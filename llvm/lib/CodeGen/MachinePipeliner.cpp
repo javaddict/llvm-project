@@ -2368,6 +2368,25 @@ static void computeLiveOuts(MachineFunction &MF, RegPressureTracker &RPTracker,
 /// A heuristic to filter nodes in recurrent node-sets if the register
 /// pressure of a set is too high.
 void SwingSchedulerDAG::registerPressureFilter(NodeSetType &NodeSets) {
+  // Interval-based RegPressureTracker on-demand-computes LiveIntervals for
+  // virtregs. LiveIntervalCalc asserts if any use/def parent is missing from
+  // SlotIndexes (debug/pseudo-probe are intentionally unmapped; targets or
+  // mid-pass inserts can leave other holes). This filter is heuristic-only
+  // (ExceedPressure) — skip the whole pass when maps are incomplete rather
+  // than asserting. Stock logic below is unchanged when maps are complete.
+  for (const MachineBasicBlock &MBB : MF) {
+    for (const MachineInstr &MI : MBB) {
+      if (MI.isDebugOrPseudoInstr())
+        continue;
+      if (LIS.isNotInMIMap(MI)) {
+        LLVM_DEBUG(dbgs() << "registerPressureFilter: skip (incomplete "
+                             "SlotIndexes in "
+                          << printMBBReference(MBB) << ")\n");
+        return;
+      }
+    }
+  }
+
   for (auto &NS : NodeSets) {
     // Skip small node-sets since they won't cause register pressure problems.
     if (NS.size() <= 2)
@@ -2388,12 +2407,15 @@ void SwingSchedulerDAG::registerPressureFilter(NodeSetType &NodeSets) {
       // instructions in a block, we need to set the tracker for each
       // instruction in the node-set. The tracker is set to the instruction
       // just after the one we're interested in.
-      MachineBasicBlock::const_iterator CurInstI = SU->getInstr();
+      MachineInstr *MI = SU->getInstr();
+      if (!MI || MI->isDebugOrPseudoInstr() || LIS.isNotInMIMap(*MI))
+        continue;
+      MachineBasicBlock::const_iterator CurInstI = MI;
       RecRPTracker.setPos(std::next(CurInstI));
 
       RegPressureDelta RPDelta;
       ArrayRef<PressureChange> CriticalPSets;
-      RecRPTracker.getMaxUpwardPressureDelta(SU->getInstr(), nullptr, RPDelta,
+      RecRPTracker.getMaxUpwardPressureDelta(MI, nullptr, RPDelta,
                                              CriticalPSets,
                                              RecRegPressure.MaxSetPressure);
       if (RPDelta.Excess.isValid()) {
@@ -2597,7 +2619,17 @@ void SwingSchedulerDAG::computeNodeOrder(NodeSetType &NodeSets) {
     LLVM_DEBUG(dbgs() << "NodeSet size " << Nodes.size() << "\n");
     OrderKind Order;
     SmallSetVector<SUnit *, 8> N;
-    if (pred_L(NodeOrder, N, DDG.get()) && llvm::set_is_subset(N, Nodes)) {
+    // Seed from predecessors that belong to *this* NodeSet. The unfiltered
+    // pred_L returns every pending pred of already-ordered nodes (including
+    // other NodeSets); set_is_subset then fails and we fall through to
+    // "Bottom up (default)", which seeds only max-ASAP — often the pointer
+    // ADDI/PHI — *before* the loads that feed already-scheduled MAC
+    // consumers. That produces es>ls on dual-load FIR MAC loops (Haydn
+    // bkfir32x32: LD64_S1 after long FF2MULA circuits). Filtering by
+    // &Nodes matches the refill paths below and the swing-SMS partial-order
+    // construction. Leave succ_L unfiltered+subset (original) so compact
+    // single-chain loops keep their prior top-down seed behaviour.
+    if (pred_L(NodeOrder, N, DDG.get(), &Nodes) && !N.empty()) {
       R.insert_range(N);
       Order = BottomUp;
       LLVM_DEBUG(dbgs() << "  Bottom up (preds) ");
@@ -4114,9 +4146,9 @@ int ResourceManager::calculateResMIIDFA() const {
   for (SUnit &SU : DAG->SUnits)
     FuncUnitOrder.push(SU.getInstr());
 
-  SmallVector<std::unique_ptr<DFAPacketizer>, 8> Resources;
+  SmallVector<std::unique_ptr<ResourceCycle>, 8> Resources;
   Resources.push_back(
-      std::unique_ptr<DFAPacketizer>(TII->CreateTargetScheduleState(*ST)));
+      std::unique_ptr<ResourceCycle>(TII->CreateTargetScheduleState(*ST)));
 
   while (!FuncUnitOrder.empty()) {
     MachineInstr *MI = FuncUnitOrder.top();
@@ -4154,7 +4186,7 @@ int ResourceManager::calculateResMIIDFA() const {
       auto *NewResource = TII->CreateTargetScheduleState(*ST);
       assert(NewResource->canReserveResources(*MI) && "Reserve error.");
       NewResource->reserveResources(*MI);
-      Resources.push_back(std::unique_ptr<DFAPacketizer>(NewResource));
+      Resources.push_back(std::unique_ptr<ResourceCycle>(NewResource));
     }
   }
 

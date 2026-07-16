@@ -324,6 +324,7 @@ enum {
   EM_BPF = 247,           // Linux kernel bpf virtual machine
   EM_VE = 251,            // NEC SX-Aurora VE
   EM_CSKY = 252,          // C-SKY 32-bit processor
+  EM_HAYDN = 259,          // Haydn 3-issue VLIW DSP (experimental)
   EM_LOONGARCH = 258,     // LoongArch
 };
 
@@ -1093,6 +1094,11 @@ enum : unsigned {
 // ELF Relocation types for Xtensa
 enum {
 #include "ELFRelocs/Xtensa.def"
+};
+
+// ELF Relocation types for Haydn
+enum {
+#include "ELFRelocs/Haydn.def"
 };
 
 #undef ELF_RELOC

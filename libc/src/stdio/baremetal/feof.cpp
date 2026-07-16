@@ -9,15 +9,17 @@
 #include "src/stdio/feof.h"
 
 #include "hdr/types/FILE.h"
+#include "src/__support/OSUtil/baremetal/stdio_cookie.h"
 #include "src/__support/common.h"
 #include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(int, feof, (::FILE * stream)) {
-  (void)stream;
-  // TODO: Shall we have an embeddeding API for feof?
-  return 0;
+  if (stream == nullptr)
+    return 0;
+  auto *cookie = reinterpret_cast<__llvm_libc_stdio_cookie *>(stream);
+  return cookie->eof ? 1 : 0;
 }
 
 } // namespace LIBC_NAMESPACE_DECL

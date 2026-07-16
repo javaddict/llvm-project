@@ -2543,10 +2543,11 @@ init(ScheduleDAGMI *DAG, const TargetSchedModel *SchedModel) {
   }
 }
 
-void SchedBoundary::
-init(ScheduleDAGMI *dag, const TargetSchedModel *smodel, SchedRemainder *rem) {
+void SchedBoundary::init(ScheduleDAGMI *dag, MachineSchedStrategy *simpl,
+                         const TargetSchedModel *smodel, SchedRemainder *rem) {
   reset();
   DAG = dag;
+  SchedImpl = simpl;
   SchedModel = smodel;
   Rem = rem;
   if (SchedModel->hasInstrSchedModel()) {
@@ -2816,23 +2817,23 @@ void SchedBoundary::releaseNode(SUnit *SU, unsigned ReadyCycle, bool InPQueue,
 
   // Check for interlocks first. For the purpose of other heuristics, an
   // instruction that cannot issue appears as if it's not in the ReadyQueue.
+  // AIE-style: strategy may further delay nodes (isAvailableNode).
   bool IsBuffered = SchedModel->getMicroOpBufferSize() != 0;
-  bool HazardDetected = !IsBuffered && ReadyCycle > CurrCycle;
-  if (HazardDetected)
-    LLVM_DEBUG(dbgs().indent(2) << "hazard: SU(" << SU->NodeNum
-                                << ") ReadyCycle = " << ReadyCycle
-                                << " is later than CurrCycle = " << CurrCycle
-                                << " on an unbuffered resource" << "\n");
-  else
-    HazardDetected = checkHazard(SU);
-
-  if (!HazardDetected && Available.size() >= ReadyListLimit) {
-    HazardDetected = true;
-    LLVM_DEBUG(dbgs().indent(2) << "hazard: Available Q is full (size: "
-                                << Available.size() << ")\n");
+  bool IsAvailable = true;
+  if (SchedImpl) {
+    IsAvailable =
+        SchedImpl->isAvailableNode(*SU, *this, /*VerifyReadyCycle=*/!IsBuffered);
+  } else {
+    if (!IsBuffered && ReadyCycle > CurrCycle)
+      IsAvailable = false;
+    else if (checkHazard(SU))
+      IsAvailable = false;
   }
 
-  if (!HazardDetected) {
+  if (IsAvailable && Available.size() >= ReadyListLimit)
+    IsAvailable = false;
+
+  if (IsAvailable) {
     Available.push(SU);
     LLVM_DEBUG(dbgs().indent(2)
                << "Move SU(" << SU->NodeNum << ") into Available Q\n");
@@ -3148,9 +3149,13 @@ SUnit *SchedBoundary::pickOnlyChoice() {
   if (CheckPending)
     releasePending();
 
-  // Defer any ready instrs that now have a hazard.
+  // Defer any ready instrs that now have a hazard (or strategy delay).
   for (ReadyQueue::iterator I = Available.begin(); I != Available.end();) {
-    if (checkHazard(*I)) {
+    bool Avail = SchedImpl
+                     ? SchedImpl->isAvailableNode(**I, *this,
+                                                   /*VerifyReadyCycle=*/false)
+                     : !checkHazard(*I);
+    if (!Avail) {
       Pending.push(*I);
       I = Available.remove(I);
       continue;
@@ -3229,6 +3234,19 @@ LLVM_DUMP_METHOD void SchedBoundary::dumpScheduledState() const {
     dumpReservedCycles();
 }
 #endif
+
+//===----------------------------------------------------------------------===//
+// MachineSchedStrategy - base helpers
+//===----------------------------------------------------------------------===//
+
+bool MachineSchedStrategy::isAvailableNode(SUnit &SU, SchedBoundary &Zone,
+                                           bool VerifyReadyCycle) {
+  // Stock default (AIE base impl): ready cycle + hazard recognizer.
+  unsigned ReadyCycle = Zone.isTop() ? SU.TopReadyCycle : SU.BotReadyCycle;
+  if (VerifyReadyCycle && ReadyCycle > Zone.getCurrCycle())
+    return false;
+  return !Zone.checkHazard(&SU);
+}
 
 //===----------------------------------------------------------------------===//
 // GenericScheduler - Generic implementation of MachineSchedStrategy.
@@ -3645,8 +3663,8 @@ void GenericScheduler::initialize(ScheduleDAGMI *dag) {
     DAG->computeDFSResult();
 
   Rem.init(DAG, SchedModel);
-  Top.init(DAG, SchedModel, &Rem);
-  Bot.init(DAG, SchedModel, &Rem);
+  Top.init(DAG, this, SchedModel, &Rem);
+  Bot.init(DAG, this, SchedModel, &Rem);
 
   // Initialize resource counts.
 
@@ -4286,8 +4304,8 @@ void PostGenericScheduler::initialize(ScheduleDAGMI *Dag) {
   TRI = DAG->TRI;
 
   Rem.init(DAG, SchedModel);
-  Top.init(DAG, SchedModel, &Rem);
-  Bot.init(DAG, SchedModel, &Rem);
+  Top.init(DAG, this, SchedModel, &Rem);
+  Bot.init(DAG, this, SchedModel, &Rem);
 
   // Initialize the HazardRecognizers. If itineraries don't exist, are empty,
   // or are disabled, then these HazardRecs will be disabled.

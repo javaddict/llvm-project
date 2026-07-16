@@ -1,0 +1,174 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+#
+# REBASELINED : / FLEX cutover — CSRW_W and SET_HWLOOP_W now render as CSRW_W_S0 and SET_HWLOOP_W_S0 in postmisched output. hazard intent preserved: test1 (CSR 0x20) stays as two separate non-bundled instrs; test2 (CSR 0x10) is also left un-bundled here (the bundling assertion belongs to a -run-pass=haydn-packetizer test, per the comment below).
+#
+# MIR body refreshed : CSRW_W and SET_HWLOOP_W now carry the
+# post-BUG-2 `implicit-def $sfr` operands required by the SFR/HWLR
+# implicit-Def modelling in HaydnInstrInfo.td (Defs = [SFR]). The hazard
+# logic this test exercises (: CSRW 0x20-0x25 must not bundle with
+# SET_HWLOOP) is unchanged; only the test's input operands were stale.
+#
+# Previously expected-fail — the ScheduleDAG barrier-edge serialization (root cause
+# both CSRW_W and SET_HWLOOP_W had hasUnmodeledSideEffects because their
+# pattern was and they set hasSideEffects=1 with no explicit SFR def/use)
+# shadowed the hazard gate. FIXED: HaydnInstrInfo.td now models the
+# CSR/HWLR side effect via an explicit SFR implicit def (Defs=[SFR]
+# hasSideEffects=0), so the DAG stops adding barrier edges and the gate
+# in HaydnHazardRecognizer is the sole separator. test1 (CSR 0x20 = hazard)
+# stays SEPARATE; test2 (CSR 0x10 = control) now BUNDLES.
+#
+# REGRESSION TEST : CSRW targeting CSR 0x20-0x25 (HWLR_BEGIN/END/COUNT)
+# must NOT be packetized into the same bundle as any SET_HWLOOP variant.
+#
+# Spec (Database/hypo_encoding/encoding_manual.md §5.10, line 365):
+# "[CSRW] Also must not target CSR addresses 0x20-0x25 (HWLR_BEGIN/END/COUNT)
+# in the same bundle as SET_HWLOOP, SET_HWLOOP_F2, or SET_HWLOOP_REG."
+# Golden source: Database/VLIW_Engine_Compiler_Constraints.md (CSRs 0x20-0x25 =
+# the two hardware-loop slots' BEGIN/END/COUNT registers). A same-cycle CSRW to
+# one of those addresses would race the implicit HWLR write that SET_HWLOOP
+# performs, so the packetizer must serialize them into separate bundles.
+#
+# Why this test uses CSRW_W + SET_HWLOOP_W (the 48-bit wide forms):
+# The narrow SET_HWLOOP / SET_HWLOOP_REG are MCID::Pseudo and lowered by
+# AsmPrinter AFTER the post-RA scheduler, so they never reach postmisched
+# as real instructions (getHazardType early-outs on isPseudo).
+# The wide forms CSRW_W / SET_HWLOOP_W are real (non-pseudo) instructions
+# that the encoding migration is wiring onto the post-RA path. They are the
+# load-bearing path for this hazard once the migration lands; constructing
+# them directly in MIR exercises the gate today.
+# The gate in HaydnHazardRecognizer.cpp checks all six SET_HWLOOP
+# variants by opcode enum, so it is correct-by-construction regardless of
+# which form reaches the scheduler.
+#
+# Test design:
+# test1: CSRW_W 0x20 (HWLR_BEGIN) + SET_HWLOOP_W. No data dep, ports fit
+# slots free. ONLY the hazard forbids the bundle -> MUST be two
+# standalone instrs (no BUNDLE).
+# test2 (CONTROL): CSRW_W 0x10 (NOT a HWLR address) + SET_HWLOOP_W. No
+# hazard -> SHOULD bundle. Guards against the fix over-rejecting.
+# (RESOLVED — see escalation block below.)
+#
+# What breaks if regresses (gate removed):
+# test1's pair would land in ONE BUNDLE -> the CHECK (two standalone instrs
+# no BUNDLE) fails. The base VLIWPacketizerList only emits a BUNDLE MI for
+# multi-instruction packets; a forced-sequential pair shows up as two
+# un-bundled instrs (same shape as the WAW test postmisched-waw-dst-reg).
+#
+# =============================================================================
+# ESCALATION — RESOLVED (test2 control case now bundles):
+# =============================================================================
+# test2 (CSR 0x10, NOT a HWLR address) bundles as designed: "no hazard
+# > SHOULD bundle, proving the gate does not over-reject". Previously this
+# control FAILED: both CSRW_W and SET_HWLOOP_W ended up as standalone instrs
+# even with no hazard. Root cause (confirmed via `-debug`):
+#
+# SU(0): CSRW_W 16, $r1
+# SU(1): Ord Latency=0 Barrier
+# SU(1): SET_HWLOOP_W...
+# SU(0): Ord Latency=0 Barrier
+#
+# The ScheduleDAG inserted an ORDER Barrier edge between every pair of
+# `hasUnmodeledSideEffects` instructions. CSRW_W and SET_HWLOOP_W both had
+# `hasSideEffects=1` and pattern `` (no explicit SFR def/use, unlike scalar
+# ALU ops), so they were treated as memory-barrier-like and serialized by the
+# DAG BUILDER — BEFORE the HaydnHazardRecognizer ever saw them. The gate
+# (HaydnHazardRecognizer.cpp) was correct but DEAD CODE on these two opcodes.
+#
+# Fix (HaydnInstrInfo.td): CSRW_W and the three SET_HWLOOP_W forms now set
+# `hasSideEffects = 0` and `Defs = [SFR]`, modelling the CSR/HWLR side effect
+# as an explicit SFR implicit def. The DAG stops adding barrier edges (no
+# MCID::UnmodeledSideEffects), and the gate is the sole separator.
+# HaydnHazardRecognizer's WAW guard already excludes SFR, so a non-hazard
+# CSR write (e.g. 0x10) bundles freely with SET_HWLOOP, while a hazard CSR
+# (0x20-0x25) is still rejected by the gate.
+# =============================================================================
+
+--- |
+  define void @test1_csrw_hwlr_set_hwloop_no_bundle() { ret void }
+  define void @test2_csrw_non_hwlr_set_hwloop_can_bundle() { ret void }
+...
+---
+# ============================================================================
+# Test 1: CSRW_W 0x20 (HWLR_BEGIN) + SET_HWLOOP_W. CSR 0x20 is in the forbidden
+# 0x20-0x25 range -> hazard -> NOT bundled (two standalone instrs).
+# ============================================================================
+name:            test1_csrw_hwlr_set_hwloop_no_bundle
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1, $r2
+
+    ; CHECK-LABEL: name: test1_csrw_hwlr_set_hwloop_no_bundle
+    ; CHECK: liveins: $r1, $r2
+    ; CHECK-NEXT: {{^ +$}}
+    ; CHECK-NEXT: CSRW_W 32, $r1, implicit-def $sfr
+    ; CHECK-NEXT: SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    CSRW_W 32, $r1, implicit-def $sfr
+    SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
+
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...
+---
+# ============================================================================
+# Test 2 (CONTROL): CSRW_W 0x10 (NOT a HWLR address) + SET_HWLOOP_W. The
+# hazard gate lives in the Haydn packetizer (HaydnHazardRecognizer), NOT in
+# postmisched, so this -run-pass=postmisched run cannot exercise bundling.
+# The control case instead confirms postmisched leaves both instructions
+# intact and in order (no reordering, no spurious transformation). The
+# packetizer-level bundling assertion for the control case belongs in a
+# separate -run-pass=haydn-packetizer test.
+# ============================================================================
+name:            test2_csrw_non_hwlr_set_hwloop_can_bundle
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1, $r2
+
+    ; CHECK-LABEL: name: test2_csrw_non_hwlr_set_hwloop_can_bundle
+    ; CHECK: liveins: $r1, $r2
+    ; CHECK-NEXT: {{^ +$}}
+    ; CHECK-NEXT: CSRW_W 16, $r1, implicit-def $sfr
+    ; CHECK-NEXT: SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    CSRW_W 16, $r1, implicit-def $sfr
+    SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
+
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

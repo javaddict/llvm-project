@@ -1,0 +1,2459 @@
+//===-- HaydnInstrInfo.cpp - Haydn Instruction Information --------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file contains the Haydn implementation of the TargetInstrInfo class.
+//
+//===----------------------------------------------------------------------===//
+
+#include "HaydnInstrInfo.h"
+#include "HaydnHWLoopContracts.h"
+#include "HaydnHazardRecognizer.h"
+#include "HaydnMachineFunctionInfo.h"
+#include "HaydnPostRAScratch.h"
+#include "HaydnResourceCycle.h"
+#include "HaydnSubtarget.h"
+#include "MCTargetDesc/HaydnBaseInfo.h"
+#include "MCTargetDesc/HaydnMatInt.h"
+#include "MCTargetDesc/HaydnMCFormats.h"
+#include "llvm/Support/CommandLine.h"
+#include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/CodeGen/LiveIntervals.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineMemOperand.h"
+#include "llvm/CodeGen/MachinePipeliner.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/MachineScheduler.h"
+#include "llvm/CodeGen/RegisterClassInfo.h"
+#include "llvm/CodeGen/RegisterPressure.h"
+#include "llvm/CodeGen/RegisterScavenging.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/MC/MCContext.h"
+#include <algorithm>
+#include <optional>
+#include <vector>
+
+#define DEBUG_TYPE "haydn-instr-info"
+
+using namespace llvm;
+
+// SMS pipelining of ZOL-form loops. DEFAULT ON per / ("classic SMS
+// running PRE-RA on ZOL form"). The IR-level HardwareLoops pass runs before
+// IRTranslator, so every countable single-BB loop arrives at the pre-RA
+// pipeliner already in LoopStart (preheader) + PseudoLoopEnd (latch) ZOL form;
+// the naive icmp+br countable-loop path never sees them. With the default off
+// SMS rejected 100% of real loops with "Unable to analyzeLoop".
+//
+// The "experimental / careful validation" gate is retired: the ZOL
+// PipelinerLoopInfo (shouldIgnoreForPipelining, shouldUseSchedule rejecting
+// StageCount<=1, adjustTripCount editing LoopStart's $adj, the no-guard
+// createTripCountGreaterCondition) is complete and AIE-faithful. The prior
+// single-stage +358-bloat regression feared is now gated inside
+// shouldUseSchedule. Declared non-static so
+// HaydnSubtarget::enableWindowScheduler can read it (the WindowScheduler
+// crashes on PseudoLoopEnd, so SMS must be the sole pipeliner when ZOL
+// pipelining is on).
+cl::opt<bool> EnableZOLPipelining(
+    "haydn-zol-pipelining", cl::Hidden, cl::init(true),
+    cl::desc("Enable SMS pipelining of ZOL-form loops (default on)"));
+
+// PR8 / AIE preferPostPipeliner seed. DEFAULT OFF: Stage-0 PostPipeliner is
+// real but narrower than SMS (single-BB ZOL, limited stage count). Preferring
+// it would reject SMS for all ZOL; keep off until Stage-1 quality is proven.
+static cl::opt<bool> EnableZOLPreferPostPipeliner(
+    "haydn-zol-prefer-post-pipeliner", cl::Hidden, cl::init(false),
+    cl::desc("Prefer post-pipeliner over SMS for ZOL (rejects SMS). Default "
+             "OFF — Stage-0 PostPipeliner is not yet a full SMS replacement."));
+
+// PPS-3: AIE-style stage-count gate for SMS (into shouldUseSchedule).
+static cl::opt<unsigned> HaydnSMSMaxStageCount(
+    "haydn-sms-max-stagecount", cl::Hidden, cl::init(3),
+    cl::desc("PPS-3: reject SMS schedules with more than this many stages "
+             "(prologue stages + 1). Default 3 (AIE LoopMaxStageCount)."));
+
+// PPS-3: AIE-style reg-pressure gate for SMS (into shouldUseSchedule — this
+// LLVM has no PipelinerLoopInfo::canAcceptII virtual). Mirrors AIE's
+// TrackRegPressure + canAllocate (AIEBasePipelinerLoopInfo.cpp:31-34, 460-518
+// 865-869). Default ON matches AIE aie-pipeliner-track-regpressure.
+static cl::opt<bool> HaydnSMSTrackRegPressure(
+    "haydn-pipeliner-track-regpressure", cl::Hidden, cl::init(true),
+    cl::desc("PPS-3: refuse SMS schedules likely to force register spills "
+             "(AIE canAllocate peer). Default ON matching AIE."));
+
+cl::opt<bool> EnableHaydnHRResourceCycle(
+    "haydn-hr-resource-cycle", cl::Hidden, cl::init(true),
+    cl::desc("/: return a HaydnResourceCycle (Bundle-backed"
+             "alternative-aware) from CreateTargetScheduleState so SMS reasons "
+             "about real slot pressure. Default ON: the DFA packetizer is "
+             "choice-set-naive (DFAPacketizerEmitter ORs all units in a stage), "
+             "so a Slot01_LD LD64 reserves BOTH slot0+slot1 bits and two LD64 "
+             "always conflict — inflating ResMII past the schedule span and "
+             "rejecting every dual-load streaming loop (Subagent A). The"
+             "Bundle model picks ONE slot from the alt-set, so two LD64 pack as "
+             "slot0+slot1. Mirrors AIE's AIEResourceCycle (AIE-faithful)."));
+
+// Hexagon manner (HexagonBranchRelaxation.cpp): BR / layout has no exact final
+// text size knowledge — post-BR AsmPrinter growth (same-slot overflow
+// serial Bundle128s, JT R0 re-zero, hwloop align pads) can push a branch that
+// computeBlockSize believes is in-range past WIDE_BranchSImm12 (±4 KB).
+// Hexagon adds `BranchRelaxSafetyBuffer` (default 200) to the distance before
+// isJumpWithinBranchRange; we do the same for isBranchOffsetInRange.
+//
+// Default history:
+// 256 (> measured ~224 B printf undercount; Bundle128-aligned).
+// (yarpgen seed 3434, ~6.4k LOC): buffer=256 still left a beqz_w at
+// ~4096 B un-relaxed; buffer=512 clears the seed. Default 1024 keeps
+// Hexagon-style headroom for yarpgen-scale TUs without forcing every
+// mid-range branch to long form.
+// AIE has empty addPreEmitPass (no BR) — N/A there.
+static cl::opt<uint32_t> BranchRelaxSafetyBuffer(
+    "haydn-branch-relax-safety-buffer", cl::Hidden, cl::init(1024),
+    cl::desc("Extra bytes added to branch distance when deciding if a "
+             "conditional is in WIDE_BranchSImm12 range (Hexagon-style "
+             "branch-relax-safety-buffer). /."));
+
+#define GET_INSTRINFO_CTOR_DTOR
+#include "HaydnGenInstrInfo.inc"
+#include "HaydnGenDFAPacketizer.inc"
+
+// Map a `_S{0,1,2}` opcode to its base semantic opcode enum.
+// Strips the suffix + maps the base name to its legacy enum. Used by the SMS
+// naive loop recognizer + branch-analysis (for _W_S0 far branches).
+static unsigned getHaydnFlexBaseOpcode(unsigned Opc, const MCInstrInfo &MII) {
+  StringRef Name = MII.getName(Opc);
+  StringRef Base = Name;
+  for (StringRef Suffix : {"_S0", "_S1", "_S2"}) {
+    if (Base.ends_with(Suffix)) {
+      Base = Base.drop_back(Suffix.size());
+      break;
+    }
+  }
+  if (Base == Name)
+    return Opc;
+  static const std::pair<StringRef, unsigned> KnownBases[] = {
+      {"ADD32", Haydn::ADD32},         {"ADDI32", Haydn::ADDI32},
+      {"ADDI32_W", Haydn::ADDI32_W},   {"SUB32", Haydn::SUB32},
+      {"SEQ32", Haydn::SEQ32},         {"SLT32", Haydn::SLT32},
+      {"SLTU32", Haydn::SLTU32},
+      {"JAL_W", Haydn::JAL_W},         {"JALR_W", Haydn::JALR_W},
+      {"BEQ_W", Haydn::BEQ_W},         {"BNE_W", Haydn::BNE_W},
+      {"BGE_W", Haydn::BGE_W},         {"BLT_W", Haydn::BLT_W},
+      {"BGEU_W", Haydn::BGEU_W},       {"BLTU_W", Haydn::BLTU_W},
+      {"BEQZ_W", Haydn::BEQZ_W},       {"BNEZ_W", Haydn::BNEZ_W},
+      {"BGEZ_W", Haydn::BGEZ_W},       {"BLTZ_W", Haydn::BLTZ_W},
+      {"CSRW_W", Haydn::CSRW_W},       {"ORI32_W", Haydn::ORI32_W}};
+  for (auto [BaseName, Enum] : KnownBases)
+    if (Base == BaseName)
+      return Enum;
+  return Opc;
+}
+
+HaydnInstrInfo::HaydnInstrInfo(const HaydnSubtarget &STI)
+    : HaydnGenInstrInfo(STI, RegInfo, Haydn::ADJCALLSTACKDOWN,
+                        Haydn::ADJCALLSTACKUP),
+      RegInfo(/* HwMode*/ 0),
+      STI(STI) {}
+
+void HaydnInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
+                                MachineBasicBlock::iterator MI,
+                                const DebugLoc &DL, Register DestReg,
+                                Register SrcReg, bool KillSrc, bool RenamableDest,
+                                bool RenamableSrc) const {
+  if (Haydn::DR64RegClass.contains(DestReg, SrcReg)) {
+    // DR64 → DR64: OR64 rd, rs, rs (rd = rs | rs = rs).
+    // Cannot use ADD64 with R0 because ADD64 requires DR64 operands.
+    BuildMI(MBB, MI, DL, get(Haydn::OR64), DestReg)
+        .addReg(SrcReg, getKillRegState(KillSrc))
+        .addReg(SrcReg, getKillRegState(KillSrc));
+    return;
+  }
+
+  // GPR32 → GPR32: MOVE32 rd, rs, rs (register move).
+  // The.td models MOVE32 with two source operands ($rs1, $rs2) because the
+  // R-type encoding (FmtALU32) has separate rs1/rs2 bit fields, and both
+  // must be populated for a deterministic encoding. copyPhysReg therefore
+  // passes SrcReg twice. Semantically MOVE32 reads only one register
+  // (1R/1W, RI-like — see), and the VLIW packetizer's countGPRPorts
+  // dedupes repeated source operands so this counts as a single GPR read.
+  // Using OR32 rd, rs, rs instead would also work but OR32 is two-source
+  // in the.td (no duplicate), so MOVE32 is the canonical single-read move.
+  BuildMI(MBB, MI, DL, get(Haydn::MOVE32), DestReg)
+      .addReg(SrcReg, getKillRegState(KillSrc))
+      .addReg(SrcReg, getKillRegState(KillSrc));
+}
+
+std::optional<DestSourcePair>
+HaydnInstrInfo::isCopyInstrImpl(const MachineInstr &MI) const {
+  switch (MI.getOpcode()) {
+  default:
+    return std::nullopt;
+  case Haydn::MOVE32:
+    // Canonical GPR move: MOVE32 rd, rs, rs (rs2 mirrors rs1 for encoding).
+    if (MI.getNumOperands() < 2 || !MI.getOperand(0).isReg() ||
+        !MI.getOperand(1).isReg())
+      return std::nullopt;
+    return DestSourcePair{MI.getOperand(0), MI.getOperand(1)};
+  case Haydn::OR32:
+  case Haydn::OR64:
+    // Bank copy: OR rd, rs, rs ⇒ rd = rs | rs = rs.
+    // Do NOT rewrite these to bare COPY post-RA (bundler/AsmPrinter drop).
+    if (MI.getNumOperands() < 3 || !MI.getOperand(0).isReg() ||
+        !MI.getOperand(1).isReg() || !MI.getOperand(2).isReg())
+      return std::nullopt;
+    if (MI.getOperand(1).getReg() != MI.getOperand(2).getReg())
+      return std::nullopt;
+    if (!MI.getOperand(1).getReg())
+      return std::nullopt;
+    return DestSourcePair{MI.getOperand(0), MI.getOperand(1)};
+  }
+}
+
+void HaydnInstrInfo::storeRegToStackSlot(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator MI, Register SrcReg,
+    bool IsKill, int FrameIndex, const TargetRegisterClass *RC, Register VReg,
+    MachineInstr::MIFlag Flags) const {
+  DebugLoc DL;
+  if (MI != MBB.end())
+    DL = MI->getDebugLoc();
+
+  MachineFunction &MF = *MBB.getParent();
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+
+  unsigned Opc;
+  unsigned Size;
+  // Check if this is a 32-bit GPR class (including subclasses)
+  // Use contains check since GPR32NoSPNoLR is a subclass
+  if (RC == &Haydn::GPR32RegClass || RC == &Haydn::GPR32NoSPNoLRRegClass ||
+      RC->hasSubClassEq(&Haydn::GPR32RegClass)) {
+    Opc = Haydn::ST32;
+    Size = 4;
+  } else if (RC == &Haydn::DR64RegClass) {
+    Opc = Haydn::ST64; // Use 64-bit store for DR64 registers
+    Size = 8;
+  } else {
+    llvm_unreachable("Unknown register class for store");
+  }
+
+  MachineMemOperand *MMO = MF.getMachineMemOperand(
+      MachinePointerInfo::getFixedStack(MF, FrameIndex),
+      MachineMemOperand::MOStore, Size, MFI.getObjectAlign(FrameIndex));
+
+  auto MIB = BuildMI(MBB, MI, DL, get(Opc))
+                 .addReg(SrcReg, getKillRegState(IsKill))
+                 .addFrameIndex(FrameIndex)
+                 .addImm(0)
+                 .addMemOperand(MMO);
+  if (Flags)
+    MIB.setMIFlag(Flags);
+}
+
+void HaydnInstrInfo::loadRegFromStackSlot(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator MI, Register DestReg,
+    int FrameIndex, const TargetRegisterClass *RC, Register VReg,
+    unsigned SubReg, MachineInstr::MIFlag Flags) const {
+  DebugLoc DL;
+  if (MI != MBB.end())
+    DL = MI->getDebugLoc();
+
+  MachineFunction &MF = *MBB.getParent();
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+
+  unsigned Opc;
+  unsigned Size;
+  // Check if this is a 32-bit GPR class (including subclasses)
+  // Use contains check since GPR32NoSPNoLR is a subclass
+  if (RC == &Haydn::GPR32RegClass || RC == &Haydn::GPR32NoSPNoLRRegClass ||
+      RC->hasSubClassEq(&Haydn::GPR32RegClass)) {
+    Opc = Haydn::LD32;
+    Size = 4;
+  } else if (RC == &Haydn::DR64RegClass) {
+    Opc = Haydn::LD64; // logical; slot from placement / FlexMap
+    Size = 8;
+  } else {
+    llvm_unreachable("Unknown register class for load");
+  }
+
+  MachineMemOperand *MMO = MF.getMachineMemOperand(
+      MachinePointerInfo::getFixedStack(MF, FrameIndex),
+      MachineMemOperand::MOLoad, Size, MFI.getObjectAlign(FrameIndex));
+
+  auto MIB = BuildMI(MBB, MI, DL, get(Opc), DestReg)
+                 .addFrameIndex(FrameIndex)
+                 .addImm(0)
+                 .addMemOperand(MMO);
+  if (Flags)
+    MIB.setMIFlag(Flags);
+}
+
+bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
+                                   MachineBasicBlock *&TBB,
+                                   MachineBasicBlock *&FBB,
+                                   SmallVectorImpl<MachineOperand> &Cond,
+                                   bool AllowModify) const {
+  TBB = nullptr;
+  FBB = nullptr;
+  Cond.clear();
+
+  if (MBB.empty())
+    return false;
+
+  // Walk backwards through the block, skipping debug/CFI instructions.
+  // LLVM analyzeBranch convention:
+  // [cond-br TBB] [uncond-br FBB] → TBB + Cond + FBB
+  // [cond-br TBB] → TBB + Cond (fallthrough)
+  // [uncond-br TBB] → TBB only (unconditional)
+  //
+  // When walking backwards, we may see the unconditional branch BEFORE the
+  // conditional one. We must remember the unconditional target (as FBB) and
+  // continue scanning for a preceding conditional branch.
+  MachineBasicBlock *UncondTarget = nullptr;
+
+  MachineBasicBlock::iterator I = MBB.end();
+  while (I != MBB.begin()) {
+    --I;
+    if (I->isDebugInstr() || I->isCFIInstruction())
+      continue;
+
+    // Returns are not analyzable as branches.
+    if (I->isReturn())
+      return true;
+
+    // Generic opcodes (pre-selection) are not analyzable.
+    if (isPreISelGenericOpcode(I->getOpcode()))
+      return true;
+
+    unsigned Opc = I->getOpcode();
+    // BranchRelaxation-era branch-analysis must recognize the
+    // `_W_S0` far-branch variants. Resolve to the legacy `_W` base so the
+    // enum compares below match (the FLEX variants have identical operand
+    // shapes — only the opcode encoding/reloc differ).
+    Opc = getHaydnFlexBaseOpcode(Opc, *this);
+
+    // Unconditional branches
+    bool IsUnconditional = false;
+    MachineBasicBlock *Target = nullptr;
+
+    if (Opc == Haydn::B) {
+      IsUnconditional = true;
+      Target = I->getOperand(0).getMBB();
+    } else if ((Opc == Haydn::JAL || Opc == Haydn::JAL_W) &&
+               I->getOperand(0).getReg() == Haydn::R0 &&
+               I->getNumOperands() > 1 && I->getOperand(1).isMBB()) {
+      // Phase 1a: CodeGen now selects JAL_W; legacy JAL kept for the
+      // asm parser / decoder. Both have the same (rd, target) operand shape.
+      IsUnconditional = true;
+      Target = I->getOperand(1).getMBB();
+    } else if (Opc == Haydn::BEQZ_W &&
+               I->getOperand(0).getReg() == Haydn::R0 &&
+               !MBB.getParent()->getRegInfo().isLiveIn(Haydn::R0)) {
+      // BEQZ_W R0 is only unconditional when R0 is not a function argument
+      // (i1 values passed in R0 make this a genuine conditional branch).
+      // Phase 1b : the WIDE 48-bit form is the CodeGen-selected
+      // conditional branch (encoding_manual.md §5.5, opcode 0x2C).
+      IsUnconditional = true;
+      Target = I->getOperand(1).getMBB();
+    }
+
+    if (IsUnconditional) {
+      // Remember this unconditional branch target. If we later find a
+      // conditional branch, this becomes FBB. Otherwise it's TBB.
+      UncondTarget = Target;
+      continue; // Keep scanning backwards for a conditional branch
+    }
+
+    // JALR / JALR_W — indirect branch, not analyzable as a terminator.
+    // Phase 1a: CodeGen selects JALR_W; legacy JALR kept for asm.
+    // If we already parsed a trailing branch sequence, this is mid-block
+    // material (should not happen for JALR) — stop and keep the analysis.
+    if (Opc == Haydn::JALR || Opc == Haydn::JALR_W) {
+      if (!Cond.empty() || UncondTarget)
+        break;
+      return true;
+    }
+
+    // BR_JT — indirect jump table branch, not analyzable as a terminator.
+    if (Opc == Haydn::BR_JT) {
+      if (!Cond.empty() || UncondTarget)
+        break;
+      return true;
+    }
+
+    // JAL / JAL_W with non-MBB target (external symbol / libcall):
+    // As the terminator → unanalyzable (tail-call / bare call end).
+    // After a trailing conditional/unconditional branch → mid-block call
+    // (yarpgen soft-div pattern: `JAL_W &__divsi3; BNE_W...`). Stop
+    // scanning and keep the branch analysis. Without this, BranchRelaxation
+    // asserts "branches to be relaxed must be analyzable" whenever
+    // a far cond-branch sits after a call in the same MBB.
+    if (Opc == Haydn::JAL || Opc == Haydn::JAL_W) {
+      if (!Cond.empty() || UncondTarget)
+        break;
+      return true;
+    }
+
+    // Other barriers that are not analyzable as terminators. Mid-block after
+    // an already-parsed branch sequence: stop scanning, keep the analysis.
+    if (I->isBarrier()) {
+      if (!Cond.empty() || UncondTarget)
+        break;
+      return true;
+    }
+
+    // Conditional branches (1 register)
+    // Phase 1b : all conditional branches use the WIDE 48-bit
+    // form (encoding_manual.md §5.5). The legacy Haydn32 BEQZ/BNEZ/BGEZ
+    // BLTZ/BEQ/BNE/... defs remain for the asm parser only.
+    if (Opc == Haydn::BNEZ_W || Opc == Haydn::BEQZ_W ||
+        Opc == Haydn::BGEZ_W || Opc == Haydn::BLTZ_W) {
+      if (Cond.empty()) {
+        MachineBasicBlock *TargetBB = I->getOperand(1).getMBB();
+        Cond.push_back(MachineOperand::CreateImm(Opc));
+        Cond.push_back(I->getOperand(0));
+        TBB = TargetBB;
+        // If there was a preceding unconditional branch, it's FBB
+        if (UncondTarget) {
+          FBB = UncondTarget;
+          return false;
+        }
+        // No unconditional — may fall through
+      } else {
+        return true; // Second conditional — can't analyze
+      }
+    }
+    // Conditional branches (2 registers)
+    else if (Opc == Haydn::BEQ_W || Opc == Haydn::BNE_W || Opc == Haydn::BGE_W ||
+             Opc == Haydn::BGEU_W || Opc == Haydn::BLT_W || Opc == Haydn::BLTU_W) {
+      if (Cond.empty()) {
+        MachineBasicBlock *TargetBB = I->getOperand(2).getMBB();
+        Cond.push_back(MachineOperand::CreateImm(Opc));
+        Cond.push_back(I->getOperand(0));
+        Cond.push_back(I->getOperand(1));
+        TBB = TargetBB;
+        if (UncondTarget) {
+          FBB = UncondTarget;
+          return false;
+        }
+      } else {
+        return true; // Second conditional — can't analyze
+      }
+    }
+    // Hardware-loop terminators (ZOL + JNZD)
+    // PseudoLoopEnd: single MBB operand (the loop body / self-back-edge).
+    // Cond = [Imm(PseudoLoopEnd)]. No register operand needed — the hardware
+    // loop counter is implicit. Mirrors AIE's parseCondBranch
+    // (AIEBaseInstrInfo.cpp:112-130).
+    else if (Opc == Haydn::PseudoLoopEnd) {
+      if (Cond.empty()) {
+        Cond.push_back(MachineOperand::CreateImm(Opc));
+        TBB = I->getOperand(0).getMBB();
+        if (UncondTarget) {
+          FBB = UncondTarget;
+          return false;
+        }
+      } else {
+        return true;
+      }
+    }
+    // LoopJNZ: register counter + MBB target (JNZD model).
+    // Cond = [Imm(LoopJNZ), <counter reg>].
+    else if (Opc == Haydn::LoopJNZ) {
+      if (Cond.empty()) {
+        Cond.push_back(MachineOperand::CreateImm(Opc));
+        Cond.push_back(I->getOperand(0)); // counter reg
+        TBB = I->getOperand(1).getMBB();
+        if (UncondTarget) {
+          FBB = UncondTarget;
+          return false;
+        }
+      } else {
+        return true;
+      }
+    } else {
+      // Not a branch — stop scanning.
+      break;
+    }
+  }
+
+  // If we only found an unconditional branch (no conditional), set TBB.
+  if (Cond.empty() && UncondTarget) {
+    TBB = UncondTarget;
+  }
+
+  return false;
+}
+
+//===----------------------------------------------------------------------===//
+// SSA EarlyIfConversion: canInsertSelect / insertSelect
+//===----------------------------------------------------------------------===//
+//
+// Generic EarlyIfConverter (llvm/lib/CodeGen/EarlyIfConversion.cpp) rewrites
+// SSA triangles/diamonds by speculating side blocks and inserting a select for
+// each PHI at the join. Cond comes from analyzeBranch:
+// Cond = [ Imm(BEQZ_W|BNEZ_W|...), CondReg ]
+//
+// Haydn MOVT32/MOVF32 test only bit0 of the condition GPR (same as G_SELECT
+// isel). We therefore accept only single-register zero-tests (BEQZ/BNEZ)
+// which are the form produced after SEQ32/icmp. Two-register BEQ/BNE are
+// refused — EarlyIfConv leaves those as branches (or they can be booleanized
+// earlier).
+//
+// Semantics (identical to HaydnInstructionSelector G_SELECT s32):
+// Dst = COPY False
+// Dst = MOVT32 Dst(tied), True, CondReg / if branch-taken means Cond!=0
+// Dst = MOVF32 Dst(tied), True, CondReg / if branch-taken means Cond==0
+//
+// CFG is owned by EarlyIfConverter (splice, transferSuccessorsAndUpdatePHIs
+// updateTerminator) — never by hand-rolled post-RA successor edits.
+
+bool HaydnInstrInfo::canInsertSelect(const MachineBasicBlock &MBB,
+                                     ArrayRef<MachineOperand> Cond,
+                                     Register DstReg, Register TrueReg,
+                                     Register FalseReg, int &CondCycles,
+                                     int &TrueCycles,
+                                     int &FalseCycles) const {
+  // Cond from analyzeBranch: [Imm(opc), Reg] for BEQZ_W / BNEZ_W.
+  if (Cond.size() != 2 || !Cond[0].isImm() || !Cond[1].isReg())
+    return false;
+
+  unsigned Opc = getHaydnFlexBaseOpcode(Cond[0].getImm(), *this);
+  if (Opc != Haydn::BEQZ_W && Opc != Haydn::BNEZ_W &&
+      Opc != Haydn::BEQZ && Opc != Haydn::BNEZ)
+    return false;
+
+  const MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
+  const TargetRegisterClass *RC = RegInfo.getCommonSubClass(
+      MRI.getRegClass(TrueReg), MRI.getRegClass(FalseReg));
+  if (!RC || !RegInfo.getCommonSubClass(RC, MRI.getRegClass(DstReg)))
+    return false;
+  // Scalar GPR32 only — MOVT32/MOVF32 live in GPR32. DR64 / vector selects
+  // stay as branches or use other isel paths.
+  if (!Haydn::GPR32RegClass.hasSubClassEq(RC))
+    return false;
+
+  // Rough latencies for EarlyIfConv heuristics (ALU cmov = 1 cycle).
+  CondCycles = 1;
+  TrueCycles = FalseCycles = 1;
+  return true;
+}
+
+void HaydnInstrInfo::insertSelect(MachineBasicBlock &MBB,
+                                  MachineBasicBlock::iterator I,
+                                  const DebugLoc &DL, Register DstReg,
+                                  ArrayRef<MachineOperand> Cond,
+                                  Register TrueReg,
+                                  Register FalseReg) const {
+  assert(Cond.size() == 2 && Cond[0].isImm() && Cond[1].isReg() &&
+         "insertSelect: Cond must be [Imm(BEQZ/BNEZ), Reg]");
+
+  unsigned Opc = getHaydnFlexBaseOpcode(Cond[0].getImm(), *this);
+  Register CondReg = Cond[1].getReg();
+
+  // Branch-taken means "Cond is true" for EarlyIfConv's TrueReg/FalseReg.
+  // BNEZ: taken when CondReg != 0 → MOVT (bit0==1 takes True)
+  // BEQZ: taken when CondReg == 0 → MOVF (bit0==0 takes True)
+  unsigned MovOpc;
+  switch (Opc) {
+  case Haydn::BNEZ_W:
+  case Haydn::BNEZ:
+    MovOpc = Haydn::MOVT32;
+    break;
+  case Haydn::BEQZ_W:
+  case Haydn::BEQZ:
+    MovOpc = Haydn::MOVF32;
+    break;
+  default:
+    llvm_unreachable("canInsertSelect should have rejected this Cond");
+  }
+
+  // Single SSA def: %Dst = MOVT/MOVF %False(tied), %True, %Cond
+  // Same shape as GISel G_SELECT s32. Do NOT emit
+  // %Dst = COPY False; %Dst = MOVT %Dst,...
+  // that is two defs of %Dst and trips getVRegDef in MachineCSE.
+  // The $rd = $rd_src constraint forces RA to coalesce Dst with False.
+  BuildMI(MBB, I, DL, get(MovOpc), DstReg)
+      .addReg(FalseReg) // tied $rd_src (False fallthrough)
+      .addReg(TrueReg)  // $rs1
+      .addReg(CondReg)  // $rs2 bit0
+      ;
+}
+
+unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
+                                     MachineBasicBlock *TBB,
+                                     MachineBasicBlock *FBB,
+                                     ArrayRef<MachineOperand> Cond,
+                                     const DebugLoc &DL,
+                                     int *BytesAdded) const {
+  assert(TBB && "insertBranch must not be called with a null TBB");
+
+  if (BytesAdded)
+    *BytesAdded = 0;
+
+  if (Cond.empty()) {
+    // Unconditional branch — emit the B pseudo (has isBarrier=1).
+    // The B pseudo survives through BranchRelaxation (where it is properly
+    // recognized by analyzeBranch). It is expanded to BEQZ_W R0 either by
+    // expandPostRAPseudo (for pre-existing B pseudos) or by AsmPrinter
+    // (for B pseudos inserted by BranchRelaxation via insertBranch).
+    // Phase 1b : WIDE 48-bit form (6 bytes per §5.5).
+    MachineInstr &MI = *BuildMI(MBB, MBB.end(), DL, get(Haydn::B)).addMBB(TBB);
+    if (BytesAdded)
+      *BytesAdded += getInstSizeInBytes(MI);
+    return 1;
+  }
+
+  // Conditional branch
+  unsigned Opc = Cond[0].getImm();
+  // resolve `_W_S0` far-branch variants to their legacy `_W`
+  // base. analyzeBranch stores the resolved base in Cond[0], but
+  // BranchRelaxation may mutate Cond; resolving here keeps the operand-shape
+  // compares below consistent and builds the legacy `_W` form (whose encoder
+  // pipeline handling is identical to the FLEX variant for branch purposes).
+  Opc = getHaydnFlexBaseOpcode(Opc, *this);
+
+  // Hardware-loop terminators. PseudoLoopEnd has no register operand
+  // (Cond = [Imm] only); LoopJNZ has one register (Cond = [Imm, reg]).
+  // Both use addMBB(TBB) for the target. When FBB is non-null (two-way)
+  // append an unconditional B to FBB after the conditional.
+  if (Opc == Haydn::PseudoLoopEnd) {
+    MachineInstr &MI = *BuildMI(MBB, MBB.end(), DL, get(Opc)).addMBB(TBB);
+    if (BytesAdded)
+      *BytesAdded += getInstSizeInBytes(MI);
+    if (FBB) {
+      MachineInstr &BMI = *BuildMI(MBB, MBB.end(), DL, get(Haydn::B)).addMBB(FBB);
+      if (BytesAdded)
+        *BytesAdded += getInstSizeInBytes(BMI);
+      return 2;
+    }
+    return 1;
+  }
+  if (Opc == Haydn::LoopJNZ) {
+    MachineInstr &MI = *BuildMI(MBB, MBB.end(), DL, get(Opc))
+                            .addReg(Cond[1].getReg())
+                            .addMBB(TBB);
+    if (BytesAdded)
+      *BytesAdded += getInstSizeInBytes(MI);
+    if (FBB) {
+      MachineInstr &BMI = *BuildMI(MBB, MBB.end(), DL, get(Haydn::B)).addMBB(FBB);
+      if (BytesAdded)
+        *BytesAdded += getInstSizeInBytes(BMI);
+      return 2;
+    }
+    return 1;
+  }
+
+  if (FBB == nullptr) {
+    // One-way conditional branch: if Cond, goto TBB; else fall through
+    // Phase 1b: all conditionals are WIDE 48-bit (6 bytes).
+    MachineInstrBuilder MIB = BuildMI(MBB, MBB.end(), DL, get(Opc));
+    if (Opc == Haydn::BNEZ_W || Opc == Haydn::BEQZ_W ||
+        Opc == Haydn::BGEZ_W || Opc == Haydn::BLTZ_W) {
+      MIB.addReg(Cond[1].getReg());
+    } else {
+      MIB.addReg(Cond[1].getReg()).addReg(Cond[2].getReg());
+    }
+    MIB.addMBB(TBB);
+    if (BytesAdded)
+      *BytesAdded += getInstSizeInBytes(*MIB);
+    return 1;
+  }
+
+  // Two-way conditional branch: if Cond, goto TBB; else goto FBB
+  MachineInstrBuilder MIB = BuildMI(MBB, MBB.end(), DL, get(Opc));
+  if (Opc == Haydn::BNEZ_W || Opc == Haydn::BEQZ_W ||
+      Opc == Haydn::BGEZ_W || Opc == Haydn::BLTZ_W) {
+    MIB.addReg(Cond[1].getReg());
+  } else {
+    MIB.addReg(Cond[1].getReg()).addReg(Cond[2].getReg());
+  }
+  MIB.addMBB(TBB);
+  if (BytesAdded)
+    *BytesAdded += getInstSizeInBytes(*MIB);
+  // Unconditional branch to FBB via B pseudo (has isBarrier=1).
+  // Expanded by expandPostRAPseudo or AsmPrinter.
+  MachineInstr &BMI = *BuildMI(MBB, MBB.end(), DL, get(Haydn::B)).addMBB(FBB);
+  if (BytesAdded)
+    *BytesAdded += getInstSizeInBytes(BMI);
+  return 2;
+}
+
+unsigned HaydnInstrInfo::removeBranch(MachineBasicBlock &MBB,
+                                      int *BytesRemoved) const {
+  if (BytesRemoved)
+    *BytesRemoved = 0;
+
+  MachineBasicBlock::iterator I = MBB.end();
+  unsigned Count = 0;
+
+  while (I != MBB.begin()) {
+    --I;
+    if (I->isDebugInstr() || I->isCFIInstruction())
+      continue;
+
+    if (!I->isBranch())
+      break;
+
+    // Report removed branch size via getInstSizeInBytes (not hand constants).
+    // BranchRelaxation increments BlockInfo from BytesRemoved; verify
+    // recomputes via computeBlockSize — both must agree. : B/RET/etc.
+    // size as one Bundle128 parcel (16), not the retired WIDE 6-byte model.
+    if (BytesRemoved)
+      *BytesRemoved += getInstSizeInBytes(*I);
+    I = MBB.erase(I);
+    Count++;
+  }
+
+  return Count;
+}
+
+bool HaydnInstrInfo::reverseBranchCondition(
+    SmallVectorImpl<MachineOperand> &Cond) const {
+  // Unconditional branches have an empty condition — there is nothing to
+  // reverse. Returning false tells BranchRelaxation that we cannot produce
+  // an inverted branch, so it will fall back to its own long-branch handling
+  // (e.g. inserting an indirect jump).
+  if (Cond.empty())
+    return false;
+
+  unsigned Opc = Cond[0].getImm();
+  // resolve `_W_S0` far-branch variants to their legacy `_W`
+  // base so the inversion switch below recognizes them (the inverted opcode
+  // is written back as the legacy `_W` form, which the existing pipeline
+  // encoder handle identically to the FLEX variant for branch purposes).
+  Opc = getHaydnFlexBaseOpcode(Opc, *this);
+
+ // Invert conditional branches. Emit inverted opcode as s0 FLEX.
+  unsigned Inv = 0;
+  switch (Opc) {
+  case Haydn::BEQZ_W:  Inv = Haydn::BNEZ_W; break;
+  case Haydn::BNEZ_W:  Inv = Haydn::BEQZ_W; break;
+  case Haydn::BGEZ_W:  Inv = Haydn::BLTZ_W; break;
+  case Haydn::BLTZ_W:  Inv = Haydn::BGEZ_W; break;
+  case Haydn::BEQ_W:   Inv = Haydn::BNE_W;  break;
+  case Haydn::BNE_W:   Inv = Haydn::BEQ_W;  break;
+  case Haydn::BGE_W:   Inv = Haydn::BLT_W;  break;
+  case Haydn::BLT_W:   Inv = Haydn::BGE_W;  break;
+  case Haydn::BGEU_W:  Inv = Haydn::BLTU_W; break;
+  case Haydn::BLTU_W:  Inv = Haydn::BGEU_W; break;
+  default:
+    return true; // Cannot reverse
+  }
+
+  Cond[0].setImm(Inv);
+  return false; // Successfully reversed
+}
+
+bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
+  MachineBasicBlock &MBB = *MI.getParent();
+  MachineBasicBlock::iterator MBBI = MI.getIterator();
+  DebugLoc DL = MI.getDebugLoc();
+
+  switch (MI.getOpcode()) {
+  default:
+    return false;
+
+  case Haydn::RET:
+    // RET → JALR_W R0, R15, 0 (jump to LR, discard link address).
+    // Phase 1a: route to the 48-bit WIDE form (legacy JALR kept in
+    // the.td for asm parser / decoder until Phase 3).
+    MI.setDesc(get(Haydn::JALR_W));
+    MI.addOperand(MachineOperand::CreateReg(Haydn::R0, /*isDef*/ true));
+    MI.addOperand(MachineOperand::CreateReg(Haydn::R15, /*isDef*/ false));
+    MI.addOperand(MachineOperand::CreateImm(0));
+    return true;
+
+  case Haydn::B:
+    // B pseudo must survive through all post-RA passes including
+    // MachineBlockPlacement so analyzeBranch correctly identifies it.
+    // Expanded to BEQZ R0 in the AsmPrinter (HaydnAsmPrinter.cpp).
+    return false;
+
+  case Haydn::LOADI32: {
+    // LOADI32 $rd, $imm — post-RA expansion of rematerialisable constants.
+    //
+    // ISA LUI loads imm12 into bits[31:20] (<< 20), NOT a 16-bit
+    // "upper half" (<< 16). The pre-ISA-43 split (Upper = Val>>16, LUI Upper
+    // ADDI Lower) mis-materialised every value outside simm16 — e.g. 0xFFFF
+    // became LUI 1; ADDI 0xFFFF → 0x0010FFFF on real hardware/ISS, which then
+    // poisoned AND masks and (when remat/spilled) load bases → unaligned
+    // MEMORY_FAULT. Always use HaydnMatInt (same as AsmPrinter / G_CONSTANT
+    // isel). MBB operands (branch-relax destinations) are left for AsmPrinter
+    // ExpandPostRA runs before BranchRelaxation inserts those.
+    //
+    // slice Z: ZERO_GPR retired — MatInt(0) is ADDI32_W rd, R0, 0 (or
+    // equivalent); soft-zero R0 remains available as the sequence source.
+    if (!MI.getOperand(1).isImm())
+      return false;
+
+    Register DstReg = MI.getOperand(0).getReg();
+    int64_t Imm = MI.getOperand(1).getImm();
+    HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(Imm);
+
+    // Post-RA: chain every MatInt step through the same phys dst (R0 → Dst → …).
+    Register CurrentReg = Haydn::R0;
+    for (const HaydnMatInt::Inst &MatInst : Seq) {
+      switch (MatInst.Opc) {
+      default:
+        // ADDI32 / LUI / ADDI32_W / ORI32_W: (rd, rs, imm)
+        BuildMI(MBB, MBBI, DL, get(MatInst.Opc), DstReg)
+            .addReg(CurrentReg)
+            .addImm(MatInst.Imm);
+        break;
+      case Haydn::SLLI32:
+        BuildMI(MBB, MBBI, DL, get(Haydn::SLLI32), DstReg)
+            .addReg(CurrentReg)
+            .addImm(MatInst.Imm);
+        break;
+      case Haydn::ORI32:
+        BuildMI(MBB, MBBI, DL, get(Haydn::ORI32), DstReg)
+            .addReg(CurrentReg)
+            .addImm(MatInst.Imm);
+        break;
+      }
+      CurrentReg = DstReg;
+    }
+    MI.eraseFromParent();
+    return true;
+  }
+
+  case Haydn::LOADI64: {
+    // LOADI64 $rd, $imm — materialise an i64 constant into a DR64 register.
+    // lo32/hi32 via HaydnMatInt into a scavenged post-RA GPR scratch, ST32
+    // both halves to a transient SP slot, LD64. Rematerialisable single-imm
+    // pseudo.
+    //
+    // OPT-7 (sign-extend hi): when hi32 == 0xFFFFFFFF and lo32 < 0, the
+    // high half is arithmetic sign-extension of the low half. Emit
+    // SRAI32 scr, scr, 31
+    // after storing lo, instead of a second MatInt(-1). Same shape as
+    // HaydnMatInt's 64-bit early-out; applied here because G_CONSTANT
+    // selects LOADI64 and expansion owns the final halves.
+    //
+    // MatInt scratch is NOT free AT / not fixed R12. withPostRAScratch
+    // picks an available call-clobbered-first GPR (PreferNotR12); spills
+    // only when every candidate is live.
+    Register DstReg = MI.getOperand(0).getReg(); // DR64
+    int64_t Imm = MI.getOperand(1).getImm();
+    uint64_t Val = static_cast<uint64_t>(Imm);
+    int32_t Lo = static_cast<int32_t>(Val & 0xFFFFFFFFu);
+    int32_t Hi = static_cast<int32_t>((Val >> 32) & 0xFFFFFFFFu);
+    const bool HiIsSignExtOfLo = (Hi == -1 && Lo < 0);
+    const HaydnSubtarget &ST =
+        MBB.getParent()->getSubtarget<HaydnSubtarget>();
+
+    auto emitConst32 = [&](int32_t V, Register Target) {
+      HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(V);
+      Register Cur = Haydn::R0;
+      for (size_t I = 0; I < Seq.size(); ++I) {
+        BuildMI(MBB, MBBI, DL, get(Seq[I].Opc), Target)
+            .addReg(Cur)
+            .addImm(Seq[I].Imm);
+        Cur = Target;
+      }
+    };
+
+    withPostRAScratch(
+        MBB, MBBI, DL, *this, ST, /*PreferNotR12=*/true, [&](Register Scr) {
+          BuildMI(MBB, MBBI, DL, get(Haydn::SUBI32), Haydn::R13)
+              .addReg(Haydn::R13)
+              .addImm(8);
+          emitConst32(Lo, Scr);
+          BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+              .addReg(Scr)
+              .addReg(Haydn::R13)
+              .addImm(0);
+          if (HiIsSignExtOfLo) {
+            // OPT-7: hi = ashr(lo, 31). Scr still holds lo.
+            BuildMI(MBB, MBBI, DL, get(Haydn::SRAI32), Scr)
+                .addReg(Scr)
+                .addImm(31);
+          } else {
+            emitConst32(Hi, Scr);
+          }
+          BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+              .addReg(Scr)
+              .addReg(Haydn::R13)
+              .addImm(4);
+          BuildMI(MBB, MBBI, DL, get(Haydn::LD64), DstReg)
+              .addReg(Haydn::R13)
+              .addImm(0);
+          BuildMI(MBB, MBBI, DL, get(Haydn::ADDI32_W), Haydn::R13)
+              .addReg(Haydn::R13)
+              .addImm(8);
+        });
+
+    MI.eraseFromParent();
+    return true;
+  }
+
+  case Haydn::MOV_GPR_TO_DR64: {
+    // MOV_GPR_TO_DR64 $rd, $rs_lo, $rs_hi
+    // Pack two GPR32 values into one DR64: rd = (rs_hi << 32) | rs_lo.
+    //
+    // Why a special case when a half is R0 — not "hardwired zero":
+    // Haydn R0 is soft-zero (HaydnRegisterInfo): prologue sets it to 0
+    // reserved so regalloc never assigns it. Selectors emit R0 as the
+    // zero half of a pack (e.g. MOV_GPR_TO_DR64 R0, srai for Q15 coef).
+    // Silicon does NOT force R0==0; do not read R0 here for the zero half.
+    //
+    // Why only that special case (not general two-live-half):
+    // Stackless pack of two nonzero GPRs needs a second DR temp to OR the
+    // shifted halves; expandPostRAPseudo has no scavenger. With one half
+    // known zero (operand is the soft-zero reg), shifts alone produce the
+    // zero half and Dst is the only DR needed.
+    //
+    // fir_xcorr / firinterp: MOV_GPR_TO_DR64 R0, (srai hi,16) — SP path was
+    // the hot-loop subi32/st32/ld64 bloat (P7 / ISA-42 interim).
+    //
+    // General (both halves live GPRs) still uses SP-relative memory after PEI:
+    // SUBI32 SP, SP, 8; ST32 lo; ST32 hi; LD64 rd; ADDI32 SP, 8
+    // CFI: balanced transient — net CFA zero (same rationale as before).
+    Register DstReg = MI.getOperand(0).getReg();  // DR64
+    Register SrcLo = MI.getOperand(1).getReg();   // GPR32 low half
+    Register SrcHi = MI.getOperand(2).getReg();   // GPR32 high half
+    bool LoKill = MI.getOperand(1).isKill();
+    bool HiKill = MI.getOperand(2).isKill();
+
+    // Stackless when a half is the soft-zero *operand* (no R0 read)
+    if (SrcLo == Haydn::R0 && SrcHi == Haydn::R0) {
+      // Zero DR64 without reading R0 (soft-zero may be stale after JALR→R0).
+      BuildMI(MBB, MBBI, DL, get(Haydn::XOR64), DstReg)
+          .addReg(DstReg, RegState::Undef)
+          .addReg(DstReg, RegState::Undef);
+      MI.eraseFromParent();
+      return true;
+    }
+    if (SrcLo == Haydn::R0) {
+      // rd = (uint64_t)rs_hi << 32 — hi in [63:32], zero in [31:0].
+      // Zero low half comes from the shift, not from reading R0.
+      BuildMI(MBB, MBBI, DL, get(Haydn::SEXT_GPR32_TO_DR64), DstReg)
+          .addReg(SrcHi, getKillRegState(HiKill));
+      BuildMI(MBB, MBBI, DL, get(Haydn::SLLI64), DstReg)
+          .addReg(DstReg)
+          .addImm(32);
+      MI.eraseFromParent();
+      return true;
+    }
+    if (SrcHi == Haydn::R0) {
+      // rd = zero_extend(rs_lo) — lo in [31:0], zero in [63:32].
+      // Zero high half from (<<32)>>32; do not read R0.
+      BuildMI(MBB, MBBI, DL, get(Haydn::SEXT_GPR32_TO_DR64), DstReg)
+          .addReg(SrcLo, getKillRegState(LoKill));
+      BuildMI(MBB, MBBI, DL, get(Haydn::SLLI64), DstReg)
+          .addReg(DstReg)
+          .addImm(32);
+      BuildMI(MBB, MBBI, DL, get(Haydn::SRLI64), DstReg)
+          .addReg(DstReg)
+          .addImm(32);
+      MI.eraseFromParent();
+      return true;
+    }
+
+    BuildMI(MBB, MBBI, DL, get(Haydn::SUBI32), Haydn::R13)
+        .addReg(Haydn::R13)
+        .addImm(8);
+    // When SrcLo == SrcHi, only apply kill on the last use to avoid
+    // killing the same physical register twice.
+    if (SrcLo == SrcHi) {
+      BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+          .addReg(SrcLo, getKillRegState(false))
+          .addReg(Haydn::R13)
+          .addImm(0);
+      BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+          .addReg(SrcHi, getKillRegState(LoKill || HiKill))
+          .addReg(Haydn::R13)
+          .addImm(4);
+    } else {
+      BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+          .addReg(SrcLo, getKillRegState(LoKill))
+          .addReg(Haydn::R13)
+          .addImm(0);
+      BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+          .addReg(SrcHi, getKillRegState(HiKill))
+          .addReg(Haydn::R13)
+          .addImm(4);
+    }
+    BuildMI(MBB, MBBI, DL, get(Haydn::LD64), DstReg)
+        .addReg(Haydn::R13)
+        .addImm(0);
+    BuildMI(MBB, MBBI, DL, get(Haydn::ADDI32_W), Haydn::R13)
+        .addReg(Haydn::R13)
+        .addImm(8);
+
+    MI.eraseFromParent();
+    return true;
+  }
+
+  case Haydn::MOV_DR64_TO_GPR: {
+    // MOV_DR64_TO_GPR $rd_lo, $rd_hi, $rs
+    // use native MOVE32_DR_L + MOVE32_DR_H (2 ops, no stack) instead
+    // of the 5-op stack spill (SUBI/ST64/LD32/LD32/ADDI). Both are slot-0
+    // ALU ops that can bundle with neighbors.
+    Register DstLo = MI.getOperand(0).getReg();   // GPR32 low half
+    Register DstHi = MI.getOperand(1).getReg();   // GPR32 high half
+    Register SrcReg = MI.getOperand(2).getReg();   // DR64
+    bool SrcKill = MI.getOperand(2).isKill();
+
+    BuildMI(MBB, MBBI, DL, get(Haydn::MOVE32_DR_L), DstLo)
+        .addReg(SrcReg, getKillRegState(false));
+    BuildMI(MBB, MBBI, DL, get(Haydn::MOVE32_DR_H), DstHi)
+        .addReg(SrcReg, getKillRegState(SrcKill));
+
+    MI.eraseFromParent();
+    return true;
+  }
+  }
+}
+
+bool HaydnInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
+                                         const MachineBasicBlock *MBB,
+                                         const MachineFunction &MF) const {
+  // Instructions that should not be packetized across:
+  if (MI.isCall() || MI.isInlineAsm() || MI.isReturn() || MI.isBranch())
+    return true;
+
+  // Hardware-loop setup is a hard region boundary (AIE/Hexagon-aligned).
+  // Role A expands LoopStart → SET_HWLOOP_REG before postmisched; without
+  // this fence the scheduler can reorder body peels / address setup across
+  // SET (lc_dp_merge: s_lw_post with unscaled index after SET → ALIGNMENT).
+  // Treat remaining LoopStart the same until fully expanded.
+  unsigned Opc = MI.getOpcode();
+  if (Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG ||
+      Opc == Haydn::SET_HWLOOP_W || Opc == Haydn::SET_HWLOOP_F2_W ||
+      Opc == Haydn::SET_HWLOOP_REG_W || Opc == Haydn::LoopStart)
+    return true;
+
+  // Frame-setup / frame-destroy instructions modify the stack pointer (R13):
+  // the prologue SUBI32 $r13 and the epilogue ADDI32 $r13. They MUST be
+  // scheduling barriers. Without this, the post-RA scheduler treats them as
+  // ordinary ALU ops — dependency-independent of the surrounding callee-save
+  // stores — and co-issues the epilogue SP-restore with prologue stores
+  // restoring SP mid-function. Every subsequent sp-relative address then
+  // resolves against the caller's SP, not the callee frame (e.g. VASTART
+  // va_list field materializations in variadic functions read garbage past
+  // the frame, so va_arg returns 0). The base TargetInstrInfo default enforces
+  // this via modifiesRegister(getStackPointerRegisterToSaveRestore); this
+  // override shadows the base, so re-assert it via the explicit frame flags.
+  if (MI.getFlag(MachineInstr::FrameSetup) ||
+      MI.getFlag(MachineInstr::FrameDestroy))
+    return true;
+
+  // Debug values and labels
+  if (MI.isDebugValue() || MI.isDebugLabel() || MI.isDebugInstr())
+    return true;
+
+  // CFI instructions
+  if (MI.isCFIInstruction())
+    return true;
+
+  // Labels and position markers
+  if (MI.isLabel())
+    return true;
+
+  // Implicitdefs/Uses are not real instructions.
+  if (MI.isImplicitDef())
+    return false;
+
+  // Instructions with side effects that should remain isolated.
+  // Haydn ALU instructions set hasSideEffects=1 because they access SFR (status
+  // flag register). This is a modeled side effect — SFR appears as an explicit
+  // implicit def/use in MIR. Only treat as a boundary if there are unmodeled
+  // side effects BEYOND just accessing SFR.
+  if (MI.hasUnmodeledSideEffects()) {
+    bool HasNonSFRImplicit = false;
+    for (const MachineOperand &MO : MI.operands()) {
+      if (MO.isReg() && MO.isImplicit()) {
+        if (MO.getReg() != Haydn::SFR)
+          HasNonSFRImplicit = true;
+      }
+    }
+    if (HasNonSFRImplicit)
+      return true;
+    // All implicit operands are SFR — modeled side effect, not a boundary.
+  }
+
+  return false;
+}
+
+//===----------------------------------------------------------------------===//
+// Branch relaxation hooks
+//===----------------------------------------------------------------------===//
+
+bool HaydnInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
+                                            int64_t BrOffset) const {
+  // resolve `_W_S0` far-branch variants to their legacy `_W`
+  // base so the opcode-range compares below recognize them (the FLEX variants
+  // share the legacy `_W` offset field width — only the encoding/reloc differ).
+  BranchOpc = getHaydnFlexBaseOpcode(BranchOpc, *this);
+  // JAL / JAL_W have a 20-bit signed target field (SImm20): ±512KB range.
+  // JALR / JALR_W have no offset limitation (register-indirect).
+  // Phase 1a: CodeGen selects the _W forms; legacy opcodes kept for
+  // the asm parser / decoder.
+  if (BranchOpc == Haydn::JAL || BranchOpc == Haydn::JAL_W ||
+      BranchOpc == Haydn::JALR || BranchOpc == Haydn::JALR_W)
+    return true;
+
+  // Pseudo-call and jump-table pseudo reach ±512KB (JAL_W) / unlimited
+  // (JALR_W via BR_JT) — always in range for any single fn.
+  // NOTE : B is deliberately NOT here. B lowers to BEQZ_W R0, which
+  // shares the conditional branch's ±4 KB WIDE_BranchSImm12 reach — it is
+  // NOT a long-reach unconditional jump. Modeling B as always-in-range hid
+  // out-of-range unconditional branches from BranchRelaxation: when
+  // fixupConditionalBranch relaxes a far conditional into (inverted cond to
+  // near + B to far), the B leg still overflows ±4 KB. Letting B fall through
+  // to the isInt<13> check below makes BranchRelaxation detect the far B leg
+  // and relax it via fixupUnconditionalBranch → insertIndirectBranch
+  // (LOADI32 + JALR, unlimited reach) on the next fixed-point iteration.
+  if (BranchOpc == Haydn::PseudoCALL || BranchOpc == Haydn::BR_JT)
+    return true;
+
+  // Phase 1b : all conditional branches (BEQ_W..BLTU_W
+  // BEQZ_W..BLTZ_W) use the 48-bit WIDE format (encoding_manual.md §5.5)
+  // with a 12-bit signed offset field stored in 2-byte units (§5.14 D1):
+  // range = sext(off12) << 1 = ±(2^11) << 1 = ±4096 bytes (±4KB).
+  // The offset is measured in bytes.
+  //
+  // Hexagon-style safety buffer (see HexagonBranchRelaxation::isJumpOutOfRange):
+  // Distance = |offset| + BranchRelaxSafetyBuffer
+  // out-of-range if !isJumpWithinBranchRange(..., Distance)
+  // Inflate BrOffset away from zero by the buffer, then apply isInt<13>.
+  // without this, BR accepted printf BNEZ at 3904 B; AsmPrinter growth
+  // made final distance 4128 B and MC-fixup failed.
+  // residual: large yarpgen TUs still under-estimate (seed 3434
+  // beqz_w @ ~4 KB with buffer=256). Default buffer is 1024 — see cl::opt.
+  int64_t Inflated = BrOffset >= 0
+                         ? BrOffset + (int64_t)BranchRelaxSafetyBuffer
+                         : BrOffset - (int64_t)BranchRelaxSafetyBuffer;
+  return isInt<13>(Inflated);
+}
+
+MachineBasicBlock *
+HaydnInstrInfo::getBranchDestBlock(const MachineInstr &MI) const {
+  unsigned Opc = MI.getOpcode();
+  // resolve `_W_S0` far-branch variants to their legacy `_W`
+  // base so the operand-index compares below recognize them (the FLEX variants
+  // share the legacy `_W` operand layout — only the encoding/reloc differ).
+  Opc = getHaydnFlexBaseOpcode(Opc, *this);
+
+  // Two-register conditional branches (Phase 1b: _W forms): BEQ_W..BLTU_W.
+  // Operands: rs1, rs2, brtarget
+  if (Opc == Haydn::BEQ_W || Opc == Haydn::BNE_W || Opc == Haydn::BGE_W ||
+      Opc == Haydn::BGEU_W || Opc == Haydn::BLT_W || Opc == Haydn::BLTU_W) {
+    return MI.getOperand(2).getMBB();
+  }
+
+  // Single-register conditional branches (Phase 1b: _W forms): BEQZ_W..BLTZ_W.
+  // Operands: rs, brtarget
+  if (Opc == Haydn::BEQZ_W || Opc == Haydn::BNEZ_W || Opc == Haydn::BGEZ_W ||
+      Opc == Haydn::BLTZ_W) {
+    return MI.getOperand(1).getMBB();
+  }
+
+  // Unconditional branch pseudo: B
+  // Operand 0: brtarget
+  if (Opc == Haydn::B) {
+    return MI.getOperand(0).getMBB();
+  }
+
+  // JAL / JAL_W with MBB operand (call or far jump).
+  // Operands: rd, calltarget/brtarget_wide_i20 (both shapes are (rd, target)).
+  // Phase 1a: CodeGen selects JAL_W; legacy JAL kept for asm/parser.
+  if ((Opc == Haydn::JAL || Opc == Haydn::JAL_W) &&
+      MI.getOperand(1).isMBB()) {
+    return MI.getOperand(1).getMBB();
+  }
+
+  // Hardware-loop terminators.
+  // PseudoLoopEnd: single MBB operand (the loop body).
+  // LoopJNZ: reg + MBB operand (counter + loop body).
+  if (Opc == Haydn::PseudoLoopEnd)
+    return MI.getOperand(0).getMBB();
+  if (Opc == Haydn::LoopJNZ)
+    return MI.getOperand(1).getMBB();
+
+  llvm_unreachable("unhandled branch in getBranchDestBlock");
+}
+
+void HaydnInstrInfo::insertIndirectBranch(
+    MachineBasicBlock &MBB, MachineBasicBlock &NewDestBB,
+    MachineBasicBlock &RestoreBB, const DebugLoc &DL, int64_t BrOffset,
+    RegScavenger *RS) const {
+  // Insert an indirect branch from MBB to NewDestBB using JALR.
+  //
+  // Sequence:
+  // LOADI32 scratch, <dest_addr> (expands to LUI+ADDI32_W / MatInt)
+  // JALR_W scratch, scratch, 0 (jump; link discarded into scratch)
+  //
+  // never use R0 as the JALR link dest (soft-zero, not hardwired).
+  // Scratch policy (RISC-V-aligned; AIE model: no free AT):
+  // 1. RegScavenger with AllowSpill=false after re-attaching the dedicated
+  // BranchRelaxationScratchFI (BranchRelaxation constructs a *fresh* RS
+  // that does not inherit PEI scavenger FIs).
+  // 2. If still no free reg: spill R11 to that FI, jump via RestoreBB
+  // restore R11 there (same as RISCVInstrInfo::insertIndirectBranch).
+  //
+  // AllowSpill=true was wrong here. Under greedy RA (high
+  // live pressure across a far branch), scavengeRegisterBackwards spilled a
+  // live-out GPR and reinserted the reload *after* the JALR_W terminator
+  // in the trampoline MBB. The reload is dead (never executed); the dest
+  // block saw a clobbered live-in → wrong oracle_u64 (seed2 @ -O1/-O2;
+  // seed7 @ -O2 same class). RISC-V uses AllowSpill=false and the RestoreBB
+  // path for the no-free-reg case; match that.
+  assert(RS && "RegScavenger required for long branching");
+  assert(MBB.pred_size() == 1);
+
+  if (!isInt<32>(BrOffset))
+    report_fatal_error(
+        "Branch offsets outside of the signed 32-bit range not supported");
+
+  MachineFunction *MF = MBB.getParent();
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+  const HaydnSubtarget &ST = MF->getSubtarget<HaydnSubtarget>();
+  const TargetRegisterInfo *TRI = ST.getRegisterInfo();
+  auto *FuncInfo = MF->getInfo<HaydnMachineFunctionInfo>();
+  auto II = MBB.end();
+
+  // Re-attach PEI-allocated emergency FI onto BranchRelaxation's fresh RS.
+  int ScratchFI = FuncInfo->getBranchRelaxationScratchFI();
+  if (ScratchFI >= 0 && !RS->isScavengingFrameIndex(ScratchFI))
+    RS->addScavengingFrameIndex(ScratchFI);
+
+  auto scavengeScratch = [&](MachineBasicBlock::iterator From) -> Register {
+    // Scavenge only (AIE model: R12 is allocatable, never a free AT).
+    // AllowSpill must be false — see comment block above.
+    Register S = RS->scavengeRegisterBackwards(
+        Haydn::GPR32RegClass, From, /*RestoreAfter=*/false, /*SpAdj=*/0,
+        /*AllowSpill=*/false);
+    if (!S)
+      S = RS->FindUnusedReg(&Haydn::GPR32RegClass);
+    return S;
+  };
+
+  // Manual spill of R11 when scavenger still fails (RISC-V s11 pattern).
+  // Jump lands on RestoreBB (restore R11) which falls through to NewDestBB.
+  auto emitWithManualSpill = [&](Register ScratchPhys,
+                                 MachineBasicBlock::iterator InsertPt,
+                                 bool JumpToRestore) {
+    if (ScratchFI < 0)
+      report_fatal_error(
+          "Haydn: insertIndirectBranch needs BranchRelaxationScratchFI "
+          "(underestimated function size / no emergency spill)");
+
+    storeRegToStackSlot(MBB, InsertPt, ScratchPhys, /*IsKill=*/true, ScratchFI,
+                        &Haydn::GPR32RegClass, Register());
+    // Post-PEI: fold FI now.
+    TRI->eliminateFrameIndex(std::prev(InsertPt), /*SpAdj=*/0,
+                             /*FIOperandNum=*/1);
+
+    MachineBasicBlock *JumpDest = JumpToRestore ? &RestoreBB : &NewDestBB;
+    BuildMI(MBB, InsertPt, DL, get(Haydn::LOADI32), ScratchPhys)
+        .addMBB(JumpDest);
+    BuildMI(MBB, InsertPt, DL, get(Haydn::JALR_W))
+        .addReg(ScratchPhys, RegState::Define)
+        .addReg(ScratchPhys)
+        .addImm(0);
+
+    if (JumpToRestore) {
+      loadRegFromStackSlot(RestoreBB, RestoreBB.end(), ScratchPhys, ScratchFI,
+                           &Haydn::GPR32RegClass, Register());
+      TRI->eliminateFrameIndex(RestoreBB.back(), /*SpAdj=*/0,
+                               /*FIOperandNum=*/1);
+    }
+  };
+
+  Register ScratchPhys;
+  if (MBB.empty()) {
+    // Scavenger needs at least one instr to walk from; use a vreg then
+    // substitute (same workaround as RISCV/SIInstrInfo).
+    Register ScratchV = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+    MachineInstr *LoadMI =
+        BuildMI(MBB, II, DL, get(Haydn::LOADI32), ScratchV).addMBB(&NewDestBB);
+    BuildMI(MBB, II, DL, get(Haydn::JALR_W))
+        .addReg(ScratchV, RegState::Define)
+        .addReg(ScratchV)
+        .addImm(0);
+
+    RS->enterBasicBlockEnd(MBB);
+    ScratchPhys = scavengeScratch(LoadMI->getIterator());
+    if (ScratchPhys.isValid()) {
+      RS->setRegUsed(ScratchPhys);
+      MRI.replaceRegWith(ScratchV, ScratchPhys);
+      MRI.clearVirtRegs();
+      return;
+    }
+
+    // No free reg: tear down vreg sequence and manual-spill R11 via RestoreBB.
+    MBB.erase(MBB.begin(), MBB.end());
+    MRI.clearVirtRegs();
+    ScratchPhys = Haydn::R11;
+    emitWithManualSpill(ScratchPhys, MBB.end(), /*JumpToRestore=*/true);
+    return;
+  }
+
+  // Non-empty MBB: scavenge at the insertion point before emitting.
+  RS->enterBasicBlockEnd(MBB);
+  ScratchPhys = scavengeScratch(II);
+  if (ScratchPhys.isValid()) {
+    RS->setRegUsed(ScratchPhys);
+    BuildMI(MBB, II, DL, get(Haydn::LOADI32), ScratchPhys).addMBB(&NewDestBB);
+    BuildMI(MBB, II, DL, get(Haydn::JALR_W))
+        .addReg(ScratchPhys, RegState::Define)
+        .addReg(ScratchPhys)
+        .addImm(0);
+    return;
+  }
+
+  ScratchPhys = Haydn::R11;
+  emitWithManualSpill(ScratchPhys, II, /*JumpToRestore=*/true);
+}
+
+unsigned HaydnInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
+  // === Bundle128-only size model (shared with Fixup/HardwareLoops/BR) ===
+  // Single numeric authority: haydn::hwloop::Bundle128Bytes (16).
+  // AIE returns TableGen Size of the encoded format; Haydn emit is always
+  // one BUNDLE128_FULL parcel per packet.
+  //
+  // Contract (matches encoder + BranchRelaxation sum over MBB.instrs):
+  // BUNDLE root → Bundle128Bytes
+  // child inside a BUNDLE → 0 (do not double-count)
+  // real / FLEX / legacy with FlexMap → Bundle128Bytes
+  // multi-MI pseudos → Bundle128Bytes * N_expanded_parcels
+  // pure meta / zero-size pseudos → 0
+  using haydn::hwloop::Bundle128Bytes;
+  const unsigned B = static_cast<unsigned>(Bundle128Bytes);
+
+  // Formed VLIW packet: always one Bundle128 word (idle slots = zero windows).
+  if (MI.isBundle())
+    return B;
+
+  // Children are accounted on the BUNDLE root (AIE bundle size is format size
+  // on the composite, not sum of slot sub-instruction Sizes).
+  if (MI.isInsideBundle())
+    return 0;
+
+  // Pseudos that expand to one or more real parcels before/at emit.
+  switch (MI.getOpcode()) {
+  default:
+    break;
+  case Haydn::B:
+  case Haydn::RET:
+  case Haydn::BR_JT:
+  case Haydn::PseudoCALL:
+  case Haydn::SET_HWLOOP:
+  case Haydn::SET_HWLOOP_REG:
+    // Each expands to a single real instruction → one Bundle128 parcel.
+    return B;
+  case Haydn::LOADI32: {
+    // expandPostRAPseudo: Imm==0 → XOR32 (1); else XOR+ADDI or LUI+ADDI (2).
+    if (MI.getOperand(1).isImm() && MI.getOperand(1).getImm() == 0)
+      return B;
+    return B * 2;
+  }
+  case Haydn::LOAD_ADDR:
+    // LUI + ADDI32_W → two parcels.
+    return B * 2;
+  case Haydn::LOADI64:
+    // SP-transient materialize: optional R12 spill/restore (when AT not
+    // reserved) + SUBI32 + up to 2× MatInt(~4) + 2×ST + LD64 + ADDI32.
+    // Worst case ~17 real ops. Size conservatively high so BR relaxes early.
+    return B * 17;
+  case Haydn::MOV_GPR_TO_DR64:
+  case Haydn::MOV_DR64_TO_GPR:
+    // SUBI32 + 2×ST + LD + ADDI32 = 5 parcels.
+    return B * 5;
+  case Haydn::ADJCALLSTACKDOWN:
+  case Haydn::ADJCALLSTACKUP:
+  case Haydn::VASTART:
+  case Haydn::VACOPY:
+  case Haydn::VAEND:
+  case Haydn::LIBCALL_SDIV:
+  case Haydn::LIBCALL_UDIV:
+  case Haydn::LIBCALL_SREM:
+  case Haydn::LIBCALL_UREM:
+  case Haydn::LIBCALL_MUL64:
+  case Haydn::WFI:
+    return 0;
+  }
+
+  if (MI.isPseudo() || MI.isMetaInstruction() || MI.isDebugInstr() ||
+      MI.isImplicitDef() || MI.isKill())
+    return 0;
+
+  // Every real opcode the MC layer accepts is Bundle128 (forcing
+  // function). Shared FlexMap/FLEX predicate matches the encoder; unmigrated
+  // real ops still size as B so BranchRelaxation never undercounts (encode
+  // will report_fatal_error if there is truly no Flex form).
+  return B;
+}
+
+ResourceCycle *HaydnInstrInfo::CreateTargetScheduleState(
+    const TargetSubtargetInfo &STI) const {
+  // Bundle-backed resource model for SWPS (alternative-aware slot
+  // pressure). Default ON — see EnableHaydnHRResourceCycle. The DFA fallback is
+  // choice-set-naive (reserves all alt bits in a stage), which inflates ResMII
+  // on dual-load streaming loops.
+  if (EnableHaydnHRResourceCycle)
+    return new HaydnResourceCycle();
+  const InstrItineraryData *II = STI.getInstrItineraryData();
+  return static_cast<const HaydnSubtarget &>(STI).createDFAPacketizer(II);
+}
+
+ScheduleHazardRecognizer *HaydnInstrInfo::CreateTargetMIHazardRecognizer(
+    const InstrItineraryData *ItinData, const ScheduleDAGMI *DAG) const {
+  // Phase B1 (Stream B): install the Haydn scoreboard hazard recognizer
+  // only for the POST-RA scheduler (where DAG has no vreg liveness). The pre-RA
+  // path keeps the existing VLIWMachineScheduler strategy with its default
+  // ScoreboardHazardRecognizer — we MUST return a non-null recognizer here for
+  // pre-RA because VLIWMachineScheduler::schedule unconditionally assigns
+  // the result to Top/Bot.HazardRec and later dereferences it (returning
+  // nullptr would SIGSEGV). Falling back to the base implementation gives the
+  // pre-RA path exactly what it had before this override existed.
+  if (DAG && DAG->hasVRegLiveness())
+    return TargetInstrInfo::CreateTargetMIHazardRecognizer(ItinData, DAG);
+  // slice 2a: thread the function's alt-descriptor side-map into the HR so
+  // it can record each MI's chosen slot/variant during scheduling (inert until
+  // slice 2b wires the recording behind -haydn-hr-slot-select).
+  HaydnAlternateDescriptors *AltDescs = nullptr;
+  if (DAG)
+    AltDescs = &DAG->MF.getInfo<HaydnMachineFunctionInfo>()->getAltDescs();
+  return new HaydnHazardRecognizer(this, ItinData, /*IsPreRA=*/false, AltDescs);
+}
+
+//===----------------------------------------------------------------------===//
+// AIE dual-sched mutation helpers
+//===----------------------------------------------------------------------===//
+
+std::optional<int>
+HaydnInstrInfo::getFirstMemoryCycle(unsigned SchedClass) const {
+  // Memory ops issue on cycle 0 relative to the MI start (Bundle128 pack
+  // unit). Non-memory sched classes have no memory cycle.
+  const InstrItineraryData *Itin = STI.getInstrItineraryData();
+  if (!Itin || Itin->isEmpty())
+    return std::nullopt;
+  // Itinerary present for class: treat as memory-capable if it has stages.
+  const InstrStage *IS = Itin->beginStage(SchedClass);
+  const InstrStage *E = Itin->endStage(SchedClass);
+  if (IS == E)
+    return std::nullopt;
+  return 0;
+}
+
+std::optional<int>
+HaydnInstrInfo::getLastMemoryCycle(unsigned SchedClass) const {
+  // Loads: data returns at LoadLatency (2) → last memory cycle = 1.
+  // Stores: complete on issue cycle 0.
+  // Without per-opcode mayLoad, use itinerary operand span when available.
+  std::optional<int> First = getFirstMemoryCycle(SchedClass);
+  if (!First)
+    return std::nullopt;
+  const InstrItineraryData *Itin = STI.getInstrItineraryData();
+  if (!Itin || Itin->isEmpty())
+    return 0;
+  unsigned Lat = 1;
+  int FirstOp = Itin->Itineraries[SchedClass].FirstOperandCycle;
+  int LastOp = Itin->Itineraries[SchedClass].LastOperandCycle;
+  if (FirstOp >= 0 && LastOp > FirstOp) {
+    for (int OpIdx = FirstOp; OpIdx < LastOp; ++OpIdx) {
+      unsigned C = Itin->OperandCycles[OpIdx];
+      if (C > Lat)
+        Lat = C;
+    }
+  }
+  // Cap last memory cycle at LoadLatency-1 (=1 for model LoadLatency=2).
+  int Last = static_cast<int>(std::min(Lat, 2u)) - 1;
+  return std::max(0, Last);
+}
+
+std::optional<int>
+HaydnInstrInfo::getMemoryLatency(unsigned SrcSchedClass,
+                                 unsigned DstSchedClass) const {
+  // Product path matches AIE AccurateMemEdges=false: class-agnostic latency 1.
+  // getFirst/LastMemoryCycle tables exist for a future accurate path; enabling
+  // them here (Last-First+1) raised store→load to 2 and regressed packing /
+  // lit densify (MemoryEdges default ON). Flip only with NatureDSP A/B + lit.
+  (void)SrcSchedClass;
+  (void)DstSchedClass;
+  return 1;
+}
+
+unsigned HaydnInstrInfo::getMaxResultLatency(const MachineInstr &MI) const {
+  const MachineFunction *MF = MI.getMF();
+  if (!MF)
+    return 1;
+  const auto &ST = MF->getSubtarget<HaydnSubtarget>();
+  const InstrItineraryData *Itin = ST.getInstrItineraryData();
+  unsigned Lat = 1;
+  if (Itin && !Itin->isEmpty()) {
+    unsigned SC = MI.getDesc().getSchedClass();
+    int FirstOp = Itin->Itineraries[SC].FirstOperandCycle;
+    int LastOp = Itin->Itineraries[SC].LastOperandCycle;
+    if (FirstOp >= 0 && LastOp > FirstOp) {
+      for (int OpIdx = FirstOp; OpIdx < LastOp; ++OpIdx) {
+        unsigned C = Itin->OperandCycles[OpIdx];
+        if (C > Lat)
+          Lat = C;
+      }
+    }
+  }
+  if (MI.mayLoad()) {
+    // ISA §55 / HaydnSchedModel.LoadLatency = 2
+    Lat = std::max(Lat, 2u);
+  }
+  return Lat;
+}
+
+unsigned HaydnInstrInfo::getNumDelaySlots(const MachineInstr & /*MI*/) const {
+  // Haydn has no architectural delayed-branch slots; post-RA inserts NOPs via
+  // leaveMBB. RegionEndEdges uses getMaxResultLatency instead.
+  return 0;
+}
+
+//===----------------------------------------------------------------------===//
+// Software Pipelining (MachinePipeliner) support
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+// Get an instruction sequence from an SMS schedule estimated to have similar
+// register pressure to premisched output. Reverse stage extraction: stages
+// laid down in reverse order without interleaving.
+// Peer: AIEBasePipelinerLoopInfo.cpp:getInstrSequence (408-429).
+std::vector<MachineInstr *> getSMSInstrSequence(SMSchedule &Sched) {
+  std::vector<MachineInstr *> Seq;
+
+  for (int Stage = static_cast<int>(Sched.getMaxStageCount()); Stage >= 0;
+       --Stage) {
+    int FirstSeqCycle =
+        Sched.getFirstCycle() + Stage * Sched.getInitiationInterval();
+    int LastSeqCycle = FirstSeqCycle + Sched.getInitiationInterval() - 1;
+    for (int SeqCycle = FirstSeqCycle; SeqCycle <= LastSeqCycle; ++SeqCycle) {
+      for (SUnit *SU : Sched.getInstructions(SeqCycle))
+        Seq.push_back(SU->getInstr());
+    }
+  }
+
+  return Seq;
+}
+
+// Replay instructions in \p Seq and collect live-in registers.
+// Peer: AIEBasePipelinerLoopInfo.cpp:collectLiveInRegs (431-456).
+std::vector<VRegMaskOrUnit>
+collectSMSLiveInRegs(const std::vector<MachineInstr *> &Seq,
+                     const MachineFunction &MF) {
+  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+  LiveRegSet LiveRegs;
+  LiveRegs.init(MF.getRegInfo());
+
+  for (const MachineInstr *MI : reverse(Seq)) {
+    // Ignore PHI nodes: they make two values appear live-in without actually
+    // increasing pressure when correctly placed/allocated.
+    if (MI->isPHI())
+      continue;
+
+    RegisterOperands RegOpers;
+    RegOpers.collect(*MI, *TRI, MF.getRegInfo(), true, true);
+    for (const VRegMaskOrUnit &Def : RegOpers.Defs)
+      LiveRegs.erase(Def);
+    for (const VRegMaskOrUnit &Use : RegOpers.Uses)
+      LiveRegs.insert(Use);
+  }
+
+  SmallVector<VRegMaskOrUnit> LiveInRegs;
+  LiveRegs.appendTo(LiveInRegs);
+  return {LiveInRegs.begin(), LiveInRegs.end()};
+}
+
+// Estimate whether RA can allocate the schedule without spilling by checking
+// incoming register pressure against pressure-set limits.
+// Peer: AIEBasePipelinerLoopInfo.cpp:canAllocate (458-518).
+bool canAllocateSMS(SMSchedule &Sched) {
+  std::vector<MachineInstr *> Seq = getSMSInstrSequence(Sched);
+  if (Seq.empty())
+    return true;
+
+  for (const MachineInstr *MI : Seq)
+    LLVM_DEBUG(dbgs() << "PPS-3 predicted order: " << *MI);
+
+  MachineBasicBlock &MBB = *Seq.front()->getParent();
+  MachineFunction &MF = *MBB.getParent();
+
+  RegionPressure RegPressure;
+  RegPressureTracker RPTracker(RegPressure);
+  RegisterClassInfo RegClassInfo;
+  RegClassInfo.runOnMachineFunction(MF);
+  RPTracker.init(&MF, &RegClassInfo, nullptr, &MBB,
+                 MachineBasicBlock::iterator(Seq.back()), false, false);
+  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+
+  auto CheckPressureExcess = [&](const RegisterPressure &Pressure) {
+    bool PressureExcess = false;
+    for (unsigned I = 0, E = Pressure.MaxSetPressure.size(); I < E; ++I) {
+      unsigned Limit = RegClassInfo.getRegPressureSetLimit(I);
+      if (Pressure.MaxSetPressure[I] > Limit) {
+        LLVM_DEBUG(dbgs() << TRI->getRegPressureSetName(I) << " Limit " << Limit
+                          << " Actual " << Pressure.MaxSetPressure[I] << "\n");
+        PressureExcess = true;
+      }
+    }
+    return PressureExcess;
+  };
+
+  for (const VRegMaskOrUnit &LiveInReg : collectSMSLiveInRegs(Seq, MF)) {
+    Register PrintReg =
+        LiveInReg.VRegOrUnit.isVirtualReg()
+            ? LiveInReg.VRegOrUnit.asVirtualReg()
+            : Register(static_cast<unsigned>(LiveInReg.VRegOrUnit.asMCRegUnit()));
+    LLVM_DEBUG(dbgs() << "PPS-3 add livein pressure: "
+                      << printReg(PrintReg, TRI, 0, &MF.getRegInfo()) << ":"
+                      << printRegClassOrBank(PrintReg, MF.getRegInfo(), TRI)
+                      << "\n");
+
+    // Ignore partially live regs — RPTracker overcounts pressure units.
+    if (LiveInReg.VRegOrUnit.isVirtualReg() &&
+        LiveInReg.LaneMask !=
+            MF.getRegInfo().getMaxLaneMaskForVReg(
+                LiveInReg.VRegOrUnit.asVirtualReg())) {
+      LLVM_DEBUG(dbgs() << "PPS-3 skipped partially live reg\n");
+      continue;
+    }
+    RPTracker.increaseRegPressure(LiveInReg.VRegOrUnit, LaneBitmask::getNone(),
+                                  LiveInReg.LaneMask);
+  }
+
+  // true when no pressure set is overbooked (AIE ExcessIncomingPressure).
+  bool CanAllocate = !CheckPressureExcess(RPTracker.getPressure());
+  return CanAllocate;
+}
+
+} // namespace
+
+bool HaydnPipelinerLoopInfo::shouldIgnoreForPipelining(
+    const MachineInstr *MI) const {
+  // Ignore the loop-control instructions -- the conditional-branch latch
+  // (EndLoop) and the comparison that sets the branch condition (CmpMI). These
+  // must remain in stage 0 and cannot be pipelined across stages.
+  // in ZOL mode, also ignore LoopStart (preheader setup) and
+  // PseudoLoopEnd (the meta latch terminator).
+  if (MI == EndLoop || MI == CmpMI)
+    return true;
+  if (IsZOL && (MI == LoopStart ||
+                MI->getOpcode() == Haydn::PseudoLoopEnd ||
+                MI->getOpcode() == Haydn::LoopStart))
+    return true;
+  return false;
+}
+
+bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
+                                               SMSchedule &SMS) {
+  const unsigned PrologueCount = SMS.getMaxStageCount();
+  const unsigned StageCount = PrologueCount + 1;
+
+  // PR8 / AIE preferPostPipeliner seed: when the flag is set, defer ZOL to the
+  // post-pipeliner path by rejecting every SMS schedule for ZOL form. Default
+  // off so classic pre-RA SMS behavior is unchanged.
+  if (IsZOL && EnableZOLPreferPostPipeliner) {
+    LLVM_DEBUG(dbgs() << "ZOL: preferring post-pipeliner over SMS "
+                         "(-haydn-zol-prefer-post-pipeliner)\n");
+    return false;
+  }
+
+  // For ZOL loops, reject single-stage schedules (StageCount <= 1).
+  // A single-stage schedule has no pipeline overlap -- it just adds
+  // prologue/epilogue overhead (register copies, trip-count adjustments)
+  // without any benefit. This caused +358 bundles on the corpus when ZOL
+  // pipelining was first enabled with unconditional acceptance.
+  // Multi-stage schedules (StageCount >= 2) have real overlap and are worth
+  // the overhead. Mirrors AIE's ZeroOverheadLoop::shouldUseSchedule
+  // (AIEBasePipelinerLoopInfo.cpp:826-835) which delegates to the base class
+  // that rejects StageCount <= 1.
+  if (IsZOL && StageCount <= 1) {
+    LLVM_DEBUG(dbgs() << "ZOL: rejecting single-stage schedule (no overlap)\n");
+    return false;
+  }
+
+  // PPS-3: AIE canAcceptII stage-count gate (into shouldUseSchedule — this
+  // LLVM has no PipelinerLoopInfo::canAcceptII virtual). Reject schedules
+  // with too many stages; high stage count forces many prologue/epilogue
+  // copies and often loses to Stage-0 PostPipeliner or no-SWP.
+  // Mirrors AIEBasePipelinerLoopInfo::canAcceptII MaxStageCount check
+  // (AIEBasePipelinerLoopInfo.cpp:839-847).
+  if (StageCount > HaydnSMSMaxStageCount) {
+    LLVM_DEBUG(dbgs() << "PPS-3: reject SMS (stages=" << StageCount
+                      << " > max=" << HaydnSMSMaxStageCount
+                      << " II=" << SMS.getInitiationInterval() << ")\n");
+    return false;
+  }
+
+  // PPS-3: AIE canAcceptII TrackRegPressure/canAllocate gate. Reject schedules
+  // whose estimated kernel live-ins exceed register pressure-set limits (spill
+  // risk). Peer AIEBasePipelinerLoopInfo.cpp:865-869.
+  if (HaydnSMSTrackRegPressure && !canAllocateSMS(SMS)) {
+    LLVM_DEBUG(dbgs() << "PPS-3: reject SMS (too much block pressure, stages="
+                      << StageCount
+                      << " II=" << SMS.getInitiationInterval() << ")\n");
+    return false;
+  }
+
+  // For naive loops (non-ZOL), accept remaining schedules (Hexagon-like).
+  return true;
+}
+
+std::optional<bool> HaydnPipelinerLoopInfo::createTripCountGreaterCondition(
+    int TC, MachineBasicBlock &MBB,
+    SmallVectorImpl<MachineOperand> &Cond) {
+  // ZOL mode — the hardware loop counter handles the iteration count.
+  // We cannot emit a dynamic guard (the ZOL terminator cannot be reversed).
+  // Return true to indicate the guard is not needed (the loop will execute
+  // the correct number of iterations). Mirrors AIE's
+  // ZeroOverheadLoop::createTripCountGreaterCondition
+  // (AIEBasePipelinerLoopInfo.cpp:750-761).
+  if (IsZOL)
+    return true;
+
+  // Always emit a runtime "branch if TripCountReg > TC" and return nullopt
+  // NEVER a compile-time static bool. This mirrors the ARM reference
+  // implementation (ARMBaseInstrInfo.cpp::ARMPipelinerLoopInfo), which has no
+  // static-trip-count path whatsoever. Returning a static bool here was the
+  // Blocker-1 silent-wrong-code root cause: a hand-rolled `(limit-init)/step`
+  // value drove `PeelingModuloScheduleExpander::fixupBranches`
+  // (ModuloSchedule.cpp:1980-1999) into the static-false (`KernelDisposed`)
+  // branch, collapsing countable loops (e.g. dot_product_16, trip 16) to ~1
+  // iteration with `-verify-machineinstrs` still green. See.
+  //
+  // `analyzeLoopForPipelining` rejects any loop without a usable runtime
+  // trip-count register, so TripCountReg must be valid here.
+  assert(TripCountReg.isValid() && "pipelined loop must have a runtime TC reg");
+
+  // TripCountReg > TC <=> NOT (TripCountReg < TC + 1)
+  // <=> BEQZ (SLT32 TripCountReg, TC+1)
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+  const TargetRegisterClass *RC = &Haydn::GPR32RegClass;
+  DebugLoc BranchDL = MBB.findBranchDebugLoc();
+
+  // Materialize (TC + 1) into a register.
+  Register CmpReg = MRI.createVirtualRegister(RC);
+  if (isInt<16>(TC + 1)) {
+    BuildMI(&MBB, BranchDL, HII->get(Haydn::LOADI32), CmpReg).addImm(TC + 1);
+  } else {
+    BuildMI(&MBB, BranchDL, HII->get(Haydn::LUI), CmpReg)
+        .addReg(Haydn::R0)
+        .addImm(((static_cast<uint32_t>(TC + 1) + 0x8000) >> 16) & 0xFFFF);
+    BuildMI(&MBB, BranchDL, HII->get(Haydn::ADDI32_W), CmpReg)
+        .addReg(CmpReg)
+        .addImm((TC + 1) & 0xFFFF);
+  }
+
+  // CmpResult = (TripCountReg < TC + 1)
+  Register CmpResult = MRI.createVirtualRegister(RC);
+  BuildMI(&MBB, BranchDL, HII->get(Haydn::SLT32), CmpResult)
+      .addReg(TripCountReg)
+      .addReg(CmpReg);
+
+  // fix: upstream contract (see Hexagon's J2_jumpf reference and
+  // PeelingModuloScheduleExpander::fixupBranches / placeRematerializersCall
+  // call sites in ModuloSchedule.cpp:886,1975) requires the Cond to be TRUE
+  // (branch-taken) when the trip count is NOT greater than TC, i.e. when the
+  // prologue should be SKIPPED. CmpResult = (TripCountReg < TC+1) is true when
+  // trip <= TC. To branch on that "skip" condition we must fire when CmpResult
+  // != 0, hence BNEZ_W. The previous BEQZ fired when trip > TC (CmpResult ==
+  // 0), reversing the guard and dead-stripping every pipelined loop with trip
+  // > stage count (counting-sort, vec-max). Phase 1b: emit the
+  // WIDE 48-bit form so insertBranch / AsmPrinter produce a WIDE parcel.
+  Cond.push_back(MachineOperand::CreateImm(Haydn::BNEZ_W));
+  Cond.push_back(MachineOperand::CreateReg(CmpResult, false));
+  return {};
+}
+
+void HaydnPipelinerLoopInfo::adjustTripCount(int TripCountAdjust) {
+  // ZOL mode — edit LoopStart's simm6:$adj operand directly.
+  // Mirrors AIE's ZeroOverheadLoop::adjustTripCount
+  // (AIEBasePipelinerLoopInfo.cpp:763-768).
+  if (IsZOL) {
+    assert(LoopStart && "ZOL pipelined loop must have a LoopStart");
+    // LoopStart has operands: $src (reg), $adj (simm6). The adj field is
+    // the pipeliner's trip-count adjustment — add the delta to it.
+    int64_t CurAdj = LoopStart->getOperand(1).getImm();
+    LoopStart->getOperand(1).setImm(CurAdj + TripCountAdjust);
+    return;
+  }
+
+  // Runtime trip count: subtract the prolog stage count from TripCountReg.
+  // TripCountAdjust is the (negative) delta the expander wants applied.
+  // There is no static path -- see createTripCountGreaterCondition.
+  assert(TripCountReg.isValid() && "pipelined loop must have a runtime TC reg");
+
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+  const TargetRegisterClass *RC = &Haydn::GPR32RegClass;
+  Register NewTC = MRI.createVirtualRegister(RC);
+
+  int64_t Adj = -TripCountAdjust;
+  // Use the cached LoopBB (the original loop body).
+  MachineBasicBlock *LoopBB = this->LoopBB;
+  if (isInt<16>(Adj)) {
+    BuildMI(*LoopBB, LoopBB->getFirstNonPHI(), DL, HII->get(Haydn::ADDI32_W),
+            NewTC)
+        .addReg(TripCountReg)
+        .addImm(Adj);
+  } else {
+    Register AdjReg = MRI.createVirtualRegister(RC);
+    BuildMI(*LoopBB, LoopBB->getFirstNonPHI(), DL, HII->get(Haydn::LOADI32),
+            AdjReg)
+        .addImm(Adj);
+    BuildMI(*LoopBB, LoopBB->getFirstNonPHI(), DL, HII->get(Haydn::ADD32),
+            NewTC)
+        .addReg(TripCountReg)
+        .addReg(AdjReg);
+  }
+
+  // Rewrite all subsequent uses of the trip-count register.
+  MRI.replaceRegWith(TripCountReg, NewTC);
+}
+
+void HaydnPipelinerLoopInfo::setPreheader(MachineBasicBlock *NewPreheader) {
+  // No-op. SMS runs PRE-RA on ZOL form : the IR-level
+  // HardwareLoops pass has already emitted LoopStart (preheader) +
+  // PseudoLoopEnd (latch) before the pipeliner runs. The expander clones the
+  // ZOL terminator into its new preheader/prologue/epilogue blocks directly;
+  // adjustTripCount edits the LoopStart $adj operand already present in the
+  // expander's new preheader, so no additional target splice is needed here.
+}
+
+namespace {
+
+// True if \p Opc is a Haydn ADD/SUB that can serve as a loop-carried induction
+// step (the bump of an IV update). ADD32/SUB32 have two register sources;
+// ADDI32 has one register source and an immediate step. The IV candidate is
+// the step's non-immediate register source. Accepts both the legacy base
+// opcodes and their `_S<k>` Selector-emitted variants.
+static bool isInductionStep(unsigned Opc, const MCInstrInfo &MII) {
+  unsigned Base = getHaydnFlexBaseOpcode(Opc, MII);
+  return Base == Haydn::ADD32 || Base == Haydn::ADDI32 ||
+         Base == Haydn::ADDI32_W || Base == Haydn::SUB32;
+}
+
+// Return the latch-incoming value of a PHI in \p LoopBB, i.e. the incoming
+// register whose predecessor block is the loop back-edge. For a single-BB
+// loop analyzed by the MachinePipeliner, the back-edge predecessor is LoopBB
+// itself (the loop block branches to itself). Returns Register if \p PHIMI
+// is not a PHI in LoopBB or has no such incoming.
+static Register getPHILatchIncoming(const MachineInstr &PHIMI,
+                                    MachineBasicBlock *LoopBB) {
+  if (!PHIMI.isPHI() || PHIMI.getParent() != LoopBB)
+    return Register();
+  // PHI operand layout: %dst = PHI %v0, %bb0, %v1, %bb1,...
+  for (unsigned I = 1, E = PHIMI.getNumOperands(); I + 1 < E; I += 2) {
+    if (PHIMI.getOperand(I + 1).isMBB() &&
+        PHIMI.getOperand(I + 1).getMBB() == LoopBB)
+      return PHIMI.getOperand(I).getReg();
+  }
+  return Register();
+}
+
+// Return the preheader-incoming value of a PHI in \p LoopBB, i.e. the incoming
+// register whose predecessor block is NOT the loop back-edge (the value the
+// IV is initialized to before the first iteration). For a single-BB loop this
+// is the other incoming of the 2-input PHI. Returns Register if \p PHIMI is
+// not a PHI in LoopBB or has no such incoming. This is the induction
+// variable's *init* value -- for a decrementing loop it is the trip count
+// (the IV counts N, N-1,..., 0).
+static Register getPHIPreheaderIncoming(const MachineInstr &PHIMI,
+                                        MachineBasicBlock *LoopBB) {
+  if (!PHIMI.isPHI() || PHIMI.getParent() != LoopBB)
+    return Register();
+  for (unsigned I = 1, E = PHIMI.getNumOperands(); I + 1 < E; I += 2) {
+    if (PHIMI.getOperand(I + 1).isMBB() &&
+        PHIMI.getOperand(I + 1).getMBB() != LoopBB)
+      return PHIMI.getOperand(I).getReg();
+  }
+  return Register();
+}
+
+// Resolve the constant integer value of an induction step (\p BumpMI) into
+// \p Step. The step is signed: positive for an incrementing IV, negative for
+// a decrementing IV. ADDI32 carries the step in an immediate operand;
+// ADD32/SUB32 carry it in a register source, which LSR materializes as
+// ADDI32 $r0, imm -- chase that one hop. Returns true and sets \p Step on
+// success; false if the step is not a recoverable constant (the caller then
+// conservatively rejects the loop, mirroring AIE's isConstStep requirement).
+static bool getInductionStep(const MachineRegisterInfo &MRI,
+                             const MCInstrInfo &MII,
+                             const MachineInstr &BumpMI, int64_t &Step) {
+  unsigned Opc = BumpMI.getOpcode();
+  unsigned Base = getHaydnFlexBaseOpcode(Opc, MII);
+  if (Base == Haydn::ADDI32 || Base == Haydn::ADDI32_W) {
+    if (!BumpMI.getOperand(2).isImm())
+      return false;
+    Step = BumpMI.getOperand(2).getImm();
+    return true;
+  }
+  // ADD32/SUB32: the step is a register source. LSR materializes constant
+  // steps as ADDI32 $r0, imm; recover it (the non-IV operand -- whichever
+  // source is defined by such an ADDI32). The materialized step itself may be
+  // a `_S<k>` variant, so resolve it through getHaydnFlexBaseOpcode too.
+  for (const MachineOperand &MO : BumpMI.explicit_uses()) {
+    if (!MO.isReg() || !MO.getReg().isVirtual())
+      continue;
+    const MachineInstr *Def = MRI.getVRegDef(MO.getReg());
+    if (!Def)
+      continue;
+    unsigned DefBase = getHaydnFlexBaseOpcode(Def->getOpcode(), MII);
+    if (DefBase != Haydn::ADDI32 && DefBase != Haydn::ADDI32_W)
+      continue;
+    if (Def->getOperand(1).getReg() != Haydn::R0 || !Def->getOperand(2).isImm())
+      continue;
+    int64_t V = Def->getOperand(2).getImm();
+    Step = (Base == Haydn::SUB32) ? -V : V;
+    return true;
+  }
+  return false;
+}
+
+// Determine whether \p Reg is the update (bump) of a loop-carried induction
+// variable in \p LoopBB, and return the IV register (the PHI that the bump
+// feeds back into). The MachinePipeliner runs PRE-PHIElimination, so it sees
+// genuine PHI-form MIR (-REWORK):
+// bb.loop:
+// %iv = PHI %init, %preheader, %bump, %bb.loop; the IV
+// %bump = ADD32 %iv, %step; or ADDI32 / SUB32
+// %cmp = SEQ32 %bump, %limit
+// Given the comparison source \p Reg:
+// 1. If \p Reg is the bump (ADD/ADDI/SUB defined in LoopBB), the IV candidate
+// is its non-immediate register source; that candidate must be a PHI whose
+// latch-incoming value == the bump's def (closing the back-edge cycle).
+// 2. Symmetric shape -- \p Reg is itself the IV PHI and the bump is the PHI's
+// latch-incoming value. This occurs when the compare reads the IV directly
+// rather than the bumped value.
+// On success, also returns the IV's defining PHI (\p IVPhi, for trip-count
+// derivation) and the signed step (\p Step, to distinguish incrementing vs
+// decrementing IVs). Returns the IV register on success, or Register if
+// \p Reg is not an induction variable. See (rework), and
+static Register findInductionVar(MachineRegisterInfo &MRI,
+                                 const MCInstrInfo &MII,
+                                 MachineBasicBlock *LoopBB, Register Reg,
+                                 MachineInstr *&IVPhi, int64_t &Step) {
+  IVPhi = nullptr;
+  Step = 0;
+  if (!Reg.isVirtual())
+    return Register();
+
+  MachineInstr *DefMI = MRI.getVRegDef(Reg);
+  if (!DefMI || DefMI->getParent() != LoopBB)
+    return Register();
+
+  // Shape 1: the compare source is the BUMP. The IV is the bump's
+  // non-immediate register source, which must be a PHI whose latch-incoming
+  // value is exactly the bump's definition.
+  if (isInductionStep(DefMI->getOpcode(), MII)) {
+    Register BumpDef = DefMI->getOperand(0).getReg();
+    for (const MachineOperand &MO : DefMI->explicit_uses()) {
+      if (!MO.isReg() || !MO.getReg().isVirtual())
+        continue;
+      Register IVCandidate = MO.getReg();
+      MachineInstr *PhiMI = MRI.getVRegDef(IVCandidate);
+      if (!PhiMI || !PhiMI->isPHI() || PhiMI->getParent() != LoopBB)
+        continue;
+      Register LatchIncoming = getPHILatchIncoming(*PhiMI, LoopBB);
+      if (LatchIncoming.isValid() && LatchIncoming == BumpDef) {
+        IVPhi = PhiMI;
+        // Recover the step; if it is not a constant, still recognize the IV
+        // (the caller will conservatively reject if it needs the step).
+        int64_t S = 0;
+        if (getInductionStep(MRI, MII, *DefMI, S))
+          Step = S;
+        return IVCandidate;
+      }
+    }
+    return Register();
+  }
+
+  // Shape 2 (symmetric): the compare source is itself the IV PHI. The bump is
+  // the PHI's latch-incoming value and must be an ADD/ADDI/SUB defined in the
+  // loop whose IV-source operand is this PHI.
+  if (DefMI->isPHI()) {
+    Register BumpReg = getPHILatchIncoming(*DefMI, LoopBB);
+    if (!BumpReg.isVirtual())
+      return Register();
+    MachineInstr *BumpMI = MRI.getVRegDef(BumpReg);
+    if (!BumpMI || BumpMI->getParent() != LoopBB ||
+        !isInductionStep(BumpMI->getOpcode(), MII))
+      return Register();
+    for (const MachineOperand &MO : BumpMI->explicit_uses()) {
+      if (MO.isReg() && MO.getReg() == Reg) {
+        IVPhi = DefMI;
+        int64_t S = 0;
+        if (getInductionStep(MRI, MII, *BumpMI, S))
+          Step = S;
+        return Reg;
+      }
+    }
+    return Register();
+  }
+
+  return Register();
+}
+
+// True if \p Opc is a Haydn conditional branch (single or two-register).
+// Phase 1b : only the WIDE 48-bit forms are emitted by CodeGen;
+// the legacy Haydn32 BEQ/BNE/.../BLTZ remain in the.td for the asm parser.
+static bool isHaydnCondBranch(unsigned Opc) {
+  switch (Opc) {
+  case Haydn::BEQZ_W:
+  case Haydn::BNEZ_W:
+  case Haydn::BGEZ_W:
+  case Haydn::BLTZ_W:
+  case Haydn::BEQ_W:
+  case Haydn::BNE_W:
+  case Haydn::BGE_W:
+  case Haydn::BGEU_W:
+  case Haydn::BLT_W:
+  case Haydn::BLTU_W:
+    return true;
+  default:
+    return false;
+  }
+}
+
+// True if \p LoopBB has a PHI whose latch-incoming is defined by another PHI
+// in the same block (shift-register / delay-line chain).
+// Classic ModuloScheduleExpander mis-rewrites such chains into epilog PHIs
+// that use a same-block PHI result as a predecessor live-in, e.g.:
+// bb.epilog:
+// %A = PHI %x, %pred,...
+// %B = PHI %A, %pred,...; %A is not live-out of %pred
+// That breaks SSA; LiveVariables later asserts
+// "Can't find reaching def for virtreg". Prefer declining SMS over incorrect
+// code (correctness > SWPS). Observed on NatureDSP 32x16 FIR
+// (bkfir32x16 / bkfira32x16 / fir_xcorr32x16 / firdec32x16 / firinterp32x16)
+// where sliding-window delay PHIs form PHI→PHI latch edges. Bisect:
+// enable-pipeliner=0 avoids the crash; -haydn-enable-hwloops=0 does not.
+static bool hasShiftRegisterPhiChain(MachineBasicBlock *LoopBB) {
+  MachineRegisterInfo &MRI = LoopBB->getParent()->getRegInfo();
+  for (const MachineInstr &MI : LoopBB->phis()) {
+    Register LatchIn = getPHILatchIncoming(MI, LoopBB);
+    if (!LatchIn.isVirtual())
+      continue;
+    const MachineInstr *Def = MRI.getVRegDef(LatchIn);
+    if (Def && Def->isPHI() && Def->getParent() == LoopBB)
+      return true;
+  }
+  return false;
+}
+
+// Analyze a countable single-BB loop for the MachinePipeliner.
+// This mirrors the ARM structure (ARMBaseInstrInfo.cpp:6770): identify the
+// conditional terminator (EndLoop), the comparison that defines its
+// condition register (CmpMI), and a runtime trip-count register (TripCountReg).
+// The conditional branch may target either the loop (back-edge) or the exit
+// (fall-through / B-self) -- both shapes are accepted, matching the loops
+// produced by LSR on Haydn. Trip-count computation is delegated entirely to
+// the generic ModuloScheduleExpander via createTripCountGreaterCondition
+// adjustTripCount, which ALWAYS emit a runtime comparison and return nullopt.
+// There is NO static-trip-count shortcut: a hand-rolled `(limit-init)/step`
+// derivation was the Blocker-1 silent-wrong-code root cause. Loops
+// where no usable runtime trip-count register can be found are REJECTED
+// (return false), exactly like ARM returns nullptr when it cannot recognize
+// the comparison.
+// IV detection runs at the MachinePipeliner, which executes PRE-PHIElimination
+// the loop block STILL contains its PHIs. The loop-carried IV is a PHI
+// whose latch-incoming value is the IV's own bump:
+// bb.loop:
+// %iv = PHI %init, %preheader, %bump, %bb.loop; the IV
+// %bump = ADD32 %iv, %step; or ADDI32 / SUB32
+// %cmp = SEQ32 %bump, %limit
+// We identify the IV from the comparison's own operands via findInductionVar:
+// the compare source that is an induction-step bump feeding a PHI's
+// latch-incoming (or, symmetrically, a PHI whose latch-incoming is such a
+// bump) is the IV. The earlier "copy-chain" diagnosis was WRONG: it
+// assumed the pipeliner sees post-PHIElimination COPY cycles, but the
+// pipeliner never runs that late -- the copy-chain code was dead and every
+// real loop was over-rejected. This PHI-form rework is the first
+// recognizer to actually match the MIR the pipeliner sees.
+// Trip-count derivation : the source depends on IV direction.
+// For a DECREMENTING IV (step < 0, e.g. LSR's `iv += -1` until `SEQ32 iv, 0`
+// the shape every real DSP loop lowers to), TripCountReg is the IV's
+// preheader *init* (the IV counts N, N-1,..., 0). For an INCREMENTING IV
+// (`SLT32 iv, limit`), TripCountReg is the compare's non-IV operand. Taking
+// the compare's non-IV operand UNCONDITIONALLY was the matrix_test crash +
+// silent-wrong-code root cause: for decrementing loops that operand is a
+// function-wide materialized zero (`ADDI32 $r0, 0`), and adjustTripCount's
+// replaceRegWith on it corrupted every compare/PHI-init in the function
+// while createTripCountGreaterCondition emitted `SLT32 0, TC+1` (always-true
+// so the guard never disabled the kernel). AIE's DownCountLoop resolves the
+// trip count from the IV init the same way.
+// Returns true and fills outs on success; false if the loop is not
+// analyzable for SMS. See (rework)/ and lessons
+static bool analyzeSimpleLoop(MachineBasicBlock *LoopBB,
+                              const MCInstrInfo &MII, MachineInstr *&EndLoop,
+                              MachineInstr *&CmpMI, Register &TripCountReg) {
+  MachineFunction *MF = LoopBB->getParent();
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+
+  EndLoop = nullptr;
+  CmpMI = nullptr;
+  TripCountReg = Register();
+
+  // Decline SMS on shift-register PHI chains — see hasShiftRegisterPhiChain.
+  if (hasShiftRegisterPhiChain(LoopBB)) {
+    LLVM_DEBUG(dbgs() << "SMS: reject loop with shift-register PHI chain "
+                         "(ModuloScheduleExpander PHI rewrite unsafe)\n");
+    return false;
+  }
+
+  // Reject loops containing a CALL: control leaves the loop, so the call
+  // cannot be safely moved across SMS stages (-REWORK). This
+  // mirrors AIE's hasLockInstruction early bail (AIEBaseInstrInfo.cpp:1413)
+  // AIE rejects ONLY lock instructions here, not generic side effects.
+  //
+  // We deliberately do NOT reject on hasUnmodeledSideEffects: every Haydn
+  // `_S<k>` opcode carries MCID::UnmodeledSideEffects as a TableGen
+  // ARTIFACT (HaydnFormatInst in HaydnSlots.td does not set
+  // `hasSideEffects = 0`, so pattern-less FLEX defs default to side-effecting
+  // unlike the legacy FmtALU32/FmtI bases). The FLEX ALU32/compare/MAC ops
+  // the Selector emits are genuinely pure (no real side effect), so treating
+  // the flag as real rejected EVERY subsequent loop at this scan before the
+  // recognizer even reached its opcode-key checks -- the real reason 's
+  // opcode-strip helper did not unblock the naive path. isCall is the one
+  // reliably-unsafe signal for the body. hasOrderedMemoryRef is also NOT
+  // used: it returns true whenever memoperands are empty (common pre-RA)
+  // spuriously rejecting every ordinary load loop. (The latent.td gap
+  // HaydnFormatInst should set `hasSideEffects = 0` for pure-compute FLEX
+  // formats -- is recorded as a follow-up; it benefits other passes too.)
+  for (const MachineInstr &MI : *LoopBB) {
+    if (MI.isTerminator() || MI.isPHI() || MI.isDebugInstr())
+      continue;
+    if (MI.isCall())
+      return false;
+  }
+
+  // Find the conditional terminator. Single-BB loops on Haydn have either:
+  // (a) cond_br Reg, LoopBB (conditional back-edge), or
+  // (b) cond_br Reg, ExitBB; B LoopBB (conditional exit + B-self).
+  // getFirstTerminator returns the first terminator in either layout;
+  // in case (b) the conditional comes first, in (a) it may be the only one.
+  for (MachineInstr &MI : LoopBB->terminators()) {
+    if (isHaydnCondBranch(MI.getOpcode())) {
+      EndLoop = &MI;
+      break;
+    }
+  }
+  if (!EndLoop)
+    return false;
+
+  // The branch's condition register is operand 0. It must be a virtual
+  // register for us to trace it back to a defining comparison.
+  if (EndLoop->getNumOperands() == 0 || !EndLoop->getOperand(0).isReg())
+    return false;
+  Register CondReg = EndLoop->getOperand(0).getReg();
+  if (!CondReg.isVirtual())
+    return false;
+
+  // Find the SEQ32/SLT32/SLTU32 comparison that sets the branch condition
+  // register, defined within the loop. Without it we cannot identify the
+  // runtime trip-count (limit) register, so reject -- like ARM returning
+  // nullptr when it cannot recognize the comparison.
+  MachineInstr *CondDef = MRI.getVRegDef(CondReg);
+  if (!CondDef || CondDef->getParent() != LoopBB)
+    return false;
+  // Accept both the legacy base compare opcodes and their `_S<k>`
+  // Selector-emitted variants : the GISel InstructionSelect pass emits
+  // `SLT32_S0` etc. directly, so the naive recognizer must key on the
+  // base semantic opcode via getHaydnFlexBaseOpcode.
+  unsigned CondOpc = getHaydnFlexBaseOpcode(CondDef->getOpcode(), MII);
+  if (CondOpc != Haydn::SEQ32 && CondOpc != Haydn::SLT32 &&
+      CondOpc != Haydn::SLTU32)
+    return false;
+  CmpMI = CondDef;
+
+  // Identify the IV from the comparison's two source operands: the IV is the
+  // operand that is an induction-step bump feeding a PHI's latch-incoming
+  // (PHI-form -- the pipeliner runs PRE-PHIElimination; see). We also
+  // recover the IV's defining PHI and the signed step (to distinguish
+  // incrementing vs decrementing IVs -- critical for trip-count derivation).
+  Register SrcA = (CmpMI->getOperand(1).isReg())
+                      ? CmpMI->getOperand(1).getReg()
+                      : Register();
+  Register SrcB = (CmpMI->getOperand(2).isReg())
+                      ? CmpMI->getOperand(2).getReg()
+                      : Register();
+
+  Register IVReg;
+  Register LimitReg;
+  MachineInstr *IVPhi = nullptr;
+  int64_t Step = 0;
+  Register IVA, IVB;
+  MachineInstr *PhiA = nullptr, *PhiB = nullptr;
+  int64_t StepA = 0, StepB = 0;
+  if (SrcA.isValid())
+    IVA = findInductionVar(MRI, MII, LoopBB, SrcA, PhiA, StepA);
+  if (SrcB.isValid())
+    IVB = findInductionVar(MRI, MII, LoopBB, SrcB, PhiB, StepB);
+
+  // Reject ambiguous loops where BOTH compare operands look like induction
+  // variables -- the trip-count operand would be ill-defined.
+  if (IVA.isValid() && IVB.isValid())
+    return false;
+
+  if (IVA.isValid()) {
+    IVReg = IVA;
+    IVPhi = PhiA;
+    Step = StepA;
+    LimitReg = SrcB;
+  } else if (IVB.isValid()) {
+    IVReg = IVB;
+    IVPhi = PhiB;
+    Step = StepB;
+    LimitReg = SrcA;
+  } else {
+    return false;
+  }
+
+  // Derive the runtime trip-count register. The correct source depends on the
+  // IV direction :
+  // DECREMENTING IV (step < 0, e.g. `iv -= 1` until `iv == 0`): the IV
+  // starts at the trip count N and counts down to 0, so the trip count is
+  // the IV's preheader *init* value. The compare's other operand is 0
+  // (often a function-wide materialized zero like `ADDI32 $r0, 0`), NOT
+  // the trip count -- using it was the matrix_test crash + silent
+  // wrong-code root cause: adjustTripCount did replaceRegWith on that
+  // shared zero register, corrupting every compare/PHI-init in the
+  // function, and createTripCountGreaterCondition emitted `SLT32 0, TC+1`
+  // which is always-true (the guard never disabled the kernel).
+  // INCREMENTING IV (step > 0, e.g. `iv += 1` until `iv < limit`): the
+  // compare's non-IV operand is the upper bound; when the init is 0 (the
+  // common LSR shape) it equals the trip count, so fall back to it.
+  // AIE's DownCountLoop resolves the trip count from the IV init the same way
+  // (sms-packetizer-deep-dive.md §2c); we additionally keep the incrementing
+  // fallback so existing synthetic tests (init==0, limit==N) keep working.
+  Register InitReg =
+      IVPhi ? getPHIPreheaderIncoming(*IVPhi, LoopBB) : Register();
+  if (Step < 0) {
+    // Decrementing: trip count = IV init. Must be a usable register.
+    if (!InitReg.isValid() || !InitReg.isVirtual())
+      return false;
+    TripCountReg = InitReg;
+  } else {
+    // Incrementing (or unknown step): use the compare's non-IV operand. This
+    // is correct when the IV init is 0; for a non-zero init it is an
+    // approximation, but SMS's runtime guard still bounds the kernel safely
+    // as long as LimitReg is a real register.
+    if (!LimitReg.isValid() || !LimitReg.isVirtual())
+      return false;
+    TripCountReg = LimitReg;
+  }
+
+  return true;
+}
+
+} // end anonymous namespace
+
+bool HaydnInstrInfo::analyzeCountableLoop(MachineBasicBlock *LoopBB,
+                                          HaydnCountableLoop &Out) const {
+  MachineInstr *EndLoop = nullptr;
+  MachineInstr *CmpMI = nullptr;
+  Register TripCountReg;
+  if (!analyzeSimpleLoop(LoopBB, *this, EndLoop, CmpMI, TripCountReg) ||
+      !EndLoop)
+    return false;
+  Out.EndLoop = EndLoop;
+  Out.CmpMI = CmpMI;
+  Out.TripCountReg = TripCountReg;
+  // The IV register is identified inside analyzeSimpleLoop via findInductionVar
+  // but not surfaced today; the SMS path does not need it (it only needs the
+  // trip count). Hardware-loop conversion does not need it either -- the IV PHI
+  // and its bump are left intact (mirrors Hexagon: only the compare + branch are
+  // removed; the IV survives because its body uses, e.g. array indices, keep it
+  // live). Leave IVReg invalid; callers that need it can re-derive it.
+  Out.IVReg = Register();
+  return true;
+}
+
+std::unique_ptr<TargetInstrInfo::PipelinerLoopInfo>
+HaydnInstrInfo::analyzeLoopForPipelining(MachineBasicBlock *LoopBB) const {
+  // Check for ZOL (Zero-Overhead Loop) form. The IR-level HardwareLoops pass
+  // runs before IRTranslator, so it has ALREADY converted every countable
+  // single-BB loop to LoopStart (preheader) + PseudoLoopEnd (latch) by the time
+  // SMS runs. SMS pipelines it via the ZOL PipelinerLoopInfo
+  // (adjustTripCount edits LoopStart's $adj operand). EnableZOLPipelining
+  // defaults ON ("SMS runs PRE-RA on ZOL form"); the cl::opt
+  // remains for emergency disable. When off, SMS skips ZOL loops — they still
+  // form hwloops via the IR-level pass, just without software pipelining.
+  MachineBasicBlock::iterator TermIt = LoopBB->getFirstTerminator();
+  if (TermIt != LoopBB->end() &&
+      TermIt->getOpcode() == Haydn::PseudoLoopEnd) {
+    if (!EnableZOLPipelining)
+      return nullptr; // ZOL loop — don't pipeline (keep hwloop, skip SMS).
+    // Same PHI-chain hazard as the naive path (hasShiftRegisterPhiChain).
+    if (hasShiftRegisterPhiChain(LoopBB)) {
+      LLVM_DEBUG(dbgs() << "SMS: reject ZOL loop with shift-register PHI chain "
+                           "(ModuloScheduleExpander PHI rewrite unsafe)\n");
+      return nullptr;
+    }
+    MachineInstr *Term = &*TermIt;
+    // Find LoopStart in the preheader (or dominating block).
+    MachineBasicBlock *Pred = LoopBB->getSinglePredecessor();
+    if (!Pred) {
+      for (MachineBasicBlock *P : LoopBB->predecessors()) {
+        if (P != LoopBB) { Pred = P; break; }
+      }
+    }
+    if (Pred) {
+      for (MachineInstr &MI : *Pred) {
+        if (MI.getOpcode() == Haydn::LoopStart) {
+          MachineFunction *MF = LoopBB->getParent();
+          return std::make_unique<HaydnPipelinerLoopInfo>(MF, this, Term,
+                                                           &MI);
+        }
+      }
+    }
+    // ZOL loop without findable LoopStart — don't pipeline.
+    return nullptr;
+  }
+
+  // Naive countable loop path (SEQ32/SLT32 + BNEZ/BEQZ).
+  HaydnCountableLoop L;
+  if (!analyzeCountableLoop(LoopBB, L))
+    return nullptr;
+
+  MachineFunction *MF = LoopBB->getParent();
+  return std::make_unique<HaydnPipelinerLoopInfo>(MF, this, L.EndLoop, L.CmpMI,
+                                                   L.TripCountReg);
+}
+
+//===----------------------------------------------------------------------===//
+// Dual-load slot promotion, ported from HaydnVLIWPacketizer (Phase B2)
+//===----------------------------------------------------------------------===//
+
+namespace {
+// Opcodes that occupy slot 0 as a load or store. When one of these precedes
+// an LD32 in a region, the LD32 is promoted to LD32_S1 (slot 1) so the two
+// can pack into one bundle. LD32_S1 / LD64_S1 are Slot1_LD and intentionally
+// NOT in this set (a slot-1 load does not block a slot-0 load); LD64_S1 is
+// the slot-1-only form. The plain LD64 IS a slot-0/1 load — it is
+// included here so a second LD64 in the same region gets promoted to LD64_S1.
+// ST64 is a slot-0 store.
+bool isSlot0LoadStore(const MachineInstr &MI) {
+  switch (MI.getOpcode()) {
+  default:
+    return false;
+  case Haydn::LD32:
+  case Haydn::LD16:
+  case Haydn::LD8:
+  case Haydn::LDU16:
+  case Haydn::LDU8:
+  case Haydn::LD64:   // plain 64-bit load (slot 0 or 1) — counts as a slot-0 occupant
+  case Haydn::ST32:
+  case Haydn::ST16:
+  case Haydn::ST8:
+  case Haydn::ST64:
+  // Fused / CB loads also occupy a load slot (FlexMap S0/S1/S2). Counting
+  // them as slot-0 occupants lets a following LD32/LD64 promote to *_S1 so
+  // dual-load packets form with CB/post-inc streams (bkfir / vec_dot).
+  case Haydn::D_LDW_POST_IMM:
+  case Haydn::D_LDW_POST_REG:
+  case Haydn::D_LDW_CB_IMM:
+  case Haydn::D_LDW_CB_REG:
+  case Haydn::S_LW_POST_IMM:
+  case Haydn::D_SDW_POST_IMM:
+  case Haydn::D_SDW_CB_IMM:
+    return true;
+  }
+}
+} // namespace
+
+void HaydnInstrInfo::insertNoop(MachineBasicBlock &MBB,
+                                MachineBasicBlock::iterator MI) const {
+  // Mirrors HexagonInstrInfo::insertNoop (HexagonInstrInfo.cpp:1667-1671).
+  // Used by the post-RA scheduler's leaveMBB to pad idle cycles (Phase B2).
+  DebugLoc DL;
+  BuildMI(MBB, MI, DL, get(Haydn::NOP));
+}
+
+void HaydnInstrInfo::promoteLoadsToSlot1(MachineBasicBlock::iterator Begin,
+                                         MachineBasicBlock::iterator End) const {
+  // single authority: dual-load packing is a *placement* hint
+  // not a second opcode family. Logical opcodes stay LD32/LD64; slot lives in
+  // AltDescs (→ HaydnMCFlags at MC lower). Encoder materializes the S1 Flex
+  // window from that slot. Bundle position is the public slot; `_S*` is
+  // encode-private only.
+  //
+  // LD32/LD64 use Slot01_LD (S0|S1) so the HR can auction the second load into
+  // SLOT1 without setDesc(LD*_S1). Walk program order; when an LD32/LD64
+  // follows a slot-0 LS occupant, record slot=1 on AltDescs only.
+  //
+  // Pseudos/meta neither consume a slot nor reset the pending S0 occupant.
+  bool Slot0OccupantIsLS = false;
+  for (MachineBasicBlock::iterator I = Begin; I != End; ++I) {
+    MachineInstr &MI = *I;
+    if (MI.isPseudo() || MI.isImplicitDef() || MI.isKill() || MI.isDebugInstr() ||
+        MI.isCopy() || MI.isInlineAsm() || MI.isPosition())
+      continue;
+
+    if (Slot0OccupantIsLS &&
+        (MI.getOpcode() == Haydn::LD32 || MI.getOpcode() == Haydn::LD64)) {
+      // Placement only — never bake slot into the opcode (no setDesc).
+      commitSlotFlexVariant(MI, /*Slot=*/1);
+      LLVM_DEBUG(dbgs() << "promoteLoadsToSlot1: slot=1 (placement-only) for ";
+                 MI.dump(); dbgs() << "\n");
+      // Second load targets S1: does not occupy S0 for the next candidate.
+      Slot0OccupantIsLS = false;
+      continue;
+    }
+
+    // Update slot-0 occupancy state for the next iteration.
+    Slot0OccupantIsLS = isSlot0LoadStore(MI);
+  }
+}
+
+bool HaydnInstrInfo::commitSlotFlexVariant(MachineInstr &MI,
+                                           std::optional<unsigned> Slot) const {
+  // Phase 1 — placement only. Do NOT MI.setDesc(*_S*). Slot lives
+  // solely in HaydnAlternateDescriptors (and later HaydnMCFlags at MC lower);
+  // the encoder materializes Flex/private encode opcodes at encode time only.
+  // I1: MachineInstr opcodes stay logical (ADD32, ADDI32_W, …) after ISel.
+  //
+  // When \p Slot is given, it is the HR-auction slot (already in AltDescs for
+  // most scheduled MIs — re-record is idempotent). When \p Slot is nullopt
+  // derive from FlexMap legal slots (prefer S0, then S1) for MIs the HR never
+  // auctioned. Called from materializeMultiOpcodeInstrs (post-RA leaveRegion).
+  if (MI.isBundle() || MI.isDebugInstr() || MI.isPseudo())
+    return false;
+
+  unsigned Legacy = MI.getOpcode();
+
+  // Resolve the slot. Prefer the explicit (HR-recorded) slot; fall back to
+  // the FlexMap for late-built / unrecorded MIs. Prefer S0, then S1
+  // (historical HR default; S2 is HR-recorded when used).
+  unsigned ResolvedSlot;
+  if (Slot) {
+    ResolvedSlot = *Slot;
+  } else {
+    HaydnMCFormats Formats;
+    SlotBits Legal = Formats.getLegalSlots(Legacy);
+    if (Legal == 0)
+      return false; // No Bundle128 form in any slot — not placeable.
+    if (Legal & Haydn::SLOT0)
+      ResolvedSlot = 0;
+    else if (Legal & Haydn::SLOT1)
+      ResolvedSlot = 1;
+    else
+      return false; // Only S2 legal without HR record — leave unset.
+  }
+
+  MachineFunction *MF = MI.getMF();
+  if (!MF)
+    return false;
+  MF->getInfo<HaydnMachineFunctionInfo>()->getAltDescs().setSlot(&MI,
+                                                                 ResolvedSlot);
+
+  LLVM_DEBUG(dbgs() << " commitSlotFlexVariant (placement-only): opcode"
+                    << Legacy << " -> slot " << ResolvedSlot
+                    << " (no setDesc)\n");
+  // true = placement recorded. Opcode is intentionally left logical.
+  return true;
+}
+

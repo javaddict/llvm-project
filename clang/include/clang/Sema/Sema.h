@@ -165,6 +165,7 @@ class SemaCUDA;
 class SemaDirectX;
 class SemaHLSL;
 class SemaHexagon;
+class SemaHaydn;
 class SemaLoongArch;
 class SemaM68k;
 class SemaMIPS;
@@ -1460,6 +1461,11 @@ public:
     return *HexagonPtr;
   }
 
+  SemaHaydn &Haydn() {
+    assert(HaydnPtr);
+    return *HaydnPtr;
+  }
+
   SemaLoongArch &LoongArch() {
     assert(LoongArchPtr);
     return *LoongArchPtr;
@@ -1591,6 +1597,7 @@ private:
   std::unique_ptr<SemaDirectX> DirectXPtr;
   std::unique_ptr<SemaHLSL> HLSLPtr;
   std::unique_ptr<SemaHexagon> HexagonPtr;
+  std::unique_ptr<SemaHaydn> HaydnPtr;
   std::unique_ptr<SemaLoongArch> LoongArchPtr;
   std::unique_ptr<SemaM68k> M68kPtr;
   std::unique_ptr<SemaMIPS> MIPSPtr;

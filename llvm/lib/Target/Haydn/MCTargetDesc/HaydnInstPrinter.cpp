@@ -1,0 +1,186 @@
+//===-- HaydnInstPrinter.cpp - Convert Haydn MCInst to asm syntax ---------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This class prints an Haydn MCInst to a.s file.
+//
+//===----------------------------------------------------------------------===//
+
+#include "HaydnInstPrinter.h"
+#include "HaydnMCTargetDesc.h"
+#include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCExpr.h"
+#include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MCSymbol.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/raw_ostream.h"
+
+using namespace llvm;
+
+#define DEBUG_TYPE "haydn-asm-printer"
+
+// Include the auto-generated portion of the assembly writer.
+#define PRINT_ALIAS_INSTR
+#include "HaydnGenAsmWriter.inc"
+
+void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
+                                 StringRef Annot, const MCSubtargetInfo &STI,
+                                 raw_ostream &O) {
+  // VLIW bundles: Hexagon-style { slot0; slot1; slot2 } format. Only the
+  // legacy canonical Haydn::BUNDLE (AsmPrinter/asm-parser path) is rendered
+  // here -- the decoded BUNDLE128_FULL composite is tblgen-printed via
+  // its AsmString + printOperand recursing on the isInst slot sub-instructions
+  // (no hand-roll); it falls through to the non-bundle { printSingleInst }
+  // path below.
+  if (MI->getOpcode() == Haydn::BUNDLE) {
+    SmallVector<const MCInst *, 3> Children;
+    for (unsigned I = 0, E = MI->getNumOperands(); I != E; ++I) {
+      const MCOperand &Op = MI->getOperand(I);
+      if (Op.isInst() && Op.getInst())
+        Children.push_back(Op.getInst());
+    }
+    if (Children.empty()) {
+      printAnnotation(O, Annot);
+      return;
+    }
+    O << "\t{ ";
+    for (unsigned I = 0, E = Children.size(); I != E; ++I) {
+      if (I > 0)
+        O << "; ";
+      printSingleInst(Children[I], Address, STI, O);
+    }
+    O << " }";
+    printAnnotation(O, Annot);
+    return;
+  }
+
+  // Non-bundle: single-issue packet, still wrapped in.
+  O << "\t{ ";
+  printSingleInst(MI, Address, STI, O);
+  O << " }";
+  printAnnotation(O, Annot);
+}
+
+void HaydnInstPrinter::printSingleInst(const MCInst *MI, uint64_t Address,
+                                       const MCSubtargetInfo &STI,
+                                       raw_ostream &O) {
+  // Special handling for SET_HWLOOP_REG: print as
+  // set_hwloop_f2 sel, loop_start, loop_end, rs
+  // The MCInst carries: sel(imm), loop_start(expr|imm), loop_end(expr|imm), rs(reg).
+  // The expr form comes from the AsmPrinter/asm-parser path (symbolic labels);
+  // the imm form comes from the disassembler (decoded raw offset field values
+  // in WORDS — i.e. the encoded off16 field, already divided by 4 from bytes).
+  // We display both forms so the offsets are always visible for auditing. See
+  // (Bug C — previously the imm form was silently dropped because only
+  // isExpr was checked, making objdump show "set_hwloop_f2 1, r12" with no
+  // offsets, hiding the START/END correctness bug).
+  if (MI->getOpcode() == Haydn::SET_HWLOOP_REG) {
+    O << "set_hwloop_f2\t";
+    if (MI->getNumOperands() > 0 && MI->getOperand(0).isImm())
+      O << MI->getOperand(0).getImm();
+    auto printOffset = [&](unsigned OpIdx) {
+      if (OpIdx >= MI->getNumOperands())
+        return;
+      const MCOperand &Op = MI->getOperand(OpIdx);
+      if (Op.isExpr()) {
+        O << ", ";
+        MAI.printExpr(O, *Op.getExpr());
+      } else if (Op.isImm()) {
+        // Disassembler path: the immediate is the encoded off16 field value
+        // (word offset). Display as "<N>w" to make clear it is a word offset
+        // and also show the byte equivalent for debugging.
+        int64_t WordOff = Op.getImm();
+        O << ", <off" << WordOff << "w=" << (WordOff * 4) << "B>";
+      }
+    };
+    printOffset(1);
+    printOffset(2);
+    if (MI->getNumOperands() > 3 && MI->getOperand(3).isReg()) {
+      O << ", ";
+      printRegName(O, MI->getOperand(3).getReg());
+    }
+    return;
+  }
+
+  // Special handling for JAL instruction.
+  // Use the enum constant, not a hardcoded number, because tablegen
+  // renumbers opcodes when instructions are added/removed.
+  if (MI->getOpcode() == Haydn::JAL) {
+    O << "jal\t";
+    if (MI->getNumOperands() >= 1) {
+      const MCOperand &Op0 = MI->getOperand(0);
+      if (Op0.isReg())
+        printRegName(O, Op0.getReg());
+    }
+    if (MI->getNumOperands() >= 2) {
+      const MCOperand &Op1 = MI->getOperand(1);
+      O << ", ";
+      if (Op1.isExpr())
+        MAI.printExpr(O, *Op1.getExpr());
+      else if (Op1.isImm())
+        O << Op1.getImm();
+    }
+    return;
+  }
+
+  if (!printAliasInstr(MI, Address, STI, O))
+    printInstruction(MI, Address, STI, O);
+}
+
+void HaydnInstPrinter::printRegName(raw_ostream &O, MCRegister Reg) {
+  O << getRegisterName(Reg);
+}
+
+void HaydnInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
+                                    const MCSubtargetInfo &STI,
+                                    raw_ostream &O) {
+  // Defensive bounds check: the generated printInstruction indexes operands
+  // by fixed OpNo per the AsmWriter string. A malformed MCInst produced by a
+  // straddle read in the disassembler (e.g. a D-class bundle decoded from
+  // cross-boundary bytes at a +6 cursor, or a slot decoder that filled fewer
+  // operands than the printer expects) has fewer operands than printInstruction
+  // indexes. Without this guard, getOperand(OpNo) triggers SmallVector's
+  // `idx < size` assertion and aborts objdump (dct4/fft/firinterp/ifft
+  // NatureDSP objects). Print a placeholder and continue rather than crashing.
+  // A well-formed decode never reaches this branch.
+  if (OpNo >= MI->getNumOperands()) {
+    O << "<?>";
+    return;
+  }
+  const MCOperand &MO = MI->getOperand(OpNo);
+
+  // Composite/packet slot sub-instruction (BUNDLE128_FULL's $s0/$s1/$s2 are
+  // MCOperand::isInst): recurse into the sub-instruction's printer (AIE isInst
+  // model). tblgen generates the composite AsmString; this renders each slot.
+  // An empty sub-MCInst (opcode 0) is an all-zero slot window = NOP per §4
+  // (the per-slot trie doesn't match an all-zero window, so decodeS0/S1/S2Slot
+  // leaves the sub-MCInst cleared). Print "nop" rather than recursing into
+  // printInstruction (which would assert on Bits==0). Bounds-safe defense
+  // (CLAUDE.md): a genuinely malformed slot still renders benignly.
+  if (MO.isInst()) {
+    const MCInst *SubInst = MO.getInst();
+    if (SubInst && SubInst->getOpcode() != 0)
+      printSingleInst(SubInst, /*Address=*/0, STI, O);
+    else
+      O << "nop";
+    return;
+  }
+
+  if (MO.isReg()) {
+    printRegName(O, MO.getReg());
+    return;
+  }
+
+  if (MO.isImm()) {
+    O << MO.getImm();
+    return;
+  }
+
+  assert(MO.isExpr() && "Unknown operand kind in printOperand");
+  MAI.printExpr(O, *MO.getExpr());
+}

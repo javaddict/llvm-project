@@ -1,0 +1,59 @@
+{
+  "bsp_prefix": "/ssd2/mhyang/BundleSim/build/bsp-stage",
+  "bundle_limit": 50000000,
+  "comparison": {
+    "differing_byte_offsets": [
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      28
+    ],
+    "host_sha256": "01e01de024f2d75ae0ee80ef5078c952b4d196ebe0371bd214c4785b44d500bd",
+    "match": false,
+    "target_sha256": "da0fed5a8cc52a66d41a5649195eb91b407fdb22695e74b793bf7bd9b741b508"
+  },
+  "error": "Haydn CoreMark structured result differs from ILP32 host",
+  "host_fields": {
+    "datatype_errors": 0,
+    "error_count": 0,
+    "exec_mask": 7,
+    "final_crc": 59156,
+    "iterations": 1,
+    "known_id": 3,
+    "list_crc": 59156,
+    "magic": 1129136723,
+    "matrix_crc": 8151,
+    "reserved": 0,
+    "seed_crc": 59893,
+    "size": 36,
+    "state_crc": 36410,
+    "version": 1
+  },
+  "iterations": 1,
+  "link_recipe": "sysroot-crt",
+  "llvm_libc_sha256": "c1d1c1856c55cbb9cf81dbad0c30a2cc218ed593c6e59ed6464647c70ba932e3",
+  "status": "ORACLE_MISMATCH",
+  "target_fields": {
+    "datatype_errors": 0,
+    "error_count": 3,
+    "exec_mask": 7,
+    "final_crc": 19130,
+    "iterations": 1,
+    "known_id": 3,
+    "list_crc": 19130,
+    "magic": 1129136723,
+    "matrix_crc": 24471,
+    "reserved": 0,
+    "seed_crc": 59893,
+    "size": 36,
+    "state_crc": 21595,
+    "version": 1
+  },
+  "toolchain_clang": "clang version 22.1.8 (ssh://ctcsoc.rtkbf.com:29418/rsdk/llvm-project 39833c78726e7b7258f2e756ef8c8932d9aadff0)",
+  "toolchain_clang_sha256": "58afc9d3934c73154b0ed129bfd01b2821ae40ee71e58ab5a724cb11c7d3568c"
+}

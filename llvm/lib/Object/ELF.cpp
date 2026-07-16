@@ -169,6 +169,13 @@ StringRef llvm::object::getELFRelocationTypeName(uint32_t Machine,
       break;
     }
     break;
+  case ELF::EM_HAYDN:
+    switch (Type) {
+#include "llvm/BinaryFormat/ELFRelocs/Haydn.def"
+    default:
+      break;
+    }
+    break;
   case ELF::EM_LOONGARCH:
     switch (Type) {
 #include "llvm/BinaryFormat/ELFRelocs/LoongArch.def"
@@ -240,6 +247,9 @@ uint32_t llvm::object::getELFRelativeRelocationType(uint32_t Machine) {
     return ELF::R_SPARC_RELATIVE;
   case ELF::EM_CSKY:
     return ELF::R_CKCORE_RELATIVE;
+  case ELF::EM_HAYDN:
+    // Haydn does not use RELATIVE relocations for baremetal
+    break;
   case ELF::EM_VE:
     return ELF::R_VE_RELATIVE;
   case ELF::EM_AMDGPU:

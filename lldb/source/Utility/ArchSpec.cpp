@@ -248,6 +248,10 @@ static constexpr const CoreDefinition g_core_definitions[] = {
 
     {eByteOrderLittle, 4, 1, 4, llvm::Triple::wasm32, ArchSpec::eCore_wasm32,
      "wasm32"},
+
+    // Haydn: 32-bit addr, min opcode 2, 8-byte stack align (ILP32 freestanding).
+    {eByteOrderLittle, 4, 2, 8, llvm::Triple::haydn, ArchSpec::eCore_haydn,
+     "haydn"},
 };
 
 // Ensure that we have an entry in the g_core_definitions for each core. If you
@@ -412,6 +416,7 @@ static const ArchDefinitionEntry g_elf_arch_entries[] = {
     {ArchSpec::eCore_riscv64,         llvm::ELF::EM_RISCV,      ArchSpec::eRISCVSubType_riscv64}, // riscv64
     {ArchSpec::eCore_loongarch32,     llvm::ELF::EM_LOONGARCH,  ArchSpec::eLoongArchSubType_loongarch32}, // loongarch32
     {ArchSpec::eCore_loongarch64,     llvm::ELF::EM_LOONGARCH,  ArchSpec::eLoongArchSubType_loongarch64}, // loongarch64
+    {ArchSpec::eCore_haydn,           llvm::ELF::EM_HAYDN       }, // Haydn VLIW DSP
 };
 // clang-format on
 

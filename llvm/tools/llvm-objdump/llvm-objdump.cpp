@@ -2378,7 +2378,18 @@ disassembleObject(ObjectFile &Obj, const ObjectFile &DbgObj,
 
         // When -z or --disassemble-zeroes are given we always dissasemble
         // them. Otherwise we might want to skip zero bytes we see.
-        if (!DisassembleZeroes) {
+        //
+        // Haydn Bundle128 exception (mandatory, not optional):
+        //   * Full-NOP parcels are 16 zero bytes.
+        //   * Real parcels with s0=NOP start with 6 zero bytes in the s0 window.
+        // Default zero-skip (skip ≥8 zeros, round down to 4) jumps into the
+        // middle of the next parcel (addr%16!=0) and floods false <unknown>s
+        // (CB-89 residual noise). Force disassemble-zeroes for Haydn so plain
+        // `llvm-objdump -d` is correct without a manual -z.
+        const bool AllowZeroSkip =
+            !DisassembleZeroes &&
+            !DT->SubtargetInfo->getTargetTriple().isHaydn();
+        if (AllowZeroSkip) {
           uint64_t MaxOffset = End - Index;
           // For --reloc: print zero blocks patched by relocations, so that
           // relocations can be shown in the dump.

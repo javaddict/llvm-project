@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "BareMetal.h"
+#include "Haydn.h"
 
 #include "Gnu.h"
 #include "clang/Driver/CommonArgs.h"
@@ -348,6 +349,13 @@ void BareMetal::findMultilibs(const Driver &D, const llvm::Triple &Triple,
   }
 }
 
+const char *BareMetal::getDefaultLinker() const {
+  // Haydn baremetal has no system ld; always use ld.lld.
+  if (getTriple().getArch() == llvm::Triple::haydn)
+    return toolchains::getDefaultHaydnLinker();
+  return "ld";
+}
+
 bool BareMetal::handlesTarget(const llvm::Triple &Triple) {
   return arm::isARMEABIBareMetal(Triple) ||
          aarch64::isAArch64BareMetal(Triple) || isRISCVBareMetal(Triple) ||
@@ -626,6 +634,12 @@ void baremetal::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     return;
   }
 
+  // Haydn: forward to Haydn-owned helper to append the baremetal linker
+  // script (`-T<haydn.ld>`) if the user hasn't supplied one via -T. All
+  // Haydn-specific linker policy lives in ToolChains/Haydn.cpp (HC#0).
+  if (Triple.getArch() == llvm::Triple::haydn)
+    toolchains::addHaydnLinkArgs(TC, Triple, Args, CmdArgs);
+
   if (Triple.isRISCV()) {
     CmdArgs.push_back("-X");
     if (Args.hasArg(options::OPT_mno_relax))
@@ -700,8 +714,15 @@ void baremetal::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs)) {
     CmdArgs.push_back("--start-group");
-    AddRunTimeLibs(TC, D, CmdArgs, Args);
-    if (!Args.hasArg(options::OPT_nolibc))
+    // Haydn ships its own runtime as libhaydn.a (mem*, atomics, integer
+    // div/mod, and the compiler-rt soft-float builtins — see D251); do not
+    // pull in libclang_rt.builtins.a or -lc, neither of which is built for
+    // the Haydn target. libhaydn.a itself is appended earlier via
+    // toolchains::addHaydnLinkArgs() (see Haydn.cpp, HC#0).
+    bool IsHaydn = Triple.getArch() == llvm::Triple::haydn;
+    if (!IsHaydn)
+      AddRunTimeLibs(TC, D, CmdArgs, Args);
+    if (!IsHaydn && !Args.hasArg(options::OPT_nolibc))
       CmdArgs.push_back("-lc");
     if (TC.hasValidGCCInstallation() || detectGCCToolchainAdjacent(D))
       CmdArgs.push_back("-lgloss");

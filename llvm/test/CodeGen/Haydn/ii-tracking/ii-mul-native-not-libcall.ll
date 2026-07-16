@@ -1,0 +1,57 @@
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
+;
+; REGRESSION TEST: scalar 32x32->64 multiply must lower to native MUL64_LL
+; NOT to a __muldi3/__mulsi3 libcall (bug #19, fixed by).
+;
+; Bug: an `(int64_t)(int32_t)a * b` (sign-extended 32-bit mul producing a
+; 64-bit result) lowered to a __mulsi3/__muldi3 libcall. The libcall target
+; symbol was emitted as NULL (no runtime stub exists for __muldi3 in
+; haydn-rt/m6-int-div-stubs.c), so the `jal_w` resolved to address 0 at runtime
+; a correctness crash -- on top of costing 30-50 cycles per call. This
+; dominated the hot loops of 10/14 firother, 11/12 firblk, both IIR kernels
+; complex2mag32x32, and CoreMark.
+;
+; Fix : HaydnLegalizerInfo::legalizeCustom now detects G_MUL <s64>
+; whose operands both trace to a G_SEXT/G_ZEXT/G_ANYEXT of an s32 value (the
+; IRTranslator shape for `(int64_t)(int32_t)a * b`) and emits MUL64_LL
+; directly into DR64. MUL64_LL computes rsd1[31:00] * rsd2[31:00] (signed x
+; signed, full 64-bit product) -- the exact semantics of the widening
+; multiply, since the high 32 bits of a sign-extended s32 do not affect the
+; low x low product.
+;
+; NOTE on instruction choice: the original version of this test (and the
+; CLAUDE.md M7 forward-focus wording) named `x2mul32`. That was incorrect:
+; `X2MUL32` is the dual SIMD multiply (X2MUL32 rtd1, rtd2, rsd1, rsd2
+; two 32x32->64 lanes into two DR64 destinations, spec row 85) and does not
+; match the scalar G_MUL <s64> shape. `MUL64_LL` (spec row 5
+; HaydnInstrInfoAuto.td:909) is the correct scalar widening multiply. The
+; CLAUDE.md wording should be read as "lower to a native DR64 multiply";
+; MUL64_LL is the correct family member for this case. See Sec 3a.
+;
+; Test design: a single multiply of two sign-extended i32 values producing an
+; i64, returned in a register. This is the minimal repro of the libcall shape.
+; The CHECK requires mul64.ll to appear and forbids any jal_w into __muldi3 or
+; __mulsi3. If the LIBCALL_MUL64 regression returns, this test fails on the
+; CHECK-NOT lines.
+
+define i64 @ii_mul_native_not_libcall(i32 %a, i32 %b) {
+; CHECK: 	.globl	ii_mul_native_not_libcall       // -- Begin function ii_mul_native_not_libcall
+; CHECK: 	.type	ii_mul_native_not_libcall,@function
+; CHECK-LABEL: ii_mul_native_not_libcall:              // @ii_mul_native_not_libcall
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:                               // %entry
+; CHECK: 	{ 	xor32	r0, r0, r0 }
+; CHECK: 	{ 	sext32t64	d0, r1 }
+; CHECK: 	{ 	sext32t64	d1, r2 }
+; CHECK: 	{ 	mul64.ll	d0, d0, d1 }
+; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: .Lfunc_end0:
+; CHECK: 	.size	ii_mul_native_not_libcall, .Lfunc_end0-ii_mul_native_not_libcall
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+entry:
+  %aa = sext i32 %a to i64
+  %bb = sext i32 %b to i64
+  %p = mul i64 %aa, %bb
+  ret i64 %p
+}

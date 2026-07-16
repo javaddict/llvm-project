@@ -1,0 +1,199 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select %s -o - | FileCheck %s
+#
+# Test G_LOAD/G_STORE selection by memory width (ISA-43 bug 2):
+# s8 -> LDU8/ST8, s16 -> LDU16/ST16, s32 -> LD32/ST32.
+# Sign/zero extension is separate (G_SEXT/G_ZEXT lowered by the selector).
+
+---
+name:            test_select_load32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_load32
+# CHECK: LD32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(p0) = COPY $r0
+    %1:_(s32) = G_LOAD %0(p0) :: (load (s32))
+    $r0 = COPY %1(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_load32_offset
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_load32_offset
+# CHECK: LD32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(p0) = COPY $r0
+    %1:_(s32) = G_CONSTANT i32 16
+    %2:_(p0) = G_PTR_ADD %0, %1(s32)
+    %3:_(s32) = G_LOAD %2(p0) :: (load (s32))
+    $r0 = COPY %3(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_load16
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_load16
+# ISA-43 bug 2: s16 load selects LDU16 (not LD32)
+# CHECK: LDU16
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(p0) = COPY $r0
+    %1:_(s16) = G_LOAD %0(p0) :: (load (s16))
+    %2:_(s32) = G_SEXT %1(s16)
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_load16_unsigned
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_load16_unsigned
+# CHECK: LDU16
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(p0) = COPY $r0
+    %1:_(s16) = G_LOAD %0(p0) :: (load (s16))
+    %2:_(s32) = G_ZEXT %1(s16)
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_load8
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_load8
+# ISA-43 bug 2: s8 load selects LDU8 (not LD32)
+# CHECK: LDU8
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(p0) = COPY $r0
+    %1:_(s8) = G_LOAD %0(p0) :: (load (s8))
+    %2:_(s32) = G_SEXT %1(s8)
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_load8_unsigned
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_load8_unsigned
+# CHECK: LDU8
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(p0) = COPY $r0
+    %1:_(s8) = G_LOAD %0(p0) :: (load (s8))
+    %2:_(s32) = G_ZEXT %1(s8)
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_store32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_store32
+# CHECK: ST32
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(p0) = COPY $r1
+    G_STORE %0(s32), %1(p0) :: (store (s32))
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_store32_offset
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_store32_offset
+# CHECK: ST32
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(p0) = COPY $r1
+    %2:_(s32) = G_CONSTANT i32 8
+    %3:_(p0) = G_PTR_ADD %1, %2(s32)
+    G_STORE %0(s32), %3(p0) :: (store (s32))
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_store16
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_store16
+# ISA-43 bug 2: s16 store selects ST16 (not ST32)
+# CHECK: ST16
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(p0) = COPY $r1
+    %2:_(s16) = G_TRUNC %0(s32)
+    G_STORE %2(s16), %1(p0) :: (store (s16))
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_store8
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_store8
+# ISA-43 bug 2: s8 store selects ST8 (not ST32)
+# CHECK: ST8
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(p0) = COPY $r1
+    %2:_(s8) = G_TRUNC %0(s32)
+    G_STORE %2(s8), %1(p0) :: (store (s8))
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_load_ptr
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_load_ptr
+# CHECK: LD32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(p0) = COPY $r0
+    %1:_(p0) = G_LOAD %0(p0) :: (load (p0))
+    $r0 = COPY %1(p0)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_store_ptr
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_store_ptr
+# CHECK: ST32
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(p0) = COPY $r0
+    %1:_(p0) = COPY $r1
+    G_STORE %0(p0), %1(p0) :: (store (p0))
+    RET implicit $r0, implicit $r15
+...

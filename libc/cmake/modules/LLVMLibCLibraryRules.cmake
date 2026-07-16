@@ -2,6 +2,17 @@ function(collect_object_file_deps target result)
   # NOTE: This function does add entrypoint targets to |result|.
   # It is expected that the caller adds them separately.
   set(all_deps "")
+  # CMake ALIAS targets (e.g. osutil → baremetal_util) have no TARGET_TYPE
+  # property, so packaging would drop stdin/stdout/exit objects. Follow the
+  # aliasee first (C7 / Haydn baremetal).
+  if(TARGET ${target})
+    get_target_property(_aliased ${target} ALIASED_TARGET)
+    if(_aliased)
+      collect_object_file_deps(${_aliased} _alias_deps)
+      set(${result} ${_alias_deps} PARENT_SCOPE)
+      return()
+    endif()
+  endif()
   get_target_property(target_type ${target} "TARGET_TYPE")
   if(NOT target_type)
     return()

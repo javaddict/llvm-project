@@ -29,6 +29,11 @@ typedef unsigned int fenv_t;
 typedef struct {
   unsigned int __fpc;
 } fenv_t;
+#elif defined(__haydn__) || defined(__HAYDN__)
+// Soft-float DSP: no HW FPSCR; dummy FEnvImpl stores nothing meaningful.
+typedef struct {
+  unsigned int __fpc;
+} fenv_t;
 #else
 #error "fenv_t not defined for your platform"
 #endif

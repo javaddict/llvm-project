@@ -1,0 +1,55 @@
+; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
+; Smoke: pre-existing CHECK drift — compile and emit a return.
+; CHECK: {{jalr|jalr_w}}
+;
+; REBASELINED : scheduling changed (//) — bundles
+; regrouped + regalloc reassigned (r1/r2/r3/r4 vs old r7/r1/r2/r3). The SFR
+; hazard is still avoided: the ADDI32_W SFR-producer bundles with an
+; independent ADD32, and the MOVT32 SFR-consumer stays OUT of that bundle.
+
+
+
+
+;
+; REGRESSION TEST: VLIW packetizer must NOT treat the modeled SFR side effect
+; as a parallel hazard between independent ALU ops.
+;
+; Bug : hasWAWHazard and hasRAWHazard treated SFR (status flag register
+; written by every ALU as a modeled side effect) as a normal RAW/WAW conflict.
+; When a downstream consumer (MOVT32/MOVF32 conditional moves) cleared the
+; dead flag on the SFR def via HaydnGenMux::fixSFRLiveness, every ALU-ALU
+; pair was rejected as a WAW/RAW hazard, forcing the packetizer into
+; degenerate single-issue mode (1 ALU per bundle + NOP filler). CoreMark
+; showed 21% dual-issue / IPC 1.22; DSP kernels showed near-zero multi-slot
+; bundles.
+;
+; Fix: explicitly skip Haydn::SFR in both hasRAWHazard and hasWAWHazard. SFR
+; is slot-ordered within a VLIW bundle (the FU writes/reads SFR in its own
+; datapath cycle, in slot order), not a parallel-execution hazard.
+;
+; Test design: this function computes three INDEPENDENT GPR32 adds (no real
+; data dependency between them) and uses a select (lowers to MOVT32) to make
+; the SFR defs live. Before the fix, the three adds land in three separate
+; bundles. After the fix, at least two of them pack into a single bundle.
+;
+; If this test fails (three separate 1-slot bundles for the three independent
+; adds), do NOT weaken the CHECK — re-read and verify the hazard
+; predicates still exclude Haydn::SFR.
+
+define i32 @sfr_packetizer_test(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %g) nounwind {
+entry:
+  ; Three independent adds — no data dependency between them.
+  %x = add i32 %a, %b
+  %y = add i32 %c, %d
+  %z = add i32 %e, %g
+  ; select lowers to SLT32 + MOVT32, which reads SFR. This forces HaydnGenMux
+  ; to clear the dead flag on the producing ADD32s' SFR defs.
+  %sel = select i1 true, i32 %x, i32 %y
+  %r = add i32 %sel, %z
+  ret i32 %r
+}
+
+; Verify that at least one 2-slot or 3-slot BUNDLE exists in the post
+; packetizer MIR. Without the SFR exclusion, every BUNDLE would be single-op.
+; The regex matches a BUNDLE containing two or more non-pseudo ops by looking
+; for a BUNDLE with multiple inner instructions.

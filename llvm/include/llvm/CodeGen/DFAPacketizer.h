@@ -26,6 +26,7 @@
 #define LLVM_CODEGEN_DFAPACKETIZER_H
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/ResourceCycle.h"
 #include "llvm/CodeGen/ScheduleDAGInstrs.h"
 #include "llvm/CodeGen/ScheduleDAGMutation.h"
 #include "llvm/Support/Automaton.h"
@@ -70,7 +71,7 @@ protected:
   void postProcessDAG();
 };
 
-class DFAPacketizer {
+class DFAPacketizer : public ResourceCycle {
 private:
   const InstrItineraryData *InstrItins;
   Automaton<uint64_t> A;
@@ -84,10 +85,11 @@ public:
       : InstrItins(InstrItins), A(std::move(a)), ItinActions(ItinActions) {
     // Start off with resource tracking disabled.
     A.enableTranscription(false);
+    CanTrackResources = true;
   }
 
   // Reset the current state to make all resources available.
-  void clearResources() {
+  void clearResources() override {
     A.reset();
   }
 
@@ -100,19 +102,19 @@ public:
 
   // Check if the resources occupied by a MCInstrDesc are available in
   // the current state.
-  bool canReserveResources(const MCInstrDesc *MID);
+  bool canReserveResources(const MCInstrDesc *MID) override;
 
   // Reserve the resources occupied by a MCInstrDesc and change the current
   // state to reflect that change.
-  void reserveResources(const MCInstrDesc *MID);
+  void reserveResources(const MCInstrDesc *MID) override;
 
   // Check if the resources occupied by a machine instruction are available
   // in the current state.
-  bool canReserveResources(MachineInstr &MI);
+  bool canReserveResources(MachineInstr &MI) override;
 
   // Reserve the resources occupied by a machine instruction and change the
   // current state to reflect that change.
-  void reserveResources(MachineInstr &MI);
+  void reserveResources(MachineInstr &MI) override;
 
   // Return the resources used by the InstIdx'th instruction added to this
   // packet. The resources are returned as a bitvector of functional units.

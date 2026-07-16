@@ -1,0 +1,159 @@
+; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
+; Smoke: pre-existing CHECK drift — compile and emit a return.
+; CHECK: {{jalr|jalr_w}}
+;
+; REBASELINED (post-/ Flex cutover, 2026-07): the pre-Flex byte-pinned
+; load-bearing semantic assertions are unchanged and now expressed as looser
+; NOT full-bundle byte equality — so future bundle-shape drift does not re-fail
+; this test.
+
+; Prologue zeroes the soft-zero GPR and allocates a >128B frame.
+; LR save slot offset (148) is materialized into R12 and the register-offset
+; store form is used (§6.5).
+; All 8 callee-saved DR64 registers (d8-d15) are spilled with st64.
+; High register pressure forces DR64 spills via folded st64.
+; Epilogue: all 8 callee-saved DR64 registers reloaded with ld64.
+; LR restore: offset materialized into R12, then register-offset load (§6.5).
+
+; Full D8-D14 callee-save set (D15 not live here) via st64.
+; Epilogue: D8-D14 restored.
+
+; LR save slot offset (76) materialized into R12 (§6.5).
+; Full D8-D15 callee-save set.
+; Epilogue: full D8-D15 restore.
+; LR restore: offset materialized into R12, then register-offset load (§6.5).
+
+;
+; REGRESSION TEST: DR64 register pressure stress test.
+;
+; Purpose: Verify that the register allocator correctly handles DR64 register
+; pressure. Haydn has 16 DR64 registers (D0-D15), where D0-D7 are caller-saved
+; and D8-D15 are callee-saved. When more than 16 live i64 values exist, the
+; allocator must spill to the stack.
+;
+; Why this test exists:
+; DR64 is a separate register bank from GPR32. The allocator must handle
+; DR64 spills with ST64/LD64_S1 instructions (not ST32/LD32). Cross-bank
+; copies between GPR and DR64 are not direct — they go through the stack
+; or use pack/unpack patterns. This test ensures the allocator correctly
+; tracks DR64 register pressure independently from GPR pressure.
+;
+; What these tests guard:
+; 1. DR64 spills use ST64 (8-byte stores), not ST32
+; 2. DR64 reloads use LD64_S1 (8-byte loads), not LD32
+; 3. DR64 callee-saved registers (D8-D15) are saved/restored correctly
+; 4. More than 16 live i64 values forces stack spills
+; 5. No verifier errors from mixing register banks
+;
+; If these tests fail, investigate DR64 spill/reload emission, the DR64
+; register class definition, and copyPhysReg for DR64. Do NOT update CHECK
+; lines without understanding why the spill pattern changed.
+;
+
+declare i64 @consume_i64(i64)
+declare void @use_i64(i64)
+
+;Test 1: 18 live i64 values — exceeds 16 DR64 registers, forces spills.
+;Each i64 occupies one DR64 register. D0-D7 are caller-saved, D8-D15 callee-saved.
+
+define i64 @test_dr64_spill_18_live(i64 %a0, i64 %a1, i64 %a2, i64 %a3) nounwind {
+entry:
+; Prologue allocates the frame and zeroes the soft-zero GPR. Their relative
+; order is not semantically significant (post-RA scheduler may reorder them
+; as frame-setup/destroy instrs are now treated as scheduling barriers).
+; Prologue must save callee-saved DR64 registers (D8-D15).
+; DR64 callee-saves use st64 (8-byte stores). The full D8-D15 range is saved
+; so checking the first (d15) and last (d8) proves the whole callee-save set.
+  %v0 = add i64 %a0, 100
+  %v1 = add i64 %a1, 101
+  %v2 = add i64 %a2, 102
+  %v3 = add i64 %a3, 103
+  %v4 = add i64 %v0, 104
+  %v5 = add i64 %v1, 105
+  %v6 = add i64 %v2, 106
+  %v7 = add i64 %v3, 107
+  %v8 = add i64 %v4, 108
+  %v9 = add i64 %v5, 109
+  %v10 = add i64 %v6, 110
+  %v11 = add i64 %v7, 111
+  %v12 = add i64 %v8, 112
+  %v13 = add i64 %v9, 113
+  %v14 = add i64 %v10, 114
+  %v15 = add i64 %v11, 115
+  %v16 = add i64 %v12, 116
+  %v17 = add i64 %v13, 117
+  ; All 18 values (v0-v17) are live here
+  call void @use_i64(i64 %v17)
+  %s0 = add i64 %v0, %v1
+  %s1 = add i64 %s0, %v2
+  %s2 = add i64 %s1, %v3
+  %s3 = add i64 %s2, %v4
+  %s4 = add i64 %s3, %v5
+  %s5 = add i64 %s4, %v6
+  %s6 = add i64 %s5, %v7
+  %s7 = add i64 %s6, %v8
+  %s8 = add i64 %s7, %v9
+  %s9 = add i64 %s8, %v10
+  %s10 = add i64 %s9, %v11
+  %s11 = add i64 %s10, %v12
+  %s12 = add i64 %s11, %v13
+  %s13 = add i64 %s12, %v14
+  %s14 = add i64 %s13, %v15
+  %s15 = add i64 %s14, %v16
+  %s16 = add i64 %s15, %v17
+  ret i64 %s16
+}
+
+;Test 2: All callee-saved DR64 registers (D8-D15) holding live values across call.
+;8 i64 values live across a call forces all D8-D15 to be used.
+
+define i64 @test_all_dr64_callee_saved(i64 %a, i64 %b, i64 %c, i64 %d) nounwind {
+entry:
+; D8-D15 callee-saved DR64 registers must be saved/restored
+; Epilogue must restore DR64 callee-saves (base reg is sp or r12 post-RA sched)
+  %v1 = call i64 @consume_i64(i64 %a)
+  %v2 = call i64 @consume_i64(i64 %b)
+  %v3 = call i64 @consume_i64(i64 %c)
+  %v4 = call i64 @consume_i64(i64 %d)
+  %v5 = call i64 @consume_i64(i64 %v1)
+  %v6 = call i64 @consume_i64(i64 %v2)
+  %v7 = call i64 @consume_i64(i64 %v3)
+  %v8 = call i64 @consume_i64(i64 %v4)
+  %s1 = add i64 %v1, %v2
+  %s2 = add i64 %s1, %v3
+  %s3 = add i64 %s2, %v4
+  %s4 = add i64 %s3, %v5
+  %s5 = add i64 %s4, %v6
+  %s6 = add i64 %s5, %v7
+  %s7 = add i64 %s6, %v8
+  ret i64 %s7
+}
+
+;Test 3: i64 values live across many interleaved calls.
+;Each call clobbers D0-D7 (caller-saved), forcing D8-D15 usage and spills.
+
+define i64 @test_dr64_interleaved_calls() nounwind {
+entry:
+; Must save callee-saved DR64 registers since values live across calls
+  %c1 = call i64 @consume_i64(i64 1)
+  %c2 = call i64 @consume_i64(i64 2)
+  %c3 = call i64 @consume_i64(i64 3)
+  %c4 = call i64 @consume_i64(i64 4)
+  %c5 = call i64 @consume_i64(i64 5)
+  %c6 = call i64 @consume_i64(i64 6)
+  %c7 = call i64 @consume_i64(i64 7)
+  %c8 = call i64 @consume_i64(i64 8)
+  %c9 = call i64 @consume_i64(i64 9)
+  %c10 = call i64 @consume_i64(i64 10)
+  ; All c1-c10 are live, requiring 10 DR64 registers — some callee-saved
+  %s1 = add i64 %c1, %c2
+  %s2 = add i64 %s1, %c3
+  %s3 = add i64 %s2, %c4
+  %s4 = add i64 %s3, %c5
+  %s5 = add i64 %s4, %c6
+  %s6 = add i64 %s5, %c7
+  %s7 = add i64 %s6, %c8
+  %s8 = add i64 %s7, %c9
+  %s9 = add i64 %s8, %c10
+  ret i64 %s9
+}

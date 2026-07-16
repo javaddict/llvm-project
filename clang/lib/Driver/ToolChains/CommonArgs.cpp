@@ -99,6 +99,7 @@ static bool useFramePointerForTargetByDefault(const llvm::opt::ArgList &Args,
   case llvm::Triple::loongarch32:
   case llvm::Triple::loongarch64:
   case llvm::Triple::m68k:
+  case llvm::Triple::haydn:
     return !clang::driver::tools::areOptimizationsEnabled(Args);
   default:
     break;
@@ -639,6 +640,8 @@ const char *tools::getLDMOption(const llvm::Triple &T, const ArgList &Args) {
     return "elf64ve";
   case llvm::Triple::csky:
     return "cskyelf_linux";
+  case llvm::Triple::haydn:
+    return "elf32haydn";
   default:
     return nullptr;
   }
@@ -915,6 +918,13 @@ void tools::getTargetFeatures(const Driver &D, const llvm::Triple &Triple,
   case llvm::Triple::loongarch32:
   case llvm::Triple::loongarch64:
     loongarch::getLoongArchTargetFeatures(D, Triple, Args, Features);
+    break;
+  case llvm::Triple::haydn:
+    // AIE / Hexagon / RISC-V model: no free assembler temporary.
+    // R12 is a normal allocatable caller-saved GPR. MatInt goes into Dst
+    // (LOADI32) or a LivePhysRegs-scavenged GPR (LOADI64); large FI offsets
+    // use createVirtualRegister like RISCV/AIE EFI. VASTART still brackets
+    // fixed R12 via PEI R12ScratchFI (emit-time, no scavenger).
     break;
   }
 

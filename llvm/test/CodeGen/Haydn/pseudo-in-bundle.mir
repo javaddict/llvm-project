@@ -1,0 +1,119 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos -verify-machineinstrs %s -o - | FileCheck %s
+#
+# REGRESSION TEST: LD32_POST_INC / ST32_POST_INC pseudos inside VLIW bundles
+# must be expanded to real instructions, not silently dropped.
+#
+# Bug : The load/store optimizer (haydn-ldst-opt) creates LD32_POST_INC
+# ST32_POST_INC pseudos after the initial expand-pseudos pass. The VLIW
+# packetizer then bundles these pseudos. Without the bundle-aware expansion
+# in HaydnExpandPseudos, these pseudos reach the AsmPrinter inside bundles
+# and are silently dropped (AsmPrinter skips isPseudo inside bundles)
+# producing WRONG CODE — missing loads/stores (the COPY-drop wrong-code).
+#
+# Fix: HaydnExpandPseudos::expandPseudosInBundles iterates bundle children
+# removes pseudos from bundles, expands them to real instructions inserted
+# before the BUNDLE, and removes empty bundles.
+#
+# (DB-named fused post-increment load) extended the in-bundle fallback
+# path: an LD32_POST_INC pseudo whose stride is encodable (imm6 in signed
+# range) now expands to a SINGLE real S_LW_POST_IMM with tied base-writeback
+# instead of the LD32 + ADDI32 split. The safety guarantee is unchanged: the
+# pseudo is still fully expanded out of the bundle into a real, encodable
+# instruction. ST32_POST_INC still expands to the 2-instruction ST32 + ADDI32
+# split because the current MC/silicon encoding has no fused store-post form.
+#
+# If this test regresses (a POST_INC pseudo survives inside a BUNDLE), the
+# AsmPrinter will silently drop it and real loads/stores will be missing
+# from the output. Do NOT update CHECK lines without understanding root cause.
+
+--- |
+  define void @test_ld32.post_inc_in_bundle(ptr %p) {
+  entry:
+    ret void
+  }
+
+  define void @test_st32.post_inc_in_bundle(ptr %p, i32 %val) {
+  entry:
+    ret void
+  }
+...
+---
+name:            test_ld32.post_inc_in_bundle
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0.entry:
+    liveins: $r1
+
+    ; The BUNDLE contains LD32_POST_INC — a pseudo that must be expanded.
+    ; After expansion: a real load instruction is emitted before the bundle
+    ; position (replacing the pseudo), and the empty bundle is removed.
+    ;
+    ; (DB-named fused post-increment load): when the stride is encodable (here
+    ; stride 4 = imm6<<2 with imm6=1, in signed range -32..+31), the pseudo
+    ; expands to a SINGLE fused S_LW_POST_IMM (a real, non-pseudo instruction with
+    ; encoding 0x48 — NOT dropped by AsmPrinter). The base writeback is tied
+    ; into the same instruction. This is the correct fused form; it does NOT
+    ; weaken the safety net — the pseudo is still fully expanded out of
+    ; the bundle into a real instruction, never silently dropped.
+    ; CHECK: $r3, $r1 = S_LW_POST_IMM $r1, 1
+    ; CHECK-NOT: LD32_POST_INC
+    ; CHECK-NOT: BUNDLE
+    BUNDLE implicit-def dead $sfr {
+      $r3 = LD32_POST_INC $r1, 4, 0
+    }
+
+    RET implicit $r0, implicit $r15
+...
+---
+name:            test_st32.post_inc_in_bundle
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r3
+
+    ; ST32_POST_INC should be expanded before the bundle position.
+    ; CHECK: ST32 $r3, $r1, 0
+    ; CHECK-NEXT: $r1 = ADDI32_W{{(_S[012]_FLEX)?}} $r1, 4
+    ; CHECK-NOT: ST32_POST_INC
+    ; CHECK-NOT: BUNDLE
+    BUNDLE implicit-def dead $sfr {
+      ST32_POST_INC $r3, $r1, 4, 0
+    }
+
+    RET implicit $r0, implicit $r15
+...

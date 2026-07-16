@@ -189,7 +189,8 @@ bool VLIWResourceModel::reserveResources(SUnit *SU, bool IsTop) {
   return startNewCycle;
 }
 
-DFAPacketizer *
+ResourceCycle *
+
 VLIWResourceModel::createPacketizer(const TargetSubtargetInfo &STI) const {
   return STI.getInstrInfo()->CreateTargetScheduleState(STI);
 }
