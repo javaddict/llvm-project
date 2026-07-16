@@ -16,7 +16,6 @@
 
 #include "SystemZ.h"
 #include "SystemZInstrInfo.h"
-#include "llvm/CodeGen/LibcallLoweringInfo.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/TargetLowering.h"
@@ -124,7 +123,7 @@ public:
   AtomicExpansionKind shouldCastAtomicLoadInIR(LoadInst *LI) const override;
   AtomicExpansionKind shouldCastAtomicStoreInIR(StoreInst *SI) const override;
   AtomicExpansionKind
-  shouldExpandAtomicRMWInIR(const AtomicRMWInst *RMW) const override;
+  shouldExpandAtomicRMWInIR(AtomicRMWInst *RMW) const override;
   bool isLegalICmpImmediate(int64_t Imm) const override;
   bool isLegalAddImmediate(int64_t Imm) const override;
   bool isLegalAddressingMode(const DataLayout &DL, const AddrMode &AM, Type *Ty,
@@ -133,11 +132,11 @@ public:
   bool allowsMisalignedMemoryAccesses(EVT VT, unsigned AS, Align Alignment,
                                       MachineMemOperand::Flags Flags,
                                       unsigned *Fast) const override;
-  bool findOptimalMemOpLowering(LLVMContext &Context, std::vector<EVT> &MemOps,
-                                unsigned Limit, const MemOp &Op, unsigned DstAS,
-                                unsigned SrcAS,
-                                const AttributeList &FuncAttributes,
-                                EVT *LargestVT = nullptr) const override;
+  bool
+  findOptimalMemOpLowering(LLVMContext &Context, std::vector<EVT> &MemOps,
+                           unsigned Limit, const MemOp &Op, unsigned DstAS,
+                           unsigned SrcAS,
+                           const AttributeList &FuncAttributes) const override;
   EVT getOptimalMemOpType(LLVMContext &Context, const MemOp &Op,
                           const AttributeList &FuncAttributes) const override;
   bool isTruncateFree(Type *, Type *) const override;
@@ -228,10 +227,9 @@ public:
 
   /// Override to support customized stack guard loading.
   bool useLoadStackGuardNode(const Module &M) const override { return true; }
-  /// Insert SSP declaration if global stack protector is used.
-  void
-  insertSSPDeclarations(Module &M,
-                        const LibcallLoweringInfo &Libcalls) const override;
+  void insertSSPDeclarations(Module &M) const override {
+  }
+
   MachineBasicBlock *
   EmitInstrWithCustomInserter(MachineInstr &MI,
                               MachineBasicBlock *BB) const override;
@@ -295,7 +293,7 @@ public:
 
   bool isGuaranteedNotToBeUndefOrPoisonForTargetNode(
       SDValue Op, const APInt &DemandedElts, const SelectionDAG &DAG,
-      UndefPoisonKind Kind, unsigned Depth) const override;
+      bool PoisonOnly, unsigned Depth) const override;
 
   ISD::NodeType getExtendForAtomicOps() const override {
     return ISD::ANY_EXTEND;
@@ -474,9 +472,7 @@ private:
                                          unsigned Opcode) const;
   MachineBasicBlock *emitProbedAlloca(MachineInstr &MI,
                                       MachineBasicBlock *MBB) const;
-  MachineBasicBlock *emitStackGuardPseudo(MachineInstr &MI,
-                                          MachineBasicBlock *MBB,
-                                          unsigned PseudoOp) const;
+
   SDValue getBackchainAddress(SDValue SP, SelectionDAG &DAG) const;
 
   MachineMemOperand::Flags

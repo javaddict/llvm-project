@@ -25,9 +25,9 @@
 namespace llvm {
 
 /// Create ctor and init functions.
-struct RealtimeSanitizerPass
-    : public RequiredPassInfoMixin<RealtimeSanitizerPass> {
+struct RealtimeSanitizerPass : public PassInfoMixin<RealtimeSanitizerPass> {
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

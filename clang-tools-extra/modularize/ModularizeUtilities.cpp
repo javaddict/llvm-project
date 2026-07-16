@@ -287,8 +287,7 @@ std::error_code ModularizeUtilities::loadModuleMap(
     Target.get(), *HeaderInfo));
 
   // Parse module.modulemap file into module map.
-  if (ModMap->parseAndLoadModuleMapFile(ModuleMapEntry, /*IsSystem=*/false,
-                                        /*ImplicitlyDiscovered=*/false, Dir)) {
+  if (ModMap->parseAndLoadModuleMapFile(ModuleMapEntry, false, Dir)) {
     return std::error_code(1, std::generic_category());
   }
 
@@ -342,7 +341,7 @@ bool ModularizeUtilities::collectModuleHeaders(const clang::Module &Mod) {
   DependentsVector UmbrellaDependents;
 
   // Recursively do submodules.
-  for (Module *Submodule : Mod.submodules())
+  for (auto *Submodule : Mod.submodules())
     collectModuleHeaders(*Submodule);
 
   if (std::optional<clang::Module::Header> UmbrellaHeader =

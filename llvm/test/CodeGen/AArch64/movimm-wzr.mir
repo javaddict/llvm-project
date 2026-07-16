@@ -1,5 +1,4 @@
 # RUN: llc -run-pass=aarch64-expand-pseudo %s -o - | FileCheck %s
-# RUN: llc -passes=aarch64-expand-pseudo %s -o - | FileCheck %s
 
 --- |
   ; ModuleID = 'simple.ll'

@@ -1,0 +1,55 @@
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+# RUN:   -run-pass=early-machinelicm -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s
+#
+# REGRESSION TEST: (Path B) — 2-dest SIMD MAC must not abort in
+# MachineLICM::calcRegisterCost.
+#
+# Bug: The D_RRA2 _FLEX format classes (HaydnFormatsMAC.td) declare 6 bits
+# fields (rtd1, rtd2, rsd1, rsd2, rta1, rta2) but the 1-dest collapse left
+# rtd2/rta1/rta2 orphaned (declared as fields, bound to no dag operand).
+# CodeGenFormat derived NumOperands=6 from the bits-field set while the
+# selector emitted only 4 operands -> MachineLICM::calcRegisterCost
+# (MachineLICM.cpp:958) iterated 0..6 calling MI.getOperand(i) -> OOB assert
+# (ArrayRef::operator Index < Length) at i=4. This aborted 9+ NatureDSP
+# family-A kernels (vec_stddev16x16, vec_shift16x16,...).
+#
+# Fix (Path B): bind ALL 6 fields to dag operands (2 defs + 4 ins with
+# tied-def Constraints) so NumOperands matches the actual MI operand count.
+# The selector's selectSimdMacAcc2Dest emits the 2-def shape.
+#
+# Test design: a hand-written MIR with X4MULA16S_S1 (2 defs + 4 uses
+# tied accumulators). -run-pass=early-machinelicm walks calcRegisterCost over
+# all operands. Before the fix this aborts (exit 134); after the fix it runs
+# clean and CHECKs the instruction survives. Straight-line code is sufficient
+# the OOB is in per-MI operand iteration, independent of loop structure.
+---
+name:            test_x4mula16s_flex_machinelicm
+selected:        true
+tracksRegLiveness: true
+registers:
+  - { id: 0, class: dr64 }
+  - { id: 1, class: dr64 }
+  - { id: 2, class: dr64 }
+  - { id: 3, class: dr64 }
+  - { id: 4, class: dr64 }
+  - { id: 5, class: dr64 }
+body:             |
+  bb.0:
+    %0 = IMPLICIT_DEF
+    %1 = IMPLICIT_DEF
+    %2 = IMPLICIT_DEF
+    %3 = IMPLICIT_DEF
+
+    ; X4MULA16S_S1 is the family-A crashing op: 2 defs (rtd1, rtd2) tied
+    ; to 2 accumulator inputs (rta1, rta2), plus 2 sources (rsd1, rsd2). Before
+    ; the desc said 6 operands but only 4 were present -> OOB. Now 6 = 6.
+    %4, %5 = X4MULA16S_S1 %0, %1, %2, %3
+    $d0 = COPY %4
+    $d1 = COPY %5
+    RET implicit $d0, implicit $d1, implicit $r0, implicit $r15
+...
+
+# CHECK-LABEL: name: test_x4mula16s_flex_machinelicm
+# CHECK: X4MULA16S
+# CHECK-NOT: Assertion

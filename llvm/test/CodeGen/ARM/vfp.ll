@@ -9,19 +9,19 @@ define void @test(ptr %P, ptr %D) {
 	ret void
 }
 
-declare float @llvm.fabs.f32(float)
+declare float @fabsf(float)
 
-declare double @llvm.fabs.f64(double)
+declare double @fabs(double)
 
 define void @test_abs(ptr %P, ptr %D) {
 ;CHECK-LABEL: test_abs:
 	%a = load float, ptr %P		; <float> [#uses=1]
 ;CHECK: vabs.f32
-	%b = call float @llvm.fabs.f32( float %a ) readnone	; <float> [#uses=1]
+	%b = call float @fabsf( float %a ) readnone	; <float> [#uses=1]
 	store float %b, ptr %P
 	%A = load double, ptr %D		; <double> [#uses=1]
 ;CHECK: vabs.f64
-	%B = call double @llvm.fabs.f64( double %A ) readnone	; <double> [#uses=1]
+	%B = call double @fabs( double %A ) readnone	; <double> [#uses=1]
 	store double %B, ptr %D
 	ret void
 }

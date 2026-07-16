@@ -171,9 +171,7 @@ static std::optional<parser::Message> WhyNotDefinableBase(parser::CharBlock at,
             "'%s' is not device or managed or shared data and is not definable in a device subprogram"_err_en_US,
             original);
       }
-    } else if (!isOwnedByDeviceCode &&
-        !scope.context().languageFeatures().IsEnabled(
-            common::LanguageFeature::CudaUnified)) {
+    } else if (!isOwnedByDeviceCode) {
       return BlameSymbol(at,
           "'%s' is a host variable and is not definable in a device subprogram"_err_en_US,
           original);
@@ -222,19 +220,8 @@ static std::optional<parser::Message> WhyNotDefinableLast(parser::CharBlock at,
   }
   if (dyType && inPure) {
     if (const Symbol * impure{HasImpureFinal(ultimate)}) {
-      if (flags.test(DefinabilityFlag::OnlyWarnOnImpureFinalInPureContext)) {
-        if (scope.context().ShouldWarn(
-                common::UsageWarning::ImpureFinalInPure)) {
-          parser::Message message{at,
-              "'%s' has impure FINAL procedure '%s' and must be definable in this pure context"_warn_en_US,
-              original.name(), impure->name()};
-          evaluate::AttachDeclaration(message, original);
-          return message;
-        }
-      } else {
-        return BlameSymbol(at, "'%s' has an impure FINAL procedure '%s'"_en_US,
-            original, impure->name());
-      }
+      return BlameSymbol(at, "'%s' has an impure FINAL procedure '%s'"_en_US,
+          original, impure->name());
     }
     if (!flags.test(DefinabilityFlag::PolymorphicOkInPure)) {
       if (const DerivedTypeSpec * derived{GetDerivedTypeSpec(dyType)}) {
@@ -317,10 +304,6 @@ public:
       }
     }
     return anyVector ? false : (*this)(aRef.base());
-  }
-  template <typename T> bool operator()(const evaluate::ConditionalExpr<T> &) {
-    // A conditional expression is not a variable and cannot be definable.
-    return false;
   }
 
 private:

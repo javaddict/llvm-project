@@ -144,7 +144,6 @@ struct ModuleMapFile {
   SourceLocation Start;
 
   bool IsSystem;
-  bool ImplicitlyDiscovered;
   std::vector<TopLevelDecl> Decls;
 
   void dump(llvm::raw_ostream &out) const;
@@ -164,8 +163,7 @@ struct ModuleMapFile {
 /// \returns The parsed ModuleMapFile if successful, std::nullopt otherwise.
 std::optional<ModuleMapFile>
 parseModuleMap(FileID ID, clang::DirectoryEntryRef Dir, SourceManager &SM,
-               DiagnosticsEngine &Diags, bool IsSystem,
-               bool ImplicitlyDiscovered, unsigned *Offset);
+               DiagnosticsEngine &Diags, bool IsSystem, unsigned *Offset);
 
 } // namespace modulemap
 } // namespace clang

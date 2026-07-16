@@ -13,7 +13,6 @@
 #include "lldb/Host/posix/ConnectionFileDescriptorPosix.h"
 #include "lldb/Utility/Args.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/Support/ErrorExtras.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Testing/Support/Error.h"
 #include "gtest/gtest.h"
@@ -45,7 +44,8 @@ TestClient::~TestClient() {
 
 Error TestClient::initializeConnection() {
   if (SendAck() == 0)
-    return createStringError("Sending initial ACK failed.");
+    return make_error<StringError>("Sending initial ACK failed.",
+                                   inconvertibleErrorCode());
 
   if (Error E = SendMessage("QStartNoAckMode"))
     return E;
@@ -142,7 +142,8 @@ TestClient::launchCustom(StringRef Log, bool disable_stdio,
 
 Error TestClient::SetInferior(llvm::ArrayRef<std::string> inferior_args) {
   if (SendEnvironment(Host::GetEnvironment()) != 0) {
-    return createStringError("Failed to set launch environment");
+    return make_error<StringError>("Failed to set launch environment",
+                                   inconvertibleErrorCode());
   }
   std::stringstream command;
   command << "A";
@@ -211,8 +212,9 @@ Error TestClient::SendMessage(StringRef message, std::string &response_string,
   response.GetEscapedBinaryData(response_string);
   GTEST_LOG_(INFO) << "Read Packet: " << response_string;
   if (result != expected_result)
-    return createStringErrorV("Error sending message `{0}`: {1}", message,
-                              result);
+    return make_error<StringError>(
+        formatv("Error sending message `{0}`: {1}", message, result).str(),
+        inconvertibleErrorCode());
 
   return Error::success();
 }
@@ -277,9 +279,12 @@ Error TestClient::Continue(StringRef message) {
     StringExtractorGDBRemote R;
     PacketResult result = ReadPacket(R, GetPacketTimeout(), false);
     if (result != PacketResult::ErrorDisconnected) {
-      return createStringErrorV("Expected connection close after sending {0}. "
-                                "Got {1}/{2} instead.",
-                                message, result, R.GetStringRef());
+      return make_error<StringError>(
+          formatv("Expected connection close after sending {0}. Got {1}/{2} "
+                  "instead.",
+                  message, result, R.GetStringRef())
+              .str(),
+          inconvertibleErrorCode());
     }
   }
   return Error::success();

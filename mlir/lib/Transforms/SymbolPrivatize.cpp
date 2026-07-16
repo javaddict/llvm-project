@@ -16,15 +16,15 @@
 #include "mlir/IR/SymbolTable.h"
 
 namespace mlir {
-#define GEN_PASS_DEF_SYMBOLPRIVATIZEPASS
+#define GEN_PASS_DEF_SYMBOLPRIVATIZE
 #include "mlir/Transforms/Passes.h.inc"
 } // namespace mlir
 
 using namespace mlir;
 
 namespace {
-struct SymbolPrivatize : public impl::SymbolPrivatizePassBase<SymbolPrivatize> {
-  using impl::SymbolPrivatizePassBase<SymbolPrivatize>::SymbolPrivatizePassBase;
+struct SymbolPrivatize : public impl::SymbolPrivatizeBase<SymbolPrivatize> {
+  explicit SymbolPrivatize(ArrayRef<std::string> excludeSymbols);
   LogicalResult initialize(MLIRContext *context) override;
   void runOnOperation() override;
 
@@ -32,6 +32,10 @@ struct SymbolPrivatize : public impl::SymbolPrivatizePassBase<SymbolPrivatize> {
   DenseSet<StringAttr> excludedSymbols;
 };
 } // namespace
+
+SymbolPrivatize::SymbolPrivatize(llvm::ArrayRef<std::string> excludeSymbols) {
+  exclude = excludeSymbols;
+}
 
 LogicalResult SymbolPrivatize::initialize(MLIRContext *context) {
   for (const std::string &symbol : exclude)
@@ -51,4 +55,9 @@ void SymbolPrivatize::runOnOperation() {
       }
     }
   }
+}
+
+std::unique_ptr<Pass>
+mlir::createSymbolPrivatizePass(ArrayRef<std::string> exclude) {
+  return std::make_unique<SymbolPrivatize>(exclude);
 }

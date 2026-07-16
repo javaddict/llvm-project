@@ -65,14 +65,11 @@ private:
     /// dynamically based on the size of Buffer.
     mutable void *OffsetCache = nullptr;
 
-    /// Look up a given \p Ptr in the buffer, determining which line and column
-    /// it came from. This method has O(log n) complexity, where n is the number
-    /// of lines in the buffer.
-    LLVM_ABI std::pair<unsigned, unsigned>
-    getLineAndColumn(const char *Ptr) const;
+    /// Look up a given \p Ptr in the buffer, determining which line it came
+    /// from.
+    LLVM_ABI unsigned getLineNumber(const char *Ptr) const;
     template <typename T>
-    std::pair<unsigned, unsigned>
-    getLineAndColumnSpecialized(const char *Ptr) const;
+    unsigned getLineNumberSpecialized(const char *Ptr) const;
 
     /// Return a pointer to the first character of the specified line number or
     /// null if the line number is invalid.
@@ -109,14 +106,14 @@ public:
   LLVM_ABI SourceMgr();
   /// Create new source manager with the capability of finding include files
   /// via the provided file system.
-  LLVM_ABI explicit SourceMgr(IntrusiveRefCntPtr<vfs::FileSystem> FS);
+  explicit SourceMgr(IntrusiveRefCntPtr<vfs::FileSystem> FS);
   SourceMgr(const SourceMgr &) = delete;
   SourceMgr &operator=(const SourceMgr &) = delete;
-  LLVM_ABI SourceMgr(SourceMgr &&);
-  LLVM_ABI SourceMgr &operator=(SourceMgr &&);
+  SourceMgr(SourceMgr &&);
+  SourceMgr &operator=(SourceMgr &&);
   LLVM_ABI ~SourceMgr();
 
-  LLVM_ABI IntrusiveRefCntPtr<vfs::FileSystem> getVirtualFileSystem() const;
+  IntrusiveRefCntPtr<vfs::FileSystem> getVirtualFileSystem() const;
   LLVM_ABI void setVirtualFileSystem(IntrusiveRefCntPtr<vfs::FileSystem> FS);
 
   /// Return the include directories of this source manager.
@@ -203,8 +200,7 @@ public:
   /// buffer of the stacked file. The full path to the included file can be
   /// found in \p IncludedFile.
   LLVM_ABI ErrorOr<std::unique_ptr<MemoryBuffer>>
-  OpenIncludeFile(const std::string &Filename, std::string &IncludedFile,
-                  bool RequiresNullTerminator = true);
+  OpenIncludeFile(const std::string &Filename, std::string &IncludedFile);
 
   /// Return the ID of the buffer containing the specified location.
   ///
@@ -212,15 +208,13 @@ public:
   LLVM_ABI unsigned FindBufferContainingLoc(SMLoc Loc) const;
 
   /// Find the line number for the specified location in the specified file.
-  /// This method has O(log n) complexity, where n is the number of lines in the
-  /// buffer.
+  /// This is not a fast method.
   unsigned FindLineNumber(SMLoc Loc, unsigned BufferID = 0) const {
     return getLineAndColumn(Loc, BufferID).first;
   }
 
   /// Find the line and column number for the specified location in the
-  /// specified file. This method has O(log n) complexity, where n is the number
-  /// of lines in the buffer.
+  /// specified file. This is not a fast method.
   LLVM_ABI std::pair<unsigned, unsigned>
   getLineAndColumn(SMLoc Loc, unsigned BufferID = 0) const;
 

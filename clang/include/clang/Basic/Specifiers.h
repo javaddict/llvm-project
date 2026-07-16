@@ -15,7 +15,6 @@
 #ifndef LLVM_CLANG_BASIC_SPECIFIERS_H
 #define LLVM_CLANG_BASIC_SPECIFIERS_H
 
-#include "clang/Basic/OptionalUnsigned.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -193,8 +192,6 @@ namespace clang {
     /// This template specialization was implicitly instantiated from a
     /// template. (C++ [temp.inst]).
     TSK_ImplicitInstantiation,
-    /// This template is a friend declaration.
-    TSK_FriendDeclaration,
     /// This template specialization was declared or defined by an
     /// explicit specialization (C++ [temp.expl.spec]) or partial
     /// specialization (C++ [temp.class.spec]).
@@ -229,7 +226,6 @@ namespace clang {
 
     case TSK_Undeclared:
     case TSK_ImplicitInstantiation:
-    case TSK_FriendDeclaration:
       return false;
     }
     llvm_unreachable("bad template specialization kind");
@@ -365,8 +361,6 @@ namespace clang {
     // parameters are assumed to only get null on error.
     NullableResult,
   };
-  using NullabilityKindOrNone = OptionalUnsigned<NullabilityKind>;
-
   /// Prints human-readable debug representation.
   llvm::raw_ostream &operator<<(llvm::raw_ostream&, NullabilityKind);
 

@@ -16,7 +16,6 @@ add_lldb_library(lldbBreakpoint NO_PLUGIN_DEPENDENCIES
   BreakpointResolverName.cpp
   BreakpointResolverScripted.cpp
   BreakpointSite.cpp
-  ScriptedBreakpointOverrideResolver.cpp
   Stoppoint.cpp
   StoppointCallbackContext.cpp
   StoppointSite.cpp

@@ -10,7 +10,7 @@
 
 // class map
 
-// void swap(map& m); // constexpr since C++26
+// void swap(map& m);
 
 #include <map>
 #include <cassert>
@@ -18,7 +18,7 @@
 #include "test_macros.h"
 #include "min_allocator.h"
 
-TEST_CONSTEXPR_CXX26 bool test() {
+int main(int, char**) {
   typedef std::pair<const int, double> V;
   {
     typedef std::map<int, double> M;
@@ -108,13 +108,6 @@ TEST_CONSTEXPR_CXX26 bool test() {
     }
   }
 #endif
-  return true;
-}
 
-int main(int, char**) {
-  test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
   return 0;
 }

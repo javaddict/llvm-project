@@ -26,7 +26,8 @@ namespace ento {
 /// Widen the loop by invalidating anything that might be modified
 /// by the loop body in any iteration.
 ProgramStateRef getWidenedLoopState(ProgramStateRef PrevState,
-                                    const StackFrame *SF, unsigned BlockCount,
+                                    const LocationContext *LCtx,
+                                    unsigned BlockCount,
                                     ConstCFGElementRef Elem);
 
 } // end namespace ento

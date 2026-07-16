@@ -225,13 +225,9 @@ ConstantPointerNull *ConstantPointerNull::get(PointerType *Ty) {
   return cast<ConstantPointerNull>(Ty->getContext().getOrCreateConstant(LLVMC));
 }
 
-Type *ConstantPointerNull::getType() const {
-  return Ctx.getType(cast<llvm::ConstantPointerNull>(Val)->getType());
-}
-
-PointerType *ConstantPointerNull::getPointerType() const {
+PointerType *ConstantPointerNull::getType() const {
   return cast<PointerType>(
-      Ctx.getType(cast<llvm::ConstantPointerNull>(Val)->getPointerType()));
+      Ctx.getType(cast<llvm::ConstantPointerNull>(Val)->getType()));
 }
 
 UndefValue *UndefValue::get(Type *T) {

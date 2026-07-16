@@ -48,8 +48,6 @@ struct UnwrappedLine {
   bool InPragmaDirective = false;
   /// Whether it is part of a macro body.
   bool InMacroBody = false;
-  /// Whether it is a C++20 module/import declaration.
-  bool IsModuleOrImportDecl = false;
 
   /// Nesting level of unbraced body of a control statement.
   unsigned UnbracedBodyLevel = 0;
@@ -147,7 +145,7 @@ private:
                               bool *HasLabel = nullptr);
   bool tryToParseBracedList();
   bool parseBracedList(bool IsAngleBracket = false, bool IsEnum = false);
-  bool parseParens(TokenType StarAndAmpTokenType = TT_Unknown,
+  bool parseParens(TokenType AmpAmpTokenType = TT_Unknown,
                    bool InMacroCall = false);
   void parseSquare(bool LambdaIntroducer = false);
   void keepAncestorBraces();
@@ -161,13 +159,11 @@ private:
   void parseLoopBody(bool KeepBraces, bool WrapRightBrace);
   void parseForOrWhileLoop(bool HasParens = true);
   void parseDoWhile();
-  void parseLabel(FormatStyle::IndentGotoLabelStyle IndentGotoLabels =
-                      FormatStyle::IGLS_OuterIndent);
+  void parseLabel(bool LeftAlignLabel = false);
   void parseCaseLabel();
   void parseSwitch(bool IsExpr);
   void parseNamespace();
-  bool parseModuleDecl();
-  bool parseImportDecl();
+  bool parseModuleImport();
   void parseNew();
   void parseAccessSpecifier();
   bool parseEnum();
@@ -211,8 +207,6 @@ private:
   void parseVerilogCaseLabel();
   // For import, export, and extern.
   void parseVerilogExtern();
-  // Skip things that can precede the keywords like module.
-  void skipVerilogQualifiers();
   std::optional<llvm::SmallVector<llvm::SmallVector<FormatToken *, 8>, 1>>
   parseMacroCall();
 

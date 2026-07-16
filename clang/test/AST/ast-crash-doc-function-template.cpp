@@ -1,7 +1,7 @@
 // RUN: rm -rf %t
 // RUN: split-file %s %t
 
-// RUN: %clang_cc1 -x c++ -Wdocumentation -ast-dump-all %t/t.cpp | FileCheck %s
+// RUN: %clang_cc1 -x c++ -Wdocumentation -ast-dump-all %t/t.cpp
 
 //--- t.h
 /// MyClass in the header file

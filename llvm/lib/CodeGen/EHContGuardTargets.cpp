@@ -37,7 +37,9 @@ class EHContGuardTargets : public MachineFunctionPass {
 public:
   static char ID;
 
-  EHContGuardTargets() : MachineFunctionPass(ID) {}
+  EHContGuardTargets() : MachineFunctionPass(ID) {
+    initializeEHContGuardTargetsPass(*PassRegistry::getPassRegistry());
+  }
 
   StringRef getPassName() const override {
     return "EH Cont Guard catchret targets";

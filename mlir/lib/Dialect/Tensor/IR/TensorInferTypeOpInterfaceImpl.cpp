@@ -11,7 +11,6 @@
 #include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
-#include "llvm/ADT/SmallVectorExtras.h"
 
 using namespace mlir;
 using namespace mlir::tensor;
@@ -51,11 +50,11 @@ static OpFoldResult getCollapsedOutputDimFromInputShape(
 static SmallVector<OpFoldResult, 4> getCollapsedOutputShapeFromInputShape(
     OpBuilder &builder, Location loc, Value src,
     ArrayRef<int64_t> dstStaticShape, ArrayRef<AffineMap> reassociation) {
-  return llvm::map_to_vector<4>(
+  return llvm::to_vector<4>(llvm::map_range(
       llvm::seq<int64_t>(0, dstStaticShape.size()), [&](int64_t dim) {
         return getCollapsedOutputDimFromInputShape(
             builder, loc, dim, src, dstStaticShape, reassociation);
-      });
+      }));
 }
 
 struct ReifyCollapseShapeOp

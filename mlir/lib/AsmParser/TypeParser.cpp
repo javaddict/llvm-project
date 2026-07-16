@@ -58,7 +58,6 @@ OptionalParseResult Parser::parseOptionalType(Type &type) {
   case Token::kw_f128:
   case Token::kw_index:
   case Token::kw_none:
-  case Token::kw_token:
   case Token::exclamation_identifier:
     return failure(!(type = parseType()));
 
@@ -371,11 +370,6 @@ Type Parser::parseNonFunctionType() {
   case Token::kw_none:
     consumeToken(Token::kw_none);
     return builder.getNoneType();
-
-  // token-type
-  case Token::kw_token:
-    consumeToken(Token::kw_token);
-    return builder.getType<TokenType>();
 
   // extended type
   case Token::exclamation_identifier:

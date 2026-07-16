@@ -50,10 +50,9 @@ struct ReplayInlinerSettings {
 };
 
 /// Get call site location as a string with the given format
-LLVM_ABI std::string formatCallSiteLocation(DebugLoc DLoc,
-                                            const CallSiteFormat &Format);
+std::string formatCallSiteLocation(DebugLoc DLoc, const CallSiteFormat &Format);
 
-LLVM_ABI std::unique_ptr<InlineAdvisor>
+std::unique_ptr<InlineAdvisor>
 getReplayInlineAdvisor(Module &M, FunctionAnalysisManager &FAM,
                        LLVMContext &Context,
                        std::unique_ptr<InlineAdvisor> OriginalAdvisor,
@@ -62,7 +61,7 @@ getReplayInlineAdvisor(Module &M, FunctionAnalysisManager &FAM,
 
 /// Replay inline advisor that uses optimization remarks from inlining of
 /// previous build to guide current inlining. This is useful for inliner tuning.
-class LLVM_ABI ReplayInlineAdvisor : public InlineAdvisor {
+class ReplayInlineAdvisor : public InlineAdvisor {
 public:
   ReplayInlineAdvisor(Module &M, FunctionAnalysisManager &FAM,
                       LLVMContext &Context,

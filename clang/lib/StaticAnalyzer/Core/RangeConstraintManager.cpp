@@ -109,7 +109,7 @@ public:
 //                           RangeSet implementation
 //===----------------------------------------------------------------------===//
 
-const RangeSet::ContainerType RangeSet::Factory::EmptySet{};
+RangeSet::ContainerType RangeSet::Factory::EmptySet{};
 
 RangeSet RangeSet::Factory::add(RangeSet LHS, RangeSet RHS) {
   ContainerType Result;

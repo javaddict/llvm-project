@@ -71,9 +71,8 @@ removeFieldInitialized(const FieldDecl *M,
     // Erase all members in a union if any member of it is initialized.
     for (const auto *F : R->fields())
       FieldDecls.erase(F);
-  } else {
+  } else
     FieldDecls.erase(M);
-  }
 }
 
 static void
@@ -150,20 +149,18 @@ struct InitializerInsertion {
            "insertion represents a new initializer list.");
     SourceLocation Location;
     switch (Placement) {
-    case InitializerPlacement::New: {
-      const std::optional<Token> Tok = utils::lexer::getPreviousToken(
-          Constructor.getBody()->getBeginLoc(), Context.getSourceManager(),
-          Context.getLangOpts());
-      Location = Tok ? Tok->getLocation() : SourceLocation{};
+    case InitializerPlacement::New:
+      Location = utils::lexer::getPreviousToken(
+                     Constructor.getBody()->getBeginLoc(),
+                     Context.getSourceManager(), Context.getLangOpts())
+                     .getLocation();
       break;
-    }
-    case InitializerPlacement::Before: {
-      const std::optional<Token> Tok = utils::lexer::getPreviousToken(
-          Where->getSourceRange().getBegin(), Context.getSourceManager(),
-          Context.getLangOpts());
-      Location = Tok ? Tok->getLocation() : SourceLocation{};
+    case InitializerPlacement::Before:
+      Location = utils::lexer::getPreviousToken(
+                     Where->getSourceRange().getBegin(),
+                     Context.getSourceManager(), Context.getLangOpts())
+                     .getLocation();
       break;
-    }
     case InitializerPlacement::After:
       Location = Where->getRParenLoc();
       break;
@@ -571,13 +568,8 @@ void ProTypeMemberInitCheck::checkMissingBaseClassInitializer(
       return;
 
     for (const CXXCtorInitializer *Init : Ctor->inits())
-      if (Init->isBaseInitializer() && Init->isWritten()) {
-        // In template AST BaseInitializer could be generated too even if it's
-        // not target to base class.
-        if (const CXXRecordDecl *CRD =
-                Init->getBaseClass()->getAsCXXRecordDecl())
-          BasesToInit.erase(CRD->getCanonicalDecl());
-      }
+      if (Init->isBaseInitializer() && Init->isWritten())
+        BasesToInit.erase(Init->getBaseClass()->getAsCXXRecordDecl());
   }
 
   if (BasesToInit.empty())

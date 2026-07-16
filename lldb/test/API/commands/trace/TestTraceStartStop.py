@@ -7,8 +7,6 @@ from lldbsuite.test.decorators import *
 
 @skipIfNoIntelPT
 class TestTraceStartStop(TraceIntelPTTestCaseBase):
-    SHARED_BUILD_TESTCASE = False
-
     def expectGenericHelpMessageForStartCommand(self):
         self.expect(
             "help thread trace start",

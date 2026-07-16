@@ -22,11 +22,10 @@ namespace llvm {
 class LPMUpdater;
 class Loop;
 /// Performs Loop Predication Pass.
-class LoopPredicationPass : public OptionalPassInfoMixin<LoopPredicationPass> {
+class LoopPredicationPass : public PassInfoMixin<LoopPredicationPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
-                                 LoopStandardAnalysisResults &AR,
-                                 LPMUpdater &U);
+  PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
+                        LoopStandardAnalysisResults &AR, LPMUpdater &U);
 };
 } // end namespace llvm
 

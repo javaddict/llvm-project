@@ -31,7 +31,6 @@
 #include <ctime>
 #include <map>
 #include <memory>
-#include <optional>
 #include <string>
 
 namespace llvm {
@@ -41,6 +40,8 @@ class MemoryBuffer;
 } // end namespace llvm
 
 namespace clang {
+
+class FileSystemStatCache;
 
 /// Implements support for file system lookup, file system caching,
 /// and directory search management.
@@ -119,6 +120,9 @@ class FileManager : public RefCountedBase<FileManager> {
   unsigned NumDirCacheMisses = 0;
   unsigned NumFileCacheMisses = 0;
 
+  // Caching.
+  std::unique_ptr<FileSystemStatCache> StatCache;
+
   std::error_code getStatValue(StringRef Path, llvm::vfs::Status &Status,
                                bool isFile, std::unique_ptr<llvm::vfs::File> *F,
                                bool IsText = true);
@@ -130,21 +134,6 @@ class FileManager : public RefCountedBase<FileManager> {
   /// Fills the RealPathName in file entry.
   void fillRealPathName(FileEntry *UFE, llvm::StringRef FileName);
 
-  /// Implementation for getFileRef and getOptionalFileRef. Uses \c ErrorOr for
-  /// efficiency when an error will be ignored.
-  llvm::ErrorOr<FileEntryRef> getFileRefImpl(StringRef Filename, bool OpenFile,
-                                             bool CacheFailure, bool IsText);
-
-  /// Implementation for getDirectoryRef and getOptionalDirectoryRef. Uses
-  /// \c ErrorOr for efficiency when an error will be ignored.
-  llvm::ErrorOr<DirectoryEntryRef> getDirectoryRefImpl(StringRef DirName,
-                                                       bool CacheFailure);
-
-  /// Retrieves the directory that the given \p Filename resides in.
-  /// \p Filename can point to either a real file or a virtual file.
-  llvm::ErrorOr<DirectoryEntryRef> getDirectoryFromFile(StringRef Filename,
-                                                        bool CacheFailure);
-
 public:
   /// Construct a file manager, optionally with a custom VFS.
   ///
@@ -153,6 +142,18 @@ public:
   FileManager(const FileSystemOptions &FileSystemOpts,
               IntrusiveRefCntPtr<llvm::vfs::FileSystem> FS = nullptr);
   ~FileManager();
+
+  /// Installs the provided FileSystemStatCache object within
+  /// the FileManager.
+  ///
+  /// Ownership of this object is transferred to the FileManager.
+  ///
+  /// \param statCache the new stat cache to install. Ownership of this
+  /// object is transferred to the FileManager.
+  void setStatCache(std::unique_ptr<FileSystemStatCache> statCache);
+
+  /// Removes the FileSystemStatCache object from the manager.
+  void clearStatCache();
 
   /// Returns the number of unique real file entries cached by the file manager.
   size_t getNumUniqueRealFiles() const { return UniqueRealFiles.size(); }
@@ -168,19 +169,12 @@ public:
   /// \param CacheFailure If true and the file does not exist, we'll cache
   /// the failure to find this file.
   llvm::Expected<DirectoryEntryRef> getDirectoryRef(StringRef DirName,
-                                                    bool CacheFailure = true) {
-    auto Ref = getDirectoryRefImpl(DirName, CacheFailure);
-    if (Ref)
-      return *Ref;
-    return llvm::createFileError(DirName, Ref.getError());
-  }
+                                                    bool CacheFailure = true);
 
   /// Get a \c DirectoryEntryRef if it exists, without doing anything on error.
   OptionalDirectoryEntryRef getOptionalDirectoryRef(StringRef DirName,
                                                     bool CacheFailure = true) {
-    if (auto Ref = getDirectoryRefImpl(DirName, CacheFailure))
-      return *Ref;
-    return std::nullopt;
+    return llvm::expectedToOptional(getDirectoryRef(DirName, CacheFailure));
   }
 
   /// Lookup, cache, and verify the specified file (real or virtual). Return the
@@ -200,12 +194,7 @@ public:
   llvm::Expected<FileEntryRef> getFileRef(StringRef Filename,
                                           bool OpenFile = false,
                                           bool CacheFailure = true,
-                                          bool IsText = true) {
-    auto Ref = getFileRefImpl(Filename, OpenFile, CacheFailure, IsText);
-    if (Ref)
-      return *Ref;
-    return llvm::createFileError(Filename, Ref.getError());
-  }
+                                          bool IsText = true);
 
   /// Get the FileEntryRef for stdin, returning an error if stdin cannot be
   /// read.
@@ -218,11 +207,9 @@ public:
   /// Get a FileEntryRef if it exists, without doing anything on error.
   OptionalFileEntryRef getOptionalFileRef(StringRef Filename,
                                           bool OpenFile = false,
-                                          bool CacheFailure = true,
-                                          bool IsText = true) {
-    if (auto Ref = getFileRefImpl(Filename, OpenFile, CacheFailure, IsText))
-      return *Ref;
-    return std::nullopt;
+                                          bool CacheFailure = true) {
+    return llvm::expectedToOptional(
+        getFileRef(Filename, OpenFile, CacheFailure));
   }
 
   /// Returns the current file system options
@@ -288,6 +275,15 @@ private:
   DirectoryEntry *&getRealDirEntry(const llvm::vfs::Status &Status);
 
 public:
+  /// Get the 'stat' information for the given \p Path.
+  ///
+  /// If the path is relative, it will be resolved against the WorkingDir of the
+  /// FileManager's FileSystemOptions.
+  ///
+  /// \returns a \c std::error_code describing an error, if there was one
+  std::error_code getNoncachedStatValue(StringRef Path,
+                                        llvm::vfs::Status &Result);
+
   /// If path is not absolute and FileSystemOptions set the working
   /// directory, the path is modified to be relative to the given
   /// working directory.
@@ -299,12 +295,14 @@ public:
                                 SmallVectorImpl<char> &Path);
 
   /// Makes \c Path absolute taking into account FileSystemOptions and the
-  /// working directory option, and canonicalizes through
-  /// `llvm::path::remove_dots` if \c Canonicalize is true.
-  ///
-  /// \returns true if \c Path was changed.
-  bool makeAbsolutePath(SmallVectorImpl<char> &Path,
-                        bool Canonicalize = false) const;
+  /// working directory option.
+  /// \returns true if \c Path changed to absolute.
+  bool makeAbsolutePath(SmallVectorImpl<char> &Path) const;
+
+  /// Produce an array mapping from the unique IDs assigned to each
+  /// file to the corresponding FileEntryRef.
+  void
+  GetUniqueIDMapping(SmallVectorImpl<OptionalFileEntryRef> &UIDToFiles) const;
 
   /// Retrieve the canonical name for a given directory.
   ///

@@ -1,7 +1,5 @@
 // RUN: %check_clang_tidy -std=c++17-or-later %s fuchsia-trailing-return %t
 
-#include <utility>
-
 int add_one(const int arg) { return arg; }
 
 auto get_add_one() -> int (*)(const int) {
@@ -31,6 +29,12 @@ struct ImplicitDeductionGuides {
   ImplicitDeductionGuides(const T &);
 };
 
+template <typename A, typename B>
+struct pair {
+  A first;
+  B second;
+};
+
 template <typename T>
 struct UserDefinedDeductionGuides {
   UserDefinedDeductionGuides(T);
@@ -39,7 +43,7 @@ struct UserDefinedDeductionGuides {
 };
 
 template <typename T1, typename T2>
-UserDefinedDeductionGuides(T1, T2) -> UserDefinedDeductionGuides<std::pair<T1, T2>>;
+UserDefinedDeductionGuides(T1, T2) -> UserDefinedDeductionGuides<pair<T1, T2>>;
 
 void foo() {
   ImplicitDeductionGuides X(42);

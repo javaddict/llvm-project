@@ -26,9 +26,30 @@ The aim here is to explain the interface from the compiler to the runtime.
 The overall design is described, and each function in the interface
 has its own description. (At least, that's the ambition, we may not be there yet).
 
-@section sec_building Building the Runtime
+@section sec_building Quickly Building the Runtime
+For the impatient, we cover building the runtime as the first topic here.
 
-For build instructions, please see https://openmp.llvm.org/Building.html.
+CMake is used to build the OpenMP runtime.  For details and a full list of options for the CMake build system,
+see <tt>README.rst</tt> in the source code repository.  These instructions will provide the most typical build.
+
+In-LLVM-tree build:.
+@code
+$ cd where-you-want-to-live
+Check out openmp into llvm/projects
+$ cd where-you-want-to-build
+$ mkdir build && cd build
+$ cmake path/to/llvm -DCMAKE_C_COMPILER=<C compiler> -DCMAKE_CXX_COMPILER=<C++ compiler>
+$ make omp
+@endcode
+Out-of-LLVM-tree build:
+@code
+$ cd where-you-want-to-live
+Check out openmp
+$ cd where-you-want-to-live/openmp
+$ mkdir build && cd build
+$ cmake path/to/openmp -DCMAKE_C_COMPILER=<C compiler> -DCMAKE_CXX_COMPILER=<C++ compiler>
+$ make
+@endcode
 
 @section sec_supported Supported RTL Build Configurations
 

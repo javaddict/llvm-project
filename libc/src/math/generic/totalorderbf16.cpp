@@ -7,13 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/totalorderbf16.h"
-#include "src/__support/math/totalorderbf16.h"
+#include "src/__support/FPUtil/BasicOperations.h"
+#include "src/__support/FPUtil/bfloat16.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(int, totalorderbf16,
                    (const bfloat16 *x, const bfloat16 *y)) {
-  return math::totalorderbf16(x, y);
+  return static_cast<int>(fputil::totalorder(*x, *y));
 }
 
 } // namespace LIBC_NAMESPACE_DECL

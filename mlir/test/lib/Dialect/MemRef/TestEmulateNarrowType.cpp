@@ -11,8 +11,6 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Arith/Transforms/NarrowTypeEmulationConverter.h"
 #include "mlir/Dialect/Arith/Transforms/Passes.h"
-#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
-#include "mlir/Dialect/ControlFlow/Transforms/StructuralTypeConversions.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/MemRef/Transforms/Transforms.h"
@@ -36,9 +34,9 @@ struct TestEmulateNarrowTypePass
       : PassWrapper(pass) {}
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<arith::ArithDialect, cf::ControlFlowDialect,
-                    func::FuncDialect, memref::MemRefDialect,
-                    vector::VectorDialect, affine::AffineDialect>();
+    registry
+        .insert<arith::ArithDialect, func::FuncDialect, memref::MemRefDialect,
+                vector::VectorDialect, affine::AffineDialect>();
   }
   StringRef getArgument() const final { return "test-emulate-narrow-int"; }
   StringRef getDescription() const final {
@@ -101,13 +99,9 @@ struct TestEmulateNarrowTypePass
     RewritePatternSet patterns(ctx);
 
     arith::populateArithNarrowTypeEmulationPatterns(typeConverter, patterns);
-    memref::populateMemRefNarrowTypeEmulationPatterns(
-        typeConverter, patterns, disableAtomicRMW, assumeAligned);
-    vector::populateVectorNarrowTypeEmulationPatterns(
-        typeConverter, patterns, disableAtomicRMW, assumeAligned);
-
-    cf::populateCFStructuralTypeConversionsAndLegality(typeConverter, patterns,
-                                                       target);
+    memref::populateMemRefNarrowTypeEmulationPatterns(typeConverter, patterns);
+    vector::populateVectorNarrowTypeEmulationPatterns(typeConverter, patterns,
+                                                      disableAtomicRMW);
 
     if (failed(applyPartialConversion(op, target, std::move(patterns))))
       signalPassFailure();
@@ -131,12 +125,6 @@ struct TestEmulateNarrowTypePass
       *this, "disable-atomic-rmw",
       llvm::cl::desc("disable atomic read-modify-write and prefer generating "
                      "normal sequence"),
-      llvm::cl::init(false)};
-
-  Option<bool> assumeAligned{
-      *this, "assume-aligned",
-      llvm::cl::desc("assume store offsets are aligned to container element "
-                     "boundaries"),
       llvm::cl::init(false)};
 };
 

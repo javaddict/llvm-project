@@ -6,7 +6,7 @@ target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16
 ; Make sure the loop is vectorized under -Os without folding its tail based on
 ; its trip-count's lower bits known to be zero.
 
-define void @alignTC(ptr noalias nocapture %A, i32 %n) optsize {
+define dso_local void @alignTC(ptr noalias nocapture %A, i32 %n) optsize {
 ; CHECK-LABEL: @alignTC(
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    [[ALIGNEDTC:%.*]] = and i32 [[N:%.*]], -8
@@ -58,7 +58,7 @@ exit:
 ; Make sure the loop is vectorized under -Os without folding its tail based on
 ; its trip-count's lower bits assumed to be zero.
 
-define void @assumeAlignedTC(ptr noalias nocapture %A, i32 %p, i32 %q) optsize {
+define dso_local void @assumeAlignedTC(ptr noalias nocapture %A, i32 %p, i32 %q) optsize {
 ; CHECK-LABEL: @assumeAlignedTC(
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    [[AND1:%.*]] = and i32 [[P:%.*]], 3
@@ -133,7 +133,7 @@ exit:
 ; Make sure the loop's tail is folded when vectorized under -Os based on its trip-count's
 ; not being provably divisible by chosen VF.
 
-define void @cannotProveAlignedTC(ptr noalias nocapture %A, i32 %p, i32 %q) optsize {
+define dso_local void @cannotProveAlignedTC(ptr noalias nocapture %A, i32 %p, i32 %q) optsize {
 ; CHECK-LABEL: @cannotProveAlignedTC(
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    [[AND1:%.*]] = and i32 [[P:%.*]], 3
@@ -161,14 +161,15 @@ define void @cannotProveAlignedTC(ptr noalias nocapture %A, i32 %p, i32 %q) opts
 ; CHECK-NEXT:    [[INDEX:%.*]] = phi i32 [ 0, [[VECTOR_PH]] ], [ [[INDEX_NEXT:%.*]], [[PRED_STORE_CONTINUE6:%.*]] ]
 ; CHECK-NEXT:    [[VEC_IND:%.*]] = phi <4 x i32> [ <i32 0, i32 1, i32 2, i32 3>, [[VECTOR_PH]] ], [ [[VEC_IND_NEXT:%.*]], [[PRED_STORE_CONTINUE6]] ]
 ; CHECK-NEXT:    [[TMP0:%.*]] = icmp ule <4 x i32> [[VEC_IND]], [[BROADCAST_SPLAT]]
-; CHECK-NEXT:    [[TMP1:%.*]] = extractelement <4 x i1> [[TMP0]], i64 0
+; CHECK-NEXT:    [[TMP1:%.*]] = extractelement <4 x i1> [[TMP0]], i32 0
 ; CHECK-NEXT:    br i1 [[TMP1]], label [[PRED_STORE_IF:%.*]], label [[PRED_STORE_CONTINUE:%.*]]
 ; CHECK:       pred.store.if:
-; CHECK-NEXT:    [[TMP3:%.*]] = getelementptr inbounds i32, ptr [[A:%.*]], i32 [[INDEX]]
+; CHECK-NEXT:    [[TMP2:%.*]] = add i32 [[INDEX]], 0
+; CHECK-NEXT:    [[TMP3:%.*]] = getelementptr inbounds i32, ptr [[A:%.*]], i32 [[TMP2]]
 ; CHECK-NEXT:    store i32 13, ptr [[TMP3]], align 1
 ; CHECK-NEXT:    br label [[PRED_STORE_CONTINUE]]
 ; CHECK:       pred.store.continue:
-; CHECK-NEXT:    [[TMP4:%.*]] = extractelement <4 x i1> [[TMP0]], i64 1
+; CHECK-NEXT:    [[TMP4:%.*]] = extractelement <4 x i1> [[TMP0]], i32 1
 ; CHECK-NEXT:    br i1 [[TMP4]], label [[PRED_STORE_IF1:%.*]], label [[PRED_STORE_CONTINUE2:%.*]]
 ; CHECK:       pred.store.if1:
 ; CHECK-NEXT:    [[TMP5:%.*]] = add i32 [[INDEX]], 1
@@ -176,7 +177,7 @@ define void @cannotProveAlignedTC(ptr noalias nocapture %A, i32 %p, i32 %q) opts
 ; CHECK-NEXT:    store i32 13, ptr [[TMP6]], align 1
 ; CHECK-NEXT:    br label [[PRED_STORE_CONTINUE2]]
 ; CHECK:       pred.store.continue2:
-; CHECK-NEXT:    [[TMP7:%.*]] = extractelement <4 x i1> [[TMP0]], i64 2
+; CHECK-NEXT:    [[TMP7:%.*]] = extractelement <4 x i1> [[TMP0]], i32 2
 ; CHECK-NEXT:    br i1 [[TMP7]], label [[PRED_STORE_IF3:%.*]], label [[PRED_STORE_CONTINUE4:%.*]]
 ; CHECK:       pred.store.if3:
 ; CHECK-NEXT:    [[TMP8:%.*]] = add i32 [[INDEX]], 2
@@ -184,7 +185,7 @@ define void @cannotProveAlignedTC(ptr noalias nocapture %A, i32 %p, i32 %q) opts
 ; CHECK-NEXT:    store i32 13, ptr [[TMP9]], align 1
 ; CHECK-NEXT:    br label [[PRED_STORE_CONTINUE4]]
 ; CHECK:       pred.store.continue4:
-; CHECK-NEXT:    [[TMP10:%.*]] = extractelement <4 x i1> [[TMP0]], i64 3
+; CHECK-NEXT:    [[TMP10:%.*]] = extractelement <4 x i1> [[TMP0]], i32 3
 ; CHECK-NEXT:    br i1 [[TMP10]], label [[PRED_STORE_IF5:%.*]], label [[PRED_STORE_CONTINUE6]]
 ; CHECK:       pred.store.if5:
 ; CHECK-NEXT:    [[TMP11:%.*]] = add i32 [[INDEX]], 3
@@ -193,7 +194,7 @@ define void @cannotProveAlignedTC(ptr noalias nocapture %A, i32 %p, i32 %q) opts
 ; CHECK-NEXT:    br label [[PRED_STORE_CONTINUE6]]
 ; CHECK:       pred.store.continue6:
 ; CHECK-NEXT:    [[INDEX_NEXT]] = add i32 [[INDEX]], 4
-; CHECK-NEXT:    [[VEC_IND_NEXT]] = add nuw <4 x i32> [[VEC_IND]], splat (i32 4)
+; CHECK-NEXT:    [[VEC_IND_NEXT]] = add <4 x i32> [[VEC_IND]], splat (i32 4)
 ; CHECK-NEXT:    [[TMP13:%.*]] = icmp eq i32 [[INDEX_NEXT]], [[N_VEC]]
 ; CHECK-NEXT:    br i1 [[TMP13]], label [[MIDDLE_BLOCK:%.*]], label [[VECTOR_BODY]], !llvm.loop [[LOOP6:![0-9]+]]
 ; CHECK:       middle.block:
@@ -229,3 +230,4 @@ exit:
   ret void
 }
 
+declare void @llvm.assume(i1 noundef) nofree nosync nounwind willreturn

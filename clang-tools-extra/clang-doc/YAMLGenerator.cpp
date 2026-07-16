@@ -10,7 +10,6 @@
 
 #include "Generators.h"
 #include "Representation.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/YAMLTraits.h"
 #include "llvm/Support/raw_ostream.h"
 #include <optional>
@@ -29,84 +28,11 @@ LLVM_YAML_IS_SEQUENCE_VECTOR(EnumValueInfo)
 LLVM_YAML_IS_SEQUENCE_VECTOR(TemplateParamInfo)
 LLVM_YAML_IS_SEQUENCE_VECTOR(TypedefInfo)
 LLVM_YAML_IS_SEQUENCE_VECTOR(BaseRecordInfo)
+LLVM_YAML_IS_SEQUENCE_VECTOR(std::unique_ptr<CommentInfo>)
+LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::SmallString<16>)
 
 namespace llvm {
-
-template <typename T>
-static bool operator==(const llvm::simple_ilist<T> &LHS,
-                       const llvm::simple_ilist<T> &RHS) {
-  auto LIt = LHS.begin(), LEnd = LHS.end();
-  auto RIt = RHS.begin(), REnd = RHS.end();
-  for (; LIt != LEnd && RIt != REnd; ++LIt, ++RIt) {
-    if (!(*LIt == *RIt))
-      return false;
-  }
-  return LIt == LEnd && RIt == REnd;
-}
-
-template <typename T>
-static bool operator!=(const llvm::simple_ilist<T> &LHS,
-                       const llvm::simple_ilist<T> &RHS) {
-  return !(LHS == RHS);
-}
-
 namespace yaml {
-
-// Provide SequenceTraits for ArrayRef<T*> since YAMLTraits only provides it for
-// MutableArrayRef
-template <typename T> struct SequenceTraits<ArrayRef<T *>> {
-  static size_t size(IO &io, ArrayRef<T *> &seq) { return seq.size(); }
-  static T *&element(IO &io, ArrayRef<T *> &seq, size_t index) {
-    // ArrayRef is not mutable, but YAML output only reads the value.
-    return const_cast<T *&>(seq[index]);
-  }
-};
-
-template <typename T> struct SequenceTraits<llvm::simple_ilist<T>> {
-  static size_t size(IO &io, llvm::simple_ilist<T> &seq) { return seq.size(); }
-  static T &element(IO &io, llvm::simple_ilist<T> &seq, size_t index) {
-    return *std::next(seq.begin(), index);
-  }
-};
-
-template <typename T> struct SequenceTraits<clang::doc::DocList<T>> {
-  static size_t size(IO &io, clang::doc::DocList<T> &seq) { return seq.size(); }
-  static T &element(IO &io, clang::doc::DocList<T> &seq, size_t index) {
-    return *(std::next(seq.begin(), index));
-  }
-};
-
-// Map pointers to the value mappings as clang-doc only does output
-// serialization.
-template <typename T> struct PointerMappingTraits {
-  static void mapping(IO &IO, T *&Val) {
-    if (Val)
-      MappingTraits<T>::mapping(IO, *Val);
-  }
-};
-
-template <>
-struct MappingTraits<clang::doc::Reference *>
-    : PointerMappingTraits<clang::doc::Reference> {};
-template <>
-struct MappingTraits<clang::doc::CommentInfo *>
-    : PointerMappingTraits<clang::doc::CommentInfo> {};
-template <>
-struct MappingTraits<clang::doc::FunctionInfo *>
-    : PointerMappingTraits<clang::doc::FunctionInfo> {};
-template <>
-struct MappingTraits<clang::doc::EnumInfo *>
-    : PointerMappingTraits<clang::doc::EnumInfo> {};
-template <>
-struct MappingTraits<clang::doc::TemplateParamInfo *>
-    : PointerMappingTraits<clang::doc::TemplateParamInfo> {};
-
-template <typename T> struct SequenceTraits<ArrayRef<T>> {
-  static size_t size(IO &io, llvm::ArrayRef<T> &seq) { return seq.size(); }
-  static T &element(IO &io, llvm::ArrayRef<T> &seq, size_t index) {
-    return const_cast<T &>(seq[index]);
-  }
-};
 
 // Enumerations to YAML output.
 
@@ -168,14 +94,30 @@ template <> struct ScalarEnumerationTraits<clang::doc::CommentKind> {
 };
 
 // Scalars to YAML output.
+template <unsigned U> struct ScalarTraits<SmallString<U>> {
 
-template <> struct ScalarTraits<SymbolID> {
+  static void output(const SmallString<U> &S, void *, llvm::raw_ostream &OS) {
+    for (const auto &C : S)
+      OS << C;
+  }
 
-  static void output(const SymbolID &S, void *, llvm::raw_ostream &OS) {
+  static StringRef input(StringRef Scalar, void *, SmallString<U> &Value) {
+    Value.assign(Scalar.begin(), Scalar.end());
+    return StringRef();
+  }
+
+  static QuotingType mustQuote(StringRef) { return QuotingType::Single; }
+};
+
+template <> struct ScalarTraits<std::array<unsigned char, 20>> {
+
+  static void output(const std::array<unsigned char, 20> &S, void *,
+                     llvm::raw_ostream &OS) {
     OS << toHex(toStringRef(S));
   }
 
-  static StringRef input(StringRef Scalar, void *, SymbolID &Value) {
+  static StringRef input(StringRef Scalar, void *,
+                         std::array<unsigned char, 20> &Value) {
     if (Scalar.size() != 40)
       return "Error: Incorrect scalar size for USR.";
     Value = stringToSymbol(Scalar);
@@ -185,39 +127,12 @@ template <> struct ScalarTraits<SymbolID> {
   static SymbolID stringToSymbol(llvm::StringRef Value) {
     SymbolID USR;
     std::string HexString = fromHex(Value);
-    llvm::copy(HexString, USR.begin());
+    std::copy(HexString.begin(), HexString.end(), USR.begin());
     return SymbolID(USR);
   }
 
   static QuotingType mustQuote(StringRef) { return QuotingType::Single; }
 };
-
-/// A wrapper for StringRef to force YAML traits to single-quote the string.
-struct QuotedString {
-  StringRef Ref;
-  QuotedString() = default;
-  explicit QuotedString(StringRef R) : Ref(R) {}
-  explicit operator StringRef() const { return Ref; }
-  bool operator==(const QuotedString &Other) const { return Ref == Other.Ref; }
-};
-
-template <> struct ScalarTraits<QuotedString> {
-  static void output(const QuotedString &S, void *, llvm::raw_ostream &OS) {
-    OS << S.Ref;
-  }
-  static StringRef input(StringRef Scalar, void *, QuotedString &Value) {
-    Value.Ref = Scalar;
-    return StringRef();
-  }
-  static QuotingType mustQuote(StringRef) { return QuotingType::Single; }
-};
-} // end namespace yaml
-} // end namespace llvm
-
-LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::yaml::QuotedString)
-
-namespace llvm {
-namespace yaml {
 
 // Helper functions to map infos to YAML.
 
@@ -227,31 +142,14 @@ static void typeInfoMapping(IO &IO, TypeInfo &I) {
 
 static void fieldTypeInfoMapping(IO &IO, FieldTypeInfo &I) {
   typeInfoMapping(IO, I);
-
-  QuotedString QName(I.Name);
-  IO.mapOptional("Name", QName, QuotedString(StringRef()));
-  if (!IO.outputting())
-    I.Name = QName.Ref;
-
-  QuotedString QDefault(I.DefaultValue);
-  IO.mapOptional("DefaultValue", QDefault, QuotedString(StringRef()));
-  if (!IO.outputting())
-    I.DefaultValue = QDefault.Ref;
+  IO.mapOptional("Name", I.Name, SmallString<16>());
+  IO.mapOptional("DefaultValue", I.DefaultValue, SmallString<16>());
 }
 
 static void infoMapping(IO &IO, Info &I) {
   IO.mapRequired("USR", I.USR);
-
-  QuotedString QName(I.Name);
-  IO.mapOptional("Name", QName, QuotedString(StringRef()));
-  if (!IO.outputting())
-    I.Name = QName.Ref;
-
-  QuotedString QPath(I.Path);
-  IO.mapOptional("Path", QPath, QuotedString(StringRef()));
-  if (!IO.outputting())
-    I.Path = QPath.Ref;
-
+  IO.mapOptional("Name", I.Name, SmallString<16>());
+  IO.mapOptional("Path", I.Path, SmallString<128>());
   IO.mapOptional("Namespace", I.Namespace, llvm::SmallVector<Reference, 4>());
   IO.mapOptional("Description", I.Description);
 }
@@ -259,7 +157,7 @@ static void infoMapping(IO &IO, Info &I) {
 static void symbolInfoMapping(IO &IO, SymbolInfo &I) {
   infoMapping(IO, I);
   IO.mapOptional("DefLocation", I.DefLoc, std::optional<Location>());
-  IO.mapOptional("Location", I.Loc);
+  IO.mapOptional("Location", I.Loc, llvm::SmallVector<Location, 2>());
 }
 
 static void recordInfoMapping(IO &IO, RecordInfo &I) {
@@ -268,10 +166,10 @@ static void recordInfoMapping(IO &IO, RecordInfo &I) {
   IO.mapOptional("IsTypeDef", I.IsTypeDef, false);
   IO.mapOptional("Members", I.Members);
   IO.mapOptional("Bases", I.Bases);
-  IO.mapOptional("Parents", I.Parents, SmallVector<Reference, 4>());
+  IO.mapOptional("Parents", I.Parents, llvm::SmallVector<Reference, 4>());
   IO.mapOptional("VirtualParents", I.VirtualParents,
                  llvm::SmallVector<Reference, 4>());
-  IO.mapOptional("ChildRecords", I.Children.Records);
+  IO.mapOptional("ChildRecords", I.Children.Records, std::vector<Reference>());
   IO.mapOptional("ChildFunctions", I.Children.Functions);
   IO.mapOptional("ChildEnums", I.Children.Enums);
   IO.mapOptional("ChildTypedefs", I.Children.Typedefs);
@@ -280,56 +178,18 @@ static void recordInfoMapping(IO &IO, RecordInfo &I) {
 
 static void commentInfoMapping(IO &IO, CommentInfo &I) {
   IO.mapOptional("Kind", I.Kind, CommentKind::CK_Unknown);
-
-  QuotedString QText(I.Text);
-  IO.mapOptional("Text", QText, QuotedString(StringRef()));
-  if (!IO.outputting())
-    I.Text = QText.Ref;
-
-  QuotedString QName(I.Name);
-  IO.mapOptional("Name", QName, QuotedString(StringRef()));
-  if (!IO.outputting())
-    I.Name = QName.Ref;
-
-  QuotedString QDirection(I.Direction);
-  IO.mapOptional("Direction", QDirection, QuotedString(StringRef()));
-  if (!IO.outputting())
-    I.Direction = QDirection.Ref;
-
-  QuotedString QParamName(I.ParamName);
-  IO.mapOptional("ParamName", QParamName, QuotedString(StringRef()));
-  if (!IO.outputting())
-    I.ParamName = QParamName.Ref;
-
-  QuotedString QCloseName(I.CloseName);
-  IO.mapOptional("CloseName", QCloseName, QuotedString(StringRef()));
-  if (!IO.outputting())
-    I.CloseName = QCloseName.Ref;
-
+  IO.mapOptional("Text", I.Text, SmallString<64>());
+  IO.mapOptional("Name", I.Name, SmallString<16>());
+  IO.mapOptional("Direction", I.Direction, SmallString<8>());
+  IO.mapOptional("ParamName", I.ParamName, SmallString<16>());
+  IO.mapOptional("CloseName", I.CloseName, SmallString<16>());
   IO.mapOptional("SelfClosing", I.SelfClosing, false);
   IO.mapOptional("Explicit", I.Explicit, false);
-
-  std::vector<QuotedString> QArgs;
-  if (IO.outputting()) {
-    for (auto &S : I.Args)
-      QArgs.push_back(QuotedString(S));
-  }
-  IO.mapOptional("Args", QArgs, std::vector<QuotedString>());
-
-  std::vector<QuotedString> QAttrKeys;
-  if (IO.outputting()) {
-    for (auto &S : I.AttrKeys)
-      QAttrKeys.push_back(QuotedString(S));
-  }
-  IO.mapOptional("AttrKeys", QAttrKeys, std::vector<QuotedString>());
-
-  std::vector<QuotedString> QAttrValues;
-  if (IO.outputting()) {
-    for (auto &S : I.AttrValues)
-      QAttrValues.push_back(QuotedString(S));
-  }
-  IO.mapOptional("AttrValues", QAttrValues, std::vector<QuotedString>());
-
+  IO.mapOptional("Args", I.Args, llvm::SmallVector<SmallString<16>, 4>());
+  IO.mapOptional("AttrKeys", I.AttrKeys,
+                 llvm::SmallVector<SmallString<16>, 4>());
+  IO.mapOptional("AttrValues", I.AttrValues,
+                 llvm::SmallVector<SmallString<16>, 4>());
   IO.mapOptional("Children", I.Children);
 }
 
@@ -338,34 +198,17 @@ static void commentInfoMapping(IO &IO, CommentInfo &I) {
 template <> struct MappingTraits<Location> {
   static void mapping(IO &IO, Location &Loc) {
     IO.mapOptional("LineNumber", Loc.StartLineNumber, 0);
-
-    QuotedString QFilename(Loc.Filename);
-    IO.mapOptional("Filename", QFilename, QuotedString(StringRef()));
-    if (!IO.outputting())
-      Loc.Filename = QFilename.Ref;
+    IO.mapOptional("Filename", Loc.Filename, SmallString<32>());
   }
 };
 
 template <> struct MappingTraits<Reference> {
   static void mapping(IO &IO, Reference &Ref) {
     IO.mapOptional("Type", Ref.RefType, InfoType::IT_default);
-
-    QuotedString QName(Ref.Name);
-    IO.mapOptional("Name", QName, QuotedString(StringRef()));
-    if (!IO.outputting())
-      Ref.Name = QName.Ref;
-
-    QuotedString QQualName(Ref.QualName);
-    IO.mapOptional("QualName", QQualName, QuotedString(StringRef()));
-    if (!IO.outputting())
-      Ref.QualName = QQualName.Ref;
-
+    IO.mapOptional("Name", Ref.Name, SmallString<16>());
+    IO.mapOptional("QualName", Ref.QualName, SmallString<16>());
     IO.mapOptional("USR", Ref.USR, SymbolID());
-
-    QuotedString QPath(Ref.Path);
-    IO.mapOptional("Path", QPath, QuotedString(StringRef()));
-    if (!IO.outputting())
-      Ref.Path = QPath.Ref;
+    IO.mapOptional("Path", Ref.Path, SmallString<128>());
   }
 };
 
@@ -376,16 +219,8 @@ template <> struct MappingTraits<TypeInfo> {
 template <> struct MappingTraits<FieldTypeInfo> {
   static void mapping(IO &IO, FieldTypeInfo &I) {
     typeInfoMapping(IO, I);
-
-    QuotedString QName(I.Name);
-    IO.mapOptional("Name", QName, QuotedString(StringRef()));
-    if (!IO.outputting())
-      I.Name = QName.Ref;
-
-    QuotedString QDefault(I.DefaultValue);
-    IO.mapOptional("DefaultValue", QDefault, QuotedString(StringRef()));
-    if (!IO.outputting())
-      I.DefaultValue = QDefault.Ref;
+    IO.mapOptional("Name", I.Name, SmallString<16>());
+    IO.mapOptional("DefaultValue", I.DefaultValue, SmallString<16>());
   }
 };
 
@@ -403,11 +238,10 @@ template <> struct MappingTraits<MemberTypeInfo> {
 template <> struct MappingTraits<NamespaceInfo> {
   static void mapping(IO &IO, NamespaceInfo &I) {
     infoMapping(IO, I);
-    std::vector<Reference> TempNamespaces;
-    for (const auto &N : I.Children.Namespaces)
-      TempNamespaces.push_back(N);
-    IO.mapOptional("ChildNamespaces", TempNamespaces, std::vector<Reference>());
-    IO.mapOptional("ChildRecords", I.Children.Records);
+    IO.mapOptional("ChildNamespaces", I.Children.Namespaces,
+                   std::vector<Reference>());
+    IO.mapOptional("ChildRecords", I.Children.Records,
+                   std::vector<Reference>());
     IO.mapOptional("ChildFunctions", I.Children.Functions);
     IO.mapOptional("ChildEnums", I.Children.Enums);
     IO.mapOptional("ChildTypedefs", I.Children.Typedefs);
@@ -432,20 +266,9 @@ template <> struct MappingTraits<BaseRecordInfo> {
 
 template <> struct MappingTraits<EnumValueInfo> {
   static void mapping(IO &IO, EnumValueInfo &I) {
-    QuotedString QName(I.Name);
-    IO.mapOptional("Name", QName, QuotedString(StringRef()));
-    if (!IO.outputting())
-      I.Name = QName.Ref;
-
-    QuotedString QValue(I.Value);
-    IO.mapOptional("Value", QValue, QuotedString(StringRef()));
-    if (!IO.outputting())
-      I.Value = QValue.Ref;
-
-    QuotedString QExpr(I.ValueExpr);
-    IO.mapOptional("Expr", QExpr, QuotedString(StringRef()));
-    if (!IO.outputting())
-      I.ValueExpr = QExpr.Ref;
+    IO.mapOptional("Name", I.Name);
+    IO.mapOptional("Value", I.Value);
+    IO.mapOptional("Expr", I.ValueExpr, SmallString<16>());
   }
 };
 
@@ -483,10 +306,7 @@ template <> struct MappingTraits<FunctionInfo> {
 
 template <> struct MappingTraits<TemplateParamInfo> {
   static void mapping(IO &IO, TemplateParamInfo &I) {
-    QuotedString QContents(I.Contents);
-    IO.mapOptional("Contents", QContents, QuotedString(StringRef()));
-    if (!IO.outputting())
-      I.Contents = QContents.Ref;
+    IO.mapOptional("Contents", I.Contents);
   }
 };
 
@@ -509,6 +329,13 @@ template <> struct MappingTraits<CommentInfo> {
   static void mapping(IO &IO, CommentInfo &I) { commentInfoMapping(IO, I); }
 };
 
+template <> struct MappingTraits<std::unique_ptr<CommentInfo>> {
+  static void mapping(IO &IO, std::unique_ptr<CommentInfo> &I) {
+    if (I)
+      commentInfoMapping(IO, *I);
+  }
+};
+
 } // end namespace yaml
 } // end namespace llvm
 
@@ -520,10 +347,9 @@ class YAMLGenerator : public Generator {
 public:
   static const char *Format;
 
-  llvm::Error generateDocumentation(StringRef RootDir,
-                                    llvm::StringMap<doc::Info *> Infos,
-                                    const ClangDocContext &CDCtx,
-                                    std::string DirName) override;
+  llvm::Error generateDocumentation(
+      StringRef RootDir, llvm::StringMap<std::unique_ptr<doc::Info>> Infos,
+      const ClangDocContext &CDCtx, std::string DirName) override;
   llvm::Error generateDocForInfo(Info *I, llvm::raw_ostream &OS,
                                  const ClangDocContext &CDCtx) override;
 };
@@ -531,10 +357,10 @@ public:
 const char *YAMLGenerator::Format = "yaml";
 
 llvm::Error YAMLGenerator::generateDocumentation(
-    StringRef RootDir, llvm::StringMap<doc::Info *> Infos,
+    StringRef RootDir, llvm::StringMap<std::unique_ptr<doc::Info>> Infos,
     const ClangDocContext &CDCtx, std::string DirName) {
   for (const auto &Group : Infos) {
-    doc::Info *Info = Group.getValue();
+    doc::Info *Info = Group.getValue().get();
 
     // Output file names according to the USR except the global namesapce.
     // Anonymous namespaces are taken care of in serialization, so here we can
@@ -567,19 +393,19 @@ llvm::Error YAMLGenerator::generateDocForInfo(Info *I, llvm::raw_ostream &OS,
   llvm::yaml::Output InfoYAML(OS);
   switch (I->IT) {
   case InfoType::IT_namespace:
-    InfoYAML << *cast<NamespaceInfo>(I);
+    InfoYAML << *static_cast<clang::doc::NamespaceInfo *>(I);
     break;
   case InfoType::IT_record:
-    InfoYAML << *cast<RecordInfo>(I);
+    InfoYAML << *static_cast<clang::doc::RecordInfo *>(I);
     break;
   case InfoType::IT_enum:
-    InfoYAML << *cast<EnumInfo>(I);
+    InfoYAML << *static_cast<clang::doc::EnumInfo *>(I);
     break;
   case InfoType::IT_function:
-    InfoYAML << *cast<FunctionInfo>(I);
+    InfoYAML << *static_cast<clang::doc::FunctionInfo *>(I);
     break;
   case InfoType::IT_typedef:
-    InfoYAML << *cast<TypedefInfo>(I);
+    InfoYAML << *static_cast<clang::doc::TypedefInfo *>(I);
     break;
   case InfoType::IT_concept:
   case InfoType::IT_variable:

@@ -84,13 +84,13 @@ public:
   }
 
   _LIBCPP_HIDE_FROM_ABI void lock();
-  [[__nodiscard__]] _LIBCPP_HIDE_FROM_ABI bool try_lock();
+  _LIBCPP_HIDE_FROM_ABI bool try_lock();
 
   template <class _Rep, class _Period>
-  [[__nodiscard__]] _LIBCPP_HIDE_FROM_ABI bool try_lock_for(const chrono::duration<_Rep, _Period>& __d);
+  _LIBCPP_HIDE_FROM_ABI bool try_lock_for(const chrono::duration<_Rep, _Period>& __d);
 
   template <class _Clock, class _Duration>
-  [[__nodiscard__]] _LIBCPP_HIDE_FROM_ABI bool try_lock_until(const chrono::time_point<_Clock, _Duration>& __t);
+  _LIBCPP_HIDE_FROM_ABI bool try_lock_until(const chrono::time_point<_Clock, _Duration>& __t);
 
   _LIBCPP_HIDE_FROM_ABI void unlock();
 
@@ -106,9 +106,9 @@ public:
     return __m;
   }
 
-  [[__nodiscard__]] _LIBCPP_HIDE_FROM_ABI bool owns_lock() const _NOEXCEPT { return __owns_; }
+  _LIBCPP_HIDE_FROM_ABI bool owns_lock() const _NOEXCEPT { return __owns_; }
   _LIBCPP_HIDE_FROM_ABI explicit operator bool() const _NOEXCEPT { return __owns_; }
-  [[__nodiscard__]] _LIBCPP_HIDE_FROM_ABI mutex_type* mutex() const _NOEXCEPT { return __m_; }
+  _LIBCPP_HIDE_FROM_ABI mutex_type* mutex() const _NOEXCEPT { return __m_; }
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(unique_lock);
 

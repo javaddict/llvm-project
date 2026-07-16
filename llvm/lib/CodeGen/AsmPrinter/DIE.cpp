@@ -473,9 +473,8 @@ unsigned DIEExpr::sizeOf(const dwarf::FormParams &FormParams,
 
 LLVM_DUMP_METHOD
 void DIEExpr::print(raw_ostream &O) const {
-  MCTargetOptions Opts;
   O << "Expr: ";
-  MCAsmInfo(Opts).printExpr(O, *Expr);
+  MCAsmInfo().printExpr(O, *Expr);
 }
 
 //===----------------------------------------------------------------------===//

@@ -4,7 +4,6 @@ set(LLVM_LINK_COMPONENTS
   BinaryFormat
   BitWriter
   Core
-  FrontendOffloading
   IRReader
   Linker
   MC
@@ -13,7 +12,6 @@ set(LLVM_LINK_COMPONENTS
   Support
   Target
   TargetParser
-  TransformUtils
   )
 
 set(LLVM_TARGET_DEFINITIONS SYCLLinkOpts.td)

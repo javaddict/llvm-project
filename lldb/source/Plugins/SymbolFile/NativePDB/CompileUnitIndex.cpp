@@ -24,8 +24,6 @@
 #include "llvm/Support/Path.h"
 
 #include "lldb/Utility/LLDBAssert.h"
-#include "lldb/Utility/LLDBLog.h"
-#include "lldb/Utility/Log.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -48,31 +46,22 @@ static bool IsMainFile(llvm::StringRef main, llvm::StringRef other) {
   return main.equals_insensitive(normalized);
 }
 
-static llvm::Error ParseCompile3(const CVSymbol &sym, CompilandIndexItem &cci) {
+static void ParseCompile3(const CVSymbol &sym, CompilandIndexItem &cci) {
   cci.m_compile_opts.emplace();
-  if (auto err = SymbolDeserializer::deserializeAs<Compile3Sym>(
-          sym, *cci.m_compile_opts)) {
-    cci.m_compile_opts.reset();
-    return err;
-  }
-  return llvm::Error::success();
+  llvm::cantFail(
+      SymbolDeserializer::deserializeAs<Compile3Sym>(sym, *cci.m_compile_opts));
 }
 
-static llvm::Error ParseObjname(const CVSymbol &sym, CompilandIndexItem &cci) {
+static void ParseObjname(const CVSymbol &sym, CompilandIndexItem &cci) {
   cci.m_obj_name.emplace();
-  if (auto err =
-          SymbolDeserializer::deserializeAs<ObjNameSym>(sym, *cci.m_obj_name)) {
-    cci.m_obj_name.reset();
-    return err;
-  }
-  return llvm::Error::success();
+  llvm::cantFail(
+      SymbolDeserializer::deserializeAs<ObjNameSym>(sym, *cci.m_obj_name));
 }
 
-static llvm::Error ParseBuildInfo(PdbIndex &index, const CVSymbol &sym,
-                                  CompilandIndexItem &cci) {
+static void ParseBuildInfo(PdbIndex &index, const CVSymbol &sym,
+                           CompilandIndexItem &cci) {
   BuildInfoSym bis(SymbolRecordKind::BuildInfoSym);
-  if (auto err = SymbolDeserializer::deserializeAs<BuildInfoSym>(sym, bis))
-    return err;
+  llvm::cantFail(SymbolDeserializer::deserializeAs<BuildInfoSym>(sym, bis));
 
   // S_BUILDINFO just points to an LF_BUILDINFO in the IPI stream.  Let's do
   // a little extra work to pull out the LF_BUILDINFO.
@@ -80,13 +69,11 @@ static llvm::Error ParseBuildInfo(PdbIndex &index, const CVSymbol &sym,
   std::optional<CVType> cvt = types.tryGetType(bis.BuildId);
 
   if (!cvt || cvt->kind() != LF_BUILDINFO)
-    return llvm::Error::success();
+    return;
 
   BuildInfoRecord bir;
-  if (auto err = TypeDeserializer::deserializeAs<BuildInfoRecord>(*cvt, bir))
-    return err;
+  llvm::cantFail(TypeDeserializer::deserializeAs<BuildInfoRecord>(*cvt, bir));
   cci.m_build_info.assign(bir.ArgIndices.begin(), bir.ArgIndices.end());
-  return llvm::Error::success();
 }
 
 static void ParseExtendedInfo(PdbIndex &index, CompilandIndexItem &item) {
@@ -98,25 +85,18 @@ static void ParseExtendedInfo(PdbIndex &index, CompilandIndexItem &item) {
   lldbassert(!item.m_compile_opts);
   lldbassert(item.m_build_info.empty());
 
-  Log *log = GetLog(LLDBLog::Symbols);
   // We're looking for 3 things.  S_COMPILE3, S_OBJNAME, and S_BUILDINFO.
   int found = 0;
   for (const CVSymbol &sym : syms) {
     switch (sym.kind()) {
     case S_COMPILE3:
-      if (auto err = ParseCompile3(sym, item))
-        LLDB_LOG_ERROR(log, std::move(err),
-                       "Failed to parse S_COMPILE3 record: {0}");
+      ParseCompile3(sym, item);
       break;
     case S_OBJNAME:
-      if (auto err = ParseObjname(sym, item))
-        LLDB_LOG_ERROR(log, std::move(err),
-                       "Failed to parse S_OBJNAME record: {0}");
+      ParseObjname(sym, item);
       break;
     case S_BUILDINFO:
-      if (auto err = ParseBuildInfo(index, sym, item))
-        LLDB_LOG_ERROR(log, std::move(err),
-                       "Failed to parse S_BUILDINFO record: {0}");
+      ParseBuildInfo(index, sym, item);
       break;
     default:
       continue;
@@ -127,7 +107,6 @@ static void ParseExtendedInfo(PdbIndex &index, CompilandIndexItem &item) {
 }
 
 static void ParseInlineeLineTableForCompileUnit(CompilandIndexItem &item) {
-  Log *log = GetLog(LLDBLog::Symbols);
   for (const auto &ss : item.m_debug_stream.getSubsectionsArray()) {
     if (ss.kind() != DebugSubsectionKind::InlineeLines)
       continue;
@@ -135,8 +114,7 @@ static void ParseInlineeLineTableForCompileUnit(CompilandIndexItem &item) {
     DebugInlineeLinesSubsectionRef inlinee_lines;
     llvm::BinaryStreamReader reader(ss.getRecordData());
     if (llvm::Error error = inlinee_lines.initialize(reader)) {
-      LLDB_LOG_ERROR(log, std::move(error),
-                     "Failed to initialize inlinee lines subsection: {0}");
+      consumeError(std::move(error));
       continue;
     }
 
@@ -177,14 +155,7 @@ CompilandIndexItem &CompileUnitIndex::GetOrCreateCompiland(uint16_t modi) {
   llvm::pdb::ModuleDebugStreamRef debug_stream(descriptor,
                                                std::move(stream_data));
 
-  if (llvm::Error err = debug_stream.reload()) {
-    LLDB_LOG_ERROR(GetLog(LLDBLog::Symbols), std::move(err),
-                   "Failed to reload debug stream for module {1}: {0}", modi);
-    llvm::pdb::ModuleDebugStreamRef empty_stream(descriptor, nullptr);
-    cci = std::make_unique<CompilandIndexItem>(
-        PdbCompilandId{modi}, empty_stream, std::move(descriptor));
-    return *cci;
-  }
+  cantFail(debug_stream.reload());
 
   cci = std::make_unique<CompilandIndexItem>(
       PdbCompilandId{modi}, std::move(debug_stream), std::move(descriptor));
@@ -196,8 +167,7 @@ CompilandIndexItem &CompileUnitIndex::GetOrCreateCompiland(uint16_t modi) {
     cci->m_strings.initialize(cci->m_debug_stream.getSubsectionsArray());
     cci->m_strings.setStrings(strings->getStringTable());
   } else {
-    LLDB_LOG_ERROR(GetLog(LLDBLog::Symbols), strings.takeError(),
-                   "Failed to get PDB string table: {0}");
+    consumeError(strings.takeError());
   }
 
   // We want the main source file to always comes first.  Note that we can't
@@ -206,14 +176,7 @@ CompilandIndexItem &CompileUnitIndex::GetOrCreateCompiland(uint16_t modi) {
   // have to iterate the module file list comparing each one to the main file
   // name until we find it, and we can cache that one since the memory is backed
   // by a contiguous chunk inside the mapped PDB.
-  llvm::SmallString<64> main_file;
-  if (auto main_file_or_err = GetMainSourceFile(*cci)) {
-    main_file = std::move(*main_file_or_err);
-  } else {
-    LLDB_LOG_ERROR(GetLog(LLDBLog::Symbols), main_file_or_err.takeError(),
-                   "Failed to determine main source file for module {1}: {0}",
-                   modi);
-  }
+  llvm::SmallString<64> main_file = GetMainSourceFile(*cci);
   llvm::sys::path::native(main_file);
 
   uint32_t file_count = modules.getSourceFileCount(modi);
@@ -245,7 +208,7 @@ CompilandIndexItem *CompileUnitIndex::GetCompiland(uint16_t modi) {
   return iter->second.get();
 }
 
-llvm::Expected<llvm::SmallString<64>>
+llvm::SmallString<64>
 CompileUnitIndex::GetMainSourceFile(const CompilandIndexItem &item) const {
   // LF_BUILDINFO contains a list of arg indices which point to LF_STRING_ID
   // records in the IPI stream.  The order of the arg indices is as follows:
@@ -259,7 +222,7 @@ CompileUnitIndex::GetMainSourceFile(const CompilandIndexItem &item) const {
   // We need to form the path [0]\[2] to generate the full path to the main
   // file.source
   if (item.m_build_info.size() < 3)
-    return llvm::SmallString<64>("");
+    return {""};
 
   LazyRandomTypeCollection &types = m_index.ipi().typeCollection();
 
@@ -267,12 +230,10 @@ CompileUnitIndex::GetMainSourceFile(const CompilandIndexItem &item) const {
   StringIdRecord file_name;
   CVType dir_cvt = types.getType(item.m_build_info[0]);
   CVType file_cvt = types.getType(item.m_build_info[2]);
-  if (auto err =
-          TypeDeserializer::deserializeAs<StringIdRecord>(dir_cvt, working_dir))
-    return std::move(err);
-  if (auto err =
-          TypeDeserializer::deserializeAs<StringIdRecord>(file_cvt, file_name))
-    return std::move(err);
+  llvm::cantFail(
+      TypeDeserializer::deserializeAs<StringIdRecord>(dir_cvt, working_dir));
+  llvm::cantFail(
+      TypeDeserializer::deserializeAs<StringIdRecord>(file_cvt, file_name));
 
   llvm::sys::path::Style style = working_dir.String.starts_with("/")
                                      ? llvm::sys::path::Style::posix

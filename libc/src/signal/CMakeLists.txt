@@ -38,13 +38,6 @@ add_entrypoint_object(
 )
 
 add_entrypoint_object(
-  pthread_sigmask
-  ALIAS
-  DEPENDS
-    .${LIBC_TARGET_OS}.pthread_sigmask
-)
-
-add_entrypoint_object(
   sigemptyset
   ALIAS
   DEPENDS

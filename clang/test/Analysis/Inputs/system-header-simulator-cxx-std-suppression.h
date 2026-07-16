@@ -10,12 +10,6 @@ typedef unsigned char uint8_t;
 typedef __typeof__(sizeof(int)) size_t;
 void *memmove(void *s1, const void *s2, size_t n);
 
-#define TRIGGER_DIV_BY_ZERO \
-do {         \
-  int z = 0; \
-  z = 5/z;   \
-} while (0)
-
 namespace std {
 
   template <class _Tp>
@@ -47,7 +41,8 @@ namespace std {
       // Fake use-after-free.
       // No warning is expected as we are suppressing warning coming
       // out of std::list.
-      TRIGGER_DIV_BY_ZERO;
+      int z = 0;
+      z = 5/z;
     }
     bool empty() const;
   };
@@ -74,7 +69,8 @@ namespace std {
       // Fake error trigger.
       // No warning is expected as we are suppressing warning coming
       // out of std::basic_string.
-      TRIGGER_DIV_BY_ZERO;
+      int z = 0;
+      z = 5/z;
     }
 
     _CharT *getBuffer() {
@@ -112,7 +108,8 @@ __independent_bits_engine<_Engine, _UIntType>
   // Fake error trigger.
   // No warning is expected as we are suppressing warning coming
   // out of std::__independent_bits_engine.
-  TRIGGER_DIV_BY_ZERO;
+  int z = 0;
+  z = 5/z;
 }
 
 #if __has_feature(cxx_decltype)
@@ -133,7 +130,8 @@ public:
     // Fake error trigger.
     // No warning is expected as we are suppressing warning coming
     // out of std::shared_ptr.
-    TRIGGER_DIV_BY_ZERO;
+    int z = 0;
+    z = 5/z;
   }
 };
 
@@ -144,28 +142,5 @@ shared_ptr<_Tp>::shared_ptr(nullptr_t) {
 }
 
 #endif // __has_feature(cxx_decltype)
-
-template<typename _RandomAccessIterator>
-void sort(_RandomAccessIterator __first, _RandomAccessIterator __last) {
-  // Fake error trigger
-  // std::sort is expected to be evaluated conservatively.
-  TRIGGER_DIV_BY_ZERO;
 }
-
-template<typename _RandomAccessIterator>
-void stable_sort(_RandomAccessIterator __first, _RandomAccessIterator __last) {
-  // Fake error trigger
-  // std::stable_sort is expected to be evaluated conservatively.
-  TRIGGER_DIV_BY_ZERO;
-}
-
-template<typename _BidirectionalIterator>
-void inplace_merge(_BidirectionalIterator __first,
-                   _BidirectionalIterator __middle,
-                   _BidirectionalIterator __last) {
-  // Fake error trigger
-  // std::inplace_merge is expected to be evaluated conservatively.
-  TRIGGER_DIV_BY_ZERO;
-}
-} // namespace std
 

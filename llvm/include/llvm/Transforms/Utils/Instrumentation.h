@@ -154,7 +154,6 @@ struct SanitizerCoverageOptions {
   bool TraceGep = false;
   bool Use8bitCounters = false;
   bool TracePC = false;
-  bool TracePCEntryExit = false;
   bool TracePCGuard = false;
   bool Inline8bitCounters = false;
   bool InlineBoolFlag = false;

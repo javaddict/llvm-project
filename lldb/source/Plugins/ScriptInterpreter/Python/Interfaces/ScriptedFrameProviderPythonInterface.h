@@ -6,8 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_SCRIPTINTERPRETER_PYTHON_INTERFACES_SCRIPTEDFRAMEPROVIDERPYTHONINTERFACE_H
-#define LLDB_SOURCE_PLUGINS_SCRIPTINTERPRETER_PYTHON_INTERFACES_SCRIPTEDFRAMEPROVIDERPYTHONINTERFACE_H
+#ifndef LLDB_PLUGINS_SCRIPTINTERPRETER_PYTHON_INTERFACES_SCRIPTEDFRAMEPROVIDERPYTHONINTERFACE_H
+#define LLDB_PLUGINS_SCRIPTINTERPRETER_PYTHON_INTERFACES_SCRIPTEDFRAMEPROVIDERPYTHONINTERFACE_H
+
+#include "lldb/Host/Config.h"
+
+#if LLDB_ENABLE_PYTHON
 
 #include "ScriptedPythonInterface.h"
 #include "lldb/Core/PluginInterface.h"
@@ -27,8 +31,9 @@ public:
                        lldb::ThreadSP thread_sp) override;
 
   llvm::Expected<StructuredData::GenericSP>
-  CreatePluginObject(const ScriptedMetadata &scripted_metadata,
-                     lldb::StackFrameListSP input_frames) override;
+  CreatePluginObject(llvm::StringRef class_name,
+                     lldb::StackFrameListSP input_frames,
+                     StructuredData::DictionarySP args_sp) override;
 
   llvm::SmallVector<AbstractMethodRequirement>
   GetAbstractMethodRequirements() const override {
@@ -56,4 +61,5 @@ public:
 };
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_SCRIPTINTERPRETER_PYTHON_INTERFACES_SCRIPTEDFRAMEPROVIDERPYTHONINTERFACE_H
+#endif // LLDB_ENABLE_PYTHON
+#endif // LLDB_PLUGINS_SCRIPTINTERPRETER_PYTHON_INTERFACES_SCRIPTEDFRAMEPROVIDERPYTHONINTERFACE_H

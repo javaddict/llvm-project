@@ -859,9 +859,6 @@ llvm::parseReducerWorkItem(StringRef ToolName, StringRef Filename,
 
     std::unique_ptr<Module> M = MParser->parseIRModule(SetDataLayout);
 
-    if (!TheTriple.empty())
-      M->setTargetTriple(TheTriple);
-
     MMM->MMI = std::make_unique<MachineModuleInfo>(TM.get());
     MParser->parseMachineFunctions(*M, *MMM->MMI);
     MMM->M = std::move(M);

@@ -11,8 +11,8 @@
 // class map
 
 // template <class InputIterator>
-//     constexpr map(InputIterator first, InputIterator last,
-//         const key_compare& comp, const allocator_type& a); // constexpr since C++26
+//     map(InputIterator first, InputIterator last,
+//         const key_compare& comp, const allocator_type& a);
 
 #include <map>
 #include <cassert>
@@ -22,7 +22,7 @@
 #include "test_allocator.h"
 #include "min_allocator.h"
 
-TEST_CONSTEXPR_CXX26 bool test() {
+int main(int, char**) {
   {
     typedef std::pair<const int, double> V;
     V ar[] = {
@@ -115,13 +115,6 @@ TEST_CONSTEXPR_CXX26 bool test() {
   }
 #  endif
 #endif
-  return true;
-}
 
-int main(int, char**) {
-  test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
   return 0;
 }

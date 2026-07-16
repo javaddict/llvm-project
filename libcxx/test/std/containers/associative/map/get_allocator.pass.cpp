@@ -10,7 +10,7 @@
 
 // class map
 
-// allocator_type get_allocator() const // constexpr since C++26
+// allocator_type get_allocator() const
 
 #include <map>
 #include <cassert>
@@ -19,7 +19,7 @@
 #include "test_allocator.h"
 #include "test_macros.h"
 
-TEST_CONSTEXPR_CXX26 bool test() {
+int main(int, char**) {
   typedef std::pair<const int, std::string> ValueType;
   {
     std::allocator<ValueType> alloc;
@@ -31,13 +31,6 @@ TEST_CONSTEXPR_CXX26 bool test() {
     const std::map<int, std::string, std::less<int>, other_allocator<ValueType> > m(alloc);
     assert(m.get_allocator() == alloc);
   }
-  return true;
-}
 
-int main(int, char**) {
-  test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
   return 0;
 }

@@ -40,8 +40,8 @@ struct DlSymAllocator {
     return ptr;
   }
 
-  static void* Callocate(usize nmemb, usize size, uptr align = kWordSize) {
-    void* ptr = InternalCalloc(nmemb, size, nullptr, align);
+  static void *Callocate(usize nmemb, usize size) {
+    void *ptr = InternalCalloc(nmemb, size);
     CHECK(internal_allocator()->FromPrimary(ptr));
     Details::OnAllocate(ptr, GetSize(ptr));
     return ptr;
@@ -53,9 +53,9 @@ struct DlSymAllocator {
     InternalFree(ptr);
   }
 
-  static void* Realloc(void* ptr, uptr new_size, uptr align = kWordSize) {
+  static void *Realloc(void *ptr, uptr new_size) {
     if (!ptr)
-      return Allocate(new_size, align);
+      return Allocate(new_size);
     CHECK(internal_allocator()->FromPrimary(ptr));
     if (!new_size) {
       Free(ptr);
@@ -63,7 +63,7 @@ struct DlSymAllocator {
     }
     uptr size = GetSize(ptr);
     uptr memcpy_size = Min(new_size, size);
-    void* new_ptr = Allocate(new_size, align);
+    void *new_ptr = Allocate(new_size);
     if (new_ptr)
       internal_memcpy(new_ptr, ptr, memcpy_size);
     Free(ptr);

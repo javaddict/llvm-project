@@ -140,10 +140,7 @@ static Function *createRetFunction(Module *M, StringRef Name,
 TEST_F(ReOptimizeLayerTest, BasicReOptimization) {
   MangleAndInterner Mangle(*ES, *DL);
 
-  auto MA = ES->getExecutorProcessControl().createDefaultMemoryAccess();
-  EXPECT_THAT_ERROR(MA.takeError(), Succeeded());
-
-  auto RM = JITLinkRedirectableSymbolManager::Create(*ObjLinkingLayer, **MA);
+  auto RM = JITLinkRedirectableSymbolManager::Create(*ObjLinkingLayer);
   EXPECT_THAT_ERROR(RM.takeError(), Succeeded());
 
   ROLayer = std::make_unique<ReOptimizeLayer>(*ES, *DL, *CompileLayer, **RM);

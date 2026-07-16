@@ -29,7 +29,6 @@
 #include <__type_traits/is_constructible.h>
 #include <__type_traits/is_same.h>
 #include <__type_traits/remove_cvref.h>
-#include <__utility/exchange.h>
 #include <__utility/forward.h>
 #include <tuple>
 
@@ -45,7 +44,6 @@ _LIBCPP_PUSH_MACROS
 #include <__undef_macros>
 
 _LIBCPP_BEGIN_NAMESPACE_STD
-_LIBCPP_BEGIN_EXPLICIT_ABI_ANNOTATIONS
 
 #if _LIBCPP_HAS_THREADS
 
@@ -238,12 +236,13 @@ public:
 #  endif
   ~thread();
 
-  _LIBCPP_HIDE_FROM_ABI thread(thread&& __t) _NOEXCEPT : __t_(std::__exchange(__t.__t_, __libcpp_thread_t())) {}
+  _LIBCPP_HIDE_FROM_ABI thread(thread&& __t) _NOEXCEPT : __t_(__t.__t_) { __t.__t_ = _LIBCPP_NULL_THREAD; }
 
   _LIBCPP_HIDE_FROM_ABI thread& operator=(thread&& __t) _NOEXCEPT {
     if (!__libcpp_thread_isnull(&__t_))
       terminate();
-    __t_ = std::__exchange(__t.__t_, __libcpp_thread_t());
+    __t_     = __t.__t_;
+    __t.__t_ = _LIBCPP_NULL_THREAD;
     return *this;
   }
 
@@ -262,7 +261,6 @@ inline _LIBCPP_HIDE_FROM_ABI void swap(thread& __x, thread& __y) _NOEXCEPT { __x
 
 #endif // _LIBCPP_HAS_THREADS
 
-_LIBCPP_END_EXPLICIT_ABI_ANNOTATIONS
 _LIBCPP_END_NAMESPACE_STD
 
 _LIBCPP_POP_MACROS

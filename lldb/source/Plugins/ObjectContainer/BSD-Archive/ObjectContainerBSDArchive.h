@@ -9,7 +9,6 @@
 #ifndef LLDB_SOURCE_PLUGINS_OBJECTCONTAINER_BSD_ARCHIVE_OBJECTCONTAINERBSDARCHIVE_H
 #define LLDB_SOURCE_PLUGINS_OBJECTCONTAINER_BSD_ARCHIVE_OBJECTCONTAINERBSDARCHIVE_H
 
-#include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/UniqueCStringMap.h"
 #include "lldb/Symbol/ObjectContainer.h"
 #include "lldb/Utility/ArchSpec.h"
@@ -55,10 +54,12 @@ public:
                  lldb::offset_t data_offset, const lldb_private::FileSpec *file,
                  lldb::offset_t offset, lldb::offset_t length);
 
-  static lldb_private::ModuleSpecList
-  GetModuleSpecifications(const lldb_private::FileSpec &file,
-                          lldb::DataExtractorSP &extractor_sp,
-                          lldb::offset_t file_offset, lldb::offset_t length);
+  static size_t GetModuleSpecifications(const lldb_private::FileSpec &file,
+                                        lldb::DataBufferSP &data_sp,
+                                        lldb::offset_t data_offset,
+                                        lldb::offset_t file_offset,
+                                        lldb::offset_t length,
+                                        lldb_private::ModuleSpecList &specs);
 
   static ArchiveType
   MagicBytesMatch(const lldb_private::DataExtractor &extractor);
@@ -83,6 +84,12 @@ protected:
 
     void Clear();
 
+    lldb::offset_t ExtractFromThin(const lldb_private::DataExtractor &extractor,
+                                   lldb::offset_t offset,
+                                   llvm::StringRef stringTable);
+
+    lldb::offset_t Extract(const lldb_private::DataExtractor &extractor,
+                           lldb::offset_t offset);
     /// Object name in the archive.
     lldb_private::ConstString ar_name;
 
@@ -101,12 +108,10 @@ protected:
     void Dump() const;
   };
 
-  class Archive;
-  typedef std::shared_ptr<Archive> ArchiveSP;
-
   class Archive {
   public:
-    typedef std::multimap<lldb_private::FileSpec, ArchiveSP> Map;
+    typedef std::shared_ptr<Archive> shared_ptr;
+    typedef std::multimap<lldb_private::FileSpec, shared_ptr> Map;
 
     Archive(const lldb_private::ArchSpec &arch,
             const llvm::sys::TimePoint<> &mod_time, lldb::offset_t file_offset,
@@ -118,12 +123,11 @@ protected:
 
     static std::recursive_mutex &GetArchiveCacheMutex();
 
-    static ArchiveSP FindCachedArchive(const lldb_private::FileSpec &file,
-                                       const lldb_private::ArchSpec &arch,
-                                       const llvm::sys::TimePoint<> &mod_time,
-                                       lldb::offset_t file_offset);
+    static Archive::shared_ptr FindCachedArchive(
+        const lldb_private::FileSpec &file, const lldb_private::ArchSpec &arch,
+        const llvm::sys::TimePoint<> &mod_time, lldb::offset_t file_offset);
 
-    static ArchiveSP ParseAndCacheArchiveForFile(
+    static Archive::shared_ptr ParseAndCacheArchiveForFile(
         const lldb_private::FileSpec &file, const lldb_private::ArchSpec &arch,
         const llvm::sys::TimePoint<> &mod_time, lldb::offset_t file_offset,
         lldb::DataExtractorSP extractor_sp, ArchiveType archive_type);
@@ -153,7 +157,7 @@ protected:
 
     bool HasNoExternalReferences() const;
 
-    lldb_private::DataExtractor &GetData() { return *m_extractor_sp; }
+    lldb_private::DataExtractor &GetData() { return *m_extractor_sp.get(); }
     lldb::DataExtractorSP &GetDataSP() { return m_extractor_sp; }
 
     ArchiveType GetArchiveType() { return m_archive_type; }
@@ -172,9 +176,9 @@ protected:
     ArchiveType m_archive_type;
   };
 
-  void SetArchive(ArchiveSP &archive_sp);
+  void SetArchive(Archive::shared_ptr &archive_sp);
 
-  ArchiveSP m_archive_sp;
+  Archive::shared_ptr m_archive_sp;
 
   ArchiveType m_archive_type;
 };

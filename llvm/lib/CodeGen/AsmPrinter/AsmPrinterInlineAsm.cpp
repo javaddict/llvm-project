@@ -87,8 +87,10 @@ void AsmPrinter::emitInlineAsm(StringRef Str, const MCSubtargetInfo &STI,
   // Otherwise parse the asm and emit it via MC support.
   // This is useful in case the asm parser doesn't handle something but the
   // system assembler does.
-  const MCAsmInfo &MCAI = TM.getMCAsmInfo();
-  if (!MCAI.useIntegratedAssembler() && !MCAI.parseInlineAsmUsingAsmParser() &&
+  const MCAsmInfo *MCAI = TM.getMCAsmInfo();
+  assert(MCAI && "No MCAsmInfo");
+  if (!MCAI->useIntegratedAssembler() &&
+      !MCAI->parseInlineAsmUsingAsmParser() &&
       !OutStreamer->isIntegratedAssemblerRequired()) {
     emitInlineAsmStart();
     OutStreamer->emitRawText(Str);
@@ -106,7 +108,7 @@ void AsmPrinter::emitInlineAsm(StringRef Str, const MCSubtargetInfo &STI,
   }());
 
   std::unique_ptr<MCAsmParser> Parser(
-      createMCAsmParser(SrcMgr, OutContext, *OutStreamer, MAI, BufNum));
+      createMCAsmParser(SrcMgr, OutContext, *OutStreamer, *MAI, BufNum));
 
   // We create a new MCInstrInfo here since we might be at the module level
   // and not have a MachineFunction to initialize the TargetInstrInfo from and
@@ -114,8 +116,8 @@ void AsmPrinter::emitInlineAsm(StringRef Str, const MCSubtargetInfo &STI,
   // because it's not subtarget dependent.
   std::unique_ptr<MCInstrInfo> MII(TM.getTarget().createMCInstrInfo());
   assert(MII && "Failed to create instruction info");
-  std::unique_ptr<MCTargetAsmParser> TAP(
-      TM.getTarget().createMCAsmParser(STI, *Parser, *MII));
+  std::unique_ptr<MCTargetAsmParser> TAP(TM.getTarget().createMCAsmParser(
+      STI, *Parser, *MII, MCOptions));
   if (!TAP)
     report_fatal_error("Inline asm not supported by this streamer because"
                        " we don't have an asm parser for this target\n");
@@ -138,7 +140,7 @@ void AsmPrinter::emitInlineAsm(StringRef Str, const MCSubtargetInfo &STI,
 }
 
 static void EmitInlineAsmStr(const char *AsmStr, const MachineInstr *MI,
-                             MachineModuleInfo *MMI, const MCAsmInfo &MAI,
+                             MachineModuleInfo *MMI, const MCAsmInfo *MAI,
                              AsmPrinter *AP, uint64_t LocCookie,
                              raw_ostream &OS) {
   bool InputIsIntelDialect = MI->getInlineAsmDialect() == InlineAsm::AD_Intel;
@@ -159,7 +161,7 @@ static void EmitInlineAsmStr(const char *AsmStr, const MachineInstr *MI,
     AsmPrinterVariant = MMI->getTarget().unqualifiedInlineAsmVariant();
 
   // FIXME: Should this happen for `asm inteldialect` as well?
-  if (!InputIsIntelDialect && !MAI.isHLASM())
+  if (!InputIsIntelDialect && !MAI->isHLASM())
     OS << '\t';
 
   while (*LastEmitted) {
@@ -344,14 +346,14 @@ void AsmPrinter::emitInlineAsm(const MachineInstr *MI) {
   // If this asmstr is empty, just print the #APP/#NOAPP markers.
   // These are useful to see where empty asm's wound up.
   if (AsmStr[0] == 0) {
-    OutStreamer->emitRawComment(MAI.getInlineAsmStart());
-    OutStreamer->emitRawComment(MAI.getInlineAsmEnd());
+    OutStreamer->emitRawComment(MAI->getInlineAsmStart());
+    OutStreamer->emitRawComment(MAI->getInlineAsmEnd());
     return;
   }
 
   // Emit the #APP start marker.  This has to happen even if verbose-asm isn't
   // enabled, so we use emitRawComment.
-  OutStreamer->emitRawComment(MAI.getInlineAsmStart());
+  OutStreamer->emitRawComment(MAI->getInlineAsmStart());
 
   const MDNode *LocMD = MI->getLocCookieMD();
   uint64_t LocCookie =
@@ -420,7 +422,7 @@ void AsmPrinter::emitInlineAsm(const MachineInstr *MI) {
 
   // Emit the #NOAPP end marker.  This has to happen even if verbose-asm isn't
   // enabled, so we use emitRawComment.
-  OutStreamer->emitRawComment(MAI.getInlineAsmEnd());
+  OutStreamer->emitRawComment(MAI->getInlineAsmEnd());
 }
 
 /// PrintSpecial - Print information related to the specified machine instr
@@ -433,9 +435,9 @@ void AsmPrinter::PrintSpecial(const MachineInstr *MI, raw_ostream &OS,
                               StringRef Code) const {
   if (Code == "private") {
     const DataLayout &DL = MF->getDataLayout();
-    OS << DL.getInternalSymbolPrefix();
+    OS << DL.getPrivateGlobalPrefix();
   } else if (Code == "comment") {
-    OS << MAI.getCommentString();
+    OS << MAI->getCommentString();
   } else if (Code == "uid") {
     // Comparing the address of MI isn't sufficient, because machineinstrs may
     // be allocated to the same address across functions.

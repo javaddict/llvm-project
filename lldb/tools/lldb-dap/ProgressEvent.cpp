@@ -195,8 +195,7 @@ ProgressEventReporter::ProgressEventReporter(
 
 ProgressEventReporter::~ProgressEventReporter() {
   m_thread_should_exit = true;
-  if (m_thread.joinable())
-    m_thread.join();
+  m_thread.join();
 }
 
 void ProgressEventReporter::ReportStartEvents() {

@@ -136,6 +136,7 @@ static void lowerAwaitSuspend(IRBuilder<> &Builder, CoroAwaitSuspendInst *CB,
     FunctionType *ResumeTy = FunctionType::get(
         Type::getVoidTy(Ctx), PointerType::getUnqual(Ctx), false);
     auto *ResumeCall = Builder.CreateCall(ResumeTy, ResumeAddr, {NewCall});
+    ResumeCall->setCallingConv(CallingConv::Fast);
 
     // We can't insert the 'ret' instruction and adjust the cc until the
     // function has been split, so remember this for later.
@@ -301,14 +302,6 @@ static void replaceFallthroughCoroEnd(AnyCoroEndInst *End,
   BB->getTerminator()->eraseFromParent();
 }
 
-/// Create a pointer to the switch index field in the coroutine frame.
-static Value *createSwitchIndexPtr(const coro::Shape &Shape,
-                                   IRBuilder<> &Builder, Value *FramePtr) {
-  auto *Offset = ConstantInt::get(Type::getInt64Ty(FramePtr->getContext()),
-                                  Shape.SwitchLowering.IndexOffset);
-  return Builder.CreateInBoundsPtrAdd(FramePtr, Offset, "index.addr");
-}
-
 // Mark a coroutine as done, which implies that the coroutine is finished and
 // never gets resumed.
 //
@@ -322,9 +315,12 @@ static void markCoroutineAsDone(IRBuilder<> &Builder, const coro::Shape &Shape,
   assert(
       Shape.ABI == coro::ABI::Switch &&
       "markCoroutineAsDone is only supported for Switch-Resumed ABI for now.");
-  // Resume function pointer is always first
-  auto *NullPtr = ConstantPointerNull::get(Shape.getSwitchResumePointerType());
-  Builder.CreateStore(NullPtr, FramePtr);
+  auto *GepIndex = Builder.CreateStructGEP(
+      Shape.FrameTy, FramePtr, coro::Shape::SwitchFieldIndex::Resume,
+      "ResumeFn.addr");
+  auto *NullPtr = ConstantPointerNull::get(cast<PointerType>(
+      Shape.FrameTy->getTypeAtIndex(coro::Shape::SwitchFieldIndex::Resume)));
+  Builder.CreateStore(NullPtr, GepIndex);
 
   // If the coroutine don't have unwind coro end, we could omit the store to
   // the final suspend point since we could infer the coroutine is suspended
@@ -340,7 +336,9 @@ static void markCoroutineAsDone(IRBuilder<> &Builder, const coro::Shape &Shape,
            "The final suspend should only live in the last position of "
            "CoroSuspends.");
     ConstantInt *IndexVal = Shape.getIndex(Shape.CoroSuspends.size() - 1);
-    Value *FinalIndex = createSwitchIndexPtr(Shape, Builder, FramePtr);
+    auto *FinalIndex = Builder.CreateStructGEP(
+        Shape.FrameTy, FramePtr, Shape.getSwitchIndexField(), "index.addr");
+
     Builder.CreateStore(IndexVal, FinalIndex);
   }
 }
@@ -422,9 +420,11 @@ void coro::BaseCloner::handleFinalSuspend() {
       // to generate code for other cases.
       Builder.CreateBr(ResumeBB);
     } else {
-      // Resume function pointer is always first
+      auto *GepIndex = Builder.CreateStructGEP(
+          Shape.FrameTy, NewFramePtr, coro::Shape::SwitchFieldIndex::Resume,
+          "ResumeFn.addr");
       auto *Load =
-          Builder.CreateLoad(Shape.getSwitchResumePointerType(), NewFramePtr);
+          Builder.CreateLoad(Shape.getSwitchResumePointerType(), GepIndex);
       auto *Cond = Builder.CreateIsNull(Load);
       Builder.CreateCondBr(Cond, ResumeBB, NewSwitchBB);
     }
@@ -452,7 +452,7 @@ static Function *createCloneDeclaration(Function &OrigF, coro::Shape &Shape,
 
   Function *NewF =
       Function::Create(FnTy, GlobalValue::LinkageTypes::InternalLinkage,
-                       OrigF.getAddressSpace(), OrigF.getName() + Suffix);
+                       OrigF.getName() + Suffix);
 
   M->getFunctionList().insert(InsertBefore, NewF);
 
@@ -686,7 +686,8 @@ void coro::BaseCloner::replaceEntryBlock() {
   // exactly one predecessor, which we created when splitting out
   // AllocaSpillBlock to begin with.
   assert(Entry->hasOneUse());
-  auto BranchToEntry = cast<UncondBrInst>(Entry->user_back());
+  auto BranchToEntry = cast<BranchInst>(Entry->user_back());
+  assert(BranchToEntry->isUnconditional());
   Builder.SetInsertPoint(BranchToEntry);
   Builder.CreateUnreachable();
   BranchToEntry->eraseFromParent();
@@ -715,7 +716,8 @@ void coro::BaseCloner::replaceEntryBlock() {
              Shape.ABI == coro::ABI::RetconOnce) &&
             isa<CoroSuspendRetconInst>(ActiveSuspend)));
     auto *MappedCS = cast<AnyCoroSuspendInst>(VMap[ActiveSuspend]);
-    auto Branch = cast<UncondBrInst>(MappedCS->getNextNode());
+    auto Branch = cast<BranchInst>(MappedCS->getNextNode());
+    assert(Branch->isUnconditional());
     Builder.CreateBr(Branch->getSuccessor(0));
     break;
   }
@@ -764,11 +766,9 @@ Value *coro::BaseCloner::deriveNewFramePointer() {
     CallerContext->setDebugLoc(DbgLoc);
     // The frame is located after the async_context header.
     auto &Context = Builder.getContext();
-    auto *FramePtrAddr = Builder.CreateInBoundsPtrAdd(
-        CallerContext,
-        ConstantInt::get(Type::getInt64Ty(Context),
-                         Shape.AsyncLowering.FrameOffset),
-        "async.ctx.frameptr");
+    auto *FramePtrAddr = Builder.CreateConstInBoundsGEP1_32(
+        Type::getInt8Ty(Context), CallerContext,
+        Shape.AsyncLowering.FrameOffset, "async.ctx.frameptr");
     // Inline the projection function.
     InlineFunctionInfo InlineInfo;
     auto InlineRes = InlineFunction(*CallerContext, InlineInfo);
@@ -780,7 +780,7 @@ Value *coro::BaseCloner::deriveNewFramePointer() {
   case coro::ABI::Retcon:
   case coro::ABI::RetconOnce: {
     Argument *NewStorage = &*NewF->arg_begin();
-    auto FramePtrTy = PointerType::getUnqual(Shape.FramePtr->getContext());
+    auto FramePtrTy = PointerType::getUnqual(Shape.FrameTy->getContext());
 
     // If the storage is inline, just bitcast to the storage to the frame type.
     if (Shape.RetconLowering.IsFrameInlineInStorage)
@@ -815,13 +815,9 @@ static void updateScopeLine(Instruction *ActiveSuspend,
   BasicBlock::iterator Successor = ActiveSuspend->getNextNode()->getIterator();
   // Corosplit splits the BB around ActiveSuspend, so the meaningful
   // instructions are not in the same BB.
-  // FIXME: remove this hardcoded number of tries.
-  for (unsigned Repeat = 0; Repeat < 2; Repeat++) {
-    auto *Branch = dyn_cast_or_null<UncondBrInst>(Successor);
-    if (!Branch)
-      break;
-    Successor = Branch->getSuccessor()->getFirstNonPHIOrDbg();
-  }
+  if (auto *Branch = dyn_cast_or_null<BranchInst>(Successor);
+      Branch && Branch->isUnconditional())
+    Successor = Branch->getSuccessor(0)->getFirstNonPHIOrDbg();
 
   // Find the first successor of ActiveSuspend with a non-zero line location.
   // If that matches the file of ActiveSuspend, use it.
@@ -1099,9 +1095,10 @@ void coro::SwitchCloner::create() {
   // Clone the function
   coro::BaseCloner::create();
 
-  // Replacing coro.free with 'null' in cleanup to suppress deallocation code.
-  if (FKind == coro::CloneKind::SwitchCleanup)
-    elideCoroFree(NewFramePtr);
+  // Eliminate coro.free from the clones, replacing it with 'null' in cleanup,
+  // to suppress deallocation code.
+  coro::replaceCoroFree(cast<CoroIdInst>(VMap[Shape.CoroBegin->getId()]),
+                        /*Elide=*/FKind == coro::CloneKind::SwitchCleanup);
 }
 
 static void updateAsyncFuncPointerContextSize(coro::Shape &Shape) {
@@ -1119,6 +1116,14 @@ static void updateAsyncFuncPointerContextSize(coro::Shape &Shape) {
   Shape.AsyncLowering.AsyncFuncPointer->setInitializer(NewFuncPtrStruct);
 }
 
+static TypeSize getFrameSizeForShape(coro::Shape &Shape) {
+  // In the same function all coro.sizes should have the same result type.
+  auto *SizeIntrin = Shape.CoroSizes.back();
+  Module *M = SizeIntrin->getModule();
+  const DataLayout &DL = M->getDataLayout();
+  return DL.getTypeAllocSize(Shape.FrameTy);
+}
+
 static void replaceFrameSizeAndAlignment(coro::Shape &Shape) {
   if (Shape.ABI == coro::ABI::Async)
     updateAsyncFuncPointerContextSize(Shape);
@@ -1134,8 +1139,8 @@ static void replaceFrameSizeAndAlignment(coro::Shape &Shape) {
 
   // In the same function all coro.sizes should have the same result type.
   auto *SizeIntrin = Shape.CoroSizes.back();
-  auto *SizeConstant = ConstantInt::get(SizeIntrin->getType(),
-                                        TypeSize::getFixed(Shape.FrameSize));
+  auto *SizeConstant =
+      ConstantInt::get(SizeIntrin->getType(), getFrameSizeForShape(Shape));
 
   for (CoroSizeInst *CS : Shape.CoroSizes) {
     CS->replaceAllUsesWith(SizeConstant);
@@ -1161,15 +1166,12 @@ static void handleNoSuspendCoroutine(coro::Shape &Shape) {
   auto *CoroBegin = Shape.CoroBegin;
   switch (Shape.ABI) {
   case coro::ABI::Switch: {
-    if (auto *AllocInst = Shape.getSwitchCoroId()->getCoroAlloc()) {
-      coro::elideCoroFree(CoroBegin);
-
+    auto SwitchId = Shape.getSwitchCoroId();
+    auto *AllocInst = SwitchId->getCoroAlloc();
+    coro::replaceCoroFree(SwitchId, /*Elide=*/AllocInst != nullptr);
+    if (AllocInst) {
       IRBuilder<> Builder(AllocInst);
-      // Create an alloca for a byte array of the frame size
-      auto *FrameTy = ArrayType::get(Type::getInt8Ty(Builder.getContext()),
-                                     Shape.FrameSize);
-      auto *Frame = Builder.CreateAlloca(
-          FrameTy, nullptr, AllocInst->getFunction()->getName() + ".Frame");
+      auto *Frame = Builder.CreateAlloca(Shape.FrameTy);
       Frame->setAlignment(Shape.FrameAlign);
       AllocInst->replaceAllUsesWith(Builder.getFalse());
       AllocInst->eraseFromParent();
@@ -1302,7 +1304,7 @@ static bool simplifySuspendPoint(CoroSuspendInst *Suspend,
 
   // No longer need a call to coro.resume or coro.destroy.
   if (auto *Invoke = dyn_cast<InvokeInst>(CB)) {
-    UncondBrInst::Create(Invoke->getNormalDest(), Invoke->getIterator());
+    BranchInst::Create(Invoke->getNormalDest(), Invoke->getIterator());
   }
 
   // Grab the CalledValue from CB before erasing the CallInstr.
@@ -1416,12 +1418,12 @@ struct SwitchCoroutineSplitter {
     SmallVector<Type *> NewParams;
     NewParams.reserve(OldParams.size() + 1);
     NewParams.append(OldParams.begin(), OldParams.end());
-    NewParams.push_back(PointerType::getUnqual(Shape.FramePtr->getContext()));
+    NewParams.push_back(PointerType::getUnqual(Shape.FrameTy->getContext()));
 
     auto *NewFnTy = FunctionType::get(OrigFnTy->getReturnType(), NewParams,
                                       OrigFnTy->isVarArg());
-    Function *NoAllocF = Function::Create(
-        NewFnTy, F.getLinkage(), F.getAddressSpace(), F.getName() + ".noalloc");
+    Function *NoAllocF =
+        Function::Create(NewFnTy, F.getLinkage(), F.getName() + ".noalloc");
 
     ValueToValueMapTy VMap;
     unsigned int Idx = 0;
@@ -1438,8 +1440,9 @@ struct SwitchCoroutineSplitter {
     if (Shape.CoroBegin) {
       auto *NewCoroBegin =
           cast_if_present<CoroBeginInst>(VMap[Shape.CoroBegin]);
-      coro::elideCoroFree(NewCoroBegin);
-      coro::suppressCoroAllocs(cast<CoroIdInst>(NewCoroBegin->getId()));
+      auto *NewCoroId = cast<CoroIdInst>(NewCoroBegin->getId());
+      coro::replaceCoroFree(NewCoroId, /*Elide=*/true);
+      coro::suppressCoroAllocs(NewCoroId);
       NewCoroBegin->replaceAllUsesWith(NoAllocF->getArg(FrameIdx));
       NewCoroBegin->eraseFromParent();
     }
@@ -1497,7 +1500,9 @@ private:
 
     IRBuilder<> Builder(NewEntry);
     auto *FramePtr = Shape.FramePtr;
-    Value *GepIndex = createSwitchIndexPtr(Shape, Builder, FramePtr);
+    auto *FrameTy = Shape.FrameTy;
+    auto *GepIndex = Builder.CreateStructGEP(
+        FrameTy, FramePtr, Shape.getSwitchIndexField(), "index.addr");
     auto *Index = Builder.CreateLoad(Shape.getIndexType(), GepIndex, "index");
     auto *Switch =
         Builder.CreateSwitch(Index, UnreachBB, Shape.CoroSuspends.size());
@@ -1519,7 +1524,8 @@ private:
         // point.
         markCoroutineAsDone(Builder, Shape, FramePtr);
       } else {
-        Value *GepIndex = createSwitchIndexPtr(Shape, Builder, FramePtr);
+        auto *GepIndex = Builder.CreateStructGEP(
+            FrameTy, FramePtr, Shape.getSwitchIndexField(), "index.addr");
         Builder.CreateStore(IndexVal, GepIndex);
       }
 
@@ -1557,7 +1563,7 @@ private:
           S->getNextNode(), ResumeBB->getName() + Twine(".landing"));
       Switch->addCase(IndexVal, ResumeBB);
 
-      cast<UncondBrInst>(SuspendBB->getTerminator())->setSuccessor(LandingBB);
+      cast<BranchInst>(SuspendBB->getTerminator())->setSuccessor(0, LandingBB);
       auto *PN = PHINode::Create(Builder.getInt8Ty(), 2, "");
       PN->insertBefore(LandingBB->begin());
       S->replaceAllUsesWith(PN);
@@ -1601,10 +1607,10 @@ private:
   static void updateCoroFrame(coro::Shape &Shape, Function *ResumeFn,
                               Function *DestroyFn, Function *CleanupFn) {
     IRBuilder<> Builder(&*Shape.getInsertPtAfterFramePtr());
-    LLVMContext &C = ResumeFn->getContext();
 
-    // Resume function pointer
-    Value *ResumeAddr = Shape.FramePtr;
+    auto *ResumeAddr = Builder.CreateStructGEP(
+        Shape.FrameTy, Shape.FramePtr, coro::Shape::SwitchFieldIndex::Resume,
+        "resume.addr");
     Builder.CreateStore(ResumeFn, ResumeAddr);
 
     Value *DestroyOrCleanupFn = DestroyFn;
@@ -1616,11 +1622,8 @@ private:
       DestroyOrCleanupFn = Builder.CreateSelect(CA, DestroyFn, CleanupFn);
     }
 
-    // Destroy function pointer
-    Value *DestroyAddr = Builder.CreateInBoundsPtrAdd(
-        Shape.FramePtr,
-        ConstantInt::get(Type::getInt64Ty(C),
-                         Shape.SwitchLowering.DestroyOffset),
+    auto *DestroyAddr = Builder.CreateStructGEP(
+        Shape.FrameTy, Shape.FramePtr, coro::Shape::SwitchFieldIndex::Destroy,
         "destroy.addr");
     Builder.CreateStore(DestroyOrCleanupFn, DestroyAddr);
   }
@@ -1731,10 +1734,8 @@ void coro::AsyncABI::splitCoroutine(Function &F, coro::Shape &Shape,
 
   auto *FramePtr = Id->getStorage();
   FramePtr = Builder.CreateBitOrPointerCast(FramePtr, Int8PtrTy);
-  FramePtr = Builder.CreateInBoundsPtrAdd(
-      FramePtr,
-      ConstantInt::get(Type::getInt64Ty(Context),
-                       Shape.AsyncLowering.FrameOffset),
+  FramePtr = Builder.CreateConstInBoundsGEP1_32(
+      Type::getInt8Ty(Context), FramePtr, Shape.AsyncLowering.FrameOffset,
       "async.ctx.frameptr");
 
   // Map all uses of llvm.coro.begin to the allocated frame pointer.
@@ -1776,7 +1777,7 @@ void coro::AsyncABI::splitCoroutine(Function &F, coro::Shape &Shape,
     // point.
     auto *SuspendBB = Suspend->getParent();
     auto *NewSuspendBB = SuspendBB->splitBasicBlock(Suspend);
-    auto *Branch = cast<UncondBrInst>(SuspendBB->getTerminator());
+    auto *Branch = cast<BranchInst>(SuspendBB->getTerminator());
 
     // Place it before the first suspend.
     auto *ReturnBB =
@@ -1831,12 +1832,14 @@ void coro::AnyRetconABI::splitCoroutine(Function &F, coro::Shape &Shape,
   } else {
     IRBuilder<> Builder(Id);
 
-    auto FrameSize = Builder.getInt64(Shape.FrameSize);
+    // Determine the size of the frame.
+    const DataLayout &DL = F.getDataLayout();
+    auto Size = DL.getTypeAllocSize(Shape.FrameTy);
 
     // Allocate.  We don't need to update the call graph node because we're
     // going to recompute it from scratch after splitting.
     // FIXME: pass the required alignment
-    RawFramePtr = Shape.emitAlloc(Builder, FrameSize, nullptr);
+    RawFramePtr = Shape.emitAlloc(Builder, Builder.getInt64(Size), nullptr);
     RawFramePtr =
         Builder.CreateBitCast(RawFramePtr, Shape.CoroBegin->getType());
 
@@ -1874,7 +1877,7 @@ void coro::AnyRetconABI::splitCoroutine(Function &F, coro::Shape &Shape,
     // the suspend point.
     auto SuspendBB = Suspend->getParent();
     auto NewSuspendBB = SuspendBB->splitBasicBlock(Suspend);
-    auto Branch = cast<UncondBrInst>(SuspendBB->getTerminator());
+    auto Branch = cast<BranchInst>(SuspendBB->getTerminator());
 
     // Create the unified return block.
     if (!ReturnBB) {

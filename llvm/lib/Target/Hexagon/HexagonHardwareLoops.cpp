@@ -41,7 +41,6 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/MachineOperand.h"
-#include "llvm/CodeGen/MachineOptimizationRemarkEmitter.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/DebugLoc.h"
@@ -98,7 +97,6 @@ namespace {
     MachineDominatorTree       *MDT;
     const HexagonInstrInfo     *TII;
     const HexagonRegisterInfo  *TRI;
-    MachineOptimizationRemarkEmitter *MORE;
 #ifndef NDEBUG
     static int Counter;
 #endif
@@ -115,7 +113,6 @@ namespace {
     void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.addRequired<MachineDominatorTreeWrapperPass>();
       AU.addRequired<MachineLoopInfoWrapperPass>();
-      AU.addRequired<MachineOptimizationRemarkEmitterPass>();
       MachineFunctionPass::getAnalysisUsage(AU);
     }
 
@@ -387,8 +384,6 @@ bool HexagonHardwareLoops::runOnMachineFunction(MachineFunction &MF) {
   TII = HST.getInstrInfo();
   TRI = HST.getRegisterInfo();
 
-  MORE = &getAnalysis<MachineOptimizationRemarkEmitterPass>().getORE();
-
   for (auto &L : *MLI)
     if (L->isOutermost()) {
       bool L0Used = false;
@@ -460,8 +455,7 @@ bool HexagonHardwareLoops::findInductionRegister(MachineLoop *L,
     return false;
 
   Register PredR;
-  unsigned PredPos;
-  RegState PredRegFlags;
+  unsigned PredPos, PredRegFlags;
   if (!TII->getPredReg(Cond, PredR, PredPos, PredRegFlags))
     return false;
 
@@ -648,8 +642,7 @@ CountValue *HexagonHardwareLoops::getLoopTripCount(MachineLoop *L,
   // to the header.
   bool Negated = TII->predOpcodeHasNot(Cond) ^ (TB != Header);
   Register PredReg;
-  unsigned PredPos;
-  RegState PredRegFlags;
+  unsigned PredPos, PredRegFlags;
   if (!TII->getPredReg(Cond, PredReg, PredPos, PredRegFlags))
     return nullptr;
   MachineInstr *CondI = MRI->getVRegDef(PredReg);
@@ -928,10 +921,11 @@ CountValue *HexagonHardwareLoops::computeCount(MachineLoop *Loop,
         BuildMI(*PH, InsertPos, DL, SubD, SubR);
 
       if (RegToReg)
-        SubIB.addReg(End->getReg(), {}, End->getSubReg())
-            .addReg(Start->getReg(), {}, Start->getSubReg());
+        SubIB.addReg(End->getReg(), 0, End->getSubReg())
+          .addReg(Start->getReg(), 0, Start->getSubReg());
       else
-        SubIB.addImm(EndV).addReg(Start->getReg(), {}, Start->getSubReg());
+        SubIB.addImm(EndV)
+          .addReg(Start->getReg(), 0, Start->getSubReg());
       DistR = SubR;
     } else {
       // If the loop has been unrolled, we should use the original loop count
@@ -946,7 +940,8 @@ CountValue *HexagonHardwareLoops::computeCount(MachineLoop *Loop,
         Register SubR = MRI->createVirtualRegister(IntRC);
         MachineInstrBuilder SubIB =
           BuildMI(*PH, InsertPos, DL, SubD, SubR);
-        SubIB.addReg(End->getReg(), {}, End->getSubReg()).addImm(-StartV);
+        SubIB.addReg(End->getReg(), 0, End->getSubReg())
+             .addImm(-StartV);
         DistR = SubR;
       }
     }
@@ -965,8 +960,8 @@ CountValue *HexagonHardwareLoops::computeCount(MachineLoop *Loop,
     Register AddR = MRI->createVirtualRegister(IntRC);
     MCInstrDesc const &AddD = TII->get(Hexagon::A2_addi);
     BuildMI(*PH, InsertPos, DL, AddD, AddR)
-        .addReg(DistR, {}, DistSR)
-        .addImm(AdjV);
+      .addReg(DistR, 0, DistSR)
+      .addImm(AdjV);
 
     AdjR = AddR;
     AdjSR = 0;
@@ -987,8 +982,8 @@ CountValue *HexagonHardwareLoops::computeCount(MachineLoop *Loop,
     Register LsrR = MRI->createVirtualRegister(IntRC);
     const MCInstrDesc &LsrD = TII->get(Hexagon::S2_lsr_i_r);
     BuildMI(*PH, InsertPos, DL, LsrD, LsrR)
-        .addReg(AdjR, {}, AdjSR)
-        .addImm(Shift);
+      .addReg(AdjR, 0, AdjSR)
+      .addImm(Shift);
 
     CountR = LsrR;
     CountSR = 0;
@@ -1009,7 +1004,7 @@ CountValue *HexagonHardwareLoops::computeCount(MachineLoop *Loop,
     Register DistCheckR = MRI->createVirtualRegister(PredRC);
     const MCInstrDesc &DistCheckD = TII->get(Hexagon::C2_cmpgti);
     BuildMI(*PH, InsertPos, DL, DistCheckD, DistCheckR)
-        .addReg(DistR, {}, DistSR)
+        .addReg(DistR, 0, DistSR)
         .addImm((CmpLess) ? 0 : -1);
 
     // Generate:
@@ -1020,14 +1015,14 @@ CountValue *HexagonHardwareLoops::computeCount(MachineLoop *Loop,
       const MCInstrDesc &MuxD = TII->get(Hexagon::C2_muxir);
       BuildMI(*PH, InsertPos, DL, MuxD, MuxR)
           .addReg(DistCheckR)
-          .addReg(CountR, {}, CountSR)
+          .addReg(CountR, 0, CountSR)
           .addImm(1);
     } else {
       const MCInstrDesc &MuxD = TII->get(Hexagon::C2_muxri);
       BuildMI(*PH, InsertPos, DL, MuxD, MuxR)
           .addReg(DistCheckR)
           .addImm(1)
-          .addReg(CountR, {}, CountSR);
+          .addReg(CountR, 0, CountSR);
     }
     MuxSR = 0;
   }
@@ -1216,41 +1211,21 @@ bool HexagonHardwareLoops::convertToHardwareLoop(MachineLoop *L,
 #endif
 
   // Does the loop contain any invalid instructions?
-  if (containsInvalidInstruction(L, IsInnerHWLoop)) {
-    MORE->emit([&]() {
-      return MachineOptimizationRemarkMissed(DEBUG_TYPE, "InvalidInstruction",
-                                             L->getStartLoc(), L->getHeader())
-             << "loop contains an instruction that prevents hardware loop "
-                "generation (e.g. a call or hardware loop register definition)";
-    });
+  if (containsInvalidInstruction(L, IsInnerHWLoop))
     return false;
-  }
 
   MachineBasicBlock *LastMBB = L->findLoopControlBlock();
   // Don't generate hw loop if the loop has more than one exit.
-  if (!LastMBB) {
-    MORE->emit([&]() {
-      return MachineOptimizationRemarkMissed(DEBUG_TYPE, "MultipleExits",
-                                             L->getStartLoc(), L->getHeader())
-             << "loop has multiple exits and cannot be converted to a "
-                "hardware loop";
-    });
+  if (!LastMBB)
     return false;
-  }
 
   MachineBasicBlock::iterator LastI = LastMBB->getFirstTerminator();
   if (LastI == LastMBB->end())
     return false;
 
   // Is the induction variable bump feeding the latch condition?
-  if (!fixupInductionVariable(L)) {
-    MORE->emit([&]() {
-      return MachineOptimizationRemarkMissed(DEBUG_TYPE, "InductionVariable",
-                                             L->getStartLoc(), L->getHeader())
-             << "could not identify or fix up the induction variable";
-    });
+  if (!fixupInductionVariable(L))
     return false;
-  }
 
   // Ensure the loop has a preheader: the loop instruction will be
   // placed there.
@@ -1266,14 +1241,8 @@ bool HexagonHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   SmallVector<MachineInstr*, 2> OldInsts;
   // Are we able to determine the trip count for the loop?
   CountValue *TripCount = getLoopTripCount(L, OldInsts);
-  if (!TripCount) {
-    MORE->emit([&]() {
-      return MachineOptimizationRemarkMissed(DEBUG_TYPE, "TripCount",
-                                             L->getStartLoc(), L->getHeader())
-             << "trip count of the loop could not be computed";
-    });
+  if (!TripCount)
     return false;
-  }
 
   // Is the trip count available in the preheader?
   if (TripCount->isReg()) {
@@ -1281,15 +1250,8 @@ bool HexagonHardwareLoops::convertToHardwareLoop(MachineLoop *L,
     // so make sure that the register is actually defined at that point.
     MachineInstr *TCDef = MRI->getVRegDef(TripCount->getReg());
     MachineBasicBlock *BBDef = TCDef->getParent();
-    if (!MDT->dominates(BBDef, Preheader)) {
-      MORE->emit([&]() {
-        return MachineOptimizationRemarkMissed(DEBUG_TYPE,
-                                               "TripCountNotDominating",
-                                               L->getStartLoc(), L->getHeader())
-               << "trip count register is not available in the loop preheader";
-      });
+    if (!MDT->dominates(BBDef, Preheader))
       return false;
-    }
   }
 
   // Determine the loop start.
@@ -1323,7 +1285,7 @@ bool HexagonHardwareLoops::convertToHardwareLoop(MachineLoop *L,
     // Create a copy of the loop count register.
     Register CountReg = MRI->createVirtualRegister(&Hexagon::IntRegsRegClass);
     BuildMI(*Preheader, InsertPos, DL, TII->get(TargetOpcode::COPY), CountReg)
-        .addReg(TripCount->getReg(), {}, TripCount->getSubReg());
+      .addReg(TripCount->getReg(), 0, TripCount->getSubReg());
     // Add the Loop instruction to the beginning of the loop.
     BuildMI(*Preheader, InsertPos, DL, TII->get(LOOP_r)).addMBB(LoopStart)
       .addReg(CountReg);
@@ -1377,12 +1339,6 @@ bool HexagonHardwareLoops::convertToHardwareLoop(MachineLoop *L,
     removeIfDead(OldInsts[i]);
 
   ++NumHWLoops;
-
-  MORE->emit([&]() {
-    return MachineOptimizationRemark(DEBUG_TYPE, "HardwareLoop",
-                                     L->getStartLoc(), L->getHeader())
-           << "converted loop to hardware loop";
-  });
 
   // Set RecL1used and RecL0used only after hardware loop has been
   // successfully generated. Doing it earlier can cause wrong loop instruction

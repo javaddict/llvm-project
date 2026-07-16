@@ -24,7 +24,7 @@ add_llvm_tool(llvm-symbolizer
   )
 
 if(NOT LLVM_TOOL_LLVM_DRIVER_BUILD)
-  target_link_libraries(llvm-symbolizer PRIVATE LLVMDebuginfod LLVMHTTP)
+  target_link_libraries(llvm-symbolizer PRIVATE LLVMDebuginfod)
 endif()
 
 add_llvm_tool_symlink(llvm-addr2line llvm-symbolizer)

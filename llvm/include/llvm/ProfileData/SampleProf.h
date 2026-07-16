@@ -522,13 +522,7 @@ struct SampleContextFrame {
   }
 
   uint64_t getHashCode() const {
-    // Context frame hash is heavily used in llvm-profgen context-sensitive
-    // pre-inliner. Use a lightweight hashing here to avoid speed regression.
-    uint64_t NameHash = 0;
-    if (Func.isStringRef())
-      NameHash = std::hash<std::string>{}(Func.str());
-    else
-      NameHash = Func.getHashCode();
+    uint64_t NameHash = Func.getHashCode();
     uint64_t LocId = Location.getHashCode();
     return NameHash + (LocId << 5) + LocId;
   }
@@ -1227,12 +1221,8 @@ public:
 
   static StringRef getCanonicalCoroFnName(StringRef FnName,
                                           StringRef Attr = "selected") {
-    // A local coroutine function from another CU can be promoted to a global
-    // function during ThinLTO import. This will create a linkage name like
-    // "_Zfoo.llvm.xxxx.cleanup". Remove the ".llvm." suffix after stripping all
-    // the coroutine suffixes to avoid pseudo probe mismatch.
     const SmallVector<StringRef, 3> CoroSuffixes{".cleanup", ".destroy",
-                                                 ".resume", LLVMSuffix};
+                                                 ".resume"};
     return getCanonicalFnName(FnName, CoroSuffixes, Attr);
   }
 
@@ -1704,6 +1694,12 @@ private:
 using namespace sampleprof;
 // Provide DenseMapInfo for SampleContext.
 template <> struct DenseMapInfo<SampleContext> {
+  static inline SampleContext getEmptyKey() { return SampleContext(); }
+
+  static inline SampleContext getTombstoneKey() {
+    return SampleContext(FunctionId(~1ULL));
+  }
+
   static unsigned getHashValue(const SampleContext &Val) {
     return Val.getHashCode();
   }

@@ -27,8 +27,11 @@ OperatingSystem *OperatingSystem::FindPlugin(Process *process,
         return instance_up.release();
     }
   } else {
-    for (auto create_callback :
-         PluginManager::GetOperatingSystemCreateCallbacks()) {
+    for (uint32_t idx = 0;
+         (create_callback =
+              PluginManager::GetOperatingSystemCreateCallbackAtIndex(idx)) !=
+         nullptr;
+         ++idx) {
       std::unique_ptr<OperatingSystem> instance_up(
           create_callback(process, false));
       if (instance_up)

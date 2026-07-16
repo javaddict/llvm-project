@@ -87,6 +87,8 @@ class DialectInterfaceCollectionBase {
     }
 
     static bool isEqual(Dialect *lhs, const DialectInterface *rhs) {
+      if (rhs == getEmptyKey() || rhs == getTombstoneKey())
+        return false;
       return lhs == rhs->getDialect();
     }
   };

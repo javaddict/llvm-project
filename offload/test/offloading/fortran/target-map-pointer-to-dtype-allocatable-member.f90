@@ -4,8 +4,7 @@
 ! directives
 ! REQUIRES: flang, amdgpu
 
-! RUN: %libomptarget-compile-fortran-generic
-! RUN: env LIBOMPTARGET_TREAT_ATTACH_AUTO_AS_ALWAYS=1 %libomptarget-run-generic 2>&1 | %fcheck-generic
+! RUN: %libomptarget-compile-fortran-run-and-check-generic
 module dtype
     type :: my_dtype
             integer :: s, e

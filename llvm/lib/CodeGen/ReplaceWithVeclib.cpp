@@ -26,7 +26,6 @@
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/VFABIDemangler.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/TypeSize.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 
@@ -48,7 +47,6 @@ STATISTIC(NumFuncUsedAdded,
 /// Function.
 Function *getTLIFunction(Module *M, FunctionType *VectorFTy,
                          const StringRef TLIName,
-                         std::optional<CallingConv::ID> CC,
                          Function *ScalarFunc = nullptr) {
   Function *TLIFunc = M->getFunction(TLIName);
   if (!TLIFunc) {
@@ -56,8 +54,6 @@ Function *getTLIFunction(Module *M, FunctionType *VectorFTy,
         Function::Create(VectorFTy, Function::ExternalLinkage, TLIName, *M);
     if (ScalarFunc)
       TLIFunc->copyAttributesFrom(ScalarFunc);
-    if (CC)
-      TLIFunc->setCallingConv(*CC);
 
     LLVM_DEBUG(dbgs() << DEBUG_TYPE << ": Added vector library function `"
                       << TLIName << "` of type `" << *(TLIFunc->getType())
@@ -80,10 +76,11 @@ static void replaceWithTLIFunction(IntrinsicInst *II, VFInfo &Info,
                                    Function *TLIVecFunc) {
   IRBuilder<> IRBuilder(II);
   SmallVector<Value *> Args(II->args());
-  if (Info.isMasked()) {
+  if (auto OptMaskpos = Info.getParamIndexForOptionalMask()) {
     auto *MaskTy =
         VectorType::get(Type::getInt1Ty(II->getContext()), Info.Shape.VF);
-    Args.push_back(Constant::getAllOnesValue(MaskTy));
+    Args.insert(Args.begin() + OptMaskpos.value(),
+                Constant::getAllOnesValue(MaskTy));
   }
 
   // Preserve the operand bundles.
@@ -95,7 +92,6 @@ static void replaceWithTLIFunction(IntrinsicInst *II, VFInfo &Info,
   // Preserve fast math flags for FP math.
   if (isa<FPMathOperator>(Replacement))
     Replacement->copyFastMathFlags(II);
-  Replacement->setCallingConv(TLIVecFunc->getCallingConv());
 }
 
 /// Returns true when successfully replaced \p II, which is a call to a
@@ -199,7 +195,7 @@ static bool replaceWithCallToVeclib(const TargetLibraryInfo &TLI,
 
   Function *TLIFunc =
       getTLIFunction(II->getModule(), VectorFTy, VD->getVectorFnName(),
-                     VD->getCallingConv(), II->getCalledFunction());
+                     II->getCalledFunction());
   replaceWithTLIFunction(II, *OptInfo, TLIFunc);
   LLVM_DEBUG(dbgs() << DEBUG_TYPE << ": Replaced call to `" << ScalarName
                     << "` with call to `" << TLIFunc->getName() << "`.\n");

@@ -14,13 +14,12 @@
 #ifndef LLVM_LIB_TARGET_NVPTX_NVPTX_H
 #define LLVM_LIB_TARGET_NVPTX_NVPTX_H
 
+#include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/AtomicOrdering.h"
 #include "llvm/Support/CodeGen.h"
-#include "llvm/Support/NVPTXAddrSpace.h"
 #include "llvm/Target/TargetMachine.h"
-
 namespace llvm {
 class FunctionPass;
 class MachineFunctionPass;
@@ -49,11 +48,9 @@ MachineFunctionPass *createNVPTXPrologEpilogPass();
 MachineFunctionPass *createNVPTXReplaceImageHandlesPass();
 FunctionPass *createNVPTXImageOptimizerPass();
 FunctionPass *createNVPTXLowerArgsPass();
-FunctionPass *createNVPTXSetByValParamAlignPass();
 FunctionPass *createNVPTXLowerAllocaPass();
 FunctionPass *createNVPTXLowerUnreachablePass(bool TrapUnreachable,
                                               bool NoTrapAfterNoreturn);
-FunctionPass *createNVPTXMarkKernelPtrsGlobalPass();
 FunctionPass *createNVPTXTagInvariantLoadsPass();
 FunctionPass *createNVPTXIRPeepholePass();
 MachineFunctionPass *createNVPTXPeephole();
@@ -71,7 +68,6 @@ void initializeNVPTXLowerAggrCopiesPass(PassRegistry &);
 void initializeNVPTXLowerAllocaPass(PassRegistry &);
 void initializeNVPTXLowerUnreachablePass(PassRegistry &);
 void initializeNVPTXLowerArgsLegacyPassPass(PassRegistry &);
-void initializeNVPTXSetByValParamAlignLegacyPassPass(PassRegistry &);
 void initializeNVPTXProxyRegErasurePass(PassRegistry &);
 void initializeNVPTXForwardParamsPassPass(PassRegistry &);
 void initializeNVVMIntrRangePass(PassRegistry &);
@@ -79,20 +75,19 @@ void initializeNVVMReflectPass(PassRegistry &);
 void initializeNVPTXAAWrapperPassPass(PassRegistry &);
 void initializeNVPTXExternalAAWrapperPass(PassRegistry &);
 void initializeNVPTXPeepholePass(PassRegistry &);
-void initializeNVPTXMarkKernelPtrsGlobalLegacyPassPass(PassRegistry &);
 void initializeNVPTXTagInvariantLoadLegacyPassPass(PassRegistry &);
 void initializeNVPTXIRPeepholePass(PassRegistry &);
 void initializeNVPTXPrologEpilogPassPass(PassRegistry &);
 
-struct NVVMIntrRangePass : OptionalPassInfoMixin<NVVMIntrRangePass> {
+struct NVVMIntrRangePass : PassInfoMixin<NVVMIntrRangePass> {
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
-struct NVPTXIRPeepholePass : OptionalPassInfoMixin<NVPTXIRPeepholePass> {
+struct NVPTXIRPeepholePass : PassInfoMixin<NVPTXIRPeepholePass> {
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
-struct NVVMReflectPass : OptionalPassInfoMixin<NVVMReflectPass> {
+struct NVVMReflectPass : PassInfoMixin<NVVMReflectPass> {
   NVVMReflectPass() : SmVersion(0) {}
   NVVMReflectPass(unsigned SmVersion) : SmVersion(SmVersion) {}
   PreservedAnalyses run(Module &F, ModuleAnalysisManager &AM);
@@ -101,20 +96,15 @@ private:
   unsigned SmVersion;
 };
 
-struct GenericToNVVMPass : OptionalPassInfoMixin<GenericToNVVMPass> {
+struct GenericToNVVMPass : PassInfoMixin<GenericToNVVMPass> {
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
 
-struct NVPTXCopyByValArgsPass : OptionalPassInfoMixin<NVPTXCopyByValArgsPass> {
+struct NVPTXCopyByValArgsPass : PassInfoMixin<NVPTXCopyByValArgsPass> {
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
-struct NVPTXSetByValParamAlignPass
-    : OptionalPassInfoMixin<NVPTXSetByValParamAlignPass> {
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-};
-
-struct NVPTXLowerArgsPass : OptionalPassInfoMixin<NVPTXLowerArgsPass> {
+struct NVPTXLowerArgsPass : PassInfoMixin<NVPTXLowerArgsPass> {
 private:
   TargetMachine &TM;
 
@@ -123,13 +113,7 @@ public:
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
-struct NVPTXMarkKernelPtrsGlobalPass
-    : OptionalPassInfoMixin<NVPTXMarkKernelPtrsGlobalPass> {
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-};
-
-struct NVPTXTagInvariantLoadsPass
-    : OptionalPassInfoMixin<NVPTXTagInvariantLoadsPass> {
+struct NVPTXTagInvariantLoadsPass : PassInfoMixin<NVPTXTagInvariantLoadsPass> {
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
@@ -200,19 +184,15 @@ enum Scope : ScopeUnderlyingType {
 
 using AddressSpaceUnderlyingType = unsigned int;
 enum AddressSpace : AddressSpaceUnderlyingType {
-  Generic = NVPTXAS::ADDRESS_SPACE_GENERIC,
-  Global = NVPTXAS::ADDRESS_SPACE_GLOBAL,
-  Shared = NVPTXAS::ADDRESS_SPACE_SHARED,
-  Const = NVPTXAS::ADDRESS_SPACE_CONST,
-  Local = NVPTXAS::ADDRESS_SPACE_LOCAL,
-  SharedCluster = NVPTXAS::ADDRESS_SPACE_SHARED_CLUSTER,
-  EntryParam = NVPTXAS::ADDRESS_SPACE_ENTRY_PARAM,
+  Generic = 0,
+  Global = 1,
+  Shared = 3,
+  Const = 4,
+  Local = 5,
+  SharedCluster = 7,
 
-  // DeviceParam is not a real address space, as it does not support pointers
-  // and instead can only be referenced by param+offset. For this reason it is
-  // only used in MIR as an instruction modifier and should not be used in LLVM
-  // IR.
-  DeviceParam
+  // NVPTX Backend Private:
+  Param = 101
 };
 
 namespace PTXLdStInstCode {
@@ -237,8 +217,7 @@ enum CvtMode {
   BASE_MASK = 0x0F,
   FTZ_FLAG = 0x10,
   SAT_FLAG = 0x20,
-  RELU_FLAG = 0x40,
-  SATFINITE_FLAG = 0x80
+  RELU_FLAG = 0x40
 };
 }
 

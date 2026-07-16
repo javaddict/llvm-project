@@ -134,6 +134,8 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  M->removeDebugIntrinsicDeclarations();
+
   std::unique_ptr<ModuleSummaryIndex> Index = std::move(ModuleAndIndex.Index);
 
   if (!DisableVerify) {

@@ -48,8 +48,7 @@ LLVM_ABI bool thinLTOPropagateFunctionAttrs(
 /// access memory, or only read memory, and give them the readnone/readonly
 /// attribute. It also discovers function arguments that are not captured by
 /// the function and marks them with the nocapture attribute.
-struct PostOrderFunctionAttrsPass
-    : OptionalPassInfoMixin<PostOrderFunctionAttrsPass> {
+struct PostOrderFunctionAttrsPass : PassInfoMixin<PostOrderFunctionAttrsPass> {
   PostOrderFunctionAttrsPass(bool SkipNonRecursive = false)
       : SkipNonRecursive(SkipNonRecursive) {}
   LLVM_ABI PreservedAnalyses run(LazyCallGraph::SCC &C,
@@ -75,7 +74,7 @@ private:
 // this is a boring module pass, but eventually it should be an RPO CGSCC pass
 // when such infrastructure is available.
 class ReversePostOrderFunctionAttrsPass
-    : public OptionalPassInfoMixin<ReversePostOrderFunctionAttrsPass> {
+    : public PassInfoMixin<ReversePostOrderFunctionAttrsPass> {
 public:
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
@@ -89,7 +88,7 @@ public:
 /// taken or any function in the module has external linkage, to safely handle
 /// indirect and library function calls from current function.
 class NoRecurseLTOInferencePass
-    : public OptionalPassInfoMixin<NoRecurseLTOInferencePass> {
+    : public PassInfoMixin<NoRecurseLTOInferencePass> {
 public:
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
 };

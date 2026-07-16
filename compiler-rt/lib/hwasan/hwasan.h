@@ -57,18 +57,11 @@ constexpr unsigned kTaggableRegionCheckShift =
 // Tags are done in upper bits using Intel LAM.
 constexpr unsigned kAddressTagShift = 57;
 constexpr unsigned kTagBits = 6;
-#elif defined(__aarch64__)
+#else
 // TBI (Top Byte Ignore) feature of AArch64: bits [63:56] are ignored in address
 // translation and can be used to store a tag.
 constexpr unsigned kAddressTagShift = 56;
 constexpr unsigned kTagBits = 8;
-#elif SANITIZER_RISCV64
-// Pointer Masking extension for RISC-V: Top PMLEN (16 or 7) bits are ignored in
-// address translation and can be used to store a tag.
-constexpr unsigned kAddressTagShift = 56;
-constexpr unsigned kTagBits = 8;
-#else
-#  error Architecture not supported
 #endif  // defined(HWASAN_ALIASING_MODE)
 
 // Mask for extracting tag bits from the lower 8 bits.

@@ -52,18 +52,16 @@ void DeleteNullPointerCheck::check(const MatchFinder::MatchResult &Result) {
   auto Diag = diag(
       IfWithDelete->getBeginLoc(),
       "'if' statement is unnecessary; deleting null pointer has no effect");
-  if (IfWithDelete->hasElseStorage())
+  if (IfWithDelete->getElse())
     return;
   // FIXME: generate fixit for this case.
 
-  const std::optional<Token> PrevTok = utils::lexer::getPreviousToken(
-      IfWithDelete->getThen()->getBeginLoc(), *Result.SourceManager,
-      Result.Context->getLangOpts());
-  if (!PrevTok)
-    return;
-
   Diag << FixItHint::CreateRemoval(CharSourceRange::getTokenRange(
-      IfWithDelete->getBeginLoc(), PrevTok->getLocation()));
+      IfWithDelete->getBeginLoc(),
+      utils::lexer::getPreviousToken(IfWithDelete->getThen()->getBeginLoc(),
+                                     *Result.SourceManager,
+                                     Result.Context->getLangOpts())
+          .getLocation()));
 
   if (Compound) {
     Diag << FixItHint::CreateRemoval(

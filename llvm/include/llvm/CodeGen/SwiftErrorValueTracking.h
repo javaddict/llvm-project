@@ -33,10 +33,10 @@ namespace llvm {
 
 class SwiftErrorValueTracking {
   // Some useful objects to reduce the number of function arguments needed.
-  MachineFunction *MF = nullptr;
-  const Function *Fn = nullptr;
-  const TargetLowering *TLI = nullptr;
-  const TargetInstrInfo *TII = nullptr;
+  MachineFunction *MF;
+  const Function *Fn;
+  const TargetLowering *TLI;
+  const TargetInstrInfo *TII;
 
   /// A map from swifterror value in a basic block to the virtual register it is
   /// currently represented by.
@@ -55,7 +55,7 @@ class SwiftErrorValueTracking {
       VRegDefUses;
 
   /// The swifterror argument of the current function.
-  const Value *SwiftErrorArg = nullptr;
+  const Value *SwiftErrorArg;
 
   using SwiftErrorValues = SmallVector<const Value*, 1>;
   /// A function can only have a single swifterror argument. And if it does
@@ -65,7 +65,7 @@ class SwiftErrorValueTracking {
 
 public:
   /// Initialize data structures for specified new function.
-  LLVM_ABI void setFunction(MachineFunction &MF);
+  void setFunction(MachineFunction &MF);
 
   /// Get the (unique) function argument that was marked swifterror, or nullptr
   /// if this function has no swifterror args.
@@ -75,36 +75,32 @@ public:
 
   /// Get or create the swifterror value virtual register in
   /// VRegDefMap for this basic block.
-  LLVM_ABI Register getOrCreateVReg(const MachineBasicBlock *, const Value *);
+  Register getOrCreateVReg(const MachineBasicBlock *, const Value *);
 
   /// Set the swifterror virtual register in the VRegDefMap for this
   /// basic block.
-  LLVM_ABI void setCurrentVReg(const MachineBasicBlock *MBB, const Value *,
-                               Register);
+  void setCurrentVReg(const MachineBasicBlock *MBB, const Value *, Register);
 
   /// Get or create the swifterror value virtual register for a def of a
   /// swifterror by an instruction.
-  LLVM_ABI Register getOrCreateVRegDefAt(const Instruction *,
-                                         const MachineBasicBlock *,
-                                         const Value *);
+  Register getOrCreateVRegDefAt(const Instruction *, const MachineBasicBlock *,
+                                const Value *);
 
   /// Get or create the swifterror value virtual register for a use of a
   /// swifterror by an instruction.
-  LLVM_ABI Register getOrCreateVRegUseAt(const Instruction *,
-                                         const MachineBasicBlock *,
-                                         const Value *);
+  Register getOrCreateVRegUseAt(const Instruction *, const MachineBasicBlock *,
+                                const Value *);
 
   /// Create initial definitions of swifterror values in the entry block of the
   /// current function.
-  LLVM_ABI bool createEntriesInEntryBlock(DebugLoc DbgLoc);
+  bool createEntriesInEntryBlock(DebugLoc DbgLoc);
 
   /// Propagate assigned swifterror vregs through a function, synthesizing PHI
   /// nodes when needed to maintain consistency.
-  LLVM_ABI void propagateVRegs();
+  void propagateVRegs();
 
-  LLVM_ABI void preassignVRegs(MachineBasicBlock *MBB,
-                               BasicBlock::const_iterator Begin,
-                               BasicBlock::const_iterator End);
+  void preassignVRegs(MachineBasicBlock *MBB, BasicBlock::const_iterator Begin,
+                      BasicBlock::const_iterator End);
 };
 
 }

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_SCRIPTED_SCRIPTEDPROCESS_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_SCRIPTED_SCRIPTEDPROCESS_H
+#ifndef LLDB_SOURCE_PLUGINS_SCRIPTED_PROCESS_H
+#define LLDB_SOURCE_PLUGINS_SCRIPTED_PROCESS_H
 
 #include "lldb/Target/Process.h"
 #include "lldb/Utility/ConstString.h"
@@ -84,8 +84,8 @@ public:
 
   bool GetProcessInfo(ProcessInstanceInfo &info) override;
 
-  lldb_private::StructuredData::ObjectSP GetLoadedDynamicLibrariesInfos(
-      lldb::BinaryInformationLevel info_level) override;
+  lldb_private::StructuredData::ObjectSP
+  GetLoadedDynamicLibrariesInfos() override;
 
   lldb_private::StructuredData::DictionarySP GetMetadata() override;
 
@@ -98,8 +98,7 @@ public:
     // dictionary before emitting the private stop event to avoid having the
     // module loading happen while the process state is changing.
     if (StateIsStoppedState(state, true))
-      GetLoadedDynamicLibrariesInfos(
-          lldb::BinaryInformationLevel::eBinaryInformationLevelFull);
+      GetLoadedDynamicLibrariesInfos();
     SetPrivateState(state);
   }
 
@@ -134,4 +133,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_SCRIPTED_SCRIPTEDPROCESS_H
+#endif // LLDB_SOURCE_PLUGINS_SCRIPTED_PROCESS_H

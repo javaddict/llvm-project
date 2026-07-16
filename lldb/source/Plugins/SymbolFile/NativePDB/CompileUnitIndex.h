@@ -21,7 +21,6 @@
 #include "llvm/DebugInfo/PDB/Native/DbiModuleDescriptor.h"
 #include "llvm/DebugInfo/PDB/Native/ModuleDebugStream.h"
 #include "llvm/DebugInfo/PDB/PDBTypes.h"
-#include "llvm/Support/Error.h"
 
 #include "PdbSymUid.h"
 
@@ -101,8 +100,7 @@ public:
 
   CompilandIndexItem *GetCompiland(uint16_t modi);
 
-  llvm::Expected<llvm::SmallString<64>>
-  GetMainSourceFile(const CompilandIndexItem &item) const;
+  llvm::SmallString<64> GetMainSourceFile(const CompilandIndexItem &item) const;
 };
 } // namespace npdb
 } // namespace lldb_private

@@ -5,8 +5,6 @@ from fork_testbase import GdbRemoteForkTestBase
 
 
 class TestGdbRemoteForkNonStop(GdbRemoteForkTestBase):
-    SHARED_BUILD_TESTCASE = False
-
     def setUp(self):
         GdbRemoteForkTestBase.setUp(self)
         if self.getPlatform() == "linux" and self.getArchitecture() in [

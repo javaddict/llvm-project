@@ -5,9 +5,5 @@ static_library("DTLTO") {
     "//llvm/lib/LTO",
     "//llvm/lib/Support",
   ]
-  sources = [
-    "DTLTO.cpp",
-    "DTLTODistributionDriver.cpp",
-    "DTLTOInputFiles.cpp",
-  ]
+  sources = [ "DTLTO.cpp" ]
 }

@@ -523,11 +523,10 @@ public:
   };
 
   MipsAsmParser(const MCSubtargetInfo &sti, MCAsmParser &parser,
-                const MCInstrInfo &MII)
-      : MCTargetAsmParser(sti, MII),
-        ABI(MipsABIInfo::computeTargetABI(
-            sti.getTargetTriple(),
-            parser.getContext().getTargetOptions().getABIName())) {
+                const MCInstrInfo &MII, const MCTargetOptions &Options)
+      : MCTargetAsmParser(Options, sti, MII),
+        ABI(MipsABIInfo::computeTargetABI(sti.getTargetTriple(),
+                                          Options.getABIName())) {
     MCAsmParserExtension::Initialize(parser);
 
     parser.addAliasForDirective(".asciiz", ".asciz");
@@ -694,8 +693,6 @@ public:
     return (getSTI().hasFeature(Mips::FeatureCnMipsP));
   }
 
-  bool isR5900() const { return (getSTI().hasFeature(Mips::FeatureR5900)); }
-
   bool inPicMode() {
     return IsPicEnabled;
   }
@@ -711,11 +708,6 @@ public:
   bool useSoftFloat() const {
     return getSTI().hasFeature(Mips::FeatureSoftFloat);
   }
-
-  bool isSingleFloat() const {
-    return getSTI().hasFeature(Mips::FeatureSingleFloat);
-  }
-
   bool hasMT() const {
     return getSTI().hasFeature(Mips::FeatureMT);
   }
@@ -2962,7 +2954,7 @@ bool MipsAsmParser::loadAndAddSymbolAddress(const MCExpr *SymExpr,
          static_cast<const MCSymbolELF *>(Res.getAddSym())->getBinding() ==
              ELF::STB_LOCAL);
     // For O32, "$"-prefixed symbols are recognized as temporary while
-    // .L-prefixed symbols are not (InternalSymbolPrefix is "$"). Recognize ".L"
+    // .L-prefixed symbols are not (PrivateGlobalPrefix is "$"). Recognize ".L"
     // manually.
     if (ABI.IsO32() && Res.getAddSym()->getName().starts_with(".L"))
       IsLocalSym = true;

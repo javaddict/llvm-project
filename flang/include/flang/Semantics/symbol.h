@@ -32,7 +32,7 @@ class raw_ostream;
 namespace Fortran::parser {
 struct Expr;
 struct OpenMPDeclarativeConstruct;
-} // namespace Fortran::parser
+}
 
 namespace Fortran::semantics {
 
@@ -52,53 +52,33 @@ using MutableSymbolVector = std::vector<MutableSymbolRef>;
 // Mixin for details with OpenMP declarative constructs.
 class WithOmpDeclarative {
 public:
-  using OmpClauseSet =
+  // The set of requirements for any program unit include requirements
+  // from any module used in the program unit.
+  using RequiresClauses =
       common::EnumSet<llvm::omp::Clause, llvm::omp::Clause_enumSize>;
 
-  const OmpClauseSet &ompRequires() const { return ompRequires_; }
-  void set_ompRequires(OmpClauseSet clauses) { ompRequires_ = clauses; }
+  bool has_ompRequires() const { return ompRequires_.has_value(); }
+  const RequiresClauses *ompRequires() const {
+    return ompRequires_ ? &*ompRequires_ : nullptr;
+  }
+  void set_ompRequires(RequiresClauses clauses) { ompRequires_ = clauses; }
 
-  const std::optional<common::OmpMemoryOrderType> &
-  ompAtomicDefaultMemOrder() const {
-    return ompAtomicDefaultMemOrder_;
+  bool has_ompAtomicDefaultMemOrder() const {
+    return ompAtomicDefaultMemOrder_.has_value();
+  }
+  const common::OmpMemoryOrderType *ompAtomicDefaultMemOrder() const {
+    return ompAtomicDefaultMemOrder_ ? &*ompAtomicDefaultMemOrder_ : nullptr;
   }
   void set_ompAtomicDefaultMemOrder(common::OmpMemoryOrderType flags) {
     ompAtomicDefaultMemOrder_ = flags;
   }
 
-  const OmpClauseSet &ompDeclTarget() const { return ompDeclTarget_; }
-  void set_ompDeclTarget(OmpClauseSet clauses) { ompDeclTarget_ = clauses; }
-
-  const std::optional<common::OmpDeviceType> &ompDeviceType() const {
-    return ompDeviceType_;
-  }
-  void set_ompDeclTarget(common::OmpDeviceType device) {
-    ompDeviceType_ = device;
-  }
-
-  void printClauseSet(llvm::raw_ostream &os, const OmpClauseSet &clauses,
-      parser::CharBlock name = parser::CharBlock{}) const;
   friend llvm::raw_ostream &operator<<(
       llvm::raw_ostream &, const WithOmpDeclarative &);
 
-  void set_version(unsigned version) { version_ = version; }
-
 private:
-  unsigned version_;
-  // The set of clauses from a REQUIRES directive. Only applicable
-  // to program unit symbols (i.e. scopes of the REQUIRES directive).
-  // The set of requirements for any program unit include requirements
-  // from any module used in the program unit.
-  OmpClauseSet ompRequires_;
-  // The argument to ATOMIC_DEFAULT_MEM_ORDER. Only needed when the ADMO
-  // clause is present in the ompRequires_ set.
+  std::optional<RequiresClauses> ompRequires_;
   std::optional<common::OmpMemoryOrderType> ompAtomicDefaultMemOrder_;
-  // The set of clauses on DECLARE_TARGET directive that apply to this
-  // symbol.
-  OmpClauseSet ompDeclTarget_;
-  // The argument to DEVICE_TYPE clause. Only needed when the clause is
-  // present in the ompDeclTarget_ set.
-  std::optional<common::OmpDeviceType> ompDeviceType_;
 };
 
 // A module or submodule.
@@ -397,7 +377,7 @@ private:
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const AssocEntityDetails &);
 
 // An entity known to be an object.
-class ObjectEntityDetails : public EntityDetails, public WithOmpDeclarative {
+class ObjectEntityDetails : public EntityDetails {
 public:
   explicit ObjectEntityDetails(EntityDetails &&);
   ObjectEntityDetails(const ObjectEntityDetails &) = default;
@@ -468,9 +448,7 @@ private:
 // A procedure pointer (other than one defined with POINTER and an
 // INTERFACE block), a dummy procedure (without an INTERFACE but with
 // EXTERNAL or use in a procedure reference), or external procedure.
-class ProcEntityDetails : public EntityDetails,
-                          public WithPassArg,
-                          public WithOmpDeclarative {
+class ProcEntityDetails : public EntityDetails, public WithPassArg {
 public:
   ProcEntityDetails() = default;
   explicit ProcEntityDetails(EntityDetails &&);
@@ -497,12 +475,6 @@ public:
     return usedAsProcedureHere_;
   }
   void set_usedAsProcedureHere(SourceName here) { usedAsProcedureHere_ = here; }
-  const std::vector<OpenACCRoutineInfo> &openACCRoutineInfos() const {
-    return openACCRoutineInfos_;
-  }
-  void add_openACCRoutineInfo(OpenACCRoutineInfo info) {
-    openACCRoutineInfos_.push_back(info);
-  }
 
 private:
   const Symbol *rawProcInterface_{nullptr};
@@ -510,7 +482,6 @@ private:
   std::optional<const Symbol *> init_;
   bool isCUDAKernel_{false};
   std::optional<SourceName> usedAsProcedureHere_;
-  std::vector<OpenACCRoutineInfo> openACCRoutineInfos_;
   friend llvm::raw_ostream &operator<<(
       llvm::raw_ostream &, const ProcEntityDetails &);
 };
@@ -526,10 +497,6 @@ public:
   const SymbolVector &paramDeclOrder() const { return paramDeclOrder_; }
   bool sequence() const { return sequence_; }
   bool isDECStructure() const { return isDECStructure_; }
-  bool isEnumerationType() const { return isEnumerationType_; }
-  void set_isEnumerationType(bool x = true) { isEnumerationType_ = x; }
-  int enumeratorCount() const { return enumeratorCount_; }
-  void set_enumeratorCount(int n) { enumeratorCount_ = n; }
   std::map<SourceName, SymbolRef> &finals() { return finals_; }
   const std::map<SourceName, SymbolRef> &finals() const { return finals_; }
   bool isForwardReferenced() const { return isForwardReferenced_; }
@@ -581,10 +548,6 @@ private:
   bool isForwardReferenced_{false};
   std::map<SourceName, const parser::Expr *> originalKindParameterMap_;
 
-  // These fields are only used if the derived type is an enumeration type.
-  bool isEnumerationType_{false};
-  int enumeratorCount_{0};
-
   friend llvm::raw_ostream &operator<<(
       llvm::raw_ostream &, const DerivedTypeDetails &);
 };
@@ -615,7 +578,7 @@ private:
   SymbolVector objects_;
 };
 
-class CommonBlockDetails : public WithBindName, public WithOmpDeclarative {
+class CommonBlockDetails : public WithBindName {
 public:
   explicit CommonBlockDetails(SourceName location)
       : sourceLocation_{location} {}
@@ -801,22 +764,6 @@ public:
         return true;
       }
     }
-    // For derived and class-derived types, match on the type symbol pointer.
-    if (type.category() == DeclTypeSpec::TypeDerived ||
-        type.category() == DeclTypeSpec::ClassDerived) {
-      const auto &rhs = type.derivedTypeSpec();
-      const auto &rhsSym = rhs.typeSymbol();
-      for (auto t : typeList_) {
-        if (t->category() == DeclTypeSpec::TypeDerived ||
-            t->category() == DeclTypeSpec::ClassDerived) {
-          const auto &lhs = t->derivedTypeSpec();
-          const auto &lhsSym = lhs.typeSymbol();
-          if (&lhsSym == &rhsSym) {
-            return true;
-          }
-        }
-      }
-    }
     return false;
   }
 
@@ -889,8 +836,6 @@ public:
       AccPresent, AccLink, AccDeviceResident, AccDevicePtr, AccUseDevice,
       // OpenACC declare
       AccDeclare,
-      // OpenACC declare on allocatable/pointer needs cross-TU action recipes
-      AccDeclareAction,
       // OpenACC data-movement attribute
       AccDevice, AccHost, AccSelf,
       // OpenACC miscellaneous flags
@@ -1221,12 +1166,6 @@ inline const DeclTypeSpec *Symbol::GetTypeImpl(int depth) const {
 
 inline const DeclTypeSpec *Symbol::GetType() const { return GetTypeImpl(); }
 
-// Defined here, where Symbol is a complete type, so that it can be inlined
-// into FortranEvaluate without that library needing to link FortranSemantics.
-inline const Scope *DerivedTypeSpec::GetScope() const {
-  return scope_ ? scope_ : typeSymbol_.scope();
-}
-
 // Sets and maps keyed by Symbols
 
 struct SymbolAddressCompare {
@@ -1272,6 +1211,17 @@ SourceOrderedSymbolSet OrderBySourcePosition(const A &container) {
 // Define required  info so that SymbolRef can be used inside llvm::DenseMap.
 namespace llvm {
 template <> struct DenseMapInfo<Fortran::semantics::SymbolRef> {
+  static inline Fortran::semantics::SymbolRef getEmptyKey() {
+    auto ptr = DenseMapInfo<const Fortran::semantics::Symbol *>::getEmptyKey();
+    return *reinterpret_cast<Fortran::semantics::SymbolRef *>(&ptr);
+  }
+
+  static inline Fortran::semantics::SymbolRef getTombstoneKey() {
+    auto ptr =
+        DenseMapInfo<const Fortran::semantics::Symbol *>::getTombstoneKey();
+    return *reinterpret_cast<Fortran::semantics::SymbolRef *>(&ptr);
+  }
+
   static unsigned getHashValue(const Fortran::semantics::SymbolRef &sym) {
     return DenseMapInfo<const Fortran::semantics::Symbol *>::getHashValue(
         &sym.get());

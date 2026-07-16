@@ -2,7 +2,7 @@
 // RUN: split-file %s %t
 // RUN: %clang_cc1 -fmodules -fimplicit-module-maps -I%t \
 // RUN:   -fmodules-cache-path=%t/cache %t/tu.c -fsyntax-only -Rmodule-map \
-// RUN:   -fmodules-lazy-load-module-maps -verify
+// RUN:   -verify
 
 //--- module.modulemap
 
@@ -28,4 +28,4 @@ module B {
 
 // expected-remark@*{{parsing modulemap}}
 // expected-remark@*{{loading parsed module 'A'}}
-// expected-remark@*{{loading parsed module 'B'}}
+// expected-remark@*{{loading modulemap}}

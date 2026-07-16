@@ -18,5 +18,5 @@ add_mlir_dialect_library(MLIRVectorTransformOps
   MLIRTransformDialect
   MLIRVectorDialect
   MLIRVectorToSCF
-  MLIRX86Transforms
+  MLIRX86VectorTransforms
   )

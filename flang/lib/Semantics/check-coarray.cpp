@@ -9,7 +9,6 @@
 #include "check-coarray.h"
 #include "definable.h"
 #include "flang/Common/indirection.h"
-#include "flang/Evaluate/check-expression.h"
 #include "flang/Evaluate/expression.h"
 #include "flang/Parser/message.h"
 #include "flang/Parser/parse-tree.h"
@@ -101,7 +100,6 @@ template <typename T>
 static void CheckTeamType(
     SemanticsContext &context, const T &x, bool mustBeVariable = false) {
   if (const auto *expr{GetExpr(context, x)}) {
-    NoteUsedSymbols(context, *expr);
     if (!IsTeamType(evaluate::GetDerivedTypeSpec(expr->GetType()))) {
       context.Say(parser::FindSourceLocation(x), // C1114
           "Team value must be of type TEAM_TYPE from module ISO_FORTRAN_ENV"_err_en_US);

@@ -374,8 +374,7 @@ MemProfiler::isInterestingMemoryAccess(Instruction *I) const {
     }
 
     // Do not instrument accesses to LLVM internal variables.
-    if (GV->getName().starts_with("__llvm") ||
-        GV->getName().starts_with(getInstrProfVarPrefix()))
+    if (GV->getName().starts_with("__llvm"))
       return std::nullopt;
   }
 

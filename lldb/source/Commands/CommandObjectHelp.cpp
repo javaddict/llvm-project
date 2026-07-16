@@ -168,7 +168,6 @@ void CommandObjectHelp::DoExecute(Args &command, CommandReturnObject &result) {
       for (size_t i = 0; i < match_count; i++) {
         output_strm.Printf("\t%s\n", matches.GetStringAtIndex(i));
       }
-      result.SetStatus(eReturnStatusSuccessFinishNoResult);
     } else {
       // Maybe the user is asking for help about a command argument rather than
       // a command.

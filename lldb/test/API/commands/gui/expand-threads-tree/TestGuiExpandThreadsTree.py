@@ -10,7 +10,6 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test.lldbpexpect import PExpectTest
 
 
-@skipIfTargetDoesNotSupportThreads()
 class TestGuiExpandThreadsTree(PExpectTest):
     # PExpect uses many timeouts internally and doesn't play well
     # under ASAN on a loaded machine..
@@ -55,3 +54,4 @@ class TestGuiExpandThreadsTree(PExpectTest):
         self.child.send(escape_key)
 
         self.expect_prompt()
+        self.quit()

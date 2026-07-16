@@ -187,7 +187,6 @@ for dirs in tool_dirs:
     llvm_config.with_environment("PATH", dirs, append_path=True)
 
 tools = [
-    "llvm-strings",
     "mlir-tblgen",
     "mlir-translate",
     "mlir-lsp-server",
@@ -353,9 +352,6 @@ if config.enable_assertions:
     config.available_features.add("asserts")
 else:
     config.available_features.add("noasserts")
-
-if config.enable_python_stable_abi:
-    config.available_features.add("python-stable-abi")
 
 if config.expensive_checks:
     config.available_features.add("expensive_checks")

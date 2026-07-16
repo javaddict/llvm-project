@@ -59,8 +59,9 @@ char LibcallLoweringInfoWrapper::ID = 0;
 
 LibcallLoweringInfoWrapper::LibcallLoweringInfoWrapper() : ImmutablePass(ID) {}
 
-void LibcallLoweringInfoWrapper::initializePass() {
-  RuntimeLibcallsWrapper = &getAnalysis<RuntimeLibraryInfoWrapper>();
+bool LibcallLoweringInfoWrapper::doInitialization(Module &M) {
+  Result.init(&getAnalysis<RuntimeLibraryInfoWrapper>().getRTLCI(M));
+  return false;
 }
 
 void LibcallLoweringInfoWrapper::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -69,7 +70,3 @@ void LibcallLoweringInfoWrapper::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 void LibcallLoweringInfoWrapper::releaseMemory() { Result.clear(); }
-
-ModulePass *llvm::createLibcallLoweringInfoWrapper() {
-  return new LibcallLoweringInfoWrapper();
-}

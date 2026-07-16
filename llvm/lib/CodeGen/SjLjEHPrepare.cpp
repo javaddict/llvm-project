@@ -385,7 +385,7 @@ bool SjLjEHPrepareImpl::setupEntryBlockAndCallSites(Function &F) {
       if (Function *Callee = II->getCalledFunction())
         if (Callee->getIntrinsicID() == Intrinsic::donothing) {
           // Remove the NOP invoke.
-          UncondBrInst::Create(II->getNormalDest(), II->getIterator());
+          BranchInst::Create(II->getNormalDest(), II->getIterator());
           II->eraseFromParent();
           continue;
         }

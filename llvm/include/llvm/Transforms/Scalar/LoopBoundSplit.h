@@ -31,11 +31,10 @@ class Loop;
 ///                                  C
 ///                                }
 ///                              }
-class LoopBoundSplitPass : public OptionalPassInfoMixin<LoopBoundSplitPass> {
+class LoopBoundSplitPass : public PassInfoMixin<LoopBoundSplitPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
-                                 LoopStandardAnalysisResults &AR,
-                                 LPMUpdater &U);
+  PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
+                        LoopStandardAnalysisResults &AR, LPMUpdater &U);
 };
 
 } // end namespace llvm

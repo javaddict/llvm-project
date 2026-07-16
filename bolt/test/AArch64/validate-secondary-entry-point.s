@@ -47,16 +47,15 @@ _bar:
 void _start() {}
 
 __attribute__((naked)) void foo() {
-  __asm(
-    "ldr x16, .L_fnptr\n"
-    "blr x16\n"
-    "ret\n"
+  asm("ldr x16, .L_fnptr\n"
+      "blr x16\n"
+      "ret\n"
 
-    "_rodatx:"
-    ".global _rodatx;"
-    ".quad 0;"
-    ".L_fnptr:"
-    ".quad 0;");
+      "_rodatx:"
+      ".global _rodatx;"
+      ".quad 0;"
+      ".L_fnptr:"
+      ".quad 0;");
 }
 
 ;--- ss.c

@@ -27,7 +27,15 @@ void DynamicAllocator::cleanup() {
       assert(!B->isDead());
       assert(B->isInitialized());
       B->invokeDtor();
-      B->removePointers();
+
+      if (B->hasPointers()) {
+        while (B->Pointers) {
+          Pointer *Next = B->Pointers->asBlockPointer().Next;
+          B->Pointers->BS.Pointee = nullptr;
+          B->Pointers = Next;
+        }
+        B->Pointers = nullptr;
+      }
     }
   }
 
@@ -39,11 +47,9 @@ Block *DynamicAllocator::allocate(const Expr *Source, PrimType T,
                                   Form AllocForm) {
   // Create a new descriptor for an array of the specified size and
   // element type.
-  const Descriptor *D =
-      allocateDescriptor(Source, nullptr, T, Descriptor::InlineDescMD,
-                         NumElements, /*IsConst=*/false,
-                         /*IsTemporary=*/false, /*IsMutable=*/false,
-                         /*IsVolatile=*/false);
+  const Descriptor *D = allocateDescriptor(
+      Source, T, Descriptor::InlineDescMD, NumElements, /*IsConst=*/false,
+      /*IsTemporary=*/false, /*IsMutable=*/false);
 
   return allocate(D, EvalID, AllocForm);
 }

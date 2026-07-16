@@ -12,7 +12,6 @@
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/Support/DebugLog.h"
 #include "llvm/Support/MathExtras.h"
 
@@ -104,8 +103,8 @@ OpFoldResult getAsOpFoldResult(Value val) {
 /// Given an array of values, try to extract a constant Attribute from each
 /// value. If this fails, return the original value.
 SmallVector<OpFoldResult> getAsOpFoldResult(ValueRange values) {
-  return llvm::map_to_vector(values,
-                             [](Value v) { return getAsOpFoldResult(v); });
+  return llvm::to_vector(
+      llvm::map_range(values, [](Value v) { return getAsOpFoldResult(v); }));
 }
 
 /// Convert `arrayAttr` to a vector of OpFoldResult.
@@ -123,8 +122,8 @@ OpFoldResult getAsIndexOpFoldResult(MLIRContext *ctx, int64_t val) {
 
 SmallVector<OpFoldResult> getAsIndexOpFoldResult(MLIRContext *ctx,
                                                  ArrayRef<int64_t> values) {
-  return llvm::map_to_vector(
-      values, [ctx](int64_t v) { return getAsIndexOpFoldResult(ctx, v); });
+  return llvm::to_vector(llvm::map_range(
+      values, [ctx](int64_t v) { return getAsIndexOpFoldResult(ctx, v); }));
 }
 
 /// If ofr is a constant integer or an IntegerAttr, return the integer.
@@ -154,14 +153,15 @@ std::optional<int64_t> getConstantIntValue(OpFoldResult ofr) {
 
 std::optional<SmallVector<int64_t>>
 getConstantIntValues(ArrayRef<OpFoldResult> ofrs) {
-  SmallVector<int64_t> res;
-  res.reserve(ofrs.size());
-  for (OpFoldResult ofr : ofrs) {
+  bool failed = false;
+  SmallVector<int64_t> res = llvm::map_to_vector(ofrs, [&](OpFoldResult ofr) {
     auto cv = getConstantIntValue(ofr);
     if (!cv.has_value())
-      return std::nullopt;
-    res.push_back(cv.value());
-  }
+      failed = true;
+    return cv.value_or(0);
+  });
+  if (failed)
+    return std::nullopt;
   return res;
 }
 
@@ -316,12 +316,8 @@ std::optional<APInt> constantTripCount(
            << lb;
     return std::nullopt;
   }
-  if (lb == ub) {
-    // Fast path: LB == UB. The loop has zero iterations.
-    // Note: LB and UB could match at runtime, even though they are different
-    // SSA values. That case cannot be detected here.
+  if (lb == ub)
     return APInt(bitwidth, 0);
-  }
 
   std::optional<std::pair<APInt, bool>> maybeStepCst =
       getConstantAPIntValue(step);
@@ -330,12 +326,10 @@ std::optional<APInt> constantTripCount(
     auto &stepCst = maybeStepCst->first;
     assert(static_cast<int>(stepCst.getBitWidth()) == bitwidth &&
            "step must have the same bitwidth as lb and ub");
-    if (stepCst.isZero()) {
-      // Step is zero. If LB and UB match, we have zero iterations. Otherwise,
-      // we have an infinite number of iterations. We cannot tell for sure which
-      // case applies, so the static trip count is unknown.
-      return std::nullopt;
-    }
+    if (stepCst.isZero())
+      return stepCst;
+    if (stepCst.isNegative())
+      return APInt(bitwidth, 0);
   }
 
   if (isIndex) {
@@ -364,13 +358,7 @@ std::optional<APInt> constantTripCount(
              << (isSigned ? "isSigned" : "isUnsigned") << ")";
       return APInt(bitwidth, 0);
     }
-    // Compute the difference. Since we've already checked that ub > lb, the
-    // result can be interpreted as an unsigned value without overflow concerns.
     diff = ubCst - lbCst;
-    // Convert diff to unsigned. This handles cases like i8: ub=127, lb=-128
-    // where the subtraction yields 255, which wraps to -1 in signed i8 but is
-    // correctly represented as 255 when interpreted as unsigned.
-    diff.setIsUnsigned(true);
   } else {
     if (maybeUbCst)
       return std::nullopt;
@@ -395,21 +383,10 @@ std::optional<APInt> constantTripCount(
     return std::nullopt;
   }
   auto &stepCst = maybeStepCst->first;
-  // For signed loops, a negative step size could indicate an infinite number of
-  // iterations.
-  if (isSigned && stepCst.isSignBitSet()) {
-    LDBG() << "constantTripCount is infinite because step is negative";
-    return std::nullopt;
-  }
-
-  // Both diff and step are non-negative at this point (negative steps are
-  // rejected earlier), so we use unsigned division regardless of the loop
-  // comparison signedness.
-  llvm::APInt tripCount = diff.udiv(stepCst);
-  llvm::APInt remainder = diff.urem(stepCst);
+  llvm::APInt tripCount = isSigned ? diff.sdiv(stepCst) : diff.udiv(stepCst);
+  llvm::APInt remainder = isSigned ? diff.srem(stepCst) : diff.urem(stepCst);
   if (!remainder.isZero())
     tripCount = tripCount + 1;
-
   LDBG() << "constantTripCount found: " << tripCount;
   return tripCount;
 }

@@ -518,8 +518,7 @@ static StringRef getNodeName(const RecordDecl &Node,
   llvm::raw_svector_ostream OS(Scratch);
 
   PrintingPolicy Copy(Node.getASTContext().getPrintingPolicy());
-  Copy.AnonymousTagNameStyle =
-      llvm::to_underlying(PrintingPolicy::AnonymousTagMode::Plain);
+  Copy.AnonymousTagLocations = false;
   Node.printName(OS, Copy);
 
   return OS.str();
@@ -816,8 +815,6 @@ const internal::VariadicDynCastAllOfMatcher<TypeLoc, PointerTypeLoc>
 const internal::VariadicDynCastAllOfMatcher<TypeLoc, ReferenceTypeLoc>
     referenceTypeLoc;
 const internal::VariadicDynCastAllOfMatcher<TypeLoc, ArrayTypeLoc> arrayTypeLoc;
-const internal::VariadicDynCastAllOfMatcher<TypeLoc, FunctionTypeLoc>
-    functionTypeLoc;
 const internal::VariadicDynCastAllOfMatcher<TypeLoc,
                                             TemplateSpecializationTypeLoc>
     templateSpecializationTypeLoc;
@@ -1137,17 +1134,8 @@ AST_TYPELOC_TRAVERSE_MATCHER_DEF(
 
 const internal::VariadicDynCastAllOfMatcher<Stmt, OMPExecutableDirective>
     ompExecutableDirective;
-const internal::VariadicDynCastAllOfMatcher<Stmt, OMPTargetUpdateDirective>
-    ompTargetUpdateDirective;
-const internal::VariadicDynCastAllOfMatcher<Stmt, OMPSplitDirective>
-    ompSplitDirective;
-const internal::VariadicDynCastAllOfMatcher<OMPClause, OMPCountsClause>
-    ompCountsClause;
 const internal::VariadicDynCastAllOfMatcher<OMPClause, OMPDefaultClause>
     ompDefaultClause;
-const internal::VariadicDynCastAllOfMatcher<OMPClause, OMPFromClause>
-    ompFromClause;
-const internal::VariadicDynCastAllOfMatcher<OMPClause, OMPToClause> ompToClause;
 const internal::VariadicDynCastAllOfMatcher<Decl, CXXDeductionGuideDecl>
     cxxDeductionGuideDecl;
 

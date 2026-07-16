@@ -1,4 +1,4 @@
-// RUN: %check_clang_tidy -std=c++14-or-later %s bugprone-nondeterministic-pointer-iteration-order %t -- -- -I%S
+// RUN: %check_clang_tidy %s bugprone-nondeterministic-pointer-iteration-order %t -- -- -I%S -std=c++!4
 
 #include "Inputs/system-header-simulator/sim_set"
 #include "Inputs/system-header-simulator/sim_unordered_set"

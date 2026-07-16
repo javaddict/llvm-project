@@ -633,13 +633,14 @@ struct TensorAllocDemapper : public OpRewritePattern<AllocOp> {
     }
 
     assert(dynSz.empty()); // should have consumed all.
+    rewriter.startOpModification(op);
+    op->setOperands(dynLvlSzs);
+    op.getResult().setType(stt.getDemappedType());
+    rewriter.finalizeOpModification(op);
+    rewriter.setInsertionPointAfter(op);
 
-    // Create a new op to let the MLIR builder calculate the correct metadata.
-    auto allocOp =
-        AllocOp::create(rewriter, loc, stt.getDemappedType(), dynLvlSzs);
-
-    Value t = genRemap(rewriter, stt.getEncoding(), allocOp.getResult());
-    rewriter.replaceOp(op, t);
+    Value t = genRemap(rewriter, stt.getEncoding(), op.getResult());
+    rewriter.replaceAllUsesExcept(op.getResult(), t, t.getDefiningOp());
     return success();
   }
 };

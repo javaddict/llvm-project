@@ -58,7 +58,7 @@ llvm::Type *DirectXTargetCodeGenInfo::getHLSLType(
   switch (ResAttrs.ResourceClass) {
   case llvm::dxil::ResourceClass::UAV:
   case llvm::dxil::ResourceClass::SRV: {
-    // TypedBuffer, RawBuffer and Texture all need element type
+    // TypedBuffer and RawBuffer both need element type
     QualType ContainedTy = ResType->getContainedType();
     if (ContainedTy.isNull())
       return nullptr;
@@ -66,49 +66,18 @@ llvm::Type *DirectXTargetCodeGenInfo::getHLSLType(
     // convert element type
     llvm::Type *ElemType = CGM.getTypes().ConvertTypeForMem(ContainedTy);
 
-    bool IsRawBuffer = ResAttrs.RawBuffer;
-    bool IsTexture =
-        ResAttrs.ResourceDimension != llvm::dxil::ResourceDimension::Unknown;
-    assert((!IsRawBuffer || !IsTexture) && "A resource cannot be both a raw "
-                                           "buffer and a texture.");
-    llvm::StringRef TypeName = "dx.TypedBuffer";
-    if (IsRawBuffer)
-      TypeName = "dx.RawBuffer";
-    else if (IsTexture)
-      TypeName = "dx.Texture";
-
-    SmallVector<unsigned, 4> Ints = {/*IsWriteable*/ ResAttrs.ResourceClass ==
+    llvm::StringRef TypeName =
+        ResAttrs.RawBuffer ? "dx.RawBuffer" : "dx.TypedBuffer";
+    SmallVector<unsigned, 3> Ints = {/*IsWriteable*/ ResAttrs.ResourceClass ==
                                          llvm::dxil::ResourceClass::UAV,
                                      /*IsROV*/ ResAttrs.IsROV};
-    if (!IsRawBuffer) {
+    if (!ResAttrs.RawBuffer) {
       const clang::Type *ElemType = ContainedTy->getUnqualifiedDesugaredType();
       if (ElemType->isVectorType())
         ElemType = cast<clang::VectorType>(ElemType)
                        ->getElementType()
                        ->getUnqualifiedDesugaredType();
       Ints.push_back(/*IsSigned*/ ElemType->isSignedIntegerType());
-    }
-
-    if (IsTexture) {
-      // Map ResourceDimension to dxil::ResourceKind
-      llvm::dxil::ResourceKind RK = llvm::dxil::ResourceKind::Invalid;
-      switch (ResAttrs.ResourceDimension) {
-      case llvm::dxil::ResourceDimension::Dim1D:
-        RK = llvm::dxil::ResourceKind::Texture1D;
-        break;
-      case llvm::dxil::ResourceDimension::Dim2D:
-        RK = llvm::dxil::ResourceKind::Texture2D;
-        break;
-      case llvm::dxil::ResourceDimension::Dim3D:
-        RK = llvm::dxil::ResourceKind::Texture3D;
-        break;
-      case llvm::dxil::ResourceDimension::Cube:
-        RK = llvm::dxil::ResourceKind::TextureCube;
-        break;
-      default:
-        llvm_unreachable("Unsupported resource dimension for textur.");
-      }
-      Ints.push_back(static_cast<unsigned>(RK));
     }
 
     return llvm::TargetExtType::get(Ctx, TypeName, {ElemType}, Ints);
@@ -127,7 +96,8 @@ llvm::Type *DirectXTargetCodeGenInfo::getHLSLType(
     return llvm::TargetExtType::get(Ctx, "dx.CBuffer", {BufferLayoutTy});
   }
   case llvm::dxil::ResourceClass::Sampler:
-    return llvm::TargetExtType::get(Ctx, "dx.Sampler", {}, {0});
+    llvm_unreachable("dx.Sampler handles are not implemented yet");
+    break;
   }
   llvm_unreachable("Unknown llvm::dxil::ResourceClass enum");
 }

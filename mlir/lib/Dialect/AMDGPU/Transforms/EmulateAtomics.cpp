@@ -123,7 +123,6 @@ LogicalResult RawBufferAtomicByCasPattern<AtomicOp, ArithOp>::matchAndRewrite(
   Block *currentBlock = rewriter.getInsertionBlock();
   Block *afterAtomic =
       rewriter.splitBlock(currentBlock, rewriter.getInsertionPoint());
-  afterAtomic->addArgument(dataType, loc);
   Block *loopBlock = rewriter.createBlock(afterAtomic, {dataType}, {loc});
 
   rewriter.setInsertionPointToEnd(currentBlock);
@@ -158,9 +157,9 @@ LogicalResult RawBufferAtomicByCasPattern<AtomicOp, ArithOp>::matchAndRewrite(
   Value canLeave =
       arith::CmpIOp::create(rewriter, loc, arith::CmpIPredicate::eq,
                             atomicResForCompare, prevLoadForCompare);
-  cf::CondBranchOp::create(rewriter, loc, canLeave, afterAtomic,
-                           ValueRange{prevLoad}, loopBlock, atomicRes);
-  rewriter.replaceOp(atomicOp, ValueRange{afterAtomic->getArgument(0)});
+  cf::CondBranchOp::create(rewriter, loc, canLeave, afterAtomic, ValueRange{},
+                           loopBlock, atomicRes);
+  rewriter.eraseOp(atomicOp);
   return success();
 }
 

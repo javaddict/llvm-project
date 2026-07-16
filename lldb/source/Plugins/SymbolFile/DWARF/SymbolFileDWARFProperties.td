@@ -1,6 +1,6 @@
 include "../../../../include/lldb/Core/PropertiesBase.td"
 
-let Definition = "symbolfiledwarf", Path = "plugin.symbol-file.dwarf" in {
+let Definition = "symbolfiledwarf" in {
   def IgnoreIndexes: Property<"ignore-file-indexes", "Boolean">,
     Global,
     DefaultFalse,

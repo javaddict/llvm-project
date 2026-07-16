@@ -768,8 +768,7 @@ const Init *ListInit::convertInitializerTo(const RecTy *Ty) const {
 const Record *ListInit::getElementAsRecord(unsigned Idx) const {
   const auto *DI = dyn_cast<DefInit>(getElement(Idx));
   if (!DI)
-    PrintFatalError("expected record type for the element with index " +
-                    Twine(Idx) + " in list " + getAsString());
+    PrintFatalError("Expected record in list!");
   return DI->getDef();
 }
 
@@ -810,7 +809,7 @@ std::string ListInit::getAsString() const {
 }
 
 const Init *OpInit::getBit(unsigned Bit) const {
-  if (isa<BitRecTy>(getType()))
+  if (getType() == BitRecTy::get(getRecordKeeper()))
     return this;
   return VarBitInit::get(this, Bit);
 }
@@ -1788,57 +1787,6 @@ static const Init *FilterHelper(const Init *LHS, const Init *MHS,
   return nullptr;
 }
 
-static const Init *SortHelper(const Init *LHS, const Init *MHS, const Init *RHS,
-                              const RecTy *Type, const Record *CurRec) {
-  const auto *MHSl = dyn_cast<ListInit>(MHS);
-  if (!MHSl)
-    return nullptr;
-
-  RecordKeeper &RK = LHS->getRecordKeeper();
-  using KV = std::pair<const Init *, const Init *>;
-  SmallVector<KV, 8> KeyedList;
-
-  for (const Init *Item : MHSl->getElements()) {
-    const Init *Key = ItemApply(LHS, Item, RHS, CurRec);
-    if (!Key)
-      return nullptr;
-    KeyedList.emplace_back(Key, Item);
-  }
-
-  if (KeyedList.empty())
-    return ListInit::get({}, cast<ListRecTy>(Type)->getElementType());
-
-  // Determine key type from the first element; all keys must agree.
-  bool UseInt =
-      dyn_cast_or_null<IntInit>(KeyedList[0].first->convertInitializerTo(
-          IntRecTy::get(RK))) != nullptr;
-  for (auto &[Key, Item] : KeyedList) {
-    if (UseInt) {
-      if (!dyn_cast_or_null<IntInit>(
-              Key->convertInitializerTo(IntRecTy::get(RK))))
-        return nullptr;
-    } else {
-      if (!isa<StringInit>(Key))
-        return nullptr;
-    }
-  }
-
-  llvm::stable_sort(KeyedList, [&RK, UseInt](const KV &A, const KV &B) {
-    if (UseInt)
-      return cast<IntInit>(A.first->convertInitializerTo(IntRecTy::get(RK)))
-                 ->getValue() <
-             cast<IntInit>(B.first->convertInitializerTo(IntRecTy::get(RK)))
-                 ->getValue();
-    return cast<StringInit>(A.first)->getValue() <
-           cast<StringInit>(B.first)->getValue();
-  });
-
-  SmallVector<const Init *, 8> Result;
-  for (auto &[Key, Item] : KeyedList)
-    Result.push_back(Item);
-  return ListInit::get(Result, cast<ListRecTy>(Type)->getElementType());
-}
-
 const Init *TernOpInit::Fold(const Record *CurRec) const {
   RecordKeeper &RK = getRecordKeeper();
   switch (getOpcode()) {
@@ -1892,12 +1840,6 @@ const Init *TernOpInit::Fold(const Record *CurRec) const {
 
   case FILTER: {
     if (const Init *Result = FilterHelper(LHS, MHS, RHS, getType(), CurRec))
-      return Result;
-    break;
-  }
-
-  case SORT: {
-    if (const Init *Result = SortHelper(LHS, MHS, RHS, getType(), CurRec))
       return Result;
     break;
   }
@@ -2061,7 +2003,7 @@ const Init *TernOpInit::resolveReferences(Resolver &R) const {
   const Init *mhs = MHS->resolveReferences(R);
   const Init *rhs;
 
-  if (getOpcode() == FOREACH || getOpcode() == FILTER || getOpcode() == SORT) {
+  if (getOpcode() == FOREACH || getOpcode() == FILTER) {
     ShadowResolver SR(R);
     SR.addShadow(lhs);
     rhs = RHS->resolveReferences(SR);
@@ -2082,10 +2024,6 @@ std::string TernOpInit::getAsString() const {
   case DAG: Result = "!dag"; break;
   case FILTER: Result = "!filter"; UnquotedLHS = true; break;
   case FOREACH: Result = "!foreach"; UnquotedLHS = true; break;
-  case SORT:
-    Result = "!sort";
-    UnquotedLHS = true;
-    break;
   case IF: Result = "!if"; break;
   case RANGE:
     Result = "!range";
@@ -2166,8 +2104,6 @@ const Init *FoldOpInit::resolveReferences(Resolver &R) const {
 }
 
 const Init *FoldOpInit::getBit(unsigned Bit) const {
-  if (isa<BitRecTy>(getType()))
-    return this;
   return VarBitInit::get(this, Bit);
 }
 
@@ -2372,6 +2308,10 @@ const Init *InstancesOpInit::resolveReferences(Resolver &R) const {
   return this;
 }
 
+const Init *InstancesOpInit::getBit(unsigned Bit) const {
+  return VarBitInit::get(this, Bit);
+}
+
 std::string InstancesOpInit::getAsString() const {
   return "!instances<" + Type->getAsString() + ">(" + Regex->getAsString() +
          ")";
@@ -2388,7 +2328,7 @@ const RecTy *TypedInit::getFieldType(const StringInit *FieldName) const {
 }
 
 const Init *TypedInit::convertInitializerTo(const RecTy *Ty) const {
-  if (getType()->typeIsA(Ty))
+  if (getType() == Ty || getType()->typeIsA(Ty))
     return this;
 
   if (isa<BitRecTy>(getType()) && isa<BitsRecTy>(Ty) &&
@@ -2417,7 +2357,7 @@ TypedInit::convertInitializerBitRange(ArrayRef<unsigned> Bits) const {
 
 const Init *TypedInit::getCastTo(const RecTy *Ty) const {
   // Handle the common case quickly
-  if (getType()->typeIsA(Ty))
+  if (getType() == Ty || getType()->typeIsA(Ty))
     return this;
 
   if (const Init *Converted = convertInitializerTo(Ty)) {
@@ -2451,7 +2391,7 @@ StringRef VarInit::getName() const {
 }
 
 const Init *VarInit::getBit(unsigned Bit) const {
-  if (isa<BitRecTy>(getType()))
+  if (getType() == BitRecTy::get(getRecordKeeper()))
     return this;
   return VarBitInit::get(this, Bit);
 }
@@ -2644,7 +2584,7 @@ const FieldInit *FieldInit::get(const Init *R, const StringInit *FN) {
 }
 
 const Init *FieldInit::getBit(unsigned Bit) const {
-  if (isa<BitRecTy>(getType()))
+  if (getType() == BitRecTy::get(getRecordKeeper()))
     return this;
   return VarBitInit::get(this, Bit);
 }
@@ -2791,8 +2731,6 @@ std::string CondOpInit::getAsString() const {
 }
 
 const Init *CondOpInit::getBit(unsigned Bit) const {
-  if (isa<BitRecTy>(getType()))
-    return this;
   return VarBitInit::get(this, Bit);
 }
 
@@ -2932,7 +2870,7 @@ StringRef RecordVal::getName() const {
 }
 
 std::string RecordVal::getPrintType() const {
-  if (isa<StringRecTy>(getType())) {
+  if (getType() == StringRecTy::get(getRecordKeeper())) {
     if (const auto *StrInit = dyn_cast<StringInit>(Value)) {
       if (StrInit->hasCodeFormat())
         return "code";
@@ -2952,11 +2890,10 @@ bool RecordVal::setValue(const Init *V) {
     return false;
   }
 
-  const Init *NewValue = V->getCastTo(getType());
-  if (!NewValue)
+  Value = V->getCastTo(getType());
+  if (!Value)
     return true;
 
-  Value = NewValue;
   assert(!isa<TypedInit>(Value) ||
          cast<TypedInit>(Value)->getType()->typeIsA(getType()));
   if (const auto *BTy = dyn_cast<BitsRecTy>(getType())) {

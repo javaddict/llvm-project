@@ -21,7 +21,7 @@ enum class StructuralHashOptions {
 
 /// Printer pass for  StructuralHashes
 class StructuralHashPrinterPass
-    : public RequiredPassInfoMixin<StructuralHashPrinterPass> {
+    : public PassInfoMixin<StructuralHashPrinterPass> {
   raw_ostream &OS;
   const StructuralHashOptions Options;
 
@@ -30,7 +30,9 @@ public:
                                      StructuralHashOptions Options)
       : OS(OS), Options(Options) {}
 
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
+
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

@@ -10,6 +10,7 @@
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_BUGPRONE_DYNAMICSTATICINITIALIZERSCHECK_H
 
 #include "../ClangTidyCheck.h"
+#include "../FileExtensionsSet.h"
 
 namespace clang::tidy::bugprone {
 
@@ -22,6 +23,9 @@ public:
   }
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
+
+private:
+  FileExtensionsSet HeaderFileExtensions;
 };
 
 } // namespace clang::tidy::bugprone

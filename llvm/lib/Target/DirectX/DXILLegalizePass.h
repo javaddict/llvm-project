@@ -13,7 +13,7 @@
 
 namespace llvm {
 
-class DXILLegalizePass : public OptionalPassInfoMixin<DXILLegalizePass> {
+class DXILLegalizePass : public PassInfoMixin<DXILLegalizePass> {
 public:
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };

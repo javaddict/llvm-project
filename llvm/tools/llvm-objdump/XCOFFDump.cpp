@@ -129,6 +129,7 @@ void XCOFFDumper::checkAndPrintAuxHeaderParseError(
   if (PartialFieldOffset < AuxSize) {
     std::string Buf;
     raw_string_ostream OS(Buf);
+    OS.flush();
     OS << FormattedString("Raw data", 0, FormattedString::JustifyLeft) << " ("
        << format_bytes(
               ArrayRef<uint8_t>(reinterpret_cast<const uint8_t *>(&AuxHeader) +

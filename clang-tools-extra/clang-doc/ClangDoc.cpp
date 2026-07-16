@@ -24,7 +24,7 @@ namespace doc {
 
 class MapperActionFactory : public tooling::FrontendActionFactory {
 public:
-  explicit MapperActionFactory(ClangDocContext CDCtx) : CDCtx(CDCtx) {}
+  MapperActionFactory(ClangDocContext CDCtx) : CDCtx(CDCtx) {}
   std::unique_ptr<FrontendAction> create() override;
 
 private:
@@ -34,7 +34,7 @@ private:
 std::unique_ptr<FrontendAction> MapperActionFactory::create() {
   class ClangDocAction : public clang::ASTFrontendAction {
   public:
-    explicit ClangDocAction(ClangDocContext CDCtx) : CDCtx(CDCtx) {}
+    ClangDocAction(ClangDocContext CDCtx) : CDCtx(CDCtx) {}
 
     std::unique_ptr<clang::ASTConsumer>
     CreateASTConsumer(clang::CompilerInstance &Compiler,

@@ -21,7 +21,7 @@ environment variable. This works with any program that uses liboffload.
 
 ```sh
 $ OFFLOAD_TRACE=1 ./offload.unittests
----> olInit(nullptr)-> OL_SUCCESS
+---> olInit()-> OL_SUCCESS
 # etc
 ```
 

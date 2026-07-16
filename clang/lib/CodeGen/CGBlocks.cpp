@@ -1028,8 +1028,8 @@ llvm::Value *CodeGenFunction::EmitBlockLiteral(const CGBlockInfo &blockInfo) {
     } else {
       // Fake up a new variable so that EmitScalarInit doesn't think
       // we're referring to the variable in its own initializer.
-      auto *BlockFieldPseudoVar = ImplicitParamDecl::Create(
-          getContext(), type, ImplicitParamKind::Other);
+      ImplicitParamDecl BlockFieldPseudoVar(getContext(), type,
+                                            ImplicitParamKind::Other);
 
       // We use one of these or the other depending on whether the
       // reference is nested.
@@ -1042,7 +1042,7 @@ llvm::Value *CodeGenFunction::EmitBlockLiteral(const CGBlockInfo &blockInfo) {
       // FIXME: Pass a specific location for the expr init so that the store is
       // attributed to a reasonable location - otherwise it may be attributed to
       // locations of subexpressions in the initialization.
-      EmitExprAsInit(&l2r, BlockFieldPseudoVar,
+      EmitExprAsInit(&l2r, &BlockFieldPseudoVar,
                      MakeAddrLValue(blockField, type, AlignmentSource::Decl),
                      /*captured by init*/ false);
     }
@@ -1418,8 +1418,7 @@ void CodeGenFunction::setBlockContextParameter(const ImplicitParamDecl *D,
 
   // Allocate a stack slot like for any local variable to guarantee optimal
   // debug info at -O0. The mem2reg pass will eliminate it when optimizing.
-  RawAddress alloc =
-      CreateMemTempWithoutCast(D->getType(), D->getName() + ".addr");
+  RawAddress alloc = CreateMemTemp(D->getType(), D->getName() + ".addr");
   Builder.CreateStore(arg, alloc);
   if (CGDebugInfo *DI = getDebugInfo()) {
     if (CGM.getCodeGenOpts().hasReducedDebugInfo()) {
@@ -1491,10 +1490,10 @@ llvm::Function *CodeGenFunction::GenerateBlockFunction(
 
   const IdentifierInfo *II = &CGM.getContext().Idents.get(".block_descriptor");
 
-  auto *SelfDecl = ImplicitParamDecl::Create(
-      getContext(), const_cast<BlockDecl *>(blockDecl), SourceLocation(), II,
-      selfTy, ImplicitParamKind::ObjCSelf);
-  args.push_back(SelfDecl);
+  ImplicitParamDecl SelfDecl(getContext(), const_cast<BlockDecl *>(blockDecl),
+                             SourceLocation(), II, selfTy,
+                             ImplicitParamKind::ObjCSelf);
+  args.push_back(&SelfDecl);
 
   // Now add the rest of the parameters.
   args.append(blockDecl->param_begin(), blockDecl->param_end());
@@ -1558,8 +1557,8 @@ llvm::Function *CodeGenFunction::GenerateBlockFunction(
     if (!capture.isConstant()) continue;
 
     CharUnits align = getContext().getDeclAlign(variable);
-    Address alloca = CreateMemTempWithoutCast(variable->getType(), align,
-                                              "block.captured-const");
+    Address alloca =
+      CreateMemTemp(variable->getType(), align, "block.captured-const");
 
     Builder.CreateStore(capture.getConstant(), alloca);
 
@@ -1935,12 +1934,12 @@ CodeGenFunction::GenerateCopyHelperFunction(const CGBlockInfo &blockInfo) {
 
   QualType ReturnTy = C.VoidTy;
 
-  auto *DstDecl =
-      ImplicitParamDecl::Create(C, C.VoidPtrTy, ImplicitParamKind::Other);
-  auto *SrcDecl =
-      ImplicitParamDecl::Create(C, C.VoidPtrTy, ImplicitParamKind::Other);
+  FunctionArgList args;
+  ImplicitParamDecl DstDecl(C, C.VoidPtrTy, ImplicitParamKind::Other);
+  args.push_back(&DstDecl);
+  ImplicitParamDecl SrcDecl(C, C.VoidPtrTy, ImplicitParamKind::Other);
+  args.push_back(&SrcDecl);
 
-  FunctionArgList args{DstDecl, SrcDecl};
   const CGFunctionInfo &FI =
       CGM.getTypes().arrangeBuiltinFunctionDeclaration(ReturnTy, args);
 
@@ -1954,16 +1953,20 @@ CodeGenFunction::GenerateCopyHelperFunction(const CGBlockInfo &blockInfo) {
   if (CGM.supportsCOMDAT())
     Fn->setComdat(CGM.getModule().getOrInsertComdat(FuncName));
 
+  SmallVector<QualType, 2> ArgTys;
+  ArgTys.push_back(C.VoidPtrTy);
+  ArgTys.push_back(C.VoidPtrTy);
+
   setBlockHelperAttributesVisibility(blockInfo.CapturesNonExternalType, Fn, FI,
                                      CGM);
   StartFunction(GlobalDecl(), ReturnTy, Fn, FI, args);
   auto AL = ApplyDebugLocation::CreateArtificial(*this);
 
-  Address src = GetAddrOfLocalVar(SrcDecl);
+  Address src = GetAddrOfLocalVar(&SrcDecl);
   src = Address(Builder.CreateLoad(src), blockInfo.StructureType,
                 blockInfo.BlockAlign);
 
-  Address dst = GetAddrOfLocalVar(DstDecl);
+  Address dst = GetAddrOfLocalVar(&DstDecl);
   dst = Address(Builder.CreateLoad(dst), blockInfo.StructureType,
                 blockInfo.BlockAlign);
 
@@ -2128,10 +2131,10 @@ CodeGenFunction::GenerateDestroyHelperFunction(const CGBlockInfo &blockInfo) {
 
   QualType ReturnTy = C.VoidTy;
 
-  auto *SrcDecl =
-      ImplicitParamDecl::Create(C, C.VoidPtrTy, ImplicitParamKind::Other);
+  FunctionArgList args;
+  ImplicitParamDecl SrcDecl(C, C.VoidPtrTy, ImplicitParamKind::Other);
+  args.push_back(&SrcDecl);
 
-  FunctionArgList args{SrcDecl};
   const CGFunctionInfo &FI =
       CGM.getTypes().arrangeBuiltinFunctionDeclaration(ReturnTy, args);
 
@@ -2145,6 +2148,9 @@ CodeGenFunction::GenerateDestroyHelperFunction(const CGBlockInfo &blockInfo) {
   if (CGM.supportsCOMDAT())
     Fn->setComdat(CGM.getModule().getOrInsertComdat(FuncName));
 
+  SmallVector<QualType, 1> ArgTys;
+  ArgTys.push_back(C.VoidPtrTy);
+
   setBlockHelperAttributesVisibility(blockInfo.CapturesNonExternalType, Fn, FI,
                                      CGM);
   StartFunction(GlobalDecl(), ReturnTy, Fn, FI, args);
@@ -2152,7 +2158,7 @@ CodeGenFunction::GenerateDestroyHelperFunction(const CGBlockInfo &blockInfo) {
 
   auto AL = ApplyDebugLocation::CreateArtificial(*this);
 
-  Address src = GetAddrOfLocalVar(SrcDecl);
+  Address src = GetAddrOfLocalVar(&SrcDecl);
   src = Address(Builder.CreateLoad(src), blockInfo.StructureType,
                 blockInfo.BlockAlign);
 
@@ -2394,12 +2400,13 @@ generateByrefCopyHelper(CodeGenFunction &CGF, const BlockByrefInfo &byrefInfo,
 
   QualType ReturnTy = Context.VoidTy;
 
-  auto *Dst = ImplicitParamDecl::Create(Context, Context.VoidPtrTy,
-                                        ImplicitParamKind::Other);
-  auto *Src = ImplicitParamDecl::Create(Context, Context.VoidPtrTy,
-                                        ImplicitParamKind::Other);
+  FunctionArgList args;
+  ImplicitParamDecl Dst(Context, Context.VoidPtrTy, ImplicitParamKind::Other);
+  args.push_back(&Dst);
 
-  FunctionArgList args{Dst, Src};
+  ImplicitParamDecl Src(Context, Context.VoidPtrTy, ImplicitParamKind::Other);
+  args.push_back(&Src);
+
   const CGFunctionInfo &FI =
       CGF.CGM.getTypes().arrangeBuiltinFunctionDeclaration(ReturnTy, args);
 
@@ -2411,6 +2418,10 @@ generateByrefCopyHelper(CodeGenFunction &CGF, const BlockByrefInfo &byrefInfo,
     llvm::Function::Create(LTy, llvm::GlobalValue::InternalLinkage,
                            "__Block_byref_object_copy_", &CGF.CGM.getModule());
 
+  SmallVector<QualType, 2> ArgTys;
+  ArgTys.push_back(Context.VoidPtrTy);
+  ArgTys.push_back(Context.VoidPtrTy);
+
   CGF.CGM.SetInternalFunctionAttributes(GlobalDecl(), Fn, FI);
 
   CGF.StartFunction(GlobalDecl(), ReturnTy, Fn, FI, args);
@@ -2419,14 +2430,14 @@ generateByrefCopyHelper(CodeGenFunction &CGF, const BlockByrefInfo &byrefInfo,
 
   if (generator.needsCopy()) {
     // dst->x
-    Address destField = CGF.GetAddrOfLocalVar(Dst);
+    Address destField = CGF.GetAddrOfLocalVar(&Dst);
     destField = Address(CGF.Builder.CreateLoad(destField), byrefInfo.Type,
                         byrefInfo.ByrefAlignment);
     destField =
         CGF.emitBlockByrefAddress(destField, byrefInfo, false, "dest-object");
 
     // src->x
-    Address srcField = CGF.GetAddrOfLocalVar(Src);
+    Address srcField = CGF.GetAddrOfLocalVar(&Src);
     srcField = Address(CGF.Builder.CreateLoad(srcField), byrefInfo.Type,
                        byrefInfo.ByrefAlignment);
     srcField =
@@ -2456,10 +2467,11 @@ generateByrefDisposeHelper(CodeGenFunction &CGF,
   ASTContext &Context = CGF.getContext();
   QualType R = Context.VoidTy;
 
-  auto *Src = ImplicitParamDecl::Create(CGF.getContext(), Context.VoidPtrTy,
-                                        ImplicitParamKind::Other);
+  FunctionArgList args;
+  ImplicitParamDecl Src(CGF.getContext(), Context.VoidPtrTy,
+                        ImplicitParamKind::Other);
+  args.push_back(&Src);
 
-  FunctionArgList args{Src};
   const CGFunctionInfo &FI =
     CGF.CGM.getTypes().arrangeBuiltinFunctionDeclaration(R, args);
 
@@ -2472,6 +2484,9 @@ generateByrefDisposeHelper(CodeGenFunction &CGF,
                            "__Block_byref_object_dispose_",
                            &CGF.CGM.getModule());
 
+  SmallVector<QualType, 1> ArgTys;
+  ArgTys.push_back(Context.VoidPtrTy);
+
   CGF.CGM.SetInternalFunctionAttributes(GlobalDecl(), Fn, FI);
 
   CGF.StartFunction(GlobalDecl(), R, Fn, FI, args);
@@ -2479,7 +2494,7 @@ generateByrefDisposeHelper(CodeGenFunction &CGF,
   auto AL = ApplyDebugLocation::CreateArtificial(CGF);
 
   if (generator.needsDispose()) {
-    Address addr = CGF.GetAddrOfLocalVar(Src);
+    Address addr = CGF.GetAddrOfLocalVar(&Src);
     addr = Address(CGF.Builder.CreateLoad(addr), byrefInfo.Type,
                    byrefInfo.ByrefAlignment);
     addr = CGF.emitBlockByrefAddress(addr, byrefInfo, false, "object");

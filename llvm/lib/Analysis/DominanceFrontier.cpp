@@ -21,8 +21,9 @@ using namespace llvm;
 
 namespace llvm {
 
-template class LLVM_TEMPLATE_ABI DominanceFrontierBase<BasicBlock, false>;
-template class LLVM_TEMPLATE_ABI DominanceFrontierBase<BasicBlock, true>;
+template class DominanceFrontierBase<BasicBlock, false>;
+template class DominanceFrontierBase<BasicBlock, true>;
+template class ForwardDominanceFrontierBase<BasicBlock>;
 
 } // end namespace llvm
 

@@ -153,23 +153,20 @@ bool MipsInstructionSelector::materialize32BitImm(Register DestReg, APInt Imm,
     MachineInstr *Inst =
         B.buildInstr(Mips::ORi, {DestReg}, {Register(Mips::ZERO)})
             .addImm(Imm.getLoBits(16).getLimitedValue());
-    constrainSelectedInstRegOperands(*Inst, TII, TRI, RBI);
-    return true;
+    return constrainSelectedInstRegOperands(*Inst, TII, TRI, RBI);
   }
   // Lui places immediate in high 16 bits and sets low 16 bits to zero.
   if (Imm.getLoBits(16).isZero()) {
     MachineInstr *Inst = B.buildInstr(Mips::LUi, {DestReg}, {})
                              .addImm(Imm.getHiBits(16).getLimitedValue());
-    constrainSelectedInstRegOperands(*Inst, TII, TRI, RBI);
-    return true;
+    return constrainSelectedInstRegOperands(*Inst, TII, TRI, RBI);
   }
   // ADDiu sign extends immediate. Used for values with 1s in high 17 bits.
   if (Imm.isSignedIntN(16)) {
     MachineInstr *Inst =
         B.buildInstr(Mips::ADDiu, {DestReg}, {Register(Mips::ZERO)})
             .addImm(Imm.getLoBits(16).getLimitedValue());
-    constrainSelectedInstRegOperands(*Inst, TII, TRI, RBI);
-    return true;
+    return constrainSelectedInstRegOperands(*Inst, TII, TRI, RBI);
   }
   // Values that cannot be materialized with single immediate instruction.
   Register LUiReg = B.getMRI()->createVirtualRegister(&Mips::GPR32RegClass);
@@ -177,8 +174,10 @@ bool MipsInstructionSelector::materialize32BitImm(Register DestReg, APInt Imm,
                           .addImm(Imm.getHiBits(16).getLimitedValue());
   MachineInstr *ORi = B.buildInstr(Mips::ORi, {DestReg}, {LUiReg})
                           .addImm(Imm.getLoBits(16).getLimitedValue());
-  constrainSelectedInstRegOperands(*LUi, TII, TRI, RBI);
-  constrainSelectedInstRegOperands(*ORi, TII, TRI, RBI);
+  if (!constrainSelectedInstRegOperands(*LUi, TII, TRI, RBI))
+    return false;
+  if (!constrainSelectedInstRegOperands(*ORi, TII, TRI, RBI))
+    return false;
   return true;
 }
 
@@ -269,7 +268,8 @@ bool MipsInstructionSelector::buildUnalignedStore(
           .add(BaseAddr)
           .addImm(Offset)
           .addMemOperand(MMO);
-  constrainSelectedInstRegOperands(*NewInst, TII, TRI, RBI);
+  if (!constrainSelectedInstRegOperands(*NewInst, TII, TRI, RBI))
+    return false;
   return true;
 }
 
@@ -283,7 +283,8 @@ bool MipsInstructionSelector::buildUnalignedLoad(
           .addImm(Offset)
           .addUse(TiedDest)
           .addMemOperand(*I.memoperands_begin());
-  constrainSelectedInstRegOperands(*NewInst, TII, TRI, RBI);
+  if (!constrainSelectedInstRegOperands(*NewInst, TII, TRI, RBI))
+    return false;
   return true;
 }
 
@@ -306,7 +307,8 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
                             .add(I.getOperand(0))
                             .add(I.getOperand(1))
                             .add(I.getOperand(2));
-    constrainSelectedInstRegOperands(*Mul, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*Mul, TII, TRI, RBI))
+      return false;
     Mul->getOperand(3).setIsDead(true);
     Mul->getOperand(4).setIsDead(true);
 
@@ -329,12 +331,14 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
                       .addDef(PseudoMULTuReg)
                       .add(I.getOperand(1))
                       .add(I.getOperand(2));
-    constrainSelectedInstRegOperands(*PseudoMULTu, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*PseudoMULTu, TII, TRI, RBI))
+      return false;
 
     PseudoMove = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Mips::PseudoMFHI))
                      .addDef(I.getOperand(0).getReg())
                      .addUse(PseudoMULTuReg);
-    constrainSelectedInstRegOperands(*PseudoMove, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*PseudoMove, TII, TRI, RBI))
+      return false;
 
     I.eraseFromParent();
     return true;
@@ -369,14 +373,16 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
                             .addDef(JTIndex)
                             .addUse(I.getOperand(2).getReg())
                             .addImm(Log2_32(EntrySize));
-    constrainSelectedInstRegOperands(*SLL, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*SLL, TII, TRI, RBI))
+      return false;
 
     Register DestAddress = MRI.createVirtualRegister(&Mips::GPR32RegClass);
     MachineInstr *ADDu = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Mips::ADDu))
                              .addDef(DestAddress)
                              .addUse(I.getOperand(0).getReg())
                              .addUse(JTIndex);
-    constrainSelectedInstRegOperands(*ADDu, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*ADDu, TII, TRI, RBI))
+      return false;
 
     Register Dest = MRI.createVirtualRegister(&Mips::GPR32RegClass);
     MachineInstr *LW =
@@ -386,7 +392,8 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
             .addJumpTableIndex(I.getOperand(1).getIndex(), MipsII::MO_ABS_LO)
             .addMemOperand(MF.getMachineMemOperand(
                 MachinePointerInfo(), MachineMemOperand::MOLoad, 4, Align(4)));
-    constrainSelectedInstRegOperands(*LW, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*LW, TII, TRI, RBI))
+      return false;
 
     if (MF.getTarget().isPositionIndependent()) {
       Register DestTmp = MRI.createVirtualRegister(&Mips::GPR32RegClass);
@@ -396,13 +403,15 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
                                .addUse(DestTmp)
                                .addUse(MF.getInfo<MipsFunctionInfo>()
                                            ->getGlobalBaseRegForGlobalISel(MF));
-      constrainSelectedInstRegOperands(*ADDu, TII, TRI, RBI);
+      if (!constrainSelectedInstRegOperands(*ADDu, TII, TRI, RBI))
+        return false;
     }
 
     MachineInstr *Branch =
         BuildMI(MBB, I, I.getDebugLoc(), TII.get(Mips::PseudoIndirectBranch))
             .addUse(Dest);
-    constrainSelectedInstRegOperands(*Branch, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*Branch, TII, TRI, RBI))
+      return false;
 
     I.eraseFromParent();
     return true;
@@ -509,13 +518,15 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
                     .addDef(HILOReg)
                     .add(I.getOperand(1))
                     .add(I.getOperand(2));
-    constrainSelectedInstRegOperands(*PseudoDIV, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*PseudoDIV, TII, TRI, RBI))
+      return false;
 
     PseudoMove = BuildMI(MBB, I, I.getDebugLoc(),
                          TII.get(IsDiv ? Mips::PseudoMFLO : Mips::PseudoMFHI))
                      .addDef(I.getOperand(0).getReg())
                      .addUse(HILOReg);
-    constrainSelectedInstRegOperands(*PseudoMove, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*PseudoMove, TII, TRI, RBI))
+      return false;
 
     I.eraseFromParent();
     return true;
@@ -546,13 +557,15 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
                                   .addDef(Lo)
                                   .addUse(Src)
                                   .addImm(0);
-    constrainSelectedInstRegOperands(*ExtractLo, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*ExtractLo, TII, TRI, RBI))
+      return false;
 
     MachineInstr *ExtractHi = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Opcode))
                                   .addDef(Hi)
                                   .addUse(Src)
                                   .addImm(1);
-    constrainSelectedInstRegOperands(*ExtractHi, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*ExtractHi, TII, TRI, RBI))
+      return false;
 
     I.eraseFromParent();
     return true;
@@ -588,7 +601,8 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
 
       MachineInstrBuilder MTC1 =
           B.buildInstr(Mips::MTC1, {I.getOperand(0).getReg()}, {GPRReg});
-      MTC1.constrainAllUses(TII, TRI, RBI);
+      if (!MTC1.constrainAllUses(TII, TRI, RBI))
+        return false;
     }
     if (Size == 64) {
       Register GPRRegHigh = MRI.createVirtualRegister(&Mips::GPR32RegClass);
@@ -602,7 +616,8 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
       MachineInstrBuilder PairF64 = B.buildInstr(
           STI.isFP64bit() ? Mips::BuildPairF64_64 : Mips::BuildPairF64,
           {I.getOperand(0).getReg()}, {GPRRegLow, GPRRegHigh});
-      PairF64.constrainAllUses(TII, TRI, RBI);
+      if (!PairF64.constrainAllUses(TII, TRI, RBI))
+        return false;
     }
 
     I.eraseFromParent();
@@ -635,12 +650,14 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
     MachineInstr *Trunc = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Opcode))
                 .addDef(ResultInFPR)
                 .addUse(I.getOperand(1).getReg());
-    constrainSelectedInstRegOperands(*Trunc, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*Trunc, TII, TRI, RBI))
+      return false;
 
     MachineInstr *Move = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Mips::MFC1))
                              .addDef(I.getOperand(0).getReg())
                              .addUse(ResultInFPR);
-    constrainSelectedInstRegOperands(*Move, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*Move, TII, TRI, RBI))
+      return false;
 
     I.eraseFromParent();
     return true;
@@ -664,7 +681,8 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
       LWGOT->addMemOperand(
           MF, MF.getMachineMemOperand(MachinePointerInfo::getGOT(MF),
                                       MachineMemOperand::MOLoad, 4, Align(4)));
-      constrainSelectedInstRegOperands(*LWGOT, TII, TRI, RBI);
+      if (!constrainSelectedInstRegOperands(*LWGOT, TII, TRI, RBI))
+        return false;
 
       if (GVal->hasLocalLinkage()) {
         Register LWGOTDef = MRI.createVirtualRegister(&Mips::GPR32RegClass);
@@ -676,7 +694,8 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
                 .addReg(LWGOTDef)
                 .addGlobalAddress(GVal);
         ADDiu->getOperand(2).setTargetFlags(MipsII::MO_ABS_LO);
-        constrainSelectedInstRegOperands(*ADDiu, TII, TRI, RBI);
+        if (!constrainSelectedInstRegOperands(*ADDiu, TII, TRI, RBI))
+          return false;
       }
     } else {
       Register LUiReg = MRI.createVirtualRegister(&Mips::GPR32RegClass);
@@ -685,7 +704,8 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
                               .addDef(LUiReg)
                               .addGlobalAddress(GVal);
       LUi->getOperand(1).setTargetFlags(MipsII::MO_ABS_HI);
-      constrainSelectedInstRegOperands(*LUi, TII, TRI, RBI);
+      if (!constrainSelectedInstRegOperands(*LUi, TII, TRI, RBI))
+        return false;
 
       MachineInstr *ADDiu =
           BuildMI(MBB, I, I.getDebugLoc(), TII.get(Mips::ADDiu))
@@ -693,7 +713,8 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
               .addUse(LUiReg)
               .addGlobalAddress(GVal);
       ADDiu->getOperand(2).setTargetFlags(MipsII::MO_ABS_LO);
-      constrainSelectedInstRegOperands(*ADDiu, TII, TRI, RBI);
+      if (!constrainSelectedInstRegOperands(*ADDiu, TII, TRI, RBI))
+        return false;
     }
     I.eraseFromParent();
     return true;
@@ -789,7 +810,8 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
       else
         MIB.addUse(Instruction.RHS);
 
-      MIB.constrainAllUses(TII, TRI, RBI);
+      if (!MIB.constrainAllUses(TII, TRI, RBI))
+        return false;
     }
 
     I.eraseFromParent();
@@ -859,14 +881,16 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
                              .addUse(I.getOperand(2).getReg())
                              .addUse(I.getOperand(3).getReg())
                              .addImm(MipsFCMPCondCode);
-    constrainSelectedInstRegOperands(*FCMP, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*FCMP, TII, TRI, RBI))
+      return false;
 
     MachineInstr *Move = BuildMI(MBB, I, I.getDebugLoc(), TII.get(MoveOpcode))
                              .addDef(I.getOperand(0).getReg())
                              .addUse(Mips::ZERO)
                              .addUse(Mips::FCC0)
                              .addUse(TrueInReg);
-    constrainSelectedInstRegOperands(*Move, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*Move, TII, TRI, RBI))
+      return false;
 
     I.eraseFromParent();
     return true;
@@ -885,13 +909,15 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
             .addDef(LeaReg)
             .addFrameIndex(FI)
             .addImm(0);
-    constrainSelectedInstRegOperands(*LEA_ADDiu, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*LEA_ADDiu, TII, TRI, RBI))
+      return false;
 
     MachineInstr *Store = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Mips::SW))
                               .addUse(LeaReg)
                               .addUse(I.getOperand(0).getReg())
                               .addImm(0);
-    constrainSelectedInstRegOperands(*Store, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*Store, TII, TRI, RBI))
+      return false;
 
     I.eraseFromParent();
     return true;
@@ -901,8 +927,7 @@ bool MipsInstructionSelector::select(MachineInstr &I) {
   }
 
   I.eraseFromParent();
-  constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
-  return true;
+  return constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
 }
 
 namespace llvm {

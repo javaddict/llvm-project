@@ -525,7 +525,7 @@ void TailRecursionEliminator::createTailRecurseLoopHeader(CallInst *CI) {
   BasicBlock *NewEntry = BasicBlock::Create(F.getContext(), "", &F, HeaderBB);
   NewEntry->takeName(HeaderBB);
   HeaderBB->setName("tailrecurse");
-  auto *BI = UncondBrInst::Create(HeaderBB, NewEntry);
+  auto *BI = BranchInst::Create(HeaderBB, NewEntry);
   BI->setDebugLoc(DebugLoc::getCompilerGenerated());
   // If the new branch preserves the debug location of CI, it could result in
   // misleading stepping, if CI is located in a conditional branch.
@@ -721,10 +721,6 @@ bool TailRecursionEliminator::eliminateCall(CallInst *CI) {
     // the result of the call anymore, instead, use the PHI node we just
     // inserted.
     AccRecInstr->setOperand(AccRecInstr->getOperand(0) != CI, AccPN);
-
-    // Reassociating into the loop reorders the operands, so flags from the
-    // original order (nsw/nuw/exact/...) may no longer hold.
-    AccRecInstr->dropPoisonGeneratingFlags();
   }
 
   // Update our return value tracking
@@ -753,7 +749,7 @@ bool TailRecursionEliminator::eliminateCall(CallInst *CI) {
 
   // Now that all of the PHI nodes are in place, remove the call and
   // ret instructions, replacing them with an unconditional branch.
-  UncondBrInst *NewBI = UncondBrInst::Create(HeaderBB, Ret->getIterator());
+  BranchInst *NewBI = BranchInst::Create(HeaderBB, Ret->getIterator());
   NewBI->setDebugLoc(CI->getDebugLoc());
 
   Ret->eraseFromParent();  // Remove return.
@@ -864,8 +860,11 @@ void TailRecursionEliminator::cleanupAndFinalize() {
 bool TailRecursionEliminator::processBlock(BasicBlock &BB) {
   Instruction *TI = BB.getTerminator();
 
-  if (UncondBrInst *BI = dyn_cast<UncondBrInst>(TI)) {
-    BasicBlock *Succ = BI->getSuccessor();
+  if (BranchInst *BI = dyn_cast<BranchInst>(TI)) {
+    if (BI->isConditional())
+      return false;
+
+    BasicBlock *Succ = BI->getSuccessor(0);
     ReturnInst *Ret = dyn_cast<ReturnInst>(Succ->getFirstNonPHIOrDbg(true));
 
     if (!Ret)

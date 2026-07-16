@@ -11,7 +11,6 @@
 
 #include "clang/CodeGen/BackendUtil.h"
 #include "clang/CodeGen/CodeGenAction.h"
-#include "clang/CodeGen/ModuleLinker.h"
 
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/Support/Timer.h"
@@ -26,6 +25,8 @@ class CodeGenAction;
 class CoverageSourceInfo;
 
 class BackendConsumer : public ASTConsumer {
+  using LinkModule = CodeGenAction::LinkModule;
+
   virtual void anchor();
   CompilerInstance &CI;
   DiagnosticsEngine &Diags;

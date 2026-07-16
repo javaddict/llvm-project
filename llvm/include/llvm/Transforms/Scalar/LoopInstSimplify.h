@@ -22,12 +22,10 @@ class Loop;
 class LPMUpdater;
 
 /// Performs Loop Inst Simplify Pass.
-class LoopInstSimplifyPass
-    : public OptionalPassInfoMixin<LoopInstSimplifyPass> {
+class LoopInstSimplifyPass : public PassInfoMixin<LoopInstSimplifyPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
-                                 LoopStandardAnalysisResults &AR,
-                                 LPMUpdater &U);
+  PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
+                        LoopStandardAnalysisResults &AR, LPMUpdater &U);
 };
 
 } // end namespace llvm

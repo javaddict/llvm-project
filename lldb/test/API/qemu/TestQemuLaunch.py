@@ -13,7 +13,6 @@ from lldbsuite.test.gdbclientutils import *
 
 @skipIfRemote
 @skipIfWindows
-@skipIf(archs=["arm64e"])
 class TestQemuLaunch(TestBase):
     NO_DEBUG_INFO_TESTCASE = True
 

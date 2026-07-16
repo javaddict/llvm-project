@@ -17,8 +17,8 @@ namespace LIBC_NAMESPACE_DECL {
                                      (void *dst, int value, size_t count)) {
   // Use the inline memset function to set the memory.
   inline_memset(dst, static_cast<uint8_t>(value), count);
-  // avoid dead store elimination
-  // The asm itself should also be sufficient to behave as a compiler barrier.
+  // Avoid dead-store elimination. Empty asm with an "r" input is a standard
+  // compiler barrier; Haydn GISel lowers "r" via getRegForInlineAsmConstraint.
   asm("" : : "r"(dst) : "memory");
   return dst;
 }

@@ -1,5 +1,4 @@
-// RUN: %check_clang_tidy -std=c++17-or-later %s bugprone-std-namespace-modification %t \
-// RUN:   -- -- -isystem %S/../Inputs/Headers
+// RUN: %check_clang_tidy -std=c++17-or-later %s bugprone-std-namespace-modification %t -- -- -I %clang_tidy_headers
 
 #include "system-header-simulation.h"
 
@@ -282,18 +281,3 @@ template<typename> struct T {};
 
 T<B> b;
 }
-
-template <typename T>
-struct std::hash<std::vector<T>>
-// CHECK-MESSAGES: :[[@LINE-1]]:13: warning: modification of 'std' namespace can result in undefined behavior [bugprone-std-namespace-modification]
-{};
-
-// gh183752 begin
-template <typename T>
-struct Bar
-{};
-
-template <typename T>
-struct std::hash<Bar<T>> // Should not warn as this specialization depends on a user-defined type.
-{};
-// gh183752 end

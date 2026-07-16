@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/fminimum_numf.h"
-#include "src/__support/math/fminimum_numf.h"
+#include "src/__support/FPUtil/BasicOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(float, fminimum_numf, (float x, float y)) {
-  return math::fminimum_numf(x, y);
+  return fputil::fminimum_num(x, y);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

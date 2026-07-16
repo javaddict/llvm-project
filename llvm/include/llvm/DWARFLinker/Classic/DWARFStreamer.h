@@ -106,10 +106,10 @@ public:
   MCSymbol *emitDwarfDebugRangeListHeader(const CompileUnit &Unit) override;
 
   /// Emit debug ranges(.debug_ranges, .debug_rnglists) fragment.
-  Error emitDwarfDebugRangeListFragment(const CompileUnit &Unit,
-                                        const AddressRanges &LinkedRanges,
-                                        PatchLocation Patch,
-                                        DebugDieValuePool &AddrPool) override;
+  void emitDwarfDebugRangeListFragment(const CompileUnit &Unit,
+                                       const AddressRanges &LinkedRanges,
+                                       PatchLocation Patch,
+                                       DebugDieValuePool &AddrPool) override;
 
   /// Emit debug ranges(.debug_ranges, .debug_rnglists) footer.
   void emitDwarfDebugRangeListFooter(const CompileUnit &Unit,
@@ -130,7 +130,7 @@ public:
                                  MCSymbol *EndLabel) override;
 
   /// Emit debug ranges(.debug_loc, .debug_loclists) fragment.
-  Error emitDwarfDebugLocListFragment(
+  void emitDwarfDebugLocListFragment(
       const CompileUnit &Unit,
       const DWARFLocationExpressionsVector &LinkedLocationExpression,
       PatchLocation Patch, DebugDieValuePool &AddrPool) override;
@@ -222,15 +222,6 @@ private:
       WarningHandler(Warning, Context, nullptr);
   }
 
-  Expected<uint64_t> clampSecOffset(uint64_t Offset, dwarf::FormParams FP,
-                                    StringRef Section) {
-    if (Offset <= FP.getDwarfMaxOffset())
-      return Offset;
-    return createStringError(Section + " section offset 0x" +
-                             Twine::utohexstr(Offset) + " exceeds the " +
-                             dwarf::FormatString(FP.Format) + " limit");
-  }
-
   MCSection *getMCSection(DebugSectionKind SecKind);
 
   void emitMacroTableImpl(const DWARFDebugMacro *MacroTable,
@@ -238,24 +229,24 @@ private:
                           OffsetsStringPool &StringPool, uint64_t &OutOffset);
 
   /// Emit piece of .debug_ranges for \p LinkedRanges.
-  Error emitDwarfDebugRangesTableFragment(const CompileUnit &Unit,
-                                          const AddressRanges &LinkedRanges,
-                                          PatchLocation Patch);
+  void emitDwarfDebugRangesTableFragment(const CompileUnit &Unit,
+                                         const AddressRanges &LinkedRanges,
+                                         PatchLocation Patch);
 
   /// Emit piece of .debug_rnglists for \p LinkedRanges.
-  Error emitDwarfDebugRngListsTableFragment(const CompileUnit &Unit,
-                                            const AddressRanges &LinkedRanges,
-                                            PatchLocation Patch,
-                                            DebugDieValuePool &AddrPool);
+  void emitDwarfDebugRngListsTableFragment(const CompileUnit &Unit,
+                                           const AddressRanges &LinkedRanges,
+                                           PatchLocation Patch,
+                                           DebugDieValuePool &AddrPool);
 
   /// Emit piece of .debug_loc for \p LinkedRanges.
-  Error emitDwarfDebugLocTableFragment(
+  void emitDwarfDebugLocTableFragment(
       const CompileUnit &Unit,
       const DWARFLocationExpressionsVector &LinkedLocationExpression,
       PatchLocation Patch);
 
   /// Emit piece of .debug_loclists for \p LinkedRanges.
-  Error emitDwarfDebugLocListsTableFragment(
+  void emitDwarfDebugLocListsTableFragment(
       const CompileUnit &Unit,
       const DWARFLocationExpressionsVector &LinkedLocationExpression,
       PatchLocation Patch, DebugDieValuePool &AddrPool);
@@ -289,7 +280,6 @@ private:
 
   /// \defgroup MCObjects MC layer objects constructed by the streamer
   /// @{
-  MCTargetOptions MCOptions;
   std::unique_ptr<MCRegisterInfo> MRI;
   std::unique_ptr<MCAsmInfo> MAI;
   std::unique_ptr<MCObjectFileInfo> MOFI;

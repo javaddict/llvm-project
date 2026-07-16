@@ -427,7 +427,7 @@ def main():
             print(f"Writing fixes to {args.export_fixes} ...")
         try:
             merge_replacement_files(export_fixes_dir, args.export_fixes)
-        except Exception:
+        except:
             sys.stderr.write("Error exporting fixes.\n")
             traceback.print_exc()
             return_code = 1

@@ -65,7 +65,6 @@ static_library("Clang") {
     "CxxModuleHandler.cpp",
     "IRDynamicChecks.cpp",
     "IRForTarget.cpp",
-    "InjectPointerSigningFixups.cpp",
     "NameSearchContext.cpp",
   ]
 }

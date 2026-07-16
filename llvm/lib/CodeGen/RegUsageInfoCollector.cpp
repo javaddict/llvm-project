@@ -26,7 +26,6 @@
 #include "llvm/CodeGen/RegisterUsageInfo.h"
 #include "llvm/CodeGen/TargetFrameLowering.h"
 #include "llvm/IR/Function.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -54,7 +53,9 @@ public:
 class RegUsageInfoCollectorLegacy : public MachineFunctionPass {
 public:
   static char ID;
-  RegUsageInfoCollectorLegacy() : MachineFunctionPass(ID) {}
+  RegUsageInfoCollectorLegacy() : MachineFunctionPass(ID) {
+    initializeRegUsageInfoCollectorLegacyPass(*PassRegistry::getPassRegistry());
+  }
 
   StringRef getPassName() const override {
     return "Register Usage Information Collector Pass";

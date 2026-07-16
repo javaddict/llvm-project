@@ -24,8 +24,7 @@ endif()
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/generic)
 
 if(NOT LLVM_LIBC_FULL_BUILD)
-  set(use_system_file "COMPILE_OPTIONS")
-  libc_add_definition(use_system_file "LIBC_COPT_STDIO_USE_SYSTEM_FILE")
+  list(APPEND use_system_file "COMPILE_OPTIONS" "-DLIBC_COPT_STDIO_USE_SYSTEM_FILE")
 endif()
 
 add_entrypoint_object(
@@ -117,15 +116,10 @@ add_entrypoint_object(
     libc.src.stdio.scanf_core.string_reader
 )
 
-set(sprintf_srcs sprintf.cpp)
-if(LIBC_CONF_PRINTF_MODULAR)
-  list(APPEND sprintf_srcs sprintf_modular.cpp)
-endif()
-
 add_entrypoint_object(
   sprintf
   SRCS
-    ${sprintf_srcs}
+    sprintf.cpp
   HDRS
     sprintf.h
   DEPENDS
@@ -137,14 +131,10 @@ add_entrypoint_object(
     libc.src.__support.CPP.limits
 )
 
-set(snprintf_srcs snprintf.cpp)
-if(LIBC_CONF_PRINTF_MODULAR)
-  list(APPEND snprintf_srcs snprintf_modular.cpp)
-endif()
 add_entrypoint_object(
   snprintf
   SRCS
-    ${snprintf_srcs}
+    snprintf.cpp
   HDRS
     snprintf.h
   DEPENDS
@@ -156,14 +146,10 @@ add_entrypoint_object(
     libc.src.__support.CPP.limits
 )
 
-set(asprintf_srcs asprintf.cpp)
-if(LIBC_CONF_PRINTF_MODULAR)
-  list(APPEND asprintf_srcs asprintf_modular.cpp)
-endif()
 add_entrypoint_object(
   asprintf
   SRCS
-    ${asprintf_srcs}
+    asprintf.cpp
   HDRS
     asprintf.h
   DEPENDS
@@ -174,15 +160,10 @@ add_entrypoint_object(
     libc.src.__support.CPP.limits
 )
 
-set(vsprintf_srcs vsprintf.cpp)
-if(LIBC_CONF_PRINTF_MODULAR)
-  list(APPEND vsprintf_srcs vsprintf_modular.cpp)
-endif()
-
 add_entrypoint_object(
   vsprintf
   SRCS
-    ${vsprintf_srcs}
+    vsprintf.cpp
   HDRS
     vsprintf.h
   DEPENDS
@@ -194,15 +175,10 @@ add_entrypoint_object(
     libc.src.__support.CPP.limits
 )
 
-set(vsnprintf_srcs vsnprintf.cpp)
-if(LIBC_CONF_PRINTF_MODULAR)
-  list(APPEND vsnprintf_srcs vsnprintf_modular.cpp)
-endif()
-
 add_entrypoint_object(
   vsnprintf
   SRCS
-    ${vsnprintf_srcs}
+    vsnprintf.cpp
   HDRS
     vsnprintf.h
   DEPENDS
@@ -214,15 +190,10 @@ add_entrypoint_object(
     libc.src.__support.CPP.limits
 )
 
-set(vasprintf_srcs vasprintf.cpp)
-if(LIBC_CONF_PRINTF_MODULAR)
-  list(APPEND vasprintf_srcs vasprintf_modular.cpp)
-endif()
-
 add_entrypoint_object(
   vasprintf
   SRCS
-    ${vasprintf_srcs}
+    vasprintf.cpp
   HDRS
     vasprintf.h
   DEPENDS
@@ -263,7 +234,6 @@ add_stdio_entrypoint_object(feof_unlocked)
 add_stdio_entrypoint_object(ferror)
 add_stdio_entrypoint_object(ferror_unlocked)
 add_stdio_entrypoint_object(fseek)
-add_stdio_entrypoint_object(rewind)
 add_stdio_entrypoint_object(ftell)
 add_stdio_entrypoint_object(fseeko)
 add_stdio_entrypoint_object(fileno)

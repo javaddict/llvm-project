@@ -41,7 +41,8 @@ public:
   TodoCommentHandler(TodoCommentCheck &Check, std::optional<std::string> User)
       : Check(Check), User(User ? *User : "unknown"),
         TodoMatch(R"(^// *TODO *((\((.*)\))?:?( )?|: *(.*) *- *)?(.*)$)") {
-    const StringRef TodoStyleString = Check.Options.get("Style", "Hyphen");
+    const llvm::StringRef TodoStyleString =
+        Check.Options.get("Style", "Hyphen");
     for (const auto &[Value, Name] :
          OptionEnumMapping<StyleKind>::getEnumMapping()) {
       if (Name == TodoStyleString) {

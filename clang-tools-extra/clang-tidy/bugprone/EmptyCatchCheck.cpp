@@ -35,7 +35,8 @@ AST_MATCHER_P(CXXCatchStmt, hasCaughtType, Matcher<QualType>, InnerMatcher) {
   return InnerMatcher.matches(Node.getCaughtType(), Finder, Builder);
 }
 
-AST_MATCHER_P(CompoundStmt, hasAnyTextFromList, std::vector<StringRef>, List) {
+AST_MATCHER_P(CompoundStmt, hasAnyTextFromList, std::vector<llvm::StringRef>,
+              List) {
   if (List.empty())
     return false;
 
@@ -87,7 +88,7 @@ void EmptyCatchCheck::registerMatchers(MatchFinder *Finder) {
                      hasCanonicalType(AllowedNamedExceptionTypes)));
 
   Finder->addMatcher(
-      cxxCatchStmt(unless(isInMacro()),
+      cxxCatchStmt(unless(isExpansionInSystemHeader()), unless(isInMacro()),
                    unless(hasCaughtType(IgnoredExceptionType)),
                    hasHandler(compoundStmt(
                        statementCountIs(0),

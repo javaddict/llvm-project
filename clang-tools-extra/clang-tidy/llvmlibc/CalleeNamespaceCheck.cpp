@@ -64,7 +64,7 @@ void CalleeNamespaceCheck::check(const MatchFinder::MatchResult &Result) {
       << FuncDecl << RequiredNamespaceRefMacroName;
 
   diag(FuncDecl->getLocation(), "resolves to this declaration",
-       DiagnosticIDs::Note);
+       clang::DiagnosticIDs::Note);
 }
 
 } // namespace clang::tidy::llvm_libc

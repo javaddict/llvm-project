@@ -177,8 +177,6 @@ struct AssemblerInvocation {
   LLVM_PREFERRED_TYPE(bool)
   unsigned X86Sse2Avx : 1;
 
-  RelocSectionSymType RelocSectionSym = RelocSectionSymType::All;
-
   /// The name of the relocation model to use.
   std::string RelocationModel;
 
@@ -396,12 +394,6 @@ bool AssemblerInvocation::CreateFromArgs(AssemblerInvocation &Opts,
       Args.hasArg(OPT_femit_compact_unwind_non_canonical);
   Opts.EmitSFrameUnwind = Args.hasArg(OPT_gsframe);
   Opts.Crel = Args.hasArg(OPT_crel);
-  Opts.RelocSectionSym = RelocSectionSymType::All;
-  if (auto *A = Args.getLastArg(OPT_reloc_section_sym))
-    Opts.RelocSectionSym = StringSwitch<RelocSectionSymType>(A->getValue())
-                               .Case("internal", RelocSectionSymType::Internal)
-                               .Case("none", RelocSectionSymType::None)
-                               .Default(RelocSectionSymType::All);
   Opts.ImplicitMapsyms = Args.hasArg(OPT_mmapsyms_implicit);
   Opts.X86RelaxRelocations = !Args.hasArg(OPT_mrelax_relocations_no);
   Opts.X86Sse2Avx = Args.hasArg(OPT_msse2avx);
@@ -469,7 +461,6 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
   MCOptions.EmitSFrameUnwind = Opts.EmitSFrameUnwind;
   MCOptions.MCSaveTempLabels = Opts.SaveTemporaryLabels;
   MCOptions.Crel = Opts.Crel;
-  MCOptions.RelocSectionSym = Opts.RelocSectionSym;
   MCOptions.ImplicitMapSyms = Opts.ImplicitMapsyms;
   MCOptions.X86RelaxRelocations = Opts.X86RelaxRelocations;
   MCOptions.X86Sse2Avx = Opts.X86Sse2Avx;
@@ -506,7 +497,8 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
            << Opts.CPU << FS.empty() << FS;
   }
 
-  MCContext Ctx(Triple(Opts.Triple), *MAI, *MRI, *STI, &SrcMgr);
+  MCContext Ctx(Triple(Opts.Triple), MAI.get(), MRI.get(), STI.get(), &SrcMgr,
+                &MCOptions);
 
   bool PIC = false;
   if (Opts.RelocationModel == "static") {
@@ -625,8 +617,9 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
   std::unique_ptr<MCAsmParser> Parser(
       createMCAsmParser(SrcMgr, Ctx, *Str, *MAI));
 
+  // FIXME: init MCTargetOptions from sanitizer flags here.
   std::unique_ptr<MCTargetAsmParser> TAP(
-      TheTarget->createMCAsmParser(*STI, *Parser, *MCII));
+      TheTarget->createMCAsmParser(*STI, *Parser, *MCII, MCOptions));
   if (!TAP)
     Failed = Diags.Report(diag::err_target_unknown_triple) << Opts.Triple.str();
 

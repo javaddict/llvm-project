@@ -30,51 +30,72 @@ public:
 
   static std::pair<std::unique_ptr<TestTransport<Proto>>,
                    std::unique_ptr<TestTransport<Proto>>>
-  createPair(lldb_private::MainLoop &loop) {
+  createPair() {
     std::unique_ptr<TestTransport<Proto>> transports[2] = {
-        std::make_unique<TestTransport<Proto>>(loop),
-        std::make_unique<TestTransport<Proto>>(loop)};
+        std::make_unique<TestTransport<Proto>>(),
+        std::make_unique<TestTransport<Proto>>()};
     return std::make_pair(std::move(transports[0]), std::move(transports[1]));
   }
 
-  explicit TestTransport(lldb_private::MainLoop &loop) : m_loop(loop) {}
+  explicit TestTransport() {
+    llvm::Expected<lldb::FileUP> dummy_file =
+        lldb_private::FileSystem::Instance().Open(
+            lldb_private::FileSpec(lldb_private::FileSystem::DEV_NULL),
+            lldb_private::File::eOpenOptionReadWrite);
+    EXPECT_THAT_EXPECTED(dummy_file, llvm::Succeeded());
+    m_dummy_file = std::move(*dummy_file);
+  }
 
   llvm::Error Send(const typename Proto::Evt &evt) override {
-    EXPECT_TRUE(m_handler) << "Send called before RegisterMessageHandler";
-    m_loop.AddPendingCallback([this, evt](lldb_private::MainLoopBase &) {
+    EXPECT_TRUE(m_loop && m_handler)
+        << "Send called before RegisterMessageHandler";
+    m_loop->AddPendingCallback([this, evt](lldb_private::MainLoopBase &) {
       m_handler->Received(evt);
     });
     return llvm::Error::success();
   }
 
   llvm::Error Send(const typename Proto::Req &req) override {
-    EXPECT_TRUE(m_handler) << "Send called before RegisterMessageHandler";
-    m_loop.AddPendingCallback([this, req](lldb_private::MainLoopBase &) {
+    EXPECT_TRUE(m_loop && m_handler)
+        << "Send called before RegisterMessageHandler";
+    m_loop->AddPendingCallback([this, req](lldb_private::MainLoopBase &) {
       m_handler->Received(req);
     });
     return llvm::Error::success();
   }
 
   llvm::Error Send(const typename Proto::Resp &resp) override {
-    EXPECT_TRUE(m_handler) << "Send called before RegisterMessageHandler";
-    m_loop.AddPendingCallback([this, resp](lldb_private::MainLoopBase &) {
+    EXPECT_TRUE(m_loop && m_handler)
+        << "Send called before RegisterMessageHandler";
+    m_loop->AddPendingCallback([this, resp](lldb_private::MainLoopBase &) {
       m_handler->Received(resp);
     });
     return llvm::Error::success();
   }
 
-  llvm::Error RegisterMessageHandler(MessageHandler &handler) override {
+  llvm::Expected<lldb_private::MainLoop::ReadHandleUP>
+  RegisterMessageHandler(lldb_private::MainLoop &loop,
+                         MessageHandler &handler) override {
+    if (!m_loop)
+      m_loop = &loop;
     if (!m_handler)
       m_handler = &handler;
-    return llvm::Error::success();
+    lldb_private::Status status;
+    auto handle = loop.RegisterReadObject(
+        m_dummy_file, [](lldb_private::MainLoopBase &) {}, status);
+    if (status.Fail())
+      return status.takeError();
+    return handle;
   }
 
 protected:
   void Log(llvm::StringRef message) override {};
 
 private:
-  lldb_private::MainLoop &m_loop;
+  lldb_private::MainLoop *m_loop = nullptr;
   MessageHandler *m_handler = nullptr;
+  // Dummy file for registering with the MainLoop.
+  lldb::FileSP m_dummy_file = nullptr;
 };
 
 template <typename Proto>

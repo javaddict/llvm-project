@@ -6,11 +6,14 @@ from lldbsuite.test import lldbutil
 
 class TestCase(TestBase):
     @skipIfRemote
-    @no_debug_info_test
-    @skipIf(archs=no_match(["x86_64", "arm64$"]))
+    @skipIfWindows
     # glibc's dlopen doesn't support opening executables.
     # https://sourceware.org/bugzilla/show_bug.cgi?id=11754
-    @skipUnlessDarwin
+    @skipIfLinux
+    # freebsd's dlopen ditto
+    @expectedFailureAll(oslist=["freebsd"])
+    @expectedFailureNetBSD
+    @no_debug_info_test
     def test(self):
         self.build()
         # Launch and stop before the dlopen call.

@@ -17,7 +17,7 @@ using namespace clang::ast_matchers;
 namespace clang::tidy::modernize {
 
 static bool doesNoDiscardMacroExist(ASTContext &Context,
-                                    const StringRef &MacroId) {
+                                    const llvm::StringRef &MacroId) {
   // Don't check for the Macro existence if we are using an attribute
   // either a C++17 standard attribute or pre C++17 syntax
   if (MacroId.starts_with("[[") || MacroId.starts_with("__attribute__"))
@@ -84,9 +84,6 @@ void UseNodiscardCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
 void UseNodiscardCheck::registerMatchers(MatchFinder *Finder) {
   auto FunctionObj =
       cxxRecordDecl(hasAnyName("::std::function", "::boost::function"));
-  auto NoDiscardClassTemplateSpecialization =
-      classTemplateSpecializationDecl(hasSpecializedTemplate(classTemplateDecl(
-          has(cxxRecordDecl(hasAttr(attr::WarnUnusedResult))))));
 
   // Find all non-void const methods which have not already been marked to
   // warn on unused result.
@@ -95,12 +92,11 @@ void UseNodiscardCheck::registerMatchers(MatchFinder *Finder) {
           isConst(), isDefinitionOrInline(),
           unless(anyOf(
               returns(voidType()),
-              returns(hasDeclaration(decl(hasAttr(attr::WarnUnusedResult)))),
-              returns(hasUnqualifiedDesugaredType(recordType(
-                  hasDeclaration(NoDiscardClassTemplateSpecialization)))),
+              returns(
+                  hasDeclaration(decl(hasAttr(clang::attr::WarnUnusedResult)))),
               isNoReturn(), isOverloadedOperator(), isVariadic(),
               hasTemplateReturnType(), hasClassMutableFields(),
-              isConversionOperator(), hasAttr(attr::WarnUnusedResult),
+              isConversionOperator(), hasAttr(clang::attr::WarnUnusedResult),
               hasType(isInstantiationDependentType()),
               hasAnyParameter(
                   anyOf(parmVarDecl(anyOf(hasType(FunctionObj),

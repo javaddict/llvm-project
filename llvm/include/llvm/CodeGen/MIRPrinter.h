@@ -26,21 +26,23 @@ class MachineModuleInfo;
 class Module;
 template <typename T> class SmallVectorImpl;
 
-class PrintMIRPreparePass : public RequiredPassInfoMixin<PrintMIRPreparePass> {
+class PrintMIRPreparePass : public PassInfoMixin<PrintMIRPreparePass> {
   raw_ostream &OS;
 
 public:
   PrintMIRPreparePass(raw_ostream &OS = errs()) : OS(OS) {}
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &MFAM);
+  static bool isRequired() { return true; }
 };
 
-class PrintMIRPass : public RequiredPassInfoMixin<PrintMIRPass> {
+class PrintMIRPass : public PassInfoMixin<PrintMIRPass> {
   raw_ostream &OS;
 
 public:
   PrintMIRPass(raw_ostream &OS = errs()) : OS(OS) {}
   LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
                                  MachineFunctionAnalysisManager &MFAM);
+  static bool isRequired() { return true; }
 };
 
 /// Print LLVM IR using the MIR serialization format to the given output stream.

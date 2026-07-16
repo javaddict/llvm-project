@@ -40,9 +40,7 @@ public:
     return true;
   }
 
-  SanitizerMask
-  getSupportedSanitizers(StringRef BoundArch,
-                         Action::OffloadKind DeviceOffloadKind) const override;
+  SanitizerMask getSupportedSanitizers() const override;
   std::string computeSysRoot() const override;
 
   std::string getDynamicLinker(const llvm::opt::ArgList &Args) const override;

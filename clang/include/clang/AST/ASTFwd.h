@@ -35,7 +35,6 @@ class Attr;
 #include "clang/Basic/AttrList.inc"
 class ObjCProtocolLoc;
 class ConceptReference;
-class OffsetOfNode;
 
 } // end namespace clang
 

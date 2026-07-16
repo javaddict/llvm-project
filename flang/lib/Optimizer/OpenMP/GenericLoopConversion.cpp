@@ -272,12 +272,12 @@ private:
       clauseOps.privateSyms.assign(privateSyms->begin(), privateSyms->end());
 
     Fortran::common::openmp::EntryBlockArgs args;
-    args.privVars = clauseOps.privateVars;
+    args.priv.vars = clauseOps.privateVars;
 
     if constexpr (!std::is_same_v<OpOperandsTy,
                                   mlir::omp::DistributeOperands>) {
       populateReductionClauseOps(loopOp, clauseOps);
-      args.reductionVars = clauseOps.reductionVars;
+      args.reduction.vars = clauseOps.reductionVars;
     }
 
     auto wrapperOp = OpTy::create(rewriter, loopOp.getLoc(), clauseOps);
@@ -305,7 +305,7 @@ private:
                                            privateSyms->end());
 
     Fortran::common::openmp::EntryBlockArgs parallelArgs;
-    parallelArgs.privVars = parallelClauseOps.privateVars;
+    parallelArgs.priv.vars = parallelClauseOps.privateVars;
 
     auto parallelOp = mlir::omp::ParallelOp::create(rewriter, loopOp.getLoc(),
                                                     parallelClauseOps);
@@ -323,7 +323,7 @@ private:
     mlir::omp::WsloopOperands wsloopClauseOps;
     populateReductionClauseOps(loopOp, wsloopClauseOps);
     Fortran::common::openmp::EntryBlockArgs wsloopArgs;
-    wsloopArgs.reductionVars = wsloopClauseOps.reductionVars;
+    wsloopArgs.reduction.vars = wsloopClauseOps.reductionVars;
 
     auto wsloopOp =
         mlir::omp::WsloopOp::create(rewriter, loopOp.getLoc(), wsloopClauseOps);

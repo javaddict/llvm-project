@@ -10,8 +10,6 @@
 #ifndef __RISCV_NTLH_H
 #define __RISCV_NTLH_H
 
-#define __riscv_intrinsic_zihintntl 1
-
 #ifndef __riscv_zihintntl
 #error "NTLH intrinsics require the NTLH extension."
 #endif

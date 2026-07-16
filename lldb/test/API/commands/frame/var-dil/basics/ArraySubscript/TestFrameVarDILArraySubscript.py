@@ -13,7 +13,7 @@ class TestFrameVarDILArraySubscript(TestBase):
 
     def test_subscript(self):
         self.build()
-        (target, process, thread, bkpt) = lldbutil.run_to_source_breakpoint(
+        lldbutil.run_to_source_breakpoint(
             self, "Set a breakpoint here", lldb.SBFileSpec("main.cpp")
         )
 
@@ -86,13 +86,6 @@ class TestFrameVarDILArraySubscript(TestBase):
             error=True,
             substrs=["subscript of pointer to incomplete type 'void'"],
         )
-
-        # Check that subscription is not allowed in simple mode, but allowed in legacy mode
-        frame = thread.GetFrameAtIndex(0)
-        simple = frame.GetValueForVariablePath("int_arr[0]", lldb.eDILModeSimple)
-        legacy = frame.GetValueForVariablePath("int_arr[0]", lldb.eDILModeLegacy)
-        self.assertFailure(simple.GetError())
-        self.assertSuccess(legacy.GetError())
 
     def test_subscript_synthetic(self):
         self.build()

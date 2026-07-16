@@ -5,8 +5,7 @@ C_SOURCES := main.c
 
 ASM_OBJS := $(ASM_SOURCES:.s=.o)
 
-include Makefile.rules
-
 %.o: %.s
-	$(CC) $(CFLAGS) -c -x assembler $< -o $@
+	$(CC) -c -x assembler $< -o $@
 
+include Makefile.rules

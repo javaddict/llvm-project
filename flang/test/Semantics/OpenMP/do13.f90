@@ -5,11 +5,9 @@
 program omp
   integer i, j, k
 
-  !ERROR: This construct requires a perfect nest of depth 3, but the associated nest is a perfect nest of depth 1
-  !BECAUSE: COLLAPSE clause was specified with argument 3
+  !ERROR: The value of the parameter in the COLLAPSE or ORDERED clause must not be larger than the number of nested loops following the construct.
   !$omp do  collapse(3)
   do i = 0, 10
-    !BECAUSE: The nest contains code that prevents it from being canonical at this nesting level
     !ERROR: CYCLE statement to non-innermost associated loop of an OpenMP DO construct
     cycle
     do j = 0, 10
@@ -20,12 +18,10 @@ program omp
   end do
   !$omp end do
 
-  !ERROR: This construct requires a perfect nest of depth 3, but the associated nest is a perfect nest of depth 2
-  !BECAUSE: COLLAPSE clause was specified with argument 3
+  !ERROR: The value of the parameter in the COLLAPSE or ORDERED clause must not be larger than the number of nested loops following the construct.
   !$omp do  collapse(3)
   do i = 0, 10
     do j = 0, 10
-      !BECAUSE: The nest contains code that prevents it from being canonical at this nesting level
       !ERROR: CYCLE statement to non-innermost associated loop of an OpenMP DO construct
       cycle
       do k  = 0, 10
@@ -35,11 +31,9 @@ program omp
   end do
   !$omp end do
 
-  !ERROR: This construct requires a perfect nest of depth 2, but the associated nest is a perfect nest of depth 1
-  !BECAUSE: COLLAPSE clause was specified with argument 2
+  !ERROR: The value of the parameter in the COLLAPSE or ORDERED clause must not be larger than the number of nested loops following the construct.
   !$omp do  collapse(2)
   do i = 0, 10
-    !BECAUSE: The nest contains code that prevents it from being canonical at this nesting level
     !ERROR: CYCLE statement to non-innermost associated loop of an OpenMP DO construct
     cycle
     do j = 0, 10
@@ -51,11 +45,9 @@ program omp
   !$omp end do
 
 
-  !ERROR: This construct requires a perfect nest of depth 2, but the associated nest is a perfect nest of depth 1
-  !BECAUSE: COLLAPSE clause was specified with argument 2
+  !ERROR: The value of the parameter in the COLLAPSE or ORDERED clause must not be larger than the number of nested loops following the construct.
   !$omp do  collapse(2)
   foo: do i = 0, 10
-    !BECAUSE: The nest contains code that prevents it from being canonical at this nesting level
     !ERROR: CYCLE statement to non-innermost associated loop of an OpenMP DO construct
     cycle foo
     do j = 0, 10
@@ -67,12 +59,10 @@ program omp
   !$omp end do
 
 
-  !ERROR: This construct requires a perfect nest of depth 3, but the associated nest is a perfect nest of depth 2
-  !BECAUSE: COLLAPSE clause was specified with argument 3
+  !ERROR: The value of the parameter in the COLLAPSE or ORDERED clause must not be larger than the number of nested loops following the construct.
   !$omp do collapse(3)
   do 60 i=1,10
     do j=1,10
-      !BECAUSE: The nest contains code that prevents it from being canonical at this nesting level
       !ERROR: CYCLE statement to non-innermost associated loop of an OpenMP DO construct
       cycle
       do k=1,10
@@ -170,8 +160,7 @@ program omp
   !$omp end parallel
 
   !$omp parallel
-  !ERROR: This construct requires a perfect nest of depth 3, but the associated nest is a perfect nest of depth 2
-  !BECAUSE: ORDERED clause was specified with argument 3
+  !ERROR: The value of the parameter in the COLLAPSE or ORDERED clause must not be larger than the number of nested loops following the construct.
   !$omp parallel do ordered(3) collapse(2)
   foo: do i = 0, 10
     foo1: do j = 0, 10
@@ -190,7 +179,7 @@ program omp
       !$omp end parallel
     end do foo1
   end do foo
-  !$omp end parallel do
-  !$omp end parallel
+!$omp end parallel do
+!$omp end parallel
 
 end program omp

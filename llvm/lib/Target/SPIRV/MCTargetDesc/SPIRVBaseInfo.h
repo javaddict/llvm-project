@@ -12,10 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_SPIRV_MCTARGETDESC_SPIRVBASEINFO_H
-#define LLVM_LIB_TARGET_SPIRV_MCTARGETDESC_SPIRVBASEINFO_H
+#ifndef LLVM_LIB_TARGET_SPIRV_SPIRVSYMBOLICOPERANDS_H
+#define LLVM_LIB_TARGET_SPIRV_SPIRVSYMBOLICOPERANDS_H
 
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/VersionTuple.h"
@@ -257,8 +256,6 @@ using CapabilityList = SmallVector<SPIRV::Capability::Capability, 8>;
 using ExtensionList = SmallVector<SPIRV::Extension::Extension, 8>;
 using EnvironmentList = SmallVector<SPIRV::Environment::Environment, 8>;
 
-using ExtensionSet = DenseSet<SPIRV::Extension::Extension>;
-
 std::string
 getSymbolicOperandMnemonic(SPIRV::OperandCategory::OperandCategory Category,
                            int32_t Value);
@@ -314,4 +311,4 @@ std::string getSPIRVStringOperand(const InstType &MI, unsigned StartIndex) {
   return s;
 }
 } // namespace llvm
-#endif // LLVM_LIB_TARGET_SPIRV_MCTARGETDESC_SPIRVBASEINFO_H
+#endif // LLVM_LIB_TARGET_SPIRV_SPIRVSYMBOLICOPERANDS_H

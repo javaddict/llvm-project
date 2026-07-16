@@ -106,9 +106,7 @@ public:
     return llvm::DebuggerKind::SCE;
   }
 
-  SanitizerMask
-  getSupportedSanitizers(StringRef BoundArch,
-                         Action::OffloadKind DeviceOffloadKind) const override;
+  SanitizerMask getSupportedSanitizers() const override;
 
   void addClangTargetOptions(
       const llvm::opt::ArgList &DriverArgs, llvm::opt::ArgStringList &CC1Args,
@@ -174,9 +172,7 @@ public:
 
   unsigned GetDefaultDwarfVersion() const override { return 5; }
 
-  SanitizerMask
-  getSupportedSanitizers(StringRef BoundArch,
-                         Action::OffloadKind DeviceOffloadKind) const override;
+  SanitizerMask getSupportedSanitizers() const override;
 
   const char *getLinkerBaseName() const override { return "lld"; }
   std::string qualifyPSCmdName(StringRef CmdName) const override {

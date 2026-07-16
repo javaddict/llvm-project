@@ -79,10 +79,6 @@ def HasReferenceTypes :
     Predicate<"Subtarget->hasReferenceTypes()">,
     AssemblerPredicate<(all_of FeatureReferenceTypes), "reference-types">;
 
-def HasRelaxedAtomics :
-    Predicate<"Subtarget->hasRelaxedAtomics()">,
-    AssemblerPredicate<(all_of FeatureRelaxedAtomics), "relaxed-atomics">;
-
 def HasRelaxedSIMD :
     Predicate<"Subtarget->hasRelaxedSIMD()">,
     AssemblerPredicate<(all_of FeatureRelaxedSIMD), "relaxed-simd">;
@@ -234,12 +230,6 @@ def tag_op : Operand<i32>;
 
 } // OperandType = "OPERAND_P2ALIGN"
 
-let OperandType = "OPERAND_MEMORDER" in {
-def MemOrder : Operand<i32> {
-  let PrintMethod = "printWebAssemblyMemOrderOperand";
-}
-} // OperandType = "OPERAND_MEMORDER"
-
 let OperandType = "OPERAND_SIGNATURE" in
 def Signature : Operand<i32> {
   let PrintMethod = "printWebAssemblySignatureOperand";
@@ -257,7 +247,7 @@ def bool_node : PatLeaf<(i32 I32:$cond), [{
 
 /// Floating point constants
 def fpimm0    : PatLeaf<(fpimm), [{
-  return N->isPosZero();
+  return N->isExactlyValue(+0.0);
 }]>;
 
 //===----------------------------------------------------------------------===//

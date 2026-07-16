@@ -18,12 +18,10 @@
 namespace Fortran::runtime::cuda {
 
 extern "C" {
-cudaStream_t RTDECL(CUFGetAssociatedStream)(void *);
-int RTDECL(CUFSetAssociatedStream)(void *, cudaStream_t);
-void RTDECL(CUFRegisterAllocator)();
-}
 
-void CUFResetStream(cudaStream_t stream);
+void RTDECL(CUFRegisterAllocator)();
+cudaStream_t RTDECL(CUFGetAssociatedStream)(void *);
+}
 
 void *CUFAllocPinned(std::size_t, std::int64_t *);
 void CUFFreePinned(void *);

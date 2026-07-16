@@ -38,13 +38,9 @@ static void bm_ranges_swap_ranges_vb_unaligned(benchmark::State& state) {
   }
 }
 
-BENCHMARK(bm_ranges_swap_ranges_vb_aligned)
-    ->Name("rng::swap_ranges(std::vector<bool>, std::vector<bool>) (aligned)")
-    ->RangeMultiplier(2)
-    ->Range(8, 1 << 20);
-BENCHMARK(bm_ranges_swap_ranges_vb_unaligned)
-    ->Name("rng::swap_ranges(std::vector<bool>, std::vector<bool>) (unaligned)")
-    ->Range(8, 1 << 20);
+// Test std::ranges::swap_ranges for vector<bool>::iterator
+BENCHMARK(bm_ranges_swap_ranges_vb_aligned)->RangeMultiplier(2)->Range(8, 1 << 20);
+BENCHMARK(bm_ranges_swap_ranges_vb_unaligned)->Range(8, 1 << 20);
 
 static void bm_swap_ranges_vb(benchmark::State& state, bool aligned) {
   auto n = state.range();
@@ -63,11 +59,8 @@ static void bm_swap_ranges_vb(benchmark::State& state, bool aligned) {
 static void bm_swap_ranges_vb_aligned(benchmark::State& state) { bm_swap_ranges_vb(state, true); }
 static void bm_swap_ranges_vb_unaligned(benchmark::State& state) { bm_swap_ranges_vb(state, false); }
 
-BENCHMARK(bm_swap_ranges_vb_aligned)
-    ->Name("std::swap_ranges(std::vector<bool>, std::vector<bool>) (aligned)")
-    ->Range(8, 1 << 20);
-BENCHMARK(bm_swap_ranges_vb_unaligned)
-    ->Name("std::swap_ranges(std::vector<bool>, std::vector<bool>) (unaligned)")
-    ->Range(8, 1 << 20);
+// Test std::swap_ranges for vector<bool>::iterator
+BENCHMARK(bm_swap_ranges_vb_aligned)->Range(8, 1 << 20);
+BENCHMARK(bm_swap_ranges_vb_unaligned)->Range(8, 1 << 20);
 
 BENCHMARK_MAIN();

@@ -119,8 +119,7 @@ public:
 
   // Opcode Implementations
   void visitReturnInst(ReturnInst &I);
-  void visitUncondBrInst(UncondBrInst &I);
-  void visitCondBrInst(CondBrInst &I);
+  void visitBranchInst(BranchInst &I);
   void visitSwitchInst(SwitchInst &I);
   void visitIndirectBrInst(IndirectBrInst &I);
 

@@ -25,7 +25,7 @@
 #include "mlir/Transforms/FoldUtils.h"
 
 namespace mlir {
-#define GEN_PASS_DEF_SCCPPASS
+#define GEN_PASS_DEF_SCCP
 #include "mlir/Transforms/Passes.h.inc"
 } // namespace mlir
 
@@ -114,7 +114,7 @@ static void rewrite(DataFlowSolver &solver, MLIRContext *context,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct SCCP : public impl::SCCPPassBase<SCCP> {
+struct SCCP : public impl::SCCPBase<SCCP> {
   void runOnOperation() override;
 };
 } // namespace
@@ -128,4 +128,8 @@ void SCCP::runOnOperation() {
   if (failed(solver.initializeAndRun(op)))
     return signalPassFailure();
   rewrite(solver, op->getContext(), op->getRegions());
+}
+
+std::unique_ptr<Pass> mlir::createSCCPPass() {
+  return std::make_unique<SCCP>();
 }

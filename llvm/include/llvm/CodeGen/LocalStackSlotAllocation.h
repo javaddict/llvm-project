@@ -14,10 +14,10 @@
 namespace llvm {
 
 class LocalStackSlotAllocationPass
-    : public RequiredPassInfoMixin<LocalStackSlotAllocationPass> {
+    : public PassInfoMixin<LocalStackSlotAllocationPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &);
+  PreservedAnalyses run(MachineFunction &MF, MachineFunctionAnalysisManager &);
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

@@ -115,10 +115,8 @@ PWACtx SCEVAffinator::getPWACtxFromPWA(isl::pw_aff PWA) {
 }
 
 PWACtx SCEVAffinator::getPwAff(const SCEV *Expr, BasicBlock *BB,
-                               RecordedAssumptionsTy *RecordedAssumptions,
-                               bool IsInsideDomain) {
+                               RecordedAssumptionsTy *RecordedAssumptions) {
   this->BB = BB;
-  this->IsInsideDomain = IsInsideDomain;
   this->RecordedAssumptions = RecordedAssumptions;
 
   if (BB) {
@@ -139,7 +137,7 @@ PWACtx SCEVAffinator::checkForWrapping(const SCEV *Expr, PWACtx PWAC) const {
   // whereas n is the number of bits of the Expr, hence:
   //   n = bitwidth(ExprType)
 
-  if (IgnoreIntegerWrapping || any(getNoWrapFlags(Expr) & SCEV::FlagNSW))
+  if (IgnoreIntegerWrapping || (getNoWrapFlags(Expr) & SCEV::FlagNSW))
     return PWAC;
 
   isl::pw_aff PWAMod = addModuloSemantic(PWAC.first, Expr->getType());
@@ -180,7 +178,7 @@ bool SCEVAffinator::hasNSWAddRecForLoop(Loop *L) const {
       continue;
     if (AddRec->getLoop() != L)
       continue;
-    if (AddRec->hasNoSignedWrap())
+    if (AddRec->getNoWrapFlags() & SCEV::FlagNSW)
       return true;
   }
 
@@ -191,7 +189,7 @@ bool SCEVAffinator::computeModuloForExpr(const SCEV *Expr) {
   unsigned Width = TD.getTypeSizeInBits(Expr->getType());
   // We assume nsw expressions never overflow.
   if (auto *NAry = dyn_cast<SCEVNAryExpr>(Expr))
-    if (NAry->hasNoSignedWrap())
+    if (NAry->getNoWrapFlags() & SCEV::FlagNSW)
       return false;
   return Width <= MaxSmallBitWidth;
 }
@@ -273,10 +271,6 @@ PWACtx SCEVAffinator::visitVScale(const SCEVVScale *VScale) {
   llvm_unreachable("SCEVVScale not yet supported");
 }
 
-PWACtx SCEVAffinator::visitPtrToAddrExpr(const SCEVPtrToAddrExpr *Expr) {
-  return visit(Expr->getOperand(0));
-}
-
 PWACtx SCEVAffinator::visitPtrToIntExpr(const SCEVPtrToIntExpr *Expr) {
   return visit(Expr->getOperand(0));
 }
@@ -311,7 +305,7 @@ PWACtx SCEVAffinator::visitTruncateExpr(const SCEVTruncateExpr *Expr) {
   }
 
   recordAssumption(RecordedAssumptions, UNSIGNED, isl::manage(OutOfBoundsDom),
-                   DebugLoc(), AS_RESTRICTION, IsInsideDomain ? BB : nullptr);
+                   DebugLoc(), AS_RESTRICTION, BB);
 
   return OpPWAC;
 }

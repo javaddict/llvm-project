@@ -53,7 +53,7 @@ static inline Type *checkType(Type *Ty) {
 Value::Value(Type *ty, unsigned scid)
     : SubclassID(scid), HasValueHandle(0), SubclassOptionalData(0),
       SubclassData(0), NumUserOperands(0), IsUsedByMD(false), HasName(false),
-      VTy(checkType(ty)) {
+      HasMetadata(false), VTy(checkType(ty)) {
   static_assert(ConstantFirstVal == 0, "!(SubclassID < ConstantFirstVal)");
   // FIXME: Why isn't this in the subclass gunk??
   // Note, we cannot call isa<CallInst> before the CallInst has been
@@ -79,6 +79,10 @@ Value::~Value() {
     ValueHandleBase::ValueIsDeleted(this);
   if (isUsedByMetadata())
     ValueAsMetadata::handleDeletion(this);
+
+  // Remove associated metadata from context.
+  if (HasMetadata)
+    clearMetadata();
 
 #ifndef NDEBUG      // Only in -g mode...
   // Check to make sure that there are no uses of this value that are still
@@ -542,11 +546,8 @@ void Value::doRAUW(Value *New, ReplaceMetadataUses ReplaceMetaUses) {
     U.set(New);
   }
 
-  if (BasicBlock *BB = dyn_cast<BasicBlock>(this)) {
+  if (BasicBlock *BB = dyn_cast<BasicBlock>(this))
     BB->replaceSuccessorsPhiUsesWith(cast<BasicBlock>(New));
-    if (BB->hasAddressTaken())
-      BlockAddress::lookup(BB)->handleOperandChange(this, New);
-  }
 }
 
 void Value::replaceAllUsesWith(Value *New) {
@@ -557,7 +558,7 @@ void Value::replaceNonMetadataUsesWith(Value *New) {
   doRAUW(New, ReplaceMetadataUses::No);
 }
 
-bool Value::replaceUsesWithIf(Value *New,
+void Value::replaceUsesWithIf(Value *New,
                               llvm::function_ref<bool(Use &U)> ShouldReplace) {
   assert(New && "Value::replaceUsesWithIf(<null>) is invalid!");
   assert(New->getType() == getType() &&
@@ -566,12 +567,9 @@ bool Value::replaceUsesWithIf(Value *New,
   SmallVector<TrackingVH<Constant>, 8> Consts;
   SmallPtrSet<Constant *, 8> Visited;
 
-  bool Changed = false;
   for (Use &U : llvm::make_early_inc_range(uses())) {
     if (!ShouldReplace(U))
       continue;
-    Changed = true;
-
     // Must handle Constants specially, we cannot call replaceUsesOfWith on a
     // constant because they are uniqued.
     if (auto *C = dyn_cast<Constant>(U.getUser())) {
@@ -589,8 +587,6 @@ bool Value::replaceUsesWithIf(Value *New,
     //        not just the one passed to ShouldReplace
     Consts.pop_back_val()->handleOperandChange(this, New);
   }
-
-  return Changed;
 }
 
 /// Replace debug record uses of MetadataAsValue(ValueAsMetadata(V)) outside BB
@@ -778,7 +774,7 @@ const Value *Value::stripAndAccumulateConstantOffsets(
         APInt OldOffset = Offset;
         Offset = Offset.sadd_ov(GEPOffsetST, Overflow);
         if (Overflow) {
-          Offset = std::move(OldOffset);
+          Offset = OldOffset;
           return V;
         }
       }
@@ -837,23 +833,17 @@ bool Value::canBeFreed() const {
   if (auto *A = dyn_cast<Argument>(this)) {
     if (A->hasPointeeInMemoryValueAttr())
       return false;
-    // A nofree function can not free (including via synchronization) any
-    // allocations that existed prior to the call, but may free allocations
-    // created inside the function. This logic is limited to argument pointers,
-    // as they definitely exist prior to the call.
+    // A pointer to an object in a function which neither frees, nor can arrange
+    // for another thread to free on its behalf, can not be freed in the scope
+    // of the function.  Note that this logic is restricted to memory
+    // allocations in existance before the call; a nofree function *is* allowed
+    // to free memory it allocated.
     const Function *F = A->getParent();
-    if (F->doesNotFreeMemory())
-      return false;
-
-    // nofree on the argument ensures that it cannot be freed through that
-    // pointer. noalias additionally ensures that it can't be freed through
-    // another pointer to the same allocation. Readonly implies nofree.
-    if ((A->hasNoFreeAttr() || A->onlyReadsMemory()) && A->hasNoAliasAttr())
+    if (F->doesNotFreeMemory() && F->hasNoSync())
       return false;
   }
 
-  if (auto *ITP = dyn_cast<IntToPtrInst>(this);
-      ITP && ITP->hasMetadata(LLVMContext::MD_nofree))
+  if (isa<IntToPtrInst>(this) && getMetadata(LLVMContext::MD_nofree))
     return false;
 
   const Function *F = nullptr;
@@ -952,8 +942,9 @@ uint64_t Value::getPointerDereferenceableBytes(const DataLayout &DL,
       CanBeNull = true;
     }
   } else if (auto *AI = dyn_cast<AllocaInst>(this)) {
-    if (std::optional<TypeSize> Size = AI->getAllocationSize(DL)) {
-      DerefBytes = Size->getKnownMinValue();
+    if (!AI->isArrayAllocation()) {
+      DerefBytes =
+          DL.getTypeStoreSize(AI->getAllocatedType()).getKnownMinValue();
       CanBeNull = false;
       CanBeFreed = false;
     }
@@ -1112,6 +1103,8 @@ const Value *Value::DoPHITranslation(const BasicBlock *CurBB,
   return this;
 }
 
+LLVMContext &Value::getContext() const { return VTy->getContext(); }
+
 void Value::reverseUseList() {
   if (!UseList || !UseList->Next)
     // No need to reverse 0 or 1 uses.
@@ -1203,7 +1196,8 @@ void ValueHandleBase::AddToUseList() {
   }
 
   // Okay, reallocation did happen.  Fix the Prev Pointers.
-  for (auto I = Handles.begin(), E = Handles.end(); I != E; ++I) {
+  for (DenseMap<Value*, ValueHandleBase*>::iterator I = Handles.begin(),
+       E = Handles.end(); I != E; ++I) {
     assert(I->second && I->first == I->second->getValPtr() &&
            "List invariant broken!");
     I->second->setPrevPtr(&I->second);
@@ -1231,10 +1225,7 @@ void ValueHandleBase::RemoveFromUseList() {
   LLVMContextImpl *pImpl = getValPtr()->getContext().pImpl;
   DenseMap<Value*, ValueHandleBase*> &Handles = pImpl->ValueHandles;
   if (Handles.isPointerIntoBucketsArray(PrevPtr)) {
-    // TODO: Remove the only user of DenseMap's callback erase.
-    Handles.erase(getValPtr(), [](auto &Bucket) {
-      Bucket.second->setPrevPtr(&Bucket.second);
-    });
+    Handles.erase(getValPtr());
     getValPtr()->HasValueHandle = false;
   }
 }

@@ -100,11 +100,6 @@ public:
   ///
   bool getAllowRegisterRenaming() const;
 
-  /// getRegistersAreIntervals - Return the RegistersAreIntervals flag value for
-  /// this target.
-  ///
-  bool getRegistersAreIntervals() const;
-
   /// getAsmParser - Return the AssemblyParser definition for this target.
   ///
   const Record *getAsmParser() const;

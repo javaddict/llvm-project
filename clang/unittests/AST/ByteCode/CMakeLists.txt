@@ -2,7 +2,6 @@ add_clang_unittest(InterpTests
   BitcastBuffer.cpp
   Descriptor.cpp
   toAPValue.cpp
-  Pointer.cpp
   CLANG_LIBS
   clangAST
   clangASTMatchers

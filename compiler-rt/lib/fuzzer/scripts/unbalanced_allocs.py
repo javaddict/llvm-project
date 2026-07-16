@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # ===- lib/fuzzer/scripts/unbalanced_allocs.py ------------------------------===#
 #
 # Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.

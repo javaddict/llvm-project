@@ -511,7 +511,9 @@ public:
     /// while still making the use of this in debugging and logging useful.
     std::string getName() const {
       std::string Name;
-      raw_string_ostream(Name) << *this;
+      raw_string_ostream OS(Name);
+      OS << *this;
+      OS.flush();
       return Name;
     }
   };
@@ -650,7 +652,9 @@ public:
     /// while still making the use of this in debugging and logging useful.
     std::string getName() const {
       std::string Name;
-      raw_string_ostream(Name) << *this;
+      raw_string_ostream OS(Name);
+      OS << *this;
+      OS.flush();
       return Name;
     }
 
@@ -1283,26 +1287,30 @@ public:
 ///
 /// This is primarily useful for testing the analysis.
 class LazyCallGraphPrinterPass
-    : public RequiredPassInfoMixin<LazyCallGraphPrinterPass> {
+    : public PassInfoMixin<LazyCallGraphPrinterPass> {
   raw_ostream &OS;
 
 public:
   LLVM_ABI explicit LazyCallGraphPrinterPass(raw_ostream &OS);
 
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 };
 
 /// A pass which prints the call graph as a DOT file to a \c raw_ostream.
 ///
 /// This is primarily useful for visualization purposes.
 class LazyCallGraphDOTPrinterPass
-    : public RequiredPassInfoMixin<LazyCallGraphDOTPrinterPass> {
+    : public PassInfoMixin<LazyCallGraphDOTPrinterPass> {
   raw_ostream &OS;
 
 public:
   LLVM_ABI explicit LazyCallGraphDOTPrinterPass(raw_ostream &OS);
 
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 };
 
 extern template struct LLVM_TEMPLATE_ABI

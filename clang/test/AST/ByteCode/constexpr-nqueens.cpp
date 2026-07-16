@@ -60,9 +60,7 @@ constexpr Board buildBoardRecurse(int N, int Col, const Board &B) {
 }
 constexpr Board buildBoard(int N) {
   return buildBoardRecurse(N, 0, Board()); // ref-note {{in call to 'buildBoardRecurse(8, 0, Board())'}} \
-                                           // expected-note {{in call to 'buildBoardRecurse(8, 0, Board())'}} \
-                                           // ref-note {{temporary created here}} \
-                                           // expected-note {{temporary created here}}
+                                           // expected-note {{in call to 'buildBoardRecurse(8, 0, Board())'}}
 }
 
 constexpr Board q8 = buildBoard(8); // ref-error {{must be initialized by a constant expression}} \

@@ -121,13 +121,21 @@ bool SuspendCrossingInfo::computeBlockData(
       B.Consumes |= P.Consumes;
       B.Kills |= P.Kills;
 
-      if (P.isAlwaysKill())
+      // If block P is a suspend block, it should propagate kills into block
+      // B for every block P consumes.
+      if (P.Suspend)
         B.Kills |= P.Consumes;
     }
 
-    if (B.isAlwaysKill()) {
+    if (B.Suspend) {
+      // If block B is a suspend block, it should kill all of the blocks it
+      // consumes.
       B.Kills |= B.Consumes;
-    } else if (B.isNeverKill()) {
+    } else if (B.End) {
+      // If block B is an end block, it should not propagate kills as the
+      // blocks following coro.end() are reached during initial invocation
+      // of the coroutine while all the data are still available on the
+      // stack or in the registers.
       B.Kills.reset();
     } else {
       // This is reached when B block it not Suspend nor coro.end and it
@@ -145,7 +153,9 @@ bool SuspendCrossingInfo::computeBlockData(
   return Changed;
 }
 
-SuspendCrossingInfo::SuspendCrossingInfo(Function &F, const coro::Shape &Shape)
+SuspendCrossingInfo::SuspendCrossingInfo(
+    Function &F, const SmallVectorImpl<AnyCoroSuspendInst *> &CoroSuspends,
+    const SmallVectorImpl<AnyCoroEndInst *> &CoroEnds)
     : Mapping(F) {
   const size_t N = Mapping.size();
   Block.resize(N);
@@ -162,21 +172,13 @@ SuspendCrossingInfo::SuspendCrossingInfo(Function &F, const coro::Shape &Shape)
   // Mark all CoroEnd Blocks. We do not propagate Kills beyond coro.ends as
   // the code beyond coro.end is reachable during initial invocation of the
   // coroutine.
-  for (auto *CE : Shape.CoroEnds) {
+  for (auto *CE : CoroEnds) {
     // Verify CoroEnd was normalized
     assert(CE->getParent()->getFirstInsertionPt() == CE->getIterator() &&
            CE->getParent()->size() <= 2 && "CoroEnd must be in its own BB");
 
-    getBlockData(CE->getParent()).setNeverKill();
+    getBlockData(CE->getParent()).End = true;
   }
-
-  for (auto *InRamp : Shape.CoroIsInRampInsts)
-    for (auto *U : InRamp->users())
-      if (auto *Br = dyn_cast<CondBrInst>(U)) {
-        auto *TrueBB = Br->getSuccessor(0);
-        if (TrueBB->getSinglePredecessor())
-          getBlockData(TrueBB).setNeverKill();
-      }
 
   // Mark all suspend blocks and indicate that they kill everything they
   // consume. Note, that crossing coro.save also requires a spill, as any code
@@ -185,10 +187,10 @@ SuspendCrossingInfo::SuspendCrossingInfo(Function &F, const coro::Shape &Shape)
   auto markSuspendBlock = [&](IntrinsicInst *BarrierInst) {
     BasicBlock *SuspendBlock = BarrierInst->getParent();
     auto &B = getBlockData(SuspendBlock);
-    B.setAlwaysKill();
+    B.Suspend = true;
     B.Kills |= B.Consumes;
   };
-  for (auto *CSI : Shape.CoroSuspends) {
+  for (auto *CSI : CoroSuspends) {
     // Verify CoroSuspend was normalized
     assert(CSI->getParent()->getFirstInsertionPt() == CSI->getIterator() &&
            CSI->getParent()->size() <= 2 &&

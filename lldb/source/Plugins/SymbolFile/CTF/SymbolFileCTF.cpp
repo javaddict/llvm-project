@@ -29,7 +29,6 @@
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/Timer.h"
 #include "llvm/Config/llvm-config.h" // for LLVM_ENABLE_ZLIB
-#include "llvm/Support/ErrorExtras.h"
 #include "llvm/Support/MemoryBuffer.h"
 
 #include "Plugins/ExpressionParser/Clang/ClangASTMetadata.h"
@@ -176,8 +175,8 @@ bool SymbolFileCTF::ParseHeader() {
 
     if (zstr.total_out != decompressed_size) {
       LLDB_LOG(log,
-               "CTF parsing failed: decompressed size ({}) doesn't match "
-               "expected size ({})",
+               "CTF parsing failed: decompressed size ({0}) doesn't match "
+               "expected size ([1})",
                zstr.total_out, decompressed_size);
       return false;
     }
@@ -336,10 +335,11 @@ SymbolFileCTF::CreateInteger(const CTFInteger &ctf_integer) {
   lldb::BasicType basic_type =
       TypeSystemClang::GetBasicTypeEnumeration(ctf_integer.name);
   if (basic_type == eBasicTypeInvalid)
-    return llvm::createStringErrorV(
-        "unsupported integer type: no corresponding basic clang "
-        "type for '{0}'",
-        ctf_integer.name);
+    return llvm::make_error<llvm::StringError>(
+        llvm::formatv("unsupported integer type: no corresponding basic clang "
+                      "type for '{0}'",
+                      ctf_integer.name),
+        llvm::inconvertibleErrorCode());
 
   CompilerType compiler_type = m_ast->GetBasicType(basic_type);
 
@@ -347,18 +347,23 @@ SymbolFileCTF::CreateInteger(const CTFInteger &ctf_integer) {
     // Make sure the type we got is an integer type.
     bool compiler_type_is_signed = false;
     if (!compiler_type.IsIntegerType(compiler_type_is_signed))
-      return llvm::createStringErrorV(
-          "Found compiler type for '{0}' but it's not an integer type: {1}",
-          ctf_integer.name, compiler_type.GetDisplayTypeName().GetStringRef());
+      return llvm::make_error<llvm::StringError>(
+          llvm::formatv(
+              "Found compiler type for '{0}' but it's not an integer type: {1}",
+              ctf_integer.name,
+              compiler_type.GetDisplayTypeName().GetStringRef()),
+          llvm::inconvertibleErrorCode());
 
     // Make sure the signing matches between the CTF and the compiler type.
     const bool type_is_signed = (ctf_integer.encoding & IntEncoding::eSigned);
     if (compiler_type_is_signed != type_is_signed)
-      return llvm::createStringErrorV(
-          "Found integer compiler type for {0} but compiler type is {1} and "
-          "{0} is {2}",
-          ctf_integer.name, compiler_type_is_signed ? "signed" : "unsigned",
-          type_is_signed ? "signed" : "unsigned");
+      return llvm::make_error<llvm::StringError>(
+          llvm::formatv("Found integer compiler type for {0} but compiler type "
+                        "is {1} and {0} is {2}",
+                        ctf_integer.name,
+                        compiler_type_is_signed ? "signed" : "unsigned",
+                        type_is_signed ? "signed" : "unsigned"),
+          llvm::inconvertibleErrorCode());
   }
 
   Declaration decl;
@@ -372,8 +377,9 @@ llvm::Expected<lldb::TypeSP>
 SymbolFileCTF::CreateModifier(const CTFModifier &ctf_modifier) {
   Type *ref_type = ResolveTypeUID(ctf_modifier.type);
   if (!ref_type)
-    return llvm::createStringErrorV("could not find modified type: {0}",
-                                    ctf_modifier.type);
+    return llvm::make_error<llvm::StringError>(
+        llvm::formatv("Could not find modified type: {0}", ctf_modifier.type),
+        llvm::inconvertibleErrorCode());
 
   CompilerType compiler_type;
 
@@ -391,8 +397,10 @@ SymbolFileCTF::CreateModifier(const CTFModifier &ctf_modifier) {
     compiler_type = ref_type->GetFullCompilerType().AddRestrictModifier();
     break;
   default:
-    return llvm::createStringErrorV(
-        "ParseModifier called with unsupported kind: {0}", ctf_modifier.kind);
+    return llvm::make_error<llvm::StringError>(
+        llvm::formatv("ParseModifier called with unsupported kind: {0}",
+                      ctf_modifier.kind),
+        llvm::inconvertibleErrorCode());
   }
 
   Declaration decl;
@@ -405,8 +413,10 @@ llvm::Expected<lldb::TypeSP>
 SymbolFileCTF::CreateTypedef(const CTFTypedef &ctf_typedef) {
   Type *underlying_type = ResolveTypeUID(ctf_typedef.type);
   if (!underlying_type)
-    return llvm::createStringErrorV(
-        "could not find typedef underlying type: {0}", ctf_typedef.type);
+    return llvm::make_error<llvm::StringError>(
+        llvm::formatv("Could not find typedef underlying type: {0}",
+                      ctf_typedef.type),
+        llvm::inconvertibleErrorCode());
 
   CompilerType target_ast_type = underlying_type->GetFullCompilerType();
   clang::DeclContext *decl_ctx = m_ast->GetTranslationUnitDecl();
@@ -423,8 +433,9 @@ llvm::Expected<lldb::TypeSP>
 SymbolFileCTF::CreateArray(const CTFArray &ctf_array) {
   Type *element_type = ResolveTypeUID(ctf_array.type);
   if (!element_type)
-    return llvm::createStringErrorV("could not find array element type: {0}",
-                                    ctf_array.type);
+    return llvm::make_error<llvm::StringError>(
+        llvm::formatv("Could not find array element type: {0}", ctf_array.type),
+        llvm::inconvertibleErrorCode());
 
   auto element_size_or_err = element_type->GetByteSize(nullptr);
   if (!element_size_or_err)
@@ -472,8 +483,10 @@ SymbolFileCTF::CreateFunction(const CTFFunction &ctf_function) {
 
   Type *ret_type = ResolveTypeUID(ctf_function.return_type);
   if (!ret_type)
-    return llvm::createStringErrorV("could not find function return type: {0}",
-                                    ctf_function.return_type);
+    return llvm::make_error<llvm::StringError>(
+        llvm::formatv("Could not find function return type: {0}",
+                      ctf_function.return_type),
+        llvm::inconvertibleErrorCode());
 
   CompilerType func_type = m_ast->CreateFunctionType(
       ret_type->GetFullCompilerType(), arg_types, ctf_function.variadic, 0,
@@ -489,7 +502,7 @@ llvm::Expected<lldb::TypeSP>
 SymbolFileCTF::CreateRecord(const CTFRecord &ctf_record) {
   const clang::TagTypeKind tag_kind = TranslateRecordKind(ctf_record.kind);
   CompilerType record_type = m_ast->CreateRecordType(
-      nullptr, OptionalClangModuleID(), ctf_record.name.data(),
+      nullptr, OptionalClangModuleID(), eAccessPublic, ctf_record.name.data(),
       llvm::to_underlying(tag_kind), eLanguageTypeC);
   m_compiler_types[record_type.GetOpaqueQualType()] = &ctf_record;
   Declaration decl;
@@ -532,7 +545,7 @@ bool SymbolFileCTF::CompleteType(CompilerType &compiler_type) {
         llvm::expectedToOptional(field_type->GetByteSize(nullptr)).value_or(0);
     TypeSystemClang::AddFieldToRecordType(compiler_type, field.name,
                                           field_type->GetFullCompilerType(),
-                                          field_size);
+                                          eAccessPublic, field_size);
   }
   m_ast->CompleteTagDeclarationDefinition(compiler_type);
 
@@ -547,7 +560,7 @@ bool SymbolFileCTF::CompleteType(CompilerType &compiler_type) {
 llvm::Expected<lldb::TypeSP>
 SymbolFileCTF::CreateForward(const CTFForward &ctf_forward) {
   CompilerType forward_compiler_type = m_ast->CreateRecordType(
-      nullptr, OptionalClangModuleID(), ctf_forward.name,
+      nullptr, OptionalClangModuleID(), eAccessPublic, ctf_forward.name,
       llvm::to_underlying(clang::TagTypeKind::Struct), eLanguageTypeC);
   Declaration decl;
   return MakeType(ctf_forward.uid, ConstString(ctf_forward.name), 0, nullptr,
@@ -557,7 +570,8 @@ SymbolFileCTF::CreateForward(const CTFForward &ctf_forward) {
 
 llvm::Expected<TypeSP> SymbolFileCTF::CreateType(CTFType *ctf_type) {
   if (!ctf_type)
-    return llvm::createStringError("cannot create type for unparsed type");
+    return llvm::make_error<llvm::StringError>(
+        "cannot create type for unparsed type", llvm::inconvertibleErrorCode());
 
   switch (ctf_type->kind) {
   case CTFType::Kind::eInteger:
@@ -583,9 +597,10 @@ llvm::Expected<TypeSP> SymbolFileCTF::CreateType(CTFType *ctf_type) {
   case CTFType::Kind::eUnknown:
   case CTFType::Kind::eFloat:
   case CTFType::Kind::eSlice:
-    return llvm::createStringErrorV(
-        "unsupported type (uid = {0}, name = {1}, kind = {2})", ctf_type->uid,
-        ctf_type->name, ctf_type->kind);
+    return llvm::make_error<llvm::StringError>(
+        llvm::formatv("unsupported type (uid = {0}, name = {1}, kind = {2})",
+                      ctf_type->uid, ctf_type->name, ctf_type->kind),
+        llvm::inconvertibleErrorCode());
   }
   llvm_unreachable("Unexpected CTF type kind");
 }
@@ -685,9 +700,10 @@ SymbolFileCTF::ParseType(lldb::offset_t &offset, lldb::user_id_t uid) {
     break;
   }
 
-  return llvm::createStringErrorV(
-      "unsupported type (name = {0}, kind = {1}, vlength = {2})", name, kind,
-      variable_length);
+  return llvm::make_error<llvm::StringError>(
+      llvm::formatv("unsupported type (name = {0}, kind = {1}, vlength = {2})",
+                    name, kind, variable_length),
+      llvm::inconvertibleErrorCode());
 }
 
 size_t SymbolFileCTF::ParseTypes(CompileUnit &cu) {
@@ -777,7 +793,7 @@ size_t SymbolFileCTF::ParseFunctions(CompileUnit &cu) {
     const uint16_t kind = GetKind(info);
     const uint16_t variable_length = GetVLen(info);
 
-    const Symbol *symbol = symtab->FindSymbolWithType(
+    Symbol *symbol = symtab->FindSymbolWithType(
         eSymbolTypeCode, Symtab::eDebugYes, Symtab::eVisibilityAny, symbol_idx);
 
     // Skip padding.
@@ -849,14 +865,16 @@ static DWARFExpression CreateDWARFExpression(ModuleSP module_sp,
   const ArchSpec &architecture = module_sp->GetArchitecture();
   ByteOrder byte_order = architecture.GetByteOrder();
   uint32_t address_size = architecture.GetAddressByteSize();
+  uint32_t byte_size = architecture.GetDataByteSize();
 
-  StreamBuffer<32> stream(Stream::eBinary, byte_order);
+  StreamBuffer<32> stream(Stream::eBinary, address_size, byte_order);
   stream.PutHex8(llvm::dwarf::DW_OP_addr);
   stream.PutMaxHex64(symbol.GetFileAddress(), address_size, byte_order);
 
   DataBufferSP buffer =
       std::make_shared<DataBufferHeap>(stream.GetData(), stream.GetSize());
-  lldb_private::DataExtractor extractor(buffer, byte_order, address_size);
+  lldb_private::DataExtractor extractor(buffer, byte_order, address_size,
+                                        byte_size);
   DWARFExpression result(extractor);
   result.SetRegisterKind(eRegisterKindDWARF);
 
@@ -889,7 +907,7 @@ size_t SymbolFileCTF::ParseObjects(CompileUnit &comp_unit) {
   while (object_offset < object_offset_end) {
     const uint32_t type_uid = m_data.GetU32(&object_offset);
 
-    if (const Symbol *symbol =
+    if (Symbol *symbol =
             symtab->FindSymbolWithType(eSymbolTypeData, Symtab::eDebugYes,
                                        Symtab::eVisibilityAny, symbol_idx)) {
       Variable::RangeList ranges;
@@ -902,10 +920,9 @@ size_t SymbolFileCTF::ParseObjects(CompileUnit &comp_unit) {
 
       lldb::user_id_t variable_type_uid = m_variables.size();
       m_variables.emplace_back(std::make_shared<Variable>(
-          variable_type_uid, symbol->GetName().AsCString(nullptr),
-          symbol->GetName().AsCString(nullptr), type_sp,
-          eValueTypeVariableGlobal, m_comp_unit_sp.get(), ranges, &decl,
-          location, symbol->IsExternal(),
+          variable_type_uid, symbol->GetName().AsCString(),
+          symbol->GetName().AsCString(), type_sp, eValueTypeVariableGlobal,
+          m_comp_unit_sp.get(), ranges, &decl, location, symbol->IsExternal(),
           /*artificial=*/false,
           /*location_is_constant_data*/ false));
     }
@@ -960,8 +977,7 @@ uint32_t SymbolFileCTF::ResolveSymbolContext(const Address &so_addr,
   // Resolve variables.
   if (resolve_scope & eSymbolContextVariable) {
     for (VariableSP variable_sp : m_variables) {
-      if (variable_sp->LocationIsValidForAddress(
-              Address(so_addr.GetFileAddress()))) {
+      if (variable_sp->LocationIsValidForAddress(so_addr.GetFileAddress())) {
         sc.variable = variable_sp.get();
         break;
       }
@@ -1015,8 +1031,8 @@ lldb_private::Type *SymbolFileCTF::ResolveTypeUID(lldb::user_id_t type_uid) {
   if (log) {
     StreamString ss;
     type_sp->Dump(&ss, true);
-    LLDB_LOG_VERBOSE(log, "Adding type {0}: {1}", type_sp->GetID(),
-                     llvm::StringRef(ss.GetString()).rtrim());
+    LLDB_LOGV(log, "Adding type {0}: {1}", type_sp->GetID(),
+              llvm::StringRef(ss.GetString()).rtrim());
   }
 
   m_types[type_uid] = type_sp;

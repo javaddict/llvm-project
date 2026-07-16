@@ -40,7 +40,7 @@
 using namespace mlir;
 
 // The JIT isn't supported on Windows at that time
-#if !defined(_WIN32) && !defined(_AIX)
+#ifndef _WIN32
 
 static struct LLVMInitializer {
   LLVMInitializer() {

@@ -34,8 +34,6 @@
 // RUN:  2>&1 | FileCheck -check-prefix=CHECK-HVX-OFF %s
 // RUN: %clang -c %s -### --target=hexagon-unknown-elf -mv73 \
 // RUN:  2>&1 | FileCheck -check-prefix=CHECK-HVX-OFF %s
-// RUN: %clang -c %s -### --target=hexagon-unknown-elf -mv73 -mno-hvx \
-// RUN:  2>&1 | FileCheck -check-prefix=CHECK-HVX-OFF %s
 
 // Infer HVX version from flag:
 
@@ -248,8 +246,6 @@
 // RUN: not %clang -c %s -### --target=hexagon-unknown-elf -mv69 -mhvx-qfloat \
 // RUN:  2>&1 | FileCheck -check-prefix=CHECK-NEEDS-HVX %s
 // RUN: not %clang -c %s -### --target=hexagon-unknown-elf -mv69 -mhvx-ieee-fp \
-// RUN:  2>&1 | FileCheck -check-prefix=CHECK-NEEDS-HVX %s
-// RUN: not %clang -c %s -### --target=hexagon-unknown-elf -mv73 -mno-hvx -mhvx-qfloat \
 // RUN:  2>&1 | FileCheck -check-prefix=CHECK-NEEDS-HVX %s
 
 // Invalid HVX length:

@@ -130,11 +130,10 @@ private:
   void calculateLiveIntervals();
 
 public:
-  LLVM_ABI StackLifetime(const Function &F,
-                         ArrayRef<const AllocaInst *> Allocas,
-                         LivenessType Type);
+  StackLifetime(const Function &F, ArrayRef<const AllocaInst *> Allocas,
+                LivenessType Type);
 
-  LLVM_ABI void run();
+  void run();
 
   iterator_range<
       filter_iterator<ArrayRef<const IntrinsicInst *>::const_iterator,
@@ -148,13 +147,13 @@ public:
   /// Returns a set of "interesting" instructions where the given alloca is
   /// live. Not all instructions in a function are interesting: we pick a set
   /// that is large enough for LiveRange::Overlaps to be correct.
-  LLVM_ABI const LiveRange &getLiveRange(const AllocaInst *AI) const;
+  const LiveRange &getLiveRange(const AllocaInst *AI) const;
 
   /// Returns true if instruction is reachable from entry.
-  LLVM_ABI bool isReachable(const Instruction *I) const;
+  bool isReachable(const Instruction *I) const;
 
   /// Returns true if the alloca is alive after the instruction.
-  LLVM_ABI bool isAliveAfter(const AllocaInst *AI, const Instruction *I) const;
+  bool isAliveAfter(const AllocaInst *AI, const Instruction *I) const;
 
   /// Returns a live range that represents an alloca that is live throughout the
   /// entire function.
@@ -162,7 +161,7 @@ public:
     return LiveRange(Instructions.size(), true);
   }
 
-  LLVM_ABI void print(raw_ostream &O);
+  void print(raw_ostream &O);
 };
 
 static inline raw_ostream &operator<<(raw_ostream &OS, const BitVector &V) {
@@ -181,18 +180,17 @@ inline raw_ostream &operator<<(raw_ostream &OS,
 
 /// Printer pass for testing.
 class StackLifetimePrinterPass
-    : public RequiredPassInfoMixin<StackLifetimePrinterPass> {
+    : public PassInfoMixin<StackLifetimePrinterPass> {
   StackLifetime::LivenessType Type;
   raw_ostream &OS;
 
 public:
   StackLifetimePrinterPass(raw_ostream &OS, StackLifetime::LivenessType Type)
       : Type(Type), OS(OS) {}
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-
-  LLVM_ABI void
-  printPipeline(raw_ostream &OS,
-                function_ref<StringRef(StringRef)> MapClassName2PassName);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
+  void printPipeline(raw_ostream &OS,
+                     function_ref<StringRef(StringRef)> MapClassName2PassName);
 };
 
 } // end namespace llvm

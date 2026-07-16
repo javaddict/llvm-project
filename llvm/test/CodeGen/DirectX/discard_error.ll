@@ -2,7 +2,7 @@
 
 ; DXIL operation discard does not support no bool overload type
 
-; CHECK: intrinsic argument 0 type expected i1, but got double
+; CHECK: invalid intrinsic signature
 ; CHECK: call void @llvm.dx.discard(double %p)
 ;
 define void @discard_double(double noundef %p) {

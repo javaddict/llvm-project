@@ -63,10 +63,9 @@ public:
       : DFG(g), TRI(g.getTRI()), PRI(g.getPRI()), MDT(g.getDT()),
         MDF(g.getDF()), LiveMap(g.getPRI()), Empty(), NoRegs(g.getPRI()) {}
 
-  LLVM_ABI NodeList getAllReachingDefs(RegisterRef RefRR,
-                                       NodeAddr<RefNode *> RefA,
-                                       bool TopShadows, bool FullChain,
-                                       const RegisterAggr &DefRRs);
+  NodeList getAllReachingDefs(RegisterRef RefRR, NodeAddr<RefNode *> RefA,
+                              bool TopShadows, bool FullChain,
+                              const RegisterAggr &DefRRs);
 
   NodeList getAllReachingDefs(NodeAddr<RefNode *> RefA) {
     return getAllReachingDefs(RefA.Addr->getRegRef(DFG), RefA, false, false,
@@ -77,20 +76,20 @@ public:
     return getAllReachingDefs(RefRR, RefA, false, false, NoRegs);
   }
 
-  LLVM_ABI NodeSet getAllReachedUses(RegisterRef RefRR,
-                                     NodeAddr<DefNode *> DefA,
-                                     const RegisterAggr &DefRRs);
+  NodeSet getAllReachedUses(RegisterRef RefRR, NodeAddr<DefNode *> DefA,
+                            const RegisterAggr &DefRRs);
 
   NodeSet getAllReachedUses(RegisterRef RefRR, NodeAddr<DefNode *> DefA) {
     return getAllReachedUses(RefRR, DefA, NoRegs);
   }
 
-  LLVM_ABI std::pair<NodeSet, bool>
-  getAllReachingDefsRec(RegisterRef RefRR, NodeAddr<RefNode *> RefA,
-                        NodeSet &Visited, const NodeSet &Defs);
+  std::pair<NodeSet, bool> getAllReachingDefsRec(RegisterRef RefRR,
+                                                 NodeAddr<RefNode *> RefA,
+                                                 NodeSet &Visited,
+                                                 const NodeSet &Defs);
 
-  LLVM_ABI NodeAddr<RefNode *> getNearestAliasedRef(RegisterRef RefRR,
-                                                    NodeAddr<InstrNode *> IA);
+  NodeAddr<RefNode *> getNearestAliasedRef(RegisterRef RefRR,
+                                           NodeAddr<InstrNode *> IA);
 
   LiveMapType &getLiveMap() { return LiveMap; }
   const LiveMapType &getLiveMap() const { return LiveMap; }
@@ -100,11 +99,11 @@ public:
     return F == RealUseMap.end() ? Empty : F->second;
   }
 
-  LLVM_ABI void computePhiInfo();
-  LLVM_ABI void computeLiveIns();
-  LLVM_ABI void resetLiveIns();
-  LLVM_ABI void resetKills();
-  LLVM_ABI void resetKills(MachineBasicBlock *B);
+  void computePhiInfo();
+  void computeLiveIns();
+  void resetLiveIns();
+  void resetKills();
+  void resetKills(MachineBasicBlock *B);
 
   void trace(bool T) { Trace = T; }
 
@@ -154,8 +153,7 @@ private:
                             unsigned Nest, unsigned MaxNest);
 };
 
-LLVM_ABI raw_ostream &operator<<(raw_ostream &OS,
-                                 const Print<Liveness::RefMap> &P);
+raw_ostream &operator<<(raw_ostream &OS, const Print<Liveness::RefMap> &P);
 
 } // end namespace llvm::rdf
 

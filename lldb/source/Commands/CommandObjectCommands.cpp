@@ -115,7 +115,7 @@ protected:
   void DoExecute(Args &command, CommandReturnObject &result) override {
     if (command.GetArgumentCount() != 1) {
       result.AppendErrorWithFormat(
-          "'%s' takes exactly one executable filename argument",
+          "'%s' takes exactly one executable filename argument.\n",
           GetCommandName().str().c_str());
       return;
     }
@@ -425,7 +425,7 @@ protected:
     // Verify that the command is alias-able.
     if (m_interpreter.CommandExists(alias_command)) {
       result.AppendErrorWithFormat(
-          "'%s' is a permanent debugger command and cannot be redefined",
+          "'%s' is a permanent debugger command and cannot be redefined.\n",
           args[0].c_str());
       return;
     }
@@ -433,7 +433,7 @@ protected:
     if (m_interpreter.UserMultiwordCommandExists(alias_command)) {
       result.AppendErrorWithFormat(
           "'%s' is a user container command and cannot be overwritten.\n"
-          "Delete it first with 'command container delete'",
+          "Delete it first with 'command container delete'\n",
           args[0].c_str());
       return;
     }
@@ -448,7 +448,7 @@ protected:
     if (!cmd_obj) {
       result.AppendErrorWithFormat("invalid command given to 'command alias'. "
                                    "'%s' does not begin with a valid command."
-                                   "  No alias created",
+                                   "  No alias created.",
                                    original_raw_command_string.str().c_str());
     } else if (!cmd_obj->WantsRawCommandString()) {
       // Note that args was initialized with the original command, and has not
@@ -482,8 +482,9 @@ protected:
 
     if (m_interpreter.AliasExists(alias_command) ||
         m_interpreter.UserCommandExists(alias_command)) {
-      result.AppendWarningWithFormatv(
-          "overwriting existing definition for '{0}'", alias_command);
+      result.AppendWarningWithFormat(
+          "Overwriting existing definition for '%s'.\n",
+          alias_command.str().c_str());
     }
     if (CommandAlias *alias = m_interpreter.AddAlias(
             alias_command, cmd_obj_sp, raw_command_string)) {
@@ -518,7 +519,7 @@ protected:
 
     if (m_interpreter.CommandExists(alias_command)) {
       result.AppendErrorWithFormat(
-          "'%s' is a permanent debugger command and cannot be redefined",
+          "'%s' is a permanent debugger command and cannot be redefined.\n",
           alias_command.c_str());
       return false;
     }
@@ -536,7 +537,7 @@ protected:
     CommandObjectSP subcommand_obj_sp;
     bool use_subcommand = false;
     if (!command_obj_sp) {
-      result.AppendErrorWithFormat("'%s' is not an existing command",
+      result.AppendErrorWithFormat("'%s' is not an existing command.\n",
                                    actual_command.c_str());
       return false;
     }
@@ -552,7 +553,7 @@ protected:
       if (!subcommand_obj_sp) {
         result.AppendErrorWithFormat(
             "'%s' is not a valid sub-command of '%s'.  "
-            "Unable to create alias",
+            "Unable to create alias.\n",
             args[0].c_str(), actual_command.c_str());
         return false;
       }
@@ -578,8 +579,8 @@ protected:
 
     if (m_interpreter.AliasExists(alias_command) ||
         m_interpreter.UserCommandExists(alias_command)) {
-      result.AppendWarningWithFormatv(
-          "overwriting existing definition for '{0}'", alias_command);
+      result.AppendWarningWithFormat(
+          "Overwriting existing definition for '%s'.\n", alias_command.c_str());
     }
 
     if (CommandAlias *alias = m_interpreter.AddAlias(
@@ -640,7 +641,7 @@ protected:
     if (!cmd_obj) {
       result.AppendErrorWithFormat(
           "'%s' is not a known command.\nTry 'help' to see a "
-          "current list of commands",
+          "current list of commands.\n",
           args[0].c_str());
       return;
     }
@@ -649,11 +650,11 @@ protected:
       if (cmd_obj->IsRemovable()) {
         result.AppendErrorWithFormat(
             "'%s' is not an alias, it is a debugger command which can be "
-            "removed using the 'command delete' command",
+            "removed using the 'command delete' command.\n",
             args[0].c_str());
       } else {
         result.AppendErrorWithFormat(
-            "'%s' is a permanent debugger command and cannot be removed",
+            "'%s' is a permanent debugger command and cannot be removed.\n",
             args[0].c_str());
       }
       return;
@@ -662,9 +663,10 @@ protected:
     if (!m_interpreter.RemoveAlias(command_name)) {
       if (m_interpreter.AliasExists(command_name))
         result.AppendErrorWithFormat(
-            "Error occurred while attempting to unalias '%s'", args[0].c_str());
+            "Error occurred while attempting to unalias '%s'.\n",
+            args[0].c_str());
       else
-        result.AppendErrorWithFormat("'%s' is not an existing alias",
+        result.AppendErrorWithFormat("'%s' is not an existing alias.\n",
                                      args[0].c_str());
       return;
     }
@@ -725,7 +727,7 @@ protected:
 
     if (!m_interpreter.RemoveCommand(command_name)) {
       result.AppendErrorWithFormat(
-          "'%s' is a permanent debugger command and cannot be removed",
+          "'%s' is a permanent debugger command and cannot be removed.\n",
           args[0].c_str());
       return;
     }
@@ -868,7 +870,6 @@ protected:
 
       if (error.Success()) {
         AddRegexCommandToInterpreter();
-        result.SetStatus(eReturnStatusSuccessFinishNoResult);
       }
     }
     if (error.Fail()) {
@@ -1916,8 +1917,9 @@ public:
           auto report_error = [this, elem_counter,
                                counter](const char *err_txt) -> bool {
             m_args_error = Status::FromErrorStringWithFormatv(
-                "element {} of arguments list element {}: {}", elem_counter,
-                counter, err_txt);
+                "Element {0} of arguments "
+                "list element {1}: %s.",
+                elem_counter, counter, err_txt);
             return false;
           };
 
@@ -2499,8 +2501,6 @@ protected:
     if (m_options.m_class_name.empty() && m_options.m_funct_name.empty()) {
       m_interpreter.GetPythonCommandsFromIOHandler("     ", // Prompt
                                                    *this);  // IOHandlerDelegate
-      // Still gathering input; the IOHandler will set the final status.
-      result.SetStatus(eReturnStatusStarted);
       return;
     }
 
@@ -2639,12 +2639,12 @@ protected:
 
     CommandObjectSP cmd_sp = m_interpreter.GetCommandSPExact(root_cmd);
     if (!cmd_sp) {
-      result.AppendErrorWithFormat("command '%s' not found",
+      result.AppendErrorWithFormat("command '%s' not found.",
                                    command[0].c_str());
       return;
     }
     if (!cmd_sp->IsUserCommand()) {
-      result.AppendErrorWithFormat("command '%s' is not a user command",
+      result.AppendErrorWithFormat("command '%s' is not a user command.",
                                    command[0].c_str());
       return;
     }
@@ -2901,7 +2901,7 @@ protected:
       CommandInterpreter &interp = GetCommandInterpreter();
       CommandObjectSP cmd_sp = interp.GetCommandSPExact(cmd_name);
       if (!cmd_sp) {
-        result.AppendErrorWithFormat("container command %s doesn't exist",
+        result.AppendErrorWithFormat("container command %s doesn't exist.",
                                      cmd_name);
         return;
       }
@@ -2918,7 +2918,7 @@ protected:
 
       bool did_remove = GetCommandInterpreter().RemoveUserMultiword(cmd_name);
       if (!did_remove) {
-        result.AppendErrorWithFormat("error removing command %s", cmd_name);
+        result.AppendErrorWithFormat("error removing command %s.", cmd_name);
         return;
       }
 

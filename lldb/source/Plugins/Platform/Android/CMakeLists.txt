@@ -6,10 +6,6 @@ lldb_tablegen(PlatformAndroidPropertiesEnum.inc -gen-lldb-property-enum-defs
   SOURCE PlatformAndroidProperties.td
   TARGET LLDBPluginPlatformAndroidPropertiesEnumGen)
 
-lldb_tablegen(PlatformAndroidProperties.json -dump-json
-  SOURCE PlatformAndroidProperties.td
-  TARGET LLDBPluginPlatformAndroidPropertiesJsonGen)
-
 add_lldb_library(lldbPluginPlatformAndroid PLUGIN
   AdbClient.cpp
   PlatformAndroid.cpp

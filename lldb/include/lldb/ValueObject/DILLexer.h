@@ -9,7 +9,6 @@
 #ifndef LLDB_VALUEOBJECT_DILLEXER_H
 #define LLDB_VALUEOBJECT_DILLEXER_H
 
-#include "lldb/lldb-enumerations.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -30,25 +29,18 @@ public:
     colon,
     coloncolon,
     eof,
-    equal,
     float_constant,
-    greatergreater,
     identifier,
     integer_constant,
     kw_false,
     kw_true,
     l_paren,
     l_square,
-    lessless,
     minus,
-    minusequal,
-    percent,
     period,
     plus,
-    plusequal,
     r_paren,
     r_square,
-    slash,
     star,
   };
 
@@ -82,8 +74,7 @@ class DILLexer {
 public:
   /// Lexes all the tokens in expr and calls the private constructor
   /// with the lexed tokens.
-  static llvm::Expected<DILLexer>
-  Create(llvm::StringRef expr, lldb::DILMode mode = lldb::eDILModeFull);
+  static llvm::Expected<DILLexer> Create(llvm::StringRef expr);
 
   /// Return the current token to be handled by the DIL parser.
   const Token &GetCurrentToken() { return m_lexed_tokens[m_tokens_idx]; }

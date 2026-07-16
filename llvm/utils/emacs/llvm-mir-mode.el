@@ -1,9 +1,7 @@
-;;; llvm-mir-mode.el --- Major mode for LLVM Machine IR -*- lexical-binding: t -*-
+;;; llvm-mir-mode.el --- Major mode for LLVM Machine IR
 
 ;; Maintainer:  The LLVM team, http://llvm.org/
 ;; Version: 1.0
-;; Homepage: http://llvm.org/
-;; Package-Requires: ((emacs "24.3"))
 
 ;;; Commentary:
 

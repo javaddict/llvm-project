@@ -30,8 +30,8 @@ extern NSString * const NSUndoManagerCheckpointNotification;
 
 int main (int argc, const char * argv[]) {
   NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
-  id someUninitializedPointer = [someUninitializedPointer objectAtIndex:0]; // expected-warning{{Receiver in message expression is an uninitialized value}}
-  NSLog(@"%@", someUninitializedPointer);    
+  id someUnintializedPointer = [someUnintializedPointer objectAtIndex:0]; // expected-warning{{Receiver in message expression is an uninitialized value}}
+  NSLog(@"%@", someUnintializedPointer);    
   [pool drain];
   return 0;
 }

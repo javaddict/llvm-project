@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "DefinitionsInHeadersCheck.h"
-#include "../utils/FileExtensionsUtils.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 
@@ -28,17 +27,17 @@ AST_MATCHER_P(NamedDecl, usesHeaderFileExtension, FileExtensionsSet,
 
 DefinitionsInHeadersCheck::DefinitionsInHeadersCheck(StringRef Name,
                                                      ClangTidyContext *Context)
-    : ClangTidyCheck(Name, Context) {}
+    : ClangTidyCheck(Name, Context),
+      HeaderFileExtensions(Context->getHeaderFileExtensions()) {}
 
 void DefinitionsInHeadersCheck::registerMatchers(MatchFinder *Finder) {
   auto DefinitionMatcher =
       anyOf(functionDecl(isDefinition(), unless(isDeleted())),
             varDecl(isDefinition()));
-  Finder->addMatcher(
-      namedDecl(DefinitionMatcher,
-                usesHeaderFileExtension(getHeaderFileExtensions()))
-          .bind("name-decl"),
-      this);
+  Finder->addMatcher(namedDecl(DefinitionMatcher,
+                               usesHeaderFileExtension(HeaderFileExtensions))
+                         .bind("name-decl"),
+                     this);
 }
 
 void DefinitionsInHeadersCheck::check(const MatchFinder::MatchResult &Result) {
@@ -106,7 +105,7 @@ void DefinitionsInHeadersCheck::check(const MatchFinder::MatchResult &Result) {
       return;
     diag(FD->getLocation(), "mark the definition as 'inline'",
          DiagnosticIDs::Note)
-        << FixItHint::CreateInsertion(FD->getFunctionLocStart(), "inline ");
+        << FixItHint::CreateInsertion(FD->getInnerLocStart(), "inline ");
   } else if (const auto *VD = dyn_cast<VarDecl>(ND)) {
     // C++14 variable templates are allowed.
     if (VD->getDescribedVarTemplate())

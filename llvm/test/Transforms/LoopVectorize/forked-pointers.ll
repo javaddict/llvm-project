@@ -14,15 +14,15 @@ target datalayout = "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128"
 ;;   }
 ;; }
 
-define void @forked_ptrs_different_base_same_offset(ptr nocapture readonly %Base1, ptr nocapture readonly %Base2, ptr nocapture %Dest, ptr nocapture readonly %Preds) {
+define dso_local void @forked_ptrs_different_base_same_offset(ptr nocapture readonly %Base1, ptr nocapture readonly %Base2, ptr nocapture %Dest, ptr nocapture readonly %Preds) {
 ; CHECK-LABEL: @forked_ptrs_different_base_same_offset(
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    br label [[VECTOR_MEMCHECK:%.*]]
 ; CHECK:       vector.memcheck:
-; CHECK-NEXT:    [[DEST1:%.*]] = ptrtoaddr ptr [[DEST:%.*]] to i64
-; CHECK-NEXT:    [[PREDS2:%.*]] = ptrtoaddr ptr [[PREDS:%.*]] to i64
-; CHECK-NEXT:    [[BASE23:%.*]] = ptrtoaddr ptr [[BASE2:%.*]] to i64
-; CHECK-NEXT:    [[BASE15:%.*]] = ptrtoaddr ptr [[BASE1:%.*]] to i64
+; CHECK-NEXT:    [[DEST1:%.*]] = ptrtoint ptr [[DEST:%.*]] to i64
+; CHECK-NEXT:    [[PREDS2:%.*]] = ptrtoint ptr [[PREDS:%.*]] to i64
+; CHECK-NEXT:    [[BASE23:%.*]] = ptrtoint ptr [[BASE2:%.*]] to i64
+; CHECK-NEXT:    [[BASE15:%.*]] = ptrtoint ptr [[BASE1:%.*]] to i64
 ; CHECK-NEXT:    [[TMP0:%.*]] = sub i64 [[DEST1]], [[PREDS2]]
 ; CHECK-NEXT:    [[DIFF_CHECK:%.*]] = icmp ult i64 [[TMP0]], 16
 ; CHECK-NEXT:    [[TMP1:%.*]] = sub i64 [[DEST1]], [[BASE23]]
@@ -42,7 +42,7 @@ define void @forked_ptrs_different_base_same_offset(ptr nocapture readonly %Base
 ; CHECK-NEXT:    br label [[VECTOR_BODY:%.*]]
 ; CHECK:       vector.body:
 ; CHECK-NEXT:    [[INDEX:%.*]] = phi i64 [ 0, [[VECTOR_PH]] ], [ [[INDEX_NEXT:%.*]], [[VECTOR_BODY]] ]
-; CHECK-NEXT:    [[TMP6:%.*]] = getelementptr inbounds [4 x i8], ptr [[PREDS]], i64 [[INDEX]]
+; CHECK-NEXT:    [[TMP6:%.*]] = getelementptr inbounds i32, ptr [[PREDS]], i64 [[INDEX]]
 ; CHECK-NEXT:    [[WIDE_LOAD:%.*]] = load <4 x i32>, ptr [[TMP6]], align 4
 ; CHECK-NEXT:    [[TMP7:%.*]] = icmp eq <4 x i32> [[WIDE_LOAD]], zeroinitializer
 ; CHECK-NEXT:    [[TMP8:%.*]] = select <4 x i1> [[TMP7]], <4 x ptr> [[BROADCAST_SPLAT]], <4 x ptr> [[BROADCAST_SPLAT9]]
@@ -50,12 +50,12 @@ define void @forked_ptrs_different_base_same_offset(ptr nocapture readonly %Base
 ; CHECK-NEXT:    [[TMP11:%.*]] = extractelement <4 x ptr> [[TMP8]], i64 1
 ; CHECK-NEXT:    [[TMP13:%.*]] = extractelement <4 x ptr> [[TMP8]], i64 2
 ; CHECK-NEXT:    [[TMP15:%.*]] = extractelement <4 x ptr> [[TMP8]], i64 3
-; CHECK-NEXT:    [[TMP10:%.*]] = getelementptr inbounds [4 x i8], ptr [[TMP9]], i64 [[INDEX]]
-; CHECK-NEXT:    [[TMP29:%.*]] = getelementptr [4 x i8], ptr [[TMP11]], i64 [[INDEX]]
+; CHECK-NEXT:    [[TMP10:%.*]] = getelementptr inbounds float, ptr [[TMP9]], i64 [[INDEX]]
+; CHECK-NEXT:    [[TMP29:%.*]] = getelementptr float, ptr [[TMP11]], i64 [[INDEX]]
 ; CHECK-NEXT:    [[TMP12:%.*]] = getelementptr i8, ptr [[TMP29]], i64 4
-; CHECK-NEXT:    [[TMP30:%.*]] = getelementptr [4 x i8], ptr [[TMP13]], i64 [[INDEX]]
+; CHECK-NEXT:    [[TMP30:%.*]] = getelementptr float, ptr [[TMP13]], i64 [[INDEX]]
 ; CHECK-NEXT:    [[TMP14:%.*]] = getelementptr i8, ptr [[TMP30]], i64 8
-; CHECK-NEXT:    [[TMP31:%.*]] = getelementptr [4 x i8], ptr [[TMP15]], i64 [[INDEX]]
+; CHECK-NEXT:    [[TMP31:%.*]] = getelementptr float, ptr [[TMP15]], i64 [[INDEX]]
 ; CHECK-NEXT:    [[TMP16:%.*]] = getelementptr i8, ptr [[TMP31]], i64 12
 ; CHECK-NEXT:    [[TMP17:%.*]] = load float, ptr [[TMP10]], align 4
 ; CHECK-NEXT:    [[TMP18:%.*]] = load float, ptr [[TMP12]], align 4
@@ -65,7 +65,7 @@ define void @forked_ptrs_different_base_same_offset(ptr nocapture readonly %Base
 ; CHECK-NEXT:    [[TMP22:%.*]] = insertelement <4 x float> [[TMP21]], float [[TMP18]], i64 1
 ; CHECK-NEXT:    [[TMP23:%.*]] = insertelement <4 x float> [[TMP22]], float [[TMP19]], i64 2
 ; CHECK-NEXT:    [[TMP24:%.*]] = insertelement <4 x float> [[TMP23]], float [[TMP20]], i64 3
-; CHECK-NEXT:    [[TMP25:%.*]] = getelementptr inbounds [4 x i8], ptr [[DEST]], i64 [[INDEX]]
+; CHECK-NEXT:    [[TMP25:%.*]] = getelementptr inbounds float, ptr [[DEST]], i64 [[INDEX]]
 ; CHECK-NEXT:    store <4 x float> [[TMP24]], ptr [[TMP25]], align 4
 ; CHECK-NEXT:    [[INDEX_NEXT]] = add nuw i64 [[INDEX]], 4
 ; CHECK-NEXT:    [[TMP26:%.*]] = icmp eq i64 [[INDEX_NEXT]], 100
@@ -78,13 +78,13 @@ define void @forked_ptrs_different_base_same_offset(ptr nocapture readonly %Base
 ; CHECK-NEXT:    ret void
 ; CHECK:       for.body:
 ; CHECK-NEXT:    [[INDVARS_IV:%.*]] = phi i64 [ 0, [[SCALAR_PH]] ], [ [[INDVARS_IV_NEXT:%.*]], [[FOR_BODY]] ]
-; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds nuw [4 x i8], ptr [[PREDS]], i64 [[INDVARS_IV]]
+; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds nuw i32, ptr [[PREDS]], i64 [[INDVARS_IV]]
 ; CHECK-NEXT:    [[TMP27:%.*]] = load i32, ptr [[ARRAYIDX]], align 4
 ; CHECK-NEXT:    [[CMP1_NOT:%.*]] = icmp eq i32 [[TMP27]], 0
 ; CHECK-NEXT:    [[SPEC_SELECT:%.*]] = select i1 [[CMP1_NOT]], ptr [[BASE2]], ptr [[BASE1]]
-; CHECK-NEXT:    [[DOTSINK_IN:%.*]] = getelementptr inbounds nuw [4 x i8], ptr [[SPEC_SELECT]], i64 [[INDVARS_IV]]
+; CHECK-NEXT:    [[DOTSINK_IN:%.*]] = getelementptr inbounds nuw float, ptr [[SPEC_SELECT]], i64 [[INDVARS_IV]]
 ; CHECK-NEXT:    [[DOTSINK:%.*]] = load float, ptr [[DOTSINK_IN]], align 4
-; CHECK-NEXT:    [[TMP28:%.*]] = getelementptr inbounds nuw [4 x i8], ptr [[DEST]], i64 [[INDVARS_IV]]
+; CHECK-NEXT:    [[TMP28:%.*]] = getelementptr inbounds nuw float, ptr [[DEST]], i64 [[INDVARS_IV]]
 ; CHECK-NEXT:    store float [[DOTSINK]], ptr [[TMP28]], align 4
 ; CHECK-NEXT:    [[INDVARS_IV_NEXT]] = add nuw nsw i64 [[INDVARS_IV]], 1
 ; CHECK-NEXT:    [[EXITCOND_NOT:%.*]] = icmp eq i64 [[INDVARS_IV_NEXT]], 100
@@ -123,7 +123,7 @@ for.body:
 ;;   }
 ;; }
 
-define void @forked_ptrs_same_base_different_offset(ptr nocapture readonly %Base, ptr nocapture %Dest, ptr nocapture readonly %Preds) {
+define dso_local void @forked_ptrs_same_base_different_offset(ptr nocapture readonly %Base, ptr nocapture %Dest, ptr nocapture readonly %Preds) {
 ; CHECK-LABEL: @forked_ptrs_same_base_different_offset(
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    br label [[FOR_BODY:%.*]]
@@ -132,7 +132,7 @@ define void @forked_ptrs_same_base_different_offset(ptr nocapture readonly %Base
 ; CHECK:       for.body:
 ; CHECK-NEXT:    [[INDVARS_IV:%.*]] = phi i64 [ 0, [[ENTRY:%.*]] ], [ [[INDVARS_IV_NEXT:%.*]], [[FOR_BODY]] ]
 ; CHECK-NEXT:    [[I_014:%.*]] = phi i32 [ 0, [[ENTRY]] ], [ [[ADD:%.*]], [[FOR_BODY]] ]
-; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds nuw [4 x i8], ptr [[PREDS:%.*]], i64 [[INDVARS_IV]]
+; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds nuw i32, ptr [[PREDS:%.*]], i64 [[INDVARS_IV]]
 ; CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr [[ARRAYIDX]], align 4
 ; CHECK-NEXT:    [[CMP1_NOT:%.*]] = icmp eq i32 [[TMP0]], 0
 ; CHECK-NEXT:    [[INDVARS_IV_NEXT]] = add nuw nsw i64 [[INDVARS_IV]], 1
@@ -140,9 +140,9 @@ define void @forked_ptrs_same_base_different_offset(ptr nocapture readonly %Base
 ; CHECK-NEXT:    [[TMP1:%.*]] = trunc i64 [[INDVARS_IV]] to i32
 ; CHECK-NEXT:    [[OFFSET_0:%.*]] = select i1 [[CMP1_NOT]], i32 [[ADD]], i32 [[TMP1]]
 ; CHECK-NEXT:    [[IDXPROM213:%.*]] = zext i32 [[OFFSET_0]] to i64
-; CHECK-NEXT:    [[ARRAYIDX3:%.*]] = getelementptr inbounds nuw [4 x i8], ptr [[BASE:%.*]], i64 [[IDXPROM213]]
+; CHECK-NEXT:    [[ARRAYIDX3:%.*]] = getelementptr inbounds nuw float, ptr [[BASE:%.*]], i64 [[IDXPROM213]]
 ; CHECK-NEXT:    [[TMP2:%.*]] = load float, ptr [[ARRAYIDX3]], align 4
-; CHECK-NEXT:    [[ARRAYIDX5:%.*]] = getelementptr inbounds nuw [4 x i8], ptr [[DEST:%.*]], i64 [[INDVARS_IV]]
+; CHECK-NEXT:    [[ARRAYIDX5:%.*]] = getelementptr inbounds nuw float, ptr [[DEST:%.*]], i64 [[INDVARS_IV]]
 ; CHECK-NEXT:    store float [[TMP2]], ptr [[ARRAYIDX5]], align 4
 ; CHECK-NEXT:    [[EXITCOND_NOT:%.*]] = icmp eq i64 [[INDVARS_IV_NEXT]], 100
 ; CHECK-NEXT:    br i1 [[EXITCOND_NOT]], label [[FOR_COND_CLEANUP:%.*]], label [[FOR_BODY]]
@@ -150,10 +150,10 @@ define void @forked_ptrs_same_base_different_offset(ptr nocapture readonly %Base
 entry:
   br label %for.body
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret void
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
   %i.014 = phi i32 [ 0, %entry ], [ %add, %for.body ]
   %arrayidx = getelementptr inbounds i32, ptr %Preds, i64 %indvars.iv

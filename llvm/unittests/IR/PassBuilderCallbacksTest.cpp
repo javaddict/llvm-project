@@ -121,7 +121,7 @@ template <typename DerivedT, typename IRUnitT,
           typename... ExtraArgTs>
 class MockPassHandleBase {
 public:
-  class Pass : public OptionalPassInfoMixin<Pass> {
+  class Pass : public PassInfoMixin<Pass> {
     friend MockPassHandleBase;
 
     DerivedT *Handle;

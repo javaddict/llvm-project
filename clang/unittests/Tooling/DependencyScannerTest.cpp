@@ -228,15 +228,13 @@ TEST(DependencyScanner, ScanDepsWithFS) {
   VFS->addFile(TestPath, 0,
                llvm::MemoryBuffer::getMemBuffer("#include \"header.h\"\n"));
 
-  DependencyScanningServiceOptions Opts;
-  Opts.MakeVFS = [&] { return VFS; };
-  DependencyScanningService Service(std::move(Opts));
-  DependencyScanningTool ScanTool(Service);
+  DependencyScanningService Service(ScanningMode::DependencyDirectivesScan,
+                                    ScanningOutputFormat::Make);
+  DependencyScanningTool ScanTool(Service, VFS);
 
   TextDiagnosticBuffer DiagConsumer;
-  std::optional<std::string> DepFile = ScanTool.getDependencyFile(
-      CommandLine, CWD, CallbackActionController::lookupUnreachableModuleOutput,
-      DiagConsumer);
+  std::optional<std::string> DepFile =
+      ScanTool.getDependencyFile(CommandLine, CWD, DiagConsumer);
   ASSERT_TRUE(DepFile.has_value());
   EXPECT_EQ(llvm::sys::path::convert_to_slash(*DepFile),
             "test.cpp.o: /root/test.cpp /root/header.h\n");
@@ -287,18 +285,16 @@ TEST(DependencyScanner, ScanDepsWithModuleLookup) {
 
   auto InterceptFS = llvm::makeIntrusiveRefCnt<InterceptorFS>(VFS);
 
-  DependencyScanningServiceOptions Opts;
-  Opts.MakeVFS = [&] { return InterceptFS; };
-  DependencyScanningService Service(std::move(Opts));
-  DependencyScanningTool ScanTool(Service);
+  DependencyScanningService Service(ScanningMode::DependencyDirectivesScan,
+                                    ScanningOutputFormat::Make);
+  DependencyScanningTool ScanTool(Service, InterceptFS);
 
   // This will fail with "fatal error: module 'Foo' not found" but it doesn't
   // matter, the point of the test is to check that files are not read
   // unnecessarily.
   TextDiagnosticBuffer DiagConsumer;
-  std::optional<std::string> DepFile = ScanTool.getDependencyFile(
-      CommandLine, CWD, CallbackActionController::lookupUnreachableModuleOutput,
-      DiagConsumer);
+  std::optional<std::string> DepFile =
+      ScanTool.getDependencyFile(CommandLine, CWD, DiagConsumer);
   ASSERT_FALSE(DepFile.has_value());
 
   EXPECT_TRUE(!llvm::is_contained(InterceptFS->StatPaths, OtherPath));

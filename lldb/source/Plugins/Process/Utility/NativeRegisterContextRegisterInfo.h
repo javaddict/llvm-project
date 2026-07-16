@@ -33,9 +33,6 @@ public:
 
   const RegisterInfoInterface &GetRegisterInfoInterface() const;
 
-  // Invalidate cached values in register context data structures.
-  virtual void InvalidateAllRegisters() {}
-
 protected:
   std::unique_ptr<RegisterInfoInterface> m_register_info_interface_up;
 };

@@ -17,11 +17,11 @@
 #include "LoongArch.h"
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/SelectionDAG.h"
-#include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/CodeGen/TargetLowering.h"
 
 namespace llvm {
 class LoongArchSubtarget;
+
 class LoongArchTargetLowering : public TargetLowering {
   const LoongArchSubtarget &Subtarget;
 
@@ -62,7 +62,7 @@ public:
   bool isCheapToSpeculateCtlz(Type *Ty) const override;
   bool hasAndNot(SDValue Y) const override;
   TargetLowering::AtomicExpansionKind
-  shouldExpandAtomicRMWInIR(const AtomicRMWInst *AI) const override;
+  shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
   void emitExpandAtomicRMW(AtomicRMWInst *AI) const override;
 
   Value *emitMaskedAtomicRMWIntrinsic(IRBuilderBase &Builder, AtomicRMWInst *AI,
@@ -73,15 +73,15 @@ public:
   EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
                          EVT VT) const override;
   TargetLowering::AtomicExpansionKind
-  shouldExpandAtomicCmpXchgInIR(const AtomicCmpXchgInst *CI) const override;
+  shouldExpandAtomicCmpXchgInIR(AtomicCmpXchgInst *CI) const override;
   Value *emitMaskedAtomicCmpXchgIntrinsic(IRBuilderBase &Builder,
                                           AtomicCmpXchgInst *CI,
                                           Value *AlignedAddr, Value *CmpVal,
                                           Value *NewVal, Value *Mask,
                                           AtomicOrdering Ord) const override;
 
-  void getTgtMemIntrinsic(SmallVectorImpl<IntrinsicInfo> &Infos,
-                          const CallBase &I, MachineFunction &MF,
+  bool getTgtMemIntrinsic(IntrinsicInfo &Info, const CallBase &I,
+                          MachineFunction &MF,
                           unsigned Intrinsic) const override;
 
   bool isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
@@ -158,10 +158,6 @@ public:
   bool isFPImmVLDILegal(const APFloat &Imm, EVT VT) const;
   LegalizeTypeAction getPreferredVectorAction(MVT VT) const override;
 
-  void computeKnownBitsForTargetNode(const SDValue Op, KnownBits &Known,
-                                     const APInt &DemandedElts,
-                                     const SelectionDAG &DAG,
-                                     unsigned Depth) const override;
   bool SimplifyDemandedBitsForTargetNode(SDValue Op, const APInt &DemandedBits,
                                          const APInt &DemandedElts,
                                          KnownBits &Known,
@@ -178,14 +174,6 @@ public:
   std::pair<bool, uint64_t>
   isImmVLDILegalForMode1(const APInt &SplatValue,
                          const unsigned SplatBitSize) const;
-
-  /// True if stack clash protection is enabled for this function.
-  bool hasInlineStackProbe(const MachineFunction &MF) const override;
-
-  unsigned getStackProbeSize(const MachineFunction &MF, Align StackAlign) const;
-
-  MachineBasicBlock *emitDynamicProbedAlloc(MachineInstr &MI,
-                                            MachineBasicBlock *MBB) const;
 
 private:
   /// Target-specific function used to lower LoongArch calling conventions.
@@ -255,10 +243,6 @@ private:
   SDValue lowerConstantFP(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerSETCC(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerRotate(SDValue Op, SelectionDAG &DAG) const;
-  SDValue lowerFP_ROUND(SDValue Op, SelectionDAG &DAG) const;
-  SDValue lowerFP_EXTEND(SDValue Op, SelectionDAG &DAG) const;
-  SDValue lowerSIGN_EXTEND_VECTOR_INREG(SDValue Op, SelectionDAG &DAG) const;
-  SDValue lowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
 
   bool isFPImmLegal(const APFloat &Imm, EVT VT,
                     bool ForCodeSize) const override;

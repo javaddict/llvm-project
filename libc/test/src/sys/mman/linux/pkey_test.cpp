@@ -8,7 +8,6 @@
 
 #include "hdr/errno_macros.h"
 #include "hdr/signal_macros.h"
-#include "hdr/sys_mman_macros.h"
 #include "hdr/types/size_t.h"
 #include "src/sys/mman/mmap.h"
 #include "src/sys/mman/munmap.h"

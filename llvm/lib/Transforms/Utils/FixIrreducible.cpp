@@ -290,13 +290,7 @@ static bool fixIrreducible(Cycle &C, CycleInfo &CI, DominatorTree &DT,
   }
 
   for (BasicBlock *P : Predecessors) {
-    if (isa<UncondBrInst>(P->getTerminator())) {
-      assert(P->getTerminator()->getSuccessor(0) == Header);
-      CHub.addBranch(P, Header);
-
-      LLVM_DEBUG(dbgs() << "Added internal branch: " << printBasicBlock(P)
-                        << " -> " << printBasicBlock(Header) << '\n');
-    } else if (CondBrInst *Branch = dyn_cast<CondBrInst>(P->getTerminator())) {
+    if (BranchInst *Branch = dyn_cast<BranchInst>(P->getTerminator())) {
       // Exactly one of the two successors is the header.
       BasicBlock *Succ0 = Branch->getSuccessor(0) == Header ? Header : nullptr;
       BasicBlock *Succ1 = Succ0 ? nullptr : Header;
@@ -334,18 +328,12 @@ static bool fixIrreducible(Cycle &C, CycleInfo &CI, DominatorTree &DT,
   }
 
   for (BasicBlock *P : Predecessors) {
-    if (UncondBrInst *Branch = dyn_cast<UncondBrInst>(P->getTerminator())) {
-      BasicBlock *Succ0 = Branch->getSuccessor();
-      Succ0 = C.contains(Succ0) ? Succ0 : nullptr;
-      CHub.addBranch(P, Succ0);
-
-      LLVM_DEBUG(dbgs() << "Added external branch: " << printBasicBlock(P)
-                        << " -> " << printBasicBlock(Succ0) << '\n');
-    } else if (CondBrInst *Branch = dyn_cast<CondBrInst>(P->getTerminator())) {
+    if (BranchInst *Branch = dyn_cast<BranchInst>(P->getTerminator()); Branch) {
       BasicBlock *Succ0 = Branch->getSuccessor(0);
       Succ0 = C.contains(Succ0) ? Succ0 : nullptr;
-      BasicBlock *Succ1 = Branch->getSuccessor(1);
-      Succ1 = C.contains(Succ1) ? Succ1 : nullptr;
+      BasicBlock *Succ1 =
+          Branch->isUnconditional() ? nullptr : Branch->getSuccessor(1);
+      Succ1 = Succ1 && C.contains(Succ1) ? Succ1 : nullptr;
       CHub.addBranch(P, Succ0, Succ1);
 
       LLVM_DEBUG(dbgs() << "Added external branch: " << printBasicBlock(P)

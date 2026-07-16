@@ -24,18 +24,6 @@ void TCETargetInfo::getTargetDefines(const LangOptions &Opts,
   Builder.defineMacro("__TCE_V1__");
 }
 
-void TCELE64TargetInfo::getTargetDefines(const LangOptions &Opts,
-                                         MacroBuilder &Builder) const {
-  DefineStd(Builder, "tcele64", Opts);
-  Builder.defineMacro("__TCE__");
-  Builder.defineMacro("__TCE_V1__");
-  Builder.defineMacro("__TCELE__");
-  Builder.defineMacro("__TCELE_V1__");
-  Builder.defineMacro("__TCELE64__");
-  Builder.defineMacro("__TCELE64_V1__");
-  Builder.defineMacro("__TCE64__");
-}
-
 void TCELETargetInfo::getTargetDefines(const LangOptions &Opts,
                                        MacroBuilder &Builder) const {
   DefineStd(Builder, "tcele", Opts);

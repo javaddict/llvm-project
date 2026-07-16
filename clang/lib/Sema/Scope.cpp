@@ -113,23 +113,18 @@ bool Scope::containedInPrototypeScope() const {
   return false;
 }
 
-void Scope::EnterLoopBody(LabelDecl *LD) {
-  Flags |= BreakScope | ContinueScope;
-  BreakParent = ContinueParent = this;
-  PrecedingLabel = LD;
-}
-
-void Scope::EnterSwitchBody(LabelDecl *LD) {
-  Flags |= BreakScope;
-  BreakParent = this;
-  PrecedingLabel = LD;
-}
-
-void Scope::LeaveLoopBody() {
-  Flags &= ~(BreakScope | ContinueScope);
-  BreakParent = getParent()->BreakParent;
-  ContinueParent = getParent()->ContinueParent;
-  PrecedingLabel = nullptr;
+void Scope::AddFlags(unsigned FlagsToSet) {
+  assert((FlagsToSet & ~(BreakScope | ContinueScope)) == 0 &&
+         "Unsupported scope flags");
+  if (FlagsToSet & BreakScope) {
+    assert((Flags & BreakScope) == 0 && "Already set");
+    BreakParent = this;
+  }
+  if (FlagsToSet & ContinueScope) {
+    assert((Flags & ContinueScope) == 0 && "Already set");
+    ContinueParent = this;
+  }
+  Flags |= FlagsToSet;
 }
 
 // The algorithm for updating NRVO candidate is as follows:
@@ -234,7 +229,7 @@ void Scope::dumpImpl(raw_ostream &OS) const {
       {CompoundStmtScope, "CompoundStmtScope"},
       {ClassInheritanceScope, "ClassInheritanceScope"},
       {CatchScope, "CatchScope"},
-      {Unused, "Unused"},
+      {ConditionVarScope, "ConditionVarScope"},
       {OpenMPOrderClauseScope, "OpenMPOrderClauseScope"},
       {LambdaScope, "LambdaScope"},
       {OpenACCComputeConstructScope, "OpenACCComputeConstructScope"},

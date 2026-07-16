@@ -13,13 +13,13 @@
 // class map
 
 // template <class... Args>
-//  constexpr pair<iterator, bool> try_emplace(const key_type& k, Args&&... args);          // C++17, constexpr since C++26
+//  pair<iterator, bool> try_emplace(const key_type& k, Args&&... args);          // C++17
 // template <class... Args>
-//  constexpr pair<iterator, bool> try_emplace(key_type&& k, Args&&... args);               // C++17, constexpr since C++26
+//  pair<iterator, bool> try_emplace(key_type&& k, Args&&... args);               // C++17
 // template <class... Args>
-//  constexpr iterator try_emplace(const_iterator hint, const key_type& k, Args&&... args); // C++17, constexpr since C++26
+//  iterator try_emplace(const_iterator hint, const key_type& k, Args&&... args); // C++17
 // template <class... Args>
-//  constexpr iterator try_emplace(const_iterator hint, key_type&& k, Args&&... args);      // C++17, constexpr since C++26
+//  iterator try_emplace(const_iterator hint, key_type&& k, Args&&... args);      // C++17
 
 #include <map>
 #include <cassert>
@@ -36,13 +36,13 @@ class Moveable {
   double double_;
 
 public:
-  TEST_CONSTEXPR_CXX26 Moveable() : int_(0), double_(0) {}
-  TEST_CONSTEXPR_CXX26 Moveable(int i, double d) : int_(i), double_(d) {}
-  TEST_CONSTEXPR_CXX26 Moveable(Moveable&& x) : int_(x.int_), double_(x.double_) {
+  Moveable() : int_(0), double_(0) {}
+  Moveable(int i, double d) : int_(i), double_(d) {}
+  Moveable(Moveable&& x) : int_(x.int_), double_(x.double_) {
     x.int_    = -1;
     x.double_ = -1;
   }
-  TEST_CONSTEXPR_CXX26 Moveable& operator=(Moveable&& x) {
+  Moveable& operator=(Moveable&& x) {
     int_      = x.int_;
     x.int_    = -1;
     double_   = x.double_;
@@ -50,16 +50,14 @@ public:
     return *this;
   }
 
-  TEST_CONSTEXPR_CXX26 bool operator==(const Moveable& x) const { return int_ == x.int_ && double_ == x.double_; }
-  TEST_CONSTEXPR_CXX26 bool operator<(const Moveable& x) const {
-    return int_ < x.int_ || (int_ == x.int_ && double_ < x.double_);
-  }
+  bool operator==(const Moveable& x) const { return int_ == x.int_ && double_ == x.double_; }
+  bool operator<(const Moveable& x) const { return int_ < x.int_ || (int_ == x.int_ && double_ < x.double_); }
 
-  TEST_CONSTEXPR_CXX26 int get() const { return int_; }
-  TEST_CONSTEXPR_CXX26 bool moved() const { return int_ == -1; }
+  int get() const { return int_; }
+  bool moved() const { return int_ == -1; }
 };
 
-TEST_CONSTEXPR_CXX26 bool test() {
+int main(int, char**) {
   { // pair<iterator, bool> try_emplace(const key_type& k, Args&&... args);
     typedef std::map<int, Moveable> M;
     typedef std::pair<M::iterator, bool> R;
@@ -94,10 +92,10 @@ TEST_CONSTEXPR_CXX26 bool test() {
     assert(r.first->second.get() == 5); // value
 
     Moveable mv3(-1, 3.0);
-    r = m.try_emplace(117, std::move(mv3));
+    r = m.try_emplace(117, std::move(mv2));
     assert(m.size() == 13);
     assert(r.second);                    // was inserted
-    assert(mv3.moved());                 // was moved from
+    assert(mv2.moved());                 // was moved from
     assert(r.first->first == 117);       // key
     assert(r.first->second.get() == -1); // value
   }
@@ -180,13 +178,6 @@ TEST_CONSTEXPR_CXX26 bool test() {
     assert(r->first.get() == 3);  // key
     assert(r->second.get() == 4); // value
   }
-  return true;
-}
 
-int main(int, char**) {
-  test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
   return 0;
 }

@@ -7,7 +7,6 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
 
-@skipIfTargetDoesNotSupportSharedLibraries()
 class TestExecutableIsFirst(TestBase):
     NO_DEBUG_INFO_TESTCASE = True
 
@@ -17,7 +16,8 @@ class TestExecutableIsFirst(TestBase):
     def test_executable_is_first_before_run(self):
         self.build()
 
-        lib_name = self.platformContext.getFullLibName("bar")
+        ctx = self.platformContext
+        lib_name = ctx.shlib_prefix + "bar." + ctx.shlib_extension
 
         exe = self.getBuildArtifact("a.out")
         lib = self.getBuildArtifact(lib_name)

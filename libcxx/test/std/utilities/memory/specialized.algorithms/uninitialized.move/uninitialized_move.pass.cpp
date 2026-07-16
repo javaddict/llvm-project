@@ -17,7 +17,6 @@
 #include <cstdlib>
 #include <cassert>
 
-#include "MoveOnly.h"
 #include "test_macros.h"
 #include "test_iterators.h"
 #include "../overload_compare_iterator.h"
@@ -55,25 +54,6 @@ struct ThrowsCounted {
 int ThrowsCounted::count = 0;
 int ThrowsCounted::constructed = 0;
 int ThrowsCounted::throw_after = 0;
-
-TEST_CONSTEXPR_CXX26 bool test() {
-  const int n    = 3;
-  MoveOnly in[n] = {1, 2, 3};
-  std::allocator<MoveOnly> alloc;
-  MoveOnly* out = alloc.allocate(n);
-
-  MoveOnly* result = std::uninitialized_move(in, in + n, out);
-  assert(result == out + n);
-  for (int i = 0; i < n; ++i) {
-    assert(in[i] == 0);
-    assert(out[i] == i + 1);
-  }
-
-  std::destroy(out, out + n);
-  alloc.deallocate(out, n);
-
-  return true;
-}
 
 void test_ctor_throws()
 {
@@ -161,10 +141,5 @@ int main(int, char**) {
         }
     }
 
-    test();
-#if TEST_STD_VER >= 26
-    static_assert(test());
-#endif
-
-    return 0;
+  return 0;
 }

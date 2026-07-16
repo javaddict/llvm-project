@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/remquof128.h"
-#include "src/__support/math/remquof128.h"
+#include "src/__support/FPUtil/DivisionAndRemainderOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(float128, remquof128, (float128 x, float128 y, int *exp)) {
-  return math::remquof128(x, y, exp);
+  return fputil::remquo(x, y, *exp);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

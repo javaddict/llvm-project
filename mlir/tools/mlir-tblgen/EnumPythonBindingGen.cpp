@@ -17,7 +17,6 @@
 #include "mlir/TableGen/Dialect.h"
 #include "mlir/TableGen/EnumInfo.h"
 #include "mlir/TableGen/GenInfo.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/TableGen/Record.h"
 
@@ -26,10 +25,6 @@ using namespace mlir::tblgen;
 using llvm::formatv;
 using llvm::Record;
 using llvm::RecordKeeper;
-
-// Declared in OpPythonBindingGen.cpp; the two generators share the same
-// -bind-dialect option to allow filtering enum registrations by dialect.
-extern std::string dialectNameStorage;
 
 /// File header and includes.
 constexpr const char *fileHeader = R"Py(
@@ -99,11 +94,7 @@ static bool emitAttributeBuilder(const EnumInfo &enumInfo, raw_ostream &os) {
     return false;
 
   int64_t bitwidth = enumInfo.getBitwidth();
-  // These builders may be emitted by multiple dialect enum_gen files when
-  // dialects share enum definitions via .td includes. Use allow_existing=True
-  // so that the first loaded dialect registers the builder and subsequent
-  // loads silently skip (first-registration wins).
-  os << formatv("@register_attribute_builder(\"{0}\", allow_existing=True)\n",
+  os << formatv("@register_attribute_builder(\"{0}\")\n",
                 enumAttrInfo->getAttrDefName());
   os << formatv("def _{0}(x, context):\n",
                 enumAttrInfo->getAttrDefName().lower());
@@ -117,12 +108,10 @@ static bool emitAttributeBuilder(const EnumInfo &enumInfo, raw_ostream &os) {
 /// Emits an attribute builder for the given dialect enum attribute to support
 /// automatic conversion between enum values and attributes in Python. Returns
 /// `false` on success, `true` on failure.
-static bool emitDialectEnumAttributeBuilder(StringRef dialect,
-                                            StringRef attrDefName,
+static bool emitDialectEnumAttributeBuilder(StringRef attrDefName,
                                             StringRef formatString,
                                             raw_ostream &os) {
-  os << formatv("@register_attribute_builder(\"{0}.{1}\")\n", dialect,
-                attrDefName);
+  os << formatv("@register_attribute_builder(\"{0}\")\n", attrDefName);
   os << formatv("def _{0}(x, context):\n", attrDefName.lower());
   os << formatv("    return "
                 "_ods_ir.Attribute.parse(f'{0}', context=context)\n\n",
@@ -143,12 +132,6 @@ static bool emitPythonEnums(const RecordKeeper &records, raw_ostream &os) {
   for (const Record *it :
        records.getAllDerivedDefinitionsIfDefined("EnumAttr")) {
     AttrOrTypeDef attr(&*it);
-    StringRef dialect = attr.getDialect().getName();
-    // When -bind-dialect is specified, only emit builders for EnumAttr records
-    // belonging to that dialect. This prevents duplicate registrations when
-    // multiple dialects include the same .td files.
-    if (!dialectNameStorage.empty() && dialect != dialectNameStorage)
-      continue;
     if (!attr.getMnemonic()) {
       llvm::errs() << "enum case " << attr
                    << " needs mnemonic for python enum bindings generation";
@@ -156,13 +139,14 @@ static bool emitPythonEnums(const RecordKeeper &records, raw_ostream &os) {
     }
     StringRef mnemonic = attr.getMnemonic().value();
     std::optional<StringRef> assemblyFormat = attr.getAssemblyFormat();
+    StringRef dialect = attr.getDialect().getName();
     if (assemblyFormat == "`<` $value `>`") {
       emitDialectEnumAttributeBuilder(
-          dialect, attr.getName(),
+          attr.getName(),
           formatv("#{0}.{1}<{{str(x)}>", dialect, mnemonic).str(), os);
     } else if (assemblyFormat == "$value") {
       emitDialectEnumAttributeBuilder(
-          dialect, attr.getName(),
+          attr.getName(),
           formatv("#{0}<{1} {{str(x)}>", dialect, mnemonic).str(), os);
     } else {
       llvm::errs()

@@ -25,25 +25,25 @@ using namespace sampleprof;
 class ProfileSummaryInfo;
 class Module;
 
-extern LLVM_ABI cl::opt<unsigned> SampleProfileMaxPropagateIterations;
-extern LLVM_ABI cl::opt<unsigned> SampleProfileRecordCoverage;
-extern LLVM_ABI cl::opt<unsigned> SampleProfileSampleCoverage;
-extern LLVM_ABI cl::opt<bool> NoWarnSampleUnused;
+extern cl::opt<unsigned> SampleProfileMaxPropagateIterations;
+extern cl::opt<unsigned> SampleProfileRecordCoverage;
+extern cl::opt<unsigned> SampleProfileSampleCoverage;
+extern cl::opt<bool> NoWarnSampleUnused;
 
 namespace sampleprofutil {
 
 class SampleCoverageTracker {
 public:
-  LLVM_ABI bool markSamplesUsed(const FunctionSamples *FS, uint32_t LineOffset,
-                                uint32_t Discriminator, uint64_t Samples);
-  LLVM_ABI unsigned computeCoverage(unsigned Used, unsigned Total) const;
-  LLVM_ABI unsigned countUsedRecords(const FunctionSamples *FS,
-                                     ProfileSummaryInfo *PSI) const;
-  LLVM_ABI unsigned countBodyRecords(const FunctionSamples *FS,
-                                     ProfileSummaryInfo *PSI) const;
+  bool markSamplesUsed(const FunctionSamples *FS, uint32_t LineOffset,
+                       uint32_t Discriminator, uint64_t Samples);
+  unsigned computeCoverage(unsigned Used, unsigned Total) const;
+  unsigned countUsedRecords(const FunctionSamples *FS,
+                            ProfileSummaryInfo *PSI) const;
+  unsigned countBodyRecords(const FunctionSamples *FS,
+                            ProfileSummaryInfo *PSI) const;
   uint64_t getTotalUsedSamples() const { return TotalUsedSamples; }
-  LLVM_ABI uint64_t countBodySamples(const FunctionSamples *FS,
-                                     ProfileSummaryInfo *PSI) const;
+  uint64_t countBodySamples(const FunctionSamples *FS,
+                            ProfileSummaryInfo *PSI) const;
 
   void clear() {
     SampleCoverage.clear();
@@ -86,11 +86,11 @@ private:
 };
 
 /// Return true if the given callsite is hot wrt to hot cutoff threshold.
-LLVM_ABI bool callsiteIsHot(const FunctionSamples *CallsiteFS,
-                            ProfileSummaryInfo *PSI, bool ProfAccForSymsInList);
+bool callsiteIsHot(const FunctionSamples *CallsiteFS, ProfileSummaryInfo *PSI,
+                   bool ProfAccForSymsInList);
 
 /// Create a global variable to flag FSDiscriminators are used.
-LLVM_ABI void createFSDiscriminatorVariable(Module *M);
+void createFSDiscriminatorVariable(Module *M);
 
 } // end of namespace sampleprofutil
 } // end of namespace llvm

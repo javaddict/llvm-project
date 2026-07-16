@@ -7,12 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/copysignbf16.h"
-#include "src/__support/math/copysignbf16.h"
+#include "src/__support/FPUtil/ManipulationFunctions.h"
+#include "src/__support/FPUtil/bfloat16.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(bfloat16, copysignbf16, (bfloat16 x, bfloat16 y)) {
-  return math::copysignbf16(x, y);
+  return fputil::copysign(x, y);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

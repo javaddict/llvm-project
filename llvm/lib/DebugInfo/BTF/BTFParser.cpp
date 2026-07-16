@@ -15,7 +15,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/Errc.h"
-#include "llvm/Support/FormatVariadic.h"
 
 #define DEBUG_TYPE "debug-info-btf-parser"
 
@@ -89,7 +88,8 @@ public:
     Expected<StringRef> Contents = Sec.getContents();
     if (!Contents)
       return Contents.takeError();
-    return DataExtractor(Contents.get(), Obj.isLittleEndian());
+    return DataExtractor(Contents.get(), Obj.isLittleEndian(),
+                         Obj.getBytesInAddress());
   }
 
   std::optional<SectionRef> findSection(StringRef Name) const {
@@ -206,7 +206,7 @@ Error BTFParser::parseTypesInfo(ParseContext &Ctx, uint64_t TypesInfoStart,
                                 StringRef RawData) {
   using support::endian::byte_swap;
 
-  TypesBuffer.assign(arrayRefFromStringRef(RawData));
+  TypesBuffer = OwningArrayRef<uint8_t>(arrayRefFromStringRef(RawData));
   // Switch endianness if necessary.
   endianness Endianness = Ctx.Obj.isLittleEndian() ? llvm::endianness::little
                                                    : llvm::endianness::big;
@@ -380,7 +380,7 @@ Error BTFParser::parse(const ObjectFile &Obj, const ParseOptions &Opts) {
   SectionLines.clear();
   SectionRelocs.clear();
   Types.clear();
-  TypesBuffer.clear();
+  TypesBuffer = OwningArrayRef<uint8_t>();
 
   ParseContext Ctx(Obj, Opts);
   std::optional<SectionRef> BTF;
@@ -679,8 +679,7 @@ void BTFParser::symbolize(const BTF::BPFFieldReloc *Reloc,
     if (SpecStr.empty())
       break;
     if (SpecStr[0] != ':')
-      return Fail(
-          formatv("unexpected spec string delimiter: '{0}'", SpecStr[0]));
+      return Fail(format("unexpected spec string delimiter: '%c'", SpecStr[0]));
     SpecStr = SpecStr.substr(1);
   }
 
@@ -690,7 +689,7 @@ void BTFParser::symbolize(const BTF::BPFFieldReloc *Reloc,
   uint32_t CurId = Reloc->TypeID;
   const BTF::CommonType *Type = findType(CurId);
   if (!Type)
-    return Fail(formatv("unknown type id: {0:d}", CurId));
+    return Fail(format("unknown type id: %d", CurId));
 
   Stream << " [" << CurId << "]";
 
@@ -704,7 +703,7 @@ void BTFParser::symbolize(const BTF::BPFFieldReloc *Reloc,
     CurId = Type->Type;
     const BTF::CommonType *NextType = findType(CurId);
     if (!NextType)
-      return Fail(formatv("unknown type id: {0:d} in modifiers chain", CurId));
+      return Fail(format("unknown type id: %d in modifiers chain", CurId));
     Type = NextType;
   }
   // Print the type name to `Stream`.
@@ -768,19 +767,19 @@ void BTFParser::symbolize(const BTF::BPFFieldReloc *Reloc,
     uint32_t Idx = RawSpec[0];
     if (auto *T = dyn_cast<BTF::EnumType>(Type)) {
       if (T->values().size() <= Idx)
-        return Fail(formatv("bad value index: {0:d}", Idx));
+        return Fail(format("bad value index: %d", Idx));
       const BTF::BTFEnum &E = T->values()[Idx];
       NameOff = E.NameOff;
       Val = E.Val;
     } else if (auto *T = dyn_cast<BTF::Enum64Type>(Type)) {
       if (T->values().size() <= Idx)
-        return Fail(formatv("bad value index: {0:d}", Idx));
+        return Fail(format("bad value index: %d", Idx));
       const BTF::BTFEnum64 &E = T->values()[Idx];
       NameOff = E.NameOff;
       Val = (uint64_t)E.Val_Hi32 << 32u | E.Val_Lo32;
     } else {
-      return Fail(formatv("unexpected type kind for enum relocation: {0:d}",
-                          Type->getKind()));
+      return Fail(format("unexpected type kind for enum relocation: %d",
+                         Type->getKind()));
     }
 
     Stream << StrOrAnon({*this, NameOff, Idx});
@@ -825,9 +824,9 @@ void BTFParser::symbolize(const BTF::BPFFieldReloc *Reloc,
 
       if (auto *T = dyn_cast<BTF::StructType>(Type)) {
         if (T->getVlen() <= Idx)
-          return Fail(formatv(
-              "member index {0:d} for spec sub-string {1:d} is out of range",
-              Idx, I));
+          return Fail(
+              format("member index %d for spec sub-string %d is out of range",
+                     Idx, I));
 
         const BTF::BTFMember &Member = T->members()[Idx];
         if (I != 1 || RawSpec[0] != 0)
@@ -835,20 +834,18 @@ void BTFParser::symbolize(const BTF::BPFFieldReloc *Reloc,
         Stream << StrOrAnon({*this, Member.NameOff, Idx});
         Type = findType(Member.Type);
         if (!Type)
-          return Fail(
-              formatv("unknown member type id {0:d} for spec sub-string {1:d}",
-                      Member.Type, I));
+          return Fail(format("unknown member type id %d for spec sub-string %d",
+                             Member.Type, I));
       } else if (auto *T = dyn_cast<BTF::ArrayType>(Type)) {
         Stream << "[" << Idx << "]";
         Type = findType(T->getArray().ElemType);
         if (!Type)
           return Fail(
-              formatv("unknown element type id {0:d} for spec sub-string {1:d}",
-                      T->getArray().ElemType, I));
+              format("unknown element type id %d for spec sub-string %d",
+                     T->getArray().ElemType, I));
       } else {
-        return Fail(
-            formatv("unexpected type kind {0:d} for spec sub-string {1:d}",
-                    Type->getKind(), I));
+        return Fail(format("unexpected type kind %d for spec sub-string %d",
+                           Type->getKind(), I));
       }
     }
 
@@ -856,5 +853,5 @@ void BTFParser::symbolize(const BTF::BPFFieldReloc *Reloc,
     return;
   }
 
-  return Fail(formatv("unknown relocation kind: {0:d}", Reloc->RelocKind));
+  return Fail(format("unknown relocation kind: %d", Reloc->RelocKind));
 }

@@ -8,11 +8,10 @@
 
 #include "llvm/DebugInfo/GSYM/FunctionInfo.h"
 #include "llvm/DebugInfo/GSYM/FileWriter.h"
-#include "llvm/DebugInfo/GSYM/GsymCreator.h"
-#include "llvm/DebugInfo/GSYM/GsymDataExtractor.h"
 #include "llvm/DebugInfo/GSYM/GsymReader.h"
-#include "llvm/DebugInfo/GSYM/InlineInfo.h"
 #include "llvm/DebugInfo/GSYM/LineTable.h"
+#include "llvm/DebugInfo/GSYM/InlineInfo.h"
+#include "llvm/Support/DataExtractor.h"
 #include <optional>
 
 using namespace llvm;
@@ -39,7 +38,7 @@ raw_ostream &llvm::gsym::operator<<(raw_ostream &OS, const FunctionInfo &FI) {
   return OS;
 }
 
-llvm::Expected<FunctionInfo> FunctionInfo::decode(GsymDataExtractor &Data,
+llvm::Expected<FunctionInfo> FunctionInfo::decode(DataExtractor &Data,
                                                   uint64_t BaseAddr) {
   FunctionInfo FI;
   uint64_t Offset = 0;
@@ -50,12 +49,11 @@ llvm::Expected<FunctionInfo> FunctionInfo::decode(GsymDataExtractor &Data,
   if (!Data.isValidOffsetForDataOfSize(Offset, 4))
     return createStringError(std::errc::io_error,
         "0x%8.8" PRIx64 ": missing FunctionInfo Name", Offset);
-  FI.Name = Data.getStringOffset(&Offset);
+  FI.Name = Data.getU32(&Offset);
   if (FI.Name == 0)
     return createStringError(std::errc::io_error,
-                             "0x%8.8" PRIx64
-                             ": invalid FunctionInfo Name value 0x%" PRIx64,
-                             Offset - Data.getStringOffsetSize(), FI.Name);
+        "0x%8.8" PRIx64 ": invalid FunctionInfo Name value 0x%8.8x",
+        Offset - 4, FI.Name);
   bool Done = false;
   while (!Done) {
     if (!Data.isValidOffsetForDataOfSize(Offset, 4))
@@ -70,7 +68,9 @@ llvm::Expected<FunctionInfo> FunctionInfo::decode(GsymDataExtractor &Data,
       return createStringError(std::errc::io_error,
           "0x%8.8" PRIx64 ": missing FunctionInfo data for InfoType %u",
           Offset, IT);
-    GsymDataExtractor InfoData(Data, Offset, InfoLength);
+    DataExtractor InfoData(Data.getData().substr(Offset, InfoLength),
+                           Data.isLittleEndian(),
+                           Data.getAddressSize());
     switch (IT) {
       case InfoType::EndOfList:
         Done = true;
@@ -116,13 +116,12 @@ llvm::Expected<FunctionInfo> FunctionInfo::decode(GsymDataExtractor &Data,
   return std::move(FI);
 }
 
-uint64_t FunctionInfo::cacheEncoding(GsymCreator &GC) {
+uint64_t FunctionInfo::cacheEncoding() {
   EncodingCache.clear();
   if (!isValid())
     return 0;
   raw_svector_ostream OutStrm(EncodingCache);
   FileWriter FW(OutStrm, llvm::endianness::native);
-  FW.setStringOffsetSize(GC.getStringOffsetSize());
   llvm::Expected<uint64_t> Result = encode(FW);
   if (!Result) {
     EncodingCache.clear();
@@ -155,8 +154,8 @@ llvm::Expected<uint64_t> FunctionInfo::encode(FileWriter &Out,
   // Write the size in bytes of this function as a uint32_t. This can be zero
   // if we just have a symbol from a symbol table and that symbol has no size.
   Out.writeU32(size());
-  // Write the name of this function as a string table offset.
-  Out.writeStringOffset(Name);
+  // Write the name of this function as a uint32_t string table offset.
+  Out.writeU32(Name);
 
   if (OptLineTable) {
     Out.writeU32(InfoType::LineTableInfo);
@@ -237,14 +236,14 @@ llvm::Expected<uint64_t> FunctionInfo::encode(FileWriter &Out,
 }
 
 llvm::Expected<LookupResult>
-FunctionInfo::lookup(GsymDataExtractor &Data, const GsymReader &GR,
+FunctionInfo::lookup(DataExtractor &Data, const GsymReader &GR,
                      uint64_t FuncAddr, uint64_t Addr,
-                     std::optional<GsymDataExtractor> *MergedFuncsData) {
+                     std::optional<DataExtractor> *MergedFuncsData) {
   LookupResult LR;
   LR.LookupAddr = Addr;
   uint64_t Offset = 0;
   LR.FuncRange = {FuncAddr, FuncAddr + Data.getU32(&Offset)};
-  gsym_strp_t NameOffset = Data.getStringOffset(&Offset);
+  uint32_t NameOffset = Data.getU32(&Offset);
   // The "lookup" functions doesn't report errors as accurately as the "decode"
   // function as it is meant to be fast. For more accurage errors we could call
   // "decode".
@@ -260,13 +259,12 @@ FunctionInfo::lookup(GsymDataExtractor &Data, const GsymReader &GR,
 
   if (NameOffset == 0)
     return createStringError(std::errc::io_error,
-                             "0x%8.8" PRIx64
-                             ": invalid FunctionInfo Name value 0x0",
-                             Offset - Data.getStringOffsetSize());
+        "0x%8.8" PRIx64 ": invalid FunctionInfo Name value 0x00000000",
+        Offset - 4);
   LR.FuncName = GR.getString(NameOffset);
   bool Done = false;
   std::optional<LineEntry> LineEntry;
-  std::optional<GsymDataExtractor> InlineInfoData;
+  std::optional<DataExtractor> InlineInfoData;
   while (!Done) {
     if (!Data.isValidOffsetForDataOfSize(Offset, 8))
       return createStringError(std::errc::io_error,
@@ -277,7 +275,8 @@ FunctionInfo::lookup(GsymDataExtractor &Data, const GsymReader &GR,
     if (InfoLength != InfoBytes.size())
       return createStringError(std::errc::io_error,
                                "FunctionInfo data is truncated");
-    GsymDataExtractor InfoData(Data, Offset, InfoLength);
+    DataExtractor InfoData(InfoBytes, Data.isLittleEndian(),
+                           Data.getAddressSize());
     switch (IT) {
       case InfoType::EndOfList:
         Done = true;
@@ -309,7 +308,7 @@ FunctionInfo::lookup(GsymDataExtractor &Data, const GsymReader &GR,
             // Check if the call site matches the lookup address
             if (CS.ReturnOffset == Addr - FuncAddr) {
               // Get regex patterns
-              for (gsym_strp_t RegexOffset : CS.MatchRegex) {
+              for (uint32_t RegexOffset : CS.MatchRegex) {
                 LR.CallSiteFuncRegex.push_back(GR.getString(RegexOffset));
               }
               break;

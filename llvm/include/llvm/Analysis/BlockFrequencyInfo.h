@@ -132,13 +132,15 @@ public:
 
 /// Printer pass for the \c BlockFrequencyInfo results.
 class BlockFrequencyPrinterPass
-    : public RequiredPassInfoMixin<BlockFrequencyPrinterPass> {
+    : public PassInfoMixin<BlockFrequencyPrinterPass> {
   raw_ostream &OS;
 
 public:
   explicit BlockFrequencyPrinterPass(raw_ostream &OS) : OS(OS) {}
 
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 };
 
 /// Legacy analysis pass which computes \c BlockFrequencyInfo.

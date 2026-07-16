@@ -3,10 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 """Library functions for IR extraction."""
 
-# TODO(boomanaiden154): Remove this import once we have upgrade to python 3.10
-# which supports the relevant type annotations by default.
-from __future__ import annotations
-
 import os
 import pathlib
 import re
@@ -17,12 +13,14 @@ import functools
 import json
 import logging
 
+from typing import Dict, List, Optional
+
 _UNSPECIFIED_OVERRIDE = ["<UNSPECIFIED>"]
 
 
 # TODO(ml-compiler-opt): maybe we can also convert here the cmdline file,from a
 # \0 - separated list of strings, to a \n one.
-def should_include_module(cmdline: str, match_regexp: str | None) -> bool:
+def should_include_module(cmdline: str, match_regexp: Optional[str]) -> bool:
     """Determine if the module should be included."""
     if match_regexp is None:
         return True
@@ -30,7 +28,7 @@ def should_include_module(cmdline: str, match_regexp: str | None) -> bool:
     return any(len(re.findall(match_regexp, l)) for l in lines)
 
 
-def get_thinlto_index(cmdline: str, basedir: str) -> str | None:
+def get_thinlto_index(cmdline: str, basedir: str) -> Optional[str]:
     opts = cmdline.split("\0")
     for option in opts:
         if option.startswith("-fthinlto-index"):
@@ -124,11 +122,11 @@ class TrainingIRExtractor:
     def _extract_clang_artifacts(
         self,
         llvm_objcopy_path: str,
-        cmd_filter: str | None,
+        cmd_filter: str,
         is_thinlto: bool,
         cmd_section_name: str,
         bitcode_section_name: str,
-    ) -> str | None:
+    ) -> Optional[str]:
         """Run llvm-objcopy to extract the .bc and command line."""
         if not os.path.exists(self.input_obj()):
             logging.info("%s does not exist.", self.input_obj())
@@ -175,7 +173,7 @@ class TrainingIRExtractor:
         )
         return self.relative_output_path()
 
-    def _extract_lld_artifacts(self) -> str | None:
+    def _extract_lld_artifacts(self) -> Optional[str]:
         """Extract the .bc file with ThinLTO index from an lld ThinLTO invocation."""
         if not os.path.exists(self.lld_src_bc()):
             logging.info("%s does not exist.", self.lld_src_bc())
@@ -195,12 +193,12 @@ class TrainingIRExtractor:
 
     def extract(
         self,
-        llvm_objcopy_path: str | None = None,
-        cmd_filter: str | None = None,
-        thinlto_build: str | None = None,
-        cmd_section_name: str | None = ".llvmcmd",
-        bitcode_section_name: str | None = ".llvmbc",
-    ) -> str | None:
+        llvm_objcopy_path: Optional[str] = None,
+        cmd_filter: Optional[str] = None,
+        thinlto_build: Optional[str] = None,
+        cmd_section_name: Optional[str] = ".llvmcmd",
+        bitcode_section_name: Optional[str] = ".llvmbc",
+    ) -> Optional[str]:
         if thinlto_build == "local":
             return self._extract_lld_artifacts()
         return self._extract_clang_artifacts(
@@ -213,8 +211,8 @@ class TrainingIRExtractor:
 
 
 def convert_compile_command_to_objectfile(
-    command: dict[str, str], output_dir: str
-) -> TrainingIRExtractor | None:
+    command: Dict[str, str], output_dir: str
+) -> Optional[TrainingIRExtractor]:
     obj_base_dir = command["directory"]
     if "arguments" in command:
         cmd_parts = command["arguments"]
@@ -240,8 +238,8 @@ def convert_compile_command_to_objectfile(
 
 
 def load_from_compile_commands(
-    json_array: list[dict[str, str]], output_dir: str
-) -> list[TrainingIRExtractor]:
+    json_array: List[Dict[str, str]], output_dir: str
+) -> List[TrainingIRExtractor]:
     objs = [
         convert_compile_command_to_objectfile(cmd, output_dir) for cmd in json_array
     ]
@@ -250,8 +248,8 @@ def load_from_compile_commands(
 
 
 def load_from_lld_params(
-    params_array: list[str], obj_base_dir: str, output_dir: str
-) -> list[TrainingIRExtractor]:
+    params_array: List[str], obj_base_dir: str, output_dir: str
+) -> List[TrainingIRExtractor]:
     """Create an ObjectFile array based on lld's parameters."""
     # yank out -o and the output. After that, anything not starting with '-', and
     # ending in a '.o', is an object file.
@@ -277,7 +275,7 @@ def load_from_lld_params(
 
 def load_from_directory(
     obj_base_dir: str, output_dir: str
-) -> list[TrainingIRExtractor]:
+) -> List[TrainingIRExtractor]:
     """Create an object file array by globbing an entire drectory.
 
     Args:
@@ -300,7 +298,7 @@ def load_from_directory(
 
 def load_for_lld_thinlto(
     obj_base_dir: str, output_dir: str
-) -> list[TrainingIRExtractor]:
+) -> List[TrainingIRExtractor]:
     # .3.import.bc is the suffix attached to post-merge-pre-opt ('postimport')
     # IR bitcode saved by lld. It is hardcoded into lld. ThinLTO index files
     # are also emitted next to the postimport bitcode, with the suffix
@@ -342,10 +340,10 @@ def load_bazel_aquery(aquery_json, obj_base_dir: str, output_dir: str):
 
 
 def run_extraction(
-    objs: list[TrainingIRExtractor],
+    objs: List[TrainingIRExtractor],
     num_workers: int,
     llvm_objcopy_path: str,
-    cmd_filter: str | None,
+    cmd_filter: str,
     thinlto_build: str,
     cmd_section_name: str,
     bitcode_section_name: str,
@@ -385,7 +383,7 @@ def run_extraction(
 
 
 def write_corpus_manifest(
-    thinlto_build: str, relative_output_paths: list[str], output_dir: str
+    thinlto_build: str, relative_output_paths: List[str], output_dir: str
 ):
     """Writes a corpus_manifest.json containing all necessary information about
     the corpus.

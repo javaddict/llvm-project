@@ -108,14 +108,9 @@ bool tryToFindPtrOrigin(
         if (auto *decl = memberCall->getMethodDecl()) {
           std::optional<bool> IsGetterOfRefCt = isGetterOfSafePtr(decl);
           if (IsGetterOfRefCt && *IsGetterOfRefCt) {
-            E = memberCall->getImplicitObjectArgument()->IgnoreParenCasts();
-            if (auto *DRE = dyn_cast<DeclRefExpr>(E)) {
-              if (auto *Decl = dyn_cast_or_null<VarDecl>(DRE->getDecl())) {
-                if (Decl->isLocalVarDeclOrParm()) {
-                  if (StopAtFirstRefCountedObj)
-                    return callback(E, true);
-                }
-              }
+            E = memberCall->getImplicitObjectArgument();
+            if (StopAtFirstRefCountedObj) {
+              return callback(E, true);
             }
             continue;
           }
@@ -211,8 +206,6 @@ bool tryToFindPtrOrigin(
         if (isSafePtrType(Method->getReturnType()))
           return callback(E, true);
       }
-      if (ObjCMsgExpr->isClassMessage())
-        return callback(E, true);
       auto Selector = ObjCMsgExpr->getSelector();
       auto NameForFirstSlot = Selector.getNameForSlot(0);
       if ((NameForFirstSlot == "class" || NameForFirstSlot == "superclass") &&
@@ -246,19 +239,10 @@ bool tryToFindPtrOrigin(
 
 bool isASafeCallArg(const Expr *E) {
   assert(E);
-  auto IsCheckedLocalVarOrParam = [](const VarDecl *Decl) {
-    auto Ty = Decl->getType();
-    const CXXRecordDecl *CXXRD = Ty->getAsCXXRecordDecl();
-    if (!CXXRD)
-      CXXRD = Ty->getPointeeCXXRecordDecl();
-    if (CXXRD && isWeakPtr(CXXRD))
-      return false;
-    return Decl->isLocalVarDeclOrParm();
-  };
   if (auto *Ref = dyn_cast<DeclRefExpr>(E)) {
     auto *FoundDecl = Ref->getFoundDecl();
     if (auto *D = dyn_cast_or_null<VarDecl>(FoundDecl)) {
-      if (IsCheckedLocalVarOrParam(D))
+      if (isa<ParmVarDecl>(D) || D->isLocalVarDecl())
         return true;
       if (auto *ImplicitP = dyn_cast<ImplicitParamDecl>(D)) {
         auto Kind = ImplicitP->getParameterKind();
@@ -269,10 +253,9 @@ bool isASafeCallArg(const Expr *E) {
           return true;
       }
     } else if (auto *BD = dyn_cast_or_null<BindingDecl>(FoundDecl)) {
-      if (VarDecl *VD = BD->getHoldingVar()) {
-        if (IsCheckedLocalVarOrParam(VD))
-          return true;
-      }
+      VarDecl *VD = BD->getHoldingVar();
+      if (VD && (isa<ParmVarDecl>(VD) || VD->isLocalVarDecl()))
+        return true;
     }
   }
   if (isa<CXXTemporaryObjectExpr>(E))
@@ -354,13 +337,8 @@ bool isAllocInit(const Expr *E, const Expr **InnerExpr) {
   auto NameForFirstSlot = Selector.getNameForSlot(0);
   if (NameForFirstSlot.starts_with("alloc") ||
       NameForFirstSlot.starts_with("copy") ||
-      NameForFirstSlot.starts_with("mutableCopy")) {
-    if (auto *MD = ObjCMsgExpr->getMethodDecl()) {
-      if (MD->getReturnType()->isVoidType())
-        return false;
-    }
+      NameForFirstSlot.starts_with("mutableCopy"))
     return true;
-  }
   if (!NameForFirstSlot.starts_with("init") &&
       !NameForFirstSlot.starts_with("_init"))
     return false;

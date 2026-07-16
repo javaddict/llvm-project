@@ -8,7 +8,6 @@
 
 #include "ABIInfoImpl.h"
 #include "TargetInfo.h"
-#include "clang/AST/DeclCXX.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/AMDGPUAddrSpace.h"
 
@@ -25,7 +24,7 @@ class AMDGPUABIInfo final : public DefaultABIInfo {
 private:
   static const unsigned MaxNumRegsForArgsRet = 16;
 
-  uint64_t numRegsForType(QualType Ty) const;
+  unsigned numRegsForType(QualType Ty) const;
 
   bool isHomogeneousAggregateBaseType(QualType Ty) const override;
   bool isHomogeneousAggregateSmallEnough(const Type *Base,
@@ -79,20 +78,20 @@ bool AMDGPUABIInfo::isHomogeneousAggregateSmallEnough(
 }
 
 /// Estimate number of registers the type will use when passed in registers.
-uint64_t AMDGPUABIInfo::numRegsForType(QualType Ty) const {
-  uint64_t NumRegs = 0;
+unsigned AMDGPUABIInfo::numRegsForType(QualType Ty) const {
+  unsigned NumRegs = 0;
 
   if (const VectorType *VT = Ty->getAs<VectorType>()) {
     // Compute from the number of elements. The reported size is based on the
     // in-memory size, which includes the padding 4th element for 3-vectors.
     QualType EltTy = VT->getElementType();
-    uint64_t EltSize = getContext().getTypeSize(EltTy);
+    unsigned EltSize = getContext().getTypeSize(EltTy);
 
     // 16-bit element vectors should be passed as packed.
     if (EltSize == 16)
       return (VT->getNumElements() + 1) / 2;
 
-    uint64_t EltNumRegs = (EltSize + 31) / 32;
+    unsigned EltNumRegs = (EltSize + 31) / 32;
     return EltNumRegs * VT->getNumElements();
   }
 
@@ -265,7 +264,7 @@ ABIArgInfo AMDGPUABIInfo::classifyArgumentType(QualType Ty, bool Variadic,
     }
 
     if (NumRegsLeft > 0) {
-      uint64_t NumRegs = numRegsForType(Ty);
+      unsigned NumRegs = numRegsForType(Ty);
       if (NumRegsLeft >= NumRegs) {
         NumRegsLeft -= NumRegs;
         return ABIArgInfo::getDirect();
@@ -282,8 +281,8 @@ ABIArgInfo AMDGPUABIInfo::classifyArgumentType(QualType Ty, bool Variadic,
   // Otherwise just do the default thing.
   ABIArgInfo ArgInfo = DefaultABIInfo::classifyArgumentType(Ty);
   if (!ArgInfo.isIndirect()) {
-    uint64_t NumRegs = numRegsForType(Ty);
-    NumRegsLeft -= std::min(NumRegs, uint64_t{NumRegsLeft});
+    unsigned NumRegs = numRegsForType(Ty);
+    NumRegsLeft -= std::min(NumRegs, NumRegsLeft);
   }
 
   return ArgInfo;
@@ -305,12 +304,16 @@ public:
   llvm::Constant *getNullPointer(const CodeGen::CodeGenModule &CGM,
       llvm::PointerType *T, QualType QT) const override;
 
-  LangAS getSRetAddrSpace(const CXXRecordDecl *RD) const override;
-
+  LangAS getASTAllocaAddressSpace() const override {
+    return getLangASFromTargetAS(
+        getABIInfo().getDataLayout().getAllocaAddrSpace());
+  }
   LangAS getGlobalVarAddressSpace(CodeGenModule &CGM,
                                   const VarDecl *D) const override;
-  StringRef getLLVMSyncScopeStr(const LangOptions &LangOpts, SyncScope Scope,
-                                llvm::AtomicOrdering Ordering) const override;
+  llvm::SyncScope::ID getLLVMSyncScopeID(const LangOptions &LangOpts,
+                                         SyncScope Scope,
+                                         llvm::AtomicOrdering Ordering,
+                                         llvm::LLVMContext &Ctx) const override;
   void setTargetAtomicMetadata(CodeGenFunction &CGF,
                                llvm::Instruction &AtomicInst,
                                const AtomicExpr *Expr = nullptr) const override;
@@ -467,16 +470,6 @@ llvm::Constant *AMDGPUTargetCodeGenInfo::getNullPointer(
 }
 
 LangAS
-AMDGPUTargetCodeGenInfo::getSRetAddrSpace(const CXXRecordDecl *RD) const {
-  // Types with no viable copy/move must be constructed in-place , use the
-  // default AS so the sret pointer matches the "this" convention.
-  if (RD && !RD->canPassInRegisters())
-    return LangAS::Default;
-  return getLangASFromTargetAS(
-      getABIInfo().getDataLayout().getAllocaAddrSpace());
-}
-
-LangAS
 AMDGPUTargetCodeGenInfo::getGlobalVarAddressSpace(CodeGenModule &CGM,
                                                   const VarDecl *D) const {
   assert(!CGM.getLangOpts().OpenCL &&
@@ -500,42 +493,55 @@ AMDGPUTargetCodeGenInfo::getGlobalVarAddressSpace(CodeGenModule &CGM,
   return DefaultGlobalAS;
 }
 
-StringRef AMDGPUTargetCodeGenInfo::getLLVMSyncScopeStr(
-    const LangOptions &LangOpts, SyncScope Scope,
-    llvm::AtomicOrdering Ordering) const {
-
-  // OpenCL assumes by default that atomic scopes are per-address space for
-  // non-sequentially consistent operations.
-  bool IsOneAs = (Scope >= SyncScope::OpenCLWorkGroup &&
-                  Scope <= SyncScope::OpenCLSubGroup &&
-                  Ordering != llvm::AtomicOrdering::SequentiallyConsistent);
-
+llvm::SyncScope::ID
+AMDGPUTargetCodeGenInfo::getLLVMSyncScopeID(const LangOptions &LangOpts,
+                                            SyncScope Scope,
+                                            llvm::AtomicOrdering Ordering,
+                                            llvm::LLVMContext &Ctx) const {
+  std::string Name;
   switch (Scope) {
   case SyncScope::HIPSingleThread:
   case SyncScope::SingleScope:
-    return IsOneAs ? "singlethread-one-as" : "singlethread";
+    Name = "singlethread";
+    break;
   case SyncScope::HIPWavefront:
   case SyncScope::OpenCLSubGroup:
   case SyncScope::WavefrontScope:
-    return IsOneAs ? "wavefront-one-as" : "wavefront";
+    Name = "wavefront";
+    break;
   case SyncScope::HIPCluster:
   case SyncScope::ClusterScope:
-    assert(!IsOneAs && "OpenCL does not have cluster scope");
-    return "cluster";
+    Name = "cluster";
+    break;
   case SyncScope::HIPWorkgroup:
   case SyncScope::OpenCLWorkGroup:
   case SyncScope::WorkgroupScope:
-    return IsOneAs ? "workgroup-one-as" : "workgroup";
+    Name = "workgroup";
+    break;
   case SyncScope::HIPAgent:
   case SyncScope::OpenCLDevice:
   case SyncScope::DeviceScope:
-    return IsOneAs ? "agent-one-as" : "agent";
+    Name = "agent";
+    break;
   case SyncScope::SystemScope:
   case SyncScope::HIPSystem:
   case SyncScope::OpenCLAllSVMDevices:
-    return IsOneAs ? "one-as" : "";
+    Name = "";
+    break;
   }
-  llvm_unreachable("Unknown SyncScope enum");
+
+  // OpenCL assumes by default that atomic scopes are per-address space for
+  // non-sequentially consistent operations.
+  if (Scope >= SyncScope::OpenCLWorkGroup &&
+      Scope <= SyncScope::OpenCLSubGroup &&
+      Ordering != llvm::AtomicOrdering::SequentiallyConsistent) {
+    if (!Name.empty())
+      Name = Twine(Twine(Name) + Twine("-")).str();
+
+    Name = Twine(Twine(Name) + Twine("one-as")).str();
+  }
+
+  return Ctx.getOrInsertSyncScopeID(Name);
 }
 
 void AMDGPUTargetCodeGenInfo::setTargetAtomicMetadata(

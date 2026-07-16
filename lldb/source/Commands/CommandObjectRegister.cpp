@@ -171,8 +171,8 @@ protected:
               break;
             }
           } else {
-            result.AppendErrorWithFormat("invalid register set index: %" PRIu64,
-                                         (uint64_t)set_idx);
+            result.AppendErrorWithFormat(
+                "invalid register set index: %" PRIu64 "\n", (uint64_t)set_idx);
             break;
           }
         }
@@ -214,14 +214,12 @@ protected:
                               print_flags))
               strm.Printf("%-12s = error: unavailable\n", reg_info->name);
           } else {
-            result.AppendErrorWithFormat("Invalid register name '%s'",
+            result.AppendErrorWithFormat("Invalid register name '%s'.\n",
                                          arg_str.str().c_str());
           }
         }
       }
     }
-    if (result.GetStatus() != eReturnStatusFailed)
-      result.SetStatus(eReturnStatusSuccessFinishResult);
   }
 
   class CommandOptions : public OptionGroup {
@@ -370,7 +368,7 @@ protected:
         }
         if (error.AsCString()) {
           result.AppendErrorWithFormat(
-              "Failed to write register '%s' with value '%s': %s",
+              "Failed to write register '%s' with value '%s': %s\n",
               reg_name.str().c_str(), value_str.str().c_str(),
               error.AsCString());
         } else {
@@ -379,7 +377,7 @@ protected:
               reg_name.str().c_str(), value_str.str().c_str());
         }
       } else {
-        result.AppendErrorWithFormat("Register not found for '%s'",
+        result.AppendErrorWithFormat("Register not found for '%s'.\n",
                                      reg_name.str().c_str());
       }
     }
@@ -441,7 +439,7 @@ protected:
           GetCommandInterpreter().GetDebugger().GetTerminalWidth());
       result.SetStatus(eReturnStatusSuccessFinishResult);
     } else
-      result.AppendErrorWithFormat("No register found with name '%s'",
+      result.AppendErrorWithFormat("No register found with name '%s'.\n",
                                    reg_name.str().c_str());
   }
 };

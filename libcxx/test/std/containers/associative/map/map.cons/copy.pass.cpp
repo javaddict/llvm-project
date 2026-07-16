@@ -10,7 +10,7 @@
 
 // class map
 
-// map(const map& m); // constexpr since C++26
+// map(const map& m);
 
 #include <cassert>
 #include <map>
@@ -20,7 +20,7 @@
 #include "test_allocator.h"
 
 template <template <class> class Alloc>
-TEST_CONSTEXPR_CXX26 bool test_alloc() {
+void test_alloc() {
   { // Simple check
     using V   = std::pair<const int, int>;
     using Map = std::map<int, int, std::less<int>, Alloc<V> >;
@@ -80,10 +80,9 @@ TEST_CONSTEXPR_CXX26 bool test_alloc() {
     assert(*std::next(orig.begin(), 4) == V(5, 0));
     assert(std::next(orig.begin(), 5) == orig.end());
   }
-  return true;
 }
 
-TEST_CONSTEXPR_CXX26 bool test() {
+void test() {
   test_alloc<std::allocator>();
   test_alloc<min_allocator>(); // Make sure that fancy pointers work
 
@@ -132,13 +131,10 @@ TEST_CONSTEXPR_CXX26 bool test() {
     assert(orig.size() == 3);
     assert(orig.get_allocator() == other_allocator<V>(10));
   }
-  return true;
 }
 
 int main(int, char**) {
   test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
+
   return 0;
 }

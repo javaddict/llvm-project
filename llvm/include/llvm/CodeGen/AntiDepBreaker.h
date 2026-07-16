@@ -28,7 +28,7 @@ class RegisterClassInfo;
 
 /// This class works in conjunction with the post-RA scheduler to rename
 /// registers to break register anti-dependencies (WAR hazards).
-class LLVM_ABI AntiDepBreaker {
+class AntiDepBreaker {
 public:
   using DbgValueVector =
       std::vector<std::pair<MachineInstr *, MachineInstr *>>;
@@ -90,13 +90,12 @@ public:
   }
 };
 
-LLVM_ABI AntiDepBreaker *createAggressiveAntiDepBreaker(
+AntiDepBreaker *createAggressiveAntiDepBreaker(
     MachineFunction &MFi, const RegisterClassInfo &RCI,
     TargetSubtargetInfo::RegClassVector &CriticalPathRCs);
 
-LLVM_ABI AntiDepBreaker *
-createCriticalAntiDepBreaker(MachineFunction &MFi,
-                             const RegisterClassInfo &RCI);
+AntiDepBreaker *createCriticalAntiDepBreaker(MachineFunction &MFi,
+                                             const RegisterClassInfo &RCI);
 
 } // end namespace llvm
 

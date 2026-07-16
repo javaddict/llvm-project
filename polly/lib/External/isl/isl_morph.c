@@ -250,7 +250,7 @@ isl_size isl_morph_ran_dim(__isl_keep isl_morph *morph, enum isl_dim_type type)
 __isl_give isl_morph *isl_morph_remove_dom_dims(__isl_take isl_morph *morph,
 	enum isl_dim_type type, unsigned first, unsigned n)
 {
-	isl_size dom_offset;
+	unsigned dom_offset;
 
 	if (n == 0)
 		return morph;
@@ -259,15 +259,13 @@ __isl_give isl_morph *isl_morph_remove_dom_dims(__isl_take isl_morph *morph,
 	if (!morph)
 		return NULL;
 
-	dom_offset = isl_space_offset(morph->dom->dim, type);
-	if (dom_offset < 0)
-		return isl_morph_free(morph);
+	dom_offset = 1 + isl_space_offset(morph->dom->dim, type);
 
 	morph->dom = isl_basic_set_remove_dims(morph->dom, type, first, n);
 
-	morph->map = isl_mat_drop_cols(morph->map, 1 + dom_offset + first, n);
+	morph->map = isl_mat_drop_cols(morph->map, dom_offset + first, n);
 
-	morph->inv = isl_mat_drop_rows(morph->inv, 1 + dom_offset + first, n);
+	morph->inv = isl_mat_drop_rows(morph->inv, dom_offset + first, n);
 
 	if (morph->dom && morph->ran && morph->map && morph->inv)
 		return morph;
@@ -279,7 +277,7 @@ __isl_give isl_morph *isl_morph_remove_dom_dims(__isl_take isl_morph *morph,
 __isl_give isl_morph *isl_morph_remove_ran_dims(__isl_take isl_morph *morph,
 	enum isl_dim_type type, unsigned first, unsigned n)
 {
-	isl_size ran_offset;
+	unsigned ran_offset;
 
 	if (n == 0)
 		return morph;
@@ -288,15 +286,13 @@ __isl_give isl_morph *isl_morph_remove_ran_dims(__isl_take isl_morph *morph,
 	if (!morph)
 		return NULL;
 
-	ran_offset = isl_space_offset(morph->ran->dim, type);
-	if (ran_offset < 0)
-		return isl_morph_free(morph);
+	ran_offset = 1 + isl_space_offset(morph->ran->dim, type);
 
 	morph->ran = isl_basic_set_remove_dims(morph->ran, type, first, n);
 
-	morph->map = isl_mat_drop_rows(morph->map, 1 + ran_offset + first, n);
+	morph->map = isl_mat_drop_rows(morph->map, ran_offset + first, n);
 
-	morph->inv = isl_mat_drop_cols(morph->inv, 1 + ran_offset + first, n);
+	morph->inv = isl_mat_drop_cols(morph->inv, ran_offset + first, n);
 
 	if (morph->dom && morph->ran && morph->map && morph->inv)
 		return morph;
@@ -504,10 +500,10 @@ __isl_give isl_morph *isl_basic_set_variable_compression(
 	nrest = total - (orest - 1);
 
 	for (f_eq = 0; f_eq < bset->n_eq; ++f_eq)
-		if (!isl_seq_any_non_zero(bset->eq[f_eq] + orest, nrest))
+		if (isl_seq_first_non_zero(bset->eq[f_eq] + orest, nrest) == -1)
 			break;
 	for (n_eq = 0; f_eq + n_eq < bset->n_eq; ++n_eq)
-		if (!isl_seq_any_non_zero(bset->eq[f_eq + n_eq] + otype, ntype))
+		if (isl_seq_first_non_zero(bset->eq[f_eq + n_eq] + otype, ntype) == -1)
 			break;
 	if (n_eq == 0)
 		return isl_morph_identity(bset);
@@ -591,8 +587,8 @@ __isl_give isl_morph *isl_basic_set_parameter_compression(
 	if (nparam < 0 || nvar < 0 || n_div < 0)
 		return NULL;
 
-	if (!isl_seq_any_non_zero(bset->eq[bset->n_eq - 1] + 1 + nparam,
-				    nvar + n_div))
+	if (isl_seq_first_non_zero(bset->eq[bset->n_eq - 1] + 1 + nparam,
+				    nvar + n_div) == -1)
 		isl_die(isl_basic_set_get_ctx(bset), isl_error_invalid,
 			"input not allowed to have parameter equalities",
 			return NULL);

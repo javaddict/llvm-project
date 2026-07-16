@@ -34,8 +34,8 @@ private:
     SmallVector<Register> ArgRegs;
     Register Callee;
   };
-  void produceIndirectPtrType(MachineIRBuilder &MIRBuilder,
-                              const SPIRVIndirectCall &IC) const;
+  void produceIndirectPtrTypes(MachineIRBuilder &MIRBuilder) const;
+  mutable SmallVector<SPIRVIndirectCall> IndirectCalls;
 
 public:
   SPIRVCallLowering(const SPIRVTargetLowering &TLI, SPIRVGlobalRegistry *GR);

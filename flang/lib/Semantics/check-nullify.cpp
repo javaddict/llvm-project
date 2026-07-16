@@ -37,7 +37,7 @@ void NullifyChecker::Leave(const parser::NullifyStmt &nullifyStmt) {
               }
             },
             [&](const parser::StructureComponent &structureComponent) {
-              const auto &component{structureComponent.Component()};
+              const auto &component{structureComponent.component};
               SourceName at{component.source};
               if (const auto *checkedExpr{GetExpr(context_, pointerObject)}) {
                 if (auto whyNot{WhyNotDefinable(at, scope,

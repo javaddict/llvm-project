@@ -53,8 +53,7 @@ void mlir::sparse_tensor::buildSparsifier(OpPassManager &pm,
   // GPU code generation.
   const bool gpuCodegen = options.gpuTriple.hasValue();
   if (gpuCodegen) {
-    pm.addPass(createSparseGPUCodegenPass(options.gpuNumThreads,
-                                          options.enableRuntimeLibrary));
+    pm.addPass(createSparseGPUCodegenPass());
     pm.addNestedPass<gpu::GPUModuleOp>(createStripDebugInfoPass());
     pm.addNestedPass<gpu::GPUModuleOp>(createSCFToControlFlowPass());
     pm.addNestedPass<gpu::GPUModuleOp>(createConvertGpuOpsToNVVMOps());

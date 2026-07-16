@@ -26,7 +26,9 @@ ItOut LzwEncode(ItIn begin, ItIn end, ItOut out) {
 
   // Sentinel value for substrings of len 1.
   static constexpr LzwCodeType kNoPrefix =
-      DenseMapInfo<Substring>::getEmptyKey().first - 1;
+      Min(DenseMapInfo<Substring>::getEmptyKey().first,
+          DenseMapInfo<Substring>::getTombstoneKey().first) -
+      1;
   DenseMap<Substring, LzwCodeType> prefix_to_code;
   {
     // Add all substring of len 1 as initial dictionary.

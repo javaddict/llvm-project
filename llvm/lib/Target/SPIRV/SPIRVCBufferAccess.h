@@ -5,18 +5,18 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 
-#ifndef LLVM_LIB_TARGET_SPIRV_SPIRVCBUFFERACCESS_H
-#define LLVM_LIB_TARGET_SPIRV_SPIRVCBUFFERACCESS_H
+#ifndef LLVM_LIB_TARGET_SPIRV_SPIRVCBUFFERACCESS_H_
+#define LLVM_LIB_TARGET_SPIRV_SPIRVCBUFFERACCESS_H_
 
 #include "llvm/IR/PassManager.h"
 
 namespace llvm {
 
-class SPIRVCBufferAccess : public OptionalPassInfoMixin<SPIRVCBufferAccess> {
+class SPIRVCBufferAccess : public PassInfoMixin<SPIRVCBufferAccess> {
 public:
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
 
 } // namespace llvm
 
-#endif // LLVM_LIB_TARGET_SPIRV_SPIRVCBUFFERACCESS_H
+#endif // LLVM_LIB_TARGET_SPIRV_SPIRVCBUFFERACCESS_H_

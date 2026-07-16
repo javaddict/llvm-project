@@ -120,6 +120,7 @@ llvm::Error WasmIncrementalExecutor::addModule(PartialTranslationUnit &PTU) {
   std::vector<const char *> LinkerArgs = {"wasm-ld",
                                           "-shared",
                                           "--import-memory",
+                                          "--experimental-pic",
                                           "--stack-first",
                                           "--allow-undefined",
                                           ObjectFileName.c_str(),

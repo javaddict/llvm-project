@@ -241,7 +241,6 @@ getSancovOptsFromCGOpts(const CodeGenOptions &CGOpts) {
   Opts.TraceGep = CGOpts.SanitizeCoverageTraceGep;
   Opts.Use8bitCounters = CGOpts.SanitizeCoverage8bitCounters;
   Opts.TracePC = CGOpts.SanitizeCoverageTracePC;
-  Opts.TracePCEntryExit = CGOpts.SanitizeCoverageTracePCEntryExit;
   Opts.TracePCGuard = CGOpts.SanitizeCoverageTracePCGuard;
   Opts.NoPrune = CGOpts.SanitizeCoverageNoPrune;
   Opts.Inline8bitCounters = CGOpts.SanitizeCoverageInline8bitCounters;
@@ -424,6 +423,8 @@ static bool initTargetOptions(const CompilerInstance &CI,
   if (CodeGenOpts.hasWasmExceptions())
     Options.ExceptionModel = llvm::ExceptionHandling::Wasm;
 
+  Options.NoInfsFPMath = LangOpts.NoHonorInfs;
+  Options.NoNaNsFPMath = LangOpts.NoHonorNaNs;
   Options.NoZerosInBSS = CodeGenOpts.NoZeroInitializedInBSS;
 
   Options.BBAddrMap = CodeGenOpts.BBAddrMap;
@@ -461,7 +462,7 @@ static bool initTargetOptions(const CompilerInstance &CI,
   Options.EmulatedTLS = CodeGenOpts.EmulatedTLS;
   Options.DebuggerTuning = CodeGenOpts.getDebuggerTuning();
   Options.EmitStackSizeSection = CodeGenOpts.StackSizeSection;
-  Options.StackUsageFile = CodeGenOpts.StackUsageFile;
+  Options.StackUsageOutput = CodeGenOpts.StackUsageOutput;
   Options.EmitAddrsig = CodeGenOpts.Addrsig;
   Options.ForceDwarfFrameSection = CodeGenOpts.ForceDwarfFrameSection;
   Options.EmitCallGraphSection = CodeGenOpts.CallGraphSection;
@@ -512,7 +513,6 @@ static bool initTargetOptions(const CompilerInstance &CI,
   Options.MCOptions.Dwarf64 = CodeGenOpts.Dwarf64;
   Options.MCOptions.PreserveAsmComments = CodeGenOpts.PreserveAsmComments;
   Options.MCOptions.Crel = CodeGenOpts.Crel;
-  Options.MCOptions.RelocSectionSym = CodeGenOpts.getRelocSectionSym();
   Options.MCOptions.ImplicitMapSyms = CodeGenOpts.ImplicitMapSyms;
   Options.MCOptions.X86RelaxRelocations = CodeGenOpts.X86RelaxRelocations;
   Options.MCOptions.CompressDebugSections =
@@ -645,7 +645,19 @@ static OptimizationLevel mapToLevel(const CodeGenOptions &Opts) {
     return OptimizationLevel::O1;
 
   case 2:
-    return OptimizationLevel::O2;
+    switch (Opts.OptimizeSize) {
+    default:
+      llvm_unreachable("Invalid optimization level for size!");
+
+    case 0:
+      return OptimizationLevel::O2;
+
+    case 1:
+      return OptimizationLevel::Os;
+
+    case 2:
+      return OptimizationLevel::Oz;
+    }
 
   case 3:
     return OptimizationLevel::O3;
@@ -1035,7 +1047,10 @@ void EmitAssemblyHelper::RunOptimizationPipeline(
     if (IsThinLTOPostLink)
       PB.registerPipelineStartEPCallback(
           [](ModulePassManager &MPM, OptimizationLevel Level) {
-            MPM.addPass(DropTypeTestsPass());
+            MPM.addPass(LowerTypeTestsPass(
+                /*ExportSummary=*/nullptr,
+                /*ImportSummary=*/nullptr,
+                /*DropTypeTests=*/lowertypetests::DropTestKind::Assume));
           });
 
     // Register callbacks to schedule sanitizer passes at the appropriate part
@@ -1384,8 +1399,6 @@ runThinLTOBackend(CompilerInstance &CI, ModuleSummaryIndex *CombinedIndex,
   Conf.RemarksFormat = CGOpts.OptRecordFormat;
   Conf.SplitDwarfFile = CGOpts.SplitDwarfFile;
   Conf.SplitDwarfOutput = CGOpts.SplitDwarfOutput;
-  for (auto &Plugin : CI.getPassPlugins())
-    Conf.LoadedPassPlugins.push_back(Plugin.get());
   switch (Action) {
   case Backend_EmitNothing:
     Conf.PreCodeGenModuleHook = [](size_t Task, const llvm::Module &Mod) {
@@ -1411,14 +1424,12 @@ runThinLTOBackend(CompilerInstance &CI, ModuleSummaryIndex *CombinedIndex,
 
   // FIXME: Both ExecuteAction and thinBackend set up optimization remarks for
   // the same context.
-  // FIXME: This does not yet set the list of bitcode libfuncs that it isn't
-  // safe to call. This precludes bitcode libc in distributed ThinLTO.
   finalizeLLVMOptimizationRemarks(M->getContext());
-  if (Error E = thinBackend(
-          Conf, -1, AddStream, *M, *CombinedIndex, ImportList,
-          ModuleToDefinedGVSummaries[M->getModuleIdentifier()],
-          /*ModuleMap=*/nullptr, Conf.CodeGenOnly, /*BitcodeLibFuncs=*/{},
-          /*IRAddStream=*/nullptr, CGOpts.CmdArgs)) {
+  if (Error E =
+          thinBackend(Conf, -1, AddStream, *M, *CombinedIndex, ImportList,
+                      ModuleToDefinedGVSummaries[M->getModuleIdentifier()],
+                      /*ModuleMap=*/nullptr, Conf.CodeGenOnly,
+                      /*IRAddStream=*/nullptr, CGOpts.CmdArgs)) {
     handleAllErrors(std::move(E), [&](ErrorInfoBase &EIB) {
       errs() << "Error running ThinLTO backend: " << EIB.message() << '\n';
     });

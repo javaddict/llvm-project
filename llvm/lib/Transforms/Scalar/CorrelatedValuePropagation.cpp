@@ -32,11 +32,9 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
-#include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/PatternMatch.h"
-#include "llvm/IR/ProfDataUtils.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Casting.h"
@@ -226,7 +224,7 @@ static Value *getValueOnEdge(LazyValueInfo *LVI, Value *Incoming,
     if (Constant *C = LVI->getConstantOnEdge(Condition, From, To, CxtI)) {
       if (C->isOneValue())
         return SI->getTrueValue();
-      if (C->isNullValue())
+      if (C->isZeroValue())
         return SI->getFalseValue();
     }
   }
@@ -333,17 +331,10 @@ static bool constantFoldCmp(CmpInst *Cmp, LazyValueInfo *LVI) {
   if (!Res)
     return false;
 
-  bool Changed = Cmp->replaceUsesWithIf(
-      Res, [](Use &U) { return !isa<AssumeInst>(U.getUser()); });
-  if (Cmp->use_empty()) {
-    Cmp->eraseFromParent();
-    Changed = true;
-  }
-
-  if (Changed)
-    ++NumCmps;
-
-  return Changed;
+  ++NumCmps;
+  Cmp->replaceAllUsesWith(Res);
+  Cmp->eraseFromParent();
+  return true;
 }
 
 static bool processCmp(CmpInst *Cmp, LazyValueInfo *LVI) {
@@ -675,7 +666,8 @@ static bool processSaturatingInst(SaturatingInst *SI, LazyValueInfo *LVI) {
   ++NumSaturating;
 
   // See if we can infer the other no-wrap too.
-  processBinOp(BinOp, LVI);
+  if (auto *BO = dyn_cast<BinaryOperator>(BinOp))
+    processBinOp(BO, LVI);
 
   return true;
 }
@@ -885,8 +877,7 @@ static bool expandUDivOrURem(BinaryOperator *Instr, const ConstantRange &XCR,
     auto *AdjX = B.CreateNUWSub(FrozenX, FrozenY, Instr->getName() + ".urem");
     auto *Cmp = B.CreateICmp(ICmpInst::ICMP_ULT, FrozenX, FrozenY,
                              Instr->getName() + ".cmp");
-    ExpandedOp =
-        B.CreateSelectWithUnknownProfile(Cmp, FrozenX, AdjX, DEBUG_TYPE);
+    ExpandedOp = B.CreateSelect(Cmp, FrozenX, AdjX);
   } else {
     auto *Cmp =
         B.CreateICmp(ICmpInst::ICMP_UGE, X, Y, Instr->getName() + ".cmp");

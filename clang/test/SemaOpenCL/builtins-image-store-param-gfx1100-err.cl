@@ -10,32 +10,24 @@ void test_builtin_image_store_2d(float f32, int i32, __amdgpu_texture_t tex) {
 }
 void test_builtin_image_store_2d_1(float4 v4f32, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_2d_v4f32_i32(v4f32, 15, i32, i32, tex, i32, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_2d_v4f32_i32' must be a constant integer}}
+  return __builtin_amdgcn_image_store_2d_v4f32_i32(v4f32, 100, i32, i32, tex, i32, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_2d_v4f32_i32' must be a constant integer}}
 }
 void test_builtin_image_store_2d_2(half4 v4f16, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_2d_v4f16_i32(v4f16, 15, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_2d_v4f16_i32' must be a constant integer}}
-}
-void test_builtin_image_store_2d_dmask_range(half4 v4f16, int i32, __amdgpu_texture_t tex) {
-
-  return __builtin_amdgcn_image_store_2d_v4f16_i32(v4f16, 100, i32, i32, tex, 120, 110); //expected-error{{argument value 100 is outside the valid range [0, 15]}}
+  return __builtin_amdgcn_image_store_2d_v4f16_i32(v4f16, 100, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_2d_v4f16_i32' must be a constant integer}}
 }
 
 void test_builtin_image_store_2darray(float f32, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_2darray_f32_i32(f32, 15, i32, i32, i32, tex, i32, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_2darray_f32_i32' must be a constant integer}}
+  return __builtin_amdgcn_image_store_2darray_f32_i32(f32, 100, i32, i32, i32, tex, i32, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_2darray_f32_i32' must be a constant integer}}
 }
 void test_builtin_image_store_2darray_1(float4 v4f32, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_2darray_v4f32_i32(v4f32, 15, i32, i32, i32, tex, i32, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_2darray_v4f32_i32' must be a constant integer}}
+  return __builtin_amdgcn_image_store_2darray_v4f32_i32(v4f32, 100, i32, i32, i32, tex, i32, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_2darray_v4f32_i32' must be a constant integer}}
 }
 void test_builtin_image_store_2darray_2(half4 v4f16, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_2darray_v4f16_i32(v4f16, 15, i32, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_2darray_v4f16_i32' must be a constant integer}}
-}
-void test_builtin_image_store_2darray_dmask_range(half4 v4f16, int i32, __amdgpu_texture_t tex) {
-
-  return __builtin_amdgcn_image_store_2darray_v4f16_i32(v4f16, 100, i32, i32, i32, tex, 120, 110); //expected-error{{argument value 100 is outside the valid range [0, 15]}}
+  return __builtin_amdgcn_image_store_2darray_v4f16_i32(v4f16, 100, i32, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_2darray_v4f16_i32' must be a constant integer}}
 }
 
 void test_builtin_image_store_1d_1(float4 v4f32, int i32, __amdgpu_texture_t tex) {
@@ -44,37 +36,25 @@ void test_builtin_image_store_1d_1(float4 v4f32, int i32, __amdgpu_texture_t tex
 }
 void test_builtin_image_store_1d_2(half4 v4f16, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_1d_v4f16_i32(v4f16, 15, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_1d_v4f16_i32' must be a constant integer}}
-}
-void test_builtin_image_store_1d_dmask_range(half4 v4f16, int i32, __amdgpu_texture_t tex) {
-
-  return __builtin_amdgcn_image_store_1d_v4f16_i32(v4f16, 100, i32, tex, 120, 110); //expected-error{{argument value 100 is outside the valid range [0, 15]}}
+  return __builtin_amdgcn_image_store_1d_v4f16_i32(v4f16, 100, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_1d_v4f16_i32' must be a constant integer}}
 }
 
 void test_builtin_image_store_1darray_1(float4 v4f32, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_1darray_v4f32_i32(v4f32, 15, i32, i32, tex, i32, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_1darray_v4f32_i32' must be a constant integer}}
+  return __builtin_amdgcn_image_store_1darray_v4f32_i32(v4f32, 100, i32, i32, tex, i32, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_1darray_v4f32_i32' must be a constant integer}}
 }
 void test_builtin_image_store_1darray_2(half4 v4f16, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_1darray_v4f16_i32(v4f16, 15, i32, i32, tex, i32, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_1darray_v4f16_i32' must be a constant integer}}
-}
-void test_builtin_image_store_1darray_dmask_range(half4 v4f16, int i32, __amdgpu_texture_t tex) {
-
-  return __builtin_amdgcn_image_store_1darray_v4f16_i32(v4f16, 100, i32, i32, tex, 120, 110); //expected-error{{argument value 100 is outside the valid range [0, 15]}}
+  return __builtin_amdgcn_image_store_1darray_v4f16_i32(v4f16, 100, i32, i32, tex, i32, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_1darray_v4f16_i32' must be a constant integer}}
 }
 
 void test_builtin_image_store_3d_1(float4 v4f32, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_3d_v4f32_i32(v4f32, 15, i32, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_3d_v4f32_i32' must be a constant integer}}
+  return __builtin_amdgcn_image_store_3d_v4f32_i32(v4f32, 100, i32, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_3d_v4f32_i32' must be a constant integer}}
 }
 void test_builtin_image_store_3d_2(half4 v4f16, int i32, __amdgpu_texture_t tex) {
 
   return __builtin_amdgcn_image_store_3d_v4f16_i32(v4f16, i32, i32, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_3d_v4f16_i32' must be a constant integer}}
-}
-void test_builtin_image_store_3d_dmask_range(half4 v4f16, int i32, __amdgpu_texture_t tex) {
-
-  return __builtin_amdgcn_image_store_3d_v4f16_i32(v4f16, 100, i32, i32, i32, tex, 120, 110); //expected-error{{argument value 100 is outside the valid range [0, 15]}}
 }
 
 void test_builtin_image_store_cube_1(float4 v4f32, int i32, __amdgpu_texture_t tex) {
@@ -85,10 +65,6 @@ void test_builtin_image_store_cube_2(half4 v4f16, int i32, __amdgpu_texture_t te
 
   return __builtin_amdgcn_image_store_cube_v4f16_i32(v4f16, i32, i32, i32, i32, tex, 120, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_cube_v4f16_i32' must be a constant integer}}
 }
-void test_builtin_image_store_cube_dmask_range(half4 v4f16, int i32, __amdgpu_texture_t tex) {
-
-  return __builtin_amdgcn_image_store_cube_v4f16_i32(v4f16, 100, i32, i32, i32, tex, 120, 110); //expected-error{{argument value 100 is outside the valid range [0, 15]}}
-}
 
 void test_builtin_image_store_mip_1d_1(float4 v4f32, int i32, __amdgpu_texture_t tex) {
 
@@ -96,11 +72,7 @@ void test_builtin_image_store_mip_1d_1(float4 v4f32, int i32, __amdgpu_texture_t
 }
 void test_builtin_image_store_mip_1d_2(half4 v4f16, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_mip_1d_v4f16_i32(v4f16, 15, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_mip_1d_v4f16_i32' must be a constant integer}}
-}
-void test_builtin_image_store_mip_1d_dmask_range(half4 v4f16, int i32, __amdgpu_texture_t tex) {
-
-  return __builtin_amdgcn_image_store_mip_1d_v4f16_i32(v4f16, 100, i32, i32, tex, 120, 110); //expected-error{{argument value 100 is outside the valid range [0, 15]}}
+  return __builtin_amdgcn_image_store_mip_1d_v4f16_i32(v4f16, 100, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_mip_1d_v4f16_i32' must be a constant integer}}
 }
 
 void test_builtin_image_store_mip_1darray_1(float4 v4f32, int i32, __amdgpu_texture_t tex) {
@@ -109,11 +81,7 @@ void test_builtin_image_store_mip_1darray_1(float4 v4f32, int i32, __amdgpu_text
 }
 void test_builtin_image_store_mip_1darray_2(half4 v4f16, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_mip_1darray_v4f16_i32(v4f16, 15, i32, i32, i32, tex, i32, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_mip_1darray_v4f16_i32' must be a constant integer}}
-}
-void test_builtin_image_store_mip_1darray_dmask_range(half4 v4f16, int i32, __amdgpu_texture_t tex) {
-
-  return __builtin_amdgcn_image_store_mip_1darray_v4f16_i32(v4f16, 100, i32, i32, i32, tex, 120, 110); //expected-error{{argument value 100 is outside the valid range [0, 15]}}
+  return __builtin_amdgcn_image_store_mip_1darray_v4f16_i32(v4f16, 100, i32, i32, i32, tex, i32, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_mip_1darray_v4f16_i32' must be a constant integer}}
 }
 
 void test_builtin_image_store_mip_2d(float f32, int i32, __amdgpu_texture_t tex) {
@@ -122,15 +90,11 @@ void test_builtin_image_store_mip_2d(float f32, int i32, __amdgpu_texture_t tex)
 }
 void test_builtin_image_store_mip_2d_1(float4 v4f32, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_mip_2d_v4f32_i32(v4f32, 15, i32, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_mip_2d_v4f32_i32' must be a constant integer}}
+  return __builtin_amdgcn_image_store_mip_2d_v4f32_i32(v4f32, 100, i32, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_mip_2d_v4f32_i32' must be a constant integer}}
 }
 void test_builtin_image_store_mip_2d_2(half4 v4f16, int i32, __amdgpu_texture_t tex) {
 
   return __builtin_amdgcn_image_store_mip_2d_v4f16_i32(v4f16, i32, i32, i32, i32, tex, 120, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_mip_2d_v4f16_i32' must be a constant integer}}
-}
-void test_builtin_image_store_mip_2d_dmask_range(half4 v4f16, int i32, __amdgpu_texture_t tex) {
-
-  return __builtin_amdgcn_image_store_mip_2d_v4f16_i32(v4f16, 100, i32, i32, i32, tex, 120, 110); //expected-error{{argument value 100 is outside the valid range [0, 15]}}
 }
 
 void test_builtin_image_store_mip_2darray(float f32, int i32, __amdgpu_texture_t tex) {
@@ -139,15 +103,11 @@ void test_builtin_image_store_mip_2darray(float f32, int i32, __amdgpu_texture_t
 }
 void test_builtin_image_store_mip_2darray_1(float4 v4f32, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_mip_2darray_v4f32_i32(v4f32, 15, i32, i32, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_mip_2darray_v4f32_i32' must be a constant integer}}
+  return __builtin_amdgcn_image_store_mip_2darray_v4f32_i32(v4f32, 100, i32, i32, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_mip_2darray_v4f32_i32' must be a constant integer}}
 }
 void test_builtin_image_store_mip_2darray_2(half4 v4f16, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_mip_2darray_v4f16_i32(v4f16, 15, i32, i32, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_mip_2darray_v4f16_i32' must be a constant integer}}
-}
-void test_builtin_image_store_mip_2darray_dmask_range(half4 v4f16, int i32, __amdgpu_texture_t tex) {
-
-  return __builtin_amdgcn_image_store_mip_2darray_v4f16_i32(v4f16, 100, i32, i32, i32, i32, tex, 120, 110); //expected-error{{argument value 100 is outside the valid range [0, 15]}}
+  return __builtin_amdgcn_image_store_mip_2darray_v4f16_i32(v4f16, 100, i32, i32, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_mip_2darray_v4f16_i32' must be a constant integer}}
 }
 
 void test_builtin_image_store_mip_3d_1(float4 v4f32, int i32, __amdgpu_texture_t tex) {
@@ -158,10 +118,6 @@ void test_builtin_image_store_mip_3d_2(half4 v4f16, int i32, __amdgpu_texture_t 
 
   return __builtin_amdgcn_image_store_mip_3d_v4f16_i32(v4f16, i32, i32, i32, i32, i32, tex, i32, 110); //expected-error{{argument to '__builtin_amdgcn_image_store_mip_3d_v4f16_i32' must be a constant integer}}
 }
-void test_builtin_image_store_mip_3d_dmask_range(half4 v4f16, int i32, __amdgpu_texture_t tex) {
-
-  return __builtin_amdgcn_image_store_mip_3d_v4f16_i32(v4f16, 100, i32, i32, i32, i32, tex, 120, 110); //expected-error{{argument value 100 is outside the valid range [0, 15]}}
-}
 
 void test_builtin_image_store_mip_cube_1(float4 v4f32, int i32, __amdgpu_texture_t tex) {
 
@@ -169,9 +125,5 @@ void test_builtin_image_store_mip_cube_1(float4 v4f32, int i32, __amdgpu_texture
 }
 void test_builtin_image_store_mip_cube_2(half4 v4f16, int i32, __amdgpu_texture_t tex) {
 
-  return __builtin_amdgcn_image_store_mip_cube_v4f16_i32(v4f16, 15, i32, i32, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_mip_cube_v4f16_i32' must be a constant integer}}
-}
-void test_builtin_image_store_mip_cube_dmask_range(half4 v4f16, int i32, __amdgpu_texture_t tex) {
-
-  return __builtin_amdgcn_image_store_mip_cube_v4f16_i32(v4f16, 100, i32, i32, i32, i32, tex, 120, 110); //expected-error{{argument value 100 is outside the valid range [0, 15]}}
+  return __builtin_amdgcn_image_store_mip_cube_v4f16_i32(v4f16, 100, i32, i32, i32, i32, tex, 120, i32); //expected-error{{argument to '__builtin_amdgcn_image_store_mip_cube_v4f16_i32' must be a constant integer}}
 }

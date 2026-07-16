@@ -97,8 +97,7 @@ static bool fixupSetCC(MachineFunction &MF) {
       // it, itself, by definition, clobbers eflags. But it may happen that
       // FlagsDefMI also *uses* eflags, in which case the transformation is
       // invalid.
-      if (!ST->hasZU() &&
-          FlagsDefMI->readsRegister(X86::EFLAGS, /*TRI=*/nullptr))
+      if (FlagsDefMI->readsRegister(X86::EFLAGS, /*TRI=*/nullptr))
         continue;
 
       // On 32-bit, we need to be careful to force an ABCD register.

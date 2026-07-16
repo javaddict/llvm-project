@@ -18,8 +18,8 @@ void mlir::tblgen::emitSummaryAndDescComments(llvm::raw_ostream &os,
                                               llvm::StringRef summary,
                                               llvm::StringRef description,
                                               bool terminateComment) {
-  StringRef trimmedSummary = summary.rtrim();
-  StringRef trimmedDesc = description.rtrim();
+  StringRef trimmedSummary = summary.trim();
+  StringRef trimmedDesc = description.trim();
   raw_indented_ostream ros(os);
 
   bool empty = true;

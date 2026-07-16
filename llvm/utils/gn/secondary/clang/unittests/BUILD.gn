@@ -29,7 +29,7 @@ group("unittests") {
     deps += [
       "Analysis:ClangAnalysisTests",
       "Analysis/FlowSensitive:ClangAnalysisFlowSensitiveTests",
-      "ScalableStaticAnalysisFramework:ClangScalableAnalysisTests",
+      "Analysis/Scalable:ClangScalableAnalysisTests",
       "StaticAnalyzer:StaticAnalysisTests",
     ]
   }

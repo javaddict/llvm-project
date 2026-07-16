@@ -82,7 +82,10 @@ def SMTFuncType : SMTTypeDef<"SMTFunc"> {
     "mlir::Type":$rangeType
   );
 
-  let assemblyFormat = "`<` custom<DomainTypes>($domainTypes) $rangeType `>`";
+  // Note: We are not printing the parentheses when no domain type is present
+  // because the default MLIR parser thinks it is a builtin function type
+  // otherwise.
+  let assemblyFormat = "`<` `(` $domainTypes `)` ` ` $rangeType `>`";
 
   let builders = [
     TypeBuilderWithInferredContext<(ins

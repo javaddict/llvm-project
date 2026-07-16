@@ -17,7 +17,8 @@ namespace clang::tidy::misc {
 
 AnonymousNamespaceInHeaderCheck::AnonymousNamespaceInHeaderCheck(
     StringRef Name, ClangTidyContext *Context)
-    : ClangTidyCheck(Name, Context) {}
+    : ClangTidyCheck(Name, Context),
+      HeaderFileExtensions(Context->getHeaderFileExtensions()) {}
 
 void AnonymousNamespaceInHeaderCheck::registerMatchers(
     ast_matchers::MatchFinder *Finder) {
@@ -33,7 +34,7 @@ void AnonymousNamespaceInHeaderCheck::check(
     return;
 
   if (utils::isPresumedLocInHeaderFile(Loc, *Result.SourceManager,
-                                       getHeaderFileExtensions()))
+                                       HeaderFileExtensions))
     diag(Loc, "do not use unnamed namespaces in header files");
 }
 

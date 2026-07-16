@@ -14,7 +14,6 @@
 #ifndef LLVM_LIB_TARGET_ARM_ARM_H
 #define LLVM_LIB_TARGET_ARM_ARM_H
 
-#include "llvm/CodeGen/MachineFunctionAnalysisManager.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Support/CodeGen.h"
 #include <functional>
@@ -39,7 +38,7 @@ Pass *createARMParallelDSPPass();
 FunctionPass *createARMISelDag(ARMBaseTargetMachine &TM,
                                CodeGenOptLevel OptLevel);
 FunctionPass *createA15SDOptimizerPass();
-FunctionPass *createARMLoadStoreOptLegacyPass(bool PreAlloc = false);
+FunctionPass *createARMLoadStoreOptimizationPass(bool PreAlloc = false);
 FunctionPass *createARMExpandPseudoPass();
 FunctionPass *createARMBranchTargetsPass();
 FunctionPass *createARMConstantIslandPass();
@@ -69,10 +68,10 @@ void initializeARMConstantIslandsPass(PassRegistry &);
 void initializeARMDAGToDAGISelLegacyPass(PassRegistry &);
 void initializeARMExpandPseudoPass(PassRegistry &);
 void initializeARMFixCortexA57AES1742098Pass(PassRegistry &);
-void initializeARMLoadStoreOptLegacyPass(PassRegistry &);
+void initializeARMLoadStoreOptPass(PassRegistry &);
 void initializeARMLowOverheadLoopsPass(PassRegistry &);
 void initializeARMParallelDSPPass(PassRegistry &);
-void initializeARMPreAllocLoadStoreOptLegacyPass(PassRegistry &);
+void initializeARMPreAllocLoadStoreOptPass(PassRegistry &);
 void initializeARMSLSHardeningPass(PassRegistry &);
 void initializeMVEGatherScatterLoweringPass(PassRegistry &);
 void initializeMVELaneInterleavingPass(PassRegistry &);
@@ -81,19 +80,6 @@ void initializeMVETailPredicationPass(PassRegistry &);
 void initializeMVEVPTBlockPass(PassRegistry &);
 void initializeThumb2ITBlockPass(PassRegistry &);
 void initializeThumb2SizeReducePass(PassRegistry &);
-
-class ARMPreAllocLoadStoreOptPass
-    : public OptionalPassInfoMixin<ARMPreAllocLoadStoreOptPass> {
-public:
-  PreservedAnalyses run(MachineFunction &MF,
-                        MachineFunctionAnalysisManager &MFAM);
-};
-
-class ARMLoadStoreOptPass : public OptionalPassInfoMixin<ARMLoadStoreOptPass> {
-public:
-  PreservedAnalyses run(MachineFunction &MF,
-                        MachineFunctionAnalysisManager &MFAM);
-};
 
 } // end namespace llvm
 

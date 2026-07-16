@@ -21,7 +21,6 @@ volatile vector bool short vbs;
 volatile vector bool int vbi;
 volatile vector bool long long vbl;
 volatile vector float vf;
-volatile vector float vf1;
 volatile vector double vd;
 
 void test_nnp_assist(void) {
@@ -41,10 +40,10 @@ void test_nnp_assist(void) {
   // CHECK: call <4 x float> @llvm.s390.vclfnls(<8 x i16> %{{.*}}, i32 15)
   // CHECK-ASM: vclfnl
 
-  vus = vec_round_from_fp32(vf, vf1, 0);
+  vus = vec_round_from_fp32(vf, vf, 0);
   // CHECK: call <8 x i16> @llvm.s390.vcrnfs(<4 x float> %{{.*}}, <4 x float> %{{.*}}, i32 0)
   // CHECK-ASM: vcrnf
-  vus = vec_round_from_fp32(vf, vf1, 15);
+  vus = vec_round_from_fp32(vf, vf, 15);
   // CHECK: call <8 x i16> @llvm.s390.vcrnfs(<4 x float> %{{.*}}, <4 x float> %{{.*}}, i32 15)
   // CHECK-ASM: vcrnf
 

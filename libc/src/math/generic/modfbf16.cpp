@@ -7,12 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/modfbf16.h"
-#include "src/__support/math/modfbf16.h"
+#include "src/__support/FPUtil/ManipulationFunctions.h"
+#include "src/__support/FPUtil/bfloat16.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(bfloat16, modfbf16, (bfloat16 x, bfloat16 *iptr)) {
-  return math::modfbf16(x, iptr);
+  return fputil::modf(x, *iptr);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

@@ -21,15 +21,6 @@ class MachineIRBuilder;
 
 namespace AMDGPU {
 
-/// Holds waterfall loop information: the set of SGPR operand registers that
-/// need waterfalling, and an instruction range [Start, End) to wrap in the
-/// loop.
-struct WaterfallInfo {
-  SmallSet<Register, 4> SgprWaterfallOperandRegs;
-  MachineBasicBlock::iterator Start;
-  MachineBasicBlock::iterator End;
-};
-
 // Receives list of RegBankLLTMappingApplyID and applies register banks on all
 // operands. It is user's responsibility to provide RegBankLLTMappingApplyIDs
 // for all register operands, there is no need to specify NonReg for trailing
@@ -48,7 +39,6 @@ class RegBankLegalizeHelper {
   const bool IsWave32;
   const RegisterBank *SgprRB;
   const RegisterBank *VgprRB;
-  const RegisterBank *AgprRB;
   const RegisterBank *VccRB;
 
   static constexpr LLT S1 = LLT::scalar(1);
@@ -96,8 +86,14 @@ public:
 
   bool findRuleAndApplyMapping(MachineInstr &MI);
 
+  // Manual apply helpers.
+  bool applyMappingPHI(MachineInstr &MI);
+  void applyMappingTrivial(MachineInstr &MI);
+
 private:
-  bool executeInWaterfallLoop(MachineIRBuilder &B, const WaterfallInfo &WFI);
+  bool executeInWaterfallLoop(MachineIRBuilder &B,
+                              iterator_range<MachineBasicBlock::iterator> Range,
+                              SmallSet<Register, 4> &SgprOperandRegs);
 
   LLT getTyFromID(RegBankLLTMappingApplyID ID);
   LLT getBTyFromID(RegBankLLTMappingApplyID ID, LLT Ty);
@@ -111,7 +107,7 @@ private:
   bool
   applyMappingSrc(MachineInstr &MI, unsigned &OpIdx,
                   const SmallVectorImpl<RegBankLLTMappingApplyID> &MethodIDs,
-                  WaterfallInfo &WFI);
+                  SmallSet<Register, 4> &SgprWaterfallOperandRegs);
 
   bool splitLoad(MachineInstr &MI, ArrayRef<LLT> LLTBreakdown,
                  LLT MergeTy = LLT());
@@ -119,7 +115,7 @@ private:
   bool widenMMOToS32(GAnyLoad &MI) const;
 
   bool lower(MachineInstr &MI, const RegBankLLTMapping &Mapping,
-             WaterfallInfo &WFI);
+             SmallSet<Register, 4> &SgprWaterfallOperandRegs);
 
   bool lowerVccExtToSel(MachineInstr &MI);
   std::pair<Register, Register> unpackZExt(Register Reg);
@@ -129,22 +125,12 @@ private:
   bool lowerUnpackBitShift(MachineInstr &MI);
   bool lowerV_BFE(MachineInstr &MI);
   bool lowerS_BFE(MachineInstr &MI);
-  bool lowerUniMAD64(MachineInstr &MI);
   bool lowerSplitTo32(MachineInstr &MI);
-  bool lowerSplitTo32Mul(MachineInstr &MI);
   bool lowerSplitTo16(MachineInstr &MI);
   bool lowerSplitTo32Select(MachineInstr &MI);
   bool lowerSplitTo32SExtInReg(MachineInstr &MI);
-  bool lowerSplitBitCount64To32(MachineInstr &MI);
   bool lowerUnpackMinMax(MachineInstr &MI);
   bool lowerUnpackAExt(MachineInstr &MI);
-  bool lowerExtrVecEltToSel(MachineInstr &MI);
-  bool lowerExtrVecEltTo32(MachineInstr &MI);
-  bool lowerInsVecEltToSel(MachineInstr &MI);
-  bool lowerInsVecEltTo32(MachineInstr &MI);
-  bool lowerAbsToNegMax(MachineInstr &MI);
-  bool lowerAbsToS32(MachineInstr &MI);
-  bool applyRegisterBanksVgprWithSgprRsrc(MachineInstr &MI, unsigned RsrcIdx);
 };
 
 } // end namespace AMDGPU

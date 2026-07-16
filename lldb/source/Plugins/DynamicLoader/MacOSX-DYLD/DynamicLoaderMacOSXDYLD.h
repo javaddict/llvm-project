@@ -58,12 +58,10 @@ public:
 
   lldb_private::Status CanLoadImage() override;
 
-  bool GetSharedCacheInformation(lldb::addr_t &base_address,
-                                 lldb_private::UUID &uuid,
-                                 lldb_private::LazyBool &using_shared_cache,
-                                 lldb_private::LazyBool &private_shared_cache,
-                                 lldb_private::FileSpec &shared_cache_filepath,
-                                 std::optional<uint64_t> &size) override;
+  bool GetSharedCacheInformation(
+      lldb::addr_t &base_address, lldb_private::UUID &uuid,
+      lldb_private::LazyBool &using_shared_cache,
+      lldb_private::LazyBool &private_shared_cache) override;
 
   // PluginInterface protocol
   llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }

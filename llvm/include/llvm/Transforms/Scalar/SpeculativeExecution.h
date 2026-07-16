@@ -69,18 +69,17 @@ class BasicBlock;
 class TargetTransformInfo;
 
 class SpeculativeExecutionPass
-    : public OptionalPassInfoMixin<SpeculativeExecutionPass> {
+    : public PassInfoMixin<SpeculativeExecutionPass> {
 public:
-  LLVM_ABI SpeculativeExecutionPass(bool OnlyIfDivergentTarget = false);
+  SpeculativeExecutionPass(bool OnlyIfDivergentTarget = false);
 
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 
-  LLVM_ABI void
-  printPipeline(raw_ostream &OS,
-                function_ref<StringRef(StringRef)> MapClassName2PassName);
+  void printPipeline(raw_ostream &OS,
+                     function_ref<StringRef(StringRef)> MapClassName2PassName);
 
   // Glue for old PM
-  LLVM_ABI bool runImpl(Function &F, TargetTransformInfo *TTI);
+  bool runImpl(Function &F, TargetTransformInfo *TTI);
 
 private:
   bool runOnBasicBlock(BasicBlock &B);

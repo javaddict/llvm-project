@@ -124,8 +124,6 @@ protected:
     B.setMF(*MF);
     MRI = &MF->getRegInfo();
     B.setInsertPt(*EntryMBB, EntryMBB->end());
-    RTLCI.emplace(TM->getTargetTriple());
-    LibcallLowering.emplace(*RTLCI, MF->getSubtarget());
   }
 
   LLVMContext Context;
@@ -137,8 +135,6 @@ protected:
   MachineBasicBlock *EntryMBB;
   MachineIRBuilder B;
   MachineRegisterInfo *MRI;
-  std::optional<RTLIB::RuntimeLibcallsInfo> RTLCI;
-  std::optional<LibcallLoweringInfo> LibcallLowering;
 };
 
 class AArch64GISelMITest : public GISelMITest {

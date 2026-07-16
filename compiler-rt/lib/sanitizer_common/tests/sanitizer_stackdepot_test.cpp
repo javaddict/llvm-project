@@ -174,11 +174,11 @@ class StackDepotBenchmark
 //   '--gtest_filter=*Benchmark*'
 TEST_P(StackDepotBenchmark, DISABLED_Benchmark) {
   auto Param = GetParam();
-  std::atomic<int> here = {};
+  std::atomic<unsigned int> here = {};
 
   auto thread = [&](int idx) {
     here++;
-    while (here < Param.Threads) std::this_thread::yield();
+    while (here < Param.UniqueThreads) std::this_thread::yield();
 
     std::vector<uptr> frames(64);
     for (int r = 0; r < Param.RepeatPerThread; ++r) {

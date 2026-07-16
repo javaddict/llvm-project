@@ -1,6 +1,19 @@
 // RUN: %check_clang_tidy -std=c++17-or-later %s readability-isolate-declaration %t
-#include <utility>
-#include <vector>
+
+template <typename T1, typename T2>
+struct pair {
+  T1 first;
+  T2 second;
+  pair(T1 v1, T2 v2) : first(v1), second(v2) {}
+
+  template <int N>
+  decltype(auto) get() const {
+    if constexpr (N == 0)
+      return first;
+    else if constexpr (N == 1)
+      return second;
+  }
+};
 
 void forbidden_transformations() {
   if (int i = 42, j = i; i == j)
@@ -8,7 +21,7 @@ void forbidden_transformations() {
   switch (int i = 12, j = 14; i)
     ;
 
-  auto [i, j] = std::pair<int, int>(42, 42);
+  auto [i, j] = pair<int, int>(42, 42);
 }
 
 struct SomeClass {
@@ -16,7 +29,29 @@ struct SomeClass {
   SomeClass(int value);
 };
 
-#include <string>
+namespace std {
+template <typename T>
+class initializer_list { const T *a, *b; };
+
+template <typename T>
+class vector {
+public:
+  vector() = default;
+  vector(initializer_list<T> init) {}
+};
+
+class string {
+public:
+  string() = default;
+  string(const char *) {}
+};
+
+namespace string_literals {
+string operator""s(const char *, decltype(sizeof(int))) {
+  return string();
+}
+} // namespace string_literals
+} // namespace std
 
 namespace Types {
 typedef int MyType;

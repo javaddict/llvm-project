@@ -22,7 +22,7 @@ class HexagonMCAsmInfo : public MCAsmInfoELF {
   void anchor() override;
 
 public:
-  explicit HexagonMCAsmInfo(const Triple &TT, const MCTargetOptions &Options);
+  explicit HexagonMCAsmInfo(const Triple &TT);
 };
 
 } // namespace llvm

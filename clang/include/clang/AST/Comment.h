@@ -1044,9 +1044,7 @@ struct DeclInfo {
     TypedefKind,
 
     /// An enumeration or scoped enumeration.
-    EnumKind,
-
-    ConceptKind
+    EnumKind
   };
 
   /// What kind of template specialization \c CommentDecl is.

@@ -132,7 +132,6 @@ void ilist_callback_traits<MachineBasicBlock>::addNodeToList(
     MachineBasicBlock *N) {
   MachineFunction &MF = *N->getParent();
   N->Number = MF.addToMBBNumbering(N);
-  N->AnalysisNumber = MF.assignAnalysisNumber();
 
   // Make sure the instructions have their operands in the reginfo lists.
   MachineRegisterInfo &RegInfo = MF.getRegInfo();
@@ -144,7 +143,6 @@ void ilist_callback_traits<MachineBasicBlock>::removeNodeFromList(
     MachineBasicBlock *N) {
   N->getParent()->removeFromMBBNumbering(N->Number);
   N->Number = -1;
-  N->AnalysisNumber = -1;
 }
 
 /// When we add an instruction to a basic block list, we update its parent

@@ -171,13 +171,13 @@ public:
       clear_unused_bits();
   }
 
-  /// Returns whether there are no bits in this bitvector.
+  /// empty - Tests whether there are no bits in this bitvector.
   bool empty() const { return Size == 0; }
 
-  /// Returns the number of bits in this bitvector.
+  /// size - Returns the number of bits in this bitvector.
   size_type size() const { return Size; }
 
-  /// Returns the number of bits which are set.
+  /// count - Returns the number of bits which are set.
   size_type count() const {
     unsigned NumBits = 0;
     for (auto Bit : Bits)
@@ -185,12 +185,12 @@ public:
     return NumBits;
   }
 
-  /// Returns true if any bit is set.
+  /// any - Returns true if any bit is set.
   bool any() const {
     return any_of(Bits, [](BitWord Bit) { return Bit != 0; });
   }
 
-  /// Returns true if all bits are set.
+  /// all - Returns true if all bits are set.
   bool all() const {
     for (unsigned i = 0; i < Size / BITWORD_SIZE; ++i)
       if (Bits[i] != ~BitWord(0))
@@ -203,13 +203,14 @@ public:
     return true;
   }
 
-  /// Returns true if none of the bits are set.
+  /// none - Returns true if none of the bits are set.
   bool none() const {
     return !any();
   }
 
-  /// Returns the index of the first set/unset bit, depending on \p Set, in
-  /// the range [Begin, End). Returns -1 if all bits in the range are unset/set.
+  /// find_first_in - Returns the index of the first set / unset bit,
+  /// depending on \p Set, in the range [Begin, End).
+  /// Returns -1 if all bits in the range are unset / set.
   int find_first_in(unsigned Begin, unsigned End, bool Set = true) const {
     assert(Begin <= End && End <= Size);
     if (Begin == End)
@@ -243,8 +244,8 @@ public:
     return -1;
   }
 
-  /// Returns the index of the last set bit in the range [Begin, End).
-  /// Returns -1 if all bits in the range are unset.
+  /// find_last_in - Returns the index of the last set bit in the range
+  /// [Begin, End).  Returns -1 if all bits in the range are unset.
   int find_last_in(unsigned Begin, unsigned End) const {
     assert(Begin <= End && End <= Size);
     if (Begin == End)
@@ -274,14 +275,14 @@ public:
     return -1;
   }
 
-  /// Returns the index of the first unset bit in the range [Begin, End).
-  /// Returns -1 if all bits in the range are set.
+  /// find_first_unset_in - Returns the index of the first unset bit in the
+  /// range [Begin, End).  Returns -1 if all bits in the range are set.
   int find_first_unset_in(unsigned Begin, unsigned End) const {
     return find_first_in(Begin, End, /* Set = */ false);
   }
 
-  /// Returns the index of the last unset bit in the range [Begin, End).
-  /// Returns -1 if all bits in the range are set.
+  /// find_last_unset_in - Returns the index of the last unset bit in the
+  /// range [Begin, End).  Returns -1 if all bits in the range are set.
   int find_last_unset_in(unsigned Begin, unsigned End) const {
     assert(Begin <= End && End <= Size);
     if (Begin == End)
@@ -313,45 +314,49 @@ public:
     return -1;
   }
 
-  /// Returns the index of the first set bit, -1 if none of the bits are set.
+  /// find_first - Returns the index of the first set bit, -1 if none
+  /// of the bits are set.
   int find_first() const { return find_first_in(0, Size); }
 
-  /// Returns the index of the last set bit, -1 if none of the bits are set.
+  /// find_last - Returns the index of the last set bit, -1 if none of the bits
+  /// are set.
   int find_last() const { return find_last_in(0, Size); }
 
-  /// Returns the index of the next set bit following the "Prev" bit.
-  /// Returns -1 if the next set bit is not found.
+  /// find_next - Returns the index of the next set bit following the
+  /// "Prev" bit. Returns -1 if the next set bit is not found.
   int find_next(unsigned Prev) const { return find_first_in(Prev + 1, Size); }
 
-  /// Returns the index of the first set bit that precedes the bit at
-  /// \p PriorTo. Returns -1 if all previous bits are unset.
+  /// find_prev - Returns the index of the first set bit that precedes the
+  /// the bit at \p PriorTo.  Returns -1 if all previous bits are unset.
   int find_prev(unsigned PriorTo) const { return find_last_in(0, PriorTo); }
 
-  /// Returns the index of the first unset bit, -1 if all of the bits are set.
+  /// find_first_unset - Returns the index of the first unset bit, -1 if all
+  /// of the bits are set.
   int find_first_unset() const { return find_first_unset_in(0, Size); }
 
-  /// Returns the index of the next unset bit following the \p Prev bit.
-  /// Returns -1 if all remaining bits are set.
+  /// find_next_unset - Returns the index of the next unset bit following the
+  /// "Prev" bit.  Returns -1 if all remaining bits are set.
   int find_next_unset(unsigned Prev) const {
     return find_first_unset_in(Prev + 1, Size);
   }
 
-  /// Returns the index of the last unset bit, -1 if all of the bits are set.
+  /// find_last_unset - Returns the index of the last unset bit, -1 if all of
+  /// the bits are set.
   int find_last_unset() const { return find_last_unset_in(0, Size); }
 
-  /// Returns the index of the first unset bit that precedes the bit at
-  /// \p PriorTo. Returns -1 if all previous bits are set.
+  /// find_prev_unset - Returns the index of the first unset bit that precedes
+  /// the bit at \p PriorTo.  Returns -1 if all previous bits are set.
   int find_prev_unset(unsigned PriorTo) const {
     return find_last_unset_in(0, PriorTo);
   }
 
-  /// Removes all bits from the bitvector.
+  /// clear - Removes all bits from the bitvector.
   void clear() {
     Size = 0;
     Bits.clear();
   }
 
-  /// Grow or shrink the bitvector.
+  /// resize - Grow or shrink the bitvector.
   void resize(unsigned N, bool t = false) {
     set_unused_bits(t);
     Size = N;
@@ -359,24 +364,22 @@ public:
     clear_unused_bits();
   }
 
-  /// Reserve space for atleast \p N bits in the bitvector.
   void reserve(unsigned N) { Bits.reserve(NumBitWords(N)); }
 
-  /// Set all bits in the bitvector.
+  // Set, reset, flip
   BitVector &set() {
     init_words(true);
     clear_unused_bits();
     return *this;
   }
 
-  // Set bit \p Idx in the bitvector.
   BitVector &set(unsigned Idx) {
     assert(Idx < Size && "access in bound");
     Bits[Idx / BITWORD_SIZE] |= BitWord(1) << (Idx % BITWORD_SIZE);
     return *this;
   }
 
-  /// Efficiently set a range of bits in [I, E)
+  /// set - Efficiently set a range of bits in [I, E)
   BitVector &set(unsigned I, unsigned E) {
     assert(I <= E && "Attempted to set backwards range!");
     assert(E <= size() && "Attempted to set out-of-bounds range!");
@@ -405,19 +408,17 @@ public:
     return *this;
   }
 
-  /// Reset all bits in the bitvector.
   BitVector &reset() {
     init_words(false);
     return *this;
   }
 
-  /// Reset bit \p Idx in the bitvector.
   BitVector &reset(unsigned Idx) {
     Bits[Idx / BITWORD_SIZE] &= ~(BitWord(1) << (Idx % BITWORD_SIZE));
     return *this;
   }
 
-  /// Efficiently reset a range of bits in [I, E)
+  /// reset - Efficiently reset a range of bits in [I, E)
   BitVector &reset(unsigned I, unsigned E) {
     assert(I <= E && "Attempted to reset backwards range!");
     assert(E <= size() && "Attempted to reset out-of-bounds range!");
@@ -446,7 +447,6 @@ public:
     return *this;
   }
 
-  /// Flip all bits in the bitvector.
   BitVector &flip() {
     for (auto &Bit : Bits)
       Bit = ~Bit;
@@ -454,7 +454,6 @@ public:
     return *this;
   }
 
-  /// Flip bit \p Idx in the bitvector.
   BitVector &flip(unsigned Idx) {
     Bits[Idx / BITWORD_SIZE] ^= BitWord(1) << (Idx % BITWORD_SIZE);
     return *this;
@@ -472,18 +471,17 @@ public:
     return (Bits[Idx / BITWORD_SIZE] & Mask) != 0;
   }
 
-  /// Return the last element in the bitvector.
+  /// Return the last element in the vector.
   bool back() const {
     assert(!empty() && "Getting last element of empty vector.");
     return (*this)[size() - 1];
   }
 
-  /// Returns true if bit \p Idx is set.
   bool test(unsigned Idx) const {
     return (*this)[Idx];
   }
 
-  // Push single bit to end of bitvector.
+  // Push single bit to end of vector.
   void push_back(bool Val) {
     unsigned OldSize = Size;
     unsigned NewSize = Size + 1;
@@ -526,7 +524,7 @@ public:
 
   bool operator!=(const BitVector &RHS) const { return !(*this == RHS); }
 
-  /// Intersection of this bitvector with \p RHS.
+  /// Intersection, union, disjoint union.
   BitVector &operator&=(const BitVector &RHS) {
     unsigned ThisWords = Bits.size();
     unsigned RHSWords = RHS.Bits.size();
@@ -543,7 +541,7 @@ public:
     return *this;
   }
 
-  /// Reset bits that are set in RHS. Same as *this &= ~RHS.
+  /// reset - Reset bits that are set in RHS. Same as *this &= ~RHS.
   BitVector &reset(const BitVector &RHS) {
     unsigned ThisWords = Bits.size();
     unsigned RHSWords = RHS.Bits.size();
@@ -552,7 +550,7 @@ public:
     return *this;
   }
 
-  /// Check if (This - RHS) is non-zero.
+  /// test - Check if (This - RHS) is non-zero.
   /// This is the same as reset(RHS) and any().
   bool test(const BitVector &RHS) const {
     unsigned ThisWords = Bits.size();
@@ -569,7 +567,7 @@ public:
     return false;
   }
 
-  /// Check if This is a subset of RHS.
+  /// subsetOf - Check if This is a subset of RHS.
   bool subsetOf(const BitVector &RHS) const { return !test(RHS); }
 
   template <class F, class... ArgTys>
@@ -583,7 +581,6 @@ public:
     return Out;
   }
 
-  /// Union of this bitvector with \p RHS.
   BitVector &operator|=(const BitVector &RHS) {
     if (size() < RHS.size())
       resize(RHS.size());
@@ -592,7 +589,6 @@ public:
     return *this;
   }
 
-  /// Disjoint union of this bitvector with \p RHS.
   BitVector &operator^=(const BitVector &RHS) {
     if (size() < RHS.size())
       resize(RHS.size());
@@ -705,6 +701,12 @@ public:
     std::swap(Size, RHS.Size);
   }
 
+  void invalid() {
+    assert(!Size && Bits.empty());
+    Size = (unsigned)-1;
+  }
+  bool isInvalid() const { return Size == (unsigned)-1; }
+
   ArrayRef<BitWord> getData() const { return {Bits.data(), Bits.size()}; }
 
   //===--------------------------------------------------------------------===//
@@ -719,25 +721,25 @@ public:
   // bit mask is always a whole multiple of 32 bits.  If no bit mask size is
   // given, the bit mask is assumed to cover the entire BitVector.
 
-  /// Add '1' bits from Mask to this vector. Don't resize.
+  /// setBitsInMask - Add '1' bits from Mask to this vector. Don't resize.
   /// This computes "*this |= Mask".
   void setBitsInMask(const uint32_t *Mask, unsigned MaskWords = ~0u) {
     applyMask<true, false>(Mask, MaskWords);
   }
 
-  /// Clear any bits in this vector that are set in Mask.
+  /// clearBitsInMask - Clear any bits in this vector that are set in Mask.
   /// Don't resize. This computes "*this &= ~Mask".
   void clearBitsInMask(const uint32_t *Mask, unsigned MaskWords = ~0u) {
     applyMask<false, false>(Mask, MaskWords);
   }
 
-  /// Add a bit to this vector for every '0' bit in Mask.
+  /// setBitsNotInMask - Add a bit to this vector for every '0' bit in Mask.
   /// Don't resize.  This computes "*this |= ~Mask".
   void setBitsNotInMask(const uint32_t *Mask, unsigned MaskWords = ~0u) {
     applyMask<true, true>(Mask, MaskWords);
   }
 
-  /// Clear a bit in this vector for every '0' bit in Mask.
+  /// clearBitsNotInMask - Clear a bit in this vector for every '0' bit in Mask.
   /// Don't resize.  This computes "*this &= Mask".
   void clearBitsNotInMask(const uint32_t *Mask, unsigned MaskWords = ~0u) {
     applyMask<false, true>(Mask, MaskWords);
@@ -847,11 +849,19 @@ inline BitVector::size_type capacity_in_bytes(const BitVector &X) {
 }
 
 template <> struct DenseMapInfo<BitVector> {
+  static inline BitVector getEmptyKey() { return {}; }
+  static inline BitVector getTombstoneKey() {
+    BitVector V;
+    V.invalid();
+    return V;
+  }
   static unsigned getHashValue(const BitVector &V) {
     return DenseMapInfo<std::pair<BitVector::size_type, ArrayRef<uintptr_t>>>::
         getHashValue(std::make_pair(V.size(), V.getData()));
   }
   static bool isEqual(const BitVector &LHS, const BitVector &RHS) {
+    if (LHS.isInvalid() || RHS.isInvalid())
+      return LHS.isInvalid() == RHS.isInvalid();
     return LHS == RHS;
   }
 };

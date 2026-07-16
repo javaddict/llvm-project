@@ -40,7 +40,7 @@ LLVM_ABI bool isBitcodeWriterPass(Pass *P);
 ///
 /// Note that this is intended for use with the new pass manager. To construct
 /// a pass for the legacy pass manager, use the function above.
-class BitcodeWriterPass : public RequiredPassInfoMixin<BitcodeWriterPass> {
+class BitcodeWriterPass : public PassInfoMixin<BitcodeWriterPass> {
   raw_ostream &OS;
   bool ShouldPreserveUseListOrder;
   bool EmitSummaryIndex;
@@ -64,7 +64,10 @@ public:
   /// Run the bitcode writer pass, and output the module to the selected
   /// output stream.
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &);
+
+  static bool isRequired() { return true; }
 };
+
 }
 
 #endif

@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/f16sqrtl.h"
-#include "src/__support/math/f16sqrtl.h"
+#include "src/__support/FPUtil/sqrt.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(float16, f16sqrtl, (long double x)) {
-  return math::f16sqrtl(x);
+  return fputil::sqrt<float16>(x);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

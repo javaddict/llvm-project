@@ -202,10 +202,6 @@ struct TestVectorUnrollingPatterns
                       resultShape[1] == 32) {
                     return SmallVector<int64_t>{1, 16};
                   }
-                  if (resultShape.size() == 2 && resultShape[0] == 2 &&
-                      resultShape[1] == 1) {
-                    return SmallVector<int64_t>{1, 1};
-                  }
                   // Default case: [2,4] for all tests.
                   return SmallVector<int64_t>{2, 4};
                 })
@@ -217,24 +213,6 @@ struct TestVectorUnrollingPatterns
                       .setNativeShape(ArrayRef<int64_t>{1, 3, 4, 2})
                       .setFilterConstraint([](Operation *op) {
                         return success(isa<vector::TransposeOp>(op));
-                      }));
-    populateVectorUnrollPatterns(
-        patterns, UnrollVectorOptions()
-                      .setNativeShape(ArrayRef<int64_t>{4, 4})
-                      .setFilterConstraint([](Operation *op) {
-                        return success(isa<vector::BitCastOp>(op));
-                      }));
-    populateVectorUnrollPatterns(
-        patterns, UnrollVectorOptions()
-                      .setNativeShape(ArrayRef<int64_t>{2, 4})
-                      .setFilterConstraint([](Operation *op) {
-                        return success(isa<vector::InterleaveOp>(op));
-                      }));
-    populateVectorUnrollPatterns(
-        patterns, UnrollVectorOptions()
-                      .setNativeShape(ArrayRef<int64_t>{2, 4})
-                      .setFilterConstraint([](Operation *op) {
-                        return success(isa<vector::DeinterleaveOp>(op));
                       }));
 
     if (unrollBasedOnType) {
@@ -704,9 +682,9 @@ struct TestVectorDistribution
     }
     WarpExecuteOnLane0LoweringOptions options;
     options.warpAllocationFn = allocateGlobalSharedMemory;
-    options.warpSynchronizationFn = [](Location loc, OpBuilder &builder,
-                                       gpu::WarpExecuteOnLane0Op warpOp) {
-      gpu::BarrierOp::create(builder, loc, gpu::AddressSpace::Workgroup);
+    options.warpSyncronizationFn = [](Location loc, OpBuilder &builder,
+                                      gpu::WarpExecuteOnLane0Op warpOp) {
+      gpu::BarrierOp::create(builder, loc);
     };
     // Test on one pattern in isolation.
     if (warpOpToSCF) {
@@ -801,8 +779,8 @@ struct TestVectorGatherLowering
            "loads";
   }
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<affine::AffineDialect, arith::ArithDialect,
-                    func::FuncDialect, memref::MemRefDialect, scf::SCFDialect,
+    registry.insert<arith::ArithDialect, func::FuncDialect,
+                    memref::MemRefDialect, scf::SCFDialect,
                     tensor::TensorDialect, vector::VectorDialect>();
   }
 

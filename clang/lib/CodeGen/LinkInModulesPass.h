@@ -26,13 +26,14 @@ class Pass;
 /// Create and return a pass that links in Moduels from a provided
 /// BackendConsumer to a given primary Module. Note that this pass is designed
 /// for use with the legacy pass manager.
-class LinkInModulesPass : public RequiredPassInfoMixin<LinkInModulesPass> {
+class LinkInModulesPass : public PassInfoMixin<LinkInModulesPass> {
   clang::BackendConsumer *BC;
 
 public:
   LinkInModulesPass(clang::BackendConsumer *BC);
 
   PreservedAnalyses run(Module &M, AnalysisManager<Module> &);
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

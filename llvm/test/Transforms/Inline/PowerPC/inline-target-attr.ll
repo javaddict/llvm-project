@@ -1,4 +1,5 @@
 ; RUN: opt < %s -mtriple=powerpc64le-ibm-linux-gnu -S -passes=inline | FileCheck %s
+; RUN: opt < %s -mtriple=powerpc64le-ibm-linux-gnu -S -passes='cgscc(inline)' | FileCheck %s
 
 target datalayout = "E-m:e-i64:64-n32:64"
 target triple = "powerpc64le-ibm-linux-gnu"

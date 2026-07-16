@@ -1,5 +1,4 @@
-// RUN: %clang_cc1 -triple dxil-pc-shadermodel6.2-library -fnative-half-type -verify %s
-// RUN: %clang_cc1 -triple dxil-pc-shadermodel6.2-library -fnative-half-type -fexperimental-new-constant-interpreter -verify %s
+// RUN: %clang_cc1 -triple dxil-pc-shadermodel6.2-library -fnative-half-type -Wconversion -verify %s
 
 void literal_assignments() {
   half h;

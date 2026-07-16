@@ -131,6 +131,7 @@ static void error(llvm::Error E, StringRef FileName, const Archive::Child &C,
   std::string Buf;
   raw_string_ostream OS(Buf);
   logAllUnhandledErrors(std::move(E), OS);
+  OS.flush();
   errs() << ": " << Buf << "\n";
 }
 
@@ -148,6 +149,7 @@ static void error(llvm::Error E, StringRef FileName,
   std::string Buf;
   raw_string_ostream OS(Buf);
   logAllUnhandledErrors(std::move(E), OS);
+  OS.flush();
   errs() << ": " << Buf << "\n";
 }
 
@@ -608,21 +610,22 @@ static void printFileSectionSizes(StringRef file) {
             ArchFound = true;
             Expected<std::unique_ptr<ObjectFile>> UO = I->getAsObjectFile();
             if (UO) {
-              ObjectFile *o = &*UO.get();
-              MachOObjectFile *MachO = dyn_cast<MachOObjectFile>(o);
-              if (OutputFormat == sysv)
-                outs() << o->getFileName() << "  :\n";
-              else if (MachO && OutputFormat == darwin) {
-                if (MoreThanOneFile || ArchFlags.size() > 1)
-                  outs() << o->getFileName() << " (for architecture "
-                         << I->getArchFlagName() << "): \n";
-              }
-              printObjectSectionSizes(o);
-              if (OutputFormat == berkeley) {
-                if (!MachO || MoreThanOneFile || ArchFlags.size() > 1)
-                  outs() << o->getFileName() << " (for architecture "
-                         << I->getArchFlagName() << ")";
-                outs() << "\n";
+              if (ObjectFile *o = dyn_cast<ObjectFile>(&*UO.get())) {
+                MachOObjectFile *MachO = dyn_cast<MachOObjectFile>(o);
+                if (OutputFormat == sysv)
+                  outs() << o->getFileName() << "  :\n";
+                else if (MachO && OutputFormat == darwin) {
+                  if (MoreThanOneFile || ArchFlags.size() > 1)
+                    outs() << o->getFileName() << " (for architecture "
+                           << I->getArchFlagName() << "): \n";
+                }
+                printObjectSectionSizes(o);
+                if (OutputFormat == berkeley) {
+                  if (!MachO || MoreThanOneFile || ArchFlags.size() > 1)
+                    outs() << o->getFileName() << " (for architecture "
+                           << I->getArchFlagName() << ")";
+                  outs() << "\n";
+                }
               }
             } else if (auto E = isNotObjectErrorInvalidFileType(
                        UO.takeError())) {
@@ -698,21 +701,22 @@ static void printFileSectionSizes(StringRef file) {
         if (HostArchName == I->getArchFlagName()) {
           Expected<std::unique_ptr<ObjectFile>> UO = I->getAsObjectFile();
           if (UO) {
-            ObjectFile *o = &*UO.get();
-            MachOObjectFile *MachO = dyn_cast<MachOObjectFile>(o);
-            if (OutputFormat == sysv)
-              outs() << o->getFileName() << "  :\n";
-            else if (MachO && OutputFormat == darwin) {
-              if (MoreThanOneFile)
-                outs() << o->getFileName() << " (for architecture "
-                       << I->getArchFlagName() << "):\n";
-            }
-            printObjectSectionSizes(o);
-            if (OutputFormat == berkeley) {
-              if (!MachO || MoreThanOneFile)
-                outs() << o->getFileName() << " (for architecture "
-                       << I->getArchFlagName() << ")";
-              outs() << "\n";
+            if (ObjectFile *o = dyn_cast<ObjectFile>(&*UO.get())) {
+              MachOObjectFile *MachO = dyn_cast<MachOObjectFile>(o);
+              if (OutputFormat == sysv)
+                outs() << o->getFileName() << "  :\n";
+              else if (MachO && OutputFormat == darwin) {
+                if (MoreThanOneFile)
+                  outs() << o->getFileName() << " (for architecture "
+                         << I->getArchFlagName() << "):\n";
+              }
+              printObjectSectionSizes(o);
+              if (OutputFormat == berkeley) {
+                if (!MachO || MoreThanOneFile)
+                  outs() << o->getFileName() << " (for architecture "
+                         << I->getArchFlagName() << ")";
+                outs() << "\n";
+              }
             }
           } else if (auto E = isNotObjectErrorInvalidFileType(UO.takeError())) {
             error(std::move(E), file);
@@ -772,22 +776,23 @@ static void printFileSectionSizes(StringRef file) {
          I != E; ++I) {
       Expected<std::unique_ptr<ObjectFile>> UO = I->getAsObjectFile();
       if (UO) {
-        ObjectFile *o = &*UO.get();
-        MachOObjectFile *MachO = dyn_cast<MachOObjectFile>(o);
-        if (OutputFormat == sysv)
-          outs() << o->getFileName() << "  :\n";
-        else if (MachO && OutputFormat == darwin) {
-          if (MoreThanOneFile || MoreThanOneArch)
-            outs() << o->getFileName() << " (for architecture "
-                   << I->getArchFlagName() << "):";
-          outs() << "\n";
-        }
-        printObjectSectionSizes(o);
-        if (OutputFormat == berkeley) {
-          if (!MachO || MoreThanOneFile || MoreThanOneArch)
-            outs() << o->getFileName() << " (for architecture "
-                   << I->getArchFlagName() << ")";
-          outs() << "\n";
+        if (ObjectFile *o = dyn_cast<ObjectFile>(&*UO.get())) {
+          MachOObjectFile *MachO = dyn_cast<MachOObjectFile>(o);
+          if (OutputFormat == sysv)
+            outs() << o->getFileName() << "  :\n";
+          else if (MachO && OutputFormat == darwin) {
+            if (MoreThanOneFile || MoreThanOneArch)
+              outs() << o->getFileName() << " (for architecture "
+                     << I->getArchFlagName() << "):";
+            outs() << "\n";
+          }
+          printObjectSectionSizes(o);
+          if (OutputFormat == berkeley) {
+            if (!MachO || MoreThanOneFile || MoreThanOneArch)
+              outs() << o->getFileName() << " (for architecture "
+                     << I->getArchFlagName() << ")";
+            outs() << "\n";
+          }
         }
       } else if (auto E = isNotObjectErrorInvalidFileType(UO.takeError())) {
         error(std::move(E), file, MoreThanOneArch ?

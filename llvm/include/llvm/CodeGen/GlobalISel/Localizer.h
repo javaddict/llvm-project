@@ -40,7 +40,7 @@ class TargetTransformInfo;
 /// Moreover, it only materializes constants in blocks where they
 /// are used. PHI uses are considered happening at the end of the
 /// related predecessor.
-class LLVM_ABI Localizer : public MachineFunctionPass {
+class Localizer : public MachineFunctionPass {
 public:
   static char ID;
 

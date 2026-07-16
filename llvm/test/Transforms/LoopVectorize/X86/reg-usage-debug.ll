@@ -28,7 +28,7 @@ target triple = "x86_64-unknown-linux-gnu"
 ; CHECK-NEXT: LV(REG): Found invariant usage: 1 item
 ; CHECK-NEXT: LV(REG): RegisterClass: Generic::ScalarRC, 1 registers
 
-define i32 @test_g(ptr nocapture readonly %a, i32 %n) !dbg !6 {
+define i32 @test_g(ptr nocapture readonly %a, i32 %n) local_unnamed_addr !dbg !6 {
 entry:
   tail call void @llvm.dbg.value(metadata ptr %a, i64 0, metadata !12, metadata !16), !dbg !17
   tail call void @llvm.dbg.value(metadata i32 %n, i64 0, metadata !13, metadata !16), !dbg !18
@@ -39,11 +39,11 @@ entry:
   %cmp6 = icmp eq i32 %n, 0, !dbg !21
   br i1 %cmp6, label %for.end, label %for.body.preheader, !dbg !25
 
-for.body.preheader:
+for.body.preheader:                               ; preds = %entry
   %wide.trip.count = zext i32 %n to i64, !dbg !21
   br label %for.body, !dbg !27
 
-for.body:
+for.body:                                         ; preds = %for.body.preheader, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %for.body.preheader ]
   %r.08 = phi i32 [ %add, %for.body ], [ 0, %for.body.preheader ]
   %arrayidx = getelementptr inbounds i32, ptr %a, i64 %indvars.iv, !dbg !27
@@ -55,10 +55,10 @@ for.body:
   %exitcond = icmp eq i64 %indvars.iv.next, %wide.trip.count, !dbg !21
   br i1 %exitcond, label %for.end.loopexit, label %for.body, !dbg !25, !llvm.loop !35
 
-for.end.loopexit:
+for.end.loopexit:                                 ; preds = %for.body
   br label %for.end, !dbg !38
 
-for.end:
+for.end:                                          ; preds = %for.end.loopexit, %entry
   %r.0.lcssa = phi i32 [ 0, %entry ], [ %add, %for.end.loopexit ]
   ret i32 %r.0.lcssa, !dbg !38
 }
@@ -70,16 +70,16 @@ for.end:
 ; CHECK-NEXT: LV(REG): Found invariant usage: 1 item
 ; CHECK-NEXT: LV(REG): RegisterClass: Generic::ScalarRC, 1 registers
 
-define i32 @test(ptr nocapture readonly %a, i32 %n) {
+define i32 @test(ptr nocapture readonly %a, i32 %n) local_unnamed_addr {
 entry:
   %cmp6 = icmp eq i32 %n, 0
   br i1 %cmp6, label %for.end, label %for.body.preheader
 
-for.body.preheader:
+for.body.preheader:                               ; preds = %entry
   %wide.trip.count = zext i32 %n to i64
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %for.body.preheader, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %for.body.preheader ]
   %r.08 = phi i32 [ %add, %for.body ], [ 0, %for.body.preheader ]
   %arrayidx = getelementptr inbounds i32, ptr %a, i64 %indvars.iv
@@ -89,14 +89,15 @@ for.body:
   %exitcond = icmp eq i64 %indvars.iv.next, %wide.trip.count
   br i1 %exitcond, label %for.end.loopexit, label %for.body
 
-for.end.loopexit:
+for.end.loopexit:                                 ; preds = %for.body
   br label %for.end
 
-for.end:
+for.end:                                          ; preds = %for.end.loopexit, %entry
   %r.0.lcssa = phi i32 [ 0, %entry ], [ %add, %for.end.loopexit ]
   ret i32 %r.0.lcssa
 }
 
+declare void @llvm.dbg.value(metadata, i64, metadata, metadata)
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!3, !4}

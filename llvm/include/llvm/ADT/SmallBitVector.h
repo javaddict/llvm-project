@@ -683,6 +683,12 @@ public:
       getPointer()->clearBitsNotInMask(Mask, MaskWords);
   }
 
+  void invalid() {
+    assert(empty());
+    X = (uintptr_t)-1;
+  }
+  bool isInvalid() const { return X == (uintptr_t)-1; }
+
   ArrayRef<uintptr_t> getData(uintptr_t &Store) const {
     if (!isSmall())
       return getPointer()->getData();
@@ -728,6 +734,12 @@ operator^(const SmallBitVector &LHS, const SmallBitVector &RHS) {
 }
 
 template <> struct DenseMapInfo<SmallBitVector> {
+  static inline SmallBitVector getEmptyKey() { return SmallBitVector(); }
+  static inline SmallBitVector getTombstoneKey() {
+    SmallBitVector V;
+    V.invalid();
+    return V;
+  }
   static unsigned getHashValue(const SmallBitVector &V) {
     uintptr_t Store;
     return DenseMapInfo<
@@ -735,6 +747,8 @@ template <> struct DenseMapInfo<SmallBitVector> {
         getHashValue(std::make_pair(V.size(), V.getData(Store)));
   }
   static bool isEqual(const SmallBitVector &LHS, const SmallBitVector &RHS) {
+    if (LHS.isInvalid() || RHS.isInvalid())
+      return LHS.isInvalid() == RHS.isInvalid();
     return LHS == RHS;
   }
 };

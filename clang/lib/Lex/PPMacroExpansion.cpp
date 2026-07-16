@@ -125,6 +125,35 @@ void Preprocessor::setLoadedMacroDirective(IdentifierInfo *II,
   II->setHasMacroDefinition(true);
   if (!MD->isDefined() && !LeafModuleMacros.contains(II))
     II->setHasMacroDefinition(false);
+
+  if (getLangOpts().Modules) {
+    // When both modules and a PCH are used, we may run into the following
+    // situation:
+    //  - the PCH is compiled with macro definitions on the command line.
+    //  - the modules are compiled with the same set of macros on the command
+    // line.
+    // In this case, clang needs to know that some predefined macros exist
+    // over the command line transitively through the PCH and some are passed
+    // directly over the command line. The preprocessor stores
+    // PCHPredefinesFileID so later it is aware of macros defined transitively
+    // through the PCH's compilation.
+    auto MDLoc = MD->getLocation();
+
+    if (SourceMgr.isWrittenInCommandLineFile(MDLoc)) {
+      auto MDFileID = SourceMgr.getFileID(MDLoc);
+      if (PCHPredefinesFileID.isInvalid())
+        PCHPredefinesFileID = MDFileID;
+      else {
+        // The PCH and all the chain of headers it includes must be
+        // compiled with the exact same set of macros defined over the
+        // command line. No different macros should be defined over
+        // different command line invocations. This means that all the macros'
+        // source locations should have the same MDFileID.
+        assert(MDFileID == PCHPredefinesFileID &&
+               "PCHBuiltinFileID must be consistent!");
+      }
+    }
+  }
 }
 
 ModuleMacro *Preprocessor::addModuleMacro(Module *Mod, IdentifierInfo *II,
@@ -176,7 +205,7 @@ ModuleMacro *Preprocessor::getModuleMacro(Module *Mod,
 }
 
 void Preprocessor::updateModuleMacroInfo(const IdentifierInfo *II,
-                                         FullModuleMacroInfo &Info) {
+                                         ModuleMacroInfo &Info) {
   assert(Info.ActiveModuleMacrosGeneration !=
              CurSubmoduleState->VisibleModules.getGeneration() &&
          "don't need to update this macro name info");
@@ -264,9 +293,7 @@ void Preprocessor::dumpMacroInfo(const IdentifierInfo *II) {
     State = &Pos->second;
 
   llvm::errs() << "MacroState " << State << " " << II->getNameStart();
-  const auto ModuleInfo =
-      State ? State->getModuleInfo(*this, II) : ModuleMacroInfo{};
-  if (ModuleInfo.IsAmbiguous)
+  if (State && State->isAmbiguous(*this, II))
     llvm::errs() << " ambiguous";
   if (State && !State->getOverriddenMacros().empty()) {
     llvm::errs() << " overrides";
@@ -283,8 +310,10 @@ void Preprocessor::dumpMacroInfo(const IdentifierInfo *II) {
   }
 
   // Dump module macros.
-  llvm::DenseSet<ModuleMacro *> Active(llvm::from_range,
-                                       ModuleInfo.ActiveModuleMacros);
+  llvm::DenseSet<ModuleMacro*> Active;
+  for (auto *MM : State ? State->getActiveModuleMacros(*this, II)
+                        : ArrayRef<ModuleMacro *>())
+    Active.insert(MM);
   llvm::DenseSet<ModuleMacro*> Visited;
   llvm::SmallVector<ModuleMacro *, 16> Worklist(Leaf);
   while (!Worklist.empty()) {
@@ -1287,8 +1316,11 @@ EmbedResult Preprocessor::EvaluateHasEmbed(Token &Tok, IdentifierInfo *II) {
       this->GetIncludeFilenameSpelling(FilenameTok.getLocation(), Filename);
   // If GetIncludeFilenameSpelling set the start ptr to null, there was an
   // error.
+  const FileEntry *LookupFromFile =
+      this->getCurrentFileLexer() ? *this->getCurrentFileLexer()->getFileEntry()
+                                  : static_cast<FileEntry *>(nullptr);
   OptionalFileEntryRef MaybeFileEntry =
-      this->LookupEmbedFile(Filename, isAngled, false);
+      this->LookupEmbedFile(Filename, isAngled, false, LookupFromFile);
   if (Callbacks) {
     Callbacks->HasEmbed(LParenLoc, Filename, isAngled, MaybeFileEntry);
   }
@@ -1361,7 +1393,7 @@ static void EvaluateFeatureLikeBuiltinMacro(llvm::raw_svector_ostream& OS,
 
   Token ResultTok;
   bool SuppressDiagnostic = false;
-  while (Tok.isNoneOf(tok::eod, tok::eof)) {
+  while (true) {
     // Parse next token.
     if (ExpandArgs)
       PP.Lex(Tok);
@@ -1440,7 +1472,7 @@ already_lexed:
       PP.Diag(LParenLoc, diag::note_matching) << tok::l_paren;
       SuppressDiagnostic = true;
     }
-}
+  }
 }
 
 /// Helper function to return the IdentifierInfo structure of a Token

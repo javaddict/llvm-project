@@ -168,13 +168,13 @@ protected:
   ///
   /// This will visit the users with the same offset of the current visit
   /// (including an unknown offset if that is the current state).
-  LLVM_ABI void enqueueUsers(Value &I);
+  void enqueueUsers(Value &I);
 
   /// Walk the operands of a GEP and adjust the offset as appropriate.
   ///
   /// This routine does the heavy lifting of the pointer walk by computing
   /// offsets and looking through GEPs.
-  LLVM_ABI bool adjustOffsetForGEP(GetElementPtrInst &GEPI);
+  bool adjustOffsetForGEP(GetElementPtrInst &GEPI);
 };
 
 } // end namespace detail

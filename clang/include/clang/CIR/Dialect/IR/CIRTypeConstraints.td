@@ -110,27 +110,21 @@ def CIR_SInt128 : CIR_SInt<128>;
 
 // Fundamental integer types represent standard source-level integer types that
 // have a specified set of admissible bitwidths (8, 16, 32, 64).
-// _BitInt types are excluded even when their width matches a fundamental width.
-
-def CIR_IsNotBitIntPred : CPred<"!$_self.getIsBitInt()">;
 
 def CIR_AnyFundamentalIntType
-    : CIR_ConfinedType<CIR_AnyIntType,
-        [CIR_HasFundamentalIntWidthPred, CIR_IsNotBitIntPred],
+    : CIR_ConfinedType<CIR_AnyIntType, [CIR_HasFundamentalIntWidthPred],
         "fundamental integer type"> {
     let cppFunctionName = "isFundamentalIntType";
 }
 
 def CIR_AnyFundamentalUIntType
-    : CIR_ConfinedType<CIR_AnyUIntType,
-        [CIR_HasFundamentalIntWidthPred, CIR_IsNotBitIntPred],
+    : CIR_ConfinedType<CIR_AnyUIntType, [CIR_HasFundamentalIntWidthPred],
         "fundamental unsigned integer type"> {
     let cppFunctionName = "isFundamentalUIntType";
 }
 
 def CIR_AnyFundamentalSIntType
-    : CIR_ConfinedType<CIR_AnySIntType,
-        [CIR_HasFundamentalIntWidthPred, CIR_IsNotBitIntPred],
+    : CIR_ConfinedType<CIR_AnySIntType, [CIR_HasFundamentalIntWidthPred],
         "fundamental signed integer type"> {
     let cppFunctionName = "isFundamentalSIntType";
 }
@@ -173,11 +167,6 @@ def CIR_AnyIntOrFloatType : AnyTypeOf<[CIR_AnyFloatType, CIR_AnyIntType],
     let cppFunctionName = "isAnyIntegerOrFloatingPointType";
 }
 
-def CIR_AnyIntOrBoolType
-    : AnyTypeOf<[CIR_AnyIntType, CIR_AnyBoolType], "integer or boolean type"> {
-  let cppFunctionName = "isIntOrBoolType";
-}
-
 def CIR_AnyIntOrBoolOrFloatType
     : AnyTypeOf<[CIR_AnyBoolType, CIR_AnyFloatType, CIR_AnyIntType],
                 "integer, boolean or floating point type"> {
@@ -201,12 +190,6 @@ def CIR_AnyComplexOrIntOrBoolOrFloatType
 //===----------------------------------------------------------------------===//
 
 def CIR_AnyRecordType : CIR_TypeBase<"::cir::RecordType", "record type">;
-
-//===----------------------------------------------------------------------===//
-// Function Type predicates
-//===----------------------------------------------------------------------===//
-
-def CIR_AnyFuncType : CIR_TypeBase<"::cir::FuncType", "function type">;
 
 //===----------------------------------------------------------------------===//
 // Array Type predicates
@@ -269,8 +252,6 @@ def CIR_PtrToIntOrFloatType : CIR_PtrToType<CIR_AnyIntOrFloatType>;
 def CIR_PtrToComplexType : CIR_PtrToType<CIR_AnyComplexType>;
 
 def CIR_PtrToRecordType : CIR_PtrToType<CIR_AnyRecordType>;
-
-def CIR_PtrToFunc : CIR_PtrToType<CIR_AnyFuncType>;
 
 def CIR_PtrToArray : CIR_PtrToType<CIR_AnyArrayType>;
 
@@ -342,12 +323,6 @@ def CIR_AnyFloatOrVecOfFloatType
     let cppFunctionName = "isFPOrVectorOfFPType";
 }
 
-// Types valid for bitwise ops (and/or/xor):
-// integer, boolean, or vector of integer (no floating-point).
-def CIR_AnyBitwiseType
-    : AnyTypeOf<[CIR_AnyIntType, CIR_AnyBoolType, CIR_VectorOfIntType],
-                "integer, boolean, or vector of integer">;
-
 //===----------------------------------------------------------------------===//
 // Data member type predicates
 //===----------------------------------------------------------------------===//
@@ -377,20 +352,6 @@ defvar CIR_ScalarTypes = [
 
 def CIR_AnyScalarType : AnyTypeOf<CIR_ScalarTypes, "cir scalar type"> {
   let cppFunctionName = "isScalarType";
-}
-
-//===----------------------------------------------------------------------===//
-// Comparable Type predicates
-//===----------------------------------------------------------------------===//
-
-def CIR_AnyMethodType : CIR_TypeBase<"::cir::MethodType", "method type">;
-
-def CIR_ComparableType
-    : AnyTypeOf<[CIR_AnyIntType, CIR_AnyFloatType, CIR_AnyPtrType,
-                 CIR_AnyComplexType, CIR_AnyVPtrType,
-                 CIR_AnyDataMemberType, CIR_AnyMethodType],
-                "comparable type"> {
-  let cppFunctionName = "isComparableType";
 }
 
 #endif // CLANG_CIR_DIALECT_IR_CIRTYPECONSTRAINTS_TD

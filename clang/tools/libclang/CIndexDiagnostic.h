@@ -28,7 +28,8 @@ class CXDiagnosticSetImpl {
   std::vector<std::unique_ptr<CXDiagnosticImpl>> Diagnostics;
   const bool IsExternallyManaged;
 public:
-  CXDiagnosticSetImpl(bool isManaged = false);
+  CXDiagnosticSetImpl(bool isManaged = false)
+    : IsExternallyManaged(isManaged) {}
 
   virtual ~CXDiagnosticSetImpl();
 

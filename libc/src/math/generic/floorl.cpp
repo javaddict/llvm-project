@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/floorl.h"
-#include "src/__support/math/floorl.h"
+#include "src/__support/FPUtil/NearestIntegerOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(long double, floorl, (long double x)) {
-  return math::floorl(x);
+  return fputil::floor(x);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

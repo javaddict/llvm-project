@@ -16,7 +16,11 @@ using namespace lldb;
 using namespace lldb_private;
 
 void JITLoader::LoadPlugins(Process *process, JITLoaderList &list) {
-  for (auto create_callback : PluginManager::GetJITLoaderCreateCallbacks()) {
+  JITLoaderCreateInstance create_callback = nullptr;
+  for (uint32_t idx = 0;
+       (create_callback =
+            PluginManager::GetJITLoaderCreateCallbackAtIndex(idx)) != nullptr;
+       ++idx) {
     JITLoaderSP instance_sp(create_callback(process, false));
     if (instance_sp)
       list.Append(std::move(instance_sp));

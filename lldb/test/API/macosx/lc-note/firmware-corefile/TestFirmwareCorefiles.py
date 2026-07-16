@@ -12,8 +12,6 @@ from lldbsuite.test import lldbutil
 
 
 class TestFirmwareCorefiles(TestBase):
-    SHARED_BUILD_TESTCASE = False
-
     @skipIf(
         debug_info=no_match(["dsym"]),
         bugnumber="This test is looking explicitly for a dSYM",

@@ -66,7 +66,7 @@ private:
 
   void initialize(const GCNSubtarget &ST);
 
-  bool isUniform(CondBrInst *T);
+  bool isUniform(BranchInst *T);
 
   bool isTopOfStack(BasicBlock *BB);
 
@@ -80,14 +80,15 @@ private:
 
   bool eraseIfUnused(PHINode *Phi);
 
-  bool openIf(CondBrInst *Term);
+  bool openIf(BranchInst *Term);
 
-  bool insertElse(CondBrInst *Term);
+  bool insertElse(BranchInst *Term);
 
-  Value *handleLoopCondition(Value *Cond, PHINode *Broken, llvm::Loop *L,
-                             CondBrInst *Term);
+  Value *
+  handleLoopCondition(Value *Cond, PHINode *Broken, llvm::Loop *L,
+                      BranchInst *Term);
 
-  bool handleLoop(CondBrInst *Term);
+  bool handleLoop(BranchInst *Term);
 
   bool closeControlFlow(BasicBlock *BB);
 
@@ -127,8 +128,8 @@ void SIAnnotateControlFlow::initialize(const GCNSubtarget &ST) {
 
 /// Is the branch condition uniform or did the StructurizeCFG pass
 /// consider it as such?
-bool SIAnnotateControlFlow::isUniform(CondBrInst *T) {
-  return UA->isUniformAtDef(T) || T->hasMetadata("structurizecfg.uniform");
+bool SIAnnotateControlFlow::isUniform(BranchInst *T) {
+  return UA->isUniform(T) || T->hasMetadata("structurizecfg.uniform");
 }
 
 /// Is BB the last block saved on the stack ?
@@ -183,7 +184,7 @@ bool SIAnnotateControlFlow::eraseIfUnused(PHINode *Phi) {
 }
 
 /// Open a new "If" block
-bool SIAnnotateControlFlow::openIf(CondBrInst *Term) {
+bool SIAnnotateControlFlow::openIf(BranchInst *Term) {
   if (isUniform(Term))
     return false;
 
@@ -198,7 +199,7 @@ bool SIAnnotateControlFlow::openIf(CondBrInst *Term) {
 }
 
 /// Close the last "If" block and open a new "Else" block
-bool SIAnnotateControlFlow::insertElse(CondBrInst *Term) {
+bool SIAnnotateControlFlow::insertElse(BranchInst *Term) {
   if (isUniform(Term)) {
     return false;
   }
@@ -214,9 +215,8 @@ bool SIAnnotateControlFlow::insertElse(CondBrInst *Term) {
 }
 
 /// Recursively handle the condition leading to a loop
-Value *SIAnnotateControlFlow::handleLoopCondition(Value *Cond, PHINode *Broken,
-                                                  llvm::Loop *L,
-                                                  CondBrInst *Term) {
+Value *SIAnnotateControlFlow::handleLoopCondition(
+    Value *Cond, PHINode *Broken, llvm::Loop *L, BranchInst *Term) {
 
   auto CreateBreak = [this, Cond, Broken](Instruction *I) -> CallInst * {
     return IRBuilder<>(I).CreateCall(
@@ -257,7 +257,7 @@ Value *SIAnnotateControlFlow::handleLoopCondition(Value *Cond, PHINode *Broken,
 }
 
 /// Handle a back edge (loop)
-bool SIAnnotateControlFlow::handleLoop(CondBrInst *Term) {
+bool SIAnnotateControlFlow::handleLoop(BranchInst *Term) {
   if (isUniform(Term))
     return false;
 
@@ -347,9 +347,9 @@ bool SIAnnotateControlFlow::run() {
                                  E = df_end(&F->getEntryBlock());
        I != E; ++I) {
     BasicBlock *BB = *I;
-    CondBrInst *Term = dyn_cast<CondBrInst>(BB->getTerminator());
+    BranchInst *Term = dyn_cast<BranchInst>(BB->getTerminator());
 
-    if (!Term) {
+    if (!Term || Term->isUnconditional()) {
       if (isTopOfStack(BB))
         Changed |= closeControlFlow(BB);
 

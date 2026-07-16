@@ -97,9 +97,6 @@ LLVM_ABI bool checkDebugInfoMetadata(Module &M,
 /// Used to check whether we track synthetic or original debug info.
 enum class DebugifyMode { NoDebugify, SyntheticDebugInfo, OriginalDebugInfo };
 
-using DebugifyApplyToMFCallback = llvm::function_ref<bool(
-    llvm::DIBuilder &, llvm::Function &, llvm::ModuleAnalysisManager &)>;
-
 LLVM_ABI llvm::ModulePass *createDebugifyModulePass(
     enum DebugifyMode Mode = DebugifyMode::SyntheticDebugInfo,
     llvm::StringRef NameOfWrappedPass = "",
@@ -109,9 +106,7 @@ LLVM_ABI llvm::FunctionPass *createDebugifyFunctionPass(
     llvm::StringRef NameOfWrappedPass = "",
     DebugInfoPerPass *DebugInfoBeforePass = nullptr);
 
-class NewPMDebugifyPass
-    : public llvm::OptionalPassInfoMixin<NewPMDebugifyPass> {
-  DebugifyApplyToMFCallback ApplyToMF = nullptr;
+class NewPMDebugifyPass : public llvm::PassInfoMixin<NewPMDebugifyPass> {
   llvm::StringRef NameOfWrappedPass;
   DebugInfoPerPass *DebugInfoBeforePass = nullptr;
   enum DebugifyMode Mode = DebugifyMode::NoDebugify;
@@ -122,8 +117,6 @@ public:
       DebugInfoPerPass *DebugInfoBeforePass = nullptr)
       : NameOfWrappedPass(NameOfWrappedPass),
         DebugInfoBeforePass(DebugInfoBeforePass), Mode(Mode) {}
-  NewPMDebugifyPass(DebugifyApplyToMFCallback ApplyToMF)
-      : ApplyToMF(ApplyToMF), Mode(DebugifyMode::SyntheticDebugInfo) {}
 
   LLVM_ABI llvm::PreservedAnalyses run(llvm::Module &M,
                                        llvm::ModuleAnalysisManager &AM);
@@ -173,7 +166,7 @@ LLVM_ABI llvm::FunctionPass *createCheckDebugifyFunctionPass(
     llvm::StringRef OrigDIVerifyBugsReportFilePath = "");
 
 class NewPMCheckDebugifyPass
-    : public llvm::OptionalPassInfoMixin<NewPMCheckDebugifyPass> {
+    : public llvm::PassInfoMixin<NewPMCheckDebugifyPass> {
   llvm::StringRef NameOfWrappedPass;
   llvm::StringRef OrigDIVerifyBugsReportFilePath;
   DebugifyStatsMap *StatsMap;

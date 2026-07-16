@@ -451,9 +451,8 @@ struct MatchableInfo {
       /// the operand.
       ImmOperand,
 
-      /// RegOperand - This represents a fixed register (potentially depending
-      /// on the HwMode) that is dumped in.
-      RegOperand,
+      /// RegOperand - This represents a fixed register that is dumped in.
+      RegOperand
     } Kind;
 
     /// Tuple containing the index of the (earlier) result operand that should
@@ -1585,7 +1584,7 @@ void AsmMatcherInfo::buildInfo() {
         continue;
 
       // Ignore "codegen only" instructions.
-      if (CGI->isCodeGenOnly)
+      if (CGI->TheDef->getValueAsBit("isCodeGenOnly"))
         continue;
 
       // Ignore instructions for different instructions
@@ -2010,10 +2009,7 @@ emitConvertFuncs(CodeGenTarget &Target, StringRef ClassName,
   SmallSetVector<CachedHashString, 16> OperandConversionKinds;
   SmallSetVector<CachedHashString, 16> InstructionConversionKinds;
   std::vector<std::vector<uint8_t>> ConversionTable;
-
-  // minimum is custom converter plus a operand index in parsed OperandVector
-  // (0 for custom converter) and terminator (CVT_Done).
-  size_t MaxRowLength = 3;
+  size_t MaxRowLength = 2; // minimum is custom converter plus terminator.
 
   // TargetOperandClass - This is the target's operand class, like X86Operand.
   std::string TargetOperandClass = Target.getName().str() + "Operand";
@@ -2187,7 +2183,7 @@ emitConvertFuncs(CodeGenTarget &Target, StringRef ClassName,
           // If optional operand is not present in actual instruction then we
           // should call its DefaultMethod before RenderMethod
           assert(HasOptionalOperands);
-          CvtOS << "      if (OptionalOperandsMask[*(p + 1)]) {\n"
+          CvtOS << "      if (OptionalOperandsMask[*(p + 1) - 1]) {\n"
                 << "        " << Op.Class->DefaultMethod << "()"
                 << "->" << Op.Class->RenderMethod << "(Inst, "
                 << OpInfo.MINumOperands << ");\n"
@@ -2267,14 +2263,12 @@ emitConvertFuncs(CodeGenTarget &Target, StringRef ClassName,
       }
       case MatchableInfo::ResOperand::RegOperand: {
         std::string Reg, Name;
-        bool IsRegByHwMode = false;
         if (!OpInfo.Register) {
           Name = "reg0";
           Reg = "0";
         } else {
           Reg = getQualifiedName(OpInfo.Register);
           Name = "reg" + OpInfo.Register->getName().str();
-          IsRegByHwMode = OpInfo.Register->isSubClassOf("RegisterByHwMode");
         }
         Signature += "__" + Name;
         Name = "CVT_" + Name;
@@ -2287,17 +2281,10 @@ emitConvertFuncs(CodeGenTarget &Target, StringRef ClassName,
 
         if (!IsNewConverter)
           break;
+        CvtOS << "    case " << Name << ":\n"
+              << "      Inst.addOperand(MCOperand::createReg(" << Reg << "));\n"
+              << "      break;\n";
 
-        CvtOS << indent(4) << "case " << Name << ":\n"
-              << indent(6) << "Inst.addOperand(MCOperand::createReg(";
-        if (IsRegByHwMode) {
-          RegisterByHwMode(OpInfo.Register, Target.getRegBank())
-              .emitResolverCall(
-                  CvtOS, "STI->getHwMode(MCSubtargetInfo::HwMode_RegInfo)");
-        } else {
-          CvtOS << Reg;
-        }
-        CvtOS << "));\n" << indent(6) << "break;\n";
         OpOS << "    case " << Name << ":\n"
              << "      Operands[*(p + 1)]->setMCOperandNum(NumMCOperands);\n"
              << "      Operands[*(p + 1)]->setConstraint(\"m\");\n"
@@ -2617,8 +2604,7 @@ static void emitValidateOperandClass(const CodeGenTarget &Target,
     OS << indent(4)
        << "const unsigned HwMode = "
           "STI.getHwMode(MCSubtargetInfo::HwMode_RegInfo);\n"
-       << indent(4)
-       << "Kind = RegClassByHwModeMatchTable[HwMode][Kind - (MCK_LAST_REGISTER "
+          "Kind = RegClassByHwModeMatchTable[HwMode][Kind - (MCK_LAST_REGISTER "
           "+ 1)];\n"
           "  }\n\n";
   }
@@ -3606,7 +3592,7 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
       assert(I != Info.SubtargetFeatures.end() && "Didn't import predicate?");
       OS << I->second.getEnumBitName() << ", ";
     }
-    OS << "}, // " << getNameForFeatureBitset(FeatureBitset) << "\n";
+    OS << "},\n";
   }
   OS << "};\n\n";
 
@@ -3623,7 +3609,7 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
   OS << "namespace {\n";
   OS << "  struct MatchEntry {\n";
   OS << "    " << getMinimalTypeForRange(MaxMnemonicIndex) << " Mnemonic;\n";
-  OS << "    uint32_t Opcode;\n";
+  OS << "    uint16_t Opcode;\n";
   OS << "    " << getMinimalTypeForRange(NumConverters) << " ConvertFn;\n";
   OS << "    " << getMinimalTypeForRange(FeatureBitsets.size())
      << " RequiredFeaturesIdx;\n";
@@ -3747,8 +3733,7 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
   }
 
   if (HasOptionalOperands)
-    OS << "  SmallBitVector OptionalOperandsMask("
-       << MaxNumOperands + HasMnemonicFirst << ");\n";
+    OS << "  SmallBitVector OptionalOperandsMask(" << MaxNumOperands << ");\n";
 
   // Emit code to search the table.
   OS << "  // Find the appropriate table for this asm variant.\n";
@@ -3817,8 +3802,7 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
   if (!ReportMultipleNearMisses)
     OS << "    bool OperandsValid = true;\n";
   if (HasOptionalOperands)
-    OS << "    OptionalOperandsMask.reset(0, "
-       << MaxNumOperands + HasMnemonicFirst << ");\n";
+    OS << "    OptionalOperandsMask.reset(0, " << MaxNumOperands << ");\n";
   OS << "    for (unsigned FormalIdx = " << (HasMnemonicFirst ? "0" : "SIndex")
      << ", ActualIdx = " << (HasMnemonicFirst ? "1" : "SIndex")
      << "; FormalIdx != " << MaxNumOperands << "; ++FormalIdx) {\n";
@@ -3832,7 +3816,7 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
   OS << "      if (ActualIdx < Operands.size())\n";
   OS << "        DEBUG_WITH_TYPE(\"asm-matcher\", dbgs() << \" (\";\n";
   OS << "                        Operands[ActualIdx]->print(dbgs(), "
-        "getContext().getAsmInfo()); dbgs() << "
+        "*getContext().getAsmInfo()); dbgs() << "
         "\"): \");\n";
   OS << "      else\n";
   OS << "        DEBUG_WITH_TYPE(\"asm-matcher\", dbgs() << \": \");\n";
@@ -3866,24 +3850,21 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
     OS << "          DEBUG_WITH_TYPE(\"asm-matcher\", dbgs() << \"but formal "
           "operand not required\\n\");\n";
     OS << "          if (isSubclass(Formal, OptionalMatchClass)) {\n";
-    OS << "            OptionalOperandsMask.set("
-       << (HasMnemonicFirst ? "FormalIdx + 1" : "FormalIdx") << ");\n";
+    OS << "            OptionalOperandsMask.set(FormalIdx);\n";
     OS << "          }\n";
     OS << "        }\n";
     OS << "        continue;\n";
   } else {
     OS << "        if (Formal == InvalidMatchClass) {\n";
     if (HasOptionalOperands) {
-      OS << "          OptionalOperandsMask.set("
-         << (HasMnemonicFirst ? "FormalIdx + 1, " : "FormalIdx, ")
-         << MaxNumOperands + HasMnemonicFirst << ");\n";
+      OS << "          OptionalOperandsMask.set(FormalIdx, " << MaxNumOperands
+         << ");\n";
     }
     OS << "          break;\n";
     OS << "        }\n";
     OS << "        if (isSubclass(Formal, OptionalMatchClass)) {\n";
     if (HasOptionalOperands)
-      OS << "          OptionalOperandsMask.set("
-         << (HasMnemonicFirst ? "FormalIdx + 1" : "FormalIdx") << ");\n";
+      OS << "          OptionalOperandsMask.set(FormalIdx);\n";
     OS << "          continue;\n";
     OS << "        }\n";
     OS << "        OperandsValid = false;\n";
@@ -3923,8 +3904,7 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
   OS << "      if (Diag == Match_InvalidOperand "
      << "&& isSubclass(Formal, OptionalMatchClass)) {\n";
   if (HasOptionalOperands)
-    OS << "        OptionalOperandsMask.set("
-       << (HasMnemonicFirst ? "FormalIdx + 1" : "FormalIdx") << ");\n";
+    OS << "        OptionalOperandsMask.set(FormalIdx);\n";
   OS << "        DEBUG_WITH_TYPE(\"asm-matcher\", dbgs() << \"ignoring "
         "optional operand\\n\");\n";
   OS << "        continue;\n";
@@ -4079,12 +4059,12 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
   if (HasOptionalOperands) {
     OS << "    unsigned DefaultsOffset[" << (MaxNumOperands + 1)
        << "] = { 0 };\n";
-    OS << "    assert(OptionalOperandsMask.size() == "
-       << (MaxNumOperands + HasMnemonicFirst) << ");\n";
+    OS << "    assert(OptionalOperandsMask.size() == " << (MaxNumOperands)
+       << ");\n";
     OS << "    for (unsigned i = 0, NumDefaults = 0; i < " << (MaxNumOperands)
        << "; ++i) {\n";
-    OS << "      NumDefaults += (OptionalOperandsMask[i] ? 1 : 0);\n";
     OS << "      DefaultsOffset[i + 1] = NumDefaults;\n";
+    OS << "      NumDefaults += (OptionalOperandsMask[i] ? 1 : 0);\n";
     OS << "    }\n\n";
   }
 

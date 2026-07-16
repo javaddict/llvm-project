@@ -1,4 +1,5 @@
 ; RUN: opt < %s -passes=inline -S | FileCheck %s
+; RUN: opt < %s -passes='cgscc(inline)' -S | FileCheck %s
 
 ; Always prefer call site attribute over function attribute
 

@@ -53,8 +53,9 @@ entry:
 define i64 @test_llleui_sext_z(i32 zeroext %a) {
 ; CHECK-LABEL: test_llleui_sext_z:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    addic r3, r3, -1
-; CHECK-NEXT:    subfe r3, r3, r3
+; CHECK-NEXT:    cntlzw r3, r3
+; CHECK-NEXT:    srwi r3, r3, 5
+; CHECK-NEXT:    neg r3, r3
 ; CHECK-NEXT:    blr
 entry:
   %cmp = icmp ule i32 %a, 0
@@ -116,9 +117,10 @@ entry:
 define dso_local void @test_llleui_sext_z_store(i32 zeroext %a) {
 ; CHECK-LABEL: test_llleui_sext_z_store:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    addic r3, r3, -1
+; CHECK-NEXT:    cntlzw r3, r3
 ; CHECK-NEXT:    addis r4, r2, glob@toc@ha
-; CHECK-NEXT:    subfe r3, r3, r3
+; CHECK-NEXT:    srwi r3, r3, 5
+; CHECK-NEXT:    neg r3, r3
 ; CHECK-NEXT:    stw r3, glob@toc@l(r4)
 ; CHECK-NEXT:    blr
 entry:

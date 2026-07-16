@@ -162,8 +162,7 @@ bool DynamicLoaderFreeBSDKernel::ReadELFHeader(Process *process,
     *read_error = false;
 
   if (process->ReadMemory(addr, &header, sizeof(header), error) !=
-          sizeof(header) ||
-      error.Fail()) {
+      sizeof(header)) {
     if (read_error)
       *read_error = true;
     return false;
@@ -201,17 +200,9 @@ lldb_private::UUID DynamicLoaderFreeBSDKernel::CheckForKernelImageAtAddress(
   if (header.e_type != llvm::ELF::ET_EXEC)
     return UUID();
 
-  llvm::Expected<ModuleSP> memory_module_sp_or_err =
+  ModuleSP memory_module_sp =
       process->ReadModuleFromMemory(FileSpec("temp_freebsd_kernel"), addr);
-  if (auto err = memory_module_sp_or_err.takeError()) {
-    LLDB_LOG_ERROR(log, std::move(err),
-                   "DynamicLoaderFreeBSDKernel::CheckForKernelImageAtAddress: "
-                   "Failed to read module in memory -- {0}");
-    *read_error = true;
-    return UUID();
-  }
 
-  ModuleSP memory_module_sp = *memory_module_sp_or_err;
   if (!memory_module_sp.get()) {
     *read_error = true;
     return UUID();
@@ -256,6 +247,8 @@ void DynamicLoaderFreeBSDKernel::DebuggerInit(
 DynamicLoaderFreeBSDKernel::DynamicLoaderFreeBSDKernel(Process *process,
                                                        addr_t kernel_address)
     : DynamicLoader(process), m_process(process),
+      m_linker_file_list_struct_addr(LLDB_INVALID_ADDRESS),
+      m_linker_file_head_addr(LLDB_INVALID_ADDRESS),
       m_kernel_load_address(kernel_address), m_mutex() {
   process->SetCanRunCode(false);
 }
@@ -292,22 +285,14 @@ bool DynamicLoaderFreeBSDKernel::KModImageInfo::ReadMemoryModule(
       llvm::ELF::Elf64_Ehdr elf_eheader;
       Status error;
       if (process->ReadMemory(m_load_address, &elf_eheader, sizeof(elf_eheader),
-                              error) == sizeof(elf_eheader) &&
-          error.Success())
+                              error) == sizeof(elf_eheader))
         size_to_read = sizeof(llvm::ELF::Elf64_Ehdr) +
                        elf_eheader.e_phnum * elf_eheader.e_phentsize;
     }
   }
 
-  llvm::Expected<ModuleSP> memory_module_sp_or_err =
+  memory_module_sp =
       process->ReadModuleFromMemory(file_spec, m_load_address, size_to_read);
-  if (auto err = memory_module_sp_or_err.takeError()) {
-    LLDB_LOG_ERROR(log, std::move(err),
-                   "KextImageInfo::ReadMemoryModule: Failed to read module "
-                   "from memory -- {0}");
-    return false;
-  }
-  memory_module_sp = *memory_module_sp_or_err;
 
   if (!memory_module_sp)
     return false;
@@ -360,8 +345,7 @@ bool DynamicLoaderFreeBSDKernel::KModImageInfo::LoadImageUsingMemoryModule(
       if (IsKernel()) {
         Status error;
         if (PluginManager::DownloadObjectAndSymbolFile(module_spec, error,
-                                                       true) &&
-            error.Success()) {
+                                                       true)) {
           if (FileSystem::Instance().Exists(module_spec.GetFileSpec()))
             m_module_sp = std::make_shared<Module>(module_spec.GetFileSpec(),
                                                    target.GetArchitecture());

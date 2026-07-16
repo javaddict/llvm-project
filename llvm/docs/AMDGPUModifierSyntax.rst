@@ -809,10 +809,9 @@ tfe
 See a description :ref:`here<amdgpu_synid_tfe>`.
 
 .. _amdgpu_synid_fmt:
-.. _amdgpu_synid_format:
 
-format
-~~~~~~
+fmt
+~~~
 
 Specifies data and numeric formats used by the operation.
 The default numeric format is BUF_NUM_FORMAT_UNORM.

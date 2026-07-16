@@ -17,7 +17,6 @@ unittest("JITLinkTests") {
     "AArch32ErrorTests.cpp",
     "AArch32Tests.cpp",
     "AArch64Tests.cpp",
-    "COFFLinkGraphTests.cpp",
     "EHFrameSupportTests.cpp",
     "JITLinkTestUtils.cpp",
     "LinkGraphTests.cpp",

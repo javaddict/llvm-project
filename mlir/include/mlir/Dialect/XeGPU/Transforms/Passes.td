@@ -11,6 +11,24 @@
 
 include "mlir/Pass/PassBase.td"
 
+def XeGPUFoldAliasOps : Pass<"xegpu-fold-alias-ops"> {
+  let summary = "Fold alias ops into XeGPU ops";
+  let description = [{
+    The pass folds aliasing ops into XeGPU ops that they operate on the original
+    source references.
+  }];
+  let dependentDialects = ["memref::MemRefDialect", "xegpu::XeGPUDialect"];
+}
+
+def XeGPUSubgroupDistribute : Pass<"xegpu-subgroup-distribute"> {
+  let summary = "Distribute XeGPU ops to work items";
+  let description = [{
+    The pass distributes subgroup level (SIMD) XeGPU ops to work items.
+  }];
+  let dependentDialects = ["memref::MemRefDialect", "xegpu::XeGPUDialect",
+                           "vector::VectorDialect", "index::IndexDialect"];
+}
+
 def XeGPUPropagateLayout : Pass<"xegpu-propagate-layout"> {
   let summary = "Propagate and assign XeGPU layout information";
   let description = [{
@@ -46,11 +64,7 @@ def XeGPUPropagateLayout : Pass<"xegpu-propagate-layout"> {
     Option<
     "layoutKind", "layout-kind", "std::string",
     /*default=*/"\"lane\"",
-    "Propagate `subgroup` / `inst` / `lane` level of xegpu layouts.">,
-    Option<
-    "indexBitWidth", "index-bitwidth", "unsigned",
-    /*default=*/"64",
-    "Vectors of `index` type should also be distributable, inst-data and lower levels need to know the index size.">
+    "Propagate `subgroup` / `inst` / `lane` level of xegpu layouts.">
   ];
 }
 
@@ -88,7 +102,7 @@ def XeGPUVectorLinearize : Pass<"xegpu-vector-linearize"> {
                            "scf::SCFDialect", "ub::UBDialect", "vector::VectorDialect"];
 }
 
-def XeGPUPeepHoleOptimizer : Pass<"xegpu-optimize-peephole"> {
+def XeGPUOptimizeBlockLoads : Pass<"xegpu-optimize-block-loads"> {
   let summary = "Optimize XeGPU block load operations";
   let description = [{
     This pass rewrites XeGPU loadNd operations into more optimal forms
@@ -99,15 +113,5 @@ def XeGPUPeepHoleOptimizer : Pass<"xegpu-optimize-peephole"> {
   let dependentDialects = ["memref::MemRefDialect", "xegpu::XeGPUDialect",
                            "vector::VectorDialect"];
 }
-
-def XeGPUSgToLaneDistribute : Pass<"xegpu-sg-to-lane-distribute"> {
-  let summary = "Distribute XeGPU ops to lanes";
-  let description = [{
-    The pass distributes subgroup level XeGPU ops to lane level XeGPU ops.
-  }];
-  let dependentDialects = ["memref::MemRefDialect", "xegpu::XeGPUDialect",
-                           "vector::VectorDialect", "index::IndexDialect"];
-}
-
 
 #endif // MLIR_DIALECT_XEGPU_TRANSFORMS_PASSES_TD

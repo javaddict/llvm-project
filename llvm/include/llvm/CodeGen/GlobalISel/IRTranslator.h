@@ -63,7 +63,7 @@ class Value;
 // the information from the LLVM IR.
 // The idea is that ultimately we would be able to free up the memory used
 // by the LLVM IR as soon as the translation is over.
-class LLVM_ABI IRTranslator : public MachineFunctionPass {
+class IRTranslator : public MachineFunctionPass {
 public:
   static char ID;
 
@@ -299,7 +299,7 @@ private:
 
   bool translateIntrinsic(
       const CallBase &CB, Intrinsic::ID ID, MachineIRBuilder &MIRBuilder,
-      ArrayRef<TargetLowering::IntrinsicInfo> TgtMemIntrinsicInfos = {});
+      const TargetLowering::IntrinsicInfo *TgtMemIntrinsicInfo = nullptr);
 
   /// When an invoke or a cleanupret unwinds to the next EH pad, there are
   /// many places it could ultimately go. In the IR, we have a single unwind
@@ -380,8 +380,7 @@ private:
 
   /// Translate branch (br) instruction.
   /// \pre \p U is a branch instruction.
-  bool translateUncondBr(const User &U, MachineIRBuilder &MIRBuilder);
-  bool translateCondBr(const User &U, MachineIRBuilder &MIRBuilder);
+  bool translateBr(const User &U, MachineIRBuilder &MIRBuilder);
 
   // Begin switch lowering functions.
   bool emitJumpTableHeader(SwitchCG::JumpTable &JT,
@@ -636,7 +635,6 @@ private:
   AAResults *AA = nullptr;
   AssumptionCache *AC = nullptr;
   const TargetLibraryInfo *LibInfo = nullptr;
-  const LibcallLoweringInfo *Libcalls = nullptr;
   const TargetLowering *TLI = nullptr;
   FunctionLoweringInfo FuncInfo;
 
@@ -649,8 +647,6 @@ private:
   bool HasTailCall = false;
 
   StackProtectorDescriptor SPDescriptor;
-
-  bool mayTranslateUserTypes(const User &U) const;
 
   /// Switch analysis and optimization.
   class GISelSwitchLowering : public SwitchCG::SwitchLowering {

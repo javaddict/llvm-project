@@ -33,7 +33,6 @@ public:
 
 private:
   const bool IgnoreUnscopedEnumsInClasses;
-  const bool IgnoreMacros;
 };
 
 } // namespace clang::tidy::cppcoreguidelines

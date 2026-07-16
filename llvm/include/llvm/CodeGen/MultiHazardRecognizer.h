@@ -22,15 +22,11 @@ namespace llvm {
 class MachineInstr;
 class SUnit;
 
-class LLVM_ABI MultiHazardRecognizer : public ScheduleHazardRecognizer {
+class MultiHazardRecognizer : public ScheduleHazardRecognizer {
   SmallVector<std::unique_ptr<ScheduleHazardRecognizer>, 4> Recognizers;
 
 public:
   MultiHazardRecognizer() = default;
-
-  MultiHazardRecognizer(const MultiHazardRecognizer &) = delete;
-  MultiHazardRecognizer &operator=(const MultiHazardRecognizer &) = delete;
-
   void AddHazardRecognizer(std::unique_ptr<ScheduleHazardRecognizer> &&);
 
   bool atIssueLimit() const override;
@@ -40,7 +36,7 @@ public:
   void EmitInstruction(MachineInstr *) override;
   unsigned PreEmitNoops(SUnit *) override;
   unsigned PreEmitNoops(MachineInstr *) override;
-  bool ShouldPreferAnother(SUnit *) const override;
+  bool ShouldPreferAnother(SUnit *) override;
   void AdvanceCycle() override;
   void RecedeCycle() override;
   void EmitNoop() override;

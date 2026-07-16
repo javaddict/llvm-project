@@ -31,6 +31,13 @@ int main(int argc, char** argv) {
       return x == y;
     });
   };
+  auto ranges_find_end_pred = [](auto first1, auto last1, auto first2, auto last2) {
+    return std::ranges::find_end(first1, last1, first2, last2, [](auto x, auto y) {
+      benchmark::DoNotOptimize(x);
+      benchmark::DoNotOptimize(y);
+      return x == y;
+    });
+  };
 
   auto register_benchmarks = [&](auto bm, std::string comment) {
     // {std,ranges}::find_end(it1, it1, it2, it2)
@@ -38,6 +45,11 @@ int main(int argc, char** argv) {
     bm.template operator()<std::deque<int>>("std::find_end(deque<int>) (" + comment + ")", std_find_end);
     bm.template operator()<std::list<int>>("std::find_end(list<int>) (" + comment + ")", std_find_end);
     bm.template operator()<std::forward_list<int>>("std::find_end(forward_list<int>) (" + comment + ")", std_find_end);
+    bm.template operator()<std::vector<int>>("rng::find_end(vector<int>) (" + comment + ")", std::ranges::find_end);
+    bm.template operator()<std::deque<int>>("rng::find_end(deque<int>) (" + comment + ")", std::ranges::find_end);
+    bm.template operator()<std::list<int>>("rng::find_end(list<int>) (" + comment + ")", std::ranges::find_end);
+    bm.template operator()<std::forward_list<int>>(
+        "rng::find_end(forward_list<int>) (" + comment + ")", std::ranges::find_end);
 
     // {std,ranges}::find_end(it1, it1, it2, it2, pred)
     bm.template operator()<std::vector<int>>("std::find_end(vector<int>, pred) (" + comment + ")", std_find_end_pred);
@@ -45,6 +57,12 @@ int main(int argc, char** argv) {
     bm.template operator()<std::list<int>>("std::find_end(list<int>, pred) (" + comment + ")", std_find_end_pred);
     bm.template operator()<std::forward_list<int>>(
         "std::find_end(forward_list<int>, pred) (" + comment + ")", std_find_end_pred);
+    bm.template operator()<std::vector<int>>(
+        "rng::find_end(vector<int>, pred) (" + comment + ")", ranges_find_end_pred);
+    bm.template operator()<std::deque<int>>("rng::find_end(deque<int>, pred) (" + comment + ")", ranges_find_end_pred);
+    bm.template operator()<std::list<int>>("rng::find_end(list<int>, pred) (" + comment + ")", ranges_find_end_pred);
+    bm.template operator()<std::forward_list<int>>(
+        "rng::find_end(forward_list<int>, pred) (" + comment + ")", ranges_find_end_pred);
   };
 
   // Benchmark {std,ranges}::find_end where we never find the needle, which is the

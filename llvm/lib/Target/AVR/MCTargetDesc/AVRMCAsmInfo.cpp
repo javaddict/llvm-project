@@ -19,8 +19,7 @@
 
 using namespace llvm;
 
-AVRMCAsmInfo::AVRMCAsmInfo(const Triple &TT, const MCTargetOptions &Options)
-    : MCAsmInfoELF(Options) {
+AVRMCAsmInfo::AVRMCAsmInfo(const Triple &TT, const MCTargetOptions &Options) {
   CodePointerSize = 2;
   CalleeSaveStackSlotSize = 2;
   CommentString = ";";

@@ -132,23 +132,22 @@ void DebugCounter::applyCLOptions() {
     // Debug counter arguments are expected to be in the form: `counter=value`.
     auto [counterName, counterValueStr] = arg.split('=');
     if (counterValueStr.empty()) {
-      clOptions->counters.error(
-          llvm::Twine(
-              "expected DebugCounter argument to have an `=` separating "
-              "the counter name and value, but the provided argument "
-              "was: `") +
-          arg + "`");
-      exit(1);
+      llvm::errs() << "error: expected DebugCounter argument to have an `=` "
+                      "separating the counter name and value, but the provided "
+                      "argument was: `"
+                   << arg << "`\n";
+      llvm::report_fatal_error(
+          "Invalid DebugCounter command-line configuration");
     }
 
     // Extract the counter value.
     int64_t counterValue;
     if (counterValueStr.getAsInteger(0, counterValue)) {
-      clOptions->counters.error(
-          llvm::Twine("expected DebugCounter counter value to be numeric, but "
-                      "got `") +
-          counterValueStr + "`");
-      exit(1);
+      llvm::errs() << "error: expected DebugCounter counter value to be "
+                      "numeric, but got `"
+                   << counterValueStr << "`\n";
+      llvm::report_fatal_error(
+          "Invalid DebugCounter command-line configuration");
     }
 
     // Now we need to see if this is the skip or the count, remove the suffix,
@@ -160,11 +159,11 @@ void DebugCounter::applyCLOptions() {
       counters[counterName].countToStopAfter = counterValue;
 
     } else {
-      clOptions->counters.error(
-          llvm::Twine("expected DebugCounter counter name to end with either "
-                      "`-skip` or `-count`, but got `") +
-          counterName + "`");
-      exit(1);
+      llvm::errs() << "error: expected DebugCounter counter name to end with "
+                      "either `-skip` or `-count`, but got`"
+                   << counterName << "`\n";
+      llvm::report_fatal_error(
+          "Invalid DebugCounter command-line configuration");
     }
   }
 }

@@ -227,8 +227,7 @@ bool BPFMIPeephole::eliminateZExtSeq() {
         }
 
         BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(BPF::SUBREG_TO_REG), DstReg)
-            .addReg(SubReg)
-            .addImm(BPF::sub_32);
+          .addImm(0).addReg(SubReg).addImm(BPF::sub_32);
 
         SllMI->eraseFromParent();
         MovMI->eraseFromParent();
@@ -279,8 +278,7 @@ bool BPFMIPeephole::eliminateZExt() {
 
       // Build a SUBREG_TO_REG instruction.
       BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(BPF::SUBREG_TO_REG), dst)
-          .addReg(src)
-          .addImm(BPF::sub_32);
+        .addImm(0).addReg(src).addImm(BPF::sub_32);
 
       ToErase = &MI;
       Eliminated = true;
@@ -323,7 +321,6 @@ private:
   bool insertMissingCallerSavedSpills();
   bool removeMayGotoZero();
   bool addExitAfterUnreachable();
-  bool expandStackArgPseudos();
 
 public:
 
@@ -341,7 +338,6 @@ public:
     Changed |= insertMissingCallerSavedSpills();
     Changed |= removeMayGotoZero();
     Changed |= addExitAfterUnreachable();
-    Changed |= expandStackArgPseudos();
     return Changed;
   }
 };
@@ -752,64 +748,6 @@ bool BPFMIPreEmitPeephole::addExitAfterUnreachable() {
 
   BuildMI(&MBB, MI.getDebugLoc(), TII->get(BPF::RET));
   return true;
-}
-
-bool BPFMIPreEmitPeephole::expandStackArgPseudos() {
-  bool Changed = false;
-
-  for (MachineBasicBlock &MBB : *MF) {
-    for (auto It = MBB.begin(), End = MBB.end(); It != End;) {
-      MachineInstr &MI = *It++;
-      DebugLoc DL = MI.getDebugLoc();
-
-      switch (MI.getOpcode()) {
-      default:
-        break;
-
-      case BPF::LOAD_STACK_ARG_PSEUDO: {
-        Register DstReg = MI.getOperand(0).getReg();
-        int16_t Off = MI.getOperand(1).getImm();
-
-        BuildMI(MBB, MI, DL, TII->get(BPF::LDD), DstReg)
-            .addReg(BPF::R11)
-            .addImm(Off);
-        MI.eraseFromParent();
-        Changed = true;
-        break;
-      }
-
-      case BPF::STORE_STACK_ARG_PSEUDO: {
-        int16_t Off = MI.getOperand(0).getImm();
-        const MachineOperand &SrcMO = MI.getOperand(1);
-        Register SrcReg = SrcMO.getReg();
-        bool IsKill = SrcMO.isKill();
-
-        BuildMI(MBB, MI, DL, TII->get(BPF::STD))
-            .addReg(SrcReg, getKillRegState(IsKill))
-            .addReg(BPF::R11)
-            .addImm(Off);
-        MI.eraseFromParent();
-        Changed = true;
-        break;
-      }
-
-      case BPF::STORE_STACK_ARG_IMM_PSEUDO: {
-        int16_t Off = MI.getOperand(0).getImm();
-        int32_t Val = MI.getOperand(1).getImm();
-
-        BuildMI(MBB, MI, DL, TII->get(BPF::STD_imm))
-            .addImm(Val)
-            .addReg(BPF::R11)
-            .addImm(Off);
-        MI.eraseFromParent();
-        Changed = true;
-        break;
-      }
-      }
-    }
-  }
-
-  return Changed;
 }
 
 } // end default namespace

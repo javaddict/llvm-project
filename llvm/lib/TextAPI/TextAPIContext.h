@@ -23,7 +23,6 @@ struct TextAPIContext {
   std::string ErrorMessage;
   std::string Path;
   FileType FileKind;
-  bool SkipUnknownTriples;
 };
 
 } // end namespace MachO.

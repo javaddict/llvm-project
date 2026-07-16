@@ -6,10 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/AST/DeclCXX.h"
+
 #include "Cocoa.h"
 
-#include "Plugins/Language/ObjC/NSString.h"
-#include "Plugins/LanguageRuntime/ObjC/ObjCLanguageRuntime.h"
 #include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/DataFormatters/FormattersHelpers.h"
 #include "lldb/Target/Target.h"
@@ -19,7 +19,9 @@
 #include "lldb/Utility/Stream.h"
 #include "lldb/ValueObject/ValueObject.h"
 #include "lldb/ValueObject/ValueObjectConstResult.h"
-#include "llvm/Support/ErrorExtras.h"
+
+#include "Plugins/Language/ObjC/NSString.h"
+#include "Plugins/LanguageRuntime/ObjC/ObjCLanguageRuntime.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -156,7 +158,7 @@ public:
         ScratchTypeSystemClang::GetForTarget(process_sp->GetTarget());
     if (!scratch_ts_sp)
       return lldb::ChildCacheState::eRefetch;
-    m_child_sp = CreateChildValueObjectFromData(
+    m_child_sp = CreateValueObjectFromData(
         "_userInfo", isw.GetAsData(process_sp->GetByteOrder()),
         m_backend.GetExecutionContextRef(),
         scratch_ts_sp->GetBasicType(lldb::eBasicTypeObjCID));
@@ -167,7 +169,8 @@ public:
     static ConstString g_userInfo("_userInfo");
     if (name == g_userInfo)
       return 0;
-    return llvm::createStringErrorV("type has no child named '{0}'", name);
+    return llvm::createStringError("Type has no child named '%s'",
+                                   name.AsCString());
   }
 
 private:

@@ -201,9 +201,7 @@ define half @fp16_vminnm_NNNo(half %a) {
 ; CHECK:       @ %bb.0: @ %entry
 ; CHECK-NEXT:    vmov.f16 s0, r0
 ; CHECK-NEXT:    vmov.f16 s2, #1.200000e+01
-; CHECK-NEXT:    vcmp.f16 s2, s0
-; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselgt.f16 s0, s0, s2
+; CHECK-NEXT:    vminnm.f16 s0, s0, s2
 ; CHECK-NEXT:    vldr.16 s2, .LCPI12_0
 ; CHECK-NEXT:    vcmp.f16 s0, s2
 ; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
@@ -231,9 +229,7 @@ define half @fp16_vminnm_NNNo_rev(half %a) {
 ; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
 ; CHECK-NEXT:    vselgt.f16 s0, s2, s0
 ; CHECK-NEXT:    vldr.16 s2, .LCPI13_1
-; CHECK-NEXT:    vcmp.f16 s2, s0
-; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselgt.f16 s0, s0, s2
+; CHECK-NEXT:    vminnm.f16 s0, s0, s2
 ; CHECK-NEXT:    vmov r0, s0
 ; CHECK-NEXT:    bx lr
 ; CHECK-NEXT:    .p2align 1
@@ -255,9 +251,7 @@ define half @fp16_vminnm_NNNu(half %b) {
 ; CHECK:       @ %bb.0: @ %entry
 ; CHECK-NEXT:    vmov.f16 s0, r0
 ; CHECK-NEXT:    vmov.f16 s2, #1.200000e+01
-; CHECK-NEXT:    vcmp.f16 s2, s0
-; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselge.f16 s0, s0, s2
+; CHECK-NEXT:    vminnm.f16 s0, s0, s2
 ; CHECK-NEXT:    vldr.16 s2, .LCPI14_0
 ; CHECK-NEXT:    vcmp.f16 s0, s2
 ; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
@@ -281,9 +275,7 @@ define half @fp16_vminnm_NNNule(half %b) {
 ; CHECK:       @ %bb.0: @ %entry
 ; CHECK-NEXT:    vldr.16 s2, .LCPI15_0
 ; CHECK-NEXT:    vmov.f16 s0, r0
-; CHECK-NEXT:    vcmp.f16 s2, s0
-; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselgt.f16 s0, s0, s2
+; CHECK-NEXT:    vminnm.f16 s0, s0, s2
 ; CHECK-NEXT:    vldr.16 s2, .LCPI15_1
 ; CHECK-NEXT:    vcmp.f16 s0, s2
 ; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
@@ -314,9 +306,7 @@ define half @fp16_vminnm_NNNu_rev(half %b) {
 ; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
 ; CHECK-NEXT:    vselge.f16 s0, s2, s0
 ; CHECK-NEXT:    vldr.16 s2, .LCPI16_1
-; CHECK-NEXT:    vcmp.f16 s2, s0
-; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselge.f16 s0, s0, s2
+; CHECK-NEXT:    vminnm.f16 s0, s0, s2
 ; CHECK-NEXT:    vmov r0, s0
 ; CHECK-NEXT:    bx lr
 ; CHECK-NEXT:    .p2align 1
@@ -340,9 +330,7 @@ define half @fp16_vmaxnm_NNNo(half %a) {
 ; CHECK:       @ %bb.0: @ %entry
 ; CHECK-NEXT:    vmov.f16 s0, r0
 ; CHECK-NEXT:    vmov.f16 s2, #1.200000e+01
-; CHECK-NEXT:    vcmp.f16 s0, s2
-; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselgt.f16 s0, s0, s2
+; CHECK-NEXT:    vmaxnm.f16 s0, s0, s2
 ; CHECK-NEXT:    vldr.16 s2, .LCPI17_0
 ; CHECK-NEXT:    vcmp.f16 s2, s0
 ; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
@@ -366,9 +354,7 @@ define half @fp16_vmaxnm_NNNoge(half %a) {
 ; CHECK:       @ %bb.0: @ %entry
 ; CHECK-NEXT:    vldr.16 s2, .LCPI18_0
 ; CHECK-NEXT:    vmov.f16 s0, r0
-; CHECK-NEXT:    vcmp.f16 s0, s2
-; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselge.f16 s0, s0, s2
+; CHECK-NEXT:    vmaxnm.f16 s0, s0, s2
 ; CHECK-NEXT:    vldr.16 s2, .LCPI18_1
 ; CHECK-NEXT:    vcmp.f16 s2, s0
 ; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
@@ -398,9 +384,7 @@ define half @fp16_vmaxnm_NNNo_rev(half %a) {
 ; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
 ; CHECK-NEXT:    vselgt.f16 s0, s2, s0
 ; CHECK-NEXT:    vldr.16 s2, .LCPI19_1
-; CHECK-NEXT:    vcmp.f16 s0, s2
-; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselgt.f16 s0, s0, s2
+; CHECK-NEXT:    vmaxnm.f16 s0, s0, s2
 ; CHECK-NEXT:    vmov r0, s0
 ; CHECK-NEXT:    bx lr
 ; CHECK-NEXT:    .p2align 1
@@ -426,9 +410,7 @@ define half @fp16_vmaxnm_NNNole_rev(half %a) {
 ; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
 ; CHECK-NEXT:    vselge.f16 s0, s2, s0
 ; CHECK-NEXT:    vldr.16 s2, .LCPI20_1
-; CHECK-NEXT:    vcmp.f16 s0, s2
-; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselge.f16 s0, s0, s2
+; CHECK-NEXT:    vmaxnm.f16 s0, s0, s2
 ; CHECK-NEXT:    vmov r0, s0
 ; CHECK-NEXT:    bx lr
 ; CHECK-NEXT:    .p2align 1
@@ -450,9 +432,7 @@ define half @fp16_vmaxnm_NNNu(half %b) {
 ; CHECK:       @ %bb.0: @ %entry
 ; CHECK-NEXT:    vmov.f16 s0, r0
 ; CHECK-NEXT:    vmov.f16 s2, #1.200000e+01
-; CHECK-NEXT:    vcmp.f16 s0, s2
-; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselge.f16 s0, s0, s2
+; CHECK-NEXT:    vmaxnm.f16 s0, s0, s2
 ; CHECK-NEXT:    vldr.16 s2, .LCPI21_0
 ; CHECK-NEXT:    vcmp.f16 s2, s0
 ; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
@@ -476,9 +456,7 @@ define half @fp16_vmaxnm_NNNuge(half %b) {
 ; CHECK:       @ %bb.0: @ %entry
 ; CHECK-NEXT:    vldr.16 s2, .LCPI22_0
 ; CHECK-NEXT:    vmov.f16 s0, r0
-; CHECK-NEXT:    vcmp.f16 s0, s2
-; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselgt.f16 s0, s0, s2
+; CHECK-NEXT:    vmaxnm.f16 s0, s0, s2
 ; CHECK-NEXT:    vldr.16 s2, .LCPI22_1
 ; CHECK-NEXT:    vcmp.f16 s2, s0
 ; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
@@ -502,14 +480,12 @@ entry:
 define half @fp16_vminmaxnm_neg0(half %a) {
 ; CHECK-LABEL: fp16_vminmaxnm_neg0:
 ; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    vldr.16 s2, .LCPI23_0
-; CHECK-NEXT:    vmov.f16 s0, r0
-; CHECK-NEXT:    vcmp.f16 s2, s0
+; CHECK-NEXT:    vldr.16 s0, .LCPI23_0
+; CHECK-NEXT:    vmov.f16 s2, r0
+; CHECK-NEXT:    vminnm.f16 s2, s2, s0
+; CHECK-NEXT:    vcmp.f16 s0, s2
 ; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselgt.f16 s0, s0, s2
-; CHECK-NEXT:    vcmp.f16 s2, s0
-; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselge.f16 s0, s2, s0
+; CHECK-NEXT:    vselge.f16 s0, s0, s2
 ; CHECK-NEXT:    vmov r0, s0
 ; CHECK-NEXT:    bx lr
 ; CHECK-NEXT:    .p2align 1
@@ -532,9 +508,7 @@ define half @fp16_vminmaxnm_e_0(half %a) {
 ; CHECK-NEXT:    vcmp.f16 s0, #0
 ; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
 ; CHECK-NEXT:    vselge.f16 s0, s2, s0
-; CHECK-NEXT:    vcmp.f16 s0, #0
-; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselgt.f16 s0, s0, s2
+; CHECK-NEXT:    vmaxnm.f16 s0, s0, s2
 ; CHECK-NEXT:    vmov r0, s0
 ; CHECK-NEXT:    bx lr
 ; CHECK-NEXT:    .p2align 1
@@ -552,14 +526,12 @@ entry:
 define half @fp16_vminmaxnm_e_neg0(half %a) {
 ; CHECK-LABEL: fp16_vminmaxnm_e_neg0:
 ; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    vldr.16 s2, .LCPI25_0
-; CHECK-NEXT:    vmov.f16 s0, r0
-; CHECK-NEXT:    vcmp.f16 s2, s0
+; CHECK-NEXT:    vldr.16 s0, .LCPI25_0
+; CHECK-NEXT:    vmov.f16 s2, r0
+; CHECK-NEXT:    vminnm.f16 s2, s2, s0
+; CHECK-NEXT:    vcmp.f16 s0, s2
 ; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselgt.f16 s0, s0, s2
-; CHECK-NEXT:    vcmp.f16 s2, s0
-; CHECK-NEXT:    vmrs APSR_nzcv, fpscr
-; CHECK-NEXT:    vselge.f16 s0, s2, s0
+; CHECK-NEXT:    vselge.f16 s0, s0, s2
 ; CHECK-NEXT:    vmov r0, s0
 ; CHECK-NEXT:    bx lr
 ; CHECK-NEXT:    .p2align 1

@@ -2,6 +2,7 @@
 target datalayout = "E-m:e-i64:64-n32:64"
 target triple = "powerpc64-unknown-linux-gnu"
 
+; Function Attrs: nounwind
 define void @foo(ptr noalias nocapture %a, ptr noalias nocapture readonly %b) #0 {
 entry:
   br label %for.body
@@ -9,10 +10,10 @@ entry:
 ; CHECK-LABEL: @foo
 ; CHECK: <2 x double>
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret void
 
-for.body:
+for.body:                                         ; preds = %for.body, %entry
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
   %0 = shl nsw i64 %indvars.iv, 1
   %odd.idx = add nsw i64 %0, 1
@@ -31,5 +32,5 @@ for.body:
   br i1 %exitcond, label %for.cond.cleanup, label %for.body
 }
 
-attributes #0 = { "target-cpu"="pwr8" }
+attributes #0 = { nounwind "target-cpu"="pwr8" }
 

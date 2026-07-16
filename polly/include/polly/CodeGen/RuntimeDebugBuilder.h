@@ -124,6 +124,5 @@ private:
 } // namespace polly
 
 extern bool PollyDebugPrinting;
-extern bool TraceStmts;
 
 #endif

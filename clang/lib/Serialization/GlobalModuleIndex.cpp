@@ -342,7 +342,8 @@ bool GlobalModuleIndex::loadedModuleFile(ModuleFile *File) {
   //  If the size and modification time match what we expected, record this
   // module file.
   bool Failed = true;
-  if (File->Size == Info.Size && File->ModTime == Info.ModTime) {
+  if (File->File.getSize() == Info.Size &&
+      File->File.getModificationTime() == Info.ModTime) {
     Info.File = File;
     ModulesByFile[File] = Known->second;
 
@@ -637,7 +638,6 @@ llvm::Error GlobalModuleIndexBuilder::loadModuleFile(FileEntryRef File) {
       // Load stored size/modification time.
       off_t StoredSize = (off_t)Record[Idx++];
       time_t StoredModTime = (time_t)Record[Idx++];
-      (void)Record[Idx++]; // ImplicitModuleSuffixLength
 
       // Skip the stored signature.
       // FIXME: we could read the signature out of the import and validate it.

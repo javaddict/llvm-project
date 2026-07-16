@@ -18,14 +18,7 @@ Members:
       Value:            "amdgcn-amd-amdhsa"
     - Key:              "arch"
       Value:            "gfx908"
-    Content:          "cafefeed"
-  - ImageKind:        IMG_Object
-    OffloadKind:      OFK_SYCL
-    # OIF_Metadata
-    Flags:            1
-    String:
-    - Key:              "device"
-      Value:            "gpu"
+    Content:          "cafefeed"  
 
 # CHECK: --- !Offload
 # CHECK-NEXT: Members:
@@ -47,10 +40,4 @@ Members:
 # CHECK-NEXT:       - Key:             arch
 # CHECK-NEXT:         Value:           gfx908
 # CHECK-NEXT:     Content:         CAFEFEED
-# CHECK-NEXT:   - ImageKind:       IMG_Object
-# CHECK-NEXT:     OffloadKind:     OFK_SYCL
-# CHECK-NEXT:     Flags:           1
-# CHECK-NEXT:     String:
-# CHECK-NEXT:       - Key:             device
-# CHECK-NEXT:         Value:           gpu
 # CHECK-NEXT: ...

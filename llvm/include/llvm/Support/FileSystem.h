@@ -299,27 +299,15 @@ LLVM_ABI std::error_code create_directory(const Twine &path,
                                           bool IgnoreExisting = true,
                                           perms Perms = owner_all | group_all);
 
-/// Create a symbolic link from \a from to \a to.
-///
-/// This may fail on Windows if run without create symbolic link permissions.
-///
-/// On Windows
-///   - slashes in the symlink target are normalized to `\`, and
-///   - if \a to does not exist, it will always create a file symlink.
-///
-/// @param to The path to the symlink target.
-/// @param from The path of the symlink to create.
-/// @returns errc::success if the link was created, otherwise a platform
-/// specific error_code.
-LLVM_ABI std::error_code create_symlink(const Twine &to, const Twine &from);
-
 /// Create a link from \a from to \a to.
 ///
-/// Tries to create a symbolic link first, and falls back to a hard link if
-/// that fails. The caller may not assume which type of link is created.
+/// The link may be a soft or a hard link, depending on the platform. The caller
+/// may not assume which one. Currently on windows it creates a hard link since
+/// soft links require extra privileges. On unix, it creates a soft link since
+/// hard links don't work on SMB file systems.
 ///
-/// @param to The path to link to.
-/// @param from The path to link from. This is created.
+/// @param to The path to hard link to.
+/// @param from The path to hard link from. This is created.
 /// @returns errc::success if the link was created, otherwise a platform
 /// specific error_code.
 LLVM_ABI std::error_code create_link(const Twine &to, const Twine &from);
@@ -342,16 +330,6 @@ LLVM_ABI std::error_code create_hard_link(const Twine &to, const Twine &from);
 LLVM_ABI std::error_code real_path(const Twine &path,
                                    SmallVectorImpl<char> &output,
                                    bool expand_tilde = false);
-
-/// Read the target of a symbolic link.
-///
-/// @param path The path of the symlink.
-/// @param output The location to store the symlink target.
-/// @returns errc::success if the symlink target has been stored in output,
-///          errc::invalid_argument if path is not a symbolic link, otherwise
-///          a platform-specific error_code.
-LLVM_ABI std::error_code readlink(const Twine &path,
-                                  SmallVectorImpl<char> &output);
 
 /// Expands ~ expressions to the user's home directory. On Unix ~user
 /// directories are resolved as well.
@@ -728,24 +706,6 @@ inline std::error_code setLastAccessAndModificationTime(int FD,
   return setLastAccessAndModificationTime(FD, Time, Time);
 }
 
-/// Set the file modification and access time, by path.
-///
-/// Works for both regular files and directories on all supported platforms.
-///
-/// @returns errc::success if the file times were successfully set, otherwise a
-///          platform-specific error_code or errc::function_not_supported on
-///          platforms where the functionality isn't available.
-LLVM_ABI std::error_code
-setLastAccessAndModificationTime(const Twine &Path, TimePoint<> AccessTime,
-                                 TimePoint<> ModificationTime);
-
-/// Simpler version that sets both file modification and access time to the same
-/// time.
-inline std::error_code setLastAccessAndModificationTime(const Twine &Path,
-                                                        TimePoint<> Time) {
-  return setLastAccessAndModificationTime(Path, Time, Time);
-}
-
 /// Is status available?
 ///
 /// @param s Input file status.
@@ -817,16 +777,6 @@ enum OpenFlags : unsigned {
   /// Force files Atime to be updated on access. Only makes a difference on
   /// Windows.
   OF_UpdateAtime = 32,
-
-  /// Open the file with sufficient access to update its metadata. Only makes
-  /// a difference on Windows, where it adds FILE_WRITE_ATTRIBUTES to the
-  /// access mask.
-  OF_UpdateAttributes = 64,
-
-  /// Allow opening a directory. Only makes a difference on Windows, where it
-  /// adds FILE_FLAG_BACKUP_SEMANTICS to the open flags so a handle to a
-  /// directory can be obtained.
-  OF_OpenDirectory = 128,
 };
 
 /// Create a potentially unique file name but does not create it.
@@ -844,7 +794,7 @@ enum OpenFlags : unsigned {
 ///
 /// Example: clang-%%-%%-%%-%%-%%.s => clang-a0-b1-c2-d3-e4.s
 ///
-/// @param Model Name to base unique path off of. Must contain at least one '%'.
+/// @param Model Name to base unique path off of.
 /// @param ResultPath Set to the file's path.
 /// @param MakeAbsolute Whether to use the system temp directory.
 LLVM_ABI void createUniquePath(const Twine &Model,
@@ -1361,10 +1311,9 @@ private:
   LLVM_ABI void unmapImpl();
   LLVM_ABI void dontNeedImpl();
   LLVM_ABI void willNeedImpl();
-  LLVM_ABI void randomAccessImpl();
 
   LLVM_ABI std::error_code init(sys::fs::file_t FD, uint64_t Offset,
-                                mapmode Mode, const char *Name);
+                                mapmode Mode);
 
 public:
   mapped_file_region() = default;
@@ -1380,8 +1329,7 @@ public:
 
   /// \param fd An open file descriptor to map. Does not take ownership of fd.
   LLVM_ABI mapped_file_region(sys::fs::file_t fd, mapmode mode, size_t length,
-                              uint64_t offset, std::error_code &ec,
-                              const char *name = nullptr);
+                              uint64_t offset, std::error_code &ec);
 
   ~mapped_file_region() { unmapImpl(); }
 
@@ -1395,7 +1343,6 @@ public:
   }
   void dontNeed() { dontNeedImpl(); }
   void willNeed() { willNeedImpl(); }
-  void randomAccess() { randomAccessImpl(); }
 
   LLVM_ABI size_t size() const;
   LLVM_ABI char *data() const;

@@ -898,11 +898,11 @@ void Template::registerPartial(std::string Name, std::string Partial) {
 }
 
 void Template::registerLambda(std::string Name, Lambda L) {
-  Ctx.Lambdas[Name] = std::move(L);
+  Ctx.Lambdas[Name] = L;
 }
 
 void Template::registerLambda(std::string Name, SectionLambda L) {
-  Ctx.SectionLambdas[Name] = std::move(L);
+  Ctx.SectionLambdas[Name] = L;
 }
 
 void Template::overrideEscapeCharacters(EscapeMap E) {

@@ -1,4 +1,5 @@
 ; RUN: opt -mtriple=amdgcn-amd-amdhsa -S -passes=inline < %s | FileCheck %s
+; RUN: opt -mtriple=amdgcn-amd-amdhsa -S -passes='cgscc(inline)' < %s | FileCheck %s
 
 ; CHECK-LABEL: @func_no_target_cpu(
 define i32 @func_no_target_cpu() #0 {

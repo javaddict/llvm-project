@@ -18,14 +18,14 @@ class Loop;
 class raw_ostream;
 
 /// Printer pass for the \c IVUsers for a loop.
-class IVUsersPrinterPass : public RequiredPassInfoMixin<IVUsersPrinterPass> {
+class IVUsersPrinterPass : public PassInfoMixin<IVUsersPrinterPass> {
   raw_ostream &OS;
 
 public:
   explicit IVUsersPrinterPass(raw_ostream &OS) : OS(OS) {}
-  LLVM_ABI PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
-                                 LoopStandardAnalysisResults &AR,
-                                 LPMUpdater &U);
+  PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
+                        LoopStandardAnalysisResults &AR, LPMUpdater &U);
+  static bool isRequired() { return true; }
 };
 }
 

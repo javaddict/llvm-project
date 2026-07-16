@@ -121,7 +121,7 @@ public:
 
 /// Printer pass for ShaderFlagsAnalysis results.
 class ShaderFlagsAnalysisPrinter
-    : public OptionalPassInfoMixin<ShaderFlagsAnalysisPrinter> {
+    : public PassInfoMixin<ShaderFlagsAnalysisPrinter> {
   raw_ostream &OS;
 
 public:

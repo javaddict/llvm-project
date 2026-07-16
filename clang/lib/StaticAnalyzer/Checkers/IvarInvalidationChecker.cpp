@@ -287,7 +287,7 @@ bool IvarInvalidationCheckerImpl::trackIvar(const ObjCIvarDecl *Iv,
   containsInvalidationMethod(IvInterf, Info, /*LookForPartial*/ false);
   if (Info.needsInvalidation()) {
     const ObjCIvarDecl *I = cast<ObjCIvarDecl>(Iv->getCanonicalDecl());
-    TrackedIvars[I] = std::move(Info);
+    TrackedIvars[I] = Info;
     if (!*FirstIvarDecl)
       *FirstIvarDecl = I;
     return true;
@@ -740,5 +740,3 @@ bool ento::shouldRegisterIvarInvalidationModeling(const CheckerManager &mgr) {
 
 REGISTER_CHECKER(InstanceVariableInvalidation)
 REGISTER_CHECKER(MissingInvalidationMethod)
-
-#undef REGISTER_CHECKER

@@ -308,11 +308,9 @@ public:
                                            const LangOptions &LangOpts,
                                            const llvm::Triple &Triple);
 
-  /// Compute the context hash - a string that uniquely identifies compiler
-  /// settings.
-  /// This is currently used mainly for distinguishing different variants of the
-  /// same implicitly-built Clang module.
-  std::string computeContextHash() const;
+  /// Retrieve a module hash string that is suitable for uniquely
+  /// identifying the conditions under which the module was built.
+  std::string getModuleHash() const;
 
   /// Check that \p Args can be parsed and re-serialized without change,
   /// emiting diagnostics for any differences.

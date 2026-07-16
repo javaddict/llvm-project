@@ -32,7 +32,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVVLEFFBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                     ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                     Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                    int PolicyAttrs, bool IsMasked) {
+                    int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   llvm::SmallVector<llvm::Type *, 3> IntrinsicTypes;
@@ -69,7 +69,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVVSSEBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                    ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                    Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                   int PolicyAttrs, bool IsMasked) {
+                   int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   llvm::SmallVector<llvm::Type *, 3> IntrinsicTypes;
@@ -89,11 +89,10 @@ emitRVVVSSEBuiltin(CodeGenFunction *CGF, const CallExpr *E,
   return Builder.CreateCall(F, Ops, "");
 }
 
-static LLVM_ATTRIBUTE_NOINLINE Value *
-emitRVVIndexedStoreBuiltin(CodeGenFunction *CGF, const CallExpr *E,
-                           ReturnValueSlot ReturnValue, llvm::Type *ResultType,
-                           Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                           int PolicyAttrs, bool IsMasked) {
+static LLVM_ATTRIBUTE_NOINLINE Value *emitRVVIndexedStoreBuiltin(
+    CodeGenFunction *CGF, const CallExpr *E, ReturnValueSlot ReturnValue,
+    llvm::Type *ResultType, Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
+    int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   llvm::SmallVector<llvm::Type *, 4> IntrinsicTypes;
@@ -120,7 +119,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVPseudoUnaryBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                           ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                           Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                          int PolicyAttrs, bool IsMasked) {
+                          int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   llvm::SmallVector<llvm::Type *, 3> IntrinsicTypes;
@@ -150,7 +149,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVPseudoVNotBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                          ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                          Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                         int PolicyAttrs, bool IsMasked) {
+                         int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   llvm::SmallVector<llvm::Type *, 3> IntrinsicTypes;
@@ -180,7 +179,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVPseudoMaskBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                          ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                          Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                         int PolicyAttrs, bool IsMasked) {
+                         int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   llvm::SmallVector<llvm::Type *, 3> IntrinsicTypes;
@@ -191,11 +190,10 @@ emitRVVPseudoMaskBuiltin(CodeGenFunction *CGF, const CallExpr *E,
   return Builder.CreateCall(F, Ops, "");
 }
 
-static LLVM_ATTRIBUTE_NOINLINE Value *
-emitRVVPseudoVFUnaryBuiltin(CodeGenFunction *CGF, const CallExpr *E,
-                            ReturnValueSlot ReturnValue, llvm::Type *ResultType,
-                            Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                            int PolicyAttrs, bool IsMasked) {
+static LLVM_ATTRIBUTE_NOINLINE Value *emitRVVPseudoVFUnaryBuiltin(
+    CodeGenFunction *CGF, const CallExpr *E, ReturnValueSlot ReturnValue,
+    llvm::Type *ResultType, Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
+    int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   llvm::SmallVector<llvm::Type *, 3> IntrinsicTypes;
@@ -222,7 +220,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVPseudoVWCVTBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                           ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                           Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                          int PolicyAttrs, bool IsMasked) {
+                          int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   llvm::SmallVector<llvm::Type *, 4> IntrinsicTypes;
@@ -252,7 +250,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVPseudoVNCVTBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                           ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                           Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                          int PolicyAttrs, bool IsMasked) {
+                          int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   llvm::SmallVector<llvm::Type *, 4> IntrinsicTypes;
@@ -284,7 +282,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVVlenbBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                     ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                     Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                    int PolicyAttrs, bool IsMasked) {
+                    int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   LLVMContext &Context = CGM.getLLVMContext();
@@ -301,7 +299,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVVsetvliBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                       ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                       Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                      int PolicyAttrs, bool IsMasked) {
+                      int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   llvm::Function *F = CGM.getIntrinsic(ID, {ResultType});
@@ -312,7 +310,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVVSEMaskBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                       ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                       Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                      int PolicyAttrs, bool IsMasked) {
+                      int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   llvm::SmallVector<llvm::Type *, 3> IntrinsicTypes;
@@ -493,7 +491,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVAveragingBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                         ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                         Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                        int PolicyAttrs, bool IsMasked) {
+                        int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   // LLVM intrinsic
@@ -519,11 +517,10 @@ emitRVVAveragingBuiltin(CodeGenFunction *CGF, const CallExpr *E,
   return Builder.CreateCall(F, Ops, "");
 }
 
-static LLVM_ATTRIBUTE_NOINLINE Value *
-emitRVVNarrowingClipBuiltin(CodeGenFunction *CGF, const CallExpr *E,
-                            ReturnValueSlot ReturnValue, llvm::Type *ResultType,
-                            Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                            int PolicyAttrs, bool IsMasked) {
+static LLVM_ATTRIBUTE_NOINLINE Value *emitRVVNarrowingClipBuiltin(
+    CodeGenFunction *CGF, const CallExpr *E, ReturnValueSlot ReturnValue,
+    llvm::Type *ResultType, Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
+    int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   // LLVM intrinsic
@@ -550,11 +547,10 @@ emitRVVNarrowingClipBuiltin(CodeGenFunction *CGF, const CallExpr *E,
   return Builder.CreateCall(F, Ops, "");
 }
 
-static LLVM_ATTRIBUTE_NOINLINE Value *
-emitRVVFloatingPointBuiltin(CodeGenFunction *CGF, const CallExpr *E,
-                            ReturnValueSlot ReturnValue, llvm::Type *ResultType,
-                            Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                            int PolicyAttrs, bool IsMasked) {
+static LLVM_ATTRIBUTE_NOINLINE Value *emitRVVFloatingPointBuiltin(
+    CodeGenFunction *CGF, const CallExpr *E, ReturnValueSlot ReturnValue,
+    llvm::Type *ResultType, Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
+    int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   // LLVM intrinsic
@@ -589,7 +585,7 @@ emitRVVFloatingPointBuiltin(CodeGenFunction *CGF, const CallExpr *E,
 static LLVM_ATTRIBUTE_NOINLINE Value *emitRVVWideningFloatingPointBuiltin(
     CodeGenFunction *CGF, const CallExpr *E, ReturnValueSlot ReturnValue,
     llvm::Type *ResultType, Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-    int PolicyAttrs, bool IsMasked) {
+    int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   // LLVM intrinsic
@@ -692,7 +688,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVFMABuiltin(CodeGenFunction *CGF, const CallExpr *E,
                   ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                   Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                  int PolicyAttrs, bool IsMasked) {
+                  int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   // LLVM intrinsic
@@ -721,7 +717,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVWideningFMABuiltin(CodeGenFunction *CGF, const CallExpr *E,
                           ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                           Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                          int PolicyAttrs, bool IsMasked) {
+                          int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   // LLVM intrinsic
@@ -746,11 +742,10 @@ emitRVVWideningFMABuiltin(CodeGenFunction *CGF, const CallExpr *E,
   return Builder.CreateCall(F, Ops, "");
 }
 
-static LLVM_ATTRIBUTE_NOINLINE Value *
-emitRVVFloatingUnaryBuiltin(CodeGenFunction *CGF, const CallExpr *E,
-                            ReturnValueSlot ReturnValue, llvm::Type *ResultType,
-                            Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                            int PolicyAttrs, bool IsMasked) {
+static LLVM_ATTRIBUTE_NOINLINE Value *emitRVVFloatingUnaryBuiltin(
+    CodeGenFunction *CGF, const CallExpr *E, ReturnValueSlot ReturnValue,
+    llvm::Type *ResultType, Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
+    int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   llvm::SmallVector<llvm::Type *, 3> IntrinsicTypes;
@@ -783,11 +778,10 @@ emitRVVFloatingUnaryBuiltin(CodeGenFunction *CGF, const CallExpr *E,
   return Builder.CreateCall(F, Ops, "");
 }
 
-static LLVM_ATTRIBUTE_NOINLINE Value *
-emitRVVFloatingConvBuiltin(CodeGenFunction *CGF, const CallExpr *E,
-                           ReturnValueSlot ReturnValue, llvm::Type *ResultType,
-                           Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                           int PolicyAttrs, bool IsMasked) {
+static LLVM_ATTRIBUTE_NOINLINE Value *emitRVVFloatingConvBuiltin(
+    CodeGenFunction *CGF, const CallExpr *E, ReturnValueSlot ReturnValue,
+    llvm::Type *ResultType, Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
+    int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   // LLVM intrinsic
@@ -821,7 +815,7 @@ emitRVVFloatingConvBuiltin(CodeGenFunction *CGF, const CallExpr *E,
 static LLVM_ATTRIBUTE_NOINLINE Value *emitRVVFloatingReductionBuiltin(
     CodeGenFunction *CGF, const CallExpr *E, ReturnValueSlot ReturnValue,
     llvm::Type *ResultType, Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-    int PolicyAttrs, bool IsMasked) {
+    int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
   // LLVM intrinsic
@@ -854,7 +848,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVReinterpretBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                           ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                           Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                          int PolicyAttrs, bool IsMasked) {
+                          int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto &CGM = CGF->CGM;
 
@@ -893,7 +887,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVGetBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                   ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                   Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                  int PolicyAttrs, bool IsMasked) {
+                  int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   auto *VecTy = cast<ScalableVectorType>(ResultType);
   if (auto *OpVecTy = dyn_cast<ScalableVectorType>(Ops[0]->getType())) {
@@ -918,7 +912,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVSetBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                   ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                   Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                  int PolicyAttrs, bool IsMasked) {
+                  int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   if (auto *ResVecTy = dyn_cast<ScalableVectorType>(ResultType)) {
     auto *VecTy = cast<ScalableVectorType>(Ops[2]->getType());
@@ -943,7 +937,7 @@ static LLVM_ATTRIBUTE_NOINLINE Value *
 emitRVVCreateBuiltin(CodeGenFunction *CGF, const CallExpr *E,
                      ReturnValueSlot ReturnValue, llvm::Type *ResultType,
                      Intrinsic::ID ID, SmallVectorImpl<Value *> &Ops,
-                     int PolicyAttrs, bool IsMasked) {
+                     int PolicyAttrs, bool IsMasked, unsigned SegInstSEW) {
   auto &Builder = CGF->Builder;
   llvm::Value *ReturnVector = llvm::PoisonValue::get(ResultType);
   auto *VecTy = cast<ScalableVectorType>(Ops[0]->getType());
@@ -1161,7 +1155,7 @@ Value *CodeGenFunction::EmitRISCVBuiltinExpr(unsigned BuiltinID,
     // Zbc
     case RISCV::BI__builtin_riscv_clmul_32:
     case RISCV::BI__builtin_riscv_clmul_64:
-      ID = Intrinsic::clmul;
+      ID = Intrinsic::riscv_clmul;
       break;
     case RISCV::BI__builtin_riscv_clmulh_32:
     case RISCV::BI__builtin_riscv_clmulh_64:

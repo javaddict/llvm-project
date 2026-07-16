@@ -2,7 +2,6 @@ set(LLVM_LINK_COMPONENTS
   MC
   MCDisassembler
   Support
-  AArch64CodeGen
   AArch64Desc
   )
 

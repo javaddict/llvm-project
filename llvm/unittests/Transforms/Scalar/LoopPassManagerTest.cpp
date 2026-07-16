@@ -153,7 +153,7 @@ template <typename DerivedT, typename IRUnitT,
           typename... ExtraArgTs>
 class MockPassHandleBase {
 public:
-  class Pass : public OptionalPassInfoMixin<Pass> {
+  class Pass : public PassInfoMixin<Pass> {
     friend MockPassHandleBase;
 
     DerivedT *Handle;
@@ -919,7 +919,7 @@ TEST_F(LoopPassManagerTest, LoopChildInsertion) {
                           const char *Name, BasicBlock *BB) {
     auto *Cond = new LoadInst(Type::getInt1Ty(Context), &Ptr, Name,
                               /*isVolatile*/ true, BB);
-    CondBrInst::Create(Cond, TrueBB, FalseBB, BB);
+    BranchInst::Create(TrueBB, FalseBB, Cond, BB);
   };
 
   // Build the pass managers and register our pipeline. We build a single loop
@@ -969,10 +969,10 @@ TEST_F(LoopPassManagerTest, LoopChildInsertion) {
         NewLoop01LatchBB =
             BasicBlock::Create(Context, "loop.0.1.latch", &F, &Loop02PHBB);
         Loop01BB.getTerminator()->replaceUsesOfWith(&Loop01BB, NewLoop010PHBB);
-        UncondBrInst::Create(NewLoop010BB, NewLoop010PHBB);
+        BranchInst::Create(NewLoop010BB, NewLoop010PHBB);
         CreateCondBr(NewLoop01LatchBB, NewLoop010BB, "cond.0.1.0",
                      NewLoop010BB);
-        UncondBrInst::Create(&Loop01BB, NewLoop01LatchBB);
+        BranchInst::Create(&Loop01BB, NewLoop01LatchBB);
         AR.DT.addNewBlock(NewLoop010PHBB, &Loop01BB);
         AR.DT.addNewBlock(NewLoop010BB, NewLoop010PHBB);
         AR.DT.addNewBlock(NewLoop01LatchBB, NewLoop010BB);
@@ -1012,7 +1012,7 @@ TEST_F(LoopPassManagerTest, LoopChildInsertion) {
         auto *NewLoop011BB = BasicBlock::Create(Context, "loop.0.1.1", &F, NewLoop01LatchBB);
         NewLoop010BB->getTerminator()->replaceUsesOfWith(NewLoop01LatchBB,
                                                          NewLoop011PHBB);
-        UncondBrInst::Create(NewLoop011BB, NewLoop011PHBB);
+        BranchInst::Create(NewLoop011BB, NewLoop011PHBB);
         CreateCondBr(NewLoop01LatchBB, NewLoop011BB, "cond.0.1.1",
                      NewLoop011BB);
         AR.DT.addNewBlock(NewLoop011PHBB, NewLoop010BB);
@@ -1122,7 +1122,7 @@ TEST_F(LoopPassManagerTest, LoopPeerInsertion) {
                           const char *Name, BasicBlock *BB) {
     auto *Cond = new LoadInst(Type::getInt1Ty(Context), &Ptr, Name,
                               /*isVolatile*/ true, BB);
-    CondBrInst::Create(Cond, TrueBB, FalseBB, BB);
+    BranchInst::Create(TrueBB, FalseBB, Cond, BB);
   };
 
   // Build the pass managers and register our pipeline. We build a single loop
@@ -1158,7 +1158,7 @@ TEST_F(LoopPassManagerTest, LoopPeerInsertion) {
         L.getParentLoop()->addChildLoop(NewLoop);
         auto *NewLoop01PHBB = BasicBlock::Create(Context, "loop.0.1.ph", &F, &Loop02PHBB);
         auto *NewLoop01BB = BasicBlock::Create(Context, "loop.0.1", &F, &Loop02PHBB);
-        UncondBrInst::Create(NewLoop01BB, NewLoop01PHBB);
+        BranchInst::Create(NewLoop01BB, NewLoop01PHBB);
         CreateCondBr(&Loop02PHBB, NewLoop01BB, "cond.0.1", NewLoop01BB);
         Loop00BB.getTerminator()->replaceUsesOfWith(&Loop02PHBB, NewLoop01PHBB);
         AR.DT.addNewBlock(NewLoop01PHBB, &Loop00BB);
@@ -1216,13 +1216,13 @@ TEST_F(LoopPassManagerTest, LoopPeerInsertion) {
         auto *NewLoop04LatchBB =
             BasicBlock::Create(Context, "loop.0.4.latch", &F, &Loop0LatchBB);
         Loop02BB.getTerminator()->replaceUsesOfWith(&Loop0LatchBB, NewLoop03PHBB);
-        UncondBrInst::Create(NewLoop03BB, NewLoop03PHBB);
+        BranchInst::Create(NewLoop03BB, NewLoop03PHBB);
         CreateCondBr(NewLoop04PHBB, NewLoop03BB, "cond.0.3", NewLoop03BB);
-        UncondBrInst::Create(NewLoop04BB, NewLoop04PHBB);
+        BranchInst::Create(NewLoop04BB, NewLoop04PHBB);
         CreateCondBr(&Loop0LatchBB, NewLoop040PHBB, "cond.0.4", NewLoop04BB);
-        UncondBrInst::Create(NewLoop040BB, NewLoop040PHBB);
+        BranchInst::Create(NewLoop040BB, NewLoop040PHBB);
         CreateCondBr(NewLoop04LatchBB, NewLoop040BB, "cond.0.4.0", NewLoop040BB);
-        UncondBrInst::Create(NewLoop04BB, NewLoop04LatchBB);
+        BranchInst::Create(NewLoop04BB, NewLoop04LatchBB);
         AR.DT.addNewBlock(NewLoop03PHBB, &Loop02BB);
         AR.DT.addNewBlock(NewLoop03BB, NewLoop03PHBB);
         AR.DT.addNewBlock(NewLoop04PHBB, NewLoop03BB);
@@ -1280,7 +1280,7 @@ TEST_F(LoopPassManagerTest, LoopPeerInsertion) {
         AR.LI.addTopLevelLoop(NewLoop);
         auto *NewLoop1PHBB = BasicBlock::Create(Context, "loop.1.ph", &F, &Loop2BB);
         auto *NewLoop1BB = BasicBlock::Create(Context, "loop.1", &F, &Loop2BB);
-        UncondBrInst::Create(NewLoop1BB, NewLoop1PHBB);
+        BranchInst::Create(NewLoop1BB, NewLoop1PHBB);
         CreateCondBr(&Loop2PHBB, NewLoop1BB, "cond.1", NewLoop1BB);
         Loop0BB.getTerminator()->replaceUsesOfWith(&Loop2PHBB, NewLoop1PHBB);
         AR.DT.addNewBlock(NewLoop1PHBB, &Loop0BB);
@@ -1513,11 +1513,11 @@ TEST_F(LoopPassManagerTest, LoopDeletion) {
                 BasicBlock::Create(Context, "loop.0.3.ph", &F, &Loop0LatchBB);
             auto *NewLoop03BB =
                 BasicBlock::Create(Context, "loop.0.3", &F, &Loop0LatchBB);
-            UncondBrInst::Create(NewLoop03BB, NewLoop03PHBB);
+            BranchInst::Create(NewLoop03BB, NewLoop03PHBB);
             auto *Cond =
                 new LoadInst(Type::getInt1Ty(Context), &Ptr, "cond.0.3",
                              /*isVolatile*/ true, NewLoop03BB);
-            CondBrInst::Create(Cond, &Loop0LatchBB, NewLoop03BB, NewLoop03BB);
+            BranchInst::Create(&Loop0LatchBB, NewLoop03BB, Cond, NewLoop03BB);
             Loop02PHBB.getTerminator()->replaceUsesOfWith(&Loop0LatchBB,
                                                           NewLoop03PHBB);
             AR.DT.addNewBlock(NewLoop03PHBB, &Loop02PHBB);

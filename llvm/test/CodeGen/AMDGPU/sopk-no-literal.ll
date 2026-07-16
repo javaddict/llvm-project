@@ -2,9 +2,10 @@
 ; RUN: llc -O0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1100 -debug-only=branch-relaxation < %s 2>&1 | FileCheck --check-prefix=GFX10 %s
 
 ; GFX10: Basic blocks after relaxation
-; GFX10: %bb.0	offset=00000000	size=0x28
+; GFX10: %bb.0	offset=00000000	size=0x1c
 
-; At -O0 without DAG combines, more instructions are generated.
+; Each instruction in the following kernel is 4 bytes in size,
+; except s_load_b32 which is 8 bytes in size. Hence, 0x1c bytes in total.
 define amdgpu_kernel void @test_sopk_size(i32 %var.mode) {
 ; GFX10-LABEL: test_sopk_size:
 ; GFX10:  ; %bb.0:

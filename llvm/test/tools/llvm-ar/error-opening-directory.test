@@ -1,5 +1,6 @@
-## Unsupported on AIX as AIX allow reading directories by default.
-# UNSUPPORTED: system-aix
+## Unsupported on AIX and FreeBSD as AIX and FreeBSD 12 and earlier allow
+## reading directories by default.
+# UNSUPPORTED: system-freebsd, system-aix
 
 # RUN: rm -rf %t && mkdir -p %t
 

@@ -41,7 +41,7 @@ class LowerNontemporalPass
                   operand = op.getMemref();
                   defOp = operand.getDefiningOp();
                 })
-            .Case([&](fir::BoxAddrOp op) {
+            .Case<fir::BoxAddrOp>([&](auto op) {
               operand = op.getVal();
               defOp = operand.getDefiningOp();
             })

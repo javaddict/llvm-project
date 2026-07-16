@@ -6,7 +6,6 @@
 //
 //===-----------------------------------------------------------------------===/
 
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/TextAPI/InterfaceFile.h"
 #include <string>

@@ -9,7 +9,7 @@
 #include "Mapper.h"
 #include "Serialize.h"
 #include "clang/AST/Comment.h"
-#include "clang/UnifiedSymbolResolution/USRGeneration.h"
+#include "clang/Index/USRGeneration.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Support/Mutex.h"
@@ -43,9 +43,6 @@ void MapASTVisitor::HandleTranslationUnit(ASTContext &Context) {
   if (CDCtx.FTimeTrace)
     llvm::timeTraceProfilerInitialize(200, "clang-doc");
   TraverseDecl(Context.getTranslationUnitDecl());
-
-  getTransientArena().Reset();
-
   if (CDCtx.FTimeTrace)
     llvm::timeTraceProfilerFinishThread();
 }
@@ -65,7 +62,7 @@ bool MapASTVisitor::mapDecl(const T *D, bool IsDefinition) {
       return true;
   }
 
-  std::pair<Info *, Info *> CP;
+  std::pair<std::unique_ptr<Info>, std::unique_ptr<Info>> CP;
 
   {
     llvm::TimeTraceScope TS("emit info from astnode");
@@ -86,8 +83,7 @@ bool MapASTVisitor::mapDecl(const T *D, bool IsDefinition) {
     bool IsFileInRootDir;
     llvm::SmallString<128> File =
         getFile(D, D->getASTContext(), CDCtx.SourceRoot, IsFileInRootDir);
-    serialize::Serializer Serializer;
-    CP = Serializer.emitInfo(D, getComment(D, D->getASTContext()),
+    CP = serialize::emitInfo(D, getComment(D, D->getASTContext()),
                              getDeclLocation(D), CDCtx.PublicOnly);
   }
 
@@ -99,10 +95,10 @@ bool MapASTVisitor::mapDecl(const T *D, bool IsDefinition) {
     // this decl for some reason (e.g. we're only reporting public decls).
     if (Child)
       CDCtx.ECtx->reportResult(llvm::toHex(llvm::toStringRef(Child->USR)),
-                               serialize::serialize(*Child, CDCtx.Diags));
+                               serialize::serialize(Child, CDCtx.Diags));
     if (Parent)
       CDCtx.ECtx->reportResult(llvm::toHex(llvm::toStringRef(Parent->USR)),
-                               serialize::serialize(*Parent, CDCtx.Diags));
+                               serialize::serialize(Parent, CDCtx.Diags));
   }
   return true;
 }
@@ -150,7 +146,7 @@ bool MapASTVisitor::VisitVarDecl(const VarDecl *D) {
 
 comments::FullComment *
 MapASTVisitor::getComment(const NamedDecl *D, const ASTContext &Context) const {
-  RawComment *Comment = Context.getRawCommentNoCache(D);
+  RawComment *Comment = Context.getRawCommentForDeclNoCache(D);
   // FIXME: Move setAttached to the initial comment parsing.
   if (Comment) {
     Comment->setAttached();

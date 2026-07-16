@@ -179,11 +179,6 @@ public:
   virtual bool
   ignoreUnsafeBufferInLibcCall(const SourceLocation &Loc) const = 0;
 
-  /// \return true iff array subscript accesses on fixed size arrays should NOT
-  /// be reported at `Loc`
-  virtual bool
-  ignoreUnsafeBufferInStaticSizedArray(const SourceLocation &Loc) const = 0;
-
   virtual std::string
   getUnsafeBufferUsageAttributeTextAt(SourceLocation Loc,
                                       StringRef WSSuffix = "") const = 0;
@@ -201,10 +196,7 @@ bool anyConflict(const llvm::SmallVectorImpl<FixItHint> &FixIts,
                  const SourceManager &SM);
 } // namespace internal
 
-/// \return true iff `N` is an unsafe buffer usage and populates the unsafe
-/// pointers in `UnsafePointers`
-bool matchUnsafePointers(const DynTypedNode &N, ASTContext &Ctx,
-                         std::set<const Expr *> &UnsafePointers);
+std::set<const Expr *> findUnsafePointers(const FunctionDecl *FD);
 } // end namespace clang
 
 #endif /* LLVM_CLANG_ANALYSIS_ANALYSES_UNSAFEBUFFERUSAGE_H */

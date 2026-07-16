@@ -153,7 +153,7 @@ SValBuilder::getRegionValueSymbolVal(const TypedValueRegion *region) {
 
 DefinedOrUnknownSVal SValBuilder::conjureSymbolVal(const void *SymbolTag,
                                                    ConstCFGElementRef elem,
-                                                   const StackFrame *SF,
+                                                   const LocationContext *LCtx,
                                                    unsigned Count) {
   const Expr *Ex = dyn_cast<Expr>(elem->getAs<CFGStmt>()->getStmt());
   assert(Ex && "elem must be a CFGStmt containing an Expr");
@@ -166,14 +166,14 @@ DefinedOrUnknownSVal SValBuilder::conjureSymbolVal(const void *SymbolTag,
   // result should be a location.
   QualType ExType = Ex->getType();
   if (Ex->isGLValue())
-    T = SF->getAnalysisDeclContext()->getASTContext().getPointerType(ExType);
+    T = LCtx->getAnalysisDeclContext()->getASTContext().getPointerType(ExType);
 
-  return conjureSymbolVal(SymbolTag, elem, SF, T, Count);
+  return conjureSymbolVal(SymbolTag, elem, LCtx, T, Count);
 }
 
 DefinedOrUnknownSVal SValBuilder::conjureSymbolVal(const void *symbolTag,
                                                    ConstCFGElementRef elem,
-                                                   const StackFrame *SF,
+                                                   const LocationContext *LCtx,
                                                    QualType type,
                                                    unsigned count) {
   if (type->isNullPtrType())
@@ -182,7 +182,7 @@ DefinedOrUnknownSVal SValBuilder::conjureSymbolVal(const void *symbolTag,
   if (!SymbolManager::canSymbolicate(type))
     return UnknownVal();
 
-  SymbolRef sym = SymMgr.conjureSymbol(elem, SF, type, count, symbolTag);
+  SymbolRef sym = SymMgr.conjureSymbol(elem, LCtx, type, count, symbolTag);
 
   if (Loc::isLocType(type))
     return loc::MemRegionVal(MemMgr.getSymbolicRegion(sym));
@@ -191,17 +191,17 @@ DefinedOrUnknownSVal SValBuilder::conjureSymbolVal(const void *symbolTag,
 }
 
 DefinedOrUnknownSVal SValBuilder::conjureSymbolVal(ConstCFGElementRef elem,
-                                                   const StackFrame *SF,
+                                                   const LocationContext *LCtx,
                                                    QualType type,
                                                    unsigned visitCount) {
-  return conjureSymbolVal(/*symbolTag=*/nullptr, elem, SF, type, visitCount);
+  return conjureSymbolVal(/*symbolTag=*/nullptr, elem, LCtx, type, visitCount);
 }
 
 DefinedOrUnknownSVal SValBuilder::conjureSymbolVal(const CallEvent &call,
                                                    unsigned visitCount,
                                                    const void *symbolTag) {
   return conjureSymbolVal(symbolTag, call.getCFGElementRef(),
-                          call.getStackFrame(), call.getResultType(),
+                          call.getLocationContext(), call.getResultType(),
                           visitCount);
 }
 
@@ -210,11 +210,11 @@ DefinedOrUnknownSVal SValBuilder::conjureSymbolVal(const CallEvent &call,
                                                    unsigned visitCount,
                                                    const void *symbolTag) {
   return conjureSymbolVal(symbolTag, call.getCFGElementRef(),
-                          call.getStackFrame(), type, visitCount);
+                          call.getLocationContext(), type, visitCount);
 }
 
 DefinedSVal SValBuilder::getConjuredHeapSymbolVal(ConstCFGElementRef elem,
-                                                  const StackFrame *SF,
+                                                  const LocationContext *LCtx,
                                                   QualType type,
                                                   unsigned VisitCount) {
   assert(Loc::isLocType(type));
@@ -225,26 +225,27 @@ DefinedSVal SValBuilder::getConjuredHeapSymbolVal(ConstCFGElementRef elem,
     return makeZeroVal(type).castAs<DefinedSVal>();
   }
 
-  SymbolRef sym = SymMgr.conjureSymbol(elem, SF, type, VisitCount);
+  SymbolRef sym = SymMgr.conjureSymbol(elem, LCtx, type, VisitCount);
   return loc::MemRegionVal(MemMgr.getSymbolicHeapRegion(sym));
 }
 
 loc::MemRegionVal SValBuilder::getAllocaRegionVal(const Expr *E,
-                                                  const StackFrame *SF,
+                                                  const LocationContext *LCtx,
                                                   unsigned VisitCount) {
-  const AllocaRegion *R = getRegionManager().getAllocaRegion(E, VisitCount, SF);
+  const AllocaRegion *R =
+      getRegionManager().getAllocaRegion(E, VisitCount, LCtx);
   return loc::MemRegionVal(R);
 }
 
 DefinedSVal SValBuilder::getMetadataSymbolVal(const void *symbolTag,
                                               const MemRegion *region,
                                               const Expr *expr, QualType type,
-                                              const StackFrame *SF,
+                                              const LocationContext *LCtx,
                                               unsigned count) {
   assert(SymbolManager::canSymbolicate(type) && "Invalid metadata symbol type");
 
-  SymbolRef sym =
-      SymMgr.acquire<SymbolMetadata>(region, expr, type, SF, count, symbolTag);
+  SymbolRef sym = SymMgr.acquire<SymbolMetadata>(region, expr, type, LCtx,
+                                                 count, symbolTag);
 
   if (Loc::isLocType(type))
     return loc::MemRegionVal(MemMgr.getSymbolicRegion(sym));
@@ -293,11 +294,12 @@ DefinedSVal SValBuilder::getFunctionPointer(const FunctionDecl *func) {
 
 DefinedSVal SValBuilder::getBlockPointer(const BlockDecl *block,
                                          CanQualType locTy,
-                                         const StackFrame *SF,
+                                         const LocationContext *locContext,
                                          unsigned blockCount) {
   const BlockCodeRegion *BC =
-      MemMgr.getBlockCodeRegion(block, locTy, SF->getAnalysisDeclContext());
-  const BlockDataRegion *BD = MemMgr.getBlockDataRegion(BC, SF, blockCount);
+    MemMgr.getBlockCodeRegion(block, locTy, locContext->getAnalysisDeclContext());
+  const BlockDataRegion *BD = MemMgr.getBlockDataRegion(BC, locContext,
+                                                        blockCount);
   return loc::MemRegionVal(BD);
 }
 
@@ -310,17 +312,17 @@ SValBuilder::getCastedMemRegionVal(const MemRegion *R, QualType Ty) {
 
 /// Return a memory region for the 'this' object reference.
 loc::MemRegionVal SValBuilder::getCXXThis(const CXXMethodDecl *D,
-                                          const StackFrame *SF) {
+                                          const StackFrameContext *SFC) {
   return loc::MemRegionVal(
-      getRegionManager().getCXXThisRegion(D->getThisType(), SF));
+      getRegionManager().getCXXThisRegion(D->getThisType(), SFC));
 }
 
 /// Return a memory region for the 'this' object reference.
 loc::MemRegionVal SValBuilder::getCXXThis(const CXXRecordDecl *D,
-                                          const StackFrame *SF) {
+                                          const StackFrameContext *SFC) {
   CanQualType PT =
       getContext().getPointerType(getContext().getCanonicalTagType(D));
-  return loc::MemRegionVal(getRegionManager().getCXXThisRegion(PT, SF));
+  return loc::MemRegionVal(getRegionManager().getCXXThisRegion(PT, SFC));
 }
 
 std::optional<SVal> SValBuilder::getConstantVal(const Expr *E) {

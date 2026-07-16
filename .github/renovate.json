@@ -14,12 +14,6 @@
       "matchPackageNames": ["windows", "macos"],
       "matchManagers": ["github-actions"],
       "enabled": false
-    },
-    {
-      "matchPackageNames": ["python"],
-      "matchManagers": ["github-actions"],
-      "matchFileNames": ["release-binaries.yml"],
-      "enabled": false
     }
   ]
 }

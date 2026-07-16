@@ -7,10 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/lrintbf16.h"
-#include "src/__support/math/lrintbf16.h"
+#include "src/__support/FPUtil/NearestIntegerOperations.h"
+#include "src/__support/FPUtil/bfloat16.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
-LLVM_LIBC_FUNCTION(long, lrintbf16, (bfloat16 x)) { return math::lrintbf16(x); }
+LLVM_LIBC_FUNCTION(long, lrintbf16, (bfloat16 x)) {
+  return fputil::round_to_signed_integer_using_current_rounding_mode<bfloat16,
+                                                                     long>(x);
+}
 
 } // namespace LIBC_NAMESPACE_DECL

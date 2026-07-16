@@ -70,7 +70,7 @@ using HasRunOnLoopT = decltype(std::declval<PassT>().run(
 template <>
 class PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
                   LPMUpdater &>
-    : public RequiredPassInfoMixin<
+    : public PassInfoMixin<
           PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
                       LPMUpdater &>> {
 public:
@@ -129,6 +129,8 @@ public:
 
   bool isEmpty() const { return LoopPasses.empty() && LoopNestPasses.empty(); }
 
+  static bool isRequired() { return true; }
+
   size_t getNumLoopPasses() const { return LoopPasses.size(); }
   size_t getNumLoopNestPasses() const { return LoopNestPasses.size(); }
 
@@ -184,7 +186,7 @@ typedef PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
 template <typename AnalysisT>
 struct RequireAnalysisPass<AnalysisT, Loop, LoopAnalysisManager,
                            LoopStandardAnalysisResults &, LPMUpdater &>
-    : OptionalPassInfoMixin<
+    : PassInfoMixin<
           RequireAnalysisPass<AnalysisT, Loop, LoopAnalysisManager,
                               LoopStandardAnalysisResults &, LPMUpdater &>> {
   PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
@@ -394,7 +396,7 @@ std::optional<PreservedAnalyses> LoopPassManager::runSinglePass(
 /// \fn createLoopFunctionToLoopPassAdaptor to see when loop mode and loop-nest
 /// mode are used.
 class FunctionToLoopPassAdaptor
-    : public RequiredPassInfoMixin<FunctionToLoopPassAdaptor> {
+    : public PassInfoMixin<FunctionToLoopPassAdaptor> {
 public:
   using PassConceptT =
       detail::PassConcept<Loop, LoopAnalysisManager,
@@ -414,6 +416,8 @@ public:
   LLVM_ABI void
   printPipeline(raw_ostream &OS,
                 function_ref<StringRef(StringRef)> MapClassName2PassName);
+
+  static bool isRequired() { return true; }
 
   bool isLoopNestMode() const { return LoopNestMode; }
 
@@ -482,7 +486,7 @@ createFunctionToLoopPassAdaptor<LoopPassManager>(LoopPassManager &&LPM,
 }
 
 /// Pass for printing a loop's contents as textual IR.
-class PrintLoopPass : public RequiredPassInfoMixin<PrintLoopPass> {
+class PrintLoopPass : public PassInfoMixin<PrintLoopPass> {
   raw_ostream &OS;
   std::string Banner;
 

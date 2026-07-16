@@ -9,10 +9,8 @@
 #include "mlir/TableGen/Interfaces.h"
 #include "llvm/ADT/FunctionExtras.h"
 #include "llvm/ADT/StringSet.h"
-#include "llvm/ADT/Twine.h"
 #include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
-#include <utility>
 
 using namespace mlir;
 using namespace mlir::tblgen;
@@ -31,15 +29,8 @@ InterfaceMethod::InterfaceMethod(const Record *def, std::string uniqueName)
     : def(def), uniqueName(uniqueName) {
   const DagInit *args = def->getValueAsDag("arguments");
   for (unsigned i = 0, e = args->getNumArgs(); i != e; ++i) {
-    const Init *arg = args->getArg(i);
-    const auto *strArg = dyn_cast<StringInit>(arg);
-    if (!strArg)
-      llvm::PrintFatalError(
-          def->getLoc(),
-          "expected string type for interface method argument #" + Twine(i) +
-              " ('" + args->getArgNameStr(i) + "') in '" + def->getName() +
-              "', but got '" + arg->getAsString() + "'");
-    arguments.push_back({strArg->getValue(), args->getArgNameStr(i)});
+    arguments.push_back({cast<StringInit>(args->getArg(i))->getValue(),
+                         args->getArgNameStr(i)});
   }
 }
 
@@ -58,16 +49,6 @@ StringRef InterfaceMethod::getUniqueName() const { return uniqueName; }
 // Return if this method is static.
 bool InterfaceMethod::isStatic() const {
   return def->isSubClassOf("StaticInterfaceMethod");
-}
-
-// Return if the method is a pure virtual one.
-bool InterfaceMethod::isPureVirtual() const {
-  return def->isSubClassOf("PureVirtualInterfaceMethod");
-}
-
-// Return if the method is only a declaration.
-bool InterfaceMethod::isDeclaration() const {
-  return def->isSubClassOf("InterfaceMethodDeclaration");
 }
 
 // Return the body for this method if it has one.

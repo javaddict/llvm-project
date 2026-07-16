@@ -36,7 +36,7 @@ class Value;
 
 /// Eliminate dead arguments (and return values) from functions.
 class DeadArgumentEliminationPass
-    : public OptionalPassInfoMixin<DeadArgumentEliminationPass> {
+    : public PassInfoMixin<DeadArgumentEliminationPass> {
 public:
   /// Struct that represents (part of) either a return value or a function
   /// argument.  Used so that arguments and return values can be used
@@ -75,7 +75,7 @@ public:
   DeadArgumentEliminationPass(bool ShouldHackArguments = false)
       : ShouldHackArguments(ShouldHackArguments) {}
 
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &);
 
   /// Convenience wrapper
   RetOrArg createRet(const Function *F, unsigned Idx) {

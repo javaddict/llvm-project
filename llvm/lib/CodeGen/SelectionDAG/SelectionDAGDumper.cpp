@@ -55,10 +55,6 @@ VerboseDAGDumping("dag-dump-verbose", cl::Hidden,
                   cl::desc("Display more information when dumping selection "
                            "DAG nodes."));
 
-static cl::opt<bool>
-    PrintSDNodeAddrs("print-sdnode-addrs", cl::Hidden,
-                     cl::desc("Print addresses of SDNodes when dumping"));
-
 std::string SDNode::getOperationName(const SelectionDAG *G) const {
   switch (getOpcode()) {
   default:
@@ -435,7 +431,6 @@ std::string SDNode::getOperationName(const SelectionDAG *G) const {
   case ISD::STRICT_BF16_TO_FP:          return "strict_bf16_to_fp";
   case ISD::FP_TO_BF16:                 return "fp_to_bf16";
   case ISD::STRICT_FP_TO_BF16:          return "strict_fp_to_bf16";
-  case ISD::CONVERT_FROM_ARBITRARY_FP:  return "convert_from_arbitrary_fp";
   case ISD::LROUND:                     return "lround";
   case ISD::STRICT_LROUND:              return "strict_lround";
   case ISD::LLROUND:                    return "llround";
@@ -484,8 +479,6 @@ std::string SDNode::getOperationName(const SelectionDAG *G) const {
     return "fake_use";
   case ISD::RELOC_NONE:
     return "reloc_none";
-  case ISD::COND_LOOP:
-    return "cond_loop";
   case ISD::PSEUDO_PROBE:
     return "pseudoprobe";
   case ISD::GC_TRANSITION_START:        return "gc_transition.start";
@@ -517,14 +510,13 @@ std::string SDNode::getOperationName(const SelectionDAG *G) const {
 
   // Bit manipulation
   case ISD::ABS:                        return "abs";
-  case ISD::ABS_MIN_POISON:             return "abs_min_poison";
   case ISD::BITREVERSE:                 return "bitreverse";
   case ISD::BSWAP:                      return "bswap";
   case ISD::CTPOP:                      return "ctpop";
   case ISD::CTTZ:                       return "cttz";
-  case ISD::CTTZ_ZERO_POISON:           return "cttz_zero_poison";
+  case ISD::CTTZ_ZERO_UNDEF:            return "cttz_zero_undef";
   case ISD::CTLZ:                       return "ctlz";
-  case ISD::CTLZ_ZERO_POISON:           return "ctlz_zero_poison";
+  case ISD::CTLZ_ZERO_UNDEF:            return "ctlz_zero_undef";
   case ISD::CTLS:                       return "ctls";
   case ISD::PARITY:                     return "parity";
 
@@ -592,11 +584,6 @@ std::string SDNode::getOperationName(const SelectionDAG *G) const {
   case ISD::EXPERIMENTAL_VECTOR_HISTOGRAM:
     return "histogram";
 
-  case ISD::CTTZ_ELTS:
-    return "cttz_elts";
-  case ISD::CTTZ_ELTS_ZERO_POISON:
-    return "cttz_elts_zero_poison";
-
   case ISD::VECTOR_FIND_LAST_ACTIVE:
     return "find_last_active";
 
@@ -615,14 +602,6 @@ std::string SDNode::getOperationName(const SelectionDAG *G) const {
     return "loop_dep_war";
   case ISD::LOOP_DEPENDENCE_RAW_MASK:
     return "loop_dep_raw";
-  case ISD::MASKED_UDIV:
-    return "masked_udiv";
-  case ISD::MASKED_SDIV:
-    return "masked_sdiv";
-  case ISD::MASKED_UREM:
-    return "masked_urem";
-  case ISD::MASKED_SREM:
-    return "masked_srem";
 
     // Vector Predication
 #define BEGIN_REGISTER_VP_SDNODE(SDID, LEGALARG, NAME, ...)                    \
@@ -749,9 +728,6 @@ void SDNode::print_details(raw_ostream &OS, const SelectionDAG *G) const {
 
   if (getFlags().hasNoFPExcept())
     OS << " nofpexcept";
-
-  if (getFlags().hasNoConvergent())
-    OS << " noconvergent";
 
   if (const MachineSDNode *MN = dyn_cast<MachineSDNode>(this)) {
     if (!MN->memoperands_empty()) {
@@ -953,9 +929,7 @@ void SDNode::print_details(raw_ostream &OS, const SelectionDAG *G) const {
     OS << ">";
   } else if (const MemSDNode *M = dyn_cast<MemSDNode>(this)) {
     OS << "<";
-    interleaveComma(M->memoperands(), OS, [&](const MachineMemOperand *MMO) {
-      printMemOperand(OS, *MMO, G);
-    });
+    printMemOperand(OS, *M->getMemOperand(), G);
     if (auto *A = dyn_cast<AtomicSDNode>(M))
       if (A->getOpcode() == ISD::ATOMIC_LOAD) {
         bool doExt = true;
@@ -1100,8 +1074,6 @@ static void DumpNodes(const SDNode *N, unsigned indent, const SelectionDAG *G) {
   dbgs().indent(indent);
   N->dump(G);
 }
-
-LLVM_DUMP_METHOD void SelectionDAG::dump() const { dump(false); }
 
 LLVM_DUMP_METHOD void SelectionDAG::dump(bool Sorted) const {
   dbgs() << "SelectionDAG has " << AllNodes.size() << " nodes:\n";
@@ -1265,6 +1237,4 @@ void SDNode::print(raw_ostream &OS, const SelectionDAG *G) const {
     OS << ", ";
     DL.print(OS);
   }
-  if (PrintSDNodeAddrs)
-    OS << " ; " << this;
 }

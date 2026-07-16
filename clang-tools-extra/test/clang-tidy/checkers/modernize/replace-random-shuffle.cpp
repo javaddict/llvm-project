@@ -1,5 +1,4 @@
 // RUN: %check_clang_tidy %s modernize-replace-random-shuffle %t
-#include <vector>
 
 //CHECK-FIXES: #include <random>
 
@@ -7,6 +6,13 @@ namespace std {
 template <typename T> struct vec_iterator {
   T *ptr;
   vec_iterator operator++(int);
+};
+
+template <typename T> struct vector {
+  typedef vec_iterator<T> iterator;
+
+  iterator begin();
+  iterator end();
 };
 
 template <typename FwIt>

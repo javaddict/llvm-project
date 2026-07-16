@@ -21,10 +21,10 @@ namespace llvm {
 
 class Function;
 
-class AddDiscriminatorsPass
-    : public RequiredPassInfoMixin<AddDiscriminatorsPass> {
+class AddDiscriminatorsPass : public PassInfoMixin<AddDiscriminatorsPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 
 } // end namespace llvm

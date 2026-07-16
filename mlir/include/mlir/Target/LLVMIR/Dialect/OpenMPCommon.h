@@ -24,14 +24,10 @@ namespace mlir {
 namespace LLVM {
 
 /// Create a constant string location from the MLIR Location information.
-/// When \p ForOffloadMap is true, the layout matches Clang's
-/// \c emitMappingInformation (first \c ';'-delimited field is the map name for
-/// \c libomptarget). When false, the layout matches \c ident_t (file then
-/// function name in the encoded string).
 llvm::Constant *createSourceLocStrFromLocation(Location loc,
                                                llvm::OpenMPIRBuilder &builder,
-                                               StringRef name, uint32_t &strLen,
-                                               bool ForOffloadMap = false);
+                                               StringRef name,
+                                               uint32_t &strLen);
 
 /// Create a constant string representing the mapping information extracted from
 /// the MLIR location information.

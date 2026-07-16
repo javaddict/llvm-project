@@ -27,7 +27,9 @@ class SIFixVGPRCopiesLegacy : public MachineFunctionPass {
 public:
   static char ID;
 
-  SIFixVGPRCopiesLegacy() : MachineFunctionPass(ID) {}
+  SIFixVGPRCopiesLegacy() : MachineFunctionPass(ID) {
+    initializeSIFixVGPRCopiesLegacyPass(*PassRegistry::getPassRegistry());
+  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesAll();

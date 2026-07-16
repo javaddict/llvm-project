@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/faddf128.h"
-#include "src/__support/math/faddf128.h"
+#include "src/__support/FPUtil/generic/add_sub.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(float, faddf128, (float128 x, float128 y)) {
-  return math::faddf128(x, y);
+  return fputil::generic::add<float>(x, y);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

@@ -1,5 +1,4 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -fblocks -pedantic %s
-// RUN: %clang_cc1 -fsyntax-only -verify -fblocks -pedantic %s -fexperimental-new-constant-interpreter
 // REQUIRES: LP64
 
 struct foo { int a, b; };

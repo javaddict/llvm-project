@@ -8,20 +8,22 @@
 
 #include "src/unistd/dup3.h"
 
-#include "src/__support/OSUtil/linux/syscall_wrappers/dup3.h"
+#include "src/__support/OSUtil/syscall.h" // For internal syscall function.
 #include "src/__support/common.h"
+
 #include "src/__support/libc_errno.h"
 #include "src/__support/macros/config.h"
+#include <sys/syscall.h> // For syscall numbers.
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(int, dup3, (int oldfd, int newfd, int flags)) {
-  ErrorOr<int> ret = linux_syscalls::dup3(oldfd, newfd, flags);
-  if (!ret) {
-    libc_errno = ret.error();
-    return -1;
-  }
-  return ret.value();
+  // If dup2 syscall is available, we make use of directly.
+  int ret = LIBC_NAMESPACE::syscall_impl<int>(SYS_dup3, oldfd, newfd, flags);
+  if (ret >= 0)
+    return ret;
+  libc_errno = -ret;
+  return -1;
 }
 
 } // namespace LIBC_NAMESPACE_DECL

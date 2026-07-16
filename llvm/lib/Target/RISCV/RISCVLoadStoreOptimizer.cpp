@@ -309,12 +309,12 @@ bool RISCVLoadStoreOpt::tryConvertToXqcilsmMultiLdSt(
     return false;
 
   unsigned NewOpc;
-  RegState StartRegState;
+  unsigned StartRegState;
   bool AddImplicitRegs = true;
 
   if (IsLoad) {
     NewOpc = RISCV::QC_LWMI;
-    StartRegState = RegState::Define;
+    StartRegState = static_cast<unsigned>(RegState::Define);
   } else {
     assert(SMode != StoreMode::Unknown &&
            "Group should be large enough to know the store mode");
@@ -357,9 +357,9 @@ bool RISCVLoadStoreOpt::tryConvertToXqcilsmMultiLdSt(
     // Add implicit operands for the additional registers.
     for (unsigned i = 1; i < Len; ++i) {
       Register R = StartReg + i;
-      RegState State;
+      unsigned State = 0;
       if (IsLoad)
-        State = RegState::ImplicitDefine;
+        State = static_cast<unsigned>(RegState::ImplicitDefine);
       else
         State = RegState::Implicit |
                 getKillRegState(Group[i]->getOperand(0).isKill());
@@ -425,8 +425,8 @@ bool RISCVLoadStoreOpt::tryConvertToXqcilsmLdStPair(
   Register NextReg = SecondOp0.getReg();
 
   unsigned XqciOpc;
-  RegState StartRegState;
-  RegState NextRegState = {};
+  unsigned StartRegState;
+  unsigned NextRegState = 0;
   bool AddNextReg = true;
 
   if (Opc == RISCV::LW) {
@@ -443,8 +443,8 @@ bool RISCVLoadStoreOpt::tryConvertToXqcilsmLdStPair(
       return false;
 
     XqciOpc = RISCV::QC_LWMI;
-    StartRegState = RegState::Define;
-    NextRegState = RegState::ImplicitDefine;
+    StartRegState = static_cast<unsigned>(RegState::Define);
+    NextRegState = static_cast<unsigned>(RegState::ImplicitDefine);
   } else {
     assert(Opc == RISCV::SW && "Expected a SW instruction");
     if (StartReg == NextReg) {
@@ -729,33 +729,24 @@ RISCVLoadStoreOpt::mergePairedInsns(MachineBasicBlock::iterator I,
     }
   }
 
-  // Remember the original position of the instruction we're moving so we can
-  // restore it if we fail to form a pair.
-  MachineBasicBlock::iterator OrigNext = std::next(DeletionPoint);
-
   MachineInstr *ToInsert = DeletionPoint->removeFromParent();
   MachineBasicBlock &MBB = *InsertionPoint->getParent();
-  MachineBasicBlock::iterator First, Second, Moved;
+  MachineBasicBlock::iterator First, Second;
 
   if (!InsertAfter) {
     First = MBB.insert(InsertionPoint, ToInsert);
     Second = InsertionPoint;
-    Moved = First;
   } else {
     Second = MBB.insertAfter(InsertionPoint, ToInsert);
     First = InsertionPoint;
-    Moved = Second;
   }
 
   if (tryConvertToLdStPair(First, Second)) {
     LLVM_DEBUG(dbgs() << "Pairing load/store:\n    ");
     LLVM_DEBUG(prev_nodbg(NextI, MBB.begin())->print(dbgs()));
   } else if (!STI->is64Bit() && STI->hasVendorXqcilsm()) {
-    // We were unable to form the pair, so move the instruction back to it's
-    // original place. Point NextI to the next non-debug instruction after the
-    // first instruction we had wanted to merge.
-    MachineInstr *MovedMI = Moved->removeFromParent();
-    MBB.insert(OrigNext, MovedMI);
+    // We were unable to form the pair, so use the next non-debug instruction
+    // after the first instruction we had wanted to merge.
     NextI = next_nodbg(I, E);
   }
 

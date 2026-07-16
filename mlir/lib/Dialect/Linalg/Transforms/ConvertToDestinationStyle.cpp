@@ -20,7 +20,6 @@
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
-#include "mlir/Dialect/Utils/StructuredOpsUtils.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/STLExtras.h"
@@ -97,12 +96,7 @@ static Operation *movePaddingToFillOrGenericOp(RewriterBase &rewriter,
   OpBuilder::InsertionGuard g(rewriter);
   RankedTensorType resultType = padOp.getResultType();
 
-  // Collect user/dialect attributes from the pad op to preserve on the newly
-  // created ops.
-  SmallVector<NamedAttribute> preservedAttrs =
-      getPrunedAttributeList(padOp, PadOp::getAttributeNames());
-
-  // Examine the yielded value to decide if a linalg.generic is needed or a
+  // Examine the yielded value to decide if a linalg.generic is neede or a
   // linalg.fill is sufficient.
   Value yieldedValue =
       cast<tensor::YieldOp>(padOp.getBody()->getTerminator()).getValue();
@@ -128,7 +122,6 @@ static Operation *movePaddingToFillOrGenericOp(RewriterBase &rewriter,
             ->getResult(0);
     auto fillOp = linalg::FillOp::create(rewriter, loc, ValueRange(fillValue),
                                          ValueRange(dest));
-    fillOp->setDiscardableAttrs(preservedAttrs);
     return fillOp;
   }
 
@@ -136,7 +129,6 @@ static Operation *movePaddingToFillOrGenericOp(RewriterBase &rewriter,
     // Padding with an invariant value.
     auto fillOp = linalg::FillOp::create(
         rewriter, loc, ValueRange(yieldedValue), ValueRange(dest));
-    fillOp->setDiscardableAttrs(preservedAttrs);
     return fillOp;
   }
 
@@ -149,7 +141,6 @@ static Operation *movePaddingToFillOrGenericOp(RewriterBase &rewriter,
       rewriter, loc, resultType, /*inputs=*/ValueRange(),
       /*outputs=*/ValueRange{dest}, /*indexingMaps=*/
       indexingMaps, iteratorTypes);
-  genericOp->setDiscardableAttrs(preservedAttrs);
   Block *body = rewriter.createBlock(&genericOp->getRegion(0), {},
                                      resultType.getElementType(), loc);
   rewriter.setInsertionPointToStart(body);

@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/ddivl.h"
-#include "src/__support/math/ddivl.h"
+#include "src/__support/FPUtil/generic/div.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(double, ddivl, (long double x, long double y)) {
-  return math::ddivl(x, y);
+  return fputil::generic::div<double>(x, y);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

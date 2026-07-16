@@ -2,15 +2,12 @@
 // RUN: mkdir -p %t
 // RUN: split-file %s %t
 //
-// RUN: %clang_cc1 -Wno-unused-value -std=c++20 -emit-pch -o %t/header.pch %t/header.h -x c++\
-// RUN:            -Wunsafe-buffer-usage -verify
-// RUN: %clang_cc1 -Wno-unused-value -Wunsafe-buffer-usage -std=c++20 -include-pch %t/header.pch -verify=with-fixit %t/main.cpp -fsafe-buffer-usage-suggestions
-// RUN: %clang_cc1 -Wno-unused-value -Wunsafe-buffer-usage -std=c++20 -include-pch %t/header.pch %t/main.cpp -verify
+// RUN: %clang_cc1 -Wno-unused-value -std=c++20 -emit-pch -o %t/header.pch %t/header.h -x c++
+// RUN: %clang_cc1 -Wno-unused-value -Wunsafe-buffer-usage -std=c++20 -include-pch %t/header.pch -verify %t/main.cpp
 
 //--- header.h
 int foo(int *p) {
-  return p[5];  // expected-warning{{unsafe buffer access}} \
-		   expected-note{{pass -fsafe-buffer-usage-suggestions to receive code hardening suggestions}}
+  return p[5];  // This will be warned
 }
 
 #pragma clang unsafe_buffer_usage begin
@@ -28,7 +25,5 @@ int bar(int *p) {
 
 
 //--- main.cpp
-// with-fixit-warning@header.h:1 {{'p' is an unsafe pointer used for buffer access}}
-// with-fixit-note@header.h:1 {{change type of 'p' to 'std::span' to preserve bounds information}}
-// with-fixit-note@header.h:2 {{used in buffer access here}}
-// expected-no-diagnostics
+// expected-warning@header.h:2 {{unsafe buffer access}}
+// expected-note@header.h:2 {{pass -fsafe-buffer-usage-suggestions to receive code hardening suggestions}}

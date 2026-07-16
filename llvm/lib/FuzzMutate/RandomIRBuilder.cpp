@@ -21,23 +21,11 @@
 using namespace llvm;
 using namespace fuzzerop;
 
-static DominatorTree getDomTree(Function &F) {
-  // Dominator tree construction requires that all blocks have terminators.
-  SmallVector<Instruction *> AddedInsts;
-  for (BasicBlock &BB : F)
-    if (!BB.hasTerminator())
-      AddedInsts.push_back(new UnreachableInst(F.getContext(), &BB));
-  DominatorTree DT(F);
-  for (Instruction *I : AddedInsts)
-    I->eraseFromParent();
-  return DT;
-}
-
 /// Return a vector of Blocks that dominates this block, excluding current
 /// block.
 static std::vector<BasicBlock *> getDominators(BasicBlock *BB) {
   std::vector<BasicBlock *> ret;
-  DominatorTree DT = getDomTree(*BB->getParent());
+  DominatorTree DT(*BB->getParent());
   DomTreeNode *Node = DT.getNode(BB);
   // It's possible that an orphan block is not in the dom tree. In that case we
   // just return nothing.
@@ -55,7 +43,7 @@ static std::vector<BasicBlock *> getDominators(BasicBlock *BB) {
 /// Return a vector of Blocks that is dominated by this block, excluding current
 /// block
 static std::vector<BasicBlock *> getDominatees(BasicBlock *BB) {
-  DominatorTree DT = getDomTree(*BB->getParent());
+  DominatorTree DT(*BB->getParent());
   std::vector<BasicBlock *> ret;
   DomTreeNode *Parent = DT.getNode(BB);
   // It's possible that an orphan block is not in the dom tree. In that case we
@@ -219,7 +207,7 @@ Value *RandomIRBuilder::findOrCreateSource(BasicBlock &BB,
       Module *M = BB.getParent()->getParent();
       auto [GV, DidCreate] = findOrCreateGlobalVariable(M, Srcs, Pred);
       Type *Ty = GV->getValueType();
-      InsertPosition IP = BB.hasTerminator()
+      InsertPosition IP = BB.getTerminator()
                               ? InsertPosition(BB.getFirstInsertionPt())
                               : InsertPosition(&BB);
       // Build a legal load and track new instructions in case a rollback is
@@ -292,7 +280,7 @@ Value *RandomIRBuilder::newSource(BasicBlock &BB, ArrayRef<Instruction *> Insts,
     Type *Ty = newSrc->getType();
     Function *F = BB.getParent();
     AllocaInst *Alloca = createStackMemory(F, Ty, newSrc);
-    if (BB.hasTerminator()) {
+    if (BB.getTerminator()) {
       newSrc = new LoadInst(Ty, Alloca, /*ArrLen,*/ "L",
                             BB.getTerminator()->getIterator());
     } else {
@@ -326,7 +314,7 @@ static bool isCompatibleReplacement(const Instruction *I, const Use &Operand,
   // Modify other operands, like switch case may accidently change case from
   // ConstantInt to a register, which is illegal.
   case Instruction::Switch:
-  case Instruction::CondBr:
+  case Instruction::Br:
     if (OperandNo >= 1)
       return false;
     break;
@@ -344,11 +332,6 @@ static bool isCompatibleReplacement(const Instruction *I, const Use &Operand,
       return false;
     return !Callee->hasParamAttribute(OperandNo, Attribute::ImmArg);
   }
-  case Instruction::CatchPad:
-    // Argument operand must be alloca or constant
-    if (!isa<Constant>(Replacement) && !isa<AllocaInst>(Replacement))
-      return false;
-    break;
   default:
     break;
   }

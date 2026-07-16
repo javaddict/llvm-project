@@ -130,7 +130,8 @@ static void CheckForPhysRegDependency(SDNode *Def, SDNode *User, unsigned Op,
   }
 
   if (PhysReg) {
-    const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
+    const TargetRegisterClass *RC =
+        TRI->getMinimalPhysRegClass(Reg, Def->getSimpleValueType(ResNo));
     Cost = RC->expensiveOrImpossibleToCopy() ? -1 : RC->getCopyCost();
   }
 }
@@ -328,7 +329,6 @@ void ScheduleDAGSDNodes::BuildSchedUnits() {
   unsigned NumNodes = 0;
   for (SDNode &NI : DAG->allnodes()) {
     NI.setNodeId(-1);
-    NI.setSchedulerWorklistVisited(false);
     ++NumNodes;
   }
 
@@ -343,19 +343,16 @@ void ScheduleDAGSDNodes::BuildSchedUnits() {
   SmallVector<SDNode*, 64> Worklist;
   SmallPtrSet<SDNode*, 32> Visited;
   Worklist.push_back(DAG->getRoot().getNode());
-  DAG->getRoot().getNode()->setSchedulerWorklistVisited(true);
+  Visited.insert(DAG->getRoot().getNode());
 
   SmallVector<SUnit*, 8> CallSUnits;
   while (!Worklist.empty()) {
     SDNode *NI = Worklist.pop_back_val();
 
     // Add all operands to the worklist unless they've already been added.
-    for (const SDValue &Op : NI->op_values()) {
-      if (Op.getNode()->getSchedulerWorklistVisited())
-        continue;
-      Op.getNode()->setSchedulerWorklistVisited(true);
-      Worklist.push_back(Op.getNode());
-    }
+    for (const SDValue &Op : NI->op_values())
+      if (Visited.insert(Op.getNode()).second)
+        Worklist.push_back(Op.getNode());
 
     if (isPassiveNode(NI))  // Leaf node, e.g. a TargetImmediate.
       continue;
@@ -812,7 +809,8 @@ EmitPhysRegCopy(SUnit *SU, SmallDenseMap<SUnit *, Register, 16> &VRBaseMap,
       continue; // ignore chain preds
     if (Pred.getSUnit()->CopyDstRC) {
       // Copy to physical register.
-      auto VRI = VRBaseMap.find(Pred.getSUnit());
+      DenseMap<SUnit *, Register>::iterator VRI =
+          VRBaseMap.find(Pred.getSUnit());
       assert(VRI != VRBaseMap.end() && "Node emitted out of order - late");
       // Find the destination physical register.
       Register Reg;

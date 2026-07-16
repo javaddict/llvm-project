@@ -11,7 +11,6 @@ import re
 import json
 
 
-@skipIfTargetDoesNotSupportSharedLibraries()
 class TestDAP_terminatedEvent(lldbdap_testcase.DAPTestCaseBase):
     @skipIfWindows
     def test_terminated_event(self):
@@ -43,7 +42,7 @@ class TestDAP_terminatedEvent(lldbdap_testcase.DAPTestCaseBase):
         )
         self.assertEqual(len(breakpoint_ids), len(functions), "expect one breakpoint")
         main_bp_line = line_number("main.cpp", "// main breakpoint 1")
-        breakpoint_ids.extend(
+        breakpoint_ids.append(
             self.set_source_breakpoints(
                 "main.cpp", [main_bp_line], wait_for_resolve=False
             )

@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/fminimum_magl.h"
-#include "src/__support/math/fminimum_magl.h"
+#include "src/__support/FPUtil/BasicOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(long double, fminimum_magl, (long double x, long double y)) {
-  return math::fminimum_magl(x, y);
+  return fputil::fminimum_mag(x, y);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

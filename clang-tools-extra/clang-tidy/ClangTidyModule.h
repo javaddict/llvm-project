@@ -28,12 +28,12 @@ class ClangTidyContext;
 class ClangTidyCheckFactories {
 public:
   using CheckFactory = std::function<std::unique_ptr<ClangTidyCheck>(
-      StringRef Name, ClangTidyContext *Context)>;
+      llvm::StringRef Name, ClangTidyContext *Context)>;
 
   /// Registers check \p Factory with name \p Name.
   ///
   /// For all checks that have default constructors, use \c registerCheck.
-  void registerCheckFactory(StringRef Name, CheckFactory Factory);
+  void registerCheckFactory(llvm::StringRef Name, CheckFactory Factory);
 
   /// Registers the \c CheckType with the name \p Name.
   ///
@@ -56,14 +56,14 @@ public:
   ///   }
   /// };
   /// \endcode
-  template <typename CheckType> void registerCheck(StringRef CheckName) {
+  template <typename CheckType> void registerCheck(llvm::StringRef CheckName) {
     registerCheckFactory(CheckName,
-                         [](StringRef Name, ClangTidyContext *Context) {
+                         [](llvm::StringRef Name, ClangTidyContext *Context) {
                            return std::make_unique<CheckType>(Name, Context);
                          });
   }
 
-  void eraseCheck(StringRef CheckName) { Factories.erase(CheckName); }
+  void eraseCheck(llvm::StringRef CheckName) { Factories.erase(CheckName); }
 
   /// Create instances of checks that are enabled.
   std::vector<std::unique_ptr<ClangTidyCheck>>

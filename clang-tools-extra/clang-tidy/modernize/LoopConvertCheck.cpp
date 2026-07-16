@@ -650,7 +650,7 @@ void LoopConvertCheck::doConversion(
 
       VarNameOrStructuredBinding.erase(VarNameOrStructuredBinding.size() - 2,
                                        2);
-      VarNameOrStructuredBinding += ']';
+      VarNameOrStructuredBinding += "]";
     } else {
       VarNameOrStructuredBinding = AliasVar->getName().str();
 
@@ -1074,7 +1074,7 @@ void LoopConvertCheck::check(const MatchFinder::MatchResult &Result) {
                Finder.aliasFromForInit(), Loop, Descriptor);
 }
 
-StringRef LoopConvertCheck::getReverseFunction() const {
+llvm::StringRef LoopConvertCheck::getReverseFunction() const {
   if (!ReverseFunction.empty())
     return ReverseFunction;
   if (UseReverseRanges)
@@ -1082,7 +1082,7 @@ StringRef LoopConvertCheck::getReverseFunction() const {
   return "";
 }
 
-StringRef LoopConvertCheck::getReverseHeader() const {
+llvm::StringRef LoopConvertCheck::getReverseHeader() const {
   if (!ReverseHeader.empty())
     return ReverseHeader;
   if (UseReverseRanges && ReverseFunction.empty())

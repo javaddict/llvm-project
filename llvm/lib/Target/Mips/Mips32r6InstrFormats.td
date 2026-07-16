@@ -29,7 +29,7 @@ class MipsR6Arch<string opstr> {
   string BaseOpcode = opstr;
 }
 
-class MipsR6Inst : MipsInst<(outs), (ins), "", [], FrmOther> {
+class MipsR6Inst : MipsInst<(outs), (ins), "", [], NoItinerary, FrmOther> {
   let DecoderNamespace = "Mips32r6_64r6";
   let EncodingPredicates = [HasStdEnc];
 }

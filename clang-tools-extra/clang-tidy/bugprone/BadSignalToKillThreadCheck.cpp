@@ -32,22 +32,15 @@ void BadSignalToKillThreadCheck::check(const MatchFinder::MatchResult &Result) {
     return KeyValue.first->getName() == "SIGTERM" &&
            KeyValue.first->hasMacroDefinition();
   };
-  const auto Macros = PP->macros();
   const auto TryExpandAsInteger =
-      [&](Preprocessor::macro_iterator It) -> std::optional<unsigned> {
-    if (It == Macros.end())
+      [](Preprocessor::macro_iterator It) -> std::optional<unsigned> {
+    if (It == PP->macro_end())
       return std::nullopt;
     const MacroInfo *MI = PP->getMacroInfo(It->first);
     const Token &T = MI->tokens().back();
-
-    if (!T.isLiteral())
+    if (!T.isLiteral() || !T.getLiteralData())
       return std::nullopt;
-
-    SmallVector<char> Buffer;
-    bool Invalid = false;
-    const StringRef ValueStr = PP->getSpelling(T, Buffer, &Invalid);
-    if (Invalid)
-      return std::nullopt;
+    const StringRef ValueStr = StringRef(T.getLiteralData(), T.getLength());
 
     llvm::APInt IntValue;
     constexpr unsigned AutoSenseRadix = 0;
@@ -56,7 +49,7 @@ void BadSignalToKillThreadCheck::check(const MatchFinder::MatchResult &Result) {
     return IntValue.getZExtValue();
   };
 
-  const auto SigtermMacro = llvm::find_if(Macros, IsSigterm);
+  const auto SigtermMacro = llvm::find_if(PP->macros(), IsSigterm);
 
   if (!SigtermValue && !(SigtermValue = TryExpandAsInteger(SigtermMacro)))
     return;

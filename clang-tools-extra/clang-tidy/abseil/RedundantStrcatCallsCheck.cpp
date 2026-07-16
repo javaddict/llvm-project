@@ -61,9 +61,9 @@ static void removeCallLeaveArgs(const CallExpr *Call,
           Call->getRParenLoc(), Call->getEndLoc().getLocWithOffset(1))));
 }
 
-static const CallExpr *processArgument(const Expr *Arg,
-                                       const MatchFinder::MatchResult &Result,
-                                       StrCatCheckResult *CheckResult) {
+static const clang::CallExpr *
+processArgument(const Expr *Arg, const MatchFinder::MatchResult &Result,
+                StrCatCheckResult *CheckResult) {
   const auto IsAlphanum = hasDeclaration(cxxMethodDecl(hasName("AlphaNum")));
   static const auto *const Strcat = new auto(hasName("::absl::StrCat"));
   const auto IsStrcat = cxxBindTemporaryExpr(
@@ -89,15 +89,17 @@ static StrCatCheckResult processCall(const CallExpr *RootCall, bool IsAppend,
   while (!CallsToProcess.empty()) {
     ++CheckResult.NumCalls;
 
-    const CallExpr *Call = CallsToProcess.front();
+    const CallExpr *CallExpr = CallsToProcess.front();
     CallsToProcess.pop_front();
 
-    int StartArg = Call == RootCall && IsAppend;
-    for (const auto *Arg : Call->arguments()) {
+    int StartArg = CallExpr == RootCall && IsAppend;
+    for (const auto *Arg : CallExpr->arguments()) {
       if (StartArg-- > 0)
         continue;
-      if (const CallExpr *Sub = processArgument(Arg, Result, &CheckResult))
+      if (const clang::CallExpr *Sub =
+              processArgument(Arg, Result, &CheckResult)) {
         CallsToProcess.push_back(Sub);
+      }
     }
   }
   return CheckResult;

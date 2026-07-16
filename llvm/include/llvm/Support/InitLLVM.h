@@ -36,13 +36,10 @@ namespace llvm {
 class InitLLVM {
 public:
   LLVM_ABI InitLLVM(int &Argc, const char **&Argv,
-                    bool InstallPipeSignalExitHandler = true,
-                    bool NeedsPOSIXUtilitySignalHandling = false);
-  InitLLVM(int &Argc, char **&Argv, bool InstallPipeSignalExitHandler = true,
-           bool NeedsPOSIXUtilitySignalHandling = false)
+                    bool InstallPipeSignalExitHandler = true);
+  InitLLVM(int &Argc, char **&Argv, bool InstallPipeSignalExitHandler = true)
       : InitLLVM(Argc, const_cast<const char **&>(Argv),
-                 InstallPipeSignalExitHandler,
-                 NeedsPOSIXUtilitySignalHandling) {}
+                 InstallPipeSignalExitHandler) {}
 
   LLVM_ABI ~InitLLVM();
 

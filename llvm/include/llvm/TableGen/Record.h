@@ -968,7 +968,6 @@ public:
     FIND,
     SETDAGARG,
     SETDAGNAME,
-    SORT,
   };
 
 private:
@@ -1212,9 +1211,7 @@ public:
 
   const Init *resolveReferences(Resolver &R) const override;
 
-  const Init *getBit(unsigned Bit) const override {
-    llvm_unreachable("Illegal bit reference off !instances");
-  }
+  const Init *getBit(unsigned Bit) const override;
 
   std::string getAsString() const override;
 };

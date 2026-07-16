@@ -10,7 +10,6 @@
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Interfaces/ValueBoundsOpInterface.h"
-#include "llvm/ADT/SmallVectorExtras.h"
 
 using namespace mlir;
 using namespace mlir::affine;
@@ -60,10 +59,10 @@ struct AffineMinOpInterface
 
     // Align affine map results with dims/symbols in the constraint set.
     for (AffineExpr expr : minOp.getAffineMap().getResults()) {
-      SmallVector<AffineExpr> dimReplacements = llvm::map_to_vector(
-          minOp.getDimOperands(), [&](Value v) { return cstr.getExpr(v); });
-      SmallVector<AffineExpr> symReplacements = llvm::map_to_vector(
-          minOp.getSymbolOperands(), [&](Value v) { return cstr.getExpr(v); });
+      SmallVector<AffineExpr> dimReplacements = llvm::to_vector(llvm::map_range(
+          minOp.getDimOperands(), [&](Value v) { return cstr.getExpr(v); }));
+      SmallVector<AffineExpr> symReplacements = llvm::to_vector(llvm::map_range(
+          minOp.getSymbolOperands(), [&](Value v) { return cstr.getExpr(v); }));
       AffineExpr bound =
           expr.replaceDimsAndSymbols(dimReplacements, symReplacements);
       cstr.bound(value) <= bound;
@@ -81,10 +80,10 @@ struct AffineMaxOpInterface
 
     // Align affine map results with dims/symbols in the constraint set.
     for (AffineExpr expr : maxOp.getAffineMap().getResults()) {
-      SmallVector<AffineExpr> dimReplacements = llvm::map_to_vector(
-          maxOp.getDimOperands(), [&](Value v) { return cstr.getExpr(v); });
-      SmallVector<AffineExpr> symReplacements = llvm::map_to_vector(
-          maxOp.getSymbolOperands(), [&](Value v) { return cstr.getExpr(v); });
+      SmallVector<AffineExpr> dimReplacements = llvm::to_vector(llvm::map_range(
+          maxOp.getDimOperands(), [&](Value v) { return cstr.getExpr(v); }));
+      SmallVector<AffineExpr> symReplacements = llvm::to_vector(llvm::map_range(
+          maxOp.getSymbolOperands(), [&](Value v) { return cstr.getExpr(v); }));
       AffineExpr bound =
           expr.replaceDimsAndSymbols(dimReplacements, symReplacements);
       cstr.bound(value) >= bound;

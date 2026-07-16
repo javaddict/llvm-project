@@ -826,23 +826,20 @@ void ExternalFileUnit::HitEndOnRead(IoErrorHandler &handler) {
 }
 
 ChildIo &ExternalFileUnit::PushChildIo(IoStatementState &parent) {
-  ChildIo *current{child_};
+  OwningPtr<ChildIo> current{std::move(child_)};
   Terminator &terminator{parent.GetIoErrorHandler()};
-  child_ = new (AllocateMemoryOrCrash(terminator, sizeof(ChildIo)))
-      ChildIo{parent, current};
+  OwningPtr<ChildIo> next{New<ChildIo>{terminator}(parent, std::move(current))};
+  child_.reset(next.release());
   leftTabLimit = positionInRecord;
   return *child_;
 }
 
 void ExternalFileUnit::PopChildIo(ChildIo &child) {
-  ChildIo *previous = child.AcquirePrevious();
-  if (child_ != &child) {
+  if (child_.get() != &child) {
     child.parent().GetIoErrorHandler().Crash(
         "ChildIo being popped is not top of stack");
   }
-  child_->~ChildIo(); // delete top child
-  FreeMemory(child_);
-  child_ = previous;
+  child_.reset(child.AcquirePrevious().release()); // deletes top child
 }
 
 std::uint32_t ExternalFileUnit::ReadHeaderOrFooter(std::int64_t frameOffset) {

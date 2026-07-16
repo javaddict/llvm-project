@@ -13,10 +13,11 @@
 
 namespace llvm {
 
-class FEntryInserterPass : public RequiredPassInfoMixin<FEntryInserterPass> {
+class FEntryInserterPass : public PassInfoMixin<FEntryInserterPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

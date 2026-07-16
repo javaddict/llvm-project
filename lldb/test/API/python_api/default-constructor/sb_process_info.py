@@ -19,5 +19,3 @@ def fuzz_obj(obj):
     obj.EffectiveUserIDIsValid()
     obj.EffectiveGroupIDIsValid()
     obj.GetParentProcessID()
-    obj.GetNumArguments()
-    obj.GetArgumentAtIndex(100)

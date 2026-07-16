@@ -16,7 +16,6 @@
 
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/PassManager.h"
-#include "llvm/Support/Compiler.h"
 
 namespace llvm {
 
@@ -42,7 +41,7 @@ class TargetLibraryInfo;
 class TypeSize;
 class Value;
 
-class MemCpyOptPass : public OptionalPassInfoMixin<MemCpyOptPass> {
+class MemCpyOptPass : public PassInfoMixin<MemCpyOptPass> {
   TargetLibraryInfo *TLI = nullptr;
   AAResults *AA = nullptr;
   AssumptionCache *AC = nullptr;
@@ -55,13 +54,15 @@ class MemCpyOptPass : public OptionalPassInfoMixin<MemCpyOptPass> {
 public:
   MemCpyOptPass() = default;
 
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 
-private:
-  // Helper functions
+  // Glue for the old PM.
   bool runImpl(Function &F, TargetLibraryInfo *TLI, AAResults *AA,
                AssumptionCache *AC, DominatorTree *DT, PostDominatorTree *PDT,
                MemorySSA *MSSA);
+
+private:
+  // Helper functions
   bool processStore(StoreInst *SI, BasicBlock::iterator &BBI);
   bool processStoreOfLoad(StoreInst *SI, LoadInst *LI, const DataLayout &DL,
                           BasicBlock::iterator &BBI);
@@ -84,8 +85,8 @@ private:
                                     Value *ByteVal);
   bool moveUp(StoreInst *SI, Instruction *P, const LoadInst *LI);
   bool performStackMoveOptzn(Instruction *Load, Instruction *Store,
-                             Value *DestPtr, Value *SrcPtr, TypeSize Size,
-                             BatchAAResults &BAA);
+                             AllocaInst *DestAlloca, AllocaInst *SrcAlloca,
+                             TypeSize Size, BatchAAResults &BAA);
   bool isMemMoveMemSetDependency(MemMoveInst *M);
 
   void eraseInstruction(Instruction *I);

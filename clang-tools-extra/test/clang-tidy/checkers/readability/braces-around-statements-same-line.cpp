@@ -2,10 +2,6 @@
 
 void do_something(const char *) {}
 
-#define BAD_MACRO(x) \
-  do_something(x);   \
-  do_something(x)
-
 bool cond(const char *) {
   return false;
 }
@@ -37,8 +33,4 @@ void test() {
   // CHECK-MESSAGES: :[[@LINE-7]]:31: warning: statement should be inside braces
   // CHECK-FIXES: if (cond("if4") /*comment*/) {
   // CHECK-FIXES: }
-
-  if (cond("macro"))
-    BAD_MACRO("macro");
-  // CHECK-MESSAGES: :[[@LINE-2]]:21: warning: statement should be inside braces
 }

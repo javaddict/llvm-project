@@ -118,7 +118,7 @@ struct GlobalStoreOpInterface
 
   bool bufferizesToMemoryRead(Operation *, OpOperand &,
                               const AnalysisState &) const {
-    return true;
+    return false;
   }
 
   bool bufferizesToMemoryWrite(Operation *, OpOperand &,

@@ -25,7 +25,7 @@ class Module;
 class MLInlineAdvice;
 class ProfileSummaryInfo;
 
-class LLVM_ABI MLInlineAdvisor : public InlineAdvisor {
+class MLInlineAdvisor : public InlineAdvisor {
 public:
   MLInlineAdvisor(Module &M, ModuleAnalysisManager &MAM,
                   std::function<std::unique_ptr<MLModelRunner>(
@@ -101,7 +101,7 @@ private:
 
 /// InlineAdvice that tracks changes post inlining. For that reason, it only
 /// overrides the "successful inlining" extension points.
-class LLVM_ABI MLInlineAdvice : public InlineAdvice {
+class MLInlineAdvice : public InlineAdvice {
 public:
   MLInlineAdvice(MLInlineAdvisor *Advisor, CallBase &CB,
                  OptimizationRemarkEmitter &ORE, bool Recommendation);

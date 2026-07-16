@@ -77,9 +77,7 @@ void DynamicLoaderHexagonDYLD::Initialize() {
                                 GetPluginDescriptionStatic(), CreateInstance);
 }
 
-void DynamicLoaderHexagonDYLD::Terminate() {
-  PluginManager::UnregisterPlugin(CreateInstance);
-}
+void DynamicLoaderHexagonDYLD::Terminate() {}
 
 llvm::StringRef DynamicLoaderHexagonDYLD::GetPluginDescriptionStatic() {
   return "Dynamic loader plug-in that watches for shared library "
@@ -289,7 +287,7 @@ bool DynamicLoaderHexagonDYLD::SetRendezvousBreakpoint() {
 
     // Make sure our breakpoint is at the right address.
     assert(target.GetBreakpointByID(m_dyld_bid)
-               ->FindLocationByAddress(Address(break_addr))
+               ->FindLocationByAddress(break_addr)
                ->GetBreakpoint()
                .GetID() == m_dyld_bid);
 
@@ -364,11 +362,13 @@ void DynamicLoaderHexagonDYLD::RefreshModules() {
         new_modules.Append(module_sp);
       }
 
-      LLDB_LOGF(log, "Target is loading '%s'", I->path.c_str());
-      if (!module_sp.get())
-        LLDB_LOGF(log, "LLDB failed to load '%s'", I->path.c_str());
-      else
-        LLDB_LOGF(log, "LLDB successfully loaded '%s'", I->path.c_str());
+      if (log) {
+        LLDB_LOGF(log, "Target is loading '%s'", I->path.c_str());
+        if (!module_sp.get())
+          LLDB_LOGF(log, "LLDB failed to load '%s'", I->path.c_str());
+        else
+          LLDB_LOGF(log, "LLDB successfully loaded '%s'", I->path.c_str());
+      }
     }
     m_process->GetTarget().ModulesDidLoad(new_modules);
   }
@@ -405,7 +405,7 @@ DynamicLoaderHexagonDYLD::GetStepThroughTrampolinePlan(Thread &thread,
 
   StackFrame *frame = thread.GetStackFrameAtIndex(0).get();
   const SymbolContext &context = frame->GetSymbolContext(eSymbolContextSymbol);
-  const Symbol *sym = context.symbol;
+  Symbol *sym = context.symbol;
 
   if (sym == nullptr || !sym->IsTrampoline())
     return thread_plan_sp;

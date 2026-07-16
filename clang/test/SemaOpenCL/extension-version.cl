@@ -27,11 +27,6 @@
 #endif
 #pragma OPENCL EXTENSION __cl_clang_variadic_functions : enable
 
-#ifndef __cl_clang_function_scope_local_variables
-#error "Missing __cl_clang_function_scope_local_variables define"
-#endif
-#pragma OPENCL EXTENSION __cl_clang_function_scope_local_variables : enable
-
 #ifndef cl_khr_fp16
 #error "Missing cl_khr_fp16 define"
 #endif
@@ -107,7 +102,7 @@
 // expected-warning@-2{{OpenCL extension 'cl_khr_3d_image_writes' is core feature or supported optional core feature - ignoring}}
 #endif
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 110)
 #ifndef cles_khr_int64
 #error "Missing cles_khr_int64 define"
 #endif
@@ -116,7 +111,7 @@
 #endif
 #pragma OPENCL EXTENSION cles_khr_int64 : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 100)
 #ifndef cl_khr_gl_msaa_sharing
 #error "Missing cl_khr_gl_msaa_sharing define"
 #endif
@@ -125,7 +120,7 @@
 #endif
 #pragma OPENCL EXTENSION cl_khr_gl_msaa_sharing : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_mipmap_image
 #error "Missing cl_khr_mipmap_image define"
 #endif
@@ -137,7 +132,7 @@
 #endif
 #pragma OPENCL EXTENSION cl_khr_mipmap_image : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_mipmap_image_writes
 #error "Missing cl_khr_mipmap_image_writes define"
 #endif
@@ -149,7 +144,7 @@
 #endif
 #pragma OPENCL EXTENSION cl_khr_mipmap_image_writes : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_srgb_image_writes
 #error "Missing cl_khr_srgb_image_writes define"
 #endif
@@ -158,7 +153,7 @@
 #endif
 #pragma OPENCL EXTENSION cl_khr_srgb_image_writes : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_subgroups
 #error "Missing cl_khr_subgroups define"
 #endif
@@ -170,7 +165,7 @@
 #endif
 #pragma OPENCL EXTENSION cl_khr_subgroups : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_ext_float_atomics
 #error "Missing cl_ext_float_atomics define"
 #endif
@@ -182,7 +177,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_ext_float_atomics' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_ext_float_atomics : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_extended_bit_ops
 #error "Missing cl_khr_extended_bit_ops define"
 #endif
@@ -194,7 +189,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_khr_extended_bit_ops' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_khr_extended_bit_ops : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_integer_dot_product
 #error "Missing cl_khr_integer_dot_product define"
 #endif
@@ -206,7 +201,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_khr_integer_dot_product' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_khr_integer_dot_product : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_kernel_clock
 #error "Missing cl_khr_kernel_clock define"
 #endif
@@ -218,7 +213,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_khr_kernel_clock' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_khr_kernel_clock : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_subgroup_ballot
 #error "Missing cl_khr_subgroup_ballot define"
 #endif
@@ -230,7 +225,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_khr_subgroup_ballot' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_khr_subgroup_ballot : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_subgroup_clustered_reduce
 #error "Missing cl_khr_subgroup_clustered_reduce define"
 #endif
@@ -242,7 +237,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_khr_subgroup_clustered_reduce' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_khr_subgroup_clustered_reduce : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_subgroup_extended_types
 #error "Missing cl_khr_subgroup_extended_types define"
 #endif
@@ -254,7 +249,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_khr_subgroup_extended_types' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_khr_subgroup_extended_types : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_subgroup_named_barrier
 #error "Missing cl_khr_subgroup_named_barrier define"
 #endif
@@ -266,7 +261,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_khr_subgroup_named_barrier' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_khr_subgroup_named_barrier : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_subgroup_non_uniform_arithmetic
 #error "Missing cl_khr_subgroup_non_uniform_arithmetic define"
 #endif
@@ -278,7 +273,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_khr_subgroup_non_uniform_arithmetic' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_khr_subgroup_non_uniform_arithmetic : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_subgroup_non_uniform_vote
 #error "Missing cl_khr_subgroup_non_uniform_vote define"
 #endif
@@ -290,7 +285,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_khr_subgroup_non_uniform_vote' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_khr_subgroup_non_uniform_vote : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_subgroup_rotate
 #error "Missing cl_khr_subgroup_rotate define"
 #endif
@@ -302,7 +297,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_khr_subgroup_rotate' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_khr_subgroup_rotate : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_subgroup_shuffle_relative
 #error "Missing cl_khr_subgroup_shuffle_relative define"
 #endif
@@ -314,7 +309,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_khr_subgroup_shuffle_relative' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_khr_subgroup_shuffle_relative : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_khr_subgroup_shuffle
 #error "Missing cl_khr_subgroup_shuffle define"
 #endif
@@ -336,7 +331,7 @@
 #endif
 #pragma OPENCL EXTENSION cl_amd_media_ops2 : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 120)
 #ifndef cl_khr_depth_images
 #error "Missing cl_khr_depth_images define"
 #endif
@@ -348,7 +343,7 @@
 #endif
 #pragma OPENCL EXTENSION cl_khr_depth_images : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 100)
 #ifndef cl_intel_bfloat16_conversions
 #error "Missing cl_intel_bfloat16_conversions define"
 #endif
@@ -360,7 +355,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_intel_bfloat16_conversions' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_intel_bfloat16_conversions : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 200)
 #ifndef cl_intel_required_subgroup_size
 #error "Missing cl_intel_required_subgroup_size define"
 #endif
@@ -372,19 +367,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_intel_required_subgroup_size' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_intel_required_subgroup_size : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
-#ifndef cl_intel_split_work_group_barrier
-#error "Missing cl_intel_split_work_group_barrier define"
-#endif
-#else
-#ifdef cl_intel_split_work_group_barrier
-#error "Incorrect cl_intel_split_work_group_barrier define"
-#endif
-#endif
-// expected-warning@+1{{OpenCL extension 'cl_intel_split_work_group_barrier' unknown or does not require pragma - ignoring}}
-#pragma OPENCL EXTENSION cl_intel_split_work_group_barrier : enable
-
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 120)
 #ifndef cl_intel_subgroups
 #error "Missing cl_intel_subgroups define"
 #endif
@@ -396,7 +379,7 @@
 #endif
 #pragma OPENCL EXTENSION cl_intel_subgroups : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 120)
 #ifndef cl_intel_subgroups_char
 #error "Missing cl_intel_subgroups_char define"
 #endif
@@ -408,7 +391,7 @@
 #endif
 #pragma OPENCL EXTENSION cl_intel_subgroups_char : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 120)
 #ifndef cl_intel_subgroups_long
 #error "Missing cl_intel_subgroups_long define"
 #endif
@@ -420,7 +403,7 @@
 #endif
 #pragma OPENCL EXTENSION cl_intel_subgroups_long : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 120)
 #ifndef cl_intel_subgroups_short
 #error "Missing cl_intel_subgroups_short define"
 #endif
@@ -432,7 +415,7 @@
 #endif
 #pragma OPENCL EXTENSION cl_intel_subgroups_short : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 120)
 #ifndef cl_intel_subgroup_buffer_prefetch
 #error "Missing cl_intel_subgroup_buffer_prefetch define"
 #endif
@@ -444,7 +427,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_intel_subgroup_buffer_prefetch' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_intel_subgroup_buffer_prefetch : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 120)
 #ifndef cl_intel_subgroup_local_block_io
 #error "Missing cl_intel_subgroup_local_block_io define"
 #endif
@@ -456,7 +439,7 @@
 // expected-warning@+1{{OpenCL extension 'cl_intel_subgroup_local_block_io' unknown or does not require pragma - ignoring}}
 #pragma OPENCL EXTENSION cl_intel_subgroup_local_block_io : enable
 
-#if (defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__))
+#if (defined(__OPENCL_CPP_VERSION__) || __OPENCL_C_VERSION__ >= 120)
 #ifndef cl_intel_device_side_avc_motion_estimation
 #error "Missing cl_intel_device_side_avc_motion_estimation define"
 #endif

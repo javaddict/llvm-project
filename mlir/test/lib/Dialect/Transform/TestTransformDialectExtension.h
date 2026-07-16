@@ -28,9 +28,6 @@ class DialectRegistry;
 #define GET_TYPEDEF_CLASSES
 #include "TestTransformDialectExtensionTypes.h.inc"
 
-#define GET_ATTRDEF_CLASSES
-#include "TestTransformDialectExtensionAttrs.h.inc"
-
 #define GET_OP_CLASSES
 #include "TestTransformDialectExtension.h.inc"
 

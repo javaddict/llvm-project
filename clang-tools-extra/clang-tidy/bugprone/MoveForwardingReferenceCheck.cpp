@@ -13,14 +13,6 @@ using namespace clang::ast_matchers;
 
 namespace clang::tidy::bugprone {
 
-namespace {
-
-AST_MATCHER(DeclRefExpr, refersToEnclosingVariableOrCapture) {
-  return Node.refersToEnclosingVariableOrCapture();
-}
-
-} // namespace
-
 static void replaceMoveWithForward(const UnresolvedLookupExpr *Callee,
                                    const ParmVarDecl *ParmVar,
                                    const TemplateTypeParmDecl *TypeParmDecl,
@@ -88,15 +80,13 @@ void MoveForwardingReferenceCheck::registerMatchers(MatchFinder *Finder) {
           .bind("parm-var");
 
   Finder->addMatcher(
-      callExpr(
-          callee(unresolvedLookupExpr(
-                     hasAnyDeclaration(
-                         namedDecl(hasUnderlyingDecl(hasName("::std::move")))))
-                     .bind("lookup")),
-          argumentCountIs(1),
-          hasArgument(0, ignoringParenImpCasts(declRefExpr(
-                             to(ForwardingReferenceParmMatcher),
-                             unless(refersToEnclosingVariableOrCapture())))))
+      callExpr(callee(unresolvedLookupExpr(
+                          hasAnyDeclaration(namedDecl(
+                              hasUnderlyingDecl(hasName("::std::move")))))
+                          .bind("lookup")),
+               argumentCountIs(1),
+               hasArgument(0, ignoringParenImpCasts(declRefExpr(
+                                  to(ForwardingReferenceParmMatcher)))))
           .bind("call-move"),
       this);
 }

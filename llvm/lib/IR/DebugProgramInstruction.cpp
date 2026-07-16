@@ -145,8 +145,8 @@ DbgRecord::createDebugIntrinsic(Module *M, Instruction *InsertBefore) const {
   llvm_unreachable("unsupported DbgRecord kind");
 }
 
-DbgLabelRecord::DbgLabelRecord(MDNode *Label)
-    : DbgRecord(LabelKind, DebugLoc()), Label(Label) {
+DbgLabelRecord::DbgLabelRecord(MDNode *Label, MDNode *DL)
+    : DbgRecord(LabelKind, DebugLoc(DL)), Label(Label) {
   assert(Label && "Unexpected nullptr");
   assert((isa<DILabel>(Label) || Label->isTemporary()) &&
          "Label type must be or resolve to a DILabel");
@@ -156,25 +156,26 @@ DbgLabelRecord::DbgLabelRecord(DILabel *Label, DebugLoc DL)
   assert(Label && "Unexpected nullptr");
 }
 
-DbgLabelRecord *DbgLabelRecord::createUnresolvedDbgLabelRecord(MDNode *Label) {
-  return new DbgLabelRecord(Label);
+DbgLabelRecord *DbgLabelRecord::createUnresolvedDbgLabelRecord(MDNode *Label,
+                                                               MDNode *DL) {
+  return new DbgLabelRecord(Label, DL);
 }
 
 DbgVariableRecord::DbgVariableRecord(DbgVariableRecord::LocationType Type,
                                      Metadata *Val, MDNode *Variable,
                                      MDNode *Expression, MDNode *AssignID,
                                      Metadata *Address,
-                                     MDNode *AddressExpression)
-    : DbgRecord(ValueKind, DebugLoc()),
+                                     MDNode *AddressExpression, MDNode *DI)
+    : DbgRecord(ValueKind, DebugLoc(DI)),
       DebugValueUser({Val, Address, AssignID}), Type(Type), Variable(Variable),
       Expression(Expression), AddressExpression(AddressExpression) {}
 
 DbgVariableRecord *DbgVariableRecord::createUnresolvedDbgVariableRecord(
     DbgVariableRecord::LocationType Type, Metadata *Val, MDNode *Variable,
     MDNode *Expression, MDNode *AssignID, Metadata *Address,
-    MDNode *AddressExpression) {
+    MDNode *AddressExpression, MDNode *DI) {
   return new DbgVariableRecord(Type, Val, Variable, Expression, AssignID,
-                               Address, AddressExpression);
+                               Address, AddressExpression, DI);
 }
 
 DbgVariableRecord *

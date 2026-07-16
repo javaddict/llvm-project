@@ -688,7 +688,7 @@ void SourcePrinter::printSourceLine(formatted_raw_ostream &OS,
     printLines(OS, Address, LineInfo, Delimiter, LEP);
   if (PrintSource)
     printSources(OS, LineInfo, ObjectFilename, Delimiter, LEP);
-  OldLineInfo = std::move(LineInfo);
+  OldLineInfo = LineInfo;
 }
 
 void SourcePrinter::printLines(formatted_raw_ostream &OS,

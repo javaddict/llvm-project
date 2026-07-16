@@ -48,7 +48,6 @@
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Registry.h"
-#include "llvm/Support/TrailingObjects.h"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -135,40 +134,6 @@ struct CXXStandardLibraryVersionInfo {
   enum Library { Unknown, LibStdCXX };
   Library Lib;
   std::uint64_t Version;
-};
-
-class ModuleNameLoc final
-    : llvm::TrailingObjects<ModuleNameLoc, IdentifierLoc> {
-  friend TrailingObjects;
-  unsigned NumIdentifierLocs;
-  unsigned numTrailingObjects(OverloadToken<IdentifierLoc>) const {
-    return getNumIdentifierLocs();
-  }
-
-  ModuleNameLoc(ModuleIdPath Path) : NumIdentifierLocs(Path.size()) {
-    (void)llvm::copy(Path, getTrailingObjectsNonStrict<IdentifierLoc>());
-  }
-
-public:
-  static ModuleNameLoc *Create(Preprocessor &PP, ModuleIdPath Path);
-  unsigned getNumIdentifierLocs() const { return NumIdentifierLocs; }
-  ModuleIdPath getModuleIdPath() const {
-    return {getTrailingObjectsNonStrict<IdentifierLoc>(),
-            getNumIdentifierLocs()};
-  }
-
-  SourceLocation getBeginLoc() const {
-    return getModuleIdPath().front().getLoc();
-  }
-  SourceLocation getEndLoc() const {
-    auto &Last = getModuleIdPath().back();
-    return Last.getLoc().getLocWithOffset(
-        Last.getIdentifierInfo()->getLength());
-  }
-  SourceRange getRange() const { return {getBeginLoc(), getEndLoc()}; }
-  std::string str() const {
-    return ModuleLoader::getFlatNameFromPath(getModuleIdPath());
-  }
 };
 
 /// Engages in a tight little dance with the lexer to efficiently
@@ -374,18 +339,17 @@ private:
   /// lexed, if any.
   SourceLocation ModuleImportLoc;
 
-  /// The source location of the \c module contextual keyword we just
-  /// lexed, if any.
-  SourceLocation ModuleDeclLoc;
+  /// The import path for named module that we're currently processing.
+  SmallVector<IdentifierLoc, 2> NamedModuleImportPath;
 
   llvm::DenseMap<FileID, SmallVector<const char *>> CheckPoints;
   unsigned CheckPointCounter = 0;
 
-  /// Whether we're importing a standard C++20 named Modules.
-  bool ImportingCXXNamedModules = false;
+  /// Whether the import is an `@import` or a standard c++ modules import.
+  bool IsAtImport = false;
 
-  /// Whether the last token we lexed was an 'export' keyword.
-  Token LastExportKeyword;
+  /// Whether the last token we lexed was an '@'.
+  bool LastTokenWasAt = false;
 
   /// First pp-token source location in current translation unit.
   SourceLocation FirstPPTokenLoc;
@@ -598,9 +562,9 @@ private:
         reset();
     }
 
-    void handleModuleName(ModuleNameLoc *NameLoc) {
-      if (isModuleCandidate() && NameLoc)
-        Name += NameLoc->str();
+    void handleIdentifier(IdentifierInfo *Identifier) {
+      if (isModuleCandidate() && Identifier)
+        Name += Identifier->getName().str();
       else if (!isNamedModule())
         reset();
     }
@@ -608,6 +572,13 @@ private:
     void handleColon() {
       if (isModuleCandidate())
         Name += ":";
+      else if (!isNamedModule())
+        reset();
+    }
+
+    void handlePeriod() {
+      if (isModuleCandidate())
+        Name += ".";
       else if (!isNamedModule())
         reset();
     }
@@ -667,6 +638,10 @@ private:
   };
 
   ModuleDeclSeq ModuleDeclState;
+
+  /// Whether the module import expects an identifier next. Otherwise,
+  /// it expects a '.' or ';'.
+  bool ModuleImportExpectsIdentifier = false;
 
   /// The identifier and source location of the currently-active
   /// \#pragma clang arc_cf_code_audited begin.
@@ -801,12 +776,6 @@ private:
   /// Only one of CurLexer, or CurTokenLexer will be non-null.
   std::unique_ptr<Lexer> CurLexer;
 
-  /// Lexers that are pending destruction, deferred until the current
-  /// Stack of Lexer unwinds completely (LexLevel returns to 0).
-  /// This avoids use-after-free when HandleEndOfFile is called from
-  /// within a Lexer method that still needs to access its members.
-  SmallVector<std::unique_ptr<Lexer>, 2> PendingDestroyLexers;
-
   /// The current top of the stack that we're lexing from
   /// if not expanding a macro.
   ///
@@ -874,7 +843,7 @@ private:
   SmallVector<MacroExpandsInfo, 2> DelayedMacroExpandsCallbacks;
 
   /// Information about a name that has been used to define a module macro.
-  struct FullModuleMacroInfo {
+  struct ModuleMacroInfo {
     /// The most recent macro directive for this identifier.
     MacroDirective *MD;
 
@@ -891,15 +860,15 @@ private:
     /// The module macros that are overridden by this macro.
     llvm::TinyPtrVector<ModuleMacro *> OverriddenMacros;
 
-    FullModuleMacroInfo(MacroDirective *MD) : MD(MD) {}
+    ModuleMacroInfo(MacroDirective *MD) : MD(MD) {}
   };
 
   /// The state of a macro for an identifier.
   class MacroState {
-    mutable llvm::PointerUnion<MacroDirective *, FullModuleMacroInfo *> State;
+    mutable llvm::PointerUnion<MacroDirective *, ModuleMacroInfo *> State;
 
-    FullModuleMacroInfo *getFullModuleInfo(Preprocessor &PP,
-                                           const IdentifierInfo *II) const {
+    ModuleMacroInfo *getModuleInfo(Preprocessor &PP,
+                                   const IdentifierInfo *II) const {
       if (II->isOutOfDate())
         PP.updateOutOfDateIdentifier(*II);
       // FIXME: Find a spare bit on IdentifierInfo and store a
@@ -910,10 +879,10 @@ private:
           !PP.CurSubmoduleState->VisibleModules.getGeneration())
         return nullptr;
 
-      auto *Info = dyn_cast_if_present<FullModuleMacroInfo *>(State);
+      auto *Info = dyn_cast_if_present<ModuleMacroInfo *>(State);
       if (!Info) {
         Info = new (PP.getPreprocessorAllocator())
-            FullModuleMacroInfo(cast<MacroDirective *>(State));
+            ModuleMacroInfo(cast<MacroDirective *>(State));
         State = Info;
       }
 
@@ -939,27 +908,32 @@ private:
     }
 
     ~MacroState() {
-      if (auto *Info = dyn_cast_if_present<FullModuleMacroInfo *>(State))
-        Info->~FullModuleMacroInfo();
+      if (auto *Info = dyn_cast_if_present<ModuleMacroInfo *>(State))
+        Info->~ModuleMacroInfo();
     }
 
     MacroDirective *getLatest() const {
-      if (auto *Info = dyn_cast_if_present<FullModuleMacroInfo *>(State))
+      if (auto *Info = dyn_cast_if_present<ModuleMacroInfo *>(State))
         return Info->MD;
       return cast<MacroDirective *>(State);
     }
 
     void setLatest(MacroDirective *MD) {
-      if (auto *Info = dyn_cast_if_present<FullModuleMacroInfo *>(State))
+      if (auto *Info = dyn_cast_if_present<ModuleMacroInfo *>(State))
         Info->MD = MD;
       else
         State = MD;
     }
 
-    ModuleMacroInfo getModuleInfo(Preprocessor &PP,
-                                  const IdentifierInfo *II) const {
-      if (auto *Info = getFullModuleInfo(PP, II))
-        return ModuleMacroInfo{Info->ActiveModuleMacros, Info->IsAmbiguous};
+    bool isAmbiguous(Preprocessor &PP, const IdentifierInfo *II) const {
+      auto *Info = getModuleInfo(PP, II);
+      return Info ? Info->IsAmbiguous : false;
+    }
+
+    ArrayRef<ModuleMacro *>
+    getActiveModuleMacros(Preprocessor &PP, const IdentifierInfo *II) const {
+      if (auto *Info = getModuleInfo(PP, II))
+        return Info->ActiveModuleMacros;
       return {};
     }
 
@@ -972,7 +946,7 @@ private:
     }
 
     void overrideActiveModuleMacros(Preprocessor &PP, IdentifierInfo *II) {
-      if (auto *Info = getFullModuleInfo(PP, II)) {
+      if (auto *Info = getModuleInfo(PP, II)) {
         Info->OverriddenMacros.insert(Info->OverriddenMacros.end(),
                                       Info->ActiveModuleMacros.begin(),
                                       Info->ActiveModuleMacros.end());
@@ -982,19 +956,19 @@ private:
     }
 
     ArrayRef<ModuleMacro*> getOverriddenMacros() const {
-      if (auto *Info = dyn_cast_if_present<FullModuleMacroInfo *>(State))
+      if (auto *Info = dyn_cast_if_present<ModuleMacroInfo *>(State))
         return Info->OverriddenMacros;
       return {};
     }
 
     void setOverriddenMacros(Preprocessor &PP,
                              ArrayRef<ModuleMacro *> Overrides) {
-      auto *Info = dyn_cast_if_present<FullModuleMacroInfo *>(State);
+      auto *Info = dyn_cast_if_present<ModuleMacroInfo *>(State);
       if (!Info) {
         if (Overrides.empty())
           return;
         Info = new (PP.getPreprocessorAllocator())
-            FullModuleMacroInfo(cast<MacroDirective *>(State));
+            ModuleMacroInfo(cast<MacroDirective *>(State));
         State = Info;
       }
       Info->OverriddenMacros.clear();
@@ -1145,14 +1119,15 @@ private:
   /// The file ID for the PCH through header.
   FileID PCHThroughHeaderFileID;
 
+  /// The file ID for the predefines that come from the PCH.
+  /// This is only set when modules are in effect.
+  FileID PCHPredefinesFileID;
+
   /// Whether tokens are being skipped until a #pragma hdrstop is seen.
   bool SkippingUntilPragmaHdrStop = false;
 
   /// Whether tokens are being skipped until the through header is seen.
   bool SkippingUntilPCHThroughHeader = false;
-
-  /// Whether the main file is preprocessed module file.
-  bool MainFileIsPreprocessedModuleFile = false;
 
   /// \{
   /// Cache of macro expanders to reduce malloc traffic.
@@ -1344,6 +1319,13 @@ public:
   /// Returns the FileID for the preprocessor predefines.
   FileID getPredefinesFileID() const { return PredefinesFileID; }
 
+  /// Returns the FileID for the predefines loaded from the PCH.
+  FileID getPCHPredefinesFileID() const {
+    assert(getLangOpts().Modules &&
+           "PCHPredefinedFileID is only set when modules is in effect!");
+    return PCHPredefinesFileID;
+  }
+
   /// \{
   /// Accessors for preprocessor callbacks.
   ///
@@ -1356,7 +1338,7 @@ public:
                                                 std::move(Callbacks));
     Callbacks = std::move(C);
   }
-  void removePPCallbacks();
+  void removePPCallbacks() { Callbacks.reset(); }
   /// \}
 
   /// Get the number of tokens processed so far.
@@ -1418,7 +1400,8 @@ public:
     while (isa_and_nonnull<VisibilityMacroDirective>(MD))
       MD = MD->getPrevious();
     return MacroDefinition(dyn_cast_or_null<DefMacroDirective>(MD),
-                           S.getModuleInfo(*this, II));
+                           S.getActiveModuleMacros(*this, II),
+                           S.isAmbiguous(*this, II));
   }
 
   MacroDefinition getMacroDefinitionAtLoc(const IdentifierInfo *II,
@@ -1431,7 +1414,9 @@ public:
     if (auto *MD = S.getLatest())
       DI = MD->findDirectiveAtLoc(Loc, getSourceManager());
     // FIXME: Compute the set of active module macros at the specified location.
-    return MacroDefinition(DI.getDirective(), S.getModuleInfo(*this, II));
+    return MacroDefinition(DI.getDirective(),
+                           S.getActiveModuleMacros(*this, II),
+                           S.isAmbiguous(*this, II));
   }
 
   /// Given an identifier, return its latest non-imported MacroDirective
@@ -1510,8 +1495,15 @@ public:
   /// MacroInfo::getUndefLoc() at the head of the list.
   using macro_iterator = MacroMap::const_iterator;
 
+  macro_iterator macro_begin(bool IncludeExternalMacros = true) const;
+  macro_iterator macro_end(bool IncludeExternalMacros = true) const;
+
   llvm::iterator_range<macro_iterator>
-  macros(bool IncludeExternalMacros = true) const;
+  macros(bool IncludeExternalMacros = true) const {
+    macro_iterator begin = macro_begin(IncludeExternalMacros);
+    macro_iterator end = macro_end(IncludeExternalMacros);
+    return llvm::make_range(begin, end);
+  }
 
   /// \}
 
@@ -1520,7 +1512,7 @@ public:
     assert(M->isModuleMapModule());
     if (!BuildingSubmoduleStack.empty()) {
       if (M != BuildingSubmoduleStack.back().M)
-        BuildingSubmoduleStack.back().M->AffectingClangModules.push_back(M);
+        BuildingSubmoduleStack.back().M->AffectingClangModules.insert(M);
     } else {
       AffectingClangModules.insert(M);
     }
@@ -1797,38 +1789,6 @@ public:
   std::optional<LexEmbedParametersResult> LexEmbedParameters(Token &Current,
                                                              bool ForHasEmbed);
 
-  /// Whether the main file is preprocessed module file.
-  bool isPreprocessedModuleFile() const {
-    return MainFileIsPreprocessedModuleFile;
-  }
-
-  /// Mark the main file as a preprocessed module file, then the 'module' and
-  /// 'import' directive recognition will be suppressed. Only
-  /// '__preprocessed_moduke' and '__preprocessed_import' are allowed.
-  void markMainFileAsPreprocessedModuleFile() {
-    MainFileIsPreprocessedModuleFile = true;
-  }
-
-  bool LexModuleNameContinue(Token &Tok, SourceLocation UseLoc,
-                             SmallVectorImpl<Token> &Suffix,
-                             SmallVectorImpl<IdentifierLoc> &Path,
-                             bool AllowMacroExpansion, bool IsPartition);
-  bool HandleModuleName(StringRef DirType, SourceLocation UseLoc, Token &Tok,
-                        SmallVectorImpl<IdentifierLoc> &Path,
-                        SmallVectorImpl<Token> &DirToks,
-                        bool AllowMacroExpansion, bool IsPartition);
-  void EnterModuleSuffixTokenStream(ArrayRef<Token> Toks);
-  void HandleCXXImportDirective(Token Import);
-  void HandleCXXModuleDirective(Token Module);
-
-  /// Callback invoked when the lexer sees one of export, import or module token
-  /// at the start of a line.
-  ///
-  /// This consumes the import/module directive, modifies the
-  /// lexer/preprocessor state, and advances the lexer(s) so that the next token
-  /// read is the correct one.
-  bool HandleModuleContextualKeyword(Token &Result);
-
   /// Get the start location of the first pp-token in main file.
   SourceLocation getMainFileFirstPPTokenLoc() const {
     assert(FirstPPTokenLoc.isValid() &&
@@ -1836,10 +1796,8 @@ public:
     return FirstPPTokenLoc;
   }
 
-  void CollectPPImportSuffix(SmallVectorImpl<Token> &Toks,
-                             bool StopUntilEOD = false);
-  bool CollectPPImportSuffixAndEnterStream(SmallVectorImpl<Token> &Toks,
-                                           bool StopUntilEOD = false);
+  bool LexAfterModuleImport(Token &Result);
+  void CollectPpImportSuffix(SmallVectorImpl<Token> &Toks);
 
   void makeModuleVisible(Module *M, SourceLocation Loc,
                          bool IncludeExports = true);
@@ -2361,22 +2319,45 @@ public:
     }
   }
 
-  /// isNextPPTokenOneOf - Check whether the next pp-token is one of the
-  /// specificed token kind. this method should have no observable side-effect
-  /// on the lexed tokens.
-  template <typename... Ts> bool isNextPPTokenOneOf(Ts... Ks) const {
+  /// Check whether the next pp-token is one of the specificed token kind. this
+  /// method should have no observable side-effect on the lexed tokens.
+  template <typename... Ts> bool isNextPPTokenOneOf(Ts... Ks) {
     static_assert(sizeof...(Ts) > 0,
                   "requires at least one tok::TokenKind specified");
-    auto NextTokOpt = peekNextPPToken();
-    return NextTokOpt.has_value() ? NextTokOpt->is(Ks...) : false;
+    // Do some quick tests for rejection cases.
+    std::optional<Token> Val;
+    if (CurLexer)
+      Val = CurLexer->peekNextPPToken();
+    else
+      Val = CurTokenLexer->peekNextPPToken();
+
+    if (!Val) {
+      // We have run off the end.  If it's a source file we don't
+      // examine enclosing ones (C99 5.1.1.2p4).  Otherwise walk up the
+      // macro stack.
+      if (CurPPLexer)
+        return false;
+      for (const IncludeStackInfo &Entry : llvm::reverse(IncludeMacroStack)) {
+        if (Entry.TheLexer)
+          Val = Entry.TheLexer->peekNextPPToken();
+        else
+          Val = Entry.TheTokenLexer->peekNextPPToken();
+
+        if (Val)
+          break;
+
+        // Ran off the end of a source file?
+        if (Entry.ThePPLexer)
+          return false;
+      }
+    }
+
+    // Okay, we found the token and return.  Otherwise we found the end of the
+    // translation unit.
+    return Val->isOneOf(Ks...);
   }
 
 private:
-  /// peekNextPPToken - Return std::nullopt if there are no more tokens in the
-  /// buffer controlled by this lexer, otherwise return the next unexpanded
-  /// token.
-  std::optional<Token> peekNextPPToken() const;
-
   /// Identifiers used for SEH handling in Borland. These are only
   /// allowed in particular circumstances
   // __except block
@@ -2432,27 +2413,20 @@ public:
   /// If \p EnableMacros is true, then we consider macros that expand to zero
   /// tokens as being ok.
   ///
-  /// If \p ExtraToks not null, the extra tokens will be saved in this
-  /// container.
-  ///
   /// \return The location of the end of the directive (the terminating
   /// newline).
-  SourceLocation
-  CheckEndOfDirective(StringRef DirType, bool EnableMacros = false,
-                      SmallVectorImpl<Token> *ExtraToks = nullptr);
+  SourceLocation CheckEndOfDirective(const char *DirType,
+                                     bool EnableMacros = false);
 
   /// Read and discard all tokens remaining on the current line until
   /// the tok::eod token is found. Returns the range of the skipped tokens.
-  SourceRange
-  DiscardUntilEndOfDirective(SmallVectorImpl<Token> *DiscardedToks = nullptr) {
+  SourceRange DiscardUntilEndOfDirective() {
     Token Tmp;
-    return DiscardUntilEndOfDirective(Tmp, DiscardedToks);
+    return DiscardUntilEndOfDirective(Tmp);
   }
 
   /// Same as above except retains the token that was found.
-  SourceRange
-  DiscardUntilEndOfDirective(Token &Tok,
-                             SmallVectorImpl<Token> *DiscardedToks = nullptr);
+  SourceRange DiscardUntilEndOfDirective(Token &Tok);
 
   /// Returns true if the preprocessor has seen a use of
   /// __DATE__ or __TIME__ in the file so far.
@@ -2523,10 +2497,11 @@ public:
   }
 
   /// If we're importing a standard C++20 Named Modules.
-  bool isImportingCXXNamedModules() const {
-    assert(getLangOpts().CPlusPlusModules &&
-           "Import C++ named modules are only valid for C++20 modules");
-    return ImportingCXXNamedModules;
+  bool isInImportingCXXNamedModules() const {
+    // NamedModuleImportPath will be non-empty only if we're importing
+    // Standard C++ named modules.
+    return !NamedModuleImportPath.empty() && getLangOpts().CPlusPlusModules &&
+           !IsAtImport;
   }
 
   /// Allocate a new MacroInfo object with the provided SourceLocation.
@@ -2560,11 +2535,13 @@ public:
   /// resource. \p isAngled indicates whether the file reference is for
   /// system \#include's or not (i.e. using <> instead of ""). If \p OpenFile
   /// is true, the file looked up is opened for reading, otherwise it only
-  /// validates that the file exists.
+  /// validates that the file exists. Quoted filenames are looked up relative
+  /// to \p LookupFromFile if it is nonnull.
   ///
   /// Returns std::nullopt on failure.
-  OptionalFileEntryRef LookupEmbedFile(StringRef Filename, bool isAngled,
-                                       bool OpenFile);
+  OptionalFileEntryRef
+  LookupEmbedFile(StringRef Filename, bool isAngled, bool OpenFile,
+                  const FileEntry *LookupFromFile = nullptr);
 
   /// Return true if we're in the top-level file, not in a \#include.
   bool isInPrimaryFile() const;
@@ -2592,8 +2569,6 @@ private:
   }
 
   void PopIncludeMacroStack() {
-    if (CurLexer)
-      PendingDestroyLexers.push_back(std::move(CurLexer));
     CurLexer = std::move(IncludeMacroStack.back().TheLexer);
     CurPPLexer = IncludeMacroStack.back().ThePPLexer;
     CurTokenLexer = std::move(IncludeMacroStack.back().TheTokenLexer);
@@ -2611,8 +2586,7 @@ private:
 
   /// Update the set of active module macros and ambiguity flag for a module
   /// macro name.
-  void updateModuleMacroInfo(const IdentifierInfo *II,
-                             FullModuleMacroInfo &Info);
+  void updateModuleMacroInfo(const IdentifierInfo *II, ModuleMacroInfo &Info);
 
   DefMacroDirective *AllocateDefMacroDirective(MacroInfo *MI,
                                                SourceLocation Loc);
@@ -2780,8 +2754,7 @@ private:
 
   /// Add a lexer to the top of the include stack and
   /// start lexing tokens from it instead of the current buffer.
-  void EnterSourceFileWithLexer(std::unique_ptr<Lexer> TheLexer,
-                                ConstSearchDirIterator Dir);
+  void EnterSourceFileWithLexer(Lexer *TheLexer, ConstSearchDirIterator Dir);
 
   /// Set the FileID for the preprocessor predefines.
   void setPredefinesFileID(FileID FID) {
@@ -2876,7 +2849,8 @@ private:
       SmallVectorImpl<char> &RelativePath, SmallVectorImpl<char> &SearchPath,
       ModuleMap::KnownHeader &SuggestedModule, bool isAngled);
   // Binary data inclusion
-  void HandleEmbedDirective(SourceLocation HashLoc, Token &Tok);
+  void HandleEmbedDirective(SourceLocation HashLoc, Token &Tok,
+                            const FileEntry *LookupFromFile = nullptr);
   void HandleEmbedDirectiveImpl(SourceLocation HashLoc,
                                 const LexEmbedParametersResult &Params,
                                 StringRef BinaryContents, StringRef FileName);
@@ -2894,7 +2868,6 @@ private:
   void HandleIncludeMacrosDirective(SourceLocation HashLoc, Token &Tok);
   void HandleImportDirective(SourceLocation HashLoc, Token &Tok);
   void HandleMicrosoftImportDirective(Token &Tok);
-  void HandleObjCImportDirective(Token &AtTok, Token &ImportTok);
 
 public:
   /// Check that the given module is available, producing a diagnostic if not.
@@ -3157,6 +3130,9 @@ private:
   }
   static bool CLK_DependencyDirectivesLexer(Preprocessor &P, Token &Result) {
     return P.CurLexer->LexDependencyDirectiveToken(Result);
+  }
+  static bool CLK_LexAfterModuleImport(Preprocessor &P, Token &Result) {
+    return P.LexAfterModuleImport(Result);
   }
 };
 

@@ -54,9 +54,7 @@
 #include "llvm/Support/SaveAndRestore.h"
 #include "llvm/Support/TimeProfiler.h"
 #include "llvm/Support/raw_ostream.h"
-#include <algorithm>
 #include <cassert>
-#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -658,7 +656,6 @@ private:
                   bool ExternallyDestructed = false);
   CFGBlock *VisitStmt(Stmt *S, AddStmtChoice asc);
   CFGBlock *VisitChildren(Stmt *S);
-  CFGBlock *VisitCallExprChildren(CallExpr *C);
   CFGBlock *VisitNoRecurse(Expr *E, AddStmtChoice asc);
   CFGBlock *VisitOMPExecutableDirective(OMPExecutableDirective *D,
                                         AddStmtChoice asc);
@@ -701,6 +698,7 @@ private:
     TempDtorContext() = default;
     TempDtorContext(TryResult KnownExecuted)
         : IsConditional(true), KnownExecuted(KnownExecuted) {}
+
     /// Returns whether we need to start a new branch for a temporary destructor
     /// call. This is the case when the temporary destructor is
     /// conditionally executed, and it is the first one we encounter while
@@ -718,12 +716,7 @@ private:
       TerminatorExpr = E;
     }
 
-    void track(const MaterializeTemporaryExpr *MTE) {
-      CollectedMTEs.push_back(MTE);
-    }
-
     const bool IsConditional = false;
-    SmallVector<const MaterializeTemporaryExpr *, 5> CollectedMTEs;
     const TryResult KnownExecuted = true;
     CFGBlock *Succ = nullptr;
     CXXBindTemporaryExpr *TerminatorExpr = nullptr;
@@ -731,23 +724,20 @@ private:
 
   // Visitors to walk an AST and generate destructors of temporaries in
   // full expression.
-  CFGBlock *VisitForTemporaries(Stmt *E, bool ExternallyDestructed,
-                                TempDtorContext &Context);
-  CFGBlock *VisitChildrenForTemporaries(Stmt *E, bool ExternallyDestructed,
-                                        TempDtorContext &Context);
-  CFGBlock *VisitBinaryOperatorForTemporaries(BinaryOperator *E,
-                                              bool ExternallyDestructed,
-                                              TempDtorContext &Context);
-  CFGBlock *VisitCXXOperatorCallExprForTemporaryDtors(CXXOperatorCallExpr *E,
-                                                      TempDtorContext &Context);
+  CFGBlock *VisitForTemporaryDtors(Stmt *E, bool ExternallyDestructed,
+                                   TempDtorContext &Context);
+  CFGBlock *VisitChildrenForTemporaryDtors(Stmt *E,  bool ExternallyDestructed,
+                                           TempDtorContext &Context);
+  CFGBlock *VisitBinaryOperatorForTemporaryDtors(BinaryOperator *E,
+                                                 bool ExternallyDestructed,
+                                                 TempDtorContext &Context);
   CFGBlock *VisitCXXBindTemporaryExprForTemporaryDtors(
       CXXBindTemporaryExpr *E, bool ExternallyDestructed, TempDtorContext &Context);
-  CFGBlock *
-  VisitConditionalOperatorForTemporaries(AbstractConditionalOperator *E,
-                                         bool ExternallyDestructed,
-                                         TempDtorContext &Context);
-  void InsertTempDecisionBlock(const TempDtorContext &Context,
-                               CFGBlock *FalseSucc = nullptr);
+  CFGBlock *VisitConditionalOperatorForTemporaryDtors(
+      AbstractConditionalOperator *E, bool ExternallyDestructed,
+      TempDtorContext &Context);
+  void InsertTempDtorDecisionBlock(const TempDtorContext &Context,
+                                   CFGBlock *FalseSucc = nullptr);
 
   // NYS == Not Yet Supported
   CFGBlock *NYS() {
@@ -813,8 +803,6 @@ private:
   void addScopeChangesHandling(LocalScope::const_iterator SrcPos,
                                LocalScope::const_iterator DstPos,
                                Stmt *S);
-  void addFullExprCleanupMarker(TempDtorContext &Context,
-                                const ExprWithCleanups *CleanupExpr);
   CFGBlock *createScopeChangesHandlingBlock(LocalScope::const_iterator SrcPos,
                                             CFGBlock *SrcBlk,
                                             LocalScope::const_iterator DstPost,
@@ -1679,20 +1667,12 @@ std::unique_ptr<CFG> CFGBuilder::buildCFG(const Decl *D, Stmt *Statement) {
   assert(Succ == &cfg->getExit());
   Block = nullptr;  // the EXIT block is empty.  Create all other blocks lazily.
 
-  if (BuildOpts.AddLifetime && BuildOpts.AddParameterLifetimes) {
-    // Add parameters to the initial scope to handle lifetime ends.
-    LocalScope *paramScope = nullptr;
-    if (const auto *FD = dyn_cast_or_null<FunctionDecl>(D))
-      for (ParmVarDecl *PD : FD->parameters()) {
-        paramScope = addLocalScopeForVarDecl(PD, paramScope);
-      }
-    if (auto *C = dyn_cast<CompoundStmt>(Statement))
-      if (C->body_empty() || !isa<ReturnStmt>(*C->body_rbegin()))
-        // If the body ends with a ReturnStmt, the dtors will be added in
-        // VisitReturnStmt.
-        addAutomaticObjHandling(ScopePos, LocalScope::const_iterator(),
-                                Statement);
-  }
+  // Add parameters to the initial scope to handle their dtos and lifetime ends.
+  LocalScope *paramScope = nullptr;
+  if (const auto *FD = dyn_cast_or_null<FunctionDecl>(D))
+    for (ParmVarDecl *PD : FD->parameters())
+      paramScope = addLocalScopeForVarDecl(PD, paramScope);
+
   if (BuildOpts.AddImplicitDtors)
     if (const CXXDestructorDecl *DD = dyn_cast_or_null<CXXDestructorDecl>(D))
       addImplicitDtorsForDestructor(DD);
@@ -1831,22 +1811,13 @@ CFGBlock *CFGBuilder::addInitializer(CXXCtorInitializer *I) {
   // after initialization finishes.
   Expr *Init = I->getInit();
   if (Init) {
-    Expr *ActualInit = Init;
-    if (BuildOpts.AddCXXDefaultInitExprInCtors)
-      if (auto *DIE = dyn_cast<CXXDefaultInitExpr>(Init))
-        ActualInit = DIE->getExpr();
+    HasTemporaries = isa<ExprWithCleanups>(Init);
 
-    HasTemporaries = isa<ExprWithCleanups>(ActualInit);
-
-    if (HasTemporaries &&
-        (BuildOpts.AddTemporaryDtors || BuildOpts.AddLifetime)) {
+    if (BuildOpts.AddTemporaryDtors && HasTemporaries) {
       // Generate destructors for temporaries in initialization expression.
       TempDtorContext Context;
-      auto *FullExprWithCleanups = cast<ExprWithCleanups>(ActualInit);
-      VisitForTemporaries(FullExprWithCleanups->getSubExpr(),
-                          /*ExternallyDestructed=*/false, Context);
-
-      addFullExprCleanupMarker(Context, FullExprWithCleanups);
+      VisitForTemporaryDtors(cast<ExprWithCleanups>(Init)->getSubExpr(),
+                             /*ExternallyDestructed=*/false, Context);
     }
   }
 
@@ -1863,6 +1834,11 @@ CFGBlock *CFGBuilder::addInitializer(CXXCtorInitializer *I) {
         ConstructionContextLayer::create(cfg->getBumpVectorContext(), I),
         AILEInit ? AILEInit : Init);
 
+    if (HasTemporaries) {
+      // For expression with temporaries go directly to subexpression to omit
+      // generating destructors for the second time.
+      return Visit(cast<ExprWithCleanups>(Init)->getSubExpr());
+    }
     if (BuildOpts.AddCXXDefaultInitExprInCtors) {
       if (CXXDefaultInitExpr *Default = dyn_cast<CXXDefaultInitExpr>(Init)) {
         // In general, appending the expression wrapped by a CXXDefaultInitExpr
@@ -1870,20 +1846,11 @@ CFGBlock *CFGBuilder::addInitializer(CXXCtorInitializer *I) {
         // here is safe because there's only one initializer per field.
         autoCreateBlock();
         appendStmt(Block, Default);
-        if (Stmt *Child = Default->getExpr()) {
-          if (HasTemporaries)
-            Child = cast<ExprWithCleanups>(Child)->getSubExpr();
+        if (Stmt *Child = Default->getExpr())
           if (CFGBlock *R = Visit(Child))
             Block = R;
-        }
         return Block;
       }
-    }
-
-    if (HasTemporaries) {
-      // For expression with temporaries go directly to subexpression to omit
-      // generating destructors for the second time.
-      return Visit(cast<ExprWithCleanups>(Init)->getSubExpr());
     }
     return Visit(Init);
   }
@@ -2096,22 +2063,6 @@ void CFGBuilder::addScopeChangesHandling(LocalScope::const_iterator SrcPos,
   // Append scopeEnds, destructor and lifetime with the terminator for
   // block left by goto.
   addAutomaticObjHandling(SrcPos, BasePos, S);
-}
-
-void CFGBuilder::addFullExprCleanupMarker(TempDtorContext &Context,
-                                          const ExprWithCleanups *CleanupExpr) {
-  CFGFullExprCleanup::MTEVecTy *ExpiringMTEs = nullptr;
-  BumpVectorContext &BVC = cfg->getBumpVectorContext();
-
-  size_t NumCollected = Context.CollectedMTEs.size();
-  if (NumCollected > 0) {
-    autoCreateBlock();
-    ExpiringMTEs = new (cfg->getAllocator())
-        CFGFullExprCleanup::MTEVecTy(BVC, NumCollected);
-    for (const MaterializeTemporaryExpr *MTE : Context.CollectedMTEs)
-      ExpiringMTEs->push_back(MTE, BVC);
-    Block->appendFullExprCleanup(ExpiringMTEs, CleanupExpr, BVC);
-  }
 }
 
 /// createScopeChangesHandlingBlock - Creates a block with cfgElements
@@ -2583,19 +2534,6 @@ CFGBlock *CFGBuilder::VisitChildren(Stmt *S) {
   return B;
 }
 
-CFGBlock *CFGBuilder::VisitCallExprChildren(CallExpr *C) {
-  // For overloaded assignment operators, visit arguments in reverse order (LHS
-  // then RHS) so that RHS is sequenced before LHS in the CFG, matching C++17
-  // sequencing rules.
-  if (auto *OCE = dyn_cast<CXXOperatorCallExpr>(C);
-      OCE && OCE->isAssignmentOp()) {
-    Visit(OCE->getArg(0));
-    Visit(OCE->getArg(1));
-    return Visit(OCE->getCallee());
-  }
-  return VisitChildren(C);
-}
-
 CFGBlock *CFGBuilder::VisitInitListExpr(InitListExpr *ILE, AddStmtChoice asc) {
   if (asc.alwaysAdd(*this, ILE)) {
     autoCreateBlock();
@@ -2933,7 +2871,7 @@ CFGBlock *CFGBuilder::VisitCallExpr(CallExpr *C, AddStmtChoice asc) {
     autoCreateBlock();
     appendCall(Block, C);
 
-    return VisitCallExprChildren(C);
+    return VisitChildren(C);
   }
 
   if (Block) {
@@ -2957,7 +2895,7 @@ CFGBlock *CFGBuilder::VisitCallExpr(CallExpr *C, AddStmtChoice asc) {
       addSuccessor(Block, &cfg->getExit());
   }
 
-  return VisitCallExprChildren(C);
+  return VisitChildren(C);
 }
 
 CFGBlock *CFGBuilder::VisitChooseExpr(ChooseExpr *C,
@@ -3172,15 +3110,11 @@ CFGBlock *CFGBuilder::VisitDeclSubExpr(DeclStmt *DS) {
   if (Init) {
     HasTemporaries = isa<ExprWithCleanups>(Init);
 
-    if (HasTemporaries &&
-        (BuildOpts.AddTemporaryDtors || BuildOpts.AddLifetime)) {
+    if (BuildOpts.AddTemporaryDtors && HasTemporaries) {
       // Generate destructors for temporaries in initialization expression.
       TempDtorContext Context;
-      auto *FullExprWithCleanups = cast<ExprWithCleanups>(Init);
-      VisitForTemporaries(FullExprWithCleanups->getSubExpr(),
-                          /*ExternallyDestructed=*/true, Context);
-
-      addFullExprCleanupMarker(Context, FullExprWithCleanups);
+      VisitForTemporaryDtors(cast<ExprWithCleanups>(Init)->getSubExpr(),
+                             /*ExternallyDestructed=*/true, Context);
     }
   }
 
@@ -4192,7 +4126,9 @@ CFGBlock *CFGBuilder::VisitArrayInitLoopExpr(ArrayInitLoopExpr *A,
   if (CFGBlock *R = Visit(A->getSubExpr()))
     B = R;
 
-  OpaqueValueExpr *OVE = A->getCommonExpr();
+  auto *OVE = dyn_cast<OpaqueValueExpr>(A->getCommonExpr());
+  assert(OVE && "ArrayInitLoopExpr->getCommonExpr() should be wrapped in an "
+                "OpaqueValueExpr!");
   if (CFGBlock *R = Visit(OVE->getSourceExpr()))
     B = R;
 
@@ -4871,10 +4807,7 @@ CFGBlock *CFGBuilder::VisitCXXForRangeStmt(CXXForRangeStmt *S) {
   // Save local scope position before the addition of the implicit variables.
   SaveAndRestore save_scope_pos(ScopePos);
 
-  // Create local scopes and destructors for init, range, begin and end
-  // variables.
-  if (Stmt *Init = S->getInit())
-    addLocalScopeForStmt(Init);
+  // Create local scopes and destructors for range, begin and end variables.
   if (Stmt *Range = S->getRangeStmt())
     addLocalScopeForStmt(Range);
   if (Stmt *Begin = S->getBeginStmt())
@@ -4988,16 +4921,12 @@ CFGBlock *CFGBuilder::VisitCXXForRangeStmt(CXXForRangeStmt *S) {
 }
 
 CFGBlock *CFGBuilder::VisitExprWithCleanups(ExprWithCleanups *E,
-                                            AddStmtChoice asc,
-                                            bool ExternallyDestructed) {
-  if (BuildOpts.AddTemporaryDtors || BuildOpts.AddLifetime) {
+    AddStmtChoice asc, bool ExternallyDestructed) {
+  if (BuildOpts.AddTemporaryDtors) {
     // If adding implicit destructors visit the full expression for adding
     // destructors of temporaries.
     TempDtorContext Context;
-    Expr *FullExpr = E->getSubExpr();
-    VisitForTemporaries(FullExpr, ExternallyDestructed, Context);
-
-    addFullExprCleanupMarker(Context, E);
+    VisitForTemporaryDtors(E->getSubExpr(), ExternallyDestructed, Context);
 
     // Full expression has to be added as CFGStmt so it will be sequenced
     // before destructors of it's temporaries.
@@ -5134,8 +5063,9 @@ CFGBlock *CFGBuilder::VisitIndirectGotoStmt(IndirectGotoStmt *I) {
   return addStmt(I->getTarget());
 }
 
-CFGBlock *CFGBuilder::VisitForTemporaries(Stmt *E, bool ExternallyDestructed,
-                                          TempDtorContext &Context) {
+CFGBlock *CFGBuilder::VisitForTemporaryDtors(Stmt *E, bool ExternallyDestructed,
+                                             TempDtorContext &Context) {
+  assert(BuildOpts.AddImplicitDtors && BuildOpts.AddTemporaryDtors);
 
 tryAgain:
   if (!E) {
@@ -5144,18 +5074,15 @@ tryAgain:
   }
   switch (E->getStmtClass()) {
     default:
-      return VisitChildrenForTemporaries(E, false, Context);
+      return VisitChildrenForTemporaryDtors(E, false, Context);
 
     case Stmt::InitListExprClass:
-      return VisitChildrenForTemporaries(E, ExternallyDestructed, Context);
+      return VisitChildrenForTemporaryDtors(E, ExternallyDestructed, Context);
 
     case Stmt::BinaryOperatorClass:
-      return VisitBinaryOperatorForTemporaries(cast<BinaryOperator>(E),
-                                               ExternallyDestructed, Context);
-
-    case Stmt::CXXOperatorCallExprClass:
-      return VisitCXXOperatorCallExprForTemporaryDtors(
-          cast<CXXOperatorCallExpr>(E), Context);
+      return VisitBinaryOperatorForTemporaryDtors(cast<BinaryOperator>(E),
+                                                  ExternallyDestructed,
+                                                  Context);
 
     case Stmt::CXXBindTemporaryExprClass:
       return VisitCXXBindTemporaryExprForTemporaryDtors(
@@ -5163,7 +5090,7 @@ tryAgain:
 
     case Stmt::BinaryConditionalOperatorClass:
     case Stmt::ConditionalOperatorClass:
-      return VisitConditionalOperatorForTemporaries(
+      return VisitConditionalOperatorForTemporaryDtors(
           cast<AbstractConditionalOperator>(E), ExternallyDestructed, Context);
 
     case Stmt::ImplicitCastExprClass:
@@ -5187,8 +5114,6 @@ tryAgain:
     case Stmt::MaterializeTemporaryExprClass: {
       const MaterializeTemporaryExpr* MTE = cast<MaterializeTemporaryExpr>(E);
       ExternallyDestructed = (MTE->getStorageDuration() != SD_FullExpression);
-      if (BuildOpts.AddLifetime && !ExternallyDestructed)
-        Context.track(MTE);
       SmallVector<const Expr *, 2> CommaLHSs;
       SmallVector<SubobjectAdjustment, 2> Adjustments;
       // Find the expression whose lifetime needs to be extended.
@@ -5198,8 +5123,8 @@ tryAgain:
               ->skipRValueSubobjectAdjustments(CommaLHSs, Adjustments));
       // Visit the skipped comma operator left-hand sides for other temporaries.
       for (const Expr *CommaLHS : CommaLHSs) {
-        VisitForTemporaries(const_cast<Expr *>(CommaLHS),
-                            /*ExternallyDestructed=*/false, Context);
+        VisitForTemporaryDtors(const_cast<Expr *>(CommaLHS),
+                               /*ExternallyDestructed=*/false, Context);
       }
       goto tryAgain;
     }
@@ -5216,7 +5141,7 @@ tryAgain:
       CFGBlock *B = Block;
       for (Expr *Init : LE->capture_inits()) {
         if (Init) {
-          if (CFGBlock *R = VisitForTemporaries(
+          if (CFGBlock *R = VisitForTemporaryDtors(
                   Init, /*ExternallyDestructed=*/true, Context))
             B = R;
         }
@@ -5239,41 +5164,39 @@ tryAgain:
   }
 }
 
-CFGBlock *CFGBuilder::VisitChildrenForTemporaries(Stmt *E,
-                                                  bool ExternallyDestructed,
-                                                  TempDtorContext &Context) {
+CFGBlock *CFGBuilder::VisitChildrenForTemporaryDtors(Stmt *E,
+                                                     bool ExternallyDestructed,
+                                                     TempDtorContext &Context) {
   if (isa<LambdaExpr>(E)) {
     // Do not visit the children of lambdas; they have their own CFGs.
     return Block;
   }
 
-  // When visiting children for destructors or lifetime markers we want to visit
-  // them in reverse order that they will appear in the CFG.  Because the CFG is
-  // built bottom-up, this means we visit them in their natural order, which
+  // When visiting children for destructors we want to visit them in reverse
+  // order that they will appear in the CFG.  Because the CFG is built
+  // bottom-up, this means we visit them in their natural order, which
   // reverses them in the CFG.
   CFGBlock *B = Block;
   for (Stmt *Child : E->children())
     if (Child)
-      if (CFGBlock *R =
-              VisitForTemporaries(Child, ExternallyDestructed, Context))
+      if (CFGBlock *R = VisitForTemporaryDtors(Child, ExternallyDestructed, Context))
         B = R;
 
   return B;
 }
 
-CFGBlock *CFGBuilder::VisitBinaryOperatorForTemporaries(
+CFGBlock *CFGBuilder::VisitBinaryOperatorForTemporaryDtors(
     BinaryOperator *E, bool ExternallyDestructed, TempDtorContext &Context) {
   if (E->isCommaOp()) {
     // For the comma operator, the LHS expression is evaluated before the RHS
     // expression, so prepend temporary destructors for the LHS first.
-    CFGBlock *LHSBlock = VisitForTemporaries(E->getLHS(), false, Context);
-    CFGBlock *RHSBlock =
-        VisitForTemporaries(E->getRHS(), ExternallyDestructed, Context);
+    CFGBlock *LHSBlock = VisitForTemporaryDtors(E->getLHS(), false, Context);
+    CFGBlock *RHSBlock = VisitForTemporaryDtors(E->getRHS(), ExternallyDestructed, Context);
     return RHSBlock ? RHSBlock : LHSBlock;
   }
 
   if (E->isLogicalOp()) {
-    VisitForTemporaries(E->getLHS(), false, Context);
+    VisitForTemporaryDtors(E->getLHS(), false, Context);
     TryResult RHSExecuted = tryEvaluateBool(E->getLHS());
     if (RHSExecuted.isKnown() && E->getOpcode() == BO_LOr)
       RHSExecuted.negate();
@@ -5283,11 +5206,8 @@ CFGBlock *CFGBuilder::VisitBinaryOperatorForTemporaries(
     // constructor call.
     TempDtorContext RHSContext(
         bothKnownTrue(Context.KnownExecuted, RHSExecuted));
-    VisitForTemporaries(E->getRHS(), false, RHSContext);
-    InsertTempDecisionBlock(RHSContext);
-
-    if (BuildOpts.AddLifetime)
-      Context.CollectedMTEs.append(RHSContext.CollectedMTEs);
+    VisitForTemporaryDtors(E->getRHS(), false, RHSContext);
+    InsertTempDtorDecisionBlock(RHSContext);
 
     return Block;
   }
@@ -5295,34 +5215,21 @@ CFGBlock *CFGBuilder::VisitBinaryOperatorForTemporaries(
   if (E->isAssignmentOp()) {
     // For assignment operators, the RHS expression is evaluated before the LHS
     // expression, so prepend temporary destructors for the RHS first.
-    CFGBlock *RHSBlock = VisitForTemporaries(E->getRHS(), false, Context);
-    CFGBlock *LHSBlock = VisitForTemporaries(E->getLHS(), false, Context);
+    CFGBlock *RHSBlock = VisitForTemporaryDtors(E->getRHS(), false, Context);
+    CFGBlock *LHSBlock = VisitForTemporaryDtors(E->getLHS(), false, Context);
     return LHSBlock ? LHSBlock : RHSBlock;
   }
 
   // Any other operator is visited normally.
-  return VisitChildrenForTemporaries(E, ExternallyDestructed, Context);
-}
-
-CFGBlock *CFGBuilder::VisitCXXOperatorCallExprForTemporaryDtors(
-    CXXOperatorCallExpr *E, TempDtorContext &Context) {
-  if (E->isAssignmentOp()) {
-    // For assignment operators, the RHS expression is evaluated before the LHS
-    // expression, so prepend temporary destructors for the RHS first.
-    CFGBlock *RHSBlock = VisitForTemporaries(E->getArg(1), false, Context);
-    CFGBlock *LHSBlock = VisitForTemporaries(E->getArg(0), false, Context);
-    return LHSBlock ? LHSBlock : RHSBlock;
-  }
-  return VisitChildrenForTemporaries(E, false, Context);
+  return VisitChildrenForTemporaryDtors(E, ExternallyDestructed, Context);
 }
 
 CFGBlock *CFGBuilder::VisitCXXBindTemporaryExprForTemporaryDtors(
     CXXBindTemporaryExpr *E, bool ExternallyDestructed, TempDtorContext &Context) {
   // First add destructors for temporaries in subexpression.
   // Because VisitCXXBindTemporaryExpr calls setDestructed:
-  CFGBlock *B = VisitForTemporaries(E->getSubExpr(), true, Context);
-  if (!ExternallyDestructed && BuildOpts.AddImplicitDtors &&
-      BuildOpts.AddTemporaryDtors) {
+  CFGBlock *B = VisitForTemporaryDtors(E->getSubExpr(), true, Context);
+  if (!ExternallyDestructed) {
     // If lifetime of temporary is not prolonged (by assigning to constant
     // reference) add destructor for it.
 
@@ -5347,13 +5254,14 @@ CFGBlock *CFGBuilder::VisitCXXBindTemporaryExprForTemporaryDtors(
       Context.setDecisionPoint(Succ, E);
     }
     appendTemporaryDtor(Block, E);
+
     B = Block;
   }
   return B;
 }
 
-void CFGBuilder::InsertTempDecisionBlock(const TempDtorContext &Context,
-                                         CFGBlock *FalseSucc) {
+void CFGBuilder::InsertTempDtorDecisionBlock(const TempDtorContext &Context,
+                                             CFGBlock *FalseSucc) {
   if (!Context.TerminatorExpr) {
     // If no temporary was found, we do not need to insert a decision point.
     return;
@@ -5368,10 +5276,10 @@ void CFGBuilder::InsertTempDecisionBlock(const TempDtorContext &Context,
   Block = Decision;
 }
 
-CFGBlock *CFGBuilder::VisitConditionalOperatorForTemporaries(
+CFGBlock *CFGBuilder::VisitConditionalOperatorForTemporaryDtors(
     AbstractConditionalOperator *E, bool ExternallyDestructed,
     TempDtorContext &Context) {
-  VisitForTemporaries(E->getCond(), false, Context);
+  VisitForTemporaryDtors(E->getCond(), false, Context);
   CFGBlock *ConditionBlock = Block;
   CFGBlock *ConditionSucc = Succ;
   TryResult ConditionVal = tryEvaluateBool(E->getCond());
@@ -5380,28 +5288,23 @@ CFGBlock *CFGBuilder::VisitConditionalOperatorForTemporaries(
 
   TempDtorContext TrueContext(
       bothKnownTrue(Context.KnownExecuted, ConditionVal));
-  VisitForTemporaries(E->getTrueExpr(), ExternallyDestructed, TrueContext);
+  VisitForTemporaryDtors(E->getTrueExpr(), ExternallyDestructed, TrueContext);
   CFGBlock *TrueBlock = Block;
 
   Block = ConditionBlock;
   Succ = ConditionSucc;
   TempDtorContext FalseContext(
       bothKnownTrue(Context.KnownExecuted, NegatedVal));
-  VisitForTemporaries(E->getFalseExpr(), ExternallyDestructed, FalseContext);
+  VisitForTemporaryDtors(E->getFalseExpr(), ExternallyDestructed, FalseContext);
 
   if (TrueContext.TerminatorExpr && FalseContext.TerminatorExpr) {
-    InsertTempDecisionBlock(FalseContext, TrueBlock);
+    InsertTempDtorDecisionBlock(FalseContext, TrueBlock);
   } else if (TrueContext.TerminatorExpr) {
     Block = TrueBlock;
-    InsertTempDecisionBlock(TrueContext);
+    InsertTempDtorDecisionBlock(TrueContext);
   } else {
-    InsertTempDecisionBlock(FalseContext);
+    InsertTempDtorDecisionBlock(FalseContext);
   }
-  if (BuildOpts.AddLifetime) {
-    Context.CollectedMTEs.append(TrueContext.CollectedMTEs);
-    Context.CollectedMTEs.append(FalseContext.CollectedMTEs);
-  }
-
   return Block;
 }
 
@@ -5519,7 +5422,6 @@ CFGImplicitDtor::getDestructorDecl(ASTContext &astContext) const {
     case CFGElement::CXXRecordTypedCall:
     case CFGElement::ScopeBegin:
     case CFGElement::ScopeEnd:
-    case CFGElement::FullExprCleanup:
     case CFGElement::CleanupFunction:
       llvm_unreachable("getDestructorDecl should only be used with "
                        "ImplicitDtors");
@@ -6084,27 +5986,6 @@ static void print_elem(raw_ostream &OS, StmtPrinterHelper &Helper,
     OS << " (Lifetime ends)";
     break;
 
-  case CFGElement::Kind::FullExprCleanup: {
-    auto MTEs = E.castAs<CFGFullExprCleanup>().getExpiringMTEs();
-    size_t MTECount = MTEs.size();
-    OS << "(FullExprCleanup collected " << MTECount
-       << (MTECount > 1 ? " MTEs: " : " MTE: ");
-    bool FirstMTE = true;
-    for (const MaterializeTemporaryExpr *MTE : MTEs) {
-      if (!FirstMTE)
-        OS << ", ";
-      if (!Helper.handledStmt(MTE->getSubExpr(), OS)) {
-        PrintingPolicy Policy{Helper.getLangOpts()};
-        Policy.IncludeNewlines = false;
-        // Pretty print the sub-expresion as a fallback
-        MTE->printPretty(OS, &Helper, Policy);
-      }
-      FirstMTE = false;
-    }
-    OS << ")";
-    break;
-  }
-
   case CFGElement::Kind::LoopExit:
     OS << E.castAs<CFGLoopExit>().getLoopStmt()->getStmtClassName()
        << " (LoopExit)";
@@ -6470,7 +6351,7 @@ bool CFGBlock::isInevitablySinking() const {
     // If at least one path reaches the CFG exit, it means that control is
     // returned to the caller. For now, say that we are not sure what
     // happens next. If necessary, this can be improved to analyze
-    // the parent StackFrame's call site in a similar manner.
+    // the parent StackFrameContext's call site in a similar manner.
     if (Blk == &Cfg.getExit())
       return false;
 

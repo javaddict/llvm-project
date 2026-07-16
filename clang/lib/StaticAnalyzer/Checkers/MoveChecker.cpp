@@ -57,7 +57,7 @@ public:
                      const InvalidatedSymbols *Invalidated,
                      ArrayRef<const MemRegion *> RequestedRegions,
                      ArrayRef<const MemRegion *> InvalidatedRegions,
-                     const StackFrame *SF, const CallEvent *Call) const;
+                     const LocationContext *LCtx, const CallEvent *Call) const;
   void printState(raw_ostream &Out, ProgramStateRef State,
                   const char *NL, const char *Sep) const override;
 
@@ -219,7 +219,7 @@ private:
   ExplodedNode *tryToReportBug(const MemRegion *Region, const CXXRecordDecl *RD,
                                CheckerContext &C, MisuseKind MK) const;
 
-  bool isInMoveSafeStackFrame(const StackFrame *SF) const;
+  bool isInMoveSafeContext(const LocationContext *LC) const;
   bool isStateResetMethod(const CXXMethodDecl *MethodDec) const;
   bool isMoveSafeMethod(const CXXMethodDecl *MethodDec) const;
   const ExplodedNode *getMoveLocation(const ExplodedNode *N,
@@ -328,7 +328,8 @@ MoveChecker::MovedBugVisitor::VisitNode(const ExplodedNode *N,
   }
 
   // Generate the extra diagnostic.
-  PathDiagnosticLocation Pos(S, BRC.getSourceManager(), N->getStackFrame());
+  PathDiagnosticLocation Pos(S, BRC.getSourceManager(),
+                             N->getLocationContext());
   return std::make_shared<PathDiagnosticEventPiece>(Pos, OS.str(), true);
 }
 
@@ -361,8 +362,8 @@ void MoveChecker::modelUse(ProgramStateRef State, const MemRegion *Region,
   if (MK == MK_Dereference && OK.StdKind != SK_SmartPtr)
     MK = MK_FunCall;
 
-  if (!RS || !shouldWarnAbout(OK, MK) ||
-      isInMoveSafeStackFrame(C.getStackFrame())) {
+  if (!RS || !shouldWarnAbout(OK, MK)
+          || isInMoveSafeContext(C.getLocationContext())) {
     // Finalize changes made by the caller.
     C.addTransition(State);
     return;
@@ -402,7 +403,7 @@ ExplodedNode *MoveChecker::tryToReportBug(const MemRegion *Region,
 
     if (const Stmt *MoveStmt = MoveNode->getStmtForDiagnostics())
       LocUsedForUniqueing = PathDiagnosticLocation::createBegin(
-          MoveStmt, C.getSourceManager(), MoveNode->getStackFrame());
+          MoveStmt, C.getSourceManager(), MoveNode->getLocationContext());
 
     // Creating the error message.
     llvm::SmallString<128> Str;
@@ -431,7 +432,7 @@ ExplodedNode *MoveChecker::tryToReportBug(const MemRegion *Region,
 
     auto R = std::make_unique<PathSensitiveBugReport>(
         BT, OS.str(), N, LocUsedForUniqueing,
-        MoveNode->getStackFrame()->getDecl());
+        MoveNode->getLocationContext()->getDecl());
     R->addVisitor(std::make_unique<MovedBugVisitor>(*this, Region, RD, MK));
     C.emitReport(std::move(R));
     return N;
@@ -529,18 +530,18 @@ bool MoveChecker::isStateResetMethod(const CXXMethodDecl *MethodDec) const {
 
 // Don't report an error inside a move related operation.
 // We assume that the programmer knows what she does.
-bool MoveChecker::isInMoveSafeStackFrame(const StackFrame *SF) const {
+bool MoveChecker::isInMoveSafeContext(const LocationContext *LC) const {
   do {
-    const auto *SFDec = SF->getDecl();
-    auto *CtorDec = dyn_cast_or_null<CXXConstructorDecl>(SFDec);
-    auto *DtorDec = dyn_cast_or_null<CXXDestructorDecl>(SFDec);
-    auto *MethodDec = dyn_cast_or_null<CXXMethodDecl>(SFDec);
+    const auto *CtxDec = LC->getDecl();
+    auto *CtorDec = dyn_cast_or_null<CXXConstructorDecl>(CtxDec);
+    auto *DtorDec = dyn_cast_or_null<CXXDestructorDecl>(CtxDec);
+    auto *MethodDec = dyn_cast_or_null<CXXMethodDecl>(CtxDec);
     if (DtorDec || (CtorDec && CtorDec->isCopyOrMoveConstructor()) ||
         (MethodDec && MethodDec->isOverloadedOperator() &&
          MethodDec->getOverloadedOperator() == OO_Equal) ||
         isStateResetMethod(MethodDec) || isMoveSafeMethod(MethodDec))
       return true;
-  } while ((SF = SF->getParent()));
+  } while ((LC = LC->getParent()));
   return false;
 }
 
@@ -702,8 +703,8 @@ void MoveChecker::checkDeadSymbols(SymbolReaper &SymReaper,
 ProgramStateRef MoveChecker::checkRegionChanges(
     ProgramStateRef State, const InvalidatedSymbols *Invalidated,
     ArrayRef<const MemRegion *> RequestedRegions,
-    ArrayRef<const MemRegion *> InvalidatedRegions, const StackFrame *SF,
-    const CallEvent *Call) const {
+    ArrayRef<const MemRegion *> InvalidatedRegions,
+    const LocationContext *LCtx, const CallEvent *Call) const {
   if (Call) {
     // Relax invalidation upon function calls: only invalidate parameters
     // that are passed directly via non-const pointers or non-const references

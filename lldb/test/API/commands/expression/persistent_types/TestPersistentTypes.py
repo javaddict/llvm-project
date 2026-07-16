@@ -9,7 +9,6 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
 
-@skipIfWasm  # no expression evaluation
 class PersistenttypesTestCase(TestBase):
     def test_persistent_types(self):
         """Test that lldb persistent types works correctly."""

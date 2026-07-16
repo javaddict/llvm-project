@@ -9,7 +9,6 @@
 #include "llvm/ExecutionEngine/Orc/EPCGenericJITLinkMemoryManager.h"
 
 #include "llvm/ExecutionEngine/JITLink/JITLink.h"
-#include "llvm/ExecutionEngine/Orc/LookupAndRecordAddrs.h"
 #include "llvm/ExecutionEngine/Orc/Shared/OrcRTBridge.h"
 
 #include <limits>
@@ -97,31 +96,6 @@ private:
   ExecutorAddr AllocAddr;
   SegInfoMap Segs;
 };
-
-Expected<std::unique_ptr<EPCGenericJITLinkMemoryManager>>
-EPCGenericJITLinkMemoryManager::Create(
-    JITDylib &JD, rt::SimpleExecutorMemoryManagerSymbolNames SNs) {
-  auto &ES = JD.getExecutionSession();
-  SymbolAddrs SAs;
-  if (auto Err = lookupAndRecordAddrs(
-          ES, LookupKind::Static, makeJITDylibSearchOrder({&JD}),
-          {
-              {ES.intern(SNs.AllocatorName), &SAs.Allocator},
-              {ES.intern(SNs.ReserveName), &SAs.Reserve},
-              {ES.intern(SNs.InitializeName), &SAs.Initialize},
-              {ES.intern(SNs.DeinitializeName), &SAs.Deinitialize},
-              {ES.intern(SNs.ReleaseName), &SAs.Release},
-          }))
-    return Err;
-  return std::make_unique<EPCGenericJITLinkMemoryManager>(
-      ES.getExecutorProcessControl(), SAs);
-}
-
-Expected<std::unique_ptr<EPCGenericJITLinkMemoryManager>>
-EPCGenericJITLinkMemoryManager::Create(
-    ExecutionSession &ES, rt::SimpleExecutorMemoryManagerSymbolNames SNs) {
-  return Create(ES.getBootstrapJITDylib(), std::move(SNs));
-}
 
 void EPCGenericJITLinkMemoryManager::allocate(const JITLinkDylib *JD,
                                               LinkGraph &G,

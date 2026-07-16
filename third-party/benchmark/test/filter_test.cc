@@ -37,45 +37,43 @@ class TestReporter : public benchmark::ConsoleReporter {
   mutable int64_t max_family_index_;
 };
 
-void NoPrefix(benchmark::State& state) {
+}  // end namespace
+
+static void NoPrefix(benchmark::State& state) {
   for (auto _ : state) {
   }
 }
 BENCHMARK(NoPrefix);
 
-void BM_Foo(benchmark::State& state) {
+static void BM_Foo(benchmark::State& state) {
   for (auto _ : state) {
   }
 }
 BENCHMARK(BM_Foo);
 
-void BM_Bar(benchmark::State& state) {
+static void BM_Bar(benchmark::State& state) {
   for (auto _ : state) {
   }
 }
 BENCHMARK(BM_Bar);
 
-void BM_FooBar(benchmark::State& state) {
+static void BM_FooBar(benchmark::State& state) {
   for (auto _ : state) {
   }
 }
 BENCHMARK(BM_FooBar);
 
-void BM_FooBa(benchmark::State& state) {
+static void BM_FooBa(benchmark::State& state) {
   for (auto _ : state) {
   }
 }
 BENCHMARK(BM_FooBa);
-}  // end namespace
 
 int main(int argc, char** argv) {
-  benchmark::MaybeReenterWithoutASLR(argc, argv);
-
   bool list_only = false;
-  for (int i = 0; i < argc; ++i) {
+  for (int i = 0; i < argc; ++i)
     list_only |= std::string(argv[i]).find("--benchmark_list_tests") !=
                  std::string::npos;
-  }
 
   benchmark::Initialize(&argc, argv);
 
@@ -86,13 +84,13 @@ int main(int argc, char** argv) {
   if (argc == 2) {
     // Make sure we ran all of the tests
     std::stringstream ss(argv[1]);
-    int64_t expected_return = 0;
+    int64_t expected_return;
     ss >> expected_return;
 
     if (returned_count != expected_return) {
       std::cerr << "ERROR: Expected " << expected_return
                 << " tests to match the filter but returned_count = "
-                << returned_count << '\n';
+                << returned_count << std::endl;
       return -1;
     }
 
@@ -101,7 +99,7 @@ int main(int argc, char** argv) {
     if (reports_count != expected_reports) {
       std::cerr << "ERROR: Expected " << expected_reports
                 << " tests to be run but reported_count = " << reports_count
-                << '\n';
+                << std::endl;
       return -1;
     }
 
@@ -110,7 +108,7 @@ int main(int argc, char** argv) {
     if (num_families != expected_reports) {
       std::cerr << "ERROR: Expected " << expected_reports
                 << " test families to be run but num_families = "
-                << num_families << '\n';
+                << num_families << std::endl;
       return -1;
     }
   }

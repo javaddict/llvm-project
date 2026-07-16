@@ -14,7 +14,6 @@ static_library("MC") {
   ]
   sources = [
     "ConstantPools.cpp",
-    "DXContainerInfo.cpp",
     "DXContainerPSVInfo.cpp",
     "DXContainerRootSignature.cpp",
     "ELFObjectWriter.cpp",
@@ -46,8 +45,6 @@ static_library("MC") {
     "MCInstrAnalysis.cpp",
     "MCInstrDesc.cpp",
     "MCInstrInfo.cpp",
-    "MCLFI.cpp",
-    "MCLFIRewriter.cpp",
     "MCLabel.cpp",
     "MCLinkerOptimizationHint.cpp",
     "MCMachOStreamer.cpp",

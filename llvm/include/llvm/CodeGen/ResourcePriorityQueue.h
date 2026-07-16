@@ -16,6 +16,7 @@
 #ifndef LLVM_CODEGEN_RESOURCEPRIORITYQUEUE_H
 #define LLVM_CODEGEN_RESOURCEPRIORITYQUEUE_H
 
+#include "llvm/CodeGen/ResourceCycle.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
 
 namespace llvm {
@@ -31,10 +32,10 @@ namespace llvm {
     ResourcePriorityQueue *PQ;
     explicit resource_sort(ResourcePriorityQueue *pq) : PQ(pq) {}
 
-    LLVM_ABI bool operator()(const SUnit *LHS, const SUnit *RHS) const;
+    bool operator()(const SUnit* LHS, const SUnit* RHS) const;
   };
 
-  class LLVM_ABI ResourcePriorityQueue : public SchedulingPriorityQueue {
+  class ResourcePriorityQueue : public SchedulingPriorityQueue {
     /// SUnits - The SUnits for the current graph.
     std::vector<SUnit> *SUnits;
 
@@ -63,7 +64,7 @@ namespace llvm {
     /// ResourcesModel - Represents VLIW state.
     /// Not limited to VLIW targets per say, but assumes
     /// definition of DFA by a target.
-    std::unique_ptr<DFAPacketizer> ResourcesModel;
+    std::unique_ptr<ResourceCycle> ResourcesModel;
 
     /// Resource model - packet/bundle model. Purely
     /// internal at the time.

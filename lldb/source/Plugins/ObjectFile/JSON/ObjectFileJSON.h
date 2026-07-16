@@ -38,10 +38,12 @@ public:
                                           const lldb::ProcessSP &process_sp,
                                           lldb::addr_t header_addr);
 
-  static ModuleSpecList
-  GetModuleSpecifications(const FileSpec &file,
-                          lldb::DataExtractorSP &extractor_sp,
-                          lldb::offset_t file_offset, lldb::offset_t length);
+  static size_t GetModuleSpecifications(const FileSpec &file,
+                                        lldb::DataBufferSP &data_sp,
+                                        lldb::offset_t data_offset,
+                                        lldb::offset_t file_offset,
+                                        lldb::offset_t length,
+                                        ModuleSpecList &specs);
 
   llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
 
@@ -89,7 +91,8 @@ public:
   bool SetLoadAddress(Target &target, lldb::addr_t value,
                       bool value_is_offset) override;
 
-  static bool MagicBytesMatch(lldb::DataExtractorSP extractor_sp);
+  static bool MagicBytesMatch(lldb::DataBufferSP data_sp, lldb::addr_t offset,
+                              lldb::addr_t length);
 
   struct Header {
     std::string triple;

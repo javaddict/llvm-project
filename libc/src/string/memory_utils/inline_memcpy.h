@@ -15,10 +15,7 @@
 
 #include <stddef.h> // size_t
 
-#if defined(LIBC_COPT_USE_MEM_BUILTINS)
-#include "src/string/memory_utils/generic/builtin.h"
-#define LIBC_SRC_STRING_MEMORY_UTILS_MEMCPY inline_memcpy_builtin
-#elif defined(LIBC_COPT_MEMCPY_USE_EMBEDDED_TINY)
+#if defined(LIBC_COPT_MEMCPY_USE_EMBEDDED_TINY)
 #include "src/string/memory_utils/generic/byte_per_byte.h"
 #define LIBC_SRC_STRING_MEMORY_UTILS_MEMCPY inline_memcpy_byte_per_byte
 #elif defined(LIBC_TARGET_ARCH_IS_X86)
@@ -34,7 +31,7 @@
 #elif defined(LIBC_TARGET_ARCH_IS_ANY_RISCV)
 #include "src/string/memory_utils/riscv/inline_memcpy.h"
 #define LIBC_SRC_STRING_MEMORY_UTILS_MEMCPY inline_memcpy_riscv
-#elif defined(LIBC_TARGET_ARCH_IS_GPU) || defined(LIBC_TARGET_ARCH_IS_WASM)
+#elif defined(LIBC_TARGET_ARCH_IS_GPU)
 #include "src/string/memory_utils/generic/builtin.h"
 #define LIBC_SRC_STRING_MEMORY_UTILS_MEMCPY inline_memcpy_builtin
 #else

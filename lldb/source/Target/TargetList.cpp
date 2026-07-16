@@ -135,13 +135,14 @@ Status TargetList::CreateTargetInternal(
 
     lldb::offset_t file_offset = 0;
     lldb::offset_t file_size = 0;
-    ModuleSpecList module_specs = ObjectFile::GetModuleSpecifications(
-        module_spec.GetFileSpec(), file_offset, file_size);
+    ModuleSpecList module_specs;
+    const size_t num_specs = ObjectFile::GetModuleSpecifications(
+        module_spec.GetFileSpec(), file_offset, file_size, module_specs);
 
-    if (module_specs.GetSize() > 0) {
+    if (num_specs > 0) {
       ModuleSpec matching_module_spec;
 
-      if (module_specs.GetSize() == 1) {
+      if (num_specs == 1) {
         if (module_specs.GetModuleSpecAtIndex(0, matching_module_spec)) {
           if (platform_arch.IsValid()) {
             if (platform_arch.IsCompatibleMatch(
@@ -305,10 +306,6 @@ Status TargetList::CreateTargetInternal(Debugger &debugger,
     if (platform_sp) {
       ModuleSpec module_spec(file, arch);
       module_spec.SetTarget(target_sp);
-      // Set the platform so that GetSharedModule can use it for the locate
-      // module callback, even when Target is not yet available (during target
-      // creation for launch mode).
-      module_spec.SetPlatform(platform_sp);
       error = platform_sp->ResolveExecutable(module_spec, exe_module_sp);
     }
 

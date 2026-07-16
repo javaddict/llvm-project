@@ -1,4 +1,4 @@
-// RUN: %check_clang_tidy %s readability-string-compare %t -- -config='{CheckOptions: {readability-string-compare.StringLikeClasses: "CustomStringTemplateBase;CustomStringNonTemplateBase"}}'
+// RUN: %check_clang_tidy %s readability-string-compare %t -- -config='{CheckOptions: {readability-string-compare.StringLikeClasses: "CustomStringTemplateBase;CustomStringNonTemplateBase"}}' -- -isystem %clang_tidy_headers
 #include <string>
 
 struct CustomStringNonTemplateBase {

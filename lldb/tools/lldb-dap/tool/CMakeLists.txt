@@ -2,16 +2,11 @@ set(LLVM_TARGET_DEFINITIONS Options.td)
 tablegen(LLVM Options.inc -gen-opt-parser-defs)
 add_public_tablegen_target(LLDBDAPOptionsTableGen)
 
-set(LLDB_DAP_LINK_LIBS lldbDAP liblldb lldbHost)
-
 add_lldb_tool(lldb-dap
   lldb-dap.cpp
 
-  LINK_COMPONENTS
-    Option
-    Support
   LINK_LIBS
-    ${LLDB_DAP_LINK_LIBS}
+    lldbDAP
   )
 
 add_dependencies(lldb-dap

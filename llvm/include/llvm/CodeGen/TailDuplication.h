@@ -16,7 +16,7 @@
 namespace llvm {
 
 template <typename DerivedT, bool PreRegAlloc>
-class TailDuplicatePassBase : public OptionalPassInfoMixin<DerivedT> {
+class TailDuplicatePassBase : public PassInfoMixin<DerivedT> {
 private:
   std::unique_ptr<MBFIWrapper> MBFIW;
 

@@ -24,26 +24,26 @@
 namespace llvm {
 
 class Value;
-class CondBrInst;
+class BranchInst;
 
 class DomConditionCache {
 private:
   /// A map of values about which a branch might be providing information.
-  using AffectedValuesMap = DenseMap<Value *, SmallVector<CondBrInst *, 1>>;
+  using AffectedValuesMap = DenseMap<Value *, SmallVector<BranchInst *, 1>>;
   AffectedValuesMap AffectedValues;
 
 public:
   /// Add a branch condition to the cache.
-  LLVM_ABI void registerBranch(CondBrInst *BI);
+  void registerBranch(BranchInst *BI);
 
   /// Remove a value from the cache, e.g. because it will be erased.
   void removeValue(Value *V) { AffectedValues.erase(V); }
 
   /// Access the list of branches which affect this value.
-  ArrayRef<CondBrInst *> conditionsFor(const Value *V) const {
+  ArrayRef<BranchInst *> conditionsFor(const Value *V) const {
     auto AVI = AffectedValues.find_as(const_cast<Value *>(V));
     if (AVI == AffectedValues.end())
-      return ArrayRef<CondBrInst *>();
+      return ArrayRef<BranchInst *>();
 
     return AVI->second;
   }

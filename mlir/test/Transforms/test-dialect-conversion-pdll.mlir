@@ -2,10 +2,10 @@
 
 // CHECK-LABEL: @TestSingleConversion
 func.func @TestSingleConversion() {
-  // CHECK: "test.cast"() : () -> f64
-  // CHECK-NEXT: "test.return"() : () -> ()
+  // CHECK: %[[CAST:.*]] = "test.cast"() : () -> f64
+  // CHECK-NEXT: "test.return"(%[[CAST]]) : (f64) -> ()
   %result = "test.cast"() : () -> (i64)
-  "test.return"() : () -> ()
+  "test.return"(%result) : (i64) -> ()
 }
 
 // CHECK-LABEL: @TestLingeringConversion

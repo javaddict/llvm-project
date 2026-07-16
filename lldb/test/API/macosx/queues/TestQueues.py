@@ -4,7 +4,6 @@ import os
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
-from lldbsuite.test.lldbplatformutil import findBacktraceRecordingDylib
 from lldbsuite.test import lldbutil
 
 
@@ -308,10 +307,11 @@ class TestQueues(TestBase):
         """Test queues inspection SB APIs with libBacktraceRecording present."""
         exe = self.getBuildArtifact("a.out")
 
-        libbtr_path = findBacktraceRecordingDylib()
-        if not libbtr_path:
+        if not os.path.isfile(
+            "/Applications/Xcode.app/Contents/Developer/usr/lib/libBacktraceRecording.dylib"
+        ):
             self.skipTest(
-                "Skipped because libBacktraceRecording.dylib was not found on the system."
+                "Skipped because libBacktraceRecording.dylib was present on the system."
             )
 
         if not os.path.isfile("/usr/lib/system/introspection/libdispatch.dylib"):
@@ -326,6 +326,18 @@ class TestQueues(TestBase):
 
         break1 = target.BreakpointCreateByName("stopper", "a.out")
         self.assertTrue(break1, VALID_BREAKPOINT)
+
+        # Now launch the process, and do not stop at entry point.
+        libbtr_path = "/Applications/Xcode.app/Contents/Developer/usr/lib/libBacktraceRecording.dylib"
+        if self.getArchitecture() in [
+            "arm",
+            "arm64",
+            "arm64e",
+            "arm64_32",
+            "armv7",
+            "armv7k",
+        ]:
+            libbtr_path = "/Developer/usr/lib/libBacktraceRecording.dylib"
 
         process = target.LaunchSimple(
             [],

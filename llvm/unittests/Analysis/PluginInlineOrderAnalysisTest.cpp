@@ -51,7 +51,7 @@ struct CompilerInstance {
   }
 
   CompilerInstance() {
-    IP = getInlineParamsFromOptLevel(3);
+    IP = getInlineParams(3, 0);
     PB.registerModuleAnalyses(MAM);
     PB.registerCGSCCAnalyses(CGAM);
     PB.registerFunctionAnalyses(FAM);

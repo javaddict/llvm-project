@@ -7,12 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/iscanonicalf128.h"
-#include "src/__support/math/iscanonicalf128.h"
+#include "src/__support/FPUtil/BasicOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(int, iscanonicalf128, (float128 x)) {
-  return math::iscanonicalf128(x);
+  float128 temp;
+  return fputil::canonicalize(temp, x) == 0;
 }
 
 } // namespace LIBC_NAMESPACE_DECL

@@ -527,30 +527,25 @@ struct DefaultmapT {
   std::tuple<ImplicitBehavior, OPT(VariableCategory)> t;
 };
 
+template <typename T, typename I, typename E> //
+struct DoacrossT;
+
 // V5.2: [15.9.5] `depend` clause
 template <typename T, typename I, typename E> //
 struct DependT {
   using Iterator = type::IteratorT<T, I, E>;
   using LocatorList = ObjectListT<I, E>;
   using DependenceType = tomp::type::DependenceType;
-  // For the (pre-5.2) doacross spelling of the depend clause on the
-  // ordered directive: depend(source) / depend(sink: vec). Empty Vector
-  // means omp_cur_iteration, matching DoacrossT::Vector. When Vector has a
-  // value, LocatorList must be empty and the dependence type must be Source or
-  // Sink.
-  using Vector = ListT<type::LoopIterationT<I, E>>;
 
-  using TupleTrait = std::true_type;
-  // Empty LocatorList means "omp_all_memory".
-  std::tuple<DependenceType, OPT(Iterator), OPT(Vector), LocatorList> t;
-};
+  struct TaskDep { // The form with task dependence type.
+    using TupleTrait = std::true_type;
+    // Empty LocatorList means "omp_all_memory".
+    std::tuple<DependenceType, OPT(Iterator), LocatorList> t;
+  };
 
-// [tr14:212-213]
-template <typename T, typename I, typename E> //
-struct DepthT {
-  using DepthExpr = E;
-  using WrapperTrait = std::true_type;
-  DepthExpr v;
+  using Doacross = DoacrossT<T, I, E>;
+  using UnionTrait = std::true_type;
+  std::variant<Doacross, TaskDep> u; // Doacross form is legacy
 };
 
 // V5.2: [3.5] `destroy` clause
@@ -1006,26 +1001,30 @@ struct NumTasksT {
 };
 
 // V5.2: [10.2.1] `num_teams` clause
-// V6.1: Extended with dims modifier support
 template <typename T, typename I, typename E> //
 struct NumTeamsT {
   using LowerBound = E;
   using UpperBound = E;
-  using UpperBoundList = ListT<UpperBound>;
 
-  using TupleTrait = std::true_type;
-  // Representation: {LB?, [UB]}
-  std::tuple<OPT(LowerBound), UpperBoundList> t;
+  // The name Range is not a spec name.
+  struct Range {
+    using TupleTrait = std::true_type;
+    std::tuple<OPT(LowerBound), UpperBound> t;
+  };
+
+  // The name List is not a spec name. The list is an extension to allow
+  // specifying a grid with connection with the ompx_bare clause.
+  using List = ListT<Range>;
+  using WrapperTrait = std::true_type;
+  List v;
 };
 
 // V5.2: [10.1.2] `num_threads` clause
-// V6.1: Extended with dims modifier support
 template <typename T, typename I, typename E> //
 struct NumThreadsT {
   using Nthreads = E;
-  using List = ListT<Nthreads>;
   using WrapperTrait = std::true_type;
-  List v;
+  Nthreads v;
 };
 
 template <typename T, typename I, typename E> //
@@ -1240,13 +1239,11 @@ struct TaskReductionT {
 };
 
 // V5.2: [13.3] `thread_limit` clause
-// V6.1: Extended with dims modifier support
 template <typename T, typename I, typename E> //
 struct ThreadLimitT {
   using Threadlim = E;
-  using List = ListT<Threadlim>;
   using WrapperTrait = std::true_type;
-  List v;
+  Threadlim v;
 };
 
 // V5.2: [15.10.3] `parallelization-level` clauses
@@ -1276,7 +1273,7 @@ struct ToT {
   std::tuple<OPT(Expectation), OPT(Mappers), OPT(Iterator), LocatorList> t;
 };
 
-// [6.0:510:25] `transparent` clause
+// [6.0:440-441] `transparent` clause
 template <typename T, typename I, typename E> //
 struct TransparentT {
   using IncompleteTrait = std::true_type;
@@ -1430,7 +1427,7 @@ using WrapperClausesT = std::variant<
     AbsentT<T, I, E>, AlignT<T, I, E>, AllocatorT<T, I, E>,
     AtomicDefaultMemOrderT<T, I, E>, AtT<T, I, E>, BindT<T, I, E>,
     CollapseT<T, I, E>, CombinerT<T, I, E>, ContainsT<T, I, E>,
-    CopyinT<T, I, E>, CopyprivateT<T, I, E>, DefaultT<T, I, E>, DepthT<T, I, E>,
+    CopyinT<T, I, E>, CopyprivateT<T, I, E>, DefaultT<T, I, E>,
     DestroyT<T, I, E>, DetachT<T, I, E>, DeviceSafesyncT<T, I, E>,
     DeviceTypeT<T, I, E>, DynamicAllocatorsT<T, I, E>, EnterT<T, I, E>,
     ExclusiveT<T, I, E>, FailT<T, I, E>, FilterT<T, I, E>, FinalT<T, I, E>,

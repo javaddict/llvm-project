@@ -42,7 +42,7 @@ namespace vector {
 ///
 /// [ContractionOpToDotLowering]
 /// Progressively lower a `vector.contract` with row-major matmul semantics to
-/// linearized `vector.extract` + `vector.reduction` + `vector.insert`.
+/// linearized `vector.extract` + `vector.reduce` + `vector.insert`.
 ///
 /// [ContractionOpToOuterProductOpLowering]
 /// Progressively lower a `vector.contract` with row-major matmul semantics to
@@ -60,31 +60,19 @@ void populateVectorContractLoweringPatterns(
 void populateVectorOuterProductLoweringPatterns(RewritePatternSet &patterns,
                                                 PatternBenefit benefit = 1);
 
-/// Populate the pattern set with the following patterns:
+/// Collect a set of patterns to convert vector.multi_reduction op into
+/// a sequence of vector.reduction ops. The patterns comprise:
 ///
 /// [InnerOuterDimReductionConversion]
 /// Rewrites vector.multi_reduction such that all reduction dimensions are
 /// either innermost or outermost, by adding the proper vector.transpose
 /// operations.
-void populateVectorMultiReductionReorderPatterns(
-    RewritePatternSet &patterns, VectorMultiReductionLowering options,
-    PatternBenefit benefit = 1);
-
-/// Populate the pattern set with the following patterns:
 ///
 /// [ReduceMultiDimReductionRank]
 /// Once in innermost or outermost reduction
 /// form, rewrites n-D vector.multi_reduction into 2-D vector.multi_reduction,
 /// by introducing vector.shape_cast ops to collapse + multi-reduce + expand
 /// back.
-void populateVectorMultiReductionFlatteningPatterns(
-    RewritePatternSet &patterns, VectorMultiReductionLowering options,
-    PatternBenefit benefit = 1);
-
-/// Populate the pattern set with the following patterns:
-///
-/// [OneDimMultiReductionToReduction]
-/// Converts 1-D vector.multi_reduction to vector.reduction.
 ///
 /// [TwoDimMultiReductionToElementWise]
 /// Once in 2-D vector.multi_reduction form, with an **outermost** reduction
@@ -96,7 +84,13 @@ void populateVectorMultiReductionFlatteningPatterns(
 /// dimension, unroll the outer dimension to obtain a sequence of extract +
 /// vector.reduction + insert. This can further lower to horizontal reduction
 /// ops.
-void populateVectorMultiReductionUnrollingPatterns(
+///
+/// [OneDimMultiReductionToTwoDim]
+/// For cases that reduce to 1-D vector<k> reduction (and are thus missing
+/// either a parallel or a reduction), we lift them back up to 2-D with a simple
+/// vector.shape_cast to vector<1xk> so that the other patterns can kick in,
+/// thus fully exiting out of the vector.multi_reduction abstraction.
+void populateVectorMultiReductionLoweringPatterns(
     RewritePatternSet &patterns, VectorMultiReductionLowering options,
     PatternBenefit benefit = 1);
 
@@ -289,9 +283,6 @@ void populateVectorInterleaveLoweringPatterns(RewritePatternSet &patterns,
 
 void populateVectorInterleaveToShufflePatterns(RewritePatternSet &patterns,
                                                PatternBenefit benefit = 1);
-
-void populateVectorDeinterleaveToShufflePatterns(RewritePatternSet &patterns,
-                                                 PatternBenefit benefit = 1);
 
 /// Populates the pattern set with the following patterns:
 ///

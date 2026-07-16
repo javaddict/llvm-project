@@ -15,12 +15,12 @@ namespace llvm {
 
 class TargetMachine;
 
-class SafeStackPass : public RequiredPassInfoMixin<SafeStackPass> {
+class SafeStackPass : public PassInfoMixin<SafeStackPass> {
   const TargetMachine *TM;
 
 public:
   explicit SafeStackPass(const TargetMachine &TM_) : TM(&TM_) {}
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
 
 } // namespace llvm

@@ -1,6 +1,6 @@
 include "../../../../include/lldb/Core/PropertiesBase.td"
 
-let Definition = "processkdp", Path = "plugin.process.kdp-remote" in {
+let Definition = "processkdp" in {
   def KDPPacketTimeout: Property<"packet-timeout", "UInt64">,
     Global,
     DefaultUnsignedValue<5>,

@@ -17,10 +17,10 @@ namespace LIBC_NAMESPACE_DECL {
 // Futexes are 32 bits in size on all platforms, including 64-bit platforms.
 using FutexWordType = uint32_t;
 
-#if defined(SYS_futex_time64)
-constexpr auto FUTEX_SYSCALL_ID = SYS_futex_time64;
-#elif defined(SYS_futex)
+#if SYS_futex
 constexpr auto FUTEX_SYSCALL_ID = SYS_futex;
+#elif defined(SYS_futex_time64)
+constexpr auto FUTEX_SYSCALL_ID = SYS_futex_time64;
 #else
 #error "futex and futex_time64 syscalls not available."
 #endif

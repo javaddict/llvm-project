@@ -88,7 +88,9 @@ void CompileUnit::markEverythingAsKept() {
 
     if (auto ExprLockBlock = Value->getAsBlock()) {
       // Parse 'exprloc' expression.
-      DataExtractor Data(*ExprLockBlock, U->getContext().isLittleEndian());
+      DataExtractor Data(toStringRef(*ExprLockBlock),
+                         U->getContext().isLittleEndian(),
+                         U->getAddressByteSize());
       DWARFExpression Expression(Data, U->getAddressByteSize(),
                                  U->getFormParams().Format);
 
@@ -105,7 +107,7 @@ void CompileUnit::markEverythingAsKept() {
         case dwarf::DW_OP_const4s:
         case dwarf::DW_OP_const8s:
           if (NextIt == Expression.end() ||
-              !dwarf::isTlsAddressOp(NextIt->getCode()))
+              NextIt->getCode() != dwarf::DW_OP_form_tls_address)
             break;
           [[fallthrough]];
         case dwarf::DW_OP_constx:

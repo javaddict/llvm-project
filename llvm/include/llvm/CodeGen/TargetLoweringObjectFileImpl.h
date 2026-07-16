@@ -31,7 +31,7 @@ class MCSymbol;
 class Module;
 class TargetMachine;
 
-class LLVM_ABI TargetLoweringObjectFileELF : public TargetLoweringObjectFile {
+class TargetLoweringObjectFileELF : public TargetLoweringObjectFile {
   bool UseInitArray = false;
   mutable unsigned NextUniqueID = 1;  // ID 0 is reserved for execute-only sections
   SmallPtrSet<GlobalObject *, 2> Used;
@@ -63,14 +63,13 @@ public:
   /// Given a constant with the SectionKind, return a section that it should be
   /// placed in.
   MCSection *getSectionForConstant(const DataLayout &DL, SectionKind Kind,
-                                   const Constant *C, Align &Alignment,
-                                   const Function *F) const override;
+                                   const Constant *C,
+                                   Align &Alignment) const override;
 
   /// Similar to the function above, but append \p SectionSuffix to the section
   /// name.
   MCSection *getSectionForConstant(const DataLayout &DL, SectionKind Kind,
                                    const Constant *C, Align &Alignment,
-                                   const Function *F,
                                    StringRef SectionSuffix) const override;
 
   MCSection *getExplicitSectionGlobal(const GlobalObject *GO, SectionKind Kind,
@@ -131,7 +130,7 @@ public:
   MCSection *getSectionForCommandLines() const override;
 };
 
-class LLVM_ABI TargetLoweringObjectFileMachO : public TargetLoweringObjectFile {
+class TargetLoweringObjectFileMachO : public TargetLoweringObjectFile {
 public:
   TargetLoweringObjectFileMachO();
   ~TargetLoweringObjectFileMachO() override = default;
@@ -153,8 +152,8 @@ public:
                                       const TargetMachine &TM) const override;
 
   MCSection *getSectionForConstant(const DataLayout &DL, SectionKind Kind,
-                                   const Constant *C, Align &Alignment,
-                                   const Function *F) const override;
+                                   const Constant *C,
+                                   Align &Alignment) const override;
 
   /// The mach-o version of this method defaults to returning a stub reference.
   const MCExpr *getTTypeGlobalReference(const GlobalValue *GV,
@@ -181,7 +180,7 @@ public:
   MCSection *getSectionForCommandLines() const override;
 };
 
-class LLVM_ABI TargetLoweringObjectFileCOFF : public TargetLoweringObjectFile {
+class TargetLoweringObjectFileCOFF : public TargetLoweringObjectFile {
   mutable unsigned NextUniqueID = 0;
   const TargetMachine *TM = nullptr;
 
@@ -222,11 +221,11 @@ public:
   /// Given a mergeable constant with the specified size and relocation
   /// information, return a section that it should be placed in.
   MCSection *getSectionForConstant(const DataLayout &DL, SectionKind Kind,
-                                   const Constant *C, Align &Alignment,
-                                   const Function *F) const override;
+                                   const Constant *C,
+                                   Align &Alignment) const override;
 };
 
-class LLVM_ABI TargetLoweringObjectFileWasm : public TargetLoweringObjectFile {
+class TargetLoweringObjectFileWasm : public TargetLoweringObjectFile {
   mutable unsigned NextUniqueID = 0;
   SmallPtrSet<GlobalObject *, 2> Used;
 
@@ -252,7 +251,7 @@ public:
                                   const MCSymbol *KeySym) const override;
 };
 
-class LLVM_ABI TargetLoweringObjectFileXCOFF : public TargetLoweringObjectFile {
+class TargetLoweringObjectFileXCOFF : public TargetLoweringObjectFile {
 public:
   TargetLoweringObjectFileXCOFF() = default;
   ~TargetLoweringObjectFileXCOFF() override = default;
@@ -284,13 +283,13 @@ public:
   /// Given a constant with the SectionKind, return a section that it should be
   /// placed in.
   MCSection *getSectionForConstant(const DataLayout &DL, SectionKind Kind,
-                                   const Constant *C, Align &Alignment,
-                                   const Function *F) const override;
+                                   const Constant *C,
+                                   Align &Alignment) const override;
 
   static XCOFF::StorageClass getStorageClassForGlobal(const GlobalValue *GV);
 
   MCSection *
-  getSectionForFunctionDescriptor(const GlobalObject *F,
+  getSectionForFunctionDescriptor(const Function *F,
                                   const TargetMachine &TM) const override;
   MCSection *getSectionForTOCEntry(const MCSymbol *Sym,
                                    const TargetMachine &TM) const override;
@@ -316,7 +315,7 @@ public:
                                const TargetMachine &TM) const override;
 };
 
-class LLVM_ABI TargetLoweringObjectFileGOFF : public TargetLoweringObjectFile {
+class TargetLoweringObjectFileGOFF : public TargetLoweringObjectFile {
   std::string DefaultRootSDName;
   std::string DefaultADAPRName;
 
@@ -326,8 +325,6 @@ public:
 
   void getModuleMetadata(Module &M) override;
 
-  bool shouldPutJumpTableInFunctionSection(bool UsesLabelDifference,
-                                           const Function &F) const override;
   MCSection *SelectSectionForGlobal(const GlobalObject *GO, SectionKind Kind,
                                     const TargetMachine &TM) const override;
   MCSection *getExplicitSectionGlobal(const GlobalObject *GO, SectionKind Kind,

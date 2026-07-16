@@ -1,5 +1,4 @@
 set(LLVM_LINK_COMPONENTS
-  ABI
   AggressiveInstCombine
   Analysis
   BitReader
@@ -115,16 +114,15 @@ add_clang_library(clangCodeGen
   MacroPPCallbacks.cpp
   MicrosoftCXXABI.cpp
   ModuleBuilder.cpp
-  ModuleLinker.cpp
   ObjectFilePCHContainerWriter.cpp
   PatternInit.cpp
-  QualTypeMapper.cpp
   SanitizerMetadata.cpp
   SwiftCallingConv.cpp
   TargetBuiltins/ARM.cpp
   TargetBuiltins/AMDGPU.cpp
   TargetBuiltins/DirectX.cpp
   TargetBuiltins/Hexagon.cpp
+  TargetBuiltins/Haydn.cpp
   TargetBuiltins/NVPTX.cpp
   TargetBuiltins/PPC.cpp
   TargetBuiltins/RISCV.cpp
@@ -146,6 +144,7 @@ add_clang_library(clangCodeGen
   Targets/LoongArch.cpp
   Targets/M68k.cpp
   Targets/MSP430.cpp
+  Targets/Haydn.cpp
   Targets/Mips.cpp
   Targets/NVPTX.cpp
   Targets/PPC.cpp

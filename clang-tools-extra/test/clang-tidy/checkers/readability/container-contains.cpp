@@ -1,8 +1,43 @@
-// RUN: %check_clang_tidy %s readability-container-contains %t
-#include <map>
-#include <set>
+// RUN: %check_clang_tidy %s readability-container-contains %t -- \
+// RUN:   -- -isystem %clang_tidy_headers
+
 #include <string>
-#include <unordered_set>
+
+// Some *very* simplified versions of `map` etc.
+namespace std {
+
+template <class Key, class T>
+struct map {
+  struct iterator {
+    bool operator==(const iterator &Other) const;
+    bool operator!=(const iterator &Other) const;
+  };
+
+  unsigned count(const Key &K) const;
+  bool contains(const Key &K) const;
+  iterator find(const Key &K);
+  iterator end();
+};
+
+template <class Key>
+struct set {
+  unsigned count(const Key &K) const;
+  bool contains(const Key &K) const;
+};
+
+template <class Key>
+struct unordered_set {
+  unsigned count(const Key &K) const;
+  bool contains(const Key &K) const;
+};
+
+template <class Key, class T>
+struct multimap {
+  unsigned count(const Key &K) const;
+  bool contains(const Key &K) const;
+};
+
+} // namespace std
 
 // Check that we detect various common ways to check for membership
 int testDifferentCheckTypes(std::map<int, int> &MyMap) {

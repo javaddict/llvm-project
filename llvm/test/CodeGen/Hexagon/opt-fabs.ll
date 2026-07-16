@@ -3,13 +3,13 @@
 
 ; CHECK: r{{[0-9]+}} = clrbit(r{{[0-9]+}},#31)
 
-define float @my_llvm.fabs.f32(float %x) nounwind {
+define float @my_fabsf(float %x) nounwind {
 entry:
   %x.addr = alloca float, align 4
   store float %x, ptr %x.addr, align 4
   %0 = load float, ptr %x.addr, align 4
-  %call = call float @llvm.fabs.f32(float %0) readnone
+  %call = call float @fabsf(float %0) readnone
   ret float %call
 }
 
-declare float @llvm.fabs.f32(float)
+declare float @fabsf(float)

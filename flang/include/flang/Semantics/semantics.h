@@ -33,7 +33,6 @@ class IntrinsicTypeDefaultKinds;
 }
 
 namespace Fortran::parser {
-struct AccObject;
 struct Name;
 struct Program;
 class AllCookedSources;
@@ -69,8 +68,7 @@ class SemanticsContext {
 public:
   SemanticsContext(const common::IntrinsicTypeDefaultKinds &,
       const common::LanguageFeatureControl &, const common::LangOptions &,
-      parser::AllCookedSources &,
-      common::FPMaxminBehavior = common::FPMaxminBehavior::Legacy);
+      parser::AllCookedSources &);
   ~SemanticsContext();
 
   const common::IntrinsicTypeDefaultKinds &defaultKinds() const {
@@ -295,10 +293,8 @@ public:
   void UseFortranBuiltinsModule();
   const Scope *GetBuiltinsScope() const { return builtinsScope_; }
 
-  // Locate CUDA intrinsic modules on demand. These return null after emitting a
-  // diagnostic when the required module file cannot be read.
-  const Scope *GetCUDABuiltinsScope();
-  const Scope *GetCUDADeviceScope();
+  const Scope &GetCUDABuiltinsScope();
+  const Scope &GetCUDADeviceScope();
 
   void UsePPCBuiltinTypesModule();
   void UsePPCBuiltinsModule();
@@ -336,17 +332,7 @@ public:
   void NoteDefinedSymbol(const Symbol &);
   bool IsSymbolDefined(const Symbol &) const;
   void NoteUsedSymbol(const Symbol &);
-  void NoteUsedSymbols(const UnorderedSymbolSet &);
   bool IsSymbolUsed(const Symbol &) const;
-
-  // Track same-kind duplicate AccObjects between resolve-directives and
-  // rewrite-parse-tree (e.g. the second `x` in `private(x, x)`).
-  void MarkAccObjectDuplicate(const parser::AccObject *o) {
-    accObjectDuplicates_.insert(o);
-  }
-  bool IsAccObjectDuplicate(const parser::AccObject *o) const {
-    return accObjectDuplicates_.count(o) != 0;
-  }
 
   void DumpSymbols(llvm::raw_ostream &);
 
@@ -407,7 +393,6 @@ private:
   std::map<const Symbol *, SourceName> moduleFileOutputRenamings_;
   UnorderedSymbolSet isDefined_;
   UnorderedSymbolSet isUsed_;
-  std::set<const parser::AccObject *> accObjectDuplicates_;
   std::list<ProgramTree> programTrees_;
 };
 

@@ -65,12 +65,10 @@ extern llvm::cl::opt<bool> supportCrayPointers;
 
 namespace {
 
-// Return the size and alignment (in bytes) for the given type, or std::nullopt
-// if the type cannot be converted.
-//
+// Return the size and alignment (in bytes) for the given type.
 // TODO: this must be combined with DebugTypeGenerator::getFieldSizeAndAlign().
 // We'd better move fir::LLVMTypeConverter out of the FIRCodeGen component.
-static std::optional<std::pair<std::uint64_t, unsigned short>>
+static std::pair<std::uint64_t, unsigned short>
 getTypeSizeAndAlignment(mlir::Type type,
                         fir::LLVMTypeConverter &llvmTypeConverter) {
   mlir::Type llvmTy;
@@ -78,9 +76,6 @@ getTypeSizeAndAlignment(mlir::Type type,
     llvmTy = llvmTypeConverter.convertBoxTypeAsStruct(boxTy, getBoxRank(boxTy));
   else
     llvmTy = llvmTypeConverter.convertType(type);
-
-  if (!llvmTy)
-    return std::nullopt;
 
   const mlir::DataLayout &dataLayout = llvmTypeConverter.getDataLayout();
   uint64_t byteSize = dataLayout.getTypeSize(llvmTy);
@@ -218,7 +213,10 @@ public:
   void processFunctionScopes(mlir::func::FuncOp func);
   // For the given fir.declare returns the dominating fir.dummy_scope
   // operation.
-  fir::DummyScopeOp getDeclarationScope(fir::DeclareOp declareOp);
+  fir::DummyScopeOp getDeclarationScope(fir::DeclareOp declareOp) const;
+  // For the given fir.declare returns the outermost fir.dummy_scope
+  // in the current function.
+  fir::DummyScopeOp getOutermostScope(fir::DeclareOp declareOp) const;
   // Returns true, if the given type of a memref of a FirAliasTagOpInterface
   // operation is a descriptor or contains a descriptor
   // (e.g. !fir.ref<!fir.type<Derived{f:!fir.box<!fir.heap<f32>>}>>).
@@ -239,15 +237,12 @@ public:
   // about their physical storages and layouts.
   void collectPhysicalStorageAliasSets(mlir::Operation *op);
 
-  // Return the byte size of the given declaration, or std::nullopt if the
-  // size could not be computed (e.g. the type contains !fir.boxproc members).
-  std::optional<std::size_t>
-  getDeclarationSize(fir::FortranVariableStorageOpInterface decl) {
+  // Return the byte size of the given declaration.
+  std::size_t getDeclarationSize(fir::FortranVariableStorageOpInterface decl) {
     mlir::Type memType = fir::unwrapRefType(decl.getBase().getType());
-    auto sizeAndAlign = getTypeSizeAndAlignment(memType, llvmTypeConverter);
-    if (!sizeAndAlign)
-      return std::nullopt;
-    return llvm::alignTo(sizeAndAlign->first, sizeAndAlign->second);
+    auto [size, alignment] =
+        getTypeSizeAndAlignment(memType, llvmTypeConverter);
+    return llvm::alignTo(size, alignment);
   }
 
   // A StorageDesc specifies an operation that defines a physical storage
@@ -361,9 +356,8 @@ void PassState::processFunctionScopes(mlir::func::FuncOp func) {
   }
 }
 
-// For the given fir.declare returns the dominating fir.dummy_scope
-// operation.
-fir::DummyScopeOp PassState::getDeclarationScope(fir::DeclareOp declareOp) {
+fir::DummyScopeOp
+PassState::getDeclarationScope(fir::DeclareOp declareOp) const {
   auto func = declareOp->getParentOfType<mlir::func::FuncOp>();
   assert(func && "fir.declare does not have parent func.func");
   auto &scopeOps = sortedScopeOperations.at(func);
@@ -371,6 +365,15 @@ fir::DummyScopeOp PassState::getDeclarationScope(fir::DeclareOp declareOp) {
     if (domInfo.dominates(&**II, &*declareOp))
       return *II;
   }
+  return nullptr;
+}
+
+fir::DummyScopeOp PassState::getOutermostScope(fir::DeclareOp declareOp) const {
+  auto func = declareOp->getParentOfType<mlir::func::FuncOp>();
+  assert(func && "fir.declare does not have parent func.func");
+  auto &scopeOps = sortedScopeOperations.at(func);
+  if (!scopeOps.empty())
+    return scopeOps[0];
   return nullptr;
 }
 
@@ -462,33 +465,30 @@ void PassState::collectPhysicalStorageAliasSets(mlir::Operation *op) {
     fir::GlobalOp globalDef =
         getGlobalDefiningOp(addrOfOp.getSymbol().getRootReference());
     std::uint64_t storageOffset = decl.getStorageOffset();
-    std::optional<std::size_t> declSize = getDeclarationSize(decl);
+    std::size_t declSize = getDeclarationSize(decl);
     LLVM_DEBUG(llvm::dbgs()
                << "Found variable with storage:\n"
                << "Declaration: " << decl << "\n"
                << "Storage: " << (globalDef ? globalDef : nullptr) << "\n"
                << "Offset: " << storageOffset << "\n"
-               << "Size: "
-               << (declSize ? llvm::Twine(*declSize)
-                            : llvm::Twine("could not be computed"))
-               << "\n");
+               << "Size: " << declSize << "\n");
     if (!globalDef) {
       seenUnknownStorage = true;
       return mlir::WalkResult::advance();
     }
-    // Skip variables whose size could not be computed or that are zero-sized,
-    // as they do not need any TBAA tags.
-    if (!declSize || *declSize == 0)
+    // Zero-sized variables do not need any TBAA tags, because
+    // they cannot be accessed.
+    if (declSize == 0)
       return mlir::WalkResult::advance();
 
     declToStorageMap.try_emplace(decl.getOperation(), globalDef.getOperation(),
-                                 storageOffset, *declSize);
+                                 storageOffset, declSize);
     storageDecls.try_emplace(globalDef.getOperation())
         .first->second.push_back(decl.getOperation());
 
     auto &set =
         memberIntervals.try_emplace(globalDef.getOperation()).first->second;
-    set.insert(IntervalTy(storageOffset, *declSize));
+    set.insert(IntervalTy(storageOffset, declSize));
     return mlir::WalkResult::advance();
   });
 
@@ -829,6 +829,15 @@ void AddAliasTagsPass::runOnAliasInterface(fir::FirAliasTagOpInterface op,
       name = alloc.getUniqName();
     else
       unknownAllocOp = true;
+
+    if (auto declOp = source.origin.instantiationPoint) {
+      // Use the outermost scope for local allocations,
+      // because using the innermost scope may result
+      // in incorrect TBAA, when calls are inlined in MLIR.
+      auto declareOp = mlir::dyn_cast<fir::DeclareOp>(declOp);
+      assert(declareOp && "Instantiation point must be fir.declare");
+      scopeOp = state.getOutermostScope(declareOp);
+    }
 
     if (unknownAllocOp) {
       LLVM_DEBUG(llvm::dbgs().indent(2)

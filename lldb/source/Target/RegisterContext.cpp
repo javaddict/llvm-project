@@ -98,8 +98,12 @@ uint64_t RegisterContext::GetPC(uint64_t fail_value) {
   uint64_t pc = ReadRegisterAsUnsigned(reg, fail_value);
 
   if (pc != fail_value) {
-    if (TargetSP target_sp = m_thread.CalculateTarget())
-      pc = target_sp->GetOpcodeLoadAddress(pc, AddressClass::eCode);
+    TargetSP target_sp = m_thread.CalculateTarget();
+    if (target_sp) {
+      Target *target = target_sp.get();
+      if (target)
+        pc = target->GetOpcodeLoadAddress(pc, AddressClass::eCode);
+    }
   }
 
   return pc;

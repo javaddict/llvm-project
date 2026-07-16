@@ -151,8 +151,8 @@ struct ImOpConversion : public ConvertOpToLLVMPattern<complex::ImOp> {
 };
 
 struct BinaryComplexOperands {
-  mlir::Complex<Value> lhs;
-  mlir::Complex<Value> rhs;
+  std::complex<Value> lhs;
+  std::complex<Value> rhs;
 };
 
 template <typename OpTy>
@@ -279,37 +279,13 @@ struct MulOpConversion : public ConvertOpToLLVMPattern<complex::MulOp> {
     Value lhsRe = arg.lhs.real();
     Value lhsIm = arg.lhs.imag();
 
-    Value real;
-    Value imag;
-    if (arith::bitEnumContainsAll(complexFMFAttr.getValue(),
-                                  arith::FastMathFlags::contract)) {
-      Value lhsImagTimesRhsImag =
-          LLVM::FMulOp::create(rewriter, loc, lhsIm, rhsIm, fmf);
-      Value negLhsImagTimesRhsImag =
-          LLVM::FNegOp::create(rewriter, loc, lhsImagTimesRhsImag, fmf);
-      real = LLVM::FMAOp::create(rewriter, loc, lhsRe, rhsRe,
-                                 negLhsImagTimesRhsImag, fmf);
+    Value real = LLVM::FSubOp::create(
+        rewriter, loc, LLVM::FMulOp::create(rewriter, loc, rhsRe, lhsRe, fmf),
+        LLVM::FMulOp::create(rewriter, loc, rhsIm, lhsIm, fmf), fmf);
 
-      Value lhsImagTimesRhsReal =
-          LLVM::FMulOp::create(rewriter, loc, lhsIm, rhsRe, fmf);
-      imag = LLVM::FMAOp::create(rewriter, loc, lhsRe, rhsIm,
-                                 lhsImagTimesRhsReal, fmf);
-    } else {
-      Value lhsRealTimesRhsReal =
-          LLVM::FMulOp::create(rewriter, loc, rhsRe, lhsRe, fmf);
-      Value lhsImagTimesRhsImag =
-          LLVM::FMulOp::create(rewriter, loc, rhsIm, lhsIm, fmf);
-      Value lhsImagTimesRhsReal =
-          LLVM::FMulOp::create(rewriter, loc, lhsIm, rhsRe, fmf);
-      Value lhsRealTimesRhsImag =
-          LLVM::FMulOp::create(rewriter, loc, lhsRe, rhsIm, fmf);
-
-      real = LLVM::FSubOp::create(rewriter, loc, lhsRealTimesRhsReal,
-                                  lhsImagTimesRhsImag, fmf);
-
-      imag = LLVM::FAddOp::create(rewriter, loc, lhsImagTimesRhsReal,
-                                  lhsRealTimesRhsImag, fmf);
-    }
+    Value imag = LLVM::FAddOp::create(
+        rewriter, loc, LLVM::FMulOp::create(rewriter, loc, lhsIm, rhsRe, fmf),
+        LLVM::FMulOp::create(rewriter, loc, lhsRe, rhsIm, fmf), fmf);
 
     result.setReal(rewriter, loc, real);
     result.setImaginary(rewriter, loc, imag);
@@ -399,9 +375,7 @@ void ConvertComplexToLLVMPass::runOnOperation() {
 namespace {
 /// Implement the interface to convert MemRef to LLVM.
 struct ComplexToLLVMDialectInterface : public ConvertToLLVMPatternInterface {
-  ComplexToLLVMDialectInterface(Dialect *dialect)
-      : ConvertToLLVMPatternInterface(dialect) {}
-
+  using ConvertToLLVMPatternInterface::ConvertToLLVMPatternInterface;
   void loadDependentDialects(MLIRContext *context) const final {
     context->loadDialect<LLVM::LLVMDialect>();
   }

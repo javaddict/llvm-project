@@ -6,8 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <utility>
-
 #include "mlir/Dialect/Transform/Interfaces/TransformInterfaces.h"
 
 #include "mlir/IR/Diagnostics.h"
@@ -1173,8 +1171,7 @@ bool transform::TransformResults::isSet(unsigned resultNumber) const {
 transform::TrackingListener::TrackingListener(TransformState &state,
                                               TransformOpInterface op,
                                               TrackingListenerConfig config)
-    : TransformState::Extension(state), transformOp(op),
-      config(std::move(config)) {
+    : TransformState::Extension(state), transformOp(op), config(config) {
   if (op) {
     for (OpOperand *opOperand : transformOp.getConsumedHandleOpOperands()) {
       consumedHandles.insert(opOperand->get());
@@ -1988,45 +1985,6 @@ LogicalResult transform::detail::verifyTransformOpInterface(Operation *op) {
 }
 
 //===----------------------------------------------------------------------===//
-// Normal form utilities.
-//===----------------------------------------------------------------------===//
-
-DiagnosedSilenceableFailure transform::detail::checkNormalForms(
-    ArrayRef<NormalFormAttrInterface> normalForms,
-    ArrayRef<Operation *> payload) {
-  // Return any definite failure or the first silenceable failure.
-  auto overallResult = DiagnosedSilenceableFailure::success();
-  for (Operation *op : payload) {
-    for (NormalFormAttrInterface normalForm : normalForms) {
-      DiagnosedSilenceableFailure result = normalForm.checkOperation(op);
-      if (result.isDefiniteFailure())
-        return result;
-      if (result.isSilenceableFailure() && overallResult.succeeded())
-        overallResult = std::move(result);
-    }
-  }
-  return overallResult;
-}
-
-LogicalResult transform::detail::verifyNormalFormList(
-    function_ref<InFlightDiagnostic()> emitError,
-    ArrayRef<NormalFormAttrInterface> normalForms) {
-  llvm::DenseMap<TypeID, NormalFormAttrInterface> seen;
-  for (NormalFormAttrInterface normalForm : normalForms) {
-    auto [previous, inserted] =
-        seen.try_emplace(normalForm.getTypeID(), normalForm);
-    if (!inserted) {
-      InFlightDiagnostic diag = emitError()
-                                << "duplicate normal form: " << normalForm;
-      diag.attachNote() << "previous instance: " << previous->second;
-      return diag;
-    }
-  }
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // Entry point.
 //===----------------------------------------------------------------------===//
 
@@ -2062,6 +2020,5 @@ LogicalResult transform::applyTransforms(
 // Generated interface implementation.
 //===----------------------------------------------------------------------===//
 
-#include "mlir/Dialect/Transform/Interfaces/TransformAttrInterfaces.cpp.inc"
 #include "mlir/Dialect/Transform/Interfaces/TransformInterfaces.cpp.inc"
 #include "mlir/Dialect/Transform/Interfaces/TransformTypeInterfaces.cpp.inc"

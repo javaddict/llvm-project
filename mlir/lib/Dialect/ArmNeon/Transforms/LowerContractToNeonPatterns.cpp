@@ -150,7 +150,6 @@ protected:
     case MMLA::Nop:
       llvm_unreachable("Uninitialized operation type");
     }
-    llvm_unreachable("Unknown MMLA");
   }
 
   // Check common preconditions for applying the patterns and initialize

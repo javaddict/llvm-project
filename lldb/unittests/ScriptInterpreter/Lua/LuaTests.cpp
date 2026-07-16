@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Plugins/ScriptInterpreter/Lua/LuaState.h"
+#include "Plugins/ScriptInterpreter/Lua/Lua.h"
 #include "Plugins/ScriptInterpreter/Lua/SWIGLuaBridge.h"
 #include "gtest/gtest.h"
 
@@ -29,14 +29,14 @@ lldb_private::lua::SWIGBridge::LLDBSwigLuaWatchpointCallbackFunction(
 }
 
 TEST(LuaTest, RunValid) {
-  LuaState lua_state;
-  llvm::Error error = lua_state.Run("foo = 1");
+  Lua lua;
+  llvm::Error error = lua.Run("foo = 1");
   EXPECT_FALSE(static_cast<bool>(error));
 }
 
 TEST(LuaTest, RunInvalid) {
-  LuaState lua_state;
-  llvm::Error error = lua_state.Run("nil = foo");
+  Lua lua;
+  llvm::Error error = lua.Run("nil = foo");
   EXPECT_TRUE(static_cast<bool>(error));
   EXPECT_EQ(llvm::toString(std::move(error)),
             "[string \"buffer\"]:1: unexpected symbol near 'nil'\n");

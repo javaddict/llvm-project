@@ -17,7 +17,6 @@
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CAS/MappedFileRegionArena.h"
-#include "llvm/CAS/OnDiskCASLogger.h"
 #include "llvm/Support/Error.h"
 
 namespace llvm::cas::ondisk {
@@ -117,7 +116,6 @@ public:
   /// Create the DatabaseFile at Path with Capacity.
   static Expected<DatabaseFile>
   create(const Twine &Path, uint64_t Capacity,
-         std::shared_ptr<OnDiskCASLogger> Logger,
          function_ref<Error(DatabaseFile &)> NewDBConstructor);
 
   size_t size() const { return Alloc.size(); }

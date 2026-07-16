@@ -28,12 +28,12 @@ class LLVMContext;
 class Type;
 class Value;
 
-class Float2IntPass : public OptionalPassInfoMixin<Float2IntPass> {
+class Float2IntPass : public PassInfoMixin<Float2IntPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 
   // Glue for old PM.
-  LLVM_ABI bool runImpl(Function &F, const DominatorTree &DT);
+  bool runImpl(Function &F, const DominatorTree &DT);
 
 private:
   void findRoots(Function &F, const DominatorTree &DT);

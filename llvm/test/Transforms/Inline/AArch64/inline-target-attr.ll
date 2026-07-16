@@ -1,4 +1,5 @@
 ; RUN: opt < %s -mtriple=aarch64-unknown-linux-gnu -S -passes=inline | FileCheck %s
+; RUN: opt < %s -mtriple=aarch64-unknown-linux-gnu -S -passes='cgscc(inline)' | FileCheck %s
 ; Check that we only inline when we have compatible target attributes.
 
 define i32 @foo() #0 {

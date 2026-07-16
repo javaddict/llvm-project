@@ -520,7 +520,7 @@ inline std::string join_items(Sep Separator, Args &&... Items) {
 ///   ListSeparator LS;
 ///   for (auto &I : C)
 ///     OS << LS << I.getName();
-/// \endcode
+/// \end
 class ListSeparator {
   bool First = true;
   StringRef Separator;
@@ -602,9 +602,9 @@ public:
 /// \code
 ///   for (StringRef x : llvm::split("foo,bar,baz", ","))
 ///     ...;
-/// \endcode
+/// \end
 ///
-/// Note that the passed string must remain valid throughout lifetime
+/// Note that the passed string must remain valid throuhgout lifetime
 /// of the iterators.
 inline iterator_range<SplittingIterator> split(StringRef Str, StringRef Separator) {
   return {SplittingIterator(Str, Separator),

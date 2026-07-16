@@ -1235,12 +1235,6 @@ public:
   /// Determine whether this class has any variant members.
   bool hasVariantMembers() const { return data().HasVariantMembers; }
 
-  /// Returns whether the pointer fields in this class should have pointer field
-  /// protection (PFP) by default, either because of an attribute, the
-  /// -fexperimental-pointer-field-protection-abi compiler flag or inheritance
-  /// from a base or member with PFP.
-  bool isPFPType() const { return data().IsPFPType; }
-
   /// Determine whether this class has a trivial default constructor
   /// (C++11 [class.ctor]p5).
   bool hasTrivialDefaultConstructor() const {
@@ -1791,9 +1785,6 @@ public:
   /// the declaration context suffices.
   Decl *getLambdaContextDecl() const;
 
-  /// Set the context declaration for a lambda class.
-  void setLambdaContextDecl(Decl *ContextDecl);
-
   /// Retrieve the index of this lambda within the context declaration returned
   /// by getLambdaContextDecl().
   unsigned getLambdaIndexInContext() const {
@@ -1803,19 +1794,21 @@ public:
 
   /// Information about how a lambda is numbered within its context.
   struct LambdaNumbering {
+    Decl *ContextDecl = nullptr;
     unsigned IndexInContext = 0;
     unsigned ManglingNumber = 0;
     unsigned DeviceManglingNumber = 0;
     bool HasKnownInternalLinkage = false;
   };
 
-  /// Set the mangling numbers for a lambda class.
+  /// Set the mangling numbers and context declaration for a lambda class.
   void setLambdaNumbering(LambdaNumbering Numbering);
 
-  // Get the mangling numbers for a lambda class.
+  // Get the mangling numbers and context declaration for a lambda class.
   LambdaNumbering getLambdaNumbering() const {
-    return {getLambdaIndexInContext(), getLambdaManglingNumber(),
-            getDeviceLambdaManglingNumber(), hasKnownLambdaInternalLinkage()};
+    return {getLambdaContextDecl(), getLambdaIndexInContext(),
+            getLambdaManglingNumber(), getDeviceLambdaManglingNumber(),
+            hasKnownLambdaInternalLinkage()};
   }
 
   /// Retrieve the device side mangling number.
@@ -1948,7 +1941,7 @@ public:
 
   /// Check for equivalence of explicit specifiers.
   /// \return true if the explicit specifier are equivalent, false otherwise.
-  bool isEquivalent(ExplicitSpecifier Other) const;
+  bool isEquivalent(const ExplicitSpecifier Other) const;
   /// Determine whether this specifier is known to correspond to an explicit
   /// declaration. Returns false if the specifier is absent or has an
   /// expression that is value-dependent or evaluates to false.
@@ -1964,7 +1957,10 @@ public:
   void setKind(ExplicitSpecKind Kind) { ExplicitSpec.setInt(Kind); }
   void setExpr(Expr *E) { ExplicitSpec.setPointer(E); }
   // Retrieve the explicit specifier in the given declaration, if any.
-  static ExplicitSpecifier getFromDecl(const FunctionDecl *Function);
+  static ExplicitSpecifier getFromDecl(FunctionDecl *Function);
+  static const ExplicitSpecifier getFromDecl(const FunctionDecl *Function) {
+    return getFromDecl(const_cast<FunctionDecl *>(Function));
+  }
   static ExplicitSpecifier Invalid() {
     return ExplicitSpecifier(nullptr, ExplicitSpecKind::Unresolved);
   }
@@ -2038,7 +2034,8 @@ public:
   static CXXDeductionGuideDecl *CreateDeserialized(ASTContext &C,
                                                    GlobalDeclID ID);
 
-  ExplicitSpecifier getExplicitSpecifier() const { return ExplicitSpec; }
+  ExplicitSpecifier getExplicitSpecifier() { return ExplicitSpec; }
+  const ExplicitSpecifier getExplicitSpecifier() const { return ExplicitSpec; }
 
   /// Return true if the declaration is already resolved to be explicit.
   bool isExplicit() const { return ExplicitSpec.isExplicit(); }
@@ -2224,19 +2221,6 @@ public:
 
   /// Determine whether this is a move assignment operator.
   bool isMoveAssignmentOperator() const;
-
-  /// Determine whether this is a copy or move constructor or a copy or move
-  /// assignment operator.
-  bool isCopyOrMoveConstructorOrAssignment() const;
-
-  /// Determine whether this is a copy or move constructor. Always returns
-  /// false for non-constructor methods; see also
-  /// CXXConstructorDecl::isCopyOrMoveConstructor().
-  bool isCopyOrMoveConstructor() const;
-
-  /// Returns whether this is a copy/move constructor or assignment operator
-  /// that can be implemented as a memcpy of the object representation.
-  bool isMemcpyEquivalentSpecialMember(const ASTContext &Ctx) const;
 
   CXXMethodDecl *getCanonicalDecl() override {
     return cast<CXXMethodDecl>(FunctionDecl::getCanonicalDecl());
@@ -2689,7 +2673,10 @@ public:
       CXXConstructorDeclBits.IsSimpleExplicit = ES.isExplicit();
   }
 
-  ExplicitSpecifier getExplicitSpecifier() const {
+  ExplicitSpecifier getExplicitSpecifier() {
+    return getCanonicalDecl()->getExplicitSpecifierInternal();
+  }
+  const ExplicitSpecifier getExplicitSpecifier() const {
     return getCanonicalDecl()->getExplicitSpecifierInternal();
   }
 
@@ -2976,7 +2963,11 @@ public:
          const AssociatedConstraint &TrailingRequiresClause = {});
   static CXXConversionDecl *CreateDeserialized(ASTContext &C, GlobalDeclID ID);
 
-  ExplicitSpecifier getExplicitSpecifier() const {
+  ExplicitSpecifier getExplicitSpecifier() {
+    return getCanonicalDecl()->ExplicitSpec;
+  }
+
+  const ExplicitSpecifier getExplicitSpecifier() const {
     return getCanonicalDecl()->ExplicitSpec;
   }
 

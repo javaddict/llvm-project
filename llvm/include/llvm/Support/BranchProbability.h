@@ -46,7 +46,6 @@ public:
   LLVM_ABI BranchProbability(uint32_t Numerator, uint32_t Denominator);
 
   bool isZero() const { return N == 0; }
-  bool isOne() const { return N == D; }
   bool isUnknown() const { return N == UnknownN; }
 
   static BranchProbability getZero() { return BranchProbability(0); }
@@ -102,7 +101,7 @@ public:
   LLVM_ABI uint64_t scaleByInverse(uint64_t Num) const;
 
   /// Compute pow(Probability, N).
-  LLVM_ABI BranchProbability pow(unsigned N) const;
+  BranchProbability pow(unsigned N) const;
 
   BranchProbability &operator+=(BranchProbability RHS) {
     assert(N != UnknownN && RHS.N != UnknownN &&

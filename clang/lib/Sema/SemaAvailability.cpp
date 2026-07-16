@@ -58,14 +58,9 @@ static const AvailabilityAttr *getAttrForPlatform(ASTContext &Context,
       // FIXME: this is copied from CheckAvailability. We should try to
       // de-duplicate.
 
-      // If this attr has an inferred platform-specific attr (e.g. anyappleos
-      // → ios/macos/...), use that for platform matching but return the
-      // original.
-      const AvailabilityAttr *EffectiveAvail = Avail->getEffectiveAttr();
-
       // Check if this is an App Extension "platform", and if so chop off
       // the suffix for matching with the actual platform.
-      StringRef ActualPlatform = EffectiveAvail->getPlatform()->getName();
+      StringRef ActualPlatform = Avail->getPlatform()->getName();
       StringRef RealizedPlatform = ActualPlatform;
       if (Context.getLangOpts().AppExt) {
         size_t suffix = RealizedPlatform.rfind("_app_extension");
@@ -78,7 +73,7 @@ static const AvailabilityAttr *getAttrForPlatform(ASTContext &Context,
       // Match the platform name.
       if (RealizedPlatform == TargetPlatform) {
         // Find the best matching attribute for this environment
-        if (hasMatchingEnvironmentOrNone(Context, EffectiveAvail))
+        if (hasMatchingEnvironmentOrNone(Context, Avail))
           return Avail;
         PartialMatch = Avail;
       }
@@ -126,6 +121,12 @@ Sema::ShouldDiagnoseAvailabilityOfDecl(const NamedDecl *D, std::string *Message,
     }
   }
 done:
+  // For alias templates, get the underlying declaration.
+  if (const auto *ADecl = dyn_cast<TypeAliasTemplateDecl>(D)) {
+    D = ADecl->getTemplatedDecl();
+    Result = D->getAvailability(Message);
+  }
+
   // Forward class declarations get their attributes from their definition.
   if (const auto *IDecl = dyn_cast<ObjCInterfaceDecl>(D)) {
     if (IDecl->getDefinition()) {
@@ -206,8 +207,8 @@ static bool ShouldDiagnoseAvailabilityInContext(
   auto CheckContext = [&](const Decl *C) {
     if (K == AR_NotYetIntroduced) {
       if (const AvailabilityAttr *AA = getAttrForPlatform(S.Context, C))
-        if (AA->getEffectiveIntroduced() >= DeclVersion &&
-            AA->getEffectiveEnvironment() == DeclEnv)
+        if (AA->getIntroduced() >= DeclVersion &&
+            AA->getEnvironment() == DeclEnv)
           return true;
     } else if (K == AR_Deprecated) {
       if (C->isDeprecated())
@@ -428,8 +429,8 @@ static void DoEmitAvailabilityWarning(Sema &S, AvailabilityResult K,
   const AvailabilityAttr *AA = getAttrForPlatform(S.Context, OffendingDecl);
   const IdentifierInfo *IIEnv = nullptr;
   if (AA) {
-    DeclVersion = AA->getEffectiveIntroduced();
-    IIEnv = AA->getEffectiveEnvironment();
+    DeclVersion = AA->getIntroduced();
+    IIEnv = AA->getEnvironment();
   }
 
   if (!ShouldDiagnoseAvailabilityInContext(S, K, DeclVersion, IIEnv, Ctx,
@@ -461,9 +462,9 @@ static void DoEmitAvailabilityWarning(Sema &S, AvailabilityResult K,
     // for declarations that were introduced in iOS 11 (macOS 10.13, ...) or
     // later.
     assert(AA != nullptr && "expecting valid availability attribute");
-    VersionTuple Introduced = AA->getEffectiveIntroduced();
+    VersionTuple Introduced = AA->getIntroduced();
     bool EnvironmentMatchesOrNone =
-        hasMatchingEnvironmentOrNone(S.getASTContext(), AA->getEffectiveAttr());
+        hasMatchingEnvironmentOrNone(S.getASTContext(), AA);
 
     const TargetInfo &TI = S.getASTContext().getTargetInfo();
     std::string PlatformName(
@@ -675,11 +676,10 @@ static void DoEmitAvailabilityWarning(Sema &S, AvailabilityResult K,
   struct AllowWarningInSystemHeaders {
     AllowWarningInSystemHeaders(DiagnosticsEngine &E,
                                 bool AllowWarningInSystemHeaders)
-        : Engine(E), Prev(E.getForceSystemWarnings()) {
-      if (AllowWarningInSystemHeaders)
-        Engine.setForceSystemWarnings(true);
+        : Engine(E), Prev(E.getSuppressSystemWarnings()) {
+      E.setSuppressSystemWarnings(!AllowWarningInSystemHeaders);
     }
-    ~AllowWarningInSystemHeaders() { Engine.setForceSystemWarnings(Prev); }
+    ~AllowWarningInSystemHeaders() { Engine.setSuppressSystemWarnings(Prev); }
 
   private:
     DiagnosticsEngine &Engine;
@@ -897,9 +897,9 @@ void DiagnoseUnguardedAvailability::DiagnoseDeclAvailability(
     const AvailabilityAttr *AA =
       getAttrForPlatform(SemaRef.getASTContext(), OffendingDecl);
     assert(AA != nullptr && "expecting valid availability attribute");
-    bool EnvironmentMatchesOrNone = hasMatchingEnvironmentOrNone(
-        SemaRef.getASTContext(), AA->getEffectiveAttr());
-    VersionTuple Introduced = AA->getEffectiveIntroduced();
+    bool EnvironmentMatchesOrNone =
+        hasMatchingEnvironmentOrNone(SemaRef.getASTContext(), AA);
+    VersionTuple Introduced = AA->getIntroduced();
 
     if (EnvironmentMatchesOrNone && AvailabilityStack.back() >= Introduced)
       return;
@@ -907,7 +907,7 @@ void DiagnoseUnguardedAvailability::DiagnoseDeclAvailability(
     // If the context of this function is less available than D, we should not
     // emit a diagnostic.
     if (!ShouldDiagnoseAvailabilityInContext(SemaRef, Result, Introduced,
-                                             AA->getEffectiveEnvironment(), Ctx,
+                                             AA->getEnvironment(), Ctx,
                                              OffendingDecl))
       return;
 
@@ -987,22 +987,12 @@ void DiagnoseUnguardedAvailability::DiagnoseDeclAvailability(
     const char *ExtraIndentation = "    ";
     std::string FixItString;
     llvm::raw_string_ostream FixItOS(FixItString);
-    StringRef FixItPlatformName;
-    VersionTuple FixItVersion;
-
-    if (AA->getInferredAttr()) {
-      FixItPlatformName = "anyAppleOS";
-      FixItVersion = AA->getIntroduced();
-    } else {
-      FixItPlatformName = AvailabilityAttr::getPlatformNameSourceSpelling(
-          SemaRef.getASTContext().getTargetInfo().getPlatformName());
-      FixItVersion = AA->getEffectiveIntroduced();
-    }
-    FixItOS << "if ("
-            << (SemaRef.getLangOpts().ObjC ? "@available"
-                                           : "__builtin_available")
-            << "(" << FixItPlatformName << " " << FixItVersion.getAsString()
-            << ", *)) {\n"
+    FixItOS << "if (" << (SemaRef.getLangOpts().ObjC ? "@available"
+                                                     : "__builtin_available")
+            << "("
+            << AvailabilityAttr::getPlatformNameSourceSpelling(
+                   SemaRef.getASTContext().getTargetInfo().getPlatformName())
+            << " " << Introduced.getAsString() << ", *)) {\n"
             << Indentation << ExtraIndentation;
     FixitDiag << FixItHint::CreateInsertion(IfInsertionLoc, FixItOS.str());
     SourceLocation ElseInsertionLoc = Lexer::findLocationAfterToken(

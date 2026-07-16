@@ -32,7 +32,7 @@ format(StringRef input, StringPrinter::EscapeStyle escape_style) {
   StringPrinter::ReadBufferAndDumpToStreamOptions opts;
   opts.SetStream(&out);
   opts.SetSourceSize(input.size());
-  opts.SetZeroTermination(StringPrinter::ZeroTermination::ZeroTerminate);
+  opts.SetNeedsZeroTermination(true);
   opts.SetEscapeNonPrintables(true);
   opts.SetIgnoreMaxLength(false);
   opts.SetEscapeStyle(escape_style);

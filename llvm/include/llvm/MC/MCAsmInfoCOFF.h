@@ -20,21 +20,21 @@ class MCAsmInfoCOFF : public MCAsmInfo {
   bool useCodeAlign(const MCSection &Sec) const final;
 
 protected:
-  explicit MCAsmInfoCOFF(const MCTargetOptions &Options);
+  explicit MCAsmInfoCOFF();
 };
 
 class MCAsmInfoMicrosoft : public MCAsmInfoCOFF {
   void anchor() override;
 
 protected:
-  explicit MCAsmInfoMicrosoft(const MCTargetOptions &Options);
+  explicit MCAsmInfoMicrosoft();
 };
 
 class MCAsmInfoGNUCOFF : public MCAsmInfoCOFF {
   void anchor() override;
 
 protected:
-  explicit MCAsmInfoGNUCOFF(const MCTargetOptions &Options);
+  explicit MCAsmInfoGNUCOFF();
 };
 
 } // end namespace llvm

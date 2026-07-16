@@ -135,8 +135,7 @@ private:
                                               mlir::LLVM::DIFileAttr fileAttr,
                                               mlir::LLVM::DIScopeAttr scope,
                                               fir::cg::XDeclareOp declOp,
-                                              bool hasDescriptor,
-                                              bool genStringLocation = true);
+                                              bool hasDescriptor);
 
   mlir::LLVM::DITypeAttr convertPointerLikeType(mlir::Type elTy,
                                                 mlir::LLVM::DIFileAttr fileAttr,

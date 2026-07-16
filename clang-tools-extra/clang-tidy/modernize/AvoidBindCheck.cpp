@@ -185,9 +185,8 @@ static bool anyDescendantIsLocal(const Stmt *Statement) {
       if (Var->isLocalVarDeclOrParm())
         return true;
     }
-  } else if (isa<CXXThisExpr>(Statement)) {
+  } else if (isa<CXXThisExpr>(Statement))
     return true;
-  }
 
   return any_of(Statement->children(), anyDescendantIsLocal);
 }
@@ -366,11 +365,10 @@ static void addFunctionCallArgs(ArrayRef<BindArgument> Args,
     if (B.Kind == BK_Placeholder) {
       Stream << "std::forward<decltype(" << B.UsageIdentifier << ")>";
       Stream << "(" << B.UsageIdentifier << ")";
-    } else if (B.CM != CM_None) {
+    } else if (B.CM != CM_None)
       Stream << B.UsageIdentifier;
-    } else {
+    else
       Stream << B.SourceTokens;
-    }
 
     Delimiter = ", ";
   }
@@ -391,7 +389,7 @@ static std::vector<const FunctionDecl *>
 findCandidateCallOperators(const CXXRecordDecl *RecordDecl, size_t NumArgs) {
   std::vector<const FunctionDecl *> Candidates;
 
-  for (const CXXMethodDecl *Method : RecordDecl->methods()) {
+  for (const clang::CXXMethodDecl *Method : RecordDecl->methods()) {
     const OverloadedOperatorKind OOK = Method->getOverloadedOperator();
 
     if (OOK != OverloadedOperatorKind::OO_Call)
@@ -404,7 +402,7 @@ findCandidateCallOperators(const CXXRecordDecl *RecordDecl, size_t NumArgs) {
   }
 
   // Find templated operator(), if any.
-  for (const Decl *D : RecordDecl->decls()) {
+  for (const clang::Decl *D : RecordDecl->decls()) {
     const auto *FTD = dyn_cast<FunctionTemplateDecl>(D);
     if (!FTD)
       continue;

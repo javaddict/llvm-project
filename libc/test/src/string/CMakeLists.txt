@@ -275,16 +275,6 @@ add_libc_test(
 )
 
 add_libc_test(
-  strnlen_s_test
-  SUITE
-    libc-string-tests
-  SRCS
-    strnlen_s_test.cpp
-  DEPENDS
-    libc.src.string.strnlen_s
-)
-
-add_libc_test(
   strpbrk_test
   SUITE
     libc-string-tests

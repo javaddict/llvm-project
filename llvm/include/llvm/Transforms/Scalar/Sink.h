@@ -21,9 +21,9 @@ namespace llvm {
 class Function;
 
 /// Move instructions into successor blocks when possible.
-class SinkingPass : public OptionalPassInfoMixin<SinkingPass> {
+class SinkingPass : public PassInfoMixin<SinkingPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 }
 

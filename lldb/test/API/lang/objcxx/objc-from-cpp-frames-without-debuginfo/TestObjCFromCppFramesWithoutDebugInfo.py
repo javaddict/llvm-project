@@ -10,11 +10,8 @@ from lldbsuite.test import lldbutil
 
 
 class TestObjCFromCppFramesWithoutDebugInfo(TestBase):
-    NO_DEBUG_INFO_TESTCASE = True
-    SHARED_BUILD_TESTCASE = False
-
     def test(self):
-        self.build(debug_info="none")
+        self.build()
         (_, process, _, _) = lldbutil.run_to_name_breakpoint(self, "main")
 
         self.assertState(process.GetState(), lldb.eStateStopped)

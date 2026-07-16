@@ -773,8 +773,7 @@ class ConstantPointerNull final : public Constant {
 public:
   LLVM_ABI static ConstantPointerNull *get(PointerType *Ty);
 
-  LLVM_ABI Type *getType() const;
-  LLVM_ABI PointerType *getPointerType() const;
+  LLVM_ABI PointerType *getType() const;
 
   /// For isa/dyn_cast.
   static bool classof(const sandboxir::Value *From) {

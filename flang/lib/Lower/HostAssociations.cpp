@@ -74,8 +74,11 @@ static void bindCapturedSymbol(const Fortran::semantics::Symbol &sym,
                                fir::ExtendedValue val,
                                Fortran::lower::AbstractConverter &converter,
                                Fortran::lower::SymMap &symMap) {
-  Fortran::lower::genDeclareSymbol(converter, symMap, sym, val,
-                                   fir::FortranVariableFlagsEnum::host_assoc);
+  if (converter.getLoweringOptions().getLowerToHighLevelFIR())
+    Fortran::lower::genDeclareSymbol(converter, symMap, sym, val,
+                                     fir::FortranVariableFlagsEnum::host_assoc);
+  else
+    symMap.addSymbol(sym, val);
 }
 
 namespace {

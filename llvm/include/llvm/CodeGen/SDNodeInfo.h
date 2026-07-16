@@ -121,7 +121,7 @@ public:
     return Names[getDesc(Opcode).NameOffset];
   }
 
-  LLVM_ABI void verifyNode(const SelectionDAG &DAG, const SDNode *N) const;
+  void verifyNode(const SelectionDAG &DAG, const SDNode *N) const;
 };
 
 } // namespace llvm

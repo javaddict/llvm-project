@@ -22,9 +22,8 @@ class Module;
 
 /// Call "ShouldRemove" for every entry in M's global_ctor list and remove the
 /// entries for which it returns true.  Return true if anything changed.
-LLVM_ABI bool
-optimizeGlobalCtorsList(Module &M,
-                        function_ref<bool(uint32_t, Function *)> ShouldRemove);
+bool optimizeGlobalCtorsList(
+    Module &M, function_ref<bool(uint32_t, Function *)> ShouldRemove);
 
 } // namespace llvm
 

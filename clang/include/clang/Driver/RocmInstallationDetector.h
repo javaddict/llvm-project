@@ -82,6 +82,7 @@ private:
     bool FiniteOnly;
     bool UnsafeMathOpt;
     bool FastRelaxedMath;
+    bool CorrectSqrt;
     bool GPUSan;
   };
 
@@ -145,6 +146,7 @@ private:
   ConditionalLibrary WavefrontSize64;
   ConditionalLibrary FiniteOnly;
   ConditionalLibrary UnsafeMath;
+  ConditionalLibrary CorrectlyRoundedSqrt;
 
   // Maps ABI version to library path. The version number is in the format of
   // three digits as used in the ABI version library name.
@@ -157,7 +159,8 @@ private:
 
   bool allGenericLibsValid() const {
     return !OCML.empty() && !OCKL.empty() && !OpenCL.empty() &&
-           WavefrontSize64.isValid();
+           WavefrontSize64.isValid() && FiniteOnly.isValid() &&
+           UnsafeMath.isValid() && CorrectlyRoundedSqrt.isValid();
   }
 
   void scanLibDevicePath(llvm::StringRef Path);
@@ -174,7 +177,8 @@ private:
 public:
   RocmInstallationDetector(const Driver &D, const llvm::Triple &HostTriple,
                            const llvm::opt::ArgList &Args,
-                           bool DetectHIPRuntime = true);
+                           bool DetectHIPRuntime = true,
+                           bool DetectDeviceLib = false);
 
   /// Get file paths of default bitcode libraries common to AMDGPU based
   /// toolchains.
@@ -241,11 +245,15 @@ public:
   }
 
   StringRef getFiniteOnlyPath(bool Enabled) const {
-    return FiniteOnly.isValid() ? FiniteOnly.get(Enabled) : "";
+    return FiniteOnly.get(Enabled);
   }
 
   StringRef getUnsafeMathPath(bool Enabled) const {
-    return UnsafeMath.isValid() ? UnsafeMath.get(Enabled) : "";
+    return UnsafeMath.get(Enabled);
+  }
+
+  StringRef getCorrectlyRoundedSqrtPath(bool Enabled) const {
+    return CorrectlyRoundedSqrt.get(Enabled);
   }
 
   StringRef getABIVersionPath(DeviceLibABIVersion ABIVer) const {

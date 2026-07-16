@@ -35,8 +35,7 @@ namespace {
 
 /// Implement the interface to convert SCF to EmitC.
 struct SCFToEmitCDialectInterface : public ConvertToEmitCPatternInterface {
-  SCFToEmitCDialectInterface(Dialect *dialect)
-      : ConvertToEmitCPatternInterface(dialect) {}
+  using ConvertToEmitCPatternInterface::ConvertToEmitCPatternInterface;
 
   /// Hook for derived dialect interface to provide conversion patterns
   /// and mark dialect legal for the conversion target.
@@ -90,9 +89,6 @@ createVariablesForResults(T op, const TypeConverter *typeConverter,
     Type resultType = typeConverter->convertType(result.getType());
     if (!resultType)
       return rewriter.notifyMatchFailure(op, "result type conversion failed");
-    if (isa<emitc::ArrayType>(resultType))
-      return rewriter.notifyMatchFailure(
-          op, "cannot create variable for result of array type");
     Type varType = emitc::LValueType::get(resultType);
     emitc::OpaqueAttr noInit = emitc::OpaqueAttr::get(context, "");
     emitc::VariableOp var =
@@ -397,10 +393,6 @@ private:
       Type convertedType = getTypeConverter()->convertType(init.getType());
       if (!convertedType)
         return rewriter.notifyMatchFailure(whileOp, "type conversion failed");
-      if (isa<emitc::ArrayType>(convertedType))
-        return rewriter.notifyMatchFailure(
-            whileOp,
-            "cannot create variable for loop-carried value of array type");
 
       auto var = emitc::VariableOp::create(
           rewriter, loc, emitc::LValueType::get(convertedType), noInit);

@@ -11,14 +11,13 @@
 // template<class InputIterator>
 //   iterator insert(const_iterator p, InputIterator first, InputIterator last); // constexpr since C++20
 
-#include <cassert>
-#include <cstdint>
 #include <string>
+#include <cassert>
 
-#include "asan_testing.h"
-#include "min_allocator.h"
-#include "test_iterators.h"
 #include "test_macros.h"
+#include "test_iterators.h"
+#include "min_allocator.h"
+#include "asan_testing.h"
 
 template <class S, class It>
 TEST_CONSTEXPR_CXX20 void test(S s, typename S::difference_type pos, It first, It last, S expected) {
@@ -150,7 +149,7 @@ TEST_CONSTEXPR_CXX20 bool test() {
   test_string<std::string>();
 #if TEST_STD_VER >= 11
   test_string<std::basic_string<char, std::char_traits<char>, min_allocator<char>>>();
-  test_string<std::basic_string<char, std::char_traits<char>, safe_allocator<char>>>();
+  test_string<std::basic_string<char, std::char_traits<char>, min_allocator<char>>>();
 #endif
 
 #ifndef TEST_HAS_NO_EXCEPTIONS

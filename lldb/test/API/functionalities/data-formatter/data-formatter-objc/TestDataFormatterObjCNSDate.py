@@ -15,8 +15,6 @@ import datetime
 
 
 class ObjCDataFormatterNSDate(ObjCDataFormatterTestCase):
-    SHARED_BUILD_TESTCASE = False
-
     def test_nsdate_with_run_command(self):
         """Test formatters for  NSDate."""
         self.appkit_tester_impl(self.nsdate_data_formatter_commands, False)
@@ -42,8 +40,7 @@ class ObjCDataFormatterNSDate(ObjCDataFormatterTestCase):
         self.expect("frame variable date5", substrs=[now_year])
 
         self.expect(
-            "frame variable date1_abs date2_abs",
-            patterns=["1985-04-10|1985-04-11", "2011-01-01|2010-12-31"],
+            "frame variable date1_abs date2_abs", substrs=["1985-04", "2011-01"]
         )
 
         self.expect("frame variable date3_abs", substrs=[now_year])

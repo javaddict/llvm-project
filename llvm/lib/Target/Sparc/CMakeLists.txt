@@ -30,10 +30,8 @@ add_llvm_target(SparcCodeGen
   SparcSubtarget.cpp
   SparcTargetMachine.cpp
   SparcTargetObjectFile.cpp
-  SparcTargetTransformInfo.cpp
 
   LINK_COMPONENTS
-  Analysis
   AsmPrinter
   CodeGen
   CodeGenTypes
@@ -45,7 +43,6 @@ add_llvm_target(SparcCodeGen
   Support
   Target
   TargetParser
-  TransformUtils
 
   ADD_TO_COMPONENT
   Sparc

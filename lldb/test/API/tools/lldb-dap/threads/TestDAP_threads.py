@@ -8,7 +8,6 @@ from lldbsuite.test import lldbutil
 import lldbdap_testcase
 
 
-@skipIfTargetDoesNotSupportThreads()
 class TestDAP_threads(lldbdap_testcase.DAPTestCaseBase):
     def test_correct_thread(self):
         """
@@ -40,7 +39,8 @@ class TestDAP_threads(lldbdap_testcase.DAPTestCaseBase):
                 "breakpoint %s." % breakpoint_ids[0]
             )
         )
-        self.assertNotIn("preserveFocusHint", stopped_event[0]["body"])
+        self.assertFalse(stopped_event[0]["body"]["preserveFocusHint"])
+        self.assertTrue(stopped_event[0]["body"]["threadCausedFocus"])
         # All threads should be named Thread {index}
         threads = self.dap_server.get_threads()
         self.assertTrue(all(len(t["name"]) > 0 for t in threads))

@@ -255,7 +255,11 @@ public:
   /// Prefer using LLDB_LOGF whenever possible.
   void Printf(const char *format, ...) __attribute__((format(printf, 2, 3)));
 
+  void Error(const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+
   void Verbose(const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+
+  void Warning(const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 
   const Flags GetOptions() const;
 
@@ -264,6 +268,7 @@ public:
   bool GetVerbose() const;
 
   void VAPrintf(const char *format, va_list args);
+  void VAError(const char *format, va_list args);
   void VAFormatf(llvm::StringRef file, llvm::StringRef function,
                  const char *format, va_list args);
 
@@ -368,13 +373,6 @@ Log *GetLLDBErrorLog();
       log_private->Format(__FILE__, __func__, __VA_ARGS__);                    \
   } while (0)
 
-#define LLDB_LOG_VERBOSE(log, ...)                                             \
-  do {                                                                         \
-    ::lldb_private::Log *log_private = (log);                                  \
-    if (log_private && log_private->GetVerbose())                              \
-      log_private->Format(__FILE__, __func__, __VA_ARGS__);                    \
-  } while (0)
-
 #define LLDB_LOGF(log, ...)                                                    \
   do {                                                                         \
     ::lldb_private::Log *log_private = (log);                                  \
@@ -382,11 +380,11 @@ Log *GetLLDBErrorLog();
       log_private->Formatf(__FILE__, __func__, __VA_ARGS__);                   \
   } while (0)
 
-#define LLDB_LOGF_VERBOSE(log, ...)                                            \
+#define LLDB_LOGV(log, ...)                                                    \
   do {                                                                         \
     ::lldb_private::Log *log_private = (log);                                  \
     if (log_private && log_private->GetVerbose())                              \
-      log_private->Formatf(__FILE__, __func__, __VA_ARGS__);                   \
+      log_private->Format(__FILE__, __func__, __VA_ARGS__);                    \
   } while (0)
 
 // Write message to log, if error is set. In the log message refer to the error

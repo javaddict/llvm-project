@@ -1,32 +1,27 @@
 header: arpa/inet.h
-standards:
-  - posix
-macros:
-  - macro_name: INET_ADDRSTRLEN
-    macro_header: inet-address-macros.h
-  - macro_name: INET6_ADDRSTRLEN
-    macro_header: inet-address-macros.h
+header_template: inet.h.def
+macros: []
 types:
+  - type_name: in_addr
   - type_name: in_addr_t
-  - type_name: struct_in_addr
 enums: []
 objects: []
 functions:
   - name: htonl
     standards:
-      - posix
+      - POSIX
     return_type: uint32_t
     arguments:
       - type: uint32_t
   - name: htons
     standards:
-      - posix
+      - POSIX
     return_type: uint16_t
     arguments:
       - type: uint16_t
   - name: inet_addr
     standards:
-      - posix
+      - POSIX
     return_type: in_addr_t
     arguments:
       - type: const char *
@@ -36,16 +31,16 @@ functions:
     return_type: int
     arguments:
       - type: const char *
-      - type: struct in_addr *
+      - type: in_addr *
   - name: ntohl
     standards:
-      - posix
+      - POSIX
     return_type: uint32_t
     arguments:
       - type: uint32_t
   - name: ntohs
     standards:
-      - posix
+      - POSIX
     return_type: uint16_t
     arguments:
       - type: uint16_t

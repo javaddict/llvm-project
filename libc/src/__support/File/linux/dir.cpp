@@ -8,7 +8,6 @@
 
 #include "src/__support/File/dir.h"
 
-#include "src/__support/OSUtil/linux/syscall_wrappers/open.h"
 #include "src/__support/OSUtil/syscall.h" // For internal syscall function.
 #include "src/__support/error_or.h"
 #include "src/__support/macros/config.h"
@@ -19,7 +18,21 @@
 namespace LIBC_NAMESPACE_DECL {
 
 ErrorOr<int> platform_opendir(const char *name) {
-  return linux_syscalls::open(name, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
+  int open_flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC;
+#ifdef SYS_open
+  int fd = LIBC_NAMESPACE::syscall_impl<int>(SYS_open, name, open_flags);
+#elif defined(SYS_openat)
+  int fd =
+      LIBC_NAMESPACE::syscall_impl<int>(SYS_openat, AT_FDCWD, name, open_flags);
+#else
+#error                                                                         \
+    "SYS_open and SYS_openat syscalls not available to perform an open operation."
+#endif
+
+  if (fd < 0) {
+    return LIBC_NAMESPACE::Error(-fd);
+  }
+  return fd;
 }
 
 ErrorOr<size_t> platform_fetch_dirents(int fd, cpp::span<uint8_t> buffer) {

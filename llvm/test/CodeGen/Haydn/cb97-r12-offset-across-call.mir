@@ -1,0 +1,68 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=machine-latecleanup %s -o - | FileCheck %s
+#
+# MachineLateInstrsCleanup must NOT delete a post-call LOADI32 of the
+# reserved AT scratch R12 when an identical pre-call materialization exists.
+#
+# PEI inserts `$r12 = LOADI32 <off>` immediately before each WITH_REG frame
+# access whose offset is outside the golden scaled-simm6 field. Callees may
+# clobber R12 (AT is not callee-saved). LateCleanup used to treat the pre-call
+# LOADI32 as still live after JAL_W (call Defs omitted R12 and CallLowering
+# omitted the call-preserved regmask), delete the post-call remat, and leave
+# `ld32_reg..., sp, r12` reading a stale value (CoreMark core_init_matrix).
+#
+# This MIR is the PEI shape for that pattern. With correct call clobbers
+# (implicit-def $r12 from TableGen Defs + csr_haydn regmask), LateCleanup must
+# keep both remats. (Two LOADI32 128 lines must appear in the output.)
+
+--- |
+  define i32 @r12_remat_across_call(i32 %a, i32 %b) nounwind {
+  entry:
+    %r = srem i32 %a, %b
+    ret i32 %r
+  }
+...
+---
+name:            r12_remat_across_call
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+frameInfo:
+  stackSize:       16
+  adjustsStack:    true
+  hasCalls:        true
+  maxCallFrameSize: 0
+  isCalleeSavedInfoValid: true
+stack:
+  - { id: 0, name: '', type: spill-slot, offset: -4, size: 4, alignment: 4,
+      stack-id: default, callee-saved-register: '$r15', callee-saved-restored: true,
+      debug-info-variable: '', debug-info-expression: '', debug-info-location: '' }
+machineFunctionInfo: {}
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r0
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r13 = frame-setup SUBI32 $r13, 16
+    frame-setup ST32 $r15, $r13, 12
+
+    ; Pre-call PEI remat of large stack offset into reserved R12 + WITH_REG store.
+    ; CHECK: $r12 = LOADI32 128
+    $r12 = LOADI32 128
+    ; CHECK: ST32_REG_M0S0LS $r1, $r13, $r12
+    ST32_REG_M0S0LS $r1, $r13, $r12
+
+    ; Call clobbers R12 (implicit-def from Defs) and non-CSR regs (regmask).
+    ; CSR_Haydn preserves $r8-$r11, $r15, $d8-$d15 — R12 is NOT preserved.
+    $r15 = JAL_W &__modsi3, csr_haydn, implicit-def $r1, implicit-def dead $r2, implicit-def dead $r3, implicit-def dead $r4, implicit-def dead $r5, implicit-def dead $r6, implicit-def dead $r7, implicit-def $r12, implicit-def dead $r14, implicit-def dead $d0, implicit-def dead $d1, implicit-def dead $d2, implicit-def dead $d3, implicit-def dead $d4, implicit-def dead $d5, implicit-def dead $d6, implicit-def dead $d7, implicit $r1, implicit $r2, implicit-def $r1
+
+    ; Post-call PEI remat — LateCleanup must KEEP this.
+    ; CHECK: $r12 = LOADI32 128
+    $r12 = LOADI32 128
+    ; CHECK: LD32_REG_M0S0LS $r13, $r12
+    $r4 = LD32_REG_M0S0LS $r13, $r12
+
+    $r1 = ADD32 $r1, $r4
+    $r15 = LD32 $r13, 12
+    $r13 = ADDI32_W $r13, 16
+    RET implicit $r15, implicit $r1
+...

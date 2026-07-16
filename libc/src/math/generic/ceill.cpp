@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/ceill.h"
-#include "src/__support/math/ceill.h"
+#include "src/__support/FPUtil/NearestIntegerOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(long double, ceill, (long double x)) {
-  return math::ceill(x);
+  return fputil::ceil(x);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

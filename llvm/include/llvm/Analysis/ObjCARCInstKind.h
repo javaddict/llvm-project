@@ -53,48 +53,48 @@ enum class ARCInstKind {
   None                      ///< anything that is inert from an ARC perspective.
 };
 
-LLVM_ABI raw_ostream &operator<<(raw_ostream &OS, const ARCInstKind Class);
+raw_ostream &operator<<(raw_ostream &OS, const ARCInstKind Class);
 
 /// Test if the given class is a kind of user.
-LLVM_ABI bool IsUser(ARCInstKind Class);
+bool IsUser(ARCInstKind Class);
 
 /// Test if the given class is objc_retain or equivalent.
-LLVM_ABI bool IsRetain(ARCInstKind Class);
+bool IsRetain(ARCInstKind Class);
 
 /// Test if the given class is objc_autorelease or equivalent.
-LLVM_ABI bool IsAutorelease(ARCInstKind Class);
+bool IsAutorelease(ARCInstKind Class);
 
 /// Test if the given class represents instructions which return their
 /// argument verbatim.
-LLVM_ABI bool IsForwarding(ARCInstKind Class);
+bool IsForwarding(ARCInstKind Class);
 
 /// Test if the given class represents instructions which do nothing if
 /// passed a null pointer.
-LLVM_ABI bool IsNoopOnNull(ARCInstKind Class);
+bool IsNoopOnNull(ARCInstKind Class);
 
 /// Test if the given class represents instructions which do nothing if
 /// passed a global variable.
-LLVM_ABI bool IsNoopOnGlobal(ARCInstKind Class);
+bool IsNoopOnGlobal(ARCInstKind Class);
 
 /// Test if the given class represents instructions which are always safe
 /// to mark with the "tail" keyword.
-LLVM_ABI bool IsAlwaysTail(ARCInstKind Class);
+bool IsAlwaysTail(ARCInstKind Class);
 
 /// Test if the given class represents instructions which are never safe
 /// to mark with the "tail" keyword.
-LLVM_ABI bool IsNeverTail(ARCInstKind Class);
+bool IsNeverTail(ARCInstKind Class);
 
 /// Test if the given class represents instructions which are always safe
 /// to mark with the nounwind attribute.
-LLVM_ABI bool IsNoThrow(ARCInstKind Class);
+bool IsNoThrow(ARCInstKind Class);
 
 /// Test whether the given instruction can autorelease any pointer or cause an
 /// autoreleasepool pop.
-LLVM_ABI bool CanInterruptRV(ARCInstKind Class);
+bool CanInterruptRV(ARCInstKind Class);
 
 /// Determine if F is one of the special known Functions.  If it isn't,
 /// return ARCInstKind::CallOrUser.
-LLVM_ABI ARCInstKind GetFunctionClass(const Function *F);
+ARCInstKind GetFunctionClass(const Function *F);
 
 /// Determine which objc runtime call instruction class V belongs to.
 ///
@@ -114,11 +114,11 @@ inline ARCInstKind GetBasicARCInstKind(const Value *V) {
 }
 
 /// Map V to its ARCInstKind equivalence class.
-LLVM_ABI ARCInstKind GetARCInstKind(const Value *V);
+ARCInstKind GetARCInstKind(const Value *V);
 
 /// Returns false if conservatively we can prove that any instruction mapped to
 /// this kind can not decrement ref counts. Returns true otherwise.
-LLVM_ABI bool CanDecrementRefCount(ARCInstKind Kind);
+bool CanDecrementRefCount(ARCInstKind Kind);
 
 } // end namespace objcarc
 } // end namespace llvm

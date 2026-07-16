@@ -46,10 +46,10 @@ void TimelineView::onReservedBuffers(const InstRef &IR,
   const MCSchedModel &SM = getSubTargetInfo().getSchedModel();
   std::pair<unsigned, int> BufferInfo = {0, -1};
   for (const unsigned Buffer : Buffers) {
-    const int BufferSize = SM.getResourceBufferSize(Buffer);
-    if (!BufferInfo.first || BufferInfo.second > BufferSize) {
+    const MCProcResourceDesc &MCDesc = *SM.getProcResource(Buffer);
+    if (!BufferInfo.first || BufferInfo.second > MCDesc.BufferSize) {
       BufferInfo.first = Buffer;
-      BufferInfo.second = BufferSize;
+      BufferInfo.second = MCDesc.BufferSize;
     }
   }
 
@@ -151,7 +151,7 @@ void TimelineView::printWaitTimeEntry(formatted_raw_ostream &OS,
   AverageTime3 = (double)(Entry.CyclesSpentAfterWBAndBeforeRetire * 10) /
                  CumulativeExecutions;
 
-  OS << CumulativeExecutions;
+  OS << Executions;
   OS.PadToColumn(13);
 
   int BufferSize = PrintingTotals ? 0 : UsedBuffer[SourceIndex].second;

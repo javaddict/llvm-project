@@ -37,7 +37,7 @@ public:
   PluginProperties() {
     m_collection_sp = std::make_shared<OptionValueProperties>(
         PlatformQemuUser::GetPluginNameStatic());
-    m_collection_sp->Initialize(g_platformqemuuser_properties_def);
+    m_collection_sp->Initialize(g_platformqemuuser_properties);
   }
 
   llvm::StringRef GetArchitecture() {

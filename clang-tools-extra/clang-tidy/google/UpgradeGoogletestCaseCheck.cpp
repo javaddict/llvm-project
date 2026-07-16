@@ -17,12 +17,13 @@ using namespace clang::ast_matchers;
 
 namespace clang::tidy::google {
 
-static constexpr StringRef RenameCaseToSuiteMessage =
+static const llvm::StringRef RenameCaseToSuiteMessage =
     "Google Test APIs named with 'case' are deprecated; use equivalent APIs "
     "named with 'suite'";
 
-static std::optional<StringRef> getNewMacroName(StringRef MacroName) {
-  static const llvm::StringMap<StringRef> ReplacementMap = {
+static std::optional<llvm::StringRef>
+getNewMacroName(llvm::StringRef MacroName) {
+  static const llvm::StringMap<llvm::StringRef> ReplacementMap = {
       {"TYPED_TEST_CASE", "TYPED_TEST_SUITE"},
       {"TYPED_TEST_CASE_P", "TYPED_TEST_SUITE_P"},
       {"REGISTER_TYPED_TEST_CASE_P", "REGISTER_TYPED_TEST_SUITE_P"},
@@ -61,7 +62,7 @@ public:
       // We check if the newly defined macro is one of the target replacements.
       // This ensures that the check creates warnings only if it is including a
       // recent enough version of Google Test.
-      const StringRef FileName = PP->getSourceManager().getFilename(
+      const llvm::StringRef FileName = PP->getSourceManager().getFilename(
           MD->getMacroInfo()->getDefinitionLoc());
       ReplacementFound = FileName.ends_with("gtest/gtest-typed-test.h") &&
                          PP->getSpelling(MacroNameTok) == "TYPED_TEST_SUITE";
@@ -86,18 +87,18 @@ public:
 private:
   enum class CheckAction { Warn, Rename };
 
-  void macroUsed(const Token &MacroNameTok, const MacroDefinition &MD,
+  void macroUsed(const clang::Token &MacroNameTok, const MacroDefinition &MD,
                  SourceLocation Loc, CheckAction Action) {
     if (!ReplacementFound)
       return;
 
     const std::string Name = PP->getSpelling(MacroNameTok);
 
-    std::optional<StringRef> Replacement = getNewMacroName(Name);
+    std::optional<llvm::StringRef> Replacement = getNewMacroName(Name);
     if (!Replacement)
       return;
 
-    const StringRef FileName = PP->getSourceManager().getFilename(
+    const llvm::StringRef FileName = PP->getSourceManager().getFilename(
         MD.getMacroInfo()->getDefinitionLoc());
     if (!FileName.ends_with("gtest/gtest-typed-test.h"))
       return;
@@ -200,8 +201,8 @@ void UpgradeGoogletestCaseCheck::registerMatchers(MatchFinder *Finder) {
       this);
 }
 
-static StringRef getNewMethodName(StringRef CurrentName) {
-  static const llvm::StringMap<StringRef> ReplacementMap = {
+static llvm::StringRef getNewMethodName(llvm::StringRef CurrentName) {
+  static const llvm::StringMap<llvm::StringRef> ReplacementMap = {
       {"SetUpTestCase", "SetUpTestSuite"},
       {"TearDownTestCase", "TearDownTestSuite"},
       {"test_case_name", "test_suite_name"},
@@ -237,7 +238,7 @@ static bool isInTemplate(const NodeType &Node,
 
 static bool
 derivedTypeHasReplacementMethod(const MatchFinder::MatchResult &Result,
-                                StringRef ReplacementMethod) {
+                                llvm::StringRef ReplacementMethod) {
   const auto *Class = Result.Nodes.getNodeAs<CXXRecordDecl>("class");
   return !match(cxxRecordDecl(
                     unless(isExpansionInFileMatching(
@@ -263,7 +264,7 @@ getAliasNameRange(const MatchFinder::MatchResult &Result) {
 }
 
 void UpgradeGoogletestCaseCheck::check(const MatchFinder::MatchResult &Result) {
-  StringRef ReplacementText;
+  llvm::StringRef ReplacementText;
   CharSourceRange ReplacementRange;
   if (const auto *Method = Result.Nodes.getNodeAs<CXXMethodDecl>("method")) {
     ReplacementText = getNewMethodName(Method->getName());
@@ -272,7 +273,7 @@ void UpgradeGoogletestCaseCheck::check(const MatchFinder::MatchResult &Result) {
     bool IsInTemplate = false;
     bool AddFix = true;
     if (const auto *Call = Result.Nodes.getNodeAs<CXXMemberCallExpr>("call")) {
-      const auto *Callee = cast<MemberExpr>(Call->getCallee());
+      const auto *Callee = llvm::cast<MemberExpr>(Call->getCallee());
       ReplacementRange = CharSourceRange::getTokenRange(Callee->getMemberLoc(),
                                                         Callee->getMemberLoc());
       IsInInstantiation = isInInstantiation(*Call, Result);

@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "flang/Semantics/unparse-with-symbols.h"
-
 #include "mod-file.h"
 #include "flang/Parser/parse-tree-visitor.h"
 #include "flang/Parser/parse-tree.h"
@@ -50,42 +49,38 @@ public:
     return true;
   }
   void Post(const parser::OmpClause &) { currStmt_ = std::nullopt; }
-  bool Pre(const parser::OmpGroupprivateDirective &dir) {
+  bool Pre(const parser::OpenMPGroupprivate &dir) {
     currStmt_ = dir.source;
     return true;
   }
-  void Post(const parser::OmpGroupprivateDirective &) {
-    currStmt_ = std::nullopt;
-  }
-  bool Pre(const parser::OmpThreadprivateDirective &dir) {
+  void Post(const parser::OpenMPGroupprivate &) { currStmt_ = std::nullopt; }
+  bool Pre(const parser::OpenMPThreadprivate &dir) {
     currStmt_ = dir.source;
     return true;
   }
-  void Post(const parser::OmpThreadprivateDirective &) {
-    currStmt_ = std::nullopt;
-  }
+  void Post(const parser::OpenMPThreadprivate &) { currStmt_ = std::nullopt; }
 
-  bool Pre(const parser::OmpDeclareMapperDirective &x) {
+  bool Pre(const parser::OpenMPDeclareMapperConstruct &x) {
     currStmt_ = x.source;
     return true;
   }
-  void Post(const parser::OmpDeclareMapperDirective &) {
+  void Post(const parser::OpenMPDeclareMapperConstruct &) {
     currStmt_ = std::nullopt;
   }
 
-  bool Pre(const parser::OmpDeclareReductionDirective &x) {
+  bool Pre(const parser::OpenMPDeclareReductionConstruct &x) {
     currStmt_ = x.source;
     return true;
   }
-  void Post(const parser::OmpDeclareReductionDirective &) {
+  void Post(const parser::OpenMPDeclareReductionConstruct &) {
     currStmt_ = std::nullopt;
   }
 
-  bool Pre(const parser::OmpDeclareTargetDirective &x) {
+  bool Pre(const parser::OpenMPDeclareTargetConstruct &x) {
     currStmt_ = x.source;
     return true;
   }
-  void Post(const parser::OmpDeclareTargetDirective &) {
+  void Post(const parser::OpenMPDeclareTargetConstruct &) {
     currStmt_ = std::nullopt;
   }
 

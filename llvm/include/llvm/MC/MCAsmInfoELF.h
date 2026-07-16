@@ -21,7 +21,7 @@ class MCAsmInfoELF : public MCAsmInfo {
   bool useCodeAlign(const MCSection &Sec) const final;
 
 protected:
-  MCAsmInfoELF(const MCTargetOptions &Options);
+  MCAsmInfoELF();
 };
 
 } // end namespace llvm

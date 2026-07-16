@@ -54,7 +54,7 @@ using namespace lldb_private;
 const char *SBThread::GetBroadcasterClassName() {
   LLDB_INSTRUMENT();
 
-  return ConstString(Thread::GetStaticBroadcasterClass()).AsCString(nullptr);
+  return ConstString(Thread::GetStaticBroadcasterClass()).AsCString();
 }
 
 // Constructors
@@ -846,9 +846,10 @@ SBError SBThread::StepOverUntil(lldb::SBFrame &sb_frame,
             "step until target not in current function");
     } else {
       Status new_plan_status;
-      ThreadPlanSP new_plan_sp = thread->QueueThreadPlanForStepUntil(
-          abort_other_plans, step_over_until_addrs, stop_other_threads,
-          frame_sp->GetFrameIndex(), new_plan_status);
+      ThreadPlanSP new_plan_sp(thread->QueueThreadPlanForStepUntil(
+          abort_other_plans, &step_over_until_addrs[0],
+          step_over_until_addrs.size(), stop_other_threads,
+          frame_sp->GetFrameIndex(), new_plan_status));
 
       if (new_plan_status.Success())
         sb_error = ResumeNewPlan(std::move(*exe_ctx), new_plan_sp.get());
@@ -897,13 +898,8 @@ SBError SBThread::StepUsingScriptedThreadPlan(const char *script_class_name,
   Status new_plan_status;
   StructuredData::ObjectSP obj_sp = args_data.m_impl_up->GetObjectSP();
 
-  StructuredData::DictionarySP args_dict_sp;
-  if (obj_sp && obj_sp->GetType() == lldb::eStructuredDataTypeDictionary)
-    args_dict_sp = std::static_pointer_cast<StructuredData::Dictionary>(obj_sp);
-
-  ScriptedMetadata scripted_metadata(script_class_name, args_dict_sp);
   ThreadPlanSP new_plan_sp = thread->QueueThreadPlanForStepScripted(
-      false, scripted_metadata, false, new_plan_status);
+      false, script_class_name, obj_sp, false, new_plan_status);
 
   if (new_plan_status.Fail()) {
     error = Status::FromErrorString(new_plan_status.AsCString());

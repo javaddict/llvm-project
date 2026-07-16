@@ -156,14 +156,14 @@ getCollapsedExtractSliceInfo(OpBuilder &b, tensor::ExtractSliceOp sliceOp,
 
 /// Computes the offsets, sizes, and strides needed to build an expanded
 /// `sliceOp`. The dimensions to expand are specified by `reassociation` and
-/// the shape of `expandedValue`.
+/// `expandedShape`.
 ///
 /// This fails when the specified expansion cannot be represented by a valid
 /// ExtractSliceOp.
 LogicalResult
 getExpandedExtractSliceInfo(OpBuilder &b, tensor::ExtractSliceOp sliceOp,
                             ArrayRef<ReassociationIndices> reassociation,
-                            Value expandedValue,
+                            ArrayRef<int64_t> expandedShape,
                             SmallVectorImpl<OpFoldResult> &expandedOffsets,
                             SmallVectorImpl<OpFoldResult> &expandedSizes,
                             SmallVectorImpl<OpFoldResult> &expandedStrides);

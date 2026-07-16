@@ -381,14 +381,10 @@ void GCNIterativeScheduler::scheduleRegion(Region &R, Range &&Schedule,
   auto Top = R.Begin;
   for (const auto &I : Schedule) {
     auto MI = getMachineInstr(I);
-
-    MachineBasicBlock::iterator MII = MI->getIterator();
-    if (MII != Top) {
-      bool NonDebugReordered =
-          !MI->isDebugInstr() && skipDebugInstructionsForward(Top, MII) != MII;
+    if (MI != &*Top) {
       BB->remove(MI);
       BB->insert(Top, MI);
-      if (NonDebugReordered)
+      if (!MI->isDebugInstr())
         LIS->handleMove(*MI, true);
     }
     if (!MI->isDebugInstr()) {

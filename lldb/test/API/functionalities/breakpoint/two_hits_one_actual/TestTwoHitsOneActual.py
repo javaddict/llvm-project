@@ -11,7 +11,6 @@ from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
 
 
-@skipIfTargetDoesNotSupportThreads()
 class TestTwoHitsOneActual(TestBase):
     NO_DEBUG_INFO_TESTCASE = True
 

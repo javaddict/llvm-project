@@ -563,7 +563,9 @@ BufferDeallocation::updateFunctionSignature(FunctionOpInterface op) {
   SmallVector<TypeRange> returnOperandTypes(llvm::map_range(
       op.getFunctionBody().getOps<RegionBranchTerminatorOpInterface>(),
       [&](RegionBranchTerminatorOpInterface branchOp) {
-        return branchOp.getSuccessorOperands(RegionSuccessor::parent())
+        return branchOp
+            .getSuccessorOperands(RegionSuccessor(
+                op.getOperation(), op.getOperation()->getResults()))
             .getTypes();
       }));
   if (!llvm::all_equal(returnOperandTypes))
@@ -668,11 +670,6 @@ LogicalResult BufferDeallocation::deallocate(Block *block) {
 Operation *BufferDeallocation::appendOpResults(Operation *op,
                                                ArrayRef<Type> types) {
   SmallVector<Type> newTypes(op->getResultTypes());
-  // Save the old result values before appendOpResults erases the op. The
-  // liveness analysis holds references to these values and they may be queried
-  // later (e.g., from handleInterface(BranchOpInterface) in the same block).
-  SmallVector<Value> oldResults(op->getResults());
-
   newTypes.append(types.begin(), types.end());
   auto *newOp = Operation::create(op->getLoc(), op->getName(), newTypes,
                                   op->getOperands(), op->getAttrDictionary(),
@@ -685,12 +682,6 @@ Operation *BufferDeallocation::appendOpResults(Operation *op,
   OpBuilder(op).insert(newOp);
   op->replaceAllUsesWith(newOp->getResults().take_front(op->getNumResults()));
   op->erase();
-
-  // Register the replacement of each old result with the corresponding new
-  // result so that stale liveness entries can be translated on demand.
-  for (auto [oldResult, newResult] :
-       llvm::zip(oldResults, newOp->getResults().take_front(oldResults.size())))
-    state.mapValue(oldResult, newResult);
 
   return newOp;
 }
@@ -723,7 +714,7 @@ BufferDeallocation::handleInterface(RegionBranchOpInterface op) {
   // the outside.
   Value falseVal = buildBoolValue(builder, op.getLoc(), false);
   op->insertOperands(op->getNumOperands(),
-                     Repeated<Value>(numMemrefOperands, falseVal));
+                     SmallVector<Value>(numMemrefOperands, falseVal));
 
   int counter = op->getNumResults();
   unsigned numMemrefResults = llvm::count_if(op->getResults(), isMemref);
@@ -954,8 +945,8 @@ BufferDeallocation::handleInterface(RegionBranchTerminatorOpInterface op) {
   // about, but we would need to check how many successors there are and under
   // which condition they are taken, etc.
 
-  MutableOperandRange operands =
-      op.getMutableSuccessorOperands(RegionSuccessor::parent());
+  MutableOperandRange operands = op.getMutableSuccessorOperands(
+      RegionSuccessor(op.getOperation(), op.getOperation()->getResults()));
 
   SmallVector<Value> updatedOwnerships;
   auto result = deallocation_impl::insertDeallocOpForReturnLike(

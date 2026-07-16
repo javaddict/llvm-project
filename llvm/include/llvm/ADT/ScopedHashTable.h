@@ -46,7 +46,6 @@ template <typename K, typename V>
 class ScopedHashTableVal {
   ScopedHashTableVal *NextInScope;
   ScopedHashTableVal *NextForKey;
-  ScopedHashTableVal *PreInScope;
   K Key;
   V Val;
 
@@ -60,7 +59,6 @@ public:
   ScopedHashTableVal *getNextForKey() { return NextForKey; }
   const ScopedHashTableVal *getNextForKey() const { return NextForKey; }
   ScopedHashTableVal *getNextInScope() { return NextInScope; }
-  ScopedHashTableVal *getPreInScope() { return PreInScope; }
 
   template <typename AllocatorTy>
   static ScopedHashTableVal *Create(ScopedHashTableVal *nextInScope,
@@ -72,9 +70,6 @@ public:
     new (New) ScopedHashTableVal(key, val);
     New->NextInScope = nextInScope;
     New->NextForKey = nextForKey;
-    New->PreInScope = nullptr;
-    if (nextInScope)
-      nextInScope->PreInScope = New;
     return New;
   }
 
@@ -82,20 +77,6 @@ public:
     // Free memory referenced by the item.
     this->~ScopedHashTableVal();
     Allocator.Deallocate(this);
-  }
-
-  template <typename AllocatorTy>
-  static void erase(ScopedHashTableVal<K, V> *&ThisEntry,
-                    AllocatorTy &Allocator) {
-    ScopedHashTableVal<K, V> *ToDestroy = ThisEntry;
-    ScopedHashTableVal<K, V> *NextInScope = ThisEntry->NextInScope;
-    ScopedHashTableVal<K, V> *PrevInScope = ThisEntry->PreInScope;
-    if (PrevInScope)
-      PrevInScope->NextInScope = NextInScope;
-    if (NextInScope)
-      NextInScope->PreInScope = PrevInScope;
-    ThisEntry = ThisEntry->NextForKey;
-    ToDestroy->Destroy(Allocator);
   }
 };
 
@@ -120,7 +101,6 @@ public:
 
   ScopedHashTableScope *getParentScope() { return PrevScope; }
   const ScopedHashTableScope *getParentScope() const { return PrevScope; }
-  void erase(const K &key);
 
 private:
   friend class ScopedHashTable<K, V, KInfo, AllocatorTy>;
@@ -219,7 +199,8 @@ public:
   iterator end() { return iterator(nullptr); }
 
   iterator begin(const K &Key) {
-    auto I = TopLevelMap.find(Key);
+    typename DenseMap<K, ValTy*, KInfo>::iterator I =
+      TopLevelMap.find(Key);
     if (I == TopLevelMap.end()) return end();
     return iterator(I->second);
   }
@@ -238,8 +219,6 @@ public:
                              getAllocator());
     S->setLastValInScope(KeyEntry);
   }
-
-  void erase(const K &key) { CurScope->erase(key); }
 };
 
 /// ScopedHashTableScope ctor - Install this as the current scope for the hash
@@ -278,33 +257,6 @@ ScopedHashTableScope<K, V, KInfo, Allocator>::~ScopedHashTableScope() {
   }
 }
 
-/// This method undoes the latest binding of the given key, effectively
-/// reverting to the previous state for that key. In the example at the
-/// beginning of this file, if we execute `HT.erase(0)` immediately after
-/// `HT.insert(0, 42);`, then the value associated with key "0" reverts to 0.
-/// This value is owned by "Scope1(HT)".
-template <typename K, typename V, typename KInfo, typename Allocator>
-void ScopedHashTableScope<K, V, KInfo, Allocator>::erase(const K &Key) {
-  auto It = HT.TopLevelMap.find(Key);
-  if (It == HT.TopLevelMap.end())
-    return;
-  ScopedHashTableVal<K, V> *&ThisEntry = It->second;
-
-  // `ThisEntry` may be the LastValInScope of a parent scope rather than the
-  // current scope. We iterate through the scope chain to find the scope
-  // that owns ThisEntry as its LastValInScope and update it accordingly.
-  auto *S = this;
-  while (S) {
-    if (ThisEntry == S->LastValInScope) {
-      S->LastValInScope = ThisEntry->getNextInScope();
-      break;
-    }
-    S = S->PrevScope;
-  }
-  if (ThisEntry->getNextForKey() == nullptr)
-    HT.TopLevelMap.erase(It);
-  ScopedHashTableVal<K, V>::erase(ThisEntry, HT.getAllocator());
-}
 } // end namespace llvm
 
 #endif // LLVM_ADT_SCOPEDHASHTABLE_H

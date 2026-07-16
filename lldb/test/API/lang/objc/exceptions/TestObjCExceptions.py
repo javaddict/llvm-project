@@ -12,7 +12,6 @@ from lldbsuite.test import lldbutil
 
 class ObjCExceptionsTestCase(TestBase):
     @skipIf(compiler="clang", compiler_version=["<", "13.0"])
-    @expectedFailureAll(archs=["arm64e"])
     def test_objc_exceptions_at_throw(self):
         self.build()
 
@@ -168,7 +167,6 @@ class ObjCExceptionsTestCase(TestBase):
             )
 
     @skipIf(compiler="clang", compiler_version=["<", "13.0"])
-    @expectedFailureAll(archs=["arm64e"])
     def test_objc_exceptions_at_abort(self):
         self.build()
 

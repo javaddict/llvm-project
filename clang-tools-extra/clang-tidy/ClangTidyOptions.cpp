@@ -324,7 +324,8 @@ ClangTidyOptions ClangTidyOptions::merge(const ClangTidyOptions &Other,
   return Result;
 }
 
-ClangTidyOptions ClangTidyOptionsProvider::getOptions(StringRef FileName) {
+ClangTidyOptions
+ClangTidyOptionsProvider::getOptions(llvm::StringRef FileName) {
   ClangTidyOptions Result;
   unsigned Priority = 0;
   for (auto &Source : getRawOptions(FileName))
@@ -333,7 +334,7 @@ ClangTidyOptions ClangTidyOptionsProvider::getOptions(StringRef FileName) {
 }
 
 std::vector<OptionsSource>
-DefaultOptionsProvider::getRawOptions(StringRef FileName) {
+DefaultOptionsProvider::getRawOptions(llvm::StringRef FileName) {
   std::vector<OptionsSource> Result;
   Result.emplace_back(DefaultOptions, OptionsSourceTypeDefaultBinary);
   return Result;
@@ -349,14 +350,14 @@ ConfigOptionsProvider::ConfigOptionsProvider(
       ConfigOptions(std::move(ConfigOptions)) {}
 
 std::vector<OptionsSource>
-ConfigOptionsProvider::getRawOptions(StringRef FileName) {
+ConfigOptionsProvider::getRawOptions(llvm::StringRef FileName) {
   std::vector<OptionsSource> RawOptions =
       DefaultOptionsProvider::getRawOptions(FileName);
   if (ConfigOptions.InheritParentConfig.value_or(false)) {
     LLVM_DEBUG(llvm::dbgs()
                << "Getting options for file " << FileName << "...\n");
 
-    llvm::ErrorOr<SmallString<128>> AbsoluteFilePath =
+    llvm::ErrorOr<llvm::SmallString<128>> AbsoluteFilePath =
         getNormalizedAbsolutePath(FileName);
     if (AbsoluteFilePath)
       addRawFileOptions(AbsoluteFilePath->str(), RawOptions);
@@ -389,10 +390,10 @@ FileOptionsBaseProvider::FileOptionsBaseProvider(
       OverrideOptions(std::move(OverrideOptions)),
       ConfigHandlers(std::move(ConfigHandlers)) {}
 
-llvm::ErrorOr<SmallString<128>>
-FileOptionsBaseProvider::getNormalizedAbsolutePath(StringRef Path) {
+llvm::ErrorOr<llvm::SmallString<128>>
+FileOptionsBaseProvider::getNormalizedAbsolutePath(llvm::StringRef Path) {
   assert(FS && "FS must be set.");
-  SmallString<128> NormalizedAbsolutePath = {Path};
+  llvm::SmallString<128> NormalizedAbsolutePath = {Path};
   const std::error_code Err = FS->makeAbsolute(NormalizedAbsolutePath);
   if (Err)
     return Err;
@@ -401,7 +402,7 @@ FileOptionsBaseProvider::getNormalizedAbsolutePath(StringRef Path) {
 }
 
 void FileOptionsBaseProvider::addRawFileOptions(
-    StringRef AbsolutePath, std::vector<OptionsSource> &CurOptions) {
+    llvm::StringRef AbsolutePath, std::vector<OptionsSource> &CurOptions) {
   auto CurSize = CurOptions.size();
   // Look for a suitable configuration file in all parent directories of the
   // file. Start with the immediate parent directory and move up.
@@ -464,7 +465,7 @@ FileOptionsProvider::getRawOptions(StringRef FileName) {
   LLVM_DEBUG(llvm::dbgs() << "Getting options for file " << FileName
                           << "...\n");
 
-  const llvm::ErrorOr<SmallString<128>> AbsoluteFilePath =
+  const llvm::ErrorOr<llvm::SmallString<128>> AbsoluteFilePath =
       getNormalizedAbsolutePath(FileName);
   if (!AbsoluteFilePath)
     return {};

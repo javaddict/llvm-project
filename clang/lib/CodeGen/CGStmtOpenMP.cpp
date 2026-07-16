@@ -150,20 +150,6 @@ class OMPLoopScope : public CodeGenFunction::RunCleanupsScope {
     const Stmt *PreInits;
     CodeGenFunction::OMPMapVars PreCondVars;
     if (auto *LD = dyn_cast<OMPLoopDirective>(&S)) {
-      // Emit init, __range, __begin and __end variables for C++ range loops.
-      (void)OMPLoopBasedDirective::doForAllLoops(
-          LD->getInnermostCapturedStmt()->getCapturedStmt(),
-          /*TryImperfectlyNestedLoops=*/true, LD->getLoopsNumber(),
-          [&CGF](unsigned Cnt, const Stmt *CurStmt) {
-            if (const auto *CXXFor = dyn_cast<CXXForRangeStmt>(CurStmt)) {
-              if (const Stmt *Init = CXXFor->getInit())
-                CGF.EmitStmt(Init);
-              CGF.EmitStmt(CXXFor->getRangeStmt());
-              CGF.EmitStmt(CXXFor->getBeginStmt());
-              CGF.EmitStmt(CXXFor->getEndStmt());
-            }
-            return false;
-          });
       llvm::DenseSet<const VarDecl *> EmittedAsPrivate;
       for (const auto *E : LD->counters()) {
         const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
@@ -188,6 +174,19 @@ class OMPLoopScope : public CodeGenFunction::RunCleanupsScope {
         }
       }
       (void)PreCondVars.apply(CGF);
+      // Emit init, __range and __end variables for C++ range loops.
+      (void)OMPLoopBasedDirective::doForAllLoops(
+          LD->getInnermostCapturedStmt()->getCapturedStmt(),
+          /*TryImperfectlyNestedLoops=*/true, LD->getLoopsNumber(),
+          [&CGF](unsigned Cnt, const Stmt *CurStmt) {
+            if (const auto *CXXFor = dyn_cast<CXXForRangeStmt>(CurStmt)) {
+              if (const Stmt *Init = CXXFor->getInit())
+                CGF.EmitStmt(Init);
+              CGF.EmitStmt(CXXFor->getRangeStmt());
+              CGF.EmitStmt(CXXFor->getEndStmt());
+            }
+            return false;
+          });
       PreInits = LD->getPreInits();
     } else if (const auto *Tile = dyn_cast<OMPTileDirective>(&S)) {
       PreInits = Tile->getPreInits();
@@ -197,8 +196,6 @@ class OMPLoopScope : public CodeGenFunction::RunCleanupsScope {
       PreInits = Unroll->getPreInits();
     } else if (const auto *Reverse = dyn_cast<OMPReverseDirective>(&S)) {
       PreInits = Reverse->getPreInits();
-    } else if (const auto *Split = dyn_cast<OMPSplitDirective>(&S)) {
-      PreInits = Split->getPreInits();
     } else if (const auto *Interchange =
                    dyn_cast<OMPInterchangeDirective>(&S)) {
       PreInits = Interchange->getPreInits();
@@ -426,7 +423,7 @@ void CodeGenFunction::GenerateOpenMPCapturedVars(
       // and load it as a void pointer.
       if (!CurField->getType()->isAnyPointerType()) {
         ASTContext &Ctx = getContext();
-        Address DstAddr = CreateMemTempWithoutCast(
+        Address DstAddr = CreateMemTemp(
             Ctx.getUIntPtrType(),
             Twine(CurCap->getCapturedVar()->getName(), ".casted"));
         LValue DstLV = MakeAddrLValue(DstAddr, Ctx.getUIntPtrType());
@@ -608,12 +605,6 @@ static llvm::Function *emitOutlinedFunctionPrologue(
       llvm::Function::Create(FuncLLVMTy, llvm::GlobalValue::InternalLinkage,
                              FO.FunctionName, &CGM.getModule());
   CGM.SetInternalFunctionAttributes(CD, F, FuncInfo);
-
-  // Adjust the calling convention for SPIR-V targets to avoid mismatches
-  // between callee and caller.
-  if (CGM.getTriple().isSPIRV() && !FO.IsDeviceKernel)
-    F->setCallingConv(llvm::CallingConv::SPIR_FUNC);
-
   if (CD->isNothrow())
     F->setDoesNotThrow();
   F->setDoesNotRecurse();
@@ -623,8 +614,6 @@ static llvm::Function *emitOutlinedFunctionPrologue(
     F->removeFnAttr(llvm::Attribute::NoInline);
     F->addFnAttr(llvm::Attribute::AlwaysInline);
   }
-  if (!CGM.getCodeGenOpts().SampleProfileFile.empty())
-    F->addFnAttr("sample-profile-suffix-elision-policy", "selected");
 
   // Generate the function.
   CGF.StartFunction(CD, Ctx.VoidTy, F, FuncInfo, TargetArgs,
@@ -698,112 +687,6 @@ static llvm::Function *emitOutlinedFunctionPrologue(
     }
     ++Cnt;
     ++I;
-  }
-
-  return F;
-}
-
-static llvm::Function *emitOutlinedFunctionPrologueAggregate(
-    CodeGenFunction &CGF, FunctionArgList &Args,
-    llvm::MapVector<const Decl *, std::pair<const VarDecl *, Address>>
-        &LocalAddrs,
-    llvm::DenseMap<const Decl *, std::pair<const Expr *, llvm::Value *>>
-        &VLASizes,
-    llvm::Value *&CXXThisValue, llvm::Value *&ContextV, const CapturedStmt &CS,
-    SourceLocation Loc, StringRef FunctionName) {
-  const CapturedDecl *CD = CS.getCapturedDecl();
-  const RecordDecl *RD = CS.getCapturedRecordDecl();
-
-  CXXThisValue = nullptr;
-  CodeGenModule &CGM = CGF.CGM;
-  ASTContext &Ctx = CGM.getContext();
-  Args.push_back(CD->getContextParam());
-
-  const CGFunctionInfo &FuncInfo =
-      CGM.getTypes().arrangeBuiltinFunctionDeclaration(Ctx.VoidTy, Args);
-  llvm::FunctionType *FuncLLVMTy = CGM.getTypes().GetFunctionType(FuncInfo);
-
-  auto *F =
-      llvm::Function::Create(FuncLLVMTy, llvm::GlobalValue::InternalLinkage,
-                             FunctionName, &CGM.getModule());
-  CGM.SetInternalFunctionAttributes(CD, F, FuncInfo);
-  if (CD->isNothrow())
-    F->setDoesNotThrow();
-  F->setDoesNotRecurse();
-
-  CGF.StartFunction(CD, Ctx.VoidTy, F, FuncInfo, Args, Loc, Loc);
-  Address ContextAddr = CGF.GetAddrOfLocalVar(CD->getContextParam());
-  ContextV = CGF.Builder.CreateLoad(ContextAddr);
-
-  // The runtime passes arguments as a flat array of promoted intptr_t values.
-  llvm::Type *IntPtrTy = CGF.IntPtrTy;
-  llvm::Type *PtrTy = CGF.Builder.getPtrTy();
-  llvm::Align PtrAlign = CGM.getDataLayout().getPointerABIAlignment(0);
-  CharUnits SlotAlign = CharUnits::fromQuantity(PtrAlign.value());
-
-  for (auto [FD, C, FieldIdx] :
-       llvm::zip(RD->fields(), CS.captures(),
-                 llvm::seq<unsigned>(RD->getNumFields()))) {
-    llvm::Value *Slot =
-        CGF.Builder.CreateConstInBoundsGEP1_32(IntPtrTy, ContextV, FieldIdx);
-
-    // Generate the appropriate load from the GEP into the __context struct.
-    // This includes all of the user arguments as well as the implicit kernel
-    // argument pointer.
-    if (C.capturesVariableByCopy() && FD->getType()->isAnyPointerType()) {
-      const VarDecl *CurVD = C.getCapturedVar();
-      Slot->setName(CurVD->getName());
-      Address SlotAddr(Slot, PtrTy, SlotAlign);
-      LocalAddrs.insert({FD, {CurVD, SlotAddr}});
-    } else if (FD->hasCapturedVLAType()) {
-      // VLA size is stored as intptr_t directly in the slot.
-      Address SlotAddr(Slot, CGF.ConvertTypeForMem(FD->getType()), SlotAlign);
-      LValue ArgLVal =
-          CGF.MakeAddrLValue(SlotAddr, FD->getType(), AlignmentSource::Decl);
-      llvm::Value *ExprArg = CGF.EmitLoadOfScalar(ArgLVal, C.getLocation());
-      const VariableArrayType *VAT = FD->getCapturedVLAType();
-      VLASizes.try_emplace(FD, VAT->getSizeExpr(), ExprArg);
-    } else if (C.capturesVariable()) {
-      const VarDecl *Var = C.getCapturedVar();
-      QualType VarTy = Var->getType();
-
-      if (VarTy->isVariablyModifiedType() && VarTy->isPointerType()) {
-        Slot->setName(Var->getName() + ".addr");
-        Address SlotAddr(Slot, PtrTy, SlotAlign);
-        LocalAddrs.insert({FD, {Var, SlotAddr}});
-      } else {
-        llvm::Value *VarAddr = CGF.Builder.CreateAlignedLoad(
-            PtrTy, Slot, PtrAlign, Var->getName());
-        LocalAddrs.insert({FD,
-                           {Var, Address(VarAddr, CGF.ConvertTypeForMem(VarTy),
-                                         Ctx.getDeclAlign(Var))}});
-      }
-    } else if (C.capturesVariableByCopy()) {
-      assert(!FD->getType()->isAnyPointerType() &&
-             "Not expecting a captured pointer.");
-      const VarDecl *Var = C.getCapturedVar();
-      QualType FieldTy = FD->getType();
-
-      // Scalar values are promoted and stored directly in the slot.
-      Address SlotAddr(Slot, CGF.ConvertTypeForMem(FieldTy), SlotAlign);
-      Address CopyAddr =
-          CGF.CreateMemTemp(FieldTy, Ctx.getDeclAlign(FD), Var->getName());
-      LValue SrcLVal =
-          CGF.MakeAddrLValue(SlotAddr, FieldTy, AlignmentSource::Decl);
-      LValue CopyLVal =
-          CGF.MakeAddrLValue(CopyAddr, FieldTy, AlignmentSource::Decl);
-
-      RValue ArgRVal = CGF.EmitLoadOfLValue(SrcLVal, C.getLocation());
-      CGF.EmitStoreThroughLValue(ArgRVal, CopyLVal);
-
-      LocalAddrs.insert({FD, {Var, CopyAddr}});
-    } else {
-      assert(C.capturesThis() && "Default case expected to be CXX 'this'");
-      CXXThisValue =
-          CGF.Builder.CreateAlignedLoad(PtrTy, Slot, PtrAlign, "this");
-      Address SlotAddr(Slot, PtrTy, SlotAlign);
-      LocalAddrs.insert({FD, {nullptr, SlotAddr}});
-    }
   }
 
   return F;
@@ -898,124 +781,6 @@ llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunction(
     CallArgs.emplace_back(WrapperCGF.EmitFromMemory(CallArg, Arg->getType()));
     ++PI;
   }
-  CGM.getOpenMPRuntime().emitOutlinedFunctionCall(WrapperCGF, Loc, F, CallArgs);
-  WrapperCGF.FinishFunction();
-  return WrapperF;
-}
-
-llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunctionAggregate(
-    const CapturedStmt &S, const OMPExecutableDirective &D) {
-  SourceLocation Loc = D.getBeginLoc();
-  assert(
-      CapturedStmtInfo &&
-      "CapturedStmtInfo should be set when generating the captured function");
-  const CapturedDecl *CD = S.getCapturedDecl();
-  const RecordDecl *RD = S.getCapturedRecordDecl();
-  StringRef FunctionName = CapturedStmtInfo->getHelperName();
-  bool NeedWrapperFunction =
-      getDebugInfo() && CGM.getCodeGenOpts().hasReducedDebugInfo();
-
-  CodeGenFunction WrapperCGF(CGM, /*suppressNewContext=*/true);
-  llvm::Function *WrapperF = nullptr;
-  llvm::Value *WrapperContextV = nullptr;
-  if (NeedWrapperFunction) {
-    WrapperCGF.CapturedStmtInfo = CapturedStmtInfo;
-    FunctionArgList WrapperArgs;
-    llvm::MapVector<const Decl *, std::pair<const VarDecl *, Address>>
-        WrapperLocalAddrs;
-    llvm::DenseMap<const Decl *, std::pair<const Expr *, llvm::Value *>>
-        WrapperVLASizes;
-    WrapperF = emitOutlinedFunctionPrologueAggregate(
-        WrapperCGF, WrapperArgs, WrapperLocalAddrs, WrapperVLASizes,
-        WrapperCGF.CXXThisValue, WrapperContextV, S, Loc, FunctionName);
-  }
-
-  FunctionArgList Args;
-  llvm::MapVector<const Decl *, std::pair<const VarDecl *, Address>> LocalAddrs;
-  llvm::DenseMap<const Decl *, std::pair<const Expr *, llvm::Value *>> VLASizes;
-  llvm::Function *F;
-
-  if (NeedWrapperFunction) {
-    SmallString<256> Buffer;
-    llvm::raw_svector_ostream Out(Buffer);
-    Out << FunctionName << "_debug__";
-
-    FunctionOptions FO(&S, /*UIntPtrCastRequired=*/false,
-                       /*RegisterCastedArgsOnly=*/false, Out.str(), Loc,
-                       /*IsDeviceKernel=*/false);
-    F = emitOutlinedFunctionPrologue(*this, Args, LocalAddrs, VLASizes,
-                                     CXXThisValue, FO);
-  } else {
-    llvm::Value *ContextV = nullptr;
-    F = emitOutlinedFunctionPrologueAggregate(*this, Args, LocalAddrs, VLASizes,
-                                              CXXThisValue, ContextV, S, Loc,
-                                              FunctionName);
-
-    const RecordDecl *RD = S.getCapturedRecordDecl();
-    unsigned FieldIdx = RD->getNumFields();
-    for (unsigned I = 0; I < CD->getNumParams(); ++I) {
-      const ImplicitParamDecl *Param = CD->getParam(I);
-      if (Param == CD->getContextParam())
-        continue;
-      llvm::Value *ParamAddr = Builder.CreateConstInBoundsGEP1_32(
-          IntPtrTy, ContextV, FieldIdx, Twine(Param->getName()) + ".addr");
-      llvm::Value *ParamVal = Builder.CreateAlignedLoad(
-          Builder.getPtrTy(), ParamAddr,
-          CGM.getDataLayout().getPointerABIAlignment(0), Param->getName());
-      Address ParamLocalAddr =
-          CreateMemTemp(Param->getType(), Param->getName());
-      Builder.CreateStore(ParamVal, ParamLocalAddr);
-      LocalAddrs.insert({Param, {Param, ParamLocalAddr}});
-      ++FieldIdx;
-    }
-  }
-
-  CodeGenFunction::OMPPrivateScope LocalScope(*this);
-  for (const auto &LocalAddrPair : LocalAddrs) {
-    if (LocalAddrPair.second.first)
-      LocalScope.addPrivate(LocalAddrPair.second.first,
-                            LocalAddrPair.second.second);
-  }
-  (void)LocalScope.Privatize();
-  for (const auto &VLASizePair : VLASizes)
-    VLASizeMap[VLASizePair.second.first] = VLASizePair.second.second;
-  PGO->assignRegionCounters(GlobalDecl(CD), F);
-  CapturedStmtInfo->EmitBody(*this, CD->getBody());
-  (void)LocalScope.ForceCleanup();
-  FinishFunction(CD->getBodyRBrace());
-
-  if (!NeedWrapperFunction)
-    return F;
-
-  // Reverse the order.
-  WrapperF->removeFromParent();
-  F->getParent()->getFunctionList().insertAfter(F->getIterator(), WrapperF);
-
-  llvm::Align PtrAlign = CGM.getDataLayout().getPointerABIAlignment(0);
-  llvm::SmallVector<llvm::Value *, 16> CallArgs;
-  assert(CD->getContextParamPosition() == 0 &&
-         "Expected context param at position 0 for target regions");
-  assert(RD->getNumFields() + 1 == F->getNumOperands() &&
-         "Argument count mismatch");
-
-  for (auto [FD, InnerParam, SlotIdx] : llvm::zip(
-           RD->fields(), F->args(), llvm::seq<unsigned>(RD->getNumFields()))) {
-    llvm::Value *Slot = WrapperCGF.Builder.CreateConstInBoundsGEP1_32(
-        WrapperCGF.IntPtrTy, WrapperContextV, SlotIdx);
-    llvm::Value *Val = WrapperCGF.Builder.CreateAlignedLoad(
-        InnerParam.getType(), Slot, PtrAlign, InnerParam.getName());
-    CallArgs.push_back(Val);
-  }
-
-  // Handle the load from the implicit dyn_ptr at the end of the __context.
-  unsigned SlotIdx = RD->getNumFields();
-  auto InnerParam = F->arg_begin() + SlotIdx;
-  llvm::Value *Slot = WrapperCGF.Builder.CreateConstInBoundsGEP1_32(
-      WrapperCGF.IntPtrTy, WrapperContextV, SlotIdx);
-  llvm::Value *Val = WrapperCGF.Builder.CreateAlignedLoad(
-      InnerParam->getType(), Slot, PtrAlign, InnerParam->getName());
-  CallArgs.push_back(Val);
-
   CGM.getOpenMPRuntime().emitOutlinedFunctionCall(WrapperCGF, Loc, F, CallArgs);
   WrapperCGF.FinishFunction();
   return WrapperF;
@@ -2122,10 +1887,10 @@ void CodeGenFunction::EmitOMPParallelDirective(const OMPParallelDirective &S) {
     const CapturedStmt *CS = S.getCapturedStmt(OMPD_parallel);
     const Stmt *ParallelRegionBodyStmt = CS->getCapturedStmt();
 
-    auto BodyGenCB = [&, this](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                               ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
+    auto BodyGenCB = [&, this](InsertPointTy AllocaIP,
+                               InsertPointTy CodeGenIP) {
       OMPBuilderCBHelpers::EmitOMPOutlinedRegionBody(
-          *this, ParallelRegionBodyStmt, AllocIP, CodeGenIP, "parallel");
+          *this, ParallelRegionBodyStmt, AllocaIP, CodeGenIP, "parallel");
       return llvm::Error::success();
     };
 
@@ -2133,10 +1898,9 @@ void CodeGenFunction::EmitOMPParallelDirective(const OMPParallelDirective &S) {
     CodeGenFunction::CGCapturedStmtRAII CapInfoRAII(*this, &CGSI);
     llvm::OpenMPIRBuilder::InsertPointTy AllocaIP(
         AllocaInsertPt->getParent(), AllocaInsertPt->getIterator());
-    llvm::OpenMPIRBuilder::InsertPointTy AfterIP =
-        cantFail(OMPBuilder.createParallel(
-            Builder, AllocaIP, /*DeallocBlocks=*/{}, BodyGenCB, PrivCB, FiniCB,
-            IfCond, NumThreads, ProcBind, S.hasCancel()));
+    llvm::OpenMPIRBuilder::InsertPointTy AfterIP = cantFail(
+        OMPBuilder.createParallel(Builder, AllocaIP, BodyGenCB, PrivCB, FiniCB,
+                                  IfCond, NumThreads, ProcBind, S.hasCancel()));
     Builder.restoreIP(AfterIP);
     return;
   }
@@ -3209,12 +2973,6 @@ void CodeGenFunction::EmitOMPStripeDirective(const OMPStripeDirective &S) {
 void CodeGenFunction::EmitOMPReverseDirective(const OMPReverseDirective &S) {
   // Emit the de-sugared statement.
   OMPTransformDirectiveScopeRAII ReverseScope(*this, &S);
-  EmitStmt(S.getTransformedStmt());
-}
-
-void CodeGenFunction::EmitOMPSplitDirective(const OMPSplitDirective &S) {
-  // Emit the de-sugared statement (the split loops).
-  OMPTransformDirectiveScopeRAII SplitScope(*this, &S);
   EmitStmt(S.getTransformedStmt());
 }
 
@@ -4670,23 +4428,21 @@ void CodeGenFunction::EmitOMPSectionsDirective(const OMPSectionsDirective &S) {
     llvm::SmallVector<BodyGenCallbackTy, 4> SectionCBVector;
     if (CS) {
       for (const Stmt *SubStmt : CS->children()) {
-        auto SectionCB = [this, SubStmt](
-                             InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                             ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
-          OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(*this, SubStmt, AllocIP,
-                                                        CodeGenIP, "section");
+        auto SectionCB = [this, SubStmt](InsertPointTy AllocaIP,
+                                         InsertPointTy CodeGenIP) {
+          OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(
+              *this, SubStmt, AllocaIP, CodeGenIP, "section");
           return llvm::Error::success();
         };
         SectionCBVector.push_back(SectionCB);
       }
     } else {
-      auto SectionCB =
-          [this, CapturedStmt](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                               ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
-            OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(
-                *this, CapturedStmt, AllocIP, CodeGenIP, "section");
-            return llvm::Error::success();
-          };
+      auto SectionCB = [this, CapturedStmt](InsertPointTy AllocaIP,
+                                            InsertPointTy CodeGenIP) {
+        OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(
+            *this, CapturedStmt, AllocaIP, CodeGenIP, "section");
+        return llvm::Error::success();
+      };
       SectionCBVector.push_back(SectionCB);
     }
 
@@ -4740,11 +4496,10 @@ void CodeGenFunction::EmitOMPSectionDirective(const OMPSectionDirective &S) {
       return llvm::Error::success();
     };
 
-    auto BodyGenCB = [SectionRegionBodyStmt,
-                      this](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                            ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
+    auto BodyGenCB = [SectionRegionBodyStmt, this](InsertPointTy AllocaIP,
+                                                   InsertPointTy CodeGenIP) {
       OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(
-          *this, SectionRegionBodyStmt, AllocIP, CodeGenIP, "section");
+          *this, SectionRegionBodyStmt, AllocaIP, CodeGenIP, "section");
       return llvm::Error::success();
     };
 
@@ -4826,11 +4581,10 @@ void CodeGenFunction::EmitOMPMasterDirective(const OMPMasterDirective &S) {
       return llvm::Error::success();
     };
 
-    auto BodyGenCB = [MasterRegionBodyStmt,
-                      this](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                            ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
+    auto BodyGenCB = [MasterRegionBodyStmt, this](InsertPointTy AllocaIP,
+                                                  InsertPointTy CodeGenIP) {
       OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(
-          *this, MasterRegionBodyStmt, AllocIP, CodeGenIP, "master");
+          *this, MasterRegionBodyStmt, AllocaIP, CodeGenIP, "master");
       return llvm::Error::success();
     };
 
@@ -4877,11 +4631,10 @@ void CodeGenFunction::EmitOMPMaskedDirective(const OMPMaskedDirective &S) {
       return llvm::Error::success();
     };
 
-    auto BodyGenCB = [MaskedRegionBodyStmt,
-                      this](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                            ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
+    auto BodyGenCB = [MaskedRegionBodyStmt, this](InsertPointTy AllocaIP,
+                                                  InsertPointTy CodeGenIP) {
       OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(
-          *this, MaskedRegionBodyStmt, AllocIP, CodeGenIP, "masked");
+          *this, MaskedRegionBodyStmt, AllocaIP, CodeGenIP, "masked");
       return llvm::Error::success();
     };
 
@@ -4921,11 +4674,10 @@ void CodeGenFunction::EmitOMPCriticalDirective(const OMPCriticalDirective &S) {
       return llvm::Error::success();
     };
 
-    auto BodyGenCB = [CriticalRegionBodyStmt,
-                      this](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                            ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
+    auto BodyGenCB = [CriticalRegionBodyStmt, this](InsertPointTy AllocaIP,
+                                                    InsertPointTy CodeGenIP) {
       OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(
-          *this, CriticalRegionBodyStmt, AllocIP, CodeGenIP, "critical");
+          *this, CriticalRegionBodyStmt, AllocaIP, CodeGenIP, "critical");
       return llvm::Error::success();
     };
 
@@ -5352,7 +5104,7 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
       ParamTypes.push_back(PrivatesPtr->getType());
       for (const Expr *E : Data.PrivateVars) {
         const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
-        RawAddress PrivatePtr = CGF.CreateMemTempWithoutCast(
+        RawAddress PrivatePtr = CGF.CreateMemTemp(
             CGF.getContext().getPointerType(E->getType()), ".priv.ptr.addr");
         PrivatePtrs.emplace_back(VD, PrivatePtr);
         CallArgs.push_back(PrivatePtr.getPointer());
@@ -5360,9 +5112,9 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
       }
       for (const Expr *E : Data.FirstprivateVars) {
         const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
-        RawAddress PrivatePtr = CGF.CreateMemTempWithoutCast(
-            CGF.getContext().getPointerType(E->getType()),
-            ".firstpriv.ptr.addr");
+        RawAddress PrivatePtr =
+            CGF.CreateMemTemp(CGF.getContext().getPointerType(E->getType()),
+                              ".firstpriv.ptr.addr");
         PrivatePtrs.emplace_back(VD, PrivatePtr);
         FirstprivatePtrs.emplace_back(VD, PrivatePtr);
         CallArgs.push_back(PrivatePtr.getPointer());
@@ -5370,9 +5122,9 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
       }
       for (const Expr *E : Data.LastprivateVars) {
         const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
-        RawAddress PrivatePtr = CGF.CreateMemTempWithoutCast(
-            CGF.getContext().getPointerType(E->getType()),
-            ".lastpriv.ptr.addr");
+        RawAddress PrivatePtr =
+            CGF.CreateMemTemp(CGF.getContext().getPointerType(E->getType()),
+                              ".lastpriv.ptr.addr");
         PrivatePtrs.emplace_back(VD, PrivatePtr);
         CallArgs.push_back(PrivatePtr.getPointer());
         ParamTypes.push_back(PrivatePtr.getType());
@@ -5383,7 +5135,7 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
           Ty = CGF.getContext().getPointerType(Ty);
         if (isAllocatableDecl(VD))
           Ty = CGF.getContext().getPointerType(Ty);
-        RawAddress PrivatePtr = CGF.CreateMemTempWithoutCast(
+        RawAddress PrivatePtr = CGF.CreateMemTemp(
             CGF.getContext().getPointerType(Ty), ".local.ptr.addr");
         auto Result = UntiedLocalVars.insert(
             std::make_pair(VD, std::make_pair(PrivatePtr, Address::invalid())));
@@ -5674,9 +5426,9 @@ void CodeGenFunction::EmitOMPTargetTaskBasedDirective(
       ParamTypes.push_back(PrivatesPtr->getType());
       for (const Expr *E : Data.FirstprivateVars) {
         const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
-        RawAddress PrivatePtr = CGF.CreateMemTempWithoutCast(
-            CGF.getContext().getPointerType(E->getType()),
-            ".firstpriv.ptr.addr");
+        RawAddress PrivatePtr =
+            CGF.CreateMemTemp(CGF.getContext().getPointerType(E->getType()),
+                              ".firstpriv.ptr.addr");
         PrivatePtrs.emplace_back(VD, PrivatePtr);
         CallArgs.push_back(PrivatePtr.getPointer());
         ParamTypes.push_back(PrivatePtr.getType());
@@ -5892,8 +5644,8 @@ void CodeGenFunction::EmitOMPTaskgroupDirective(
     InsertPointTy AllocaIP(AllocaInsertPt->getParent(),
                            AllocaInsertPt->getIterator());
 
-    auto BodyGenCB = [&, this](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                               ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
+    auto BodyGenCB = [&, this](InsertPointTy AllocaIP,
+                               InsertPointTy CodeGenIP) {
       Builder.restoreIP(CodeGenIP);
       EmitStmt(S.getInnermostCapturedStmt()->getCapturedStmt());
       return llvm::Error::success();
@@ -5902,8 +5654,7 @@ void CodeGenFunction::EmitOMPTaskgroupDirective(
     if (!CapturedStmtInfo)
       CapturedStmtInfo = &CapStmtInfo;
     llvm::OpenMPIRBuilder::InsertPointTy AfterIP =
-        cantFail(OMPBuilder.createTaskgroup(Builder, AllocaIP,
-                                            /*DeallocBlocks=*/{}, BodyGenCB));
+        cantFail(OMPBuilder.createTaskgroup(Builder, AllocaIP, BodyGenCB));
     Builder.restoreIP(AfterIP);
     return;
   }
@@ -6483,9 +6234,8 @@ void CodeGenFunction::EmitOMPOrderedDirective(const OMPOrderedDirective &S) {
         return llvm::Error::success();
       };
 
-      auto BodyGenCB = [&S, C,
-                        this](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                              ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
+      auto BodyGenCB = [&S, C, this](InsertPointTy AllocaIP,
+                                     InsertPointTy CodeGenIP) {
         Builder.restoreIP(CodeGenIP);
 
         const CapturedStmt *CS = S.getInnermostCapturedStmt();
@@ -6502,7 +6252,7 @@ void CodeGenFunction::EmitOMPOrderedDirective(const OMPOrderedDirective &S) {
                                                OutlinedFn, CapturedVars);
         } else {
           OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(
-              *this, CS->getCapturedStmt(), AllocIP, CodeGenIP, "ordered");
+              *this, CS->getCapturedStmt(), AllocaIP, CodeGenIP, "ordered");
         }
         return llvm::Error::success();
       };

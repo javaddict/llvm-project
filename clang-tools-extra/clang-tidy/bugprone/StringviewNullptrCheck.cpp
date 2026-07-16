@@ -27,8 +27,8 @@ AST_MATCHER_P(InitListExpr, initCountIs, unsigned, N) {
   return Node.getNumInits() == N;
 }
 
-AST_MATCHER(VarDecl, isDirectInitialization) {
-  return Node.getInitStyle() != VarDecl::InitializationStyle::CInit;
+AST_MATCHER(clang::VarDecl, isDirectInitialization) {
+  return Node.getInitStyle() != clang::VarDecl::InitializationStyle::CInit;
 }
 
 } // namespace
@@ -59,7 +59,7 @@ static RewriteRuleWith<std::string> stringviewNullptrCheckImpl() {
 
   // Matches `nullptr` and `(nullptr)` binding to a pointer
   auto NullLiteral = implicitCastExpr(
-      hasCastKind(CK_NullToPointer),
+      hasCastKind(clang::CK_NullToPointer),
       hasSourceExpression(ignoringParens(cxxNullPtrLiteralExpr())));
 
   // Matches `{nullptr}` and `{(nullptr)}` binding to a pointer
@@ -233,7 +233,7 @@ static RewriteRuleWith<std::string> stringviewNullptrCheckImpl() {
       cxxOperatorCallExpr(
           hasOverloadedOperatorName("=="),
           hasOperands(ignoringImpCasts(BasicStringViewConstructingFromNullExpr),
-                      traverse(TK_IgnoreUnlessSpelledInSource,
+                      traverse(clang::TK_IgnoreUnlessSpelledInSource,
                                expr().bind("instance"))))
           .bind("root"),
       changeTo(node("root"), cat(access("instance", cat("empty")), "()")),
@@ -244,7 +244,7 @@ static RewriteRuleWith<std::string> stringviewNullptrCheckImpl() {
       cxxOperatorCallExpr(
           hasOverloadedOperatorName("!="),
           hasOperands(ignoringImpCasts(BasicStringViewConstructingFromNullExpr),
-                      traverse(TK_IgnoreUnlessSpelledInSource,
+                      traverse(clang::TK_IgnoreUnlessSpelledInSource,
                                expr().bind("instance"))))
           .bind("root"),
       changeTo(node("root"), cat("!", access("instance", cat("empty")), "()")),

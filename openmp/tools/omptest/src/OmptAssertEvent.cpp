@@ -14,8 +14,6 @@
 #include "OmptAssertEvent.h"
 #include <omp-tools.h>
 
-#include <cstdlib>
-
 using namespace omptest;
 
 const char *omptest::to_string(ObserveState State) {

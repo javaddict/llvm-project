@@ -22,8 +22,7 @@ struct TypeNameVisitor : TestVisitor {
     if (ExpectedName != "") {
       PrintingPolicy Policy(Context->getPrintingPolicy());
       Policy.SuppressScope = false;
-      Policy.AnonymousTagNameStyle =
-          llvm::to_underlying(PrintingPolicy::AnonymousTagMode::SourceLocation);
+      Policy.AnonymousTagLocations = true;
       Policy.PolishForDeclaration = true;
       Policy.SuppressUnwrittenScope = true;
       std::string ActualName = TypeName::getFullyQualifiedName(

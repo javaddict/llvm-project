@@ -33,7 +33,6 @@ _LIBCPP_PUSH_MACROS
 #if _LIBCPP_STD_VER >= 17 && _LIBCPP_HAS_FILESYSTEM
 
 _LIBCPP_BEGIN_NAMESPACE_FILESYSTEM
-_LIBCPP_BEGIN_EXPLICIT_ABI_ANNOTATIONS
 
 class _LIBCPP_HIDDEN __dir_stream;
 class directory_iterator {
@@ -130,7 +129,6 @@ operator!=(const directory_iterator& __lhs, const directory_iterator& __rhs) noe
   return directory_iterator();
 }
 
-_LIBCPP_END_EXPLICIT_ABI_ANNOTATIONS
 _LIBCPP_END_NAMESPACE_FILESYSTEM
 
 #  if _LIBCPP_STD_VER >= 20

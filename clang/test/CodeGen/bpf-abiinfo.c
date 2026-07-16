@@ -1,6 +1,5 @@
 // REQUIRES: bpf-registered-target
 // RUN: %clang_cc1 -triple bpf -O2 -emit-llvm -disable-llvm-passes %s -o - | FileCheck %s
-// RUN: %clang_cc1 -triple bpf -O2 -emit-llvm -disable-llvm-passes -fexperimental-abi-lowering %s -o - | FileCheck %s
 
 _Bool bar_bool(void);
 unsigned char bar_char(void);

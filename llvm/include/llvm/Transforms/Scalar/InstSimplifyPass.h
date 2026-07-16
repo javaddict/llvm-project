@@ -29,9 +29,9 @@ namespace llvm {
 /// restricted transform at a pass granularity. However, for a much more
 /// powerful and comprehensive peephole optimization engine, see the
 /// `instcombine` pass instead.
-class InstSimplifyPass : public OptionalPassInfoMixin<InstSimplifyPass> {
+class InstSimplifyPass : public PassInfoMixin<InstSimplifyPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
 } // end namespace llvm

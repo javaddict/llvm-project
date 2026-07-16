@@ -15,7 +15,6 @@
 #include "LoongArch.h"
 #include "LoongArchMachineFunctionInfo.h"
 #include "MCTargetDesc/LoongArchInstPrinter.h"
-#include "MCTargetDesc/LoongArchMCAsmInfo.h"
 #include "MCTargetDesc/LoongArchMCTargetDesc.h"
 #include "TargetInfo/LoongArchTargetInfo.h"
 #include "llvm/CodeGen/AsmPrinter.h"
@@ -41,11 +40,6 @@ cl::opt<bool> LArchAnnotateTableJump(
 // Simple pseudo-instructions have their lowering (with expansion to real
 // instructions) auto-generated.
 #include "LoongArchGenMCPseudoLowering.inc"
-
-LoongArchTargetStreamer &LoongArchAsmPrinter::getTargetStreamer() const {
-  return static_cast<LoongArchTargetStreamer &>(
-      *OutStreamer->getTargetStreamer());
-}
 
 void LoongArchAsmPrinter::emitInstruction(const MachineInstr *MI) {
   LoongArch_MC::verifyInstructionPredicates(
@@ -170,7 +164,7 @@ bool LoongArchAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
   else if (OffsetMO.isGlobal() || OffsetMO.isBlockAddress() ||
            OffsetMO.isMCSymbol() || OffsetMO.isCPI()) {
     OS << ", ";
-    MAI.printExpr(OS, *MCO.getExpr());
+    MAI->printExpr(OS, *MCO.getExpr());
   } else
     return true;
 
@@ -221,7 +215,11 @@ void LoongArchAsmPrinter::LowerPATCHABLE_FUNCTION_ENTER(
     const MachineInstr &MI) {
   const Function &F = MF->getFunction();
   if (F.hasFnAttribute("patchable-function-entry")) {
-    unsigned Num = F.getFnAttributeAsParsedInteger("patchable-function-entry");
+    unsigned Num;
+    if (F.getFnAttribute("patchable-function-entry")
+            .getValueAsString()
+            .getAsInteger(10, Num))
+      return;
     emitNops(Num);
     return;
   }
@@ -278,7 +276,7 @@ void LoongArchAsmPrinter::emitJumpTableInfo() {
     return;
 
   unsigned Size = getDataLayout().getPointerSize();
-  const auto &JT = JTI->getJumpTables();
+  auto JT = JTI->getJumpTables();
 
   // Emit an additional section to store the correlation info as pairs of
   // addresses, each pair contains the address of a jump instruction (jr) and
@@ -297,28 +295,6 @@ void LoongArchAsmPrinter::emitJumpTableInfo() {
     OutStreamer->emitValue(
         MCSymbolRefExpr::create(GetJTISymbol(JTIIdx), OutContext), Size);
   }
-}
-
-// Emit .dtprelword or .dtpreldword directive
-// and value for debug thread local expression.
-void LoongArchAsmPrinter::emitDebugValue(const MCExpr *Value,
-                                         unsigned Size) const {
-  if (auto *Expr = dyn_cast<MCSpecifierExpr>(Value)) {
-    if (Expr->getSpecifier() == LoongArchMCExpr::VK_DTPREL) {
-      switch (Size) {
-      case 4:
-        getTargetStreamer().emitDTPRel32Value(Expr->getSubExpr());
-        break;
-      case 8:
-        getTargetStreamer().emitDTPRel64Value(Expr->getSubExpr());
-        break;
-      default:
-        llvm_unreachable("Unexpected size of expression value.");
-      }
-      return;
-    }
-  }
-  AsmPrinter::emitDebugValue(Value, Size);
 }
 
 bool LoongArchAsmPrinter::runOnMachineFunction(MachineFunction &MF) {

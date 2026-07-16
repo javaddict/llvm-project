@@ -1,4 +1,4 @@
-! RUN: %python %S/test_errors.py %s %flang_fc1 -pedantic
+! RUN: %python %S/test_errors.py %s %flang_fc1
 type :: t1
   sequence
   integer :: m = 123
@@ -14,14 +14,14 @@ type :: t3
   integer :: k = 234
   integer :: pad
 end type
-!ERROR: Default component initializations of equivalenced objects affect 'x1a%m' more than once, distinctly
+!ERROR: Distinct default component initializations of equivalenced objects affect 'x1a%m' more than once
 type(t1) :: x1a
-!ERROR: Default component initializations of equivalenced objects affect 'x2a%n' more than once, distinctly
+!ERROR: Distinct default component initializations of equivalenced objects affect 'x2a%n' more than once
 type(t2) :: x2a
-!ERROR: Default component initializations of equivalenced objects affect 'x3%k' more than once, distinctly
+!ERROR: Distinct default component initializations of equivalenced objects affect 'x3%k' more than once
 type(t3), save :: x3
-!ERROR: Explicit initializations of equivalenced objects affect 'ja(2_8)' more than once, distinctly
-!ERROR: Explicit initializations of equivalenced objects affect 'ka(1_8)' more than once, distinctly
+!ERROR: Explicit initializations of equivalenced objects affect 'ja(2_8)' more than once
+!ERROR: Explicit initializations of equivalenced objects affect 'ka(1_8)' more than once
 integer :: ja(2), ka(2)
 data ja/345, 456/
 data ka/456, 567/

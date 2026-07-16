@@ -216,15 +216,6 @@ macro(add_mlir_generic_tablegen_target target)
   add_dependencies(mlir-generic-headers ${target})
 endmacro()
 
-# Declare a dialect in the include directory
-function(add_mlir_type_interface interface)
-  set(LLVM_TARGET_DEFINITIONS ${interface}.td)
-  mlir_tablegen(${interface}.h.inc -gen-type-interface-decls)
-  mlir_tablegen(${interface}.cpp.inc -gen-type-interface-defs)
-  add_public_tablegen_target(MLIR${interface}IncGen)
-  add_dependencies(mlir-generic-headers MLIR${interface}IncGen)
-endfunction()
-
 # Generate Documentation
 function(add_mlir_doc doc_filename output_file output_directory command)
   set(LLVM_TARGET_DEFINITIONS ${doc_filename}.td)
@@ -345,11 +336,9 @@ endfunction()
 #   aggregate shared library.
 #   TODO: Make this the default for all MLIR libraries once all libraries
 #   are compatible with building an object library.
-# STANDALONE
-#   Don't link against LLVMSupport.
 function(add_mlir_library name)
   cmake_parse_arguments(ARG
-    "SHARED;INSTALL_WITH_TOOLCHAIN;EXCLUDE_FROM_LIBMLIR;DISABLE_INSTALL;ENABLE_AGGREGATION;OBJECT;STANDALONE"
+    "SHARED;INSTALL_WITH_TOOLCHAIN;EXCLUDE_FROM_LIBMLIR;DISABLE_INSTALL;ENABLE_AGGREGATION;OBJECT"
     ""
     "ADDITIONAL_HEADERS;DEPENDS;LINK_COMPONENTS;LINK_LIBS"
     ${ARGN})
@@ -402,10 +391,8 @@ function(add_mlir_library name)
     list(APPEND LIBTYPE OBJECT)
   endif()
 
-  # Most MLIR libraries depend on LLVMSupport.  Just specify it once here.
-  if(NOT ARG_STANDALONE)
-    list(APPEND ARG_LINK_COMPONENTS Support)
-  endif()
+  # MLIR libraries uniformly depend on LLVMSupport.  Just specify it once here.
+  list(APPEND ARG_LINK_COMPONENTS Support)
   _check_llvm_components_usage(${name} ${ARG_LINK_LIBS})
 
   list(APPEND ARG_DEPENDS mlir-generic-headers)
@@ -679,9 +666,6 @@ function(add_mlir_public_c_api_library name)
     ENABLE_AGGREGATION
     ADDITIONAL_HEADER_DIRS
     ${MLIR_MAIN_INCLUDE_DIR}/mlir-c
-
-    # Disable PCH reuse due to non-default symbol visibility.
-    DISABLE_PCH_REUSE
   )
   # API libraries compile with hidden visibility and macros that enable
   # exporting from the DLL. Only apply to the obj lib, which only affects
@@ -769,7 +753,7 @@ endfunction(mlir_check_all_link_libraries)
 # used.
 function(mlir_target_link_libraries target type)
   if (TARGET obj.${target})
-    target_link_libraries(obj.${target} ${type} ${ARGN})
+    target_link_libraries(obj.${target} ${ARGN})
   endif()
 
   if (MLIR_LINK_MLIR_DYLIB)

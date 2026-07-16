@@ -14,21 +14,10 @@
 
 namespace lldb_private {
 class UnimplementedError : public llvm::ErrorInfo<UnimplementedError> {
-  std::string m_message;
-
 public:
   static char ID;
 
-  UnimplementedError() = default;
-  explicit UnimplementedError(std::string message)
-      : m_message(std::move(message)) {}
-
-  void log(llvm::raw_ostream &OS) const override {
-    if (!m_message.empty())
-      OS << m_message;
-    else
-      OS << "Not implemented";
-  }
+  void log(llvm::raw_ostream &OS) const override { OS << "Not implemented"; }
 
   std::error_code convertToErrorCode() const override {
     return llvm::errc::not_supported;

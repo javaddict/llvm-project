@@ -44,14 +44,14 @@ private:
   bool OnlyLowerUnknownSize;
 
 public:
-  LLVM_ABI FortifiedLibCallSimplifier(const TargetLibraryInfo *TLI,
-                                      bool OnlyLowerUnknownSize = false);
+  FortifiedLibCallSimplifier(const TargetLibraryInfo *TLI,
+                             bool OnlyLowerUnknownSize = false);
 
   /// Take the given call instruction and return a more
   /// optimal value to replace the instruction with or 0 if a more
   /// optimal form can't be found.
   /// The call must not be an indirect call.
-  LLVM_ABI Value *optimizeCall(CallInst *CI, IRBuilderBase &B);
+  Value *optimizeCall(CallInst *CI, IRBuilderBase &B);
 
 private:
   Value *optimizeMemCpyChk(CallInst *CI, IRBuilderBase &B);
@@ -127,10 +127,10 @@ private:
   static void eraseFromParentDefault(Instruction *I) { I->eraseFromParent(); }
 
   /// Replace an instruction's uses with a value using our replacer.
-  LLVM_ABI void replaceAllUsesWith(Instruction *I, Value *With);
+  void replaceAllUsesWith(Instruction *I, Value *With);
 
   /// Erase an instruction from its parent with our eraser.
-  LLVM_ABI void eraseFromParent(Instruction *I);
+  void eraseFromParent(Instruction *I);
 
   /// Replace an instruction with a value and erase it from its parent.
   void substituteInParent(Instruction *I, Value *With) {
@@ -139,7 +139,7 @@ private:
   }
 
 public:
-  LLVM_ABI LibCallSimplifier(
+  LibCallSimplifier(
       const DataLayout &DL, const TargetLibraryInfo *TLI, DominatorTree *DT,
       DomConditionCache *DC, AssumptionCache *AC,
       OptimizationRemarkEmitter &ORE, BlockFrequencyInfo *BFI,
@@ -155,7 +155,7 @@ public:
   /// other instructions that use the given instruction were modified
   /// and the given instruction is dead.
   /// The call must not be an indirect call.
-  LLVM_ABI Value *optimizeCall(CallInst *CI, IRBuilderBase &B);
+  Value *optimizeCall(CallInst *CI, IRBuilderBase &B);
 
 private:
   // String and Memory Library Call Optimizations
@@ -204,7 +204,8 @@ private:
   Value *replacePowWithExp(CallInst *Pow, IRBuilderBase &B);
   Value *replacePowWithSqrt(CallInst *Pow, IRBuilderBase &B);
   Value *optimizeExp2(CallInst *CI, IRBuilderBase &B);
-  Value *optimizeFMinFMax(CallInst *CI, IRBuilderBase &B, Intrinsic::ID IID);
+  Value *optimizeFMinFMax(CallInst *CI, IRBuilderBase &B);
+  Value *optimizeFMinimumnumFMaximumnum(CallInst *CI, IRBuilderBase &B);
   Value *optimizeLog(CallInst *CI, IRBuilderBase &B);
   Value *optimizeSqrt(CallInst *CI, IRBuilderBase &B);
   Value *optimizeFMod(CallInst *CI, IRBuilderBase &B);

@@ -17,7 +17,6 @@ add_llvm_tool(llvm-readtapi
 
   DEPENDS
   ReadTAPIOptsTableGen
-  GENERATE_DRIVER
   )
 
 if(LLVM_INSTALL_BINUTILS_SYMLINKS)

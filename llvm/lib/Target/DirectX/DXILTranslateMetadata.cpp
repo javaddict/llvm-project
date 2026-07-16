@@ -480,7 +480,7 @@ static void translateInstructionMetadata(Module &M) {
         translateBranchMetadata(M, I);
 
       for (auto &I : make_early_inc_range(BB)) {
-        if (isa<UncondBrInst, CondBrInst>(I))
+        if (isa<BranchInst>(I))
           if (MDNode *LoopMD = I.getMetadata(MDLoopKind))
             translateLoopMetadata(M, &I, LoopMD);
         I.dropUnknownNonDebugMetadata(DXILCompatibleMDs);

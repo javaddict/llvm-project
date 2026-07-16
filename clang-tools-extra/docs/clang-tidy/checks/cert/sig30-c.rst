@@ -1,4 +1,6 @@
 .. title:: clang-tidy - cert-sig30-c
+.. meta::
+   :http-equiv=refresh: 5;URL=../bugprone/signal-handler.html
 
 cert-sig30-c
 ============

@@ -128,7 +128,9 @@ class PEILegacy : public MachineFunctionPass {
 public:
   static char ID;
 
-  PEILegacy() : MachineFunctionPass(ID) {}
+  PEILegacy() : MachineFunctionPass(ID) {
+    initializePEILegacyPass(*PassRegistry::getPassRegistry());
+  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override;
 

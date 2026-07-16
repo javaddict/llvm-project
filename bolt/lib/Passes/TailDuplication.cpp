@@ -167,22 +167,18 @@ void TailDuplication::constantAndCopyPropagate(
 
   BlocksToPropagate.insert(BlocksToPropagate.begin(), &OriginalBB);
   // Iterate through the original instructions to find one to propagate
-  for (auto Itr = OriginalBB.begin(); Itr != OriginalBB.end();) {
+  for (auto Itr = OriginalBB.begin(); Itr != OriginalBB.end(); ++Itr) {
     MCInst &OriginalInst = *Itr;
     // It must be a non conditional
-    if (BC.MIB->isConditionalMove(OriginalInst)) {
-      ++Itr;
+    if (BC.MIB->isConditionalMove(OriginalInst))
       continue;
-    }
 
     // Move immediate or move register
     if ((!BC.MII->get(OriginalInst.getOpcode()).isMoveImmediate() ||
          !OriginalInst.getOperand(1).isImm()) &&
         (!BC.MII->get(OriginalInst.getOpcode()).isMoveReg() ||
-         !OriginalInst.getOperand(1).isReg())) {
-      ++Itr;
+         !OriginalInst.getOperand(1).isReg()))
       continue;
-    }
 
     // True if this is constant propagation and not copy propagation
     bool ConstantProp = BC.MII->get(OriginalInst.getOpcode()).isMoveImmediate();
@@ -251,9 +247,7 @@ void TailDuplication::constantAndCopyPropagate(
       // to replace is active for constant propagation
       StaticInstructionDeletionCount++;
       DynamicInstructionDeletionCount += OriginalBB.getExecutionCount();
-      Itr = OriginalBB.eraseInstruction(Itr);
-    } else {
-      ++Itr;
+      Itr = std::prev(OriginalBB.eraseInstruction(Itr));
     }
   }
 }

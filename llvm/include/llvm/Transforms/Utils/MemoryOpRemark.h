@@ -32,7 +32,7 @@ class StoreInst;
 
 // FIXME: Once we get to more remarks like this one, we need to re-evaluate how
 // much of this logic should actually go into the remark emitter.
-struct LLVM_ABI MemoryOpRemark {
+struct MemoryOpRemark {
   OptimizationRemarkEmitter &ORE;
   StringRef RemarkPass;
   const DataLayout &DL;
@@ -94,7 +94,7 @@ private:
 };
 
 /// Special case for -ftrivial-auto-var-init remarks.
-struct LLVM_ABI AutoInitRemark : public MemoryOpRemark {
+struct AutoInitRemark : public MemoryOpRemark {
   AutoInitRemark(OptimizationRemarkEmitter &ORE, StringRef RemarkPass,
                  const DataLayout &DL, const TargetLibraryInfo &TLI)
       : MemoryOpRemark(ORE, RemarkPass, DL, TLI) {}

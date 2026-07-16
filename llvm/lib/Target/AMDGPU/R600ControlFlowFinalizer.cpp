@@ -68,7 +68,7 @@ bool CFStack::requiresWorkAroundForInst(unsigned Opcode) {
       getLoopDepth() > 1)
     return true;
 
-  if (!ST->hasCFALUBug())
+  if (!ST->hasCFAluBug())
     return false;
 
   switch(Opcode) {

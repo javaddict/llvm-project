@@ -48,8 +48,7 @@ protected:
 
   lldb::LanguageType GetLanguage() override;
 
-  bool PrintOneVariable(Debugger &debugger,
-                        lldb::LockableStreamFileSP &output_stream_sp,
+  bool PrintOneVariable(Debugger &debugger, lldb::StreamFileSP &output_sp,
                         lldb::ValueObjectSP &valobj_sp,
                         ExpressionVariable *var = nullptr) override;
 

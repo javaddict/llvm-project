@@ -32,12 +32,8 @@ using namespace clang;
 void clang::mangleObjCMethodName(raw_ostream &OS, bool includePrefixByte,
                                  bool isInstanceMethod, StringRef ClassName,
                                  std::optional<StringRef> CategoryName,
-                                 StringRef MethodName, bool useDirectABI) {
-  assert(
-      !(includePrefixByte && useDirectABI) &&
-      "includePrefixByte and useDirectABI shouldn't be set at the same time");
+                                 StringRef MethodName) {
   // \01+[ContainerName(CategoryName) SelectorName]
-  // Or for direct ABI: +[ContainerName(CategoryName) SelectorName]D
   if (includePrefixByte)
     OS << "\01";
   OS << (isInstanceMethod ? '-' : '+');
@@ -48,8 +44,6 @@ void clang::mangleObjCMethodName(raw_ostream &OS, bool includePrefixByte,
   OS << " ";
   OS << MethodName;
   OS << ']';
-  if (useDirectABI)
-    OS << 'D';
 }
 
 // FIXME: For blocks we currently mimic GCC's mangling scheme, which leaves
@@ -158,6 +152,8 @@ bool MangleContext::shouldMangleDeclName(const NamedDecl *D) {
   return shouldMangleCXXName(D);
 }
 
+static llvm::StringRef g_lldb_func_call_label_prefix = "$__lldb_func:";
+
 /// Given an LLDB function call label, this function prints the label
 /// into \c Out, together with the structor type of \c GD (if the
 /// decl is a constructor/destructor). LLDB knows how to handle mangled
@@ -171,9 +167,9 @@ bool MangleContext::shouldMangleDeclName(const NamedDecl *D) {
 ///
 static void emitLLDBAsmLabel(llvm::StringRef label, GlobalDecl GD,
                              llvm::raw_ostream &Out) {
-  assert(label.starts_with(LLDBManglingABI::FunctionLabelPrefix));
+  assert(label.starts_with(g_lldb_func_call_label_prefix));
 
-  Out << LLDBManglingABI::FunctionLabelPrefix;
+  Out << g_lldb_func_call_label_prefix;
 
   if (auto *Ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(GD.getDecl())) {
     Out << "C";
@@ -184,7 +180,7 @@ static void emitLLDBAsmLabel(llvm::StringRef label, GlobalDecl GD,
     Out << "D" << GD.getDtorType();
   }
 
-  Out << label.substr(LLDBManglingABI::FunctionLabelPrefix.size());
+  Out << label.substr(g_lldb_func_call_label_prefix.size());
 }
 
 void MangleContext::mangleName(GlobalDecl GD, raw_ostream &Out) {
@@ -220,7 +216,7 @@ void MangleContext::mangleName(GlobalDecl GD, raw_ostream &Out) {
     if (!UserLabelPrefix.empty())
       Out << '\01'; // LLVM IR Marker for __asm("foo")
 
-    if (ALA->getLabel().starts_with(LLDBManglingABI::FunctionLabelPrefix))
+    if (ALA->getLabel().starts_with(g_lldb_func_call_label_prefix))
       emitLLDBAsmLabel(ALA->getLabel(), GD, Out);
     else
       Out << ALA->getLabel();
@@ -384,8 +380,7 @@ void MangleContext::mangleBlock(const DeclContext *DC, const BlockDecl *BD,
 void MangleContext::mangleObjCMethodName(const ObjCMethodDecl *MD,
                                          raw_ostream &OS,
                                          bool includePrefixByte,
-                                         bool includeCategoryNamespace,
-                                         bool useDirectABI) const {
+                                         bool includeCategoryNamespace) const {
   if (getASTContext().getLangOpts().ObjCRuntime.isGNUFamily()) {
     // This is the mangling we've always used on the GNU runtimes, but it
     // has obvious collisions in the face of underscores within class
@@ -437,16 +432,8 @@ void MangleContext::mangleObjCMethodName(const ObjCMethodDecl *MD,
   std::string MethodName;
   llvm::raw_string_ostream MethodNameOS(MethodName);
   MD->getSelector().print(MethodNameOS);
-  // Normal methods always have internal linkage, and we prefix them with '\01'
-  // for reasons that are somewhat lost to time. We suppress this for direct
-  // methods because they have non-internal linkage and we don't want to make it
-  // unnecessarily difficult to refer to them, e.g. in things like export lists.
-  // Direct methods also have a distinct ABI, so we add a suffix to make them
-  // obvious to tools like debuggers and to elevate incompatible uses into
-  // linker errors.
-  clang::mangleObjCMethodName(OS, includePrefixByte && !useDirectABI,
-                              MD->isInstanceMethod(), ClassName, CategoryName,
-                              MethodName, useDirectABI);
+  clang::mangleObjCMethodName(OS, includePrefixByte, MD->isInstanceMethod(),
+                              ClassName, CategoryName, MethodName);
 }
 
 void MangleContext::mangleObjCMethodNameAsSourceName(const ObjCMethodDecl *MD,

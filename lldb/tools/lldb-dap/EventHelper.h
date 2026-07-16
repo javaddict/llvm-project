@@ -28,6 +28,8 @@ void SendProcessEvent(DAP &dap, LaunchMethod launch_method);
 
 llvm::Error SendThreadStoppedEvent(DAP &dap, bool on_entry = false);
 
+void SendTerminatedEvent(DAP &dap);
+
 void SendStdOutStdErr(DAP &dap, lldb::SBProcess &process);
 
 void SendContinuedEvent(DAP &dap);

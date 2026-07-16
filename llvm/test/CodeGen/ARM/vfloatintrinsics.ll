@@ -341,8 +341,8 @@ define %v2f64 @test_v2f64.fma(%v2f64 %a, %v2f64 %b, %v2f64 %c) {
 }
 ; CHECK-LABEL: test_v2f64.fabs:{{.*}}
 define %v2f64 @test_v2f64.fabs(%v2f64 %a) {
-  ; CHECK: vld1.64
-  ; CHECK: vand
+  ; CHECK: bfc {{r[1,3]}}, #31, #1
+  ; CHECK: bfc {{r[1,3]}}, #31, #1
   %1 = call %v2f64 @llvm.fabs.v2f64(%v2f64 %a)
   ret %v2f64 %1
 }

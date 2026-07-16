@@ -242,9 +242,6 @@
 /* Define if ICU library is available */
 #cmakedefine01 HAVE_ICU
 
-/* Define if Windows vendored ICU is available */
-#cmakedefine01 HAVE_WINDOWS_ICU
-
 /* Define if iconv library is available */
 #cmakedefine01 HAVE_ICONV
 

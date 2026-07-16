@@ -75,12 +75,9 @@ static cl::opt<std::string>
     OutputFilename("o", cl::desc("Override output filename"), cl::init("-"),
                    cl::value_desc("filename"), cl::cat(LinkCategory));
 
-static cl::opt<bool>
-    Internalize("internalize",
-                cl::desc("Internalize linked symbols - maintains existing "
-                         "linkage for the first input and converts linkage in"
-                         " all other inputs to `internal`"),
-                cl::cat(LinkCategory));
+static cl::opt<bool> Internalize("internalize",
+                                 cl::desc("Internalize linked symbols"),
+                                 cl::cat(LinkCategory));
 
 static cl::opt<bool>
     DisableDITypeMap("disable-debug-info-type-map",
@@ -425,7 +422,7 @@ static bool linkFiles(const char *argv0, LLVMContext &Context, Linker &L,
       for (auto &I : *Index) {
         for (auto &S : I.second.getSummaryList()) {
           if (GlobalValue::isLocalLinkage(S->linkage()))
-            S->setExternalLinkageForTest();
+            S->setLinkage(GlobalValue::ExternalLinkage);
         }
       }
 
@@ -516,6 +513,7 @@ int main(int argc, char **argv) {
 
   if (Verbose)
     errs() << "Writing bitcode...\n";
+  Composite->removeDebugIntrinsicDeclarations();
   if (OutputAssembly) {
     Composite->print(Out.os(), nullptr, /* ShouldPreserveUseListOrder */ false);
   } else if (Force || !CheckBitcodeOutputToConsole(Out.os())) {

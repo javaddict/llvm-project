@@ -66,7 +66,8 @@
 #if defined(_LIBCPP_OBJECT_FORMAT_MACHO)
 
 #  define _LIBCPP_CAN_DETECT_OVERRIDDEN_FUNCTION 1
-#  define OVERRIDABLE_FUNCTION [[gnu::weak, gnu::section("__TEXT,__lcxx_override,regular,pure_instructions")]]
+#  define OVERRIDABLE_FUNCTION                                                                                         \
+    __attribute__((__section__("__TEXT,__lcxx_override,regular,pure_instructions"))) _LIBCPP_WEAK
 
 _LIBCPP_BEGIN_NAMESPACE_STD template <typename T, T* _Func>
 _LIBCPP_HIDE_FROM_ABI inline bool __is_function_overridden() noexcept {
@@ -98,7 +99,7 @@ _LIBCPP_END_NAMESPACE_STD
 #elif defined(_LIBCPP_OBJECT_FORMAT_ELF) && !defined(__NVPTX__)
 
 #  define _LIBCPP_CAN_DETECT_OVERRIDDEN_FUNCTION 1
-#  define OVERRIDABLE_FUNCTION [[gnu::weak, gnu::section("__lcxx_override")]]
+#  define OVERRIDABLE_FUNCTION __attribute__((__section__("__lcxx_override"))) _LIBCPP_WEAK
 
 // This is very similar to what we do for Mach-O above. The ELF linker will implicitly define
 // variables with those names corresponding to the start and the end of the section.
@@ -126,7 +127,7 @@ _LIBCPP_END_NAMESPACE_STD
 #else
 
 #  define _LIBCPP_CAN_DETECT_OVERRIDDEN_FUNCTION 0
-#  define OVERRIDABLE_FUNCTION [[gnu::weak]]
+#  define OVERRIDABLE_FUNCTION _LIBCPP_WEAK
 
 #endif
 

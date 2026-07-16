@@ -59,7 +59,8 @@ struct TestSubsystemWithError {
     assert(state == SystemState::Start);
     state = SystemState::Initialized;
     if (will_fail)
-      return llvm::createStringError(SubsystemErrorString);
+      return llvm::make_error<llvm::StringError>(
+          SubsystemErrorString, llvm::inconvertibleErrorCode());
     return llvm::Error::success();
   }
   static void Terminate() {

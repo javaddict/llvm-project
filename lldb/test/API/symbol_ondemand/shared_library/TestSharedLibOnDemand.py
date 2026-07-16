@@ -7,7 +7,6 @@ from lldbsuite.test.lldbtest import *
 import lldbsuite.test.lldbutil as lldbutil
 
 
-@skipIfTargetDoesNotSupportSharedLibraries()
 class SharedLibTestCase(TestBase):
     def setUp(self):
         # Call super's setUp().
@@ -32,7 +31,8 @@ class SharedLibTestCase(TestBase):
             self.target, self.shlib_names
         )
 
-        self.shared_lib_name = self.platformContext.getFullLibName("foo")
+        ctx = self.platformContext
+        self.shared_lib_name = ctx.shlib_prefix + "foo." + ctx.shlib_extension
 
     @skipIfWindows
     def test_source_line_breakpoint(self):

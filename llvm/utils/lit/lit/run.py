@@ -24,7 +24,7 @@ class TimeoutError(Exception):
     pass
 
 
-class Run:
+class Run(object):
     """A concrete, configured testing run."""
 
     def __init__(

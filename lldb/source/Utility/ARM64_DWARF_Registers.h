@@ -50,14 +50,8 @@ enum {
   x31 = 31,
   sp = x31,
   pc = 32,
-  elr_mode = 33,
-  ra_sign_state = 34,
-  tpidrr0_el0 = 35,
-  tpidr_el0 = 36,
-  tpidr_el1 = 37,
-  tpidr_el2 = 38,
-  tpidr_el3 = 39,
-  // 40-45 Reserved
+  cpsr = 33,
+  // 34-45 reserved
 
   // 64-bit SVE Vector granule pseudo register
   vg = 46,

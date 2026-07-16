@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 import lldb
 import shlex
@@ -544,19 +544,22 @@ class DelegateTree(ttk.Frame):
 
 
 @lldb.command("tk-variables")
-def tk_variable_display(debugger, command, exe_ctx, result, internal_dict):
+def tk_variable_display(debugger, command, result, dict):
     # needed for tree creation in TK library as it uses sys.argv...
     sys.argv = ["tk-variables"]
-    if not exe_ctx.target:
+    target = debugger.GetSelectedTarget()
+    if not target:
         print("invalid target", file=result)
         return
-    if not exe_ctx.process:
+    process = target.GetProcess()
+    if not process:
         print("invalid process", file=result)
         return
-    if not exe_ctx.thread:
+    thread = process.GetSelectedThread()
+    if not thread:
         print("invalid thread", file=result)
         return
-    frame = exe_ctx.frame
+    frame = thread.GetSelectedFrame()
     if not frame:
         print("invalid frame", file=result)
         return
@@ -575,13 +578,14 @@ def tk_variable_display(debugger, command, exe_ctx, result, internal_dict):
 
 
 @lldb.command("tk-process")
-def tk_process_display(debugger, command, exe_ctx, result, internal_dict):
+def tk_process_display(debugger, command, result, dict):
     # needed for tree creation in TK library as it uses sys.argv...
     sys.argv = ["tk-process"]
-    if not exe_ctx.target:
+    target = debugger.GetSelectedTarget()
+    if not target:
         print("invalid target", file=result)
         return
-    process = exe_ctx.process
+    process = target.GetProcess()
     if not process:
         print("invalid process", file=result)
         return
@@ -599,10 +603,10 @@ def tk_process_display(debugger, command, exe_ctx, result, internal_dict):
 
 
 @lldb.command("tk-target")
-def tk_target_display(debugger, command, exe_ctx, result, internal_dict):
+def tk_target_display(debugger, command, result, dict):
     # needed for tree creation in TK library as it uses sys.argv...
     sys.argv = ["tk-target"]
-    target = exe_ctx.target
+    target = debugger.GetSelectedTarget()
     if not target:
         print("invalid target", file=result)
         return

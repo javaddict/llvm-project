@@ -183,8 +183,7 @@ Error iterateSymbolGroups(InputFile &Input, const PrintScope &HeaderScope,
   if (Filters.DumpModi) {
     uint32_t Modi = *Filters.DumpModi;
     SymbolGroup SG(&Input, Modi);
-    return iterateOneModule(Input,
-                            withLabelWidth(HeaderScope, NumDigitsBase10(Modi)),
+    return iterateOneModule(Input, withLabelWidth(HeaderScope, NumDigits(Modi)),
                             SG, Modi, Callback);
   }
 
@@ -192,9 +191,9 @@ Error iterateSymbolGroups(InputFile &Input, const PrintScope &HeaderScope,
 
   for (const auto &SG : Input.symbol_groups()) {
     if (shouldDumpSymbolGroup(I, SG, Filters))
-      if (auto Err = iterateOneModule(
-              Input, withLabelWidth(HeaderScope, NumDigitsBase10(I)), SG, I,
-              Callback))
+      if (auto Err =
+              iterateOneModule(Input, withLabelWidth(HeaderScope, NumDigits(I)),
+                               SG, I, Callback))
         return Err;
 
     ++I;

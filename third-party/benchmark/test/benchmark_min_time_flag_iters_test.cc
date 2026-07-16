@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -12,11 +13,11 @@ namespace {
 
 class TestReporter : public benchmark::ConsoleReporter {
  public:
-  bool ReportContext(const Context& context) override {
+  virtual bool ReportContext(const Context& context) BENCHMARK_OVERRIDE {
     return ConsoleReporter::ReportContext(context);
   };
 
-  void ReportRuns(const std::vector<Run>& report) override {
+  virtual void ReportRuns(const std::vector<Run>& report) BENCHMARK_OVERRIDE {
     assert(report.size() == 1);
     iter_nums_.push_back(report[0].iterations);
     ConsoleReporter::ReportRuns(report);
@@ -24,7 +25,7 @@ class TestReporter : public benchmark::ConsoleReporter {
 
   TestReporter() {}
 
-  ~TestReporter() override {}
+  virtual ~TestReporter() {}
 
   const std::vector<benchmark::IterationCount>& GetIters() const {
     return iter_nums_;
@@ -34,26 +35,22 @@ class TestReporter : public benchmark::ConsoleReporter {
   std::vector<benchmark::IterationCount> iter_nums_;
 };
 
-void BM_MyBench(benchmark::State& state) {
+}  // end namespace
+
+static void BM_MyBench(benchmark::State& state) {
   for (auto s : state) {
   }
 }
-}  // end namespace
-
 BENCHMARK(BM_MyBench);
 
 int main(int argc, char** argv) {
-  benchmark::MaybeReenterWithoutASLR(argc, argv);
-
   // Make a fake argv and append the new --benchmark_min_time=<foo> to it.
   int fake_argc = argc + 1;
-  std::vector<const char*> fake_argv(static_cast<size_t>(fake_argc));
-  for (size_t i = 0; i < static_cast<size_t>(argc); ++i) {
-    fake_argv[i] = argv[i];
-  }
-  fake_argv[static_cast<size_t>(argc)] = "--benchmark_min_time=4x";
+  const char** fake_argv = new const char*[static_cast<size_t>(fake_argc)];
+  for (int i = 0; i < argc; ++i) fake_argv[i] = argv[i];
+  fake_argv[argc] = "--benchmark_min_time=4x";
 
-  benchmark::Initialize(&fake_argc, const_cast<char**>(fake_argv.data()));
+  benchmark::Initialize(&fake_argc, const_cast<char**>(fake_argv));
 
   TestReporter test_reporter;
   const size_t returned_count =
@@ -64,5 +61,6 @@ int main(int argc, char** argv) {
   const std::vector<benchmark::IterationCount> iters = test_reporter.GetIters();
   assert(!iters.empty() && iters[0] == 4);
 
+  delete[] fake_argv;
   return 0;
 }

@@ -87,9 +87,6 @@ public:
   llvm::Expected<MLIRConvertBytecodeResult>
   convertToBytecode(const URIForFile &uri);
 
-  /// Set the workspace root for the server.
-  void setWorkspaceRoot(StringRef root);
-
 private:
   struct Impl;
 

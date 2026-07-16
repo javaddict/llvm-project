@@ -24,8 +24,7 @@ class RISCVMCAsmInfo : public MCAsmInfoELF {
   void anchor() override;
 
 public:
-  explicit RISCVMCAsmInfo(const Triple &TargetTriple,
-                          const MCTargetOptions &Options);
+  explicit RISCVMCAsmInfo(const Triple &TargetTriple);
 
   const MCExpr *getExprForFDESymbol(const MCSymbol *Sym, unsigned Encoding,
                                     MCStreamer &Streamer) const override;
@@ -42,14 +41,10 @@ enum {
   // Specifiers mapping to distinct relocation types.
   S_LO = FirstTargetFixupKind,
   S_PCREL_LO,
-  S_PCREL_HI,
   S_TPREL_LO,
-  S_CALL_PLT,
-  S_GOT_HI,
   // Vendor-specific relocation types might conflict across vendors.
   // Refer to them using Specifier constants.
   S_QC_ABS20,
-  S_QC_ACCESS,
 };
 
 Specifier parseSpecifierName(StringRef name);
@@ -58,9 +53,7 @@ StringRef getSpecifierName(Specifier Kind);
 
 class RISCVMCAsmInfoDarwin : public MCAsmInfoDarwin {
 public:
-  explicit RISCVMCAsmInfoDarwin(const MCTargetOptions &Options);
-  void printSpecifierExpr(raw_ostream &OS,
-                          const MCSpecifierExpr &Expr) const override;
+  explicit RISCVMCAsmInfoDarwin();
 };
 
 } // namespace llvm

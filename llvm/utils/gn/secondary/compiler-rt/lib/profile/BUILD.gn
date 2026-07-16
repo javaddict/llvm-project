@@ -41,7 +41,6 @@ static_library("profile") {
     "InstrProfilingPlatformAIX.c",
     "InstrProfilingPlatformDarwin.c",
     "InstrProfilingPlatformFuchsia.c",
-    "InstrProfilingPlatformGPU.c",
     "InstrProfilingPlatformLinux.c",
     "InstrProfilingPlatformOther.c",
     "InstrProfilingPlatformWindows.c",

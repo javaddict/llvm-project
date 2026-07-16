@@ -17,7 +17,6 @@
 #include "flang/Common/target-rounding.h"
 #include "flang/Parser/char-block.h"
 #include "flang/Parser/message.h"
-#include "flang/Support/FPMaxminBehavior.h"
 #include "flang/Support/Fortran-features.h"
 #include "flang/Support/Fortran.h"
 #include "flang/Support/default-kinds.h"
@@ -219,21 +218,15 @@ public:
   FoldingContext(const common::IntrinsicTypeDefaultKinds &d,
       const IntrinsicProcTable &t, const TargetCharacteristics &c,
       const common::LanguageFeatureControl &lfc,
-      std::set<std::string> &tempNames,
-      common::FPMaxminBehavior fpMaxminBehavior =
-          common::FPMaxminBehavior::Legacy)
+      std::set<std::string> &tempNames)
       : defaults_{d}, intrinsics_{t}, targetCharacteristics_{c},
-        languageFeatures_{lfc}, tempNames_{tempNames},
-        fpMaxminBehavior_{fpMaxminBehavior} {}
+        languageFeatures_{lfc}, tempNames_{tempNames} {}
   FoldingContext(const parser::ContextualMessages &m,
       const common::IntrinsicTypeDefaultKinds &d, const IntrinsicProcTable &t,
       const TargetCharacteristics &c, const common::LanguageFeatureControl &lfc,
-      std::set<std::string> &tempNames,
-      common::FPMaxminBehavior fpMaxminBehavior =
-          common::FPMaxminBehavior::Legacy)
+      std::set<std::string> &tempNames)
       : messages_{m}, defaults_{d}, intrinsics_{t}, targetCharacteristics_{c},
-        languageFeatures_{lfc}, tempNames_{tempNames},
-        fpMaxminBehavior_{fpMaxminBehavior} {}
+        languageFeatures_{lfc}, tempNames_{tempNames} {}
   FoldingContext(const FoldingContext &that)
       : messages_{that.messages_}, defaults_{that.defaults_},
         intrinsics_{that.intrinsics_},
@@ -242,8 +235,8 @@ public:
         analyzingPDTComponentKindSelector_{
             that.analyzingPDTComponentKindSelector_},
         impliedDos_{that.impliedDos_},
-        languageFeatures_{that.languageFeatures_}, tempNames_{that.tempNames_},
-        fpMaxminBehavior_{that.fpMaxminBehavior_} {}
+        languageFeatures_{that.languageFeatures_}, tempNames_{that.tempNames_} {
+  }
   FoldingContext(
       const FoldingContext &that, const parser::ContextualMessages &m)
       : messages_{m}, defaults_{that.defaults_}, intrinsics_{that.intrinsics_},
@@ -252,8 +245,8 @@ public:
         analyzingPDTComponentKindSelector_{
             that.analyzingPDTComponentKindSelector_},
         impliedDos_{that.impliedDos_},
-        languageFeatures_{that.languageFeatures_}, tempNames_{that.tempNames_},
-        fpMaxminBehavior_{that.fpMaxminBehavior_} {}
+        languageFeatures_{that.languageFeatures_}, tempNames_{that.tempNames_} {
+  }
 
   parser::ContextualMessages &messages() { return messages_; }
   const parser::ContextualMessages &messages() const { return messages_; }
@@ -270,9 +263,6 @@ public:
   }
   const common::LanguageFeatureControl &languageFeatures() const {
     return languageFeatures_;
-  }
-  common::FPMaxminBehavior fpMaxminBehavior() const {
-    return fpMaxminBehavior_;
   }
   template <typename... A>
   parser::Message *Warn(common::LanguageFeature feature, A &&...args) {
@@ -335,7 +325,6 @@ private:
   const common::LanguageFeatureControl &languageFeatures_;
   std::set<std::string> &tempNames_;
   std::string realFlagWarningContext_;
-  common::FPMaxminBehavior fpMaxminBehavior_{common::FPMaxminBehavior::Legacy};
 };
 
 } // namespace Fortran::evaluate

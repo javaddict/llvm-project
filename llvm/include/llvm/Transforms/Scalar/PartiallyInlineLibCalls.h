@@ -20,9 +20,9 @@
 namespace llvm {
 class Function;
 class PartiallyInlineLibCallsPass
-    : public OptionalPassInfoMixin<PartiallyInlineLibCallsPass> {
+    : public PassInfoMixin<PartiallyInlineLibCallsPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 }
 

@@ -147,12 +147,13 @@ public:
 };
 
 class CtxProfAnalysisPrinterPass
-    : public RequiredPassInfoMixin<CtxProfAnalysisPrinterPass> {
+    : public PassInfoMixin<CtxProfAnalysisPrinterPass> {
 public:
   enum class PrintMode { Everything, YAML };
   LLVM_ABI explicit CtxProfAnalysisPrinterPass(raw_ostream &OS);
 
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
+  static bool isRequired() { return true; }
 
 private:
   raw_ostream &OS;
@@ -196,7 +197,7 @@ public:
 // the pass pipeline, associate it with any Global Value, and then use it for
 // PGO and ThinLTO.
 // At that point, this should be moved elsewhere.
-class AssignGUIDPass : public OptionalPassInfoMixin<AssignGUIDPass> {
+class AssignGUIDPass : public PassInfoMixin<AssignGUIDPass> {
 public:
   explicit AssignGUIDPass() = default;
 

@@ -10,7 +10,6 @@
 // UNSUPPORTED: hwasan
 // FIXME: Windows does not have aligned_alloc
 // UNSUPPORTED: system-windows
-// XFAIL: system-aix
 
 async.func @async_func_empty() -> !async.token {
   return

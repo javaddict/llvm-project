@@ -286,9 +286,9 @@ APFixedPoint APFixedPoint::mul(const APFixedPoint &Other,
                                                  .extOrTrunc(Wide);
   if (CommonFXSema.isSaturated()) {
     if (Result < Min)
-      Result = std::move(Min);
+      Result = Min;
     else if (Result > Max)
-      Result = std::move(Max);
+      Result = Max;
   } else {
     Overflowed = Result < Min || Result > Max;
   }
@@ -349,9 +349,9 @@ APFixedPoint APFixedPoint::div(const APFixedPoint &Other,
                                                  .extOrTrunc(Wide);
   if (CommonFXSema.isSaturated()) {
     if (Result < Min)
-      Result = std::move(Min);
+      Result = Min;
     else if (Result > Max)
-      Result = std::move(Max);
+      Result = Max;
   } else {
     Overflowed = Result < Min || Result > Max;
   }
@@ -385,9 +385,9 @@ APFixedPoint APFixedPoint::shl(unsigned Amt, bool *Overflow) const {
   APSInt Min = APFixedPoint::getMin(Sema).getValue().extOrTrunc(Wide);
   if (Sema.isSaturated()) {
     if (Result < Min)
-      Result = std::move(Min);
+      Result = Min;
     else if (Result > Max)
-      Result = std::move(Max);
+      Result = Max;
   } else {
     Overflowed = Result < Min || Result > Max;
   }

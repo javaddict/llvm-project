@@ -16,13 +16,13 @@ namespace llvm {
 class Function;
 class TargetMachine;
 
-class AtomicExpandPass : public RequiredPassInfoMixin<AtomicExpandPass> {
+class AtomicExpandPass : public PassInfoMixin<AtomicExpandPass> {
 private:
   const TargetMachine *TM;
 
 public:
   AtomicExpandPass(const TargetMachine &TM) : TM(&TM) {}
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
 } // end namespace llvm

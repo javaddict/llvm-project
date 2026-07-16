@@ -15,7 +15,6 @@
 namespace fir::omp {
 void registerOpenMPExtensions(mlir::DialectRegistry &registry) {
   registerAttrsExtensions(registry);
-  registerOpInterfacesExtensions(registry);
 }
 
 } // namespace fir::omp

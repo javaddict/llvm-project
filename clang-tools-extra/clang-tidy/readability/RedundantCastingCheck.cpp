@@ -50,8 +50,8 @@ static bool areTypesEqual(QualType TypeS, QualType TypeD,
                                             TypeD.getLocalUnqualifiedType());
 }
 
-static bool binaryOperatorOperandsTypesEqualToOperatorResultType(
-    const Expr *E, bool IgnoreTypeAliases, bool IgnoreImplicitCasts) {
+static bool areBinaryOperatorOperandsTypesEqualToOperatorResultType(
+    const Expr *E, bool IgnoreTypeAliases) {
   if (!E)
     return true;
   const Expr *WithoutImplicitAndParen = E->IgnoreParenImpCasts();
@@ -64,21 +64,12 @@ static bool binaryOperatorOperandsTypesEqualToOperatorResultType(
 
     const QualType NonReferenceType = Type.getNonReferenceType();
     const QualType LHSType = B->getLHS()->IgnoreImplicit()->getType();
+    if (LHSType.isNull() || !areTypesEqual(LHSType.getNonReferenceType(),
+                                           NonReferenceType, IgnoreTypeAliases))
+      return false;
     const QualType RHSType = B->getRHS()->IgnoreImplicit()->getType();
-    const bool LHSMatches =
-        !LHSType.isNull() && areTypesEqual(LHSType.getNonReferenceType(),
-                                           NonReferenceType, IgnoreTypeAliases);
-    const bool RHSMatches =
-        !RHSType.isNull() && areTypesEqual(RHSType.getNonReferenceType(),
-                                           NonReferenceType, IgnoreTypeAliases);
-    // Explicit Cast is needed if:
-    // IgnoreImplicitCasts = false: neither of operands type matches cast type
-    // IgnoreImplicitCasts = true: at least one operand type doesn't match cast
-    //                             type
-    const bool CastIsNeeded = IgnoreImplicitCasts
-                                  ? (!LHSMatches || !RHSMatches)
-                                  : (!LHSMatches && !RHSMatches);
-    if (CastIsNeeded)
+    if (RHSType.isNull() || !areTypesEqual(RHSType.getNonReferenceType(),
+                                           NonReferenceType, IgnoreTypeAliases))
       return false;
   }
   return true;
@@ -101,13 +92,11 @@ RedundantCastingCheck::RedundantCastingCheck(StringRef Name,
                                              ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
       IgnoreMacros(Options.get("IgnoreMacros", true)),
-      IgnoreTypeAliases(Options.get("IgnoreTypeAliases", false)),
-      IgnoreImplicitCasts(Options.get("IgnoreImplicitCasts", false)) {}
+      IgnoreTypeAliases(Options.get("IgnoreTypeAliases", false)) {}
 
 void RedundantCastingCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "IgnoreMacros", IgnoreMacros);
   Options.store(Opts, "IgnoreTypeAliases", IgnoreTypeAliases);
-  Options.store(Opts, "IgnoreImplicitCasts", IgnoreImplicitCasts);
 }
 
 void RedundantCastingCheck::registerMatchers(MatchFinder *Finder) {
@@ -156,8 +145,8 @@ void RedundantCastingCheck::check(const MatchFinder::MatchResult &Result) {
   if (!areTypesEqual(TypeS, TypeD, IgnoreTypeAliases))
     return;
 
-  if (!binaryOperatorOperandsTypesEqualToOperatorResultType(
-          SourceExpr, IgnoreTypeAliases, IgnoreImplicitCasts))
+  if (!areBinaryOperatorOperandsTypesEqualToOperatorResultType(
+          SourceExpr, IgnoreTypeAliases))
     return;
 
   const auto *CastExpr = Result.Nodes.getNodeAs<ExplicitCastExpr>("cast");

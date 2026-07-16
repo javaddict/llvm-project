@@ -69,6 +69,7 @@ add_clang_library(clangBasic
   ExpressionTraits.cpp
   FileEntry.cpp
   FileManager.cpp
+  FileSystemStatCache.cpp
   IdentifierTable.cpp
   LangOptions.cpp
   LangStandards.cpp
@@ -102,6 +103,7 @@ add_clang_library(clangBasic
   Targets/BPF.cpp
   Targets/CSKY.cpp
   Targets/DirectX.cpp
+  Targets/Haydn.cpp
   Targets/Hexagon.cpp
   Targets/Lanai.cpp
   Targets/LoongArch.cpp

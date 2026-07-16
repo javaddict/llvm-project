@@ -596,8 +596,7 @@ TEST_F(FormatTestJava, RetainsLogicalShifts) {
 
 TEST_F(FormatTestJava, ShortFunctions) {
   FormatStyle Style = getLLVMStyle(FormatStyle::LK_Java);
-  Style.AllowShortFunctionsOnASingleLine =
-      FormatStyle::ShortFunctionStyle::setEmptyAndInline();
+  Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_Inline;
   verifyFormat("enum Enum {\n"
                "  E1,\n"
                "  E2;\n"
@@ -847,13 +846,6 @@ TEST_F(FormatTestJava, TextBlock) {
 
   verifyNoChange("String name = \"\"\"\n"
                  "              Pat Q. Smith");
-
-  verifyFormat("String foo = \"\"\"\n"
-               "    bar\n"
-               "    \\\\\"\"\";",
-               "String foo=\"\"\"\n"
-               "    bar\n"
-               "    \\\\\"\"\" ;");
 }
 
 TEST_F(FormatTestJava, BreakAfterRecord) {

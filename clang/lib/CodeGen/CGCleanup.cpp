@@ -159,7 +159,6 @@ void *EHScopeStack::pushCleanup(CleanupKind Kind, size_t Size) {
   bool IsEHCleanup = Kind & EHCleanup;
   bool IsLifetimeMarker = Kind & LifetimeMarker;
   bool IsFakeUse = Kind & FakeUse;
-  bool IsSEHFinallyCleanup = Kind & SEHFinallyCleanup;
 
   // Per C++ [except.terminate], it is implementation-defined whether none,
   // some, or all cleanups are called before std::terminate. Thus, when
@@ -184,8 +183,6 @@ void *EHScopeStack::pushCleanup(CleanupKind Kind, size_t Size) {
     Scope->setLifetimeMarker();
   if (IsFakeUse)
     Scope->setFakeUse();
-  if (IsSEHFinallyCleanup)
-    Scope->setSEHFinallyCleanup();
 
   // With Windows -EHa, Invoke llvm.seh.scope.begin() for EHCleanup
   // If exceptions are disabled/ignored and SEH is not in use, then there is no
@@ -194,8 +191,7 @@ void *EHScopeStack::pushCleanup(CleanupKind Kind, size_t Size) {
   // consistent with MSVC's behavior, except in the presence of -EHa.
   // Check getInvokeDest() to generate llvm.seh.scope.begin() as needed.
   if (CGF->getLangOpts().EHAsynch && IsEHCleanup && !IsLifetimeMarker &&
-      !IsSEHFinallyCleanup && CGF->getTarget().getCXXABI().isMicrosoft() &&
-      CGF->getInvokeDest())
+      CGF->getTarget().getCXXABI().isMicrosoft() && CGF->getInvokeDest())
     CGF->EmitSehCppScopeBegin();
 
   return Scope->getCleanupBuffer();
@@ -350,7 +346,7 @@ static void ResolveAllBranchFixups(CodeGenFunction &CGF,
       createStoreInstBefore(CGF.Builder.getInt32(Fixup.DestinationIndex),
                             CGF.getNormalCleanupDestSlot(),
                             Fixup.InitialBranch->getIterator(), CGF);
-      Fixup.InitialBranch->setSuccessor(CleanupEntry);
+      Fixup.InitialBranch->setSuccessor(0, CleanupEntry);
     }
 
     // Don't add this case to the switch statement twice.
@@ -371,8 +367,10 @@ static llvm::SwitchInst *TransitionToCleanupSwitch(CodeGenFunction &CGF,
   // If it's a branch, turn it into a switch whose default
   // destination is its original target.
   llvm::Instruction *Term = Block->getTerminator();
+  assert(Term && "can't transition block without terminator");
 
-  if (llvm::UncondBrInst *Br = dyn_cast<llvm::UncondBrInst>(Term)) {
+  if (llvm::BranchInst *Br = dyn_cast<llvm::BranchInst>(Term)) {
+    assert(Br->isUnconditional());
     auto Load = createLoadInstBefore(CGF.getNormalCleanupDestSlot(),
                                      "cleanup.dest", Term->getIterator(), CGF);
     llvm::SwitchInst *Switch =
@@ -532,10 +530,9 @@ static llvm::BasicBlock *SimplifyCleanupEntry(CodeGenFunction &CGF,
   llvm::BasicBlock *Pred = Entry->getSinglePredecessor();
   if (!Pred) return Entry;
 
-  llvm::UncondBrInst *Br = dyn_cast<llvm::UncondBrInst>(Pred->getTerminator());
-  if (!Br)
-    return Entry;
-  assert(Br->getSuccessor() == Entry);
+  llvm::BranchInst *Br = dyn_cast<llvm::BranchInst>(Pred->getTerminator());
+  if (!Br || Br->isConditional()) return Entry;
+  assert(Br->getSuccessor(0) == Entry);
 
   // If we were previously inserting at the end of the cleanup entry
   // block, we'll need to continue inserting at the end of the
@@ -594,9 +591,9 @@ static void ForwardPrebranchedFallthrough(llvm::BasicBlock *Exit,
   // an unconditional branch or a switch.
   llvm::Instruction *Term = Exit->getTerminator();
 
-  if (llvm::UncondBrInst *Br = dyn_cast<llvm::UncondBrInst>(Term)) {
-    assert(Br->getSuccessor() == From);
-    Br->setSuccessor(To);
+  if (llvm::BranchInst *Br = dyn_cast<llvm::BranchInst>(Term)) {
+    assert(Br->isUnconditional() && Br->getSuccessor(0) == From);
+    Br->setSuccessor(0, To);
   } else {
     llvm::SwitchInst *Switch = cast<llvm::SwitchInst>(Term);
     for (unsigned I = 0, E = Switch->getNumSuccessors(); I != E; ++I)
@@ -629,8 +626,8 @@ static void destroyOptimisticNormalEntry(CodeGenFunction &CGF,
     llvm::SwitchInst *si = cast<llvm::SwitchInst>(use.getUser());
     if (si->getNumCases() == 1 && si->getDefaultDest() == unreachableBB) {
       // Replace the switch with a branch.
-      llvm::UncondBrInst::Create(si->case_begin()->getCaseSuccessor(),
-                                 si->getIterator());
+      llvm::BranchInst::Create(si->case_begin()->getCaseSuccessor(),
+                               si->getIterator());
 
       // The switch operand is a load from the cleanup-dest alloca.
       llvm::LoadInst *condition = cast<llvm::LoadInst>(si->getCondition());
@@ -700,7 +697,7 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough,
   // rest of IR gen doesn't need to worry about this; it only happens
   // during the execution of PopCleanupBlocks().
   bool HasPrebranchedFallthrough =
-      (FallthroughSource && FallthroughSource->hasTerminator());
+    (FallthroughSource && FallthroughSource->getTerminator());
 
   // If this is a normal cleanup, then having a prebranched
   // fallthrough implies that the fallthrough source unconditionally
@@ -788,7 +785,7 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough,
 
   // Under -EHa, invoke seh.scope.end() to mark scope end before dtor
   bool IsEHa = getLangOpts().EHAsynch && !Scope.isLifetimeMarker();
-  bool IsSEHFinallyCleanup = Scope.isSEHFinallyCleanup();
+  const EHPersonality &Personality = EHPersonality::get(*this);
   if (!RequiresNormalCleanup) {
     // Mark CPP scope end for passed-by-value Arg temp
     //   per Windows ABI which is "normally" Cleanup in callee
@@ -798,7 +795,7 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough,
       // block.
       if (NormalDeactivateOrigIP.isSet())
         Builder.restoreIP(NormalDeactivateOrigIP);
-      if (Builder.GetInsertBlock() && !IsSEHFinallyCleanup)
+      if (Personality.isMSVCXXPersonality() && Builder.GetInsertBlock())
         EmitSehCppScopeEnd();
       if (NormalDeactivateOrigIP.isSet())
         NormalDeactivateOrigIP = Builder.saveAndClearIP();
@@ -814,10 +811,10 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough,
 
       // mark SEH scope end for fall-through flow
       if (IsEHa && getInvokeDest()) {
-        if (Scope.isSEHFinallyCleanup())
-          EmitSehTryScopeEnd();
-        else
+        if (Personality.isMSVCXXPersonality())
           EmitSehCppScopeEnd();
+        else
+          EmitSehTryScopeEnd();
       }
 
       destroyOptimisticNormalEntry(*this, Scope);
@@ -856,10 +853,10 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough,
 
       // intercept normal cleanup to mark SEH scope end
       if (IsEHa && getInvokeDest()) {
-        if (Scope.isSEHFinallyCleanup())
-          EmitSehTryScopeEnd();
-        else
+        if (Personality.isMSVCXXPersonality())
           EmitSehCppScopeEnd();
+        else
+          EmitSehTryScopeEnd();
       }
 
       // III.  Figure out where we're going and build the cleanup
@@ -906,13 +903,13 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough,
         }
 
         llvm::BasicBlock *BranchAfter = Scope.getBranchAfterBlock(0);
-        InstsToAppend.push_back(llvm::UncondBrInst::Create(BranchAfter));
+        InstsToAppend.push_back(llvm::BranchInst::Create(BranchAfter));
 
-        // Build a switch-out if we need it:
-        //   - if there are branch-afters threaded through the scope
-        //   - if fall-through is a branch-after
-        //   - if there are fixups that have nowhere left to go and
-        //     so must be immediately resolved
+      // Build a switch-out if we need it:
+      //   - if there are branch-afters threaded through the scope
+      //   - if fall-through is a branch-after
+      //   - if there are fixups that have nowhere left to go and
+      //     so must be immediately resolved
       } else if (Scope.getNumBranchAfters() ||
                  (HasFallthrough && !FallthroughIsBranchThrough) ||
                  (HasFixups && !HasEnclosingCleanups)) {
@@ -953,7 +950,7 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough,
       } else {
         // We should always have a branch-through destination in this case.
         assert(BranchThroughDest);
-        InstsToAppend.push_back(llvm::UncondBrInst::Create(BranchThroughDest));
+        InstsToAppend.push_back(llvm::BranchInst::Create(BranchThroughDest));
       }
 
       // IV.  Pop the cleanup and emit it.
@@ -978,7 +975,7 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough,
           createStoreInstBefore(Builder.getInt32(Fixup.DestinationIndex),
                                 getNormalCleanupDestSlot(),
                                 Fixup.InitialBranch->getIterator(), *this);
-          Fixup.InitialBranch->setSuccessor(NormalEntry);
+          Fixup.InitialBranch->setSuccessor(0, NormalEntry);
         }
         Fixup.OptimisticBranchBlock = NormalExit;
       }
@@ -1059,8 +1056,7 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough,
       EHStack.pushTerminate();
       PushedTerminate = true;
     } else if (IsEHa && getInvokeDest()) {
-      if (!IsSEHFinallyCleanup)
-        EmitSehCppScopeEnd();
+      EmitSehCppScopeEnd();
     }
 
     // We only actually emit the cleanup code if the cleanup is either
@@ -1121,7 +1117,7 @@ void CodeGenFunction::EmitBranchThroughCleanup(JumpDest Dest) {
     return;
 
   // Create the branch.
-  llvm::UncondBrInst *BI = Builder.CreateBr(Dest.getBlock());
+  llvm::BranchInst *BI = Builder.CreateBr(Dest.getBlock());
   addInstToCurrentSourceAtom(BI, nullptr);
 
   // Calculate the innermost active normal cleanup.
@@ -1258,8 +1254,8 @@ static void SetupCleanupBlockActivation(CodeGenFunction &CGF,
   Address var = Scope.getActiveFlag();
   if (!var.isValid()) {
     CodeGenFunction::AllocaTrackerRAII AllocaTracker(CGF);
-    var = CGF.CreateTempAlloca(CGF.Builder.getInt1Ty(), LangAS::Default,
-                               CharUnits::One(), "cleanup.isactive");
+    var = CGF.CreateTempAlloca(CGF.Builder.getInt1Ty(), CharUnits::One(),
+                               "cleanup.isactive");
     Scope.setActiveFlag(var);
     Scope.AddAuxAllocas(AllocaTracker.Take());
 

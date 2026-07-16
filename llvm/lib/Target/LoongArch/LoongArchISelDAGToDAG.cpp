@@ -400,17 +400,16 @@ bool LoongArchDAGToDAGISel::selectVSplat(SDNode *N, APInt &Imm,
   return true;
 }
 
-template <unsigned ImmBitSize, unsigned EltBitSize, bool IsSigned>
+template <unsigned ImmBitSize, bool IsSigned>
 bool LoongArchDAGToDAGISel::selectVSplatImm(SDValue N, SDValue &SplatVal) {
   APInt ImmValue;
   EVT EltTy = N->getValueType(0).getVectorElementType();
-  unsigned EltBitWidth = EltBitSize ? EltBitSize : EltTy.getSizeInBits();
 
   if (N->getOpcode() == ISD::BITCAST)
     N = N->getOperand(0);
 
-  if (selectVSplat(N.getNode(), ImmValue, EltBitWidth) &&
-      ImmValue.getBitWidth() == EltBitWidth) {
+  if (selectVSplat(N.getNode(), ImmValue, EltTy.getSizeInBits()) &&
+      ImmValue.getBitWidth() == EltTy.getSizeInBits()) {
     if (IsSigned && ImmValue.isSignedIntN(ImmBitSize)) {
       SplatVal = CurDAG->getSignedTargetConstant(
           ImmValue.getSExtValue(), SDLoc(N), Subtarget->getGRLenVT());
@@ -426,9 +425,8 @@ bool LoongArchDAGToDAGISel::selectVSplatImm(SDValue N, SDValue &SplatVal) {
   return false;
 }
 
-template <unsigned ImmBitSize>
-bool LoongArchDAGToDAGISel::selectVSplatImmNeg(SDValue N,
-                                               SDValue &SplatVal) const {
+bool LoongArchDAGToDAGISel::selectVSplatUimmInvPow2(SDValue N,
+                                                    SDValue &SplatImm) const {
   APInt ImmValue;
   EVT EltTy = N->getValueType(0).getVectorElementType();
 
@@ -437,28 +435,6 @@ bool LoongArchDAGToDAGISel::selectVSplatImmNeg(SDValue N,
 
   if (selectVSplat(N.getNode(), ImmValue, EltTy.getSizeInBits()) &&
       ImmValue.getBitWidth() == EltTy.getSizeInBits()) {
-    if ((-ImmValue).isIntN(ImmBitSize)) {
-      SplatVal = CurDAG->getTargetConstant(-ImmValue.getSExtValue(), SDLoc(N),
-                                           Subtarget->getGRLenVT());
-      return true;
-    }
-  }
-
-  return false;
-}
-
-template <unsigned EltBitSize>
-bool LoongArchDAGToDAGISel::selectVSplatUimmInvPow2(SDValue N,
-                                                    SDValue &SplatImm) const {
-  APInt ImmValue;
-  EVT EltTy = N->getValueType(0).getVectorElementType();
-  unsigned EltBitWidth = EltBitSize ? EltBitSize : EltTy.getSizeInBits();
-
-  if (N->getOpcode() == ISD::BITCAST)
-    N = N->getOperand(0);
-
-  if (selectVSplat(N.getNode(), ImmValue, EltBitWidth) &&
-      ImmValue.getBitWidth() == EltBitWidth) {
     int32_t Log2 = (~ImmValue).exactLogBase2();
 
     if (Log2 != -1) {
@@ -470,18 +446,16 @@ bool LoongArchDAGToDAGISel::selectVSplatUimmInvPow2(SDValue N,
   return false;
 }
 
-template <unsigned EltBitSize>
 bool LoongArchDAGToDAGISel::selectVSplatUimmPow2(SDValue N,
                                                  SDValue &SplatImm) const {
   APInt ImmValue;
   EVT EltTy = N->getValueType(0).getVectorElementType();
-  unsigned EltBitWidth = EltBitSize ? EltBitSize : EltTy.getSizeInBits();
 
   if (N->getOpcode() == ISD::BITCAST)
     N = N->getOperand(0);
 
-  if (selectVSplat(N.getNode(), ImmValue, EltBitWidth) &&
-      ImmValue.getBitWidth() == EltBitWidth) {
+  if (selectVSplat(N.getNode(), ImmValue, EltTy.getSizeInBits()) &&
+      ImmValue.getBitWidth() == EltTy.getSizeInBits()) {
     int32_t Log2 = ImmValue.exactLogBase2();
 
     if (Log2 != -1) {

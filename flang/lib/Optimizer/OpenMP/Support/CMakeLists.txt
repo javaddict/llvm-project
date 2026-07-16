@@ -2,7 +2,6 @@ get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 
 add_flang_library(FIROpenMPSupport
   FIROpenMPAttributes.cpp
-  FIROpenMPOpsInterfaces.cpp
   RegisterOpenMPExtensions.cpp
 
   DEPENDS

@@ -46,7 +46,10 @@ class AMDGPUPrepareAGPRAllocLegacy : public MachineFunctionPass {
 public:
   static char ID;
 
-  AMDGPUPrepareAGPRAllocLegacy() : MachineFunctionPass(ID) {}
+  AMDGPUPrepareAGPRAllocLegacy() : MachineFunctionPass(ID) {
+    initializeAMDGPUPrepareAGPRAllocLegacyPass(
+        *PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
@@ -59,8 +62,10 @@ public:
 };
 } // End anonymous namespace.
 
-INITIALIZE_PASS(AMDGPUPrepareAGPRAllocLegacy, DEBUG_TYPE,
-                "AMDGPU Prepare AGPR Alloc", false, false)
+INITIALIZE_PASS_BEGIN(AMDGPUPrepareAGPRAllocLegacy, DEBUG_TYPE,
+                      "AMDGPU Prepare AGPR Alloc", false, false)
+INITIALIZE_PASS_END(AMDGPUPrepareAGPRAllocLegacy, DEBUG_TYPE,
+                    "AMDGPU Prepare AGPR Alloc", false, false)
 
 char AMDGPUPrepareAGPRAllocLegacy::ID = 0;
 

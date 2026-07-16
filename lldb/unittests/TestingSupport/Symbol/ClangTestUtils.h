@@ -25,7 +25,8 @@ inline CompilerType
 createRecord(TypeSystemClang &ast, llvm::StringRef name,
              lldb::LanguageType lang = lldb::LanguageType::eLanguageTypeC) {
   return ast.CreateRecordType(ast.getASTContext().getTranslationUnitDecl(),
-                              OptionalClangModuleID(), name, 0, lang);
+                              OptionalClangModuleID(),
+                              lldb::AccessType::eAccessPublic, name, 0, lang);
 }
 
 /// Create a record with the given name and a field with the given type
@@ -37,7 +38,8 @@ inline CompilerType createRecordWithField(
   CompilerType t = createRecord(ast, record_name, lang);
 
   TypeSystemClang::StartTagDeclarationDefinition(t);
-  ast.AddFieldToRecordType(t, field_name, field_type, 7);
+  ast.AddFieldToRecordType(t, field_name, field_type,
+                           lldb::AccessType::eAccessPublic, 7);
   TypeSystemClang::CompleteTagDeclarationDefinition(t);
 
   return t;

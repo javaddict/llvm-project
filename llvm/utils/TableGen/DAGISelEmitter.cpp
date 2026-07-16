@@ -30,7 +30,7 @@ class DAGISelEmitter {
   const CodeGenDAGPatterns CGP;
 
 public:
-  explicit DAGISelEmitter(const RecordKeeper &R) : Records(R), CGP(R, false) {}
+  explicit DAGISelEmitter(const RecordKeeper &R) : Records(R), CGP(R) {}
   void run(raw_ostream &OS);
 };
 } // End anonymous namespace
@@ -89,30 +89,13 @@ struct PatternSortingPredicate {
     const TreePatternNode &LT = LHS->getSrcPattern();
     const TreePatternNode &RT = RHS->getSrcPattern();
 
-    bool LHSIsVector = false;
-    bool RHSIsVector = false;
-    bool LHSIsFP = false;
-    bool RHSIsFP = false;
+    MVT LHSVT = LT.getNumTypes() != 0 ? LT.getSimpleType(0) : MVT::Other;
+    MVT RHSVT = RT.getNumTypes() != 0 ? RT.getSimpleType(0) : MVT::Other;
+    if (LHSVT.isVector() != RHSVT.isVector())
+      return RHSVT.isVector();
 
-    if (LT.getNumTypes() != 0) {
-      for (auto [_, VT] : LT.getType(0)) {
-        LHSIsVector |= VT.isVector();
-        LHSIsFP |= VT.isFloatingPoint();
-      }
-    }
-
-    if (RT.getNumTypes() != 0) {
-      for (auto [_, VT] : RT.getType(0)) {
-        RHSIsVector |= VT.isVector();
-        RHSIsFP |= VT.isFloatingPoint();
-      }
-    }
-
-    if (LHSIsVector != RHSIsVector)
-      return RHSIsVector;
-
-    if (LHSIsFP != RHSIsFP)
-      return RHSIsFP;
+    if (LHSVT.isFloatingPoint() != RHSVT.isFloatingPoint())
+      return RHSVT.isFloatingPoint();
 
     // Otherwise, if the patterns might both match, sort based on complexity,
     // which means that we prefer to match patterns that cover more nodes in the
@@ -170,15 +153,15 @@ void DAGISelEmitter::run(raw_ostream &OS) {
         "// When neither of the GET_DAGISEL* macros is defined, the functions\n"
         "// are emitted inline.\n\n";
 
-  LLVM_DEBUG(dbgs() << "\n\nALL PATTERNS TO MATCH:\n\n";
+  LLVM_DEBUG(errs() << "\n\nALL PATTERNS TO MATCH:\n\n";
              for (CodeGenDAGPatterns::ptm_iterator I = CGP.ptm_begin(),
                   E = CGP.ptm_end();
                   I != E; ++I) {
-               dbgs() << "PATTERN: ";
+               errs() << "PATTERN: ";
                I->getSrcPattern().dump();
-               dbgs() << "\nRESULT:  ";
+               errs() << "\nRESULT:  ";
                I->getDstPattern().dump();
-               dbgs() << "\n";
+               errs() << "\n";
              });
 
   // Add all the patterns to a temporary list so we can sort them.
@@ -193,26 +176,26 @@ void DAGISelEmitter::run(raw_ostream &OS) {
 
   // Convert each variant of each pattern into a Matcher.
   Timer.startTimer("Convert to matchers");
-  SmallVector<MatcherList, 0> PatternMatchers;
+  SmallVector<Matcher *, 0> PatternMatchers;
   for (const PatternToMatch *PTM : Patterns) {
     for (unsigned Variant = 0;; ++Variant) {
-      MatcherList ML = ConvertPatternToMatcherList(*PTM, Variant, CGP);
-      if (ML.empty())
+      if (Matcher *M = ConvertPatternToMatcher(*PTM, Variant, CGP))
+        PatternMatchers.push_back(M);
+      else
         break;
-      PatternMatchers.push_back(std::move(ML));
     }
   }
 
-  MatcherList Matchers;
-  Matchers.push_front(new ScopeMatcher(std::move(PatternMatchers)));
+  std::unique_ptr<Matcher> TheMatcher =
+      std::make_unique<ScopeMatcher>(std::move(PatternMatchers));
 
   Timer.startTimer("Optimize matchers");
-  OptimizeMatcher(Matchers, CGP);
+  OptimizeMatcher(TheMatcher, CGP);
 
-  // Matchers->dump();
+  // Matcher->dump();
 
   Timer.startTimer("Emit matcher table");
-  EmitMatcherTable(Matchers, CGP, OS);
+  EmitMatcherTable(TheMatcher.get(), CGP, OS);
 }
 
 static TableGen::Emitter::OptClass<DAGISelEmitter>

@@ -32,9 +32,6 @@ if (CLANGD_ENABLE_REMOTE)
     DEPENDS
     clangdRemoteIndexProto
     clangdRemoteIndexServiceProto
-
-    # Disable PCH, gRPC adds -pthread.
-    DISABLE_PCH_REUSE
     )
 
   clang_target_link_libraries(clangdRemoteIndex

@@ -40,13 +40,12 @@ public:
   /// * Division of constants is performed as signed.
   /// * The multiplication of Quotient and Denominator may wrap.
   /// * The addition of Quotient*Denominator and Remainder may wrap.
-  LLVM_ABI static void divide(ScalarEvolution &SE, const SCEV *Numerator,
-                              const SCEV *Denominator, const SCEV **Quotient,
-                              const SCEV **Remainder);
+  static void divide(ScalarEvolution &SE, const SCEV *Numerator,
+                     const SCEV *Denominator, const SCEV **Quotient,
+                     const SCEV **Remainder);
 
   // Except in the trivial case described above, we do not know how to divide
   // Expr by Denominator for the following functions with empty implementation.
-  void visitPtrToAddrExpr(const SCEVPtrToAddrExpr *Numerator) {}
   void visitPtrToIntExpr(const SCEVPtrToIntExpr *Numerator) {}
   void visitTruncateExpr(const SCEVTruncateExpr *Numerator) {}
   void visitZeroExtendExpr(const SCEVZeroExtendExpr *Numerator) {}
@@ -60,15 +59,15 @@ public:
   void visitUnknown(const SCEVUnknown *Numerator) {}
   void visitCouldNotCompute(const SCEVCouldNotCompute *Numerator) {}
 
-  LLVM_ABI void visitConstant(const SCEVConstant *Numerator);
+  void visitConstant(const SCEVConstant *Numerator);
 
-  LLVM_ABI void visitVScale(const SCEVVScale *Numerator);
+  void visitVScale(const SCEVVScale *Numerator);
 
-  LLVM_ABI void visitAddRecExpr(const SCEVAddRecExpr *Numerator);
+  void visitAddRecExpr(const SCEVAddRecExpr *Numerator);
 
-  LLVM_ABI void visitAddExpr(const SCEVAddExpr *Numerator);
+  void visitAddExpr(const SCEVAddExpr *Numerator);
 
-  LLVM_ABI void visitMulExpr(const SCEVMulExpr *Numerator);
+  void visitMulExpr(const SCEVMulExpr *Numerator);
 
 private:
   SCEVDivision(ScalarEvolution &S, const SCEV *Numerator,
@@ -82,14 +81,13 @@ private:
   const SCEV *Denominator, *Quotient, *Remainder, *Zero, *One;
 };
 
-class SCEVDivisionPrinterPass
-    : public RequiredPassInfoMixin<SCEVDivisionPrinterPass> {
+class SCEVDivisionPrinterPass : public PassInfoMixin<SCEVDivisionPrinterPass> {
   raw_ostream &OS;
   void runImpl(Function &F, ScalarEvolution &SE);
 
 public:
   explicit SCEVDivisionPrinterPass(raw_ostream &OS) : OS(OS) {}
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
 } // end namespace llvm

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_SCRIPTED_SCRIPTEDTHREAD_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_SCRIPTED_SCRIPTEDTHREAD_H
+#ifndef LLDB_SOURCE_PLUGINS_SCRIPTED_THREAD_H
+#define LLDB_SOURCE_PLUGINS_SCRIPTED_THREAD_H
 
 #include <string>
 
@@ -80,4 +80,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_SCRIPTED_SCRIPTEDTHREAD_H
+#endif // LLDB_SOURCE_PLUGINS_SCRIPTED_THREAD_H

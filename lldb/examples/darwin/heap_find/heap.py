@@ -32,7 +32,6 @@ typedef natural_t task_t;
 typedef int kern_return_t;
 #define KERN_SUCCESS 0
 typedef void (*range_callback_t)(task_t, void *, unsigned, uintptr_t, uintptr_t);
-task_t task = 0;
 """
     if options.search_vm_regions:
         expr += """
@@ -131,7 +130,7 @@ memory_reader_t task_peek = [](task_t, vm_address_t remote_address, vm_size_t, v
     return KERN_SUCCESS;
 };
 vm_address_t *zones = 0;
-unsigned int num_zones = 0;
+unsigned int num_zones = 0;task_t task = 0;
 kern_return_t err = (kern_return_t)malloc_get_all_zones (task, task_peek, &zones, &num_zones);
 if (KERN_SUCCESS == err)
 {
@@ -526,12 +525,12 @@ def type_flags_to_description(
     return type_str
 
 
-def dump_stack_history_entry(target, options, result, stack_history_entry, idx):
+def dump_stack_history_entry(options, result, stack_history_entry, idx):
     address = int(stack_history_entry.address)
     if address:
         type_flags = int(stack_history_entry.type_flags)
         symbolicator = lldb.utils.symbolication.Symbolicator()
-        symbolicator.target = target
+        symbolicator.target = lldb.debugger.GetSelectedTarget()
         type_str = type_flags_to_string(type_flags)
         result.AppendMessage(
             "stack[%u]: addr = 0x%x, type=%s, frames:" % (idx, address, type_str)
@@ -562,9 +561,8 @@ def dump_stack_history_entry(target, options, result, stack_history_entry, idx):
         result.AppendMessage("")
 
 
-def dump_stack_history_entries(exe_ctx, options, result, addr, history):
+def dump_stack_history_entries(options, result, addr, history):
     # malloc_stack_entry *get_stack_history_for_address (const void * addr)
-    target = exe_ctx.target
     expr_prefix = """
 typedef int kern_return_t;
 typedef struct $malloc_stack_entry {
@@ -655,7 +653,12 @@ lldb_info""" % (
         addr,
     )
 
-    frame = exe_ctx.frame
+    frame = (
+        lldb.debugger.GetSelectedTarget()
+        .GetProcess()
+        .GetSelectedThread()
+        .GetSelectedFrame()
+    )
     if history:
         expr = history_expr
     else:
@@ -682,9 +685,7 @@ lldb_info""" % (
                 i_max = options.max_history
             for i in range(i_max):
                 stack_history_entry = malloc_stack_history.entries[i]
-                dump_stack_history_entry(
-                    target, options, result, stack_history_entry, i
-                )
+                dump_stack_history_entry(options, result, stack_history_entry, i)
             if num_stacks > options.max_history:
                 result.AppendMessage(
                     'warning: the max number of stacks (%u) was reached, use the "--max-history=%u" option to see all of the stacks'
@@ -692,7 +693,7 @@ lldb_info""" % (
                 )
         else:
             stack_history_entry = lldb.value(expr_sbvalue)
-            dump_stack_history_entry(target, options, result, stack_history_entry, 0)
+            dump_stack_history_entry(options, result, stack_history_entry, 0)
 
     else:
         result.AppendMessage(
@@ -701,7 +702,7 @@ lldb_info""" % (
 
 
 def display_match_results(
-    exe_ctx,
+    process,
     result,
     options,
     arg_str_description,
@@ -709,8 +710,12 @@ def display_match_results(
     print_no_matches,
     expr_prefix=None,
 ):
-    process = exe_ctx.process
-    frame = exe_ctx.frame
+    frame = (
+        lldb.debugger.GetSelectedTarget()
+        .GetProcess()
+        .GetSelectedThread()
+        .GetSelectedFrame()
+    )
     if not frame:
         result.AppendMessage("error: invalid frame")
         return 0
@@ -764,7 +769,7 @@ def display_match_results(
                     options.search_heap = True
                     options.search_vm_regions = False
                     if malloc_info_impl(
-                        exe_ctx, result, options, [hex(malloc_addr + offset)]
+                        lldb.debugger, result, options, [hex(malloc_addr + offset)]
                     ):
                         print_entry = False
                     options.search_stack = search_stack_old
@@ -891,9 +896,9 @@ def display_match_results(
                     )
                     result.AppendMessage(cmd_result.GetOutput())
                 if options.stack_history:
-                    dump_stack_history_entries(exe_ctx, options, result, malloc_addr, 1)
+                    dump_stack_history_entries(options, result, malloc_addr, 1)
                 elif options.stack:
-                    dump_stack_history_entries(exe_ctx, options, result, malloc_addr, 0)
+                    dump_stack_history_entries(options, result, malloc_addr, 0)
         return i
     else:
         result.AppendMessage(str(expr_sbvalue.error))
@@ -914,7 +919,7 @@ program."""
     return parser
 
 
-def find_variable(debugger, command, exe_ctx, result, internal_dict):
+def find_variable(debugger, command, result, dict):
     usage = "usage: %prog [options] <ADDR> [ADDR ...]"
     description = (
         """Searches for a local variable in all frames that contains a hex ADDR."""
@@ -936,7 +941,7 @@ def find_variable(debugger, command, exe_ctx, result, internal_dict):
     except:
         return
 
-    process = exe_ctx.process
+    process = debugger.GetSelectedTarget().GetProcess()
     if not process:
         result.AppendMessage("error: invalid process")
         return
@@ -956,7 +961,7 @@ def find_variable(debugger, command, exe_ctx, result, internal_dict):
                 break
 
 
-def ptr_refs(debugger, command, exe_ctx, result, internal_dict):
+def ptr_refs(debugger, command, result, dict):
     command_args = shlex.split(command)
     parser = get_ptr_refs_options()
     try:
@@ -964,11 +969,11 @@ def ptr_refs(debugger, command, exe_ctx, result, internal_dict):
     except:
         return
 
-    process = exe_ctx.process
+    process = debugger.GetSelectedTarget().GetProcess()
     if not process:
         result.AppendMessage("error: invalid process")
         return
-    frame = exe_ctx.frame
+    frame = process.GetSelectedThread().GetSelectedFrame()
     if not frame:
         result.AppendMessage("error: invalid frame")
         return
@@ -1038,7 +1043,7 @@ baton.matches"""
             )
             arg_str_description = "malloc block containing pointer %s" % ptr_expr
             display_match_results(
-                exe_ctx, result, options, arg_str_description, expr, True, expr_prefix
+                process, result, options, arg_str_description, expr, True, expr_prefix
             )
     else:
         result.AppendMessage("error: no pointer arguments were given")
@@ -1058,7 +1063,7 @@ program."""
     return parser
 
 
-def cstr_refs(debugger, command, exe_ctx, result, internal_dict):
+def cstr_refs(debugger, command, result, dict):
     command_args = shlex.split(command)
     parser = get_cstr_refs_options()
     try:
@@ -1066,11 +1071,11 @@ def cstr_refs(debugger, command, exe_ctx, result, internal_dict):
     except:
         return
 
-    process = exe_ctx.process
+    process = debugger.GetSelectedTarget().GetProcess()
     if not process:
         result.AppendMessage("error: invalid process")
         return
-    frame = exe_ctx.frame
+    frame = process.GetSelectedThread().GetSelectedFrame()
     if not frame:
         result.AppendMessage("error: invalid frame")
         return
@@ -1142,7 +1147,7 @@ baton.matches"""
             )
             arg_str_description = 'malloc block containing "%s"' % cstr
             display_match_results(
-                exe_ctx, result, options, arg_str_description, expr, True, expr_prefix
+                process, result, options, arg_str_description, expr, True, expr_prefix
             )
     else:
         result.AppendMessage("error: command takes one or more C string arguments")
@@ -1162,25 +1167,25 @@ information in the program."""
     return parser
 
 
-def malloc_info(debugger, command, exe_ctx, result, internal_dict):
+def malloc_info(debugger, command, result, dict):
     command_args = shlex.split(command)
     parser = get_malloc_info_options()
     try:
         (options, args) = parser.parse_args(command_args)
     except:
         return
-    malloc_info_impl(exe_ctx, result, options, args)
+    malloc_info_impl(debugger, result, options, args)
 
 
-def malloc_info_impl(exe_ctx, result, options, args):
+def malloc_info_impl(debugger, result, options, args):
     # We are specifically looking for something on the heap only
     options.type = "malloc_info"
 
-    process = exe_ctx.process
+    process = debugger.GetSelectedTarget().GetProcess()
     if not process:
         result.AppendMessage("error: invalid process")
         return
-    frame = exe_ctx.frame
+    frame = process.GetSelectedThread().GetSelectedFrame()
     if not frame:
         result.AppendMessage("error: invalid frame")
         return
@@ -1227,7 +1232,7 @@ baton.matches[1].addr = 0;"""
             )
             arg_str_description = "malloc block that contains %s" % ptr_expr
             total_matches += display_match_results(
-                exe_ctx, result, options, arg_str_description, expr, True, expr_prefix
+                process, result, options, arg_str_description, expr, True, expr_prefix
             )
         return total_matches
     else:
@@ -1300,24 +1305,7 @@ def get_sections_ranges_struct(process):
                 base = section.GetLoadAddress(target)
                 size = section.GetByteSize()
                 if base != lldb.LLDB_INVALID_ADDRESS and size > 0:
-                    # Walk VM regions across the section and only include
-                    # readable portions, since runtime permissions may
-                    # differ from the Mach-O section permissions.
-                    addr = base
-                    end = base + size
-                    while addr < end:
-                        region_info = lldb.SBMemoryRegionInfo()
-                        if not process.GetMemoryRegionInfo(addr, region_info).Success():
-                            break
-                        region_end = region_info.GetRegionEnd()
-                        if region_end <= addr:
-                            break
-                        chunk_end = min(region_end, end)
-                        if region_info.IsReadable():
-                            segment_dicts.append(
-                                {"base": addr, "size": chunk_end - addr}
-                            )
-                        addr = chunk_end
+                    segment_dicts.append({"base": base, "size": size})
     segment_dicts_len = len(segment_dicts)
     if segment_dicts_len > 0:
         result = """
@@ -1339,6 +1327,84 @@ segments[%(index)u].size = 0x%(size)x;"""
         return ""
 
 
+def section_ptr_refs(debugger, command, result, dict):
+    command_args = shlex.split(command)
+    usage = "usage: %prog [options] <EXPR> [EXPR ...]"
+    description = """Searches section contents for pointer values in darwin user space programs."""
+    parser = optparse.OptionParser(
+        description=description, prog="section_ptr_refs", usage=usage
+    )
+    add_common_options(parser)
+    parser.add_option(
+        "--section",
+        action="append",
+        type="string",
+        dest="section_names",
+        help="section name to search",
+        default=list(),
+    )
+    try:
+        (options, args) = parser.parse_args(command_args)
+    except:
+        return
+
+    options.type = "pointer"
+
+    sections = list()
+    section_modules = list()
+    if not options.section_names:
+        result.AppendMessage(
+            "error: at least one section must be specified with the --section option"
+        )
+        return
+
+    target = debugger.GetSelectedTarget()
+    for module in target.modules:
+        for section_name in options.section_names:
+            section = module.section[section_name]
+            if section:
+                sections.append(section)
+                section_modules.append(module)
+    if sections:
+        dylid_load_err = load_dylib()
+        if dylid_load_err:
+            result.AppendMessage(dylid_load_err)
+            return
+        frame = target.GetProcess().GetSelectedThread().GetSelectedFrame()
+        for expr_str in args:
+            for idx, section in enumerate(sections):
+                expr = "find_pointer_in_memory(0x%xllu, %ullu, (void *)%s)" % (
+                    section.addr.load_addr,
+                    section.size,
+                    expr_str,
+                )
+                arg_str_description = 'section %s.%s containing "%s"' % (
+                    section_modules[idx].file.fullpath,
+                    section.name,
+                    expr_str,
+                )
+                num_matches = display_match_results(
+                    target.GetProcess(),
+                    result,
+                    options,
+                    arg_str_description,
+                    expr,
+                    False,
+                )
+                if num_matches:
+                    if num_matches < options.max_matches:
+                        options.max_matches = options.max_matches - num_matches
+                    else:
+                        options.max_matches = 0
+                if options.max_matches == 0:
+                    return
+    else:
+        result.AppendMessage(
+            "error: no sections were found that match any of %s"
+            % (", ".join(options.section_names))
+        )
+
+
 def get_objc_refs_options():
     usage = "usage: %prog [options] <CLASS> [CLASS ...]"
     description = """Searches all allocations on the heap for instances of
@@ -1354,7 +1420,7 @@ program."""
     return parser
 
 
-def objc_refs(debugger, command, exe_ctx, result, internal_dict):
+def objc_refs(debugger, command, result, dict):
     command_args = shlex.split(command)
     parser = get_objc_refs_options()
     try:
@@ -1362,11 +1428,11 @@ def objc_refs(debugger, command, exe_ctx, result, internal_dict):
     except:
         return
 
-    process = exe_ctx.process
+    process = debugger.GetSelectedTarget().GetProcess()
     if not process:
         result.AppendMessage("error: invalid process")
         return
-    frame = exe_ctx.frame
+    frame = process.GetSelectedThread().GetSelectedFrame()
     if not frame:
         result.AppendMessage("error: invalid frame")
         return
@@ -1508,7 +1574,7 @@ int nc = (int)objc_getClassList(baton.classes, sizeof(baton.classes)/sizeof(Clas
                     )
                     arg_str_description = "objective C classes with isa 0x%x" % isa
                     display_match_results(
-                        exe_ctx,
+                        process,
                         result,
                         options,
                         arg_str_description,
@@ -1551,6 +1617,7 @@ def __lldb_init_module(debugger, internal_dict):
     debugger.HandleCommand(
         "command script add -o -f %s.find_variable find_variable" % __name__
     )
+    # debugger.HandleCommand('command script add -o -f %s.section_ptr_refs section_ptr_refs' % package_name)
     debugger.HandleCommand("command script add -o -f %s.objc_refs objc_refs" % __name__)
     print(
         '"malloc_info", "ptr_refs", "cstr_refs", "find_variable", and "objc_refs" commands have been installed, use the "--help" options on these commands for detailed help.'

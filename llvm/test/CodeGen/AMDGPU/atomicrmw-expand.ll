@@ -46,7 +46,6 @@ define float @syncscope_system(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    s_cbranch_execz .LBB0_3
 ; GFX90A-NEXT:  ; %bb.2: ; %atomicrmw.global
 ; GFX90A-NEXT:    buffer_wbl2
-; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    global_atomic_add_f32 v3, v[0:1], v2, off glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_invl2
@@ -85,7 +84,6 @@ define float @syncscope_system(ptr %addr, float %val) #0 {
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    buffer_wbl2 sc0 sc1
-; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    flat_atomic_add_f32 v0, v[0:1], v2 sc0 sc1
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    buffer_inv sc0 sc1
@@ -458,15 +456,18 @@ define i64 @optnone_atomicrmw_add_i64_expand(i64 %val) #1 {
 ; GFX908-NEXT:    s_add_u32 s6, s6, global@rel32@lo+4
 ; GFX908-NEXT:    s_addc_u32 s7, s7, global@rel32@hi+12
 ; GFX908-NEXT:    s_cmp_eq_u32 s7, s5
-; GFX908-NEXT:    s_cselect_b64 s[6:7], -1, 0
+; GFX908-NEXT:    s_cselect_b64 s[4:5], -1, 0
+; GFX908-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[4:5]
 ; GFX908-NEXT:    s_mov_b64 s[4:5], -1
-; GFX908-NEXT:    s_xor_b64 s[6:7], s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b32 s6, 1
+; GFX908-NEXT:    v_cmp_ne_u32_e64 s[6:7], v2, s6
 ; GFX908-NEXT:    s_and_b64 vcc, exec, s[6:7]
 ; GFX908-NEXT:    ; implicit-def: $vgpr3_vgpr4
 ; GFX908-NEXT:    s_cbranch_vccnz .LBB4_3
 ; GFX908-NEXT:  .LBB4_1: ; %Flow
-; GFX908-NEXT:    s_mov_b64 s[6:7], -1
-; GFX908-NEXT:    s_xor_b64 s[4:5], s[4:5], s[6:7]
+; GFX908-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[4:5]
+; GFX908-NEXT:    s_mov_b32 s4, 1
+; GFX908-NEXT:    v_cmp_ne_u32_e64 s[4:5], v2, s4
 ; GFX908-NEXT:    s_and_b64 vcc, exec, s[4:5]
 ; GFX908-NEXT:    s_cbranch_vccnz .LBB4_4
 ; GFX908-NEXT:  ; %bb.2: ; %atomicrmw.private
@@ -504,15 +505,18 @@ define i64 @optnone_atomicrmw_add_i64_expand(i64 %val) #1 {
 ; GFX90A-NEXT:    s_add_u32 s6, s6, global@rel32@lo+4
 ; GFX90A-NEXT:    s_addc_u32 s7, s7, global@rel32@hi+12
 ; GFX90A-NEXT:    s_cmp_eq_u32 s7, s5
-; GFX90A-NEXT:    s_cselect_b64 s[6:7], -1, 0
+; GFX90A-NEXT:    s_cselect_b64 s[4:5], -1, 0
+; GFX90A-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[4:5]
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], -1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b32 s6, 1
+; GFX90A-NEXT:    v_cmp_ne_u32_e64 s[6:7], v2, s6
 ; GFX90A-NEXT:    s_and_b64 vcc, exec, s[6:7]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr2_vgpr3
 ; GFX90A-NEXT:    s_cbranch_vccnz .LBB4_3
 ; GFX90A-NEXT:  .LBB4_1: ; %Flow
-; GFX90A-NEXT:    s_mov_b64 s[6:7], -1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], s[4:5], s[6:7]
+; GFX90A-NEXT:    v_cndmask_b32_e64 v4, 0, 1, s[4:5]
+; GFX90A-NEXT:    s_mov_b32 s4, 1
+; GFX90A-NEXT:    v_cmp_ne_u32_e64 s[4:5], v4, s4
 ; GFX90A-NEXT:    s_and_b64 vcc, exec, s[4:5]
 ; GFX90A-NEXT:    s_cbranch_vccnz .LBB4_4
 ; GFX90A-NEXT:  ; %bb.2: ; %atomicrmw.private
@@ -550,19 +554,23 @@ define i64 @optnone_atomicrmw_add_i64_expand(i64 %val) #1 {
 ; GFX942-NEXT:    s_add_u32 s2, s2, global@rel32@lo+4
 ; GFX942-NEXT:    s_addc_u32 s3, s3, global@rel32@hi+12
 ; GFX942-NEXT:    s_cmp_eq_u32 s3, s1
-; GFX942-NEXT:    s_cselect_b64 s[2:3], -1, 0
+; GFX942-NEXT:    s_cselect_b64 s[0:1], -1, 0
+; GFX942-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[0:1]
 ; GFX942-NEXT:    s_mov_b64 s[0:1], -1
-; GFX942-NEXT:    s_xor_b64 s[2:3], s[2:3], s[0:1]
+; GFX942-NEXT:    s_mov_b32 s2, 1
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[2:3], v2, s2
 ; GFX942-NEXT:    s_and_b64 vcc, exec, s[2:3]
 ; GFX942-NEXT:    ; implicit-def: $vgpr2_vgpr3
 ; GFX942-NEXT:    s_cbranch_vccnz .LBB4_3
 ; GFX942-NEXT:  .LBB4_1: ; %Flow
-; GFX942-NEXT:    s_mov_b64 s[2:3], -1
-; GFX942-NEXT:    s_xor_b64 s[0:1], s[0:1], s[2:3]
+; GFX942-NEXT:    v_cndmask_b32_e64 v4, 0, 1, s[0:1]
+; GFX942-NEXT:    s_mov_b32 s0, 1
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[0:1], v4, s0
 ; GFX942-NEXT:    s_and_b64 vcc, exec, s[0:1]
 ; GFX942-NEXT:    s_cbranch_vccnz .LBB4_4
 ; GFX942-NEXT:  ; %bb.2: ; %atomicrmw.private
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX942-NEXT:    s_nop 1
 ; GFX942-NEXT:    scratch_load_dwordx2 v[2:3], off, s0
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    v_lshl_add_u64 v[0:1], v[2:3], 0, v[0:1]
@@ -593,15 +601,18 @@ define i64 @optnone_atomicrmw_add_i64_expand(i64 %val) #1 {
 ; GFX1100-NEXT:    s_add_u32 s2, s2, global@rel32@lo+4
 ; GFX1100-NEXT:    s_addc_u32 s3, s3, global@rel32@hi+12
 ; GFX1100-NEXT:    s_cmp_eq_u32 s3, s1
-; GFX1100-NEXT:    s_cselect_b32 s1, -1, 0
+; GFX1100-NEXT:    s_cselect_b32 s0, -1, 0
+; GFX1100-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s0
 ; GFX1100-NEXT:    s_mov_b32 s0, -1
-; GFX1100-NEXT:    s_xor_b32 s1, s1, s0
+; GFX1100-NEXT:    s_mov_b32 s1, 1
+; GFX1100-NEXT:    v_cmp_ne_u32_e64 s1, v2, s1
 ; GFX1100-NEXT:    s_and_b32 vcc_lo, exec_lo, s1
 ; GFX1100-NEXT:    ; implicit-def: $vgpr3_vgpr4
 ; GFX1100-NEXT:    s_cbranch_vccnz .LBB4_3
 ; GFX1100-NEXT:  .LBB4_1: ; %Flow
-; GFX1100-NEXT:    s_mov_b32 s1, -1
-; GFX1100-NEXT:    s_xor_b32 s0, s0, s1
+; GFX1100-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s0
+; GFX1100-NEXT:    s_mov_b32 s0, 1
+; GFX1100-NEXT:    v_cmp_ne_u32_e64 s0, v2, s0
 ; GFX1100-NEXT:    s_and_b32 vcc_lo, exec_lo, s0
 ; GFX1100-NEXT:    s_cbranch_vccnz .LBB4_4
 ; GFX1100-NEXT:  ; %bb.2: ; %atomicrmw.private
@@ -645,20 +656,23 @@ define i64 @optnone_atomicrmw_add_i64_expand(i64 %val) #1 {
 ; GFX1200-NEXT:    s_add_co_ci_u32 s3, s3, global@rel32@hi+24
 ; GFX1200-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX1200-NEXT:    s_cmp_eq_u32 s3, s1
-; GFX1200-NEXT:    s_cselect_b32 s1, -1, 0
+; GFX1200-NEXT:    s_cselect_b32 s0, -1, 0
+; GFX1200-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; GFX1200-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s0
 ; GFX1200-NEXT:    s_mov_b32 s0, -1
+; GFX1200-NEXT:    s_mov_b32 s1, 1
 ; GFX1200-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX1200-NEXT:    s_xor_b32 s1, s1, s0
-; GFX1200-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; GFX1200-NEXT:    v_cmp_ne_u32_e64 s1, v2, s1
 ; GFX1200-NEXT:    s_and_b32 vcc_lo, exec_lo, s1
 ; GFX1200-NEXT:    ; implicit-def: $vgpr3_vgpr4
 ; GFX1200-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX1200-NEXT:    s_cbranch_vccnz .LBB4_3
 ; GFX1200-NEXT:  .LBB4_1: ; %Flow
-; GFX1200-NEXT:    s_mov_b32 s1, -1
 ; GFX1200-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX1200-NEXT:    s_xor_b32 s0, s0, s1
+; GFX1200-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s0
+; GFX1200-NEXT:    s_mov_b32 s0, 1
 ; GFX1200-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; GFX1200-NEXT:    v_cmp_ne_u32_e64 s0, v2, s0
 ; GFX1200-NEXT:    s_and_b32 vcc_lo, exec_lo, s0
 ; GFX1200-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX1200-NEXT:    s_cbranch_vccnz .LBB4_4
@@ -706,9 +720,11 @@ define double @optnone_atomicrmw_fadd_f64_expand(double %val) #1 {
 ; GFX908-NEXT:    s_add_u32 s6, s6, global@rel32@lo+4
 ; GFX908-NEXT:    s_addc_u32 s7, s7, global@rel32@hi+12
 ; GFX908-NEXT:    s_cmp_eq_u32 s7, s5
-; GFX908-NEXT:    s_cselect_b64 s[6:7], -1, 0
+; GFX908-NEXT:    s_cselect_b64 s[4:5], -1, 0
+; GFX908-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[4:5]
 ; GFX908-NEXT:    s_mov_b64 s[4:5], -1
-; GFX908-NEXT:    s_xor_b64 s[6:7], s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b32 s6, 1
+; GFX908-NEXT:    v_cmp_ne_u32_e64 s[6:7], v2, s6
 ; GFX908-NEXT:    s_and_b64 vcc, exec, s[6:7]
 ; GFX908-NEXT:    ; implicit-def: $vgpr3_vgpr4
 ; GFX908-NEXT:    s_cbranch_vccnz .LBB5_2
@@ -771,15 +787,18 @@ define double @optnone_atomicrmw_fadd_f64_expand(double %val) #1 {
 ; GFX90A-NEXT:    s_add_u32 s6, s6, global@rel32@lo+4
 ; GFX90A-NEXT:    s_addc_u32 s7, s7, global@rel32@hi+12
 ; GFX90A-NEXT:    s_cmp_eq_u32 s7, s5
-; GFX90A-NEXT:    s_cselect_b64 s[6:7], -1, 0
+; GFX90A-NEXT:    s_cselect_b64 s[4:5], -1, 0
+; GFX90A-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[4:5]
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], -1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b32 s6, 1
+; GFX90A-NEXT:    v_cmp_ne_u32_e64 s[6:7], v2, s6
 ; GFX90A-NEXT:    s_and_b64 vcc, exec, s[6:7]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr2_vgpr3
 ; GFX90A-NEXT:    s_cbranch_vccnz .LBB5_3
 ; GFX90A-NEXT:  .LBB5_1: ; %Flow4
-; GFX90A-NEXT:    s_mov_b64 s[6:7], -1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], s[4:5], s[6:7]
+; GFX90A-NEXT:    v_cndmask_b32_e64 v4, 0, 1, s[4:5]
+; GFX90A-NEXT:    s_mov_b32 s4, 1
+; GFX90A-NEXT:    v_cmp_ne_u32_e64 s[4:5], v4, s4
 ; GFX90A-NEXT:    s_and_b64 vcc, exec, s[4:5]
 ; GFX90A-NEXT:    s_cbranch_vccnz .LBB5_10
 ; GFX90A-NEXT:  ; %bb.2: ; %atomicrmw.shared
@@ -791,9 +810,11 @@ define double @optnone_atomicrmw_fadd_f64_expand(double %val) #1 {
 ; GFX90A-NEXT:    s_add_u32 s6, s6, global@rel32@lo+4
 ; GFX90A-NEXT:    s_addc_u32 s7, s7, global@rel32@hi+12
 ; GFX90A-NEXT:    s_cmp_eq_u32 s7, s5
-; GFX90A-NEXT:    s_cselect_b64 s[6:7], -1, 0
+; GFX90A-NEXT:    s_cselect_b64 s[4:5], -1, 0
+; GFX90A-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[4:5]
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], -1
-; GFX90A-NEXT:    s_xor_b64 s[6:7], s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b32 s6, 1
+; GFX90A-NEXT:    v_cmp_ne_u32_e64 s[6:7], v2, s6
 ; GFX90A-NEXT:    s_and_b64 vcc, exec, s[6:7]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr2_vgpr3
 ; GFX90A-NEXT:    s_cbranch_vccnz .LBB5_5
@@ -858,15 +879,18 @@ define double @optnone_atomicrmw_fadd_f64_expand(double %val) #1 {
 ; GFX942-NEXT:    s_add_u32 s2, s2, global@rel32@lo+4
 ; GFX942-NEXT:    s_addc_u32 s3, s3, global@rel32@hi+12
 ; GFX942-NEXT:    s_cmp_eq_u32 s3, s1
-; GFX942-NEXT:    s_cselect_b64 s[2:3], -1, 0
+; GFX942-NEXT:    s_cselect_b64 s[0:1], -1, 0
+; GFX942-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[0:1]
 ; GFX942-NEXT:    s_mov_b64 s[0:1], -1
-; GFX942-NEXT:    s_xor_b64 s[2:3], s[2:3], s[0:1]
+; GFX942-NEXT:    s_mov_b32 s2, 1
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[2:3], v2, s2
 ; GFX942-NEXT:    s_and_b64 vcc, exec, s[2:3]
 ; GFX942-NEXT:    ; implicit-def: $vgpr2_vgpr3
 ; GFX942-NEXT:    s_cbranch_vccnz .LBB5_3
 ; GFX942-NEXT:  .LBB5_1: ; %Flow4
-; GFX942-NEXT:    s_mov_b64 s[2:3], -1
-; GFX942-NEXT:    s_xor_b64 s[0:1], s[0:1], s[2:3]
+; GFX942-NEXT:    v_cndmask_b32_e64 v4, 0, 1, s[0:1]
+; GFX942-NEXT:    s_mov_b32 s0, 1
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[0:1], v4, s0
 ; GFX942-NEXT:    s_and_b64 vcc, exec, s[0:1]
 ; GFX942-NEXT:    s_cbranch_vccnz .LBB5_10
 ; GFX942-NEXT:  ; %bb.2: ; %atomicrmw.shared
@@ -878,9 +902,11 @@ define double @optnone_atomicrmw_fadd_f64_expand(double %val) #1 {
 ; GFX942-NEXT:    s_add_u32 s2, s2, global@rel32@lo+4
 ; GFX942-NEXT:    s_addc_u32 s3, s3, global@rel32@hi+12
 ; GFX942-NEXT:    s_cmp_eq_u32 s3, s1
-; GFX942-NEXT:    s_cselect_b64 s[2:3], -1, 0
+; GFX942-NEXT:    s_cselect_b64 s[0:1], -1, 0
+; GFX942-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[0:1]
 ; GFX942-NEXT:    s_mov_b64 s[0:1], -1
-; GFX942-NEXT:    s_xor_b64 s[2:3], s[2:3], s[0:1]
+; GFX942-NEXT:    s_mov_b32 s2, 1
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[2:3], v2, s2
 ; GFX942-NEXT:    s_and_b64 vcc, exec, s[2:3]
 ; GFX942-NEXT:    ; implicit-def: $vgpr2_vgpr3
 ; GFX942-NEXT:    s_cbranch_vccnz .LBB5_5
@@ -943,9 +969,11 @@ define double @optnone_atomicrmw_fadd_f64_expand(double %val) #1 {
 ; GFX1100-NEXT:    s_add_u32 s2, s2, global@rel32@lo+4
 ; GFX1100-NEXT:    s_addc_u32 s3, s3, global@rel32@hi+12
 ; GFX1100-NEXT:    s_cmp_eq_u32 s3, s1
-; GFX1100-NEXT:    s_cselect_b32 s1, -1, 0
+; GFX1100-NEXT:    s_cselect_b32 s0, -1, 0
+; GFX1100-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s0
 ; GFX1100-NEXT:    s_mov_b32 s0, -1
-; GFX1100-NEXT:    s_xor_b32 s1, s1, s0
+; GFX1100-NEXT:    s_mov_b32 s1, 1
+; GFX1100-NEXT:    v_cmp_ne_u32_e64 s1, v2, s1
 ; GFX1100-NEXT:    s_and_b32 vcc_lo, exec_lo, s1
 ; GFX1100-NEXT:    ; implicit-def: $vgpr3_vgpr4
 ; GFX1100-NEXT:    s_cbranch_vccnz .LBB5_2
@@ -1013,11 +1041,13 @@ define double @optnone_atomicrmw_fadd_f64_expand(double %val) #1 {
 ; GFX1200-NEXT:    s_add_co_ci_u32 s3, s3, global@rel32@hi+24
 ; GFX1200-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX1200-NEXT:    s_cmp_eq_u32 s3, s1
-; GFX1200-NEXT:    s_cselect_b32 s1, -1, 0
+; GFX1200-NEXT:    s_cselect_b32 s0, -1, 0
+; GFX1200-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; GFX1200-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s0
 ; GFX1200-NEXT:    s_mov_b32 s0, -1
+; GFX1200-NEXT:    s_mov_b32 s1, 1
 ; GFX1200-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX1200-NEXT:    s_xor_b32 s1, s1, s0
-; GFX1200-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; GFX1200-NEXT:    v_cmp_ne_u32_e64 s1, v2, s1
 ; GFX1200-NEXT:    s_and_b32 vcc_lo, exec_lo, s1
 ; GFX1200-NEXT:    ; implicit-def: $vgpr3_vgpr4
 ; GFX1200-NEXT:    s_wait_alu depctr_sa_sdst(0)

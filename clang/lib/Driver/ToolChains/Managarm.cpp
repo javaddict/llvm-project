@@ -197,12 +197,9 @@ void Managarm::addLibStdCxxIncludePaths(
   addGCCLibStdCxxIncludePaths(DriverArgs, CC1Args);
 }
 
-SanitizerMask
-Managarm::getSupportedSanitizers(StringRef BoundArch,
-                                 Action::OffloadKind DeviceOffloadKind) const {
+SanitizerMask Managarm::getSupportedSanitizers() const {
   const bool IsX86_64 = getTriple().getArch() == llvm::Triple::x86_64;
-  SanitizerMask Res =
-      ToolChain::getSupportedSanitizers(BoundArch, DeviceOffloadKind);
+  SanitizerMask Res = ToolChain::getSupportedSanitizers();
   Res |= SanitizerKind::PointerCompare;
   Res |= SanitizerKind::PointerSubtract;
   Res |= SanitizerKind::KernelAddress;

@@ -717,44 +717,40 @@ Doacross makeDoacross(const parser::OmpDoacross &doa,
   return common::visit(common::visitors{visitSink, visitSource}, doa.u);
 }
 
-Depend makeDepend(const parser::OmpDependClause::TaskDep &inp,
-                  semantics::SemanticsContext &semaCtx) {
-  auto &mods = semantics::OmpGetModifiers(inp);
-  auto *m0 = semantics::OmpGetUniqueModifier<parser::OmpIterator>(mods);
-  auto *m1 =
-      semantics::OmpGetUniqueModifier<parser::OmpTaskDependenceType>(mods);
-  auto &t1 = std::get<parser::OmpObjectList>(inp.t);
-  assert(m1 && "expecting task dependence type");
+Depend make(const parser::OmpClause::Depend &inp,
+            semantics::SemanticsContext &semaCtx) {
+  // inp.v -> parser::OmpDependClause
+  using wrapped = parser::OmpDependClause;
+  using Variant = decltype(Depend::u);
 
-  auto &&maybeIter =
-      m0 ? makeIterator(*m0, semaCtx) : std::optional<Iterator>{};
-  return Depend{{/*DependenceType=*/makeDepType(*m1),
-                 /*Iterator=*/std::move(maybeIter),
-                 /*Vector=*/std::nullopt,
-                 /*LocatorList=*/makeObjects(t1, semaCtx)}};
-}
+  auto visitTaskDep = [&](const wrapped::TaskDep &s) -> Variant {
+    auto &mods = semantics::OmpGetModifiers(s);
+    auto *m0 = semantics::OmpGetUniqueModifier<parser::OmpIterator>(mods);
+    auto *m1 =
+        semantics::OmpGetUniqueModifier<parser::OmpTaskDependenceType>(mods);
+    auto &t1 = std::get<parser::OmpObjectList>(s.t);
+    assert(m1 && "expecting task dependence type");
 
-// depend(source) / depend(sink: vec) on ordered (4.5..5.1 spelling, deprecated
-// in 5.2 in favor of the dedicated doacross clause). Internally modelled as a
-// Depend with the optional iteration Vector populated and an empty
-// LocatorList, mirroring the shape of Doacross.
-Depend makeDependDoacross(const parser::OmpDoacross &doa,
-                          semantics::SemanticsContext &semaCtx) {
-  Doacross doacross = makeDoacross(doa, semaCtx);
-  return Depend{
-      {/*DependenceType=*/std::get<Doacross::DependenceType>(doacross.t),
-       /*Iterator=*/std::nullopt,
-       /*Vector=*/std::get<Doacross::Vector>(std::move(doacross.t)),
-       /*LocatorList=*/{}}};
+    auto &&maybeIter =
+        m0 ? makeIterator(*m0, semaCtx) : std::optional<Iterator>{};
+    return Depend::TaskDep{{/*DependenceType=*/makeDepType(*m1),
+                            /*Iterator=*/std::move(maybeIter),
+                            /*LocatorList=*/makeObjects(t1, semaCtx)}};
+  };
+
+  return Depend{common::visit( //
+      common::visitors{
+          // Doacross
+          [&](const parser::OmpDoacross &s) -> Variant {
+            return makeDoacross(s, semaCtx);
+          },
+          // Depend::TaskDep
+          visitTaskDep,
+      },
+      inp.v.u)};
 }
 
 // Depobj: empty
-
-Depth make(const parser::OmpClause::Depth &inp,
-           semantics::SemanticsContext &semaCtx) {
-  // inp.v -> parser::ScalarIntConstantExpr
-  return Depth{/*DepthExpr=*/makeExpr(inp.v, semaCtx)};
-}
 
 Destroy make(const parser::OmpClause::Destroy &inp,
              semantics::SemanticsContext &semaCtx) {
@@ -1270,8 +1266,8 @@ Nocontext make(const parser::OmpClause::Nocontext &inp,
 
 Nontemporal make(const parser::OmpClause::Nontemporal &inp,
                  semantics::SemanticsContext &semaCtx) {
-  // inp.v -> parser::OmpObjectList
-  return Nontemporal{/*List=*/makeObjects(inp.v, semaCtx)};
+  // inp.v -> std::list<parser::Name>
+  return Nontemporal{/*List=*/makeList(inp.v, makeObjectFn(semaCtx))};
 }
 
 // NoOpenmp: empty
@@ -1301,38 +1297,19 @@ NumTasks make(const parser::OmpClause::NumTasks &inp,
 NumTeams make(const parser::OmpClause::NumTeams &inp,
               semantics::SemanticsContext &semaCtx) {
   // inp.v -> parser::OmpNumTeamsClause
-  auto &mods = semantics::OmpGetModifiers(inp.v);
-  auto *lowerBound =
-      semantics::OmpGetUniqueModifier<parser::OmpLowerBound>(mods);
-  auto &values = std::get<std::list<parser::ScalarIntExpr>>(inp.v.t);
-  assert(!values.empty());
-
-  // Extract optional lower bound (only valid without dims modifier)
-  auto lb = maybeApplyToV(makeExprFn(semaCtx), lowerBound);
-
-  // Extract all upper bounds
-  NumTeams::UpperBoundList upperBounds;
-  for (const auto &val : values) {
-    upperBounds.push_back(makeExpr(val, semaCtx));
-  }
-
-  return NumTeams{
-      {/*LowerBound=*/lb, /*UpperBoundList=*/std::move(upperBounds)}};
+  auto &t1 = std::get<std::list<parser::ScalarIntExpr>>(inp.v.t);
+  assert(!t1.empty());
+  List<NumTeams::Range> v{{{/*LowerBound=*/std::nullopt,
+                            /*UpperBound=*/makeExpr(t1.front(), semaCtx)}}};
+  return NumTeams{/*List=*/v};
 }
 
 NumThreads make(const parser::OmpClause::NumThreads &inp,
                 semantics::SemanticsContext &semaCtx) {
   // inp.v -> parser::OmpNumThreadsClause
-  // With dims modifier (OpenMP 6.1): multiple values
-  // Without dims modifier: single value
-  auto &values = std::get<std::list<parser::ScalarIntExpr>>(inp.v.t);
-  assert(!values.empty());
-
-  List<NumThreads::Nthreads> v;
-  for (const auto &val : values) {
-    v.push_back(makeExpr(val, semaCtx));
-  }
-  return NumThreads{/*Nthreads=*/v};
+  auto &t1 = std::get<std::list<parser::ScalarIntExpr>>(inp.v.t);
+  assert(!t1.empty());
+  return NumThreads{/*Nthreads=*/makeExpr(t1.front(), semaCtx)};
 }
 
 // OmpxAttribute: empty
@@ -1582,16 +1559,9 @@ TaskReduction make(const parser::OmpClause::TaskReduction &inp,
 ThreadLimit make(const parser::OmpClause::ThreadLimit &inp,
                  semantics::SemanticsContext &semaCtx) {
   // inp.v -> parser::OmpThreadLimitClause
-  // With dims modifier: multiple values
-  // Without dims modifier: single value
-  auto &values = std::get<std::list<parser::ScalarIntExpr>>(inp.v.t);
-  assert(!values.empty());
-
-  List<ThreadLimit::Threadlim> v;
-  for (const auto &val : values) {
-    v.push_back(makeExpr(val, semaCtx));
-  }
-  return ThreadLimit{/*Threadlim=*/std::move(v)};
+  auto &t1 = std::get<std::list<parser::ScalarIntExpr>>(inp.v.t);
+  assert(!t1.empty());
+  return ThreadLimit{/*Threadlim=*/makeExpr(t1.front(), semaCtx)};
 }
 
 Threadset make(const parser::OmpClause::Threadset &inp,
@@ -1731,34 +1701,12 @@ Clause makeClause(const parser::OmpClause &cls,
       common::visitors{
           [&](const parser::OmpClause::Default &s) {
             using DSA = parser::OmpDefaultClause::DataSharingAttribute;
-            using ODS = common::Indirection<parser::OmpDirectiveSpecification>;
             if (std::holds_alternative<DSA>(s.v.u)) {
               return makeClause(llvm::omp::Clause::OMPC_default,
                                 clause::makeDefault(s, semaCtx), cls.source);
-            } else if (std::holds_alternative<ODS>(s.v.u)) {
+            } else {
               return makeClause(llvm::omp::Clause::OMPC_otherwise,
                                 clause::makeOtherwise(s, semaCtx), cls.source);
-            } else {
-              llvm_unreachable("Unexpected alternative");
-            }
-          },
-          [&](const parser::OmpClause::Depend &s) {
-            using TaskDep = parser::OmpDependClause::TaskDep;
-            if (auto *dep = std::get_if<TaskDep>(&s.v.u)) {
-              return makeClause(llvm::omp::Clause::OMPC_depend,
-                                clause::makeDepend(*dep, semaCtx), cls.source);
-            } else if (auto *doa = std::get_if<parser::OmpDoacross>(&s.v.u)) {
-              // depend(source) / depend(sink:) on ordered is the
-              // 4.5 - 5.1 spelling of what 5.2 renamed to the doacross
-              // clause. Represent it as OMPC_depend (the surface clause is
-              // depend) rather than rewriting to OMPC_doacross, otherwise
-              // construct decomposition rejects the clause at OpenMP < 5.2
-              // even though the construct itself is valid since 4.5.
-              return makeClause(llvm::omp::Clause::OMPC_depend,
-                                clause::makeDependDoacross(*doa, semaCtx),
-                                cls.source);
-            } else {
-              llvm_unreachable("Unexpected alternative");
             }
           },
           [&](auto &&s) {

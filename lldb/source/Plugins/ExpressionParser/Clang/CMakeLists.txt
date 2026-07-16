@@ -21,9 +21,8 @@ add_lldb_library(lldbPluginExpressionParserClang
   ClangUtilityFunction.cpp
   CppModuleConfiguration.cpp
   CxxModuleHandler.cpp
-  IRDynamicChecks.cpp
   IRForTarget.cpp
-  InjectPointerSigningFixups.cpp
+  IRDynamicChecks.cpp
   NameSearchContext.cpp
 
   DEPENDS
@@ -46,6 +45,7 @@ add_lldb_library(lldbPluginExpressionParserClang
     lldbUtility
     lldbValueObject
     lldbPluginCPlusPlusLanguage
+    lldbPluginCPPRuntime
     lldbPluginObjCRuntime
     lldbPluginTypeSystemClang
   CLANG_LIBS

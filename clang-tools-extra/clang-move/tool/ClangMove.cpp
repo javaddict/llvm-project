@@ -99,7 +99,7 @@ int main(int argc, const char **argv) {
   auto ExpectedParser =
       tooling::CommonOptionsParser::create(argc, argv, ClangMoveCategory);
   if (!ExpectedParser) {
-    llvm::errs() << llvm::toString(ExpectedParser.takeError());
+    llvm::errs() << ExpectedParser.takeError();
     return 1;
   }
   tooling::CommonOptionsParser &OptionsParser = ExpectedParser.get();

@@ -43,8 +43,6 @@ static void relaxStubToShortJmp(BinaryBasicBlock &StubBB, const MCSymbol *Tgt) {
   BC.MIB->createShortJmp(Seq, Tgt, BC.Ctx.get());
   StubBB.clear();
   StubBB.addInstructions(Seq.begin(), Seq.end());
-  if (BC.usesBTI())
-    BC.MIB->applyBTIFixupToTarget(StubBB);
 }
 
 static void relaxStubToLongJmp(BinaryBasicBlock &StubBB, const MCSymbol *Tgt) {
@@ -53,8 +51,6 @@ static void relaxStubToLongJmp(BinaryBasicBlock &StubBB, const MCSymbol *Tgt) {
   BC.MIB->createLongJmp(Seq, Tgt, BC.Ctx.get());
   StubBB.clear();
   StubBB.addInstructions(Seq.begin(), Seq.end());
-  if (BC.usesBTI())
-    BC.MIB->applyBTIFixupToTarget(StubBB);
 }
 
 static BinaryBasicBlock *getBBAtHotColdSplitPoint(BinaryFunction &Func) {
@@ -73,13 +69,6 @@ static BinaryBasicBlock *getBBAtHotColdSplitPoint(BinaryFunction &Func) {
 }
 
 static bool mayNeedStub(const BinaryContext &BC, const MCInst &Inst) {
-  if (BC.isAArch64() && BC.MIB->isShortRangeBranch(Inst) &&
-      !opts::CompactCodeModel) {
-    BC.errs() << "BOLT-ERROR: short range branch not supported"
-              << " outside compact code model\n";
-    BC.printInstruction(BC.errs(), Inst);
-    exit(1);
-  }
   return (BC.MIB->isBranch(Inst) || BC.MIB->isCall(Inst)) &&
          !BC.MIB->isIndirectBranch(Inst) && !BC.MIB->isIndirectCall(Inst);
 }
@@ -367,11 +356,6 @@ LongJmpPass::tentativeLayoutRelocMode(const BinaryContext &BC,
   CurrentIndex = 0;
   bool ColdLayoutDone = false;
   auto runColdLayout = [&]() {
-    // Mirror the extra hugify alignment inserted by final section allocation
-    // after the last non-cold section. Account for it before assigning cold
-    // fragment addresses so range checks see the hot-to-cold gap.
-    if (opts::Hugify && !BC.HasFixedLoadAddress && !opts::HotFunctionsAtEnd)
-      DotAddress = alignTo(DotAddress, opts::AlignText);
     DotAddress = tentativeLayoutRelocColdPart(BC, SortedFunctions, DotAddress);
     ColdLayoutDone = true;
     if (opts::HotFunctionsAtEnd)
@@ -500,12 +484,57 @@ Error LongJmpPass::relaxStub(BinaryBasicBlock &StubBB, bool &Modified) {
       ~((1ULL << (RangeSingleInstr - 1)) - 1);
 
   const MCSymbol *RealTargetSym = BC.MIB->getTargetSymbol(*StubBB.begin());
-  const BinaryBasicBlock *TgtBB = Func.getBasicBlockForLabel(RealTargetSym);
+  BinaryBasicBlock *TgtBB = Func.getBasicBlockForLabel(RealTargetSym);
+  BinaryFunction *TargetFunction = BC.getFunctionForSymbol(RealTargetSym);
   uint64_t TgtAddress = getSymbolAddress(BC, RealTargetSym, TgtBB);
   uint64_t DotAddress = BBAddresses[&StubBB];
   uint64_t PCRelTgtAddress = DotAddress > TgtAddress ? DotAddress - TgtAddress
                                                      : TgtAddress - DotAddress;
 
+  auto applyBTIFixup = [&](BinaryFunction *TargetFunction,
+                           BinaryBasicBlock *RealTgtBB) {
+    // TODO: add support for editing each type, and remove errors.
+    if (!TargetFunction && !RealTgtBB) {
+      BC.errs() << "BOLT-ERROR: Cannot add BTI to function with symbol "
+                << RealTargetSym->getName() << "\n";
+      exit(1);
+    }
+    if (TargetFunction && TargetFunction->isIgnored()) {
+      // Includes PLT functions.
+      BC.errs() << "BOLT-ERROR: Cannot add BTI landing pad to ignored function "
+                << TargetFunction->getPrintName() << "\n";
+      exit(1);
+    }
+    if (TargetFunction && !TargetFunction->hasCFG()) {
+      if (TargetFunction->hasInstructions()) {
+        auto FirstII = TargetFunction->instrs().begin();
+        MCInst FirstInst = FirstII->second;
+        if (BC.MIB->isCallCoveredByBTI(*StubBB.getLastNonPseudoInstr(),
+                                       FirstInst))
+          return;
+      }
+      BC.errs()
+          << "BOLT-ERROR: Cannot add BTI landing pad to function without CFG: "
+          << TargetFunction->getPrintName() << "\n";
+      exit(1);
+    }
+    if (!RealTgtBB)
+      // !RealTgtBB -> TargetFunction is not a nullptr
+      RealTgtBB = &*TargetFunction->begin();
+    if (RealTgtBB) {
+      if (!RealTgtBB->hasParent()) {
+        BC.errs() << "BOLT-ERROR: Cannot add BTI to block with no parent "
+                     "function. Targeted symbol: "
+                  << RealTargetSym->getName() << "\n";
+        exit(1);
+      }
+      // The BR is the last inst of the StubBB.
+      BC.MIB->insertBTI(*RealTgtBB, *StubBB.getLastNonPseudoInstr());
+      return;
+    }
+    BC.errs() << "BOLT-ERROR: unhandled case when applying BTI fixup\n";
+    exit(1);
+  };
   // If it fits in one instruction, do not relax
   if (!(PCRelTgtAddress & SingleInstrMask))
     return Error::success();
@@ -520,6 +549,8 @@ Error LongJmpPass::relaxStub(BinaryBasicBlock &StubBB, bool &Modified) {
                       << " RealTargetSym = " << RealTargetSym->getName()
                       << "\n");
     relaxStubToShortJmp(StubBB, RealTargetSym);
+    if (BC.usesBTI())
+      applyBTIFixup(TargetFunction, TgtBB);
     StubBits[&StubBB] = RangeShortJmp;
     Modified = true;
     return Error::success();
@@ -535,6 +566,8 @@ Error LongJmpPass::relaxStub(BinaryBasicBlock &StubBB, bool &Modified) {
                     << Twine::utohexstr(PCRelTgtAddress)
                     << " RealTargetSym = " << RealTargetSym->getName() << "\n");
   relaxStubToLongJmp(StubBB, RealTargetSym);
+  if (BC.usesBTI())
+    applyBTIFixup(TargetFunction, TgtBB);
   StubBits[&StubBB] = static_cast<int>(BC.AsmInfo->getCodePointerSize() * 8);
   Modified = true;
   return Error::success();
@@ -823,25 +856,13 @@ void LongJmpPass::relaxLocalBranches(BinaryFunction &BF) {
         return;
       }
 
-      // If the other successor is a fall-through, invert the condition code.
-      BinaryBasicBlock *NextBB =
-          BF->getLayout().getBasicBlockAfter(BB, /*IgnoreSplits*/ false);
-      bool IsReversibleBranch = MIB->isReversibleBranch(Inst);
-      bool ShouldReverseBranch = BB->getConditionalSuccessor(false) == NextBB;
-
-      // Create a trampoline basic block for the fall-through target of the
-      // branch if its condition cannot be inverted.
-      if (ShouldReverseBranch && !IsReversibleBranch) {
-        const uint64_t NextCount = BB->getBranchInfo(*NextBB).Count;
-        BinaryBasicBlock *FallThrough =
-            addTrampolineAfter(BB, NextBB, NextCount);
-        BB->replaceSuccessor(NextBB, FallThrough, NextCount);
-      }
-
-      // Create a trampoline basic block for the taken target of the branch.
+      // Insert a new block after the current one and use it as a trampoline.
       TrampolineBB = addTrampolineAfter(BB, TargetBB, Count);
 
-      if (ShouldReverseBranch && IsReversibleBranch) {
+      // If the other successor is a fall-through, invert the condition code.
+      const BinaryBasicBlock *const NextBB =
+          BF->getLayout().getBasicBlockAfter(BB, /*IgnoreSplits*/ false);
+      if (BB->getConditionalSuccessor(false) == NextBB) {
         BB->swapConditionalSuccessors();
         auto L = BC.scopeLock();
         MIB->reverseBranchCondition(Inst, NextBB->getLabel(), BC.Ctx.get());

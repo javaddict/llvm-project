@@ -34,14 +34,12 @@ def ReductionTreePass : Pass<"reduction-tree"> {
   ] # CommonReductionPassOptions.options;
 }
 
-def OptReductionPass : Pass<"opt-reduction-pass"> {
+def OptReductionPass : Pass<"opt-reduction-pass", "ModuleOp"> {
   let summary = "A wrapper pass that reduces the file with optimization passes";
 
   let options = [
     Option<"optPass", "opt-pass", "std::string", /* default */"",
            "The optimization passes used for reduction, e.g., symbol-dce">,
-    Option<"optPassFile", "opt-pass-file", "std::string", /* default */"",
-           "The file path containing the optimization pipeline definition">,
   ] # CommonReductionPassOptions.options;
 }
 

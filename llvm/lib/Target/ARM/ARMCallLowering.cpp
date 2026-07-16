@@ -117,8 +117,7 @@ struct ARMOutgoingValueHandler : public CallLowering::OutgoingValueHandler {
   }
 
   void assignValueToReg(Register ValVReg, Register PhysReg,
-                        const CCValAssign &VA,
-                        ISD::ArgFlagsTy Flags = {}) override {
+                        const CCValAssign &VA) override {
     assert(VA.isRegLoc() && "Value shouldn't be assigned to reg");
     assert(VA.getLocReg() == PhysReg && "Assigning to the wrong reg?");
 
@@ -142,7 +141,7 @@ struct ARMOutgoingValueHandler : public CallLowering::OutgoingValueHandler {
   unsigned assignCustomValue(CallLowering::ArgInfo &Arg,
                              ArrayRef<CCValAssign> VAs,
                              std::function<void()> *Thunk) override {
-    assert(Arg.Regs.size() == 1 && "Can't handle multiple regs yet");
+    assert(Arg.Regs.size() == 1 && "Can't handle multple regs yet");
 
     const CCValAssign &VA = VAs[0];
     assert(VA.needsCustom() && "Value doesn't need custom handling");
@@ -291,8 +290,7 @@ struct ARMIncomingValueHandler : public CallLowering::IncomingValueHandler {
   }
 
   void assignValueToReg(Register ValVReg, Register PhysReg,
-                        const CCValAssign &VA,
-                        ISD::ArgFlagsTy Flags = {}) override {
+                        const CCValAssign &VA) override {
     assert(VA.isRegLoc() && "Value shouldn't be assigned to reg");
     assert(VA.getLocReg() == PhysReg && "Assigning to the wrong reg?");
 
@@ -319,7 +317,7 @@ struct ARMIncomingValueHandler : public CallLowering::IncomingValueHandler {
   unsigned assignCustomValue(ARMCallLowering::ArgInfo &Arg,
                              ArrayRef<CCValAssign> VAs,
                              std::function<void()> *Thunk) override {
-    assert(Arg.Regs.size() == 1 && "Can't handle multiple regs yet");
+    assert(Arg.Regs.size() == 1 && "Can't handle multple regs yet");
 
     const CCValAssign &VA = VAs[0];
     assert(VA.needsCustom() && "Value doesn't need custom handling");

@@ -85,6 +85,8 @@ define i32 @leaf_sign_all(i32 %x) "branch-protection-pauth-lr" "sign-return-addr
 ; PAUTHLR-NEXT:    .cfi_negate_ra_state_with_pc
 ; PAUTHLR-NEXT:  .Ltmp0:
 ; PAUTHLR-NEXT:    paciasppc
+; PAUTHLR-NEXT:    adrp x16, .Ltmp0
+; PAUTHLR-NEXT:    add x16, x16, :lo12:.Ltmp0
 ; PAUTHLR-NEXT:    retaasppc .Ltmp0
   ret i32 %x
 }
@@ -139,6 +141,8 @@ define i64 @leaf_clobbers_lr(i64 %x) "branch-protection-pauth-lr" "sign-return-a
 ; PAUTHLR-NEXT:    mov x30, x0
 ; PAUTHLR-NEXT:    //NO_APP
 ; PAUTHLR-NEXT:    ldr x30, [sp], #16 // 8-byte Folded Reload
+; PAUTHLR-NEXT:    adrp x16, .Ltmp1
+; PAUTHLR-NEXT:    add x16, x16, :lo12:.Ltmp1
 ; PAUTHLR-NEXT:    retaasppc .Ltmp1
   call void asm sideeffect "mov x30, $0", "r,~{lr}"(i64 %x) #1
   ret i64 %x
@@ -190,6 +194,8 @@ define i32 @non_leaf_sign_all(i32 %x) "branch-protection-pauth-lr" "sign-return-
 ; PAUTHLR-NEXT:    .cfi_offset w30, -16
 ; PAUTHLR-NEXT:    bl foo
 ; PAUTHLR-NEXT:    ldr x30, [sp], #16 // 8-byte Folded Reload
+; PAUTHLR-NEXT:    adrp x16, .Ltmp2
+; PAUTHLR-NEXT:    add x16, x16, :lo12:.Ltmp2
 ; PAUTHLR-NEXT:    retaasppc .Ltmp2
   %call = call i32 @foo(i32 %x)
   ret i32 %call
@@ -239,6 +245,8 @@ define i32 @non_leaf_sign_non_leaf(i32 %x) "branch-protection-pauth-lr" "sign-re
 ; PAUTHLR-NEXT:    .cfi_offset w30, -16
 ; PAUTHLR-NEXT:    bl foo
 ; PAUTHLR-NEXT:    ldr x30, [sp], #16 // 8-byte Folded Reload
+; PAUTHLR-NEXT:    adrp x16, .Ltmp3
+; PAUTHLR-NEXT:    add x16, x16, :lo12:.Ltmp3
 ; PAUTHLR-NEXT:    retaasppc .Ltmp3
   %call = call i32 @foo(i32 %x)
   ret i32 %call
@@ -279,6 +287,8 @@ define i32 @non_leaf_scs(i32 %x) "branch-protection-pauth-lr" "sign-return-addre
 ; PAUTHLR-NEXT:    bl foo
 ; PAUTHLR-NEXT:    ldr x30, [sp], #16 // 8-byte Folded Reload
 ; PAUTHLR-NEXT:    ldr x30, [x18, #-8]!
+; PAUTHLR-NEXT:    adrp x16, .Ltmp4
+; PAUTHLR-NEXT:    add x16, x16, :lo12:.Ltmp4
 ; PAUTHLR-NEXT:    autiasppc .Ltmp4
 ; PAUTHLR-NEXT:    ret
   %call = call i32 @foo(i32 %x)
@@ -302,6 +312,8 @@ define i32 @leaf_sign_all_v83(i32 %x) "branch-protection-pauth-lr" "sign-return-
 ; PAUTHLR-NEXT:    .cfi_negate_ra_state_with_pc
 ; PAUTHLR-NEXT:  .Ltmp5:
 ; PAUTHLR-NEXT:    paciasppc
+; PAUTHLR-NEXT:    adrp x16, .Ltmp5
+; PAUTHLR-NEXT:    add x16, x16, :lo12:.Ltmp5
 ; PAUTHLR-NEXT:    retaasppc .Ltmp5
   ret i32 %x
 }
@@ -359,6 +371,8 @@ define fastcc void @spill_lr_and_tail_call(i64 %x) "branch-protection-pauth-lr" 
 ; PAUTHLR-NEXT:    mov x30, x0
 ; PAUTHLR-NEXT:    //NO_APP
 ; PAUTHLR-NEXT:    ldr x30, [sp], #16 // 8-byte Folded Reload
+; PAUTHLR-NEXT:    adrp x16, .Ltmp6
+; PAUTHLR-NEXT:    add x16, x16, :lo12:.Ltmp6
 ; PAUTHLR-NEXT:    autiasppc .Ltmp6
 ; PAUTHLR-NEXT:    b bar
   call void asm sideeffect "mov x30, $0", "r,~{lr}"(i64 %x) #1
@@ -395,6 +409,8 @@ define i32 @leaf_sign_all_a_key(i32 %x) "branch-protection-pauth-lr" "sign-retur
 ; PAUTHLR-NEXT:    .cfi_negate_ra_state_with_pc
 ; PAUTHLR-NEXT:  .Ltmp7:
 ; PAUTHLR-NEXT:    paciasppc
+; PAUTHLR-NEXT:    adrp x16, .Ltmp7
+; PAUTHLR-NEXT:    add x16, x16, :lo12:.Ltmp7
 ; PAUTHLR-NEXT:    retaasppc .Ltmp7
   ret i32 %x
 }
@@ -431,6 +447,8 @@ define i32 @leaf_sign_all_b_key(i32 %x) "branch-protection-pauth-lr" "sign-retur
 ; PAUTHLR-NEXT:    .cfi_negate_ra_state_with_pc
 ; PAUTHLR-NEXT:  .Ltmp8:
 ; PAUTHLR-NEXT:    pacibsppc
+; PAUTHLR-NEXT:    adrp x16, .Ltmp8
+; PAUTHLR-NEXT:    add x16, x16, :lo12:.Ltmp8
 ; PAUTHLR-NEXT:    retabsppc .Ltmp8
   ret i32 %x
 }
@@ -454,6 +472,8 @@ define i32 @leaf_sign_all_v83_b_key(i32 %x) "branch-protection-pauth-lr" "sign-r
 ; PAUTHLR-NEXT:    .cfi_negate_ra_state_with_pc
 ; PAUTHLR-NEXT:  .Ltmp9:
 ; PAUTHLR-NEXT:    pacibsppc
+; PAUTHLR-NEXT:    adrp x16, .Ltmp9
+; PAUTHLR-NEXT:    add x16, x16, :lo12:.Ltmp9
 ; PAUTHLR-NEXT:    retabsppc .Ltmp9
   ret i32 %x
 }
@@ -491,6 +511,8 @@ define i32 @leaf_sign_all_a_key_bti(i32 %x) "branch-protection-pauth-lr" "sign-r
 ; PAUTHLR-NEXT:    bti c
 ; PAUTHLR-NEXT:  .Ltmp10:
 ; PAUTHLR-NEXT:    paciasppc
+; PAUTHLR-NEXT:    adrp x16, .Ltmp10
+; PAUTHLR-NEXT:    add x16, x16, :lo12:.Ltmp10
 ; PAUTHLR-NEXT:    retaasppc .Ltmp10
   ret i32 %x
 }
@@ -531,6 +553,8 @@ define i32 @leaf_sign_all_b_key_bti(i32 %x) "branch-protection-pauth-lr" "sign-r
 ; PAUTHLR-NEXT:    bti c
 ; PAUTHLR-NEXT:  .Ltmp11:
 ; PAUTHLR-NEXT:    pacibsppc
+; PAUTHLR-NEXT:    adrp x16, .Ltmp11
+; PAUTHLR-NEXT:    add x16, x16, :lo12:.Ltmp11
 ; PAUTHLR-NEXT:    retabsppc .Ltmp11
   ret i32 %x
 }
@@ -557,6 +581,8 @@ define i32 @leaf_sign_all_v83_b_key_bti(i32 %x) "branch-protection-pauth-lr" "si
 ; PAUTHLR-NEXT:    bti c
 ; PAUTHLR-NEXT:  .Ltmp12:
 ; PAUTHLR-NEXT:    pacibsppc
+; PAUTHLR-NEXT:    adrp x16, .Ltmp12
+; PAUTHLR-NEXT:    add x16, x16, :lo12:.Ltmp12
 ; PAUTHLR-NEXT:    retabsppc .Ltmp12
   ret i32 %x
 }

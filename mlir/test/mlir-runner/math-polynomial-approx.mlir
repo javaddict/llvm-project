@@ -4,7 +4,6 @@
 // RUN:     -shared-libs=%mlir_c_runner_utils  \
 // RUN:     -shared-libs=%mlir_runner_utils    \
 // RUN: | FileCheck %s
-// XFAIL: system-aix
 
 // -------------------------------------------------------------------------- //
 // Tanh.

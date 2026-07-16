@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #ifndef _WIN32
@@ -34,13 +35,7 @@
 #include "llvm/Option/Option.h"
 #include "llvm/Support/Errno.h"
 #include "llvm/Support/Error.h"
-#include "llvm/Support/ErrorExtras.h"
-#include "llvm/Support/FormatAdapters.h"
 #include "llvm/Support/WithColor.h"
-
-#if defined(LLDB_ENABLE_MOCK_ACCELERATOR_PLUGIN)
-#include "Plugins/Accelerator/Mock/LLDBServerMockAcceleratorPlugin.h"
-#endif
 
 #if defined(__linux__)
 #include "Plugins/Process/Linux/NativeProcessLinux.h"
@@ -50,8 +45,6 @@
 #include "Plugins/Process/NetBSD/NativeProcessNetBSD.h"
 #elif defined(_WIN32)
 #include "Plugins/Process/Windows/Common/NativeProcessWindows.h"
-#elif defined(_AIX)
-#include "Plugins/Process/AIX/NativeProcessAIX.h"
 #endif
 
 #ifndef LLGS_PROGRAM_NAME
@@ -77,8 +70,6 @@ typedef process_freebsd::NativeProcessFreeBSD::Manager NativeProcessManager;
 typedef process_netbsd::NativeProcessNetBSD::Manager NativeProcessManager;
 #elif defined(_WIN32)
 typedef NativeProcessWindows::Manager NativeProcessManager;
-#elif defined(_AIX)
-typedef process_aix::NativeProcessAIX::Manager NativeProcessManager;
 #else
 // Dummy implementation to make sure the code compiles
 class NativeProcessManager : public NativeProcessProtocol::Manager {
@@ -116,24 +107,23 @@ static void sighup_handler(MainLoopBase &mainloop) {
 }
 #endif // #ifndef _WIN32
 
-llvm::Error handle_attach_to_pid(GDBRemoteCommunicationServerLLGS &gdb_server,
-                                 lldb::pid_t pid) {
-  Status status = gdb_server.AttachToProcess(pid);
-  if (status.Fail())
-    return llvm::createStringErrorV("failed to attach to pid {0}: {1}", pid,
-                                    status.AsCString());
-  return llvm::Error::success();
+void handle_attach_to_pid(GDBRemoteCommunicationServerLLGS &gdb_server,
+                          lldb::pid_t pid) {
+  Status error = gdb_server.AttachToProcess(pid);
+  if (error.Fail()) {
+    fprintf(stderr, "error: failed to attach to pid %" PRIu64 ": %s\n", pid,
+            error.AsCString());
+    exit(1);
+  }
 }
 
-llvm::Error
-handle_attach_to_process_name(GDBRemoteCommunicationServerLLGS &gdb_server,
-                              const std::string &process_name) {
+void handle_attach_to_process_name(GDBRemoteCommunicationServerLLGS &gdb_server,
+                                   const std::string &process_name) {
   // FIXME implement.
-  return llvm::Error::success();
 }
 
-llvm::Error handle_attach(GDBRemoteCommunicationServerLLGS &gdb_server,
-                          const std::string &attach_target) {
+void handle_attach(GDBRemoteCommunicationServerLLGS &gdb_server,
+                   const std::string &attach_target) {
   assert(!attach_target.empty() && "attach_target cannot be empty");
 
   // First check if the attach_target is convertible to a long. If so, we'll use
@@ -145,22 +135,23 @@ llvm::Error handle_attach(GDBRemoteCommunicationServerLLGS &gdb_server,
   if (end_p &&
       static_cast<size_t>(end_p - attach_target.c_str()) ==
           attach_target.size())
-    return handle_attach_to_pid(gdb_server, static_cast<lldb::pid_t>(pid));
-  return handle_attach_to_process_name(gdb_server, attach_target);
+    handle_attach_to_pid(gdb_server, static_cast<lldb::pid_t>(pid));
+  else
+    handle_attach_to_process_name(gdb_server, attach_target);
 }
 
-llvm::Error handle_launch(GDBRemoteCommunicationServerLLGS &gdb_server,
-                          llvm::ArrayRef<llvm::StringRef> Arguments) {
+void handle_launch(GDBRemoteCommunicationServerLLGS &gdb_server,
+                   llvm::ArrayRef<llvm::StringRef> Arguments) {
   ProcessLaunchInfo info;
   info.GetFlags().Set(eLaunchFlagStopAtEntry | eLaunchFlagDebug |
                       eLaunchFlagDisableASLR);
   info.SetArguments(Args(Arguments), true);
 
   llvm::SmallString<64> cwd;
-  if (std::error_code ec = llvm::sys::fs::current_path(cwd))
-    return llvm::createStringErrorV("Error getting current directory: {0}",
-                                    ec.message());
-
+  if (std::error_code ec = llvm::sys::fs::current_path(cwd)) {
+    llvm::errs() << "Error getting current directory: " << ec.message() << "\n";
+    exit(1);
+  }
   FileSpec cwd_spec(cwd);
   FileSystem::Instance().Resolve(cwd_spec);
   info.SetWorkingDirectory(cwd_spec);
@@ -168,16 +159,16 @@ llvm::Error handle_launch(GDBRemoteCommunicationServerLLGS &gdb_server,
 
   gdb_server.SetLaunchInfo(info);
 
-  Status status = gdb_server.LaunchProcess();
-  if (status.Fail())
-    return llvm::createStringErrorV("failed to launch '{0}': {1}", Arguments[0],
-                                    status);
-
-  return llvm::Error::success();
+  Status error = gdb_server.LaunchProcess();
+  if (error.Fail()) {
+    llvm::errs() << llvm::formatv("error: failed to launch '{0}': {1}\n",
+                                  Arguments[0], error);
+    exit(1);
+  }
 }
 
-static llvm::Error writeSocketIdToPipe(Pipe &port_pipe,
-                                       const std::string &socket_id) {
+static Status writeSocketIdToPipe(Pipe &port_pipe,
+                                  const std::string &socket_id) {
   // NB: Include the nul character at the end.
   llvm::StringRef buf(socket_id.data(), socket_id.size() + 1);
   while (!buf.empty()) {
@@ -185,36 +176,35 @@ static llvm::Error writeSocketIdToPipe(Pipe &port_pipe,
             port_pipe.Write(buf.data(), buf.size()))
       buf = buf.drop_front(*written);
     else
-      return written.takeError();
+      return Status::FromError(written.takeError());
   }
-  return llvm::Error::success();
+  return Status();
 }
 
-llvm::Error writeSocketIdToPipe(const char *const named_pipe_path,
-                                llvm::StringRef socket_id) {
+Status writeSocketIdToPipe(const char *const named_pipe_path,
+                           llvm::StringRef socket_id) {
   Pipe port_name_pipe;
   // Wait for 10 seconds for pipe to be opened.
   if (llvm::Error err = port_name_pipe.OpenAsWriter(named_pipe_path,
                                                     std::chrono::seconds{10}))
-    return err;
+    return Status::FromError(std::move(err));
 
   return writeSocketIdToPipe(port_name_pipe, socket_id.str());
 }
 
-llvm::Error writeSocketIdToPipe(lldb::pipe_t unnamed_pipe,
-                                llvm::StringRef socket_id) {
+Status writeSocketIdToPipe(lldb::pipe_t unnamed_pipe,
+                           llvm::StringRef socket_id) {
   Pipe port_pipe{LLDB_INVALID_PIPE, unnamed_pipe};
   return writeSocketIdToPipe(port_pipe, socket_id.str());
 }
 
-llvm::Error ConnectToRemote(MainLoop &mainloop,
-                            GDBRemoteCommunicationServerLLGS &gdb_server,
-                            bool reverse_connect, llvm::StringRef host_and_port,
-                            const char *const progname,
-                            const char *const subcommand,
-                            const char *const named_pipe_path,
-                            pipe_t unnamed_pipe, shared_fd_t connection_fd) {
-  Status status;
+void ConnectToRemote(MainLoop &mainloop,
+                     GDBRemoteCommunicationServerLLGS &gdb_server,
+                     bool reverse_connect, llvm::StringRef host_and_port,
+                     const char *const progname, const char *const subcommand,
+                     const char *const named_pipe_path, pipe_t unnamed_pipe,
+                     shared_fd_t connection_fd) {
+  Status error;
 
   std::unique_ptr<Connection> connection_up;
   std::string url;
@@ -222,10 +212,12 @@ llvm::Error ConnectToRemote(MainLoop &mainloop,
   if (connection_fd != SharedSocket::kInvalidFD) {
 #ifdef _WIN32
     NativeSocket sockfd;
-    status = SharedSocket::GetNativeSocket(connection_fd, sockfd);
-    if (status.Fail())
-      return llvm::createStringErrorV("GetNativeSocket failed: {0}",
-                                      status.AsCString());
+    error = SharedSocket::GetNativeSocket(connection_fd, sockfd);
+    if (error.Fail()) {
+      llvm::errs() << llvm::formatv("error: GetNativeSocket failed: {0}\n",
+                                    error.AsCString());
+      exit(-1);
+    }
     connection_up = std::make_unique<ConnectionFileDescriptor>(
         std::make_unique<TCPSocket>(sockfd, /*should_close=*/true));
 #else
@@ -237,10 +229,13 @@ llvm::Error ConnectToRemote(MainLoop &mainloop,
   } else if (!host_and_port.empty()) {
     llvm::Expected<std::string> url_exp =
         LLGSArgToURL(host_and_port, reverse_connect);
-    if (!url_exp)
-      return llvm::createStringErrorV("invalid host:port or URL '{0}': {1}",
-                                      host_and_port,
-                                      llvm::toString(url_exp.takeError()));
+    if (!url_exp) {
+      llvm::errs() << llvm::formatv("error: invalid host:port or URL '{0}': "
+                                    "{1}\n",
+                                    host_and_port,
+                                    llvm::toString(url_exp.takeError()));
+      exit(-1);
+    }
 
     url = std::move(url_exp.get());
   }
@@ -255,39 +250,43 @@ llvm::Error ConnectToRemote(MainLoop &mainloop,
           // If we have a named pipe to write the socket id back to, do that
           // now.
           if (named_pipe_path && named_pipe_path[0]) {
-            llvm::Error error = writeSocketIdToPipe(named_pipe_path, socket_id);
-            if (error)
+            Status error = writeSocketIdToPipe(named_pipe_path, socket_id);
+            if (error.Fail())
               llvm::errs() << llvm::formatv(
                   "failed to write to the named pipe '{0}': {1}\n",
-                  named_pipe_path, llvm::fmt_consume(std::move(error)));
+                  named_pipe_path, error.AsCString());
           }
           // If we have an unnamed pipe to write the socket id back to, do
           // that now.
           else if (unnamed_pipe != LLDB_INVALID_PIPE) {
-            llvm::Error error = writeSocketIdToPipe(unnamed_pipe, socket_id);
-            if (error)
+            Status error = writeSocketIdToPipe(unnamed_pipe, socket_id);
+            if (error.Fail())
               llvm::errs() << llvm::formatv(
-                  "failed to write to the unnamed pipe: {0}\n",
-                  llvm::fmt_consume(std::move(error)));
+                  "failed to write to the unnamed pipe: {0}\n", error);
           }
         },
-        &status);
+        &error);
 
-    if (status.Fail())
-      return llvm::createStringErrorV(
-          "failed to connect to client at '{0}': {1}", url, status);
-    if (connection_result != eConnectionStatusSuccess)
-      return llvm::createStringErrorV(
-          "failed to connect to client at '{0}' (connection status: {1})", url,
-          static_cast<int>(connection_result));
+    if (error.Fail()) {
+      llvm::errs() << llvm::formatv(
+          "error: failed to connect to client at '{0}': {1}\n", url, error);
+      exit(-1);
+    }
+    if (connection_result != eConnectionStatusSuccess) {
+      llvm::errs() << llvm::formatv(
+          "error: failed to connect to client at '{0}' "
+          "(connection status: {1})\n",
+          url, static_cast<int>(connection_result));
+      exit(-1);
+    }
     connection_up = std::move(conn_fd_up);
   }
-  status = gdb_server.InitializeConnection(std::move(connection_up));
-  if (status.Fail())
-    return llvm::createStringErrorV("failed to initialize connection: {0}",
-                                    status);
+  error = gdb_server.InitializeConnection(std::move(connection_up));
+  if (error.Fail()) {
+    llvm::errs() << llvm::formatv("failed to initialize connection\n", error);
+    exit(-1);
+  }
   llvm::outs() << "Connection established.\n";
-  return llvm::Error::success();
 }
 
 namespace {
@@ -341,13 +340,13 @@ DESCRIPTION
 } // namespace
 
 int main_gdbserver(int argc, char *argv[]) {
-  Status status;
+  Status error;
   MainLoop mainloop;
 #ifndef _WIN32
   // Setup signal handlers first thing.
   signal(SIGPIPE, SIG_IGN);
   MainLoop::SignalHandleUP sighup_handle =
-      mainloop.RegisterSignal(SIGHUP, sighup_handler, status);
+      mainloop.RegisterSignal(SIGHUP, sighup_handler, error);
 #endif
 
   const char *progname = argv[0];
@@ -379,12 +378,12 @@ int main_gdbserver(int argc, char *argv[]) {
       "Use '" + Name + " --help' for a complete list of options.\n";
   if (HasError) {
     llvm::errs() << HelpText;
-    return EXIT_FAILURE;
+    return 1;
   }
 
   if (Args.hasArg(OPT_help)) {
     Opts.PrintHelp(Name);
-    return EXIT_SUCCESS;
+    return 0;
   }
 
 #ifndef _WIN32
@@ -420,7 +419,7 @@ int main_gdbserver(int argc, char *argv[]) {
     uint64_t Arg;
     if (!llvm::to_integer(Args.getLastArgValue(OPT_pipe), Arg)) {
       WithColor::error() << "invalid '--pipe' argument\n" << HelpText;
-      return EXIT_FAILURE;
+      return 1;
     }
     unnamed_pipe = (pipe_t)Arg;
   }
@@ -428,7 +427,7 @@ int main_gdbserver(int argc, char *argv[]) {
     int64_t fd;
     if (!llvm::to_integer(Args.getLastArgValue(OPT_fd), fd)) {
       WithColor::error() << "invalid '--fd' argument\n" << HelpText;
-      return EXIT_FAILURE;
+      return 1;
     }
     connection_fd = (shared_fd_t)fd;
   }
@@ -448,17 +447,11 @@ int main_gdbserver(int argc, char *argv[]) {
   }
   if (Inputs.empty() && connection_fd == SharedSocket::kInvalidFD) {
     WithColor::error() << "no connection arguments\n" << HelpText;
-    return EXIT_FAILURE;
+    return 1;
   }
 
   NativeProcessManager manager(mainloop);
   GDBRemoteCommunicationServerLLGS gdb_server(mainloop, manager);
-
-#if defined(LLDB_ENABLE_MOCK_ACCELERATOR_PLUGIN)
-  gdb_server.InstallPlugin(
-      std::make_unique<lldb_server::LLDBServerMockAcceleratorPlugin>(gdb_server,
-                                                                     mainloop));
-#endif
 
   llvm::StringRef host_and_port;
   if (!Inputs.empty() && connection_fd == SharedSocket::kInvalidFD) {
@@ -473,40 +466,30 @@ int main_gdbserver(int argc, char *argv[]) {
   // to launch a program, or a vAttach packet to attach to an existing process,
   // unless
   // explicitly asked to attach with the --attach={pid|program_name} form.
-  if (!attach_target.empty()) {
-    if (llvm::Error err = handle_attach(gdb_server, attach_target)) {
-      llvm::errs() << "error: " << llvm::toString(std::move(err)) << "\n";
-      return EXIT_FAILURE;
-    }
-  } else if (!Inputs.empty()) {
-    if (llvm::Error err = handle_launch(gdb_server, Inputs)) {
-      llvm::errs() << "error: " << llvm::toString(std::move(err)) << "\n";
-      return EXIT_FAILURE;
-    }
-  }
+  if (!attach_target.empty())
+    handle_attach(gdb_server, attach_target);
+  else if (!Inputs.empty())
+    handle_launch(gdb_server, Inputs);
 
   // Print version info.
   printf("%s-%s\n", LLGS_PROGRAM_NAME, LLGS_VERSION_STR);
 
-  if (llvm::Error err = ConnectToRemote(
-          mainloop, gdb_server, reverse_connect, host_and_port, progname,
-          subcommand, named_pipe_path.c_str(), unnamed_pipe, connection_fd)) {
-    llvm::errs() << "error: " << llvm::toString(std::move(err)) << "\n";
-    return EXIT_FAILURE;
-  }
+  ConnectToRemote(mainloop, gdb_server, reverse_connect, host_and_port,
+                  progname, subcommand, named_pipe_path.c_str(),
+                  unnamed_pipe, connection_fd);
 
   if (!gdb_server.IsConnected()) {
     fprintf(stderr, "no connection information provided, unable to run\n");
-    return EXIT_FAILURE;
+    return 1;
   }
 
   Status ret = mainloop.Run();
   if (ret.Fail()) {
     fprintf(stderr, "lldb-server terminating due to error: %s\n",
             ret.AsCString());
-    return EXIT_FAILURE;
+    return 1;
   }
   fprintf(stderr, "lldb-server exiting...\n");
 
-  return EXIT_SUCCESS;
+  return 0;
 }

@@ -215,7 +215,8 @@ SemanticsContext &AssignmentChecker::context() {
 AssignmentChecker::AssignmentChecker(SemanticsContext &context)
     : context_{new AssignmentContext{context}} {}
 
-void AssignmentChecker::Enter(const parser::OmpDeclareReductionDirective &x) {
+void AssignmentChecker::Enter(
+    const parser::OpenMPDeclareReductionConstruct &x) {
   context().set_location(x.source);
 }
 void AssignmentChecker::Enter(const parser::AssignmentStmt &x) {

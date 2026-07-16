@@ -19,7 +19,6 @@
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/ThreadPlan.h"
 #include "lldb/Target/ThreadPlanTracer.h"
-#include "lldb/Utility/ScriptedMetadata.h"
 #include "lldb/Utility/StructuredData.h"
 #include "lldb/Utility/UserID.h"
 #include "lldb/lldb-forward.h"
@@ -29,7 +28,8 @@ namespace lldb_private {
 
 class ScriptedThreadPlan : public ThreadPlan {
 public:
-  ScriptedThreadPlan(Thread &thread, const ScriptedMetadata &scripted_metadata);
+  ScriptedThreadPlan(Thread &thread, const char *class_name,
+                     const StructuredDataImpl &args_data);
 
   void GetDescription(Stream *s, lldb::DescriptionLevel level) override;
 
@@ -58,10 +58,9 @@ protected:
 
   ScriptInterpreter *GetScriptInterpreter();
 
-  llvm::StringRef GetScriptClassName() const;
-
 private:
-  ScriptedMetadata m_scripted_metadata;
+  std::string m_class_name;
+  StructuredDataImpl m_args_data;
   std::string m_error_str;
   StructuredData::ObjectSP m_implementation_sp;
   StreamString m_stop_description; // Cache the stop description here

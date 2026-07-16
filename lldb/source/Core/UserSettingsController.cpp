@@ -55,7 +55,7 @@ void Properties::DumpAllPropertyValues(const ExecutionContext *exe_ctx,
                                        bool is_json) {
   if (is_json) {
     llvm::json::Value json = m_collection_sp->ToJSON(exe_ctx);
-    strm << llvm::formatv("{0:2}", json);
+    strm.Printf("%s", llvm::formatv("{0:2}", json).str().c_str());
   } else
     m_collection_sp->DumpValue(exe_ctx, strm, dump_mask);
 }
@@ -75,11 +75,11 @@ Status Properties::DumpPropertyValue(const ExecutionContext *exe_ctx,
                                             dump_mask, is_json);
 }
 
-void Properties::Apropos(
-    llvm::StringRef keyword, std::vector<const Property *> &matching_properties,
-    std::vector<const Property *> &matching_property_paths) const {
-  m_collection_sp->Apropos(keyword, matching_properties,
-                           matching_property_paths);
+size_t
+Properties::Apropos(llvm::StringRef keyword,
+                    std::vector<const Property *> &matching_properties) const {
+  m_collection_sp->Apropos(keyword, matching_properties);
+  return matching_properties.size();
 }
 
 llvm::StringRef Properties::GetExperimentalSettingsName() {

@@ -4,9 +4,9 @@
 
 // RUN: llvm-mc -filetype=obj -triple=x86_64-pc-linux %s -o %t.o
 // RUN: ld.lld -o /dev/null %t.o %t.so
-// RUN: not ld.lld -o /dev/null -static %t.o %t.so 2>&1 | FileCheck %s --implicit-check-not=error:
+// RUN: not ld.lld -o /dev/null -static %t.o %t.so 2>&1 | FileCheck %s
 
-// CHECK: error: attempted static link of dynamic object {{.*}}.so
+// CHECK: attempted static link of dynamic object
 
 .global _start
 _start:

@@ -44,13 +44,8 @@ void GpuModuleToBinaryPass::runOnOperation() {
           .Cases({"binary", "bin"}, CompilationTarget::Binary)
           .Cases({"fatbinary", "fatbin"}, CompilationTarget::Fatbin)
           .Default(std::nullopt);
-  if (!targetFormat) {
-    getOperation()->emitError()
-        << "Invalid format specified: '" << compilationTarget
-        << "' (expected one of: offloading, llvm, assembly, isa, binary, bin, "
-           "fatbinary, fatbin)";
-    return signalPassFailure();
-  }
+  if (!targetFormat)
+    getOperation()->emitError() << "Invalid format specified.";
 
   // Lazy symbol table builder callback.
   std::optional<SymbolTable> parentTable;
@@ -92,7 +87,7 @@ LogicalResult moduleSerializer(GPUModuleOp op,
     auto target = dyn_cast<gpu::TargetAttrInterface>(targetAttr);
     assert(target &&
            "Target attribute doesn't implements `TargetAttrInterface`.");
-    std::optional<SerializedObject> serializedModule =
+    std::optional<SmallVector<char, 0>> serializedModule =
         target.serializeToObject(op, targetOptions);
     if (!serializedModule) {
       op.emitError("An error happened while serializing the module.");

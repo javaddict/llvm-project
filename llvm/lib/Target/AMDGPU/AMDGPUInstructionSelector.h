@@ -102,7 +102,6 @@ private:
   bool selectG_AMDGPU_MAD_64_32(MachineInstr &I) const;
   bool selectG_EXTRACT(MachineInstr &I) const;
   bool selectG_FMA_FMAD(MachineInstr &I) const;
-  bool selectS16MergeToS32(MachineInstr &MI) const;
   bool selectG_MERGE_VALUES(MachineInstr &I) const;
   bool selectG_UNMERGE_VALUES(MachineInstr &I) const;
   bool selectG_BUILD_VECTOR(MachineInstr &I) const;
@@ -146,7 +145,6 @@ private:
   bool selectG_INSERT_VECTOR_ELT(MachineInstr &I) const;
   bool selectBufferLoadLds(MachineInstr &MI) const;
   bool selectGlobalLoadLds(MachineInstr &MI) const;
-  bool selectTensorLoadStore(MachineInstr &MI, Intrinsic::ID IID) const;
   bool selectBVHIntersectRayIntrinsic(MachineInstr &I) const;
   bool selectSMFMACIntrin(MachineInstr &I) const;
   bool selectPermlaneSwapIntrin(MachineInstr &I, Intrinsic::ID IntrID) const;
@@ -164,7 +162,6 @@ private:
                                                    bool IsCanonicalizing = true,
                                                    bool AllowAbs = true,
                                                    bool OpSel = false) const;
-  std::pair<Register, unsigned> selectVOP3PModsF32Impl(Register Src) const;
 
   Register copyToVGPRIfSrcFolded(Register Src, unsigned Mods,
                                  MachineOperand Root, MachineInstr *InsertPt,
@@ -202,12 +199,6 @@ private:
 
   InstructionSelector::ComplexRendererFns
   selectVOP3PModsDOT(MachineOperand &Root) const;
-  InstructionSelector::ComplexRendererFns
-  selectVOP3PNoModsDOT(MachineOperand &Root) const;
-  InstructionSelector::ComplexRendererFns
-  selectVOP3PModsF32(MachineOperand &Root) const;
-  InstructionSelector::ComplexRendererFns
-  selectVOP3PNoModsF32(MachineOperand &Root) const;
 
   InstructionSelector::ComplexRendererFns
   selectWMMAOpSelVOP3PMods(MachineOperand &Root) const;
@@ -248,9 +239,8 @@ private:
   InstructionSelector::ComplexRendererFns
   selectSmrdSgprImm(MachineOperand &Root) const;
 
-  std::pair<Register, int>
-  selectFlatOffsetImpl(MachineOperand &Root,
-                       AMDGPU::FlatAddrSpace FlatVariant) const;
+  std::pair<Register, int> selectFlatOffsetImpl(MachineOperand &Root,
+                                                uint64_t FlatVariant) const;
 
   InstructionSelector::ComplexRendererFns
   selectFlatOffset(MachineOperand &Root) const;
@@ -409,8 +399,8 @@ private:
     renderBitcastFPImm(MIB, MI, OpIdx);
   }
 
-  void renderCountTrailingOnesImm(MachineInstrBuilder &MIB,
-                                  const MachineInstr &MI, int OpIdx) const;
+  void renderPopcntImm(MachineInstrBuilder &MIB, const MachineInstr &MI,
+                       int OpIdx) const;
   void renderExtractCPol(MachineInstrBuilder &MIB, const MachineInstr &MI,
                          int OpIdx) const;
   void renderExtractSWZ(MachineInstrBuilder &MIB, const MachineInstr &MI,

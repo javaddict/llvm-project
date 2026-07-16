@@ -7,7 +7,7 @@ expr = re.compile(r"^(\\)?((\| )?)\W+b(\S+)\\b\W*$")
 wordifier = re.compile(r"(\W*)(\b[^\b]+\b)")
 
 
-class FindTool:
+class FindTool(object):
     def __init__(self, name):
         self.name = name
 
@@ -26,7 +26,7 @@ class FindTool:
         return command
 
 
-class ToolSubst:
+class ToolSubst(object):
     """String-like class used to build regex substitution patterns for llvm
     tools.
 
@@ -44,7 +44,6 @@ class ToolSubst:
         verbatim=False,
         unresolved="warn",
         extra_args=None,
-        launcher=None,
     ):
         """Construct a ToolSubst.
 
@@ -80,7 +79,6 @@ class ToolSubst:
         """
         self.unresolved = unresolved
         self.extra_args = extra_args
-        self.launcher = launcher
         self.key = key
         self.command = command if command is not None else FindTool(key)
         self.was_resolved = False
@@ -122,8 +120,6 @@ class ToolSubst:
         if command_str:
             if self.extra_args:
                 command_str = " ".join([command_str] + self.extra_args)
-            if self.launcher:
-                command_str = self.launcher + " " + command_str
         else:
             if self.unresolved == "warn":
                 # Warn, but still provide a substitution.

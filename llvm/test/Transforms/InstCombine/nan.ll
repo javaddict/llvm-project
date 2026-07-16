@@ -7,7 +7,7 @@
 
 define double @nan_empty() {
 ; CHECK-LABEL: define double @nan_empty() {
-; CHECK-NEXT:    ret double +qnan
+; CHECK-NEXT:    ret double 0x7FF8000000000000
 ;
   %res = call double @nan(ptr @empty)
   ret double %res
@@ -15,7 +15,7 @@ define double @nan_empty() {
 
 define double @nan_dec() {
 ; CHECK-LABEL: define double @nan_dec() {
-; CHECK-NEXT:    ret double +nan(0x1)
+; CHECK-NEXT:    ret double 0x7FF8000000000001
 ;
   %res = call double @nan(ptr @dec)
   ret double %res
@@ -23,7 +23,7 @@ define double @nan_dec() {
 
 define double @nan_hex() {
 ; CHECK-LABEL: define double @nan_hex() {
-; CHECK-NEXT:    ret double +nan(0xF)
+; CHECK-NEXT:    ret double 0x7FF800000000000F
 ;
   %res = call double @nan(ptr @hex)
   ret double %res
@@ -31,7 +31,7 @@ define double @nan_hex() {
 
 define float @nanf_empty() {
 ; CHECK-LABEL: define float @nanf_empty() {
-; CHECK-NEXT:    ret float +qnan
+; CHECK-NEXT:    ret float 0x7FF8000000000000
 ;
   %res = call float @nanf(ptr @empty)
   ret float %res

@@ -9,11 +9,10 @@
 #ifndef LLVM_LIBC_SHARED_MATH_COSHF16_H
 #define LLVM_LIBC_SHARED_MATH_COSHF16_H
 
-#include "include/llvm-libc-macros/float16-macros.h"
+#include "shared/libc_common.h"
 
 #ifdef LIBC_TYPES_HAS_FLOAT16
 
-#include "shared/libc_common.h"
 #include "src/__support/math/coshf16.h"
 
 namespace LIBC_NAMESPACE_DECL {

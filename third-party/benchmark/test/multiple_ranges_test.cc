@@ -5,7 +5,6 @@
 
 #include "benchmark/benchmark.h"
 
-namespace {
 class MultipleRangesFixture : public ::benchmark::Fixture {
  public:
   MultipleRangesFixture()
@@ -88,11 +87,10 @@ void BM_CheckDefaultArgument(benchmark::State& state) {
 }
 BENCHMARK(BM_CheckDefaultArgument)->Ranges({{1, 5}, {6, 10}});
 
-void BM_MultipleRanges(benchmark::State& st) {
+static void BM_MultipleRanges(benchmark::State& st) {
   for (auto _ : st) {
   }
 }
 BENCHMARK(BM_MultipleRanges)->Ranges({{5, 5}, {6, 6}});
-}  // end namespace
 
 BENCHMARK_MAIN();

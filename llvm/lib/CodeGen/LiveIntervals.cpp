@@ -40,7 +40,6 @@
 #include "llvm/Config/llvm-config.h"
 #include "llvm/IR/ProfileSummary.h"
 #include "llvm/IR/Statepoint.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/MC/LaneBitmask.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Pass.h"
@@ -65,10 +64,8 @@ AnalysisKey LiveIntervalsAnalysis::Key;
 LiveIntervalsAnalysis::Result
 LiveIntervalsAnalysis::run(MachineFunction &MF,
                            MachineFunctionAnalysisManager &MFAM) {
-  auto Res = Result(MF, MFAM.getResult<SlotIndexesAnalysis>(MF),
-                    MFAM.getResult<MachineDominatorTreeAnalysis>(MF));
-  LLVM_DEBUG(Res.dump());
-  return Res;
+  return Result(MF, MFAM.getResult<SlotIndexesAnalysis>(MF),
+                MFAM.getResult<MachineDominatorTreeAnalysis>(MF));
 }
 
 PreservedAnalyses
@@ -120,8 +117,9 @@ void LiveIntervalsWrapperPass::getAnalysisUsage(AnalysisUsage &AU) const {
   MachineFunctionPass::getAnalysisUsage(AU);
 }
 
-LiveIntervalsWrapperPass::LiveIntervalsWrapperPass()
-    : MachineFunctionPass(ID) {}
+LiveIntervalsWrapperPass::LiveIntervalsWrapperPass() : MachineFunctionPass(ID) {
+  initializeLiveIntervalsWrapperPassPass(*PassRegistry::getPassRegistry());
+}
 
 LiveIntervals::~LiveIntervals() { clear(); }
 

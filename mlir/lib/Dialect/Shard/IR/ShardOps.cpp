@@ -631,12 +631,8 @@ public:
     bool modified = succeeded(foldDynamicIndexList(mixedHalos, true)) ||
                     succeeded(foldDynamicIndexList(mixedOffs, true));
 
-    auto decomposedHalos = decomposeMixedValues(mixedHalos);
-    auto staticHalos = decomposedHalos.first;
-    auto dynamicHalos = decomposedHalos.second;
-    auto decomposedOffs = decomposeMixedValues(mixedOffs);
-    auto staticOffs = decomposedOffs.first;
-    auto dynamicOffs = decomposedOffs.second;
+    auto [staticHalos, dynamicHalos] = decomposeMixedValues(mixedHalos);
+    auto [staticOffs, dynamicOffs] = decomposeMixedValues(mixedOffs);
 
     if (dynamicHalos.empty() && !staticHalos.empty()) {
       if (staticHalos[0] == 0 && llvm::all_equal(staticHalos)) {
@@ -670,12 +666,11 @@ public:
       return failure();
     }
 
-    b.modifyOpInPlace(op, [&]() {
-      op.setStaticHaloSizes(staticHalos);
-      op.getDynamicHaloSizesMutable().assign(dynamicHalos);
-      op.setStaticShardedDimsOffsets(staticOffs);
-      op.getDynamicShardedDimsOffsetsMutable().assign(dynamicOffs);
-    });
+    op.setStaticHaloSizes(staticHalos);
+    op.getDynamicHaloSizesMutable().assign(dynamicHalos);
+    op.setStaticShardedDimsOffsets(staticOffs);
+    op.getDynamicShardedDimsOffsetsMutable().assign(dynamicOffs);
+
     return success();
   }
 };
@@ -752,29 +747,6 @@ bool Sharding::operator==(const Sharding &rhs) const {
 }
 
 bool Sharding::operator!=(const Sharding &rhs) const { return !(*this == rhs); }
-
-llvm::raw_ostream &mlir::shard::operator<<(llvm::raw_ostream &os,
-                                           const Sharding &sharding) {
-  os << "Sharding<grid=" << sharding.getGrid() << ", split_axes=[";
-  llvm::interleaveComma(sharding.getSplitAxes(), os, [&](GridAxesAttr axes) {
-    os << "[";
-    llvm::interleaveComma(axes.asArrayRef(), os);
-    os << "]";
-  });
-  os << "]";
-  if (!sharding.getStaticHaloSizes().empty()) {
-    os << ", halo_sizes=[";
-    llvm::interleaveComma(sharding.getStaticHaloSizes(), os);
-    os << "]";
-  }
-  if (!sharding.getStaticShardedDimsOffsets().empty()) {
-    os << ", sharded_dims_offsets=[";
-    llvm::interleaveComma(sharding.getStaticShardedDimsOffsets(), os);
-    os << "]";
-  }
-  os << ">";
-  return os;
-}
 
 Sharding::Sharding(::mlir::FlatSymbolRefAttr grid) : grid(grid) {}
 
@@ -882,8 +854,7 @@ public:
           b.eraseOp(op.getOperation());
         } else {
           // use the other sharding as input for op
-          b.modifyOpInPlace(
-              op, [&]() { op.getSrcMutable().assign(otherOp.getResult()); });
+          op.getSrcMutable().assign(otherOp.getResult());
         }
         return success();
       }
@@ -1422,7 +1393,7 @@ ReduceScatterOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   }
 
   return verifyScatterOrSliceOperandAndResultShape(
-      getOperand(), getResult(), getScatterDim().getSExtValue(), getGridAxes(),
+      getOperand(), getResult(), getScatterAxis().getSExtValue(), getGridAxes(),
       grid.value().getShape());
 }
 
@@ -1451,9 +1422,9 @@ LogicalResult ScatterOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return failure();
   }
 
-  auto scatterDim = getScatterDim().getSExtValue();
+  auto scatterAxis = getScatterAxis().getSExtValue();
   return verifyScatterOrSliceOperandAndResultShape(getInput(), getResult(),
-                                                   scatterDim, getGridAxes(),
+                                                   scatterAxis, getGridAxes(),
                                                    grid.value().getShape());
 }
 

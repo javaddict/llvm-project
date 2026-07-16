@@ -19,7 +19,6 @@
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Analysis/PHITransAddr.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/PassManager.h"
@@ -38,10 +37,8 @@ class AAResults;
 class AssumeInst;
 class AssumptionCache;
 class BasicBlock;
-class BatchAAResults;
+class BranchInst;
 class CallInst;
-class CondBrInst;
-class EarliestEscapeAnalysis;
 class ExtractValueInst;
 class Function;
 class FunctionPass;
@@ -79,7 +76,7 @@ class GVNLegacyPass;
 /// Intended use is to create a default object, modify parameters with
 /// additional setters and then pass it to GVN.
 struct GVNOptions {
-  std::optional<bool> AllowScalarPRE;
+  std::optional<bool> AllowPRE;
   std::optional<bool> AllowLoadPRE;
   std::optional<bool> AllowLoadInLoopPRE;
   std::optional<bool> AllowLoadPRESplitBackedge;
@@ -88,9 +85,9 @@ struct GVNOptions {
 
   GVNOptions() = default;
 
-  /// Enables or disables PRE of scalars in GVN.
-  GVNOptions &setScalarPRE(bool ScalarPRE) {
-    AllowScalarPRE = ScalarPRE;
+  /// Enables or disables PRE in GVN.
+  GVNOptions &setPRE(bool PRE) {
+    AllowPRE = PRE;
     return *this;
   }
 
@@ -128,7 +125,7 @@ struct GVNOptions {
 ///
 /// FIXME: We should have a good summary of the GVN algorithm implemented by
 /// this particular pass here.
-class GVNPass : public OptionalPassInfoMixin<GVNPass> {
+class GVNPass : public PassInfoMixin<GVNPass> {
   GVNOptions Options;
 
 public:
@@ -151,7 +148,7 @@ public:
   AAResults *getAliasAnalysis() const { return VN.getAliasAnalysis(); }
   MemoryDependenceResults &getMemDep() const { return *MD; }
 
-  LLVM_ABI bool isScalarPREEnabled() const;
+  LLVM_ABI bool isPREEnabled() const;
   LLVM_ABI bool isLoadPREEnabled() const;
   LLVM_ABI bool isLoadInLoopPREEnabled() const;
   LLVM_ABI bool isLoadPRESplitBackedgeEnabled() const;
@@ -258,7 +255,6 @@ private:
   OptimizationRemarkEmitter *ORE = nullptr;
   ImplicitControlFlowTracking *ICF = nullptr;
   LoopInfo *LI = nullptr;
-  AAResults *AA = nullptr;
   MemorySSAUpdater *MSSAU = nullptr;
 
   ValueTable VN;
@@ -268,20 +264,14 @@ private:
   class LeaderMap {
   public:
     struct LeaderTableEntry {
-      // Use AssertingVH here to catch dangling Value*'s in the leader table.
-      // Will crash if the value gets deleted before the AssertingVH is
-      // destroyed.
-      AssertingVH<Value> Val;
+      Value *Val;
       const BasicBlock *BB;
-      LeaderTableEntry(Value *V, const BasicBlock *BB) : Val(V), BB(BB) {}
     };
 
   private:
     struct LeaderListNode {
       LeaderTableEntry Entry;
       LeaderListNode *Next;
-      LeaderListNode(Value *V, const BasicBlock *BB, LeaderListNode *Next)
-          : Entry(V, BB), Next(Next) {}
     };
     DenseMap<uint32_t, LeaderListNode> NumToLeaders;
     BumpPtrAllocator TableAllocator;
@@ -325,18 +315,8 @@ private:
 
     LLVM_ABI void insert(uint32_t N, Value *V, const BasicBlock *BB);
     LLVM_ABI void erase(uint32_t N, Instruction *I, const BasicBlock *BB);
+    LLVM_ABI void verifyRemoved(const Value *Inst) const;
     void clear() {
-      // Manually destroy non-head nodes (in BumpPtrAllocator) to properly
-      // clean up AssertingVH handles before Reset(). Head nodes are destroyed
-      // by NumToLeaders.clear() below.
-      for (auto &[_, HeadNode] : NumToLeaders) {
-        LeaderListNode *N = HeadNode.Next;
-        while (N) {
-          auto *Next = N->Next;
-          N->~LeaderListNode();
-          N = Next;
-        }
-      }
       NumToLeaders.clear();
       TableAllocator.Reset();
     }
@@ -364,91 +344,21 @@ private:
   // List of critical edges to be split between iterations.
   SmallVector<std::pair<Instruction *, unsigned>, 4> ToSplit;
 
-  enum class DepKind {
-    Other = 0, // Unknown value.
-    Def,       // Exactly overlapping locations.
-    Clobber,   // Reaching value superset of needed bits.
-  };
-
-  // Describe a memory location value, such that there exists a path to a point
-  // in the program, along which that memory location is not modified.
-  struct ReachingMemVal {
-    DepKind Kind;
-    BasicBlock *Block;
-    const Value *Addr;
-    Instruction *Inst;
-    int32_t Offset;
-
-    static ReachingMemVal getUnknown(BasicBlock *BB, const Value *Addr,
-                                     Instruction *Inst = nullptr) {
-      return {DepKind::Other, BB, Addr, Inst, -1};
-    }
-
-    static ReachingMemVal getDef(const Value *Addr, Instruction *Inst) {
-      return {DepKind::Def, Inst->getParent(), Addr, Inst, -1};
-    }
-
-    static ReachingMemVal getClobber(const Value *Addr, Instruction *Inst,
-                                     int32_t Offset = -1) {
-      return {DepKind::Clobber, Inst->getParent(), Addr, Inst, Offset};
-    }
-  };
-
-  struct DependencyBlockInfo {
-    DependencyBlockInfo() = delete;
-    DependencyBlockInfo(const PHITransAddr &Addr, MemoryAccess *ClobberMA)
-        : Addr(Addr), InitialClobberMA(ClobberMA), ClobberMA(ClobberMA),
-          ForceUnknown(false), Visited(false) {}
-    PHITransAddr Addr;
-    MemoryAccess *InitialClobberMA;
-    MemoryAccess *ClobberMA;
-    std::optional<ReachingMemVal> MemVal;
-    bool ForceUnknown : 1;
-    bool Visited : 1;
-  };
-
-  using DependencyBlockSet = DenseMap<BasicBlock *, DependencyBlockInfo>;
-
-  std::optional<GVNPass::ReachingMemVal> scanMemoryAccessesUsers(
-      const MemoryLocation &Loc, bool IsInvariantLoad, BasicBlock *BB,
-      const SmallVectorImpl<MemoryAccess *> &ClobbersList, MemorySSA &MSSA,
-      BatchAAResults &AA, LoadInst *L = nullptr);
-
-  std::optional<GVNPass::ReachingMemVal>
-  accessMayModifyLocation(MemoryAccess *ClobberMA, const MemoryLocation &Loc,
-                          bool IsInvariantLoad, BasicBlock *BB, MemorySSA &MSSA,
-                          BatchAAResults &AA);
-
-  bool collectPredecessors(BasicBlock *BB, const PHITransAddr &Addr,
-                           MemoryAccess *ClobberMA, DependencyBlockSet &Blocks,
-                           SmallVectorImpl<BasicBlock *> &Worklist);
-
-  void collectClobberList(SmallVectorImpl<MemoryAccess *> &Clobbers,
-                          BasicBlock *BB, const DependencyBlockInfo &StartInfo,
-                          const DependencyBlockSet &Blocks, MemorySSA &MSSA);
-
-  bool findReachingValuesForLoad(LoadInst *Inst,
-                                 SmallVectorImpl<ReachingMemVal> &Values,
-                                 MemorySSA &MSSA, AAResults &AA);
-
   // Helper functions of redundant load elimination.
   bool processLoad(LoadInst *L);
   bool processMaskedLoad(IntrinsicInst *I);
   bool processNonLocalLoad(LoadInst *L);
-  bool processNonLocalLoad(LoadInst *L, SmallVectorImpl<ReachingMemVal> &Deps);
   bool processAssumeIntrinsic(AssumeInst *II);
 
   /// Given a local dependency (Def or Clobber) determine if a value is
   /// available for the load.
   std::optional<gvn::AvailableValue>
-  AnalyzeLoadAvailability(LoadInst *Load, const ReachingMemVal &Dep,
-                          Value *Address);
+  AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo, Value *Address);
 
   /// Given a list of non-local dependencies, determine if a value is
   /// available for the load in each specified block.  If it is, add it to
   /// ValuesPerBlock.  If not, add it to UnavailableBlocks.
-  void AnalyzeLoadAvailability(LoadInst *Load,
-                               SmallVectorImpl<ReachingMemVal> &Deps,
+  void AnalyzeLoadAvailability(LoadInst *Load, LoadDepVect &Deps,
                                AvailValInBlkVect &ValuesPerBlock,
                                UnavailBlkVect &UnavailableBlocks);
 
@@ -491,26 +401,25 @@ private:
   bool
   propagateEquality(Value *LHS, Value *RHS,
                     const std::variant<BasicBlockEdge, Instruction *> &Root);
-  bool processFoldableCondBr(CondBrInst *BI);
+  bool processFoldableCondBr(BranchInst *BI);
   void addDeadBlock(BasicBlock *BB);
   void assignValNumForDeadCode();
   void assignBlockRPONumber(Function &F);
 };
 
 /// Create a legacy GVN pass.
-LLVM_ABI FunctionPass *createGVNPass(bool ScalarPRE);
 LLVM_ABI FunctionPass *createGVNPass();
 
 /// A simple and fast domtree-based GVN pass to hoist common expressions
 /// from sibling branches.
-struct GVNHoistPass : OptionalPassInfoMixin<GVNHoistPass> {
+struct GVNHoistPass : PassInfoMixin<GVNHoistPass> {
   /// Run the pass over the function.
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
 /// Uses an "inverted" value numbering to decide the similarity of
 /// expressions and sinks similar expressions into successors.
-struct GVNSinkPass : OptionalPassInfoMixin<GVNSinkPass> {
+struct GVNSinkPass : PassInfoMixin<GVNSinkPass> {
   /// Run the pass over the function.
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };

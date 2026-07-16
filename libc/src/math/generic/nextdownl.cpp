@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/nextdownl.h"
-#include "src/__support/math/nextdownl.h"
+#include "src/__support/FPUtil/ManipulationFunctions.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(long double, nextdownl, (long double x)) {
-  return math::nextdownl(x);
+  return fputil::nextupdown</*IsDown=*/true>(x);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

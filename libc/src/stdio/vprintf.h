@@ -16,7 +16,6 @@
 namespace LIBC_NAMESPACE_DECL {
 
 int vprintf(const char *__restrict format, va_list vlist);
-int __vprintf_modular(const char *__restrict format, va_list vlist);
 
 } // namespace LIBC_NAMESPACE_DECL
 

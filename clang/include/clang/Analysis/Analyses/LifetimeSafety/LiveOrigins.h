@@ -87,7 +87,7 @@ public:
 
   // Dump liveness values on all test points in the program.
   void dump(llvm::raw_ostream &OS,
-            const llvm::StringMap<ProgramPoint> &TestPoints) const;
+            llvm::StringMap<ProgramPoint> TestPoints) const;
 
 private:
   class Impl;

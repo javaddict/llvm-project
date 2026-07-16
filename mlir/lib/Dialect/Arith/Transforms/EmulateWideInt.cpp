@@ -890,18 +890,18 @@ struct ConvertSubI final : OpConversionPattern<arith::SubIOp> {
     auto [rhsElem0, rhsElem1] =
         extractLastDimHalves(rewriter, loc, adaptor.getRhs());
 
-    // Emulates LHS - RHS by [LHS0 - RHS0, LHS1 - RHS1 - BORROW] where
-    // BORROW is 1 or 0.
-    auto lowDiff =
-        arith::SubUIExtendedOp::create(rewriter, loc, lhsElem0, rhsElem0);
-    Value borrowVal =
-        arith::ExtUIOp::create(rewriter, loc, newElemTy, lowDiff.getBorrow());
+    // Emulates LHS - RHS by [LHS0 - RHS0, LHS1 - RHS1 - CARRY] where
+    // CARRY is 1 or 0.
+    Value low = arith::SubIOp::create(rewriter, loc, lhsElem0, rhsElem0);
+    // We have a carry if lhsElem0 < rhsElem0.
+    Value carry0 = arith::CmpIOp::create(
+        rewriter, loc, arith::CmpIPredicate::ult, lhsElem0, rhsElem0);
+    Value carryVal = arith::ExtUIOp::create(rewriter, loc, newElemTy, carry0);
 
-    Value high0 = arith::SubIOp::create(rewriter, loc, lhsElem1, borrowVal);
+    Value high0 = arith::SubIOp::create(rewriter, loc, lhsElem1, carryVal);
     Value high = arith::SubIOp::create(rewriter, loc, high0, rhsElem1);
 
-    Value resultVec =
-        constructResultVector(rewriter, loc, newTy, {lowDiff.getDiff(), high});
+    Value resultVec = constructResultVector(rewriter, loc, newTy, {low, high});
     rewriter.replaceOp(op, resultVec);
     return success();
   }

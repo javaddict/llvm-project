@@ -357,13 +357,13 @@ public:
   void clearLineTableForUnit(DWARFUnit *U);
 
   DataExtractor getStringExtractor() const {
-    return DataExtractor(DObj->getStrSection(), false);
+    return DataExtractor(DObj->getStrSection(), false, 0);
   }
   DataExtractor getStringDWOExtractor() const {
-    return DataExtractor(DObj->getStrDWOSection(), false);
+    return DataExtractor(DObj->getStrDWOSection(), false, 0);
   }
   DataExtractor getLineStringExtractor() const {
-    return DataExtractor(DObj->getLineStrSection(), false);
+    return DataExtractor(DObj->getLineStrSection(), false, 0);
   }
 
   /// Wraps the returned DIEs for a given address.
@@ -402,7 +402,7 @@ public:
   getLocalsForAddress(object::SectionedAddress Address) override;
 
   bool isLittleEndian() const { return DObj->isLittleEndian(); }
-  static unsigned getMaxSupportedVersion() { return 6; }
+  static unsigned getMaxSupportedVersion() { return 5; }
   static bool isSupportedVersion(unsigned version) {
     return version >= 2 && version <= getMaxSupportedVersion();
   }

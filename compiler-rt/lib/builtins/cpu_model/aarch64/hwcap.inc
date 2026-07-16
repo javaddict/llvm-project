@@ -4,6 +4,9 @@
 #ifndef AT_HWCAP
 #define AT_HWCAP 16
 #endif
+#ifndef HWCAP_CPUID
+#define HWCAP_CPUID (1 << 11)
+#endif
 #ifndef HWCAP_FP
 #define HWCAP_FP (1 << 0)
 #endif
@@ -33,9 +36,6 @@
 #endif
 #ifndef HWCAP_ASIMDHP
 #define HWCAP_ASIMDHP (1 << 10)
-#endif
-#ifndef HWCAP_CPUID
-#define HWCAP_CPUID (1 << 11)
 #endif
 #ifndef HWCAP_ASIMDRDM
 #define HWCAP_ASIMDRDM (1 << 12)
@@ -173,9 +173,6 @@
 #ifndef HWCAP2_SVE_EBF16
 #define HWCAP2_SVE_EBF16 (1ULL << 33)
 #endif
-#ifndef HWCAP2_CSSC
-#define HWCAP2_CSSC (1UL << 34)
-#endif
 #ifndef HWCAP2_SME2
 #define HWCAP2_SME2 (1UL << 37)
 #endif
@@ -184,4 +181,7 @@
 #endif
 #ifndef HWCAP2_LRCPC3
 #define HWCAP2_LRCPC3 (1UL << 46)
+#endif
+#ifndef HWCAP2_CSSC
+#define HWCAP2_CSSC (1UL << 34)
 #endif

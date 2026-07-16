@@ -27,18 +27,17 @@ LLVM_ABI size_t getDefaultPrecision(FloatStyle Style);
 LLVM_ABI bool isPrefixedHexStyle(HexPrintStyle S);
 
 LLVM_ABI void write_integer(raw_ostream &S, unsigned int N, size_t MinDigits,
-                            IntegerStyle Style, bool NonNegativePlus = false);
+                            IntegerStyle Style);
 LLVM_ABI void write_integer(raw_ostream &S, int N, size_t MinDigits,
-                            IntegerStyle Style, bool NonNegativePlus = false);
+                            IntegerStyle Style);
 LLVM_ABI void write_integer(raw_ostream &S, unsigned long N, size_t MinDigits,
-                            IntegerStyle Style, bool NonNegativePlus = false);
+                            IntegerStyle Style);
 LLVM_ABI void write_integer(raw_ostream &S, long N, size_t MinDigits,
-                            IntegerStyle Style, bool NonNegativePlus = false);
+                            IntegerStyle Style);
 LLVM_ABI void write_integer(raw_ostream &S, unsigned long long N,
-                            size_t MinDigits, IntegerStyle Style,
-                            bool NonNegativePlus = false);
+                            size_t MinDigits, IntegerStyle Style);
 LLVM_ABI void write_integer(raw_ostream &S, long long N, size_t MinDigits,
-                            IntegerStyle Style, bool NonNegativePlus = false);
+                            IntegerStyle Style);
 
 LLVM_ABI void write_hex(raw_ostream &S, uint64_t N, HexPrintStyle Style,
                         std::optional<size_t> Width = std::nullopt);

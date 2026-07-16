@@ -62,7 +62,7 @@ public:
 };
 
 struct AMDGPUPerfHintAnalysisPass
-    : public OptionalPassInfoMixin<AMDGPUPerfHintAnalysisPass> {
+    : public PassInfoMixin<AMDGPUPerfHintAnalysisPass> {
   const GCNTargetMachine &TM;
   std::unique_ptr<AMDGPUPerfHintAnalysis> Impl;
 

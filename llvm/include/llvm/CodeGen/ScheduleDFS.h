@@ -56,9 +56,9 @@ struct ILPValue {
     return RHS <= *this;
   }
 
-  LLVM_ABI void print(raw_ostream &OS) const;
+  void print(raw_ostream &OS) const;
 
-  LLVM_ABI void dump() const;
+  void dump() const;
 };
 
 /// Compute the values of each DAG node for various metrics during DFS.
@@ -138,7 +138,7 @@ public:
   }
 
   /// Compute various metrics for the DAG with given roots.
-  LLVM_ABI void compute(ArrayRef<SUnit> SUnits);
+  void compute(ArrayRef<SUnit> SUnits);
 
   /// Get the number of instructions in the given subtree and its
   /// children.
@@ -183,10 +183,10 @@ public:
 
   /// Scheduler callback to update SubtreeConnectLevels when a tree is
   /// initially scheduled.
-  LLVM_ABI void scheduleTree(unsigned SubtreeID);
+  void scheduleTree(unsigned SubtreeID);
 };
 
-LLVM_ABI raw_ostream &operator<<(raw_ostream &OS, const ILPValue &Val);
+raw_ostream &operator<<(raw_ostream &OS, const ILPValue &Val);
 
 } // end namespace llvm
 

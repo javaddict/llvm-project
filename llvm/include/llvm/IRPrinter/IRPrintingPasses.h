@@ -30,7 +30,7 @@ class Pass;
 
 /// Pass (for the new pass manager) for printing a Module as
 /// LLVM's text IR assembly.
-class PrintModulePass : public RequiredPassInfoMixin<PrintModulePass> {
+class PrintModulePass : public PassInfoMixin<PrintModulePass> {
   raw_ostream &OS;
   std::string Banner;
   bool ShouldPreserveUseListOrder;
@@ -43,11 +43,12 @@ public:
                            bool EmitSummaryIndex = false);
 
   LLVM_ABI PreservedAnalyses run(Module &M, AnalysisManager<Module> &);
+  static bool isRequired() { return true; }
 };
 
 /// Pass (for the new pass manager) for printing a Function as
 /// LLVM's text IR assembly.
-class PrintFunctionPass : public RequiredPassInfoMixin<PrintFunctionPass> {
+class PrintFunctionPass : public PassInfoMixin<PrintFunctionPass> {
   raw_ostream &OS;
   std::string Banner;
 
@@ -56,6 +57,7 @@ public:
   LLVM_ABI PrintFunctionPass(raw_ostream &OS, const std::string &Banner = "");
 
   LLVM_ABI PreservedAnalyses run(Function &F, AnalysisManager<Function> &);
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

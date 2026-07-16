@@ -22,7 +22,7 @@
 namespace llvm {
 
 /// Legacy analysis pass which computes a \ref CycleInfo.
-class LLVM_ABI CycleInfoWrapperPass : public FunctionPass {
+class CycleInfoWrapperPass : public FunctionPass {
   Function *F = nullptr;
   CycleInfo CI;
 
@@ -54,26 +54,23 @@ public:
   using LegacyWrapper = CycleInfoWrapperPass;
 
   /// Run the analysis pass over a function and produce a dominator tree.
-  LLVM_ABI CycleInfo run(Function &F, FunctionAnalysisManager &);
-
-  LLVM_ABI bool invalidate(Function &F, const PreservedAnalyses &PA,
-                           FunctionAnalysisManager::Invalidator &);
+  CycleInfo run(Function &F, FunctionAnalysisManager &);
 
   // TODO: verify analysis?
 };
 
-class CycleInfoPrinterPass
-    : public RequiredPassInfoMixin<CycleInfoPrinterPass> {
+class CycleInfoPrinterPass : public PassInfoMixin<CycleInfoPrinterPass> {
   raw_ostream &OS;
 
 public:
-  LLVM_ABI explicit CycleInfoPrinterPass(raw_ostream &OS);
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  explicit CycleInfoPrinterPass(raw_ostream &OS);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 
-struct CycleInfoVerifierPass
-    : public RequiredPassInfoMixin<CycleInfoVerifierPass> {
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+struct CycleInfoVerifierPass : public PassInfoMixin<CycleInfoVerifierPass> {
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 
 } // end namespace llvm

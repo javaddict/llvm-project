@@ -135,30 +135,22 @@ void ColorPrintf(std::ostream& out, LogColor color, const char* fmt,
   // Gets the current text color.
   CONSOLE_SCREEN_BUFFER_INFO buffer_info;
   GetConsoleScreenBufferInfo(stdout_handle, &buffer_info);
-  const WORD original_color_attrs = buffer_info.wAttributes;
+  const WORD old_color_attrs = buffer_info.wAttributes;
 
   // We need to flush the stream buffers into the console before each
   // SetConsoleTextAttribute call lest it affect the text that is already
   // printed but has not yet reached the console.
   out.flush();
-
-  const WORD original_background_attrs =
-      original_color_attrs & (BACKGROUND_RED | BACKGROUND_GREEN |
-                              BACKGROUND_BLUE | BACKGROUND_INTENSITY);
-
-  SetConsoleTextAttribute(stdout_handle, GetPlatformColorCode(color) |
-                                             FOREGROUND_INTENSITY |
-                                             original_background_attrs);
+  SetConsoleTextAttribute(stdout_handle,
+                          GetPlatformColorCode(color) | FOREGROUND_INTENSITY);
   out << FormatString(fmt, args);
 
   out.flush();
-  // Restores the text and background color.
-  SetConsoleTextAttribute(stdout_handle, original_color_attrs);
+  // Restores the text color.
+  SetConsoleTextAttribute(stdout_handle, old_color_attrs);
 #else
   const char* color_code = GetPlatformColorCode(color);
-  if (color_code != nullptr) {
-    out << FormatString("\033[0;3%sm", color_code);
-  }
+  if (color_code) out << FormatString("\033[0;3%sm", color_code);
   out << FormatString(fmt, args) << "\033[m";
 #endif
 }
@@ -195,7 +187,7 @@ bool IsColorTerminal() {
 
   bool term_supports_color = false;
   for (const char* candidate : SUPPORTED_TERM_VALUES) {
-    if ((term != nullptr) && 0 == strcmp(term, candidate)) {
+    if (term && 0 == strcmp(term, candidate)) {
       term_supports_color = true;
       break;
     }

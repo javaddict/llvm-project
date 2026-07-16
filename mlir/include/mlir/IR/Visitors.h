@@ -120,9 +120,8 @@ void walk(Operation *op, function_ref<void(Block *)> callback,
           WalkOrder order) {
   for (auto &region : Iterator::makeIterable(*op)) {
     // Early increment here in the case where the block is erased.
-    // PostOrderTraversal keeps state outside of iterators, so store it here.
-    auto &&It = Iterator::makeIterable(region);
-    for (auto &block : llvm::make_early_inc_range(It)) {
+    for (auto &block :
+         llvm::make_early_inc_range(Iterator::makeIterable(region))) {
       if (order == WalkOrder::PreOrder)
         callback(&block);
       for (auto &nestedOp : Iterator::makeIterable(block))
@@ -196,9 +195,8 @@ WalkResult walk(Operation *op, function_ref<WalkResult(Block *)> callback,
                 WalkOrder order) {
   for (auto &region : Iterator::makeIterable(*op)) {
     // Early increment here in the case where the block is erased.
-    // PostOrderTraversal keeps state outside of iterators, so store it here.
-    auto &&It = Iterator::makeIterable(region);
-    for (auto &block : llvm::make_early_inc_range(It)) {
+    for (auto &block :
+         llvm::make_early_inc_range(Iterator::makeIterable(region))) {
       if (order == WalkOrder::PreOrder) {
         WalkResult result = callback(&block);
         if (result.wasSkipped())

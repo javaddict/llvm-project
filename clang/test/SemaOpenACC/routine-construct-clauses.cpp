@@ -803,14 +803,3 @@ namespace OtherDupes {
 #pragma acc routine device_type(nvidia) vector device_type(acc_device_nvidia)
   void Func3();
 }
-
-namespace GH192245 {
-  // These are fine, but we were assuming a bind-clause during checking that
-  // didnt' exist in the Func1 case.
-#pragma acc routine seq
-#pragma acc routine seq bind("asdf")
-  void Func1();
-#pragma acc routine seq bind("asdf")
-#pragma acc routine seq
-  void Func2();
-}

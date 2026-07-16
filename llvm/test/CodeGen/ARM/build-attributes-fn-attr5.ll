@@ -16,4 +16,4 @@ entry:
 
 declare float @llvm.fma.f32(float, float, float)
 
-attributes #0 = { minsize norecurse nounwind optsize readnone denormal_fpenv(preservesign)}
+attributes #0 = { minsize norecurse nounwind optsize readnone "denormal-fp-math"="preserve-sign,preserve-sign"}

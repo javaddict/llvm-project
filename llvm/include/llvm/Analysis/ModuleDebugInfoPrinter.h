@@ -16,13 +16,14 @@ namespace llvm {
 class raw_ostream;
 
 class ModuleDebugInfoPrinterPass
-    : public RequiredPassInfoMixin<ModuleDebugInfoPrinterPass> {
+    : public PassInfoMixin<ModuleDebugInfoPrinterPass> {
   DebugInfoFinder Finder;
   raw_ostream &OS;
 
 public:
-  LLVM_ABI explicit ModuleDebugInfoPrinterPass(raw_ostream &OS);
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  explicit ModuleDebugInfoPrinterPass(raw_ostream &OS);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 } // end namespace llvm
 

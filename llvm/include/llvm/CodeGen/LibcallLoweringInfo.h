@@ -10,12 +10,11 @@
 #define LLVM_CODEGEN_LIBCALLLOWERINGINFO_H
 
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/Analysis/RuntimeLibcallInfo.h"
 #include "llvm/IR/RuntimeLibcalls.h"
 #include "llvm/Pass.h"
 
 namespace llvm {
-class RuntimeLibraryInfoWrapper;
+
 class TargetSubtargetInfo;
 class TargetMachine;
 
@@ -37,30 +36,31 @@ public:
 
   /// Get the libcall routine name for the specified libcall.
   // FIXME: This should be removed. Only LibcallImpl should have a name.
-  const char *getLibcallName(RTLIB::Libcall Call) const {
+  LLVM_ABI const char *getLibcallName(RTLIB::Libcall Call) const {
     // FIXME: Return StringRef
     return RTLIB::RuntimeLibcallsInfo::getLibcallImplName(LibcallImpls[Call])
         .data();
   }
 
   /// Return the lowering's selection of implementation call for \p Call
-  RTLIB::LibcallImpl getLibcallImpl(RTLIB::Libcall Call) const {
+  LLVM_ABI RTLIB::LibcallImpl getLibcallImpl(RTLIB::Libcall Call) const {
     return LibcallImpls[Call];
   }
 
   /// Rename the default libcall routine name for the specified libcall.
-  void setLibcallImpl(RTLIB::Libcall Call, RTLIB::LibcallImpl Impl) {
+  LLVM_ABI void setLibcallImpl(RTLIB::Libcall Call, RTLIB::LibcallImpl Impl) {
     LibcallImpls[Call] = Impl;
   }
 
   // FIXME: Remove this wrapper in favor of directly using
   // getLibcallImplCallingConv
-  CallingConv::ID getLibcallCallingConv(RTLIB::Libcall Call) const {
+  LLVM_ABI CallingConv::ID getLibcallCallingConv(RTLIB::Libcall Call) const {
     return RTLCI.LibcallImplCallingConvs[LibcallImpls[Call]];
   }
 
   /// Get the CallingConv that should be used for the specified libcall.
-  CallingConv::ID getLibcallImplCallingConv(RTLIB::LibcallImpl Call) const {
+  LLVM_ABI CallingConv::ID
+  getLibcallImplCallingConv(RTLIB::LibcallImpl Call) const {
     return RTLCI.LibcallImplCallingConvs[Call];
   }
 
@@ -97,8 +97,6 @@ public:
     LoweringMap.clear();
   }
 
-  operator bool() const { return RTLCI != nullptr; }
-
   LLVM_ABI bool invalidate(Module &, const PreservedAnalyses &,
                            ModuleAnalysisManager::Invalidator &);
 
@@ -124,24 +122,21 @@ public:
 
 class LLVM_ABI LibcallLoweringInfoWrapper : public ImmutablePass {
   LibcallLoweringModuleAnalysisResult Result;
-  RuntimeLibraryInfoWrapper *RuntimeLibcallsWrapper = nullptr;
 
 public:
   static char ID;
   LibcallLoweringInfoWrapper();
 
   const LibcallLoweringInfo &
-  getLibcallLowering(const Module &M, const TargetSubtargetInfo &Subtarget) {
-    return getResult(M).getLibcallLowering(Subtarget);
+  getLibcallLowering(const TargetSubtargetInfo &Subtarget) const {
+    return Result.getLibcallLowering(Subtarget);
   }
 
-  const LibcallLoweringModuleAnalysisResult &getResult(const Module &M) {
-    if (!Result)
-      Result.init(&RuntimeLibcallsWrapper->getRTLCI(M));
+  const LibcallLoweringModuleAnalysisResult &getResult() const {
     return Result;
   }
 
-  void initializePass() override;
+  bool doInitialization(Module &M) override;
   void getAnalysisUsage(AnalysisUsage &AU) const override;
   void releaseMemory() override;
 };

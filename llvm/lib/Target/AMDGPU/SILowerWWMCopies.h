@@ -12,8 +12,7 @@
 #include "llvm/CodeGen/MachinePassManager.h"
 
 namespace llvm {
-class SILowerWWMCopiesPass
-    : public OptionalPassInfoMixin<SILowerWWMCopiesPass> {
+class SILowerWWMCopiesPass : public PassInfoMixin<SILowerWWMCopiesPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);

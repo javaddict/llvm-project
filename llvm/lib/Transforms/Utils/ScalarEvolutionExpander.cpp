@@ -152,13 +152,19 @@ Value *SCEVExpander::ReuseOrCreateCast(Value *V, Type *Ty,
 BasicBlock::iterator
 SCEVExpander::findInsertPointAfter(Instruction *I,
                                    Instruction *MustDominate) const {
-  BasicBlock::iterator IP;
-  if (auto MaybeIP = I->getInsertionPointAfterDef()) {
-    IP = *MaybeIP;
+  BasicBlock::iterator IP = ++I->getIterator();
+  if (auto *II = dyn_cast<InvokeInst>(I))
+    IP = II->getNormalDest()->begin();
+
+  while (isa<PHINode>(IP))
+    ++IP;
+
+  if (isa<FuncletPadInst>(IP) || isa<LandingPadInst>(IP)) {
+    ++IP;
+  } else if (isa<CatchSwitchInst>(IP)) {
+    IP = MustDominate->getParent()->getFirstInsertionPt();
   } else {
-    assert(SE.DT.dominates(I, MustDominate) &&
-           "instruction must dominate the insertion point");
-    IP = MustDominate->getIterator();
+    assert(!IP->isEHPad() && "unexpected eh pad!");
   }
 
   // Adjust insert point to be after instructions inserted by the expander, so
@@ -296,9 +302,9 @@ Value *SCEVExpander::InsertBinop(Instruction::BinaryOps Opcode,
       auto canGenerateIncompatiblePoison = [&Flags](Instruction *I) {
         // Ensure that no-wrap flags match.
         if (isa<OverflowingBinaryOperator>(I)) {
-          if (I->hasNoSignedWrap() != any(Flags & SCEV::FlagNSW))
+          if (I->hasNoSignedWrap() != (Flags & SCEV::FlagNSW))
             return true;
-          if (I->hasNoUnsignedWrap() != any(Flags & SCEV::FlagNUW))
+          if (I->hasNoUnsignedWrap() != (Flags & SCEV::FlagNUW))
             return true;
         }
         // Conservatively, do not use any instruction which has any of exact
@@ -331,23 +337,16 @@ Value *SCEVExpander::InsertBinop(Instruction::BinaryOps Opcode,
   }
 
   // If we haven't found this binop, insert it.
-  Builder.SetCurrentDebugLocation(Loc);
-  bool IsNUW = any(Flags & SCEV::FlagNUW);
-  bool IsNSW = any(Flags & SCEV::FlagNSW);
-  // Don't use folder when expanding post-inc rewrites in LSRMode to preserve
-  // the rewrites.
-  if (LSRMode && !PostIncLoops.empty() &&
-      all_of(PostIncLoops, [&](const Loop *L) {
-        return !L->contains(Builder.GetInsertBlock());
-      })) {
-    auto *BO = BinaryOperator::Create(Opcode, LHS, RHS);
-    if (IsNUW)
-      BO->setHasNoUnsignedWrap();
-    if (IsNSW)
-      BO->setHasNoSignedWrap();
-    return Builder.Insert(BO);
-  }
-  return Builder.CreateNoWrapBinOp(Opcode, LHS, RHS, IsNUW, IsNSW);
+  // TODO: Use the Builder, which will make CreateBinOp below fold with
+  // InstSimplifyFolder.
+  Instruction *BO = Builder.Insert(BinaryOperator::Create(Opcode, LHS, RHS));
+  BO->setDebugLoc(Loc);
+  if (Flags & SCEV::FlagNUW)
+    BO->setHasNoUnsignedWrap();
+  if (Flags & SCEV::FlagNSW)
+    BO->setHasNoSignedWrap();
+
+  return BO;
 }
 
 /// expandAddToGEP - Expand an addition expression with a pointer type into
@@ -383,9 +382,8 @@ Value *SCEVExpander::expandAddToGEP(const SCEV *Offset, Value *V,
          SE.DT.dominates(cast<Instruction>(V), &*Builder.GetInsertPoint()));
 
   Value *Idx = expand(Offset);
-  GEPNoWrapFlags NW = any(Flags & SCEV::FlagNUW)
-                          ? GEPNoWrapFlags::noUnsignedWrap()
-                          : GEPNoWrapFlags::none();
+  GEPNoWrapFlags NW = (Flags & SCEV::FlagNUW) ? GEPNoWrapFlags::noUnsignedWrap()
+                                              : GEPNoWrapFlags::none();
 
   // Fold a GEP with constant operands.
   if (Constant *CLHS = dyn_cast<Constant>(V))
@@ -459,7 +457,6 @@ const Loop *SCEVExpander::getRelevantLoop(const SCEV *S) {
   case scTruncate:
   case scZeroExtend:
   case scSignExtend:
-  case scPtrToAddr:
   case scPtrToInt:
   case scAddExpr:
   case scMulExpr:
@@ -525,7 +522,7 @@ public:
 
 }
 
-Value *SCEVExpander::visitAddExpr(SCEVUseT<const SCEVAddExpr *> S) {
+Value *SCEVExpander::visitAddExpr(const SCEVAddExpr *S) {
   // Recognize the canonical representation of an unsimplifed urem.
   const SCEV *URemLHS = nullptr;
   const SCEV *URemRHS = nullptr;
@@ -565,7 +562,7 @@ Value *SCEVExpander::visitAddExpr(SCEVUseT<const SCEVAddExpr *> S) {
     if (isa<PointerType>(Sum->getType())) {
       // The running sum expression is a pointer. Try to form a getelementptr
       // at this level with that as the base.
-      SmallVector<SCEVUse, 4> NewOps;
+      SmallVector<const SCEV *, 4> NewOps;
       for (; I != E && I->first == CurLoop; ++I) {
         // If the operand is SCEVUnknown and not instructions, peek through
         // it, to enable more of it to be folded into the GEP.
@@ -575,7 +572,7 @@ Value *SCEVExpander::visitAddExpr(SCEVUseT<const SCEVAddExpr *> S) {
             X = SE.getSCEV(U->getValue());
         NewOps.push_back(X);
       }
-      Sum = expandAddToGEP(SE.getAddExpr(NewOps), Sum, S.getNoWrapFlags());
+      Sum = expandAddToGEP(SE.getAddExpr(NewOps), Sum, S->getNoWrapFlags());
     } else if (Op->isNonConstantNegative()) {
       // Instead of doing a negate and add, just do a subtract.
       Value *W = expand(SE.getNegativeSCEV(Op));
@@ -588,7 +585,7 @@ Value *SCEVExpander::visitAddExpr(SCEVUseT<const SCEVAddExpr *> S) {
       // Canonicalize a constant to the RHS.
       if (isa<Constant>(Sum))
         std::swap(Sum, W);
-      Sum = InsertBinop(Instruction::Add, Sum, W, S.getNoWrapFlags(),
+      Sum = InsertBinop(Instruction::Add, Sum, W, S->getNoWrapFlags(),
                         /*IsSafeToHoist*/ true);
       ++I;
     }
@@ -597,7 +594,7 @@ Value *SCEVExpander::visitAddExpr(SCEVUseT<const SCEVAddExpr *> S) {
   return Sum;
 }
 
-Value *SCEVExpander::visitMulExpr(SCEVUseT<const SCEVMulExpr *> S) {
+Value *SCEVExpander::visitMulExpr(const SCEVMulExpr *S) {
   Type *Ty = S->getType();
 
   // Collect all the mul operands in a loop, along with their associated loops.
@@ -672,7 +669,7 @@ Value *SCEVExpander::visitMulExpr(SCEVUseT<const SCEVMulExpr *> S) {
       if (match(W, m_Power2(RHS))) {
         // Canonicalize Prod*(1<<C) to Prod<<C.
         assert(!Ty->isVectorTy() && "vector types are not SCEVable");
-        auto NWFlags = S.getNoWrapFlags();
+        auto NWFlags = S->getNoWrapFlags();
         // clear nsw flag if shl will produce poison value.
         if (RHS->logBase2() == RHS->getBitWidth() - 1)
           NWFlags = ScalarEvolution::clearFlags(NWFlags, SCEV::FlagNSW);
@@ -680,7 +677,7 @@ Value *SCEVExpander::visitMulExpr(SCEVUseT<const SCEVMulExpr *> S) {
                            ConstantInt::get(Ty, RHS->logBase2()), NWFlags,
                            /*IsSafeToHoist*/ true);
       } else {
-        Prod = InsertBinop(Instruction::Mul, Prod, W, S.getNoWrapFlags(),
+        Prod = InsertBinop(Instruction::Mul, Prod, W, S->getNoWrapFlags(),
                            /*IsSafeToHoist*/ true);
       }
     }
@@ -689,7 +686,7 @@ Value *SCEVExpander::visitMulExpr(SCEVUseT<const SCEVMulExpr *> S) {
   return Prod;
 }
 
-Value *SCEVExpander::visitUDivExpr(SCEVUseT<const SCEVUDivExpr *> S) {
+Value *SCEVExpander::visitUDivExpr(const SCEVUDivExpr *S) {
   Value *LHS = expand(S->getLHS());
   if (const SCEVConstant *SC = dyn_cast<SCEVConstant>(S->getRHS())) {
     const APInt &RHS = SC->getAPInt();
@@ -1158,8 +1155,7 @@ SCEVExpander::getAddRecExprPHILiterally(const SCEVAddRecExpr *Normalized,
   return PN;
 }
 
-Value *
-SCEVExpander::expandAddRecExprLiterally(SCEVUseT<const SCEVAddRecExpr *> S) {
+Value *SCEVExpander::expandAddRecExprLiterally(const SCEVAddRecExpr *S) {
   const Loop *L = S->getLoop();
 
   // Determine a normalized form of this expression, which is the expression
@@ -1249,29 +1245,13 @@ SCEVExpander::expandAddRecExprLiterally(SCEVUseT<const SCEVAddRecExpr *> S) {
   return Result;
 }
 
-Value *SCEVExpander::tryToReuseLCSSAPhi(SCEVUseT<const SCEVAddRecExpr *> S) {
+Value *SCEVExpander::tryToReuseLCSSAPhi(const SCEVAddRecExpr *S) {
   Type *STy = S->getType();
   const Loop *L = S->getLoop();
   BasicBlock *EB = L->getExitBlock();
   if (!EB || !EB->getSinglePredecessor() ||
       !SE.DT.dominates(EB, Builder.GetInsertBlock()))
     return nullptr;
-
-  // Helper to check if the diff between S and ExitSCEV is simple enough to
-  // allow reusing the LCSSA phi.
-  auto CanReuse = [&](const SCEV *ExitSCEV) -> const SCEV * {
-    if (isa<SCEVCouldNotCompute>(ExitSCEV))
-      return nullptr;
-    const SCEV *Diff = SE.getMinusSCEV(S, ExitSCEV);
-    const SCEV *Op = Diff;
-    match(Op, m_scev_Add(m_SCEVConstant(), m_SCEV(Op)));
-    match(Op, m_scev_Mul(m_scev_AllOnes(), m_SCEV(Op)));
-    match(Op, m_scev_PtrToAddr(m_SCEV(Op))) ||
-        match(Op, m_scev_PtrToInt(m_SCEV(Op)));
-    if (!isa<SCEVConstant, SCEVUnknown>(Op))
-      return nullptr;
-    return Diff;
-  };
 
   for (auto &PN : EB->phis()) {
     if (!SE.isSCEVable(PN.getType()))
@@ -1280,20 +1260,22 @@ Value *SCEVExpander::tryToReuseLCSSAPhi(SCEVUseT<const SCEVAddRecExpr *> S) {
     if (!isa<SCEVAddRecExpr>(ExitSCEV))
       continue;
     Type *PhiTy = PN.getType();
-    const SCEV *Diff = nullptr;
-    if (STy->isIntegerTy() && PhiTy->isPointerTy() &&
-        DL.getAddressType(PhiTy) == STy) {
-      // Prefer ptrtoaddr over ptrtoint.
-      const SCEV *AddrSCEV = SE.getPtrToAddrExpr(ExitSCEV);
-      Diff = CanReuse(AddrSCEV);
-      if (!Diff) {
-        const SCEV *IntSCEV = SE.getPtrToIntExpr(ExitSCEV, STy);
-        Diff = CanReuse(IntSCEV);
-      }
-    } else if (STy == PhiTy) {
-      Diff = CanReuse(ExitSCEV);
+    if (STy->isIntegerTy() && PhiTy->isPointerTy()) {
+      ExitSCEV = SE.getPtrToIntExpr(ExitSCEV, STy);
+      if (isa<SCEVCouldNotCompute>(ExitSCEV))
+        continue;
+    } else if (S->getType() != PN.getType()) {
+      continue;
     }
-    if (!Diff)
+
+    // Check if we can re-use the existing PN, by adjusting it with an expanded
+    // offset, if the offset is simpler.
+    const SCEV *Diff = SE.getMinusSCEV(S, ExitSCEV);
+    const SCEV *Op = Diff;
+    match(Op, m_scev_Add(m_SCEVConstant(), m_SCEV(Op)));
+    match(Op, m_scev_Mul(m_scev_AllOnes(), m_SCEV(Op)));
+    match(Op, m_scev_PtrToInt(m_SCEV(Op)));
+    if (!isa<SCEVConstant, SCEVUnknown>(Op))
       continue;
 
     assert(Diff->getType()->isIntegerTy() &&
@@ -1303,7 +1285,7 @@ Value *SCEVExpander::tryToReuseLCSSAPhi(SCEVUseT<const SCEVAddRecExpr *> S) {
     if (PhiTy->isPointerTy()) {
       if (STy->isPointerTy())
         return Builder.CreatePtrAdd(BaseV, DiffV);
-      BaseV = Builder.CreatePtrToAddr(BaseV);
+      BaseV = Builder.CreatePtrToInt(BaseV, DiffV->getType());
     }
     return Builder.CreateAdd(BaseV, DiffV);
   }
@@ -1311,7 +1293,7 @@ Value *SCEVExpander::tryToReuseLCSSAPhi(SCEVUseT<const SCEVAddRecExpr *> S) {
   return nullptr;
 }
 
-Value *SCEVExpander::visitAddRecExpr(SCEVUseT<const SCEVAddRecExpr *> S) {
+Value *SCEVExpander::visitAddRecExpr(const SCEVAddRecExpr *S) {
   // In canonical mode we compute the addrec as an expression of a canonical IV
   // using evaluateAtIteration and expand the resulting SCEV expression. This
   // way we avoid introducing new IVs to carry on the computation of the addrec
@@ -1339,15 +1321,13 @@ Value *SCEVExpander::visitAddRecExpr(SCEVUseT<const SCEVAddRecExpr *> S) {
   if (CanonicalIV &&
       SE.getTypeSizeInBits(CanonicalIV->getType()) > SE.getTypeSizeInBits(Ty) &&
       !S->getType()->isPointerTy()) {
-    SmallVector<SCEVUse, 4> NewOps(S->getNumOperands());
+    SmallVector<const SCEV *, 4> NewOps(S->getNumOperands());
     for (unsigned i = 0, e = S->getNumOperands(); i != e; ++i)
       NewOps[i] = SE.getAnyExtendExpr(S->getOperand(i), CanonicalIV->getType());
-    Value *V = expand(
-        SE.getAddRecExpr(NewOps, S->getLoop(), S.getNoWrapFlags(SCEV::FlagNW)));
+    Value *V = expand(SE.getAddRecExpr(NewOps, S->getLoop(),
+                                       S->getNoWrapFlags(SCEV::FlagNW)));
     BasicBlock::iterator NewInsertPt =
-        isa<Instruction>(V) ? findInsertPointAfter(cast<Instruction>(V),
-                                                   &*Builder.GetInsertPoint())
-                            : Builder.GetInsertPoint();
+        findInsertPointAfter(cast<Instruction>(V), &*Builder.GetInsertPoint());
     V = expand(SE.getTruncateExpr(SE.getUnknown(V), Ty), NewInsertPt);
     return V;
   }
@@ -1362,13 +1342,13 @@ Value *SCEVExpander::visitAddRecExpr(SCEVUseT<const SCEVAddRecExpr *> S) {
     if (isa<PointerType>(S->getType())) {
       Value *StartV = expand(SE.getPointerBase(S));
       return expandAddToGEP(SE.removePointerBase(S), StartV,
-                            S.getNoWrapFlags(SCEV::FlagNUW));
+                            S->getNoWrapFlags(SCEV::FlagNUW));
     }
 
-    SmallVector<SCEVUse, 4> NewOps(S->operands());
+    SmallVector<const SCEV *, 4> NewOps(S->operands());
     NewOps[0] = SE.getConstant(Ty, 0);
-    const SCEV *Rest =
-        SE.getAddRecExpr(NewOps, L, S.getNoWrapFlags(SCEV::FlagNW));
+    const SCEV *Rest = SE.getAddRecExpr(NewOps, L,
+                                        S->getNoWrapFlags(SCEV::FlagNW));
 
     // Just do a normal add. Pre-expand the operands to suppress folding.
     //
@@ -1453,51 +1433,29 @@ Value *SCEVExpander::visitAddRecExpr(SCEVUseT<const SCEVAddRecExpr *> S) {
   return expand(T);
 }
 
-Value *SCEVExpander::visitPtrToAddrExpr(SCEVUseT<const SCEVPtrToAddrExpr *> S) {
-  Value *V = expand(S->getOperand());
-  Type *Ty = S->getType();
-
-  // ptrtoaddr and ptrtoint produce the same value, so try to reuse either.
-  if (!isa<Constant>(V)) {
-    BasicBlock::iterator BIP = Builder.GetInsertPoint();
-    for (User *U : V->users()) {
-      auto *CI = dyn_cast<CastInst>(U);
-      if (CI && CI->getType() == Ty &&
-          (CI->getOpcode() == CastInst::PtrToAddr ||
-           CI->getOpcode() == CastInst::PtrToInt) &&
-          &*BIP != CI && SE.DT.dominates(CI, &*BIP))
-        return CI;
-    }
-  }
-  return ReuseOrCreateCast(V, Ty, CastInst::PtrToAddr,
-                           GetOptimalInsertionPointForCastOf(V));
-}
-
-Value *SCEVExpander::visitPtrToIntExpr(SCEVUseT<const SCEVPtrToIntExpr *> S) {
+Value *SCEVExpander::visitPtrToIntExpr(const SCEVPtrToIntExpr *S) {
   Value *V = expand(S->getOperand());
   return ReuseOrCreateCast(V, S->getType(), CastInst::PtrToInt,
                            GetOptimalInsertionPointForCastOf(V));
 }
 
-Value *SCEVExpander::visitTruncateExpr(SCEVUseT<const SCEVTruncateExpr *> S) {
+Value *SCEVExpander::visitTruncateExpr(const SCEVTruncateExpr *S) {
   Value *V = expand(S->getOperand());
   return Builder.CreateTrunc(V, S->getType());
 }
 
-Value *
-SCEVExpander::visitZeroExtendExpr(SCEVUseT<const SCEVZeroExtendExpr *> S) {
+Value *SCEVExpander::visitZeroExtendExpr(const SCEVZeroExtendExpr *S) {
   Value *V = expand(S->getOperand());
   return Builder.CreateZExt(V, S->getType(), "",
                             SE.isKnownNonNegative(S->getOperand()));
 }
 
-Value *
-SCEVExpander::visitSignExtendExpr(SCEVUseT<const SCEVSignExtendExpr *> S) {
+Value *SCEVExpander::visitSignExtendExpr(const SCEVSignExtendExpr *S) {
   Value *V = expand(S->getOperand());
   return Builder.CreateSExt(V, S->getType());
 }
 
-Value *SCEVExpander::expandMinMaxExpr(SCEVUseT<const SCEVNAryExpr *> S,
+Value *SCEVExpander::expandMinMaxExpr(const SCEVNAryExpr *S,
                                       Intrinsic::ID IntrinID, Twine Name,
                                       bool IsSequential) {
   bool PrevSafeMode = SafeUDivMode;
@@ -1526,39 +1484,38 @@ Value *SCEVExpander::expandMinMaxExpr(SCEVUseT<const SCEVNAryExpr *> S,
   return LHS;
 }
 
-Value *SCEVExpander::visitSMaxExpr(SCEVUseT<const SCEVSMaxExpr *> S) {
+Value *SCEVExpander::visitSMaxExpr(const SCEVSMaxExpr *S) {
   return expandMinMaxExpr(S, Intrinsic::smax, "smax");
 }
 
-Value *SCEVExpander::visitUMaxExpr(SCEVUseT<const SCEVUMaxExpr *> S) {
+Value *SCEVExpander::visitUMaxExpr(const SCEVUMaxExpr *S) {
   return expandMinMaxExpr(S, Intrinsic::umax, "umax");
 }
 
-Value *SCEVExpander::visitSMinExpr(SCEVUseT<const SCEVSMinExpr *> S) {
+Value *SCEVExpander::visitSMinExpr(const SCEVSMinExpr *S) {
   return expandMinMaxExpr(S, Intrinsic::smin, "smin");
 }
 
-Value *SCEVExpander::visitUMinExpr(SCEVUseT<const SCEVUMinExpr *> S) {
+Value *SCEVExpander::visitUMinExpr(const SCEVUMinExpr *S) {
   return expandMinMaxExpr(S, Intrinsic::umin, "umin");
 }
 
-Value *SCEVExpander::visitSequentialUMinExpr(
-    SCEVUseT<const SCEVSequentialUMinExpr *> S) {
-  return expandMinMaxExpr(S, Intrinsic::umin, "umin",
-                          /*IsSequential*/ true);
+Value *SCEVExpander::visitSequentialUMinExpr(const SCEVSequentialUMinExpr *S) {
+  return expandMinMaxExpr(S, Intrinsic::umin, "umin", /*IsSequential*/true);
 }
 
-Value *SCEVExpander::visitVScale(SCEVUseT<const SCEVVScale *> S) {
+Value *SCEVExpander::visitVScale(const SCEVVScale *S) {
   return Builder.CreateVScale(S->getType());
 }
 
-Value *SCEVExpander::expandCodeFor(SCEVUse SH, Type *Ty,
+Value *SCEVExpander::expandCodeFor(const SCEV *SH, Type *Ty,
                                    BasicBlock::iterator IP) {
   setInsertPoint(IP);
-  return expandCodeFor(SH, Ty);
+  Value *V = expandCodeFor(SH, Ty);
+  return V;
 }
 
-Value *SCEVExpander::expandCodeFor(SCEVUse SH, Type *Ty) {
+Value *SCEVExpander::expandCodeFor(const SCEV *SH, Type *Ty) {
   // Expand the code for this SCEV.
   Value *V = expand(SH);
 
@@ -1571,7 +1528,7 @@ Value *SCEVExpander::expandCodeFor(SCEVUse SH, Type *Ty) {
 }
 
 Value *SCEVExpander::FindValueInExprValueMap(
-    SCEVUse S, const Instruction *InsertPt,
+    const SCEV *S, const Instruction *InsertPt,
     SmallVectorImpl<Instruction *> &DropPoisonGeneratingInsts) {
   // If the expansion is not in CanonicalMode, and the SCEV contains any
   // sub scAddRecExpr type SCEV, it is required to expand the SCEV literally.
@@ -1610,7 +1567,7 @@ Value *SCEVExpander::FindValueInExprValueMap(
 // literally, to prevent LSR's transformed SCEV from being reverted. Otherwise,
 // the expansion will try to reuse Value from ExprValueMap, and only when it
 // fails, expand the SCEV literally.
-Value *SCEVExpander::expand(SCEVUse S) {
+Value *SCEVExpander::expand(const SCEV *S) {
   // Compute an insertion point for this SCEV object. Hoist the instructions
   // as far out in the loop nest as possible.
   BasicBlock::iterator InsertPt = Builder.GetInsertPoint();
@@ -1678,7 +1635,24 @@ Value *SCEVExpander::expand(SCEVUse S) {
   } else {
     for (Instruction *I : DropPoisonGeneratingInsts) {
       rememberFlags(I);
-      dropPoisonGeneratingAnnotationsAndReinfer(SE, I);
+      I->dropPoisonGeneratingAnnotations();
+      // See if we can re-infer from first principles any of the flags we just
+      // dropped.
+      if (auto *OBO = dyn_cast<OverflowingBinaryOperator>(I))
+        if (auto Flags = SE.getStrengthenedNoWrapFlagsFromBinOp(OBO)) {
+          auto *BO = cast<BinaryOperator>(I);
+          BO->setHasNoUnsignedWrap(
+            ScalarEvolution::maskFlags(*Flags, SCEV::FlagNUW) == SCEV::FlagNUW);
+          BO->setHasNoSignedWrap(
+            ScalarEvolution::maskFlags(*Flags, SCEV::FlagNSW) == SCEV::FlagNSW);
+        }
+      if (auto *NNI = dyn_cast<PossiblyNonNegInst>(I)) {
+        auto *Src = NNI->getOperand(0);
+        if (isImpliedByDomCondition(ICmpInst::ICMP_SGE, Src,
+                                    Constant::getNullValue(Src->getType()), I,
+                                    DL).value_or(false))
+          NNI->setNonNeg(true);
+      }
     }
   }
   // Remember the expanded value for this SCEV at this location.
@@ -1704,29 +1678,6 @@ void SCEVExpander::rememberInstruction(Value *I) {
 void SCEVExpander::rememberFlags(Instruction *I) {
   // If we already have flags for the instruction, keep the existing ones.
   OrigFlags.try_emplace(I, PoisonFlags(I));
-}
-
-void SCEVExpander::dropPoisonGeneratingAnnotationsAndReinfer(
-    ScalarEvolution &SE, Instruction *I) {
-  I->dropPoisonGeneratingAnnotations();
-  // See if we can re-infer from first principles any of the flags we just
-  // dropped.
-  if (auto *OBO = dyn_cast<OverflowingBinaryOperator>(I))
-    if (auto Flags = SE.getStrengthenedNoWrapFlagsFromBinOp(OBO)) {
-      auto *BO = cast<BinaryOperator>(I);
-      BO->setHasNoUnsignedWrap(
-          ScalarEvolution::maskFlags(*Flags, SCEV::FlagNUW) == SCEV::FlagNUW);
-      BO->setHasNoSignedWrap(
-          ScalarEvolution::maskFlags(*Flags, SCEV::FlagNSW) == SCEV::FlagNSW);
-    }
-  if (auto *NNI = dyn_cast<PossiblyNonNegInst>(I)) {
-    auto *Src = NNI->getOperand(0);
-    if (isImpliedByDomCondition(ICmpInst::ICMP_SGE, Src,
-                                Constant::getNullValue(Src->getType()), I,
-                                SE.getDataLayout())
-            .value_or(false))
-      NNI->setNonNeg(true);
-  }
 }
 
 void SCEVExpander::replaceCongruentIVInc(
@@ -2006,9 +1957,6 @@ template<typename T> static InstructionCost costAndCollectOperands(
   case scConstant:
   case scVScale:
     return 0;
-  case scPtrToAddr:
-    Cost = CastCost(Instruction::PtrToAddr);
-    break;
   case scPtrToInt:
     Cost = CastCost(Instruction::PtrToInt);
     break;
@@ -2032,26 +1980,12 @@ template<typename T> static InstructionCost costAndCollectOperands(
   case scAddExpr:
     Cost = ArithCost(Instruction::Add, S->getNumOperands() - 1);
     break;
-  case scMulExpr: {
-    // Match the actual expansion in visitMulExpr: multiply by -1 is
-    // expanded as a negate (sub 0, x), and multiply by a power of 2 is
-    // expanded as a shift.  Only handle the common two-operand case with a
-    // constant LHS; for everything else fall back to the pessimistic
-    // all-multiplies estimate.
-    // TODO: this is still pessimistic for the general case because of the
-    // Bin Pow algorithm actually used by the expander, see
-    // SCEVExpander::visitMulExpr(), ExpandOpBinPowN().
-    unsigned OpCode = Instruction::Mul;
-    if (S->getNumOperands() == 2)
-      if (auto *SC = dyn_cast<SCEVConstant>(S->getOperand(0))) {
-        if (SC->getAPInt().isAllOnes()) // -1
-          OpCode = Instruction::Sub;
-        else if (SC->getAPInt().isPowerOf2())
-          OpCode = Instruction::Shl;
-      }
-    Cost = ArithCost(OpCode, S->getNumOperands() - 1);
+  case scMulExpr:
+    // TODO: this is a very pessimistic cost modelling for Mul,
+    // because of Bin Pow algorithm actually used by the expander,
+    // see SCEVExpander::visitMulExpr(), ExpandOpBinPowN().
+    Cost = ArithCost(Instruction::Mul, S->getNumOperands() - 1);
     break;
-  }
   case scSMaxExpr:
   case scUMaxExpr:
   case scSMinExpr:
@@ -2146,7 +2080,6 @@ bool SCEVExpander::isHighCostExpansionHelper(
     return Cost > Budget;
   }
   case scTruncate:
-  case scPtrToAddr:
   case scPtrToInt:
   case scZeroExtend:
   case scSignExtend: {

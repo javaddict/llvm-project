@@ -24,11 +24,11 @@ Tester::Tester(StringRef scriptName, ArrayRef<std::string> scriptArgs)
     : testScript(scriptName), testScriptArgs(scriptArgs) {}
 
 std::pair<Tester::Interestingness, size_t>
-Tester::isInteresting(Operation *topOp) const {
+Tester::isInteresting(ModuleOp module) const {
   // The reduced module should always be vaild, or we may end up retaining the
   // error message by an invalid case. Besides, an invalid module may not be
   // able to print properly.
-  if (failed(verify(topOp)))
+  if (failed(verify(module)))
     return std::make_pair(Interestingness::False, /*size=*/0);
 
   SmallString<128> filepath;
@@ -43,7 +43,7 @@ Tester::isInteresting(Operation *topOp) const {
                              ec.message());
 
   llvm::ToolOutputFile out(filepath, fd);
-  topOp->print(out.os());
+  module.print(out.os());
   out.os().close();
 
   if (out.os().has_error())

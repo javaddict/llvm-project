@@ -59,9 +59,7 @@ void M68kInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
                                    raw_ostream &O) {
   const MCOperand &MO = MI->getOperand(OpNo);
   if (MO.isReg()) {
-    MCRegister Reg = MO.getReg();
-    if (Reg.isValid())
-      printRegName(O, Reg);
+    printRegName(O, MO.getReg());
     return;
   }
 
@@ -148,16 +146,6 @@ void M68kInstPrinter::printDisp(const MCInst *MI, unsigned opNum,
   }
   assert(Op.isExpr() && "Unknown operand kind in printOperand");
   MAI.printExpr(O, *Op.getExpr());
-}
-
-void M68kInstPrinter::printScale(const MCInst *MI, unsigned opNum,
-                                 raw_ostream &O) {
-  const MCOperand &Op = MI->getOperand(opNum);
-  // Scale has to be an immediate.
-  unsigned Scale = Op.getImm();
-  // We only print it out when it's larger than 1
-  if (Scale > 1)
-    O << "*" << Scale;
 }
 
 // NOTE forcing (W,L) size available since M68020 only

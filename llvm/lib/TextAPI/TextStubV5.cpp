@@ -12,7 +12,6 @@
 #include "TextStubCommon.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/JSON.h"
-#include <optional>
 #include <utility>
 
 // clang-format off
@@ -280,15 +279,6 @@ Expected<FileType> getVersion(const Object *File) {
   return *VersionOrErr;
 }
 
-Expected<std::optional<MachO::Target>> parseTargetStr(StringRef Str) {
-  auto TargetOrErr = MachO::Target::create(Str);
-  if (!TargetOrErr)
-    return make_error<JSONStubError>(getParseErrorMsg(TBDKey::Target));
-  if (!TargetOrErr->isValid())
-    return std::nullopt;
-  return *TargetOrErr;
-}
-
 Expected<TargetList> getTargets(const Object *Section) {
   const auto *Targets = Section->getArray(Keys[TBDKey::Targets]);
   if (!Targets)
@@ -299,12 +289,10 @@ Expected<TargetList> getTargets(const Object *Section) {
     auto TargetStr = JSONTarget.getAsString();
     if (!TargetStr.has_value())
       return make_error<JSONStubError>(getParseErrorMsg(TBDKey::Target));
-    auto TargetOrErr = parseTargetStr(TargetStr.value());
+    auto TargetOrErr = Target::create(TargetStr.value());
     if (!TargetOrErr)
-      return TargetOrErr.takeError();
-    if (!TargetOrErr->has_value())
-      continue;
-    IFTargets.push_back(**TargetOrErr);
+      return make_error<JSONStubError>(getParseErrorMsg(TBDKey::Target));
+    IFTargets.push_back(*TargetOrErr);
   }
   return std::move(IFTargets);
 }
@@ -323,22 +311,20 @@ Expected<TargetList> getTargetsSection(const Object *Section) {
         getRequiredValue<StringRef>(TBDKey::Target, Obj, &Object::getString);
     if (!TargetStr)
       return make_error<JSONStubError>(getParseErrorMsg(TBDKey::Target));
-    auto TargetOrErr = parseTargetStr(*TargetStr);
+    auto TargetOrErr = Target::create(*TargetStr);
     if (!TargetOrErr)
-      return TargetOrErr.takeError();
-    if (!TargetOrErr->has_value())
-      continue;
+      return make_error<JSONStubError>(getParseErrorMsg(TBDKey::Target));
 
     auto VersionStr = Obj->getString(Keys[TBDKey::Deployment]);
     VersionTuple Version;
     if (VersionStr && Version.tryParse(*VersionStr))
       return make_error<JSONStubError>(getParseErrorMsg(TBDKey::Deployment));
-    (*TargetOrErr)->MinDeployment = Version;
+    TargetOrErr->MinDeployment = Version;
 
     // Convert to LLVM::Triple to accurately compute minOS + platform + arch
     // pairing.
     IFTargets.push_back(
-        MachO::Target(Triple(getTargetTripleName(**TargetOrErr))));
+        MachO::Target(Triple(getTargetTripleName(*TargetOrErr))));
   }
   return std::move(IFTargets);
 }
@@ -656,13 +642,13 @@ Expected<IFPtr> parseToInterfaceFile(const Object *File) {
   auto UmbrellasOrErr = getUmbrellaSection(File, Targets);
   if (!UmbrellasOrErr)
     return UmbrellasOrErr.takeError();
-  const AttrToTargets &Umbrellas = *UmbrellasOrErr;
+  AttrToTargets Umbrellas = *UmbrellasOrErr;
 
   auto ClientsOrErr =
       getLibSection(File, TBDKey::AllowableClients, TBDKey::Clients, Targets);
   if (!ClientsOrErr)
     return ClientsOrErr.takeError();
-  const AttrToTargets &Clients = *ClientsOrErr;
+  AttrToTargets Clients = *ClientsOrErr;
 
   auto RLOrErr =
       getLibSection(File, TBDKey::ReexportLibs, TBDKey::Names, Targets);
@@ -715,24 +701,15 @@ Expected<IFPtr> parseToInterfaceFile(const Object *File) {
   for (auto &[Path, Targets] : RPaths)
     for (auto Target : Targets)
       F->addRPath(Path, Target);
-  for (auto &[Targets, Symbols] : Exports) {
-    if (Targets.empty())
-      continue;
+  for (auto &[Targets, Symbols] : Exports)
     for (auto &Sym : Symbols)
       F->addSymbol(Sym.Kind, Sym.Name, Targets, Sym.Flags);
-  }
-  for (auto &[Targets, Symbols] : Reexports) {
-    if (Targets.empty())
-      continue;
+  for (auto &[Targets, Symbols] : Reexports)
     for (auto &Sym : Symbols)
       F->addSymbol(Sym.Kind, Sym.Name, Targets, Sym.Flags);
-  }
-  for (auto &[Targets, Symbols] : Undefineds) {
-    if (Targets.empty())
-      continue;
+  for (auto &[Targets, Symbols] : Undefineds)
     for (auto &Sym : Symbols)
       F->addSymbol(Sym.Kind, Sym.Name, Targets, Sym.Flags);
-  }
 
   return std::move(F);
 }

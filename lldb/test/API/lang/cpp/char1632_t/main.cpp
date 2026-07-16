@@ -1,5 +1,4 @@
 #include <assert.h>
-#include <cstring>
 #include <string>
 
 #define UASZ 64
@@ -11,7 +10,7 @@ void copy_char_seq (T (&arr)[N], const T* src)
     assert(src_len < N);
 
     std::char_traits<T>::copy(arr, src, src_len);
-    memset(&arr[src_len], 0, (N - src_len) * sizeof(T));
+    arr[src_len] = 0;
 }
 
 int main (int argc, char const *argv[])
@@ -26,12 +25,6 @@ int main (int argc, char const *argv[])
     char32_t *s32 = (char32_t *)U"ЕЙРГЖО";
     copy_char_seq(as16, s16);
     copy_char_seq(as32, s32);
-
-    char16_t aZero16[32] = u"I\0have\0zeros";
-    const char16_t *cZero16 = u"I\0have\0zeros";
-    char32_t aZero32[32] = U"I\0have\0zeros";
-    const char32_t *cZero32 = U"I\0have\0zeros";
-
     s32 = nullptr; // breakpoint1
     s32 = (char32_t *)U"෴";
     s16 = (char16_t *)u"色ハ匂ヘト散リヌルヲ";

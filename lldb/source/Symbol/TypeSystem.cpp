@@ -41,10 +41,14 @@ TypeSystem::~TypeSystem() = default;
 
 static TypeSystemSP CreateInstanceHelper(lldb::LanguageType language,
                                          Module *module, Target *target) {
-  for (auto create_callback : PluginManager::GetTypeSystemCreateCallbacks()) {
+  uint32_t i = 0;
+  TypeSystemCreateInstance create_callback;
+  while ((create_callback = PluginManager::GetTypeSystemCreateCallbackAtIndex(
+              i++)) != nullptr) {
     if (auto type_system_sp = create_callback(language, module, target))
       return type_system_sp;
   }
+
   return {};
 }
 
@@ -123,9 +127,11 @@ bool TypeSystem::IsPromotableIntegerType(lldb::opaque_compiler_type_t type) {
   return false;
 }
 
-CompilerType
-TypeSystem::GetPromotedIntegerType(lldb::opaque_compiler_type_t type) {
-  return CompilerType();
+llvm::Expected<CompilerType>
+TypeSystem::DoIntegralPromotion(CompilerType from,
+                                ExecutionContextScope *exe_scope) {
+  return llvm::createStringError(
+      "Integral promotion is not implemented for this TypeSystem");
 }
 
 bool TypeSystem::IsTemplateType(lldb::opaque_compiler_type_t type) {

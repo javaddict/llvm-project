@@ -11,13 +11,8 @@ int  *create_tag1(int a, unsigned b) {
 }
 
 int  *create_tag2(int *a, unsigned *b) {
-#ifdef __cplusplus
-  // expected-error@+1 {{cannot initialize a parameter of type 'unsigned long' with an lvalue of type 'unsigned int *'}}
+  // expected-error@+1 {{second argument of MTE builtin function must be an integer type ('unsigned int *' invalid)}}
   return __arm_mte_create_random_tag(a,b);
-#else
-  // expected-error@+1 {{incompatible pointer to integer conversion passing 'unsigned int *' to parameter of type 'unsigned long'}}
-  return __arm_mte_create_random_tag(a,b);
-#endif
 }
 
 int  *create_tag3(const int *a, unsigned b) {
@@ -81,13 +76,8 @@ unsigned exclude_tag1(int *ptr, unsigned m) {
 }
 
 unsigned exclude_tag2(int *ptr, int *m) {
-#ifdef __cplusplus
-   // expected-error@+1 {{cannot initialize a parameter of type 'unsigned long' with an lvalue of type 'int *'}}
+   // expected-error@+1 {{second argument of MTE builtin function must be an integer type ('int *' invalid)}}
    return  __arm_mte_exclude_tag(ptr, m);
-#else
-   // expected-error@+1 {{incompatible pointer to integer conversion passing 'int *' to parameter of type 'unsigned long'}}
-   return  __arm_mte_exclude_tag(ptr, m);
-#endif
 }
 
 void get_tag1(void) {

@@ -60,11 +60,9 @@ void tools::MinGW::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
 
 void tools::MinGW::Linker::AddLibGCC(const ArgList &Args,
                                      ArgStringList &CmdArgs) const {
-  bool NoLibc = Args.hasArg(options::OPT_nolibc);
   if (Args.hasArg(options::OPT_mthreads))
     CmdArgs.push_back("-lmingwthrd");
-  if (!NoLibc)
-    CmdArgs.push_back("-lmingw32");
+  CmdArgs.push_back("-lmingw32");
 
   // Make use of compiler-rt if --rtlib option is used
   ToolChain::RuntimeLibType RLT = getToolChain().GetRuntimeLibType(Args);
@@ -85,23 +83,21 @@ void tools::MinGW::Linker::AddLibGCC(const ArgList &Args,
     AddRunTimeLibs(getToolChain(), getToolChain().getDriver(), CmdArgs, Args);
   }
 
-  if (!NoLibc) {
-    CmdArgs.push_back("-lmoldname");
-    CmdArgs.push_back("-lmingwex");
-    for (auto Lib : Args.getAllArgValues(options::OPT_l)) {
-      if (StringRef(Lib).starts_with("msvcr") ||
-          StringRef(Lib).starts_with("ucrt") ||
-          StringRef(Lib).starts_with("crtdll")) {
-        std::string CRTLib = (llvm::Twine("-l") + Lib).str();
-        // Respect the user's chosen crt variant, but still provide it
-        // again as the last linker argument, because some of the libraries
-        // we added above may depend on it.
-        CmdArgs.push_back(Args.MakeArgStringRef(CRTLib));
-        return;
-      }
+  CmdArgs.push_back("-lmoldname");
+  CmdArgs.push_back("-lmingwex");
+  for (auto Lib : Args.getAllArgValues(options::OPT_l)) {
+    if (StringRef(Lib).starts_with("msvcr") ||
+        StringRef(Lib).starts_with("ucrt") ||
+        StringRef(Lib).starts_with("crtdll")) {
+      std::string CRTLib = (llvm::Twine("-l") + Lib).str();
+      // Respect the user's chosen crt variant, but still provide it
+      // again as the last linker argument, because some of the libraries
+      // we added above may depend on it.
+      CmdArgs.push_back(Args.MakeArgStringRef(CRTLib));
+      return;
     }
-    CmdArgs.push_back("-lmsvcrt");
   }
+  CmdArgs.push_back("-lmsvcrt");
 }
 
 void tools::MinGW::Linker::ConstructJob(Compilation &C, const JobAction &JA,
@@ -263,8 +259,9 @@ void tools::MinGW::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   AddLinkerInputs(TC, Inputs, Args, CmdArgs, JA);
 
-  if (auto LTO = TC.getLTOMode(Args); LTO != LTOK_None)
-    addLTOOptions(TC, Args, CmdArgs, Output, Inputs, LTO == LTOK_Thin);
+  if (D.isUsingLTO())
+    addLTOOptions(TC, Args, CmdArgs, Output, Inputs,
+                  D.getLTOMode() == LTOK_Thin);
 
   if (C.getDriver().IsFlangMode() &&
       !Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs)) {
@@ -292,7 +289,6 @@ void tools::MinGW::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
-  bool NoLibc = Args.hasArg(options::OPT_nolibc);
   if (!Args.hasArg(options::OPT_nostdlib)) {
     if (!Args.hasArg(options::OPT_nodefaultlibs)) {
       if (Args.hasArg(options::OPT_static))
@@ -351,7 +347,7 @@ void tools::MinGW::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
       TC.addProfileRTLibs(Args, CmdArgs);
 
-      if (!HasWindowsApp && !NoLibc) {
+      if (!HasWindowsApp) {
         // Add system libraries. If linking to libwindowsapp.a, that import
         // library replaces all these and we shouldn't accidentally try to
         // link to the normal desktop mode dlls.
@@ -369,7 +365,7 @@ void tools::MinGW::Linker::ConstructJob(Compilation &C, const JobAction &JA,
         CmdArgs.push_back("--end-group");
       } else {
         AddLibGCC(Args, CmdArgs);
-        if (!HasWindowsApp && !NoLibc)
+        if (!HasWindowsApp)
           CmdArgs.push_back("-lkernel32");
       }
     }
@@ -558,8 +554,6 @@ toolchains::MinGW::MinGW(const Driver &D, const llvm::Triple &Triple,
       getDriver().SysRoot.size())
     getFilePaths().push_back(Base + "lib");
 
-  loadMultilibsFromYAML(Args, D);
-
   NativeLLVMSupport =
       Args.getLastArgValue(options::OPT_fuse_ld_EQ, D.getPreferredLinker())
           .equals_insensitive("lld");
@@ -626,10 +620,8 @@ toolchains::MinGW::GetExceptionModel(const ArgList &Args) const {
   return llvm::ExceptionHandling::DwarfCFI;
 }
 
-SanitizerMask toolchains::MinGW::getSupportedSanitizers(
-    StringRef BoundArch, Action::OffloadKind DeviceOffloadKind) const {
-  SanitizerMask Res =
-      ToolChain::getSupportedSanitizers(BoundArch, DeviceOffloadKind);
+SanitizerMask toolchains::MinGW::getSupportedSanitizers() const {
+  SanitizerMask Res = ToolChain::getSupportedSanitizers();
   Res |= SanitizerKind::Address;
   Res |= SanitizerKind::PointerCompare;
   Res |= SanitizerKind::PointerSubtract;
@@ -711,21 +703,6 @@ void toolchains::MinGW::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
 
   if (DriverArgs.hasArg(options::OPT_nostdlibinc))
     return;
-
-  // Add multilib variant include paths in priority order.
-  for (const Multilib &M : getOrderedMultilibs()) {
-    if (M.isDefault())
-      continue;
-    if (std::optional<std::string> StdlibIncDir = getStdlibIncludePath()) {
-      SmallString<128> Dir(*StdlibIncDir);
-      llvm::sys::path::append(Dir, M.includeSuffix());
-      if (getDriver().getVFS().exists(Dir))
-        addSystemInclude(DriverArgs, CC1Args, Dir);
-    }
-  }
-
-  if (std::optional<std::string> Path = getStdlibIncludePath())
-    addSystemInclude(DriverArgs, CC1Args, *Path);
 
   addSystemInclude(DriverArgs, CC1Args,
                    Base + SubdirName + llvm::sys::path::get_separator() +

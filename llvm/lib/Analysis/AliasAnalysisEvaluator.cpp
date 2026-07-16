@@ -78,11 +78,10 @@ static inline void PrintModRefResults(
   }
 }
 
-static inline void PrintModRefResults(const char *Msg, bool P,
-                                      Instruction *MemOpA, Instruction *MemOpB,
-                                      Module *M) {
+static inline void PrintModRefResults(const char *Msg, bool P, CallBase *CallA,
+                                      CallBase *CallB, Module *M) {
   if (PrintAll || P) {
-    errs() << "  " << Msg << ": " << *MemOpA << " <-> " << *MemOpB << '\n';
+    errs() << "  " << Msg << ": " << *CallA << " <-> " << *CallB << '\n';
   }
 }
 
@@ -105,7 +104,7 @@ void AAEvaluator::runInternal(Function &F, AAResults &AA) {
   ++FunctionCount;
 
   SetVector<std::pair<const Value *, Type *>> Pointers;
-  SmallSetVector<Instruction *, 16> OtherMemOps;
+  SmallSetVector<CallBase *, 16> Calls;
   SetVector<Value *> Loads;
   SetVector<Value *> Stores;
 
@@ -117,16 +116,14 @@ void AAEvaluator::runInternal(Function &F, AAResults &AA) {
       Pointers.insert({SI->getPointerOperand(),
                        SI->getValueOperand()->getType()});
       Stores.insert(SI);
-    }
-
-    if (isa<CallBase>(Inst) || Inst.isAtomic())
-      OtherMemOps.insert(&Inst);
+    } else if (auto *CB = dyn_cast<CallBase>(&Inst))
+      Calls.insert(CB);
   }
 
   if (PrintAll || PrintNoAlias || PrintMayAlias || PrintPartialAlias ||
       PrintMustAlias || PrintNoModRef || PrintMod || PrintRef || PrintModRef)
     errs() << "Function: " << F.getName() << ": " << Pointers.size()
-           << " pointers, " << OtherMemOps.size() << " call sites\n";
+           << " pointers, " << Calls.size() << " call sites\n";
 
   // iterate over the worklist, and run the full (n^2)/2 disambiguations
   for (auto I1 = Pointers.begin(), E = Pointers.end(); I1 != E; ++I1) {
@@ -211,27 +208,27 @@ void AAEvaluator::runInternal(Function &F, AAResults &AA) {
     }
   }
 
-  // Mod/ref alias analysis: compare all pairs of mem ops and values
-  for (Instruction *MemOp : OtherMemOps) {
+  // Mod/ref alias analysis: compare all pairs of calls and values
+  for (CallBase *Call : Calls) {
     for (const auto &Pointer : Pointers) {
       LocationSize Size =
           LocationSize::precise(DL.getTypeStoreSize(Pointer.second));
-      switch (AA.getModRefInfo(MemOp, Pointer.first, Size)) {
+      switch (AA.getModRefInfo(Call, Pointer.first, Size)) {
       case ModRefInfo::NoModRef:
-        PrintModRefResults("NoModRef", PrintNoModRef, MemOp, Pointer,
+        PrintModRefResults("NoModRef", PrintNoModRef, Call, Pointer,
                            F.getParent());
         ++NoModRefCount;
         break;
       case ModRefInfo::Mod:
-        PrintModRefResults("Just Mod", PrintMod, MemOp, Pointer, F.getParent());
+        PrintModRefResults("Just Mod", PrintMod, Call, Pointer, F.getParent());
         ++ModCount;
         break;
       case ModRefInfo::Ref:
-        PrintModRefResults("Just Ref", PrintRef, MemOp, Pointer, F.getParent());
+        PrintModRefResults("Just Ref", PrintRef, Call, Pointer, F.getParent());
         ++RefCount;
         break;
       case ModRefInfo::ModRef:
-        PrintModRefResults("Both ModRef", PrintModRef, MemOp, Pointer,
+        PrintModRefResults("Both ModRef", PrintModRef, Call, Pointer,
                            F.getParent());
         ++ModRefCount;
         break;
@@ -239,27 +236,27 @@ void AAEvaluator::runInternal(Function &F, AAResults &AA) {
     }
   }
 
-  // Mod/ref alias analysis: compare all pairs of mem ops
-  for (Instruction *MemOpA : OtherMemOps) {
-    for (Instruction *MemOpB : OtherMemOps) {
-      if (MemOpA == MemOpB)
+  // Mod/ref alias analysis: compare all pairs of calls
+  for (CallBase *CallA : Calls) {
+    for (CallBase *CallB : Calls) {
+      if (CallA == CallB)
         continue;
-      switch (AA.getModRefInfo(MemOpA, MemOpB)) {
+      switch (AA.getModRefInfo(CallA, CallB)) {
       case ModRefInfo::NoModRef:
-        PrintModRefResults("NoModRef", PrintNoModRef, MemOpA, MemOpB,
+        PrintModRefResults("NoModRef", PrintNoModRef, CallA, CallB,
                            F.getParent());
         ++NoModRefCount;
         break;
       case ModRefInfo::Mod:
-        PrintModRefResults("Just Mod", PrintMod, MemOpA, MemOpB, F.getParent());
+        PrintModRefResults("Just Mod", PrintMod, CallA, CallB, F.getParent());
         ++ModCount;
         break;
       case ModRefInfo::Ref:
-        PrintModRefResults("Just Ref", PrintRef, MemOpA, MemOpB, F.getParent());
+        PrintModRefResults("Just Ref", PrintRef, CallA, CallB, F.getParent());
         ++RefCount;
         break;
       case ModRefInfo::ModRef:
-        PrintModRefResults("Both ModRef", PrintModRef, MemOpA, MemOpB,
+        PrintModRefResults("Both ModRef", PrintModRef, CallA, CallB,
                            F.getParent());
         ++ModRefCount;
         break;

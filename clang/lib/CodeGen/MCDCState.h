@@ -13,7 +13,6 @@
 #ifndef LLVM_CLANG_LIB_CODEGEN_MCDCSTATE_H
 #define LLVM_CLANG_LIB_CODEGEN_MCDCSTATE_H
 
-#include "Address.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ProfileData/Coverage/MCDCTypes.h"
@@ -39,7 +38,6 @@ struct State {
     unsigned BitmapIdx;
     IndicesTy Indices;
     unsigned ID = InvalidID;
-    Address MCDCCondBitmapAddr = Address::invalid();
 
     bool isValid() const { return ID != InvalidID; }
 

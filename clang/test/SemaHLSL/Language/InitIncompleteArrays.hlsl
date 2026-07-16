@@ -1,5 +1,4 @@
-// RUN: %clang_cc1 -triple dxil-pc-shadermodel6.0-compute -finclude-default-header -verify -Wdouble-promotion %s
-// RUN: %clang_cc1 -triple dxil-pc-shadermodel6.0-compute -finclude-default-header -fexperimental-new-constant-interpreter -verify -Wdouble-promotion %s
+// RUN: %clang_cc1 -triple dxil-pc-shadermodel6.0-compute -finclude-default-header -verify -Wdouble-promotion -Wconversion %s
 
 // Some helpers!
 template <typename T, typename U>

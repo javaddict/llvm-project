@@ -12,8 +12,7 @@
 #include "llvm/CodeGen/MachinePassManager.h"
 
 namespace llvm {
-class SIFormMemoryClausesPass
-    : public OptionalPassInfoMixin<SIFormMemoryClausesPass> {
+class SIFormMemoryClausesPass : public PassInfoMixin<SIFormMemoryClausesPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);

@@ -39,9 +39,6 @@ def print_wrapped_module : Flag<["--"], "print-wrapped-module">,
   HelpText<"Print the wrapped module's IR for testing">;
 def save_temps : Flag<["--"], "save-temps">,
   Flags<[WrapperOnlyOption]>, HelpText<"Save intermediate results">;
-def no_lto : Flag<["--"], "no-lto">,
-             Flags<[WrapperOnlyOption]>,
-             HelpText<"Use the non-LTO device compilation pipeline">;
 def compress : Flag<["--"], "compress">,
   Flags<[WrapperOnlyOption]>, HelpText<"Compress bundled files">;
 def compression_level_eq : Joined<["--"], "compression-level=">,
@@ -71,10 +68,6 @@ def emit_fatbin_only
     : Flag<["--"], "emit-fatbin-only">,
       Flags<[WrapperOnlyOption]>,
       HelpText<"Emit fat binary directly without wrapping or host linking">;
-
-def no_canonical_prefixes : Flag<["--"], "no-canonical-prefixes">,
-  Flags<[WrapperOnlyOption]>,
-  HelpText<"Do not resolve symbolic links, turn relative paths into absolute ones, or do anything else to identify the executable">;
 
 // Flags passed to the device linker.
 def arch_EQ : Joined<["--"], "arch=">,

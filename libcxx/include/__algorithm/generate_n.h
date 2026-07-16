@@ -29,11 +29,8 @@ inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 _OutputIterator
 __generate_n(_OutputIterator __first, _Size __orig_n, _Generator& __gen) {
   using __iter_ref = decltype(*__first);
   __identity __proj;
-  return std::__for_each_n(
-      std::move(__first),
-      __orig_n,
-      [&](__iter_ref __element) { std::forward<__iter_ref>(__element) = __gen(); },
-      __proj);
+  auto __f = [&](__iter_ref __element) { std::forward<__iter_ref>(__element) = __gen(); };
+  return std::__for_each_n(std::move(__first), __orig_n, __f, __proj);
 }
 
 template <class _OutputIterator, class _Size, class _Generator>

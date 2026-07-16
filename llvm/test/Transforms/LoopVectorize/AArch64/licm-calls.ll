@@ -66,3 +66,4 @@ exit:
   ret void
 }
 
+declare double @llvm.pow.f64(double, double)

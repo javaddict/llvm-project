@@ -4,7 +4,6 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
 
-@skipIfTargetDoesNotSupportSharedLibraries()
 class OdrHandlingWithDylibTestCase(TestBase):
     @skipIf(
         bugnumber="https://github.com/llvm/llvm-project/issues/50375, rdar://135551810"

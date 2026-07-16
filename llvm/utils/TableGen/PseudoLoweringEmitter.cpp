@@ -76,7 +76,6 @@ void PseudoLoweringEmitter::addOperandMapping(
     // Physical register reference. Explicit check for the special case
     // "zero_reg" definition.
     if (DI->getDef()->isSubClassOf("Register") ||
-        DI->getDef()->isSubClassOf("RegisterByHwMode") ||
         DI->getDef()->getName() == "zero_reg") {
       auto &Entry = OperandMap[MIOpNo];
       Entry.Kind = OpData::Reg;
@@ -257,15 +256,10 @@ void PseudoLoweringEmitter::emitLoweringEmitter(raw_ostream &o) {
             const Record *Reg = Expansion.OperandMap[MIOpNo + i].RegRec;
             o << "    Inst.addOperand(MCOperand::createReg(";
             // "zero_reg" is special.
-            if (Reg->getName() == "zero_reg") {
+            if (Reg->getName() == "zero_reg")
               o << "0";
-            } else if (Reg->isSubClassOf("RegisterByHwMode")) {
-              RegisterByHwMode(Reg, Target.getRegBank())
-                  .emitResolverCall(
-                      o, "STI->getHwMode(MCSubtargetInfo::HwMode_RegInfo)");
-            } else {
+            else
               o << Reg->getValueAsString("Namespace") << "::" << Reg->getName();
-            }
             o << "));\n";
             break;
           }

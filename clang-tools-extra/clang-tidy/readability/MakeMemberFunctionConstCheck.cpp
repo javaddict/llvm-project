@@ -37,8 +37,8 @@ AST_MATCHER(CXXMethodDecl, isDependentContext) {
 
 AST_MATCHER(CXXMethodDecl, isInsideMacroDefinition) {
   const ASTContext &Ctxt = Finder->getASTContext();
-  return Lexer::makeFileCharRange(
-             CharSourceRange::getCharRange(
+  return clang::Lexer::makeFileCharRange(
+             clang::CharSourceRange::getCharRange(
                  Node.getTypeSourceInfo()->getTypeLoc().getSourceRange()),
              Ctxt.getSourceManager(), Ctxt.getLangOpts())
       .isInvalid();
@@ -224,9 +224,9 @@ void MakeMemberFunctionConstCheck::registerMatchers(MatchFinder *Finder) {
           cxxMethodDecl(
               isDefinition(), isUserProvided(),
               unless(anyOf(
-                  isVirtual(), isConst(), isStatic(), hasTrivialBody(),
-                  cxxConstructorDecl(), cxxDestructorDecl(), isTemplate(),
-                  isDependentContext(),
+                  isExpansionInSystemHeader(), isVirtual(), isConst(),
+                  isStatic(), hasTrivialBody(), cxxConstructorDecl(),
+                  cxxDestructorDecl(), isTemplate(), isDependentContext(),
                   ofClass(anyOf(isLambda(),
                                 hasAnyDependentBases()) // Method might become
                                                         // virtual depending on

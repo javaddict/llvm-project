@@ -431,9 +431,10 @@ bool Evaluator::EvaluateBlock(BasicBlock::iterator CurInst, BasicBlock *&NextBB,
           Value *PtrArg = getVal(II->getArgOperand(1));
           Value *Ptr = PtrArg->stripPointerCasts();
           if (GlobalVariable *GV = dyn_cast<GlobalVariable>(Ptr)) {
-            uint64_t MinGVSize = GV->getGlobalSize(DL);
+            Type *ElemTy = GV->getValueType();
             if (!Size->isMinusOne() &&
-                Size->getValue().getLimitedValue() >= MinGVSize) {
+                Size->getValue().getLimitedValue() >=
+                    DL.getTypeStoreSize(ElemTy)) {
               Invariants.insert(GV);
               LLVM_DEBUG(dbgs() << "Found a global var that is an invariant: "
                                 << *GV << "\n");
@@ -526,13 +527,16 @@ bool Evaluator::EvaluateBlock(BasicBlock::iterator CurInst, BasicBlock *&NextBB,
     } else if (CurInst->isTerminator()) {
       LLVM_DEBUG(dbgs() << "Found a terminator instruction.\n");
 
-      if (UncondBrInst *BI = dyn_cast<UncondBrInst>(CurInst)) {
-        NextBB = BI->getSuccessor(0);
-      } else if (CondBrInst *BI = dyn_cast<CondBrInst>(CurInst)) {
-        ConstantInt *Cond = dyn_cast<ConstantInt>(getVal(BI->getCondition()));
-        if (!Cond)
-          return false; // Cannot determine.
-        NextBB = BI->getSuccessor(!Cond->getZExtValue());
+      if (BranchInst *BI = dyn_cast<BranchInst>(CurInst)) {
+        if (BI->isUnconditional()) {
+          NextBB = BI->getSuccessor(0);
+        } else {
+          ConstantInt *Cond =
+            dyn_cast<ConstantInt>(getVal(BI->getCondition()));
+          if (!Cond) return false;  // Cannot determine.
+
+          NextBB = BI->getSuccessor(!Cond->getZExtValue());
+        }
       } else if (SwitchInst *SI = dyn_cast<SwitchInst>(CurInst)) {
         ConstantInt *Val =
           dyn_cast<ConstantInt>(getVal(SI->getCondition()));

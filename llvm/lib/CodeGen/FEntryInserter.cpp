@@ -29,7 +29,9 @@ struct FEntryInserter {
 
 struct FEntryInserterLegacy : public MachineFunctionPass {
   static char ID; // Pass identification, replacement for typeid
-  FEntryInserterLegacy() : MachineFunctionPass(ID) {}
+  FEntryInserterLegacy() : MachineFunctionPass(ID) {
+    initializeFEntryInserterLegacyPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &F) override {
     return FEntryInserter().run(F);

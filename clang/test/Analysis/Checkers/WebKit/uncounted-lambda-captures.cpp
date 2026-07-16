@@ -670,18 +670,6 @@ void static_visitor(RefCountable* obj) {
   });
 }
 
-void make_visitor_with_multiple_lambdas(RefCountable* obj) {
-  auto* otherObj = make_obj();
-  auto visitor = WTF::makeVisitor([&] {
-    obj->method();
-    // expected-warning@-1{{Implicitly captured raw-pointer 'obj' to uncounted type is unsafe [webkit.UncountedLambdaCapturesChecker]}}
-  }, [&] {
-    otherObj->method();
-    // expected-warning@-1{{Implicitly captured raw-pointer 'otherObj' to uncounted type is unsafe [webkit.UncountedLambdaCapturesChecker]}}
-  });
-  bad_visit(visitor, obj);
-}
-
 void bad_use_visitor(RefCountable* obj) {
   auto visitor = WTF::makeVisitor([&] {
     obj->method();
@@ -689,25 +677,3 @@ void bad_use_visitor(RefCountable* obj) {
   });
   bad_visit(visitor, obj);
 }
-
-class LambdaInConstructorDestructor {
-public:
-  LambdaInConstructorDestructor() {
-    call([this]() {
-      // expected-warning@-1{{Captured raw-pointer 'this' to uncounted type is unsafe [webkit.UncountedLambdaCapturesChecker]}}
-      doWork();
-    });
-  }
-
-  ~LambdaInConstructorDestructor() {
-    call([this]() {
-      // expected-warning@-1{{Captured raw-pointer 'this' to uncounted type is unsafe [webkit.UncountedLambdaCapturesChecker]}}
-      doWork();
-    });
-  }
-
-  void ref() const;
-  void deref() const;
-
-  void doWork();
-};

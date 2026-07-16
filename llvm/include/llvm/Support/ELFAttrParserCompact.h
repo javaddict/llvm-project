@@ -33,7 +33,7 @@ class LLVM_ABI ELFCompactAttrParser : public ELFAttributeParser {
 protected:
   ScopedPrinter *sw;
   TagNameMap tagToStringMap;
-  DataExtractor de{ArrayRef<uint8_t>{}, true};
+  DataExtractor de{ArrayRef<uint8_t>{}, true, 0};
   DataExtractor::Cursor cursor{0};
 
   void printAttribute(unsigned tag, unsigned value, StringRef valueDesc);

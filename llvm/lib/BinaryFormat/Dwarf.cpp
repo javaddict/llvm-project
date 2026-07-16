@@ -550,7 +550,6 @@ StringRef llvm::dwarf::LanguageDescription(dwarf::SourceLanguageName Name,
   case DW_LNAME_Dylan:
   case DW_LNAME_Go:
   case DW_LNAME_Haskell:
-  case DW_LNAME_HIP:
   case DW_LNAME_HLSL:
   case DW_LNAME_Java:
   case DW_LNAME_Julia:
@@ -602,28 +601,6 @@ llvm::dwarf::getSourceLanguageName(StringRef SourceLanguageNameString) {
   .Case("DW_LNAME_" #NAME, DW_LNAME_##NAME)
 #include "llvm/BinaryFormat/Dwarf.def"
       .Default(0);
-}
-
-StringRef llvm::dwarf::LanguageDialectString(unsigned LanguageDialect) {
-  switch (LanguageDialect) {
-  default:
-    return StringRef();
-#define HANDLE_DW_LLVM_LANG_DIALECT(ID, NAME)                                  \
-  case DW_LLVM_LANG_DIALECT_##NAME:                                            \
-    return "DW_LLVM_LANG_DIALECT_" #NAME;
-#include "llvm/BinaryFormat/Dwarf.def"
-  }
-}
-
-unsigned llvm::dwarf::getLanguageDialect(StringRef LanguageDialectString) {
-  // Return ~0U for unrecognized spellings. The "no dialect" state is
-  // represented by numeric 0 (i.e. omitting the field); there is no
-  // corresponding symbolic enumerator for it.
-  return StringSwitch<unsigned>(LanguageDialectString)
-#define HANDLE_DW_LLVM_LANG_DIALECT(ID, NAME)                                  \
-  .Case("DW_LLVM_LANG_DIALECT_" #NAME, DW_LLVM_LANG_DIALECT_##NAME)
-#include "llvm/BinaryFormat/Dwarf.def"
-      .Default(~0U);
 }
 
 StringRef llvm::dwarf::CaseString(unsigned Case) {
@@ -894,8 +871,6 @@ StringRef llvm::dwarf::AttributeValueString(uint16_t Attr, unsigned Val) {
     return VirtualityString(Val);
   case DW_AT_language:
     return LanguageString(Val);
-  case DW_AT_LLVM_language_dialect:
-    return LanguageDialectString(Val);
   case DW_AT_encoding:
     return AttributeEncodingString(Val);
   case DW_AT_decimal_sign:

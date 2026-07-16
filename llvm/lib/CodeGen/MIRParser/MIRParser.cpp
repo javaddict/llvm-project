@@ -106,8 +106,7 @@ public:
   ///
   /// Return true if an error occurred.
   bool parseMachineFunction(Module &M, MachineModuleInfo &MMI,
-                            ModuleAnalysisManager *FAM,
-                            Module::iterator &FirstUnvisitedFunction);
+                            ModuleAnalysisManager *FAM);
 
   /// Initialize the machine function to the state that's described in the MIR
   /// file.
@@ -115,12 +114,6 @@ public:
   /// Return true if error occurred.
   bool initializeMachineFunction(const yaml::MachineFunction &YamlMF,
                                  MachineFunction &MF);
-
-  bool initializeCallSiteInfo(PerFunctionMIParsingState &PFS,
-                              const yaml::MachineFunction &YamlMF);
-
-  bool initializePrefetchTargets(PerFunctionMIParsingState &PFS,
-                                 const yaml::MachineFunction &YamlMF);
 
   bool parseRegisterInfo(PerFunctionMIParsingState &PFS,
                          const yaml::MachineFunction &YamlMF);
@@ -135,6 +128,9 @@ public:
       PerFunctionMIParsingState &PFS,
       const std::vector<yaml::SaveRestorePointEntry> &YamlSRPoints,
       llvm::SaveRestorePoints &SaveRestorePoints);
+
+  bool initializeCallSiteInfo(PerFunctionMIParsingState &PFS,
+                              const yaml::MachineFunction &YamlMF);
 
   bool parseCalleeSavedRegister(PerFunctionMIParsingState &PFS,
                                 std::vector<CalleeSavedInfo> &CSIInfo,
@@ -300,9 +296,8 @@ bool MIRParserImpl::parseMachineFunctions(Module &M, MachineModuleInfo &MMI,
     return false;
 
   // Parse the machine functions.
-  auto FirstUnvisitedFunction = M.begin();
   do {
-    if (parseMachineFunction(M, MMI, MAM, FirstUnvisitedFunction))
+    if (parseMachineFunction(M, MMI, MAM))
       return true;
     In.nextDocument();
   } while (In.setCurrentDocument());
@@ -324,19 +319,8 @@ Function *MIRParserImpl::createDummyFunction(StringRef Name, Module &M) {
   return F;
 }
 
-static Function *
-getNextUnusedUnnamedFunction(const Module &M,
-                             Module::iterator &FirstUnvisitedFunction) {
-  for (; FirstUnvisitedFunction != M.end(); ++FirstUnvisitedFunction)
-    if (!FirstUnvisitedFunction->hasName())
-      return &*FirstUnvisitedFunction++;
-
-  return nullptr;
-}
-
-bool MIRParserImpl::parseMachineFunction(
-    Module &M, MachineModuleInfo &MMI, ModuleAnalysisManager *MAM,
-    Module::iterator &FirstUnvisitedFunction) {
+bool MIRParserImpl::parseMachineFunction(Module &M, MachineModuleInfo &MMI,
+                                         ModuleAnalysisManager *MAM) {
   // Parse the yaml.
   yaml::MachineFunction YamlMF;
   yaml::EmptyContext Ctx;
@@ -355,8 +339,7 @@ bool MIRParserImpl::parseMachineFunction(
   if (!F) {
     if (NoLLVMIR) {
       F = createDummyFunction(FunctionName, M);
-    } else if (!FunctionName.empty() ||
-               !(F = getNextUnusedUnnamedFunction(M, FirstUnvisitedFunction))) {
+    } else {
       return error(Twine("function '") + FunctionName +
                    "' isn't defined in the provided LLVM IR");
     }
@@ -603,8 +586,6 @@ MIRParserImpl::initializeMachineFunction(const yaml::MachineFunction &YamlMF,
   PerFunctionMIParsingState PFS(MF, SM, IRSlots, *Target);
   if (parseRegisterInfo(PFS, YamlMF))
     return true;
-  if (initializePrefetchTargets(PFS, YamlMF))
-    return true;
   if (!YamlMF.Constants.empty()) {
     auto *ConstantPool = MF.getConstantPool();
     assert(ConstantPool && "Constant pool must be created");
@@ -690,29 +671,11 @@ MIRParserImpl::initializeMachineFunction(const yaml::MachineFunction &YamlMF,
   if (parseCalledGlobals(PFS, MF, YamlMF))
     return true;
 
-  if (initializePrefetchTargets(PFS, YamlMF))
-    return true;
-
   setupDebugValueTracking(MF, PFS, YamlMF);
 
   MF.getSubtarget().mirFileLoaded(MF);
 
   MF.verify(nullptr, nullptr, &errs());
-  return false;
-}
-
-bool MIRParserImpl::initializePrefetchTargets(
-    PerFunctionMIParsingState &PFS, const yaml::MachineFunction &YamlMF) {
-  MachineFunction &MF = PFS.MF;
-  SMDiagnostic Error;
-  DenseMap<UniqueBBID, SmallVector<unsigned>> Targets;
-  for (const auto &YamlTarget : YamlMF.PrefetchTargets) {
-    CallsiteID Target;
-    if (llvm::parsePrefetchTarget(PFS, Target, YamlTarget.Value, Error))
-      return error(Error, YamlTarget.SourceRange);
-    Targets[Target.BBID].push_back(Target.CallsiteIndex);
-  }
-  MF.setPrefetchTargets(Targets);
   return false;
 }
 
@@ -900,8 +863,6 @@ bool MIRParserImpl::initializeFrameInfo(PerFunctionMIParsingState &PFS,
     MFI.ensureMaxAlignment(Align(YamlMFI.MaxAlignment));
   MFI.setAdjustsStack(YamlMFI.AdjustsStack);
   MFI.setHasCalls(YamlMFI.HasCalls);
-  if (YamlMFI.FramePointerPolicy != FramePointerKind::None)
-    MFI.setFramePointerPolicy(YamlMFI.FramePointerPolicy);
   if (YamlMFI.MaxCallFrameSize != ~0u)
     MFI.setMaxCallFrameSize(YamlMFI.MaxCallFrameSize);
   MFI.setCVBytesOfCalleeSavedRegisters(YamlMFI.CVBytesOfCalleeSavedRegisters);
@@ -1312,7 +1273,7 @@ std::unique_ptr<MIRParser> llvm::createMIRParserFromFile(
   auto FileOrErr = MemoryBuffer::getFileOrSTDIN(Filename, /*IsText=*/true);
   if (std::error_code EC = FileOrErr.getError()) {
     Error = SMDiagnostic(Filename, SourceMgr::DK_Error,
-                         "could not open input file: " + EC.message());
+                         "Could not open input file: " + EC.message());
     return nullptr;
   }
   return createMIRParser(std::move(FileOrErr.get()), Context,
@@ -1329,7 +1290,7 @@ llvm::createMIRParser(std::unique_ptr<MemoryBuffer> Contents,
         DS_Error,
         SMDiagnostic(
             Filename, SourceMgr::DK_Error,
-            "cannot read MIR with a Context that discards named Values")));
+            "Can't read MIR with a Context that discards named Values")));
     return nullptr;
   }
   return std::make_unique<MIRParser>(std::make_unique<MIRParserImpl>(

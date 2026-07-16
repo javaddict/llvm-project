@@ -196,13 +196,17 @@ Value *CodeGenFunction::EmitSystemZBuiltinExpr(unsigned BuiltinID,
   }
   case SystemZ::BI__builtin_s390_vflpsb:
   case SystemZ::BI__builtin_s390_vflpdb: {
+    llvm::Type *ResultType = ConvertType(E->getType());
     Value *X = EmitScalarExpr(E->getArg(0));
-    return Builder.CreateFAbs(X);
+    Function *F = CGM.getIntrinsic(Intrinsic::fabs, ResultType);
+    return Builder.CreateCall(F, X);
   }
   case SystemZ::BI__builtin_s390_vflnsb:
   case SystemZ::BI__builtin_s390_vflndb: {
+    llvm::Type *ResultType = ConvertType(E->getType());
     Value *X = EmitScalarExpr(E->getArg(0));
-    return Builder.CreateFNeg(Builder.CreateFAbs(X), "neg");
+    Function *F = CGM.getIntrinsic(Intrinsic::fabs, ResultType);
+    return Builder.CreateFNeg(Builder.CreateCall(F, X), "neg");
   }
   case SystemZ::BI__builtin_s390_vfisb:
   case SystemZ::BI__builtin_s390_vfidb: {

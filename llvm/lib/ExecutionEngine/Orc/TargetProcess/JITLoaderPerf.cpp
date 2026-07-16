@@ -155,11 +155,10 @@ static void writeCodeRecord(const PerfJITCodeLoadRecord &CodeRecord) {
 static void
 writeUnwindRecord(const PerfJITCodeUnwindingInfoRecord &UnwindRecord) {
   assert(State && "PerfState not initialized");
-  LLVM_DEBUG(dbgs() << "Writing unwind record with unwind data size "
-                    << UnwindRecord.UnwindDataSize
-                    << " and EH frame header size "
-                    << UnwindRecord.EHFrameHdrSize << " and mapped size "
-                    << UnwindRecord.MappedSize << "\n");
+  dbgs() << "Writing unwind record with unwind data size "
+         << UnwindRecord.UnwindDataSize << " and EH frame header size "
+         << UnwindRecord.EHFrameHdrSize << " and mapped size "
+         << UnwindRecord.MappedSize << "\n";
   UWR Uwr{RecHeader{static_cast<uint32_t>(UnwindRecord.Prefix.Id),
                     UnwindRecord.Prefix.TotalSize, perf_get_timestamp()},
           UnwindRecord.UnwindDataSize, UnwindRecord.EHFrameHdrSize,

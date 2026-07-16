@@ -13,7 +13,6 @@
 
 namespace llvm {
 class MCSection;
-class formatted_raw_ostream;
 
 /// Implments NVPTX-specific streamer.
 class NVPTXTargetStreamer : public MCTargetStreamer {
@@ -24,19 +23,6 @@ private:
 public:
   NVPTXTargetStreamer(MCStreamer &S);
   ~NVPTXTargetStreamer() override;
-
-  /// Emit the banner which specifies details of PTX generator.
-  virtual void emitBanner() {}
-
-  /// Emit the PTX ISA version number.
-  virtual void emitVersionDirective(unsigned PTXVersion) {}
-
-  /// Emit architecture and platform target.
-  virtual void emitTargetDirective(StringRef Target, bool TexModeIndependent,
-                                   bool HasDebug) {}
-
-  /// Emit address size used for this PTX module.
-  virtual void emitAddressSizeDirective(unsigned AddrSize) {}
 
   /// Outputs the list of the DWARF '.file' directives to the streamer.
   void outputDwarfFileDirectives();
@@ -67,20 +53,9 @@ public:
 };
 
 class NVPTXAsmTargetStreamer : public NVPTXTargetStreamer {
-  formatted_raw_ostream &OS;
-
 public:
-  NVPTXAsmTargetStreamer(MCStreamer &S, formatted_raw_ostream &OS);
+  NVPTXAsmTargetStreamer(MCStreamer &S);
   ~NVPTXAsmTargetStreamer() override;
-
-  void emitBanner() override;
-
-  void emitVersionDirective(unsigned PTXVersion) override;
-
-  void emitTargetDirective(StringRef Target, bool TexModeIndependent,
-                           bool HasDebug) override;
-
-  void emitAddressSizeDirective(unsigned AddrSize) override;
 };
 
 } // end namespace llvm

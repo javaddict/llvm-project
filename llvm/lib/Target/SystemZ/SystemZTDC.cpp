@@ -123,8 +123,8 @@ void SystemZTDCPass::convertFCmp(CmpInst &I) {
   Value *Op0 = I.getOperand(0);
   auto *Const = dyn_cast<ConstantFP>(I.getOperand(1));
   auto Pred = I.getPredicate();
-  // Only scalar comparisons with consts are interesting.
-  if (!Const || !Const->getType()->isFloatingPointTy())
+  // Only comparisons with consts are interesting.
+  if (!Const)
     return;
   // Compute the smallest normal number (and its negation).
   auto &Sem = Op0->getType()->getFltSemantics();

@@ -13,12 +13,12 @@ entry:
   ret void
 }
 
-;CHECK-LABEL: tail_call_regcall:
+;CHECK-LABLE: tail_call_regcall:
 ;CHECK:       # %bb.0:
 ;CHECK-NEXT:  jmp     __regcall3__func                # TAILCALL
 ;CHECK-NEXT:  .Lfunc_end0:
 
-;CHECK-LABEL: __regcall3__func:
+;CHECK-LABLE: __regcall3__func:
 ;CHECK:       addl    $_GLOBAL_OFFSET_TABLE_+({{.*}}), %ecx
 ;CHECK-NEXT:  movl    a0@GOT(%ecx), %ecx
 ;CHECK-NEXT:  movl    %eax, (%ecx)

@@ -254,12 +254,12 @@ CommandObjectDisassemble::CheckRangeSize(std::vector<AddressRange> ranges,
     return ranges;
 
   StreamString msg;
-  msg << "not disassembling " << what << " because it is very large ";
+  msg << "Not disassembling " << what << " because it is very large ";
   for (const AddressRange &r : ranges)
-    r.Dump(&msg, GetTarget(), Address::DumpStyleLoadAddress,
+    r.Dump(&msg, &GetTarget(), Address::DumpStyleLoadAddress,
            Address::DumpStyleFileAddress);
   msg << ". To disassemble specify an instruction count limit, start/stop "
-         "addresses or use the --force option";
+         "addresses or use the --force option.";
   return llvm::createStringError(msg.GetString());
 }
 
@@ -282,16 +282,15 @@ CommandObjectDisassemble::GetContainingAddressRanges() {
     }
   };
 
-  Target *target = GetTarget();
-  assert(target && "target guaranteed by eCommandRequiresTarget");
-  if (target->HasLoadedSections()) {
+  Target &target = GetTarget();
+  if (target.HasLoadedSections()) {
     Address symbol_containing_address;
-    if (target->ResolveLoadAddress(m_options.symbol_containing_addr,
-                                   symbol_containing_address)) {
+    if (target.ResolveLoadAddress(m_options.symbol_containing_addr,
+                                  symbol_containing_address)) {
       get_ranges(symbol_containing_address);
     }
   } else {
-    for (lldb::ModuleSP module_sp : target->GetImages().Modules()) {
+    for (lldb::ModuleSP module_sp : target.GetImages().Modules()) {
       Address file_address;
       if (module_sp->ResolveFileAddress(m_options.symbol_containing_addr,
                                         file_address)) {
@@ -367,7 +366,7 @@ CommandObjectDisassemble::GetCurrentLineRanges() {
 
 llvm::Expected<std::vector<AddressRange>>
 CommandObjectDisassemble::GetNameRanges(CommandReturnObject &result) {
-  ConstString name(m_options.func_name);
+  ConstString name(m_options.func_name.c_str());
 
   ModuleFunctionSearchOptions function_options;
   function_options.include_symbols = true;
@@ -375,8 +374,8 @@ CommandObjectDisassemble::GetNameRanges(CommandReturnObject &result) {
 
   // Find functions matching the given name.
   SymbolContextList sc_list;
-  GetTarget()->GetImages().FindFunctions(name, eFunctionNameTypeAuto,
-                                         function_options, sc_list);
+  GetTarget().GetImages().FindFunctions(name, eFunctionNameTypeAuto,
+                                        function_options, sc_list);
 
   std::vector<AddressRange> ranges;
   llvm::Error range_errs = llvm::Error::success();
@@ -467,10 +466,10 @@ CommandObjectDisassemble::GetRangesForSelectedMode(
 
 void CommandObjectDisassemble::DoExecute(Args &command,
                                          CommandReturnObject &result) {
-  Target *target = GetTarget();
-  assert(target && "target guaranteed by eCommandRequiresTarget");
+  Target &target = GetTarget();
+
   if (!m_options.arch.IsValid())
-    m_options.arch = target->GetArchitecture();
+    m_options.arch = target.GetArchitecture();
 
   if (!m_options.arch.IsValid()) {
     result.AppendError(
@@ -490,23 +489,23 @@ void CommandObjectDisassemble::DoExecute(Args &command,
     if (plugin_name) {
       result.AppendErrorWithFormat(
           "Unable to find Disassembler plug-in named '%s' that supports the "
-          "'%s' architecture",
+          "'%s' architecture.\n",
           plugin_name, m_options.arch.GetArchitectureName());
     } else
       result.AppendErrorWithFormat(
-          "Unable to find Disassembler plug-in for the '%s' architecture",
+          "Unable to find Disassembler plug-in for the '%s' architecture.\n",
           m_options.arch.GetArchitectureName());
     return;
   } else if (flavor_string != nullptr && !disassembler->FlavorValidForArchSpec(
                                              m_options.arch, flavor_string))
-    result.AppendWarningWithFormatv(
-        "invalid disassembler flavor \"{0}\", using default", flavor_string);
+    result.AppendWarningWithFormat(
+        "invalid disassembler flavor \"%s\", using default.\n", flavor_string);
 
   result.SetStatus(eReturnStatusSuccessFinishResult);
 
   if (!command.empty()) {
     result.AppendErrorWithFormat(
-        "\"disassemble\" arguments are specified as options");
+        "\"disassemble\" arguments are specified as options.\n");
     const int terminal_width =
         GetCommandInterpreter().GetDebugger().GetTerminalWidth();
     const bool use_color = GetCommandInterpreter().GetDebugger().GetUseColor();
@@ -565,12 +564,12 @@ void CommandObjectDisassemble::DoExecute(Args &command,
     } else {
       if (m_options.symbol_containing_addr != LLDB_INVALID_ADDRESS) {
         result.AppendErrorWithFormat(
-            "Failed to disassemble memory in function at 0x%8.8" PRIx64,
+            "Failed to disassemble memory in function at 0x%8.8" PRIx64 ".\n",
             m_options.symbol_containing_addr);
       } else {
         result.AppendErrorWithFormat(
-            "Failed to disassemble memory at 0x%8.8" PRIx64,
-            cur_range.GetBaseAddress().GetLoadAddress(target));
+            "Failed to disassemble memory at 0x%8.8" PRIx64 ".\n",
+            cur_range.GetBaseAddress().GetLoadAddress(&target));
       }
     }
     if (print_sc_header)

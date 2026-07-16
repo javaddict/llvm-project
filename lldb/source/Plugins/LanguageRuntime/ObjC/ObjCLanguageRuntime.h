@@ -15,8 +15,6 @@
 #include <optional>
 #include <unordered_set>
 
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
 
 #include "lldb/Breakpoint/BreakpointPrecondition.h"
@@ -69,7 +67,7 @@ public:
     // for the known v1/v2 this is all that needs to be done
     virtual bool IsKVO() {
       if (m_is_kvo == eLazyBoolCalculate) {
-        const char *class_name = GetClassName().AsCString(nullptr);
+        const char *class_name = GetClassName().AsCString();
         if (class_name && *class_name)
           m_is_kvo =
               (LazyBool)(strstr(class_name, "NSKVONotifying_") == class_name);
@@ -81,7 +79,7 @@ public:
     // for the known v1/v2 this is all that needs to be done
     virtual bool IsCFType() {
       if (m_is_cf == eLazyBoolCalculate) {
-        const char *class_name = GetClassName().AsCString(nullptr);
+        const char *class_name = GetClassName().AsCString();
         if (class_name && *class_name)
           m_is_cf = (LazyBool)(strcmp(class_name, "__NSCFType") == 0 ||
                                strcmp(class_name, "NSCFType") == 0);
@@ -342,7 +340,7 @@ protected:
 
   bool AddClass(ObjCISA isa, const ClassDescriptorSP &descriptor_sp) {
     if (isa != 0) {
-      m_isa_to_descriptor.insert_or_assign(isa, descriptor_sp);
+      m_isa_to_descriptor[isa] = descriptor_sp;
       return true;
     }
     return false;
@@ -354,8 +352,8 @@ protected:
   bool AddClass(ObjCISA isa, const ClassDescriptorSP &descriptor_sp,
                 uint32_t class_name_hash) {
     if (isa != 0) {
-      m_isa_to_descriptor.insert_or_assign(isa, descriptor_sp);
-      m_hash_to_isa_map[class_name_hash].push_back(isa);
+      m_isa_to_descriptor[isa] = descriptor_sp;
+      m_hash_to_isa_map.insert(std::make_pair(class_name_hash, isa));
       return true;
     }
     return false;
@@ -421,17 +419,10 @@ private:
 
   typedef std::map<ClassAndSel, lldb::addr_t> MsgImplMap;
   typedef std::map<ClassAndSelStr, lldb::addr_t> MsgImplStrMap;
-  typedef llvm::DenseMap<ObjCISA, ClassDescriptorSP> ISAToDescriptorMap;
-
-  /// Keys are already djbHash values, so use identity as the hash function.
-  struct IdentityHashKeyInfo {
-    static unsigned getHashValue(uint32_t Val) { return Val; }
-    static bool isEqual(uint32_t LHS, uint32_t RHS) { return LHS == RHS; }
-  };
-
-  typedef llvm::SmallVector<ObjCISA, 2> ISAVector;
-  typedef llvm::DenseMap<uint32_t, ISAVector, IdentityHashKeyInfo> HashToISAMap;
+  typedef std::map<ObjCISA, ClassDescriptorSP> ISAToDescriptorMap;
+  typedef std::multimap<uint32_t, ObjCISA> HashToISAMap;
   typedef ISAToDescriptorMap::iterator ISAToDescriptorIterator;
+  typedef HashToISAMap::iterator HashToISAIterator;
   typedef ThreadSafeDenseMap<void *, uint64_t> TypeSizeCache;
 
   MsgImplMap m_impl_cache;

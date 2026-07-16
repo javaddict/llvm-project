@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This defines a checker which detects usage of uninitialized va_list values
+// This defines checkers which detect usage of uninitialized va_list values
 // and va_start calls with no matching va_end.
 //
 //===----------------------------------------------------------------------===//
@@ -64,8 +64,7 @@ class VAListChecker : public Checker<check::PreCall, check::PreStmt<VAArgExpr>,
     int ParamIndex;
   };
   static const SmallVector<VAListAccepter, 15> VAListAccepters;
-  static const CallDescriptionSet VaStart;
-  static const CallDescription VaEnd, VaCopy;
+  static const CallDescription VaStart, VaEnd, VaCopy;
 
 public:
   void checkPreStmt(const VAArgExpr *VAA, CheckerContext &C) const;
@@ -134,18 +133,16 @@ const SmallVector<VAListChecker::VAListAccepter, 15>
                                       // vsnprintf, vsprintf has no wide version
                                       {{CDM::CLibrary, {"vswscanf"}, 3}, 2}};
 
-const CallDescriptionSet VAListChecker::VaStart{
-    {CDM::CLibrary, {"__builtin_va_start"}},
-    {CDM::CLibrary, {"__builtin_c23_va_start"}}};
-
-const CallDescription VAListChecker::VaCopy(CDM::CLibrary,
-                                            {"__builtin_va_copy"}, 2),
+const CallDescription VAListChecker::VaStart(CDM::CLibrary,
+                                             {"__builtin_va_start"}, /*Args=*/2,
+                                             /*Params=*/1),
+    VAListChecker::VaCopy(CDM::CLibrary, {"__builtin_va_copy"}, 2),
     VAListChecker::VaEnd(CDM::CLibrary, {"__builtin_va_end"}, 1);
 } // end anonymous namespace
 
 void VAListChecker::checkPreCall(const CallEvent &Call,
                                  CheckerContext &C) const {
-  if (VaStart.contains(Call))
+  if (VaStart.matches(Call))
     checkVAListStartCall(Call, C);
   else if (VaCopy.matches(Call))
     checkVAListCopyCall(Call, C);
@@ -235,7 +232,7 @@ void VAListChecker::checkDeadSymbols(SymbolReaper &SR,
 const ExplodedNode *
 VAListChecker::getStartCallSite(const ExplodedNode *N,
                                 const MemRegion *Reg) const {
-  const StackFrame *LeakSF = N->getStackFrame();
+  const LocationContext *LeakContext = N->getLocationContext();
   const ExplodedNode *StartCallNode = N;
 
   bool SeenInitializedState = false;
@@ -247,7 +244,8 @@ VAListChecker::getStartCallSite(const ExplodedNode *N,
     } else if (SeenInitializedState) {
       break;
     }
-    if (N->getStackFrame() == LeakSF || N->getStackFrame()->isParentOf(LeakSF))
+    const LocationContext *NContext = N->getLocationContext();
+    if (NContext == LeakContext || NContext->isParentOf(LeakContext))
       StartCallNode = N;
     N = N->pred_empty() ? nullptr : *(N->pred_begin());
   }
@@ -275,7 +273,7 @@ void VAListChecker::reportLeaked(const RegionVector &Leaked, StringRef Msg1,
 
     if (const Stmt *StartCallStmt = StartNode->getStmtForDiagnostics())
       LocUsedForUniqueing = PathDiagnosticLocation::createBegin(
-          StartCallStmt, C.getSourceManager(), StartNode->getStackFrame());
+          StartCallStmt, C.getSourceManager(), StartNode->getLocationContext());
 
     SmallString<100> Buf;
     llvm::raw_svector_ostream OS(Buf);
@@ -287,7 +285,7 @@ void VAListChecker::reportLeaked(const RegionVector &Leaked, StringRef Msg1,
 
     auto R = std::make_unique<PathSensitiveBugReport>(
         LeakBug, OS.str(), N, LocUsedForUniqueing,
-        StartNode->getStackFrame()->getDecl());
+        StartNode->getLocationContext()->getDecl());
     R->markInteresting(Reg);
     R->addVisitor(std::make_unique<VAListBugVisitor>(Reg, true));
     C.emitReport(std::move(R));
@@ -296,9 +294,6 @@ void VAListChecker::reportLeaked(const RegionVector &Leaked, StringRef Msg1,
 
 void VAListChecker::checkVAListStartCall(const CallEvent &Call,
                                          CheckerContext &C) const {
-  if (Call.getNumArgs() == 0)
-    return; // Prevent a crash on grossly invalid input.
-
   const MemRegion *Arg =
       getVAListAsRegion(Call.getArgSVal(0), Call.getArgExpr(0), C);
   if (!Arg)
@@ -412,7 +407,8 @@ PathDiagnosticPieceRef VAListChecker::VAListBugVisitor::VisitNode(
   if (Msg.empty())
     return nullptr;
 
-  PathDiagnosticLocation Pos(S, BRC.getSourceManager(), N->getStackFrame());
+  PathDiagnosticLocation Pos(S, BRC.getSourceManager(),
+                             N->getLocationContext());
   return std::make_shared<PathDiagnosticEventPiece>(Pos, Msg, true);
 }
 

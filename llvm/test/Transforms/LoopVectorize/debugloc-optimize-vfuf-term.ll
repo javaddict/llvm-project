@@ -21,7 +21,7 @@ define i32 @foo(ptr %p) {
 entry:
   br label %loop
 
-loop:
+loop:                                          ; preds = %loop, %entry
   %iv = phi i64 [ %iv.next, %loop ], [ 0, %entry ], !dbg !3
   %conv = trunc i64 0 to i8, !dbg !4
   store i8 %conv, ptr %p, align 1, !dbg !5
@@ -29,7 +29,7 @@ loop:
   %exitcond = icmp eq i64 %iv, 1, !dbg !7
   br i1 %exitcond, label %exit, label %loop, !dbg !8
 
-exit:
+exit:                              ; preds = %loop
   ret i32 0
 }
 

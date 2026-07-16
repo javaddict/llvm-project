@@ -44,7 +44,7 @@ namespace llvm {
   /// 110     6   A <= B
   /// 111     7   Always true
   ///
-  LLVM_ABI unsigned getICmpCode(CmpInst::Predicate Pred);
+  unsigned getICmpCode(CmpInst::Predicate Pred);
 
   /// This is the complement of getICmpCode. It turns a predicate code into
   /// either a constant true or false or the predicate for a new ICmp.
@@ -52,13 +52,12 @@ namespace llvm {
   /// new ICmp instruction.
   /// Non-NULL return value will be a true or false constant.
   /// NULL return means a new ICmp is needed. The predicate is output in Pred.
-  LLVM_ABI Constant *getPredForICmpCode(unsigned Code, bool Sign, Type *OpTy,
-                                        CmpInst::Predicate &Pred);
+  Constant *getPredForICmpCode(unsigned Code, bool Sign, Type *OpTy,
+                               CmpInst::Predicate &Pred);
 
   /// Return true if both predicates match sign or if at least one of them is an
   /// equality comparison (which is signless).
-  LLVM_ABI bool predicatesFoldable(CmpInst::Predicate P1,
-                                   CmpInst::Predicate P2);
+  bool predicatesFoldable(CmpInst::Predicate P1, CmpInst::Predicate P2);
 
   /// Similar to getICmpCode but for FCmpInst. This encodes a fcmp predicate
   /// into a four bit mask.
@@ -90,8 +89,8 @@ namespace llvm {
   /// either a constant true or false or the predicate for a new FCmp.
   /// Non-NULL return value will be a true or false constant.
   /// NULL return means a new ICmp is needed. The predicate is output in Pred.
-  LLVM_ABI Constant *getPredForFCmpCode(unsigned Code, Type *OpTy,
-                                        CmpInst::Predicate &Pred);
+  Constant *getPredForFCmpCode(unsigned Code, Type *OpTy,
+                               CmpInst::Predicate &Pred);
 
   /// Represents the operation icmp (X & Mask) pred C, where pred can only be
   /// eq or ne.
@@ -106,7 +105,7 @@ namespace llvm {
   /// Unless \p AllowNonZeroC is true, C will always be 0. If \p
   /// DecomposeAnd is specified, then, for equality predicates, this will
   /// decompose bitmasking via `and`.
-  LLVM_ABI std::optional<DecomposedBitTest>
+  std::optional<DecomposedBitTest>
   decomposeBitTestICmp(Value *LHS, Value *RHS, CmpInst::Predicate Pred,
                        bool LookThroughTrunc = true, bool AllowNonZeroC = false,
                        bool DecomposeAnd = false);
@@ -115,7 +114,7 @@ namespace llvm {
   /// possible. Unless \p AllowNonZeroC is true, C will always be 0.
   /// If \p DecomposeAnd is specified, then, for equality predicates, this
   /// will decompose bitmasking via `and`.
-  LLVM_ABI std::optional<DecomposedBitTest>
+  std::optional<DecomposedBitTest>
   decomposeBitTest(Value *Cond, bool LookThroughTrunc = true,
                    bool AllowNonZeroC = false, bool DecomposeAnd = false);
 

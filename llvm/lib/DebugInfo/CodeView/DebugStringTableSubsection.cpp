@@ -22,7 +22,7 @@ DebugStringTableSubsectionRef::DebugStringTableSubsectionRef()
     : DebugSubsectionRef(DebugSubsectionKind::StringTable) {}
 
 Error DebugStringTableSubsectionRef::initialize(BinaryStreamRef Contents) {
-  Stream = std::move(Contents);
+  Stream = Contents;
   return Error::success();
 }
 

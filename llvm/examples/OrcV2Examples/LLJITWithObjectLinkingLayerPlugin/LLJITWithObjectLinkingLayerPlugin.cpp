@@ -203,10 +203,10 @@ int main(int argc, char *argv[]) {
       LLJITBuilder()
           .setJITTargetMachineBuilder(std::move(JTMB))
           .setObjectLinkingLayerCreator(
-              [&](ExecutionSession &ES, jitlink::JITLinkMemoryManager &MemMgr) {
+              [&](ExecutionSession &ES) {
                 // Create ObjectLinkingLayer.
-                auto ObjLinkingLayer =
-                    std::make_unique<ObjectLinkingLayer>(ES, MemMgr);
+                auto ObjLinkingLayer = std::make_unique<ObjectLinkingLayer>(
+                    ES, ExitOnErr(jitlink::InProcessMemoryManager::Create()));
                 // Add an instance of our plugin.
                 ObjLinkingLayer->addPlugin(std::make_unique<MyPlugin>());
                 return ObjLinkingLayer;

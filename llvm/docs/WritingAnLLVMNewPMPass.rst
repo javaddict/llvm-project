@@ -25,8 +25,7 @@ Unlike passes under the legacy pass manager where the pass interface is
 defined via inheritance, passes under the new pass manager rely on
 concept-based polymorphism, meaning there is no explicit interface (see
 comments in ``PassManager.h`` for more details). All LLVM passes inherit from
-the CRTP mix-in ``OptionalPassInfoMixin<PassT>`` or
-``RequiredPassInfoMixin<PassT>``. The pass should have a ``run()``
+the CRTP mix-in ``PassInfoMixin<PassT>``. The pass should have a ``run()``
 method which returns a ``PreservedAnalyses`` and takes in some unit of IR
 along with an analysis manager. For example, a function pass would have a
 ``PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);`` method.
@@ -83,7 +82,7 @@ contain the following boilerplate:
 
   namespace llvm {
 
-  class HelloWorldPass : public OptionalPassInfoMixin<HelloWorldPass> {
+  class HelloWorldPass : public PassInfoMixin<HelloWorldPass> {
   public:
     PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
   };
@@ -93,12 +92,8 @@ contain the following boilerplate:
   #endif // LLVM_TRANSFORMS_HELLONEW_HELLOWORLD_H
 
 This creates the class for the pass with a declaration of the ``run()``
-method which actually runs the pass. Inheriting from
-``OptionalPassInfoMixin<PassT>`` or ``RequiredPassInfoMixin<PassT>`` sets up
-some more boilerplate so that we don't have to write it ourselves.
-``RequiredPassInfoMixin`` should be used for passes that cannot be skipped
-(e.g. ``AlwaysInlinerPass``), while ``OptionalPassInfoMixin`` should be used
-for passes that can be skipped (e.g. optimization passes).
+method which actually runs the pass. Inheriting from ``PassInfoMixin<PassT>``
+sets up some more boilerplate so that we don't have to write it ourselves.
 
 Our class is in the ``llvm`` namespace so that we don't pollute the global
 namespace.
@@ -215,13 +210,15 @@ FAQs
 Required passes
 ---------------
 
-A pass that inherits from ``RequiredPassInfoMixin<PassT>`` is a required pass. For example:
+A pass that defines a static ``isRequired()`` method that returns true is a required pass. For example:
 
 .. code-block:: c++
 
-  class HelloWorldPass : public RequiredPassInfoMixin<HelloWorldPass> {
+  class HelloWorldPass : public PassInfoMixin<HelloWorldPass> {
   public:
     PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+
+    static bool isRequired() { return true; }
   };
 
 A required pass is a pass that may not be skipped. An example of a required

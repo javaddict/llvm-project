@@ -339,7 +339,8 @@ std::vector<GlobalValue *> SymbolLinkagePromoter::operator()(Module &M) {
 Function* cloneFunctionDecl(Module &Dst, const Function &F,
                             ValueToValueMapTy *VMap) {
   Function *NewF =
-      Function::Create(F.getFunctionType(), F.getLinkage(), F.getName(), &Dst);
+    Function::Create(cast<FunctionType>(F.getValueType()),
+                     F.getLinkage(), F.getName(), &Dst);
   NewF->copyAttributesFrom(&F);
 
   if (VMap) {

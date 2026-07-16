@@ -583,14 +583,16 @@ bool ARMInstructionSelector::insertComparison(CmpConstants Helper, InsertInfo I,
           .addUse(LHSReg)
           .addUse(RHSReg)
           .add(predOps(ARMCC::AL));
-  constrainSelectedInstRegOperands(*CmpI, TII, TRI, RBI);
+  if (!constrainSelectedInstRegOperands(*CmpI, TII, TRI, RBI))
+    return false;
 
   // Read the comparison flags (if necessary).
   if (Helper.ReadFlagsOpcode != ARM::INSTRUCTION_LIST_END) {
     auto ReadI = BuildMI(I.MBB, I.InsertBefore, I.DbgLoc,
                          TII.get(Helper.ReadFlagsOpcode))
                      .add(predOps(ARMCC::AL));
-    constrainSelectedInstRegOperands(*ReadI, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*ReadI, TII, TRI, RBI))
+      return false;
   }
 
   // Select either 1 or the previous result based on the value of the flags.
@@ -600,7 +602,8 @@ bool ARMInstructionSelector::insertComparison(CmpConstants Helper, InsertInfo I,
                    .addUse(PrevRes)
                    .addImm(1)
                    .add(predOps(Cond, ARM::CPSR));
-  constrainSelectedInstRegOperands(*Mov1I, TII, TRI, RBI);
+  if (!constrainSelectedInstRegOperands(*Mov1I, TII, TRI, RBI))
+    return false;
 
   return true;
 }
@@ -698,22 +701,21 @@ bool ARMInstructionSelector::selectGlobal(MachineInstrBuilder &MIB,
                            .add(predOps(ARMCC::AL));
         addGOTMemOperand(MIBLoad);
 
-        constrainSelectedInstRegOperands(*MIBLoad, TII, TRI, RBI);
+        if (!constrainSelectedInstRegOperands(*MIBLoad, TII, TRI, RBI))
+          return false;
       } else {
         addGOTMemOperand(MIB);
       }
     }
 
-    constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
-    return true;
+    return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
   }
 
   bool isReadOnly = STI.getTargetLowering()->isReadOnly(GV);
   if (STI.isROPI() && isReadOnly) {
     unsigned Opc = UseMovt ? Opcodes.MOV_ga_pcrel : Opcodes.LDRLIT_ga_pcrel;
     MIB->setDesc(TII.get(Opc));
-    constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
-    return true;
+    return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
   }
   if (STI.isRWPI() && !isReadOnly) {
     auto Offset = MRI.createVirtualRegister(&ARM::GPRRegClass);
@@ -728,7 +730,8 @@ bool ARMInstructionSelector::selectGlobal(MachineInstrBuilder &MIB,
                           TII.get(Opcodes.ConstPoolLoad), Offset);
       addOpsForConstantPoolLoad(OffsetMIB, GV, /*IsSBREL*/ true);
     }
-    constrainSelectedInstRegOperands(*OffsetMIB, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*OffsetMIB, TII, TRI, RBI))
+      return false;
 
     // Add the offset to the SB register.
     MIB->setDesc(TII.get(Opcodes.ADDrr));
@@ -738,8 +741,7 @@ bool ARMInstructionSelector::selectGlobal(MachineInstrBuilder &MIB,
         .add(predOps(ARMCC::AL))
         .add(condCodeOp());
 
-    constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
-    return true;
+    return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
   }
 
   if (STI.isTargetELF()) {
@@ -761,8 +763,7 @@ bool ARMInstructionSelector::selectGlobal(MachineInstrBuilder &MIB,
     return false;
   }
 
-  constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
-  return true;
+  return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
 }
 
 bool ARMInstructionSelector::selectSelect(MachineInstrBuilder &MIB,
@@ -779,7 +780,8 @@ bool ARMInstructionSelector::selectSelect(MachineInstrBuilder &MIB,
                   .addUse(CondReg)
                   .addImm(1)
                   .add(predOps(ARMCC::AL));
-  constrainSelectedInstRegOperands(*CmpI, TII, TRI, RBI);
+  if (!constrainSelectedInstRegOperands(*CmpI, TII, TRI, RBI))
+    return false;
 
   // Move a value into the result register based on the result of the
   // comparison.
@@ -794,7 +796,8 @@ bool ARMInstructionSelector::selectSelect(MachineInstrBuilder &MIB,
                    .addUse(TrueReg)
                    .addUse(FalseReg)
                    .add(predOps(ARMCC::EQ, ARM::CPSR));
-  constrainSelectedInstRegOperands(*Mov1I, TII, TRI, RBI);
+  if (!constrainSelectedInstRegOperands(*Mov1I, TII, TRI, RBI))
+    return false;
 
   MIB->eraseFromParent();
   return true;
@@ -806,8 +809,7 @@ bool ARMInstructionSelector::selectShift(unsigned ShiftOpc,
   MIB->setDesc(TII.get(ARM::MOVsr));
   MIB.addImm(ShiftOpc);
   MIB.add(predOps(ARMCC::AL)).add(condCodeOp());
-  constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
-  return true;
+  return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
 }
 
 void ARMInstructionSelector::renderVFPF32Imm(
@@ -898,7 +900,8 @@ bool ARMInstructionSelector::select(MachineInstr &I) {
                 .addImm(0)
                 .add(predOps(ARMCC::AL))
                 .add(condCodeOp());
-        constrainSelectedInstRegOperands(*SubI, TII, TRI, RBI);
+        if (!constrainSelectedInstRegOperands(*SubI, TII, TRI, RBI))
+          return false;
       }
       break;
     }
@@ -945,7 +948,8 @@ bool ARMInstructionSelector::select(MachineInstr &I) {
               .addDef(IgnoredBits)
               .addUse(SrcReg)
               .add(predOps(ARMCC::AL));
-      constrainSelectedInstRegOperands(*MovI, TII, TRI, RBI);
+      if (!constrainSelectedInstRegOperands(*MovI, TII, TRI, RBI))
+        return false;
 
       MIB->eraseFromParent();
       return true;
@@ -1112,7 +1116,8 @@ bool ARMInstructionSelector::select(MachineInstr &I) {
                          .addImm(0)
                          .add(predOps(ARMCC::AL))
                          .addMemOperand(&MemOp);
-        constrainSelectedInstRegOperands(*Instr, TII, TRI, RBI);
+        if (!constrainSelectedInstRegOperands(*Instr, TII, TRI, RBI))
+          return false;
         I.eraseFromParent();
         return true;
       }
@@ -1152,14 +1157,16 @@ bool ARMInstructionSelector::select(MachineInstr &I) {
             .addReg(I.getOperand(0).getReg())
             .addImm(1)
             .add(predOps(ARMCC::AL));
-    constrainSelectedInstRegOperands(*Test, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*Test, TII, TRI, RBI))
+      return false;
 
     // Branch conditionally.
     auto Branch =
         BuildMI(*I.getParent(), I, I.getDebugLoc(), TII.get(Opcodes.Bcc))
             .add(I.getOperand(1))
             .add(predOps(ARMCC::NE, ARM::CPSR));
-    constrainSelectedInstRegOperands(*Branch, TII, TRI, RBI);
+    if (!constrainSelectedInstRegOperands(*Branch, TII, TRI, RBI))
+      return false;
     I.eraseFromParent();
     return true;
   }
@@ -1178,6 +1185,5 @@ bool ARMInstructionSelector::select(MachineInstr &I) {
     return false;
   }
 
-  constrainSelectedInstRegOperands(I, TII, TRI, RBI);
-  return true;
+  return constrainSelectedInstRegOperands(I, TII, TRI, RBI);
 }

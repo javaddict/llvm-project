@@ -2,6 +2,7 @@
 ; turned into branches to the invoke destination.
 
 ; RUN: opt < %s -passes=inline -S | FileCheck %s
+; RUN: opt < %s -passes='cgscc(inline)' -S | FileCheck %s
 ; RUN: opt < %s -passes='module-inline' -S | FileCheck %s
 
 declare void @might_throw()

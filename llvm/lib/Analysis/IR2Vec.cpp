@@ -40,7 +40,7 @@ namespace ir2vec {
 cl::OptionCategory IR2VecCategory("IR2Vec Options");
 
 // FIXME: Use a default vocab when not specified
-cl::opt<std::string>
+static cl::opt<std::string>
     VocabFile("ir2vec-vocab-path", cl::Optional,
               cl::desc("Path to the vocabulary file for IR2Vec"), cl::init(""),
               cl::cat(IR2VecCategory));
@@ -180,9 +180,8 @@ Embedding Embedder::computeEmbeddings(const BasicBlock &BB) const {
   Embedding BBVector(Dimension, 0);
 
   // We consider only the non-debug and non-pseudo instructions
-  for (const auto &I : BB)
-    if (!I.isDebugOrPseudoInst())
-      BBVector += computeEmbeddings(I);
+  for (const auto &I : BB.instructionsWithoutDebug())
+    BBVector += computeEmbeddings(I);
   return BBVector;
 }
 
@@ -477,16 +476,18 @@ VocabStorage Vocabulary::createDummyVocabForTest(unsigned Dim) {
   return VocabStorage(std::move(Sections));
 }
 
-namespace {
-using VocabMap = std::map<std::string, Embedding>;
+// ==----------------------------------------------------------------------===//
+// IR2VecVocabAnalysis
+//===----------------------------------------------------------------------===//
 
-/// Read vocabulary JSON file and populate the section maps.
-Error readVocabularyFromFile(StringRef VocabFilePath, VocabMap &OpcVocab,
-                             VocabMap &TypeVocab, VocabMap &ArgVocab) {
-  auto BufOrError =
-      MemoryBuffer::getFileOrSTDIN(VocabFilePath, /*IsText=*/true);
+// FIXME: Make this optional. We can avoid file reads
+// by auto-generating a default vocabulary during the build time.
+Error IR2VecVocabAnalysis::readVocabulary(VocabMap &OpcVocab,
+                                          VocabMap &TypeVocab,
+                                          VocabMap &ArgVocab) {
+  auto BufOrError = MemoryBuffer::getFileOrSTDIN(VocabFile, /*IsText=*/true);
   if (!BufOrError)
-    return createFileError(VocabFilePath, BufOrError.getError());
+    return createFileError(VocabFile, BufOrError.getError());
 
   auto Content = BufOrError.get()->getBuffer();
 
@@ -513,12 +514,10 @@ Error readVocabularyFromFile(StringRef VocabFilePath, VocabMap &OpcVocab,
 
   return Error::success();
 }
-} // anonymous namespace
 
-/// Generate VocabStorage from vocabulary maps.
-VocabStorage Vocabulary::buildVocabStorage(const VocabMap &OpcVocab,
-                                           const VocabMap &TypeVocab,
-                                           const VocabMap &ArgVocab) {
+void IR2VecVocabAnalysis::generateVocabStorage(VocabMap &OpcVocab,
+                                               VocabMap &TypeVocab,
+                                               VocabMap &ArgVocab) {
 
   // Helper for handling missing entities in the vocabulary.
   // Currently, we use a zero vector. In the future, we will throw an error to
@@ -590,33 +589,48 @@ VocabStorage Vocabulary::buildVocabStorage(const VocabMap &OpcVocab,
   // Create section-based storage instead of flat vocabulary
   // Order must match Vocabulary::Section enum
   std::vector<std::vector<Embedding>> Sections(4);
-  Sections[static_cast<unsigned>(Section::Opcodes)] =
+  Sections[static_cast<unsigned>(Vocabulary::Section::Opcodes)] =
       std::move(NumericOpcodeEmbeddings); // Section::Opcodes
-  Sections[static_cast<unsigned>(Section::CanonicalTypes)] =
+  Sections[static_cast<unsigned>(Vocabulary::Section::CanonicalTypes)] =
       std::move(NumericTypeEmbeddings); // Section::CanonicalTypes
-  Sections[static_cast<unsigned>(Section::Operands)] =
+  Sections[static_cast<unsigned>(Vocabulary::Section::Operands)] =
       std::move(NumericArgEmbeddings); // Section::Operands
-  Sections[static_cast<unsigned>(Section::Predicates)] =
+  Sections[static_cast<unsigned>(Vocabulary::Section::Predicates)] =
       std::move(NumericPredEmbeddings); // Section::Predicates
 
   // Create VocabStorage from organized sections
-  return VocabStorage(std::move(Sections));
+  Vocab.emplace(std::move(Sections));
 }
 
-// ==----------------------------------------------------------------------===//
-// Vocabulary
-//===----------------------------------------------------------------------===//
+void IR2VecVocabAnalysis::emitError(Error Err, LLVMContext &Ctx) {
+  handleAllErrors(std::move(Err), [&](const ErrorInfoBase &EI) {
+    Ctx.emitError("Error reading vocabulary: " + EI.message());
+  });
+}
 
-Expected<Vocabulary> Vocabulary::fromFile(StringRef VocabFilePath,
-                                          float OpcWeight, float TypeWeight,
-                                          float ArgWeight) {
+IR2VecVocabAnalysis::Result
+IR2VecVocabAnalysis::run(Module &M, ModuleAnalysisManager &AM) {
+  auto Ctx = &M.getContext();
+  // If vocabulary is already populated by the constructor, use it.
+  if (Vocab.has_value())
+    return Vocabulary(std::move(Vocab.value()));
+
+  // Otherwise, try to read from the vocabulary file.
+  if (VocabFile.empty()) {
+    // FIXME: Use default vocabulary
+    Ctx->emitError("IR2Vec vocabulary file path not specified; You may need to "
+                   "set it using --ir2vec-vocab-path");
+    return Vocabulary(); // Return invalid result
+  }
+
   VocabMap OpcVocab, TypeVocab, ArgVocab;
-  if (auto Err =
-          readVocabularyFromFile(VocabFilePath, OpcVocab, TypeVocab, ArgVocab))
-    return std::move(Err);
+  if (auto Err = readVocabulary(OpcVocab, TypeVocab, ArgVocab)) {
+    emitError(std::move(Err), *Ctx);
+    return Vocabulary();
+  }
 
   // Scale the vocabulary sections based on the provided weights
-  auto scaleVocabSection = [](VocabMap &Vocab, float Weight) {
+  auto scaleVocabSection = [](VocabMap &Vocab, double Weight) {
     for (auto &Entry : Vocab)
       Entry.second *= Weight;
   };
@@ -625,39 +639,9 @@ Expected<Vocabulary> Vocabulary::fromFile(StringRef VocabFilePath,
   scaleVocabSection(ArgVocab, ArgWeight);
 
   // Generate the numeric lookup vocabulary
-  return Vocabulary(buildVocabStorage(OpcVocab, TypeVocab, ArgVocab));
-}
+  generateVocabStorage(OpcVocab, TypeVocab, ArgVocab);
 
-// ==----------------------------------------------------------------------===//
-// IR2VecVocabAnalysis
-//===----------------------------------------------------------------------===//
-
-void IR2VecVocabAnalysis::emitError(Error Err) {
-  handleAllErrors(std::move(Err), [&](const ErrorInfoBase &EI) {
-    reportFatalUsageError(Twine("error reading vocabulary: ") + EI.message());
-  });
-}
-
-IR2VecVocabAnalysis::Result
-IR2VecVocabAnalysis::run(Module &M, ModuleAnalysisManager &AM) {
-  // If vocabulary is already populated by the constructor, use it.
-  if (Vocab.has_value())
-    return Vocabulary(std::move(Vocab.value()));
-
-  // Otherwise, try to read from the vocabulary file specified via CLI.
-  if (VocabFile.empty())
-    // FIXME: Use default vocabulary
-    reportFatalUsageError(
-        "IR2Vec vocabulary file path not specified; You may need to "
-        "set it using --ir2vec-vocab-path");
-
-  // Use the static factory method to load the vocabulary.
-  auto VocabOrErr =
-      Vocabulary::fromFile(VocabFile, OpcWeight, TypeWeight, ArgWeight);
-  if (!VocabOrErr)
-    emitError(VocabOrErr.takeError());
-
-  return std::move(*VocabOrErr);
+  return Vocabulary(std::move(Vocab.value()));
 }
 
 // ==----------------------------------------------------------------------===//

@@ -7,11 +7,11 @@ contains
 
 subroutine f00(x, v)
   integer :: x, v
-!CHECK: omp.atomic.read %{{[ %#=0-9]+}} memory_order(acq_rel)
+!CHECK: omp.atomic.read %{{[ %#=0-9]+}} memory_order(acquire)
   !$omp atomic read
     v = x
 
-!CHECK: omp.atomic.write %{{[ %#=0-9]+}} memory_order(acq_rel)
+!CHECK: omp.atomic.write %{{[ %#=0-9]+}} memory_order(release)
   !$omp atomic write
     x = v
 end

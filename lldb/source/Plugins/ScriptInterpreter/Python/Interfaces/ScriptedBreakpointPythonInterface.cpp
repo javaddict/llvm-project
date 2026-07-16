@@ -6,16 +6,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../lldb-python.h"
-
-#include "lldb/Breakpoint/Breakpoint.h"
-#include "lldb/Breakpoint/BreakpointLocation.h"
-#include "lldb/Breakpoint/BreakpointResolverScripted.h"
 #include "lldb/Core/PluginManager.h"
+#include "lldb/Host/Config.h"
 #include "lldb/Symbol/SymbolContext.h"
 #include "lldb/Target/ExecutionContext.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/lldb-enumerations.h"
+
+#if LLDB_ENABLE_PYTHON
+
+// LLDB Python header must be included first
+#include "../lldb-python.h"
 
 #include "../SWIGPythonBridge.h"
 #include "../ScriptInterpreterPythonImpl.h"
@@ -31,38 +32,10 @@ ScriptedBreakpointPythonInterface::ScriptedBreakpointPythonInterface(
 
 llvm::Expected<StructuredData::GenericSP>
 ScriptedBreakpointPythonInterface::CreatePluginObject(
-    const ScriptedMetadata &scripted_metadata, lldb::BreakpointSP break_sp) {
-  return ScriptedPythonInterface::CreatePluginObject(
-      scripted_metadata, nullptr, break_sp, scripted_metadata.GetArgsSP());
-}
-
-bool ScriptedBreakpointPythonInterface::OverridesResolver(
-    Target &target, StructuredDataImpl &resolver_data) {
-  Status error;
-
-  TargetSP target_sp = target.shared_from_this();
-
-  StructuredData::ObjectSP obj =
-      Dispatch("overrides_resolver", error, target_sp, resolver_data);
-
-  if (!ScriptedInterface::CheckStructuredDataObject(LLVM_PRETTY_FUNCTION, obj,
-                                                    error)) {
-    Log *log = GetLog(LLDBLog::Script);
-    LLDB_LOG(log, "Error calling overrides_resolver method: {0}", error);
-    return false;
-  }
-  return obj->GetBooleanValue();
-}
-
-void ScriptedBreakpointPythonInterface::SetBreakpoint(
-    lldb::BreakpointSP break_sp) {
-  Status error;
-  StructuredData::ObjectSP obj = Dispatch("set_breakpoint", error, break_sp);
-  if (!ScriptedInterface::CheckStructuredDataObject(LLVM_PRETTY_FUNCTION, obj,
-                                                    error)) {
-    Log *log = GetLog(LLDBLog::Script);
-    LLDB_LOG(log, "Error calling set_breakpoint method: {0}", error);
-  }
+    llvm::StringRef class_name, lldb::BreakpointSP break_sp,
+    const StructuredDataImpl &args_sp) {
+  return ScriptedPythonInterface::CreatePluginObject(class_name, nullptr,
+                                                     break_sp, args_sp);
 }
 
 bool ScriptedBreakpointPythonInterface::ResolverCallback(
@@ -74,7 +47,7 @@ bool ScriptedBreakpointPythonInterface::ResolverCallback(
   if (!ScriptedInterface::CheckStructuredDataObject(LLVM_PRETTY_FUNCTION, obj,
                                                     error)) {
     Log *log = GetLog(LLDBLog::Script);
-    LLDB_LOG(log, "Error calling __callback__ method: {}", error);
+    LLDB_LOG(log, "Error calling __callback__ method: {1}", error);
     return true;
   }
   return obj->GetBooleanValue();
@@ -149,3 +122,5 @@ void ScriptedBreakpointPythonInterface::Initialize() {
 void ScriptedBreakpointPythonInterface::Terminate() {
   PluginManager::UnregisterPlugin(CreateInstance);
 }
+
+#endif

@@ -46,7 +46,6 @@
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -288,10 +287,10 @@ void Preprocessor::Handle_Pragma(Token &Tok) {
 
   // Make and enter a lexer object so that we lex and expand the tokens just
   // like any others.
-  std::unique_ptr<Lexer> TL = Lexer::Create_PragmaLexer(
-      TokLoc, PragmaLoc, RParenLoc, StrVal.size(), *this);
+  Lexer *TL = Lexer::Create_PragmaLexer(TokLoc, PragmaLoc, RParenLoc,
+                                        StrVal.size(), *this);
 
-  EnterSourceFileWithLexer(std::move(TL), nullptr);
+  EnterSourceFileWithLexer(TL, nullptr);
 
   // With everything set up, lex this as a #pragma directive.
   HandlePragmaDirective({PIK__Pragma, PragmaLoc});
@@ -1080,8 +1079,6 @@ struct PragmaDebugHandler : public PragmaHandler {
         Crasher.setAnnotationRange(SourceRange(Tok.getLocation()));
         PP.EnterToken(Crasher, /*IsReinject*/ false);
       }
-    } else if (II->isStr("sleep")) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
     } else if (II->isStr("dump")) {
       Token DumpAnnot;
       DumpAnnot.startToken();

@@ -10,8 +10,8 @@
 
 // class map
 
-// pair<iterator,iterator>             equal_range(const key_type& k); // constexpr since C++26
-// pair<const_iterator,const_iterator> equal_range(const key_type& k) const; // constexpr since C++26
+// pair<iterator,iterator>             equal_range(const key_type& k);
+// pair<const_iterator,const_iterator> equal_range(const key_type& k) const;
 
 #include <map>
 #include <cassert>
@@ -21,7 +21,7 @@
 #include "private_constructor.h"
 #include "is_transparent.h"
 
-TEST_CONSTEXPR_CXX26 bool test() {
+int main(int, char**) {
   {
     typedef std::pair<const int, double> V;
     typedef std::map<int, double> M;
@@ -436,13 +436,6 @@ TEST_CONSTEXPR_CXX26 bool test() {
     assert(r.second == std::next(m.begin(), 8));
   }
 #endif
-  return true;
-}
 
-int main(int, char**) {
-  test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
   return 0;
 }

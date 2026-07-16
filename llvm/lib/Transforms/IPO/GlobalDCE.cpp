@@ -36,7 +36,9 @@ namespace {
 class GlobalDCELegacyPass : public ModulePass {
 public:
   static char ID; // Pass identification, replacement for typeid
-  GlobalDCELegacyPass() : ModulePass(ID) {}
+  GlobalDCELegacyPass() : ModulePass(ID) {
+    initializeGlobalDCELegacyPassPass(*PassRegistry::getPassRegistry());
+  }
   bool runOnModule(Module &M) override {
     if (skipModule(M))
       return false;
@@ -169,12 +171,14 @@ void GlobalDCEPass::ScanVTables(Module &M) {
     // If the type corresponding to the vtable is private to this translation
     // unit, we know that we can see all virtual functions which might use it,
     // so VFE is safe.
-    GlobalObject::VCallVisibility TypeVis = GV.getVCallVisibility();
-    if (TypeVis == GlobalObject::VCallVisibilityTranslationUnit ||
-        (InLTOPostLink &&
-         TypeVis == GlobalObject::VCallVisibilityLinkageUnit)) {
-      LLVM_DEBUG(dbgs() << GV.getName() << " is safe for VFE\n");
-      VFESafeVTables.insert(&GV);
+    if (auto GO = dyn_cast<GlobalObject>(&GV)) {
+      GlobalObject::VCallVisibility TypeVis = GO->getVCallVisibility();
+      if (TypeVis == GlobalObject::VCallVisibilityTranslationUnit ||
+          (InLTOPostLink &&
+           TypeVis == GlobalObject::VCallVisibilityLinkageUnit)) {
+        LLVM_DEBUG(dbgs() << GV.getName() << " is safe for VFE\n");
+        VFESafeVTables.insert(&GV);
+      }
     }
   }
 }

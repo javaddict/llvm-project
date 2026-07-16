@@ -110,14 +110,10 @@ class ScopBuilder final {
   /// This will fill @p ConditionSets with the conditions under which control
   /// will be moved from @p TI to its successors. Hence, @p ConditionSets will
   /// have as many elements as @p TI has successors.
-  ///
-  /// Set @p IsInsideDomain to false when building the conditions that check
-  /// whether @p BB is to be executed, since we are not in its domain yet.
   bool buildConditionSets(BasicBlock *BB, Instruction *TI, Loop *L,
                           __isl_keep isl_set *Domain,
                           DenseMap<BasicBlock *, isl::set> &InvalidDomainMap,
-                          SmallVectorImpl<__isl_give isl_set *> &ConditionSets,
-                          bool IsInsideDomain = true);
+                          SmallVectorImpl<__isl_give isl_set *> &ConditionSets);
 
   /// Build the conditions sets for the branch condition @p Condition in
   /// the @p Domain.
@@ -127,28 +123,20 @@ class ScopBuilder final {
   /// have as many elements as @p TI has successors. If @p TI is nullptr the
   /// context under which @p Condition is true/false will be returned as the
   /// new elements of @p ConditionSets.
-  ///
-  /// Set @p IsInsideDomain to false when building the conditions that check
-  /// whether @p BB is to be executed, since we are not in its domain yet.
   bool buildConditionSets(BasicBlock *BB, Value *Condition, Instruction *TI,
                           Loop *L, __isl_keep isl_set *Domain,
                           DenseMap<BasicBlock *, isl::set> &InvalidDomainMap,
-                          SmallVectorImpl<__isl_give isl_set *> &ConditionSets,
-                          bool IsInsideDomain = true);
+                          SmallVectorImpl<__isl_give isl_set *> &ConditionSets);
 
   /// Build the conditions sets for the switch @p SI in the @p Domain.
   ///
   /// This will fill @p ConditionSets with the conditions under which control
   /// will be moved from @p SI to its successors. Hence, @p ConditionSets will
   /// have as many elements as @p SI has successors.
-  ///
-  /// Set @p IsInsideDomain to false when building the conditions that check
-  /// whether @p BB is to be executed, since we are not in its domain yet.
   bool buildConditionSets(BasicBlock *BB, SwitchInst *SI, Loop *L,
                           __isl_keep isl_set *Domain,
                           DenseMap<BasicBlock *, isl::set> &InvalidDomainMap,
-                          SmallVectorImpl<__isl_give isl_set *> &ConditionSets,
-                          bool IsInsideDomain = true);
+                          SmallVectorImpl<__isl_give isl_set *> &ConditionSets);
 
   /// Build condition sets for unsigned ICmpInst(s).
   /// Special handling is required for unsigned operands to ensure that if
@@ -157,15 +145,12 @@ class ScopBuilder final {
   ///
   /// @param IsStrictUpperBound holds information on the predicate relation
   /// between TestVal and UpperBound, i.e,
-  ///
-  /// Set @p IsInsideDomain to false when building the conditions that check
-  /// whether @p BB is to be executed, since we are not in its domain yet.
   /// TestVal < UpperBound  OR  TestVal <= UpperBound
-  isl::set buildUnsignedConditionSets(
-      BasicBlock *BB, Value *Condition, const isl::set &Domain,
+  __isl_give isl_set *buildUnsignedConditionSets(
+      BasicBlock *BB, Value *Condition, __isl_keep isl_set *Domain,
       const SCEV *SCEV_TestVal, const SCEV *SCEV_UpperBound,
       DenseMap<BasicBlock *, isl::set> &InvalidDomainMap,
-      bool IsStrictUpperBound, bool IsInsideDomain = true);
+      bool IsStrictUpperBound);
 
   /// Propagate the domain constraints through the region @p R.
   ///
@@ -250,20 +235,13 @@ class ScopBuilder final {
   /// @param InvalidDomainMap A map of BB to their invalid domains.
   /// @param E                The SCEV that should be translated.
   /// @param NonNegative      Flag to indicate the @p E has to be
-  ///                         non-negative.
-  /// @param IsInsideDomain If true, assumptions only need to apply during the
-  ///                       execution of @p BB. That is, when we know that we
-  ///                       are in its domain. Must be false if the SCEV is
-  ///                       evaluated outside a ScopStmt, or for code that
-  ///                       computes the domain (since while doing that, we
-  ///                       don't know whether we are in the domain yet).
+  /// non-negative.
   ///
   /// Note that this function will also adjust the invalid context
   /// accordingly.
-  isl::pw_aff getPwAff(BasicBlock *BB,
-                       DenseMap<BasicBlock *, isl::set> &InvalidDomainMap,
-                       const SCEV *E, bool NonNegative = false,
-                       bool IsInsideDomain = true);
+  __isl_give isl_pw_aff *
+  getPwAff(BasicBlock *BB, DenseMap<BasicBlock *, isl::set> &InvalidDomainMap,
+           const SCEV *E, bool NonNegative = false);
 
   /// Create equivalence classes for required invariant accesses.
   ///

@@ -15,7 +15,7 @@
 namespace llvm {
 
 /// Transform all llvm memory intrinsics to explicit loads and stores.
-class DXILMemIntrinsics : public OptionalPassInfoMixin<DXILMemIntrinsics> {
+class DXILMemIntrinsics : public PassInfoMixin<DXILMemIntrinsics> {
 public:
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &);
 };

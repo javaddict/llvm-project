@@ -88,12 +88,10 @@ private:
   friend class ConstantExpr;
 
   void setHasNoUnsignedWrap(bool B) {
-    assert(isa<Instruction>(this) && "cannot modify ConstantExpr");
     SubclassOptionalData =
       (SubclassOptionalData & ~NoUnsignedWrap) | (B * NoUnsignedWrap);
   }
   void setHasNoSignedWrap(bool B) {
-    assert(isa<Instruction>(this) && "cannot modify ConstantExpr");
     SubclassOptionalData =
       (SubclassOptionalData & ~NoSignedWrap) | (B * NoSignedWrap);
   }
@@ -203,8 +201,6 @@ class FPMathOperator : public Operator {
 private:
   friend class Instruction;
 
-  LLVM_ABI LLVM_READONLY FastMathFlags &getFastMathFlagsImpl();
-
   /// 'Fast' means all bits are set.
   void setFast(bool B) {
     setHasAllowReassoc(B);
@@ -216,33 +212,59 @@ private:
     setHasApproxFunc(B);
   }
 
-  void setHasAllowReassoc(bool B) { getFastMathFlagsImpl().setAllowReassoc(B); }
+  void setHasAllowReassoc(bool B) {
+    SubclassOptionalData =
+    (SubclassOptionalData & ~FastMathFlags::AllowReassoc) |
+    (B * FastMathFlags::AllowReassoc);
+  }
 
-  void setHasNoNaNs(bool B) { getFastMathFlagsImpl().setNoNaNs(B); }
+  void setHasNoNaNs(bool B) {
+    SubclassOptionalData =
+      (SubclassOptionalData & ~FastMathFlags::NoNaNs) |
+      (B * FastMathFlags::NoNaNs);
+  }
 
-  void setHasNoInfs(bool B) { getFastMathFlagsImpl().setNoInfs(B); }
+  void setHasNoInfs(bool B) {
+    SubclassOptionalData =
+      (SubclassOptionalData & ~FastMathFlags::NoInfs) |
+      (B * FastMathFlags::NoInfs);
+  }
 
   void setHasNoSignedZeros(bool B) {
-    getFastMathFlagsImpl().setNoSignedZeros(B);
+    SubclassOptionalData =
+      (SubclassOptionalData & ~FastMathFlags::NoSignedZeros) |
+      (B * FastMathFlags::NoSignedZeros);
   }
 
   void setHasAllowReciprocal(bool B) {
-    getFastMathFlagsImpl().setAllowReciprocal(B);
+    SubclassOptionalData =
+      (SubclassOptionalData & ~FastMathFlags::AllowReciprocal) |
+      (B * FastMathFlags::AllowReciprocal);
   }
 
   void setHasAllowContract(bool B) {
-    getFastMathFlagsImpl().setAllowContract(B);
+    SubclassOptionalData =
+        (SubclassOptionalData & ~FastMathFlags::AllowContract) |
+        (B * FastMathFlags::AllowContract);
   }
 
-  void setHasApproxFunc(bool B) { getFastMathFlagsImpl().setApproxFunc(B); }
+  void setHasApproxFunc(bool B) {
+    SubclassOptionalData =
+        (SubclassOptionalData & ~FastMathFlags::ApproxFunc) |
+        (B * FastMathFlags::ApproxFunc);
+  }
 
   /// Convenience function for setting multiple fast-math flags.
   /// FMF is a mask of the bits to set.
-  void setFastMathFlags(FastMathFlags FMF) { getFastMathFlagsImpl() |= FMF; }
+  void setFastMathFlags(FastMathFlags FMF) {
+    SubclassOptionalData |= FMF.Flags;
+  }
 
   /// Convenience function for copying all fast-math flags.
   /// All values in FMF are transferred to this operator.
-  void copyFastMathFlags(FastMathFlags FMF) { getFastMathFlagsImpl() = FMF; }
+  void copyFastMathFlags(FastMathFlags FMF) {
+    SubclassOptionalData = FMF.Flags;
+  }
 
   /// Returns true if `Ty` is composed of a single kind of float-poing type
   /// (possibly repeated within an aggregate).
@@ -254,42 +276,62 @@ private:
     } else if (auto *ArrayTy = dyn_cast<ArrayType>(Ty)) {
       do {
         Ty = ArrayTy->getElementType();
-      } while ((ArrayTy = dyn_cast<ArrayType>(Ty)) != nullptr);
+      } while ((ArrayTy = dyn_cast<ArrayType>(Ty)));
     }
     return Ty->isFPOrFPVectorTy();
   };
 
 public:
   /// Test if this operation allows all non-strict floating-point transforms.
-  bool isFast() const { return getFastMathFlags().isFast(); }
+  bool isFast() const {
+    return ((SubclassOptionalData & FastMathFlags::AllowReassoc) != 0 &&
+            (SubclassOptionalData & FastMathFlags::NoNaNs) != 0 &&
+            (SubclassOptionalData & FastMathFlags::NoInfs) != 0 &&
+            (SubclassOptionalData & FastMathFlags::NoSignedZeros) != 0 &&
+            (SubclassOptionalData & FastMathFlags::AllowReciprocal) != 0 &&
+            (SubclassOptionalData & FastMathFlags::AllowContract) != 0 &&
+            (SubclassOptionalData & FastMathFlags::ApproxFunc) != 0);
+  }
 
   /// Test if this operation may be simplified with reassociative transforms.
-  bool hasAllowReassoc() const { return getFastMathFlags().allowReassoc(); }
+  bool hasAllowReassoc() const {
+    return (SubclassOptionalData & FastMathFlags::AllowReassoc) != 0;
+  }
 
   /// Test if this operation's arguments and results are assumed not-NaN.
-  bool hasNoNaNs() const { return getFastMathFlags().noNaNs(); }
+  bool hasNoNaNs() const {
+    return (SubclassOptionalData & FastMathFlags::NoNaNs) != 0;
+  }
 
   /// Test if this operation's arguments and results are assumed not-infinite.
-  bool hasNoInfs() const { return getFastMathFlags().noInfs(); }
+  bool hasNoInfs() const {
+    return (SubclassOptionalData & FastMathFlags::NoInfs) != 0;
+  }
 
   /// Test if this operation can ignore the sign of zero.
-  bool hasNoSignedZeros() const { return getFastMathFlags().noSignedZeros(); }
+  bool hasNoSignedZeros() const {
+    return (SubclassOptionalData & FastMathFlags::NoSignedZeros) != 0;
+  }
 
   /// Test if this operation can use reciprocal multiply instead of division.
   bool hasAllowReciprocal() const {
-    return getFastMathFlags().allowReciprocal();
+    return (SubclassOptionalData & FastMathFlags::AllowReciprocal) != 0;
   }
 
   /// Test if this operation can be floating-point contracted (FMA).
-  bool hasAllowContract() const { return getFastMathFlags().allowContract(); }
+  bool hasAllowContract() const {
+    return (SubclassOptionalData & FastMathFlags::AllowContract) != 0;
+  }
 
   /// Test if this operation allows approximations of math library functions or
   /// intrinsics.
-  bool hasApproxFunc() const { return getFastMathFlags().approxFunc(); }
+  bool hasApproxFunc() const {
+    return (SubclassOptionalData & FastMathFlags::ApproxFunc) != 0;
+  }
 
   /// Convenience function for getting all the fast-math flags
   FastMathFlags getFastMathFlags() const {
-    return const_cast<FPMathOperator *>(this)->getFastMathFlagsImpl();
+    return FastMathFlags(SubclassOptionalData);
   }
 
   /// Get the maximum error permitted by this operation in ULPs. An accuracy of
@@ -320,8 +362,6 @@ public:
     case Instruction::FRem:
     case Instruction::FPTrunc:
     case Instruction::FPExt:
-    case Instruction::UIToFP:
-    case Instruction::SIToFP:
     // FIXME: To clean up and correct the semantics of fast-math-flags, FCmp
     //        should not be treated as a math op, but the other opcodes should.
     //        This would make things consistent with Select/PHI (FP value type

@@ -28,7 +28,6 @@
 #include "llvm/CodeGen/MBFIWrapper.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
-#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstr.h"
@@ -36,7 +35,6 @@
 #include "llvm/CodeGen/MachineJumpTableInfo.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/MachineOperand.h"
-#include "llvm/CodeGen/MachinePostDominators.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineSizeOpts.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
@@ -140,11 +138,10 @@ PreservedAnalyses BranchFolderPass::run(MachineFunction &MF,
   MBFIWrapper MBBFreqInfo(MBFI);
   BranchFolder Folder(EnableTailMerge, /*CommonHoist=*/true, MBBFreqInfo, MBPI,
                       PSI);
-  if (Folder.OptimizeFunction(MF, MF.getSubtarget().getInstrInfo(),
-                              MF.getSubtarget().getRegisterInfo()))
-    return getMachineFunctionPassPreservedAnalyses();
-
-  return PreservedAnalyses::all();
+  if (!Folder.OptimizeFunction(MF, MF.getSubtarget().getInstrInfo(),
+                               MF.getSubtarget().getRegisterInfo()))
+    return PreservedAnalyses::all();
+  return getMachineFunctionPassPreservedAnalyses();
 }
 
 bool BranchFolderLegacy::runOnMachineFunction(MachineFunction &MF) {
@@ -199,10 +196,10 @@ void BranchFolder::RemoveDeadBlock(MachineBasicBlock *MBB) {
       MF->eraseAdditionalCallInfo(&MI);
 
   // Remove the block.
-  if (MLI)
-    MLI->removeBlock(MBB);
   MF->erase(MBB);
   EHScopeMembership.erase(MBB);
+  if (MLI)
+    MLI->removeBlock(MBB);
 }
 
 bool BranchFolder::OptimizeFunction(MachineFunction &MF,

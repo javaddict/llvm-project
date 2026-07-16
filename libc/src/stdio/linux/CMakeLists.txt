@@ -19,8 +19,10 @@ add_entrypoint_object(
   HDRS
     ../rename.h
   DEPENDS
-    libc.src.__support.OSUtil.linux.syscall_wrappers.rename
+    libc.include.sys_syscall
+    libc.src.__support.OSUtil.osutil
     libc.src.errno.errno
+    libc.hdr.fcntl_macros
 )
 
 add_entrypoint_object(
@@ -31,38 +33,5 @@ add_entrypoint_object(
     ../fdopen.h
   DEPENDS
     libc.src.__support.File.file
-    libc.src.__support.File.platform_file
-)
-
-add_entrypoint_object(
-  stdin
-  SRCS
-    stdin.cpp
-  HDRS
-    ../stdin.h
-  DEPENDS
-    libc.hdr.types.FILE
-    libc.src.__support.File.platform_file
-)
-
-add_entrypoint_object(
-  stdout
-  SRCS
-    stdout.cpp
-  HDRS
-    ../stdout.h
-  DEPENDS
-    libc.hdr.types.FILE
-    libc.src.__support.File.platform_file
-)
-
-add_entrypoint_object(
-  stderr
-  SRCS
-    stderr.cpp
-  HDRS
-    ../stderr.h
-  DEPENDS
-    libc.hdr.types.FILE
     libc.src.__support.File.platform_file
 )

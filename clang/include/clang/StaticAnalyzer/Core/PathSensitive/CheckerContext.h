@@ -89,7 +89,9 @@ public:
 
   /// Returns the number of times the current block has been visited
   /// along the analyzed path.
-  unsigned blockCount() const { return Eng.getNumVisitedCurrent(); }
+  unsigned blockCount() const {
+    return NB.getContext().blockCount();
+  }
 
   ASTContext &getASTContext() {
     return Eng.getContext();
@@ -101,10 +103,16 @@ public:
     return Eng.getContext().getLangOpts();
   }
 
-  const StackFrame *getStackFrame() const { return Pred->getStackFrame(); }
+  const LocationContext *getLocationContext() const {
+    return Pred->getLocationContext();
+  }
 
-  /// Return true if the current StackFrame has no caller context.
-  bool inTopFrame() const { return getStackFrame()->inTopFrame(); }
+  const StackFrameContext *getStackFrame() const {
+    return Pred->getStackFrame();
+  }
+
+  /// Return true if the current LocationContext has no caller context.
+  bool inTopFrame() const { return getLocationContext()->inTopFrame();  }
 
   BugReporter &getBugReporter() {
     return Eng.getBugReporter();
@@ -143,11 +151,13 @@ public:
   }
 
   AnalysisDeclContext *getCurrentAnalysisDeclContext() const {
-    return Pred->getStackFrame()->getAnalysisDeclContext();
+    return Pred->getLocationContext()->getAnalysisDeclContext();
   }
 
   /// Get the blockID.
-  unsigned getBlockID() const { return Eng.getCurrBlock()->getBlockID(); }
+  unsigned getBlockID() const {
+    return NB.getContext().getBlock()->getBlockID();
+  }
 
   /// If the given node corresponds to a PostStore program point,
   /// retrieve the location region as it was uttered in the code.
@@ -162,7 +172,9 @@ public:
   }
 
   /// Get the value of arbitrary expressions at this point in the path.
-  SVal getSVal(const Expr *E) const { return Pred->getSVal(E); }
+  SVal getSVal(const Stmt *S) const {
+    return Pred->getSVal(S);
+  }
 
   ConstCFGElementRef getCFGElementRef() const { return Eng.getCFGElementRef(); }
 
@@ -422,7 +434,7 @@ public:
   /// If AF_INET is a macro, the result should be treated as a source of taint.
   ///
   /// \sa clang::Lexer::getSpelling(), clang::Lexer::getImmediateMacroName().
-  std::string getMacroNameOrSpelling(SourceLocation &Loc);
+  StringRef getMacroNameOrSpelling(SourceLocation &Loc);
 
 private:
   ExplodedNode *addTransitionImpl(ProgramStateRef State,

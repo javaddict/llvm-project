@@ -29,7 +29,6 @@ class Instruction;
 class LoadInst;
 class Loop;
 class MemoryLocation;
-class SCEV;
 class ScalarEvolution;
 class SCEVPredicate;
 template <typename T> class SmallVectorImpl;
@@ -65,8 +64,8 @@ LLVM_ABI bool isDereferenceableAndAlignedPointer(
 
 /// Return true if we know that executing a load from this value cannot trap.
 ///
-/// If ScanFrom is specified this method performs context-sensitive analysis
-/// and returns true if it is safe to load immediately before ScanFrom.
+/// If DT and ScanFrom are specified this method performs context-sensitive
+/// analysis and returns true if it is safe to load immediately before ScanFrom.
 ///
 /// If it is not obviously safe to load from the specified pointer, we do a
 /// quick local scan of the basic block containing ScanFrom, to determine if
@@ -86,13 +85,6 @@ LLVM_ABI bool isSafeToLoadUnconditionally(
 LLVM_ABI bool isDereferenceableAndAlignedInLoop(
     LoadInst *LI, Loop *L, ScalarEvolution &SE, DominatorTree &DT,
     AssumptionCache *AC = nullptr,
-    SmallVectorImpl<const SCEVPredicate *> *Predicates = nullptr);
-
-/// Overload for isDereferenceableAndAlignedInLoop taking the pointer and access
-/// size directly as SCEVs.
-LLVM_ABI bool isDereferenceableAndAlignedInLoop(
-    const SCEV *PtrSCEV, Align Alignment, const SCEV *EltSizeSCEV, Loop *L,
-    ScalarEvolution &SE, DominatorTree &DT, AssumptionCache *AC = nullptr,
     SmallVectorImpl<const SCEVPredicate *> *Predicates = nullptr);
 
 /// Returns true if the loop contains read-only memory accesses and doesn't

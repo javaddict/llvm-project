@@ -141,7 +141,9 @@ class InterleavedAccess : public FunctionPass {
 public:
   static char ID;
 
-  InterleavedAccess() : FunctionPass(ID) {}
+  InterleavedAccess() : FunctionPass(ID) {
+    initializeInterleavedAccessPass(*PassRegistry::getPassRegistry());
+  }
 
   StringRef getPassName() const override { return "Interleaved Access Pass"; }
 
@@ -572,7 +574,7 @@ static void getGapMask(const Constant &MaskConst, unsigned Factor,
     bool AllZero = true;
     for (unsigned Idx = 0U; Idx < LeafMaskLen; ++Idx) {
       Constant *C = MaskConst.getAggregateElement(F + Idx * Factor);
-      if (!C->isNullValue()) {
+      if (!C->isZeroValue()) {
         AllZero = false;
         break;
       }
@@ -594,7 +596,7 @@ static std::pair<Value *, APInt> getMask(Value *WideMask, unsigned Factor,
       // Check if all the intrinsic arguments are the same, except those that
       // are zeros, which we mark as gaps in the gap mask.
       for (auto [Idx, Arg] : enumerate(IMI->args())) {
-        if (auto *C = dyn_cast<Constant>(Arg); C && C->isNullValue()) {
+        if (auto *C = dyn_cast<Constant>(Arg); C && C->isZeroValue()) {
           GapMask.clearBit(Idx);
           continue;
         }
@@ -667,7 +669,7 @@ static std::pair<Value *, APInt> getMask(Value *WideMask, unsigned Factor,
     SmallVector<unsigned> StartIndexes;
     if (ShuffleVectorInst::isInterleaveMask(SVI->getShuffleMask(), Factor,
                                             NumSrcElts * 2, StartIndexes) &&
-        llvm::all_of(StartIndexes, equal_to(0)) &&
+        llvm::all_of(StartIndexes, [](unsigned Start) { return Start == 0; }) &&
         llvm::all_of(SVI->getShuffleMask(), [&NumSrcElts](int Idx) {
           return Idx < (int)NumSrcElts;
         })) {
@@ -698,7 +700,6 @@ bool InterleavedAccessImpl::lowerDeinterleaveIntrinsic(
   assert(Factor && "unexpected deinterleave intrinsic");
 
   Value *Mask = nullptr;
-  auto GapMask = APInt::getAllOnes(Factor);
   if (LI) {
     if (!LI->isSimple())
       return false;
@@ -712,20 +713,24 @@ bool InterleavedAccessImpl::lowerDeinterleaveIntrinsic(
       return false;
 
     // Check mask operand. Handle both all-true/false and interleaved mask.
+    APInt GapMask(Factor, 0);
     std::tie(Mask, GapMask) =
         getMask(getMaskOperand(II), Factor, getDeinterleavedVectorType(DI));
     if (!Mask)
       return false;
+    // We haven't supported gap mask if it's deinterleaving using intrinsics.
+    // Yet it is possible that we already changed the IR, hence returning true
+    // here.
+    if (GapMask.popcount() != Factor)
+      return true;
 
     LLVM_DEBUG(dbgs() << "IA: Found a vp.load or masked.load with deinterleave"
                       << " intrinsic " << *DI << " and factor = "
                       << Factor << "\n");
-    LLVM_DEBUG(dbgs() << "IA: With nominal factor " << Factor
-                      << " and actual factor " << GapMask.popcount() << "\n");
   }
 
   // Try and match this with target specific intrinsics.
-  if (!TLI->lowerDeinterleaveIntrinsicToLoad(LoadedVal, Mask, DI, GapMask))
+  if (!TLI->lowerDeinterleaveIntrinsicToLoad(LoadedVal, Mask, DI))
     return false;
 
   DeadInsts.insert(DI);
@@ -738,7 +743,9 @@ bool InterleavedAccessImpl::lowerInterleaveIntrinsic(
     IntrinsicInst *IntII, SmallSetVector<Instruction *, 32> &DeadInsts) {
   if (!IntII->hasOneUse())
     return false;
-  Instruction *StoredBy = IntII->user_back();
+  Instruction *StoredBy = dyn_cast<Instruction>(IntII->user_back());
+  if (!StoredBy)
+    return false;
   auto *SI = dyn_cast<StoreInst>(StoredBy);
   auto *II = dyn_cast<IntrinsicInst>(StoredBy);
   if (!SI && !II)

@@ -159,7 +159,7 @@ for name in [
     "TypeAttr",
     "UnitAttr",
     "DenseStringElementsAttr",
-    "DenseTypedElementsAttr",
+    "DenseIntOrFPElementsAttr",
     "SparseElementsAttr",
     # mlir/IR/BuiltinTypes.h
     "ComplexType",

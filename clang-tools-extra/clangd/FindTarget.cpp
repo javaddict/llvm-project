@@ -552,10 +552,6 @@ allTargetDecls(const DynTypedNode &N, const HeuristicResolver *Resolver) {
     Finder.add(PL->getProtocol(), Flags);
   else if (const ConceptReference *CR = N.get<ConceptReference>())
     Finder.add(CR, Flags);
-  else if (const OffsetOfNode *OON = N.get<OffsetOfNode>()) {
-    if (OON->getKind() == OffsetOfNode::Field)
-      Finder.add(OON->getField(), Flags);
-  }
   return Finder.takeDecls();
 }
 
@@ -849,14 +845,14 @@ refInTypeLoc(TypeLoc L, const HeuristicResolver *Resolver) {
 
     void VisitUnresolvedUsingTypeLoc(UnresolvedUsingTypeLoc L) {
       Refs.push_back(ReferenceLoc{L.getQualifierLoc(),
-                                  L.getNameLoc(),
+                                  L.getLocalSourceRange().getBegin(),
                                   /*IsDecl=*/false,
                                   {L.getDecl()}});
     }
 
     void VisitUsingTypeLoc(UsingTypeLoc L) {
       Refs.push_back(ReferenceLoc{L.getQualifierLoc(),
-                                  L.getNameLoc(),
+                                  L.getLocalSourceRange().getBegin(),
                                   /*IsDecl=*/false,
                                   {L.getDecl()}});
     }
@@ -1023,11 +1019,6 @@ public:
     return true;
   }
 
-  bool VisitOffsetOfNode(const OffsetOfNode *N) {
-    visitNode(DynTypedNode::create(*N));
-    return true;
-  }
-
 private:
   /// Obtain information about a reference directly defined in \p N. Does not
   /// recurse into child nodes, e.g. do not expect references for constructor
@@ -1082,14 +1073,6 @@ private:
                            CR->getConceptNameLoc(),
                            /*IsDecl=*/false,
                            {CR->getNamedConcept()}}};
-    if (const OffsetOfNode *OON = N.get<OffsetOfNode>()) {
-      if (OON->getKind() == OffsetOfNode::Field)
-        return {ReferenceLoc{NestedNameSpecifierLoc(),
-                             OON->getEndLoc(),
-                             /*IsDecl=*/false,
-                             {OON->getField()}}};
-      return {};
-    }
 
     // We do not have location information for other nodes (QualType, etc)
     return {};

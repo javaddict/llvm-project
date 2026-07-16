@@ -39,9 +39,3 @@
 // RUN:   %s 2>&1 | FileCheck -check-prefix=NOCOLON %s
 
 // NOCOLON: error: invalid target ID 'gfx900+xnack'
-
-// RUN: not %clang --target=amdgcn-amd-amdhsa \
-// RUN:   -mcpu=gfx900::xnack+ -nostdlib \
-// RUN:   %s 2>&1 | FileCheck -check-prefix=EXTRACOL %s
-
-// EXTRACOL: error: invalid target ID 'gfx900::xnack+'

@@ -10,7 +10,6 @@ import abc
 import os
 import sys
 import traceback
-from typing import List
 import unittest
 
 from types import SimpleNamespace
@@ -216,14 +215,6 @@ class DebuggerBase(object, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def _get_step_info(self, watches, step_index):
-        pass
-
-    @abc.abstractmethod
-    def get_stack_frames(self, step_index: int) -> StepIR:
-        pass
-
-    @abc.abstractmethod
-    def collect_watches(self, step: StepIR, watches: List[str]):
         pass
 
     @abc.abstractproperty

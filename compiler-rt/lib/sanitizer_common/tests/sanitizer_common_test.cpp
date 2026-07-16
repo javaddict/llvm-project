@@ -21,7 +21,6 @@
 #include "../../../include/sanitizer/asan_interface.h"
 #include "../../../include/sanitizer/msan_interface.h"
 #include "../../../include/sanitizer/tsan_interface.h"
-#include "../../../include/sanitizer/tysan_interface.h"
 #include "gtest/gtest.h"
 #include "sanitizer_common/sanitizer_allocator_internal.h"
 #include "sanitizer_common/sanitizer_common.h"

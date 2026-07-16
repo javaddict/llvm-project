@@ -3,8 +3,7 @@
 
 [[clang::require_constant_initialization]] int cc = cc; // both-error {{variable does not have a constant initializer}} \
                                                         // both-note {{attribute here}} \
-                                                        // both-note {{ead of object outside its lifetime}} \
-                                                        // both-note {{declared here}}
+                                                        // both-note {{ead of object outside its lifetime}}
 
 
 struct F { int a; int b;};
@@ -149,32 +148,4 @@ namespace NonConstexprStructuredBinding {
     auto [a, b] = arr;
     static_assert(&a != &b);
   }
-}
-
-
-
-
-int d, m;
-struct C {
-  constexpr C() {}
-  constexpr C(const C &) {}
-  template <int I> int &get() const {
-    // static_assert(d == 1 + I);
-    ++d;
-    return m;
-  }
-};
-
-template <> struct std::tuple_size<const C> {
-  static const int value = 3;
-};
-template <int I> struct std::tuple_element<I, const C> {
-  using type = int;
-};
-
-namespace ZeroInCheckInvoke {
-  constexpr C foo(const C &) { return C{}; }
-#ifndef __MVS__
-  thread_local const auto &[s, t, u] = foo(C{}); // both-warning {{thread_local}}
-#endif
 }

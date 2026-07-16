@@ -35,8 +35,8 @@
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/raw_ostream.h"
 #include <functional>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -91,10 +91,9 @@ inline bool partiallyMatches(const til::SExpr *E1, const til::SExpr *E2) {
 }
 
 inline std::string toString(const til::SExpr *E) {
-  std::string s;
-  llvm::raw_string_ostream ss(s);
+  std::stringstream ss;
   til::StdPrinter::print(E, ss);
-  return s;
+  return ss.str();
 }
 
 }  // namespace sx

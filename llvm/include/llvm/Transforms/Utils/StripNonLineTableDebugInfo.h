@@ -16,9 +16,9 @@ namespace llvm {
 class Module;
 
 class StripNonLineTableDebugInfoPass
-    : public OptionalPassInfoMixin<StripNonLineTableDebugInfoPass> {
+    : public PassInfoMixin<StripNonLineTableDebugInfoPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
 
 } // end namespace llvm

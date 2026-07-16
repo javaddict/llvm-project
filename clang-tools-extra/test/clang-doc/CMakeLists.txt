@@ -5,7 +5,3 @@ add_lit_testsuite(check-clang-extra-clang-doc "Running clang-doc tests"
   DEPENDS clang-doc
   DEPENDS ${LLVM_UTILS_DEPS}
 )
-
-if (LLVM_INCLUDE_BENCHMARKS)
-   add_dependencies(check-clang-extra-clang-doc ClangDocBenchmark)
-endif()

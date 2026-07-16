@@ -13,13 +13,13 @@
 
 namespace llvm {
 
-class PostRASchedulerPass : public OptionalPassInfoMixin<PostRASchedulerPass> {
+class PostRASchedulerPass : public PassInfoMixin<PostRASchedulerPass> {
   const TargetMachine *TM;
 
 public:
   PostRASchedulerPass(const TargetMachine *TM) : TM(TM) {}
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
 
   MachineFunctionProperties getRequiredProperties() const {
     return MachineFunctionProperties().setNoVRegs();

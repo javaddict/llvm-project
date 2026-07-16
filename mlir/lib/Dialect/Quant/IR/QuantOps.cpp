@@ -200,8 +200,7 @@ struct QuantInlinerInterface : public DialectInlinerInterface {
 
 void QuantDialect::initialize() {
   addTypes<AnyQuantizedType, CalibratedQuantizedType, UniformQuantizedType,
-           UniformQuantizedPerAxisType, UniformQuantizedSubChannelType,
-           QuantileType>();
+           UniformQuantizedPerAxisType, UniformQuantizedSubChannelType>();
   addOperations<
 #define GET_OP_LIST
 #include "mlir/Dialect/Quant/IR/QuantOps.cpp.inc"

@@ -14,6 +14,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/MachineScheduler.h"
+#include "llvm/CodeGen/ResourceCycle.h"
 #include "llvm/CodeGen/TargetSchedule.h"
 #include <limits>
 #include <memory>
@@ -28,14 +29,14 @@ class SUnit;
 class TargetInstrInfo;
 class TargetSubtargetInfo;
 
-class LLVM_ABI VLIWResourceModel {
+class VLIWResourceModel {
 protected:
   const TargetInstrInfo *TII;
 
   /// ResourcesModel - Represents VLIW state.
   /// Not limited to VLIW targets per se, but assumes definition of resource
   /// model by a target.
-  DFAPacketizer *ResourcesModel;
+  ResourceCycle *ResourcesModel;
 
   const TargetSchedModel *SchedModel;
 
@@ -62,12 +63,12 @@ public:
   bool isInPacket(SUnit *SU) const { return is_contained(Packet, SU); }
 
 protected:
-  virtual DFAPacketizer *createPacketizer(const TargetSubtargetInfo &STI) const;
+  virtual ResourceCycle *createPacketizer(const TargetSubtargetInfo &STI) const;
 };
 
 /// Extend the standard ScheduleDAGMILive to provide more context and override
 /// the top-level schedule() driver.
-class LLVM_ABI VLIWMachineScheduler : public ScheduleDAGMILive {
+class VLIWMachineScheduler : public ScheduleDAGMILive {
 public:
   VLIWMachineScheduler(MachineSchedContext *C,
                        std::unique_ptr<MachineSchedStrategy> S)
@@ -86,7 +87,7 @@ public:
 // MachineSchedStrategy.
 //===----------------------------------------------------------------------===//
 
-class LLVM_ABI ConvergingVLIWScheduler : public MachineSchedStrategy {
+class ConvergingVLIWScheduler : public MachineSchedStrategy {
 protected:
   /// Store the state used by ConvergingVLIWScheduler heuristics, required
   ///  for the lifetime of one invocation of pickNode().
@@ -151,7 +152,7 @@ protected:
         : Available(ID, Name + ".A"),
           Pending(ID << ConvergingVLIWScheduler::LogMaxQID, Name + ".P") {}
 
-    LLVM_ABI ~VLIWSchedBoundary();
+    ~VLIWSchedBoundary();
     VLIWSchedBoundary &operator=(const VLIWSchedBoundary &other) = delete;
     VLIWSchedBoundary(const VLIWSchedBoundary &other) = delete;
 
@@ -186,19 +187,19 @@ protected:
       return Available.getID() == ConvergingVLIWScheduler::TopQID;
     }
 
-    LLVM_ABI bool checkHazard(SUnit *SU);
+    bool checkHazard(SUnit *SU);
 
-    LLVM_ABI void releaseNode(SUnit *SU, unsigned ReadyCycle);
+    void releaseNode(SUnit *SU, unsigned ReadyCycle);
 
-    LLVM_ABI void bumpCycle();
+    void bumpCycle();
 
-    LLVM_ABI void bumpNode(SUnit *SU);
+    void bumpNode(SUnit *SU);
 
-    LLVM_ABI void releasePending();
+    void releasePending();
 
-    LLVM_ABI void removeReady(SUnit *SU);
+    void removeReady(SUnit *SU);
 
-    LLVM_ABI SUnit *pickOnlyChoice();
+    SUnit *pickOnlyChoice();
 
     bool isLatencyBound(SUnit *SU) {
       if (CurrCycle >= CriticalPathLength)

@@ -3,9 +3,8 @@
 // RUN: llvm-mc -g -dwarf-version 2 -triple  i686-pc-linux-gnu %s -filetype=asm -o - | FileCheck --check-prefix=ASM --check-prefix=DWARF2 %s
 // RUN: llvm-mc -g -dwarf-version 3 -triple  i686-pc-linux-gnu %s -filetype=asm -o - | FileCheck --check-prefix=ASM --check-prefix=DWARF3 %s
 // RUN: llvm-mc -g -triple  i686-pc-linux-gnu %s -filetype=asm -o - | FileCheck --check-prefix=ASM --check-prefix=DWARF4 %s
-// RUN: llvm-mc -g -dwarf-version 5  -triple  i686-pc-linux-gnu %s -filetype=asm -o - 2>&1 | FileCheck --check-prefix=DWARF5,DWARF5_VER %s
-// RUN: llvm-mc -g -dwarf-version 6  -triple  i686-pc-linux-gnu %s -filetype=asm -o - 2>&1 | FileCheck --check-prefix=DWARF5,DWARF6_VER %s
-// RUN: not llvm-mc -g -dwarf-version 7  -triple  i686-pc-linux-gnu %s -filetype=asm -o - 2>&1 | FileCheck --check-prefix=DWARF7 %s
+// RUN: llvm-mc -g -dwarf-version 5  -triple  i686-pc-linux-gnu %s -filetype=asm -o - 2>&1 | FileCheck --check-prefix=DWARF5 %s
+// RUN: not llvm-mc -g -dwarf-version 6  -triple  i686-pc-linux-gnu %s -filetype=asm -o - 2>&1 | FileCheck --check-prefix=DWARF6 %s
 
 
 // Test that on ELF:
@@ -47,8 +46,7 @@ foo:
 // DWARF3: .short 3
 // DWARF4: .short 4
 // ASM-NEXT: .long [[ABBREV_LABEL]]
-// DWARF5_VER: .short 5
-// DWARF6_VER: .short 6
+// DWARF5: .short 5
 // DWARF5-NEXT: .byte 1
 // DWARF5-NEXT: .byte 4
 // DWARF5-NEXT: .long [[ABBREV_LABEL]]
@@ -61,4 +59,4 @@ foo:
 // ASM-NEXT: [[LINE_LABEL]]
 
 // DWARF1: Dwarf version 1 is not supported.
-// DWARF7: Dwarf version 7 is not supported.
+// DWARF6: Dwarf version 6 is not supported.

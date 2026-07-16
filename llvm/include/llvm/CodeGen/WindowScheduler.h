@@ -58,7 +58,7 @@ enum WindowSchedulingFlag {
 
 /// The main class in the implementation of the target independent window
 /// scheduler.
-class LLVM_ABI WindowScheduler {
+class WindowScheduler {
 protected:
   MachineSchedContext *Context = nullptr;
   MachineFunction *MF = nullptr;

@@ -17,4 +17,3 @@ functions:
       - stdc
     attributes:
       - CONST_FUNC_A
-      - MACRO_ATTR(A)

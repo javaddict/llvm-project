@@ -764,9 +764,6 @@ Error MetadataParser::validateRootSignature(
 
 Expected<mcdxbc::RootSignatureDesc>
 MetadataParser::ParseRootSignature(uint32_t Version) {
-  assert(hlsl::rootsig::verifyVersion(Version) &&
-         "Unsupported Root Signature version");
-
   Error DeferredErrs = Error::success();
   mcdxbc::RootSignatureDesc RSD;
   RSD.Version = Version;

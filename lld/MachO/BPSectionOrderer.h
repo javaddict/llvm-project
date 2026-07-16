@@ -14,8 +14,6 @@
 #ifndef LLD_MACHO_BPSECTION_ORDERER_H
 #define LLD_MACHO_BPSECTION_ORDERER_H
 
-#include "lld/Common/BPSectionOrdererBase.h"
-#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -27,11 +25,10 @@ class InputSection;
 ///
 /// It is important that .subsections_via_symbols is used to ensure functions
 /// and data are in their own sections and thus can be reordered.
-llvm::DenseMap<const InputSection *, int> runBalancedPartitioning(
-    llvm::StringRef profilePath,
-    llvm::ArrayRef<BPCompressionSortSpec> compressionSortSpecs,
-    bool forFunctionCompression, bool forDataCompression,
-    bool compressionSortStartupFunctions, bool verbose);
+llvm::DenseMap<const InputSection *, int>
+runBalancedPartitioning(llvm::StringRef profilePath,
+                        bool forFunctionCompression, bool forDataCompression,
+                        bool compressionSortStartupFunctions, bool verbose);
 
 } // namespace lld::macho
 

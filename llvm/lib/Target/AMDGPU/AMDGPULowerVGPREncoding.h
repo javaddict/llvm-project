@@ -14,7 +14,7 @@
 namespace llvm {
 
 class AMDGPULowerVGPREncodingPass
-    : public OptionalPassInfoMixin<AMDGPULowerVGPREncodingPass> {
+    : public PassInfoMixin<AMDGPULowerVGPREncodingPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);

@@ -16,12 +16,10 @@ namespace llvm {
 class LPMUpdater;
 class Loop;
 
-class LoopVersioningLICMPass
-    : public OptionalPassInfoMixin<LoopVersioningLICMPass> {
+class LoopVersioningLICMPass : public PassInfoMixin<LoopVersioningLICMPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
-                                 LoopStandardAnalysisResults &LAR,
-                                 LPMUpdater &U);
+  PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
+                        LoopStandardAnalysisResults &LAR, LPMUpdater &U);
 };
 
 } // namespace llvm

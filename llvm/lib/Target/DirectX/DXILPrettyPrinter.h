@@ -19,8 +19,7 @@
 namespace llvm {
 
 /// A pass that prints resources in a format suitable for textual DXIL.
-class DXILPrettyPrinterPass
-    : public OptionalPassInfoMixin<DXILPrettyPrinterPass> {
+class DXILPrettyPrinterPass : public PassInfoMixin<DXILPrettyPrinterPass> {
   raw_ostream &OS;
 
 public:

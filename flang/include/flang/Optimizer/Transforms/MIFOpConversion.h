@@ -20,9 +20,7 @@ class LLVMTypeConverter;
 namespace mif {
 
 /// Patterns that convert MIF operations to runtime calls.
-void populateMIFOpConversionPatterns(const fir::LLVMTypeConverter &converter,
-                                     mlir::DataLayout &dl,
-                                     mlir::RewritePatternSet &patterns);
+void populateMIFOpConversionPatterns(mlir::RewritePatternSet &patterns);
 
 } // namespace mif
 

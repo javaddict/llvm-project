@@ -72,9 +72,6 @@ struct CodeGenTypeCache {
     llvm::PointerType *GlobalsInt8PtrTy;
   };
 
-  /// Pointer in program address space
-  llvm::PointerType *ProgramPtrTy;
-
   /// void* in the address space for constant globals
   llvm::PointerType *ConstGlobalsPtrTy;
 
@@ -106,6 +103,8 @@ struct CodeGenTypeCache {
     unsigned char SizeAlignInBytes;
   };
 
+  LangAS ASTAllocaAddressSpace;
+
   CharUnits getSizeSize() const {
     return CharUnits::fromQuantity(SizeSizeInBytes);
   }
@@ -121,6 +120,8 @@ struct CodeGenTypeCache {
 
   llvm::CallingConv::ID RuntimeCC;
   llvm::CallingConv::ID getRuntimeCC() const { return RuntimeCC; }
+
+  LangAS getASTAllocaAddressSpace() const { return ASTAllocaAddressSpace; }
 };
 
 }  // end namespace CodeGen

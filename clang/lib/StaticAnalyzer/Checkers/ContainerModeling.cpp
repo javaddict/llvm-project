@@ -109,10 +109,12 @@ SymbolRef getContainerEnd(ProgramStateRef State, const MemRegion *Cont);
 ProgramStateRef createContainerBegin(ProgramStateRef State,
                                      const MemRegion *Cont,
                                      ConstCFGElementRef Elem, QualType T,
-                                     const StackFrame *SF, unsigned BlockCount);
+                                     const LocationContext *LCtx,
+                                     unsigned BlockCount);
 ProgramStateRef createContainerEnd(ProgramStateRef State, const MemRegion *Cont,
                                    ConstCFGElementRef Elem, QualType T,
-                                   const StackFrame *SF, unsigned BlockCount);
+                                   const LocationContext *LCtx,
+                                   unsigned BlockCount);
 ProgramStateRef setContainerData(ProgramStateRef State, const MemRegion *Cont,
                                  const ContainerData &CData);
 ProgramStateRef invalidateAllIteratorPositions(ProgramStateRef State,
@@ -262,7 +264,7 @@ void ContainerModeling::handleBegin(CheckerContext &C, ConstCFGElementRef Elem,
   auto BeginSym = getContainerBegin(State, ContReg);
   if (!BeginSym) {
     State = createContainerBegin(State, ContReg, Elem, C.getASTContext().LongTy,
-                                 C.getStackFrame(), C.blockCount());
+                                 C.getLocationContext(), C.blockCount());
     BeginSym = getContainerBegin(State, ContReg);
   }
   State = setIteratorPosition(State, RetVal,
@@ -284,7 +286,7 @@ void ContainerModeling::handleEnd(CheckerContext &C, ConstCFGElementRef Elem,
   auto EndSym = getContainerEnd(State, ContReg);
   if (!EndSym) {
     State = createContainerEnd(State, ContReg, Elem, C.getASTContext().LongTy,
-                               C.getStackFrame(), C.blockCount());
+                               C.getLocationContext(), C.blockCount());
     EndSym = getContainerEnd(State, ContReg);
   }
   State = setIteratorPosition(State, RetVal,
@@ -328,7 +330,7 @@ void ContainerModeling::handleAssignment(CheckerContext &C, SVal Cont,
           auto &SVB = C.getSValBuilder();
           // Then generate and assign a new "end" symbol for the new container.
           auto NewEndSym =
-              SymMgr.conjureSymbol(Elem, C.getStackFrame(),
+              SymMgr.conjureSymbol(Elem, C.getLocationContext(),
                                    C.getASTContext().LongTy, C.blockCount());
           State = assumeNoOverflow(State, NewEndSym, 4);
           if (CData) {
@@ -849,7 +851,7 @@ SymbolRef getContainerEnd(ProgramStateRef State, const MemRegion *Cont) {
 ProgramStateRef createContainerBegin(ProgramStateRef State,
                                      const MemRegion *Cont,
                                      ConstCFGElementRef Elem, QualType T,
-                                     const StackFrame *SF,
+                                     const LocationContext *LCtx,
                                      unsigned BlockCount) {
   // Only create if it does not exist
   const auto *CDataPtr = getContainerData(State, Cont);
@@ -858,7 +860,7 @@ ProgramStateRef createContainerBegin(ProgramStateRef State,
 
   auto &SymMgr = State->getSymbolManager();
   const SymbolConjured *Sym =
-      SymMgr.conjureSymbol(Elem, SF, T, BlockCount, "begin");
+      SymMgr.conjureSymbol(Elem, LCtx, T, BlockCount, "begin");
   State = assumeNoOverflow(State, Sym, 4);
 
   if (CDataPtr) {
@@ -872,7 +874,8 @@ ProgramStateRef createContainerBegin(ProgramStateRef State,
 
 ProgramStateRef createContainerEnd(ProgramStateRef State, const MemRegion *Cont,
                                    ConstCFGElementRef Elem, QualType T,
-                                   const StackFrame *SF, unsigned BlockCount) {
+                                   const LocationContext *LCtx,
+                                   unsigned BlockCount) {
   // Only create if it does not exist
   const auto *CDataPtr = getContainerData(State, Cont);
   if (CDataPtr && CDataPtr->getEnd())
@@ -880,7 +883,7 @@ ProgramStateRef createContainerEnd(ProgramStateRef State, const MemRegion *Cont,
 
   auto &SymMgr = State->getSymbolManager();
   const SymbolConjured *Sym =
-      SymMgr.conjureSymbol(Elem, SF, T, BlockCount, "end");
+      SymMgr.conjureSymbol(Elem, LCtx, T, BlockCount, "end");
   State = assumeNoOverflow(State, Sym, 4);
 
   if (CDataPtr) {

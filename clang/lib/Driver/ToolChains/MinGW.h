@@ -73,9 +73,7 @@ public:
   bool isPIEDefault(const llvm::opt::ArgList &Args) const override;
   bool isPICDefaultForced() const override;
 
-  SanitizerMask
-  getSupportedSanitizers(StringRef BoundArch,
-                         Action::OffloadKind DeviceOffloadKind) const override;
+  SanitizerMask getSupportedSanitizers() const override;
 
   llvm::ExceptionHandling GetExceptionModel(
       const llvm::opt::ArgList &Args) const override;

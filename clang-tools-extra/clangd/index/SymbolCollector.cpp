@@ -392,14 +392,17 @@ private:
     llvm::sys::path::append(UmbrellaPath, Framework + ".framework", "Headers",
                             Framework + ".h");
 
-    if (HS.getFileMgr().getOptionalFileRef(UmbrellaPath))
+    llvm::vfs::Status Status;
+    auto StatErr = HS.getFileMgr().getNoncachedStatValue(UmbrellaPath, Status);
+    if (!StatErr)
       CachedSpelling->PublicHeader = llvm::formatv("<{0}/{0}.h>", Framework);
 
     UmbrellaPath = HeaderPath.FrameworkParentDir;
     llvm::sys::path::append(UmbrellaPath, Framework + ".framework",
                             "PrivateHeaders", Framework + "_Private.h");
 
-    if (HS.getFileMgr().getOptionalFileRef(UmbrellaPath))
+    StatErr = HS.getFileMgr().getNoncachedStatValue(UmbrellaPath, Status);
+    if (!StatErr)
       CachedSpelling->PrivateHeader =
           llvm::formatv("<{0}/{0}_Private.h>", Framework);
 

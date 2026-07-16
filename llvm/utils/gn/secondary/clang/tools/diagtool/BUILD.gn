@@ -3,7 +3,6 @@ executable("diagtool") {
   deps = [
     "//clang/include/clang/Basic:DiagnosticIndexName",
     "//clang/lib/Basic",
-    "//clang/lib/Driver",
     "//clang/lib/Frontend",
     "//llvm/lib/Support",
   ]

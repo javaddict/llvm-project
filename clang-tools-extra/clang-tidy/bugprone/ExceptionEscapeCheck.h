@@ -32,12 +32,6 @@ public:
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
 
-  enum class TreatFunctionsWithoutSpecification {
-    None,
-    OnlyUndefined,
-    All,
-  };
-
 private:
   StringRef RawFunctionsThatShouldNotThrow;
   StringRef RawIgnoredExceptions;
@@ -47,9 +41,6 @@ private:
   const bool CheckMoveMemberFunctions;
   const bool CheckMain;
   const bool CheckNothrowFunctions;
-
-  const TreatFunctionsWithoutSpecification
-      TreatFunctionsWithoutSpecificationAsThrowing;
 
   llvm::StringSet<> FunctionsThatShouldNotThrow;
   llvm::StringSet<> CheckedSwapFunctions;

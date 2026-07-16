@@ -165,28 +165,16 @@ class Function;
 namespace AA {
 using InstExclusionSetTy = SmallPtrSet<Instruction *, 4>;
 
+enum class GPUAddressSpace : unsigned {
+  Generic = 0,
+  Global = 1,
+  Shared = 3,
+  Constant = 4,
+  Local = 5,
+};
+
 /// Return true iff \p M target a GPU (and we can use GPU AS reasoning).
 LLVM_ABI bool isGPU(const Module &M);
-
-/// Check if the given address space \p AS corresponds to a GPU generic
-/// address space for the target triple in module \p M.
-LLVM_ABI bool isGPUGenericAddressSpace(const Module &M, unsigned AS);
-
-/// Check if the given address space \p AS corresponds to a GPU global
-/// address space for the target triple in module \p M.
-LLVM_ABI bool isGPUGlobalAddressSpace(const Module &M, unsigned AS);
-
-/// Check if the given address space \p AS corresponds to a GPU shared
-/// address space for the target triple in module \p M.
-LLVM_ABI bool isGPUSharedAddressSpace(const Module &M, unsigned AS);
-
-/// Check if the given address space \p AS corresponds to a GPU constant
-/// address space for the target triple in module \p M.
-LLVM_ABI bool isGPUConstantAddressSpace(const Module &M, unsigned AS);
-
-/// Check if the given address space \p AS corresponds to a GPU local/private
-/// address space for the target triple in module \p M.
-LLVM_ABI bool isGPULocalAddressSpace(const Module &M, unsigned AS);
 
 /// Flags to distinguish intra-procedural queries from *potentially*
 /// inter-procedural queries. Not that information can be valid for both and
@@ -325,7 +313,7 @@ struct RangeTy {
   /// Constants used to represent special offsets or sizes.
   /// - We cannot assume that Offsets and Size are non-negative.
   /// - The constants should not clash with DenseMapInfo, such as EmptyKey
-  ///   (INT64_MAX).
+  ///   (INT64_MAX) and TombstoneKey (INT64_MIN).
   /// We use values "in the middle" of the 64 bit range to represent these
   /// special cases.
   static constexpr int64_t Unassigned = std::numeric_limits<int32_t>::min();
@@ -431,6 +419,12 @@ template <>
 struct DenseMapInfo<AA::ValueAndContext>
     : public DenseMapInfo<AA::ValueAndContext::Base> {
   using Base = DenseMapInfo<AA::ValueAndContext::Base>;
+  static inline AA::ValueAndContext getEmptyKey() {
+    return Base::getEmptyKey();
+  }
+  static inline AA::ValueAndContext getTombstoneKey() {
+    return Base::getTombstoneKey();
+  }
   static unsigned getHashValue(const AA::ValueAndContext &VAC) {
     return Base::getHashValue(VAC);
   }
@@ -444,6 +438,12 @@ struct DenseMapInfo<AA::ValueAndContext>
 template <>
 struct DenseMapInfo<AA::ValueScope> : public DenseMapInfo<unsigned char> {
   using Base = DenseMapInfo<unsigned char>;
+  static inline AA::ValueScope getEmptyKey() {
+    return AA::ValueScope(Base::getEmptyKey());
+  }
+  static inline AA::ValueScope getTombstoneKey() {
+    return AA::ValueScope(Base::getTombstoneKey());
+  }
   static unsigned getHashValue(const AA::ValueScope &S) {
     return Base::getHashValue(S);
   }
@@ -456,6 +456,14 @@ struct DenseMapInfo<AA::ValueScope> : public DenseMapInfo<unsigned char> {
 template <>
 struct DenseMapInfo<const AA::InstExclusionSetTy *>
     : public DenseMapInfo<void *> {
+  using super = DenseMapInfo<void *>;
+  static inline const AA::InstExclusionSetTy *getEmptyKey() {
+    return static_cast<const AA::InstExclusionSetTy *>(super::getEmptyKey());
+  }
+  static inline const AA::InstExclusionSetTy *getTombstoneKey() {
+    return static_cast<const AA::InstExclusionSetTy *>(
+        super::getTombstoneKey());
+  }
   static unsigned getHashValue(const AA::InstExclusionSetTy *BES) {
     unsigned H = 0;
     if (BES)
@@ -467,6 +475,9 @@ struct DenseMapInfo<const AA::InstExclusionSetTy *>
                       const AA::InstExclusionSetTy *RHS) {
     if (LHS == RHS)
       return true;
+    if (LHS == getEmptyKey() || RHS == getEmptyKey() ||
+        LHS == getTombstoneKey() || RHS == getTombstoneKey())
+      return false;
     auto SizeLHS = LHS ? LHS->size() : 0;
     auto SizeRHS = RHS ? RHS->size() : 0;
     if (SizeLHS != SizeRHS)
@@ -930,6 +941,13 @@ struct IRPosition {
   /// Check if the position has any call base context.
   bool hasCallBaseContext() const { return CBContext != nullptr; }
 
+  /// Special DenseMap key values.
+  ///
+  ///{
+  LLVM_ABI static const IRPosition EmptyKey;
+  LLVM_ABI static const IRPosition TombstoneKey;
+  ///}
+
   /// Conversion into a void * to allow reuse of pointer hashing.
   operator void *() const { return Enc.getOpaqueValue(); }
 
@@ -1064,6 +1082,10 @@ private:
 
 /// Helper that allows IRPosition as a key in a DenseMap.
 template <> struct DenseMapInfo<IRPosition> {
+  static inline IRPosition getEmptyKey() { return IRPosition::EmptyKey; }
+  static inline IRPosition getTombstoneKey() {
+    return IRPosition::TombstoneKey;
+  }
   static unsigned getHashValue(const IRPosition &IRP) {
     return (DenseMapInfo<void *>::getHashValue(IRP) << 4) ^
            (DenseMapInfo<Value *>::getHashValue(IRP.getCallBaseContext()));
@@ -1189,7 +1211,8 @@ struct InformationCache {
   InformationCache(const Module &M, AnalysisGetter &AG,
                    BumpPtrAllocator &Allocator, SetVector<Function *> *CGSCC,
                    bool UseExplorer = true)
-      : CGSCC(CGSCC), M(M), Allocator(Allocator), AG(AG) {
+      : CGSCC(CGSCC), DL(M.getDataLayout()), Allocator(Allocator), AG(AG),
+        TargetTriple(M.getTargetTriple()) {
     if (UseExplorer)
       Explorer = new (Allocator) MustBeExecutedContextExplorer(
           /* ExploreInterBlock */
@@ -1300,10 +1323,8 @@ struct InformationCache {
     return AG.getAnalysis<AP>(F, CachedOnly);
   }
 
-  const Module &getModule() const { return M; }
-
   /// Return datalayout used in the module.
-  const DataLayout &getDL() const { return M.getDataLayout(); }
+  const DataLayout &getDL() { return DL; }
 
   /// Return the map conaining all the knowledge we have from `llvm.assume`s.
   const RetainedKnowledgeMap &getKnowledgeMap() const { return KnowledgeMap; }
@@ -1322,10 +1343,10 @@ struct InformationCache {
   }
 
   /// Return true if the stack (llvm::Alloca) can be accessed by other threads.
-  bool stackIsAccessibleByOtherThreads() { return !IsTargetGPU(); }
+  bool stackIsAccessibleByOtherThreads() { return !targetIsGPU(); }
 
   /// Return true if the target is a GPU.
-  bool IsTargetGPU() const { return M.getTargetTriple().isGPU(); }
+  bool targetIsGPU() { return TargetTriple.isGPU(); }
 
   /// Return all functions that might be called indirectly, only valid for
   /// closed world modules (see isClosedWorldModule).
@@ -1382,8 +1403,8 @@ private:
   /// through the information cache interface *prior* to looking at them.
   LLVM_ABI void initializeInformationCache(const Function &F, FunctionInfo &FI);
 
-  /// The module.
-  const Module &M;
+  /// The datalayout used in the module.
+  const DataLayout &DL;
 
   /// The allocator used to allocate memory, e.g. for `FunctionInfo`s.
   BumpPtrAllocator &Allocator;
@@ -1405,6 +1426,9 @@ private:
 
   /// Set of inlineable functions
   SmallPtrSet<const Function *, 8> InlineableFunctions;
+
+  /// The triple describing the target machine.
+  Triple TargetTriple;
 
   /// Give the Attributor access to the members so
   /// Attributor::identifyDefaultAbstractAttributes(...) can initialize them.
@@ -1714,9 +1738,6 @@ struct Attributor {
 
   /// Return the internal information cache.
   InformationCache &getInfoCache() { return InfoCache; }
-
-  /// Return the module.
-  const Module &getModule() { return InfoCache.getModule(); }
 
   /// Return true if this is a module pass, false otherwise.
   bool isModulePass() const { return Configuration.IsModulePass; }
@@ -2457,7 +2478,7 @@ public:
                        DenseMap<Function *, Function *> &FnMap);
 
   /// Return the data layout associated with the anchor scope.
-  const DataLayout &getDataLayout() const { return InfoCache.getDL(); }
+  const DataLayout &getDataLayout() const { return InfoCache.DL; }
 
   /// The allocator used to allocate memory, e.g. for `AbstractAttribute`s.
   BumpPtrAllocator &Allocator;
@@ -3453,10 +3474,10 @@ LLVM_ABI raw_ostream &operator<<(raw_ostream &OS,
                                  const IntegerRangeState &State);
 ///}
 
-struct AttributorPass : public OptionalPassInfoMixin<AttributorPass> {
+struct AttributorPass : public PassInfoMixin<AttributorPass> {
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
-struct AttributorCGSCCPass : public OptionalPassInfoMixin<AttributorCGSCCPass> {
+struct AttributorCGSCCPass : public PassInfoMixin<AttributorCGSCCPass> {
   LLVM_ABI PreservedAnalyses run(LazyCallGraph::SCC &C,
                                  CGSCCAnalysisManager &AM, LazyCallGraph &CG,
                                  CGSCCUpdateResult &UR);
@@ -3464,14 +3485,14 @@ struct AttributorCGSCCPass : public OptionalPassInfoMixin<AttributorCGSCCPass> {
 
 /// A more lightweight version of the Attributor which only runs attribute
 /// inference but no simplifications.
-struct AttributorLightPass : public OptionalPassInfoMixin<AttributorLightPass> {
+struct AttributorLightPass : public PassInfoMixin<AttributorLightPass> {
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
 
 /// A more lightweight version of the Attributor which only runs attribute
 /// inference but no simplifications.
 struct AttributorLightCGSCCPass
-    : public OptionalPassInfoMixin<AttributorLightCGSCCPass> {
+    : public PassInfoMixin<AttributorLightCGSCCPass> {
   LLVM_ABI PreservedAnalyses run(LazyCallGraph::SCC &C,
                                  CGSCCAnalysisManager &AM, LazyCallGraph &CG,
                                  CGSCCUpdateResult &UR);
@@ -3577,6 +3598,9 @@ struct AANoSync
   /// atomic. In other words, if an atomic instruction does not have unordered
   /// or monotonic ordering
   LLVM_ABI static bool isNonRelaxedAtomic(const Instruction *I);
+
+  /// Helper function specific for intrinsics which are potentially volatile.
+  LLVM_ABI static bool isNoSyncIntrinsic(const Instruction *I);
 
   /// Helper function to determine if \p CB is an aligned (GPU) barrier. Aligned
   /// barriers have to be executed by all threads. The flag \p ExecutedAligned
@@ -5445,7 +5469,15 @@ struct AANoFPClass
 
   /// See AbstractAttribute::isValidIRPositionForInit
   static bool isValidIRPositionForInit(Attributor &A, const IRPosition &IRP) {
-    return AttributeFuncs::isNoFPClassCompatibleType(IRP.getAssociatedType());
+    Type *Ty = IRP.getAssociatedType();
+    do {
+      if (Ty->isFPOrFPVectorTy())
+        return IRAttribute::isValidIRPositionForInit(A, IRP);
+      if (!Ty->isArrayTy())
+        break;
+      Ty = Ty->getArrayElementType();
+    } while (true);
+    return false;
   }
 
   /// Return the underlying assumed nofpclass.
@@ -6561,7 +6593,7 @@ struct AAIndirectCallInfo
 };
 
 /// An abstract Attribute for specializing "dynamic" components of
-/// denormal_fpenv to a known denormal mode.
+/// "denormal-fp-math" and "denormal-fp-math-f32" to a known denormal mode.
 struct AADenormalFPMath
     : public StateWrapper<DenormalFPMathState, AbstractAttribute> {
   using Base = StateWrapper<DenormalFPMathState, AbstractAttribute>;
@@ -6593,11 +6625,7 @@ enum AttributorRunOption {
   NONE = 0,
   MODULE = 1 << 0,
   CGSCC = 1 << 1,
-  MODULE_LIGHT = 1 << 2,
-  CGSCC_LIGHT = 1 << 3,
-
-  FULL = MODULE | CGSCC,
-  LIGHT = MODULE_LIGHT | CGSCC_LIGHT
+  ALL = MODULE | CGSCC
 };
 
 namespace AA {

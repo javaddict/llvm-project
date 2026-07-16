@@ -46,10 +46,10 @@ struct NormalizeDenormalizeRewriter
 
 const SCEV *
 NormalizeDenormalizeRewriter::visitAddRecExpr(const SCEVAddRecExpr *AR) {
-  SmallVector<SCEVUse, 8> Operands;
+  SmallVector<const SCEV *, 8> Operands;
 
   transform(AR->operands(), std::back_inserter(Operands),
-            [&](SCEVUse Op) { return visit(Op.getPointer()); });
+            [&](const SCEV *Op) { return visit(Op); });
 
   if (!Pred(AR))
     return SE.getAddRecExpr(Operands, AR->getLoop(), SCEV::FlagAnyWrap);

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_DYNAMICLOADER_WASM_DYLD_DYNAMICLOADERWASMDYLD_H
-#define LLDB_SOURCE_PLUGINS_DYNAMICLOADER_WASM_DYLD_DYNAMICLOADERWASMDYLD_H
+#ifndef liblldb_Plugins_DynamicLoaderWasmDYLD_h_
+#define liblldb_Plugins_DynamicLoaderWasmDYLD_h_
 
 #include "lldb/Target/DynamicLoader.h"
 
@@ -19,7 +19,7 @@ public:
   DynamicLoaderWasmDYLD(Process *process);
 
   static void Initialize();
-  static void Terminate();
+  static void Terminate() {}
 
   static llvm::StringRef GetPluginNameStatic() { return "wasm-dyld"; }
   static llvm::StringRef GetPluginDescriptionStatic();
@@ -49,4 +49,4 @@ public:
 } // namespace wasm
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_DYNAMICLOADER_WASM_DYLD_DYNAMICLOADERWASMDYLD_H
+#endif // liblldb_Plugins_DynamicLoaderWasmDYLD_h_

@@ -18,7 +18,6 @@
 #define LLVM_ADT_MAPVECTOR_H
 
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include <cassert>
 #include <cstddef>
@@ -33,8 +32,7 @@ namespace llvm {
 /// mapping is done with DenseMap from Keys to indexes in that vector.
 template <typename KeyT, typename ValueT,
           typename MapType = DenseMap<KeyT, unsigned>,
-          typename VectorType = SmallVector<std::pair<KeyT, ValueT>, 0>,
-          unsigned N = 0>
+          typename VectorType = SmallVector<std::pair<KeyT, ValueT>, 0>>
 class MapVector {
 public:
   using key_type = KeyT;
@@ -110,8 +108,8 @@ public:
   [[nodiscard]] ValueT lookup(const KeyT &Key) const {
     static_assert(std::is_copy_constructible_v<ValueT>,
                   "Cannot call lookup() if ValueT is not copyable.");
-    auto I = find(Key);
-    return I == end() ? ValueT() : I->second;
+    typename MapType::const_iterator Pos = Map.find(Key);
+    return Pos == Map.end()? ValueT() : Vector[Pos->second].second;
   }
 
   template <typename... Ts>
@@ -146,7 +144,7 @@ public:
   }
 
   [[nodiscard]] bool contains(const KeyT &Key) const {
-    return find(Key) != end();
+    return Map.find(Key) != Map.end();
   }
 
   [[nodiscard]] size_type count(const KeyT &Key) const {
@@ -154,19 +152,11 @@ public:
   }
 
   [[nodiscard]] iterator find(const KeyT &Key) {
-    if constexpr (canBeSmall())
-      if (isSmall())
-        return findInVector(Vector, Key);
-
     typename MapType::const_iterator Pos = Map.find(Key);
     return Pos == Map.end() ? Vector.end() : (Vector.begin() + Pos->second);
   }
 
   [[nodiscard]] const_iterator find(const KeyT &Key) const {
-    if constexpr (canBeSmall())
-      if (isSmall())
-        return findInVector(Vector, Key);
-
     typename MapType::const_iterator Pos = Map.find(Key);
     return Pos == Map.end() ? Vector.end() : (Vector.begin() + Pos->second);
   }
@@ -174,27 +164,21 @@ public:
   /// at - Return the entry for the specified key, or abort if no such
   /// entry exists.
   [[nodiscard]] ValueT &at(const KeyT &Key) {
-    auto I = find(Key);
-    assert(I != end() && "MapVector::at failed due to a missing key");
-    return I->second;
+    auto Pos = Map.find(Key);
+    assert(Pos != Map.end() && "MapVector::at failed due to a missing key");
+    return Vector[Pos->second].second;
   }
 
   /// at - Return the entry for the specified key, or abort if no such
   /// entry exists.
   [[nodiscard]] const ValueT &at(const KeyT &Key) const {
-    auto I = find(Key);
-    assert(I != end() && "MapVector::at failed due to a missing key");
-    return I->second;
+    auto Pos = Map.find(Key);
+    assert(Pos != Map.end() && "MapVector::at failed due to a missing key");
+    return Vector[Pos->second].second;
   }
 
   /// Remove the last element from the vector.
   void pop_back() {
-    if constexpr (canBeSmall())
-      if (isSmall()) {
-        Vector.pop_back();
-        return;
-      }
-
     typename MapType::iterator Pos = Map.find(Vector.back().first);
     Map.erase(Pos);
     Vector.pop_back();
@@ -208,10 +192,6 @@ public:
   /// \note This is a deceivingly expensive operation (linear time).  It's
   /// usually better to use \a remove_if() if possible.
   typename VectorType::iterator erase(typename VectorType::iterator Iterator) {
-    if constexpr (canBeSmall())
-      if (isSmall())
-        return Vector.erase(Iterator);
-
     Map.erase(Iterator->first);
     auto Next = Vector.erase(Iterator);
     if (Next == Vector.end())
@@ -244,36 +224,9 @@ public:
   /// time.
   template <class Predicate> void remove_if(Predicate Pred);
 
-  /// Return the approximate size (in bytes) of the data structure.
-  /// This is just the raw memory used by MapVector.
-  /// If entries are pointers to objects, the size of the referenced objects
-  /// are not included.
-  [[nodiscard]] size_t getMemorySize() const {
-    return capacity_in_bytes(Map) + capacity_in_bytes(Vector);
-  }
-
 private:
-  template <typename VectorT, typename LookupKeyT>
-  [[nodiscard]] static auto findInVector(VectorT &Vec, const LookupKeyT &Key) {
-    return find_if(Vec, [&Key](const auto &P) { return P.first == Key; });
-  }
-
-  [[nodiscard]] static constexpr bool canBeSmall() { return N != 0; }
-
-  [[nodiscard]] bool isSmall() const { return Map.empty(); }
-
-  void makeBig() {
-    if constexpr (canBeSmall()) {
-      unsigned Index = 0;
-      for (const auto &entry : Vector)
-        Map[entry.first] = Index++;
-    }
-  }
-
   MapType Map;
   VectorType Vector;
-
-  static_assert(N <= 32, "Small size should be less than or equal to 32!");
 
   static_assert(
       std::is_integral_v<typename MapType::mapped_type>,
@@ -281,19 +234,6 @@ private:
 
   template <typename KeyArgT, typename... Ts>
   std::pair<iterator, bool> try_emplace_impl(KeyArgT &&Key, Ts &&...Args) {
-    if constexpr (canBeSmall())
-      if (isSmall()) {
-        auto I = findInVector(Vector, Key);
-        if (I != Vector.end())
-          return {I, false};
-        Vector.emplace_back(std::piecewise_construct,
-                            std::forward_as_tuple(std::forward<KeyArgT>(Key)),
-                            std::forward_as_tuple(std::forward<Ts>(Args)...));
-        if (Vector.size() > N)
-          makeBig();
-        return {std::prev(end()), true};
-      }
-
     auto [It, Inserted] = Map.try_emplace(Key);
     if (Inserted) {
       It->second = Vector.size();
@@ -306,16 +246,9 @@ private:
   }
 };
 
-template <typename KeyT, typename ValueT, typename MapType, typename VectorType,
-          unsigned N>
+template <typename KeyT, typename ValueT, typename MapType, typename VectorType>
 template <class Function>
-void MapVector<KeyT, ValueT, MapType, VectorType, N>::remove_if(Function Pred) {
-  if constexpr (canBeSmall())
-    if (isSmall()) {
-      Vector.erase(llvm::remove_if(Vector, Pred), Vector.end());
-      return;
-    }
-
+void MapVector<KeyT, ValueT, MapType, VectorType>::remove_if(Function Pred) {
   auto O = Vector.begin();
   for (auto I = O, E = Vector.end(); I != E; ++I) {
     if (Pred(*I)) {
@@ -338,18 +271,10 @@ void MapVector<KeyT, ValueT, MapType, VectorType, N>::remove_if(Function Pred) {
 /// A MapVector that performs no allocations if smaller than a certain
 /// size.
 template <typename KeyT, typename ValueT, unsigned N>
-struct SmallMapVector : MapVector<KeyT, ValueT, DenseMap<KeyT, unsigned>,
-                                  SmallVector<std::pair<KeyT, ValueT>, N>, N> {
+struct SmallMapVector
+    : MapVector<KeyT, ValueT, SmallDenseMap<KeyT, unsigned, N>,
+                SmallVector<std::pair<KeyT, ValueT>, N>> {
 };
-
-template <typename KeyT, typename ValueT,
-          typename MapType = DenseMap<KeyT, unsigned>,
-          typename VectorType = SmallVector<std::pair<KeyT, ValueT>, 0>,
-          unsigned N = 0>
-[[nodiscard]] size_t
-capacity_in_bytes(const MapVector<KeyT, ValueT, MapType, VectorType, N> &X) {
-  return X.getMemorySize();
-}
 
 } // end namespace llvm
 

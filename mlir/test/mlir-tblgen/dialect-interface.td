@@ -11,20 +11,26 @@ def NoDefaultMethod : DialectInterface<"NoDefaultMethod"> {
 
   let methods = [
     InterfaceMethod<
-      "Check if it's an example dialect", "bool", "isExampleDialect", (ins)
-    >,
-    InterfaceMethod<
-      "second method to check if multiple methods supported",
-      "unsigned", "supportSecondMethod", (ins "::mlir::Type":$type)
+      /*desc=*/        "Check if it's an example dialect",
+      /*returnType=*/  "bool",
+      /*methodName=*/  "isExampleDialect",
+      /*args=*/        (ins)
+      >,
+      InterfaceMethod<
+      /*desc=*/        "second method to check if multiple methods supported",
+      /*returnType=*/  "unsigned",
+      /*methodName=*/  "supportSecondMethod",
+      /*args=*/        (ins "::mlir::Type":$type)
       >
+
   ];
 }
 
 // DECL:   class NoDefaultMethod : public {{.*}}DialectInterface::Base<NoDefaultMethod>
 // DECL:   public:
+// DECL-NEXT:   NoDefaultMethod(::mlir::Dialect *dialect) : Base(dialect) {}
 // DECL:   virtual bool isExampleDialect() const {}
 // DECL:   virtual unsigned supportSecondMethod(::mlir::Type type) const {}
-// DECL:   NoDefaultMethod(::mlir::Dialect *dialect) : Base(dialect) {}
 
 def WithDefaultMethodInterface : DialectInterface<"WithDefaultMethodInterface"> {
   let description = [{
@@ -34,63 +40,26 @@ def WithDefaultMethodInterface : DialectInterface<"WithDefaultMethodInterface"> 
   let cppNamespace = "::mlir::example";
 
   let methods = [
-      InterfaceMethod<
-        "Check if it's an example dialect", "bool", "isExampleDialect", (ins),
-        [{
+    InterfaceMethod<
+      /*desc=*/        "Check if it's an example dialect",
+      /*returnType=*/  "bool",
+      /*methodName=*/  "isExampleDialect",
+      /*args=*/        (ins),
+      /*methodBody=*/  [{
           return true;
-        }]
+         }]
       >,
       InterfaceMethod<
-        "second method to check if multiple methods supported",
-        "unsigned", "supportSecondMethod", (ins "::mlir::Type":$type)
+      /*desc=*/        "second method to check if multiple methods supported",
+      /*returnType=*/  "unsigned",
+      /*methodName=*/  "supportSecondMethod",
+      /*args=*/        (ins "::mlir::Type":$type)
       >
+
   ];
 }
 
-// DECL:   virtual bool isExampleDialect() const {
-// DECL-NEXT:   return true;
-// DECL-NEXT:   }
+// DECL:  virtual bool isExampleDialect() const {
+// DECL-NEXT:  return true;
+// DECL-NEXT: }
 
-def OnlyDeclarationInterfaceWithExtraDecls : DialectInterface<"OnlyDeclarationInterfaceWithExtraDecls"> {
-  let description = [{
-    This is an example dialect interface with only declarations.
-  }];
-
-  let cppNamespace = "::mlir::example";
-
-  let methods = [
-      InterfaceMethodDeclaration<
-        "a method declaration", "void", "exampleMethodDeclaration", 
-        (ins "::mlir::Type":$type)
-      >
-  ];
-
-  let extraClassDeclaration = [{
-    using DeclType = int;
-  }];
-}
-
-// DECL:   class OnlyDeclarationInterfaceWithExtraDecls : public {{.*}}DialectInterface::Base<OnlyDeclarationInterfaceWithExtraDecls>
-// DECL:   virtual void exampleMethodDeclaration(::mlir::Type type) const;
-// DECL:   using DeclType = int;
-
-def PureVirtualInterface : DialectInterface<"PureVirtualInterface"> {
-  let description = [{
-    This is an example dialect interface with pure virtual methods.
-  }];
-
-  let cppNamespace = "::mlir::example";
-
-  let methods = [
-      PureVirtualInterfaceMethod<
-        "Check if it's an example dialect", "bool", "isExampleDialect",
-        (ins)
-      >
-  ];
-}
-
-// DECL:   class PureVirtualInterface : public {{.*}}DialectInterface::Base<PureVirtualInterface>
-// DECL:   public:
-// DECL:   virtual bool isExampleDialect() const = 0;
-// DECL:   protected:
-// DECL-NEXT:   PureVirtualInterface(::mlir::Dialect *dialect) : Base(dialect) {}

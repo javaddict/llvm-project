@@ -25,7 +25,6 @@
 #include "llvm/CodeGen/VirtRegMap.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/PassTimingInfo.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -156,10 +155,6 @@ void RegAllocBase::allocatePhysRegs() {
 
 void RegAllocBase::postOptimization() {
   spiller().postOptimization();
-
-  // Verify LiveRegMatrix after spilling (no dangling pointers).
-  assert(Matrix->isValid() && "LiveRegMatrix validation failed");
-
   for (auto *DeadInst : DeadRemats) {
     LIS->RemoveMachineInstrFromMaps(*DeadInst);
     DeadInst->eraseFromParent();

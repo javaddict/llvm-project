@@ -328,13 +328,10 @@ Solaris::Solaris(const Driver &D, const llvm::Triple &Triple,
   addPathIfExists(D, D.SysRoot + "/usr/lib" + LibSuffix, Paths);
 }
 
-SanitizerMask
-Solaris::getSupportedSanitizers(StringRef BoundArch,
-                                Action::OffloadKind DeviceOffloadKind) const {
+SanitizerMask Solaris::getSupportedSanitizers() const {
   const bool IsSparc = getTriple().getArch() == llvm::Triple::sparc;
   const bool IsX86 = getTriple().getArch() == llvm::Triple::x86;
-  SanitizerMask Res =
-      ToolChain::getSupportedSanitizers(BoundArch, DeviceOffloadKind);
+  SanitizerMask Res = ToolChain::getSupportedSanitizers();
   // FIXME: Omit SparcV9 and X86_64 until 64-bit support is figured out.
   if (IsSparc || IsX86) {
     Res |= SanitizerKind::Address;

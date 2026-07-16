@@ -12,7 +12,7 @@
 namespace clang::tidy::matchers {
 
 bool NotIdenticalStatementsPredicate::operator()(
-    const ast_matchers::internal::BoundNodesMap &Nodes) const {
+    const clang::ast_matchers::internal::BoundNodesMap &Nodes) const {
   return !utils::areStatementsIdentical(Node.get<Stmt>(),
                                         Nodes.getNodeAs<Stmt>(ID), *Context);
 }

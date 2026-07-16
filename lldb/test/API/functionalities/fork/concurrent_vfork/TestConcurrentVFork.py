@@ -8,7 +8,6 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test.decorators import *
 
 
-@skipIfTargetDoesNotSupportThreads()
 class TestConcurrentVFork(TestBase):
     NO_DEBUG_INFO_TESTCASE = True
 

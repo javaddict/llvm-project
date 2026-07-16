@@ -112,7 +112,8 @@ void ReturnPointerRangeChecker::checkPreStmt(const ReturnStmt *RS,
         OS << ", returned pointer points at index " << ConcreteIdx->getValue();
       }
 
-      Report->addNote(SBuf, {RetE, C.getSourceManager(), C.getStackFrame()});
+      Report->addNote(SBuf,
+                      {RetE, C.getSourceManager(), C.getLocationContext()});
     }
 
     bugreporter::trackExpressionValue(N, RetE, *Report);

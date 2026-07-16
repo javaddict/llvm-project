@@ -618,9 +618,7 @@ static void UnpoisonDefaultStack() {
     int local_stack;
     const uptr page_size = GetPageSizeCached();
     top = curr_thread->stack_top();
-    bottom = (uptr)&local_stack & ~(page_size - 1);
-    if (AddrIsInMem(bottom - page_size))
-      bottom -= page_size;
+    bottom = ((uptr)&local_stack - page_size) & ~(page_size - 1);
   } else {
     CHECK(!SANITIZER_FUCHSIA);
     // If we haven't seen this thread, try asking the OS for stack bounds.

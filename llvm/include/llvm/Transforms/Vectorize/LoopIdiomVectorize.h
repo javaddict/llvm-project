@@ -15,8 +15,7 @@
 namespace llvm {
 enum class LoopIdiomVectorizeStyle { Masked, Predicated };
 
-class LoopIdiomVectorizePass
-    : public OptionalPassInfoMixin<LoopIdiomVectorizePass> {
+class LoopIdiomVectorizePass : public PassInfoMixin<LoopIdiomVectorizePass> {
   LoopIdiomVectorizeStyle VectorizeStyle = LoopIdiomVectorizeStyle::Masked;
 
   // The VF used in vectorizing the byte compare pattern.
@@ -30,9 +29,8 @@ public:
   LoopIdiomVectorizePass(LoopIdiomVectorizeStyle S, unsigned BCVF)
       : VectorizeStyle(S), ByteCompareVF(BCVF) {}
 
-  LLVM_ABI PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
-                                 LoopStandardAnalysisResults &AR,
-                                 LPMUpdater &U);
+  PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
+                        LoopStandardAnalysisResults &AR, LPMUpdater &U);
 };
 } // namespace llvm
 #endif // LLVM_LIB_TRANSFORMS_VECTORIZE_LOOPIDIOMVECTORIZE_H

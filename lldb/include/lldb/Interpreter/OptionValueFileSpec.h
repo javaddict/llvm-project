@@ -53,8 +53,6 @@ public:
   void AutoComplete(CommandInterpreter &interpreter,
                     CompletionRequest &request) override;
 
-  bool IsDefault() const override { return m_current_value == m_default_value; }
-
   // Subclass specific functions
 
   FileSpec &GetCurrentValue() { return m_current_value; }

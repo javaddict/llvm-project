@@ -39,7 +39,7 @@ struct DifferingParamInfo {
   bool GenerateFixItHint;
 };
 
-using DifferingParamsContainer = SmallVector<DifferingParamInfo, 10>;
+using DifferingParamsContainer = llvm::SmallVector<DifferingParamInfo, 10>;
 
 struct InconsistentDeclarationInfo {
   InconsistentDeclarationInfo(SourceLocation DeclarationLocation,
@@ -52,7 +52,7 @@ struct InconsistentDeclarationInfo {
 };
 
 using InconsistentDeclarationsContainer =
-    SmallVector<InconsistentDeclarationInfo, 2>;
+    llvm::SmallVector<InconsistentDeclarationInfo, 2>;
 
 } // namespace
 
@@ -195,7 +195,7 @@ getParameterSourceDeclaration(const FunctionDecl *OriginalDeclaration) {
 static std::string joinParameterNames(
     const DifferingParamsContainer &DifferingParams,
     llvm::function_ref<StringRef(const DifferingParamInfo &)> ChooseParamName) {
-  SmallString<40> Str;
+  llvm::SmallString<40> Str;
   bool First = true;
   for (const DifferingParamInfo &ParamInfo : DifferingParams) {
     if (First)

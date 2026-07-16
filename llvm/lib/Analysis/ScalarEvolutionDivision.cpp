@@ -141,15 +141,14 @@ void SCEVDivision::visitAddRecExpr(const SCEVAddRecExpr *Numerator) {
   if (Ty != StartQ->getType() || Ty != StartR->getType() ||
       Ty != StepQ->getType() || Ty != StepR->getType())
     return cannotDivide(Numerator);
-
   Quotient = SE.getAddRecExpr(StartQ, StepQ, Numerator->getLoop(),
-                              SCEV::NoWrapFlags::FlagAnyWrap);
+                              Numerator->getNoWrapFlags());
   Remainder = SE.getAddRecExpr(StartR, StepR, Numerator->getLoop(),
-                               SCEV::NoWrapFlags::FlagAnyWrap);
+                               Numerator->getNoWrapFlags());
 }
 
 void SCEVDivision::visitAddExpr(const SCEVAddExpr *Numerator) {
-  SmallVector<SCEVUse, 2> Qs, Rs;
+  SmallVector<const SCEV *, 2> Qs, Rs;
   Type *Ty = Denominator->getType();
 
   for (const SCEV *Op : Numerator->operands()) {
@@ -175,7 +174,7 @@ void SCEVDivision::visitAddExpr(const SCEVAddExpr *Numerator) {
 }
 
 void SCEVDivision::visitMulExpr(const SCEVMulExpr *Numerator) {
-  SmallVector<SCEVUse, 2> Qs;
+  SmallVector<const SCEV *, 2> Qs;
   Type *Ty = Denominator->getType();
 
   bool FoundDenominatorTerm = false;

@@ -498,7 +498,7 @@ void SymbolFileBreakpad::AddSymbols(Symtab &symtab) {
 }
 
 llvm::Expected<lldb::addr_t>
-SymbolFileBreakpad::GetParameterStackSize(const Symbol &symbol) {
+SymbolFileBreakpad::GetParameterStackSize(Symbol &symbol) {
   ParseUnwindData();
   if (auto *entry = m_unwind_data->win.FindEntryThatContains(
           symbol.GetAddress().GetFileAddress())) {
@@ -564,7 +564,8 @@ ResolveRegisterOrRA(const llvm::Triple &triple,
 
 llvm::ArrayRef<uint8_t> SymbolFileBreakpad::SaveAsDWARF(postfix::Node &node) {
   ArchSpec arch = m_objfile_sp->GetArchitecture();
-  StreamString dwarf(Stream::eBinary, arch.GetByteOrder());
+  StreamString dwarf(Stream::eBinary, arch.GetAddressByteSize(),
+                     arch.GetByteOrder());
   ToDWARF(node, dwarf);
   uint8_t *saved = m_allocator.Allocate<uint8_t>(dwarf.GetSize());
   std::memcpy(saved, dwarf.GetData(), dwarf.GetSize());

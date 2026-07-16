@@ -29,7 +29,6 @@ namespace llvm {
 /// below for details.
 class ValueHandleBase {
   friend class Value;
-  template <typename ValueTy> friend class PoisoningVH;
 
 protected:
   /// This indicates what sub class the handle actually is.
@@ -45,15 +44,6 @@ protected:
       : PrevPair(nullptr, Kind), Val(RHS.getValPtr()) {
     if (isValid(getValPtr()))
       AddToExistingUseList(RHS.getPrevPtr());
-  }
-
-  ValueHandleBase(HandleBaseKind Kind, ValueHandleBase &&RHS)
-      : PrevPair(nullptr, Kind), Val(RHS.getValPtr()) {
-    if (isValid(getValPtr())) {
-      AddToExistingUseList(RHS.getPrevPtr());
-      RHS.RemoveFromUseList();
-      RHS.clearValPtr();
-    }
   }
 
 private:
@@ -99,26 +89,6 @@ public:
     return getValPtr();
   }
 
-  Value *operator=(ValueHandleBase &&RHS) {
-    if (getValPtr() == RHS.getValPtr()) {
-      if (this != &RHS) {
-        if (isValid(RHS.getValPtr()))
-          RHS.RemoveFromUseList();
-        RHS.clearValPtr();
-      }
-      return getValPtr();
-    }
-    if (isValid(getValPtr()))
-      RemoveFromUseList();
-    setValPtr(RHS.getValPtr());
-    if (isValid(getValPtr())) {
-      AddToExistingUseList(RHS.getPrevPtr());
-      RHS.RemoveFromUseList();
-      RHS.clearValPtr();
-    }
-    return getValPtr();
-  }
-
   Value *operator->() const { return getValPtr(); }
   Value &operator*() const {
     Value *V = getValPtr();
@@ -129,7 +99,11 @@ public:
 protected:
   Value *getValPtr() const { return Val; }
 
-  static bool isValid(Value *V) { return V; }
+  static bool isValid(Value *V) {
+    return V &&
+           V != DenseMapInfo<Value *>::getEmptyKey() &&
+           V != DenseMapInfo<Value *>::getTombstoneKey();
+  }
 
   /// Remove this ValueHandle from its current use list.
   LLVM_ABI void RemoveFromUseList();
@@ -204,6 +178,14 @@ template <> struct simplify_type<const WeakVH> {
 
 // Specialize DenseMapInfo to allow WeakVH to participate in DenseMap.
 template <> struct DenseMapInfo<WeakVH> {
+  static inline WeakVH getEmptyKey() {
+    return WeakVH(DenseMapInfo<Value *>::getEmptyKey());
+  }
+
+  static inline WeakVH getTombstoneKey() {
+    return WeakVH(DenseMapInfo<Value *>::getTombstoneKey());
+  }
+
   static unsigned getHashValue(const WeakVH &Val) {
     return DenseMapInfo<Value *>::getHashValue(Val);
   }
@@ -303,12 +285,10 @@ public:
   AssertingVH() : ValueHandleBase(Assert) {}
   AssertingVH(ValueTy *P) : ValueHandleBase(Assert, GetAsValue(P)) {}
   AssertingVH(const AssertingVH &RHS) : ValueHandleBase(Assert, RHS) {}
-  AssertingVH(AssertingVH &&RHS) : ValueHandleBase(Assert, std::move(RHS)) {}
 #else
   AssertingVH() : ThePtr(nullptr) {}
   AssertingVH(ValueTy *P) : ThePtr(GetAsValue(P)) {}
   AssertingVH(const AssertingVH &) = default;
-  AssertingVH(AssertingVH &&RHS) : ThePtr(std::exchange(RHS.ThePtr, nullptr)) {}
 #endif
 
   operator ValueTy*() const {
@@ -323,17 +303,6 @@ public:
     setValPtr(RHS.getValPtr());
     return getValPtr();
   }
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS
-  ValueTy *operator=(AssertingVH<ValueTy> &&RHS) {
-    ValueHandleBase::operator=(std::move(RHS));
-    return getValPtr();
-  }
-#else
-  ValueTy *operator=(AssertingVH<ValueTy> &&RHS) {
-    ThePtr = std::exchange(RHS.ThePtr, nullptr);
-    return getValPtr();
-  }
-#endif
 
   ValueTy *operator->() const { return getValPtr(); }
   ValueTy &operator*() const { return *getValPtr(); }
@@ -529,15 +498,8 @@ public:
   PoisoningVH() = default;
 #if LLVM_ENABLE_ABI_BREAKING_CHECKS
   PoisoningVH(ValueTy *P) : CallbackVH(GetAsValue(P)) {}
-  // A poisoned handle is detached from its use list but keeps its raw value
-  // pointer, so its use-list pointers are stale; a copy must not relink through
-  // them.
-  PoisoningVH(const PoisoningVH &RHS) : CallbackVH(), Poisoned(RHS.Poisoned) {
-    if (Poisoned)
-      ValueHandleBase::setValPtr(RHS.getRawValPtr());
-    else
-      setRawValPtr(RHS.getRawValPtr());
-  }
+  PoisoningVH(const PoisoningVH &RHS)
+      : CallbackVH(RHS), Poisoned(RHS.Poisoned) {}
 
   ~PoisoningVH() {
     if (Poisoned)
@@ -547,14 +509,7 @@ public:
   PoisoningVH &operator=(const PoisoningVH &RHS) {
     if (Poisoned)
       clearValPtr();
-    if (RHS.Poisoned) {
-      // Detach *this and copy only the raw pointer; see the copy constructor.
-      if (isValid(getRawValPtr()))
-        RemoveFromUseList();
-      ValueHandleBase::setValPtr(RHS.getRawValPtr());
-    } else {
-      CallbackVH::operator=(RHS);
-    }
+    CallbackVH::operator=(RHS);
     Poisoned = RHS.Poisoned;
     return *this;
   }
@@ -570,6 +525,18 @@ public:
 
 // Specialize DenseMapInfo to allow PoisoningVH to participate in DenseMap.
 template <typename T> struct DenseMapInfo<PoisoningVH<T>> {
+  static inline PoisoningVH<T> getEmptyKey() {
+    PoisoningVH<T> Res;
+    Res.setRawValPtr(DenseMapInfo<Value *>::getEmptyKey());
+    return Res;
+  }
+
+  static inline PoisoningVH<T> getTombstoneKey() {
+    PoisoningVH<T> Res;
+    Res.setRawValPtr(DenseMapInfo<Value *>::getTombstoneKey());
+    return Res;
+  }
+
   static unsigned getHashValue(const PoisoningVH<T> &Val) {
     return DenseMapInfo<Value *>::getHashValue(Val.getRawValPtr());
   }

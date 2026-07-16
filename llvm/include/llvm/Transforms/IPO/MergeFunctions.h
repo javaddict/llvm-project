@@ -24,7 +24,7 @@ class Module;
 class Function;
 
 /// Merge identical functions.
-class MergeFunctionsPass : public OptionalPassInfoMixin<MergeFunctionsPass> {
+class MergeFunctionsPass : public PassInfoMixin<MergeFunctionsPass> {
 public:
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 

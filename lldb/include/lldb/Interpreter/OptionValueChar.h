@@ -43,8 +43,6 @@ public:
     m_value_was_set = false;
   }
 
-  bool IsDefault() const override { return m_current_value == m_default_value; }
-
   // Subclass specific functions
 
   const char &operator=(char c) {

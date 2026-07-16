@@ -55,7 +55,6 @@ static_library("LLVMLoongArchCodeGen") {
     "LoongArchSelectionDAGInfo.cpp",
     "LoongArchSubtarget.cpp",
     "LoongArchTargetMachine.cpp",
-    "LoongArchTargetObjectFile.cpp",
     "LoongArchTargetTransformInfo.cpp",
   ]
 }

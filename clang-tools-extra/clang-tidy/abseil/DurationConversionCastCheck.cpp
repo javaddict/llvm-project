@@ -51,7 +51,8 @@ void DurationConversionCastCheck::check(
   // Casting a double to an integer.
   if (MatchedCast->getTypeAsWritten()->isIntegerType() &&
       ConversionFuncName.contains("Double")) {
-    const StringRef NewFuncName = getDurationInverseForScale(*Scale).second;
+    const llvm::StringRef NewFuncName =
+        getDurationInverseForScale(*Scale).second;
 
     diag(MatchedCast->getBeginLoc(),
          "duration should be converted directly to an integer rather than "
@@ -66,7 +67,8 @@ void DurationConversionCastCheck::check(
   // Casting an integer to a double.
   if (MatchedCast->getTypeAsWritten()->isRealFloatingType() &&
       ConversionFuncName.contains("Int64")) {
-    const StringRef NewFuncName = getDurationInverseForScale(*Scale).first;
+    const llvm::StringRef NewFuncName =
+        getDurationInverseForScale(*Scale).first;
 
     diag(MatchedCast->getBeginLoc(), "duration should be converted directly to "
                                      "a floating-point number rather than "

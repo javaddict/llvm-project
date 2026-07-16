@@ -35,16 +35,15 @@ void SPIRVMCInstLower::lower(const MachineInstr *MI, MCInst &OutMI,
     default:
       llvm_unreachable("unknown operand type");
     case MachineOperand::MO_GlobalAddress: {
-      MCRegister Reg =
-          MAI->getGlobalObjReg(dyn_cast<GlobalObject>(MO.getGlobal()));
-      if (!Reg.isValid()) {
+      MCRegister FuncReg = MAI->getFuncReg(dyn_cast<Function>(MO.getGlobal()));
+      if (!FuncReg.isValid()) {
         std::string DiagMsg;
         raw_string_ostream OS(DiagMsg);
         MI->print(OS);
-        DiagMsg = "Unknown global object in:" + DiagMsg;
+        DiagMsg = "Unknown function in:" + DiagMsg;
         report_fatal_error(DiagMsg.c_str());
       }
-      MCOp = MCOperand::createReg(Reg);
+      MCOp = MCOperand::createReg(FuncReg);
       break;
     }
     case MachineOperand::MO_MachineBasicBlock:

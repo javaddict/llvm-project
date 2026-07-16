@@ -47,7 +47,6 @@ class LLVM_LIBRARY_VISIBILITY M68kAsmPrinter
 
   void printDisp(const MachineInstr *MI, unsigned OpNum, raw_ostream &OS);
   void printAbsMem(const MachineInstr *MI, unsigned OpNum, raw_ostream &OS);
-  void printScale(const MachineInstr *MI, unsigned OpNum, raw_ostream &OS);
 
 public:
   static char ID;
@@ -74,6 +73,7 @@ public:
   void emitInstruction(const MachineInstr *MI) override;
   void emitFunctionBodyStart() override;
   void emitFunctionBodyEnd() override;
+  void emitStartOfAsmFile(Module &M) override;
   void emitEndOfAsmFile(Module &M) override;
 };
 } // namespace llvm

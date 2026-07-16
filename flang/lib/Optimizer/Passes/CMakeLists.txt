@@ -7,7 +7,6 @@ add_flang_library(flangPasses
 
   LINK_LIBS
   FIRCodeGen
-  FIROpenACCTransforms
   FIRTransforms
   FlangOpenMPTransforms
   FortranSupport
@@ -19,10 +18,6 @@ add_flang_library(flangPasses
   MLIR_LIBS
   ${dialect_libs}
   ${extension_libs}
-  MLIRComplexToStandard
-  MLIRLLVMIRTransforms
-  MLIRMathToFuncs
-  MLIRMathToLLVM
   MLIRPass
   MLIRReconcileUnrealizedCasts
   MLIRSCFToControlFlow

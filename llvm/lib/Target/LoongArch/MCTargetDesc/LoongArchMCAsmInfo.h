@@ -23,7 +23,7 @@ class StringRef;
 class LoongArchMCExpr : public MCSpecifierExpr {
 public:
   using Specifier = uint16_t;
-  enum { VK_None, VK_DTPREL };
+  enum { VK_None };
 
 private:
   const bool RelaxHint;
@@ -42,8 +42,7 @@ class LoongArchMCAsmInfo : public MCAsmInfoELF {
   void anchor() override;
 
 public:
-  explicit LoongArchMCAsmInfo(const Triple &TargetTriple,
-                              const MCTargetOptions &Options);
+  explicit LoongArchMCAsmInfo(const Triple &TargetTriple);
   void printSpecifierExpr(raw_ostream &OS,
                           const MCSpecifierExpr &Expr) const override;
 };

@@ -27,27 +27,21 @@ public:
 
 private:
   const unsigned MinimumVariableNameLength;
-  const unsigned MinimumBindingNameLength;
   const unsigned MinimumLoopCounterNameLength;
   const unsigned MinimumExceptionNameLength;
   const unsigned MinimumParameterNameLength;
 
-  StringRef IgnoredVariableNamesInput;
+  std::string IgnoredVariableNamesInput;
   llvm::Regex IgnoredVariableNames;
 
-  StringRef IgnoredBindingNamesInput;
-  llvm::Regex IgnoredBindingNames;
-
-  StringRef IgnoredLoopCounterNamesInput;
+  std::string IgnoredLoopCounterNamesInput;
   llvm::Regex IgnoredLoopCounterNames;
 
-  StringRef IgnoredExceptionVariableNamesInput;
+  std::string IgnoredExceptionVariableNamesInput;
   llvm::Regex IgnoredExceptionVariableNames;
 
-  StringRef IgnoredParameterNamesInput;
+  std::string IgnoredParameterNamesInput;
   llvm::Regex IgnoredParameterNames;
-
-  const unsigned LineCountThreshold;
 };
 
 } // namespace clang::tidy::readability

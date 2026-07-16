@@ -162,7 +162,7 @@ void randomizeStructureLayoutImpl(const ASTContext &Context,
     llvm::append_range(FinalOrder, RandFields);
   }
 
-  FieldsOut = std::move(FinalOrder);
+  FieldsOut = FinalOrder;
 }
 
 } // anonymous namespace

@@ -1,6 +1,6 @@
 ! Test forall lowering
 
-! RUN: %flang_fc1 -emit-hlfir %s -o - | FileCheck %s
+! RUN: bbc -emit-fir -hlfir=false %s -o - | FileCheck %s
 
 !*** Test forall targeted by label
 subroutine test4_forall_construct()
@@ -13,10 +13,10 @@ subroutine test4_forall_construct()
 200   return
 end subroutine test4_forall_construct
 
-! CHECK-LABEL: func.func @_QPtest4_forall_construct() {
+! CHECK-LABEL: func @_QPtest4_forall_construct
 ! CHECK:   cf.br ^bb1
 ! CHECK: ^bb1:  // 2 preds: ^bb0, ^bb2
-! CHECK:   hlfir.forall
+! CHECK:   %{{.*}} = fir.do_loop
 ! CHECK:   cf.cond_br %{{.*}}, ^bb2, ^bb3
 ! CHECK: ^bb2:  // pred: ^bb1
 ! CHECK:   cf.br ^bb1
@@ -33,10 +33,10 @@ subroutine test4_forall_construct2()
 200   return
 end subroutine test4_forall_construct2
 
-! CHECK-LABEL: func.func @_QPtest4_forall_construct2() {
+! CHECK-LABEL: func @_QPtest4_forall_construct2
 ! CHECK:   cf.br ^bb1
 ! CHECK: ^bb1:  // 2 preds: ^bb0, ^bb2
-! CHECK:   hlfir.forall
+! CHECK:   %{{.*}} = fir.do_loop
 ! CHECK:   cf.cond_br %{{.*}}, ^bb2, ^bb3
 ! CHECK: ^bb2:  // pred: ^bb1
 ! CHECK:   cf.br ^bb1

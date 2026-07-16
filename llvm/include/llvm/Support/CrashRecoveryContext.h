@@ -60,7 +60,7 @@ public:
   LLVM_ABI void unregisterCleanup(CrashRecoveryContextCleanup *cleanup);
 
   /// Enable crash recovery.
-  LLVM_ABI static void Enable(bool NeedsPOSIXUtilitySignalHandling = false);
+  LLVM_ABI static void Enable();
 
   /// Disable crash recovery.
   LLVM_ABI static void Disable();

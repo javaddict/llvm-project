@@ -15,8 +15,7 @@
 namespace llvm {
 
 /// A pass that transforms Vectors to Arrays
-class DXILDataScalarization
-    : public OptionalPassInfoMixin<DXILDataScalarization> {
+class DXILDataScalarization : public PassInfoMixin<DXILDataScalarization> {
 public:
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &);
 };

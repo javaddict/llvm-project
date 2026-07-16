@@ -18,23 +18,20 @@ set(NVPTXCodeGen_sources
   NVPTXAssignValidGlobalNames.cpp
   NVPTXAtomicLower.cpp
   NVPTXCtorDtorLowering.cpp
-  NVPTXDwarfDebug.cpp
+  NVPTXIRPeephole.cpp
   NVPTXForwardParams.cpp
   NVPTXFrameLowering.cpp
   NVPTXGenericToNVVM.cpp
-  NVPTXIRPeephole.cpp
-  NVPTXISelDAGToDAG.cpp
-  NVPTXISelLowering.cpp
   NVPTXImageOptimizer.cpp
   NVPTXInstrInfo.cpp
+  NVPTXISelDAGToDAG.cpp
+  NVPTXISelLowering.cpp
   NVPTXLowerAggrCopies.cpp
   NVPTXLowerAlloca.cpp
   NVPTXLowerArgs.cpp
   NVPTXLowerUnreachable.cpp
   NVPTXMCExpr.cpp
-  NVPTXMarkKernelPtrsGlobal.cpp
   NVPTXPeephole.cpp
-  NVPTXSetByValParamAlign.cpp
   NVPTXPrologEpilogPass.cpp
   NVPTXProxyRegErasure.cpp
   NVPTXRegisterInfo.cpp
@@ -46,7 +43,6 @@ set(NVPTXCodeGen_sources
   NVPTXTargetTransformInfo.cpp
   NVPTXUtilities.cpp
   NVVMIntrRange.cpp
-  NVVMProperties.cpp
   NVVMReflect.cpp
   )
 

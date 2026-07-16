@@ -209,22 +209,6 @@ LLVMAttributeRef LLVMCreateConstantRangeAttribute(LLVMContextRef C,
                     APInt(NumBits, ArrayRef(UpperWords, NumWords)))));
 }
 
-LLVMAttributeRef LLVMCreateDenormalFPEnvAttribute(
-    LLVMContextRef C, LLVMDenormalModeKind DefaultModeOutput,
-    LLVMDenormalModeKind DefaultModeInput, LLVMDenormalModeKind FloatModeOutput,
-    LLVMDenormalModeKind FloatModeInput) {
-  auto &Ctx = *unwrap(C);
-
-  DenormalFPEnv Env(
-      DenormalMode(
-          static_cast<DenormalMode::DenormalModeKind>(DefaultModeOutput),
-          static_cast<DenormalMode::DenormalModeKind>(DefaultModeInput)),
-      DenormalMode(
-          static_cast<DenormalMode::DenormalModeKind>(FloatModeOutput),
-          static_cast<DenormalMode::DenormalModeKind>(FloatModeInput)));
-  return wrap(Attribute::get(Ctx, Attribute::DenormalFPEnv, Env.toIntValue()));
-}
-
 LLVMAttributeRef LLVMCreateStringAttribute(LLVMContextRef C,
                                            const char *K, unsigned KLength,
                                            const char *V, unsigned VLength) {
@@ -265,6 +249,7 @@ char *LLVMGetDiagInfoDescription(LLVMDiagnosticInfoRef DI) {
   DiagnosticPrinterRawOStream DP(Stream);
 
   unwrap(DI)->print(DP);
+  Stream.flush();
 
   return LLVMCreateMessage(MsgStorage.c_str());
 }
@@ -492,6 +477,7 @@ char *LLVMPrintModuleToString(LLVMModuleRef M) {
   raw_string_ostream os(buf);
 
   unwrap(M)->print(os, nullptr);
+  os.flush();
 
   return strdup(buf.c_str());
 }
@@ -621,8 +607,6 @@ LLVMTypeKind LLVMGetTypeKind(LLVMTypeRef Ty) {
     return LLVMLabelTypeKind;
   case Type::MetadataTyID:
     return LLVMMetadataTypeKind;
-  case Type::ByteTyID:
-    return LLVMByteTypeKind;
   case Type::IntegerTyID:
     return LLVMIntegerTypeKind;
   case Type::FunctionTyID:
@@ -671,17 +655,9 @@ char *LLVMPrintTypeToString(LLVMTypeRef Ty) {
   else
     os << "Printing <null> Type";
 
+  os.flush();
+
   return strdup(buf.c_str());
-}
-
-/*--.. Operations on byte types ............................................--*/
-
-LLVMTypeRef LLVMByteTypeInContext(LLVMContextRef C, unsigned NumBits) {
-  return wrap(ByteType::get(*unwrap(C), NumBits));
-}
-
-unsigned LLVMGetByteTypeWidth(LLVMTypeRef ByteTy) {
-  return unwrap<ByteType>(ByteTy)->getBitWidth();
 }
 
 /*--.. Operations on integer types .........................................--*/
@@ -1074,6 +1050,8 @@ char* LLVMPrintValueToString(LLVMValueRef Val) {
   else
     os << "Printing <null> Value";
 
+  os.flush();
+
   return strdup(buf.c_str());
 }
 
@@ -1089,6 +1067,8 @@ char *LLVMPrintDbgRecordToString(LLVMDbgRecordRef Record) {
     unwrap(Record)->print(os);
   else
     os << "Printing <null> DbgRecord";
+
+  os.flush();
 
   return strdup(buf.c_str());
 }
@@ -1170,12 +1150,6 @@ LLVMInstructionGetAllMetadataOtherThanDebugLoc(LLVMValueRef Value,
   }
 
 LLVM_FOR_EACH_VALUE_SUBCLASS(LLVM_DEFINE_VALUE_CAST)
-
-LLVMValueRef LLVMIsABranchInst(LLVMValueRef Val) {
-  if (Value *V = unwrap(Val))
-    return isa<UncondBrInst, CondBrInst>(V) ? Val : nullptr;
-  return nullptr;
-}
 
 LLVMValueRef LLVMIsAMDNode(LLVMValueRef Val) {
   if (auto *MD = dyn_cast_or_null<MetadataAsValue>(unwrap(Val)))
@@ -1590,30 +1564,6 @@ LLVMValueRef LLVMConstIntOfStringAndSize(LLVMTypeRef IntTy, const char Str[],
                                Radix));
 }
 
-LLVMValueRef LLVMConstByte(LLVMTypeRef ByteTy, unsigned long long N) {
-  return wrap(ConstantByte::get(unwrap<ByteType>(ByteTy), N));
-}
-
-LLVMValueRef LLVMConstByteOfArbitraryPrecision(LLVMTypeRef ByteTy,
-                                               unsigned NumWords,
-                                               const uint64_t Words[]) {
-  ByteType *Ty = unwrap<ByteType>(ByteTy);
-  return wrap(ConstantByte::get(
-      Ty->getContext(), APInt(Ty->getBitWidth(), ArrayRef(Words, NumWords))));
-}
-
-LLVMValueRef LLVMConstByteOfString(LLVMTypeRef ByteTy, const char Str[],
-                                   uint8_t Radix) {
-  return wrap(
-      ConstantByte::get(unwrap<ByteType>(ByteTy), StringRef(Str), Radix));
-}
-
-LLVMValueRef LLVMConstByteOfStringAndSize(LLVMTypeRef ByteTy, const char Str[],
-                                          size_t SLen, uint8_t Radix) {
-  return wrap(
-      ConstantByte::get(unwrap<ByteType>(ByteTy), StringRef(Str, SLen), Radix));
-}
-
 LLVMValueRef LLVMConstReal(LLVMTypeRef RealTy, double N) {
   return wrap(ConstantFP::get(unwrap(RealTy), N));
 }
@@ -1641,14 +1591,6 @@ unsigned long long LLVMConstIntGetZExtValue(LLVMValueRef ConstantVal) {
 
 long long LLVMConstIntGetSExtValue(LLVMValueRef ConstantVal) {
   return unwrap<ConstantInt>(ConstantVal)->getSExtValue();
-}
-
-unsigned long long LLVMConstByteGetZExtValue(LLVMValueRef ConstantVal) {
-  return unwrap<ConstantByte>(ConstantVal)->getZExtValue();
-}
-
-long long LLVMConstByteGetSExtValue(LLVMValueRef ConstantVal) {
-  return unwrap<ConstantByte>(ConstantVal)->getSExtValue();
 }
 
 double LLVMConstRealGetDouble(LLVMValueRef ConstantVal, LLVMBool *LosesInfo) {
@@ -2552,13 +2494,13 @@ static Intrinsic::ID llvm_map_to_intrinsic_id(unsigned ID) {
   return llvm::Intrinsic::ID(ID);
 }
 
-LLVMValueRef LLVMGetIntrinsicDeclaration(LLVMModuleRef Mod, unsigned ID,
-                                         LLVMTypeRef *OverloadTypes,
-                                         size_t OverloadCount) {
-  ArrayRef<Type *> OverloadTys(unwrap(OverloadTypes), OverloadCount);
+LLVMValueRef LLVMGetIntrinsicDeclaration(LLVMModuleRef Mod,
+                                         unsigned ID,
+                                         LLVMTypeRef *ParamTypes,
+                                         size_t ParamCount) {
+  ArrayRef<Type*> Tys(unwrap(ParamTypes), ParamCount);
   auto IID = llvm_map_to_intrinsic_id(ID);
-  return wrap(
-      llvm::Intrinsic::getOrInsertDeclaration(unwrap(Mod), IID, OverloadTys));
+  return wrap(llvm::Intrinsic::getOrInsertDeclaration(unwrap(Mod), IID, Tys));
 }
 
 const char *LLVMIntrinsicGetName(unsigned ID, size_t *NameLength) {
@@ -2569,30 +2511,27 @@ const char *LLVMIntrinsicGetName(unsigned ID, size_t *NameLength) {
 }
 
 LLVMTypeRef LLVMIntrinsicGetType(LLVMContextRef Ctx, unsigned ID,
-                                 LLVMTypeRef *OverloadTypes,
-                                 size_t OverloadCount) {
+                                 LLVMTypeRef *ParamTypes, size_t ParamCount) {
   auto IID = llvm_map_to_intrinsic_id(ID);
-  ArrayRef<Type *> OverloadTys(unwrap(OverloadTypes), OverloadCount);
-  return wrap(llvm::Intrinsic::getType(*unwrap(Ctx), IID, OverloadTys));
+  ArrayRef<Type*> Tys(unwrap(ParamTypes), ParamCount);
+  return wrap(llvm::Intrinsic::getType(*unwrap(Ctx), IID, Tys));
 }
 
-char *LLVMIntrinsicCopyOverloadedName(unsigned ID, LLVMTypeRef *OverloadTypes,
-                                      size_t OverloadCount,
-                                      size_t *NameLength) {
+char *LLVMIntrinsicCopyOverloadedName(unsigned ID, LLVMTypeRef *ParamTypes,
+                                      size_t ParamCount, size_t *NameLength) {
   auto IID = llvm_map_to_intrinsic_id(ID);
-  ArrayRef<Type *> OverloadTys(unwrap(OverloadTypes), OverloadCount);
-  auto Str = llvm::Intrinsic::getNameNoUnnamedTypes(IID, OverloadTys);
+  ArrayRef<Type*> Tys(unwrap(ParamTypes), ParamCount);
+  auto Str = llvm::Intrinsic::getNameNoUnnamedTypes(IID, Tys);
   *NameLength = Str.length();
   return strdup(Str.c_str());
 }
 
 char *LLVMIntrinsicCopyOverloadedName2(LLVMModuleRef Mod, unsigned ID,
-                                       LLVMTypeRef *OverloadTypes,
-                                       size_t OverloadCount,
-                                       size_t *NameLength) {
+                                       LLVMTypeRef *ParamTypes,
+                                       size_t ParamCount, size_t *NameLength) {
   auto IID = llvm_map_to_intrinsic_id(ID);
-  ArrayRef<Type *> OverloadTys(unwrap(OverloadTypes), OverloadCount);
-  auto Str = llvm::Intrinsic::getName(IID, OverloadTys, unwrap(Mod));
+  ArrayRef<Type *> Tys(unwrap(ParamTypes), ParamCount);
+  auto Str = llvm::Intrinsic::getName(IID, Tys, unwrap(Mod));
   *NameLength = Str.length();
   return strdup(Str.c_str());
 }
@@ -2883,7 +2822,7 @@ LLVMValueRef LLVMGetBasicBlockParent(LLVMBasicBlockRef BB) {
 }
 
 LLVMValueRef LLVMGetBasicBlockTerminator(LLVMBasicBlockRef BB) {
-  return wrap(unwrap(BB)->getTerminatorOrNull());
+  return wrap(unwrap(BB)->getTerminator());
 }
 
 unsigned LLVMCountBasicBlocks(LLVMValueRef FnRef) {
@@ -3305,15 +3244,15 @@ void LLVMSetSuccessor(LLVMValueRef Term, unsigned i, LLVMBasicBlockRef block) {
 /*--.. Operations on branch instructions (only) ............................--*/
 
 LLVMBool LLVMIsConditional(LLVMValueRef Branch) {
-  return isa<CondBrInst>(unwrap<Instruction>(Branch));
+  return unwrap<BranchInst>(Branch)->isConditional();
 }
 
 LLVMValueRef LLVMGetCondition(LLVMValueRef Branch) {
-  return wrap(unwrap<CondBrInst>(Branch)->getCondition());
+  return wrap(unwrap<BranchInst>(Branch)->getCondition());
 }
 
 void LLVMSetCondition(LLVMValueRef Branch, LLVMValueRef Cond) {
-  return unwrap<CondBrInst>(Branch)->setCondition(unwrap(Cond));
+  return unwrap<BranchInst>(Branch)->setCondition(unwrap(Cond));
 }
 
 /*--.. Operations on switch instructions (only) ............................--*/
@@ -3486,14 +3425,14 @@ LLVMMetadataRef LLVMGetCurrentDebugLocation2(LLVMBuilderRef Builder) {
 
 void LLVMSetCurrentDebugLocation2(LLVMBuilderRef Builder, LLVMMetadataRef Loc) {
   if (Loc)
-    unwrap(Builder)->SetCurrentDebugLocation(DebugLoc(unwrap<DILocation>(Loc)));
+    unwrap(Builder)->SetCurrentDebugLocation(DebugLoc(unwrap<MDNode>(Loc)));
   else
     unwrap(Builder)->SetCurrentDebugLocation(DebugLoc());
 }
 
 void LLVMSetCurrentDebugLocation(LLVMBuilderRef Builder, LLVMValueRef L) {
-  DILocation *Loc =
-      L ? cast<DILocation>(unwrap<MetadataAsValue>(L)->getMetadata()) : nullptr;
+  MDNode *Loc =
+      L ? cast<MDNode>(unwrap<MetadataAsValue>(L)->getMetadata()) : nullptr;
   unwrap(Builder)->SetCurrentDebugLocation(DebugLoc(Loc));
 }
 
@@ -3539,7 +3478,7 @@ LLVMValueRef LLVMBuildRet(LLVMBuilderRef B, LLVMValueRef V) {
 
 LLVMValueRef LLVMBuildAggregateRet(LLVMBuilderRef B, LLVMValueRef *RetVals,
                                    unsigned N) {
-  return wrap(unwrap(B)->CreateAggregateRet({unwrap(RetVals), N}));
+  return wrap(unwrap(B)->CreateAggregateRet(unwrap(RetVals), N));
 }
 
 LLVMValueRef LLVMBuildBr(LLVMBuilderRef B, LLVMBasicBlockRef Dest) {
@@ -4111,10 +4050,6 @@ static AtomicRMWInst::BinOp mapFromLLVMRMWBinOp(LLVMAtomicRMWBinOp BinOp) {
       return AtomicRMWInst::FMaximum;
     case LLVMAtomicRMWBinOpFMinimum:
       return AtomicRMWInst::FMinimum;
-    case LLVMAtomicRMWBinOpFMaximumNum:
-      return AtomicRMWInst::FMaximumNum;
-    case LLVMAtomicRMWBinOpFMinimumNum:
-      return AtomicRMWInst::FMinimumNum;
     case LLVMAtomicRMWBinOpUIncWrap:
       return AtomicRMWInst::UIncWrap;
     case LLVMAtomicRMWBinOpUDecWrap:
@@ -4149,10 +4084,6 @@ static LLVMAtomicRMWBinOp mapToLLVMRMWBinOp(AtomicRMWInst::BinOp BinOp) {
       return LLVMAtomicRMWBinOpFMaximum;
     case AtomicRMWInst::FMinimum:
       return LLVMAtomicRMWBinOpFMinimum;
-    case AtomicRMWInst::FMaximumNum:
-      return LLVMAtomicRMWBinOpFMaximumNum;
-    case AtomicRMWInst::FMinimumNum:
-      return LLVMAtomicRMWBinOpFMinimumNum;
     case AtomicRMWInst::UIncWrap:
       return LLVMAtomicRMWBinOpUIncWrap;
     case AtomicRMWInst::UDecWrap:
@@ -4510,10 +4441,8 @@ LLVMValueRef LLVMBuildIsNotNull(LLVMBuilderRef B, LLVMValueRef Val,
 LLVMValueRef LLVMBuildPtrDiff2(LLVMBuilderRef B, LLVMTypeRef ElemTy,
                                LLVMValueRef LHS, LLVMValueRef RHS,
                                const char *Name) {
-  IRBuilderBase *Builder = unwrap(B);
-  Value *Diff =
-      Builder->CreatePtrDiff(unwrap(ElemTy), unwrap(LHS), unwrap(RHS), Name);
-  return wrap(Builder->CreateSExtOrTrunc(Diff, Builder->getInt64Ty()));
+  return wrap(unwrap(B)->CreatePtrDiff(unwrap(ElemTy), unwrap(LHS),
+                                       unwrap(RHS), Name));
 }
 
 LLVMValueRef LLVMBuildAtomicRMW(LLVMBuilderRef B,LLVMAtomicRMWBinOp op,

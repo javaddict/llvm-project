@@ -50,8 +50,7 @@ def p : Flag<["-"], "p">,
 def strip_all : Flag<["--"], "strip-all">,
     HelpText<"For ELF, remove all symbols and non-alloc sections not within "
              "segments, except for .gnu.warning*, .ARM.attribute, and the section name table. "
-             "For COFF and Mach-O, remove all symbols, debug sections, and relocations. "
-             "For WebAssembly, remove all custom sections except for metadata.code.*">;
+             "For COFF and Mach-O, remove all symbols, debug sections, and relocations">;
 
 def strip_all_gnu
     : Flag<["--"], "strip-all-gnu">,
@@ -121,11 +120,6 @@ def x : Flag<["-"], "x">,
 def regex
     : Flag<["--"], "regex">,
       HelpText<"Permit regular expressions in name comparison">;
-
-def verbose : Flag<["--"], "verbose">,
-              HelpText<"Print the paths of files that are copied">;
-def v : Flag<["-"], "v">, Alias<verbose>,
-        HelpText<"Alias for --verbose">;
 
 def version : Flag<["--"], "version">,
               HelpText<"Print the version and exit.">;

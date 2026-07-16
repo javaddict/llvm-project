@@ -21,9 +21,9 @@ namespace llvm {
 class Module;
 
 /// Pass to remove unused function declarations.
-class PartialInlinerPass : public OptionalPassInfoMixin<PartialInlinerPass> {
+class PartialInlinerPass : public PassInfoMixin<PartialInlinerPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &);
 };
 
 } // end namespace llvm

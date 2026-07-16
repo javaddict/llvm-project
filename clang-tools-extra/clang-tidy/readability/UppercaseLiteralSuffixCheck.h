@@ -10,6 +10,7 @@
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_READABILITY_UPPERCASELITERALSUFFIXCHECK_H
 
 #include "../ClangTidyCheck.h"
+#include "../utils/OptionsUtils.h"
 
 namespace clang::tidy::readability {
 
@@ -30,6 +31,9 @@ public:
   }
 
 private:
+  template <typename LiteralType>
+  bool checkBoundMatch(const ast_matchers::MatchFinder::MatchResult &Result);
+
   const std::vector<StringRef> NewSuffixes;
   const bool IgnoreMacros;
 };

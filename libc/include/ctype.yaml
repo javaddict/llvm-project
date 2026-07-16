@@ -18,7 +18,7 @@ functions:
       - type: int
   - name: isascii
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: int
@@ -84,7 +84,7 @@ functions:
       - type: int
   - name: toascii
     standards:
-      - gnu
+      - GNUExtensions
     return_type: int
     arguments:
       - type: int

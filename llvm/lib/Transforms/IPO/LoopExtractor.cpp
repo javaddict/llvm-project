@@ -39,7 +39,9 @@ struct LoopExtractorLegacyPass : public ModulePass {
   unsigned NumLoops;
 
   explicit LoopExtractorLegacyPass(unsigned NumLoops = ~0)
-      : ModulePass(ID), NumLoops(NumLoops) {}
+      : ModulePass(ID), NumLoops(NumLoops) {
+    initializeLoopExtractorLegacyPassPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnModule(Module &M) override;
 
@@ -187,8 +189,10 @@ bool LoopExtractor::runOnFunction(Function &F) {
     bool ShouldExtractLoop = false;
 
     // Extract the loop if the entry block doesn't branch to the loop header.
-    auto *EntryTI = dyn_cast<UncondBrInst>(F.getEntryBlock().getTerminator());
-    if (EntryTI && EntryTI->getSuccessor() != TLL->getHeader()) {
+    Instruction *EntryTI = F.getEntryBlock().getTerminator();
+    if (!isa<BranchInst>(EntryTI) ||
+        !cast<BranchInst>(EntryTI)->isUnconditional() ||
+        EntryTI->getSuccessor(0) != TLL->getHeader()) {
       ShouldExtractLoop = true;
     } else {
       // Check to see if any exits from the loop are more than just return
@@ -238,11 +242,8 @@ bool LoopExtractor::extractLoop(Loop *L, LoopInfo &LI, DominatorTree &DT) {
   AssumptionCache *AC = LookupAssumptionCache(Func);
   CodeExtractorAnalysisCache CEAC(Func);
   CodeExtractor Extractor(L->getBlocks(), &DT, false, nullptr, nullptr, AC);
-  if (Extractor.isEligible()) {
-    // Remove loop while blocks are still in the current function
+  if (Extractor.extractCodeRegion(CEAC)) {
     LI.erase(L);
-    [[maybe_unused]] Function *ExtrF = Extractor.extractCodeRegion(CEAC);
-    assert(ExtrF && "CodeExtractor didn't extact eligible loop");
     --NumLoops;
     ++NumExtracted;
     return true;

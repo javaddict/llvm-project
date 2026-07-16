@@ -3,7 +3,6 @@ from lldbsuite.test.concurrent_base import ConcurrentEventsBase
 from lldbsuite.test.lldbtest import TestBase
 
 
-@skipIfTargetDoesNotSupportThreads()
 @skipIfWindows
 class ConcurrentManyCrash(ConcurrentEventsBase):
     # Atomic sequences are not supported yet for MIPS in LLDB.

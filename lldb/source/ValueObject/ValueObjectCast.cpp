@@ -16,17 +16,21 @@
 #include "lldb/ValueObject/ValueObject.h"
 #include <optional>
 
+namespace lldb_private {
+class ConstString;
+}
+
 using namespace lldb_private;
 
 lldb::ValueObjectSP ValueObjectCast::Create(ValueObject &parent,
-                                            llvm::StringRef name,
+                                            ConstString name,
                                             const CompilerType &cast_type) {
   ValueObjectCast *cast_valobj_ptr =
       new ValueObjectCast(parent, name, cast_type);
   return cast_valobj_ptr->GetSP();
 }
 
-ValueObjectCast::ValueObjectCast(ValueObject &parent, llvm::StringRef name,
+ValueObjectCast::ValueObjectCast(ValueObject &parent, ConstString name,
                                  const CompilerType &cast_type)
     : ValueObject(parent), m_cast_type(cast_type) {
   SetName(name);

@@ -23,7 +23,9 @@ namespace {
 class FuncletLayout : public MachineFunctionPass {
 public:
   static char ID; // Pass identification, replacement for typeid
-  FuncletLayout() : MachineFunctionPass(ID) {}
+  FuncletLayout() : MachineFunctionPass(ID) {
+    initializeFuncletLayoutPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &F) override;
   MachineFunctionProperties getRequiredProperties() const override {

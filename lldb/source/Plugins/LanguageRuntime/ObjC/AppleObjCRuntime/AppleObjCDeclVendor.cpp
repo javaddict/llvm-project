@@ -36,12 +36,14 @@ public:
     Log *log(GetLog(
         LLDBLog::Expressions)); // FIXME - a more appropriate log channel?
 
-    LLDB_LOGF(log,
-              "AppleObjCExternalASTSource::FindExternalVisibleDeclsByName"
-              " on (ASTContext*)%p Looking for %s in (%sDecl*)%p",
-              static_cast<void *>(&decl_ctx->getParentASTContext()),
-              name.getAsString().c_str(), decl_ctx->getDeclKindName(),
-              static_cast<const void *>(decl_ctx));
+    if (log) {
+      LLDB_LOGF(log,
+                "AppleObjCExternalASTSource::FindExternalVisibleDeclsByName"
+                " on (ASTContext*)%p Looking for %s in (%sDecl*)%p",
+                static_cast<void *>(&decl_ctx->getParentASTContext()),
+                name.getAsString().c_str(), decl_ctx->getDeclKindName(),
+                static_cast<const void *>(decl_ctx));
+    }
 
     do {
       const clang::ObjCInterfaceDecl *interface_decl =
@@ -87,20 +89,24 @@ public:
     Log *log(GetLog(
         LLDBLog::Expressions)); // FIXME - a more appropriate log channel?
 
-    LLDB_LOGF(log,
-              "AppleObjCExternalASTSource::CompleteType on "
-              "(ASTContext*)%p Completing (ObjCInterfaceDecl*)%p named %s",
-              static_cast<void *>(&interface_decl->getASTContext()),
-              static_cast<void *>(interface_decl),
-              interface_decl->getName().str().c_str());
+    if (log) {
+      LLDB_LOGF(log,
+                "AppleObjCExternalASTSource::CompleteType on "
+                "(ASTContext*)%p Completing (ObjCInterfaceDecl*)%p named %s",
+                static_cast<void *>(&interface_decl->getASTContext()),
+                static_cast<void *>(interface_decl),
+                interface_decl->getName().str().c_str());
 
-    LLDB_LOGF(log, "  AOEAS::CT Before:");
-    LLDB_LOG(log, "    [CT] {0}", ClangUtil::DumpDecl(interface_decl));
+      LLDB_LOGF(log, "  AOEAS::CT Before:");
+      LLDB_LOG(log, "    [CT] {0}", ClangUtil::DumpDecl(interface_decl));
+    }
 
     m_decl_vendor.FinishDecl(interface_decl);
 
-    LLDB_LOGF(log, "  [CT] After:");
-    LLDB_LOG(log, "    [CT] {0}", ClangUtil::DumpDecl(interface_decl));
+    if (log) {
+      LLDB_LOGF(log, "  [CT] After:");
+      LLDB_LOG(log, "    [CT] {0}", ClangUtil::DumpDecl(interface_decl));
+    }
   }
 
   bool layoutRecordType(
@@ -497,19 +503,22 @@ bool AppleObjCDeclVendor::FinishDecl(clang::ObjCInterfaceDecl *interface_decl) {
     return false;
   };
 
-  LLDB_LOG(log,
-           "[AppleObjCDeclVendor::FinishDecl] Finishing Objective-C interface "
-           "for {0}",
-           descriptor->GetClassName());
+  LLDB_LOGF(log,
+            "[AppleObjCDeclVendor::FinishDecl] Finishing Objective-C "
+            "interface for %s",
+            descriptor->GetClassName().AsCString());
 
   if (!descriptor->Describe(superclass_func, instance_method_func,
                             class_method_func, ivar_func))
     return false;
 
-  LLDB_LOGF(log,
-            "[AppleObjCDeclVendor::FinishDecl] Finished Objective-C interface");
+  if (log) {
+    LLDB_LOGF(
+        log,
+        "[AppleObjCDeclVendor::FinishDecl] Finished Objective-C interface");
 
-  LLDB_LOG(log, "  [AOTV::FD] {0}", ClangUtil::DumpDecl(interface_decl));
+    LLDB_LOG(log, "  [AOTV::FD] {0}", ClangUtil::DumpDecl(interface_decl));
+  }
 
   return true;
 }
@@ -521,8 +530,9 @@ uint32_t AppleObjCDeclVendor::FindDecls(ConstString name, bool append,
   Log *log(
       GetLog(LLDBLog::Expressions)); // FIXME - a more appropriate log channel?
 
-  LLDB_LOG(log, "AppleObjCDeclVendor::FindDecls ('{0}', {1}, {2}, )", name,
-           append ? "true" : "false", max_matches);
+  LLDB_LOGF(log, "AppleObjCDeclVendor::FindDecls ('%s', %s, %u, )",
+            (const char *)name.AsCString(), append ? "true" : "false",
+            max_matches);
 
   if (!append)
     decls.clear();
@@ -565,7 +575,8 @@ uint32_t AppleObjCDeclVendor::FindDecls(ConstString name, bool append,
     return 0;
   }
 
-  LLDB_LOG(log, "AOCTV::FT Couldn't find {0} in the ASTContext", name);
+  LLDB_LOGF(log, "AOCTV::FT Couldn't find %s in the ASTContext",
+            name.AsCString());
 
   // It's not.  If it exists, we have to put it into our ASTContext.
 

@@ -21,6 +21,7 @@
 #include "llvm/Config/llvm-config.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
+#include "llvm/PassRegistry.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/GenericLoopInfoImpl.h"
 
@@ -50,7 +51,9 @@ MachineLoopPrinterPass::run(MachineFunction &MF,
 
 char MachineLoopInfoWrapperPass::ID = 0;
 MachineLoopInfoWrapperPass::MachineLoopInfoWrapperPass()
-    : MachineFunctionPass(ID) {}
+    : MachineFunctionPass(ID) {
+  initializeMachineLoopInfoWrapperPassPass(*PassRegistry::getPassRegistry());
+}
 INITIALIZE_PASS_BEGIN(MachineLoopInfoWrapperPass, "machine-loops",
                       "Machine Natural Loop Construction", true, true)
 INITIALIZE_PASS_DEPENDENCY(MachineDominatorTreeWrapperPass)

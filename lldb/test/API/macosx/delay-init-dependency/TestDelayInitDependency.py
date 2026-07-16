@@ -12,7 +12,6 @@ class TestDelayInitDependencies(TestBase):
 
     @skipUnlessDarwin
     @skipIf(macos_version=["<", "15.0"])
-    @skipIfRemote
     def test_delay_init_dependency(self):
         TestBase.setUp(self)
         out = subprocess.run(

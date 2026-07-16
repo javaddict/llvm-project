@@ -278,9 +278,8 @@ static int getSymbolNameOffset(CVSymbol Sym) {
   // See SectionSym
   case SymbolKind::S_SECTION:
     return 16;
-  // See CoffGroupSym, RegRelativeIndirSym
+  // See CoffGroupSym
   case SymbolKind::S_COFFGROUP:
-  case SymbolKind::S_REGREL32_INDIR:
     return 14;
   // See PublicSym32, FileStaticSym, RegRelativeSym, DataSym, ThreadLocalDataSym
   case SymbolKind::S_PUB32:

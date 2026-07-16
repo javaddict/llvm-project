@@ -9,8 +9,8 @@
 // Include this header for a definition of uuid_t compatible with Darwin's
 // definition.
 
-#ifndef LLDB_UTILITY_APPLEUUIDCOMPATIBILITY_H
-#define LLDB_UTILITY_APPLEUUIDCOMPATIBILITY_H
+#ifndef utility_UUID_COMPATIBILITY_H
+#define utility_UUID_COMPATIBILITY_H
 // uuid_t is guaranteed to always be a 16-byte array
 typedef unsigned char uuid_t[16];
-#endif // LLDB_UTILITY_APPLEUUIDCOMPATIBILITY_H
+#endif // utility_UUID_COMPATIBILITY_H

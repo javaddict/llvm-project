@@ -34,36 +34,42 @@ respectively.
 
 MCP uses standard input/output (stdio) for communication between client and
 server. The exact configuration depends on the client, but most applications
-allow you to specify an MCP server as a binary and arguments. LLDB ships with
-`lldb-mcp`, a small helper that bridges stdio to LLDB's MCP server socket.
+allow you to specify an MCP server as a binary and arguments. This means that
+you need to use something like `netcat` to connect to LLDB's MCP server and
+forward communication over stdio over the network connection.
 
 ```
 ┌──────────┐               ┌──────────┐               ┌──────────┐
 │          │               │          │               │          │
-│   LLDB   ├─────socket────┤ lldb-mcp ├─────stdio─────┤MCP Client│
+│   LLDB   ├─────socket────┤  netcat  ├─────stdio─────┤MCP Client│
 │          │               │          │               │          │
 └──────────┘               └──────────┘               └──────────┘
 ```
 
-`lldb-mcp` automatically discovers a running LLDB MCP server, so there is no
-need to specify a port. If no server is running, it will launch `lldb` in the
-background and connect to it. The `lldb` binary located next to `lldb-mcp` is
-used by default; set the `LLDB_EXE_PATH` environment variable to override this.
-
 Configuration example for [Claude Code](https://modelcontextprotocol.io/quickstart/user):
-
-```
-claude mcp add --transport stdio -- lldb-mcp /path/to/lldb-mcp
-```
-
-Configuration example (`mcp.json`) for [Visual Studio Code](https://code.visualstudio.com/docs/copilot/chat/mcp-servers):
 
 ```json
 {
-  "servers": {
-    "lldb": {
-      "type": "stdio",
-      "command": "/path/to/lldb-mcp"
+  "mcpServers": {
+    "tool": {
+      "command": "/usr/bin/nc",
+      "args": ["localhost", "59999"]
+    }
+  }
+}
+```
+
+Configuration example for [Visual Studio Code](https://code.visualstudio.com/docs/copilot/chat/mcp-servers):
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "lldb": {
+        "type": "stdio",
+        "command": "/usr/bin/nc",
+        "args": ["localhost", "59999"]
+      }
     }
   }
 }

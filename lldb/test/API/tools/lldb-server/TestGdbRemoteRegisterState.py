@@ -4,7 +4,6 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
 
-@skipIfMTE  # MTE security transition shims restrict socket operations.
 class TestGdbRemoteRegisterState(gdbremote_testcase.GdbRemoteTestCaseBase):
     """Test QSaveRegisterState/QRestoreRegisterState support."""
 

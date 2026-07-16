@@ -679,13 +679,11 @@ static bool retrieveRelationalIntegerConstantExpr(
           if (!Arg->isValueDependent() &&
               !Arg->isIntegerConstantExpr(*Result.Context))
             return false;
-        } else {
+        } else
           return false;
-        }
       }
-    } else {
+    } else
       return false;
-    }
 
     Symbol = OverloadedOperatorExpr->getArg(IntegerConstantIsFirstArg ? 1 : 0);
     OperandExpr = OverloadedOperatorExpr;
@@ -868,14 +866,14 @@ static bool areExprsMacroAndNonMacro(const Expr *&LhsExpr,
   return LhsLoc.isMacroID() != RhsLoc.isMacroID();
 }
 
-static bool areStringsSameIgnoreSpaces(const StringRef Left,
-                                       const StringRef Right) {
+static bool areStringsSameIgnoreSpaces(const llvm::StringRef Left,
+                                       const llvm::StringRef Right) {
   if (Left == Right)
     return true;
 
   // Do running comparison ignoring spaces
-  StringRef L = Left.trim();
-  StringRef R = Right.trim();
+  llvm::StringRef L = Left.trim();
+  llvm::StringRef R = Right.trim();
   while (!L.empty() && !R.empty()) {
     L = L.ltrim();
     R = R.ltrim();
@@ -905,9 +903,9 @@ static bool areExprsSameMacroOrLiteral(const BinaryOperator *BinOp,
     // Left is macro so right macro too
     if (Rsr.getBegin().isMacroID()) {
       // Both sides are macros so they are same macro or literal
-      const StringRef L = Lexer::getSourceText(
+      const llvm::StringRef L = Lexer::getSourceText(
           CharSourceRange::getTokenRange(Lsr), SM, Context->getLangOpts());
-      const StringRef R = Lexer::getSourceText(
+      const llvm::StringRef R = Lexer::getSourceText(
           CharSourceRange::getTokenRange(Rsr), SM, Context->getLangOpts());
       return areStringsSameIgnoreSpaces(L, R);
     }
@@ -1178,10 +1176,8 @@ void RedundantExpressionCheck::checkBitwiseExpr(
         !retrieveIntegerConstantExpr(Result, "rhs", RhsValue))
       return;
 
-    const unsigned ConstantWidth =
-        std::max(LhsValue.getBitWidth(), RhsValue.getBitWidth());
-    const llvm::APInt LhsConstant = LhsValue.extOrTrunc(ConstantWidth);
-    const llvm::APInt RhsConstant = RhsValue.extOrTrunc(ConstantWidth);
+    const uint64_t LhsConstant = LhsValue.getZExtValue();
+    const uint64_t RhsConstant = RhsValue.getZExtValue();
     const SourceLocation Loc = ComparisonOperator->getOperatorLoc();
 
     // Check expression: x & k1 == k2  (i.e. x & 0xFF == 0xF00)

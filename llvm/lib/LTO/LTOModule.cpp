@@ -401,7 +401,7 @@ void LTOModule::addDefinedFunctionSymbol(ModuleSymbolTable::Symbol Sym) {
   }
 
   auto *GV = cast<GlobalValue *>(Sym);
-  assert((isa<Function>(GV) || isa<GlobalIFunc>(GV) ||
+  assert((isa<Function>(GV) ||
           (isa<GlobalAlias>(GV) &&
            isa<Function>(cast<GlobalAlias>(GV)->getAliasee()))) &&
          "Not function or function alias");
@@ -608,11 +608,6 @@ void LTOModule::parseSymbols() {
 
     if (isa<GlobalVariable>(GV)) {
       addDefinedDataSymbol(Sym);
-      continue;
-    }
-
-    if (getTargetTriple().isOSBinFormatXCOFF() && isa<GlobalIFunc>(GV)) {
-      addDefinedFunctionSymbol(Sym);
       continue;
     }
 

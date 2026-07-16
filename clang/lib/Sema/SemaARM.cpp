@@ -42,15 +42,13 @@ bool SemaARM::BuiltinARMMemoryTaggingCall(unsigned BuiltinID,
              << "first" << FirstArgType << Arg0->getSourceRange();
     TheCall->setArg(0, FirstArg.get());
 
-    InitializedEntity Entity = InitializedEntity::InitializeParameter(
-        Context, Context.getIntTypeForBitwidth(64, /*Signed=*/false),
-        /*Consumed=*/false);
-    ExprResult SecArg =
-        SemaRef.PerformCopyInitialization(Entity,
-                                          /*EqualLoc=*/SourceLocation(), Arg1);
+    ExprResult SecArg = SemaRef.DefaultLvalueConversion(Arg1);
     if (SecArg.isInvalid())
       return true;
-    TheCall->setArg(1, SecArg.get());
+    QualType SecArgType = SecArg.get()->getType();
+    if (!SecArgType->isIntegerType())
+      return Diag(TheCall->getBeginLoc(), diag::err_memtag_arg_must_be_integer)
+             << "second" << SecArgType << Arg1->getSourceRange();
 
     // Derive the return type from the pointer argument.
     TheCall->setType(FirstArgType);
@@ -91,18 +89,12 @@ bool SemaARM::BuiltinARMMemoryTaggingCall(unsigned BuiltinID,
     if (!FirstArgType->isAnyPointerType())
       return Diag(TheCall->getBeginLoc(), diag::err_memtag_arg_must_be_pointer)
              << "first" << FirstArgType << Arg0->getSourceRange();
-    TheCall->setArg(0, FirstArg.get());
 
-    InitializedEntity Entity = InitializedEntity::InitializeParameter(
-        Context, Context.getIntTypeForBitwidth(64, /*Signed=*/false),
-        /*Consumed=*/false);
-    ExprResult SecArg =
-        SemaRef.PerformCopyInitialization(Entity,
-                                          /*EqualLoc=*/SourceLocation(), Arg1);
-    if (SecArg.isInvalid())
-      return true;
-    TheCall->setArg(1, SecArg.get());
-
+    QualType SecArgType = Arg1->getType();
+    if (!SecArgType->isIntegerType())
+      return Diag(TheCall->getBeginLoc(), diag::err_memtag_arg_must_be_integer)
+             << "second" << SecArgType << Arg1->getSourceRange();
+    TheCall->setType(Context.IntTy);
     return false;
   }
 
@@ -184,6 +176,7 @@ bool SemaARM::BuiltinARMMemoryTaggingCall(unsigned BuiltinID,
 
     TheCall->setArg(0, ArgExprA.get());
     TheCall->setArg(1, ArgExprB.get());
+    TheCall->setType(Context.LongLongTy);
     return false;
   }
   assert(false && "Unhandled ARM MTE intrinsic");
@@ -749,13 +742,11 @@ bool SemaARM::CheckNeonBuiltinFunctionCall(const TargetInfo &TI,
 
   // For NEON intrinsics which are overloaded on vector element type, validate
   // the immediate which specifies which variant to emit.
+  unsigned ImmArg = TheCall->getNumArgs() - 1;
   if (mask) {
-    unsigned ImmArg = TheCall->getNumArgs() - 1;
     if (SemaRef.BuiltinConstantArg(TheCall, ImmArg, Result))
       return true;
 
-    // FIXME: This is effectively dead code. Change the logic above so that the
-    // following check is actually run.
     TV = Result.getLimitedValue(64);
     if ((TV > 63) || (mask & (1ULL << TV)) == 0)
       return Diag(TheCall->getBeginLoc(), diag::err_invalid_neon_type_code)
@@ -1167,21 +1158,14 @@ bool SemaARM::CheckAArch64BuiltinFunctionCall(const TargetInfo &TI,
     return BuiltinARMSpecialReg(BuiltinID, TheCall, 0, 5, true);
 
   // Only check the valid encoding range. Any constant in this range would be
-  // converted to a register of the form S2_2_C3_C4_5. Let the hardware throw
+  // converted to a register of the form S1_2_C3_C4_5. Let the hardware throw
   // an exception for incorrect registers. This matches MSVC behavior.
   if (BuiltinID == AArch64::BI_ReadStatusReg ||
-      BuiltinID == AArch64::BI_WriteStatusReg)
-    return SemaRef.BuiltinConstantArgRange(TheCall, 0, 0x4000, 0x7fff);
+      BuiltinID == AArch64::BI_WriteStatusReg || BuiltinID == AArch64::BI__sys)
+    return SemaRef.BuiltinConstantArgRange(TheCall, 0, 0, 0x7fff);
 
-  if (BuiltinID == AArch64::BI__sys)
-    return SemaRef.BuiltinConstantArgRange(TheCall, 0, 0, 0x3fff);
-
-  if (BuiltinID == AArch64::BI__getReg || BuiltinID == AArch64::BI__setReg ||
-      BuiltinID == AArch64::BI__getRegFp || BuiltinID == AArch64::BI__setRegFp)
+  if (BuiltinID == AArch64::BI__getReg)
     return SemaRef.BuiltinConstantArgRange(TheCall, 0, 0, 31);
-
-  if (BuiltinID == AArch64::BI__prefetch2)
-    return SemaRef.BuiltinConstantArgRange(TheCall, 1, 0, 31);
 
   if (BuiltinID == AArch64::BI__break)
     return SemaRef.BuiltinConstantArgRange(TheCall, 0, 0, 0xffff);
@@ -1541,8 +1525,7 @@ bool SemaARM::areCompatibleSveTypes(QualType FirstType, QualType SecondType) {
           return BT->getKind() == BuiltinType::SveBool;
         else if (VT->getVectorKind() == VectorKind::SveFixedLengthData)
           return VT->getElementType().getCanonicalType() ==
-                     FirstType->getSveEltType(Context) &&
-                 BT->getKind() != BuiltinType::SveBool;
+                 FirstType->getSveEltType(Context);
         else if (VT->getVectorKind() == VectorKind::Generic)
           return Context.getTypeSize(SecondType) ==
                      getSVETypeSize(Context, BT, IsStreaming) &&
@@ -1757,8 +1740,10 @@ bool SemaARM::checkTargetClonesAttr(
     NewParams.push_back(NewParam);
     HasNonDefault = true;
   }
+  if (!HasNonDefault)
+    return true;
 
-  return !HasNonDefault;
+  return false;
 }
 
 bool SemaARM::checkSVETypeSupport(QualType Ty, SourceLocation Loc,

@@ -67,7 +67,10 @@ INITIALIZE_PASS(RemoveRedundantDebugValuesLegacy, DEBUG_TYPE,
 
 /// Default construct and initialize the pass.
 RemoveRedundantDebugValuesLegacy::RemoveRedundantDebugValuesLegacy()
-    : MachineFunctionPass(ID) {}
+    : MachineFunctionPass(ID) {
+  initializeRemoveRedundantDebugValuesLegacyPass(
+      *PassRegistry::getPassRegistry());
+}
 
 // This analysis aims to remove redundant DBG_VALUEs by going forward
 // in the basic block by considering the first DBG_VALUE as a valid
@@ -128,9 +131,11 @@ static bool reduceDbgValsForwardScan(MachineBasicBlock &MBB) {
       continue;
 
     // Stop tracking any location that is clobbered by this instruction.
-    VariableMap.remove_if([&](const auto &Var) {
-      return MI.modifiesRegister(Var.second.first->getReg(), TRI);
-    });
+    for (auto &Var : VariableMap) {
+      auto &LocOp = Var.second.first;
+      if (MI.modifiesRegister(LocOp->getReg(), TRI))
+        VariableMap.erase(Var.first);
+    }
   }
 
   for (auto &Instr : DbgValsToBeRemoved) {

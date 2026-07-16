@@ -72,3 +72,4 @@ class TestGuiBasicDebugCommandTest(PExpectTest):
         self.child.send(escape_key)
 
         self.expect_prompt()
+        self.quit()

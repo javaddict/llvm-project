@@ -38,7 +38,6 @@ class WebAssemblyPeephole final : public MachineFunctionPass {
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
     AU.addRequired<TargetLibraryInfoWrapperPass>();
-    AU.addRequired<LibcallLoweringInfoWrapper>();
     MachineFunctionPass::getAnalysisUsage(AU);
   }
 
@@ -118,28 +117,11 @@ bool WebAssemblyPeephole::runOnMachineFunction(MachineFunction &MF) {
 
   MachineRegisterInfo &MRI = MF.getRegInfo();
   WebAssemblyFunctionInfo &MFI = *MF.getInfo<WebAssemblyFunctionInfo>();
-  const WebAssemblySubtarget &Subtarget =
-      MF.getSubtarget<WebAssemblySubtarget>();
-  const auto &TII = *Subtarget.getInstrInfo();
+  const auto &TII = *MF.getSubtarget<WebAssemblySubtarget>().getInstrInfo();
+  const WebAssemblyTargetLowering &TLI =
+      *MF.getSubtarget<WebAssemblySubtarget>().getTargetLowering();
   auto &LibInfo =
       getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(MF.getFunction());
-
-  const LibcallLoweringInfo &LibcallLowering =
-      getAnalysis<LibcallLoweringInfoWrapper>().getLibcallLowering(
-          *MF.getFunction().getParent(), Subtarget);
-
-  RTLIB::LibcallImpl MemcpyImpl = LibcallLowering.getLibcallImpl(RTLIB::MEMCPY);
-  RTLIB::LibcallImpl MemmoveImpl =
-      LibcallLowering.getLibcallImpl(RTLIB::MEMMOVE);
-  RTLIB::LibcallImpl MemsetImpl = LibcallLowering.getLibcallImpl(RTLIB::MEMSET);
-
-  StringRef MemcpyName =
-      RTLIB::RuntimeLibcallsInfo::getLibcallImplName(MemcpyImpl);
-  StringRef MemmoveName =
-      RTLIB::RuntimeLibcallsInfo::getLibcallImplName(MemmoveImpl);
-  StringRef MemsetName =
-      RTLIB::RuntimeLibcallsInfo::getLibcallImplName(MemsetImpl);
-
   bool Changed = false;
 
   for (auto &MBB : MF)
@@ -151,7 +133,9 @@ bool WebAssemblyPeephole::runOnMachineFunction(MachineFunction &MF) {
         MachineOperand &Op1 = MI.getOperand(1);
         if (Op1.isSymbol()) {
           StringRef Name(Op1.getSymbolName());
-          if (Name == MemcpyName || Name == MemmoveName || Name == MemsetName) {
+          if (Name == TLI.getLibcallName(RTLIB::MEMCPY) ||
+              Name == TLI.getLibcallName(RTLIB::MEMMOVE) ||
+              Name == TLI.getLibcallName(RTLIB::MEMSET)) {
             LibFunc Func;
             if (LibInfo.getLibFunc(Name, Func)) {
               const auto &Op2 = MI.getOperand(2);

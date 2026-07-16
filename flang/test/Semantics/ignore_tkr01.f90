@@ -1,12 +1,12 @@
 ! RUN: %python %S/test_errors.py %s %flang_fc1 -pedantic
 ! !DIR$ IGNORE_TKR tests
 
-!ERROR: !DIR$ IGNORE_TKR directive must appear in a program unit
+!ERROR: !DIR$ IGNORE_TKR directive must appear in a subroutine or function
 !dir$ ignore_tkr
 
 module m
 
-!WARNING: !DIR$ IGNORE_TKR directive should appear in a subroutine or function [-Wmisplaced-ignore-tkr]
+!ERROR: !DIR$ IGNORE_TKR directive must appear in a subroutine or function
 !dir$ ignore_tkr
 
   interface
@@ -115,7 +115,7 @@ module m
   subroutine t17(x)
     real x
     x = x + 1.
-!WARNING: !DIR$ IGNORE_TKR directive should appear in the specification part [-Wmisplaced-ignore-tkr]
+!ERROR: !DIR$ IGNORE_TKR directive must appear in the specification part
 !dir$ ignore_tkr x
   end
 
@@ -173,7 +173,7 @@ end
 
 program test
 
-!WARNING: !DIR$ IGNORE_TKR directive should appear in a subroutine or function [-Wmisplaced-ignore-tkr]
+!ERROR: !DIR$ IGNORE_TKR directive must appear in a subroutine or function
 !dir$ ignore_tkr
 
   use m

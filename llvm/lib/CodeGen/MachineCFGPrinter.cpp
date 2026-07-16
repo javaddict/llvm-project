@@ -14,7 +14,6 @@
 #include "llvm/CodeGen/MachineCFGPrinter.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachinePassManager.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
@@ -57,11 +56,11 @@ static void writeMCFGToDotFile(MachineFunction &MF) {
 
 namespace {
 
-class MachineCFGPrinterLegacy : public MachineFunctionPass {
+class MachineCFGPrinter : public MachineFunctionPass {
 public:
   static char ID;
 
-  MachineCFGPrinterLegacy();
+  MachineCFGPrinter();
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
@@ -73,17 +72,19 @@ public:
 
 } // namespace
 
-char MachineCFGPrinterLegacy::ID = 0;
+char MachineCFGPrinter::ID = 0;
 
-char &llvm::MachineCFGPrinterID = MachineCFGPrinterLegacy::ID;
+char &llvm::MachineCFGPrinterID = MachineCFGPrinter::ID;
 
-INITIALIZE_PASS(MachineCFGPrinterLegacy, DEBUG_TYPE, "Machine CFG Printer Pass",
+INITIALIZE_PASS(MachineCFGPrinter, DEBUG_TYPE, "Machine CFG Printer Pass",
                 false, true)
 
 /// Default construct and initialize the pass.
-MachineCFGPrinterLegacy::MachineCFGPrinterLegacy() : MachineFunctionPass(ID) {}
+MachineCFGPrinter::MachineCFGPrinter() : MachineFunctionPass(ID) {
+  initializeMachineCFGPrinterPass(*PassRegistry::getPassRegistry());
+}
 
-bool MachineCFGPrinterLegacy::runOnMachineFunction(MachineFunction &MF) {
+bool MachineCFGPrinter::runOnMachineFunction(MachineFunction &MF) {
   if (!MCFGFuncName.empty() && !MF.getName().contains(MCFGFuncName))
     return false;
   errs() << "Writing Machine CFG for function ";
@@ -91,16 +92,4 @@ bool MachineCFGPrinterLegacy::runOnMachineFunction(MachineFunction &MF) {
 
   writeMCFGToDotFile(MF);
   return false;
-}
-
-PreservedAnalyses
-MachineCFGPrinterPass::run(MachineFunction &MF,
-                           MachineFunctionAnalysisManager &MFAM) {
-  if (!MCFGFuncName.empty() && !MF.getName().contains(MCFGFuncName))
-    return PreservedAnalyses::all();
-  errs() << "Writing Machine CFG for function ";
-  errs().write_escaped(MF.getName()) << '\n';
-
-  writeMCFGToDotFile(MF);
-  return PreservedAnalyses::all();
 }

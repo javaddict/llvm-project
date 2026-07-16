@@ -28,22 +28,23 @@ namespace ento {
 class SValBuilder;
 class SymbolReaper;
 
-/// An entry in the environment consists of a Stmt and an StackFrame.
+/// An entry in the environment consists of a Stmt and an LocationContext.
 /// This allows the environment to manage context-sensitive bindings,
 /// which is essentially for modeling recursive function analysis, among
 /// other things.
-class EnvironmentEntry : public std::pair<const Expr *, const StackFrame *> {
+class EnvironmentEntry : public std::pair<const Stmt *,
+                                          const StackFrameContext *> {
 public:
-  EnvironmentEntry(const Expr *E, const StackFrame *SF);
+  EnvironmentEntry(const Stmt *s, const LocationContext *L);
 
-  const Expr *getExpr() const { return first; }
-  const StackFrame *getStackFrame() const { return second; }
+  const Stmt *getStmt() const { return first; }
+  const LocationContext *getLocationContext() const { return second; }
 
   /// Profile an EnvironmentEntry for inclusion in a FoldingSet.
   static void Profile(llvm::FoldingSetNodeID &ID,
                       const EnvironmentEntry &E) {
-    ID.AddPointer(E.getExpr());
-    ID.AddPointer(E.getStackFrame());
+    ID.AddPointer(E.getStmt());
+    ID.AddPointer(E.getLocationContext());
   }
 
   void Profile(llvm::FoldingSetNodeID &ID) const {
@@ -51,7 +52,7 @@ public:
   }
 };
 
-/// An immutable map from EnvironmentEntries to SVals.
+/// An immutable map from EnvironemntEntries to SVals.
 class Environment {
 private:
   friend class EnvironmentManager;
@@ -91,7 +92,7 @@ public:
   }
 
   void printJson(raw_ostream &Out, const ASTContext &Ctx,
-                 const StackFrame *SF = nullptr, const char *NL = "\n",
+                 const LocationContext *LCtx = nullptr, const char *NL = "\n",
                  unsigned int Space = 0, bool IsDot = false) const;
 };
 

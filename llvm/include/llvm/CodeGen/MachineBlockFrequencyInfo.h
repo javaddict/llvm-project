@@ -125,7 +125,7 @@ public:
 
 /// Printer pass for the \c MachineBlockFrequencyInfo results.
 class MachineBlockFrequencyPrinterPass
-    : public RequiredPassInfoMixin<MachineBlockFrequencyPrinterPass> {
+    : public PassInfoMixin<MachineBlockFrequencyPrinterPass> {
   raw_ostream &OS;
 
 public:
@@ -133,6 +133,8 @@ public:
 
   LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
                                  MachineFunctionAnalysisManager &MFAM);
+
+  static bool isRequired() { return true; }
 };
 
 class LLVM_ABI MachineBlockFrequencyInfoWrapperPass

@@ -32,15 +32,15 @@ void ByteCodeEmitter::compileFunc(const FunctionDecl *FuncDecl,
     return;
 
   // Set up lambda captures.
-  if (Func->isLambdaCallOperator()) {
+  if (const auto *MD = dyn_cast<CXXMethodDecl>(FuncDecl);
+      MD && isLambdaCallOperator(MD)) {
     // Set up lambda capture to closure record field mapping.
-    const CXXRecordDecl *ParentDecl = Func->getParentDecl();
-    const Record *R = P.getOrCreateRecord(ParentDecl);
+    const Record *R = P.getOrCreateRecord(MD->getParent());
     assert(R);
     llvm::DenseMap<const ValueDecl *, FieldDecl *> LC;
     FieldDecl *LTC;
 
-    ParentDecl->getCaptureFields(LC, LTC);
+    MD->getParent()->getCaptureFields(LC, LTC);
 
     for (auto Cap : LC) {
       unsigned Offset = R->getField(Cap.second)->Offset;
@@ -55,13 +55,17 @@ void ByteCodeEmitter::compileFunc(const FunctionDecl *FuncDecl,
   }
 
   bool IsValid = !FuncDecl->isInvalidDecl();
-  // Register parameters and their index.
-  for (unsigned ParamIndex = 0, N = Func->getNumWrittenParams();
-       ParamIndex != N; ++ParamIndex) {
-    const ParmVarDecl *PD = FuncDecl->getParamDecl(ParamIndex);
+  // Register parameters with their offset.
+  unsigned ParamIndex = 0;
+  unsigned Drop = Func->hasRVO() +
+                  (Func->hasThisPointer() && !Func->isThisPointerExplicit());
+  for (auto ParamOffset : llvm::drop_begin(Func->ParamOffsets, Drop)) {
+    const ParmVarDecl *PD = FuncDecl->parameters()[ParamIndex];
     if (PD->isInvalidDecl())
       IsValid = false;
-    this->Params.insert({PD, {ParamIndex, Ctx.canClassify(PD->getType())}});
+    OptPrimType T = Ctx.classify(PD->getType());
+    this->Params.insert({PD, {ParamOffset, T != std::nullopt}});
+    ++ParamIndex;
   }
 
   Func->setDefined(true);
@@ -221,16 +225,16 @@ bool ByteCodeEmitter::emitOp(Opcode Op, const Tys &...Args, SourceInfo SI) {
   return Success;
 }
 
-bool ByteCodeEmitter::jumpTrue(const LabelTy &Label, SourceInfo SI) {
-  return emitJt(getOffset(Label), SI);
+bool ByteCodeEmitter::jumpTrue(const LabelTy &Label) {
+  return emitJt(getOffset(Label), SourceInfo{});
 }
 
-bool ByteCodeEmitter::jumpFalse(const LabelTy &Label, SourceInfo SI) {
-  return emitJf(getOffset(Label), SI);
+bool ByteCodeEmitter::jumpFalse(const LabelTy &Label) {
+  return emitJf(getOffset(Label), SourceInfo{});
 }
 
-bool ByteCodeEmitter::jump(const LabelTy &Label, SourceInfo SI) {
-  return emitJmp(getOffset(Label), SI);
+bool ByteCodeEmitter::jump(const LabelTy &Label) {
+  return emitJmp(getOffset(Label), SourceInfo{});
 }
 
 bool ByteCodeEmitter::fallthrough(const LabelTy &Label) {

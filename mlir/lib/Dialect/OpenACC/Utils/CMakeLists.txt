@@ -1,7 +1,5 @@
 add_mlir_dialect_library(MLIROpenACCUtils
   OpenACCUtils.cpp
-  OpenACCUtilsCG.cpp
-  OpenACCUtilsGPU.cpp
   OpenACCUtilsLoop.cpp
   OpenACCUtilsTiling.cpp
 
@@ -20,8 +18,6 @@ add_mlir_dialect_library(MLIROpenACCUtils
   LINK_LIBS PUBLIC
   MLIRArithDialect
   MLIRArithUtils
-  MLIRDataLayoutInterfaces
-  MLIRGPUDialect
   MLIROpenACCDialect
   MLIRIR
   MLIRSCFDialect

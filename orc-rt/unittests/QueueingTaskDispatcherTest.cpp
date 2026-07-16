@@ -18,274 +18,331 @@ using namespace orc_rt;
 
 namespace {
 
+TEST(QueueingTaskDispatcherTest, EmptyDispatcher) {
+  // Test that a newly created dispatcher has no tasks
+  QueueingTaskDispatcher Dispatcher;
+
+  EXPECT_EQ(Dispatcher.pop_back(), nullptr);
+  EXPECT_EQ(Dispatcher.pop_front(), nullptr);
+
+  Dispatcher.shutdown();
+}
+
 TEST(QueueingTaskDispatcherTest, BasicTaskDispatch) {
-  // Test basic task dispatching and retrieval.
-  QueueingTaskDispatcher::TaskQueue Q;
-  QueueingTaskDispatcher Dispatcher(Q);
+  // Test basic task dispatching and retrieval
+  QueueingTaskDispatcher Dispatcher;
   bool TaskRan = false;
 
   Dispatcher.dispatch(makeGenericTask([&]() { TaskRan = true; }));
-  Dispatcher.shutdown();
 
-  auto Task = Q.takeFirstIn();
+  auto Task = Dispatcher.pop_back();
   EXPECT_NE(Task, nullptr);
+
   Task->run();
   EXPECT_TRUE(TaskRan);
 
-  // Queue is shut down and drained — should return nullptr.
-  EXPECT_EQ(Q.takeFirstIn(), nullptr);
+  // Should be empty now
+  EXPECT_EQ(Dispatcher.pop_back(), nullptr);
+  EXPECT_EQ(Dispatcher.pop_front(), nullptr);
+
+  Dispatcher.shutdown();
 }
 
 TEST(QueueingTaskDispatcherTest, MultipleTasks) {
-  // Test dispatching and running multiple tasks.
-  QueueingTaskDispatcher::TaskQueue Q;
-  QueueingTaskDispatcher Dispatcher(Q);
+  // Test dispatching multiple tasks
+  QueueingTaskDispatcher Dispatcher;
   int TaskCount = 0;
   constexpr int NumTasks = 5;
 
   for (int I = 0; I < NumTasks; ++I)
     Dispatcher.dispatch(makeGenericTask([&]() { ++TaskCount; }));
-  Dispatcher.shutdown();
 
-  // Take and run all tasks.
+  // Pop all tasks and run them
   for (int I = 0; I < NumTasks; ++I) {
-    auto Task = Q.takeFirstIn();
+    auto Task = Dispatcher.pop_back();
     EXPECT_NE(Task, nullptr);
     Task->run();
   }
 
   EXPECT_EQ(TaskCount, NumTasks);
-  EXPECT_EQ(Q.takeFirstIn(), nullptr);
+  EXPECT_EQ(Dispatcher.pop_back(), nullptr);
+
+  Dispatcher.shutdown();
 }
 
-TEST(QueueingTaskDispatcherTest, TakeLastInLIFOOrder) {
-  // Test that takeLastIn retrieves tasks in LIFO order.
-  QueueingTaskDispatcher::TaskQueue Q;
-  QueueingTaskDispatcher Dispatcher(Q);
+TEST(QueueingTaskDispatcherTest, PopBackLIFOOrder) {
+  // Test that pop_back retrieves tasks in LIFO (Last-In-First-Out) order
+  QueueingTaskDispatcher Dispatcher;
   std::vector<int> ExecutionOrder;
 
+  // Dispatch tasks with different values
   for (int I = 0; I < 3; ++I)
     Dispatcher.dispatch(makeGenericTask(
         [&ExecutionOrder, I]() { ExecutionOrder.push_back(I); }));
-  Dispatcher.shutdown();
 
-  while (auto Task = Q.takeLastIn())
+  // Pop from back should give us tasks in reverse order (LIFO)
+  while (auto Task = Dispatcher.pop_back())
     Task->run();
 
-  ASSERT_EQ(ExecutionOrder.size(), 3u);
-  EXPECT_EQ(ExecutionOrder[0], 2);
+  EXPECT_EQ(ExecutionOrder.size(), 3u);
+  EXPECT_EQ(ExecutionOrder[0], 2); // Last dispatched task
   EXPECT_EQ(ExecutionOrder[1], 1);
-  EXPECT_EQ(ExecutionOrder[2], 0);
+  EXPECT_EQ(ExecutionOrder[2], 0); // First dispatched task
+
+  Dispatcher.shutdown();
 }
 
-TEST(QueueingTaskDispatcherTest, TakeFirstInFIFOOrder) {
-  // Test that takeFirstIn retrieves tasks in FIFO order.
-  QueueingTaskDispatcher::TaskQueue Q;
-  QueueingTaskDispatcher Dispatcher(Q);
+TEST(QueueingTaskDispatcherTest, PopFrontFIFOOrder) {
+  // Test that pop_front retrieves tasks in FIFO (First-In-First-Out) order
+  QueueingTaskDispatcher Dispatcher;
   std::vector<int> ExecutionOrder;
 
+  // Dispatch tasks with different values
   for (int I = 0; I < 3; ++I)
     Dispatcher.dispatch(makeGenericTask(
         [&ExecutionOrder, I]() { ExecutionOrder.push_back(I); }));
-  Dispatcher.shutdown();
 
-  while (auto Task = Q.takeFirstIn())
+  // Pop from front should give us tasks in original order (FIFO)
+  while (auto Task = Dispatcher.pop_front())
     Task->run();
 
-  ASSERT_EQ(ExecutionOrder.size(), 3u);
-  EXPECT_EQ(ExecutionOrder[0], 0);
+  EXPECT_EQ(ExecutionOrder.size(), 3u);
+  EXPECT_EQ(ExecutionOrder[0], 0); // First dispatched task
   EXPECT_EQ(ExecutionOrder[1], 1);
-  EXPECT_EQ(ExecutionOrder[2], 2);
+  EXPECT_EQ(ExecutionOrder[2], 2); // Last dispatched task
+
+  Dispatcher.shutdown();
 }
 
 TEST(QueueingTaskDispatcherTest, RunLIFOUntilEmpty) {
-  // Test the runLIFOUntilEmpty convenience method.
-  QueueingTaskDispatcher::TaskQueue Q;
-  QueueingTaskDispatcher Dispatcher(Q);
+  // Test the runLIFOUntilEmpty method
+  QueueingTaskDispatcher Dispatcher;
   std::vector<int> ExecutionOrder;
 
+  // Dispatch tasks
   for (int I = 0; I < 3; ++I)
     Dispatcher.dispatch(makeGenericTask(
         [&ExecutionOrder, I]() { ExecutionOrder.push_back(I); }));
-  Dispatcher.shutdown();
 
-  Q.runLIFOUntilEmpty();
+  // Run all tasks in LIFO order
+  Dispatcher.runLIFOUntilEmpty();
 
-  ASSERT_EQ(ExecutionOrder.size(), 3u);
-  EXPECT_EQ(ExecutionOrder[0], 2);
+  EXPECT_EQ(ExecutionOrder.size(), 3u);
+  EXPECT_EQ(ExecutionOrder[0], 2); // Last dispatched task runs first
   EXPECT_EQ(ExecutionOrder[1], 1);
-  EXPECT_EQ(ExecutionOrder[2], 0);
+  EXPECT_EQ(ExecutionOrder[2], 0); // First dispatched task runs last
+
+  // Should be empty now
+  EXPECT_EQ(Dispatcher.pop_back(), nullptr);
+  EXPECT_EQ(Dispatcher.pop_front(), nullptr);
+
+  Dispatcher.shutdown();
 }
 
 TEST(QueueingTaskDispatcherTest, RunFIFOUntilEmpty) {
-  // Test the runFIFOUntilEmpty convenience method.
-  QueueingTaskDispatcher::TaskQueue Q;
-  QueueingTaskDispatcher Dispatcher(Q);
+  // Test the runFIFOUntilEmpty method
+  QueueingTaskDispatcher Dispatcher;
   std::vector<int> ExecutionOrder;
 
+  // Dispatch tasks
   for (int I = 0; I < 3; ++I)
     Dispatcher.dispatch(makeGenericTask(
         [&ExecutionOrder, I]() { ExecutionOrder.push_back(I); }));
-  Dispatcher.shutdown();
 
-  Q.runFIFOUntilEmpty();
+  // Run all tasks in FIFO order
+  Dispatcher.runFIFOUntilEmpty();
 
-  ASSERT_EQ(ExecutionOrder.size(), 3u);
-  EXPECT_EQ(ExecutionOrder[0], 0);
+  EXPECT_EQ(ExecutionOrder.size(), 3u);
+  EXPECT_EQ(ExecutionOrder[0], 0); // First dispatched task runs first
   EXPECT_EQ(ExecutionOrder[1], 1);
-  EXPECT_EQ(ExecutionOrder[2], 2);
+  EXPECT_EQ(ExecutionOrder[2], 2); // Last dispatched task runs last
+
+  // Should be empty now
+  EXPECT_EQ(Dispatcher.pop_back(), nullptr);
+  EXPECT_EQ(Dispatcher.pop_front(), nullptr);
+
+  Dispatcher.shutdown();
 }
 
-TEST(QueueingTaskDispatcherTest, MixedTakeOperations) {
-  // Test mixing takeFirstIn and takeLastIn.
-  QueueingTaskDispatcher::TaskQueue Q;
-  QueueingTaskDispatcher Dispatcher(Q);
+TEST(QueueingTaskDispatcherTest, MixedPopOperations) {
+  // Test mixing pop_front and pop_back operations
+  QueueingTaskDispatcher Dispatcher;
   std::vector<int> ExecutionOrder;
 
-  // Dispatch tasks 0, 1, 2.
+  // Dispatch tasks 0, 1, 2
   for (int I = 0; I < 3; ++I)
     Dispatcher.dispatch(makeGenericTask(
         [&ExecutionOrder, I]() { ExecutionOrder.push_back(I); }));
-  Dispatcher.shutdown();
 
-  // takeLastIn should get task 2.
-  auto Task1 = Q.takeLastIn();
-  ASSERT_NE(Task1, nullptr);
+  // Pop from back (should get task 2)
+  auto Task1 = Dispatcher.pop_back();
+  EXPECT_NE(Task1, nullptr);
   Task1->run();
 
-  // takeFirstIn should get task 0.
-  auto Task2 = Q.takeFirstIn();
-  ASSERT_NE(Task2, nullptr);
+  // Pop from front (should get task 0)
+  auto Task2 = Dispatcher.pop_front();
+  EXPECT_NE(Task2, nullptr);
   Task2->run();
 
-  // takeLastIn should get task 1 (only one left).
-  auto Task3 = Q.takeLastIn();
-  ASSERT_NE(Task3, nullptr);
+  // Pop from back again (should get task 1)
+  auto Task3 = Dispatcher.pop_back();
+  EXPECT_NE(Task3, nullptr);
   Task3->run();
 
-  EXPECT_EQ(Q.takeFirstIn(), nullptr);
+  // Should be empty now
+  EXPECT_EQ(Dispatcher.pop_back(), nullptr);
+  EXPECT_EQ(Dispatcher.pop_front(), nullptr);
 
-  ASSERT_EQ(ExecutionOrder.size(), 3u);
-  EXPECT_EQ(ExecutionOrder[0], 2);
-  EXPECT_EQ(ExecutionOrder[1], 0);
-  EXPECT_EQ(ExecutionOrder[2], 1);
-}
-
-TEST(QueueingTaskDispatcherTest, ShutdownDrainsRemainingTasks) {
-  // Verify that tasks dispatched before shutdown can still be taken.
-  QueueingTaskDispatcher::TaskQueue Q;
-  QueueingTaskDispatcher Dispatcher(Q);
-  int TaskCount = 0;
-
-  for (int I = 0; I < 3; ++I)
-    Dispatcher.dispatch(makeGenericTask([&]() { ++TaskCount; }));
+  EXPECT_EQ(ExecutionOrder.size(), 3u);
+  EXPECT_EQ(ExecutionOrder[0], 2); // Last task (pop_back)
+  EXPECT_EQ(ExecutionOrder[1], 0); // First task (pop_front)
+  EXPECT_EQ(ExecutionOrder[2], 1); // Middle task (pop_back)
 
   Dispatcher.shutdown();
+}
 
-  // All pre-shutdown tasks should still be available.
-  while (auto Task = Q.takeFirstIn())
-    Task->run();
+TEST(QueueingTaskDispatcherTest, ShutdownWithPendingTasks) {
+  // Test shutdown behavior when tasks remain in queue
+  QueueingTaskDispatcher Dispatcher;
 
-  EXPECT_EQ(TaskCount, 3);
+  // Dispatch some tasks but don't run them
+  for (int I = 0; I < 3; ++I)
+    Dispatcher.dispatch(makeGenericTask([]() {
+      // These tasks won't be executed in this test
+    }));
+
+  // Should be able to shutdown even with pending tasks
+  Dispatcher.shutdown();
+
+  // After shutdown, no tasks should be available
+  EXPECT_EQ(Dispatcher.pop_back(), nullptr);
+  EXPECT_EQ(Dispatcher.pop_front(), nullptr);
 }
 
 TEST(QueueingTaskDispatcherTest, DispatchAfterShutdown) {
-  // Tasks dispatched after shutdown should be discarded.
-  QueueingTaskDispatcher::TaskQueue Q;
-  QueueingTaskDispatcher Dispatcher(Q);
+  // Test behavior of dispatch after shutdown
+  QueueingTaskDispatcher Dispatcher;
   bool TaskRan = false;
 
   Dispatcher.shutdown();
 
+  // Dispatch should work even after shutdown (tasks are queued)
   Dispatcher.dispatch(makeGenericTask([&]() { TaskRan = true; }));
 
-  EXPECT_EQ(Q.takeFirstIn(), nullptr);
+  // Task should not be retrievable
+  EXPECT_EQ(Dispatcher.pop_back(), nullptr);
+  EXPECT_EQ(Dispatcher.pop_front(), nullptr);
+
   EXPECT_FALSE(TaskRan);
 }
 
-TEST(QueueingTaskDispatcherTest, TakeBlocksUntilTaskAvailable) {
-  // Verify that takeFirstIn blocks on an empty queue until a task arrives.
-  QueueingTaskDispatcher::TaskQueue Q;
-  QueueingTaskDispatcher Dispatcher(Q);
-  std::atomic<bool> TaskTaken = false;
+TEST(QueueingTaskDispatcherTest, RunMethodsOnEmptyDispatcher) {
+  // Test that run methods work correctly on empty dispatcher
+  QueueingTaskDispatcher Dispatcher;
 
-  std::thread Consumer([&]() {
-    auto Task = Q.takeFirstIn();
-    TaskTaken = true;
-    EXPECT_NE(Task, nullptr);
-    Task->run();
-  });
-
-  // Give the consumer a moment to block.
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  EXPECT_FALSE(TaskTaken);
-
-  // Dispatching a task should unblock the consumer.
-  std::atomic<bool> TaskRan = false;
-  Dispatcher.dispatch(makeGenericTask([&]() { TaskRan = true; }));
-
-  Consumer.join();
-
-  EXPECT_TRUE(TaskTaken);
-  EXPECT_TRUE(TaskRan);
+  // These should not crash or hang
+  Dispatcher.runLIFOUntilEmpty();
+  Dispatcher.runFIFOUntilEmpty();
 
   Dispatcher.shutdown();
 }
 
-TEST(QueueingTaskDispatcherTest, TakeReturnsNullptrOnShutdown) {
-  // Verify that a blocked take returns nullptr when the queue is shut down.
-  QueueingTaskDispatcher::TaskQueue Q;
-  QueueingTaskDispatcher Dispatcher(Q);
-  std::atomic<bool> TakeReturned = false;
+TEST(QueueingTaskDispatcherTest, InterleaveDispatchAndPop) {
+  // Test interleaving dispatch and pop operations
+  QueueingTaskDispatcher Dispatcher;
+  std::vector<int> ExecutionOrder;
 
-  std::thread Consumer([&]() {
-    auto Task = Q.takeFirstIn();
-    EXPECT_EQ(Task, nullptr);
-    TakeReturned.store(true);
-  });
+  // Dispatch task 0
+  Dispatcher.dispatch(
+      makeGenericTask([&ExecutionOrder]() { ExecutionOrder.push_back(0); }));
 
-  // Give the consumer a moment to block.
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  EXPECT_FALSE(TakeReturned);
+  // Pop and run task 0
+  auto Task1 = Dispatcher.pop_back();
+  EXPECT_NE(Task1, nullptr);
+  Task1->run();
 
-  // Shutting down should unblock the consumer with nullptr.
+  // Dispatch tasks 1 and 2
+  for (int I = 1; I < 3; ++I)
+    Dispatcher.dispatch(makeGenericTask(
+        [&ExecutionOrder, I]() { ExecutionOrder.push_back(I); }));
+
+  // Pop and run remaining tasks
+  while (auto Task = Dispatcher.pop_front())
+    Task->run();
+
+  EXPECT_EQ(ExecutionOrder.size(), 3u);
+  EXPECT_EQ(ExecutionOrder[0], 0); // First task executed immediately
+  EXPECT_EQ(ExecutionOrder[1], 1); // Second task (FIFO order)
+  EXPECT_EQ(ExecutionOrder[2], 2); // Third task (FIFO order)
+
   Dispatcher.shutdown();
-
-  Consumer.join();
-  EXPECT_TRUE(TakeReturned);
 }
 
 TEST(QueueingTaskDispatcherTest, ThreadSafety) {
-  // Test thread safety with concurrent dispatch and take.
-  QueueingTaskDispatcher::TaskQueue Q;
-  QueueingTaskDispatcher Dispatcher(Q);
-  constexpr int NumProducers = 4;
-  constexpr int TasksPerProducer = 25;
-  constexpr int TotalTasks = NumProducers * TasksPerProducer;
+  // Test thread safety of the dispatcher
+  QueueingTaskDispatcher Dispatcher;
+  constexpr int NumThreads = 4;
+  constexpr int TasksPerThread = 25;
   std::atomic<int> TasksCompleted = 0;
 
-  // Producer threads dispatch tasks.
-  std::vector<std::thread> Producers;
-  for (int I = 0; I < NumProducers; ++I) {
-    Producers.emplace_back([&]() {
-      for (int J = 0; J < TasksPerProducer; ++J)
+  std::vector<std::thread> DispatchThreads;
+  std::vector<std::thread> PopThreads;
+
+  // Create threads that dispatch tasks
+  for (int ThreadId = 0; ThreadId < NumThreads; ++ThreadId) {
+    DispatchThreads.emplace_back([&]() {
+      for (int I = 0; I < TasksPerThread; ++I) {
         Dispatcher.dispatch(makeGenericTask([&]() { ++TasksCompleted; }));
+      }
     });
   }
 
-  // Consumer thread takes and runs tasks until shutdown.
-  std::thread Consumer([&]() {
-    while (auto Task = Q.takeFirstIn())
-      Task->run();
-  });
+  // Create threads that pop and run tasks
+  for (int ThreadId = 0; ThreadId < NumThreads; ++ThreadId) {
+    PopThreads.emplace_back([&]() {
+      for (int I = 0; I < TasksPerThread; ++I) {
+        std::unique_ptr<Task> Task;
 
-  // Wait for all producers to finish, then shut down.
-  for (auto &T : Producers)
+        // Keep trying to pop a task
+        while (!Task) {
+          Task = Dispatcher.pop_back();
+          if (!Task) {
+            std::this_thread::yield();
+          }
+        }
+
+        Task->run();
+      }
+    });
+  }
+
+  // Wait for all threads to complete
+  for (auto &T : DispatchThreads)
     T.join();
-  Dispatcher.shutdown();
+  for (auto &T : PopThreads)
+    T.join();
 
-  Consumer.join();
-  EXPECT_EQ(TasksCompleted, TotalTasks);
+  EXPECT_EQ(TasksCompleted.load(), NumThreads * TasksPerThread);
+
+  Dispatcher.shutdown();
+}
+
+TEST(QueueingTaskDispatcherTest, LargeNumberOfTasks) {
+  // Test with a large number of tasks to ensure no performance issues
+  QueueingTaskDispatcher Dispatcher;
+  constexpr int NumTasks = 1000;
+  int TasksRun = 0;
+
+  // Dispatch many tasks
+  for (int I = 0; I < NumTasks; ++I)
+    Dispatcher.dispatch(makeGenericTask([&TasksRun]() { ++TasksRun; }));
+
+  // Run all tasks using FIFO
+  Dispatcher.runFIFOUntilEmpty();
+
+  EXPECT_EQ(TasksRun, NumTasks);
+
+  Dispatcher.shutdown();
 }
 
 } // end anonymous namespace

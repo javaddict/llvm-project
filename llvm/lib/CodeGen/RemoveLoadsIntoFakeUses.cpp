@@ -47,7 +47,10 @@ class RemoveLoadsIntoFakeUsesLegacy : public MachineFunctionPass {
 public:
   static char ID;
 
-  RemoveLoadsIntoFakeUsesLegacy() : MachineFunctionPass(ID) {}
+  RemoveLoadsIntoFakeUsesLegacy() : MachineFunctionPass(ID) {
+    initializeRemoveLoadsIntoFakeUsesLegacyPass(
+        *PassRegistry::getPassRegistry());
+  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
@@ -187,8 +190,7 @@ bool RemoveLoadsIntoFakeUses::run(MachineFunction &MF) {
               RegFakeUses.erase(&FakeUse);
         }
       }
-      if (!MI.isDebugInstr())
-        LivePhysRegs.stepBackward(MI);
+      LivePhysRegs.stepBackward(MI);
     }
   }
 

@@ -192,9 +192,10 @@ private:
   /// Add a successor machine basic block to ParentMBB. If the successor mbb
   /// has not been created yet (i.e. if SuccMBB = 0), then the machine basic
   /// block will be created. Assign a large weight if IsLikely is true.
-  LLVM_ABI MachineBasicBlock *
-  addSuccessorMBB(const BasicBlock *BB, MachineBasicBlock *ParentMBB,
-                  bool IsLikely, MachineBasicBlock *SuccMBB = nullptr);
+  MachineBasicBlock *addSuccessorMBB(const BasicBlock *BB,
+                                     MachineBasicBlock *ParentMBB,
+                                     bool IsLikely,
+                                     MachineBasicBlock *SuccMBB = nullptr);
 };
 
 /// Find the split point at which to splice the end of BB into its success stack
@@ -210,7 +211,7 @@ private:
 /// terminator sequence so that we can ensure that we splice off not just the
 /// terminator, but additionally the copies that move the vregs into the
 /// physical registers.
-LLVM_ABI MachineBasicBlock::iterator
+MachineBasicBlock::iterator
 findSplitPointForStackProtector(MachineBasicBlock *BB,
                                 const TargetInstrInfo &TII);
 
@@ -224,13 +225,13 @@ findSplitPointForStackProtector(MachineBasicBlock *BB,
 ///
 /// \returns The inverted test, or fcNone, if inversion does not produce a
 /// simpler test.
-LLVM_ABI FPClassTest invertFPClassTestIfSimpler(FPClassTest Test, bool UseFCmp);
+FPClassTest invertFPClassTestIfSimpler(FPClassTest Test, bool UseFCmp);
 
 /// Assuming the instruction \p MI is going to be deleted, attempt to salvage
 /// debug users of \p MI by writing the effect of \p MI in a DIExpression.
-LLVM_ABI void salvageDebugInfoForDbgValue(const MachineRegisterInfo &MRI,
-                                          MachineInstr &MI,
-                                          ArrayRef<MachineOperand *> DbgUsers);
+void salvageDebugInfoForDbgValue(const MachineRegisterInfo &MRI,
+                                 MachineInstr &MI,
+                                 ArrayRef<MachineOperand *> DbgUsers);
 
 } // namespace llvm
 

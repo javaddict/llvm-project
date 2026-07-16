@@ -21,11 +21,12 @@
 namespace LIBC_NAMESPACE_DECL {
 namespace printf_core {
 
-#define HANDLE_WRITE_MODE(MODE) MODE,
 enum class WriteMode {
-#include "src/stdio/printf_core/write_modes.def"
+  FILL_BUFF_AND_DROP_OVERFLOW,
+  FLUSH_TO_STREAM,
+  RESIZE_AND_FILL_BUFF,
+  RUNTIME_DISPATCH,
 };
-#undef HANDLE_WRITE_MODE
 
 // Helper to omit the template argument if we are using runtime dispatch and
 // avoid multiple copies of the converter functions.

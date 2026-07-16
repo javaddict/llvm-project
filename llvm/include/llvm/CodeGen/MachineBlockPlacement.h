@@ -14,27 +14,29 @@
 namespace llvm {
 
 class MachineBlockPlacementPass
-    : public RequiredPassInfoMixin<MachineBlockPlacementPass> {
+    : public PassInfoMixin<MachineBlockPlacementPass> {
 
   bool AllowTailMerge = true;
 
 public:
   MachineBlockPlacementPass(bool AllowTailMerge)
       : AllowTailMerge(AllowTailMerge) {}
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+  static bool isRequired() { return true; }
 
-  LLVM_ABI void
+  void
   printPipeline(raw_ostream &OS,
                 function_ref<StringRef(StringRef)> MapClassName2PassName) const;
 };
 
 class MachineBlockPlacementStatsPass
-    : public RequiredPassInfoMixin<MachineBlockPlacementStatsPass> {
+    : public PassInfoMixin<MachineBlockPlacementStatsPass> {
 
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

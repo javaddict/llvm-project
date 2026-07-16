@@ -27,6 +27,12 @@ attributes #0 = { noinline nounwind optnone "target-features"="+atomics,+bulk-me
 ; CHECK-NEXT:     Globals:
 ; CHECK-NEXT:       - Index:           0
 ; CHECK-NEXT:         Type:            I32
+; CHECK-NEXT:         Mutable:         true
+; CHECK-NEXT:         InitExpr:
+; CHECK-NEXT:           Opcode:          I32_CONST
+; CHECK-NEXT:           Value:           65536
+; CHECK-NEXT:       - Index:           1
+; CHECK-NEXT:         Type:            I32
 ; CHECK-NEXT:         Mutable:         false
 ; CHECK-NEXT:         InitExpr:
 ; CHECK-NEXT:           Opcode:          I32_CONST
@@ -34,4 +40,6 @@ attributes #0 = { noinline nounwind optnone "target-features"="+atomics,+bulk-me
 
 ;      CHECK:     GlobalNames:
 ; CHECK-NEXT:       - Index:           0
+; CHECK-NEXT:         Name:            __stack_pointer
+; CHECK-NEXT:       - Index:           1
 ; CHECK-NEXT:         Name:            __tls_base

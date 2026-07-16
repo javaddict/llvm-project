@@ -26,8 +26,6 @@ def isUbuntu18_04():
 
 
 class TestRerunExprDylib(TestBase):
-    SHARED_BUILD_TESTCASE = False
-
     @skipTestIfFn(isUbuntu18_04, bugnumber="rdar://103831050")
     @skipIfWindows
     @skipIfRemote

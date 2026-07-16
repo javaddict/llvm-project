@@ -329,13 +329,7 @@ void arith::SelectOp::inferResultRangesFromOptional(
       setResultRange(getResult(), trueCase);
     return;
   }
-
-  // When one of the ranges is uninitialized, set the whole range to max
-  // otherwise the result will ignore the uninitialized range.
-  if (trueCase.isUninitialized() || falseCase.isUninitialized())
-    setResultRange(getResult(), IntegerValueRange::getMaxRange(getResult()));
-  else
-    setResultRange(getResult(), IntegerValueRange::join(trueCase, falseCase));
+  setResultRange(getResult(), IntegerValueRange::join(trueCase, falseCase));
 }
 
 //===----------------------------------------------------------------------===//

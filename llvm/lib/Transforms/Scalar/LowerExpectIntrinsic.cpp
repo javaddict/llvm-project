@@ -193,14 +193,18 @@ static void handlePhiDef(CallInst *Expect) {
 
   // Get the first dominating conditional branch of the operand
   // i's incoming block.
-  auto GetDomConditional = [&](unsigned i) -> CondBrInst * {
+  auto GetDomConditional = [&](unsigned i) -> BranchInst * {
     BasicBlock *BB = PhiDef->getIncomingBlock(i);
-    if (CondBrInst *BI = dyn_cast<CondBrInst>(BB->getTerminator()))
+    BranchInst *BI = dyn_cast<BranchInst>(BB->getTerminator());
+    if (BI && BI->isConditional())
       return BI;
     BB = BB->getSinglePredecessor();
     if (!BB)
       return nullptr;
-    return dyn_cast<CondBrInst>(BB->getTerminator());
+    BI = dyn_cast<BranchInst>(BB->getTerminator());
+    if (!BI || BI->isUnconditional())
+      return nullptr;
+    return BI;
   };
 
   // Now walk through all Phi operands to find phi oprerands with values
@@ -222,7 +226,7 @@ static void handlePhiDef(CallInst *Expect) {
     if (ExpectedValueIsLikely == (ExpectedPhiValue == CurrentPhiValue))
       continue;
 
-    CondBrInst *BI = GetDomConditional(i);
+    BranchInst *BI = GetDomConditional(i);
     if (!BI)
       continue;
 
@@ -268,7 +272,7 @@ static void handlePhiDef(CallInst *Expect) {
   }
 }
 
-// Handle both CondBrInst and SelectInst.
+// Handle both BranchInst and SelectInst.
 template <class BrSelInst> static bool handleBrSelExpect(BrSelInst &BSI) {
 
   // Handle non-optimized IR code like:
@@ -350,13 +354,20 @@ template <class BrSelInst> static bool handleBrSelExpect(BrSelInst &BSI) {
   return true;
 }
 
+static bool handleBranchExpect(BranchInst &BI) {
+  if (BI.isUnconditional())
+    return false;
+
+  return handleBrSelExpect<BranchInst>(BI);
+}
+
 static bool lowerExpectIntrinsic(Function &F) {
   bool Changed = false;
 
   for (BasicBlock &BB : F) {
     // Create "block_weights" metadata.
-    if (CondBrInst *BI = dyn_cast<CondBrInst>(BB.getTerminator())) {
-      if (handleBrSelExpect<CondBrInst>(*BI))
+    if (BranchInst *BI = dyn_cast<BranchInst>(BB.getTerminator())) {
+      if (handleBranchExpect(*BI))
         ExpectIntrinsicsHandled++;
     } else if (SwitchInst *SI = dyn_cast<SwitchInst>(BB.getTerminator())) {
       if (handleSwitchExpect(*SI))

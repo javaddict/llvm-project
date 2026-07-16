@@ -19,11 +19,13 @@
 namespace llvm {
 
 /// Simple pass that provides a name to every anonymous globals.
-class NameAnonGlobalPass : public RequiredPassInfoMixin<NameAnonGlobalPass> {
+class NameAnonGlobalPass : public PassInfoMixin<NameAnonGlobalPass> {
 public:
   NameAnonGlobalPass() = default;
 
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 };
 
 } // end namespace llvm

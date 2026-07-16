@@ -42,11 +42,8 @@ Error HugePage::runOnFunctions(BinaryContext &BC) {
       BC.getBinaryFunctionAtAddress(*BC.StartFunctionAddress);
   assert(Start && "Entry point function not found");
   const MCSymbol *StartSym = Start->getSymbol();
-  InstructionListType Insts =
-      BC.MIB->createSymbolTrampoline(StartSym, BC.Ctx.get());
-  createSimpleFunction("__bolt_hugify_start_program", Insts);
-  if (BC.usesBTI())
-    BC.MIB->applyBTIFixupToSymbol(BC, StartSym, *(Insts.end() - 1));
+  createSimpleFunction("__bolt_hugify_start_program",
+                       BC.MIB->createSymbolTrampoline(StartSym, BC.Ctx.get()));
   return Error::success();
 }
 } // namespace bolt

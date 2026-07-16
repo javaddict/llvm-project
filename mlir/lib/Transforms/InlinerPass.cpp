@@ -21,7 +21,7 @@
 #include "llvm/Support/DebugLog.h"
 
 namespace mlir {
-#define GEN_PASS_DEF_INLINERPASS
+#define GEN_PASS_DEF_INLINER
 #include "mlir/Transforms/Passes.h.inc"
 } // namespace mlir
 
@@ -39,9 +39,8 @@ static void defaultInlinerOptPipeline(OpPassManager &pm) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-class InlinerPass : public impl::InlinerPassBase<InlinerPass> {
+class InlinerPass : public impl::InlinerBase<InlinerPass> {
 public:
-  using impl::InlinerPassBase<InlinerPass>::InlinerPassBase;
   InlinerPass();
   InlinerPass(const InlinerPass &) = default;
   InlinerPass(std::function<void(OpPassManager &)> defaultPipeline);
@@ -184,6 +183,9 @@ LogicalResult InlinerPass::initializeOptions(
   return success();
 }
 
+std::unique_ptr<Pass> mlir::createInlinerPass() {
+  return std::make_unique<InlinerPass>();
+}
 std::unique_ptr<Pass>
 mlir::createInlinerPass(llvm::StringMap<OpPassManager> opPipelines) {
   return std::make_unique<InlinerPass>(defaultInlinerOptPipeline,

@@ -627,7 +627,7 @@ void HexagonSplitDoubleRegs::splitMemRef(MachineInstr *MI,
   unsigned AdrX = PostInc ? (Load ? 2 : 1)
                           : (Load ? 1 : 0);
   MachineOperand &AdrOp = MI->getOperand(AdrX);
-  RegState RSA = getRegState(AdrOp);
+  unsigned RSA = getRegState(AdrOp);
   MachineOperand &ValOp = Load ? MI->getOperand(0)
                                : (PostInc ? MI->getOperand(3)
                                           : MI->getOperand(2));
@@ -754,7 +754,7 @@ void HexagonSplitDoubleRegs::splitExt(MachineInstr *MI,
   UUPairMap::const_iterator F = PairMap.find(Op0.getReg());
   assert(F != PairMap.end());
   const UUPair &P = F->second;
-  RegState RS = getRegState(Op1);
+  unsigned RS = getRegState(Op1);
 
   BuildMI(B, MI, DL, TII->get(TargetOpcode::COPY), P.first)
     .addReg(Op1.getReg(), RS & ~RegState::Kill, Op1.getSubReg());
@@ -788,7 +788,7 @@ void HexagonSplitDoubleRegs::splitShift(MachineInstr *MI,
 
   MachineBasicBlock &B = *MI->getParent();
   DebugLoc DL = MI->getDebugLoc();
-  RegState RS = getRegState(Op1);
+  unsigned RS = getRegState(Op1);
   unsigned ShiftOpc = Left ? S2_asl_i_r
                            : (Signed ? S2_asr_i_r : S2_lsr_i_r);
   unsigned LoSR = isub_lo;
@@ -908,8 +908,8 @@ void HexagonSplitDoubleRegs::splitAslOr(MachineInstr *MI,
 
   MachineBasicBlock &B = *MI->getParent();
   DebugLoc DL = MI->getDebugLoc();
-  RegState RS1 = getRegState(Op1);
-  RegState RS2 = getRegState(Op2);
+  unsigned RS1 = getRegState(Op1);
+  unsigned RS2 = getRegState(Op2);
   const TargetRegisterClass *IntRC = &IntRegsRegClass;
 
   unsigned LoSR = isub_lo;

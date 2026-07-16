@@ -37,9 +37,9 @@ public:
   month_day() = default;
   _LIBCPP_HIDE_FROM_ABI constexpr month_day(const chrono::month& __mval, const chrono::day& __dval) noexcept
       : __m_{__mval}, __d_{__dval} {}
-  [[nodiscard]] _LIBCPP_HIDE_FROM_ABI inline constexpr chrono::month month() const noexcept { return __m_; }
-  [[nodiscard]] _LIBCPP_HIDE_FROM_ABI inline constexpr chrono::day day() const noexcept { return __d_; }
-  [[nodiscard]] _LIBCPP_HIDE_FROM_ABI constexpr bool ok() const noexcept;
+  _LIBCPP_HIDE_FROM_ABI inline constexpr chrono::month month() const noexcept { return __m_; }
+  _LIBCPP_HIDE_FROM_ABI inline constexpr chrono::day day() const noexcept { return __d_; }
+  _LIBCPP_HIDE_FROM_ABI constexpr bool ok() const noexcept;
 };
 
 _LIBCPP_HIDE_FROM_ABI inline constexpr bool month_day::ok() const noexcept {
@@ -70,25 +70,23 @@ operator<=>(const month_day& __lhs, const month_day& __rhs) noexcept {
   return __lhs.day() <=> __rhs.day();
 }
 
-[[nodiscard]] _LIBCPP_HIDE_FROM_ABI inline constexpr month_day
-operator/(const month& __lhs, const day& __rhs) noexcept {
+_LIBCPP_HIDE_FROM_ABI inline constexpr month_day operator/(const month& __lhs, const day& __rhs) noexcept {
   return month_day{__lhs, __rhs};
 }
 
-[[nodiscard]] _LIBCPP_HIDE_FROM_ABI inline constexpr month_day
-operator/(const day& __lhs, const month& __rhs) noexcept {
+_LIBCPP_HIDE_FROM_ABI inline constexpr month_day operator/(const day& __lhs, const month& __rhs) noexcept {
   return __rhs / __lhs;
 }
 
-[[nodiscard]] _LIBCPP_HIDE_FROM_ABI inline constexpr month_day operator/(const month& __lhs, int __rhs) noexcept {
+_LIBCPP_HIDE_FROM_ABI inline constexpr month_day operator/(const month& __lhs, int __rhs) noexcept {
   return __lhs / day(__rhs);
 }
 
-[[nodiscard]] _LIBCPP_HIDE_FROM_ABI inline constexpr month_day operator/(int __lhs, const day& __rhs) noexcept {
+_LIBCPP_HIDE_FROM_ABI inline constexpr month_day operator/(int __lhs, const day& __rhs) noexcept {
   return month(__lhs) / __rhs;
 }
 
-[[nodiscard]] _LIBCPP_HIDE_FROM_ABI inline constexpr month_day operator/(const day& __lhs, int __rhs) noexcept {
+_LIBCPP_HIDE_FROM_ABI inline constexpr month_day operator/(const day& __lhs, int __rhs) noexcept {
   return month(__rhs) / __lhs;
 }
 
@@ -98,8 +96,8 @@ private:
 
 public:
   _LIBCPP_HIDE_FROM_ABI explicit constexpr month_day_last(const chrono::month& __val) noexcept : __m_{__val} {}
-  [[nodiscard]] _LIBCPP_HIDE_FROM_ABI inline constexpr chrono::month month() const noexcept { return __m_; }
-  [[nodiscard]] _LIBCPP_HIDE_FROM_ABI inline constexpr bool ok() const noexcept { return __m_.ok(); }
+  _LIBCPP_HIDE_FROM_ABI inline constexpr chrono::month month() const noexcept { return __m_; }
+  _LIBCPP_HIDE_FROM_ABI inline constexpr bool ok() const noexcept { return __m_.ok(); }
 };
 
 _LIBCPP_HIDE_FROM_ABI inline constexpr bool
@@ -112,19 +110,19 @@ operator<=>(const month_day_last& __lhs, const month_day_last& __rhs) noexcept {
   return __lhs.month() <=> __rhs.month();
 }
 
-[[nodiscard]] _LIBCPP_HIDE_FROM_ABI inline constexpr month_day_last operator/(const month& __lhs, last_spec) noexcept {
+_LIBCPP_HIDE_FROM_ABI inline constexpr month_day_last operator/(const month& __lhs, last_spec) noexcept {
   return month_day_last{__lhs};
 }
 
-[[nodiscard]] _LIBCPP_HIDE_FROM_ABI inline constexpr month_day_last operator/(last_spec, const month& __rhs) noexcept {
+_LIBCPP_HIDE_FROM_ABI inline constexpr month_day_last operator/(last_spec, const month& __rhs) noexcept {
   return month_day_last{__rhs};
 }
 
-[[nodiscard]] _LIBCPP_HIDE_FROM_ABI inline constexpr month_day_last operator/(int __lhs, last_spec) noexcept {
+_LIBCPP_HIDE_FROM_ABI inline constexpr month_day_last operator/(int __lhs, last_spec) noexcept {
   return month_day_last{month(__lhs)};
 }
 
-[[nodiscard]] _LIBCPP_HIDE_FROM_ABI inline constexpr month_day_last operator/(last_spec, int __rhs) noexcept {
+_LIBCPP_HIDE_FROM_ABI inline constexpr month_day_last operator/(last_spec, int __rhs) noexcept {
   return month_day_last{month(__rhs)};
 }
 
@@ -134,14 +132,14 @@ operator<=>(const month_day_last& __lhs, const month_day_last& __rhs) noexcept {
 
 template <>
 struct hash<chrono::month_day> {
-  [[nodiscard]] _LIBCPP_HIDE_FROM_ABI static size_t operator()(const chrono::month_day& __md) noexcept {
+  _LIBCPP_HIDE_FROM_ABI static size_t operator()(const chrono::month_day& __md) noexcept {
     return std::__hash_combine(hash<chrono::month>{}(__md.month()), hash<chrono::day>{}(__md.day()));
   }
 };
 
 template <>
 struct hash<chrono::month_day_last> {
-  [[nodiscard]] _LIBCPP_HIDE_FROM_ABI static size_t operator()(const chrono::month_day_last& __mdl) noexcept {
+  _LIBCPP_HIDE_FROM_ABI static size_t operator()(const chrono::month_day_last& __mdl) noexcept {
     return hash<chrono::month>{}(__mdl.month());
   }
 };

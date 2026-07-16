@@ -66,30 +66,30 @@ define void @f() {
 entry:
   br label %outer.header
 
-outer.header:
+outer.header:                            ; preds = %cleanup, %entry
   %0 = load ptr, ptr @d, align 1
   %c.0 = call i1 @cond()
   br i1 %c.0, label %outer.exit.0, label %inner.1.header
 
-inner.1.header:
+inner.1.header:                                         ; preds = %if.end, %for.body3.lr.ph.outer
   %c.1 = call i1 @cond()
   br i1 %c.1, label %inner.1.latch, label %outer.latch
 
-inner.1.latch:
+inner.1.latch:                                           ; preds = %land.end
   %c.2 = call i1 @cond()
   br i1 %c.2, label %outer.exit.1, label %inner.1.header
 
-outer.latch:
+outer.latch:                                          ; preds = %land.end
   br label %outer.header
 
 
-outer.exit.0:
+outer.exit.0:                                         ; preds = %if.end, %if.end.us.us.us
   br label %loop
 
-outer.exit.1:
+outer.exit.1:                                         ; preds = %if.end, %if.end.us.us.us
   br label %loop
 
-loop:
+loop:                                  ; preds = %if.end.us.us.us, %for.body3.lr.ph.outer
   %iv = phi i32 [ %iv.next, %loop ], [ 0, %outer.exit.0 ], [ 0, %outer.exit.1 ]
   %conv6.us.us.us = zext i1 false to i32
   store i32 %conv6.us.us.us, ptr @f.e, align 1

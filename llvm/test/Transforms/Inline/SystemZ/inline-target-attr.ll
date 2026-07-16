@@ -1,4 +1,5 @@
 ; RUN: opt < %s -mtriple=s390x-linux-gnu -S -passes=inline | FileCheck %s
+; RUN: opt < %s -mtriple=s390x-linux-gnu -S -passes='cgscc(inline)' | FileCheck %s
 ; Check that we only inline when we have equal target attributes.
 
 define i32 @foo() #0 {

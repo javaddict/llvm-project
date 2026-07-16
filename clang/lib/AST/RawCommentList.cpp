@@ -202,9 +202,6 @@ const char *RawComment::extractBriefText(const ASTContext &Context) const {
 comments::FullComment *RawComment::parse(const ASTContext &Context,
                                          const Preprocessor *PP,
                                          const Decl *D) const {
-  if (D->isInvalidDecl())
-    return nullptr;
-
   // Lazily initialize RawText using the accessor before using it.
   (void)getRawText(Context.getSourceManager());
 

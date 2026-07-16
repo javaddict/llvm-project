@@ -22,10 +22,6 @@ class ResponseHandler;
 class SourceBreakpoint;
 class Watchpoint;
 struct DAP;
-namespace protocol {
-struct var_ref_t;
-} // namespace protocol
-using var_ref_t = protocol::var_ref_t;
 } // namespace lldb_dap
 
 namespace lldb {

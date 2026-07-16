@@ -13,14 +13,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Analysis/FlowSensitive/DataflowAnalysisContext.h"
-#include "clang/AST/Type.h"
 #include "clang/Analysis/FlowSensitive/ASTOps.h"
 #include "clang/Analysis/FlowSensitive/Formula.h"
 #include "clang/Analysis/FlowSensitive/Logger.h"
 #include "clang/Analysis/FlowSensitive/SimplifyConstraints.h"
 #include "clang/Analysis/FlowSensitive/Value.h"
-#include "clang/Basic/LLVM.h"
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/CommandLine.h"
@@ -30,7 +27,6 @@
 #include "llvm/Support/raw_ostream.h"
 #include <cassert>
 #include <memory>
-#include <stack>
 #include <string>
 #include <utility>
 #include <vector>
@@ -44,7 +40,7 @@ static llvm::cl::opt<std::string> DataflowLog(
 namespace clang {
 namespace dataflow {
 
-FieldSet DataflowAnalysisContext::computeModeledFields(QualType Type) {
+FieldSet DataflowAnalysisContext::getModeledFields(QualType Type) {
   // During context-sensitive analysis, a struct may be allocated in one
   // function, but its field accessed in a function lower in the stack than
   // the allocation. Since we only collect fields used in the function where
@@ -58,17 +54,8 @@ FieldSet DataflowAnalysisContext::computeModeledFields(QualType Type) {
   return llvm::set_intersection(getObjectFields(Type), ModeledFields);
 }
 
-const FieldSet &DataflowAnalysisContext::getModeledFields(QualType Type) {
-  QualType CanonicalType = Type.getCanonicalType().getUnqualifiedType();
-  std::unique_ptr<FieldSet> &Fields = CachedModeledFields[CanonicalType];
-  if (Fields == nullptr)
-    Fields = std::make_unique<FieldSet>(computeModeledFields(CanonicalType));
-  return *Fields;
-}
-
 void DataflowAnalysisContext::addModeledFields(const FieldSet &Fields) {
   ModeledFields.set_union(Fields);
-  CachedModeledFields.clear();
 }
 
 StorageLocation &DataflowAnalysisContext::createStorageLocation(QualType Type) {
@@ -274,33 +261,23 @@ void DataflowAnalysisContext::addTransitiveFlowConditionConstraints(
 
 static void getReferencedAtoms(const Formula &F,
                                llvm::DenseSet<dataflow::Atom> &Refs) {
-  // Avoid recursion to avoid stack overflows from very large formulas.
-  // The shape of the tree structure for very large formulas is such that there
-  // are at most 2 children from any node, but there may be many generations.
-  std::stack<const Formula *> WorkList;
-  WorkList.push(&F);
-
-  while (!WorkList.empty()) {
-    const Formula *Current = WorkList.top();
-    WorkList.pop();
-    switch (Current->kind()) {
-    case Formula::AtomRef:
-      Refs.insert(Current->getAtom());
-      break;
-    case Formula::Literal:
-      break;
-    case Formula::Not:
-      WorkList.push(Current->operands()[0]);
-      break;
-    case Formula::And:
-    case Formula::Or:
-    case Formula::Implies:
-    case Formula::Equal:
-      ArrayRef<const Formula *> Operands = Current->operands();
-      WorkList.push(Operands[0]);
-      WorkList.push(Operands[1]);
-      break;
-    }
+  switch (F.kind()) {
+  case Formula::AtomRef:
+    Refs.insert(F.getAtom());
+    break;
+  case Formula::Literal:
+    break;
+  case Formula::Not:
+    getReferencedAtoms(*F.operands()[0], Refs);
+    break;
+  case Formula::And:
+  case Formula::Or:
+  case Formula::Implies:
+  case Formula::Equal:
+    ArrayRef<const Formula *> Operands = F.operands();
+    getReferencedAtoms(*Operands[0], Refs);
+    getReferencedAtoms(*Operands[1], Refs);
+    break;
   }
 }
 

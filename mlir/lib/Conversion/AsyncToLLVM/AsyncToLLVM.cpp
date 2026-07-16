@@ -78,8 +78,8 @@ struct AsyncAPI {
     return LLVM::LLVMPointerType::get(ctx);
   }
 
-  static mlir::TokenType tokenType(MLIRContext *ctx) {
-    return mlir::TokenType::get(ctx);
+  static LLVM::LLVMTokenType tokenType(MLIRContext *ctx) {
+    return LLVM::LLVMTokenType::get(ctx);
   }
 
   static FunctionType addOrDropRefFunctionType(MLIRContext *ctx) {
@@ -89,7 +89,7 @@ struct AsyncAPI {
   }
 
   static FunctionType createTokenFunctionType(MLIRContext *ctx) {
-    return FunctionType::get(ctx, {}, {async::TokenType::get(ctx)});
+    return FunctionType::get(ctx, {}, {TokenType::get(ctx)});
   }
 
   static FunctionType createValueFunctionType(MLIRContext *ctx) {
@@ -109,7 +109,7 @@ struct AsyncAPI {
   }
 
   static FunctionType emplaceTokenFunctionType(MLIRContext *ctx) {
-    return FunctionType::get(ctx, {async::TokenType::get(ctx)}, {});
+    return FunctionType::get(ctx, {TokenType::get(ctx)}, {});
   }
 
   static FunctionType emplaceValueFunctionType(MLIRContext *ctx) {
@@ -118,7 +118,7 @@ struct AsyncAPI {
   }
 
   static FunctionType setTokenErrorFunctionType(MLIRContext *ctx) {
-    return FunctionType::get(ctx, {async::TokenType::get(ctx)}, {});
+    return FunctionType::get(ctx, {TokenType::get(ctx)}, {});
   }
 
   static FunctionType setValueErrorFunctionType(MLIRContext *ctx) {
@@ -128,7 +128,7 @@ struct AsyncAPI {
 
   static FunctionType isTokenErrorFunctionType(MLIRContext *ctx) {
     auto i1 = IntegerType::get(ctx, 1);
-    return FunctionType::get(ctx, {async::TokenType::get(ctx)}, {i1});
+    return FunctionType::get(ctx, {TokenType::get(ctx)}, {i1});
   }
 
   static FunctionType isValueErrorFunctionType(MLIRContext *ctx) {
@@ -143,7 +143,7 @@ struct AsyncAPI {
   }
 
   static FunctionType awaitTokenFunctionType(MLIRContext *ctx) {
-    return FunctionType::get(ctx, {async::TokenType::get(ctx)}, {});
+    return FunctionType::get(ctx, {TokenType::get(ctx)}, {});
   }
 
   static FunctionType awaitValueFunctionType(MLIRContext *ctx) {
@@ -162,14 +162,13 @@ struct AsyncAPI {
 
   static FunctionType addTokenToGroupFunctionType(MLIRContext *ctx) {
     auto i64 = IntegerType::get(ctx, 64);
-    return FunctionType::get(
-        ctx, {async::TokenType::get(ctx), GroupType::get(ctx)}, {i64});
+    return FunctionType::get(ctx, {TokenType::get(ctx), GroupType::get(ctx)},
+                             {i64});
   }
 
   static FunctionType awaitTokenAndExecuteFunctionType(MLIRContext *ctx) {
     auto ptrType = opaquePointerType(ctx);
-    return FunctionType::get(
-        ctx, {async::TokenType::get(ctx), ptrType, ptrType}, {});
+    return FunctionType::get(ctx, {TokenType::get(ctx), ptrType, ptrType}, {});
   }
 
   static FunctionType awaitValueAndExecuteFunctionType(MLIRContext *ctx) {
@@ -292,7 +291,7 @@ public:
   }
 
   static std::optional<Type> convertAsyncTypes(Type type) {
-    if (isa<async::TokenType, GroupType, ValueType>(type))
+    if (isa<TokenType, GroupType, ValueType>(type))
       return AsyncAPI::opaquePointerType(type.getContext());
 
     if (isa<CoroIdType, CoroStateType>(type))
@@ -584,7 +583,7 @@ public:
     Type resultType = op->getResultTypes()[0];
 
     // Tokens creation maps to a simple function call.
-    if (isa<async::TokenType>(resultType)) {
+    if (isa<TokenType>(resultType)) {
       rewriter.replaceOpWithNewOp<func::CallOp>(
           op, kCreateToken, converter->convertType(resultType));
       return success();
@@ -660,7 +659,7 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     StringRef apiFuncName =
         TypeSwitch<Type, StringRef>(op.getOperand().getType())
-            .Case<async::TokenType>([](Type) { return kEmplaceToken; })
+            .Case<TokenType>([](Type) { return kEmplaceToken; })
             .Case<ValueType>([](Type) { return kEmplaceValue; });
 
     rewriter.replaceOpWithNewOp<func::CallOp>(op, apiFuncName, TypeRange(),
@@ -686,7 +685,7 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     StringRef apiFuncName =
         TypeSwitch<Type, StringRef>(op.getOperand().getType())
-            .Case<async::TokenType>([](Type) { return kSetTokenError; })
+            .Case<TokenType>([](Type) { return kSetTokenError; })
             .Case<ValueType>([](Type) { return kSetValueError; });
 
     rewriter.replaceOpWithNewOp<func::CallOp>(op, apiFuncName, TypeRange(),
@@ -711,7 +710,7 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     StringRef apiFuncName =
         TypeSwitch<Type, StringRef>(op.getOperand().getType())
-            .Case<async::TokenType>([](Type) { return kIsTokenError; })
+            .Case<TokenType>([](Type) { return kIsTokenError; })
             .Case<GroupType>([](Type) { return kIsGroupError; })
             .Case<ValueType>([](Type) { return kIsValueError; });
 
@@ -736,7 +735,7 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     StringRef apiFuncName =
         TypeSwitch<Type, StringRef>(op.getOperand().getType())
-            .Case<async::TokenType>([](Type) { return kAwaitToken; })
+            .Case<TokenType>([](Type) { return kAwaitToken; })
             .Case<ValueType>([](Type) { return kAwaitValue; })
             .Case<GroupType>([](Type) { return kAwaitGroup; });
 
@@ -764,7 +763,7 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     StringRef apiFuncName =
         TypeSwitch<Type, StringRef>(op.getOperand().getType())
-            .Case<async::TokenType>([](Type) { return kAwaitTokenAndExecute; })
+            .Case<TokenType>([](Type) { return kAwaitTokenAndExecute; })
             .Case<ValueType>([](Type) { return kAwaitValueAndExecute; })
             .Case<GroupType>([](Type) { return kAwaitAllAndExecute; });
 
@@ -907,7 +906,7 @@ public:
   matchAndRewrite(RuntimeAddToGroupOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Currently we can only add tokens to the group.
-    if (!isa<async::TokenType>(op.getOperand().getType()))
+    if (!isa<TokenType>(op.getOperand().getType()))
       return rewriter.notifyMatchFailure(op, "only token type is supported");
 
     // Replace with a runtime API function call.
@@ -1152,7 +1151,7 @@ public:
 void mlir::populateAsyncStructuralTypeConversionsAndLegality(
     TypeConverter &typeConverter, RewritePatternSet &patterns,
     ConversionTarget &target) {
-  typeConverter.addConversion([&](async::TokenType type) { return type; });
+  typeConverter.addConversion([&](TokenType type) { return type; });
   typeConverter.addConversion([&](ValueType type) {
     Type converted = typeConverter.convertType(type.getValueType());
     return converted ? ValueType::get(converted) : converted;

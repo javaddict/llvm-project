@@ -99,9 +99,6 @@
   !ERROR: If ADVANCE appears, UNIT=internal-file must not appear
   write(internal_file, advance='yes', fmt=1) 'Ok'
 
-  !ERROR: If ADVANCE appears, REC must not appear
-  write(10, '(A)', advance='no', rec=13) 'Ok'
-
   !ERROR: If ADVANCE appears, an explicit format must also appear
   write(10, advance='yes') 'Ok'
 

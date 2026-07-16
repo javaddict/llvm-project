@@ -60,16 +60,16 @@ struct CheckResult {
   CharSourceRange ConstRange;
 
   // FixItHints associated with the definition being checked.
-  SmallVector<FixItHint, 4> Hints;
+  llvm::SmallVector<clang::FixItHint, 4> Hints;
 
   // Locations of any declarations that could not be fixed.
-  SmallVector<SourceLocation, 4> DeclLocs;
+  llvm::SmallVector<clang::SourceLocation, 4> DeclLocs;
 };
 
 } // namespace
 
 // Does the actual work of the check.
-static CheckResult checkDef(const FunctionDecl *Def,
+static CheckResult checkDef(const clang::FunctionDecl *Def,
                             const MatchFinder::MatchResult &MatchResult) {
   CheckResult Result;
   std::optional<Token> Tok = findConstToRemove(Def, MatchResult);

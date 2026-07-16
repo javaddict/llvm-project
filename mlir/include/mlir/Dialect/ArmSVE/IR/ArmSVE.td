@@ -81,11 +81,10 @@ class ArmSVE_IntrOp<string mnemonic,
                     list<int> overloadedResults = [],
                     int numResults = 1,
                     list<int> immArgPositions = [],
-                    list<string> immArgAttrNames = [],
-                    string enumName = "aarch64_sve_" # !subst(".", "_", mnemonic) > :
+                    list<string> immArgAttrNames = []> :
   LLVM_IntrOpBase</*Dialect dialect=*/ArmSVE_Dialect,
                   /*string opName=*/"intr." # mnemonic,
-                  /*string enumName=*/enumName,
+                  /*string enumName=*/"aarch64_sve_" # !subst(".", "_", mnemonic),
                   /*list<int> overloadedResults=*/overloadedResults,
                   /*list<int> overloadedOperands=*/overloadedOperands,
                   /*list<Trait> traits=*/traits,
@@ -298,13 +297,7 @@ def UsmmlaOp : ArmSVE_Op<"usmmla", [Pure,
 def BfmmlaOp : ArmSVE_IntrOp<"bfmmla", [Pure,
                                         AllTypesMatch<["src1", "src2"]>,
                                         AllTypesMatch<["acc", "res"]>,
-                                        ],
-                                        /*overloadedOperands=*/[1],
-                                        /*overloadedResults=*/[0],
-                                        /*numResults=*/1,
-                                        /*immArgPositions=*/[],
-                                        /*immArgAttrNames=*/[],
-                                        /*enumName=*/"aarch64_sve_fmmla"> {
+                                        ]> {
   let summary = "BFloat16 matrix multiply-accumulate";
   let description = [{
     BFMMLA: BFloat16 matrix multiply-accumulate into 2×2 matrices";
@@ -597,7 +590,7 @@ def DupQLaneOp : ArmSVE_Op<"dupq_lane", [Pure, AllTypesMatch<["src", "dst"]>]> {
     // %V = [A B C D E F H A B C D E F H]
     ```
 
-    Note: The semantics of the operation match those of the `svdupq_lane` intrinsics.
+    Note: The semantics of the operation match those of the `svdupq_lane` instrinsics.
     [Source](https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=svdupq_lane)
   }];
 

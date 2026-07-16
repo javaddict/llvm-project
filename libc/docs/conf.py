@@ -25,18 +25,13 @@ from datetime import date
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = [
-    "sphinx.ext.intersphinx",
-    "sphinx.ext.todo",
-    "sphinx_reredirects",
-    "myst_parser",
-]
+extensions = ["sphinx.ext.intersphinx", "sphinx.ext.todo", "sphinx_reredirects"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
 
 # The suffix of source filenames.
-source_suffix = [".rst", ".md"]
+source_suffix = ".rst"
 
 # The encoding of source files.
 # source_encoding = 'utf-8-sig'
@@ -69,14 +64,7 @@ today_fmt = "%Y-%m-%d"
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ["_build"]
-
-rst_prolog = """
-.. role::  raw-html(raw)
-    :format: html
-
-.. |check| replace:: :raw-html:`&#x2705`
-"""
+exclude_patterns = ["_build", "Helpers"]
 
 # The reST default role (used for this markup: `text`) to use for all documents.
 # default_role = None
@@ -104,16 +92,15 @@ pygments_style = "friendly"
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 # html_theme = 'haiku'
-html_theme = "furo"
+html_theme = "alabaster"
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
-    # "Edit this page" links
-    "source_repository": "https://github.com/llvm/llvm-project/",
-    "source_branch": "main",
-    "source_directory": "libc/docs/",
+    "font_size": "11pt",
+    # Don't generate any links to GitHub.
+    "github_button": "false",
 }
 
 # Add any paths that contain custom themes here, relative to this directory.
@@ -139,11 +126,7 @@ html_title = "The LLVM C Library"
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
-
-# Custom JS/CSS files
-html_js_files = ["copybutton.js"]
-html_css_files = ["copybutton.css"]
-
+#
 # html_context = {
 #    'css_files': [
 #        '_static/libc.css'

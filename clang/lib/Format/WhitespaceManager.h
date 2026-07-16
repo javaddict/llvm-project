@@ -55,8 +55,7 @@ public:
   /// from. It is used for determining what lines the alignment process should
   /// move.
   void replaceWhitespace(FormatToken &Tok, unsigned Newlines, unsigned Spaces,
-                         unsigned StartOfTokenColumn,
-                         const FormatToken *AlignedTo = nullptr,
+                         unsigned StartOfTokenColumn, bool IsAligned = false,
                          bool InPPDirective = false,
                          unsigned IndentedFromColumn = 0);
 
@@ -118,7 +117,7 @@ public:
            SourceRange OriginalWhitespaceRange, int Spaces,
            unsigned StartOfTokenColumn, unsigned IndentedFromColumn,
            unsigned NewlinesBefore, StringRef PreviousLinePostfix,
-           StringRef CurrentLinePrefix, const FormatToken *AlignedTo,
+           StringRef CurrentLinePrefix, bool IsAligned,
            bool ContinuesPPDirective, bool IsInsideToken);
 
     // The kind of the token whose whitespace this change replaces, or in which
@@ -140,7 +139,7 @@ public:
     unsigned NewlinesBefore;
     std::string PreviousLinePostfix;
     std::string CurrentLinePrefix;
-    const FormatToken *AlignedTo;
+    bool IsAligned;
     bool ContinuesPPDirective;
 
     // The number of spaces in front of the token or broken part of the token.
@@ -235,7 +234,7 @@ private:
   /// Align consecutive bitfields over all \c Changes.
   void alignConsecutiveBitFields();
 
-  /// Align consecutive colon. For bitfields, TableGen DAGArgs and definitions.
+  /// Align consecutive colon. For bitfields, TableGen DAGArgs and defintions.
   void
   alignConsecutiveColons(const FormatStyle::AlignConsecutiveStyle &AlignStyle,
                          TokenType Type);
@@ -357,8 +356,6 @@ private:
 
   /// Link the Cell pointers in the list of Cells.
   static CellDescriptions linkCells(CellDescriptions &&CellDesc);
-
-  void setChangeSpaces(unsigned Start, unsigned Spaces);
 
   /// Fill \c Replaces with the replacements for all effective changes.
   void generateChanges();

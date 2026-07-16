@@ -10,10 +10,9 @@ from lldbsuite.test import lldbutil
 
 class TestFrameVarDILNoDebugInfo(TestBase):
     NO_DEBUG_INFO_TESTCASE = True
-    SHARED_BUILD_TESTCASE = False
 
     def test_no_debug_info(self):
-        self.build(debug_info="none")
+        self.build()
         lldbutil.run_to_name_breakpoint(self, "main")
 
         self.runCmd("settings set target.experimental.use-DIL true")

@@ -18,11 +18,11 @@
 namespace llvm {
 // New pass manager boilerplate.
 class WarnMissedTransformationsPass
-    : public OptionalPassInfoMixin<WarnMissedTransformationsPass> {
+    : public PassInfoMixin<WarnMissedTransformationsPass> {
 public:
   explicit WarnMissedTransformationsPass() = default;
 
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 } // end namespace llvm
 

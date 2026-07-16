@@ -15,7 +15,6 @@
 #include "lldb/Utility/ArchSpec.h"
 #include "lldb/Utility/Connection.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/ErrorExtras.h"
 #include "llvm/Support/FormatVariadic.h"
 #include <memory>
 #include <optional>
@@ -70,8 +69,9 @@ public:
     assert(m_stop_reply);
     if (const auto *Reply = llvm::dyn_cast<T>(m_stop_reply.get()))
       return *Reply;
-    return llvm::createStringErrorV("Unexpected Stop Reply {0}",
-                                    m_stop_reply->getKind());
+    return llvm::make_error<llvm::StringError>(
+        llvm::formatv("Unexpected Stop Reply {0}", m_stop_reply->getKind()),
+        llvm::inconvertibleErrorCode());
   }
   llvm::Error SendMessage(llvm::StringRef message);
   llvm::Error SendMessage(llvm::StringRef message,

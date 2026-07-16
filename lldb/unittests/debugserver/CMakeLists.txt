@@ -14,7 +14,6 @@ add_lldb_unittest(debugserverTests
   LINK_LIBS
     lldbDebugserverCommon
     lldbHost
-    lldbHostHelpers
     LLVMTestingSupport
   )
 

@@ -75,7 +75,9 @@ class StaticDataSplitter : public MachineFunctionPass {
 public:
   static char ID;
 
-  StaticDataSplitter() : MachineFunctionPass(ID) {}
+  StaticDataSplitter() : MachineFunctionPass(ID) {
+    initializeStaticDataSplitterPass(*PassRegistry::getPassRegistry());
+  }
 
   StringRef getPassName() const override { return "Static Data Splitter"; }
 

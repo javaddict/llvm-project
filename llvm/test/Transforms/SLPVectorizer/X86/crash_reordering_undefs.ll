@@ -4,7 +4,9 @@
 define i32 @crash_reordering_undefs() {
 ; CHECK-LABEL: @crash_reordering_undefs(
 ; CHECK-NEXT:  entry:
-; CHECK-NEXT:    ret i32 undef
+; CHECK-NEXT:    [[ADD0:%.*]] = call i32 @llvm.vector.reduce.add.v4i32(<4 x i32> splat (i32 65537))
+; CHECK-NEXT:    [[OP_RDX:%.*]] = add i32 undef, [[ADD0]]
+; CHECK-NEXT:    ret i32 [[OP_RDX]]
 ;
 entry:
   %or0 = or i64 undef, undef

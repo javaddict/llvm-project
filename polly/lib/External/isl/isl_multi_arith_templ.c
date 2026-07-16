@@ -109,6 +109,5 @@ __isl_give MULTI(BASE) *FN(MULTI(BASE),mod_multi_val)(
  */
 __isl_give MULTI(BASE) *FN(MULTI(BASE),neg)(__isl_take MULTI(BASE) *multi)
 {
-	S(MULTI(BASE),un_op_control) control = { .fn_el = &FN(EL,neg) };
-	return FN(MULTI(BASE),un_op)(multi, &control);
+	return FN(MULTI(BASE),un_op)(multi, &FN(EL,neg));
 }

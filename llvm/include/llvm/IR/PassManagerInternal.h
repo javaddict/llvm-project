@@ -57,10 +57,8 @@ struct PassConcept {
 
   /// Polymorphic method to let a pass optionally exempted from skipping by
   /// PassInstrumentation.
-  /// To opt-in, pass should implement `static bool isRequired()`, or inherit
-  /// from `RequiredPassInfoMixin` or `OptionalPassInfoMixin`.
-  /// It's no-op to have `isRequired` always return false since that is the
-  /// default.
+  /// To opt-in, pass should implement `static bool isRequired()`. It's no-op
+  /// to have `isRequired` always return false since that is the default.
   virtual bool isRequired() const = 0;
 };
 
@@ -101,7 +99,16 @@ struct PassModel : PassConcept<IRUnitT, AnalysisManagerT, ExtraArgTs...> {
 
   StringRef name() const override { return PassT::name(); }
 
-  bool isRequired() const override { return PassT::isRequired(); }
+  template <typename T>
+  using has_required_t = decltype(std::declval<T &>().isRequired());
+
+  template <typename T> static bool passIsRequiredImpl() {
+    if constexpr (is_detected<has_required_t, T>::value)
+      return T::isRequired();
+    return false;
+  }
+
+  bool isRequired() const override { return passIsRequiredImpl<PassT>(); }
 
   PassT Pass;
 };

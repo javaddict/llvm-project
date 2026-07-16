@@ -310,7 +310,6 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::CXXDefaultArgExprClass:
   case Stmt::CXXDefaultInitExprClass:
   case Stmt::CXXFoldExprClass:
-  case Stmt::CXXReflectExprClass:
   case Stmt::CXXRewrittenBinaryOperatorClass:
   case Stmt::CXXStdInitializerListExprClass:
   case Stmt::CXXScalarValueInitExprClass:
@@ -323,7 +322,6 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::ExprWithCleanupsClass:
   case Stmt::ExpressionTraitExprClass:
   case Stmt::ExtVectorElementExprClass:
-  case Stmt::MatrixElementExprClass:
   case Stmt::ImplicitCastExprClass:
   case Stmt::ImplicitValueInitExprClass:
   case Stmt::NoInitExprClass:
@@ -383,7 +381,6 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
     break;
 
   case Stmt::SYCLKernelCallStmtClass:
-  case Stmt::UnresolvedSYCLKernelCallStmtClass:
     K = CXCursor_UnexposedStmt;
     break;
 
@@ -696,9 +693,6 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
     break;
   case Stmt::OMPReverseDirectiveClass:
     K = CXCursor_OMPReverseDirective;
-    break;
-  case Stmt::OMPSplitDirectiveClass:
-    K = CXCursor_OMPSplitDirective;
     break;
   case Stmt::OMPInterchangeDirectiveClass:
     K = CXCursor_OMPInterchangeDirective;
@@ -1622,6 +1616,12 @@ static inline CXCursorSet_Impl *unpackCXCursorSet(CXCursorSet set) {
 namespace llvm {
 template <> struct DenseMapInfo<CXCursor> {
 public:
+  static inline CXCursor getEmptyKey() {
+    return MakeCXCursorInvalid(CXCursor_InvalidFile);
+  }
+  static inline CXCursor getTombstoneKey() {
+    return MakeCXCursorInvalid(CXCursor_NoDeclFound);
+  }
   static inline unsigned getHashValue(const CXCursor &cursor) {
     return llvm::DenseMapInfo<std::pair<const void *, const void *>>::
         getHashValue(std::make_pair(cursor.data[0], cursor.data[1]));

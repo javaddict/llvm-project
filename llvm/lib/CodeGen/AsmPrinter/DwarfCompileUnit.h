@@ -89,14 +89,6 @@ class DwarfCompileUnit final : public DwarfUnit {
 
   DenseMap<const DINode *, std::unique_ptr<DbgEntity>> AbstractEntities;
 
-  /// Cache of artificial DIEs created for DW_OP_LLVM_implicit_pointer
-  /// lowering, keyed by (pointee type, constant value). Enables reuse when
-  /// multiple pointer variables reference the same constant.
-  DenseMap<std::pair<const DIType *, int64_t>, DIE *> ImplicitPointerDIEs;
-
-  // Set of scope nodes referenced by global variables in this CU.
-  SmallPtrSet<const MDNode *, 4> GlobalVarScopes;
-
   /// DWO ID for correlating skeleton and split units.
   uint64_t DWOId = 0;
 
@@ -132,14 +124,6 @@ class DwarfCompileUnit final : public DwarfUnit {
 
   ///@}
 
-  /// Lower DW_OP_LLVM_implicit_pointer by creating an artificial variable DIE
-  /// for the dereferenced value and emitting DW_OP_implicit_pointer (DWARF 5)
-  /// or DW_OP_GNU_implicit_pointer (DWARF 4) for the pointer's location.
-  ///
-  /// \returns true if the implicit pointer was handled successfully.
-  bool emitImplicitPointerLocation(const Loc::Single &Single,
-                                   const DbgVariable &DV, DIE &VariableDie);
-
   bool isDwoUnit() const override;
 
   DenseMap<const DILocalScope *, DIE *> &getAbstractScopeDIEs() {
@@ -159,9 +143,6 @@ class DwarfCompileUnit final : public DwarfUnit {
       return FinalizedAbstractSubprograms;
     return DU->getFinalizedAbstractSubprograms();
   }
-
-  /// \returns true if \ref ScopeNode contains a GlobalVariable.
-  bool hasGlobalVariableInScope(const DILocalScope *ScopeNode);
 
   void finishNonUnitTypeDIE(DIE& D, const DICompositeType *CTy) override;
 
@@ -276,9 +257,14 @@ public:
   /// DIE to represent this concrete inlined copy of the function.
   DIE *constructInlinedScopeDIE(LexicalScope *Scope, DIE &ParentScopeDIE);
 
-  /// Get if available or create a new DW_TAG_lexical_block for the given
-  /// LexicalScope and attach DW_AT_low_pc/DW_AT_high_pc labels.
-  DIE *getOrCreateLexicalBlockDIE(LexicalScope *Scope, DIE &ParentDIE);
+  /// Construct new DW_TAG_lexical_block for this scope and
+  /// attach DW_AT_low_pc/DW_AT_high_pc labels.
+  DIE *constructLexicalScopeDIE(LexicalScope *Scope);
+
+  /// Get a DIE for the given DILexicalBlock.
+  /// Note that this function assumes that the DIE has been already created
+  /// and it's an error, if it hasn't.
+  DIE *getLexicalBlockDIE(const DILexicalBlock *LB);
 
   /// Construct a DIE for the given DbgVariable.
   DIE *constructVariableDIE(DbgVariable &DV, bool Abstract = false);
@@ -296,11 +282,6 @@ public:
   /// Construct a DIE for a given scope.
   /// This instance of 'getOrCreateContextDIE()' can handle DILocalScope.
   DIE *getOrCreateContextDIE(const DIScope *Ty) override;
-
-  /// Get DW_TAG_lexical_block for the given DILexicalBlock if available,
-  /// or the most close parent DIE, if no correspoding DW_TAG_lexical_block
-  /// exists.
-  DIE *getLocalContextDIE(const DILexicalBlock *LB);
 
   DIE *getOrCreateSubprogramDIE(const DISubprogram *SP, const Function *F,
                                 bool Minimal = false) override;
@@ -455,10 +436,6 @@ public:
   void addBaseTypeRef(DIEValueList &Die, int64_t Idx);
 
   MDNodeSetVector &getDeferredLocalDecls() { return DeferredLocalDecls; }
-
-  void addLinkageNamesToDeclarations(const DwarfDebug &DD,
-                                     const DISubprogram &CalleeSP,
-                                     DIE &CalleeDIE);
 };
 
 } // end namespace llvm

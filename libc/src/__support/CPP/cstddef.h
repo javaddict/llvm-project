@@ -16,11 +16,7 @@
 namespace LIBC_NAMESPACE_DECL {
 namespace cpp {
 
-// Clang grants the [basic.lval]/11.3 char-aliasing privilege only to the named
-// `::std::byte` type (see `Type::isStdByteType()`), so `cpp::byte` would
-// otherwise get its own TBAA node. `may_alias` makes accesses through
-// `cpp::byte *` char-aliasing as callers expect.
-enum class [[gnu::may_alias]] byte : unsigned char {};
+enum class byte : unsigned char {};
 
 template <class IntegerType>
 LIBC_INLINE constexpr enable_if_t<is_integral_v<IntegerType>, byte>

@@ -10,9 +10,6 @@ config.test_source_root = os.path.dirname(__file__)
 
 # Setup default compiler flags used with -fsanitize=dataflow option.
 clang_dfsan_cflags = ["-fsanitize=dataflow"] + [config.target_cflags]
-# s390x arch needs -mbackchain to print stack backtrace of origin.
-if config.target_arch == "s390x":
-    clang_dfsan_cflags.append("-mbackchain")
 
 clang_dfsan_cxxflags = config.cxx_mode_flags + clang_dfsan_cflags
 
@@ -28,8 +25,5 @@ config.substitutions.append(("%clangxx_dfsan ", build_invocation(clang_dfsan_cxx
 config.suffixes = [".c", ".cpp"]
 
 # DataFlowSanitizer tests are currently supported on Linux only.
-if not (
-    config.target_os in ["Linux"]
-    and config.target_arch in ["aarch64", "x86_64", "loongarch64", "s390x"]
-):
+if not (config.target_os in ["Linux"] and config.target_arch in ["aarch64", "x86_64", "loongarch64"]):
     config.unsupported = True

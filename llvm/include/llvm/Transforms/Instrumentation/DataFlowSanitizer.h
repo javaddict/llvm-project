@@ -17,8 +17,7 @@
 namespace llvm {
 class Module;
 
-class DataFlowSanitizerPass
-    : public RequiredPassInfoMixin<DataFlowSanitizerPass> {
+class DataFlowSanitizerPass : public PassInfoMixin<DataFlowSanitizerPass> {
 private:
   std::vector<std::string> ABIListFiles;
   IntrusiveRefCntPtr<vfs::FileSystem> FS;
@@ -29,6 +28,7 @@ public:
       IntrusiveRefCntPtr<vfs::FileSystem> FS = vfs::getRealFileSystem())
       : ABIListFiles(ABIListFiles), FS(std::move(FS)) {}
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

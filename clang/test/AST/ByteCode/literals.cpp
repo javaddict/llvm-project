@@ -541,7 +541,7 @@ namespace IncDec {
   /// current interpreter. But they are stil OK.
   template<typename T, bool Inc, bool Pre>
   constexpr int uninit() {
-    T a; // both-note 10{{declared here}}
+    T a;
     if constexpr (Inc) {
       if (Pre)
         ++a; // ref-note 3{{increment of uninitialized}} \
@@ -1502,8 +1502,4 @@ namespace ExternRedecl {
   constexpr const int *p = &a;
   constexpr int a = 10;
   static_assert(*p == 10, "");
-}
-
-namespace GetElemDataSizeBool {
-  int foo[(intptr_t)(bool *)0]; // both-warning {{variable length array folded to constant array as an extension}}
 }

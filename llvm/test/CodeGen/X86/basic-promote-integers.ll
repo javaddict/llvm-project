@@ -1,4 +1,6 @@
-; Test that vectors are scalarized/lowered correctly.
+; Test that vectors are scalarized/lowered correctly
+; (with both legalization methods).
+; RUN: llc -mtriple=i686--  < %s
 ; RUN: llc -mtriple=i686--  < %s
 
 ; A simple test to check copyToParts and copyFromParts.

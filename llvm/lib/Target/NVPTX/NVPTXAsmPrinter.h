@@ -58,7 +58,6 @@
 namespace llvm {
 
 class MCOperand;
-class NVPTXTargetStreamer;
 
 class LLVM_LIBRARY_VISIBILITY NVPTXAsmPrinter : public AsmPrinter {
 
@@ -89,7 +88,7 @@ class LLVM_LIBRARY_VISIBILITY NVPTXAsmPrinter : public AsmPrinter {
     }
 
   private:
-    const unsigned Size;               // size of the buffer in bytes
+    const unsigned size;   // size of the buffer in bytes
     std::vector<unsigned char> buffer; // the buffer
     SmallVector<unsigned, 4> symbolPosInBuffer;
     SmallVector<const Value *, 4> Symbols;
@@ -106,14 +105,9 @@ class LLVM_LIBRARY_VISIBILITY NVPTXAsmPrinter : public AsmPrinter {
     const bool EmitGeneric;
 
   public:
-    AggBuffer(unsigned Size, const NVPTXAsmPrinter &AP)
-        : Size(Size), buffer(Size), curpos(0), AP(AP),
+    AggBuffer(unsigned size, const NVPTXAsmPrinter &AP)
+        : size(size), buffer(size), curpos(0), AP(AP),
           EmitGeneric(AP.EmitGeneric) {}
-
-    unsigned getBufferSize() const { return Size; }
-
-    // Number of bytes written so far.
-    unsigned getCurpos() const { return curpos; }
 
     // Copy Num bytes from Ptr.
     // if Bytes > Num, zero fill up to Bytes.
@@ -125,7 +119,7 @@ class LLVM_LIBRARY_VISIBILITY NVPTXAsmPrinter : public AsmPrinter {
     }
 
     void addByte(uint8_t Byte) {
-      assert(curpos < Size);
+      assert(curpos < size);
       buffer[curpos] = Byte;
       curpos++;
     }
@@ -159,8 +153,6 @@ public:
 private:
   const Function *F;
 
-  NVPTXTargetStreamer *getTargetStreamer() const;
-
   void emitStartOfAsmFile(Module &M) override;
   void emitBasicBlockStart(const MachineBasicBlock &MBB) override;
   void emitFunctionEntryLabel() override;
@@ -180,7 +172,7 @@ private:
                           bool processDemoted, const NVPTXSubtarget &STI);
   void emitGlobals(const Module &M);
   void emitGlobalAlias(const Module &M, const GlobalAlias &GA) override;
-  void emitHeader(Module &M, const NVPTXSubtarget &STI);
+  void emitHeader(Module &M, raw_ostream &O, const NVPTXSubtarget &STI);
   void emitKernelFunctionDirectives(const Function &F, raw_ostream &O) const;
   void emitVirtualRegister(unsigned int vr, raw_ostream &);
   void emitFunctionParamList(const Function *, raw_ostream &O);
@@ -197,18 +189,10 @@ private:
   const MCExpr *lowerConstantForGV(const Constant *CV,
                                    bool ProcessingGeneric) const;
   void printMCExpr(const MCExpr &Expr, raw_ostream &OS) const;
-  /// Emit a blob of inline asm to the output streamer.
-  void emitInlineAsm(StringRef Str, const MCSubtargetInfo &STI,
-                     const MCTargetOptions &MCOptions, const MDNode *LocMDNode,
-                     InlineAsm::AsmDialect Dialect,
-                     const MachineInstr *MI) override;
 
 protected:
   bool doInitialization(Module &M) override;
   bool doFinalization(Module &M) override;
-
-  /// Create NVPTX-specific DwarfDebug handler.
-  DwarfDebug *createDwarfDebug() override;
 
 private:
   bool GlobalsEmitted;
@@ -233,7 +217,6 @@ private:
   void printFPConstant(const ConstantFP *Fp, raw_ostream &O) const;
   void bufferLEByte(const Constant *CPV, int Bytes, AggBuffer *aggBuffer);
   void bufferAggregateConstant(const Constant *CV, AggBuffer *aggBuffer);
-  void bufferAggregateConstVec(const ConstantVector *CV, AggBuffer *aggBuffer);
 
   void emitLinkageDirective(const GlobalValue *V, raw_ostream &O);
   void emitDeclarations(const Module &, raw_ostream &O);

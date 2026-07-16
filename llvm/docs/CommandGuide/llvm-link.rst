@@ -71,10 +71,7 @@ OPTIONS
 
 .. option:: --internalize
 
-  Maintains existing linkage for symbols defined in the first input and
-  converts linkage in all other inputs to internal linkage unless they are
-  referenced by `llvm*.used` or are special-cased runtime functions (e.g.
-  stack protector runtime).
+  Internalize the linked symbols.
 
 .. option:: --disable-debug-info-type-map
 

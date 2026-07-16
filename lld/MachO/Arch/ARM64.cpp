@@ -33,8 +33,7 @@ struct ARM64 : ARM64Common {
   void writeObjCMsgSendStub(uint8_t *buf, Symbol *sym, uint64_t stubsAddr,
                             uint64_t &stubOffset, uint64_t selrefVA,
                             Symbol *objcMsgSend) const override;
-  void populateThunk(InputSection *thunk, Symbol *funcSym,
-                     int64_t addend) override;
+  void populateThunk(InputSection *thunk, Symbol *funcSym) override;
 
   void initICFSafeThunkBody(InputSection *thunk,
                             Symbol *targetSym) const override;
@@ -161,18 +160,17 @@ static constexpr uint32_t thunkCode[] = {
     0xd61f0200, // 08: br    x16
 };
 
-void ARM64::populateThunk(InputSection *thunk, Symbol *funcSym,
-                          int64_t addend) {
+void ARM64::populateThunk(InputSection *thunk, Symbol *funcSym) {
   thunk->align = 4;
   thunk->data = {reinterpret_cast<const uint8_t *>(thunkCode),
                  sizeof(thunkCode)};
   thunk->relocs.emplace_back(/*type=*/ARM64_RELOC_PAGEOFF12,
                              /*pcrel=*/false, /*length=*/2,
-                             /*offset=*/4, /*addend=*/addend,
+                             /*offset=*/4, /*addend=*/0,
                              /*referent=*/funcSym);
   thunk->relocs.emplace_back(/*type=*/ARM64_RELOC_PAGE21,
                              /*pcrel=*/true, /*length=*/2,
-                             /*offset=*/0, /*addend=*/addend,
+                             /*offset=*/0, /*addend=*/0,
                              /*referent=*/funcSym);
 }
 // Just a single direct branch to the target function.

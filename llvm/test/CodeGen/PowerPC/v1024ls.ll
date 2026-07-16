@@ -44,4 +44,4 @@ entry:
   ret void
 }
 
-declare <1024 x i1> @llvm.ppc.dmsetdmrz()
+declare <1024 x i1> @llvm.ppc.mma.dmsetdmrz()

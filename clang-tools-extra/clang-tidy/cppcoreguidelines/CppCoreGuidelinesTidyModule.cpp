@@ -9,7 +9,6 @@
 #include "../ClangTidy.h"
 #include "../ClangTidyModule.h"
 #include "../bugprone/NarrowingConversionsCheck.h"
-#include "../misc/ExplicitConstructorCheck.h"
 #include "../misc/NonPrivateMemberVariablesInClassesCheck.h"
 #include "../misc/UnconventionalAssignOperatorCheck.h"
 #include "../modernize/AvoidCArraysCheck.h"
@@ -76,8 +75,6 @@ public:
         "cppcoreguidelines-avoid-non-const-global-variables");
     CheckFactories.registerCheck<AvoidReferenceCoroutineParametersCheck>(
         "cppcoreguidelines-avoid-reference-coroutine-parameters");
-    CheckFactories.registerCheck<misc::ExplicitConstructorCheck>(
-        "cppcoreguidelines-explicit-constructor");
     CheckFactories.registerCheck<modernize::UseOverrideCheck>(
         "cppcoreguidelines-explicit-virtual-functions");
     CheckFactories.registerCheck<InitVariablesCheck>(

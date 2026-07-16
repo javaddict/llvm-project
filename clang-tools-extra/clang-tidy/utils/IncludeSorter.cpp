@@ -9,6 +9,7 @@
 #include "IncludeSorter.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
+#include <algorithm>
 #include <optional>
 
 namespace clang::tidy {
@@ -102,7 +103,7 @@ static int compareHeaders(StringRef LHS, StringRef RHS,
                           IncludeSorter::IncludeStyle Style) {
   if (Style == IncludeSorter::IncludeStyle::IS_Google_ObjC) {
     const std::pair<const char *, const char *> &Mismatch =
-        llvm::mismatch(LHS, RHS);
+        std::mismatch(LHS.begin(), LHS.end(), RHS.begin(), RHS.end());
     if ((Mismatch.first != LHS.end()) && (Mismatch.second != RHS.end())) {
       if ((*Mismatch.first == '.') && (*Mismatch.second == '+'))
         return -1;

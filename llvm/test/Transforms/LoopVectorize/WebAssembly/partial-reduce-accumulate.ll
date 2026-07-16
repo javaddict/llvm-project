@@ -106,10 +106,10 @@ define hidden i32 @accumulate_add_u8_u8(ptr noundef readonly  %a, ptr noundef re
 entry:
   br label %for.body
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret i32 %add3
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %iv = phi i32 [ %inc, %for.body ], [ 0, %entry ]
   %red = phi i32 [ %add3, %for.body ], [ 0, %entry ]
   %arrayidx = getelementptr inbounds nuw i8, ptr %a, i32 %iv

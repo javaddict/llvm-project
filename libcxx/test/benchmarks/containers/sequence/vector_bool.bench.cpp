@@ -6,8 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
-
 #include <benchmark/benchmark.h>
 #include <memory_resource>
 #include <vector>
@@ -23,7 +21,7 @@ static void BM_vector_bool_copy_ctor(benchmark::State& state) {
     benchmark::DoNotOptimize(vec2);
   }
 }
-BENCHMARK(BM_vector_bool_copy_ctor)->Name("std::vector<bool>::ctor(const Self&)");
+BENCHMARK(BM_vector_bool_copy_ctor)->Name("vector<bool>(const vector<bool>&)");
 
 static void BM_vector_bool_move_ctor_alloc_equal(benchmark::State& state) {
   std::vector<bool> vec(100, true);
@@ -36,7 +34,7 @@ static void BM_vector_bool_move_ctor_alloc_equal(benchmark::State& state) {
   }
 }
 BENCHMARK(BM_vector_bool_move_ctor_alloc_equal)
-    ->Name("std::vector<bool>::ctor(Self&&, const allocator_type&) (equal allocators)");
+    ->Name("vector<bool>(vector<bool>&&, const allocator_type&) (equal allocators)");
 
 #if TEST_STD_VER >= 17
 static void BM_vector_bool_move_ctor_alloc_different(benchmark::State& state) {
@@ -50,7 +48,7 @@ static void BM_vector_bool_move_ctor_alloc_different(benchmark::State& state) {
   }
 }
 BENCHMARK(BM_vector_bool_move_ctor_alloc_different)
-    ->Name("std::vector<bool>::ctor(Self&&, const allocator_type&) (different allocators)");
+    ->Name("vector<bool>(vector<bool>&&, const allocator_type&) (different allocators)");
 #endif
 
 static void BM_vector_bool_size_ctor(benchmark::State& state) {
@@ -59,7 +57,7 @@ static void BM_vector_bool_size_ctor(benchmark::State& state) {
     benchmark::DoNotOptimize(vec);
   }
 }
-BENCHMARK(BM_vector_bool_size_ctor)->Name("std::vector<bool>::ctor(size_type, const value_type&)");
+BENCHMARK(BM_vector_bool_size_ctor)->Name("vector<bool>(size_type, const value_type&)");
 
 static void BM_vector_bool_reserve(benchmark::State& state) {
   for (auto _ : state) {
@@ -68,7 +66,7 @@ static void BM_vector_bool_reserve(benchmark::State& state) {
     benchmark::DoNotOptimize(vec);
   }
 }
-BENCHMARK(BM_vector_bool_reserve)->Name("std::vector<bool>::reserve()");
+BENCHMARK(BM_vector_bool_reserve)->Name("vector<bool>::reserve()");
 
 static void BM_vector_bool_resize(benchmark::State& state) {
   for (auto _ : state) {
@@ -77,6 +75,6 @@ static void BM_vector_bool_resize(benchmark::State& state) {
     benchmark::DoNotOptimize(vec);
   }
 }
-BENCHMARK(BM_vector_bool_resize)->Name("std::vector<bool>::resize()");
+BENCHMARK(BM_vector_bool_resize)->Name("vector<bool>::resize()");
 
 BENCHMARK_MAIN();

@@ -134,8 +134,33 @@ public:
   // Find the required profiles or extensions from the compliance info according
   // to the operand type combination.
   template <typename T>
-  SmallVector<OpComplianceInfo<T>>
-  findMatchedEntries(Operation *op, SmallVector<OpComplianceInfo<T>> compInfo);
+  OpComplianceInfo<T>
+  findMatchedEntry(Operation *op, SmallVector<OpComplianceInfo<T>> compInfo);
+
+  SmallVector<Profile> getCooperativeProfiles(Extension ext) {
+    switch (ext) {
+    case Extension::int16:
+    case Extension::int4:
+    case Extension::doubleround:
+    case Extension::inexactround:
+      return {Profile::pro_int};
+    case Extension::bf16:
+    case Extension::fp8e4m3:
+    case Extension::fp8e5m2:
+    case Extension::fft:
+    case Extension::mxfp:
+      return {Profile::pro_fp};
+    case Extension::variable:
+    case Extension::controlflow:
+    case Extension::dynamic:
+    case Extension::int64:
+    case Extension::shape:
+      return {Profile::pro_fp, Profile::pro_int};
+    case Extension::none:
+      return {};
+    };
+    llvm_unreachable("bad Extension type");
+  }
 
   // Debug utilites.
   template <typename T>
@@ -149,8 +174,7 @@ public:
 
 private:
   template <typename T>
-  FailureOr<SmallVector<OpComplianceInfo<T>>>
-  getOperatorMatchedEntries(Operation *op);
+  FailureOr<OpComplianceInfo<T>> getOperatorDefinition(Operation *op);
 
   OperationProfileComplianceMap profileComplianceMap;
   OperationExtensionComplianceMap extensionComplianceMap;

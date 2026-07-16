@@ -81,9 +81,9 @@ public:
     StringRef buf = Buffer->getBuffer();
     StringRef magic = buf.substr(0, 4);
     if (magic == "gcno") {
-      de = DataExtractor(buf.substr(4), false);
+      de = DataExtractor(buf.substr(4), false, 0);
     } else if (magic == "oncg") {
-      de = DataExtractor(buf.substr(4), true);
+      de = DataExtractor(buf.substr(4), true, 0);
     } else {
       errs() << "unexpected magic: " << magic << "\n";
       return false;
@@ -96,9 +96,9 @@ public:
     StringRef buf = Buffer->getBuffer();
     StringRef magic = buf.substr(0, 4);
     if (magic == "gcda") {
-      de = DataExtractor(buf.substr(4), false);
+      de = DataExtractor(buf.substr(4), false, 0);
     } else if (magic == "adcg") {
-      de = DataExtractor(buf.substr(4), true);
+      de = DataExtractor(buf.substr(4), true, 0);
     } else {
       return false;
     }
@@ -179,7 +179,7 @@ public:
     return bool(cursor);
   }
 
-  DataExtractor de{ArrayRef<uint8_t>{}, false};
+  DataExtractor de{ArrayRef<uint8_t>{}, false, 0};
   DataExtractor::Cursor cursor{0};
 
 private:

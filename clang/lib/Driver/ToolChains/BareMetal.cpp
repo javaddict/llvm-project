@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "BareMetal.h"
+#include "Haydn.h"
 
 #include "Gnu.h"
 #include "clang/Driver/CommonArgs.h"
@@ -23,6 +24,8 @@
 #include "llvm/Option/ArgList.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/VirtualFileSystem.h"
+
+#include <sstream>
 
 using namespace llvm::opt;
 using namespace clang;
@@ -47,12 +50,6 @@ static bool isRISCVBareMetal(const llvm::Triple &Triple) {
 static bool isPPCBareMetal(const llvm::Triple &Triple) {
   return Triple.isPPC() && Triple.getOS() == llvm::Triple::UnknownOS &&
          Triple.getEnvironment() == llvm::Triple::EABI;
-}
-
-/// Is the triple {ix86,x86_64}-*-none-elf?
-static bool isX86BareMetal(const llvm::Triple &Triple) {
-  return Triple.isX86() && Triple.getOS() == llvm::Triple::UnknownOS &&
-         Triple.getEnvironmentName() == "elf";
 }
 
 static bool findRISCVMultilibs(const Driver &D,
@@ -262,15 +259,89 @@ BareMetal::BareMetal(const Driver &D, const llvm::Triple &Triple,
   }
 }
 
+static void
+findMultilibsFromYAML(const ToolChain &TC, const Driver &D,
+                      StringRef MultilibPath, const ArgList &Args,
+                      DetectedMultilibs &Result,
+                      SmallVector<StringRef> &CustomFlagsMacroDefines) {
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> MB =
+      D.getVFS().getBufferForFile(MultilibPath);
+  if (!MB)
+    return;
+  Multilib::flags_list Flags = TC.getMultilibFlags(Args);
+  llvm::ErrorOr<MultilibSet> ErrorOrMultilibSet =
+      MultilibSet::parseYaml(*MB.get());
+  if (ErrorOrMultilibSet.getError())
+    return;
+  Result.Multilibs = ErrorOrMultilibSet.get();
+  if (Result.Multilibs.select(D, Flags, Result.SelectedMultilibs,
+                              &CustomFlagsMacroDefines))
+    return;
+  D.Diag(clang::diag::warn_drv_missing_multilib) << llvm::join(Flags, " ");
+  std::stringstream ss;
+
+  // If multilib selection didn't complete successfully, report a list
+  // of all the configurations the user could have provided.
+  for (const Multilib &Multilib : Result.Multilibs)
+    if (!Multilib.isError())
+      ss << "\n" << llvm::join(Multilib.flags(), " ");
+  D.Diag(clang::diag::note_drv_available_multilibs) << ss.str();
+
+  // Now report any custom error messages requested by the YAML. We do
+  // this after displaying the list of available multilibs, because
+  // that list is probably large, and (in interactive use) risks
+  // scrolling the useful error message off the top of the user's
+  // terminal.
+  for (const Multilib &Multilib : Result.SelectedMultilibs)
+    if (Multilib.isError())
+      D.Diag(clang::diag::err_drv_multilib_custom_error)
+          << Multilib.getErrorMessage();
+
+  // If there was an error, clear the SelectedMultilibs vector, in
+  // case it contains partial data.
+  Result.SelectedMultilibs.clear();
+}
+
+static constexpr llvm::StringLiteral MultilibFilename = "multilib.yaml";
+
+static std::optional<llvm::SmallString<128>>
+getMultilibConfigPath(const Driver &D, const llvm::Triple &Triple,
+                      const ArgList &Args) {
+  llvm::SmallString<128> MultilibPath;
+  if (Arg *ConfigFileArg = Args.getLastArg(options::OPT_multi_lib_config)) {
+    MultilibPath = ConfigFileArg->getValue();
+    if (!D.getVFS().exists(MultilibPath)) {
+      D.Diag(clang::diag::err_drv_no_such_file) << MultilibPath.str();
+      return {};
+    }
+  } else {
+    MultilibPath = computeClangRuntimesSysRoot(D, /*IncludeTriple=*/false);
+    llvm::sys::path::append(MultilibPath, MultilibFilename);
+  }
+  return MultilibPath;
+}
+
 void BareMetal::findMultilibs(const Driver &D, const llvm::Triple &Triple,
                               const ArgList &Args) {
+  DetectedMultilibs Result;
   // Look for a multilib.yaml before trying target-specific hardwired logic.
-  std::string FallbackDir =
-      computeClangRuntimesSysRoot(D, /*IncludeTriple=*/false);
-  if (loadMultilibsFromYAML(Args, D, FallbackDir)) {
-    SysRoot = FallbackDir;
+  // If it exists, always do what it specifies.
+  std::optional<llvm::SmallString<128>> MultilibPath =
+      getMultilibConfigPath(D, Triple, Args);
+  if (!MultilibPath)
+    return;
+  if (D.getVFS().exists(*MultilibPath)) {
+    // If multilib.yaml is found, update sysroot so it doesn't use a target
+    // specific suffix
+    SysRoot = computeClangRuntimesSysRoot(D, /*IncludeTriple=*/false);
+    SmallVector<StringRef> CustomFlagMacroDefines;
+    findMultilibsFromYAML(*this, D, *MultilibPath, Args, Result,
+                          CustomFlagMacroDefines);
+    SelectedMultilibs = Result.SelectedMultilibs;
+    Multilibs = Result.Multilibs;
+    MultilibMacroDefines.append(CustomFlagMacroDefines.begin(),
+                                CustomFlagMacroDefines.end());
   } else if (isRISCVBareMetal(Triple) && !detectGCCToolchainAdjacent(D)) {
-    DetectedMultilibs Result;
     if (findRISCVMultilibs(D, Triple, Args, Result)) {
       SelectedMultilibs = Result.SelectedMultilibs;
       Multilibs = Result.Multilibs;
@@ -278,10 +349,17 @@ void BareMetal::findMultilibs(const Driver &D, const llvm::Triple &Triple,
   }
 }
 
+const char *BareMetal::getDefaultLinker() const {
+  // Haydn baremetal has no system ld; always use ld.lld.
+  if (getTriple().getArch() == llvm::Triple::haydn)
+    return toolchains::getDefaultHaydnLinker();
+  return "ld";
+}
+
 bool BareMetal::handlesTarget(const llvm::Triple &Triple) {
   return arm::isARMEABIBareMetal(Triple) ||
          aarch64::isAArch64BareMetal(Triple) || isRISCVBareMetal(Triple) ||
-         isPPCBareMetal(Triple) || isX86BareMetal(Triple);
+         isPPCBareMetal(Triple);
 }
 
 Tool *BareMetal::buildLinker() const {
@@ -290,6 +368,16 @@ Tool *BareMetal::buildLinker() const {
 
 Tool *BareMetal::buildStaticLibTool() const {
   return new tools::baremetal::StaticLibTool(*this);
+}
+
+BareMetal::OrderedMultilibs BareMetal::getOrderedMultilibs() const {
+  // Get multilibs in reverse order because they're ordered most-specific last.
+  if (!SelectedMultilibs.empty())
+    return llvm::reverse(SelectedMultilibs);
+
+  // No multilibs selected so return a single default multilib.
+  static const llvm::SmallVector<Multilib> Default = {Multilib()};
+  return llvm::reverse(Default);
 }
 
 ToolChain::CXXStdlibType BareMetal::GetDefaultCXXStdlibType() const {
@@ -376,7 +464,7 @@ void BareMetal::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
     return;
 
   const Driver &D = getDriver();
-  StringRef Target = getTripleString();
+  std::string Target = getTripleString();
 
   auto AddCXXIncludePath = [&](StringRef Path) {
     std::string Version = detectLibcxxVersion(Path);
@@ -546,6 +634,12 @@ void baremetal::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     return;
   }
 
+  // Haydn: forward to Haydn-owned helper to append the baremetal linker
+  // script (`-T<haydn.ld>`) if the user hasn't supplied one via -T. All
+  // Haydn-specific linker policy lives in ToolChains/Haydn.cpp (HC#0).
+  if (Triple.getArch() == llvm::Triple::haydn)
+    toolchains::addHaydnLinkArgs(TC, Triple, Args, CmdArgs);
+
   if (Triple.isRISCV()) {
     CmdArgs.push_back("-X");
     if (Args.hasArg(options::OPT_mno_relax))
@@ -592,19 +686,20 @@ void baremetal::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
-  Args.addAllArgs(CmdArgs, {options::OPT_L});
+  Args.addAllArgs(CmdArgs,
+                  {options::OPT_L, options::OPT_u, options::OPT_T_Group,
+                   options::OPT_s, options::OPT_t, options::OPT_r});
+
   TC.AddFilePathLibArgs(Args, CmdArgs);
-  Args.addAllArgs(CmdArgs, {options::OPT_u, options::OPT_T_Group,
-                            options::OPT_s, options::OPT_t, options::OPT_r});
 
   for (const auto &LibPath : TC.getLibraryPaths())
     CmdArgs.push_back(Args.MakeArgString(llvm::Twine("-L", LibPath)));
 
-  if (auto LTO = TC.getLTOMode(Args); LTO != LTOK_None)
-    addLTOOptions(TC, Args, CmdArgs, Output, Inputs, LTO == LTOK_Thin);
+  if (D.isUsingLTO())
+    addLTOOptions(TC, Args, CmdArgs, Output, Inputs,
+                  D.getLTOMode() == LTOK_Thin);
 
   AddLinkerInputs(TC, Inputs, Args, CmdArgs, JA);
-  TC.addProfileRTLibs(Args, CmdArgs);
 
   if (TC.ShouldLinkCXXStdlib(Args)) {
     bool OnlyLibstdcxxStatic = Args.hasArg(options::OPT_static_libstdcxx) &&
@@ -619,8 +714,15 @@ void baremetal::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs)) {
     CmdArgs.push_back("--start-group");
-    AddRunTimeLibs(TC, D, CmdArgs, Args);
-    if (!Args.hasArg(options::OPT_nolibc))
+    // Haydn ships its own runtime as libhaydn.a (mem*, atomics, integer
+    // div/mod, and the compiler-rt soft-float builtins — see D251); do not
+    // pull in libclang_rt.builtins.a or -lc, neither of which is built for
+    // the Haydn target. libhaydn.a itself is appended earlier via
+    // toolchains::addHaydnLinkArgs() (see Haydn.cpp, HC#0).
+    bool IsHaydn = Triple.getArch() == llvm::Triple::haydn;
+    if (!IsHaydn)
+      AddRunTimeLibs(TC, D, CmdArgs, Args);
+    if (!IsHaydn && !Args.hasArg(options::OPT_nolibc))
       CmdArgs.push_back("-lc");
     if (TC.hasValidGCCInstallation() || detectGCCToolchainAdjacent(D))
       CmdArgs.push_back("-lgloss");
@@ -648,15 +750,12 @@ void baremetal::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 // BareMetal toolchain allows all sanitizers where the compiler generates valid
 // code, ignoring all runtime library support issues on the assumption that
 // baremetal targets typically implement their own runtime support.
-SanitizerMask
-BareMetal::getSupportedSanitizers(StringRef BoundArch,
-                                  Action::OffloadKind DeviceOffloadKind) const {
+SanitizerMask BareMetal::getSupportedSanitizers() const {
   const bool IsX86_64 = getTriple().getArch() == llvm::Triple::x86_64;
   const bool IsAArch64 = getTriple().getArch() == llvm::Triple::aarch64 ||
                          getTriple().getArch() == llvm::Triple::aarch64_be;
-  const bool IsRISCV64 = getTriple().isRISCV64();
-  SanitizerMask Res =
-      ToolChain::getSupportedSanitizers(BoundArch, DeviceOffloadKind);
+  const bool IsRISCV64 = getTriple().getArch() == llvm::Triple::riscv64;
+  SanitizerMask Res = ToolChain::getSupportedSanitizers();
   Res |= SanitizerKind::Address;
   Res |= SanitizerKind::KernelAddress;
   Res |= SanitizerKind::PointerCompare;
@@ -672,4 +771,9 @@ BareMetal::getSupportedSanitizers(StringRef BoundArch,
     Res |= SanitizerKind::KernelHWAddress;
   }
   return Res;
+}
+
+SmallVector<std::string>
+BareMetal::getMultilibMacroDefinesStr(llvm::opt::ArgList &Args) const {
+  return MultilibMacroDefines;
 }

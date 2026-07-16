@@ -6,19 +6,10 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 from collections import OrderedDict
 import os
-from typing import List, Union
+from typing import List
 
 from dex.dextIR.DebuggerIR import DebuggerIR
 from dex.dextIR.StepIR import StepIR, StepKind
-from dex.test_script.Script import DexterScript
-
-
-def file_matches(a, b):
-    if os.path.exists(a) and os.path.exists(b):
-        return os.path.samefile(a, b)
-    return os.path.normpath(os.path.normcase(a)) == os.path.normpath(
-        os.path.normcase(b)
-    )
 
 
 def _step_kind_func(context, step):
@@ -28,7 +19,7 @@ def _step_kind_func(context, step):
         return StepKind.FUNC_UNKNOWN
 
     if any(
-        file_matches(step.current_location.path, f)
+        os.path.samefile(step.current_location.path, f)
         for f in context.options.source_files
     ):
         return StepKind.FUNC
@@ -64,7 +55,6 @@ class DextIR:
         self.debugger = debugger
         self.commands = commands
         self.steps: List[StepIR] = []
-        self.script: Union[DexterScript, None] = None
 
     def __str__(self):
         colors = "rgby"

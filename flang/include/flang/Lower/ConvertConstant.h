@@ -65,8 +65,7 @@ fir::GlobalOp tryCreatingDenseGlobal(fir::FirOpBuilder &builder,
                                      llvm::StringRef globalName,
                                      mlir::StringAttr linkage, bool isConst,
                                      const Fortran::lower::SomeExpr &initExpr,
-                                     cuf::DataAttributeAttr dataAttr = {},
-                                     bool setDefaultAlignment = true);
+                                     cuf::DataAttributeAttr dataAttr = {});
 
 /// Lower a StructureConstructor that must be lowered in read only data although
 /// it may not be wrapped into a Constant<T> (this may be the case for derived

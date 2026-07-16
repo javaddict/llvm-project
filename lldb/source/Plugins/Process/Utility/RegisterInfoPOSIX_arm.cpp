@@ -24,15 +24,13 @@ using namespace lldb_private;
 #define FPSCR_OFFSET                                                           \
   (LLVM_EXTENSION offsetof(RegisterInfoPOSIX_arm::FPU, fpscr) +                \
    sizeof(RegisterInfoPOSIX_arm::GPR))
-#define TLS_OFFSET                                                             \
-  (sizeof(RegisterInfoPOSIX_arm::GPR) + sizeof(RegisterInfoPOSIX_arm::FPU))
 #define EXC_OFFSET(idx)                                                        \
-  ((idx) * 4 + sizeof(RegisterInfoPOSIX_arm::GPR) +                            \
-   sizeof(RegisterInfoPOSIX_arm::FPU) + sizeof(RegisterInfoPOSIX_arm::TLS))
+  ((idx)*4 + sizeof(RegisterInfoPOSIX_arm::GPR) +                              \
+   sizeof(RegisterInfoPOSIX_arm::FPU))
 #define DBG_OFFSET(reg)                                                        \
   ((LLVM_EXTENSION offsetof(RegisterInfoPOSIX_arm::DBG, reg) +                 \
     sizeof(RegisterInfoPOSIX_arm::GPR) + sizeof(RegisterInfoPOSIX_arm::FPU) +  \
-    sizeof(RegisterInfoPOSIX_arm::TLS) + sizeof(RegisterInfoPOSIX_arm::EXC)))
+    sizeof(RegisterInfoPOSIX_arm::EXC)))
 
 #define DEFINE_DBG(reg, i)                                                     \
   #reg, NULL, sizeof(((RegisterInfoPOSIX_arm::DBG *) NULL)->reg[i]),           \
@@ -77,9 +75,7 @@ GetRegisterInfoCount(const lldb_private::ArchSpec &target_arch) {
 enum {
   k_num_gpr_registers = gpr_cpsr - gpr_r0 + 1,
   k_num_fpr_registers = fpu_q15 - fpu_s0 + 1,
-  k_num_tls_registers = 1,
-  k_num_register_sets_without_tls = 2,
-  k_num_register_sets_with_tls = 3
+  k_num_register_sets = 2
 };
 
 // arm general purpose registers.
@@ -146,29 +142,18 @@ static_assert(((sizeof g_fpu_regnums_arm / sizeof g_fpu_regnums_arm[0]) - 1) ==
                   k_num_fpr_registers,
               "g_fpu_regnums_arm has wrong number of register infos");
 
-// arm thread local storage registers.
-static const uint32_t g_tls_regnums_arm[] = {
-    tls_tpidruro,
-    LLDB_INVALID_REGNUM // register sets need to end with this flag
-};
-static_assert(((sizeof g_tls_regnums_arm / sizeof g_tls_regnums_arm[0]) - 1) ==
-                  k_num_tls_registers,
-              "g_tls_regnums_arm has wrong number of register infos");
-
 // Register sets for arm.
-static const RegisterSet g_reg_sets_arm[k_num_register_sets_with_tls] = {
+static const RegisterSet g_reg_sets_arm[k_num_register_sets] = {
     {"General Purpose Registers", "gpr", k_num_gpr_registers,
      g_gpr_regnums_arm},
-    {"Floating Point Registers", "fpu", k_num_fpr_registers, g_fpu_regnums_arm},
-    {"Thread Local Storage Registers", "tls", k_num_tls_registers,
-     g_tls_regnums_arm}};
+    {"Floating Point Registers", "fpu", k_num_fpr_registers,
+     g_fpu_regnums_arm}};
 
 RegisterInfoPOSIX_arm::RegisterInfoPOSIX_arm(
-    const lldb_private::ArchSpec &target_arch, bool has_tls_reg)
+    const lldb_private::ArchSpec &target_arch)
     : lldb_private::RegisterInfoAndSetInterface(target_arch),
       m_register_info_p(GetRegisterInfoPtr(target_arch)),
-      m_register_info_count(GetRegisterInfoCount(target_arch)),
-      m_has_tls_reg(has_tls_reg) {}
+      m_register_info_count(GetRegisterInfoCount(target_arch)) {}
 
 size_t RegisterInfoPOSIX_arm::GetGPRSize() const {
   return sizeof(struct RegisterInfoPOSIX_arm::GPR);
@@ -184,8 +169,7 @@ RegisterInfoPOSIX_arm::GetRegisterInfo() const {
 }
 
 size_t RegisterInfoPOSIX_arm::GetRegisterSetCount() const {
-  return m_has_tls_reg ? k_num_register_sets_with_tls
-                       : k_num_register_sets_without_tls;
+  return k_num_register_sets;
 }
 
 size_t RegisterInfoPOSIX_arm::GetRegisterSetFromRegisterIndex(
@@ -194,8 +178,6 @@ size_t RegisterInfoPOSIX_arm::GetRegisterSetFromRegisterIndex(
     return GPRegSet;
   if (reg_index <= fpu_q15)
     return FPRegSet;
-  if (reg_index == tls_tpidruro && m_has_tls_reg)
-    return TLSRegSet;
   return LLDB_INVALID_REGNUM;
 }
 

@@ -11,7 +11,6 @@
 #include "src/__support/common.h"
 #include "src/__support/macros/config.h"
 
-#include "hdr/errno_macros.h"
 #include <pthread.h>
 
 namespace LIBC_NAMESPACE_DECL {

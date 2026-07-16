@@ -12,9 +12,8 @@
 #include "hdr/types/off_t.h"
 #include "src/__support/CPP/new.h"
 #include "src/__support/File/file.h"
+#include "src/__support/File/linux/lseekImpl.h"
 #include "src/__support/OSUtil/fcntl.h"
-#include "src/__support/OSUtil/linux/syscall_wrappers/lseek.h"
-#include "src/__support/OSUtil/linux/syscall_wrappers/open.h"
 #include "src/__support/OSUtil/syscall.h" // For internal syscall function.
 #include "src/__support/alloc-checker.h"
 #include "src/__support/libc_errno.h" // For error macros
@@ -48,11 +47,13 @@ FileIOResult linux_file_read(File *f, void *buf, size_t size) {
 
 ErrorOr<off_t> linux_file_seek(File *f, off_t offset, int whence) {
   auto *lf = reinterpret_cast<LinuxFile *>(f);
-  return linux_syscalls::lseek(lf->get_fd(), offset, whence);
+  auto result = internal::lseekimpl(lf->get_fd(), offset, whence);
+  if (!result.has_value())
+    return result.error();
+  return result.value();
 }
 
 int linux_file_close(File *f) {
-  File::remove_file(f);
   auto *lf = reinterpret_cast<LinuxFile *>(f);
   int ret = LIBC_NAMESPACE::syscall_impl<int>(SYS_close, lf->get_fd());
   if (ret < 0) {
@@ -69,7 +70,7 @@ ErrorOr<File *> openfile(const char *path, const char *mode) {
     // return {nullptr, EINVAL};
     return Error(EINVAL);
   }
-  int open_flags = 0;
+  long open_flags = 0;
   if (modeflags & ModeFlags(File::OpenMode::APPEND)) {
     open_flags = O_CREAT | O_APPEND;
     if (modeflags & ModeFlags(File::OpenMode::PLUS))
@@ -90,12 +91,21 @@ ErrorOr<File *> openfile(const char *path, const char *mode) {
   }
 
   // File created will have 0666 permissions.
-  constexpr mode_t OPEN_MODE =
+  constexpr long OPEN_MODE =
       S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 
-  ErrorOr<int> fd = linux_syscalls::open(path, open_flags, OPEN_MODE);
-  if (!fd)
-    return Error(fd.error());
+#ifdef SYS_open
+  int fd =
+      LIBC_NAMESPACE::syscall_impl<int>(SYS_open, path, open_flags, OPEN_MODE);
+#elif defined(SYS_openat)
+  int fd = LIBC_NAMESPACE::syscall_impl<int>(SYS_openat, AT_FDCWD, path,
+                                             open_flags, OPEN_MODE);
+#else
+#error "open and openat syscalls not available."
+#endif
+
+  if (fd < 0)
+    return Error(-fd);
 
   uint8_t *buffer;
   {
@@ -105,11 +115,10 @@ ErrorOr<File *> openfile(const char *path, const char *mode) {
       return Error(ENOMEM);
   }
   AllocChecker ac;
-  auto *file = new (ac) LinuxFile(fd.value(), buffer, File::DEFAULT_BUFFER_SIZE,
-                                  _IOFBF, true, modeflags);
+  auto *file = new (ac)
+      LinuxFile(fd, buffer, File::DEFAULT_BUFFER_SIZE, _IOFBF, true, modeflags);
   if (!ac)
     return Error(ENOMEM);
-  File::add_file(file);
   return file;
 }
 
@@ -159,12 +168,10 @@ ErrorOr<LinuxFile *> create_file_from_fd(int fd, const char *mode) {
   if (!ac) {
     return Error(ENOMEM);
   }
-  File::add_file(file);
   if (do_seek) {
-    result = file->seek(0, SEEK_END);
+    auto result = file->seek(0, SEEK_END);
     if (!result.has_value()) {
-      File::remove_file(file);
-      delete file;
+      free(file);
       return Error(result.error());
     }
   }

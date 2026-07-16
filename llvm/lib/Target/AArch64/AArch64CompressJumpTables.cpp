@@ -30,9 +30,9 @@ STATISTIC(NumJT16, "Number of jump-tables with 2-byte entries");
 STATISTIC(NumJT32, "Number of jump-tables with 4-byte entries");
 
 namespace {
-class AArch64CompressJumpTablesImpl {
-  const TargetInstrInfo *TII = nullptr;
-  MachineFunction *MF = nullptr;
+class AArch64CompressJumpTables : public MachineFunctionPass {
+  const TargetInstrInfo *TII;
+  MachineFunction *MF;
   SmallVector<int, 8> BlockInfo;
 
   /// Returns the size of instructions in the block \p MBB, or std::nullopt if
@@ -46,13 +46,8 @@ class AArch64CompressJumpTablesImpl {
   bool compressJumpTable(MachineInstr &MI, int Offset);
 
 public:
-  bool run(MachineFunction &MF);
-};
-
-class AArch64CompressJumpTablesLegacy : public MachineFunctionPass {
-public:
   static char ID;
-  AArch64CompressJumpTablesLegacy() : MachineFunctionPass(ID) {}
+  AArch64CompressJumpTables() : MachineFunctionPass(ID) {}
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
@@ -63,14 +58,14 @@ public:
     return "AArch64 Compress Jump Tables";
   }
 };
-char AArch64CompressJumpTablesLegacy::ID = 0;
+char AArch64CompressJumpTables::ID = 0;
 } // namespace
 
-INITIALIZE_PASS(AArch64CompressJumpTablesLegacy, DEBUG_TYPE,
+INITIALIZE_PASS(AArch64CompressJumpTables, DEBUG_TYPE,
                 "AArch64 compress jump tables pass", false, false)
 
 std::optional<int>
-AArch64CompressJumpTablesImpl::computeBlockSize(MachineBasicBlock &MBB) {
+AArch64CompressJumpTables::computeBlockSize(MachineBasicBlock &MBB) {
   int Size = 0;
   for (const MachineInstr &MI : MBB) {
     // Inline asm may contain some directives like .bytes which we don't
@@ -84,7 +79,7 @@ AArch64CompressJumpTablesImpl::computeBlockSize(MachineBasicBlock &MBB) {
   return Size;
 }
 
-bool AArch64CompressJumpTablesImpl::scanFunction() {
+bool AArch64CompressJumpTables::scanFunction() {
   BlockInfo.clear();
   BlockInfo.resize(MF->getNumBlockIDs());
 
@@ -106,8 +101,8 @@ bool AArch64CompressJumpTablesImpl::scanFunction() {
   return true;
 }
 
-bool AArch64CompressJumpTablesImpl::compressJumpTable(MachineInstr &MI,
-                                                      int Offset) {
+bool AArch64CompressJumpTables::compressJumpTable(MachineInstr &MI,
+                                                  int Offset) {
   if (MI.getOpcode() != AArch64::JumpTableDest32)
     return false;
 
@@ -160,7 +155,7 @@ bool AArch64CompressJumpTablesImpl::compressJumpTable(MachineInstr &MI,
   return false;
 }
 
-bool AArch64CompressJumpTablesImpl::run(MachineFunction &MFIn) {
+bool AArch64CompressJumpTables::runOnMachineFunction(MachineFunction &MFIn) {
   bool Changed = false;
   MF = &MFIn;
 
@@ -184,22 +179,6 @@ bool AArch64CompressJumpTablesImpl::run(MachineFunction &MFIn) {
   return Changed;
 }
 
-bool AArch64CompressJumpTablesLegacy::runOnMachineFunction(
-    MachineFunction &MF) {
-  return AArch64CompressJumpTablesImpl().run(MF);
-}
-
-PreservedAnalyses
-AArch64CompressJumpTablesPass::run(MachineFunction &MF,
-                                   MachineFunctionAnalysisManager &MFAM) {
-  const bool Changed = AArch64CompressJumpTablesImpl().run(MF);
-  if (!Changed)
-    return PreservedAnalyses::all();
-  PreservedAnalyses PA = getMachineFunctionPassPreservedAnalyses();
-  PA.preserveSet<CFGAnalyses>();
-  return PA;
-}
-
 FunctionPass *llvm::createAArch64CompressJumpTablesPass() {
-  return new AArch64CompressJumpTablesLegacy();
+  return new AArch64CompressJumpTables();
 }

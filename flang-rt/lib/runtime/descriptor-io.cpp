@@ -99,14 +99,7 @@ static RT_API_ATTRS common::optional<bool> DefinedFormattedIo(
     }
     ExternalFileUnit *actualExternal{io.GetExternalFileUnit()};
     ExternalFileUnit *external{actualExternal};
-    if (external) {
-      // Neither parent nor child I/O may be asynchronous.
-      if (const auto *extBase{io.get_if<ExternalIoStatementBase>()}) {
-        if (extBase->asynchronousID() >= 0) {
-          io.GetIoErrorHandler().SignalError(IostatParentAsynchronous);
-        }
-      }
-    } else {
+    if (!external) {
       // Create a new unit to service defined I/O for an
       // internal I/O parent.
       external = &ExternalFileUnit::NewUnit(handler, true);
@@ -172,9 +165,9 @@ static RT_API_ATTRS common::optional<bool> DefinedFormattedIo(
     external->PopChildIo(child);
     if (!actualExternal) {
       // Close unit created for internal I/O above.
-      auto *closing{external->LookUpForClose(external->unitNumber(), handler)};
+      auto *closing{external->LookUpForClose(external->unitNumber())};
       RUNTIME_CHECK(handler, external == closing);
-      external->DestroyClosed(handler);
+      external->DestroyClosed();
     }
     if (startPos) {
       io.GotChar(io.InquirePos() - *startPos);
@@ -200,12 +193,6 @@ static RT_API_ATTRS bool DefinedUnformattedIo(IoStatementState &io,
   if (!external) { // INQUIRE(IOLENGTH=)
     handler.SignalError(IostatNonExternalDefinedUnformattedIo);
     return false;
-  }
-  // Neither parent nor child I/O may be asynchronous.
-  if (const auto *extBase{io.get_if<ExternalIoStatementBase>()}) {
-    if (extBase->asynchronousID() >= 0) {
-      io.GetIoErrorHandler().SignalError(IostatParentAsynchronous);
-    }
   }
   ChildIo &child{external->PushChildIo(io)};
   int unit{external->unitNumber()};

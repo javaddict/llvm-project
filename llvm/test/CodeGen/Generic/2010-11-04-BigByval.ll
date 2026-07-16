@@ -8,7 +8,6 @@
 
 ; AArch64 incorrectly nests ADJCALLSTACKDOWN/ADJCALLSTACKUP.
 ; UNSUPPORTED: expensive_checks && target=aarch64{{.*}}
-; UNSUPPORTED: expensive_checks && target=arm64{{.*}}
 
 %big = type [131072 x i8]
 

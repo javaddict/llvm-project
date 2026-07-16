@@ -13,6 +13,7 @@
 
 namespace lld::elf {
 class OutputSection;
+void copySectionsIntoPartitions(Ctx &ctx);
 template <class ELFT> void writeResult(Ctx &ctx);
 
 void addReservedSymbols(Ctx &ctx);

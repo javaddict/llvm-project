@@ -1,0 +1,191 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-ldst-opt -haydn-ldst-opt-phase2=1 -verify-machineinstrs %s -o - | FileCheck %s
+# Phase 2 (redundant-load-elim + store-to-load-forward) is default OFF;
+# this test exercises Phase 2's overlap-invalidation, so enable it explicitly.
+#
+# REGRESSION TEST (KnownContent memory-alias invalidation,):
+#
+# The Haydn Load/Store Optimizer (`haydn-ldst-opt`) tracks known memory
+# contents in a `KnownContent` map keyed by `{BaseReg, Offset}` and performs
+# store-to-load forwarding when a later load hits a tracked entry. The store
+# handler previously contained a DEAD invalidation loop:
+#
+# SmallVector<MemLoc, 4> ToErase;
+# for (auto &[EntryLoc, Info] : KnownContent) {
+#         if (EntryLoc == Loc)
+# continue; // <-- the only branch: skip everything
+# } // <-- ToErase is never pushed to
+# for (const MemLoc &L : ToErase)
+# KnownContent.erase(L); // <-- erases nothing
+#
+# So an OVERLAPPING or ALIASING store never invalidated any tracked entry.
+# Concrete wrong-code: a 4-byte `ST32 [sp,0]` is tracked, then a 2-byte
+# `ST16 [sp,2]` writes bytes [2,4) of the same word, then a `LD32 [sp,0]`
+# re-reads the full word. The optimizer WRONGLY forwarded the LD32 to the
+# stale stored value register — emitting `$rC = ADD32 $rA, $r0` instead of a
+# real load — silently dropping the ST16 update.
+#
+# Test design (size-aware same-base overlap, NO alias-analysis dependency):
+# We construct three memory ops on the same base with overlapping byte
+# ranges. Only the address-keyed `KnownContent` map matters; no vregs, no
+# AA, no cross-BB. Two sub-tests cover the two overlap shapes:
+#
+# *partial_overlap*: ST32[sp,0] (bytes [0,4)) tracked, then ST16[sp,2]
+# (bytes [2,4)) overlaps the tail. The following LD32[sp,0] MUST remain a
+# real load (not forwarded from the stale ST32 value register).
+#
+# *full_overlap*: ST16[sp,0] (bytes [0,2)) tracked, then ST32[sp,0]
+# (bytes [0,4)) fully covers it. The following LD16[sp,0] MUST remain a
+# real load (not forwarded from the stale ST16 value register).
+#
+# A *disjoint* control case (ST32[r13,0] then ST32[r13,8], disjoint 4-byte
+# slots) MUST still forward — confirms we did not over-invalidate (this is
+# what regalloc-gpr-pressure.ll also guards, with disjoint spill slots).
+#
+# Note on register names: SP is R13 (asm name "sp", but MIR parses/prints
+# physical regs by their TableGen def name, so we write $r13 here, not $sp).
+#
+# What breaks if this regresses:
+# If the dead `ToErase` no-op returns (or the overlap test is dropped), the
+# `LD32 [sp,0]` in *partial_overlap* becomes `$rC = ADD32 $rA, $r0`
+# silently dropping the intervening `ST16` — i.e. WRONG CODE: a stored value
+# visible to no later load. The CHECK-LABEL bodies below assert that each
+# post-overlap load survives as a real `LD32` / `LD16`.
+
+--- |
+  define void @partial_overlap() {
+  entry:
+    ret void
+  }
+
+  define void @full_overlap() {
+  entry:
+    ret void
+  }
+
+  define void @disjoint_no_invalidate() {
+  entry:
+    ret void
+  }
+...
+---
+name:            partial_overlap
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r13', virtual-reg: '' }
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0.entry:
+    liveins: $r13, $r1, $r2
+
+    ; ST32 [sp,0] — bytes [0,4). KnownContent[{$r13,0}] = {$r1, size=4}.
+    ST32 $r1, $r13, 0
+    ; ST16 [sp,2] — bytes [2,4). OVERLAPS the tracked [0,4) range. Must drop
+    ; the {$r13,0} entry so the next LD32 cannot be forwarded from $r1.
+    ST16 $r2, $r13, 2
+    ; LD32 [sp,0] — full word. Must remain a REAL load (the [2,4) half was
+    ; overwritten by the ST16). Forwarding would emit ADD32 from $r1 and
+    ; silently drop the ST16 update.
+    ; CHECK-LABEL: name: partial_overlap
+    ; CHECK: $r3 = LD32 $r13, 0
+    ; CHECK-NOT: ADD32
+    $r3 = LD32 $r13, 0
+
+    RET implicit $r0, implicit $r15
+...
+---
+name:            full_overlap
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r13', virtual-reg: '' }
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0.entry:
+    liveins: $r13, $r1, $r2
+
+    ; ST16 [sp,0] — bytes [0,2). KnownContent[{$r13,0}] = {$r1, size=2}.
+    ST16 $r1, $r13, 0
+    ; ST32 [sp,0] — bytes [0,4). FULLY covers [0,2). Must drop {$r13,0}.
+    ST32 $r2, $r13, 0
+    ; LD16 [sp,0] — half word. Must remain a REAL load; the value is now $r2's
+    ; low half, not $r1.
+    ; CHECK-LABEL: name: full_overlap
+    ; CHECK: $r3 = LD16 $r13, 0
+    ; CHECK-NOT: ADD32
+    $r3 = LD16 $r13, 0
+
+    RET implicit $r0, implicit $r15
+...
+---
+name:            disjoint_no_invalidate
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r13', virtual-reg: '' }
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0.entry:
+    liveins: $r13, $r1, $r2
+
+    ; ST32 [sp,0] — bytes [0,4). Tracked as {$r13,0} = {$r1, size=4}.
+    ST32 $r1, $r13, 0
+    ; ST32 [sp,8] — bytes [8,12). DISJOINT from [0,4). Must NOT drop {$r13,0}.
+    ST32 $r2, $r13, 8
+    ; LD32 [sp,0] — full word. The {$r13,0} entry survives (disjoint store), so
+    ; store-to-load forwarding MUST still fire: `$r3 = ADD32 $r1, $r0`.
+    ; This guards against over-invalidation: if the overlap test were
+    ; accidentally widened to "same base => drop all", this would regress to a
+    ; real LD32 and silently disable forwarding.
+    ; CHECK-LABEL: name: disjoint_no_invalidate
+    ; CHECK: $r3 = ADD32 $r1, $r0
+    ; CHECK-NOT: LD32 $r13, 0
+    $r3 = LD32 $r13, 0
+
+    RET implicit $r0, implicit $r15
+...

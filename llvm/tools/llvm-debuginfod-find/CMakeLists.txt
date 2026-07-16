@@ -13,9 +13,8 @@ add_llvm_tool(llvm-debuginfod-find
   DebugInfodFindOptsTableGen
   GENERATE_DRIVER
   )
-
 if(NOT LLVM_TOOL_LLVM_DRIVER_BUILD)
-  target_link_libraries(llvm-debuginfod-find PRIVATE LLVMDebuginfod LLVMHTTP)
+  target_link_libraries(llvm-debuginfod-find PRIVATE LLVMDebuginfod)
 endif()
 if(LLVM_INSTALL_BINUTILS_SYMLINKS)
   add_llvm_tool_symlink(debuginfod-find llvm-debuginfod-find)

@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "AMDGPULaneMaskUtils.h"
 #include "GCNSubtarget.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachinePostDominators.h"
@@ -20,8 +19,8 @@
 #include "llvm/CodeGen/MachineSSAUpdater.h"
 
 namespace llvm {
-namespace AMDGPU {
-/// Incoming for lane mask phi as machine instruction, incoming register \p Reg
+
+/// Incoming for lane maks phi as machine instruction, incoming register \p Reg
 /// and incoming block \p Block are taken from machine instruction.
 /// \p UpdatedReg (if valid) is \p Reg lane mask merged with another lane mask.
 struct Incoming {
@@ -51,11 +50,18 @@ protected:
   const GCNSubtarget *ST = nullptr;
   const SIInstrInfo *TII = nullptr;
   MachineRegisterInfo::VRegAttrs LaneMaskRegAttrs;
-  const AMDGPU::LaneMaskConstants *LMC = nullptr;
 
 #ifndef NDEBUG
   DenseSet<Register> PhiRegisters;
 #endif
+
+  Register ExecReg;
+  unsigned MovOp;
+  unsigned AndOp;
+  unsigned OrOp;
+  unsigned XorOp;
+  unsigned AndN2Op;
+  unsigned OrN2Op;
 
 public:
   bool lowerPhis();
@@ -94,5 +100,5 @@ public:
                                    Register PrevReg, Register CurReg) = 0;
   virtual void constrainAsLaneMask(Incoming &In) = 0;
 };
-} // namespace AMDGPU
+
 } // end namespace llvm

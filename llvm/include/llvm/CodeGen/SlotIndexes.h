@@ -92,8 +92,6 @@ class raw_ostream;
 
     PointerIntPair<IndexListEntry*, 2, unsigned> lie;
 
-    SlotIndex(IndexListEntry *entry, unsigned slot) : lie(entry, slot) {}
-
     IndexListEntry* listEntry() const {
       assert(isValid() && "Attempt to compare reserved index.");
       return lie.getPointer();
@@ -117,6 +115,11 @@ class raw_ostream;
 
     /// Construct an invalid index.
     SlotIndex() = default;
+
+    // Creates a SlotIndex from an IndexListEntry and a slot. Generally should
+    // not be used. This method is only public to facilitate writing certain
+    // unit tests.
+    SlotIndex(IndexListEntry *entry, unsigned slot) : lie(entry, slot) {}
 
     // Construct a new slot index from the given one, and set the slot.
     SlotIndex(const SlotIndex &li, Slot s) : lie(li.listEntry(), unsigned(s)) {
@@ -659,14 +662,14 @@ class raw_ostream;
     LLVM_ABI Result run(MachineFunction &MF, MachineFunctionAnalysisManager &);
   };
 
-  class SlotIndexesPrinterPass
-      : public RequiredPassInfoMixin<SlotIndexesPrinterPass> {
+  class SlotIndexesPrinterPass : public PassInfoMixin<SlotIndexesPrinterPass> {
     raw_ostream &OS;
 
   public:
     explicit SlotIndexesPrinterPass(raw_ostream &OS) : OS(OS) {}
     LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
                                    MachineFunctionAnalysisManager &MFAM);
+    static bool isRequired() { return true; }
   };
 
   class LLVM_ABI SlotIndexesWrapperPass : public MachineFunctionPass {

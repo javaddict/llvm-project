@@ -1,4 +1,4 @@
-;;; mlir-mode.el --- Major mode for the MLIR assembler language -*- lexical-binding: t -*-
+;;; mlir-mode.el --- Major mode for the MLIR assembler language.
 
 ;; Copyright (C) 2019 The MLIR Authors.
 ;;
@@ -14,9 +14,7 @@
 ;; See the License for the specific language governing permissions and
 ;; limitations under the License.
 
-;; Version: 0.2.0
-;; Homepage: https://mlir.llvm.org/
-;; Package-Requires: ((emacs "24.3"))
+;; Version: 0.1.0
 
 ;;; Commentary:
 
@@ -60,8 +58,14 @@
          "br" "ceildiv" "func" "cond_br" "else" "extfunc" "false" "floordiv" "for" "if" "mod" "return" "size" "step" "to" "true" "??" ) 'symbols) . font-lock-keyword-face))
   "Syntax highlighting for MLIR.")
 
+;; Emacs 23 compatibility.
+(defalias 'mlir-mode-prog-mode
+  (if (fboundp 'prog-mode)
+      'prog-mode
+    'fundamental-mode))
+
 ;;;###autoload
-(define-derived-mode mlir-mode prog-mode "MLIR"
+(define-derived-mode mlir-mode mlir-mode-prog-mode "MLIR"
   "Major mode for editing MLIR source files.
 \\{mlir-mode-map}
   Runs `mlir-mode-hook' on startup."

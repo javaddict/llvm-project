@@ -92,76 +92,6 @@ public:
       case 'u':
         m_filtered_backtrace = false;
         break;
-      case 'p': {
-        // Parse provider range using same format as breakpoint IDs.
-        // Supports: "N", "N-M", "N to M", "*", "all".
-        llvm::StringRef trimmed = option_arg.trim();
-        if (trimmed == "*" || trimmed.equals_insensitive("all")) {
-          m_show_all_providers = true;
-          m_provider_specific_backtrace = true;
-          break;
-        }
-
-        std::string option_lower = option_arg.lower();
-        static constexpr llvm::StringLiteral range_specifiers[] = {"-", "to"};
-
-        llvm::StringRef range_from;
-        llvm::StringRef range_to;
-        bool is_range = false;
-
-        // Try to find a range specifier.
-        for (auto specifier : range_specifiers) {
-          size_t idx = option_lower.find(specifier);
-          if (idx == std::string::npos)
-            continue;
-
-          range_from = llvm::StringRef(option_lower).take_front(idx).trim();
-          range_to = llvm::StringRef(option_lower)
-                         .drop_front(idx + specifier.size())
-                         .trim();
-
-          if (!range_from.empty() && !range_to.empty()) {
-            is_range = true;
-            break;
-          }
-        }
-
-        if (is_range) {
-          // Parse both start and end IDs.
-          if (range_from.getAsInteger(0, m_provider_start_id)) {
-            error = Status::FromErrorStringWithFormat(
-                "invalid start provider ID for option '%c': %s", short_option,
-                range_from.data());
-            break;
-          }
-          if (range_to.getAsInteger(0, m_provider_end_id)) {
-            error = Status::FromErrorStringWithFormat(
-                "invalid end provider ID for option '%c': %s", short_option,
-                range_to.data());
-            break;
-          }
-
-          // Validate range.
-          if (m_provider_start_id > m_provider_end_id) {
-            error = Status::FromErrorStringWithFormat(
-                "invalid provider range for option '%c': start ID %u > end "
-                "ID %u",
-                short_option, m_provider_start_id, m_provider_end_id);
-            break;
-          }
-        } else {
-          // Single provider ID.
-          if (option_arg.getAsInteger(0, m_provider_start_id)) {
-            error = Status::FromErrorStringWithFormat(
-                "invalid provider ID for option '%c': %s", short_option,
-                option_arg.data());
-            break;
-          }
-          m_provider_end_id = m_provider_start_id;
-        }
-
-        m_provider_specific_backtrace = true;
-      } break;
       default:
         llvm_unreachable("Unimplemented option");
       }
@@ -173,14 +103,10 @@ public:
       m_start = 0;
       m_extended_backtrace = false;
       m_filtered_backtrace = true;
-      m_provider_start_id = 0;
-      m_provider_end_id = 0;
-      m_provider_specific_backtrace = false;
-      m_show_all_providers = false;
     }
 
     llvm::ArrayRef<OptionDefinition> GetDefinitions() override {
-      return g_thread_backtrace_options;
+      return llvm::ArrayRef(g_thread_backtrace_options);
     }
 
     // Instance variables to hold the values for command options.
@@ -188,10 +114,6 @@ public:
     uint32_t m_start;
     bool m_extended_backtrace;
     bool m_filtered_backtrace;
-    lldb::frame_list_id_t m_provider_start_id;
-    lldb::frame_list_id_t m_provider_end_id;
-    bool m_provider_specific_backtrace;
-    bool m_show_all_providers;
   };
 
   CommandObjectThreadBacktrace(CommandInterpreter &interpreter)
@@ -202,9 +124,6 @@ public:
             "Use the thread-index \"all\" to see all threads.\n"
             "Use the thread-index \"unique\" to see threads grouped by unique "
             "call stacks.\n"
-            "Use '--provider <id>' or '--provider <start>-<end>' to view "
-            "synthetic frame providers (0=base unwinder, 1+=synthetic). "
-            "Range specifiers '-', 'to', 'To', 'TO' are supported.\n"
             "Use 'settings set frame-format' to customize the printing of "
             "frames in the backtrace and 'settings set thread-format' to "
             "customize the thread header.\n"
@@ -302,127 +221,26 @@ protected:
         m_exe_ctx.GetProcessPtr()->GetThreadList().FindThreadByID(tid);
     if (!thread_sp) {
       result.AppendErrorWithFormat(
-          "thread disappeared while computing backtraces: 0x%" PRIx64, tid);
+          "thread disappeared while computing backtraces: 0x%" PRIx64 "\n",
+          tid);
       return false;
     }
 
     Thread *thread = thread_sp.get();
+
     Stream &strm = result.GetOutputStream();
 
-    // Check if provider filtering is requested.
-    if (m_options.m_provider_specific_backtrace) {
-      // Disallow 'bt --provider' from within a scripted frame provider.
-      // A provider's get_frame_at_index running 'bt --provider' would
-      // try to evaluate the very provider that is mid-construction,
-      // leading to infinite recursion.
-      if (thread->IsAnyProviderActive()) {
-        result.AppendErrorWithFormat(
-            "cannot use '--provider' option while a scripted frame provider is "
-            "being constructed on this thread");
-        return false;
-      }
-
-      // Print thread status header, like regular bt. This also ensures the
-      // frame list is initialized and any providers are loaded.
-      thread->GetStatus(strm, /*start_frame=*/0, /*num_frames=*/0,
-                        /*num_frames_with_source=*/0, /*stop_format=*/true,
-                        /*show_hidden=*/false, /*only_stacks=*/false);
-
-      if (m_options.m_show_all_providers) {
-        // Show all providers: unwinder (0) through the last in the chain.
-        m_options.m_provider_start_id = 0;
-        const auto &chain = thread->GetProviderChainIds();
-        m_options.m_provider_end_id = chain.empty() ? 0 : chain.back().second;
-      }
-
-      // Provider filter mode: show sequential views for each provider in range.
-      bool first_provider = true;
-      for (lldb::frame_list_id_t provider_id = m_options.m_provider_start_id;
-           provider_id <= m_options.m_provider_end_id; ++provider_id) {
-
-        // Get the frame list for this provider.
-        lldb::StackFrameListSP frame_list_sp =
-            thread->GetFrameListByIdentifier(provider_id);
-
-        if (!frame_list_sp) {
-          // Provider doesn't exist - skip silently.
-          continue;
-        }
-
-        // Add blank line between providers for readability.
-        if (!first_provider)
-          strm.PutChar('\n');
-        first_provider = false;
-
-        // Print provider header.
-        strm.Printf("=== Provider %u", provider_id);
-
-        // Get provider metadata for header.
-        if (provider_id == 0) {
-          strm.Printf(": Base Unwinder ===\n");
-        } else {
-          // Find the descriptor in the provider chain.
-          const auto &provider_chain = thread->GetProviderChainIds();
-          std::string provider_name = "Unknown";
-          std::string provider_desc;
-          std::optional<uint32_t> provider_priority;
-
-          for (const auto &[descriptor, id] : provider_chain) {
-            if (id == provider_id) {
-              provider_name = descriptor.GetName().str();
-              provider_desc = descriptor.GetDescription();
-              provider_priority = descriptor.GetPriority();
-              break;
-            }
-          }
-
-          strm.Printf(": %s", provider_name.c_str());
-          if (provider_priority.has_value()) {
-            strm.Printf(" (priority: %u)", *provider_priority);
-          }
-          strm.Printf(" ===\n");
-
-          if (!provider_desc.empty()) {
-            strm.Printf("Description: %s\n", provider_desc.c_str());
-          }
-        }
-
-        // Print the backtrace for this provider.
-        const uint32_t num_frames_with_source = 0;
-        const StackFrameSP selected_frame_sp =
-            thread->GetSelectedFrame(DoNoSelectMostRelevantFrame);
-        const char *selected_frame_marker = selected_frame_sp ? "->" : nullptr;
-
-        size_t num_frames = frame_list_sp->GetStatus(
-            strm, m_options.m_start, m_options.m_count,
-            /*show_frame_info=*/true, num_frames_with_source,
-            /*show_unique=*/false,
-            /*show_hidden=*/!m_options.m_filtered_backtrace,
-            selected_frame_marker);
-
-        if (num_frames == 0) {
-          strm.Printf("(No frames available)\n");
-        }
-      }
-
-      if (first_provider) {
-        result.AppendErrorWithFormat("no provider found in range %u-%u",
-                                     m_options.m_provider_start_id,
-                                     m_options.m_provider_end_id);
-        return false;
-      }
-      return true;
-    }
-
-    // Original behavior: show default backtrace.
+    // Only dump stack info if we processing unique stacks.
     const bool only_stacks = m_unique_stacks;
+
+    // Don't show source context when doing backtraces.
     const uint32_t num_frames_with_source = 0;
     const bool stop_format = true;
     if (!thread->GetStatus(strm, m_options.m_start, m_options.m_count,
                            num_frames_with_source, stop_format,
                            !m_options.m_filtered_backtrace, only_stacks)) {
       result.AppendErrorWithFormat(
-          "error displaying backtrace for thread: \"0x%4.4x\"",
+          "error displaying backtrace for thread: \"0x%4.4x\"\n",
           thread->GetIndexID());
       return false;
     }
@@ -613,7 +431,7 @@ protected:
       uint32_t step_thread_idx;
 
       if (!llvm::to_integer(thread_idx_cstr, step_thread_idx)) {
-        result.AppendErrorWithFormat("invalid thread index '%s'",
+        result.AppendErrorWithFormat("invalid thread index '%s'.\n",
                                      thread_idx_cstr);
         return;
       }
@@ -621,7 +439,7 @@ protected:
           process->GetThreadList().FindThreadByIndexID(step_thread_idx).get();
       if (thread == nullptr) {
         result.AppendErrorWithFormat(
-            "Thread index %u is out of range (valid values are 0 - %u)",
+            "Thread index %u is out of range (valid values are 0 - %u).\n",
             step_thread_idx, num_threads);
         return;
       }
@@ -629,12 +447,12 @@ protected:
 
     if (m_step_type == eStepTypeScripted) {
       if (m_class_options.GetName().empty()) {
-        result.AppendErrorWithFormat("empty class name for scripted step");
+        result.AppendErrorWithFormat("empty class name for scripted step.");
         return;
       } else if (!GetDebugger().GetScriptInterpreter()->CheckObjectExists(
                      m_class_options.GetName().c_str())) {
         result.AppendErrorWithFormat(
-            "class for scripted step: \"%s\" does not exist",
+            "class for scripted step: \"%s\" does not exist.",
             m_class_options.GetName().c_str());
         return;
       }
@@ -682,7 +500,7 @@ protected:
           Status error;
           Block *block = frame->GetSymbolContext(eSymbolContextBlock).block;
           if (!block) {
-            result.AppendErrorWithFormat("Could not find the current block");
+            result.AppendErrorWithFormat("Could not find the current block.");
             return;
           }
 
@@ -691,7 +509,7 @@ protected:
           block->GetRangeContainingAddress(pc_address, block_range);
           if (!block_range.GetBaseAddress().IsValid()) {
             result.AppendErrorWithFormat(
-                "Could not find the current block address");
+                "Could not find the current block address.");
             return;
           }
           lldb::addr_t pc_offset_in_block =
@@ -745,10 +563,9 @@ protected:
           thread->GetSelectedFrameIndex(DoNoSelectMostRelevantFrame),
           new_plan_status, m_options.m_step_out_avoid_no_debug);
     } else if (m_step_type == eStepTypeScripted) {
-      ScriptedMetadata scripted_metadata(m_class_options.GetName(),
-                                         m_class_options.GetStructuredData());
       new_plan_sp = thread->QueueThreadPlanForStepScripted(
-          abort_other_plans, scripted_metadata, bool_stop_other_threads,
+          abort_other_plans, m_class_options.GetName().c_str(),
+          m_class_options.GetStructuredData(), bool_stop_other_threads,
           new_plan_status);
     } else {
       result.AppendError("step type is not supported");
@@ -766,7 +583,7 @@ protected:
       if (m_options.m_step_count > 1) {
         if (!new_plan_sp->SetIterationCount(m_options.m_step_count)) {
           result.AppendWarning(
-              "step operation does not support iteration count");
+              "step operation does not support iteration count.");
         }
       }
 
@@ -783,7 +600,6 @@ protected:
 
       if (!error.Success()) {
         result.AppendMessage(error.AsCString());
-        result.SetStatus(eReturnStatusFailed);
         return;
       }
 
@@ -859,7 +675,7 @@ public:
           uint32_t thread_idx;
           if (entry.ref().getAsInteger(0, thread_idx)) {
             result.AppendErrorWithFormat(
-                "invalid thread index argument: \"%s\"", entry.c_str());
+                "invalid thread index argument: \"%s\".\n", entry.c_str());
             return;
           }
           Thread *thread =
@@ -868,7 +684,8 @@ public:
           if (thread) {
             resume_threads.push_back(thread);
           } else {
-            result.AppendErrorWithFormat("invalid thread index %u", thread_idx);
+            result.AppendErrorWithFormat("invalid thread index %u.\n",
+                                         thread_idx);
             return;
           }
         }
@@ -877,11 +694,10 @@ public:
           result.AppendError("no valid thread indexes were specified");
           return;
         } else {
-          Stream &strm = result.GetOutputStream();
           if (resume_threads.size() == 1)
-            strm << "Resuming thread: ";
+            result.AppendMessageWithFormat("Resuming thread: ");
           else
-            strm << "Resuming threads: ";
+            result.AppendMessageWithFormat("Resuming threads: ");
 
           for (uint32_t idx = 0; idx < num_threads; ++idx) {
             Thread *thread =
@@ -892,9 +708,9 @@ public:
             if (this_thread_pos != resume_threads.end()) {
               resume_threads.erase(this_thread_pos);
               if (!resume_threads.empty())
-                strm << llvm::formatv("{0}, ", thread->GetIndexID());
+                result.AppendMessageWithFormat("%u, ", thread->GetIndexID());
               else
-                strm << llvm::formatv("{0} ", thread->GetIndexID());
+                result.AppendMessageWithFormat("%u ", thread->GetIndexID());
 
               const bool override_suspend = true;
               thread->SetResumeState(eStateRunning, override_suspend);
@@ -902,7 +718,8 @@ public:
               thread->SetResumeState(eStateSuspended);
             }
           }
-          result.AppendMessageWithFormatv("in process {0}", process->GetID());
+          result.AppendMessageWithFormat("in process %" PRIu64 "\n",
+                                         process->GetID());
         }
       } else {
         // These two lines appear at the beginning of both blocks in this
@@ -920,9 +737,9 @@ public:
         for (uint32_t idx = 0; idx < num_threads; ++idx) {
           Thread *thread = process->GetThreadList().GetThreadAtIndex(idx).get();
           if (thread == current_thread) {
-            result.AppendMessageWithFormatv(
-                "Resuming thread {0:x4} in process {1}", thread->GetID(),
-                process->GetID());
+            result.AppendMessageWithFormat("Resuming thread 0x%4.4" PRIx64
+                                           " in process %" PRIu64 "\n",
+                                           thread->GetID(), process->GetID());
             const bool override_suspend = true;
             thread->SetResumeState(eStateRunning, override_suspend);
           } else {
@@ -940,8 +757,8 @@ public:
 
       // We should not be holding the thread list lock when we do this.
       if (error.Success()) {
-        result.AppendMessageWithFormatv("Process {0} resuming",
-                                        process->GetID());
+        result.AppendMessageWithFormat("Process %" PRIu64 " resuming\n",
+                                       process->GetID());
         if (synchronous_execution) {
           // If any state changed events had anything to say, add that to the
           // result
@@ -954,12 +771,12 @@ public:
           result.SetStatus(eReturnStatusSuccessContinuingNoResult);
         }
       } else {
-        result.AppendErrorWithFormat("Failed to resume process: %s",
+        result.AppendErrorWithFormat("Failed to resume process: %s\n",
                                      error.AsCString());
       }
     } else {
       result.AppendErrorWithFormat(
-          "Process cannot be continued from its current state (%s)",
+          "Process cannot be continued from its current state (%s).\n",
           StateAsCString(state));
     }
   }
@@ -1040,6 +857,7 @@ public:
       return llvm::ArrayRef(g_thread_until_options);
     }
 
+    uint32_t m_step_thread_idx = LLDB_INVALID_THREAD_ID;
     bool m_stop_others = false;
     std::vector<lldb::addr_t> m_until_addrs;
 
@@ -1069,7 +887,7 @@ protected:
   void DoExecute(Args &command, CommandReturnObject &result) override {
     bool synchronous_execution = m_interpreter.GetSynchronous();
 
-    Target *target = GetTarget();
+    Target *target = &GetTarget();
 
     Process *process = m_exe_ctx.GetProcessPtr();
     if (process == nullptr) {
@@ -1083,7 +901,7 @@ protected:
         for (size_t i = 0; i < num_args; i++) {
           uint32_t line_number;
           if (!llvm::to_integer(command.GetArgumentAtIndex(i), line_number)) {
-            result.AppendErrorWithFormat("invalid line number: '%s'",
+            result.AppendErrorWithFormat("invalid line number: '%s'.\n",
                                          command.GetArgumentAtIndex(i));
             return;
           } else
@@ -1106,7 +924,7 @@ protected:
       if (thread == nullptr) {
         const uint32_t num_threads = process->GetThreadList().GetSize();
         result.AppendErrorWithFormat(
-            "Thread index %u is out of range (valid values are 0 - %u)",
+            "Thread index %u is out of range (valid values are 0 - %u).\n",
             m_options.m_thread_idx, num_threads);
         return;
       }
@@ -1117,7 +935,7 @@ protected:
           thread->GetStackFrameAtIndex(m_options.m_frame_idx).get();
       if (frame == nullptr) {
         result.AppendErrorWithFormat(
-            "Frame index %u is out of range for thread id %" PRIu64,
+            "Frame index %u is out of range for thread id %" PRIu64 ".\n",
             m_options.m_frame_idx, thread->GetID());
         return;
       }
@@ -1135,7 +953,7 @@ protected:
 
         if (line_table == nullptr) {
           result.AppendErrorWithFormat("Failed to resolve the line table for "
-                                       "frame %u of thread id %" PRIu64,
+                                       "frame %u of thread id %" PRIu64 ".\n",
                                        m_options.m_frame_idx, thread->GetID());
           return;
         }
@@ -1147,7 +965,7 @@ protected:
         // sure it is valid:
         if (!sc.function) {
           result.AppendErrorWithFormat("Have debug information but no "
-                                       "function info - can't get until range");
+                                       "function info - can't get until range.");
           return;
         }
 
@@ -1200,17 +1018,17 @@ protected:
         if (address_list.empty()) {
           if (found_something)
             result.AppendErrorWithFormat(
-                "Until target outside of the current function");
+                "Until target outside of the current function.\n");
           else
             result.AppendErrorWithFormat(
-                "No line entries matching until target");
+                "No line entries matching until target.\n");
 
           return;
         }
 
         new_plan_sp = thread->QueueThreadPlanForStepUntil(
-            abort_other_plans, address_list, m_options.m_stop_others,
-            m_options.m_frame_idx, new_plan_status);
+            abort_other_plans, &address_list.front(), address_list.size(),
+            m_options.m_stop_others, m_options.m_frame_idx, new_plan_status);
         if (new_plan_sp) {
           // User level plans should be controlling plans so they can be
           // interrupted
@@ -1225,14 +1043,14 @@ protected:
         }
       } else {
         result.AppendErrorWithFormat("Frame index %u of thread id %" PRIu64
-                                     " has no debug information",
+                                     " has no debug information.\n",
                                      m_options.m_frame_idx, thread->GetID());
         return;
       }
 
       if (!process->GetThreadList().SetSelectedThreadByID(thread->GetID())) {
         result.AppendErrorWithFormat(
-            "Failed to set the selected thread to thread id %" PRIu64,
+            "Failed to set the selected thread to thread id %" PRIu64 ".\n",
             thread->GetID());
         return;
       }
@@ -1245,8 +1063,8 @@ protected:
         error = process->Resume();
 
       if (error.Success()) {
-        result.AppendMessageWithFormatv("Process {0} resuming",
-                                        process->GetID());
+        result.AppendMessageWithFormat("Process %" PRIu64 " resuming\n",
+                                       process->GetID());
         if (synchronous_execution) {
           // If any state changed events had anything to say, add that to the
           // result
@@ -1259,7 +1077,7 @@ protected:
           result.SetStatus(eReturnStatusSuccessContinuingNoResult);
         }
       } else {
-        result.AppendErrorWithFormat("Failed to resume process: %s",
+        result.AppendErrorWithFormat("Failed to resume process: %s.\n",
                                      error.AsCString());
       }
     }
@@ -1363,13 +1181,13 @@ protected:
                command.GetArgumentCount() != 1) {
       result.AppendErrorWithFormat(
           "'%s' takes exactly one thread index argument, or a thread ID "
-          "option:\nUsage: %s",
+          "option:\nUsage: %s\n",
           m_cmd_name.c_str(), m_cmd_syntax.c_str());
       return;
     } else if (m_options.m_thread_id != LLDB_INVALID_THREAD_ID &&
                command.GetArgumentCount() != 0) {
       result.AppendErrorWithFormat("'%s' cannot take both a thread ID option "
-                                   "and a thread index argument:\nUsage: %s",
+                                   "and a thread index argument:\nUsage: %s\n",
                                    m_cmd_name.c_str(), m_cmd_syntax.c_str());
       return;
     }
@@ -1384,7 +1202,7 @@ protected:
       }
       new_thread = process->GetThreadList().FindThreadByIndexID(index_id).get();
       if (new_thread == nullptr) {
-        result.AppendErrorWithFormat("Invalid thread index #%s",
+        result.AppendErrorWithFormat("Invalid thread index #%s.\n",
                                      command.GetArgumentAtIndex(0));
         return;
       }
@@ -1392,7 +1210,7 @@ protected:
       new_thread =
           process->GetThreadList().FindThreadByID(m_options.m_thread_id).get();
       if (new_thread == nullptr) {
-        result.AppendErrorWithFormat("Invalid thread ID %" PRIu64,
+        result.AppendErrorWithFormat("Invalid thread ID %" PRIu64 ".\n",
                                      m_options.m_thread_id);
         return;
       }
@@ -1516,7 +1334,8 @@ public:
     ThreadSP thread_sp =
         m_exe_ctx.GetProcessPtr()->GetThreadList().FindThreadByID(tid);
     if (!thread_sp) {
-      result.AppendErrorWithFormat("thread no longer exists: 0x%" PRIx64, tid);
+      result.AppendErrorWithFormat("thread no longer exists: 0x%" PRIx64 "\n",
+                                   tid);
       return false;
     }
 
@@ -1528,7 +1347,7 @@ public:
     if (!thread->GetDescription(strm, eDescriptionLevelFull,
                                 m_options.m_json_thread,
                                 m_options.m_json_stopinfo)) {
-      result.AppendErrorWithFormat("error displaying info for thread: \"%d\"",
+      result.AppendErrorWithFormat("error displaying info for thread: \"%d\"\n",
                                    thread->GetIndexID());
       return false;
     }
@@ -1565,7 +1384,8 @@ public:
     ThreadSP thread_sp =
         m_exe_ctx.GetProcessPtr()->GetThreadList().FindThreadByID(tid);
     if (!thread_sp) {
-      result.AppendErrorWithFormat("thread no longer exists: 0x%" PRIx64, tid);
+      result.AppendErrorWithFormat("thread no longer exists: 0x%" PRIx64 "\n",
+                                   tid);
       return false;
     }
 
@@ -1616,13 +1436,14 @@ public:
     ThreadSP thread_sp =
         m_exe_ctx.GetProcessPtr()->GetThreadList().FindThreadByID(tid);
     if (!thread_sp) {
-      result.AppendErrorWithFormat("thread no longer exists: 0x%" PRIx64, tid);
+      result.AppendErrorWithFormat("thread no longer exists: 0x%" PRIx64 "\n",
+                                   tid);
       return false;
     }
 
     Stream &strm = result.GetOutputStream();
     if (!thread_sp->GetDescription(strm, eDescriptionLevelFull, false, false)) {
-      result.AppendErrorWithFormat("error displaying info for thread: \"%d\"",
+      result.AppendErrorWithFormat("error displaying info for thread: \"%d\"\n",
                                    thread_sp->GetIndexID());
       return false;
     }
@@ -1719,14 +1540,14 @@ protected:
     // "thread return -- -5".
     if (command.starts_with("-x")) {
       if (command.size() != 2U)
-        result.AppendWarning("return values ignored when returning from user "
+        result.AppendWarning("Return values ignored when returning from user "
                              "called expressions");
 
       Thread *thread = m_exe_ctx.GetThreadPtr();
       Status error;
       error = thread->UnwindInnermostExpression();
       if (!error.Success()) {
-        result.AppendErrorWithFormat("Unwinding expression failed - %s",
+        result.AppendErrorWithFormat("Unwinding expression failed - %s.",
                                      error.AsCString());
       } else {
         bool success =
@@ -1737,7 +1558,7 @@ protected:
           result.SetStatus(eReturnStatusSuccessFinishResult);
         } else {
           result.AppendErrorWithFormat(
-              "Could not select 0th frame after unwinding expression");
+              "Could not select 0th frame after unwinding expression.");
         }
       }
       return;
@@ -1770,7 +1591,7 @@ protected:
               return_valobj_sp->GetError().AsCString());
         else
           result.AppendErrorWithFormat(
-              "Unknown error evaluating result expression");
+              "Unknown error evaluating result expression.");
         return;
       }
     }
@@ -1781,7 +1602,7 @@ protected:
     error = thread_sp->ReturnFromFrame(frame_sp, return_valobj_sp, broadcast);
     if (!error.Success()) {
       result.AppendErrorWithFormat(
-          "Error returning from frame %d of thread %d: %s", frame_idx,
+          "Error returning from frame %d of thread %d: %s.", frame_idx,
           thread_sp->GetIndexID(), error.AsCString());
       return;
     }
@@ -1886,12 +1707,12 @@ protected:
 
       lldb::addr_t callAddr = dest.GetCallableLoadAddress(target);
       if (callAddr == LLDB_INVALID_ADDRESS) {
-        result.AppendErrorWithFormat("Invalid destination address");
+        result.AppendErrorWithFormat("Invalid destination address.");
         return;
       }
 
       if (!reg_ctx->SetPC(callAddr)) {
-        result.AppendErrorWithFormat("Error changing PC value for thread %d",
+        result.AppendErrorWithFormat("Error changing PC value for thread %d.",
                                      thread->GetIndexID());
         return;
       }
@@ -1908,7 +1729,7 @@ protected:
 
       if (!file) {
         result.AppendErrorWithFormat(
-            "no source file available for the current location");
+            "No source file available for the current location.");
         return;
       }
 
@@ -2096,7 +1917,7 @@ public:
     Thread *thread = m_exe_ctx.GetThreadPtr();
     if (args.GetArgumentCount() != 1) {
       result.AppendErrorWithFormat("Too many arguments, expected one - the "
-                                   "thread plan index - but got %zu",
+                                   "thread plan index - but got %zu.",
                                    args.GetArgumentCount());
       return;
     }
@@ -2104,14 +1925,14 @@ public:
     uint32_t thread_plan_idx;
     if (!llvm::to_integer(args.GetArgumentAtIndex(0), thread_plan_idx)) {
       result.AppendErrorWithFormat(
-          "Invalid thread index: \"%s\" - should be unsigned int",
+          "Invalid thread index: \"%s\" - should be unsigned int.",
           args.GetArgumentAtIndex(0));
       return;
     }
 
     if (thread_plan_idx == 0) {
       result.AppendErrorWithFormat(
-          "You wouldn't really want me to discard the base thread plan");
+          "You wouldn't really want me to discard the base thread plan.");
       return;
     }
 
@@ -2119,7 +1940,7 @@ public:
       result.SetStatus(eReturnStatusSuccessFinishNoResult);
     } else {
       result.AppendErrorWithFormat(
-          "Could not find User thread plan with index %s",
+          "Could not find User thread plan with index %s.",
           args.GetArgumentAtIndex(0));
     }
   }
@@ -2161,12 +1982,12 @@ public:
     for (size_t i = 0; i < num_args; i++) {
       lldb::tid_t tid;
       if (!llvm::to_integer(args.GetArgumentAtIndex(i), tid)) {
-        result.AppendErrorWithFormat("invalid thread specification: \"%s\"",
+        result.AppendErrorWithFormat("invalid thread specification: \"%s\"\n",
                                      args.GetArgumentAtIndex(i));
         return;
       }
       if (!process->PruneThreadPlansForTID(tid)) {
-        result.AppendErrorWithFormat("Could not find unreported tid: \"%s\"",
+        result.AppendErrorWithFormat("Could not find unreported tid: \"%s\"\n",
                                      args.GetArgumentAtIndex(i));
         return;
       }
@@ -2210,10 +2031,15 @@ public:
             "process to different formats.",
             "thread trace export <export-plugin> [<subcommand objects>]") {
 
-    for (auto &cbs : PluginManager::GetTraceExporterCallbacks()) {
-      if (cbs.create_thread_trace_export_command)
-        LoadSubCommand(cbs.name,
-                       cbs.create_thread_trace_export_command(interpreter));
+    unsigned i = 0;
+    for (llvm::StringRef plugin_name =
+             PluginManager::GetTraceExporterPluginNameAtIndex(i);
+         !plugin_name.empty();
+         plugin_name = PluginManager::GetTraceExporterPluginNameAtIndex(i++)) {
+      if (ThreadTraceExportCommandCreator command_creator =
+              PluginManager::GetThreadTraceExportCommandCreatorAtIndex(i)) {
+        LoadSubCommand(plugin_name, command_creator(interpreter));
+      }
     }
   }
 };
@@ -2279,13 +2105,13 @@ static ThreadSP GetSingleThreadFromArgs(ExecutionContext &exe_ctx, Args &args,
   uint32_t thread_idx;
 
   if (!llvm::to_integer(arg, thread_idx)) {
-    result.AppendErrorWithFormat("invalid thread specification: \"%s\"", arg);
+    result.AppendErrorWithFormat("invalid thread specification: \"%s\"\n", arg);
     return nullptr;
   }
   ThreadSP thread_sp =
       exe_ctx.GetProcessRef().GetThreadList().FindThreadByIndexID(thread_idx);
   if (!thread_sp)
-    result.AppendErrorWithFormat("no thread with index: \"%s\"", arg);
+    result.AppendErrorWithFormat("no thread with index: \"%s\"\n", arg);
   return thread_sp;
 }
 

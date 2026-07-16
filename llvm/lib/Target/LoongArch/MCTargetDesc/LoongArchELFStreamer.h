@@ -23,8 +23,6 @@ public:
   void emitDirectiveOptionPop() override;
   void emitDirectiveOptionRelax() override;
   void emitDirectiveOptionNoRelax() override;
-  void emitDTPRel32Value(const MCExpr *) override;
-  void emitDTPRel64Value(const MCExpr *) override;
 
   void finish() override;
 };

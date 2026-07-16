@@ -18,7 +18,7 @@
 namespace llvm {
 
 class DXILForwardHandleAccesses
-    : public OptionalPassInfoMixin<DXILForwardHandleAccesses> {
+    : public PassInfoMixin<DXILForwardHandleAccesses> {
 public:
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };

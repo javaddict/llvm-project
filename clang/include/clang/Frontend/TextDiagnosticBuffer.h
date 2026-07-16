@@ -28,8 +28,6 @@ public:
   using iterator = DiagList::iterator;
   using const_iterator = DiagList::const_iterator;
 
-  using AllDiagList = std::vector<std::pair<DiagnosticsEngine::Level, size_t>>;
-
 private:
   DiagList Errors, Warnings, Remarks, Notes;
 
@@ -37,7 +35,7 @@ private:
   /// order likely doesn't correspond to user input order, but it at least
   /// keeps notes in the right places.  Each pair in the vector is a diagnostic
   /// level and an index into the corresponding DiagList above.
-  AllDiagList All;
+  std::vector<std::pair<DiagnosticsEngine::Level, size_t>> All;
 
 public:
   const_iterator err_begin() const { return Errors.begin(); }
@@ -51,9 +49,6 @@ public:
 
   const_iterator note_begin() const { return Notes.begin(); }
   const_iterator note_end() const { return Notes.end(); }
-
-  AllDiagList::const_iterator all_begin() const { return All.begin(); }
-  AllDiagList::const_iterator all_end() const { return All.end(); }
 
   void HandleDiagnostic(DiagnosticsEngine::Level DiagLevel,
                         const Diagnostic &Info) override;

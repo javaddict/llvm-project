@@ -14,10 +14,10 @@
 namespace llvm {
 
 class RegUsageInfoPropagationPass
-    : public RequiredPassInfoMixin<RegUsageInfoPropagationPass> {
+    : public PassInfoMixin<RegUsageInfoPropagationPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
 };
 
 } // namespace llvm

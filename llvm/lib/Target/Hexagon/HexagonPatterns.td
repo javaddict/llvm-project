@@ -306,7 +306,7 @@ def anyimm3: PatLeaf<(i32 AnyImm3:$Addr)>;
 def f32ImmPred : PatLeaf<(f32 fpimm:$F)>;
 def f64ImmPred : PatLeaf<(f64 fpimm:$F)>;
 def f32zero: PatLeaf<(f32 fpimm:$F), [{
-  return N->isPosZero();
+  return N->isExactlyValue(APFloat::getZero(APFloat::IEEEsingle(), false));
 }]>;
 
 // This complex pattern is really only to detect various forms of
@@ -1752,17 +1752,9 @@ def n8_0ImmPred: PatLeaf<(i32 imm), [{
   return -255 <= V && V <= 0;
 }]>;
 
-def mulnsw : PatFrag<(ops node:$lhs, node:$rhs),
-                     (mul node:$lhs, node:$rhs), [{
-  return N->getFlags().hasNoSignedWrap();
-}]>;
-
 // Change the sign of the immediate for Rd=-mpyi(Rs,#u8)
 def: Pat<(mul I32:$Rs, n8_0ImmPred:$n8),
          (M2_mpysin I32:$Rs, (NegImm8 imm:$n8))>;
-
-def: Pat<(v2i32 (mulnsw (sext V2I16:$Rs), (sext V2I16:$Rt))),
-         (M2_vmpy2s_s0 V2I16:$Rs, V2I16:$Rt)>;
 
 def: Pat<(add Sext64:$Rs, I64:$Rt),
          (A2_addsp (LoReg Sext64:$Rs), I64:$Rt)>;
@@ -3474,13 +3466,20 @@ def HexagonBARRIER: SDNode<"HexagonISD::BARRIER", SDTNone, [SDNPHasChain]>;
 def: Pat<(HexagonBARRIER), (Y2_barrier)>;
 
 def: Pat<(trap), (PS_crash)>;
-def: Pat<(debugtrap), (J2_trap0 0xDB)>;
+def: Pat<(debugtrap), (Y2_break)>;
 
 // Read cycle counter.
-def : Pat<(i64 (readcyclecounter)), (PS_readcr64 UPCYCLE)>;
+def SDTInt64Leaf: SDTypeProfile<1, 0, [SDTCisVT<0, i64>]>;
+def HexagonREADCYCLE: SDNode<"HexagonISD::READCYCLE", SDTInt64Leaf,
+  [SDNPHasChain]>;
 
-// Read packet counter
-def : Pat<(i64 (readsteadycounter)), (PS_readcr64 UTIMER)>;
+def: Pat<(HexagonREADCYCLE), (A4_tfrcpp UPCYCLE)>;
+
+// Read time counter.
+def HexagonREADTIMER: SDNode<"HexagonISD::READTIMER", SDTInt64Leaf,
+  [SDNPHasChain]>;
+
+def: Pat<(HexagonREADTIMER), (A4_tfrcpp UTIMER)>;
 
 def SDTInt32Leaf : SDTypeProfile<1, 0, [SDTCisVT<0, i32>]>;
 def HexagonTHREADPOINTER : SDNode<"HexagonISD::THREAD_POINTER", SDTPtrLeaf>;

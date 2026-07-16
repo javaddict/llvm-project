@@ -7,8 +7,6 @@ from lldbsuite.test.lldbgdbclient import GDBRemoteTestBase
 
 @skipIf(hostoslist=["windows"])
 class TestPty(GDBRemoteTestBase):
-    SHARED_BUILD_TESTCASE = False
-
     server_socket_class = PtyServerSocket
 
     def get_term_attrs(self):

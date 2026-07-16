@@ -13,10 +13,11 @@
 
 namespace llvm {
 
-class InitUndefPass : public RequiredPassInfoMixin<InitUndefPass> {
+class InitUndefPass : public PassInfoMixin<InitUndefPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

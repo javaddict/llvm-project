@@ -41,7 +41,6 @@ int Test_BlockCommandComment_WithArgs();
 
 /// \param Aaa xxx
 /// \param [in,out] Bbb yyy
-/// \param Ccc: zzz
 void Test_ParamCommandComment(int Aaa, int Bbb);
 // CHECK:      FunctionDecl{{.*}}Test_ParamCommandComment
 // CHECK:        ParamCommandComment{{.*}} [in] implicitly Param="Aaa" ParamIndex=0
@@ -50,9 +49,6 @@ void Test_ParamCommandComment(int Aaa, int Bbb);
 // CHECK:        ParamCommandComment{{.*}} [in,out] explicitly Param="Bbb" ParamIndex=1
 // CHECK-NEXT:     ParagraphComment
 // CHECK-NEXT:       TextComment{{.*}} Text=" yyy"
-// CHECK:        ParamCommandComment{{.*}} [in] implicitly Param="Ccc"
-// CHECK-NEXT:     ParagraphComment
-// CHECK-NEXT:       TextComment{{.*}} Text=" zzz"
 
 /// \tparam Aaa xxx
 template <typename Aaa> class Test_TParamCommandComment;

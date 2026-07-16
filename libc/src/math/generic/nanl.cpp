@@ -7,12 +7,18 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/nanl.h"
-#include "src/__support/math/nanl.h"
+#include "src/__support/common.h"
+#include "src/__support/libc_errno.h"
+#include "src/__support/macros/config.h"
+#include "src/__support/str_to_float.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(long double, nanl, (const char *arg)) {
-  return math::nanl(arg);
+  auto result = internal::strtonan<long double>(arg);
+  if (result.has_error())
+    libc_errno = result.error;
+  return result.value;
 }
 
 } // namespace LIBC_NAMESPACE_DECL

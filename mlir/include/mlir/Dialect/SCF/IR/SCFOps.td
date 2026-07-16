@@ -19,7 +19,6 @@ include "mlir/IR/RegionKindInterface.td"
 include "mlir/Dialect/SCF/IR/DeviceMappingInterface.td"
 include "mlir/Interfaces/DestinationStyleOpInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
-include "mlir/Interfaces/MemorySlotInterfaces.td"
 include "mlir/Interfaces/ParallelCombiningOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
@@ -55,7 +54,7 @@ class SCF_Op<string mnemonic, list<Trait> traits = []> :
 def ConditionOp : SCF_Op<"condition", [
   HasParent<"WhileOp">,
   DeclareOpInterfaceMethods<RegionBranchTerminatorOpInterface,
-    ["getSuccessorRegions", "getMutableSuccessorOperands"]>,
+    ["getSuccessorRegions"]>,
   Pure,
   Terminator
 ]> {
@@ -78,9 +77,7 @@ def ConditionOp : SCF_Op<"condition", [
 //===----------------------------------------------------------------------===//
 
 def ExecuteRegionOp : SCF_Op<"execute_region", [
-    DeclareOpInterfaceMethods<RegionBranchOpInterface, ["getSuccessorInputs"]>,
-    DeclareOpInterfaceMethods<PromotableRegionOpInterface>,
-    RecursiveMemoryEffects]> {
+    DeclareOpInterfaceMethods<RegionBranchOpInterface>, RecursiveMemoryEffects]> {
   let summary = "operation that executes its region exactly once";
   let description = [{
     The `scf.execute_region` operation is used to allow multiple blocks within SCF
@@ -157,13 +154,11 @@ def ForOp : SCF_Op<"for",
         "getLoopInductionVars", "getLoopLowerBounds", "getLoopSteps",
         "getLoopUpperBounds", "getStaticTripCount", "getYieldedValuesMutable",
         "promoteIfSingleIteration", "replaceWithAdditionalYields",
-        "yieldTiledValuesAndReplace", "isValidInductionVarType",
-        "setLoopLowerBounds", "setLoopUpperBounds", "setLoopSteps"]>,
+        "yieldTiledValuesAndReplace"]>,
        AllTypesMatch<["lowerBound", "upperBound", "step"]>,
        ConditionallySpeculatable,
        DeclareOpInterfaceMethods<RegionBranchOpInterface,
-        ["getEntrySuccessorOperands", "getSuccessorInputs"]>,
-       DeclareOpInterfaceMethods<PromotableRegionOpInterface>,
+        ["getEntrySuccessorOperands"]>,
        SingleBlockImplicitTerminator<"scf::YieldOp">,
        RecursiveMemoryEffects]> {
   let summary = "for operation";
@@ -332,7 +327,6 @@ def ForallOp : SCF_Op<"forall", [
        RecursiveMemoryEffects,
        SingleBlockImplicitTerminator<"scf::InParallelOp">,
        DeclareOpInterfaceMethods<RegionBranchOpInterface>,
-       DeclareOpInterfaceMethods<PromotableRegionOpInterface>,
        DestinationStyleOpInterface,
        HasParallelRegion
      ]> {
@@ -655,6 +649,13 @@ def ForallOp : SCF_Op<"forall", [
 
     /// Returns true if the mapping specified for this forall op is linear.
     bool usesLinearMapping();
+
+    /// RegionBranchOpInterface
+
+    OperandRange getEntrySuccessorOperands(RegionSuccessor successor) {
+      return getInits();
+    }
+
   }];
 }
 
@@ -666,7 +667,6 @@ def InParallelOp : SCF_Op<"forall.in_parallel", [
        Pure,
        Terminator,
        DeclareOpInterfaceMethods<InParallelOpInterface>,
-       ReturnLike,
        HasParent<"ForallOp">,
       ] # GraphRegionNoTerminator.traits> {
   let summary = "terminates a `forall` block";
@@ -704,8 +704,7 @@ def InParallelOp : SCF_Op<"forall.in_parallel", [
 
 def IfOp : SCF_Op<"if", [DeclareOpInterfaceMethods<RegionBranchOpInterface, [
     "getNumRegionInvocations", "getRegionInvocationBounds",
-    "getEntrySuccessorRegions", "getSuccessorInputs"]>,
-    DeclareOpInterfaceMethods<PromotableRegionOpInterface>,
+    "getEntrySuccessorRegions"]>,
     InferTypeOpAdaptor, SingleBlockImplicitTerminator<"scf::YieldOp">,
     RecursiveMemoryEffects, RecursivelySpeculatable, NoRegionArguments]> {
   let summary = "if-then-else operation";
@@ -811,7 +810,6 @@ def ParallelOp : SCF_Op<"parallel",
           "getLoopLowerBounds", "getLoopUpperBounds", "getLoopSteps"]>,
      RecursiveMemoryEffects,
      DeclareOpInterfaceMethods<RegionBranchOpInterface>,
-     DeclareOpInterfaceMethods<PromotableRegionOpInterface>,
      SingleBlockImplicitTerminator<"scf::ReduceOp">,
      HasParallelRegion]> {
   let summary = "parallel for operation";
@@ -910,9 +908,7 @@ def ParallelOp : SCF_Op<"parallel",
 
 def ReduceOp : SCF_Op<"reduce", [
     Terminator, HasParent<"ParallelOp">, RecursiveMemoryEffects,
-    DeclareOpInterfaceMethods<PromotableRegionOpInterface>,
-    DeclareOpInterfaceMethods<RegionBranchTerminatorOpInterface,
-                              ["getMutableSuccessorOperands"]>]> {
+    DeclareOpInterfaceMethods<RegionBranchTerminatorOpInterface>]> {
   let summary = "reduce operation for scf.parallel";
   let description = [{
     The `scf.reduce` operation is the terminator for `scf.parallel` operations. It can model
@@ -991,10 +987,9 @@ def ReduceReturnOp :
 
 def WhileOp : SCF_Op<"while",
     [DeclareOpInterfaceMethods<RegionBranchOpInterface,
-        ["getEntrySuccessorOperands", "getSuccessorInputs"]>,
+        ["getEntrySuccessorOperands"]>,
      DeclareOpInterfaceMethods<LoopLikeOpInterface,
         ["getRegionIterArgs", "getYieldedValuesMutable"]>,
-     DeclareOpInterfaceMethods<PromotableRegionOpInterface>,
      RecursiveMemoryEffects, SingleBlock]> {
   let summary = "a generic 'while' loop";
   let description = [{
@@ -1144,11 +1139,9 @@ def WhileOp : SCF_Op<"while",
 
 def IndexSwitchOp : SCF_Op<"index_switch", [RecursiveMemoryEffects,
     SingleBlockImplicitTerminator<"scf::YieldOp">,
-    DeclareOpInterfaceMethods<PromotableRegionOpInterface>,
     DeclareOpInterfaceMethods<RegionBranchOpInterface,
                               ["getRegionInvocationBounds",
-                               "getEntrySuccessorRegions",
-                               "getSuccessorInputs"]>]> {
+                               "getEntrySuccessorRegions"]>]> {
   let summary = "switch-case operation on an index argument";
   let description = [{
     The `scf.index_switch` is a control-flow operation that branches to one of

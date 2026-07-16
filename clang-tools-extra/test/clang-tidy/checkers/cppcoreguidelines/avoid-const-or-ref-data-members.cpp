@@ -1,6 +1,11 @@
 // RUN: %check_clang_tidy %s cppcoreguidelines-avoid-const-or-ref-data-members %t
+namespace std {
+template <typename T>
+struct unique_ptr {};
 
-#include <memory>
+template <typename T>
+struct shared_ptr {};
+} // namespace std
 
 namespace gsl {
 template <typename T>

@@ -208,6 +208,7 @@ __isl_give isl_ast_build *isl_ast_build_dup(__isl_keep isl_ast_build *build)
 	dup->strides = isl_vec_copy(build->strides);
 	dup->offsets = isl_multi_aff_copy(build->offsets);
 	dup->executed = isl_union_map_copy(build->executed);
+	dup->single_valued = build->single_valued;
 	dup->options = isl_union_map_copy(build->options);
 	dup->at_each_domain = build->at_each_domain;
 	dup->at_each_domain_user = build->at_each_domain_user;
@@ -747,7 +748,7 @@ static __isl_give isl_set *intersect_stride_constraint(__isl_take isl_set *set,
 
 	if (!build)
 		return isl_set_free(set);
-	if (!isl_ast_build_has_stride(build))
+	if (!isl_ast_build_has_stride(build, build->depth))
 		return set;
 
 	stride = isl_ast_build_get_stride_constraint(build);
@@ -1344,7 +1345,7 @@ __isl_give isl_set *isl_ast_build_get_stride_constraint(
 
 	pos = build->depth;
 
-	if (!isl_ast_build_has_stride(build))
+	if (!isl_ast_build_has_stride(build, pos))
 		return isl_set_universe(isl_ast_build_get_space(build, 1));
 
 	stride = isl_ast_build_get_stride(build, pos);
@@ -1384,7 +1385,7 @@ __isl_give isl_multi_aff *isl_ast_build_get_stride_expansion(
 	space = isl_space_map_from_set(space);
 	ma = isl_multi_aff_identity(space);
 
-	if (!isl_ast_build_has_stride(build))
+	if (!isl_ast_build_has_stride(build, pos))
 		return ma;
 
 	offset = isl_ast_build_get_offset(build, pos);
@@ -1407,7 +1408,7 @@ __isl_give isl_ast_build *isl_ast_build_include_stride(
 
 	if (!build)
 		return NULL;
-	if (!isl_ast_build_has_stride(build))
+	if (!isl_ast_build_has_stride(build, build->depth))
 		return build;
 	build = isl_ast_build_cow(build);
 	if (!build)
@@ -1927,16 +1928,14 @@ isl_bool isl_ast_build_aff_is_nonneg(__isl_keep isl_ast_build *build,
 	return empty;
 }
 
-/* Does the dimension at the current depth have a non-trivial stride?
+/* Does the dimension at (internal) position "pos" have a non-trivial stride?
  */
-isl_bool isl_ast_build_has_stride(__isl_keep isl_ast_build *build)
+isl_bool isl_ast_build_has_stride(__isl_keep isl_ast_build *build, int pos)
 {
 	isl_val *v;
 	isl_bool has_stride;
-	isl_size pos;
 
-	pos = isl_ast_build_get_depth(build);
-	if (pos < 0)
+	if (!build)
 		return isl_bool_error;
 
 	v = isl_vec_get_element_val(build->strides, pos);
@@ -2440,4 +2439,21 @@ __isl_give isl_set *isl_ast_build_eliminate(
 	domain = isl_ast_build_eliminate_inner(build, domain);
 	domain = isl_ast_build_eliminate_divs(build, domain);
 	return domain;
+}
+
+/* Replace build->single_valued by "sv".
+ */
+__isl_give isl_ast_build *isl_ast_build_set_single_valued(
+	__isl_take isl_ast_build *build, int sv)
+{
+	if (!build)
+		return build;
+	if (build->single_valued == sv)
+		return build;
+	build = isl_ast_build_cow(build);
+	if (!build)
+		return build;
+	build->single_valued = sv;
+
+	return build;
 }

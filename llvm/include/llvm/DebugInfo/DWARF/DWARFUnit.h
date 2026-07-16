@@ -395,7 +395,7 @@ public:
   DWARFDataExtractor getDebugInfoExtractor() const;
 
   DataExtractor getStringExtractor() const {
-    return DataExtractor(StringSection, false);
+    return DataExtractor(StringSection, false, 0);
   }
 
   const DWARFLocationTable &getLocationTable() { return *LocTable; }

@@ -24,10 +24,6 @@ using namespace llvm;
 
 #define DEBUG_TYPE "ppctti"
 
-static cl::opt<bool> PPCEVL("ppc-evl",
-                            cl::desc("Allow EVL type vp.load/vp.store"),
-                            cl::init(false), cl::Hidden);
-
 static cl::opt<bool> Pwr9EVL("ppc-pwr9-evl",
                              cl::desc("Allow vp.load and vp.store for pwr9"),
                              cl::init(false), cl::Hidden);
@@ -386,9 +382,10 @@ bool PPCTTIImpl::isHardwareLoopProfitable(Loop *L, ScalarEvolution &SE,
     Instruction *TI = BB->getTerminator();
     if (!TI) continue;
 
-    if (CondBrInst *BI = dyn_cast<CondBrInst>(TI)) {
+    if (BranchInst *BI = dyn_cast<BranchInst>(TI)) {
       uint64_t TrueWeight = 0, FalseWeight = 0;
-      if (!extractBranchWeights(*BI, TrueWeight, FalseWeight))
+      if (!BI->isConditional() ||
+          !extractBranchWeights(*BI, TrueWeight, FalseWeight))
         continue;
 
       // If the exit path is more frequent than the loop path,
@@ -684,9 +681,10 @@ InstructionCost PPCTTIImpl::getCmpSelInstrCost(
   return Cost * CostFactor;
 }
 
-InstructionCost PPCTTIImpl::getVectorInstrCost(
-    unsigned Opcode, Type *Val, TTI::TargetCostKind CostKind, unsigned Index,
-    const Value *Op0, const Value *Op1, TTI::VectorInstrContext VIC) const {
+InstructionCost PPCTTIImpl::getVectorInstrCost(unsigned Opcode, Type *Val,
+                                               TTI::TargetCostKind CostKind,
+                                               unsigned Index, const Value *Op0,
+                                               const Value *Op1) const {
   assert(Val->isVectorTy() && "This must be a vector type");
 
   int ISD = TLI->InstructionOpcodeToISD(Opcode);
@@ -697,7 +695,7 @@ InstructionCost PPCTTIImpl::getVectorInstrCost(
     return InstructionCost::getMax();
 
   InstructionCost Cost =
-      BaseT::getVectorInstrCost(Opcode, Val, CostKind, Index, Op0, Op1, VIC);
+      BaseT::getVectorInstrCost(Opcode, Val, CostKind, Index, Op0, Op1);
   Cost *= CostFactor;
 
   if (ST->hasVSX() && Val->getScalarType()->isDoubleTy()) {
@@ -779,6 +777,7 @@ InstructionCost PPCTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src,
                                             TTI::TargetCostKind CostKind,
                                             TTI::OperandValueInfo OpInfo,
                                             const Instruction *I) const {
+
   InstructionCost CostFactor = vectorCostAdjustmentFactor(Opcode, Src, nullptr);
   if (!CostFactor.isValid())
     return InstructionCost::getMax();
@@ -859,9 +858,8 @@ InstructionCost PPCTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src,
   if (Src->isVectorTy() && Opcode == Instruction::Store)
     for (int I = 0, E = cast<FixedVectorType>(Src)->getNumElements(); I < E;
          ++I)
-      Cost +=
-          getVectorInstrCost(Instruction::ExtractElement, Src, CostKind, I,
-                             nullptr, nullptr, TTI::VectorInstrContext::None);
+      Cost += getVectorInstrCost(Instruction::ExtractElement, Src, CostKind, I,
+                                 nullptr, nullptr);
 
   return Cost;
 }
@@ -903,23 +901,7 @@ InstructionCost PPCTTIImpl::getInterleavedMemoryOpCost(
 InstructionCost
 PPCTTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
                                   TTI::TargetCostKind CostKind) const {
-
-  if (!VPIntrinsic::isVPIntrinsic(ICA.getID()))
-    return BaseT::getIntrinsicInstrCost(ICA, CostKind);
-
-  if (ICA.getID() == Intrinsic::vp_load) {
-    MemIntrinsicCostAttributes MICA(Intrinsic::masked_load, ICA.getReturnType(),
-                                    Align(1), 0);
-    return getMemIntrinsicInstrCost(MICA, CostKind);
-  }
-
-  if (ICA.getID() == Intrinsic::vp_store) {
-    MemIntrinsicCostAttributes MICA(Intrinsic::masked_store,
-                                    ICA.getArgTypes()[0], Align(1), 0);
-    return getMemIntrinsicInstrCost(MICA, CostKind);
-  }
-
-  return InstructionCost::getInvalid();
+  return BaseT::getIntrinsicInstrCost(ICA, CostKind);
 }
 
 bool PPCTTIImpl::areInlineCompatible(const Function *Caller,
@@ -955,7 +937,7 @@ bool PPCTTIImpl::areTypesABICompatible(const Function *Caller,
   });
 }
 
-bool PPCTTIImpl::canSaveCmp(Loop *L, CondBrInst **BI, ScalarEvolution *SE,
+bool PPCTTIImpl::canSaveCmp(Loop *L, BranchInst **BI, ScalarEvolution *SE,
                             LoopInfo *LI, DominatorTree *DT,
                             AssumptionCache *AC,
                             TargetLibraryInfo *LibInfo) const {
@@ -1095,79 +1077,4 @@ PPCTTIImpl::getVPLegalizationStrategy(const VPIntrinsic &PI) const {
     return DefaultLegalization;
 
   return VPLegalization(VPLegalization::Legal, VPLegalization::Legal);
-}
-
-bool PPCTTIImpl::hasActiveVectorLength() const {
-  if (!PPCEVL || !ST->isPPC64())
-    return false;
-  unsigned CPU = ST->getCPUDirective();
-  return CPU == PPC::DIR_PWR10 || CPU == PPC::DIR_PWR_FUTURE ||
-         (Pwr9EVL && CPU == PPC::DIR_PWR9);
-}
-
-bool PPCTTIImpl::isLegalMaskedLoad(Type *DataType, Align Alignment,
-                                   unsigned AddressSpace,
-                                   TTI::MaskKind MaskKind) const {
-  if (!hasActiveVectorLength())
-    return false;
-
-  auto IsLegalLoadWithLengthType = [](EVT VT) {
-    if (VT != MVT::i64 && VT != MVT::i32 && VT != MVT::i16 && VT != MVT::i8)
-      return false;
-    return true;
-  };
-
-  return IsLegalLoadWithLengthType(TLI->getValueType(DL, DataType, true));
-}
-
-bool PPCTTIImpl::isLegalMaskedStore(Type *DataType, Align Alignment,
-                                    unsigned AddressSpace,
-                                    TTI::MaskKind MaskKind) const {
-  return isLegalMaskedLoad(DataType, Alignment, AddressSpace);
-}
-
-InstructionCost
-PPCTTIImpl::getMemIntrinsicInstrCost(const MemIntrinsicCostAttributes &MICA,
-                                     TTI::TargetCostKind CostKind) const {
-
-  InstructionCost BaseCost = BaseT::getMemIntrinsicInstrCost(MICA, CostKind);
-
-  unsigned Opcode;
-  switch (MICA.getID()) {
-  case Intrinsic::masked_load:
-    Opcode = Instruction::Load;
-    break;
-  case Intrinsic::masked_store:
-    Opcode = Instruction::Store;
-    break;
-  default:
-    return BaseCost;
-  }
-
-  Type *DataTy = MICA.getDataType();
-  Align Alignment = MICA.getAlignment();
-  unsigned AddressSpace = MICA.getAddressSpace();
-
-  auto VecTy = dyn_cast<FixedVectorType>(DataTy);
-  if (!VecTy)
-    return BaseCost;
-  if (Opcode == Instruction::Load) {
-    if (!isLegalMaskedLoad(VecTy->getScalarType(), Alignment, AddressSpace))
-      return BaseCost;
-  } else {
-    if (!isLegalMaskedStore(VecTy->getScalarType(), Alignment, AddressSpace))
-      return BaseCost;
-  }
-  if (VecTy->getPrimitiveSizeInBits() > 128)
-    return BaseCost;
-
-  // Cost is 1 (scalar compare) + 1 (scalar select) +
-  //  1 * vectorCostAdjustmentFactor (vector load with length)
-  // Maybe + 1 (scalar shift)
-  InstructionCost Cost =
-      1 + 1 + vectorCostAdjustmentFactor(Opcode, DataTy, nullptr);
-  if (ST->getCPUDirective() != PPC::DIR_PWR_FUTURE ||
-      VecTy->getScalarSizeInBits() != 8)
-    Cost += 1; // need shift for length
-  return Cost;
 }

@@ -164,7 +164,7 @@ void CommandObjectMultiword::Execute(const char *args_string,
   }
 
   if (m_subcommand_dict.empty()) {
-    result.AppendErrorWithFormat("'%s' does not have any subcommands",
+    result.AppendErrorWithFormat("'%s' does not have any subcommands.\n",
                                  GetCommandName().str().c_str());
     return;
   }

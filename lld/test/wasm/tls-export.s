@@ -1,9 +1,6 @@
-# RUN: split-file %s %t
-# RUN: llvm-mc -filetype=obj -triple=wasm32-unknown-unknown -o %t/define-tls.o %t/define-tls.s
-# RUN: wasm-ld -shared -o %t/define-tls.so %t/define-tls.o
-# RUN: obj2yaml %t/define-tls.so | FileCheck %s
-
-#--- define-tls.s
+# RUN: llvm-mc -filetype=obj -triple=wasm32-unknown-unknown -o %t.o %s
+# RUN: wasm-ld -shared --experimental-pic -o %t.so %t.o
+# RUN: obj2yaml %t.so | FileCheck %s
 
 .section  .tdata.tls1,"",@
 .globl  tls1
@@ -23,28 +20,6 @@ tls1:
   .int8 43
   .int8 15
   .ascii "mutable-globals"
-
-#--- use-tls.s
-
-  .globl  _start
-_start:
-  .functype _start () -> ()
-  i32.const tls1@TLSREL
-  drop
-  end_function
-
-.section  .custom_section.target_features,"",@
-  .int8 3
-  .int8 43
-  .int8 7
-  .ascii  "atomics"
-  .int8 43
-  .int8 11
-  .ascii  "bulk-memory"
-  .int8 43
-  .int8 15
-  .ascii "mutable-globals"
-
 
 #      CHECK:    ExportInfo:
 # CHECK-NEXT:      - Name:            tls1
@@ -68,9 +43,3 @@ _start:
 # CHECK-NEXT:      - Name:            tls1
 # CHECK-NEXT:        Kind:            GLOBAL
 # CHECK-NEXT:        Index:           2
-
-# Check that linking a shared object that exports a TLS global doesn't cause 
-# the global to be erroneously marked as non-TLS.
-
-# RUN: llvm-mc -filetype=obj -triple=wasm32-unknown-unknown -o %t/use-tls.o %t/use-tls.s
-# RUN: wasm-ld --shared-memory -pie -o %t/use-tls.wasm %t/define-tls.so %t/use-tls.o

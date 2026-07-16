@@ -14,7 +14,7 @@
 namespace llvm {
 
 template <typename DerivedT, bool PreRegAlloc>
-class MachineLICMBasePass : public OptionalPassInfoMixin<DerivedT> {
+class MachineLICMBasePass : public PassInfoMixin<DerivedT> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);

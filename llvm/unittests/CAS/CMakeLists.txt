@@ -1,7 +1,5 @@
 set(ONDISK_CAS_TEST_SOURCES
-  BuiltinObjectHasherTest.cpp
   BuiltinUnifiedCASDatabasesTest.cpp
-  OnDiskCASLoggerTest.cpp
   OnDiskGraphDBTest.cpp
   OnDiskDataAllocatorTest.cpp
   OnDiskKeyValueDBTest.cpp
@@ -27,9 +25,7 @@ set(LLVM_LINK_COMPONENTS
 add_llvm_unittest(CASTests
   ActionCacheTest.cpp
   CASTestConfig.cpp
-  NamedValuesSchemaTest.cpp
   ObjectStoreTest.cpp
-  OnDiskCommonUtils.cpp
 
   ${ONDISK_CAS_TEST_SOURCES}
   )

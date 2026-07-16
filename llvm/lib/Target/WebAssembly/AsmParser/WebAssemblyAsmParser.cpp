@@ -46,15 +46,7 @@ namespace {
 /// WebAssemblyOperand - Instances of this class represent the operands in a
 /// parsed Wasm machine instruction.
 struct WebAssemblyOperand : public MCParsedAsmOperand {
-  enum KindTy {
-    Token,
-    Integer,
-    Float,
-    Symbol,
-    BrList,
-    CatchList,
-    TypeList
-  } Kind;
+  enum KindTy { Token, Integer, Float, Symbol, BrList, CatchList } Kind;
 
   SMLoc StartLoc, EndLoc;
 
@@ -88,10 +80,6 @@ struct WebAssemblyOperand : public MCParsedAsmOperand {
     std::vector<CaLOpElem> List;
   };
 
-  struct TyLOp {
-    std::vector<uint8_t> List;
-  };
-
   union {
     struct TokOp Tok;
     struct IntOp Int;
@@ -99,7 +87,6 @@ struct WebAssemblyOperand : public MCParsedAsmOperand {
     struct SymOp Sym;
     struct BrLOp BrL;
     struct CaLOp CaL;
-    struct TyLOp TyL;
   };
 
   WebAssemblyOperand(SMLoc Start, SMLoc End, TokOp T)
@@ -114,16 +101,12 @@ struct WebAssemblyOperand : public MCParsedAsmOperand {
       : Kind(BrList), StartLoc(Start), EndLoc(End), BrL(B) {}
   WebAssemblyOperand(SMLoc Start, SMLoc End, CaLOp C)
       : Kind(CatchList), StartLoc(Start), EndLoc(End), CaL(C) {}
-  WebAssemblyOperand(SMLoc Start, SMLoc End, TyLOp T)
-      : Kind(TypeList), StartLoc(Start), EndLoc(End), TyL(T) {}
 
   ~WebAssemblyOperand() override {
     if (isBrList())
       BrL.~BrLOp();
     if (isCatchList())
       CaL.~CaLOp();
-    if (isTypeList())
-      TyL.~TyLOp();
   }
 
   bool isToken() const override { return Kind == Token; }
@@ -133,7 +116,6 @@ struct WebAssemblyOperand : public MCParsedAsmOperand {
   bool isReg() const override { return false; }
   bool isBrList() const { return Kind == BrList; }
   bool isCatchList() const { return Kind == CatchList; }
-  bool isTypeList() const { return Kind == TypeList; }
 
   MCRegister getReg() const override {
     llvm_unreachable("Assembly inspects a register operand");
@@ -198,13 +180,6 @@ struct WebAssemblyOperand : public MCParsedAsmOperand {
     }
   }
 
-  void addTypeListOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && isTypeList() && "Invalid TypeList!");
-    Inst.addOperand(MCOperand::createImm(TyL.List.size()));
-    for (auto Ty : TyL.List)
-      Inst.addOperand(MCOperand::createImm(Ty));
-  }
-
   void print(raw_ostream &OS, const MCAsmInfo &MAI) const override {
     switch (Kind) {
     case Token:
@@ -224,9 +199,6 @@ struct WebAssemblyOperand : public MCParsedAsmOperand {
       break;
     case CatchList:
       OS << "CaList:" << CaL.List.size();
-      break;
-    case TypeList:
-      OS << "TyList:" << TyL.List.size();
       break;
     }
   }
@@ -301,10 +273,10 @@ class WebAssemblyAsmParser final : public MCTargetAsmParser {
 
 public:
   WebAssemblyAsmParser(const MCSubtargetInfo &STI, MCAsmParser &Parser,
-                       const MCInstrInfo &MII)
-      : MCTargetAsmParser(STI, MII), Parser(Parser), Lexer(Parser.getLexer()),
-        Is64(STI.getTargetTriple().isArch64Bit()), TC(Parser, MII, Is64),
-        SkipTypeCheck(Parser.getContext().getTargetOptions().MCNoTypeCheck) {
+                       const MCInstrInfo &MII, const MCTargetOptions &Options)
+      : MCTargetAsmParser(Options, STI, MII), Parser(Parser),
+        Lexer(Parser.getLexer()), Is64(STI.getTargetTriple().isArch64Bit()),
+        TC(Parser, MII, Is64), SkipTypeCheck(Options.MCNoTypeCheck) {
     FeatureBitset FBS = ComputeAvailableFeatures(STI.getFeatureBits());
 
     // bulk-memory implies bulk-memory-opt
@@ -443,21 +415,6 @@ public:
     return Name;
   }
 
-  StringRef expectStringOrIdent() {
-    if (Lexer.is(AsmToken::String)) {
-      auto Str = Lexer.getTok().getStringContents();
-      Parser.Lex();
-      return Str;
-    }
-    if (Lexer.is(AsmToken::Identifier)) {
-      auto Name = Lexer.getTok().getString();
-      Parser.Lex();
-      return Name;
-    }
-    error("Expected string or identifier, got: ", Lexer.getTok());
-    return StringRef();
-  }
-
   bool parseRegTypeList(SmallVectorImpl<wasm::ValType> &Types) {
     while (Lexer.is(AsmToken::Identifier)) {
       auto Type = WebAssembly::parseType(Lexer.getTok().getString());
@@ -512,29 +469,6 @@ public:
     Operands.push_back(std::make_unique<WebAssemblyOperand>(
         Flt.getLoc(), Flt.getEndLoc(), WebAssemblyOperand::FltOp{Val}));
     Parser.Lex();
-    return false;
-  }
-
-  bool addMemOrderOrDefault(OperandVector &Operands) {
-    auto &Tok = Lexer.getTok();
-    int64_t Order = wasm::WASM_MEM_ORDER_SEQ_CST;
-    if (Tok.is(AsmToken::Identifier)) {
-      StringRef S = Tok.getString();
-      Order = StringSwitch<int64_t>(S)
-                  .Case("acqrel", wasm::WASM_MEM_ORDER_ACQ_REL)
-                  .Case("seqcst", wasm::WASM_MEM_ORDER_SEQ_CST)
-                  .Default(-1);
-      if (Order != -1) {
-        if (!STI->checkFeatures("+relaxed-atomics"))
-          return error("memory ordering requires relaxed-atomics feature: ",
-                       Tok);
-        Parser.Lex();
-      } else {
-        Order = wasm::WASM_MEM_ORDER_SEQ_CST;
-      }
-    }
-    Operands.push_back(std::make_unique<WebAssemblyOperand>(
-        Tok.getLoc(), Tok.getEndLoc(), WebAssemblyOperand::IntOp{Order}));
     return false;
   }
 
@@ -734,39 +668,10 @@ public:
       if (parseFunctionTableOperand(&FunctionTable))
         return true;
       ExpectFuncType = true;
-    } else if (Name == "call_ref" || Name == "return_call_ref") {
-      // The typed function references forms take a function signature as
-      // their sole explicit operand (the funcref is popped from the stack).
-      ExpectFuncType = true;
     } else if (Name == "ref.test") {
       // When we get support for wasm-gc types, this should become
       // ExpectRefType.
       ExpectFuncType = true;
-    } else if (Name == "ref.cast") {
-      // When we get support for wasm-gc types, this should become
-      // ExpectRefType.
-      ExpectFuncType = true;
-    } else if (Name == "select") {
-      // The typed select instruction takes a vec of valtypes as its sole
-      // operand (select t*). Parse the list of value-type identifiers here
-      // and push a TypeList operand.
-      auto Op = std::make_unique<WebAssemblyOperand>(
-          Lexer.getLoc(), Lexer.getLoc(), WebAssemblyOperand::TyLOp{});
-      while (Lexer.is(AsmToken::Identifier)) {
-        auto &Id = Lexer.getTok();
-        auto Ty = WebAssembly::parseType(Id.getString());
-        if (!Ty)
-          return error("unknown value type in select operand list: ", Id);
-        Op->TyL.List.push_back(static_cast<uint8_t>(*Ty));
-        Op->EndLoc = Id.getEndLoc();
-        Parser.Lex();
-      }
-      Operands.push_back(std::move(Op));
-    }
-
-    if (Name.contains("atomic.")) {
-      if (addMemOrderOrDefault(Operands))
-        return true;
     }
 
     // Returns true if the next tokens are a catch clause
@@ -1136,7 +1041,7 @@ public:
         return ParseStatus::Failure;
       if (expect(AsmToken::Comma, ","))
         return ParseStatus::Failure;
-      auto ExportName = expectStringOrIdent();
+      auto ExportName = expectIdent();
       if (ExportName.empty())
         return ParseStatus::Failure;
       auto *WasmSym =
@@ -1152,7 +1057,7 @@ public:
         return ParseStatus::Failure;
       if (expect(AsmToken::Comma, ","))
         return ParseStatus::Failure;
-      auto ImportModule = expectStringOrIdent();
+      auto ImportModule = expectIdent();
       if (ImportModule.empty())
         return ParseStatus::Failure;
       auto *WasmSym =
@@ -1168,7 +1073,7 @@ public:
         return ParseStatus::Failure;
       if (expect(AsmToken::Comma, ","))
         return ParseStatus::Failure;
-      StringRef ImportName = expectStringOrIdent();
+      auto ImportName = expectIdent();
       if (ImportName.empty())
         return ParseStatus::Failure;
       auto *WasmSym =
@@ -1262,21 +1167,11 @@ public:
     case Match_Success: {
       ensureLocals(Out);
       // Fix unknown p2align operands.
-      const MCInstrDesc &Desc = MII.get(Inst.getOpcode());
       auto Align = WebAssembly::GetDefaultP2AlignAny(Inst.getOpcode());
       if (Align != -1U) {
-        unsigned I = 0;
-        // It's operand 0 for regular memory ops and 1 for atomics.
-        for (unsigned E = Desc.getNumOperands(); I < E; ++I) {
-          if (Desc.operands()[I].OperandType == WebAssembly::OPERAND_P2ALIGN) {
-            auto &Op = Inst.getOperand(I);
-            if (Op.getImm() == -1) {
-              Op.setImm(Align);
-            }
-            break;
-          }
-        }
-        assert(I < 2 && "Default p2align set but operand not found");
+        auto &Op0 = Inst.getOperand(0);
+        if (Op0.getImm() == -1)
+          Op0.setImm(Align);
       }
       if (Is64) {
         // Upgrade 32-bit loads/stores to 64-bit. These mostly differ by having

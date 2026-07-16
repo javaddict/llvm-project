@@ -4,14 +4,13 @@ static_library("Options") {
   include_dirs = [ "." ]
   deps = [
     "//clang/include/clang/Config",
-    "//clang/include/clang/StaticAnalyzer/Checkers",
     "//clang/lib/Basic",
     "//llvm/lib/Option",
     "//llvm/lib/Support",
   ]
   public_deps = [
     # public_dep because public header Options.h includes generated Options.inc.
-    "//clang/include/clang/Options",
+    "//clang/include/clang/Options:Options",
   ]
   sources = [
     "DriverOptions.cpp",

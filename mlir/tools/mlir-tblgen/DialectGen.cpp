@@ -207,23 +207,23 @@ static const char *const discardableAttrHelperDecl = R"(
       static constexpr ::llvm::StringLiteral getNameStr() {{
         return "{4}.{1}";
       }
-      constexpr ::mlir::StringAttr getName() const {{
+      constexpr ::mlir::StringAttr getName() {{
         return name;
       }
 
-      explicit {0}AttrHelper(::mlir::MLIRContext *ctx)
+      {0}AttrHelper(::mlir::MLIRContext *ctx)
         : name(::mlir::StringAttr::get(ctx, getNameStr())) {{}
 
-     {2} getAttr(::mlir::Operation *op) const {{
+     {2} getAttr(::mlir::Operation *op) {{
        return op->getAttrOfType<{2}>(name);
      }
-     void setAttr(::mlir::Operation *op, {2} val) const {{
+     void setAttr(::mlir::Operation *op, {2} val) {{
        op->setAttr(name, val);
      }
-     bool isAttrPresent(::mlir::Operation *op) const {{
+     bool isAttrPresent(::mlir::Operation *op) {{
        return op->hasAttrOfType<{2}>(name);
      }
-     void removeAttr(::mlir::Operation *op) const {{
+     void removeAttr(::mlir::Operation *op) {{
        assert(op->hasAttrOfType<{2}>(name));
        op->removeAttr(name);
      }

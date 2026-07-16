@@ -310,10 +310,10 @@ bool LoadStoreOpt::mergeStores(SmallVectorImpl<GStore *> &StoresToMerge) {
   initializeStoreMergeTargetInfo(AS);
   const auto &LegalSizes = LegalStoreSizes[AS];
 
-  // FIXME: Support mismatching types (i16 + f16).
+#ifndef NDEBUG
   for (auto *StoreMI : StoresToMerge)
-    if (MRI->getType(StoreMI->getValueReg()) != OrigTy)
-      return false;
+    assert(MRI->getType(StoreMI->getValueReg()) == OrigTy);
+#endif
 
   bool AnyMerged = false;
   do {
@@ -819,8 +819,7 @@ bool LoadStoreOpt::mergeTruncStore(GStore &StoreMI,
     // We didn't find enough stores to merge into the size of the original
     // source value, but we may be able to generate a smaller store if we
     // truncate the source value.
-    WideStoreTy =
-        LLT::integer(FoundStores.size() * MemTy.getScalarSizeInBits());
+    WideStoreTy = LLT::scalar(FoundStores.size() * MemTy.getScalarSizeInBits());
   }
 
   unsigned NumStoresFound = FoundStores.size();
@@ -968,7 +967,7 @@ void LoadStoreOpt::initializeStoreMergeTargetInfo(unsigned AddrSpace) {
       LegalSizes.set(Size);
   }
   assert(LegalSizes.any() && "Expected some store sizes to be legal!");
-  LegalStoreSizes[AddrSpace] = std::move(LegalSizes);
+  LegalStoreSizes[AddrSpace] = LegalSizes;
 }
 
 bool LoadStoreOpt::runOnMachineFunction(MachineFunction &MF) {

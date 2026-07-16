@@ -587,8 +587,9 @@ void AVR::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
-  if (auto LTO = TC.getLTOMode(Args); LTO != LTOK_None)
-    addLTOOptions(TC, Args, CmdArgs, Output, Inputs, LTO == LTOK_Thin);
+  if (D.isUsingLTO())
+    addLTOOptions(TC, Args, CmdArgs, Output, Inputs,
+                  D.getLTOMode() == LTOK_Thin);
 
   // If the family name is known, we can link with the device-specific libgcc.
   // Without it, libgcc will simply not be linked. This matches avr-gcc

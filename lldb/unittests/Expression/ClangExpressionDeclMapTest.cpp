@@ -23,7 +23,7 @@ namespace {
 struct FakeClangExpressionDeclMap : public ClangExpressionDeclMap {
   FakeClangExpressionDeclMap(const std::shared_ptr<ClangASTImporter> &importer)
       : ClangExpressionDeclMap(false, nullptr, lldb::TargetSP(), importer,
-                               nullptr, /*ignore_context_qualifiers=*/false) {
+                               nullptr) {
     m_holder = std::make_unique<clang_utils::TypeSystemClangHolder>("ast");
     m_scratch_context = m_holder->GetAST();
   }

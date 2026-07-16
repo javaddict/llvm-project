@@ -71,12 +71,14 @@ mlir::detail::getDefaultTypeSizeInBits(Type type, const DataLayout &dataLayout,
         IntegerType::get(type.getContext(), getIndexBitwidth(params)));
 
   // Sizes of vector types are rounded up to those of types with closest
-  // power-of-two number of elements in the innermost dimension.
+  // power-of-two number of elements in the innermost dimension. We also assume
+  // there is no bit-packing at the moment element sizes are taken in bytes and
+  // multiplied with 8 bits.
   // TODO: make this extensible.
   if (auto vecType = dyn_cast<VectorType>(type)) {
     uint64_t baseSize = vecType.getNumElements() / vecType.getShape().back() *
                         llvm::PowerOf2Ceil(vecType.getShape().back()) *
-                        dataLayout.getTypeSizeInBits(vecType.getElementType());
+                        dataLayout.getTypeSize(vecType.getElementType()) * 8;
     return llvm::TypeSize::get(baseSize, vecType.isScalable());
   }
 
@@ -387,7 +389,7 @@ collectParentLayouts(Operation *leaf,
   for (Operation *parent = leaf->getParentOp(); parent != nullptr;
        parent = parent->getParentOp()) {
     llvm::TypeSwitch<Operation *>(parent)
-        .Case([&](ModuleOp op) {
+        .Case<ModuleOp>([&](ModuleOp op) {
           // Skip top-level module op unless it has a layout. Top-level module
           // without layout is most likely the one implicitly added by the
           // parser and it doesn't have location. Top-level null specification
@@ -399,7 +401,7 @@ collectParentLayouts(Operation *leaf,
           if (opLocations)
             opLocations->push_back(op.getLoc());
         })
-        .Case([&](DataLayoutOpInterface op) {
+        .Case<DataLayoutOpInterface>([&](DataLayoutOpInterface op) {
           specs.push_back(op.getDataLayoutSpec());
           if (opLocations)
             opLocations->push_back(op.getLoc());

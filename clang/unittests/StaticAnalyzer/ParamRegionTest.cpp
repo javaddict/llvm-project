@@ -16,43 +16,44 @@ namespace ento {
 namespace {
 
 class ParamRegionTestConsumer : public ExprEngineConsumer {
-  void checkForSameParamRegions(MemRegionManager &MRMgr, const StackFrame *SF,
+  void checkForSameParamRegions(MemRegionManager &MRMgr,
+                                const StackFrameContext *SFC,
                                 const ParmVarDecl *PVD) {
     ASSERT_TRUE(llvm::all_of(PVD->redecls(), [&](const clang::VarDecl *D2) {
-      return MRMgr.getVarRegion(PVD, SF) ==
-             MRMgr.getVarRegion(cast<ParmVarDecl>(D2), SF);
+      return MRMgr.getVarRegion(PVD, SFC) ==
+             MRMgr.getVarRegion(cast<ParmVarDecl>(D2), SFC);
     }));
   }
 
   void performTest(const Decl *D) {
     StoreManager &StMgr = Eng.getStoreManager();
     MemRegionManager &MRMgr = StMgr.getRegionManager();
-    const StackFrame *SF =
-        Eng.getAnalysisDeclContextManager().getTopStackFrame(D);
+    const StackFrameContext *SFC =
+        Eng.getAnalysisDeclContextManager().getStackFrame(D);
 
     if (const auto *FD = dyn_cast<FunctionDecl>(D)) {
       for (const auto *P : FD->parameters()) {
-        if (SF->inTopFrame())
-          assert(isa<NonParamVarRegion>(MRMgr.getVarRegion(P, SF)));
+        if (SFC->inTopFrame())
+          assert(isa<NonParamVarRegion>(MRMgr.getVarRegion(P, SFC)));
         else
-          assert(isa<ParamVarRegion>(MRMgr.getVarRegion(P, SF)));
-        checkForSameParamRegions(MRMgr, SF, P);
+          assert(isa<ParamVarRegion>(MRMgr.getVarRegion(P, SFC)));
+        checkForSameParamRegions(MRMgr, SFC, P);
       }
     } else if (const auto *CD = dyn_cast<CXXConstructorDecl>(D)) {
       for (const auto *P : CD->parameters()) {
-        if (SF->inTopFrame())
-          assert(isa<NonParamVarRegion>(MRMgr.getVarRegion(P, SF)));
+        if (SFC->inTopFrame())
+          assert(isa<NonParamVarRegion>(MRMgr.getVarRegion(P, SFC)));
         else
-          assert(isa<ParamVarRegion>(MRMgr.getVarRegion(P, SF)));
-        checkForSameParamRegions(MRMgr, SF, P);
+          assert(isa<ParamVarRegion>(MRMgr.getVarRegion(P, SFC)));
+        checkForSameParamRegions(MRMgr, SFC, P);
       }
     } else if (const auto *MD = dyn_cast<ObjCMethodDecl>(D)) {
       for (const auto *P : MD->parameters()) {
-        if (SF->inTopFrame())
-          assert(isa<NonParamVarRegion>(MRMgr.getVarRegion(P, SF)));
+        if (SFC->inTopFrame())
+          assert(isa<NonParamVarRegion>(MRMgr.getVarRegion(P, SFC)));
         else
-          assert(isa<ParamVarRegion>(MRMgr.getVarRegion(P, SF)));
-        checkForSameParamRegions(MRMgr, SF, P);
+          assert(isa<ParamVarRegion>(MRMgr.getVarRegion(P, SFC)));
+        checkForSameParamRegions(MRMgr, SFC, P);
       }
     }
   }

@@ -16,42 +16,15 @@ using namespace llvm;
 
 // Crash if the assertion fails, printing the message and testcase.
 // More elegant error handling isn't needed for unit tests.
-static void require(bool Assertion, const llvm::Twine &Msg,
-                    llvm::StringRef Code) {
+static void require(bool Assertion, const char *Msg, llvm::StringRef Code) {
   if (!Assertion) {
     llvm::errs() << "Annotated testcase: " << Msg << "\n" << Code << "\n";
     llvm_unreachable("Annotated testcase assertion failed!");
   }
 }
 
-Annotations::Annotations(llvm::StringRef Text) : Annotations(Text, {}) {}
-
-Annotations::Annotations(llvm::StringRef Text, const Markers &Markers) {
-  assert(!Markers.Point.empty() && "point marker cannot be empty");
-  assert(!Markers.Name.empty() && "name marker cannot be empty");
-  assert(!Markers.RangeBegin.empty() && "range begin marker cannot be empty");
-  assert(!Markers.RangeEnd.empty() && "range end marker cannot be empty");
-
-  assert(!Markers.Point.starts_with(Markers.RangeBegin) &&
-         !Markers.RangeBegin.starts_with(Markers.Point) &&
-         "point and range begin markers cannot be prefixes of each other");
-  assert(!Markers.Point.starts_with(Markers.RangeEnd) &&
-         !Markers.RangeEnd.starts_with(Markers.Point) &&
-         "point and range end markers cannot be prefixes of each other");
-  assert(!Markers.Point.starts_with(Markers.Name) &&
-         !Markers.Name.starts_with(Markers.Point) &&
-         "point and name markers cannot be prefixes of each other");
-  assert(!Markers.RangeBegin.starts_with(Markers.RangeEnd) &&
-         !Markers.RangeEnd.starts_with(Markers.RangeBegin) &&
-         "range begin and range end markers cannot be prefixes of each other");
-  assert(!Markers.RangeBegin.starts_with(Markers.Name) &&
-         !Markers.Name.starts_with(Markers.RangeBegin) &&
-         "range begin and name markers cannot be prefixes of each other");
-  assert(!Markers.RangeEnd.starts_with(Markers.Name) &&
-         !Markers.Name.starts_with(Markers.RangeEnd) &&
-         "range end and name markers cannot be prefixes of each other");
-
-  auto Require = [Text](bool Assertion, const llvm::Twine &Msg) {
+Annotations::Annotations(llvm::StringRef Text) {
+  auto Require = [Text](bool Assertion, const char *Msg) {
     require(Assertion, Msg, Text);
   };
   std::optional<llvm::StringRef> Name;
@@ -60,7 +33,7 @@ Annotations::Annotations(llvm::StringRef Text, const Markers &Markers) {
 
   Code.reserve(Text.size());
   while (!Text.empty()) {
-    if (Text.consume_front(Markers.Point)) {
+    if (Text.consume_front("^")) {
       All.push_back(
           {Code.size(), size_t(-1), Name.value_or(""), Payload.value_or("")});
       Points[Name.value_or("")].push_back(All.size() - 1);
@@ -68,17 +41,16 @@ Annotations::Annotations(llvm::StringRef Text, const Markers &Markers) {
       Payload = std::nullopt;
       continue;
     }
-    if (Text.consume_front(Markers.RangeBegin)) {
+    if (Text.consume_front("[[")) {
       OpenRanges.push_back(
           {Code.size(), size_t(-1), Name.value_or(""), Payload.value_or("")});
       Name = std::nullopt;
       Payload = std::nullopt;
       continue;
     }
-    Require(!Name, Markers.Name + "name should be followed by " +
-                       Markers.Point + " or " + Markers.RangeBegin);
-    if (Text.consume_front(Markers.RangeEnd)) {
-      Require(!OpenRanges.empty(), "unmatched " + Markers.RangeEnd);
+    Require(!Name, "$name should be followed by ^ or [[");
+    if (Text.consume_front("]]")) {
+      Require(!OpenRanges.empty(), "unmatched ]]");
 
       const Annotation &NewRange = OpenRanges.back();
       All.push_back(
@@ -88,7 +60,7 @@ Annotations::Annotations(llvm::StringRef Text, const Markers &Markers) {
       OpenRanges.pop_back();
       continue;
     }
-    if (Text.consume_front(Markers.Name)) {
+    if (Text.consume_front("$")) {
       Name =
           Text.take_while([](char C) { return llvm::isAlnum(C) || C == '_'; });
       Text = Text.drop_front(Name->size());
@@ -104,8 +76,8 @@ Annotations::Annotations(llvm::StringRef Text, const Markers &Markers) {
     Code.push_back(Text.front());
     Text = Text.drop_front();
   }
-  Require(!Name, "unterminated " + Markers.Name + "name");
-  Require(OpenRanges.empty(), "unmatched " + Markers.RangeBegin);
+  Require(!Name, "unterminated $name");
+  Require(OpenRanges.empty(), "unmatched [[");
 }
 
 size_t Annotations::point(llvm::StringRef Name) const {

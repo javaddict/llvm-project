@@ -13,7 +13,6 @@
 #include "bolt/Core/BinaryFunction.h"
 #include "bolt/Core/MCInstUtils.h"
 #include "bolt/Passes/BinaryPasses.h"
-#include "bolt/Utils/CommandLineOpts.h"
 #include "llvm/Support/raw_ostream.h"
 #include <memory>
 
@@ -162,8 +161,7 @@ class FunctionAnalysisContext {
   MCPlusBuilder::AllocatorIdTy AllocatorId;
   FunctionAnalysisResult Result;
 
-  /// Bitmask of detectors to run (only GS_PTRAUTH_* are allowed).
-  opts::GadgetKindBitmask EnabledDetectors;
+  bool PacRetGadgetsOnly;
 
   void findUnsafeUses(SmallVector<PartialReport<MCPhysReg>> &Reports);
   void augmentUnsafeUseReports(ArrayRef<PartialReport<MCPhysReg>> Reports);
@@ -178,7 +176,9 @@ class FunctionAnalysisContext {
 public:
   FunctionAnalysisContext(BinaryFunction &BF,
                           MCPlusBuilder::AllocatorIdTy AllocatorId,
-                          opts::GadgetKindBitmask EnabledDetectors);
+                          bool PacRetGadgetsOnly)
+      : BC(BF.getBinaryContext()), BF(BF), AllocatorId(AllocatorId),
+        PacRetGadgetsOnly(PacRetGadgetsOnly) {}
 
   void run();
 
@@ -186,8 +186,8 @@ public:
 };
 
 class Analysis : public BinaryFunctionPass {
-  /// Bitmask of detectors to run (only GS_PTRAUTH_* are allowed).
-  opts::GadgetKindBitmask EnabledDetectors;
+  /// Only search for pac-ret violations.
+  bool PacRetGadgetsOnly;
 
   void runOnFunction(BinaryFunction &Function,
                      MCPlusBuilder::AllocatorIdTy AllocatorId);
@@ -196,7 +196,8 @@ class Analysis : public BinaryFunctionPass {
   std::mutex AnalysisResultsMutex;
 
 public:
-  explicit Analysis(opts::GadgetKindBitmask EnabledDetectors);
+  explicit Analysis(bool PacRetGadgetsOnly)
+      : BinaryFunctionPass(false), PacRetGadgetsOnly(PacRetGadgetsOnly) {}
 
   const char *getName() const override { return "pauth-gadget-scanner"; }
 

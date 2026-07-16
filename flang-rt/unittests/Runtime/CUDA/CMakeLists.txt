@@ -9,7 +9,6 @@
 add_flangrt_unittest(FlangCufRuntimeTests
   Allocatable.cpp
   AllocatorCUF.cpp
-  DefaultStream.cpp
   Memory.cpp
 )
 

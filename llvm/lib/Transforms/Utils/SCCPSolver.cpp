@@ -393,7 +393,8 @@ bool SCCPSolver::removeNonFeasibleEdges(BasicBlock *BB, DomTreeUpdater &DTU,
 
   // SCCP can only determine non-feasible edges for br, switch and indirectbr.
   Instruction *TI = BB->getTerminator();
-  assert((isa<UncondBrInst, CondBrInst, SwitchInst, IndirectBrInst>(TI)) &&
+  assert((isa<BranchInst>(TI) || isa<SwitchInst>(TI) ||
+          isa<IndirectBrInst>(TI)) &&
          "Terminator must be a br, switch or indirectbr");
 
   if (FeasibleSuccessors.size() == 0) {
@@ -425,7 +426,7 @@ bool SCCPSolver::removeNonFeasibleEdges(BasicBlock *BB, DomTreeUpdater &DTU,
       Updates.push_back({DominatorTree::Delete, BB, Succ});
     }
 
-    Instruction *BI = UncondBrInst::Create(OnlyFeasibleSuccessor, BB);
+    Instruction *BI = BranchInst::Create(OnlyFeasibleSuccessor, BB);
     BI->setDebugLoc(TI->getDebugLoc());
     TI->eraseFromParent();
     DTU.applyUpdatesPermissive(Updates);
@@ -938,7 +939,8 @@ public:
   const ValueLatticeElement &getLatticeValueFor(Value *V) const {
     assert(!V->getType()->isStructTy() &&
            "Should use getStructLatticeValueFor");
-    auto I = ValueState.find(V);
+    DenseMap<Value *, ValueLatticeElement>::const_iterator I =
+        ValueState.find(V);
     assert(I != ValueState.end() &&
            "V not found in ValueState nor Paramstate map!");
     return I->second;
@@ -1249,12 +1251,12 @@ bool SCCPInstVisitor::markEdgeExecutable(BasicBlock *Source, BasicBlock *Dest) {
 void SCCPInstVisitor::getFeasibleSuccessors(Instruction &TI,
                                             SmallVectorImpl<bool> &Succs) {
   Succs.resize(TI.getNumSuccessors());
-  if (isa<UncondBrInst>(TI)) {
-    Succs[0] = true;
-    return;
-  }
+  if (auto *BI = dyn_cast<BranchInst>(&TI)) {
+    if (BI->isUnconditional()) {
+      Succs[0] = true;
+      return;
+    }
 
-  if (auto *BI = dyn_cast<CondBrInst>(&TI)) {
     const ValueLatticeElement &BCValue = getValueState(BI->getCondition());
     ConstantInt *CI = getConstantInt(BCValue, BI->getCondition()->getType());
     if (!CI) {
@@ -2061,7 +2063,7 @@ void SCCPInstVisitor::handlePredicate(Instruction *I, Value *CopyOf,
     // a chained predicate, as the != x information is more likely to be
     // helpful in practice.
     if (!CopyOfCR.contains(NewCR) && CopyOfCR.getSingleMissingElement())
-      NewCR = std::move(CopyOfCR);
+      NewCR = CopyOfCR;
 
     // The new range is based on a branch condition. That guarantees that
     // neither of the compare operands can be undef in the branch targets,
@@ -2126,7 +2128,7 @@ void SCCPInstVisitor::handleCallResult(CallBase &CB) {
 
       // If Count <= MaxLanes, getvectorlength(Count, MaxLanes) = Count
       if (Count.icmp(CmpInst::ICMP_ULE, MaxLanes))
-        Result = std::move(Count);
+        Result = Count;
 
       Result = Result.truncate(II->getType()->getScalarSizeInBits());
       return (void)mergeInValue(ValueState[II], II,

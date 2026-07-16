@@ -7,12 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/fdimbf16.h"
-#include "src/__support/math/fdimbf16.h"
+#include "src/__support/FPUtil/BasicOperations.h"
+#include "src/__support/FPUtil/bfloat16.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(bfloat16, fdimbf16, (bfloat16 x, bfloat16 y)) {
-  return math::fdimbf16(x, y);
+  return fputil::fdim(x, y);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

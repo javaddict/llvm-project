@@ -6,8 +6,6 @@
 ---
 name: popret_rvlist5
 tracksRegLiveness: true
-frameInfo:
-  maxCallFrameSize: 0
 body:                   |
   bb.0:
     ; CHECK-XQCCMP32-LABEL: name: popret_rvlist5
@@ -38,8 +36,6 @@ body:                   |
 ---
 name: popretz_rvlist5
 tracksRegLiveness: true
-frameInfo:
-  maxCallFrameSize: 0
 body:                   |
   bb.0:
     ; CHECK-XQCCMP32-LABEL: name: popretz_rvlist5

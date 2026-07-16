@@ -226,7 +226,8 @@ Fortran::lower::CallerInterface::characterize() const {
   // ProcedureDesignator has no interface, or may mismatch in case of implicit
   // interface.
   if (!characteristic->HasExplicitInterface() ||
-      (isExternalDefinedInSameCompilationUnit(procRef.proc()) &&
+      (converter.getLoweringOptions().getLowerToHighLevelFIR() &&
+       isExternalDefinedInSameCompilationUnit(procRef.proc()) &&
        characteristic->CanBeCalledViaImplicitInterface())) {
     // In HLFIR lowering, calls to subprogram with implicit interfaces are
     // always prepared according to the actual arguments. This is to support
@@ -717,18 +718,12 @@ void Fortran::lower::CallInterface<T>::declare() {
       setCUDAAttributes(func, side().getProcedureSymbol(), characteristic);
 
       if (const Fortran::semantics::Symbol *sym = side().getProcedureSymbol()) {
-        const Fortran::semantics::Symbol &ultimate{sym->GetUltimate()};
-        if (const auto *subpDetails{
-                ultimate.detailsIf<Fortran::semantics::SubprogramDetails>()}) {
-          if (!subpDetails->openACCRoutineInfos().empty()) {
+        if (const auto &info{
+                sym->GetUltimate()
+                    .detailsIf<Fortran::semantics::SubprogramDetails>()}) {
+          if (!info->openACCRoutineInfos().empty()) {
             genOpenACCRoutineConstruct(converter, module, func,
-                                       subpDetails->openACCRoutineInfos());
-          }
-        } else if (const auto *procDetails{ultimate.detailsIf<
-                       Fortran::semantics::ProcEntityDetails>()}) {
-          if (!procDetails->openACCRoutineInfos().empty()) {
-            genOpenACCRoutineConstruct(converter, module, func,
-                                       procDetails->openACCRoutineInfos());
+                                       info->openACCRoutineInfos());
           }
         }
       }
@@ -1172,6 +1167,9 @@ private:
       addPassedArg(PassEntityBy::MutableBox, entity, characteristics);
     } else if (obj.IsPassedByDescriptor(isBindC)) {
       // Pass as fir.box or fir.class
+      if (isValueAttr &&
+          !getConverter().getLoweringOptions().getLowerToHighLevelFIR())
+        TODO(loc, "assumed shape dummy argument with VALUE attribute");
       addFirOperand(boxType, nextPassedArgPosition(), Property::Box, attrs);
       addPassedArg(PassEntityBy::Box, entity, characteristics);
     } else if (dynamicType.category() ==
@@ -1212,9 +1210,6 @@ private:
           if (isBuiltinCptrType) {
             auto recTy = mlir::dyn_cast<fir::RecordType>(type);
             mlir::Type fieldTy = recTy.getTypeList()[0].second;
-            if (fir::isa_builtin_cdevptr_type(type))
-              fieldTy =
-                  mlir::cast<fir::RecordType>(fieldTy).getTypeList()[0].second;
             passType = fir::ReferenceType::get(fieldTy);
           } else {
             passType = type;
@@ -1232,6 +1227,11 @@ private:
       const DummyCharacteristics *characteristics,
       const Fortran::evaluate::characteristics::DummyProcedure &proc,
       const FortranEntity &entity) {
+    if (!interface.converter.getLoweringOptions().getLowerToHighLevelFIR() &&
+        proc.attrs.test(
+            Fortran::evaluate::characteristics::DummyProcedure::Attr::Pointer))
+      TODO(interface.converter.getCurrentLocation(),
+           "procedure pointer arguments");
     const Fortran::evaluate::characteristics::Procedure &procedure =
         proc.procedure.value();
     mlir::Type funcType =
@@ -1579,14 +1579,9 @@ Fortran::lower::CallInterface<T>::getProcedureAttrs(
       if (sym->attrs().test(Fortran::semantics::Attr::NON_RECURSIVE) ||
           (sym->owner().context().languageFeatures().IsEnabled(
                Fortran::common::LanguageFeature::DefaultSave) &&
-           !sym->attrs().test(Fortran::semantics::Attr::RECURSIVE)))
+           !sym->attrs().test(Fortran::semantics::Attr::RECURSIVE))) {
         flags = flags | fir::FortranProcedureFlagsEnum::non_recursive;
-
-      // Set RECURSIVE if the attribute is explicitly present.  This is only
-      // used for debug info generation to maintain consistency with pre-F2018
-      // compilers.
-      if (sym->attrs().test(Fortran::semantics::Attr::RECURSIVE))
-        flags = flags | fir::FortranProcedureFlagsEnum::recursive;
+      }
     }
   }
   if (flags != fir::FortranProcedureFlagsEnum::none)

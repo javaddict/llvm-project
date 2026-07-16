@@ -1,5 +1,4 @@
 # RUN: llc -run-pass arm-prera-ldst-opt %s -o - | FileCheck %s
-# RUN: llc -passes=arm-prera-ldst-opt %s -o - | FileCheck %s
 --- |
   target triple = "thumbv7---eabi"
 

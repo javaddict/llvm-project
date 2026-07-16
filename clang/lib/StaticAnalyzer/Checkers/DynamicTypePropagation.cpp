@@ -190,7 +190,7 @@ RuntimeType inferReceiverType(const ObjCMethodCall &Message,
         return {cast<ObjCObjectType>(DTI.getType()), !DTI.canBeASubClass()};
       }
 
-      SVal SelfSVal = State->getSelfSVal(C.getStackFrame());
+      SVal SelfSVal = State->getSelfSVal(C.getLocationContext());
 
       // Another way we can guess what is in Class object, is when it is a
       // 'self' variable of the current class method.
@@ -369,7 +369,7 @@ void DynamicTypePropagation::checkPostCall(const CallEvent &Call,
       if (const MemRegion *Target = Ctor->getCXXThisVal().getAsRegion()) {
         // We just finished a base constructor. Now we can use the subclass's
         // type when resolving virtual calls.
-        const StackFrame *SF = C.getStackFrame();
+        const LocationContext *LCtx = C.getLocationContext();
 
         // FIXME: In C++17 classes with non-virtual bases may be treated as
         // aggregates, and in such case no top-frame constructor will be called.
@@ -378,10 +378,10 @@ void DynamicTypePropagation::checkPostCall(const CallEvent &Call,
         // trigger-statement (InitListExpr or CXXParenListInitExpr in this case)
         // available in this callback, ideally as part of CallEvent.
         if (isa_and_nonnull<InitListExpr, CXXParenListInitExpr>(
-                SF->getParentMap().getParent(Ctor->getOriginExpr())))
+                LCtx->getParentMap().getParent(Ctor->getOriginExpr())))
           return;
 
-        recordFixedType(Target, cast<CXXConstructorDecl>(SF->getDecl()), C);
+        recordFixedType(Target, cast<CXXConstructorDecl>(LCtx->getDecl()), C);
       }
       return;
     }
@@ -718,10 +718,11 @@ static bool isObjCTypeParamDependent(QualType Type) {
   public:
     IsObjCTypeParamDependentTypeVisitor() = default;
     bool VisitObjCTypeParamType(ObjCTypeParamType *Type) override {
-      static_assert(
-          std::is_same_v<decltype(Type->getDecl()), ObjCTypeParamDecl *>);
-      Result = true;
-      return false;
+      if (isa<ObjCTypeParamDecl>(Type->getDecl())) {
+        Result = true;
+        return false;
+      }
+      return true;
     }
 
     bool Result = false;
@@ -1090,7 +1091,8 @@ PathDiagnosticPieceRef DynamicTypePropagation::GenericsBugVisitor::VisitNode(
   }
 
   // Generate the extra diagnostic.
-  PathDiagnosticLocation Pos(S, BRC.getSourceManager(), N->getStackFrame());
+  PathDiagnosticLocation Pos(S, BRC.getSourceManager(),
+                             N->getLocationContext());
   return std::make_shared<PathDiagnosticEventPiece>(Pos, OS.str(), true);
 }
 

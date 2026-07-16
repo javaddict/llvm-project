@@ -13,11 +13,10 @@
 
 namespace llvm {
 
-class ProcessImplicitDefsPass
-    : public RequiredPassInfoMixin<ProcessImplicitDefsPass> {
+class ProcessImplicitDefsPass : public PassInfoMixin<ProcessImplicitDefsPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
   MachineFunctionProperties getRequiredProperties() const {
     return MachineFunctionProperties().setIsSSA();
   }

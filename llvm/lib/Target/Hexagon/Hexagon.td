@@ -116,10 +116,8 @@ def FeatureSmallData: SubtargetFeature<"small-data", "UseSmallData", "true",
       "Allow GP-relative addressing of global variables">;
 def FeatureDuplex: SubtargetFeature<"duplex", "EnableDuplex", "true",
       "Enable generation of duplex instruction">;
-foreach i = {16-28} in
-    def FeatureReservedR#i : SubtargetFeature<"reserved-r"#i,
-        "UserReservedRegister[Hexagon::R"#i#"]",
-        "true", "Reserve register R"#i>;
+def FeatureReservedR19: SubtargetFeature<"reserved-r19", "ReservedR19",
+      "true", "Reserve register R19">;
 def FeatureNoreturnStackElim: SubtargetFeature<"noreturn-stack-elim",
       "NoreturnStackElim", "true",
       "Eliminate stack allocation in a noreturn function when possible">;

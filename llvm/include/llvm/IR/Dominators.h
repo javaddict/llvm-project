@@ -111,13 +111,26 @@ public:
     return Start;
   }
 
-  const BasicBlock *getEnd() const { return End; }
+  const BasicBlock *getEnd() const {
+    return End;
+  }
+
+  /// Check if this is the only edge between Start and End.
+  LLVM_ABI bool isSingleEdge() const;
 };
 
 template <> struct DenseMapInfo<BasicBlockEdge> {
   using BBInfo = DenseMapInfo<const BasicBlock *>;
 
   LLVM_ABI static unsigned getHashValue(const BasicBlockEdge *V);
+
+  static inline BasicBlockEdge getEmptyKey() {
+    return BasicBlockEdge(BBInfo::getEmptyKey(), BBInfo::getEmptyKey());
+  }
+
+  static inline BasicBlockEdge getTombstoneKey() {
+    return BasicBlockEdge(BBInfo::getTombstoneKey(), BBInfo::getTombstoneKey());
+  }
 
   static unsigned getHashValue(const BasicBlockEdge &Edge) {
     return hash_combine(BBInfo::getHashValue(Edge.getStart()),
@@ -281,19 +294,21 @@ public:
 
 /// Printer pass for the \c DominatorTree.
 class DominatorTreePrinterPass
-    : public RequiredPassInfoMixin<DominatorTreePrinterPass> {
+    : public PassInfoMixin<DominatorTreePrinterPass> {
   raw_ostream &OS;
 
 public:
   LLVM_ABI explicit DominatorTreePrinterPass(raw_ostream &OS);
 
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 };
 
 /// Verifier pass for the \c DominatorTree.
-struct DominatorTreeVerifierPass
-    : RequiredPassInfoMixin<DominatorTreeVerifierPass> {
+struct DominatorTreeVerifierPass : PassInfoMixin<DominatorTreeVerifierPass> {
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 
 /// Enables verification of dominator trees.

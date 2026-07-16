@@ -47,8 +47,11 @@ DynamicLoader *DynamicLoader::FindPlugin(Process *process,
         return instance_up.release();
     }
   } else {
-    for (auto create_callback :
-         PluginManager::GetDynamicLoaderCreateCallbacks()) {
+    for (uint32_t idx = 0;
+         (create_callback =
+              PluginManager::GetDynamicLoaderCreateCallbackAtIndex(idx)) !=
+         nullptr;
+         ++idx) {
       std::unique_ptr<DynamicLoader> instance_up(
           create_callback(process, false));
       if (instance_up)
@@ -173,24 +176,13 @@ ModuleSP DynamicLoader::LoadModuleAtAddress(const FileSpec &file,
                                             addr_t link_map_addr,
                                             addr_t base_addr,
                                             bool base_addr_is_offset) {
-  ModuleSP module_sp = FindModuleViaTarget(file);
-  // We have a core file, try to load the image from memory if we didn't find
-  // the module.
-  if (!module_sp && !m_process->IsLiveDebugSession()) {
-    llvm::Expected<ModuleSP> memory_module_sp_or_err =
-        m_process->ReadModuleFromMemory(file, base_addr);
-    if (auto err = memory_module_sp_or_err.takeError())
-      LLDB_LOG_ERROR(GetLog(LLDBLog::DynamicLoader), std::move(err),
-                     "Failed to read module from memory: {0}");
-    else {
-      module_sp = *memory_module_sp_or_err;
-      m_process->GetTarget().GetImages().AppendIfNeeded(module_sp, false);
-    }
-  }
-  if (module_sp)
+  if (ModuleSP module_sp = FindModuleViaTarget(file)) {
     UpdateLoadedSections(module_sp, link_map_addr, base_addr,
                          base_addr_is_offset);
-  return module_sp;
+    return module_sp;
+  }
+
+  return nullptr;
 }
 
 static ModuleSP ReadUnnamedMemoryModule(Process *process, addr_t addr,
@@ -200,14 +192,7 @@ static ModuleSP ReadUnnamedMemoryModule(Process *process, addr_t addr,
     snprintf(namebuf, sizeof(namebuf), "memory-image-0x%" PRIx64, addr);
     name = namebuf;
   }
-  llvm::Expected<ModuleSP> module_sp_or_err =
-      process->ReadModuleFromMemory(FileSpec(name), addr);
-  if (auto err = module_sp_or_err.takeError()) {
-    LLDB_LOG_ERROR(GetLog(LLDBLog::DynamicLoader), std::move(err),
-                   "Failed to read module from memory: {0}");
-    return {};
-  }
-  return *module_sp_or_err;
+  return process->ReadModuleFromMemory(FileSpec(name), addr);
 }
 
 ModuleSP DynamicLoader::LoadBinaryWithUUIDAndAddress(

@@ -14,15 +14,14 @@
 namespace llvm {
 
 class SeparateConstOffsetFromGEPPass
-    : public OptionalPassInfoMixin<SeparateConstOffsetFromGEPPass> {
+    : public PassInfoMixin<SeparateConstOffsetFromGEPPass> {
   bool LowerGEP;
 
 public:
   SeparateConstOffsetFromGEPPass(bool LowerGEP = false) : LowerGEP(LowerGEP) {}
-  LLVM_ABI void
-  printPipeline(raw_ostream &OS,
-                function_ref<StringRef(StringRef)> MapClassName2PassName);
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &);
+  void printPipeline(raw_ostream &OS,
+                     function_ref<StringRef(StringRef)> MapClassName2PassName);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &);
 };
 
 } // end namespace llvm

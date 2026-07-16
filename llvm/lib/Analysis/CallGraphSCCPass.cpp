@@ -28,7 +28,6 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassTimingInfo.h"
 #include "llvm/IR/PrintPasses.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -318,7 +317,8 @@ bool CGPassManager::RefreshCallGraph(const CallGraphSCC &CurSCC, CallGraph &CG,
 
         // If this call site already existed in the callgraph, just verify it
         // matches up to expectations and remove it from Calls.
-        auto ExistingIt = Calls.find(Call);
+        DenseMap<Value *, CallGraphNode *>::iterator ExistingIt =
+            Calls.find(Call);
         if (ExistingIt != Calls.end()) {
           CallGraphNode *ExistingNode = ExistingIt->second;
 
@@ -678,7 +678,7 @@ namespace {
       auto PrintBannerOnce = [&]() {
         if (BannerPrinted)
           return;
-        OS << Banner << "\n";
+        OS << Banner;
         BannerPrinted = true;
       };
 

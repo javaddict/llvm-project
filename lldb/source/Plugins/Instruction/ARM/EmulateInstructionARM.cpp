@@ -5146,7 +5146,7 @@ bool EmulateInstructionARM::EmulateSTRThumb(const uint32_t opcode,
 
       // index = TRUE; add = TRUE; wback = FALSE;
       index = true;
-      add = true;
+      add = false;
       wback = false;
       break;
 

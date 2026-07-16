@@ -7,12 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/getpayloadbf16.h"
-#include "src/__support/math/getpayloadbf16.h"
+#include "src/__support/FPUtil/BasicOperations.h"
+#include "src/__support/FPUtil/bfloat16.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(bfloat16, getpayloadbf16, (const bfloat16 *x)) {
-  return math::getpayloadbf16(x);
+  return fputil::getpayload(*x);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

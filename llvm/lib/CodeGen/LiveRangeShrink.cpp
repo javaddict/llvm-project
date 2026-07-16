@@ -44,7 +44,9 @@ class LiveRangeShrink : public MachineFunctionPass {
 public:
   static char ID;
 
-  LiveRangeShrink() : MachineFunctionPass(ID) {}
+  LiveRangeShrink() : MachineFunctionPass(ID) {
+    initializeLiveRangeShrinkPass(*PassRegistry::getPassRegistry());
+  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();

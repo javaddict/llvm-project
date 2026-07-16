@@ -24,10 +24,6 @@
 #    error "__cpp_lib_as_const should not be defined before c++17"
 #  endif
 
-#  ifdef __cpp_lib_constant_wrapper
-#    error "__cpp_lib_constant_wrapper should not be defined before c++26"
-#  endif
-
 #  ifdef __cpp_lib_constexpr_algorithms
 #    error "__cpp_lib_constexpr_algorithms should not be defined before c++20"
 #  endif
@@ -80,10 +76,6 @@
 
 #  ifdef __cpp_lib_as_const
 #    error "__cpp_lib_as_const should not be defined before c++17"
-#  endif
-
-#  ifdef __cpp_lib_constant_wrapper
-#    error "__cpp_lib_constant_wrapper should not be defined before c++26"
 #  endif
 
 #  ifdef __cpp_lib_constexpr_algorithms
@@ -152,10 +144,6 @@
 #    error "__cpp_lib_as_const should have the value 201510L in c++17"
 #  endif
 
-#  ifdef __cpp_lib_constant_wrapper
-#    error "__cpp_lib_constant_wrapper should not be defined before c++26"
-#  endif
-
 #  ifdef __cpp_lib_constexpr_algorithms
 #    error "__cpp_lib_constexpr_algorithms should not be defined before c++20"
 #  endif
@@ -220,10 +208,6 @@
 #  endif
 #  if __cpp_lib_as_const != 201510L
 #    error "__cpp_lib_as_const should have the value 201510L in c++20"
-#  endif
-
-#  ifdef __cpp_lib_constant_wrapper
-#    error "__cpp_lib_constant_wrapper should not be defined before c++26"
 #  endif
 
 #  ifndef __cpp_lib_constexpr_algorithms
@@ -299,10 +283,6 @@
 #  endif
 #  if __cpp_lib_as_const != 201510L
 #    error "__cpp_lib_as_const should have the value 201510L in c++23"
-#  endif
-
-#  ifdef __cpp_lib_constant_wrapper
-#    error "__cpp_lib_constant_wrapper should not be defined before c++26"
 #  endif
 
 #  ifndef __cpp_lib_constexpr_algorithms
@@ -399,13 +379,6 @@
 #  endif
 #  if __cpp_lib_as_const != 201510L
 #    error "__cpp_lib_as_const should have the value 201510L in c++26"
-#  endif
-
-#  ifndef __cpp_lib_constant_wrapper
-#    error "__cpp_lib_constant_wrapper should be defined in c++26"
-#  endif
-#  if __cpp_lib_constant_wrapper != 202603L
-#    error "__cpp_lib_constant_wrapper should have the value 202603L in c++26"
 #  endif
 
 #  ifndef __cpp_lib_constexpr_algorithms

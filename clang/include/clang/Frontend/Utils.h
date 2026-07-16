@@ -72,9 +72,8 @@ public:
   /// to the list of dependencies.
   ///
   /// The default implementation ignores <built-in> and system files.
-  virtual bool sawDependency(StringRef Filename, bool FromModule, bool IsSystem,
-                             bool IsModuleFile, bool IsDirectModuleImport,
-                             bool IsMissing);
+  virtual bool sawDependency(StringRef Filename, bool FromModule,
+                             bool IsSystem, bool IsModuleFile, bool IsMissing);
 
   /// Called when the end of the main file is reached.
   virtual void finishedMainFile(DiagnosticsEngine &Diags) {}
@@ -86,7 +85,7 @@ public:
   /// sawDependency() returns true.
   virtual void maybeAddDependency(StringRef Filename, bool FromModule,
                                   bool IsSystem, bool IsModuleFile,
-                                  bool IsDirectModuleImport, bool IsMissing);
+                                  bool IsMissing);
 
 protected:
   /// Return true if the filename was added to the list of dependencies, false
@@ -113,8 +112,7 @@ public:
   bool needSystemDependencies() final { return IncludeSystemHeaders; }
 
   bool sawDependency(StringRef Filename, bool FromModule, bool IsSystem,
-                     bool IsModuleFile, bool IsDirectModuleImport,
-                     bool IsMissing) final;
+                     bool IsModuleFile, bool IsMissing) final;
 
 protected:
   void outputDependencyFile(llvm::raw_ostream &OS);
@@ -128,7 +126,7 @@ private:
   bool PhonyTarget;
   bool AddMissingHeaderDeps;
   bool SeenMissingHeader;
-  ModuleFileDepsKind IncludeModuleFiles;
+  bool IncludeModuleFiles;
   DependencyOutputFormat OutputFormat;
   unsigned InputFileIndex;
 };

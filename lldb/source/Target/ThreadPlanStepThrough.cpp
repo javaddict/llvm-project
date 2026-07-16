@@ -62,8 +62,10 @@ ThreadPlanStepThrough::ThreadPlanStepThrough(Thread &thread,
         return_bp->SetBreakpointKind("step-through-backstop");
       }
       Log *log = GetLog(LLDBLog::Step);
-      LLDB_LOGF(log, "Setting backstop breakpoint %d at address: 0x%" PRIx64,
-                m_backstop_bkpt_id, m_backstop_addr);
+      if (log) {
+        LLDB_LOGF(log, "Setting backstop breakpoint %d at address: 0x%" PRIx64,
+                  m_backstop_bkpt_id, m_backstop_addr);
+      }
     }
   }
 }

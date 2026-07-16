@@ -23,9 +23,7 @@ namespace opts {
 extern cl::OptionCategory BoltOptCategory;
 
 static cl::opt<bolt::PLTCall::OptType>
-    PLT("plt",
-        cl::desc("optimize PLT calls (requires linking with -znow on "
-                 "non-x86 architectures)"),
+    PLT("plt", cl::desc("optimize PLT calls (requires linking with -znow)"),
         cl::init(bolt::PLTCall::OT_NONE),
         cl::values(clEnumValN(bolt::PLTCall::OT_NONE, "none",
                               "do not optimize PLT calls"),
@@ -78,12 +76,7 @@ Error PLTCall::runOnFunctions(BinaryContext &BC) {
   }
 
   if (NumCallsOptimized) {
-    // On X86-64, PLT optimization does not require -znow because the indirect
-    // call through GOT works correctly with lazy binding. At runtime, the
-    // resolver will populate the GOT entry on first call just like with a
-    // regular PLT call.
-    if (!BC.isX86())
-      BC.RequiresZNow = true;
+    BC.RequiresZNow = true;
     BC.outs() << "BOLT-INFO: " << NumCallsOptimized
               << " PLT calls in the binary were optimized.\n";
   }

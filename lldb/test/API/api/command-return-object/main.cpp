@@ -30,5 +30,4 @@ int main() {
   interp.AddCommand("crasher", &crasher, nullptr /*help*/);
   SBCommandReturnObject Result;
   dbg.GetCommandInterpreter().HandleCommand("crasher", Result);
-  SBDebugger::Terminate();
 }

@@ -33,3 +33,4 @@ class IOHandlerCompletionTest(PExpectTest):
         self.child.expect_exact(
             "(lldb) This is a long sentence missing its first letter."
         )
+        self.quit()

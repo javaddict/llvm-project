@@ -19,7 +19,6 @@
 // RUN:   %if target={{s390x-.*}} %{ -argext-abi-check=false %} | FileCheck %s
 // RUN: ls %t.o
 // RUN: rm %t.o
-// XFAIL: system-aix
 
 // Declarations of C library functions.
 llvm.func @logbf(f32) -> f32

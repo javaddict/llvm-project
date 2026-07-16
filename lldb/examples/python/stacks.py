@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 import lldb
 import optparse
 import shlex
 
 
-def stack_frames(debugger, command, exe_ctx, result, internal_dict):
+def stack_frames(debugger, command, result, dict):
     command_args = shlex.split(command)
     usage = "usage: %prog [options] <PATH> [PATH ...]"
     description = """This command will enumerate all stack frames, print the stack size for each, and print an aggregation of which functions have the largest stack frame sizes at the end."""
@@ -22,8 +22,11 @@ def stack_frames(debugger, command, exe_ctx, result, internal_dict):
     except:
         return
 
+    target = debugger.GetSelectedTarget()
+    process = target.GetProcess()
+
     frame_info = {}
-    for thread in exe_ctx.process:
+    for thread in process:
         last_frame = None
         print("thread %u" % (thread.id))
         for frame in thread.frames:

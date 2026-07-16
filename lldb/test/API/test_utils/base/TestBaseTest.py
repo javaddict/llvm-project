@@ -9,8 +9,6 @@ from lldbsuite.test_event import build_exception
 
 
 class TestBuildMethod(Base):
-    SHARED_BUILD_TESTCASE = False
-
     def setUp(self):
         super().setUp()
         self._traces = []

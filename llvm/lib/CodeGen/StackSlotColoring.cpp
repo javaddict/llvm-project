@@ -161,7 +161,9 @@ class StackSlotColoringLegacy : public MachineFunctionPass {
 public:
   static char ID; // Pass identification
 
-  StackSlotColoringLegacy() : MachineFunctionPass(ID) {}
+  StackSlotColoringLegacy() : MachineFunctionPass(ID) {
+    initializeStackSlotColoringLegacyPass(*PassRegistry::getPassRegistry());
+  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
@@ -495,9 +497,6 @@ bool StackSlotColoring::RemoveDeadStores(MachineBasicBlock* MBB) {
     }
     if (NextMI == E) continue;
     if (!(StoreReg = TII->isStoreToStackSlot(*NextMI, SecondSS, StoreSize)))
-      continue;
-    // Skip if the stack size is unknown.
-    if (!LoadSize || !StoreSize)
       continue;
     if (FirstSS != SecondSS || LoadReg != StoreReg || FirstSS == -1 ||
         LoadSize != StoreSize || !MFI->isSpillSlotObjectIndex(FirstSS))

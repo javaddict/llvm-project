@@ -207,7 +207,12 @@ static void updateSupportedARMFeatures(Ctx &ctx,
 }
 
 InputFile::InputFile(Ctx &ctx, Kind k, MemoryBufferRef m)
-    : ctx(ctx), mb(m), fileKind(k) {}
+    : ctx(ctx), mb(m), groupId(ctx.driver.nextGroupId), fileKind(k) {
+  // All files within the same --{start,end}-group get the same group ID.
+  // Otherwise, a new file will get a new group ID.
+  if (!ctx.driver.isInGroup)
+    ++ctx.driver.nextGroupId;
+}
 
 InputFile::~InputFile() {}
 
@@ -868,8 +873,10 @@ void ObjFile<ELFT>::initializeSections(bool ignoreComdats,
     default:
       this->sections[i] =
           createInputSection(i, sec, check(obj.getSectionName(sec, shstrtab)));
-      if (ctx.arg.rejectMismatch &&
-          !isKnownSpecificSectionType(type, sec.sh_flags))
+      if (type == SHT_LLVM_SYMPART)
+        ctx.hasSympart.store(true, std::memory_order_relaxed);
+      else if (ctx.arg.rejectMismatch &&
+               !isKnownSpecificSectionType(type, sec.sh_flags))
         Err(ctx) << this->sections[i] << ": unknown section type 0x"
                  << Twine::utohexstr(type);
       break;
@@ -1619,8 +1626,7 @@ template <class ELFT> void SharedFile::parse() {
   // --as-needed, --no-as-needed takes precedence over --as-needed because a
   // user can add an extra DSO with --no-as-needed to force it to be added to
   // the dependency list.
-  if (isNeeded)
-    it->second->isNeeded.store(true, std::memory_order_relaxed);
+  it->second->isNeeded |= isNeeded;
   if (!wasInserted)
     return;
 

@@ -16,49 +16,49 @@ using namespace llvm;
 
 namespace {
 
-void populateYAML(OffloadYAML::Binary &YAMLBinary,
-                  ArrayRef<std::unique_ptr<object::OffloadBinary>> OBinaries,
+void populateYAML(OffloadYAML::Binary &YAMLBinary, object::OffloadBinary &OB,
                   UniqueStringSaver Saver) {
-  for (const auto &OBinaryPtr : OBinaries) {
-    object::OffloadBinary &OB = *OBinaryPtr;
-
-    YAMLBinary.Members.emplace_back();
-    auto &Member = YAMLBinary.Members.back();
-    Member.ImageKind = OB.getImageKind();
-    Member.OffloadKind = OB.getOffloadKind();
-    Member.Flags = OB.getFlags();
-    if (!OB.strings().empty()) {
-      Member.StringEntries = std::vector<OffloadYAML::Binary::StringEntry>();
-      for (const auto &StringEntry : OB.strings())
-        Member.StringEntries->emplace_back(OffloadYAML::Binary::StringEntry(
-            {Saver.save(StringEntry.first), Saver.save(StringEntry.second)}));
-    }
-
-    if (!OB.getImage().empty())
-      Member.Content = arrayRefFromStringRef(OB.getImage());
+  YAMLBinary.Members.emplace_back();
+  auto &Member = YAMLBinary.Members.back();
+  Member.ImageKind = OB.getImageKind();
+  Member.OffloadKind = OB.getOffloadKind();
+  Member.Flags = OB.getFlags();
+  if (!OB.strings().empty()) {
+    Member.StringEntries = std::vector<OffloadYAML::Binary::StringEntry>();
+    for (const auto &Entry : OB.strings())
+      Member.StringEntries->emplace_back(OffloadYAML::Binary::StringEntry(
+          {Saver.save(Entry.first), Saver.save(Entry.second)}));
   }
+
+  if (!OB.getImage().empty())
+    Member.Content = arrayRefFromStringRef(OB.getImage());
 }
 
 Expected<OffloadYAML::Binary *> dump(MemoryBufferRef Source,
                                      UniqueStringSaver Saver) {
+  Expected<std::unique_ptr<object::OffloadBinary>> OB =
+      object::OffloadBinary::create(Source);
+  if (!OB)
+    return OB.takeError();
+
   std::unique_ptr<OffloadYAML::Binary> YAMLBinary =
       std::make_unique<OffloadYAML::Binary>();
 
   YAMLBinary->Members = std::vector<OffloadYAML::Binary::Member>();
 
   uint64_t Offset = 0;
-  while (Offset < Source.getBufferSize()) {
+  while (Offset < (*OB)->getMemoryBufferRef().getBufferSize()) {
     MemoryBufferRef Buffer = MemoryBufferRef(
-        Source.getBuffer().drop_front(Offset), Source.getBufferIdentifier());
-    auto BinariesOrErr = object::OffloadBinary::create(Buffer);
-    if (!BinariesOrErr)
-      return BinariesOrErr.takeError();
+        (*OB)->getData().drop_front(Offset), (*OB)->getFileName());
+    auto BinaryOrErr = object::OffloadBinary::create(Buffer);
+    if (!BinaryOrErr)
+      return BinaryOrErr.takeError();
 
-    SmallVector<std::unique_ptr<object::OffloadBinary>> &Binaries =
-        *BinariesOrErr;
-    populateYAML(*YAMLBinary, Binaries, Saver);
+    object::OffloadBinary &Binary = **BinaryOrErr;
 
-    Offset += Binaries[0]->getSize();
+    populateYAML(*YAMLBinary, Binary, Saver);
+
+    Offset += Binary.getSize();
   }
 
   return YAMLBinary.release();

@@ -10,10 +10,8 @@
 #include "DebugMap.h"
 #include "MachOUtils.h"
 #include "RelocationMap.h"
-#include "dsymutil.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallSet.h"
-#include "llvm/ADT/StringSet.h"
 #include "llvm/Object/MachO.h"
 #include "llvm/Support/Chrono.h"
 #include "llvm/Support/Path.h"
@@ -29,18 +27,15 @@ using namespace llvm::object;
 
 class MachODebugMapParser {
 public:
-  MachODebugMapParser(
-      BinaryHolder &BinHolder, StringRef BinaryPath,
-      ArrayRef<std::string> Archs, ArrayRef<std::string> DSYMSearchPaths,
-      StringRef PathPrefix = "", StringRef VariantSuffix = "",
-      bool Verbose = false,
-      const std::optional<StringSet<>> &ObjectFilter = std::nullopt,
-      ObjectFilterType ObjectFilterType = ObjectFilterType::Allow)
+  MachODebugMapParser(BinaryHolder &BinHolder, StringRef BinaryPath,
+                      ArrayRef<std::string> Archs,
+                      ArrayRef<std::string> DSYMSearchPaths,
+                      StringRef PathPrefix = "", StringRef VariantSuffix = "",
+                      bool Verbose = false)
       : BinaryPath(std::string(BinaryPath)), Archs(Archs),
         DSYMSearchPaths(DSYMSearchPaths), PathPrefix(std::string(PathPrefix)),
         VariantSuffix(std::string(VariantSuffix)), BinHolder(BinHolder),
-        CurrentDebugMapObject(nullptr), SkipDebugMapObject(false),
-        ObjectFilter(ObjectFilter), ObjectFilterType(ObjectFilterType) {}
+        CurrentDebugMapObject(nullptr), SkipDebugMapObject(false) {}
 
   /// Parses and returns the DebugMaps of the input binary. The binary contains
   /// multiple maps in case it is a universal binary.
@@ -85,12 +80,6 @@ private:
   /// Whether we need to skip the current debug map object.
   bool SkipDebugMapObject;
 
-  /// Optional set of object paths to filter on.
-  const std::optional<StringSet<>> &ObjectFilter;
-
-  /// Whether ObjectFilter is an allow list or a disallow list.
-  enum ObjectFilterType ObjectFilterType;
-
   /// Holds function info while function scope processing.
   const char *CurrentFunctionName;
   uint64_t CurrentFunctionAddress;
@@ -130,15 +119,6 @@ private:
   }
 
   void addCommonSymbols();
-
-  /// Check if a debug map object should be included based on the
-  /// object filter.
-  bool shouldIncludeObject(StringRef Path) const {
-    if (!ObjectFilter.has_value())
-      return true;
-    bool InSet = ObjectFilter->contains(Path);
-    return ObjectFilterType == Allow ? InSet : !InSet;
-  }
 
   /// Dump the symbol table output header.
   void dumpSymTabHeader(raw_ostream &OS, StringRef Arch);
@@ -210,11 +190,6 @@ void MachODebugMapParser::switchToNewDebugMapObject(
 
   SmallString<80> Path(PathPrefix);
   sys::path::append(Path, Filename);
-
-  if (!shouldIncludeObject(Path)) {
-    SkipDebugMapObject = true;
-    return;
-  }
 
   auto ObjectEntry = BinHolder.getObjectEntry(Path, Timestamp);
   if (!ObjectEntry) {
@@ -882,16 +857,13 @@ llvm::ErrorOr<std::vector<std::unique_ptr<DebugMap>>>
 parseDebugMap(BinaryHolder &BinHolder, StringRef InputFile,
               ArrayRef<std::string> Archs,
               ArrayRef<std::string> DSYMSearchPaths, StringRef PrependPath,
-              StringRef VariantSuffix, bool Verbose, bool InputIsYAML,
-              const std::optional<StringSet<>> &ObjectFilter,
-              enum ObjectFilterType ObjectFilterType) {
+              StringRef VariantSuffix, bool Verbose, bool InputIsYAML) {
   if (InputIsYAML)
     return DebugMap::parseYAMLDebugMap(BinHolder, InputFile, PrependPath,
                                        Verbose);
 
   MachODebugMapParser Parser(BinHolder, InputFile, Archs, DSYMSearchPaths,
-                             PrependPath, VariantSuffix, Verbose, ObjectFilter,
-                             ObjectFilterType);
+                             PrependPath, VariantSuffix, Verbose);
 
   return Parser.parse();
 }

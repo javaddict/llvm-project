@@ -14,9 +14,9 @@
 namespace llvm {
 
 class ConstraintEliminationPass
-    : public OptionalPassInfoMixin<ConstraintEliminationPass> {
+    : public PassInfoMixin<ConstraintEliminationPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &);
 };
 
 } // end namespace llvm

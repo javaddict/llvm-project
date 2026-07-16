@@ -44,9 +44,15 @@
 //   nonnull, and use optionals where necessary.
 //
 
-#ifndef LLDB_SOURCE_PLUGINS_SCRIPTINTERPRETER_PYTHON_PYTHONDATAOBJECTS_H
-#define LLDB_SOURCE_PLUGINS_SCRIPTINTERPRETER_PYTHON_PYTHONDATAOBJECTS_H
 
+#ifndef LLDB_PLUGINS_SCRIPTINTERPRETER_PYTHON_PYTHONDATAOBJECTS_H
+#define LLDB_PLUGINS_SCRIPTINTERPRETER_PYTHON_PYTHONDATAOBJECTS_H
+
+#include "lldb/Host/Config.h"
+
+#if LLDB_ENABLE_PYTHON
+
+// LLDB Python header must be included first
 #include "lldb-python.h"
 
 #include "lldb/Host/File.h"
@@ -774,4 +780,6 @@ int RunSimpleString(const char *str);
 } // namespace python
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_SCRIPTINTERPRETER_PYTHON_PYTHONDATAOBJECTS_H
+#endif
+
+#endif // LLDB_PLUGINS_SCRIPTINTERPRETER_PYTHON_PYTHONDATAOBJECTS_H

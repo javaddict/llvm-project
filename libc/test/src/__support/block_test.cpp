@@ -248,7 +248,7 @@ TEST(LlvmLibcBlockTest, CanMarkBlockUsed) {
   EXPECT_FALSE(block->used());
 }
 
-TEST(LlvmLibcBlockTest, CanSplitUsedBlock) {
+TEST(LlvmLibcBlockTest, CannotSplitUsedBlock) {
   constexpr size_t kN = 1024;
   constexpr size_t kSplitN = 512;
 
@@ -259,13 +259,7 @@ TEST(LlvmLibcBlockTest, CanSplitUsedBlock) {
 
   block->mark_used();
   result = block->split(kSplitN);
-  ASSERT_TRUE(result.has_value());
-  Block *new_block = *result;
-
-  EXPECT_TRUE(block->used());
-  EXPECT_FALSE(new_block->used());
-  EXPECT_EQ(block->next(), new_block);
-  EXPECT_EQ(new_block->prev_free(), static_cast<Block *>(nullptr));
+  ASSERT_FALSE(result.has_value());
 }
 
 TEST(LlvmLibcBlockTest, CanMergeWithNextBlock) {

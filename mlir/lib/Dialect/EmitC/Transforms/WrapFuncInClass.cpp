@@ -31,7 +31,7 @@ struct WrapFuncInClassPass
     Operation *rootOp = getOperation();
 
     RewritePatternSet patterns(&getContext());
-    populateWrapFuncInClass(patterns, funcName);
+    populateFuncPatterns(patterns);
 
     walkAndApplyPatterns(rootOp, std::move(patterns));
   }
@@ -43,8 +43,8 @@ struct WrapFuncInClassPass
 
 class WrapFuncInClass : public OpRewritePattern<emitc::FuncOp> {
 public:
-  WrapFuncInClass(MLIRContext *context, StringRef funcName)
-      : OpRewritePattern<emitc::FuncOp>(context), funcName(funcName) {}
+  WrapFuncInClass(MLIRContext *context)
+      : OpRewritePattern<emitc::FuncOp>(context) {}
 
   LogicalResult matchAndRewrite(emitc::FuncOp funcOp,
                                 PatternRewriter &rewriter) const override {
@@ -76,7 +76,7 @@ public:
     FunctionType funcType = funcOp.getFunctionType();
     Location loc = funcOp.getLoc();
     FuncOp newFuncOp =
-        emitc::FuncOp::create(rewriter, loc, (funcName), funcType);
+        emitc::FuncOp::create(rewriter, loc, ("execute"), funcType);
 
     rewriter.createBlock(&newFuncOp.getBody());
     newFuncOp.getBody().takeBody(funcOp.getBody());
@@ -102,14 +102,8 @@ public:
     rewriter.replaceOp(funcOp, newClassOp);
     return success();
   }
-
-private:
-  /// Name of the newly generated member function with body matching the input
-  /// function.
-  std::string funcName;
 };
 
-void mlir::emitc::populateWrapFuncInClass(RewritePatternSet &patterns,
-                                          StringRef funcName) {
-  patterns.add<WrapFuncInClass>(patterns.getContext(), funcName);
+void mlir::emitc::populateFuncPatterns(RewritePatternSet &patterns) {
+  patterns.add<WrapFuncInClass>(patterns.getContext());
 }

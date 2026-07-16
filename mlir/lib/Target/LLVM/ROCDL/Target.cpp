@@ -19,7 +19,6 @@
 #include "mlir/Target/LLVM/ROCDL/Utils.h"
 #include "mlir/Target/LLVMIR/Export.h"
 
-#include "llvm/Config/Targets.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
@@ -39,7 +38,7 @@
 #include "llvm/Support/Program.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
-#include "llvm/TargetParser/AMDGPUTargetParser.h"
+#include "llvm/TargetParser/TargetParser.h"
 
 #include <cstdlib>
 #include <optional>
@@ -56,12 +55,12 @@ namespace {
 class ROCDLTargetAttrImpl
     : public gpu::TargetAttrInterface::FallbackModel<ROCDLTargetAttrImpl> {
 public:
-  std::optional<mlir::gpu::SerializedObject>
+  std::optional<SmallVector<char, 0>>
   serializeToObject(Attribute attribute, Operation *module,
                     const gpu::TargetOptions &options) const;
 
   Attribute createObject(Attribute attribute, Operation *module,
-                         const mlir::gpu::SerializedObject &object,
+                         const SmallVector<char, 0> &object,
                          const gpu::TargetOptions &options) const;
 };
 } // namespace
@@ -113,7 +112,7 @@ void SerializeGPUModuleBase::init() {
   static llvm::once_flag initializeBackendOnce;
   llvm::call_once(initializeBackendOnce, []() {
   // If the `AMDGPU` LLVM target was built, initialize it.
-#if LLVM_HAS_AMDGPU_TARGET
+#if MLIR_ENABLE_ROCM_CONVERSIONS
     LLVMInitializeAMDGPUTarget();
     LLVMInitializeAMDGPUTargetInfo();
     LLVMInitializeAMDGPUTargetMC();
@@ -303,7 +302,8 @@ mlir::ROCDL::assembleIsa(StringRef isa, StringRef targetTriple, StringRef chip,
   std::unique_ptr<llvm::MCSubtargetInfo> sti(
       target->createMCSubtargetInfo(triple, chip, features));
 
-  llvm::MCContext ctx(triple, *mai, *mri, *sti, &srcMgr);
+  llvm::MCContext ctx(triple, mai.get(), mri.get(), sti.get(), &srcMgr,
+                      &mcOptions);
   std::unique_ptr<llvm::MCObjectFileInfo> mofi(target->createMCObjectFileInfo(
       ctx, /*PIC=*/false, /*LargeCodeModel=*/false));
   ctx.setObjectFileInfo(mofi.get());
@@ -325,7 +325,7 @@ mlir::ROCDL::assembleIsa(StringRef isa, StringRef targetTriple, StringRef chip,
   std::unique_ptr<llvm::MCAsmParser> parser(
       createMCAsmParser(srcMgr, ctx, *mcStreamer, *mai));
   std::unique_ptr<llvm::MCTargetAsmParser> tap(
-      target->createMCAsmParser(*sti, *parser, *mcii));
+      target->createMCAsmParser(*sti, *parser, *mcii, mcOptions));
 
   if (!tap)
     return emitError() << "assembler initialization error";
@@ -336,7 +336,7 @@ mlir::ROCDL::assembleIsa(StringRef isa, StringRef targetTriple, StringRef chip,
 }
 
 FailureOr<SmallVector<char, 0>>
-mlir::ROCDL::linkObjectCode(ArrayRef<char> objectCode, StringRef lldPath,
+mlir::ROCDL::linkObjectCode(ArrayRef<char> objectCode, StringRef toolkitPath,
                             function_ref<InFlightDiagnostic()> emitError) {
   // Save the ISA binary to a temp file.
   int tempIsaBinaryFd = -1;
@@ -361,6 +361,8 @@ mlir::ROCDL::linkObjectCode(ArrayRef<char> objectCode, StringRef lldPath,
 
   llvm::FileRemover cleanupHsaco(tempHsacoFilename);
 
+  llvm::SmallString<128> lldPath(toolkitPath);
+  llvm::sys::path::append(lldPath, "llvm", "bin", "ld.lld");
   int lldResult = llvm::sys::ExecuteAndWait(
       lldPath,
       {"ld.lld", "-shared", tempIsaBinaryFilename, "-o", tempHsacoFilename});
@@ -390,10 +392,8 @@ SerializeGPUModuleBase::compileToBinary(StringRef serializedISA) {
     return failure();
 
   // Link the object code.
-  llvm::SmallString<128> lldPath(toolkitPath);
-  llvm::sys::path::append(lldPath, "llvm", "bin", "ld.lld");
   FailureOr<SmallVector<char, 0>> linkedCode =
-      ROCDL::linkObjectCode(*isaBinary, lldPath, errCallback);
+      ROCDL::linkObjectCode(*isaBinary, toolkitPath, errCallback);
   if (failed(linkedCode))
     return failure();
 
@@ -446,7 +446,7 @@ FailureOr<SmallVector<char, 0>> SerializeGPUModuleBase::moduleToObjectImpl(
   return compileToBinary(*serializedISA);
 }
 
-#if LLVM_HAS_AMDGPU_TARGET
+#if MLIR_ENABLE_ROCM_CONVERSIONS
 namespace {
 class AMDGPUSerializer : public SerializeGPUModuleBase {
 public:
@@ -471,10 +471,9 @@ FailureOr<SmallVector<char, 0>>
 AMDGPUSerializer::moduleToObject(llvm::Module &llvmModule) {
   return moduleToObjectImpl(targetOptions, llvmModule);
 }
-#endif // LLVM_HAS_AMDGPU_TARGET
+#endif // MLIR_ENABLE_ROCM_CONVERSIONS
 
-std::optional<mlir::gpu::SerializedObject>
-ROCDLTargetAttrImpl::serializeToObject(
+std::optional<SmallVector<char, 0>> ROCDLTargetAttrImpl::serializeToObject(
     Attribute attribute, Operation *module,
     const gpu::TargetOptions &options) const {
   assert(module && "The module must be non null.");
@@ -484,24 +483,21 @@ ROCDLTargetAttrImpl::serializeToObject(
     module->emitError("module must be a GPU module");
     return std::nullopt;
   }
-#if LLVM_HAS_AMDGPU_TARGET
+#if MLIR_ENABLE_ROCM_CONVERSIONS
   AMDGPUSerializer serializer(*module, cast<ROCDLTargetAttr>(attribute),
                               options);
   serializer.init();
-  std::optional<SmallVector<char, 0>> binary = serializer.run();
-  if (!binary)
-    return std::nullopt;
-  return gpu::SerializedObject{std::move(*binary)};
+  return serializer.run();
 #else
   module->emitError("the `AMDGPU` target was not built. Please enable it when "
                     "building LLVM");
   return std::nullopt;
-#endif // LLVM_HAS_AMDGPU_TARGET
+#endif // MLIR_ENABLE_ROCM_CONVERSIONS
 }
 
 Attribute
 ROCDLTargetAttrImpl::createObject(Attribute attribute, Operation *module,
-                                  const mlir::gpu::SerializedObject &object,
+                                  const SmallVector<char, 0> &object,
                                   const gpu::TargetOptions &options) const {
   gpu::CompilationTarget format = options.getCompilationTarget();
   // If format is `fatbin` transform it to binary as `fatbin` is not yet
@@ -509,12 +505,12 @@ ROCDLTargetAttrImpl::createObject(Attribute attribute, Operation *module,
   gpu::KernelTableAttr kernels;
   if (format > gpu::CompilationTarget::Binary) {
     format = gpu::CompilationTarget::Binary;
-    kernels = ROCDL::getKernelMetadata(module, object.getObject());
+    kernels = ROCDL::getKernelMetadata(module, object);
   }
   DictionaryAttr properties{};
   Builder builder(attribute.getContext());
-  StringAttr objectStr = builder.getStringAttr(
-      StringRef(object.getObject().data(), object.getObject().size()));
+  StringAttr objectStr =
+      builder.getStringAttr(StringRef(object.data(), object.size()));
   return builder.getAttr<gpu::ObjectAttr>(attribute, format, objectStr,
                                           properties, kernels);
 }

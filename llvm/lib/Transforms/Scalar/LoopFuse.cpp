@@ -53,6 +53,7 @@
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/ScalarEvolution.h"
+#include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Verifier.h"
@@ -71,11 +72,15 @@ using namespace llvm;
 
 STATISTIC(FuseCounter, "Loops fused");
 STATISTIC(NumFusionCandidates, "Number of candidates for loop fusion");
-STATISTIC(InvalidLoopStructure, "Loop has invalid structure");
+STATISTIC(InvalidPreheader, "Loop has invalid preheader");
+STATISTIC(InvalidHeader, "Loop has invalid header");
+STATISTIC(InvalidExitingBlock, "Loop has invalid exiting blocks");
+STATISTIC(InvalidExitBlock, "Loop has invalid exit block");
+STATISTIC(InvalidLatch, "Loop has invalid latch");
+STATISTIC(InvalidLoop, "Loop is invalid");
 STATISTIC(AddressTakenBB, "Basic block has address taken");
 STATISTIC(MayThrowException, "Loop may throw an exception");
 STATISTIC(ContainsVolatileAccess, "Loop contains a volatile access");
-STATISTIC(ContainsAtomicAccess, "Loop contains an atomic access");
 STATISTIC(NotSimplifiedForm, "Loop is not in simplified form");
 STATISTIC(InvalidDependencies, "Dependencies prevent fusion");
 STATISTIC(UnknownTripCount, "Loop has unknown trip count");
@@ -94,10 +99,27 @@ STATISTIC(NotRotated, "Candidate is not rotated");
 STATISTIC(OnlySecondCandidateIsGuarded,
           "The second candidate is guarded while the first one is not");
 STATISTIC(NumHoistedInsts, "Number of hoisted preheader instructions.");
-STATISTIC(NumSunkInsts, "Number of sunk preheader instructions.");
+STATISTIC(NumSunkInsts, "Number of hoisted preheader instructions.");
 STATISTIC(NumDA, "DA checks passed");
 
-static cl::opt<uint32_t> FusionPeelMaxCount(
+enum FusionDependenceAnalysisChoice {
+  FUSION_DEPENDENCE_ANALYSIS_SCEV,
+  FUSION_DEPENDENCE_ANALYSIS_DA,
+  FUSION_DEPENDENCE_ANALYSIS_ALL,
+};
+
+static cl::opt<FusionDependenceAnalysisChoice> FusionDependenceAnalysis(
+    "loop-fusion-dependence-analysis",
+    cl::desc("Which dependence analysis should loop fusion use?"),
+    cl::values(clEnumValN(FUSION_DEPENDENCE_ANALYSIS_SCEV, "scev",
+                          "Use the scalar evolution interface"),
+               clEnumValN(FUSION_DEPENDENCE_ANALYSIS_DA, "da",
+                          "Use the dependence analysis interface"),
+               clEnumValN(FUSION_DEPENDENCE_ANALYSIS_ALL, "all",
+                          "Use all available analyses")),
+    cl::Hidden, cl::init(FUSION_DEPENDENCE_ANALYSIS_ALL));
+
+static cl::opt<unsigned> FusionPeelMaxCount(
     "loop-fusion-peel-max-count", cl::init(0), cl::Hidden,
     cl::desc("Max number of iterations to be peeled from a loop, such that "
              "fusion can take place"));
@@ -144,7 +166,7 @@ struct FusionCandidate {
   /// Are all of the members of this fusion candidate still valid
   bool Valid;
   /// Guard branch of the loop, if it exists
-  CondBrInst *GuardBranch;
+  BranchInst *GuardBranch;
   /// Peeling Paramaters of the Loop.
   TTI::PeelingPreferences PP;
   /// Can you Peel this Loop?
@@ -182,18 +204,19 @@ struct FusionCandidate {
           reportInvalidCandidate(MayThrowException);
           return;
         }
-        if (I.isVolatile()) {
-          invalidate();
-          reportInvalidCandidate(ContainsVolatileAccess);
-          return;
+        if (StoreInst *SI = dyn_cast<StoreInst>(&I)) {
+          if (SI->isVolatile()) {
+            invalidate();
+            reportInvalidCandidate(ContainsVolatileAccess);
+            return;
+          }
         }
-        // Atomic accesses impose ordering/synchronization constraints that the
-        // dependence analysis used for fusion does not model, so reordering
-        // them across the fused body could be unsafe.
-        if (I.isAtomic()) {
-          invalidate();
-          reportInvalidCandidate(ContainsAtomicAccess);
-          return;
+        if (LoadInst *LI = dyn_cast<LoadInst>(&I)) {
+          if (LI->isVolatile()) {
+            invalidate();
+            reportInvalidCandidate(ContainsVolatileAccess);
+            return;
+          }
         }
         if (I.mayWriteToMemory())
           MemWrites.push_back(&I);
@@ -205,7 +228,7 @@ struct FusionCandidate {
 
   /// Check if all members of the class are valid.
   bool isValid() const {
-    return Preheader && ExitingBlock && ExitBlock && Latch && L &&
+    return Preheader && Header && ExitingBlock && ExitBlock && Latch && L &&
            !L->isInvalid() && Valid;
   }
 
@@ -229,7 +252,8 @@ struct FusionCandidate {
   BasicBlock *getEntryBlock() const {
     if (GuardBranch)
       return GuardBranch->getParent();
-    return Preheader;
+    else
+      return Preheader;
   }
 
   /// After Peeling the loop is modified quite a bit, hence all of the Blocks
@@ -252,6 +276,8 @@ struct FusionCandidate {
   /// This method is only valid for guarded loops.
   BasicBlock *getNonLoopBlock() const {
     assert(GuardBranch && "Only valid on guarded loops.");
+    assert(GuardBranch->isConditional() &&
+           "Expecting guard to be a conditional branch.");
     if (Peeled)
       return GuardBranch->getSuccessor(1);
     return (GuardBranch->getSuccessor(0) == Preheader)
@@ -288,8 +314,19 @@ struct FusionCandidate {
   bool isEligibleForFusion(ScalarEvolution &SE) const {
     if (!isValid()) {
       LLVM_DEBUG(dbgs() << "FC has invalid CFG requirements!\n");
-      assert(Header && "Header should be guaranteed to exist!");
-      ++InvalidLoopStructure;
+      if (!Preheader)
+        ++InvalidPreheader;
+      if (!Header)
+        ++InvalidHeader;
+      if (!ExitingBlock)
+        ++InvalidExitingBlock;
+      if (!ExitBlock)
+        ++InvalidExitBlock;
+      if (!Latch)
+        ++InvalidLatch;
+      if (L->isInvalid())
+        ++InvalidLoop;
+
       return false;
     }
 
@@ -329,15 +366,12 @@ private:
 
   bool reportInvalidCandidate(Statistic &Stat) const {
     using namespace ore;
-    ORE.emit(OptimizationRemarkAnalysis(DEBUG_TYPE, "InvalidCandidate",
-                                        L->getStartLoc(), L->getHeader())
-             << "Loop is not a candidate for fusion");
-
+    assert(L && Preheader && "Fusion candidate not initialized properly!");
 #if LLVM_ENABLE_STATS
     ++Stat;
     ORE.emit(OptimizationRemarkAnalysis(DEBUG_TYPE, Stat.getName(),
-                                        L->getStartLoc(), L->getHeader())
-             << "[" << L->getHeader()->getParent()->getName() << "]: "
+                                        L->getStartLoc(), Preheader)
+             << "[" << Preheader->getParent()->getName() << "]: "
              << "Loop is not a candidate for fusion: " << Stat.getDesc());
 #endif
     return false;
@@ -470,8 +504,8 @@ private:
 public:
   LoopFuser(LoopInfo &LI, DominatorTree &DT, DependenceInfo &DI,
             ScalarEvolution &SE, PostDominatorTree &PDT,
-            OptimizationRemarkEmitter &ORE, AssumptionCache &AC,
-            const TargetTransformInfo &TTI)
+            OptimizationRemarkEmitter &ORE, const DataLayout &DL,
+            AssumptionCache &AC, const TargetTransformInfo &TTI)
       : LDT(LI), DTU(DT, PDT, DomTreeUpdater::UpdateStrategy::Lazy), LI(LI),
         DT(DT), DI(DI), SE(SE), PDT(PDT), ORE(ORE), AC(AC), TTI(TTI) {}
 
@@ -511,15 +545,17 @@ public:
 
         collectFusionCandidates(LV);
         Changed |= fuseCandidates();
-        // All loops in the candidate sets have a common parent (or no parent).
-        // Next loop vector will correspond to a different parent. It is safe
-        // to remove all the candidates currently in the set.
-        FusionCandidates.clear();
       }
 
-      // Finished analyzing candidates at this level. Descend to the next level.
+      // Finished analyzing candidates at this level.
+      // Descend to the next level and clear all of the candidates currently
+      // collected. Note that it will not be possible to fuse any of the
+      // existing candidates with new candidates because the new candidates will
+      // be at a different nest level and thus not be control flow equivalent
+      // with all of the candidates collected so far.
       LLVM_DEBUG(dbgs() << "Descend one level!\n");
       LDT.descend();
+      FusionCandidates.clear();
     }
 
     if (Changed)
@@ -555,10 +591,18 @@ private:
       // FusionCandidates.
       bool FoundAdjacent = false;
       for (auto &CurrCandList : FusionCandidates) {
-        if (isStrictlyAdjacent(CurrCandList.back(), CurrCand)) {
+        if (isStrictlyAdjacent(CurrCand, CurrCandList.front())) {
+          CurrCandList.push_front(CurrCand);
+          FoundAdjacent = true;
+#ifndef NDEBUG
+          if (VerboseFusionDebugging)
+            LLVM_DEBUG(dbgs() << "Adding " << CurrCand
+                              << " to existing candidate list\n");
+#endif
+          break;
+        } else if (isStrictlyAdjacent(CurrCandList.back(), CurrCand)) {
           CurrCandList.push_back(CurrCand);
           FoundAdjacent = true;
-          NumFusionCandidates++;
 #ifndef NDEBUG
           if (VerboseFusionDebugging)
             LLVM_DEBUG(dbgs() << "Adding " << CurrCand
@@ -577,6 +621,7 @@ private:
         NewCandList.push_back(CurrCand);
         FusionCandidates.push_back(NewCandList);
       }
+      NumFusionCandidates++;
     }
   }
 
@@ -590,26 +635,29 @@ private:
     return true;
   }
 
-  /// Computes the integer difference in trip counts:
-  /// TripCount(FC0) - TripCount(FC1).
+  /// Determine if two fusion candidates have the same trip count (i.e., they
+  /// execute the same number of iterations).
   ///
-  /// \returns The integer difference, or std::nullopt if it
-  ///          cannot be determined.
-  std::optional<int64_t>
-  calculateTripCountDiff(const FusionCandidate &FC0,
-                         const FusionCandidate &FC1) const {
+  /// This function will return a pair of values. The first is a boolean,
+  /// stating whether or not the two candidates are known at compile time to
+  /// have the same TripCount. The second is the difference in the two
+  /// TripCounts. This information can be used later to determine whether or not
+  /// peeling can be performed on either one of the candidates.
+  std::pair<bool, std::optional<unsigned>>
+  haveIdenticalTripCounts(const FusionCandidate &FC0,
+                          const FusionCandidate &FC1) const {
     const SCEV *TripCount0 = SE.getBackedgeTakenCount(FC0.L);
     if (isa<SCEVCouldNotCompute>(TripCount0)) {
       UncomputableTripCount++;
       LLVM_DEBUG(dbgs() << "Trip count of first loop could not be computed!");
-      return std::nullopt;
+      return {false, std::nullopt};
     }
 
     const SCEV *TripCount1 = SE.getBackedgeTakenCount(FC1.L);
     if (isa<SCEVCouldNotCompute>(TripCount1)) {
       UncomputableTripCount++;
       LLVM_DEBUG(dbgs() << "Trip count of second loop could not be computed!");
-      return std::nullopt;
+      return {false, std::nullopt};
     }
 
     LLVM_DEBUG(dbgs() << "\tTrip counts: " << *TripCount0 << " & "
@@ -618,19 +666,15 @@ private:
                       << "\n");
 
     if (TripCount0 == TripCount1)
-      return 0;
+      return {true, 0};
 
     LLVM_DEBUG(dbgs() << "The loops do not have the same tripcount, "
                          "determining the difference between trip counts\n");
 
     // Currently only considering loops with a single exit point
-    // and a non-constant trip count. Note that the return value
-    // of getSmallConstantTripCount is a 32 bit number, based on
-    // the existing implementation.
-    const int64_t TC0 =
-        static_cast<int64_t>(SE.getSmallConstantTripCount(FC0.L));
-    const int64_t TC1 =
-        static_cast<int64_t>(SE.getSmallConstantTripCount(FC1.L));
+    // and a non-constant trip count.
+    const unsigned TC0 = SE.getSmallConstantTripCount(FC0.L);
+    const unsigned TC1 = SE.getSmallConstantTripCount(FC1.L);
 
     // If any of the tripcounts are zero that means that loop(s) do not have
     // a single exit or a constant tripcount.
@@ -638,10 +682,24 @@ private:
       LLVM_DEBUG(dbgs() << "Loop(s) do not have a single exit point or do not "
                            "have a constant number of iterations. Peeling "
                            "is not benefical\n");
-      return std::nullopt;
+      return {false, std::nullopt};
     }
 
-    return TC0 - TC1;
+    std::optional<unsigned> Difference;
+    int Diff = TC0 - TC1;
+
+    if (Diff > 0)
+      Difference = Diff;
+    else {
+      LLVM_DEBUG(
+          dbgs() << "Difference is less than 0. FC1 (second loop) has more "
+                    "iterations than the first one. Currently not supported\n");
+    }
+
+    LLVM_DEBUG(dbgs() << "Difference in loop trip count is: " << Difference
+                      << "\n");
+
+    return {false, Difference};
   }
 
   void peelFusionCandidate(FusionCandidate &FC0, const FusionCandidate &FC1,
@@ -652,64 +710,62 @@ private:
                       << " iterations of the first loop. \n");
 
     ValueToValueMapTy VMap;
-    // LoopFusion is a function pass that neither requires nor preserves
-    // LCSSA, so peelLoop need not preserve it across its internal
-    // simplifyLoop call.
-    peelLoop(FC0.L, PeelCount, /*PeelLast=*/false, &LI, &SE, DT, &AC,
-             /*PreserveLCSSA=*/false, VMap);
-    FC0.Peeled = true;
-    LLVM_DEBUG(dbgs() << "Done Peeling\n");
+    FC0.Peeled =
+        peelLoop(FC0.L, PeelCount, false, &LI, &SE, DT, &AC, true, VMap);
+    if (FC0.Peeled) {
+      LLVM_DEBUG(dbgs() << "Done Peeling\n");
 
 #ifndef NDEBUG
-    auto TCDiff = calculateTripCountDiff(FC0, FC1);
+      auto IdenticalTripCount = haveIdenticalTripCounts(FC0, FC1);
 
-    assert(TCDiff && *TCDiff == 0 &&
-           "Loops should have identical trip counts after peeling");
+      assert(IdenticalTripCount.first && *IdenticalTripCount.second == 0 &&
+             "Loops should have identical trip counts after peeling");
 #endif
 
-    FC0.PP.PeelCount += PeelCount;
+      FC0.PP.PeelCount += PeelCount;
 
-    // Peeling does not update the PDT
-    PDT.recalculate(*FC0.Preheader->getParent());
+      // Peeling does not update the PDT
+      PDT.recalculate(*FC0.Preheader->getParent());
 
-    FC0.updateAfterPeeling();
+      FC0.updateAfterPeeling();
 
-    // In this case the iterations of the loop are constant, so the first
-    // loop will execute completely (will not jump from one of
-    // the peeled blocks to the second loop). Here we are updating the
-    // branch conditions of each of the peeled blocks, such that it will
-    // branch to its successor which is not the preheader of the second loop
-    // in the case of unguarded loops, or the succesors of the exit block of
-    // the first loop otherwise. Doing this update will ensure that the entry
-    // block of the first loop dominates the entry block of the second loop.
-    BasicBlock *BB =
-        FC0.GuardBranch ? FC0.ExitBlock->getUniqueSuccessor() : FC1.Preheader;
-    if (BB) {
-      SmallVector<DominatorTree::UpdateType, 8> TreeUpdates;
-      SmallVector<Instruction *, 8> WorkList;
-      for (BasicBlock *Pred : predecessors(BB)) {
-        if (Pred != FC0.ExitBlock) {
-          WorkList.emplace_back(Pred->getTerminator());
-          TreeUpdates.emplace_back(
-              DominatorTree::UpdateType(DominatorTree::Delete, Pred, BB));
+      // In this case the iterations of the loop are constant, so the first
+      // loop will execute completely (will not jump from one of
+      // the peeled blocks to the second loop). Here we are updating the
+      // branch conditions of each of the peeled blocks, such that it will
+      // branch to its successor which is not the preheader of the second loop
+      // in the case of unguarded loops, or the succesors of the exit block of
+      // the first loop otherwise. Doing this update will ensure that the entry
+      // block of the first loop dominates the entry block of the second loop.
+      BasicBlock *BB =
+          FC0.GuardBranch ? FC0.ExitBlock->getUniqueSuccessor() : FC1.Preheader;
+      if (BB) {
+        SmallVector<DominatorTree::UpdateType, 8> TreeUpdates;
+        SmallVector<Instruction *, 8> WorkList;
+        for (BasicBlock *Pred : predecessors(BB)) {
+          if (Pred != FC0.ExitBlock) {
+            WorkList.emplace_back(Pred->getTerminator());
+            TreeUpdates.emplace_back(
+                DominatorTree::UpdateType(DominatorTree::Delete, Pred, BB));
+          }
         }
-      }
-      // Cannot modify the predecessors inside the above loop as it will cause
-      // the iterators to be nullptrs, causing memory errors.
-      for (Instruction *CurrentBranch : WorkList) {
-        BasicBlock *Succ = CurrentBranch->getSuccessor(0);
-        if (Succ == BB)
-          Succ = CurrentBranch->getSuccessor(1);
-        ReplaceInstWithInst(CurrentBranch, UncondBrInst::Create(Succ));
-      }
+        // Cannot modify the predecessors inside the above loop as it will cause
+        // the iterators to be nullptrs, causing memory errors.
+        for (Instruction *CurrentBranch : WorkList) {
+          BasicBlock *Succ = CurrentBranch->getSuccessor(0);
+          if (Succ == BB)
+            Succ = CurrentBranch->getSuccessor(1);
+          ReplaceInstWithInst(CurrentBranch, BranchInst::Create(Succ));
+        }
 
-      DTU.applyUpdates(TreeUpdates);
-      DTU.flush();
+        DTU.applyUpdates(TreeUpdates);
+        DTU.flush();
+      }
+      LLVM_DEBUG(
+          dbgs() << "Sucessfully peeled " << FC0.PP.PeelCount
+                 << " iterations from the first loop.\n"
+                    "Both Loops have the same number of iterations now.\n");
     }
-    LLVM_DEBUG(
-        dbgs() << "Sucessfully peeled " << FC0.PP.PeelCount
-               << " iterations from the first loop.\n"
-                  "Both Loops have the same number of iterations now.\n");
   }
 
   /// Walk each set of strictly adjacent fusion candidates and attempt to fuse
@@ -746,19 +802,34 @@ private:
         FC0.verify();
         FC1.verify();
 
-        std::optional<int64_t> TCDifference = calculateTripCountDiff(FC0, FC1);
-        // Here we are checking that FC0 (the first loop) can be peeled, and
-        // the first loop has a larger trip count. In this case it is possible
-        // that the first loop is peeled to expose the fusion opportunity.
-        // Peeling the second loop is not currently supported.
-        bool WillPeel =
-            FC0.AbleToPeel && TCDifference && *TCDifference > 0 &&
-            *TCDifference <= static_cast<int64_t>(FusionPeelMaxCount);
+        // Check if the candidates have identical tripcounts (first value of
+        // pair), and if not check the difference in the tripcounts between
+        // the loops (second value of pair). The difference is not equal to
+        // std::nullopt iff the loops iterate a constant number of times, and
+        // have a single exit.
+        std::pair<bool, std::optional<unsigned>> IdenticalTripCountRes =
+            haveIdenticalTripCounts(FC0, FC1);
+        bool SameTripCount = IdenticalTripCountRes.first;
+        std::optional<unsigned> TCDifference = IdenticalTripCountRes.second;
 
-        if (!WillPeel && (!TCDifference || *TCDifference != 0)) {
+        // Here we are checking that FC0 (the first loop) can be peeled, and
+        // both loops have different tripcounts.
+        if (FC0.AbleToPeel && !SameTripCount && TCDifference) {
+          if (*TCDifference > FusionPeelMaxCount) {
+            LLVM_DEBUG(dbgs()
+                       << "Difference in loop trip counts: " << *TCDifference
+                       << " is greater than maximum peel count specificed: "
+                       << FusionPeelMaxCount << "\n");
+          } else {
+            // Dependent on peeling being performed on the first loop, and
+            // assuming all other conditions for fusion return true.
+            SameTripCount = true;
+          }
+        }
+
+        if (!SameTripCount) {
           LLVM_DEBUG(dbgs() << "Fusion candidates do not have identical trip "
-                               "counts and peeling is not supported for this "
-                               "case. Not fusing.\n");
+                               "counts. Not fusing.\n");
           reportLoopFusion<OptimizationRemarkMissed>(FC0, FC1,
                                                      NonEqualTripCount);
           continue;
@@ -773,18 +844,15 @@ private:
           continue;
         }
 
-        // If TCDifference is not set or if it is zero, peeling is not needed.
-        // In this case we must ensure if the loops are guarded the guards
-        // are identical.
-        if (!TCDifference || *TCDifference == 0) {
-          if (FC0.GuardBranch && FC1.GuardBranch &&
-              !haveIdenticalGuards(FC0, FC1)) {
-            LLVM_DEBUG(dbgs() << "Fusion candidates do not have identical "
-                                 "guards. Not Fusing.\n");
-            reportLoopFusion<OptimizationRemarkMissed>(FC0, FC1,
-                                                       NonIdenticalGuards);
-            continue;
-          }
+        // Ensure that FC0 and FC1 have identical guards.
+        // If one (or both) are not guarded, this check is not necessary.
+        if (FC0.GuardBranch && FC1.GuardBranch &&
+            !haveIdenticalGuards(FC0, FC1) && !TCDifference) {
+          LLVM_DEBUG(dbgs() << "Fusion candidates do not have identical "
+                               "guards. Not Fusing.\n");
+          reportLoopFusion<OptimizationRemarkMissed>(FC0, FC1,
+                                                     NonIdenticalGuards);
+          continue;
         }
 
         if (FC0.GuardBranch) {
@@ -1015,6 +1083,28 @@ private:
     return true;
   }
 
+  /// This function fixes PHI nodes after fusion in \p SafeToSink.
+  /// \p SafeToSink instructions are the instructions that are to be moved past
+  /// the fused loop. Thus, the PHI nodes in \p SafeToSink should be updated to
+  /// receive values from the fused loop if they are currently taking values
+  /// from the first loop (i.e. FC0)'s latch.
+  void fixPHINodes(ArrayRef<Instruction *> SafeToSink,
+                   const FusionCandidate &FC0,
+                   const FusionCandidate &FC1) const {
+    for (Instruction *Inst : SafeToSink) {
+      // No update needed for non-PHI nodes.
+      PHINode *Phi = dyn_cast<PHINode>(Inst);
+      if (!Phi)
+        continue;
+      for (unsigned I = 0; I < Phi->getNumIncomingValues(); I++) {
+        if (Phi->getIncomingBlock(I) != FC0.Latch)
+          continue;
+        assert(FC1.Latch && "FC1 latch is not set");
+        Phi->setIncomingBlock(I, FC1.Latch);
+      }
+    }
+  }
+
   /// Collect instructions in the \p FC1 Preheader that can be hoisted
   /// to the \p FC0 Preheader or sunk into the \p FC1 Body
   bool collectMovablePreheaderInsts(
@@ -1068,88 +1158,184 @@ private:
     return true;
   }
 
+  /// Rewrite all additive recurrences in a SCEV to use a new loop.
+  class AddRecLoopReplacer : public SCEVRewriteVisitor<AddRecLoopReplacer> {
+  public:
+    AddRecLoopReplacer(ScalarEvolution &SE, const Loop &OldL, const Loop &NewL,
+                       bool UseMax = true)
+        : SCEVRewriteVisitor(SE), Valid(true), UseMax(UseMax), OldL(OldL),
+          NewL(NewL) {}
+
+    const SCEV *visitAddRecExpr(const SCEVAddRecExpr *Expr) {
+      const Loop *ExprL = Expr->getLoop();
+      SmallVector<const SCEV *, 2> Operands;
+      if (ExprL == &OldL) {
+        append_range(Operands, Expr->operands());
+        return SE.getAddRecExpr(Operands, &NewL, Expr->getNoWrapFlags());
+      }
+
+      if (OldL.contains(ExprL)) {
+        bool Pos = SE.isKnownPositive(Expr->getStepRecurrence(SE));
+        if (!UseMax || !Pos || !Expr->isAffine()) {
+          Valid = false;
+          return Expr;
+        }
+        return visit(Expr->getStart());
+      }
+
+      for (const SCEV *Op : Expr->operands())
+        Operands.push_back(visit(Op));
+      return SE.getAddRecExpr(Operands, ExprL, Expr->getNoWrapFlags());
+    }
+
+    bool wasValidSCEV() const { return Valid; }
+
+  private:
+    bool Valid, UseMax;
+    const Loop &OldL, &NewL;
+  };
+
+  /// Return false if the access functions of \p I0 and \p I1 could cause
+  /// a negative dependence.
+  bool accessDiffIsPositive(const Loop &L0, const Loop &L1, Instruction &I0,
+                            Instruction &I1, bool EqualIsInvalid) {
+    Value *Ptr0 = getLoadStorePointerOperand(&I0);
+    Value *Ptr1 = getLoadStorePointerOperand(&I1);
+    if (!Ptr0 || !Ptr1)
+      return false;
+
+    const SCEV *SCEVPtr0 = SE.getSCEVAtScope(Ptr0, &L0);
+    const SCEV *SCEVPtr1 = SE.getSCEVAtScope(Ptr1, &L1);
+#ifndef NDEBUG
+    if (VerboseFusionDebugging)
+      LLVM_DEBUG(dbgs() << "    Access function check: " << *SCEVPtr0 << " vs "
+                        << *SCEVPtr1 << "\n");
+#endif
+    AddRecLoopReplacer Rewriter(SE, L0, L1);
+    SCEVPtr0 = Rewriter.visit(SCEVPtr0);
+#ifndef NDEBUG
+    if (VerboseFusionDebugging)
+      LLVM_DEBUG(dbgs() << "    Access function after rewrite: " << *SCEVPtr0
+                        << " [Valid: " << Rewriter.wasValidSCEV() << "]\n");
+#endif
+    if (!Rewriter.wasValidSCEV())
+      return false;
+
+    // TODO: isKnownPredicate doesnt work well when one SCEV is loop carried (by
+    //       L0) and the other is not. We could check if it is monotone and test
+    //       the beginning and end value instead.
+
+    BasicBlock *L0Header = L0.getHeader();
+    auto HasNonLinearDominanceRelation = [&](const SCEV *S) {
+      const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(S);
+      if (!AddRec)
+        return false;
+      return !DT.dominates(L0Header, AddRec->getLoop()->getHeader()) &&
+             !DT.dominates(AddRec->getLoop()->getHeader(), L0Header);
+    };
+    if (SCEVExprContains(SCEVPtr1, HasNonLinearDominanceRelation))
+      return false;
+
+    ICmpInst::Predicate Pred =
+        EqualIsInvalid ? ICmpInst::ICMP_SGT : ICmpInst::ICMP_SGE;
+    bool IsAlwaysGE = SE.isKnownPredicate(Pred, SCEVPtr0, SCEVPtr1);
+#ifndef NDEBUG
+    if (VerboseFusionDebugging)
+      LLVM_DEBUG(dbgs() << "    Relation: " << *SCEVPtr0
+                        << (IsAlwaysGE ? "  >=  " : "  may <  ") << *SCEVPtr1
+                        << "\n");
+#endif
+    return IsAlwaysGE;
+  }
+
   /// Return true if the dependences between @p I0 (in @p L0) and @p I1 (in
-  /// @p L1) allow loop fusion of @p L0 and @p L1.
+  /// @p L1) allow loop fusion of @p L0 and @p L1. The dependence analyses
+  /// specified by @p DepChoice are used to determine this.
   bool dependencesAllowFusion(const FusionCandidate &FC0,
                               const FusionCandidate &FC1, Instruction &I0,
-                              Instruction &I1) {
+                              Instruction &I1, bool AnyDep,
+                              FusionDependenceAnalysisChoice DepChoice) {
 #ifndef NDEBUG
     if (VerboseFusionDebugging) {
-      LLVM_DEBUG(dbgs() << "Check dep: " << I0 << " vs " << I1 << "\n");
+      LLVM_DEBUG(dbgs() << "Check dep: " << I0 << " vs " << I1 << " : "
+                        << DepChoice << "\n");
     }
 #endif
-    auto DepResult = DI.depends(&I0, &I1);
-    if (!DepResult)
-      return true;
+    switch (DepChoice) {
+    case FUSION_DEPENDENCE_ANALYSIS_SCEV:
+      return accessDiffIsPositive(*FC0.L, *FC1.L, I0, I1, AnyDep);
+    case FUSION_DEPENDENCE_ANALYSIS_DA: {
+      auto DepResult = DI.depends(&I0, &I1);
+      if (!DepResult)
+        return true;
 #ifndef NDEBUG
-    if (VerboseFusionDebugging) {
-      LLVM_DEBUG(dbgs() << "DA res: "; DepResult->dump(dbgs());
-                 dbgs() << " [#l: " << DepResult->getLevels() << "][Ordered: "
-                        << (DepResult->isOrdered() ? "true" : "false")
-                        << "]\n");
-      LLVM_DEBUG(dbgs() << "DepResult Levels: " << DepResult->getLevels()
-                        << "\n");
-    }
+      if (VerboseFusionDebugging) {
+        LLVM_DEBUG(dbgs() << "DA res: "; DepResult->dump(dbgs());
+                   dbgs() << " [#l: " << DepResult->getLevels() << "][Ordered: "
+                          << (DepResult->isOrdered() ? "true" : "false")
+                          << "]\n");
+        LLVM_DEBUG(dbgs() << "DepResult Levels: " << DepResult->getLevels()
+                          << "\n");
+      }
 #endif
-    unsigned Levels = DepResult->getLevels();
-    unsigned SameSDLevels = DepResult->getSameSDLevels();
-    unsigned CurLoopLevel = FC0.L->getLoopDepth();
+      unsigned Levels = DepResult->getLevels();
+      unsigned SameSDLevels = DepResult->getSameSDLevels();
+      unsigned CurLoopLevel = FC0.L->getLoopDepth();
 
-    // Check if DA is missing info regarding the current loop level
-    if (CurLoopLevel > Levels + SameSDLevels)
-      return false;
+      // Check if DA is missing info regarding the current loop level
+      if (CurLoopLevel > Levels + SameSDLevels)
+        return false;
 
-    // Iterating over the outer levels.
-    for (unsigned Level = 1; Level <= std::min(CurLoopLevel - 1, Levels);
-         ++Level) {
-      unsigned Direction = DepResult->getDirection(Level, false);
+      // Iterating over the outer levels.
+      for (unsigned Level = 1; Level <= std::min(CurLoopLevel - 1, Levels);
+           ++Level) {
+        unsigned Direction = DepResult->getDirection(Level, false);
 
-      // Check if the direction vector does not include equality. If an outer
-      // loop has a non-equal direction, outer indicies are different and it
-      // is safe to fuse.
-      if (!(Direction & Dependence::DVEntry::EQ)) {
-        LLVM_DEBUG(dbgs() << "Safe to fuse due to non-equal acceses in the "
-                             "outer loops\n");
+        // Check if the direction vector does not include equality. If an outer
+        // loop has a non-equal direction, outer indicies are different and it
+        // is safe to fuse.
+        if (!(Direction & Dependence::DVEntry::EQ)) {
+          LLVM_DEBUG(dbgs() << "Safe to fuse due to non-equal acceses in the "
+                               "outer loops\n");
+          NumDA++;
+          return true;
+        }
+      }
+
+      assert(CurLoopLevel > Levels && "Fusion candidates are not separated");
+
+      unsigned CurDir = DepResult->getDirection(CurLoopLevel, true);
+
+      // Check if the direction vector does not include greater direction. In
+      // that case, the dependency is not a backward loop-carried and is legal
+      // to fuse. For example here we have a forward dependency
+      //    for (int i = 0; i < n; i++)
+      //        A[i] = ...;
+      //    for (int i = 0; i < n; i++)
+      //        ... = A[i-1];
+      if (!(CurDir & Dependence::DVEntry::GT)) {
+        LLVM_DEBUG(dbgs() << "Safe to fuse with no backward loop-carried "
+                             "dependency\n");
         NumDA++;
         return true;
       }
-    }
 
-    assert(CurLoopLevel > Levels && "Fusion candidates are not separated");
+      if (DepResult->getNextPredecessor() || DepResult->getNextSuccessor())
+        LLVM_DEBUG(
+            dbgs() << "TODO: Implement pred/succ dependence handling!\n");
 
-    if (DepResult->isScalar(CurLoopLevel, true)) {
-      if (DepResult->isInput() || DepResult->isOutput()) {
-        LLVM_DEBUG(dbgs() << "Safe to fuse due to a loop-invariant "
-                          << (DepResult->isInput() ? "input" : "output")
-                          << " dependency\n");
-        NumDA++;
-        return true;
-      }
-      LLVM_DEBUG(
-          dbgs() << "Not safe to fuse due to a scalar flow dependency\n");
+      // TODO: Can we actually use the dependence info analysis here?
       return false;
     }
 
-    unsigned CurDir = DepResult->getDirection(CurLoopLevel, true);
-
-    // Check if the direction vector does not include greater direction. In
-    // that case, the dependency is not a backward loop-carried and is legal
-    // to fuse. For example here we have a forward dependency
-    //    for (int i = 0; i < n; i++)
-    //        A[i] = ...;
-    //    for (int i = 0; i < n; i++)
-    //        ... = A[i-1];
-    if (!(CurDir & Dependence::DVEntry::GT)) {
-      LLVM_DEBUG(dbgs() << "Safe to fuse with no backward loop-carried "
-                           "dependency\n");
-      NumDA++;
-      return true;
+    case FUSION_DEPENDENCE_ANALYSIS_ALL:
+      return dependencesAllowFusion(FC0, FC1, I0, I1, AnyDep,
+                                    FUSION_DEPENDENCE_ANALYSIS_SCEV) ||
+             dependencesAllowFusion(FC0, FC1, I0, I1, AnyDep,
+                                    FUSION_DEPENDENCE_ANALYSIS_DA);
     }
 
-    if (DepResult->getNextPredecessor() || DepResult->getNextSuccessor())
-      LLVM_DEBUG(dbgs() << "TODO: Implement pred/succ dependence handling!\n");
-
-    return false;
+    llvm_unreachable("Unknown fusion dependence analysis choice!");
   }
 
   /// Perform a dependence check and return if @p FC0 and @p FC1 can be fused.
@@ -1162,22 +1348,34 @@ private:
 
     for (Instruction *WriteL0 : FC0.MemWrites) {
       for (Instruction *WriteL1 : FC1.MemWrites)
-        if (!dependencesAllowFusion(FC0, FC1, *WriteL0, *WriteL1)) {
+        if (!dependencesAllowFusion(FC0, FC1, *WriteL0, *WriteL1,
+                                    /* AnyDep */ false,
+                                    FusionDependenceAnalysis)) {
+          InvalidDependencies++;
           return false;
         }
       for (Instruction *ReadL1 : FC1.MemReads)
-        if (!dependencesAllowFusion(FC0, FC1, *WriteL0, *ReadL1)) {
+        if (!dependencesAllowFusion(FC0, FC1, *WriteL0, *ReadL1,
+                                    /* AnyDep */ false,
+                                    FusionDependenceAnalysis)) {
+          InvalidDependencies++;
           return false;
         }
     }
 
     for (Instruction *WriteL1 : FC1.MemWrites) {
       for (Instruction *WriteL0 : FC0.MemWrites)
-        if (!dependencesAllowFusion(FC0, FC1, *WriteL0, *WriteL1)) {
+        if (!dependencesAllowFusion(FC0, FC1, *WriteL0, *WriteL1,
+                                    /* AnyDep */ false,
+                                    FusionDependenceAnalysis)) {
+          InvalidDependencies++;
           return false;
         }
       for (Instruction *ReadL0 : FC0.MemReads)
-        if (!dependencesAllowFusion(FC0, FC1, *ReadL0, *WriteL1)) {
+        if (!dependencesAllowFusion(FC0, FC1, *ReadL0, *WriteL1,
+                                    /* AnyDep */ false,
+                                    FusionDependenceAnalysis)) {
+          InvalidDependencies++;
           return false;
         }
     }
@@ -1189,6 +1387,7 @@ private:
         for (auto &Op : I.operands())
           if (Instruction *Def = dyn_cast<Instruction>(Op))
             if (FC0.L->contains(Def->getParent())) {
+              InvalidDependencies++;
               return false;
             }
 
@@ -1213,7 +1412,8 @@ private:
     if (FC0.GuardBranch)
       return DT.dominates(FC0.getEntryBlock(), FC1.getEntryBlock()) &&
              FC0.ExitBlock->getSingleSuccessor() == FC1.getEntryBlock();
-    return FC0.ExitBlock == FC1.getEntryBlock();
+    else
+      return FC0.ExitBlock == FC1.getEntryBlock();
   }
 
   bool isEmptyPreheader(const FusionCandidate &FC) const {
@@ -1253,19 +1453,11 @@ private:
     // insert instructions in reverse order to maintain dominance relationship
     for (Instruction *I : reverse(SinkInsts)) {
       assert(I->getParent() == FC1.Preheader);
-      if (isa<PHINode>(I)) {
-        // The Phis to be sunk should have only one incoming value, as is
-        // assured by the condition that the second loop is dominated by the
-        // first one which is enforced by isStrictlyAdjacent().
-        // Replace the phi uses with the corresponding incoming value to clean
-        // up the code.
-        assert(cast<PHINode>(I)->getNumIncomingValues() == 1 &&
-               "Expected the sunk PHI node to have 1 incoming value.");
-        I->replaceAllUsesWith(I->getOperand(0));
-        I->eraseFromParent();
-      } else
-        I->moveBefore(*FC1.ExitBlock, FC1.ExitBlock->getFirstInsertionPt());
+      I->moveBefore(*FC1.ExitBlock, FC1.ExitBlock->getFirstInsertionPt());
     }
+    // PHI nodes in SinkInsts need to be updated to receive values from the
+    // fused loop.
+    fixPHINodes(SinkInsts, FC0, FC1);
   }
 
   /// Determine if two fusion candidates have identical guards
@@ -1285,32 +1477,32 @@ private:
     assert(FC0.GuardBranch && FC1.GuardBranch &&
            "Expecting FC0 and FC1 to be guarded loops.");
 
-    auto *FC0CmpInst = dyn_cast<Instruction>(FC0.GuardBranch->getCondition());
-    auto *FC1CmpInst = dyn_cast<Instruction>(FC1.GuardBranch->getCondition());
-    if ((!FC0CmpInst || !FC1CmpInst) &&
-        FC0.GuardBranch->getCondition() != FC1.GuardBranch->getCondition())
-      return false;
-
-    if (FC0CmpInst && FC1CmpInst && !FC0CmpInst->isIdenticalTo(FC1CmpInst))
-      return false;
+    if (auto FC0CmpInst =
+            dyn_cast<Instruction>(FC0.GuardBranch->getCondition()))
+      if (auto FC1CmpInst =
+              dyn_cast<Instruction>(FC1.GuardBranch->getCondition()))
+        if (!FC0CmpInst->isIdenticalTo(FC1CmpInst))
+          return false;
 
     // The compare instructions are identical.
     // Now make sure the successor of the guards have the same flow into/around
     // the loop
     if (FC0.GuardBranch->getSuccessor(0) == FC0.Preheader)
       return (FC1.GuardBranch->getSuccessor(0) == FC1.Preheader);
-    return (FC1.GuardBranch->getSuccessor(1) == FC1.Preheader);
+    else
+      return (FC1.GuardBranch->getSuccessor(1) == FC1.Preheader);
   }
 
   /// Modify the latch branch of FC to be unconditional since successors of the
   /// branch are the same.
   void simplifyLatchBranch(const FusionCandidate &FC) const {
-    CondBrInst *FCLatchBranch = dyn_cast<CondBrInst>(FC.Latch->getTerminator());
+    BranchInst *FCLatchBranch = dyn_cast<BranchInst>(FC.Latch->getTerminator());
     if (FCLatchBranch) {
-      assert(FCLatchBranch->getSuccessor(0) == FCLatchBranch->getSuccessor(1) &&
+      assert(FCLatchBranch->isConditional() &&
+             FCLatchBranch->getSuccessor(0) == FCLatchBranch->getSuccessor(1) &&
              "Expecting the two successors of FCLatchBranch to be the same");
-      UncondBrInst *NewBranch =
-          UncondBrInst::Create(FCLatchBranch->getSuccessor(0));
+      BranchInst *NewBranch =
+          BranchInst::Create(FCLatchBranch->getSuccessor(0));
       ReplaceInstWithInst(FCLatchBranch, NewBranch);
     }
   }
@@ -1318,7 +1510,7 @@ private:
   /// Move instructions from FC0.Latch to FC1.Latch. If FC0.Latch has an unique
   /// successor, then merge FC0.Latch with its unique successor.
   void mergeLatch(const FusionCandidate &FC0, const FusionCandidate &FC1) {
-    moveInstructionsToTheBeginning(*FC0.Latch, *FC1.Latch, DT, PDT, DI, SE);
+    moveInstructionsToTheBeginning(*FC0.Latch, *FC1.Latch, DT, PDT, DI);
     if (BasicBlock *Succ = FC0.Latch->getUniqueSuccessor()) {
       MergeBlockIntoPredecessor(Succ, &DTU, &LI);
       DTU.flush();
@@ -1363,7 +1555,7 @@ private:
 
     // Move instructions from the preheader of FC1 to the end of the preheader
     // of FC0.
-    moveInstructionsToTheEnd(*FC1.Preheader, *FC0.Preheader, DT, PDT, DI, SE);
+    moveInstructionsToTheEnd(*FC1.Preheader, *FC0.Preheader, DT, PDT, DI);
 
     // Fusing guarded loops is handled slightly differently than non-guarded
     // loops and has been broken out into a separate method instead of trying to
@@ -1515,6 +1707,15 @@ private:
     SE.forgetLoop(FC1.L);
     SE.forgetLoop(FC0.L);
 
+    // Move instructions from FC0.Latch to FC1.Latch.
+    // Note: mergeLatch requires an updated DT.
+    mergeLatch(FC0, FC1);
+
+    // Forget block dispositions as well, so that there are no dangling
+    // pointers to erased/free'ed blocks. It should be done after mergeLatch()
+    // since merging the latches may affect the dispositions.
+    SE.forgetBlockAndLoopDispositions();
+
     // Merge the loops.
     SmallVector<BasicBlock *, 8> Blocks(FC1.L->blocks());
     for (BasicBlock *BB : Blocks) {
@@ -1533,15 +1734,6 @@ private:
 
     // Delete the now empty loop L1.
     LI.erase(FC1.L);
-
-    // Forget block dispositions as well, so that there are no dangling
-    // pointers to erased/free'ed blocks. It should be done after mergeLatch()
-    // since merging the latches may affect the dispositions.
-    SE.forgetBlockAndLoopDispositions();
-
-    // Move instructions from FC0.Latch to FC1.Latch.
-    // Note: mergeLatch requires an updated DT.
-    mergeLatch(FC0, FC1);
 
 #ifndef NDEBUG
     assert(!verifyFunction(*FC0.Header->getParent(), &errs()));
@@ -1616,11 +1808,11 @@ private:
     // of the FC0 Exit block to the beginning of the exit block of FC1.
     moveInstructionsToTheBeginning(
         (FC0.Peeled ? *FC0ExitBlockSuccessor : *FC0.ExitBlock), *FC1.ExitBlock,
-        DT, PDT, DI, SE);
+        DT, PDT, DI);
 
     // Move instructions from the guard block of FC1 to the end of the guard
     // block of FC0.
-    moveInstructionsToTheEnd(*FC1GuardBlock, *FC0GuardBlock, DT, PDT, DI, SE);
+    moveInstructionsToTheEnd(*FC1GuardBlock, *FC0GuardBlock, DT, PDT, DI);
 
     assert(FC0NonLoopBlock == FC1GuardBlock && "Loops are not adjacent");
 
@@ -1654,8 +1846,6 @@ private:
         DominatorTree::Insert, FC0GuardBlock, FC1NonLoopBlock));
 
     if (FC0.Peeled) {
-      TreeUpdates.emplace_back(DominatorTree::UpdateType(
-          DominatorTree::Delete, FC0.ExitBlock, FC0ExitBlockSuccessor));
       // Remove the Block after the ExitBlock of FC0
       TreeUpdates.emplace_back(DominatorTree::UpdateType(
           DominatorTree::Delete, FC0ExitBlockSuccessor, FC1GuardBlock));
@@ -1815,6 +2005,15 @@ private:
     SE.forgetLoop(FC1.L);
     SE.forgetLoop(FC0.L);
 
+    // Move instructions from FC0.Latch to FC1.Latch.
+    // Note: mergeLatch requires an updated DT.
+    mergeLatch(FC0, FC1);
+
+    // Forget block dispositions as well, so that there are no dangling
+    // pointers to erased/free'ed blocks. It should be done after mergeLatch()
+    // since merging the latches may affect the dispositions.
+    SE.forgetBlockAndLoopDispositions();
+
     // Merge the loops.
     SmallVector<BasicBlock *, 8> Blocks(FC1.L->blocks());
     for (BasicBlock *BB : Blocks) {
@@ -1833,15 +2032,6 @@ private:
 
     // Delete the now empty loop L1.
     LI.erase(FC1.L);
-
-    // Forget block dispositions as well, so that there are no dangling
-    // pointers to erased/free'ed blocks. It should be done after mergeLatch()
-    // since merging the latches may affect the dispositions.
-    SE.forgetBlockAndLoopDispositions();
-
-    // Move instructions from FC0.Latch to FC1.Latch.
-    // Note: mergeLatch requires an updated DT.
-    mergeLatch(FC0, FC1);
 
 #ifndef NDEBUG
     assert(!verifyFunction(*FC0.Header->getParent(), &errs()));
@@ -1867,6 +2057,7 @@ PreservedAnalyses LoopFusePass::run(Function &F, FunctionAnalysisManager &AM) {
   auto &ORE = AM.getResult<OptimizationRemarkEmitterAnalysis>(F);
   auto &AC = AM.getResult<AssumptionAnalysis>(F);
   const TargetTransformInfo &TTI = AM.getResult<TargetIRAnalysis>(F);
+  const DataLayout &DL = F.getDataLayout();
 
   // Ensure loops are in simplifed form which is a pre-requisite for loop fusion
   // pass. Added only for new PM since the legacy PM has already added
@@ -1879,7 +2070,7 @@ PreservedAnalyses LoopFusePass::run(Function &F, FunctionAnalysisManager &AM) {
   if (Changed)
     PDT.recalculate(F);
 
-  LoopFuser LF(LI, DT, DI, SE, PDT, ORE, AC, TTI);
+  LoopFuser LF(LI, DT, DI, SE, PDT, ORE, DL, AC, TTI);
   Changed |= LF.fuseLoops(F);
   if (!Changed)
     return PreservedAnalyses::all();

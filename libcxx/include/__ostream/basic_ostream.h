@@ -41,7 +41,6 @@ _LIBCPP_PUSH_MACROS
 #  include <__undef_macros>
 
 _LIBCPP_BEGIN_NAMESPACE_STD
-_LIBCPP_BEGIN_EXPLICIT_ABI_ANNOTATIONS
 
 template <class _CharT, class _Traits>
 class basic_ostream : virtual public basic_ios<_CharT, _Traits> {
@@ -673,7 +672,6 @@ extern template class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS basic_ostream<char>;
 extern template class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS basic_ostream<wchar_t>;
 #  endif
 
-_LIBCPP_END_EXPLICIT_ABI_ANNOTATIONS
 _LIBCPP_END_NAMESPACE_STD
 
 _LIBCPP_POP_MACROS

@@ -1,0 +1,39 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=legalizer %s -o - 2>&1 | FileCheck %s
+#
+# REGRESSION TEST: G_SMULH (and G_UMULH) on an s24 operand must legalize
+# without crashing.
+#
+# Bug: the G_SMULH/G_UMULH actions only listed s8/s16 in customFor (and
+# s32/s64 in lowerFor). An s24 operand — which arises from a 23-bit signed
+# bitfield (`int member : 23` -> clang `load i24`, then `(x*y)>>k` DAGCombines
+# to MULHS) — matched NEITHER set, so the legalizer fell through to its default
+# and aborted: "unable to legalize instruction: %..:_(s24) = G_SMULH". clang
+# crashed (exit 134, no.s).
+#
+# Fix: add s24 to the customFor set for both G_SMULH and G_UMULH; the existing
+# narrow custom path (sign/zero-extend operands to s32, MUL s32, AShr/LShr by
+# DstBits, truncate) generalizes verbatim (DstBits = 24).
+#
+# This test feeds G_SMULH s24 straight into the legalizer and checks it is
+# lowered (sext + mul + ashr + trunc) with no residual G_SMULH. If the bug
+# regresses, llc aborts with "unable to legalize" and FileCheck sees no output.
+
+---
+name:            smulh_s24
+legalized:       false
+# CHECK-LABEL: name: smulh_s24
+body:             |
+  bb.0:
+    %0:_(s24) = G_IMPLICIT_DEF
+    %1:_(s24) = G_IMPLICIT_DEF
+    %2:_(s24) = G_SMULH %0, %1
+    %3:_(s32) = G_ANYEXT %2
+    $r0 = COPY %3(s32)
+    ; The custom lowering sign-extends each s24 operand to s32 (here via
+    ; shift-left-then-arithmetic-shift-right), multiplies, and extracts the
+    ; high half with G_ASHR by 24. The original G_SMULH must be gone.
+    ; CHECK: G_MUL
+    ; CHECK: G_ASHR
+    ; CHECK-NOT: G_SMULH
+    RET implicit $r0, implicit $r15
+...

@@ -40,7 +40,7 @@ struct MergedLoadStoreMotionOptions {
 };
 
 class MergedLoadStoreMotionPass
-    : public OptionalPassInfoMixin<MergedLoadStoreMotionPass> {
+    : public PassInfoMixin<MergedLoadStoreMotionPass> {
   MergedLoadStoreMotionOptions Options;
 
 public:
@@ -48,10 +48,9 @@ public:
       : MergedLoadStoreMotionPass(MergedLoadStoreMotionOptions()) {}
   MergedLoadStoreMotionPass(const MergedLoadStoreMotionOptions &PassOptions)
       : Options(PassOptions) {}
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-  LLVM_ABI void
-  printPipeline(raw_ostream &OS,
-                function_ref<StringRef(StringRef)> MapClassName2PassName);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  void printPipeline(raw_ostream &OS,
+                     function_ref<StringRef(StringRef)> MapClassName2PassName);
 };
 }
 

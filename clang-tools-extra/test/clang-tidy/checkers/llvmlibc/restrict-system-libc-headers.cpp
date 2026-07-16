@@ -9,5 +9,5 @@
 #include "string.h"
 // CHECK-MESSAGES: :[[@LINE-1]]:1: warning: system include string.h not allowed
 #include "stdatomic.h"
-#include <stdatomic.h>
+#include <stddef.h>
 // Compiler provided headers should not throw warnings.

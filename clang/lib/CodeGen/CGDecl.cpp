@@ -125,7 +125,6 @@ void CodeGenFunction::EmitDecl(const Decl &D, bool EvaluateConditionDecl) {
   case Decl::Function:     // void X();
   case Decl::EnumConstant: // enum ? { X = ? }
   case Decl::StaticAssert: // static_assert(X, ""); [C++0x]
-  case Decl::ExplicitInstantiation:
   case Decl::Label:        // __label__ x;
   case Decl::Import:
   case Decl::MSGuid:    // __declspec(uuid("..."))
@@ -304,8 +303,8 @@ llvm::Constant *CodeGenModule::getOrCreateStaticVarDecl(
   LangAS ExpectedAS = Ty.getAddressSpace();
   llvm::Constant *Addr = GV;
   if (AS != ExpectedAS) {
-    Addr = performAddrSpaceCast(
-        GV,
+    Addr = getTargetCodeGenInfo().performAddrSpaceCast(
+        *this, GV, AS,
         llvm::PointerType::get(getLLVMContext(),
                                getContext().getTargetAddressSpace(ExpectedAS)));
   }
@@ -1071,7 +1070,7 @@ static llvm::Constant *constStructWithPadding(CodeGenModule &CGM,
       Values.push_back(patternOrZeroFor(CGM, isPattern, PadTy));
     }
     llvm::Constant *CurOp;
-    if (constant->isNullValue())
+    if (constant->isZeroValue())
       CurOp = llvm::Constant::getNullValue(STy->getElementType(i));
     else
       CurOp = cast<llvm::Constant>(constant->getAggregateElement(i));
@@ -1529,7 +1528,7 @@ CodeGenFunction::EmitAutoVarAlloca(const VarDecl &D) {
         (D.isConstexpr() ||
          ((Ty.isPODType(getContext()) ||
            getContext().getBaseElementType(Ty)->isObjCObjectPointerType()) &&
-          D.getInit()->isConstantInitializer(getContext())))) {
+          D.getInit()->isConstantInitializer(getContext(), false)))) {
 
       // If the variable's a const type, and it's neither an NRVO
       // candidate nor a __block variable and has no mutable members,
@@ -1634,21 +1633,6 @@ CodeGenFunction::EmitAutoVarAlloca(const VarDecl &D) {
         }
       } else {
         assert(!emission.useLifetimeMarkers());
-      }
-    }
-
-    if (D.hasAttr<StackProtectorIgnoreAttr>()) {
-      if (auto *AI = dyn_cast<llvm::AllocaInst>(address.getBasePointer())) {
-        llvm::LLVMContext &Ctx = Builder.getContext();
-        auto *Operand = llvm::ConstantAsMetadata::get(Builder.getInt32(0));
-        AI->setMetadata("stack-protector", llvm::MDNode::get(Ctx, {Operand}));
-      }
-
-      std::optional<llvm::Attribute::AttrKind> Attr =
-          CGM.StackProtectorAttribute(&D);
-      if (Attr && (*Attr == llvm::Attribute::StackProtectReq)) {
-        CGM.getDiags().Report(D.getLocation(),
-                              diag::warn_stack_protection_ignore_attribute);
       }
     }
   } else {
@@ -2024,7 +2008,7 @@ void CodeGenFunction::EmitAutoVarInit(const AutoVarEmission &emission) {
       D.mightBeUsableInConstantExpressions(getContext())) {
     assert(!capturedByInit && "constant init contains a capturing block?");
     constant = ConstantEmitter(*this).tryEmitAbstractForInitializer(D);
-    if (constant && !constant->isNullValue() &&
+    if (constant && !constant->isZeroValue() &&
         (trivialAutoVarInit !=
          LangOptions::TrivialAutoVarInitKind::Uninitialized)) {
       IsPattern isPattern =
@@ -2228,13 +2212,8 @@ void CodeGenFunction::EmitAutoVarCleanups(const AutoVarEmission &emission) {
   const VarDecl &D = *emission.Variable;
 
   // Check the type for a cleanup.
-  if (QualType::DestructionKind dtorKind = D.needsDestruction(getContext())) {
-    // Check if we're in a SEH block with /EH, prevent it
-    if (getLangOpts().CXXExceptions && currentFunctionUsesSEHTry())
-      getContext().getDiagnostics().Report(D.getLocation(),
-                                           diag::err_seh_object_unwinding);
+  if (QualType::DestructionKind dtorKind = D.needsDestruction(getContext()))
     emitAutoVarTypeCleanup(emission, dtorKind);
-  }
 
   // In GC mode, honor objc_precise_lifetime.
   if (getLangOpts().getGC() != LangOptions::NonGC &&
@@ -2684,8 +2663,6 @@ void CodeGenFunction::EmitParmDecl(const VarDecl &D, ParamValue Arg,
     Arg.getAnyValue()->setName(D.getName());
 
   QualType Ty = D.getType();
-  assert((getLangOpts().OpenCL || Ty.getAddressSpace() == LangAS::Default) &&
-         "parameter has non-default address space in non-OpenCL mode");
 
   // Use better IR generation for certain implicit parameters.
   if (auto IPD = dyn_cast<ImplicitParamDecl>(&D)) {
@@ -2714,6 +2691,9 @@ void CodeGenFunction::EmitParmDecl(const VarDecl &D, ParamValue Arg,
   if (Arg.isIndirect()) {
     DeclPtr = Arg.getIndirectAddress();
     DeclPtr = DeclPtr.withElementType(ConvertTypeForMem(Ty));
+    // Indirect argument is in alloca address space, which may be different
+    // from the default address space.
+    auto AllocaAS = CGM.getASTAllocaAddressSpace();
     auto *V = DeclPtr.emitRawPointer(*this);
     AllocaPtr = RawAddress(V, DeclPtr.getElementType(), DeclPtr.getAlignment());
 
@@ -2724,18 +2704,22 @@ void CodeGenFunction::EmitParmDecl(const VarDecl &D, ParamValue Arg,
       UseIndirectDebugAddress = !ArgInfo.getIndirectByVal();
     if (UseIndirectDebugAddress) {
       auto PtrTy = getContext().getPointerType(Ty);
-      AllocaPtr = CreateMemTempWithoutCast(
-          PtrTy, getContext().getTypeAlignInChars(PtrTy),
-          D.getName() + ".indirect_addr");
+      AllocaPtr = CreateMemTemp(PtrTy, getContext().getTypeAlignInChars(PtrTy),
+                                D.getName() + ".indirect_addr");
       EmitStoreOfScalar(V, AllocaPtr, /* Volatile */ false, PtrTy);
     }
 
-    LangAS DestLangAS = Ty.getAddressSpace();
-    unsigned DestAS = getContext().getTargetAddressSpace(DestLangAS);
-    if (DeclPtr.getAddressSpace() != DestAS) {
+    auto SrcLangAS = getLangOpts().OpenCL ? LangAS::opencl_private : AllocaAS;
+    auto DestLangAS =
+        getLangOpts().OpenCL ? LangAS::opencl_private : LangAS::Default;
+    if (SrcLangAS != DestLangAS) {
+      assert(getContext().getTargetAddressSpace(SrcLangAS) ==
+             CGM.getDataLayout().getAllocaAddrSpace());
+      auto DestAS = getContext().getTargetAddressSpace(DestLangAS);
       auto *T = llvm::PointerType::get(getLLVMContext(), DestAS);
-      DeclPtr = DeclPtr.withPointer(performAddrSpaceCast(V, T),
-                                    DeclPtr.isKnownNonNull());
+      DeclPtr = DeclPtr.withPointer(
+          getTargetHooks().performAddrSpaceCast(*this, V, SrcLangAS, T, true),
+          DeclPtr.isKnownNonNull());
     }
 
     // Push a destructor cleanup for this parameter if the ABI requires it.
@@ -2763,7 +2747,7 @@ void CodeGenFunction::EmitParmDecl(const VarDecl &D, ParamValue Arg,
       DeclPtr = OpenMPLocalAddr;
       AllocaPtr = DeclPtr;
     } else {
-      // Otherwise, create a casted temporary to hold the value.
+      // Otherwise, create a temporary to hold the value.
       DeclPtr = CreateMemTemp(Ty, getContext().getDeclAlign(&D),
                               D.getName() + ".addr", &AllocaPtr);
     }
@@ -2773,9 +2757,7 @@ void CodeGenFunction::EmitParmDecl(const VarDecl &D, ParamValue Arg,
   llvm::Value *ArgVal = (DoStore ? Arg.getDirectValue() : nullptr);
 
   LValue lv = MakeAddrLValue(DeclPtr, Ty);
-  // If this is a thunk, don't bother with ARC lifetime management.
-  // The true implementation will take care of that.
-  if (IsScalar && !CurFuncIsThunk) {
+  if (IsScalar) {
     Qualifiers qs = Ty.getQualifiers();
     if (Qualifiers::ObjCLifetime lt = qs.getObjCLifetime()) {
       // We honor __attribute__((ns_consumed)) for types with lifetime.

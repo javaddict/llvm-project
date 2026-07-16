@@ -170,10 +170,6 @@ uptr internal_close(fd_t fd) {
   return close(fd);
 }
 
-uptr internal_close_range(fd_t lowfd, fd_t highfd, int flags) {
-  return -1;  // Not supported.
-}
-
 uptr internal_open(const char *filename, int flags) {
   return open(filename, flags);
 }
@@ -1533,7 +1529,7 @@ void DumpProcessMap() {
   Printf("End of module map.\n");
 }
 
-void OnDlOpen(const char* filename, int flag) {
+void CheckNoDeepBind(const char *filename, int flag) {
   // Do nothing.
 }
 

@@ -9,7 +9,6 @@
 #
 # ===------------------------------------------------------------------------===#
 
-import concurrent.futures
 import datetime
 import github
 import re
@@ -265,11 +264,6 @@ def count_prs(gh: github.Github, triage_list: dict, start_date: datetime.datetim
         date_begin = date_end
 
 
-# 4 because that's how many cores the default github runners have.  Also, if we
-# make this too high, we risk hitting some of GitHub's secondary rate limits.
-THREAD_POOL_MAX_WORKERS = 4
-
-
 def main():
     token = sys.argv[1]
     gh = github.Github(auth=github.Auth.Token(token))
@@ -297,16 +291,9 @@ def main():
         sys.exit(0)
 
     # Step 2 check for reviews
-
-    with concurrent.futures.ThreadPoolExecutor(
-        max_workers=THREAD_POOL_MAX_WORKERS
-    ) as executor:
-        executor.map(
-            lambda user: triage_list[user].add_reviewed(
-                get_review_count(gh, user, one_year_ago)
-            ),
-            list(triage_list.keys()),
-        )
+    for user in list(triage_list.keys()):
+        review_count = get_review_count(gh, user, one_year_ago)
+        triage_list[user].add_reviewed(review_count)
 
     print("After Reviews:", len(triage_list), "triagers")
 
@@ -314,17 +301,11 @@ def main():
         sys.exit(0)
 
     # Step 3 check for number of commits
-    with concurrent.futures.ThreadPoolExecutor(
-        max_workers=THREAD_POOL_MAX_WORKERS
-    ) as executor:
+    for user in list(triage_list.keys()):
+        num_commits = get_num_commits(gh, user, one_year_ago)
         # Override the total number of commits to not double count commits and
         # authored PRs.
-        executor.map(
-            lambda user: triage_list[user].set_authored(
-                get_num_commits(gh, user, one_year_ago)
-            ),
-            list(triage_list.keys()),
-        )
+        triage_list[user].set_authored(num_commits)
 
     print("After Commits:", len(triage_list), "triagers")
 

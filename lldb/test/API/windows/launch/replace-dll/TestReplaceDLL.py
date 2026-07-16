@@ -8,8 +8,6 @@ import os
 
 
 class ReplaceDllTestCase(TestBase):
-    SHARED_BUILD_TESTCASE = False
-
     @skipUnlessWindows
     def test(self):
         """

@@ -6,6 +6,7 @@ add_entrypoint_object(
     ../getrandom.h
   DEPENDS
     libc.include.sys_random
-    libc.src.__support.OSUtil.linux.syscall_wrappers.getrandom
+    libc.include.sys_syscall
+    libc.src.__support.OSUtil.osutil
     libc.src.errno.errno
 )

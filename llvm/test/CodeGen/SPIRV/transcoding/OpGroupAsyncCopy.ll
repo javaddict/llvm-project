@@ -1,6 +1,7 @@
-; RUN: llc -verify-machineinstrs -O0 -mtriple=spirv32-unknown-unknown %s -o - | FileCheck %s --check-prefix=CHECK-SPIRV
-; TODO: enable spirv-val: OpGroupAsyncCopy event arg needs OpTypeEvent, not OpTypePointer
-; RUNx: %if spirv-tools %{ llc -O0 -mtriple=spirv32-unknown-unknown %s -o - -filetype=obj | spirv-val %}
+; RUN: llc -O0 -mtriple=spirv32-unknown-unknown %s -o - | FileCheck %s --check-prefix=CHECK-SPIRV
+
+; TODO: This test currently fails with LLVM_ENABLE_EXPENSIVE_CHECKS enabled
+; XFAIL: expensive_checks
 
 ; CHECK-SPIRV-DAG: %[[#]] = OpGroupAsyncCopy %[[#]] %[[#Scope:]]
 ; CHECK-SPIRV-DAG: %[[#Scope]] = OpConstant %[[#]]

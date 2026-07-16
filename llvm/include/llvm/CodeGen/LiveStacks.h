@@ -58,8 +58,7 @@ public:
 
   unsigned getNumIntervals() const { return (unsigned)S2IMap.size(); }
 
-  LLVM_ABI LiveInterval &getOrCreateInterval(int Slot,
-                                             const TargetRegisterClass *RC);
+  LiveInterval &getOrCreateInterval(int Slot, const TargetRegisterClass *RC);
 
   LiveInterval &getInterval(int Slot) {
     assert(Slot >= 0 && "Spill slot indice must be >= 0");
@@ -88,19 +87,21 @@ public:
 
   VNInfo::Allocator &getVNInfoAllocator() { return VNInfoAllocator; }
 
-  LLVM_ABI void releaseMemory();
+  void releaseMemory();
   /// init - analysis entry point
-  LLVM_ABI void init(MachineFunction &MF);
-  LLVM_ABI void print(raw_ostream &O, const Module *M = nullptr) const;
+  void init(MachineFunction &MF);
+  void print(raw_ostream &O, const Module *M = nullptr) const;
 };
 
-class LLVM_ABI LiveStacksWrapperLegacy : public MachineFunctionPass {
+class LiveStacksWrapperLegacy : public MachineFunctionPass {
   LiveStacks Impl;
 
 public:
   static char ID; // Pass identification, replacement for typeid
 
-  LiveStacksWrapperLegacy() : MachineFunctionPass(ID) {}
+  LiveStacksWrapperLegacy() : MachineFunctionPass(ID) {
+    initializeLiveStacksWrapperLegacyPass(*PassRegistry::getPassRegistry());
+  }
 
   LiveStacks &getLS() { return Impl; }
   const LiveStacks &getLS() const { return Impl; }
@@ -122,18 +123,16 @@ class LiveStacksAnalysis : public AnalysisInfoMixin<LiveStacksAnalysis> {
 public:
   using Result = LiveStacks;
 
-  LLVM_ABI LiveStacks run(MachineFunction &MF,
-                          MachineFunctionAnalysisManager &);
+  LiveStacks run(MachineFunction &MF, MachineFunctionAnalysisManager &);
 };
 
-class LiveStacksPrinterPass
-    : public RequiredPassInfoMixin<LiveStacksPrinterPass> {
+class LiveStacksPrinterPass : public PassInfoMixin<LiveStacksPrinterPass> {
   raw_ostream &OS;
 
 public:
   LiveStacksPrinterPass(raw_ostream &OS) : OS(OS) {}
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &AM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &AM);
 };
 } // end namespace llvm
 

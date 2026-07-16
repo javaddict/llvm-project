@@ -66,7 +66,7 @@ bool UnrolledInstAnalyzer::simplifyInstWithSCEV(Instruction *I) {
   SimplifiedAddress Address;
   Address.Base = Base->getValue();
   Address.Offset = *Offset;
-  SimplifiedAddresses[I] = std::move(Address);
+  SimplifiedAddresses[I] = Address;
   return false;
 }
 

@@ -26,7 +26,6 @@ class DependenceInfo;
 class DominatorTree;
 class Instruction;
 class PostDominatorTree;
-class ScalarEvolution;
 
 /// Return true if \p I can be safely moved before \p InsertPoint.
 LLVM_ABI bool isSafeToMoveBefore(Instruction &I, Instruction &InsertPoint,
@@ -44,16 +43,18 @@ LLVM_ABI bool isSafeToMoveBefore(BasicBlock &BB, Instruction &InsertPoint,
 
 /// Move instructions, in an order-preserving manner, from \p FromBB to the
 /// beginning of \p ToBB when proven safe.
-LLVM_ABI void
-moveInstructionsToTheBeginning(BasicBlock &FromBB, BasicBlock &ToBB,
-                               DominatorTree &DT, const PostDominatorTree &PDT,
-                               DependenceInfo &DI, ScalarEvolution &SE);
+LLVM_ABI void moveInstructionsToTheBeginning(BasicBlock &FromBB,
+                                             BasicBlock &ToBB,
+                                             DominatorTree &DT,
+                                             const PostDominatorTree &PDT,
+                                             DependenceInfo &DI);
+
 /// Move instructions, in an order-preserving manner, from \p FromBB to the end
 /// of \p ToBB when proven safe.
 LLVM_ABI void moveInstructionsToTheEnd(BasicBlock &FromBB, BasicBlock &ToBB,
                                        DominatorTree &DT,
                                        const PostDominatorTree &PDT,
-                                       DependenceInfo &DI, ScalarEvolution &SE);
+                                       DependenceInfo &DI);
 
 /// In case that two BBs \p ThisBlock and \p OtherBlock are control flow
 /// equivalent but they do not strictly dominate and post-dominate each

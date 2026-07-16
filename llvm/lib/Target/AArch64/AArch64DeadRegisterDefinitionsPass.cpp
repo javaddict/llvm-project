@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "AArch64.h"
+#include "AArch64RegisterInfo.h"
 #include "AArch64Subtarget.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -30,21 +31,16 @@ STATISTIC(NumDeadDefsReplaced, "Number of dead definitions replaced");
 #define AARCH64_DEAD_REG_DEF_NAME "AArch64 Dead register definitions"
 
 namespace {
-class AArch64DeadRegisterDefinitionsImpl {
-public:
-  bool run(MachineFunction &MF);
-
+class AArch64DeadRegisterDefinitions : public MachineFunctionPass {
 private:
+  const TargetRegisterInfo *TRI;
   const MachineRegisterInfo *MRI;
   const TargetInstrInfo *TII;
   bool Changed;
   void processMachineBasicBlock(MachineBasicBlock &MBB);
-};
-
-class AArch64DeadRegisterDefinitionsLegacy : public MachineFunctionPass {
 public:
   static char ID; // Pass identification, replacement for typeid.
-  AArch64DeadRegisterDefinitionsLegacy() : MachineFunctionPass(ID) {}
+  AArch64DeadRegisterDefinitions() : MachineFunctionPass(ID) {}
 
   bool runOnMachineFunction(MachineFunction &F) override;
 
@@ -55,10 +51,10 @@ public:
     MachineFunctionPass::getAnalysisUsage(AU);
   }
 };
-char AArch64DeadRegisterDefinitionsLegacy::ID = 0;
+char AArch64DeadRegisterDefinitions::ID = 0;
 } // end anonymous namespace
 
-INITIALIZE_PASS(AArch64DeadRegisterDefinitionsLegacy, "aarch64-dead-defs",
+INITIALIZE_PASS(AArch64DeadRegisterDefinitions, "aarch64-dead-defs",
                 AARCH64_DEAD_REG_DEF_NAME, false, false)
 
 static bool usesFrameIndex(const MachineInstr &MI) {
@@ -117,7 +113,7 @@ static bool atomicReadDroppedOnZero(unsigned Opcode) {
   return false;
 }
 
-void AArch64DeadRegisterDefinitionsImpl::processMachineBasicBlock(
+void AArch64DeadRegisterDefinitions::processMachineBasicBlock(
     MachineBasicBlock &MBB) {
   for (MachineInstr &MI : MBB) {
     if (usesFrameIndex(MI)) {
@@ -187,7 +183,11 @@ void AArch64DeadRegisterDefinitionsImpl::processMachineBasicBlock(
 
 // Scan the function for instructions that have a dead definition of a
 // register. Replace that register with the zero register when possible.
-bool AArch64DeadRegisterDefinitionsImpl::run(MachineFunction &MF) {
+bool AArch64DeadRegisterDefinitions::runOnMachineFunction(MachineFunction &MF) {
+  if (skipFunction(MF.getFunction()))
+    return false;
+
+  TRI = MF.getSubtarget().getRegisterInfo();
   TII = MF.getSubtarget().getInstrInfo();
   MRI = &MF.getRegInfo();
   LLVM_DEBUG(dbgs() << "***** AArch64DeadRegisterDefinitions *****\n");
@@ -197,24 +197,6 @@ bool AArch64DeadRegisterDefinitionsImpl::run(MachineFunction &MF) {
   return Changed;
 }
 
-bool AArch64DeadRegisterDefinitionsLegacy::runOnMachineFunction(
-    MachineFunction &MF) {
-  if (skipFunction(MF.getFunction()))
-    return false;
-  return AArch64DeadRegisterDefinitionsImpl().run(MF);
-}
-
-PreservedAnalyses
-AArch64DeadRegisterDefinitionsPass::run(MachineFunction &MF,
-                                        MachineFunctionAnalysisManager &MFAM) {
-  const bool Changed = AArch64DeadRegisterDefinitionsImpl().run(MF);
-  if (!Changed)
-    return PreservedAnalyses::all();
-  PreservedAnalyses PA = getMachineFunctionPassPreservedAnalyses();
-  PA.preserveSet<CFGAnalyses>();
-  return PA;
-}
-
 FunctionPass *llvm::createAArch64DeadRegisterDefinitions() {
-  return new AArch64DeadRegisterDefinitionsLegacy();
+  return new AArch64DeadRegisterDefinitions();
 }

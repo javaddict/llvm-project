@@ -21,7 +21,6 @@
 
 #include <cassert>
 #include <ctime>
-#include <ios>
 #include <locale>
 
 #include "test_macros.h"

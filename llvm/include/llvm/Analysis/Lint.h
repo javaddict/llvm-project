@@ -29,21 +29,20 @@ class Function;
 ///
 /// This should only be used for debugging, because it plays games with
 /// PassManagers and stuff.
-LLVM_ABI void lintModule(const Module &M, bool AbortOnError = false);
+void lintModule(const Module &M, bool AbortOnError = false);
 
 // Lint a function.
-LLVM_ABI void lintFunction(const Function &F, bool AbortOnError = false);
+void lintFunction(const Function &F, bool AbortOnError = false);
 
-class LintPass : public RequiredPassInfoMixin<LintPass> {
+class LintPass : public PassInfoMixin<LintPass> {
   const bool AbortOnError;
 
 public:
   LintPass(bool AbortOnError) : AbortOnError(AbortOnError) {}
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 
-  LLVM_ABI void
-  printPipeline(raw_ostream &OS,
-                function_ref<StringRef(StringRef)> MapClassName2PassName);
+  void printPipeline(raw_ostream &OS,
+                     function_ref<StringRef(StringRef)> MapClassName2PassName);
 };
 
 } // namespace llvm

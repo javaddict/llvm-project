@@ -20,9 +20,9 @@ namespace llvm {
 
 class Function;
 
-struct AnnotationRemarksPass
-    : public RequiredPassInfoMixin<AnnotationRemarksPass> {
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+struct AnnotationRemarksPass : public PassInfoMixin<AnnotationRemarksPass> {
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 } // namespace llvm
 

@@ -21,13 +21,12 @@ namespace llvm {
 class Loop;
 class LPMUpdater;
 
-class LoopDeletionPass : public OptionalPassInfoMixin<LoopDeletionPass> {
+class LoopDeletionPass : public PassInfoMixin<LoopDeletionPass> {
 public:
   LoopDeletionPass() = default;
 
-  LLVM_ABI PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
-                                 LoopStandardAnalysisResults &AR,
-                                 LPMUpdater &U);
+  PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
+                        LoopStandardAnalysisResults &AR, LPMUpdater &U);
 };
 
 } // end namespace llvm

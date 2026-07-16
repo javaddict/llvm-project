@@ -42,8 +42,8 @@ class LPMUpdater;
 class Loop;
 class LoopNest;
 
-extern LLVM_ABI cl::opt<unsigned> SetLicmMssaOptCap;
-extern LLVM_ABI cl::opt<unsigned> SetLicmMssaNoAccForPromotionCap;
+extern cl::opt<unsigned> SetLicmMssaOptCap;
+extern cl::opt<unsigned> SetLicmMssaNoAccForPromotionCap;
 
 struct LICMOptions {
   unsigned MssaOptCap;
@@ -63,7 +63,7 @@ struct LICMOptions {
 };
 
 /// Performs Loop Invariant Code Motion Pass.
-class LICMPass : public OptionalPassInfoMixin<LICMPass> {
+class LICMPass : public PassInfoMixin<LICMPass> {
   LICMOptions Opts;
 
 public:
@@ -73,17 +73,15 @@ public:
                              AllowSpeculation)) {}
   LICMPass(LICMOptions Opts) : Opts(Opts) {}
 
-  LLVM_ABI PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
-                                 LoopStandardAnalysisResults &AR,
-                                 LPMUpdater &U);
+  PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
+                        LoopStandardAnalysisResults &AR, LPMUpdater &U);
 
-  LLVM_ABI void
-  printPipeline(raw_ostream &OS,
-                function_ref<StringRef(StringRef)> MapClassName2PassName);
+  void printPipeline(raw_ostream &OS,
+                     function_ref<StringRef(StringRef)> MapClassName2PassName);
 };
 
 /// Performs LoopNest Invariant Code Motion Pass.
-class LNICMPass : public OptionalPassInfoMixin<LNICMPass> {
+class LNICMPass : public PassInfoMixin<LNICMPass> {
   LICMOptions Opts;
 
 public:
@@ -93,13 +91,11 @@ public:
                               AllowSpeculation)) {}
   LNICMPass(LICMOptions Opts) : Opts(Opts) {}
 
-  LLVM_ABI PreservedAnalyses run(LoopNest &L, LoopAnalysisManager &AM,
-                                 LoopStandardAnalysisResults &AR,
-                                 LPMUpdater &U);
+  PreservedAnalyses run(LoopNest &L, LoopAnalysisManager &AM,
+                        LoopStandardAnalysisResults &AR, LPMUpdater &U);
 
-  LLVM_ABI void
-  printPipeline(raw_ostream &OS,
-                function_ref<StringRef(StringRef)> MapClassName2PassName);
+  void printPipeline(raw_ostream &OS,
+                     function_ref<StringRef(StringRef)> MapClassName2PassName);
 };
 } // end namespace llvm
 

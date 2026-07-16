@@ -37,11 +37,10 @@ public:
 
 private:
   LocationKind Kind;
-  union {
-    SourceLocation SourceLoc;
-    MemoryLocation MemoryLoc;
-    const SymbolizedStack *SymbolizedLoc; // Not owned.
-  };
+  // FIXME: In C++11, wrap these in an anonymous union.
+  SourceLocation SourceLoc;
+  MemoryLocation MemoryLoc;
+  const SymbolizedStack *SymbolizedLoc;  // Not owned.
 
 public:
   Location() : Kind(LK_Null) {}

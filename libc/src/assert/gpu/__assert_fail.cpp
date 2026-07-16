@@ -10,10 +10,9 @@
 
 #include "src/__support/CPP/atomic.h"
 #include "src/__support/GPU/utils.h"
-#include "src/__support/common.h"
 #include "src/__support/libc_assert.h"
 #include "src/__support/macros/config.h"
-#include "src/stdlib/abort_utils.h"
+#include "src/stdlib/abort.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
@@ -36,7 +35,7 @@ LLVM_LIBC_FUNCTION(void, __assert_fail,
   if (gpu::is_first_lane(mask))
     LIBC_NAMESPACE::report_assertion_failure(assertion, file, line, function);
   gpu::sync_lane(mask);
-  LIBC_NAMESPACE::abort_utils::abort();
+  LIBC_NAMESPACE::abort();
 }
 
 } // namespace LIBC_NAMESPACE_DECL

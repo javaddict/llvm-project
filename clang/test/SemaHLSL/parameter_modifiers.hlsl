@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple dxil-pc-shadermodel6.6-library %s -verify
+// RUN: %clang_cc1 -triple dxil-pc-shadermodel6.6-library %s -verify -Wconversion
 void fn(in out float f); // #fn
 
 // expected-error@#fn2{{duplicate parameter modifier 'in'}}

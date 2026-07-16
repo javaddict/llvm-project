@@ -19,7 +19,7 @@ namespace mlir {
 /// class since you need to determine safe positions to place alloc and
 /// deallocs. This alias analysis only finds aliases that might have been
 /// created on top of the specified view. To find all aliases, resolve the
-/// initial alloc/argument value.
+/// intial alloc/argument value.
 class BufferViewFlowAnalysis {
 public:
   using ValueSetT = SmallPtrSet<Value, 16>;

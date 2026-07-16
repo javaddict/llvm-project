@@ -8,7 +8,6 @@
 
 #include "flang/Parser/tools.h"
 #include "flang/Common/indirection.h"
-#include "flang/Evaluate/characteristics.h"
 #include "flang/Parser/dump-parse-tree.h"
 #include "flang/Parser/message.h"
 #include "flang/Parser/parse-tree.h"
@@ -121,19 +120,6 @@ const Scope *FindOpenACCConstructContaining(const Scope *scope) {
                        return s.kind() == Scope::Kind::OpenACCConstruct;
                      })
                : nullptr;
-}
-
-bool HasOpenACCRoutineDirective(const Scope *scope) {
-  if (!scope) {
-    return false;
-  }
-  const Scope &progUnit{GetProgramUnitContaining(*scope)};
-  if (const Symbol *symbol{progUnit.symbol()}) {
-    if (const auto *subpDetails{symbol->detailsIf<SubprogramDetails>()}) {
-      return !subpDetails->openACCRoutineInfos().empty();
-    }
-  }
-  return false;
 }
 
 // 7.5.2.4 "same derived type" test -- rely on IsTkCompatibleWith() and its
@@ -263,7 +249,7 @@ bool DoesScopeContain(const Scope *maybeAncestor, const Symbol &symbol) {
   return DoesScopeContain(maybeAncestor, symbol.owner());
 }
 
-const Symbol &FollowHostAssoc(const Symbol &symbol) {
+static const Symbol &FollowHostAssoc(const Symbol &symbol) {
   for (const Symbol *s{&symbol};;) {
     const auto *details{s->detailsIf<HostAssocDetails>()};
     if (!details) {
@@ -331,13 +317,7 @@ const Symbol *FindExternallyVisibleObject(
   // TODO: Storage association with any object for which this predicate holds,
   // once EQUIVALENCE is supported.
   const Symbol &ultimate{GetAssociationRoot(object)};
-  if (ultimate.owner().IsDerivedType()) {
-    return nullptr;
-  } else if (!IsDummy(ultimate) &&
-      (IsUseAssociated(object, scope) ||
-          IsHostAssociatedIntoSubprogram(object, scope))) {
-    return &object;
-  } else if (IsDummy(ultimate)) {
+  if (IsDummy(ultimate)) {
     if (IsIntentIn(ultimate)) {
       return &ultimate;
     }
@@ -345,7 +325,12 @@ const Symbol *FindExternallyVisibleObject(
         IsPureProcedure(ultimate.owner()) && IsFunction(ultimate.owner())) {
       return &ultimate;
     }
-  } else if (const Symbol *block{FindCommonBlockContaining(ultimate)}) {
+  } else if (ultimate.owner().IsDerivedType()) {
+    return nullptr;
+  } else if (&GetProgramUnitContaining(ultimate) !=
+      &GetProgramUnitContaining(scope)) {
+    return &object;
+  } else if (const Symbol * block{FindCommonBlockContaining(ultimate)}) {
     return block;
   }
   return nullptr;
@@ -359,6 +344,18 @@ const Symbol &BypassGeneric(const Symbol &symbol) {
     }
   }
   return symbol;
+}
+
+const Symbol &GetCrayPointer(const Symbol &crayPointee) {
+  const Symbol *found{nullptr};
+  const Symbol &ultimate{crayPointee.GetUltimate()};
+  for (const auto &[pointee, pointer] : ultimate.owner().crayPointers()) {
+    if (pointee == ultimate.name()) {
+      found = &pointer.get();
+      break;
+    }
+  }
+  return DEREF(found);
 }
 
 bool ExprHasTypeCategory(
@@ -774,7 +771,7 @@ const Symbol *IsFinalizable(const DerivedTypeSpec &derived,
   if (elemental && (!withImpureFinalizer || !IsPureProcedure(*elemental))) {
     return elemental;
   }
-  // Check components (including ancestors via parent component recursion)
+  // Check components (including ancestors)
   std::set<const DerivedTypeSpec *> basis;
   if (inProgress) {
     if (inProgress->find(&derived) != inProgress->end()) {
@@ -785,14 +782,10 @@ const Symbol *IsFinalizable(const DerivedTypeSpec &derived,
   }
   auto iterator{inProgress->insert(&derived).first};
   const Symbol *result{nullptr};
-  // Iterate only the type's own scope to avoid exponential traversal
-  // when combined with recursion through derived-type components.
-  if (const Scope *scope{derived.GetScope()}) {
-    for (const auto &[_, symbolRef] : *scope) {
-      result = IsFinalizable(*symbolRef, inProgress, withImpureFinalizer);
-      if (result) {
-        break;
-      }
+  for (const Symbol &component : PotentialComponentIterator{derived}) {
+    result = IsFinalizable(component, inProgress, withImpureFinalizer);
+    if (result) {
+      break;
     }
   }
   inProgress->erase(iterator);
@@ -960,13 +953,13 @@ public:
     return false;
   }
   bool operator()(const parser::CallStmt &stmt) {
-    const auto &call{std::get<parser::Call>(stmt.t)};
     const auto &procedureDesignator{
-        std::get<parser::ProcedureDesignator>(call.t)};
+        std::get<parser::ProcedureDesignator>(stmt.call.t)};
     if (auto *name{std::get_if<parser::Name>(&procedureDesignator.u)}) {
       // TODO: also ensure that the procedure is, in fact, an intrinsic
       if (name->source == "move_alloc") {
-        const auto &args{std::get<std::list<parser::ActualArgSpec>>(call.t)};
+        const auto &args{
+            std::get<std::list<parser::ActualArgSpec>>(stmt.call.t)};
         if (!args.empty()) {
           const parser::ActualArg &actualArg{
               std::get<parser::ActualArg>(args.front().t)};
@@ -1076,17 +1069,6 @@ bool IsAssumedType(const Symbol &symbol) {
   return false;
 }
 
-bool IsEnumerationType(const Symbol &symbol) {
-  if (const auto *details{symbol.detailsIf<DerivedTypeDetails>()}) {
-    return details->isEnumerationType();
-  }
-  return false;
-}
-
-bool IsEnumerationType(const DerivedTypeSpec &derived) {
-  return derived.IsEnumerationType();
-}
-
 bool IsPolymorphic(const Symbol &symbol) {
   if (const DeclTypeSpec * type{symbol.GetType()}) {
     return type->IsPolymorphic();
@@ -1139,15 +1121,6 @@ bool HasCUDAComponent(const Symbol &symbol) {
   return false;
 }
 
-bool IsCUDAAddressSpaceAgnostic(
-    const evaluate::characteristics::DummyDataObject &dummy) {
-  return !dummy.cudaDataAttr && dummy.type.type().IsAssumedType() &&
-      (dummy.type.attrs().test(
-           evaluate::characteristics::TypeAndShape::Attr::AssumedSize) ||
-          dummy.type.attrs().test(
-              evaluate::characteristics::TypeAndShape::Attr::AssumedRank));
-}
-
 UltimateComponentIterator::const_iterator
 FindCUDADeviceAllocatableUltimateComponent(const DerivedTypeSpec &derived) {
   UltimateComponentIterator ultimates{derived};
@@ -1172,8 +1145,10 @@ bool CanCUDASymbolBeGlobal(const Symbol &sym) {
           return false;
         }
       }
-      if (details->cudaDataAttr())
+      if (details->cudaDataAttr() &&
+          *details->cudaDataAttr() != common::CUDADataAttr::Unified) {
         return false;
+      }
     }
   }
   return true;

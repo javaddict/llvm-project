@@ -400,8 +400,7 @@ private:
   FragmentsSetTy ParentFragments;
 
   /// Indicate if the function body was folded into another function.
-  /// Used by ICF optimization. Always points to the root parent function
-  /// (i.e., a function that is not itself folded).
+  /// Used by ICF optimization.
   BinaryFunction *FoldedIntoFunction{nullptr};
 
   /// All fragments for a parent function.
@@ -683,8 +682,7 @@ private:
   ///
   /// Prefer to use BinaryContext::getFunctionForSymbol(EntrySymbol, &ID)
   /// instead of calling this function directly.
-  std::optional<uint64_t>
-  getEntryIDForSymbol(const MCSymbol *EntrySymbol) const;
+  uint64_t getEntryIDForSymbol(const MCSymbol *EntrySymbol) const;
 
   /// If the function represents a secondary split function fragment, set its
   /// parent fragment to \p BF.
@@ -772,9 +770,6 @@ private:
   /// Clear state of the function that could not be disassembled or if its
   /// disassembled state was later invalidated.
   void clearDisasmState();
-
-  /// Reset the function state into Empty state, i.e. pre-disassembly form.
-  void resetState();
 
   /// Release memory allocated for CFG and instructions.
   /// We still keep basic blocks for address translation/mapping purposes.

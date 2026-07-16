@@ -32,10 +32,6 @@
 #    error "__cpp_lib_associative_heterogeneous_insertion should not be defined before c++26"
 #  endif
 
-#  ifdef __cpp_lib_constexpr_map
-#    error "__cpp_lib_constexpr_map should not be defined before c++26"
-#  endif
-
 #  ifdef __cpp_lib_containers_ranges
 #    error "__cpp_lib_containers_ranges should not be defined before c++23"
 #  endif
@@ -76,10 +72,6 @@
 
 #  ifdef __cpp_lib_associative_heterogeneous_insertion
 #    error "__cpp_lib_associative_heterogeneous_insertion should not be defined before c++26"
-#  endif
-
-#  ifdef __cpp_lib_constexpr_map
-#    error "__cpp_lib_constexpr_map should not be defined before c++26"
 #  endif
 
 #  ifdef __cpp_lib_containers_ranges
@@ -128,10 +120,6 @@
 
 #  ifdef __cpp_lib_associative_heterogeneous_insertion
 #    error "__cpp_lib_associative_heterogeneous_insertion should not be defined before c++26"
-#  endif
-
-#  ifdef __cpp_lib_constexpr_map
-#    error "__cpp_lib_constexpr_map should not be defined before c++26"
 #  endif
 
 #  ifdef __cpp_lib_containers_ranges
@@ -189,10 +177,6 @@
 
 #  ifdef __cpp_lib_associative_heterogeneous_insertion
 #    error "__cpp_lib_associative_heterogeneous_insertion should not be defined before c++26"
-#  endif
-
-#  ifdef __cpp_lib_constexpr_map
-#    error "__cpp_lib_constexpr_map should not be defined before c++26"
 #  endif
 
 #  ifdef __cpp_lib_containers_ranges
@@ -262,10 +246,6 @@
 
 #  ifdef __cpp_lib_associative_heterogeneous_insertion
 #    error "__cpp_lib_associative_heterogeneous_insertion should not be defined before c++26"
-#  endif
-
-#  ifdef __cpp_lib_constexpr_map
-#    error "__cpp_lib_constexpr_map should not be defined before c++26"
 #  endif
 
 #  ifndef __cpp_lib_containers_ranges
@@ -356,13 +336,6 @@
 #    ifdef __cpp_lib_associative_heterogeneous_insertion
 #      error "__cpp_lib_associative_heterogeneous_insertion should not be defined because it is unimplemented in libc++!"
 #    endif
-#  endif
-
-#  ifndef __cpp_lib_constexpr_map
-#    error "__cpp_lib_constexpr_map should be defined in c++26"
-#  endif
-#  if __cpp_lib_constexpr_map != 202502L
-#    error "__cpp_lib_constexpr_map should have the value 202502L in c++26"
 #  endif
 
 #  ifndef __cpp_lib_containers_ranges

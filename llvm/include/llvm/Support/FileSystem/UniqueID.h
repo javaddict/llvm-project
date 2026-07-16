@@ -53,6 +53,17 @@ public:
 
 // Support UniqueIDs as DenseMap keys.
 template <> struct DenseMapInfo<llvm::sys::fs::UniqueID> {
+  static inline llvm::sys::fs::UniqueID getEmptyKey() {
+    auto EmptyKey = DenseMapInfo<std::pair<uint64_t, uint64_t>>::getEmptyKey();
+    return {EmptyKey.first, EmptyKey.second};
+  }
+
+  static inline llvm::sys::fs::UniqueID getTombstoneKey() {
+    auto TombstoneKey =
+        DenseMapInfo<std::pair<uint64_t, uint64_t>>::getTombstoneKey();
+    return {TombstoneKey.first, TombstoneKey.second};
+  }
+
   static hash_code getHashValue(const llvm::sys::fs::UniqueID &Tag) {
     return hash_value(std::make_pair(Tag.getDevice(), Tag.getFile()));
   }

@@ -1,5 +1,4 @@
 ; RUN: llc -O0 -mtriple=spirv32-unknown-unknown %s -o - | FileCheck %s
-; RUN: %if spirv-tools %{ llc -O0 -mtriple=spirv32-unknown-unknown %s -o - -filetype=obj | spirv-val %}
 
 ; CHECK-DAG: OpDecorate %[[#Memset_p0i32:]] LinkageAttributes "spirv.llvm_memset_p0_i32" Export
 ; CHECK-DAG: OpDecorate %[[#Memset_p3i32:]] LinkageAttributes "spirv.llvm_memset_p3_i32" Export
@@ -40,22 +39,16 @@
 ; CHECK: %[[#Volatile:]] = OpFunctionParameter %[[#]]
 
 ; CHECK: %[[#Entry:]] = OpLabel
-; CHECK: %[[#IsNonZeroLen:]] = OpINotEqual %[[#]] %[[#Len]] %[[#Zero:]]
-; CHECK: OpBranchConditional %[[#IsNonZeroLen]] %[[#Preheader:]] %[[#End:]]
-
-; CHECK: %[[#Preheader]] = OpLabel
-; CHECK: OpBranch %[[#WhileBody:]]
+; CHECK: %[[#IsZeroLen:]] = OpIEqual %[[#]] %[[#Zero:]] %[[#Len]]
+; CHECK: OpBranchConditional %[[#IsZeroLen]] %[[#End:]] %[[#WhileBody:]]
 
 ; CHECK: %[[#WhileBody]] = OpLabel
-; CHECK: %[[#Offset:]] = OpPhi %[[#]] %[[#OffsetInc:]] %[[#WhileBody]] %[[#Zero]] %[[#Preheader]]
+; CHECK: %[[#Offset:]] = OpPhi %[[#]] %[[#Zero]] %[[#Entry]] %[[#OffsetInc:]] %[[#WhileBody]]
 ; CHECK: %[[#Ptr:]] = OpInBoundsPtrAccessChain %[[#]] %[[#Dest]] %[[#Offset]]
 ; CHECK: OpStore %[[#Ptr]] %[[#Value]] Aligned 1
 ; CHECK: %[[#OffsetInc]] = OpIAdd %[[#]] %[[#Offset]] %[[#One:]]
 ; CHECK: %[[#NotEnd:]] = OpULessThan %[[#]] %[[#OffsetInc]] %[[#Len]]
-; CHECK: OpBranchConditional %[[#NotEnd]] %[[#WhileBody]] %[[#LoopExit:]]
-
-; CHECK: %[[#LoopExit]] = OpLabel
-; CHECK: OpBranch %[[#End]]
+; CHECK: OpBranchConditional %[[#NotEnd]] %[[#WhileBody]] %[[#End]]
 
 ; CHECK: %[[#End]] = OpLabel
 ; CHECK: OpReturn

@@ -157,14 +157,14 @@ private:
   getDeallocReleaseRequirement(const ObjCPropertyImplDecl *PropImpl) const;
 
   bool isInInstanceDealloc(const CheckerContext &C, SVal &SelfValOut) const;
-  bool isInInstanceDealloc(const CheckerContext &C, const StackFrame *SF,
+  bool isInInstanceDealloc(const CheckerContext &C, const LocationContext *LCtx,
                            SVal &SelfValOut) const;
   bool instanceDeallocIsOnStack(const CheckerContext &C,
                                 SVal &InstanceValOut) const;
 
   bool isSuperDeallocMessage(const ObjCMethodCall &M) const;
 
-  const ObjCImplDecl *getContainingObjCImpl(const StackFrame *SF) const;
+  const ObjCImplDecl *getContainingObjCImpl(const LocationContext *LCtx) const;
 
   const ObjCPropertyDecl *
   findShadowedPropertyDecl(const ObjCPropertyImplDecl *PropImpl) const;
@@ -267,7 +267,7 @@ void ObjCDeallocChecker::checkBeginFunction(
 
   SymbolRef SelfSymbol = SelfVal.getAsSymbol();
 
-  const StackFrame *SF = C.getStackFrame();
+  const LocationContext *LCtx = C.getLocationContext();
   ProgramStateRef InitialState = C.getState();
 
   ProgramStateRef State = InitialState;
@@ -282,7 +282,7 @@ void ObjCDeallocChecker::checkBeginFunction(
   if (const SymbolSet *CurrSet = State->get<UnreleasedIvarMap>(SelfSymbol))
     RequiredReleases = *CurrSet;
 
-  for (auto *PropImpl : getContainingObjCImpl(SF)->property_impls()) {
+  for (auto *PropImpl : getContainingObjCImpl(LCtx)->property_impls()) {
     ReleaseRequirement Requirement = getDeallocReleaseRequirement(PropImpl);
     if (Requirement != ReleaseRequirement::MustRelease)
       continue;
@@ -500,7 +500,7 @@ void ObjCDeallocChecker::diagnoseMissingReleases(CheckerContext &C) const {
     return;
 
   const MemRegion *SelfRegion = SelfVal.castAs<loc::MemRegionVal>().getRegion();
-  const StackFrame *SF = C.getStackFrame();
+  const LocationContext *LCtx = C.getLocationContext();
 
   ExplodedNode *ErrNode = nullptr;
 
@@ -530,7 +530,7 @@ void ObjCDeallocChecker::diagnoseMissingReleases(CheckerContext &C) const {
     // Prevent an inlined call to -dealloc in a super class from warning
     // about the values the subclass's -dealloc should release.
     if (IvarDecl->getContainingInterface() !=
-        cast<ObjCMethodDecl>(SF->getDecl())->getClassInterface())
+        cast<ObjCMethodDecl>(LCtx->getDecl())->getClassInterface())
       continue;
 
     // Prevents diagnosing multiple times for the same instance variable
@@ -604,7 +604,7 @@ void ObjCDeallocChecker::diagnoseMissingReleases(CheckerContext &C) const {
   // Make sure that after checking in the top-most frame the list of
   // tracked ivars is empty. This is intended to detect accidental leaks in
   // the UnreleasedIvarMap program state.
-  assert(!SF->inTopFrame() || State->get<UnreleasedIvarMap>().isEmpty());
+  assert(!LCtx->inTopFrame() || State->get<UnreleasedIvarMap>().isEmpty());
 }
 
 /// Given a symbol, determine whether the symbol refers to an ivar on
@@ -628,10 +628,10 @@ ObjCDeallocChecker::findPropertyOnDeallocatingInstance(
       IvarRegion->getSuperRegion())
     return nullptr;
 
-  const StackFrame *SF = C.getStackFrame();
+  const LocationContext *LCtx = C.getLocationContext();
   const ObjCIvarDecl *IvarDecl = IvarRegion->getDecl();
 
-  const ObjCImplDecl *Container = getContainingObjCImpl(SF);
+  const ObjCImplDecl *Container = getContainingObjCImpl(LCtx);
   const ObjCPropertyImplDecl *PropImpl =
       Container->FindPropertyImplIvarDecl(IvarDecl->getIdentifier());
   return PropImpl;
@@ -688,7 +688,7 @@ bool ObjCDeallocChecker::diagnoseExtraRelease(SymbolRef ReleasedValue,
          isReleasedByCIFilterDealloc(PropImpl)
          );
 
-  const ObjCImplDecl *Container = getContainingObjCImpl(C.getStackFrame());
+  const ObjCImplDecl *Container = getContainingObjCImpl(C.getLocationContext());
   OS << "The '" << *PropImpl->getPropertyIvarDecl()
      << "' ivar in '" << *Container;
 
@@ -783,10 +783,10 @@ bool ObjCDeallocChecker::isSuperDeallocMessage(
   return M.getSelector() == DeallocSel;
 }
 
-/// Returns the ObjCImplDecl containing the method declaration in SF.
+/// Returns the ObjCImplDecl containing the method declaration in LCtx.
 const ObjCImplDecl *
-ObjCDeallocChecker::getContainingObjCImpl(const StackFrame *SF) const {
-  auto *MD = cast<ObjCMethodDecl>(SF->getDecl());
+ObjCDeallocChecker::getContainingObjCImpl(const LocationContext *LCtx) const {
+  auto *MD = cast<ObjCMethodDecl>(LCtx->getDecl());
   return cast<ObjCImplDecl>(MD->getDeclContext());
 }
 
@@ -957,24 +957,24 @@ ObjCDeallocChecker::getValueReleasedByNillingOut(const ObjCMethodCall &M,
 /// 'self'.
 bool ObjCDeallocChecker::isInInstanceDealloc(const CheckerContext &C,
                                              SVal &SelfValOut) const {
-  return isInInstanceDealloc(C, C.getStackFrame(), SelfValOut);
+  return isInInstanceDealloc(C, C.getLocationContext(), SelfValOut);
 }
 
-/// Returns true if SF is a call to -dealloc and false
+/// Returns true if LCtx is a call to -dealloc and false
 /// otherwise. If true, it also sets SelfValOut to the value of
 /// 'self'.
 bool ObjCDeallocChecker::isInInstanceDealloc(const CheckerContext &C,
-                                             const StackFrame *SF,
+                                             const LocationContext *LCtx,
                                              SVal &SelfValOut) const {
-  auto *MD = dyn_cast<ObjCMethodDecl>(SF->getDecl());
+  auto *MD = dyn_cast<ObjCMethodDecl>(LCtx->getDecl());
   if (!MD || !MD->isInstanceMethod() || MD->getSelector() != DeallocSel)
     return false;
 
-  const ImplicitParamDecl *SelfDecl = SF->getSelfDecl();
+  const ImplicitParamDecl *SelfDecl = LCtx->getSelfDecl();
   assert(SelfDecl && "No self in -dealloc?");
 
   ProgramStateRef State = C.getState();
-  SelfValOut = State->getSVal(State->getRegion(SelfDecl, SF));
+  SelfValOut = State->getSVal(State->getRegion(SelfDecl, LCtx));
   return true;
 }
 
@@ -983,13 +983,13 @@ bool ObjCDeallocChecker::isInInstanceDealloc(const CheckerContext &C,
 /// 'self' in the frame for -dealloc.
 bool ObjCDeallocChecker::instanceDeallocIsOnStack(const CheckerContext &C,
                                                   SVal &InstanceValOut) const {
-  const StackFrame *SF = C.getStackFrame();
+  const LocationContext *LCtx = C.getLocationContext();
 
-  while (SF) {
-    if (isInInstanceDealloc(C, SF, InstanceValOut))
+  while (LCtx) {
+    if (isInInstanceDealloc(C, LCtx, InstanceValOut))
       return true;
 
-    SF = SF->getParent();
+    LCtx = LCtx->getParent();
   }
 
   return false;

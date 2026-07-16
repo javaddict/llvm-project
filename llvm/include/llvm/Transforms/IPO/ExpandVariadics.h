@@ -23,17 +23,17 @@ enum class ExpandVariadicsMode {
   Lowering,    // Change variadic calling convention
 };
 
-class ExpandVariadicsPass : public OptionalPassInfoMixin<ExpandVariadicsPass> {
+class ExpandVariadicsPass : public PassInfoMixin<ExpandVariadicsPass> {
   const ExpandVariadicsMode Mode;
 
 public:
   // Operates under passed mode unless overridden on commandline
-  LLVM_ABI ExpandVariadicsPass(ExpandVariadicsMode Mode);
+  ExpandVariadicsPass(ExpandVariadicsMode Mode);
 
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
 
-LLVM_ABI ModulePass *createExpandVariadicsPass(ExpandVariadicsMode);
+ModulePass *createExpandVariadicsPass(ExpandVariadicsMode);
 
 } // end namespace llvm
 

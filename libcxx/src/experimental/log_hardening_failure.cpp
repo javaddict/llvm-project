@@ -15,7 +15,6 @@
 #endif // __BIONIC__
 
 _LIBCPP_BEGIN_NAMESPACE_STD
-_LIBCPP_BEGIN_EXPLICIT_ABI_ANNOTATIONS
 
 void __log_hardening_failure(const char* message) noexcept {
   // Always log the message to `stderr` in case the platform-specific system calls fail.
@@ -29,5 +28,4 @@ void __log_hardening_failure(const char* message) noexcept {
 #endif
 }
 
-_LIBCPP_END_EXPLICIT_ABI_ANNOTATIONS
 _LIBCPP_END_NAMESPACE_STD

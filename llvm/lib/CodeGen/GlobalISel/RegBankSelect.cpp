@@ -45,18 +45,11 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
-#include <optional>
 #include <utility>
 
 #define DEBUG_TYPE "regbankselect"
 
 using namespace llvm;
-
-/// Cost value representing an impossible or invalid repairing.
-/// This matches the value returned by RegisterBankInfo::copyCost() and
-/// RegisterBankInfo::getBreakDownCost() when the cost cannot be computed.
-static constexpr unsigned ImpossibleRepairCost =
-    std::numeric_limits<unsigned>::max();
 
 static cl::opt<RegBankSelect::Mode> RegBankSelectMode(
     cl::desc("Mode of the RegBankSelect pass"), cl::Hidden, cl::Optional,
@@ -285,11 +278,12 @@ uint64_t RegBankSelect::getRepairCost(
     // repairing placement.
     unsigned Cost = RBI->copyCost(*DesiredRegBank, *CurRegBank,
                                   RBI->getSizeInBits(MO.getReg(), *MRI, *TRI));
-    if (Cost != ImpossibleRepairCost)
+    // TODO: use a dedicated constant for ImpossibleCost.
+    if (Cost != std::numeric_limits<unsigned>::max())
       return Cost;
     // Return the legalization cost of that repairing.
   }
-  return ImpossibleRepairCost;
+  return std::numeric_limits<unsigned>::max();
 }
 
 const RegisterBankInfo::InstructionMapping &RegBankSelect::findBestMapping(
@@ -541,7 +535,7 @@ RegBankSelect::MappingCost RegBankSelect::computeMapping(
     uint64_t RepairCost = getRepairCost(MO, ValMapping);
 
     // This is an impossible to repair cost.
-    if (RepairCost == ImpossibleRepairCost)
+    if (RepairCost == std::numeric_limits<unsigned>::max())
       return MappingCost::ImpossibleCost();
 
     // Bias used for splitting: 5%.
@@ -596,7 +590,7 @@ bool RegBankSelect::applyMapping(
     MachineInstr &MI, const RegisterBankInfo::InstructionMapping &InstrMapping,
     SmallVectorImpl<RegBankSelect::RepairingPlacement> &RepairPts) {
   // OpdMapper will hold all the information needed for the rewriting.
-  std::optional<RegisterBankInfo::OperandsMapper> OpdMapper;
+  RegisterBankInfo::OperandsMapper OpdMapper(MI, InstrMapping, *MRI);
 
   // First, place the repairing code.
   for (RepairingPlacement &RepairPt : RepairPts) {
@@ -621,10 +615,8 @@ bool RegBankSelect::applyMapping(
       // Don't insert additional instruction for debug instruction.
       if (MI.isDebugInstr())
         break;
-      if (!OpdMapper)
-        OpdMapper.emplace(MI, InstrMapping, *MRI);
-      OpdMapper->createVRegs(OpIdx);
-      if (!repairReg(MO, ValMapping, RepairPt, OpdMapper->getVRegs(OpIdx)))
+      OpdMapper.createVRegs(OpIdx);
+      if (!repairReg(MO, ValMapping, RepairPt, OpdMapper.getVRegs(OpIdx)))
         return false;
       break;
     default:
@@ -632,16 +624,9 @@ bool RegBankSelect::applyMapping(
     }
   }
 
-  // Default mappings only need rewriting when repairs create new operands.
-  if (!OpdMapper && InstrMapping.getID() == RegisterBankInfo::DefaultMappingID)
-    return true;
-
-  if (!OpdMapper)
-    OpdMapper.emplace(MI, InstrMapping, *MRI);
   // Second, rewrite the instruction.
-  LLVM_DEBUG(dbgs() << "Actual mapping of the operands: " << *OpdMapper
-                    << '\n');
-  RBI->applyMapping(MIRBuilder, *OpdMapper);
+  LLVM_DEBUG(dbgs() << "Actual mapping of the operands: " << OpdMapper << '\n');
+  RBI->applyMapping(MIRBuilder, OpdMapper);
 
   return true;
 }

@@ -19,10 +19,6 @@ It attempts to be command-line-compatible and output-compatible with macOS's
 OPTIONS
 -------
 
-.. option:: -a
-
- Print archive header.
-
 .. option:: -arch <value>
 
  Select slice of universal Mach-O file.
@@ -82,10 +78,6 @@ OPTIONS
 .. option:: -l
 
  Print load commands.
-
-.. option:: -m
-
- Don't use archive(member) syntax.
 
 .. option:: -mcpu=<value>
 

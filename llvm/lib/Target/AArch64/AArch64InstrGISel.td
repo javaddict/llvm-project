@@ -25,13 +25,20 @@ def G_ADD_LOW : AArch64GenericInstruction {
   let hasSideEffects = 0;
 }
 
+// Pseudo for a rev16 instruction. Produced post-legalization from
+// G_SHUFFLE_VECTORs with appropriate masks.
+def G_REV16 : AArch64GenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$src);
+  let hasSideEffects = 0;
+}
+
 // Pseudo for a rev32 instruction. Produced post-legalization from
 // G_SHUFFLE_VECTORs with appropriate masks.
 def G_REV32 : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$src);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 
 // Pseudo for a rev64 instruction. Produced post-legalization from
@@ -40,7 +47,6 @@ def G_REV64 : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$src);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 
 // Represents an uzp1 instruction. Produced post-legalization from
@@ -49,7 +55,6 @@ def G_UZP1 : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$v1, type0:$v2);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 
 // Represents an uzp2 instruction. Produced post-legalization from
@@ -58,7 +63,6 @@ def G_UZP2 : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$v1, type0:$v2);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 
 // Represents a zip1 instruction. Produced post-legalization from
@@ -67,7 +71,6 @@ def G_ZIP1 : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$v1, type0:$v2);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 
 // Represents a zip2 instruction. Produced post-legalization from
@@ -76,7 +79,6 @@ def G_ZIP2 : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$v1, type0:$v2);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 
 // Represents a dup instruction. Produced post-legalization from
@@ -85,7 +87,6 @@ def G_DUP: AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type1:$lane);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 
 // Represents a lane duplicate operation.
@@ -93,25 +94,21 @@ def G_DUPLANE8 : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$src, type1:$lane);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 def G_DUPLANE16 : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$src, type1:$lane);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 def G_DUPLANE32 : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$src, type1:$lane);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 def G_DUPLANE64 : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$src, type1:$lane);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 
 // Represents a trn1 instruction. Produced post-legalization from
@@ -120,7 +117,6 @@ def G_TRN1 : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$v1, type0:$v2);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 
 // Represents a trn2 instruction. Produced post-legalization from
@@ -129,7 +125,6 @@ def G_TRN2 : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$v1, type0:$v2);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 
 // Represents an ext instruction. Produced post-legalization from
@@ -138,7 +133,6 @@ def G_EXT: AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$v1, type0:$v2, untyped_imm_0:$imm);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 
 // Represents a vector G_ASHR with an immediate.
@@ -300,9 +294,9 @@ def G_BSP : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$src1, type0:$src2, type0:$src3);
   let hasSideEffects = 0;
-  let GISelMatchGenericTypes = 1;
 }
 
+def : GINodeEquiv<G_REV16, AArch64rev16>;
 def : GINodeEquiv<G_REV32, AArch64rev32>;
 def : GINodeEquiv<G_REV64, AArch64rev64>;
 def : GINodeEquiv<G_UZP1, AArch64uzp1>;

@@ -22,10 +22,6 @@
 #include <tuple>
 #include <vector>
 
-namespace lldb_private {
-class StackFrame;
-}
-
 namespace lldb_private::dil {
 
 enum class ErrorCode : unsigned char {
@@ -34,9 +30,6 @@ enum class ErrorCode : unsigned char {
   kUndeclaredIdentifier,
   kUnknown,
 };
-
-CompilerType ResolveTypeByName(const std::string &name,
-                               ExecutionContextScope &ctx_scope);
 
 // The following is modeled on class OptionParseError.
 class DILDiagnosticError
@@ -71,24 +64,29 @@ public:
                                          DILLexer lexer,
                                          std::shared_ptr<StackFrame> frame_sp,
                                          lldb::DynamicValueType use_dynamic,
-                                         lldb::DILMode mode);
+                                         bool use_synthetic, bool fragile_ivar,
+                                         bool check_ptr_vs_member);
 
   ~DILParser() = default;
+
+  bool UseSynthetic() { return m_use_synthetic; }
+
+  bool UseFragileIvar() { return m_fragile_ivar; }
+
+  bool CheckPtrVsMember() { return m_check_ptr_vs_member; }
+
+  lldb::DynamicValueType UseDynamic() { return m_use_dynamic; }
 
 private:
   explicit DILParser(llvm::StringRef dil_input_expr, DILLexer lexer,
                      std::shared_ptr<StackFrame> frame_sp,
-                     lldb::DynamicValueType use_dynamic, llvm::Error &error,
-                     lldb::DILMode mode);
+                     lldb::DynamicValueType use_dynamic, bool use_synthetic,
+                     bool fragile_ivar, bool check_ptr_vs_member,
+                     llvm::Error &error);
 
   ASTNodeUP Run();
 
   ASTNodeUP ParseExpression();
-
-  ASTNodeUP ParseAssignmentExpression();
-  ASTNodeUP ParseShiftExpression();
-  ASTNodeUP ParseAdditiveExpression();
-  ASTNodeUP ParseMultiplicativeExpression();
   ASTNodeUP ParseUnaryExpression();
   ASTNodeUP ParsePostfixExpression();
   ASTNodeUP ParsePrimaryExpression();
@@ -105,9 +103,6 @@ private:
   ASTNodeUP ParseCastExpression();
   std::optional<CompilerType> ParseBuiltinType();
   std::optional<CompilerType> ParseTypeId();
-  void ParseTypeSpecifierSeq(std::string &type_name);
-  std::optional<std::string> ParseTypeSpecifier();
-  std::optional<std::string> ParseTypeName();
   CompilerType ResolveTypeDeclarators(CompilerType type,
                                       const std::vector<Token> &ptr_operators);
 
@@ -138,9 +133,9 @@ private:
   llvm::Error &m_error;
 
   lldb::DynamicValueType m_use_dynamic;
-
-  // DIL Mode requested by the caller.
-  lldb::DILMode m_mode;
+  bool m_use_synthetic;
+  bool m_fragile_ivar;
+  bool m_check_ptr_vs_member;
 }; // class DILParser
 
 } // namespace lldb_private::dil

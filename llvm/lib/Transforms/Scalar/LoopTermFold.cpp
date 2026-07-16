@@ -67,8 +67,8 @@ canFoldTermCondOfLoop(Loop *L, ScalarEvolution &SE, DominatorTree &DT,
   }
 
   BasicBlock *LoopLatch = L->getLoopLatch();
-  CondBrInst *BI = dyn_cast<CondBrInst>(LoopLatch->getTerminator());
-  if (!BI)
+  BranchInst *BI = dyn_cast<BranchInst>(LoopLatch->getTerminator());
+  if (!BI || BI->isUnconditional())
     return std::nullopt;
   auto *TermCond = dyn_cast<ICmpInst>(BI->getCondition());
   if (!TermCond) {
@@ -274,7 +274,7 @@ static bool RunTermFold(Loop *L, ScalarEvolution &SE, DominatorTree &DT,
                     << *TermValue << "\n");
 
   // Create new terminating condition at loop latch
-  CondBrInst *BI = cast<CondBrInst>(LoopLatch->getTerminator());
+  BranchInst *BI = cast<BranchInst>(LoopLatch->getTerminator());
   ICmpInst *OldTermCond = cast<ICmpInst>(BI->getCondition());
   IRBuilder<> LatchBuilder(LoopLatch->getTerminator());
   Value *NewTermCond =

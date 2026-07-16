@@ -9,7 +9,6 @@ endif()
 set(CLANG_BOOTSTRAP_TARGETS
   check-all
   check-clang
-  check-clang-extra
   check-lld
   check-llvm
   check-polly

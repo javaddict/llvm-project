@@ -1,10 +1,8 @@
-# lldbDAP is an OBJECT library: a collection of compiled object files that is
-# shared between the lldb-dap tool and the DAPTests unit test, with no declared
-# link dependencies of its own. Each consumer lists its own LINK_LIBS and
-# LINK_COMPONENTS, avoiding transitive propagation of static LLVM components
-# that would collide with symbols re-exported by liblldb when
-# LLDB_EXPORT_ALL_SYMBOLS is ON.
-add_lldb_library(lldbDAP OBJECT
+# We need to include the llvm components we depend on manually, as liblldb does
+# not re-export those.
+set(LLVM_LINK_COMPONENTS Support)
+
+add_lldb_library(lldbDAP
   Breakpoint.cpp
   BreakpointBase.cpp
   ClientLauncher.cpp
@@ -31,10 +29,10 @@ add_lldb_library(lldbDAP OBJECT
 
   Handler/ResponseHandler.cpp
   Handler/AttachRequestHandler.cpp
-  Handler/BreakpointLocationsRequestHandler.cpp
+  Handler/BreakpointLocationsHandler.cpp
   Handler/CancelRequestHandler.cpp
   Handler/CompileUnitsRequestHandler.cpp
-  Handler/CompletionsRequestHandler.cpp
+  Handler/CompletionsHandler.cpp
   Handler/ConfigurationDoneRequestHandler.cpp
   Handler/ContinueRequestHandler.cpp
   Handler/DataBreakpointInfoRequestHandler.cpp
@@ -75,14 +73,14 @@ add_lldb_library(lldbDAP OBJECT
   Protocol/ProtocolEvents.cpp
   Protocol/ProtocolTypes.cpp
   Protocol/ProtocolRequests.cpp
-  )
 
-# When building with precompiled headers and Xcode as a generator,
-# It adds obj.lldbDAP.dir/${BUILD_TYPE}/cmake_pch.xxx but does not generate one
-# causing the build to fail.
-if(CMAKE_GENERATOR STREQUAL "Xcode")
-  set_target_properties(lldbDAP PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
-endif()
+  LINK_COMPONENTS
+    Option
+    Support
+  LINK_LIBS
+    liblldb
+    lldbHost
+  )
 
 target_include_directories(lldbDAP
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})

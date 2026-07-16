@@ -2,10 +2,6 @@
 // RUN:   -analyzer-config optin.cplusplus.UninitializedObject:Pedantic=true -DPEDANTIC \
 // RUN:   -analyzer-config optin.cplusplus.UninitializedObject:IgnoreRecordsWithField="[Tt]ag|[Kk]ind" \
 // RUN:   -std=c++11 -verify  %s
-// RUN: %clang_analyze_cc1 -analyzer-checker=core,optin.cplusplus.UninitializedObject \
-// RUN:   -analyzer-config optin.cplusplus.UninitializedObject:Pedantic=true -DPEDANTIC \
-// RUN:   -analyzer-config optin.cplusplus.UninitializedObject:IgnoreRecordsWithField="[Tt]ag|[Kk]ind" \
-// RUN:   -std=c++11 -verify  %s -DHEAP_ALLOCATION
 
 // RUN: not %clang_analyze_cc1 -verify %s \
 // RUN:   -analyzer-checker=core \
@@ -20,11 +16,6 @@
 // CHECK-UNINIT-INVALID-REGEX-SAME: with error message "parentheses not
 // CHECK-UNINIT-INVALID-REGEX-SAME: balanced"
 
-#ifdef HEAP_ALLOCATION
-#define INIT(CLS, ARGS) new CLS ARGS
-#else
-#define INIT(CLS, ARGS) (void) CLS ARGS
-#endif
 
 // expected-no-diagnostics
 
@@ -51,7 +42,7 @@ struct UnionLikeStruct1 {
 };
 
 void fUnionLikeStruct1() {
-  INIT(UnionLikeStruct1, (UnionLikeStruct1::volume, 10));
+  UnionLikeStruct1 t(UnionLikeStruct1::volume, 10);
 }
 
 // Only name contains "kind".
@@ -77,7 +68,7 @@ struct UnionLikeStruct2 {
 };
 
 void fUnionLikeStruct2() {
-  INIT(UnionLikeStruct2, (UnionLikeStruct2::volume, 10));
+  UnionLikeStruct2 t(UnionLikeStruct2::volume, 10);
 }
 
 // Only type contains "kind".
@@ -103,7 +94,7 @@ struct UnionLikeStruct3 {
 };
 
 void fUnionLikeStruct3() {
-  INIT(UnionLikeStruct3, (UnionLikeStruct3::volume, 10));
+  UnionLikeStruct3 t(UnionLikeStruct3::volume, 10);
 }
 
 // Only type contains "tag".
@@ -129,7 +120,7 @@ struct UnionLikeStruct4 {
 };
 
 void fUnionLikeStruct4() {
-  INIT(UnionLikeStruct4, (UnionLikeStruct4::volume, 10));
+  UnionLikeStruct4 t(UnionLikeStruct4::volume, 10);
 }
 
 // Both name and type name contains but does not equal to tag/kind.
@@ -155,5 +146,5 @@ struct UnionLikeStruct5 {
 };
 
 void fUnionLikeStruct5() {
-  INIT(UnionLikeStruct5, (UnionLikeStruct5::volume, 10));
+  UnionLikeStruct5 t(UnionLikeStruct5::volume, 10);
 }

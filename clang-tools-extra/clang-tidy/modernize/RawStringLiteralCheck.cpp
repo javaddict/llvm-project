@@ -63,8 +63,9 @@ static bool containsEscapedCharacters(const MatchFinder::MatchResult &Result,
 }
 
 static bool containsDelimiter(StringRef Bytes, const std::string &Delimiter) {
-  return Bytes.contains(Delimiter.empty() ? std::string(R"lit()")lit")
-                                          : (")" + Delimiter + R"(")"));
+  return Bytes.find(Delimiter.empty()
+                        ? std::string(R"lit()")lit")
+                        : (")" + Delimiter + R"(")")) != StringRef::npos;
 }
 
 RawStringLiteralCheck::RawStringLiteralCheck(StringRef Name,

@@ -144,6 +144,7 @@ define <2 x i16> @trunc_v2i64_arg_to_v2i16(<2 x i64> %arg0) #0 {
 ; SI-NEXT:    v_lshlrev_b32_e32 v1, 16, v2
 ; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
 ; SI-NEXT:    v_or_b32_e32 v0, v0, v1
+; SI-NEXT:    v_and_b32_e32 v1, 0xffff, v2
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; VI-LABEL: trunc_v2i64_arg_to_v2i16:
@@ -160,11 +161,18 @@ define <2 x i16> @trunc_v2i64_arg_to_v2i16(<2 x i64> %arg0) #0 {
 ; on the final result, due to losing the fact that the upper half of
 ; the lhs vector was undef.
 define <2 x i16> @vector_trunc_high_bits_undef_lshr_lhs_alignbit_regression(i32 %arg0) {
-; GCN-LABEL: vector_trunc_high_bits_undef_lshr_lhs_alignbit_regression:
-; GCN:       ; %bb.0:
-; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
-; GCN-NEXT:    s_setpc_b64 s[30:31]
+; SI-LABEL: vector_trunc_high_bits_undef_lshr_lhs_alignbit_regression:
+; SI:       ; %bb.0:
+; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; SI-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
+; SI-NEXT:    v_mov_b32_e32 v1, 0
+; SI-NEXT:    s_setpc_b64 s[30:31]
+;
+; VI-LABEL: vector_trunc_high_bits_undef_lshr_lhs_alignbit_regression:
+; VI:       ; %bb.0:
+; VI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; VI-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
+; VI-NEXT:    s_setpc_b64 s[30:31]
   %undef.hi.elt = insertelement <2 x i32> poison, i32 %arg0, i32 0
   %lshr = lshr <2 x i32> %undef.hi.elt, splat (i32 16)
   %trunc = trunc <2 x i32> %lshr to <2 x i16>
@@ -176,6 +184,7 @@ define <2 x i16> @vector_trunc_high_bits_undef_lshr_rhs_alignbit_regression(i32 
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_lshr_b32_e32 v0, 16, v0
+; SI-NEXT:    v_mov_b32_e32 v1, 0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; VI-LABEL: vector_trunc_high_bits_undef_lshr_rhs_alignbit_regression:
@@ -190,11 +199,18 @@ define <2 x i16> @vector_trunc_high_bits_undef_lshr_rhs_alignbit_regression(i32 
 }
 
 define <2 x i16> @vector_trunc_high_bits_undef_ashr_lhs_alignbit_regression(i32 %arg0) {
-; GCN-LABEL: vector_trunc_high_bits_undef_ashr_lhs_alignbit_regression:
-; GCN:       ; %bb.0:
-; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
-; GCN-NEXT:    s_setpc_b64 s[30:31]
+; SI-LABEL: vector_trunc_high_bits_undef_ashr_lhs_alignbit_regression:
+; SI:       ; %bb.0:
+; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; SI-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
+; SI-NEXT:    v_mov_b32_e32 v1, 0
+; SI-NEXT:    s_setpc_b64 s[30:31]
+;
+; VI-LABEL: vector_trunc_high_bits_undef_ashr_lhs_alignbit_regression:
+; VI:       ; %bb.0:
+; VI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; VI-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
+; VI-NEXT:    s_setpc_b64 s[30:31]
   %undef.hi.elt = insertelement <2 x i32> poison, i32 %arg0, i32 0
   %ashr = ashr <2 x i32> %undef.hi.elt, splat (i32 16)
   %trunc = trunc <2 x i32> %ashr to <2 x i16>
@@ -207,6 +223,7 @@ define <2 x i16> @vector_trunc_high_bits_undef_ashr_rhs_alignbit_regression(i32 
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_ashr_i32_e32 v0, -4, v0
 ; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; SI-NEXT:    v_mov_b32_e32 v1, 0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; VI-LABEL: vector_trunc_high_bits_undef_ashr_rhs_alignbit_regression:
@@ -226,6 +243,7 @@ define <2 x i16> @vector_trunc_high_bits_undef_add_lhs_alignbit_regression(i32 %
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_add_i32_e32 v0, vcc, 16, v0
 ; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; SI-NEXT:    v_mov_b32_e32 v1, 0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; VI-LABEL: vector_trunc_high_bits_undef_add_lhs_alignbit_regression:
@@ -245,6 +263,7 @@ define <2 x i16> @vector_trunc_high_bits_undef_shl_rhs_alignbit_regression(i32 %
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_lshl_b32_e32 v0, 2, v0
 ; SI-NEXT:    v_and_b32_e32 v0, 0xfffe, v0
+; SI-NEXT:    v_mov_b32_e32 v1, 0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; VI-LABEL: vector_trunc_high_bits_undef_shl_rhs_alignbit_regression:
@@ -264,6 +283,7 @@ define <2 x i16> @vector_trunc_high_bits_undef_sub_lhs_alignbit_regression(i32 %
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_add_i32_e32 v0, vcc, -16, v0
 ; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; SI-NEXT:    v_mov_b32_e32 v1, 0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; VI-LABEL: vector_trunc_high_bits_undef_sub_lhs_alignbit_regression:
@@ -278,11 +298,18 @@ define <2 x i16> @vector_trunc_high_bits_undef_sub_lhs_alignbit_regression(i32 %
 }
 
 define <2 x i16> @vector_trunc_high_bits_undef_or_lhs_alignbit_regression(i32 %arg0) {
-; GCN-LABEL: vector_trunc_high_bits_undef_or_lhs_alignbit_regression:
-; GCN:       ; %bb.0:
-; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    v_or_b32_e32 v0, 0xffff0011, v0
-; GCN-NEXT:    s_setpc_b64 s[30:31]
+; SI-LABEL: vector_trunc_high_bits_undef_or_lhs_alignbit_regression:
+; SI:       ; %bb.0:
+; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; SI-NEXT:    v_or_b32_e32 v0, 0xffff0011, v0
+; SI-NEXT:    v_mov_b32_e32 v1, 0xffff
+; SI-NEXT:    s_setpc_b64 s[30:31]
+;
+; VI-LABEL: vector_trunc_high_bits_undef_or_lhs_alignbit_regression:
+; VI:       ; %bb.0:
+; VI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; VI-NEXT:    v_or_b32_e32 v0, 0xffff0011, v0
+; VI-NEXT:    s_setpc_b64 s[30:31]
   %undef.hi.elt = insertelement <2 x i32> poison, i32 %arg0, i32 0
   %lshr = or <2 x i32> %undef.hi.elt, splat (i32 17)
   %trunc = trunc <2 x i32> %lshr to <2 x i16>
@@ -295,6 +322,7 @@ define <2 x i16> @vector_trunc_high_bits_undef_xor_lhs_alignbit_regression(i32 %
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_xor_b32_e32 v0, 17, v0
 ; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; SI-NEXT:    v_mov_b32_e32 v1, 0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; VI-LABEL: vector_trunc_high_bits_undef_xor_lhs_alignbit_regression:
@@ -314,6 +342,7 @@ define <2 x i16> @vector_trunc_high_bits_undef_shl_lhs_alignbit_regression(i32 %
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; SI-NEXT:    v_and_b32_e32 v0, 0xfffc, v0
+; SI-NEXT:    v_mov_b32_e32 v1, 0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; VI-LABEL: vector_trunc_high_bits_undef_shl_lhs_alignbit_regression:
@@ -328,12 +357,20 @@ define <2 x i16> @vector_trunc_high_bits_undef_shl_lhs_alignbit_regression(i32 %
 }
 
 define <2 x i16> @vector_trunc_high_bits_undef_mul_lhs_alignbit_regression(i32 %arg0) {
-; GCN-LABEL: vector_trunc_high_bits_undef_mul_lhs_alignbit_regression:
-; GCN:       ; %bb.0:
-; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    v_mul_lo_u32 v0, v0, 18
-; GCN-NEXT:    v_and_b32_e32 v0, 0xfffe, v0
-; GCN-NEXT:    s_setpc_b64 s[30:31]
+; SI-LABEL: vector_trunc_high_bits_undef_mul_lhs_alignbit_regression:
+; SI:       ; %bb.0:
+; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; SI-NEXT:    v_mul_lo_u32 v0, v0, 18
+; SI-NEXT:    v_mov_b32_e32 v1, 0
+; SI-NEXT:    v_and_b32_e32 v0, 0xfffe, v0
+; SI-NEXT:    s_setpc_b64 s[30:31]
+;
+; VI-LABEL: vector_trunc_high_bits_undef_mul_lhs_alignbit_regression:
+; VI:       ; %bb.0:
+; VI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; VI-NEXT:    v_mul_lo_u32 v0, v0, 18
+; VI-NEXT:    v_and_b32_e32 v0, 0xfffe, v0
+; VI-NEXT:    s_setpc_b64 s[30:31]
   %undef.hi.elt = insertelement <2 x i32> poison, i32 %arg0, i32 0
   %lshr = mul <2 x i32> %undef.hi.elt, splat (i32 18)
   %trunc = trunc <2 x i32> %lshr to <2 x i16>
@@ -350,6 +387,7 @@ define <2 x i16> @vector_trunc_high_bits_undef_sdiv_lhs_alignbit_regression(i32 
 ; SI-NEXT:    v_lshrrev_b32_e32 v0, 2, v0
 ; SI-NEXT:    v_add_i32_e32 v0, vcc, v0, v1
 ; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; SI-NEXT:    v_mov_b32_e32 v1, 0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; VI-LABEL: vector_trunc_high_bits_undef_sdiv_lhs_alignbit_regression:
@@ -379,6 +417,7 @@ define <2 x i16> @vector_trunc_high_bits_undef_srem_lhs_alignbit_regression(i32 
 ; SI-NEXT:    v_mul_lo_u32 v1, v1, 18
 ; SI-NEXT:    v_sub_i32_e32 v0, vcc, v0, v1
 ; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; SI-NEXT:    v_mov_b32_e32 v1, 0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; VI-LABEL: vector_trunc_high_bits_undef_srem_lhs_alignbit_regression:
@@ -405,6 +444,7 @@ define <2 x i16> @vector_trunc_high_bits_undef_udiv_lhs_alignbit_regression(i32 
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    s_mov_b32 s4, 0x38e38e39
 ; SI-NEXT:    v_mul_hi_u32 v0, v0, s4
+; SI-NEXT:    v_mov_b32_e32 v1, 0
 ; SI-NEXT:    v_bfe_u32 v0, v0, 2, 16
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -431,6 +471,7 @@ define <2 x i16> @vector_trunc_high_bits_undef_urem_lhs_alignbit_regression(i32 
 ; SI-NEXT:    v_mul_lo_u32 v1, v1, 18
 ; SI-NEXT:    v_sub_i32_e32 v0, vcc, v0, v1
 ; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; SI-NEXT:    v_mov_b32_e32 v1, 0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; VI-LABEL: vector_trunc_high_bits_undef_urem_lhs_alignbit_regression:

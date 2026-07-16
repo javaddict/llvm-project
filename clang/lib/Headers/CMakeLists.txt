@@ -3,7 +3,6 @@
 # to platform specific lists below.
 set(core_files
   builtins.h
-  endian.h
   float.h
   __float_float.h
   __float_header_macro.h
@@ -55,7 +54,6 @@ set(arm_only_files
   )
 
 set(aarch64_only_files
-  arm64_neon.h
   arm64intr.h
   arm_neon_sve_bridge.h
   )
@@ -78,6 +76,12 @@ set(hexagon_files
   hexagon_protos.h
   hexagon_types.h
   hvx_hexagon_protos.h
+  )
+
+set(haydn_files
+  haydn_intrin.h
+  haydn_dsp.h
+  haydn_types.h
   )
 
 set(hip_files
@@ -131,22 +135,18 @@ set(ppc_htm_files
   )
 
 set(riscv_files
-  # Standard headers
   riscv_bitmanip.h
-  riscv_crypto.h
-  riscv_ntlh.h
-  # Vendor headers
-  andes_vector.h
   riscv_corev_alu.h
-  riscv_mips.h
+  riscv_crypto.h
   riscv_nds.h
+  riscv_ntlh.h
   sifive_vector.h
+  andes_vector.h
+  riscv_mips.h
   )
 
 set(spirv_files
   __clang_spirv_builtins.h
-  __clang_spirv_libdevice_declares.h
-  __clang_spirv_math.h
   )
 
 set(systemz_files
@@ -300,7 +300,6 @@ set(x86_files
   )
 
 set(gpu_files
-  amdhsa_abi.h
   gpuintrin.h
   nvptxintrin.h
   amdgpuintrin.h
@@ -324,6 +323,7 @@ set(files
   ${arm_only_files}
   ${aarch64_only_files}
   ${cuda_files}
+  ${haydn_files}
   ${hexagon_files}
   ${hip_files}
   ${loongarch_files}
@@ -507,15 +507,6 @@ if(RISCV IN_LIST LLVM_TARGETS_TO_BUILD)
     )
 endif()
 
-# Generate HLSL intrinsic overloads
-file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/hlsl")
-clang_generate_header(-gen-hlsl-alias-intrinsics HLSLIntrinsics.td
-                      hlsl/hlsl_alias_intrinsics_gen.inc)
-clang_generate_header(-gen-hlsl-inline-intrinsics HLSLIntrinsics.td
-                      hlsl/hlsl_inline_intrinsics_gen.inc)
-set(hlsl_generated_files
-  "${CMAKE_CURRENT_BINARY_DIR}/hlsl/hlsl_alias_intrinsics_gen.inc"
-  "${CMAKE_CURRENT_BINARY_DIR}/hlsl/hlsl_inline_intrinsics_gen.inc")
 
 # Check if the generated headers are included in a target specific lists
 # Currently, all generated headers are target specific.
@@ -523,7 +514,6 @@ set(all_target_specific_generated_files
   ${arm_common_generated_files}
   ${arm_only_generated_files}
   ${aarch64_only_generated_files}
-  ${hlsl_generated_files}
   ${riscv_generated_files})
 foreach( f ${generated_files} )
   if (NOT ${f} IN_LIST all_target_specific_generated_files)
@@ -533,8 +523,8 @@ foreach( f ${generated_files} )
   endif()
 endforeach( f )
 
-function(add_header_target target_name)
-  add_library(${target_name} INTERFACE ${ARGN})
+function(add_header_target target_name file_list)
+  add_library(${target_name} INTERFACE ${file_list})
   set_target_properties(${target_name} PROPERTIES
     FOLDER "Clang/Resources"
     RUNTIME_OUTPUT_DIRECTORY "${output_dir}")
@@ -551,6 +541,7 @@ add_dependencies("clang-resource-headers"
                  "arm-resource-headers"
                  "aarch64-resource-headers"
                  "cuda-resource-headers"
+                 "haydn-resource-headers"
                  "hexagon-resource-headers"
                  "hip-resource-headers"
                  "hlsl-resource-headers"
@@ -579,6 +570,7 @@ add_header_target("arm-resource-headers" "${arm_only_files};${arm_only_generated
 add_header_target("aarch64-resource-headers" "${aarch64_only_files};${aarch64_only_generated_files}")
 add_header_target("cuda-resource-headers" "${cuda_files};${cuda_wrapper_files};${cuda_wrapper_bits_files};${cuda_wrapper_utility_files}")
 add_header_target("hexagon-resource-headers" "${hexagon_files}")
+add_header_target("haydn-resource-headers" "${haydn_files}")
 add_header_target("hip-resource-headers" "${hip_files}")
 add_header_target("loongarch-resource-headers" "${loongarch_files}")
 add_header_target("mips-resource-headers" "${mips_msa_files}")
@@ -592,7 +584,7 @@ add_header_target("x86-resource-headers" "${x86_files}")
 add_header_target("gpu-resource-headers" "${gpu_files}")
 
 # Other header groupings
-add_header_target("hlsl-resource-headers" "${hlsl_files};${hlsl_generated_files}")
+add_header_target("hlsl-resource-headers" ${hlsl_files})
 add_header_target("spirv-resource-headers" ${spirv_files})
 add_header_target("opencl-resource-headers" ${opencl_files})
 add_header_target("llvm-libc-resource-headers" ${llvm_libc_wrapper_files})
@@ -711,6 +703,12 @@ install(
   COMPONENT hexagon-resource-headers)
 
 install(
+  FILES ${haydn_files}
+  DESTINATION ${header_install_dir}
+  EXCLUDE_FROM_ALL
+  COMPONENT haydn-resource-headers)
+
+install(
   FILES ${hip_files}
   DESTINATION ${header_install_dir}
   EXCLUDE_FROM_ALL
@@ -811,12 +809,6 @@ install(
   COMPONENT hlsl-resource-headers)
 
 install(
-  FILES ${hlsl_generated_files}
-  DESTINATION ${header_install_dir}/hlsl
-  ${EXCLUDE_HLSL}
-  COMPONENT hlsl-resource-headers)
-
-install(
   FILES ${spirv_files}
   DESTINATION ${header_install_dir}
   EXCLUDE_FROM_ALL
@@ -876,6 +868,9 @@ if (NOT LLVM_ENABLE_IDE)
   add_llvm_install_targets(install-hexagon-resource-headers
                            DEPENDS hexagon-resource-headers
                            COMPONENT hexagon-resource-headers)
+  add_llvm_install_targets(install-haydn-resource-headers
+                           DEPENDS haydn-resource-headers
+                           COMPONENT haydn-resource-headers)
   add_llvm_install_targets(install-hip-resource-headers
                            DEPENDS hip-resource-headers
                            COMPONENT hip-resource-headers)

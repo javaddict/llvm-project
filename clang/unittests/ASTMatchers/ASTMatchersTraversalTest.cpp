@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ASTMatchersTest.h"
-#include "clang/AST/Attr.h"
+#include "clang/AST/Attrs.inc"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
@@ -6071,14 +6071,14 @@ public:
         FunDecl);
 
     ExpectCorrectResult("ForCallable first",
-                        callExpr(forCallable(declaresSameEntityAsNode(FunDecl)),
+                        callExpr(forCallable(equalsNode(FunDecl)),
                                  callee(cxxMethodDecl().bind("callee")))
                             .bind("call"),
                         FunDecl);
 
     ExpectCorrectResult("ForCallable second",
                         callExpr(callee(cxxMethodDecl().bind("callee")),
-                                 forCallable(declaresSameEntityAsNode(FunDecl)))
+                                 forCallable(equalsNode(FunDecl)))
                             .bind("call"),
                         FunDecl);
 

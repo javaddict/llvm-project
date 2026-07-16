@@ -8,7 +8,6 @@ set(LLVM_LINK_COMPONENTS
 set(LIBS
   CUFDialect
   FIRBuilder
-  FIRAnalysis
   FIRCodeGenDialect
   FIRDialect
   FIRDialectSupport
@@ -34,7 +33,6 @@ add_flang_unittest(FlangOptimizerTests
   Builder/Runtime/ReductionTest.cpp
   Builder/Runtime/StopTest.cpp
   Builder/Runtime/TransformationalTest.cpp
-  FIRCallInterfaceTest.cpp
   FIRContextTest.cpp
   FIRTypesTest.cpp
   FortranVariableTest.cpp

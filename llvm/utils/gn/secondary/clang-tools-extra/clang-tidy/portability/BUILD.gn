@@ -14,7 +14,6 @@ static_library("portability") {
   ]
   sources = [
     "AvoidPragmaOnceCheck.cpp",
-    "NoAssemblerCheck.cpp",
     "PortabilityTidyModule.cpp",
     "RestrictSystemIncludesCheck.cpp",
     "SIMDIntrinsicsCheck.cpp",

@@ -3,6 +3,5 @@
 
 include "llvm/IR/Intrinsics.td"
 
-// CHECK-LABEL: IIT_LongEncodingTable
 // CHECK: /* 0 */ 0, 26, 0,
 def int_foo : Intrinsic<[], [llvm_vararg_ty]>;

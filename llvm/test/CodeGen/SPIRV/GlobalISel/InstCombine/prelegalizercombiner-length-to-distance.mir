@@ -1,4 +1,5 @@
 # RUN: llc -verify-machineinstrs -O0 -mtriple spirv-unknown-unknown -run-pass=spirv-prelegalizer-combiner %s -o - | FileCheck %s
+# REQUIRES: asserts
 ---
 name:            distance_instcombine_float4
 tracksRegLiveness: true

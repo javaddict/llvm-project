@@ -23,8 +23,7 @@ class M68kELFMCAsmInfo : public MCAsmInfoELF {
   void anchor() override;
 
 public:
-  explicit M68kELFMCAsmInfo(const Triple &Triple,
-                            const MCTargetOptions &Options);
+  explicit M68kELFMCAsmInfo(const Triple &Triple);
 };
 
 namespace M68k {

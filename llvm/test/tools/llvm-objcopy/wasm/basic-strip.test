@@ -1,17 +1,16 @@
 ## Test that debug, name, and producers sections are stripped with --strip-all.
-## Unknown custom sections (such as foo) are also stripped, but metadata.code.
-## sections are not.
+## Other sections (unknown to LLVM, such as foo) are not stripped by --strip-all.
 # RUN: yaml2obj %s -o %t
 # RUN: llvm-strip --strip-all %t
-# RUN: obj2yaml %t | FileCheck --implicit-check-not producers --implicit-check-not .debug --implicit-check-not name --implicit-check-not foo %s
+# RUN: obj2yaml %t | FileCheck --implicit-check-not producers --implicit-check-not .debug --implicit-check-not name %s
 
 ## The default no-arg behavior is the same as --strip-all.
 # RUN: llvm-strip %t
-# RUN: obj2yaml %t | FileCheck --implicit-check-not producers --implicit-check-not .debug --implicit-check-not name --implicit-check-not foo %s
+# RUN: obj2yaml %t | FileCheck --implicit-check-not producers --implicit-check-not .debug --implicit-check-not name %s
 
 # CHECK:      Sections:
 # CHECK-NEXT:   - Type: TYPE
-# CHECK:          Name: metadata.code.bar
+# CHECK:          Name: foo
 
 --- !WASM
 FileHeader:
@@ -45,6 +44,3 @@ Sections:
   - Type: CUSTOM
     Name: foo
     Payload: CAFE
-  - Type: CUSTOM
-    Name: metadata.code.bar
-    Payload: BACE

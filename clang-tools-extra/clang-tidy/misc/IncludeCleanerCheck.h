@@ -51,7 +51,7 @@ private:
   const bool UnusedIncludes;
   // Whether to report missing includes.
   const bool MissingIncludes;
-  SmallVector<llvm::Regex> IgnoreHeadersRegex;
+  llvm::SmallVector<llvm::Regex> IgnoreHeadersRegex;
   bool shouldIgnore(const include_cleaner::Header &H);
 };
 

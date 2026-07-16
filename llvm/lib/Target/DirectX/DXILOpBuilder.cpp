@@ -261,18 +261,10 @@ static StructType *getBinaryWithCarryType(LLVMContext &Context) {
   return StructType::create({Int32Ty, Int1Ty}, "dx.types.i32c");
 }
 
-static StructType *getDimensionsType(LLVMContext &Context) {
-  Type *Int32Ty = Type::getInt32Ty(Context);
+static StructType *getDimensionsType(LLVMContext &Ctx) {
+  Type *Int32Ty = Type::getInt32Ty(Ctx);
   return getOrCreateStructType("dx.types.Dimensions",
-                               {Int32Ty, Int32Ty, Int32Ty, Int32Ty}, Context);
-}
-
-static StructType *getFouri32sType(LLVMContext &Context) {
-  if (auto *ST = StructType::getTypeByName(Context, "dx.types.fouri32"))
-    return ST;
-  Type *Int32Ty = Type::getInt32Ty(Context);
-  return getOrCreateStructType("dx.types.fouri32",
-                               {Int32Ty, Int32Ty, Int32Ty, Int32Ty}, Context);
+                               {Int32Ty, Int32Ty, Int32Ty, Int32Ty}, Ctx);
 }
 
 static Type *getTypeFromOpParamType(OpParamType Kind, LLVMContext &Ctx,
@@ -334,10 +326,7 @@ static Type *getTypeFromOpParamType(OpParamType Kind, LLVMContext &Ctx,
     return getBinaryWithCarryType(Ctx);
   case OpParamType::DimensionsTy:
     return getDimensionsType(Ctx);
-  case OpParamType::Fouri32s:
-    return getFouri32sType(Ctx);
   }
-
   llvm_unreachable("Invalid parameter kind");
   return nullptr;
 }
@@ -438,7 +427,8 @@ constexpr static uint64_t computeSwitchEnum(dxil::OpCode OpCode,
   return (OpCodePack << 32) | (VersionMajor << 16) | VersionMinor;
 }
 
-/// Get the set of attributes for a given DXIL OpCode and the DXIL version.
+// Retreive all the set attributes for a DXIL OpCode given the targeted
+// DXILVersion
 static dxil::Attributes getDXILAttributes(dxil::OpCode OpCode,
                                           VersionTuple DXILVersion) {
   // Instantiate all versions to iterate through
@@ -467,25 +457,20 @@ static dxil::Attributes getDXILAttributes(dxil::OpCode OpCode,
   return Attributes;
 }
 
-/// Get the attributes to apply to the function for the DXIL operation with the
-/// given OpCode and DXIL version.
-static AttributeList getDXILFnAttributeList(LLVMContext &Ctx,
-                                            dxil::OpCode OpCode,
-                                            VersionTuple DXILVersion) {
+// Retreive the set of DXIL Attributes given the version and map them to an
+// llvm function attribute that is set onto the instruction
+static void setDXILAttributes(CallInst *CI, dxil::OpCode OpCode,
+                              VersionTuple DXILVersion) {
   dxil::Attributes Attributes = getDXILAttributes(OpCode, DXILVersion);
-  AttrBuilder FnAttrs(Ctx);
-
   if (Attributes.ReadNone)
-    FnAttrs.addMemoryAttr(MemoryEffects::none());
+    CI->setDoesNotAccessMemory();
   if (Attributes.ReadOnly)
-    FnAttrs.addMemoryAttr(MemoryEffects::readOnly());
+    CI->setOnlyReadsMemory();
   if (Attributes.NoReturn)
-    FnAttrs.addAttribute(Attribute::NoReturn);
+    CI->setDoesNotReturn();
   if (Attributes.NoDuplicate)
-    FnAttrs.addAttribute(Attribute::NoDuplicate);
-  FnAttrs.addAttribute(Attribute::NoUnwind);
-
-  return AttributeList::get(Ctx, AttributeList::FunctionIndex, FnAttrs);
+    CI->setCannotDuplicate();
+  return;
 }
 
 namespace llvm {
@@ -573,11 +558,8 @@ Expected<CallInst *> DXILOpBuilder::tryCreateOp(dxil::OpCode OpCode,
   if (!(ValidShaderKindMask & ModuleStagekind))
     return makeOpError(OpCode, "Invalid stage");
 
-  AttributeList DXILFnAttrs =
-      getDXILFnAttributeList(M.getContext(), OpCode, DXILVersion);
   std::string DXILFnName = constructOverloadName(Kind, OverloadTy, *Prop);
-  FunctionCallee DXILFn =
-      M.getOrInsertFunction(DXILFnName, DXILOpFT, DXILFnAttrs);
+  FunctionCallee DXILFn = M.getOrInsertFunction(DXILFnName, DXILOpFT);
 
   // We need to inject the opcode as the first argument.
   SmallVector<Value *> OpArgs;
@@ -586,6 +568,9 @@ Expected<CallInst *> DXILOpBuilder::tryCreateOp(dxil::OpCode OpCode,
 
   // Create the function call instruction
   CallInst *CI = IRB.CreateCall(DXILFn, OpArgs, Name);
+
+  // We then need to attach available function attributes
+  setDXILAttributes(CI, OpCode, DXILVersion);
 
   return CI;
 }

@@ -19,7 +19,6 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/DXContainer.h"
-#include "llvm/MC/DXContainerInfo.h"
 #include "llvm/Object/Error.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/Compiler.h"
@@ -469,7 +468,6 @@ private:
   dxbc::Header Header;
   SmallVector<uint32_t, 4> PartOffsets;
   std::optional<DXILData> DXIL;
-  std::optional<DXILData> DebugDXIL;
   std::optional<uint64_t> ShaderFeatureFlags;
   std::optional<dxbc::ShaderHash> Hash;
   std::optional<DirectX::PSVRuntimeInfo> PSVInfo;
@@ -477,21 +475,15 @@ private:
   DirectX::Signature InputSignature;
   DirectX::Signature OutputSignature;
   DirectX::Signature PatchConstantSignature;
-  std::optional<mcdxbc::DebugName> DebugName;
-  std::optional<mcdxbc::CompilerVersion> VersionInfo;
-  std::optional<mcdxbc::SourceInfo> SourceInfo;
 
   Error parseHeader();
   Error parsePartOffsets();
-  Error parseDXILHeader(dxbc::PartType PT, StringRef Part);
-  Error parseDebugName(StringRef Part);
+  Error parseDXILHeader(StringRef Part);
   Error parseShaderFeatureFlags(StringRef Part);
   Error parseHash(StringRef Part);
   Error parseRootSignature(StringRef Part);
   Error parsePSVInfo(StringRef Part);
   Error parseSignature(StringRef Part, DirectX::Signature &Array);
-  Error parseCompilerVersionInfo(StringRef Part);
-  Error parseSourceInfo(StringRef Part);
   friend class PartIterator;
 
 public:
@@ -569,20 +561,7 @@ public:
 
   const dxbc::Header &getHeader() const { return Header; }
 
-  const std::optional<DXILData> &getDXIL(bool Debug) const {
-    return Debug ? DebugDXIL : DXIL;
-  }
-
-  std::optional<uint16_t> getShaderKind() const {
-    const auto &ProgramPart = DXIL ? DXIL : DebugDXIL;
-    if (!ProgramPart)
-      return std::nullopt;
-    return ProgramPart->first.ShaderKind;
-  }
-
-  const std::optional<mcdxbc::DebugName> getDebugName() const {
-    return DebugName;
-  }
+  const std::optional<DXILData> &getDXIL() const { return DXIL; }
 
   std::optional<uint64_t> getShaderFeatureFlags() const {
     return ShaderFeatureFlags;
@@ -604,14 +583,6 @@ public:
   }
   const DirectX::Signature &getPatchConstantSignature() const {
     return PatchConstantSignature;
-  }
-
-  const std::optional<mcdxbc::CompilerVersion> &getCompilerVersionInfo() const {
-    return VersionInfo;
-  }
-
-  const std::optional<mcdxbc::SourceInfo> &getSourceInfo() const {
-    return SourceInfo;
   }
 };
 

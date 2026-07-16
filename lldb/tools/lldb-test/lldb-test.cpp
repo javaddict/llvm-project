@@ -767,7 +767,8 @@ Error opts::symbols::verify(lldb_private::Module &Module) {
     if (!comp_unit)
       return make_string_error("Cannot parse compile unit {0}.", i);
 
-    outs() << "Processing '" << comp_unit->GetPrimaryFile().GetFilename()
+    outs() << "Processing '"
+           << comp_unit->GetPrimaryFile().GetFilename().AsCString()
            << "' compile unit.\n";
 
     LineTable *lt = comp_unit->GetLineTable();

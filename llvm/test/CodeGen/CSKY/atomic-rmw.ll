@@ -14,7 +14,7 @@ define i8 @atomicrmw_xchg_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI0_0:
 ; CSKY-NEXT:    .long __atomic_exchange_1
   %1 = atomicrmw xchg ptr %a, i8 %b monotonic
@@ -33,7 +33,7 @@ define i8 @atomicrmw_xchg_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI1_0:
 ; CSKY-NEXT:    .long __atomic_exchange_1
   %1 = atomicrmw xchg ptr %a, i8 %b acquire
@@ -52,7 +52,7 @@ define i8 @atomicrmw_xchg_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI2_0:
 ; CSKY-NEXT:    .long __atomic_exchange_1
   %1 = atomicrmw xchg ptr %a, i8 %b release
@@ -71,7 +71,7 @@ define i8 @atomicrmw_xchg_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI3_0:
 ; CSKY-NEXT:    .long __atomic_exchange_1
   %1 = atomicrmw xchg ptr %a, i8 %b acq_rel
@@ -90,7 +90,7 @@ define i8 @atomicrmw_xchg_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI4_0:
 ; CSKY-NEXT:    .long __atomic_exchange_1
   %1 = atomicrmw xchg ptr %a, i8 %b seq_cst
@@ -109,7 +109,7 @@ define i8 @atomicrmw_add_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI5_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_1
   %1 = atomicrmw add ptr %a, i8 %b monotonic
@@ -128,7 +128,7 @@ define i8 @atomicrmw_add_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI6_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_1
   %1 = atomicrmw add ptr %a, i8 %b acquire
@@ -147,7 +147,7 @@ define i8 @atomicrmw_add_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI7_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_1
   %1 = atomicrmw add ptr %a, i8 %b release
@@ -166,7 +166,7 @@ define i8 @atomicrmw_add_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI8_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_1
   %1 = atomicrmw add ptr %a, i8 %b acq_rel
@@ -185,7 +185,7 @@ define i8 @atomicrmw_add_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI9_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_1
   %1 = atomicrmw add ptr %a, i8 %b seq_cst
@@ -204,7 +204,7 @@ define i8 @atomicrmw_sub_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI10_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_1
   %1 = atomicrmw sub ptr %a, i8 %b monotonic
@@ -223,7 +223,7 @@ define i8 @atomicrmw_sub_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI11_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_1
   %1 = atomicrmw sub ptr %a, i8 %b acquire
@@ -242,7 +242,7 @@ define i8 @atomicrmw_sub_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI12_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_1
   %1 = atomicrmw sub ptr %a, i8 %b release
@@ -261,7 +261,7 @@ define i8 @atomicrmw_sub_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI13_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_1
   %1 = atomicrmw sub ptr %a, i8 %b acq_rel
@@ -280,7 +280,7 @@ define i8 @atomicrmw_sub_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI14_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_1
   %1 = atomicrmw sub ptr %a, i8 %b seq_cst
@@ -299,7 +299,7 @@ define i8 @atomicrmw_and_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI15_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_1
   %1 = atomicrmw and ptr %a, i8 %b monotonic
@@ -318,7 +318,7 @@ define i8 @atomicrmw_and_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI16_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_1
   %1 = atomicrmw and ptr %a, i8 %b acquire
@@ -337,7 +337,7 @@ define i8 @atomicrmw_and_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI17_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_1
   %1 = atomicrmw and ptr %a, i8 %b release
@@ -356,7 +356,7 @@ define i8 @atomicrmw_and_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI18_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_1
   %1 = atomicrmw and ptr %a, i8 %b acq_rel
@@ -375,7 +375,7 @@ define i8 @atomicrmw_and_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI19_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_1
   %1 = atomicrmw and ptr %a, i8 %b seq_cst
@@ -394,7 +394,7 @@ define i8 @atomicrmw_nand_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI20_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_1
   %1 = atomicrmw nand ptr %a, i8 %b monotonic
@@ -413,7 +413,7 @@ define i8 @atomicrmw_nand_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI21_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_1
   %1 = atomicrmw nand ptr %a, i8 %b acquire
@@ -432,7 +432,7 @@ define i8 @atomicrmw_nand_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI22_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_1
   %1 = atomicrmw nand ptr %a, i8 %b release
@@ -451,7 +451,7 @@ define i8 @atomicrmw_nand_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI23_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_1
   %1 = atomicrmw nand ptr %a, i8 %b acq_rel
@@ -470,7 +470,7 @@ define i8 @atomicrmw_nand_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI24_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_1
   %1 = atomicrmw nand ptr %a, i8 %b seq_cst
@@ -489,7 +489,7 @@ define i8 @atomicrmw_or_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI25_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_1
   %1 = atomicrmw or ptr %a, i8 %b monotonic
@@ -508,7 +508,7 @@ define i8 @atomicrmw_or_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI26_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_1
   %1 = atomicrmw or ptr %a, i8 %b acquire
@@ -527,7 +527,7 @@ define i8 @atomicrmw_or_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI27_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_1
   %1 = atomicrmw or ptr %a, i8 %b release
@@ -546,7 +546,7 @@ define i8 @atomicrmw_or_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI28_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_1
   %1 = atomicrmw or ptr %a, i8 %b acq_rel
@@ -565,7 +565,7 @@ define i8 @atomicrmw_or_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI29_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_1
   %1 = atomicrmw or ptr %a, i8 %b seq_cst
@@ -584,7 +584,7 @@ define i8 @atomicrmw_xor_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI30_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_1
   %1 = atomicrmw xor ptr %a, i8 %b monotonic
@@ -603,7 +603,7 @@ define i8 @atomicrmw_xor_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI31_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_1
   %1 = atomicrmw xor ptr %a, i8 %b acquire
@@ -622,7 +622,7 @@ define i8 @atomicrmw_xor_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI32_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_1
   %1 = atomicrmw xor ptr %a, i8 %b release
@@ -641,7 +641,7 @@ define i8 @atomicrmw_xor_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI33_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_1
   %1 = atomicrmw xor ptr %a, i8 %b acq_rel
@@ -660,7 +660,7 @@ define i8 @atomicrmw_xor_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI34_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_1
   %1 = atomicrmw xor ptr %a, i8 %b seq_cst
@@ -679,22 +679,21 @@ define i8 @atomicrmw_max_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI35_0]
-; CSKY-NEXT:    sextb16 l3, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    sextb16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB35_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    sextb16 a1, a0
-; CSKY-NEXT:    cmplt16 l3, a1
+; CSKY-NEXT:    cmplt16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movt32 a2, a0
 ; CSKY-NEXT:    st32.b a0, (sp, 7)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 0
-; CSKY-NEXT:    jsri32 [.LCPI35_1]
+; CSKY-NEXT:    jsri32 [.LCPI35_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB35_1
@@ -709,10 +708,8 @@ define i8 @atomicrmw_max_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI35_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI35_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw max ptr %a, i8 %b monotonic
   ret i8 %1
@@ -730,9 +727,8 @@ define i8 @atomicrmw_max_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI36_0]
-; CSKY-NEXT:    sextb16 l2, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    sextb16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB36_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -745,7 +741,7 @@ define i8 @atomicrmw_max_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 2
-; CSKY-NEXT:    jsri32 [.LCPI36_1]
+; CSKY-NEXT:    jsri32 [.LCPI36_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB36_1
@@ -760,10 +756,8 @@ define i8 @atomicrmw_max_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI36_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI36_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw max ptr %a, i8 %b acquire
   ret i8 %1
@@ -781,22 +775,21 @@ define i8 @atomicrmw_max_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI37_0]
-; CSKY-NEXT:    sextb16 l3, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    sextb16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB37_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    sextb16 a1, a0
-; CSKY-NEXT:    cmplt16 l3, a1
+; CSKY-NEXT:    cmplt16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movt32 a2, a0
 ; CSKY-NEXT:    st32.b a0, (sp, 7)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 3
-; CSKY-NEXT:    jsri32 [.LCPI37_1]
+; CSKY-NEXT:    jsri32 [.LCPI37_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB37_1
@@ -811,10 +804,8 @@ define i8 @atomicrmw_max_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI37_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI37_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw max ptr %a, i8 %b release
   ret i8 %1
@@ -832,9 +823,8 @@ define i8 @atomicrmw_max_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI38_0]
-; CSKY-NEXT:    sextb16 l2, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    sextb16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB38_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -847,7 +837,7 @@ define i8 @atomicrmw_max_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 4
-; CSKY-NEXT:    jsri32 [.LCPI38_1]
+; CSKY-NEXT:    jsri32 [.LCPI38_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB38_1
@@ -862,10 +852,8 @@ define i8 @atomicrmw_max_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI38_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI38_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw max ptr %a, i8 %b acq_rel
   ret i8 %1
@@ -883,9 +871,8 @@ define i8 @atomicrmw_max_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI39_0]
-; CSKY-NEXT:    sextb16 l2, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    sextb16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 5
 ; CSKY-NEXT:  .LBB39_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -898,7 +885,7 @@ define i8 @atomicrmw_max_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 5
-; CSKY-NEXT:    jsri32 [.LCPI39_1]
+; CSKY-NEXT:    jsri32 [.LCPI39_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB39_1
@@ -913,10 +900,8 @@ define i8 @atomicrmw_max_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI39_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI39_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw max ptr %a, i8 %b seq_cst
   ret i8 %1
@@ -934,22 +919,21 @@ define i8 @atomicrmw_min_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI40_0]
-; CSKY-NEXT:    sextb16 l3, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    sextb16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB40_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    sextb16 a1, a0
-; CSKY-NEXT:    cmplt16 l3, a1
+; CSKY-NEXT:    cmplt16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movf32 a2, a0
 ; CSKY-NEXT:    st32.b a0, (sp, 7)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 0
-; CSKY-NEXT:    jsri32 [.LCPI40_1]
+; CSKY-NEXT:    jsri32 [.LCPI40_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB40_1
@@ -964,10 +948,8 @@ define i8 @atomicrmw_min_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI40_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI40_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw min ptr %a, i8 %b monotonic
   ret i8 %1
@@ -985,9 +967,8 @@ define i8 @atomicrmw_min_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI41_0]
-; CSKY-NEXT:    sextb16 l2, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    sextb16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB41_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -1000,7 +981,7 @@ define i8 @atomicrmw_min_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 2
-; CSKY-NEXT:    jsri32 [.LCPI41_1]
+; CSKY-NEXT:    jsri32 [.LCPI41_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB41_1
@@ -1015,10 +996,8 @@ define i8 @atomicrmw_min_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI41_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI41_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw min ptr %a, i8 %b acquire
   ret i8 %1
@@ -1036,22 +1015,21 @@ define i8 @atomicrmw_min_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI42_0]
-; CSKY-NEXT:    sextb16 l3, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    sextb16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB42_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    sextb16 a1, a0
-; CSKY-NEXT:    cmplt16 l3, a1
+; CSKY-NEXT:    cmplt16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movf32 a2, a0
 ; CSKY-NEXT:    st32.b a0, (sp, 7)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 3
-; CSKY-NEXT:    jsri32 [.LCPI42_1]
+; CSKY-NEXT:    jsri32 [.LCPI42_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB42_1
@@ -1066,10 +1044,8 @@ define i8 @atomicrmw_min_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI42_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI42_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw min ptr %a, i8 %b release
   ret i8 %1
@@ -1087,9 +1063,8 @@ define i8 @atomicrmw_min_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI43_0]
-; CSKY-NEXT:    sextb16 l2, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    sextb16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB43_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -1102,7 +1077,7 @@ define i8 @atomicrmw_min_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 4
-; CSKY-NEXT:    jsri32 [.LCPI43_1]
+; CSKY-NEXT:    jsri32 [.LCPI43_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB43_1
@@ -1117,10 +1092,8 @@ define i8 @atomicrmw_min_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI43_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI43_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw min ptr %a, i8 %b acq_rel
   ret i8 %1
@@ -1138,9 +1111,8 @@ define i8 @atomicrmw_min_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI44_0]
-; CSKY-NEXT:    sextb16 l2, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    sextb16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 5
 ; CSKY-NEXT:  .LBB44_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -1153,7 +1125,7 @@ define i8 @atomicrmw_min_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 5
-; CSKY-NEXT:    jsri32 [.LCPI44_1]
+; CSKY-NEXT:    jsri32 [.LCPI44_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB44_1
@@ -1168,10 +1140,8 @@ define i8 @atomicrmw_min_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI44_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI44_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw min ptr %a, i8 %b seq_cst
   ret i8 %1
@@ -1189,22 +1159,21 @@ define i8 @atomicrmw_umax_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI45_0]
-; CSKY-NEXT:    zextb16 l3, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    zextb16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB45_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    zextb16 a1, a0
-; CSKY-NEXT:    cmphs16 l3, a1
+; CSKY-NEXT:    cmphs16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movf32 a2, a0
 ; CSKY-NEXT:    st32.b a0, (sp, 7)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 0
-; CSKY-NEXT:    jsri32 [.LCPI45_1]
+; CSKY-NEXT:    jsri32 [.LCPI45_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB45_1
@@ -1219,10 +1188,8 @@ define i8 @atomicrmw_umax_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI45_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI45_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw umax ptr %a, i8 %b monotonic
   ret i8 %1
@@ -1240,9 +1207,8 @@ define i8 @atomicrmw_umax_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI46_0]
-; CSKY-NEXT:    zextb16 l2, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    zextb16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB46_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -1255,7 +1221,7 @@ define i8 @atomicrmw_umax_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 2
-; CSKY-NEXT:    jsri32 [.LCPI46_1]
+; CSKY-NEXT:    jsri32 [.LCPI46_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB46_1
@@ -1270,10 +1236,8 @@ define i8 @atomicrmw_umax_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI46_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI46_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw umax ptr %a, i8 %b acquire
   ret i8 %1
@@ -1291,22 +1255,21 @@ define i8 @atomicrmw_umax_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI47_0]
-; CSKY-NEXT:    zextb16 l3, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    zextb16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB47_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    zextb16 a1, a0
-; CSKY-NEXT:    cmphs16 l3, a1
+; CSKY-NEXT:    cmphs16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movf32 a2, a0
 ; CSKY-NEXT:    st32.b a0, (sp, 7)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 3
-; CSKY-NEXT:    jsri32 [.LCPI47_1]
+; CSKY-NEXT:    jsri32 [.LCPI47_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB47_1
@@ -1321,10 +1284,8 @@ define i8 @atomicrmw_umax_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI47_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI47_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw umax ptr %a, i8 %b release
   ret i8 %1
@@ -1342,9 +1303,8 @@ define i8 @atomicrmw_umax_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI48_0]
-; CSKY-NEXT:    zextb16 l2, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    zextb16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB48_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -1357,7 +1317,7 @@ define i8 @atomicrmw_umax_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 4
-; CSKY-NEXT:    jsri32 [.LCPI48_1]
+; CSKY-NEXT:    jsri32 [.LCPI48_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB48_1
@@ -1372,10 +1332,8 @@ define i8 @atomicrmw_umax_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI48_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI48_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw umax ptr %a, i8 %b acq_rel
   ret i8 %1
@@ -1393,9 +1351,8 @@ define i8 @atomicrmw_umax_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI49_0]
-; CSKY-NEXT:    zextb16 l2, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    zextb16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 5
 ; CSKY-NEXT:  .LBB49_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -1408,7 +1365,7 @@ define i8 @atomicrmw_umax_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 5
-; CSKY-NEXT:    jsri32 [.LCPI49_1]
+; CSKY-NEXT:    jsri32 [.LCPI49_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB49_1
@@ -1423,10 +1380,8 @@ define i8 @atomicrmw_umax_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI49_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI49_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw umax ptr %a, i8 %b seq_cst
   ret i8 %1
@@ -1444,22 +1399,21 @@ define i8 @atomicrmw_umin_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI50_0]
-; CSKY-NEXT:    zextb16 l3, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    zextb16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB50_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    zextb16 a1, a0
-; CSKY-NEXT:    cmphs16 l3, a1
+; CSKY-NEXT:    cmphs16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movt32 a2, a0
 ; CSKY-NEXT:    st32.b a0, (sp, 7)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 0
-; CSKY-NEXT:    jsri32 [.LCPI50_1]
+; CSKY-NEXT:    jsri32 [.LCPI50_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB50_1
@@ -1474,10 +1428,8 @@ define i8 @atomicrmw_umin_i8_monotonic(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI50_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI50_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw umin ptr %a, i8 %b monotonic
   ret i8 %1
@@ -1495,9 +1447,8 @@ define i8 @atomicrmw_umin_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI51_0]
-; CSKY-NEXT:    zextb16 l2, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    zextb16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB51_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -1510,7 +1461,7 @@ define i8 @atomicrmw_umin_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 2
-; CSKY-NEXT:    jsri32 [.LCPI51_1]
+; CSKY-NEXT:    jsri32 [.LCPI51_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB51_1
@@ -1525,10 +1476,8 @@ define i8 @atomicrmw_umin_i8_acquire(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI51_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI51_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw umin ptr %a, i8 %b acquire
   ret i8 %1
@@ -1546,22 +1495,21 @@ define i8 @atomicrmw_umin_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI52_0]
-; CSKY-NEXT:    zextb16 l3, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    zextb16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB52_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    zextb16 a1, a0
-; CSKY-NEXT:    cmphs16 l3, a1
+; CSKY-NEXT:    cmphs16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movt32 a2, a0
 ; CSKY-NEXT:    st32.b a0, (sp, 7)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 3
-; CSKY-NEXT:    jsri32 [.LCPI52_1]
+; CSKY-NEXT:    jsri32 [.LCPI52_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB52_1
@@ -1576,10 +1524,8 @@ define i8 @atomicrmw_umin_i8_release(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI52_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI52_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw umin ptr %a, i8 %b release
   ret i8 %1
@@ -1597,9 +1543,8 @@ define i8 @atomicrmw_umin_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI53_0]
-; CSKY-NEXT:    zextb16 l2, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    zextb16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB53_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -1612,7 +1557,7 @@ define i8 @atomicrmw_umin_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 4
-; CSKY-NEXT:    jsri32 [.LCPI53_1]
+; CSKY-NEXT:    jsri32 [.LCPI53_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB53_1
@@ -1627,10 +1572,8 @@ define i8 @atomicrmw_umin_i8_acq_rel(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI53_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI53_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw umin ptr %a, i8 %b acq_rel
   ret i8 %1
@@ -1648,9 +1591,8 @@ define i8 @atomicrmw_umin_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI54_0]
-; CSKY-NEXT:    zextb16 l2, l0
+; CSKY-NEXT:    ld16.b a0, (a0, 0)
+; CSKY-NEXT:    zextb16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 5
 ; CSKY-NEXT:  .LBB54_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -1663,7 +1605,7 @@ define i8 @atomicrmw_umin_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 7
 ; CSKY-NEXT:    movi16 a3, 5
-; CSKY-NEXT:    jsri32 [.LCPI54_1]
+; CSKY-NEXT:    jsri32 [.LCPI54_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.b a0, (sp, 7)
 ; CSKY-NEXT:    bez32 a1, .LBB54_1
@@ -1678,10 +1620,8 @@ define i8 @atomicrmw_umin_i8_seq_cst(ptr %a, i8 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI54_0:
-; CSKY-NEXT:    .long __atomic_load_1
-; CSKY-NEXT:  .LCPI54_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_1
   %1 = atomicrmw umin ptr %a, i8 %b seq_cst
   ret i8 %1
@@ -1699,7 +1639,7 @@ define i16 @atomicrmw_xchg_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI55_0:
 ; CSKY-NEXT:    .long __atomic_exchange_2
   %1 = atomicrmw xchg ptr %a, i16 %b monotonic
@@ -1718,7 +1658,7 @@ define i16 @atomicrmw_xchg_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI56_0:
 ; CSKY-NEXT:    .long __atomic_exchange_2
   %1 = atomicrmw xchg ptr %a, i16 %b acquire
@@ -1737,7 +1677,7 @@ define i16 @atomicrmw_xchg_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI57_0:
 ; CSKY-NEXT:    .long __atomic_exchange_2
   %1 = atomicrmw xchg ptr %a, i16 %b release
@@ -1756,7 +1696,7 @@ define i16 @atomicrmw_xchg_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI58_0:
 ; CSKY-NEXT:    .long __atomic_exchange_2
   %1 = atomicrmw xchg ptr %a, i16 %b acq_rel
@@ -1775,7 +1715,7 @@ define i16 @atomicrmw_xchg_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI59_0:
 ; CSKY-NEXT:    .long __atomic_exchange_2
   %1 = atomicrmw xchg ptr %a, i16 %b seq_cst
@@ -1794,7 +1734,7 @@ define i16 @atomicrmw_add_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI60_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_2
   %1 = atomicrmw add ptr %a, i16 %b monotonic
@@ -1813,7 +1753,7 @@ define i16 @atomicrmw_add_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI61_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_2
   %1 = atomicrmw add ptr %a, i16 %b acquire
@@ -1832,7 +1772,7 @@ define i16 @atomicrmw_add_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI62_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_2
   %1 = atomicrmw add ptr %a, i16 %b release
@@ -1851,7 +1791,7 @@ define i16 @atomicrmw_add_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI63_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_2
   %1 = atomicrmw add ptr %a, i16 %b acq_rel
@@ -1870,7 +1810,7 @@ define i16 @atomicrmw_add_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI64_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_2
   %1 = atomicrmw add ptr %a, i16 %b seq_cst
@@ -1889,7 +1829,7 @@ define i16 @atomicrmw_sub_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI65_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_2
   %1 = atomicrmw sub ptr %a, i16 %b monotonic
@@ -1908,7 +1848,7 @@ define i16 @atomicrmw_sub_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI66_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_2
   %1 = atomicrmw sub ptr %a, i16 %b acquire
@@ -1927,7 +1867,7 @@ define i16 @atomicrmw_sub_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI67_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_2
   %1 = atomicrmw sub ptr %a, i16 %b release
@@ -1946,7 +1886,7 @@ define i16 @atomicrmw_sub_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI68_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_2
   %1 = atomicrmw sub ptr %a, i16 %b acq_rel
@@ -1965,7 +1905,7 @@ define i16 @atomicrmw_sub_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI69_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_2
   %1 = atomicrmw sub ptr %a, i16 %b seq_cst
@@ -1984,7 +1924,7 @@ define i16 @atomicrmw_and_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI70_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_2
   %1 = atomicrmw and ptr %a, i16 %b monotonic
@@ -2003,7 +1943,7 @@ define i16 @atomicrmw_and_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI71_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_2
   %1 = atomicrmw and ptr %a, i16 %b acquire
@@ -2022,7 +1962,7 @@ define i16 @atomicrmw_and_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI72_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_2
   %1 = atomicrmw and ptr %a, i16 %b release
@@ -2041,7 +1981,7 @@ define i16 @atomicrmw_and_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI73_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_2
   %1 = atomicrmw and ptr %a, i16 %b acq_rel
@@ -2060,7 +2000,7 @@ define i16 @atomicrmw_and_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI74_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_2
   %1 = atomicrmw and ptr %a, i16 %b seq_cst
@@ -2079,7 +2019,7 @@ define i16 @atomicrmw_nand_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI75_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_2
   %1 = atomicrmw nand ptr %a, i16 %b monotonic
@@ -2098,7 +2038,7 @@ define i16 @atomicrmw_nand_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI76_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_2
   %1 = atomicrmw nand ptr %a, i16 %b acquire
@@ -2117,7 +2057,7 @@ define i16 @atomicrmw_nand_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI77_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_2
   %1 = atomicrmw nand ptr %a, i16 %b release
@@ -2136,7 +2076,7 @@ define i16 @atomicrmw_nand_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI78_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_2
   %1 = atomicrmw nand ptr %a, i16 %b acq_rel
@@ -2155,7 +2095,7 @@ define i16 @atomicrmw_nand_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI79_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_2
   %1 = atomicrmw nand ptr %a, i16 %b seq_cst
@@ -2174,7 +2114,7 @@ define i16 @atomicrmw_or_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI80_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_2
   %1 = atomicrmw or ptr %a, i16 %b monotonic
@@ -2193,7 +2133,7 @@ define i16 @atomicrmw_or_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI81_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_2
   %1 = atomicrmw or ptr %a, i16 %b acquire
@@ -2212,7 +2152,7 @@ define i16 @atomicrmw_or_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI82_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_2
   %1 = atomicrmw or ptr %a, i16 %b release
@@ -2231,7 +2171,7 @@ define i16 @atomicrmw_or_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI83_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_2
   %1 = atomicrmw or ptr %a, i16 %b acq_rel
@@ -2250,7 +2190,7 @@ define i16 @atomicrmw_or_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI84_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_2
   %1 = atomicrmw or ptr %a, i16 %b seq_cst
@@ -2269,7 +2209,7 @@ define i16 @atomicrmw_xor_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI85_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_2
   %1 = atomicrmw xor ptr %a, i16 %b monotonic
@@ -2288,7 +2228,7 @@ define i16 @atomicrmw_xor_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI86_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_2
   %1 = atomicrmw xor ptr %a, i16 %b acquire
@@ -2307,7 +2247,7 @@ define i16 @atomicrmw_xor_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI87_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_2
   %1 = atomicrmw xor ptr %a, i16 %b release
@@ -2326,7 +2266,7 @@ define i16 @atomicrmw_xor_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI88_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_2
   %1 = atomicrmw xor ptr %a, i16 %b acq_rel
@@ -2345,7 +2285,7 @@ define i16 @atomicrmw_xor_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI89_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_2
   %1 = atomicrmw xor ptr %a, i16 %b seq_cst
@@ -2364,22 +2304,21 @@ define i16 @atomicrmw_max_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI90_0]
-; CSKY-NEXT:    sexth16 l3, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    sexth16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB90_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    sexth16 a1, a0
-; CSKY-NEXT:    cmplt16 l3, a1
+; CSKY-NEXT:    cmplt16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movt32 a2, a0
 ; CSKY-NEXT:    st32.h a0, (sp, 6)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 0
-; CSKY-NEXT:    jsri32 [.LCPI90_1]
+; CSKY-NEXT:    jsri32 [.LCPI90_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB90_1
@@ -2394,10 +2333,8 @@ define i16 @atomicrmw_max_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI90_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI90_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw max ptr %a, i16 %b monotonic
   ret i16 %1
@@ -2415,9 +2352,8 @@ define i16 @atomicrmw_max_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI91_0]
-; CSKY-NEXT:    sexth16 l2, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    sexth16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB91_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -2430,7 +2366,7 @@ define i16 @atomicrmw_max_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 2
-; CSKY-NEXT:    jsri32 [.LCPI91_1]
+; CSKY-NEXT:    jsri32 [.LCPI91_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB91_1
@@ -2445,10 +2381,8 @@ define i16 @atomicrmw_max_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI91_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI91_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw max ptr %a, i16 %b acquire
   ret i16 %1
@@ -2466,22 +2400,21 @@ define i16 @atomicrmw_max_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI92_0]
-; CSKY-NEXT:    sexth16 l3, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    sexth16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB92_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    sexth16 a1, a0
-; CSKY-NEXT:    cmplt16 l3, a1
+; CSKY-NEXT:    cmplt16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movt32 a2, a0
 ; CSKY-NEXT:    st32.h a0, (sp, 6)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 3
-; CSKY-NEXT:    jsri32 [.LCPI92_1]
+; CSKY-NEXT:    jsri32 [.LCPI92_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB92_1
@@ -2496,10 +2429,8 @@ define i16 @atomicrmw_max_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI92_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI92_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw max ptr %a, i16 %b release
   ret i16 %1
@@ -2517,9 +2448,8 @@ define i16 @atomicrmw_max_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI93_0]
-; CSKY-NEXT:    sexth16 l2, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    sexth16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB93_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -2532,7 +2462,7 @@ define i16 @atomicrmw_max_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 4
-; CSKY-NEXT:    jsri32 [.LCPI93_1]
+; CSKY-NEXT:    jsri32 [.LCPI93_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB93_1
@@ -2547,10 +2477,8 @@ define i16 @atomicrmw_max_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI93_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI93_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw max ptr %a, i16 %b acq_rel
   ret i16 %1
@@ -2568,9 +2496,8 @@ define i16 @atomicrmw_max_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI94_0]
-; CSKY-NEXT:    sexth16 l2, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    sexth16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 5
 ; CSKY-NEXT:  .LBB94_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -2583,7 +2510,7 @@ define i16 @atomicrmw_max_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 5
-; CSKY-NEXT:    jsri32 [.LCPI94_1]
+; CSKY-NEXT:    jsri32 [.LCPI94_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB94_1
@@ -2598,10 +2525,8 @@ define i16 @atomicrmw_max_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI94_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI94_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw max ptr %a, i16 %b seq_cst
   ret i16 %1
@@ -2619,22 +2544,21 @@ define i16 @atomicrmw_min_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI95_0]
-; CSKY-NEXT:    sexth16 l3, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    sexth16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB95_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    sexth16 a1, a0
-; CSKY-NEXT:    cmplt16 l3, a1
+; CSKY-NEXT:    cmplt16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movf32 a2, a0
 ; CSKY-NEXT:    st32.h a0, (sp, 6)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 0
-; CSKY-NEXT:    jsri32 [.LCPI95_1]
+; CSKY-NEXT:    jsri32 [.LCPI95_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB95_1
@@ -2649,10 +2573,8 @@ define i16 @atomicrmw_min_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI95_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI95_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw min ptr %a, i16 %b monotonic
   ret i16 %1
@@ -2670,9 +2592,8 @@ define i16 @atomicrmw_min_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI96_0]
-; CSKY-NEXT:    sexth16 l2, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    sexth16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB96_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -2685,7 +2606,7 @@ define i16 @atomicrmw_min_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 2
-; CSKY-NEXT:    jsri32 [.LCPI96_1]
+; CSKY-NEXT:    jsri32 [.LCPI96_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB96_1
@@ -2700,10 +2621,8 @@ define i16 @atomicrmw_min_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI96_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI96_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw min ptr %a, i16 %b acquire
   ret i16 %1
@@ -2721,22 +2640,21 @@ define i16 @atomicrmw_min_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI97_0]
-; CSKY-NEXT:    sexth16 l3, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    sexth16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB97_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    sexth16 a1, a0
-; CSKY-NEXT:    cmplt16 l3, a1
+; CSKY-NEXT:    cmplt16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movf32 a2, a0
 ; CSKY-NEXT:    st32.h a0, (sp, 6)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 3
-; CSKY-NEXT:    jsri32 [.LCPI97_1]
+; CSKY-NEXT:    jsri32 [.LCPI97_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB97_1
@@ -2751,10 +2669,8 @@ define i16 @atomicrmw_min_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI97_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI97_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw min ptr %a, i16 %b release
   ret i16 %1
@@ -2772,9 +2688,8 @@ define i16 @atomicrmw_min_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI98_0]
-; CSKY-NEXT:    sexth16 l2, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    sexth16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB98_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -2787,7 +2702,7 @@ define i16 @atomicrmw_min_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 4
-; CSKY-NEXT:    jsri32 [.LCPI98_1]
+; CSKY-NEXT:    jsri32 [.LCPI98_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB98_1
@@ -2802,10 +2717,8 @@ define i16 @atomicrmw_min_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI98_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI98_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw min ptr %a, i16 %b acq_rel
   ret i16 %1
@@ -2823,9 +2736,8 @@ define i16 @atomicrmw_min_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI99_0]
-; CSKY-NEXT:    sexth16 l2, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    sexth16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 5
 ; CSKY-NEXT:  .LBB99_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -2838,7 +2750,7 @@ define i16 @atomicrmw_min_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 5
-; CSKY-NEXT:    jsri32 [.LCPI99_1]
+; CSKY-NEXT:    jsri32 [.LCPI99_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB99_1
@@ -2853,10 +2765,8 @@ define i16 @atomicrmw_min_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI99_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI99_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw min ptr %a, i16 %b seq_cst
   ret i16 %1
@@ -2874,22 +2784,21 @@ define i16 @atomicrmw_umax_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI100_0]
-; CSKY-NEXT:    zexth16 l3, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    zexth16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB100_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    zexth16 a1, a0
-; CSKY-NEXT:    cmphs16 l3, a1
+; CSKY-NEXT:    cmphs16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movf32 a2, a0
 ; CSKY-NEXT:    st32.h a0, (sp, 6)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 0
-; CSKY-NEXT:    jsri32 [.LCPI100_1]
+; CSKY-NEXT:    jsri32 [.LCPI100_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB100_1
@@ -2904,10 +2813,8 @@ define i16 @atomicrmw_umax_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI100_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI100_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw umax ptr %a, i16 %b monotonic
   ret i16 %1
@@ -2925,9 +2832,8 @@ define i16 @atomicrmw_umax_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI101_0]
-; CSKY-NEXT:    zexth16 l2, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    zexth16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB101_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -2940,7 +2846,7 @@ define i16 @atomicrmw_umax_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 2
-; CSKY-NEXT:    jsri32 [.LCPI101_1]
+; CSKY-NEXT:    jsri32 [.LCPI101_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB101_1
@@ -2955,10 +2861,8 @@ define i16 @atomicrmw_umax_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI101_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI101_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw umax ptr %a, i16 %b acquire
   ret i16 %1
@@ -2976,22 +2880,21 @@ define i16 @atomicrmw_umax_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI102_0]
-; CSKY-NEXT:    zexth16 l3, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    zexth16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB102_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    zexth16 a1, a0
-; CSKY-NEXT:    cmphs16 l3, a1
+; CSKY-NEXT:    cmphs16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movf32 a2, a0
 ; CSKY-NEXT:    st32.h a0, (sp, 6)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 3
-; CSKY-NEXT:    jsri32 [.LCPI102_1]
+; CSKY-NEXT:    jsri32 [.LCPI102_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB102_1
@@ -3006,10 +2909,8 @@ define i16 @atomicrmw_umax_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI102_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI102_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw umax ptr %a, i16 %b release
   ret i16 %1
@@ -3027,9 +2928,8 @@ define i16 @atomicrmw_umax_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI103_0]
-; CSKY-NEXT:    zexth16 l2, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    zexth16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB103_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -3042,7 +2942,7 @@ define i16 @atomicrmw_umax_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 4
-; CSKY-NEXT:    jsri32 [.LCPI103_1]
+; CSKY-NEXT:    jsri32 [.LCPI103_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB103_1
@@ -3057,10 +2957,8 @@ define i16 @atomicrmw_umax_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI103_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI103_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw umax ptr %a, i16 %b acq_rel
   ret i16 %1
@@ -3078,9 +2976,8 @@ define i16 @atomicrmw_umax_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI104_0]
-; CSKY-NEXT:    zexth16 l2, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    zexth16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 5
 ; CSKY-NEXT:  .LBB104_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -3093,7 +2990,7 @@ define i16 @atomicrmw_umax_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 5
-; CSKY-NEXT:    jsri32 [.LCPI104_1]
+; CSKY-NEXT:    jsri32 [.LCPI104_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB104_1
@@ -3108,10 +3005,8 @@ define i16 @atomicrmw_umax_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI104_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI104_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw umax ptr %a, i16 %b seq_cst
   ret i16 %1
@@ -3129,22 +3024,21 @@ define i16 @atomicrmw_umin_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI105_0]
-; CSKY-NEXT:    zexth16 l3, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    zexth16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB105_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    zexth16 a1, a0
-; CSKY-NEXT:    cmphs16 l3, a1
+; CSKY-NEXT:    cmphs16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movt32 a2, a0
 ; CSKY-NEXT:    st32.h a0, (sp, 6)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 0
-; CSKY-NEXT:    jsri32 [.LCPI105_1]
+; CSKY-NEXT:    jsri32 [.LCPI105_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB105_1
@@ -3159,10 +3053,8 @@ define i16 @atomicrmw_umin_i16_monotonic(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI105_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI105_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw umin ptr %a, i16 %b monotonic
   ret i16 %1
@@ -3180,9 +3072,8 @@ define i16 @atomicrmw_umin_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI106_0]
-; CSKY-NEXT:    zexth16 l2, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    zexth16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB106_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -3195,7 +3086,7 @@ define i16 @atomicrmw_umin_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 2
-; CSKY-NEXT:    jsri32 [.LCPI106_1]
+; CSKY-NEXT:    jsri32 [.LCPI106_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB106_1
@@ -3210,10 +3101,8 @@ define i16 @atomicrmw_umin_i16_acquire(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI106_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI106_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw umin ptr %a, i16 %b acquire
   ret i16 %1
@@ -3231,22 +3120,21 @@ define i16 @atomicrmw_umin_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI107_0]
-; CSKY-NEXT:    zexth16 l3, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    zexth16 l2, a1
+; CSKY-NEXT:    movi16 l3, 0
 ; CSKY-NEXT:  .LBB107_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    zexth16 a1, a0
-; CSKY-NEXT:    cmphs16 l3, a1
+; CSKY-NEXT:    cmphs16 l2, a1
 ; CSKY-NEXT:    mov16 a2, l0
 ; CSKY-NEXT:    movt32 a2, a0
 ; CSKY-NEXT:    st32.h a0, (sp, 6)
-; CSKY-NEXT:    st16.w l2, (sp, 0)
+; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 3
-; CSKY-NEXT:    jsri32 [.LCPI107_1]
+; CSKY-NEXT:    jsri32 [.LCPI107_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB107_1
@@ -3261,10 +3149,8 @@ define i16 @atomicrmw_umin_i16_release(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI107_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI107_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw umin ptr %a, i16 %b release
   ret i16 %1
@@ -3282,9 +3168,8 @@ define i16 @atomicrmw_umin_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI108_0]
-; CSKY-NEXT:    zexth16 l2, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    zexth16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB108_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -3297,7 +3182,7 @@ define i16 @atomicrmw_umin_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 4
-; CSKY-NEXT:    jsri32 [.LCPI108_1]
+; CSKY-NEXT:    jsri32 [.LCPI108_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB108_1
@@ -3312,10 +3197,8 @@ define i16 @atomicrmw_umin_i16_acq_rel(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI108_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI108_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw umin ptr %a, i16 %b acq_rel
   ret i16 %1
@@ -3333,9 +3216,8 @@ define i16 @atomicrmw_umin_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI109_0]
-; CSKY-NEXT:    zexth16 l2, l0
+; CSKY-NEXT:    ld16.h a0, (a0, 0)
+; CSKY-NEXT:    zexth16 l2, a1
 ; CSKY-NEXT:    movi16 l3, 5
 ; CSKY-NEXT:  .LBB109_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -3348,7 +3230,7 @@ define i16 @atomicrmw_umin_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi32 a1, sp, 6
 ; CSKY-NEXT:    movi16 a3, 5
-; CSKY-NEXT:    jsri32 [.LCPI109_1]
+; CSKY-NEXT:    jsri32 [.LCPI109_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld32.h a0, (sp, 6)
 ; CSKY-NEXT:    bez32 a1, .LBB109_1
@@ -3363,10 +3245,8 @@ define i16 @atomicrmw_umin_i16_seq_cst(ptr %a, i16 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI109_0:
-; CSKY-NEXT:    .long __atomic_load_2
-; CSKY-NEXT:  .LCPI109_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_2
   %1 = atomicrmw umin ptr %a, i16 %b seq_cst
   ret i16 %1
@@ -3384,7 +3264,7 @@ define i32 @atomicrmw_xchg_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI110_0:
 ; CSKY-NEXT:    .long __atomic_exchange_4
   %1 = atomicrmw xchg ptr %a, i32 %b monotonic
@@ -3403,7 +3283,7 @@ define i32 @atomicrmw_xchg_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI111_0:
 ; CSKY-NEXT:    .long __atomic_exchange_4
   %1 = atomicrmw xchg ptr %a, i32 %b acquire
@@ -3422,7 +3302,7 @@ define i32 @atomicrmw_xchg_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI112_0:
 ; CSKY-NEXT:    .long __atomic_exchange_4
   %1 = atomicrmw xchg ptr %a, i32 %b release
@@ -3441,7 +3321,7 @@ define i32 @atomicrmw_xchg_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI113_0:
 ; CSKY-NEXT:    .long __atomic_exchange_4
   %1 = atomicrmw xchg ptr %a, i32 %b acq_rel
@@ -3460,7 +3340,7 @@ define i32 @atomicrmw_xchg_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI114_0:
 ; CSKY-NEXT:    .long __atomic_exchange_4
   %1 = atomicrmw xchg ptr %a, i32 %b seq_cst
@@ -3479,7 +3359,7 @@ define i32 @atomicrmw_add_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI115_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_4
   %1 = atomicrmw add ptr %a, i32 %b monotonic
@@ -3498,7 +3378,7 @@ define i32 @atomicrmw_add_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI116_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_4
   %1 = atomicrmw add ptr %a, i32 %b acquire
@@ -3517,7 +3397,7 @@ define i32 @atomicrmw_add_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI117_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_4
   %1 = atomicrmw add ptr %a, i32 %b release
@@ -3536,7 +3416,7 @@ define i32 @atomicrmw_add_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI118_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_4
   %1 = atomicrmw add ptr %a, i32 %b acq_rel
@@ -3555,7 +3435,7 @@ define i32 @atomicrmw_add_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI119_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_4
   %1 = atomicrmw add ptr %a, i32 %b seq_cst
@@ -3574,7 +3454,7 @@ define i32 @atomicrmw_sub_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI120_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_4
   %1 = atomicrmw sub ptr %a, i32 %b monotonic
@@ -3593,7 +3473,7 @@ define i32 @atomicrmw_sub_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI121_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_4
   %1 = atomicrmw sub ptr %a, i32 %b acquire
@@ -3612,7 +3492,7 @@ define i32 @atomicrmw_sub_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI122_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_4
   %1 = atomicrmw sub ptr %a, i32 %b release
@@ -3631,7 +3511,7 @@ define i32 @atomicrmw_sub_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI123_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_4
   %1 = atomicrmw sub ptr %a, i32 %b acq_rel
@@ -3650,7 +3530,7 @@ define i32 @atomicrmw_sub_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI124_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_4
   %1 = atomicrmw sub ptr %a, i32 %b seq_cst
@@ -3669,7 +3549,7 @@ define i32 @atomicrmw_and_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI125_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_4
   %1 = atomicrmw and ptr %a, i32 %b monotonic
@@ -3688,7 +3568,7 @@ define i32 @atomicrmw_and_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI126_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_4
   %1 = atomicrmw and ptr %a, i32 %b acquire
@@ -3707,7 +3587,7 @@ define i32 @atomicrmw_and_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI127_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_4
   %1 = atomicrmw and ptr %a, i32 %b release
@@ -3726,7 +3606,7 @@ define i32 @atomicrmw_and_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI128_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_4
   %1 = atomicrmw and ptr %a, i32 %b acq_rel
@@ -3745,7 +3625,7 @@ define i32 @atomicrmw_and_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI129_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_4
   %1 = atomicrmw and ptr %a, i32 %b seq_cst
@@ -3764,7 +3644,7 @@ define i32 @atomicrmw_nand_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI130_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_4
   %1 = atomicrmw nand ptr %a, i32 %b monotonic
@@ -3783,7 +3663,7 @@ define i32 @atomicrmw_nand_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI131_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_4
   %1 = atomicrmw nand ptr %a, i32 %b acquire
@@ -3802,7 +3682,7 @@ define i32 @atomicrmw_nand_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI132_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_4
   %1 = atomicrmw nand ptr %a, i32 %b release
@@ -3821,7 +3701,7 @@ define i32 @atomicrmw_nand_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI133_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_4
   %1 = atomicrmw nand ptr %a, i32 %b acq_rel
@@ -3840,7 +3720,7 @@ define i32 @atomicrmw_nand_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI134_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_4
   %1 = atomicrmw nand ptr %a, i32 %b seq_cst
@@ -3859,7 +3739,7 @@ define i32 @atomicrmw_or_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI135_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_4
   %1 = atomicrmw or ptr %a, i32 %b monotonic
@@ -3878,7 +3758,7 @@ define i32 @atomicrmw_or_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI136_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_4
   %1 = atomicrmw or ptr %a, i32 %b acquire
@@ -3897,7 +3777,7 @@ define i32 @atomicrmw_or_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI137_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_4
   %1 = atomicrmw or ptr %a, i32 %b release
@@ -3916,7 +3796,7 @@ define i32 @atomicrmw_or_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI138_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_4
   %1 = atomicrmw or ptr %a, i32 %b acq_rel
@@ -3935,7 +3815,7 @@ define i32 @atomicrmw_or_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI139_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_4
   %1 = atomicrmw or ptr %a, i32 %b seq_cst
@@ -3954,7 +3834,7 @@ define i32 @atomicrmw_xor_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI140_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_4
   %1 = atomicrmw xor ptr %a, i32 %b monotonic
@@ -3973,7 +3853,7 @@ define i32 @atomicrmw_xor_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI141_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_4
   %1 = atomicrmw xor ptr %a, i32 %b acquire
@@ -3992,7 +3872,7 @@ define i32 @atomicrmw_xor_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI142_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_4
   %1 = atomicrmw xor ptr %a, i32 %b release
@@ -4011,7 +3891,7 @@ define i32 @atomicrmw_xor_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI143_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_4
   %1 = atomicrmw xor ptr %a, i32 %b acq_rel
@@ -4030,7 +3910,7 @@ define i32 @atomicrmw_xor_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI144_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_4
   %1 = atomicrmw xor ptr %a, i32 %b seq_cst
@@ -4048,9 +3928,8 @@ define i32 @atomicrmw_max_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI145_0]
 ; CSKY-NEXT:  .LBB145_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    cmplt16 l0, a0
@@ -4061,7 +3940,7 @@ define i32 @atomicrmw_max_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 0
-; CSKY-NEXT:    jsri32 [.LCPI145_1]
+; CSKY-NEXT:    jsri32 [.LCPI145_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB145_1
@@ -4075,10 +3954,8 @@ define i32 @atomicrmw_max_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI145_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI145_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw max ptr %a, i32 %b monotonic
   ret i32 %1
@@ -4095,8 +3972,7 @@ define i32 @atomicrmw_max_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI146_0]
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 2
 ; CSKY-NEXT:  .LBB146_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -4108,7 +3984,7 @@ define i32 @atomicrmw_max_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 2
-; CSKY-NEXT:    jsri32 [.LCPI146_1]
+; CSKY-NEXT:    jsri32 [.LCPI146_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB146_1
@@ -4122,10 +3998,8 @@ define i32 @atomicrmw_max_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI146_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI146_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw max ptr %a, i32 %b acquire
   ret i32 %1
@@ -4142,9 +4016,8 @@ define i32 @atomicrmw_max_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI147_0]
 ; CSKY-NEXT:  .LBB147_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    cmplt16 l0, a0
@@ -4155,7 +4028,7 @@ define i32 @atomicrmw_max_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 3
-; CSKY-NEXT:    jsri32 [.LCPI147_1]
+; CSKY-NEXT:    jsri32 [.LCPI147_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB147_1
@@ -4169,10 +4042,8 @@ define i32 @atomicrmw_max_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI147_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI147_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw max ptr %a, i32 %b release
   ret i32 %1
@@ -4189,8 +4060,7 @@ define i32 @atomicrmw_max_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI148_0]
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 2
 ; CSKY-NEXT:  .LBB148_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -4202,7 +4072,7 @@ define i32 @atomicrmw_max_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 4
-; CSKY-NEXT:    jsri32 [.LCPI148_1]
+; CSKY-NEXT:    jsri32 [.LCPI148_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB148_1
@@ -4216,10 +4086,8 @@ define i32 @atomicrmw_max_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI148_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI148_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw max ptr %a, i32 %b acq_rel
   ret i32 %1
@@ -4236,8 +4104,7 @@ define i32 @atomicrmw_max_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI149_0]
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 5
 ; CSKY-NEXT:  .LBB149_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -4249,7 +4116,7 @@ define i32 @atomicrmw_max_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 5
-; CSKY-NEXT:    jsri32 [.LCPI149_1]
+; CSKY-NEXT:    jsri32 [.LCPI149_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB149_1
@@ -4263,10 +4130,8 @@ define i32 @atomicrmw_max_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI149_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI149_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw max ptr %a, i32 %b seq_cst
   ret i32 %1
@@ -4283,9 +4148,8 @@ define i32 @atomicrmw_min_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI150_0]
 ; CSKY-NEXT:  .LBB150_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    cmplt16 l0, a0
@@ -4296,7 +4160,7 @@ define i32 @atomicrmw_min_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 0
-; CSKY-NEXT:    jsri32 [.LCPI150_1]
+; CSKY-NEXT:    jsri32 [.LCPI150_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB150_1
@@ -4310,10 +4174,8 @@ define i32 @atomicrmw_min_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI150_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI150_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw min ptr %a, i32 %b monotonic
   ret i32 %1
@@ -4330,8 +4192,7 @@ define i32 @atomicrmw_min_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI151_0]
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 2
 ; CSKY-NEXT:  .LBB151_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -4343,7 +4204,7 @@ define i32 @atomicrmw_min_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 2
-; CSKY-NEXT:    jsri32 [.LCPI151_1]
+; CSKY-NEXT:    jsri32 [.LCPI151_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB151_1
@@ -4357,10 +4218,8 @@ define i32 @atomicrmw_min_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI151_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI151_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw min ptr %a, i32 %b acquire
   ret i32 %1
@@ -4377,9 +4236,8 @@ define i32 @atomicrmw_min_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI152_0]
 ; CSKY-NEXT:  .LBB152_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    cmplt16 l0, a0
@@ -4390,7 +4248,7 @@ define i32 @atomicrmw_min_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 3
-; CSKY-NEXT:    jsri32 [.LCPI152_1]
+; CSKY-NEXT:    jsri32 [.LCPI152_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB152_1
@@ -4404,10 +4262,8 @@ define i32 @atomicrmw_min_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI152_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI152_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw min ptr %a, i32 %b release
   ret i32 %1
@@ -4424,8 +4280,7 @@ define i32 @atomicrmw_min_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI153_0]
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 2
 ; CSKY-NEXT:  .LBB153_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -4437,7 +4292,7 @@ define i32 @atomicrmw_min_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 4
-; CSKY-NEXT:    jsri32 [.LCPI153_1]
+; CSKY-NEXT:    jsri32 [.LCPI153_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB153_1
@@ -4451,10 +4306,8 @@ define i32 @atomicrmw_min_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI153_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI153_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw min ptr %a, i32 %b acq_rel
   ret i32 %1
@@ -4471,8 +4324,7 @@ define i32 @atomicrmw_min_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI154_0]
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 5
 ; CSKY-NEXT:  .LBB154_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -4484,7 +4336,7 @@ define i32 @atomicrmw_min_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 5
-; CSKY-NEXT:    jsri32 [.LCPI154_1]
+; CSKY-NEXT:    jsri32 [.LCPI154_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB154_1
@@ -4498,10 +4350,8 @@ define i32 @atomicrmw_min_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI154_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI154_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw min ptr %a, i32 %b seq_cst
   ret i32 %1
@@ -4518,9 +4368,8 @@ define i32 @atomicrmw_umax_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI155_0]
 ; CSKY-NEXT:  .LBB155_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    cmphs16 l0, a0
@@ -4531,7 +4380,7 @@ define i32 @atomicrmw_umax_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 0
-; CSKY-NEXT:    jsri32 [.LCPI155_1]
+; CSKY-NEXT:    jsri32 [.LCPI155_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB155_1
@@ -4545,10 +4394,8 @@ define i32 @atomicrmw_umax_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI155_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI155_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw umax ptr %a, i32 %b monotonic
   ret i32 %1
@@ -4565,8 +4412,7 @@ define i32 @atomicrmw_umax_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI156_0]
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 2
 ; CSKY-NEXT:  .LBB156_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -4578,7 +4424,7 @@ define i32 @atomicrmw_umax_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 2
-; CSKY-NEXT:    jsri32 [.LCPI156_1]
+; CSKY-NEXT:    jsri32 [.LCPI156_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB156_1
@@ -4592,10 +4438,8 @@ define i32 @atomicrmw_umax_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI156_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI156_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw umax ptr %a, i32 %b acquire
   ret i32 %1
@@ -4612,9 +4456,8 @@ define i32 @atomicrmw_umax_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI157_0]
 ; CSKY-NEXT:  .LBB157_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    cmphs16 l0, a0
@@ -4625,7 +4468,7 @@ define i32 @atomicrmw_umax_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 3
-; CSKY-NEXT:    jsri32 [.LCPI157_1]
+; CSKY-NEXT:    jsri32 [.LCPI157_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB157_1
@@ -4639,10 +4482,8 @@ define i32 @atomicrmw_umax_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI157_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI157_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw umax ptr %a, i32 %b release
   ret i32 %1
@@ -4659,8 +4500,7 @@ define i32 @atomicrmw_umax_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI158_0]
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 2
 ; CSKY-NEXT:  .LBB158_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -4672,7 +4512,7 @@ define i32 @atomicrmw_umax_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 4
-; CSKY-NEXT:    jsri32 [.LCPI158_1]
+; CSKY-NEXT:    jsri32 [.LCPI158_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB158_1
@@ -4686,10 +4526,8 @@ define i32 @atomicrmw_umax_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI158_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI158_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw umax ptr %a, i32 %b acq_rel
   ret i32 %1
@@ -4706,8 +4544,7 @@ define i32 @atomicrmw_umax_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI159_0]
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 5
 ; CSKY-NEXT:  .LBB159_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -4719,7 +4556,7 @@ define i32 @atomicrmw_umax_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 5
-; CSKY-NEXT:    jsri32 [.LCPI159_1]
+; CSKY-NEXT:    jsri32 [.LCPI159_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB159_1
@@ -4733,10 +4570,8 @@ define i32 @atomicrmw_umax_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI159_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI159_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw umax ptr %a, i32 %b seq_cst
   ret i32 %1
@@ -4753,9 +4588,8 @@ define i32 @atomicrmw_umin_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI160_0]
 ; CSKY-NEXT:  .LBB160_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    cmphs16 l0, a0
@@ -4766,7 +4600,7 @@ define i32 @atomicrmw_umin_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 0
-; CSKY-NEXT:    jsri32 [.LCPI160_1]
+; CSKY-NEXT:    jsri32 [.LCPI160_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB160_1
@@ -4780,10 +4614,8 @@ define i32 @atomicrmw_umin_i32_monotonic(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI160_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI160_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw umin ptr %a, i32 %b monotonic
   ret i32 %1
@@ -4800,8 +4632,7 @@ define i32 @atomicrmw_umin_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI161_0]
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 2
 ; CSKY-NEXT:  .LBB161_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -4813,7 +4644,7 @@ define i32 @atomicrmw_umin_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 2
-; CSKY-NEXT:    jsri32 [.LCPI161_1]
+; CSKY-NEXT:    jsri32 [.LCPI161_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB161_1
@@ -4827,10 +4658,8 @@ define i32 @atomicrmw_umin_i32_acquire(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI161_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI161_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw umin ptr %a, i32 %b acquire
   ret i32 %1
@@ -4847,9 +4676,8 @@ define i32 @atomicrmw_umin_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI162_0]
 ; CSKY-NEXT:  .LBB162_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    cmphs16 l0, a0
@@ -4860,7 +4688,7 @@ define i32 @atomicrmw_umin_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 3
-; CSKY-NEXT:    jsri32 [.LCPI162_1]
+; CSKY-NEXT:    jsri32 [.LCPI162_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB162_1
@@ -4874,10 +4702,8 @@ define i32 @atomicrmw_umin_i32_release(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI162_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI162_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw umin ptr %a, i32 %b release
   ret i32 %1
@@ -4894,8 +4720,7 @@ define i32 @atomicrmw_umin_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI163_0]
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 2
 ; CSKY-NEXT:  .LBB163_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -4907,7 +4732,7 @@ define i32 @atomicrmw_umin_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 4
-; CSKY-NEXT:    jsri32 [.LCPI163_1]
+; CSKY-NEXT:    jsri32 [.LCPI163_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB163_1
@@ -4921,10 +4746,8 @@ define i32 @atomicrmw_umin_i32_acq_rel(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI163_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI163_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw umin ptr %a, i32 %b acq_rel
   ret i32 %1
@@ -4941,8 +4764,7 @@ define i32 @atomicrmw_umin_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    subi16 sp, sp, 8
 ; CSKY-NEXT:    mov16 l0, a1
 ; CSKY-NEXT:    mov16 l1, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI164_0]
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l2, 5
 ; CSKY-NEXT:  .LBB164_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -4954,7 +4776,7 @@ define i32 @atomicrmw_umin_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    mov16 a0, l1
 ; CSKY-NEXT:    addi16 a1, sp, 4
 ; CSKY-NEXT:    movi16 a3, 5
-; CSKY-NEXT:    jsri32 [.LCPI164_1]
+; CSKY-NEXT:    jsri32 [.LCPI164_0]
 ; CSKY-NEXT:    mov16 a1, a0
 ; CSKY-NEXT:    ld16.w a0, (sp, 4)
 ; CSKY-NEXT:    bez32 a1, .LBB164_1
@@ -4968,10 +4790,8 @@ define i32 @atomicrmw_umin_i32_seq_cst(ptr %a, i32 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI164_0:
-; CSKY-NEXT:    .long __atomic_load_4
-; CSKY-NEXT:  .LCPI164_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_4
   %1 = atomicrmw umin ptr %a, i32 %b seq_cst
   ret i32 %1
@@ -4989,7 +4809,7 @@ define i64 @atomicrmw_xchg_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI165_0:
 ; CSKY-NEXT:    .long __atomic_exchange_8
   %1 = atomicrmw xchg ptr %a, i64 %b monotonic
@@ -5008,7 +4828,7 @@ define i64 @atomicrmw_xchg_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI166_0:
 ; CSKY-NEXT:    .long __atomic_exchange_8
   %1 = atomicrmw xchg ptr %a, i64 %b acquire
@@ -5027,7 +4847,7 @@ define i64 @atomicrmw_xchg_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI167_0:
 ; CSKY-NEXT:    .long __atomic_exchange_8
   %1 = atomicrmw xchg ptr %a, i64 %b release
@@ -5046,7 +4866,7 @@ define i64 @atomicrmw_xchg_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI168_0:
 ; CSKY-NEXT:    .long __atomic_exchange_8
   %1 = atomicrmw xchg ptr %a, i64 %b acq_rel
@@ -5065,7 +4885,7 @@ define i64 @atomicrmw_xchg_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI169_0:
 ; CSKY-NEXT:    .long __atomic_exchange_8
   %1 = atomicrmw xchg ptr %a, i64 %b seq_cst
@@ -5084,7 +4904,7 @@ define i64 @atomicrmw_add_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI170_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_8
   %1 = atomicrmw add ptr %a, i64 %b monotonic
@@ -5103,7 +4923,7 @@ define i64 @atomicrmw_add_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI171_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_8
   %1 = atomicrmw add ptr %a, i64 %b acquire
@@ -5122,7 +4942,7 @@ define i64 @atomicrmw_add_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI172_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_8
   %1 = atomicrmw add ptr %a, i64 %b release
@@ -5141,7 +4961,7 @@ define i64 @atomicrmw_add_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI173_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_8
   %1 = atomicrmw add ptr %a, i64 %b acq_rel
@@ -5160,7 +4980,7 @@ define i64 @atomicrmw_add_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI174_0:
 ; CSKY-NEXT:    .long __atomic_fetch_add_8
   %1 = atomicrmw add ptr %a, i64 %b seq_cst
@@ -5179,7 +4999,7 @@ define i64 @atomicrmw_sub_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI175_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_8
   %1 = atomicrmw sub ptr %a, i64 %b monotonic
@@ -5198,7 +5018,7 @@ define i64 @atomicrmw_sub_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI176_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_8
   %1 = atomicrmw sub ptr %a, i64 %b acquire
@@ -5217,7 +5037,7 @@ define i64 @atomicrmw_sub_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI177_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_8
   %1 = atomicrmw sub ptr %a, i64 %b release
@@ -5236,7 +5056,7 @@ define i64 @atomicrmw_sub_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI178_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_8
   %1 = atomicrmw sub ptr %a, i64 %b acq_rel
@@ -5255,7 +5075,7 @@ define i64 @atomicrmw_sub_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI179_0:
 ; CSKY-NEXT:    .long __atomic_fetch_sub_8
   %1 = atomicrmw sub ptr %a, i64 %b seq_cst
@@ -5274,7 +5094,7 @@ define i64 @atomicrmw_and_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI180_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_8
   %1 = atomicrmw and ptr %a, i64 %b monotonic
@@ -5293,7 +5113,7 @@ define i64 @atomicrmw_and_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI181_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_8
   %1 = atomicrmw and ptr %a, i64 %b acquire
@@ -5312,7 +5132,7 @@ define i64 @atomicrmw_and_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI182_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_8
   %1 = atomicrmw and ptr %a, i64 %b release
@@ -5331,7 +5151,7 @@ define i64 @atomicrmw_and_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI183_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_8
   %1 = atomicrmw and ptr %a, i64 %b acq_rel
@@ -5350,7 +5170,7 @@ define i64 @atomicrmw_and_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI184_0:
 ; CSKY-NEXT:    .long __atomic_fetch_and_8
   %1 = atomicrmw and ptr %a, i64 %b seq_cst
@@ -5369,7 +5189,7 @@ define i64 @atomicrmw_nand_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI185_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_8
   %1 = atomicrmw nand ptr %a, i64 %b monotonic
@@ -5388,7 +5208,7 @@ define i64 @atomicrmw_nand_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI186_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_8
   %1 = atomicrmw nand ptr %a, i64 %b acquire
@@ -5407,7 +5227,7 @@ define i64 @atomicrmw_nand_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI187_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_8
   %1 = atomicrmw nand ptr %a, i64 %b release
@@ -5426,7 +5246,7 @@ define i64 @atomicrmw_nand_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI188_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_8
   %1 = atomicrmw nand ptr %a, i64 %b acq_rel
@@ -5445,7 +5265,7 @@ define i64 @atomicrmw_nand_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI189_0:
 ; CSKY-NEXT:    .long __atomic_fetch_nand_8
   %1 = atomicrmw nand ptr %a, i64 %b seq_cst
@@ -5464,7 +5284,7 @@ define i64 @atomicrmw_or_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI190_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_8
   %1 = atomicrmw or ptr %a, i64 %b monotonic
@@ -5483,7 +5303,7 @@ define i64 @atomicrmw_or_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI191_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_8
   %1 = atomicrmw or ptr %a, i64 %b acquire
@@ -5502,7 +5322,7 @@ define i64 @atomicrmw_or_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI192_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_8
   %1 = atomicrmw or ptr %a, i64 %b release
@@ -5521,7 +5341,7 @@ define i64 @atomicrmw_or_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI193_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_8
   %1 = atomicrmw or ptr %a, i64 %b acq_rel
@@ -5540,7 +5360,7 @@ define i64 @atomicrmw_or_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI194_0:
 ; CSKY-NEXT:    .long __atomic_fetch_or_8
   %1 = atomicrmw or ptr %a, i64 %b seq_cst
@@ -5559,7 +5379,7 @@ define i64 @atomicrmw_xor_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI195_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_8
   %1 = atomicrmw xor ptr %a, i64 %b monotonic
@@ -5578,7 +5398,7 @@ define i64 @atomicrmw_xor_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI196_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_8
   %1 = atomicrmw xor ptr %a, i64 %b acquire
@@ -5597,7 +5417,7 @@ define i64 @atomicrmw_xor_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI197_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_8
   %1 = atomicrmw xor ptr %a, i64 %b release
@@ -5616,7 +5436,7 @@ define i64 @atomicrmw_xor_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI198_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_8
   %1 = atomicrmw xor ptr %a, i64 %b acq_rel
@@ -5635,7 +5455,7 @@ define i64 @atomicrmw_xor_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.1:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI199_0:
 ; CSKY-NEXT:    .long __atomic_fetch_xor_8
   %1 = atomicrmw xor ptr %a, i64 %b seq_cst
@@ -5655,9 +5475,9 @@ define i64 @atomicrmw_max_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI200_0]
 ; CSKY-NEXT:  .LBB200_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    cmplt16 l0, a1
@@ -5685,7 +5505,7 @@ define i64 @atomicrmw_max_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 20
-; CSKY-NEXT:    jsri32 [.LCPI200_1]
+; CSKY-NEXT:    jsri32 [.LCPI200_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 24)
 ; CSKY-NEXT:    ld16.w a0, (sp, 20)
@@ -5701,10 +5521,8 @@ define i64 @atomicrmw_max_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI200_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI200_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw max ptr %a, i64 %b monotonic
   ret i64 %1
@@ -5723,8 +5541,8 @@ define i64 @atomicrmw_max_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI201_0]
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB201_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -5753,7 +5571,7 @@ define i64 @atomicrmw_max_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 20
-; CSKY-NEXT:    jsri32 [.LCPI201_1]
+; CSKY-NEXT:    jsri32 [.LCPI201_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 24)
 ; CSKY-NEXT:    ld16.w a0, (sp, 20)
@@ -5769,10 +5587,8 @@ define i64 @atomicrmw_max_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI201_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI201_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw max ptr %a, i64 %b acquire
   ret i64 %1
@@ -5792,9 +5608,9 @@ define i64 @atomicrmw_max_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI202_0]
 ; CSKY-NEXT:    movi32 l4, 3
 ; CSKY-NEXT:  .LBB202_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -5823,7 +5639,7 @@ define i64 @atomicrmw_max_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st32.w l4, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 20
-; CSKY-NEXT:    jsri32 [.LCPI202_1]
+; CSKY-NEXT:    jsri32 [.LCPI202_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 24)
 ; CSKY-NEXT:    ld16.w a0, (sp, 20)
@@ -5840,10 +5656,8 @@ define i64 @atomicrmw_max_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI202_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI202_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw max ptr %a, i64 %b release
   ret i64 %1
@@ -5863,8 +5677,8 @@ define i64 @atomicrmw_max_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI203_0]
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:    movi32 l4, 4
 ; CSKY-NEXT:  .LBB203_1: # %atomicrmw.start
@@ -5894,7 +5708,7 @@ define i64 @atomicrmw_max_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st32.w l4, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 20
-; CSKY-NEXT:    jsri32 [.LCPI203_1]
+; CSKY-NEXT:    jsri32 [.LCPI203_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 24)
 ; CSKY-NEXT:    ld16.w a0, (sp, 20)
@@ -5911,10 +5725,8 @@ define i64 @atomicrmw_max_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI203_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI203_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw max ptr %a, i64 %b acq_rel
   ret i64 %1
@@ -5933,8 +5745,8 @@ define i64 @atomicrmw_max_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI204_0]
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 5
 ; CSKY-NEXT:  .LBB204_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -5963,7 +5775,7 @@ define i64 @atomicrmw_max_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 20
-; CSKY-NEXT:    jsri32 [.LCPI204_1]
+; CSKY-NEXT:    jsri32 [.LCPI204_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 24)
 ; CSKY-NEXT:    ld16.w a0, (sp, 20)
@@ -5979,10 +5791,8 @@ define i64 @atomicrmw_max_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI204_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI204_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw max ptr %a, i64 %b seq_cst
   ret i64 %1
@@ -6001,9 +5811,9 @@ define i64 @atomicrmw_min_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI205_0]
 ; CSKY-NEXT:  .LBB205_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    cmphs16 l1, a0
@@ -6031,7 +5841,7 @@ define i64 @atomicrmw_min_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 20
-; CSKY-NEXT:    jsri32 [.LCPI205_1]
+; CSKY-NEXT:    jsri32 [.LCPI205_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 24)
 ; CSKY-NEXT:    ld16.w a0, (sp, 20)
@@ -6047,10 +5857,8 @@ define i64 @atomicrmw_min_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI205_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI205_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw min ptr %a, i64 %b monotonic
   ret i64 %1
@@ -6069,8 +5877,8 @@ define i64 @atomicrmw_min_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI206_0]
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB206_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -6099,7 +5907,7 @@ define i64 @atomicrmw_min_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 20
-; CSKY-NEXT:    jsri32 [.LCPI206_1]
+; CSKY-NEXT:    jsri32 [.LCPI206_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 24)
 ; CSKY-NEXT:    ld16.w a0, (sp, 20)
@@ -6115,10 +5923,8 @@ define i64 @atomicrmw_min_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI206_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI206_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw min ptr %a, i64 %b acquire
   ret i64 %1
@@ -6138,9 +5944,9 @@ define i64 @atomicrmw_min_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI207_0]
 ; CSKY-NEXT:    movi32 l4, 3
 ; CSKY-NEXT:  .LBB207_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -6169,7 +5975,7 @@ define i64 @atomicrmw_min_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st32.w l4, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 20
-; CSKY-NEXT:    jsri32 [.LCPI207_1]
+; CSKY-NEXT:    jsri32 [.LCPI207_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 24)
 ; CSKY-NEXT:    ld16.w a0, (sp, 20)
@@ -6186,10 +5992,8 @@ define i64 @atomicrmw_min_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI207_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI207_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw min ptr %a, i64 %b release
   ret i64 %1
@@ -6209,8 +6013,8 @@ define i64 @atomicrmw_min_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI208_0]
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:    movi32 l4, 4
 ; CSKY-NEXT:  .LBB208_1: # %atomicrmw.start
@@ -6240,7 +6044,7 @@ define i64 @atomicrmw_min_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st32.w l4, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 20
-; CSKY-NEXT:    jsri32 [.LCPI208_1]
+; CSKY-NEXT:    jsri32 [.LCPI208_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 24)
 ; CSKY-NEXT:    ld16.w a0, (sp, 20)
@@ -6257,10 +6061,8 @@ define i64 @atomicrmw_min_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI208_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI208_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw min ptr %a, i64 %b acq_rel
   ret i64 %1
@@ -6279,8 +6081,8 @@ define i64 @atomicrmw_min_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI209_0]
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 5
 ; CSKY-NEXT:  .LBB209_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -6309,7 +6111,7 @@ define i64 @atomicrmw_min_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 20
-; CSKY-NEXT:    jsri32 [.LCPI209_1]
+; CSKY-NEXT:    jsri32 [.LCPI209_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 24)
 ; CSKY-NEXT:    ld16.w a0, (sp, 20)
@@ -6325,10 +6127,8 @@ define i64 @atomicrmw_min_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI209_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI209_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw min ptr %a, i64 %b seq_cst
   ret i64 %1
@@ -6347,9 +6147,9 @@ define i64 @atomicrmw_umax_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI210_0]
 ; CSKY-NEXT:  .LBB210_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    cmpne16 a1, l0
@@ -6373,7 +6173,7 @@ define i64 @atomicrmw_umax_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 16
-; CSKY-NEXT:    jsri32 [.LCPI210_1]
+; CSKY-NEXT:    jsri32 [.LCPI210_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 20)
 ; CSKY-NEXT:    ld16.w a0, (sp, 16)
@@ -6389,10 +6189,8 @@ define i64 @atomicrmw_umax_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI210_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI210_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw umax ptr %a, i64 %b monotonic
   ret i64 %1
@@ -6411,8 +6209,8 @@ define i64 @atomicrmw_umax_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI211_0]
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB211_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -6437,7 +6235,7 @@ define i64 @atomicrmw_umax_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 16
-; CSKY-NEXT:    jsri32 [.LCPI211_1]
+; CSKY-NEXT:    jsri32 [.LCPI211_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 20)
 ; CSKY-NEXT:    ld16.w a0, (sp, 16)
@@ -6453,10 +6251,8 @@ define i64 @atomicrmw_umax_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI211_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI211_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw umax ptr %a, i64 %b acquire
   ret i64 %1
@@ -6476,9 +6272,9 @@ define i64 @atomicrmw_umax_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI212_0]
 ; CSKY-NEXT:    movi32 l4, 3
 ; CSKY-NEXT:  .LBB212_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -6503,7 +6299,7 @@ define i64 @atomicrmw_umax_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st32.w l4, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 16
-; CSKY-NEXT:    jsri32 [.LCPI212_1]
+; CSKY-NEXT:    jsri32 [.LCPI212_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 20)
 ; CSKY-NEXT:    ld16.w a0, (sp, 16)
@@ -6520,10 +6316,8 @@ define i64 @atomicrmw_umax_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI212_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI212_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw umax ptr %a, i64 %b release
   ret i64 %1
@@ -6543,8 +6337,8 @@ define i64 @atomicrmw_umax_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI213_0]
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:    movi32 l4, 4
 ; CSKY-NEXT:  .LBB213_1: # %atomicrmw.start
@@ -6570,7 +6364,7 @@ define i64 @atomicrmw_umax_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st32.w l4, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 16
-; CSKY-NEXT:    jsri32 [.LCPI213_1]
+; CSKY-NEXT:    jsri32 [.LCPI213_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 20)
 ; CSKY-NEXT:    ld16.w a0, (sp, 16)
@@ -6587,10 +6381,8 @@ define i64 @atomicrmw_umax_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI213_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI213_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw umax ptr %a, i64 %b acq_rel
   ret i64 %1
@@ -6609,8 +6401,8 @@ define i64 @atomicrmw_umax_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI214_0]
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 5
 ; CSKY-NEXT:  .LBB214_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -6635,7 +6427,7 @@ define i64 @atomicrmw_umax_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 16
-; CSKY-NEXT:    jsri32 [.LCPI214_1]
+; CSKY-NEXT:    jsri32 [.LCPI214_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 20)
 ; CSKY-NEXT:    ld16.w a0, (sp, 16)
@@ -6651,10 +6443,8 @@ define i64 @atomicrmw_umax_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI214_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI214_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw umax ptr %a, i64 %b seq_cst
   ret i64 %1
@@ -6673,9 +6463,9 @@ define i64 @atomicrmw_umin_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI215_0]
 ; CSKY-NEXT:  .LBB215_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CSKY-NEXT:    cmphs16 l1, a0
@@ -6707,7 +6497,7 @@ define i64 @atomicrmw_umin_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 24
-; CSKY-NEXT:    jsri32 [.LCPI215_1]
+; CSKY-NEXT:    jsri32 [.LCPI215_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 28)
 ; CSKY-NEXT:    ld16.w a0, (sp, 24)
@@ -6723,10 +6513,8 @@ define i64 @atomicrmw_umin_i64_monotonic(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI215_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI215_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw umin ptr %a, i64 %b monotonic
   ret i64 %1
@@ -6745,8 +6533,8 @@ define i64 @atomicrmw_umin_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI216_0]
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:  .LBB216_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -6779,7 +6567,7 @@ define i64 @atomicrmw_umin_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 24
-; CSKY-NEXT:    jsri32 [.LCPI216_1]
+; CSKY-NEXT:    jsri32 [.LCPI216_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 28)
 ; CSKY-NEXT:    ld16.w a0, (sp, 24)
@@ -6795,10 +6583,8 @@ define i64 @atomicrmw_umin_i64_acquire(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI216_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI216_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw umin ptr %a, i64 %b acquire
   ret i64 %1
@@ -6818,9 +6604,9 @@ define i64 @atomicrmw_umin_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI217_0]
 ; CSKY-NEXT:    movi32 l4, 3
 ; CSKY-NEXT:  .LBB217_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -6853,7 +6639,7 @@ define i64 @atomicrmw_umin_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st32.w l4, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 24
-; CSKY-NEXT:    jsri32 [.LCPI217_1]
+; CSKY-NEXT:    jsri32 [.LCPI217_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 28)
 ; CSKY-NEXT:    ld16.w a0, (sp, 24)
@@ -6870,10 +6656,8 @@ define i64 @atomicrmw_umin_i64_release(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI217_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI217_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw umin ptr %a, i64 %b release
   ret i64 %1
@@ -6893,8 +6677,8 @@ define i64 @atomicrmw_umin_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI218_0]
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 2
 ; CSKY-NEXT:    movi32 l4, 4
 ; CSKY-NEXT:  .LBB218_1: # %atomicrmw.start
@@ -6928,7 +6712,7 @@ define i64 @atomicrmw_umin_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st32.w l4, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 24
-; CSKY-NEXT:    jsri32 [.LCPI218_1]
+; CSKY-NEXT:    jsri32 [.LCPI218_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 28)
 ; CSKY-NEXT:    ld16.w a0, (sp, 24)
@@ -6945,10 +6729,8 @@ define i64 @atomicrmw_umin_i64_acq_rel(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI218_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI218_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw umin ptr %a, i64 %b acq_rel
   ret i64 %1
@@ -6967,8 +6749,8 @@ define i64 @atomicrmw_umin_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    mov16 l0, a2
 ; CSKY-NEXT:    mov16 l1, a1
 ; CSKY-NEXT:    mov16 l2, a0
-; CSKY-NEXT:    movi16 a1, 0
-; CSKY-NEXT:    jsri32 [.LCPI219_0]
+; CSKY-NEXT:    ld16.w a1, (a0, 4)
+; CSKY-NEXT:    ld16.w a0, (a0, 0)
 ; CSKY-NEXT:    movi16 l3, 5
 ; CSKY-NEXT:  .LBB219_1: # %atomicrmw.start
 ; CSKY-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -7001,7 +6783,7 @@ define i64 @atomicrmw_umin_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    st16.w l3, (sp, 0)
 ; CSKY-NEXT:    mov16 a0, l2
 ; CSKY-NEXT:    addi16 a1, sp, 24
-; CSKY-NEXT:    jsri32 [.LCPI219_1]
+; CSKY-NEXT:    jsri32 [.LCPI219_0]
 ; CSKY-NEXT:    mov16 a2, a0
 ; CSKY-NEXT:    ld16.w a1, (sp, 28)
 ; CSKY-NEXT:    ld16.w a0, (sp, 24)
@@ -7017,10 +6799,8 @@ define i64 @atomicrmw_umin_i64_seq_cst(ptr %a, i64 %b) nounwind {
 ; CSKY-NEXT:    rts16
 ; CSKY-NEXT:    .p2align 1
 ; CSKY-NEXT:  # %bb.3:
-; CSKY-NEXT:    .p2align 2, 0x0
+; CSKY-NEXT:    .p2align 2
 ; CSKY-NEXT:  .LCPI219_0:
-; CSKY-NEXT:    .long __atomic_load_8
-; CSKY-NEXT:  .LCPI219_1:
 ; CSKY-NEXT:    .long __atomic_compare_exchange_8
   %1 = atomicrmw umin ptr %a, i64 %b seq_cst
   ret i64 %1

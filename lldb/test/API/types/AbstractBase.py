@@ -22,8 +22,6 @@ class GenericTester(TestBase):
     # printf() stmts (see basic_type.cpp).
     pattern = re.compile(r" (\*?a[^=]*) = '([^=]*)'$")
 
-    SHARED_BUILD_TESTCASE = False
-
     # Assert message.
     DATA_TYPE_GROKKED = "Data type from expr parser output is parsed correctly"
 

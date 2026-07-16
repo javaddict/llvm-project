@@ -33,9 +33,8 @@ public:
   /// prefers it.
   virtual unsigned getPriority(const LiveInterval &LI) const = 0;
 
-  LLVM_ABI RegAllocPriorityAdvisor(const MachineFunction &MF,
-                                   const RAGreedy &RA,
-                                   SlotIndexes *const Indexes);
+  RegAllocPriorityAdvisor(const MachineFunction &MF, const RAGreedy &RA,
+                          SlotIndexes *const Indexes);
 
 protected:
   const RAGreedy &RA;
@@ -49,7 +48,7 @@ protected:
   const bool ReverseLocalAssignment;
 };
 
-class LLVM_ABI DefaultPriorityAdvisor : public RegAllocPriorityAdvisor {
+class DefaultPriorityAdvisor : public RegAllocPriorityAdvisor {
 public:
   DefaultPriorityAdvisor(const MachineFunction &MF, const RAGreedy &RA,
                          SlotIndexes *const Indexes)
@@ -61,7 +60,7 @@ private:
 
 /// Stupid priority advisor which just enqueues in virtual register number
 /// order, for debug purposes only.
-class LLVM_ABI DummyPriorityAdvisor : public RegAllocPriorityAdvisor {
+class DummyPriorityAdvisor : public RegAllocPriorityAdvisor {
 public:
   DummyPriorityAdvisor(const MachineFunction &MF, const RAGreedy &RA,
                        SlotIndexes *const Indexes)
@@ -116,8 +115,7 @@ public:
     }
   };
 
-  LLVM_ABI Result run(MachineFunction &MF,
-                      MachineFunctionAnalysisManager &MFAM);
+  Result run(MachineFunction &MF, MachineFunctionAnalysisManager &MFAM);
 
 private:
   void initializeProvider(LLVMContext &Ctx);
@@ -126,7 +124,7 @@ private:
   std::unique_ptr<RegAllocPriorityAdvisorProvider> Provider;
 };
 
-class LLVM_ABI RegAllocPriorityAdvisorAnalysisLegacy : public ImmutablePass {
+class RegAllocPriorityAdvisorAnalysisLegacy : public ImmutablePass {
 public:
   using AdvisorMode = RegAllocPriorityAdvisorProvider::AdvisorMode;
   RegAllocPriorityAdvisorAnalysisLegacy(AdvisorMode Mode)
@@ -155,19 +153,18 @@ private:
 
 /// Specialization for the API used by the analysis infrastructure to create
 /// an instance of the priority advisor.
-template <>
-LLVM_ABI Pass *callDefaultCtor<RegAllocPriorityAdvisorAnalysisLegacy>();
+template <> Pass *callDefaultCtor<RegAllocPriorityAdvisorAnalysisLegacy>();
 
-LLVM_ABI RegAllocPriorityAdvisorAnalysisLegacy *
+RegAllocPriorityAdvisorAnalysisLegacy *
 createReleaseModePriorityAdvisorAnalysis();
 
-LLVM_ABI RegAllocPriorityAdvisorAnalysisLegacy *
+RegAllocPriorityAdvisorAnalysisLegacy *
 createDevelopmentModePriorityAdvisorAnalysis();
 
-LLVM_ATTRIBUTE_RETURNS_NONNULL LLVM_ABI RegAllocPriorityAdvisorProvider *
+LLVM_ATTRIBUTE_RETURNS_NONNULL RegAllocPriorityAdvisorProvider *
 createReleaseModePriorityAdvisorProvider();
 
-LLVM_ATTRIBUTE_RETURNS_NONNULL LLVM_ABI RegAllocPriorityAdvisorProvider *
+LLVM_ATTRIBUTE_RETURNS_NONNULL RegAllocPriorityAdvisorProvider *
 createDevelopmentModePriorityAdvisorProvider(LLVMContext &Ctx);
 
 } // namespace llvm

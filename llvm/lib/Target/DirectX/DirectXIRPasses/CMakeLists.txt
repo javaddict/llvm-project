@@ -1,11 +1,9 @@
-add_llvm_component_library(LLVMDirectXIRPasses
-  DXILDebugInfo.cpp
+add_llvm_component_library(LLVMDirectXPointerTypeAnalysis
   PointerTypeAnalysis.cpp
 
   LINK_COMPONENTS
   Core
   Support
-  TransformUtils
 
   ADD_TO_COMPONENT
   DirectX

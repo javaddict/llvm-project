@@ -57,33 +57,32 @@ private:
 public:
   /// If InsertedPHIs is specified, it will be filled
   /// in with all PHI Nodes created by rewriting.
-  LLVM_ABI explicit SSAUpdater(
-      SmallVectorImpl<PHINode *> *InsertedPHIs = nullptr);
+  explicit SSAUpdater(SmallVectorImpl<PHINode *> *InsertedPHIs = nullptr);
   SSAUpdater(const SSAUpdater &) = delete;
   SSAUpdater &operator=(const SSAUpdater &) = delete;
-  LLVM_ABI ~SSAUpdater();
+  ~SSAUpdater();
 
   /// Reset this object to get ready for a new set of SSA updates with
   /// type 'Ty'.
   ///
   /// PHI nodes get a name based on 'Name'.
-  LLVM_ABI void Initialize(Type *Ty, StringRef Name);
+  void Initialize(Type *Ty, StringRef Name);
 
   /// Indicate that a rewritten value is available in the specified block
   /// with the specified value.
-  LLVM_ABI void AddAvailableValue(BasicBlock *BB, Value *V);
+  void AddAvailableValue(BasicBlock *BB, Value *V);
 
   /// Return true if the SSAUpdater already has a value for the specified
   /// block.
-  LLVM_ABI bool HasValueForBlock(BasicBlock *BB) const;
+  bool HasValueForBlock(BasicBlock *BB) const;
 
   /// Return the value for the specified block if the SSAUpdater has one,
   /// otherwise return nullptr.
-  LLVM_ABI Value *FindValueForBlock(BasicBlock *BB) const;
+  Value *FindValueForBlock(BasicBlock *BB) const;
 
   /// Construct SSA form, materializing a value that is live at the end
   /// of the specified block.
-  LLVM_ABI Value *GetValueAtEndOfBlock(BasicBlock *BB);
+  Value *GetValueAtEndOfBlock(BasicBlock *BB);
 
   /// Construct SSA form, materializing a value that is live in the
   /// middle of the specified block.
@@ -105,7 +104,7 @@ public:
   /// their respective blocks.  However, the use of X happens in the *middle* of
   /// a block.  Because of this, we need to insert a new PHI node in SomeBB to
   /// merge the appropriate values, and this value isn't live out of the block.
-  LLVM_ABI Value *GetValueInMiddleOfBlock(BasicBlock *BB);
+  Value *GetValueInMiddleOfBlock(BasicBlock *BB);
 
   /// Rewrite a use of the symbolic value.
   ///
@@ -114,24 +113,23 @@ public:
   /// rewritten to a value defined in the same block as the use, but above it.
   /// Any 'AddAvailableValue's added for the use's block will be considered to
   /// be below it.
-  LLVM_ABI void RewriteUse(Use &U);
+  void RewriteUse(Use &U);
 
   /// Rewrite debug value intrinsics to conform to a new SSA form.
   ///
   /// This will scout out all the debug value intrinsics associated with
   /// the instruction. Anything outside of its block will have its
   /// value set to the new SSA value if available, and undef if not.
-  LLVM_ABI void UpdateDebugValues(Instruction *I);
-  LLVM_ABI void
-  UpdateDebugValues(Instruction *I,
-                    SmallVectorImpl<DbgVariableRecord *> &DbgValues);
+  void UpdateDebugValues(Instruction *I);
+  void UpdateDebugValues(Instruction *I,
+                         SmallVectorImpl<DbgVariableRecord *> &DbgValues);
 
   /// Rewrite a use like \c RewriteUse but handling in-block definitions.
   ///
   /// This version of the method can rewrite uses in the same block as
   /// a definition, because it assumes that all uses of a value are below any
   /// inserted values.
-  LLVM_ABI void RewriteUseAfterInsertions(Use &U);
+  void RewriteUseAfterInsertions(Use &U);
 
 private:
   Value *GetValueAtEndOfBlockInternal(BasicBlock *BB);
@@ -151,8 +149,8 @@ protected:
   SSAUpdater &SSA;
 
 public:
-  LLVM_ABI LoadAndStorePromoter(ArrayRef<const Instruction *> Insts,
-                                SSAUpdater &S, StringRef Name = StringRef());
+  LoadAndStorePromoter(ArrayRef<const Instruction *> Insts,
+                       SSAUpdater &S, StringRef Name = StringRef());
   virtual ~LoadAndStorePromoter() = default;
 
   /// This does the promotion.
@@ -160,7 +158,7 @@ public:
   /// Insts is a list of loads and stores to promote, and Name is the basename
   /// for the PHIs to insert. After this is complete, the loads and stores are
   /// removed from the code.
-  LLVM_ABI void run(const SmallVectorImpl<Instruction *> &Insts);
+  void run(const SmallVectorImpl<Instruction *> &Insts);
 
   /// This hook is invoked after all the stores are found and inserted as
   /// available values.

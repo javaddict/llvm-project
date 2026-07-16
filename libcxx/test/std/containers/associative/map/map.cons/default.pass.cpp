@@ -10,7 +10,7 @@
 
 // class map
 
-// map(); // constexpr since C++26
+// map();
 
 #include <map>
 #include <cassert>
@@ -18,7 +18,7 @@
 #include "test_macros.h"
 #include "min_allocator.h"
 
-TEST_CONSTEXPR_CXX26 bool test() {
+int main(int, char**) {
   {
     std::map<int, double> m;
     assert(m.empty());
@@ -50,13 +50,6 @@ TEST_CONSTEXPR_CXX26 bool test() {
     assert(m.begin() == m.end());
   }
 #endif
-  return true;
-}
 
-int main(int, char**) {
-  test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
   return 0;
 }

@@ -37,8 +37,9 @@ class CompoundLiteralExpr;
 class CXXBasePath;
 class Decl;
 class Expr;
+class LocationContext;
 class ObjCIvarDecl;
-class StackFrame;
+class StackFrameContext;
 
 namespace ento {
 
@@ -131,7 +132,7 @@ public:
 
   /// getInitialStore - Returns the initial "empty" store representing the
   ///  value bindings upon entry to an analyzed function.
-  virtual StoreRef getInitialStore(const StackFrame *InitSF) = 0;
+  virtual StoreRef getInitialStore(const LocationContext *InitLoc) = 0;
 
   /// getRegionManager - Returns the internal RegionManager object that is
   ///  used to query and manipulate MemRegion objects.
@@ -139,13 +140,13 @@ public:
 
   SValBuilder& getSValBuilder() { return svalBuilder; }
 
-  virtual Loc getLValueVar(const VarDecl *VD, const StackFrame *SF) {
-    return svalBuilder.makeLoc(MRMgr.getVarRegion(VD, SF));
+  virtual Loc getLValueVar(const VarDecl *VD, const LocationContext *LC) {
+    return svalBuilder.makeLoc(MRMgr.getVarRegion(VD, LC));
   }
 
   Loc getLValueCompoundLiteral(const CompoundLiteralExpr *CL,
-                               const StackFrame *SF) {
-    return loc::MemRegionVal(MRMgr.getCompoundLiteralRegion(CL, SF));
+                               const LocationContext *LC) {
+    return loc::MemRegionVal(MRMgr.getCompoundLiteralRegion(CL, LC));
   }
 
   virtual SVal getLValueIvar(const ObjCIvarDecl *decl, SVal base);
@@ -192,7 +193,7 @@ public:
   std::optional<const MemRegion *> castRegion(const MemRegion *region,
                                               QualType CastToTy);
 
-  virtual StoreRef removeDeadBindings(Store store, const StackFrame *SF,
+  virtual StoreRef removeDeadBindings(Store store, const StackFrameContext *LCtx,
                                       SymbolReaper &SymReaper) = 0;
 
   virtual bool includedInBindings(Store store,
@@ -241,14 +242,14 @@ public:
   ///   information will not be used.
   virtual StoreRef invalidateRegions(
       Store store, ArrayRef<SVal> Values, ConstCFGElementRef Elem,
-      unsigned Count, const StackFrame *SF, const CallEvent *Call,
+      unsigned Count, const LocationContext *LCtx, const CallEvent *Call,
       InvalidatedSymbols &IS, RegionAndSymbolInvalidationTraits &ITraits,
       InvalidatedRegions *TopLevelRegions, InvalidatedRegions *Invalidated) = 0;
 
   /// enterStackFrame - Let the StoreManager to do something when execution
   /// engine is about to execute into a callee.
   BindResult enterStackFrame(Store store, const CallEvent &Call,
-                             const StackFrame *CalleeSF);
+                             const StackFrameContext *CalleeCtx);
 
   /// Finds the transitive closure of symbols within the given region.
   ///

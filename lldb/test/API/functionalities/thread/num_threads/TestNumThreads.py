@@ -9,7 +9,6 @@ from lldbsuite.test.lldbtest import *
 import lldbsuite.test.lldbutil as lldbutil
 
 
-@skipIfTargetDoesNotSupportThreads()
 class NumberOfThreadsTestCase(TestBase):
     NO_DEBUG_INFO_TESTCASE = True
 

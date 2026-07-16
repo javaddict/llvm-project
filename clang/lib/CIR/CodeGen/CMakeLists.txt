@@ -13,17 +13,11 @@ add_clang_library(clangCIR
   CIRGenBuilder.cpp
   CIRGenBuiltin.cpp
   CIRGenBuiltinAArch64.cpp
-  CIRGenBuiltinAMDGPU.cpp
-  CIRGenBuiltinNVPTX.cpp
-  CIRGenAMDGPU.cpp
-  CIRGenBuiltinRISCV.cpp
   CIRGenBuiltinX86.cpp
   CIRGenCall.cpp
   CIRGenClass.cpp
   CIRGenCleanup.cpp
   CIRGenCoroutine.cpp
-  CIRGenCUDANV.cpp
-  CIRGenCUDARuntime.cpp
   CIRGenCXX.cpp
   CIRGenCXXABI.cpp
   CIRGenDecl.cpp
@@ -44,7 +38,6 @@ add_clang_library(clangCIR
   CIRGenOpenACCClause.cpp
   CIRGenOpenACCRecipe.cpp
   CIRGenOpenMPClause.cpp
-  CIRGenOpenMPRuntime.cpp
   CIRGenPointerAuth.cpp
   CIRGenRecordLayoutBuilder.cpp
   CIRGenStmt.cpp
@@ -54,8 +47,6 @@ add_clang_library(clangCIR
   CIRGenTypes.cpp
   CIRGenVTables.cpp
   TargetInfo.cpp
-  Targets/AMDGPU.cpp
-  Targets/SPIRV.cpp
 
   DEPENDS
   MLIRCIR
@@ -67,9 +58,7 @@ add_clang_library(clangCIR
   clangBasic
   clangLex
   ${dialect_libs}
-  CIRRegisterAllDialects
   CIROpenACCSupport
-  CIROpenMPSupport
   MLIRCIR
   MLIRCIRInterfaces
   MLIRTargetLLVMIRImport

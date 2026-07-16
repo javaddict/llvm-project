@@ -13,7 +13,6 @@
 
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/Support/Compiler.h"
-#include "llvm/Support/Error.h"
 
 #include <memory>
 #include <optional>
@@ -55,10 +54,10 @@ class Function;
 ///
 /// FIXME: For now, the algorithm assumes no recursion in the input Module. This
 /// will be addressed in the near future.
-LLVM_ABI Error splitModuleTransitiveFromEntryPoints(
+LLVM_ABI void splitModuleTransitiveFromEntryPoints(
     std::unique_ptr<Module> M,
     function_ref<std::optional<int>(const Function &F)> EntryPointCategorizer,
-    function_ref<Error(std::unique_ptr<Module> Part)> Callback);
+    function_ref<void(std::unique_ptr<Module> Part)> Callback);
 
 } // namespace llvm
 

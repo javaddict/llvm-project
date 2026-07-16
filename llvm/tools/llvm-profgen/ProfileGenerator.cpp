@@ -13,7 +13,6 @@
 #include "ProfiledBinary.h"
 #include "llvm/DebugInfo/Symbolize/SymbolizableModule.h"
 #include "llvm/ProfileData/ProfileCommon.h"
-#include "llvm/Support/Timer.h"
 #include <algorithm>
 #include <float.h>
 #include <unordered_set>
@@ -245,10 +244,10 @@ bool ProfileGeneratorBase::filterAmbiguousProfile(FunctionSamples &FS) {
 // from the profile map during the profile generation time. The profiles are all
 // cold functions, it won't have perf impact.
 void ProfileGeneratorBase::filterAmbiguousProfile(SampleProfileMap &Profiles) {
-  for (auto I = Profiles.begin(); I != Profiles.end();) {
+  for (auto I = ProfileMap.begin(); I != ProfileMap.end();) {
     auto FS = I++;
     if (filterAmbiguousProfile(FS->second))
-      Profiles.erase(FS);
+      ProfileMap.erase(FS);
   }
 }
 
@@ -502,8 +501,6 @@ ProfileGenerator::getTopLevelFunctionProfile(FunctionId FuncName) {
 }
 
 void ProfileGenerator::generateProfile() {
-  NamedRegionTimer T("generate", "Generate profile", "profgen", "llvm-profgen",
-                     TimeProfGen);
   collectProfiledFunctions();
 
   if (Binary->usePseudoProbes()) {
@@ -532,14 +529,15 @@ void ProfileGeneratorBase::markAllContextPreinlined(
 
 void ProfileGenerator::postProcessProfiles() {
   computeSummaryAndThreshold(ProfileMap);
-  trimColdProfiles(ColdCountThreshold);
+  trimColdProfiles(ProfileMap, ColdCountThreshold);
   filterAmbiguousProfile(ProfileMap);
   if (MarkAllContextPreinlined)
     markAllContextPreinlined(ProfileMap);
   calculateAndShowDensity(ProfileMap);
 }
 
-void ProfileGenerator::trimColdProfiles(uint64_t ColdCntThreshold) {
+void ProfileGenerator::trimColdProfiles(const SampleProfileMap &Profiles,
+                                        uint64_t ColdCntThreshold) {
   if (!TrimColdProfile)
     return;
 
@@ -924,8 +922,6 @@ CSProfileGenerator::getOrCreateContextNode(const SampleContextFrames Context,
 }
 
 void CSProfileGenerator::generateProfile() {
-  NamedRegionTimer T("generate", "Generate CS profile", "profgen",
-                     "llvm-profgen", TimeProfGen);
   FunctionSamples::ProfileIsCS = true;
 
   collectProfiledFunctions();

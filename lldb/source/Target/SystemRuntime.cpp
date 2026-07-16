@@ -15,8 +15,11 @@ using namespace lldb;
 using namespace lldb_private;
 
 SystemRuntime *SystemRuntime::FindPlugin(Process *process) {
-  for (auto create_callback :
-       PluginManager::GetSystemRuntimeCreateCallbacks()) {
+  SystemRuntimeCreateInstance create_callback = nullptr;
+  for (uint32_t idx = 0;
+       (create_callback = PluginManager::GetSystemRuntimeCreateCallbackAtIndex(
+            idx)) != nullptr;
+       ++idx) {
     std::unique_ptr<SystemRuntime> instance_up(create_callback(process));
     if (instance_up)
       return instance_up.release();

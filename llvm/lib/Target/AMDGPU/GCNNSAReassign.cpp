@@ -81,7 +81,9 @@ class GCNNSAReassignLegacy : public MachineFunctionPass {
 public:
   static char ID;
 
-  GCNNSAReassignLegacy() : MachineFunctionPass(ID) {}
+  GCNNSAReassignLegacy() : MachineFunctionPass(ID) {
+    initializeGCNNSAReassignLegacyPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 

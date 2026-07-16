@@ -20,7 +20,6 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/MemoryLocation.h"
-#include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
@@ -112,9 +111,8 @@ class HexagonLoopIdiomRecognize {
 public:
   explicit HexagonLoopIdiomRecognize(AliasAnalysis *AA, DominatorTree *DT,
                                      LoopInfo *LF, const TargetLibraryInfo *TLI,
-                                     ScalarEvolution *SE,
-                                     OptimizationRemarkEmitter &ORE)
-      : AA(AA), DT(DT), LF(LF), TLI(TLI), SE(SE), ORE(ORE) {}
+                                     ScalarEvolution *SE)
+      : AA(AA), DT(DT), LF(LF), TLI(TLI), SE(SE) {}
 
   bool run(Loop *L);
 
@@ -135,7 +133,6 @@ private:
   LoopInfo *LF;
   const TargetLibraryInfo *TLI;
   ScalarEvolution *SE;
-  OptimizationRemarkEmitter &ORE;
   bool HasMemcpy, HasMemmove;
 };
 
@@ -157,7 +154,6 @@ public:
     AU.addRequired<ScalarEvolutionWrapperPass>();
     AU.addRequired<DominatorTreeWrapperPass>();
     AU.addRequired<TargetLibraryInfoWrapperPass>();
-    AU.addRequired<OptimizationRemarkEmitterWrapperPass>();
     AU.addPreserved<TargetLibraryInfoWrapperPass>();
   }
 
@@ -270,7 +266,6 @@ INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
-INITIALIZE_PASS_DEPENDENCY(OptimizationRemarkEmitterWrapperPass)
 INITIALIZE_PASS_END(HexagonLoopIdiomRecognizeLegacyPass, "hexagon-loop-idiom",
                     "Recognize Hexagon-specific loop idioms", false, false)
 
@@ -1724,29 +1719,6 @@ void PolynomialMultiplyRecognize::setupPreSimplifier(Simplifier &S) {
       return B.CreateBinOp(BitOp2->getOpcode(), X,
                 B.CreateBinOp(BitOp1->getOpcode(), CA, CB));
     });
-  S.addRule("select with trunc cond to select with icmp cond",
-            // select (trunc x to i1) -> select (icmp ne (and x, 1), 0)
-            // select (xor (trunc x to i1) 1) -> select (icmp eq (and x, 1), 0)
-            [](Instruction *I, LLVMContext &Ctx) -> Value * {
-              SelectInst *Sel = dyn_cast<SelectInst>(I);
-              if (!Sel)
-                return nullptr;
-              Value *C = Sel->getCondition();
-              Value *X;
-              using namespace PatternMatch;
-              if (!(match(C, m_Trunc(m_Value(X))) ||
-                    match(C, m_Not(m_Trunc(m_Value(X))))))
-                return nullptr;
-
-              IRBuilder<> B(Ctx);
-              Type *Ty = X->getType();
-              Value *And = B.CreateAnd(X, ConstantInt::get(Ty, 1));
-              Value *Icmp = B.CreateICmp(isa<TruncInst>(C) ? ICmpInst::ICMP_NE
-                                                           : ICmpInst::ICMP_EQ,
-                                         And, ConstantInt::get(Ty, 0));
-              return B.CreateSelect(Icmp, Sel->getTrueValue(),
-                                    Sel->getFalseValue());
-            });
 }
 
 void PolynomialMultiplyRecognize::setupPostSimplifier(Simplifier &S) {
@@ -1948,14 +1920,8 @@ bool HexagonLoopIdiomRecognize::isLegalStore(Loop *CurLoop, StoreInst *SI) {
   // loop, which indicates a strided store.  If we have something else, it's a
   // random store we can't handle.
   auto *StoreEv = dyn_cast<SCEVAddRecExpr>(SE->getSCEV(StorePtr));
-  if (!StoreEv || StoreEv->getLoop() != CurLoop || !StoreEv->isAffine()) {
-    ORE.emit([&]() {
-      return OptimizationRemarkMissed(DEBUG_TYPE, "NonAffineStorePtr",
-                                      SI->getDebugLoc(), SI->getParent())
-             << "store pointer is not an affine AddRec";
-    });
+  if (!StoreEv || StoreEv->getLoop() != CurLoop || !StoreEv->isAffine())
     return false;
-  }
 
   // Check to see if the stride matches the size of the store.  If so, then we
   // know that every byte is touched in the loop.
@@ -1963,39 +1929,21 @@ bool HexagonLoopIdiomRecognize::isLegalStore(Loop *CurLoop, StoreInst *SI) {
   if (Stride == 0)
     return false;
   unsigned StoreSize = DL->getTypeStoreSize(SI->getValueOperand()->getType());
-  if (StoreSize != unsigned(std::abs(Stride))) {
-    ORE.emit([&]() {
-      return OptimizationRemarkMissed(DEBUG_TYPE, "StrideSizeMismatch",
-                                      SI->getDebugLoc(), SI->getParent())
-             << "stride does not match store size";
-    });
+  if (StoreSize != unsigned(std::abs(Stride)))
     return false;
-  }
 
   // The store must be feeding a non-volatile load.
   LoadInst *LI = dyn_cast<LoadInst>(SI->getValueOperand());
-  if (!LI || !LI->isSimple()) {
-    ORE.emit([&]() {
-      return OptimizationRemarkMissed(DEBUG_TYPE, "StoreNotFeedingLoad",
-                                      SI->getDebugLoc(), SI->getParent())
-             << "store value is not a simple load";
-    });
+  if (!LI || !LI->isSimple())
     return false;
-  }
 
   // See if the pointer expression is an AddRec like {base,+,1} on the current
   // loop, which indicates a strided load.  If we have something else, it's a
   // random load we can't handle.
   Value *LoadPtr = LI->getPointerOperand();
   auto *LoadEv = dyn_cast<SCEVAddRecExpr>(SE->getSCEV(LoadPtr));
-  if (!LoadEv || LoadEv->getLoop() != CurLoop || !LoadEv->isAffine()) {
-    ORE.emit([&]() {
-      return OptimizationRemarkMissed(DEBUG_TYPE, "NonAffineLoadPtr",
-                                      LI->getDebugLoc(), LI->getParent())
-             << "load pointer is not an affine AddRec";
-    });
+  if (!LoadEv || LoadEv->getLoop() != CurLoop || !LoadEv->isAffine())
     return false;
-  }
 
   // The store and load must share the same stride.
   if (StoreEv->getOperand(1) != LoadEv->getOperand(1))
@@ -2119,11 +2067,6 @@ CleanupAndExit:
     if (mayLoopAccessLocation(StoreBasePtr, ModRefInfo::ModRef, CurLoop,
                               BECount, StoreSize, *AA, Ignore1)) {
       // Still bad. Nothing we can do.
-      ORE.emit([&]() {
-        return OptimizationRemarkMissed(DEBUG_TYPE, "MemoryAlias",
-                                        SI->getDebugLoc(), SI->getParent())
-               << "memory aliasing prevents memcpy/memmove";
-      });
       goto CleanupAndExit;
     }
     // It worked with the load ignored.
@@ -2131,14 +2074,8 @@ CleanupAndExit:
   }
 
   if (!Overlap) {
-    if (DisableMemcpyIdiom || !HasMemcpy) {
-      ORE.emit([&]() {
-        return OptimizationRemarkMissed(DEBUG_TYPE, "MemcpyDisabled",
-                                        SI->getDebugLoc(), SI->getParent())
-               << "memcpy idiom is disabled or unavailable";
-      });
+    if (DisableMemcpyIdiom || !HasMemcpy)
       goto CleanupAndExit;
-    }
   } else {
     // Don't generate memmove if this function will be inlined. This is
     // because the caller will undergo this transformation after inlining.
@@ -2153,32 +2090,14 @@ CleanupAndExit:
     SmallVector<Instruction*,2> Insts;
     Insts.push_back(SI);
     Insts.push_back(LI);
-    if (!coverLoop(CurLoop, Insts)) {
-      ORE.emit([&]() {
-        return OptimizationRemarkMissed(DEBUG_TYPE, "ExtraLoopInstructions",
-                                        SI->getDebugLoc(), SI->getParent())
-               << "loop contains instructions beyond load/store pair";
-      });
+    if (!coverLoop(CurLoop, Insts))
       goto CleanupAndExit;
-    }
 
-    if (DisableMemmoveIdiom || !HasMemmove) {
-      ORE.emit([&]() {
-        return OptimizationRemarkMissed(DEBUG_TYPE, "MemmoveDisabled",
-                                        SI->getDebugLoc(), SI->getParent())
-               << "memmove idiom is disabled or unavailable";
-      });
+    if (DisableMemmoveIdiom || !HasMemmove)
       goto CleanupAndExit;
-    }
     bool IsNested = CurLoop->getParentLoop() != nullptr;
-    if (IsNested && OnlyNonNestedMemmove) {
-      ORE.emit([&]() {
-        return OptimizationRemarkMissed(DEBUG_TYPE, "NestedLoop",
-                                        SI->getDebugLoc(), SI->getParent())
-               << "memmove skipped for nested loop";
-      });
+    if (IsNested && OnlyNonNestedMemmove)
       goto CleanupAndExit;
-    }
   }
 
   // For a memcpy, we have to make sure that the input array is not being
@@ -2364,20 +2283,6 @@ CleanupAndExit:
                     << "    from store ptr=" << *StoreEv << " at: " << *SI
                     << "\n");
 
-  if (Overlap) {
-    ORE.emit([&]() {
-      return OptimizationRemark(DEBUG_TYPE, "LoopToMemmove", DLoc,
-                                CurLoop->getHeader())
-             << "converted loop to memmove";
-    });
-  } else {
-    ORE.emit([&]() {
-      return OptimizationRemark(DEBUG_TYPE, "LoopToMemcpy", DLoc,
-                                CurLoop->getHeader())
-             << "converted loop to memcpy";
-    });
-  }
-
   return true;
 }
 
@@ -2414,7 +2319,7 @@ bool HexagonLoopIdiomRecognize::coverLoop(Loop *L,
   // instructions in it that are not involved in the original set Insts.
   for (auto *B : L->blocks()) {
     for (auto &In : *B) {
-      if (isa<UncondBrInst, CondBrInst>(In))
+      if (isa<BranchInst>(In))
         continue;
       if (!Worklist.count(&In) && In.mayHaveSideEffects())
         return false;
@@ -2460,14 +2365,8 @@ bool HexagonLoopIdiomRecognize::runOnLoopBlock(Loop *CurLoop, BasicBlock *BB,
 
 bool HexagonLoopIdiomRecognize::runOnCountableLoop(Loop *L) {
   PolynomialMultiplyRecognize PMR(L, *DL, *DT, *TLI, *SE);
-  if (PMR.recognize()) {
-    ORE.emit([&]() {
-      return OptimizationRemark(DEBUG_TYPE, "PolynomialMultiply",
-                                L->getStartLoc(), L->getHeader())
-             << "recognized polynomial multiply idiom";
-    });
+  if (PMR.recognize())
     return true;
-  }
 
   if (!HasMemcpy && !HasMemmove)
     return false;
@@ -2500,14 +2399,8 @@ bool HexagonLoopIdiomRecognize::run(Loop *L) {
 
   // If the loop could not be converted to canonical form, it must have an
   // indirectbr in it, just give up.
-  if (!L->getLoopPreheader()) {
-    ORE.emit([&]() {
-      return OptimizationRemarkMissed(DEBUG_TYPE, "NoPreheader",
-                                      L->getStartLoc(), L->getHeader())
-             << "loop not in canonical form (no preheader)";
-    });
+  if (!L->getLoopPreheader())
     return false;
-  }
 
   // Disable loop idiom recognition if the function's name is a common idiom.
   StringRef Name = L->getHeader()->getParent()->getName();
@@ -2521,12 +2414,6 @@ bool HexagonLoopIdiomRecognize::run(Loop *L) {
 
   if (SE->hasLoopInvariantBackedgeTakenCount(L))
     return runOnCountableLoop(L);
-
-  ORE.emit([&]() {
-    return OptimizationRemarkMissed(DEBUG_TYPE, "NonCountableLoop",
-                                    L->getStartLoc(), L->getHeader())
-           << "backedge-taken count is not loop-invariant";
-  });
   return false;
 }
 
@@ -2541,8 +2428,7 @@ bool HexagonLoopIdiomRecognizeLegacyPass::runOnLoop(Loop *L,
   auto *TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(
       *L->getHeader()->getParent());
   auto *SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
-  auto &ORE = getAnalysis<OptimizationRemarkEmitterWrapperPass>().getORE();
-  return HexagonLoopIdiomRecognize(AA, DT, LF, TLI, SE, ORE).run(L);
+  return HexagonLoopIdiomRecognize(AA, DT, LF, TLI, SE).run(L);
 }
 
 Pass *llvm::createHexagonLoopIdiomPass() {
@@ -2553,8 +2439,7 @@ PreservedAnalyses
 HexagonLoopIdiomRecognitionPass::run(Loop &L, LoopAnalysisManager &AM,
                                      LoopStandardAnalysisResults &AR,
                                      LPMUpdater &U) {
-  OptimizationRemarkEmitter ORE(L.getHeader()->getParent());
-  return HexagonLoopIdiomRecognize(&AR.AA, &AR.DT, &AR.LI, &AR.TLI, &AR.SE, ORE)
+  return HexagonLoopIdiomRecognize(&AR.AA, &AR.DT, &AR.LI, &AR.TLI, &AR.SE)
                  .run(&L)
              ? getLoopPassPreservedAnalyses()
              : PreservedAnalyses::all();

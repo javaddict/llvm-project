@@ -24,13 +24,10 @@ static bool isDefinedAsZero(Value val) {
   if (isZeroIntegerOrFloat(val))
     return true;
 
-  auto *defOp = val.getDefiningOp();
-  if (!defOp)
-    return false;
-
-  return TypeSwitch<Operation *, bool>(defOp)
+  return TypeSwitch<Operation *, bool>(val.getDefiningOp())
       .Case<linalg::FillOp, linalg::CopyOp>([&](auto op) {
-        return op.getInputs().size() == 1 && isDefinedAsZero(op.getInputs()[0]);
+        return op && op.getInputs().size() == 1 &&
+               isDefinedAsZero(op.getInputs()[0]);
       })
       .Default([&](auto) { return false; });
 }

@@ -8,6 +8,7 @@
 
 #include "CF.h"
 
+#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/DataFormatters/FormattersHelpers.h"
 #include "lldb/Target/Language.h"
 #include "lldb/Target/StackFrame.h"

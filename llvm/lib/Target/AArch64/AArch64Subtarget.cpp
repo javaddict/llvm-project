@@ -137,6 +137,7 @@ void AArch64Subtarget::initializeProperties(bool HasMinSize) {
       AvoidLDAPUR = true;
     break;
   case Carmel:
+    CacheLineSize = 64;
     break;
   case CortexA35:
   case CortexA53:
@@ -220,6 +221,7 @@ void AArch64Subtarget::initializeProperties(bool HasMinSize) {
   case AppleA17:
   case AppleM4:
   case AppleM5:
+    CacheLineSize = 64;
     PrefetchDistance = 280;
     MinPrefetchStride = 2048;
     MaxPrefetchIterationsAhead = 3;
@@ -256,6 +258,7 @@ void AArch64Subtarget::initializeProperties(bool HasMinSize) {
     break;
   case NeoverseV2:
   case NeoverseV3:
+    CacheLineSize = 64;
     EpilogueVectorizationMinVF = 8;
     ScatterOverhead = 13;
     [[fallthrough]];
@@ -282,6 +285,7 @@ void AArch64Subtarget::initializeProperties(bool HasMinSize) {
     MinVectorRegisterBitWidth = 128;
     break;
   case ThunderX2T99:
+    CacheLineSize = 64;
     PrefFunctionAlignment = Align(8);
     PrefLoopAlignment = Align(4);
     PrefetchDistance = 128;
@@ -301,10 +305,12 @@ void AArch64Subtarget::initializeProperties(bool HasMinSize) {
     MinVectorRegisterBitWidth = 128;
     break;
   case TSV110:
+    CacheLineSize = 64;
     PrefFunctionAlignment = Align(16);
     PrefLoopAlignment = Align(4);
     break;
   case ThunderX3T110:
+    CacheLineSize = 64;
     PrefFunctionAlignment = Align(16);
     PrefLoopAlignment = Align(4);
     PrefetchDistance = 128;
@@ -317,10 +323,12 @@ void AArch64Subtarget::initializeProperties(bool HasMinSize) {
   case Ampere1A:
   case Ampere1B:
   case Ampere1C:
+    CacheLineSize = 64;
     PrefFunctionAlignment = Align(64);
     PrefLoopAlignment = Align(64);
     break;
   case Oryon:
+    CacheLineSize = 64;
     PrefFunctionAlignment = Align(16);
     PrefetchDistance = 128;
     MinPrefetchStride = 1024;
@@ -347,8 +355,7 @@ AArch64Subtarget::AArch64Subtarget(const Triple &TT, StringRef CPU,
                                    unsigned MinSVEVectorSizeInBitsOverride,
                                    unsigned MaxSVEVectorSizeInBitsOverride,
                                    bool IsStreaming, bool IsStreamingCompatible,
-                                   bool HasMinSize,
-                                   bool EnableSRLTSubregToRegMitigation)
+                                   bool HasMinSize)
     : AArch64GenSubtargetInfo(TT, CPU, TuneCPU, FS),
       ReserveXRegister(AArch64::GPR64commonRegClass.getNumRegs()),
       ReserveXRegisterForRA(AArch64::GPR64commonRegClass.getNumRegs()),
@@ -360,17 +367,7 @@ AArch64Subtarget::AArch64Subtarget(const Triple &TT, StringRef CPU,
               ? std::optional<unsigned>(AArch64StreamingHazardSize)
               : std::nullopt),
       MinSVEVectorSizeInBits(MinSVEVectorSizeInBitsOverride),
-      MaxSVEVectorSizeInBits(MaxSVEVectorSizeInBitsOverride),
-      EnableSRLTSubregToRegMitigation(EnableSRLTSubregToRegMitigation),
-      // To benefit from SME2's strided-register multi-vector load/store
-      // instructions we'll need to enable subreg liveness. Our longer
-      // term aim is to make this the default, regardless of streaming
-      // mode, but there are still some outstanding issues, see:
-      //  https://github.com/llvm/llvm-project/pull/174188
-      // and:
-      //  https://github.com/llvm/llvm-project/pull/168353
-      EnableSubregLiveness(IsStreaming || EnableSubregLivenessTracking),
-      TargetTriple(TT),
+      MaxSVEVectorSizeInBits(MaxSVEVectorSizeInBitsOverride), TargetTriple(TT),
       InstrInfo(initializeSubtargetDependencies(FS, CPU, TuneCPU, HasMinSize)),
       TLInfo(TM, *this) {
   if (AArch64::isX18ReservedByDefault(TT))
@@ -402,6 +399,8 @@ AArch64Subtarget::AArch64Subtarget(const Triple &TT, StringRef CPU,
   // X29 is named FP, so we can't use TRI->getName to check X29.
   if (ReservedRegNames.count("X29") || ReservedRegNames.count("FP"))
     ReserveXRegisterForRA.set(29);
+
+  EnableSubregLiveness = EnableSubregLivenessTracking.getValue();
 }
 
 const CallLowering *AArch64Subtarget::getCallLowering() const {

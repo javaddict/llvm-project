@@ -170,7 +170,6 @@ inline constexpr bool IsValidFortranTokenCharacter(char ch) {
   case '<':
   case '=':
   case '>':
-  case '?': // Used in conditional expressions (Fortran 2023)
   case '[':
   case ']':
   case '{': // Used in OpenMP context selector specification

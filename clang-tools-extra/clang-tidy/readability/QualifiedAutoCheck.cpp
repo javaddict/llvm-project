@@ -120,7 +120,7 @@ void QualifiedAutoCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
 void QualifiedAutoCheck::registerMatchers(MatchFinder *Finder) {
   auto ExplicitSingleVarDecl =
       [](const ast_matchers::internal::Matcher<VarDecl> &InnerMatcher,
-         StringRef ID) {
+         llvm::StringRef ID) {
         return declStmt(
             unless(isInTemplateInstantiation()),
             hasSingleDecl(
@@ -128,7 +128,7 @@ void QualifiedAutoCheck::registerMatchers(MatchFinder *Finder) {
       };
   auto ExplicitSingleVarDeclInTemplate =
       [](const ast_matchers::internal::Matcher<VarDecl> &InnerMatcher,
-         StringRef ID) {
+         llvm::StringRef ID) {
         return declStmt(
             isInTemplateInstantiation(),
             hasSingleDecl(
@@ -193,11 +193,10 @@ void QualifiedAutoCheck::check(const MatchFinder::MatchResult &Result) {
     if (std::optional<SourceRange> TypeSpec =
             getTypeSpecifierLocation(Var, Result)) {
       TypeSpecifier = *TypeSpec;
-    } else {
+    } else
       return;
-    }
 
-    SmallVector<SourceRange, 4> RemoveQualifiersRange;
+    llvm::SmallVector<SourceRange, 4> RemoveQualifiersRange;
     auto CheckQualifier = [&](bool IsPresent, Qualifier Qual) {
       if (IsPresent) {
         std::optional<Token> Token = findQualToken(Var, Qual, Result);

@@ -68,7 +68,10 @@ class MachineLateInstrsCleanupLegacy : public MachineFunctionPass {
 public:
   static char ID; // Pass identification, replacement for typeid
 
-  MachineLateInstrsCleanupLegacy() : MachineFunctionPass(ID) {}
+  MachineLateInstrsCleanupLegacy() : MachineFunctionPass(ID) {
+    initializeMachineLateInstrsCleanupLegacyPass(
+        *PassRegistry::getPassRegistry());
+  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
@@ -243,17 +246,15 @@ bool MachineLateInstrsCleanup::processBlock(MachineBasicBlock *MBB) {
     }
 
     // Clear any entries in map that MI clobbers.
-    MBBDefs.remove_if([&](const auto &Entry) {
-      Register Reg = Entry.first;
+    for (auto DefI : llvm::make_early_inc_range(MBBDefs)) {
+      Register Reg = DefI.first;
       if (MI.modifiesRegister(Reg, TRI)) {
+        MBBDefs.erase(Reg);
         MBBKills.erase(Reg);
-        return true;
-      }
-      if (MI.findRegisterUseOperandIdx(Reg, TRI, true /*isKill*/) != -1)
+      } else if (MI.findRegisterUseOperandIdx(Reg, TRI, true /*isKill*/) != -1)
         // Keep track of all instructions that fully or partially kills Reg.
         MBBKills[Reg].push_back(&MI);
-      return false;
-    });
+    }
 
     // Record this MI for potential later reuse.
     if (IsCandidate) {

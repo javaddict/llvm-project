@@ -111,7 +111,7 @@ static Error tryInstructionMix() {
         Mix.begin(), Mix.end(), 1, [](unsigned MaxValue, const MixEntry &Elt) {
           return std::max(MaxValue, Elt.second);
         });
-    unsigned ValueWidth = NumDigitsBase10(MaxValue);
+    unsigned ValueWidth = std::log10(MaxValue) + 1;
     FOS << "Instruction";
     FOS.PadToColumn(MaxMnemonic + 1) << "Count\n";
     FOS << "-----------";

@@ -32,7 +32,6 @@ add_mlir_dialect_library(MLIRSCFTransforms
   MLIRBufferizationTransforms
   MLIRDestinationStyleOpInterface
   MLIRDialectUtils
-  MLIRIndexDialect
   MLIRIR
   MLIRMemRefDialect
   MLIRPass

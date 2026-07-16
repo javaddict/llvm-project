@@ -31,6 +31,12 @@ _start:
 #      CHECK:  - Type:            GLOBAL
 # CHECK-NEXT:    Globals:
 # CHECK-NEXT:      - Index:           0
+# CHECK-NEXT:        Type:            I32
+# CHECK-NEXT:        Mutable:         true
+# CHECK-NEXT:        InitExpr:
+# CHECK-NEXT:          Opcode:          I32_CONST
+# CHECK-NEXT:          Value:           65536
+# CHECK-NEXT:      - Index:           1
 # CHECK-NEXT:        Type:            EXTERNREF
 # CHECK-NEXT:        Mutable:         true
 # CHECK-NEXT:        InitExpr:

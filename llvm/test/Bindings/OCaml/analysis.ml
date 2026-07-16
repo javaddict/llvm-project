@@ -12,7 +12,7 @@ open Llvm_analysis
 (* Note that this takes a moment to link, so it's best to keep the number of
    individual tests low. *)
 
-let context = create_context ()
+let context = global_context ()
 
 let test x = if not x then exit 1 else ()
 
@@ -49,7 +49,6 @@ let _ =
   if verify_function fn then bomb "invalid function passed verification!";
 
 
-  dispose_module m;
-  dispose_context context
+  dispose_module m
 
   (* Don't bother to test assert_valid_{module,function}. *)

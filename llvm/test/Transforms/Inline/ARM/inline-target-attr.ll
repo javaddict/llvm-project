@@ -1,4 +1,5 @@
 ; RUN: opt < %s -mtriple=arm-unknown-linux-gnu -S -passes=inline | FileCheck %s
+; RUN: opt < %s -mtriple=arm-unknown-linux-gnu -S -passes='cgscc(inline)' | FileCheck %s
 ; Check that we only inline when we have compatible target attributes.
 ; ARM has implemented a target attribute that will verify that the attribute
 ; sets are compatible.

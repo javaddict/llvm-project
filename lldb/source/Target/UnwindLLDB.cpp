@@ -103,8 +103,10 @@ bool UnwindLLDB::AddFirstFrame() {
 
 unwind_done:
   Log *log = GetLog(LLDBLog::Unwind);
-  LLDB_LOGF(log, "th%d Unwind of this thread is complete.",
-            m_thread.GetIndexID());
+  if (log) {
+    LLDB_LOGF(log, "th%d Unwind of this thread is complete.",
+              m_thread.GetIndexID());
+  }
   m_unwind_complete = true;
   return false;
 }

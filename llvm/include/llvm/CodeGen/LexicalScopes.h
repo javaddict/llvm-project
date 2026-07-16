@@ -56,9 +56,6 @@ public:
       Parent->addChild(this);
   }
 
-  LexicalScope(const LexicalScope &) = delete;
-  LexicalScope &operator=(const LexicalScope &) = delete;
-
   // Accessors.
   LexicalScope *getParent() const { return Parent; }
   const MDNode *getDesc() const { return Desc; }
@@ -143,9 +140,6 @@ private:
 class LexicalScopes {
 public:
   LexicalScopes() = default;
-
-  LexicalScopes(const LexicalScopes &) = delete;
-  LexicalScopes &operator=(const LexicalScopes &) = delete;
 
   /// Scan module to build subprogram-to-function map.
   LLVM_ABI void initialize(const Module &);

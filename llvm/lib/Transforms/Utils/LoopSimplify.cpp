@@ -381,7 +381,7 @@ static BasicBlock *insertUniqueBackedgeBlock(Loop *L, BasicBlock *Preheader,
   // Create and insert the new backedge block.
   BasicBlock *BEBlock = BasicBlock::Create(Header->getContext(),
                                            Header->getName() + ".backedge", F);
-  UncondBrInst *BETerminator = UncondBrInst::Create(Header, BEBlock);
+  BranchInst *BETerminator = BranchInst::Create(Header, BEBlock);
   BETerminator->setDebugLoc(Header->getFirstNonPHIIt()->getDebugLoc());
 
   LLVM_DEBUG(dbgs() << "LoopSimplify: Inserting unique backedge block "
@@ -518,19 +518,20 @@ ReprocessLoop:
   SmallVector<BasicBlock*, 8> ExitingBlocks;
   L->getExitingBlocks(ExitingBlocks);
   for (BasicBlock *ExitingBlock : ExitingBlocks)
-    if (CondBrInst *BI = dyn_cast<CondBrInst>(ExitingBlock->getTerminator())) {
-      if (UndefValue *Cond = dyn_cast<UndefValue>(BI->getCondition())) {
+    if (BranchInst *BI = dyn_cast<BranchInst>(ExitingBlock->getTerminator()))
+      if (BI->isConditional()) {
+        if (UndefValue *Cond = dyn_cast<UndefValue>(BI->getCondition())) {
 
-        LLVM_DEBUG(
-            dbgs() << "LoopSimplify: Resolving \"br i1 undef\" to exit in "
-                   << ExitingBlock->getName() << "\n");
+          LLVM_DEBUG(dbgs()
+                     << "LoopSimplify: Resolving \"br i1 undef\" to exit in "
+                     << ExitingBlock->getName() << "\n");
 
-        BI->setCondition(ConstantInt::get(Cond->getType(),
-                                          !L->contains(BI->getSuccessor(0))));
+          BI->setCondition(ConstantInt::get(Cond->getType(),
+                                            !L->contains(BI->getSuccessor(0))));
 
-        Changed = true;
+          Changed = true;
+        }
       }
-    }
 
   // Does the loop already have a preheader?  If so, don't insert one.
   BasicBlock *Preheader = L->getLoopPreheader();
@@ -628,9 +629,8 @@ ReprocessLoop:
   if (HasUniqueExitBlock()) {
     for (BasicBlock *ExitingBlock : ExitingBlocks) {
       if (!ExitingBlock->getSinglePredecessor()) continue;
-      CondBrInst *BI = dyn_cast<CondBrInst>(ExitingBlock->getTerminator());
-      if (!BI)
-        continue;
+      BranchInst *BI = dyn_cast<BranchInst>(ExitingBlock->getTerminator());
+      if (!BI || !BI->isConditional()) continue;
       CmpInst *CI = dyn_cast<CmpInst>(BI->getCondition());
       if (!CI || CI->getParent() != ExitingBlock) continue;
 
@@ -638,7 +638,7 @@ ReprocessLoop:
       // comparison and the branch.
       bool AllInvariant = true;
       bool AnyInvariant = false;
-      for (auto I = ExitingBlock->begin(); &*I != BI;) {
+      for (auto I = ExitingBlock->instructionsWithoutDebug().begin(); &*I != BI; ) {
         Instruction *Inst = &*I++;
         if (Inst == CI)
           continue;
@@ -669,8 +669,10 @@ ReprocessLoop:
       LI->removeBlock(ExitingBlock);
 
       DomTreeNode *Node = DT->getNode(ExitingBlock);
-      while (!Node->isLeaf())
-        DT->changeImmediateDominator(*Node->begin(), Node->getIDom());
+      while (!Node->isLeaf()) {
+        DomTreeNode *Child = Node->back();
+        DT->changeImmediateDominator(Child, Node->getIDom());
+      }
       DT->eraseNode(ExitingBlock);
       if (MSSAU) {
         SmallSetVector<BasicBlock *, 8> ExitBlockSet;

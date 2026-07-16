@@ -91,7 +91,6 @@ add_subdirectory(Tooling)
 add_subdirectory(Format)
 add_subdirectory(Frontend)
 add_subdirectory(Rewrite)
-add_subdirectory(ScalableStaticAnalysisFramework)
 add_subdirectory(Sema)
 add_subdirectory(CodeGen)
 if(HAVE_CLANG_REPL_SUPPORT)
@@ -110,7 +109,6 @@ add_subdirectory(Support)
 if (CLANG_ENABLE_CIR)
   add_subdirectory(CIR)
 endif()
-add_subdirectory(offload-arch)
 
 # If we're doing a single merged clang unit test binary, add that target after
 # all the previous subdirectories have been processed.

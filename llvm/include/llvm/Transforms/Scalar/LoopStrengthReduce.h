@@ -30,12 +30,10 @@ class Loop;
 class LPMUpdater;
 
 /// Performs Loop Strength Reduce Pass.
-class LoopStrengthReducePass
-    : public OptionalPassInfoMixin<LoopStrengthReducePass> {
+class LoopStrengthReducePass : public PassInfoMixin<LoopStrengthReducePass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
-                                 LoopStandardAnalysisResults &AR,
-                                 LPMUpdater &U);
+  PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
+                        LoopStandardAnalysisResults &AR, LPMUpdater &U);
 };
 
 } // end namespace llvm

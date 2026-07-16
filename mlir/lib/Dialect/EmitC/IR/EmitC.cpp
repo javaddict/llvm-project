@@ -12,7 +12,6 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
-#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Types.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "mlir/Support/LLVM.h"
@@ -340,55 +339,42 @@ bool CastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
 // CallOpaqueOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult
-verifyOpaqueCallCommon(Operation *op, StringRef callee,
-                       std::optional<ArrayAttr> args,
-                       std::optional<ArrayAttr> templateArgs,
-                       TypeRange resultTypes, size_t numArgsOperands) {
+LogicalResult emitc::CallOpaqueOp::verify() {
   // Callee must not be empty.
-  if (callee.empty())
-    return op->emitOpError("callee must not be empty");
+  if (getCallee().empty())
+    return emitOpError("callee must not be empty");
 
-  if (args) {
-    for (Attribute arg : *args) {
+  if (std::optional<ArrayAttr> argsAttr = getArgs()) {
+    for (Attribute arg : *argsAttr) {
       auto intAttr = llvm::dyn_cast<IntegerAttr>(arg);
       if (intAttr && llvm::isa<IndexType>(intAttr.getType())) {
         int64_t index = intAttr.getInt();
         // Args with elements of type index must be in range
-        // [0..numArgsOperands).
-        if ((index < 0) || (index >= static_cast<int64_t>(numArgsOperands)))
-          return op->emitOpError("index argument is out of range");
+        // [0..operands.size).
+        if ((index < 0) || (index >= static_cast<int64_t>(getNumOperands())))
+          return emitOpError("index argument is out of range");
 
-      } else if (llvm::isa<ArrayAttr>(arg)) {
-        return op->emitOpError("array argument has no type");
+        // Args with elements of type ArrayAttr must have a type.
+      } else if (llvm::isa<ArrayAttr>(
+                     arg) /*&& llvm::isa<NoneType>(arg.getType())*/) {
+        // FIXME: Array attributes never have types
+        return emitOpError("array argument has no type");
       }
     }
   }
 
-  if (templateArgs) {
-    for (Attribute tArg : *templateArgs) {
+  if (std::optional<ArrayAttr> templateArgsAttr = getTemplateArgs()) {
+    for (Attribute tArg : *templateArgsAttr) {
       if (!llvm::isa<TypeAttr, IntegerAttr, FloatAttr, emitc::OpaqueAttr>(tArg))
-        return op->emitOpError("template argument has invalid type");
+        return emitOpError("template argument has invalid type");
     }
   }
 
-  if (llvm::any_of(resultTypes, llvm::IsaPred<ArrayType>)) {
-    return op->emitOpError() << "cannot return array type";
+  if (llvm::any_of(getResultTypes(), llvm::IsaPred<ArrayType>)) {
+    return emitOpError() << "cannot return array type";
   }
 
   return success();
-}
-
-LogicalResult emitc::CallOpaqueOp::verify() {
-  return verifyOpaqueCallCommon(getOperation(), getCallee(), getArgs(),
-                                getTemplateArgs(), getResultTypes(),
-                                getNumOperands());
-}
-
-LogicalResult emitc::MemberCallOpaqueOp::verify() {
-  return verifyOpaqueCallCommon(getOperation(), getCallee(), getArgs(),
-                                getTemplateArgs(), getResultTypes(),
-                                getArgOperands().size());
 }
 
 //===----------------------------------------------------------------------===//
@@ -426,81 +412,6 @@ LogicalResult DereferenceOp::verify() {
 // ExpressionOp
 //===----------------------------------------------------------------------===//
 
-namespace {
-
-struct RemoveRecurringExpressionOperands
-    : public OpRewritePattern<ExpressionOp> {
-  using OpRewritePattern<ExpressionOp>::OpRewritePattern;
-  LogicalResult matchAndRewrite(ExpressionOp expressionOp,
-                                PatternRewriter &rewriter) const override {
-    SetVector<Value> uniqueOperands;
-    DenseMap<Value, int> firstIndexOf;
-
-    // Collect duplicate operands and prepare to remove excessive copies.
-    for (auto [i, operand] : llvm::enumerate(expressionOp.getDefs())) {
-      if (uniqueOperands.contains(operand))
-        continue;
-      uniqueOperands.insert(operand);
-      firstIndexOf[operand] = i;
-    }
-
-    // If every operand is unique, bail out.
-    if (uniqueOperands.size() == expressionOp.getDefs().size())
-      return failure();
-
-    // Create a new expression with unique operands.
-    rewriter.setInsertionPointAfter(expressionOp);
-    auto uniqueExpression = emitc::ExpressionOp::create(
-        rewriter, expressionOp.getLoc(), expressionOp.getResult().getType(),
-        uniqueOperands.getArrayRef(), expressionOp.getDoNotInline());
-    Block &uniqueExpressionBody = uniqueExpression.createBody();
-
-    // Map each original block arguments to the unique block argument taking
-    // the same operand.
-    IRMapping mapper;
-    Block *expressionBody = expressionOp.getBody();
-    for (auto [operand, arg] :
-         llvm::zip(expressionOp.getOperands(), expressionBody->getArguments()))
-      mapper.map(arg, uniqueExpressionBody.getArgument(firstIndexOf[operand]));
-
-    rewriter.setInsertionPointToStart(&uniqueExpressionBody);
-    for (Operation &opToClone : *expressionOp.getBody())
-      rewriter.clone(opToClone, mapper);
-
-    // Complete the rewrite.
-    rewriter.replaceOp(expressionOp, uniqueExpression);
-
-    return success();
-  }
-};
-
-/// If an ExpressionOp body yields a block argument directly (no root op),
-/// this means a contained op was folded away (e.g., an identity cast whose
-/// in/out types match). Canonicalize by replacing the expression with the
-/// corresponding operand value.
-struct FoldTrivialExpressionOp : public OpRewritePattern<ExpressionOp> {
-  using OpRewritePattern<ExpressionOp>::OpRewritePattern;
-  LogicalResult matchAndRewrite(ExpressionOp expressionOp,
-                                PatternRewriter &rewriter) const override {
-    auto yieldOp = cast<YieldOp>(expressionOp.getBody()->getTerminator());
-    Value yieldedValue = yieldOp.getResult();
-    auto blockArg = dyn_cast_if_present<BlockArgument>(yieldedValue);
-    if (!blockArg)
-      return failure();
-    rewriter.replaceOp(expressionOp,
-                       expressionOp.getOperand(blockArg.getArgNumber()));
-    return success();
-  }
-};
-
-} // namespace
-
-void ExpressionOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                               MLIRContext *context) {
-  results.add<RemoveRecurringExpressionOperands, FoldTrivialExpressionOp>(
-      context);
-}
-
 ParseResult ExpressionOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand> operands;
   if (parser.parseOperandList(operands))
@@ -524,45 +435,27 @@ ParseResult ExpressionOp::parse(OpAsmParser &parser, OperationState &result) {
                             "expected single return type");
   result.addTypes(fnType.getResults());
   Region *body = result.addRegion();
-  DenseSet<Value> uniqueOperands(result.operands.begin(),
-                                 result.operands.end());
-  bool enableNameShadowing = uniqueOperands.size() == result.operands.size();
   SmallVector<OpAsmParser::Argument> argsInfo;
-  if (enableNameShadowing) {
-    for (auto [unresolvedOperand, operandType] :
-         llvm::zip(operands, fnType.getInputs())) {
-      OpAsmParser::Argument argInfo;
-      argInfo.ssaName = unresolvedOperand;
-      argInfo.type = operandType;
-      argsInfo.push_back(argInfo);
-    }
+  for (auto [unresolvedOperand, operandType] :
+       llvm::zip(operands, fnType.getInputs())) {
+    OpAsmParser::Argument argInfo;
+    argInfo.ssaName = unresolvedOperand;
+    argInfo.type = operandType;
+    argsInfo.push_back(argInfo);
   }
-  SMLoc beforeRegionLoc = parser.getCurrentLocation();
-  if (parser.parseRegion(*body, argsInfo, enableNameShadowing))
+  if (parser.parseRegion(*body, argsInfo, /*enableNameShadowing=*/true))
     return failure();
-  if (!enableNameShadowing) {
-    if (body->front().getArguments().size() < result.operands.size()) {
-      return parser.emitError(
-          beforeRegionLoc, "with recurring operands expected block arguments");
-    }
-  }
   return success();
 }
 
 void emitc::ExpressionOp::print(OpAsmPrinter &p) {
   p << ' ';
-  auto operands = getDefs();
-  p.printOperands(operands);
+  p.printOperands(getDefs());
   p << " : ";
   p.printFunctionalType(getOperation());
-  DenseSet<Value> uniqueOperands(operands.begin(), operands.end());
-  bool printEntryBlockArgs = true;
-  if (uniqueOperands.size() == operands.size()) {
-    p.shadowRegionArgs(getRegion(), getDefs());
-    printEntryBlockArgs = false;
-  }
+  p.shadowRegionArgs(getRegion(), getDefs());
   p << ' ';
-  p.printRegion(getRegion(), printEntryBlockArgs);
+  p.printRegion(getRegion(), /*printEntryBlockArgs=*/false);
 }
 
 Operation *ExpressionOp::getRootOp() {
@@ -619,8 +512,7 @@ LogicalResult ExpressionOp::verify() {
     Operation *op = worklist.back();
     worklist.pop_back();
     if (visited.contains(op)) {
-      auto cExpr = cast<CExpressionInterface>(op);
-      if (!cExpr.alwaysInline() && cExpr.hasSideEffects())
+      if (cast<CExpressionInterface>(op).hasSideEffects())
         return emitOpError(
             "requires exactly one use for operations with side effects");
     }
@@ -629,14 +521,6 @@ LogicalResult ExpressionOp::verify() {
       if (Operation *def = operand.getDefiningOp()) {
         worklist.push_back(def);
       }
-  }
-
-  // It is illegal to forbid inlining of expressions whose root operation must
-  // be inlined.
-  if (getDoNotInline() &&
-      cast<emitc::CExpressionInterface>(rootOp).alwaysInline()) {
-    return emitOpError("root operation must be inlined but expression is marked"
-                       " do-not-inline");
   }
 
   return success();
@@ -994,7 +878,8 @@ void IfOp::getSuccessorRegions(RegionBranchPoint point,
                                SmallVectorImpl<RegionSuccessor> &regions) {
   // The `then` and the `else` region branch back to the parent operation.
   if (!point.isParent()) {
-    regions.push_back(RegionSuccessor::parent());
+    regions.push_back(
+        RegionSuccessor(getOperation(), getOperation()->getResults()));
     return;
   }
 
@@ -1003,14 +888,10 @@ void IfOp::getSuccessorRegions(RegionBranchPoint point,
   // Don't consider the else region if it is empty.
   Region *elseRegion = &this->getElseRegion();
   if (elseRegion->empty())
-    regions.push_back(RegionSuccessor::parent());
+    regions.push_back(
+        RegionSuccessor(getOperation(), getOperation()->getResults()));
   else
     regions.push_back(RegionSuccessor(elseRegion));
-}
-
-ValueRange IfOp::getSuccessorInputs(RegionSuccessor successor) {
-  return successor.isParent() ? ValueRange(getOperation()->getResults())
-                              : ValueRange();
 }
 
 void IfOp::getEntrySuccessorRegions(ArrayRef<Attribute> operands,
@@ -1025,7 +906,7 @@ void IfOp::getEntrySuccessorRegions(ArrayRef<Attribute> operands,
     if (!getElseRegion().empty())
       regions.emplace_back(&getElseRegion());
     else
-      regions.emplace_back(RegionSuccessor::parent());
+      regions.emplace_back(getOperation(), getOperation()->getResults());
   }
 }
 
@@ -1133,10 +1014,6 @@ LogicalResult emitc::YieldOp::verify() {
 
   if (!isa<DoOp>(containingOp) && !result && containingOp->getNumResults() != 0)
     return emitOpError() << "does not yield a value to be returned by parent";
-
-  if (result && isa<emitc::LValueType>(result.getType()) &&
-      !isa<ExpressionOp>(containingOp))
-    return emitOpError() << "yielding lvalues is not supported for this op";
 
   return success();
 }
@@ -1577,19 +1454,6 @@ void SwitchOp::getSuccessorRegions(
   llvm::append_range(successors, getRegions());
 }
 
-/// Returns the int64_t value of an IntegerAttr regardless of whether its type
-/// is signless, signed, or unsigned. Returns std::nullopt for unknown types.
-static std::optional<int64_t> getIntAttrValue(IntegerAttr attr) {
-  Type type = attr.getType();
-  if (type.isIndex() || type.isSignlessInteger())
-    return attr.getInt();
-  if (type.isSignedInteger())
-    return attr.getSInt();
-  if (type.isUnsignedInteger())
-    return static_cast<int64_t>(attr.getUInt());
-  return std::nullopt;
-}
-
 void SwitchOp::getEntrySuccessorRegions(
     ArrayRef<Attribute> operands,
     SmallVectorImpl<RegionSuccessor> &successors) {
@@ -1602,17 +1466,10 @@ void SwitchOp::getEntrySuccessorRegions(
     return;
   }
 
-  std::optional<int64_t> argValue = getIntAttrValue(arg);
-  if (!argValue) {
-    // Unknown type; conservatively treat all regions as possible.
-    llvm::append_range(successors, getRegions());
-    return;
-  }
-
   // Otherwise, try to find a case with a matching value. If not, the
   // default region is the only successor.
   for (auto [caseValue, caseRegion] : llvm::zip(getCases(), getCaseRegions())) {
-    if (caseValue == *argValue) {
+    if (caseValue == arg.getInt()) {
       successors.emplace_back(&caseRegion);
       return;
     }
@@ -1629,15 +1486,8 @@ void SwitchOp::getRegionInvocationBounds(
     return;
   }
 
-  std::optional<int64_t> maybeIntValue = getIntAttrValue(operandValue);
-  if (!maybeIntValue) {
-    // Unknown type; conservatively treat all regions as possible.
-    bounds.append(getNumRegions(), InvocationBounds(/*lb=*/0, /*ub=*/1));
-    return;
-  }
-
   unsigned liveIndex = getNumRegions() - 1;
-  const auto *iteratorToInt = llvm::find(getCases(), *maybeIntValue);
+  const auto *iteratorToInt = llvm::find(getCases(), operandValue.getInt());
 
   liveIndex = iteratorToInt != getCases().end()
                   ? std::distance(getCases().begin(), iteratorToInt)

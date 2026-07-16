@@ -183,3 +183,4 @@ exit:
 
 
 
+declare i32 @llvm.smin.i32(i32, i32)

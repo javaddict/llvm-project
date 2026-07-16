@@ -19,6 +19,7 @@
 #ifndef MLIR_BINDINGS_PYTHON_NANOBINDADAPTORS_H
 #define MLIR_BINDINGS_PYTHON_NANOBINDADAPTORS_H
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -29,11 +30,46 @@
 #include "mlir/Bindings/Python/Nanobind.h"
 #include "mlir-c/Bindings/Python/Interop.h" // This is expected after nanobind.
 // clang-format on
-#include "mlir/Bindings/Python/NanobindUtils.h"
+#include "llvm/ADT/Twine.h"
 
 namespace mlir {
 namespace python {
 namespace {
+
+// Safely calls Python initialization code on first use, avoiding deadlocks.
+template <typename T>
+class SafeInit {
+public:
+  typedef std::unique_ptr<T> (*F)();
+
+  explicit SafeInit(F init_fn) : initFn(init_fn) {}
+
+  T &get() {
+    if (T *result = output.load()) {
+      return *result;
+    }
+
+    // Note: init_fn() may be called multiple times if, for example, the GIL is
+    // released during its execution. The intended use case is for module
+    // imports which are safe to perform multiple times. We are careful not to
+    // hold a lock across init_fn() to avoid lock ordering problems.
+    std::unique_ptr<T> m = initFn();
+    {
+      nanobind::ft_lock_guard lock(mu);
+      if (T *result = output.load()) {
+        return *result;
+      }
+      T *p = m.release();
+      output.store(p);
+      return *p;
+    }
+  }
+
+private:
+  nanobind::ft_mutex mu;
+  std::atomic<T *> output{nullptr};
+  F initFn;
+};
 
 nanobind::module_ &irModule() {
   static SafeInit<nanobind::module_> init([]() {
@@ -72,17 +108,6 @@ mlirApiObjectToCapsule(nanobind::handle apiObject) {
   return api;
 }
 
-/// Clears the Python error indicator if the given condition `val` is false and
-/// returns the condition. This is needed in `from_python` of the type casters
-/// below, where a failed conversion from a Python capsule sets the Python error
-/// indicator but the caller of the caster expects or may even need a clean
-/// error indicator.
-inline bool pyErrClearIfFalse(bool val) {
-  if (!val)
-    PyErr_Clear();
-  return val;
-}
-
 // Note: Currently all of the following support cast from nanobind::object to
 // the Mlir* C-API type, but only a few light-weight, context-bound ones
 // implicitly cast the other way because the use case has not yet emerged and
@@ -96,7 +121,7 @@ struct type_caster<MlirAffineMap> {
   bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
     if (auto capsule = mlirApiObjectToCapsule(src)) {
       value = mlirPythonCapsuleToAffineMap(capsule->ptr());
-      return pyErrClearIfFalse(!mlirAffineMapIsNull(value));
+      return !mlirAffineMapIsNull(value);
     }
     return false;
   }
@@ -119,7 +144,7 @@ struct type_caster<MlirAttribute> {
   bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
     if (auto capsule = mlirApiObjectToCapsule(src)) {
       value = mlirPythonCapsuleToAttribute(capsule->ptr());
-      return pyErrClearIfFalse(!mlirAttributeIsNull(value));
+      return !mlirAttributeIsNull(value);
     }
     return false;
   }
@@ -142,7 +167,7 @@ struct type_caster<MlirBlock> {
   bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
     if (auto capsule = mlirApiObjectToCapsule(src)) {
       value = mlirPythonCapsuleToBlock(capsule->ptr());
-      return pyErrClearIfFalse(!mlirBlockIsNull(value));
+      return !mlirBlockIsNull(value);
     }
     return false;
   }
@@ -161,16 +186,15 @@ struct type_caster<MlirContext> {
     // If there is no context, including thread-bound, emit a warning (since
     // this function is not allowed to throw) and fail to cast.
     if (src.is_none()) {
-      PyErr_WarnEx(
+      PyErr_Warn(
           PyExc_RuntimeWarning,
           "Passing None as MLIR Context is only allowed inside "
-          "the " MAKE_MLIR_PYTHON_QUALNAME("ir.Context") " context manager.",
-          /*stacklevel=*/1);
+          "the " MAKE_MLIR_PYTHON_QUALNAME("ir.Context") " context manager.");
       return false;
     }
     if (std::optional<nanobind::object> capsule = mlirApiObjectToCapsule(src)) {
       value = mlirPythonCapsuleToContext(capsule->ptr());
-      return pyErrClearIfFalse(!mlirContextIsNull(value));
+      return !mlirContextIsNull(value);
     }
     return false;
   }
@@ -184,7 +208,7 @@ struct type_caster<MlirDialectRegistry> {
   bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
     if (auto capsule = mlirApiObjectToCapsule(src)) {
       value = mlirPythonCapsuleToDialectRegistry(capsule->ptr());
-      return pyErrClearIfFalse(!mlirDialectRegistryIsNull(value));
+      return !mlirDialectRegistryIsNull(value);
     }
     return false;
   }
@@ -211,7 +235,7 @@ struct type_caster<MlirLocation> {
     }
     if (auto capsule = mlirApiObjectToCapsule(src)) {
       value = mlirPythonCapsuleToLocation(capsule->ptr());
-      return pyErrClearIfFalse(!mlirLocationIsNull(value));
+      return !mlirLocationIsNull(value);
     }
     return false;
   }
@@ -233,7 +257,7 @@ struct type_caster<MlirModule> {
   bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
     if (auto capsule = mlirApiObjectToCapsule(src)) {
       value = mlirPythonCapsuleToModule(capsule->ptr());
-      return pyErrClearIfFalse(!mlirModuleIsNull(value));
+      return !mlirModuleIsNull(value);
     }
     return false;
   }
@@ -257,7 +281,7 @@ struct type_caster<MlirFrozenRewritePatternSet> {
   bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
     if (auto capsule = mlirApiObjectToCapsule(src)) {
       value = mlirPythonCapsuleToFrozenRewritePatternSet(capsule->ptr());
-      return pyErrClearIfFalse(value.ptr != nullptr);
+      return value.ptr != nullptr;
     }
     return false;
   }
@@ -280,7 +304,7 @@ struct type_caster<MlirOperation> {
   bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
     if (auto capsule = mlirApiObjectToCapsule(src)) {
       value = mlirPythonCapsuleToOperation(capsule->ptr());
-      return pyErrClearIfFalse(!mlirOperationIsNull(value));
+      return !mlirOperationIsNull(value);
     }
     return false;
   }
@@ -304,7 +328,7 @@ struct type_caster<MlirValue> {
   bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
     if (auto capsule = mlirApiObjectToCapsule(src)) {
       value = mlirPythonCapsuleToValue(capsule->ptr());
-      return pyErrClearIfFalse(!mlirValueIsNull(value));
+      return !mlirValueIsNull(value);
     }
     return false;
   }
@@ -330,7 +354,7 @@ struct type_caster<MlirPassManager> {
   bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
     if (auto capsule = mlirApiObjectToCapsule(src)) {
       value = mlirPythonCapsuleToPassManager(capsule->ptr());
-      return pyErrClearIfFalse(!mlirPassManagerIsNull(value));
+      return !mlirPassManagerIsNull(value);
     }
     return false;
   }
@@ -343,7 +367,7 @@ struct type_caster<MlirTypeID> {
   bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
     if (auto capsule = mlirApiObjectToCapsule(src)) {
       value = mlirPythonCapsuleToTypeID(capsule->ptr());
-      return pyErrClearIfFalse(!mlirTypeIDIsNull(value));
+      return !mlirTypeIDIsNull(value);
     }
     return false;
   }
@@ -367,7 +391,7 @@ struct type_caster<MlirType> {
   bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
     if (auto capsule = mlirApiObjectToCapsule(src)) {
       value = mlirPythonCapsuleToType(capsule->ptr());
-      return pyErrClearIfFalse(!mlirTypeIsNull(value));
+      return !mlirTypeIsNull(value);
     }
     return false;
   }
@@ -471,11 +495,8 @@ public:
         std::forward<Func>(f),
         nanobind::name(name), // nanobind::scope(thisClass),
         extra...);
-    static SafeInit<nanobind::object> classmethodFn([]() {
-      return std::make_unique<nanobind::object>(
-          nanobind::module_::import_("builtins").attr("classmethod"));
-    });
-    thisClass.attr(name) = classmethodFn.get()(cf);
+    thisClass.attr(name) =
+        nanobind::borrow<nanobind::object>(PyClassMethod_New(cf.ptr()));
     return *this;
   }
 
@@ -529,9 +550,10 @@ public:
               !isaFunction(rawAttribute)) {
             auto origRepr =
                 nanobind::cast<std::string>(nanobind::repr(otherAttribute));
-            throw std::invalid_argument(nanobind::detail::join(
-                "Cannot cast attribute to ", captureTypeName, " (from ",
-                origRepr, ")"));
+            throw std::invalid_argument(
+                (llvm::Twine("Cannot cast attribute to ") + captureTypeName +
+                 " (from " + origRepr + ")")
+                    .str());
           }
           nanobind::object self = superCls.attr("__new__")(cls, otherAttribute);
           return self;
@@ -549,9 +571,8 @@ public:
         [isaFunction](MlirAttribute other) { return isaFunction(other); },
         nanobind::arg("other_attribute"), nanobind::sig(kIsinstanceSig));
     def("__repr__", [superCls, captureTypeName](nanobind::object self) {
-      return nanobind::cast<std::string>(
-          nanobind::repr(superCls(self))
-              .attr("replace")(superCls.attr("__name__"), captureTypeName));
+      return nanobind::repr(superCls(self))
+          .attr("replace")(superCls.attr("__name__"), captureTypeName);
     });
     if (getTypeIDFunction) {
       def_staticmethod(
@@ -612,9 +633,10 @@ public:
               !isaFunction(rawType)) {
             auto origRepr =
                 nanobind::cast<std::string>(nanobind::repr(otherType));
-            throw std::invalid_argument(
-                nanobind::detail::join("Cannot cast type to ", captureTypeName,
-                                       " (from ", origRepr, ")"));
+            throw std::invalid_argument((llvm::Twine("Cannot cast type to ") +
+                                         captureTypeName + " (from " +
+                                         origRepr + ")")
+                                            .str());
           }
           nanobind::object self = superCls.attr("__new__")(cls, otherType);
           return self;
@@ -698,9 +720,10 @@ public:
               !isaFunction(rawValue)) {
             auto origRepr =
                 nanobind::cast<std::string>(nanobind::repr(otherValue));
-            throw std::invalid_argument(nanobind::detail::join(
-                "Cannot cast value to ", captureValueName, " (from ", origRepr,
-                ")"));
+            throw std::invalid_argument((llvm::Twine("Cannot cast value to ") +
+                                         captureValueName + " (from " +
+                                         origRepr + ")")
+                                            .str());
           }
           nanobind::object self = superCls.attr("__new__")(cls, otherValue);
           return self;

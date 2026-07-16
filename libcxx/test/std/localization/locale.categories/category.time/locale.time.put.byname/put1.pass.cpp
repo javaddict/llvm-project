@@ -29,11 +29,8 @@
 //     ~time_put_byname();
 // };
 
-#include <cassert>
-#include <ctime>
-#include <ios>
 #include <locale>
-
+#include <cassert>
 #include "test_macros.h"
 #include "test_iterators.h"
 
@@ -52,7 +49,7 @@ public:
 int main(int, char**)
 {
     char str[200];
-    std::tm t;
+    tm t;
     t.tm_sec = 6;
     t.tm_min = 3;
     t.tm_hour = 13;

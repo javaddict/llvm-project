@@ -149,7 +149,7 @@ private:
 
 AnalysisKey TestImmutableFunctionAnalysis::Key;
 
-struct LambdaModulePass : public OptionalPassInfoMixin<LambdaModulePass> {
+struct LambdaModulePass : public PassInfoMixin<LambdaModulePass> {
   template <typename T>
   LambdaModulePass(T &&Arg) : Func(std::forward<T>(Arg)) {}
 
@@ -160,7 +160,7 @@ struct LambdaModulePass : public OptionalPassInfoMixin<LambdaModulePass> {
   std::function<PreservedAnalyses(Module &, ModuleAnalysisManager &)> Func;
 };
 
-struct LambdaSCCPass : public OptionalPassInfoMixin<LambdaSCCPass> {
+struct LambdaSCCPass : public PassInfoMixin<LambdaSCCPass> {
   template <typename T> LambdaSCCPass(T &&Arg) : Func(std::forward<T>(Arg)) {}
 
   PreservedAnalyses run(LazyCallGraph::SCC &C, CGSCCAnalysisManager &AM,
@@ -173,7 +173,7 @@ struct LambdaSCCPass : public OptionalPassInfoMixin<LambdaSCCPass> {
       Func;
 };
 
-struct LambdaFunctionPass : public OptionalPassInfoMixin<LambdaFunctionPass> {
+struct LambdaFunctionPass : public PassInfoMixin<LambdaFunctionPass> {
   template <typename T>
   LambdaFunctionPass(T &&Arg) : Func(std::forward<T>(Arg)) {}
 
@@ -1320,8 +1320,7 @@ TEST_F(CGSCCPassManagerTest, TestAnalysisInvalidationCGSCCUpdate) {
 // is not defined.
 #ifndef NDEBUG
 
-struct LambdaSCCPassNoPreserve
-    : public OptionalPassInfoMixin<LambdaSCCPassNoPreserve> {
+struct LambdaSCCPassNoPreserve : public PassInfoMixin<LambdaSCCPassNoPreserve> {
   template <typename T>
   LambdaSCCPassNoPreserve(T &&Arg) : Func(std::forward<T>(Arg)) {}
 

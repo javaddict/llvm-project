@@ -16,8 +16,6 @@ namespace LIBC_NAMESPACE_DECL {
 /// A best-fit store of variously-sized free blocks. Blocks can be inserted and
 /// removed in logarithmic time.
 class FreeStore {
-  friend class FreeListHeap;
-
 public:
   FreeStore() = default;
   FreeStore(const FreeStore &other) = delete;

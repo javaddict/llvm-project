@@ -4,6 +4,10 @@
 Testing the UEFI C library
 ==========================
 
+.. contents:: Table of Contents
+  :depth: 4
+  :local:
+
 Testing infrastructure
 ======================
 

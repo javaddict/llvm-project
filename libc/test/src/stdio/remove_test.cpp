@@ -6,7 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "hdr/sys_stat_macros.h"
 #include "src/fcntl/open.h"
 #include "src/stdio/remove.h"
 #include "src/sys/stat/mkdirat.h"

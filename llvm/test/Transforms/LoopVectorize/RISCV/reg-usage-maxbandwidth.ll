@@ -12,7 +12,7 @@ define i32 @dotp(ptr %a, ptr %b) {
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %for.body, %entry
   %iv = phi i64 [ 0, %entry ], [ %iv.next, %for.body ]
   %accum = phi i32 [ 0, %entry ], [ %add, %for.body ]
   %gep.a = getelementptr i8, ptr %a, i64 %iv
@@ -28,6 +28,6 @@ for.body:
   %exitcond.not = icmp eq i64 %iv.next, 1024
   br i1 %exitcond.not, label %for.exit, label %for.body
 
-for.exit:
+for.exit:                        ; preds = %for.body
   ret i32 %add
 }

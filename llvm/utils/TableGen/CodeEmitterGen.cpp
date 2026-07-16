@@ -34,7 +34,6 @@
 #include "llvm/Support/Format.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/TableGen/CodeGenHelpers.h"
 #include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
 #include "llvm/TableGen/TableGenBackend.h"
@@ -524,8 +523,9 @@ void CodeEmitterGen::run(raw_ostream &O) {
     O << "  return Value;\n";
   O << "}\n\n";
 
-  IfDefEmitter IfDef(O, "GET_OPERAND_BIT_OFFSET");
-  O << "uint32_t " << Target.getName()
+  O << "#ifdef GET_OPERAND_BIT_OFFSET\n"
+    << "#undef GET_OPERAND_BIT_OFFSET\n\n"
+    << "uint32_t " << Target.getName()
     << "MCCodeEmitter::getOperandBitOffset(const MCInst &MI,\n"
     << "    unsigned OpNum,\n"
     << "    const MCSubtargetInfo &STI) const {\n"
@@ -535,7 +535,8 @@ void CodeEmitterGen::run(raw_ostream &O) {
     << "    reportUnsupportedInst(MI);\n"
     << "  }\n"
     << "  reportUnsupportedOperand(MI, OpNum);\n"
-    << "}\n";
+    << "}\n\n"
+    << "#endif // GET_OPERAND_BIT_OFFSET\n\n";
 }
 
 static TableGen::Emitter::OptClass<CodeEmitterGen>

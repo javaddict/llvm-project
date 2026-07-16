@@ -39,7 +39,6 @@ bool IntrinsicInst::mayLowerToFunctionCall(Intrinsic::ID IID) {
   case Intrinsic::objc_autoreleasePoolPop:
   case Intrinsic::objc_autoreleasePoolPush:
   case Intrinsic::objc_autoreleaseReturnValue:
-  case Intrinsic::objc_claimAutoreleasedReturnValue:
   case Intrinsic::objc_copyWeak:
   case Intrinsic::objc_destroyWeak:
   case Intrinsic::objc_initWeak:
@@ -263,7 +262,11 @@ Value *InstrProfIncrementInst::getStep() const {
   return ConstantInt::get(Type::getInt64Ty(Context), 1);
 }
 
-Value *InstrProfCallsite::getCallee() const { return getArgOperand(4); }
+Value *InstrProfCallsite::getCallee() const {
+  if (isa<InstrProfCallsite>(this))
+    return getArgOperand(4);
+  return nullptr;
+}
 
 void InstrProfCallsite::setCallee(Value *Callee) {
   assert(isa<InstrProfCallsite>(this));

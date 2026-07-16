@@ -34,9 +34,6 @@
 ; CHECK-NEXT: successors
 ; CHECK-NEXT: {{^ *$}}
 ; CHECK-NEXT: DBG_VALUE 0, $noreg, ![[#]], !DIExpression()
-;; After the escaping call to @a, the memory location is reinstated.
-; CHECK: CALL64pcrel32 {{.*}}@a
-; CHECK: DBG_VALUE %stack.0.c, $noreg, ![[#]], !DIExpression(DW_OP_deref)
 
 target triple = "x86_64-unknown-linux-gnu"
 

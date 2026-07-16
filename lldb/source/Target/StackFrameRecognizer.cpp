@@ -146,7 +146,7 @@ StackFrameRecognizerManager::GetRecognizerForFrame(StackFrameSP frame) {
   if (!module_sp)
     return StackFrameRecognizerSP();
   ConstString module_name = module_sp->GetFileSpec().GetFilename();
-  const Symbol *symbol = symctx.symbol;
+  Symbol *symbol = symctx.symbol;
   if (!symbol)
     return StackFrameRecognizerSP();
   Address start_addr = symbol->GetAddress();

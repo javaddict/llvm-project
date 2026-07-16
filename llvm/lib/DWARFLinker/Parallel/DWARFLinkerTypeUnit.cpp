@@ -132,26 +132,31 @@ void TypeUnit::prepareDataForTreeCreation() {
       getOrCreateSectionDescriptor(DebugSectionKind::DebugInfo);
 
   // Type unit data created parallelly. So the order of data is not
-  // deterministic. Sort data here to produce deterministic output.
+  // deterministic. Order data here if we need deterministic output.
 
   llvm::parallel::TaskGroup TG;
 
-  TG.spawn([&]() {
-    // Sort types to have a deterministic output.
-    Types.sortTypes();
-  });
+  if (!GlobalData.getOptions().AllowNonDeterministicOutput) {
+    TG.spawn([&]() {
+      // Sort types to have a deterministic output.
+      Types.sortTypes();
+    });
+  }
 
   TG.spawn([&]() {
-    // Sort decl type patches to have a deterministic output.
-    std::function<bool(const DebugTypeDeclFilePatch &LHS,
-                       const DebugTypeDeclFilePatch &RHS)>
-        PatchesComparator = [&](const DebugTypeDeclFilePatch &LHS,
-                                const DebugTypeDeclFilePatch &RHS) {
-          return LHS.Directory->first() < RHS.Directory->first() ||
-                 (!(RHS.Directory->first() < LHS.Directory->first()) &&
-                  LHS.FilePath->first() < RHS.FilePath->first());
-        };
-    DebugInfoSection.ListDebugTypeDeclFilePatch.sort(PatchesComparator);
+    if (!GlobalData.getOptions().AllowNonDeterministicOutput) {
+      // Sort decl type patches to have a deterministic output.
+      std::function<bool(const DebugTypeDeclFilePatch &LHS,
+                         const DebugTypeDeclFilePatch &RHS)>
+          PatchesComparator = [&](const DebugTypeDeclFilePatch &LHS,
+                                  const DebugTypeDeclFilePatch &RHS) {
+            return LHS.Directory->first() < RHS.Directory->first() ||
+                   (!(RHS.Directory->first() < LHS.Directory->first()) &&
+                    LHS.FilePath->first() < RHS.FilePath->first());
+          };
+      // Sort patches to have a deterministic output.
+      DebugInfoSection.ListDebugTypeDeclFilePatch.sort(PatchesComparator);
+    }
 
     // Update DW_AT_decl_file attribute
     dwarf::Form DeclFileForm =
@@ -184,46 +189,51 @@ void TypeUnit::prepareDataForTreeCreation() {
         });
   });
 
-  // Sort patches to have a deterministic output.
-  TG.spawn([&]() {
-    forEach([&](SectionDescriptor &OutSection) {
-      std::function<bool(const DebugStrPatch &LHS, const DebugStrPatch &RHS)>
-          StrPatchesComparator =
-              [&](const DebugStrPatch &LHS, const DebugStrPatch &RHS) {
-                return LHS.String->getKey() < RHS.String->getKey();
-              };
-      OutSection.ListDebugStrPatch.sort(StrPatchesComparator);
+  if (!GlobalData.getOptions().AllowNonDeterministicOutput) {
+    // Sort patches to have a deterministic output.
+    TG.spawn([&]() {
+      forEach([&](SectionDescriptor &OutSection) {
+        std::function<bool(const DebugStrPatch &LHS, const DebugStrPatch &RHS)>
+            StrPatchesComparator =
+                [&](const DebugStrPatch &LHS, const DebugStrPatch &RHS) {
+                  return LHS.String->getKey() < RHS.String->getKey();
+                };
+        OutSection.ListDebugStrPatch.sort(StrPatchesComparator);
 
-      std::function<bool(const DebugTypeStrPatch &LHS,
-                         const DebugTypeStrPatch &RHS)>
-          TypeStrPatchesComparator =
-              [&](const DebugTypeStrPatch &LHS, const DebugTypeStrPatch &RHS) {
-                return LHS.String->getKey() < RHS.String->getKey();
-              };
-      OutSection.ListDebugTypeStrPatch.sort(TypeStrPatchesComparator);
+        std::function<bool(const DebugTypeStrPatch &LHS,
+                           const DebugTypeStrPatch &RHS)>
+            TypeStrPatchesComparator = [&](const DebugTypeStrPatch &LHS,
+                                           const DebugTypeStrPatch &RHS) {
+              return LHS.String->getKey() < RHS.String->getKey();
+            };
+        OutSection.ListDebugTypeStrPatch.sort(TypeStrPatchesComparator);
+      });
     });
-  });
+  }
 
-  // Sort patches to have a deterministic output.
-  TG.spawn([&]() {
-    forEach([&](SectionDescriptor &OutSection) {
-      std::function<bool(const DebugLineStrPatch &LHS,
-                         const DebugLineStrPatch &RHS)>
-          LineStrPatchesComparator =
-              [&](const DebugLineStrPatch &LHS, const DebugLineStrPatch &RHS) {
-                return LHS.String->getKey() < RHS.String->getKey();
-              };
-      OutSection.ListDebugLineStrPatch.sort(LineStrPatchesComparator);
+  if (!GlobalData.getOptions().AllowNonDeterministicOutput) {
+    // Sort patches to have a deterministic output.
+    TG.spawn([&]() {
+      forEach([&](SectionDescriptor &OutSection) {
+        std::function<bool(const DebugLineStrPatch &LHS,
+                           const DebugLineStrPatch &RHS)>
+            LineStrPatchesComparator = [&](const DebugLineStrPatch &LHS,
+                                           const DebugLineStrPatch &RHS) {
+              return LHS.String->getKey() < RHS.String->getKey();
+            };
+        OutSection.ListDebugLineStrPatch.sort(LineStrPatchesComparator);
 
-      std::function<bool(const DebugTypeLineStrPatch &LHS,
-                         const DebugTypeLineStrPatch &RHS)>
-          TypeLineStrPatchesComparator = [&](const DebugTypeLineStrPatch &LHS,
-                                             const DebugTypeLineStrPatch &RHS) {
-            return LHS.String->getKey() < RHS.String->getKey();
-          };
-      OutSection.ListDebugTypeLineStrPatch.sort(TypeLineStrPatchesComparator);
+        std::function<bool(const DebugTypeLineStrPatch &LHS,
+                           const DebugTypeLineStrPatch &RHS)>
+            TypeLineStrPatchesComparator =
+                [&](const DebugTypeLineStrPatch &LHS,
+                    const DebugTypeLineStrPatch &RHS) {
+                  return LHS.String->getKey() < RHS.String->getKey();
+                };
+        OutSection.ListDebugTypeLineStrPatch.sort(TypeLineStrPatchesComparator);
+      });
     });
-  });
+  }
 }
 
 uint64_t TypeUnit::finalizeTypeEntryRec(uint64_t OutOffset, DIE *OutDIE,

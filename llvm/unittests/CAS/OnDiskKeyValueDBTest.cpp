@@ -49,7 +49,13 @@ TEST_F(OnDiskCASTest, OnDiskKeyValueDBTest) {
   }
 
   // Validate
-  ASSERT_THAT_ERROR(DB->validate(), Succeeded());
+  {
+    auto ValidateFunc = [](FileOffset Offset, ArrayRef<char> Data) -> Error {
+      EXPECT_EQ(Data.size(), sizeof(ValueType));
+      return Error::success();
+    };
+    ASSERT_THAT_ERROR(DB->validate(ValidateFunc), Succeeded());
+  }
 
   // Size
   {

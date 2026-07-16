@@ -75,10 +75,8 @@ public:
   Error setFilter(StringRef Filter);
   /// Check wether the string matches the filter.
   bool matchesFilter(StringRef Str);
-  /// Check if the remarks NEED to have metadata in an object section
+  /// Check if the remarks also need to have associated metadata in a section.
   bool needsSection() const;
-  /// Check if the remarks should store associated metadata if suppported
-  bool wantsSection() const;
 };
 } // end namespace remarks
 } // end namespace llvm

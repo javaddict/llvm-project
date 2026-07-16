@@ -13,7 +13,6 @@ include "mlir/Dialect/Arith/IR/ArithBase.td"
 include "mlir/Dialect/Arith/IR/ArithOpsInterfaces.td"
 include "mlir/Interfaces/CastInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
-include "mlir/Interfaces/InferIntDivisibilityOpInterface.td"
 include "mlir/Interfaces/InferIntRangeInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -21,12 +20,6 @@ include "mlir/Interfaces/VectorInterfaces.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/EnumAttr.td"
-
-// Type constraint for signless-integer-or-index-like types that additionally
-// excludes i0 (zero-bitwidth integers), used for arith integer operations.
-def Arith_SignlessIntegerOrIndexLike : TypeOrValueSemanticsContainer<
-    AnyNonZeroBitwidthSignlessIntegerOrIndex,
-    "signless-non-zero-bitwidth-integer-like">;
 
 // Base class for Arith dialect ops. Ops in this dialect have no memory
 // effects and can be applied element-wise to vectors and tensors.
@@ -58,8 +51,8 @@ class Arith_BinaryOp<string mnemonic, list<Trait> traits = []> :
 class Arith_IntBinaryOp<string mnemonic, list<Trait> traits = []> :
     Arith_BinaryOp<mnemonic, traits #
       [DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>,
-    Arguments<(ins Arith_SignlessIntegerOrIndexLike:$lhs, Arith_SignlessIntegerOrIndexLike:$rhs)>,
-    Results<(outs Arith_SignlessIntegerOrIndexLike:$result)>;
+    Arguments<(ins SignlessIntegerOrIndexLike:$lhs, SignlessIntegerOrIndexLike:$rhs)>,
+    Results<(outs SignlessIntegerOrIndexLike:$result)>;
 
 // Base class for integer binary operations without undefined behavior.
 class Arith_TotalIntBinaryOp<string mnemonic, list<Trait> traits = []> :
@@ -82,49 +75,12 @@ class Arith_FloatUnaryOp<string mnemonic, list<Trait> traits = []> :
 class Arith_FloatBinaryOp<string mnemonic, list<Trait> traits = []> :
     Arith_BinaryOp<mnemonic,
       !listconcat([Pure, DeclareOpInterfaceMethods<ArithFastMathInterface>],
-                  traits)> {
-  let arguments = (ins FloatLike:$lhs, FloatLike:$rhs,
+                  traits)>,
+    Arguments<(ins FloatLike:$lhs, FloatLike:$rhs,
       DefaultValuedAttr<
-        Arith_FastMathAttr, "::mlir::arith::FastMathFlags::none">:$fastmath);
-  let results = (outs FloatLike:$result);
+        Arith_FastMathAttr, "::mlir::arith::FastMathFlags::none">:$fastmath)>,
+    Results<(outs FloatLike:$result)> {
   let assemblyFormat = [{ $lhs `,` $rhs (`fastmath` `` $fastmath^)?
-                          attr-dict `:` type($result) }];
-}
-
-// Base class for floating point binary operations with an optional rounding
-// mode.
-class Arith_FloatBinaryOpWithRoundingMode<string mnemonic,
-                                          list<Trait> traits = []> :
-    Arith_FloatBinaryOp<mnemonic,
-      !listconcat([DeclareOpInterfaceMethods<ArithRoundingModeInterface>],
-                  traits)> {
-  let arguments = (ins FloatLike:$lhs, FloatLike:$rhs,
-      DefaultValuedAttr<
-        Arith_FastMathAttr, "::mlir::arith::FastMathFlags::none">:$fastmath,
-      OptionalAttr<Arith_RoundingModeAttr>:$roundingmode);
-  let builders = [
-    OpBuilder<(ins "Value":$lhs, "Value":$rhs,
-      CArg<"::mlir::arith::FastMathFlags",
-           "::mlir::arith::FastMathFlags::none">:$fastmath), [{
-      build($_builder, $_state, lhs, rhs, fastmath,
-            ::mlir::arith::RoundingModeAttr{});
-    }]>,
-    OpBuilder<(ins "Value":$lhs, "Value":$rhs,
-      "::mlir::arith::FastMathFlagsAttr":$fastmath), [{
-      build($_builder, $_state, lhs, rhs, fastmath,
-            ::mlir::arith::RoundingModeAttr{});
-    }]>,
-    OpBuilder<(ins "Type":$type, "Value":$lhs, "Value":$rhs,
-      CArg<"::mlir::arith::FastMathFlags",
-           "::mlir::arith::FastMathFlags::none">:$fastmath), [{
-      build($_builder, $_state, type, lhs, rhs,
-            ::mlir::arith::FastMathFlagsAttr::get(
-                $_builder.getContext(), fastmath),
-            ::mlir::arith::RoundingModeAttr{});
-    }]>,
-  ];
-  let assemblyFormat = [{ $lhs `,` $rhs ($roundingmode^)?
-                          (`fastmath` `` $fastmath^)?
                           attr-dict `:` type($result) }];
 }
 
@@ -154,12 +110,10 @@ class Arith_CastOp<string mnemonic, TypeConstraint From, TypeConstraint To,
 
 // Casts do not accept indices. Type constraint for signless-integer-like types
 // excluding indices: signless integers, vectors or tensors thereof.
-// i0 (zero-bitwidth) integers are excluded as they have no meaningful
-// representation in cast operations.
 def SignlessFixedWidthIntegerLike : TypeConstraint<Or<[
-        AnyNonZeroBitwidthSignlessInteger.predicate,
-        VectorOfAnyRankOf<[AnyNonZeroBitwidthSignlessInteger]>.predicate,
-        TensorOf<[AnyNonZeroBitwidthSignlessInteger]>.predicate]>,
+        AnySignlessInteger.predicate,
+        VectorOfAnyRankOf<[AnySignlessInteger]>.predicate,
+        TensorOf<[AnySignlessInteger]>.predicate]>,
     "signless-fixed-width-integer-like">;
 
 // Cast from an integer type to another integer type.
@@ -194,11 +148,11 @@ class Arith_IntBinaryOpWithOverflowFlags<string mnemonic, list<Trait> traits = [
     Arith_BinaryOp<mnemonic, traits #
       [Pure, DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>,
        DeclareOpInterfaceMethods<ArithIntegerOverflowFlagsInterface>]>,
-    Arguments<(ins Arith_SignlessIntegerOrIndexLike:$lhs, Arith_SignlessIntegerOrIndexLike:$rhs,
+    Arguments<(ins SignlessIntegerOrIndexLike:$lhs, SignlessIntegerOrIndexLike:$rhs,
       DefaultValuedAttr<
         Arith_IntegerOverflowAttr,
         "::mlir::arith::IntegerOverflowFlags::none">:$overflowFlags)>,
-    Results<(outs Arith_SignlessIntegerOrIndexLike:$result)> {
+    Results<(outs SignlessIntegerOrIndexLike:$result)> {
 
   let assemblyFormat = [{ $lhs `,` $rhs (`overflow` `` $overflowFlags^)?
                           attr-dict `:` type($result) }];
@@ -207,10 +161,10 @@ class Arith_IntBinaryOpWithOverflowFlags<string mnemonic, list<Trait> traits = [
 class Arith_IntBinaryOpWithExactFlag<string mnemonic, list<Trait> traits = []> :
     Arith_BinaryOp<mnemonic, traits #
       [DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>,
-    Arguments<(ins Arith_SignlessIntegerOrIndexLike:$lhs,
-               Arith_SignlessIntegerOrIndexLike:$rhs,
+    Arguments<(ins SignlessIntegerOrIndexLike:$lhs,
+               SignlessIntegerOrIndexLike:$rhs,
                UnitAttr:$isExact)>,
-    Results<(outs Arith_SignlessIntegerOrIndexLike:$result)> {
+    Results<(outs SignlessIntegerOrIndexLike:$result)> {
 
   let assemblyFormat = [{ $lhs `,` $rhs (`exact` $isExact^)?
                           attr-dict `:` type($result) }];
@@ -224,7 +178,6 @@ def Arith_ConstantOp : Op<Arith_Dialect, "constant",
     [ConstantLike, Pure,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
      AllTypesMatch<["value", "result"]>,
-     DeclareOpInterfaceMethods<InferIntDivisibilityOpInterface>,
      DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "integer or floating point constant";
   let description = [{
@@ -272,8 +225,7 @@ def Arith_ConstantOp : Op<Arith_Dialect, "constant",
 // AddIOp
 //===----------------------------------------------------------------------===//
 
-def Arith_AddIOp : Arith_IntBinaryOpWithOverflowFlags<"addi",
-    [Commutative, DeclareOpInterfaceMethods<InferIntDivisibilityOpInterface>]> {
+def Arith_AddIOp : Arith_IntBinaryOpWithOverflowFlags<"addi", [Commutative]> {
   let summary = "integer addition operation";
   let description = [{
     Performs N-bit addition on the operands. The operands are interpreted as
@@ -341,63 +293,10 @@ def Arith_AddUIExtendedOp : Arith_Op<"addui_extended", [Pure, Commutative,
     ```
   }];
 
-  let arguments = (ins Arith_SignlessIntegerOrIndexLike:$lhs, Arith_SignlessIntegerOrIndexLike:$rhs);
-  let results = (outs Arith_SignlessIntegerOrIndexLike:$sum, BoolLike:$overflow);
+  let arguments = (ins SignlessIntegerOrIndexLike:$lhs, SignlessIntegerOrIndexLike:$rhs);
+  let results = (outs SignlessIntegerOrIndexLike:$sum, BoolLike:$overflow);
   let assemblyFormat = [{
     $lhs `,` $rhs attr-dict `:` type($sum) `,` type($overflow)
-  }];
-
-  let builders = [
-    OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
-      build($_builder, $_state, lhs.getType(), ::getI1SameShape(lhs.getType()),
-            lhs, rhs);
-    }]>
-  ];
-
-  let hasFolder = 1;
-  let hasCanonicalizer = 1;
-
-  let extraClassDeclaration = [{
-    std::optional<SmallVector<int64_t, 4>> getShapeForUnroll();
-  }];
-}
-
-//===----------------------------------------------------------------------===//
-// SubUIExtendedOp
-//===----------------------------------------------------------------------===//
-
-def Arith_SubUIExtendedOp : Arith_Op<"subui_extended", [Pure,
-    AllTypesMatch<["lhs", "rhs", "diff"]>]> {
-  let summary = [{
-    extended unsigned integer subtraction operation returning difference and
-    borrow bit
-  }];
-
-  let description = [{
-    Performs (N+1)-bit subtraction on zero-extended operands. Returns two
-    results: the N-bit difference (same type as both operands), and the borrow
-    bit (boolean-like), where `1` indicates unsigned subtraction underflow
-    (i.e. `lhs < rhs` when interpreted as unsigned), while `0` indicates no
-    underflow.
-
-    Example:
-
-    ```mlir
-    // Scalar subtraction.
-    %diff, %borrow = arith.subui_extended %b, %c : i64, i1
-
-    // Vector element-wise subtraction.
-    %d:2 = arith.subui_extended %e, %f : vector<4xi32>, vector<4xi1>
-
-    // Tensor element-wise subtraction.
-    %x:2 = arith.subui_extended %y, %z : tensor<4x?xi8>, tensor<4x?xi1>
-    ```
-  }];
-
-  let arguments = (ins Arith_SignlessIntegerOrIndexLike:$lhs, Arith_SignlessIntegerOrIndexLike:$rhs);
-  let results = (outs Arith_SignlessIntegerOrIndexLike:$diff, BoolLike:$borrow);
-  let assemblyFormat = [{
-    $lhs `,` $rhs attr-dict `:` type($diff) `,` type($borrow)
   }];
 
   let builders = [
@@ -419,8 +318,7 @@ def Arith_SubUIExtendedOp : Arith_Op<"subui_extended", [Pure,
 // SubIOp
 //===----------------------------------------------------------------------===//
 
-def Arith_SubIOp : Arith_IntBinaryOpWithOverflowFlags<"subi",
-    [DeclareOpInterfaceMethods<InferIntDivisibilityOpInterface>]> {
+def Arith_SubIOp : Arith_IntBinaryOpWithOverflowFlags<"subi"> {
   let summary = [{
     Integer subtraction operation.
   }];
@@ -465,9 +363,7 @@ def Arith_SubIOp : Arith_IntBinaryOpWithOverflowFlags<"subi",
 //===----------------------------------------------------------------------===//
 
 def Arith_MulIOp : Arith_IntBinaryOpWithOverflowFlags<"muli",
-  [Commutative,
-   DeclareOpInterfaceMethods<InferIntDivisibilityOpInterface>,
-   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]
+  [Commutative, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]
 > {
   let summary = [{
     Integer multiplication operation.
@@ -538,8 +434,8 @@ def Arith_MulSIExtendedOp : Arith_Op<"mulsi_extended", [Pure, Commutative,
     ```
   }];
 
-  let arguments = (ins Arith_SignlessIntegerOrIndexLike:$lhs, Arith_SignlessIntegerOrIndexLike:$rhs);
-  let results = (outs Arith_SignlessIntegerOrIndexLike:$low, Arith_SignlessIntegerOrIndexLike:$high);
+  let arguments = (ins SignlessIntegerOrIndexLike:$lhs, SignlessIntegerOrIndexLike:$rhs);
+  let results = (outs SignlessIntegerOrIndexLike:$low, SignlessIntegerOrIndexLike:$high);
 
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
 
@@ -581,8 +477,8 @@ def Arith_MulUIExtendedOp : Arith_Op<"mului_extended", [Pure, Commutative,
     ```
   }];
 
-  let arguments = (ins Arith_SignlessIntegerOrIndexLike:$lhs, Arith_SignlessIntegerOrIndexLike:$rhs);
-  let results = (outs Arith_SignlessIntegerOrIndexLike:$low, Arith_SignlessIntegerOrIndexLike:$high);
+  let arguments = (ins SignlessIntegerOrIndexLike:$lhs, SignlessIntegerOrIndexLike:$rhs);
+  let results = (outs SignlessIntegerOrIndexLike:$low, SignlessIntegerOrIndexLike:$high);
 
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
 
@@ -599,8 +495,7 @@ def Arith_MulUIExtendedOp : Arith_Op<"mului_extended", [Pure, Commutative,
 //===----------------------------------------------------------------------===//
 
 def Arith_DivUIOp : Arith_IntBinaryOpWithExactFlag<"divui",
-    [ConditionallySpeculatable,
-     DeclareOpInterfaceMethods<InferIntDivisibilityOpInterface>]> {
+                                                   [ConditionallySpeculatable]> {
   let summary = "unsigned integer division operation";
   let description = [{
     Unsigned integer division. Rounds towards zero. Treats the leading bit as
@@ -775,8 +670,7 @@ def Arith_FloorDivSIOp : Arith_TotalIntBinaryOp<"floordivsi"> {
 // RemUIOp
 //===----------------------------------------------------------------------===//
 
-def Arith_RemUIOp : Arith_IntBinaryOp<"remui",
-                                      [ConditionallySpeculatable]> {
+def Arith_RemUIOp : Arith_TotalIntBinaryOp<"remui"> {
   let summary = "unsigned integer division remainder operation";
   let description = [{
     Unsigned integer division remainder. Treats the leading bit as the most
@@ -799,12 +693,6 @@ def Arith_RemUIOp : Arith_IntBinaryOp<"remui",
     %x = arith.remui %y, %z : tensor<4x?xi8>
     ```
   }];
-
-  let extraClassDeclaration = [{
-    /// Interface method for ConditionallySpeculatable.
-    Speculation::Speculatability getSpeculatability();
-  }];
-
   let hasFolder = 1;
 }
 
@@ -812,8 +700,7 @@ def Arith_RemUIOp : Arith_IntBinaryOp<"remui",
 // RemSIOp
 //===----------------------------------------------------------------------===//
 
-def Arith_RemSIOp : Arith_IntBinaryOp<"remsi",
-                                      [ConditionallySpeculatable]> {
+def Arith_RemSIOp : Arith_TotalIntBinaryOp<"remsi"> {
   let summary = "signed integer division remainder operation";
   let description = [{
     Signed integer division remainder. Treats the leading bit as sign, i.e. `6 %
@@ -836,12 +723,6 @@ def Arith_RemSIOp : Arith_IntBinaryOp<"remsi",
     %x = arith.remsi %y, %z : tensor<4x?xi8>
     ```
   }];
-
-  let extraClassDeclaration = [{
-    /// Interface method for ConditionallySpeculatable.
-    Speculation::Speculatability getSpeculatability();
-  }];
-
   let hasFolder = 1;
 }
 
@@ -1051,49 +932,10 @@ def Arith_NegFOp : Arith_FloatUnaryOp<"negf"> {
 }
 
 //===----------------------------------------------------------------------===//
-// FlushDenormalsOp
-//===----------------------------------------------------------------------===//
-
-def Arith_FlushDenormalsOp : Arith_FloatUnaryOp<"flush_denormals"> {
-  let summary = "flush denormal floating-point values to zero";
-  let description = [{
-    The `flush_denormals` operation takes a floating-point value and returns
-    the input value if it is a normal (or zero, infinity, or NaN) value, or
-    a zero of the same type if the input is a denormal (subnormal) value.
-    The sign of zero is preserved when flushing a denormal: negative
-    denormals flush to `-0.0`, positive denormals flush to `+0.0`.
-
-    A denormal number ("subnormal number" in IEEE-754) is a non-zero floating
-    point number that is smaller (closer to zero) than the smallest normal
-    number. Denormals fill the underflow gap around zero in floating-point
-    arithmetics, but may come at a runtime cost on some architectures.
-
-    The input and result are required to be the same type. This type may be
-    a floating-point scalar type, a vector whose element type is a
-    floating-point type, or a tensor of floats. When operating on vectors
-    or tensors, the operation is applied elementwise.
-
-    Example:
-
-    ```mlir
-    // Scalar denormal flushing.
-    %a = arith.flush_denormals %b : f32
-
-    // SIMD vector element-wise denormal flushing.
-    %f = arith.flush_denormals %g : vector<4xf32>
-
-    // Tensor element-wise denormal flushing.
-    %x = arith.flush_denormals %y : tensor<4x?xbf16>
-    ```
-  }];
-  let hasFolder = 1;
-}
-
-//===----------------------------------------------------------------------===//
 // AddFOp
 //===----------------------------------------------------------------------===//
 
-def Arith_AddFOp : Arith_FloatBinaryOpWithRoundingMode<"addf", [Commutative]> {
+def Arith_AddFOp : Arith_FloatBinaryOp<"addf", [Commutative]> {
   let summary = "floating point addition operation";
   let description = [{
     The `addf` operation takes two operands and returns one result, each of
@@ -1112,10 +954,10 @@ def Arith_AddFOp : Arith_FloatBinaryOpWithRoundingMode<"addf", [Commutative]> {
 
     // Tensor addition.
     %x = arith.addf %y, %z : tensor<4x?xbf16>
-
-    // Scalar addition with rounding mode.
-    %a = arith.addf %b, %c to_nearest_even : f64
     ```
+
+    TODO: In the distant future, this will accept optional attributes for fast
+    math, contraction, rounding mode, and other controls.
   }];
   let hasFolder = 1;
 }
@@ -1124,7 +966,7 @@ def Arith_AddFOp : Arith_FloatBinaryOpWithRoundingMode<"addf", [Commutative]> {
 // SubFOp
 //===----------------------------------------------------------------------===//
 
-def Arith_SubFOp : Arith_FloatBinaryOpWithRoundingMode<"subf"> {
+def Arith_SubFOp : Arith_FloatBinaryOp<"subf"> {
   let summary = "floating point subtraction operation";
   let description = [{
     The `subf` operation takes two operands and returns one result, each of
@@ -1143,13 +985,12 @@ def Arith_SubFOp : Arith_FloatBinaryOpWithRoundingMode<"subf"> {
 
     // Tensor subtraction.
     %x = arith.subf %y, %z : tensor<4x?xbf16>
-
-    // Scalar subtraction with rounding mode.
-    %a = arith.subf %b, %c downward : f64
     ```
+
+    TODO: In the distant future, this will accept optional attributes for fast
+    math, contraction, rounding mode, and other controls.
   }];
   let hasFolder = 1;
-  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1198,8 +1039,7 @@ def Arith_MaxNumFOp : Arith_FloatBinaryOp<"maxnumf", [Commutative]> {
 // MaxSIOp
 //===----------------------------------------------------------------------===//
 
-def Arith_MaxSIOp : Arith_TotalIntBinaryOp<"maxsi",
-    [Commutative, DeclareOpInterfaceMethods<InferIntDivisibilityOpInterface>]> {
+def Arith_MaxSIOp : Arith_TotalIntBinaryOp<"maxsi", [Commutative]> {
   let summary = "signed integer maximum operation";
   let hasFolder = 1;
 }
@@ -1208,8 +1048,7 @@ def Arith_MaxSIOp : Arith_TotalIntBinaryOp<"maxsi",
 // MaxUIOp
 //===----------------------------------------------------------------------===//
 
-def Arith_MaxUIOp : Arith_TotalIntBinaryOp<"maxui",
-    [Commutative, DeclareOpInterfaceMethods<InferIntDivisibilityOpInterface>]> {
+def Arith_MaxUIOp : Arith_TotalIntBinaryOp<"maxui", [Commutative]> {
   let summary = "unsigned integer maximum operation";
   let hasFolder = 1;
 }
@@ -1259,8 +1098,7 @@ def Arith_MinNumFOp : Arith_FloatBinaryOp<"minnumf", [Commutative]> {
 // MinSIOp
 //===----------------------------------------------------------------------===//
 
-def Arith_MinSIOp : Arith_TotalIntBinaryOp<"minsi",
-    [Commutative, DeclareOpInterfaceMethods<InferIntDivisibilityOpInterface>]> {
+def Arith_MinSIOp : Arith_TotalIntBinaryOp<"minsi", [Commutative]> {
   let summary = "signed integer minimum operation";
   let hasFolder = 1;
 }
@@ -1269,8 +1107,7 @@ def Arith_MinSIOp : Arith_TotalIntBinaryOp<"minsi",
 // MinUIOp
 //===----------------------------------------------------------------------===//
 
-def Arith_MinUIOp : Arith_TotalIntBinaryOp<"minui",
-    [Commutative, DeclareOpInterfaceMethods<InferIntDivisibilityOpInterface>]> {
+def Arith_MinUIOp : Arith_TotalIntBinaryOp<"minui", [Commutative]> {
   let summary = "unsigned integer minimum operation";
   let hasFolder = 1;
 }
@@ -1280,7 +1117,7 @@ def Arith_MinUIOp : Arith_TotalIntBinaryOp<"minui",
 // MulFOp
 //===----------------------------------------------------------------------===//
 
-def Arith_MulFOp : Arith_FloatBinaryOpWithRoundingMode<"mulf", [Commutative]> {
+def Arith_MulFOp : Arith_FloatBinaryOp<"mulf", [Commutative]> {
   let summary = "floating point multiplication operation";
   let description = [{
     The `mulf` operation takes two operands and returns one result, each of
@@ -1299,10 +1136,10 @@ def Arith_MulFOp : Arith_FloatBinaryOpWithRoundingMode<"mulf", [Commutative]> {
 
     // Tensor pointwise multiplication.
     %x = arith.mulf %y, %z : tensor<4x?xbf16>
-
-    // Scalar multiplication with rounding mode.
-    %a = arith.mulf %b, %c upward : f64
     ```
+
+    TODO: In the distant future, this will accept optional attributes for fast
+    math, contraction, rounding mode, and other controls.
   }];
   let hasFolder = 1;
   let hasCanonicalizer = 1;
@@ -1312,24 +1149,8 @@ def Arith_MulFOp : Arith_FloatBinaryOpWithRoundingMode<"mulf", [Commutative]> {
 // DivFOp
 //===----------------------------------------------------------------------===//
 
-def Arith_DivFOp : Arith_FloatBinaryOpWithRoundingMode<"divf"> {
+def Arith_DivFOp : Arith_FloatBinaryOp<"divf"> {
   let summary = "floating point division operation";
-  let description = [{
-    The `divf` operation takes two operands and returns one result, each of
-    these is required to be the same type. This type may be a floating point
-    scalar type, a vector whose element type is a floating point type, or a
-    floating point tensor.
-
-    Example:
-
-    ```mlir
-    // Scalar division.
-    %a = arith.divf %b, %c : f64
-
-    // Scalar division with rounding mode.
-    %a = arith.divf %b, %c toward_zero : f64
-    ```
-  }];
   let hasFolder = 1;
   let hasCanonicalizer = 1;
 }
@@ -1343,8 +1164,6 @@ def Arith_RemFOp : Arith_FloatBinaryOp<"remf"> {
   let description = [{
     Returns the floating point division remainder.
     The remainder has the same sign as the dividend (lhs operand).
-
-    TODO: Add support for rounding modes.
   }];
   let hasFolder = 1;
 }
@@ -1353,19 +1172,13 @@ def Arith_RemFOp : Arith_FloatBinaryOp<"remf"> {
 // ExtUIOp
 //===----------------------------------------------------------------------===//
 
-def Arith_ExtUIOp :
-    Arith_IToICastOp<"extui", [DeclareOpInterfaceMethods<ArithNonNegFlagInterface>]> {
+def Arith_ExtUIOp : Arith_IToICastOp<"extui"> {
   let summary = "integer zero extension operation";
   let description = [{
     The integer zero extension operation takes an integer input of
     width M and an integer destination type of width N. The destination
     bit-width must be larger than the input bit-width (N > M).
     The top-most (N - M) bits of the output are filled with zeros.
-
-    When the `nneg` flag is present, the operand is assumed to have
-    the most significant bit set to 0. In this case, zero extension is
-    equivalent to sign extension. When this assumption is violated, the
-    result is poison.
 
     Example:
 
@@ -1376,17 +1189,9 @@ def Arith_ExtUIOp :
       %4 = arith.extui %3 : i3 to i6  // %4 is 0b000010
 
       %5 = arith.extui %0 : vector<2 x i32> to vector<2 x i64>
-
-      // Zero extension with nneg flag.
-      %6 = arith.extui %3 nneg : i3 to i6
     ```
   }];
 
-  let arguments = (ins SignlessFixedWidthIntegerLike:$in, UnitAttr:$nonNeg);
-  let results = (outs SignlessFixedWidthIntegerLike:$out);
-  let assemblyFormat = [{
-    $in (`nneg` $nonNeg^)? attr-dict `:` type($in) `to` type($out)
-  }];
   let hasFolder = 1;
   let hasVerifier = 1;
 }
@@ -1579,6 +1384,8 @@ def Arith_TruncFOp :
   let description = [{
     Truncate a floating-point value to a smaller floating-point-typed value.
     The destination type must be strictly narrower than the source type.
+    If the value cannot be exactly represented, it is rounded using the
+    provided rounding mode or the default one if no rounding mode is provided.
     When operating on vectors, casts elementwise.
   }];
   let builders = [
@@ -1590,38 +1397,6 @@ def Arith_TruncFOp :
 
   let hasFolder = 1;
   let hasCanonicalizer = 1;
-  let hasVerifier = 1;
-  let assemblyFormat = [{ $in ($roundingmode^)?
-                          (`fastmath` `` $fastmath^)?
-                          attr-dict `:` type($in) `to` type($out) }];
-}
-
-//===----------------------------------------------------------------------===//
-// ConvertFOp
-//===----------------------------------------------------------------------===//
-
-def Arith_ConvertFOp :
-    Arith_Op<"convertf",
-      [Pure, SameOperandsAndResultShape, SameInputOutputTensorDims,
-       DeclareOpInterfaceMethods<ArithRoundingModeInterface>,
-       DeclareOpInterfaceMethods<ArithFastMathInterface>,
-       DeclareOpInterfaceMethods<CastOpInterface>]>,
-    Arguments<(ins FloatLike:$in,
-                   OptionalAttr<Arith_RoundingModeAttr>:$roundingmode,
-                   OptionalAttr<Arith_FastMathAttr>:$fastmath)>,
-    Results<(outs FloatLike:$out)> {
-  let summary = "cast between floating-point types of the same bitwidth";
-  let description = [{
-    Cast a floating-point value to a different floating-point type of the same
-    bitwidth. This operation handles conversions between types that have the
-    same bitwidth but different semantics (e.g., f16 to bf16), which cannot
-    be represented by `arith.extf` or `arith.truncf`.
-
-    The source and destination element types must be different and must have
-    the same bitwidth. When operating on vectors, casts elementwise.
-  }];
-
-  let hasFolder = 1;
   let hasVerifier = 1;
   let assemblyFormat = [{ $in ($roundingmode^)?
                           (`fastmath` `` $fastmath^)?
@@ -1702,36 +1477,15 @@ def Arith_ScalingTruncFOp
 // UIToFPOp
 //===----------------------------------------------------------------------===//
 
-def Arith_UIToFPOp :
-    Arith_IToFCastOp<"uitofp", [DeclareOpInterfaceMethods<ArithNonNegFlagInterface>]> {
+def Arith_UIToFPOp : Arith_IToFCastOp<"uitofp"> {
   let summary = "cast from unsigned integer type to floating-point";
   let description = [{
     Cast from a value interpreted as unsigned integer to the corresponding
-    floating-point value. When operating on vectors, casts elementwise.
-
-    When the `nneg` flag is present, the operand is assumed to have
-    the most significant bit set to 0. In this case, zero extension is
-    equivalent to sign extension. When this assumption is violated, the
-    result is poison.
-
-    Example:
-
-    ```mlir
-      // Without nneg flag.
-      %0 = arith.uitofp %a : i32 to f64
-
-      // With nneg flag.
-      %1 = arith.uitofp %a nneg : i32 to f64
-    ```
-  }];
-
-  let arguments = (ins SignlessFixedWidthIntegerLike:$in, UnitAttr:$nonNeg);
-  let results = (outs FloatLike:$out);
-  let assemblyFormat = [{
-    $in (`nneg` $nonNeg^)? attr-dict `:` type($in) `to` type($out)
+    floating-point value. If the value cannot be exactly represented, it is
+    rounded using the default rounding mode. When operating on vectors, casts
+    elementwise.
   }];
   let hasFolder = 1;
-  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1742,10 +1496,11 @@ def Arith_SIToFPOp : Arith_IToFCastOp<"sitofp"> {
   let summary = "cast from integer type to floating-point";
   let description = [{
     Cast from a value interpreted as a signed integer to the corresponding
-    floating-point value. When operating on vectors, casts elementwise.
+    floating-point value. If the value cannot be exactly represented, it is
+    rounded using the default rounding mode. When operating on vectors, casts
+    elementwise.
   }];
   let hasFolder = 1;
-  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1782,9 +1537,9 @@ def Arith_FPToSIOp : Arith_FToICastOp<"fptosi"> {
 
 // Index cast can convert between memrefs of signless integers and indices too.
 def IndexCastTypeConstraint : TypeConstraint<Or<[
-        Arith_SignlessIntegerOrIndexLike.predicate,
-        MemRefOf<[AnyNonZeroBitwidthSignlessInteger, Index]>.predicate]>,
-    "signless-non-zero-bitwidth-integer-like or memref of signless-integer">;
+        SignlessIntegerOrIndexLike.predicate,
+        MemRefOf<[AnySignlessInteger, Index]>.predicate]>,
+    "signless-integer-like or memref of signless-integer">;
 
 def Arith_IndexCastOp
   : Arith_CastOp<"index_cast", IndexCastTypeConstraint, IndexCastTypeConstraint,
@@ -1807,34 +1562,15 @@ def Arith_IndexCastOp
 
 def Arith_IndexCastUIOp
   : Arith_CastOp<"index_castui", IndexCastTypeConstraint, IndexCastTypeConstraint,
-                 [DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>,
-                  DeclareOpInterfaceMethods<ArithNonNegFlagInterface>]> {
+                 [DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "unsigned cast between index and integer types";
   let description = [{
     Casts between scalar or vector integers and corresponding 'index' scalar or
     vectors. Index is an integer of platform-specific bit width. If casting to
     a wider integer, the value is zero-extended. If casting to a narrower
     integer, the value is truncated.
-
-    When the `nneg` flag is present, the operand is assumed to have
-    the most significant bit set to 0. In this case, zero extension
-    is equivalent to sign extension. When this assumption is violated,
-    the result is poison.
-
-    Example:
-
-    ```mlir
-      %0 = arith.index_castui %a : i32 to index
-      %1 = arith.index_castui %a nneg : i32 to index
-      %2 = arith.index_castui %b nneg : index to i64
-    ```
   }];
 
-  let arguments = (ins IndexCastTypeConstraint:$in, UnitAttr:$nonNeg);
-  let results = (outs IndexCastTypeConstraint:$out);
-  let assemblyFormat = [{
-    $in (`nneg` $nonNeg^)? attr-dict `:` type($in) `to` type($out)
-  }];
   let hasFolder = 1;
   let hasCanonicalizer = 1;
 }
@@ -1844,12 +1580,10 @@ def Arith_IndexCastUIOp
 //===----------------------------------------------------------------------===//
 
 // Bitcast can convert between memrefs of signless integers and floats.
-// i0 (zero-bitwidth) integers are excluded: a 0-bit bitcast is meaningless.
 def BitcastTypeConstraint : TypeConstraint<Or<[
-        SignlessFixedWidthIntegerLike.predicate,
-        FloatLike.predicate,
-        MemRefOf<[AnyNonZeroBitwidthSignlessInteger, AnyFloat]>.predicate]>,
-    "non-zero-bitwidth-signless-integer-or-float-like or memref of non-zero-bitwidth signless integer or float">;
+        SignlessIntegerOrFloatLike.predicate,
+        MemRefOf<[AnySignlessInteger, AnyFloat]>.predicate]>,
+    "signless-integer-or-float-like or memref of signless-integer or float">;
 
 def Arith_BitcastOp : Arith_CastOp<"bitcast", BitcastTypeConstraint,
                                               BitcastTypeConstraint> {
@@ -1948,8 +1682,8 @@ def Arith_CmpIOp : Arith_CompareOp<"cmpi",
   }];
 
   let arguments = (ins Arith_CmpIPredicateAttr:$predicate,
-                       Arith_SignlessIntegerOrIndexLike:$lhs,
-                       Arith_SignlessIntegerOrIndexLike:$rhs);
+                       SignlessIntegerOrIndexLike:$lhs,
+                       SignlessIntegerOrIndexLike:$rhs);
 
   let hasFolder = 1;
   let hasCanonicalizer = 1;
@@ -2008,14 +1742,11 @@ class BooleanConditionOrMatchingShape<string condition, string result> :
     PredOpTrait<
       condition # " is signless i1 or has matching shape",
       Or<[TypeIsPred<condition, I1>,
-          And<[SubstLeaves<"$_self", "$" # condition # ".getType()", IsShapedTypePred>,
-               SubstLeaves<"$_self", "$" # result # ".getType()", IsShapedTypePred>,
-               AllShapesMatch<[condition, result]>.predicate]>]>>;
+          AllShapesMatch<[condition, result]>.predicate]>>;
 
 def SelectOp : Arith_Op<"select", [Pure,
     AllTypesMatch<["true_value", "false_value", "result"]>,
     BooleanConditionOrMatchingShape<"condition", "result">,
-    DeclareOpInterfaceMethods<InferIntDivisibilityOpInterface>,
     DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRangesFromOptional"]>,
     DeclareOpInterfaceMethods<SelectLikeOpInterface>]> {
   let summary = "select operation";

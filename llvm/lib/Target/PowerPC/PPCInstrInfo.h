@@ -297,8 +297,7 @@ class PPCInstrInfo : public PPCGenInstrInfo {
   // Replace the instruction with single LI if possible. \p DefMI must be LI or
   // LI8.
   bool simplifyToLI(MachineInstr &MI, MachineInstr &DefMI,
-                    unsigned OpNoForForwarding, MachineInstr **KilledDef,
-                    SmallSet<Register, 4> *RegsToUpdate = nullptr) const;
+                    unsigned OpNoForForwarding, MachineInstr **KilledDef) const;
   // If the inst is imm-form and its register operand is produced by a ADDI, put
   // the imm into the inst directly and remove the ADDI if possible.
   bool transformToNewImmFormFedByAdd(MachineInstr &MI, MachineInstr &DefMI,
@@ -700,9 +699,6 @@ public:
   ///
   unsigned getInstSizeInBytes(const MachineInstr &MI) const override;
 
-  InstSizeVerifyMode
-  getInstSizeVerifyMode(const MachineInstr &MI) const override;
-
   MCInst getNop() const override;
 
   std::pair<unsigned, unsigned>
@@ -716,7 +712,6 @@ public:
 
   // Lower pseudo instructions after register allocation.
   bool expandPostRAPseudo(MachineInstr &MI) const override;
-  bool expandAMOCSNEPseudo(MachineInstr &MI) const;
 
   const TargetRegisterClass *updatedRC(const TargetRegisterClass *RC) const;
   static int getRecordFormOpcode(unsigned Opcode);

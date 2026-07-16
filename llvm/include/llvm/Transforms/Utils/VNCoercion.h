@@ -5,7 +5,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
 /// \file / This file provides routines used by LLVM's value numbering passes to
 /// perform various forms of value extraction from memory when the types are not
 /// identical.  For example, given
@@ -18,13 +17,9 @@
 /// These routines know how to tell whether they can do that (the analyze*
 /// routines), and can also insert the necessary IR to do it (the get*
 /// routines).
-///
-//===----------------------------------------------------------------------===//
 
 #ifndef LLVM_TRANSFORMS_UTILS_VNCOERCION_H
 #define LLVM_TRANSFORMS_UTILS_VNCOERCION_H
-
-#include "llvm/Support/Compiler.h"
 
 namespace llvm {
 class Constant;
@@ -37,12 +32,11 @@ class IRBuilderBase;
 class Value;
 class Type;
 class DataLayout;
-
 namespace VNCoercion {
 /// Return true if CoerceAvailableValueToLoadType would succeed if it was
 /// called.
-LLVM_ABI bool canCoerceMustAliasedValueToLoad(Value *StoredVal, Type *LoadTy,
-                                              Function *F);
+bool canCoerceMustAliasedValueToLoad(Value *StoredVal, Type *LoadTy,
+                                     Function *F);
 
 /// If we saw a store of a value to memory, and then a load from a must-aliased
 /// pointer of a different type, try to coerce the stored value to the loaded
@@ -50,60 +44,55 @@ LLVM_ABI bool canCoerceMustAliasedValueToLoad(Value *StoredVal, Type *LoadTy,
 /// IRBuilder used to insert new instructions.
 ///
 /// If we can't do it, return null.
-LLVM_ABI Value *coerceAvailableValueToLoadType(Value *StoredVal, Type *LoadedTy,
-                                               IRBuilderBase &IRB, Function *F);
+Value *coerceAvailableValueToLoadType(Value *StoredVal, Type *LoadedTy,
+                                      IRBuilderBase &IRB, Function *F);
 
 /// This function determines whether a value for the pointer LoadPtr can be
 /// extracted from the store at DepSI.
 ///
 /// On success, it returns the offset into DepSI that extraction would start.
 /// On failure, it returns -1.
-LLVM_ABI int analyzeLoadFromClobberingStore(Type *LoadTy, Value *LoadPtr,
-                                            StoreInst *DepSI,
-                                            const DataLayout &DL);
+int analyzeLoadFromClobberingStore(Type *LoadTy, Value *LoadPtr,
+                                   StoreInst *DepSI, const DataLayout &DL);
 
 /// This function determines whether a value for the pointer LoadPtr can be
 /// extracted from the load at DepLI.
 ///
 /// On success, it returns the offset into DepLI that extraction would start.
 /// On failure, it returns -1.
-LLVM_ABI int analyzeLoadFromClobberingLoad(Type *LoadTy, Value *LoadPtr,
-                                           LoadInst *DepLI,
-                                           const DataLayout &DL);
+int analyzeLoadFromClobberingLoad(Type *LoadTy, Value *LoadPtr, LoadInst *DepLI,
+                                  const DataLayout &DL);
 
 /// This function determines whether a value for the pointer LoadPtr can be
 /// extracted from the memory intrinsic at DepMI.
 ///
 /// On success, it returns the offset into DepMI that extraction would start.
 /// On failure, it returns -1.
-LLVM_ABI int analyzeLoadFromClobberingMemInst(Type *LoadTy, Value *LoadPtr,
-                                              MemIntrinsic *DepMI,
-                                              const DataLayout &DL);
+int analyzeLoadFromClobberingMemInst(Type *LoadTy, Value *LoadPtr,
+                                     MemIntrinsic *DepMI, const DataLayout &DL);
 
 /// If analyzeLoadFromClobberingStore/Load returned an offset, this function
 /// can be used to actually perform the extraction of the bits from the store.
 /// It inserts instructions to do so at InsertPt, and returns the extracted
 /// value.
-LLVM_ABI Value *getValueForLoad(Value *SrcVal, unsigned Offset, Type *LoadTy,
-                                Instruction *InsertPt, Function *F);
+Value *getValueForLoad(Value *SrcVal, unsigned Offset, Type *LoadTy,
+                       Instruction *InsertPt, Function *F);
 // This is the same as getValueForLoad, except it performs no insertion.
 // It only allows constant inputs.
-LLVM_ABI Constant *getConstantValueForLoad(Constant *SrcVal, unsigned Offset,
-                                           Type *LoadTy, const DataLayout &DL);
+Constant *getConstantValueForLoad(Constant *SrcVal, unsigned Offset,
+                                  Type *LoadTy, const DataLayout &DL);
 
 /// If analyzeLoadFromClobberingMemInst returned an offset, this function can be
 /// used to actually perform the extraction of the bits from the memory
 /// intrinsic.  It inserts instructions to do so at InsertPt, and returns the
 /// extracted value.
-LLVM_ABI Value *getMemInstValueForLoad(MemIntrinsic *SrcInst, unsigned Offset,
-                                       Type *LoadTy, Instruction *InsertPt,
-                                       const DataLayout &DL);
+Value *getMemInstValueForLoad(MemIntrinsic *SrcInst, unsigned Offset,
+                              Type *LoadTy, Instruction *InsertPt,
+                              const DataLayout &DL);
 // This is the same as getStoreValueForLoad, except it performs no insertion.
 // It returns nullptr if it cannot produce a constant.
-LLVM_ABI Constant *getConstantMemInstValueForLoad(MemIntrinsic *SrcInst,
-                                                  unsigned Offset, Type *LoadTy,
-                                                  const DataLayout &DL);
-} // namespace VNCoercion
-} // namespace llvm
-
-#endif // LLVM_TRANSFORMS_UTILS_VNCOERCION_H
+Constant *getConstantMemInstValueForLoad(MemIntrinsic *SrcInst, unsigned Offset,
+                                         Type *LoadTy, const DataLayout &DL);
+}
+}
+#endif

@@ -7,12 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/llrintf128.h"
-#include "src/__support/math/llrintf128.h"
+#include "src/__support/FPUtil/NearestIntegerOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(long long, llrintf128, (float128 x)) {
-  return math::llrintf128(x);
+  return fputil::round_to_signed_integer_using_current_rounding_mode<float128,
+                                                                     long long>(
+      x);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

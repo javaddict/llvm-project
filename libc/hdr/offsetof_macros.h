@@ -18,6 +18,6 @@
 #define __need_offsetof
 #include <stddef.h>
 
-#endif // LIBC_FULL_BUILD
+#endif // LLVM_LIBC_FULL_BUILD
 
 #endif // LLVM_LIBC_HDR_OFFSETOF_MACROS_H

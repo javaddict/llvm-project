@@ -14,7 +14,6 @@
 #include "mlir-c/IR.h"
 
 #include <assert.h>
-#include <inttypes.h>
 #include <stdio.h>
 
 MlirOperation createOperationWithName(MlirContext ctx, const char *name) {
@@ -555,10 +554,10 @@ void testGreedyRewriteDriverConfig(MlirContext ctx) {
 
   // Test all configuration getters and verify values
   // CHECK: MaxIterations: 5
-  fprintf(stderr, "MaxIterations: %" PRId64 "\n",
+  fprintf(stderr, "MaxIterations: %ld\n",
           mlirGreedyRewriteDriverConfigGetMaxIterations(config));
   // CHECK: MaxNumRewrites: 100
-  fprintf(stderr, "MaxNumRewrites: %" PRId64 "\n",
+  fprintf(stderr, "MaxNumRewrites: %ld\n",
           mlirGreedyRewriteDriverConfigGetMaxNumRewrites(config));
   // CHECK: UseTopDownTraversal: 1
   fprintf(stderr, "UseTopDownTraversal: %d\n",

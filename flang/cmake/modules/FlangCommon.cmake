@@ -12,7 +12,6 @@
 
 include(CheckCSourceCompiles)
 include(CheckIncludeFile)
-include(CMakePushCheckState)
 
 # The out of tree builds of the compiler and the Fortran runtime
 # must use the same setting of FLANG_RUNTIME_F128_MATH_LIB

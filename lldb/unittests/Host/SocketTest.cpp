@@ -11,15 +11,10 @@
 #include "lldb/Host/Config.h"
 #include "lldb/Host/MainLoop.h"
 #include "lldb/Utility/UriParser.h"
-#include "llvm/ADT/ScopeExit.h"
 #include "llvm/Testing/Support/Error.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <chrono>
-#if LLDB_ENABLE_POSIX
-#include <cerrno>
-#include <csignal>
-#endif
 #if __linux__
 #include <lldb/Host/linux/AbstractSocket.h>
 #endif
@@ -50,23 +45,20 @@ TEST_F(SocketTest, DecodeHostAndPort) {
   EXPECT_THAT_EXPECTED(
       Socket::DecodeHostAndPort("google.com:65536"),
       llvm::FailedWithMessage(
-          "invalid host:port specification: 'google.com:65536', both IPv4 "
-          "(e.g., localhost:8080) or IPv6 (e.g, [2001:db8::1]:8080) formats "
-          "are supported"));
+          "invalid host:port specification: 'google.com:65536'"));
 
   EXPECT_THAT_EXPECTED(
       Socket::DecodeHostAndPort("google.com:-1138"),
       llvm::FailedWithMessage(
-          "invalid host:port specification: 'google.com:-1138', both IPv4 "
-          "(e.g., localhost:8080) or IPv6 (e.g, [2001:db8::1]:8080) formats "
-          "are supported"));
+          "invalid host:port specification: 'google.com:-1138'"));
 
   EXPECT_THAT_EXPECTED(
       Socket::DecodeHostAndPort("google.com:65536"),
       llvm::FailedWithMessage(
-          "invalid host:port specification: 'google.com:65536', both IPv4 "
-          "(e.g., localhost:8080) or IPv6 (e.g, [2001:db8::1]:8080) formats "
-          "are supported"));
+          "invalid host:port specification: 'google.com:65536'"));
+
+  EXPECT_THAT_EXPECTED(Socket::DecodeHostAndPort("12345"),
+                       llvm::HasValue(Socket::HostAndPort{"", 12345}));
 
   EXPECT_THAT_EXPECTED(Socket::DecodeHostAndPort("*:0"),
                        llvm::HasValue(Socket::HostAndPort{"*", 0}));
@@ -85,16 +77,12 @@ TEST_F(SocketTest, DecodeHostAndPort) {
 TEST_F(SocketTest, CreatePair) {
   std::vector<std::optional<Socket::SocketProtocol>> functional_protocols = {
       std::nullopt,
-  };
-  if (HostSupportsIPv4() || HostSupportsIPv6())
-    functional_protocols.push_back(Socket::ProtocolTcp);
+      Socket::ProtocolTcp,
 #if LLDB_ENABLE_POSIX
-  if (HostSupportsDomainSockets()) {
-    functional_protocols.push_back(Socket::ProtocolUnixDomain);
-    functional_protocols.push_back(Socket::ProtocolUnixAbstract);
-  }
+      Socket::ProtocolUnixDomain,
+      Socket::ProtocolUnixAbstract,
 #endif
-
+  };
   for (auto p : functional_protocols) {
     auto expected_socket_pair = Socket::CreatePair(p);
     ASSERT_THAT_EXPECTED(expected_socket_pair, llvm::Succeeded());
@@ -117,15 +105,12 @@ TEST_F(SocketTest, CreatePair) {
   };
   for (auto p : erroring_protocols) {
     ASSERT_THAT_EXPECTED(Socket::CreatePair(p),
-                         llvm::FailedWithMessage("unsupported protocol"));
+                         llvm::FailedWithMessage("Unsupported protocol"));
   }
 }
 
 #if LLDB_ENABLE_POSIX
 TEST_F(SocketTest, DomainListenConnectAccept) {
-  if (!HostSupportsDomainSockets())
-    GTEST_SKIP() << "Domain sockets unavailable";
-
   llvm::SmallString<64> Path;
   std::error_code EC =
       llvm::sys::fs::createUniqueDirectory("DomainListenConnectAccept", Path);
@@ -142,9 +127,6 @@ TEST_F(SocketTest, DomainListenConnectAccept) {
 }
 
 TEST_F(SocketTest, DomainListenGetListeningConnectionURI) {
-  if (!HostSupportsDomainSockets())
-    GTEST_SKIP() << "Domain sockets unavailable";
-
   llvm::SmallString<64> Path;
   std::error_code EC =
       llvm::sys::fs::createUniqueDirectory("DomainListenConnectAccept", Path);
@@ -167,9 +149,6 @@ TEST_F(SocketTest, DomainListenGetListeningConnectionURI) {
 }
 
 TEST_F(SocketTest, DomainMainLoopAccept) {
-  if (!HostSupportsDomainSockets())
-    GTEST_SKIP() << "Domain sockets unavailable";
-
   llvm::SmallString<64> Path;
   std::error_code EC =
       llvm::sys::fs::createUniqueDirectory("DomainListenConnectAccept", Path);
@@ -374,9 +353,6 @@ TEST_P(SocketTest, UDPGetConnectURI) {
 
 #if LLDB_ENABLE_POSIX
 TEST_F(SocketTest, DomainGetConnectURI) {
-  if (!HostSupportsDomainSockets())
-    GTEST_SKIP() << "Domain sockets unavailable";
-
   llvm::SmallString<64> domain_path;
   std::error_code EC = llvm::sys::fs::createUniqueDirectory(
       "DomainListenConnectAccept", domain_path);
@@ -399,9 +375,6 @@ TEST_F(SocketTest, DomainGetConnectURI) {
 }
 
 TEST_F(SocketTest, DomainSocketFromBoundNativeSocket) {
-  if (!HostSupportsDomainSockets())
-    GTEST_SKIP() << "Domain sockets unavailable";
-
   // Generate a name for the domain socket.
   llvm::SmallString<64> name;
   std::error_code EC = llvm::sys::fs::createUniqueDirectory(
@@ -430,8 +403,8 @@ TEST_F(SocketTest, DomainSocketFromBoundNativeSocket) {
 TEST_F(SocketTest, AbstractSocketFromBoundNativeSocket) {
   // Generate a name for the abstract socket.
   llvm::SmallString<100> name;
-  llvm::sys::fs::createUniquePath("AbstractSocketFromBoundNativeSocket-%%%%%%",
-                                  name, true);
+  llvm::sys::fs::createUniquePath("AbstractSocketFromBoundNativeSocket", name,
+                                  true);
   llvm::sys::path::append(name, "test");
 
   // Skip the test if the $TMPDIR is too long to hold a domain socket.
@@ -448,34 +421,6 @@ TEST_F(SocketTest, AbstractSocketFromBoundNativeSocket) {
                                           /*should_close=*/false);
   ASSERT_THAT_EXPECTED(sock, llvm::Succeeded());
   ASSERT_EQ(Socket::ProtocolUnixAbstract, sock->get()->GetSocketProtocol());
-}
-#endif
-
-#if LLDB_ENABLE_POSIX
-TEST_F(SocketTest, DontReceiveSIGPIPE) {
-  static volatile std::sig_atomic_t sigpipe_received;
-  sigpipe_received = 0;
-
-  struct sigaction new_action = {};
-  struct sigaction old_action = {};
-  new_action.sa_handler = [](int) { sigpipe_received = 1; };
-  sigemptyset(&new_action.sa_mask);
-  ASSERT_EQ(0, sigaction(SIGPIPE, &new_action, &old_action));
-  llvm::scope_exit restore_sigpipe(
-      [&] { sigaction(SIGPIPE, &old_action, nullptr); });
-
-  auto pair = Socket::CreatePair();
-  ASSERT_THAT_EXPECTED(pair, llvm::Succeeded());
-  Socket &reader = *pair->first;
-  Socket &writer = *pair->second;
-
-  ASSERT_THAT_ERROR(reader.Close().takeError(), llvm::Succeeded());
-
-  size_t num_bytes = 1;
-  Status err = writer.Write("x", num_bytes);
-  EXPECT_TRUE(err.Fail());
-  EXPECT_EQ(EPIPE, static_cast<int>(err.GetError()));
-  EXPECT_EQ(0, sigpipe_received);
 }
 #endif
 

@@ -46,7 +46,9 @@ static bool runImpl(Module &M);
 namespace {
 struct JMCInstrumenter : public ModulePass {
   static char ID;
-  JMCInstrumenter() : ModulePass(ID) {}
+  JMCInstrumenter() : ModulePass(ID) {
+    initializeJMCInstrumenterPass(*PassRegistry::getPassRegistry());
+  }
   bool runOnModule(Module &M) override { return runImpl(M); }
 };
 char JMCInstrumenter::ID = 0;

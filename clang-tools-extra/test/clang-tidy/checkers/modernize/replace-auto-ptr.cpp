@@ -1,8 +1,8 @@
-// RUN: %check_clang_tidy %s modernize-replace-auto-ptr %t
+// RUN: %check_clang_tidy %s modernize-replace-auto-ptr %t -- -- -isystem %S/Inputs/replace-auto-ptr
 
 // CHECK-FIXES: #include <utility>
 
-#include <memory>
+#include "memory.h"
 
 // Instrumentation for auto_ptr_ref test.
 struct Base {};

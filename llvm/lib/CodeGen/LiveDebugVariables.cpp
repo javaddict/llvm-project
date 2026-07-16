@@ -93,7 +93,10 @@ void LiveDebugVariablesWrapperLegacy::getAnalysisUsage(
 }
 
 LiveDebugVariablesWrapperLegacy::LiveDebugVariablesWrapperLegacy()
-    : MachineFunctionPass(ID) {}
+    : MachineFunctionPass(ID) {
+  initializeLiveDebugVariablesWrapperLegacyPass(
+      *PassRegistry::getPassRegistry());
+}
 
 enum : unsigned { UndefLocNo = ~0U };
 

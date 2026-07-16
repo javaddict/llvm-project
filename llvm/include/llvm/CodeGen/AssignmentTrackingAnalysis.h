@@ -92,13 +92,13 @@ public:
   }
   ///@}
 
-  LLVM_ABI void print(raw_ostream &OS, const Function &Fn) const;
+  void print(raw_ostream &OS, const Function &Fn) const;
 
   ///@{
   /// Non-const methods used by AssignmentTrackingAnalysis (which invalidate
   /// analysis results if called incorrectly).
-  LLVM_ABI void init(FunctionVarLocsBuilder &Builder);
-  LLVM_ABI void clear();
+  void init(FunctionVarLocsBuilder &Builder);
+  void clear();
   ///@}
 };
 
@@ -109,19 +109,19 @@ class DebugAssignmentTrackingAnalysis
 
 public:
   using Result = FunctionVarLocs;
-  LLVM_ABI Result run(Function &F, FunctionAnalysisManager &FAM);
+  Result run(Function &F, FunctionAnalysisManager &FAM);
 };
 
 class DebugAssignmentTrackingPrinterPass
-    : public RequiredPassInfoMixin<DebugAssignmentTrackingPrinterPass> {
+    : public PassInfoMixin<DebugAssignmentTrackingPrinterPass> {
   raw_ostream &OS;
 
 public:
   DebugAssignmentTrackingPrinterPass(raw_ostream &OS) : OS(OS) {}
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
 
-class LLVM_ABI AssignmentTrackingAnalysis : public FunctionPass {
+class AssignmentTrackingAnalysis : public FunctionPass {
   std::unique_ptr<FunctionVarLocs> Results;
 
 public:
@@ -130,6 +130,8 @@ public:
   AssignmentTrackingAnalysis();
 
   bool runOnFunction(Function &F) override;
+
+  static bool isRequired() { return true; }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesAll();

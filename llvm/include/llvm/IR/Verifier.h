@@ -118,6 +118,7 @@ public:
 
   LLVM_ABI Result run(Module &M, ModuleAnalysisManager &);
   LLVM_ABI Result run(Function &F, FunctionAnalysisManager &);
+  static bool isRequired() { return true; }
 };
 
 /// Create a verifier pass.
@@ -130,7 +131,7 @@ public:
 ///
 /// Note that this creates a pass suitable for the legacy pass manager. It has
 /// nothing to do with \c VerifierPass.
-class VerifierPass : public RequiredPassInfoMixin<VerifierPass> {
+class VerifierPass : public PassInfoMixin<VerifierPass> {
   bool FatalErrors;
 
 public:
@@ -138,6 +139,7 @@ public:
 
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 
 } // end namespace llvm

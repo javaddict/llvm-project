@@ -36,14 +36,13 @@ class PoisonAttr;
 /// Uses `resultType` for the type of the returned attribute.
 /// Optional PoisonAttr template argument allows to specify 'poison' attribute
 /// which will be directly propagated to result.
-template <class LAttrElementT, class RAttrElementT = LAttrElementT,
-          class LElementValueT = typename LAttrElementT::ValueType,
-          class RElementValueT = typename RAttrElementT::ValueType,
+template <class AttrElementT, //
+          class ElementValueT = typename AttrElementT::ValueType,
           class PoisonAttr = ub::PoisonAttr,
-          class ResultAttrElementT = LAttrElementT,
+          class ResultAttrElementT = AttrElementT,
           class ResultElementValueT = typename ResultAttrElementT::ValueType,
-          class CalculationT = function_ref<std::optional<ResultElementValueT>(
-              LElementValueT, RElementValueT)>>
+          class CalculationT = function_ref<
+              std::optional<ResultElementValueT>(ElementValueT, ElementValueT)>>
 Attribute constFoldBinaryOpConditional(ArrayRef<Attribute> operands,
                                        Type resultType,
                                        CalculationT &&calculate) {
@@ -63,12 +62,11 @@ Attribute constFoldBinaryOpConditional(ArrayRef<Attribute> operands,
   if (!resultType || !operands[0] || !operands[1])
     return {};
 
-  if (isa<LAttrElementT>(operands[0]) && isa<RAttrElementT>(operands[1])) {
-    auto lhs = cast<LAttrElementT>(operands[0]);
-    auto rhs = cast<RAttrElementT>(operands[1]);
-    if constexpr (std::is_same_v<LElementValueT, RElementValueT>)
-      if (lhs.getType() != rhs.getType())
-        return {};
+  if (isa<AttrElementT>(operands[0]) && isa<AttrElementT>(operands[1])) {
+    auto lhs = cast<AttrElementT>(operands[0]);
+    auto rhs = cast<AttrElementT>(operands[1]);
+    if (lhs.getType() != rhs.getType())
+      return {};
 
     auto calRes = calculate(lhs.getValue(), rhs.getValue());
 
@@ -84,12 +82,11 @@ Attribute constFoldBinaryOpConditional(ArrayRef<Attribute> operands,
     // just fold based on the splat value.
     auto lhs = cast<SplatElementsAttr>(operands[0]);
     auto rhs = cast<SplatElementsAttr>(operands[1]);
-    if constexpr (std::is_same_v<LElementValueT, RElementValueT>)
-      if (lhs.getType() != rhs.getType())
-        return {};
+    if (lhs.getType() != rhs.getType())
+      return {};
 
-    auto elementResult = calculate(lhs.getSplatValue<LElementValueT>(),
-                                   rhs.getSplatValue<RElementValueT>());
+    auto elementResult = calculate(lhs.getSplatValue<ElementValueT>(),
+                                   rhs.getSplatValue<ElementValueT>());
     if (!elementResult)
       return {};
 
@@ -101,12 +98,11 @@ Attribute constFoldBinaryOpConditional(ArrayRef<Attribute> operands,
     // expanding the values.
     auto lhs = cast<ElementsAttr>(operands[0]);
     auto rhs = cast<ElementsAttr>(operands[1]);
-    if constexpr (std::is_same_v<LElementValueT, RElementValueT>)
-      if (lhs.getType() != rhs.getType())
-        return {};
+    if (lhs.getType() != rhs.getType())
+      return {};
 
-    auto maybeLhsIt = lhs.try_value_begin<LElementValueT>();
-    auto maybeRhsIt = rhs.try_value_begin<RElementValueT>();
+    auto maybeLhsIt = lhs.try_value_begin<ElementValueT>();
+    auto maybeRhsIt = rhs.try_value_begin<ElementValueT>();
     if (!maybeLhsIt || !maybeRhsIt)
       return {};
     auto lhsIt = *maybeLhsIt;
@@ -131,14 +127,13 @@ Attribute constFoldBinaryOpConditional(ArrayRef<Attribute> operands,
 /// attribute.
 /// Optional PoisonAttr template argument allows to specify 'poison' attribute
 /// which will be directly propagated to result.
-template <class LAttrElementT, class RAttrElementT = LAttrElementT,
-          class LElementValueT = typename LAttrElementT::ValueType,
-          class RElementValueT = typename RAttrElementT::ValueType,
+template <class AttrElementT, //
+          class ElementValueT = typename AttrElementT::ValueType,
           class PoisonAttr = ub::PoisonAttr,
-          class ResultAttrElementT = LAttrElementT,
+          class ResultAttrElementT = AttrElementT,
           class ResultElementValueT = typename ResultAttrElementT::ValueType,
-          class CalculationT = function_ref<std::optional<ResultElementValueT>(
-              LElementValueT, RElementValueT)>>
+          class CalculationT = function_ref<
+              std::optional<ResultElementValueT>(ElementValueT, ElementValueT)>>
 Attribute constFoldBinaryOpConditional(ArrayRef<Attribute> operands,
                                        CalculationT &&calculate) {
   assert(operands.size() == 2 && "binary op takes two operands");
@@ -164,49 +159,44 @@ Attribute constFoldBinaryOpConditional(ArrayRef<Attribute> operands,
   Type rhsType = getAttrType(operands[1]);
   if (!lhsType || !rhsType)
     return {};
-  if constexpr (std::is_same_v<LElementValueT, RElementValueT>)
-    if (lhsType != rhsType)
-      return {};
+  if (lhsType != rhsType)
+    return {};
 
-  return constFoldBinaryOpConditional<
-      LAttrElementT, RAttrElementT, LElementValueT, RElementValueT, PoisonAttr,
-      ResultAttrElementT, ResultElementValueT, CalculationT>(
+  return constFoldBinaryOpConditional<AttrElementT, ElementValueT, PoisonAttr,
+                                      ResultAttrElementT, ResultElementValueT,
+                                      CalculationT>(
       operands, lhsType, std::forward<CalculationT>(calculate));
 }
 
-template <class LAttrElementT, class RAttrElementT = LAttrElementT,
-          class LElementValueT = typename LAttrElementT::ValueType,
-          class RElementValueT = typename RAttrElementT::ValueType,
+template <class AttrElementT,
+          class ElementValueT = typename AttrElementT::ValueType,
           class PoisonAttr = void, //
-          class ResultAttrElementT = LAttrElementT,
+          class ResultAttrElementT = AttrElementT,
           class ResultElementValueT = typename ResultAttrElementT::ValueType,
           class CalculationT =
-              function_ref<ResultElementValueT(LElementValueT, RElementValueT)>>
+              function_ref<ResultElementValueT(ElementValueT, ElementValueT)>>
 Attribute constFoldBinaryOp(ArrayRef<Attribute> operands, Type resultType,
                             CalculationT &&calculate) {
-  return constFoldBinaryOpConditional<LAttrElementT, RAttrElementT,
-                                      LElementValueT, RElementValueT,
-                                      PoisonAttr, ResultAttrElementT>(
+  return constFoldBinaryOpConditional<AttrElementT, ElementValueT, PoisonAttr,
+                                      ResultAttrElementT>(
       operands, resultType,
-      [&](LElementValueT a, RElementValueT b)
+      [&](ElementValueT a, ElementValueT b)
           -> std::optional<ResultElementValueT> { return calculate(a, b); });
 }
 
-template <class LAttrElementT, class RAttrElementT = LAttrElementT,
-          class LElementValueT = typename LAttrElementT::ValueType,
-          class RElementValueT = typename RAttrElementT::ValueType,
+template <class AttrElementT, //
+          class ElementValueT = typename AttrElementT::ValueType,
           class PoisonAttr = ub::PoisonAttr,
-          class ResultAttrElementT = LAttrElementT,
+          class ResultAttrElementT = AttrElementT,
           class ResultElementValueT = typename ResultAttrElementT::ValueType,
           class CalculationT =
-              function_ref<ResultElementValueT(LElementValueT, RElementValueT)>>
+              function_ref<ResultElementValueT(ElementValueT, ElementValueT)>>
 Attribute constFoldBinaryOp(ArrayRef<Attribute> operands,
                             CalculationT &&calculate) {
-  return constFoldBinaryOpConditional<LAttrElementT, RAttrElementT,
-                                      LElementValueT, RElementValueT,
-                                      PoisonAttr, ResultAttrElementT>(
+  return constFoldBinaryOpConditional<AttrElementT, ElementValueT, PoisonAttr,
+                                      ResultAttrElementT>(
       operands,
-      [&](LElementValueT a, RElementValueT b)
+      [&](ElementValueT a, ElementValueT b)
           -> std::optional<ResultElementValueT> { return calculate(a, b); });
 }
 

@@ -261,7 +261,7 @@ FailureOr<PromotionInfo> mlir::linalg::promoteSubviewAsNewBuffer(
       FailureOr<int64_t> upperBound =
           ValueBoundsConstraintSet::computeConstantBound(
               presburger::BoundType::UB, rangeValue.size,
-              /*stopCondition=*/nullptr, ValueBoundsOptions{/*closedUB=*/true});
+              /*stopCondition=*/nullptr, /*closedUB=*/true);
       size = failed(upperBound)
                  ? getValueOrCreateConstantIndexOp(b, loc, rangeValue.size)
                  : arith::ConstantIndexOp::create(b, loc, *upperBound);

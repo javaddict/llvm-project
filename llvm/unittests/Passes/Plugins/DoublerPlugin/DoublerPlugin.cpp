@@ -13,7 +13,7 @@
 
 using namespace llvm;
 
-struct DoublerModulePass : public OptionalPassInfoMixin<DoublerModulePass> {
+struct DoublerModulePass : public PassInfoMixin<DoublerModulePass> {
 
   // Double the value of the initializer
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM) {

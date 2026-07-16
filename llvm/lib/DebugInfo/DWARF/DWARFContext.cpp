@@ -47,8 +47,6 @@
 #include "llvm/Support/DataExtractor.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/Format.h"
-#include "llvm/Support/FormatAdapters.h"
-#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/LEB128.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -103,7 +101,7 @@ void fixupIndexV4(DWARFContext &C, DWARFUnitIndex &Index) {
                                                        Header.getOffset()}});
       if (!Iter.second) {
         logAllUnhandledErrors(
-            createError("Collision occurred between for truncated offset 0x" +
+            createError("Collision occured between for truncated offset 0x" +
                         Twine::utohexstr(TruncOffset)),
             errs());
         Map.clear();
@@ -196,7 +194,7 @@ static T &getAccelTable(std::unique_ptr<T> &Cache, const DWARFObject &Obj,
   if (Cache)
     return *Cache;
   DWARFDataExtractor AccelSection(Obj, Section, IsLittleEndian, 0);
-  DataExtractor StrData(StringSection, IsLittleEndian);
+  DataExtractor StrData(StringSection, IsLittleEndian, 0);
   Cache = std::make_unique<T>(AccelSection, StrData);
   if (Error E = Cache->extract())
     llvm::consumeError(std::move(E));
@@ -320,7 +318,7 @@ public:
     if (AbbrevDWO)
       return AbbrevDWO.get();
     const DWARFObject &DObj = D.getDWARFObj();
-    DataExtractor abbrData(DObj.getAbbrevDWOSection(), D.isLittleEndian());
+    DataExtractor abbrData(DObj.getAbbrevDWOSection(), D.isLittleEndian(), 0);
     AbbrevDWO = std::make_unique<DWARFDebugAbbrev>(abbrData);
     return AbbrevDWO.get();
   }
@@ -329,7 +327,8 @@ public:
     if (CUIndex)
       return *CUIndex;
 
-    DataExtractor Data(D.getDWARFObj().getCUIndexSection(), D.isLittleEndian());
+    DataExtractor Data(D.getDWARFObj().getCUIndexSection(),
+                       D.isLittleEndian(), 0);
     CUIndex = std::make_unique<DWARFUnitIndex>(DW_SECT_INFO);
     if (CUIndex->parse(Data))
       fixupIndex(D, *CUIndex);
@@ -339,7 +338,8 @@ public:
     if (TUIndex)
       return *TUIndex;
 
-    DataExtractor Data(D.getDWARFObj().getTUIndexSection(), D.isLittleEndian());
+    DataExtractor Data(D.getDWARFObj().getTUIndexSection(),
+                       D.isLittleEndian(), 0);
     TUIndex = std::make_unique<DWARFUnitIndex>(DW_SECT_EXT_TYPES);
     bool isParseSuccessful = TUIndex->parse(Data);
     // If we are parsing TU-index and for .debug_types section we don't need
@@ -353,8 +353,7 @@ public:
     if (GdbIndex)
       return *GdbIndex;
 
-    DataExtractor Data(D.getDWARFObj().getGdbIndexSection(),
-                       /*IsLittleEndian=*/true);
+    DataExtractor Data(D.getDWARFObj().getGdbIndexSection(), true /*LE*/, 0);
     GdbIndex = std::make_unique<DWARFGdbIndex>();
     GdbIndex->parse(Data);
     return *GdbIndex;
@@ -364,7 +363,8 @@ public:
     if (Abbrev)
       return Abbrev.get();
 
-    DataExtractor Data(D.getDWARFObj().getAbbrevSection(), D.isLittleEndian());
+    DataExtractor Data(D.getDWARFObj().getAbbrevSection(),
+                       D.isLittleEndian(), 0);
     Abbrev = std::make_unique<DWARFDebugAbbrev>(Data);
     return Abbrev.get();
   }
@@ -832,7 +832,7 @@ static void dumpStringOffsetsSection(raw_ostream &OS, DIDumpOptions DumpOpts,
                                      bool LittleEndian) {
   auto Contributions = collectContributionData(Units);
   DWARFDataExtractor StrOffsetExt(Obj, StringOffsetsSection, LittleEndian, 0);
-  DataExtractor StrData(StringSection, LittleEndian);
+  DataExtractor StrData(StringSection, LittleEndian, 0);
   uint64_t SectionSize = StringOffsetsSection.Data.size();
   uint64_t Offset = 0;
   for (auto &Contribution : Contributions) {
@@ -863,10 +863,10 @@ static void dumpStringOffsetsSection(raw_ostream &OS, DIDumpOptions DumpOpts,
     }
     // Report a gap in the table.
     if (Offset < ContributionHeader) {
-      OS << formatv("{0:x8}: Gap, length = ", Offset);
+      OS << format("0x%8.8" PRIx64 ": Gap, length = ", Offset);
       OS << (ContributionHeader - Offset) << "\n";
     }
-    OS << formatv("{0:x8}: ", ContributionHeader);
+    OS << format("0x%8.8" PRIx64 ": ", ContributionHeader);
     // In DWARF v5 the contribution size in the descriptor does not equal
     // the originally encoded length (it does not contain the length of the
     // version field and the padding, a total of 4 bytes). Add them back in
@@ -878,20 +878,19 @@ static void dumpStringOffsetsSection(raw_ostream &OS, DIDumpOptions DumpOpts,
     Offset = Contribution->Base;
     unsigned EntrySize = Contribution->getDwarfOffsetByteSize();
     while (Offset - Contribution->Base < Contribution->Size) {
-      OS << formatv("{0:x8}: ", Offset);
+      OS << format("0x%8.8" PRIx64 ": ", Offset);
       uint64_t StringOffset =
           StrOffsetExt.getRelocatedValue(EntrySize, &Offset);
-      OS << formatv("{0:x-} ", fmt_align(StringOffset, AlignStyle::Right,
-                                         OffsetDumpWidth, '0'));
+      OS << format("%0*" PRIx64 " ", OffsetDumpWidth, StringOffset);
       const char *S = StrData.getCStr(&StringOffset);
       if (S)
-        OS << formatv("\"{0}\"", S);
+        OS << format("\"%s\"", S);
       OS << "\n";
     }
   }
   // Report a gap at the end of the table.
   if (Offset < SectionSize) {
-    OS << formatv("{0:x8}: Gap, length = ", Offset);
+    OS << format("0x%8.8" PRIx64 ": Gap, length = ", Offset);
     OS << (SectionSize - Offset) << "\n";
   }
 }
@@ -1167,14 +1166,15 @@ void DWARFContext::dump(
         Parser.skip(DumpOpts.WarningHandler, DumpOpts.WarningHandler);
         continue;
       }
-      OS << "debug_line[" << formatv("{0:x8}", Parser.getOffset()) << "]\n";
+      OS << "debug_line[" << format("0x%8.8" PRIx64, Parser.getOffset())
+         << "]\n";
       Parser.parseNext(DumpOpts.WarningHandler, DumpOpts.WarningHandler, &OS,
                        DumpOpts.Verbose);
     }
   };
 
   auto DumpStrSection = [&](StringRef Section) {
-    DataExtractor StrData(Section, isLittleEndian());
+    DataExtractor StrData(Section, isLittleEndian(), 0);
     uint64_t Offset = 0;
     uint64_t StrOffset = 0;
     while (StrData.isValidOffset(Offset)) {
@@ -1184,7 +1184,7 @@ void DWARFContext::dump(
         DumpOpts.WarningHandler(std::move(Err));
         return;
       }
-      OS << formatv("{0:x8}: \"", StrOffset);
+      OS << format("0x%8.8" PRIx64 ": \"", StrOffset);
       OS.write_escaped(CStr);
       OS << "\"\n";
       StrOffset = Offset;

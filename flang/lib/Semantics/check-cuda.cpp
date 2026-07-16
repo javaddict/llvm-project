@@ -115,23 +115,6 @@ struct DeviceExprChecker
   SemanticsContext &context_;
 };
 
-static bool IsHostArray(const Symbol &symbol) {
-  const Symbol &resolved{GetAssociationRoot(symbol)};
-  if (const auto *details{
-          resolved.detailsIf<semantics::ObjectEntityDetails>()}) {
-    if (details->cudaDataAttr() &&
-        (*details->cudaDataAttr() == common::CUDADataAttr::Device ||
-            *details->cudaDataAttr() == common::CUDADataAttr::Constant ||
-            *details->cudaDataAttr() == common::CUDADataAttr::Managed ||
-            *details->cudaDataAttr() == common::CUDADataAttr::Shared ||
-            *details->cudaDataAttr() == common::CUDADataAttr::Unified ||
-            *details->cudaDataAttr() == common::CUDADataAttr::UseDevice)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 struct FindHostArray
     : public evaluate::AnyTraverse<FindHostArray, const Symbol *> {
   using Result = const Symbol *;
@@ -139,28 +122,10 @@ struct FindHostArray
   FindHostArray() : Base(*this) {}
   using Base::operator();
   Result operator()(const evaluate::Component &x) const {
-    const Symbol &symbol{x.GetLastSymbol().GetUltimate()};
-    const Symbol &baseSymbol{GetAssociationRoot(x.base().GetFirstSymbol())};
-    if (symbol.IsFuncResult() || baseSymbol.IsFuncResult()) {
-      return nullptr;
-    }
-    if (!IsHostArray(symbol)) {
-      return nullptr;
-    }
-    if (IsDummy(baseSymbol) && IsCUDADeviceContext(&baseSymbol.owner())) {
-      return nullptr;
-    }
+    const Symbol &symbol{x.GetLastSymbol()};
     if (IsAllocatableOrPointer(symbol)) {
       if (Result hostArray{(*this)(symbol)}) {
         return hostArray;
-      }
-    } else if (const auto *details{symbol.GetUltimate()
-                       .detailsIf<semantics::ObjectEntityDetails>()}) {
-      if (details->IsArray()) {
-        if (!IsHostArray(baseSymbol)) {
-          return nullptr;
-        }
-        return &symbol;
       }
     }
     return (*this)(x.base());
@@ -179,9 +144,7 @@ struct FindHostArray
                   *details->cudaDataAttr() != common::CUDADataAttr::Constant &&
                   *details->cudaDataAttr() != common::CUDADataAttr::Managed &&
                   *details->cudaDataAttr() != common::CUDADataAttr::Shared &&
-                  *details->cudaDataAttr() != common::CUDADataAttr::Unified &&
-                  *details->cudaDataAttr() !=
-                      common::CUDADataAttr::UseDevice))) {
+                  *details->cudaDataAttr() != common::CUDADataAttr::Unified))) {
         return &symbol;
       }
     }
@@ -442,9 +405,6 @@ private:
   void ErrorIfHostSymbol(const A &expr, parser::CharBlock source) {
     if (isHostDevice)
       return;
-    if (context_.languageFeatures().IsEnabled(
-            common::LanguageFeature::CudaUnified))
-      return;
     if (const Symbol * hostArray{FindHostArray{}(expr)}) {
       context_.Say(source,
           "Host array '%s' cannot be present in device context"_err_en_US,
@@ -554,10 +514,10 @@ private:
     Check(uS.statement, uS.source);
   }
   void Check(const parser::LoopControl::Bounds &bounds) {
-    Check(bounds.Lower());
-    Check(bounds.Upper());
-    if (auto &step{bounds.Step()}) {
-      Check(*step);
+    Check(bounds.lower);
+    Check(bounds.upper);
+    if (bounds.step) {
+      Check(*bounds.step);
     }
   }
   void Check(const parser::LoopControl::Concurrent &x) {
@@ -664,10 +624,6 @@ static void CheckReduce(
         auto cat{type->category()};
         bool isOk{false};
         switch (op) {
-        case parser::ReductionOperator::Operator::Minus:
-          context.Say(var.thing.GetSource(),
-              "'-' is not a supported !$CUF KERNEL DO REDUCE operator"_err_en_US);
-          continue;
         case parser::ReductionOperator::Operator::Plus:
         case parser::ReductionOperator::Operator::Multiply:
         case parser::ReductionOperator::Operator::Max:
@@ -802,12 +758,11 @@ void CUDAChecker::Enter(const parser::AssignmentStmt &x) {
   }
 
   int nbLhs{evaluate::GetNbOfCUDADeviceSymbols(assign->lhs)};
-  int nbRhs{evaluate::GetNbOfUniqueCUDADeviceSymbols(assign->rhs)};
-  int nbRhsManaged{evaluate::GetNbOfCUDAManagedOrUnifiedSymbols(assign->rhs)};
+  int nbRhs{evaluate::GetNbOfCUDADeviceSymbols(assign->rhs)};
 
   // device to host transfer with more than one device object on the rhs is not
   // legal.
-  if (nbLhs == 0 && nbRhs > 1 && nbRhsManaged != nbRhs) {
+  if (nbLhs == 0 && nbRhs > 1) {
     context_.Say(lhsLoc,
         "More than one reference to a CUDA object on the right hand side of the assignment"_err_en_US);
   }
@@ -840,9 +795,7 @@ void CUDAChecker::Enter(const parser::PrintStmt &x) {
             if (details->cudaDataAttr() &&
                 (*details->cudaDataAttr() == common::CUDADataAttr::Device ||
                     *details->cudaDataAttr() ==
-                        common::CUDADataAttr::Constant ||
-                    *details->cudaDataAttr() ==
-                        common::CUDADataAttr::UseDevice)) {
+                        common::CUDADataAttr::Constant)) {
               context_.Say(parser::FindSourceLocation(*x),
                   "device data not allowed in I/O statements"_err_en_US);
             }

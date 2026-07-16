@@ -70,63 +70,73 @@ enum class DebugLocKind : uint8_t {
   Temporary
 };
 
-// Extends a DILocation pointer to also store a DebugLocKind and Origin,
+// Extends TrackingMDNodeRef to also store a DebugLocKind and Origin,
 // allowing Debugify to ignore intentionally-empty DebugLocs and display the
 // code responsible for generating unintentionally-empty DebugLocs.
 // Currently we only need to track the Origin of this DILoc when using a
 // DebugLoc that is not annotated (i.e. has DebugLocKind::Normal) and has a
 // null DILocation, so only collect the origin stacktrace in those cases.
-class DILocAndCoverageTracking : public DbgLocOrigin {
-  DILocation *Loc;
-
+class DILocAndCoverageTracking : public TrackingMDNodeRef, public DbgLocOrigin {
 public:
   DebugLocKind Kind;
   // Default constructor for empty DebugLocs.
   DILocAndCoverageTracking()
-      : DbgLocOrigin(true), Loc(nullptr), Kind(DebugLocKind::Normal) {}
-  // Valid or nullptr DILocation*, no annotative DebugLocKind.
-  DILocAndCoverageTracking(const DILocation *Loc)
-      : DbgLocOrigin(!Loc), Loc(const_cast<DILocation *>(Loc)),
+      : TrackingMDNodeRef(nullptr), DbgLocOrigin(true),
         Kind(DebugLocKind::Normal) {}
-  // Explicit DebugLocKind, which always means a nullptr DILocation*.
+  // Valid or nullptr MDNode*, no annotative DebugLocKind.
+  DILocAndCoverageTracking(const MDNode *Loc)
+      : TrackingMDNodeRef(const_cast<MDNode *>(Loc)), DbgLocOrigin(!Loc),
+        Kind(DebugLocKind::Normal) {}
+  LLVM_ABI DILocAndCoverageTracking(const DILocation *Loc);
+  // Explicit DebugLocKind, which always means a nullptr MDNode*.
   DILocAndCoverageTracking(DebugLocKind Kind)
-      : DbgLocOrigin(Kind == DebugLocKind::Normal), Loc(nullptr), Kind(Kind) {}
-
-  operator DILocation *() const { return Loc; }
+      : TrackingMDNodeRef(nullptr), DbgLocOrigin(Kind == DebugLocKind::Normal),
+        Kind(Kind) {}
 };
 template <> struct simplify_type<DILocAndCoverageTracking> {
-  using SimpleType = DILocation *;
+  using SimpleType = MDNode *;
 
-  static DILocation *getSimplifiedValue(DILocAndCoverageTracking &MD) {
-    return MD;
+  static MDNode *getSimplifiedValue(DILocAndCoverageTracking &MD) {
+    return MD.get();
   }
 };
 template <> struct simplify_type<const DILocAndCoverageTracking> {
-  using SimpleType = DILocation *;
+  using SimpleType = MDNode *;
 
-  static DILocation *getSimplifiedValue(const DILocAndCoverageTracking &MD) {
-    return MD;
+  static MDNode *getSimplifiedValue(const DILocAndCoverageTracking &MD) {
+    return MD.get();
   }
 };
 
-using DebugLocRef = DILocAndCoverageTracking;
+using DebugLocTrackingRef = DILocAndCoverageTracking;
 #else
-using DebugLocRef = DILocation *;
+using DebugLocTrackingRef = TrackingMDNodeRef;
 #endif // LLVM_ENABLE_DEBUGLOC_TRACKING_COVERAGE
 
 /// A debug info location.
 ///
-/// This class is a wrapper around an \a DILocation
+/// This class is a wrapper around a tracking reference to an \a DILocation
 /// pointer.
 ///
 /// To avoid extra includes, \a DebugLoc doubles the \a DILocation API with a
 /// one based on relatively opaque \a MDNode pointers.
 class DebugLoc {
-  DebugLocRef Loc = {};
+
+  DebugLocTrackingRef Loc;
 
 public:
+  DebugLoc() = default;
+
   /// Construct from an \a DILocation.
-  DebugLoc(const DILocation *L = nullptr) : Loc(const_cast<DILocation *>(L)) {}
+  LLVM_ABI DebugLoc(const DILocation *L);
+
+  /// Construct from an \a MDNode.
+  ///
+  /// Note: if \c N is not an \a DILocation, a verifier check will fail, and
+  /// accessors will crash.  However, construction from other nodes is
+  /// supported in order to handle forward references when reading textual
+  /// IR.
+  LLVM_ABI explicit DebugLoc(const MDNode *N);
 
 #if LLVM_ENABLE_DEBUGLOC_TRACKING_COVERAGE
   DebugLoc(DebugLocKind Kind) : Loc(Kind) {}
@@ -215,7 +225,7 @@ public:
   ///
   /// \pre !*this or \c isa<DILocation>(getAsMDNode()).
   /// @{
-  DILocation *get() const { return Loc; }
+  LLVM_ABI DILocation *get() const;
   operator DILocation *() const { return get(); }
   DILocation *operator->() const { return get(); }
   DILocation &operator*() const { return *get(); }
@@ -228,6 +238,9 @@ public:
   /// the right type.  Important for cases like \a llvm::StripDebugInfo() and
   /// \a Instruction::hasMetadata().
   explicit operator bool() const { return Loc; }
+
+  /// Check whether this has a trivial destructor.
+  bool hasTrivialDestructor() const { return Loc.hasTrivialDestructor(); }
 
   enum { ReplaceLastInlinedAt = true };
   /// Rebuild the entire inlined-at chain for this instruction so that the top
@@ -274,7 +287,7 @@ public:
   LLVM_ABI DebugLoc getFnDebugLoc() const;
 
   /// Return \c this as a bar \a MDNode.
-  LLVM_ABI MDNode *getAsMDNode() const;
+  MDNode *getAsMDNode() const { return Loc; }
 
   /// Check if the DebugLoc corresponds to an implicit code.
   LLVM_ABI bool isImplicitCode() const;

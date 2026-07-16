@@ -13,7 +13,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/CodeGen/KCFI.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
@@ -32,9 +31,14 @@ using namespace llvm;
 STATISTIC(NumKCFIChecksAdded, "Number of indirect call checks added");
 
 namespace {
-class KCFI {
+class KCFI : public MachineFunctionPass {
 public:
-  bool run(MachineFunction &MF);
+  static char ID;
+
+  KCFI() : MachineFunctionPass(ID) {}
+
+  StringRef getPassName() const override { return KCFI_PASS_NAME; }
+  bool runOnMachineFunction(MachineFunction &MF) override;
 
 private:
   /// Machine instruction info used throughout the class.
@@ -49,34 +53,12 @@ private:
                  MachineBasicBlock::instr_iterator I) const;
 };
 
-class MachineKCFILegacy : public MachineFunctionPass {
-public:
-  static char ID;
-
-  MachineKCFILegacy() : MachineFunctionPass(ID) {}
-
-  StringRef getPassName() const override { return KCFI_PASS_NAME; }
-  bool runOnMachineFunction(MachineFunction &MF) override {
-    return KCFI().run(MF);
-  }
-};
-
-char MachineKCFILegacy::ID = 0;
+char KCFI::ID = 0;
 } // end anonymous namespace
 
-INITIALIZE_PASS(MachineKCFILegacy, DEBUG_TYPE, KCFI_PASS_NAME, false, false)
+INITIALIZE_PASS(KCFI, DEBUG_TYPE, KCFI_PASS_NAME, false, false)
 
-FunctionPass *llvm::createKCFIPass() { return new MachineKCFILegacy(); }
-
-PreservedAnalyses MachineKCFIPass::run(MachineFunction &MF,
-                                       MachineFunctionAnalysisManager &MFAM) {
-  if (!KCFI().run(MF))
-    return PreservedAnalyses::all();
-
-  PreservedAnalyses PA = getMachineFunctionPassPreservedAnalyses();
-  PA.preserveSet<CFGAnalyses>();
-  return PA;
-}
+FunctionPass *llvm::createKCFIPass() { return new KCFI(); }
 
 bool KCFI::emitCheck(MachineBasicBlock &MBB,
                      MachineBasicBlock::instr_iterator MBBI) const {
@@ -105,7 +87,7 @@ bool KCFI::emitCheck(MachineBasicBlock &MBB,
   return true;
 }
 
-bool KCFI::run(MachineFunction &MF) {
+bool KCFI::runOnMachineFunction(MachineFunction &MF) {
   const Module *M = MF.getFunction().getParent();
   if (!M->getModuleFlag("kcfi"))
     return false;

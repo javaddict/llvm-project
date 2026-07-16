@@ -1,4 +1,6 @@
 .. title:: clang-tidy - cert-dcl16-c
+.. meta::
+   :http-equiv=refresh: 5;URL=../readability/uppercase-literal-suffix.html
 
 cert-dcl16-c
 ============

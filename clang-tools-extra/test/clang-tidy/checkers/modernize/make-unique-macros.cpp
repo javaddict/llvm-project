@@ -2,7 +2,7 @@
 // RUN:   -config="{CheckOptions: {modernize-make-unique.IgnoreMacros: false}}" \
 // RUN:   -- -I %S/Inputs/smart-ptr
 
-#include <memory>
+#include "unique_ptr.h"
 
 class Foo {};
 class Bar {};

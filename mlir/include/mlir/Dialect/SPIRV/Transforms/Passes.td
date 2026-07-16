@@ -32,7 +32,7 @@ def SPIRVCompositeTypeLayoutPass
 }
 
 def SPIRVLowerABIAttributesPass : Pass<"spirv-lower-abi-attrs", "spirv::ModuleOp"> {
-  let summary = "Lower SPIR-V ABI attributes to global variables and entry points";
+  let summary = "Decorate SPIR-V composite type with layout info";
   let description = [{
     Operation pass that lowers the ABI attributes specified during
     SPIR-V Lowering. Specifically:

@@ -1,5 +1,4 @@
 // RUN: %clang_cc1 -Wno-error=return-type -Wno-error=int-conversion %s -emit-llvm-only
-// RUN: %clang_cc1 -Wno-error=return-type -Wno-error=int-conversion %s -emit-llvm-only -fexperimental-new-constant-interpreter
 // REQUIRES: LP64
 
 // Mismatched type between return and function result.

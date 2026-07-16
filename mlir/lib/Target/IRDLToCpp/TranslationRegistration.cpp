@@ -27,10 +27,10 @@ void registerIRDLToCppTranslation() {
       "irdl-to-cpp", "translate IRDL dialect definitions to C++ definitions",
       [](Operation *op, raw_ostream &output) {
         return TypeSwitch<Operation *, LogicalResult>(op)
-            .Case([&](irdl::DialectOp dialectOp) {
+            .Case<irdl::DialectOp>([&](irdl::DialectOp dialectOp) {
               return irdl::translateIRDLDialectToCpp(dialectOp, output);
             })
-            .Case([&](ModuleOp moduleOp) {
+            .Case<ModuleOp>([&](ModuleOp moduleOp) {
               for (Operation &op : moduleOp.getBody()->getOperations())
                 if (auto dialectOp = llvm::dyn_cast<irdl::DialectOp>(op))
                   if (failed(

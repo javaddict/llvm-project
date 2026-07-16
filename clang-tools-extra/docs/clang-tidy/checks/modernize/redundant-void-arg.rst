@@ -3,8 +3,7 @@
 modernize-redundant-void-arg
 ============================
 
-Finds and removes redundant ``void`` argument lists.
-Works in C++ and in C23 and up.
+Find and remove redundant ``void`` argument lists.
 
 Examples:
   ===================================  ===========================

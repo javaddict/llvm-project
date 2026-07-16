@@ -13,9 +13,9 @@
 
 namespace llvm {
 
-class HelloWorldPass : public OptionalPassInfoMixin<HelloWorldPass> {
+class HelloWorldPass : public PassInfoMixin<HelloWorldPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
 } // namespace llvm

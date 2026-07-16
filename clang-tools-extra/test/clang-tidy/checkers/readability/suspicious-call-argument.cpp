@@ -1,4 +1,4 @@
-// RUN: %check_clang_tidy %s readability-suspicious-call-argument %t -- -- -std=c++11-or-later
+// RUN: %check_clang_tidy %s readability-suspicious-call-argument %t -- -- -std=c++11
 
 void foo_1(int aaaaaa, int bbbbbb) {}
 

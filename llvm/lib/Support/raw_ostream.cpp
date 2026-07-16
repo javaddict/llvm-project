@@ -1025,13 +1025,6 @@ Error llvm::writeToOutput(StringRef OutputFileName,
 
   raw_fd_ostream Out(Temp->FD, false);
 
-#if defined(__MVS__)
-  if (auto EC = llvm::copyFileTagAttributes(OutputFileName.str(), Temp->FD)) {
-    if (EC != std::errc::no_such_file_or_directory)
-      return createFileError(OutputFileName, EC);
-  }
-#endif
-
   if (Error E = Write(Out)) {
     if (Error DiscardError = Temp->discard())
       return joinErrors(std::move(E), std::move(DiscardError));

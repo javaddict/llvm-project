@@ -21,23 +21,19 @@ class LPMUpdater;
 class Loop;
 
 /// A simple loop rotation transformation.
-class LoopRotatePass : public OptionalPassInfoMixin<LoopRotatePass> {
+class LoopRotatePass : public PassInfoMixin<LoopRotatePass> {
 public:
-  LLVM_ABI LoopRotatePass(bool EnableHeaderDuplication = true,
-                          bool PrepareForLTO = false,
-                          bool CheckExitCount = false);
-  LLVM_ABI PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
-                                 LoopStandardAnalysisResults &AR,
-                                 LPMUpdater &U);
+  LoopRotatePass(bool EnableHeaderDuplication = true,
+                 bool PrepareForLTO = false);
+  PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
+                        LoopStandardAnalysisResults &AR, LPMUpdater &U);
 
-  LLVM_ABI void
-  printPipeline(raw_ostream &OS,
-                function_ref<StringRef(StringRef)> MapClassName2PassName);
+  void printPipeline(raw_ostream &OS,
+                     function_ref<StringRef(StringRef)> MapClassName2PassName);
 
 private:
   const bool EnableHeaderDuplication;
   const bool PrepareForLTO;
-  const bool CheckExitCount;
 };
 }
 

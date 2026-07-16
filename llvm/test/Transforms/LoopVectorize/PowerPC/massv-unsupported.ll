@@ -6,6 +6,8 @@ target triple = "powerpc64le-unknown-linux-gnu"
 declare double @ceil(double) #0
 declare float @fabsf(float) #0
 
+declare double @llvm.sqrt.f64(double) #0
+declare float @llvm.sqrt.f32(float) #0
 
 ; Vector counterpart of ceil is unsupported in MASSV library.
 define void @ceil_f64(ptr nocapture %varray) {
@@ -106,3 +108,5 @@ for.body:
 for.end:
   ret void
 }
+
+attributes #0 = { nounwind }

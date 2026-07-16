@@ -53,7 +53,6 @@ private:
   /// Print register mask for MOVEM instruction in order A7-A0,D7-D0
   void printMoveMaskR(const MCInst *MI, unsigned opNum, raw_ostream &O);
   void printDisp(const MCInst *MI, unsigned opNum, raw_ostream &O);
-  void printScale(const MCInst *MI, unsigned opNum, raw_ostream &O);
   void printAbsMem(const MCInst *MI, unsigned opNum, raw_ostream &O);
 
   //===----------------------------------------------------------------------===//
@@ -159,15 +158,6 @@ private:
   void printPCI32Mem(const MCInst *MI, uint64_t Address, unsigned opNum,
                      raw_ostream &O) {
     printPCIMem(MI, Address, opNum, O);
-  }
-
-  void printPCIBD16Mem(const MCInst *MI, uint64_t Address, unsigned opNum,
-                       raw_ostream &O) {
-    printPCIBDMem<16>(MI, Address, opNum, O);
-  }
-  void printPCIBD32Mem(const MCInst *MI, uint64_t Address, unsigned opNum,
-                       raw_ostream &O) {
-    printPCIBDMem<32>(MI, Address, opNum, O);
   }
 };
 } // end namespace llvm

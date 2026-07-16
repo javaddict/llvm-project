@@ -1184,10 +1184,10 @@ void LVScopeArray::printExtra(raw_ostream &OS, bool Full) const {
 void LVScopeCompileUnit::addSize(LVScope *Scope, LVOffset Lower,
                                  LVOffset Upper) {
   LLVM_DEBUG({
-    dbgs() << formatv("CU [{0:x8}], Scope [{1:x8}], Range [{2:x8}"
-                      ":{3:x8}], Size = {4}\n",
-                      getOffset(), Scope->getOffset(), Lower, Upper,
-                      Upper - Lower);
+    dbgs() << format(
+        "CU [0x%08" PRIx64 "], Scope [0x%08" PRIx64 "], Range [0x%08" PRIx64
+        ":0x%08" PRIx64 "], Size = %" PRId64 "\n",
+        getOffset(), Scope->getOffset(), Lower, Upper, Upper - Lower);
   });
 
   // There is no need to check for a previous entry, as we are traversing the
@@ -1482,7 +1482,7 @@ void LVScopeCompileUnit::printWarnings(raw_ostream &OS, bool Full) const {
   if (options().getInternalTag() && getReader().isBinaryTypeELF()) {
     PrintHeader("Unsupported DWARF Tags");
     for (LVTagOffsetsMap::const_reference Entry : DebugTags) {
-      OS << formatv("\n{0:x2}", (unsigned)Entry.first) << ", "
+      OS << format("\n0x%02x", (unsigned)Entry.first) << ", "
          << dwarf::TagString(Entry.first) << "\n";
       unsigned Count = 0;
       for (const LVOffset &Offset : Entry.second)
@@ -1498,7 +1498,7 @@ void LVScopeCompileUnit::printWarnings(raw_ostream &OS, bool Full) const {
       // Symbol basic information.
       LVSymbol *Symbol = Entry.second;
       OS << hexSquareString(Entry.first) << " {Coverage} "
-         << formatv("{0:f2}%", Symbol->getCoveragePercentage()) << " "
+         << format("%.2f%%", Symbol->getCoveragePercentage()) << " "
          << formattedKind(Symbol->kind()) << " "
          << formattedName(Symbol->getName()) << "\n";
     }
@@ -1527,8 +1527,8 @@ void LVScopeCompileUnit::printWarnings(raw_ostream &OS, bool Full) const {
 void LVScopeCompileUnit::printTotals(raw_ostream &OS) const {
   OS << "\nTotals by lexical level:\n";
   for (size_t Index = 1; Index <= MaxSeenLevel; ++Index)
-    OS << formatv("[{0,0+3}]: {1,10} ({2,6:f2}%)\n", Index, Totals[Index].first,
-                  Totals[Index].second);
+    OS << format("[%03d]: %10d (%6.2f%%)\n", Index, Totals[Index].first,
+                 Totals[Index].second);
 }
 
 void LVScopeCompileUnit::printScopeSize(const LVScope *Scope, raw_ostream &OS) {
@@ -1540,7 +1540,7 @@ void LVScopeCompileUnit::printScopeSize(const LVScope *Scope, raw_ostream &OS) {
     // implementation-defined rounding inside printing functions.
     float Percentage =
         rint((float(Size) / CUContributionSize) * 100.0 * 100.0) / 100.0;
-    OS << formatv("{0,10} ({1,6:f2}%) : ", Size, Percentage);
+    OS << format("%10" PRId64 " (%6.2f%%) : ", Size, Percentage);
     Scope->print(OS);
 
     // Keep record of the total sizes at each lexical level.
@@ -1607,12 +1607,11 @@ void LVScopeCompileUnit::printSummary(raw_ostream &OS, const LVCounter &Counter,
                                       const char *Header) const {
   std::string Separator = std::string(29, '-');
   auto PrintSeparator = [&]() { OS << Separator << "\n"; };
-  const char *Fmt = "{0,-9}{1,9}  {2,9}\n";
   auto PrintHeadingRow = [&](const char *T, const char *U, const char *V) {
-    OS << formatv(Fmt, T, U, V);
+    OS << format("%-9s%9s  %9s\n", T, U, V);
   };
   auto PrintDataRow = [&](const char *T, unsigned U, unsigned V) {
-    OS << formatv(Fmt, T, U, V);
+    OS << format("%-9s%9d  %9d\n", T, U, V);
   };
 
   OS << "\n";

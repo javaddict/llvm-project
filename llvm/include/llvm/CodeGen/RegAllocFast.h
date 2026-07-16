@@ -14,7 +14,7 @@
 
 namespace llvm {
 
-class RegAllocFastPass : public RequiredPassInfoMixin<RegAllocFastPass> {
+class RegAllocFastPass : public PassInfoMixin<RegAllocFastPass> {
 public:
   struct Options {
     RegAllocFilterFunc Filter;
@@ -43,12 +43,12 @@ public:
     return MachineFunctionProperties().setIsSSA();
   }
 
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &);
+  PreservedAnalyses run(MachineFunction &MF, MachineFunctionAnalysisManager &);
 
-  LLVM_ABI void
-  printPipeline(raw_ostream &OS,
-                function_ref<StringRef(StringRef)> MapClassName2PassName);
+  void printPipeline(raw_ostream &OS,
+                     function_ref<StringRef(StringRef)> MapClassName2PassName);
+
+  static bool isRequired() { return true; }
 
 private:
   Options Opts;

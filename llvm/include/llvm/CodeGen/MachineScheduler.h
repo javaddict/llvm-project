@@ -82,7 +82,6 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachinePassRegistry.h"
 #include "llvm/CodeGen/RegisterPressure.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
@@ -118,7 +117,6 @@ enum Direction {
 
 LLVM_ABI extern cl::opt<MISched::Direction> PreRADirection;
 LLVM_ABI extern cl::opt<bool> VerifyScheduling;
-
 #ifndef NDEBUG
 extern cl::opt<bool> ViewMISchedDAGs;
 extern cl::opt<bool> PrintDAGs;
@@ -149,7 +147,6 @@ struct LLVM_ABI MachineSchedContext {
   const TargetMachine *TM = nullptr;
   AAResults *AA = nullptr;
   LiveIntervals *LIS = nullptr;
-  MachineBlockFrequencyInfo *MBFI = nullptr;
 
   RegisterClassInfo *RegClassInfo;
 
@@ -218,9 +215,6 @@ struct MachineSchedPolicy {
   // Compute DFSResult for use in scheduling heuristics.
   bool ComputeDFSResult = false;
 
-  // If enabled, some extra cases of physreg defs will be biased towards user.
-  bool BiasPRegsExtra = false;
-
   MachineSchedPolicy() = default;
 };
 
@@ -243,6 +237,9 @@ struct SchedRegion {
 /// MachineSchedStrategy - Interface to the scheduling algorithm used by
 /// ScheduleDAGMI.
 ///
+// Forward: used by MachineSchedStrategy::isAvailableNode (AIE peer).
+class SchedBoundary;
+
 /// Initialization sequence:
 ///   initPolicy -> shouldTrackPressure -> initialize(DAG) -> registerRoots
 class LLVM_ABI MachineSchedStrategy {
@@ -305,6 +302,12 @@ public:
   /// When all successor dependencies have been resolved, free this node for
   /// bottom-up scheduling.
   virtual void releaseBottomNode(SUnit *SU) = 0;
+
+  /// Whether \p SU can enter the Available queue of \p Zone.
+  /// Default: ready-cycle (if VerifyReadyCycle) + !Zone.checkHazard.
+  /// Targets may delay pressure-worsening nodes (AIE isAvailableNode peer).
+  virtual bool isAvailableNode(SUnit &SU, SchedBoundary &Zone,
+                               bool VerifyReadyCycle);
 };
 
 /// ScheduleDAGMI is an implementation of ScheduleDAGInstrs that simply
@@ -315,7 +318,6 @@ class LLVM_ABI ScheduleDAGMI : public ScheduleDAGInstrs {
 protected:
   AAResults *AA;
   LiveIntervals *LIS;
-  MachineBlockFrequencyInfo *MBFI;
   std::unique_ptr<MachineSchedStrategy> SchedImpl;
 
   /// Ordered list of DAG postprocessing steps.
@@ -337,7 +339,7 @@ public:
   ScheduleDAGMI(MachineSchedContext *C, std::unique_ptr<MachineSchedStrategy> S,
                 bool RemoveKillFlags)
       : ScheduleDAGInstrs(*C->MF, C->MLI, RemoveKillFlags), AA(C->AA),
-        LIS(C->LIS), MBFI(C->MBFI), SchedImpl(std::move(S)) {}
+        LIS(C->LIS), SchedImpl(std::move(S)) {}
 
   // Provide a vtable anchor
   ~ScheduleDAGMI() override;
@@ -870,6 +872,8 @@ public:
   };
 
   ScheduleDAGMI *DAG = nullptr;
+  /// Strategy that owns this boundary (AIE dual-sched: isAvailableNode).
+  MachineSchedStrategy *SchedImpl = nullptr;
   const TargetSchedModel *SchedModel = nullptr;
   SchedRemainder *Rem = nullptr;
 
@@ -981,8 +985,8 @@ public:
 
   LLVM_ABI void reset();
 
-  LLVM_ABI void init(ScheduleDAGMI *dag, const TargetSchedModel *smodel,
-                     SchedRemainder *rem);
+  LLVM_ABI void init(ScheduleDAGMI *dag, MachineSchedStrategy *simpl,
+                     const TargetSchedModel *smodel, SchedRemainder *rem);
 
   bool isTop() const {
     return Available.getID() == TopQID;
@@ -1236,7 +1240,6 @@ private:
 };
 
 // Utility functions used by heuristics in tryCandidate().
-LLVM_ABI unsigned computeRemLatency(SchedBoundary &CurrZone);
 LLVM_ABI bool tryLess(int TryVal, int CandVal,
                       GenericSchedulerBase::SchedCandidate &TryCand,
                       GenericSchedulerBase::SchedCandidate &Cand,
@@ -1255,12 +1258,8 @@ LLVM_ABI bool tryPressure(const PressureChange &TryP,
                           GenericSchedulerBase::CandReason Reason,
                           const TargetRegisterInfo *TRI,
                           const MachineFunction &MF);
-LLVM_ABI bool tryBiasPhysRegs(GenericSchedulerBase::SchedCandidate &TryCand,
-                              GenericSchedulerBase::SchedCandidate &Cand,
-                              SchedBoundary *Zone, bool BiasPRegsExtra);
 LLVM_ABI unsigned getWeakLeft(const SUnit *SU, bool isTop);
-LLVM_ABI int biasPhysReg(const SUnit *SU, bool isTop,
-                         bool BiasPRegsExtra = false);
+LLVM_ABI int biasPhysReg(const SUnit *SU, bool isTop);
 
 /// GenericScheduler shrinks the unscheduled zone using heuristics to balance
 /// the schedule.
@@ -1440,18 +1439,29 @@ ScheduleDAGMILive *createSchedLive(MachineSchedContext *C) {
   // data and pass it to later mutations. Have a single mutation that gathers
   // the interesting nodes in one pass.
   DAG->addMutation(createCopyConstrainDAGMutation(DAG->TII, DAG->TRI));
+
+  const TargetSubtargetInfo &STI = C->MF->getSubtarget();
+  // Add MacroFusion mutation if fusions are not empty.
+  const auto &MacroFusions = STI.getMacroFusions();
+  if (!MacroFusions.empty())
+    DAG->addMutation(createMacroFusionDAGMutation(MacroFusions));
   return DAG;
 }
 
 /// Create a generic scheduler with no vreg liveness or DAG mutation passes.
 template <typename Strategy = PostGenericScheduler>
 ScheduleDAGMI *createSchedPostRA(MachineSchedContext *C) {
-  return new ScheduleDAGMI(C, std::make_unique<Strategy>(C),
-                           /*RemoveKillFlags=*/true);
+  ScheduleDAGMI *DAG = new ScheduleDAGMI(C, std::make_unique<Strategy>(C),
+                                         /*RemoveKillFlags=*/true);
+  const TargetSubtargetInfo &STI = C->MF->getSubtarget();
+  // Add MacroFusion mutation if fusions are not empty.
+  const auto &MacroFusions = STI.getMacroFusions();
+  if (!MacroFusions.empty())
+    DAG->addMutation(createMacroFusionDAGMutation(MacroFusions));
+  return DAG;
 }
 
-class MachineSchedulerPass
-    : public OptionalPassInfoMixin<MachineSchedulerPass> {
+class MachineSchedulerPass : public PassInfoMixin<MachineSchedulerPass> {
   // FIXME: Remove this member once RegisterClassInfo is queryable as an
   // analysis.
   std::unique_ptr<impl_detail::MachineSchedulerImpl> Impl;
@@ -1466,7 +1476,7 @@ public:
 };
 
 class PostMachineSchedulerPass
-    : public OptionalPassInfoMixin<PostMachineSchedulerPass> {
+    : public PassInfoMixin<PostMachineSchedulerPass> {
   // FIXME: Remove this member once RegisterClassInfo is queryable as an
   // analysis.
   std::unique_ptr<impl_detail::PostMachineSchedulerImpl> Impl;

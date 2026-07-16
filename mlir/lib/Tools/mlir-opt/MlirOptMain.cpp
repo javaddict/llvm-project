@@ -94,11 +94,6 @@ struct MlirOptMainConfigCLOptions : public MlirOptMainConfig {
         cl::desc("Elide resources when generating bytecode"),
         cl::location(elideResourceDataFromBytecodeFlag), cl::init(false));
 
-    static cl::opt<std::string, /*ExternalStorage=*/true> emitBytecodeProducer(
-        "emit-bytecode-producer",
-        cl::desc("Use specified producer when generating bytecode output"),
-        cl::location(emitBytecodeProducerFlag), cl::init(""));
-
     static cl::opt<std::optional<int64_t>, /*ExternalStorage=*/true,
                    BytecodeVersionParser>
         bytecodeVersion(
@@ -607,10 +602,7 @@ performActions(raw_ostream &os,
   // Print the output.
   TimingScope outputTiming = timing.nest("Output");
   if (config.shouldEmitBytecode()) {
-    std::optional<StringRef> producer = config.bytecodeProducerToEmit();
-    BytecodeWriterConfig writerConfig =
-        producer ? BytecodeWriterConfig(fallbackResourceMap, producer.value())
-                 : BytecodeWriterConfig(fallbackResourceMap);
+    BytecodeWriterConfig writerConfig(fallbackResourceMap);
     if (auto v = config.bytecodeVersionToEmit())
       writerConfig.setDesiredBytecodeVersion(*v);
     if (config.shouldElideResourceDataFromBytecode())
@@ -621,13 +613,8 @@ performActions(raw_ostream &os,
   if (config.bytecodeVersionToEmit().has_value())
     return emitError(UnknownLoc::get(pm.getContext()))
            << "bytecode version while not emitting bytecode";
-
-  // Don't re-run the verifier if we already ran the verifier at the end of the
-  // pass pipeline.
-  AsmState asmState(op.get(),
-                    OpPrintingFlags().assumeVerified(
-                        config.shouldVerifyPasses() && !pm.empty()),
-                    /*locationMap=*/nullptr, &fallbackResourceMap);
+  AsmState asmState(op.get(), OpPrintingFlags(), /*locationMap=*/nullptr,
+                    &fallbackResourceMap);
   os << OpWithState(op.get(), asmState) << '\n';
 
   // This is required if the remark policy is final. Otherwise, the remarks are
@@ -707,7 +694,7 @@ std::string mlir::registerCLIOptions(llvm::StringRef toolName,
   std::string helpHeader = (toolName + "\nAvailable Dialects: ").str();
   {
     llvm::raw_string_ostream os(helpHeader);
-    interleaveComma(registry.getRegisteredDialectNames(), os,
+    interleaveComma(registry.getDialectNames(), os,
                     [&](auto name) { os << name; });
   }
   return helpHeader;
@@ -735,7 +722,7 @@ mlir::registerAndParseCLIOptions(int argc, char **argv,
 
 static LogicalResult printRegisteredDialects(DialectRegistry &registry) {
   llvm::outs() << "Available Dialects: ";
-  interleave(registry.getRegisteredDialectNames(), llvm::outs(), ",");
+  interleave(registry.getDialectNames(), llvm::outs(), ",");
   llvm::outs() << "\n";
   return success();
 }

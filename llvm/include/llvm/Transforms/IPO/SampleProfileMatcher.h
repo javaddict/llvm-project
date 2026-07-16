@@ -14,7 +14,6 @@
 #ifndef LLVM_TRANSFORMS_IPO_SAMPLEPROFILEMATCHER_H
 #define LLVM_TRANSFORMS_IPO_SAMPLEPROFILEMATCHER_H
 
-#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Transforms/Utils/SampleProfileLoaderBaseImpl.h"
 
@@ -77,7 +76,7 @@ class SampleProfileMatcher {
   // The new functions found by the call graph matching. The map's key is the
   // the new(renamed) function pointer and the value is old(unused) profile
   // name.
-  MapVector<Function *, FunctionId> FuncToProfileNameMap;
+  std::unordered_map<Function *, FunctionId> FuncToProfileNameMap;
 
   // A map pointer to the FuncNameToProfNameMap in SampleProfileLoader,
   // which maps the function name to the matched profile name. This is used
@@ -130,7 +129,7 @@ public:
       : M(M), Reader(Reader), CG(CG), ProbeManager(ProbeManager),
         LTOPhase(LTOPhase), FuncNameToProfNameMap(&FuncNameToProfNameMap),
         SymbolMap(&SymMap), PSL(PSL) {};
-  LLVM_ABI void runOnModule();
+  void runOnModule();
   void clearMatchingData() {
     // Do not clear FuncMappings, it stores IRLoc to ProfLoc remappings which
     // will be used for sample loader.
@@ -203,8 +202,8 @@ private:
   void computeAndReportProfileStaleness();
   void UpdateWithSalvagedProfiles();
 
-  LocToLocMap &getIRToProfileLocationMap(const FunctionSamples &FS) {
-    return FuncMappings[FS.getFuncName()];
+  LocToLocMap &getIRToProfileLocationMap(const Function &F) {
+    return FuncMappings[FunctionSamples::getCanonicalFnName(F.getName())];
   }
   void distributeIRToProfileLocationMap();
   void distributeIRToProfileLocationMap(FunctionSamples &FS);
@@ -239,9 +238,6 @@ private:
   // which are supposed to be new functions. We use them as the targets for
   // call graph matching.
   void findFunctionsWithoutProfile();
-  // Match orphan IR functions to unused top-level profile entries by demangled
-  // basename, without requiring a matched caller in the call graph.
-  void matchFunctionsWithoutProfileByBasename();
   void reportOrPersistProfileStats();
 };
 } // end namespace llvm

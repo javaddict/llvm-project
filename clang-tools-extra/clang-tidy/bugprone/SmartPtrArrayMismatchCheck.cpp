@@ -89,7 +89,7 @@ void SmartPtrArrayMismatchCheck::check(const MatchFinder::MatchResult &Result) {
   if (VarOrField) {
     auto TSTypeLoc = VarOrField->getTypeSourceInfo()
                          ->getTypeLoc()
-                         .getAsAdjusted<TemplateSpecializationTypeLoc>();
+                         .getAsAdjusted<clang::TemplateSpecializationTypeLoc>();
     assert(TSTypeLoc.getNumArgs() >= 1 &&
            "Matched type should have at least 1 template argument.");
 

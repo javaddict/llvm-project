@@ -490,11 +490,8 @@ def FunctionOpInterface : OpInterface<"FunctionOpInterface", [
     }
 
     /// Return an ArrayAttr containing all result attribute dictionaries of this
-    /// function, or nullptr if no results have attributes.
-    ::mlir::ArrayAttr getAllResultAttrs() {
-      auto attrs = $_op.getResAttrsAttr();
-      return attrs && !attrs.empty() ? attrs : nullptr;
-    }
+    /// function, or nullptr if no result have attributes.
+    ::mlir::ArrayAttr getAllResultAttrs() { return $_op.getResAttrsAttr(); }
 
     /// Return all result attributes of this function.
     void getAllResultAttrs(::llvm::SmallVectorImpl<::mlir::DictionaryAttr> &result) {

@@ -1,16 +1,15 @@
-; RUN: opt -passes=loop-vectorize -mtriple=aarch64 -force-vector-width=4 -force-vector-interleave=1 %s -S | FileCheck %s --check-prefixes=CHECK,CHECK-LE
-; RUN: opt -passes=loop-vectorize -mtriple=aarch64_be -force-vector-width=4 -force-vector-interleave=1 %s -S | FileCheck %s --check-prefixes=CHECK,CHECK-BE
+; RUN: opt -passes=loop-vectorize -mtriple=arm64-apple-iphones -force-vector-width=4 -force-vector-interleave=1 %s -S | FileCheck %s
 
 ; Vectors with i4 elements may not legal with nontemporal stores.
 define void @test_i4_store(ptr %ddst) {
 ; CHECK-LABEL: define void @test_i4_store(
 ; CHECK-NOT:   vector.body:
-; CHECK:        store i4 {{.*}} !nontemporal !0
 ; CHECK:        ret void
+;
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %i = phi i32 [ 0, %entry ], [ %add, %for.body ]
   %ddst.addr = phi ptr [ %ddst, %entry ], [ %incdec.ptr, %for.body ]
   %incdec.ptr = getelementptr inbounds i4, ptr %ddst.addr, i64 1
@@ -19,24 +18,20 @@ for.body:
   %cmp = icmp ult i32 %i, 4092
   br i1 %cmp, label %for.body, label %for.cond.cleanup
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret void
 }
 
 define void @test_i8_store(ptr %ddst) {
-; CHECK-LE-LABEL: define void @test_i8_store(
-; CHECK-LE-LABEL: vector.body:
-; CHECK-LE:         store <4 x i8> {{.*}} !nontemporal !0
-; CHECK-LE:         br
+; CHECK-LABEL: define void @test_i8_store(
+; CHECK-LABEL: vector.body:
+; CHECK:         store <4 x i8> {{.*}} !nontemporal !0
+; CHECK:         br
 ;
-; CHECK-BE-LABEL: define void @test_i8_store(
-; CHECK-BE-NOT: vector.body:
-; CHECK-BE:        store i8 {{.*}} !nontemporal !0
-; CHECK-BE:         br
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %i = phi i32 [ 0, %entry ], [ %add, %for.body ]
   %ddst.addr = phi ptr [ %ddst, %entry ], [ %incdec.ptr, %for.body ]
   %incdec.ptr = getelementptr inbounds i8, ptr %ddst.addr, i64 1
@@ -45,24 +40,20 @@ for.body:
   %cmp = icmp ult i32 %i, 4092
   br i1 %cmp, label %for.body, label %for.cond.cleanup
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret void
 }
 
 define void @test_half_store(ptr %ddst) {
-; CHECK-LE-LABEL: define void @test_half_store(
-; CHECK-LE-LABEL: vector.body:
-; CHECK-LE:         store <4 x half> {{.*}} !nontemporal !0
-; CHECK-LE:         br
+; CHECK-LABEL: define void @test_half_store(
+; CHECK-LABEL: vector.body:
+; CHECK:         store <4 x half> {{.*}} !nontemporal !0
+; CHECK:         br
 ;
-; CHECK-BE-LABEL: define void @test_half_store(
-; CHECK-BE-NOT: vector.body:
-; CHECK-BE:         store half {{.*}} !nontemporal !0
-; CHECK-BE:         br
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %i = phi i32 [ 0, %entry ], [ %add, %for.body ]
   %ddst.addr = phi ptr [ %ddst, %entry ], [ %incdec.ptr, %for.body ]
   %incdec.ptr = getelementptr inbounds half, ptr %ddst.addr, i64 1
@@ -71,24 +62,20 @@ for.body:
   %cmp = icmp ult i32 %i, 4092
   br i1 %cmp, label %for.body, label %for.cond.cleanup
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret void
 }
 
 define void @test_i16_store(ptr %ddst) {
-; CHECK-LE-LABEL: define void @test_i16_store(
-; CHECK-LE-LABEL: vector.body:
-; CHECK-LE:         store <4 x i16> {{.*}} !nontemporal !0
-; CHECK-LE:         br
+; CHECK-LABEL: define void @test_i16_store(
+; CHECK-LABEL: vector.body:
+; CHECK:         store <4 x i16> {{.*}} !nontemporal !0
+; CHECK:         br
 ;
-; CHECK-BE-LABEL: define void @test_i16_store(
-; CHECK-BE-NOT: vector.body:
-; CHECK-BE:         store i16 {{.*}} !nontemporal !0
-; CHECK-BE:         br
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %i = phi i32 [ 0, %entry ], [ %add, %for.body ]
   %ddst.addr = phi ptr [ %ddst, %entry ], [ %incdec.ptr, %for.body ]
   %incdec.ptr = getelementptr inbounds i16, ptr %ddst.addr, i64 1
@@ -97,24 +84,20 @@ for.body:
   %cmp = icmp ult i32 %i, 4092
   br i1 %cmp, label %for.body, label %for.cond.cleanup
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret void
 }
 
 define void @test_i32_store(ptr nocapture %ddst) {
-; CHECK-LE-LABEL: define void @test_i32_store(
-; CHECK-LE-LABEL: vector.body:
-; CHECK-LE:         store <16 x i32> {{.*}} !nontemporal !0
-; CHECK-LE:         br
+; CHECK-LABEL: define void @test_i32_store(
+; CHECK-LABEL: vector.body:
+; CHECK:         store <16 x i32> {{.*}} !nontemporal !0
+; CHECK:         br
 ;
-; CHECK-BE-LABEL: define void @test_i32_store(
-; CHECK-BE-NOT: vector.body:
-; CHECK-BE:         store i32 {{.*}} !nontemporal !0
-; CHECK-BE:         br
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %i = phi i32 [ 0, %entry ], [ %add, %for.body ]
   %ddst.addr = phi ptr [ %ddst, %entry ], [ %incdec.ptr3, %for.body ]
   %incdec.ptr = getelementptr inbounds i32, ptr %ddst.addr, i64 1
@@ -129,7 +112,7 @@ for.body:
   %cmp = icmp ult i32 %i, 4092
   br i1 %cmp, label %for.body, label %for.cond.cleanup
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret void
 }
 
@@ -137,10 +120,11 @@ define void @test_i33_store(ptr nocapture %ddst) {
 ; CHECK-LABEL: define void @test_i33_store(
 ; CHECK-NOT:   vector.body:
 ; CHECK:         ret
+;
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %i = phi i32 [ 0, %entry ], [ %add, %for.body ]
   %ddst.addr = phi ptr [ %ddst, %entry ], [ %incdec.ptr3, %for.body ]
   %incdec.ptr = getelementptr inbounds i33, ptr %ddst.addr, i64 1
@@ -155,7 +139,7 @@ for.body:
   %cmp = icmp ult i32 %i, 4092
   br i1 %cmp, label %for.body, label %for.cond.cleanup
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret void
 }
 
@@ -163,10 +147,11 @@ define void @test_i40_store(ptr nocapture %ddst) {
 ; CHECK-LABEL: define void @test_i40_store(
 ; CHECK-NOT:   vector.body:
 ; CHECK:         ret
+;
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %i = phi i32 [ 0, %entry ], [ %add, %for.body ]
   %ddst.addr = phi ptr [ %ddst, %entry ], [ %incdec.ptr3, %for.body ]
   %incdec.ptr = getelementptr inbounds i40, ptr %ddst.addr, i64 1
@@ -181,23 +166,19 @@ for.body:
   %cmp = icmp ult i32 %i, 4092
   br i1 %cmp, label %for.body, label %for.cond.cleanup
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret void
 }
-define void @test_i64_store(ptr nocapture %ddst) #0 {
-; CHECK-LE-LABEL: define void @test_i64_store(
-; CHECK-LE-LABEL: vector.body:
-; CHECK-LE:         store <4 x i64> {{.*}} !nontemporal !0
-; CHECK-LE:         br
+define void @test_i64_store(ptr nocapture %ddst) local_unnamed_addr #0 {
+; CHECK-LABEL: define void @test_i64_store(
+; CHECK-LABEL: vector.body:
+; CHECK:         store <4 x i64> {{.*}} !nontemporal !0
+; CHECK:         br
 ;
-; CHECK-BE-LABEL: define void @test_i64_store(
-; CHECK-BE-NOT: vector.body:
-; CHECK-BE:         store i64 {{.*}} !nontemporal !0
-; CHECK-BE:         br
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %i = phi i32 [ 0, %entry ], [ %add, %for.body ]
   %ddst.addr = phi ptr [ %ddst, %entry ], [ %incdec.ptr, %for.body ]
   %incdec.ptr = getelementptr inbounds i64, ptr %ddst.addr, i64 1
@@ -206,24 +187,20 @@ for.body:
   %cmp = icmp ult i32 %i, 4092
   br i1 %cmp, label %for.body, label %for.cond.cleanup
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret void
 }
 
 define void @test_double_store(ptr %ddst) {
-; CHECK-LE-LABEL: define void @test_double_store(
-; CHECK-LE-LABEL: vector.body:
-; CHECK-LE:         store <4 x double> {{.*}} !nontemporal !0
-; CHECK-LE:         br
+; CHECK-LABEL: define void @test_double_store(
+; CHECK-LABEL: vector.body:
+; CHECK:         store <4 x double> {{.*}} !nontemporal !0
+; CHECK:         br
 ;
-; CHECK-BE-LABEL: define void @test_double_store(
-; CHECK-BE-NOT: vector.body:
-; CHECK-BE:         store double {{.*}} !nontemporal !0
-; CHECK-BE:         br
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %i = phi i32 [ 0, %entry ], [ %add, %for.body ]
   %ddst.addr = phi ptr [ %ddst, %entry ], [ %incdec.ptr, %for.body ]
   %incdec.ptr = getelementptr inbounds double, ptr %ddst.addr, i64 1
@@ -232,24 +209,20 @@ for.body:
   %cmp = icmp ult i32 %i, 4092
   br i1 %cmp, label %for.body, label %for.cond.cleanup
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret void
 }
 
 define void @test_i128_store(ptr %ddst) {
-; CHECK-LE-LABEL: define void @test_i128_store(
-; CHECK-LE-LABEL: vector.body:
-; CHECK-LE:         store <4 x i128> {{.*}} !nontemporal !0
-; CHECK-LE:         br
+; CHECK-LABEL: define void @test_i128_store(
+; CHECK-LABEL: vector.body:
+; CHECK:         store <4 x i128> {{.*}} !nontemporal !0
+; CHECK:         br
 ;
-; CHECK-BE-LABEL: define void @test_i128_store(
-; CHECK-BE-NOT: vector.body:
-; CHECK-BE:         store i128 {{.*}} !nontemporal !0
-; CHECK-BE:         br
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %i = phi i32 [ 0, %entry ], [ %add, %for.body ]
   %ddst.addr = phi ptr [ %ddst, %entry ], [ %incdec.ptr, %for.body ]
   %incdec.ptr = getelementptr inbounds i128, ptr %ddst.addr, i64 1
@@ -258,7 +231,7 @@ for.body:
   %cmp = icmp ult i32 %i, 4092
   br i1 %cmp, label %for.body, label %for.cond.cleanup
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret void
 }
 
@@ -266,10 +239,11 @@ define void @test_i256_store(ptr %ddst) {
 ; CHECK-LABEL: define void @test_i256_store(
 ; CHECK-NOT:   vector.body:
 ; CHECK:        ret void
+;
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %i = phi i32 [ 0, %entry ], [ %add, %for.body ]
   %ddst.addr = phi ptr [ %ddst, %entry ], [ %incdec.ptr, %for.body ]
   %incdec.ptr = getelementptr inbounds i256, ptr %ddst.addr, i64 1
@@ -278,7 +252,7 @@ for.body:
   %cmp = icmp ult i32 %i, 4092
   br i1 %cmp, label %for.body, label %for.cond.cleanup
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret void
 }
 
@@ -286,10 +260,11 @@ define i4 @test_i4_load(ptr %ddst) {
 ; CHECK-LABEL: define i4 @test_i4_load
 ; CHECK-NOT: vector.body:
 ; CHECK: ret i4 %{{.*}}
+;
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
   %acc.08 = phi i4 [ 0, %entry ], [ %add, %for.body ]
   %arrayidx = getelementptr inbounds i4, ptr %ddst, i64 %indvars.iv
@@ -299,24 +274,20 @@ for.body:
   %exitcond.not = icmp eq i64 %indvars.iv.next, 4092
   br i1 %exitcond.not, label %for.cond.cleanup, label %for.body
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret i4 %add
 }
 
 define i8 @test_load_i8(ptr %ddst) {
-; CHECK-LE-LABEL: @test_load_i8(
-; CHECK-LE-LABEL:   vector.body:
-; CHECK-LE: load <4 x i8>, ptr {{.*}}, align 1, !nontemporal !0
-; CHECK-LE: ret i8 %{{.*}}
+; CHECK-LABEL: @test_load_i8(
+; CHECK:   vector.body:
+; CHECK: load <4 x i8>, ptr {{.*}}, align 1, !nontemporal !0
+; CHECK: ret i8 %{{.*}}
 ;
-; CHECK-BE-LABEL: @test_load_i8(
-; CHECK-BE-NOT:   vector.body:
-; CHECK-BE: load i8, ptr {{.*}}, align 1, !nontemporal !0
-; CHECK-BE: ret i8 %{{.*}}
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
   %acc.08 = phi i8 [ 0, %entry ], [ %add, %for.body ]
   %arrayidx = getelementptr inbounds i8, ptr %ddst, i64 %indvars.iv
@@ -326,24 +297,20 @@ for.body:
   %exitcond.not = icmp eq i64 %indvars.iv.next, 4092
   br i1 %exitcond.not, label %for.cond.cleanup, label %for.body
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret i8 %add
 }
 
 define half @test_half_load(ptr %ddst) {
-; CHECK-LE-LABEL: @test_half_load
-; CHECK-LE-LABEL:   vector.body:
-; CHECK-LE: load <4 x half>, ptr {{.*}}, align 2, !nontemporal !0
-; CHECK-LE: ret half %{{.*}}
+; CHECK-LABEL: @test_half_load
+; CHECK-LABEL:   vector.body:
+; CHECK: load <4 x half>, ptr {{.*}}, align 2, !nontemporal !0
+; CHECK: ret half %{{.*}}
 ;
-; CHECK-BE-LABEL: @test_half_load
-; CHECK-BE-NOT:   vector.body:
-; CHECK-BE: load half, ptr {{.*}}, align 2, !nontemporal !0
-; CHECK-BE: ret half %{{.*}}
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
   %acc.08 = phi half [ 0.0, %entry ], [ %add, %for.body ]
   %arrayidx = getelementptr inbounds half, ptr %ddst, i64 %indvars.iv
@@ -353,24 +320,20 @@ for.body:
   %exitcond.not = icmp eq i64 %indvars.iv.next, 4092
   br i1 %exitcond.not, label %for.cond.cleanup, label %for.body
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret half %add
 }
 
 define i16 @test_i16_load(ptr %ddst) {
-; CHECK-LE-LABEL: @test_i16_load
-; CHECK-LE-LABEL:   vector.body:
-; CHECK-LE: load <4 x i16>, ptr {{.*}}, align 2, !nontemporal !0
-; CHECK-LE: ret i16 %{{.*}}
+; CHECK-LABEL: @test_i16_load
+; CHECK-LABEL:   vector.body:
+; CHECK: load <4 x i16>, ptr {{.*}}, align 2, !nontemporal !0
+; CHECK: ret i16 %{{.*}}
 ;
-; CHECK-BE-LABEL: @test_i16_load
-; CHECK-BE-NOT:   vector.body:
-; CHECK-BE: load i16, ptr {{.*}}, align 2, !nontemporal !0
-; CHECK-BE: ret i16 %{{.*}}
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
   %acc.08 = phi i16 [ 0, %entry ], [ %add, %for.body ]
   %arrayidx = getelementptr inbounds i16, ptr %ddst, i64 %indvars.iv
@@ -380,24 +343,20 @@ for.body:
   %exitcond.not = icmp eq i64 %indvars.iv.next, 4092
   br i1 %exitcond.not, label %for.cond.cleanup, label %for.body
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret i16 %add
 }
 
 define i32 @test_i32_load(ptr %ddst) {
-; CHECK-LE-LABEL: @test_i32_load
-; CHECK-LE-LABEL:   vector.body:
-; CHECK-LE: load <4 x i32>, ptr {{.*}}, align 4, !nontemporal !0
-; CHECK-LE: ret i32 %{{.*}}
+; CHECK-LABEL: @test_i32_load
+; CHECK-LABEL:   vector.body:
+; CHECK: load <4 x i32>, ptr {{.*}}, align 4, !nontemporal !0
+; CHECK: ret i32 %{{.*}}
 ;
-; CHECK-BE-LABEL: @test_i32_load
-; CHECK-BE-NOT:   vector.body:
-; CHECK-BE: load i32, ptr {{.*}}, align 4, !nontemporal !0
-; CHECK-BE: ret i32 %{{.*}}
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
   %acc.08 = phi i32 [ 0, %entry ], [ %add, %for.body ]
   %arrayidx = getelementptr inbounds i32, ptr %ddst, i64 %indvars.iv
@@ -407,7 +366,7 @@ for.body:
   %exitcond.not = icmp eq i64 %indvars.iv.next, 4092
   br i1 %exitcond.not, label %for.cond.cleanup, label %for.body
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret i32 %add
 }
 
@@ -415,10 +374,11 @@ define i33 @test_i33_load(ptr %ddst) {
 ; CHECK-LABEL: @test_i33_load
 ; CHECK-NOT:   vector.body:
 ; CHECK: ret i33 %{{.*}}
+;
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
   %acc.08 = phi i33 [ 0, %entry ], [ %add, %for.body ]
   %arrayidx = getelementptr inbounds i33, ptr %ddst, i64 %indvars.iv
@@ -428,7 +388,7 @@ for.body:
   %exitcond.not = icmp eq i64 %indvars.iv.next, 4092
   br i1 %exitcond.not, label %for.cond.cleanup, label %for.body
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret i33 %add
 }
 
@@ -436,10 +396,11 @@ define i40 @test_i40_load(ptr %ddst) {
 ; CHECK-LABEL: @test_i40_load
 ; CHECK-NOT:   vector.body:
 ; CHECK: ret i40 %{{.*}}
+;
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
   %acc.08 = phi i40 [ 0, %entry ], [ %add, %for.body ]
   %arrayidx = getelementptr inbounds i40, ptr %ddst, i64 %indvars.iv
@@ -449,24 +410,20 @@ for.body:
   %exitcond.not = icmp eq i64 %indvars.iv.next, 4092
   br i1 %exitcond.not, label %for.cond.cleanup, label %for.body
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret i40 %add
 }
 
 define i64 @test_i64_load(ptr %ddst) {
-; CHECK-LE-LABEL: @test_i64_load
-; CHECK-LE-LABEL:   vector.body:
-; CHECK-LE: load <4 x i64>, ptr {{.*}}, align 4, !nontemporal !0
-; CHECK-LE: ret i64 %{{.*}}
+; CHECK-LABEL: @test_i64_load
+; CHECK-LABEL:   vector.body:
+; CHECK: load <4 x i64>, ptr {{.*}}, align 4, !nontemporal !0
+; CHECK: ret i64 %{{.*}}
 ;
-; CHECK-BE-LABEL: @test_i64_load
-; CHECK-BE-NOT:   vector.body:
-; CHECK-BE: load i64, ptr {{.*}}, align 4, !nontemporal !0
-; CHECK-BE: ret i64 %{{.*}}
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
   %acc.08 = phi i64 [ 0, %entry ], [ %add, %for.body ]
   %arrayidx = getelementptr inbounds i64, ptr %ddst, i64 %indvars.iv
@@ -476,24 +433,20 @@ for.body:
   %exitcond.not = icmp eq i64 %indvars.iv.next, 4092
   br i1 %exitcond.not, label %for.cond.cleanup, label %for.body
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret i64 %add
 }
 
 define double @test_double_load(ptr %ddst) {
-; CHECK-LE-LABEL: @test_double_load
-; CHECK-LE-LABEL:   vector.body:
-; CHECK-LE: load <4 x double>, ptr {{.*}}, align 4, !nontemporal !0
-; CHECK-LE: ret double %{{.*}}
+; CHECK-LABEL: @test_double_load
+; CHECK-LABEL:   vector.body:
+; CHECK: load <4 x double>, ptr {{.*}}, align 4, !nontemporal !0
+; CHECK: ret double %{{.*}}
 ;
-; CHECK-BE-LABEL: @test_double_load
-; CHECK-BE-NOT:   vector.body:
-; CHECK-BE: load double, ptr {{.*}}, align 4, !nontemporal !0
-; CHECK-BE: ret double %{{.*}}
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
   %acc.08 = phi double [ 0.0, %entry ], [ %add, %for.body ]
   %arrayidx = getelementptr inbounds double, ptr %ddst, i64 %indvars.iv
@@ -503,24 +456,20 @@ for.body:
   %exitcond.not = icmp eq i64 %indvars.iv.next, 4092
   br i1 %exitcond.not, label %for.cond.cleanup, label %for.body
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret double %add
 }
 
 define i128 @test_i128_load(ptr %ddst) {
-; CHECK-LE-LABEL: @test_i128_load
-; CHECK-LE-LABEL:   vector.body:
-; CHECK-LE: load <4 x i128>, ptr {{.*}}, align 4, !nontemporal !0
-; CHECK-LE: ret i128 %{{.*}}
+; CHECK-LABEL: @test_i128_load
+; CHECK-LABEL:   vector.body:
+; CHECK: load <4 x i128>, ptr {{.*}}, align 4, !nontemporal !0
+; CHECK: ret i128 %{{.*}}
 ;
-; CHECK-BE-LABEL: @test_i128_load
-; CHECK-BE-NOT:   vector.body:
-; CHECK-BE: load i128, ptr {{.*}}, align 4, !nontemporal !0
-; CHECK-BE: ret i128 %{{.*}}
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
   %acc.08 = phi i128 [ 0, %entry ], [ %add, %for.body ]
   %arrayidx = getelementptr inbounds i128, ptr %ddst, i64 %indvars.iv
@@ -530,7 +479,7 @@ for.body:
   %exitcond.not = icmp eq i64 %indvars.iv.next, 4092
   br i1 %exitcond.not, label %for.cond.cleanup, label %for.body
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret i128 %add
 }
 
@@ -538,10 +487,11 @@ define i256 @test_256_load(ptr %ddst) {
 ; CHECK-LABEL: @test_256_load
 ; CHECK-NOT:   vector.body:
 ; CHECK: ret i256 %{{.*}}
+;
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
   %acc.08 = phi i256 [ 0, %entry ], [ %add, %for.body ]
   %arrayidx = getelementptr inbounds i256, ptr %ddst, i64 %indvars.iv
@@ -551,7 +501,7 @@ for.body:
   %exitcond.not = icmp eq i64 %indvars.iv.next, 4092
   br i1 %exitcond.not, label %for.cond.cleanup, label %for.body
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.body
   ret i256 %add
 }
 

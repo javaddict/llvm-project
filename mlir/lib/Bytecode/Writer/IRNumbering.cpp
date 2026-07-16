@@ -13,7 +13,6 @@
 #include "mlir/Bytecode/Encoding.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinTypes.h"
-#include "mlir/IR/Location.h"
 #include "mlir/IR/OpDefinition.h"
 
 using namespace mlir;
@@ -51,7 +50,6 @@ struct IRNumberingState::NumberingDialectWriter : public DialectBytecodeWriter {
   }
   void writeOwnedBlob(ArrayRef<char> blob) override {}
   void writeOwnedBool(bool value) override {}
-  void writeUnownedBlob(ArrayRef<char> blob) override {}
 
   int64_t getBytecodeVersion() const override {
     return state.getDesiredBytecodeVersion();
@@ -199,13 +197,6 @@ IRNumberingState::IRNumberingState(Operation *op,
   finalizeDialectResourceNumberings(op);
 }
 
-unsigned IRNumberingState::getNumber(Location loc) {
-  if (config.shouldElideLocations()) {
-    return getNumber(Attribute(UnknownLoc::get(loc.getContext())));
-  }
-  return getNumber(Attribute(loc));
-}
-
 void IRNumberingState::computeGlobalNumberingState(Operation *rootOp) {
   // A simple state struct tracking data used when walking operations.
   struct StackState {
@@ -314,14 +305,6 @@ void IRNumberingState::computeGlobalNumberingState(Operation *rootOp) {
           op, numbering, !numbering->isIsolatedFromAbove.has_value()});
     }
   });
-}
-
-void IRNumberingState::number(Location loc) {
-  if (config.shouldElideLocations()) {
-    number(Attribute(UnknownLoc::get(loc.getContext())));
-  } else {
-    number(Attribute(loc));
-  }
 }
 
 void IRNumberingState::number(Attribute attr) {

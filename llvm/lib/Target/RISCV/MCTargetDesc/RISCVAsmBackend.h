@@ -41,8 +41,8 @@ public:
 
   std::optional<bool> evaluateFixup(const MCFragment &, MCFixup &, MCValue &,
                                     uint64_t &) override;
-  virtual bool addReloc(const MCFragment &, const MCFixup &, const MCValue &,
-                        uint64_t &FixedValue, bool IsResolved);
+  bool addReloc(const MCFragment &, const MCFixup &, const MCValue &,
+                uint64_t &FixedValue, bool IsResolved);
 
   void maybeAddVendorReloc(const MCFragment &, const MCFixup &);
 

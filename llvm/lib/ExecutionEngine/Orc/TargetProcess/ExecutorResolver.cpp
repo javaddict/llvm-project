@@ -9,7 +9,7 @@ namespace llvm::orc {
 void DylibSymbolResolver::resolveAsync(
     const RemoteSymbolLookupSet &L,
     ExecutorResolver::YieldResolveResultFn &&OnResolve) {
-  std::vector<std::optional<ExecutorAddr>> Result;
+  std::vector<std::optional<ExecutorSymbolDef>> Result;
   auto DL = sys::DynamicLibrary(Handle.toPtr<void *>());
 
   for (const auto &E : L) {
@@ -35,7 +35,9 @@ void DylibSymbolResolver::resolveAsync(
       if (!Addr && E.Required)
         Result.emplace_back();
       else
-        Result.emplace_back(ExecutorAddr::fromPtr(Addr));
+        // FIXME: determine accurate JITSymbolFlags.
+        Result.emplace_back(ExecutorSymbolDef(ExecutorAddr::fromPtr(Addr),
+                                              JITSymbolFlags::Exported));
     }
   }
 

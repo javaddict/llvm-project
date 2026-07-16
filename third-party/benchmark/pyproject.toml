@@ -1,33 +1,42 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "setuptools-scm[toml]", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "google_benchmark"
 description = "A library to benchmark code snippets."
-requires-python = ">=3.10"
-license = { file = "LICENSE" }
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
 keywords = ["benchmark"]
 
-authors = [{ name = "Google", email = "benchmark-discuss@googlegroups.com" }]
+authors = [
+    {name = "Google", email = "benchmark-discuss@googlegroups.com"},
+]
 
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Testing",
     "Topic :: System :: Benchmark",
 ]
 
 dynamic = ["readme", "version"]
 
-[dependency-groups]
-dev = ["pre-commit>=3.3.3"]
+dependencies = [
+    "absl-py>=0.7.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit>=3.3.3",
+]
 
 [project.urls]
 Homepage = "https://github.com/google/benchmark"
@@ -36,7 +45,7 @@ Repository = "https://github.com/google/benchmark.git"
 Discord = "https://discord.gg/cz7UX7wKC2"
 
 [tool.setuptools]
-package-dir = { "" = "bindings/python" }
+package-dir = {"" = "bindings/python"}
 zip-safe = false
 
 [tool.setuptools.packages.find]
@@ -44,7 +53,8 @@ where = ["bindings/python"]
 
 [tool.setuptools.dynamic]
 readme = { file = "README.md", content-type = "text/markdown" }
-version = { attr = "google_benchmark.__version__" }
+
+[tool.setuptools_scm]
 
 [tool.mypy]
 check_untyped_defs = true
@@ -65,13 +75,11 @@ src = ["bindings/python"]
 line-length = 80
 target-version = "py311"
 
-[tool.ruff.lint]
 # Enable pycodestyle (`E`, `W`), Pyflakes (`F`), and isort (`I`) codes by default.
-select = ["ASYNC", "B", "C4", "C90", "E", "F", "I", "PERF", "PIE", "PT018", "RUF", "SIM", "UP", "W"]
+select = ["E", "F", "I", "W"]
 ignore = [
-    "PLW2901",  # redefined-loop-name
-    "UP031",    # printf-string-formatting
+    "E501", # line too long
 ]
 
-[tool.ruff.lint.isort]
+[tool.ruff.isort]
 combine-as-imports = true

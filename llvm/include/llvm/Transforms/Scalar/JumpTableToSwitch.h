@@ -15,15 +15,14 @@ namespace llvm {
 
 class Function;
 
-class JumpTableToSwitchPass
-    : public OptionalPassInfoMixin<JumpTableToSwitchPass> {
+class JumpTableToSwitchPass : public PassInfoMixin<JumpTableToSwitchPass> {
   // Necessary until we switch to GUIDs as metadata, after which we can drop it.
   const bool InLTO;
 
 public:
   explicit JumpTableToSwitchPass(bool InLTO = false) : InLTO(InLTO) {}
   /// Run the pass over the function.
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 } // end namespace llvm
 

@@ -19,7 +19,7 @@
 
 namespace llvm::sandboxir {
 
-class LLVM_ABI TransactionAcceptOrRevert : public RegionPass {
+class TransactionAcceptOrRevert : public RegionPass {
 public:
   TransactionAcceptOrRevert() : RegionPass("tr-accept-or-revert") {}
   bool runOnRegion(Region &Rgn, const Analyses &A) final;

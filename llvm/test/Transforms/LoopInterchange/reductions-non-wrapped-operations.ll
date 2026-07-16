@@ -293,20 +293,17 @@ exit:
 }
 
 
-; Interchanging the loops with AnyOf reduction is not necessarily legal. In
-; this case it should be legal, but we conservatively reject it at the moment.
+; Check that interchanging the loops is legal for the any-of reduction.
 ;
 ; int any_of = 0;
 ; for (int i = 0; i < 2; i++)
 ;   for (int j = 0; j < 2; j++)
 ;     any_of = (A[j][i] == 42) ? 1 : any_of;
 
-; CHECK:      --- !Missed
+; CHECK:      --- !Pass
 ; CHECK-NEXT: Pass:            loop-interchange
-; CHECK-NEXT: Name:            UnsupportedPHIOuter
+; CHECK-NEXT: Name:            Interchanged
 ; CHECK-NEXT: Function:        reduction_anyof
-; CHECK-NEXT: Args:
-; CHECK-NEXT:  - String:         Only outer loops with induction or reduction PHI nodes
 define void @reduction_anyof(ptr %A) {
 entry:
   br label %for.i.header

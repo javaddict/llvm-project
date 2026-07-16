@@ -1,5 +1,4 @@
 ; RUN: llc -verify-machineinstrs -O0 -mtriple=spirv32-unknown-unknown %s -o - | FileCheck %s
-; RUN: %if spirv-tools %{ llc -O0 -mtriple=spirv32-unknown-unknown %s -o - -filetype=obj | spirv-val %}
 
 ; CHECK-DAG: %[[#I32:]] = OpTypeInt 32
 ; CHECK-DAG: %[[#I16:]] = OpTypeInt 16

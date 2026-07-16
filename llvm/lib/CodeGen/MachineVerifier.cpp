@@ -99,20 +99,6 @@ namespace {
 /// at one time.
 static ManagedStatic<sys::SmartMutex<true>> ReportedErrorsLock;
 
-static bool hasPhysRegClassForType(const TargetRegisterInfo &TRI,
-                                   MCRegister Reg, LLT Ty) {
-  assert(Reg.isPhysical() && "reg must be a physical register");
-  assert(Ty.isValid() && "expected a valid type");
-
-  const TargetRegisterClass *RC = TRI.getMinimalPhysRegClass(Reg);
-  if (TRI.isTypeLegalForClass(*RC, Ty))
-    return true;
-
-  return llvm::any_of(TRI.regclasses(), [&](const TargetRegisterClass *RC) {
-    return RC->contains(Reg) && TRI.isTypeLegalForClass(*RC, Ty);
-  });
-}
-
 struct MachineVerifier {
   MachineVerifier(MachineFunctionAnalysisManager &MFAM, const char *b,
                   raw_ostream *OS, bool AbortOnError = true)
@@ -380,7 +366,9 @@ struct MachineVerifierLegacyPass : public MachineFunctionPass {
   const std::string Banner;
 
   MachineVerifierLegacyPass(std::string banner = std::string())
-      : MachineFunctionPass(ID), Banner(std::move(banner)) {}
+      : MachineFunctionPass(ID), Banner(std::move(banner)) {
+    initializeMachineVerifierLegacyPassPass(*PassRegistry::getPassRegistry());
+  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addUsedIfAvailable<LiveStacksWrapperLegacy>();
@@ -783,12 +771,13 @@ MachineVerifier::visitMachineBasicBlockBefore(const MachineBasicBlock *MBB) {
     }
   }
 
-  const MCAsmInfo &AsmInfo = TM->getMCAsmInfo();
+  const MCAsmInfo *AsmInfo = TM->getMCAsmInfo();
   const BasicBlock *BB = MBB->getBasicBlock();
   const Function &F = MF->getFunction();
   if (LandingPadSuccs.size() > 1 &&
-      !(AsmInfo.getExceptionHandlingType() == ExceptionHandling::SjLj && BB &&
-        isa<SwitchInst>(BB->getTerminator())) &&
+      !(AsmInfo &&
+        AsmInfo->getExceptionHandlingType() == ExceptionHandling::SjLj &&
+        BB && isa<SwitchInst>(BB->getTerminator())) &&
       !isScopedEHPersonality(classifyEHPersonality(F.getPersonalityFn())))
     report("MBB has more than one landing pad successor", MBB);
 
@@ -1265,9 +1254,7 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
   case TargetOpcode::G_LOAD:
   case TargetOpcode::G_STORE:
   case TargetOpcode::G_ZEXTLOAD:
-  case TargetOpcode::G_SEXTLOAD:
-  case TargetOpcode::G_FPEXTLOAD:
-  case TargetOpcode::G_FPTRUNCSTORE: {
+  case TargetOpcode::G_SEXTLOAD: {
     LLT ValTy = MRI->getType(MI->getOperand(0).getReg());
     LLT PtrTy = MRI->getType(MI->getOperand(1).getReg());
     if (!PtrTy.isPointer())
@@ -1280,14 +1267,11 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
              MI);
     } else {
       const MachineMemOperand &MMO = **MI->memoperands_begin();
-      if (isa<GExtLoad>(*MI)) {
+      if (MI->getOpcode() == TargetOpcode::G_ZEXTLOAD ||
+          MI->getOpcode() == TargetOpcode::G_SEXTLOAD) {
         if (TypeSize::isKnownGE(MMO.getSizeInBits().getValue(),
                                 ValTy.getSizeInBits()))
           report("Generic extload must have a narrower memory type", MI);
-      } else if (isa<GFPTruncStore>(*MI)) {
-        if (TypeSize::isKnownGE(MMO.getSizeInBits().getValue(),
-                                ValTy.getSizeInBits()))
-          report("Generic truncstore must have a narrower memory type", MI);
       } else if (MI->getOpcode() == TargetOpcode::G_LOAD) {
         if (TypeSize::isKnownGT(MMO.getSize().getValue(),
                                 ValTy.getSizeInBytes()))
@@ -1312,7 +1296,7 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
       }
 
       const AtomicOrdering Order = MMO.getSuccessOrdering();
-      if (isa<GAnyStore>(*MI)) {
+      if (Opc == TargetOpcode::G_STORE) {
         if (Order == AtomicOrdering::Acquire ||
             Order == AtomicOrdering::AcquireRelease)
           report("atomic store cannot use acquire ordering", MI);
@@ -1354,18 +1338,7 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
     if (SrcTy.getSizeInBits() != DstTy.getSizeInBits())
       report("bitcast sizes must match", MI);
 
-    bool SameType = SrcTy.getKind() == DstTy.getKind();
-    if (SameType && SrcTy.isPointerOrPointerVector())
-      SameType &= SrcTy.getAddressSpace() == DstTy.getAddressSpace();
-
-    SameType &= SrcTy.getScalarSizeInBits() == DstTy.getScalarSizeInBits();
-
-    if (SameType && SrcTy.isVector())
-      SameType &= SrcTy.getElementCount() == DstTy.getElementCount();
-    if (SameType && SrcTy.isFloatOrFloatVector())
-      SameType &= SrcTy.getFpSemantics() == DstTy.getFpSemantics();
-
-    if (SameType)
+    if (SrcTy == DstTy)
       report("bitcast must change the type", MI);
 
     break;
@@ -1846,16 +1819,12 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
       break;
     }
 
-    if (!DstTy.isScalable() && Src1Ty.isScalable()) {
-      report("Cannot insert a scalable vector into a fixed length vector", MI);
+    if (Src1Ty.isScalable() != DstTy.isScalable()) {
+      report("Vector types must both be fixed or both be scalable", MI);
       break;
     }
 
-    bool IsMixedFixedIntoScalable =
-        DstTy.isScalableVector() && Src1Ty.isFixedVector();
-
-    if (!IsMixedFixedIntoScalable &&
-        ElementCount::isKnownGT(Src1Ty.getElementCount(),
+    if (ElementCount::isKnownGT(Src1Ty.getElementCount(),
                                 DstTy.getElementCount())) {
       report("Second source must be smaller than destination vector", MI);
       break;
@@ -1871,8 +1840,7 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
     }
 
     uint64_t DstMinLen = DstTy.getElementCount().getKnownMinValue();
-    if (Idx >= DstMinLen ||
-        (!IsMixedFixedIntoScalable && Idx + Src1MinLen > DstMinLen)) {
+    if (Idx >= DstMinLen || Idx + Src1MinLen > DstMinLen) {
       report("Subvector type and index must not cause insert to overrun the "
              "vector being inserted into",
              MI);
@@ -1912,8 +1880,8 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
       break;
     }
 
-    if (DstTy.isScalable() && !SrcTy.isScalable()) {
-      report("Cannot extract a scalable vector from a fixed length vector", MI);
+    if (SrcTy.isScalable() != DstTy.isScalable()) {
+      report("Vector types must both be fixed or both be scalable", MI);
       break;
     }
 
@@ -1932,11 +1900,8 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
       break;
     }
 
-    bool IsMixedFixedFromScalable =
-        DstTy.isFixedVector() && SrcTy.isScalableVector();
     uint64_t SrcMinLen = SrcTy.getElementCount().getKnownMinValue();
-    if (Idx >= SrcMinLen ||
-        (!IsMixedFixedFromScalable && Idx + DstMinLen > SrcMinLen)) {
+    if (Idx >= SrcMinLen || Idx + DstMinLen > SrcMinLen) {
       report("Destination type and index must not cause extract to overrun the "
              "source vector",
              MI);
@@ -2434,14 +2399,18 @@ void MachineVerifier::visitMachineInstrBefore(const MachineInstr *MI) {
     TypeSize SrcSize = TypeSize::getZero();
     TypeSize DstSize = TypeSize::getZero();
     if (SrcReg.isPhysical() && DstTy.isValid()) {
-      if (!hasPhysRegClassForType(*TRI, SrcReg, DstTy))
+      const TargetRegisterClass *SrcRC =
+          TRI->getMinimalPhysRegClassLLT(SrcReg, DstTy);
+      if (!SrcRC)
         SrcSize = TRI->getRegSizeInBits(SrcReg, *MRI);
     } else {
       SrcSize = TRI->getRegSizeInBits(SrcReg, *MRI);
     }
 
     if (DstReg.isPhysical() && SrcTy.isValid()) {
-      if (!hasPhysRegClassForType(*TRI, DstReg, SrcTy))
+      const TargetRegisterClass *DstRC =
+          TRI->getMinimalPhysRegClassLLT(DstReg, SrcTy);
+      if (!DstRC)
         DstSize = TRI->getRegSizeInBits(DstReg, *MRI);
     } else {
       DstSize = TRI->getRegSizeInBits(DstReg, *MRI);
@@ -2833,36 +2802,46 @@ MachineVerifier::visitMachineOperand(const MachineOperand *MO, unsigned MONum) {
 
         break;
       }
-      // Validate that SubIdx can be applied to the virtual register.
-      if (!TRI->isSubRegValidForRegClass(RC, SubIdx)) {
-        report("Invalid subregister index for virtual register", MO, MONum);
-        OS << "Register class " << TRI->getRegClassName(RC)
-           << " does not support subreg index "
-           << TRI->getSubRegIndexName(SubIdx) << '\n';
-        return;
+      if (SubIdx) {
+        const TargetRegisterClass *SRC =
+          TRI->getSubClassWithSubReg(RC, SubIdx);
+        if (!SRC) {
+          report("Invalid subregister index for virtual register", MO, MONum);
+          OS << "Register class " << TRI->getRegClassName(RC)
+             << " does not support subreg index "
+             << TRI->getSubRegIndexName(SubIdx) << '\n';
+          return;
+        }
+        if (RC != SRC) {
+          report("Invalid register class for subregister index", MO, MONum);
+          OS << "Register class " << TRI->getRegClassName(RC)
+             << " does not fully support subreg index "
+             << TRI->getSubRegIndexName(SubIdx) << '\n';
+          return;
+        }
       }
-      if (MONum >= MCID.getNumOperands())
-        break;
-      const TargetRegisterClass *DRC = TII->getRegClass(MCID, MONum);
-      if (!DRC)
-        break;
-
-      // If SubIdx is used, verify that RC with SubIdx can be used for an
-      // operand of class DRC. This is valid if for every register in RC, the
-      // register obtained by applying SubIdx to it is in DRC.
-      if (SubIdx && TRI->getMatchingSuperRegClass(RC, DRC, SubIdx) != RC) {
-        report("Illegal virtual register for instruction", MO, MONum);
-        OS << TRI->getRegClassName(RC) << "." << TRI->getSubRegIndexName(SubIdx)
-           << " cannot be used for " << TRI->getRegClassName(DRC)
-           << " operands.";
-      }
-
-      // If no SubIdx is used, verify that RC is a sub-class of DRC.
-      if (!SubIdx && !RC->hasSuperClassEq(DRC)) {
-        report("Illegal virtual register for instruction", MO, MONum);
-        OS << "Expected a " << TRI->getRegClassName(DRC)
-           << " register, but got a " << TRI->getRegClassName(RC)
-           << " register\n";
+      if (MONum < MCID.getNumOperands()) {
+        if (const TargetRegisterClass *DRC = TII->getRegClass(MCID, MONum)) {
+          if (SubIdx) {
+            const TargetRegisterClass *SuperRC =
+                TRI->getLargestLegalSuperClass(RC, *MF);
+            if (!SuperRC) {
+              report("No largest legal super class exists.", MO, MONum);
+              return;
+            }
+            DRC = TRI->getMatchingSuperRegClass(SuperRC, DRC, SubIdx);
+            if (!DRC) {
+              report("No matching super-reg register class.", MO, MONum);
+              return;
+            }
+          }
+          if (!RC->hasSuperClassEq(DRC)) {
+            report("Illegal virtual register for instruction", MO, MONum);
+            OS << "Expected a " << TRI->getRegClassName(DRC)
+               << " register, but got a " << TRI->getRegClassName(RC)
+               << " register\n";
+          }
+        }
       }
     }
     break;
@@ -2884,32 +2863,34 @@ MachineVerifier::visitMachineOperand(const MachineOperand *MO, unsigned MONum) {
       LiveInterval &LI = LiveStks->getInterval(FI);
       SlotIndex Idx = LiveInts->getInstructionIndex(*MI);
 
-      bool MayStore = MI->mayStore();
-      bool MayLoad = MI->mayLoad();
+      bool stores = MI->mayStore();
+      bool loads = MI->mayLoad();
       // For a memory-to-memory move, we need to check if the frame
       // index is used for storing or loading, by inspecting the
       // memory operands.
-      if (MayStore && MayLoad) {
-        for (const MachineMemOperand *MMO : MI->memoperands()) {
-          const auto *Value = dyn_cast_if_present<FixedStackPseudoSourceValue>(
-              MMO->getPseudoValue());
-          if (!Value || Value->getFrameIndex() != FI)
-            continue;
+      if (stores && loads) {
+        for (auto *MMO : MI->memoperands()) {
+          const PseudoSourceValue *PSV = MMO->getPseudoValue();
+          if (PSV == nullptr) continue;
+          const FixedStackPseudoSourceValue *Value =
+            dyn_cast<FixedStackPseudoSourceValue>(PSV);
+          if (Value == nullptr) continue;
+          if (Value->getFrameIndex() != FI) continue;
 
           if (MMO->isStore())
-            MayLoad = false;
+            loads = false;
           else
-            MayStore = false;
+            stores = false;
           break;
         }
-        if (MayLoad == MayStore)
+        if (loads == stores)
           report("Missing fixed stack memoperand.", MI);
       }
-      if (MayLoad && !LI.liveAt(Idx.getRegSlot(true))) {
+      if (loads && !LI.liveAt(Idx.getRegSlot(true))) {
         report("Instruction loads from dead spill slot", MO, MONum);
         OS << "Live stack: " << LI << '\n';
       }
-      if (MayStore && !LI.liveAt(Idx.getRegSlot())) {
+      if (stores && !LI.liveAt(Idx.getRegSlot())) {
         report("Instruction stores to dead spill slot", MO, MONum);
         OS << "Live stack: " << LI << '\n';
       }
@@ -3173,12 +3154,9 @@ void MachineVerifier::checkLiveness(const MachineOperand *MO, unsigned MONum) {
       addRegWithSubRegs(regsDefined, Reg);
 
     // Verify SSA form.
-    if (MRI->isSSA() && Reg.isVirtual()) {
-      if (!MRI->hasOneDef(Reg))
-        report("Multiple virtual register defs in SSA form", MO, MONum);
-      if (MO->getSubReg())
-        report("Subreg def in SSA form", MO, MONum);
-    }
+    if (MRI->isSSA() && Reg.isVirtual() &&
+        std::next(MRI->def_begin(Reg)) != MRI->def_end())
+      report("Multiple virtual register defs in SSA form", MO, MONum);
 
     // Check LiveInts for a live segment, but only for virtual registers.
     if (LiveInts && !LiveInts->isNotInMIMap(*MI)) {

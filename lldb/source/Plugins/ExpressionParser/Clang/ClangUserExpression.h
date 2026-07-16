@@ -71,8 +71,8 @@ public:
 
     void ResetDeclMap(ExecutionContext &exe_ctx,
                       Materializer::PersistentVariableDelegate &result_delegate,
-                      bool keep_result_in_memory, ValueObject *ctx_obj,
-                      bool ignore_context_qualifiers);
+                      bool keep_result_in_memory,
+                      ValueObject *ctx_obj);
 
     /// Return the object that the parser should allow to access ASTs. May be
     /// NULL if the ASTs do not need to be transformed.
@@ -166,9 +166,9 @@ public:
   void ResetDeclMap(ExecutionContext &exe_ctx,
                     Materializer::PersistentVariableDelegate &result_delegate,
                     bool keep_result_in_memory) {
-    m_type_system_helper.ResetDeclMap(
-        exe_ctx, result_delegate, keep_result_in_memory, m_ctx_obj,
-        m_options.GetCppIgnoreContextQualifiers());
+    m_type_system_helper.ResetDeclMap(exe_ctx, result_delegate,
+                                      keep_result_in_memory,
+                                      m_ctx_obj);
   }
 
   lldb::ExpressionVariableSP
@@ -178,10 +178,6 @@ public:
   bool DidImportCxxModules() const { return !m_imported_cpp_modules.empty(); }
 
   llvm::StringRef GetFilename() const { return m_filename; }
-
-protected:
-  void FixupParseErrorDiagnostics(
-      DiagnosticManager &diagnostic_manager) const override;
 
 private:
   /// Populate m_in_cplusplus_method and m_in_objectivec_method based on the
@@ -197,8 +193,8 @@ private:
 
   void SetupCppModuleImports(ExecutionContext &exe_ctx);
 
-  void ScanContext(DiagnosticManager &diagnostic_manager,
-                   ExecutionContext &exe_ctx);
+  void ScanContext(ExecutionContext &exe_ctx,
+                   lldb_private::Status &err) override;
 
   bool AddArguments(ExecutionContext &exe_ctx, std::vector<lldb::addr_t> &args,
                     lldb::addr_t struct_address,
@@ -211,12 +207,6 @@ private:
 
   lldb::addr_t GetCppObjectPointer(lldb::StackFrameSP frame,
                                    llvm::StringRef object_name, Status &err);
-
-  void
-  FixupCVRParseErrorDiagnostics(DiagnosticManager &diagnostic_manager) const;
-
-  void
-  FixupTemplateLookupDiagnostics(DiagnosticManager &diagnostic_manager) const;
 
   /// Defines how the current expression should be wrapped.
   ClangExpressionSourceCode::WrapKind GetWrapKind() const;

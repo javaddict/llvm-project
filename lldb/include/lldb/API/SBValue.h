@@ -82,8 +82,6 @@ public:
 
   const char *GetObjectDescription();
 
-  lldb::SBValue GetParent();
-
   lldb::SBValue GetDynamicValue(lldb::DynamicValueType use_dynamic);
 
   lldb::SBValue GetStaticValue();

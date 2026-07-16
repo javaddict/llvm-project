@@ -260,8 +260,7 @@ struct PreorderVisitor : public RecursiveASTVisitor<PreorderVisitor> {
 
 SyntaxTree::Impl::Impl(SyntaxTree *Parent, ASTContext &AST)
     : Parent(Parent), AST(AST), TypePP(AST.getLangOpts()) {
-  TypePP.AnonymousTagNameStyle =
-      llvm::to_underlying(PrintingPolicy::AnonymousTagMode::Plain);
+  TypePP.AnonymousTagLocations = false;
 }
 
 SyntaxTree::Impl::Impl(SyntaxTree *Parent, Decl *N, ASTContext &AST)

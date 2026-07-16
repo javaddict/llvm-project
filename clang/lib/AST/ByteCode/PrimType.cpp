@@ -8,7 +8,6 @@
 
 #include "PrimType.h"
 #include "Boolean.h"
-#include "Char.h"
 #include "FixedPoint.h"
 #include "Floating.h"
 #include "IntegralAP.h"

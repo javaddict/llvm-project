@@ -42,8 +42,6 @@ public:
 
   iterator end() { return FuncToRsMap.end(); }
 
-  bool empty() const { return FuncToRsMap.empty(); }
-
   mcdxbc::RootSignatureDesc *getDescForFunction(const Function *F) {
     const auto FuncRs = find(F);
     if (FuncRs == end())
@@ -85,7 +83,7 @@ public:
 
 /// Printer pass for RootSignatureAnalysis results.
 class RootSignatureAnalysisPrinter
-    : public OptionalPassInfoMixin<RootSignatureAnalysisPrinter> {
+    : public PassInfoMixin<RootSignatureAnalysisPrinter> {
   raw_ostream &OS;
 
 public:

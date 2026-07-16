@@ -79,7 +79,9 @@ class MachineCombiner : public MachineFunctionPass {
 
 public:
   static char ID;
-  MachineCombiner() : MachineFunctionPass(ID) {}
+  MachineCombiner() : MachineFunctionPass(ID) {
+    initializeMachineCombinerPass(*PassRegistry::getPassRegistry());
+  }
   void getAnalysisUsage(AnalysisUsage &AU) const override;
   bool runOnMachineFunction(MachineFunction &MF) override;
   StringRef getPassName() const override { return "Machine InstCombiner"; }
@@ -116,6 +118,8 @@ private:
                                 SmallVectorImpl<MachineInstr *> &DelInstrs,
                                 MachineTraceMetrics::Trace BlockTrace);
 
+  void verifyPatternOrder(MachineBasicBlock *MBB, MachineInstr &Root,
+                          SmallVector<unsigned, 16> &Patterns);
   CombinerObjective getCombinerObjective(unsigned Pattern);
 };
 }
@@ -213,7 +217,8 @@ MachineCombiner::getDepth(SmallVectorImpl<MachineInstr *> &InsInstrs,
         continue;
       unsigned DepthOp = 0;
       unsigned LatencyOp = 0;
-      auto II = InstrIdxForVirtReg.find(MO.getReg());
+      DenseMap<Register, unsigned>::iterator II =
+          InstrIdxForVirtReg.find(MO.getReg());
       if (II != InstrIdxForVirtReg.end()) {
         // Operand is new virtual register not in trace
         assert(II->second < InstrDepth.size() && "Bad Index");
@@ -511,6 +516,35 @@ insertDeleteInstructions(MachineBasicBlock *MBB, MachineInstr &MI,
   NumInstCombined++;
 }
 
+// Check that the difference between original and new latency is decreasing for
+// later patterns. This helps to discover sub-optimal pattern orderings.
+void MachineCombiner::verifyPatternOrder(MachineBasicBlock *MBB,
+                                         MachineInstr &Root,
+                                         SmallVector<unsigned, 16> &Patterns) {
+  long PrevLatencyDiff = std::numeric_limits<long>::max();
+  (void)PrevLatencyDiff; // Variable is used in assert only.
+  for (auto P : Patterns) {
+    SmallVector<MachineInstr *, 16> InsInstrs;
+    SmallVector<MachineInstr *, 16> DelInstrs;
+    DenseMap<Register, unsigned> InstrIdxForVirtReg;
+    TII->genAlternativeCodeSequence(Root, P, InsInstrs, DelInstrs,
+                                    InstrIdxForVirtReg);
+    // Found pattern, but did not generate alternative sequence.
+    // This can happen e.g. when an immediate could not be materialized
+    // in a single instruction.
+    if (InsInstrs.empty() || !TSchedModel.hasInstrSchedModelOrItineraries())
+      continue;
+
+    unsigned NewRootLatency, RootLatency;
+    std::tie(NewRootLatency, RootLatency) = getLatenciesForInstrSequences(
+        Root, InsInstrs, DelInstrs, TraceEnsemble->getTrace(MBB));
+    long CurrentLatencyDiff = ((long)RootLatency) - ((long)NewRootLatency);
+    assert(CurrentLatencyDiff <= PrevLatencyDiff &&
+           "Current pattern is better than previous pattern.");
+    PrevLatencyDiff = CurrentLatencyDiff;
+  }
+}
+
 /// Substitute a slow code sequence with a faster one by
 /// evaluating instruction combining pattern.
 /// The prototype of such a pattern is MUl + ADD -> MADD. Performs instruction
@@ -571,8 +605,8 @@ bool MachineCombiner::combineInstructions(MachineBasicBlock *MBB) {
     if (!TII->getMachineCombinerPatterns(MI, Patterns, DoRegPressureReduce))
       continue;
 
-    // Only used when VerifyPatternOrder is enabled.
-    [[maybe_unused]] long PrevLatencyDiff = std::numeric_limits<long>::max();
+    if (VerifyPatternOrder)
+      verifyPatternOrder(MBB, MI, Patterns);
 
     for (const auto P : Patterns) {
       SmallVector<MachineInstr *, 16> InsInstrs;
@@ -597,19 +631,6 @@ bool MachineCombiner::combineInstructions(MachineBasicBlock *MBB) {
           InstrPtr->print(dbgs(), /*IsStandalone*/false, /*SkipOpers*/false,
                           /*SkipDebugLoc*/false, /*AddNewLine*/true, TII);
       });
-
-      // Check that the difference between original and new latency is
-      // decreasing for later patterns. This helps to discover sub-optimal
-      // pattern orderings.
-      if (VerifyPatternOrder && TSchedModel.hasInstrSchedModelOrItineraries()) {
-        auto [NewRootLatency, RootLatency] = getLatenciesForInstrSequences(
-            MI, InsInstrs, DelInstrs, TraceEnsemble->getTrace(MBB));
-        long CurrentLatencyDiff = ((long)RootLatency) - ((long)NewRootLatency);
-        assert(CurrentLatencyDiff <= PrevLatencyDiff &&
-               "Current pattern is expected to be better than the previous "
-               "pattern.");
-        PrevLatencyDiff = CurrentLatencyDiff;
-      }
 
       if (IncrementalUpdate && LastUpdate != BlockIter) {
         // Update depths since the last incremental update.

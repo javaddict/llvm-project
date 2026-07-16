@@ -25,12 +25,10 @@
 #include "clang/AST/RawCommentList.h"
 #include "clang/AST/SYCLKernelInfo.h"
 #include "clang/AST/TemplateName.h"
-#include "clang/AST/Type.h"
 #include "clang/AST/TypeOrdering.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/PartialDiagnostic.h"
 #include "clang/Basic/SourceLocation.h"
-#include "clang/Lex/MacroBase.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/DenseSet.h"
@@ -40,7 +38,6 @@
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/SetVector.h"
-#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
@@ -70,6 +67,12 @@ struct ScalableVecTyKey {
 // Provide a DenseMapInfo specialization so that ScalableVecTyKey can be used
 // as a key in DenseMap.
 template <> struct DenseMapInfo<ScalableVecTyKey> {
+  static inline ScalableVecTyKey getEmptyKey() {
+    return {DenseMapInfo<clang::QualType>::getEmptyKey(), ~0U, ~0U};
+  }
+  static inline ScalableVecTyKey getTombstoneKey() {
+    return {DenseMapInfo<clang::QualType>::getTombstoneKey(), ~0U, ~0U};
+  }
   static unsigned getHashValue(const ScalableVecTyKey &Val) {
     return hash_combine(DenseMapInfo<clang::QualType>::getHashValue(Val.EltTy),
                         Val.NumElts, Val.NumFields);
@@ -100,7 +103,6 @@ class CXXRecordDecl;
 class DiagnosticsEngine;
 class DynTypedNodeList;
 class Expr;
-class ExplicitInstantiationDecl;
 enum class FloatModeKind;
 class GlobalDecl;
 class IdentifierTable;
@@ -213,11 +215,6 @@ struct TypeInfoChars {
   }
 };
 
-struct PFPField {
-  CharUnits Offset;
-  FieldDecl *Field;
-};
-
 /// Holds long-lived AST nodes (such as types and decls) that can be
 /// referred to throughout the semantic analysis of a file.
 class ASTContext : public RefCountedBase<ASTContext> {
@@ -288,14 +285,12 @@ class ASTContext : public RefCountedBase<ASTContext> {
   mutable llvm::FoldingSet<DeducedTemplateSpecializationType>
     DeducedTemplateSpecializationTypes;
   mutable llvm::FoldingSet<AtomicType> AtomicTypes;
-  mutable llvm::ContextualFoldingSet<AttributedType, ASTContext &>
-      AttributedTypes;
+  mutable llvm::FoldingSet<AttributedType> AttributedTypes;
   mutable llvm::FoldingSet<PipeType> PipeTypes;
   mutable llvm::FoldingSet<BitIntType> BitIntTypes;
   mutable llvm::ContextualFoldingSet<DependentBitIntType, ASTContext &>
       DependentBitIntTypes;
   mutable llvm::FoldingSet<BTFTagAttributedType> BTFTagAttributedTypes;
-  mutable llvm::FoldingSet<OverflowBehaviorType> OverflowBehaviorTypes;
   llvm::FoldingSet<HLSLAttributedResourceType> HLSLAttributedResourceTypes;
   llvm::FoldingSet<HLSLInlineSpirvType> HLSLInlineSpirvTypes;
 
@@ -387,9 +382,8 @@ class ASTContext : public RefCountedBase<ASTContext> {
   mutable llvm::DenseMap<const CXXDestructorDecl *, FunctionDecl *>
       GlobalArrayOperatorDeletesForVirtualDtor;
 
-  /// To remember for which types we met new[] call, these potentially require a
-  /// vector deleting dtor.
-  llvm::DenseSet<const CXXRecordDecl *> MaybeRequireVectorDeletingDtor;
+  /// To remember which types did require a vector deleting dtor.
+  llvm::DenseSet<const CXXRecordDecl *> RequireVectorDeletingDtor;
 
   /// The next string literal "version" to allocate during constant evaluation.
   /// This is used to distinguish between repeated evaluations of the same
@@ -654,12 +648,6 @@ private:
 
   llvm::DenseMap<FieldDecl *, FieldDecl *> InstantiatedFromUnnamedFieldDecl;
 
-  /// Maps a canonical specialization Decl to all ExplicitInstantiationDecls
-  /// that reference it (declarations and definitions).
-  llvm::DenseMap<const NamedDecl *,
-                 llvm::TinyPtrVector<ExplicitInstantiationDecl *>>
-      ExplicitInstantiations;
-
   /// Mapping that stores the methods overridden by a given C++
   /// member function.
   ///
@@ -792,7 +780,7 @@ private:
   const TargetInfo *Target = nullptr;
   const TargetInfo *AuxTarget = nullptr;
   clang::PrintingPolicy PrintingPolicy;
-  mutable std::unique_ptr<interp::Context> InterpContext;
+  std::unique_ptr<interp::Context> InterpContext;
   std::unique_ptr<ParentMapContext> ParentMapCtx;
 
   /// Keeps track of the deallocated DeclListNodes for future reuse.
@@ -808,7 +796,7 @@ public:
   ASTMutationListener *Listener = nullptr;
 
   /// Returns the clang bytecode interpreter context.
-  interp::Context &getInterpContext() const;
+  interp::Context &getInterpContext();
 
   struct CUDAConstantEvalContext {
     /// Do not allow wrong-sided variables in constant expressions.
@@ -945,9 +933,6 @@ public:
   QualType getIntTypeForBitwidth(unsigned DestWidth,
                                  unsigned Signed) const;
 
-  QualType getLeastIntTypeForBitwidth(unsigned DestWidth,
-                                      unsigned Signed) const;
-
   /// getRealTypeForBitwidth -
   /// sets floating point QualTy according to specified bitwidth.
   /// Returns empty type if there is no appropriate target types.
@@ -970,8 +955,6 @@ public:
 
   bool isTypeIgnoredBySanitizer(const SanitizerMask &Mask,
                                 const QualType &Ty) const;
-
-  bool isUnaryOverflowPatternExcluded(const UnaryOperator *UO);
 
   const XRayFunctionFilter &getXRayFilter() const {
     return *XRayFilter;
@@ -996,15 +979,11 @@ public:
   /// True if comments are already loaded from ExternalASTSource.
   mutable bool CommentsLoaded = false;
 
-  /// Key used to look up the raw comment attached to a declaration or macro.
-  using RawCommentLookupKey =
-      llvm::PointerUnion<const Decl *, const MacroInfo *>;
-
-  /// Mapping from declaration or macro to directly attached comment.
+  /// Mapping from declaration to directly attached comment.
   ///
   /// Raw comments are owned by Comments list.  This mapping is populated
   /// lazily.
-  mutable llvm::DenseMap<RawCommentLookupKey, const RawComment *> RawComments;
+  mutable llvm::DenseMap<const Decl *, const RawComment *> DeclRawComments;
 
   /// Mapping from canonical declaration to the first redeclaration in chain
   /// that has a comment attached.
@@ -1026,40 +1005,37 @@ public:
   /// redeclaration.
   mutable llvm::DenseMap<const Decl *, comments::FullComment *> ParsedComments;
 
-  /// Attaches \p Comment to \p Original (a declaration or macro), and to its
-  /// redeclaration chain when \p Original is a declaration. Removes the
-  /// redeclaration chain from the set of commentless chains.
+  /// Attaches \p Comment to \p OriginalD and to its redeclaration chain
+  /// and removes the redeclaration chain from the set of commentless chains.
   ///
-  /// Don't do anything if a comment has already been attached to \p Original
+  /// Don't do anything if a comment has already been attached to \p OriginalD
   /// or its redeclaration chain.
-  void cacheRawComment(RawCommentLookupKey Original,
-                       const RawComment &Comment) const;
+  void cacheRawCommentForDecl(const Decl &OriginalD,
+                              const RawComment &Comment) const;
 
-  /// \returns searches \p CommentsInFile for doc comment for \p Key.
+  /// \returns searches \p CommentsInFile for doc comment for \p D.
   ///
   /// \p RepresentativeLocForDecl is used as a location for searching doc
   /// comments. \p CommentsInFile is a mapping offset -> comment of files in the
   /// same file where \p RepresentativeLocForDecl is.
-  RawComment *getRawCommentNoCacheImpl(
-      RawCommentLookupKey Key, const SourceLocation RepresentativeLoc,
+  RawComment *getRawCommentForDeclNoCacheImpl(
+      const Decl *D, const SourceLocation RepresentativeLocForDecl,
       const std::map<unsigned, RawComment *> &CommentsInFile) const;
 
-  /// Return the documentation comment attached to a given declaration or
-  /// macro, without looking into cache.
-  RawComment *getRawCommentNoCache(RawCommentLookupKey Key) const;
+  /// Return the documentation comment attached to a given declaration,
+  /// without looking into cache.
+  RawComment *getRawCommentForDeclNoCache(const Decl *D) const;
 
 public:
   void addComment(const RawComment &RC);
 
-  /// Return the documentation comment attached to a given declaration or
-  /// macro.  Returns nullptr if no comment is attached.
+  /// Return the documentation comment attached to a given declaration.
+  /// Returns nullptr if no comment is attached.
   ///
   /// \param OriginalDecl if not nullptr, is set to declaration AST node that
   /// had the comment, if the comment we found comes from a redeclaration.
-  /// Macros have no redeclaration chain, so this is set to nullptr when
-  /// \p Key is a \c MacroInfo.
   const RawComment *
-  getRawCommentForAnyRedecl(RawCommentLookupKey Key,
+  getRawCommentForAnyRedecl(const Decl *D,
                             const Decl **OriginalDecl = nullptr) const;
 
   /// Searches existing comments for doc comments that should be attached to \p
@@ -1079,15 +1055,6 @@ public:
   /// preprocessor is not available.
   comments::FullComment *getCommentForDecl(const Decl *D,
                                            const Preprocessor *PP) const;
-
-  /// Attempts to merge two types that may be OverflowBehaviorTypes.
-  ///
-  /// \returns A QualType if the types were handled, std::nullopt otherwise.
-  /// A null QualType indicates an incompatible merge.
-  std::optional<QualType>
-  tryMergeOverflowBehaviorTypes(QualType LHS, QualType RHS, bool OfBlockPointer,
-                                bool Unqualified, bool BlockReturnType,
-                                bool IsConditionalOperator);
 
   /// Return parsed documentation comment attached to a given declaration.
   /// Returns nullptr if no comment is attached. Does not look at any
@@ -1147,14 +1114,6 @@ public:
 
   /// Erase the attributes corresponding to the given declaration.
   void eraseDeclAttrs(const Decl *D);
-
-  /// Get all ExplicitInstantiationDecls for a given specialization.
-  ArrayRef<ExplicitInstantiationDecl *>
-  getExplicitInstantiationDecls(const NamedDecl *Spec) const;
-
-  /// Add an ExplicitInstantiationDecl for a given specialization.
-  void addExplicitInstantiationDecl(const NamedDecl *Spec,
-                                    ExplicitInstantiationDecl *EID);
 
   /// If this variable is an instantiated static data member of a
   /// class template specialization, returns the templated static data member
@@ -1290,8 +1249,6 @@ public:
   bool isInSameModule(const Module *M1, const Module *M2) const;
 
   TranslationUnitDecl *getTranslationUnitDecl() const {
-    assert(TUDecl && "TUDecl might have been reset by 'cleanup' likely because "
-                     "'CodeGenOpts.ClearASTBeforeBackend' was set.");
     assert(TUDecl->getMostRecentDecl() == TUDecl &&
            "The active TU is not current one!");
     return TUDecl->getMostRecentDecl();
@@ -1392,7 +1349,7 @@ public:
   /// This does not include extern shared variables used by device host
   /// functions as addresses of shared variables are per warp, therefore
   /// cannot be accessed by host code.
-  llvm::SetVector<const VarDecl *> CUDADeviceVarODRUsedByHost;
+  llvm::DenseSet<const VarDecl *> CUDADeviceVarODRUsedByHost;
 
   /// Keep track of CUDA/HIP external kernels or device variables ODR-used by
   /// host code. SetVector is used to maintain the order.
@@ -1401,9 +1358,6 @@ public:
   /// Keep track of CUDA/HIP implicit host device functions used on device side
   /// in device compilation.
   llvm::DenseSet<const FunctionDecl *> CUDAImplicitHostDeviceFunUsedByDevice;
-
-  /// Functions whose device body should be replaced with a trap stub.
-  llvm::SmallPtrSet<const FunctionDecl *, 4> CUDADeviceInvalidFuncs;
 
   /// Map of SYCL kernels indexed by the unique type used to name the kernel.
   /// Entries are not serialized but are recreated on deserialization of a
@@ -1867,6 +1821,12 @@ private:
   QualType getFunctionTypeInternal(QualType ResultTy, ArrayRef<QualType> Args,
                                    const FunctionProtoType::ExtProtoInfo &EPI,
                                    bool OnlyWantCanonical) const;
+  QualType
+  getAutoTypeInternal(QualType DeducedType, AutoTypeKeyword Keyword,
+                      bool IsDependent, bool IsPack = false,
+                      TemplateDecl *TypeConstraintConcept = nullptr,
+                      ArrayRef<TemplateArgument> TypeConstraintArgs = {},
+                      bool IsCanon = false) const;
 
 public:
   QualType getTypeDeclType(ElaboratedTypeKeyword Keyword,
@@ -1983,13 +1943,6 @@ public:
   QualType getBTFTagAttributedType(const BTFTypeTagAttr *BTFAttr,
                                    QualType Wrapped) const;
 
-  QualType getOverflowBehaviorType(const OverflowBehaviorAttr *Attr,
-                                   QualType Wrapped) const;
-
-  QualType
-  getOverflowBehaviorType(OverflowBehaviorType::OverflowBehaviorKind Kind,
-                          QualType Wrapped) const;
-
   QualType getHLSLAttributedResourceType(
       QualType Wrapped, QualType Contained,
       const HLSLAttributedResourceType::Attributes &Attrs);
@@ -2008,7 +1961,8 @@ public:
   QualType getSubstBuiltinTemplatePack(const TemplateArgument &ArgPack);
 
   QualType
-  getTemplateTypeParmType(int Depth, int Index, bool ParameterPack,
+  getTemplateTypeParmType(unsigned Depth, unsigned Index,
+                          bool ParameterPack,
                           TemplateTypeParmDecl *ParmDecl = nullptr) const;
 
   QualType getCanonicalTemplateSpecializationType(
@@ -2105,7 +2059,8 @@ public:
 
   /// C++11 deduced auto type.
   QualType
-  getAutoType(DeducedKind DK, QualType DeducedAsType, AutoTypeKeyword Keyword,
+  getAutoType(QualType DeducedType, AutoTypeKeyword Keyword, bool IsDependent,
+              bool IsPack = false,
               TemplateDecl *TypeConstraintConcept = nullptr,
               ArrayRef<TemplateArgument> TypeConstraintArgs = {}) const;
 
@@ -2120,11 +2075,17 @@ public:
   QualType getUnconstrainedType(QualType T) const;
 
   /// C++17 deduced class template specialization type.
-  QualType getDeducedTemplateSpecializationType(DeducedKind DK,
-                                                QualType DeducedAsType,
-                                                ElaboratedTypeKeyword Keyword,
-                                                TemplateName Template) const;
+  QualType getDeducedTemplateSpecializationType(ElaboratedTypeKeyword Keyword,
+                                                TemplateName Template,
+                                                QualType DeducedType,
+                                                bool IsDependent) const;
 
+private:
+  QualType getDeducedTemplateSpecializationTypeInternal(
+      ElaboratedTypeKeyword Keyword, TemplateName Template,
+      QualType DeducedType, bool IsDependent, QualType Canon) const;
+
+public:
   /// Return the unique type for "size_t" (C99 7.17), defined in
   /// <stddef.h>.
   ///
@@ -2679,23 +2640,6 @@ public:
   /// types.
   bool areCompatibleVectorTypes(QualType FirstVec, QualType SecondVec);
 
-  /// Return true if two OverflowBehaviorTypes are compatible for assignment.
-  /// This checks both the underlying type compatibility and the overflow
-  /// behavior kind (trap vs wrap).
-  bool areCompatibleOverflowBehaviorTypes(QualType LHS, QualType RHS);
-
-  enum class OBTAssignResult {
-    Compatible,        // No OBT issues
-    IncompatibleKinds, // __ob_trap vs __ob_wrap (error)
-    Discards,          // OBT -> non-OBT on integer types (warning)
-    NotApplicable      // Not both integers, fall through to normal checking
-  };
-
-  /// Check overflow behavior type compatibility for assignments.
-  /// Returns detailed information about OBT compatibility for assignment
-  /// checking.
-  OBTAssignResult checkOBTAssignmentCompatibility(QualType LHS, QualType RHS);
-
   /// Return true if the given types are an RISC-V vector builtin type and a
   /// VectorType that is a fixed-length representation of the RISC-V vector
   /// builtin type for a specific vector-length.
@@ -2754,8 +2698,7 @@ public:
   CharUnits getTypeSizeInChars(const Type *T) const;
 
   std::optional<CharUnits> getTypeSizeInCharsIfKnown(QualType Ty) const {
-    if (Ty->isIncompleteType() || Ty->isDependentType() ||
-        Ty->isUndeducedType() || Ty->isSizelessType())
+    if (Ty->isIncompleteType() || Ty->isDependentType())
       return std::nullopt;
     return getTypeSizeInChars(Ty);
   }
@@ -2940,8 +2883,6 @@ public:
   /// (from the AuxTargetInfo) is a an itanium target.
   MangleContext *createDeviceMangleContext(const TargetInfo &T);
 
-  MangleContext *cudaNVInitDeviceMC();
-
   void DeepCollectObjCIvars(const ObjCInterfaceDecl *OI, bool leafClass,
                             SmallVectorImpl<const ObjCIvarDecl*> &Ivars) const;
 
@@ -3096,10 +3037,6 @@ public:
   /// types, values, and templates.
   TemplateName getCanonicalTemplateName(TemplateName Name,
                                         bool IgnoreDeduced = false) const;
-
-  /// Return the default argument of a template parameter, if one exists.
-  const TemplateArgument *
-  getDefaultTemplateArgumentOrNone(const NamedDecl *P) const;
 
   /// Determine whether the given template names refer to the same
   /// template.
@@ -3579,8 +3516,8 @@ public:
                                           OperatorDeleteKind K) const;
   bool dtorHasOperatorDelete(const CXXDestructorDecl *Dtor,
                              OperatorDeleteKind K) const;
-  void setClassMaybeNeedsVectorDeletingDestructor(const CXXRecordDecl *RD);
-  bool classMaybeNeedsVectorDeletingDestructor(const CXXRecordDecl *RD);
+  void setClassNeedsVectorDeletingDestructor(const CXXRecordDecl *RD);
+  bool classNeedsVectorDeletingDestructor(const CXXRecordDecl *RD);
 
   /// Retrieve the context for computing mangling numbers in the given
   /// DeclContext.
@@ -3864,24 +3801,6 @@ public:
 
   StringRef getCUIDHash() const;
 
-  /// Returns a list of PFP fields for the given type, including subfields in
-  /// bases or other fields, except for fields contained within fields of union
-  /// type.
-  std::vector<PFPField> findPFPFields(QualType Ty) const;
-
-  bool hasPFPFields(QualType Ty) const;
-  bool isPFPField(const FieldDecl *Field) const;
-
-  /// Returns whether this record's PFP fields (if any) are trivially
-  /// copyable (i.e. may be memcpy'd). This may also return true if the
-  /// record does not have any PFP fields, so it may be necessary for the caller
-  /// to check for PFP fields, e.g. by calling hasPFPFields().
-  bool arePFPFieldsTriviallyCopyable(const RecordDecl *RD) const;
-
-  llvm::SetVector<const FieldDecl *> PFPFieldsWithEvaluatedOffset;
-  void recordMemberDataPointerEvaluation(const ValueDecl *VD);
-  void recordOffsetOfEvaluation(const OffsetOfExpr *E);
-
 private:
   /// All OMPTraitInfo objects live in this collection, one per
   /// `pragma omp [begin] declare variant` directive.
@@ -4005,6 +3924,16 @@ typename clang::LazyGenerationalUpdatePtr<Owner, T, Update>::ValueType
   return Value;
 }
 template <> struct llvm::DenseMapInfo<llvm::FoldingSetNodeID> {
+  static FoldingSetNodeID getEmptyKey() { return FoldingSetNodeID{}; }
+
+  static FoldingSetNodeID getTombstoneKey() {
+    FoldingSetNodeID ID;
+    for (size_t I = 0; I < sizeof(ID) / sizeof(unsigned); ++I) {
+      ID.AddInteger(std::numeric_limits<unsigned>::max());
+    }
+    return ID;
+  }
+
   static unsigned getHashValue(const FoldingSetNodeID &Val) {
     return Val.ComputeHash();
   }

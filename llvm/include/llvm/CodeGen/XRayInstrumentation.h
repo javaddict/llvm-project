@@ -13,11 +13,11 @@
 
 namespace llvm {
 
-class XRayInstrumentationPass
-    : public RequiredPassInfoMixin<XRayInstrumentationPass> {
+class XRayInstrumentationPass : public PassInfoMixin<XRayInstrumentationPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

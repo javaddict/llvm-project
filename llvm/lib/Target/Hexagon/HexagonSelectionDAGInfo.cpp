@@ -83,17 +83,14 @@ SDValue HexagonSelectionDAGInfo::EmitTargetCodeForMemcpy(
   Args.emplace_back(Src, ArgTy);
   Args.emplace_back(Size, ArgTy);
 
-  RTLIB::LibcallImpl SpecialMemcpyImpl = DAG.getLibcalls().getLibcallImpl(
+  const char *SpecialMemcpyName = TLI.getLibcallName(
       RTLIB::HEXAGON_MEMCPY_LIKELY_ALIGNED_MIN32BYTES_MULT8BYTES);
-  if (SpecialMemcpyImpl == RTLIB::Unsupported)
-    return SDValue();
-
   const MachineFunction &MF = DAG.getMachineFunction();
   bool LongCalls = MF.getSubtarget<HexagonSubtarget>().useLongCalls();
   unsigned Flags = LongCalls ? HexagonII::HMOTF_ConstExtended : 0;
 
-  CallingConv::ID CC =
-      DAG.getLibcalls().getLibcallImplCallingConv(SpecialMemcpyImpl);
+  CallingConv::ID CC = TLI.getLibcallCallingConv(
+      RTLIB::HEXAGON_MEMCPY_LIKELY_ALIGNED_MIN32BYTES_MULT8BYTES);
 
   TargetLowering::CallLoweringInfo CLI(DAG);
   CLI.setDebugLoc(dl)
@@ -101,7 +98,7 @@ SDValue HexagonSelectionDAGInfo::EmitTargetCodeForMemcpy(
       .setLibCallee(
           CC, Type::getVoidTy(*DAG.getContext()),
           DAG.getTargetExternalSymbol(
-              SpecialMemcpyImpl, TLI.getPointerTy(DAG.getDataLayout()), Flags),
+              SpecialMemcpyName, TLI.getPointerTy(DAG.getDataLayout()), Flags),
           std::move(Args))
       .setDiscardResult();
 

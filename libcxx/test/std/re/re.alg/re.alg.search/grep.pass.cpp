@@ -16,7 +16,6 @@
 //                  regex_constants::match_flag_type flags = regex_constants::match_default);
 
 #include <regex>
-#include <cstring>
 #include <cassert>
 
 #include "test_macros.h"
@@ -25,7 +24,7 @@
 extern "C" void LLVMFuzzerTestOneInput(const char *data)
 {
 #ifndef TEST_HAS_NO_EXCEPTIONS
-    std::size_t size = std::strlen(data);
+    std::size_t size = strlen(data);
     if (size > 0)
     {
         try

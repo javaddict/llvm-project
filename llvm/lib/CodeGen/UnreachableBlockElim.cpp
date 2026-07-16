@@ -23,7 +23,6 @@
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -46,11 +45,13 @@ class UnreachableBlockElimLegacyPass : public FunctionPass {
 
 public:
   static char ID; // Pass identification, replacement for typeid
-  UnreachableBlockElimLegacyPass() : FunctionPass(ID) {}
+  UnreachableBlockElimLegacyPass() : FunctionPass(ID) {
+    initializeUnreachableBlockElimLegacyPassPass(
+        *PassRegistry::getPassRegistry());
+  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addPreserved<DominatorTreeWrapperPass>();
-    AU.addPreserved<MachineBlockFrequencyInfoWrapperPass>();
   }
 };
 }
@@ -69,7 +70,6 @@ PreservedAnalyses UnreachableBlockElimPass::run(Function &F,
     return PreservedAnalyses::all();
   PreservedAnalyses PA;
   PA.preserve<DominatorTreeAnalysis>();
-  PA.preserve<MachineBlockFrequencyAnalysis>();
   return PA;
 }
 
@@ -111,7 +111,6 @@ void UnreachableMachineBlockElimLegacy::getAnalysisUsage(
   AU.addPreserved<MachineLoopInfoWrapperPass>();
   AU.addPreserved<MachineDominatorTreeWrapperPass>();
   AU.addPreserved<MachinePostDominatorTreeWrapperPass>();
-  AU.addPreserved<MachineBlockFrequencyInfoWrapperPass>();
   MachineFunctionPass::getAnalysisUsage(AU);
 }
 
@@ -128,8 +127,7 @@ UnreachableMachineBlockElimPass::run(MachineFunction &MF,
   return getMachineFunctionPassPreservedAnalyses()
       .preserve<MachineLoopAnalysis>()
       .preserve<MachineDominatorTreeAnalysis>()
-      .preserve<MachinePostDominatorTreeAnalysis>()
-      .preserve<MachineBlockFrequencyAnalysis>();
+      .preserve<MachinePostDominatorTreeAnalysis>();
 }
 
 bool UnreachableMachineBlockElimLegacy::runOnMachineFunction(
@@ -233,6 +231,11 @@ bool UnreachableMachineBlockElim::run(MachineFunction &F) {
   }
 
   F.RenumberBlocks();
+  if (MDT)
+    MDT->updateBlockNumbers();
+
+  if (MPDT)
+    MPDT->updateBlockNumbers();
 
   return (!DeadBlocks.empty() || ModifiedPHI);
 }

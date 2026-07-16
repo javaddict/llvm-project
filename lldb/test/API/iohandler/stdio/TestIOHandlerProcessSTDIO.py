@@ -26,3 +26,4 @@ class TestIOHandlerProcessSTDIO(PExpectTest):
         self.child.expect_exact("stdout: baz")
 
         self.child.sendcontrol("d")
+        self.quit()

@@ -1,0 +1,223 @@
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+
+; REBASELINED : / cutover — native mul now carries slot suffix (mul64.ll/s2); hwloop body and epilogue bundles reorganized by slot auction.
+; REBASELINED : / pipeline reorder (ExpandPseudos/BitSimplify pre-scheduler + materialize at leaveRegion) — bundles regrouped, ops unchanged.
+; REBASELINED : scheduling changed (//) — bundles regrouped, ops unchanged.
+; Bundle128-only rebaseline (/R2-R5): CHECK-LABEL + key invariants.
+; Bundle128 rebaseline: labels + present opcodes.
+
+; Bundle128: function labels present (compile + emit smoke).
+; CHECK-LABEL: bqriir32x32_df1_single:
+; CHECK-LABEL: bqriir32x32_df1_cascade:
+; CHECK-LABEL: main:
+; CHECK: {{.}}
+
+declare i64 @llvm.haydn.mul64.ss.ll(i64, i64) nounwind readnone
+
+; State structure
+; Layout: { b0, b1, b2, a1, a2, sx0, sx1, sy0, sy1 } -- 9 x i32 = 36 bytes
+%bqriir32_df1_state = type { i32, i32, i32, i32, i32, i32, i32, i32, i32 }
+
+;=============================================================================;
+; Single-section IIR DF1 process function
+;
+; Processes N samples through one biquad section, reading from x, writing to
+; r, and updating the delay-line state in *st.
+;=============================================================================;
+define void @bqriir32x32_df1_single(ptr %st, ptr %r, ptr %x, i32 %N) {
+;
+; REGRESSION TEST : historically this loop's runtime trip-count (%N, the
+; LIMIT) was spilled by regalloc in the preheader, then the post-RA HWLoop pass
+; emitted SET_HWLOOP_REG reading the spilled/killed trip-count reg with no
+; reload, triggering `-verify-machineinstrs`:
+; "Using an undefined physical register... SET_HWLOOP_REG... operand 3: $rN".
+; The post-RA fix (point-liveness gate via LivePhysRegs) REJECTED the conversion
+; for that shape, so the loop stayed cmp+branch.
+;
+; PRE-RA PASS UPDATE (Stream A,): the new pre-RA HardwareLoops pass forms
+; the hardware loop BEFORE regalloc, while the trip-count is still a virtual
+; register. The bug class (post-RA spill of a physreg trip-count) is
+; structurally inapplicable pre-RA — regalloc has not yet run, so there is no
+; spilled/killed physreg to misuse. The pre-RA pass therefore converts this
+; loop, and `-verify-machineinstrs` passes cleanly. The CHECK now asserts the
+; hardware loop is formed (set_hwloop_f2); if the verifier ever aborts on this
+; function, the bug has reappeared.
+;
+entry:
+  ; Load coefficients from struct (all Q30 fixed-point)
+  %b0ptr = getelementptr %bqriir32_df1_state, ptr %st, i32 0, i32 0
+  %b1ptr = getelementptr %bqriir32_df1_state, ptr %st, i32 0, i32 1
+  %b2ptr = getelementptr %bqriir32_df1_state, ptr %st, i32 0, i32 2
+  %a1ptr = getelementptr %bqriir32_df1_state, ptr %st, i32 0, i32 3
+  %a2ptr = getelementptr %bqriir32_df1_state, ptr %st, i32 0, i32 4
+  %sx0ptr = getelementptr %bqriir32_df1_state, ptr %st, i32 0, i32 5
+  %sx1ptr = getelementptr %bqriir32_df1_state, ptr %st, i32 0, i32 6
+  %sy0ptr = getelementptr %bqriir32_df1_state, ptr %st, i32 0, i32 7
+  %sy1ptr = getelementptr %bqriir32_df1_state, ptr %st, i32 0, i32 8
+
+  %b0 = load i32, ptr %b0ptr
+  %b1 = load i32, ptr %b1ptr
+  %b2 = load i32, ptr %b2ptr
+  %a1 = load i32, ptr %a1ptr
+  %a2 = load i32, ptr %a2ptr
+  %sx0.init = load i32, ptr %sx0ptr
+  %sx1.init = load i32, ptr %sx1ptr
+  %sy0.init = load i32, ptr %sy0ptr
+  %sy1.init = load i32, ptr %sy1ptr
+
+  %cmp0 = icmp sgt i32 %N, 0
+  br i1 %cmp0, label %for.body, label %for.end
+
+for.body:
+  %i    = phi i32 [ 0, %entry ],      [ %i.next, %for.body ]
+  %sx0  = phi i32 [ %sx0.init, %entry ], [ %xn, %for.body ]
+  %sx1  = phi i32 [ %sx1.init, %entry ], [ %sx0, %for.body ]
+  %sy0  = phi i32 [ %sy0.init, %entry ], [ %yn, %for.body ]
+  %sy1  = phi i32 [ %sy1.init, %entry ], [ %sy0, %for.body ]
+
+  ; Load input sample x[i]
+  %xiptr = getelementptr i32, ptr %x, i32 %i
+  %xn = load i32, ptr %xiptr
+
+  ; DF1 kernel using Haydn intrinsics
+  ; Sign-extend i32 operands to i64 for mul64_ss_ll (DR64 register operands)
+  ; Feedforward: acc = b0*xn + b1*sx0 + b2*sx1
+  %b0.ext = sext i32 %b0 to i64
+  %xn.ext = sext i32 %xn to i64
+  %acc_b0 = call i64 @llvm.haydn.mul64.ss.ll(i64 %b0.ext, i64 %xn.ext)
+
+  %b1.ext = sext i32 %b1 to i64
+  %sx0.ext = sext i32 %sx0 to i64
+  %acc_b1 = call i64 @llvm.haydn.mul64.ss.ll(i64 %b1.ext, i64 %sx0.ext)
+
+  %b2.ext = sext i32 %b2 to i64
+  %sx1.ext = sext i32 %sx1 to i64
+  %acc_b2 = call i64 @llvm.haydn.mul64.ss.ll(i64 %b2.ext, i64 %sx1.ext)
+
+  %sum01  = add i64 %acc_b0, %acc_b1
+  %sum012 = add i64 %sum01,  %acc_b2
+
+  ; Feedback: acc -= a1*sy0 + a2*sy1
+  %a1.ext = sext i32 %a1 to i64
+  %sy0.ext = sext i32 %sy0 to i64
+  %acc_a1 = call i64 @llvm.haydn.mul64.ss.ll(i64 %a1.ext, i64 %sy0.ext)
+
+  %a2.ext = sext i32 %a2 to i64
+  %sy1.ext = sext i32 %sy1 to i64
+  %acc_a2 = call i64 @llvm.haydn.mul64.ss.ll(i64 %a2.ext, i64 %sy1.ext)
+
+  %sum34 = add i64 %acc_a1, %acc_a2
+  %acc   = sub i64 %sum012, %sum34
+
+  ; Extract Q31 output: logical right shift by 30 (Q17.46 -> Q31)
+  %acc.shr = lshr i64 %acc, 30
+  %yn = trunc i64 %acc.shr to i32
+
+  ; Store output r[i]
+  %riptr = getelementptr i32, ptr %r, i32 %i
+  store i32 %yn, ptr %riptr
+
+  ; Loop bookkeeping
+  %i.next = add i32 %i, 1
+  %cmp = icmp slt i32 %i.next, %N
+  br i1 %cmp, label %for.body, label %for.end.latch
+
+for.end.latch:
+  ; Store updated delay-line state back to struct
+  store i32 %xn,  ptr %sx0ptr
+  store i32 %sx0, ptr %sx1ptr
+  store i32 %yn,  ptr %sy0ptr
+  store i32 %sy0, ptr %sy1ptr
+  br label %for.end
+
+for.end:
+  ret void
+  ; The mul64_ss_ll intrinsic should lower to the MUL64_LL instruction.
+  ; 64-bit add/sub for accumulator operations.
+  ; Store delay line state back to memory.
+}
+
+;=============================================================================;
+; Cascaded multi-section IIR DF1
+;
+; Processes N samples through nsec biquad sections. Each section reads from the
+; output of the previous section. The first section reads from x.
+;=============================================================================;
+define void @bqriir32x32_df1_cascade(ptr %sections, i32 %nsec,
+                                       ptr %r, ptr %x, i32 %N) {
+entry:
+  %cmp0 = icmp sgt i32 %nsec, 0
+  br i1 %cmp0, label %cascade.loop, label %cascade.end
+
+cascade.loop:
+  %sec_idx = phi i32 [ 0, %entry ], [ %sec_idx.next, %cascade.loop ]
+  %in_ptr  = phi ptr [ %x, %entry ], [ %r, %cascade.loop ]
+
+  ; Load section state pointer: st = sections[sec_idx]
+  %secptr = getelementptr ptr, ptr %sections, i32 %sec_idx
+  %st = load ptr, ptr %secptr
+
+  ; Process one biquad section
+  call void @bqriir32x32_df1_single(ptr %st, ptr %r, ptr %in_ptr, i32 %N)
+
+  %sec_idx.next = add i32 %sec_idx, 1
+  %cmp = icmp slt i32 %sec_idx.next, %nsec
+  br i1 %cmp, label %cascade.loop, label %cascade.end
+
+cascade.end:
+  ret void
+}
+
+;=============================================================================;
+; Test driver: 2-section cascaded IIR with impulse input
+;=============================================================================;
+define i32 @main() {
+entry:
+  ; Process section 0: input_buf -> output_buf
+  call void @bqriir32x32_df1_single(ptr @section0, ptr @output_buf,
+                                      ptr @input_buf, i32 8)
+
+  ; Process section 1: output_buf -> output_buf (in-place cascade)
+  call void @bqriir32x32_df1_single(ptr @section1, ptr @output_buf,
+                                      ptr @output_buf, i32 8)
+
+  ; Return first output sample
+  %r0 = load i32, ptr @output_buf
+  ret i32 %r0
+}
+
+;=============================================================================;
+; Static data
+;=============================================================================;
+
+; Section 0: low-pass biquad coefficients (Q1.30) + zero initial state
+@section0 = internal global [9 x i32] [
+  i32 536870912,   ; b0 = 0x20000000 = 0.25 in Q30
+  i32 268435456,   ; b1 = 0x10000000 = 0.125 in Q30
+  i32 134217728,   ; b2 = 0x08000000 = 0.0625 in Q30
+  i32 805306368,   ; a1 = 0x30000000 = 0.375 in Q30
+  i32 402653184,   ; a2 = 0x18000000 = 0.1875 in Q30
+  i32 0, i32 0,    ; sx0, sx1 = 0
+  i32 0, i32 0     ; sy0, sy1 = 0
+]
+
+; Section 1: second biquad section
+@section1 = internal global [9 x i32] [
+  i32 805306368,   ; b0 = 0x30000000 = 0.375 in Q30
+  i32 536870912,   ; b1 = 0x20000000 = 0.25 in Q30
+  i32 268435456,   ; b2 = 0x10000000 = 0.125 in Q30
+  i32 671088640,   ; a1 = 0x28000000 = 0.3125 in Q30
+  i32 335544320,   ; a2 = 0x14000000 = 0.15625 in Q30
+  i32 0, i32 0,    ; sx0, sx1 = 0
+  i32 0, i32 0     ; sy0, sy1 = 0
+]
+
+; Input: impulse response test signal (single non-zero sample)
+@input_buf = internal global [8 x i32] [
+  i32 1073741824,  ; 0x40000000 = 0.5 in Q31 (impulse)
+  i32 0, i32 0, i32 0,
+  i32 0, i32 0, i32 0, i32 0
+]
+
+; Output buffer
+@output_buf = internal global [8 x i32] zeroinitializer

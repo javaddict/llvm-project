@@ -22,6 +22,7 @@
 #include "llvm/IR/Mangler.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/RuntimeLibcalls.h"
 #include "llvm/MC/StringTableBuilder.h"
 #include "llvm/Object/ModuleSymbolTable.h"
 #include "llvm/Object/SymbolicFile.h"
@@ -73,11 +74,15 @@ struct Builder {
   // so this provides somewhere to store any strings that we create.
   Builder(SmallVector<char, 0> &Symtab, StringTableBuilder &StrtabBuilder,
           BumpPtrAllocator &Alloc, const Triple &TT)
-      : Symtab(Symtab), StrtabBuilder(StrtabBuilder), Saver(Alloc), TT(TT) {}
+      : Symtab(Symtab), StrtabBuilder(StrtabBuilder), Saver(Alloc), TT(TT),
+        Libcalls(TT) {}
 
   DenseMap<const Comdat *, int> ComdatMap;
   Mangler Mang;
   const Triple &TT;
+
+  // FIXME: This shouldn't be here.
+  RTLIB::RuntimeLibcallsInfo Libcalls;
 
   std::vector<storage::Comdat> Comdats;
   std::vector<storage::Module> Mods;
@@ -88,6 +93,10 @@ struct Builder {
   raw_string_ostream COFFLinkerOptsOS{COFFLinkerOpts};
 
   std::vector<storage::Str> DependentLibraries;
+
+  bool isPreservedName(StringRef Name) {
+    return Libcalls.getSupportedLibcallImpl(Name) != RTLIB::Unsupported;
+  }
 
   void setStr(storage::Str &S, StringRef Value) {
     S.Offset = StrtabBuilder.add(Value);
@@ -260,7 +269,7 @@ Error Builder::addSymbol(const ModuleSymbolTable &Msymtab,
   StringRef GVName = GV->getName();
   setStr(Sym.IRName, GVName);
 
-  if (Used.count(GV))
+  if (Used.count(GV) || isPreservedName(GVName))
     Sym.Flags |= 1 << storage::Symbol::FB_used;
   if (GV->isThreadLocal())
     Sym.Flags |= 1 << storage::Symbol::FB_tls;
@@ -275,7 +284,8 @@ Error Builder::addSymbol(const ModuleSymbolTable &Msymtab,
     if (!GVar)
       return make_error<StringError>("Only variables can have common linkage!",
                                      inconvertibleErrorCode());
-    Uncommon().CommonSize = GVar->getGlobalSize(GV->getDataLayout());
+    Uncommon().CommonSize =
+        GV->getDataLayout().getTypeAllocSize(GV->getValueType());
     Uncommon().CommonAlign = GVar->getAlign() ? GVar->getAlign()->value() : 0;
   }
 
@@ -307,6 +317,7 @@ Error Builder::addSymbol(const ModuleSymbolTable &Msymtab,
       std::string FallbackName;
       raw_string_ostream OS(FallbackName);
       Msymtab.printSymbolName(OS, Fallback);
+      OS.flush();
       setStr(Uncommon().COFFWeakExternFallbackName, Saver.save(FallbackName));
     }
   }
@@ -330,6 +341,7 @@ Error Builder::build(ArrayRef<Module *> IRMods) {
     if (Error Err = addModule(M))
       return Err;
 
+  COFFLinkerOptsOS.flush();
   setStr(Hdr.COFFLinkerOpts, Saver.save(COFFLinkerOpts));
 
   // We are about to fill in the header's range fields, so reserve space for it

@@ -309,7 +309,7 @@ public:
     if (!CTUDeclOrError) {
       handleAllErrors(CTUDeclOrError.takeError(),
                       [&](const cross_tu::IndexError &IE) {
-                        CTU.emitCrossTUDiagnostics(IE, VD->getLocation());
+                        CTU.emitCrossTUDiagnostics(IE);
                       });
     }
 
@@ -807,7 +807,7 @@ void AnalysisConsumer::RunPathSensitiveChecks(Decl *D,
     ExprEngineStartTime = ExprEngineTimer->getTotalTime();
     ExprEngineTimer->startTimer();
   }
-  Eng.ExecuteWorkList(Mgr->getAnalysisDeclContextManager().getTopStackFrame(D),
+  Eng.ExecuteWorkList(Mgr->getAnalysisDeclContextManager().getStackFrame(D),
                       Mgr->options.MaxNodesPerTopLevelFunction);
   if (ExprEngineTimer) {
     ExprEngineTimer->stopTimer();

@@ -46,15 +46,14 @@ const MCAsmInfo::AtSpecifier atSpecifiers[] = {
 
 void ARMMCAsmInfoDarwin::anchor() { }
 
-ARMMCAsmInfoDarwin::ARMMCAsmInfoDarwin(const Triple &TheTriple,
-                                       const MCTargetOptions &Options)
-    : MCAsmInfoDarwin(Options) {
+ARMMCAsmInfoDarwin::ARMMCAsmInfoDarwin(const Triple &TheTriple) {
   if ((TheTriple.getArch() == Triple::armeb) ||
       (TheTriple.getArch() == Triple::thumbeb))
     IsLittleEndian = false;
 
   Data64bitsDirective = nullptr;
   CommentString = "@";
+  AllowDollarAtStartOfIdentifier = false;
   UseDataRegionDirectives = true;
 
   SupportsDebugInformation = true;
@@ -72,9 +71,7 @@ ARMMCAsmInfoDarwin::ARMMCAsmInfoDarwin(const Triple &TheTriple,
 
 void ARMELFMCAsmInfo::anchor() { }
 
-ARMELFMCAsmInfo::ARMELFMCAsmInfo(const Triple &TheTriple,
-                                 const MCTargetOptions &Options)
-    : MCAsmInfoELF(Options) {
+ARMELFMCAsmInfo::ARMELFMCAsmInfo(const Triple &TheTriple) {
   if ((TheTriple.getArch() == Triple::armeb) ||
       (TheTriple.getArch() == Triple::thumbeb))
     IsLittleEndian = false;
@@ -84,6 +81,7 @@ ARMELFMCAsmInfo::ARMELFMCAsmInfo(const Triple &TheTriple,
 
   Data64bitsDirective = nullptr;
   CommentString = "@";
+  AllowDollarAtStartOfIdentifier = false;
 
   SupportsDebugInformation = true;
 
@@ -100,10 +98,11 @@ ARMELFMCAsmInfo::ARMELFMCAsmInfo(const Triple &TheTriple,
     break;
   }
 
-  initializeAtSpecifiers(atSpecifiers);
   // foo(plt) instead of foo@plt
   UseAtForSpecifier = false;
   UseParensForSpecifier = true;
+
+  initializeAtSpecifiers(atSpecifiers);
 }
 
 void ARMELFMCAsmInfo::setUseIntegratedAssembler(bool Value) {
@@ -118,14 +117,13 @@ void ARMELFMCAsmInfo::setUseIntegratedAssembler(bool Value) {
 
 void ARMCOFFMCAsmInfoMicrosoft::anchor() { }
 
-ARMCOFFMCAsmInfoMicrosoft::ARMCOFFMCAsmInfoMicrosoft(
-    const MCTargetOptions &Options)
-    : MCAsmInfoMicrosoft(Options) {
+ARMCOFFMCAsmInfoMicrosoft::ARMCOFFMCAsmInfoMicrosoft() {
   AlignmentIsInBytes = false;
   SupportsDebugInformation = true;
   ExceptionsType = ExceptionHandling::WinEH;
   WinEHEncodingType = WinEH::EncodingType::Itanium;
-  InternalSymbolPrefix = "$M";
+  PrivateGlobalPrefix = "$M";
+  PrivateLabelPrefix = "$M";
   CommentString = "@";
 
   // Conditional Thumb 4-byte instructions can have an implicit IT.
@@ -136,25 +134,27 @@ ARMCOFFMCAsmInfoMicrosoft::ARMCOFFMCAsmInfoMicrosoft(
 
 void ARMCOFFMCAsmInfoGNU::anchor() { }
 
-ARMCOFFMCAsmInfoGNU::ARMCOFFMCAsmInfoGNU(const MCTargetOptions &Options)
-    : MCAsmInfoGNUCOFF(Options) {
+ARMCOFFMCAsmInfoGNU::ARMCOFFMCAsmInfoGNU() {
   AlignmentIsInBytes = false;
   HasSingleParameterDotFile = true;
 
   CommentString = "@";
-  InternalSymbolPrefix = ".L";
+  AllowDollarAtStartOfIdentifier = false;
+  PrivateGlobalPrefix = ".L";
+  PrivateLabelPrefix = ".L";
 
   SupportsDebugInformation = true;
   ExceptionsType = ExceptionHandling::WinEH;
   WinEHEncodingType = WinEH::EncodingType::Itanium;
+  UseAtForSpecifier = false;
+  UseParensForSpecifier = true;
+
   DwarfRegNumForCFI = false;
 
   // Conditional Thumb 4-byte instructions can have an implicit IT.
   MaxInstLength = 6;
 
   initializeAtSpecifiers(atSpecifiers);
-  UseAtForSpecifier = false;
-  UseParensForSpecifier = true;
 }
 
 void ARM::printSpecifierExpr(const MCAsmInfo &MAI, raw_ostream &OS,

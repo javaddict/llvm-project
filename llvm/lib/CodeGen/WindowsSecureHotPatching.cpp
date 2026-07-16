@@ -177,7 +177,9 @@ class WindowsSecureHotPatching : public ModulePass {
 public:
   static char ID;
 
-  WindowsSecureHotPatching() : ModulePass(ID) {}
+  WindowsSecureHotPatching() : ModulePass(ID) {
+    initializeWindowsSecureHotPatchingPass(*PassRegistry::getPassRegistry());
+  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();

@@ -268,14 +268,12 @@ static void findBestInsertionSet(DominatorTree &DT, BlockFrequencyInfo &BFI,
       std::pair<SetVector<BasicBlock *>, BlockFrequency>;
 
   // InsertPtsMap is a map from a BB to the best insertion points for the
-  // subtree of BB (subtree not including the BB itself). Pre-populate every
-  // node so that loop below only uses find().
+  // subtree of BB (subtree not including the BB itself).
   DenseMap<BasicBlock *, InsertPtsCostPair> InsertPtsMap;
-  for (BasicBlock *Node : Orders)
-    InsertPtsMap.try_emplace(Node);
+  InsertPtsMap.reserve(Orders.size() + 1);
   for (BasicBlock *Node : llvm::reverse(Orders)) {
     bool NodeInBBs = BBs.count(Node);
-    auto &[InsertPts, InsertPtsFreq] = InsertPtsMap.find(Node)->second;
+    auto &[InsertPts, InsertPtsFreq] = InsertPtsMap[Node];
 
     // Return the optimal insert points in BBs.
     if (Node == Entry) {
@@ -291,7 +289,7 @@ static void findBestInsertionSet(DominatorTree &DT, BlockFrequencyInfo &BFI,
     BasicBlock *Parent = DT.getNode(Node)->getIDom()->getBlock();
     // Initially, ParentInsertPts is empty and ParentPtsFreq is 0. Every child
     // will update its parent's ParentInsertPts and ParentPtsFreq.
-    auto &[ParentInsertPts, ParentPtsFreq] = InsertPtsMap.find(Parent)->second;
+    auto &[ParentInsertPts, ParentPtsFreq] = InsertPtsMap[Parent];
     // Choose to insert in Node or in subtree of Node.
     // Don't hoist to EHPad because we may not find a proper place to insert
     // in EHPad.

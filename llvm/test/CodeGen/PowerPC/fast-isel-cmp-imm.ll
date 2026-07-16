@@ -16,7 +16,6 @@ entry:
 ; VSX: addis
 ; VSX: lfs
 ; VSX: fcmpu
-; SPE: lwz
 ; SPE: efscmpeq
   br i1 %cmp, label %if.then, label %if.end
 
@@ -40,7 +39,6 @@ entry:
 ; VSX: addis
 ; VSX: lfs
 ; VSX: fcmpu
-; SPE: lwz
 ; SPE: efscmpeq
   br i1 %cmp, label %if.then, label %if.end
 
@@ -64,7 +62,6 @@ entry:
 ; VSX: addis
 ; VSX: lfs
 ; VSX: fcmpu
-; SPE: lwz
 ; SPE: efscmpeq
   br i1 %cmp, label %if.then, label %if.end
 
@@ -88,7 +85,6 @@ entry:
 ; VSX: addis
 ; VSX: lfd
 ; VSX: xscmpudp
-; SPE: evlddx
 ; SPE: efdcmpeq
   br i1 %cmp, label %if.then, label %if.end
 
@@ -112,7 +108,6 @@ entry:
 ; VSX: addis
 ; VSX: lfd
 ; VSX: xscmpudp
-; SPE: evlddx
 ; SPE: efdcmpeq
   br i1 %cmp, label %if.then, label %if.end
 
@@ -136,7 +131,6 @@ entry:
 ; VSX: addis
 ; VSX: lfd
 ; VSX: xscmpudp
-; SPE: evlddx
 ; SPE: efdcmpeq
   br i1 %cmp, label %if.then, label %if.end
 

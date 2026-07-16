@@ -7,13 +7,9 @@ set(LLVM_LINK_COMPONENTS
   Analysis
   AsmParser
   BinaryFormat
-  CodeGen
   Core
-  MC
   Passes
   SPIRVCodeGen
-  SPIRVDesc
-  SPIRVInfo
   SPIRVAnalysis
   Support
   TargetParser
@@ -21,7 +17,6 @@ set(LLVM_LINK_COMPONENTS
 
 add_llvm_target_unittest(SPIRVTests
   SPIRVConvergenceRegionAnalysisTests.cpp
-  SPIRVGlobalRegistryTests.cpp
   SPIRVSortBlocksTests.cpp
   SPIRVPartialOrderingVisitorTests.cpp
   SPIRVAPITest.cpp

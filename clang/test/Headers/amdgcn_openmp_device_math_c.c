@@ -8,6 +8,7 @@
 
 // CHECK-LABEL: @test_math_int(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    [[RETVAL_I:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[__X_ADDR_I:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[__SGN_I:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -16,6 +17,7 @@
 // CHECK-NEXT:    [[L1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[L1]] to ptr
 // CHECK-NEXT:    store i32 [[X:%.*]], ptr [[X_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr [[X_ADDR_ASCAST]], align 4
+// CHECK-NEXT:    [[RETVAL_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[RETVAL_I]] to ptr
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I]] to ptr
 // CHECK-NEXT:    [[__SGN_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__SGN_I]] to ptr
 // CHECK-NEXT:    store i32 [[TMP0]], ptr [[__X_ADDR_ASCAST_I]], align 4
@@ -36,6 +38,7 @@ void test_math_int(int x) {
 
 // CHECK-LABEL: @test_math_long(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    [[RETVAL_I:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[__X_ADDR_I:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[__SGN_I:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
@@ -44,6 +47,7 @@ void test_math_int(int x) {
 // CHECK-NEXT:    [[L1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[L1]] to ptr
 // CHECK-NEXT:    store i64 [[X:%.*]], ptr [[X_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load i64, ptr [[X_ADDR_ASCAST]], align 8
+// CHECK-NEXT:    [[RETVAL_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[RETVAL_I]] to ptr
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I]] to ptr
 // CHECK-NEXT:    [[__SGN_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__SGN_I]] to ptr
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[__X_ADDR_ASCAST_I]], align 8
@@ -64,6 +68,7 @@ void test_math_long(long x) {
 
 // CHECK-LABEL: @test_math_long_long(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    [[RETVAL_I:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[__X_ADDR_I:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[__SGN_I:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
@@ -72,6 +77,7 @@ void test_math_long(long x) {
 // CHECK-NEXT:    [[L1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[L1]] to ptr
 // CHECK-NEXT:    store i64 [[X:%.*]], ptr [[X_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load i64, ptr [[X_ADDR_ASCAST]], align 8
+// CHECK-NEXT:    [[RETVAL_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[RETVAL_I]] to ptr
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I]] to ptr
 // CHECK-NEXT:    [[__SGN_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__SGN_I]] to ptr
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[__X_ADDR_ASCAST_I]], align 8

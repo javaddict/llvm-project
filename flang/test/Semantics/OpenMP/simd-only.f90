@@ -235,9 +235,9 @@ end subroutine
 subroutine test_sections()
   ! CHECK-NOT: ExecutionPartConstruct -> ExecutableConstruct -> OpenMPConstruct -> OpenMPSectionsConstruct
   !$omp sections
-  ! CHECK-NOT: OpenMPConstruct -> OmpSectionDirective
+  ! CHECK-NOT: OpenMPConstruct -> OpenMPSectionConstruct
   !$omp section
-  ! CHECK-NOT: OpenMPConstruct -> OmpSectionDirective
+  ! CHECK-NOT: OpenMPConstruct -> OpenMPSectionConstruct
   !$omp section
   !$omp end sections
 end subroutine
@@ -253,7 +253,7 @@ module test_threadprivate_mod
   ! CHECK: Name = 'x'
   ! CHECK: Name = 'y'
   common /vars/ x, y
-  ! CHECK-NOT: DeclarationConstruct -> SpecificationConstruct -> OpenMPDeclarativeConstruct -> OmpThreadprivateDirective
+  ! CHECK-NOT: DeclarationConstruct -> SpecificationConstruct -> OpenMPDeclarativeConstruct -> OpenMPThreadprivate
   !$omp threadprivate(/vars/)
 end module
 
@@ -411,6 +411,6 @@ module test_declare_mapper
     real, allocatable     :: data(:)
   end type myvec_t
 
-  ! CHECK-NOT: DeclarationConstruct -> SpecificationConstruct -> OpenMPDeclarativeConstruct -> OmpDeclareMapperDirective
+  ! CHECK-NOT: DeclarationConstruct -> SpecificationConstruct -> OpenMPDeclarativeConstruct -> OpenMPDeclareMapperConstruct
   !$omp declare mapper(myvec_t :: v) map(v, v%data(1:v%len))
 end module

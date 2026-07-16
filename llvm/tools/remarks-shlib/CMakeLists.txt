@@ -25,7 +25,10 @@ if(LLVM_ENABLE_PIC)
     COMPONENT Remarks)
 
   if (APPLE)
-    llvm_set_macho_current_version(Remarks ${LLVM_VERSION_MAJOR})
+    set(REMARKS_VERSION ${LLVM_VERSION_MAJOR})
+    set_property(TARGET Remarks APPEND_STRING PROPERTY
+                 LINK_FLAGS
+                 " -compatibility_version 1 -current_version ${REMARKS_VERSION}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
   endif()
 
 endif()

@@ -13,10 +13,10 @@
 
 namespace llvm {
 
-class OptimizePHIsPass : public OptionalPassInfoMixin<OptimizePHIsPass> {
+class OptimizePHIsPass : public PassInfoMixin<OptimizePHIsPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
 };
 
 } // namespace llvm

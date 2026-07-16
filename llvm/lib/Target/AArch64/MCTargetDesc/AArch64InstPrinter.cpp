@@ -922,8 +922,18 @@ bool AArch64InstPrinter::printSysAlias(const MCInst *MI,
 
   if (CnVal == 7) {
     switch (CmVal) {
-    default:
-      return false;
+    default: return false;
+    // MLBI aliases
+    case 0: {
+      const AArch64MLBI::MLBI *MLBI =
+          AArch64MLBI::lookupMLBIByEncoding(Encoding);
+      if (!MLBI || !MLBI->haveFeatures(STI.getFeatureBits()))
+        return false;
+
+      NeedsReg = MLBI->NeedsReg;
+      Ins = "mlbi\t";
+      Name = std::string(MLBI->Name);
+    } break;
     // Maybe IC, maybe Prediction Restriction
     case 1:
       switch (Op1Val) {
@@ -1011,10 +1021,10 @@ bool AArch64InstPrinter::printSysAlias(const MCInst *MI,
     if (!TLBI || !TLBI->haveFeatures(STI.getFeatureBits()))
       return false;
 
-    NeedsReg = TLBI->RegUse == REG_REQUIRED;
+    NeedsReg = TLBI->NeedsReg;
     if (STI.hasFeature(AArch64::FeatureAll) ||
         STI.hasFeature(AArch64::FeatureTLBID))
-      OptionalReg = TLBI->RegUse == REG_OPTIONAL;
+      OptionalReg = TLBI->OptionalReg;
     Ins = "tlbi\t";
     Name = std::string(TLBI->Name);
   } else if (CnVal == 12) {
@@ -1043,10 +1053,10 @@ bool AArch64InstPrinter::printSysAlias(const MCInst *MI,
     if (!PLBI || !PLBI->haveFeatures(STI.getFeatureBits()))
       return false;
 
-    NeedsReg = PLBI->RegUse == REG_REQUIRED;
+    NeedsReg = PLBI->NeedsReg;
     if (STI.hasFeature(AArch64::FeatureAll) ||
         STI.hasFeature(AArch64::FeatureTLBID))
-      OptionalReg = PLBI->RegUse == REG_OPTIONAL;
+      OptionalReg = PLBI->OptionalReg;
     Ins = "plbi\t";
     Name = std::string(PLBI->Name);
   } else
@@ -1153,6 +1163,12 @@ bool AArch64InstPrinter::printSyspAlias(const MCInst *MI,
   if (CnVal == 8 || CnVal == 9) {
     // TLBIP aliases
 
+    if (CnVal == 9) {
+      if (!STI.hasFeature(AArch64::FeatureXS))
+        return false;
+      Encoding &= ~(1 << 7);
+    }
+
     const AArch64TLBIP::TLBIP *TLBIP =
         AArch64TLBIP::lookupTLBIPByEncoding(Encoding);
     if (!TLBIP || !TLBIP->haveFeatures(STI.getFeatureBits()))
@@ -1160,6 +1176,8 @@ bool AArch64InstPrinter::printSyspAlias(const MCInst *MI,
 
     Ins = "tlbip\t";
     Name = std::string(TLBIP->Name);
+    if (CnVal == 9)
+      Name += "nXS";
   } else
     return false;
 

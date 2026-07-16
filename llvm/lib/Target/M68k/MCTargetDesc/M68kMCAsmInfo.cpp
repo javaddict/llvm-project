@@ -27,9 +27,7 @@ const MCAsmInfo::AtSpecifier atSpecifiers[] = {
 
 void M68kELFMCAsmInfo::anchor() {}
 
-M68kELFMCAsmInfo::M68kELFMCAsmInfo(const Triple &T,
-                                   const MCTargetOptions &Options)
-    : MCAsmInfoELF(Options) {
+M68kELFMCAsmInfo::M68kELFMCAsmInfo(const Triple &T) {
   CodePointerSize = 4;
   CalleeSaveStackSlotSize = 4;
 

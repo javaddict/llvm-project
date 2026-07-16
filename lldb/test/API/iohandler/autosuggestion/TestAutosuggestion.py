@@ -46,6 +46,7 @@ class TestCase(PExpectTest):
             + " "
         )
 
+        self.quit()
 
     @skipIfAsan
     @skipIfEditlineSupportMissing
@@ -131,6 +132,7 @@ class TestCase(PExpectTest):
         self.child.send(ctrl_f + "help breakpoint" + "\n")
         self.child.expect_exact(breakpoint_output_needle)
 
+        self.quit()
 
     @skipIfAsan
     @skipIfEditlineSupportMissing
@@ -154,3 +156,4 @@ class TestCase(PExpectTest):
         self.child.expect_exact(self.ANSI_RED + "ame variable" + self.ANSI_CYAN)
         self.child.send("\n")
 
+        self.quit()

@@ -143,7 +143,8 @@ static bool allUsesHaveSourceMods(MachineInstr &MI, MachineRegisterInfo &MRI,
 }
 
 static bool mayIgnoreSignedZero(MachineInstr &MI) {
-  return MI.getFlag(MachineInstr::MIFlag::FmNsz);
+  const TargetOptions &Options = MI.getMF()->getTarget().Options;
+  return Options.NoSignedZerosFPMath || MI.getFlag(MachineInstr::MIFlag::FmNsz);
 }
 
 static bool isInv2Pi(const APFloat &APF) {
@@ -463,9 +464,8 @@ bool AMDGPUCombinerHelper::matchCombineFmulWithSelectToFldexp(
   LLT DestTy = MRI.getType(Dst);
   LLT ScalarDestTy = DestTy.getScalarType();
 
-  // TODO: Expected float type in ScalarDestTy
-  if ((ScalarDestTy != LLT::scalar(64) && ScalarDestTy != LLT::scalar(32) &&
-       ScalarDestTy != LLT::scalar(16)) ||
+  if ((ScalarDestTy != LLT::float64() && ScalarDestTy != LLT::float32() &&
+       ScalarDestTy != LLT::float16()) ||
       !MRI.hasOneNonDBGUse(Sel.getOperand(0).getReg()))
     return false;
 
@@ -486,8 +486,7 @@ bool AMDGPUCombinerHelper::matchCombineFmulWithSelectToFldexp(
     return false;
 
   // For f32, only non-inline constants should be transformed.
-  // TODO: Expected float32
-  if (ScalarDestTy == LLT::scalar(32) && TII.isInlineConstant(*SelectTrueVal) &&
+  if (ScalarDestTy == LLT::float32() && TII.isInlineConstant(*SelectTrueVal) &&
       TII.isInlineConstant(*SelectFalseVal))
     return false;
 

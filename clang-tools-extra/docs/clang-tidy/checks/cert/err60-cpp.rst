@@ -1,4 +1,6 @@
 .. title:: clang-tidy - cert-err60-cpp
+.. meta::
+   :http-equiv=refresh: 5;URL=../bugprone/exception-copy-constructor-throws.html
 
 cert-err60-cpp
 ==============

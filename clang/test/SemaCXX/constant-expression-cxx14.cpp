@@ -250,7 +250,7 @@ namespace subobject {
 namespace lifetime {
   constexpr int &&id(int &&n) { return static_cast<int&&>(n); }
   constexpr int &&dead() { return id(0); } // expected-note {{temporary created here}}
-  constexpr int bad() { int &&n = dead(); n = 1; return n; } // expected-note {{assignment to object outside its lifetime}}
+  constexpr int bad() { int &&n = dead(); n = 1; return n; } // expected-note {{assignment to temporary whose lifetime has ended}}
   static_assert(bad(), ""); // expected-error {{constant expression}} expected-note {{in call}}
 }
 
@@ -842,8 +842,7 @@ namespace StmtExpr {
   static_assert(f(1) == 1, ""); // expected-error {{constant expression}} expected-note {{in call}}
 
   constexpr int g() {
-    return ({ int n; n; }); // expected-note {{read of uninitialized object}} \
-                            // expected-note {{declared here}}
+    return ({ int n; n; }); // expected-note {{read of uninitialized object}}
   }
   static_assert(g() == 0, ""); // expected-error {{constant expression}} expected-note {{in call}}
 
@@ -882,7 +881,7 @@ namespace Lifetime {
   constexpr int &get(int &&r) { return r; }
   // cxx23-error@-1 {{non-const lvalue reference to type 'int' cannot bind to a temporary of type 'int'}}
   constexpr int f() {
-    int &r = get(123); // cxx14_20-note {{temporary created here}}
+    int &r = get(123);
     return r;
     // cxx14_20-note@-1 {{read of object outside its lifetime}}
   }
@@ -891,7 +890,7 @@ namespace Lifetime {
   constexpr int g() {
     int *p = 0;
     {
-      int n = 0; // expected-note {{declared here}}
+      int n = 0;
       p = &n;
       n = 42;
     }
@@ -904,9 +903,9 @@ namespace Lifetime {
     int *p[4] = {};
     int &&r = 1;
     p[0] = &r;
-    while (int a = 1) { // expected-note {{declared here}}
+    while (int a = 1) {
       p[1] = &a;
-      for (int b = 1; int c = 1; ) { // expected-note 2{{declared here}}
+      for (int b = 1; int c = 1; ) {
         p[2] = &b, p[3] = &c;
         break;
       }
@@ -924,7 +923,7 @@ namespace Lifetime {
     int *p = 0;
     for (int i = 0; i != 2; ++i) {
       int *q = p;
-      int n = 0; // expected-note {{declared here}}
+      int n = 0;
       p = &n;
       if (i)
         // This modifies the 'n' from the previous iteration of the loop outside
@@ -956,7 +955,7 @@ namespace PR17615 {
   struct A {
     int &&r;
     constexpr A(int &&r) : r(static_cast<int &&>(r)) {}
-    constexpr A() : A(0) { // expected-note {{temporary created here}}
+    constexpr A() : A(0) {
       (void)+r; // expected-note {{outside its lifetime}}
     }
   };
@@ -1125,9 +1124,7 @@ struct A {
   };
   constexpr A() {}
 };
-static_assert(A().x == 3, ""); // cxx14-error{{not an integral constant expression}} \
-                               // cxx14-note{{in call to 'A()'}} \
-                               // cxx14-note {{temporary created here}}
+static_assert(A().x == 3, ""); // cxx14-error{{not an integral constant expression}} cxx14-note{{in call to 'A()'}}
 
 // Reference another indirect field, with different 'this'.
 struct B {
@@ -1237,14 +1234,12 @@ namespace ObjectsUnderConstruction {
   };
   constexpr Aggregate aggr1;
   static_assert(aggr1.x == 1 && aggr1.y == 1, "");
-  // This is not specified by the standard, but sanity requires it.
+  // FIXME: This is not specified by the standard, but sanity requires it.
   constexpr Aggregate aggr2 = {};
   static_assert(aggr2.x == 1 && aggr2.y == 1, "");
 
   // The lifetime of 'n' begins at the initialization, not before.
-  constexpr int n = ++const_cast<int&>(n); // expected-error {{constant expression}} \
-                                           // expected-note {{increment of object outside its lifetime}} \
-                                           // expected-note {{declared here}}
+  constexpr int n = ++const_cast<int&>(n); // expected-error {{constant expression}} expected-note {{increment of object outside its lifetime}}
 }
 
 namespace PR39728 {
@@ -1284,20 +1279,16 @@ namespace TemporaryWithBadPointer {
 
 namespace UninitCompoundAssign {
 constexpr int scalar(int a) {
-  int sum; // cxx14-warning {{uninitialized variable in a constexpr function is a C++20 extension}} \
-           // #sum-decl
-  sum += a; // expected-note {{read of uninitialized object}} \
-            // expected-note@#sum-decl {{declared here}}
+  int sum; // cxx14-warning {{uninitialized variable in a constexpr function is a C++20 extension}}
+  sum += a; // expected-note {{read of uninitialized object}};
   return 0;
 }
 static_assert(scalar(3), ""); // expected-error {{constant expression}} \
                               // expected-note {{in call to 'scalar(3)'}}
 
 constexpr int array(int a) {
-  int arr[3]; // cxx14-warning {{uninitialized variable in a constexpr function is a C++20 extension}} \
-              // #arr-decl
-  arr[1] += a; // expected-note {{read of uninitialized object}} \
-               // expected-note@#arr-decl {{declared here}}
+  int arr[3]; // cxx14-warning {{uninitialized variable in a constexpr function is a C++20 extension}}
+  arr[1] += a; // expected-note {{read of uninitialized object}};
   return 0;
 }
 static_assert(array(3), ""); // expected-error {{constant expression}} \
@@ -1308,9 +1299,8 @@ struct Foo {
   constexpr Foo() {} // cxx14-warning {{constexpr constructor that does not initialize all members is a C++20 extension}}
 };
 constexpr int field(int a) {
-  Foo f; // #f-decl
-  f.val += a; // expected-note {{read of uninitialized object}} \
-              // expected-note@#f-decl {{declared here}}
+  Foo f;
+  f.val += a; // expected-note {{read of uninitialized object}};
   return 0;
 }
 static_assert(field(3), ""); // expected-error {{constant expression}} \

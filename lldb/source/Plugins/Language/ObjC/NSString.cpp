@@ -145,26 +145,28 @@ bool lldb_private::formatters::NSStringSummaryProvider(
     if (error.Fail())
       return false;
     if (has_explicit_length && is_unicode) {
-      options.SetLocation(Address(location));
+      options.SetLocation(location);
       options.SetTargetSP(valobj.GetTargetSP());
       options.SetStream(&stream);
       options.SetQuote('"');
       options.SetSourceSize(explicit_length);
       options.SetHasSourceSize(has_explicit_length);
-      options.SetZeroTermination(StringPrinter::ZeroTermination::Ignore);
+      options.SetNeedsZeroTermination(false);
       options.SetIgnoreMaxLength(summary_options.GetCapping() ==
                                  TypeSummaryCapping::eTypeSummaryUncapped);
+      options.SetBinaryZeroIsTerminator(false);
       return StringPrinter::ReadStringAndDumpToStream<
           StringPrinter::StringElementType::UTF16>(options);
     } else {
-      options.SetLocation(Address(location + 1));
+      options.SetLocation(location + 1);
       options.SetTargetSP(valobj.GetTargetSP());
       options.SetStream(&stream);
       options.SetSourceSize(explicit_length);
       options.SetHasSourceSize(has_explicit_length);
-      options.SetZeroTermination(StringPrinter::ZeroTermination::Ignore);
+      options.SetNeedsZeroTermination(false);
       options.SetIgnoreMaxLength(summary_options.GetCapping() ==
                                  TypeSummaryCapping::eTypeSummaryUncapped);
+      options.SetBinaryZeroIsTerminator(false);
       return StringPrinter::ReadStringAndDumpToStream<
           StringPrinter::StringElementType::ASCII>(options);
     }
@@ -172,7 +174,7 @@ bool lldb_private::formatters::NSStringSummaryProvider(
              !is_path_store && !is_mutable) {
     uint64_t location = 3 * ptr_size + valobj_addr;
 
-    options.SetLocation(Address(location));
+    options.SetLocation(location);
     options.SetTargetSP(valobj.GetTargetSP());
     options.SetStream(&stream);
     options.SetQuote('"');
@@ -194,18 +196,16 @@ bool lldb_private::formatters::NSStringSummaryProvider(
       if (error.Fail())
         return false;
     }
-    options.SetLocation(Address(location));
+    options.SetLocation(location);
     options.SetTargetSP(valobj.GetTargetSP());
     options.SetStream(&stream);
     options.SetQuote('"');
     options.SetSourceSize(explicit_length);
     options.SetHasSourceSize(has_explicit_length);
-    if (has_explicit_length)
-      options.SetZeroTermination(StringPrinter::ZeroTermination::Ignore);
-    else
-      options.SetZeroTermination(StringPrinter::ZeroTermination::ZeroTerminate);
+    options.SetNeedsZeroTermination(!has_explicit_length);
     options.SetIgnoreMaxLength(summary_options.GetCapping() ==
                                TypeSummaryCapping::eTypeSummaryUncapped);
+    options.SetBinaryZeroIsTerminator(!has_explicit_length);
     return StringPrinter::ReadStringAndDumpToStream<
         StringPrinter::StringElementType::UTF16>(options);
   } else if (is_path_store) {
@@ -222,18 +222,16 @@ bool lldb_private::formatters::NSStringSummaryProvider(
     explicit_length = length_valobj_sp->GetValueAsUnsigned(0) >> 20;
     lldb::addr_t location = valobj.GetValueAsUnsigned(0) + ptr_size + 4;
 
-    options.SetLocation(Address(location));
+    options.SetLocation(location);
     options.SetTargetSP(valobj.GetTargetSP());
     options.SetStream(&stream);
     options.SetQuote('"');
     options.SetSourceSize(explicit_length);
     options.SetHasSourceSize(has_explicit_length);
-    if (has_explicit_length)
-      options.SetZeroTermination(StringPrinter::ZeroTermination::Ignore);
-    else
-      options.SetZeroTermination(StringPrinter::ZeroTermination::ZeroTerminate);
+    options.SetNeedsZeroTermination(!has_explicit_length);
     options.SetIgnoreMaxLength(summary_options.GetCapping() ==
                                TypeSummaryCapping::eTypeSummaryUncapped);
+    options.SetBinaryZeroIsTerminator(!has_explicit_length);
     return StringPrinter::ReadStringAndDumpToStream<
         StringPrinter::StringElementType::UTF16>(options);
   } else if (is_inline) {
@@ -247,17 +245,15 @@ bool lldb_private::formatters::NSStringSummaryProvider(
       has_explicit_length = !(error.Fail() || explicit_length == 0);
       location++;
     }
-    options.SetLocation(Address(location));
+    options.SetLocation(location);
     options.SetTargetSP(valobj.GetTargetSP());
     options.SetStream(&stream);
     options.SetSourceSize(explicit_length);
     options.SetHasSourceSize(has_explicit_length);
-    if (has_explicit_length)
-      options.SetZeroTermination(StringPrinter::ZeroTermination::Ignore);
-    else
-      options.SetZeroTermination(StringPrinter::ZeroTermination::ZeroTerminate);
+    options.SetNeedsZeroTermination(!has_explicit_length);
     options.SetIgnoreMaxLength(summary_options.GetCapping() ==
                                TypeSummaryCapping::eTypeSummaryUncapped);
+    options.SetBinaryZeroIsTerminator(!has_explicit_length);
     if (has_explicit_length)
       return StringPrinter::ReadStringAndDumpToStream<
           StringPrinter::StringElementType::UTF8>(options);
@@ -272,7 +268,7 @@ bool lldb_private::formatters::NSStringSummaryProvider(
     if (has_explicit_length && !has_null)
       explicit_length++; // account for the fact that there is no NULL and we
                          // need to have one added
-    options.SetLocation(Address(location));
+    options.SetLocation(location);
     options.SetTargetSP(valobj.GetTargetSP());
     options.SetStream(&stream);
     options.SetSourceSize(explicit_length);
@@ -296,7 +292,7 @@ bool lldb_private::formatters::NSAttributedStringSummaryProvider(
   pointer_value += addr_size;
   CompilerType type(valobj.GetCompilerType());
   ExecutionContext exe_ctx(target_sp, false);
-  ValueObjectSP child_ptr_sp(valobj.CreateChildValueObjectFromAddress(
+  ValueObjectSP child_ptr_sp(valobj.CreateValueObjectFromAddress(
       "string_ptr", pointer_value, exe_ctx, type));
   if (!child_ptr_sp)
     return false;

@@ -13,7 +13,7 @@
 
 namespace llvm {
 class SIOptimizeExecMaskingPreRAPass
-    : public OptionalPassInfoMixin<SIOptimizeExecMaskingPreRAPass> {
+    : public PassInfoMixin<SIOptimizeExecMaskingPreRAPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);

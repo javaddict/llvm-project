@@ -99,7 +99,7 @@ static void removeDefsFromFunction(Oracle &O, MachineFunction &MF) {
         unsigned ImpDef = IsGeneric ? TargetOpcode::G_IMPLICIT_DEF
                                     : TargetOpcode::IMPLICIT_DEF;
 
-        RegState OpFlags = getRegState(MO) & ~RegState::Implicit;
+        unsigned OpFlags = getRegState(MO) & ~RegState::Implicit;
         InsPt = BuildMI(MBB, InsPt, DebugLoc(), TII->get(ImpDef))
           .addReg(RegPair.Reg, OpFlags, RegPair.SubReg);
       }

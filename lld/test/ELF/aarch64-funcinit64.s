@@ -10,7 +10,7 @@
 .data
 # CHECK: R_AARCH64_IRELATIVE [[FOO:[0-9a-f]*]]
 # ERR: relocation R_AARCH64_FUNCINIT64 cannot be used against preemptible symbol 'foo'
-.8byte %funcinit(foo)
+.8byte foo@FUNCINIT
 
 .text
 # CHECK: {{0*}}[[FOO]] {{.*}} foo

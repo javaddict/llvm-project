@@ -2,41 +2,43 @@
 :single_byte_coverage
 big_switch
 # Func Hash:
-461999971447013334
+13144136522122330070
 # Num Counters:
-25
+27
 # Counter Values:
 1
 1
 1
 1
-0
-1
-1
-1
-1
-1
-1
-1
-1
-1
-1
-1
 1
 1
 1
 0
-0
-0
-0
-0
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
 1
 
 boolean_operators
 # Func Hash:
 1245693242827665
 # Num Counters:
-26
+17
 # Counter Values:
 1
 1
@@ -55,31 +57,15 @@ boolean_operators
 1
 1
 1
-0
-1
-1
-1
-1
-1
-1
-1
-0
 
 boolop_loops
 # Func Hash:
-873389568252105055
+12402604614320574815
 # Num Counters:
-21
+23
 # Counter Values:
 1
-1
-1
-1
-1
-1
-1
-1
-1
+0
 1
 1
 1
@@ -88,7 +74,16 @@ boolop_loops
 1
 1
 1
+1
 0
+1
+1
+1
+1
+1
+0
+1
+1
 1
 1
 1
@@ -97,8 +92,11 @@ branch-c-general.c:static_func
 # Func Hash:
 18129
 # Num Counters:
-2
+5
 # Counter Values:
+1
+1
+1
 1
 1
 
@@ -109,16 +107,16 @@ conditional_operator
 5
 # Counter Values:
 1
+1
 0
 1
 1
-0
 
 conditionals
 # Func Hash:
-293081517422662482
+4904767535850050386
 # Num Counters:
-24
+25
 # Counter Values:
 1
 1
@@ -126,31 +124,36 @@ conditionals
 1
 1
 1
-1
-1
-1
-1
-1
-1
-1
-1
-0
-1
 0
 1
 1
-0
 1
 1
-0
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
 1
 
 do_fallthrough
 # Func Hash:
-644163604256451218
+8714614136504380050
 # Num Counters:
-6
+10
 # Counter Values:
+1
+1
+1
+1
 1
 1
 1
@@ -160,9 +163,9 @@ do_fallthrough
 
 early_exits
 # Func Hash:
-574511640547777597
+2880354649761471549
 # Num Counters:
-17
+20
 # Counter Values:
 1
 0
@@ -172,21 +175,24 @@ early_exits
 1
 1
 1
-0
+1
+1
+1
 1
 1
 1
 0
-0
+1
+1
 1
 0
 0
 
 jumps
 # Func Hash:
-63440946314451995
+15051420506203462683
 # Num Counters:
-33
+38
 # Counter Values:
 1
 1
@@ -194,31 +200,36 @@ jumps
 1
 0
 0
-1
-0
-1
-1
-1
-1
 0
 1
 0
-1
-1
 1
 1
 0
 1
 1
 0
+1
+1
+1
+1
+1
+1
+1
+0
+1
+1
 0
 1
 1
 1
 1
-0
+1
+1
 1
 0
+0
+1
 1
 1
 
@@ -234,8 +245,15 @@ simple_loops
 # Func Hash:
 1245818015463121
 # Num Counters:
-4
+11
 # Counter Values:
+1
+1
+1
+1
+1
+1
+1
 1
 1
 1
@@ -245,7 +263,7 @@ switches
 # Func Hash:
 43242458792028222
 # Num Counters:
-28
+29
 # Counter Values:
 1
 1
@@ -256,6 +274,13 @@ switches
 0
 1
 1
+0
+1
+1
+1
+1
+1
+1
 1
 1
 1
@@ -265,13 +290,7 @@ switches
 1
 1
 1
-0
 1
-1
-0
-0
-0
-0
 1
 0
 0

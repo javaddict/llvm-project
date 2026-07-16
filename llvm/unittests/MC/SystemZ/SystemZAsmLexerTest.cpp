@@ -81,7 +81,8 @@ protected:
     SrcMgr.AddNewSourceBuffer(std::move(Buffer), SMLoc());
     EXPECT_EQ(Buffer, nullptr);
 
-    Ctx.reset(new MCContext(Triple, *MAI, *MRI, *STI, &SrcMgr));
+    Ctx.reset(new MCContext(Triple, MAI.get(), MRI.get(), STI.get(), &SrcMgr,
+                            &MCOptions));
     MOFI.reset(TheTarget->createMCObjectFileInfo(*Ctx, /*PIC=*/false,
                                                  /*LargeCodeModel=*/false));
     Ctx->setObjectFileInfo(MOFI.get());
@@ -90,7 +91,8 @@ protected:
 
     Parser.reset(createMCAsmParser(SrcMgr, *Ctx, *Str, *MAI));
 
-    TargetAsmParser.reset(TheTarget->createMCAsmParser(*STI, *Parser, *MII));
+    TargetAsmParser.reset(
+        TheTarget->createMCAsmParser(*STI, *Parser, *MII, MCOptions));
     Parser->setTargetParser(*TargetAsmParser);
   }
 

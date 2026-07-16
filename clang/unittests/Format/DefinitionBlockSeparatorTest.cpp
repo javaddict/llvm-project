@@ -291,22 +291,6 @@ TEST_F(DefinitionBlockSeparatorTest, Always) {
                "struct E {};",
                Style);
 
-  constexpr StringRef Code("// NOLINTBEGIN\n"
-                           "int x = 1;\n"
-                           "int y = 2;\n"
-                           "// NOLINTEND\n"
-                           "\n"
-                           "void some_function() {}");
-  verifyFormat(Code, Style, Code);
-
-  constexpr StringRef Code2("int x = 0;\n"
-                            "int y = 0;\n"
-                            "// trailing comment 1\n"
-                            "// trailing comment 2\n"
-                            "\n"
-                            "void some_function() {}");
-  verifyFormat(Code2, Style, Code2);
-
   std::string Prefix = "namespace {\n";
   std::string Infix = "\n"
                       "// Enum test1\n"
@@ -478,24 +462,8 @@ TEST_F(DefinitionBlockSeparatorTest, OpeningBracketOwnsLine) {
 
 TEST_F(DefinitionBlockSeparatorTest, TryBlocks) {
   FormatStyle Style = getLLVMStyle();
-  Style.SeparateDefinitionBlocks = FormatStyle::SDS_Always;
-  verifyFormat("void foo() try {\n"
-               "  // do something\n"
-               "} catch (const std::exception &) {\n"
-               "  // handle exception\n"
-               "}",
-               Style, "", /*Inverse=*/false);
   Style.BreakBeforeBraces = FormatStyle::BS_Allman;
-  verifyFormat("void foo()\n"
-               "try\n"
-               "{\n"
-               "  // do something\n"
-               "}\n"
-               "catch (const std::exception &)\n"
-               "{\n"
-               "  // handle exception\n"
-               "}",
-               Style, "", /*Inverse=*/false);
+  Style.SeparateDefinitionBlocks = FormatStyle::SDS_Always;
   verifyFormat("void FunctionWithInternalTry()\n"
                "{\n"
                "  try\n"
@@ -572,7 +540,7 @@ TEST_F(DefinitionBlockSeparatorTest, Leave) {
 TEST_F(DefinitionBlockSeparatorTest, CSharp) {
   FormatStyle Style = getLLVMStyle(FormatStyle::LK_CSharp);
   Style.SeparateDefinitionBlocks = FormatStyle::SDS_Always;
-  Style.AllowShortFunctionsOnASingleLine = FormatStyle::ShortFunctionStyle();
+  Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_None;
   Style.AllowShortEnumsOnASingleLine = false;
   verifyFormat("namespace {\r\n"
                "public class SomeTinyClass {\r\n"
@@ -618,7 +586,7 @@ TEST_F(DefinitionBlockSeparatorTest, CSharp) {
 TEST_F(DefinitionBlockSeparatorTest, JavaScript) {
   FormatStyle Style = getLLVMStyle(FormatStyle::LK_JavaScript);
   Style.SeparateDefinitionBlocks = FormatStyle::SDS_Always;
-  Style.AllowShortFunctionsOnASingleLine = FormatStyle::ShortFunctionStyle();
+  Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_None;
   Style.AllowShortEnumsOnASingleLine = false;
   verifyFormat("export const enum Foo {\n"
                "  A = 1,\n"

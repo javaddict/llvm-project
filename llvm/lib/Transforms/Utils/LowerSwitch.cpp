@@ -191,7 +191,7 @@ BasicBlock *NewLeafBlock(CaseRange &Leaf, Value *Val, ConstantInt *LowerBound,
 
   // Make the conditional branch...
   BasicBlock *Succ = Leaf.BB;
-  CondBrInst::Create(Comp, Succ, Default, NewLeaf);
+  BranchInst::Create(Succ, Default, Comp, NewLeaf);
 
   // Update the PHI incoming value/block for the default.
   for (auto &I : Default->phis()) {
@@ -297,7 +297,7 @@ BasicBlock *SwitchConvert(CaseItr Begin, CaseItr End, ConstantInt *LowerBound,
   F->insert(++OrigBlock->getIterator(), NewNode);
   Comp->insertInto(NewNode, NewNode->end());
 
-  CondBrInst::Create(Comp, LBranch, RBranch, NewNode);
+  BranchInst::Create(LBranch, RBranch, Comp, NewNode);
   return NewNode;
 }
 
@@ -377,7 +377,7 @@ void ProcessSwitchInst(SwitchInst *SI,
 
   // If there is only the default destination, just branch.
   if (Cases.empty()) {
-    UncondBrInst::Create(Default, OrigBlock);
+    BranchInst::Create(Default, OrigBlock);
     // Remove all the references from Default's PHIs to OrigBlock, but one.
     FixPhis(Default, OrigBlock, OrigBlock, UnsignedMax);
     SI->eraseFromParent();
@@ -492,7 +492,7 @@ void ProcessSwitchInst(SwitchInst *SI,
 
     // If there are no cases left, just branch.
     if (Cases.empty()) {
-      UncondBrInst::Create(Default, OrigBlock);
+      BranchInst::Create(Default, OrigBlock);
       SI->eraseFromParent();
       // As all the cases have been replaced with a single branch, only keep
       // one entry in the PHI nodes.
@@ -521,7 +521,7 @@ void ProcessSwitchInst(SwitchInst *SI,
     FixPhis(Default, OrigBlock, nullptr, UnsignedMax);
 
   // Branch to our shiny new if-then stuff...
-  UncondBrInst::Create(SwitchBlock, OrigBlock);
+  BranchInst::Create(SwitchBlock, OrigBlock);
 
   // We are now done with the switch instruction, delete it.
   BasicBlock *OldDefault = SI->getDefaultDest();

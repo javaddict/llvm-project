@@ -65,3 +65,5 @@ _start:
 # CHECK-NEXT:        Name:            g3
 # CHECK-NEXT:      - Index:           2
 # CHECK-NEXT:        Name:            g4
+# CHECK-NEXT:      - Index:           3
+# CHECK-NEXT:        Name:            __stack_pointer

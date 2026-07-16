@@ -49,6 +49,7 @@ class TestCase(PExpectTest):
         # Send EOF to quit the Python REPL.
         self.child.sendeof()
 
+        self.quit()
 
     # PExpect uses many timeouts internally and doesn't play well
     # under ASAN on a loaded machine..
@@ -70,3 +71,4 @@ class TestCase(PExpectTest):
         # Send EOF to quit the Python REPL.
         self.child.sendeof()
 
+        self.quit()

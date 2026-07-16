@@ -12,8 +12,7 @@
 #include "llvm/CodeGen/MachinePassManager.h"
 
 namespace llvm {
-class SILowerControlFlowPass
-    : public OptionalPassInfoMixin<SILowerControlFlowPass> {
+class SILowerControlFlowPass : public PassInfoMixin<SILowerControlFlowPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);

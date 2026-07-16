@@ -95,8 +95,6 @@ public:
 
   template <typename T> T registers() = delete;
 
-  template <typename T> T registers() const = delete;
-
   void ConfigureOffsets();
 
 protected:
@@ -145,12 +143,6 @@ template <>
 inline DynamicRegisterInfo::reg_collection_range
 DynamicRegisterInfo::registers() {
   return reg_collection_range(m_regs);
-}
-
-template <>
-inline DynamicRegisterInfo::reg_collection_const_range
-DynamicRegisterInfo::registers() const {
-  return reg_collection_const_range(m_regs);
 }
 
 void addSupplementaryRegister(std::vector<DynamicRegisterInfo::Register> &regs,

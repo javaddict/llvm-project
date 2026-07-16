@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/totalorderf.h"
-#include "src/__support/math/totalorderf.h"
+#include "src/__support/FPUtil/BasicOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(int, totalorderf, (const float *x, const float *y)) {
-  return math::totalorderf(x, y);
+  return static_cast<int>(fputil::totalorder(*x, *y));
 }
 
 } // namespace LIBC_NAMESPACE_DECL

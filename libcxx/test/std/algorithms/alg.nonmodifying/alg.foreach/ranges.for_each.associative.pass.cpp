@@ -25,10 +25,8 @@
 #include <map>
 #include <set>
 
-#include "test_macros.h"
-
 template <class Container, class Converter>
-TEST_CONSTEXPR_CXX26 void test_node_container(Converter conv) {
+void test_node_container(Converter conv) {
   using value_type = typename Container::value_type;
 
   { // Check that an empty container works
@@ -226,12 +224,12 @@ void test_invoke_set_like() {
 }
 
 template <template <class, class> class Container>
-TEST_CONSTEXPR_CXX26 void test_invoke_map_like() {
+void test_invoke_map_like() {
   { // check that std::invoke is used
     struct S {
       int i;
 
-      TEST_CONSTEXPR_CXX26 void zero() { i = 0; }
+      void zero() { i = 0; }
     };
 
     { // Iterator overload
@@ -251,39 +249,17 @@ TEST_CONSTEXPR_CXX26 void test_invoke_map_like() {
   }
 }
 
-TEST_CONSTEXPR_CXX26 bool test() {
-  if (!TEST_IS_CONSTANT_EVALUATED) {
-    // FIXME: remove when set is made constexpr
-    test_node_container<std::set<int> >([](int i) { return i; });
-
-    // FIXME: remove when multiset is made constexpr
-    test_node_container<std::multiset<int> >([](int i) { return i; });
-
-    // FIXME: remove when multimap is made constexpr
-    test_node_container<std::multimap<int, int> >([](int i) { return std::make_pair(i, i); });
-  }
+int main(int, char**) {
+  test_node_container<std::set<int> >([](int i) { return i; });
+  test_node_container<std::multiset<int> >([](int i) { return i; });
   test_node_container<std::map<int, int> >([](int i) { return std::make_pair(i, i); });
+  test_node_container<std::multimap<int, int> >([](int i) { return std::make_pair(i, i); });
 
-  if (!TEST_IS_CONSTANT_EVALUATED) {
-    // FIXME: remove when set is made constexpr
-    test_invoke_set_like<std::set>();
-
-    // FIXME: remove when multiset is made constexpr
-    test_invoke_set_like<std::multiset>();
-
-    // FIXME: remove when multimap is made constexpr
-    test_invoke_map_like<std::multimap>();
-  }
+  test_invoke_set_like<std::set>();
+  test_invoke_set_like<std::multiset>();
 
   test_invoke_map_like<std::map>();
+  test_invoke_map_like<std::multimap>();
 
-  return true;
-}
-
-int main(int, char**) {
-  test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
   return 0;
 }

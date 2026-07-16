@@ -29,7 +29,7 @@ namespace vfs {
 class FileSystem;
 } // namespace vfs
 
-class MemProfUsePass : public OptionalPassInfoMixin<MemProfUsePass> {
+class MemProfUsePass : public PassInfoMixin<MemProfUsePass> {
 public:
   LLVM_ABI explicit MemProfUsePass(
       std::string MemoryProfileFile,

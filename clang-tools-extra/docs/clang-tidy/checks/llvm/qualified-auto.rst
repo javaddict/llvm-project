@@ -1,4 +1,6 @@
 .. title:: clang-tidy - llvm-qualified-auto
+.. meta::
+   :http-equiv=refresh: 5;URL=../readability/qualified-auto.html
 
 llvm-qualified-auto
 ===================

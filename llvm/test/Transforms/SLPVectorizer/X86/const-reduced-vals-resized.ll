@@ -4,7 +4,8 @@
 define i32 @test() {
 ; CHECK-LABEL: define i32 @test() {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
-; CHECK-NEXT:    ret i32 0
+; CHECK-NEXT:    [[TMP0:%.*]] = call i32 @llvm.vector.reduce.or.v4i32(<4 x i32> zeroinitializer)
+; CHECK-NEXT:    ret i32 [[TMP0]]
 ;
 entry:
   %cond = zext i1 false to i32

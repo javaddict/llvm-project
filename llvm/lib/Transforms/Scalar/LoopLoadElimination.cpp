@@ -199,8 +199,7 @@ public:
       Instruction *Destination = Dep.getDestination(DepChecker);
 
       if (Dep.Type == MemoryDepChecker::Dependence::Unknown ||
-          Dep.Type == MemoryDepChecker::Dependence::IndirectUnsafe ||
-          Dep.Type == MemoryDepChecker::Dependence::InvariantUnsafe) {
+          Dep.Type == MemoryDepChecker::Dependence::IndirectUnsafe) {
         if (isa<LoadInst>(Source))
           LoadsWithUnknownDependence.insert(Source);
         if (isa<LoadInst>(Destination))

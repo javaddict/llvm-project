@@ -10,6 +10,7 @@
 #include "Config.h"
 #include "FS.h"
 #include "ProjectModules.h"
+#include "ScanningProjectModules.h"
 #include "SourceCode.h"
 #include "support/Logger.h"
 #include "support/Path.h"
@@ -771,7 +772,7 @@ DirectoryBasedGlobalCompilationDatabase::getProjectModules(PathRef File) const {
   if (!Res)
     return {};
 
-  return clang::clangd::getProjectModules(Res->CDB, Opts.TFS);
+  return scanningProjectModules(Res->CDB, Opts.TFS);
 }
 
 OverlayCDB::OverlayCDB(const GlobalCompilationDatabase *Base,

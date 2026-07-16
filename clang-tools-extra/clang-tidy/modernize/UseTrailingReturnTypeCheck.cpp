@@ -14,6 +14,7 @@
 #include "clang/Tooling/FixIt.h"
 #include "llvm/ADT/StringExtras.h"
 
+#include <cctype>
 #include <optional>
 
 namespace clang::tidy {
@@ -205,16 +206,6 @@ static bool isSpecifier(Token T) {
                    tok::kw_static, tok::kw_friend, tok::kw_virtual);
 }
 
-namespace {
-
-struct ClassifiedToken {
-  Token T;
-  bool IsQualifier;
-  bool IsSpecifier;
-};
-
-} // namespace
-
 static std::optional<ClassifiedToken>
 classifyToken(const FunctionDecl &F, Preprocessor &PP, Token Tok) {
   ClassifiedToken CT;
@@ -228,7 +219,7 @@ classifyToken(const FunctionDecl &F, Preprocessor &PP, Token Tok) {
   Token End;
   End.startToken();
   End.setKind(tok::eof);
-  const std::array<Token, 2> Stream{Tok, End};
+  const SmallVector<Token, 2> Stream{Tok, End};
 
   // FIXME: do not report these token to Preprocessor.TokenWatcher.
   PP.EnterTokenStream(Stream, false, /*IsReinject=*/false);
@@ -279,8 +270,10 @@ classifyTokensBeforeFunctionName(const FunctionDecl &F, const ASTContext &Ctx,
 
       if (Info.hasMacroDefinition()) {
         const MacroInfo *MI = PP->getMacroInfo(&Info);
-        if (!MI || MI->isFunctionLike() || MI->isBuiltinMacro())
+        if (!MI || MI->isFunctionLike()) {
+          // Cannot handle function style macros.
           return std::nullopt;
+        }
       }
 
       T.setIdentifierInfo(&Info);

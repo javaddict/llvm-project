@@ -21,8 +21,7 @@ using namespace llvm;
 void MipsELFMCAsmInfo::anchor() {}
 
 MipsELFMCAsmInfo::MipsELFMCAsmInfo(const Triple &TheTriple,
-                                   const MCTargetOptions &Options)
-    : MCAsmInfoELF(Options) {
+                                   const MCTargetOptions &Options) {
   IsLittleEndian = TheTriple.isLittleEndian();
 
   MipsABIInfo ABI =
@@ -32,15 +31,17 @@ MipsELFMCAsmInfo::MipsELFMCAsmInfo(const Triple &TheTriple,
     CodePointerSize = CalleeSaveStackSlotSize = 8;
 
   if (ABI.IsO32())
-    InternalSymbolPrefix = "$";
+    PrivateGlobalPrefix = "$";
   else if (ABI.IsN32() || ABI.IsN64())
-    InternalSymbolPrefix = ".L";
+    PrivateGlobalPrefix = ".L";
+  PrivateLabelPrefix = PrivateGlobalPrefix;
 
   AlignmentIsInBytes          = false;
   Data16bitsDirective         = "\t.2byte\t";
   Data32bitsDirective         = "\t.4byte\t";
   Data64bitsDirective         = "\t.8byte\t";
   CommentString               = "#";
+  AllowDollarAtStartOfIdentifier = false;
   ZeroDirective               = "\t.space\t";
   UseAssignmentForEHBegin = true;
   SupportsDebugInformation = true;
@@ -50,14 +51,14 @@ MipsELFMCAsmInfo::MipsELFMCAsmInfo(const Triple &TheTriple,
 
 void MipsCOFFMCAsmInfo::anchor() {}
 
-MipsCOFFMCAsmInfo::MipsCOFFMCAsmInfo(const MCTargetOptions &Options)
-    : MCAsmInfoGNUCOFF(Options) {
+MipsCOFFMCAsmInfo::MipsCOFFMCAsmInfo() {
   HasSingleParameterDotFile = true;
   WinEHEncodingType = WinEH::EncodingType::Itanium;
 
   ExceptionsType = ExceptionHandling::WinEH;
 
-  InternalSymbolPrefix = ".L";
+  PrivateGlobalPrefix = ".L";
+  PrivateLabelPrefix = ".L";
   AllowAtInName = true;
 }
 

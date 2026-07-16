@@ -67,7 +67,6 @@
 using namespace llvm;
 
 static codegen::RegisterCodeGenFlags CGF;
-static codegen::RegisterMTuneFlag MTF;
 static codegen::RegisterSaveStatsFlag SSF;
 
 // General options for llc.  Other pass-specific options are specified
@@ -386,14 +385,17 @@ int main(int argc, char **argv) {
   initializeCore(*Registry);
   initializeCodeGen(*Registry);
   initializeLoopStrengthReducePass(*Registry);
+  initializeLowerIntrinsicsPass(*Registry);
   initializePostInlineEntryExitInstrumenterPass(*Registry);
   initializeUnreachableBlockElimLegacyPassPass(*Registry);
   initializeConstantHoistingLegacyPassPass(*Registry);
   initializeScalarOpts(*Registry);
-  initializeIPO(*Registry);
   initializeVectorization(*Registry);
   initializeScalarizeMaskedMemIntrinLegacyPassPass(*Registry);
+  initializeExpandReductionsPass(*Registry);
+  initializeHardwareLoopsLegacyPass(*Registry);
   initializeTransformUtils(*Registry);
+  initializeReplaceWithVeclibLegacyPass(*Registry);
 
   // Initialize debugging passes.
   initializeScavengerTestPass(*Registry);
@@ -502,15 +504,17 @@ static int compileModule(char **argv, SmallVectorImpl<PassPlugin> &PluginList,
   std::unique_ptr<Module> M;
   std::unique_ptr<MIRParser> MIR;
   Triple TheTriple;
-  std::string CPUStr = codegen::getCPUStr();
-  std::string TuneCPUStr = codegen::getTuneCPUStr();
-  std::string FeaturesStr = codegen::getFeaturesStr();
+  std::string CPUStr = codegen::getCPUStr(),
+              FeaturesStr = codegen::getFeaturesStr();
 
   // Set attributes on functions as loaded from MIR from command line arguments.
-  auto setMIRFunctionAttributes = [&CPUStr, &TuneCPUStr,
-                                   &FeaturesStr](Function &F) {
-    codegen::setFunctionAttributes(F, CPUStr, FeaturesStr, TuneCPUStr);
+  auto setMIRFunctionAttributes = [&CPUStr, &FeaturesStr](Function &F) {
+    codegen::setFunctionAttributes(CPUStr, FeaturesStr, F);
   };
+
+  auto MAttrs = codegen::getMAttrs();
+  bool SkipModule =
+      CPUStr == "help" || (!MAttrs.empty() && MAttrs.front() == "help");
 
   CodeGenOptLevel OLvl;
   if (auto Level = CodeGenOpt::parseLevel(OptLevel)) {
@@ -592,14 +596,61 @@ static int compileModule(char **argv, SmallVectorImpl<PassPlugin> &PluginList,
   std::unique_ptr<TargetMachine> Target;
 
   // If user just wants to list available options, skip module loading
-  auto MAttrs = codegen::getMAttrs();
-  bool SkipModule =
-      CPUStr == "help" || TuneCPUStr == "help" || is_contained(MAttrs, "help");
-  if (SkipModule) {
+  if (!SkipModule) {
+    auto SetDataLayout = [&](StringRef DataLayoutTargetTriple,
+                             StringRef OldDLStr) -> std::optional<std::string> {
+      // If we are supposed to override the target triple, do so now.
+      std::string IRTargetTriple = DataLayoutTargetTriple.str();
+      if (!TargetTriple.empty())
+        IRTargetTriple = Triple::normalize(TargetTriple);
+      TheTriple = Triple(IRTargetTriple);
+      if (TheTriple.getTriple().empty())
+        TheTriple.setTriple(sys::getDefaultTargetTriple());
+
+      std::string Error;
+      TheTarget =
+          TargetRegistry::lookupTarget(codegen::getMArch(), TheTriple, Error);
+      if (!TheTarget) {
+        WithColor::error(errs(), argv[0]) << Error << "\n";
+        exit(1);
+      }
+
+      InitializeOptions(TheTriple);
+      Target = std::unique_ptr<TargetMachine>(TheTarget->createTargetMachine(
+          TheTriple, CPUStr, FeaturesStr, Options, RM, CM, OLvl));
+      assert(Target && "Could not allocate target machine!");
+
+      // Set PGO options based on command line flags
+      setPGOOptions(*Target);
+
+      return Target->createDataLayout().getStringRepresentation();
+    };
+    if (InputLanguage == "mir" ||
+        (InputLanguage == "" && StringRef(InputFilename).ends_with(".mir"))) {
+      MIR = createMIRParserFromFile(InputFilename, Err, Context,
+                                    setMIRFunctionAttributes);
+      if (MIR)
+        M = MIR->parseIRModule(SetDataLayout);
+    } else {
+      M = parseIRFile(InputFilename, Err, Context,
+                      ParserCallbacks(SetDataLayout));
+    }
+    if (!M) {
+      Err.print(argv[0], WithColor::error(errs(), argv[0]));
+      return 1;
+    }
     if (!TargetTriple.empty())
-      TheTriple = Triple(Triple::normalize(TargetTriple));
-    else
-      TheTriple = Triple(sys::getDefaultTargetTriple());
+      M->setTargetTriple(Triple(Triple::normalize(TargetTriple)));
+
+    std::optional<CodeModel::Model> CM_IR = M->getCodeModel();
+    if (!CM && CM_IR)
+      Target->setCodeModel(*CM_IR);
+    if (std::optional<uint64_t> LDT = codegen::getExplicitLargeDataThreshold())
+      Target->setLargeDataThreshold(*LDT);
+  } else {
+    TheTriple = Triple(Triple::normalize(TargetTriple));
+    if (TheTriple.getTriple().empty())
+      TheTriple.setTriple(sys::getDefaultTargetTriple());
 
     // Get the target specific parser.
     std::string Error;
@@ -611,17 +662,12 @@ static int compileModule(char **argv, SmallVectorImpl<PassPlugin> &PluginList,
     }
 
     InitializeOptions(TheTriple);
-    // Pass "help" as CPU for -mtune=help
-    std::string SkipModuleCPU = (TuneCPUStr == "help" ? "help" : CPUStr);
-    // Create the target machine just to print the help info. Use unique_ptr
-    // to avoid a memory leak.
     Target = std::unique_ptr<TargetMachine>(TheTarget->createTargetMachine(
-        TheTriple, SkipModuleCPU, FeaturesStr, Options, RM, CM, OLvl));
-    if (!Target) {
-      WithColor::error(errs(), argv[0])
-          << "could not allocate target machine\n";
-      return 1;
-    }
+        TheTriple, CPUStr, FeaturesStr, Options, RM, CM, OLvl));
+    assert(Target && "Could not allocate target machine!");
+
+    // Set PGO options based on command line flags
+    setPGOOptions(*Target);
 
     // If we don't have a module then just exit now. We do this down
     // here since the CPU/Feature help is underneath the target machine
@@ -629,61 +675,7 @@ static int compileModule(char **argv, SmallVectorImpl<PassPlugin> &PluginList,
     return 0;
   }
 
-  auto SetDataLayout = [&](StringRef DataLayoutTargetTriple,
-                           StringRef OldDLStr) -> std::optional<std::string> {
-    // If we are supposed to override the target triple, do so now.
-    std::string IRTargetTriple = DataLayoutTargetTriple.str();
-    if (!TargetTriple.empty())
-      IRTargetTriple = Triple::normalize(TargetTriple);
-    TheTriple = Triple(IRTargetTriple);
-    if (TheTriple.getTriple().empty())
-      TheTriple.setTriple(sys::getDefaultTargetTriple());
-
-    std::string Error;
-    TheTarget =
-        TargetRegistry::lookupTarget(codegen::getMArch(), TheTriple, Error);
-    if (!TheTarget) {
-      WithColor::error(errs(), argv[0]) << Error << "\n";
-      exit(1);
-    }
-
-    InitializeOptions(TheTriple);
-    Target = std::unique_ptr<TargetMachine>(TheTarget->createTargetMachine(
-        TheTriple, CPUStr, FeaturesStr, Options, RM, CM, OLvl));
-    if (!Target) {
-      WithColor::error(errs(), argv[0])
-          << "could not allocate target machine\n";
-      exit(1);
-    }
-
-    // Set PGO options based on command line flags
-    setPGOOptions(*Target);
-
-    return Target->createDataLayout().getStringRepresentation();
-  };
-  if (InputLanguage == "mir" ||
-      (InputLanguage == "" && StringRef(InputFilename).ends_with(".mir"))) {
-    MIR = createMIRParserFromFile(InputFilename, Err, Context,
-                                  setMIRFunctionAttributes);
-    if (MIR)
-      M = MIR->parseIRModule(SetDataLayout);
-  } else {
-    M = parseIRFile(InputFilename, Err, Context,
-                    ParserCallbacks(SetDataLayout));
-  }
-  if (!M) {
-    Err.print(argv[0], WithColor::error(errs(), argv[0]));
-    return 1;
-  }
-  if (!TargetTriple.empty())
-    M->setTargetTriple(Triple(Triple::normalize(TargetTriple)));
-
-  std::optional<CodeModel::Model> CM_IR = M->getCodeModel();
-  if (!CM && CM_IR)
-    Target->setCodeModel(*CM_IR);
-  if (std::optional<uint64_t> LDT = codegen::getExplicitLargeDataThreshold())
-    Target->setLargeDataThreshold(*LDT);
-
+  assert(M && "Should have exited if we didn't have a module!");
   if (codegen::getFloatABIForCalls() != FloatABI::Default)
     Target->Options.FloatABIType = codegen::getFloatABIForCalls();
 
@@ -723,9 +715,9 @@ static int compileModule(char **argv, SmallVectorImpl<PassPlugin> &PluginList,
   if (!NoVerify && verifyModule(*M, &errs()))
     reportError("input module cannot be verified", InputFilename);
 
-  // Override function attributes based on CPUStr, TuneCPUStr, FeaturesStr, and
-  // command line flags.
-  codegen::setFunctionAttributes(*M, CPUStr, FeaturesStr, TuneCPUStr);
+  // Override function attributes based on CPUStr, FeaturesStr, and command line
+  // flags.
+  codegen::setFunctionAttributes(CPUStr, FeaturesStr, *M);
 
   for (auto &Plugin : PluginList) {
     CodeGenFileType CGFT = codegen::getFileType();
@@ -760,9 +752,9 @@ static int compileModule(char **argv, SmallVectorImpl<PassPlugin> &PluginList,
   legacy::PassManager PM;
   PM.add(new TargetLibraryInfoWrapperPass(TLII));
   PM.add(new RuntimeLibraryInfoWrapper(
-      TheTriple, Target->Options.ExceptionModel, Target->Options.FloatABIType,
-      Target->Options.EABIVersion, Options.MCOptions.ABIName,
-      Target->Options.VecLib));
+      M->getTargetTriple(), Target->Options.ExceptionModel,
+      Target->Options.FloatABIType, Target->Options.EABIVersion,
+      Options.MCOptions.ABIName, Target->Options.VecLib));
 
   {
     raw_pwrite_stream *OS = &Out->os();

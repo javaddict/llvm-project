@@ -23,11 +23,11 @@ class DominatorTree;
 class Function;
 class TargetLibraryInfo;
 
-LLVM_ABI bool lowerConstantIntrinsics(Function &F, const TargetLibraryInfo &TLI,
-                                      DominatorTree *DT);
+bool lowerConstantIntrinsics(Function &F, const TargetLibraryInfo &TLI,
+                             DominatorTree *DT);
 
-struct LowerConstantIntrinsicsPass
-    : OptionalPassInfoMixin<LowerConstantIntrinsicsPass> {
+struct LowerConstantIntrinsicsPass :
+    PassInfoMixin<LowerConstantIntrinsicsPass> {
 public:
   explicit LowerConstantIntrinsicsPass() = default;
 
@@ -39,8 +39,9 @@ public:
   /// propagated and conditional branches are resolved where possible.
   /// This complements the Instruction Simplification and
   /// Instruction Combination passes of the optimized pass chain.
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &);
 };
+
 }
 
 #endif

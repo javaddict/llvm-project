@@ -115,7 +115,7 @@ private:
 
 } // end namespace SymbolRewriter
 
-class RewriteSymbolPass : public OptionalPassInfoMixin<RewriteSymbolPass> {
+class RewriteSymbolPass : public PassInfoMixin<RewriteSymbolPass> {
 public:
   RewriteSymbolPass() { loadAndParseMapFiles(); }
 

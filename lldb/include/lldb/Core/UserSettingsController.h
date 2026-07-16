@@ -62,9 +62,8 @@ public:
   virtual void DumpAllDescriptions(CommandInterpreter &interpreter,
                                    Stream &strm) const;
 
-  void Apropos(llvm::StringRef keyword,
-               std::vector<const Property *> &matching_properties,
-               std::vector<const Property *> &matching_property_paths) const;
+  size_t Apropos(llvm::StringRef keyword,
+                 std::vector<const Property *> &matching_properties) const;
 
   // We sometimes need to introduce a setting to enable experimental features,
   // but then we don't want the setting for these to cause errors when the

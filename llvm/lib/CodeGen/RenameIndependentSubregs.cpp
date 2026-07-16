@@ -322,7 +322,7 @@ void RenameIndependentSubregs::computeMainRangesFixFlags(
     for (LiveInterval::SubRange &SR : LI.subranges())
       UsedMask |= SR.LaneMask;
     SmallVector<unsigned> SubRegIdxs;
-    RegState Flags = {};
+    unsigned Flags = 0;
     unsigned SubReg = 0;
     // TODO: Handle SubRegIdxs.size() > 1
     if (TRI.getCoveringSubRegIndexes(MRI->getRegClass(Reg), UsedMask,

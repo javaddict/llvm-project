@@ -100,7 +100,9 @@ void MachineInstr::addImplicitDefUseOperands(MachineFunction &MF) {
 MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &TID,
                            DebugLoc DL, bool NoImp)
     : MCID(&TID), NumOperands(0), Flags(0), AsmPrinterFlags(0),
-      Opcode(TID.Opcode), DebugInstrNum(0), DbgLoc(std::move(DL)) {
+      DbgLoc(std::move(DL)), DebugInstrNum(0), Opcode(TID.Opcode) {
+  assert(DbgLoc.hasTrivialDestructor() && "Expected trivial destructor");
+
   // Reserve space for the expected number of operands.
   if (unsigned NumOps = MCID->getNumOperands() + MCID->implicit_defs().size() +
                         MCID->implicit_uses().size()) {
@@ -117,8 +119,10 @@ MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &TID,
 /// uniqueness.
 MachineInstr::MachineInstr(MachineFunction &MF, const MachineInstr &MI)
     : MCID(&MI.getDesc()), NumOperands(0), Flags(0), AsmPrinterFlags(0),
-      Opcode(MI.getOpcode()), DebugInstrNum(0), Info(MI.Info),
-      DbgLoc(MI.getDebugLoc()) {
+      Info(MI.Info), DbgLoc(MI.getDebugLoc()), DebugInstrNum(0),
+      Opcode(MI.getOpcode()) {
+  assert(DbgLoc.hasTrivialDestructor() && "Expected trivial destructor");
+
   CapOperands = OperandCapacity::get(MI.getNumOperands());
   Operands = MF.allocateOperandArray(CapOperands);
 
@@ -738,22 +742,9 @@ bool MachineInstr::isIdenticalTo(const MachineInstr &Other,
   if (getPreInstrSymbol() != Other.getPreInstrSymbol() ||
       getPostInstrSymbol() != Other.getPostInstrSymbol())
     return false;
-  if (isCall()) {
-    // Call instructions with different CFI types are not identical.
-    if (getCFIType() != Other.getCFIType())
-      return false;
-    // Even if the call instructions have the same ops, they are not identical
-    // if they are for different globals (this may happen with indirect calls).
-    if (isCandidateForAdditionalCallInfo()) {
-      MachineFunction::CalledGlobalInfo ThisCGI =
-          getParent()->getParent()->tryGetCalledGlobal(this);
-      MachineFunction::CalledGlobalInfo OtherCGI =
-          Other.getParent()->getParent()->tryGetCalledGlobal(&Other);
-      if (ThisCGI.Callee != OtherCGI.Callee ||
-          ThisCGI.TargetFlags != OtherCGI.TargetFlags)
-        return false;
-    }
-  }
+  // Call instructions with different CFI types are not identical.
+  if (isCall() && getCFIType() != Other.getCFIType())
+    return false;
   if (getDeactivationSymbol() != Other.getDeactivationSymbol())
     return false;
 
@@ -793,9 +784,9 @@ MachineInstr *MachineInstr::removeFromBundle() {
   return getParent()->remove_instr(this);
 }
 
-MachineBasicBlock::iterator MachineInstr::eraseFromParent() {
+void MachineInstr::eraseFromParent() {
   assert(getParent() && "Not embedded in a basic block!");
-  return getParent()->erase(this);
+  getParent()->erase(this);
 }
 
 void MachineInstr::eraseFromBundle() {
@@ -923,7 +914,7 @@ bool MachineInstr::isStackAligningInlineAsm() const {
 InlineAsm::AsmDialect MachineInstr::getInlineAsmDialect() const {
   assert(isInlineAsm() && "getInlineAsmDialect() only works for inline asms!");
   unsigned ExtraInfo = getOperand(InlineAsm::MIOp_ExtraInfo).getImm();
-  return InlineAsm::getDialect(ExtraInfo);
+  return InlineAsm::AsmDialect((ExtraInfo & InlineAsm::Extra_AsmDialect) != 0);
 }
 
 int MachineInstr::findInlineAsmFlagIdx(unsigned OpIdx,
@@ -1352,7 +1343,8 @@ bool MachineInstr::isSafeToMove(bool &SawStore) const {
   // Treat volatile loads as stores. This is not strictly necessary for
   // volatiles, but it is required for atomic loads. It is not allowed to move
   // a load across an atomic load with Ordering > Monotonic.
-  if (mayStore() || isCall() || isPHI() || hasOrderedMemoryRef()) {
+  if (mayStore() || isCall() || isPHI() ||
+      (mayLoad() && hasOrderedMemoryRef())) {
     SawStore = true;
     return false;
   }
@@ -1827,7 +1819,7 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
 
   SmallBitVector PrintedTypes(8);
   bool ShouldPrintRegisterTies = IsStandalone || hasComplexRegisterTies();
-  auto GetTiedOperandIdx = [&](unsigned OpIdx) {
+  auto getTiedOperandIdx = [&](unsigned OpIdx) {
     if (!ShouldPrintRegisterTies)
       return 0U;
     const MachineOperand &MO = getOperand(OpIdx);
@@ -1848,9 +1840,9 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
       OS << ", ";
 
     LLT TypeToPrint = MRI ? getTypeToPrint(StartOp, PrintedTypes, *MRI) : LLT{};
-    // tied operands are not printed for defs.
+    unsigned TiedOperandIdx = getTiedOperandIdx(StartOp);
     MO.print(OS, MST, TypeToPrint, StartOp, /*PrintDef=*/false, IsStandalone,
-             /*ShouldPrintRegisterTies=*/false, /*TiedOperandIdx=*/0, TRI);
+             ShouldPrintRegisterTies, TiedOperandIdx, TRI);
     ++StartOp;
   }
 
@@ -1885,8 +1877,6 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
     OS << "nofpexcept ";
   if (getFlag(MachineInstr::NoMerge))
     OS << "nomerge ";
-  if (getFlag(MachineInstr::NoConvergent))
-    OS << "noconvergent ";
   if (getFlag(MachineInstr::NonNeg))
     OS << "nneg ";
   if (getFlag(MachineInstr::Disjoint))
@@ -1917,7 +1907,7 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
     OS << " ";
     const unsigned OpIdx = InlineAsm::MIOp_AsmString;
     LLT TypeToPrint = MRI ? getTypeToPrint(OpIdx, PrintedTypes, *MRI) : LLT{};
-    unsigned TiedOperandIdx = GetTiedOperandIdx(OpIdx);
+    unsigned TiedOperandIdx = getTiedOperandIdx(OpIdx);
     getOperand(OpIdx).print(OS, MST, TypeToPrint, OpIdx, /*PrintDef=*/true,
                             IsStandalone, ShouldPrintRegisterTies,
                             TiedOperandIdx, TRI);
@@ -1958,7 +1948,7 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
         OS << "!\"" << DIV->getName() << '\"';
       else {
         LLT TypeToPrint = MRI ? getTypeToPrint(i, PrintedTypes, *MRI) : LLT{};
-        unsigned TiedOperandIdx = GetTiedOperandIdx(i);
+        unsigned TiedOperandIdx = getTiedOperandIdx(i);
         MO.print(OS, MST, TypeToPrint, i, /*PrintDef=*/true, IsStandalone,
                  ShouldPrintRegisterTies, TiedOperandIdx, TRI);
       }
@@ -1969,7 +1959,7 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
         OS << "\"" << DIL->getName() << '\"';
       else {
         LLT TypeToPrint = MRI ? getTypeToPrint(i, PrintedTypes, *MRI) : LLT{};
-        unsigned TiedOperandIdx = GetTiedOperandIdx(i);
+        unsigned TiedOperandIdx = getTiedOperandIdx(i);
         MO.print(OS, MST, TypeToPrint, i, /*PrintDef=*/true, IsStandalone,
                  ShouldPrintRegisterTies, TiedOperandIdx, TRI);
       }
@@ -2008,13 +1998,14 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
 
       // Compute the index of the next operand descriptor.
       AsmDescOp += 1 + F.getNumOperandRegisters();
-    } else if (MO.isImm() && isOperandSubregIdx(i)) {
-      MachineOperand::printSubRegIdx(OS, MO.getImm(), TRI);
     } else {
       LLT TypeToPrint = MRI ? getTypeToPrint(i, PrintedTypes, *MRI) : LLT{};
-      unsigned TiedOperandIdx = GetTiedOperandIdx(i);
-      MO.print(OS, MST, TypeToPrint, i, /*PrintDef=*/true, IsStandalone,
-               ShouldPrintRegisterTies, TiedOperandIdx, TRI);
+      unsigned TiedOperandIdx = getTiedOperandIdx(i);
+      if (MO.isImm() && isOperandSubregIdx(i))
+        MachineOperand::printSubRegIdx(OS, MO.getImm(), TRI);
+      else
+        MO.print(OS, MST, TypeToPrint, i, /*PrintDef=*/true, IsStandalone,
+                 ShouldPrintRegisterTies, TiedOperandIdx, TRI);
     }
   }
 
@@ -2609,9 +2600,6 @@ MachineInstr::getSpillSize(const TargetInstrInfo *TII) const {
 
 std::optional<LocationSize>
 MachineInstr::getFoldedSpillSize(const TargetInstrInfo *TII) const {
-  if (!mayStore())
-    return std::nullopt;
-
   MMOList Accesses;
   if (TII->hasStoreToStackSlot(*this, Accesses))
     return getSpillSlotSize(Accesses, getMF()->getFrameInfo());

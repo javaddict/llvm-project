@@ -11,19 +11,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_SPIRV_SPIRVSTRUCTURIZERWRAPPER_H
-#define LLVM_LIB_TARGET_SPIRV_SPIRVSTRUCTURIZERWRAPPER_H
+#ifndef LLVM_LIB_TARGET_SPIRV_SPIRVSTRUCTURIZER_H
+#define LLVM_LIB_TARGET_SPIRV_SPIRVSTRUCTURIZER_H
 
 #include "llvm/IR/PassManager.h"
 
 namespace llvm {
 
 class SPIRVStructurizerWrapper
-    : public OptionalPassInfoMixin<SPIRVStructurizerWrapper> {
+    : public PassInfoMixin<SPIRVStructurizerWrapper> {
 public:
   PreservedAnalyses run(Function &M, FunctionAnalysisManager &AM);
 };
 
 } // namespace llvm
 
-#endif // LLVM_LIB_TARGET_SPIRV_SPIRVSTRUCTURIZERWRAPPER_H
+#endif // LLVM_LIB_TARGET_SPIRV_SPIRVSTRUCTURIZER_H

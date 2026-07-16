@@ -1,12 +1,13 @@
 ; RUN: llc < %s -mtriple=mipsel-unknown-linux-gnu | FileCheck %s --check-prefixes=MIPS32
 ; RUN: llc < %s -mtriple=mips64el-unknown-linux-gnuabi64 | FileCheck %s --check-prefixes=MIPS64
+; RUN: llc < %s -mtriple=mips64el-unknown-linux-gnuabi64 | FileCheck %s --check-prefixes=MIPS64
 
 define i32 @shl_32(i32 %a, i32 %b) {
-; MIPS32-LABEL:   shl_32:
+; MIPS32-LABLE:   shl_32:
 ; MIPS32:	  # %bb.0:
 ; MIPS32-NEXT:    jr	$ra
 ; MIPS32-NEXT:    sllv	$2, $4, $5
-; MIPS64-LABEL:   shl_32:
+; MIPS64-LABLE:   shl_32:
 ; MIPS64:	  # %bb.0:
 ; MIPS64-NEXT:    sll   $1, $5, 0
 ; MIPS64-NEXT:    sll   $2, $4, 0
@@ -18,11 +19,11 @@ define i32 @shl_32(i32 %a, i32 %b) {
 }
 
 define i32 @lshr_32(i32 %a, i32 %b) {
-; MIPS32-LABEL:   lshr_32:
+; MIPS32-LABLE:   lshr_32:
 ; MIPS32:	  # %bb.0:
 ; MIPS32-NEXT:    jr	$ra
 ; MIPS32-NEXT:    srlv	$2, $4, $5
-; MIPS64-LABEL:   lshr_32:
+; MIPS64-LABLE:   lshr_32:
 ; MIPS64:	  # %bb.0:
 ; MIPS64-NEXT:    sll   $1, $5, 0
 ; MIPS64-NEXT:    sll   $2, $4, 0
@@ -34,11 +35,11 @@ define i32 @lshr_32(i32 %a, i32 %b) {
 }
 
 define i32 @ashr_32(i32 %a, i32 %b) {
-; MIPS32-LABEL:   ashr_32:
+; MIPS32-LABLE:   ashr_32:
 ; MIPS32:	  # %bb.0:
 ; MIPS32-NEXT:    jr	$ra
 ; MIPS32-NEXT:    srav	$2, $4, $5
-; MIPS64-LABEL:   ashr_32:
+; MIPS64-LABLE:   ashr_32:
 ; MIPS64:	  # %bb.0:
 ; MIPS64-NEXT:    sll   $1, $5, 0
 ; MIPS64-NEXT:    sll   $2, $4, 0
@@ -50,7 +51,7 @@ define i32 @ashr_32(i32 %a, i32 %b) {
 }
 
 define i64 @shl_64(i64 %a, i64 %b) {
-; MIPS64-LABEL:   shl_64:
+; MIPS64-LABLE:   shl_64:
 ; MIPS64:	  # %bb.0:
 ; MIPS64-NEXT:    sll   $1, $5, 0
 ; MIPS64-NEXT:    jr	$ra
@@ -61,7 +62,7 @@ define i64 @shl_64(i64 %a, i64 %b) {
 }
 
 define i64 @lshr_64(i64 %a, i64 %b) {
-; MIPS64-LABEL:   lshr_64:
+; MIPS64-LABLE:   lshr_64:
 ; MIPS64:	  # %bb.0:
 ; MIPS64-NEXT:    sll   $1, $5, 0
 ; MIPS64-NEXT:    jr	$ra
@@ -72,7 +73,7 @@ define i64 @lshr_64(i64 %a, i64 %b) {
 }
 
 define i64 @ashr_64(i64 %a, i64 %b) {
-; MIPS64-LABEL:   ashr_64:
+; MIPS64-LABLE:   ashr_64:
 ; MIPS64:	  # %bb.0:
 ; MIPS64-NEXT:    sll   $1, $5, 0
 ; MIPS64-NEXT:    jr	$ra

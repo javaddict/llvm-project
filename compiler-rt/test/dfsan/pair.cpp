@@ -6,9 +6,6 @@
 #include <sanitizer/dfsan_interface.h>
 #include <utility>
 
-// SystemZ identifies labels for struct elements precisely across all
-// optimization labels.
-
 __attribute__((noinline))
 std::pair<int *, int>
 make_pair(int *p, int i) { return {p, i}; }
@@ -68,7 +65,7 @@ void test_simple_constructors() {
   int i1 = pair1.second;
   int *ptr1 = pair1.first;
 
-#if defined(O0) && !defined(__s390x__)
+#ifdef O0
   assert(dfsan_read_label(&i1, sizeof(i1)) == 10);
   assert(dfsan_read_label(&ptr1, sizeof(ptr1)) == 10);
 #else
@@ -80,7 +77,7 @@ void test_simple_constructors() {
   int i2 = pair2.second;
   int *ptr2 = pair2.first;
 
-#if defined(O0) && !defined(__s390x__)
+#ifdef O0
   assert(dfsan_read_label(&i2, sizeof(i2)) == 10);
   assert(dfsan_read_label(&ptr2, sizeof(ptr2)) == 10);
 #else
@@ -92,7 +89,7 @@ void test_simple_constructors() {
   int i3 = pair3.second;
   int *ptr3 = pair3.first;
 
-#if defined(O0) && !defined(__s390x__)
+#ifdef O0
   assert(dfsan_read_label(&i3, sizeof(i3)) == 10);
   assert(dfsan_read_label(&ptr3, sizeof(ptr3)) == 10);
 #else
@@ -104,7 +101,7 @@ void test_simple_constructors() {
   int i4 = pair4.second;
   int *ptr4 = pair4.first;
 
-#if defined(O0) && !defined(__s390x__)
+#ifdef O0
   assert(dfsan_read_label(&i4, sizeof(i4)) == 10);
   assert(dfsan_read_label(&ptr4, sizeof(ptr4)) == 10);
 #else
@@ -142,7 +139,7 @@ void test_branches() {
 
     {
       std::pair<const char *, uint32_t> r = return_ptr_and_i32(q, res);
-#if defined(O0) && !defined(__s390x__)
+#ifdef O0
       assert(dfsan_read_label(&r.first, sizeof(r.first)) == 10);
       assert(dfsan_read_label(&r.second, sizeof(r.second)) == 10);
 #else
@@ -153,7 +150,7 @@ void test_branches() {
 
     {
       std::pair<const char *, uint64_t> r = return_ptr_and_i64(q, res);
-#if defined(O0) && !defined(__s390x__)
+#ifdef O0
       assert(dfsan_read_label(&r.first, sizeof(r.first)) == 10);
       assert(dfsan_read_label(&r.second, sizeof(r.second)) == 10);
 #else

@@ -93,7 +93,7 @@ private:
 
 AnalysisKey TestModuleAnalysis::Key;
 
-struct TestModulePass : OptionalPassInfoMixin<TestModulePass> {
+struct TestModulePass : PassInfoMixin<TestModulePass> {
   TestModulePass(int &RunCount) : RunCount(RunCount) {}
 
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &) {
@@ -104,14 +104,13 @@ struct TestModulePass : OptionalPassInfoMixin<TestModulePass> {
   int &RunCount;
 };
 
-struct TestPreservingModulePass
-    : OptionalPassInfoMixin<TestPreservingModulePass> {
+struct TestPreservingModulePass : PassInfoMixin<TestPreservingModulePass> {
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &) {
     return PreservedAnalyses::all();
   }
 };
 
-struct TestFunctionPass : OptionalPassInfoMixin<TestFunctionPass> {
+struct TestFunctionPass : PassInfoMixin<TestFunctionPass> {
   TestFunctionPass(int &RunCount, int &AnalyzedInstrCount,
                    int &AnalyzedFunctionCount, ModuleAnalysisManager &MAM,
                    bool OnlyUseCachedResults = false)
@@ -155,7 +154,7 @@ struct TestFunctionPass : OptionalPassInfoMixin<TestFunctionPass> {
 // A test function pass that invalidates all function analyses for a function
 // with a specific name.
 struct TestInvalidationFunctionPass
-    : OptionalPassInfoMixin<TestInvalidationFunctionPass> {
+    : PassInfoMixin<TestInvalidationFunctionPass> {
   TestInvalidationFunctionPass(StringRef FunctionName) : Name(FunctionName) {}
 
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM) {
@@ -568,7 +567,7 @@ private:
 
 AnalysisKey CustomizedAnalysis::Key;
 
-struct CustomizedPass : OptionalPassInfoMixin<CustomizedPass> {
+struct CustomizedPass : PassInfoMixin<CustomizedPass> {
   std::function<void(CustomizedAnalysis::Result &, int &)> Callback;
 
   template <typename CallbackT>
@@ -692,7 +691,7 @@ private:
 
 AnalysisKey TestDoublyIndirectFunctionAnalysis::Key;
 
-struct LambdaPass : public OptionalPassInfoMixin<LambdaPass> {
+struct LambdaPass : public PassInfoMixin<LambdaPass> {
   using FuncT = std::function<PreservedAnalyses(Function &, FunctionAnalysisManager &)>;
 
   LambdaPass(FuncT Func) : Func(std::move(Func)) {}
@@ -844,7 +843,7 @@ TEST_F(PassManagerTest, FunctionPassCFGChecker) {
 // FunctionPass that manually invalidates analyses and always returns
 // PreservedAnalyses::all().
 struct TestSimplifyCFGInvalidatingAnalysisPass
-    : OptionalPassInfoMixin<TestSimplifyCFGInvalidatingAnalysisPass> {
+    : PassInfoMixin<TestSimplifyCFGInvalidatingAnalysisPass> {
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
     // Run SimplifyCFG and if it changes CFG then invalidate the CFG analysis.
     // This allows to return PreserveAnalysis::all().
@@ -892,8 +891,7 @@ TEST_F(PassManagerTest, FunctionPassCFGCheckerInvalidateAnalysis) {
 
 // Wrap a FunctionPassManager running SimplifyCFG pass with another
 // FunctionPassManager.
-struct TestSimplifyCFGWrapperPass
-    : OptionalPassInfoMixin<TestSimplifyCFGWrapperPass> {
+struct TestSimplifyCFGWrapperPass : PassInfoMixin<TestSimplifyCFGWrapperPass> {
   TestSimplifyCFGWrapperPass(FunctionPassManager &InnerPM) : InnerPM(InnerPM) {}
 
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
@@ -964,7 +962,7 @@ TEST_F(PassManagerTest, FunctionPassCFGCheckerWrapped) {
 
 #ifdef EXPENSIVE_CHECKS
 
-struct WrongFunctionPass : OptionalPassInfoMixin<WrongFunctionPass> {
+struct WrongFunctionPass : PassInfoMixin<WrongFunctionPass> {
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
     F.getEntryBlock().begin()->eraseFromParent();
     return PreservedAnalyses::all();
@@ -996,7 +994,7 @@ TEST_F(PassManagerTest, FunctionPassMissedFunctionAnalysisInvalidation) {
   EXPECT_DEATH(FPM.run(*F, FAM), "Function @foo changed by WrongFunctionPass without invalidating analyses");
 }
 
-struct WrongModulePass : OptionalPassInfoMixin<WrongModulePass> {
+struct WrongModulePass : PassInfoMixin<WrongModulePass> {
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM) {
     for (Function &F : M)
       F.getEntryBlock().begin()->eraseFromParent();
@@ -1034,7 +1032,7 @@ TEST_F(PassManagerTest, ModulePassMissedFunctionAnalysisInvalidation) {
       "Function @foo changed by WrongModulePass without invalidating analyses");
 }
 
-struct WrongModulePass2 : OptionalPassInfoMixin<WrongModulePass2> {
+struct WrongModulePass2 : PassInfoMixin<WrongModulePass2> {
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM) {
     for (Function &F : M)
       F.getEntryBlock().begin()->eraseFromParent();

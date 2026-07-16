@@ -20,16 +20,14 @@ namespace llvm {
 /// This pass walks the functions in each SCC and for each one tries to
 /// transform it and all of its callers to replace indirect arguments with
 /// direct (by-value) arguments.
-class ArgumentPromotionPass
-    : public OptionalPassInfoMixin<ArgumentPromotionPass> {
+class ArgumentPromotionPass : public PassInfoMixin<ArgumentPromotionPass> {
   unsigned MaxElements;
 
 public:
   ArgumentPromotionPass(unsigned MaxElements = 2u) : MaxElements(MaxElements) {}
 
-  LLVM_ABI PreservedAnalyses run(LazyCallGraph::SCC &C,
-                                 CGSCCAnalysisManager &AM, LazyCallGraph &CG,
-                                 CGSCCUpdateResult &UR);
+  PreservedAnalyses run(LazyCallGraph::SCC &C, CGSCCAnalysisManager &AM,
+                        LazyCallGraph &CG, CGSCCUpdateResult &UR);
 };
 
 } // end namespace llvm

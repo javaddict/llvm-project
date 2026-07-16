@@ -81,7 +81,6 @@ static auto [cx, cy, cz] = C();
     // expected-warning@-4 {{structured binding declaration declared 'static' is incompatible with C++ standards before C++20}}
 #endif
 void f() {
-#ifndef __MVS__
   static thread_local auto [cx, cy, cz] = C();
 #if __cplusplus <= 201703L
     // expected-warning@-2 {{structured binding declaration declared 'static' is a C++20 extension}}
@@ -89,7 +88,6 @@ void f() {
 #else
     // expected-warning@-5 {{structured binding declaration declared 'static' is incompatible with C++ standards before C++20}}
     // expected-warning@-6 {{structured binding declaration declared 'thread_local' is incompatible with C++ standards before C++20}}
-#endif
 #endif
 }
 

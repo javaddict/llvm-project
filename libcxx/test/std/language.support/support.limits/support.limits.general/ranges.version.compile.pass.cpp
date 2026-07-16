@@ -48,10 +48,6 @@
 #    error "__cpp_lib_ranges_concat should not be defined before c++26"
 #  endif
 
-#  ifdef __cpp_lib_ranges_enumerate
-#    error "__cpp_lib_ranges_enumerate should not be defined before c++23"
-#  endif
-
 #  ifdef __cpp_lib_ranges_indices
 #    error "__cpp_lib_ranges_indices should not be defined before c++26"
 #  endif
@@ -66,10 +62,6 @@
 
 #  ifdef __cpp_lib_ranges_slide
 #    error "__cpp_lib_ranges_slide should not be defined before c++23"
-#  endif
-
-#  ifdef __cpp_lib_ranges_stride
-#    error "__cpp_lib_ranges_stride should not be defined before c++23"
 #  endif
 
 #  ifdef __cpp_lib_ranges_to_container
@@ -110,10 +102,6 @@
 #    error "__cpp_lib_ranges_concat should not be defined before c++26"
 #  endif
 
-#  ifdef __cpp_lib_ranges_enumerate
-#    error "__cpp_lib_ranges_enumerate should not be defined before c++23"
-#  endif
-
 #  ifdef __cpp_lib_ranges_indices
 #    error "__cpp_lib_ranges_indices should not be defined before c++26"
 #  endif
@@ -128,10 +116,6 @@
 
 #  ifdef __cpp_lib_ranges_slide
 #    error "__cpp_lib_ranges_slide should not be defined before c++23"
-#  endif
-
-#  ifdef __cpp_lib_ranges_stride
-#    error "__cpp_lib_ranges_stride should not be defined before c++23"
 #  endif
 
 #  ifdef __cpp_lib_ranges_to_container
@@ -172,10 +156,6 @@
 #    error "__cpp_lib_ranges_concat should not be defined before c++26"
 #  endif
 
-#  ifdef __cpp_lib_ranges_enumerate
-#    error "__cpp_lib_ranges_enumerate should not be defined before c++23"
-#  endif
-
 #  ifdef __cpp_lib_ranges_indices
 #    error "__cpp_lib_ranges_indices should not be defined before c++26"
 #  endif
@@ -190,10 +170,6 @@
 
 #  ifdef __cpp_lib_ranges_slide
 #    error "__cpp_lib_ranges_slide should not be defined before c++23"
-#  endif
-
-#  ifdef __cpp_lib_ranges_stride
-#    error "__cpp_lib_ranges_stride should not be defined before c++23"
 #  endif
 
 #  ifdef __cpp_lib_ranges_to_container
@@ -237,10 +213,6 @@
 #    error "__cpp_lib_ranges_concat should not be defined before c++26"
 #  endif
 
-#  ifdef __cpp_lib_ranges_enumerate
-#    error "__cpp_lib_ranges_enumerate should not be defined before c++23"
-#  endif
-
 #  ifdef __cpp_lib_ranges_indices
 #    error "__cpp_lib_ranges_indices should not be defined before c++26"
 #  endif
@@ -255,10 +227,6 @@
 
 #  ifdef __cpp_lib_ranges_slide
 #    error "__cpp_lib_ranges_slide should not be defined before c++23"
-#  endif
-
-#  ifdef __cpp_lib_ranges_stride
-#    error "__cpp_lib_ranges_stride should not be defined before c++23"
 #  endif
 
 #  ifdef __cpp_lib_ranges_to_container
@@ -326,13 +294,6 @@
 #    error "__cpp_lib_ranges_concat should not be defined before c++26"
 #  endif
 
-#  ifndef __cpp_lib_ranges_enumerate
-#    error "__cpp_lib_ranges_enumerate should be defined in c++23"
-#  endif
-#  if __cpp_lib_ranges_enumerate != 202302L
-#    error "__cpp_lib_ranges_enumerate should have the value 202302L in c++23"
-#  endif
-
 #  ifdef __cpp_lib_ranges_indices
 #    error "__cpp_lib_ranges_indices should not be defined before c++26"
 #  endif
@@ -362,13 +323,6 @@
 #    ifdef __cpp_lib_ranges_slide
 #      error "__cpp_lib_ranges_slide should not be defined because it is unimplemented in libc++!"
 #    endif
-#  endif
-
-#  ifndef __cpp_lib_ranges_stride
-#    error "__cpp_lib_ranges_stride should be defined in c++23"
-#  endif
-#  if __cpp_lib_ranges_stride != 202207L
-#    error "__cpp_lib_ranges_stride should have the value 202207L in c++23"
 #  endif
 
 #  ifndef __cpp_lib_ranges_to_container
@@ -447,18 +401,17 @@
 #    error "__cpp_lib_ranges_chunk_by should have the value 202202L in c++26"
 #  endif
 
-#  ifndef __cpp_lib_ranges_concat
-#    error "__cpp_lib_ranges_concat should be defined in c++26"
-#  endif
-#  if __cpp_lib_ranges_concat != 202403L
-#    error "__cpp_lib_ranges_concat should have the value 202403L in c++26"
-#  endif
-
-#  ifndef __cpp_lib_ranges_enumerate
-#    error "__cpp_lib_ranges_enumerate should be defined in c++26"
-#  endif
-#  if __cpp_lib_ranges_enumerate != 202302L
-#    error "__cpp_lib_ranges_enumerate should have the value 202302L in c++26"
+#  if !defined(_LIBCPP_VERSION)
+#    ifndef __cpp_lib_ranges_concat
+#      error "__cpp_lib_ranges_concat should be defined in c++26"
+#    endif
+#    if __cpp_lib_ranges_concat != 202403L
+#      error "__cpp_lib_ranges_concat should have the value 202403L in c++26"
+#    endif
+#  else
+#    ifdef __cpp_lib_ranges_concat
+#      error "__cpp_lib_ranges_concat should not be defined because it is unimplemented in libc++!"
+#    endif
 #  endif
 
 #  ifndef __cpp_lib_ranges_indices
@@ -493,13 +446,6 @@
 #    ifdef __cpp_lib_ranges_slide
 #      error "__cpp_lib_ranges_slide should not be defined because it is unimplemented in libc++!"
 #    endif
-#  endif
-
-#  ifndef __cpp_lib_ranges_stride
-#    error "__cpp_lib_ranges_stride should be defined in c++26"
-#  endif
-#  if __cpp_lib_ranges_stride != 202207L
-#    error "__cpp_lib_ranges_stride should have the value 202207L in c++26"
 #  endif
 
 #  ifndef __cpp_lib_ranges_to_container

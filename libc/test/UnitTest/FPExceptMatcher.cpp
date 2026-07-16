@@ -1,14 +1,9 @@
-//===----------------------------------------------------------------------===//
+//===-- FPExceptMatchers.cpp ----------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
-//===----------------------------------------------------------------------===//
-///
-/// \file
-/// FPExceptMatchers.cpp.
-///
 //===----------------------------------------------------------------------===//
 
 #undef LIBC_MATH_USE_SYSTEM_FENV
@@ -33,10 +28,6 @@ namespace testing {
 #define sigjmp_buf jmp_buf
 #define sigsetjmp(buf, save) setjmp(buf)
 #define siglongjmp(buf, val) longjmp(buf, val)
-#endif
-
-#ifdef __FreeBSD__
-using sighandler_t = __sighandler_t *;
 #endif
 
 static thread_local sigjmp_buf jumpBuffer;

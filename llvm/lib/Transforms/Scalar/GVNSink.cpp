@@ -255,6 +255,16 @@ static raw_ostream &operator<<(raw_ostream &OS,
 #endif
 
 template <> struct llvm::DenseMapInfo<ModelledPHI> {
+  static inline ModelledPHI &getEmptyKey() {
+    static ModelledPHI Dummy = ModelledPHI::createDummy(0);
+    return Dummy;
+  }
+
+  static inline ModelledPHI &getTombstoneKey() {
+    static ModelledPHI Dummy = ModelledPHI::createDummy(1);
+    return Dummy;
+  }
+
   static unsigned getHashValue(const ModelledPHI &V) { return V.hash(); }
 
   static bool isEqual(const ModelledPHI &LHS, const ModelledPHI &RHS) {
@@ -720,7 +730,7 @@ unsigned GVNSink::sinkBB(BasicBlock *BBEnd) {
     if (!RPOTOrder.count(B))
       return 0;
     auto *T = B->getTerminator();
-    if (isa<UncondBrInst, CondBrInst, SwitchInst>(T))
+    if (isa<BranchInst>(T) || isa<SwitchInst>(T))
       Preds.push_back(B);
     else
       return 0;

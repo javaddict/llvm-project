@@ -12,6 +12,5 @@
 
 __isl_give PW *FN(PW,neg)(__isl_take PW *pw)
 {
-	S(PW,un_op_control) control = { .fn_base = &FN(EL,neg) };
-	return FN(PW,un_op)(pw, &control);
+	return FN(PW,un_op)(pw, &FN(EL,neg));
 }

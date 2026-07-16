@@ -7,12 +7,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/logbbf16.h"
-#include "src/__support/math/logbbf16.h"
+#include "src/__support/FPUtil/ManipulationFunctions.h"
+#include "src/__support/FPUtil/bfloat16.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
-LLVM_LIBC_FUNCTION(bfloat16, logbbf16, (bfloat16 x)) {
-  return math::logbbf16(x);
-}
+LLVM_LIBC_FUNCTION(bfloat16, logbbf16, (bfloat16 x)) { return fputil::logb(x); }
 
 } // namespace LIBC_NAMESPACE_DECL

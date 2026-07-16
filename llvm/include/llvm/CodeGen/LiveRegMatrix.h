@@ -66,7 +66,7 @@ class LiveRegMatrix {
 public:
   LiveRegMatrix(LiveRegMatrix &&Other) = default;
 
-  LLVM_ABI void init(MachineFunction &MF, LiveIntervals &LIS, VirtRegMap &VRM);
+  void init(MachineFunction &MF, LiveIntervals &LIS, VirtRegMap &VRM);
 
   //===--------------------------------------------------------------------===//
   // High-level interface.
@@ -105,16 +105,15 @@ public:
   /// If this function returns IK_Free, it is legal to assign(VirtReg, PhysReg).
   /// When there is more than one kind of interference, the InterferenceKind
   /// with the highest enum value is returned.
-  LLVM_ABI InterferenceKind checkInterference(const LiveInterval &VirtReg,
-                                              MCRegister PhysReg);
+  InterferenceKind checkInterference(const LiveInterval &VirtReg,
+                                     MCRegister PhysReg);
 
   /// Check for interference in the segment [Start, End) that may prevent
   /// assignment to PhysReg. If this function returns true, there is
   /// interference in the segment [Start, End) of some other interval already
   /// assigned to PhysReg. If this function returns false, PhysReg is free at
   /// the segment [Start, End).
-  LLVM_ABI bool checkInterference(SlotIndex Start, SlotIndex End,
-                                  MCRegister PhysReg);
+  bool checkInterference(SlotIndex Start, SlotIndex End, MCRegister PhysReg);
 
   /// Check for interference in the segment [Start, End) that may prevent
   /// assignment to PhysReg, like checkInterference. Returns a lane mask of
@@ -123,28 +122,21 @@ public:
   ///
   /// If this function returns LaneBitmask::getNone(), PhysReg is completely
   /// free at the segment [Start, End).
-  LLVM_ABI LaneBitmask checkInterferenceLanes(SlotIndex Start, SlotIndex End,
-                                              MCRegister PhysReg);
+  LaneBitmask checkInterferenceLanes(SlotIndex Start, SlotIndex End,
+                                     MCRegister PhysReg);
 
   /// Assign VirtReg to PhysReg.
   /// This will mark VirtReg's live range as occupied in the LiveRegMatrix and
   /// update VirtRegMap. The live range is expected to be available in PhysReg.
-  LLVM_ABI void assign(const LiveInterval &VirtReg, MCRegister PhysReg);
+  void assign(const LiveInterval &VirtReg, MCRegister PhysReg);
 
   /// Unassign VirtReg from its PhysReg.
   /// Assuming that VirtReg was previously assigned to a PhysReg, this undoes
   /// the assignment and updates VirtRegMap accordingly.
-  /// ClearAllReferencingSegments changes the way segments are removed from
-  /// the matrix:
-  ///   - If false (default), only segments that exactly match VirtReg's live
-  ///     range are removed.
-  ///   - If true, all segments that reference VirtReg are removed. This is
-  ///     useful when VirtReg's live range(s) is already empty.
-  LLVM_ABI void unassign(const LiveInterval &VirtReg,
-                         bool ClearAllReferencingSegments = false);
+  void unassign(const LiveInterval &VirtReg);
 
   /// Returns true if the given \p PhysReg has any live intervals assigned.
-  LLVM_ABI bool isPhysRegUsed(MCRegister PhysReg) const;
+  bool isPhysRegUsed(MCRegister PhysReg) const;
 
   //===--------------------------------------------------------------------===//
   // Low-level interface.
@@ -156,22 +148,20 @@ public:
   /// Check for regmask interference only.
   /// Return true if VirtReg crosses a regmask operand that clobbers PhysReg.
   /// If PhysReg is null, check if VirtReg crosses any regmask operands.
-  LLVM_ABI bool
-  checkRegMaskInterference(const LiveInterval &VirtReg,
-                           MCRegister PhysReg = MCRegister::NoRegister);
+  bool checkRegMaskInterference(const LiveInterval &VirtReg,
+                                MCRegister PhysReg = MCRegister::NoRegister);
 
   /// Check for regunit interference only.
   /// Return true if VirtReg overlaps a fixed assignment of one of PhysRegs's
   /// register units.
-  LLVM_ABI bool checkRegUnitInterference(const LiveInterval &VirtReg,
-                                         MCRegister PhysReg);
+  bool checkRegUnitInterference(const LiveInterval &VirtReg,
+                                MCRegister PhysReg);
 
   /// Query a line of the assigned virtual register matrix directly.
   /// Use MCRegUnitIterator to enumerate all regunits in the desired PhysReg.
   /// This returns a reference to an internal Query data structure that is only
   /// valid until the next query() call.
-  LLVM_ABI LiveIntervalUnion::Query &query(const LiveRange &LR,
-                                           MCRegUnit RegUnit);
+  LiveIntervalUnion::Query &query(const LiveRange &LR, MCRegUnit RegUnit);
 
   /// Directly access the live interval unions per regunit.
   /// This returns an array indexed by the regunit number.
@@ -179,16 +169,10 @@ public:
     return &Matrix[static_cast<MCRegUnit>(0)];
   }
 
-  LLVM_ABI Register getOneVReg(unsigned PhysReg) const;
-
-#ifndef NDEBUG
-  /// This checks that each LiveInterval referenced in LiveIntervalUnion
-  /// actually exists in LiveIntervals and is not a dangling pointer.
-  bool isValid() const;
-#endif
+  Register getOneVReg(unsigned PhysReg) const;
 };
 
-class LLVM_ABI LiveRegMatrixWrapperLegacy : public MachineFunctionPass {
+class LiveRegMatrixWrapperLegacy : public MachineFunctionPass {
   LiveRegMatrix LRM;
 
 public:
@@ -211,8 +195,7 @@ class LiveRegMatrixAnalysis : public AnalysisInfoMixin<LiveRegMatrixAnalysis> {
 public:
   using Result = LiveRegMatrix;
 
-  LLVM_ABI LiveRegMatrix run(MachineFunction &MF,
-                             MachineFunctionAnalysisManager &MFAM);
+  LiveRegMatrix run(MachineFunction &MF, MachineFunctionAnalysisManager &MFAM);
 };
 
 } // end namespace llvm

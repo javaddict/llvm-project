@@ -159,7 +159,6 @@ def FRMArg : AsmOperandClass {
   let DefaultMethod = "defaultFRMArgOp";
 }
 
-// Operand should be named $frm for getNamedOperandIdx
 def frmarg : Operand<XLenVT> {
   let ParserMatchClass = FRMArg;
   let PrintMethod = "printFRMArg";
@@ -182,7 +181,6 @@ def FRMArgLegacy : AsmOperandClass {
   let DefaultMethod = "defaultFRMArgLegacyOp";
 }
 
-// Operand should be named $frm for getNamedOperandIdx
 def frmarglegacy : Operand<XLenVT> {
   let ParserMatchClass = FRMArgLegacy;
   let PrintMethod = "printFRMArgLegacy";
@@ -529,9 +527,7 @@ defvar FRM_RMM = 0b100;
 defvar FRM_DYN = 0b111;
 
 /// Floating point constants
-def fpimm0 : FPImmLeaf<fAny, [{
-  return Imm.isPosZero();
-}]>;
+def fpimm0    : PatLeaf<(fpimm), [{ return N->isExactlyValue(+0.0); }]>;
 
 /// Generic pattern classes
 class PatSetCC<DAGOperand Ty, SDPatternOperator OpNode, CondCode Cond,
@@ -663,10 +659,8 @@ foreach Ext = FExts in {
   defm : PatFprFpr_m<fmaximumnum, FMAX_S, Ext>;
   defm : PatFprFpr_m<riscv_fmin, FMIN_S, Ext>;
   defm : PatFprFpr_m<riscv_fmax, FMAX_S, Ext>;
-  let Predicates = Ext.Predicates in {
-    def : Pat<(f32 (fcanonicalize Ext.PrimaryTy:$rs1)),
-              (!cast<Instruction>("FMIN_S"#Ext.Suffix) $rs1, $rs1)>;
-  }
+  let Predicates = Ext.Predicates in
+  def : Pat<(f32 (fcanonicalize FPR32:$rs1)), (FMIN_S $rs1, $rs1)>;
 }
 
 /// Setcc

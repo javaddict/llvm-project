@@ -17,7 +17,6 @@
 #define TEST_HAS_NO_EXCEPTIONS
 #endif
 
-namespace {
 void TestHandler() {
 #ifndef TEST_HAS_NO_EXCEPTIONS
   throw std::logic_error("");
@@ -47,19 +46,14 @@ void try_invalid_pause_resume(benchmark::State& state) {
 void BM_diagnostic_test(benchmark::State& state) {
   static bool called_once = false;
 
-  if (!called_once) {
-    try_invalid_pause_resume(state);
-  }
+  if (called_once == false) try_invalid_pause_resume(state);
 
   for (auto _ : state) {
-    auto iterations = static_cast<double>(state.iterations()) *
-                      static_cast<double>(state.iterations());
+    auto iterations = double(state.iterations()) * double(state.iterations());
     benchmark::DoNotOptimize(iterations);
   }
 
-  if (!called_once) {
-    try_invalid_pause_resume(state);
-  }
+  if (called_once == false) try_invalid_pause_resume(state);
 
   called_once = true;
 }
@@ -68,35 +62,28 @@ BENCHMARK(BM_diagnostic_test);
 void BM_diagnostic_test_keep_running(benchmark::State& state) {
   static bool called_once = false;
 
-  if (!called_once) {
-    try_invalid_pause_resume(state);
-  }
+  if (called_once == false) try_invalid_pause_resume(state);
 
   while (state.KeepRunning()) {
-    auto iterations = static_cast<double>(state.iterations()) *
-                      static_cast<double>(state.iterations());
+    auto iterations = double(state.iterations()) * double(state.iterations());
     benchmark::DoNotOptimize(iterations);
   }
 
-  if (!called_once) {
-    try_invalid_pause_resume(state);
-  }
+  if (called_once == false) try_invalid_pause_resume(state);
 
   called_once = true;
 }
 BENCHMARK(BM_diagnostic_test_keep_running);
-}  // end namespace
 
 int main(int argc, char* argv[]) {
 #ifdef NDEBUG
   // This test is exercising functionality for debug builds, which are not
   // available in release builds. Skip the test if we are in that environment
   // to avoid a test failure.
-  std::cout << "Diagnostic test disabled in release build\n";
+  std::cout << "Diagnostic test disabled in release build" << std::endl;
   (void)argc;
   (void)argv;
 #else
-  benchmark::MaybeReenterWithoutASLR(argc, argv);
   benchmark::internal::GetAbortHandler() = &TestHandler;
   benchmark::Initialize(&argc, argv);
   benchmark::RunSpecifiedBenchmarks();

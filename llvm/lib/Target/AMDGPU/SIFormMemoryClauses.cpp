@@ -33,7 +33,7 @@ MaxClause("amdgpu-max-memory-clause", cl::Hidden, cl::init(15),
 namespace {
 
 class SIFormMemoryClausesImpl {
-  using RegUse = DenseMap<unsigned, std::pair<RegState, LaneBitmask>>;
+  using RegUse = DenseMap<unsigned, std::pair<unsigned, LaneBitmask>>;
 
   bool canBundle(const MachineInstr &MI, const RegUse &Defs,
                  const RegUse &Uses) const;
@@ -61,7 +61,9 @@ class SIFormMemoryClausesLegacy : public MachineFunctionPass {
 public:
   static char ID;
 
-  SIFormMemoryClausesLegacy() : MachineFunctionPass(ID) {}
+  SIFormMemoryClausesLegacy() : MachineFunctionPass(ID) {
+    initializeSIFormMemoryClausesLegacyPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
@@ -130,8 +132,8 @@ static bool isValidClauseInst(const MachineInstr &MI, bool IsVMEMClause) {
   return true;
 }
 
-static RegState getMopState(const MachineOperand &MO) {
-  RegState S = {};
+static unsigned getMopState(const MachineOperand &MO) {
+  unsigned S = 0;
   if (MO.isImplicit())
     S |= RegState::Implicit;
   if (MO.isDead())
@@ -232,7 +234,7 @@ void SIFormMemoryClausesImpl::collectRegUses(const MachineInstr &MI,
                            : LaneBitmask::getAll();
     RegUse &Map = MO.isDef() ? Defs : Uses;
 
-    RegState State = getMopState(MO);
+    unsigned State = getMopState(MO);
     auto [Loc, Inserted] = Map.try_emplace(Reg, State, Mask);
     if (!Inserted) {
       Loc->second.first |= State;
@@ -290,7 +292,7 @@ bool SIFormMemoryClausesImpl::run(MachineFunction &MF) {
         continue;
 
       if (!RPT.getNext().isValid())
-        RPT.reset(MI, MBB.end());
+        RPT.reset(MI);
       else { // Advance the state to the current MI.
         RPT.advance(MachineBasicBlock::const_iterator(MI));
         RPT.advanceBeforeNext();
@@ -299,7 +301,7 @@ bool SIFormMemoryClausesImpl::run(MachineFunction &MF) {
       const GCNRPTracker::LiveRegSet LiveRegsCopy(RPT.getLiveRegs());
       RegUse Defs, Uses;
       if (!processRegUses(MI, Defs, Uses, RPT)) {
-        RPT.reset(MI, MBB.end(), &LiveRegsCopy);
+        RPT.reset(MI, &LiveRegsCopy);
         continue;
       }
 
@@ -323,7 +325,7 @@ bool SIFormMemoryClausesImpl::run(MachineFunction &MF) {
         ++Length;
       }
       if (Length < 2) {
-        RPT.reset(MI, MBB.end(), &LiveRegsCopy);
+        RPT.reset(MI, &LiveRegsCopy);
         continue;
       }
 
@@ -347,7 +349,7 @@ bool SIFormMemoryClausesImpl::run(MachineFunction &MF) {
           continue;
 
         // Collect the register operands we should extend the live ranges of.
-        SmallVector<std::tuple<RegState, unsigned>> KillOps;
+        SmallVector<std::tuple<unsigned, unsigned>> KillOps;
         const LiveInterval &LI = LIS->getInterval(R.first);
 
         if (!LI.hasSubRanges()) {
@@ -391,7 +393,7 @@ bool SIFormMemoryClausesImpl::run(MachineFunction &MF) {
       }
 
       // Restore the state after processing the end of the bundle.
-      RPT.reset(MI, MBB.end(), &LiveRegsCopy);
+      RPT.reset(MI, &LiveRegsCopy);
 
       if (!Kill)
         continue;

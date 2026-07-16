@@ -21,9 +21,7 @@ const MCAsmInfo::AtSpecifier atSpecifiers[] = {
     {SystemZ::S_TLSLDM, "TLSLDM"},
 };
 
-SystemZMCAsmInfoELF::SystemZMCAsmInfoELF(const Triple &TT,
-                                         const MCTargetOptions &Options)
-    : MCAsmInfoELF(Options) {
+SystemZMCAsmInfoELF::SystemZMCAsmInfoELF(const Triple &TT) {
   AssemblerDialect = AD_GNU;
   CalleeSaveStackSlotSize = 8;
   CodePointerSize = 8;
@@ -38,9 +36,7 @@ SystemZMCAsmInfoELF::SystemZMCAsmInfoELF(const Triple &TT,
   initializeAtSpecifiers(atSpecifiers);
 }
 
-SystemZMCAsmInfoGOFF::SystemZMCAsmInfoGOFF(const Triple &TT,
-                                           const MCTargetOptions &Options)
-    : MCAsmInfoGOFF(Options) {
+SystemZMCAsmInfoGOFF::SystemZMCAsmInfoGOFF(const Triple &TT) {
   AllowAdditionalComments = false;
   AllowAtInName = true;
   AllowAtAtStartOfIdentifier = true;

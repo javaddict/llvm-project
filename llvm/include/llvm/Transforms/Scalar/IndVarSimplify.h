@@ -22,15 +22,14 @@ namespace llvm {
 class Loop;
 class LPMUpdater;
 
-class IndVarSimplifyPass : public OptionalPassInfoMixin<IndVarSimplifyPass> {
+class IndVarSimplifyPass : public PassInfoMixin<IndVarSimplifyPass> {
   /// Perform IV widening during the pass.
   bool WidenIndVars;
 
 public:
   IndVarSimplifyPass(bool WidenIndVars = true) : WidenIndVars(WidenIndVars) {}
-  LLVM_ABI PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
-                                 LoopStandardAnalysisResults &AR,
-                                 LPMUpdater &U);
+  PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
+                        LoopStandardAnalysisResults &AR, LPMUpdater &U);
 };
 
 } // end namespace llvm

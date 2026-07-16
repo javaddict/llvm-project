@@ -79,6 +79,8 @@ public:
     Options.MaxNumLoads = TLI->getMaxExpandSizeMemcmp(OptSize);
     return Options;
   }
+
+  unsigned getMaxNumArgs() const override { return 5; }
 };
 
 } // end namespace llvm

@@ -145,7 +145,6 @@ LLVMInitializePowerPCTarget() {
   initializeGlobalISel(PR);
   initializePPCCTRLoopsPass(PR);
   initializePPCDAGToDAGISelLegacyPass(PR);
-  initializePPCPrepareIFuncsOnAIXPass(PR);
   initializePPCLinuxAsmPrinterPass(PR);
   initializePPCAIXAsmPrinterPass(PR);
 }
@@ -246,12 +245,8 @@ getEffectivePPCCodeModel(const Triple &TT, std::optional<CodeModel::Model> CM,
 
   if (JIT)
     return CodeModel::Small;
-  if (TT.isOSAIX()) {
-    // Use large code model for 64-bit AIX by default.
-    if (TT.isArch64Bit())
-      return CodeModel::Large;
+  if (TT.isOSAIX())
     return CodeModel::Small;
-  }
 
   assert(TT.isOSBinFormatELF() && "All remaining PPC OSes are ELF based.");
 
@@ -340,6 +335,10 @@ PPCTargetMachine::getSubtargetImpl(const Function &F) const {
 
   auto &I = SubtargetMap[CPU + TuneCPU + FS];
   if (!I) {
+    // This needs to be done before we create a new subtarget since any
+    // creation will depend on the TM and the code generation flags on the
+    // function that reside in TargetOptions.
+    resetTargetOptions(F);
     I = std::make_unique<PPCSubtarget>(
         TargetTriple, CPU, TuneCPU,
         // FIXME: It would be good to have the subtarget additions here
@@ -438,9 +437,6 @@ void PPCPassConfig::addIRPasses() {
     // invariant.
     addPass(createLICMPass());
   }
-
-  if (TM->getTargetTriple().isOSAIX())
-    addPass(createPPCPrepareIFuncsOnAIXPass());
 
   TargetPassConfig::addIRPasses();
 }

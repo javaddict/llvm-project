@@ -14,7 +14,7 @@ entry:
 }
 
 ; CHECK-LABEL: f1
-; CHECK: trap0(#219)
+; CHECK: brkpt
 define i32 @f1() noreturn nounwind {
 entry:
   tail call void @llvm.debugtrap()

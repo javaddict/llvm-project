@@ -21,13 +21,15 @@ namespace llvm {
 
 class TargetMachine;
 
-class KernelInfoPrinter : public RequiredPassInfoMixin<KernelInfoPrinter> {
+class KernelInfoPrinter : public PassInfoMixin<KernelInfoPrinter> {
   TargetMachine *TM;
 
 public:
   explicit KernelInfoPrinter(TargetMachine *TM) : TM(TM) {}
 
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 };
 } // namespace llvm
 #endif // LLVM_ANALYSIS_KERNELINFO_H

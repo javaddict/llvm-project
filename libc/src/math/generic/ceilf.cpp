@@ -7,10 +7,18 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/ceilf.h"
-#include "src/__support/math/ceilf.h"
+#include "src/__support/FPUtil/NearestIntegerOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
-LLVM_LIBC_FUNCTION(float, ceilf, (float x)) { return math::ceilf(x); }
+LLVM_LIBC_FUNCTION(float, ceilf, (float x)) {
+#ifdef __LIBC_USE_BUILTIN_CEIL_FLOOR_RINT_TRUNC
+  return __builtin_ceilf(x);
+#else
+  return fputil::ceil(x);
+#endif
+}
 
 } // namespace LIBC_NAMESPACE_DECL

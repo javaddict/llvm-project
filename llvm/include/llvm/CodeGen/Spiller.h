@@ -30,7 +30,7 @@ class AllocationOrder;
 ///
 /// Implementations are utility classes which insert spill or remat code on
 /// demand.
-class LLVM_ABI Spiller {
+class Spiller {
   virtual void anchor();
 
 public:
@@ -58,10 +58,10 @@ public:
 
 /// Create and return a spiller that will insert spill code directly instead
 /// of deferring though VirtRegMap.
-LLVM_ABI Spiller *createInlineSpiller(const Spiller::RequiredAnalyses &Analyses,
-                                      MachineFunction &MF, VirtRegMap &VRM,
-                                      VirtRegAuxInfo &VRAI,
-                                      LiveRegMatrix *Matrix = nullptr);
+Spiller *createInlineSpiller(const Spiller::RequiredAnalyses &Analyses,
+                             MachineFunction &MF, VirtRegMap &VRM,
+                             VirtRegAuxInfo &VRAI,
+                             LiveRegMatrix *Matrix = nullptr);
 
 } // end namespace llvm
 

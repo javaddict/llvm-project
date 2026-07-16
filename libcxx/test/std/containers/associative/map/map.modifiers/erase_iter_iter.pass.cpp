@@ -10,7 +10,7 @@
 
 // class map
 
-// iterator erase(const_iterator first, const_iterator last); // constexpr since C++26
+// iterator erase(const_iterator first, const_iterator last);
 
 #include <map>
 #include <cassert>
@@ -18,7 +18,7 @@
 #include "test_macros.h"
 #include "min_allocator.h"
 
-TEST_CONSTEXPR_CXX26 bool test() {
+int main(int, char**) {
   {
     typedef std::map<int, double> M;
     typedef std::pair<int, double> P;
@@ -151,13 +151,6 @@ TEST_CONSTEXPR_CXX26 bool test() {
     assert(i == m.end());
   }
 #endif
-  return true;
-}
 
-int main(int, char**) {
-  test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
   return 0;
 }

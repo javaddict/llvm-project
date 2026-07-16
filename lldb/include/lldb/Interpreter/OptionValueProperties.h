@@ -46,8 +46,6 @@ public:
   void DumpValue(const ExecutionContext *exe_ctx, Stream &strm,
                  uint32_t dump_mask) override;
 
-  bool IsDefault() const override;
-
   llvm::json::Value ToJSON(const ExecutionContext *exe_ctx) const override;
 
   llvm::StringRef GetName() const override { return m_name; }
@@ -60,12 +58,9 @@ public:
                                    Stream &strm) const;
 
   void Apropos(llvm::StringRef keyword,
-               std::vector<const Property *> &matching_properties,
-               std::vector<const Property *> &matching_property_paths) const;
+               std::vector<const Property *> &matching_properties) const;
 
-  void Initialize(const PropertyCollectionDefinition &setting_definitions);
-
-  void SetExpectedPath(std::string path);
+  void Initialize(const PropertyDefinitions &setting_definitions);
 
   // Subclass specific functions
 
@@ -179,12 +174,9 @@ protected:
     return ((idx < m_properties.size()) ? &m_properties[idx] : nullptr);
   }
 
-  bool VerifyPath();
-
   std::string m_name;
   std::vector<Property> m_properties;
   llvm::StringMap<size_t> m_name_to_index;
-  std::string m_expected_path;
 };
 
 } // namespace lldb_private

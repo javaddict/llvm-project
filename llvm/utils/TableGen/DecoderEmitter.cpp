@@ -656,14 +656,8 @@ static std::vector<EncodingIsland> getIslands(const KnownBits &EncodingBits,
     if (!IsFiltered && IsKnown) {
       if (OnIsland) {
         // Accumulate island bits.
-        const unsigned BitNo = I - StartBit;
-        FieldVal |= static_cast<uint64_t>(EncodingBits.One[I]) << (BitNo);
-        // If island becomes larger than 64-bits complete the island and start a
-        // new one
-        if (BitNo >= 63) {
-          Islands.push_back({StartBit, 64, FieldVal});
-          OnIsland = false;
-        }
+        FieldVal |= static_cast<uint64_t>(EncodingBits.One[I])
+                    << (I - StartBit);
       } else {
         // Onto an island.
         StartBit = I;
@@ -707,16 +701,16 @@ static void emitBinaryParser(raw_ostream &OS, indent Indent,
     return;
   }
 
-  if (OpInfo.Fields.empty()) {
+  if (OpInfo.fields().empty()) {
     // Only a constant part. The old behavior is to not decode this operand.
     if (IgnoreFullyDefinedOperands)
       return;
     // Initialize `tmp` with the constant part.
     OS << Indent << "tmp = " << format_hex(*OpInfo.InitValue, 0) << ";\n";
-  } else if (OpInfo.Fields.size() == 1 && !OpInfo.InitValue.value_or(0)) {
+  } else if (OpInfo.fields().size() == 1 && !OpInfo.InitValue.value_or(0)) {
     // One variable part and no/zero constant part. Initialize `tmp` with the
     // variable part.
-    auto [Base, Width, Offset] = OpInfo.Fields.front();
+    auto [Base, Width, Offset] = OpInfo.fields().front();
     OS << Indent << "tmp = fieldFromInstruction(insn, " << Base << ", " << Width
        << ')';
     if (Offset)
@@ -727,7 +721,7 @@ static void emitBinaryParser(raw_ostream &OS, indent Indent,
     // insert the variable parts into it.
     OS << Indent << "tmp = " << format_hex(OpInfo.InitValue.value_or(0), 0)
        << ";\n";
-    for (auto [Base, Width, Offset] : OpInfo.Fields) {
+    for (auto [Base, Width, Offset] : OpInfo.fields()) {
       OS << Indent << "tmp |= fieldFromInstruction(insn, " << Base << ", "
          << Width << ')';
       if (Offset)

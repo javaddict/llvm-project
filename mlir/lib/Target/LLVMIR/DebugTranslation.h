@@ -104,7 +104,6 @@ private:
   /// corresponding type.
   llvm::TempDICompositeType translateTemporaryImpl(DICompositeTypeAttr attr);
   llvm::TempDISubprogram translateTemporaryImpl(DISubprogramAttr attr);
-  llvm::TempDICompileUnit translateTemporaryImpl(DICompileUnitAttr attr);
 
   /// Constructs a string metadata node from the string attribute. Returns
   /// nullptr if `stringAttr` is null or contains and empty string.

@@ -243,7 +243,7 @@ private:
     SmallVector<Value, 1> tokens;
     tokens.reserve(asyncTokens.size());
     TypeSwitch<Operation *>(op)
-        .Case([&](async::AwaitOp awaitOp) {
+        .Case<async::AwaitOp>([&](auto awaitOp) {
           // Add async.await ops to wait for the !gpu.async.tokens.
           builder.setInsertionPointAfter(op);
           for (auto asyncToken : asyncTokens)
@@ -252,7 +252,7 @@ private:
           // Set `it` after the inserted async.await ops.
           it = builder.getInsertionPoint();
         })
-        .Case([&](async::ExecuteOp executeOp) {
+        .Case<async::ExecuteOp>([&](auto executeOp) {
           // Set `it` to the beginning of the region and add asyncTokens to the
           // async.execute operands.
           it = executeOp.getBody()->begin();

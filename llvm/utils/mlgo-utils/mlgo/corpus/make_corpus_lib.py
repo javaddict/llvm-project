@@ -3,19 +3,17 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 """Library functions for making a corpus from arbitrary bitcode."""
 
-# TODO(boomanaiden154): Remove this import once we have upgrade to python 3.10
-# which supports the relevant type annotations by default.
-from __future__ import annotations
-
 import pathlib
 import os
 import shutil
 import json
 
+from typing import List, Optional
+
 BITCODE_EXTENSION = ".bc"
 
 
-def load_bitcode_from_directory(bitcode_base_dir: str) -> list[str]:
+def load_bitcode_from_directory(bitcode_base_dir: str) -> List[str]:
     """Finds bitcode files to extract from a given directory.
 
     Args:
@@ -35,7 +33,7 @@ def load_bitcode_from_directory(bitcode_base_dir: str) -> list[str]:
 
 
 def copy_bitcode(
-    relative_paths: list[str], bitcode_base_dir: str, output_dir: str
+    relative_paths: List[str], bitcode_base_dir: str, output_dir: str
 ) -> None:
     """Copies bitcode files from the base directory to the output directory.
 
@@ -53,9 +51,9 @@ def copy_bitcode(
 
 
 def write_corpus_manifest(
-    relative_output_paths: list[str],
+    relative_output_paths: List[str],
     output_dir: str,
-    default_args: list[str] | None = None,
+    default_args: Optional[List[str]] = None,
 ) -> None:
     """Creates a corpus manifest describing the bitcode that has been found.
 

@@ -124,7 +124,7 @@ Command Options Usage:
 <location-id> serves to disambiguate when multiple locations could be meant."""
 
 
-def jump(debugger, command, exe_ctx, result, internal_dict):
+def jump(debugger, command, result, internal_dict):
     if command == "":
         result.AppendMessage(usage_string())
 
@@ -134,20 +134,22 @@ def jump(debugger, command, exe_ctx, result, internal_dict):
         result.AppendMessage("Invalid debugger!")
         return
 
-    target = exe_ctx.target
+    target = debugger.GetSelectedTarget()
     if not target.IsValid():
         result.AppendMessage("jump requires a valid target.")
         return
 
-    if not exe_ctx.process.IsValid():
+    process = target.GetProcess()
+    if not process.IsValid():
         result.AppendMessage("jump requires a valid process.")
         return
 
-    if not exe_ctx.thread.IsValid():
+    thread = process.GetSelectedThread()
+    if not thread.IsValid():
         result.AppendMessage("jump requires a valid thread.")
         return
 
-    frame = exe_ctx.frame
+    frame = thread.GetSelectedFrame()
     if not frame.IsValid():
         result.AppendMessage("jump requires a valid frame.")
         return

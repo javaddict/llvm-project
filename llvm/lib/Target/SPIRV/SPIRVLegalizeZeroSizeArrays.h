@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_SPIRV_SPIRVLEGALIZEZEROSIZEARRAYS_H
-#define LLVM_LIB_TARGET_SPIRV_SPIRVLEGALIZEZEROSIZEARRAYS_H
+#ifndef LLVM_LIB_TARGET_SPIRV_SPIRVLEGALIZEZEROSIZE_ARRAYS_H_
+#define LLVM_LIB_TARGET_SPIRV_SPIRVLEGALIZEZEROSIZE_ARRAYS_H_
 
 #include "llvm/IR/PassManager.h"
 
@@ -16,7 +16,7 @@ namespace llvm {
 class SPIRVTargetMachine;
 
 class SPIRVLegalizeZeroSizeArrays
-    : public OptionalPassInfoMixin<SPIRVLegalizeZeroSizeArrays> {
+    : public PassInfoMixin<SPIRVLegalizeZeroSizeArrays> {
   const SPIRVTargetMachine &TM;
 
 public:
@@ -26,4 +26,4 @@ public:
 
 } // namespace llvm
 
-#endif // LLVM_LIB_TARGET_SPIRV_SPIRVLEGALIZEZEROSIZEARRAYS_H
+#endif // LLVM_LIB_TARGET_SPIRV_SPIRVLEGALIZEZEROSIZE_ARRAYS_H_

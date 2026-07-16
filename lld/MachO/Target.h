@@ -99,8 +99,7 @@ public:
 
   virtual uint64_t getPageSize() const = 0;
 
-  virtual void populateThunk(InputSection *thunk, Symbol *funcSym,
-                             int64_t addend) {
+  virtual void populateThunk(InputSection *thunk, Symbol *funcSym) {
     llvm_unreachable("target does not use thunks");
   }
 

@@ -357,7 +357,6 @@ def FuncOp : Func_Op<"func", [
     bool isDeclaration() { return isExternal(); }
   }];
   let hasCustomAssemblyFormat = 1;
-  let hasRegionVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -390,6 +389,7 @@ def ReturnOp : Func_Op<"return", [Pure, HasParent<"FuncOp">,
   }]>];
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
+  let hasVerifier = 1;
 }
 
 #endif // MLIR_DIALECT_FUNC_IR_FUNCOPS_TD

@@ -466,7 +466,8 @@ bool ThreadPlanStepOut::MischiefManaged() {
     // we're done with this step out operation.
 
     Log *log = GetLog(LLDBLog::Step);
-    LLDB_LOGF(log, "Completed step out plan.");
+    if (log)
+      LLDB_LOGF(log, "Completed step out plan.");
     if (m_return_bp_id != LLDB_INVALID_BREAK_ID) {
       GetTarget().RemoveBreakpointByID(m_return_bp_id);
       m_return_bp_id = LLDB_INVALID_BREAK_ID;

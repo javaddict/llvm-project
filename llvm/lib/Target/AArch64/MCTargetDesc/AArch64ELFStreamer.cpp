@@ -316,7 +316,8 @@ public:
       : MCELFStreamer(Context, std::move(TAB), std::move(OW),
                       std::move(Emitter)),
         LastEMS(EMS_None) {
-    ImplicitMapSyms = getContext().getTargetOptions().ImplicitMapSyms;
+    auto *TO = getContext().getTargetOptions();
+    ImplicitMapSyms = TO && TO->ImplicitMapSyms;
   }
 
   void changeSection(MCSection *Section, uint32_t Subsection = 0) override {

@@ -1,0 +1,144 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=prologepilog -simplify-mir %s -o - | FileCheck %s
+#
+# REGRESSION TEST: R12 AT-scratch spill around the immediate-count SET_HWLOOP
+# pseudo must live ABOVE SP inside the allocated frame, NOT in a transient slot
+# opened by `SUBI32 sp, sp, 8` below SP.
+#
+# Bug (prior revision, see): the AsmPrinter lowers the immediate-count
+# SET_HWLOOP pseudo by materializing the trip count into R12 (the AT scratch
+# register). R12 is not guaranteed free at that program point (: post-RA
+# scheduling can hoist a live R12 range across the side-effect-free pseudo), so
+# the old code spilled R12 to a TRANSIENT 8-byte slot opened with
+# SUBI32 sp, sp, 8; ST32 r12, [sp, 0];...; LD32 r12, [sp, 0]; ADDI32 sp, sp, 8
+# On baremetal Haydn there is NO red zone (CLAUDE.md hard constraint #4). An
+# asynchronous interrupt/exception handler that shares the stack can clobber
+# those 8 bytes below SP between the ST32 and the LD32 -> corrupted R12 ->
+# broken hwloop trip count (and, in the repro, a corrupted bswap mask).
+#
+# Fix : HaydnFrameLowering::determineCalleeSaves reserves a permanent
+# 4-byte slot above SP inside the allocated frame for any function containing a
+# SET_HWLOOP pseudo (the immediate-count form). PEI folds the slot into
+# getStackSize, so the prologue's SUBI32 sp,sp,<FrameSize> covers it and an
+# IRQ cannot touch it. The AsmPrinter (haydn-expand-pseudos leaves the pseudo
+# intact for the AsmPrinter case at HaydnAsmPrinter.cpp SET_HWLOOP) then
+# spills/restores R12 there via getFrameIndexReference. The spill/restore is
+# balanced on the single SET_HWLOOP path.
+#
+# Why a MIR test (not.ll): the immediate-count SET_HWLOOP pseudo is only
+# emitted by the post-RA HaydnHardwareLoops pass when it can derive a constant
+# trip count AND the IR-level HardwareLoops pass has not already converted the
+# loop (the IR pass lowers llvm.set.loop.iterations to LoopStart, which uses a
+# trip-count REGISTER and does NOT touch R12). Reaching the immediate path from
+# ll is therefore coupled to IR-pass heuristics and is brittle. This MIR test
+# injects SET_HWLOOP directly, isolating the frame-reservation + AsmPrinter
+# contract that established.
+#
+# Test design:
+# @imm_hwloop — contains SET_HWLOOP (immediate count). MUST reserve the R12
+# slot: prologue emits SUBI32 $r13, $r13, <FrameSize> (FrameSize >= 4) and
+# epilogue emits the matching ADDI32. This anchors that the frame (and thus
+# the R12 spill slot) is properly allocated above the post-prologue SP, so
+# the AsmPrinter's ST32/LD32 r12,[sp,off] addresses valid memory.
+# @reg_hwloop — contains SET_HWLOOP_REG (register count). Trip count is a
+# GPR operand, but /AT policy still always reserves R12ScratchFI
+# (AIE model: R12 is a normal allocatable GPR; no free AT), because
+# AsmPrinter / PEI AT materialization and residual SET paths may still
+# touch R12. Both functions therefore get an in-frame slot (above SP)
+# never a transient below-SP dance.
+#
+# What breaks if this regresses:
+# If determineCalleeSaves stops reserving R12ScratchFI (or the AsmPrinter
+# re-introduces a transient SUBI32 sp,sp,8 around the hwloop), the
+# prologue SUBI32 disappears and the AsmPrinter spill writes to
+# an unallocated offset -> IRQ clobbers it (the original / bug).
+
+--- |
+  define dso_local void @imm_hwloop(ptr nocapture writeonly %out) {
+  entry:
+    br label %for.body
+  for.body:
+    store i32 0, ptr %out, align 4
+    br label %for.body
+  exit:
+    ret void
+  }
+
+  define dso_local void @reg_hwloop(ptr nocapture writeonly %out) {
+  entry:
+    br label %for.body
+  for.body:
+    store i32 0, ptr %out, align 4
+    br label %for.body
+  exit:
+    ret void
+  }
+...
+---
+name:            imm_hwloop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP 0, %bb.1, %bb.1, 8
+
+  bb.1.for.body:
+    liveins: $r1, $r0
+    successors: %bb.2
+
+    ST32 $r0, $r1, 0
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+---
+name:            reg_hwloop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r4, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_REG 0, %bb.1, %bb.1, $r4
+
+  bb.1.for.body:
+    liveins: $r1, $r0
+    successors: %bb.2
+
+    ST32 $r0, $r1, 0
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+# imm_hwloop: SET_HWLOOP (immediate count) reserves the R12 scratch slot.
+# frameInfo.stackSize > 0 (the slot is folded into the frame)
+# a 4-byte stack object exists (the reserved slot, offset -4 from SP)
+# prologue SUBI32 / epilogue ADDI32 materialize the frame so the AsmPrinter
+# spill ST32 r12,[sp,off] / LD32 r12,[sp,off] addresses valid memory above
+# the post-prologue SP (interrupt-safe — the fix).
+# CHECK-LABEL: name:            imm_hwloop
+# CHECK:       stackSize:       [[FRAMESIZE:[0-9]+]]
+# CHECK:       - { id: 0, type: spill-slot, offset: -4, size: 4, alignment: 4 }
+# Flex cutover: SUBI32 -> SUBI32_S0 (slot-suffixed Flex form).
+# CHECK:       $r13 = frame-setup SUBI32 $r13, [[FRAMESIZE]]
+# CHECK:       SET_HWLOOP 0, %bb.1, %bb.1, 8
+# CHECK:       $r13 = frame-destroy ADDI32_W $r13, [[FRAMESIZE]]
+#
+# reg_hwloop: SET_HWLOOP_REG still gets R12ScratchFI under AT policy
+# (in-frame, above SP). Must NOT open a transient below-SP slot.
+# CHECK-LABEL: name:            reg_hwloop
+# CHECK:       stackSize:       [[RFSIZE:[0-9]+]]
+# CHECK:       - { id: 0, type: spill-slot, offset: -4, size: 4, alignment: 4 }
+# CHECK:       $r13 = frame-setup SUBI32 $r13, [[RFSIZE]]
+# CHECK:       SET_HWLOOP_REG 0, %bb.1, %bb.1, $r4
+# CHECK:       $r13 = frame-destroy ADDI32_W $r13, [[RFSIZE]]
+# CHECK-NOT:   SUBI32 $r13, $r13, 8

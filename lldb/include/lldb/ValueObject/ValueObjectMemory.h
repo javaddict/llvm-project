@@ -34,14 +34,12 @@ public:
   static lldb::ValueObjectSP Create(ExecutionContextScope *exe_scope,
                                     llvm::StringRef name,
                                     const Address &address,
-                                    lldb::TypeSP &type_sp,
-                                    ValueObject *parent = nullptr);
+                                    lldb::TypeSP &type_sp);
 
   static lldb::ValueObjectSP Create(ExecutionContextScope *exe_scope,
                                     llvm::StringRef name,
                                     const Address &address,
-                                    const CompilerType &ast_type,
-                                    ValueObject *parent = nullptr);
+                                    const CompilerType &ast_type);
 
   llvm::Expected<uint64_t> GetByteSize() override;
 

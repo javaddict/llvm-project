@@ -62,10 +62,10 @@ OpFoldResult math::AbsIOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::AcosOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(acos(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(acosf(a.convertToFloat()));
         default:
           return {};
@@ -80,10 +80,10 @@ OpFoldResult math::AcosOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::AcoshOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(acosh(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(acoshf(a.convertToFloat()));
         default:
           return {};
@@ -98,10 +98,10 @@ OpFoldResult math::AcoshOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::AsinOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(asin(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(asinf(a.convertToFloat()));
         default:
           return {};
@@ -116,10 +116,10 @@ OpFoldResult math::AsinOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::AsinhOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(asinh(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(asinhf(a.convertToFloat()));
         default:
           return {};
@@ -134,10 +134,10 @@ OpFoldResult math::AsinhOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::AtanOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(atan(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(atanf(a.convertToFloat()));
         default:
           return {};
@@ -152,10 +152,10 @@ OpFoldResult math::AtanOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::AtanhOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(atanh(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(atanhf(a.convertToFloat()));
         default:
           return {};
@@ -174,32 +174,15 @@ OpFoldResult math::Atan2Op::fold(FoldAdaptor adaptor) {
         if (a.isZero() && b.isZero())
           return llvm::APFloat::getNaN(a.getSemantics());
 
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        if (a.getSizeInBits(a.getSemantics()) == 64 &&
+            b.getSizeInBits(b.getSemantics()) == 64)
           return APFloat(atan2(a.convertToDouble(), b.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+
+        if (a.getSizeInBits(a.getSemantics()) == 32 &&
+            b.getSizeInBits(b.getSemantics()) == 32)
           return APFloat(atan2f(a.convertToFloat(), b.convertToFloat()));
-        default:
-          return {};
-        }
-      });
-}
 
-//===----------------------------------------------------------------------===//
-// CbrtOp folder
-//===----------------------------------------------------------------------===//
-
-OpFoldResult math::CbrtOp::fold(FoldAdaptor adaptor) {
-  return constFoldUnaryOpConditional<FloatAttr>(
-      adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
-          return APFloat(cbrt(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
-          return APFloat(cbrtf(a.convertToFloat()));
-        default:
-          return {};
-        }
+        return {};
       });
 }
 
@@ -236,10 +219,10 @@ OpFoldResult math::CopySignOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::CosOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(cos(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(cosf(a.convertToFloat()));
         default:
           return {};
@@ -254,10 +237,10 @@ OpFoldResult math::CosOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::CoshOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(cosh(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(coshf(a.convertToFloat()));
         default:
           return {};
@@ -272,10 +255,10 @@ OpFoldResult math::CoshOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::SinOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(sin(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(sinf(a.convertToFloat()));
         default:
           return {};
@@ -290,10 +273,10 @@ OpFoldResult math::SinOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::SinhOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(sinh(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(sinhf(a.convertToFloat()));
         default:
           return {};
@@ -302,42 +285,13 @@ OpFoldResult math::SinhOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
-// SinCosOp
+// SinCosOp getShapeForUnroll
 //===----------------------------------------------------------------------===//
 
 std::optional<SmallVector<int64_t, 4>> math::SincosOp::getShapeForUnroll() {
   if (auto vt = mlir::dyn_cast<VectorType>(getOperand().getType()))
     return llvm::to_vector<4>(vt.getShape());
   return std::nullopt;
-}
-
-LogicalResult math::SincosOp::fold(FoldAdaptor adaptor,
-                                   SmallVectorImpl<OpFoldResult> &result) {
-  auto foldSincos = [](const APFloat &a, double (*fnDouble)(double),
-                       float (*fnFloat)(float)) -> std::optional<APFloat> {
-    switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-    case APFloat::Semantics::S_IEEEdouble:
-      return APFloat(fnDouble(a.convertToDouble()));
-    case APFloat::Semantics::S_IEEEsingle:
-      return APFloat(fnFloat(a.convertToFloat()));
-    default:
-      return {};
-    }
-  };
-
-  Attribute sinRes = constFoldUnaryOpConditional<FloatAttr>(
-      adaptor.getOperands(),
-      [&](const APFloat &a) { return foldSincos(a, sin, sinf); });
-  Attribute cosRes = constFoldUnaryOpConditional<FloatAttr>(
-      adaptor.getOperands(),
-      [&](const APFloat &a) { return foldSincos(a, cos, cosf); });
-
-  if (sinRes && cosRes) {
-    result.push_back(sinRes);
-    result.push_back(cosRes);
-    return success();
-  }
-  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -377,10 +331,10 @@ OpFoldResult math::CtPopOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::ErfOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(erf(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(erff(a.convertToFloat()));
         default:
           return {};
@@ -416,9 +370,6 @@ OpFoldResult math::IPowIOp::fold(FoldAdaptor adaptor) {
       [](const APInt &base, const APInt &power) -> std::optional<APInt> {
         unsigned width = base.getBitWidth();
         auto zeroValue = APInt::getZero(width);
-        // i1 folding is ambiguous with signed semantics, don't fold.
-        if (width == 1)
-          return {};
         APInt oneValue{width, 1ULL, /*isSigned=*/true};
         APInt minusOneValue{width, -1ULL, /*isSigned=*/true};
 
@@ -429,7 +380,7 @@ OpFoldResult math::IPowIOp::fold(FoldAdaptor adaptor) {
           // Leave 0 raised to negative power not folded.
           if (base.isZero())
             return {};
-          if (base.isOne())
+          if (base.eq(oneValue))
             return oneValue;
           // If abs(base) > 1, then the result is zero.
           if (base.ne(minusOneValue))
@@ -470,14 +421,13 @@ OpFoldResult math::LogOp::fold(FoldAdaptor adaptor) {
         if (a.isNegative())
           return {};
 
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        if (a.getSizeInBits(a.getSemantics()) == 64)
           return APFloat(log(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+
+        if (a.getSizeInBits(a.getSemantics()) == 32)
           return APFloat(logf(a.convertToFloat()));
-        default:
-          return {};
-        }
+
+        return {};
       });
 }
 
@@ -491,14 +441,13 @@ OpFoldResult math::Log2Op::fold(FoldAdaptor adaptor) {
         if (a.isNegative())
           return {};
 
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        if (a.getSizeInBits(a.getSemantics()) == 64)
           return APFloat(log2(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+
+        if (a.getSizeInBits(a.getSemantics()) == 32)
           return APFloat(log2f(a.convertToFloat()));
-        default:
-          return {};
-        }
+
+        return {};
       });
 }
 
@@ -512,10 +461,10 @@ OpFoldResult math::Log10Op::fold(FoldAdaptor adaptor) {
         if (a.isNegative())
           return {};
 
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(log10(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(log10f(a.convertToFloat()));
         default:
           return {};
@@ -530,12 +479,12 @@ OpFoldResult math::Log10Op::fold(FoldAdaptor adaptor) {
 OpFoldResult math::Log1pOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           if ((a + APFloat(1.0)).isNegative())
             return {};
           return APFloat(log1p(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           if ((a + APFloat(1.0f)).isNegative())
             return {};
           return APFloat(log1pf(a.convertToFloat()));
@@ -553,36 +502,15 @@ OpFoldResult math::PowFOp::fold(FoldAdaptor adaptor) {
   return constFoldBinaryOpConditional<FloatAttr>(
       adaptor.getOperands(),
       [](const APFloat &a, const APFloat &b) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        if (a.getSizeInBits(a.getSemantics()) == 64 &&
+            b.getSizeInBits(b.getSemantics()) == 64)
           return APFloat(pow(a.convertToDouble(), b.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+
+        if (a.getSizeInBits(a.getSemantics()) == 32 &&
+            b.getSizeInBits(b.getSemantics()) == 32)
           return APFloat(powf(a.convertToFloat(), b.convertToFloat()));
-        default:
-          return {};
-        }
-      });
-}
 
-//===----------------------------------------------------------------------===//
-// RsqrtOp folder
-//===----------------------------------------------------------------------===//
-
-OpFoldResult math::RsqrtOp::fold(FoldAdaptor adaptor) {
-  return constFoldUnaryOpConditional<FloatAttr>(
-      adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        if (a.isNegative())
-          return {};
-
-        APFloat one(a.getSemantics(), 1);
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
-          return one / APFloat(sqrt(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
-          return one / APFloat(sqrtf(a.convertToFloat()));
-        default:
-          return {};
-        }
+        return {};
       });
 }
 
@@ -596,10 +524,10 @@ OpFoldResult math::SqrtOp::fold(FoldAdaptor adaptor) {
         if (a.isNegative())
           return {};
 
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(sqrt(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(sqrtf(a.convertToFloat()));
         default:
           return {};
@@ -614,10 +542,10 @@ OpFoldResult math::SqrtOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::ExpOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(exp(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(expf(a.convertToFloat()));
         default:
           return {};
@@ -632,10 +560,10 @@ OpFoldResult math::ExpOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::Exp2Op::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(exp2(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(exp2f(a.convertToFloat()));
         default:
           return {};
@@ -650,10 +578,10 @@ OpFoldResult math::Exp2Op::fold(FoldAdaptor adaptor) {
 OpFoldResult math::ExpM1Op::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(expm1(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(expm1f(a.convertToFloat()));
         default:
           return {};
@@ -732,10 +660,10 @@ OpFoldResult math::IsNormalOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::TanOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(tan(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(tanf(a.convertToFloat()));
         default:
           return {};
@@ -750,10 +678,10 @@ OpFoldResult math::TanOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::TanhOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(tanh(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(tanhf(a.convertToFloat()));
         default:
           return {};
@@ -794,10 +722,10 @@ OpFoldResult math::FloorOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::RoundOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(round(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(roundf(a.convertToFloat()));
         default:
           return {};
@@ -812,39 +740,11 @@ OpFoldResult math::RoundOp::fold(FoldAdaptor adaptor) {
 OpFoldResult math::TruncOp::fold(FoldAdaptor adaptor) {
   return constFoldUnaryOpConditional<FloatAttr>(
       adaptor.getOperands(), [](const APFloat &a) -> std::optional<APFloat> {
-        switch (APFloat::SemanticsToEnum(a.getSemantics())) {
-        case APFloat::Semantics::S_IEEEdouble:
+        switch (a.getSizeInBits(a.getSemantics())) {
+        case 64:
           return APFloat(trunc(a.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
+        case 32:
           return APFloat(truncf(a.convertToFloat()));
-        default:
-          return {};
-        }
-      });
-}
-
-//===----------------------------------------------------------------------===//
-// FPowIOp folder
-//===----------------------------------------------------------------------===//
-
-OpFoldResult math::FPowIOp::fold(FoldAdaptor adaptor) {
-  return constFoldBinaryOpConditional<FloatAttr, IntegerAttr>(
-      adaptor.getOperands(),
-      [](const APFloat &base, const APInt &exp) -> std::optional<APFloat> {
-        const llvm::fltSemantics &sem = base.getSemantics();
-        // Fold when the exponent is exactly representable in the
-        // floating-point type of the base.
-        APFloat fExp(sem);
-        if (fExp.convertFromAPInt(exp, /*isSigned=*/true,
-                                  APFloat::rmNearestTiesToEven) !=
-            APFloat::opOK)
-          return {};
-
-        switch (APFloat::SemanticsToEnum(sem)) {
-        case APFloat::Semantics::S_IEEEdouble:
-          return APFloat(pow(base.convertToDouble(), fExp.convertToDouble()));
-        case APFloat::Semantics::S_IEEEsingle:
-          return APFloat(powf(base.convertToFloat(), fExp.convertToFloat()));
         default:
           return {};
         }

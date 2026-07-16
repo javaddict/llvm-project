@@ -16,8 +16,7 @@
 using namespace llvm;
 
 NVPTXMCAsmInfo::NVPTXMCAsmInfo(const Triple &TheTriple,
-                               const MCTargetOptions &Options)
-    : MCAsmInfo(Options) {
+                               const MCTargetOptions &Options) {
   if (TheTriple.getArch() == Triple::nvptx64) {
     CodePointerSize = CalleeSaveStackSlotSize = 8;
   }
@@ -48,9 +47,10 @@ NVPTXMCAsmInfo::NVPTXMCAsmInfo(const Triple &TheTriple,
   SupportsExtendedDwarfLocDirective = false;
   SupportsSignedData = false;
 
-  InternalSymbolPrefix = "$L__";
+  PrivateGlobalPrefix = "$L__";
+  PrivateLabelPrefix = PrivateGlobalPrefix;
 
-  // TODO: Can we just disable this?
+  // @TODO: Can we just disable this?
   WeakDirective = "\t// .weak\t";
   GlobalDirective = "\t// .globl\t";
 

@@ -89,12 +89,8 @@ clang::getPointeeTypeText(const DeclaratorDecl *VD, const SourceManager &SM,
     // `PteTy` via source ranges.
     *QualifiersToAppend = PteTy.getQualifiers();
   }
-
-  std::optional<StringRef> RangeText =
-      getRangeText({PteTyLoc.getBeginLoc(), PteEndOfTokenLoc}, SM, LangOpts);
-  if (!RangeText)
-    return std::nullopt;
-  return RangeText->str();
+  return getRangeText({PteTyLoc.getBeginLoc(), PteEndOfTokenLoc}, SM, LangOpts)
+      ->str();
 }
 
 // returns text of pointee to pointee (T*&)

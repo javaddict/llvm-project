@@ -27,7 +27,7 @@ TaskDescriptorTy *__kmpc_omp_task_alloc(IdentTy *, int32_t, int32_t,
                                         size_t SharedValuesSize,
                                         TaskFnTy TaskFn) {
   auto TaskSizeInclPrivateValuesPadded =
-      utils::alignUp(TaskSizeInclPrivateValues, sizeof(void *));
+      utils::roundUp(TaskSizeInclPrivateValues, sizeof(void *));
   auto TaskSizeTotal = TaskSizeInclPrivateValuesPadded + SharedValuesSize;
   TaskDescriptorTy *TaskDescriptor = (TaskDescriptorTy *)memory::allocGlobal(
       TaskSizeTotal, "explicit task descriptor");

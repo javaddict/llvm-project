@@ -56,11 +56,6 @@ cl::opt<MIR2VecKind> MIR2VecEmbeddingKind(
     cl::init(MIR2VecKind::Symbolic), cl::desc("MIR2Vec embedding kind"),
     cl::cat(MIR2VecCategory));
 
-static cl::opt<bool> PrintAllVocabEntries(
-    "mir2vec-print-all-vocab-entries", cl::Optional, cl::init(false),
-    cl::desc("Print all vocabulary entries including zero embeddings"),
-    cl::cat(MIR2VecCategory));
-
 } // namespace mir2vec
 } // namespace llvm
 
@@ -614,13 +609,8 @@ bool MIR2VecVocabPrinterLegacyPass::doFinalization(Module &M) {
   auto &MIR2VecVocab = *MIR2VecVocabOrErr;
   unsigned Pos = 0;
   for (const auto &Entry : MIR2VecVocab) {
-    // Skip zero embeddings to avoid printing entries not in the vocabulary.
-    // This makes the output stable across changes to the opcode list.
-    if (PrintAllVocabEntries || !Entry.isZero()) {
-      OS << "Key: " << MIR2VecVocab.getStringKey(Pos) << ": ";
-      Entry.print(OS);
-    }
-    ++Pos;
+    OS << "Key: " << MIR2VecVocab.getStringKey(Pos++) << ": ";
+    Entry.print(OS);
   }
 
   return false;

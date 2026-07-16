@@ -115,8 +115,7 @@ def LLVM_aarch64_sme_umops_za32 : ArmSME_IntrMopOverloadedOp<"umops.za32">;
 class ArmSME_IntrLoadStoreOp<string mnemonic>
     : ArmSME_IntrOp<mnemonic,
                     /*immArgPositions=*/[2],
-                    /*immArgAttrNames=*/["tile_id"],
-                    /*overloadedOperands=*/[1]>;
+                    /*immArgAttrNames=*/["tile_id"]>;
 
 // Loads (from memory to ZA tile slice)
 class ArmSME_IntrLoadOp<string mnemonic>
@@ -157,10 +156,7 @@ def LLVM_aarch64_sme_st1d_vert : ArmSME_IntrStoreOp<"st1d.vert">;
 def LLVM_aarch64_sme_st1q_vert : ArmSME_IntrStoreOp<"st1q.vert">;
 
 def LLVM_aarch64_sme_str
-    : ArmSME_IntrOp<"str",
-                    /*immArgPositions=*/[],
-                    /*immArgAttrNames=*/[],
-                    /*overloadedOperands=*/[1]>,
+    : ArmSME_IntrOp<"str">,
       Arguments<(ins Arg<I32, "Index">:$index,
                  Arg<LLVM_AnyPointer, "Store address", [MemWrite]>:$store_address,
                  Arg<I32, "Offset">:$offset)>;

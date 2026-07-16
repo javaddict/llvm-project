@@ -70,8 +70,6 @@ struct WrittenTo : public Lattice<WrittenToLatticeValue> {
 /// is eventually written to.
 class WrittenToAnalysis : public SparseBackwardDataFlowAnalysis<WrittenTo> {
 public:
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(WrittenToAnalysis)
-
   WrittenToAnalysis(DataFlowSolver &solver, SymbolTableCollection &symbolTable,
                     bool assumeFuncWrites)
       : SparseBackwardDataFlowAnalysis(solver, symbolTable),
@@ -200,23 +198,14 @@ struct TestWrittenToPass
       os << "test_tag: " << tag.getValue() << ":\n";
       for (auto [index, operand] : llvm::enumerate(op->getOperands())) {
         const WrittenTo *writtenTo = solver.lookupState<WrittenTo>(operand);
-        if (!writtenTo) {
-          // The lattice may not be computed for values in unreachable code
-          // (e.g., private functions not called from anywhere in
-          // interprocedural analysis mode).
-          os << " operand #" << index << ": <not computed>\n";
-          continue;
-        }
+        assert(writtenTo && "expected a sparse lattice");
         os << " operand #" << index << ": ";
         writtenTo->print(os);
         os << "\n";
       }
       for (auto [index, operand] : llvm::enumerate(op->getResults())) {
         const WrittenTo *writtenTo = solver.lookupState<WrittenTo>(operand);
-        if (!writtenTo) {
-          os << " result #" << index << ": <not computed>\n";
-          continue;
-        }
+        assert(writtenTo && "expected a sparse lattice");
         os << " result #" << index << ": ";
         writtenTo->print(os);
         os << "\n";

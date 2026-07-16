@@ -1,0 +1,103 @@
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+
+; CHECK: 	.globl	xor_xor_const_fold              // -- Begin function xor_xor_const_fold
+; CHECK: 	.type	xor_xor_const_fold,@function
+; CHECK-LABEL: xor_xor_const_fold:                     // @xor_xor_const_fold
+; CHECK: // %bb.0:
+; CHECK: 	{ 	xor32	r0, r0, r0 }
+; CHECK: 	{ 	addi32{{(_w)?}}	r2, r0, 255 }
+; CHECK: 	{ 	xor32	r1, r1, r2 }
+; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: .Lfunc_end0:
+; CHECK: 	.size	xor_xor_const_fold, .Lfunc_end0-xor_xor_const_fold
+; CHECK:                                         // -- End function
+
+;
+; Tests for bit manipulation simplification combines in HaydnPostLegalizerCombiner.
+; Each function exercises a specific bit-simplify pattern. The post-legalizer
+; combiner runs after legalization but before RegBankSelect, so all combines
+; operate on generic MIR.
+;
+; Combiner rules tested here:
+; xor_xor_constant_fold: (A ^ C1) ^ C2 -> A ^ (C1^C2)
+; double_not: XOR(NOT(x)) -> x
+; and_or_disjoint: (A & MaskC) | SetC where disjoint, MaskC|SetC=all-ones -> A | SetC
+; shift_mask_redundant: (x >> C) & exact_remaining_mask -> x >> C
+; xor_zero: G_XOR x, 0 -> x
+
+;===--- xor_xor_constant_fold: (A ^ 0x0F) ^ 0xF0 -> A ^ 0xFF ---===
+
+define i32 @xor_xor_const_fold(i32 %a) nounwind {
+; The two XOR constants should be folded into one.
+  %t1 = xor i32 %a, 15
+  %r = xor i32 %t1, 240
+  ret i32 %r
+}
+
+;===--- xor_xor_constant_fold cancellation: (A ^ C) ^ C -> A ---===
+
+define i32 @xor_xor_cancel(i32 %a) nounwind {
+; XOR with same constant twice cancels out -> identity (no xor at all).
+  %t1 = xor i32 %a, 42
+  %r = xor i32 %t1, 42
+  ret i32 %r
+}
+
+;===--- double_not: XOR(XOR(x, -1), -1) -> x ---===
+
+define i32 @double_not(i32 %a) nounwind {
+; Two NOT operations cancel out -> identity.
+  %not1 = xor i32 %a, -1
+  %r = xor i32 %not1, -1
+  ret i32 %r
+}
+
+;===--- and_or_disjoint: (A & 0x00FF) | 0xFF00 -> A | 0xFF00 ---===
+; MaskC=0x00FF and SetC=0xFF00 are disjoint, MaskC|SetC=0xFFFF != all-ones.
+; This should NOT simplify (not all-ones coverage).
+
+define i32 @and_or_disjoint_not_full(i32 %a) nounwind {
+; The mask does NOT cover all bits, so no simplification.
+  %masked = and i32 %a, 255
+  %r = or i32 %masked, 65280
+  ret i32 %r
+}
+
+;===--- and_or_disjoint: (A & 0x00FF00FF) | 0xFF00FF00 -> A | 0xFF00FF00 ---===
+; MaskC=0x00FF00FF and SetC=0xFF00FF00 are disjoint, MaskC|SetC=0xFFFFFFFF = all-ones.
+; This SHOULD simplify to (A | SetC).
+
+define i32 @and_or_disjoint_full(i32 %a) nounwind {
+; MaskC|SetC covers all 32 bits -> simplifies to A | SetC.
+  %masked = and i32 %a, 16711935
+  %r = or i32 %masked, 4278255360
+  ret i32 %r
+}
+
+;===--- shift_mask_redundant: (x >>u 8) & 0x00FFFFFF -> x >>u 8 ---===
+
+define i32 @shift_mask_redundant_lshr(i32 %a) nounwind {
+; After lshr by 8, only the low 24 bits are meaningful. Mask 0x00FFFFFF
+; covers exactly those bits -> the AND is redundant.
+  %shifted = lshr i32 %a, 8
+  %r = and i32 %shifted, 16777215
+  ret i32 %r
+}
+
+;===--- shift_mask NOT redundant: (x >>u 8) & 0xFF -> no simplify ---===
+
+define i32 @shift_mask_not_redundant(i32 %a) nounwind {
+; Mask 0xFF only covers 8 of the 24 meaningful bits -> AND is NOT redundant.
+  %shifted = lshr i32 %a, 8
+  %r = and i32 %shifted, 255
+  ret i32 %r
+}
+
+;===--- xor_zero: G_XOR x, 0 -> x ---===
+; Note: This is also covered by right_identity_zero in TableGen rules.
+; Included here for completeness of the bit-simplify test suite.
+
+define i32 @xor_zero_identity(i32 %x) nounwind {
+  %r = xor i32 %x, 0
+  ret i32 %r
+}

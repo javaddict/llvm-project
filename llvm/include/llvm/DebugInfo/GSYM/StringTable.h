@@ -11,7 +11,6 @@
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/DebugInfo/GSYM/ExtractRanges.h"
-#include "llvm/DebugInfo/GSYM/GsymTypes.h"
 #include <stdint.h>
 
 namespace llvm {
@@ -24,7 +23,7 @@ struct StringTable {
   StringTable() = default;
   StringTable(StringRef D) : Data(D) {}
   StringRef operator[](size_t Offset) const { return getString(Offset); }
-  StringRef getString(gsym_strp_t Offset) const {
+  StringRef getString(uint32_t Offset) const {
     if (Offset < Data.size()) {
       auto End = Data.find('\0', Offset);
       return Data.substr(Offset, End - Offset);
@@ -34,32 +33,16 @@ struct StringTable {
   void clear() { Data = StringRef(); }
 };
 
-inline void dump(raw_ostream &OS, const StringTable &S,
-                 uint8_t StringOffsetSize) {
+inline raw_ostream &operator<<(raw_ostream &OS, const StringTable &S) {
   OS << "String table:\n";
-  gsym_strp_t Offset = 0;
+  uint32_t Offset = 0;
   const size_t Size = S.Data.size();
   while (Offset < Size) {
     StringRef Str = S.getString(Offset);
-    switch (StringOffsetSize) {
-    case 1:
-      OS << HEX8(Offset);
-      break;
-    case 2:
-      OS << HEX16(Offset);
-      break;
-    case 4:
-      OS << HEX32(Offset);
-      break;
-    case 8:
-      OS << HEX64(Offset);
-      break;
-    default:
-      OS << HEX64(Offset);
-    }
-    OS << ": \"" << Str << "\"\n";
+    OS << HEX32(Offset) << ": \"" << Str << "\"\n";
     Offset += Str.size() + 1;
   }
+  return OS;
 }
 
 } // namespace gsym

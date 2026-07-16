@@ -28,7 +28,6 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCTargetOptions.h"
-#include "llvm/Object/BuildID.h"
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/ProfileData/SampleProf.h"
 #include "llvm/Support/CommandLine.h"
@@ -130,7 +129,7 @@ struct PrologEpilogTracker {
       PrologEpilogSet.insert(I.first);
       InstructionPointer IP(Binary, I.first);
       if (!IP.advance())
-        continue;
+        break;
       PrologEpilogSet.insert(IP.Address);
     }
   }
@@ -141,7 +140,7 @@ struct PrologEpilogTracker {
       PrologEpilogSet.insert(Addr);
       InstructionPointer IP(Binary, Addr);
       if (!IP.backward())
-        continue;
+        break;
       PrologEpilogSet.insert(IP.Address);
     }
   }
@@ -200,14 +199,10 @@ struct MMapEvent {
 };
 
 class ProfiledBinary {
-  // The executable binary file.
-  object::OwningBinary<object::Binary> OBinary;
   // Absolute path of the executable binary.
   std::string Path;
   // Path of the debug info binary.
   std::string DebugBinaryPath;
-  // Path of the pseudo probe binary, either Path or DebugBinaryPath if present.
-  StringRef PseudoProbeBinPath;
   // The target triple.
   Triple TheTriple;
   // Path of symbolizer path which should be pointed to binary with debug info.
@@ -285,10 +280,6 @@ class ProfiledBinary {
   std::set<uint64_t> UncondBranchAddrSet;
   // A set of branch instruction addresses.
   std::unordered_set<uint64_t> BranchAddressSet;
-  // A set of indirect branch instruction addresses.
-  std::unordered_set<uint64_t> IndirectBranchAddressSet;
-  // A set of branch target addresses (destinations of branches/calls).
-  std::unordered_set<uint64_t> BranchTargetAddressSet;
 
   // Estimate and track function prolog and epilog ranges.
   PrologEpilogTracker ProEpilogTracker;
@@ -328,6 +319,8 @@ class ProfiledBinary {
   // Function name to probe frame map for top-level outlined functions.
   StringMap<MCDecodedPseudoProbeInlineTree *> TopLevelProbeFrameMap;
 
+  bool UsePseudoProbes = false;
+
   bool UseFSDiscriminator = false;
 
   // Whether we need to symbolize all instructions to get function context size.
@@ -343,16 +336,6 @@ class ProfiledBinary {
   bool MissingMMapWarned = false;
 
   bool IsCOFF = false;
-
-  // Whether the binary has a PT_INTERP program header (PIE executables do,
-  // true shared libraries don't). Used to distinguish PIE from .so since
-  // both are ET_DYN.
-  bool HasInterp = false;
-
-  // Build ID used to filter perfscript addresses in [buildid:]addr format.
-  // For shared libraries, set to the binary's build ID.
-  // For main executables, kept empty (addresses have no buildid prefix).
-  std::string FilterBuildID;
 
   void setPreferredTextSegmentAddresses(const object::ObjectFile *O);
 
@@ -372,8 +355,7 @@ class ProfiledBinary {
   void setPreferredTextSegmentAddresses(const object::COFFObjectFile *Obj,
                                         StringRef FileName);
 
-  // Return true if pseudo probe in Obj is usable.
-  bool checkPseudoProbe(const object::ObjectFile *Obj, StringRef ObjPath);
+  void checkPseudoProbe(const object::ObjectFile *Obj);
 
   void decodePseudoProbe(const object::ObjectFile *Obj);
 
@@ -416,11 +398,6 @@ class ProfiledBinary {
   SampleContextFrameVector symbolize(const InstructionPointer &IP,
                                      bool UseCanonicalFnName = false,
                                      bool UseProbeDiscriminator = false);
-
-public:
-  ProfiledBinary(const StringRef ExeBinPath, const StringRef DebugBinPath);
-  ~ProfiledBinary();
-
   /// Decode the interesting parts of the binary and build internal data
   /// structures. On high level, the parts of interest are:
   ///   1. Text sections, including the main code section and the PLT
@@ -428,7 +405,11 @@ public:
   ///   2. The .debug_line section, used by Dwarf-based profile generation.
   ///   3. Pseudo probe related sections, used by probe-based profile
   ///   generation.
-  void load(StringRef TripleStr = "");
+  void load();
+
+public:
+  ProfiledBinary(const StringRef ExeBinPath, const StringRef DebugBinPath);
+  ~ProfiledBinary();
 
   /// Symbolize an address and return the symbol name. The returned StringRef is
   /// owned by this ProfiledBinary object.
@@ -438,15 +419,10 @@ public:
 
   StringRef getPath() const { return Path; }
   StringRef getName() const { return llvm::sys::path::filename(Path); }
-  const Triple &getTriple() const { return TheTriple; }
-  const object::Binary &getBinary() const { return *OBinary.getBinary(); }
   uint64_t getBaseAddress() const { return BaseAddress; }
   void setBaseAddress(uint64_t Address) { BaseAddress = Address; }
 
   bool isCOFF() const { return IsCOFF; }
-
-  // Return the build ID used for filtering perfscript addresses.
-  StringRef getFilterBuildID() const { return FilterBuildID; }
 
   // Canonicalize to use preferred load address as base address.
   uint64_t canonicalizeVirtualAddress(uint64_t Address) {
@@ -488,12 +464,6 @@ public:
     return ProEpilogTracker.PrologEpilogSet.count(Address);
   }
 
-  bool addressIsBranchTarget(uint64_t Address) const {
-    return BranchTargetAddressSet.count(Address);
-  }
-  bool addressIsIndirectBranch(uint64_t Address) const {
-    return IndirectBranchAddressSet.count(Address);
-  }
   bool addressIsTransfer(uint64_t Address) {
     return BranchAddressSet.count(Address) || RetAddressSet.count(Address) ||
            CallAddressSet.count(Address);
@@ -512,7 +482,7 @@ public:
 
   size_t getCodeAddrVecSize() const { return CodeAddressVec.size(); }
 
-  bool usePseudoProbes() const { return !PseudoProbeBinPath.empty(); }
+  bool usePseudoProbes() const { return UsePseudoProbes; }
   bool useFSDiscriminator() const { return UseFSDiscriminator; }
   bool isKernel() const { return IsKernel; }
 

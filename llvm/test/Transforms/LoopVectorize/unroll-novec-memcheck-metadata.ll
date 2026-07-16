@@ -13,11 +13,12 @@ target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
 ; CHECK-DAG: ![[MD2]] = distinct !{![[MD2]], ![[MD3:[0-9]+]]}
 ; CHECK-DAG: ![[MD3]] = distinct !{![[MD3]], !"LVerDomain"}
 
-define void @test(ptr nocapture readonly %a, ptr nocapture %b) {
+; Function Attrs: norecurse nounwind uwtable
+define void @test(ptr nocapture readonly %a, ptr nocapture %b) local_unnamed_addr #0 {
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %for.body, %entry
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
   %arrayidx = getelementptr inbounds i32, ptr %a, i64 %indvars.iv
   %l.1 = load i32, ptr %arrayidx, align 4
@@ -29,6 +30,8 @@ for.body:
   %exitcond = icmp eq i64 %indvars.iv.next, 10000
   br i1 %exitcond, label %for.end, label %for.body
 
-for.end:
+for.end:                                          ; preds = %for.body
   ret void
 }
+
+attributes #0 = { norecurse nounwind uwtable }

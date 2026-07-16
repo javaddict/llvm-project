@@ -46,12 +46,7 @@ llvm::CachePruningPolicy DataFileCache::GetLLDBIndexCachePolicy() {
 
 DataFileCache::DataFileCache(llvm::StringRef path, llvm::CachePruningPolicy policy) {
   m_cache_dir.SetPath(path);
-  llvm::Expected<bool> err_or_pruned = pruneCache(path, policy);
-  if (!err_or_pruned) {
-    Log *log = GetLog(LLDBLog::Modules);
-    LLDB_LOG_ERROR(log, err_or_pruned.takeError(),
-                   "failed to prune lldb index cache directory: {0}");
-  }
+  pruneCache(path, policy);
 
   // This lambda will get called when the data is gotten from the cache and
   // also after the data was set for a given key. We only need to take
@@ -285,10 +280,10 @@ uint32_t ConstStringTable::Add(ConstString s) {
 static const llvm::StringRef kStringTableIdentifier("STAB");
 
 bool ConstStringTable::Encode(DataEncoder &encoder) {
-  // Write a 4 character code into the stream. This will help us when decoding
-  // to make sure we find this identifier when decoding the string table.
-  // It also helps to identify the string table when dumping the hex bytes
-  // in a cache file.
+  // Write an 4 character code into the stream. This will help us when decoding
+  // to make sure we find this identifier when decoding the string table to make
+  // sure we have the rigth data. It also helps to identify the string table
+  // when dumping the hex bytes in a cache file.
   encoder.AppendData(kStringTableIdentifier);
   size_t length_offset = encoder.GetByteSize();
   encoder.AppendU32(0); // Total length of all strings which will be fixed up.

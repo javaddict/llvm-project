@@ -62,38 +62,7 @@ add_entrypoint_object(
   HDRS
     getenv.h
   DEPENDS
-    libc.src.__support.common
-    libc.src.__support.macros.config
-    .environ_internal
-)
-
-# GCC-12 crashed when building environ_internal during GIMPLE pass: waccess.
-set(environ_internal_gcc12_workaround "")
-if((${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU") AND
-   (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "12") AND
-   (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13"))
-  set(environ_internal_gcc12_workaround "-Wno-stringop-overflow"
-      "-fdisable-tree-waccess1" "-fdisable-tree-waccess2"
-      "-fdisable-tree-waccess3")
-endif()
-
-add_object_library(
-  environ_internal
-  SRCS
-    environ_internal.cpp
-  HDRS
-    environ_internal.h
-  COMPILE_OPTIONS
-    ${environ_internal_gcc12_workaround}
-  DEPENDS
-    libc.config.app_h
-    libc.hdr.types.size_t
-    libc.src.__support.CPP.new
-    libc.src.__support.CPP.optional
-    libc.src.__support.CPP.string_view
-    libc.src.__support.macros.attributes
-    libc.src.__support.macros.config
-    libc.src.string.memory_utils.inline_memcpy
+  libc.config.app_h
 )
 
 add_entrypoint_object(
@@ -416,21 +385,6 @@ add_entrypoint_object(
 )
 
 add_entrypoint_object(
-  mblen
-  SRCS
-    mblen.cpp
-  HDRS
-    mblen.h
-  DEPENDS
-    libc.hdr.types.size_t
-    libc.src.__support.common
-    libc.src.__support.macros.config
-    libc.src.__support.libc_errno
-    libc.src.__support.wchar.mbrtowc
-    libc.src.__support.wchar.mbstate
-)
-
-add_entrypoint_object(
   mbstowcs
   SRCS
     mbstowcs.cpp
@@ -538,11 +492,6 @@ if(NOT LIBC_TARGET_OS_IS_BAREMETAL AND NOT LIBC_TARGET_OS_IS_GPU)
       DEPENDS
         ${SCUDO_DEPS}
     )
-    add_entrypoint_external(
-      posix_memalign
-      DEPENDS
-        ${SCUDO_DEPS}
-    )
   else()
     add_entrypoint_external(
       malloc
@@ -561,9 +510,6 @@ if(NOT LIBC_TARGET_OS_IS_BAREMETAL AND NOT LIBC_TARGET_OS_IS_GPU)
     )
     add_entrypoint_external(
       mallopt
-    )
-    add_entrypoint_external(
-      posix_memalign
     )
   endif()
 endif()
@@ -652,13 +598,6 @@ add_entrypoint_object(
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${LIBC_TARGET_OS})
   add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/${LIBC_TARGET_OS})
 endif()
-
-add_entrypoint_object(
-  setenv
-  ALIAS
-  DEPENDS
-    .${LIBC_TARGET_OS}.setenv
-)
 
 if(LIBC_TARGET_OS_IS_BAREMETAL OR LIBC_TARGET_OS_IS_GPU)
   add_entrypoint_object(
@@ -766,22 +705,11 @@ add_entrypoint_object(
     ${exit_deps}
 )
 
-add_header_library(
-  abort_utils
-  HDRS
-    abort_utils.h
-  DEPENDS
-    .${LIBC_TARGET_OS}.abort_utils
-)
-
 add_entrypoint_object(
   abort
-  SRCS
-    abort.cpp
-  HDRS
-    abort.h
+  ALIAS
   DEPENDS
-    .abort_utils
+    .${LIBC_TARGET_OS}.abort
 )
 
 add_entrypoint_object(

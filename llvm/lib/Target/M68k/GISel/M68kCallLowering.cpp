@@ -39,8 +39,7 @@ struct CallReturnHandler : public M68kIncomingValueHandler {
 
 private:
   void assignValueToReg(Register ValVReg, Register PhysReg,
-                        const CCValAssign &VA,
-                        ISD::ArgFlagsTy Flags = {}) override;
+                        const CCValAssign &VA) override;
 
   MachineInstrBuilder &MIB;
 };
@@ -58,8 +57,7 @@ struct M68kOutgoingArgHandler : public CallLowering::OutgoingValueHandler {
         STI(MIRBuilder.getMF().getSubtarget<M68kSubtarget>()) {}
 
   void assignValueToReg(Register ValVReg, Register PhysReg,
-                        const CCValAssign &VA,
-                        ISD::ArgFlagsTy Flags = {}) override {
+                        const CCValAssign &VA) override {
     MIB.addUse(PhysReg, RegState::Implicit);
     Register ExtReg = extendRegister(ValVReg, VA);
     MIRBuilder.buildCopy(PhysReg, ExtReg);
@@ -150,8 +148,7 @@ bool M68kCallLowering::lowerFormalArguments(MachineIRBuilder &MIRBuilder,
 
 void M68kIncomingValueHandler::assignValueToReg(Register ValVReg,
                                                 Register PhysReg,
-                                                const CCValAssign &VA,
-                                                ISD::ArgFlagsTy Flags) {
+                                                const CCValAssign &VA) {
   MIRBuilder.getMRI()->addLiveIn(PhysReg);
   MIRBuilder.getMBB().addLiveIn(PhysReg);
   IncomingValueHandler::assignValueToReg(ValVReg, PhysReg, VA);
@@ -184,8 +181,7 @@ Register M68kIncomingValueHandler::getStackAddress(uint64_t Size,
 }
 
 void CallReturnHandler::assignValueToReg(Register ValVReg, Register PhysReg,
-                                         const CCValAssign &VA,
-                                         ISD::ArgFlagsTy Flags) {
+                                         const CCValAssign &VA) {
   MIB.addDef(PhysReg, RegState::Implicit);
   MIRBuilder.buildCopy(ValVReg, PhysReg);
 }

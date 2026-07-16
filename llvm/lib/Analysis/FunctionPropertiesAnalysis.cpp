@@ -30,13 +30,9 @@ using namespace llvm;
 #define DEBUG_TYPE "func-properties-stats"
 
 #define FUNCTION_PROPERTY(Name, Description)                                   \
-  STATISTIC(Num##Name, Description);                                           \
-  STATISTIC(Num##Name##PreOptimization, Description " (before "                \
-                                                    "optimizations)");
+  STATISTIC(Total##Name, Description);
 #define DETAILED_FUNCTION_PROPERTY(Name, Description)                          \
-  STATISTIC(Num##Name, Description);                                           \
-  STATISTIC(Num##Name##PreOptimization, Description " (before "                \
-                                                    "optimizations)");
+  STATISTIC(Total##Name, Description);
 #include "llvm/IR/FunctionProperties.def"
 
 namespace llvm {
@@ -63,8 +59,9 @@ static cl::opt<unsigned> CallWithManyArgumentsThreshold(
 namespace {
 int64_t getNumBlocksFromCond(const BasicBlock &BB) {
   int64_t Ret = 0;
-  if (const auto *BI = dyn_cast<CondBrInst>(BB.getTerminator())) {
-    Ret += BI->getNumSuccessors();
+  if (const auto *BI = dyn_cast<BranchInst>(BB.getTerminator())) {
+    if (BI->isConditional())
+      Ret += BI->getNumSuccessors();
   } else if (const auto *SI = dyn_cast<SwitchInst>(BB.getTerminator())) {
     Ret += (SI->getNumCases() + (nullptr != SI->getDefaultDest()));
   }
@@ -98,7 +95,7 @@ void FunctionPropertiesInfo::updateForBB(const BasicBlock &BB,
       StoreInstCount += Direction;
     }
   }
-  TotalInstructionCount += Direction * BB.size();
+  TotalInstructionCount += Direction * BB.sizeWithoutDebug();
 
   if (EnableDetailedFunctionProperties) {
     unsigned SuccessorCount = succ_size(&BB);
@@ -109,11 +106,12 @@ void FunctionPropertiesInfo::updateForBB(const BasicBlock &BB,
     else if (SuccessorCount > 2)
       BasicBlocksWithMoreThanTwoSuccessors += Direction;
 
-    if (BB.hasNPredecessors(1))
+    unsigned PredecessorCount = pred_size(&BB);
+    if (PredecessorCount == 1)
       BasicBlocksWithSinglePredecessor += Direction;
-    else if (BB.hasNPredecessors(2))
+    else if (PredecessorCount == 2)
       BasicBlocksWithTwoPredecessors += Direction;
-    else if (BB.hasNPredecessorsOrMore(3))
+    else if (PredecessorCount > 2)
       BasicBlocksWithMoreThanTwoPredecessors += Direction;
 
     if (TotalInstructionCount > BigBasicBlockInstructionThreshold)
@@ -128,7 +126,7 @@ void FunctionPropertiesInfo::updateForBB(const BasicBlock &BB,
     // predecessors, which represent critical edges.
     if (SuccessorCount > 1) {
       for (const auto *Successor : successors(&BB)) {
-        if (Successor->hasNPredecessorsOrMore(2))
+        if (pred_size(Successor) > 1)
           CriticalEdgeCount += Direction;
       }
     }
@@ -136,20 +134,21 @@ void FunctionPropertiesInfo::updateForBB(const BasicBlock &BB,
     ControlFlowEdgeCount += Direction * SuccessorCount;
 
     const Instruction *TI = BB.getTerminator();
-    if (isa<UncondBrInst>(TI)) {
+    const int64_t InstructionSuccessorCount = TI->getNumSuccessors();
+    if (isa<BranchInst>(TI)) {
       BranchInstructionCount += Direction;
-      BranchSuccessorCount += Direction;
-      UnconditionalBranchCount += Direction;
-    } else if (isa<CondBrInst>(TI)) {
-      BranchInstructionCount += Direction;
-      BranchSuccessorCount += Direction * 2;
-      ConditionalBranchCount += Direction;
-    } else if (const auto *SI = dyn_cast<SwitchInst>(TI)) {
+      BranchSuccessorCount += Direction * InstructionSuccessorCount;
+      const auto *BI = dyn_cast<BranchInst>(TI);
+      if (BI->isConditional())
+        ConditionalBranchCount += Direction;
+      else
+        UnconditionalBranchCount += Direction;
+    } else if (isa<SwitchInst>(TI)) {
       SwitchInstructionCount += Direction;
-      SwitchSuccessorCount += Direction * SI->getNumSuccessors();
+      SwitchSuccessorCount += Direction * InstructionSuccessorCount;
     }
 
-    for (const Instruction &I : BB) {
+    for (const Instruction &I : BB.instructionsWithoutDebug()) {
       if (I.isCast())
         CastInstructionCount += Direction;
 
@@ -162,9 +161,6 @@ void FunctionPropertiesInfo::updateForBB(const BasicBlock &BB,
         ++IntrinsicCount;
 
       if (const auto *Call = dyn_cast<CallInst>(&I)) {
-        if (Call->doesNotReturn())
-          NoReturnCallCount += Direction;
-
         if (Call->isIndirectCall())
           IndirectCallCount += Direction;
         else
@@ -327,7 +323,6 @@ bool FunctionPropertiesInfo::operator==(
       ControlFlowEdgeCount != FPI.ControlFlowEdgeCount ||
       UnconditionalBranchCount != FPI.UnconditionalBranchCount ||
       IntrinsicCount != FPI.IntrinsicCount ||
-      NoReturnCallCount != FPI.NoReturnCallCount ||
       DirectCallCount != FPI.DirectCallCount ||
       IndirectCallCount != FPI.IndirectCallCount ||
       CallReturnsIntegerCount != FPI.CallReturnsIntegerCount ||
@@ -386,22 +381,13 @@ FunctionPropertiesStatisticsPass::run(Function &F,
   LLVM_DEBUG(dbgs() << "STATSCOUNT: running on function " << F.getName()
                     << "\n");
   auto &AnalysisResults = FAM.getResult<FunctionPropertiesAnalysis>(F);
-  if (IsPreOptimization) {
+
 #define FUNCTION_PROPERTY(Name, Description)                                   \
-  Num##Name##PreOptimization += AnalysisResults.Name;
+  Total##Name += AnalysisResults.Name;
 #define DETAILED_FUNCTION_PROPERTY(Name, Description)                          \
-  Num##Name##PreOptimization += AnalysisResults.Name;
+  Total##Name += AnalysisResults.Name;
 #include "llvm/IR/FunctionProperties.def"
-#undef FUNCTION_PROPERTY
-#undef DETAILED_FUNCTION_PROPERTY
-  } else {
-#define FUNCTION_PROPERTY(Name, Description) Num##Name += AnalysisResults.Name;
-#define DETAILED_FUNCTION_PROPERTY(Name, Description)                          \
-  Num##Name += AnalysisResults.Name;
-#include "llvm/IR/FunctionProperties.def"
-#undef FUNCTION_PROPERTY
-#undef DETAILED_FUNCTION_PROPERTY
-  }
+
   return PreservedAnalyses::all();
 }
 

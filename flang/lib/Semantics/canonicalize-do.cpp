@@ -94,14 +94,10 @@ public:
                   // treat the label as ending the construct itself.
                   OpenMPConstruct &omp{construct.value()};
                   if (CanonicalizeIfMatch(
-                          block, stack, i, GetFinalLabel(omp))) {
+                          block, stack, i, omp::GetFinalLabel(omp))) {
                     MarkOpenMPConstruct(
                         omp, OmpDirectiveSpecification::Flag::CrossesLabelDo);
                   }
-                },
-                [&](common::Indirection<OpenACCConstruct> &construct) {
-                  OpenACCConstruct &acc{construct.value()};
-                  CanonicalizeIfMatch(block, stack, i, GetFinalLabel(acc));
                 },
             },
             executableConstruct->u);

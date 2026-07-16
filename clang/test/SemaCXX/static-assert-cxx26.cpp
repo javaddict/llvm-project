@@ -271,7 +271,7 @@ struct InvalidPtr {
         return 42;
     }
     consteval const char *data() {
-    const char *ptr; // expected-note {{declared here}}
+    const char *ptr; // Garbage
     return ptr; // expected-note {{read of uninitialized object is not allowed in a constant expression}}
     }
 };

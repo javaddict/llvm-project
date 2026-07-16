@@ -13,7 +13,6 @@
 #include "llvm-libc-macros/float16-macros.h"
 
 #include "llvm-libc-macros/CONST_FUNC_A.h"
-#include "llvm-libc-macros/MACRO_ATTR.h"
 #include "llvm-libc-macros/test_more-macros.h"
 #include "llvm-libc-macros/test_small-macros.h"
 #include "llvm-libc-types/float128.h"
@@ -33,7 +32,7 @@ enum {
 
 __BEGIN_C_DECLS
 
-CONST_FUNC_A MACRO_ATTR(A) void func_a(void) __NOEXCEPT;
+CONST_FUNC_A void func_a(void) __NOEXCEPT;
 
 #ifdef LIBC_TYPES_HAS_FLOAT128
 float128 func_b(void) __NOEXCEPT;

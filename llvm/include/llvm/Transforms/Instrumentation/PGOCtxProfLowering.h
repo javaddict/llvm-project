@@ -16,14 +16,13 @@
 namespace llvm {
 class Type;
 
-class PGOCtxProfLoweringPass
-    : public OptionalPassInfoMixin<PGOCtxProfLoweringPass> {
+class PGOCtxProfLoweringPass : public PassInfoMixin<PGOCtxProfLoweringPass> {
 public:
   explicit PGOCtxProfLoweringPass() = default;
   // True if contextual instrumentation is enabled.
-  LLVM_ABI static bool isCtxIRPGOInstrEnabled();
+  static bool isCtxIRPGOInstrEnabled();
 
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
 };
 
 // Utility pass blocking inlining for any function that may be overridden during
@@ -33,12 +32,11 @@ public:
 // functions by a (GUID, Hash) tuple, but since the ctxprof "use" waits for
 // thinlto to happen before performing any further optimizations, it's
 // unnecessary to collect profiles for non-prevailing copies.
-class NoinlineNonPrevailing
-    : public OptionalPassInfoMixin<NoinlineNonPrevailing> {
+class NoinlineNonPrevailing : public PassInfoMixin<NoinlineNonPrevailing> {
 public:
   explicit NoinlineNonPrevailing() = default;
 
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
 };
 
 } // namespace llvm

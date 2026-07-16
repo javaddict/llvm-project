@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 class MMDSPInst<string opstr = "">
-    : MipsInst<(outs), (ins), "", [], FrmOther> {
+    : MipsInst<(outs), (ins), "", [], NoItinerary, FrmOther> {
   let ASEPredicate = [HasDSP];
   let EncodingPredicates = [InMicroMips];
   string BaseOpcode = opstr;

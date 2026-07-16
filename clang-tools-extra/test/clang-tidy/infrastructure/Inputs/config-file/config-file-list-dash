@@ -1,5 +1,5 @@
 Checks:
   - "-*"
-  - "modernize-use-auto"
-  - "modernize-use-emplace"
-  - "modernize-use-nullptr"
+  - "hicpp-uppercase-literal-suffix"
+  - "hicpp-use-auto"
+  - "hicpp-use-emplace"

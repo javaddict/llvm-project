@@ -51,8 +51,6 @@ public:
 
 class NextAccessAnalysis : public DenseBackwardDataFlowAnalysis<NextAccess> {
 public:
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(NextAccessAnalysis)
-
   NextAccessAnalysis(DataFlowSolver &solver, SymbolTableCollection &symbolTable,
                      bool assumeFuncReads = false)
       : DenseBackwardDataFlowAnalysis(solver, symbolTable),

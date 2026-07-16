@@ -6,7 +6,7 @@
  * XFAIL: vg_leak
  *)
 
-let context = Llvm.create_context ()
+let context = Llvm.global_context ()
 
 let diagnostic_handler _ = ()
 
@@ -23,4 +23,3 @@ let _ =
         ignore (Llvm.MemoryBuffer.of_file "/path/to/nonexistent/file")
     with
     Llvm.IoError _ -> ();;
-    Llvm.dispose_context context

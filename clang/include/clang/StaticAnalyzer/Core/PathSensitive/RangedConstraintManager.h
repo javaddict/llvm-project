@@ -301,7 +301,7 @@ public:
     // Usually we deal with the same ranges and range sets over and over.
     // Here we track all created containers and try not to repeat ourselves.
     llvm::FoldingSet<ContainerType> Cache;
-    static const ContainerType EmptySet;
+    static ContainerType EmptySet;
   };
 
   RangeSet(const RangeSet &) = default;

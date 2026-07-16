@@ -100,7 +100,9 @@ namespace {
   public:
     static char ID; // Pass identification, replacement for typeid
 
-    explicit LocalStackSlotPass() : MachineFunctionPass(ID) {}
+    explicit LocalStackSlotPass() : MachineFunctionPass(ID) {
+      initializeLocalStackSlotPassPass(*PassRegistry::getPassRegistry());
+    }
 
     bool runOnMachineFunction(MachineFunction &MF) override {
       return LocalStackSlotImpl().runOnMachineFunction(MF);

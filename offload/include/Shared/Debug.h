@@ -45,7 +45,7 @@
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Format.h"
-#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/circular_raw_ostream.h"
 
 /// 32-Bit field data attributes controlling information presented to the user.
 enum OpenMPInfoType : uint32_t {
@@ -142,7 +142,7 @@ inline uint32_t getInfoLevel() { return getInfoLevelInternal().load(); }
 #define INFO(_flags, _id, ...)                                                 \
   do {                                                                         \
     if (::llvm::offload::debug::isDebugEnabled()) {                            \
-      INFO_DEBUG_INT(_flags, _id, __VA_ARGS__);                                \
+      DP(__VA_ARGS__);                                                         \
     } else if (getInfoLevel() & _flags) {                                      \
       INFO_MESSAGE(_id, __VA_ARGS__);                                          \
     }                                                                          \
@@ -174,14 +174,6 @@ private:
   bool ShouldEmitNewLineOnDestruction;
   bool NeedEndNewLine = false;
 
-  /// Buffer to reduce interference between different threads
-  /// writing at the same time to the underlying stream.
-  static constexpr size_t BufferSize = 256;
-  llvm::SmallString<BufferSize> Buffer;
-
-  // Stream to write into Buffer. Its flushed to Os upon destruction.
-  llvm::raw_svector_ostream BufferStrm;
-
   /// If the stream is muted, writes to it are ignored
   bool Muted = false;
 
@@ -211,13 +203,13 @@ private:
       NeedEndNewLine = true;
     }
   }
-  void emitPrefix() { BufferStrm.write(Prefix.c_str(), Prefix.size()); }
+  void emitPrefix() { Os.write(Prefix.c_str(), Prefix.size()); }
   void writeWithPrefix(StringRef Str) {
     if (ShouldPrefixNextString) {
       emitPrefix();
       ShouldPrefixNextString = false;
     }
-    BufferStrm.write(Str.data(), Str.size());
+    Os.write(Str.data(), Str.size());
   }
 
 public:
@@ -226,29 +218,26 @@ public:
                         bool ShouldEmitNewLineOnDestruction = true)
       : Prefix(std::move(Prefix)), Os(Os), BaseLevel(BaseLevel),
         ShouldPrefixNextString(ShouldPrefixNextString),
-        ShouldEmitNewLineOnDestruction(ShouldEmitNewLineOnDestruction),
-        BufferStrm(Buffer) {
+        ShouldEmitNewLineOnDestruction(ShouldEmitNewLineOnDestruction) {
     SetUnbuffered();
   }
   ~odbg_ostream() final {
     if (ShouldEmitNewLineOnDestruction && NeedEndNewLine)
-      BufferStrm << '\n';
-    Os << BufferStrm.str();
+      Os << '\n';
   }
   odbg_ostream(const odbg_ostream &) = delete;
   odbg_ostream &operator=(const odbg_ostream &) = delete;
-  odbg_ostream(odbg_ostream &&other) : Os(other.Os), BufferStrm(Buffer) {
+  odbg_ostream(odbg_ostream &&other) : Os(other.Os) {
     Prefix = std::move(other.Prefix);
     BaseLevel = other.BaseLevel;
     ShouldPrefixNextString = other.ShouldPrefixNextString;
     ShouldEmitNewLineOnDestruction = other.ShouldEmitNewLineOnDestruction;
     NeedEndNewLine = other.NeedEndNewLine;
     Muted = other.Muted;
-    BufferStrm << other.BufferStrm.str();
   }
 
   /// Forward the current_pos method to the underlying stream.
-  uint64_t current_pos() const final { return BufferStrm.tell(); }
+  uint64_t current_pos() const final { return Os.tell(); }
 
   /// Some of the `<<` operators expect an lvalue, so we trick the type
   /// system.
@@ -258,8 +247,17 @@ public:
   void shouldMute(const OnlyLevel Filter) { Muted = BaseLevel != Filter; }
 };
 
-/// dbgs - Return the debug stream for offload debugging (just llvm::errs()).
-[[maybe_unused]] static llvm::raw_ostream &dbgs() { return llvm::errs(); }
+/// dbgs - Return a circular-buffered debug stream.
+[[maybe_unused]] static llvm::raw_ostream &dbgs() {
+  // Do one-time initialization in a thread-safe way.
+  static struct dbgstream {
+    llvm::circular_raw_ostream strm;
+
+    dbgstream() : strm(llvm::errs(), "*** Debug Log Output ***\n", 0) {}
+  } thestrm;
+
+  return thestrm.strm;
+}
 
 #ifdef OMPTARGET_DEBUG
 
@@ -271,12 +269,7 @@ struct DebugFilter {
 struct DebugSettings {
   bool Enabled = false;
   uint32_t DefaultLevel = 1;
-  // Types/Components in this list are not printed when debug is enabled
-  // unless they are explicitly requested by the user in IncludeFilters.
-  llvm::SmallVector<StringRef> ExcludeFilters;
-  // Types/Components in this list are printed when debug is enabled if
-  // the debug level is equal or higher than the specified level.
-  llvm::SmallVector<DebugFilter> IncludeFilters;
+  llvm::SmallVector<DebugFilter> Filters;
 };
 
 [[maybe_unused]] static DebugFilter parseDebugFilter(StringRef Filter) {
@@ -313,13 +306,8 @@ struct DebugSettings {
       return;
 
     Settings.Enabled = true;
-
-    // Messages with Type/Components added to the exclude list are not
-    // not printed when debug is enabled unless they are explicitly
-    // requested by the user.
-    // Eventually, this should be configured from the upper layers but
-    // for now we can hardcode some excluded types here like:
-    // Settings.ExcludeFilters.push_back(Type);
+    if (EnvRef.equals_insensitive("all"))
+      return;
 
     if (!EnvRef.getAsInteger(10, Settings.DefaultLevel))
       return;
@@ -329,18 +317,7 @@ struct DebugSettings {
     for (auto &FilterSpec : llvm::split(EnvRef, ',')) {
       if (FilterSpec.empty())
         continue;
-      DebugFilter Filter = parseDebugFilter(FilterSpec);
-
-      // Remove from ExcludeFilters if present
-      Settings.ExcludeFilters.erase(
-          std::remove_if(Settings.ExcludeFilters.begin(),
-                         Settings.ExcludeFilters.end(),
-                         [&](StringRef OutType) {
-                           return OutType.equals_insensitive(Filter.Type);
-                         }),
-          Settings.ExcludeFilters.end());
-
-      Settings.IncludeFilters.push_back(Filter);
+      Settings.Filters.push_back(parseDebugFilter(FilterSpec));
     }
   });
 
@@ -355,12 +332,7 @@ shouldPrintDebug(const char *Component, const char *Type, uint32_t &Level) {
   if (!Settings.Enabled)
     return false;
 
-  for (const auto &Filter : Settings.ExcludeFilters) {
-    if (Filter.equals_insensitive(Type) || Filter.equals_insensitive(Component))
-      return false;
-  }
-
-  if (Settings.IncludeFilters.empty()) {
+  if (Settings.Filters.empty()) {
     if (Level <= Settings.DefaultLevel) {
       Level = Settings.DefaultLevel;
       return true;
@@ -368,10 +340,10 @@ shouldPrintDebug(const char *Component, const char *Type, uint32_t &Level) {
     return false;
   }
 
-  for (const auto &DT : Settings.IncludeFilters) {
+  for (const auto &DT : Settings.Filters) {
     if (DT.Level < Level)
       continue;
-    if (DT.Type.equals_insensitive("all") || DT.Type.equals_insensitive(Type) ||
+    if (DT.Type.equals_insensitive(Type) ||
         DT.Type.equals_insensitive(Component)) {
       Level = DT.Level;
       return true;
@@ -646,38 +618,7 @@ static inline odbg_ostream reportErrorStream() {
 #define FORMAT_TO_STR(Format, ...)                                             \
   ::llvm::omp::target::debug::formatToStr(Format __VA_OPT__(, ) __VA_ARGS__)
 
-template <uint32_t InfoId> static constexpr const char *InfoIdToODT() {
-  constexpr auto getId = []() {
-    switch (InfoId) {
-    case OMP_INFOTYPE_KERNEL_ARGS:
-      return "KernelArgs";
-    case OMP_INFOTYPE_MAPPING_EXISTS:
-      return "MappingExists";
-    case OMP_INFOTYPE_DUMP_TABLE:
-      return "DumpTable";
-    case OMP_INFOTYPE_MAPPING_CHANGED:
-      return "MappingChanged";
-    case OMP_INFOTYPE_PLUGIN_KERNEL:
-      return "PluginKernel";
-    case OMP_INFOTYPE_DATA_TRANSFER:
-      return "DataTransfer";
-    case OMP_INFOTYPE_EMPTY_MAPPING:
-      return "EmptyMapping";
-    case OMP_INFOTYPE_ALL:
-      return "Default";
-    }
-    return static_cast<const char *>(nullptr);
-  };
-
-  constexpr const char *result = getId();
-  static_assert(result != nullptr, "Unknown InfoId being used");
-  return result;
-}
-
-// Transform the INFO id to the corresponding debug type and print the message
-#define INFO_DEBUG_INT(_flags, _id, ...)                                       \
-  ODBG(::llvm::omp::target::debug::InfoIdToODT<_flags>())                      \
-      << FORMAT_TO_STR(__VA_ARGS__);
+#define DP(...) ODBG() << FORMAT_TO_STR(__VA_ARGS__);
 
 // Define default format for pointers
 static inline raw_ostream &operator<<(raw_ostream &Os, void *Ptr) {
@@ -686,11 +627,9 @@ static inline raw_ostream &operator<<(raw_ostream &Os, void *Ptr) {
 }
 
 #else
-
-#define INFO_DEBUG_INT(_flags, _id, ...)                                       \
+#define DP(...)                                                                \
   {                                                                            \
   }
-
 #endif // OMPTARGET_DEBUG
 
 // New REPORT macro in the same style as ODBG

@@ -8,7 +8,7 @@
 //
 // This file is a part of AddressSanitizer, an address sanity checker.
 //
-// Linux-specific (and Unix/Unix-like) details.
+// Linux-specific details.
 //===----------------------------------------------------------------------===//
 
 #include "sanitizer_common/sanitizer_platform.h"

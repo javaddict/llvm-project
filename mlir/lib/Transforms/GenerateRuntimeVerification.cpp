@@ -14,7 +14,7 @@
 #include "mlir/Interfaces/RuntimeVerifiableOpInterface.h"
 
 namespace mlir {
-#define GEN_PASS_DEF_GENERATERUNTIMEVERIFICATIONPASS
+#define GEN_PASS_DEF_GENERATERUNTIMEVERIFICATION
 #include "mlir/Transforms/Passes.h.inc"
 } // namespace mlir
 
@@ -22,10 +22,8 @@ using namespace mlir;
 
 namespace {
 struct GenerateRuntimeVerificationPass
-    : public impl::GenerateRuntimeVerificationPassBase<
+    : public impl::GenerateRuntimeVerificationBase<
           GenerateRuntimeVerificationPass> {
-  using impl::GenerateRuntimeVerificationPassBase<
-      GenerateRuntimeVerificationPass>::GenerateRuntimeVerificationPassBase;
   void runOnOperation() override;
 };
 
@@ -100,4 +98,8 @@ void GenerateRuntimeVerificationPass::runOnOperation() {
     verifiableOp.generateRuntimeVerification(builder, verifiableOp.getLoc(),
                                              defaultErrMsgGenerator);
   };
+}
+
+std::unique_ptr<Pass> mlir::createGenerateRuntimeVerificationPass() {
+  return std::make_unique<GenerateRuntimeVerificationPass>();
 }

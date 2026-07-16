@@ -18,7 +18,6 @@
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/STLExtras.h"
 #include <optional>
-#include <tuple>
 
 namespace mlir {
 class Location;
@@ -249,16 +248,10 @@ FailureOr<scf::ParallelOp> parallelLoopUnrollByFactors(
     function_ref<void(unsigned, Operation *, OpBuilder)> annotateFn = nullptr,
     IRMapping *clonedToSrcOpsMap = nullptr);
 
-/// Get constant loop bounds and steps for each of the induction variables of
-/// the given loop operation, if all the loop's ranges are constant. Each entry
-/// in the returned vector is a tuple (lowerBound, upperBound, step).
-llvm::SmallVector<std::tuple<int64_t, int64_t, int64_t>>
-getConstLoopBounds(mlir::LoopLikeOpInterface loopOp);
-
 /// Get constant trip counts for each of the induction variables of the given
 /// loop operation. If any of the loop's trip counts is not constant, return an
 /// empty vector.
-llvm::SmallVector<llvm::APInt>
+llvm::SmallVector<int64_t>
 getConstLoopTripCounts(mlir::LoopLikeOpInterface loopOp);
 
 } // namespace mlir

@@ -120,7 +120,9 @@ namespace {
   public:
     static char ID;
 
-    HardwareLoopsLegacy() : FunctionPass(ID) {}
+    HardwareLoopsLegacy() : FunctionPass(ID) {
+      initializeHardwareLoopsLegacyPass(*PassRegistry::getPassRegistry());
+    }
 
     bool runOnFunction(Function &F) override;
 
@@ -210,7 +212,7 @@ namespace {
     Module *M               = nullptr;
     const SCEV *ExitCount   = nullptr;
     Type *CountType         = nullptr;
-    CondBrInst *ExitBranch = nullptr;
+    BranchInst *ExitBranch  = nullptr;
     Value *LoopDecrement    = nullptr;
     bool UsePHICounter      = false;
     bool UseLoopGuard       = false;
@@ -391,8 +393,11 @@ static bool CanGenerateTest(Loop *L, Value *Count) {
     return false;
 
   BasicBlock *Pred = Preheader->getSinglePredecessor();
-  auto *BI = dyn_cast<CondBrInst>(Pred->getTerminator());
-  if (!BI || !isa<ICmpInst>(BI->getCondition()))
+  if (!isa<BranchInst>(Pred->getTerminator()))
+    return false;
+
+  auto *BI = cast<BranchInst>(Pred->getTerminator());
+  if (BI->isUnconditional() || !isa<ICmpInst>(BI->getCondition()))
     return false;
 
   // Check that the icmp is checking for equality of Count and zero and that
@@ -450,7 +455,7 @@ Value *HardwareLoop::InitLoopCount() {
 
   BasicBlock *BB = L->getLoopPreheader();
   if (UseLoopGuard && BB->getSinglePredecessor() &&
-      isa<UncondBrInst>(BB->getTerminator())) {
+      cast<BranchInst>(BB->getTerminator())->isUnconditional()) {
     BasicBlock *Predecessor = BB->getSinglePredecessor();
     // If it's not safe to create a while loop then don't force it and create a
     // do-while loop instead
@@ -500,9 +505,13 @@ Value* HardwareLoop::InsertIterationSetup(Value *LoopCountInit) {
 
   // Use the return value of the intrinsic to control the entry of the loop.
   if (UseLoopGuard) {
+    assert((isa<BranchInst>(BeginBB->getTerminator()) &&
+            cast<BranchInst>(BeginBB->getTerminator())->isConditional()) &&
+           "Expected conditional branch");
+
     Value *SetCount =
         UsePhi ? Builder.CreateExtractValue(LoopSetup, 1) : LoopSetup;
-    auto *LoopGuard = cast<CondBrInst>(BeginBB->getTerminator());
+    auto *LoopGuard = cast<BranchInst>(BeginBB->getTerminator());
     LoopGuard->setCondition(SetCount);
     if (LoopGuard->getSuccessor(0) != L->getLoopPreheader())
       LoopGuard->swapSuccessors();

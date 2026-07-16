@@ -48,8 +48,6 @@ MLIR_CAPI_EXPORTED MlirType mlirSMTTypeGetBitVector(MlirContext ctx,
 
 MLIR_CAPI_EXPORTED MlirStringRef mlirSMTBitVectorTypeGetName(void);
 
-MLIR_CAPI_EXPORTED MlirTypeID mlirSMTBitVectorTypeGetTypeID(void);
-
 /// Checks if the given type is a smt::BoolType.
 MLIR_CAPI_EXPORTED bool mlirSMTTypeIsABool(MlirType type);
 
@@ -58,8 +56,6 @@ MLIR_CAPI_EXPORTED MlirType mlirSMTTypeGetBool(MlirContext ctx);
 
 MLIR_CAPI_EXPORTED MlirStringRef mlirSMTBoolTypeGetName(void);
 
-MLIR_CAPI_EXPORTED MlirTypeID mlirSMTBoolTypeGetTypeID(void);
-
 /// Checks if the given type is a smt::IntType.
 MLIR_CAPI_EXPORTED bool mlirSMTTypeIsAInt(MlirType type);
 
@@ -67,8 +63,6 @@ MLIR_CAPI_EXPORTED bool mlirSMTTypeIsAInt(MlirType type);
 MLIR_CAPI_EXPORTED MlirType mlirSMTTypeGetInt(MlirContext ctx);
 
 MLIR_CAPI_EXPORTED MlirStringRef mlirSMTIntTypeGetName(void);
-
-MLIR_CAPI_EXPORTED MlirTypeID mlirSMTIntTypeGetTypeID(void);
 
 /// Checks if the given type is a smt::FuncType.
 MLIR_CAPI_EXPORTED bool mlirSMTTypeIsASMTFunc(MlirType type);

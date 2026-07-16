@@ -12,7 +12,6 @@
 #include "src/__support/arg_list.h"
 #include "src/__support/macros/config.h"
 #include "src/stdio/scanf_core/vfscanf_internal.h"
-#include "src/stdio/stdin.h"
 
 #include "hdr/types/FILE.h"
 #include <stdarg.h>

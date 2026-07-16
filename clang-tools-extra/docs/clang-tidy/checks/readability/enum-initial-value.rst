@@ -36,25 +36,19 @@ The following three cases are accepted:
     c2 = 2,
   };
 
-  enum D {    // warning: initial values in enum 'D' are not consistent,
-              //          consider explicit initialization of all, none or only
-              //          the first enumerator
+  enum D {    // Invalid, d1 is not explicitly initialized!
     d0 = 0,
-    d1,       // note: uninitialized enumerator 'd1' defined here
+    d1,
     d2 = 2,
   };
 
-  enum E {    // warning: initial values in enum 'E' are not consistent,
-              //          consider explicit initialization of all, none or only
-              //          the first enumerator
+  enum E {    // Invalid, e1, e3, and e5 are not explicitly initialized.
     e0 = 0,
-    e1,       // note: uninitialized enumerator 'e1' defined here
+    e1,
     e2 = 2,
-    e3,       // note: uninitialized enumerator 'e3' defined here
-              // Dangerous, as the numeric values of e3 and e5 are both 3,
-              // and this is not explicitly visible in the code!
+    e3,       // Dangerous, as the numeric values of e3 and e5 are both 3, and this is not explicitly visible in the code!
     e4 = 2,
-    e5,       // note: uninitialized enumerator 'e5' defined here
+    e5,
   };
 
 This check corresponds to the CERT C Coding Standard recommendation `INT09-C. Ensure enumeration constants map to unique values

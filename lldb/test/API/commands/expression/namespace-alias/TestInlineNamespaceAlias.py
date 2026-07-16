@@ -11,7 +11,6 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
 
-@skipIfWasm  # no expression evaluation
 class TestInlineNamespace(TestBase):
     @skipIf(compiler="clang", compiler_version=["<", "16.0"])
     def test(self):

@@ -9,8 +9,6 @@ import lldb
 
 
 def __lldb_init_module(debugger, internal_dict):
-    debugger.HandleCommand("type category define --enabled llvm")
-
     debugger.HandleCommand(
         "type synthetic add -w llvm "
         f"-l {__name__}.MyOptionalSynthProvider "
@@ -57,8 +55,8 @@ def stringify(bytecode: bytearray) -> str:
     return s
 
 
-def evaluate(assembly: str, data: list):
-    bytecode = assemble(assembly)
+def evaluate(assembler: str, data: list):
+    bytecode = compile(assembler)
     trace = True
     if trace:
         print(

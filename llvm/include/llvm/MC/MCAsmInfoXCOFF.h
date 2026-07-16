@@ -15,7 +15,7 @@ namespace llvm {
 
 class MCAsmInfoXCOFF : public MCAsmInfo {
 protected:
-  MCAsmInfoXCOFF(const MCTargetOptions &Options);
+  MCAsmInfoXCOFF();
   void printSwitchToSection(const MCSection &, uint32_t, const Triple &,
                             raw_ostream &) const final;
   bool useCodeAlign(const MCSection &Sec) const final;

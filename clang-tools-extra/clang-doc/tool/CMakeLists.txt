@@ -35,11 +35,6 @@ set(assets
   navbar-template.mustache
   index-template.mustache
   alias-template.mustache
-  md/all-files-template.mustache
-  md/class-template.mustache
-  md/comments-partial.mustache
-  md/index-template.mustache
-  md/namespace-template.mustache
 )
 
 set(asset_dir "${CMAKE_CURRENT_SOURCE_DIR}/../assets")

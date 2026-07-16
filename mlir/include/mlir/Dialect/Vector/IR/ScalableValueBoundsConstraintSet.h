@@ -32,8 +32,8 @@ struct ScalableValueBoundsConstraintSet
   ScalableValueBoundsConstraintSet(
       MLIRContext *context,
       ValueBoundsConstraintSet::StopConditionFn stopCondition,
-      unsigned vscaleMin, unsigned vscaleMax, ValueBoundsOptions options = {})
-      : RTTIExtends(context, stopCondition, options,
+      unsigned vscaleMin, unsigned vscaleMax)
+      : RTTIExtends(context, stopCondition,
                     /*addConservativeSemiAffineBounds=*/true),
         vscaleMin(vscaleMin), vscaleMax(vscaleMax) {};
 
@@ -71,8 +71,7 @@ struct ScalableValueBoundsConstraintSet
   static FailureOr<ConstantOrScalableBound>
   computeScalableBound(Value value, std::optional<int64_t> dim,
                        unsigned vscaleMin, unsigned vscaleMax,
-                       presburger::BoundType boundType,
-                       ValueBoundsOptions options = {/*closedUB=*/true},
+                       presburger::BoundType boundType, bool closedUB = true,
                        const StopConditionFn &stopCondition = nullptr);
 
   /// Get the value of vscale. Returns `nullptr` vscale as not been encountered.

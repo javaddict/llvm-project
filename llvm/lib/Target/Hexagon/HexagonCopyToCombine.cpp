@@ -748,7 +748,7 @@ void HexagonCopyToCombine::emitCombineIR(MachineBasicBlock::iterator &InsertPt,
                                          MachineOperand &HiOperand,
                                          MachineOperand &LoOperand) {
   Register LoReg = LoOperand.getReg();
-  RegState LoRegKillFlag = getKillRegState(LoOperand.isKill());
+  unsigned LoRegKillFlag = getKillRegState(LoOperand.isKill());
 
   DebugLoc DL = InsertPt->getDebugLoc();
   MachineBasicBlock *BB = InsertPt->getParent();
@@ -795,7 +795,7 @@ void HexagonCopyToCombine::emitCombineRI(MachineBasicBlock::iterator &InsertPt,
                                          unsigned DoubleDestReg,
                                          MachineOperand &HiOperand,
                                          MachineOperand &LoOperand) {
-  RegState HiRegKillFlag = getKillRegState(HiOperand.isKill());
+  unsigned HiRegKillFlag = getKillRegState(HiOperand.isKill());
   Register HiReg = HiOperand.getReg();
 
   DebugLoc DL = InsertPt->getDebugLoc();
@@ -844,8 +844,8 @@ void HexagonCopyToCombine::emitCombineRR(MachineBasicBlock::iterator &InsertPt,
                                          unsigned DoubleDestReg,
                                          MachineOperand &HiOperand,
                                          MachineOperand &LoOperand) {
-  RegState LoRegKillFlag = getKillRegState(LoOperand.isKill());
-  RegState HiRegKillFlag = getKillRegState(HiOperand.isKill());
+  unsigned LoRegKillFlag = getKillRegState(LoOperand.isKill());
+  unsigned HiRegKillFlag = getKillRegState(HiOperand.isKill());
   Register LoReg = LoOperand.getReg();
   Register HiReg = HiOperand.getReg();
 

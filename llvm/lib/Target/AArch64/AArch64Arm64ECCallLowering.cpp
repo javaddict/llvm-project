@@ -21,7 +21,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/IR/CallingConv.h"
-#include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/GlobalAlias.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instruction.h"
@@ -76,7 +75,7 @@ public:
   bool runOnModule(Module &M) override;
 
 private:
-  ControlFlowGuardMode CFGuardModuleFlag = ControlFlowGuardMode::Disabled;
+  int cfguard_module_flag = 0;
   FunctionType *GuardFnType = nullptr;
   FunctionType *DispatchFnType = nullptr;
   Constant *GuardFnCFGlobal = nullptr;
@@ -764,8 +763,7 @@ void AArch64Arm64ECCallLowering::lowerCall(CallBase *CB) {
 
   // Load the global symbol as a pointer to the check function.
   Value *GuardFn;
-  if ((CFGuardModuleFlag == ControlFlowGuardMode::Enabled) &&
-      !CB->hasFnAttr("guard_nocf"))
+  if (cfguard_module_flag == 2 && !CB->hasFnAttr("guard_nocf"))
     GuardFn = GuardFnCFGlobal;
   else
     GuardFn = GuardFnGlobal;
@@ -801,22 +799,9 @@ bool AArch64Arm64ECCallLowering::runOnModule(Module &Mod) {
   M = &Mod;
 
   // Check if this module has the cfguard flag and read its value.
-  CFGuardModuleFlag = M->getControlFlowGuardMode();
-
-  // Warn if the module flag requests an unsupported CFGuard mechanism.
-  if (CFGuardModuleFlag == ControlFlowGuardMode::Enabled) {
-    if (auto *CI = mdconst::dyn_extract_or_null<ConstantInt>(
-            Mod.getModuleFlag("cfguard-mechanism"))) {
-      auto MechanismOverride =
-          static_cast<ControlFlowGuardMechanism>(CI->getZExtValue());
-      if (MechanismOverride != ControlFlowGuardMechanism::Automatic &&
-          MechanismOverride != ControlFlowGuardMechanism::Check)
-        Mod.getContext().diagnose(
-            DiagnosticInfoGeneric("only the Check Control Flow Guard mechanism "
-                                  "is supported for Arm64EC",
-                                  DS_Warning));
-    }
-  }
+  if (auto *MD =
+          mdconst::extract_or_null<ConstantInt>(M->getModuleFlag("cfguard")))
+    cfguard_module_flag = MD->getZExtValue();
 
   PtrTy = PointerType::getUnqual(M->getContext());
   I64Ty = Type::getInt64Ty(M->getContext());

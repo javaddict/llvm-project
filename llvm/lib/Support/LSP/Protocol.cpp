@@ -335,8 +335,6 @@ bool llvm::lsp::fromJSON(const llvm::json::Value &Value,
   // We deliberately don't fail if we can't parse individual fields.
   O.map("capabilities", Result.capabilities);
   O.map("trace", Result.trace);
-  O.map("rootUri", Result.rootUri);
-  O.map("rootPath", Result.rootPath);
   mapOptOrNull(Value, "clientInfo", Result.clientInfo, Path);
 
   return true;
@@ -502,16 +500,6 @@ bool llvm::lsp::fromJSON(const llvm::json::Value &Value,
                          llvm::json::Path Path) {
   llvm::json::ObjectMapper O(Value, Path);
   return O && O.map("textDocument", Result.textDocument);
-}
-
-//===----------------------------------------------------------------------===//
-// DidSaveTextDocumentParams
-//===----------------------------------------------------------------------===//
-
-bool llvm::lsp::fromJSON(const llvm::json::Value &Params,
-                         DidSaveTextDocumentParams &R, llvm::json::Path P) {
-  llvm::json::ObjectMapper O(Params, P);
-  return O && O.map("textDocument", R.textDocument);
 }
 
 //===----------------------------------------------------------------------===//

@@ -18,10 +18,9 @@
 
 namespace llvm {
 
-class LowerGlobalDtorsPass
-    : public OptionalPassInfoMixin<LowerGlobalDtorsPass> {
+class LowerGlobalDtorsPass : public PassInfoMixin<LowerGlobalDtorsPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
 
 } // namespace llvm

@@ -337,13 +337,13 @@ static MCAsmInfo *createARMMCAsmInfo(const MCRegisterInfo &MRI,
                                      const MCTargetOptions &Options) {
   MCAsmInfo *MAI;
   if (TheTriple.isOSDarwin() || TheTriple.isOSBinFormatMachO())
-    MAI = new ARMMCAsmInfoDarwin(TheTriple, Options);
+    MAI = new ARMMCAsmInfoDarwin(TheTriple);
   else if (TheTriple.isWindowsMSVCEnvironment())
-    MAI = new ARMCOFFMCAsmInfoMicrosoft(Options);
+    MAI = new ARMCOFFMCAsmInfoMicrosoft();
   else if (TheTriple.isOSWindows())
-    MAI = new ARMCOFFMCAsmInfoGNU(Options);
+    MAI = new ARMCOFFMCAsmInfoGNU();
   else
-    MAI = new ARMELFMCAsmInfo(TheTriple, Options);
+    MAI = new ARMELFMCAsmInfo(TheTriple);
 
   unsigned Reg = MRI.getDwarfRegNum(ARM::SP, true);
   MAI->addInitialFrameState(MCCFIInstruction::cfiDefCfa(nullptr, Reg, 0));
@@ -598,7 +598,7 @@ std::optional<uint64_t> ARMMCInstrAnalysis::evaluateMemoryOperandAddress(
     break;
   }
 
-  // Evaluate the address depending on the addressing mode
+  // Eveluate the address depending on the addressing mode
   unsigned AddrMode = (TSFlags & ARMII::AddrModeMask);
   switch (AddrMode) {
   default:

@@ -15,7 +15,6 @@
 #include "mlir/Dialect/Transform/IR/TransformTypes.h"
 #include "mlir/Dialect/Transform/Interfaces/MatchInterfaces.h"
 #include "mlir/IR/BuiltinAttributes.h"
-#include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/Support/DebugLog.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/InterleavedRange.h"
@@ -96,8 +95,8 @@ DiagnosedSilenceableFailure transform::MatchStructuredOp::matchOperation(
         getBody()->getTerminator()->getOpOperands(), [&](OpOperand &opOperand) {
           return !llvm::is_contained(undefinedOperands, &opOperand);
         });
-    SmallVector<Value> definedOperands = llvm::map_to_vector(
-        filtered, [](OpOperand &opOperand) { return opOperand.get(); });
+    SmallVector<Value> definedOperands = llvm::to_vector(llvm::map_range(
+        filtered, [](OpOperand &opOperand) { return opOperand.get(); }));
     detail::prepareValueMappings(mappings, definedOperands, state);
     for (auto &&[operand, mapping] : llvm::zip_equal(filtered, mappings)) {
       results.setMappedValues(getResults()[operand.getOperandNumber()],
@@ -250,9 +249,10 @@ transform::MatchStructuredClassifyContractionDimsOp::matchOperation(
   MLIRContext *context = current->getContext();
   Builder builder(context);
   auto makeI64Attrs = [&](ArrayRef<unsigned> values) {
-    return llvm::map_to_vector(values, [&](unsigned value) -> Attribute {
-      return builder.getI64IntegerAttr(value);
-    });
+    return llvm::to_vector(
+        llvm::map_range(values, [&](unsigned value) -> Attribute {
+          return builder.getI64IntegerAttr(value);
+        }));
   };
   results.setParams(cast<OpResult>(getBatch()),
                     makeI64Attrs(contractionDims->batch));
@@ -278,9 +278,10 @@ transform::MatchStructuredClassifyConvolutionDimsOp::matchOperation(
   MLIRContext *context = current->getContext();
   Builder builder(context);
   auto makeI64Attrs = [&](ArrayRef<unsigned> values) {
-    return llvm::map_to_vector(values, [&](unsigned value) -> Attribute {
-      return builder.getI64IntegerAttr(value);
-    });
+    return llvm::to_vector(
+        llvm::map_range(values, [&](unsigned value) -> Attribute {
+          return builder.getI64IntegerAttr(value);
+        }));
   };
   results.setParams(cast<OpResult>(getBatch()),
                     makeI64Attrs(convolutionDims->batch));
@@ -296,9 +297,10 @@ transform::MatchStructuredClassifyConvolutionDimsOp::matchOperation(
                     makeI64Attrs(convolutionDims->depth));
 
   auto makeI64AttrsFromI64 = [&](ArrayRef<int64_t> values) {
-    return llvm::map_to_vector(values, [&](int64_t value) -> Attribute {
-      return builder.getI64IntegerAttr(value);
-    });
+    return llvm::to_vector(
+        llvm::map_range(values, [&](int64_t value) -> Attribute {
+          return builder.getI64IntegerAttr(value);
+        }));
   };
   results.setParams(cast<OpResult>(getStrides()),
                     makeI64AttrsFromI64(convolutionDims->strides));
@@ -366,10 +368,10 @@ DiagnosedSilenceableFailure transform::MatchStructuredDimOp::matchOperation(
 
   SmallVector<int64_t, 4> ranges = linalgOp.getStaticLoopRanges();
   Builder builder(current);
-  SmallVector<Attribute> captured =
-      llvm::map_to_vector(dimensions, [&](int64_t dim) -> Attribute {
+  SmallVector<Attribute> captured = llvm::to_vector(
+      llvm::map_range(dimensions, [&](int64_t dim) -> Attribute {
         return builder.getI64IntegerAttr(ranges[dim]);
-      });
+      }));
   results.setParams(cast<OpResult>(getResult()), captured);
   return DiagnosedSilenceableFailure::success();
 }

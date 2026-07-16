@@ -96,6 +96,7 @@ rescheduleLexographically(std::vector<MachineInstr *> instructions,
     std::string S;
     raw_string_ostream OS(S);
     II->print(OS);
+    OS.flush();
 
     // Trim the assignment, or start from the beginning in the case of a store.
     const size_t i = S.find('=');

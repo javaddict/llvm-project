@@ -105,8 +105,7 @@ void llvm::get_thread_name(SmallVectorImpl<char> &Name) {
   Name.clear();
 }
 
-llvm::SetThreadPriorityResult
-llvm::set_thread_priority(ThreadPriority Priority) {
+SetThreadPriorityResult llvm::set_thread_priority(ThreadPriority Priority) {
 #ifdef THREAD_POWER_THROTTLING_CURRENT_VERSION
   HMODULE kernelM = llvm::sys::windows::loadSystemModuleSecure(L"kernel32.dll");
   if (kernelM) {
@@ -117,8 +116,8 @@ llvm::set_thread_priority(ThreadPriority Priority) {
         _In_reads_bytes_(ThreadInformationSize) PVOID ThreadInformation,
         ULONG ThreadInformationSize);
     static const auto pfnSetThreadInformation =
-        (SetThreadInformation_t)(void *)::GetProcAddress(
-            kernelM, "SetThreadInformation");
+        (SetThreadInformation_t)::GetProcAddress(kernelM,
+                                                 "SetThreadInformation");
     if (pfnSetThreadInformation) {
       auto setThreadInformation = [](ULONG ControlMaskAndStateMask) {
         THREAD_POWER_THROTTLING_STATE state{};
@@ -209,9 +208,9 @@ static std::optional<std::vector<USHORT>> getActiveGroups() {
   return Groups;
 }
 
-static llvm::ArrayRef<ProcessorGroup> getProcessorGroups() {
+static ArrayRef<ProcessorGroup> getProcessorGroups() {
   auto computeGroups = []() {
-    llvm::SmallVector<ProcessorGroup, 4> Groups;
+    SmallVector<ProcessorGroup, 4> Groups;
 
     auto HandleGroup = [&](SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *ProcInfo) {
       GROUP_RELATIONSHIP &El = ProcInfo->Group;
@@ -275,7 +274,7 @@ static llvm::ArrayRef<ProcessorGroup> getProcessorGroups() {
     return std::vector<ProcessorGroup>(Groups.begin(), Groups.end());
   };
   static auto Groups = computeGroups();
-  return llvm::ArrayRef<ProcessorGroup>(Groups);
+  return ArrayRef<ProcessorGroup>(Groups);
 }
 
 template <typename R, typename UnaryPredicate>

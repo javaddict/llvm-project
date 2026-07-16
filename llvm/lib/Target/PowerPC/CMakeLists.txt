@@ -42,7 +42,6 @@ add_llvm_target(PowerPCCodeGen
   PPCMachineScheduler.cpp
   PPCMacroFusion.cpp
   PPCMIPeephole.cpp
-  PPCPrepareIFuncsOnAIX.cpp
   PPCRegisterInfo.cpp
   PPCSelectionDAGInfo.cpp
   PPCSubtarget.cpp

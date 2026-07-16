@@ -2,6 +2,7 @@
 Test some lldb platform commands.
 """
 
+
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -70,10 +71,8 @@ class PlatformCommandTestCase(TestBase):
             self.expect("platform shell ls /", substrs=["cache", "dev", "system"])
             self.expect("shell ls /", substrs=["cache", "dev", "system"])
         else:
-            self.expect(
-                "platform shell ls /", substrs=["dev", "tmp", "usr"], ordered=False
-            )
-            self.expect("shell ls /", substrs=["dev", "tmp", "usr"], ordered=False)
+            self.expect("platform shell ls /", substrs=["dev", "tmp", "usr"])
+            self.expect("shell ls /", substrs=["dev", "tmp", "usr"])
 
     @no_debug_info_test
     def test_shell_builtin(self):

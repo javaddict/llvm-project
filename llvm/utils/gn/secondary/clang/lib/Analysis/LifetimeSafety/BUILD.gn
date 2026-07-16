@@ -16,7 +16,6 @@ static_library("LifetimeSafety") {
     "LiveOrigins.cpp",
     "LoanPropagation.cpp",
     "Loans.cpp",
-    "MovedLoans.cpp",
     "Origins.cpp",
   ]
 }

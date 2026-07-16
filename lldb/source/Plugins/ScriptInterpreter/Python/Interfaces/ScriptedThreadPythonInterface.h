@@ -6,8 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_SCRIPTINTERPRETER_PYTHON_INTERFACES_SCRIPTEDTHREADPYTHONINTERFACE_H
-#define LLDB_SOURCE_PLUGINS_SCRIPTINTERPRETER_PYTHON_INTERFACES_SCRIPTEDTHREADPYTHONINTERFACE_H
+#ifndef LLDB_PLUGINS_SCRIPTINTERPRETER_PYTHON_INTERFACES_SCRIPTEDTHREADPYTHONINTERFACE_H
+#define LLDB_PLUGINS_SCRIPTINTERPRETER_PYTHON_INTERFACES_SCRIPTEDTHREADPYTHONINTERFACE_H
+
+#include "lldb/Host/Config.h"
+
+#if LLDB_ENABLE_PYTHON
 
 #include "ScriptedPythonInterface.h"
 #include "lldb/Interpreter/Interfaces/ScriptedThreadInterface.h"
@@ -20,8 +24,8 @@ public:
   ScriptedThreadPythonInterface(ScriptInterpreterPythonImpl &interpreter);
 
   llvm::Expected<StructuredData::GenericSP>
-  CreatePluginObject(const ScriptedMetadata &scripted_metadata,
-                     ExecutionContext &exe_ctx,
+  CreatePluginObject(llvm::StringRef class_name, ExecutionContext &exe_ctx,
+                     StructuredData::DictionarySP args_sp,
                      StructuredData::Generic *script_obj = nullptr) override;
 
   llvm::SmallVector<AbstractMethodRequirement>
@@ -55,4 +59,5 @@ protected:
 };
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_SCRIPTINTERPRETER_PYTHON_INTERFACES_SCRIPTEDTHREADPYTHONINTERFACE_H
+#endif // LLDB_ENABLE_PYTHON
+#endif // LLDB_PLUGINS_SCRIPTINTERPRETER_PYTHON_INTERFACES_SCRIPTEDTHREADPYTHONINTERFACE_H

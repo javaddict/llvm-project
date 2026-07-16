@@ -726,22 +726,14 @@ public:
   TraverseClassTemplateSpecializationDecl(ClassTemplateSpecializationDecl *C) {
     if (!RecursiveASTVisitor::TraverseClassTemplateSpecializationDecl(C))
       return false;
-    const auto *Info = C->getExplicitInstantiationInfo();
-    if (!Info)
+    if (C->isExplicitSpecialization())
       return true; // we are only interested in explicit instantiations.
     auto *Declaration =
         cast<syntax::SimpleDeclaration>(handleFreeStandingTagDecl(C));
     foldExplicitTemplateInstantiation(
-        Builder.getTemplateRange(C), Builder.findToken(Info->ExternKeywordLoc),
-        Builder.findToken(Info->TemplateKeywordLoc), Declaration, C);
-    return true;
-  }
-
-  // ExplicitInstantiationDecl is an auxiliary AST node that records source
-  // info. The syntax tree is already built by
-  // TraverseClassTemplateSpecializationDecl or by the parser for
-  // function/variable templates, so skip this node.
-  bool TraverseExplicitInstantiationDecl(ExplicitInstantiationDecl *) {
+        Builder.getTemplateRange(C),
+        Builder.findToken(C->getExternKeywordLoc()),
+        Builder.findToken(C->getTemplateKeywordLoc()), Declaration, C);
     return true;
   }
 
@@ -756,7 +748,7 @@ public:
   bool WalkUpFromTagDecl(TagDecl *C) {
     // FIXME: build the ClassSpecifier node.
     if (!C->isFreeStanding()) {
-      assert(C->getTemplateParameterLists().empty());
+      assert(C->getNumTemplateParameterLists() == 0);
       return true;
     }
     handleFreeStandingTagDecl(C);
@@ -778,11 +770,10 @@ public:
           foldTemplateDeclaration(R, TemplateKW, DeclarationRange, nullptr);
       DeclarationRange = R;
     };
-    if (auto *S = dyn_cast<ClassTemplateSpecializationDecl>(C))
-      if (const auto *Info = S->getExplicitSpecializationInfo())
-        ConsumeTemplateParameters(*Info->TemplateParams);
-    for (TemplateParameterList *TPL : C->getTemplateParameterLists())
-      ConsumeTemplateParameters(*TPL);
+    if (auto *S = dyn_cast<ClassTemplatePartialSpecializationDecl>(C))
+      ConsumeTemplateParameters(*S->getTemplateParameters());
+    for (unsigned I = C->getNumTemplateParameterLists(); 0 < I; --I)
+      ConsumeTemplateParameters(*C->getTemplateParameterList(I - 1));
     return Result;
   }
 

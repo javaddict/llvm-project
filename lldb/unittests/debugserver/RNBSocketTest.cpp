@@ -14,7 +14,6 @@
 
 #include "RNBDefs.h"
 #include "RNBSocket.h"
-#include "TestingSupport/Host/SocketTestUtilities.h"
 #include "lldb/Host/Socket.h"
 #include "lldb/Host/common/TCPSocket.h"
 #include "llvm/Testing/Support/Error.h"
@@ -54,9 +53,6 @@ static void ServerCallbackv4(const void *baton, in_port_t port) {
 }
 
 void TestSocketListen(const char *addr) {
-  if (!lldb_private::HostSupportsIPv4() && !lldb_private::HostSupportsIPv6())
-    GTEST_SKIP() << "TCP sockets unavailable";
-
   // Skip IPv6 tests if there isn't a valid interafce
   auto addresses = lldb_private::SocketAddress::GetAddressInfo(
       addr, NULL, AF_UNSPEC, SOCK_STREAM, IPPROTO_TCP);
@@ -89,9 +85,6 @@ TEST(RNBSocket, LoopBackListenIPv6) { TestSocketListen("::1"); }
 TEST(RNBSocket, AnyListen) { TestSocketListen("*"); }
 
 void TestSocketConnect(const char *addr) {
-  if (!lldb_private::HostSupportsIPv4() && !lldb_private::HostSupportsIPv6())
-    GTEST_SKIP() << "TCP sockets unavailable";
-
   // Skip IPv6 tests if there isn't a valid interafce
   auto addresses = lldb_private::SocketAddress::GetAddressInfo(
       addr, NULL, AF_UNSPEC, SOCK_STREAM, IPPROTO_TCP);

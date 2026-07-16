@@ -14,18 +14,16 @@ namespace {
 namespace nb = nanobind;
 
 std::vector<std::string> Initialize(const std::vector<std::string>& argv) {
+  // The `argv` pointers here become invalid when this function returns, but
+  // benchmark holds the pointer to `argv[0]`. We create a static copy of it
+  // so it persists, and replace the pointer below.
+  static std::string executable_name(argv[0]);
   std::vector<char*> ptrs;
   ptrs.reserve(argv.size());
   for (auto& arg : argv) {
     ptrs.push_back(const_cast<char*>(arg.c_str()));
   }
-  if (!ptrs.empty()) {
-    // The `argv` pointers here become invalid when this function returns, but
-    // benchmark holds the pointer to `argv[0]`. We create a static copy of it
-    // so it persists, and replace the pointer below.
-    static std::string executable_name(argv[0]);
-    ptrs[0] = const_cast<char*>(executable_name.c_str());
-  }
+  ptrs[0] = const_cast<char*>(executable_name.c_str());
   int argc = static_cast<int>(argv.size());
   benchmark::Initialize(&argc, ptrs.data());
   std::vector<std::string> remaining_argv;
@@ -36,13 +34,14 @@ std::vector<std::string> Initialize(const std::vector<std::string>& argv) {
   return remaining_argv;
 }
 
-benchmark::Benchmark* RegisterBenchmark(const std::string& name,
-                                        nb::callable f) {
+benchmark::internal::Benchmark* RegisterBenchmark(const std::string& name,
+                                                  nb::callable f) {
   return benchmark::RegisterBenchmark(
       name, [f](benchmark::State& state) { f(&state); });
 }
 
 NB_MODULE(_benchmark, m) {
+
   using benchmark::TimeUnit;
   nb::enum_<TimeUnit>(m, "TimeUnit")
       .value("kNanosecond", TimeUnit::kNanosecond)
@@ -64,7 +63,7 @@ NB_MODULE(_benchmark, m) {
       .value("oLambda", BigO::oLambda)
       .export_values();
 
-  using benchmark::Benchmark;
+  using benchmark::internal::Benchmark;
   nb::class_<Benchmark>(m, "Benchmark")
       // For methods returning a pointer to the current object, reference
       // return policy is used to ask nanobind not to take ownership of the
@@ -79,40 +78,47 @@ NB_MODULE(_benchmark, m) {
       .def("args", &Benchmark::Args, nb::rv_policy::reference)
       .def("range", &Benchmark::Range, nb::rv_policy::reference,
            nb::arg("start"), nb::arg("limit"))
-      .def("dense_range", &Benchmark::DenseRange, nb::rv_policy::reference,
-           nb::arg("start"), nb::arg("limit"), nb::arg("step") = 1)
+      .def("dense_range", &Benchmark::DenseRange,
+           nb::rv_policy::reference, nb::arg("start"),
+           nb::arg("limit"), nb::arg("step") = 1)
       .def("ranges", &Benchmark::Ranges, nb::rv_policy::reference)
-      .def("args_product", &Benchmark::ArgsProduct, nb::rv_policy::reference)
+      .def("args_product", &Benchmark::ArgsProduct,
+           nb::rv_policy::reference)
       .def("arg_name", &Benchmark::ArgName, nb::rv_policy::reference)
-      .def("arg_names", &Benchmark::ArgNames, nb::rv_policy::reference)
-      .def("range_pair", &Benchmark::RangePair, nb::rv_policy::reference,
-           nb::arg("lo1"), nb::arg("hi1"), nb::arg("lo2"), nb::arg("hi2"))
+      .def("arg_names", &Benchmark::ArgNames,
+           nb::rv_policy::reference)
+      .def("range_pair", &Benchmark::RangePair,
+           nb::rv_policy::reference, nb::arg("lo1"), nb::arg("hi1"),
+           nb::arg("lo2"), nb::arg("hi2"))
       .def("range_multiplier", &Benchmark::RangeMultiplier,
            nb::rv_policy::reference)
       .def("min_time", &Benchmark::MinTime, nb::rv_policy::reference)
       .def("min_warmup_time", &Benchmark::MinWarmUpTime,
            nb::rv_policy::reference)
-      .def("iterations", &Benchmark::Iterations, nb::rv_policy::reference)
-      .def("repetitions", &Benchmark::Repetitions, nb::rv_policy::reference)
+      .def("iterations", &Benchmark::Iterations,
+           nb::rv_policy::reference)
+      .def("repetitions", &Benchmark::Repetitions,
+           nb::rv_policy::reference)
       .def("report_aggregates_only", &Benchmark::ReportAggregatesOnly,
            nb::rv_policy::reference, nb::arg("value") = true)
       .def("display_aggregates_only", &Benchmark::DisplayAggregatesOnly,
            nb::rv_policy::reference, nb::arg("value") = true)
       .def("measure_process_cpu_time", &Benchmark::MeasureProcessCPUTime,
            nb::rv_policy::reference)
-      .def("use_real_time", &Benchmark::UseRealTime, nb::rv_policy::reference)
+      .def("use_real_time", &Benchmark::UseRealTime,
+           nb::rv_policy::reference)
       .def("use_manual_time", &Benchmark::UseManualTime,
            nb::rv_policy::reference)
       .def(
           "complexity",
           (Benchmark * (Benchmark::*)(benchmark::BigO)) & Benchmark::Complexity,
-          nb::rv_policy::reference, nb::arg("complexity") = benchmark::oAuto);
+          nb::rv_policy::reference,
+          nb::arg("complexity") = benchmark::oAuto);
 
   using benchmark::Counter;
   nb::class_<Counter> py_counter(m, "Counter");
 
-  nb::enum_<Counter::Flags>(py_counter, "Flags", nb::is_arithmetic(),
-                            nb::is_flag())
+  nb::enum_<Counter::Flags>(py_counter, "Flags")
       .value("kDefaults", Counter::Flags::kDefaults)
       .value("kIsRate", Counter::Flags::kIsRate)
       .value("kAvgThreads", Counter::Flags::kAvgThreads)
@@ -123,7 +129,8 @@ NB_MODULE(_benchmark, m) {
       .value("kAvgIterations", Counter::Flags::kAvgIterations)
       .value("kAvgIterationsRate", Counter::Flags::kAvgIterationsRate)
       .value("kInvert", Counter::Flags::kInvert)
-      .export_values();
+      .export_values()
+      .def(nb::self | nb::self);
 
   nb::enum_<Counter::OneK>(py_counter, "OneK")
       .value("kIs1000", Counter::OneK::kIs1000)
@@ -134,8 +141,7 @@ NB_MODULE(_benchmark, m) {
       .def(nb::init<double, Counter::Flags, Counter::OneK>(),
            nb::arg("value") = 0., nb::arg("flags") = Counter::kDefaults,
            nb::arg("k") = Counter::kIs1000)
-      .def("__init__",
-           ([](Counter* c, double value) { new (c) Counter(value); }))
+      .def("__init__", ([](Counter *c, double value) { new (c) Counter(value); }))
       .def_rw("value", &Counter::value)
       .def_rw("flags", &Counter::flags)
       .def_rw("oneK", &Counter::oneK)
@@ -155,21 +161,13 @@ NB_MODULE(_benchmark, m) {
       .def_prop_ro("error_occurred", &State::error_occurred)
       .def("set_iteration_time", &State::SetIterationTime)
       .def_prop_rw("bytes_processed", &State::bytes_processed,
-                   &State::SetBytesProcessed)
+                    &State::SetBytesProcessed)
       .def_prop_rw("complexity_n", &State::complexity_length_n,
-                   &State::SetComplexityN)
+                    &State::SetComplexityN)
       .def_prop_rw("items_processed", &State::items_processed,
                    &State::SetItemsProcessed)
       .def("set_label", &State::SetLabel)
-      .def(
-          "range",
-          [](const State& state, std::size_t pos = 0) -> int64_t {
-            if (pos < state.range_size()) {
-              return state.range(pos);
-            }
-            throw nb::index_error("pos is out of range");
-          },
-          nb::arg("pos") = 0)
+      .def("range", &State::range, nb::arg("pos") = 0)
       .def_prop_ro("iterations", &State::iterations)
       .def_prop_ro("name", &State::name)
       .def_rw("counters", &State::counters)
@@ -177,13 +175,10 @@ NB_MODULE(_benchmark, m) {
       .def_prop_ro("threads", &State::threads);
 
   m.def("Initialize", Initialize);
-  m.def("RegisterBenchmark", RegisterBenchmark, nb::rv_policy::reference);
+  m.def("RegisterBenchmark", RegisterBenchmark,
+        nb::rv_policy::reference);
   m.def("RunSpecifiedBenchmarks",
         []() { benchmark::RunSpecifiedBenchmarks(); });
   m.def("ClearRegisteredBenchmarks", benchmark::ClearRegisteredBenchmarks);
-  m.def("AddCustomContext", benchmark::AddCustomContext, nb::arg("key"),
-        nb::arg("value"),
-        "Add a key-value pair to output as part of the context stanza in the "
-        "report.");
 };
 }  // namespace

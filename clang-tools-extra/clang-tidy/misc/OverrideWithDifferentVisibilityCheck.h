@@ -35,7 +35,7 @@ private:
   ChangeKind DetectVisibilityChange;
   bool CheckDestructors;
   bool CheckOperators;
-  std::vector<StringRef> IgnoredFunctions;
+  std::vector<llvm::StringRef> IgnoredFunctions;
 };
 
 } // namespace clang::tidy::misc

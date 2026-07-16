@@ -76,7 +76,7 @@ static const struct BuiltinTypeEntry {
 };
 
 SymbolCache::SymbolCache(NativeSession &Session, DbiStream *Dbi)
-    : Session(Session), Dbi(Dbi), AddressToSymbolId(IMapAllocator) {
+    : Session(Session), Dbi(Dbi) {
   // Id 0 is reserved for the invalid symbol.
   Cache.push_back(nullptr);
   SourceFiles.push_back(nullptr);
@@ -310,26 +310,24 @@ SymIndexId SymbolCache::getOrCreateInlineSymbol(InlineSiteSym Sym,
   return Id;
 }
 
-std::unique_ptr<PDBSymbol> SymbolCache::findSymbolByVA(uint64_t VA,
-                                                       PDB_SymType Type) {
+std::unique_ptr<PDBSymbol>
+SymbolCache::findSymbolBySectOffset(uint32_t Sect, uint32_t Offset,
+                                    PDB_SymType Type) {
   switch (Type) {
   case PDB_SymType::Function:
-    return findFunctionSymbolByVA(VA);
-  case PDB_SymType::PublicSymbol: {
-    uint32_t Sect, Offset;
-    Session.addressForVA(VA, Sect, Offset);
+    return findFunctionSymbolBySectOffset(Sect, Offset);
+  case PDB_SymType::PublicSymbol:
     return findPublicSymbolBySectOffset(Sect, Offset);
-  }
   case PDB_SymType::Compiland: {
     uint16_t Modi;
-    if (!Session.moduleIndexForVA(VA, Modi))
+    if (!Session.moduleIndexForSectOffset(Sect, Offset, Modi))
       return nullptr;
     return getOrCreateCompiland(Modi);
   }
   case PDB_SymType::None: {
     // FIXME: Implement for PDB_SymType::Data. The symbolizer calls this but
     // only uses it to find the symbol length.
-    if (auto Sym = findFunctionSymbolByVA(VA))
+    if (auto Sym = findFunctionSymbolBySectOffset(Sect, Offset))
       return Sym;
     return nullptr;
   }
@@ -338,26 +336,17 @@ std::unique_ptr<PDBSymbol> SymbolCache::findSymbolByVA(uint64_t VA,
   }
 }
 
-std::unique_ptr<PDBSymbol> SymbolCache::findFunctionSymbolByVA(uint64_t VA) {
+std::unique_ptr<PDBSymbol>
+SymbolCache::findFunctionSymbolBySectOffset(uint32_t Sect, uint32_t Offset) {
+  auto Iter = AddressToSymbolId.find({Sect, Offset});
+  if (Iter != AddressToSymbolId.end())
+    return getSymbolById(Iter->second);
+
   if (!Dbi)
     return nullptr;
 
-  auto findIdInCache = [this](uint64_t VA) -> SymIndexId {
-    auto Iter = AddressToSymbolId.find(VA);
-    if (Iter.valid() && !IMapTy::KeyTraits::startLess(VA, Iter.start()))
-      return *Iter;
-    return 0;
-  };
-
-  if (SymIndexId Id = findIdInCache(VA))
-    return getSymbolById(Id);
-
   uint16_t Modi;
-  if (!Session.moduleIndexForVA(VA, Modi))
-    return nullptr;
-
-  // Module has already been decoded and no cached symbols found.
-  if (!FuncSymCachedModIndexes.insert(Modi).second)
+  if (!Session.moduleIndexForSectOffset(Sect, Offset, Modi))
     return nullptr;
 
   Expected<ModuleDebugStreamRef> ExpectedModS =
@@ -366,60 +355,29 @@ std::unique_ptr<PDBSymbol> SymbolCache::findFunctionSymbolByVA(uint64_t VA) {
     consumeError(ExpectedModS.takeError());
     return nullptr;
   }
-
-  // Return empty intervals in AddressToSymbolId from Start to Stop.
-  auto getInsertRanges = [this](uint64_t Start, uint64_t Stop) {
-    SmallVector<std::pair<uint64_t, uint64_t>> Ranges;
-    auto Iter = AddressToSymbolId.find(Start);
-    while (Iter.valid() && IMapTy::KeyTraits::nonEmpty(Start, Stop)) {
-      if (IMapTy::KeyTraits::startLess(Start, Iter.start()))
-        Ranges.push_back({Start, std::min(Iter.start(), Stop)});
-
-      // Same result as Start = std::min(Stop, Iter.stop()).
-      Start = Iter.stop();
-      ++Iter;
-    }
-    if (IMapTy::KeyTraits::nonEmpty(Start, Stop))
-      Ranges.push_back({Start, Stop});
-
-    return Ranges;
-  };
-
-  // Decode symbols in this module.
   CVSymbolArray Syms = ExpectedModS->getSymbolArray();
+
+  // Search for the symbol in this module.
   for (auto I = Syms.begin(), E = Syms.end(); I != E; ++I) {
     if (I->kind() != S_LPROC32 && I->kind() != S_GPROC32)
       continue;
-
     auto PS = cantFail(SymbolDeserializer::deserializeAs<ProcSym>(*I));
-    uint64_t SymStart = Session.getVAFromSectOffset(PS.Segment, PS.CodeOffset);
-    uint64_t SymStop = SymStart + PS.CodeSize;
-    if (LLVM_UNLIKELY(!IMapTy::KeyTraits::nonEmpty(SymStart, SymStop))) {
-      I = Syms.at(PS.End);
-      continue;
-    }
-#ifndef NDEBUG
-    Session.checkSymbolRange(SymStart, SymStop);
-#endif
-    // Only care about range that is in this module.
-    uint16_t SymModi;
-    if (!Session.moduleIndexForVA(SymStart, SymModi) || SymModi != Modi)
-      continue;
+    if (Sect == PS.Segment && Offset >= PS.CodeOffset &&
+        Offset < PS.CodeOffset + PS.CodeSize) {
+      // Check if the symbol is already cached.
+      auto Found = AddressToSymbolId.find({PS.Segment, PS.CodeOffset});
+      if (Found != AddressToSymbolId.end())
+        return getSymbolById(Found->second);
 
-    auto Ranges = getInsertRanges(SymStart, SymStop);
-    if (!Ranges.empty()) {
+      // Otherwise, create a new symbol.
       SymIndexId Id = createSymbol<NativeFunctionSymbol>(PS, I.offset());
-      for (auto [Start, Stop] : Ranges)
-        AddressToSymbolId.insert(Start, Stop, Id);
+      AddressToSymbolId.insert({{PS.Segment, PS.CodeOffset}, Id});
+      return getSymbolById(Id);
     }
 
     // Jump to the end of this ProcSym.
     I = Syms.at(PS.End);
   }
-
-  if (SymIndexId Id = findIdInCache(VA))
-    return getSymbolById(Id);
-
   return nullptr;
 }
 

@@ -21,7 +21,7 @@
 #include "llvm/MC/MCValue.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/EndianStream.h"
-#include "llvm/TargetParser/AMDGPUTargetParser.h"
+#include "llvm/TargetParser/TargetParser.h"
 
 using namespace llvm;
 using namespace llvm::AMDGPU;
@@ -34,9 +34,8 @@ public:
 
   void applyFixup(const MCFragment &, const MCFixup &, const MCValue &Target,
                   uint8_t *Data, uint64_t Value, bool IsResolved) override;
-  bool fixupNeedsRelaxationAdvanced(const MCFragment &, const MCFixup &,
-                                    const MCValue &, uint64_t,
-                                    bool) const override;
+  bool fixupNeedsRelaxation(const MCFixup &Fixup,
+                            uint64_t Value) const override;
 
   void relaxInstruction(MCInst &Inst,
                         const MCSubtargetInfo &STI) const override;
@@ -63,13 +62,8 @@ void AMDGPUAsmBackend::relaxInstruction(MCInst &Inst,
   Inst = std::move(Res);
 }
 
-bool AMDGPUAsmBackend::fixupNeedsRelaxationAdvanced(const MCFragment &,
-                                                    const MCFixup &Fixup,
-                                                    const MCValue &,
-                                                    uint64_t Value,
-                                                    bool Resolved) const {
-  if (!Resolved)
-    return true;
+bool AMDGPUAsmBackend::fixupNeedsRelaxation(const MCFixup &Fixup,
+                                            uint64_t Value) const {
   // if the branch target has an offset of x3f this needs to be relaxed to
   // add a s_nop 0 immediately after branch to effectively increment offset
   // for hardware workaround in gfx1010
@@ -203,7 +197,7 @@ bool AMDGPUAsmBackend::writeNopData(raw_ostream &OS, uint64_t Count,
   // be writing data into the text section (otherwise we have unaligned
   // instructions, and thus have far bigger problems), so just write zeros
   // instead.
-  unsigned MinInstAlignment = getContext().getAsmInfo().getMinInstAlignment();
+  unsigned MinInstAlignment = getContext().getAsmInfo()->getMinInstAlignment();
   OS.write_zeros(Count % MinInstAlignment);
 
   // We are properly aligned, so write NOPs as requested.

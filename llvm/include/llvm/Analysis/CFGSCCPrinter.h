@@ -13,12 +13,13 @@
 
 namespace llvm {
 
-class CFGSCCPrinterPass : public RequiredPassInfoMixin<CFGSCCPrinterPass> {
+class CFGSCCPrinterPass : public PassInfoMixin<CFGSCCPrinterPass> {
   raw_ostream &OS;
 
 public:
   explicit CFGSCCPrinterPass(raw_ostream &OS) : OS(OS) {}
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 } // namespace llvm
 

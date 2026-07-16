@@ -16,7 +16,8 @@ static void findAffectedValues(Value *Cond,
   findValuesAffectedByCondition(Cond, /*IsAssume=*/false, InsertAffected);
 }
 
-void DomConditionCache::registerBranch(CondBrInst *BI) {
+void DomConditionCache::registerBranch(BranchInst *BI) {
+  assert(BI->isConditional() && "Must be conditional branch");
   SmallVector<Value *, 16> Affected;
   findAffectedValues(BI->getCondition(), Affected);
   for (Value *V : Affected) {

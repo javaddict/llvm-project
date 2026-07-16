@@ -230,10 +230,13 @@ TEST(MemoryTagManagerAArch64MTETest, ExpandToGranule) {
 
 static MemoryRegionInfo MakeRegionInfo(lldb::addr_t base, lldb::addr_t size,
                                        bool tagged) {
-  return MemoryRegionInfo(MemoryRegionInfo::RangeType(base, size), eLazyBoolYes,
-                          eLazyBoolYes, eLazyBoolYes, eLazyBoolNo, eLazyBoolYes,
-                          ConstString())
-      .SetMemoryTagged(tagged ? eLazyBoolYes : eLazyBoolNo);
+  return MemoryRegionInfo(
+      MemoryRegionInfo::RangeType(base, size), MemoryRegionInfo::eYes,
+      MemoryRegionInfo::eYes, MemoryRegionInfo::eYes, MemoryRegionInfo::eNo,
+      MemoryRegionInfo::eYes, ConstString(), MemoryRegionInfo::eNo, 0,
+      /*memory_tagged=*/
+      tagged ? MemoryRegionInfo::eYes : MemoryRegionInfo::eNo,
+      MemoryRegionInfo::eDontKnow, MemoryRegionInfo::eDontKnow);
 }
 
 TEST(MemoryTagManagerAArch64MTETest, MakeTaggedRange) {
@@ -303,7 +306,7 @@ TEST(MemoryTagManagerAArch64MTETest, MakeTaggedRange) {
                        llvm::FailedWithMessage(err_msg));
 
   // If we tag that first part it succeeds
-  memory_regions.back().SetMemoryTagged(eLazyBoolYes);
+  memory_regions.back().SetMemoryTagged(MemoryRegionInfo::eYes);
   expected_range = MemoryTagManagerAArch64MTE::TagRange(0x0, 0x1000);
   got = manager.MakeTaggedRange(0, 0x1000, memory_regions);
   ASSERT_THAT_EXPECTED(got, llvm::Succeeded());
@@ -323,7 +326,7 @@ TEST(MemoryTagManagerAArch64MTETest, MakeTaggedRange) {
                        llvm::FailedWithMessage(err_msg));
 
   // If we tag the last part it succeeds
-  memory_regions.back().SetMemoryTagged(eLazyBoolYes);
+  memory_regions.back().SetMemoryTagged(MemoryRegionInfo::eYes);
   got = manager.MakeTaggedRange(0, 0x1000, memory_regions);
   ASSERT_THAT_EXPECTED(got, llvm::Succeeded());
   ASSERT_EQ(*got, expected_range);
@@ -343,7 +346,7 @@ TEST(MemoryTagManagerAArch64MTETest, MakeTaggedRange) {
                        llvm::FailedWithMessage(err_msg));
 
   // If we tag the middle part it succeeds
-  memory_regions.back().SetMemoryTagged(eLazyBoolYes);
+  memory_regions.back().SetMemoryTagged(MemoryRegionInfo::eYes);
   got = manager.MakeTaggedRange(0, 0x1000, memory_regions);
   ASSERT_THAT_EXPECTED(got, llvm::Succeeded());
   ASSERT_EQ(*got, expected_range);
@@ -378,7 +381,7 @@ TEST(MemoryTagManagerAArch64MTETest, MakeTaggedRanges) {
   ASSERT_EQ(*got, std::vector<MemoryTagManager::TagRange>{});
 
   // Make the region tagged and it'll be the one range returned.
-  memory_regions.back().SetMemoryTagged(eLazyBoolYes);
+  memory_regions.back().SetMemoryTagged(MemoryRegionInfo::eYes);
   got = manager.MakeTaggedRanges(0, 0x20, memory_regions);
   ASSERT_THAT_EXPECTED(got, llvm::Succeeded());
   ASSERT_EQ(*got, std::vector<MemoryTagManager::TagRange>{

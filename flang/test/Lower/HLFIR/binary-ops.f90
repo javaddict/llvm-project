@@ -206,7 +206,8 @@ end subroutine
 ! CHECK:  hlfir.declare {{.*}}c"}
 ! CHECK:  %[[VAL_11:.*]] = arith.constant 0 : i64
 ! CHECK:  %[[VAL_12:.*]] = fir.load %{{.*}} : !fir.ref<i64>
-! CHECK:  arith.maxsi %[[VAL_11]], %[[VAL_12]] : i64
+! CHECK:  %[[VAL_13:.*]] = arith.cmpi sgt, %[[VAL_11]], %[[VAL_12]] : i64
+! CHECK:  arith.select %[[VAL_13]], %[[VAL_11]], %[[VAL_12]] : i64
 
 subroutine cmp_int(l, x, y)
   logical :: l
@@ -294,28 +295,30 @@ end subroutine
 ! CHECK:  %[[VAL_5:.*]]:2 = hlfir.declare %{{.*}}z"} : (!fir.ref<!fir.logical<4>>, !fir.dscope) -> (!fir.ref<!fir.logical<4>>, !fir.ref<!fir.logical<4>>)
 ! CHECK:  %[[VAL_6:.*]] = fir.load %[[VAL_4]]#0 : !fir.ref<!fir.logical<4>>
 ! CHECK:  %[[VAL_7:.*]] = fir.load %[[VAL_5]]#0 : !fir.ref<!fir.logical<4>>
-! CHECK:  %[[VAL_8:.*]] = fir.logical_and %[[VAL_6]], %[[VAL_7]] : !fir.logical<4>
+! CHECK:  %[[VAL_8:.*]] = fir.convert %[[VAL_6]] : (!fir.logical<4>) -> i1
+! CHECK:  %[[VAL_9:.*]] = fir.convert %[[VAL_7]] : (!fir.logical<4>) -> i1
+! CHECK:  %[[VAL_10:.*]] = arith.andi %[[VAL_8]], %[[VAL_9]] : i1
 
 subroutine logical_or(x, y, z)
   logical :: x, y, z
   x = y.or.z
 end subroutine
 ! CHECK-LABEL: func.func @_QPlogical_or(
-! CHECK:  %[[VAL_8:.*]] = fir.logical_or {{.*}} : !fir.logical<4>
+! CHECK:  %[[VAL_10:.*]] = arith.ori
 
 subroutine logical_eqv(x, y, z)
   logical :: x, y, z
   x = y.eqv.z
 end subroutine
 ! CHECK-LABEL: func.func @_QPlogical_eqv(
-! CHECK:  %[[VAL_8:.*]] = fir.eqv {{.*}} : !fir.logical<4>
+! CHECK:  %[[VAL_10:.*]] = arith.cmpi eq
 
 subroutine logical_neqv(x, y, z)
   logical :: x, y, z
   x = y.neqv.z
 end subroutine
 ! CHECK-LABEL: func.func @_QPlogical_neqv(
-! CHECK:  %[[VAL_8:.*]] = fir.neqv {{.*}} : !fir.logical<4>
+! CHECK:  %[[VAL_10:.*]] = arith.cmpi ne
 
 subroutine cmplx_ctor(z, x, y)
   complex :: z

@@ -1,6 +1,6 @@
 include "../../../../include/lldb/Core/PropertiesBase.td"
 
-let Definition = "symbollocatordebuginfod", Path = "plugin.symbol-locator.debuginfod" in {
+let Definition = "symbollocatordebuginfod" in {
   def ServerURLs : Property<"server-urls", "Array">,
     ElementType<"String">,
     Desc<"An ordered list of Debuginfod server URLs to query for symbols. This defaults to the contents of the DEBUGINFOD_URLS environment variable.">;

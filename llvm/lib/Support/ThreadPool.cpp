@@ -187,7 +187,7 @@ void StdThreadPool::processTasksWithJobserver() {
       report_fatal_error("Timed out waiting for jobserver token.");
     }
 
-    // `llvm::scope_exit` guarantees the job slot is released, even if the
+    // `make_scope_exit` guarantees the job slot is released, even if the
     // task throws or we exit early. This prevents deadlocking the build.
     llvm::scope_exit SlotReleaser(
         [&] { TheJobserver->release(std::move(Slot)); });

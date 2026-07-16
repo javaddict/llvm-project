@@ -9,8 +9,6 @@
 ; CHECK-NEXT:      amdgpu_cs_chain_func:
 ; CHECK:             .backend_stack_size: 0x10{{$}}
 ; CHECK:             .stack_frame_size_in_bytes: 0x10{{$}}
-; CHECK-NEXT:            .vgpr_count:
-; CHECK-NEXT:    .shaders:
 ; CHECK:amdpal.version:
 ; CHECK-NEXT:  - 0x3
 ; CHECK-NEXT:  - 0
@@ -22,11 +20,6 @@ define amdgpu_cs_chain void @amdgpu_cs_chain_func(<40 x i32> %should_spill) {
   %v = alloca [3 x i32], addrspace(5)
   store i32 42, ptr addrspace(5) %v
   call amdgpu_gfx void @use(<40 x i32> %should_spill, ptr addrspace(5) %v)
-  ret void
-}
-
-define amdgpu_cs_chain_preserve void @amdgpu_cs_chain_preserve_func() {
-.entry:
   ret void
 }
 

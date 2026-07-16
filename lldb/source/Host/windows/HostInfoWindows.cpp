@@ -40,9 +40,9 @@ protected:
 
 FileSpec HostInfoWindows::m_program_filespec;
 
-void HostInfoWindows::Initialize() {
+void HostInfoWindows::Initialize(SharedLibraryDirectoryHelper *helper) {
   ::CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-  HostInfoBase::Initialize();
+  HostInfoBase::Initialize(helper);
 }
 
 void HostInfoWindows::Terminate() {
@@ -102,7 +102,7 @@ FileSpec HostInfoWindows::GetProgramFileSpec() {
   static llvm::once_flag g_once_flag;
   llvm::call_once(g_once_flag, []() {
     std::vector<wchar_t> buffer(PATH_MAX);
-    ::GetModuleFileNameW(nullptr, buffer.data(), buffer.size());
+    ::GetModuleFileNameW(NULL, buffer.data(), buffer.size());
     std::string path;
     llvm::convertWideToUTF8(buffer.data(), path);
     m_program_filespec.SetFile(path, FileSpec::Style::native);

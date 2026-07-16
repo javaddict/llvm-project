@@ -14,7 +14,7 @@
 namespace llvm {
 
 class SILoadStoreOptimizerPass
-    : public OptionalPassInfoMixin<SILoadStoreOptimizerPass> {
+    : public PassInfoMixin<SILoadStoreOptimizerPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);

@@ -1,5 +1,4 @@
 // RUN: %clang_cc1 -std=c++11 -verify %s
-// RUN: %clang_cc1 -std=c++11 -verify %s -fexperimental-new-constant-interpreter
 
 namespace UseBeforeDefinition {
   struct A {

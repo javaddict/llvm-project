@@ -617,7 +617,7 @@ int main(int argc, const char **argv) {
       argc, argv, cl::getGeneralCategory(), cl::ZeroOrMore,
       "Clang-based refactoring tool for C, C++ and Objective-C");
   if (!ExpectedParser) {
-    llvm::errs() << llvm::toString(ExpectedParser.takeError());
+    llvm::errs() << ExpectedParser.takeError();
     return 1;
   }
   CommonOptionsParser &Options = ExpectedParser.get();

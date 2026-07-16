@@ -84,7 +84,7 @@ void PlatformMacOSX::Terminate() {
   PlatformDarwinKernel::Terminate();
   PlatformAppleSimulator::Terminate();
 #endif
-  PlatformRemoteMacOSX::Terminate();
+  PlatformRemoteMacOSX::Initialize();
   PlatformRemoteiOS::Terminate();
   PlatformDarwin::Terminate();
 }
@@ -128,14 +128,18 @@ ConstString PlatformMacOSX::GetSDKDirectory(lldb_private::Target &target) {
 
   // Use the default SDK as a fallback.
   auto sdk_path_or_err =
-      PlatformDarwin::ResolveXcodeSDK(XcodeSDK::GetAnyMacOS());
+      HostInfo::GetSDKRoot(HostInfo::SDKOptions{XcodeSDK::GetAnyMacOS()});
   if (!sdk_path_or_err) {
-    Debugger::ReportError(toString(sdk_path_or_err.takeError()));
+    Debugger::ReportError("Error while searching for Xcode SDK: " +
+                          toString(sdk_path_or_err.takeError()));
     return {};
   }
 
-  if (FileSystem::Instance().Exists(*sdk_path_or_err))
-    return ConstString(sdk_path_or_err->GetPath());
+  FileSpec fspec(*sdk_path_or_err);
+  if (fspec) {
+    if (FileSystem::Instance().Exists(fspec))
+      return ConstString(fspec.GetPath());
+  }
 
   return {};
 }
@@ -179,8 +183,8 @@ lldb_private::Status PlatformMacOSX::GetSharedModule(
     const lldb_private::ModuleSpec &module_spec, Process *process,
     lldb::ModuleSP &module_sp,
     llvm::SmallVectorImpl<lldb::ModuleSP> *old_modules, bool *did_create_ptr) {
-  Status error = GetSharedModuleWithLocalCache(
-      module_spec, module_sp, old_modules, did_create_ptr, process);
+  Status error = GetSharedModuleWithLocalCache(module_spec, module_sp,
+                                               old_modules, did_create_ptr);
 
   if (module_sp) {
     if (module_spec.GetArchitecture().GetCore() ==
@@ -193,9 +197,9 @@ lldb_private::Status PlatformMacOSX::GetSharedModule(
         lldb::ModuleSP x86_64_module_sp;
         llvm::SmallVector<lldb::ModuleSP, 1> old_x86_64_modules;
         bool did_create = false;
-        Status x86_64_error = GetSharedModuleWithLocalCache(
-            module_spec_x86_64, x86_64_module_sp, &old_x86_64_modules,
-            &did_create, process);
+        Status x86_64_error =
+            GetSharedModuleWithLocalCache(module_spec_x86_64, x86_64_module_sp,
+                                          &old_x86_64_modules, &did_create);
         if (x86_64_module_sp && x86_64_module_sp->GetObjectFile()) {
           module_sp = x86_64_module_sp;
           if (old_modules)

@@ -86,7 +86,6 @@ namespace {
     void VisitTemplateDecl(const TemplateDecl *D);
     void VisitFunctionTemplateDecl(FunctionTemplateDecl *D);
     void VisitClassTemplateDecl(ClassTemplateDecl *D);
-    void VisitExplicitInstantiationDecl(ExplicitInstantiationDecl *D);
     void VisitClassTemplateSpecializationDecl(
                                             ClassTemplateSpecializationDecl *D);
     void VisitClassTemplatePartialSpecializationDecl(
@@ -258,7 +257,7 @@ static DeclPrinter::AttrPosAsWritten getPosAsWritten(const Attr *A,
 std::optional<std::string>
 DeclPrinter::prettyPrintAttributes(const Decl *D,
                                    AttrPosAsWritten Pos /*=Default*/) {
-  if (Policy.SuppressDeclAttributes || !D->hasAttrs())
+  if (!D->hasAttrs())
     return std::nullopt;
 
   std::string AttrStr;
@@ -680,8 +679,9 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
   if (D->isFunctionTemplateSpecialization())
     Out << "template<> ";
   else if (!D->getDescribedFunctionTemplate()) {
-    for (TemplateParameterList *TPL : D->getTemplateParameterLists())
-      printTemplateParameters(TPL);
+    for (unsigned I = 0, NumTemplateParams = D->getNumTemplateParameterLists();
+         I < NumTemplateParams; ++I)
+      printTemplateParameters(D->getTemplateParameterList(I));
   }
 
   CXXConstructorDecl *CDecl = dyn_cast<CXXConstructorDecl>(D);
@@ -1105,7 +1105,6 @@ void DeclPrinter::VisitCXXRecordDecl(CXXRecordDecl *D) {
     Out << *Attrs << ' ';
 
   if (D->getIdentifier()) {
-    // FIXME: Missing template parameter lists.
     D->getQualifier().print(Out, Policy);
     Out << *D;
 
@@ -1291,9 +1290,11 @@ void DeclPrinter::VisitTemplateDecl(const TemplateDecl *D) {
 void DeclPrinter::VisitFunctionTemplateDecl(FunctionTemplateDecl *D) {
   prettyPrintPragmas(D->getTemplatedDecl());
   // Print any leading template parameter lists.
-  if (const FunctionDecl *FD = D->getTemplatedDecl())
-    for (TemplateParameterList *TPL : FD->getTemplateParameterLists())
-      printTemplateParameters(TPL);
+  if (const FunctionDecl *FD = D->getTemplatedDecl()) {
+    for (unsigned I = 0, NumTemplateParams = FD->getNumTemplateParameterLists();
+         I < NumTemplateParams; ++I)
+      printTemplateParameters(FD->getTemplateParameterList(I));
+  }
   VisitRedeclarableTemplateDecl(D);
   // Declare target attribute is special one, natural spelling for the pragma
   // assumes "ending" construct so print it here.
@@ -1331,48 +1332,6 @@ void DeclPrinter::VisitClassTemplateDecl(ClassTemplateDecl *D) {
         Indent();
         Visit(I);
       }
-  }
-}
-
-void DeclPrinter::VisitExplicitInstantiationDecl(ExplicitInstantiationDecl *D) {
-  if (D->isExternTemplate())
-    Out << "extern ";
-  Out << "template ";
-
-  NamedDecl *Spec = D->getSpecialization();
-
-  // Build the qualified name with template arguments.
-  std::string Name;
-  llvm::raw_string_ostream NameOS(Name);
-  if (D->getQualifierLoc())
-    D->getQualifierLoc().getNestedNameSpecifier().print(NameOS, Policy);
-  Spec->printName(NameOS, Policy);
-  if (auto NumArgs = D->getNumTemplateArgs(); NumArgs && *NumArgs > 0) {
-    SmallVector<TemplateArgumentLoc, 4> Args;
-    for (unsigned I = 0; I < *NumArgs; ++I)
-      Args.push_back(D->getTemplateArg(I));
-    printTemplateArgumentList(NameOS, Args, Policy);
-  }
-
-  if (auto *RD = dyn_cast<RecordDecl>(Spec)) {
-    Out << RD->getKindName() << " " << Name;
-  } else if (auto *FD = dyn_cast<FunctionDecl>(Spec)) {
-    FD->getReturnType().print(Out, Policy);
-    Out << " " << Name << "(";
-    llvm::ListSeparator LS;
-    for (const ParmVarDecl *P : FD->parameters()) {
-      Out << LS;
-      P->print(Out, Policy);
-    }
-    if (FD->isVariadic()) {
-      Out << LS;
-      Out << "...";
-    }
-    Out << ")";
-  } else if (auto *TSI = D->getTypeAsWritten()) {
-    TSI->getType().print(Out, Policy, Name);
-  } else {
-    llvm_unreachable("unexpected specialization kind");
   }
 }
 

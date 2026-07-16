@@ -41,7 +41,7 @@ public:
                    std::function<OptimizationRemarkEmitter &(Function &)> *GORE,
                    function_ref<AssumptionCache *(Function &)> LAC)
       : PSI(ProfSI), GetBFI(GBFI), GetTTI(GTTI), GetORE(GORE), LookupAC(LAC) {}
-  LLVM_ABI bool run(Module &M);
+  bool run(Module &M);
 
 private:
   bool isFunctionCold(const Function &F) const;
@@ -64,10 +64,9 @@ private:
 };
 
 /// Pass to outline cold regions.
-class HotColdSplittingPass
-    : public OptionalPassInfoMixin<HotColdSplittingPass> {
+class HotColdSplittingPass : public PassInfoMixin<HotColdSplittingPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
 
 } // end namespace llvm

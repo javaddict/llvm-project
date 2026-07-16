@@ -261,7 +261,6 @@ class SarifRule {
   std::string Id;
   std::string Description;
   std::string HelpURI;
-  std::vector<std::string> DeprecatedIds;
   SarifReportingConfiguration DefaultConfiguration;
 
   SarifRule() : DefaultConfiguration(SarifReportingConfiguration::create()) {}
@@ -286,12 +285,6 @@ public:
 
   SarifRule setHelpURI(llvm::StringRef RuleHelpURI) {
     HelpURI = RuleHelpURI.str();
-    return *this;
-  }
-
-  SarifRule
-  setDeprecatedIds(llvm::ArrayRef<llvm::StringRef> RuleDeprecatedIds) {
-    DeprecatedIds.assign(RuleDeprecatedIds.begin(), RuleDeprecatedIds.end());
     return *this;
   }
 

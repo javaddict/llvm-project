@@ -14,8 +14,6 @@
 #ifndef LLD_ELF_BPSECTION_ORDERER_H
 #define LLD_ELF_BPSECTION_ORDERER_H
 
-#include "lld/Common/BPSectionOrdererBase.h"
-#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -29,11 +27,10 @@ class InputSectionBase;
 /// It is important that -ffunction-sections and -fdata-sections compiler flags
 /// are used to ensure functions and data are in their own sections and thus
 /// can be reordered.
-llvm::DenseMap<const InputSectionBase *, int> runBalancedPartitioning(
-    Ctx &ctx, llvm::StringRef profilePath,
-    llvm::ArrayRef<BPCompressionSortSpec> compressionSortSpecs,
-    bool forFunctionCompression, bool forDataCompression,
-    bool compressionSortStartupFunctions, bool verbose);
+llvm::DenseMap<const InputSectionBase *, int>
+runBalancedPartitioning(Ctx &ctx, llvm::StringRef profilePath,
+                        bool forFunctionCompression, bool forDataCompression,
+                        bool compressionSortStartupFunctions, bool verbose);
 
 } // namespace lld::elf
 

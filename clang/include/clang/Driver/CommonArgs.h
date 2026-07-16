@@ -118,10 +118,6 @@ bool checkDebugInfoOption(const llvm::opt::Arg *A,
                           const llvm::opt::ArgList &Args, const Driver &D,
                           const ToolChain &TC);
 
-void addDebugInfoForProfilingArgs(const Driver &D, const ToolChain &TC,
-                                  const llvm::opt::ArgList &Args,
-                                  llvm::opt::ArgStringList &CmdArgs);
-
 void AddAssemblerKPIC(const ToolChain &ToolChain,
                       const llvm::opt::ArgList &Args,
                       llvm::opt::ArgStringList &CmdArgs);
@@ -161,11 +157,6 @@ llvm::StringRef getLTOParallelism(const llvm::opt::ArgList &Args,
 bool areOptimizationsEnabled(const llvm::opt::ArgList &Args);
 
 bool isUseSeparateSections(const llvm::Triple &Triple);
-/// Append -ffunction-sections / -fdata-sections to \p CmdArgs when the
-/// corresponding flags are enabled (explicitly or by target default).
-void addSeparateSectionFlags(const llvm::Triple &Triple,
-                             const llvm::opt::ArgList &Args,
-                             llvm::opt::ArgStringList &CmdArgs);
 // Parse -mtls-dialect=. Return true if the target supports both general-dynamic
 // and TLSDESC, and TLSDESC is requested.
 bool isTLSDESCEnabled(const ToolChain &TC, const llvm::opt::ArgList &Args);
@@ -239,8 +230,7 @@ void addOpenMPDeviceRTL(const Driver &D, const llvm::opt::ArgList &DriverArgs,
                         StringRef BitcodeSuffix, const llvm::Triple &Triple,
                         const ToolChain &HostTC);
 
-void addOpenCLBuiltinsLib(const Driver &D, const llvm::Triple &TT,
-                          const llvm::opt::ArgList &DriverArgs,
+void addOpenCLBuiltinsLib(const Driver &D, const llvm::opt::ArgList &DriverArgs,
                           llvm::opt::ArgStringList &CC1Args);
 
 void addOutlineAtomicsArgs(const Driver &D, const ToolChain &TC,
@@ -283,13 +273,8 @@ bool shouldRecordCommandLine(const ToolChain &TC,
                              bool &FRecordCommandLine,
                              bool &GRecordCommandLine);
 
-void renderGlobalISelOptions(const Driver &D, const llvm::opt::ArgList &Args,
-                             llvm::opt::ArgStringList &CmdArgs,
-                             const llvm::Triple &Triple);
-
 void renderCommonIntegerOverflowOptions(const llvm::opt::ArgList &Args,
-                                        llvm::opt::ArgStringList &CmdArgs,
-                                        bool IsMSVCCompat);
+                                        llvm::opt::ArgStringList &CmdArgs);
 
 bool shouldEnableVectorizerAtOLevel(const llvm::opt::ArgList &Args,
                                     bool isSlpVec);

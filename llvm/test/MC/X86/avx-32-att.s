@@ -2127,17 +2127,9 @@
 // CHECK: encoding: [0xc4,0xe3,0x79,0x60,0xea,0x07]
           vpcmpestrm  $7, %xmm2, %xmm5
 
-// CHECK: vpcmpestrm  $7, %xmm2, %xmm5
-// CHECK: encoding: [0xc4,0xe3,0x79,0x60,0xea,0x07]
-          vpcmpestrml  $7, %xmm2, %xmm5
-
 // CHECK: vpcmpestrm  $7, (%eax), %xmm5
 // CHECK: encoding: [0xc4,0xe3,0x79,0x60,0x28,0x07]
           vpcmpestrm  $7, (%eax), %xmm5
-
-// CHECK: vpcmpestrm  $7, (%eax), %xmm5
-// CHECK: encoding: [0xc4,0xe3,0x79,0x60,0x28,0x07]
-          vpcmpestrml  $7, (%eax), %xmm5
 
 // CHECK: vpcmpistri  $7, %xmm2, %xmm5
 // CHECK: encoding: [0xc4,0xe3,0x79,0x63,0xea,0x07]
@@ -2151,17 +2143,9 @@
 // CHECK: encoding: [0xc4,0xe3,0x79,0x61,0xea,0x07]
           vpcmpestri  $7, %xmm2, %xmm5
 
-// CHECK: vpcmpestri  $7, %xmm2, %xmm5
-// CHECK: encoding: [0xc4,0xe3,0x79,0x61,0xea,0x07]
-          vpcmpestril  $7, %xmm2, %xmm5
-
 // CHECK: vpcmpestri  $7, (%eax), %xmm5
 // CHECK: encoding: [0xc4,0xe3,0x79,0x61,0x28,0x07]
           vpcmpestri  $7, (%eax), %xmm5
-
-// CHECK: vpcmpestri  $7, (%eax), %xmm5
-// CHECK: encoding: [0xc4,0xe3,0x79,0x61,0x28,0x07]
-          vpcmpestril  $7, (%eax), %xmm5
 
 // CHECK: vaesimc  %xmm2, %xmm5
 // CHECK: encoding: [0xc4,0xe2,0x79,0xdb,0xea]

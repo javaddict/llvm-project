@@ -13,7 +13,7 @@
 
 namespace llvm {
 class GCNPreRAOptimizationsPass
-    : public OptionalPassInfoMixin<GCNPreRAOptimizationsPass> {
+    : public PassInfoMixin<GCNPreRAOptimizationsPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);

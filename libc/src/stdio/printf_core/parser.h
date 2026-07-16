@@ -15,7 +15,6 @@
 #include "src/__support/CPP/optional.h"
 #include "src/__support/CPP/type_traits.h"
 #include "src/__support/macros/config.h"
-#include "src/__support/macros/properties/types.h"
 #include "src/__support/str_to_integer.h"
 #include "src/stdio/printf_core/core_structs.h"
 #include "src/stdio/printf_core/printf_config.h"
@@ -28,9 +27,6 @@
 #ifndef LIBC_COPT_PRINTF_DISABLE_STRERROR
 #include "src/__support/libc_errno.h"
 #endif // LIBC_COPT_PRINTF_DISABLE_STRERROR
-#ifndef LIBC_COPT_PRINTF_DISABLE_WIDE
-#include "hdr/types/wint_t.h"
-#endif // LIBC_COPT_PRINTF_DISABLE_WIDE
 
 namespace LIBC_NAMESPACE_DECL {
 namespace printf_core {
@@ -41,11 +37,9 @@ template <typename T> struct int_type_of {
 template <> struct int_type_of<double> {
   using type = fputil::FPBits<double>::StorageType;
 };
-#ifndef LIBC_TYPES_LONG_DOUBLE_IS_DOUBLE_DOUBLE
 template <> struct int_type_of<long double> {
   using type = fputil::FPBits<long double>::StorageType;
 };
-#endif // LIBC_TYPES_LONG_DOUBLE_IS_DOUBLE_DOUBLE
 
 #ifdef LIBC_INTERNAL_PRINTF_HAS_FIXED_POINT
 template <typename T>
@@ -79,9 +73,9 @@ template <typename ArgProvider> class Parser {
   ArgProvider args_cur;
 
 #ifndef LIBC_COPT_PRINTF_DISABLE_INDEX_MODE
-  // args_start stores the start of the va_args, which helps in getting the
-  // number of arguments that have already been passed. args_index is tracked
-  // so that we know which argument args_cur is on.
+  // args_start stores the start of the va_args, which is allows getting the
+  // value of arguments that have already been passed. args_index is tracked so
+  // that we know which argument args_cur is on.
   ArgProvider args_start;
   size_t args_index = 1;
 
@@ -179,17 +173,7 @@ public:
         section.has_conv = true;
         break;
       case ('c'):
-        if (section.length_modifier == LengthModifier::l) {
-#ifdef LIBC_COPT_PRINTF_DISABLE_WIDE
-          using WideCharArgType = int;
-#else
-          using WideCharArgType = wint_t;
-#endif // LIBC_COPT_PRINTF_DISABLE_WIDE
-          WRITE_ARG_VAL_SIMPLEST(section.conv_val_raw, WideCharArgType,
-                                 conv_index);
-        } else {
-          WRITE_ARG_VAL_SIMPLEST(section.conv_val_raw, int, conv_index);
-        }
+        WRITE_ARG_VAL_SIMPLEST(section.conv_val_raw, int, conv_index);
         break;
       case ('d'):
       case ('i'):
@@ -227,7 +211,6 @@ public:
           WRITE_ARG_VAL_SIMPLEST(section.conv_val_raw, ptrdiff_t, conv_index);
           break;
 
-#ifndef LIBC_COPT_PRINTF_DISABLE_BITINT
         case (LengthModifier::w):
         case (LengthModifier::wf):
           if (bw == 0) {
@@ -242,7 +225,6 @@ public:
             WRITE_ARG_VAL_SIMPLEST(section.conv_val_raw, intmax_t, conv_index);
           }
           break;
-#endif // LIBC_COPT_PRINTF_DISABLE_BITINT
         }
         break;
 #ifndef LIBC_COPT_PRINTF_DISABLE_FLOAT
@@ -257,9 +239,7 @@ public:
         if (lm != LengthModifier::L) {
           WRITE_ARG_VAL_SIMPLEST(section.conv_val_raw, double, conv_index);
         } else {
-#ifndef LIBC_TYPES_LONG_DOUBLE_IS_DOUBLE_DOUBLE
           WRITE_ARG_VAL_SIMPLEST(section.conv_val_raw, long double, conv_index);
-#endif // !LIBC_TYPES_LONG_DOUBLE_IS_DOUBLE_DOUBLE
         }
         break;
 #endif // LIBC_COPT_PRINTF_DISABLE_FLOAT
@@ -297,7 +277,7 @@ public:
         WRITE_ARG_VAL_SIMPLEST(section.conv_val_ptr, void *, conv_index);
         break;
       case ('s'):
-        WRITE_ARG_VAL_SIMPLEST(section.conv_val_ptr, void *, conv_index);
+        WRITE_ARG_VAL_SIMPLEST(section.conv_val_ptr, char *, conv_index);
         break;
       default:
         // if the conversion is undefined, change this to a raw section.
@@ -367,7 +347,6 @@ private:
         ++*local_pos;
         return {LengthModifier::l, 0};
       }
-#ifndef LIBC_COPT_PRINTF_DISABLE_BITINT
     case ('w'): {
       LengthModifier lm;
       if (str[*local_pos + 1] == 'f') {
@@ -384,7 +363,6 @@ private:
       }
       return {lm, 0};
     }
-#endif // LIBC_COPT_PRINTF_DISABLE_BITINT
     case ('h'):
       if (str[*local_pos + 1] == 'h') {
         *local_pos += 2;
@@ -498,10 +476,8 @@ private:
       // Floating point numbers are stored separately from the other arguments.
       else if (cur_type_desc == type_desc_from_type<double>())
         args_cur.template next_var<double>();
-#ifndef LIBC_TYPES_LONG_DOUBLE_IS_DOUBLE_DOUBLE
       else if (cur_type_desc == type_desc_from_type<long double>())
         args_cur.template next_var<long double>();
-#endif // !LIBC_TYPES_LONG_DOUBLE_IS_DOUBLE_DOUBLE
 #endif // LIBC_COPT_PRINTF_DISABLE_FLOAT
 #ifdef LIBC_INTERNAL_PRINTF_HAS_FIXED_POINT
       // Floating point numbers may be stored separately from the other
@@ -598,16 +574,7 @@ private:
           conv_size = type_desc_from_type<void>();
           break;
         case ('c'):
-          if (lm == LengthModifier::l) {
-#ifdef LIBC_COPT_PRINTF_DISABLE_WIDE
-            using WideCharArgType = int;
-#else
-            using WideCharArgType = wint_t;
-#endif // LIBC_COPT_PRINTF_DISABLE_WIDE
-            conv_size = type_desc_from_type<WideCharArgType>();
-          } else {
-            conv_size = type_desc_from_type<int>();
-          }
+          conv_size = type_desc_from_type<int>();
           break;
         case ('d'):
         case ('i'):
@@ -640,7 +607,6 @@ private:
           case (LengthModifier::t):
             conv_size = type_desc_from_type<ptrdiff_t>();
             break;
-#ifndef LIBC_COPT_PRINTF_DISABLE_BITINT
           case (LengthModifier::w):
           case (LengthModifier::wf):
             if (bw <= cpp::numeric_limits<unsigned int>::digits) {
@@ -653,7 +619,6 @@ private:
               conv_size = type_desc_from_type<intmax_t>();
             }
             break;
-#endif // LIBC_COPT_PRINTF_DISABLE_BITINT
           }
           break;
 #ifndef LIBC_COPT_PRINTF_DISABLE_FLOAT
@@ -667,10 +632,8 @@ private:
         case ('G'):
           if (lm != LengthModifier::L)
             conv_size = type_desc_from_type<double>();
-#ifndef LIBC_TYPES_LONG_DOUBLE_IS_DOUBLE_DOUBLE
           else
             conv_size = type_desc_from_type<long double>();
-#endif // !LIBC_TYPES_LONG_DOUBLE_IS_DOUBLE_DOUBLE
           break;
 #endif // LIBC_COPT_PRINTF_DISABLE_FLOAT
 #ifdef LIBC_INTERNAL_PRINTF_HAS_FIXED_POINT

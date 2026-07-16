@@ -69,7 +69,10 @@ void MachineOptimizationRemarkEmitter::emit(
 }
 
 MachineOptimizationRemarkEmitterPass::MachineOptimizationRemarkEmitterPass()
-    : MachineFunctionPass(ID) {}
+    : MachineFunctionPass(ID) {
+  initializeMachineOptimizationRemarkEmitterPassPass(
+      *PassRegistry::getPassRegistry());
+}
 
 bool MachineOptimizationRemarkEmitterPass::runOnMachineFunction(
     MachineFunction &MF) {

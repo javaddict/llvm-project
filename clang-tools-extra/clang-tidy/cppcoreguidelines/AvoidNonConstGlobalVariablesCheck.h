@@ -28,7 +28,6 @@ public:
 private:
   const bool AllowInternalLinkage;
   const bool AllowThreadLocal;
-  const bool IgnoreMacros;
 };
 
 } // namespace clang::tidy::cppcoreguidelines

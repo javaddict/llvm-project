@@ -8,7 +8,6 @@
 
 #include "Protocol/ProtocolRequests.h"
 #include "JSONUtils.h"
-#include "Protocol/ProtocolBase.h"
 #include "Protocol/ProtocolTypes.h"
 #include "lldb/lldb-defines.h"
 #include "llvm/ADT/DenseMap.h"
@@ -22,8 +21,8 @@ using namespace llvm;
 
 // The 'env' field is either an object as a map of strings or as an array of
 // strings formatted like 'key=value'.
-static bool parseEnv(const json::Value &Params,
-                     StringMap<lldb_dap::protocol::String> &env, json::Path P) {
+static bool parseEnv(const json::Value &Params, StringMap<std::string> &env,
+                     json::Path P) {
   const json::Object *O = Params.getAsObject();
   if (!O) {
     P.report("expected object");
@@ -88,8 +87,7 @@ static bool parseTimeout(const json::Value &Params, std::chrono::seconds &S,
 
 static bool
 parseSourceMap(const json::Value &Params,
-               std::vector<std::pair<lldb_dap::protocol::String,
-                                     lldb_dap::protocol::String>> &sourceMap,
+               std::vector<std::pair<std::string, std::string>> &sourceMap,
                json::Path P) {
   const json::Object *O = Params.getAsObject();
   if (!O) {
@@ -148,8 +146,8 @@ namespace lldb_dap::protocol {
 
 bool fromJSON(const json::Value &Params, CancelArguments &CA, json::Path P) {
   json::ObjectMapper O(Params, P);
-  return O && O.mapOptional("requestId", CA.requestId) &&
-         O.mapOptional("progressId", CA.progressId);
+  return O && O.map("requestId", CA.requestId) &&
+         O.map("progressId", CA.progressId);
 }
 
 bool fromJSON(const json::Value &Params, DisconnectArguments &DA,
@@ -298,7 +296,7 @@ bool fromJSON(const json::Value &Params, Console &C, json::Path P) {
 bool fromJSON(const json::Value &Params, LaunchRequestArguments &LRA,
               json::Path P) {
   json::ObjectMapper O(Params, P);
-  const bool success =
+  bool success =
       O && fromJSON(Params, LRA.configuration, P) &&
       O.mapOptional("noDebug", LRA.noDebug) &&
       O.mapOptional("launchCommands", LRA.launchCommands) &&
@@ -312,13 +310,6 @@ bool fromJSON(const json::Value &Params, LaunchRequestArguments &LRA,
       O.mapOptional("stdio", LRA.stdio) && parseEnv(Params, LRA.env, P);
   if (!success)
     return false;
-
-  for (std::optional<String> &io_path : LRA.stdio) {
-    // set empty paths to null.
-    if (io_path && llvm::StringRef(*io_path).trim().empty())
-      io_path.reset();
-  }
-
   // Validate that we have a well formed launch request.
   if (!LRA.launchCommands.empty() &&
       LRA.console != protocol::eConsoleInternal) {
@@ -337,6 +328,7 @@ bool fromJSON(const llvm::json::Value &Params, DAPSession &Ses,
               llvm::json::Path P) {
 
   json::ObjectMapper O(Params, P);
+  // Validate that both debuggerID and targetId are provided.
   return O && O.map("targetId", Ses.targetId) &&
          O.map("debuggerId", Ses.debuggerId);
 }
@@ -407,7 +399,7 @@ json::Value toJSON(const SetVariableResponseBody &SVR) {
 
   if (!SVR.type.empty())
     Body.insert({"type", SVR.type});
-  if (SVR.variablesReference.Reference())
+  if (SVR.variablesReference)
     Body.insert({"variablesReference", SVR.variablesReference});
   if (SVR.namedVariables)
     Body.insert({"namedVariables", SVR.namedVariables});

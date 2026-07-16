@@ -62,7 +62,7 @@ namespace NonConstExprReturn {
   constexpr const int *address_of(const int &a) {
     return &a;
   }
-  constexpr const int *return_param(int n) { // expected-note {{declared here}}
+  constexpr const int *return_param(int n) {
     return address_of(n);
   }
   struct S {

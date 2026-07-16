@@ -23,7 +23,6 @@
 #include "lld/Common/Timer.h"
 #include "lld/Common/Version.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
-#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Config/llvm-config.h"
@@ -291,34 +290,25 @@ void LinkerDriver::addBuffer(std::unique_ptr<MemoryBuffer> mb,
   case file_magic::windows_resource:
     resources.push_back(mbref);
     break;
-  case file_magic::archive: {
-    std::unique_ptr<Archive> file =
-        CHECK(Archive::create(mbref), filename + ": failed to parse archive");
-
-    // On ARM64EC/ARM64X, the archive may contain both, potentially conflicting,
-    // native and EC symbols in the symbol table. Regular archives handle this
-    // using the extended archive format, which stores the EC symbol table in a
-    // separate section, but it is not available for thin archives.
-    // Work around this limitation by lazily parsing all thin archive members
-    // instead of relying on the archive symbol table.
-    if (wholeArchive || (ctx.symtab.isEC() && file->isThin())) {
+  case file_magic::archive:
+    if (wholeArchive) {
+      std::unique_ptr<Archive> file =
+          CHECK(Archive::create(mbref), filename + ": failed to parse archive");
       Archive *archive = file.get();
       make<std::unique_ptr<Archive>>(std::move(file)); // take ownership
 
       int memberIndex = 0;
       for (MemoryBufferRef m : getArchiveMembers(ctx, archive)) {
         if (!archive->isThin())
-          addArchiveBuffer(m, "<whole-archive>", filename, memberIndex++,
-                           !wholeArchive);
+          addArchiveBuffer(m, "<whole-archive>", filename, memberIndex++);
         else
-          addThinArchiveBuffer(m, "<whole-archive>", !wholeArchive);
+          addThinArchiveBuffer(m, "<whole-archive>");
       }
 
       return;
     }
-    addFile(make<ArchiveFile>(ctx, mbref, file));
+    addFile(make<ArchiveFile>(ctx, mbref));
     break;
-  }
   case file_magic::bitcode:
     addFile(BitcodeFile::create(ctx, mbref, "", 0, lazy));
     break;
@@ -426,7 +416,7 @@ void LinkerDriver::enqueuePath(StringRef path, bool lazy, InputOpt inputOpt) {
 
 void LinkerDriver::addArchiveBuffer(MemoryBufferRef mb, StringRef symName,
                                     StringRef parentName,
-                                    uint64_t offsetInArchive, bool lazy) {
+                                    uint64_t offsetInArchive) {
   file_magic magic = identify_magic(mb.getBuffer());
   if (magic == file_magic::coff_import_library) {
     InputFile *imp = make<ImportFile>(ctx, mb);
@@ -437,9 +427,11 @@ void LinkerDriver::addArchiveBuffer(MemoryBufferRef mb, StringRef symName,
 
   InputFile *obj;
   if (magic == file_magic::coff_object) {
-    obj = tryCreateFatLTOFile(ctx, mb, parentName, offsetInArchive, lazy);
+    obj = tryCreateFatLTOFile(ctx, mb, parentName, offsetInArchive,
+                              /*lazy=*/false);
   } else if (magic == file_magic::bitcode) {
-    obj = BitcodeFile::create(ctx, mb, parentName, offsetInArchive, lazy);
+    obj = BitcodeFile::create(ctx, mb, parentName, offsetInArchive,
+                              /*lazy=*/false);
   } else if (magic == file_magic::coff_cl_gl_object) {
     Err(ctx) << mb.getBufferIdentifier()
              << ": is not a native COFF file. Recompile without /GL?";
@@ -454,13 +446,12 @@ void LinkerDriver::addArchiveBuffer(MemoryBufferRef mb, StringRef symName,
   Log(ctx) << "Loaded " << obj << " for " << symName;
 }
 
-void LinkerDriver::addThinArchiveBuffer(MemoryBufferRef mb, StringRef symName,
-                                        bool lazy) {
+void LinkerDriver::addThinArchiveBuffer(MemoryBufferRef mb, StringRef symName) {
   // Pass an empty string as the archive name and an offset of 0 so that
   // the original filename is used as the buffer identifier. This is
   // useful for DTLTO, where having the member identifier be the actual
   // path on disk enables distribution of bitcode files during ThinLTO.
-  addArchiveBuffer(mb, symName, /*parentName=*/"", /*OffsetInArchive=*/0, lazy);
+  addArchiveBuffer(mb, symName, /*parentName=*/"", /*OffsetInArchive=*/0);
 }
 
 void LinkerDriver::enqueueArchiveMember(const Archive::Child &c,
@@ -485,7 +476,7 @@ void LinkerDriver::enqueueArchiveMember(const Archive::Child &c,
     enqueueTask([=]() {
       llvm::TimeTraceScope timeScope("Archive: ", mb.getBufferIdentifier());
       ctx.driver.addArchiveBuffer(mb, toCOFFString(ctx, sym), parentName,
-                                  offsetInArchive, false);
+                                  offsetInArchive);
     });
     return;
   }
@@ -503,7 +494,7 @@ void LinkerDriver::enqueueArchiveMember(const Archive::Child &c,
     llvm::TimeTraceScope timeScope("Archive: ",
                                    mbOrErr.first->getBufferIdentifier());
     ctx.driver.addThinArchiveBuffer(takeBuffer(std::move(mbOrErr.first)),
-                                    toCOFFString(ctx, sym), false);
+                                    toCOFFString(ctx, sym));
   });
 }
 
@@ -724,7 +715,7 @@ std::optional<StringRef> LinkerDriver::findLibIfNew(StringRef filename) {
     return std::nullopt;
 
   StringRef path = findLib(filename);
-  if (ctx.config.noDefaultLibs.contains(path.lower()))
+  if (ctx.config.noDefaultLibs.count(path.lower()))
     return std::nullopt;
 
   if (std::optional<sys::fs::UniqueID> id = getUniqueID(path))
@@ -873,10 +864,10 @@ void LinkerDriver::addWinSysRootLibSearchPaths() {
 
   // Libraries specified by `/nodefaultlib:` may not be found in incomplete
   // search paths before lld infers a machine type from input files.
-  llvm::StringSet<> noDefaultLibs;
-  for (auto &iter : ctx.config.noDefaultLibs)
-    noDefaultLibs.insert(findLib(iter.first()).lower());
-  ctx.config.noDefaultLibs = std::move(noDefaultLibs);
+  std::set<std::string> noDefaultLibs;
+  for (const std::string &path : ctx.config.noDefaultLibs)
+    noDefaultLibs.insert(findLib(path).lower());
+  ctx.config.noDefaultLibs = noDefaultLibs;
 }
 
 // Parses LIB environment which contains a list of search paths.
@@ -1162,7 +1153,7 @@ void LinkerDriver::parseOrderFile(StringRef arg) {
     if (ctx.config.machine == I386 && !isDecorated(s))
       s = "_" + s;
 
-    if (!set.contains(s)) {
+    if (set.count(s) == 0) {
       if (ctx.config.warnMissingOrderSymbol)
         Warn(ctx) << "/order:" << arg << ": missing symbol: " << s
                   << " [LNK4037]";
@@ -1347,7 +1338,7 @@ void LinkerDriver::parsePDBAltPath() {
     cursor = secondMark + 1;
   }
 
-  ctx.config.pdbAltPath = std::move(buf);
+  ctx.config.pdbAltPath = buf;
 }
 
 /// Convert resource files and potentially merge input resource object
@@ -2112,10 +2103,6 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
   for (auto *arg : args.filtered(OPT_merge))
     parseMerge(arg->getValue());
 
-  // Handle /discard-section
-  for (auto *arg : args.filtered(OPT_discard_section))
-    config->discardSection.insert(arg->getValue());
-
   // Add default section merging rules after user rules. User rules take
   // precedence, but we will emit a warning if there is a conflict.
   parseMerge(".idata=.rdata");
@@ -2298,7 +2285,7 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
   if (errCount(ctx))
     return;
 
-  SmallSet<sys::fs::UniqueID, 0> wholeArchives;
+  std::set<sys::fs::UniqueID> wholeArchives;
   for (auto *arg : args.filtered(OPT_wholearchive_file))
     if (std::optional<StringRef> path = findFile(arg->getValue()))
       if (std::optional<sys::fs::UniqueID> id = getUniqueID(*path))
@@ -2312,7 +2299,7 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
     if (args.hasArg(OPT_wholearchive_flag))
       return true;
     if (std::optional<sys::fs::UniqueID> id = getUniqueID(path))
-      return wholeArchives.contains(*id);
+      return wholeArchives.count(*id);
     return false;
   };
 

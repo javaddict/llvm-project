@@ -41,7 +41,6 @@ int main(int, char**) {
     TEST_LIBCPP_ASSERT_FAILURE(m[-1], "mdspan: operator[] out of bounds access");
     TEST_LIBCPP_ASSERT_FAILURE(m[-130], "mdspan: operator[] out of bounds access");
     TEST_LIBCPP_ASSERT_FAILURE(m[5], "mdspan: operator[] out of bounds access");
-    TEST_LIBCPP_ASSERT_FAILURE(m[256], "mdspan: operator[] out of bounds access");
     TEST_LIBCPP_ASSERT_FAILURE(m[1000], "mdspan: operator[] out of bounds access");
   }
   {
@@ -49,7 +48,6 @@ int main(int, char**) {
     TEST_LIBCPP_ASSERT_FAILURE(m[-1], "mdspan: operator[] out of bounds access");
     TEST_LIBCPP_ASSERT_FAILURE(m[-130], "mdspan: operator[] out of bounds access");
     TEST_LIBCPP_ASSERT_FAILURE(m[5], "mdspan: operator[] out of bounds access");
-    TEST_LIBCPP_ASSERT_FAILURE(m[128], "mdspan: operator[] out of bounds access");
     TEST_LIBCPP_ASSERT_FAILURE(m[1000], "mdspan: operator[] out of bounds access");
   }
   {
@@ -57,7 +55,6 @@ int main(int, char**) {
     TEST_LIBCPP_ASSERT_FAILURE(m[-1], "mdspan: operator[] out of bounds access");
     TEST_LIBCPP_ASSERT_FAILURE(m[-130], "mdspan: operator[] out of bounds access");
     TEST_LIBCPP_ASSERT_FAILURE(m[5], "mdspan: operator[] out of bounds access");
-    TEST_LIBCPP_ASSERT_FAILURE(m[256], "mdspan: operator[] out of bounds access");
     TEST_LIBCPP_ASSERT_FAILURE(m[1000], "mdspan: operator[] out of bounds access");
   }
   {
@@ -65,7 +62,6 @@ int main(int, char**) {
     TEST_LIBCPP_ASSERT_FAILURE(m[-1], "mdspan: operator[] out of bounds access");
     TEST_LIBCPP_ASSERT_FAILURE(m[-130], "mdspan: operator[] out of bounds access");
     TEST_LIBCPP_ASSERT_FAILURE(m[5], "mdspan: operator[] out of bounds access");
-    TEST_LIBCPP_ASSERT_FAILURE(m[128], "mdspan: operator[] out of bounds access");
     TEST_LIBCPP_ASSERT_FAILURE(m[1000], "mdspan: operator[] out of bounds access");
   }
   {

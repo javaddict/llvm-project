@@ -14,4 +14,4 @@ using namespace llvm;
 
 R600MachineFunctionInfo::R600MachineFunctionInfo(const Function &F,
                                                  const R600Subtarget *STI)
-    : AMDGPUMachineFunctionInfo(F, *STI) {}
+    : AMDGPUMachineFunction(F, *STI) {}

@@ -11,8 +11,8 @@
 #include <optional>
 #include <stack>
 
-#ifndef LLDB_TARGET_TRACEDUMPER_H
-#define LLDB_TARGET_TRACEDUMPER_H
+#ifndef LLDB_TARGET_TRACE_INSTRUCTION_DUMPER_H
+#define LLDB_TARGET_TRACE_INSTRUCTION_DUMPER_H
 
 namespace lldb_private {
 
@@ -431,4 +431,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // LLDB_TARGET_TRACEDUMPER_H
+#endif // LLDB_TARGET_TRACE_INSTRUCTION_DUMPER_H

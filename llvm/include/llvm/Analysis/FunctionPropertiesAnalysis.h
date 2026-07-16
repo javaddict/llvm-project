@@ -135,7 +135,6 @@ public:
 
   // Call related instructions
   int64_t IntrinsicCount = 0;
-  int64_t NoReturnCallCount = 0;
   int64_t DirectCallCount = 0;
   int64_t IndirectCallCount = 0;
   int64_t CallReturnsIntegerCount = 0;
@@ -174,25 +173,21 @@ public:
 
 /// Printer pass for the FunctionPropertiesAnalysis results.
 class FunctionPropertiesPrinterPass
-    : public RequiredPassInfoMixin<FunctionPropertiesPrinterPass> {
+    : public PassInfoMixin<FunctionPropertiesPrinterPass> {
   raw_ostream &OS;
 
 public:
   explicit FunctionPropertiesPrinterPass(raw_ostream &OS) : OS(OS) {}
 
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 };
 
 /// Statistics pass for the FunctionPropertiesAnalysis results.
-class FunctionPropertiesStatisticsPass
-    : public PassInfoMixin<FunctionPropertiesStatisticsPass> {
-  bool IsPreOptimization;
-
-public:
-  explicit FunctionPropertiesStatisticsPass(bool IsPreOptimization = false)
-      : IsPreOptimization(IsPreOptimization) {}
-
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
+struct FunctionPropertiesStatisticsPass
+    : PassInfoMixin<FunctionPropertiesStatisticsPass> {
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
 
 /// Correctly update FunctionPropertiesInfo post-inlining. A

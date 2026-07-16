@@ -29,7 +29,6 @@ driver_executable("llvm-debuginfod-find") {
   deps = [
     ":Opts",
     "//llvm/lib/Debuginfod",
-    "//llvm/lib/HTTP",
     "//llvm/lib/Option",
     "//llvm/lib/Support",
   ]

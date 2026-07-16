@@ -1,5 +1,13 @@
 // RUN: %check_clang_tidy %s boost-use-to-string %t
-#include <string>
+
+namespace std {
+
+template <typename T>
+class basic_string {};
+
+using string = basic_string<char>;
+using wstring = basic_string<wchar_t>;
+}
 
 namespace boost {
 template <typename T, typename V>

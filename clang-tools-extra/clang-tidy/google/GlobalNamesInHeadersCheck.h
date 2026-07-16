@@ -10,6 +10,7 @@
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_GOOGLE_GLOBALNAMESINHEADERSCHECK_H
 
 #include "../ClangTidyCheck.h"
+#include "../utils/FileExtensionsUtils.h"
 
 namespace clang::tidy::google::readability {
 
@@ -23,6 +24,9 @@ public:
   GlobalNamesInHeadersCheck(StringRef Name, ClangTidyContext *Context);
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
+
+private:
+  FileExtensionsSet HeaderFileExtensions;
 };
 
 } // namespace clang::tidy::google::readability

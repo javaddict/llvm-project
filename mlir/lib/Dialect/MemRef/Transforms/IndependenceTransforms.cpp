@@ -25,7 +25,7 @@ static FailureOr<OpFoldResult> makeIndependent(OpBuilder &b, Location loc,
   ValueDimList mapOperands;
   if (failed(ValueBoundsConstraintSet::computeIndependentBound(
           boundMap, mapOperands, presburger::BoundType::UB, ofr, independencies,
-          ValueBoundsOptions{/*closedUB=*/true})))
+          /*closedUB=*/true)))
     return failure();
   return affine::materializeComputedBound(b, loc, boundMap, mapOperands);
 }

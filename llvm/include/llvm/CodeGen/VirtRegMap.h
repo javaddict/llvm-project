@@ -228,17 +228,17 @@ public:
                           MachineFunctionAnalysisManager &MAM);
 };
 
-class VirtRegMapPrinterPass
-    : public RequiredPassInfoMixin<VirtRegMapPrinterPass> {
+class VirtRegMapPrinterPass : public PassInfoMixin<VirtRegMapPrinterPass> {
   raw_ostream &OS;
 
 public:
   explicit VirtRegMapPrinterPass(raw_ostream &OS) : OS(OS) {}
   LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
                                  MachineFunctionAnalysisManager &MFAM);
+  static bool isRequired() { return true; }
 };
 
-class VirtRegRewriterPass : public RequiredPassInfoMixin<VirtRegRewriterPass> {
+class VirtRegRewriterPass : public PassInfoMixin<VirtRegRewriterPass> {
   bool ClearVirtRegs = true;
 
 public:
@@ -246,6 +246,8 @@ public:
       : ClearVirtRegs(ClearVirtRegs) {}
   LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
                                  MachineFunctionAnalysisManager &MFAM);
+
+  static bool isRequired() { return true; }
 
   LLVM_ABI void printPipeline(raw_ostream &OS,
                               function_ref<StringRef(StringRef)>) const;

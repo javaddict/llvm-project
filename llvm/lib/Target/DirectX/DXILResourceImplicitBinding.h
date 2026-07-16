@@ -19,7 +19,7 @@
 namespace llvm {
 
 class DXILResourceImplicitBinding
-    : public OptionalPassInfoMixin<DXILResourceImplicitBinding> {
+    : public PassInfoMixin<DXILResourceImplicitBinding> {
 public:
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &);
 };

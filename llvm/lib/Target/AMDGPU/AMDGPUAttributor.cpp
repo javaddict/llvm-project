@@ -11,14 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
-#include "AMDGPUTargetMachine.h"
 #include "GCNSubtarget.h"
 #include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsR600.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/IPO/Attributor.h"
-#include <cstdint>
 
 #define DEBUG_TYPE "amdgpu-attributor"
 
@@ -40,10 +38,9 @@ enum ImplicitArgumentPositions {
 #define AMDGPU_ATTRIBUTE(Name, Str) Name = 1 << Name##_POS,
 
 enum ImplicitArgumentMask {
-  UNKNOWN_INTRINSIC = 0,
+  NOT_IMPLICIT_INPUT = 0,
 #include "AMDGPUAttributes.def"
-  ALL_ARGUMENT_MASK = (1 << LAST_ARG_POS) - 1,
-  NOT_IMPLICIT_INPUT
+  ALL_ARGUMENT_MASK = (1 << LAST_ARG_POS) - 1
 };
 
 #define AMDGPU_ATTRIBUTE(Name, Str) {Name, Str},
@@ -109,9 +106,6 @@ intrinsicToAttrMask(Intrinsic::ID ID, bool &NonKernelOnly, bool &NeedsImplicit,
     // offsets.
     return CodeObjectVersion >= AMDGPU::AMDHSA_COV5 ? IMPLICIT_ARG_PTR
                                                     : QUEUE_PTR;
-  case Intrinsic::amdgcn_wwm:
-  case Intrinsic::amdgcn_strict_wwm:
-    return WHOLE_WAVE_MODE;
   case Intrinsic::trap:
   case Intrinsic::debugtrap:
   case Intrinsic::ubsantrap:
@@ -121,7 +115,7 @@ intrinsicToAttrMask(Intrinsic::ID ID, bool &NonKernelOnly, bool &NeedsImplicit,
     NeedsImplicit = (CodeObjectVersion >= AMDGPU::AMDHSA_COV5);
     return QUEUE_PTR;
   default:
-    return UNKNOWN_INTRINSIC;
+    return NOT_IMPLICIT_INPUT;
   }
 }
 
@@ -163,8 +157,7 @@ public:
     ADDR_SPACE_CAST_PRIVATE_TO_FLAT = 1 << 1,
     ADDR_SPACE_CAST_LOCAL_TO_FLAT = 1 << 2,
     ADDR_SPACE_CAST_BOTH_TO_FLAT =
-        ADDR_SPACE_CAST_PRIVATE_TO_FLAT | ADDR_SPACE_CAST_LOCAL_TO_FLAT,
-    CS_WORST = DS_GLOBAL | ADDR_SPACE_CAST_BOTH_TO_FLAT,
+        ADDR_SPACE_CAST_PRIVATE_TO_FLAT | ADDR_SPACE_CAST_LOCAL_TO_FLAT
   };
 
   /// Check if the subtarget has aperture regs.
@@ -207,6 +200,16 @@ public:
   /// Get code object version.
   unsigned getCodeObjectVersion() const { return CodeObjectVersion; }
 
+  /// Get the effective value of "amdgpu-waves-per-eu" for the function,
+  /// accounting for the interaction with the passed value to use for
+  /// "amdgpu-flat-work-group-size".
+  std::pair<unsigned, unsigned>
+  getWavesPerEU(const Function &F,
+                std::pair<unsigned, unsigned> FlatWorkGroupSize) {
+    const GCNSubtarget &ST = TM.getSubtarget<GCNSubtarget>(F);
+    return ST.getWavesPerEU(FlatWorkGroupSize, getLDSSize(F), F);
+  }
+
   std::optional<std::pair<unsigned, unsigned>>
   getWavesPerEUAttr(const Function &F) {
     auto Val = AMDGPU::getIntegerPairAttribute(F, "amdgpu-waves-per-eu",
@@ -246,46 +249,35 @@ private:
     return Status;
   }
 
-  /// Get the constant access bitmap for \p C.
-  uint8_t getConstantAccess(const Constant *C) {
-    const auto &It = ConstantStatus.find(C);
-    if (It != ConstantStatus.end())
-      return It->second.value();
+  /// Returns the minimum amount of LDS space used by a workgroup running
+  /// function \p F.
+  static unsigned getLDSSize(const Function &F) {
+    return AMDGPU::getIntegerPairAttribute(F, "amdgpu-lds-size",
+                                           {0, UINT32_MAX}, true)
+        .first;
+  }
 
-    SmallPtrSet<const Constant *, 8> Visited;
-    SmallVector<const Constant *> Worklist;
-    Worklist.push_back(C);
-    Visited.insert(C);
+  /// Get the constant access bitmap for \p C.
+  uint8_t getConstantAccess(const Constant *C,
+                            SmallPtrSetImpl<const Constant *> &Visited) {
+    auto It = ConstantStatus.find(C);
+    if (It != ConstantStatus.end())
+      return It->second;
 
     uint8_t Result = 0;
-    while (Result != CS_WORST && !Worklist.empty()) {
-      const Constant *CurC = Worklist.pop_back_val();
+    if (isDSAddress(C))
+      Result = DS_GLOBAL;
 
-      std::optional<uint8_t> &CurCResultOrNone = ConstantStatus[CurC];
-      if (CurCResultOrNone) {
-        Result |= CurCResultOrNone.value();
+    if (const auto *CE = dyn_cast<ConstantExpr>(C))
+      Result |= visitConstExpr(CE);
+
+    for (const Use &U : C->operands()) {
+      const auto *OpC = dyn_cast<Constant>(U);
+      if (!OpC || !Visited.insert(OpC).second)
         continue;
-      }
-      uint8_t CurCResult = 0;
 
-      if (isDSAddress(CurC))
-        CurCResult |= DS_GLOBAL;
-
-      if (const auto *CE = dyn_cast<ConstantExpr>(CurC))
-        CurCResult |= visitConstExpr(CE);
-
-      for (const Use &U : CurC->operands()) {
-        if (const auto *OpC = dyn_cast<Constant>(U)) {
-          if (Visited.insert(OpC).second)
-            Worklist.push_back(OpC);
-        }
-      }
-
-      CurCResultOrNone = CurCResult;
-      Result |= CurCResult;
+      Result |= getConstantAccess(OpC, Visited);
     }
-
-    ConstantStatus[C] = Result;
     return Result;
   }
 
@@ -299,7 +291,8 @@ public:
     if (!IsNonEntryFunc && HasAperture)
       return false;
 
-    uint8_t Access = getConstantAccess(C);
+    SmallPtrSet<const Constant *, 8> Visited;
+    uint8_t Access = getConstantAccess(C, Visited);
 
     // We need to trap on DS globals in non-entry functions.
     if (IsNonEntryFunc && (Access & DS_GLOBAL))
@@ -309,13 +302,14 @@ public:
   }
 
   bool checkConstForAddrSpaceCastFromPrivate(const Constant *C) {
-    uint8_t Access = getConstantAccess(C);
+    SmallPtrSet<const Constant *, 8> Visited;
+    uint8_t Access = getConstantAccess(C, Visited);
     return Access & ADDR_SPACE_CAST_PRIVATE_TO_FLAT;
   }
 
 private:
   /// Used to determine if the Constant needs the queue pointer.
-  DenseMap<const Constant *, std::optional<uint8_t>> ConstantStatus;
+  DenseMap<const Constant *, uint8_t> ConstantStatus;
   const unsigned CodeObjectVersion;
 };
 
@@ -385,7 +379,11 @@ struct AAUniformWorkGroupSizeFunction : public AAUniformWorkGroupSize {
     if (CC != CallingConv::AMDGPU_KERNEL)
       return;
 
-    bool InitialValue = F->hasFnAttribute("uniform-work-group-size");
+    bool InitialValue = false;
+    if (F->hasFnAttribute("uniform-work-group-size"))
+      InitialValue =
+          F->getFnAttribute("uniform-work-group-size").getValueAsString() ==
+          "true";
 
     if (InitialValue)
       indicateOptimisticFixpoint();
@@ -420,13 +418,13 @@ struct AAUniformWorkGroupSizeFunction : public AAUniformWorkGroupSize {
   }
 
   ChangeStatus manifest(Attributor &A) override {
-    if (!getAssumed())
-      return ChangeStatus::UNCHANGED;
-
+    SmallVector<Attribute, 8> AttrList;
     LLVMContext &Ctx = getAssociatedFunction()->getContext();
-    return A.manifestAttrs(getIRPosition(),
-                           {Attribute::get(Ctx, "uniform-work-group-size")},
-                           /*ForceReplace=*/true);
+
+    AttrList.push_back(Attribute::get(Ctx, "uniform-work-group-size",
+                                      getAssumed() ? "true" : "false"));
+    return A.manifestAttrs(getIRPosition(), AttrList,
+                           /* ForceReplace */ true);
   }
 
   bool isValidState() const override {
@@ -527,21 +525,6 @@ struct AAAMDAttributesFunction : public AAAMDAttributes {
       ImplicitArgumentMask AttrMask =
           intrinsicToAttrMask(IID, NonKernelOnly, NeedsImplicit,
                               HasApertureRegs, SupportsGetDoorbellID, COV);
-
-      if (AttrMask == UNKNOWN_INTRINSIC) {
-        // Assume not-nocallback intrinsics may invoke a function which accesses
-        // implicit arguments.
-        //
-        // FIXME: This isn't really the correct check. We want to ensure it
-        // isn't calling any function that may use implicit arguments regardless
-        // of whether it's internal to the module or not.
-        //
-        // TODO: Ignoring callsite attributes.
-        if (!Callee->hasFnAttribute(Attribute::NoCallback))
-          return indicatePessimisticFixpoint();
-        continue;
-      }
-
       if (AttrMask != NOT_IMPLICIT_INPUT) {
         if ((IsNonEntryFunc || !NonKernelOnly))
           removeAssumedBits(AttrMask);
@@ -1314,13 +1297,8 @@ struct AAAMDGPUMinAGPRAlloc
     auto [MinNumAGPR, MaxNumAGPR] =
         AMDGPU::getIntegerPairAttribute(*F, "amdgpu-agpr-alloc", {~0u, ~0u},
                                         /*OnlyFirstRequired=*/true);
-    if (MinNumAGPR == 0) {
+    if (MinNumAGPR == 0)
       indicateOptimisticFixpoint();
-      return;
-    }
-
-    if (hasSanitizerAttributes(*F))
-      indicatePessimisticFixpoint();
   }
 
   const std::string getAsStr(Attributor *A) const override {
@@ -1349,6 +1327,7 @@ struct AAAMDGPUMinAGPRAlloc
         Maximum.takeAssumedMaximum(NumRegs);
         return true;
       }
+
       switch (CB.getIntrinsicID()) {
       case Intrinsic::not_intrinsic:
         break;
@@ -1366,24 +1345,10 @@ struct AAAMDGPUMinAGPRAlloc
 
         return true;
       }
-      // Trap-like intrinsics such as llvm.trap and llvm.debugtrap do not have
-      // the nocallback attribute, so the AMDGPU attributor can conservatively
-      // drop all implicitly-known inputs and AGPR allocation information. Make
-      // sure we still infer that no implicit inputs are required and that the
-      // AGPR allocation stays at zero. Trap-like intrinsics may invoke a
-      // function which requires AGPRs, so we need to check if the called
-      // function has the "trap-func-name" attribute.
-      case Intrinsic::trap:
-      case Intrinsic::debugtrap:
-      case Intrinsic::ubsantrap:
-        return CB.hasFnAttr(Attribute::NoCallback) ||
-               !CB.hasFnAttr("trap-func-name");
       default:
         // Some intrinsics may use AGPRs, but if we have a choice, we are not
         // required to use AGPRs.
-        // Assume !nocallback intrinsics may call a function which requires
-        // AGPRs.
-        return CB.hasFnAttr(Attribute::NoCallback);
+        return true;
       }
 
       // TODO: Handle callsite attributes
@@ -1591,10 +1556,14 @@ AAAMDGPUClusterDims::createForPosition(const IRPosition &IRP, Attributor &A) {
   llvm_unreachable("AAAMDGPUClusterDims is only valid for function position");
 }
 
-static bool runImpl(SetVector<Function *> &Functions, bool IsModulePass,
-                    bool DeleteFns, Module &M, AnalysisGetter &AG,
-                    TargetMachine &TM, AMDGPUAttributorOptions Options,
+static bool runImpl(Module &M, AnalysisGetter &AG, TargetMachine &TM,
+                    AMDGPUAttributorOptions Options,
                     ThinOrFullLTOPhase LTOPhase) {
+  SetVector<Function *> Functions;
+  for (Function &F : M) {
+    if (!F.isIntrinsic())
+      Functions.insert(&F);
+  }
 
   CallGraphUpdater CGUpdater;
   BumpPtrAllocator Allocator;
@@ -1611,8 +1580,7 @@ static bool runImpl(SetVector<Function *> &Functions, bool IsModulePass,
   AttributorConfig AC(CGUpdater);
   AC.IsClosedWorldModule = Options.IsClosedWorld;
   AC.Allowed = &Allowed;
-  AC.IsModulePass = IsModulePass;
-  AC.DeleteFns = DeleteFns;
+  AC.IsModulePass = true;
   AC.DefaultInitializeLiveInternals = false;
   AC.IndirectCalleeSpecializationCallback =
       [](Attributor &A, const AbstractAttribute &AA, CallBase &CB,
@@ -1684,41 +1652,7 @@ PreservedAnalyses llvm::AMDGPUAttributorPass::run(Module &M,
       AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
   AnalysisGetter AG(FAM);
 
-  SetVector<Function *> Functions;
-  for (Function &F : M) {
-    if (!F.isDeclaration())
-      Functions.insert(&F);
-  }
-
   // TODO: Probably preserves CFG
-  return runImpl(Functions, /*IsModulePass=*/true, /*DeleteFns=*/true, M, AG,
-                 TM, Options, LTOPhase)
-             ? PreservedAnalyses::none()
-             : PreservedAnalyses::all();
-}
-
-PreservedAnalyses llvm::AMDGPUAttributorCGSCCPass::run(LazyCallGraph::SCC &C,
-                                                       CGSCCAnalysisManager &AM,
-                                                       LazyCallGraph &CG,
-                                                       CGSCCUpdateResult &UR) {
-
-  FunctionAnalysisManager &FAM =
-      AM.getResult<FunctionAnalysisManagerCGSCCProxy>(C, CG).getManager();
-  AnalysisGetter AG(FAM);
-
-  SetVector<Function *> Functions;
-  for (LazyCallGraph::Node &N : C) {
-    Function *F = &N.getFunction();
-    if (!F->isIntrinsic())
-      Functions.insert(F);
-  }
-
-  AMDGPUAttributorOptions Options;
-  Module *M = C.begin()->getFunction().getParent();
-  // In the CGSCC pipeline, avoid untracked call graph modifications by
-  // disabling function deletion, mirroring the generic AttributorCGSCCPass.
-  return runImpl(Functions, /*IsModulePass=*/false, /*DeleteFns=*/false, *M, AG,
-                 TM, Options, ThinOrFullLTOPhase::None)
-             ? PreservedAnalyses::none()
-             : PreservedAnalyses::all();
+  return runImpl(M, AG, TM, Options, LTOPhase) ? PreservedAnalyses::none()
+                                               : PreservedAnalyses::all();
 }

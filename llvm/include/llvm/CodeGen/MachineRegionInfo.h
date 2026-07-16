@@ -60,18 +60,17 @@ public:
 
 class MachineRegion : public RegionBase<RegionTraits<MachineFunction>> {
 public:
-  LLVM_ABI MachineRegion(MachineBasicBlock *Entry, MachineBasicBlock *Exit,
-                         MachineRegionInfo *RI, MachineDominatorTree *DT,
-                         MachineRegion *Parent = nullptr);
-  LLVM_ABI ~MachineRegion();
+  MachineRegion(MachineBasicBlock *Entry, MachineBasicBlock *Exit,
+                MachineRegionInfo *RI, MachineDominatorTree *DT,
+                MachineRegion *Parent = nullptr);
+  ~MachineRegion();
 
   bool operator==(const MachineRegionNode &RN) const {
     return &RN == reinterpret_cast<const MachineRegionNode *>(this);
   }
 };
 
-class LLVM_ABI MachineRegionInfo
-    : public RegionInfoBase<RegionTraits<MachineFunction>> {
+class MachineRegionInfo : public RegionInfoBase<RegionTraits<MachineFunction>> {
 public:
   explicit MachineRegionInfo();
   ~MachineRegionInfo() override;
@@ -83,7 +82,7 @@ public:
                    MachinePostDominatorTree *PDT, MachineDominanceFrontier *DF);
 };
 
-class LLVM_ABI MachineRegionInfoPass : public MachineFunctionPass {
+class MachineRegionInfoPass : public MachineFunctionPass {
   MachineRegionInfo RI;
 
 public:

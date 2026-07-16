@@ -43,24 +43,7 @@ public:
 
   /// Shared cache utilities
   static SharedCacheImageInfo
-  GetSharedCacheImageInfo(ConstString filepath,
-                          lldb::SymbolSharedCacheUse sc_mode);
-  static SharedCacheImageInfo
-  GetSharedCacheImageInfo(const UUID &uuid, lldb::SymbolSharedCacheUse sc_mode);
-
-  static SharedCacheImageInfo
-  GetSharedCacheImageInfo(ConstString filepath, const UUID &sc_uuid,
-                          lldb::SymbolSharedCacheUse sc_mode);
-  static SharedCacheImageInfo
-  GetSharedCacheImageInfo(const UUID &uuid, const UUID &sc_uuid,
-                          lldb::SymbolSharedCacheUse sc_mode);
-
-  static bool SharedCacheIndexFiles(FileSpec &filepath, UUID &uuid,
-                                    lldb::SymbolSharedCacheUse sc_mode);
-
-  /// Check whether a bundle at the given path has a valid code signature that
-  /// chains to a trusted anchor in the system trust store.
-  static bool IsBundleCodeSignTrusted(const FileSpec &bundle_path);
+  GetSharedCacheImageInfo(llvm::StringRef image_name);
 
 protected:
   static bool ComputeSupportExeDirectory(FileSpec &file_spec);

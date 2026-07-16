@@ -13,6 +13,7 @@
 #include "mlir/Conversion/GPUToNVVM/GPUToNVVMPass.h"
 #include "mlir/Conversion/GPUToROCDL/GPUToROCDLPass.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
+#include "mlir/Conversion/NVGPUToNVVM/NVGPUToNVVM.h"
 #include "mlir/Dialect/AMDGPU/IR/AMDGPUDialect.h"
 #include "mlir/Dialect/AMDGPU/Utils/Chipset.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -62,7 +63,11 @@ using namespace mlir::transform::gpu;
 void transform::ApplyGPUToNVVMConversionPatternsOp::populatePatterns(
     TypeConverter &typeConverter, RewritePatternSet &patterns) {
   auto &llvmTypeConverter = static_cast<LLVMTypeConverter &>(typeConverter);
-  configureGpuToNVVMTypeConverter(llvmTypeConverter);
+  nvgpu::populateCommonGPUTypeAndAttributeConversions(llvmTypeConverter);
+  // Used in GPUToNVVM/WmmaOpsToNvvm.cpp so attaching here for now.
+  // TODO: We should have a single to_nvvm_type_converter.
+  llvmTypeConverter.addConversion(
+      [&](MMAMatrixType type) -> Type { return convertMMAToLLVMType(type); });
   // Set higher benefit, so patterns will run before generic LLVM lowering.
   populateGpuToNVVMConversionPatterns(llvmTypeConverter, patterns,
                                       getBenefit());
@@ -741,10 +746,6 @@ static DiagnosedSilenceableFailure checkMappingSpec(
     std::optional<TransformOpInterface> transformOp, scf::ForallOp forallOp,
     ArrayRef<int64_t> numParallelIterations, ArrayRef<int64_t> blockOrGridSizes,
     int factor, bool useLinearMapping = false) {
-  if (llvm::any_of(blockOrGridSizes, [](int64_t i) { return i <= 0; })) {
-    return definiteFailureHelper(transformOp, forallOp,
-                                 "block/grid sizes must be strictly positive");
-  }
   if (!useLinearMapping && blockOrGridSizes.front() % factor != 0) {
     auto diag = definiteFailureHelper(
         transformOp, forallOp,
@@ -752,23 +753,15 @@ static DiagnosedSilenceableFailure checkMappingSpec(
             Twine(factor));
     return diag;
   }
-  bool hasZeroParallelIteration =
-      llvm::any_of(numParallelIterations, [](int64_t i) { return i == 0; });
-  // `computeProduct` requires strictly positive inputs, so handle the
-  // zero-iteration case explicitly to avoid asserting on valid degenerate
-  // loop bounds.
-  int64_t requiredResourceCount =
-      hasZeroParallelIteration ? 0
-                               : computeProduct(numParallelIterations) * factor;
-  int64_t availableResourceCount = computeProduct(blockOrGridSizes);
-  if (requiredResourceCount > availableResourceCount) {
+  if (computeProduct(numParallelIterations) * factor >
+      computeProduct(blockOrGridSizes)) {
     auto diag = definiteFailureHelper(
         transformOp, forallOp,
         Twine("the number of required parallel resources (blocks or "
               "threads) ") +
-            Twine(requiredResourceCount) +
+            Twine(computeProduct(numParallelIterations) * factor) +
             " overflows the number of available resources " +
-            Twine(availableResourceCount));
+            Twine(computeProduct(blockOrGridSizes)));
     return diag;
   }
   return DiagnosedSilenceableFailure::success();

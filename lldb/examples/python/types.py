@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 # ----------------------------------------------------------------------
 # Be sure to add the python path that points to the LLDB shared library.
@@ -9,7 +9,6 @@
 #   (lldb) command script import /path/to/cmdtemplate.py
 # ----------------------------------------------------------------------
 
-import lldb
 import platform
 import os
 import re
@@ -300,7 +299,7 @@ def verify_type_recursive(
     return (prev_end_offset, padding)
 
 
-def check_padding_command(debugger, command, exe_ctx, result, internal_dict):
+def check_padding_command(debugger, command, result, dict):
     # Use the Shell Lexer to properly parse up command options just like a
     # shell would
     command_args = shlex.split(command)
@@ -314,11 +313,11 @@ def check_padding_command(debugger, command, exe_ctx, result, internal_dict):
         # returning a string is the same as returning an error whose
         # description is the string
         return "option parsing failed"
-    verify_types(exe_ctx.target, options)
+    verify_types(debugger.GetSelectedTarget(), options)
 
 
 @lldb.command("parse_all_struct_class_types")
-def parse_all_struct_class_types(debugger, command, result, internal_dict):
+def parse_all_struct_class_types(debugger, command, result, dict):
     command_args = shlex.split(command)
     for f in command_args:
         error = lldb.SBError()
@@ -344,7 +343,7 @@ def verify_types(target, options):
             modules.append(module)
     else:
         for module_name in options.modules:
-            module = target.module[module_name]
+            module = lldb.target.module[module_name]
             if module:
                 modules.append(module)
 

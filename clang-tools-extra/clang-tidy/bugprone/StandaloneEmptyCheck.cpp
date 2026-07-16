@@ -129,13 +129,14 @@ void StandaloneEmptyCheck::check(const MatchFinder::MatchResult &Result) {
     auto Candidates = HeuristicResolver(Context).lookupDependentName(
         MemberCall->getRecordDecl(), Name, [](const NamedDecl *ND) {
           return isa<CXXMethodDecl>(ND) &&
-                 cast<CXXMethodDecl>(ND)->getMinRequiredArguments() == 0 &&
-                 !cast<CXXMethodDecl>(ND)->isConst();
+                 llvm::cast<CXXMethodDecl>(ND)->getMinRequiredArguments() ==
+                     0 &&
+                 !llvm::cast<CXXMethodDecl>(ND)->isConst();
         });
 
     const bool HasClear = !Candidates.empty();
     if (HasClear) {
-      const auto *Clear = cast<CXXMethodDecl>(Candidates.at(0));
+      const auto *Clear = llvm::cast<CXXMethodDecl>(Candidates.at(0));
       const QualType RangeType =
           MemberCall->getImplicitObjectArgument()->getType();
       const bool QualifierIncompatible =
@@ -178,14 +179,15 @@ void StandaloneEmptyCheck::check(const MatchFinder::MatchResult &Result) {
     auto Candidates = HeuristicResolver(Context).lookupDependentName(
         ArgRecordDecl, Name, [](const NamedDecl *ND) {
           return isa<CXXMethodDecl>(ND) &&
-                 cast<CXXMethodDecl>(ND)->getMinRequiredArguments() == 0 &&
-                 !cast<CXXMethodDecl>(ND)->isConst();
+                 llvm::cast<CXXMethodDecl>(ND)->getMinRequiredArguments() ==
+                     0 &&
+                 !llvm::cast<CXXMethodDecl>(ND)->isConst();
         });
 
     const bool HasClear = !Candidates.empty();
 
     if (HasClear) {
-      const auto *Clear = cast<CXXMethodDecl>(Candidates.at(0));
+      const auto *Clear = llvm::cast<CXXMethodDecl>(Candidates.at(0));
       const bool QualifierIncompatible =
           (!Clear->isVolatile() && Arg->getType().isVolatileQualified()) ||
           Arg->getType().isConstQualified();
@@ -199,7 +201,7 @@ void StandaloneEmptyCheck::check(const MatchFinder::MatchResult &Result) {
             SourceRange(NonMemberLoc, NonMemberEndLoc);
         diag(NonMemberLoc,
              "ignoring the result of '%0'; did you mean 'clear()'?")
-            << dyn_cast<NamedDecl>(NonMemberCall->getCalleeDecl())
+            << llvm::dyn_cast<NamedDecl>(NonMemberCall->getCalleeDecl())
                    ->getQualifiedNameAsString()
             << FixItHint::CreateReplacement(ReplacementRange, ReplacementText);
         return;
@@ -207,7 +209,7 @@ void StandaloneEmptyCheck::check(const MatchFinder::MatchResult &Result) {
     }
 
     diag(NonMemberLoc, "ignoring the result of '%0'")
-        << dyn_cast<NamedDecl>(NonMemberCall->getCalleeDecl())
+        << llvm::dyn_cast<NamedDecl>(NonMemberCall->getCalleeDecl())
                ->getQualifiedNameAsString();
   }
 }

@@ -47,10 +47,7 @@ public:
   /// Invalidate dominance info. This can be used by clients that make major
   /// changes to the CFG and don't have a good way to update it.
   void invalidate();
-
-  /// Invalidate dominance info of the \p region, if \p recursive is true, it
-  /// invalidates the dominance information of child regions.
-  void invalidate(Region *region, bool recursive = true);
+  void invalidate(Region *region);
 
   /// Finds the nearest common dominator block for the two given blocks a
   /// and b. If no common dominator can be found, this function will return

@@ -105,7 +105,6 @@
       <item> noimplicitfloat </item>
       <item> noinline </item>
       <item> nomerge </item>
-      <item> nooutline </item>
       <item> noprofile </item>
       <item> noredzone </item>
       <item> noreturn </item>

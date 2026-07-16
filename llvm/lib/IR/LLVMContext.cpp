@@ -268,6 +268,8 @@ void LLVMContext::diagnose(const DiagnosticInfo &DI) {
   errs() << getDiagnosticMessagePrefix(DI.getSeverity()) << ": ";
   DI.print(DP);
   errs() << "\n";
+  if (DI.getSeverity() == DS_Error)
+    exit(1);
 }
 
 //===----------------------------------------------------------------------===//

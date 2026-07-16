@@ -37,10 +37,10 @@ constexpr auto checkEndOfKnownStmt{recovery(atEndOfStmt, SkipTo<'\n'>{})};
 constexpr auto endOfLine{consumedAllInput ||
     withMessage("expected end of line"_err_en_US, "\n"_ch >> ok)};
 
-constexpr auto semicolons{";"_ch >> skipMany(";"_tok) / space};
+constexpr auto semicolons{";"_ch >> skipMany(";"_tok) / space / maybe("\n"_ch)};
 constexpr auto endOfStmt{
     space >> withMessage("expected end of statement"_err_en_US,
-                 (semicolons / maybe(endOfLine)) || endOfLine)};
+                 semicolons || endOfLine)};
 constexpr auto skipToNextLineIfAny{consumedAllInput || SkipPast<'\n'>{}};
 constexpr auto forceEndOfStmt{recovery(endOfStmt, skipToNextLineIfAny)};
 

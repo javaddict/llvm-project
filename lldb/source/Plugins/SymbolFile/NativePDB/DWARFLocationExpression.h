@@ -12,7 +12,6 @@
 #include "lldb/lldb-forward.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/DebugInfo/CodeView/CodeView.h"
-#include "llvm/Support/Error.h"
 #include <map>
 
 namespace llvm {
@@ -40,20 +39,12 @@ MakeEnregisteredLocationExpression(llvm::codeview::RegisterId reg,
 DWARFExpression MakeRegRelLocationExpression(llvm::codeview::RegisterId reg,
                                              int32_t offset,
                                              lldb::ModuleSP module);
-DWARFExpression
-MakeRegRelIndirLocationExpression(llvm::codeview::RegisterId reg,
-                                  int32_t offset, int32_t offset_in_udt,
-                                  lldb::ModuleSP module);
 DWARFExpression MakeVFrameRelLocationExpression(llvm::StringRef fpo_program,
                                                 int32_t offset,
                                                 lldb::ModuleSP module);
-DWARFExpression
-MakeVFrameRelIndirLocationExpression(llvm::StringRef fpo_program,
-                                     int32_t offset, int32_t offset_in_udt,
-                                     lldb::ModuleSP module);
 DWARFExpression MakeGlobalLocationExpression(uint16_t section, uint32_t offset,
                                              lldb::ModuleSP module);
-llvm::Expected<DWARFExpression> MakeConstantLocationExpression(
+DWARFExpression MakeConstantLocationExpression(
     llvm::codeview::TypeIndex underlying_ti, llvm::pdb::TpiStream &tpi,
     const llvm::APSInt &constant, lldb::ModuleSP module);
 DWARFExpression MakeEnregisteredLocationExpressionForComposite(

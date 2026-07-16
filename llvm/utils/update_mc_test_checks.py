@@ -3,7 +3,7 @@
 A test update script.  This script is a utility to update LLVM 'llvm-mc' based test cases with new FileCheck patterns.
 """
 
-from __future__ import annotations, print_function
+from __future__ import print_function
 
 from sys import stderr
 from traceback import print_exc
@@ -91,15 +91,15 @@ def getErrString(err):
 def getOutputString(out):
     if not out:
         return ""
-    lines = []
+    output = ""
 
     for line in out.splitlines():
         if OUTPUT_SKIPPED_RE.search(line):
             continue
         if line.strip("\t ") == "":
             continue
-        lines.append(line.lstrip("\t "))
-    return "\n".join(lines)
+        output += line.lstrip("\t ")
+    return output
 
 
 def should_add_line_to_output(input_line, prefix_set, mc_mode):
@@ -112,20 +112,23 @@ def should_add_line_to_output(input_line, prefix_set, mc_mode):
         )
 
 
-def getStdCheckLines(prefix: str, output: str, mc_mode) -> list[str]:
-    o = []
-    for i, line in enumerate(output.splitlines()):
-        maybe_next = "-NEXT" if i > 0 else ""
-        # Add an extra end-of-line check for --show-inst MCInst lines to
-        # ensure we matched the full instruction name and not just a prefix.
-        if line.startswith("# <MCInst "):
-            line += "{{$}}"
-        o.append(f"{COMMENT[mc_mode]} {prefix}{maybe_next}: {line}")
+def getStdCheckLine(prefix, output, mc_mode):
+    o = ""
+    for line in output.splitlines():
+        o += COMMENT[mc_mode] + " " + prefix + ": " + line + "\n"
     return o
 
 
-def getErrCheckLines(prefix: str, output: str, mc_mode, line_offset=1) -> list[str]:
-    return [f"{COMMENT[mc_mode]} {prefix}: :[[@LINE-{line_offset}]]{output}"]
+def getErrCheckLine(prefix, output, mc_mode, line_offset=1):
+    return (
+        COMMENT[mc_mode]
+        + " "
+        + prefix
+        + ": "
+        + ":[[@LINE-{}]]".format(line_offset)
+        + output
+        + "\n"
+    )
 
 
 def parse_token_defs(test_info):
@@ -316,7 +319,6 @@ def update_test(ti: common.TestInfo):
     used_prefixes = set()
     prefix_set = set([prefix for p in run_list for prefix in p[0]])
     common.debug("Rewriting FileCheck prefixes:", str(prefix_set))
-    ginfo = common.make_asm_generalizer(version=1)
 
     for test_id, input_line in enumerate(testlines):
         # a {prefix : output, [runid] } dict
@@ -372,22 +374,18 @@ def update_test(ti: common.TestInfo):
 
         # Generate check lines in alphabetical order.
         check_lines = []
-        vars_seen = {prefix: dict() for prefix in selected_prefixes}
-        global_vars_seen = {prefix: dict() for prefix in selected_prefixes}
         for prefix in sorted(selected_prefixes):
             o, run_ids = p_dict[prefix]
             used_prefixes.add(prefix)
 
             if hasErr(o):
                 line_offset = len(check_lines) + 1
-                checks = getErrCheckLines(prefix, o, mc_mode, line_offset)
+                check = getErrCheckLine(prefix, o, mc_mode, line_offset)
             else:
-                checks = getStdCheckLines(prefix, o, mc_mode)
-                checks = common.generalize_check_lines(
-                    checks, ginfo, vars_seen[prefix], global_vars_seen[prefix]
-                )
+                check = getStdCheckLine(prefix, o, mc_mode)
 
-            check_lines.extend(checks)
+            if check:
+                check_lines.append(check.strip())
 
         generated_prefixes[input_line] = "\n".join(check_lines)
 

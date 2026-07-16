@@ -886,20 +886,16 @@ public:
 
 class Region : public RegionBase<RegionTraits<Function>> {
 public:
-  LLVM_ABI Region(BasicBlock *Entry, BasicBlock *Exit, RegionInfo *RI,
-                  DominatorTree *DT, Region *Parent = nullptr);
-  LLVM_ABI ~Region();
+  Region(BasicBlock *Entry, BasicBlock *Exit, RegionInfo *RI, DominatorTree *DT,
+         Region *Parent = nullptr);
+  ~Region();
 
   bool operator==(const RegionNode &RN) const {
     return &RN == reinterpret_cast<const RegionNode *>(this);
   }
 };
 
-extern template class LLVM_TEMPLATE_ABI RegionBase<RegionTraits<Function>>;
-extern template class LLVM_TEMPLATE_ABI RegionNodeBase<RegionTraits<Function>>;
-extern template class LLVM_TEMPLATE_ABI RegionInfoBase<RegionTraits<Function>>;
-
-class LLVM_ABI RegionInfo : public RegionInfoBase<RegionTraits<Function>> {
+class RegionInfo : public RegionInfoBase<RegionTraits<Function>> {
 public:
   using Base = RegionInfoBase<RegionTraits<Function>>;
 
@@ -941,7 +937,7 @@ public:
 #endif
 };
 
-class LLVM_ABI RegionInfoPass : public FunctionPass {
+class RegionInfoPass : public FunctionPass {
   RegionInfo RI;
 
 public:
@@ -974,23 +970,25 @@ class RegionInfoAnalysis : public AnalysisInfoMixin<RegionInfoAnalysis> {
 public:
   using Result = RegionInfo;
 
-  LLVM_ABI RegionInfo run(Function &F, FunctionAnalysisManager &AM);
+  RegionInfo run(Function &F, FunctionAnalysisManager &AM);
 };
 
 /// Printer pass for the \c RegionInfo.
-class RegionInfoPrinterPass
-    : public RequiredPassInfoMixin<RegionInfoPrinterPass> {
+class RegionInfoPrinterPass : public PassInfoMixin<RegionInfoPrinterPass> {
   raw_ostream &OS;
 
 public:
-  LLVM_ABI explicit RegionInfoPrinterPass(raw_ostream &OS);
+  explicit RegionInfoPrinterPass(raw_ostream &OS);
 
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 };
 
 /// Verifier pass for the \c RegionInfo.
-struct RegionInfoVerifierPass : RequiredPassInfoMixin<RegionInfoVerifierPass> {
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+struct RegionInfoVerifierPass : PassInfoMixin<RegionInfoVerifierPass> {
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 
 template <>
@@ -1021,6 +1019,10 @@ inline raw_ostream &operator<<(raw_ostream &OS,
   else
     return OS << Node.template getNodeAs<BlockT>()->getName();
 }
+
+extern template class RegionBase<RegionTraits<Function>>;
+extern template class RegionNodeBase<RegionTraits<Function>>;
+extern template class RegionInfoBase<RegionTraits<Function>>;
 
 } // end namespace llvm
 

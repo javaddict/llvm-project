@@ -58,5 +58,3 @@ CheckOptions:
     value:           camelBack
   - key:             readability-identifier-naming.VariableCase
     value:           camelBack
-  - key:             modernize-use-using.IgnoreExternC
-    value:           true

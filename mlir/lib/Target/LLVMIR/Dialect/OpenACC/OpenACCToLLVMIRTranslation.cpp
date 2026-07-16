@@ -383,7 +383,7 @@ static LogicalResult convertDataOp(acc::DataOp &op,
 
   auto afterDataRegion = builder.saveIP();
 
-  llvm::UncondBrInst *sourceTerminator = builder.CreateBr(entryBlock);
+  llvm::BranchInst *sourceTerminator = builder.CreateBr(entryBlock);
 
   builder.restoreIP(afterDataRegion);
   llvm::BasicBlock *endDataBlock = llvm::BasicBlock::Create(

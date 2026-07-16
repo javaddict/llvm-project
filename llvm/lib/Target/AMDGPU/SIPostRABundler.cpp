@@ -29,7 +29,9 @@ public:
   static char ID;
 
 public:
-  SIPostRABundlerLegacy() : MachineFunctionPass(ID) {}
+  SIPostRABundlerLegacy() : MachineFunctionPass(ID) {
+    initializeSIPostRABundlerLegacyPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 

@@ -1,9 +1,14 @@
 set(LLVM_LINK_COMPONENTS
+  AllTargetsCodeGens
+  AllTargetsDescs
+  AllTargetsInfos
   DebugInfoDWARF
   DWP
+  MC
   Object
   Option
   Support
+  TargetParser
   )
 
 set(LLVM_TARGET_DEFINITIONS Opts.td)

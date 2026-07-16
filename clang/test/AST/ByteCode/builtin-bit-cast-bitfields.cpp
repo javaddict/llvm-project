@@ -141,10 +141,12 @@ namespace BitFields {
                                                  // expected-note {{indeterminate value can only initialize an object of type 'unsigned char' or 'std::byte'; 'byte' is invalid}}
 
     struct M {
-      unsigned char mem[sizeof(BF)]; // expected-note {{subobject declared here}}
+      // expected-note@+1 {{subobject declared here}}
+      unsigned char mem[sizeof(BF)];
     };
-    constexpr M m = bit_cast<M>(bf); // expected-error {{must be initialized by a constant expression}} \
-                                     // expected-note {{not initialized}}
+    // expected-error@+2 {{initialized by a constant expression}}
+    // expected-note@+1 {{not initialized}}
+    constexpr M m = bit_cast<M>(bf);
 
     constexpr auto f = []() constexpr {
       // bits<24, unsigned int, LITTLE_END ? 0 : 8> B = {0xc0ffee};
@@ -154,9 +156,9 @@ namespace BitFields {
 
     static_assert(f()[0] + f()[1] + f()[2] == 0xc0 + 0xff + 0xee);
     {
-      constexpr auto _bad = f()[3]; // expected-error {{initialized by a constant expression}} \
-                                    // expected-note {{in call to}} \
-                                    // expected-note {{temporary created here}}
+      // expected-error@+2 {{initialized by a constant expression}}
+      // expected-note@+1 {{in call to}}
+      constexpr auto _bad = f()[3];
     }
 
     struct B {
@@ -171,9 +173,9 @@ namespace BitFields {
     };
     static_assert(g().s0 + g().s1 + g().b0 + g().b1 == 0xc0 + 0xff + 0xe + 0xe);
     {
-      constexpr auto _bad = g().b2; // expected-error {{initialized by a constant expression}} \
-                                    // expected-note {{read of uninitialized object is not allowed in a constant expression}} \
-                                    // expected-note {{temporary created here}}
+      // expected-error@+2 {{initialized by a constant expression}}
+      // expected-note@+1 {{read of uninitialized object is not allowed in a constant expression}}
+      constexpr auto _bad = g().b2;
     }
   }
 }

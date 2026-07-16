@@ -2,12 +2,11 @@
 #include "benchmark/benchmark.h"
 #include "output_test.h"
 
-namespace {
 // ========================================================================= //
 // ------------------------ Testing Basic Output --------------------------- //
 // ========================================================================= //
 
-void BM_ExplicitRepetitions(benchmark::State& state) {
+static void BM_ExplicitRepetitions(benchmark::State& state) {
   for (auto _ : state) {
   }
 }
@@ -109,7 +108,7 @@ ADD_CASES(TC_CSVOut,
 // ------------------------ Testing Basic Output --------------------------- //
 // ========================================================================= //
 
-void BM_ImplicitRepetitions(benchmark::State& state) {
+static void BM_ImplicitRepetitions(benchmark::State& state) {
   for (auto _ : state) {
   }
 }
@@ -207,13 +206,9 @@ ADD_CASES(TC_CSVOut, {{"^\"BM_ImplicitRepetitions\",%csv_report$"}});
 ADD_CASES(TC_CSVOut, {{"^\"BM_ImplicitRepetitions_mean\",%csv_report$"}});
 ADD_CASES(TC_CSVOut, {{"^\"BM_ImplicitRepetitions_median\",%csv_report$"}});
 ADD_CASES(TC_CSVOut, {{"^\"BM_ImplicitRepetitions_stddev\",%csv_report$"}});
-}  // end namespace
 
 // ========================================================================= //
 // --------------------------- TEST CASES END ------------------------------ //
 // ========================================================================= //
 
-int main(int argc, char* argv[]) {
-  benchmark::MaybeReenterWithoutASLR(argc, argv);
-  RunOutputTests(argc, argv);
-}
+int main(int argc, char* argv[]) { RunOutputTests(argc, argv); }

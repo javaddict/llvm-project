@@ -12,7 +12,6 @@
 #include "llvm/Support/DataExtractor.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
-#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cinttypes>
 #include <cstdint>
@@ -114,8 +113,7 @@ bool DWARFUnitIndex::Header::parse(DataExtractor IndexData,
 }
 
 void DWARFUnitIndex::Header::dump(raw_ostream &OS) const {
-  OS << formatv("version = {0}, units = {1}, slots = {2}\n\n", Version,
-                NumUnits, NumBuckets);
+  OS << format("version = %u, units = %u, slots = %u\n\n", Version, NumUnits, NumBuckets);
 }
 
 bool DWARFUnitIndex::parse(DataExtractor IndexData) {
@@ -228,7 +226,7 @@ void DWARFUnitIndex::dump(raw_ostream &OS) const {
          << left_justify(Name,
                          Kind == DWARFSectionKind::DW_SECT_INFO ? 40 : 24);
     else
-      OS << formatv(" Unknown: {0,-15}", RawSectionIds[i]);
+      OS << format(" Unknown: %-15" PRIu32, RawSectionIds[i]);
   }
   OS << "\n----- ------------------";
   for (unsigned i = 0; i != Header.NumColumns; ++i) {
@@ -243,17 +241,19 @@ void DWARFUnitIndex::dump(raw_ostream &OS) const {
   for (unsigned i = 0; i != Header.NumBuckets; ++i) {
     auto &Row = Rows[i];
     if (auto *Contribs = Row.Contributions.get()) {
-      OS << formatv("{0,5} {1:x16} ", i + 1, Row.Signature);
+      OS << format("%5u 0x%016" PRIx64 " ", i + 1, Row.Signature);
       for (unsigned i = 0; i != Header.NumColumns; ++i) {
         auto &Contrib = Contribs[i];
         DWARFSectionKind Kind = ColumnKinds[i];
         if (Kind == DWARFSectionKind::DW_SECT_INFO ||
             Kind == DWARFSectionKind::DW_SECT_EXT_TYPES)
-          OS << formatv("[{0:x16}, {1:x16}) ", Contrib.getOffset(),
-                        Contrib.getOffset() + Contrib.getLength());
+          OS << format("[0x%016" PRIx64 ", 0x%016" PRIx64 ") ",
+                       Contrib.getOffset(),
+                       Contrib.getOffset() + Contrib.getLength());
         else
-          OS << formatv("[{0:x8}, {1:x8}) ", Contrib.getOffset32(),
-                        Contrib.getOffset32() + Contrib.getLength32());
+          OS << format("[0x%08" PRIx32 ", 0x%08" PRIx32 ") ",
+                       Contrib.getOffset32(),
+                       Contrib.getOffset32() + Contrib.getLength32());
       }
       OS << '\n';
     }

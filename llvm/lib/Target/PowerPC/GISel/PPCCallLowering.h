@@ -45,8 +45,7 @@ public:
 
 private:
   void assignValueToReg(Register ValVReg, Register PhysReg,
-                        const CCValAssign &VA,
-                        ISD::ArgFlagsTy Flags = {}) override;
+                        const CCValAssign &VA) override;
 
   void assignValueToAddress(Register ValVReg, Register Addr, LLT MemTy,
                             const MachinePointerInfo &MPO,

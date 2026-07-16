@@ -436,7 +436,7 @@ isl::union_map ZoneAlgorithm::getWrittenValue(MemoryAccess *MA,
   if (auto *Memset = dyn_cast<MemSetInst>(AccInst)) {
     auto *WrittenConstant = dyn_cast<Constant>(Memset->getValue());
     Type *Ty = MA->getLatestScopArrayInfo()->getElementType();
-    if (WrittenConstant && WrittenConstant->isNullValue()) {
+    if (WrittenConstant && WrittenConstant->isZeroValue()) {
       Constant *Zero = Constant::getNullValue(Ty);
       return makeNormalizedValInst(Zero, Stmt, L);
     }
@@ -855,10 +855,7 @@ static isl::union_map normalizeValInst(isl::union_map Input,
 
     // Instructions within the SCoP are always wrapped. Non-wrapped tuples
     // are therefore invariant in the SCoP and don't need normalization.
-    auto IsWrapping = RangeSpace.is_wrapping();
-    if (IsWrapping.is_error())
-      return {};
-    if (!IsWrapping) {
+    if (!RangeSpace.is_wrapping()) {
       Result = Result.unite(Map);
       continue;
     }

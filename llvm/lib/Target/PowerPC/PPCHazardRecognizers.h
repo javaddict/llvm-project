@@ -29,8 +29,7 @@ class PPCDispatchGroupSBHazardRecognizer : public ScoreboardHazardRecognizer {
 
   bool isLoadAfterStore(SUnit *SU);
   bool isBCTRAfterSet(SUnit *SU);
-  bool mustComeFirst(const MCInstrDesc *MCID, unsigned &NSlots) const;
-
+  bool mustComeFirst(const MCInstrDesc *MCID, unsigned &NSlots);
 public:
   PPCDispatchGroupSBHazardRecognizer(const InstrItineraryData *ItinData,
                          const ScheduleDAG *DAG_) :
@@ -38,7 +37,7 @@ public:
     CurSlots(0), CurBranches(0) {}
 
   HazardType getHazardType(SUnit *SU, int Stalls) override;
-  bool ShouldPreferAnother(SUnit *SU) const override;
+  bool ShouldPreferAnother(SUnit* SU) override;
   unsigned PreEmitNoops(SUnit *SU) override;
   void EmitInstruction(SUnit *SU) override;
   void AdvanceCycle() override;

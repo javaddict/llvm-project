@@ -1,0 +1,156 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=legalizer %s -o - | FileCheck %s
+
+# Test that 32-bit integer arithmetic operations are legal
+# These should pass through the legalizer unchanged
+
+---
+name:            test_add_s32
+legalized:       false
+# CHECK-LABEL: name: test_add_s32
+# CHECK: %{{[0-9]+}}:_(s32) = G_ADD
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_ADD %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_sub_s32
+legalized:       false
+# CHECK-LABEL: name: test_sub_s32
+# CHECK: %{{[0-9]+}}:_(s32) = G_SUB
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_SUB %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_mul_s32
+legalized:       false
+# CHECK-LABEL: name: test_mul_s32
+# CHECK: %{{[0-9]+}}:_(s32) = G_MUL
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_MUL %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_and_s32
+legalized:       false
+# CHECK-LABEL: name: test_and_s32
+# CHECK: %{{[0-9]+}}:_(s32) = G_AND
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_AND %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_or_s32
+legalized:       false
+# CHECK-LABEL: name: test_or_s32
+# CHECK: %{{[0-9]+}}:_(s32) = G_OR
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_OR %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_xor_s32
+legalized:       false
+# CHECK-LABEL: name: test_xor_s32
+# CHECK: %{{[0-9]+}}:_(s32) = G_XOR
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_XOR %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_shl_s32
+legalized:       false
+# CHECK-LABEL: name: test_shl_s32
+# CHECK: %{{[0-9]+}}:_(s32) = G_SHL
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_SHL %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_lshr_s32
+legalized:       false
+# CHECK-LABEL: name: test_lshr_s32
+# CHECK: %{{[0-9]+}}:_(s32) = G_LSHR
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_LSHR %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_ashr_s32
+legalized:       false
+# CHECK-LABEL: name: test_ashr_s32
+# CHECK: %{{[0-9]+}}:_(s32) = G_ASHR
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_ASHR %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_icmp_s32
+legalized:       false
+# CHECK-LABEL: name: test_icmp_s32
+# CHECK: %{{[0-9]+}}:_(s1) = G_ICMP intpred(sgt)
+# CHECK: G_SELECT
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(sgt), %0(s32), %1(s32)
+    %3:_(s32) = G_SELECT %2(s1), %0, %1
+    $r0 = COPY %3(s32)
+    RET implicit $r0, implicit $r15
+...

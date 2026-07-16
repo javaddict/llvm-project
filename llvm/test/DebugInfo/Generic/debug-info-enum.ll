@@ -9,8 +9,10 @@
 ; RUN: llvm-dwarfdump -debug-info %t.o | FileCheck %s --check-prefixes=CHECK,CHECK-DW4,CHECK-TYPE
 ; RUN: llc -debugger-tune=gdb -dwarf-version=3 -filetype=obj -o %t.o < %s
 ; RUN: llvm-dwarfdump -debug-info %t.o | FileCheck %s --check-prefixes=CHECK,CHECK-TYPE
-
-; This file is also used by the dwarf-version=2 tests in debug-info-enum-dwarf2.ll.
+; RUN: llc -debugger-tune=gdb -dwarf-version=2 -filetype=obj -o %t.o < %s
+; RUN: llvm-dwarfdump -debug-info %t.o | FileCheck %s --check-prefixes=CHECK,CHECK-TYPE
+; RUN: llc -debugger-tune=gdb -dwarf-version=2 -strict-dwarf=true -filetype=obj -o %t.o < %s
+; RUN: llvm-dwarfdump -debug-info %t.o | FileCheck %s --check-prefixes=CHECK,CHECK-DW2-STRICT
 
 @x0 = global i8 0, align 1, !dbg !0
 @x1 = global i8 0, align 1, !dbg !46

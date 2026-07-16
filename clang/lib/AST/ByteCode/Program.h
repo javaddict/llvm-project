@@ -54,8 +54,6 @@ public:
     }
   }
 
-  const Context &getContext() const { return Ctx; }
-
   /// Marshals a native pointer to an ID for embedding in bytecode.
   unsigned getOrCreateNativePointer(const void *Ptr);
 
@@ -88,14 +86,13 @@ public:
                                    const Expr *Init = nullptr);
 
   /// Returns or creates a dummy value for unknown declarations.
-  unsigned getOrCreateDummy(const DeclTy &D, bool IsConstexprUnknown = false);
+  unsigned getOrCreateDummy(const DeclTy &D);
 
   /// Creates a global and returns its index.
-  UnsignedOrNone createGlobal(const ValueDecl *VD, const Expr *Init,
-                              bool IsConstexprUnknown = false);
+  UnsignedOrNone createGlobal(const ValueDecl *VD, const Expr *Init);
 
   /// Creates a global from a lifetime-extended temporary.
-  UnsignedOrNone createGlobal(const Expr *E, QualType ExprType);
+  UnsignedOrNone createGlobal(const Expr *E);
 
   /// Creates a new function from a code range.
   template <typename... Ts>
@@ -170,7 +167,6 @@ private:
 
   UnsignedOrNone createGlobal(const DeclTy &D, QualType Ty, bool IsStatic,
                               bool IsExtern, bool IsWeak,
-                              bool IsConstexprUnknown,
                               const Expr *Init = nullptr);
 
   /// Reference to the VM context.

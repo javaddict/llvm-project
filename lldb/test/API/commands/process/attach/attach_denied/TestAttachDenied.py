@@ -12,7 +12,6 @@ from lldbsuite.test import lldbutil
 exe_name = "AttachDenied"  # Must match Makefile
 
 
-@skipIfNoSignals
 class AttachDeniedTestCase(TestBase):
     NO_DEBUG_INFO_TESTCASE = True
 

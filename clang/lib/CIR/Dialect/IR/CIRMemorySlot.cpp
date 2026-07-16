@@ -155,8 +155,7 @@ bool cir::CopyOp::canUsesBeRemoved(
   if (getDst() == getSrc())
     return false;
 
-  return getCopySizeInBytes(dataLayout) ==
-         dataLayout.getTypeSize(slot.elemType);
+  return getLength(dataLayout) == dataLayout.getTypeSize(slot.elemType);
 }
 
 //===----------------------------------------------------------------------===//

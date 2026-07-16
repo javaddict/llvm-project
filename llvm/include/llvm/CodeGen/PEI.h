@@ -14,10 +14,12 @@
 namespace llvm {
 
 class PrologEpilogInserterPass
-    : public RequiredPassInfoMixin<PrologEpilogInserterPass> {
+    : public PassInfoMixin<PrologEpilogInserterPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

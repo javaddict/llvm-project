@@ -7,7 +7,7 @@
 
 // UNSUPPORTED: aarch64-unknown-linux-gnu
 // UNSUPPORTED: x86_64-unknown-linux-gnu
-// UNSUPPORTED: intelgpu
+// XFAIL: intelgpu
 
 #include <stdio.h>
 

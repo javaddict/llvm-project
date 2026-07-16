@@ -20,7 +20,6 @@
 #include "lldb/Utility/Log.h"
 #include "lldb/ValueObject/ValueObject.h"
 #include "lldb/ValueObject/ValueObjectConstResult.h"
-#include "llvm/Support/ErrorExtras.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -133,7 +132,8 @@ public:
     }
 
     ValueObjectSP child_sp(struct_sp->GetSyntheticChildAtOffset(
-        child_byte_offset, child_type, true, ConstString(child_name)));
+        child_byte_offset, child_type, true,
+        ConstString(child_name.c_str(), child_name.size())));
 
     return child_sp;
   }
@@ -146,10 +146,11 @@ public:
 
   llvm::Expected<size_t> GetIndexOfChildWithName(ConstString name) override {
     if (!m_block_struct_type.IsValid())
-      return llvm::createStringErrorV("type has no child named '{0}'", name);
+      return llvm::createStringError("Type has no child named '%s'",
+                                     name.AsCString());
 
     const bool omit_empty_base_classes = false;
-    return m_block_struct_type.GetIndexOfChildWithName(name.AsCString(nullptr),
+    return m_block_struct_type.GetIndexOfChildWithName(name.AsCString(),
                                                        omit_empty_base_classes);
   }
 

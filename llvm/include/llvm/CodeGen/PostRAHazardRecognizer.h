@@ -14,10 +14,11 @@
 namespace llvm {
 
 class PostRAHazardRecognizerPass
-    : public RequiredPassInfoMixin<PostRAHazardRecognizerPass> {
+    : public PassInfoMixin<PostRAHazardRecognizerPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

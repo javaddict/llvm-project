@@ -3,7 +3,5 @@
 
 module asm "mov ($foo), %eax"
 
-; ATT:   .att_syntax{{$}}
 ; ATT:   movl ($foo), %eax
-; INTEL: .intel_syntax noprefix{{$}}
 ; INTEL: mov eax, dword ptr [$foo]

@@ -15,15 +15,12 @@
 #define LLVM_LIB_TARGET_AMDGPU_AMDGPUASMPRINTER_H
 
 #include "AMDGPUMCResourceInfo.h"
-#include "AMDGPUResourceUsageAnalysis.h"
-#include "MCTargetDesc/AMDGPUTargetStreamer.h"
 #include "SIProgramInfo.h"
-#include "llvm/ADT/SetVector.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 
 namespace llvm {
 
-class AMDGPUMachineFunctionInfo;
+class AMDGPUMachineFunction;
 class AMDGPUResourceUsageAnalysis;
 class AMDGPUTargetStreamer;
 class MCCodeEmitter;
@@ -76,7 +73,7 @@ private:
                                   const MCExpr *TotalNumVGPR,
                                   const MCExpr *NumSGPR,
                                   const MCExpr *ScratchSize, uint64_t CodeSize,
-                                  const AMDGPUMachineFunctionInfo *MFI);
+                                  const AMDGPUMachineFunction *MFI);
   void emitResourceUsageRemarks(const MachineFunction &MF,
                                 const SIProgramInfo &CurrentProgramInfo,
                                 bool isModuleEntryFunction, bool hasMAIInsts);
@@ -88,13 +85,6 @@ private:
                             const SIProgramInfo &PI) const;
 
   void initTargetStreamer(Module &M);
-
-  void emitAMDGPUInfo(Module &M);
-  void collectCallEdge(const MachineInstr &MI);
-
-  SetVector<std::pair<MCSymbol *, MCSymbol *>> DirectCallEdges;
-
-  SmallVector<AMDGPU::FuncInfo, 8> FunctionInfos;
 
   SmallString<128> getMCExprStr(const MCExpr *Value);
 
@@ -136,7 +126,7 @@ public:
 
   void emitFunctionBodyStart() override;
 
-  void endFunction(const MachineFunction *MF);
+  void emitFunctionBodyEnd() override;
 
   void emitImplicitDef(const MachineInstr *MI) const override;
 

@@ -7,12 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/nexttowardf.h"
-#include "src/__support/math/nexttowardf.h"
+#include "src/__support/FPUtil/ManipulationFunctions.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(float, nexttowardf, (float x, long double y)) {
-  return math::nexttowardf(x, y);
+  // We can reuse the nextafter implementation because the internal nextafter is
+  // templated on the types of the arguments.
+  return fputil::nextafter(x, y);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

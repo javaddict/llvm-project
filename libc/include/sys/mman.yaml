@@ -1,9 +1,6 @@
 header: sys/mman.h
-standards:
-  - posix
-macros:
-  - macro_name: MAP_FAILED
-    macro_header: sys-mman-macros.h
+header_template: mman.h.def
+macros: []
 types:
   - type_name: mode_t
   - type_name: size_t
@@ -13,22 +10,15 @@ objects: []
 functions:
   - name: madvise
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: void *
       - type: size_t
       - type: int
-  - name: memfd_create
-    standards:
-      - linux
-    return_type: int
-    arguments:
-      - type: const char *
-      - type: unsigned int
   - name: mincore
     standards:
-      - linux
+      - Linux
     return_type: int
     arguments:
       - type: void *
@@ -36,14 +26,14 @@ functions:
       - type: unsigned char *
   - name: mlock
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: void *
       - type: size_t
   - name: mlock2
     standards:
-      - linux
+      - Linux
     return_type: int
     arguments:
       - type: void *
@@ -51,13 +41,13 @@ functions:
       - type: unsigned int
   - name: mlockall
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: int
   - name: mmap
     standards:
-      - posix
+      - POSIX
     return_type: void *
     arguments:
       - type: void *
@@ -68,7 +58,7 @@ functions:
       - type: off_t
   - name: mremap
     standards:
-      - posix
+      - POSIX
     return_type: void *
     arguments:
       - type: void *
@@ -78,7 +68,7 @@ functions:
       - type: '...'
   - name: mprotect
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: void *
@@ -86,54 +76,53 @@ functions:
       - type: int
   - name: msync
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: void *
       - type: size_t
       - type: int
   - name: munlock
-    standards:
-      - posix
+    standards: POSIX
     return_type: int
     arguments:
       - type: void *
       - type: size_t
   - name: munlockall
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: void
   - name: munmap
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: void *
       - type: size_t
   - name: pkey_alloc
     standards:
-      - linux
+      - Linux
     return_type: int
     arguments:
       - type: unsigned int
       - type: unsigned int
   - name: pkey_free
     standards:
-      - linux
+      - Linux
     return_type: int
     arguments:
       - type: int
   - name: pkey_get
     standards:
-      - gnu
+      - GNU
     return_type: int
     arguments:
       - type: int
   - name: pkey_mprotect
     standards:
-      - linux
+      - Linux
     return_type: int
     arguments:
       - type: void *
@@ -142,14 +131,14 @@ functions:
       - type: int
   - name: pkey_set
     standards:
-      - gnu
+      - GNU
     return_type: int
     arguments:
       - type: int
       - type: unsigned int
   - name: posix_madvise
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: void *
@@ -157,7 +146,7 @@ functions:
       - type: int
   - name: remap_file_pages
     standards:
-      - linux
+      - Linux
     return_type: int
     arguments:
       - type: void *
@@ -167,7 +156,7 @@ functions:
       - type: int
   - name: shm_open
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: const char *
@@ -175,7 +164,7 @@ functions:
       - type: mode_t
   - name: shm_unlink
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: const char *

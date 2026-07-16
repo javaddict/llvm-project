@@ -1,4 +1,4 @@
-// RUN: %check_clang_tidy %s readability-uppercase-literal-suffix %t -- -- -target x86_64-pc-linux-gnu
+// RUN: %check_clang_tidy %s readability-uppercase-literal-suffix %t -- -- -target x86_64-pc-linux-gnu -I %clang_tidy_headers
 
 #include "integral_constant.h"
 

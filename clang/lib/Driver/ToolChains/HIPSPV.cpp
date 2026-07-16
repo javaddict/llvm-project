@@ -60,8 +60,7 @@ void HIPSPV::Linker::constructLinkAndEmitSpirvCommand(
   ArgStringList LinkArgs{};
 
   for (auto Input : Inputs)
-    if (Input.isFilename())
-      LinkArgs.push_back(Input.getFilename());
+    LinkArgs.push_back(Input.getFilename());
 
   // Add static device libraries using the common helper function.
   // This handles unbundling archives (.a) containing bitcode bundles.
@@ -91,27 +90,9 @@ void HIPSPV::Linker::constructLinkAndEmitSpirvCommand(
   }
 
   // Emit SPIR-V binary.
-  llvm::opt::ArgStringList TrArgs;
-  auto T = getToolChain().getTriple();
-  bool HasNoSubArch = T.getSubArch() == llvm::Triple::NoSubArch;
-  if (T.getOS() == llvm::Triple::ChipStar) {
-    // chipStar needs 1.2 for supporting warp-level primitivies via sub-group
-    // extensions.  Strictly put we'd need 1.3 for the standard non-extension
-    // shuffle operations, but it's not supported by any backend driver of the
-    // chipStar.
-    if (HasNoSubArch)
-      TrArgs.push_back("--spirv-max-version=1.2");
-    TrArgs.push_back("--spirv-ext=-all"
-                     // Needed for experimental indirect call support.
-                     ",+SPV_INTEL_function_pointers"
-                     // Needed for shuffles below SPIR-V 1.3
-                     ",+SPV_INTEL_subgroups");
-  } else {
-    if (HasNoSubArch)
-      TrArgs.push_back("--spirv-max-version=1.1");
-    TrArgs.push_back("--spirv-ext=+all");
-  }
 
+  llvm::opt::ArgStringList TrArgs{"--spirv-max-version=1.1",
+                                  "--spirv-ext=+all"};
   InputInfo TrInput = InputInfo(types::TY_LLVM_BC, TempFile, "");
   SPIRV::constructTranslateCommand(C, *this, JA, Output, TrInput, TrArgs);
 }
@@ -135,16 +116,7 @@ void HIPSPV::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
 HIPSPVToolChain::HIPSPVToolChain(const Driver &D, const llvm::Triple &Triple,
                                  const ToolChain &HostTC, const ArgList &Args)
-    : ToolChain(D, Triple, Args), HostTC(&HostTC) {
-  // Lookup binaries into the driver directory, this is used to
-  // discover the clang-offload-bundler executable.
-  getProgramPaths().push_back(getDriver().Dir);
-}
-
-// Non-offloading toolchain. Primaly used by clang-offload-linker.
-HIPSPVToolChain::HIPSPVToolChain(const Driver &D, const llvm::Triple &Triple,
-                                 const ArgList &Args)
-    : ToolChain(D, Triple, Args), HostTC(nullptr) {
+    : ToolChain(D, Triple, Args), HostTC(HostTC) {
   // Lookup binaries into the driver directory, this is used to
   // discover the clang-offload-bundler executable.
   getProgramPaths().push_back(getDriver().Dir);
@@ -153,20 +125,13 @@ HIPSPVToolChain::HIPSPVToolChain(const Driver &D, const llvm::Triple &Triple,
 void HIPSPVToolChain::addClangTargetOptions(
     const llvm::opt::ArgList &DriverArgs, llvm::opt::ArgStringList &CC1Args,
     Action::OffloadKind DeviceOffloadingKind) const {
-
-  if (!HostTC) {
-    assert(DeviceOffloadingKind == Action::OFK_None &&
-           "Need host toolchain for offloading!");
-    return;
-  }
-
-  HostTC->addClangTargetOptions(DriverArgs, CC1Args, DeviceOffloadingKind);
+  HostTC.addClangTargetOptions(DriverArgs, CC1Args, DeviceOffloadingKind);
 
   assert(DeviceOffloadingKind == Action::OFK_HIP &&
          "Only HIP offloading kinds are supported for GPUs.");
 
   CC1Args.append(
-      {"-fcuda-is-device",
+      {"-fcuda-is-device", "-fcuda-allow-variadic-functions",
        // A crude workaround for llvm-spirv which does not handle the
        // autovectorized code well (vector reductions, non-i{8,16,32,64} types).
        // TODO: Allow autovectorization when SPIR-V backend arrives.
@@ -191,37 +156,27 @@ Tool *HIPSPVToolChain::buildLinker() const {
 }
 
 void HIPSPVToolChain::addClangWarningOptions(ArgStringList &CC1Args) const {
-  if (HostTC)
-    HostTC->addClangWarningOptions(CC1Args);
-  ToolChain::addClangWarningOptions(CC1Args);
+  HostTC.addClangWarningOptions(CC1Args);
 }
 
 ToolChain::CXXStdlibType
 HIPSPVToolChain::GetCXXStdlibType(const ArgList &Args) const {
-  if (HostTC)
-    return HostTC->GetCXXStdlibType(Args);
-  return ToolChain::GetCXXStdlibType(Args);
+  return HostTC.GetCXXStdlibType(Args);
 }
 
 void HIPSPVToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
                                                 ArgStringList &CC1Args) const {
-  if (HostTC)
-    HostTC->AddClangSystemIncludeArgs(DriverArgs, CC1Args);
-  ToolChain::AddClangSystemIncludeArgs(DriverArgs, CC1Args);
+  HostTC.AddClangSystemIncludeArgs(DriverArgs, CC1Args);
 }
 
 void HIPSPVToolChain::AddClangCXXStdlibIncludeArgs(
     const ArgList &Args, ArgStringList &CC1Args) const {
-  if (HostTC)
-    HostTC->AddClangCXXStdlibIncludeArgs(Args, CC1Args);
-  ToolChain::AddClangCXXStdlibIncludeArgs(Args, CC1Args);
+  HostTC.AddClangCXXStdlibIncludeArgs(Args, CC1Args);
 }
 
 void HIPSPVToolChain::AddIAMCUIncludeArgs(const ArgList &Args,
                                           ArgStringList &CC1Args) const {
-  if (HostTC)
-    HostTC->AddIAMCUIncludeArgs(Args, CC1Args);
-  ToolChain::AddIAMCUIncludeArgs(Args, CC1Args);
+  HostTC.AddIAMCUIncludeArgs(Args, CC1Args);
 }
 
 void HIPSPVToolChain::AddHIPIncludeArgs(const ArgList &DriverArgs,
@@ -305,8 +260,7 @@ HIPSPVToolChain::getDeviceLibs(
   return BCLibs;
 }
 
-SanitizerMask HIPSPVToolChain::getSupportedSanitizers(
-    StringRef BoundArch, Action::OffloadKind DeviceOffloadKind) const {
+SanitizerMask HIPSPVToolChain::getSupportedSanitizers() const {
   // The HIPSPVToolChain only supports sanitizers in the sense that it allows
   // sanitizer arguments on the command line if they are supported by the host
   // toolchain. The HIPSPVToolChain will actually ignore any command line
@@ -316,18 +270,12 @@ SanitizerMask HIPSPVToolChain::getSupportedSanitizers(
   // This behavior is necessary because the host and device toolchains
   // invocations often share the command line, so the device toolchain must
   // tolerate flags meant only for the host toolchain.
-
-  // FIXME: Be accurate and use DeviceOffloadKind.
-  if (HostTC)
-    return HostTC->getSupportedSanitizers(BoundArch, DeviceOffloadKind);
-  return ToolChain::getSupportedSanitizers(BoundArch, DeviceOffloadKind);
+  return HostTC.getSupportedSanitizers();
 }
 
 VersionTuple HIPSPVToolChain::computeMSVCVersion(const Driver *D,
                                                  const ArgList &Args) const {
-  if (HostTC)
-    return HostTC->computeMSVCVersion(D, Args);
-  return ToolChain::computeMSVCVersion(D, Args);
+  return HostTC.computeMSVCVersion(D, Args);
 }
 
 void HIPSPVToolChain::adjustDebugInfoKind(

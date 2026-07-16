@@ -39,21 +39,20 @@ public:
   void applyMatrixMultiply(MachineInstr &MI) const;
 
 private:
-  SPIRVTypeInst getDotProductVectorType(Register ResReg, uint32_t K,
-                                        SPIRVGlobalRegistry *GR) const;
+  SPIRVType *getDotProductVectorType(Register ResReg, uint32_t K,
+                                     SPIRVGlobalRegistry *GR) const;
   SmallVector<Register, 4> extractColumns(Register BReg, uint32_t N,
-                                          SPIRVTypeInst SpvVecType,
+                                          SPIRVType *SpvVecType,
                                           SPIRVGlobalRegistry *GR) const;
   SmallVector<Register, 4> extractRows(Register AReg, uint32_t NumRows,
-                                       uint32_t NumCols,
-                                       SPIRVTypeInst SpvRowType,
+                                       uint32_t NumCols, SPIRVType *SpvRowType,
                                        SPIRVGlobalRegistry *GR) const;
   SmallVector<Register, 16>
   computeDotProducts(const SmallVector<Register, 4> &RowsA,
                      const SmallVector<Register, 4> &ColsB,
-                     SPIRVTypeInst SpvVecType, SPIRVGlobalRegistry *GR) const;
+                     SPIRVType *SpvVecType, SPIRVGlobalRegistry *GR) const;
   Register computeDotProduct(Register RowA, Register ColB,
-                             SPIRVTypeInst SpvVecType,
+                             SPIRVType *SpvVecType,
                              SPIRVGlobalRegistry *GR) const;
 };
 

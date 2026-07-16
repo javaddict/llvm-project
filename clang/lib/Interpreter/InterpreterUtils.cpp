@@ -98,7 +98,7 @@ NamedDecl *LookupNamed(Sema &S, llvm::StringRef Name,
   R.resolveKind();
 
   if (R.isSingleResult())
-    return R.getFoundDecl();
+    return dyn_cast<NamedDecl>(R.getFoundDecl());
 
   return nullptr;
 }
@@ -107,8 +107,7 @@ std::string GetFullTypeName(ASTContext &Ctx, QualType QT) {
   QualType FQT = TypeName::getFullyQualifiedType(QT, Ctx);
   PrintingPolicy Policy(Ctx.getPrintingPolicy());
   Policy.SuppressScope = false;
-  Policy.AnonymousTagNameStyle =
-      llvm::to_underlying(PrintingPolicy::AnonymousTagMode::Plain);
+  Policy.AnonymousTagLocations = false;
   return FQT.getAsString(Policy);
 }
 } // namespace clang

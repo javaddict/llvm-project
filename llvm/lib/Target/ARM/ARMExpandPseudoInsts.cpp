@@ -802,8 +802,8 @@ void ARMExpandPseudo::ExpandLaneOp(MachineBasicBlock::iterator &MBBI) {
     GetDSubRegs(MO.getReg(), RegSpc, TRI, D0, D1, D2, D3);
 
   // Add the subregs as sources of the new instruction.
-  RegState SrcFlags =
-      (getUndefRegState(MO.isUndef()) | getKillRegState(MO.isKill()));
+  unsigned SrcFlags = (getUndefRegState(MO.isUndef()) |
+                       getKillRegState(MO.isKill()));
   MIB.addReg(D0, SrcFlags);
   if (NumRegs > 1)
     MIB.addReg(D1, SrcFlags);
@@ -881,7 +881,7 @@ void ARMExpandPseudo::ExpandMQQPRLoadStore(MachineBasicBlock::iterator &MBBI) {
   MachineInstrBuilder MIB =
       BuildMI(MBB, MBBI, MI.getDebugLoc(), TII->get(NewOpc));
 
-  RegState Flags = getKillRegState(MI.getOperand(0).isKill()) |
+  unsigned Flags = getKillRegState(MI.getOperand(0).isKill()) |
                    getDefRegState(MI.getOperand(0).isDef());
   Register SrcReg = MI.getOperand(0).getReg();
 
@@ -985,8 +985,6 @@ static MachineOperand getMovOperand(const MachineOperand &MO,
   }
   case MachineOperand::MO_ExternalSymbol:
     return MachineOperand::CreateES(MO.getSymbolName(), TF);
-  case MachineOperand::MO_MCSymbol:
-    return MachineOperand::CreateMCSymbol(MO.getMCSymbol(), TF);
   case MachineOperand::MO_JumpTableIndex:
     return MachineOperand::CreateJTI(MO.getIndex(), TF);
   default:
@@ -1964,7 +1962,7 @@ bool ARMExpandPseudo::ExpandCMP_SWAP(MachineBasicBlock &MBB,
 /// single GPRPair register), Thumb's take two separate registers so we need to
 /// extract the subregs from the pair.
 static void addExclusiveRegPair(MachineInstrBuilder &MIB, MachineOperand &Reg,
-                                RegState Flags, bool IsThumb,
+                                unsigned Flags, bool IsThumb,
                                 const TargetRegisterInfo *TRI) {
   if (IsThumb) {
     Register RegLo = TRI->getSubReg(Reg.getReg(), ARM::gsub_0);
@@ -2046,7 +2044,7 @@ bool ARMExpandPseudo::ExpandCMP_SWAP_64(MachineBasicBlock &MBB,
   //     bne .Lloadcmp
   unsigned STREXD = IsThumb ? ARM::t2STREXD : ARM::STREXD;
   MIB = BuildMI(StoreBB, DL, TII->get(STREXD), TempReg);
-  RegState Flags = getKillRegState(New.isDead());
+  unsigned Flags = getKillRegState(New.isDead());
   addExclusiveRegPair(MIB, New, Flags, IsThumb, TRI);
   MIB.addReg(AddrReg).add(predOps(ARMCC::AL));
 
@@ -2095,7 +2093,7 @@ static void CMSEPushCalleeSaves(const TargetInstrInfo &TII,
         BuildMI(MBB, MBBI, DL, TII.get(ARM::tPUSH)).add(predOps(ARMCC::AL));
     for (unsigned Reg = ARM::R4; Reg < ARM::R8; ++Reg) {
       PushMIB.addReg(
-          Reg, getUndefRegState(Reg != JumpReg && !LiveRegs.contains(Reg)));
+          Reg, Reg == JumpReg || LiveRegs.contains(Reg) ? 0 : RegState::Undef);
     }
 
     // Thumb1 can only tPUSH low regs, so we copy the high regs to the low
@@ -2110,7 +2108,7 @@ static void CMSEPushCalleeSaves(const TargetInstrInfo &TII,
       if (JumpReg == LoReg)
         continue;
       BuildMI(MBB, MBBI, DL, TII.get(ARM::tMOVr), LoReg)
-          .addReg(HiReg, getUndefRegState(!LiveRegs.contains(HiReg)))
+          .addReg(HiReg, LiveRegs.contains(HiReg) ? 0 : RegState::Undef)
           .add(predOps(ARMCC::AL));
       --HiReg;
     }
@@ -2128,7 +2126,7 @@ static void CMSEPushCalleeSaves(const TargetInstrInfo &TII,
     if (JumpReg >= ARM::R4 && JumpReg <= ARM::R7) {
       Register LoReg = JumpReg == ARM::R4 ? ARM::R5 : ARM::R4;
       BuildMI(MBB, MBBI, DL, TII.get(ARM::tMOVr), LoReg)
-          .addReg(ARM::R8, getUndefRegState(!LiveRegs.contains(ARM::R8)))
+          .addReg(ARM::R8, LiveRegs.contains(ARM::R8) ? 0 : RegState::Undef)
           .add(predOps(ARMCC::AL));
       BuildMI(MBB, MBBI, DL, TII.get(ARM::tPUSH))
           .add(predOps(ARMCC::AL))
@@ -2141,7 +2139,7 @@ static void CMSEPushCalleeSaves(const TargetInstrInfo &TII,
             .add(predOps(ARMCC::AL));
     for (unsigned Reg = ARM::R4; Reg < ARM::R12; ++Reg) {
       PushMIB.addReg(
-          Reg, getUndefRegState(Reg != JumpReg && !LiveRegs.contains(Reg)));
+          Reg, Reg == JumpReg || LiveRegs.contains(Reg) ? 0 : RegState::Undef);
     }
   }
 }
@@ -2220,7 +2218,7 @@ bool ARMExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
         } else {
           // Use move to satisfy constraints
           unsigned MoveOpc = Opcode == ARM::VBSPd ? ARM::VORRd : ARM::VORRq;
-          RegState MO1Flags = getRegState(MI.getOperand(1)) & ~RegState::Kill;
+          unsigned MO1Flags = getRegState(MI.getOperand(1)) & ~RegState::Kill;
           BuildMI(MBB, MBBI, MI.getDebugLoc(), TII->get(MoveOpc))
               .addReg(DstReg,
                       RegState::Define |
@@ -2244,14 +2242,6 @@ bool ARMExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
       return true;
     }
 
-    case ARM::CLEANUPRET:
-    case ARM::CATCHRET: {
-      unsigned RetOpcode = STI->isThumb() ? ARM::tBX_RET : ARM::BX_RET;
-      BuildMI(MBB, MBBI, MI.getDebugLoc(), TII->get(RetOpcode))
-          .add(predOps(ARMCC::AL));
-      MI.eraseFromParent();
-      return true;
-    }
     case ARM::TCRETURNdi:
     case ARM::TCRETURNri:
     case ARM::TCRETURNrinotr12: {
@@ -2278,7 +2268,7 @@ bool ARMExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
       // Jump to label or value in register.
       if (RetOpcode == ARM::TCRETURNdi) {
         MachineFunction *MF = MBB.getParent();
-        bool NeedsWinCFI = MF->getTarget().getMCAsmInfo().usesWindowsCFI() &&
+        bool NeedsWinCFI = MF->getTarget().getMCAsmInfo()->usesWindowsCFI() &&
                            MF->getFunction().needsUnwindTableEntry();
         unsigned TCOpcode =
             STI->isThumb()
@@ -2542,7 +2532,7 @@ bool ARMExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
       case ARM::t2MOVCClsr: NewOpc = ARM::t2LSRri; break;
       case ARM::t2MOVCCasr: NewOpc = ARM::t2ASRri; break;
       case ARM::t2MOVCCror: NewOpc = ARM::t2RORri; break;
-      default: llvm_unreachable("unexpected conditional move");
+      default: llvm_unreachable("unexpeced conditional move");
       }
       BuildMI(MBB, MBBI, MI.getDebugLoc(), TII->get(NewOpc),
               MI.getOperand(1).getReg())
@@ -2879,8 +2869,8 @@ bool ARMExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
       // Add the source operands (D subregs).
       Register D0 = TRI->getSubReg(SrcReg, ARM::dsub_0);
       Register D1 = TRI->getSubReg(SrcReg, ARM::dsub_1);
-      MIB.addReg(D0, getKillRegState(SrcIsKill))
-          .addReg(D1, getKillRegState(SrcIsKill));
+      MIB.addReg(D0, SrcIsKill ? RegState::Kill : 0)
+         .addReg(D1, SrcIsKill ? RegState::Kill : 0);
 
       if (SrcIsKill)      // Add an implicit kill for the Q register.
         MIB->addRegisterKilled(SrcReg, TRI, true);
@@ -3282,9 +3272,9 @@ bool ARMExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
           BuildMI(MBB, MBBI, MI.getDebugLoc(),
                   TII->get(Opcode == ARM::LOADDUAL ? ARM::LDRD : ARM::STRD))
               .addReg(TRI->getSubReg(PairReg, ARM::gsub_0),
-                      getDefRegState(Opcode == ARM::LOADDUAL))
+                      Opcode == ARM::LOADDUAL ? RegState::Define : 0)
               .addReg(TRI->getSubReg(PairReg, ARM::gsub_1),
-                      getDefRegState(Opcode == ARM::LOADDUAL));
+                      Opcode == ARM::LOADDUAL ? RegState::Define : 0);
       for (const MachineOperand &MO : llvm::drop_begin(MI.operands()))
         MIB.add(MO);
       MIB.add(predOps(ARMCC::AL));

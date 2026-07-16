@@ -22,7 +22,6 @@
 
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/GlobalDecl.h"
-#include "clang/AST/TypeBase.h"
 #include "clang/AST/VTableBuilder.h"
 #include "clang/CIR/MissingFeatures.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -82,6 +81,9 @@ public:
   void emitRethrow(CIRGenFunction &cgf, bool isNoReturn) override;
   void emitThrow(CIRGenFunction &cgf, const CXXThrowExpr *e) override;
 
+  void emitBeginCatch(CIRGenFunction &cgf,
+                      const CXXCatchStmt *catchStmt) override;
+
   bool useThunkForDtorVariant(const CXXDestructorDecl *dtor,
                               CXXDtorType dt) const override {
     // Itanium does not emit any destructor variant as an inline thunk.
@@ -103,10 +105,6 @@ public:
                                         const CXXDestructorDecl *dtor,
                                         CXXDtorType dtorType, Address thisAddr,
                                         DeleteOrMemberCallExpr e) override;
-
-  bool canSpeculativelyEmitVTable(const CXXRecordDecl *RD) const override;
-  bool canSpeculativelyEmitVTableAsBaseClass(const CXXRecordDecl *RD) const;
-
   mlir::Value getVTableAddressPoint(BaseSubobject base,
                                     const CXXRecordDecl *vtableClass) override;
   mlir::Value getVTableAddressPointInStructorWithVTT(
@@ -121,37 +119,8 @@ public:
                              const CXXRecordDecl *rd) override;
   void emitVirtualInheritanceTables(const CXXRecordDecl *rd) override;
 
-  void setThunkLinkage(cir::FuncOp thunk, bool forVTable, GlobalDecl gd,
-                       bool returnAdjustment) override {
-    if (forVTable && !thunk.hasLocalLinkage())
-      thunk.setLinkage(cir::GlobalLinkageKind::AvailableExternallyLinkage);
-    const auto *nd = cast<NamedDecl>(gd.getDecl());
-    cgm.setGVProperties(thunk, nd);
-  }
-
-  bool exportThunk() override { return true; }
-
-  mlir::Value performThisAdjustment(CIRGenFunction &cgf, Address thisAddr,
-                                    const CXXRecordDecl *unadjustedClass,
-                                    const ThunkInfo &ti) override;
-
-  mlir::Value performReturnAdjustment(CIRGenFunction &cgf, Address ret,
-                                      const CXXRecordDecl *unadjustedClass,
-                                      const ReturnAdjustment &ra) override;
-
-  bool shouldTypeidBeNullChecked(QualType srcTy) override;
-  mlir::Value emitTypeid(CIRGenFunction &cgf, QualType SrcRecordTy,
-                         Address thisPtr, mlir::Type StdTypeInfoPtrTy) override;
-  void emitBadTypeidCall(CIRGenFunction &cgf, mlir::Location loc) override;
-
   mlir::Attribute getAddrOfRTTIDescriptor(mlir::Location loc,
                                           QualType ty) override;
-
-  StringRef getPureVirtualCallName() override { return "__cxa_pure_virtual"; }
-  StringRef getDeletedVirtualCallName() override {
-    return "__cxa_deleted_virtual";
-  }
-
   CatchTypeInfo
   getAddrOfCXXCatchHandlerType(mlir::Location loc, QualType ty,
                                QualType catchHandlerType) override {
@@ -187,14 +156,9 @@ public:
                               cir::PointerType destCIRTy, bool isRefCast,
                               Address src) override;
 
-  cir::MethodAttr buildVirtualMethodAttr(cir::MethodType methodTy,
-                                         const CXXMethodDecl *md) override;
-
   Address initializeArrayCookie(CIRGenFunction &cgf, Address newPtr,
                                 mlir::Value numElements, const CXXNewExpr *e,
                                 QualType elementType) override;
-
-  bool isZeroInitializable(const MemberPointerType *MPT) override;
 
 protected:
   CharUnits getArrayCookieSizeImpl(QualType elementType) override;
@@ -225,10 +189,6 @@ public:
   /// the current ABI.
   RTTIUniquenessKind
   classifyRTTIUniqueness(QualType canTy, cir::GlobalLinkageKind linkage) const;
-
-private:
-  bool hasAnyUnusedVirtualInlineFunction(const CXXRecordDecl *rd) const;
-  bool isVTableHidden(const CXXRecordDecl *rd) const;
 };
 
 } // namespace
@@ -531,7 +491,7 @@ void CIRGenItaniumCXXABI::emitVTableDefinitions(CIRGenVTables &cgvt,
   }
 
   assert(!cir::MissingFeatures::vtableRelativeLayout());
-  if (cgm.getLangOpts().RelativeCXXABIVTables) {
+  if (vtContext.isRelativeLayout()) {
     cgm.errorNYI(rd->getSourceRange(), "vtableRelativeLayout");
   }
 }
@@ -593,18 +553,6 @@ class CIRGenItaniumRTTIBuilder {
   /// classes with bases that do not satisfy the abi::__si_class_type_info
   /// constraints, according ti the Itanium C++ ABI, 2.9.5p5c.
   void buildVMIClassTypeInfo(mlir::Location loc, const CXXRecordDecl *rd);
-
-  /// Build an abi::__pointer_type_info, used for pointer types, according
-  /// to the Itanium C++ ABI, 2.9.4p7.
-  void buildPointerTypeInfo(mlir::Location loc, QualType ty);
-
-  /// Build an abi::__pointer_to_member_type_info, used for pointer to member
-  /// types, according to the Itanium C++ ABI, 2.9.4p9.
-
-  /// Build an abi::__pointer_to_member_type_info
-  /// struct, used for member pointer types.
-  void buildPointerToMemberTypeInfo(mlir::Location loc,
-                                    const MemberPointerType *ty);
 
 public:
   CIRGenItaniumRTTIBuilder(const CIRGenItaniumCXXABI &abi, CIRGenModule &cgm)
@@ -973,31 +921,6 @@ static bool containsIncompleteClassType(QualType ty) {
   return false;
 }
 
-static unsigned extractPBaseFlags(const ASTContext &ctx, QualType &ty) {
-  unsigned flags = 0;
-
-  if (ty.isConstQualified())
-    flags |= PTI_Const;
-  if (ty.isVolatileQualified())
-    flags |= PTI_Volatile;
-  if (ty.isRestrictQualified())
-    flags |= PTI_Restrict;
-
-  ty = ty.getUnqualifiedType();
-
-  if (containsIncompleteClassType(ty))
-    flags |= PTI_Incomplete;
-
-  if (const auto *proto = ty->getAs<FunctionProtoType>()) {
-    if (proto->isNothrow()) {
-      flags |= PTI_Noexcept;
-      ty = ctx.getFunctionTypeWithExceptionSpec(ty, EST_None);
-    }
-  }
-
-  return flags;
-}
-
 const char *vTableClassNameForType(const CIRGenModule &cgm, const Type *ty) {
   // abi::__class_type_info.
   static const char *const classTypeInfo =
@@ -1034,7 +957,6 @@ const char *vTableClassNameForType(const CIRGenModule &cgm, const Type *ty) {
 
   case Type::Builtin:
   case Type::BitInt:
-  case Type::OverflowBehavior:
   // GCC treats vector and complex types as fundamental types.
   case Type::Vector:
   case Type::ExtVector:
@@ -1047,13 +969,13 @@ const char *vTableClassNameForType(const CIRGenModule &cgm, const Type *ty) {
   case Type::ConstantArray:
   case Type::IncompleteArray:
   case Type::VariableArray:
-    // abi::__array_type_info.
-    return "_ZTVN10__cxxabiv117__array_type_infoE";
+    cgm.errorNYI("VTableClassNameForType: __array_type_info");
+    break;
 
   case Type::FunctionNoProto:
   case Type::FunctionProto:
-    // abi::__function_type_info.
-    return "_ZTVN10__cxxabiv120__function_type_infoE";
+    cgm.errorNYI("VTableClassNameForType: __function_type_info");
+    break;
 
   case Type::Enum:
     return "_ZTVN10__cxxabiv116__enum_type_infoE";
@@ -1083,12 +1005,12 @@ const char *vTableClassNameForType(const CIRGenModule &cgm, const Type *ty) {
 
   case Type::ObjCObjectPointer:
   case Type::Pointer:
-    // abi::__pointer_type_info.
-    return "_ZTVN10__cxxabiv119__pointer_type_infoE";
+    cgm.errorNYI("VTableClassNameForType: __pointer_type_info");
+    break;
 
   case Type::MemberPointer:
-    // abi::__pointer_to_member_type_info.
-    return "_ZTVN10__cxxabiv129__pointer_to_member_type_infoE";
+    cgm.errorNYI("VTableClassNameForType: __pointer_to_member_type_info");
+    break;
 
   case Type::HLSLAttributedResource:
   case Type::HLSLInlineSpirv:
@@ -1195,15 +1117,16 @@ CIRGenItaniumRTTIBuilder::getAddrOfExternalRTTIDescriptor(mlir::Location loc,
   CIRGenBuilderTy &builder = cgm.getBuilder();
 
   // Look for an existing global.
-  cir::GlobalOp gv = dyn_cast_or_null<cir::GlobalOp>(cgm.getGlobalValue(name));
+  cir::GlobalOp gv = dyn_cast_or_null<cir::GlobalOp>(
+      mlir::SymbolTable::lookupSymbolIn(cgm.getModule(), name));
 
   if (!gv) {
     // Create a new global variable.
     // From LLVM codegen => Note for the future: If we would ever like to do
     // deferred emission of RTTI, check if emitting vtables opportunistically
     // need any adjustment.
-    gv = cgm.createGlobalOp(loc, name, builder.getUInt8PtrTy(),
-                            /*isConstant=*/true);
+    gv = CIRGenModule::createGlobalOp(cgm, loc, name, builder.getUInt8PtrTy(),
+                                      /*isConstant=*/true);
     const CXXRecordDecl *rd = ty->getAsCXXRecordDecl();
     cgm.setGVProperties(gv, rd);
 
@@ -1223,7 +1146,7 @@ void CIRGenItaniumRTTIBuilder::buildVTablePointer(mlir::Location loc,
   const char *vTableName = vTableClassNameForType(cgm, ty);
 
   // Check if the alias exists. If it doesn't, then get or create the global.
-  if (cgm.getLangOpts().RelativeCXXABIVTables) {
+  if (cgm.getItaniumVTableContext().isRelativeLayout()) {
     cgm.errorNYI("buildVTablePointer: isRelativeLayout");
     return;
   }
@@ -1236,7 +1159,7 @@ void CIRGenItaniumRTTIBuilder::buildVTablePointer(mlir::Location loc,
 
   // The vtable address point is 2.
   mlir::Attribute field{};
-  if (cgm.getLangOpts().RelativeCXXABIVTables) {
+  if (cgm.getItaniumVTableContext().isRelativeLayout()) {
     cgm.errorNYI("buildVTablePointer: isRelativeLayout");
   } else {
     SmallVector<mlir::Attribute, 4> offsets{
@@ -1350,70 +1273,6 @@ void CIRGenItaniumRTTIBuilder::buildVMIClassTypeInfo(mlir::Location loc,
   }
 }
 
-void CIRGenItaniumRTTIBuilder::buildPointerTypeInfo(mlir::Location loc,
-                                                    QualType ty) {
-  //  Itanium C++ ABI 2.9.4p7:
-  //    abi::__pbase_type_info is a base for both pointer types and
-  //    pointer-to-member types. It adds two data members:
-  //
-  //    class __pbase_type_info : public std::type_info {
-  //      public:
-  //       unsigned int __flags;
-  //       const std::type_info *__pointee;
-  //
-  //       enum __masks {
-  //         __const_mask = 0x1,
-  //         __volatile_mask = 0x2,
-  //         __restrict_mask = 0x4,
-  //         __incomplete_mask = 0x8,
-  //         __incomplete_class_mask = 0x10,
-  //         __transaction_safe_mask = 0x20
-  //         __noexcept_mask = 0x40
-  //       };
-  //   };
-  const unsigned int flags = extractPBaseFlags(cgm.getASTContext(), ty);
-
-  mlir::Type unsignedIntTy = cgm.convertType(cgm.getASTContext().UnsignedIntTy);
-  mlir::Attribute flagsAttr = cir::IntAttr::get(unsignedIntTy, flags);
-  fields.push_back(flagsAttr);
-
-  mlir::Attribute pointeeTypeInfo =
-      CIRGenItaniumRTTIBuilder(cxxABI, cgm).buildTypeInfo(loc, ty);
-  fields.push_back(pointeeTypeInfo);
-}
-
-void CIRGenItaniumRTTIBuilder::buildPointerToMemberTypeInfo(
-    mlir::Location loc, const MemberPointerType *ty) {
-
-  //  The abi::__pointer_to_member_type_info type adds one field to
-  //  abi::__pbase_type_info:
-  //
-  //    class __pointer_to_member_type_info : public __pbase_type_info {
-  //      public:
-  //        const abi::__class_type_info *__context;
-  //    };
-  QualType pointeeTy = ty->getPointeeType();
-
-  unsigned flags = extractPBaseFlags(cgm.getASTContext(), pointeeTy);
-
-  const auto *rd = ty->getMostRecentCXXRecordDecl();
-  if (!rd->hasDefinition())
-    flags |= PTI_ContainingClassIncomplete;
-
-  mlir::Type unsignedIntTy = cgm.convertType(cgm.getASTContext().UnsignedIntTy);
-  mlir::Attribute flagsAttr = cir::IntAttr::get(unsignedIntTy, flags);
-  fields.push_back(flagsAttr);
-
-  mlir::Attribute pointeeTypeInfo =
-      CIRGenItaniumRTTIBuilder(cxxABI, cgm).buildTypeInfo(loc, pointeeTy);
-  fields.push_back(pointeeTypeInfo);
-
-  CanQualType contextTy = cgm.getASTContext().getCanonicalTagType(rd);
-  mlir::Attribute classTypeInfo =
-      CIRGenItaniumRTTIBuilder(cxxABI, cgm).buildTypeInfo(loc, contextTy);
-  fields.push_back(classTypeInfo);
-}
-
 mlir::Attribute CIRGenItaniumRTTIBuilder::buildTypeInfo(mlir::Location loc,
                                                         QualType ty) {
   // We want to operate on the canonical type.
@@ -1424,7 +1283,8 @@ mlir::Attribute CIRGenItaniumRTTIBuilder::buildTypeInfo(mlir::Location loc,
   llvm::raw_svector_ostream out(name);
   cgm.getCXXABI().getMangleContext().mangleCXXRTTI(ty, out);
 
-  auto oldGV = dyn_cast_or_null<cir::GlobalOp>(cgm.getGlobalValue(name));
+  auto oldGV = dyn_cast_or_null<cir::GlobalOp>(
+      mlir::SymbolTable::lookupSymbolIn(cgm.getModule(), name));
 
   if (oldGV && !oldGV.isDeclaration()) {
     assert(!oldGV.hasAvailableExternallyLinkage() &&
@@ -1525,9 +1385,6 @@ mlir::Attribute CIRGenItaniumRTTIBuilder::buildTypeInfo(
   case Type::BitInt:
     break;
 
-  case Type::OverflowBehavior:
-    break;
-
   case Type::ConstantArray:
   case Type::IncompleteArray:
   case Type::VariableArray:
@@ -1574,12 +1431,11 @@ mlir::Attribute CIRGenItaniumRTTIBuilder::buildTypeInfo(
     break;
 
   case Type::Pointer:
-    // We need to get the type info for the pointee type.
-    buildPointerTypeInfo(loc, cast<PointerType>(ty)->getPointeeType());
+    cgm.errorNYI("buildTypeInfo: Pointer");
     break;
 
   case Type::MemberPointer:
-    buildPointerToMemberTypeInfo(loc, cast<MemberPointerType>(ty));
+    cgm.errorNYI("buildTypeInfo: MemberPointer");
     break;
 
   case Type::Atomic:
@@ -1599,11 +1455,12 @@ mlir::Attribute CIRGenItaniumRTTIBuilder::buildTypeInfo(
   cgm.getCXXABI().getMangleContext().mangleCXXRTTI(ty, out);
 
   // Create new global and search for an existing global.
-  auto oldGV = dyn_cast_or_null<cir::GlobalOp>(cgm.getGlobalValue(name));
+  auto oldGV = dyn_cast_or_null<cir::GlobalOp>(
+      mlir::SymbolTable::lookupSymbolIn(cgm.getModule(), name));
 
-  cir::GlobalOp gv = cgm.createGlobalOp(loc, name, init.getType(),
-                                        /*isConstant=*/true);
-  gv.setLinkage(linkage);
+  cir::GlobalOp gv =
+      CIRGenModule::createGlobalOp(cgm, loc, name, init.getType(),
+                                   /*isConstant=*/true);
 
   // Export the typeinfo in the same circumstances as the vtable is
   // exported.
@@ -1620,12 +1477,14 @@ mlir::Attribute CIRGenItaniumRTTIBuilder::buildTypeInfo(
       cgm.errorNYI("buildTypeInfo: old GV !use_empty");
       return {};
     }
-    cgm.eraseGlobalSymbol(oldGV);
     oldGV->erase();
   }
 
-  if (cgm.supportsCOMDAT() && cir::isWeakForLinker(linkage))
-    gv.setComdat(true);
+  if (cgm.supportsCOMDAT() && cir::isWeakForLinker(gv.getLinkage())) {
+    assert(!cir::MissingFeatures::setComdat());
+    cgm.errorNYI("buildTypeInfo: supportsCOMDAT & isWeakForLinker");
+    return {};
+  }
 
   CharUnits align = cgm.getASTContext().toCharUnitsFromBits(
       cgm.getTarget().getPointerAlign(LangAS::Default));
@@ -1658,48 +1517,6 @@ mlir::Attribute CIRGenItaniumRTTIBuilder::buildTypeInfo(
 
   CIRGenModule::setInitializer(gv, init);
   return builder.getGlobalViewAttr(builder.getUInt8PtrTy(), gv);
-}
-
-bool CIRGenItaniumCXXABI::shouldTypeidBeNullChecked(QualType srcTy) {
-  return true;
-}
-
-void CIRGenItaniumCXXABI::emitBadTypeidCall(CIRGenFunction &cgf,
-                                            mlir::Location loc) {
-  // void __cxa_bad_typeid();
-  cir::FuncType fnTy =
-      cgf.getBuilder().getFuncType({}, cgf.getBuilder().getVoidTy());
-  mlir::NamedAttrList attrs;
-  attrs.set(cir::CIRDialect::getNoReturnAttrName(),
-            mlir::UnitAttr::get(&cgf.cgm.getMLIRContext()));
-
-  cgf.emitRuntimeCall(
-      loc, cgf.cgm.createRuntimeFunction(fnTy, "__cxa_bad_typeid", attrs), {},
-      attrs);
-  cir::UnreachableOp::create(cgf.getBuilder(), loc);
-}
-
-mlir::Value CIRGenItaniumCXXABI::emitTypeid(CIRGenFunction &cgf, QualType srcTy,
-                                            Address thisPtr,
-                                            mlir::Type typeInfoPtrTy) {
-  auto *classDecl = srcTy->castAsCXXRecordDecl();
-  mlir::Location loc = cgm.getLoc(classDecl->getSourceRange());
-  mlir::Value vptr = cgf.getVTablePtr(loc, thisPtr, classDecl);
-  mlir::Value vtbl;
-
-  // TODO(cir): In classic codegen relative layouts cause us to do a
-  // 'load_relative' of -4 here. We probably don't want to reprensent this in
-  // CIR at all, but we should have the NYI here since this could be
-  // meaningful/notable for implementation of relative layout in the future.
-  if (cgm.getLangOpts().RelativeCXXABIVTables)
-    cgm.errorNYI("buildVTablePointer: isRelativeLayout");
-  else
-    vtbl = cir::VTableGetTypeInfoOp::create(
-        cgf.getBuilder(), loc, cgf.getBuilder().getPointerTo(typeInfoPtrTy),
-        vptr);
-
-  return cgf.getBuilder().createAlignedLoad(loc, typeInfoPtrTy, vtbl,
-                                            cgf.getPointerAlign());
 }
 
 mlir::Attribute CIRGenItaniumCXXABI::getAddrOfRTTIDescriptor(mlir::Location loc,
@@ -1756,6 +1573,11 @@ void CIRGenItaniumCXXABI::registerGlobalDtor(const VarDecl *vd,
                                              mlir::Value addr) {
   if (vd->isNoDestroy(cgm.getASTContext()))
     return;
+
+  if (vd->getTLSKind()) {
+    cgm.errorNYI(vd->getSourceRange(), "registerGlobalDtor: TLS");
+    return;
+  }
 
   // HLSL doesn't support atexit.
   if (cgm.getLangOpts().HLSL) {
@@ -1850,29 +1672,24 @@ void CIRGenItaniumCXXABI::emitThrow(CIRGenFunction &cgf,
   // null dtor). In CIR, we forward this info and allow for
   // Lowering pass to skip passing the trivial function.
   //
-  const auto *cxxrd = clangThrowType->getAsCXXRecordDecl();
-  mlir::FlatSymbolRefAttr dtor{};
-  if (cxxrd && !cxxrd->hasTrivialDestructor()) {
-    // __cxa_throw is declared to take its destructor as void (*)(void *). We
-    // must match that if function pointers can be authenticated with a
-    // discriminator based on their type.
-    assert(!cir::MissingFeatures::pointerAuthentication());
-    CXXDestructorDecl *dtorD = cxxrd->getDestructor();
-    dtor = mlir::FlatSymbolRefAttr::get(
-        cgm.getAddrOfCXXStructor(GlobalDecl(dtorD, Dtor_Complete))
-            .getSymNameAttr());
+  if (const RecordType *recordTy = clangThrowType->getAs<RecordType>()) {
+    auto *rec = cast<CXXRecordDecl>(recordTy->getDecl()->getDefinition());
+    assert(!cir::MissingFeatures::isTrivialCtorOrDtor());
+    if (!rec->hasTrivialDestructor()) {
+      cgm.errorNYI("emitThrow: non-trivial destructor");
+      return;
+    }
   }
 
   // Now throw the exception.
   mlir::Location loc = cgf.getLoc(e->getSourceRange());
-  insertThrowAndSplit(builder, loc, exceptionPtr, typeInfo.getSymbol(), dtor);
+  insertThrowAndSplit(builder, loc, exceptionPtr, typeInfo.getSymbol());
 }
 
 CIRGenCXXABI *clang::CIRGen::CreateCIRGenItaniumCXXABI(CIRGenModule &cgm) {
   switch (cgm.getASTContext().getCXXABIKind()) {
   case TargetCXXABI::GenericItanium:
   case TargetCXXABI::GenericAArch64:
-  case TargetCXXABI::GenericARM:
     return new CIRGenItaniumCXXABI(cgm);
 
   case TargetCXXABI::AppleARM64:
@@ -1894,7 +1711,7 @@ cir::GlobalOp CIRGenItaniumCXXABI::getAddrOfVTable(const CXXRecordDecl *rd,
     return vtable;
 
   // Queue up this vtable for possible deferred emission.
-  cgm.addDeferredVTable(rd);
+  assert(!cir::MissingFeatures::deferredVtables());
 
   SmallString<256> name;
   llvm::raw_svector_ostream out(name);
@@ -1907,7 +1724,7 @@ cir::GlobalOp CIRGenItaniumCXXABI::getAddrOfVTable(const CXXRecordDecl *rd,
   // Use pointer alignment for the vtable. Otherwise we would align them based
   // on the size of the initializer which doesn't make sense as only single
   // values are read.
-  unsigned ptrAlign = cgm.getLangOpts().RelativeCXXABIVTables
+  unsigned ptrAlign = cgm.getItaniumVTableContext().isRelativeLayout()
                           ? 32
                           : cgm.getTarget().getPointerAlign(LangAS::Default);
 
@@ -1950,7 +1767,7 @@ CIRGenCallee CIRGenItaniumCXXABI::getVirtualFunctionPointer(
     assert(!cir::MissingFeatures::emitTypeMetadataCodeForVCall());
 
     mlir::Value vfuncLoad;
-    if (cgm.getLangOpts().RelativeCXXABIVTables) {
+    if (cgm.getItaniumVTableContext().isRelativeLayout()) {
       assert(!cir::MissingFeatures::vtableRelativeLayout());
       cgm.errorNYI(loc, "getVirtualFunctionPointer: isRelativeLayout");
     } else {
@@ -2056,7 +1873,7 @@ mlir::Value CIRGenItaniumCXXABI::getVirtualBaseClassOffset(
                                                  vtableBytePtr, offsetVal);
 
   mlir::Value vbaseOffset;
-  if (cgm.getLangOpts().RelativeCXXABIVTables) {
+  if (cgm.getItaniumVTableContext().isRelativeLayout()) {
     assert(!cir::MissingFeatures::vtableRelativeLayout());
     cgm.errorNYI(loc, "getVirtualBaseClassOffset: relative layout");
   } else {
@@ -2083,11 +1900,7 @@ static void emitCallToBadCast(CIRGenFunction &cgf, mlir::Location loc) {
   // TODO(cir): set the calling convention to the runtime function.
   assert(!cir::MissingFeatures::opFuncCallingConv());
 
-  mlir::NamedAttrList attrs;
-  attrs.set(cir::CIRDialect::getNoReturnAttrName(),
-            mlir::UnitAttr::get(&cgf.cgm.getMLIRContext()));
-
-  cgf.emitRuntimeCall(loc, getBadCastFn(cgf), {}, attrs);
+  cgf.emitRuntimeCall(loc, getBadCastFn(cgf));
   cir::UnreachableOp::create(cgf.getBuilder(), loc);
   cgf.getBuilder().clearInsertionPoint();
 }
@@ -2107,7 +1920,7 @@ static CharUnits computeOffsetHint(ASTContext &astContext,
   // If Dst is not derived from Src we can skip the whole computation below and
   // return that Src is not a public base of Dst.  Record all inheritance paths.
   if (!dst->isDerivedFrom(src, paths))
-    return CharUnits::fromQuantity(-2);
+    return CharUnits::fromQuantity(-2ULL);
 
   unsigned numPublicPaths = 0;
   CharUnits offset;
@@ -2123,7 +1936,7 @@ static CharUnits computeOffsetHint(ASTContext &astContext,
       // If the path contains a virtual base class we can't give any hint.
       // -1: no hint.
       if (pathElement.Base->isVirtual())
-        return CharUnits::fromQuantity(-1);
+        return CharUnits::fromQuantity(-1ULL);
 
       if (numPublicPaths > 1) // Won't use offsets, skip computation.
         continue;
@@ -2138,11 +1951,11 @@ static CharUnits computeOffsetHint(ASTContext &astContext,
 
   // -2: Src is not a public base of Dst.
   if (numPublicPaths == 0)
-    return CharUnits::fromQuantity(-2);
+    return CharUnits::fromQuantity(-2ULL);
 
   // -3: Src is a multiple public base type but never a virtual base type.
   if (numPublicPaths > 1)
-    return CharUnits::fromQuantity(-3);
+    return CharUnits::fromQuantity(-3ULL);
 
   // Otherwise, the Src type is a unique public nonvirtual base type of Dst.
   // Return the offset of Src from the origin of Dst.
@@ -2160,7 +1973,8 @@ static cir::FuncOp getItaniumDynamicCastFn(CIRGenFunction &cgf) {
   mlir::Type rttiPtrTy = cgf.getBuilder().getUInt8PtrTy();
   mlir::Type ptrDiffTy = cgf.convertType(cgf.getContext().getPointerDiffType());
 
-  // TODO(cir): mark the function as willreturn readonly.
+  // TODO(cir): mark the function as nowind willreturn readonly.
+  assert(!cir::MissingFeatures::opFuncNoUnwind());
   assert(!cir::MissingFeatures::opFuncWillReturn());
   assert(!cir::MissingFeatures::opFuncReadOnly());
 
@@ -2169,15 +1983,13 @@ static cir::FuncOp getItaniumDynamicCastFn(CIRGenFunction &cgf) {
 
   cir::FuncType FTy = cgf.getBuilder().getFuncType(
       {voidPtrTy, rttiPtrTy, rttiPtrTy, ptrDiffTy}, voidPtrTy);
-  cir::FuncOp fn = cgf.cgm.createRuntimeFunction(FTy, "__dynamic_cast");
-  fn->setAttr(cir::CIRDialect::getNoThrowAttrName(),
-              mlir::UnitAttr::get(cgf.getBuilder().getContext()));
-  return fn;
+  return cgf.cgm.createRuntimeFunction(FTy, "__dynamic_cast");
 }
 
 static Address emitDynamicCastToVoid(CIRGenFunction &cgf, mlir::Location loc,
                                      QualType srcRecordTy, Address src) {
-  bool vtableUsesRelativeLayout = cgf.cgm.getLangOpts().RelativeCXXABIVTables;
+  bool vtableUsesRelativeLayout =
+      cgf.cgm.getItaniumVTableContext().isRelativeLayout();
   mlir::Value ptr = cgf.getBuilder().createDynCastToVoid(
       loc, src.getPointer(), vtableUsesRelativeLayout);
   return Address{ptr, src.getAlignment()};
@@ -2318,9 +2130,9 @@ static cir::DynamicCastInfoAttr emitDynamicCastInfo(CIRGenFunction &cgf,
                                                     QualType srcRecordTy,
                                                     QualType destRecordTy) {
   auto srcRtti = mlir::cast<cir::GlobalViewAttr>(
-      cgf.cgm.getAddrOfRTTIDescriptor(loc, srcRecordTy.getUnqualifiedType()));
+      cgf.cgm.getAddrOfRTTIDescriptor(loc, srcRecordTy));
   auto destRtti = mlir::cast<cir::GlobalViewAttr>(
-      cgf.cgm.getAddrOfRTTIDescriptor(loc, destRecordTy.getUnqualifiedType()));
+      cgf.cgm.getAddrOfRTTIDescriptor(loc, destRecordTy));
 
   cir::FuncOp runtimeFuncOp = getItaniumDynamicCastFn(cgf);
   cir::FuncOp badCastFuncOp = getBadCastFn(cgf);
@@ -2383,25 +2195,6 @@ mlir::Value CIRGenItaniumCXXABI::emitDynamicCast(CIRGenFunction &cgf,
                                         isRefCast, castInfo);
 }
 
-cir::MethodAttr
-CIRGenItaniumCXXABI::buildVirtualMethodAttr(cir::MethodType methodTy,
-                                            const CXXMethodDecl *md) {
-  assert(md->isVirtual() && "only deal with virtual member functions");
-
-  uint64_t index = cgm.getItaniumVTableContext().getMethodVTableIndex(md);
-  uint64_t vtableOffset;
-  if (cgm.getLangOpts().RelativeCXXABIVTables) {
-    // Multiply by 4-byte relative offsets.
-    vtableOffset = index * 4;
-  } else {
-    const ASTContext &astContext = cgm.getASTContext();
-    CharUnits pointerWidth = astContext.toCharUnitsFromBits(
-        astContext.getTargetInfo().getPointerWidth(LangAS::Default));
-    vtableOffset = index * pointerWidth.getQuantity();
-  }
-
-  return cir::MethodAttr::get(methodTy, vtableOffset);
-}
 /// The Itanium ABI always places an offset to the complete object
 /// at entry -2 in the vtable.
 void CIRGenItaniumCXXABI::emitVirtualObjectDelete(
@@ -2448,10 +2241,9 @@ Address CIRGenItaniumCXXABI::initializeArrayCookie(CIRGenFunction &cgf,
       std::max(sizeSize, ctx.getPreferredTypeAlignInChars(elementType));
   assert(cookieSize == getArrayCookieSizeImpl(elementType));
 
-  mlir::Type u8Ty = cgf.getBuilder().getUInt8Ty();
   cir::PointerType u8PtrTy = cgf.getBuilder().getUInt8PtrTy();
   mlir::Value baseBytePtr =
-      cgf.getBuilder().createBitcast(newPtr.getPointer(), u8PtrTy);
+      cgf.getBuilder().createPtrBitcast(newPtr.getPointer(), u8PtrTy);
 
   // Compute an offset to the cookie.
   CharUnits cookieOffset = cookieSize - sizeSize;
@@ -2465,7 +2257,7 @@ Address CIRGenItaniumCXXABI::initializeArrayCookie(CIRGenFunction &cgf,
 
   CharUnits baseAlignment = newPtr.getAlignment();
   CharUnits cookiePtrAlignment = baseAlignment.alignmentAtOffset(cookieOffset);
-  Address cookiePtr(cookiePtrValue, u8Ty, cookiePtrAlignment);
+  Address cookiePtr(cookiePtrValue, u8PtrTy, cookiePtrAlignment);
 
   // Write the number of elements into the appropriate slot.
   Address numElementsPtr =
@@ -2485,199 +2277,189 @@ Address CIRGenItaniumCXXABI::initializeArrayCookie(CIRGenFunction &cgf,
   return Address(finalPtr, newPtr.getElementType(), finalAlignment);
 }
 
-bool CIRGenItaniumCXXABI::hasAnyUnusedVirtualInlineFunction(
-    const CXXRecordDecl *rd) const {
-  const auto &vtableLayout = cgm.getItaniumVTableContext().getVTableLayout(rd);
+namespace {
+/// From traditional LLVM, useful info for LLVM lowering support:
+/// A cleanup to call __cxa_end_catch.  In many cases, the caught
+/// exception type lets us state definitively that the thrown exception
+/// type does not have a destructor.  In particular:
+///   - Catch-alls tell us nothing, so we have to conservatively
+///     assume that the thrown exception might have a destructor.
+///   - Catches by reference behave according to their base types.
+///   - Catches of non-record types will only trigger for exceptions
+///     of non-record types, which never have destructors.
+///   - Catches of record types can trigger for arbitrary subclasses
+///     of the caught type, so we have to assume the actual thrown
+///     exception type might have a throwing destructor, even if the
+///     caught type's destructor is trivial or nothrow.
+struct CallEndCatch final : EHScopeStack::Cleanup {
+  CallEndCatch(bool mightThrow) : mightThrow(mightThrow) {}
+  bool mightThrow;
 
-  for (const auto &vtableComponent : vtableLayout.vtable_components()) {
-    // Skip empty slot.
-    if (!vtableComponent.isUsedFunctionPointerKind())
-      continue;
-
-    const CXXMethodDecl *method = vtableComponent.getFunctionDecl();
-    const FunctionDecl *fd = method->getDefinition();
-    const bool isInlined =
-        method->getCanonicalDecl()->isInlined() || (fd && fd->isInlined());
-    if (!isInlined)
-      continue;
-
-    StringRef name = cgm.getMangledName(
-        vtableComponent.getGlobalDecl(/*HasVectorDeletingDtors=*/false));
-    auto entry = dyn_cast_or_null<cir::GlobalOp>(cgm.getGlobalValue(name));
-    // This checks if virtual inline function has already been emitted.
-    // Note that it is possible that this inline function would be emitted
-    // after trying to emit vtable speculatively. Because of this we do
-    // an extra pass after emitting all deferred vtables to find and emit
-    // these vtables opportunistically.
-    if (!entry || entry.isDeclaration())
-      return true;
-  }
-  return false;
-}
-
-bool CIRGenItaniumCXXABI::isVTableHidden(const CXXRecordDecl *rd) const {
-  const auto &vtableLayout = cgm.getItaniumVTableContext().getVTableLayout(rd);
-
-  for (const auto &vtableComponent : vtableLayout.vtable_components()) {
-    if (vtableComponent.isRTTIKind()) {
-      const CXXRecordDecl *rttiDecl = vtableComponent.getRTTIDecl();
-      if (rttiDecl->getVisibility() == Visibility::HiddenVisibility)
-        return true;
-    } else if (vtableComponent.isUsedFunctionPointerKind()) {
-      const CXXMethodDecl *method = vtableComponent.getFunctionDecl();
-      if (method->getVisibility() == Visibility::HiddenVisibility &&
-          !method->isDefined())
-        return true;
+  void emit(CIRGenFunction &cgf, Flags flags) override {
+    if (!mightThrow) {
+      // Traditional LLVM codegen would emit a call to __cxa_end_catch
+      // here. For CIR, just let it pass since the cleanup is going
+      // to be emitted on a later pass when lowering the catch region.
+      // CGF.EmitNounwindRuntimeCall(getEndCatchFn(CGF.CGM));
+      cir::YieldOp::create(cgf.getBuilder(), *cgf.currSrcLoc);
+      return;
     }
+
+    // Traditional LLVM codegen would emit a call to __cxa_end_catch
+    // here. For CIR, just let it pass since the cleanup is going
+    // to be emitted on a later pass when lowering the catch region.
+    // CGF.EmitRuntimeCallOrTryCall(getEndCatchFn(CGF.CGM));
+    if (!cgf.getBuilder().getBlock()->mightHaveTerminator())
+      cir::YieldOp::create(cgf.getBuilder(), *cgf.currSrcLoc);
   }
-  return false;
+};
+} // namespace
+
+static mlir::Value callBeginCatch(CIRGenFunction &cgf, mlir::Type paramTy,
+                                  bool endMightThrow) {
+  auto catchParam = cir::CatchParamOp::create(
+      cgf.getBuilder(), cgf.getBuilder().getUnknownLoc(), paramTy);
+
+  cgf.ehStack.pushCleanup<CallEndCatch>(
+      NormalAndEHCleanup,
+      endMightThrow && !cgf.cgm.getLangOpts().AssumeNothrowExceptionDtor);
+
+  return catchParam.getParam();
 }
 
-bool CIRGenItaniumCXXABI::canSpeculativelyEmitVTableAsBaseClass(
-    const CXXRecordDecl *rd) const {
-  // We don't emit available_externally vtables if we are in -fapple-kext mode
-  // because kext mode does not permit devirtualization.
-  if (cgm.getLangOpts().AppleKext)
-    return false;
+/// A "special initializer" callback for initializing a catch
+/// parameter during catch initialization.
+static void initCatchParam(CIRGenFunction &cgf, const VarDecl &catchParam,
+                           Address paramAddr, SourceLocation loc) {
+  CanQualType catchType =
+      cgf.cgm.getASTContext().getCanonicalType(catchParam.getType());
+  mlir::Type cirCatchTy = cgf.convertTypeForMem(catchType);
 
-  // If the vtable is hidden then it is not safe to emit an available_externally
-  // copy of vtable.
-  if (isVTableHidden(rd))
-    return false;
+  // If we're catching by reference, we can just cast the object
+  // pointer to the appropriate pointer.
+  if (isa<ReferenceType>(catchType)) {
+    cgf.cgm.errorNYI(loc, "initCatchParam: ReferenceType");
+    return;
+  }
 
-  if (cgm.getCodeGenOpts().ForceEmitVTables)
-    return true;
+  // Scalars and complexes.
+  cir::TypeEvaluationKind tek = cgf.getEvaluationKind(catchType);
+  if (tek != cir::TEK_Aggregate) {
+    // Notes for LLVM lowering:
+    // If the catch type is a pointer type, __cxa_begin_catch returns
+    // the pointer by value.
+    if (catchType->hasPointerRepresentation()) {
+      mlir::Value catchParam =
+          callBeginCatch(cgf, cirCatchTy, /*endMightThrow=*/false);
+      switch (catchType.getQualifiers().getObjCLifetime()) {
+      case Qualifiers::OCL_Strong:
+        cgf.cgm.errorNYI(loc,
+                         "initCatchParam: PointerRepresentation OCL_Strong");
+        return;
 
-  // A speculative vtable can only be generated if all virtual inline functions
-  // defined by this class are emitted. The vtable in the final program contains
-  // for each virtual inline function not used in the current TU a function that
-  // is equivalent to the unused function. The function in the actual vtable
-  // does not have to be declared under the same symbol (e.g., a virtual
-  // destructor that can be substituted with its base class's destructor). Since
-  // inline functions are emitted lazily and this emissions does not account for
-  // speculative emission of a vtable, we might generate a speculative vtable
-  // with references to inline functions that are not emitted under that name.
-  // This can lead to problems when devirtualizing a call to such a function,
-  // that result in linking errors. Hence, if there are any unused virtual
-  // inline function, we cannot emit the speculative vtable.
-  // FIXME we can still emit a copy of the vtable if we
-  // can emit definition of the inline functions.
-  if (hasAnyUnusedVirtualInlineFunction(rd))
-    return false;
+      case Qualifiers::OCL_ExplicitNone:
+      case Qualifiers::OCL_Autoreleasing:
+        cgf.cgm.errorNYI(loc, "initCatchParam: PointerRepresentation "
+                              "OCL_ExplicitNone & OCL_Autoreleasing");
+        return;
 
-  // For a class with virtual bases, we must also be able to speculatively
-  // emit the VTT, because CodeGen doesn't have separate notions of "can emit
-  // the vtable" and "can emit the VTT". For a base subobject, this means we
-  // need to be able to emit non-virtual base vtables.
-  if (rd->getNumVBases()) {
-    for (const auto &b : rd->bases()) {
-      auto *brd = b.getType()->getAsCXXRecordDecl();
-      assert(brd && "no class for base specifier");
-      if (b.isVirtual() || !brd->isDynamicClass())
-        continue;
-      if (!canSpeculativelyEmitVTableAsBaseClass(brd))
-        return false;
+      case Qualifiers::OCL_None:
+        cgf.getBuilder().createStore(cgf.getLoc(loc), catchParam, paramAddr);
+        return;
+
+      case Qualifiers::OCL_Weak:
+        cgf.cgm.errorNYI(loc, "initCatchParam: PointerRepresentation OCL_Weak");
+        return;
+      }
+
+      llvm_unreachable("bad ownership qualifier!");
     }
+
+    // Otherwise, it returns a pointer into the exception object.
+    mlir::Type cirCatchTy = cgf.convertTypeForMem(catchType);
+    mlir::Value catchParam =
+        callBeginCatch(cgf, cgf.getBuilder().getPointerTo(cirCatchTy),
+                       /*endMightThrow=*/false);
+    LValue srcLV = cgf.makeNaturalAlignAddrLValue(catchParam, catchType);
+    LValue destLV = cgf.makeAddrLValue(paramAddr, catchType);
+    switch (tek) {
+    case cir::TEK_Complex: {
+      mlir::Value load = cgf.emitLoadOfComplex(srcLV, loc);
+      cgf.emitStoreOfComplex(cgf.getLoc(loc), load, destLV, /*isInit=*/true);
+      return;
+    }
+    case cir::TEK_Scalar: {
+      mlir::Value exnLoad = cgf.emitLoadOfScalar(srcLV, loc);
+      cgf.emitStoreOfScalar(exnLoad, destLV, /*isInit=*/true);
+      return;
+    }
+    case cir::TEK_Aggregate:
+      llvm_unreachable("evaluation kind filtered out!");
+    }
+
+    llvm_unreachable("bad evaluation kind");
   }
 
-  return true;
+  cgf.cgm.errorNYI(loc, "initCatchParam: cir::TEK_Aggregate");
 }
 
-bool CIRGenItaniumCXXABI::canSpeculativelyEmitVTable(
-    const CXXRecordDecl *rd) const {
-  if (!canSpeculativelyEmitVTableAsBaseClass(rd))
-    return false;
+/// Begins a catch statement by initializing the catch variable and
+/// calling __cxa_begin_catch.
+void CIRGenItaniumCXXABI::emitBeginCatch(CIRGenFunction &cgf,
+                                         const CXXCatchStmt *catchStmt) {
+  // We have to be very careful with the ordering of cleanups here:
+  //   C++ [except.throw]p4:
+  //     The destruction [of the exception temporary] occurs
+  //     immediately after the destruction of the object declared in
+  //     the exception-declaration in the handler.
+  //
+  // So the precise ordering is:
+  //   1.  Construct catch variable.
+  //   2.  __cxa_begin_catch
+  //   3.  Enter __cxa_end_catch cleanup
+  //   4.  Enter dtor cleanup
+  //
+  // We do this by using a slightly abnormal initialization process.
+  // Delegation sequence:
+  //   - ExitCXXTryStmt opens a RunCleanupsScope
+  //     - EmitAutoVarAlloca creates the variable and debug info
+  //       - InitCatchParam initializes the variable from the exception
+  //       - CallBeginCatch calls __cxa_begin_catch
+  //       - CallBeginCatch enters the __cxa_end_catch cleanup
+  //     - EmitAutoVarCleanups enters the variable destructor cleanup
+  //   - EmitCXXTryStmt emits the code for the catch body
+  //   - EmitCXXTryStmt close the RunCleanupsScope
 
-  if (rd->shouldEmitInExternalSource())
-    return false;
-
-  // For a complete-object vtable (or more specifically, for the VTT), we need
-  // to be able to speculatively emit the vtables of all dynamic virtual bases.
-  for (const auto &b : rd->vbases()) {
-    auto *brd = b.getType()->getAsCXXRecordDecl();
-    assert(brd && "no class for base specifier");
-    if (!brd->isDynamicClass())
-      continue;
-    if (!canSpeculativelyEmitVTableAsBaseClass(brd))
-      return false;
+  VarDecl *catchParam = catchStmt->getExceptionDecl();
+  if (!catchParam) {
+    callBeginCatch(cgf, cgf.getBuilder().getVoidPtrTy(),
+                   /*endMightThrow=*/true);
+    return;
   }
 
-  return true;
-}
+  auto getCatchParamAllocaIP = [&]() {
+    cir::CIRBaseBuilderTy::InsertPoint currIns =
+        cgf.getBuilder().saveInsertionPoint();
+    mlir::Operation *currParent = currIns.getBlock()->getParentOp();
 
-static mlir::Value performTypeAdjustment(CIRGenFunction &cgf,
-                                         Address initialPtr,
-                                         const CXXRecordDecl *unadjustedClass,
-                                         int64_t nonVirtualAdjustment,
-                                         int64_t virtualAdjustment,
-                                         bool isReturnAdjustment) {
-  if (!nonVirtualAdjustment && !virtualAdjustment)
-    return initialPtr.getPointer();
-
-  CIRGenBuilderTy &builder = cgf.getBuilder();
-  mlir::Location loc = builder.getUnknownLoc();
-  cir::PointerType i8PtrTy = builder.getUInt8PtrTy();
-  mlir::Value v = builder.createBitcast(initialPtr.getPointer(), i8PtrTy);
-
-  // In a base-to-derived cast, the non-virtual adjustment is applied first.
-  if (nonVirtualAdjustment && !isReturnAdjustment) {
-    cir::ConstantOp offsetConst = builder.getSInt64(nonVirtualAdjustment, loc);
-    v = cir::PtrStrideOp::create(builder, loc, i8PtrTy, v, offsetConst);
-  }
-
-  // Perform the virtual adjustment if we have one.
-  mlir::Value resultPtr;
-  if (virtualAdjustment) {
-    mlir::Value vtablePtr = cgf.getVTablePtr(
-        loc, Address(v, clang::CharUnits::One()), unadjustedClass);
-    vtablePtr = builder.createBitcast(vtablePtr, i8PtrTy);
-
-    mlir::Value offset;
-    mlir::Value offsetPtr =
-        cir::PtrStrideOp::create(builder, loc, i8PtrTy, vtablePtr,
-                                 builder.getSInt64(virtualAdjustment, loc));
-    if (cgf.cgm.getLangOpts().RelativeCXXABIVTables) {
-      assert(!cir::MissingFeatures::vtableRelativeLayout());
-      cgf.cgm.errorNYI("virtual adjustment for relative layout vtables");
+    mlir::Block *insertBlock = nullptr;
+    if (auto scopeOp = currParent->getParentOfType<cir::ScopeOp>()) {
+      insertBlock = &scopeOp.getScopeRegion().getBlocks().back();
+    } else if (auto fnOp = currParent->getParentOfType<cir::FuncOp>()) {
+      insertBlock = &fnOp.getRegion().getBlocks().back();
     } else {
-      offset = builder.createAlignedLoad(loc, cgf.ptrDiffTy, offsetPtr,
-                                         cgf.getPointerAlign());
+      llvm_unreachable("unknown outermost scope-like parent");
     }
+    return cgf.getBuilder().getBestAllocaInsertPoint(insertBlock);
+  };
 
-    resultPtr = cir::PtrStrideOp::create(builder, loc, i8PtrTy, v, offset);
-  } else {
-    resultPtr = v;
-  }
+  // Emit the local. Make sure the alloca's superseed the current scope, since
+  // these are going to be consumed by `cir.catch`, which is not within the
+  // current scope.
 
-  // In a derived-to-base conversion, the non-virtual adjustment is
-  // applied second.
-  if (nonVirtualAdjustment && isReturnAdjustment) {
-    cir::ConstantOp offsetConst = builder.getSInt64(nonVirtualAdjustment, loc);
-    resultPtr =
-        cir::PtrStrideOp::create(builder, loc, i8PtrTy, resultPtr, offsetConst);
-  }
-
-  // Cast back to original pointer type.
-  return builder.createBitcast(resultPtr, initialPtr.getType());
-}
-
-mlir::Value CIRGenItaniumCXXABI::performThisAdjustment(
-    CIRGenFunction &cgf, Address thisAddr, const CXXRecordDecl *unadjustedClass,
-    const ThunkInfo &ti) {
-  return performTypeAdjustment(cgf, thisAddr, unadjustedClass,
-                               ti.This.NonVirtual,
-                               ti.This.Virtual.Itanium.VCallOffsetOffset,
-                               /*isReturnAdjustment=*/false);
-}
-
-mlir::Value CIRGenItaniumCXXABI::performReturnAdjustment(
-    CIRGenFunction &cgf, Address ret, const CXXRecordDecl *unadjustedClass,
-    const ReturnAdjustment &ra) {
-  return performTypeAdjustment(cgf, ret, unadjustedClass, ra.NonVirtual,
-                               ra.Virtual.Itanium.VBaseOffsetOffset,
-                               /*isReturnAdjustment=*/true);
-}
-
-bool CIRGenItaniumCXXABI::isZeroInitializable(const MemberPointerType *mpt) {
-  return mpt->isMemberFunctionPointer();
+  CIRGenFunction::AutoVarEmission var =
+      cgf.emitAutoVarAlloca(*catchParam, getCatchParamAllocaIP());
+  initCatchParam(cgf, *catchParam, var.getObjectAddress(cgf),
+                 catchStmt->getBeginLoc());
+  cgf.emitAutoVarCleanups(var);
 }

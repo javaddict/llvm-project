@@ -8,7 +8,6 @@
 import sys
 import os
 import platform
-from typing import List
 
 from dex.debugger.DebuggerBase import DebuggerBase, watch_is_active
 from dex.dextIR import FrameIR, LocIR, StepIR, StopReason, ValueIR
@@ -168,12 +167,6 @@ class DbgEng(DebuggerBase):
             program_state=ProgramState(state_frames),
         )
 
-    def get_stack_frames(self, step_index: int) -> StepIR:
-        raise NotImplementedError("--use-script debugging not supported in dbgeng yet.")
-
-    def collect_watches(self, step: StepIR, watches: List[str]):
-        raise NotImplementedError("--use-script debugging not supported in dbgeng yet.")
-
     @property
     def is_running(self):
         return False  # We're never free-running
@@ -183,12 +176,16 @@ class DbgEng(DebuggerBase):
         return self.finished
 
     def evaluate_expression(self, expression, frame_idx=0):
+        # XXX: cdb insists on using '->' to examine fields of structures,
+        # as it appears to reserve '.' for other purposes.
+        fixed_expr = expression.replace(".", "->")
+
         orig_scope_idx = self.client.Symbols.GetCurrentScopeFrameIndex()
         self.client.Symbols.SetScopeFrameByIndex(frame_idx)
 
-        res = self.client.Control.Evaluate(expression)
+        res = self.client.Control.Evaluate(fixed_expr)
         if res is not None:
-            result, typename = self.client.Control.Evaluate(expression)
+            result, typename = self.client.Control.Evaluate(fixed_expr)
             could_eval = True
         else:
             result, typename = (None, None)

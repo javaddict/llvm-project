@@ -87,32 +87,24 @@ CVType LazyRandomTypeCollection::getType(TypeIndex Index) {
   assert(!Index.isSimple());
 
   auto EC = ensureTypeExists(Index);
-  if (EC) {
-    assert(false && "Invalid type index (use tryGetType or getTypeOrError)");
-    llvm::consumeError(std::move(EC));
-    return {};
-  }
+  error(std::move(EC));
   assert(contains(Index));
 
   return Records[Index.toArrayIndex()].Type;
 }
 
-llvm::Expected<CVType>
-LazyRandomTypeCollection::getTypeOrError(TypeIndex Index) {
+std::optional<CVType> LazyRandomTypeCollection::tryGetType(TypeIndex Index) {
   if (Index.isSimple())
-    return llvm::createStringError("Type index too low (%d)", Index.getIndex());
+    return std::nullopt;
 
-  if (auto EC = ensureTypeExists(Index))
-    return EC;
+  if (auto EC = ensureTypeExists(Index)) {
+    consumeError(std::move(EC));
+    return std::nullopt;
+  }
 
   if (!contains(Index))
-    return llvm::createStringError("Type index too high (%d)",
-                                   Index.getIndex());
+    return std::nullopt;
   return Records[Index.toArrayIndex()].Type;
-}
-
-std::optional<CVType> LazyRandomTypeCollection::tryGetType(TypeIndex Index) {
-  return llvm::expectedToOptional(getTypeOrError(Index));
 }
 
 StringRef LazyRandomTypeCollection::getTypeName(TypeIndex Index) {

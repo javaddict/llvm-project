@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "UseAnonymousNamespaceCheck.h"
-#include "../utils/FileExtensionsUtils.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 
@@ -18,32 +17,33 @@ namespace {
 AST_POLYMORPHIC_MATCHER_P(isInHeaderFile,
                           AST_POLYMORPHIC_SUPPORTED_TYPES(FunctionDecl,
                                                           VarDecl),
-                          const FileExtensionsSet *, HeaderFileExtensions) {
+                          FileExtensionsSet, HeaderFileExtensions) {
   return utils::isExpansionLocInHeaderFile(
       Node.getBeginLoc(), Finder->getASTContext().getSourceManager(),
-      *HeaderFileExtensions);
+      HeaderFileExtensions);
 }
 
 AST_MATCHER(FunctionDecl, isMemberFunction) {
-  return isa<CXXMethodDecl>(&Node);
+  return llvm::isa<CXXMethodDecl>(&Node);
 }
 AST_MATCHER(VarDecl, isStaticDataMember) { return Node.isStaticDataMember(); }
 } // namespace
 
 UseAnonymousNamespaceCheck::UseAnonymousNamespaceCheck(
     StringRef Name, ClangTidyContext *Context)
-    : ClangTidyCheck(Name, Context) {}
+    : ClangTidyCheck(Name, Context),
+      HeaderFileExtensions(Context->getHeaderFileExtensions()) {}
 
 void UseAnonymousNamespaceCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(
       functionDecl(isStaticStorageClass(),
-                   unless(anyOf(isInHeaderFile(&getHeaderFileExtensions()),
+                   unless(anyOf(isInHeaderFile(HeaderFileExtensions),
                                 isInAnonymousNamespace(), isMemberFunction())))
           .bind("x"),
       this);
   Finder->addMatcher(
       varDecl(isStaticStorageClass(),
-              unless(anyOf(isInHeaderFile(&getHeaderFileExtensions()),
+              unless(anyOf(isInHeaderFile(HeaderFileExtensions),
                            isInAnonymousNamespace(), isStaticLocal(),
                            isStaticDataMember(), hasType(isConstQualified()))))
           .bind("x"),
@@ -52,7 +52,8 @@ void UseAnonymousNamespaceCheck::registerMatchers(MatchFinder *Finder) {
 
 void UseAnonymousNamespaceCheck::check(const MatchFinder::MatchResult &Result) {
   if (const auto *MatchedDecl = Result.Nodes.getNodeAs<NamedDecl>("x")) {
-    const StringRef Type = isa<VarDecl>(MatchedDecl) ? "variable" : "function";
+    const StringRef Type =
+        llvm::isa<VarDecl>(MatchedDecl) ? "variable" : "function";
     diag(MatchedDecl->getLocation(),
          "%0 %1 declared 'static', move to anonymous namespace instead")
         << Type << MatchedDecl;

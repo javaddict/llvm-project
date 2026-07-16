@@ -56,7 +56,7 @@ ParseMemoryRegionInfoFromProcMapsLine(llvm::StringRef maps_line,
 
   // Any memory region in /proc/{pid}/(maps|smaps) is by definition mapped
   // into the process.
-  region.SetMapped(eLazyBoolYes);
+  region.SetMapped(MemoryRegionInfo::OptionalBool::eYes);
 
   // Parse out each permission entry.
   if (line_extractor.GetBytesLeft() < 4)
@@ -68,9 +68,9 @@ ParseMemoryRegionInfoFromProcMapsLine(llvm::StringRef maps_line,
   // Handle read permission.
   const char read_perm_char = line_extractor.GetChar();
   if (read_perm_char == 'r')
-    region.SetReadable(eLazyBoolYes);
+    region.SetReadable(MemoryRegionInfo::OptionalBool::eYes);
   else if (read_perm_char == '-')
-    region.SetReadable(eLazyBoolNo);
+    region.SetReadable(MemoryRegionInfo::OptionalBool::eNo);
   else
     return ProcMapError("unexpected /proc/{pid}/%s read permission char",
                         maps_kind);
@@ -78,9 +78,9 @@ ParseMemoryRegionInfoFromProcMapsLine(llvm::StringRef maps_line,
   // Handle write permission.
   const char write_perm_char = line_extractor.GetChar();
   if (write_perm_char == 'w')
-    region.SetWritable(eLazyBoolYes);
+    region.SetWritable(MemoryRegionInfo::OptionalBool::eYes);
   else if (write_perm_char == '-')
-    region.SetWritable(eLazyBoolNo);
+    region.SetWritable(MemoryRegionInfo::OptionalBool::eNo);
   else
     return ProcMapError("unexpected /proc/{pid}/%s write permission char",
                         maps_kind);
@@ -88,9 +88,9 @@ ParseMemoryRegionInfoFromProcMapsLine(llvm::StringRef maps_line,
   // Handle execute permission.
   const char exec_perm_char = line_extractor.GetChar();
   if (exec_perm_char == 'x')
-    region.SetExecutable(eLazyBoolYes);
+    region.SetExecutable(MemoryRegionInfo::OptionalBool::eYes);
   else if (exec_perm_char == '-')
-    region.SetExecutable(eLazyBoolNo);
+    region.SetExecutable(MemoryRegionInfo::OptionalBool::eNo);
   else
     return ProcMapError("unexpected /proc/{pid}/%s exec permission char",
                         maps_kind);
@@ -98,11 +98,11 @@ ParseMemoryRegionInfoFromProcMapsLine(llvm::StringRef maps_line,
   // Handle sharing status (private/shared).
   const char sharing_char = line_extractor.GetChar();
   if (sharing_char == 's')
-    region.SetShared(eLazyBoolYes);
+    region.SetShared(MemoryRegionInfo::OptionalBool::eYes);
   else if (sharing_char == 'p')
-    region.SetShared(eLazyBoolNo);
+    region.SetShared(MemoryRegionInfo::OptionalBool::eNo);
   else
-    region.SetShared(eLazyBoolDontKnow);
+    region.SetShared(MemoryRegionInfo::OptionalBool::eDontKnow);
 
   line_extractor.SkipSpaces();           // Skip the separator
   line_extractor.GetHexMaxU64(false, 0); // Read the offset
@@ -164,20 +164,16 @@ void lldb_private::ParseLinuxSMapRegions(llvm::StringRef linux_smap,
     if (!name.contains(' ')) {
       if (region) {
         if (name == "VmFlags") {
-          region->SetMemoryTagged(eLazyBoolNo);
-          region->SetIsShadowStack(eLazyBoolNo);
+          region->SetMemoryTagged(MemoryRegionInfo::eNo);
+          region->SetIsShadowStack(MemoryRegionInfo::eNo);
 
           llvm::SmallVector<llvm::StringRef> flags;
           value.split(flags, ' ', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
           for (llvm::StringRef flag : flags)
             if (flag == "mt")
-              region->SetMemoryTagged(eLazyBoolYes);
+              region->SetMemoryTagged(MemoryRegionInfo::eYes);
             else if (flag == "ss")
-              region->SetIsShadowStack(eLazyBoolYes);
-        } else if (name == "ProtectionKey") {
-          unsigned key = 0;
-          if (!value.ltrim().getAsInteger(10, key))
-            region->SetProtectionKey(key);
+              region->SetIsShadowStack(MemoryRegionInfo::eYes);
         }
       } else {
         // Orphaned settings line

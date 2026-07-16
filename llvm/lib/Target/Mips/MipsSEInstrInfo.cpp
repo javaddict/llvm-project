@@ -172,8 +172,7 @@ void MipsSEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     } else if (Mips::MSACtrlRegClass.contains(SrcReg)) {
       Opc = Mips::CFCMSA;
     } else if (Mips::FGR64RegClass.contains(SrcReg) &&
-               (I->getFlag(MachineInstr::MIFlag::NoSWrap) ||
-                isWritedByFCMP(I, SrcReg))) {
+               isWritedByFCMP(I, SrcReg)) {
       Opc = Mips::MFC1_D64;
     }
   }
@@ -823,7 +822,7 @@ void MipsSEInstrInfo::expandCvtFPInt(MachineBasicBlock &MBB,
   const MCInstrDesc &CvtDesc = get(CvtOpc), &MovDesc = get(MovOpc);
   const MachineOperand &Dst = I->getOperand(0), &Src = I->getOperand(1);
   unsigned DstReg = Dst.getReg(), SrcReg = Src.getReg(), TmpReg = DstReg;
-  RegState KillSrc = getKillRegState(Src.isKill());
+  unsigned KillSrc =  getKillRegState(Src.isKill());
   DebugLoc DL = I->getDebugLoc();
   bool DstIsLarger, SrcIsLarger;
 

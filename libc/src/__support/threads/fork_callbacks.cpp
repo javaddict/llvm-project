@@ -22,6 +22,7 @@ struct ForkCallbackTriple {
   ForkCallback *prepare = nullptr;
   ForkCallback *parent = nullptr;
   ForkCallback *child = nullptr;
+  constexpr ForkCallbackTriple() = default;
 };
 
 class AtForkCallbackManager {
@@ -34,8 +35,8 @@ class AtForkCallbackManager {
 
 public:
   constexpr AtForkCallbackManager()
-      : mtx(/*is_priority_inherit=*/false, /*is_recursive=*/false,
-            /*is_robust=*/false, /*is_pshared=*/false),
+      : mtx(/*timed=*/false, /*recursive=*/false, /*robust=*/false,
+            /*pshared=*/false),
         next_index(0) {}
 
   bool register_triple(const ForkCallbackTriple &triple) {

@@ -141,11 +141,10 @@ void OptionalValueConversionCheck::check(
   }
   if (const auto *CallExpr =
           Result.Nodes.getNodeAs<CXXMemberCallExpr>("member-call")) {
-    const std::optional<Token> Tok = utils::lexer::getPreviousToken(
-        CallExpr->getExprLoc(), *Result.SourceManager, getLangOpts());
-    if (!Tok)
-      return;
-    const SourceLocation Begin = Tok->getLocation();
+    const SourceLocation Begin =
+        utils::lexer::getPreviousToken(CallExpr->getExprLoc(),
+                                       *Result.SourceManager, getLangOpts())
+            .getLocation();
     auto Diag =
         diag(CallExpr->getExprLoc(),
              "remove call to %0 to silence this warning", DiagnosticIDs::Note);
@@ -153,7 +152,7 @@ void OptionalValueConversionCheck::check(
          << FixItHint::CreateRemoval(
                 CharSourceRange::getTokenRange(Begin, CallExpr->getEndLoc()));
     if (const auto *Member =
-            dyn_cast<MemberExpr>(CallExpr->getCallee()->IgnoreImplicit());
+            llvm::dyn_cast<MemberExpr>(CallExpr->getCallee()->IgnoreImplicit());
         Member && Member->isArrow())
       Diag << FixItHint::CreateInsertion(CallExpr->getBeginLoc(), "*");
     return;

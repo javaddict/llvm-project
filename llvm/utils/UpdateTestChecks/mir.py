@@ -52,7 +52,7 @@ MIR_FUNC_RE = re.compile(
 
 
 def build_function_info_dictionary(
-    test, raw_tool_output, triple, prefixes, func_dict, verbose, filters=None
+    test, raw_tool_output, triple, prefixes, func_dict, verbose
 ):
     for m in MIR_FUNC_RE.finditer(raw_tool_output):
         func = m.group("func")
@@ -84,11 +84,10 @@ def build_function_info_dictionary(
                 )
             mangled.append(func_line)
         body = "".join(mangled)
-        filtered_body = common.do_filter(body, filters)
 
         for prefix in prefixes:
             info = common.function_body(
-                filtered_body, fixedStack, None, None, None, None, ginfo=None
+                body, fixedStack, None, None, None, None, ginfo=None
             )
             if func in func_dict[prefix]:
                 if (

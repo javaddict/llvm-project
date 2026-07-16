@@ -207,16 +207,18 @@ void DFAJumpThreading::unfold(DomTreeUpdater *DTU, LoopInfo *LI,
   assert(SI->hasOneUse());
   // The select may come indirectly, instead of from where it is defined.
   BasicBlock *StartBlock = SIUse->getIncomingBlock(*SI->use_begin());
+  BranchInst *StartBlockTerm =
+      dyn_cast<BranchInst>(StartBlock->getTerminator());
+  assert(StartBlockTerm);
 
-  if (UncondBrInst *StartBlockTerm =
-          dyn_cast<UncondBrInst>(StartBlock->getTerminator())) {
+  if (StartBlockTerm->isUnconditional()) {
     BasicBlock *EndBlock = StartBlock->getUniqueSuccessor();
     // Arbitrarily choose the 'false' side for a new input value to the PHI.
     BasicBlock *NewBlock = BasicBlock::Create(
         SI->getContext(), Twine(SI->getName(), ".si.unfold.false"),
         EndBlock->getParent(), EndBlock);
     NewBBs->push_back(NewBlock);
-    UncondBrInst::Create(EndBlock, NewBlock);
+    BranchInst::Create(EndBlock, NewBlock);
     DTU->applyUpdates({{DominatorTree::Insert, NewBlock, EndBlock}});
 
     // StartBlock
@@ -266,7 +268,7 @@ void DFAJumpThreading::unfold(DomTreeUpdater *DTU, LoopInfo *LI,
     // Insert the real conditional branch based on the original condition.
     StartBlockTerm->eraseFromParent();
     auto *BI =
-        CondBrInst::Create(SI->getCondition(), EndBlock, NewBlock, StartBlock);
+        BranchInst::Create(EndBlock, NewBlock, SI->getCondition(), StartBlock);
     if (!ProfcheckDisableMetadataFixes)
       BI->setMetadata(LLVMContext::MD_prof,
                       SI->getMetadata(LLVMContext::MD_prof));
@@ -301,10 +303,10 @@ void DFAJumpThreading::unfold(DomTreeUpdater *DTU, LoopInfo *LI,
     //   |     /
     // EndBlock
     //  (Use)
-    UncondBrInst::Create(EndBlock, NewBlockF);
+    BranchInst::Create(EndBlock, NewBlockF);
     // Insert the real conditional branch based on the original condition.
     auto *BI =
-        CondBrInst::Create(SI->getCondition(), EndBlock, NewBlockF, NewBlockT);
+        BranchInst::Create(EndBlock, NewBlockF, SI->getCondition(), NewBlockT);
     if (!ProfcheckDisableMetadataFixes)
       BI->setMetadata(LLVMContext::MD_prof,
                       SI->getMetadata(LLVMContext::MD_prof));
@@ -344,9 +346,8 @@ void DFAJumpThreading::unfold(DomTreeUpdater *DTU, LoopInfo *LI,
 
     // Update the appropriate successor of the start block to point to the new
     // unfolded block.
-    CondBrInst *CondBr = cast<CondBrInst>(StartBlock->getTerminator());
-    unsigned SuccNum = CondBr->getSuccessor(1) == EndBlock ? 1 : 0;
-    CondBr->setSuccessor(SuccNum, NewBlockT);
+    unsigned SuccNum = StartBlockTerm->getSuccessor(1) == EndBlock ? 1 : 0;
+    StartBlockTerm->setSuccessor(SuccNum, NewBlockT);
     DTU->applyUpdates({{DominatorTree::Delete, StartBlock, EndBlock},
                        {DominatorTree::Insert, StartBlock, NewBlockT}});
   }
@@ -539,17 +540,17 @@ private:
     if (!SI->hasOneUse())
       return false;
 
-    Instruction *SIUse = SI->user_back();
+    Instruction *SIUse = dyn_cast<Instruction>(SI->user_back());
     // The use of the select inst should be either a phi or another select.
-    if (!isa<PHINode, SelectInst>(SIUse))
+    if (!SIUse || !(isa<PHINode>(SIUse) || isa<SelectInst>(SIUse)))
       return false;
 
     BasicBlock *SIBB = SI->getParent();
 
     // Currently, we can only expand select instructions in basic blocks with
     // one successor.
-    UncondBrInst *SITerm = dyn_cast<UncondBrInst>(SIBB->getTerminator());
-    if (!SITerm)
+    BranchInst *SITerm = dyn_cast<BranchInst>(SIBB->getTerminator());
+    if (!SITerm || !SITerm->isUnconditional())
       return false;
 
     // Only fold the select coming from directly where it is defined.
@@ -920,7 +921,7 @@ private:
       BasicBlock *VisitedBB = getClonedBB(BB, NextState, DuplicateMap);
       if (!VisitedBB) {
         Metrics.analyzeBasicBlock(BB, *TTI, EphValues);
-        NumClonedInst += BB->size();
+        NumClonedInst += BB->sizeWithoutDebug();
         DuplicateMap[BB].push_back({BB, NextState});
       }
 
@@ -938,7 +939,7 @@ private:
         if (VisitedBB)
           continue;
         Metrics.analyzeBasicBlock(BB, *TTI, EphValues);
-        NumClonedInst += BB->size();
+        NumClonedInst += BB->sizeWithoutDebug();
         DuplicateMap[BB].push_back({BB, NextState});
       }
 
@@ -981,7 +982,7 @@ private:
     uint64_t NumOrigInst = 0;
     uint64_t NumOuterUseBlock = 0;
     for (auto *BB : DuplicateMap.keys()) {
-      NumOrigInst += BB->size();
+      NumOrigInst += BB->sizeWithoutDebug();
       // Only unduplicated blocks with single predecessor require new phi
       // nodes.
       for (auto *Succ : successors(BB))
@@ -1229,12 +1230,6 @@ private:
     NewBB->moveAfter(BB);
     NumCloned++;
 
-    // Give the clone fresh noalias scopes; otherwise it shares BB's scopes and
-    // AA can treat aliasing accesses on different threaded paths as noalias.
-    SmallVector<MDNode *> NoAliasScopes;
-    identifyNoAliasScopesToClone({NewBB}, NoAliasScopes);
-    cloneAndAdaptNoAliasScopes(NoAliasScopes, {NewBB}, BB->getContext(), "dfa");
-
     for (Instruction &I : *NewBB) {
       // Do not remap operands of PHINode in case a definition in BB is an
       // incoming value to a phi in the same block. This incoming value will
@@ -1344,9 +1339,10 @@ private:
     for (auto Entry : VMap) {
       Instruction *Inst =
           dyn_cast<Instruction>(const_cast<Value *>(Entry.first));
-      if (!Inst || !Entry.second ||
-          isa<UncondBrInst, CondBrInst, SwitchInst>(Inst))
+      if (!Inst || !Entry.second || isa<BranchInst>(Inst) ||
+          isa<SwitchInst>(Inst)) {
         continue;
+      }
 
       Instruction *Cloned = dyn_cast<Instruction>(Entry.second);
       if (!Cloned)
@@ -1393,7 +1389,7 @@ private:
     }
 
     Switch->eraseFromParent();
-    UncondBrInst::Create(NextCase, LastBlock);
+    BranchInst::Create(NextCase, LastBlock);
 
     DTU->applyUpdates(DTUpdates);
   }

@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-class MipsEVAInst : MipsInst<(outs), (ins), "", [], FrmOther>,
+class MipsEVAInst : MipsInst<(outs), (ins), "", [], NoItinerary, FrmOther>,
                     StdArch {
   let DecoderNamespace = "Mips";
   let EncodingPredicates = [HasStdEnc];

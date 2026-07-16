@@ -8,16 +8,16 @@
 
 #ifdef __CLC_SCALAR
 
-#if defined(__SPIR32__) || defined(__NVPTX__)
+#if defined(__SPIR32__) || defined(CLC_NVPTX)
 #if (defined(__CLC_FPSIZE) && __CLC_FPSIZE <= 32) ||                           \
     (defined(__CLC_GENSIZE) && (__CLC_GENSIZE == 32))
 #define __CLC_HAS_ATOMIC
 #endif
-#else // defined(__SPIR32__) || defined(__NVPTX__)
+#else // defined(__SPIR32__) || defined(CLC_NVPTX)
 #if defined(__CLC_FPSIZE) || (__CLC_GENSIZE >= 32)
 #define __CLC_HAS_ATOMIC
 #endif
-#endif // defined(__SPIR32__) || defined(__NVPTX__)
+#endif // defined(__SPIR32__) || defined(CLC_NVPTX)
 
 #ifdef __CLC_HAS_ATOMIC
 

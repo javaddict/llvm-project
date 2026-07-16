@@ -123,15 +123,14 @@ struct ConstantInfo {
 
 } // end namespace consthoist
 
-class ConstantHoistingPass
-    : public OptionalPassInfoMixin<ConstantHoistingPass> {
+class ConstantHoistingPass : public PassInfoMixin<ConstantHoistingPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 
   // Glue for old PM.
-  LLVM_ABI bool runImpl(Function &F, TargetTransformInfo &TTI,
-                        DominatorTree &DT, BlockFrequencyInfo *BFI,
-                        BasicBlock &Entry, ProfileSummaryInfo *PSI);
+  bool runImpl(Function &F, TargetTransformInfo &TTI, DominatorTree &DT,
+               BlockFrequencyInfo *BFI, BasicBlock &Entry,
+               ProfileSummaryInfo *PSI);
 
   void cleanup() {
     ClonedCastMap.clear();

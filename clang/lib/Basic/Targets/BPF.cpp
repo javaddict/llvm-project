@@ -46,7 +46,6 @@ void BPFTargetInfo::getTargetDefines(const LangOptions &Opts,
   Builder.defineMacro("__BPF_FEATURE_ADDR_SPACE_CAST");
   Builder.defineMacro("__BPF_FEATURE_MAY_GOTO");
   Builder.defineMacro("__BPF_FEATURE_ATOMIC_MEM_ORDERING");
-  Builder.defineMacro("__BPF_FEATURE_STACK_ARGUMENT");
 
   if (CPU.empty())
     CPU = "v3";

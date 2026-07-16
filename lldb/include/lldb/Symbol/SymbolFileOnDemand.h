@@ -175,8 +175,7 @@ public:
   GetUnwindPlan(const Address &address,
                 const RegisterInfoResolver &resolver) override;
 
-  llvm::Expected<lldb::addr_t>
-  GetParameterStackSize(const Symbol &symbol) override;
+  llvm::Expected<lldb::addr_t> GetParameterStackSize(Symbol &symbol) override;
 
   void PreloadSymbols() override;
 
@@ -229,10 +228,6 @@ public:
                             bool load_all_debug_info = false) override {
     return m_sym_file_impl->GetSeparateDebugInfo(d, errors_only,
                                                  load_all_debug_info);
-  }
-
-  lldb_private::ModuleSpecList GetSeparateDebugInfoFiles() override {
-    return m_sym_file_impl->GetSeparateDebugInfoFiles();
   }
 
   lldb::TypeSP MakeType(lldb::user_id_t uid, ConstString name,

@@ -852,13 +852,12 @@ ELFDumper<ELFT>::dumpStackSizesSection(const Elf_Shdr *Shdr) {
     return ContentOrErr.takeError();
 
   ArrayRef<uint8_t> Content = *ContentOrErr;
-  unsigned AddressSize = ELFT::Is64Bits ? 8 : 4;
-  DataExtractor Data(Content, Obj.isLE());
+  DataExtractor Data(Content, Obj.isLE(), ELFT::Is64Bits ? 8 : 4);
 
   std::vector<ELFYAML::StackSizeEntry> Entries;
   DataExtractor::Cursor Cur(0);
   while (Cur && Cur.tell() < Content.size()) {
-    uint64_t Address = Data.getUnsigned(Cur, AddressSize);
+    uint64_t Address = Data.getAddress(Cur);
     uint64_t Size = Data.getULEB128(Cur);
     Entries.push_back({Address, Size});
   }
@@ -889,12 +888,11 @@ ELFDumper<ELFT>::dumpBBAddrMapSection(const Elf_Shdr *Shdr) {
   if (Content.empty())
     return S.release();
 
-  unsigned AddressSize = ELFT::Is64Bits ? 8 : 4;
-  DataExtractor Data(Content, Obj.isLE());
+  DataExtractor Data(Content, Obj.isLE(), ELFT::Is64Bits ? 8 : 4);
 
-  std::vector<BBAddrMapYAML::BBAddrMapEntry> Entries;
+  std::vector<ELFYAML::BBAddrMapEntry> Entries;
   bool HasAnyPGOAnalysisMapEntry = false;
-  std::vector<BBAddrMapYAML::PGOAnalysisMapEntry> PGOAnalyses;
+  std::vector<ELFYAML::PGOAnalysisMapEntry> PGOAnalyses;
   DataExtractor::Cursor Cur(0);
   uint8_t Version = 0;
   uint16_t Feature = 0;
@@ -902,7 +900,7 @@ ELFDumper<ELFT>::dumpBBAddrMapSection(const Elf_Shdr *Shdr) {
   while (Cur && Cur.tell() < Content.size()) {
     if (Shdr->sh_type == ELF::SHT_LLVM_BB_ADDR_MAP) {
       Version = Data.getU8(Cur);
-      if (Cur && Version > 5)
+      if (Cur && Version > 4)
         return createStringError(
             errc::invalid_argument,
             "invalid SHT_LLVM_BB_ADDR_MAP section version: " +
@@ -918,20 +916,20 @@ ELFDumper<ELFT>::dumpBBAddrMapSection(const Elf_Shdr *Shdr) {
     if (FeatureOrErr->MultiBBRange) {
       NumBBRanges = Data.getULEB128(Cur);
     } else {
-      Address = Data.getUnsigned(Cur, AddressSize);
+      Address = Data.getAddress(Cur);
       NumBlocks = Data.getULEB128(Cur);
     }
-    std::vector<BBAddrMapYAML::BBAddrMapEntry::BBRangeEntry> BBRanges;
+    std::vector<ELFYAML::BBAddrMapEntry::BBRangeEntry> BBRanges;
     uint64_t BaseAddress = 0;
     for (uint64_t BBRangeN = 0; Cur && BBRangeN != NumBBRanges; ++BBRangeN) {
       if (FeatureOrErr->MultiBBRange) {
-        BaseAddress = Data.getUnsigned(Cur, AddressSize);
+        BaseAddress = Data.getAddress(Cur);
         NumBlocks = Data.getULEB128(Cur);
       } else {
         BaseAddress = Address;
       }
 
-      std::vector<BBAddrMapYAML::BBAddrMapEntry::BBEntry> BBEntries;
+      std::vector<ELFYAML::BBAddrMapEntry::BBEntry> BBEntries;
       // Read the specified number of BB entries, or until decoding fails.
       for (uint64_t BlockIndex = 0; Cur && BlockIndex < NumBlocks;
            ++BlockIndex) {
@@ -960,8 +958,7 @@ ELFDumper<ELFT>::dumpBBAddrMapSection(const Elf_Shdr *Shdr) {
     Entries.push_back(
         {Version, Feature, /*NumBBRanges=*/{}, std::move(BBRanges)});
 
-    BBAddrMapYAML::PGOAnalysisMapEntry &PGOAnalysis =
-        PGOAnalyses.emplace_back();
+    ELFYAML::PGOAnalysisMapEntry &PGOAnalysis = PGOAnalyses.emplace_back();
     if (FeatureOrErr->hasPGOAnalysis()) {
       HasAnyPGOAnalysisMapEntry = true;
 
@@ -1394,7 +1391,7 @@ ELFDumper<ELFT>::dumpGnuHashSection(const Elf_Shdr *Shdr) {
 
   unsigned AddrSize = ELFT::Is64Bits ? 8 : 4;
   ArrayRef<uint8_t> Content = *ContentOrErr;
-  DataExtractor Data(Content, Obj.isLE());
+  DataExtractor Data(Content, Obj.isLE(), AddrSize);
 
   ELFYAML::GnuHashHeader Header;
   DataExtractor::Cursor Cur(0);
@@ -1417,7 +1414,7 @@ ELFDumper<ELFT>::dumpGnuHashSection(const Elf_Shdr *Shdr) {
 
   S->BloomFilter.emplace(MaskWords);
   for (llvm::yaml::Hex64 &Val : *S->BloomFilter)
-    Val = Data.getUnsigned(Cur, AddrSize);
+    Val = Data.getAddress(Cur);
 
   S->HashBuckets.emplace(NBuckets);
   for (llvm::yaml::Hex32 &Val : *S->HashBuckets)

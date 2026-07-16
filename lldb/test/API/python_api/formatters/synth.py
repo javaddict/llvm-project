@@ -13,11 +13,7 @@ class jasSynthProvider:
         if index == 0:
             child = self.valobj.GetChildMemberWithName("A")
         if index == 1:
-            import lldb
-
-            data = lldb.SBData.CreateDataFromInt(1)
-            type = self.valobj.target.FindFirstType("int")
-            child = self.valobj.CreateValueFromData("X", data, type)
+            child = self.valobj.CreateValueFromExpression("X", "(int)1")
         return child
 
     def get_child_index(self, name):

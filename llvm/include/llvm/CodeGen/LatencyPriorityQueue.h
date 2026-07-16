@@ -26,10 +26,10 @@ namespace llvm {
     LatencyPriorityQueue *PQ;
     explicit latency_sort(LatencyPriorityQueue *pq) : PQ(pq) {}
 
-    LLVM_ABI bool operator()(const SUnit *LHS, const SUnit *RHS) const;
+    bool operator()(const SUnit* LHS, const SUnit* RHS) const;
   };
 
-  class LLVM_ABI LatencyPriorityQueue : public SchedulingPriorityQueue {
+  class LatencyPriorityQueue : public SchedulingPriorityQueue {
     // SUnits - The SUnits for the current graph.
     std::vector<SUnit> *SUnits = nullptr;
 

@@ -205,7 +205,7 @@ protected:
 
     if (!trace_or_err) {
       result.AppendErrorWithFormat(
-          "%s", llvm::toString(trace_or_err.takeError()).c_str());
+          "%s\n", llvm::toString(trace_or_err.takeError()).c_str());
       return;
     }
 
@@ -277,7 +277,7 @@ protected:
     if (error.Success()) {
       result.SetStatus(eReturnStatusSuccessFinishResult);
     } else {
-      result.AppendErrorWithFormat("%s", error.AsCString());
+      result.AppendErrorWithFormat("%s\n", error.AsCString());
     }
   }
 
@@ -367,7 +367,7 @@ protected:
     if (error.Success()) {
       result.SetStatus(eReturnStatusSuccessFinishResult);
     } else {
-      result.AppendErrorWithFormat("%s", error.AsCString());
+      result.AppendErrorWithFormat("%s\n", error.AsCString());
     }
   }
 

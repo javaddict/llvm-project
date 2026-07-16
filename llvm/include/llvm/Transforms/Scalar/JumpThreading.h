@@ -31,7 +31,7 @@ namespace llvm {
 class AAResults;
 class BasicBlock;
 class BinaryOperator;
-class CondBrInst;
+class BranchInst;
 class CmpInst;
 class Constant;
 class Function;
@@ -76,7 +76,7 @@ enum ConstantPreference { WantInteger, WantBlockAddress };
 ///
 /// In this case, the unconditional branch at the end of the first if can be
 /// revectored to the false side of the second if.
-class JumpThreadingPass : public OptionalPassInfoMixin<JumpThreadingPass> {
+class JumpThreadingPass : public PassInfoMixin<JumpThreadingPass> {
   Function *F = nullptr;
   FunctionAnalysisManager *FAM = nullptr;
   TargetLibraryInfo *TLI = nullptr;
@@ -173,7 +173,7 @@ public:
 
   LLVM_ABI bool processGuards(BasicBlock *BB);
   LLVM_ABI bool threadGuard(BasicBlock *BB, IntrinsicInst *Guard,
-                            CondBrInst *BI);
+                            BranchInst *BI);
 
 private:
   BasicBlock *splitBlockPreds(BasicBlock *BB, ArrayRef<BasicBlock *> Preds,

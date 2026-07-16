@@ -258,8 +258,6 @@ public:
 
   Size GetNumElements();
 
-  const Vector &Elements() const { return m_elements; }
-
   ~JSONArray() override = default;
 
   Vector m_elements;

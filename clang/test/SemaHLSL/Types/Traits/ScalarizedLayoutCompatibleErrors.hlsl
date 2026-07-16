@@ -1,5 +1,4 @@
 // RUN: %clang_cc1 -triple dxil-pc-shadermodel6.6-library -finclude-default-header -verify %s
-// RUN: %clang_cc1 -triple dxil-pc-shadermodel6.6-library -finclude-default-header -fexperimental-new-constant-interpreter -verify %s
 
 // Some things that don't work!
 

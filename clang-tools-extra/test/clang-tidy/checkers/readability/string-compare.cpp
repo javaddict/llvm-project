@@ -1,4 +1,4 @@
-// RUN: %check_clang_tidy %s readability-string-compare %t
+// RUN: %check_clang_tidy %s readability-string-compare %t -- -- -isystem %clang_tidy_headers
 #include <string>
 
 void func(bool b);

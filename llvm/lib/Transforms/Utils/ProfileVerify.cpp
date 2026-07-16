@@ -9,7 +9,6 @@
 #include "llvm/Transforms/Utils/ProfileVerify.h"
 #include "llvm/ADT/DynamicAPInt.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallString.h"
 #include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/IR/Analysis.h"
 #include "llvm/IR/Constants.h"
@@ -58,7 +57,7 @@ public:
     if (succ_size(&BB) < 2)
       return nullptr;
     auto *Term = BB.getTerminator();
-    return (isa<CondBrInst>(Term) || isa<SwitchInst>(Term) ||
+    return (isa<BranchInst>(Term) || isa<SwitchInst>(Term) ||
             isa<IndirectBrInst>(Term) || isa<CallBrInst>(Term))
                ? Term
                : nullptr;
@@ -77,19 +76,13 @@ bool isAsmOnly(const Function &F) {
   if (!F.hasFnAttribute(Attribute::AttrKind::Naked))
     return false;
   for (const auto &BB : F)
-    for (const auto &I : drop_end(BB)) {
+    for (const auto &I : drop_end(BB.instructionsWithoutDebug())) {
       const auto *CB = dyn_cast<CallBase>(&I);
       if (!CB || !CB->isInlineAsm())
         return false;
     }
   return true;
 }
-
-void emitProfileError(StringRef Msg, Function &F) {
-  F.getContext().emitError("Profile verification failed for function '" +
-                           F.getName() + "': " + Msg);
-}
-
 } // namespace
 
 // FIXME: currently this injects only for terminators. Select isn't yet
@@ -206,15 +199,14 @@ PreservedAnalyses ProfileVerifierPass::run(Module &M,
                                            ModuleAnalysisManager &MAM) {
   auto PopulateIgnoreList = [&](StringRef GVName) {
     if (const auto *CT = M.getGlobalVariable(GVName))
-      if (CT->hasInitializer())
-        if (const auto *CA =
-                dyn_cast_if_present<ConstantArray>(CT->getInitializer()))
-          for (const auto &Elt : CA->operands())
-            if (const auto *CS = dyn_cast<ConstantStruct>(Elt))
-              if (CS->getNumOperands() >= 2 && CS->getOperand(1))
-                if (const auto *F = dyn_cast<Function>(
-                        CS->getOperand(1)->stripPointerCasts()))
-                  IgnoreList.insert(F);
+      if (const auto *CA =
+              dyn_cast_if_present<ConstantArray>(CT->getInitializer()))
+        for (const auto &Elt : CA->operands())
+          if (const auto *CS = dyn_cast<ConstantStruct>(Elt))
+            if (CS->getNumOperands() >= 2 && CS->getOperand(1))
+              if (const auto *F = dyn_cast<Function>(
+                      CS->getOperand(1)->stripPointerCasts()))
+                IgnoreList.insert(F);
   };
   PopulateIgnoreList("llvm.global_ctors");
   PopulateIgnoreList("llvm.global_dtors");
@@ -222,7 +214,7 @@ PreservedAnalyses ProfileVerifierPass::run(Module &M,
   // expose the function-level run as public through a wrapper, so we can use
   // pass manager mechanisms dealing with declarations and with composing the
   // returned PreservedAnalyses values.
-  struct Wrapper : OptionalPassInfoMixin<Wrapper> {
+  struct Wrapper : PassInfoMixin<Wrapper> {
     ProfileVerifierPass &PVP;
     PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
       return PVP.run(F, FAM);
@@ -245,7 +237,8 @@ PreservedAnalyses ProfileVerifierPass::run(Function &F,
   if (!EntryCount) {
     auto *MD = F.getMetadata(LLVMContext::MD_prof);
     if (!MD || !isExplicitlyUnknownProfileMetadata(*MD)) {
-      emitProfileError("function entry count missing (set to 0 if cold)", F);
+      F.getContext().emitError("Profile verification failed: function entry "
+                               "count missing (set to 0 if cold)");
       return PreservedAnalyses::all();
     }
   } else if (EntryCount->getCount() == 0) {
@@ -259,13 +252,15 @@ PreservedAnalyses ProfileVerifierPass::run(Function &F,
             continue;
           if (I.getMetadata(LLVMContext::MD_prof))
             continue;
-          emitProfileError("select annotation missing", F);
+          F.getContext().emitError(
+              "Profile verification failed: select annotation missing");
         }
     }
     if (const auto *Term =
             ProfileInjector::getTerminatorBenefitingFromMDProf(BB))
       if (!Term->getMetadata(LLVMContext::MD_prof))
-        emitProfileError("branch annotation missing", F);
+        F.getContext().emitError(
+            "Profile verification failed: branch annotation missing");
   }
   return PreservedAnalyses::all();
 }

@@ -13,9 +13,7 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Lex/Lexer.h"
 
-using namespace clang::ast_matchers;
-
-namespace clang::tidy::modernize {
+using namespace clang;
 
 namespace {
 
@@ -23,10 +21,14 @@ struct FindArgsResult {
   const Expr *First;
   const Expr *Last;
   const Expr *Compare;
-  SmallVector<const Expr *, 2> Args;
+  SmallVector<const clang::Expr *, 2> Args;
 };
 
 } // anonymous namespace
+
+using namespace clang::ast_matchers;
+
+namespace clang::tidy::modernize {
 
 static FindArgsResult findArgs(const CallExpr *Call) {
   FindArgsResult Result;

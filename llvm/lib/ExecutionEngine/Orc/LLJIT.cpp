@@ -777,7 +777,7 @@ Error LLJITBuilderState::prepareForConstruction() {
       D = std::make_unique<InPlaceTaskDispatcher>();
 #endif // LLVM_ENABLE_THREADS
     if (auto EPCOrErr =
-            SelfExecutorProcessControl::Create(nullptr, std::move(D)))
+            SelfExecutorProcessControl::Create(nullptr, std::move(D), nullptr))
       EPC = std::move(*EPCOrErr);
     else
       return EPCOrErr.takeError();
@@ -828,10 +828,9 @@ Error LLJITBuilderState::prepareForConstruction() {
       if (!JTMB->getCodeModel())
         JTMB->setCodeModel(CodeModel::Small);
       JTMB->setRelocationModel(Reloc::PIC_);
-      CreateObjectLinkingLayer = [](ExecutionSession &ES,
-                                    jitlink::JITLinkMemoryManager &MemMgr)
-          -> Expected<std::unique_ptr<ObjectLayer>> {
-        return std::make_unique<ObjectLinkingLayer>(ES, MemMgr);
+      CreateObjectLinkingLayer =
+          [](ExecutionSession &ES) -> Expected<std::unique_ptr<ObjectLayer>> {
+        return std::make_unique<ObjectLinkingLayer>(ES);
       };
     }
   }
@@ -844,7 +843,7 @@ Error LLJITBuilderState::prepareForConstruction() {
       auto &JD =
           J.getExecutionSession().createBareJITDylib("<Process Symbols>");
       auto G = EPCDynamicLibrarySearchGenerator::GetForTargetProcess(
-          J.getExecutionSession(), J.getDylibMgr());
+          J.getExecutionSession());
       if (!G)
         return G.takeError();
       JD.addGenerator(std::move(*G));
@@ -874,7 +873,7 @@ Expected<JITDylib &> LLJIT::createJITDylib(std::string Name) {
 }
 
 Expected<JITDylib &> LLJIT::loadPlatformDynamicLibrary(const char *Path) {
-  auto G = EPCDynamicLibrarySearchGenerator::Load(*ES, *DylibMgr, Path);
+  auto G = EPCDynamicLibrarySearchGenerator::Load(*ES, Path);
   if (!G)
     return G.takeError();
 
@@ -943,20 +942,12 @@ Expected<ExecutorAddr> LLJIT::lookupLinkerMangled(JITDylib &JD,
     return Sym.takeError();
 }
 
-Expected<std::unique_ptr<jitlink::JITLinkMemoryManager>>
-LLJIT::createMemoryManager(LLJITBuilderState &S, ExecutionSession &ES) {
-  if (S.CreateMemoryManager)
-    return S.CreateMemoryManager(ES);
-  return ES.getExecutorProcessControl().createDefaultMemoryManager();
-}
-
 Expected<std::unique_ptr<ObjectLayer>>
-LLJIT::createObjectLinkingLayer(LLJITBuilderState &S, ExecutionSession &ES,
-                                jitlink::JITLinkMemoryManager &MemMgr) {
+LLJIT::createObjectLinkingLayer(LLJITBuilderState &S, ExecutionSession &ES) {
 
   // If the config state provided an ObjectLinkingLayer factory then use it.
   if (S.CreateObjectLinkingLayer)
-    return S.CreateObjectLinkingLayer(ES, MemMgr);
+    return S.CreateObjectLinkingLayer(ES);
 
   // Otherwise default to creating an RTDyldObjectLinkingLayer that constructs
   // a new SectionMemoryManager for each object.
@@ -1021,21 +1012,7 @@ LLJIT::LLJIT(LLJITBuilderState &S, Error &Err)
     }
   }
 
-  if (auto MM = createMemoryManager(S, *ES))
-    MemMgr = std::move(*MM);
-  else {
-    Err = MM.takeError();
-    return;
-  }
-
-  if (auto DM = ES->getExecutorProcessControl().createDefaultDylibMgr())
-    DylibMgr = std::move(*DM);
-  else {
-    Err = DM.takeError();
-    return;
-  }
-
-  auto ObjLayer = createObjectLinkingLayer(S, *ES, *MemMgr);
+  auto ObjLayer = createObjectLinkingLayer(S, *ES);
   if (!ObjLayer) {
     Err = ObjLayer.takeError();
     return;

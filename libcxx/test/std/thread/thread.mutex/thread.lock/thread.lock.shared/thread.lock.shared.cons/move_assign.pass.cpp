@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+// XFAIL: FROZEN-CXX03-HEADERS-FIXME
+
 // UNSUPPORTED: no-threads
 // UNSUPPORTED: c++03, c++11
 

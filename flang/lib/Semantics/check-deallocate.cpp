@@ -82,11 +82,9 @@ void DeallocateChecker::Leave(const parser::DeallocateStmt &deallocateStmt) {
                         "Name in DEALLOCATE statement is not definable"_err_en_US)
                     .Attach(std::move(
                         whyNot->set_severity(parser::Severity::Because)));
-              } else if (auto whyNot{WhyNotDefinable(source,
-                             context_.FindScope(source),
-                             DefinabilityFlags{
-                                 DefinabilityFlag::AllowEventLockOrNotifyType},
-                             *symbol)}) {
+              } else if (auto whyNot{
+                             WhyNotDefinable(source, context_.FindScope(source),
+                                 DefinabilityFlags{}, *symbol)}) {
                 // Catch problems with non-definability of the dynamic object
                 context_
                     .Say(source,
@@ -100,11 +98,11 @@ void DeallocateChecker::Leave(const parser::DeallocateStmt &deallocateStmt) {
             [&](const parser::StructureComponent &structureComponent) {
               // Only perform structureComponent checks if it was successfully
               // analyzed by expression analysis.
-              source = structureComponent.Component().source;
+              source = structureComponent.component.source;
               if (const auto *expr{GetExpr(context_, allocateObject)}) {
-                if (const Symbol *symbol{structureComponent.Component().symbol
-                            ? &structureComponent.Component()
-                                  .symbol->GetUltimate()
+                if (const Symbol *symbol{structureComponent.component.symbol
+                            ? &structureComponent.component.symbol
+                                  ->GetUltimate()
                             : nullptr};
                     !IsAllocatableOrObjectPointer(symbol)) { // F'2023 C936
                   context_.Say(source,
@@ -121,9 +119,7 @@ void DeallocateChecker::Leave(const parser::DeallocateStmt &deallocateStmt) {
                       .Attach(std::move(
                           whyNot->set_severity(parser::Severity::Because)));
                 } else if (auto whyNot{WhyNotDefinable(source,
-                               context_.FindScope(source),
-                               DefinabilityFlags{DefinabilityFlag::
-                                       AllowEventLockOrNotifyType},
+                               context_.FindScope(source), DefinabilityFlags{},
                                *expr)}) {
                   context_
                       .Say(source,

@@ -8,7 +8,6 @@ add_flang_library(MIFDialect
   LINK_LIBS
   FIRDialect
   FIRDialectSupport
-  HLFIRDialect
 
   LINK_COMPONENTS
   AsmParser

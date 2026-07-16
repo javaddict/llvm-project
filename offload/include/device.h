@@ -37,8 +37,6 @@
 #include "PluginInterface.h"
 
 using GenericPluginTy = llvm::omp::target::plugin::GenericPluginTy;
-using DeviceInfo = llvm::omp::target::plugin::DeviceInfo;
-using InfoTreeNode = llvm::omp::target::plugin::InfoTreeNode;
 
 // Forward declarations.
 struct __tgt_bin_desc;
@@ -117,7 +115,6 @@ struct DeviceTy {
   // Launch the kernel identified by \p TgtEntryPtr with the given arguments.
   int32_t launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
                        ptrdiff_t *TgtOffsets, KernelArgsTy &KernelArgs,
-                       KernelExtraArgsTy *KernelExtraArgs,
                        AsyncInfoTy &AsyncInfo);
 
   /// Synchronize device/queue/event based on \p AsyncInfo and return
@@ -169,20 +166,6 @@ struct DeviceTy {
 
   /// Indicate that there are pending images for this device or not.
   void setHasPendingImages(bool V) { HasPendingImages = V; }
-
-  /// Get information from the device.
-  template <typename T> T getInfo(DeviceInfo Info) const {
-    InfoTreeNode DevInfo = RTL->obtain_device_info(RTLDeviceID);
-
-    auto EntryOpt = DevInfo.get(Info);
-    if (!EntryOpt)
-      return 0;
-
-    auto Entry = *EntryOpt;
-    if (!std::holds_alternative<T>(Entry->Value))
-      return T{};
-    return std::get<T>(Entry->Value);
-  }
 
 private:
   /// Deinitialize the device (and plugin).

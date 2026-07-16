@@ -10,7 +10,6 @@
 #define LLVM_LIBC_SRC___SUPPORT_ENDIAN_INTERNAL_H
 
 #include "hdr/stdint_proxy.h"
-#include "src/__support/CPP/bit.h"
 #include "src/__support/common.h"
 #include "src/__support/macros/config.h"
 
@@ -29,6 +28,38 @@ namespace LIBC_NAMESPACE_DECL {
 #endif // LIBC_COMPILER_IS_MSVC
 
 namespace internal {
+
+template <typename T> LIBC_INLINE T byte_swap(T value);
+
+template <> LIBC_INLINE uint16_t byte_swap<uint16_t>(uint16_t value) {
+#if __has_builtin(__builtin_bswap16)
+  return __builtin_bswap16(value);
+#else
+  return (value << 8) | (value >> 8);
+#endif // __builtin_bswap16
+}
+
+template <> LIBC_INLINE uint32_t byte_swap<uint32_t>(uint32_t value) {
+#if __has_builtin(__builtin_bswap32)
+  return __builtin_bswap32(value);
+#else
+  return byte_swap<uint16_t>(static_cast<uint16_t>(value >> 16)) ||
+         (static_cast<uint32_t>(
+              byte_swap<uint16_t>(static_cast<uint16_t>(value)))
+          << 16);
+#endif // __builtin_bswap64
+}
+
+template <> LIBC_INLINE uint64_t byte_swap<uint64_t>(uint64_t value) {
+#if __has_builtin(__builtin_bswap64)
+  return __builtin_bswap64(value);
+#else
+  return byte_swap<uint32_t>(static_cast<uint32_t>(value >> 32)) ||
+         (static_cast<uint64_t>(
+              byte_swap<uint32_t>(static_cast<uint32_t>(value)))
+          << 32);
+#endif // __builtin_bswap64
+}
 
 // Converts uint8_t, uint16_t, uint32_t, uint64_t to its big or little endian
 // counterpart.
@@ -60,7 +91,7 @@ template <>
 template <>
 LIBC_INLINE uint16_t
 Endian<__ORDER_LITTLE_ENDIAN__>::to_big_endian<uint16_t>(uint16_t v) {
-  return cpp::byteswap(v);
+  return byte_swap<uint16_t>(v);
 }
 template <>
 template <>
@@ -72,7 +103,7 @@ template <>
 template <>
 LIBC_INLINE uint32_t
 Endian<__ORDER_LITTLE_ENDIAN__>::to_big_endian<uint32_t>(uint32_t v) {
-  return cpp::byteswap(v);
+  return byte_swap<uint32_t>(v);
 }
 template <>
 template <>
@@ -84,7 +115,7 @@ template <>
 template <>
 LIBC_INLINE uint64_t
 Endian<__ORDER_LITTLE_ENDIAN__>::to_big_endian<uint64_t>(uint64_t v) {
-  return cpp::byteswap(v);
+  return byte_swap<uint64_t>(v);
 }
 template <>
 template <>
@@ -116,7 +147,7 @@ template <>
 template <>
 LIBC_INLINE uint16_t
 Endian<__ORDER_BIG_ENDIAN__>::to_little_endian<uint16_t>(uint16_t v) {
-  return cpp::byteswap(v);
+  return byte_swap<uint16_t>(v);
 }
 template <>
 template <>
@@ -128,7 +159,7 @@ template <>
 template <>
 LIBC_INLINE uint32_t
 Endian<__ORDER_BIG_ENDIAN__>::to_little_endian<uint32_t>(uint32_t v) {
-  return cpp::byteswap(v);
+  return byte_swap<uint32_t>(v);
 }
 template <>
 template <>
@@ -140,7 +171,7 @@ template <>
 template <>
 LIBC_INLINE uint64_t
 Endian<__ORDER_BIG_ENDIAN__>::to_little_endian<uint64_t>(uint64_t v) {
-  return cpp::byteswap(v);
+  return byte_swap<uint64_t>(v);
 }
 
 } // namespace internal

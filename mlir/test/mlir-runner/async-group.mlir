@@ -17,7 +17,6 @@
 // UNSUPPORTED: hwasan
 // FIXME: Windows does not have aligned_alloc
 // UNSUPPORTED: system-windows
-// XFAIL: system-aix
 
 func.func @main() {
   %c1 = arith.constant 1 : index

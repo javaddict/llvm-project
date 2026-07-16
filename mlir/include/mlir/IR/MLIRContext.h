@@ -211,7 +211,6 @@ public:
   // This is effectively private given that only MLIRContext.cpp can see the
   // MLIRContextImpl type.
   MLIRContextImpl &getImpl() { return *impl; }
-  const MLIRContextImpl &getImpl() const { return *impl; }
 
   /// Returns the diagnostic engine for this context.
   DiagnosticEngine &getDiagEngine();
@@ -267,11 +266,6 @@ public:
   /// Register a handler for handling actions that are dispatched through this
   /// context. A nullptr handler can be set to disable a previously set handler.
   void registerActionHandler(HandlerTy handler);
-
-  /// Return a reference to the currently registered action handler. Its target
-  /// can be used to gain access to the handler's state, if any.
-  const HandlerTy &getActionHandler() const;
-  HandlerTy &getActionHandler();
 
   /// Return true if a valid ActionHandler is set.
   bool hasActionHandler();

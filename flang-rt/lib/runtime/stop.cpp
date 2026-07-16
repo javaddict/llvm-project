@@ -24,14 +24,10 @@
 extern "C" {
 
 [[maybe_unused]] static void DescribeIEEESignaledExceptions() {
-#if defined(RT_DEVICE_COMPILATION) || RT_GPU_TARGET
-  unsigned excepts{}; // No fenv support on the device.
-#else
 #ifdef fetestexcept // a macro in some environments; omit std::
   auto excepts{fetestexcept(FE_ALL_EXCEPT)};
 #else
   auto excepts{std::fetestexcept(FE_ALL_EXCEPT)};
-#endif
 #endif
   if (excepts) {
     std::fputs("IEEE arithmetic exceptions signaled:", stderr);
@@ -65,10 +61,8 @@ extern "C" {
 }
 
 static void CloseAllExternalUnits(const char *why) {
-#if !RT_GPU_TARGET
   Fortran::runtime::io::IoErrorHandler handler{why};
   Fortran::runtime::io::ExternalFileUnit::CloseAll(handler);
-#endif
 }
 
 [[noreturn]] RT_API_ATTRS void RTNAME(StopStatement)(
@@ -102,10 +96,7 @@ static void CloseAllExternalUnits(const char *why) {
     std::fputc('\n', stderr);
     DescribeIEEESignaledExceptions();
   }
-  if (isErrorStop)
-    Fortran::runtime::ErrorExit(code);
-  else
-    Fortran::runtime::NormalExit(code);
+  std::exit(code);
 #endif
 }
 
@@ -133,14 +124,13 @@ static void CloseAllExternalUnits(const char *why) {
     DescribeIEEESignaledExceptions();
   }
   if (isErrorStop) {
-    Fortran::runtime::ErrorExit(EXIT_FAILURE);
+    std::exit(EXIT_FAILURE);
   } else {
-    Fortran::runtime::NormalExit(EXIT_SUCCESS);
+    std::exit(EXIT_SUCCESS);
   }
 #endif
 }
 
-#if !RT_GPU_TARGET
 static bool StartPause() {
   if (Fortran::runtime::io::IsATerminal(0)) {
     Fortran::runtime::io::IoErrorHandler handler{"PAUSE statement"};
@@ -154,7 +144,7 @@ static void EndPause() {
   std::fflush(nullptr);
   if (std::fgetc(stdin) == EOF) {
     CloseAllExternalUnits("PAUSE statement");
-    Fortran::runtime::ErrorExit(EXIT_SUCCESS);
+    std::exit(EXIT_SUCCESS);
   }
 }
 
@@ -180,34 +170,21 @@ void RTNAME(PauseStatementText)(const char *code, std::size_t length) {
     EndPause();
   }
 }
-#endif
 
 [[noreturn]] void RTNAME(FailImageStatement)() {
-  CloseAllExternalUnits("FAIL IMAGE statement");
   Fortran::runtime::NotifyOtherImagesOfFailImageStatement();
-  Fortran::runtime::NormalExit(EXIT_FAILURE);
+  CloseAllExternalUnits("FAIL IMAGE statement");
+  std::exit(EXIT_FAILURE);
 }
 
 [[noreturn]] void RTNAME(ProgramEndStatement)() {
   CloseAllExternalUnits("END statement");
-  Fortran::runtime::NormalExit(EXIT_SUCCESS);
-}
-
-void RTNAME(RegisterImagesNormalEndCallback)(void (*callback)(int)) {
-  Fortran::runtime::SetNormalEndCallback(callback);
-}
-
-void RTNAME(RegisterImagesErrorCallback)(void (*callback)(int)) {
-  Fortran::runtime::SetErrorCallback(callback);
-}
-
-void RTNAME(RegisterFailImageCallback)(void (*callback)(void)) {
-  Fortran::runtime::SetFailImageCallback(callback);
+  std::exit(EXIT_SUCCESS);
 }
 
 [[noreturn]] void RTNAME(Exit)(int status) {
   CloseAllExternalUnits("CALL EXIT()");
-  Fortran::runtime::NormalExit(status);
+  std::exit(status);
 }
 
 static RT_NOINLINE_ATTR void PrintBacktrace() {

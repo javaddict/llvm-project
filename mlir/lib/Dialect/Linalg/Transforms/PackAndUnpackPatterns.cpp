@@ -11,7 +11,6 @@
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Utils/IndexingUtils.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
-#include "mlir/IR/BuiltinTypeInterfaces.h"
 #include "mlir/IR/PatternMatch.h"
 
 namespace mlir {
@@ -111,11 +110,8 @@ struct SimplifyPackToExpandShape : public OpRewritePattern<PackOp> {
                                 PatternRewriter &rewriter) const override {
     if (packOp.getPaddingValue())
       return rewriter.notifyMatchFailure(packOp, "expects no padding value");
-    // TODO: Support Memref PackOp. Temporarily return failure.
-    if (!packOp.hasPureTensorSemantics())
-      return failure();
 
-    ShapedType sourceType = packOp.getSourceType();
+    RankedTensorType sourceType = packOp.getSourceType();
     if (failed(isPackOnInnerMostDim(rewriter, packOp)) &&
         failed(isPackOn1D(rewriter, packOp, sourceType.getShape(),
                           packOp.getStaticTiles())) &&
@@ -123,7 +119,7 @@ struct SimplifyPackToExpandShape : public OpRewritePattern<PackOp> {
       return failure();
     }
 
-    ShapedType destType = packOp.getDestType();
+    RankedTensorType destType = packOp.getDestType();
     auto reassociation =
         getReassociationIndicesForReshape(sourceType, destType);
     if (!reassociation)
@@ -161,8 +157,8 @@ struct SimplifyUnPackToCollapseShape : public OpRewritePattern<UnPackOp> {
           "expects outer_dims_perm is empty or an identity permutation");
     }
 
-    ShapedType sourceType = unpackOp.getSourceType();
-    ShapedType destType = unpackOp.getDestType();
+    RankedTensorType sourceType = unpackOp.getSourceType();
+    RankedTensorType destType = unpackOp.getDestType();
     if (!sourceType.hasStaticShape() || !destType.hasStaticShape())
       return rewriter.notifyMatchFailure(unpackOp, "expects static shapes");
 
@@ -177,11 +173,7 @@ struct SimplifyUnPackToCollapseShape : public OpRewritePattern<UnPackOp> {
 
   LogicalResult matchAndRewrite(UnPackOp unpackOp,
                                 PatternRewriter &rewriter) const override {
-    // TODO: Support Memref UnPackOp. Temporarily return failure.
-    if (!unpackOp.hasPureTensorSemantics())
-      return failure();
-
-    ShapedType destType = unpackOp.getDestType();
+    RankedTensorType destType = unpackOp.getDestType();
     if (failed(isUnpackOnInnerMostDim(rewriter, unpackOp)) &&
         failed(isPackOn1D(rewriter, unpackOp, destType.getShape(),
                           unpackOp.getStaticTiles())) &&
@@ -189,7 +181,7 @@ struct SimplifyUnPackToCollapseShape : public OpRewritePattern<UnPackOp> {
       return failure();
     }
 
-    ShapedType sourceType = unpackOp.getSourceType();
+    RankedTensorType sourceType = unpackOp.getSourceType();
     auto reassociation =
         getReassociationIndicesForReshape(sourceType, destType);
     if (!reassociation)
@@ -233,7 +225,7 @@ public:
     // sizes - that is because it would be impossible to compute the padding
     // size and hence to establish whether "artificial" padding would be
     // created.
-    ShapedType unpackedType = packOp.getSourceType();
+    RankedTensorType unpackedType = packOp.getSourceType();
     SmallVector<int64_t> outerShapeWithoutTranspose =
         getPackedOuterShapeWithoutTransposition(packOp);
     for (auto [pos, tileSize, high] :
@@ -280,10 +272,6 @@ public:
                                 PatternRewriter &rewriter) const override {
     auto unpackOp = sliceOp.getSource().getDefiningOp<UnPackOp>();
     if (!unpackOp)
-      return failure();
-
-    // TODO: Support Memref UnPackOp. Temporarily return failure.
-    if (!unpackOp.hasPureTensorSemantics())
       return failure();
 
     // User controlled folding function.
@@ -348,10 +336,6 @@ public:
     if (!packOp)
       return failure();
 
-    // TODO: Support Memref PackOp. Temporarily return failure.
-    if (!packOp.hasPureTensorSemantics())
-      return failure();
-
     // User controlled folding function.
     if (controlFn && !controlFn(&linalgOp->getOpOperand(0)))
       return failure();
@@ -411,10 +395,6 @@ public:
 
   LogicalResult matchAndRewrite(PackOp packOp,
                                 PatternRewriter &rewriter) const override {
-    // TODO: Support Memref PackOp. Temporarily return failure.
-    if (!packOp.hasPureTensorSemantics())
-      return failure();
-
     auto linalgOp = packOp.getSource().getDefiningOp<linalg::LinalgOp>();
     if (!linalgOp)
       return failure();
@@ -476,10 +456,6 @@ public:
     if (!unPackOp)
       return failure();
 
-    // TODO: Support Memref UnPackOp. Temporarily return failure.
-    if (!unPackOp.hasPureTensorSemantics())
-      return failure();
-
     // User controlled folding function.
     if (controlFn && !controlFn(&linalgOp->getOpOperand(0)))
       return failure();
@@ -528,10 +504,6 @@ public:
 
   LogicalResult matchAndRewrite(UnPackOp unPackOp,
                                 PatternRewriter &rewriter) const override {
-    // TODO: Support Memref UnPackOp. Temporarily return failure.
-    if (!unPackOp.hasPureTensorSemantics())
-      return failure();
-
     auto linalgOp = unPackOp.getSource().getDefiningOp<linalg::LinalgOp>();
     if (!linalgOp)
       return failure();
@@ -596,10 +568,6 @@ struct FoldEmptyTensorWithPackOp : public OpRewritePattern<PackOp> {
 
   LogicalResult matchAndRewrite(PackOp packOp,
                                 PatternRewriter &rewriter) const override {
-    // TODO: Support Memref PackOp. Temporarily return failure.
-    if (!packOp.hasPureTensorSemantics())
-      return failure();
-
     // Check for tensor.empty source.
     auto emptyOp = packOp.getSource().getDefiningOp<tensor::EmptyOp>();
     if (!emptyOp)
@@ -624,10 +592,6 @@ struct FoldEmptyTensorWithUnPackOp : public OpRewritePattern<UnPackOp> {
 
   LogicalResult matchAndRewrite(UnPackOp unPackOp,
                                 PatternRewriter &rewriter) const override {
-    // TODO: Support Memref UnPackOp. Temporarily return failure.
-    if (!unPackOp.hasPureTensorSemantics())
-      return failure();
-
     // Check for tensor.empty source.
     auto emptyOp = unPackOp.getSource().getDefiningOp<tensor::EmptyOp>();
     if (!emptyOp)

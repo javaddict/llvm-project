@@ -3,6 +3,8 @@
 // REQUIRES: unified_shared_memory
 // UNSUPPORTED: amdgcn-amd-amdhsa
 //
+// FIXME: https://github.com/llvm/llvm-project/issues/161265
+// XFAIL: nvidiagpu
 // XFAIL: intelgpu
 
 #pragma omp declare target

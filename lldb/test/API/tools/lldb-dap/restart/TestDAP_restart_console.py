@@ -12,7 +12,7 @@ from lldbsuite.test.lldbtest import line_number
 @skipIfBuildType(["debug"])
 class TestDAP_restart_console(lldbdap_testcase.DAPTestCaseBase):
     @skipIfAsan
-    @skipIfWindows  # https://github.com/llvm/llvm-project/issues/200840
+    @skipIfWindows
     @skipIf(oslist=["linux"], archs=["arm$"])  # Always times out on buildbot
     def test_basic_functionality(self):
         """
@@ -61,7 +61,7 @@ class TestDAP_restart_console(lldbdap_testcase.DAPTestCaseBase):
         self.continue_to_exit()
 
     @skipIfAsan
-    @skipIfWindows  # https://github.com/llvm/llvm-project/issues/200840
+    @skipIfWindows
     @skipIf(oslist=["linux"], archs=["arm$"])  # Always times out on buildbot
     def test_stopOnEntry(self):
         """
@@ -71,11 +71,12 @@ class TestDAP_restart_console(lldbdap_testcase.DAPTestCaseBase):
         self.build_and_launch(program, console="integratedTerminal", stopOnEntry=True)
         [bp_main] = self.set_function_breakpoints(["main"])
 
-        self.verify_configuration_done()
+        self.dap_server.request_configurationDone()
         self.verify_stop_on_entry()
 
         # Then, if we continue, we should hit the breakpoint at main.
-        self.continue_to_breakpoints([bp_main])
+        self.dap_server.request_continue()
+        self.verify_breakpoint_hit([bp_main])
 
         # Restart and check that we still get a stopped event before reaching
         # main.
@@ -83,6 +84,7 @@ class TestDAP_restart_console(lldbdap_testcase.DAPTestCaseBase):
         self.verify_stop_on_entry()
 
         # continue to main
-        self.continue_to_breakpoints([bp_main])
+        self.dap_server.request_continue()
+        self.verify_breakpoint_hit([bp_main])
 
         self.continue_to_exit()

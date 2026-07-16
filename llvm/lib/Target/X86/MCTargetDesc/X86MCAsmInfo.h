@@ -26,14 +26,11 @@ class X86MCAsmInfoDarwin : public MCAsmInfoDarwin {
   virtual void anchor();
 
 public:
-  explicit X86MCAsmInfoDarwin(const Triple &Triple,
-                              const MCTargetOptions &Options);
-  bool isValidUnquotedName(StringRef Name) const override;
+  explicit X86MCAsmInfoDarwin(const Triple &Triple);
 };
 
 struct X86_64MCAsmInfoDarwin : public X86MCAsmInfoDarwin {
-  explicit X86_64MCAsmInfoDarwin(const Triple &Triple,
-                                 const MCTargetOptions &Options);
+  explicit X86_64MCAsmInfoDarwin(const Triple &Triple);
   const MCExpr *
   getExprForPersonalitySymbol(const MCSymbol *Sym, unsigned Encoding,
                               MCStreamer &Streamer) const override;
@@ -43,35 +40,28 @@ class X86ELFMCAsmInfo : public MCAsmInfoELF {
   void anchor() override;
 
 public:
-  explicit X86ELFMCAsmInfo(const Triple &Triple,
-                           const MCTargetOptions &Options);
-  bool isValidUnquotedName(StringRef Name) const override;
+  explicit X86ELFMCAsmInfo(const Triple &Triple);
 };
 
 class X86MCAsmInfoMicrosoft : public MCAsmInfoMicrosoft {
   void anchor() override;
 
 public:
-  explicit X86MCAsmInfoMicrosoft(const Triple &Triple,
-                                 const MCTargetOptions &Options);
-  bool isValidUnquotedName(StringRef Name) const override;
+  explicit X86MCAsmInfoMicrosoft(const Triple &Triple);
 };
 
 class X86MCAsmInfoMicrosoftMASM : public X86MCAsmInfoMicrosoft {
   void anchor() override;
 
 public:
-  explicit X86MCAsmInfoMicrosoftMASM(const Triple &Triple,
-                                     const MCTargetOptions &Options);
+  explicit X86MCAsmInfoMicrosoftMASM(const Triple &Triple);
 };
 
 class X86MCAsmInfoGNUCOFF : public MCAsmInfoGNUCOFF {
   void anchor() override;
 
 public:
-  explicit X86MCAsmInfoGNUCOFF(const Triple &Triple,
-                               const MCTargetOptions &Options);
-  bool isValidUnquotedName(StringRef Name) const override;
+  explicit X86MCAsmInfoGNUCOFF(const Triple &Triple);
 };
 
 namespace X86 {

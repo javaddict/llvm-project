@@ -214,7 +214,9 @@ class ImplicitNullChecks : public MachineFunctionPass {
 public:
   static char ID;
 
-  ImplicitNullChecks() : MachineFunctionPass(ID) {}
+  ImplicitNullChecks() : MachineFunctionPass(ID) {
+    initializeImplicitNullChecksPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 

@@ -19,9 +19,9 @@ AST_POLYMORPHIC_MATCHER_P(
     hasAnyTemplateArgumentIncludingPack,
     AST_POLYMORPHIC_SUPPORTED_TYPES(ClassTemplateSpecializationDecl,
                                     TemplateSpecializationType, FunctionDecl),
-    ast_matchers::internal::Matcher<TemplateArgument>, InnerMatcher) {
+    clang::ast_matchers::internal::Matcher<TemplateArgument>, InnerMatcher) {
   const ArrayRef<TemplateArgument> Args =
-      ast_matchers::internal::getTemplateSpecializationArgs(Node);
+      clang::ast_matchers::internal::getTemplateSpecializationArgs(Node);
   for (const auto &Arg : Args) {
     if (Arg.getKind() != TemplateArgument::Pack)
       continue;
@@ -43,13 +43,10 @@ void StdNamespaceModificationCheck::registerMatchers(MatchFinder *Finder) {
       hasDeclContext(namespaceDecl(hasAnyName("std", "posix"),
                                    unless(hasParent(namespaceDecl())))
                          .bind("nmspc"));
-  auto UserDefinedDecl =
-      namedDecl(anyOf(classTemplateDecl(), tagDecl()),
-                hasAncestor(namespaceDecl(hasAnyName("std", "posix"),
-                                          unless(hasParent(namespaceDecl())))));
-  auto UserDefinedType = qualType(hasUnqualifiedDesugaredType(anyOf(
-      tagType(unless(hasDeclaration(UserDefinedDecl))),
-      templateSpecializationType(unless(hasDeclaration(UserDefinedDecl))))));
+  auto UserDefinedType = qualType(
+      hasUnqualifiedDesugaredType(tagType(unless(hasDeclaration(tagDecl(
+          hasAncestor(namespaceDecl(hasAnyName("std", "posix"),
+                                    unless(hasParent(namespaceDecl()))))))))));
   auto HasNoProgramDefinedTemplateArgument = unless(
       hasAnyTemplateArgumentIncludingPack(refersToType(UserDefinedType)));
   auto InsideStdClassOrClassTemplateSpecialization = hasDeclContext(
@@ -94,7 +91,8 @@ void StdNamespaceModificationCheck::registerMatchers(MatchFinder *Finder) {
 
   Finder->addMatcher(decl(anyOf(BadNonTemplateSpecializationDecl,
                                 BadClassTemplateSpec, BadInnerClassTemplateSpec,
-                                BadFunctionTemplateSpec, BadMemberFunctionSpec))
+                                BadFunctionTemplateSpec, BadMemberFunctionSpec),
+                          unless(isExpansionInSystemHeader()))
                          .bind("decl"),
                      this);
 }
@@ -115,10 +113,6 @@ void clang::tidy::bugprone::StdNamespaceModificationCheck::check(
   const auto *D = Result.Nodes.getNodeAs<Decl>("decl");
   const auto *NS = Result.Nodes.getNodeAs<NamespaceDecl>("nmspc");
   if (!D || !NS)
-    return;
-
-  // Skip compiler-generated implicit declarations (e.g. std::align_val_t).
-  if (D->isImplicit())
     return;
 
   diag(D->getLocation(),

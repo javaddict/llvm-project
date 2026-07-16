@@ -4,7 +4,6 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
 
-@skipIfTargetDoesNotSupportSharedLibraries()
 class MissingDllTestCase(TestBase):
     @skipUnlessWindows
     def test(self):
@@ -25,5 +24,4 @@ class MissingDllTestCase(TestBase):
 
         error = lldb.SBError()
         target.Launch(launch_info, error)
-        self.assertFalse(error.Success(), "expected launch to fail")
-        self.assertIn("Process prematurely exited with 0xc0000135", error.GetCString())
+        self.assertFailure(error, "Process prematurely exited with 0xc0000135")

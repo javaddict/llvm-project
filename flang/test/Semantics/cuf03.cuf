@@ -35,7 +35,8 @@ module m
   real, managed :: mm ! ok
   real, managed :: mmi = 1. ! ok
   real, managed, allocatable :: mml ! ok
-  real, managed, pointer :: mmp(:) ! ok
+  !ERROR: Object 'mmp' with ATTRIBUTES(MANAGED) must also be allocatable, automatic, explicit shape, or a dummy argument
+  real, managed, pointer :: mmp(:)
   real, managed, target :: mmt
   !WARNING: Object 'mp' with ATTRIBUTES(PINNED) should also be allocatable [-Wcuda-usage]
   real, pinned :: mp
@@ -93,13 +94,6 @@ module m
     block
       real, device :: a(100) ! ok
     end block
-  end subroutine
-
-  attributes(global) subroutine dev2(a)
-    integer, intent(in) :: a
-    attributes(value) :: a
-    ! this is equivalent to:
-    ! integer, intent(in), value :: a
   end subroutine
 
 

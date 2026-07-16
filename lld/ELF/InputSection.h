@@ -28,6 +28,7 @@ class InputFile;
 class Symbol;
 
 class Defined;
+struct Partition;
 class SyntheticSection;
 template <class ELFT> class ObjFile;
 class OutputSection;
@@ -77,6 +78,11 @@ public:
 
   StringRef name;
 
+  // The 1-indexed partition that this section is assigned to by the garbage
+  // collector, or 0 if this section is dead. Normally there is only one
+  // partition, so this will either be 0 or 1.
+  elf::Partition &getPartition(Ctx &) const;
+
   // These corresponds to the fields in Elf_Shdr.
   uint64_t flags;
   uint32_t type;
@@ -86,7 +92,6 @@ public:
   uint32_t entsize;
 
   Kind sectionKind;
-  // 0 (dead) or 1 (live).
   uint8_t partition = 1;
 
   // The next two bit fields are only used by InputSectionBase, but we
@@ -204,6 +209,11 @@ public:
     bytesDropped += num;
   }
 
+  void push_back(uint64_t num) {
+    assert(bytesDropped >= num);
+    bytesDropped -= num;
+  }
+
   mutable const uint8_t *content_;
   uint64_t size;
 
@@ -289,7 +299,6 @@ public:
   template <typename T> llvm::ArrayRef<T> getDataAs() const {
     size_t s = content().size();
     assert(s % sizeof(T) == 0);
-    assert(reinterpret_cast<uintptr_t>(content().data()) % alignof(T) == 0);
     return llvm::ArrayRef<T>((const T *)content().data(), s / sizeof(T));
   }
 
@@ -316,10 +325,6 @@ struct SectionPiece {
 
 static_assert(sizeof(SectionPiece) == 16, "SectionPiece is too big");
 
-// Used by splitSections to pre-resolve section piece indexes. 32 bits of offset
-// supports section piece up to 4GB.
-constexpr unsigned mergeValueShift = 32;
-
 // This corresponds to a SHF_MERGE section of an input file.
 class MergeInputSection : public InputSectionBase {
 public:
@@ -333,8 +338,7 @@ public:
   void splitIntoPieces();
 
   // Translate an offset in the input section to an offset in the parent
-  // MergeSyntheticSection. If the offset was pre-resolved by
-  // resolveSymbolPieces (upper bits non-zero), this is O(1).
+  // MergeSyntheticSection.
   uint64_t getParentOffset(uint64_t offset) const;
 
   // Splittable sections are handled as a sequence of data

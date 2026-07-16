@@ -21,13 +21,13 @@ namespace llvm {
 class Function;
 class TargetMachine;
 
-class CodeGenPreparePass : public OptionalPassInfoMixin<CodeGenPreparePass> {
+class CodeGenPreparePass : public PassInfoMixin<CodeGenPreparePass> {
 private:
   const TargetMachine *TM;
 
 public:
   CodeGenPreparePass(const TargetMachine &TM) : TM(&TM) {}
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
 } // end namespace llvm

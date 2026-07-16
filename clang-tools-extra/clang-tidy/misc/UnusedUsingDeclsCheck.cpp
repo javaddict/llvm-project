@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "UnusedUsingDeclsCheck.h"
-#include "../utils/FileExtensionsUtils.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
@@ -21,13 +20,13 @@ namespace clang::tidy::misc {
 namespace {
 
 AST_MATCHER_P(DeducedTemplateSpecializationType, refsToTemplatedDecl,
-              ast_matchers::internal::Matcher<NamedDecl>, DeclMatcher) {
+              clang::ast_matchers::internal::Matcher<NamedDecl>, DeclMatcher) {
   if (const auto *TD = Node.getTemplateName().getAsTemplateDecl())
     return DeclMatcher.matches(*TD, Finder, Builder);
   return false;
 }
 
-AST_MATCHER_P(Type, asTagDecl, ast_matchers::internal::Matcher<TagDecl>,
+AST_MATCHER_P(Type, asTagDecl, clang::ast_matchers::internal::Matcher<TagDecl>,
               DeclMatcher) {
   if (const TagDecl *ND = Node.getAsTagDecl())
     return DeclMatcher.matches(*ND, Finder, Builder);
@@ -48,12 +47,13 @@ static bool shouldCheckDecl(const Decl *TargetDecl) {
 
 UnusedUsingDeclsCheck::UnusedUsingDeclsCheck(StringRef Name,
                                              ClangTidyContext *Context)
-    : ClangTidyCheck(Name, Context) {}
+    : ClangTidyCheck(Name, Context),
+      HeaderFileExtensions(Context->getHeaderFileExtensions()) {}
 
 void UnusedUsingDeclsCheck::registerMatchers(MatchFinder *Finder) {
   // We don't emit warnings on unused-using-decls from headers, so bail out if
   // the main file is a header.
-  if (utils::isFileExtension(getCurrentMainFile(), getHeaderFileExtensions()))
+  if (utils::isFileExtension(getCurrentMainFile(), HeaderFileExtensions))
     return;
   Finder->addMatcher(usingDecl(isExpansionInMainFile()).bind("using"), this);
   auto DeclMatcher = hasDeclaration(namedDecl().bind("used"));
@@ -97,12 +97,6 @@ void UnusedUsingDeclsCheck::check(const MatchFinder::MatchResult &Result) {
     // moment because of false positives caused by ADL and different function
     // scopes.
     if (isa<FunctionDecl>(Using->getDeclContext()))
-      return;
-
-    // Ignore exported using-decls.
-    if (Using->hasOwningModule() &&
-        Using->getModuleOwnershipKind() <=
-            Decl::ModuleOwnershipKind::VisibleWhenImported)
       return;
 
     UsingDeclContext Context(Using);

@@ -12,7 +12,6 @@
 #include "lldb/Utility/ConstString.h"
 #include "lldb/ValueObject/ValueObject.h"
 #include "llvm/ADT/APSInt.h"
-#include "llvm/Support/ErrorExtras.h"
 #include <optional>
 
 using namespace lldb;
@@ -87,9 +86,9 @@ lldb_private::formatters::LibcxxStdSpanSyntheticFrontEnd::GetChildAtIndex(
   offset = offset + m_start->GetValueAsUnsigned(0);
   StreamString name;
   name.Printf("[%" PRIu64 "]", (uint64_t)idx);
-  return CreateChildValueObjectFromAddress(name.GetString(), offset,
-                                           m_backend.GetExecutionContextRef(),
-                                           m_element_type);
+  return CreateValueObjectFromAddress(name.GetString(), offset,
+                                      m_backend.GetExecutionContextRef(),
+                                      m_element_type);
 }
 
 lldb::ChildCacheState
@@ -132,10 +131,12 @@ lldb_private::formatters::LibcxxStdSpanSyntheticFrontEnd::Update() {
 llvm::Expected<size_t> lldb_private::formatters::
     LibcxxStdSpanSyntheticFrontEnd::GetIndexOfChildWithName(ConstString name) {
   if (!m_start)
-    return llvm::createStringErrorV("type has no child named '{0}'", name);
+    return llvm::createStringError("Type has no child named '%s'",
+                                   name.AsCString());
   auto optional_idx = formatters::ExtractIndexFromString(name.GetCString());
   if (!optional_idx) {
-    return llvm::createStringErrorV("type has no child named '{0}'", name);
+    return llvm::createStringError("Type has no child named '%s'",
+                                   name.AsCString());
   }
   return *optional_idx;
 }

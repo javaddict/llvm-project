@@ -14,12 +14,9 @@
 #ifndef CLANG_LIB_CIR_ADDRESS_H
 #define CLANG_LIB_CIR_ADDRESS_H
 
-#include "mlir/Dialect/Ptr/IR/MemorySpaceInterfaces.h"
 #include "mlir/IR/Value.h"
 #include "clang/AST/CharUnits.h"
 #include "clang/CIR/Dialect/IR/CIRAttrs.h"
-#include "clang/CIR/Dialect/IR/CIRDialect.h"
-#include "clang/CIR/Dialect/IR/CIROpsEnums.h"
 #include "clang/CIR/Dialect/IR/CIRTypes.h"
 #include "clang/CIR/MissingFeatures.h"
 #include "llvm/ADT/PointerIntPair.h"
@@ -48,12 +45,8 @@ protected:
 public:
   Address(mlir::Value pointer, mlir::Type elementType,
           clang::CharUnits alignment)
-      : Address(pointer, elementType, alignment, false) {}
-
-  Address(mlir::Value pointer, mlir::Type elementType,
-          clang::CharUnits alignment, bool isKnownNonNull)
-      : pointerAndKnownNonNull(pointer, isKnownNonNull),
-        elementType(elementType), alignment(alignment) {
+      : pointerAndKnownNonNull(pointer, false), elementType(elementType),
+        alignment(alignment) {
     assert(pointer && "Pointer cannot be null");
     assert(elementType && "Element type cannot be null");
     assert(!alignment.isZero() && "Alignment cannot be zero");
@@ -87,8 +80,7 @@ public:
   /// Return address with different alignment, but same pointer and element
   /// type.
   Address withAlignment(clang::CharUnits newAlignment) const {
-    return Address(getPointer(), getElementType(), newAlignment,
-                   isKnownNonNull());
+    return Address(getPointer(), getElementType(), newAlignment);
   }
 
   /// Return address with different element type, a bitcast pointer, and
@@ -130,7 +122,7 @@ public:
     return elementType;
   }
 
-  mlir::ptr::MemorySpaceAttrInterface getAddressSpace() const {
+  cir::TargetAddressSpaceAttr getAddressSpace() const {
     auto ptrTy = mlir::dyn_cast<cir::PointerType>(getType());
     return ptrTy.getAddrSpace();
   }
@@ -146,35 +138,6 @@ public:
 
   template <typename OpTy> OpTy getDefiningOp() const {
     return mlir::dyn_cast_or_null<OpTy>(getDefiningOp());
-  }
-
-  /// Return the underlying alloca for this address, if any.
-  ///
-  /// Addresses may refer to an alloca through an address space cast, for
-  /// example when a target stack address space is cast to the language-visible
-  /// address space. Peel those casts so callers that need to annotate the
-  /// original alloca can still find it.
-  cir::AllocaOp getUnderlyingAllocaOp() const {
-    mlir::Value ptr = getPointer();
-    while (cir::CastOp castOp = ptr.getDefiningOp<cir::CastOp>()) {
-      if (!castOp.isAllocaPreservingCast())
-        break;
-      ptr = castOp.getSrc();
-    }
-    return ptr.getDefiningOp<cir::AllocaOp>();
-  }
-
-  /// Whether the pointer is known not to be null.
-  bool isKnownNonNull() const {
-    assert(isValid() && "Invalid address");
-    return static_cast<bool>(pointerAndKnownNonNull.getInt());
-  }
-
-  /// Set the non-null bit.
-  Address setKnownNonNull() {
-    assert(isValid() && "Invalid address");
-    pointerAndKnownNonNull.setInt(true);
-    return *this;
   }
 };
 

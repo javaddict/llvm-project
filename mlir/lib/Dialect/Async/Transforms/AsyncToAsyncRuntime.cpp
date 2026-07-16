@@ -90,7 +90,6 @@ struct CoroMachinery {
   std::optional<Value> asyncToken;          // returned completion token
   llvm::SmallVector<Value, 4> returnValues; // returned async values
 
-  Value coroId;     // coroutine id (!async.coro.id value)
   Value coroHandle; // coroutine handle (!async.coro.getHandle value)
   Block *entry;     // coroutine entry block
   std::optional<Block *> setError; // set returned values to error state
@@ -116,12 +115,7 @@ struct CoroMachinery {
   // If there is resume-specific cleanup logic, it can go into the Cleanup
   // block but not the destroy block. Otherwise, it can fail block dominance
   // check.
-  //
-  // This block is created lazily by `setupCleanupForDestroyBlock` only when a
-  // suspension point needs a destroy successor, so that functions without any
-  // coroutine suspends (e.g. an `async.func` body with no `await`) don't end
-  // up with dead code.
-  std::optional<Block *> cleanupForDestroy;
+  Block *cleanupForDestroy;
   Block *suspend; // coroutine suspension block
 };
 } // namespace
@@ -188,12 +182,11 @@ static CoroMachinery setupCoroMachinery(func::FuncOp func) {
 
   // We treat TokenType as state update marker to represent side-effects of
   // async computations
-  bool isStateful = isa<async::TokenType>(func.getResultTypes().front());
+  bool isStateful = isa<TokenType>(func.getResultTypes().front());
 
   std::optional<Value> retToken;
   if (isStateful)
-    retToken.emplace(
-        RuntimeCreateOp::create(builder, async::TokenType::get(ctx)));
+    retToken.emplace(RuntimeCreateOp::create(builder, TokenType::get(ctx)));
 
   llvm::SmallVector<Value, 4> retValues;
   ArrayRef<Type> resValueTypes =
@@ -211,16 +204,21 @@ static CoroMachinery setupCoroMachinery(func::FuncOp func) {
   cf::BranchOp::create(builder, originalEntryBlock);
 
   Block *cleanupBlock = func.addBlock();
+  Block *cleanupBlockForDestroy = func.addBlock();
   Block *suspendBlock = func.addBlock();
 
   // ------------------------------------------------------------------------ //
-  // Coroutine cleanup block: deallocate coroutine frame, free the memory.
+  // Coroutine cleanup blocks: deallocate coroutine frame, free the memory.
   // ------------------------------------------------------------------------ //
-  // The matching "destroy" cleanup block is materialized lazily by
-  // `setupCleanupForDestroyBlock` only when a suspend point needs it.
-  builder.setInsertionPointToStart(cleanupBlock);
-  CoroFreeOp::create(builder, coroIdOp.getId(), coroHdlOp.getHandle());
-  cf::BranchOp::create(builder, suspendBlock);
+  auto buildCleanupBlock = [&](Block *cb) {
+    builder.setInsertionPointToStart(cb);
+    CoroFreeOp::create(builder, coroIdOp.getId(), coroHdlOp.getHandle());
+
+    // Branch into the suspend block.
+    cf::BranchOp::create(builder, suspendBlock);
+  };
+  buildCleanupBlock(cleanupBlock);
+  buildCleanupBlock(cleanupBlockForDestroy);
 
   // ------------------------------------------------------------------------ //
   // Coroutine suspend block: mark the end of a coroutine and return allocated
@@ -244,19 +242,18 @@ static CoroMachinery setupCoroMachinery(func::FuncOp func) {
 
   // The switch-resumed API based coroutine should be marked with
   // presplitcoroutine attribute to mark the function as a coroutine.
-  func->setAttr("llvm.passthrough", builder.getArrayAttr(StringAttr::get(
-                                        ctx, "presplitcoroutine")));
+  func->setAttr("passthrough", builder.getArrayAttr(
+                                   StringAttr::get(ctx, "presplitcoroutine")));
 
   CoroMachinery machinery;
   machinery.func = func;
   machinery.asyncToken = retToken;
   machinery.returnValues = retValues;
-  machinery.coroId = coroIdOp.getId();
   machinery.coroHandle = coroHdlOp.getHandle();
   machinery.entry = entryBlock;
   machinery.setError = std::nullopt; // created lazily only if needed
   machinery.cleanup = cleanupBlock;
-  machinery.cleanupForDestroy = std::nullopt; // created lazily only if needed
+  machinery.cleanupForDestroy = cleanupBlockForDestroy;
   machinery.suspend = suspendBlock;
   return machinery;
 }
@@ -284,20 +281,6 @@ static Block *setupSetErrorBlock(CoroMachinery &coro) {
   cf::BranchOp::create(builder, coro.cleanup);
 
   return *coro.setError;
-}
-
-// Lazily creates the `cleanupForDestroy` block only if a suspension point
-// actually needs a destroy successor. This avoids leaving an unreachable
-// cleanup block behind in coroutines that never suspend.
-static Block *setupCleanupForDestroyBlock(ImplicitLocOpBuilder &builder,
-                                          CoroMachinery &coro) {
-  if (coro.cleanupForDestroy)
-    return *coro.cleanupForDestroy;
-  OpBuilder::InsertionGuard guard(builder);
-  coro.cleanupForDestroy = builder.createBlock(coro.suspend);
-  CoroFreeOp::create(builder, coro.coroId, coro.coroHandle);
-  cf::BranchOp::create(builder, coro.suspend);
-  return *coro.cleanupForDestroy;
 }
 
 //===----------------------------------------------------------------------===//
@@ -390,9 +373,8 @@ outlineExecuteOp(SymbolTable &symbolTable, ExecuteOp execute) {
     RuntimeResumeOp::create(builder, coro.coroHandle);
 
     // Add async.coro.suspend as a suspended block terminator.
-    Block *destroy = setupCleanupForDestroyBlock(builder, coro);
     CoroSuspendOp::create(builder, coroSaveOp.getState(), coro.suspend,
-                          branch.getDest(), destroy);
+                          branch.getDest(), coro.cleanupForDestroy);
 
     branch.erase();
   }
@@ -632,10 +614,9 @@ public:
       Block *resume = rewriter.splitBlock(suspended, Block::iterator(op));
 
       // Add async.coro.suspend as a suspended block terminator.
-      Block *destroy = setupCleanupForDestroyBlock(builder, coro);
       builder.setInsertionPointToEnd(suspended);
       CoroSuspendOp::create(builder, coroSaveOp.getState(), coro.suspend,
-                            resume, destroy);
+                            resume, coro.cleanupForDestroy);
 
       // Split the resume block into error checking and continuation.
       Block *continuation = rewriter.splitBlock(resume, Block::iterator(op));
@@ -674,9 +655,8 @@ private:
 };
 
 /// Lowering for `async.await` with a token operand.
-class AwaitTokenOpLowering
-    : public AwaitOpLoweringBase<AwaitOp, async::TokenType> {
-  using Base = AwaitOpLoweringBase<AwaitOp, async::TokenType>;
+class AwaitTokenOpLowering : public AwaitOpLoweringBase<AwaitOp, TokenType> {
+  using Base = AwaitOpLoweringBase<AwaitOp, TokenType>;
 
 public:
   using Base::Base;

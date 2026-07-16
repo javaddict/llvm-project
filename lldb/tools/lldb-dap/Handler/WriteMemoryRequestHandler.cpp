@@ -27,7 +27,8 @@ llvm::Expected<WriteMemoryResponseBody>
 WriteMemoryRequestHandler::Run(const WriteMemoryArguments &args) const {
   const lldb::addr_t address = args.memoryReference + args.offset;
 
-  if (dap.ProcessIsNotStopped())
+  lldb::SBProcess process = dap.target.GetProcess();
+  if (!lldb::SBDebugger::StateIsStoppedState(process.GetState()))
     return llvm::make_error<NotStoppedError>();
 
   if (args.data.empty()) {

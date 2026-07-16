@@ -39,19 +39,18 @@ function(add_startup_object name)
   endif()
 endfunction()
 
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${LIBC_TARGET_ARCHITECTURE})
+  add_subdirectory(${LIBC_TARGET_ARCHITECTURE})
+else()
+  message(WARNING "Cannot build 'crt1.o' for ${LIBC_TARGET_ARCHITECTURE} yet.")
+  return()
+endif()
+
 add_startup_object(
   crt1
-  SRC
-    start.cpp
+  ALIAS
   DEPENDS
-    libc.config.app_h
-    libc.src.__support.RPC.rpc_client
-    libc.src.__support.GPU.utils
-    libc.src.stdlib.exit
-    libc.src.stdlib.atexit
-  COMPILE_OPTIONS
-    -ffreestanding # To avoid compiler warnings about calling the main function.
-    -fno-builtin
+  .${LIBC_TARGET_ARCHITECTURE}.crt1
 )
 
 add_custom_target(libc-startup)

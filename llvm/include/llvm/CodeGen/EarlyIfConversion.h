@@ -13,11 +13,10 @@
 
 namespace llvm {
 
-class EarlyIfConverterPass
-    : public OptionalPassInfoMixin<EarlyIfConverterPass> {
+class EarlyIfConverterPass : public PassInfoMixin<EarlyIfConverterPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
 };
 
 } // namespace llvm

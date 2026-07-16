@@ -37,7 +37,6 @@ void foo(char c) {
 void bar(int M) { g += M; }
 
 int main(int argc, const char *argv[]) {
-  __llvm_profile_test_initialize();
   int i;
   if (argc < 4)
     return 1;

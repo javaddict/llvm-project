@@ -12,7 +12,6 @@
 #ifndef __COMPACT_UNWINDER_HPP__
 #define __COMPACT_UNWINDER_HPP__
 
-#include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -336,8 +335,8 @@ int CompactUnwinder_x86_64<A>::stepWithCompactEncodingRBPFrame(
     default:
       (void)functionStart;
       _LIBUNWIND_DEBUG_LOG("bad register for RBP frame, encoding=%08X for "
-                           "function starting at 0x%" PRIu64 "X",
-                           compactEncoding, functionStart);
+                           "function starting at 0x%llX",
+                            compactEncoding, functionStart);
       _LIBUNWIND_ABORT("invalid compact unwind encoding");
     }
     savedRegisters += 8;
@@ -455,8 +454,8 @@ int CompactUnwinder_x86_64<A>::stepWithCompactEncodingFrameless(
       break;
     default:
       _LIBUNWIND_DEBUG_LOG("bad register for frameless, encoding=%08X for "
-                           "function starting at 0x%" PRIu64 "X",
-                           encoding, functionStart);
+                           "function starting at 0x%llX",
+                            encoding, functionStart);
       _LIBUNWIND_ABORT("invalid compact unwind encoding");
     }
     savedRegisters += 8;

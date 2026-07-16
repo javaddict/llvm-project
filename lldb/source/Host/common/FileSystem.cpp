@@ -222,8 +222,7 @@ std::error_code FileSystem::GetRealPath(const Twine &path,
   return m_fs->getRealPath(path, output);
 }
 
-void FileSystem::Resolve(SmallVectorImpl<char> &path,
-                         bool force_make_absolute) {
+void FileSystem::Resolve(SmallVectorImpl<char> &path) {
   if (path.empty())
     return;
 
@@ -238,14 +237,14 @@ void FileSystem::Resolve(SmallVectorImpl<char> &path,
   MakeAbsolute(absolute);
 
   path.clear();
-  if (force_make_absolute || Exists(absolute)) {
+  if (Exists(absolute)) {
     path.append(absolute.begin(), absolute.end());
   } else {
     path.append(resolved.begin(), resolved.end());
   }
 }
 
-void FileSystem::Resolve(FileSpec &file_spec, bool force_make_absolute) {
+void FileSystem::Resolve(FileSpec &file_spec) {
   if (!file_spec)
     return;
 
@@ -254,7 +253,7 @@ void FileSystem::Resolve(FileSpec &file_spec, bool force_make_absolute) {
   file_spec.GetPath(path);
 
   // Resolve the path.
-  Resolve(path, force_make_absolute);
+  Resolve(path);
 
   // Update the FileSpec with the resolved path.
   if (file_spec.GetFilename().IsEmpty())

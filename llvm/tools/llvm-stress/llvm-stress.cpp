@@ -709,7 +709,7 @@ static void IntroduceControlFlow(Function *F, Random &R) {
     BasicBlock *Next = Curr->splitBasicBlock(Loc, "CF");
     Instr->moveBefore(Curr->getTerminator()->getIterator());
     if (Curr != &F->getEntryBlock()) {
-      CondBrInst::Create(Instr, Curr, Next,
+      BranchInst::Create(Curr, Next, Instr,
                          Curr->getTerminator()->getIterator());
       Curr->getTerminator()->eraseFromParent();
     }

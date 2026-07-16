@@ -1380,12 +1380,11 @@ private:
 /// This holds information associated with macro definitions.
 struct MacroDefinitionRecord : APIRecord {
   MacroDefinitionRecord(StringRef USR, StringRef Name, SymbolReference Parent,
-                        PresumedLoc Loc, const DocComment &Comment,
-                        DeclarationFragments Declaration,
+                        PresumedLoc Loc, DeclarationFragments Declaration,
                         DeclarationFragments SubHeading,
                         bool IsFromSystemHeader)
       : APIRecord(RK_MacroDefinition, USR, Name, Parent, Loc,
-                  AvailabilityInfo(), LinkageInfo(), Comment, Declaration,
+                  AvailabilityInfo(), LinkageInfo(), {}, Declaration,
                   SubHeading, IsFromSystemHeader) {}
 
   static bool classof(const APIRecord *Record) {

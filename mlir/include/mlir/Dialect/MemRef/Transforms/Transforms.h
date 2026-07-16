@@ -39,10 +39,6 @@ class DeallocOp;
 // Patterns
 //===----------------------------------------------------------------------===//
 
-/// Collects a set of patterns that bypass memref.reinterpet_cast Ops. This
-/// simplifies the IR in the context of lowering to EmitC.
-void populateElideReinterpretCastPatterns(RewritePatternSet &patterns);
-
 /// Collects a set of patterns to rewrite ops within the memref dialect.
 void populateExpandOpsPatterns(RewritePatternSet &patterns);
 
@@ -87,17 +83,9 @@ void populateMemRefWideIntEmulationConversions(
 
 /// Appends patterns for emulating memref operations over narrow types with ops
 /// over wider types.
-/// When `disableAtomicRMW` is true, the store patterns generate non-atomic
-/// read-modify-write sequences instead of atomic operations.
-/// When `assumeAligned` is true, `memref.subview` and
-/// `memref.reinterpret_cast` patterns accept dynamic offsets under the
-/// alignment contract that the caller guarantees those offsets are a multiple
-/// of `dstBits / srcBits`. When false (the default), dynamic offsets are
-/// rejected to preserve soundness for callers that cannot prove divisibility.
 void populateMemRefNarrowTypeEmulationPatterns(
     const arith::NarrowTypeEmulationConverter &typeConverter,
-    RewritePatternSet &patterns, bool disableAtomicRMW = false,
-    bool assumeAligned = false);
+    RewritePatternSet &patterns);
 
 /// Appends type conversions for emulating memref operations over narrow types
 /// with ops over wider types.
@@ -157,8 +145,10 @@ FailureOr<memref::AllocOp> multiBuffer(memref::AllocOp allocOp,
 /// ```
 void populateExtractAddressComputationsPatterns(RewritePatternSet &patterns);
 
-/// Patterns for flattening all supported multi-dimensional memref operations
-/// into one-dimensional memref operations.
+/// Patterns for flattening multi-dimensional memref operations into
+/// one-dimensional memref operations.
+void populateFlattenVectorOpsOnMemrefPatterns(RewritePatternSet &patterns);
+void populateFlattenMemrefOpsPatterns(RewritePatternSet &patterns);
 void populateFlattenMemrefsPatterns(RewritePatternSet &patterns);
 
 /// Build a new memref::AllocaOp whose dynamic sizes are independent of all

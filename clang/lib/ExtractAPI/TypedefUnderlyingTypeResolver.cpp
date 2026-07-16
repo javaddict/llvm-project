@@ -13,7 +13,7 @@
 
 #include "clang/ExtractAPI/TypedefUnderlyingTypeResolver.h"
 #include "clang/Basic/Module.h"
-#include "clang/UnifiedSymbolResolution/USRGeneration.h"
+#include "clang/Index/USRGeneration.h"
 
 using namespace clang;
 using namespace extractapi;

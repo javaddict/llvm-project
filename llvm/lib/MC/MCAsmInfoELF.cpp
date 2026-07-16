@@ -40,12 +40,11 @@ bool MCAsmInfoELF::useCodeAlign(const MCSection &Sec) const {
   return static_cast<const MCSectionELF &>(Sec).getFlags() & ELF::SHF_EXECINSTR;
 }
 
-MCAsmInfoELF::MCAsmInfoELF(const MCTargetOptions &Options)
-    : MCAsmInfo(Options) {
+MCAsmInfoELF::MCAsmInfoELF() {
   HasIdentDirective = true;
-  HasPreferredAlignment = true;
   WeakRefDirective = "\t.weak\t";
-  InternalSymbolPrefix = ".L";
+  PrivateGlobalPrefix = ".L";
+  PrivateLabelPrefix = ".L";
 }
 
 static void printName(raw_ostream &OS, StringRef Name) {

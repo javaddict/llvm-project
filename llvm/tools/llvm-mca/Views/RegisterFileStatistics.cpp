@@ -162,6 +162,7 @@ void RegisterFileStatistics::printView(raw_ostream &OS) const {
     }
   }
 
+  TempStream.flush();
   OS << Buffer;
 }
 

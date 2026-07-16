@@ -172,7 +172,8 @@ public:
   /// Number of micro-ops that may be buffered for OOO execution.
   unsigned getMicroOpBufferSize() const { return SchedModel.MicroOpBufferSize; }
 
-  /// Return the original buffer size for a processor resource.
+  /// Number of resource units that may be buffered for OOO execution.
+  /// \return The buffer size in resource units or -1 for unlimited.
   int getResourceBufferSize(unsigned PIdx) const {
     return SchedModel.getProcResource(PIdx)->BufferSize;
   }

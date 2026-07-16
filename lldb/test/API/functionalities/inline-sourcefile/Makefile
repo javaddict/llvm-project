@@ -8,4 +8,4 @@ OBJECTS += inline.o
 $(EXE): main.c inline.o
 
 %.o: %.ll
-	$(CC) $(CFLAGS) $< -c -o $@
+	$(CC) $< -c -o $@

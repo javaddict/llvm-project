@@ -571,7 +571,7 @@ bool ScopDetection::isValidSwitch(BasicBlock &BB, SwitchInst *SI,
                                      ConditionSCEV, ConditionSCEV, SI);
 }
 
-bool ScopDetection::isValidBranch(BasicBlock &BB, CondBrInst *BI,
+bool ScopDetection::isValidBranch(BasicBlock &BB, BranchInst *BI,
                                   Value *Condition, bool IsLoopBranch,
                                   DetectionContext &Context) {
   // Constant integer conditions are always affine.
@@ -665,24 +665,22 @@ bool ScopDetection::isValidCFG(BasicBlock &BB, bool IsLoopBranch,
   if (isa<ReturnInst>(TI) && CurRegion.isTopLevelRegion())
     return true;
 
-  if (isa<UncondBrInst>(TI))
-    return true;
+  Value *Condition = getConditionFromTerminator(TI);
 
-  if (auto *BI = dyn_cast<CondBrInst>(TI)) {
-    Value *Condition = BI->getCondition();
-    if (isa<UndefValue>(Condition))
-      return invalid<ReportUndefCond>(Context, /*Assert=*/true, TI, &BB);
+  if (!Condition)
+    return invalid<ReportInvalidTerminator>(Context, /*Assert=*/true, &BB);
+
+  // UndefValue is not allowed as condition.
+  if (isa<UndefValue>(Condition))
+    return invalid<ReportUndefCond>(Context, /*Assert=*/true, TI, &BB);
+
+  if (BranchInst *BI = dyn_cast<BranchInst>(TI))
     return isValidBranch(BB, BI, Condition, IsLoopBranch, Context);
-  }
 
-  if (auto *SI = dyn_cast<SwitchInst>(TI)) {
-    Value *Condition = SI->getCondition();
-    if (isa<UndefValue>(Condition))
-      return invalid<ReportUndefCond>(Context, /*Assert=*/true, TI, &BB);
-    return isValidSwitch(BB, SI, Condition, IsLoopBranch, Context);
-  }
+  SwitchInst *SI = dyn_cast<SwitchInst>(TI);
+  assert(SI && "Terminator was neither branch nor switch");
 
-  return invalid<ReportInvalidTerminator>(Context, /*Assert=*/true, &BB);
+  return isValidSwitch(BB, SI, Condition, IsLoopBranch, Context);
 }
 
 bool ScopDetection::isValidCallInst(CallInst &CI,
@@ -888,7 +886,7 @@ ScopDetection::getDelinearizationTerms(DetectionContext &Context,
         if (auto *AF2 = dyn_cast<SCEVAddRecExpr>(Op))
           collectParametricTerms(SE, AF2, Terms);
         if (auto *AF2 = dyn_cast<SCEVMulExpr>(Op)) {
-          SmallVector<SCEVUse, 0> Operands;
+          SmallVector<const SCEV *, 0> Operands;
 
           for (const SCEV *MulOp : AF2->operands()) {
             if (auto *Const = dyn_cast<SCEVConstant>(MulOp))
@@ -1206,17 +1204,6 @@ bool ScopDetection::isValidMemoryAccess(MemAccInst Inst,
   return isValidAccess(Inst, AccessFunction, BasePointer, Context);
 }
 
-bool ScopDetection::isCompatibleType(Instruction *Inst, Type *Ty,
-                                     DetectionContext &Context) {
-  if (!Ty)
-    return false;
-
-  if (isa<ScalableVectorType>(Ty))
-    return invalid<ReportIncompatibleType>(Context, /*Assert=*/true, Inst, Ty);
-
-  return true;
-}
-
 bool ScopDetection::isValidInstruction(Instruction &Inst,
                                        DetectionContext &Context) {
   for (auto &Op : Inst.operands()) {
@@ -1224,9 +1211,6 @@ bool ScopDetection::isValidInstruction(Instruction &Inst,
 
     if (!OpInst)
       continue;
-
-    if (!isCompatibleType(&Inst, Op->getType(), Context))
-      return false;
 
     if (isErrorBlock(*OpInst->getParent(), Context.CurRegion)) {
       auto *PHI = dyn_cast<PHINode>(OpInst);
@@ -1243,9 +1227,6 @@ bool ScopDetection::isValidInstruction(Instruction &Inst,
   }
 
   if (isa<LandingPadInst>(&Inst) || isa<ResumeInst>(&Inst))
-    return false;
-
-  if (!isCompatibleType(&Inst, Inst.getType(), Context))
     return false;
 
   // We only check the call instruction but not invoke instruction.

@@ -80,7 +80,7 @@
 //  - .loh AdrpAdrp L2, L1:
 //    L2: ADRP xA, sym1@PAGE
 //    L1: ADRP xA, sym2@PAGE
-//    L2 dominates L1 and xA is not redefined between L2 and L1
+//    L2 dominates L1 and xA is not redifined between L2 and L1
 // This LOH aims at getting rid of redundant ADRP instructions.
 //
 // The overall design for emitting the LOHs is:
@@ -122,6 +122,33 @@ STATISTIC(NumADRPToLDR, "Number of simplifiable LDR reachable by ADRP");
 STATISTIC(NumADRSimpleCandidate, "Number of simplifiable ADRP + ADD");
 
 #define AARCH64_COLLECT_LOH_NAME "AArch64 Collect Linker Optimization Hint (LOH)"
+
+namespace {
+
+struct AArch64CollectLOH : public MachineFunctionPass {
+  static char ID;
+  AArch64CollectLOH() : MachineFunctionPass(ID) {}
+
+  bool runOnMachineFunction(MachineFunction &MF) override;
+
+  MachineFunctionProperties getRequiredProperties() const override {
+    return MachineFunctionProperties().setNoVRegs();
+  }
+
+  StringRef getPassName() const override { return AARCH64_COLLECT_LOH_NAME; }
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    MachineFunctionPass::getAnalysisUsage(AU);
+    AU.setPreservesAll();
+  }
+};
+
+char AArch64CollectLOH::ID = 0;
+
+} // end anonymous namespace.
+
+INITIALIZE_PASS(AArch64CollectLOH, "aarch64-collect-loh",
+                AARCH64_COLLECT_LOH_NAME, false, false)
 
 static bool canAddBePartOfLOH(const MachineInstr &MI) {
   // Check immediate to see if the immediate is an address.
@@ -509,9 +536,10 @@ static void handleNormalInst(const MachineInstr &MI, LOHInfo *LOHInfos) {
   }
 }
 
-namespace {
+bool AArch64CollectLOH::runOnMachineFunction(MachineFunction &MF) {
+  if (skipFunction(MF.getFunction()))
+    return false;
 
-void runAArch64CollectLOH(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "********** AArch64 Collect LOH **********\n"
                     << "Looking in function " << MF.getName() << '\n');
 
@@ -562,49 +590,11 @@ void runAArch64CollectLOH(MachineFunction &MF) {
       handleNormalInst(MI, LOHInfos);
     }
   }
-}
 
-struct AArch64CollectLOHLegacy : public MachineFunctionPass {
-  static char ID;
-  AArch64CollectLOHLegacy() : MachineFunctionPass(ID) {}
-
-  bool runOnMachineFunction(MachineFunction &MF) override {
-    if (skipFunction(MF.getFunction()))
-      return false;
-    runAArch64CollectLOH(MF);
-
-    // Return "no change": The pass only collects information.
-    return false;
-  }
-
-  MachineFunctionProperties getRequiredProperties() const override {
-    return MachineFunctionProperties().setNoVRegs();
-  }
-
-  StringRef getPassName() const override { return AARCH64_COLLECT_LOH_NAME; }
-
-  void getAnalysisUsage(AnalysisUsage &AU) const override {
-    MachineFunctionPass::getAnalysisUsage(AU);
-    AU.setPreservesAll();
-  }
-};
-
-char AArch64CollectLOHLegacy::ID = 0;
-
-} // end anonymous namespace.
-
-INITIALIZE_PASS(AArch64CollectLOHLegacy, "aarch64-collect-loh",
-                AARCH64_COLLECT_LOH_NAME, false, false)
-
-PreservedAnalyses
-AArch64CollectLOHPass::run(MachineFunction &MF,
-                           MachineFunctionAnalysisManager &MFAM) {
-  runAArch64CollectLOH(MF);
-
-  // This pass only collects information.
-  return PreservedAnalyses::all();
+  // Return "no change": The pass only collects information.
+  return false;
 }
 
 FunctionPass *llvm::createAArch64CollectLOHPass() {
-  return new AArch64CollectLOHLegacy();
+  return new AArch64CollectLOH();
 }

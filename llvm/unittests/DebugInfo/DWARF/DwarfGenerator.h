@@ -17,7 +17,6 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/DIE.h"
 #include "llvm/DebugInfo/DWARF/DWARFDebugLine.h"
-#include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Support/Error.h"
 
 #include <memory>
@@ -246,7 +245,6 @@ private:
 /// the returned compile unit and adding attributes and children to each DIE.
 class Generator {
   std::unique_ptr<MCRegisterInfo> MRI;
-  MCTargetOptions MCOptions;
   std::unique_ptr<MCAsmInfo> MAI;
   std::unique_ptr<MCContext> MC;
   MCAsmBackend *MAB; // Owned by MCStreamer

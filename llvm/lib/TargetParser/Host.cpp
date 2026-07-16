@@ -1340,12 +1340,6 @@ static const char *getAMDProcessorTypeAndSubtype(unsigned Family,
       *Subtype = X86::AMDFAM1AH_ZNVER5;
       break; //  "znver5"
     }
-    if ((Model >= 0x50 && Model <= 0x5f) || (Model >= 0x80 && Model <= 0xcf) ||
-        (Model >= 0xd8 && Model <= 0xe7)) {
-      CPU = "znver6";
-      *Subtype = X86::AMDFAM1AH_ZNVER6;
-      break; //  "znver6"
-    }
     break;
 
   default:
@@ -2184,7 +2178,6 @@ StringMap<bool> sys::getHostCPUFeatures() {
   Features["nf"] = HasAPXF;
   Features["cf"] = HasAPXF;
   Features["zu"] = HasAPXF;
-  Features["jmpabs"] = HasAPXF;
 
   bool HasLeafD = MaxLevel >= 0xd &&
                   !getX86CpuIDAndInfoEx(0xd, 0x1, &EAX, &EBX, &ECX, &EDX);

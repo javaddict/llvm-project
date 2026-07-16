@@ -9,7 +9,7 @@
 open Llvm
 open Llvm_transform_utils
 
-let context = create_context ()
+let context = global_context ()
 
 let test_clone_module () =
   let m  = create_module context "mod" in
@@ -18,5 +18,4 @@ let test_clone_module () =
   if string_of_llmodule m <> string_of_llmodule m' then failwith "string_of m <> m'"
 
 let () =
-  test_clone_module ();
-  dispose_context context
+  test_clone_module ()

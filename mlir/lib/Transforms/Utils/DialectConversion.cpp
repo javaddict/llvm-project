@@ -21,7 +21,6 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/DebugLog.h"
-#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/SaveAndRestore.h"
 #include "llvm/Support/ScopedPrinter.h"
@@ -114,15 +113,16 @@ enum OpConversionMode {
 // ConversionValueMapping
 //===----------------------------------------------------------------------===//
 
-/// A vector of SSA values, optimized for the most common case of one or two
-/// values. Inline size chosen empirically based on compilation profiling.
-/// Profiled: 2.3M calls, avg=2.0+-0.3. N=2 covers 98% of cases inline.
-using ValueVector = SmallVector<Value, 2>;
+/// A vector of SSA values, optimized for the most common case of a single
+/// value.
+using ValueVector = SmallVector<Value, 1>;
 
 namespace {
 
 /// Helper class to make it possible to use `ValueVector` as a key in DenseMap.
 struct ValueVectorMapInfo {
+  static ValueVector getEmptyKey() { return ValueVector{Value()}; }
+  static ValueVector getTombstoneKey() { return ValueVector{Value(), Value()}; }
   static ::llvm::hash_code getHashValue(const ValueVector &val) {
     return ::llvm::hash_combine_range(val);
   }
@@ -548,13 +548,7 @@ public:
     // Move the block back to its original position.
     Region::iterator before =
         insertBeforeBlock ? Region::iterator(insertBeforeBlock) : region->end();
-    if (Region *currentParent = block->getParent()) {
-      // Block is still in a region, use cheap splice to move it back.
-      region->getBlocks().splice(before, currentParent->getBlocks(), block);
-      return;
-    }
-    // Block was orphaned by a prior rollback, can't splice.
-    region->getBlocks().insert(before, block);
+    region->getBlocks().splice(before, block->getParent()->getBlocks(), block);
   }
 
 private:
@@ -686,10 +680,10 @@ public:
         name(op->getName()), loc(op->getLoc()), attrs(op->getAttrDictionary()),
         operands(op->operand_begin(), op->operand_end()),
         successors(op->successor_begin(), op->successor_end()) {
-    if (PropertyRef prop = op->getPropertiesStorage()) {
+    if (OpaqueProperties prop = op->getPropertiesStorage()) {
       // Make a copy of the properties.
       propertiesStorage = operator new(op->getPropertiesStorageSize());
-      PropertyRef propCopy(name.getOpPropertiesTypeID(), propertiesStorage);
+      OpaqueProperties propCopy(propertiesStorage);
       name.initOpProperties(propCopy, /*init=*/prop);
     }
   }
@@ -710,7 +704,7 @@ public:
       listener->notifyOperationModified(op);
 
     if (propertiesStorage) {
-      PropertyRef propCopy(name.getOpPropertiesTypeID(), propertiesStorage);
+      OpaqueProperties propCopy(propertiesStorage);
       // Note: The operation may have been erased in the mean time, so
       // OperationName must be stored in this object.
       name.destroyOpProperties(propCopy);
@@ -726,7 +720,7 @@ public:
     for (const auto &it : llvm::enumerate(successors))
       op->setSuccessor(it.value(), it.index());
     if (propertiesStorage) {
-      PropertyRef propCopy(name.getOpPropertiesTypeID(), propertiesStorage);
+      OpaqueProperties propCopy(propertiesStorage);
       op->copyProperties(propCopy);
       name.destroyOpProperties(propCopy);
       operator delete(propertiesStorage);
@@ -1137,7 +1131,7 @@ struct ConversionPatternRewriterImpl : public RewriterBase::Listener {
   DenseSet<UnrealizedConversionCastOp> patternMaterializations;
 
   /// A mapping for looking up metadata of unresolved materializations.
-  llvm::MapVector<UnrealizedConversionCastOp, UnresolvedMaterializationInfo>
+  DenseMap<UnrealizedConversionCastOp, UnresolvedMaterializationInfo>
       unresolvedMaterializations;
 
   /// The current type converter, or nullptr if no type converter is currently
@@ -1305,11 +1299,6 @@ void ReplaceOperationRewrite::commit(RewriterBase &rewriter) {
 
   // Do not erase the operation yet. It may still be referenced in `mapping`.
   // Just unlink it for now and erase it during cleanup.
-  if (!op->getBlock())
-    llvm::reportFatalInternalError(
-        "dialect conversion attempted to replace a root operation that has no "
-        "parent block; the pass must ensure its target op is nested in a "
-        "block");
   op->getBlock()->getOperations().remove(op);
 }
 
@@ -1601,7 +1590,7 @@ Block *ConversionPatternRewriterImpl::applySignatureConversion(
 #if MLIR_ENABLE_EXPENSIVE_PATTERN_API_CHECKS
   // A block cannot be converted multiple times.
   if (hasRewrite<BlockTypeConversionRewrite>(rewrites, block))
-    llvm::reportFatalInternalError("block was already converted");
+    llvm::report_fatal_error("block was already converted");
 #endif // MLIR_ENABLE_EXPENSIVE_PATTERN_API_CHECKS
 
   OpBuilder::InsertionGuard g(rewriter);
@@ -2032,7 +2021,7 @@ void ConversionPatternRewriterImpl::replaceValueUses(
 #endif // NDEBUG
 
   if (functor)
-    llvm::reportFatalInternalError(
+    llvm::report_fatal_error(
         "conditional value replacement is not supported in rollback mode");
   mapping.map(from, to);
   appendRewrite<ReplaceValueRewrite>(from, converter);
@@ -2692,7 +2681,7 @@ LogicalResult OperationLegalizer::legalizeWithFold(Operation *op) {
                             newOp->getName()));
       if (!rewriter.getConfig().allowPatternRollback) {
         // Rolling back a folder is like rolling back a pattern.
-        llvm::reportFatalInternalError(
+        llvm::report_fatal_error(
             "op '" + opName +
             "' folder rollback of IR modifications requested");
       }
@@ -2716,11 +2705,11 @@ reportNewIrLegalizationFatalError(const Pattern &pattern,
       newOps, [](Operation *op) { return op->getName().getStringRef(); });
   auto modifiedOpNames = llvm::map_range(
       modifiedOps, [](Operation *op) { return op->getName().getStringRef(); });
-  llvm::reportFatalInternalError("pattern '" + pattern.getDebugName() +
-                                 "' produced IR that could not be legalized. " +
-                                 "new ops: {" + llvm::join(newOpNames, ", ") +
-                                 "}, " + "modified ops: {" +
-                                 llvm::join(modifiedOpNames, ", ") + "}");
+  llvm::report_fatal_error("pattern '" + pattern.getDebugName() +
+                           "' produced IR that could not be legalized. " +
+                           "new ops: {" + llvm::join(newOpNames, ", ") + "}, " +
+                           "modified ops: {" +
+                           llvm::join(modifiedOpNames, ", ") + "}");
 }
 
 LogicalResult OperationLegalizer::legalizeWithPattern(Operation *op) {
@@ -2777,9 +2766,8 @@ LogicalResult OperationLegalizer::legalizeWithPattern(Operation *op) {
       if (checkOp && topLevelFingerPrint) {
         OperationFingerPrint fingerPrintAfterPattern(checkOp);
         if (fingerPrintAfterPattern != *topLevelFingerPrint)
-          llvm::reportFatalInternalError(
-              "pattern '" + pattern.getDebugName() +
-              "' returned failure but IR did change");
+          llvm::report_fatal_error("pattern '" + pattern.getDebugName() +
+                                   "' returned failure but IR did change");
       }
 #endif // MLIR_ENABLE_EXPENSIVE_PATTERN_API_CHECKS
     }
@@ -2876,9 +2864,8 @@ LogicalResult OperationLegalizer::legalizePatternResult(
       return hasRewrite<ModifyOperationRewrite>(newRewrites, op);
     };
     if (!replacedRoot() && !updatedRootInPlace())
-      llvm::reportFatalInternalError(
-          "expected pattern to replace the root operation "
-          "or modify it in place");
+      llvm::report_fatal_error("expected pattern to replace the root operation "
+                               "or modify it in place");
   }
 #endif // MLIR_ENABLE_EXPENSIVE_PATTERN_API_CHECKS
 
@@ -3241,8 +3228,8 @@ void mlir::reconcileUnrealizedCasts(
 
 namespace mlir {
 static void reconcileUnrealizedCasts(
-    const llvm::MapVector<UnrealizedConversionCastOp,
-                          UnresolvedMaterializationInfo> &castOps,
+    const DenseMap<UnrealizedConversionCastOp, UnresolvedMaterializationInfo>
+        &castOps,
     SmallVectorImpl<UnrealizedConversionCastOp> *remainingCastOps) {
   reconcileUnrealizedCastsImpl(
       castOps.keys(),
@@ -3308,14 +3295,6 @@ private:
 LogicalResult OperationConverter::convert(Operation *op,
                                           bool isRecursiveLegalization) {
   const ConversionConfig &config = rewriter.getConfig();
-  auto emitFailedToLegalizeDiag = [&](bool wasExplicitlyIllegal) {
-    InFlightDiagnostic diag = op->emitError()
-                              << "failed to legalize operation '"
-                              << op->getName() << "'";
-    if (wasExplicitlyIllegal)
-      diag << " that was explicitly marked illegal";
-    diag << ": " << OpWithFlags(op, OpPrintingFlags().skipRegions());
-  };
 
   // Legalize the given operation.
   if (failed(opLegalizer.legalize(op))) {
@@ -3323,7 +3302,8 @@ LogicalResult OperationConverter::convert(Operation *op,
     // Full conversions expect all operations to be converted.
     if (mode == OpConversionMode::Full) {
       if (!isRecursiveLegalization)
-        emitFailedToLegalizeDiag(/*wasExplicitlyIllegal=*/false);
+        op->emitError() << "failed to legalize operation '" << op->getName()
+                        << "'";
       return failure();
     }
     // Partial conversions allow conversions to fail iff the operation was not
@@ -3332,7 +3312,8 @@ LogicalResult OperationConverter::convert(Operation *op,
     if (mode == OpConversionMode::Partial) {
       if (opLegalizer.isIllegal(op)) {
         if (!isRecursiveLegalization)
-          emitFailedToLegalizeDiag(/*wasExplicitlyIllegal=*/true);
+          op->emitError() << "failed to legalize operation '" << op->getName()
+                          << "' that was explicitly marked illegal";
         return failure();
       }
       if (config.unlegalizedOps && !isRecursiveLegalization)
@@ -3463,7 +3444,6 @@ LogicalResult ConversionPatternRewriter::legalize(Region *r) {
 LogicalResult OperationConverter::applyConversion(ArrayRef<Operation *> ops) {
   // Convert each operation and discard rewrites on failure.
   ConversionPatternRewriterImpl &rewriterImpl = rewriter.getImpl();
-
   LogicalResult status = legalizeOperations(ops, /*onFailure=*/[&]() {
     // Dialect conversion failed.
     if (rewriterImpl.config.allowPatternRollback) {
@@ -3484,9 +3464,8 @@ LogicalResult OperationConverter::applyConversion(ArrayRef<Operation *> ops) {
   // Reconcile all UnrealizedConversionCastOps that were inserted by the
   // dialect conversion frameworks. (Not the ones that were inserted by
   // patterns.)
-  const llvm::MapVector<UnrealizedConversionCastOp,
-                        UnresolvedMaterializationInfo> &materializations =
-      rewriterImpl.unresolvedMaterializations;
+  const DenseMap<UnrealizedConversionCastOp, UnresolvedMaterializationInfo>
+      &materializations = rewriterImpl.unresolvedMaterializations;
   SmallVector<UnrealizedConversionCastOp> remainingCastOps;
   reconcileUnrealizedCasts(materializations, &remainingCastOps);
 
@@ -3849,39 +3828,19 @@ static LogicalResult convertFuncOpTypes(FunctionOpInterface funcOp,
   if (!type)
     return failure();
 
-  // Convert the function signature (inputs and results).
-  TypeConverter::SignatureConversion funcConversion(type.getNumInputs());
+  // Convert the original function types.
+  TypeConverter::SignatureConversion result(type.getNumInputs());
   SmallVector<Type, 1> newResults;
-  if (failed(typeConverter.convertSignatureArgs(type.getInputs(),
-                                                funcConversion)) ||
+  if (failed(typeConverter.convertSignatureArgs(type.getInputs(), result)) ||
       failed(typeConverter.convertTypes(type.getResults(), newResults)))
     return failure();
-
-  // If the function has a body, apply a separate signature conversion to the
-  // entry block. Some function ops (e.g., gpu.func) have extra block arguments
-  // beyond the function type inputs (e.g., workgroup memory arguments that are
-  // not part of the public signature). Use a distinct conversion sized for all
-  // entry block arguments so that applySignatureConversion does not access
-  // out-of-bounds mappings.
-  if (!funcOp.getFunctionBody().empty()) {
-    Block *entryBlock = &funcOp.getFunctionBody().front();
-    unsigned numEntryBlockArgs = entryBlock->getNumArguments();
-    unsigned numFuncTypeInputs = type.getNumInputs();
-    TypeConverter::SignatureConversion blockConversion(numEntryBlockArgs);
-    // Convert the function-type inputs the same way as for the function type.
-    if (failed(typeConverter.convertSignatureArgs(type.getInputs(),
-                                                  blockConversion)))
-      return failure();
-    // Add identity mappings for extra block args beyond the function type
-    // inputs. These arguments are preserved as-is.
-    for (unsigned i = numFuncTypeInputs; i < numEntryBlockArgs; ++i)
-      blockConversion.addInputs(i, entryBlock->getArgument(i).getType());
-    rewriter.applySignatureConversion(entryBlock, blockConversion,
+  if (!funcOp.getFunctionBody().empty())
+    rewriter.applySignatureConversion(&funcOp.getFunctionBody().front(), result,
                                       &typeConverter);
-  }
 
-  auto newType = FunctionType::get(
-      rewriter.getContext(), funcConversion.getConvertedTypes(), newResults);
+  // Update the function signature in-place.
+  auto newType = FunctionType::get(rewriter.getContext(),
+                                   result.getConvertedTypes(), newResults);
 
   rewriter.modifyOpInPlace(funcOp, [&] { funcOp.setType(newType); });
 

@@ -58,16 +58,6 @@ public:
 struct PrintingPolicy {
   enum class SuppressInlineNamespaceMode : uint8_t { None, Redundant, All };
 
-  /// Dictates how anonymous/unnamed entities are printed.
-  enum class AnonymousTagMode {
-    /// E.g., (anonymous enum)/(unnamed struct)/etc.
-    Plain,
-
-    /// When printing an anonymous tag name, also print the location of that
-    /// entity (e.g., "enum <anonymous at t.h:10:5>").
-    SourceLocation
-  };
-
   /// Create a default printing policy for the specified language.
   PrintingPolicy(const LangOptions &LO)
       : Indentation(2), SuppressSpecifiers(false),
@@ -77,9 +67,8 @@ struct PrintingPolicy {
         SuppressInlineNamespace(
             llvm::to_underlying(SuppressInlineNamespaceMode::Redundant)),
         SuppressInitializers(false), ConstantArraySizeAsWritten(false),
-        AnonymousTagNameStyle(
-            llvm::to_underlying(AnonymousTagMode::SourceLocation)),
-        SuppressStrongLifetime(false), SuppressLifetimeQualifiers(false),
+        AnonymousTagLocations(true), SuppressStrongLifetime(false),
+        SuppressLifetimeQualifiers(false),
         SuppressTemplateArgsInCXXConstructors(false),
         SuppressDefaultTemplateArgs(true), Bool(LO.Bool),
         Nullptr(LO.CPlusPlus11 || LO.C23), NullptrTypeInNamespace(LO.CPlusPlus),
@@ -93,8 +82,7 @@ struct PrintingPolicy {
         PrintAsCanonical(false), PrintInjectedClassNameWithArguments(true),
         UsePreferredNames(true), AlwaysIncludeTypeForTemplateArgument(false),
         CleanUglifiedParameters(false), EntireContentsOfLargeArray(true),
-        UseEnumerators(true), UseHLSLTypes(LO.HLSL),
-        SuppressDeclAttributes(false), SuppressLambdaBody(false) {}
+        UseEnumerators(true), UseHLSLTypes(LO.HLSL) {}
 
   /// Adjust this printing policy for cases where it's known that we're
   /// printing C++ code (for instance, if AST dumping reaches a C++-only
@@ -207,8 +195,11 @@ struct PrintingPolicy {
   LLVM_PREFERRED_TYPE(bool)
   unsigned ConstantArraySizeAsWritten : 1;
 
-  LLVM_PREFERRED_TYPE(AnonymousTagMode)
-  unsigned AnonymousTagNameStyle : 1;
+  /// When printing an anonymous tag name, also print the location of that
+  /// entity (e.g., "enum <anonymous at t.h:10:5>"). Otherwise, just prints
+  /// "(anonymous)" for the name.
+  LLVM_PREFERRED_TYPE(bool)
+  unsigned AnonymousTagLocations : 1;
 
   /// When true, suppress printing of the __strong lifetime qualifier in ARC.
   LLVM_PREFERRED_TYPE(bool)
@@ -366,14 +357,6 @@ struct PrintingPolicy {
   /// sugared types when possible.
   LLVM_PREFERRED_TYPE(bool)
   unsigned UseHLSLTypes : 1;
-
-  /// Whether to suppress attributes in decl printing.
-  LLVM_PREFERRED_TYPE(bool)
-  unsigned SuppressDeclAttributes : 1;
-
-  /// Whether to suppress printing the body of a lambda.
-  LLVM_PREFERRED_TYPE(bool)
-  unsigned SuppressLambdaBody : 1;
 
   /// Callbacks to use to allow the behavior of printing to be customized.
   const PrintingCallbacks *Callbacks = nullptr;

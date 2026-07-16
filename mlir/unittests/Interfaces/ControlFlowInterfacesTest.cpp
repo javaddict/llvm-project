@@ -67,16 +67,12 @@ struct LoopRegionsOp
           point.getTerminatorPredecessorOrNull()->getParentRegion();
       if (region == &(*this)->getRegion(1))
         // This region also branches back to the parent.
-        regions.push_back(RegionSuccessor::parent());
+        regions.push_back(
+            RegionSuccessor(getOperation()->getParentOp(),
+                            getOperation()->getParentOp()->getResults()));
       regions.push_back(RegionSuccessor(region));
     }
   }
-
-  ValueRange getSuccessorInputs(RegionSuccessor successor) {
-    return successor.isParent() ? ValueRange(getOperation()->getResults())
-                                : ValueRange();
-  }
-
   using RegionBranchOpInterface::Trait<LoopRegionsOp>::getSuccessorRegions;
 };
 
@@ -96,16 +92,12 @@ struct DoubleLoopRegionsOp
     if (point.getTerminatorPredecessorOrNull()) {
       Region *region =
           point.getTerminatorPredecessorOrNull()->getParentRegion();
-      regions.push_back(RegionSuccessor::parent());
+      regions.push_back(
+          RegionSuccessor(getOperation()->getParentOp(),
+                          getOperation()->getParentOp()->getResults()));
       regions.push_back(RegionSuccessor(region));
     }
   }
-
-  ValueRange getSuccessorInputs(RegionSuccessor successor) {
-    return successor.isParent() ? ValueRange(getOperation()->getResults())
-                                : ValueRange();
-  }
-
   using RegionBranchOpInterface::Trait<
       DoubleLoopRegionsOp>::getSuccessorRegions;
 };

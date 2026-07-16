@@ -40,28 +40,6 @@ struct GpuIdOpInterface
   }
 };
 
-/// Implement ValueBoundsOpInterface on subgroup broadcast operations to
-/// indicate that such a broadcast does not modify the ranges of the values in
-/// question. Handles shaped types just in case one wants to broadcast a memref
-/// descriptor.
-struct SubgroupBroadcastOpInterface
-    : public ValueBoundsOpInterface::ExternalModel<SubgroupBroadcastOpInterface,
-                                                   SubgroupBroadcastOp> {
-  void populateBoundsForIndexValue(Operation *op, Value value,
-                                   ValueBoundsConstraintSet &cstr) const {
-    auto broadcastOp = cast<SubgroupBroadcastOp>(op);
-    assert(value == broadcastOp.getResult() && "invalid value");
-    cstr.bound(value) == cstr.getExpr(broadcastOp.getSrc());
-  }
-
-  void populateBoundsForShapedValueDim(Operation *op, Value value, int64_t dim,
-                                       ValueBoundsConstraintSet &cstr) const {
-    auto broadcastOp = cast<SubgroupBroadcastOp>(op);
-    assert(value == broadcastOp.getResult() && "invalid value");
-    cstr.bound(value)[dim] == cstr.getExpr(broadcastOp.getSrc(), dim);
-  }
-};
-
 struct GpuLaunchOpInterface
     : public ValueBoundsOpInterface::ExternalModel<GpuLaunchOpInterface,
                                                    LaunchOp> {
@@ -132,6 +110,5 @@ void mlir::gpu::registerValueBoundsOpInterfaceExternalModels(
 #undef REGISTER
 
     LaunchOp::attachInterface<GpuLaunchOpInterface>(*ctx);
-    SubgroupBroadcastOp::attachInterface<SubgroupBroadcastOpInterface>(*ctx);
   });
 }

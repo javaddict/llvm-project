@@ -33,7 +33,8 @@
 #include "gtest/gtest.h"
 #include <memory>
 
-using namespace llvm;
+namespace llvm {
+namespace {
 
 static std::unique_ptr<Module> parseIR(LLVMContext &C, const char *IR) {
   SMDiagnostic Err;
@@ -42,8 +43,6 @@ static std::unique_ptr<Module> parseIR(LLVMContext &C, const char *IR) {
     Err.print("InstructionsTests", errs());
   return Mod;
 }
-
-namespace {
 
 TEST(InstructionsTest, ReturnInst) {
   LLVMContext C;
@@ -130,20 +129,18 @@ TEST_F(ModuleWithFunctionTest, InvokeInst) {
   }
 }
 
-TEST(InstructionsTest, UncondBrInst) {
+TEST(InstructionsTest, BranchInst) {
   LLVMContext C;
 
-  // Make a BasicBlock
-  BasicBlock *bb0 = BasicBlock::Create(C);
+  // Make a BasicBlocks
+  BasicBlock* bb0 = BasicBlock::Create(C);
+  BasicBlock* bb1 = BasicBlock::Create(C);
 
-  const UncondBrInst *b0 = UncondBrInst::Create(bb0);
+  // Mandatory BranchInst
+  const BranchInst* b0 = BranchInst::Create(bb0);
 
-  // Test legacy BranchInst API.
-  LLVM_SUPPRESS_DEPRECATED_DECLARATIONS_PUSH
-  EXPECT_TRUE(cast<BranchInst>(b0)->isUnconditional());
-  EXPECT_FALSE(cast<BranchInst>(b0)->isConditional());
-  LLVM_SUPPRESS_DEPRECATED_DECLARATIONS_POP
-
+  EXPECT_TRUE(b0->isUnconditional());
+  EXPECT_FALSE(b0->isConditional());
   EXPECT_EQ(1U, b0->getNumSuccessors());
 
   // check num operands
@@ -154,29 +151,14 @@ TEST(InstructionsTest, UncondBrInst) {
 
   EXPECT_EQ(b0->op_end(), std::next(b0->op_begin()));
 
-  // clean up
-  delete b0;
-  delete bb0;
-}
-
-TEST(InstructionsTest, CondBrInst) {
-  LLVMContext C;
-
-  // Make a BasicBlocks
-  BasicBlock *bb0 = BasicBlock::Create(C);
-  BasicBlock *bb1 = BasicBlock::Create(C);
-
   IntegerType* Int1 = IntegerType::get(C, 1);
   Constant* One = ConstantInt::getTrue(Int1);
 
-  CondBrInst *b1 = CondBrInst::Create(One, bb0, bb1);
+  // Conditional BranchInst
+  BranchInst* b1 = BranchInst::Create(bb0, bb1, One);
 
-  // Test legacy BranchInst API.
-  LLVM_SUPPRESS_DEPRECATED_DECLARATIONS_PUSH
-  EXPECT_FALSE(cast<BranchInst>(b1)->isUnconditional());
-  EXPECT_TRUE(cast<BranchInst>(b1)->isConditional());
-  LLVM_SUPPRESS_DEPRECATED_DECLARATIONS_POP
-
+  EXPECT_FALSE(b1->isUnconditional());
+  EXPECT_TRUE(b1->isConditional());
   EXPECT_EQ(2U, b1->getNumSuccessors());
 
   // check num operands
@@ -191,21 +173,22 @@ TEST(InstructionsTest, CondBrInst) {
   EXPECT_EQ(One, b1->getCondition());
   ++b;
 
-  // check THEN
-  EXPECT_EQ(bb0, *b);
-  EXPECT_EQ(bb0, b1->getOperand(1));
-  EXPECT_EQ(bb0, b1->getSuccessor(0));
-  ++b;
-
   // check ELSE
   EXPECT_EQ(bb1, *b);
-  EXPECT_EQ(bb1, b1->getOperand(2));
+  EXPECT_EQ(bb1, b1->getOperand(1));
   EXPECT_EQ(bb1, b1->getSuccessor(1));
+  ++b;
+
+  // check THEN
+  EXPECT_EQ(bb0, *b);
+  EXPECT_EQ(bb0, b1->getOperand(2));
+  EXPECT_EQ(bb0, b1->getSuccessor(0));
   ++b;
 
   EXPECT_EQ(b1->op_end(), b);
 
   // clean up
+  delete b0;
   delete b1;
 
   delete bb0;
@@ -768,7 +751,7 @@ TEST(InstructionsTest, AlterCallBundles) {
   AttrBuilder AB(C);
   AB.addAttribute(Attribute::Cold);
   Call->setAttributes(AttributeList::get(C, AttributeList::FunctionIndex, AB));
-  Call->setDebugLoc(DebugLoc(DILocation::get(C, 1, 1, MDNode::get(C, {}))));
+  Call->setDebugLoc(DebugLoc(MDNode::get(C, {})));
 
   OperandBundleDef NewBundle("after", ConstantInt::get(Int32Ty, 7));
   std::unique_ptr<CallInst> Clone(CallInst::Create(Call.get(), NewBundle));
@@ -798,7 +781,7 @@ TEST(InstructionsTest, AlterInvokeBundles) {
   AB.addAttribute(Attribute::Cold);
   Invoke->setAttributes(
       AttributeList::get(C, AttributeList::FunctionIndex, AB));
-  Invoke->setDebugLoc(DebugLoc(DILocation::get(C, 1, 1, MDNode::get(C, {}))));
+  Invoke->setDebugLoc(DebugLoc(MDNode::get(C, {})));
 
   OperandBundleDef NewBundle("after", ConstantInt::get(Int32Ty, 7));
   std::unique_ptr<InvokeInst> Clone(
@@ -2012,3 +1995,4 @@ TEST(InstructionsTest, StripAndAccumulateConstantOffset) {
 }
 
 } // end anonymous namespace
+} // end namespace llvm

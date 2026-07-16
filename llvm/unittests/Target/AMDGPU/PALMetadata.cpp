@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPUTargetMachine.h"
-#include "AMDGPUUnitTests.h"
 #include "GCNSubtarget.h"
 #include "SIProgramInfo.h"
 #include "Utils/AMDGPUPALMetadata.h"
@@ -18,12 +17,13 @@
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
 #include "gtest/gtest.h"
 
 using namespace llvm;
 
-class PALMetadata : public AMDGPUTestBase {
+class PALMetadata : public testing::Test {
 protected:
   std::unique_ptr<GCNTargetMachine> TM;
   std::unique_ptr<LLVMContext> Ctx;
@@ -33,8 +33,23 @@ protected:
   std::unique_ptr<Module> M;
   AMDGPUPALMetadata MD;
 
+  static void SetUpTestSuite() {
+    LLVMInitializeAMDGPUTargetInfo();
+    LLVMInitializeAMDGPUTarget();
+    LLVMInitializeAMDGPUTargetMC();
+  }
+
   PALMetadata() {
-    TM = createAMDGPUTargetMachine("amdgcn--amdpal", "gfx1010", "");
+    Triple TT("amdgcn--amdpal");
+    StringRef CPU = "gfx1010";
+    StringRef FS = "";
+
+    std::string Error;
+    const Target *TheTarget = TargetRegistry::lookupTarget(TT, Error);
+    TargetOptions Options;
+
+    TM.reset(static_cast<GCNTargetMachine *>(TheTarget->createTargetMachine(
+        TT, CPU, FS, Options, std::nullopt, std::nullopt)));
 
     Ctx = std::make_unique<LLVMContext>();
     M = std::make_unique<Module>("Module", *Ctx);

@@ -26,12 +26,11 @@ class Module;
 class TargetTransformInfo;
 class TargetLibraryInfo;
 
-struct RewriteStatepointsForGC
-    : public OptionalPassInfoMixin<RewriteStatepointsForGC> {
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+struct RewriteStatepointsForGC : public PassInfoMixin<RewriteStatepointsForGC> {
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 
-  LLVM_ABI bool runOnFunction(Function &F, DominatorTree &,
-                              TargetTransformInfo &, const TargetLibraryInfo &);
+  bool runOnFunction(Function &F, DominatorTree &, TargetTransformInfo &,
+                     const TargetLibraryInfo &);
 };
 
 } // namespace llvm

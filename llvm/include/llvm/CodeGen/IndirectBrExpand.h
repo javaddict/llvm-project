@@ -15,13 +15,12 @@ namespace llvm {
 
 class TargetMachine;
 
-class IndirectBrExpandPass
-    : public RequiredPassInfoMixin<IndirectBrExpandPass> {
+class IndirectBrExpandPass : public PassInfoMixin<IndirectBrExpandPass> {
   const TargetMachine *TM;
 
 public:
   IndirectBrExpandPass(const TargetMachine &TM) : TM(&TM) {}
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
 
 } // namespace llvm

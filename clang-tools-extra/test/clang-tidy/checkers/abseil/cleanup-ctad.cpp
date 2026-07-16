@@ -1,8 +1,14 @@
-// RUN: %check_clang_tidy %s abseil-cleanup-ctad -std=c++17-or-later %t
-
-#include <utility>
+// RUN: %check_clang_tidy %s abseil-cleanup-ctad -std=c++17 %t
 
 namespace std {
+
+template <typename, typename>
+struct is_same {
+  static const bool value = false;
+};
+
+template <typename T>
+struct is_same<T, T> { static const bool value = true; };
 
 template <typename>
 class function {

@@ -42,25 +42,6 @@ def CExpressionInterface : OpInterface<"CExpressionInterface"> {
        /*defaultImplementation=*/[{
         return true;
     }]>,
-    InterfaceMethod<[{
-      Check whether operation must be inlined into all its users.
-
-      By default operation is not marked as always inlined.
-
-      ```c++
-      class ConcreteOp ... {
-      public:
-        bool alwaysInline() {
-          // That way we can override the default implementation.
-          return true;
-        }
-      };
-      ```
-    }],
-    "bool", "alwaysInline", (ins), /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-        return false;
-    }]>,
   ];
 }
 

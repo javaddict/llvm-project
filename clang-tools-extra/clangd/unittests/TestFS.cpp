@@ -84,8 +84,7 @@ MockCompilationDatabase::getCompileCommand(PathRef File) const {
 
 const char *testRoot() {
 #ifdef _WIN32
-  static const std::string Root = llvm::sys::path::native("C:/clangd-test");
-  return Root.c_str();
+  return "C:\\clangd-test";
 #else
   return "/clangd-test";
 #endif

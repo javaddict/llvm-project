@@ -4,7 +4,6 @@ add_llvm_component_library(LLVMM68kAsmParser
   LINK_COMPONENTS
   CodeGenTypes
   M68kCodeGen
-  M68kDesc
   M68kInfo
   MC
   MCParser

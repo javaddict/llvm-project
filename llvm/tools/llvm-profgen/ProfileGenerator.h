@@ -184,7 +184,8 @@ private:
   void
   populateTypeSamplesForAllFunctions(const DataAccessSample &DataAccessSamples);
   void postProcessProfiles();
-  void trimColdProfiles(uint64_t ColdCntThreshold);
+  void trimColdProfiles(const SampleProfileMap &Profiles,
+                        uint64_t ColdCntThreshold);
   bool collectFunctionsFromLLVMProfile(
       std::unordered_set<const BinaryFunction *> &ProfiledFunctions) override;
 };

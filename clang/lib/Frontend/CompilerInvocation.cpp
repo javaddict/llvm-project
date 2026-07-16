@@ -622,11 +622,6 @@ static bool FixupInvocation(CompilerInvocation &Invocation,
     LangOpts.RawStringLiterals = true;
   }
 
-  if (Args.hasArg(OPT_freflection) && !LangOpts.CPlusPlus26) {
-    Diags.Report(diag::err_drv_reflection_requires_cxx26)
-        << Args.getLastArg(options::OPT_freflection)->getAsString(Args);
-  }
-
   LangOpts.NamedLoops =
       Args.hasFlag(OPT_fnamed_loops, OPT_fno_named_loops, LangOpts.C2y);
 
@@ -658,18 +653,6 @@ static bool FixupInvocation(CompilerInvocation &Invocation,
   if (Args.hasArg(OPT_gpu_max_threads_per_block_EQ) && !LangOpts.HIP)
     Diags.Report(diag::warn_ignored_hip_only_option)
         << Args.getLastArg(OPT_gpu_max_threads_per_block_EQ)->getAsString(Args);
-
-  // HLSL invocations should always have -Wconversion, -Wvector-conversion, and
-  // -Wmatrix-conversion by default.
-  if (LangOpts.HLSL) {
-    auto &Warnings = Invocation.getDiagnosticOpts().Warnings;
-    if (!llvm::is_contained(Warnings, "conversion"))
-      Warnings.insert(Warnings.begin(), "conversion");
-    if (!llvm::is_contained(Warnings, "vector-conversion"))
-      Warnings.insert(Warnings.begin(), "vector-conversion");
-    if (!llvm::is_contained(Warnings, "matrix-conversion"))
-      Warnings.insert(Warnings.begin(), "matrix-conversion");
-  }
 
   // When these options are used, the compiler is allowed to apply
   // optimizations that may affect the final result. For example
@@ -2261,7 +2244,7 @@ bool CompilerInvocation::ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args,
   if (UsingSampleProfile)
     NeedLocTracking = true;
 
-  if (!Opts.StackUsageFile.empty())
+  if (!Opts.StackUsageOutput.empty())
     NeedLocTracking = true;
 
   // If the user requested a flag that requires source locations available in
@@ -2557,10 +2540,6 @@ void CompilerInvocationBase::GenerateDiagnosticArgs(
     if (Prefix != "expected")
       GenerateArg(Consumer, OPT_verify_EQ, Prefix);
 
-  if (Opts.VerifyDirectives) {
-    GenerateArg(Consumer, OPT_verify_directives);
-  }
-
   DiagnosticLevelMask VIU = Opts.getVerifyIgnoreUnexpected();
   if (VIU == DiagnosticLevelMask::None) {
     // This is the default, don't generate anything.
@@ -2659,7 +2638,6 @@ bool clang::ParseDiagnosticArgs(DiagnosticOptions &Opts, ArgList &Args,
   Opts.ShowColors = parseShowColorsArgs(Args, DefaultDiagColor);
 
   Opts.VerifyDiagnostics = Args.hasArg(OPT_verify) || Args.hasArg(OPT_verify_EQ);
-  Opts.VerifyDirectives = Args.hasArg(OPT_verify_directives);
   Opts.VerifyPrefixes = Args.getAllArgValues(OPT_verify_EQ);
   if (Args.hasArg(OPT_verify))
     Opts.VerifyPrefixes.push_back("expected");
@@ -3291,12 +3269,6 @@ static bool ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
 
   Opts.DashX = DashX;
 
-  // CIR is a source-level frontend pipeline. When the input is already LLVM IR
-  // (e.g. during the backend phase of OpenMP offloading), the standard LLVM
-  // backend should be used instead.
-  if (Opts.UseClangIRPipeline && DashX.getLanguage() == Language::LLVM_IR)
-    Opts.UseClangIRPipeline = false;
-
   return Diags.getNumErrors() == NumErrorsBefore;
 }
 
@@ -3721,10 +3693,6 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
       GenerateArg(Consumer, OPT_pic_is_pie);
     for (StringRef Sanitizer : serializeSanitizerKinds(Opts.Sanitize))
       GenerateArg(Consumer, OPT_fsanitize_EQ, Sanitizer);
-    for (StringRef Sanitizer :
-         serializeSanitizerKinds(Opts.UBSanFeatureIgnoredSanitize))
-      GenerateArg(Consumer, OPT_fsanitize_ignore_for_ubsan_feature_EQ,
-                  Sanitizer);
 
     return;
   }
@@ -3797,10 +3765,7 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
     GenerateArg(Consumer, OPT_ftrapv);
     GenerateArg(Consumer, OPT_ftrapv_handler, Opts.OverflowHandler);
   } else if (Opts.SignedOverflowBehavior == LangOptions::SOB_Defined) {
-    if (!Opts.MSVCCompat)
-      GenerateArg(Consumer, OPT_fwrapv);
-  } else if (Opts.MSVCCompat) {
-    GenerateArg(Consumer, OPT_fno_wrapv);
+    GenerateArg(Consumer, OPT_fwrapv);
   }
   if (Opts.PointerOverflowDefined)
     GenerateArg(Consumer, OPT_fwrapv_pointer);
@@ -3927,9 +3892,6 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
 
   for (StringRef Sanitizer : serializeSanitizerKinds(Opts.Sanitize))
     GenerateArg(Consumer, OPT_fsanitize_EQ, Sanitizer);
-  for (StringRef Sanitizer :
-       serializeSanitizerKinds(Opts.UBSanFeatureIgnoredSanitize))
-    GenerateArg(Consumer, OPT_fsanitize_ignore_for_ubsan_feature_EQ, Sanitizer);
 
   // Conflating '-fsanitize-system-ignorelist' and '-fsanitize-ignorelist'.
   for (const std::string &F : Opts.NoSanitizeFiles)
@@ -4020,10 +3982,6 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
     Opts.PIE = Args.hasArg(OPT_pic_is_pie);
     parseSanitizerKinds("-fsanitize=", Args.getAllArgValues(OPT_fsanitize_EQ),
                         Diags, Opts.Sanitize);
-    parseSanitizerKinds(
-        "-fsanitize-ignore-for-ubsan-feature=",
-        Args.getAllArgValues(OPT_fsanitize_ignore_for_ubsan_feature_EQ), Diags,
-        Opts.UBSanFeatureIgnoredSanitize);
 
     return Diags.getNumErrors() == NumErrorsBefore;
   }
@@ -4215,9 +4173,9 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
     // Set the handler, if one is specified.
     Opts.OverflowHandler =
         std::string(Args.getLastArgValue(OPT_ftrapv_handler));
-  } else if (Args.hasFlag(OPT_fwrapv, OPT_fno_wrapv, Opts.MSVCCompat)) {
-    Opts.setSignedOverflowBehavior(LangOptions::SOB_Defined);
   }
+  else if (Args.hasArg(OPT_fwrapv))
+    Opts.setSignedOverflowBehavior(LangOptions::SOB_Defined);
   if (Args.hasArg(OPT_fwrapv_pointer))
     Opts.PointerOverflowDefined = true;
 
@@ -4441,10 +4399,6 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   // Parse -fsanitize= arguments.
   parseSanitizerKinds("-fsanitize=", Args.getAllArgValues(OPT_fsanitize_EQ),
                       Diags, Opts.Sanitize);
-  parseSanitizerKinds(
-      "-fsanitize-ignore-for-ubsan-feature=",
-      Args.getAllArgValues(OPT_fsanitize_ignore_for_ubsan_feature_EQ), Diags,
-      Opts.UBSanFeatureIgnoredSanitize);
   Opts.NoSanitizeFiles = Args.getAllArgValues(OPT_fsanitize_ignorelist_EQ);
   std::vector<std::string> systemIgnorelists =
       Args.getAllArgValues(OPT_fsanitize_system_ignorelist_EQ);
@@ -5120,13 +5074,6 @@ bool CompilerInvocation::CreateFromArgsImpl(
   if (LangOpts.OpenMPIsTargetDevice)
     Res.getTargetOpts().HostTriple = Res.getFrontendOpts().AuxTriple;
 
-  // Set the default and host triples for SYCL device compilation.
-  if (LangOpts.SYCLIsDevice) {
-    if (!Args.hasArg(options::OPT_triple))
-      Res.getTargetOpts().Triple = "spirv64-unknown-unknown";
-    Res.getTargetOpts().HostTriple = Res.getFrontendOpts().AuxTriple;
-  }
-
   ParseCodeGenArgs(Res.getCodeGenOpts(), Args, DashX, Diags, T,
                    Res.getFrontendOpts().OutputFile, LangOpts);
 
@@ -5194,7 +5141,7 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Invocation,
       Invocation, DummyInvocation, CommandLineArgs, Diags, Argv0);
 }
 
-std::string CompilerInvocation::computeContextHash() const {
+std::string CompilerInvocation::getModuleHash() const {
   // FIXME: Consider using SHA1 instead of MD5.
   llvm::HashBuilder<llvm::MD5, llvm::endianness::native> HBuilder;
 

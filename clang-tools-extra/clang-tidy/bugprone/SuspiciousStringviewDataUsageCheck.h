@@ -29,8 +29,8 @@ public:
   std::optional<TraversalKind> getCheckTraversalKind() const override;
 
 private:
-  std::vector<StringRef> StringViewTypes;
-  std::vector<StringRef> AllowedCallees;
+  std::vector<llvm::StringRef> StringViewTypes;
+  std::vector<llvm::StringRef> AllowedCallees;
 };
 
 } // namespace clang::tidy::bugprone

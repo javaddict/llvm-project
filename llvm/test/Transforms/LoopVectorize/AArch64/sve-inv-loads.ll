@@ -1,5 +1,5 @@
 ; RUN: opt -S -passes=loop-vectorize -mattr=+sve -mtriple aarch64-linux-gnu \
-; RUN:   -tail-folding-policy=dont-fold-tail < %s | FileCheck %s
+; RUN:   -prefer-predicate-over-epilogue=scalar-epilogue < %s | FileCheck %s
 
 define void @invariant_load(i64 %n, ptr noalias nocapture %a, ptr nocapture readonly %b) {
 ; CHECK-LABEL: @invariant_load
@@ -14,7 +14,7 @@ define void @invariant_load(i64 %n, ptr noalias nocapture %a, ptr nocapture read
 entry:
   br label %for.body
 
-for.body:
+for.body:                                         ; preds = %for.body.lr.ph, %for.body
   %iv = phi i64 [ 0, %entry ], [ %iv.next, %for.body ]
   %arrayidx = getelementptr inbounds i32, ptr %b, i64 42
   %0 = load i32, ptr %arrayidx, align 4
@@ -27,7 +27,7 @@ for.body:
   %exitcond.not = icmp eq i64 %iv.next, %n
   br i1 %exitcond.not, label %for.end, label %for.body, !llvm.loop !1
 
-for.end:
+for.end:                                          ; preds = %for.body
   ret void
 }
 

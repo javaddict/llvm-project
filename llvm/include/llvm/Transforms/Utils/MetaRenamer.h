@@ -18,8 +18,8 @@
 #include "llvm/IR/PassManager.h"
 
 namespace llvm {
-struct MetaRenamerPass : OptionalPassInfoMixin<MetaRenamerPass> {
-  LLVM_ABI PreservedAnalyses run(Module &, ModuleAnalysisManager &);
+struct MetaRenamerPass : PassInfoMixin<MetaRenamerPass> {
+  PreservedAnalyses run(Module &, ModuleAnalysisManager &);
 };
 } // namespace llvm
 

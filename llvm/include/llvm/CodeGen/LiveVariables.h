@@ -37,6 +37,7 @@
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachinePassManager.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/PassRegistry.h"
 #include "llvm/Support/Compiler.h"
 
@@ -310,13 +311,14 @@ public:
 };
 
 class LiveVariablesPrinterPass
-    : public RequiredPassInfoMixin<LiveVariablesPrinterPass> {
+    : public PassInfoMixin<LiveVariablesPrinterPass> {
   raw_ostream &OS;
 
 public:
   explicit LiveVariablesPrinterPass(raw_ostream &OS) : OS(OS) {}
   LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
                                  MachineFunctionAnalysisManager &MFAM);
+  static bool isRequired() { return true; }
 };
 
 class LLVM_ABI LiveVariablesWrapperPass : public MachineFunctionPass {
@@ -325,7 +327,9 @@ class LLVM_ABI LiveVariablesWrapperPass : public MachineFunctionPass {
 public:
   static char ID; // Pass identification, replacement for typeid
 
-  LiveVariablesWrapperPass() : MachineFunctionPass(ID) {}
+  LiveVariablesWrapperPass() : MachineFunctionPass(ID) {
+    initializeLiveVariablesWrapperPassPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &MF) override {
     LV.analyze(MF);

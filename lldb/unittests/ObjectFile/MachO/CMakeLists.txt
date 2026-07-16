@@ -6,6 +6,5 @@ add_lldb_unittest(ObjectFileMachOTests
     lldbPluginSymbolFileSymtab
     lldbCore
     lldbUtilityHelpers
-    lldbPluginPlatformMacOSX
     LLVMTestingSupport
   )

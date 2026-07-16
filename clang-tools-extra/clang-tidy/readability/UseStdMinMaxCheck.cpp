@@ -25,7 +25,7 @@ AST_MATCHER(IfStmt, isIfInMacro) {
 
 } // namespace
 
-static constexpr StringRef AlgorithmHeader = "<algorithm>";
+static const llvm::StringRef AlgorithmHeader("<algorithm>");
 
 static bool minCondition(const BinaryOperator::Opcode Op, const Expr *CondLhs,
                          const Expr *CondRhs, const Expr *AssignLhs,
@@ -85,9 +85,9 @@ static QualType getReplacementCastType(const Expr *CondLhs, const Expr *CondRhs,
       RhsType.getCanonicalType().getNonReferenceType().getUnqualifiedType();
   QualType GlobalImplicitCastType;
   if (LhsCanonicalType != RhsCanonicalType) {
-    if (isa<IntegerLiteral>(CondRhs))
+    if (llvm::isa<IntegerLiteral>(CondRhs))
       GlobalImplicitCastType = getNonTemplateAlias(LhsType);
-    else if (isa<IntegerLiteral>(CondLhs))
+    else if (llvm::isa<IntegerLiteral>(CondLhs))
       GlobalImplicitCastType = getNonTemplateAlias(RhsType);
     else
       GlobalImplicitCastType = getNonTemplateAlias(ComparedType);
@@ -100,11 +100,11 @@ createReplacement(const Expr *CondLhs, const Expr *CondRhs,
                   const Expr *AssignLhs, const SourceManager &Source,
                   const LangOptions &LO, StringRef FunctionName,
                   const BinaryOperator *BO, StringRef Comment = "") {
-  const StringRef CondLhsStr = Lexer::getSourceText(
+  const llvm::StringRef CondLhsStr = Lexer::getSourceText(
       Source.getExpansionRange(CondLhs->getSourceRange()), Source, LO);
-  const StringRef CondRhsStr = Lexer::getSourceText(
+  const llvm::StringRef CondRhsStr = Lexer::getSourceText(
       Source.getExpansionRange(CondRhs->getSourceRange()), Source, LO);
-  const StringRef AssignLhsStr = Lexer::getSourceText(
+  const llvm::StringRef AssignLhsStr = Lexer::getSourceText(
       Source.getExpansionRange(AssignLhs->getSourceRange()), Source, LO);
 
   const QualType GlobalImplicitCastType =
@@ -159,25 +159,25 @@ void UseStdMinMaxCheck::registerPPCallbacks(const SourceManager &SM,
 
 void UseStdMinMaxCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *If = Result.Nodes.getNodeAs<IfStmt>("if");
-  const LangOptions &LO = Result.Context->getLangOpts();
+  const clang::LangOptions &LO = Result.Context->getLangOpts();
   const auto *CondLhs = Result.Nodes.getNodeAs<Expr>("CondLhs");
   const auto *CondRhs = Result.Nodes.getNodeAs<Expr>("CondRhs");
   const auto *AssignLhs = Result.Nodes.getNodeAs<Expr>("AssignLhs");
   const auto *AssignRhs = Result.Nodes.getNodeAs<Expr>("AssignRhs");
   const auto *BinaryOp = Result.Nodes.getNodeAs<BinaryOperator>("binaryOp");
-  const BinaryOperatorKind BinaryOpcode = BinaryOp->getOpcode();
+  const clang::BinaryOperatorKind BinaryOpcode = BinaryOp->getOpcode();
   const SourceLocation IfLocation = If->getIfLoc();
   const SourceLocation ThenLocation = If->getEndLoc();
 
-  auto ReplaceAndDiagnose = [&](const StringRef FunctionName) {
+  auto ReplaceAndDiagnose = [&](const llvm::StringRef FunctionName) {
     const SourceManager &Source = *Result.SourceManager;
-    SmallString<64> Comment;
+    llvm::SmallString<64> Comment;
 
-    const auto AppendNormalized = [&](StringRef Text) {
+    const auto AppendNormalized = [&](llvm::StringRef Text) {
       Text = Text.ltrim();
       if (!Text.empty()) {
         if (!Comment.empty())
-          Comment += ' ';
+          Comment += " ";
         Comment += Text;
       }
     };
@@ -210,13 +210,16 @@ void UseStdMinMaxCheck::check(const MatchFinder::MatchResult &Result) {
       // Captures:
       // if (cond) { x = y; // Comment C }
       // if (cond) { x = y; /* Comment C */ }
-      StringRef PostInner = GetSourceText(Inner->getEndLoc(), CS->getEndLoc());
+      llvm::StringRef PostInner =
+          GetSourceText(Inner->getEndLoc(), CS->getEndLoc());
 
       // Strip the trailing semicolon to avoid fixes like:
       // x = std::min(x, y);; // comment
       const size_t Semi = PostInner.find(';');
-      if (Semi != StringRef::npos && PostInner.take_front(Semi).trim().empty())
+      if (Semi != llvm::StringRef::npos &&
+          PostInner.take_front(Semi).trim().empty()) {
         PostInner = PostInner.drop_front(Semi + 1);
+      }
       AppendNormalized(PostInner);
     }
 

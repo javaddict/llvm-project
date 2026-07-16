@@ -16,11 +16,11 @@ namespace llvm {
 /// Pass to replace calls to ifuncs with indirect calls. This could be used to
 /// support ifunc on systems where the program loader does not natively support
 /// it. Constant initializer uses of ifuncs are not handled.
-class LowerIFuncPass : public OptionalPassInfoMixin<LowerIFuncPass> {
+class LowerIFuncPass : public PassInfoMixin<LowerIFuncPass> {
 public:
   LowerIFuncPass() = default;
 
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
 
 } // end namespace llvm

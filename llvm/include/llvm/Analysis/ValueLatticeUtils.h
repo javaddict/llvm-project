@@ -14,8 +14,6 @@
 #ifndef LLVM_ANALYSIS_VALUELATTICEUTILS_H
 #define LLVM_ANALYSIS_VALUELATTICEUTILS_H
 
-#include "llvm/Support/Compiler.h"
-
 namespace llvm {
 
 class Function;
@@ -24,18 +22,18 @@ class GlobalVariable;
 /// Determine if the values of the given function's arguments can be tracked
 /// interprocedurally. The value of an argument can be tracked if the function
 /// has local linkage and its address is not taken.
-LLVM_ABI bool canTrackArgumentsInterprocedurally(Function *F);
+bool canTrackArgumentsInterprocedurally(Function *F);
 
 /// Determine if the values of the given function's returns can be tracked
 /// interprocedurally. Return values can be tracked if the function has an
 /// exact definition and it doesn't have the "naked" attribute. Naked functions
 /// may contain assembly code that returns untrackable values.
-LLVM_ABI bool canTrackReturnsInterprocedurally(Function *F);
+bool canTrackReturnsInterprocedurally(Function *F);
 
 /// Determine if the value maintained in the given global variable can be
 /// tracked interprocedurally. A value can be tracked if the global variable
 /// has local linkage and is only used by non-volatile loads and stores.
-LLVM_ABI bool canTrackGlobalVariableInterprocedurally(GlobalVariable *GV);
+bool canTrackGlobalVariableInterprocedurally(GlobalVariable *GV);
 
 } // end namespace llvm
 

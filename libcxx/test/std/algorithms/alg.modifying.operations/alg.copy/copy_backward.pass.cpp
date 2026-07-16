@@ -13,9 +13,10 @@
 //   constexpr OutIter   // constexpr after C++17
 //   copy_backward(InIter first, InIter last, OutIter result);
 
+// XFAIL: FROZEN-CXX03-HEADERS-FIXME
+
 #include <algorithm>
 #include <cassert>
-#include <cstdint>
 #include <vector>
 
 #include "sized_allocator.h"

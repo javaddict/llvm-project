@@ -1028,7 +1028,14 @@ void HexagonGenInsert::computeRemovableRegisters() {
 void HexagonGenInsert::pruneEmptyLists() {
   // Remove all entries from the map, where the register has no insert forms
   // associated with it.
-  IFMap.remove_if([](const auto &P) { return P.second.empty(); });
+  using IterListType = SmallVector<IFMapType::iterator, 16>;
+  IterListType Prune;
+  for (IFMapType::iterator I = IFMap.begin(), E = IFMap.end(); I != E; ++I) {
+    if (I->second.empty())
+      Prune.push_back(I);
+  }
+  for (const auto &It : Prune)
+    IFMap.erase(It);
 }
 
 void HexagonGenInsert::pruneCoveredSets(unsigned VR) {
@@ -1401,10 +1408,10 @@ bool HexagonGenInsert::generateInserts() {
       At = B.getFirstNonPHI();
 
     BuildMI(B, At, DL, D, NewR)
-        .addReg(IF.SrcR)
-        .addReg(IF.InsR, {}, InsS)
-        .addImm(Wdh)
-        .addImm(Off);
+      .addReg(IF.SrcR)
+      .addReg(IF.InsR, 0, InsS)
+      .addImm(Wdh)
+      .addImm(Off);
 
     MRI->clearKillFlags(IF.SrcR);
     MRI->clearKillFlags(IF.InsR);
@@ -1560,9 +1567,17 @@ bool HexagonGenInsert::runOnMachineFunction(MachineFunction &MF) {
   // Filter out vregs beyond the cutoff.
   if (VRegIndexCutoff.getPosition()) {
     unsigned Cutoff = VRegIndexCutoff;
-    IFMap.remove_if([&](const auto &P) {
-      return Register(P.first).virtRegIndex() >= Cutoff;
-    });
+
+    using IterListType = SmallVector<IFMapType::iterator, 16>;
+
+    IterListType Out;
+    for (IFMapType::iterator I = IFMap.begin(), E = IFMap.end(); I != E; ++I) {
+      unsigned Idx = Register(I->first).virtRegIndex();
+      if (Idx >= Cutoff)
+        Out.push_back(I);
+    }
+    for (const auto &It : Out)
+      IFMap.erase(It);
   }
   if (IFMap.empty())
     return Changed;

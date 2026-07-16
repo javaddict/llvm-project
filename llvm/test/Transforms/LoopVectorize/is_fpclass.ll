@@ -42,3 +42,4 @@ exit:
   ret void
 }
 
+declare i1 @llvm.is.fpclass.f32(float, i32 immarg)

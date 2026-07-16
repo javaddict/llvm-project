@@ -20,7 +20,6 @@
 #include "clang/AST/MangleNumberingContext.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/Type.h"
-#include "clang/Basic/DiagnosticAST.h"
 #include "clang/Basic/TargetInfo.h"
 
 using namespace clang;
@@ -84,7 +83,9 @@ public:
         MicrosoftNumberingContext::getManglingNumber(TD, MSLocalManglingNumber);
     if (DeviceN > 0xFFFF || HostN > 0xFFFF) {
       DiagnosticsEngine &Diags = TD->getASTContext().getDiagnostics();
-      Diags.Report(TD->getLocation(), diag::err_ms_mangle_number_overflow);
+      unsigned DiagID = Diags.getCustomDiagID(
+          DiagnosticsEngine::Error, "Mangling number exceeds limit (65535)");
+      Diags.Report(TD->getLocation(), DiagID);
     }
     return (DeviceN << 16) | HostN;
   }

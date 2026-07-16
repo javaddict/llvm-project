@@ -151,8 +151,8 @@ private:
           calleeSymbolRef.getLeafReference().str());
       // If the callee does not exist or is already a valid symbol for GPU
       // regions, skip it
-      if (!callee)
-        return;
+
+      assert(callee && "callee function must be found in symbol table");
       if (accSupport.isValidSymbolUse(callOp.getOperation(), calleeSymbolRef))
         return;
       builder.setInsertionPoint(callee);
@@ -195,8 +195,7 @@ private:
             calleeSymbolRef.getLeafReference().str());
         // If the callee does not exist or is already a valid symbol for GPU
         // regions, skip it
-        if (!callee)
-          return;
+        assert(callee && "callee function must be found in symbol table");
         if (accSupport.isValidSymbolUse(callOp.getOperation(), calleeSymbolRef))
           return;
         builder.setInsertionPoint(callee);

@@ -12,9 +12,7 @@ struct S {
 constexpr int extract(const S &s) { return s.n; } // expected-note {{read of object outside its lifetime is not allowed in a constant expression}}
 
 void f() {
-  constexpr S s1; // expected-error {{constant expression}} \
-                  // expected-note {{in call to 'S()'}} \
-                  // expected-note {{declared here}}
+  constexpr S s1; // expected-error {{constant expression}} expected-note {{in call to 'S()'}}
   constexpr S s2(10);
 }
 

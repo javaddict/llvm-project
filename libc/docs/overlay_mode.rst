@@ -4,6 +4,10 @@
 Overlay Mode
 ============
 
+.. contents:: Table of Contents
+  :depth: 4
+  :local:
+
 One can choose to use LLVM's libc in the overlay mode. In this mode, the link
 order semantics are exploited to pick symbols from ``libllvmlibc.a`` (if they
 are available in ``libllvmlibc.a``) and the rest are picked from the system

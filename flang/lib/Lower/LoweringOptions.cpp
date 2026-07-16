@@ -16,8 +16,7 @@ namespace Fortran::lower {
 
 LoweringOptions::LoweringOptions() : MathOptions{} {
 #define LOWERINGOPT(Name, Bits, Default) Name = Default;
-#define ENUM_LOWERINGOPT(Name, Type, Bits, Default)                            \
-  set##Name(static_cast<Type>(Default));
+#define ENUM_LOWERINGOPT(Name, Type, Bits, Default) set##Name(Default);
 #include "flang/Lower/LoweringOptions.def"
 }
 

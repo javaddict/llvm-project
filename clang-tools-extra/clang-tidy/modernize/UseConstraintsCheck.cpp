@@ -42,6 +42,8 @@ AST_MATCHER(FunctionDecl, hasOtherDeclarations) {
 void UseConstraintsCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(
       functionTemplateDecl(
+          // Skip external libraries included as system headers
+          unless(isExpansionInSystemHeader()),
           has(functionDecl(unless(hasOtherDeclarations()), isDefinition(),
                            hasReturnTypeLoc(typeLoc().bind("return")))
                   .bind("function")))
@@ -316,22 +318,22 @@ static std::optional<std::string> getConditionText(const Expr *ConditionExpr,
     return std::nullopt;
 
   const bool SkipComments = false;
-  std::optional<Token> PrevToken;
+  Token PrevToken;
   std::tie(PrevToken, PrevTokenLoc) = utils::lexer::getPreviousTokenAndStart(
       PrevTokenLoc, SM, LangOpts, SkipComments);
   const bool EndsWithDoubleSlash =
-      PrevToken && PrevToken->is(tok::comment) &&
+      PrevToken.is(tok::comment) &&
       Lexer::getSourceText(CharSourceRange::getCharRange(
                                PrevTokenLoc, PrevTokenLoc.getLocWithOffset(2)),
                            SM, LangOpts) == "//";
 
   bool Invalid = false;
-  const StringRef ConditionText = Lexer::getSourceText(
+  const llvm::StringRef ConditionText = Lexer::getSourceText(
       CharSourceRange::getCharRange(ConditionRange), SM, LangOpts, &Invalid);
   if (Invalid)
     return std::nullopt;
 
-  auto AddParens = [&](StringRef Text) -> std::string {
+  auto AddParens = [&](llvm::StringRef Text) -> std::string {
     if (isPrimaryExpression(ConditionExpr))
       return Text.str();
     return "(" + Text.str() + ")";

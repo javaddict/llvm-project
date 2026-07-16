@@ -35,11 +35,11 @@ public:
 
 private:
   // A list of class names that are excluded from the warning
-  std::vector<StringRef> ExcludedClasses;
+  std::vector<llvm::StringRef> ExcludedClasses;
   // Setting which fix to suggest
   FixModes FixMode;
-  StringRef FixFunction;
-  StringRef FixFunctionEmptyArgs;
+  llvm::StringRef FixFunction;
+  llvm::StringRef FixFunctionEmptyArgs;
 };
 } // namespace clang::tidy::cppcoreguidelines
 

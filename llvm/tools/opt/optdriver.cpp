@@ -66,13 +66,19 @@ using namespace llvm;
 using namespace opt_tool;
 
 static codegen::RegisterCodeGenFlags CFG;
-static codegen::RegisterMTuneFlag MTF;
 static codegen::RegisterSaveStatsFlag SSF;
 
 // The OptimizationList is automatically populated with registered Passes by the
 // PassNameParser.
 static cl::list<const PassInfo *, bool, PassNameParser> PassList(cl::desc(
     "Optimizations available (use \"-passes=\" for the new pass manager)"));
+
+static cl::opt<bool> EnableLegacyPassManager(
+    "bugpoint-enable-legacy-pm",
+    cl::desc(
+        "Enable the legacy pass manager. This is strictly for bugpoint "
+        "due to it not working with the new PM, please do not use otherwise."),
+    cl::init(false));
 
 // This flag specifies a textual description of the optimization pass pipeline
 // to run over the module. This flag switches opt to use the new pass manager
@@ -372,7 +378,7 @@ static bool shouldPinPassToLegacyPM(StringRef Pass) {
       "structurizecfg",
       "fix-irreducible",
       "expand-ir-insts",
-      "inline-asm-prepare",
+      "callbrprepare",
       "scalarizer",
   };
   for (StringLiteral P : PassNamePrefix)
@@ -423,9 +429,10 @@ optMain(int argc, char **argv,
   // For codegen passes, only passes that do IR to IR transformation are
   // supported.
   initializeExpandIRInstsLegacyPassPass(Registry);
+  initializeExpandMemCmpLegacyPassPass(Registry);
   initializeScalarizeMaskedMemIntrinLegacyPassPass(Registry);
   initializeSelectOptimizePass(Registry);
-  initializeInlineAsmPreparePass(Registry);
+  initializeCallBrPreparePass(Registry);
   initializeCodeGenPrepareLegacyPassPass(Registry);
   initializeAtomicExpandLegacyPass(Registry);
   initializeWinEHPreparePass(Registry);
@@ -462,8 +469,8 @@ optMain(int argc, char **argv,
   LLVMContext Context;
 
   // TODO: remove shouldForceLegacyPM().
-  const bool UseNPM =
-      !shouldForceLegacyPM() || PassPipeline.getNumOccurrences() > 0;
+  const bool UseNPM = (!EnableLegacyPassManager && !shouldForceLegacyPM()) ||
+                      PassPipeline.getNumOccurrences() > 0;
 
   if (UseNPM && !PassList.empty()) {
     errs() << "The `opt -passname` syntax for the new pass manager is "
@@ -485,48 +492,6 @@ optMain(int argc, char **argv,
   // PassBuilder for print passes.
   if (PrintPasses) {
     printPasses(outs());
-    return 0;
-  }
-
-  // If user just wants to list available options, skip module loading.
-  auto MAttrs = codegen::getMAttrs();
-  std::string CPUStr = codegen::getCPUStr();
-  std::string TuneCPUStr = codegen::getTuneCPUStr();
-  bool SkipModule =
-      CPUStr == "help" || TuneCPUStr == "help" || is_contained(MAttrs, "help");
-  if (SkipModule) {
-    Triple TheTriple;
-    if (!TargetTriple.empty())
-      TheTriple = Triple(Triple::normalize(TargetTriple));
-    else
-      TheTriple = Triple(sys::getDefaultTargetTriple());
-
-    std::string Error;
-    const Target *TheTarget =
-        TargetRegistry::lookupTarget(codegen::getMArch(), TheTriple, Error);
-    if (!TheTarget) {
-      errs() << argv[0] << ": " << Error << "\n";
-      return 1;
-    }
-
-    // Pass "help" as CPU for -mtune=help
-    std::string SkipModuleCPU = (TuneCPUStr == "help" ? "help" : CPUStr);
-    TargetOptions Options =
-        codegen::InitTargetOptionsFromCodeGenFlags(TheTriple);
-    // Create the target machine just to print the help info. Use unique_ptr
-    // to avoid a memory leak.
-    std::unique_ptr<TargetMachine> TM(TheTarget->createTargetMachine(
-        TheTriple, SkipModuleCPU, codegen::getFeaturesStr(), Options,
-        codegen::getExplicitRelocModel(), codegen::getExplicitCodeModel(),
-        GetCodeGenOptLevel()));
-    if (!TM) {
-      errs() << argv[0] << ": could not allocate target machine\n";
-      return 1;
-    }
-
-    // If we don't have a module then just exit now. We do this down
-    // here since the CPU/Feature help is underneath the target machine
-    // creation.
     return 0;
   }
 
@@ -669,15 +634,10 @@ optMain(int argc, char **argv,
   }
 
   Triple ModuleTriple(M->getTargetTriple());
-  // Avoid setting target function attributes if no arch is found, by resetting
-  // them first
-  CPUStr.clear();
-  TuneCPUStr.clear();
-  std::string FeaturesStr;
+  std::string CPUStr, FeaturesStr;
   std::unique_ptr<TargetMachine> TM;
   if (ModuleTriple.getArch()) {
     CPUStr = codegen::getCPUStr();
-    TuneCPUStr = codegen::getTuneCPUStr();
     FeaturesStr = codegen::getFeaturesStr();
     Expected<std::unique_ptr<TargetMachine>> ExpectedTM =
         codegen::createTargetMachineForTriple(ModuleTriple.str(),
@@ -702,9 +662,9 @@ optMain(int argc, char **argv,
         codegen::InitTargetOptionsFromCodeGenFlags(ModuleTriple);
   }
 
-  // Override function attributes based on CPUStr, TuneCPUStr, FeaturesStr, and
-  // command line flags.
-  codegen::setFunctionAttributes(*M, CPUStr, FeaturesStr, TuneCPUStr);
+  // Override function attributes based on CPUStr, FeaturesStr, and command line
+  // flags.
+  codegen::setFunctionAttributes(CPUStr, FeaturesStr, *M);
 
   // If the output is set to be emitted to standard out, and standard out is a
   // console, print out a warning message and refuse to do it.  We don't
@@ -973,11 +933,6 @@ optMain(int argc, char **argv,
 
   if (DebugifyEach && !DebugifyExport.empty())
     exportDebugifyStats(DebugifyExport, Passes.getDebugifyStatsMap());
-
-  // If a pass reported an error via LLVMContext::emitError, fail without
-  // writing the output module.
-  if (Context.getDiagHandlerPtr()->HasErrors)
-    return 1;
 
   // Declare success.
   if (!NoOutput)

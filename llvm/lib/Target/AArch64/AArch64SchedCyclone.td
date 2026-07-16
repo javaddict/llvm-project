@@ -21,7 +21,7 @@ def CycloneModel : SchedMachineModel {
   list<Predicate> UnsupportedFeatures = !listconcat(SVEUnsupported.F,
                                                     PAUnsupported.F,
                                                     SMEUnsupported.F,
-                                                    [HasMTE, HasCSSC, HasMOPS, HasMOPS_GO]);
+                                                    [HasMTE, HasCSSC]);
 }
 
 //===----------------------------------------------------------------------===//
@@ -274,12 +274,7 @@ def : WriteRes<WriteLDHi, []> {
 }
 
 // STP is a vector op and store, except for QQ, which is just two stores.
-def CyWriteSTP : SchedWriteRes<[CyUnitV, CyUnitLS]> {
-  let Latency = 6;
-  let NumMicroOps = 2;
-}
-
-def : SchedAlias<WriteSTP, CyWriteSTP>;
+def : SchedAlias<WriteSTP, WriteVSTShuffle>;
 def : InstRW<[WriteST, WriteST], (instrs STPQi)>;
 
 //---

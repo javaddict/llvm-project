@@ -1123,21 +1123,16 @@ void XCOFFWriter::writeRelocation(XCOFFRelocation Reloc,
 }
 
 void XCOFFWriter::writeRelocations() {
-  for (auto *Section : Sections) {
+  for (const auto *Section : Sections) {
     if (Section->Index == SectionEntry::UninitializedIndex)
       // Nothing to write for this Section.
       continue;
 
-    for (auto *Group : Section->Groups) {
+    for (const auto *Group : Section->Groups) {
       if (Group->empty())
         continue;
 
-      for (XCOFFSection &Csect : *Group) {
-        llvm::stable_sort(Csect.Relocations, [](const XCOFFRelocation &A,
-                                                const XCOFFRelocation &B) {
-          return A.FixupOffsetInCsect < B.FixupOffsetInCsect;
-        });
-
+      for (const auto &Csect : *Group) {
         for (const auto Reloc : Csect.Relocations)
           writeRelocation(Reloc, Csect);
       }

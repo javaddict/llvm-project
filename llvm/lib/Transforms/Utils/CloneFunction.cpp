@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/DomTreeUpdater.h"
@@ -89,8 +88,8 @@ createIdentityMDPredicate(const Function &F, CloneFunctionChangeType Changes) {
   };
 
   return [=](const Metadata *MD) {
-    // Avoid cloning compile units.
-    if (isa<DICompileUnit>(MD))
+    // Avoid cloning types, compile units, and (other) subprograms.
+    if (isa<DICompileUnit>(MD) || isa<DIType>(MD))
       return true;
 
     if (auto *SP = dyn_cast<DISubprogram>(MD))
@@ -104,29 +103,6 @@ createIdentityMDPredicate(const Function &F, CloneFunctionChangeType Changes) {
     if (auto *DV = dyn_cast<DILocalVariable>(MD))
       if (auto *S = dyn_cast_or_null<DILocalScope>(DV->getScope()))
         return ShouldKeep(S->getSubprogram());
-
-    // Clone types that are local to subprograms being cloned.
-    // Avoid cloning other types.
-    auto *Type = dyn_cast<DIType>(MD);
-    if (!Type)
-      return false;
-
-    // No need to clone types if subprograms are not cloned.
-    if (SPClonedWithinModule == nullptr)
-      return true;
-
-    // Scopeless types may be derived from local types (e.g. pointers to local
-    // types). They may need cloning.
-    if (const DIDerivedType *DTy = dyn_cast_or_null<DIDerivedType>(Type);
-        DTy && !DTy->getScope())
-      return false;
-
-    auto *LScope = dyn_cast_or_null<DILocalScope>(Type->getScope());
-    if (!LScope)
-      return true;
-
-    if (ShouldKeep(LScope->getSubprogram()))
-      return true;
 
     return false;
   };
@@ -434,7 +410,7 @@ struct PruningFunctionCloner {
   ValueToValueMapTy &VMap;
   bool ModuleLevelChanges;
   const char *NameSuffix;
-  ClonedCodeInfo &CodeInfo;
+  ClonedCodeInfo *CodeInfo;
   bool HostFuncIsStrictFP;
 
   Instruction *cloneInstruction(BasicBlock::const_iterator II);
@@ -442,7 +418,7 @@ struct PruningFunctionCloner {
 public:
   PruningFunctionCloner(Function *newFunc, const Function *oldFunc,
                         ValueToValueMapTy &valueMap, bool moduleLevelChanges,
-                        const char *nameSuffix, ClonedCodeInfo &codeInfo)
+                        const char *nameSuffix, ClonedCodeInfo *codeInfo)
       : NewFunc(newFunc), OldFunc(oldFunc), VMap(valueMap),
         ModuleLevelChanges(moduleLevelChanges), NameSuffix(nameSuffix),
         CodeInfo(codeInfo) {
@@ -459,46 +435,73 @@ public:
 
 Instruction *
 PruningFunctionCloner::cloneInstruction(BasicBlock::const_iterator II) {
-  if (!HostFuncIsStrictFP)
-    return II->clone();
-
   const Instruction &OldInst = *II;
-  Intrinsic::ID CIID = getConstrainedIntrinsicID(OldInst);
-  if (CIID == Intrinsic::not_intrinsic)
-    return II->clone();
+  Instruction *NewInst = nullptr;
+  if (HostFuncIsStrictFP) {
+    Intrinsic::ID CIID = getConstrainedIntrinsicID(OldInst);
+    if (CIID != Intrinsic::not_intrinsic) {
+      // Instead of cloning the instruction, a call to constrained intrinsic
+      // should be created.
+      // Assume the first arguments of constrained intrinsics are the same as
+      // the operands of original instruction.
 
-  // Instead of cloning the instruction, a call to constrained intrinsic should
-  // be created. Assume the first arguments of constrained intrinsics are the
-  // same as the operands of original instruction.
+      // Determine overloaded types of the intrinsic.
+      SmallVector<Type *, 2> TParams;
+      SmallVector<Intrinsic::IITDescriptor, 8> Descriptor;
+      getIntrinsicInfoTableEntries(CIID, Descriptor);
+      for (unsigned I = 0, E = Descriptor.size(); I != E; ++I) {
+        Intrinsic::IITDescriptor Operand = Descriptor[I];
+        switch (Operand.Kind) {
+        case Intrinsic::IITDescriptor::Argument:
+          if (Operand.getArgumentKind() !=
+              Intrinsic::IITDescriptor::AK_MatchType) {
+            if (I == 0)
+              TParams.push_back(OldInst.getType());
+            else
+              TParams.push_back(OldInst.getOperand(I - 1)->getType());
+          }
+          break;
+        case Intrinsic::IITDescriptor::SameVecWidthArgument:
+          ++I;
+          break;
+        default:
+          break;
+        }
+      }
 
-  // Create intrinsic call.
-  LLVMContext &Ctx = NewFunc->getContext();
-  SmallVector<Value *, 4> Args;
-  unsigned NumOperands = OldInst.getNumOperands();
-  if (isa<CallInst>(OldInst))
-    --NumOperands;
-  for (unsigned I = 0; I < NumOperands; ++I)
-    Args.push_back(OldInst.getOperand(I));
+      // Create intrinsic call.
+      LLVMContext &Ctx = NewFunc->getContext();
+      Function *IFn = Intrinsic::getOrInsertDeclaration(NewFunc->getParent(),
+                                                        CIID, TParams);
+      SmallVector<Value *, 4> Args;
+      unsigned NumOperands = OldInst.getNumOperands();
+      if (isa<CallInst>(OldInst))
+        --NumOperands;
+      for (unsigned I = 0; I < NumOperands; ++I) {
+        Value *Op = OldInst.getOperand(I);
+        Args.push_back(Op);
+      }
+      if (const auto *CmpI = dyn_cast<FCmpInst>(&OldInst)) {
+        FCmpInst::Predicate Pred = CmpI->getPredicate();
+        StringRef PredName = FCmpInst::getPredicateName(Pred);
+        Args.push_back(MetadataAsValue::get(Ctx, MDString::get(Ctx, PredName)));
+      }
 
-  if (const auto *CmpI = dyn_cast<FCmpInst>(&OldInst)) {
-    FCmpInst::Predicate Pred = CmpI->getPredicate();
-    StringRef PredName = FCmpInst::getPredicateName(Pred);
-    Args.push_back(MetadataAsValue::get(Ctx, MDString::get(Ctx, PredName)));
+      // The last arguments of a constrained intrinsic are metadata that
+      // represent rounding mode (absents in some intrinsics) and exception
+      // behavior. The inlined function uses default settings.
+      if (Intrinsic::hasConstrainedFPRoundingModeOperand(CIID))
+        Args.push_back(
+            MetadataAsValue::get(Ctx, MDString::get(Ctx, "round.tonearest")));
+      Args.push_back(
+          MetadataAsValue::get(Ctx, MDString::get(Ctx, "fpexcept.ignore")));
+
+      NewInst = CallInst::Create(IFn, Args, OldInst.getName() + ".strict");
+    }
   }
-
-  // The last arguments of a constrained intrinsic are metadata that represent
-  // rounding mode (absent in some intrinsics) and exception behavior. The
-  // inlined function uses default settings.
-  if (Intrinsic::hasConstrainedFPRoundingModeOperand(CIID))
-    Args.push_back(
-        MetadataAsValue::get(Ctx, MDString::get(Ctx, "round.tonearest")));
-  Args.push_back(
-      MetadataAsValue::get(Ctx, MDString::get(Ctx, "fpexcept.ignore")));
-
-  SmallVector<Type *> ArgTys = llvm::map_to_vector(Args, &Value::getType);
-  Function *IFn = Intrinsic::getOrInsertDeclaration(NewFunc->getParent(), CIID,
-                                                    OldInst.getType(), ArgTys);
-  return CallInst::Create(IFn, Args, OldInst.getName() + ".strict");
+  if (!NewInst)
+    NewInst = II->clone();
+  return NewInst;
 }
 
 /// The specified block is found to be reachable, clone it and
@@ -589,9 +592,6 @@ void PruningFunctionCloner::CloneBlock(
       }
     }
 
-    if (auto *CB = dyn_cast<CallBase>(II); CB && CB->isIndirectCall())
-      CodeInfo.OriginallyIndirectCalls.insert(NewInst);
-
     if (II->hasName())
       NewInst->setName(II->getName() + NameSuffix);
     VMap[&*II] = NewInst; // Add instruction map to value.
@@ -603,10 +603,12 @@ void PruningFunctionCloner::CloneBlock(
 
     CloneDbgRecordsToHere(NewInst, II);
 
-    CodeInfo.OrigVMap[&*II] = NewInst;
-    if (auto *CB = dyn_cast<CallBase>(&*II))
-      if (CB->hasOperandBundles())
-        CodeInfo.OperandBundleCallSites.push_back(NewInst);
+    if (CodeInfo) {
+      CodeInfo->OrigVMap[&*II] = NewInst;
+      if (auto *CB = dyn_cast<CallBase>(&*II))
+        if (CB->hasOperandBundles())
+          CodeInfo->OperandBundleCallSites.push_back(NewInst);
+    }
 
     if (const AllocaInst *AI = dyn_cast<AllocaInst>(II)) {
       if (isa<ConstantInt>(AI->getArraySize()))
@@ -619,23 +621,25 @@ void PruningFunctionCloner::CloneBlock(
   // Finally, clone over the terminator.
   const Instruction *OldTI = BB->getTerminator();
   bool TerminatorDone = false;
-  if (const CondBrInst *BI = dyn_cast<CondBrInst>(OldTI)) {
-    // If the condition was a known constant in the callee...
-    ConstantInt *Cond = dyn_cast<ConstantInt>(BI->getCondition());
-    // Or is a known constant in the caller...
-    if (!Cond) {
-      Value *V = VMap.lookup(BI->getCondition());
-      Cond = dyn_cast_or_null<ConstantInt>(V);
-    }
+  if (const BranchInst *BI = dyn_cast<BranchInst>(OldTI)) {
+    if (BI->isConditional()) {
+      // If the condition was a known constant in the callee...
+      ConstantInt *Cond = dyn_cast<ConstantInt>(BI->getCondition());
+      // Or is a known constant in the caller...
+      if (!Cond) {
+        Value *V = VMap.lookup(BI->getCondition());
+        Cond = dyn_cast_or_null<ConstantInt>(V);
+      }
 
-    // Constant fold to uncond branch!
-    if (Cond) {
-      BasicBlock *Dest = BI->getSuccessor(!Cond->getZExtValue());
-      auto *NewBI = UncondBrInst::Create(Dest, NewBB);
-      NewBI->setDebugLoc(BI->getDebugLoc());
-      VMap[OldTI] = NewBI;
-      ToClone.push_back(Dest);
-      TerminatorDone = true;
+      // Constant fold to uncond branch!
+      if (Cond) {
+        BasicBlock *Dest = BI->getSuccessor(!Cond->getZExtValue());
+        auto *NewBI = BranchInst::Create(Dest, NewBB);
+        NewBI->setDebugLoc(BI->getDebugLoc());
+        VMap[OldTI] = NewBI;
+        ToClone.push_back(Dest);
+        TerminatorDone = true;
+      }
     }
   } else if (const SwitchInst *SI = dyn_cast<SwitchInst>(OldTI)) {
     // If switching on a value known constant in the caller.
@@ -647,7 +651,7 @@ void PruningFunctionCloner::CloneBlock(
     if (Cond) { // Constant fold to uncond branch!
       SwitchInst::ConstCaseHandle Case = *SI->findCaseValue(Cond);
       BasicBlock *Dest = const_cast<BasicBlock *>(Case.getCaseSuccessor());
-      auto *NewBI = UncondBrInst::Create(Dest, NewBB);
+      auto *NewBI = BranchInst::Create(Dest, NewBB);
       NewBI->setDebugLoc(SI->getDebugLoc());
       VMap[OldTI] = NewBI;
       ToClone.push_back(Dest);
@@ -665,10 +669,12 @@ void PruningFunctionCloner::CloneBlock(
 
     VMap[OldTI] = NewInst; // Add instruction map to value.
 
-    CodeInfo.OrigVMap[OldTI] = NewInst;
-    if (auto *CB = dyn_cast<CallBase>(OldTI))
-      if (CB->hasOperandBundles())
-        CodeInfo.OperandBundleCallSites.push_back(NewInst);
+    if (CodeInfo) {
+      CodeInfo->OrigVMap[OldTI] = NewInst;
+      if (auto *CB = dyn_cast<CallBase>(OldTI))
+        if (CB->hasOperandBundles())
+          CodeInfo->OperandBundleCallSites.push_back(NewInst);
+    }
 
     // Recursively clone any reachable successor blocks.
     append_range(ToClone, successors(BB->getTerminator()));
@@ -681,11 +687,13 @@ void PruningFunctionCloner::CloneBlock(
     CloneDbgRecordsToHere(NewInst, OldTI->getIterator());
   }
 
-  CodeInfo.ContainsCalls |= hasCalls;
-  CodeInfo.ContainsMemProfMetadata |= hasMemProfMetadata;
-  CodeInfo.ContainsDynamicAllocas |= hasDynamicAllocas;
-  CodeInfo.ContainsDynamicAllocas |=
-      hasStaticAllocas && BB != &BB->getParent()->front();
+  if (CodeInfo) {
+    CodeInfo->ContainsCalls |= hasCalls;
+    CodeInfo->ContainsMemProfMetadata |= hasMemProfMetadata;
+    CodeInfo->ContainsDynamicAllocas |= hasDynamicAllocas;
+    CodeInfo->ContainsDynamicAllocas |=
+        hasStaticAllocas && BB != &BB->getParent()->front();
+  }
 }
 
 /// This works like CloneAndPruneFunctionInto, except that it does not clone the
@@ -697,7 +705,7 @@ void llvm::CloneAndPruneIntoFromInst(Function *NewFunc, const Function *OldFunc,
                                      bool ModuleLevelChanges,
                                      SmallVectorImpl<ReturnInst *> &Returns,
                                      const char *NameSuffix,
-                                     ClonedCodeInfo &CodeInfo) {
+                                     ClonedCodeInfo *CodeInfo) {
   assert(NameSuffix && "NameSuffix cannot be null!");
 
   ValueMapTypeRemapper *TypeMapper = nullptr;
@@ -928,13 +936,13 @@ void llvm::CloneAndPruneIntoFromInst(Function *NewFunc, const Function *OldFunc,
   // uncond branches, and this code folds them.
   Function::iterator I = Begin;
   while (I != NewFunc->end()) {
-    UncondBrInst *BI = dyn_cast<UncondBrInst>(I->getTerminator());
-    if (!BI) {
+    BranchInst *BI = dyn_cast<BranchInst>(I->getTerminator());
+    if (!BI || BI->isConditional()) {
       ++I;
       continue;
     }
 
-    BasicBlock *Dest = BI->getSuccessor();
+    BasicBlock *Dest = BI->getSuccessor(0);
     if (!Dest->getSinglePredecessor() || Dest->hasAddressTaken()) {
       ++I;
       continue;
@@ -977,12 +985,10 @@ void llvm::CloneAndPruneIntoFromInst(Function *NewFunc, const Function *OldFunc,
 /// constant arguments cause a significant amount of code in the callee to be
 /// dead.  Since this doesn't produce an exact copy of the input, it can't be
 /// used for things like CloneFunction or CloneModule.
-void llvm::CloneAndPruneFunctionInto(Function *NewFunc, const Function *OldFunc,
-                                     ValueToValueMapTy &VMap,
-                                     bool ModuleLevelChanges,
-                                     SmallVectorImpl<ReturnInst *> &Returns,
-                                     const char *NameSuffix,
-                                     ClonedCodeInfo &CodeInfo) {
+void llvm::CloneAndPruneFunctionInto(
+    Function *NewFunc, const Function *OldFunc, ValueToValueMapTy &VMap,
+    bool ModuleLevelChanges, SmallVectorImpl<ReturnInst *> &Returns,
+    const char *NameSuffix, ClonedCodeInfo *CodeInfo) {
   CloneAndPruneIntoFromInst(NewFunc, OldFunc, &OldFunc->front().front(), VMap,
                             ModuleLevelChanges, Returns, NameSuffix, CodeInfo);
 }

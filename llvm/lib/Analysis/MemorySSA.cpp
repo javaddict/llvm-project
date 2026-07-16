@@ -217,6 +217,14 @@ private:
 namespace llvm {
 
 template <> struct DenseMapInfo<MemoryLocOrCall> {
+  static inline MemoryLocOrCall getEmptyKey() {
+    return MemoryLocOrCall(DenseMapInfo<MemoryLocation>::getEmptyKey());
+  }
+
+  static inline MemoryLocOrCall getTombstoneKey() {
+    return MemoryLocOrCall(DenseMapInfo<MemoryLocation>::getTombstoneKey());
+  }
+
   static unsigned getHashValue(const MemoryLocOrCall &MLOC) {
     if (!MLOC.IsCall)
       return hash_combine(
@@ -304,7 +312,7 @@ instructionClobbersQuery(const MemoryDef *MD, const MemoryLocation &UseLoc,
 
   if (auto *CB = dyn_cast_or_null<CallBase>(UseInst)) {
     ModRefInfo I = AA.getModRefInfo(DefInst, CB);
-    return isModSet(I);
+    return isModOrRefSet(I);
   }
 
   if (auto *DefLoad = dyn_cast<LoadInst>(DefInst))
@@ -386,7 +394,7 @@ static bool isUseTriviallyOptimizableToLiveOnEntry(AliasAnalysisType &AA,
 /// \param AllowImpreciseClobber Always false, unless we do relaxed verify.
 
 [[maybe_unused]] static void
-checkClobberSanity(MemoryAccess *Start, MemoryAccess *ClobberAt,
+checkClobberSanity(const MemoryAccess *Start, MemoryAccess *ClobberAt,
                    const MemoryLocation &StartLoc, const MemorySSA &MSSA,
                    const UpwardsMemoryQuery &Query, BatchAAResults &AA,
                    bool AllowImpreciseClobber = false) {
@@ -399,9 +407,9 @@ checkClobberSanity(MemoryAccess *Start, MemoryAccess *ClobberAt,
   }
 
   bool FoundClobber = false;
-  DenseSet<UpwardDefsElem> VisitedPhis;
-  SmallVector<UpwardDefsElem, 8> Worklist;
-  Worklist.push_back({Start, StartLoc, /*MayBeCrossIteration=*/false});
+  DenseSet<ConstMemoryAccessPair> VisitedPhis;
+  SmallVector<ConstMemoryAccessPair, 8> Worklist;
+  Worklist.emplace_back(Start, StartLoc);
   // Walk all paths from Start to ClobberAt, while looking for clobbers. If one
   // is found, complain.
   while (!Worklist.empty()) {
@@ -411,7 +419,7 @@ checkClobberSanity(MemoryAccess *Start, MemoryAccess *ClobberAt,
     if (!VisitedPhis.insert(MAP).second)
       continue;
 
-    for (auto *MA : def_chain(MAP.MA)) {
+    for (const auto *MA : def_chain(MAP.first)) {
       if (MA == ClobberAt) {
         if (const auto *MD = dyn_cast<MemoryDef>(MA)) {
           // instructionClobbersQuery isn't essentially free, so don't use `|=`,
@@ -421,8 +429,7 @@ checkClobberSanity(MemoryAccess *Start, MemoryAccess *ClobberAt,
           // since MD may only act as a clobber for 1 of N MemoryLocations.
           FoundClobber = FoundClobber || MSSA.isLiveOnEntryDef(MD);
           if (!FoundClobber) {
-            BatchAACrossIterationScope _(AA, MAP.MayBeCrossIteration);
-            if (instructionClobbersQuery(MD, MAP.Loc, Query.Inst, AA))
+            if (instructionClobbersQuery(MD, MAP.second, Query.Inst, AA))
               FoundClobber = true;
           }
         }
@@ -437,8 +444,7 @@ checkClobberSanity(MemoryAccess *Start, MemoryAccess *ClobberAt,
         if (MD == Start)
           continue;
 
-        BatchAACrossIterationScope _(AA, MAP.MayBeCrossIteration);
-        assert(!instructionClobbersQuery(MD, MAP.Loc, Query.Inst, AA) &&
+        assert(!instructionClobbersQuery(MD, MAP.second, Query.Inst, AA) &&
                "Found clobber before reaching ClobberAt!");
         continue;
       }
@@ -453,8 +459,9 @@ checkClobberSanity(MemoryAccess *Start, MemoryAccess *ClobberAt,
       assert(isa<MemoryPhi>(MA));
 
       // Add reachable phi predecessors
-      for (auto ItB = upward_defs_begin({MA, MAP.Loc, MAP.MayBeCrossIteration},
-                                        MSSA.getDomTree()),
+      for (auto ItB = upward_defs_begin(
+                    {const_cast<MemoryAccess *>(MA), MAP.second},
+                    MSSA.getDomTree()),
                 ItE = upward_defs_end();
            ItB != ItE; ++ItB)
         if (MSSA.getDomTree().isReachableFromEntry(ItB.getPhiArgBlock()))
@@ -493,16 +500,14 @@ class ClobberWalker {
     MemoryAccess *First;
     MemoryAccess *Last;
     std::optional<ListIndex> Previous;
-    bool MayBeCrossIteration;
 
     DefPath(const MemoryLocation &Loc, MemoryAccess *First, MemoryAccess *Last,
-            bool MayBeCrossIteration, std::optional<ListIndex> Previous)
-        : Loc(Loc), First(First), Last(Last), Previous(Previous),
-          MayBeCrossIteration(MayBeCrossIteration) {}
+            std::optional<ListIndex> Previous)
+        : Loc(Loc), First(First), Last(Last), Previous(Previous) {}
 
     DefPath(const MemoryLocation &Loc, MemoryAccess *Init,
-            bool MayBeCrossIteration, std::optional<ListIndex> Previous)
-        : DefPath(Loc, Init, Init, MayBeCrossIteration, Previous) {}
+            std::optional<ListIndex> Previous)
+        : DefPath(Loc, Init, Init, Previous) {}
   };
 
   const MemorySSA &MSSA;
@@ -516,7 +521,7 @@ class ClobberWalker {
   SmallVector<DefPath, 32> Paths;
   // List of visited <Access, Location> pairs; we can skip paths already
   // visited with the same memory location.
-  DenseSet<UpwardDefsElem> VisitedPhis;
+  DenseSet<ConstMemoryAccessPair> VisitedPhis;
 
   /// Find the nearest def or phi that `From` can legally be optimized to.
   const MemoryAccess *getWalkTarget(const MemoryPhi *From) const {
@@ -573,7 +578,6 @@ class ClobberWalker {
         if (!--*UpwardWalkLimit)
           return {Current, true};
 
-        BatchAACrossIterationScope _(*AA, Desc.MayBeCrossIteration);
         if (instructionClobbersQuery(MD, Desc.Loc, Query->Inst, *AA))
           return {MD, true};
       }
@@ -588,13 +592,12 @@ class ClobberWalker {
   }
 
   void addSearches(MemoryPhi *Phi, SmallVectorImpl<ListIndex> &PausedSearches,
-                   ListIndex PriorNode, bool MayBeCrossIteration) {
-    auto UpwardDefsBegin =
-        upward_defs_begin({Phi, Paths[PriorNode].Loc, MayBeCrossIteration}, DT);
+                   ListIndex PriorNode) {
+    auto UpwardDefsBegin = upward_defs_begin({Phi, Paths[PriorNode].Loc}, DT);
     auto UpwardDefs = make_range(UpwardDefsBegin, upward_defs_end());
-    for (const UpwardDefsElem &E : UpwardDefs) {
+    for (const MemoryAccessPair &P : UpwardDefs) {
       PausedSearches.push_back(Paths.size());
-      Paths.emplace_back(E.Loc, E.MA, E.MayBeCrossIteration, PriorNode);
+      Paths.emplace_back(P.second, P.first, PriorNode);
     }
   }
 
@@ -646,8 +649,7 @@ class ClobberWalker {
       //   - We still cache things for A, so C only needs to walk up a bit.
       // If this behavior becomes problematic, we can fix without a ton of extra
       // work.
-      if (!VisitedPhis.insert({Node.Last, Node.Loc, Node.MayBeCrossIteration})
-               .second)
+      if (!VisitedPhis.insert({Node.Last, Node.Loc}).second)
         continue;
 
       const MemoryAccess *SkipStopWhere = nullptr;
@@ -684,8 +686,7 @@ class ClobberWalker {
       }
 
       assert(!MSSA.isLiveOnEntryDef(Res.Result) && "liveOnEntry is a clobber");
-      addSearches(cast<MemoryPhi>(Res.Result), PausedSearches, PathIndex,
-                  Node.MayBeCrossIteration);
+      addSearches(cast<MemoryPhi>(Res.Result), PausedSearches, PathIndex);
     }
 
     return std::nullopt;
@@ -765,8 +766,7 @@ class ClobberWalker {
     assert(Paths.empty() && VisitedPhis.empty() &&
            "Reset the optimization state.");
 
-    Paths.emplace_back(Loc, Start, Phi, /*MayBeCrossIteration=*/false,
-                       std::nullopt);
+    Paths.emplace_back(Loc, Start, Phi, std::nullopt);
     // Stores how many "valid" optimization nodes we had prior to calling
     // addSearches/getBlockingAccess. Necessary for caching if we had a blocker.
     auto PriorPathsSize = Paths.size();
@@ -775,7 +775,7 @@ class ClobberWalker {
     SmallVector<ListIndex, 8> NewPaused;
     SmallVector<TerminatedPath, 4> TerminatedPaths;
 
-    addSearches(Phi, PausedSearches, 0, /*MayBeCrossIteration=*/false);
+    addSearches(Phi, PausedSearches, 0);
 
     // Moves the TerminatedPath with the "most dominated" Clobber to the end of
     // Paths.
@@ -903,8 +903,7 @@ class ClobberWalker {
       PriorPathsSize = Paths.size();
       PausedSearches.clear();
       for (ListIndex I : NewPaused)
-        addSearches(DefChainPhi, PausedSearches, I,
-                    Paths[I].MayBeCrossIteration);
+        addSearches(DefChainPhi, PausedSearches, I);
       NewPaused.clear();
 
       Current = DefChainPhi;
@@ -943,8 +942,7 @@ public:
     if (auto *MU = dyn_cast<MemoryUse>(Start))
       Current = MU->getDefiningAccess();
 
-    DefPath FirstDesc(Q.StartingLoc, Current, Current,
-                      /*MayBeCrossIteration=*/false, std::nullopt);
+    DefPath FirstDesc(Q.StartingLoc, Current, Current, std::nullopt);
     // Fast path for the overly-common case (no crazy phi optimization
     // necessary)
     UpwardsWalkResult WalkResult = walkToPhiOrClobber(FirstDesc);
@@ -1182,7 +1180,7 @@ void MemorySSA::renamePass(DomTreeNode *Root, MemoryAccess *IncomingVal,
         // which is the last def.
         // Incoming value can only change if there is a block def, and in that
         // case, it's the last block def in the list.
-        if (auto *BlockDefs = getBlockDefs(BB))
+        if (auto *BlockDefs = getWritableBlockDefs(BB))
           IncomingVal = &*BlockDefs->rbegin();
       } else
         IncomingVal = renameBlock(BB, IncomingVal, RenameAllUses);
@@ -1359,7 +1357,7 @@ void MemorySSA::OptimizeUses::optimizeUsesInBlock(
     DenseMap<MemoryLocOrCall, MemlocStackInfo> &LocStackInfo) {
 
   /// If no accesses, nothing to do.
-  MemorySSA::AccessList *Accesses = MSSA->getBlockAccesses(BB);
+  MemorySSA::AccessList *Accesses = MSSA->getWritableBlockAccesses(BB);
   if (Accesses == nullptr)
     return;
 
@@ -1651,7 +1649,7 @@ void MemorySSA::insertIntoListsForBlock(MemoryAccess *NewAccess,
 
 void MemorySSA::insertIntoListsBefore(MemoryAccess *What, const BasicBlock *BB,
                                       AccessList::iterator InsertPt) {
-  auto *Accesses = getBlockAccesses(BB);
+  auto *Accesses = getWritableBlockAccesses(BB);
   bool WasEnd = InsertPt == Accesses->end();
   Accesses->insert(AccessList::iterator(InsertPt), What);
   if (!isa<MemoryUse>(What)) {

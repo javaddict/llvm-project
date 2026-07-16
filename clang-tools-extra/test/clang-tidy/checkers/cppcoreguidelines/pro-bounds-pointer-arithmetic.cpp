@@ -1,9 +1,6 @@
 // RUN: %check_clang_tidy %s cppcoreguidelines-pro-bounds-pointer-arithmetic -check-suffixes=,DEFAULT  %t
 // RUN: %check_clang_tidy %s cppcoreguidelines-pro-bounds-pointer-arithmetic %t -- \
-// RUN:   -config="{CheckOptions: {cppcoreguidelines-pro-bounds-pointer-arithmetic.AllowIncrementDecrementOperators: true}}"
-
-#include <utility>
-#include <map>
+// RUN:   -config="{CheckOptions: {cppcoreguidelines-pro-bounds-pointer-arithmetic.AllowIncrementDecrementOperators: true}}" --
 
 enum E {
   ENUM_LITERAL = 1
@@ -124,8 +121,21 @@ void okay() {
 
 namespace gh126424 {
 
+namespace std {
+template <typename, typename>
+class pair {};
+
+template <typename Key, typename Value>
+class map {
+  public:
+   using value_type = pair<Key, Value>;
+   value_type& operator[](const Key& key);
+   value_type& operator[](Key&& key);
+ };
+}
+
 template <typename R>
-int f(::std::map<R*, int>& map, R* r) {
+int f(std::map<R*, int>& map, R* r) {
   return map[r]; // OK
 }
 

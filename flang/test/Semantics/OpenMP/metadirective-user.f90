@@ -27,10 +27,3 @@ subroutine f03(x)
 !This is ok
   !$omp & when(user={condition(x > 0)}: nothing)
 end
-
-subroutine f04(a, b)
-  logical :: a, b
-  !$omp metadirective &
-!ERROR: Repeated trait name CONDITION in a trait set
-  !$omp & when(user={condition(a), condition(b)}: nothing)
-end

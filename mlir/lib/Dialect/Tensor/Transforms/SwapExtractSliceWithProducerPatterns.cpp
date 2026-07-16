@@ -53,7 +53,6 @@ FailureOr<TilingResult> tensor::replaceExtractSliceWithTiledProducer(
         builder, sliceOp.getLoc(), sliceOp.getType(),
         tiledResult->tiledValues[0], offsets, sliceOp.getMixedSizes(), strides);
     tiledResult->tiledValues[0] = newSliceOp;
-    tiledResult->generatedSlices.push_back(newSliceOp);
   }
 
   return *tiledResult;

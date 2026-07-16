@@ -12,11 +12,8 @@
 #ifdef LIBC_FULL_BUILD
 
 #include "hdr/types/size_t.h"
-#include "include/__llvm-libc-common.h"
 
-__BEGIN_C_DECLS
-void *realloc(void *ptr, size_t new_size) __NOEXCEPT;
-__END_C_DECLS
+extern "C" void *realloc(void *ptr, size_t new_size) noexcept;
 
 #else // Overlay mode
 

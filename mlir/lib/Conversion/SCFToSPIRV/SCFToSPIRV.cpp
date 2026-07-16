@@ -13,7 +13,6 @@
 #include "mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVOps.h"
-#include "mlir/Dialect/SPIRV/IR/TargetAndABI.h"
 #include "mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -136,11 +135,8 @@ struct ForOpConversion final : SCFToSPIRVPattern<scf::ForOp> {
     // a single back edge from the continue to header block, and a single exit
     // from header to merge.
     auto loc = forOp.getLoc();
-    auto loopControl = spirv::LoopControl::None;
-    if (auto attr = forOp->getAttrOfType<spirv::LoopControlAttr>(
-            spirv::getLoopControlAttrName()))
-      loopControl = attr.getValue();
-    auto loopOp = spirv::LoopOp::create(rewriter, loc, loopControl);
+    auto loopOp =
+        spirv::LoopOp::create(rewriter, loc, spirv::LoopControl::None);
     loopOp.addEntryAndMergeBlock(rewriter);
 
     OpBuilder::InsertionGuard guard(rewriter);
@@ -249,12 +245,8 @@ struct IfOpConversion : SCFToSPIRVPattern<scf::IfOp> {
 
     // Create `spirv.selection` operation, selection header block and merge
     // block.
-    auto selectionControl = spirv::SelectionControl::None;
-    if (auto attr = ifOp->getAttrOfType<spirv::SelectionControlAttr>(
-            spirv::getSelectionControlAttrName()))
-      selectionControl = attr.getValue();
-    auto selectionOp =
-        spirv::SelectionOp::create(rewriter, loc, selectionControl);
+    auto selectionOp = spirv::SelectionOp::create(
+        rewriter, loc, spirv::SelectionControl::None);
     auto *mergeBlock = rewriter.createBlock(&selectionOp.getBody(),
                                             selectionOp.getBody().end());
     spirv::MergeOp::create(rewriter, loc);
@@ -356,11 +348,8 @@ struct WhileOpConversion final : SCFToSPIRVPattern<scf::WhileOp> {
   matchAndRewrite(scf::WhileOp whileOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = whileOp.getLoc();
-    auto loopControl = spirv::LoopControl::None;
-    if (auto attr = whileOp->getAttrOfType<spirv::LoopControlAttr>(
-            spirv::getLoopControlAttrName()))
-      loopControl = attr.getValue();
-    auto loopOp = spirv::LoopOp::create(rewriter, loc, loopControl);
+    auto loopOp =
+        spirv::LoopOp::create(rewriter, loc, spirv::LoopControl::None);
     loopOp.addEntryAndMergeBlock(rewriter);
 
     Region &beforeRegion = whileOp.getBefore();

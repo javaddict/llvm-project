@@ -24,8 +24,6 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
-#include "llvm/Support/FormatAdapters.h"
-#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cassert>
 #include <cinttypes>
@@ -103,34 +101,30 @@ constexpr uint64_t getCIEId(bool IsDWARF64, bool IsEH) {
 void CIE::dump(raw_ostream &OS, DIDumpOptions DumpOpts) const {
   // A CIE with a zero length is a terminator entry in the .eh_frame section.
   if (DumpOpts.IsEH && Length == 0) {
-    OS << formatv("{0:x-8}", Offset) << " ZERO terminator\n";
+    OS << format("%08" PRIx64, Offset) << " ZERO terminator\n";
     return;
   }
 
-  OS << formatv("{0:x-8}", Offset)
-     << formatv(" {0:x-}",
-                fmt_align(Length, AlignStyle::Right, IsDWARF64 ? 16 : 8, '0'))
-     << formatv(" {0:x-}",
-                fmt_align(getCIEId(IsDWARF64, DumpOpts.IsEH), AlignStyle::Right,
-                          IsDWARF64 && !DumpOpts.IsEH ? 16 : 8, '0'))
+  OS << format("%08" PRIx64, Offset)
+     << format(" %0*" PRIx64, IsDWARF64 ? 16 : 8, Length)
+     << format(" %0*" PRIx64, IsDWARF64 && !DumpOpts.IsEH ? 16 : 8,
+               getCIEId(IsDWARF64, DumpOpts.IsEH))
      << " CIE\n"
      << "  Format:                " << FormatString(IsDWARF64) << "\n";
   if (DumpOpts.IsEH && Version != 1)
     OS << "WARNING: unsupported CIE version\n";
-  OS << formatv("  Version:               {0}\n", Version)
+  OS << format("  Version:               %d\n", Version)
      << "  Augmentation:          \"" << Augmentation << "\"\n";
   if (Version >= 4) {
-    OS << formatv("  Address size:          {0}\n", (uint32_t)AddressSize);
-    OS << formatv("  Segment desc size:     {0}\n",
-                  (uint32_t)SegmentDescriptorSize);
+    OS << format("  Address size:          %u\n", (uint32_t)AddressSize);
+    OS << format("  Segment desc size:     %u\n",
+                 (uint32_t)SegmentDescriptorSize);
   }
-  OS << formatv("  Code alignment factor: {0}\n",
-                (uint32_t)CodeAlignmentFactor);
-  OS << formatv("  Data alignment factor: {0}\n", (int32_t)DataAlignmentFactor);
-  OS << formatv("  Return address column: {0}\n",
-                (int32_t)ReturnAddressRegister);
+  OS << format("  Code alignment factor: %u\n", (uint32_t)CodeAlignmentFactor);
+  OS << format("  Data alignment factor: %d\n", (int32_t)DataAlignmentFactor);
+  OS << format("  Return address column: %d\n", (int32_t)ReturnAddressRegister);
   if (Personality)
-    OS << formatv("  Personality Address: {0:x-16}\n", *Personality);
+    OS << format("  Personality Address: %016" PRIx64 "\n", *Personality);
   if (!AugmentationData.empty()) {
     OS << "  Augmentation data:    ";
     for (uint8_t Byte : AugmentationData)
@@ -154,21 +148,19 @@ void CIE::dump(raw_ostream &OS, DIDumpOptions DumpOpts) const {
 }
 
 void FDE::dump(raw_ostream &OS, DIDumpOptions DumpOpts) const {
-  OS << formatv("{0:x-8}", Offset)
-     << formatv(" {0:x-}",
-                fmt_align(Length, AlignStyle::Right, IsDWARF64 ? 16 : 8, '0'))
-     << formatv(" {0:x-}", fmt_align(CIEPointer, AlignStyle::Right,
-                                     IsDWARF64 && !DumpOpts.IsEH ? 16 : 8, '0'))
+  OS << format("%08" PRIx64, Offset)
+     << format(" %0*" PRIx64, IsDWARF64 ? 16 : 8, Length)
+     << format(" %0*" PRIx64, IsDWARF64 && !DumpOpts.IsEH ? 16 : 8, CIEPointer)
      << " FDE cie=";
   if (LinkedCIE)
-    OS << formatv("{0:x-8}", LinkedCIE->getOffset());
+    OS << format("%08" PRIx64, LinkedCIE->getOffset());
   else
     OS << "<invalid offset>";
-  OS << formatv(" pc={0:x-8}...{1:x-8}\n", InitialLocation,
-                InitialLocation + AddressRange);
+  OS << format(" pc=%08" PRIx64 "...%08" PRIx64 "\n", InitialLocation,
+               InitialLocation + AddressRange);
   OS << "  Format:       " << FormatString(IsDWARF64) << "\n";
   if (LSDAAddress)
-    OS << formatv("  LSDA Address: {0:x-16}\n", *LSDAAddress);
+    OS << format("  LSDA Address: %016" PRIx64 "\n", *LSDAAddress);
   printCFIProgram(CFIs, OS, DumpOpts, /*IndentLevel=*/1, InitialLocation);
   OS << "\n";
 

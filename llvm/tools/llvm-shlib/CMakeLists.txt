@@ -96,7 +96,9 @@ if(LLVM_BUILD_LLVM_DYLIB)
   endif()
 
   if (APPLE)
-    llvm_set_macho_current_version(LLVM ${LLVM_VERSION_MAJOR})
+    set_property(TARGET LLVM APPEND_STRING PROPERTY
+                LINK_FLAGS
+                " -compatibility_version 1 -current_version ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
   endif()
 
   if(TARGET libLLVMExports)
@@ -138,10 +140,9 @@ if(LLVM_BUILD_LLVM_C_DYLIB AND NOT MSVC)
   target_link_libraries(LLVM-C PUBLIC LLVM)
   add_dependencies(LLVM-C libLLVMCExports)
 
-  llvm_set_macho_current_version(LLVM-C ${LLVM_VERSION_MAJOR})
   set_property(TARGET LLVM-C APPEND_STRING PROPERTY
               LINK_FLAGS
-              " -Wl,-reexport_library ${LIB_PATH}")
+              " -compatibility_version 1 -current_version ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH} -Wl,-reexport_library ${LIB_PATH}")
 endif()
 
 if(LLVM_BUILD_LLVM_C_DYLIB AND MSVC)

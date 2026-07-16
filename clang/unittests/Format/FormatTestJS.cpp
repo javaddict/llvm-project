@@ -1019,8 +1019,7 @@ TEST_F(FormatTestJS, TrailingCommaInsertion) {
 
 TEST_F(FormatTestJS, FunctionLiterals) {
   FormatStyle Style = getGoogleStyle(FormatStyle::LK_JavaScript);
-  Style.AllowShortFunctionsOnASingleLine =
-      FormatStyle::ShortFunctionStyle::setEmptyAndInline();
+  Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_Inline;
   verifyFormat("doFoo(function() {});");
   verifyFormat("doFoo(function() { return 1; });", Style);
   verifyFormat("var func = function() {\n"
@@ -1133,8 +1132,7 @@ TEST_F(FormatTestJS, DontWrapEmptyLiterals) {
 
 TEST_F(FormatTestJS, InliningFunctionLiterals) {
   FormatStyle Style = getGoogleStyle(FormatStyle::LK_JavaScript);
-  Style.AllowShortFunctionsOnASingleLine =
-      FormatStyle::ShortFunctionStyle::setEmptyAndInline();
+  Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_Inline;
   verifyFormat("var func = function() {\n"
                "  return 1;\n"
                "};",
@@ -1149,8 +1147,7 @@ TEST_F(FormatTestJS, InliningFunctionLiterals) {
                "}",
                Style);
 
-  Style.AllowShortFunctionsOnASingleLine =
-      FormatStyle::ShortFunctionStyle::setAll();
+  Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_All;
   verifyFormat("var func = function() { return 1; };", Style);
   verifyFormat("var func = doSomething(function() { return 1; });", Style);
   verifyFormat(
@@ -1161,7 +1158,7 @@ TEST_F(FormatTestJS, InliningFunctionLiterals) {
                "}",
                Style);
 
-  Style.AllowShortFunctionsOnASingleLine = FormatStyle::ShortFunctionStyle();
+  Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_None;
   verifyFormat("var func = function() {\n"
                "  return 1;\n"
                "};",
@@ -1183,8 +1180,7 @@ TEST_F(FormatTestJS, InliningFunctionLiterals) {
                "}",
                Style);
 
-  Style.AllowShortFunctionsOnASingleLine =
-      FormatStyle::ShortFunctionStyle::setEmptyOnly();
+  Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_Empty;
   verifyFormat("var func = function() {\n"
                "  return 1;\n"
                "};",
@@ -1193,8 +1189,7 @@ TEST_F(FormatTestJS, InliningFunctionLiterals) {
 
 TEST_F(FormatTestJS, MultipleFunctionLiterals) {
   FormatStyle Style = getGoogleStyle(FormatStyle::LK_JavaScript);
-  Style.AllowShortFunctionsOnASingleLine =
-      FormatStyle::ShortFunctionStyle::setAll();
+  Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_All;
   verifyFormat("promise.then(\n"
                "    function success() {\n"
                "      doFoo();\n"

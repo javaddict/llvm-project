@@ -13,11 +13,10 @@
 namespace llvm {
 
 class MachineLateInstrsCleanupPass
-    : public OptionalPassInfoMixin<MachineLateInstrsCleanupPass> {
+    : public PassInfoMixin<MachineLateInstrsCleanupPass> {
 public:
-  LLVM_ABI PreservedAnalyses
-  run(MachineFunction &MachineFunction,
-      MachineFunctionAnalysisManager &MachineFunctionAM);
+  PreservedAnalyses run(MachineFunction &MachineFunction,
+                        MachineFunctionAnalysisManager &MachineFunctionAM);
 
   MachineFunctionProperties getRequiredProperties() const {
     return MachineFunctionProperties().setNoVRegs();

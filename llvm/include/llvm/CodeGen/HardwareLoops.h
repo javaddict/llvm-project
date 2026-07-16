@@ -61,14 +61,14 @@ struct HardwareLoopOptions {
   }
 };
 
-class HardwareLoopsPass : public OptionalPassInfoMixin<HardwareLoopsPass> {
+class HardwareLoopsPass : public PassInfoMixin<HardwareLoopsPass> {
   HardwareLoopOptions Opts;
 
 public:
   explicit HardwareLoopsPass(HardwareLoopOptions Opts = {})
     : Opts(Opts) { }
 
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
 } // end namespace llvm

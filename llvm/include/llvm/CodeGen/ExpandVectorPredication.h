@@ -28,8 +28,9 @@ enum class VPExpansionDetails {
 
 /// Expand a vector predication intrinsic. Returns the kind of expansion
 /// that was applied to the intrinsic.
-LLVM_ABI VPExpansionDetails expandVectorPredicationIntrinsic(
-    VPIntrinsic &VPI, const TargetTransformInfo &TTI);
+VPExpansionDetails
+expandVectorPredicationIntrinsic(VPIntrinsic &VPI,
+                                 const TargetTransformInfo &TTI);
 
 } // end namespace llvm
 

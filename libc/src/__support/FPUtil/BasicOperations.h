@@ -26,15 +26,14 @@ namespace LIBC_NAMESPACE_DECL {
 namespace fputil {
 
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-LIBC_INLINE constexpr T abs(T x) {
+LIBC_INLINE T abs(T x) {
   return FPBits<T>(x).abs().get_val();
 }
 
 namespace internal {
 
 template <typename T>
-LIBC_INLINE constexpr cpp::enable_if_t<cpp::is_floating_point_v<T>, T>
-constexpr_max(T x, T y) {
+LIBC_INLINE cpp::enable_if_t<cpp::is_floating_point_v<T>, T> max(T x, T y) {
   FPBits<T> x_bits(x);
   FPBits<T> y_bits(y);
 
@@ -46,21 +45,13 @@ constexpr_max(T x, T y) {
   return x > y ? x : y;
 }
 
-template <typename T>
-LIBC_INLINE constexpr cpp::enable_if_t<cpp::is_floating_point_v<T>, T>
-max(T x, T y) {
-  return constexpr_max(x, y);
-}
-
 #ifdef LIBC_TYPES_HAS_FLOAT16
 #if defined(__LIBC_USE_BUILTIN_FMAXF16_FMINF16)
-template <> LIBC_INLINE constexpr float16 max(float16 x, float16 y) {
-  if (cpp::is_constant_evaluated())
-    return constexpr_max(x, y);
+template <> LIBC_INLINE float16 max(float16 x, float16 y) {
   return __builtin_fmaxf16(x, y);
 }
 #elif !defined(LIBC_TARGET_ARCH_IS_AARCH64)
-template <> LIBC_INLINE constexpr float16 max(float16 x, float16 y) {
+template <> LIBC_INLINE float16 max(float16 x, float16 y) {
   FPBits<float16> x_bits(x);
   FPBits<float16> y_bits(y);
 
@@ -72,22 +63,17 @@ template <> LIBC_INLINE constexpr float16 max(float16 x, float16 y) {
 #endif // LIBC_TYPES_HAS_FLOAT16
 
 #if defined(__LIBC_USE_BUILTIN_FMAX_FMIN) && !defined(LIBC_TARGET_ARCH_IS_X86)
-template <> LIBC_INLINE constexpr float max(float x, float y) {
-  if (cpp::is_constant_evaluated())
-    return constexpr_max(x, y);
+template <> LIBC_INLINE float max(float x, float y) {
   return __builtin_fmaxf(x, y);
 }
 
-template <> LIBC_INLINE constexpr double max(double x, double y) {
-  if (cpp::is_constant_evaluated())
-    return constexpr_max(x, y);
+template <> LIBC_INLINE double max(double x, double y) {
   return __builtin_fmax(x, y);
 }
 #endif
 
 template <typename T>
-LIBC_INLINE constexpr cpp::enable_if_t<cpp::is_floating_point_v<T>, T>
-constexpr_min(T x, T y) {
+LIBC_INLINE cpp::enable_if_t<cpp::is_floating_point_v<T>, T> min(T x, T y) {
   FPBits<T> x_bits(x);
   FPBits<T> y_bits(y);
 
@@ -99,21 +85,13 @@ constexpr_min(T x, T y) {
   return x < y ? x : y;
 }
 
-template <typename T>
-LIBC_INLINE constexpr cpp::enable_if_t<cpp::is_floating_point_v<T>, T>
-min(T x, T y) {
-  return constexpr_min(x, y);
-}
-
 #ifdef LIBC_TYPES_HAS_FLOAT16
 #if defined(__LIBC_USE_BUILTIN_FMAXF16_FMINF16)
-template <> LIBC_INLINE constexpr float16 min(float16 x, float16 y) {
-  if (cpp::is_constant_evaluated())
-    return constexpr_min(x, y);
+template <> LIBC_INLINE float16 min(float16 x, float16 y) {
   return __builtin_fminf16(x, y);
 }
 #elif !defined(LIBC_TARGET_ARCH_IS_AARCH64)
-template <> LIBC_INLINE constexpr float16 min(float16 x, float16 y) {
+template <> LIBC_INLINE float16 min(float16 x, float16 y) {
   FPBits<float16> x_bits(x);
   FPBits<float16> y_bits(y);
 
@@ -125,15 +103,11 @@ template <> LIBC_INLINE constexpr float16 min(float16 x, float16 y) {
 #endif // LIBC_TYPES_HAS_FLOAT16
 
 #if defined(__LIBC_USE_BUILTIN_FMAX_FMIN) && !defined(LIBC_TARGET_ARCH_IS_X86)
-template <> LIBC_INLINE constexpr float min(float x, float y) {
-  if (cpp::is_constant_evaluated())
-    return constexpr_min(x, y);
+template <> LIBC_INLINE float min(float x, float y) {
   return __builtin_fminf(x, y);
 }
 
-template <> LIBC_INLINE constexpr double min(double x, double y) {
-  if (cpp::is_constant_evaluated())
-    return constexpr_min(x, y);
+template <> LIBC_INLINE double min(double x, double y) {
   return __builtin_fmin(x, y);
 }
 #endif
@@ -141,7 +115,7 @@ template <> LIBC_INLINE constexpr double min(double x, double y) {
 } // namespace internal
 
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-LIBC_INLINE constexpr T fmin(T x, T y) {
+LIBC_INLINE T fmin(T x, T y) {
   const FPBits<T> bitx(x), bity(y);
 
   if (bitx.is_nan())
@@ -152,7 +126,7 @@ LIBC_INLINE constexpr T fmin(T x, T y) {
 }
 
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-LIBC_INLINE constexpr T fmax(T x, T y) {
+LIBC_INLINE T fmax(T x, T y) {
   FPBits<T> bitx(x), bity(y);
 
   if (bitx.is_nan())
@@ -163,7 +137,7 @@ LIBC_INLINE constexpr T fmax(T x, T y) {
 }
 
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-LIBC_INLINE constexpr T fmaximum(T x, T y) {
+LIBC_INLINE T fmaximum(T x, T y) {
   FPBits<T> bitx(x), bity(y);
 
   if (bitx.is_nan())
@@ -174,7 +148,7 @@ LIBC_INLINE constexpr T fmaximum(T x, T y) {
 }
 
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-LIBC_INLINE constexpr T fminimum(T x, T y) {
+LIBC_INLINE T fminimum(T x, T y) {
   const FPBits<T> bitx(x), bity(y);
 
   if (bitx.is_nan())
@@ -185,7 +159,7 @@ LIBC_INLINE constexpr T fminimum(T x, T y) {
 }
 
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-LIBC_INLINE constexpr T fmaximum_num(T x, T y) {
+LIBC_INLINE T fmaximum_num(T x, T y) {
   FPBits<T> bitx(x), bity(y);
   if (bitx.is_signaling_nan() || bity.is_signaling_nan()) {
     fputil::raise_except_if_required(FE_INVALID);
@@ -200,7 +174,7 @@ LIBC_INLINE constexpr T fmaximum_num(T x, T y) {
 }
 
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-LIBC_INLINE constexpr T fminimum_num(T x, T y) {
+LIBC_INLINE T fminimum_num(T x, T y) {
   FPBits<T> bitx(x), bity(y);
   if (bitx.is_signaling_nan() || bity.is_signaling_nan()) {
     fputil::raise_except_if_required(FE_INVALID);
@@ -215,7 +189,7 @@ LIBC_INLINE constexpr T fminimum_num(T x, T y) {
 }
 
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-LIBC_INLINE constexpr T fmaximum_mag(T x, T y) {
+LIBC_INLINE T fmaximum_mag(T x, T y) {
   FPBits<T> bitx(x), bity(y);
 
   if (abs(x) > abs(y))
@@ -226,7 +200,7 @@ LIBC_INLINE constexpr T fmaximum_mag(T x, T y) {
 }
 
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-LIBC_INLINE constexpr T fminimum_mag(T x, T y) {
+LIBC_INLINE T fminimum_mag(T x, T y) {
   FPBits<T> bitx(x), bity(y);
 
   if (abs(x) < abs(y))
@@ -237,7 +211,7 @@ LIBC_INLINE constexpr T fminimum_mag(T x, T y) {
 }
 
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-LIBC_INLINE constexpr T fmaximum_mag_num(T x, T y) {
+LIBC_INLINE T fmaximum_mag_num(T x, T y) {
   FPBits<T> bitx(x), bity(y);
 
   if (abs(x) > abs(y))
@@ -248,7 +222,7 @@ LIBC_INLINE constexpr T fmaximum_mag_num(T x, T y) {
 }
 
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-LIBC_INLINE constexpr T fminimum_mag_num(T x, T y) {
+LIBC_INLINE T fminimum_mag_num(T x, T y) {
   FPBits<T> bitx(x), bity(y);
 
   if (abs(x) < abs(y))
@@ -259,7 +233,7 @@ LIBC_INLINE constexpr T fminimum_mag_num(T x, T y) {
 }
 
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-LIBC_INLINE T constexpr fdim(T x, T y) {
+LIBC_INLINE T fdim(T x, T y) {
   FPBits<T> bitx(x), bity(y);
 
   if (bitx.is_nan()) {
@@ -275,13 +249,13 @@ LIBC_INLINE T constexpr fdim(T x, T y) {
 
 // Avoid reusing `issignaling` macro.
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-LIBC_INLINE constexpr int issignaling_impl(const T &x) {
+LIBC_INLINE int issignaling_impl(const T &x) {
   FPBits<T> sx(x);
   return sx.is_signaling_nan();
 }
 
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-LIBC_INLINE constexpr int canonicalize(T &cx, const T &x) {
+LIBC_INLINE int canonicalize(T &cx, const T &x) {
   FPBits<T> sx(x);
   if constexpr (get_fp_type<T>() == FPType::X86_Binary80) {
     // All the pseudo and unnormal numbers are not canonical.
@@ -344,7 +318,7 @@ LIBC_INLINE constexpr int canonicalize(T &cx, const T &x) {
 }
 
 template <typename T>
-LIBC_INLINE constexpr cpp::enable_if_t<cpp::is_floating_point_v<T>, bool>
+LIBC_INLINE cpp::enable_if_t<cpp::is_floating_point_v<T>, bool>
 totalorder(T x, T y) {
   using FPBits = FPBits<T>;
   FPBits x_bits(x);
@@ -359,14 +333,13 @@ totalorder(T x, T y) {
 }
 
 template <typename T>
-LIBC_INLINE constexpr cpp::enable_if_t<cpp::is_floating_point_v<T>, bool>
+LIBC_INLINE cpp::enable_if_t<cpp::is_floating_point_v<T>, bool>
 totalordermag(T x, T y) {
   return FPBits<T>(x).abs().uintval() <= FPBits<T>(y).abs().uintval();
 }
 
 template <typename T>
-LIBC_INLINE constexpr cpp::enable_if_t<cpp::is_floating_point_v<T>, T>
-getpayload(T x) {
+LIBC_INLINE cpp::enable_if_t<cpp::is_floating_point_v<T>, T> getpayload(T x) {
   using FPBits = FPBits<T>;
   using StorageType = typename FPBits::StorageType;
   FPBits x_bits(x);
@@ -386,7 +359,7 @@ getpayload(T x) {
 }
 
 template <bool IsSignaling, typename T>
-LIBC_INLINE constexpr cpp::enable_if_t<cpp::is_floating_point_v<T>, bool>
+LIBC_INLINE cpp::enable_if_t<cpp::is_floating_point_v<T>, bool>
 setpayload(T &res, T pl) {
   using FPBits = FPBits<T>;
   FPBits pl_bits(pl);

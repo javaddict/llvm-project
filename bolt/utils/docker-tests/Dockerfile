@@ -43,7 +43,6 @@ WORKDIR /home/bolt
 # Get sources, compile BOLT, and run test suites.
 RUN git clone --depth 1 https://github.com/llvm/llvm-project
 RUN git clone --depth 1 https://github.com/rafaelauler/bolt-tests
-RUN git clone --depth 1 https://github.com/arm/large-bolt-tests
 
 RUN mkdir build && \
     cd build && \
@@ -53,10 +52,8 @@ RUN mkdir build && \
       -DCMAKE_BUILD_TYPE=Release \
       -DLLVM_CCACHE_BUILD=ON \
       -DLLVM_ENABLE_ASSERTIONS=ON \
-      -DLLVM_EXTERNAL_PROJECTS="bolttests;bolttests-arm" \
-      -DLLVM_EXTERNAL_BOLTTESTS_SOURCE_DIR=../bolt-tests \
-      -DLLVM_EXTERNAL_BOLTTESTS_ARM_SOURCE_DIR=../large-bolt-tests
+      -DLLVM_EXTERNAL_PROJECTS="bolttests" \
+      -DLLVM_EXTERNAL_BOLTTESTS_SOURCE_DIR=../bolt-tests
 
 RUN cd build && ninja check-bolt
 RUN cd build && ninja check-large-bolt
-RUN cd build && ninja check-large-bolt-arm

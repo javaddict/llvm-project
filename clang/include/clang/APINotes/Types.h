@@ -233,9 +233,13 @@ inline bool operator!=(const CommonTypeInfo &LHS, const CommonTypeInfo &RHS) {
 /// Describes API notes data for an Objective-C class or protocol or a C++
 /// namespace.
 class ContextInfo : public CommonTypeInfo {
-  /// The default nullability, if any.
-  LLVM_PREFERRED_TYPE(NullabilityKindOrNone)
-  unsigned DefaultNullabilityOrNone : 3;
+  /// Whether this class has a default nullability.
+  LLVM_PREFERRED_TYPE(bool)
+  unsigned HasDefaultNullability : 1;
+
+  /// The default nullability.
+  LLVM_PREFERRED_TYPE(NullabilityKind)
+  unsigned DefaultNullability : 2;
 
   /// Whether this class has designated initializers recorded.
   LLVM_PREFERRED_TYPE(bool)
@@ -253,7 +257,7 @@ class ContextInfo : public CommonTypeInfo {
 
 public:
   ContextInfo()
-      : DefaultNullabilityOrNone(0), HasDesignatedInits(0),
+      : HasDefaultNullability(0), DefaultNullability(0), HasDesignatedInits(0),
         SwiftImportAsNonGenericSpecified(false), SwiftImportAsNonGeneric(false),
         SwiftObjCMembersSpecified(false), SwiftObjCMembers(false) {}
 
@@ -262,15 +266,17 @@ public:
   ///
   /// Returns the default nullability, if implied, or std::nullopt if there is
   /// none.
-  NullabilityKindOrNone getDefaultNullability() const {
-    return NullabilityKindOrNone::fromInternalRepresentation(
-        DefaultNullabilityOrNone);
+  std::optional<NullabilityKind> getDefaultNullability() const {
+    return HasDefaultNullability
+               ? std::optional<NullabilityKind>(
+                     static_cast<NullabilityKind>(DefaultNullability))
+               : std::nullopt;
   }
 
   /// Set the default nullability for properties and methods of this class.
   void setDefaultNullability(NullabilityKind Kind) {
-    DefaultNullabilityOrNone =
-        NullabilityKindOrNone(Kind).toInternalRepresentation();
+    HasDefaultNullability = true;
+    DefaultNullability = static_cast<unsigned>(Kind);
   }
 
   bool hasDesignatedInits() const { return HasDesignatedInits; }
@@ -332,97 +338,32 @@ inline bool operator!=(const ContextInfo &LHS, const ContextInfo &RHS) {
   return !(LHS == RHS);
 }
 
-class BoundsSafetyInfo {
-public:
-  enum class BoundsSafetyKind {
-    CountedBy,
-    CountedByOrNull,
-    SizedBy,
-    SizedByOrNull,
-    EndedBy,
-  };
-
-private:
-  /// The kind of bounds safety for this property. Only valid if the bounds
-  /// safety has been audited.
-  LLVM_PREFERRED_TYPE(BoundsSafetyKind)
-  unsigned Kind : 3;
-
-  /// Whether the bounds safety kind has been audited.
-  LLVM_PREFERRED_TYPE(bool)
-  unsigned KindAudited : 1;
-
-  /// The pointer indirection level at which the bounds annotation applies.
-  /// Only valid if LevelAudited is set.
-  unsigned Level : 3;
-
-  /// Whether the pointer indirection level has been specified.
-  LLVM_PREFERRED_TYPE(bool)
-  unsigned LevelAudited : 1;
-
-public:
-  std::string ExternalBounds;
-
-  BoundsSafetyInfo()
-      : Kind(0), KindAudited(false), Level(0), LevelAudited(false),
-        ExternalBounds("") {}
-
-  std::optional<BoundsSafetyKind> getKind() const {
-    return KindAudited ? std::optional<BoundsSafetyKind>(
-                             static_cast<BoundsSafetyKind>(Kind))
-                       : std::nullopt;
-  }
-
-  void setKindAudited(BoundsSafetyKind kind) {
-    KindAudited = true;
-    Kind = static_cast<unsigned>(kind);
-  }
-
-  std::optional<unsigned> getLevel() const {
-    return LevelAudited ? std::optional<unsigned>(Level) : std::nullopt;
-  }
-
-  void setLevelAudited(unsigned level) {
-    LevelAudited = true;
-    Level = level;
-  }
-
-  friend bool operator==(const BoundsSafetyInfo &, const BoundsSafetyInfo &);
-
-  LLVM_DUMP_METHOD void dump(llvm::raw_ostream &OS) const;
-};
-
-inline bool operator==(const BoundsSafetyInfo &LHS,
-                       const BoundsSafetyInfo &RHS) {
-  return LHS.KindAudited == RHS.KindAudited && LHS.Kind == RHS.Kind &&
-         LHS.LevelAudited == RHS.LevelAudited && LHS.Level == RHS.Level &&
-         LHS.ExternalBounds == RHS.ExternalBounds;
-}
-
-inline bool operator!=(const BoundsSafetyInfo &LHS,
-                       const BoundsSafetyInfo &RHS) {
-  return !(LHS == RHS);
-}
-
 /// API notes for a variable/property.
 class VariableInfo : public CommonEntityInfo {
-  /// The kind of nullability for this property, if the nullability
+  /// Whether this property has been audited for nullability.
+  LLVM_PREFERRED_TYPE(bool)
+  unsigned NullabilityAudited : 1;
+
+  /// The kind of nullability for this property. Only valid if the nullability
   /// has been audited.
-  LLVM_PREFERRED_TYPE(NullabilityKindOrNone)
-  unsigned NullabilityOrNone : 3;
+  LLVM_PREFERRED_TYPE(NullabilityKind)
+  unsigned Nullable : 2;
 
   /// The C type of the variable, as a string.
   std::string Type;
 
 public:
-  VariableInfo() : NullabilityOrNone(0) {}
+  VariableInfo() : NullabilityAudited(false), Nullable(0) {}
 
-  NullabilityKindOrNone getNullability() const {
-    return NullabilityKindOrNone::fromInternalRepresentation(NullabilityOrNone);
+  std::optional<NullabilityKind> getNullability() const {
+    return NullabilityAudited ? std::optional<NullabilityKind>(
+                                    static_cast<NullabilityKind>(Nullable))
+                              : std::nullopt;
   }
 
   void setNullabilityAudited(NullabilityKind kind) {
-    NullabilityOrNone = NullabilityKindOrNone(kind).toInternalRepresentation();
+    NullabilityAudited = true;
+    Nullable = static_cast<unsigned>(kind);
   }
 
   const std::string &getType() const { return Type; }
@@ -433,7 +374,7 @@ public:
   VariableInfo &operator|=(const VariableInfo &RHS) {
     static_cast<CommonEntityInfo &>(*this) |= RHS;
 
-    if (!getNullability() && RHS.getNullability())
+    if (!NullabilityAudited && RHS.NullabilityAudited)
       setNullabilityAudited(*RHS.getNullability());
     if (Type.empty())
       Type = RHS.Type;
@@ -446,7 +387,8 @@ public:
 
 inline bool operator==(const VariableInfo &LHS, const VariableInfo &RHS) {
   return static_cast<const CommonEntityInfo &>(LHS) == RHS &&
-         LHS.NullabilityOrNone == RHS.NullabilityOrNone && LHS.Type == RHS.Type;
+         LHS.NullabilityAudited == RHS.NullabilityAudited &&
+         LHS.Nullable == RHS.Nullable && LHS.Type == RHS.Type;
 }
 
 inline bool operator!=(const VariableInfo &LHS, const VariableInfo &RHS) {
@@ -535,12 +477,10 @@ class ParamInfo : public VariableInfo {
   unsigned RawRetainCountConvention : 3;
 
 public:
-  std::optional<BoundsSafetyInfo> BoundsSafety;
-
   ParamInfo()
       : NoEscapeSpecified(false), NoEscape(false),
         LifetimeboundSpecified(false), Lifetimebound(false),
-        RawRetainCountConvention(), BoundsSafety(std::nullopt) {}
+        RawRetainCountConvention() {}
 
   std::optional<bool> isNoEscape() const {
     return NoEscapeSpecified ? std::optional<bool>(NoEscape) : std::nullopt;
@@ -586,9 +526,6 @@ public:
     if (!RawRetainCountConvention)
       RawRetainCountConvention = RHS.RawRetainCountConvention;
 
-    if (!BoundsSafety)
-      BoundsSafety = RHS.BoundsSafety;
-
     return *this;
   }
 
@@ -603,8 +540,7 @@ inline bool operator==(const ParamInfo &LHS, const ParamInfo &RHS) {
          LHS.NoEscape == RHS.NoEscape &&
          LHS.LifetimeboundSpecified == RHS.LifetimeboundSpecified &&
          LHS.Lifetimebound == RHS.Lifetimebound &&
-         LHS.RawRetainCountConvention == RHS.RawRetainCountConvention &&
-         LHS.BoundsSafety == RHS.BoundsSafety;
+         LHS.RawRetainCountConvention == RHS.RawRetainCountConvention;
 }
 
 inline bool operator!=(const ParamInfo &LHS, const ParamInfo &RHS) {
@@ -634,10 +570,6 @@ public:
   /// A biased RetainCountConventionKind, where 0 means "unspecified".
   unsigned RawRetainCountConvention : 3;
 
-  /// Whether the function has the [[clang::unsafe_buffer_usage]] attribute
-  LLVM_PREFERRED_TYPE(bool)
-  unsigned UnsafeBufferUsage : 1;
-
   // NullabilityKindSize bits are used to encode the nullability. The info
   // about the return type is stored at position 0, followed by the nullability
   // of the parameters.
@@ -656,7 +588,7 @@ public:
 
   FunctionInfo()
       : NullabilityAudited(false), NumAdjustedNullable(0),
-        RawRetainCountConvention(), UnsafeBufferUsage(0) {}
+        RawRetainCountConvention() {}
 
   static unsigned getMaxNullabilityIndex() {
     return ((sizeof(NullabilityPayload) * CHAR_BIT) / NullabilityKindSize);
@@ -728,7 +660,6 @@ public:
 inline bool operator==(const FunctionInfo &LHS, const FunctionInfo &RHS) {
   return static_cast<const CommonEntityInfo &>(LHS) == RHS &&
          LHS.NullabilityAudited == RHS.NullabilityAudited &&
-         LHS.UnsafeBufferUsage == RHS.UnsafeBufferUsage &&
          LHS.NumAdjustedNullable == RHS.NumAdjustedNullable &&
          LHS.NullabilityPayload == RHS.NullabilityPayload &&
          LHS.ResultType == RHS.ResultType && LHS.Params == RHS.Params &&

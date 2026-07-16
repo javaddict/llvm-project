@@ -13,10 +13,10 @@
 
 namespace llvm {
 
-class ShrinkWrapPass : public OptionalPassInfoMixin<ShrinkWrapPass> {
+class ShrinkWrapPass : public PassInfoMixin<ShrinkWrapPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
 
   MachineFunctionProperties getRequiredProperties() const {
     return MachineFunctionProperties().setNoVRegs();

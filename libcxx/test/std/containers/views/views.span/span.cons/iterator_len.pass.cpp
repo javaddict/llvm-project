@@ -5,16 +5,14 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===---------------------------------------------------------------------===//
-
-// REQUIRES: std-at-least-c++20
+// UNSUPPORTED: c++03, c++11, c++14, c++17
 
 // <span>
 
-// template<class It>
-//   constexpr explicit(extent != dynamic_extent) span(It first, size_type count);
+// template <class It>
+// constexpr explicit(Extent != dynamic_extent) span(It first, size_type count);
+//  If Extent is not equal to dynamic_extent, then count shall be equal to Extent.
 //
-// Hardened preconditions:
-//   - If extent is not equal to dynamic_extent, then count == extent is true.
 
 #include <cassert>
 #include <cstddef>

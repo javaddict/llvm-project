@@ -1,5 +1,5 @@
 // RUN: %libomptarget-compile-run-and-check-generic
-// REQUIRES: gpu
+// XFAIL: intelgpu
 #include <assert.h>
 #include <omp.h>
 #include <stdio.h>

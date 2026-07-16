@@ -629,10 +629,6 @@ using the ``let`` statement.
   field, it will be assigned an integer value. Values are assigned in
   alphabetical order starting with 0.
 
-* ``string UnderlyingType``. The name of the underlying C++ data type
-  of the enum. If a record has no such field, there will be no specification
-  in the generated enum.
-
 Here is an example where the values of the elements are specified
 explicitly, as a template argument to the ``BEntry`` class. The resulting
 C++ code is shown.
@@ -674,7 +670,6 @@ by element name.
 
   def CEnum : GenericEnum {
     let FilterClass = "CEnum";
-    let UnderlyingType = "uint32_t";
   }
 
   class CEnum;
@@ -686,7 +681,7 @@ by element name.
 .. code-block:: text
 
   #ifdef GET_CEnum_DECL
-  enum CEnum : uint32_t {
+  enum CEnum {
     CBar = 0,
     CBaz = 1,
     CFoo = 2,

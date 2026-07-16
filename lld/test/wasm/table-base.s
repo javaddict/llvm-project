@@ -26,6 +26,12 @@ _start:
 # CHECK-DEFAULT-NEXT:    Globals:
 # CHECK-DEFAULT-NEXT:      - Index:           0
 # CHECK-DEFAULT-NEXT:        Type:            I32
+# CHECK-DEFAULT-NEXT:        Mutable:         true
+# CHECK-DEFAULT-NEXT:        InitExpr:
+# CHECK-DEFAULT-NEXT:          Opcode:          I32_CONST
+# CHECK-DEFAULT-NEXT:          Value:           65536
+# CHECK-DEFAULT-NEXT:      - Index:           1
+# CHECK-DEFAULT-NEXT:        Type:            I32
 # CHECK-DEFAULT-NEXT:        Mutable:         false
 # CHECK-DEFAULT-NEXT:        InitExpr:
 # CHECK-DEFAULT-NEXT:          Opcode:          I32_CONST
@@ -34,7 +40,7 @@ _start:
 # CHECK-DEFAULT:       - Type:            EXPORT
 # CHECK-DEFAULT:           - Name:            __table_base
 # CHECK-DEFAULT-NEXT:        Kind:            GLOBAL
-# CHECK-DEFAULT-NEXT:        Index:           0
+# CHECK-DEFAULT-NEXT:        Index:           1
 
 # CHECK-100:       - Type:            TABLE
 # CHECK-100-NEXT:    Tables:
@@ -49,6 +55,12 @@ _start:
 # CHECK-100-NEXT:    Globals:
 # CHECK-100-NEXT:      - Index:           0
 # CHECK-100-NEXT:        Type:            I32
+# CHECK-100-NEXT:        Mutable:         true
+# CHECK-100-NEXT:        InitExpr:
+# CHECK-100-NEXT:          Opcode:          I32_CONST
+# CHECK-100-NEXT:          Value:           65536
+# CHECK-100-NEXT:      - Index:           1
+# CHECK-100-NEXT:        Type:            I32
 # CHECK-100-NEXT:        Mutable:         false
 # CHECK-100-NEXT:        InitExpr:
 # CHECK-100-NEXT:          Opcode:          I32_CONST
@@ -57,4 +69,4 @@ _start:
 # CHECK-100:       - Type:            EXPORT
 # CHECK-100:           - Name:            __table_base
 # CHECK-100-NEXT:        Kind:            GLOBAL
-# CHECK-100-NEXT:        Index:           0
+# CHECK-100-NEXT:        Index:           1

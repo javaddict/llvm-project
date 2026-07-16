@@ -123,7 +123,8 @@ PlatformFreeBSD::PlatformFreeBSD(bool is_host)
   } else {
     m_supported_architectures = CreateArchList(
         {llvm::Triple::x86_64, llvm::Triple::x86, llvm::Triple::aarch64,
-         llvm::Triple::arm, llvm::Triple::ppc64, llvm::Triple::ppc},
+         llvm::Triple::arm, llvm::Triple::mips64, llvm::Triple::ppc64,
+         llvm::Triple::ppc},
         llvm::Triple::FreeBSD);
   }
 }
@@ -204,30 +205,40 @@ CompilerType PlatformFreeBSD::GetSiginfoType(const llvm::Triple &triple) {
   CompilerType &uid_type = uint_type;
 
   CompilerType sigval_type = ast->CreateRecordType(
-      nullptr, OptionalClangModuleID(), "__lldb_sigval_t",
+      nullptr, OptionalClangModuleID(), lldb::eAccessPublic, "__lldb_sigval_t",
       llvm::to_underlying(clang::TagTypeKind::Union), lldb::eLanguageTypeC);
   ast->StartTagDeclarationDefinition(sigval_type);
-  ast->AddFieldToRecordType(sigval_type, "sival_int", int_type, 0);
-  ast->AddFieldToRecordType(sigval_type, "sival_ptr", voidp_type, 0);
+  ast->AddFieldToRecordType(sigval_type, "sival_int", int_type,
+                            lldb::eAccessPublic, 0);
+  ast->AddFieldToRecordType(sigval_type, "sival_ptr", voidp_type,
+                            lldb::eAccessPublic, 0);
   ast->CompleteTagDeclarationDefinition(sigval_type);
 
   // siginfo_t
   CompilerType siginfo_type = ast->CreateRecordType(
-      nullptr, OptionalClangModuleID(), "__lldb_siginfo_t",
+      nullptr, OptionalClangModuleID(), lldb::eAccessPublic, "__lldb_siginfo_t",
       llvm::to_underlying(clang::TagTypeKind::Struct), lldb::eLanguageTypeC);
   ast->StartTagDeclarationDefinition(siginfo_type);
-  ast->AddFieldToRecordType(siginfo_type, "si_signo", int_type, 0);
-  ast->AddFieldToRecordType(siginfo_type, "si_errno", int_type, 0);
-  ast->AddFieldToRecordType(siginfo_type, "si_code", int_type, 0);
-  ast->AddFieldToRecordType(siginfo_type, "si_pid", pid_type, 0);
-  ast->AddFieldToRecordType(siginfo_type, "si_uid", uid_type, 0);
-  ast->AddFieldToRecordType(siginfo_type, "si_status", int_type, 0);
-  ast->AddFieldToRecordType(siginfo_type, "si_addr", voidp_type, 0);
-  ast->AddFieldToRecordType(siginfo_type, "si_value", sigval_type, 0);
+  ast->AddFieldToRecordType(siginfo_type, "si_signo", int_type,
+                            lldb::eAccessPublic, 0);
+  ast->AddFieldToRecordType(siginfo_type, "si_errno", int_type,
+                            lldb::eAccessPublic, 0);
+  ast->AddFieldToRecordType(siginfo_type, "si_code", int_type,
+                            lldb::eAccessPublic, 0);
+  ast->AddFieldToRecordType(siginfo_type, "si_pid", pid_type,
+                            lldb::eAccessPublic, 0);
+  ast->AddFieldToRecordType(siginfo_type, "si_uid", uid_type,
+                            lldb::eAccessPublic, 0);
+  ast->AddFieldToRecordType(siginfo_type, "si_status", int_type,
+                            lldb::eAccessPublic, 0);
+  ast->AddFieldToRecordType(siginfo_type, "si_addr", voidp_type,
+                            lldb::eAccessPublic, 0);
+  ast->AddFieldToRecordType(siginfo_type, "si_value", sigval_type,
+                            lldb::eAccessPublic, 0);
 
   // union used to hold the signal data
   CompilerType union_type = ast->CreateRecordType(
-      nullptr, OptionalClangModuleID(), "",
+      nullptr, OptionalClangModuleID(), lldb::eAccessPublic, "",
       llvm::to_underlying(clang::TagTypeKind::Union), lldb::eLanguageTypeC);
   ast->StartTagDeclarationDefinition(union_type);
 
@@ -237,7 +248,7 @@ CompilerType PlatformFreeBSD::GetSiginfoType(const llvm::Triple &triple) {
                                      {
                                          {"_trapno", int_type},
                                      }),
-      0);
+      lldb::eAccessPublic, 0);
 
   ast->AddFieldToRecordType(
       union_type, "_timer",
@@ -246,7 +257,7 @@ CompilerType PlatformFreeBSD::GetSiginfoType(const llvm::Triple &triple) {
                                          {"_timerid", int_type},
                                          {"_overrun", int_type},
                                      }),
-      0);
+      lldb::eAccessPublic, 0);
 
   ast->AddFieldToRecordType(
       union_type, "_mesgq",
@@ -254,7 +265,7 @@ CompilerType PlatformFreeBSD::GetSiginfoType(const llvm::Triple &triple) {
                                      {
                                          {"_mqd", int_type},
                                      }),
-      0);
+      lldb::eAccessPublic, 0);
 
   ast->AddFieldToRecordType(
       union_type, "_poll",
@@ -262,10 +273,11 @@ CompilerType PlatformFreeBSD::GetSiginfoType(const llvm::Triple &triple) {
                                      {
                                          {"_band", long_type},
                                      }),
-      0);
+      lldb::eAccessPublic, 0);
 
   ast->CompleteTagDeclarationDefinition(union_type);
-  ast->AddFieldToRecordType(siginfo_type, "_reason", union_type, 0);
+  ast->AddFieldToRecordType(siginfo_type, "_reason", union_type,
+                            lldb::eAccessPublic, 0);
 
   ast->CompleteTagDeclarationDefinition(siginfo_type);
   return siginfo_type;

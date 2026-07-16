@@ -27,7 +27,14 @@ using namespace mlir;
 namespace {
 
 static bool insideAccComputeRegion(mlir::Operation *op) {
-  return op->getParentOfType<ACC_COMPUTE_CONSTRUCT_OPS>();
+  mlir::Operation *parent{op->getParentOp()};
+  while (parent) {
+    if (isa<ACC_COMPUTE_CONSTRUCT_OPS>(parent)) {
+      return true;
+    }
+    parent = parent->getParentOp();
+  }
+  return false;
 }
 
 static void collectVars(mlir::ValueRange operands,

@@ -40,30 +40,25 @@ struct ReverseIterator {
 /// enumerated according to their successor relationship. Unreachable blocks are
 /// not enumerated. Blocks may not be erased during the traversal.
 ///
-/// Note: If `SkipGraphRegion` is set to "true", graph regions (regions without
-/// SSA dominance) are silently skipped during the traversal. If set to "false"
-/// (the default), graph regions are visited but without dominance guarantees
-/// (i.e., defining ops are not guaranteed to be visited before their users).
-///
-/// Regions of unregistered ops are always treated as SSACFG regions (i.e.,
-/// they are visited even when `SkipGraphRegion=true`), because
-/// `mayHaveSSADominance` returns true for unregistered ops.
-template <bool SkipGraphRegion = false>
+/// Note: If `NoGraphRegions` is set to "true", this iterator asserts that each
+/// visited region has SSA dominance. In either case, the ops in such regions
+/// are visited in forward order, but for regions without SSA dominance this
+/// does not guarantee that defining ops are visited before their users.
+template <bool NoGraphRegions = false>
 struct ForwardDominanceIterator {
   static Block &makeIterable(Block &range) {
     return ForwardIterator::makeIterable(range);
   }
 
   static auto makeIterable(Region &region) {
-    Block *null = nullptr;
-    if (SkipGraphRegion && !mayHaveSSADominance(region)) {
-      // Skip graph regions.
-      return llvm::make_pointee_range(
-          llvm::make_range(llvm::df_end(null), llvm::df_end(null)));
+    if (NoGraphRegions) {
+      // Only regions with SSA dominance are allowed.
+      assert(mayHaveSSADominance(region) && "graph regions are not allowed");
     }
 
     // Create DFS iterator. Blocks are enumerated according to their successor
     // relationship.
+    Block *null = nullptr;
     auto it = region.empty()
                   ? llvm::make_range(llvm::df_end(null), llvm::df_end(null))
                   : llvm::depth_first(&region.front());
@@ -84,13 +79,9 @@ struct ForwardDominanceIterator {
 /// Cycles in the block graph are broken in an unspecified way. Unreachable
 /// blocks are not enumerated. Blocks may not be erased during the traversal.
 ///
-/// Note: If `SkipGraphRegion` is set to "true", graph regions (regions without
-/// SSA dominance) are silently skipped during the traversal.
-///
-/// Regions of unregistered ops are always treated as SSACFG regions (i.e.,
-/// they are visited even when `SkipGraphRegion=true`), because
-/// `mayHaveSSADominance` returns true for unregistered ops.
-template <bool SkipGraphRegion = false>
+/// Note: If `NoGraphRegions` is set to "true", this iterator asserts that each
+/// visited region has SSA dominance.
+template <bool NoGraphRegions = false>
 struct ReverseDominanceIterator {
   // llvm::reverse uses RangeT::rbegin and RangeT::rend.
   static constexpr auto makeIterable(Block &range) {
@@ -102,23 +93,20 @@ struct ReverseDominanceIterator {
   }
 
   static auto makeIterable(Region &region) {
-    struct Traversal : llvm::PostOrderTraversal<Region *> {
-      using BaseT = llvm::PostOrderTraversal<Region *>;
-      using BaseT::PostOrderTraversal; // Re-use constructors.
-
-      // Walk API expects Block references instead of pointers.
-      using iterator = llvm::pointee_iterator<typename BaseT::iterator>;
-      iterator begin() { return iterator(BaseT::begin()); }
-      iterator end() { return iterator(BaseT::end()); }
-    };
-
-    // Skip graph regions.
-    if ((SkipGraphRegion && !mayHaveSSADominance(region)) || region.empty())
-      return Traversal();
+    if (NoGraphRegions) {
+      // Only regions with SSA dominance are allowed.
+      assert(mayHaveSSADominance(region) && "graph regions are not allowed");
+    }
 
     // Create post-order iterator. Blocks are enumerated according to their
     // successor relationship.
-    return Traversal(&region);
+    Block *null = nullptr;
+    auto it = region.empty()
+                  ? llvm::make_range(llvm::po_end(null), llvm::po_end(null))
+                  : llvm::post_order(&region.front());
+
+    // Walk API expects Block references instead of pointers.
+    return llvm::make_pointee_range(it);
   }
 };
 } // namespace mlir

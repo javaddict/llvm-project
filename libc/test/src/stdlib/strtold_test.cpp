@@ -78,7 +78,7 @@ public:
     using FPBits = LIBC_NAMESPACE::fputil::FPBits<long double>;
     FPBits expected_fp =
         FPBits(static_cast<FPBits::StorageType>(expectedRawData));
-    [[maybe_unused]] const int expected_errno = expectedErrno;
+    const int expected_errno = expectedErrno;
 
     long double result = LIBC_NAMESPACE::strtold(inputString, &str_end);
 

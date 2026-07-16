@@ -1,6 +1,6 @@
 ; RUN: llc -mtriple=x86_64-unknown-linux-gnu -verify-machineinstrs < %s | FileCheck %s
 
-; CHECK:          .prefalign 4, .Lfunc_end0, nop
+; CHECK:          .p2align 4
 ; CHECK-LABEL:    __cfi_f1:
 ; CHECK-COUNT-11:   nop
 ; CHECK-NEXT:       movl $12345678, %eax
@@ -12,11 +12,10 @@ define void @f1(ptr noundef %x) !kcfi_type !1 {
   call void %x() [ "kcfi"(i32 12345678) ]
   ret void
 }
-; CHECK:          .Lfunc_end0:
 
-; CHECK:          .prefalign 4
+; CHECK:          .p2align 4
 ; CHECK-NOT:      __cfi_f2:
-; CHECK-NOT:        {{^[[:space:]]+}}nop
+; CHECK-NOT:        nop
 ; CHECK-LABEL:    f2:
 define void @f2(ptr noundef %x) {
 ; CHECK:            addl -4(%r{{..}}), %r10d
@@ -24,9 +23,9 @@ define void @f2(ptr noundef %x) {
   ret void
 }
 
-; CHECK:          .prefalign 4
+; CHECK:          .p2align 4
 ; CHECK-LABEL:    __cfi_f3:
-; CHECK-NOT:        {{^[[:space:]]+}}nop
+; CHECK-NOT:        nop
 ; CHECK-NEXT:       movl $12345678, %eax
 ; CHECK-COUNT-11:   nop
 ; CHECK-LABEL:    f3:
@@ -36,9 +35,9 @@ define void @f3(ptr noundef %x) #0 !kcfi_type !1 {
   ret void
 }
 
-; CHECK:          .prefalign 4
+; CHECK:          .p2align 4
 ; CHECK-NOT:      __cfi_f4:
-; CHECK-COUNT-16:   {{^[[:space:]]+}}nop
+; CHECK-COUNT-16:   nop
 ; CHECK-LABEL:    f4:
 define void @f4(ptr noundef %x) #0 {
 ; CHECK:            addl -15(%r{{..}}), %r10d

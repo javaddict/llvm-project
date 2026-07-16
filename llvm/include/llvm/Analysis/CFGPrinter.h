@@ -38,24 +38,28 @@ namespace llvm {
 class ModuleSlotTracker;
 
 template <class GraphType> struct GraphTraits;
-class CFGViewerPass : public RequiredPassInfoMixin<CFGViewerPass> {
+class CFGViewerPass : public PassInfoMixin<CFGViewerPass> {
 public:
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 
-class CFGOnlyViewerPass : public RequiredPassInfoMixin<CFGOnlyViewerPass> {
+class CFGOnlyViewerPass : public PassInfoMixin<CFGOnlyViewerPass> {
 public:
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 
-class CFGPrinterPass : public RequiredPassInfoMixin<CFGPrinterPass> {
+class CFGPrinterPass : public PassInfoMixin<CFGPrinterPass> {
 public:
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 
-class CFGOnlyPrinterPass : public RequiredPassInfoMixin<CFGOnlyPrinterPass> {
+class CFGOnlyPrinterPass : public PassInfoMixin<CFGOnlyPrinterPass> {
 public:
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 
 class DOTFuncInfo {
@@ -231,12 +235,13 @@ struct DOTGraphTraits<DOTFuncInfo *> : public DefaultDOTGraphTraits {
   static std::string getEdgeSourceLabel(const BasicBlock *Node,
                                         const_succ_iterator I) {
     // Label source of conditional branches with "T" or "F"
-    if (isa<CondBrInst>(Node->getTerminator()))
-      return (I == succ_begin(Node)) ? "T" : "F";
+    if (const BranchInst *BI = dyn_cast<BranchInst>(Node->getTerminator()))
+      if (BI->isConditional())
+        return (I == succ_begin(Node)) ? "T" : "F";
 
     // Label source of switch edges with the associated value.
     if (const SwitchInst *SI = dyn_cast<SwitchInst>(Node->getTerminator())) {
-      unsigned SuccNo = std::distance(succ_begin(SI), I);
+      unsigned SuccNo = I.getSuccessorIndex();
 
       if (SuccNo == 0)
         return "def";
@@ -268,8 +273,8 @@ struct DOTGraphTraits<DOTFuncInfo *> : public DefaultDOTGraphTraits {
     if (!CFGInfo->showEdgeWeights())
       return "";
 
+    unsigned OpNo = I.getSuccessorIndex();
     const Instruction *TI = Node->getTerminator();
-    unsigned OpNo = std::distance(succ_begin(TI), I);
     BasicBlock *SuccBB = TI->getSuccessor(OpNo);
     auto BranchProb = CFGInfo->getBPI()->getEdgeProbability(Node, SuccBB);
     double WeightPercent = ((double)BranchProb.getNumerator()) /
@@ -306,7 +311,7 @@ struct DOTGraphTraits<DOTFuncInfo *> : public DefaultDOTGraphTraits {
     if (!WeightsNode)
       return TTAttr;
 
-    OpNo += 1;
+    OpNo = I.getSuccessorIndex() + 1;
     if (OpNo >= WeightsNode->getNumOperands())
       return TTAttr;
     ConstantInt *Weight =

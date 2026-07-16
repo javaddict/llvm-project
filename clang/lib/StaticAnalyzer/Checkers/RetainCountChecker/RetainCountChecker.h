@@ -309,7 +309,8 @@ public:
   checkRegionChanges(ProgramStateRef state,
                      const InvalidatedSymbols *invalidated,
                      ArrayRef<const MemRegion *> ExplicitRegions,
-                     ArrayRef<const MemRegion *> Regions, const StackFrame *SF,
+                     ArrayRef<const MemRegion *> Regions,
+                     const LocationContext* LCtx,
                      const CallEvent *Call) const;
 
   ExplodedNode* checkReturnWithRetEffect(const ReturnStmt *S, CheckerContext &C,
@@ -371,12 +372,12 @@ const RefVal *getRefBinding(ProgramStateRef State, SymbolRef Sym);
 
 /// Returns true if this stack frame is for an Objective-C method that is a
 /// property getter or setter whose body has been synthesized by the analyzer.
-inline bool isSynthesizedAccessor(const StackFrame *SF) {
-  auto Method = dyn_cast_or_null<ObjCMethodDecl>(SF->getDecl());
+inline bool isSynthesizedAccessor(const StackFrameContext *SFC) {
+  auto Method = dyn_cast_or_null<ObjCMethodDecl>(SFC->getDecl());
   if (!Method || !Method->isPropertyAccessor())
     return false;
 
-  return SF->getAnalysisDeclContext()->isBodyAutosynthesized();
+  return SFC->getAnalysisDeclContext()->isBodyAutosynthesized();
 }
 
 } // end namespace retaincountchecker

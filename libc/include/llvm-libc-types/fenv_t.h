@@ -25,7 +25,12 @@ typedef struct {
 } fenv_t;
 #elif defined(__riscv)
 typedef unsigned int fenv_t;
-#elif defined(__AMDGPU__) || defined(__NVPTX__) || defined(__SPIRV__)
+#elif defined(__AMDGPU__) || defined(__NVPTX__)
+typedef struct {
+  unsigned int __fpc;
+} fenv_t;
+#elif defined(__haydn__) || defined(__HAYDN__)
+// Soft-float DSP: no HW FPSCR; dummy FEnvImpl stores nothing meaningful.
 typedef struct {
   unsigned int __fpc;
 } fenv_t;

@@ -28,12 +28,14 @@ PCHGenerator::PCHGenerator(
     const CodeGenOptions &CodeGenOpts,
     ArrayRef<std::shared_ptr<ModuleFileExtension>> Extensions,
     bool AllowASTWithErrors, bool IncludeTimestamps,
-    bool BuildingImplicitModule, bool GeneratingReducedBMI)
+    bool BuildingImplicitModule, bool ShouldCacheASTInMemory,
+    bool GeneratingReducedBMI)
     : PP(PP), Subject(&PP), OutputFile(OutputFile), isysroot(isysroot.str()),
       Buffer(std::move(Buffer)), Stream(this->Buffer->Data),
       Writer(Stream, this->Buffer->Data, ModCache, CodeGenOpts, Extensions,
              IncludeTimestamps, BuildingImplicitModule, GeneratingReducedBMI),
-      AllowASTWithErrors(AllowASTWithErrors) {
+      AllowASTWithErrors(AllowASTWithErrors),
+      ShouldCacheASTInMemory(ShouldCacheASTInMemory) {
   this->Buffer->IsComplete = false;
 }
 
@@ -82,7 +84,8 @@ void PCHGenerator::HandleTranslationUnit(ASTContext &Ctx) {
   if (AllowASTWithErrors)
     PP.getDiagnostics().getClient()->clear();
 
-  Buffer->Signature = Writer.WriteAST(Subject, OutputFile, Module, isysroot);
+  Buffer->Signature = Writer.WriteAST(Subject, OutputFile, Module, isysroot,
+                                      ShouldCacheASTInMemory);
 
   Buffer->IsComplete = true;
 }
@@ -108,7 +111,8 @@ CXX20ModulesGenerator::CXX20ModulesGenerator(Preprocessor &PP,
           std::make_shared<PCHBuffer>(), CodeGenOpts,
           /*Extensions=*/ArrayRef<std::shared_ptr<ModuleFileExtension>>(),
           AllowASTWithErrors, /*IncludeTimestamps=*/false,
-          /*BuildingImplicitModule=*/false, GeneratingReducedBMI) {}
+          /*BuildingImplicitModule=*/false, /*ShouldCacheASTInMemory=*/false,
+          GeneratingReducedBMI) {}
 
 Module *CXX20ModulesGenerator::getEmittingModule(ASTContext &Ctx) {
   Module *M = Ctx.getCurrentNamedModule();

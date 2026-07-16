@@ -24,6 +24,7 @@ LLVM_LIBC_FUNCTION(int, feof, (::FILE * stream)) {
       [&](rpc::Buffer *buffer, uint32_t) {
         ret = static_cast<int>(buffer->data[0]);
       });
+  port.close();
   return ret;
 }
 

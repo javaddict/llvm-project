@@ -1,4 +1,6 @@
 .. title:: clang-tidy - cppcoreguidelines-use-default-member-init
+.. meta::
+   :http-equiv=refresh: 5;URL=../modernize/use-default-member-init.html
 
 cppcoreguidelines-use-default-member-init
 =========================================

@@ -112,13 +112,14 @@ public:
 
 /// \brief Machine function pass which print \c MachineDominatorTree.
 class MachineDominatorTreePrinterPass
-    : public RequiredPassInfoMixin<MachineDominatorTreePrinterPass> {
+    : public PassInfoMixin<MachineDominatorTreePrinterPass> {
   raw_ostream &OS;
 
 public:
   explicit MachineDominatorTreePrinterPass(raw_ostream &OS) : OS(OS) {}
   LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
                                  MachineFunctionAnalysisManager &MFAM);
+  static bool isRequired() { return true; }
 };
 
 /// \brief Analysis pass which computes a \c MachineDominatorTree.

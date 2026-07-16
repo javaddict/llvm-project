@@ -68,7 +68,7 @@ bool llvm::TableGen::Emitter::ApplyCallback(const RecordKeeper &Records,
     std::string S;
     raw_string_ostream OS(S);
     Fn.SingleFileGenerator(Records, OS);
-    OutFiles = {std::move(S), {}};
+    OutFiles = {S, {}};
     return false;
   }
   if (Fn.MultiFileGenerator) {

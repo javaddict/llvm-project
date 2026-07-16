@@ -148,18 +148,6 @@ unsigned TargetInstrInfo::getInlineAsmLength(
   return Length;
 }
 
-unsigned TargetInstrInfo::getInstBundleSize(const MachineInstr &MI) const {
-  unsigned Size = 0;
-  MachineBasicBlock::const_instr_iterator I = MI.getIterator();
-  MachineBasicBlock::const_instr_iterator E = MI.getParent()->instr_end();
-  while (++I != E && I->isInsideBundle()) {
-    assert(!I->isBundle() && "No nested bundle!");
-    Size += getInstSizeInBytes(*I);
-  }
-
-  return Size;
-}
-
 /// ReplaceTailWithBranchTo - Delete the instruction OldInst and everything
 /// after it, replacing it with an unconditional branch to NewDest.
 void
@@ -459,8 +447,7 @@ bool TargetInstrInfo::getStackSlotRange(const TargetRegisterClass *RC,
 void TargetInstrInfo::reMaterialize(MachineBasicBlock &MBB,
                                     MachineBasicBlock::iterator I,
                                     Register DestReg, unsigned SubIdx,
-                                    const MachineInstr &Orig,
-                                    LaneBitmask UsedLanes) const {
+                                    const MachineInstr &Orig) const {
   MachineInstr *MI = MBB.getParent()->CloneMachineInstr(&Orig);
   MI->substituteRegister(MI->getOperand(0).getReg(), DestReg, SubIdx, TRI);
   MBB.insert(I, MI);
@@ -530,8 +517,7 @@ MCInst TargetInstrInfo::getNop() const { llvm_unreachable("Not implemented"); }
 MachineInstr *TargetInstrInfo::optimizeLoadInstr(MachineInstr &MI,
                                                  const MachineRegisterInfo *MRI,
                                                  Register &FoldAsLoadDefReg,
-                                                 MachineInstr *&DefMI,
-                                                 MachineInstr *&CopyMI) const {
+                                                 MachineInstr *&DefMI) const {
   // Check whether we can move DefMI here.
   DefMI = MRI->getVRegDef(FoldAsLoadDefReg);
   assert(DefMI);
@@ -557,8 +543,7 @@ MachineInstr *TargetInstrInfo::optimizeLoadInstr(MachineInstr &MI,
     return nullptr;
 
   // Check whether we can fold the def into SrcOperandId.
-  if (MachineInstr *FoldMI =
-          foldMemoryOperand(MI, SrcOperandIds, *DefMI, CopyMI)) {
+  if (MachineInstr *FoldMI = foldMemoryOperand(MI, SrcOperandIds, *DefMI)) {
     FoldAsLoadDefReg = 0;
     return FoldMI;
   }
@@ -717,7 +702,6 @@ static MachineInstr *foldInlineAsmMemOperand(MachineInstr &MI,
 
 MachineInstr *TargetInstrInfo::foldMemoryOperand(MachineInstr &MI,
                                                  ArrayRef<unsigned> Ops, int FI,
-                                                 MachineInstr *&CopyMI,
                                                  LiveIntervals *LIS,
                                                  VirtRegMap *VRM) const {
   auto Flags = MachineMemOperand::MONone;
@@ -766,7 +750,7 @@ MachineInstr *TargetInstrInfo::foldMemoryOperand(MachineInstr &MI,
     return foldInlineAsmMemOperand(MI, Ops, FI, *this);
   } else {
     // Ask the target to do the actual folding.
-    NewMI = foldMemoryOperandImpl(MF, MI, Ops, FI, CopyMI, LIS, VRM);
+    NewMI = foldMemoryOperandImpl(MF, MI, Ops, MI, FI, LIS, VRM);
   }
 
   if (NewMI) {
@@ -816,10 +800,10 @@ MachineInstr *TargetInstrInfo::foldMemoryOperand(MachineInstr &MI,
   return &*--Pos;
 }
 
-MachineInstr *
-TargetInstrInfo::foldMemoryOperand(MachineInstr &MI, ArrayRef<unsigned> Ops,
-                                   MachineInstr &LoadMI, MachineInstr *&CopyMI,
-                                   LiveIntervals *LIS, VirtRegMap *VRM) const {
+MachineInstr *TargetInstrInfo::foldMemoryOperand(MachineInstr &MI,
+                                                 ArrayRef<unsigned> Ops,
+                                                 MachineInstr &LoadMI,
+                                                 LiveIntervals *LIS) const {
   assert(LoadMI.canFoldAsLoad() && "LoadMI isn't foldable!");
 #ifndef NDEBUG
   for (unsigned OpIdx : Ops)
@@ -845,7 +829,7 @@ TargetInstrInfo::foldMemoryOperand(MachineInstr &MI, ArrayRef<unsigned> Ops,
     return foldInlineAsmMemOperand(MI, Ops, FrameIndex, *this);
   } else {
     // Ask the target to do the actual folding.
-    NewMI = foldMemoryOperandImpl(MF, MI, Ops, LoadMI, CopyMI, LIS, VRM);
+    NewMI = foldMemoryOperandImpl(MF, MI, Ops, MI, LoadMI, LIS);
   }
 
   if (!NewMI)
@@ -1134,7 +1118,7 @@ void TargetInstrInfo::reduceAccumulatorTree(
   if (RegistersToReduce.size() % 2 != 0)
     NewRegs.push_back(RegistersToReduce[RegistersToReduce.size() - 1]);
 
-  RegistersToReduce = std::move(NewRegs);
+  RegistersToReduce = NewRegs;
 }
 
 // The concept of the reassociation pass is that these operations can benefit

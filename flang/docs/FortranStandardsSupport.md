@@ -36,10 +36,10 @@ status of all important Fortran 2023 features. The table entries are based on th
 |------------------------------------------------------------|--------|---------------------------------------------------------|
 | Allow longer statement lines and overall statement length  | Y      | |
 | Automatic allocation of lengths of character variables     | N      | |
-| The specifiers typeof and classof                          | Y      | |
+| The specifiers typeof and classof                          | N      | |
 | Conditional expressions and arguments                      | N      | |
 | More use of boz constants                                  | P      | All usages other than enum are supported |
-| Intrinsics for extracting tokens from a string             | Y      | |
+| Intrinsics for extracting tokens from a string             | N      | |
 | Intrinsics for Trig functions that work in degrees         | Y      | |
 | Intrinsics for Trig functions that work in half revolutions| Y      | |
 | Changes to system_clock                                    | N      | |
@@ -48,7 +48,7 @@ status of all important Fortran 2023 features. The table entries are based on th
 | Extensions for c_f_pointer intrinsic                       | Y      | |
 | Procedures for converting between fortran and c strings    | N      | |
 | The at edit descriptor                                     | N      | |
-| Control over leading zeros in output of real values        | Y      | |
+| Control over leading zeros in output of real values        | N      | |
 | Extensions for Namelist                                    | N      | |
 | Allow an object of a type with a coarray ultimate component to be an array or allocatable | N | |
 | Put with Notify                                            | N      | |
@@ -56,7 +56,7 @@ status of all important Fortran 2023 features. The table entries are based on th
 | Simple procedures                                          | N      | |
 | Using integer arrays to specify subscripts                 | N      | |
 | Using integer arrays to specify rank and bound of an array | N      | |
-| Using an integer constant to specify rank                  | Y      | |
+| Using an integer constant to specify rank                  | N      | |
 | Reduction specifier for do concurrent                      | P      | Syntax is accepted |
 | Enumerations                                               | N      | |
 

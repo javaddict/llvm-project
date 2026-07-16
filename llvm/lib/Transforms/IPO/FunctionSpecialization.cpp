@@ -229,8 +229,8 @@ Cost InstCostVisitor::getCodeSizeSavingsForUser(Instruction *User, Value *Use,
   Cost CodeSize = 0;
   if (auto *I = dyn_cast<SwitchInst>(User)) {
     CodeSize = estimateSwitchInst(*I);
-  } else if (auto *I = dyn_cast<CondBrInst>(User)) {
-    CodeSize = estimateCondBrInst(*I);
+  } else if (auto *I = dyn_cast<BranchInst>(User)) {
+    CodeSize = estimateBranchInst(*I);
   } else {
     C = visit(*User);
     if (!C)
@@ -280,7 +280,7 @@ Cost InstCostVisitor::estimateSwitchInst(SwitchInst &I) {
   return estimateBasicBlocks(WorkList);
 }
 
-Cost InstCostVisitor::estimateCondBrInst(CondBrInst &I) {
+Cost InstCostVisitor::estimateBranchInst(BranchInst &I) {
   assert(LastVisited != KnownConstants.end() && "Invalid iterator!");
 
   if (I.getCondition() != LastVisited->first)
@@ -455,13 +455,13 @@ Constant *InstCostVisitor::visitSelectInst(SelectInst &I) {
   assert(LastVisited != KnownConstants.end() && "Invalid iterator!");
 
   if (I.getCondition() == LastVisited->first) {
-    Value *V = LastVisited->second->isNullValue() ? I.getFalseValue()
+    Value *V = LastVisited->second->isZeroValue() ? I.getFalseValue()
                                                   : I.getTrueValue();
     return findConstantFor(V);
   }
   if (Constant *Condition = findConstantFor(I.getCondition()))
     if ((I.getTrueValue() == LastVisited->first && Condition->isOneValue()) ||
-        (I.getFalseValue() == LastVisited->first && Condition->isNullValue()))
+        (I.getFalseValue() == LastVisited->first && Condition->isZeroValue()))
       return LastVisited->second;
   return nullptr;
 }
@@ -544,19 +544,18 @@ Constant *FunctionSpecializer::getPromotableAlloca(AllocaInst *Alloca,
 
 // A constant stack value is an AllocaInst that has a single constant
 // value stored to it. Return this constant if such an alloca stack value
-// is a function argument and the value is an integer.
+// is a function argument.
 Constant *FunctionSpecializer::getConstantStackValue(CallInst *Call,
                                                      Value *Val) {
   if (!Val)
     return nullptr;
   Val = Val->stripPointerCasts();
+  if (auto *ConstVal = dyn_cast<ConstantInt>(Val))
+    return ConstVal;
   auto *Alloca = dyn_cast<AllocaInst>(Val);
-  if (!Alloca)
+  if (!Alloca || !Alloca->getAllocatedType()->isIntegerTy())
     return nullptr;
-  Constant *C = getPromotableAlloca(Alloca, Call);
-  if (!C || !C->getType()->isIntegerTy())
-    return nullptr;
-  return C;
+  return getPromotableAlloca(Alloca, Call);
 }
 
 // To support specializing recursive functions, it is important to propagate
@@ -632,7 +631,12 @@ void FunctionSpecializer::cleanUpSSA() {
     removeSSACopy(*F);
 }
 
+
 template <> struct llvm::DenseMapInfo<SpecSig> {
+  static inline SpecSig getEmptyKey() { return {~0U, {}}; }
+
+  static inline SpecSig getTombstoneKey() { return {~1U, {}}; }
+
   static unsigned getHashValue(const SpecSig &S) {
     return static_cast<unsigned>(hash_value(S));
   }
@@ -1037,9 +1041,6 @@ bool FunctionSpecializer::isCandidateFunction(Function *F) {
     return false;
 
   if (F->hasFnAttribute(Attribute::NoDuplicate))
-    return false;
-
-  if (F->hasOptSize())
     return false;
 
   // Do not specialize the cloned function again.

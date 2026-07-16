@@ -52,7 +52,8 @@ void PreferStaticOverAnonymousNamespaceCheck::storeOptions(
 void PreferStaticOverAnonymousNamespaceCheck::registerMatchers(
     MatchFinder *Finder) {
   const auto IsDefinitionInAnonymousNamespace = allOf(
-      isLexicallyInAnonymousNamespace(), unless(isInMacro()), isDefinition());
+      unless(isExpansionInSystemHeader()), isLexicallyInAnonymousNamespace(),
+      unless(isInMacro()), isDefinition());
 
   if (AllowMemberFunctionsInClass) {
     Finder->addMatcher(

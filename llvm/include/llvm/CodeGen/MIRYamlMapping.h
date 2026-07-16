@@ -17,7 +17,6 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/MachineJumpTableInfo.h"
 #include "llvm/CodeGen/TargetFrameLowering.h"
-#include "llvm/Support/CodeGen.h"
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/YAMLTraits.h"
 #include "llvm/Support/raw_ostream.h"
@@ -142,16 +141,6 @@ template <> struct ScalarEnumerationTraits<MachineJumpTableInfo::JTEntryKind> {
                 MachineJumpTableInfo::EK_LabelDifference64);
     IO.enumCase(EntryKind, "inline", MachineJumpTableInfo::EK_Inline);
     IO.enumCase(EntryKind, "custom32", MachineJumpTableInfo::EK_Custom32);
-  }
-};
-
-template <> struct ScalarEnumerationTraits<FramePointerKind> {
-  static void enumeration(IO &IO, FramePointerKind &FP) {
-    IO.enumCase(FP, "none", FramePointerKind::None);
-    IO.enumCase(FP, "non-leaf", FramePointerKind::NonLeaf);
-    IO.enumCase(FP, "all", FramePointerKind::All);
-    IO.enumCase(FP, "reserved", FramePointerKind::Reserved);
-    IO.enumCase(FP, "non-leaf-no-reserve", FramePointerKind::NonLeafNoReserve);
   }
 };
 
@@ -436,9 +425,9 @@ struct FrameIndex {
   SMRange SourceRange;
 
   FrameIndex() = default;
-  LLVM_ABI FrameIndex(int FI, const llvm::MachineFrameInfo &MFI);
+  FrameIndex(int FI, const llvm::MachineFrameInfo &MFI);
 
-  LLVM_ABI Expected<int> getFI(const llvm::MachineFrameInfo &MFI) const;
+  Expected<int> getFI(const llvm::MachineFrameInfo &MFI) const;
 };
 
 template <> struct ScalarTraits<FrameIndex> {
@@ -713,7 +702,6 @@ struct MachineFrameInfo {
   unsigned MaxAlignment = 0;
   bool AdjustsStack = false;
   bool HasCalls = false;
-  FramePointerKind FramePointerPolicy = FramePointerKind::None;
   StringValue StackProtector;
   StringValue FunctionContext;
   unsigned MaxCallFrameSize = ~0u; ///< ~0u means: not computed yet.
@@ -736,7 +724,6 @@ struct MachineFrameInfo {
            OffsetAdjustment == Other.OffsetAdjustment &&
            MaxAlignment == Other.MaxAlignment &&
            AdjustsStack == Other.AdjustsStack && HasCalls == Other.HasCalls &&
-           FramePointerPolicy == Other.FramePointerPolicy &&
            StackProtector == Other.StackProtector &&
            FunctionContext == Other.FunctionContext &&
            MaxCallFrameSize == Other.MaxCallFrameSize &&
@@ -764,7 +751,6 @@ template <> struct MappingTraits<MachineFrameInfo> {
     YamlIO.mapOptional("maxAlignment", MFI.MaxAlignment, (unsigned)0);
     YamlIO.mapOptional("adjustsStack", MFI.AdjustsStack, false);
     YamlIO.mapOptional("hasCalls", MFI.HasCalls, false);
-    YamlIO.mapOptional("framePointerPolicy", MFI.FramePointerPolicy);
     YamlIO.mapOptional("stackProtector", MFI.StackProtector,
                        StringValue()); // Don't print it out when it's empty.
     YamlIO.mapOptional("functionContext", MFI.FunctionContext,
@@ -845,7 +831,6 @@ struct MachineFunction {
   MachineJumpTable JumpTableInfo;
   std::vector<StringValue> MachineMetadataNodes;
   std::vector<CalledGlobal> CalledGlobals;
-  std::vector<FlowStringValue> PrefetchTargets;
   BlockStringValue Body;
 };
 
@@ -907,10 +892,6 @@ template <> struct MappingTraits<MachineFunction> {
     if (!YamlIO.outputting() || !MF.CalledGlobals.empty())
       YamlIO.mapOptional("calledGlobals", MF.CalledGlobals,
                          std::vector<CalledGlobal>());
-    if (!YamlIO.outputting() || !MF.PrefetchTargets.empty())
-      YamlIO.mapOptional("prefetch-targets", MF.PrefetchTargets,
-                         std::vector<FlowStringValue>());
-
     YamlIO.mapOptional("body", MF.Body, BlockStringValue());
   }
 };

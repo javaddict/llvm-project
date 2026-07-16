@@ -89,8 +89,7 @@ private:
     // outlining candidate.
     for (auto &MI : make_range(MBB->rbegin(),
                                (MachineBasicBlock::reverse_iterator)begin()))
-      if (!MI.isDebugInstr())
-        FromEndOfBlockToStartOfSeq.stepBackward(MI);
+      FromEndOfBlockToStartOfSeq.stepBackward(MI);
   }
 
   /// Populate InSeq with liveness information.

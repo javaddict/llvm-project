@@ -31,7 +31,6 @@ class BasicBlock;
 class OptimizationRemarkEmitter;
 class Region;
 class SCEV;
-class Type;
 } // namespace llvm
 
 namespace polly {
@@ -97,7 +96,6 @@ enum class RejectReasonKind {
 
   FuncCall,
   NonSimpleMemoryAccess,
-  IncompatibleType,
 
   Alias,
 
@@ -887,32 +885,6 @@ public:
   std::string getEndUserMessage() const override;
   //@}
 };
-
-//===----------------------------------------------------------------------===//
-/// Captures types that Polly does not support
-class ReportIncompatibleType final : public RejectReason {
-  // The offending call instruction.
-  Instruction *Inst;
-  llvm::Type *Ty;
-
-public:
-  ReportIncompatibleType(Instruction *Inst, llvm::Type *Ty);
-
-  /// @name LLVM-RTTI interface
-  //@{
-  static bool classof(const RejectReason *RR);
-  //@}
-
-  /// @name RejectReason interface
-  //@{
-  std::string getRemarkName() const override;
-  const BasicBlock *getRemarkBB() const override;
-  std::string getMessage() const override;
-  const DebugLoc &getDebugLoc() const override;
-  std::string getEndUserMessage() const override;
-  //@}
-};
-
 } // namespace polly
 
 #endif // POLLY_SCOPDETECTIONDIAGNOSTIC_H

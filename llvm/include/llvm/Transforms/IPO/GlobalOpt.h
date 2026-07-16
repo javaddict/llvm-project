@@ -22,9 +22,9 @@ namespace llvm {
 class Module;
 
 /// Optimize globals that never have their address taken.
-class GlobalOptPass : public OptionalPassInfoMixin<GlobalOptPass> {
+class GlobalOptPass : public PassInfoMixin<GlobalOptPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
 
 } // end namespace llvm

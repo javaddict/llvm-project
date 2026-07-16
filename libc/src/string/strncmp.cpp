@@ -23,10 +23,7 @@ LLVM_LIBC_FUNCTION(int, strncmp,
     LIBC_CRASH_ON_NULLPTR(left);
     LIBC_CRASH_ON_NULLPTR(right);
   }
-
-  auto comp = [](char l, char r) -> int {
-    return static_cast<unsigned char>(l) - static_cast<unsigned char>(r);
-  };
+  auto comp = [](char l, char r) -> int { return l - r; };
   return inline_strncmp(left, right, n, comp);
 }
 

@@ -50,7 +50,7 @@ static cl::opt<bool>
 
 namespace {
 
-class AArch64StackTaggingPreRAImpl {
+class AArch64StackTaggingPreRA : public MachineFunctionPass {
   MachineFunction *MF;
   AArch64FunctionInfo *AFI;
   MachineFrameInfo *MFI;
@@ -61,26 +61,15 @@ class AArch64StackTaggingPreRAImpl {
   SmallVector<MachineInstr*, 16> ReTags;
 
 public:
-  bool run(MachineFunction &Func);
+  static char ID;
+  AArch64StackTaggingPreRA() : MachineFunctionPass(ID) {}
 
-private:
   bool mayUseUncheckedLoadStore();
   void uncheckUsesOf(unsigned TaggedReg, int FI);
   void uncheckLoadsAndStores();
   std::optional<int> findFirstSlotCandidate();
-};
 
-class AArch64StackTaggingPreRALegacy : public MachineFunctionPass {
-public:
-  static char ID;
-  AArch64StackTaggingPreRALegacy() : MachineFunctionPass(ID) {}
-
-  bool runOnMachineFunction(MachineFunction &MF) override {
-    if (skipFunction(MF.getFunction()))
-      return false;
-    return AArch64StackTaggingPreRAImpl().run(MF);
-  }
-
+  bool runOnMachineFunction(MachineFunction &Func) override;
   StringRef getPassName() const override {
     return "AArch64 Stack Tagging PreRA";
   }
@@ -92,28 +81,15 @@ public:
 };
 } // end anonymous namespace
 
-char AArch64StackTaggingPreRALegacy::ID = 0;
+char AArch64StackTaggingPreRA::ID = 0;
 
-INITIALIZE_PASS_BEGIN(AArch64StackTaggingPreRALegacy,
-                      "aarch64-stack-tagging-pre-ra",
+INITIALIZE_PASS_BEGIN(AArch64StackTaggingPreRA, "aarch64-stack-tagging-pre-ra",
                       "AArch64 Stack Tagging PreRA Pass", false, false)
-INITIALIZE_PASS_END(AArch64StackTaggingPreRALegacy,
-                    "aarch64-stack-tagging-pre-ra",
+INITIALIZE_PASS_END(AArch64StackTaggingPreRA, "aarch64-stack-tagging-pre-ra",
                     "AArch64 Stack Tagging PreRA Pass", false, false)
 
-FunctionPass *llvm::createAArch64StackTaggingPreRALegacyPass() {
-  return new AArch64StackTaggingPreRALegacy();
-}
-
-PreservedAnalyses
-AArch64StackTaggingPreRAPass::run(MachineFunction &MF,
-                                  MachineFunctionAnalysisManager &MFAM) {
-  if (AArch64StackTaggingPreRAImpl().run(MF)) {
-    PreservedAnalyses PA = getMachineFunctionPassPreservedAnalyses();
-    PA.preserveSet<CFGAnalyses>();
-    return PA;
-  }
-  return PreservedAnalyses::all();
+FunctionPass *llvm::createAArch64StackTaggingPreRAPass() {
+  return new AArch64StackTaggingPreRA();
 }
 
 static bool isUncheckedLoadOrStoreOpcode(unsigned Opcode) {
@@ -167,7 +143,7 @@ static bool isUncheckedLoadOrStoreOpcode(unsigned Opcode) {
   }
 }
 
-bool AArch64StackTaggingPreRAImpl::mayUseUncheckedLoadStore() {
+bool AArch64StackTaggingPreRA::mayUseUncheckedLoadStore() {
   if (ClUncheckedLdSt == UncheckedNever)
     return false;
   else if (ClUncheckedLdSt == UncheckedAlways)
@@ -191,7 +167,7 @@ bool AArch64StackTaggingPreRAImpl::mayUseUncheckedLoadStore() {
   return !MFI->hasVarSizedObjects() && EntireFrameReachableFromSP;
 }
 
-void AArch64StackTaggingPreRAImpl::uncheckUsesOf(unsigned TaggedReg, int FI) {
+void AArch64StackTaggingPreRA::uncheckUsesOf(unsigned TaggedReg, int FI) {
   for (MachineInstr &UseI :
        llvm::make_early_inc_range(MRI->use_instructions(TaggedReg))) {
     if (isUncheckedLoadOrStoreOpcode(UseI.getOpcode())) {
@@ -208,7 +184,7 @@ void AArch64StackTaggingPreRAImpl::uncheckUsesOf(unsigned TaggedReg, int FI) {
   }
 }
 
-void AArch64StackTaggingPreRAImpl::uncheckLoadsAndStores() {
+void AArch64StackTaggingPreRA::uncheckLoadsAndStores() {
   for (auto *I : ReTags) {
     Register TaggedReg = I->getOperand(0).getReg();
     int FI = I->getOperand(1).getIndex();
@@ -231,6 +207,8 @@ struct SlotWithTag {
 
 namespace llvm {
 template <> struct DenseMapInfo<SlotWithTag> {
+  static inline SlotWithTag getEmptyKey() { return {-2, -2}; }
+  static inline SlotWithTag getTombstoneKey() { return {-3, -3}; }
   static unsigned getHashValue(const SlotWithTag &V) {
     return hash_combine(DenseMapInfo<int>::getHashValue(V.FI),
                         DenseMapInfo<int>::getHashValue(V.Tag));
@@ -252,7 +230,7 @@ static bool isSlotPreAllocated(MachineFrameInfo *MFI, int FI) {
 // eliminates a vreg (by replacing it with direct uses of IRG, which is usually
 // live almost everywhere anyway), and therefore needs to happen before
 // regalloc.
-std::optional<int> AArch64StackTaggingPreRAImpl::findFirstSlotCandidate() {
+std::optional<int> AArch64StackTaggingPreRA::findFirstSlotCandidate() {
   // Find the best (FI, Tag) pair to pin to offset 0.
   // Looking at the possible uses of a tagged address, the advantage of pinning
   // is:
@@ -267,8 +245,7 @@ std::optional<int> AArch64StackTaggingPreRAImpl::findFirstSlotCandidate() {
   //   eliminated (see uncheckLoadsAndStores) so all remaining load/store
   //   instructions count.
   // - Any other instruction may benefit from being pinned to offset 0.
-  LLVM_DEBUG(
-      dbgs() << "AArch64StackTaggingPreRAImpl::findFirstSlotCandidate\n");
+  LLVM_DEBUG(dbgs() << "AArch64StackTaggingPreRA::findFirstSlotCandidate\n");
   if (!ClFirstSlot)
     return std::nullopt;
 
@@ -350,7 +327,7 @@ std::optional<int> AArch64StackTaggingPreRAImpl::findFirstSlotCandidate() {
   return MaxScoreST.FI;
 }
 
-bool AArch64StackTaggingPreRAImpl::run(MachineFunction &Func) {
+bool AArch64StackTaggingPreRA::runOnMachineFunction(MachineFunction &Func) {
   MF = &Func;
   MRI = &MF->getRegInfo();
   AFI = MF->getInfo<AArch64FunctionInfo>();

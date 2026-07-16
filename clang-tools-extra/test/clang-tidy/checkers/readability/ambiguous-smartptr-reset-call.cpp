@@ -1,6 +1,7 @@
-// RUN: %check_clang_tidy %s readability-ambiguous-smartptr-reset-call %t --fix-notes
+// RUN: %check_clang_tidy %s readability-ambiguous-smartptr-reset-call %t --fix-notes -- -I %S/../modernize/Inputs/smart-ptr
 
-#include <memory>
+#include "unique_ptr.h"
+#include "shared_ptr.h"
 
 template <typename T>
 struct non_default_reset_ptr {

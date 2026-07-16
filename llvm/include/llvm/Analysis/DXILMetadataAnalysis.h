@@ -40,7 +40,7 @@ struct ModuleMetadataInfo {
   Triple::EnvironmentType ShaderProfile{Triple::UnknownEnvironment};
   VersionTuple ValidatorVersion{};
   SmallVector<EntryProperties> EntryPropertyVec{};
-  LLVM_ABI void print(raw_ostream &OS) const;
+  void print(raw_ostream &OS) const;
 };
 
 } // namespace dxil
@@ -54,22 +54,24 @@ class DXILMetadataAnalysis : public AnalysisInfoMixin<DXILMetadataAnalysis> {
 public:
   using Result = dxil::ModuleMetadataInfo;
   /// Gather module metadata info for the module \c M.
-  LLVM_ABI dxil::ModuleMetadataInfo run(Module &M, ModuleAnalysisManager &AM);
+  dxil::ModuleMetadataInfo run(Module &M, ModuleAnalysisManager &AM);
 };
 
 /// Printer pass for the \c DXILMetadataAnalysis results.
 class DXILMetadataAnalysisPrinterPass
-    : public RequiredPassInfoMixin<DXILMetadataAnalysisPrinterPass> {
+    : public PassInfoMixin<DXILMetadataAnalysisPrinterPass> {
   raw_ostream &OS;
 
 public:
   explicit DXILMetadataAnalysisPrinterPass(raw_ostream &OS) : OS(OS) {}
 
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 };
 
 /// Legacy pass
-class LLVM_ABI DXILMetadataAnalysisWrapperPass : public ModulePass {
+class DXILMetadataAnalysisWrapperPass : public ModulePass {
   std::unique_ptr<dxil::ModuleMetadataInfo> MetadataInfo;
 
 public:

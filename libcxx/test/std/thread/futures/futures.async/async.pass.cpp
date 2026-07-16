@@ -114,6 +114,7 @@ int main(int, char**)
     bool DPID = DefaultPolicyIsDeferred;
 
     std::launch AnyPolicy = std::launch::async | std::launch::deferred;
+    LIBCPP_ASSERT(AnyPolicy == std::launch::any);
 
     {
         auto checkInt = [](std::future<int>& f) { return f.get() == 3; };

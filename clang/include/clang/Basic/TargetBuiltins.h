@@ -84,6 +84,7 @@ namespace clang {
   };
   }
 
+  /// AArch64 builtins
   namespace AArch64 {
   enum {
     LastTIBuiltin = clang::Builtin::FirstTSBuiltin - 1,
@@ -92,9 +93,8 @@ namespace clang {
     LastSVEBuiltin = SVE::FirstTSBuiltin - 1,
     FirstSMEBuiltin = SVE::FirstTSBuiltin,
     LastSMEBuiltin = SME::FirstTSBuiltin - 1,
-#define GET_BUILTIN_ENUMERATORS
-#include "clang/Basic/BuiltinsAArch64.inc"
-#undef GET_BUILTIN_ENUMERATORS
+  #define BUILTIN(ID, TYPE, ATTRS) BI##ID,
+  #include "clang/Basic/BuiltinsAArch64.def"
     LastTSBuiltin
   };
   }
@@ -135,9 +135,8 @@ namespace clang {
   namespace AMDGPU {
   enum {
     LastTIBuiltin = clang::Builtin::FirstTSBuiltin - 1,
-#define GET_BUILTIN_ENUMERATORS
-#include "clang/Basic/BuiltinsAMDGPU.inc"
-#undef GET_BUILTIN_ENUMERATORS
+  #define BUILTIN(ID, TYPE, ATTRS) BI##ID,
+  #include "clang/Basic/BuiltinsAMDGPU.def"
     LastTSBuiltin
   };
   }
@@ -228,6 +227,17 @@ namespace clang {
     LastTSBuiltin
   };
   } // namespace RISCV
+
+  /// Haydn builtins
+  namespace Haydn {
+  enum {
+    LastTIBuiltin = clang::Builtin::FirstTSBuiltin - 1,
+#define GET_BUILTIN_ENUMERATORS
+#include "clang/Basic/BuiltinsHaydn.inc"
+#undef GET_BUILTIN_ENUMERATORS
+    LastTSBuiltin
+  };
+  } // namespace Haydn
 
   /// LoongArch builtins
   namespace LoongArch {
@@ -401,9 +411,6 @@ namespace clang {
     bool isOverloadFirstandLast() const {
       return Flags & IsOverloadFirstandLast;
     }
-    bool isOverloadDefaultAndOp0() const {
-      return Flags & IsOverloadDefaultAndOp0;
-    }
     bool isPrefetch() const { return Flags & IsPrefetch; }
     bool isReverseCompare() const { return Flags & ReverseCompare; }
     bool isAppendSVALL() const { return Flags & IsAppendSVALL; }
@@ -459,9 +466,8 @@ namespace clang {
   namespace SystemZ {
     enum {
         LastTIBuiltin = clang::Builtin::FirstTSBuiltin-1,
-#define GET_BUILTIN_ENUMERATORS
-#include "clang/Basic/BuiltinsSystemZ.inc"
-#undef GET_BUILTIN_ENUMERATORS
+#define BUILTIN(ID, TYPE, ATTRS) BI##ID,
+#include "clang/Basic/BuiltinsSystemZ.def"
         LastTSBuiltin
     };
   }

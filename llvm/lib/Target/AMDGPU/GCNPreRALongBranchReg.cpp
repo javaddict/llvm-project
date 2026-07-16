@@ -57,7 +57,9 @@ public:
 class GCNPreRALongBranchRegLegacy : public MachineFunctionPass {
 public:
   static char ID;
-  GCNPreRALongBranchRegLegacy() : MachineFunctionPass(ID) {}
+  GCNPreRALongBranchRegLegacy() : MachineFunctionPass(ID) {
+    initializeGCNPreRALongBranchRegLegacyPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &MF) override {
     return GCNPreRALongBranchReg().run(MF);

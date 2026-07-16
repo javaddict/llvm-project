@@ -268,7 +268,7 @@ GCNRewritePartialRegUsesImpl::getRegClassWithShiftedSubregs(
     assert(MinRC->isAllocatable() && TRI->isRegClassAligned(MinRC, RCAlign));
     for (auto [OldSubReg, NewSubReg] : SubRegs)
       // Check that all registers in MinRC support NewSubReg subregister.
-      assert(TRI->isSubRegValidForRegClass(MinRC, NewSubReg));
+      assert(MinRC == TRI->getSubClassWithSubReg(MinRC, NewSubReg));
   }
 #endif
   // There might be zero RShift - in this case we just trying to find smaller

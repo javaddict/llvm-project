@@ -18,9 +18,8 @@
 
 struct timespec {
   time_t tv_sec; /* Seconds.  */
-  /* Nanoseconds. Forced to 64-bit to match __kernel_timespec layout (C23
-   * compliant). */
-  __INT64_TYPE__ tv_nsec;
+  /* TODO: BIG_ENDIAN may require padding. */
+  long tv_nsec; /* Nanoseconds.  */
 };
 #endif // __APPLE__
 

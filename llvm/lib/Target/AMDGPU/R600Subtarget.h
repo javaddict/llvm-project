@@ -27,14 +27,15 @@ namespace llvm {
 
 class R600Subtarget final : public R600GenSubtargetInfo,
                             public AMDGPUSubtarget {
-
-#define GET_SUBTARGETINFO_MACRO(ATTRIBUTE, DEFAULT, GETTER)                    \
-  bool ATTRIBUTE = DEFAULT;
-#include "R600GenSubtargetInfo.inc"
-
 private:
   R600InstrInfo InstrInfo;
   R600FrameLowering FrameLowering;
+  bool FMA = false;
+  bool CaymanISA = false;
+  bool CFALUBug = false;
+  bool HasVertexCache = false;
+  bool R600ALUInst = false;
+  bool FP64 = false;
   short TexVTXClauseSize = 0;
   Generation Gen = R600;
   R600TargetLowering TLInfo;
@@ -101,7 +102,9 @@ public:
     return (getGeneration() >= EVERGREEN);
   }
 
-  bool hasCaymanISA() const { return HasCaymanISA; }
+  bool hasCaymanISA() const {
+    return CaymanISA;
+  }
 
   bool hasFFBL() const {
     return (getGeneration() >= EVERGREEN);
@@ -111,13 +114,9 @@ public:
     return (getGeneration() >= EVERGREEN);
   }
 
-  bool hasFMA() const override { return HasFMA; }
+  bool hasFMA() const { return FMA; }
 
-  bool hasMadMacF32Insts() const override { return HasMadMacF32Insts; }
-
-  bool hasFP64() const override { return HasFP64; }
-
-  bool hasCFALUBug() const { return HasCFALUBug; }
+  bool hasCFAluBug() const { return CFALUBug; }
 
   bool hasVertexCache() const { return HasVertexCache; }
 
@@ -134,30 +133,30 @@ public:
   /// \returns Maximum number of work groups per compute unit supported by the
   /// subtarget and limited by given \p FlatWorkGroupSize.
   unsigned getMaxWorkGroupsPerCU(unsigned FlatWorkGroupSize) const override {
-    return AMDGPU::IsaInfo::getMaxWorkGroupsPerCU(*this, FlatWorkGroupSize);
+    return AMDGPU::IsaInfo::getMaxWorkGroupsPerCU(this, FlatWorkGroupSize);
   }
 
   /// \returns Minimum flat work group size supported by the subtarget.
   unsigned getMinFlatWorkGroupSize() const override {
-    return AMDGPU::IsaInfo::getMinFlatWorkGroupSize(*this);
+    return AMDGPU::IsaInfo::getMinFlatWorkGroupSize(this);
   }
 
   /// \returns Maximum flat work group size supported by the subtarget.
   unsigned getMaxFlatWorkGroupSize() const override {
-    return AMDGPU::IsaInfo::getMaxFlatWorkGroupSize();
+    return AMDGPU::IsaInfo::getMaxFlatWorkGroupSize(this);
   }
 
   /// \returns Number of waves per execution unit required to support the given
   /// \p FlatWorkGroupSize.
   unsigned
   getWavesPerEUForWorkGroup(unsigned FlatWorkGroupSize) const override {
-    return AMDGPU::IsaInfo::getWavesPerEUForWorkGroup(*this, FlatWorkGroupSize);
+    return AMDGPU::IsaInfo::getWavesPerEUForWorkGroup(this, FlatWorkGroupSize);
   }
 
   /// \returns Minimum number of waves per execution unit supported by the
   /// subtarget.
   unsigned getMinWavesPerEU() const override {
-    return AMDGPU::IsaInfo::getMinWavesPerEU(*this);
+    return AMDGPU::IsaInfo::getMinWavesPerEU(this);
   }
 
   bool requiresDisjointEarlyClobberAndUndef() const override {

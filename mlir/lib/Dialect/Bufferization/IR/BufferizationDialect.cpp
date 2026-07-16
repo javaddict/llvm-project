@@ -48,7 +48,7 @@ struct BuiltinTensorExternalModel
       return emitError() << "could not infer memory space";
 
     return cast<BufferLikeType>(
-        options.unknownTypeConverterFn(tensorType, *memSpace, options));
+        getMemRefType(tensorType, options, /*layout=*/{}, *memSpace));
   }
 
   mlir::LogicalResult verifyCompatibleBufferType(

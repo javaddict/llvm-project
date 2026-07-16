@@ -20,7 +20,6 @@
 #ifndef MLIR_DIALECT_NVGPU_IR_NVGPUOPS_TD
 #define MLIR_DIALECT_NVGPU_IR_NVGPUOPS_TD
 
-include "mlir/Dialect/LLVMIR/NVVMEnums.td"
 include "mlir/Dialect/NVGPU/IR/NVGPU.td"
 include "mlir/Dialect/NVGPU/IR/NVGPUTypes.td"
 
@@ -31,7 +30,6 @@ include "mlir/Dialect/NVGPU/IR/NVGPUTypes.td"
 class NVGPU_Op<string mnemonic, list<Trait> traits = []> :
   Op<NVGPU_Dialect, mnemonic, traits> {}
 
-// Promises IndexedAccessOpInterface.
 def NVGPU_LdMatrixOp : NVGPU_Op<"ldmatrix", [
                                 MemoryEffects<[MemRead]>,
                                 PredOpTrait<"srcMemref and res have same element type",
@@ -185,7 +183,6 @@ def NVGPU_MmaSparseSyncOp : NVGPU_MmaSyncOp<"mma.sp.sync"> {
   let extraClassDeclaration = extraBaseClassDeclaration;
 }
 
-// Promises IndexedMemCopyOpInterface.
 def NVGPU_DeviceAsyncCopyOp : NVGPU_Op<"device_async_copy", [
                                        AttrSizedOperandSegments]> {
   let summary = "device-side asynchronous copy";
@@ -661,12 +658,12 @@ def NVGPU_RcpOp : NVGPU_Op<"rcp", [Pure,
     The input and output must be of the same vector type and shape.
   }];
   let arguments = (ins VectorOfNonZeroRankOf<[F32]>:$in,
-                       DefaultValuedAttr<FPRoundingModeAttr, "::mlir::NVVM::FPRoundingMode::NONE">:$rounding,
-                       DefaultValuedAttr<BoolAttr, "false">:$approx,
-                       DefaultValuedAttr<BoolAttr, "false">:$ftz);
+                       DefaultValuedAttr<RcpRoundingModeAttr, "RcpRoundingMode::APPROX">:$rounding,
+                       UnitAttr:$ftz);
   let results = (outs VectorOfNonZeroRankOf<[F32]>:$out);
   let assemblyFormat = [{
-    $in attr-dict `:` type($out)
+    $in `{` `rounding` `=` $rounding (`,` `ftz` $ftz^)? `}` 
+    attr-dict `:` type($out)
   }];
   let hasVerifier = 1;
 }

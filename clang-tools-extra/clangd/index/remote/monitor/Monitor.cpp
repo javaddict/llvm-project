@@ -16,7 +16,7 @@
 
 #include <chrono>
 #include <google/protobuf/util/json_util.h>
-#include <grpcpp/grpcpp.h>
+#include <grpc++/grpc++.h>
 
 namespace clang {
 namespace clangd {

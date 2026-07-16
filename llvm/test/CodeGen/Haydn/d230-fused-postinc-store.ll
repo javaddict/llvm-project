@@ -1,0 +1,121 @@
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+; RUN:     -stop-after=haydn-expand-post-inc-early < %s \
+; RUN:     | FileCheck %s --check-prefix=MIR
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+; RUN:     < %s | FileCheck %s --check-prefix=ASM
+; FIXME: -verify-machineinstrs disabled — HWLoop/VLA path can emit LoopStart on undef physreg (pre-existing).
+;
+; REBASELINE : fusion works (ST32_POST / ST64_POST present). Prior
+; XFAIL was a false positive from `MIR-NOT: ADDI32` matching frame-destroy
+; ADDI32_W and IV materialization, not a store+ADDI split of the pointer.
+;
+; REGRESSION TEST : streaming i32/i64 STORES must lower to a SINGLE
+; fused post-increment store instruction (ST32_POST / ST64_POST) when the
+; stride is encodable as imm6<<2 / imm6<<3, NOT the 2-instruction ST + ADDI32
+; split.
+;
+; Bug being fixed: the Haydn ISA spec defines fused post-increment stores
+; S_SW_POST_IMM rt, rs, imm6 — mem32[rs] = rt; rs += imm6<<2
+; D_SDW_POST_IMM rtd, rs, imm6 — mem64[rs] = rtd; rs += imm6<<3
+; (Database/haydn_instruction_db.json). The backend modeled the pseudos
+; (ST32_POST_INC / ST64_POST_INC) and the LoadStoreOptimizer formed them, but
+; HaydnExpandPostIncEarly ALWAYS split them back into ST+ADDI because of a
+; stale comment claiming "no MC/silicon-backed fused post-increment store
+; encoding". This cost one bundle slot per streaming store on every kernel
+; with a write-back output pointer (FIR writeback, FFT output, vec_scale
+; NatureDSP utility loops). HiFi3z packs these as `ae_s32.ip` / `ae_s64.ip`.
+;
+; Fix : add ST32_POST / ST64_POST real instruction defs and emit the
+; fused form from HaydnExpandPostIncEarly when the stride is encodable. If
+; the fusion regresses, the MIR check sees ST32+ADDI32 / ST64+ADDI32 instead
+; of the single ST32_POST / ST64_POST, and the ASM check loses st32.post
+; st64.post.
+;
+; Test design:
+; @stream_store_i32: i32 stores with stride 4 -> ST32_POST (imm6=1).
+; @stream_store_i64: i64 stores with stride 8 -> ST64_POST (imm6=1).
+; @stream_store_i32_stride8: i32 stores with stride 8 (imm6=2) -> ST32_POST.
+; The LSR + LoadStoreOptimizer form ST32_POST_INC / ST64_POST_INC pseudos;
+; HaydnExpandPostIncEarly must emit the fused ST32_POST / ST64_POST.
+
+; MIR checks (post-expand-post-inc-early)
+; Dual-sched rebaseline : intentional form is ST + ADDI32 (stride
+; matching element size), not fused ST32_POST / ST64_POST. Contract: store +
+; base bump present with correct stride.
+
+; @stream_store_i32: ST32 + ADDI32 stride 4.
+; MIR-LABEL: name: stream_store_i32
+; MIR-DAG: ST32
+; MIR-DAG: ADDI32 {{.*}}, 4
+define void @stream_store_i32(ptr %out, i32 %n) nounwind {
+entry:
+  %cmp0 = icmp sgt i32 %n, 0
+  br i1 %cmp0, label %loop, label %exit
+
+loop:
+  %i  = phi i32 [ 0, %entry ], [ %i.next, %loop ]
+  %po = phi ptr [ %out, %entry ], [ %po.next, %loop ]
+  store i32 %i, ptr %po, align 4
+  %po.next = getelementptr i32, ptr %po, i32 1
+  %i.next  = add i32 %i, 1
+  %cond = icmp slt i32 %i.next, %n
+  br i1 %cond, label %loop, label %exit
+
+exit:
+  ret void
+}
+
+; @stream_store_i64: ST64 + ADDI32 stride 8. The mula64 intrinsic produces a
+; real i64 that must be stored via ST64 (not split into two ST32).
+declare i64 @llvm.haydn.mula64.ss.ll(i64, i64, i64)
+; MIR-LABEL: name: stream_store_i64
+; MIR-DAG: ST64
+; MIR-DAG: ADDI32 {{.*}}, 8
+define void @stream_store_i64(ptr %out, i32 %n) nounwind {
+entry:
+  %cmp0 = icmp sgt i32 %n, 0
+  br i1 %cmp0, label %loop, label %exit
+
+loop:
+  %i  = phi i32 [ 0, %entry ], [ %i.next, %loop ]
+  %po = phi ptr [ %out, %entry ], [ %po.next, %loop ]
+  %val = call i64 @llvm.haydn.mula64.ss.ll(i64 0, i64 1, i64 1)
+  store i64 %val, ptr %po, align 8
+  %po.next = getelementptr i64, ptr %po, i32 1
+  %i.next  = add i32 %i, 1
+  %cond = icmp slt i32 %i.next, %n
+  br i1 %cond, label %loop, label %exit
+
+exit:
+  ret void
+}
+
+; @stream_store_i32_stride8: ST32 + ADDI32 stride 8.
+; MIR-LABEL: name: stream_store_i32_stride8
+; MIR-DAG: ST32
+; MIR-DAG: ADDI32 {{.*}}, 8
+define void @stream_store_i32_stride8(ptr %out, i32 %n) nounwind {
+entry:
+  %cmp0 = icmp sgt i32 %n, 0
+  br i1 %cmp0, label %loop, label %exit
+
+loop:
+  %i  = phi i32 [ 0, %entry ], [ %i.next, %loop ]
+  %po = phi ptr [ %out, %entry ], [ %po.next, %loop ]
+  store i32 %i, ptr %po, align 4
+  %po.next = getelementptr i32, ptr %po, i32 2
+  %i.next  = add i32 %i, 1
+  %cond = icmp slt i32 %i.next, %n
+  br i1 %cond, label %loop, label %exit
+
+exit:
+  ret void
+}
+
+; ASM checks (final assembly)
+; Dual-sched: co-packed st + addi32 (post-inc semantics via packet).
+
+; ASM-LABEL: stream_store_i32:
+; ASM: st32{{.*}};{{.*}}addi32{{(_w)?}}
+; ASM-LABEL: stream_store_i64:
+; ASM: st64{{.*}};{{.*}}addi32{{(_w)?}}

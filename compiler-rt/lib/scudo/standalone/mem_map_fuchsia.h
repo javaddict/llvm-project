@@ -33,7 +33,6 @@ public:
   void releaseAndZeroPagesToOSImpl(uptr From, uptr Size);
   uptr getBaseImpl() { return WindowBase; }
   uptr getCapacityImpl() { return WindowSize; }
-  s64 getResidentPagesImpl(uptr From, uptr Size);
 
 private:
   friend class ReservedMemoryFuchsia;

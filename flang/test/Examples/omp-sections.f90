@@ -1,5 +1,4 @@
 ! REQUIRES: plugins, examples
-! XFAIL: system-aix
 
 ! RUN: %flang_fc1 -load %llvmshlibdir/flangOmpReport%pluginext -plugin flang-omp-report -fopenmp %s -o - | FileCheck %s
 
@@ -14,15 +13,15 @@ subroutine omp_sections()
 end subroutine omp_sections
 
 !CHECK: - file:            {{.*}}
-!CHECK:   line:            [[@LINE-8]]
+!CHECK:   line:            8
 !CHECK:   construct:       section
 !CHECK:   clauses:         []
 !CHECK: - file:            {{.*}}
-!CHECK:   line:            [[@LINE-10]]
+!CHECK:   line:            10
 !CHECK:   construct:       section
 !CHECK:   clauses:         []
 !CHECK: - file:            {{.*}}
-!CHECK:   line:            [[@LINE-17]]
+!CHECK:   line:            7
 !CHECK:   construct:       sections
 !CHECK:   clauses:
 !CHECK:     - clause:          nowait

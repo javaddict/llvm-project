@@ -1308,8 +1308,7 @@ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
 void SelectionDAGBuilder::LowerDeoptimizeCall(const CallInst *CI) {
   const auto &TLI = DAG.getTargetLoweringInfo();
 
-  RTLIB::LibcallImpl DeoptImpl =
-      DAG.getLibcalls().getLibcallImpl(RTLIB::DEOPTIMIZE);
+  RTLIB::LibcallImpl DeoptImpl = TLI.getLibcallImpl(RTLIB::DEOPTIMIZE);
   if (DeoptImpl == RTLIB::Unsupported) {
     DAG.getContext()->emitError("no deoptimize libcall available");
     return;

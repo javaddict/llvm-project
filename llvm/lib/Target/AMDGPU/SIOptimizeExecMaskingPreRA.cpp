@@ -54,7 +54,10 @@ class SIOptimizeExecMaskingPreRALegacy : public MachineFunctionPass {
 public:
   static char ID;
 
-  SIOptimizeExecMaskingPreRALegacy() : MachineFunctionPass(ID) {}
+  SIOptimizeExecMaskingPreRALegacy() : MachineFunctionPass(ID) {
+    initializeSIOptimizeExecMaskingPreRALegacyPass(
+        *PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 

@@ -149,15 +149,17 @@ static const ParmVarDecl *getOriginParam(SVal V, CheckerContext &C,
 }
 
 static bool isInMIGCall(CheckerContext &C) {
-  const StackFrame *SF = C.getStackFrame();
-  assert(SF && "Unknown stack frame");
+  const LocationContext *LC = C.getLocationContext();
+  assert(LC && "Unknown location context");
 
+  const StackFrameContext *SFC;
   // Find the top frame.
-  while (SF->getParent()) {
-    SF = SF->getParent();
+  while (LC) {
+    SFC = LC->getStackFrame();
+    LC = SFC->getParent();
   }
 
-  const Decl *D = SF->getDecl();
+  const Decl *D = SFC->getDecl();
 
   if (std::optional<AnyCall> AC = AnyCall::forDecl(D)) {
     // Even though there's a Sema warning when the return type of an annotated
@@ -268,7 +270,7 @@ void MIGChecker::checkReturnAux(const ReturnStmt *RS, CheckerContext &C) const {
   if (!State->get<ReleasedParameter>())
     return;
 
-  SVal V = RS->getRetValue() ? C.getSVal(RS->getRetValue()) : UndefinedVal();
+  SVal V = C.getSVal(RS);
   if (mayBeSuccess(V, C))
     return;
 

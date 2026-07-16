@@ -60,7 +60,6 @@
 #include "clang/Sema/SemaCodeCompletion.h"
 #include "clang/Serialization/ASTReader.h"
 #include "clang/Serialization/ASTWriter.h"
-#include "clang/Serialization/InMemoryModuleCache.h"
 #include "clang/Serialization/ModuleCache.h"
 #include "clang/Serialization/ModuleFile.h"
 #include "clang/Serialization/PCHContainerOperations.h"
@@ -506,7 +505,7 @@ namespace {
 /// a Preprocessor.
 class ASTInfoCollector : public ASTReaderListener {
   HeaderSearchOptions &HSOpts;
-  std::string &ContextHash;
+  std::string &SpecificModuleCachePath;
   PreprocessorOptions &PPOpts;
   LangOptions &LangOpts;
   CodeGenOptions &CodeGenOpts;
@@ -514,13 +513,14 @@ class ASTInfoCollector : public ASTReaderListener {
   uint32_t &Counter;
 
 public:
-  ASTInfoCollector(HeaderSearchOptions &HSOpts, std::string &ContextHash,
+  ASTInfoCollector(HeaderSearchOptions &HSOpts,
+                   std::string &SpecificModuleCachePath,
                    PreprocessorOptions &PPOpts, LangOptions &LangOpts,
                    CodeGenOptions &CodeGenOpts, TargetOptions &TargetOpts,
                    uint32_t &Counter)
-      : HSOpts(HSOpts), ContextHash(ContextHash), PPOpts(PPOpts),
-        LangOpts(LangOpts), CodeGenOpts(CodeGenOpts), TargetOpts(TargetOpts),
-        Counter(Counter) {}
+      : HSOpts(HSOpts), SpecificModuleCachePath(SpecificModuleCachePath),
+        PPOpts(PPOpts), LangOpts(LangOpts), CodeGenOpts(CodeGenOpts),
+        TargetOpts(TargetOpts), Counter(Counter) {}
 
   bool ReadLanguageOptions(const LangOptions &NewLangOpts,
                            StringRef ModuleFilename, bool Complain,
@@ -538,10 +538,10 @@ public:
 
   bool ReadHeaderSearchOptions(const HeaderSearchOptions &NewHSOpts,
                                StringRef ModuleFilename,
-                               StringRef NewContextHash,
+                               StringRef NewSpecificModuleCachePath,
                                bool Complain) override {
     HSOpts = NewHSOpts;
-    ContextHash = NewContextHash;
+    SpecificModuleCachePath = NewSpecificModuleCachePath;
     return false;
   }
 
@@ -733,13 +733,13 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
   AST->ModCache = createCrossProcessModuleCache();
 
   // Gather info for preprocessor construction later on.
-  std::string ContextHash;
+  std::string SpecificModuleCachePath;
   unsigned Counter = 0;
   // Using a temporary FileManager since the AST file might specify custom
   // HeaderSearchOptions::VFSOverlayFiles that affect the underlying VFS.
   FileManager TmpFileMgr(FileSystemOpts, VFS);
-  ASTInfoCollector Collector(*AST->HSOpts, ContextHash, *AST->PPOpts,
-                             *AST->LangOpts, *AST->CodeGenOpts,
+  ASTInfoCollector Collector(*AST->HSOpts, SpecificModuleCachePath,
+                             *AST->PPOpts, *AST->LangOpts, *AST->CodeGenOpts,
                              *AST->TargetOpts, Counter);
   if (ASTReader::readASTFileControlBlock(
           Filename, TmpFileMgr, *AST->ModCache, PCHContainerRdr,
@@ -763,7 +763,7 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
       AST->getHeaderSearchOpts(), AST->getSourceManager(),
       AST->getDiagnostics(), AST->getLangOpts(),
       /*Target=*/nullptr);
-  AST->HeaderInfo->initializeModuleCachePath(std::move(ContextHash));
+  AST->HeaderInfo->setModuleCachePath(SpecificModuleCachePath);
 
   AST->PP = std::make_shared<Preprocessor>(
       *AST->PPOpts, AST->getDiagnostics(), *AST->LangOpts,
@@ -785,10 +785,7 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
       *AST->PP, *AST->ModCache, AST->Ctx.get(), PCHContainerRdr,
       *AST->CodeGenOpts, ArrayRef<std::shared_ptr<ModuleFileExtension>>(),
       /*isysroot=*/"",
-      /*DisableValidationKind=*/disableValid, AllowASTWithCompilerErrors,
-      /*AllowConfigurationMismatch=*/false,
-      /*ValidateSystemInputs=*/false,
-      /*ForceValidateUserInputs=*/true, HSOpts.ValidateASTInputFilesContent);
+      /*DisableValidationKind=*/disableValid, AllowASTWithCompilerErrors);
 
   // Attach the AST reader to the AST context as an external AST source, so that
   // declarations will be deserialized from the AST file as needed.
@@ -824,8 +821,6 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
         AST->LangOpts->CommentOpts);
   }
 
-  ModuleFileName ModuleFilename = ModuleFileName::makeExplicit(Filename);
-
   // The temporary FileManager we used for ASTReader::readASTFileControlBlock()
   // might have already read stdin, and reading it again will fail. Let's
   // explicitly forward the buffer.
@@ -834,17 +829,14 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
       if (auto BufRef = TmpFileMgr.getBufferForFile(*FE)) {
         auto Buf = llvm::MemoryBuffer::getMemBufferCopy(
             (*BufRef)->getBuffer(), (*BufRef)->getBufferIdentifier());
-        off_t BufSize = Buf->getBufferSize();
-        AST->ModCache->getInMemoryModuleCache().addBuiltPCM(
-            "-", std::move(Buf), BufSize, /*ModTime=*/0);
-        ModuleFilename = ModuleFileName::makeInMemory(Filename);
+        AST->Reader->getModuleManager().addInMemoryBuffer("-", std::move(Buf));
       }
 
   // Reinstate the provided options that are relevant for reading AST files.
   AST->HSOpts->ForceCheckCXX20ModulesInputFiles =
       HSOpts.ForceCheckCXX20ModulesInputFiles;
 
-  switch (AST->Reader->ReadAST(ModuleFilename, serialization::MK_MainFile,
+  switch (AST->Reader->ReadAST(Filename, serialization::MK_MainFile,
                                SourceLocation(), ASTReader::ARR_None)) {
   case ASTReader::Success:
     break;
@@ -1484,8 +1476,8 @@ ASTUnit::create(std::shared_ptr<CompilerInvocation> CI,
   ConfigureDiags(Diags, *AST, CaptureDiagnostics);
   IntrusiveRefCntPtr<llvm::vfs::FileSystem> VFS =
       createVFSFromCompilerInvocation(*CI, *Diags);
-  AST->DiagOpts = std::move(DiagOpts);
-  AST->Diagnostics = std::move(Diags);
+  AST->DiagOpts = DiagOpts;
+  AST->Diagnostics = Diags;
   AST->FileSystemOpts = CI->getFileSystemOpts();
   AST->Invocation = std::move(CI);
   AST->FileMgr =
@@ -2451,7 +2443,7 @@ bool ASTUnit::visitLocalTopLevelDecls(void *context, DeclVisitorFn Fn) {
   return true;
 }
 
-std::optional<StringRef> ASTUnit::getPCHFile() {
+OptionalFileEntryRef ASTUnit::getPCHFile() {
   if (!Reader)
     return std::nullopt;
 
@@ -2474,7 +2466,7 @@ std::optional<StringRef> ASTUnit::getPCHFile() {
     return true;
   });
   if (Mod)
-    return Mod->FileName;
+    return Mod->File;
 
   return std::nullopt;
 }

@@ -13,10 +13,11 @@
 
 namespace llvm {
 
-class PHIEliminationPass : public RequiredPassInfoMixin<PHIEliminationPass> {
+class PHIEliminationPass : public PassInfoMixin<PHIEliminationPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

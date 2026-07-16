@@ -26,9 +26,9 @@ namespace llvm {
 class Module;
 
 /// A pass that merges duplicate global constants into a single constant.
-class ConstantMergePass : public OptionalPassInfoMixin<ConstantMergePass> {
+class ConstantMergePass : public PassInfoMixin<ConstantMergePass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &);
 };
 
 } // end namespace llvm

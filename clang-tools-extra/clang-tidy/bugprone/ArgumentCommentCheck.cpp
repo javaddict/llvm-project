@@ -17,8 +17,6 @@
 using namespace clang::ast_matchers;
 
 namespace clang::tidy::bugprone {
-
-using utils::lexer::CommentToken;
 namespace {
 AST_MATCHER(Decl, isFromStdNamespaceOrSystemHeader) {
   if (const auto *D = Node.getDeclContext()->getEnclosingNamespaceContext())
@@ -36,35 +34,26 @@ ArgumentCommentCheck::ArgumentCommentCheck(StringRef Name,
     : ClangTidyCheck(Name, Context),
       StrictMode(Options.get("StrictMode", false)),
       IgnoreSingleArgument(Options.get("IgnoreSingleArgument", false)),
-      CommentAnonymousInitLists(
-          Options.get("CommentAnonymousInitLists", false)),
       CommentBoolLiterals(Options.get("CommentBoolLiterals", false)),
-      CommentCharacterLiterals(Options.get("CommentCharacterLiterals", false)),
-      CommentFloatLiterals(Options.get("CommentFloatLiterals", false)),
       CommentIntegerLiterals(Options.get("CommentIntegerLiterals", false)),
-      CommentNullPtrs(Options.get("CommentNullPtrs", false)),
-      CommentParenthesizedTemporaries(
-          Options.get("CommentParenthesizedTemporaries", false)),
+      CommentFloatLiterals(Options.get("CommentFloatLiterals", false)),
       CommentStringLiterals(Options.get("CommentStringLiterals", false)),
-      CommentTypedInitLists(Options.get("CommentTypedInitLists", false)),
       CommentUserDefinedLiterals(
           Options.get("CommentUserDefinedLiterals", false)),
+      CommentCharacterLiterals(Options.get("CommentCharacterLiterals", false)),
+      CommentNullPtrs(Options.get("CommentNullPtrs", false)),
       IdentRE("^(/\\* *)([_A-Za-z][_A-Za-z0-9]*)( *= *\\*/)$") {}
 
 void ArgumentCommentCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "StrictMode", StrictMode);
   Options.store(Opts, "IgnoreSingleArgument", IgnoreSingleArgument);
-  Options.store(Opts, "CommentAnonymousInitLists", CommentAnonymousInitLists);
   Options.store(Opts, "CommentBoolLiterals", CommentBoolLiterals);
-  Options.store(Opts, "CommentCharacterLiterals", CommentCharacterLiterals);
-  Options.store(Opts, "CommentFloatLiterals", CommentFloatLiterals);
   Options.store(Opts, "CommentIntegerLiterals", CommentIntegerLiterals);
-  Options.store(Opts, "CommentNullPtrs", CommentNullPtrs);
-  Options.store(Opts, "CommentParenthesizedTemporaries",
-                CommentParenthesizedTemporaries);
+  Options.store(Opts, "CommentFloatLiterals", CommentFloatLiterals);
   Options.store(Opts, "CommentStringLiterals", CommentStringLiterals);
-  Options.store(Opts, "CommentTypedInitLists", CommentTypedInitLists);
   Options.store(Opts, "CommentUserDefinedLiterals", CommentUserDefinedLiterals);
+  Options.store(Opts, "CommentCharacterLiterals", CommentCharacterLiterals);
+  Options.store(Opts, "CommentNullPtrs", CommentNullPtrs);
 }
 
 void ArgumentCommentCheck::registerMatchers(MatchFinder *Finder) {
@@ -88,22 +77,67 @@ void ArgumentCommentCheck::registerMatchers(MatchFinder *Finder) {
                      this);
 }
 
-static std::vector<CommentToken> getCommentsBeforeLoc(ASTContext *Ctx,
-                                                      SourceLocation Loc) {
-  std::vector<CommentToken> Comments;
+static std::vector<std::pair<SourceLocation, StringRef>>
+getCommentsInRange(ASTContext *Ctx, CharSourceRange Range) {
+  std::vector<std::pair<SourceLocation, StringRef>> Comments;
+  auto &SM = Ctx->getSourceManager();
+  const std::pair<FileID, unsigned> BeginLoc =
+                                        SM.getDecomposedLoc(Range.getBegin()),
+                                    EndLoc =
+                                        SM.getDecomposedLoc(Range.getEnd());
+
+  if (BeginLoc.first != EndLoc.first)
+    return Comments;
+
+  bool Invalid = false;
+  const StringRef Buffer = SM.getBufferData(BeginLoc.first, &Invalid);
+  if (Invalid)
+    return Comments;
+
+  const char *StrData = Buffer.data() + BeginLoc.second;
+
+  Lexer TheLexer(SM.getLocForStartOfFile(BeginLoc.first), Ctx->getLangOpts(),
+                 Buffer.begin(), StrData, Buffer.end());
+  TheLexer.SetCommentRetentionState(true);
+
+  while (true) {
+    Token Tok;
+    if (TheLexer.LexFromRawLexer(Tok))
+      break;
+    if (Tok.getLocation() == Range.getEnd() || Tok.is(tok::eof))
+      break;
+
+    if (Tok.is(tok::comment)) {
+      const std::pair<FileID, unsigned> CommentLoc =
+          SM.getDecomposedLoc(Tok.getLocation());
+      assert(CommentLoc.first == BeginLoc.first);
+      Comments.emplace_back(
+          Tok.getLocation(),
+          StringRef(Buffer.begin() + CommentLoc.second, Tok.getLength()));
+    } else {
+      // Clear comments found before the different token, e.g. comma.
+      Comments.clear();
+    }
+  }
+
+  return Comments;
+}
+
+static std::vector<std::pair<SourceLocation, StringRef>>
+getCommentsBeforeLoc(ASTContext *Ctx, SourceLocation Loc) {
+  std::vector<std::pair<SourceLocation, StringRef>> Comments;
   while (Loc.isValid()) {
-    const std::optional<Token> Tok = utils::lexer::getPreviousToken(
+    const clang::Token Tok = utils::lexer::getPreviousToken(
         Loc, Ctx->getSourceManager(), Ctx->getLangOpts(),
         /*SkipComments=*/false);
-    if (!Tok || Tok->isNot(tok::comment))
+    if (Tok.isNot(tok::comment))
       break;
-    Loc = Tok->getLocation();
-    Comments.emplace_back(CommentToken{
+    Loc = Tok.getLocation();
+    Comments.emplace_back(
         Loc,
         Lexer::getSourceText(CharSourceRange::getCharRange(
-                                 Loc, Loc.getLocWithOffset(Tok->getLength())),
-                             Ctx->getSourceManager(), Ctx->getLangOpts()),
-    });
+                                 Loc, Loc.getLocWithOffset(Tok.getLength())),
+                             Ctx->getSourceManager(), Ctx->getLangOpts()));
   }
   return Comments;
 }
@@ -208,91 +242,21 @@ static const FunctionDecl *resolveMocks(const FunctionDecl *Func) {
   return Func;
 }
 
-namespace {
-
-enum class InitListKind {
-  None,
-  Anonymous,
-  Typed,
-};
-
-} // namespace
-
-static InitListKind getInitListKind(const Expr *Arg) {
-  Arg = Arg->IgnoreUnlessSpelledInSource();
-
-  if (const auto *StdInit = dyn_cast<CXXStdInitializerListExpr>(Arg))
-    Arg = StdInit->getSubExpr()->IgnoreUnlessSpelledInSource();
-
-  if (isa<InitListExpr>(Arg))
-    return InitListKind::Anonymous;
-
-  if (const auto *Ctor = dyn_cast<CXXConstructExpr>(Arg)) {
-    if (!Ctor->isListInitialization())
-      return InitListKind::None;
-    // CXXTemporaryObjectExpr corresponds to explicit Type{...} syntax.
-    if (isa<CXXTemporaryObjectExpr>(Ctor))
-      return InitListKind::Typed;
-    // Other list-initialized constructions (for example '{}') have no
-    // explicit type at the call site.
-    return InitListKind::Anonymous;
-  }
-
-  // std::initializer_list<T>{...} is represented as a functional cast whose
-  // subexpression carries the list-initialization spelling.
-  if (const auto *FuncCast = dyn_cast<CXXFunctionalCastExpr>(Arg)) {
-    const Expr *SubExpr = FuncCast->getSubExpr()->IgnoreImplicit();
-    if (FuncCast->isListInitialization() ||
-        isa<CXXStdInitializerListExpr>(SubExpr))
-      return InitListKind::Typed;
-  }
-
-  return InitListKind::None;
-}
-
-static bool isParenthesizedTemporary(const Expr *Arg) {
-  Arg = Arg->IgnoreUnlessSpelledInSource();
-  if (const auto *TempObject = dyn_cast<CXXTemporaryObjectExpr>(Arg))
-    return !TempObject->isListInitialization();
-  // CXXFunctionalCastExpr with CXXParenListInitExpr corresponds to explicit
-  // Type(...) aggregate temporary initialization syntax.
-  const auto *FuncCast = dyn_cast<CXXFunctionalCastExpr>(Arg);
-  return FuncCast &&
-         isa<CXXParenListInitExpr>(FuncCast->getSubExpr()->IgnoreImplicit());
-}
-
-// Given the argument type and the options determine if we should be adding an
-// argument comment and which diagnostic wording to use.
-ArgumentCommentCheck::CommentKind
-ArgumentCommentCheck::shouldAddComment(const Expr *Arg) const {
-  const InitListKind Kind = getInitListKind(Arg);
-  const bool IsParenthesizedTemporary = isParenthesizedTemporary(Arg);
-
-  // Strip implicit wrappers so brace-init arguments bound to references still
-  // look like list-initialization at this point.
-  Arg = Arg->IgnoreImplicit();
-  if (const auto *UO = dyn_cast<UnaryOperator>(Arg))
-    Arg = UO->getSubExpr()->IgnoreImplicit();
+// Given the argument type and the options determine if we should
+// be adding an argument comment.
+bool ArgumentCommentCheck::shouldAddComment(const Expr *Arg) const {
+  Arg = Arg->IgnoreImpCasts();
+  if (isa<UnaryOperator>(Arg))
+    Arg = cast<UnaryOperator>(Arg)->getSubExpr();
   if (Arg->getExprLoc().isMacroID())
-    return CommentKind::None;
-
-  if ((CommentAnonymousInitLists && Kind == InitListKind::Anonymous) ||
-      (CommentTypedInitLists && Kind == InitListKind::Typed) ||
-      (CommentParenthesizedTemporaries && IsParenthesizedTemporary)) {
-    return CommentKind::NonLiteral;
-  }
-
-  if ((CommentBoolLiterals && isa<CXXBoolLiteralExpr>(Arg)) ||
-      (CommentIntegerLiterals && isa<IntegerLiteral>(Arg)) ||
-      (CommentFloatLiterals && isa<FloatingLiteral>(Arg)) ||
-      (CommentUserDefinedLiterals && isa<UserDefinedLiteral>(Arg)) ||
-      (CommentCharacterLiterals && isa<CharacterLiteral>(Arg)) ||
-      (CommentStringLiterals && isa<StringLiteral>(Arg)) ||
-      (CommentNullPtrs && isa<CXXNullPtrLiteralExpr>(Arg))) {
-    return CommentKind::Literal;
-  }
-
-  return CommentKind::None;
+    return false;
+  return (CommentBoolLiterals && isa<CXXBoolLiteralExpr>(Arg)) ||
+         (CommentIntegerLiterals && isa<IntegerLiteral>(Arg)) ||
+         (CommentFloatLiterals && isa<FloatingLiteral>(Arg)) ||
+         (CommentUserDefinedLiterals && isa<UserDefinedLiteral>(Arg)) ||
+         (CommentCharacterLiterals && isa<CharacterLiteral>(Arg)) ||
+         (CommentStringLiterals && isa<StringLiteral>(Arg)) ||
+         (CommentNullPtrs && isa<CXXNullPtrLiteralExpr>(Arg));
 }
 
 void ArgumentCommentCheck::checkCallArgs(ASTContext *Ctx,
@@ -304,11 +268,6 @@ void ArgumentCommentCheck::checkCallArgs(ASTContext *Ctx,
     return;
 
   Callee = Callee->getFirstDecl();
-  if (const auto *Ctor = dyn_cast<CXXConstructorDecl>(Callee);
-      Ctor && Ctor->isInheritingConstructor()) {
-    if (const auto *BaseCtor = Ctor->getInheritedConstructor().getConstructor())
-      Callee = BaseCtor->getFirstDecl();
-  }
   const unsigned NumArgs =
       std::min<unsigned>(Args.size(), Callee->getNumParams());
   if ((NumArgs == 0) || (IgnoreSingleArgument && NumArgs == 1))
@@ -340,10 +299,9 @@ void ArgumentCommentCheck::checkCallArgs(ASTContext *Ctx,
         MakeFileCharRange(ArgBeginLoc, Args[I]->getBeginLoc());
     ArgBeginLoc = Args[I]->getEndLoc();
 
-    std::vector<CommentToken> Comments;
+    std::vector<std::pair<SourceLocation, StringRef>> Comments;
     if (BeforeArgument.isValid()) {
-      Comments = utils::lexer::getTrailingCommentsInRange(
-          BeforeArgument, Ctx->getSourceManager(), Ctx->getLangOpts());
+      Comments = getCommentsInRange(Ctx, BeforeArgument);
     } else {
       // Fall back to parsing back from the start of the argument.
       const CharSourceRange ArgsRange =
@@ -351,19 +309,18 @@ void ArgumentCommentCheck::checkCallArgs(ASTContext *Ctx,
       Comments = getCommentsBeforeLoc(Ctx, ArgsRange.getBegin());
     }
 
-    for (const auto &Comment : Comments) {
-      SmallVector<StringRef, 2> Matches;
-      if (IdentRE.match(Comment.Text, &Matches) &&
+    for (auto Comment : Comments) {
+      llvm::SmallVector<StringRef, 2> Matches;
+      if (IdentRE.match(Comment.second, &Matches) &&
           !sameName(Matches[2], II->getName(), StrictMode)) {
         {
           const DiagnosticBuilder Diag =
-              diag(Comment.Loc, "argument name '%0' in comment does not "
-                                "match parameter name %1")
+              diag(Comment.first, "argument name '%0' in comment does not "
+                                  "match parameter name %1")
               << Matches[2] << II;
           if (isLikelyTypo(Callee->parameters(), Matches[2], II->getName())) {
             Diag << FixItHint::CreateReplacement(
-                Comment.Loc,
-                llvm::Twine(Matches[1] + II->getName() + Matches[3]).str());
+                Comment.first, (Matches[1] + II->getName() + Matches[3]).str());
           }
         }
         diag(PVD->getLocation(), "%0 declared here", DiagnosticIDs::Note) << II;
@@ -375,18 +332,14 @@ void ArgumentCommentCheck::checkCallArgs(ASTContext *Ctx,
       }
     }
 
-    // If the argument comments are missing for configured argument kinds, add
-    // them.
-    const CommentKind Kind = shouldAddComment(Args[I]);
-    if (Comments.empty() && Kind != CommentKind::None) {
-      SmallString<32> ArgComment;
-      llvm::Twine(llvm::Twine("/*") + II->getName() + "=*/")
-          .toStringRef(ArgComment);
+    // If the argument comments are missing for literals add them.
+    if (Comments.empty() && shouldAddComment(Args[I])) {
+      llvm::SmallString<32> ArgComment;
+      (llvm::Twine("/*") + II->getName() + "=*/").toStringRef(ArgComment);
       const DiagnosticBuilder Diag =
           diag(Args[I]->getBeginLoc(),
-               "argument comment missing for %select{literal argument|"
-               "argument}0 %1")
-          << (Kind == CommentKind::Literal ? 0 : 1) << II
+               "argument comment missing for literal argument %0")
+          << II
           << FixItHint::CreateInsertion(Args[I]->getBeginLoc(), ArgComment);
     }
   }

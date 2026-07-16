@@ -18,18 +18,15 @@
 #--- main.cpp
 
 struct L1 {
-    int a;
+    int w;
     struct L2 {
-        int b;
+        int x;
         struct L3 {
-            int c;
+            int y;
             struct L4 {
-                int d;
+              int z;
                 struct L5 {
-                    int e;
-                    struct L6 {
-                      int f;
-                    } l6;
+                  int a;
                 } l5;
             } l4;
         } l3;

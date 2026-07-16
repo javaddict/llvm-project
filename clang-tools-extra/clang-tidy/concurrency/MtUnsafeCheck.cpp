@@ -11,10 +11,8 @@
 
 using namespace clang::ast_matchers;
 
-namespace clang::tidy {
-
 // Initial list was extracted from gcc documentation
-static constexpr StringRef GlibcFunctions[] = {
+static const clang::StringRef GlibcFunctions[] = {
     "::argp_error",
     "::argp_help",
     "::argp_parse",
@@ -173,7 +171,7 @@ static constexpr StringRef GlibcFunctions[] = {
     "::wordexp",
 };
 
-static constexpr StringRef PosixFunctions[] = {
+static const clang::StringRef PosixFunctions[] = {
     "::asctime",
     "::basename",
     "::catgets",
@@ -258,6 +256,8 @@ static constexpr StringRef PosixFunctions[] = {
     "::wctomb",
 };
 
+namespace clang::tidy {
+
 template <> struct OptionEnumMapping<concurrency::MtUnsafeCheck::FunctionSet> {
   static llvm::ArrayRef<
       std::pair<concurrency::MtUnsafeCheck::FunctionSet, StringRef>>
@@ -273,7 +273,7 @@ template <> struct OptionEnumMapping<concurrency::MtUnsafeCheck::FunctionSet> {
 
 namespace concurrency {
 
-static ast_matchers::internal::Matcher<NamedDecl>
+static ast_matchers::internal::Matcher<clang::NamedDecl>
 hasAnyMtUnsafeNames(MtUnsafeCheck::FunctionSet Libc) {
   switch (Libc) {
   case MtUnsafeCheck::FunctionSet::Posix:

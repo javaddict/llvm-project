@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "Basic/SDNodeProperties.h"
-#include "Basic/SequenceToOffsetTable.h"
 #include "Common/CodeGenDAGPatterns.h"
 #include "Common/CodeGenInstruction.h"
 #include "Common/CodeGenRegisters.h"
@@ -72,12 +71,6 @@ class MatcherTableEmitter {
   std::vector<std::string> VecIncludeStrings;
   MapVector<std::string, unsigned, StringMap<unsigned>> VecPatterns;
 
-  // Map from ValueTypeByHwMode to (Index, UsageCount) pair.
-  // Index is 1-based (0 means not yet assigned).
-  std::map<ValueTypeByHwMode, std::pair<unsigned, unsigned>> ValueTypeMap;
-
-  SequenceToOffsetTable<std::vector<uint8_t>> OperandTable;
-
   unsigned getPatternIdxFromTable(std::string &&P, std::string &&include_loc) {
     const auto [It, Inserted] =
         VecPatterns.try_emplace(std::move(P), VecPatterns.size());
@@ -89,10 +82,8 @@ class MatcherTableEmitter {
   }
 
 public:
-  MatcherTableEmitter(const MatcherList &TheMatcherList,
-                      const CodeGenDAGPatterns &cgp)
-      : CGP(cgp), OpcodeCounts(Matcher::HighestKind + 1, 0),
-        OperandTable(std::nullopt) {
+  MatcherTableEmitter(const Matcher *TheMatcher, const CodeGenDAGPatterns &cgp)
+      : CGP(cgp), OpcodeCounts(Matcher::HighestKind + 1, 0) {
     // Record the usage of ComplexPattern.
     MapVector<const ComplexPattern *, unsigned> ComplexPatternUsage;
     // Record the usage of PatternPredicate.
@@ -101,58 +92,27 @@ public:
     MapVector<TreePattern *, unsigned> PredicateUsage;
 
     // Iterate the whole MatcherTable once and do some statistics.
-    std::function<void(const MatcherList &)> Statistic =
-        [&](const MatcherList &ML) {
-          for (const Matcher *N : ML) {
-            if (auto *SM = dyn_cast<ScopeMatcher>(N))
-              for (unsigned I = 0; I < SM->getNumChildren(); I++)
-                Statistic(SM->getChild(I));
-            else if (auto *SOM = dyn_cast<SwitchOpcodeMatcher>(N))
-              for (unsigned I = 0; I < SOM->getNumCases(); I++)
-                Statistic(SOM->getCaseMatcher(I));
-            else if (auto *STM = dyn_cast<SwitchTypeMatcher>(N))
-              for (unsigned I = 0; I < STM->getNumCases(); I++)
-                Statistic(STM->getCaseMatcher(I));
-            else if (auto *CPM = dyn_cast<CheckComplexPatMatcher>(N))
-              ++ComplexPatternUsage[&CPM->getPattern()];
-            else if (auto *CPPM = dyn_cast<CheckPatternPredicateMatcher>(N))
-              ++PatternPredicateUsage[CPPM->getPredicate()];
-            else if (auto *PM = dyn_cast<CheckPredicateMatcher>(N))
-              ++PredicateUsage[PM->getPredicate().getOrigPatFragRecord()];
-
-            // Collect ValueTypeByHwMode usage for remapping.
-            if (auto *CTM = dyn_cast<CheckTypeMatcher>(N)) {
-              if (!CTM->getType().isSimple())
-                getValueTypeID(CTM->getType());
-            } else if (auto *CCTM = dyn_cast<CheckChildTypeMatcher>(N)) {
-              if (!CCTM->getType().isSimple())
-                getValueTypeID(CCTM->getType());
-            } else if (auto *EIM = dyn_cast<EmitIntegerMatcher>(N)) {
-              if (!EIM->getVT().isSimple())
-                getValueTypeID(EIM->getVT());
-            } else if (auto *ERM = dyn_cast<EmitRegisterMatcher>(N)) {
-              if (!ERM->getVT().isSimple())
-                getValueTypeID(ERM->getVT());
-            }
-
-            if (const auto *EN = dyn_cast<EmitNodeMatcherCommon>(N)) {
-              ArrayRef<unsigned> Ops = EN->getOperandList();
-              std::vector<uint8_t> OpBytes;
-              for (unsigned Op : Ops) {
-                uint8_t Buffer[5];
-                unsigned Len = encodeULEB128(Op, Buffer);
-                for (unsigned i = 0; i < Len; ++i)
-                  OpBytes.push_back(Buffer[i]);
-              }
-              OperandTable.add(OpBytes);
-            }
-          }
-        };
-    Statistic(TheMatcherList);
-
-    sortValueTypeByHwModeByFrequency();
-
-    OperandTable.layout();
+    std::function<void(const Matcher *)> Statistic = [&](const Matcher *N) {
+      while (N) {
+        if (auto *SM = dyn_cast<ScopeMatcher>(N))
+          for (unsigned I = 0; I < SM->getNumChildren(); I++)
+            Statistic(SM->getChild(I));
+        else if (auto *SOM = dyn_cast<SwitchOpcodeMatcher>(N))
+          for (unsigned I = 0; I < SOM->getNumCases(); I++)
+            Statistic(SOM->getCaseMatcher(I));
+        else if (auto *STM = dyn_cast<SwitchTypeMatcher>(N))
+          for (unsigned I = 0; I < STM->getNumCases(); I++)
+            Statistic(STM->getCaseMatcher(I));
+        else if (auto *CPM = dyn_cast<CheckComplexPatMatcher>(N))
+          ++ComplexPatternUsage[&CPM->getPattern()];
+        else if (auto *CPPM = dyn_cast<CheckPatternPredicateMatcher>(N))
+          ++PatternPredicateUsage[CPPM->getPredicate()];
+        else if (auto *PM = dyn_cast<CheckPredicateMatcher>(N))
+          ++PredicateUsage[PM->getPredicate().getOrigPatFragRecord()];
+        N = N->getNext();
+      }
+    };
+    Statistic(TheMatcher);
 
     // Sort ComplexPatterns by usage.
     std::vector<std::pair<const ComplexPattern *, unsigned>> ComplexPatternList(
@@ -207,42 +167,18 @@ public:
     }
   }
 
-  unsigned EmitMatcherList(const MatcherList &ML, const unsigned Indent,
+  unsigned EmitMatcherList(const Matcher *N, const unsigned Indent,
                            unsigned StartIdx, raw_ostream &OS);
 
-  void EmitOperandLists(raw_ostream &OS);
-
-  unsigned SizeMatcherList(MatcherList &ML, raw_ostream &OS);
+  unsigned SizeMatcherList(Matcher *N, raw_ostream &OS);
 
   void EmitPredicateFunctions(raw_ostream &OS);
 
-  void EmitValueTypeFunction(raw_ostream &OS);
-
-  void EmitHistogram(raw_ostream &OS);
+  void EmitHistogram(const Matcher *N, raw_ostream &OS);
 
   void EmitPatternMatchTable(raw_ostream &OS);
 
 private:
-  // Reorder ValueType indices by usage frequency (most common -> index 0).
-  // Updates the indices directly in ValueTypeMap.
-  void sortValueTypeByHwModeByFrequency() {
-    if (ValueTypeMap.empty())
-      return;
-
-    // Collect pointers to map entries with their counts for sorting.
-    using EntryPtr = std::pair<unsigned, unsigned> *;
-    std::vector<EntryPtr> Entries;
-    for (auto &[VT, IdxAndCount] : ValueTypeMap)
-      Entries.push_back(&IdxAndCount);
-
-    // Sort by count descending.
-    llvm::sort(Entries,
-               [](EntryPtr A, EntryPtr B) { return A->second > B->second; });
-
-    // Assign new indices (1-based) in frequency order.
-    for (unsigned NewIdx = 0; NewIdx < Entries.size(); ++NewIdx)
-      Entries[NewIdx]->first = NewIdx + 1;
-  }
   void EmitNodePredicatesFunction(const std::vector<TreePattern *> &Preds,
                                   StringRef Decl, raw_ostream &OS);
 
@@ -276,21 +212,6 @@ private:
     }
     return Entry - 1;
   }
-
-  unsigned getValueTypeID(const ValueTypeByHwMode &VT) {
-    auto &[Idx, Count] = ValueTypeMap[VT];
-    if (Idx == 0) {
-      Idx = ValueTypeMap.size();
-      if (Idx > 256)
-        report_fatal_error(
-            "More ValueType by HwMode than fit in a 8-bit index");
-    }
-    ++Count;
-    return Idx - 1;
-  }
-
-  unsigned emitValueTypeByHwMode(const ValueTypeByHwMode &VTBH, unsigned Index,
-                                 raw_ostream &OS);
 };
 } // end anonymous namespace.
 
@@ -374,11 +295,12 @@ static std::string getIncludePath(const Record *R) {
 
 /// This function traverses the matcher tree and sizes all the nodes
 /// that are children of the three kinds of nodes that have them.
-unsigned MatcherTableEmitter::SizeMatcherList(MatcherList &ML,
-                                              raw_ostream &OS) {
+unsigned MatcherTableEmitter::SizeMatcherList(Matcher *N, raw_ostream &OS) {
   unsigned Size = 0;
-  for (Matcher *N : ML)
+  while (N) {
     Size += SizeMatcher(N, OS);
+    N = N->getNext();
+  }
   return Size;
 }
 
@@ -394,11 +316,12 @@ unsigned MatcherTableEmitter::SizeMatcher(Matcher *N, raw_ostream &OS) {
   // and a trailing zero.
   case Matcher::Scope: {
     ScopeMatcher *SM = cast<ScopeMatcher>(N);
+    assert(SM->getNext() == nullptr && "Scope matcher should not have next");
     unsigned Size = 1; // Count the kind.
     for (unsigned i = 0, e = SM->getNumChildren(); i != e; ++i) {
       const unsigned ChildSize = SizeMatcherList(SM->getChild(i), OS);
       assert(ChildSize != 0 && "Matcher cannot have child of size 0");
-      SM->getChild(i).setSize(ChildSize);
+      SM->getChild(i)->setSize(ChildSize);
       Size += GetVBRSize(ChildSize) + ChildSize; // Count VBR and child size.
     }
     ++Size; // Count the zero sentinel.
@@ -416,17 +339,17 @@ unsigned MatcherTableEmitter::SizeMatcher(Matcher *N, raw_ostream &OS) {
     else
       NumCases = cast<SwitchTypeMatcher>(N)->getNumCases();
     for (unsigned i = 0, e = NumCases; i != e; ++i) {
-      MatcherList *Child;
+      Matcher *Child;
       if (SwitchOpcodeMatcher *SOM = dyn_cast<SwitchOpcodeMatcher>(N)) {
-        Child = &SOM->getCaseMatcher(i);
+        Child = SOM->getCaseMatcher(i);
         Size += 2; // Count the child's opcode.
       } else {
-        Child = &cast<SwitchTypeMatcher>(N)->getCaseMatcher(i);
+        Child = cast<SwitchTypeMatcher>(N)->getCaseMatcher(i);
         Size += GetVBRSize(cast<SwitchTypeMatcher>(N)
                                ->getCaseType(i)
                                .SimpleTy); // Count the child's type.
       }
-      const unsigned ChildSize = SizeMatcherList(*Child, OS);
+      const unsigned ChildSize = SizeMatcherList(Child, OS);
       assert(ChildSize != 0 && "Matcher cannot have child of size 0");
       Child->setSize(ChildSize);
       Size += GetVBRSize(ChildSize) + ChildSize; // Count VBR and child size.
@@ -513,14 +436,6 @@ static unsigned emitMVT(MVT VT, raw_ostream &OS) {
   return EmitVBRValue(VT.SimpleTy, OS);
 }
 
-unsigned
-MatcherTableEmitter::emitValueTypeByHwMode(const ValueTypeByHwMode &VTBH,
-                                           unsigned Index, raw_ostream &OS) {
-  if (!OmitComments)
-    OS << "/*" << VTBH << "*/";
-  OS << Index << ',';
-  return 1;
-}
 /// EmitMatcher - Emit bytes for the specified matcher and return
 /// the number of bytes emitted.
 unsigned MatcherTableEmitter::EmitMatcher(const Matcher *N,
@@ -551,15 +466,15 @@ unsigned MatcherTableEmitter::EmitMatcher(const Matcher *N,
         }
       }
 
-      const MatcherList &Child = SM->getChild(i);
-      unsigned ChildSize = Child.getSize();
+      const Matcher *Child = SM->getChild(i);
+      unsigned ChildSize = Child->getSize();
       CurrentIdx += EmitVBRValue(ChildSize, OS);
       if (!OmitComments)
         OS << " // ->" << CurrentIdx + ChildSize;
       OS << '\n';
 
       ChildSize = EmitMatcherList(Child, Indent + 1, CurrentIdx, OS);
-      assert(ChildSize == Child.getSize() &&
+      assert(ChildSize == Child->getSize() &&
              "Emitted child size does not match calculated size");
       CurrentIdx += ChildSize;
     }
@@ -701,13 +616,13 @@ unsigned MatcherTableEmitter::EmitMatcher(const Matcher *N,
 
     // For each case we emit the size, then the opcode, then the matcher.
     for (unsigned i = 0, e = NumCases; i != e; ++i) {
-      const MatcherList *Child;
+      const Matcher *Child;
       unsigned IdxSize;
       if (const SwitchOpcodeMatcher *SOM = dyn_cast<SwitchOpcodeMatcher>(N)) {
-        Child = &SOM->getCaseMatcher(i);
+        Child = SOM->getCaseMatcher(i);
         IdxSize = 2; // size of opcode in table is 2 bytes.
       } else {
-        Child = &cast<SwitchTypeMatcher>(N)->getCaseMatcher(i);
+        Child = cast<SwitchTypeMatcher>(N)->getCaseMatcher(i);
         IdxSize = GetVBRSize(
             cast<SwitchTypeMatcher>(N)
                 ->getCaseType(i)
@@ -734,7 +649,7 @@ unsigned MatcherTableEmitter::EmitMatcher(const Matcher *N,
         OS << " // ->" << CurrentIdx + ChildSize;
       OS << '\n';
 
-      ChildSize = EmitMatcherList(*Child, Indent + 1, CurrentIdx, OS);
+      ChildSize = EmitMatcherList(Child, Indent + 1, CurrentIdx, OS);
       assert(ChildSize == Child->getSize() &&
              "Emitted child size does not match calculated size");
       CurrentIdx += ChildSize;
@@ -753,84 +668,39 @@ unsigned MatcherTableEmitter::EmitMatcher(const Matcher *N,
   }
 
   case Matcher::CheckType: {
-    const ValueTypeByHwMode &VTBH = cast<CheckTypeMatcher>(N)->getType();
-    if (VTBH.isSimple()) {
-      MVT VT = VTBH.getSimple();
-      if (cast<CheckTypeMatcher>(N)->getResNo() == 0) {
-        switch (VT.SimpleTy) {
-        case MVT::i32:
-        case MVT::i64:
-          OS << "OPC_CheckTypeI" << MVT(VT).getSizeInBits() << ",\n";
-          return 1;
-        default:
-          OS << "OPC_CheckType, ";
-          unsigned NumBytes = emitMVT(VT, OS);
-          OS << '\n';
-          return NumBytes + 1;
-        }
-      }
-
-      OS << "OPC_CheckTypeRes, " << cast<CheckTypeMatcher>(N)->getResNo()
-         << ", ";
-      unsigned NumBytes =
-          emitMVT(cast<CheckTypeMatcher>(N)->getType().getSimple(), OS);
-      OS << '\n';
-      return NumBytes + 2;
-    }
-
-    unsigned OpSize;
     if (cast<CheckTypeMatcher>(N)->getResNo() == 0) {
-      unsigned Index = getValueTypeID(VTBH);
-      if (Index == 0) {
-        OS << "OPC_CheckTypeByHwMode0";
-        if (!OmitComments)
-          OS << "/*" << VTBH << "*/";
-        OS << ',';
-        OpSize = 1;
-      } else {
-        OS << "OPC_CheckTypeByHwMode, ";
-        OpSize = 1 + emitValueTypeByHwMode(VTBH, Index, OS);
-      }
-    } else {
-      OS << "OPC_CheckTypeResByHwMode, "
-         << cast<CheckTypeMatcher>(N)->getResNo() << ", ";
-      OpSize = 2 + emitValueTypeByHwMode(VTBH, getValueTypeID(VTBH), OS);
-    }
-    OS << '\n';
-    return OpSize;
-  }
-
-  case Matcher::CheckChildType: {
-    const ValueTypeByHwMode &VTBH = cast<CheckChildTypeMatcher>(N)->getType();
-    if (VTBH.isSimple()) {
-      MVT VT = VTBH.getSimple();
+      MVT VT = cast<CheckTypeMatcher>(N)->getType();
       switch (VT.SimpleTy) {
       case MVT::i32:
       case MVT::i64:
-        OS << "OPC_CheckChild" << cast<CheckChildTypeMatcher>(N)->getChildNo()
-           << "TypeI" << VT.getSizeInBits() << ",\n";
+        OS << "OPC_CheckTypeI" << MVT(VT).getSizeInBits() << ",\n";
         return 1;
       default:
-        OS << "OPC_CheckChild" << cast<CheckChildTypeMatcher>(N)->getChildNo()
-           << "Type, ";
+        OS << "OPC_CheckType, ";
         unsigned NumBytes = emitMVT(VT, OS);
-        OS << '\n';
+        OS << "\n";
         return NumBytes + 1;
       }
-    } else {
-      unsigned Index = getValueTypeID(VTBH);
-      if (Index == 0) {
-        OS << "OPC_CheckChild" << cast<CheckChildTypeMatcher>(N)->getChildNo()
-           << "TypeByHwMode0";
-        if (!OmitComments)
-          OS << "/*" << VTBH << "*/";
-        OS << ",\n";
-        return 1;
-      }
+    }
+    OS << "OPC_CheckTypeRes, " << cast<CheckTypeMatcher>(N)->getResNo() << ", ";
+    unsigned NumBytes = emitMVT(cast<CheckTypeMatcher>(N)->getType(), OS);
+    OS << "\n";
+    return NumBytes + 2;
+  }
+
+  case Matcher::CheckChildType: {
+    MVT VT = cast<CheckChildTypeMatcher>(N)->getType();
+    switch (VT.SimpleTy) {
+    case MVT::i32:
+    case MVT::i64:
       OS << "OPC_CheckChild" << cast<CheckChildTypeMatcher>(N)->getChildNo()
-         << "TypeByHwMode, ";
-      unsigned NumBytes = emitValueTypeByHwMode(VTBH, Index, OS);
-      OS << '\n';
+         << "TypeI" << MVT(VT).getSizeInBits() << ",\n";
+      return 1;
+    default:
+      OS << "OPC_CheckChild" << cast<CheckChildTypeMatcher>(N)->getChildNo()
+         << "Type, ";
+      unsigned NumBytes = emitMVT(VT, OS);
+      OS << "\n";
       return NumBytes + 1;
     }
   }
@@ -923,36 +793,20 @@ unsigned MatcherTableEmitter::EmitMatcher(const Matcher *N,
     const auto *IM = cast<EmitIntegerMatcher>(N);
     int64_t Val = IM->getValue();
     const std::string &Str = IM->getString();
-    const ValueTypeByHwMode &VTBH = IM->getVT();
+    MVT VT = IM->getVT();
     unsigned TypeBytes = 0;
-    if (VTBH.isSimple()) {
-      MVT VT = VTBH.getSimple();
-      switch (VT.SimpleTy) {
-      case MVT::i8:
-      case MVT::i16:
-      case MVT::i32:
-      case MVT::i64:
-        OS << "OPC_EmitIntegerI" << VT.getSizeInBits() << ", ";
-        break;
-      default:
-        OS << "OPC_EmitInteger, ";
-        TypeBytes = emitMVT(VT, OS);
-        OS << ' ';
-        break;
-      }
-    } else {
-      unsigned Index = getValueTypeID(VTBH);
-      if (Index == 0) {
-        OS << "OPC_EmitIntegerByHwMode0";
-        if (!OmitComments)
-          OS << "/*" << VTBH << "*/";
-        OS << ", ";
-        TypeBytes = 0;
-      } else {
-        OS << "OPC_EmitIntegerByHwMode, ";
-        TypeBytes = emitValueTypeByHwMode(VTBH, Index, OS);
-        OS << ' ';
-      }
+    switch (VT.SimpleTy) {
+    case MVT::i8:
+    case MVT::i16:
+    case MVT::i32:
+    case MVT::i64:
+      OS << "OPC_EmitIntegerI" << VT.getSizeInBits() << ", ";
+      break;
+    default:
+      OS << "OPC_EmitInteger, ";
+      TypeBytes = emitMVT(VT, OS);
+      OS << ' ';
+      break;
     }
     // If the value is 63 or smaller, use the string directly. Otherwise, use
     // a VBR.
@@ -975,46 +829,34 @@ unsigned MatcherTableEmitter::EmitMatcher(const Matcher *N,
   case Matcher::EmitRegister: {
     const EmitRegisterMatcher *Matcher = cast<EmitRegisterMatcher>(N);
     const CodeGenRegister *Reg = Matcher->getReg();
-    const ValueTypeByHwMode &VTBH = Matcher->getVT();
+    MVT VT = Matcher->getVT();
     unsigned OpBytes;
-    if (VTBH.isSimple()) {
-      MVT VT = VTBH.getSimple();
-      // If the enum value of the register is larger than one byte can handle,
-      // use EmitRegister2.
-      if (Reg && Reg->EnumValue > 255) {
-        OS << "OPC_EmitRegister2, ";
-        OpBytes = emitMVT(VT, OS);
-        OS << " TARGET_VAL(" << getQualifiedName(Reg->TheDef) << "),\n";
-        return OpBytes + 3;
-      }
-      switch (VT.SimpleTy) {
-      case MVT::i32:
-      case MVT::i64:
-        OpBytes = 1;
-        OS << "OPC_EmitRegisterI" << VT.getSizeInBits() << ", ";
-        break;
-      default:
-        OS << "OPC_EmitRegister, ";
-        OpBytes = emitMVT(VT, OS) + 1;
-        OS << ' ';
-        break;
-      }
-    } else {
-      if (Reg && Reg->EnumValue > 255) {
-        OS << "OPC_EmitRegisterByHwMode2, ";
-        OpBytes = emitValueTypeByHwMode(VTBH, getValueTypeID(VTBH), OS);
-        OS << " TARGET_VAL(" << getQualifiedName(Reg->TheDef) << "),\n";
-        return OpBytes + 3;
-      }
-
-      OS << "OPC_EmitRegisterByHwMode, ";
-      OpBytes = emitValueTypeByHwMode(VTBH, getValueTypeID(VTBH), OS) + 1;
-      OS << ' ';
+    // If the enum value of the register is larger than one byte can handle,
+    // use EmitRegister2.
+    if (Reg && Reg->EnumValue > 255) {
+      OS << "OPC_EmitRegister2, ";
+      OpBytes = emitMVT(VT, OS);
+      OS << "TARGET_VAL(" << getQualifiedName(Reg->TheDef) << "),\n";
+      return OpBytes + 3;
     }
-    if (Reg)
+    switch (VT.SimpleTy) {
+    case MVT::i32:
+    case MVT::i64:
+      OpBytes = 1;
+      OS << "OPC_EmitRegisterI" << VT.getSizeInBits() << ", ";
+      break;
+    default:
+      OS << "OPC_EmitRegister, ";
+      OpBytes = emitMVT(VT, OS) + 1;
+      break;
+    }
+    if (Reg) {
       OS << getQualifiedName(Reg->TheDef);
-    else
-      OS << "MCRegister::NoRegister";
+    } else {
+      OS << "0 ";
+      if (!OmitComments)
+        OS << "/*zero_reg*/";
+    }
 
     OS << ',';
     if (!OmitComments)
@@ -1031,7 +873,7 @@ unsigned MatcherTableEmitter::EmitMatcher(const Matcher *N,
       OS << ", ";
     OS << Slot << ',';
     if (!OmitComments)
-      OS << " // #" << CTTM->getResultNo() << " = ConvertToTarget #" << Slot;
+      OS << " // #" << CTTM->getResultNo();
     OS << '\n';
     return 1 + (Slot >= 8);
   }
@@ -1060,22 +902,19 @@ unsigned MatcherTableEmitter::EmitMatcher(const Matcher *N,
     if (Reg->EnumValue > 255) {
       assert(isUInt<16>(Reg->EnumValue) && "not handled");
       OS << "OPC_EmitCopyToRegTwoByte, " << Slot << ", "
-         << "TARGET_VAL(" << getQualifiedName(Reg->TheDef) << "),";
+         << "TARGET_VAL(" << getQualifiedName(Reg->TheDef) << "),\n";
       ++Bytes;
     } else {
       if (Slot < 8) {
         OS << "OPC_EmitCopyToReg" << Slot << ", "
-           << getQualifiedName(Reg->TheDef) << ",";
+           << getQualifiedName(Reg->TheDef) << ",\n";
         --Bytes;
       } else {
         OS << "OPC_EmitCopyToReg, " << Slot << ", "
-           << getQualifiedName(Reg->TheDef) << ",";
+           << getQualifiedName(Reg->TheDef) << ",\n";
       }
     }
-    if (!OmitComments)
-      OS << " // = #" << Slot;
 
-    OS << '\n';
     return Bytes;
   }
   case Matcher::EmitNodeXForm: {
@@ -1083,8 +922,8 @@ unsigned MatcherTableEmitter::EmitMatcher(const Matcher *N,
     OS << "OPC_EmitNodeXForm, " << getNodeXFormID(XF->getNodeXForm()) << ", "
        << XF->getSlot() << ',';
     if (!OmitComments)
-      OS << " // #" << XF->getResultNo() << " = "
-         << XF->getNodeXForm()->getName() << " #" << XF->getSlot();
+      OS << " // " << XF->getNodeXForm()->getName() << " #"
+         << XF->getResultNo();
     OS << '\n';
     return 3;
   }
@@ -1116,16 +955,10 @@ unsigned MatcherTableEmitter::EmitMatcher(const Matcher *N,
       OS << "OPC_CaptureDeactivationSymbol,\n";
       OS.indent(FullIndexWidth + Indent);
     }
-
-    bool ByHwMode =
-        llvm::any_of(EN->getVTList(), [](const ValueTypeByHwMode &VT) {
-          return !VT.isSimple();
-        });
-
     bool IsEmitNode = isa<EmitNodeMatcher>(EN);
     OS << (IsEmitNode ? "OPC_EmitNode" : "OPC_MorphNodeTo");
     unsigned NumVTs = EN->getNumVTs();
-    bool CompressVTs = !ByHwMode && EN->getNumVTs() < 3;
+    bool CompressVTs = NumVTs < 3;
     bool CompressNodeInfo = false;
     if (CompressVTs) {
       OS << NumVTs;
@@ -1154,9 +987,6 @@ unsigned MatcherTableEmitter::EmitMatcher(const Matcher *N,
       }
     }
 
-    if (ByHwMode)
-      OS << "ByHwMode";
-
     const CodeGenInstruction &CGI = EN->getInstruction();
     OS << ", TARGET_VAL(" << CGI.Namespace << "::" << CGI.TheDef->getName()
        << ")";
@@ -1184,55 +1014,26 @@ unsigned MatcherTableEmitter::EmitMatcher(const Matcher *N,
       OS << ",";
     }
     unsigned NumTypeBytes = 0;
-    if (ByHwMode) {
-      for (unsigned i = 0, e = EN->getNumVTs(); i != e; ++i) {
-        OS << ' ';
-        const ValueTypeByHwMode &VTBH = EN->getVT(i);
-        NumTypeBytes += emitValueTypeByHwMode(VTBH, getValueTypeID(VTBH), OS);
-      }
-    } else {
-      for (unsigned i = 0, e = EN->getNumVTs(); i != e; ++i) {
-        OS << ' ';
-        NumTypeBytes += emitMVT(EN->getVT(i).getSimple(), OS);
-      }
+    for (unsigned i = 0, e = EN->getNumVTs(); i != e; ++i) {
+      OS << ' ';
+      NumTypeBytes += emitMVT(EN->getVT(i), OS);
     }
 
-    unsigned NumOps = EN->getNumOperands();
-    OS << ' ' << NumOps;
+    OS << ' ' << EN->getNumOperands();
     if (!OmitComments)
       OS << "/*#Ops*/";
     OS << ',';
-
     unsigned NumOperandBytes = 0;
-    if (NumOps != 0) {
-      std::vector<uint8_t> OpBytes;
-      for (unsigned i = 0, e = EN->getNumOperands(); i != e; ++i) {
-        uint8_t Buffer[5];
-        unsigned Len = encodeULEB128(EN->getOperand(i), Buffer);
-        for (unsigned i = 0; i < Len; ++i)
-          OpBytes.push_back(Buffer[i]);
-      }
-      unsigned Index = OperandTable.get(OpBytes);
+    for (unsigned i = 0, e = EN->getNumOperands(); i != e; ++i) {
       OS << ' ';
-      if (!OmitComments)
-        OS << "/*OperandList*/";
-      NumOperandBytes = EmitVBRValue(Index, OS);
+      NumOperandBytes += EmitVBRValue(EN->getOperand(i), OS);
     }
 
     if (!OmitComments) {
-      // Print the operand #'s.
-      ArrayRef<unsigned> Ops = EN->getOperandList();
-      OS << " // Ops =";
-      if (Ops.empty())
-        OS << " None";
-      else
-        for (unsigned OpNo : Ops)
-          OS << " #" << OpNo;
-
       // Print the result #'s for EmitNode.
       if (const EmitNodeMatcher *E = dyn_cast<EmitNodeMatcher>(EN)) {
         if (unsigned NumResults = EN->getNumVTs()) {
-          OS << " Results =";
+          OS << " // Results =";
           unsigned First = E->getFirstResultSlot();
           for (unsigned i = 0; i != NumResults; ++i)
             OS << " #" << First + i;
@@ -1296,23 +1097,23 @@ unsigned MatcherTableEmitter::EmitMatcher(const Matcher *N,
 
 /// This function traverses the matcher tree and emits all the nodes.
 /// The nodes have already been sized.
-unsigned MatcherTableEmitter::EmitMatcherList(const MatcherList &ML,
+unsigned MatcherTableEmitter::EmitMatcherList(const Matcher *N,
                                               const unsigned Indent,
                                               unsigned CurrentIdx,
                                               raw_ostream &OS) {
   unsigned Size = 0;
-  for (const Matcher *N : ML) {
+  while (N) {
     if (!OmitComments)
       OS << "/*" << format_decimal(CurrentIdx, IndexWidth) << "*/";
     unsigned MatcherSize = EmitMatcher(N, Indent, CurrentIdx, OS);
     Size += MatcherSize;
     CurrentIdx += MatcherSize;
+
+    // If there are other nodes in this list, iterate to them, otherwise we're
+    // done.
+    N = N->getNext();
   }
   return Size;
-}
-
-void MatcherTableEmitter::EmitOperandLists(raw_ostream &OS) {
-  OperandTable.emit(OS, [](raw_ostream &OS, uint8_t O) { OS << (unsigned)O; });
 }
 
 void MatcherTableEmitter::EmitNodePredicatesFunction(
@@ -1460,45 +1261,6 @@ void MatcherTableEmitter::EmitPredicateFunctions(raw_ostream &OS) {
   }
 }
 
-void MatcherTableEmitter::EmitValueTypeFunction(raw_ostream &OS) {
-  if (ValueTypeMap.empty())
-    return;
-
-  BeginEmitFunction(OS, "MVT", "getValueTypeForHwMode(unsigned Index) const",
-                    /*AddOverride=*/true);
-  OS << "{\n";
-
-  OS << "  switch (Index) {\n";
-  OS << "  default: llvm_unreachable(\"Unexpected index\");\n";
-
-  for (const auto &[VTs, IdxAndCount] : ValueTypeMap) {
-    const auto &[Idx, Count] = IdxAndCount;
-    OS << "  case " << (Idx - 1) << ":\n";
-    if (VTs.isSimple()) {
-      OS << "    return " << getEnumName(VTs.getSimple()) << ";\n";
-    } else {
-      OS << "    switch (HwMode) {\n";
-      if (!VTs.hasDefault())
-        OS << "    default:\n      return MVT();\n";
-      for (const auto [Mode, VT] : VTs) {
-        if (Mode == DefaultMode)
-          OS << "    default:\n";
-        else
-          OS << "    case " << Mode << ":\n";
-        OS << "      return " << getEnumName(VT) << ";\n";
-      }
-
-      OS << "    }\n";
-      OS << "    break;\n";
-    }
-  }
-
-  OS << "  }\n";
-
-  OS << "}\n";
-  EndEmitFunction(OS);
-}
-
 static StringRef getOpcodeString(Matcher::KindTy Kind) {
   switch (Kind) {
   case Matcher::Scope:
@@ -1580,7 +1342,7 @@ static StringRef getOpcodeString(Matcher::KindTy Kind) {
   llvm_unreachable("Unhandled opcode?");
 }
 
-void MatcherTableEmitter::EmitHistogram(raw_ostream &OS) {
+void MatcherTableEmitter::EmitHistogram(const Matcher *M, raw_ostream &OS) {
   if (OmitComments)
     return;
 
@@ -1593,8 +1355,8 @@ void MatcherTableEmitter::EmitHistogram(raw_ostream &OS) {
   OS << '\n';
 }
 
-void llvm::EmitMatcherTable(MatcherList &TheMatcherList,
-                            const CodeGenDAGPatterns &CGP, raw_ostream &OS) {
+void llvm::EmitMatcherTable(Matcher *TheMatcher, const CodeGenDAGPatterns &CGP,
+                            raw_ostream &OS) {
   OS << "#if defined(GET_DAGISEL_DECL) && defined(GET_DAGISEL_BODY)\n";
   OS << "#error GET_DAGISEL_DECL and GET_DAGISEL_BODY cannot be both defined, ";
   OS << "undef both for inline definitions\n";
@@ -1625,7 +1387,7 @@ void llvm::EmitMatcherTable(MatcherList &TheMatcherList,
   OS << "#endif\n\n";
 
   BeginEmitFunction(OS, "void", "SelectCode(SDNode *N)", false /*AddOverride*/);
-  MatcherTableEmitter MatcherEmitter(TheMatcherList, CGP);
+  MatcherTableEmitter MatcherEmitter(TheMatcher, CGP);
 
   // First we size all the children of the three kinds of matchers that have
   // them. This is done by sharing the code in EmitMatcher(). but we don't
@@ -1633,7 +1395,7 @@ void llvm::EmitMatcherTable(MatcherList &TheMatcherList,
   bool SaveOmitComments = OmitComments;
   OmitComments = true;
   raw_null_ostream NullOS;
-  unsigned TotalSize = MatcherEmitter.SizeMatcherList(TheMatcherList, NullOS);
+  unsigned TotalSize = MatcherEmitter.SizeMatcherList(TheMatcher, NullOS);
   OmitComments = SaveOmitComments;
 
   // Now that the matchers are sized, we can emit the code for them to the
@@ -1646,26 +1408,20 @@ void llvm::EmitMatcherTable(MatcherList &TheMatcherList,
   OS << "  #define COVERAGE_IDX_VAL(X) X & 255, (unsigned(X) >> 8) & 255, ";
   OS << "(unsigned(X) >> 16) & 255, (unsigned(X) >> 24) & 255\n";
   OS << "  static const uint8_t MatcherTable[] = {\n";
-  TotalSize = MatcherEmitter.EmitMatcherList(TheMatcherList, 1, 0, OS);
-  OS << "  }; // Total Array size is " << TotalSize << " bytes\n\n";
+  TotalSize = MatcherEmitter.EmitMatcherList(TheMatcher, 1, 0, OS);
+  OS << "    0\n  }; // Total Array size is " << (TotalSize + 1)
+     << " bytes\n\n";
 
-  MatcherEmitter.EmitHistogram(OS);
-
-  OS << "  static const uint8_t OperandLists[] = {\n";
-  MatcherEmitter.EmitOperandLists(OS);
-  OS << "  };\n\n";
+  MatcherEmitter.EmitHistogram(TheMatcher, OS);
 
   OS << "  #undef COVERAGE_IDX_VAL\n";
   OS << "  #undef TARGET_VAL\n";
-  OS << "  SelectCodeCommon(N, MatcherTable, sizeof(MatcherTable),\n";
-  OS << "                   OperandLists);\n";
+  OS << "  SelectCodeCommon(N, MatcherTable, sizeof(MatcherTable));\n";
   OS << "}\n";
   EndEmitFunction(OS);
 
   // Next up, emit the function for node and pattern predicates:
   MatcherEmitter.EmitPredicateFunctions(OS);
-
-  MatcherEmitter.EmitValueTypeFunction(OS);
 
   if (InstrumentCoverage)
     MatcherEmitter.EmitPatternMatchTable(OS);

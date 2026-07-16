@@ -29,7 +29,6 @@ public:
 private:
   utils::IncludeInserter Inserter;
   const bool ValuesOnly;
-  const bool IgnoreMacros;
 };
 
 } // namespace clang::tidy::modernize

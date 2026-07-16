@@ -10,7 +10,6 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/CtxProfAnalysis.h"
 #include "llvm/Analysis/DomTreeUpdater.h"
@@ -48,11 +47,6 @@ extern cl::opt<bool> ProfcheckDisableMetadataFixes;
 
 #define DEBUG_TYPE "jump-table-to-switch"
 
-STATISTIC(NumEligibleJumpTables, "The number of jump tables seen by the pass "
-                                 "that can be converted if deemed profitable.");
-STATISTIC(NumJumpTablesConverted,
-          "The number of jump tables converted into switches.");
-
 namespace {
 struct JumpTableTy {
   Value *Index;
@@ -84,10 +78,9 @@ static std::optional<JumpTableTy> parseJumpTable(GetElementPtrInst *GEP,
   if (!ConstantOffset.isZero())
     return std::nullopt;
   APInt StrideBytes = VariableOffsets.front().second;
-  const uint64_t JumpTableSizeBytes = GV->getGlobalSize(DL);
+  const uint64_t JumpTableSizeBytes = DL.getTypeAllocSize(GV->getValueType());
   if (JumpTableSizeBytes % StrideBytes.getZExtValue() != 0)
     return std::nullopt;
-  ++NumEligibleJumpTables;
   const uint64_t N = JumpTableSizeBytes / StrideBytes.getZExtValue();
   if (N > JumpTableSizeThreshold)
     return std::nullopt;
@@ -114,7 +107,6 @@ expandToSwitch(CallBase *CB, const JumpTableTy &JT, DomTreeUpdater &DTU,
                OptimizationRemarkEmitter &ORE,
                llvm::function_ref<GlobalValue::GUID(const Function &)>
                    GetGuidForFunction) {
-  ++NumJumpTablesConverted;
   const bool IsVoid = CB->getType() == Type::getVoidTy(CB->getContext());
 
   SmallVector<DominatorTree::UpdateType, 8> DTUpdates;
@@ -158,8 +150,6 @@ expandToSwitch(CallBase *CB, const JumpTableTy &JT, DomTreeUpdater &DTU,
 
     for (const auto &[G, C] : Targets) {
       [[maybe_unused]] auto It = GuidToCounter.insert({G, C});
-      // We should always be inserting as it is verifier-enforced IR invariant
-      // that VP metadata does not have duplicate values.
       assert(It.second);
     }
   }
@@ -183,7 +173,7 @@ expandToSwitch(CallBase *CB, const JumpTableTy &JT, DomTreeUpdater &DTU,
     // just some of the jump targets are taken (for the given profile).
     BranchWeights.push_back(FctID == 0U ? 0U
                                         : GuidToCounter.lookup_or(FctID, 0U));
-    UncondBrInst::Create(Tail, B);
+    BranchInst::Create(Tail, B);
     if (PHI)
       PHI->addIncoming(Call, B);
   }
@@ -192,11 +182,9 @@ expandToSwitch(CallBase *CB, const JumpTableTy &JT, DomTreeUpdater &DTU,
     return OptimizationRemark(DEBUG_TYPE, "ReplacedJumpTableWithSwitch", CB)
            << "expanded indirect call into switch";
   });
-  // Only set branch weights on the switch if we have non-zero branch weights.
-  // We can have no non-zero branch weights while having VP metadata if for
-  // example, all of the functions are external and not instrumented.
-  if (HadProfile && !ProfcheckDisableMetadataFixes &&
-      llvm::any_of(BranchWeights, not_equal_to(0))) {
+  if (HadProfile && !ProfcheckDisableMetadataFixes) {
+    // At least one of the targets must've been taken.
+    assert(llvm::any_of(BranchWeights, [](uint64_t V) { return V != 0; }));
     setBranchWeights(*Switch, downscaleWeights(BranchWeights),
                      /*IsExpected=*/false);
   } else
@@ -215,12 +203,11 @@ PreservedAnalyses JumpTableToSwitchPass::run(Function &F,
   PostDominatorTree *PDT = AM.getCachedResult<PostDominatorTreeAnalysis>(F);
   DomTreeUpdater DTU(DT, PDT, DomTreeUpdater::UpdateStrategy::Lazy);
   bool Changed = false;
-  auto FuncToGuid = [InLTO = this->InLTO](const Function &Fct) {
+  auto FuncToGuid = [&](const Function &Fct) {
     if (Fct.getMetadata(AssignGUIDPass::GUIDMetadataName))
       return AssignGUIDPass::getGUID(Fct);
 
-    return Function::getGUIDAssumingExternalLinkage(
-        getIRPGOFuncName(Fct, InLTO));
+    return Function::getGUIDAssumingExternalLinkage(getIRPGOFuncName(F, InLTO));
   };
 
   for (BasicBlock &BB : make_early_inc_range(F)) {

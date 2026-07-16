@@ -15,12 +15,11 @@
 
 namespace llvm {
 
-class LibCallsShrinkWrapPass
-    : public OptionalPassInfoMixin<LibCallsShrinkWrapPass> {
+class LibCallsShrinkWrapPass : public PassInfoMixin<LibCallsShrinkWrapPass> {
 public:
   static StringRef name() { return "LibCallsShrinkWrapPass"; }
 
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
 } // end namespace llvm
 

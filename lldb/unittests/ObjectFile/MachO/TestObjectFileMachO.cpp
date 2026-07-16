@@ -6,16 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "lldb/Host/HostInfo.h"
 #include "Plugins/ObjectFile/Mach-O/ObjectFileMachO.h"
-#include "Plugins/Platform/MacOSX/PlatformMacOSX.h"
-#include "Plugins/Platform/MacOSX/PlatformRemoteMacOSX.h"
 #include "TestingSupport/SubsystemRAII.h"
 #include "TestingSupport/TestUtilities.h"
 #include "lldb/Core/Module.h"
-#include "lldb/Core/ModuleSpec.h"
 #include "lldb/Host/FileSystem.h"
-#include "lldb/Host/HostInfo.h"
-#include "lldb/Utility/FileSpec.h"
 #include "lldb/lldb-defines.h"
 #include "gtest/gtest.h"
 
@@ -23,7 +19,6 @@
 #include <dlfcn.h>
 #endif
 
-using namespace lldb;
 using namespace lldb_private;
 using namespace llvm;
 
@@ -35,17 +30,12 @@ class ObjectFileMachOTest : public ::testing::Test {
 
 #if defined(__APPLE__)
 TEST_F(ObjectFileMachOTest, ModuleFromSharedCacheInfo) {
-  ArchSpec arch("arm64-apple-macosx-");
+  SharedCacheImageInfo image_info =
+      HostInfo::GetSharedCacheImageInfo("/usr/lib/libobjc.A.dylib");
+  EXPECT_TRUE(image_info.uuid);
+  EXPECT_TRUE(image_info.data_sp);
 
-  Platform::SetHostPlatform(PlatformRemoteMacOSX::CreateInstance(true, &arch));
-
-  SharedCacheImageInfo image_info = HostInfo::GetSharedCacheImageInfo(
-      ConstString("/usr/lib/libobjc.A.dylib"),
-      lldb::eSymbolSharedCacheUseHostSharedCache);
-  EXPECT_TRUE(image_info.GetUUID());
-  EXPECT_TRUE(image_info.GetExtractor());
-
-  ModuleSpec spec(FileSpec(), UUID(), image_info.GetExtractor());
+  ModuleSpec spec(FileSpec(), UUID(), image_info.data_sp);
   lldb::ModuleSP module = std::make_shared<Module>(spec);
   ObjectFile *OF = module->GetObjectFile();
   ASSERT_TRUE(llvm::isa<ObjectFileMachO>(OF));
@@ -66,7 +56,7 @@ TEST_F(ObjectFileMachOTest, ModuleFromSharedCacheInfo) {
                                           lldb::eSymbolTypeAny, symbol_indices);
     EXPECT_EQ(symbol_indices.size(), 1u);
 
-    const Symbol *sym = symtab->SymbolAtIndex(symbol_indices[0]);
+    Symbol *sym = symtab->SymbolAtIndex(symbol_indices[0]);
     ASSERT_NE(sym, nullptr);
     Address base = sym->GetAddress();
     size_t size = sym->GetByteSize();
@@ -84,15 +74,13 @@ TEST_F(ObjectFileMachOTest, ModuleFromSharedCacheInfo) {
   // Read a symbol from the __TEXT segment...
   check_symbol("objc_msgSend");
   // ... and one from the __DATA segment
-  check_symbol("OBJC_IVAR_$_NSObject.isa");
+  check_symbol("OBJC_CLASS_$_NSObject");
 }
 
 TEST_F(ObjectFileMachOTest, IndirectSymbolsInTheSharedCache) {
   SharedCacheImageInfo image_info = HostInfo::GetSharedCacheImageInfo(
-      ConstString(
-          "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit"),
-      lldb::eSymbolSharedCacheUseHostSharedCache);
-  ModuleSpec spec(FileSpec(), UUID(), image_info.GetExtractor());
+      "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit");
+  ModuleSpec spec(FileSpec(), UUID(), image_info.data_sp);
   lldb::ModuleSP module = std::make_shared<Module>(spec);
 
   ObjectFile *OF = module->GetObjectFile();

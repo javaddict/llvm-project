@@ -41,6 +41,7 @@ int main(int argc, char** argv) {
           ->Arg(8192);
     };
     bm.operator()("std::distance(deque<int>)", std_distance);
+    bm.operator()("rng::distance(deque<int>)", std::ranges::distance);
   }
 
   // {std,ranges}::distance(std::join_view)
@@ -72,6 +73,8 @@ int main(int argc, char** argv) {
           ->Arg(8192);
     };
     bm.operator()<std::vector<std::vector<int>>>("std::distance(join_view(vector<vector<int>>))", std_distance, 256);
+    bm.operator()<std::vector<std::vector<int>>>(
+        "rng::distance(join_view(vector<vector<int>>)", std::ranges::distance, 256);
   }
 
   benchmark::Initialize(&argc, argv);

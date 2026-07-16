@@ -115,9 +115,8 @@ struct CognitiveComplexity final {
       } else if (C == Criteria::IncrementNesting) {
         Increment = 0; // Unused in this message.
         MsgId = 3;
-      } else {
+      } else
         llvm_unreachable("should not get to here.");
-      }
 
       return {MsgId, Increment};
     }

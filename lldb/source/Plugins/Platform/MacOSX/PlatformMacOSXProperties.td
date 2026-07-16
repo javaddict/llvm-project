@@ -1,12 +1,12 @@
 include "../../../../include/lldb/Core/PropertiesBase.td"
 
-let Definition = "platformdarwinkernel", Path = "platform.plugin.darwin-kernel" in {
+let Definition = "platformdarwinkernel" in {
   def KextDirectories: Property<"kext-directories", "FileSpecList">,
     DefaultStringValue<"">,
     Desc<"Directories/KDKs to search for kexts in when starting a kernel debug session.">;
 }
 
-let Definition = "platformdarwin", Path = "platform.plugin.darwin" in {
+let Definition = "platformdarwin" in {
   def IgnoredExceptions: Property<"ignored-exceptions", "String">,
     DefaultStringValue<"">,
     Desc<"List the mach exceptions to ignore, separated by '|' "

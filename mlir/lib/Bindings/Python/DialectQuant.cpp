@@ -17,6 +17,7 @@
 #include <mlir/Bindings/Python/IRAttributes.h>
 
 namespace nb = nanobind;
+using namespace llvm;
 using namespace mlir::python::nanobind_adaptors;
 
 namespace mlir {

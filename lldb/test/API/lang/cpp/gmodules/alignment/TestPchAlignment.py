@@ -13,8 +13,6 @@ from lldbsuite.test import lldbutil
 
 
 class TestPchAlignment(TestBase):
-    SHARED_BUILD_TESTCASE = False
-
     @add_test_categories(["gmodules"])
     def test_expr(self):
         self.build()

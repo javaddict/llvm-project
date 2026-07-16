@@ -35,6 +35,7 @@ namespace Fortran {
 namespace parser {
 struct OpenMPConstruct;
 struct OpenMPDeclarativeConstruct;
+struct OmpEndLoopDirective;
 struct OmpClauseList;
 } // namespace parser
 

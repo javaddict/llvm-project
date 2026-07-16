@@ -1,4 +1,4 @@
-// RUN: %check_clang_tidy -std=c++17-or-later %s bugprone-suspicious-stringview-data-usage %t
+// RUN: %check_clang_tidy -std=c++17-or-later %s bugprone-suspicious-stringview-data-usage %t -- -- -isystem %clang_tidy_headers
 #include <string>
 
 struct View {

@@ -22,7 +22,7 @@ AST_MATCHER(StringLiteral, isOrdinary) { return Node.isOrdinary(); }
 } // namespace
 
 UseStdPrintCheck::UseStdPrintCheck(StringRef Name, ClangTidyContext *Context)
-    : ClangTidyCheck(Name, Context),
+    : ClangTidyCheck(Name, Context), PP(nullptr),
       StrictMode(Options.get("StrictMode", false)),
       PrintfLikeFunctions(utils::options::parseStringList(
           Options.get("PrintfLikeFunctions", ""))),
@@ -69,8 +69,8 @@ void UseStdPrintCheck::registerPPCallbacks(const SourceManager &SM,
   this->PP = PP;
 }
 
-static StatementMatcher
-unusedReturnValue(const StatementMatcher &MatchedCallExpr) {
+static clang::ast_matchers::StatementMatcher unusedReturnValue(
+    const clang::ast_matchers::StatementMatcher &MatchedCallExpr) {
   auto UnusedInCompoundStmt =
       compoundStmt(forEach(MatchedCallExpr),
                    // The checker can't currently differentiate between the
@@ -158,8 +158,7 @@ void UseStdPrintCheck::check(const MatchFinder::MatchResult &Result) {
 
   if (MaybeHeaderToInclude)
     Diag << IncludeInserter.createIncludeInsertion(
-        Result.SourceManager->getFileID(
-            Result.SourceManager->getExpansionLoc(PrintfCall->getBeginLoc())),
+        Result.Context->getSourceManager().getFileID(PrintfCall->getBeginLoc()),
         *MaybeHeaderToInclude);
 }
 

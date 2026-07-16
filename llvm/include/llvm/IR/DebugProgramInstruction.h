@@ -240,7 +240,7 @@ class DbgLabelRecord : public DbgRecord {
   /// This constructor intentionally left private, so that it is only called via
   /// "createUnresolvedDbgLabelRecord", which clearly expresses that it is for
   /// parsing only.
-  DbgLabelRecord(MDNode *Label);
+  DbgLabelRecord(MDNode *Label, MDNode *DL);
 
 public:
   LLVM_ABI DbgLabelRecord(DILabel *Label, DebugLoc DL);
@@ -249,7 +249,8 @@ public:
   /// MDNodes. Trying to access the resulting DbgLabelRecord's fields before
   /// they are resolved, or if they resolve to the wrong type, will result in a
   /// crash.
-  LLVM_ABI static DbgLabelRecord *createUnresolvedDbgLabelRecord(MDNode *Label);
+  LLVM_ABI static DbgLabelRecord *createUnresolvedDbgLabelRecord(MDNode *Label,
+                                                                 MDNode *DL);
 
   LLVM_ABI DbgLabelRecord *clone() const;
   LLVM_ABI void print(raw_ostream &O, bool IsForDebug = false) const;
@@ -322,7 +323,7 @@ private:
   /// depending on which Type is passed.
   DbgVariableRecord(LocationType Type, Metadata *Val, MDNode *Variable,
                     MDNode *Expression, MDNode *AssignID, Metadata *Address,
-                    MDNode *AddressExpression);
+                    MDNode *AddressExpression, MDNode *DI);
 
 public:
   /// Used to create DbgVariableRecords during parsing, where some metadata
@@ -332,9 +333,11 @@ public:
   /// for all types of DbgVariableRecords for simplicity while parsing, but
   /// asserts if any necessary fields are empty or unused fields are not empty,
   /// i.e. if the #dbg_assign fields are used for a non-dbg-assign type.
-  LLVM_ABI static DbgVariableRecord *createUnresolvedDbgVariableRecord(
-      LocationType Type, Metadata *Val, MDNode *Variable, MDNode *Expression,
-      MDNode *AssignID, Metadata *Address, MDNode *AddressExpression);
+  LLVM_ABI static DbgVariableRecord *
+  createUnresolvedDbgVariableRecord(LocationType Type, Metadata *Val,
+                                    MDNode *Variable, MDNode *Expression,
+                                    MDNode *AssignID, Metadata *Address,
+                                    MDNode *AddressExpression, MDNode *DI);
 
   LLVM_ABI static DbgVariableRecord *
   createDVRAssign(Value *Val, DILocalVariable *Variable,

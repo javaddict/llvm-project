@@ -16,12 +16,12 @@ namespace llvm {
 class TargetMachine;
 
 class InterleavedLoadCombinePass
-    : public OptionalPassInfoMixin<InterleavedLoadCombinePass> {
+    : public PassInfoMixin<InterleavedLoadCombinePass> {
   const TargetMachine *TM;
 
 public:
   explicit InterleavedLoadCombinePass(const TargetMachine &TM) : TM(&TM) {}
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
 
 } // namespace llvm

@@ -20,6 +20,7 @@
 # RESULT-NEXT: gdsSize:         128
 # RESULT-NEXT: dynLDSAlign:     16
 # RESULT-NEXT: isEntryFunction: true
+# RESULT-NEXT: noSignedZerosFPMath: true
 # RESULT-NEXT: memoryBound:     true
 # RESULT-NEXT: waveLimiter:     true
 # RESULT-NEXT: hasSpilledSGPRs: true
@@ -73,6 +74,7 @@ machineFunctionInfo:
   gdsSize:         128
   dynLDSAlign:     16
   isEntryFunction: true
+  noSignedZerosFPMath: true
   memoryBound:     true
   waveLimiter:     true
   hasSpilledSGPRs: true

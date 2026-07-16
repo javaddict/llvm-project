@@ -58,9 +58,8 @@ public:
   bool mayNeedRelaxation(unsigned Opcode, ArrayRef<MCOperand> Operands,
                          const MCSubtargetInfo &STI) const override;
 
-  bool fixupNeedsRelaxationAdvanced(const MCFragment &, const MCFixup &,
-                                    const MCValue &, uint64_t,
-                                    bool) const override;
+  bool fixupNeedsRelaxation(const MCFixup &Fixup,
+                            uint64_t Value) const override;
 
   void relaxInstruction(MCInst &Inst,
                         const MCSubtargetInfo &STI) const override;
@@ -189,13 +188,8 @@ bool M68kAsmBackend::mayNeedRelaxation(unsigned Opcode, ArrayRef<MCOperand>,
   // NOTE will change for x20 mem
 }
 
-bool M68kAsmBackend::fixupNeedsRelaxationAdvanced(const MCFragment &,
-                                                  const MCFixup &Fixup,
-                                                  const MCValue &,
-                                                  uint64_t UnsignedValue,
-                                                  bool Resolved) const {
-  if (!Resolved)
-    return true;
+bool M68kAsmBackend::fixupNeedsRelaxation(const MCFixup &Fixup,
+                                          uint64_t UnsignedValue) const {
   int64_t Value = static_cast<int64_t>(UnsignedValue);
 
   if (!isInt<32>(Value) || (!Allows32BitBranch && !isInt<16>(Value)))

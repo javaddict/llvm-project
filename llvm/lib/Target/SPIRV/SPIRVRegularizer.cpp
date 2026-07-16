@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "SPIRVRegularizer.h"
 #include "SPIRV.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
@@ -25,25 +24,27 @@
 
 using namespace llvm;
 
-static bool runImpl(Function &F);
-
 namespace {
-struct SPIRVRegularizerLegacy : public FunctionPass {
+struct SPIRVRegularizer : public FunctionPass {
 public:
   static char ID;
-  SPIRVRegularizerLegacy() : FunctionPass(ID) {}
-  bool runOnFunction(Function &F) override { return runImpl(F); }
+  SPIRVRegularizer() : FunctionPass(ID) {}
+  bool runOnFunction(Function &F) override;
   StringRef getPassName() const override { return "SPIR-V Regularizer"; }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     FunctionPass::getAnalysisUsage(AU);
   }
+
+private:
+  void runLowerConstExpr(Function &F);
+  void runLowerI1Comparisons(Function &F);
 };
 } // namespace
 
-char SPIRVRegularizerLegacy::ID = 0;
+char SPIRVRegularizer::ID = 0;
 
-INITIALIZE_PASS(SPIRVRegularizerLegacy, DEBUG_TYPE, "SPIR-V Regularizer", false,
+INITIALIZE_PASS(SPIRVRegularizer, DEBUG_TYPE, "SPIR-V Regularizer", false,
                 false)
 
 // Since SPIR-V cannot represent constant expression, constant expressions
@@ -54,7 +55,7 @@ INITIALIZE_PASS(SPIRVRegularizerLegacy, DEBUG_TYPE, "SPIR-V Regularizer", false,
 // and all uses of it by instructions in that function are replaced by
 // one instruction.
 // TODO: remove redundant instructions for common subexpression.
-static void runLowerConstExpr(Function &F) {
+void SPIRVRegularizer::runLowerConstExpr(Function &F) {
   LLVMContext &Ctx = F.getContext();
   std::list<Instruction *> WorkList;
   for (auto &II : instructions(F))
@@ -156,7 +157,7 @@ static void runLowerConstExpr(Function &F) {
 // The backend treats i1 as boolean values, and SPIR-V only allows logical
 // operations for boolean values. This function lowers i1 comparisons with
 // certain predicates to logical operations to generate valid SPIR-V.
-static void runLowerI1Comparisons(Function &F) {
+void SPIRVRegularizer::runLowerI1Comparisons(Function &F) {
   for (auto &I : make_early_inc_range(instructions(F))) {
     auto *Cmp = dyn_cast<ICmpInst>(&I);
     if (!Cmp)
@@ -208,17 +209,12 @@ static void runLowerI1Comparisons(Function &F) {
   }
 }
 
-static bool runImpl(Function &F) {
+bool SPIRVRegularizer::runOnFunction(Function &F) {
   runLowerI1Comparisons(F);
   runLowerConstExpr(F);
   return true;
 }
 
-PreservedAnalyses SPIRVRegularizer::run(Function &F,
-                                        FunctionAnalysisManager &AM) {
-  return runImpl(F) ? PreservedAnalyses::none() : PreservedAnalyses::all();
-}
-
 FunctionPass *llvm::createSPIRVRegularizerPass() {
-  return new SPIRVRegularizerLegacy();
+  return new SPIRVRegularizer();
 }

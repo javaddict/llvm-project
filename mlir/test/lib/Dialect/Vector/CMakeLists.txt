@@ -20,5 +20,5 @@ mlir_target_link_libraries(MLIRVectorTestPasses PUBLIC
   MLIRTransformUtils
   MLIRVectorDialect
   MLIRVectorToSCF
-  MLIRX86Dialect
+  MLIRX86VectorDialect
   )

@@ -6,11 +6,8 @@
 # CHECK: [[#@LINE+1]]:19: error: Expected ,, instead got:
 .import_module foo
 
-# CHECK: [[#@LINE+1]]:20: error: Expected string or identifier, got:
+# CHECK: [[#@LINE+1]]:20: error: Expected identifier, got:
 .import_module foo,
 
 # CHECK: [[#@LINE+1]]:24: error: Expected EOL, instead got: ,
 .import_module foo, bar,
-
-# CHECK: [[#@LINE+1]]:21: error: Expected string or identifier, got: "bar
-.import_module foo, "bar

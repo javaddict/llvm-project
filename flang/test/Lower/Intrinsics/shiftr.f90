@@ -1,4 +1,5 @@
-! RUN: %flang_fc1 -emit-hlfir %s -o - | FileCheck %s
+! RUN: bbc -emit-fir -hlfir=false %s -o - | FileCheck %s
+! RUN: %flang_fc1 -emit-fir -flang-deprecated-no-hlfir %s -o - | FileCheck %s
 
 ! CHECK-LABEL: shiftr1_test
 ! CHECK-SAME: %[[A:.*]]: !fir.ref<i8>{{.*}}, %[[B:.*]]: !fir.ref<i32>{{.*}}, %[[C:.*]]: !fir.ref<i8>{{.*}}
@@ -7,11 +8,8 @@ subroutine shiftr1_test(a, b, c)
   integer :: b
   integer(kind=1) :: c
 
-  ! CHECK-DAG: %[[A_DECL:.*]]:2 = hlfir.declare %[[A]]
-  ! CHECK-DAG: %[[B_DECL:.*]]:2 = hlfir.declare %[[B]]
-  ! CHECK-DAG: %[[C_DECL:.*]]:2 = hlfir.declare %[[C]]
-  ! CHECK-DAG: %[[A_VAL:.*]] = fir.load %[[A_DECL]]#0 : !fir.ref<i8>
-  ! CHECK-DAG: %[[B_VAL:.*]] = fir.load %[[B_DECL]]#0 : !fir.ref<i32>
+  ! CHECK: %[[A_VAL:.*]] = fir.load %[[A]] : !fir.ref<i8>
+  ! CHECK: %[[B_VAL:.*]] = fir.load %[[B]] : !fir.ref<i32>
   c = shiftr(a, b)
   ! CHECK: %[[C_BITS:.*]] = arith.constant 8 : i8
   ! CHECK: %[[C_0:.*]] = arith.constant 0 : i8
@@ -21,7 +19,6 @@ subroutine shiftr1_test(a, b, c)
   ! CHECK: %[[INVALID:.*]] = arith.ori %[[UNDER]], %[[OVER]] : i1
   ! CHECK: %[[SHIFT:.*]] = arith.shrui %[[A_VAL]], %[[B_CONV]] : i8
   ! CHECK: %[[RES:.*]] = arith.select %[[INVALID]], %[[C_0]], %[[SHIFT]] : i8
-  ! CHECK: hlfir.assign %[[RES]] to %[[C_DECL]]#0 : i8, !fir.ref<i8>
 end subroutine shiftr1_test
 
 ! CHECK-LABEL: shiftr2_test
@@ -31,11 +28,8 @@ subroutine shiftr2_test(a, b, c)
   integer :: b
   integer(kind=2) :: c
 
-  ! CHECK-DAG: %[[A_DECL:.*]]:2 = hlfir.declare %[[A]]
-  ! CHECK-DAG: %[[B_DECL:.*]]:2 = hlfir.declare %[[B]]
-  ! CHECK-DAG: %[[C_DECL:.*]]:2 = hlfir.declare %[[C]]
-  ! CHECK-DAG: %[[A_VAL:.*]] = fir.load %[[A_DECL]]#0 : !fir.ref<i16>
-  ! CHECK-DAG: %[[B_VAL:.*]] = fir.load %[[B_DECL]]#0 : !fir.ref<i32>
+  ! CHECK: %[[A_VAL:.*]] = fir.load %[[A]] : !fir.ref<i16>
+  ! CHECK: %[[B_VAL:.*]] = fir.load %[[B]] : !fir.ref<i32>
   c = shiftr(a, b)
   ! CHECK: %[[C_BITS:.*]] = arith.constant 16 : i16
   ! CHECK: %[[C_0:.*]] = arith.constant 0 : i16
@@ -45,7 +39,6 @@ subroutine shiftr2_test(a, b, c)
   ! CHECK: %[[INVALID:.*]] = arith.ori %[[UNDER]], %[[OVER]] : i1
   ! CHECK: %[[SHIFT:.*]] = arith.shrui %[[A_VAL]], %[[B_CONV]] : i16
   ! CHECK: %[[RES:.*]] = arith.select %[[INVALID]], %[[C_0]], %[[SHIFT]] : i16
-  ! CHECK: hlfir.assign %[[RES]] to %[[C_DECL]]#0 : i16, !fir.ref<i16>
 end subroutine shiftr2_test
 
 ! CHECK-LABEL: shiftr4_test
@@ -55,11 +48,8 @@ subroutine shiftr4_test(a, b, c)
   integer :: b
   integer(kind=4) :: c
 
-  ! CHECK-DAG: %[[A_DECL:.*]]:2 = hlfir.declare %[[A]]
-  ! CHECK-DAG: %[[B_DECL:.*]]:2 = hlfir.declare %[[B]]
-  ! CHECK-DAG: %[[C_DECL:.*]]:2 = hlfir.declare %[[C]]
-  ! CHECK-DAG: %[[A_VAL:.*]] = fir.load %[[A_DECL]]#0 : !fir.ref<i32>
-  ! CHECK-DAG: %[[B_VAL:.*]] = fir.load %[[B_DECL]]#0 : !fir.ref<i32>
+  ! CHECK: %[[A_VAL:.*]] = fir.load %[[A]] : !fir.ref<i32>
+  ! CHECK: %[[B_VAL:.*]] = fir.load %[[B]] : !fir.ref<i32>
   c = shiftr(a, b)
   ! CHECK: %[[C_BITS:.*]] = arith.constant 32 : i32
   ! CHECK: %[[C_0:.*]] = arith.constant 0 : i32
@@ -68,7 +58,6 @@ subroutine shiftr4_test(a, b, c)
   ! CHECK: %[[INVALID:.*]] = arith.ori %[[UNDER]], %[[OVER]] : i1
   ! CHECK: %[[SHIFT:.*]] = arith.shrui %[[A_VAL]], %[[B_VAL]] : i32
   ! CHECK: %[[RES:.*]] = arith.select %[[INVALID]], %[[C_0]], %[[SHIFT]] : i32
-  ! CHECK: hlfir.assign %[[RES]] to %[[C_DECL]]#0 : i32, !fir.ref<i32>
 end subroutine shiftr4_test
 
 ! CHECK-LABEL: shiftr8_test
@@ -78,11 +67,8 @@ subroutine shiftr8_test(a, b, c)
   integer :: b
   integer(kind=8) :: c
 
-  ! CHECK-DAG: %[[A_DECL:.*]]:2 = hlfir.declare %[[A]]
-  ! CHECK-DAG: %[[B_DECL:.*]]:2 = hlfir.declare %[[B]]
-  ! CHECK-DAG: %[[C_DECL:.*]]:2 = hlfir.declare %[[C]]
-  ! CHECK-DAG: %[[A_VAL:.*]] = fir.load %[[A_DECL]]#0 : !fir.ref<i64>
-  ! CHECK-DAG: %[[B_VAL:.*]] = fir.load %[[B_DECL]]#0 : !fir.ref<i32>
+  ! CHECK: %[[A_VAL:.*]] = fir.load %[[A]] : !fir.ref<i64>
+  ! CHECK: %[[B_VAL:.*]] = fir.load %[[B]] : !fir.ref<i32>
   c = shiftr(a, b)
   ! CHECK: %[[C_BITS:.*]] = arith.constant 64 : i64
   ! CHECK: %[[C_0:.*]] = arith.constant 0 : i64
@@ -92,7 +78,6 @@ subroutine shiftr8_test(a, b, c)
   ! CHECK: %[[INVALID:.*]] = arith.ori %[[UNDER]], %[[OVER]] : i1
   ! CHECK: %[[SHIFT:.*]] = arith.shrui %[[A_VAL]], %[[B_CONV]] : i64
   ! CHECK: %[[RES:.*]] = arith.select %[[INVALID]], %[[C_0]], %[[SHIFT]] : i64
-  ! CHECK: hlfir.assign %[[RES]] to %[[C_DECL]]#0 : i64, !fir.ref<i64>
 end subroutine shiftr8_test
 
 ! CHECK-LABEL: shiftr16_test
@@ -102,11 +87,8 @@ subroutine shiftr16_test(a, b, c)
   integer :: b
   integer(kind=16) :: c
 
-  ! CHECK-DAG: %[[A_DECL:.*]]:2 = hlfir.declare %[[A]]
-  ! CHECK-DAG: %[[B_DECL:.*]]:2 = hlfir.declare %[[B]]
-  ! CHECK-DAG: %[[C_DECL:.*]]:2 = hlfir.declare %[[C]]
-  ! CHECK-DAG: %[[A_VAL:.*]] = fir.load %[[A_DECL]]#0 : !fir.ref<i128>
-  ! CHECK-DAG: %[[B_VAL:.*]] = fir.load %[[B_DECL]]#0 : !fir.ref<i32>
+  ! CHECK: %[[A_VAL:.*]] = fir.load %[[A]] : !fir.ref<i128>
+  ! CHECK: %[[B_VAL:.*]] = fir.load %[[B]] : !fir.ref<i32>
   c = shiftr(a, b)
   ! CHECK: %[[C_BITS:.*]] = arith.constant 128 : i128
   ! CHECK: %[[C_0:.*]] = arith.constant 0 : i128
@@ -116,5 +98,4 @@ subroutine shiftr16_test(a, b, c)
   ! CHECK: %[[INVALID:.*]] = arith.ori %[[UNDER]], %[[OVER]] : i1
   ! CHECK: %[[SHIFT:.*]] = arith.shrui %[[A_VAL]], %[[B_CONV]] : i128
   ! CHECK: %[[RES:.*]] = arith.select %[[INVALID]], %[[C_0]], %[[SHIFT]] : i128
-  ! CHECK: hlfir.assign %[[RES]] to %[[C_DECL]]#0 : i128, !fir.ref<i128>
 end subroutine shiftr16_test

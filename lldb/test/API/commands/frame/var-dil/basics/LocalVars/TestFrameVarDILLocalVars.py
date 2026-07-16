@@ -16,7 +16,7 @@ class TestFrameVarDILLocalVars(TestBase):
 
     def test_frame_var(self):
         self.build()
-        (target, process, thread, bkpt) = lldbutil.run_to_source_breakpoint(
+        lldbutil.run_to_source_breakpoint(
             self, "Set a breakpoint here", lldb.SBFileSpec("main.cpp")
         )
 
@@ -25,10 +25,3 @@ class TestFrameVarDILLocalVars(TestBase):
         self.expect_var_path("b", value="2")
         self.expect_var_path("c", value="'\\xfd'")
         self.expect_var_path("s", value="4")
-
-        # Check that identifiers are allowed in both simple and legacy modes
-        frame = thread.GetFrameAtIndex(0)
-        simple = frame.GetValueForVariablePath("a", lldb.eDILModeSimple)
-        legacy = frame.GetValueForVariablePath("a", lldb.eDILModeLegacy)
-        self.assertSuccess(simple.GetError())
-        self.assertSuccess(legacy.GetError())

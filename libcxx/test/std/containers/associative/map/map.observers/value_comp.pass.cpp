@@ -8,15 +8,13 @@
 
 // <map>
 
-// value_compare value_comp() const; // constexpr since C++26
+// value_compare value_comp() const;
 
 #include <map>
 #include <cassert>
 #include <string>
 
-#include "test_macros.h"
-
-TEST_CONSTEXPR_CXX26 bool test() {
+int main(int, char**) {
   typedef std::map<int, std::string> map_type;
 
   map_type m;
@@ -27,13 +25,6 @@ TEST_CONSTEXPR_CXX26 bool test() {
 
   assert(cm.value_comp()(*p1.first, *p2.first));
   assert(!cm.value_comp()(*p2.first, *p1.first));
-  return true;
-}
 
-int main(int, char**) {
-  test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
   return 0;
 }

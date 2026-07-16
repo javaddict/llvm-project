@@ -266,11 +266,10 @@ class CrashLog(symbolication.Symbolicator):
     class Frame:
         """Class that represents a stack frame in a thread in a darwin crash log"""
 
-        def __init__(self, index, pc, description, inlined=False):
+        def __init__(self, index, pc, description):
             self.pc = pc
             self.description = description
             self.index = index
-            self.inlined = inlined
 
         def __str__(self):
             if self.description:
@@ -730,7 +729,6 @@ class JSONCrashLogParser(CrashLogParser):
             if ident not in self.crashlog.idents:
                 self.crashlog.idents.append(ident)
 
-            inlined = "inline" in json_frame and bool(json_frame["inline"])
             frame_offset = int(json_frame["imageOffset"])
             image_addr = self.get_used_image(image_id)["base"]
             pc = image_addr + frame_offset
@@ -747,7 +745,7 @@ class JSONCrashLogParser(CrashLogParser):
                     "address": frame_offset - location,
                 }
 
-            thread.frames.append(self.crashlog.Frame(idx, pc, frame_offset, inlined))
+            thread.frames.append(self.crashlog.Frame(idx, pc, frame_offset))
 
             # on arm64 systems, if it jump through a null function pointer,
             # we end up at address 0 and the crash reporter unwinder
@@ -804,17 +802,26 @@ class JSONCrashLogParser(CrashLogParser):
                 frame_symbol
             ) = frame_offset = frame_file = frame_line = frame_column = None
 
-            if len(frame_match.groups()) == 4:
+            if len(frame_match.groups()) == 3:
                 # Get the image UUID from the frame image name.
-                frame_id, frame_img_name, frame_addr, _ = frame_match.groups()
-            elif len(frame_match.groups()) == 6:
+                (frame_id, frame_img_name, frame_addr) = frame_match.groups()
+            elif len(frame_match.groups()) == 5:
                 (
                     frame_id,
                     frame_img_name,
                     frame_addr,
                     frame_symbol,
                     frame_offset,
-                    _,
+                ) = frame_match.groups()
+            elif len(frame_match.groups()) == 7:
+                (
+                    frame_id,
+                    frame_img_name,
+                    frame_addr,
+                    frame_symbol,
+                    frame_offset,
+                    frame_file,
+                    frame_line,
                 ) = frame_match.groups()
             elif len(frame_match.groups()) == 8:
                 (
@@ -825,22 +832,8 @@ class JSONCrashLogParser(CrashLogParser):
                     frame_offset,
                     frame_file,
                     frame_line,
-                    _,
-                ) = frame_match.groups()
-            elif len(frame_match.groups()) == 9:
-                (
-                    frame_id,
-                    frame_img_name,
-                    frame_addr,
-                    frame_symbol,
-                    frame_offset,
-                    frame_file,
-                    frame_line,
                     frame_column,
-                    _,
                 ) = frame_match.groups()
-
-            inlined = frame_match.group("inlined") is not None
 
             thread.add_ident(frame_img_name)
             if frame_img_name not in self.crashlog.idents:
@@ -862,9 +855,7 @@ class JSONCrashLogParser(CrashLogParser):
                         }
 
             thread.frames.append(
-                self.crashlog.Frame(
-                    int(frame_id), int(frame_addr, 0), description, inlined
-                )
+                self.crashlog.Frame(int(frame_id), int(frame_addr, 0), description)
             )
 
         return True
@@ -952,11 +943,8 @@ class TextCrashLogParser(CrashLogParser):
                         )?
                        """
 
-            inlined = r"(?:\s+(?P<inlined>\[inlined\]))?"
-
             return re.compile(
-                index + img_name + version + address + symbol + inlined,
-                flags=re.VERBOSE,
+                index + img_name + version + address + symbol, flags=re.VERBOSE
             )
 
     frame_regex = FrameRegex.get()
@@ -1221,17 +1209,26 @@ class TextCrashLogParser(CrashLogParser):
             frame_addr
         ) = frame_symbol = frame_offset = frame_file = frame_line = frame_column = None
 
-        if len(frame_match.groups()) == 4:
+        if len(frame_match.groups()) == 3:
             # Get the image UUID from the frame image name.
-            frame_id, frame_img_name, frame_addr, _ = frame_match.groups()
-        elif len(frame_match.groups()) == 6:
+            (frame_id, frame_img_name, frame_addr) = frame_match.groups()
+        elif len(frame_match.groups()) == 5:
             (
                 frame_id,
                 frame_img_name,
                 frame_addr,
                 frame_symbol,
                 frame_offset,
-                _,
+            ) = frame_match.groups()
+        elif len(frame_match.groups()) == 7:
+            (
+                frame_id,
+                frame_img_name,
+                frame_addr,
+                frame_symbol,
+                frame_offset,
+                frame_file,
+                frame_line,
             ) = frame_match.groups()
         elif len(frame_match.groups()) == 8:
             (
@@ -1242,22 +1239,8 @@ class TextCrashLogParser(CrashLogParser):
                 frame_offset,
                 frame_file,
                 frame_line,
-                _,
-            ) = frame_match.groups()
-        elif len(frame_match.groups()) == 9:
-            (
-                frame_id,
-                frame_img_name,
-                frame_addr,
-                frame_symbol,
-                frame_offset,
-                frame_file,
-                frame_line,
                 frame_column,
-                _,
             ) = frame_match.groups()
-
-        inlined = frame_match.group("inlined") is not None
 
         self.thread.add_ident(frame_img_name)
         if frame_img_name not in self.crashlog.idents:
@@ -1282,7 +1265,7 @@ class TextCrashLogParser(CrashLogParser):
             )
 
         self.thread.frames.append(
-            self.crashlog.Frame(int(frame_id), int(frame_addr, 0), description, inlined)
+            self.crashlog.Frame(int(frame_id), int(frame_addr, 0), description)
         )
 
         return True

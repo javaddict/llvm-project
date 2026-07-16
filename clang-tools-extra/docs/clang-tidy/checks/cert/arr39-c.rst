@@ -1,4 +1,6 @@
 .. title:: clang-tidy - cert-arr39-c
+.. meta::
+   :http-equiv=refresh: 5;URL=../bugprone/sizeof-expression.html
 
 cert-arr39-c
 ============

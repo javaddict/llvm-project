@@ -1432,13 +1432,11 @@ TYPED_TEST(BitVectorTest, DenseSet) {
   I = Set.insert(C);
   EXPECT_EQ(true, I.second);
 
-  // Occupancy lives in the used-bit array rather than a sentinel key stored in
-  // a bucket, so a value equal to the Empty/Tombstone key can be inserted like
-  // any other.
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
   TypeParam D;
-  EXPECT_EQ(true, Set.insert(D).second);
-  EXPECT_EQ(1U, Set.count(D));
-  EXPECT_EQ(true, Set.erase(D));
+  EXPECT_DEATH(Set.insert(D),
+               "Empty/Tombstone value shouldn't be inserted into map!");
+#endif
 
   EXPECT_EQ(3U, Set.size());
   EXPECT_EQ(1U, Set.count(A));

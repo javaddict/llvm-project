@@ -122,12 +122,12 @@ class CustomOperandProps<bit optional = 0, string name = NAME> {
   string OperandType = "OPERAND_IMMEDIATE";
 }
 
-class CustomOperand<bit optional = 0, string name = NAME, ValueType type = i32>
+class CustomOperand<ValueType type, bit optional = 0, string name = NAME>
   : Operand<type>, CustomOperandProps<optional, name>;
 
 class ImmOperand<ValueType type, string name = NAME, bit optional = 0,
                  string printer = "print"#name>
-    : CustomOperand<optional, name, type=type> {
+    : CustomOperand<type, optional, name> {
   let ImmTy = "ImmTyNone";
   let ParserMethod = "";
   let PrintMethod = printer;
@@ -140,7 +140,7 @@ def u16imm : ImmOperand<i16, "U16Imm", 0, "printU16ImmOperand">;
 
 class ValuePredicatedOperand<CustomOperand op, string valuePredicate,
                              bit optional = 0>
-    : CustomOperand<optional, type=op.Type> {
+    : CustomOperand<op.Type, optional> {
   let ImmTy = op.ImmTy;
   defvar OpPredicate = op.ParserMatchClass.PredicateMethod;
   let PredicateMethod =
@@ -225,22 +225,6 @@ class FoldTernaryOpPat<SDPatternOperator op1, SDPatternOperator op2> : PatFrag<
 
 def imad : FoldTernaryOpPat<mul, add>;
 
-// Match binary op with source operands that won't fold into sdwa patterns.
-class BinOp_no_sdwa<SDPatternOperator binop> : PatFrag<
-  (ops node:$lhs, node:$rhs),
-  (binop node:$lhs, node:$rhs),
-  [{
-    return !isSDWAOperand(Op.getOperand(0).getNode()) &&
-           !isSDWAOperand(Op.getOperand(1).getNode());
-  }]> {
-  let GISelPredicateCode = [{
-    return true; // TODO
-  }];
-}
-
-def AMDGPUmul_i24_no_sdwa : BinOp_no_sdwa<AMDGPUmul_i24>;
-def AMDGPUmul_u24_no_sdwa : BinOp_no_sdwa<AMDGPUmul_u24>;
-
 let Properties = [SDNPCommutative, SDNPAssociative] in {
 def smax_oneuse : HasOneUseBinOp<smax>;
 def smin_oneuse : HasOneUseBinOp<smin>;
@@ -261,8 +245,7 @@ def or_oneuse : HasOneUseBinOp<or>;
 def xor_oneuse : HasOneUseBinOp<xor>;
 } // Properties = [SDNPCommutative, SDNPAssociative]
 
-def not_oneuse  : HasOneUseUnaryOp<not>;
-def vnot_oneuse : HasOneUseUnaryOp<vnot>;
+def not_oneuse : HasOneUseUnaryOp<not>;
 
 def add_oneuse : HasOneUseBinOp<add>;
 def sub_oneuse : HasOneUseBinOp<sub>;
@@ -760,14 +743,23 @@ int FP32_ONE = 0x3f800000;
 int FP32_NEG_ONE = 0xbf800000;
 int FP64_ONE = 0x3ff0000000000000;
 int FP64_NEG_ONE = 0xbff0000000000000;
-int BF16_ONE = 0x3F80;
-int BF16_NEG_ONE = 0xBF80;
 }
 def CONST : Constants;
 
-def fpimm_zero : FPImmLeaf<fAny, [{ return Imm.isZero(); }]> ;
-def fpimm_one : FPImmLeaf<fAny, [{ return Imm.isExactlyValue(+1.0); }]> ;
-def fpimm_half : FPImmLeaf<fAny, [{ return Imm.isExactlyValue(+0.5); }]> ;
+def FP_ZERO : PatLeaf <
+  (fpimm),
+  [{return N->getValueAPF().isZero();}]
+>;
+
+def FP_ONE : PatLeaf <
+  (fpimm),
+  [{return N->isExactlyValue(1.0);}]
+>;
+
+def FP_HALF : PatLeaf <
+  (fpimm),
+  [{return N->isExactlyValue(0.5);}]
+>;
 
 /* Generic helper patterns for intrinsics */
 /* -------------------------------------- */
@@ -814,33 +806,34 @@ class DwordAddrPat<ValueType vt, RegisterClass rc> : AMDGPUPat <
 
 // Special conversion patterns
 
-let GIIgnoreCopies = 1 in
-def cvt_rpi_i32_f32 : PatFrag<
+def cvt_rpi_i32_f32 : PatFrag <
   (ops node:$src),
-  (fp_to_sint (ffloor_nnan (fadd $src, fpimm_half)))
->, GISelFlags;
+  (fp_to_sint (ffloor (fadd $src, FP_HALF))),
+  [{ (void) N; return TM.Options.NoNaNsFPMath; }]
+>;
 
-def cvt_flr_i32_f32 : PatFrag<
+def cvt_flr_i32_f32 : PatFrag <
   (ops node:$src),
-  (fp_to_sint (ffloor_nnan $src))
+  (fp_to_sint (ffloor $src)),
+  [{ (void)N; return TM.Options.NoNaNsFPMath; }]
 >;
 
 let AddedComplexity = 2 in {
 class IMad24Pat<Instruction Inst, bit HasClamp = 0> : AMDGPUPat <
-  (add (AMDGPUmul_i24_no_sdwa i32:$src0, i32:$src1), i32:$src2),
+  (add (AMDGPUmul_i24 i32:$src0, i32:$src1), i32:$src2),
   !if(HasClamp, (Inst $src0, $src1, $src2, (i1 0)),
                 (Inst $src0, $src1, $src2))
 >;
 
 class UMad24Pat<Instruction Inst, bit HasClamp = 0> : AMDGPUPat <
-  (add (AMDGPUmul_u24_no_sdwa i32:$src0, i32:$src1), i32:$src2),
+  (add (AMDGPUmul_u24 i32:$src0, i32:$src1), i32:$src2),
   !if(HasClamp, (Inst $src0, $src1, $src2, (i1 0)),
                 (Inst $src0, $src1, $src2))
 >;
 } // AddedComplexity.
 
 class RcpPat<Instruction RcpInst, ValueType vt> : AMDGPUPat <
-  (fdiv fpimm_one, vt:$src),
+  (fdiv FP_ONE, vt:$src),
   (RcpInst $src)
 >;
 
@@ -861,7 +854,7 @@ class NeverNaNPats<dag ops, list<dag> frags> : PatFrags<ops, frags> {
     return CurDAG->isKnownNeverNaN(SDValue(N,0));
   }];
   let GISelPredicateCode = [{
-    return VT->isKnownNeverNaN(MI.getOperand(0).getReg());
+    return isKnownNeverNaN(MI.getOperand(0).getReg(), MRI);
   }];
 }
 

@@ -43,7 +43,6 @@ LIBC_INLINE uintmax_t apply_length_modifier(uintmax_t num,
     return num & cpp::numeric_limits<uintptr_t>::max();
   case LengthModifier::j:
     return num; // j is intmax, so no mask is necessary.
-#ifndef LIBC_COPT_PRINTF_DISABLE_BITINT
   case LengthModifier::w:
   case LengthModifier::wf: {
     uintmax_t mask;
@@ -56,7 +55,6 @@ LIBC_INLINE uintmax_t apply_length_modifier(uintmax_t num,
     }
     return num & mask;
   }
-#endif // LIBC_COPT_PRINTF_DISABLE_BITINT
   }
   __builtin_unreachable();
 }

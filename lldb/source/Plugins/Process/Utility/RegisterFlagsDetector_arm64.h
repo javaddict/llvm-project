@@ -69,8 +69,6 @@ private:
                                  uint64_t hwcap3);
   static Fields DetectGCSFeatureFields(uint64_t hwcap, uint64_t hwcap2,
                                        uint64_t hwcap3);
-  static Fields DetectPOREL0Fields(uint64_t hwcap, uint64_t hwcap2,
-                                   uint64_t hwcap3);
 
   struct RegisterEntry {
     RegisterEntry(llvm::StringRef name, unsigned size, DetectorFn detector)
@@ -80,7 +78,7 @@ private:
     llvm::StringRef m_name;
     RegisterFlags m_flags;
     DetectorFn m_detector;
-  } m_registers[9] = {
+  } m_registers[8] = {
       RegisterEntry("cpsr", 4, DetectCPSRFields),
       RegisterEntry("fpsr", 4, DetectFPSRFields),
       RegisterEntry("fpcr", 4, DetectFPCRFields),
@@ -89,7 +87,6 @@ private:
       RegisterEntry("fpmr", 8, DetectFPMRFields),
       RegisterEntry("gcs_features_enabled", 8, DetectGCSFeatureFields),
       RegisterEntry("gcs_features_locked", 8, DetectGCSFeatureFields),
-      RegisterEntry("por_el0", 8, DetectPOREL0Fields),
   };
 
   // Becomes true once field detection has been run for all registers.

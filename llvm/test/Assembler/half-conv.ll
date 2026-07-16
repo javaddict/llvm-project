@@ -9,6 +9,6 @@ entry:
   store half 0xH4C8D, ptr %a, align 2
   %tmp = load half, ptr %a, align 2
   %conv = fpext half %tmp to float
-; CHECK: f0x4191A000
+; CHECK: 0x4032340000000000
   ret float %conv
 }

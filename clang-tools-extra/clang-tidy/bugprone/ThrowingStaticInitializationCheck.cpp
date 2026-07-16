@@ -7,26 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "ThrowingStaticInitializationCheck.h"
-#include "../utils/Matchers.h"
-#include "../utils/OptionsUtils.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 
 using namespace clang::ast_matchers;
 
 namespace clang::tidy::bugprone {
-
-ThrowingStaticInitializationCheck::ThrowingStaticInitializationCheck(
-    StringRef Name, ClangTidyContext *Context)
-    : ClangTidyCheck(Name, Context),
-      AllowedTypes(
-          utils::options::parseStringList(Options.get("AllowedTypes", ""))) {}
-
-void ThrowingStaticInitializationCheck::storeOptions(
-    ClangTidyOptions::OptionMap &Opts) {
-  Options.store(Opts, "AllowedTypes",
-                utils::options::serializeStringList(AllowedTypes));
-}
 
 void ThrowingStaticInitializationCheck::registerMatchers(MatchFinder *Finder) {
   // Match any static or thread_local variable declaration that has an
@@ -36,10 +22,8 @@ void ThrowingStaticInitializationCheck::registerMatchers(MatchFinder *Finder) {
           TK_AsIs,
           varDecl(
               anyOf(hasThreadStorageDuration(), hasStaticStorageDuration()),
-              unless(anyOf(
-                  isConstexpr(), hasType(cxxRecordDecl(isLambda())),
-                  hasAncestor(functionDecl()),
-                  hasType(matchers::matchesAnyListedTypeName(AllowedTypes)))),
+              unless(anyOf(isConstexpr(), hasType(cxxRecordDecl(isLambda())),
+                           hasAncestor(functionDecl()))),
               anyOf(hasDescendant(cxxConstructExpr(hasDeclaration(
                         cxxConstructorDecl(unless(isNoThrow())).bind("func")))),
                     hasDescendant(cxxNewExpr(hasDeclaration(

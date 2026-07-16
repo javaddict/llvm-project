@@ -11,7 +11,6 @@ add_mlir_conversion_library(MLIRMPIToLLVM
   Core
 
   LINK_LIBS PUBLIC
-  MLIRControlFlowDialect
   MLIRDLTIDialect
   MLIRLLVMCommonConversion
   MLIRLLVMDialect

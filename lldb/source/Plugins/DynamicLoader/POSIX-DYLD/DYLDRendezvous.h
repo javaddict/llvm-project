@@ -133,7 +133,6 @@ public:
   // the per-thread state.
   struct ThreadInfo {
     bool valid;             // whether we read valid metadata
-    uint32_t pthread_size;  // size of struct pthread
     uint32_t dtv_offset;    // offset of DTV pointer within pthread
     uint32_t dtv_slot_size; // size of one DTV slot
     uint32_t modid_offset;  // offset of module ID within link_map
@@ -346,14 +345,7 @@ protected:
   /// supplied by the runtime linker.
   bool TakeSnapshot(SOEntryList &entry_list);
 
-  /// For the definitions of the metadata entries, see
-  /// <glibc>/nptl_db/(db_info.c, structs.def, thread_dbP.h).
-  enum PThreadField {
-    eSize,      // Size of an element of a field as defined by DESC, bits
-    eNElem,     // Number of elements in the field
-    eOffset,    // Offset of the field
-    eStructSize // Size of a type as defined by DB_STRUCT, bytes
-  };
+  enum PThreadField { eSize, eNElem, eOffset };
 
   bool FindMetadata(const char *name, PThreadField field, uint32_t &value);
 

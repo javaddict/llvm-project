@@ -212,7 +212,8 @@ public:
     if (auto *F = CE->getDirectCallee()) {
       // Skip the first argument for overloaded member operators (e. g. lambda
       // or std::function call operator).
-      unsigned ArgIdx = isa<CXXOperatorCallExpr>(CE) && isa<CXXMethodDecl>(F);
+      unsigned ArgIdx =
+          isa<CXXOperatorCallExpr>(CE) && isa_and_nonnull<CXXMethodDecl>(F);
 
       for (auto P = F->param_begin();
            P < F->param_end() && ArgIdx < CE->getNumArgs(); ++P, ++ArgIdx)
@@ -226,8 +227,12 @@ public:
     if (BR->getSourceManager().isInSystemHeader(CE->getExprLoc()))
       return;
 
-    if (const CXXMethodDecl *F = CE->getConstructor()) {
-      unsigned ArgIdx = 0;
+    if (auto *F = CE->getConstructor()) {
+      // Skip the first argument for overloaded member operators (e. g. lambda
+      // or std::function call operator).
+      unsigned ArgIdx =
+          isa<CXXOperatorCallExpr>(CE) && isa_and_nonnull<CXXMethodDecl>(F);
+
       for (auto P = F->param_begin();
            P < F->param_end() && ArgIdx < CE->getNumArgs(); ++P, ++ArgIdx)
         visitCallArg(CE->getArg(ArgIdx), *P, DeclWithIssue);
@@ -243,7 +248,7 @@ public:
     if (auto *Receiver = E->getInstanceReceiver()) {
       Receiver = Receiver->IgnoreParenCasts();
       if (isUnknownType(E->getReceiverType()))
-        reportUnknownReceiverType(Receiver, DeclWithIssue);
+        reportUnknownRecieverType(Receiver, DeclWithIssue);
     }
 
     auto *MethodDecl = E->getMethodDecl();
@@ -327,7 +332,7 @@ public:
               Param->getType());
   }
 
-  void reportUnknownReceiverType(const Expr *Receiver,
+  void reportUnknownRecieverType(const Expr *Receiver,
                                  const Decl *DeclWithIssue) const {
     assert(Receiver);
     reportBug(Receiver->getExprLoc(), Receiver->getSourceRange(), DeclWithIssue,

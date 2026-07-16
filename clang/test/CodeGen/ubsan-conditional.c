@@ -4,7 +4,7 @@ _Bool b;
 // CHECK: @f(
 double f(void) {
   // CHECK: %[[B:.*]] = load {{.*}} @b
-  // CHECK: %[[COND:.*]] = icmp ne i8 %[[B]], 0
+  // CHECK: %[[COND:.*]] = trunc {{.*}} %[[B]] to i1
   // CHECK: br i1 %[[COND]]
   return b ? 0.0 / 0.0 : 0.0;
 }

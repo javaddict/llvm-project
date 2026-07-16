@@ -1,7 +1,8 @@
 # Unresolve data symbols are allowing under import-dynamic when GOT
 # relocations are used
 # RUN: llvm-mc -filetype=obj -triple=wasm32-unknown-unknown %s -o %t-dynamic.o
-# RUN: wasm-ld %t-dynamic.o -o %t.wasm --unresolved-symbols=import-dynamic
+# RUN: wasm-ld %t-dynamic.o -o %t.wasm --unresolved-symbols=import-dynamic 2>&1 | FileCheck -check-prefix=WARN %s
+# WARN: wasm-ld: warning: dynamic imports are not yet stable (--unresolved-symbols=import-dynamic)
 # RUN: obj2yaml %t.wasm | FileCheck %s
 
 .functype undef () -> ()
@@ -75,6 +76,8 @@ data_ptr:
 # CHECK-NEXT:        Name:            undef
 # CHECK-NEXT:      - Index:           2
 # CHECK-NEXT:        Name:            data_external
+# CHECK-NEXT:      - Index:           3
+# CHECK-NEXT:        Name:            __stack_pointer
 # CHECK-NEXT:    DataSegmentNames:
 # CHECK-NEXT:      - Index:           0
 # CHECK-NEXT:        Name:            .data

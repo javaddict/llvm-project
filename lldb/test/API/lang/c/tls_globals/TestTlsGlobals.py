@@ -8,8 +8,6 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
 
-@skipIfTargetDoesNotSupportThreads()
-@skipIfTargetDoesNotSupportSharedLibraries()
 class TlsGlobalTestCase(TestBase):
     def setUp(self):
         TestBase.setUp(self)
@@ -40,7 +38,7 @@ class TlsGlobalTestCase(TestBase):
     # TLS works differently on Windows, this would need to be implemented
     # separately.
     @skipIfWindows
-    @skipIf(oslist=["linux"], archs=["aarch64"])
+    @skipIf(oslist=["linux"], archs=["arm$", "aarch64"])
     @skipIf(oslist=no_match([lldbplatformutil.getDarwinOSTriples(), "linux"]))
     @expectedFailureIf(lldbplatformutil.xcode15LinkerBug())
     def test(self):
@@ -48,13 +46,14 @@ class TlsGlobalTestCase(TestBase):
         self.build()
         exe = self.getBuildArtifact("a.out")
         target = self.dbg.CreateTarget(exe)
-        env = self.registerSharedLibrariesWithTarget(target, ["a"])
+        if self.platformIsDarwin():
+            self.registerSharedLibrariesWithTarget(target, ["liba.dylib"])
 
         line1 = line_number("main.c", "// thread breakpoint")
         lldbutil.run_break_set_by_file_and_line(
             self, "main.c", line1, num_expected_locations=1, loc_exact=True
         )
-        target.LaunchSimple(None, env, self.get_process_working_directory())
+        self.runCmd("run", RUN_SUCCEEDED)
 
         # The stop reason of the thread should be breakpoint.
         self.runCmd("process status", "Get process status")

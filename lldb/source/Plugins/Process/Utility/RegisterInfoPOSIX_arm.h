@@ -15,7 +15,7 @@
 
 class RegisterInfoPOSIX_arm : public lldb_private::RegisterInfoAndSetInterface {
 public:
-  enum { GPRegSet = 0, FPRegSet, TLSRegSet };
+  enum { GPRegSet = 0, FPRegSet};
 
   struct GPR {
     uint32_t r[16]; // R0-R15
@@ -40,10 +40,6 @@ public:
     uint32_t far; /* Virtual Fault Address */
   };
 
-  struct TLS {
-    uint32_t tpidruro;
-  };
-
   struct DBG {
     uint32_t bvr[16];
     uint32_t bcr[16];
@@ -51,8 +47,7 @@ public:
     uint32_t wcr[16];
   };
 
-  RegisterInfoPOSIX_arm(const lldb_private::ArchSpec &target_arch,
-                        bool has_tls_reg = false);
+  RegisterInfoPOSIX_arm(const lldb_private::ArchSpec &target_arch);
 
   size_t GetGPRSize() const override;
 
@@ -72,9 +67,6 @@ public:
 private:
   const lldb_private::RegisterInfo *m_register_info_p;
   uint32_t m_register_info_count;
-  // Only provide information about the TLS register to users of this class that
-  // can handle it. Currently, only `NativeRegisterContextLinux_arm` reads it.
-  bool m_has_tls_reg;
 };
 
 #endif // LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERINFOPOSIX_ARM_H

@@ -24,7 +24,7 @@ class StringRef;
 
 class XtensaMCAsmInfo : public MCAsmInfoELF {
 public:
-  explicit XtensaMCAsmInfo(const Triple &TT, const MCTargetOptions &Options);
+  explicit XtensaMCAsmInfo(const Triple &TT);
 
   void printSpecifierExpr(raw_ostream &OS,
                           const MCSpecifierExpr &Expr) const override;

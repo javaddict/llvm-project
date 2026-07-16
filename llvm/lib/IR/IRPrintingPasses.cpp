@@ -40,6 +40,10 @@ public:
         ShouldPreserveUseListOrder(ShouldPreserveUseListOrder) {}
 
   bool runOnModule(Module &M) override {
+    // Remove intrinsic declarations when printing in the new format.
+    // TODO: consider removing this as debug-intrinsics are gone.
+    M.removeDebugIntrinsicDeclarations();
+
     if (llvm::isFunctionInPrintList("*")) {
       if (!Banner.empty())
         OS << Banner << "\n";

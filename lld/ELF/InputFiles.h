@@ -130,7 +130,7 @@ public:
   // checking feature. All files within the same --{start,end}-group or
   // --{start,end}-lib get the same group ID. Otherwise, each file gets a new
   // group ID. For more info, see checkDependency() in SymbolTable.cpp.
-  uint32_t groupId = 0;
+  uint32_t groupId;
 
   // If this is an architecture-specific file, the following members
   // have ELF type (i.e. ELF{32,64}{LE,BE}) and target machine type.
@@ -157,6 +157,10 @@ public:
   // making the addressable range relative to the toc pointer
   // [.got, .got + 0xFFFC].
   bool ppc64SmallCodeModelTocRelocs = false;
+
+  // True if the file has TLSGD/TLSLD GOT relocations without R_PPC64_TLSGD or
+  // R_PPC64_TLSLD. Disable TLS relaxation to avoid bad code generation.
+  bool ppc64DisableTLSRelax = false;
 
 public:
   // If not empty, this stores the name of the archive containing this file.
@@ -337,16 +341,10 @@ public:
   // This is actually a vector of Elf_Verdef pointers.
   SmallVector<const void *, 0> verdefs;
 
-  // Parallel to verdefs. If a version definition is referenced by a relocatable
-  // file, the entry records the assigned Vernaux index in the output file and
-  // whether all references are weak.
-  struct VerneedInfo {
-    uint16_t id = 0;
-    // True if all references to this version are weak. Used to set
-    // VER_FLG_WEAK.
-    bool weak = true;
-  };
-  SmallVector<VerneedInfo, 0> verneedInfo;
+  // If the output file needs Elf_Verneed data structures for this file, this is
+  // a vector of Elf_Vernaux version identifiers that map onto the entries in
+  // Verdefs, otherwise it is empty.
+  SmallVector<uint32_t, 0> vernauxs;
 
   SmallVector<StringRef, 0> dtNeeded;
   StringRef soName;
@@ -356,7 +354,7 @@ public:
   template <typename ELFT> void parse();
 
   // Used for --as-needed
-  std::atomic<bool> isNeeded;
+  bool isNeeded;
 
   // Non-weak undefined symbols which are not yet resolved when the SO is
   // parsed. Only filled for `--no-allow-shlib-undefined`.

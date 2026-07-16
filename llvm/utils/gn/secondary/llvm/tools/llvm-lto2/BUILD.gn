@@ -1,7 +1,6 @@
 executable("llvm-lto2") {
   deps = [
     "//llvm/lib/Bitcode/Reader",
-    "//llvm/lib/DTLTO",
     "//llvm/lib/IR",
     "//llvm/lib/LTO",
     "//llvm/lib/Linker",

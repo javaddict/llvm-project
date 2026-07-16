@@ -40,10 +40,8 @@ public:
                                  bool DestroyToplevelScope = false);
   EvaluationResult interpretDecl(const VarDecl *VD, const Expr *Init,
                                  bool CheckFullyInitialized);
-  EvaluationResult interpretDestructor(const VarDecl *VD, const APValue &Value);
   /// Interpret the given Expr to a Pointer.
   EvaluationResult interpretAsPointer(const Expr *E, PtrCallback PtrCB);
-  EvaluationResult interpretAsLValuePointer(const Expr *E, PtrCallback PtrCB);
   /// Interpret the given expression as if it was in the body of the given
   /// function, i.e. the parameters of the function are available for use.
   bool interpretCall(const FunctionDecl *FD, const Expr *E);
@@ -63,18 +61,16 @@ protected:
 
   /// Methods implemented by the compiler.
   virtual bool visitExpr(const Expr *E, bool DestroyToplevelScope) = 0;
-  virtual bool visitLValueExpr(const Expr *E, bool DestroyToplevelScope) = 0;
   virtual bool visitDeclAndReturn(const VarDecl *VD, const Expr *Init,
                                   bool ConstantContext) = 0;
-  virtual bool visitDtorCall(const VarDecl *VD, const APValue &Value) = 0;
   virtual bool visitFunc(const FunctionDecl *F) = 0;
   virtual bool visit(const Expr *E) = 0;
   virtual bool emitBool(bool V, const Expr *E) = 0;
 
   /// Emits jumps.
-  bool jumpTrue(const LabelTy &Label, SourceInfo SI);
-  bool jumpFalse(const LabelTy &Label, SourceInfo SI);
-  bool jump(const LabelTy &Label, SourceInfo SI);
+  bool jumpTrue(const LabelTy &Label);
+  bool jumpFalse(const LabelTy &Label);
+  bool jump(const LabelTy &Label);
   bool fallthrough(const LabelTy &Label);
   /// Speculative execution.
   bool speculate(const CallExpr *E, const LabelTy &EndLabel);
@@ -95,7 +91,11 @@ protected:
   }
 
   /// Parameter indices.
-  llvm::DenseMap<const ParmVarDecl *, FuncParam> Params;
+  llvm::DenseMap<const ParmVarDecl *, ParamOffset> Params;
+  /// Lambda captures.
+  llvm::DenseMap<const ValueDecl *, ParamOffset> LambdaCaptures;
+  /// Offset of the This parameter in a lambda record.
+  ParamOffset LambdaThisCapture{0, false};
   /// Local descriptors.
   llvm::SmallVector<SmallVector<Local, 8>, 2> Descriptors;
   std::optional<SourceInfo> LocOverride = std::nullopt;

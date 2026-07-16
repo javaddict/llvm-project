@@ -13,9 +13,9 @@
 
 namespace llvm {
 class DeclareRuntimeLibcallsPass
-    : public OptionalPassInfoMixin<DeclareRuntimeLibcallsPass> {
+    : public PassInfoMixin<DeclareRuntimeLibcallsPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
 };
 
 } // end namespace llvm

@@ -13,11 +13,10 @@
 
 namespace llvm {
 
-class GCEmptyBasicBlocksPass
-    : public OptionalPassInfoMixin<GCEmptyBasicBlocksPass> {
+class GCEmptyBasicBlocksPass : public PassInfoMixin<GCEmptyBasicBlocksPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
 };
 
 } // namespace llvm

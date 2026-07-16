@@ -2,7 +2,6 @@
 
 #ifdef __clang__
 #pragma clang diagnostic ignored "-Wreturn-type"
-#pragma clang diagnostic ignored "-Wmissing-prototypes"
 #endif
 BENCHMARK_DISABLE_DEPRECATED_WARNING
 
@@ -20,7 +19,7 @@ inline int Add42(int x) { return x + 42; }
 struct NotTriviallyCopyable {
   NotTriviallyCopyable();
   explicit NotTriviallyCopyable(int x) : value(x) {}
-  NotTriviallyCopyable(NotTriviallyCopyable const&);
+  NotTriviallyCopyable(NotTriviallyCopyable const &);
   int value;
 };
 
@@ -186,7 +185,7 @@ extern "C" void test_pointer_const_lvalue() {
   // CHECK-CLANG: movq %rax, -{{[0-9]+}}(%[[REG:[a-z]+]])
   // CHECK: ret
   int x = 42;
-  int* const xp = &x;
+  int *const xp = &x;
   benchmark::DoNotOptimize(xp);
 }
 
@@ -197,6 +196,6 @@ extern "C" void test_pointer_lvalue() {
   // CHECK-CLANG: movq %rax, -{{[0-9]+}}(%[[REG:[a-z+]+]])
   // CHECK: ret
   int x = 42;
-  int* xp = &x;
+  int *xp = &x;
   benchmark::DoNotOptimize(xp);
 }

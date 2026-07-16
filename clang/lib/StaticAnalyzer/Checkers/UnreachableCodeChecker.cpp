@@ -57,22 +57,22 @@ void UnreachableCodeChecker::checkEndAnalysis(ExplodedGraph &G,
   const Decl *D = nullptr;
   CFG *C = nullptr;
   const ParentMap *PM = nullptr;
-  const StackFrame *SF = nullptr;
+  const LocationContext *LC = nullptr;
   // Iterate over ExplodedGraph
   for (const ExplodedNode &N : G.nodes()) {
     const ProgramPoint &P = N.getLocation();
-    SF = P.getStackFrame();
-    if (!SF->inTopFrame())
+    LC = P.getLocationContext();
+    if (!LC->inTopFrame())
       continue;
 
     if (!D)
-      D = SF->getAnalysisDeclContext()->getDecl();
+      D = LC->getAnalysisDeclContext()->getDecl();
 
     // Save the CFG if we don't have it already
     if (!C)
-      C = SF->getAnalysisDeclContext()->getUnoptimizedCFG();
+      C = LC->getAnalysisDeclContext()->getUnoptimizedCFG();
     if (!PM)
-      PM = &SF->getParentMap();
+      PM = &LC->getParentMap();
 
     if (std::optional<BlockEntrance> BE = P.getAs<BlockEntrance>()) {
       const CFGBlock *CB = BE->getBlock();
@@ -155,7 +155,7 @@ void UnreachableCodeChecker::checkEndAnalysis(ExplodedGraph &G,
               if (isa<DoStmt>(Parent))
                 continue;
       SR = S->getSourceRange();
-      DL = PathDiagnosticLocation::createBegin(S, B.getSourceManager(), SF);
+      DL = PathDiagnosticLocation::createBegin(S, B.getSourceManager(), LC);
       SL = DL.asLocation();
       if (SR.isInvalid() || !SL.isValid())
         continue;

@@ -16,7 +16,6 @@
 #include "lldb/lldb-defines.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Path.h"
 
 using namespace llvm;
 using namespace lldb_dap::protocol;
@@ -38,10 +37,8 @@ Error AttachRequestHandler::Run(const AttachRequestArguments &args) const {
     return err;
 
   dap.SetConfiguration(args.configuration, /*is_attach=*/true);
-  if (!args.coreFile.empty()) {
+  if (!args.coreFile.empty())
     dap.stop_at_entry = true;
-    dap.is_live_session = false;
-  }
 
   PrintWelcomeMessage();
 
@@ -74,8 +71,10 @@ Error AttachRequestHandler::Run(const AttachRequestArguments &args) const {
     target = dap.CreateTarget(error);
   }
 
-  if (target.IsValid())
-    dap.SetTarget(target);
+  if (error.Fail())
+    return ToError(error);
+
+  dap.SetTarget(target);
 
   // Run any pre run LLDB commands the user specified in the launch.json
   if (Error err = dap.RunPreRunCommands())
@@ -83,12 +82,11 @@ Error AttachRequestHandler::Run(const AttachRequestArguments &args) const {
 
   if ((args.pid == LLDB_INVALID_PROCESS_ID ||
        args.gdbRemotePort == LLDB_DAP_INVALID_PORT) &&
-      args.waitFor && !args.configuration.program.empty())
-    dap.SendOutput(
-        OutputType::Console,
-        llvm::formatv("Waiting to attach to \"{0}\"...\n",
-                      llvm::sys::path::filename(dap.configuration.program))
-            .str());
+      args.waitFor)
+    dap.SendOutput(OutputType::Console,
+                   llvm::formatv("Waiting to attach to \"{0}\"...",
+                                 dap.target.GetExecutable().GetFilename())
+                       .str());
 
   {
     // Perform the launch in synchronous mode so that we don't have to worry
@@ -103,7 +101,7 @@ Error AttachRequestHandler::Run(const AttachRequestArguments &args) const {
       if (llvm::Error err = dap.RunAttachCommands(args.attachCommands))
         return err;
 
-      dap.SetTarget(dap.debugger.GetSelectedTarget());
+      dap.target = dap.debugger.GetSelectedTarget();
 
       // Validate the attachCommand results.
       if (!dap.target.GetProcess().IsValid())
@@ -129,11 +127,7 @@ Error AttachRequestHandler::Run(const AttachRequestArguments &args) const {
       else if (!dap.configuration.program.empty())
         attach_info.SetExecutable(dap.configuration.program.data());
       attach_info.SetWaitForLaunch(args.waitFor, /*async=*/false);
-      auto process = dap.target.Attach(attach_info, error);
-      // If we attached by name then we were using the 'Dummy' target, ensure
-      // we update to the real target.
-      if (process.IsValid())
-        dap.SetTarget(process.GetTarget());
+      dap.target.Attach(attach_info, error);
     }
 
     if (error.Fail())

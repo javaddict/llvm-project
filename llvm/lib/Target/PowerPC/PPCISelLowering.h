@@ -352,10 +352,10 @@ namespace llvm {
     bool shouldInlineQuadwordAtomics() const;
 
     TargetLowering::AtomicExpansionKind
-    shouldExpandAtomicRMWInIR(const AtomicRMWInst *AI) const override;
+    shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
 
     TargetLowering::AtomicExpansionKind
-    shouldExpandAtomicCmpXchgInIR(const AtomicCmpXchgInst *AI) const override;
+    shouldExpandAtomicCmpXchgInIR(AtomicCmpXchgInst *AI) const override;
 
     Value *emitMaskedAtomicRMWIntrinsic(IRBuilderBase &Builder,
                                         AtomicRMWInst *AI, Value *AlignedAddr,
@@ -373,11 +373,13 @@ namespace llvm {
                                 MachineBasicBlock *MBB) const override;
     MachineBasicBlock *EmitAtomicBinary(MachineInstr &MI,
                                         MachineBasicBlock *MBB,
+                                        unsigned AtomicSize,
                                         unsigned BinOpcode,
                                         unsigned CmpOpcode = 0,
                                         unsigned CmpPred = 0) const;
     MachineBasicBlock *EmitPartwordAtomicBinary(MachineInstr &MI,
                                                 MachineBasicBlock *MBB,
+                                                bool is8bit,
                                                 unsigned Opcode,
                                                 unsigned CmpOpcode = 0,
                                                 unsigned CmpPred = 0) const;
@@ -490,8 +492,8 @@ namespace llvm {
 
     bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
 
-    void getTgtMemIntrinsic(SmallVectorImpl<IntrinsicInfo> &Infos,
-                            const CallBase &I, MachineFunction &MF,
+    bool getTgtMemIntrinsic(IntrinsicInfo &Info, const CallBase &I,
+                            MachineFunction &MF,
                             unsigned Intrinsic) const override;
 
     /// It returns EVT::Other if the type should be determined using generic
@@ -533,10 +535,8 @@ namespace llvm {
 
     /// createFastISel - This method returns a target-specific FastISel object,
     /// or null if the target does not support "fast" instruction selection.
-    FastISel *
-    createFastISel(FunctionLoweringInfo &FuncInfo,
-                   const TargetLibraryInfo *LibInfo,
-                   const LibcallLoweringInfo *LibcallLowering) const override;
+    FastISel *createFastISel(FunctionLoweringInfo &FuncInfo,
+                             const TargetLibraryInfo *LibInfo) const override;
 
     /// Returns true if an argument of type Ty needs to be passed in a
     /// contiguous block of registers in calling convention CallConv.
@@ -770,8 +770,6 @@ namespace llvm {
     SDValue LowerVP_LOAD(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerVP_STORE(SDValue Op, SelectionDAG &DAG) const;
 
-    SDValue LowerPartialReduce(SDValue Op, SelectionDAG &DAG) const;
-
     SDValue LowerVectorLoad(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerVectorStore(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerDMFVectorLoad(SDValue Op, SelectionDAG &DAG) const;
@@ -859,9 +857,6 @@ namespace llvm {
     SDValue lowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
     SDValue lowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerBITCAST(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerVecSplatSmallFP(SDValue Op, SelectionDAG &DAG,
-                                 bool BVNIsConstantSplat,
-                                 unsigned SplatBitSize) const;
 
     SDValue DAGCombineExtBoolTrunc(SDNode *N, DAGCombinerInfo &DCI) const;
     SDValue DAGCombineBuildVector(SDNode *N, DAGCombinerInfo &DCI) const;
@@ -876,7 +871,6 @@ namespace llvm {
     SDValue combineADD(SDNode *N, DAGCombinerInfo &DCI) const;
     SDValue combineFMALike(SDNode *N, DAGCombinerInfo &DCI) const;
     SDValue combineTRUNCATE(SDNode *N, DAGCombinerInfo &DCI) const;
-    SDValue combineSignExtendSetCC(SDNode *N, DAGCombinerInfo &DCI) const;
     SDValue combineSetCC(SDNode *N, DAGCombinerInfo &DCI) const;
     SDValue combineVectorShuffle(ShuffleVectorSDNode *SVN,
                                  SelectionDAG &DAG) const;
@@ -894,8 +888,7 @@ namespace llvm {
     SDValue getRecipEstimate(SDValue Operand, SelectionDAG &DAG, int Enabled,
                              int &RefinementSteps) const override;
     SDValue getSqrtInputTest(SDValue Operand, SelectionDAG &DAG,
-                             const DenormalMode &Mode,
-                             SDNodeFlags Flags = {}) const override;
+                             const DenormalMode &Mode) const override;
     SDValue getSqrtResultForDenormInput(SDValue Operand,
                                         SelectionDAG &DAG) const override;
     unsigned combineRepeatedFPDivisors() const override;
@@ -948,9 +941,8 @@ namespace llvm {
 
   namespace PPC {
 
-  FastISel *createFastISel(FunctionLoweringInfo &FuncInfo,
-                           const TargetLibraryInfo *LibInfo,
-                           const LibcallLoweringInfo *LibcallLowering);
+    FastISel *createFastISel(FunctionLoweringInfo &FuncInfo,
+                             const TargetLibraryInfo *LibInfo);
 
   } // end namespace PPC
 

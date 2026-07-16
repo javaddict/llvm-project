@@ -693,8 +693,7 @@ const OmpModifierDescriptor &OmpGetDescriptor<parser::OmpStepSimpleModifier>() {
       /*name=*/"step-simple-modifier",
       /*props=*/
       {
-          {45, {OmpProperty::Unique}},
-          {52, {OmpProperty::Unique, OmpProperty::Exclusive}},
+          {45, {OmpProperty::Unique, OmpProperty::Exclusive}},
       },
       /*clauses=*/
       {

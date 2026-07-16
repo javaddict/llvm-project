@@ -339,7 +339,7 @@ private:
 
 /// Printer pass for the InlineAdvisorAnalysis results.
 class InlineAdvisorAnalysisPrinterPass
-    : public RequiredPassInfoMixin<InlineAdvisorAnalysisPrinterPass> {
+    : public PassInfoMixin<InlineAdvisorAnalysisPrinterPass> {
   raw_ostream &OS;
 
 public:
@@ -350,6 +350,7 @@ public:
   LLVM_ABI PreservedAnalyses run(LazyCallGraph::SCC &InitialC,
                                  CGSCCAnalysisManager &AM, LazyCallGraph &CG,
                                  CGSCCUpdateResult &UR);
+  static bool isRequired() { return true; }
 };
 
 LLVM_ABI std::unique_ptr<InlineAdvisor>

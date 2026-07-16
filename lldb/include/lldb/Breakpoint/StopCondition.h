@@ -30,7 +30,7 @@ public:
   void SetText(std::string text) {
     static std::hash<std::string> hasher;
     m_text = std::move(text);
-    m_hash = hasher(m_text);
+    m_hash = hasher(text);
   }
 
   size_t GetHash() const { return m_hash; }

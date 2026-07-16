@@ -27,6 +27,7 @@ void IncorrectEnableSharedFromThisCheck::registerMatchers(MatchFinder *Finder) {
           .bind("base_rec")));
   Finder->addMatcher(
       cxxRecordDecl(
+          unless(isExpansionInSystemHeader()),
           hasDirectBase(cxxBaseSpecifier(unless(isPublic()), hasType(QType))
                             .bind("base")))
           .bind("derived"),
@@ -44,7 +45,7 @@ void IncorrectEnableSharedFromThisCheck::check(
       BaseSpec->getAccessSpecifierAsWritten() != AS_none;
   const auto ReplacementRange = CharSourceRange(
       SourceRange(BaseSpec->getBeginLoc()), HasWrittenAccessSpecifier);
-  const StringRef Replacement =
+  const llvm::StringRef Replacement =
       HasWrittenAccessSpecifier ? "public" : "public ";
   const FixItHint Hint =
       IsEnableSharedFromThisDirectBase

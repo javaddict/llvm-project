@@ -513,8 +513,8 @@ PartialInlinerImpl::computeOutliningColdRegionsInfo(
 std::unique_ptr<FunctionOutliningInfo>
 PartialInlinerImpl::computeOutliningInfo(Function &F) const {
   BasicBlock *EntryBlock = &F.front();
-  CondBrInst *BR = dyn_cast<CondBrInst>(EntryBlock->getTerminator());
-  if (!BR)
+  BranchInst *BR = dyn_cast<BranchInst>(EntryBlock->getTerminator());
+  if (!BR || BR->isUnconditional())
     return std::unique_ptr<FunctionOutliningInfo>();
 
   // Returns true if Succ is BB's successor
@@ -661,8 +661,10 @@ static bool hasProfileData(const Function &F, const FunctionOutliningInfo &OI) {
     return true;
   // Now check if any of the entry block has MD_prof data:
   for (auto *E : OI.Entries) {
-    CondBrInst *BR = dyn_cast<CondBrInst>(E->getTerminator());
-    if (BR && hasBranchWeightMD(*BR))
+    BranchInst *BR = dyn_cast<BranchInst>(E->getTerminator());
+    if (!BR || BR->isUnconditional())
+      continue;
+    if (hasBranchWeightMD(*BR))
       return true;
   }
   return false;
@@ -799,7 +801,7 @@ PartialInlinerImpl::computeBBInlineCost(BasicBlock *BB,
   InstructionCost InlineCost = 0;
   const DataLayout &DL = BB->getDataLayout();
   int InstrCost = InlineConstants::getInstrCost();
-  for (Instruction &I : *BB) {
+  for (Instruction &I : BB->instructionsWithoutDebug()) {
     // Skip free instructions.
     switch (I.getOpcode()) {
     case Instruction::BitCast:
@@ -1104,10 +1106,7 @@ bool PartialInlinerImpl::FunctionCloner::doMultiRegionFunctionOutlining() {
     CodeExtractor CE(RegionInfo.Region, &DT, /*AggregateArgs*/ false,
                      ClonedFuncBFI.get(), &BPI,
                      LookupAC(*RegionInfo.EntryBlock->getParent()),
-                     /* AllowVarargs */ false, /* AllowAlloca */ false,
-                     /* AllocaBlock */ nullptr, /* DeallocationBlocks */ {},
-                     /* Suffix */ "", /* ArgsInZeroAddressSpace */ false,
-                     /* VoidReturnWithSingleOutput */ false);
+                     /* AllowVarargs */ false);
 
     CE.findInputsOutputs(Inputs, Outputs, Sinks);
 
@@ -1188,10 +1187,7 @@ PartialInlinerImpl::FunctionCloner::doSingleRegionFunctionOutlining() {
   Function *OutlinedFunc =
       CodeExtractor(ToExtract, &DT, /*AggregateArgs*/ false,
                     ClonedFuncBFI.get(), &BPI, LookupAC(*ClonedFunc),
-                    /* AllowVarargs */ true, /* AllowAlloca */ false,
-                    /* AllocaBlock */ nullptr, /* DeallocationBlocks */ {},
-                    /* Suffix */ "", /* ArgsInZeroAddressSpace */ false,
-                    /* VoidReturnWithSingleOutput */ false)
+                    /* AllowVarargs */ true)
           .extractCodeRegion(CEAC);
 
   if (OutlinedFunc) {
@@ -1378,8 +1374,7 @@ bool PartialInlinerImpl::tryPartialInline(FunctionCloner &Cloner) {
     InlineFunctionInfo IFI(GetAssumptionCache, &PSI);
     // We can only forward varargs when we outlined a single region, else we
     // bail on vararg functions.
-    if (!InlineFunction(*CB, IFI, /*MergeAttributes=*/false, nullptr,
-                        /*InsertLifetime=*/true, /*TrackInlineHistory=*/true,
+    if (!InlineFunction(*CB, IFI, /*MergeAttributes=*/false, nullptr, true,
                         (Cloner.ClonedOI ? Cloner.OutlinedFunctions.back().first
                                          : nullptr))
              .isSuccess())

@@ -13,12 +13,7 @@
 #include "src/__support/macros/config.h"     // LIBC_NAMESPACE_DECL
 #include <stddef.h>                          // size_t, ptrdiff_t
 
-#if defined(LIBC_COPT_USE_MEM_BUILTINS)
-#include "src/string/memory_utils/generic/builtin.h"
-#define LIBC_SRC_STRING_MEMORY_UTILS_MEMMOVE_SMALL_SIZE                        \
-  inline_memmove_no_small_size
-#define LIBC_SRC_STRING_MEMORY_UTILS_MEMMOVE_FOLLOW_UP inline_memmove_builtin
-#elif defined(LIBC_TARGET_ARCH_IS_X86)
+#if defined(LIBC_TARGET_ARCH_IS_X86)
 #include "src/string/memory_utils/x86_64/inline_memmove.h"
 #define LIBC_SRC_STRING_MEMORY_UTILS_MEMMOVE_SMALL_SIZE                        \
   inline_memmove_small_size_x86
@@ -34,7 +29,7 @@
 #define LIBC_SRC_STRING_MEMORY_UTILS_MEMMOVE_SMALL_SIZE                        \
   inline_memmove_no_small_size
 #define LIBC_SRC_STRING_MEMORY_UTILS_MEMMOVE_FOLLOW_UP inline_memmove_riscv
-#elif defined(LIBC_TARGET_ARCH_IS_GPU) || defined(LIBC_TARGET_ARCH_IS_WASM)
+#elif defined(LIBC_TARGET_ARCH_IS_GPU)
 #include "src/string/memory_utils/generic/builtin.h"
 #define LIBC_SRC_STRING_MEMORY_UTILS_MEMMOVE_SMALL_SIZE                        \
   inline_memmove_no_small_size

@@ -12,62 +12,72 @@
 #include "llvm/Analysis/DominanceFrontier.h"
 #include "llvm/Analysis/DominanceFrontierImpl.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachinePassManager.h"
 #include "llvm/Support/GenericDomTree.h"
 
 namespace llvm {
 
-class MachineDominanceFrontier
-    : public DominanceFrontierBase<MachineBasicBlock, false> {
+class MachineDominanceFrontier : public MachineFunctionPass {
+  ForwardDominanceFrontierBase<MachineBasicBlock> Base;
+
 public:
  using DomTreeT = DomTreeBase<MachineBasicBlock>;
  using DomTreeNodeT = DomTreeNodeBase<MachineBasicBlock>;
- using DomSetType = MachineDominanceFrontier::DomSetType;
- using iterator = MachineDominanceFrontier::iterator;
- using const_iterator = MachineDominanceFrontier ::const_iterator;
+ using DomSetType = DominanceFrontierBase<MachineBasicBlock, false>::DomSetType;
+ using iterator = DominanceFrontierBase<MachineBasicBlock, false>::iterator;
+ using const_iterator =
+     DominanceFrontierBase<MachineBasicBlock, false>::const_iterator;
 
- MachineDominanceFrontier() = default;
+ MachineDominanceFrontier(const MachineDominanceFrontier &) = delete;
+ MachineDominanceFrontier &operator=(const MachineDominanceFrontier &) = delete;
 
- LLVM_ABI bool invalidate(MachineFunction &F, const PreservedAnalyses &PA,
-                          MachineFunctionAnalysisManager::Invalidator &);
-};
+ static char ID;
 
-class LLVM_ABI MachineDominanceFrontierWrapperPass
-    : public MachineFunctionPass {
-private:
-  MachineDominanceFrontier MDF;
+ MachineDominanceFrontier();
 
-public:
-  MachineDominanceFrontierWrapperPass();
+ ForwardDominanceFrontierBase<MachineBasicBlock> &getBase() { return Base; }
 
-  MachineDominanceFrontierWrapperPass(
-      const MachineDominanceFrontierWrapperPass &) = delete;
-  MachineDominanceFrontierWrapperPass &
-  operator=(const MachineDominanceFrontierWrapperPass &) = delete;
+ const SmallVectorImpl<MachineBasicBlock *> &getRoots() const {
+   return Base.getRoots();
+  }
 
-  static char ID;
+  MachineBasicBlock *getRoot() const {
+    return Base.getRoot();
+  }
+
+  bool isPostDominator() const {
+    return Base.isPostDominator();
+  }
+
+  iterator begin() {
+    return Base.begin();
+  }
+
+  const_iterator begin() const {
+    return Base.begin();
+  }
+
+  iterator end() {
+    return Base.end();
+  }
+
+  const_iterator end() const {
+    return Base.end();
+  }
+
+  iterator find(MachineBasicBlock *B) {
+    return Base.find(B);
+  }
+
+  const_iterator find(MachineBasicBlock *B) const {
+    return Base.find(B);
+  }
 
   bool runOnMachineFunction(MachineFunction &F) override;
 
-  void getAnalysisUsage(AnalysisUsage &AU) const override;
-
   void releaseMemory() override;
 
-  MachineDominanceFrontier &getMDF() { return MDF; }
-};
-
-class MachineDominanceFrontierAnalysis
-    : public AnalysisInfoMixin<MachineDominanceFrontierAnalysis> {
-  friend AnalysisInfoMixin<MachineDominanceFrontierAnalysis>;
-  static AnalysisKey Key;
-
-public:
-  using Result = MachineDominanceFrontier;
-
-  LLVM_ABI Result run(MachineFunction &MF,
-                      MachineFunctionAnalysisManager &MFAM);
+  void getAnalysisUsage(AnalysisUsage &AU) const override;
 };
 
 } // end namespace llvm

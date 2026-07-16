@@ -35,7 +35,8 @@ static bool runCodePreprationImpl(Function &F, DominatorTree *DT, LoopInfo *LI,
     ++I;
 
   // Abort if not necessary to split
-  if (isa<UncondBrInst>(I))
+  if (I->isTerminator() && isa<BranchInst>(I) &&
+      cast<BranchInst>(I)->isUnconditional())
     return false;
 
   // splitBlock updates DT, LI and RI.

@@ -22,23 +22,24 @@ namespace cir {
 namespace detail {
 
 //===----------------------------------------------------------------------===//
-// CIR StructTypeStorage
+// CIR RecordTypeStorage
 //===----------------------------------------------------------------------===//
 
-/// Type storage for CIR struct/class types.
-struct StructTypeStorage : public mlir::TypeStorage {
+/// Type storage for CIR record types.
+struct RecordTypeStorage : public mlir::TypeStorage {
   struct KeyTy {
     llvm::ArrayRef<mlir::Type> members;
     mlir::StringAttr name;
     bool incomplete;
     bool packed;
     bool padded;
-    bool is_class;
+    RecordType::RecordKind kind;
 
     KeyTy(llvm::ArrayRef<mlir::Type> members, mlir::StringAttr name,
-          bool incomplete, bool packed, bool padded, bool is_class)
+          bool incomplete, bool packed, bool padded,
+          RecordType::RecordKind kind)
         : members(members), name(name), incomplete(incomplete), packed(packed),
-          padded(padded), is_class(is_class) {}
+          padded(padded), kind(kind) {}
   };
 
   llvm::ArrayRef<mlir::Type> members;
@@ -46,134 +47,66 @@ struct StructTypeStorage : public mlir::TypeStorage {
   bool incomplete;
   bool packed;
   bool padded;
-  bool is_class;
+  RecordType::RecordKind kind;
 
-  StructTypeStorage(llvm::ArrayRef<mlir::Type> members, mlir::StringAttr name,
-                    bool incomplete, bool packed, bool padded, bool is_class)
+  RecordTypeStorage(llvm::ArrayRef<mlir::Type> members, mlir::StringAttr name,
+                    bool incomplete, bool packed, bool padded,
+                    RecordType::RecordKind kind)
       : members(members), name(name), incomplete(incomplete), packed(packed),
-        padded(padded), is_class(is_class) {
+        padded(padded), kind(kind) {
     assert((name || !incomplete) && "Incomplete records must have a name");
   }
 
   KeyTy getAsKey() const {
-    return KeyTy(members, name, incomplete, packed, padded, is_class);
+    return KeyTy(members, name, incomplete, packed, padded, kind);
   }
 
   bool operator==(const KeyTy &key) const {
     if (name)
-      return (name == key.name) && (is_class == key.is_class);
-    return std::tie(members, name, incomplete, packed, padded, is_class) ==
+      return (name == key.name) && (kind == key.kind);
+    return std::tie(members, name, incomplete, packed, padded, kind) ==
            std::tie(key.members, key.name, key.incomplete, key.packed,
-                    key.padded, key.is_class);
+                    key.padded, key.kind);
   }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
     if (key.name)
-      return llvm::hash_combine(key.name, key.is_class);
+      return llvm::hash_combine(key.name, key.kind);
     return llvm::hash_combine(key.members, key.incomplete, key.packed,
-                              key.padded, key.is_class);
+                              key.padded, key.kind);
   }
 
-  static StructTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
+  static RecordTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
                                       const KeyTy &key) {
-    return new (allocator.allocate<StructTypeStorage>())
-        StructTypeStorage(allocator.copyInto(key.members), key.name,
-                          key.incomplete, key.packed, key.padded, key.is_class);
+    return new (allocator.allocate<RecordTypeStorage>())
+        RecordTypeStorage(allocator.copyInto(key.members), key.name,
+                          key.incomplete, key.packed, key.padded, key.kind);
   }
 
-  /// Mutates the members and attributes of an identified struct/class.
+  /// Mutates the members and attributes an identified record.
+  ///
+  /// Once a record is mutated, it is marked as complete, preventing further
+  /// mutations. Anonymous records are always complete and cannot be mutated.
+  /// This method does not fail if a mutation of a complete record does not
+  /// change the record.
   llvm::LogicalResult mutate(mlir::TypeStorageAllocator &allocator,
                              llvm::ArrayRef<mlir::Type> members, bool packed,
                              bool padded) {
+    // Anonymous records cannot mutate.
     if (!name)
       return llvm::failure();
 
+    // Mutation of complete records are allowed if they change nothing.
     if (!incomplete)
       return mlir::success((this->members == members) &&
                            (this->packed == packed) &&
                            (this->padded == padded));
 
+    // Mutate incomplete record.
     this->members = allocator.copyInto(members);
     this->packed = packed;
     this->padded = padded;
-    incomplete = false;
-    return llvm::success();
-  }
-};
 
-//===----------------------------------------------------------------------===//
-// CIR UnionTypeStorage
-//===----------------------------------------------------------------------===//
-
-/// Type storage for CIR union types.
-struct UnionTypeStorage : public mlir::TypeStorage {
-  struct KeyTy {
-    llvm::ArrayRef<mlir::Type> members;
-    mlir::StringAttr name;
-    bool incomplete;
-    bool packed;
-    mlir::Type padding;
-
-    KeyTy(llvm::ArrayRef<mlir::Type> members, mlir::StringAttr name,
-          bool incomplete, bool packed, mlir::Type padding)
-        : members(members), name(name), incomplete(incomplete), packed(packed),
-          padding(padding) {}
-  };
-
-  llvm::ArrayRef<mlir::Type> members;
-  mlir::StringAttr name;
-  bool incomplete;
-  bool packed;
-  mlir::Type padding;
-
-  UnionTypeStorage(llvm::ArrayRef<mlir::Type> members, mlir::StringAttr name,
-                   bool incomplete, bool packed, mlir::Type padding)
-      : members(members), name(name), incomplete(incomplete), packed(packed),
-        padding(padding) {
-    assert((name || !incomplete) && "Incomplete records must have a name");
-  }
-
-  KeyTy getAsKey() const {
-    return KeyTy(members, name, incomplete, packed, padding);
-  }
-
-  bool operator==(const KeyTy &key) const {
-    if (name)
-      return name == key.name;
-    return std::tie(members, name, incomplete, packed, padding) ==
-           std::tie(key.members, key.name, key.incomplete, key.packed,
-                    key.padding);
-  }
-
-  static llvm::hash_code hashKey(const KeyTy &key) {
-    if (key.name)
-      return llvm::hash_combine(key.name);
-    return llvm::hash_combine(key.members, key.incomplete, key.packed,
-                              key.padding);
-  }
-
-  static UnionTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
-                                     const KeyTy &key) {
-    return new (allocator.allocate<UnionTypeStorage>())
-        UnionTypeStorage(allocator.copyInto(key.members), key.name,
-                         key.incomplete, key.packed, key.padding);
-  }
-
-  /// Mutates the members and attributes of an identified union.
-  llvm::LogicalResult mutate(mlir::TypeStorageAllocator &allocator,
-                             llvm::ArrayRef<mlir::Type> members, bool packed,
-                             mlir::Type padding) {
-    if (!name)
-      return llvm::failure();
-
-    if (!incomplete)
-      return mlir::success((this->members == members) &&
-                           (this->packed == packed) &&
-                           (this->padding == padding));
-
-    this->members = allocator.copyInto(members);
-    this->packed = packed;
-    this->padding = padding;
     incomplete = false;
     return llvm::success();
   }

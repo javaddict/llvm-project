@@ -11,6 +11,7 @@
 
 #include "hdr/types/FILE.h"
 #include "src/__support/CPP/string_view.h"
+#include "src/__support/OSUtil/baremetal/stdio_cookie.h"
 #include "src/__support/OSUtil/io.h"
 #include "src/__support/common.h"
 #include "src/__support/macros/config.h"
@@ -32,40 +33,45 @@ struct FileIOResult {
   constexpr operator size_t() { return value; }
 };
 
-// ungetc handling.
-int push_ungetc_value(::FILE *stream, int c);
-bool pop_ungetc_value(::FILE *stream, unsigned char &out);
+LIBC_INLINE __llvm_libc_stdio_cookie *cookie_from_stream(::FILE *stream) {
+  return reinterpret_cast<__llvm_libc_stdio_cookie *>(stream);
+}
 
-LIBC_INLINE int ungetc_internal(int c, ::FILE *stream) {
-  return push_ungetc_value(stream, c);
+// Update C stream indicators after a vendor I/O return.
+//   ret < 0  → error (ret is -errno); clear not done here
+//   ret == 0 && requested > 0 → EOF
+//   ret > 0  → success (leave prior eof until clearerr; set eof on short read
+//              when fewer bytes than requested — typical file-at-EOF shape)
+LIBC_INLINE void apply_io_indicators(__llvm_libc_stdio_cookie *cookie,
+                                     ssize_t ret, size_t requested) {
+  if (cookie == nullptr)
+    return;
+  if (ret < 0) {
+    cookie->err = 1;
+    return;
+  }
+  if (requested == 0)
+    return;
+  if (ret == 0 || static_cast<size_t>(ret) < requested)
+    cookie->eof = 1;
 }
 
 LIBC_INLINE FileIOResult read_internal(char *buf, size_t size, ::FILE *stream) {
-  if (size == 0)
-    return 0;
-
-  unsigned char ungetc_value = 0;
-  size_t ungetc_value_copied = 0;
-
-  if (pop_ungetc_value(stream, ungetc_value)) {
-    buf[0] = static_cast<char>(ungetc_value);
-    ungetc_value_copied = 1;
-
-    if (size == 1)
-      return 1;
-  }
-
-  ssize_t ret = __llvm_libc_stdio_read(stream, buf + ungetc_value_copied,
-                                       size - ungetc_value_copied);
+  auto *cookie = cookie_from_stream(stream);
+  ssize_t ret = __llvm_libc_stdio_read(stream, buf, size);
+  apply_io_indicators(cookie, ret, size);
   if (ret < 0)
-    return {ungetc_value_copied, static_cast<int>(-ret)};
-
-  return ret + ungetc_value_copied;
+    return {0, static_cast<int>(-ret)};
+  return ret;
 }
 
 LIBC_INLINE FileIOResult write_internal(const char *buf, size_t size,
                                         ::FILE *stream) {
+  auto *cookie = cookie_from_stream(stream);
   ssize_t ret = __llvm_libc_stdio_write(stream, buf, size);
+  // Writes: only errors set the indicator (short write ≠ EOF).
+  if (cookie != nullptr && ret < 0)
+    cookie->err = 1;
   if (ret < 0)
     return {0, static_cast<int>(-ret)};
   return ret;

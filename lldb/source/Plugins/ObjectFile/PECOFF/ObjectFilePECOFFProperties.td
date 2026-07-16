@@ -1,6 +1,6 @@
 include "../../../../include/lldb/Core/PropertiesBase.td"
 
-let Definition = "objectfilepecoff", Path = "plugin.object-file.pe-coff" in {
+let Definition = "objectfilepecoff" in {
   def ABI: Property<"abi", "Enum">,
     Global,
     DefaultEnumValue<"llvm::Triple::UnknownEnvironment">,

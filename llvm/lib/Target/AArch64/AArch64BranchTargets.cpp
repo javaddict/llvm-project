@@ -16,7 +16,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "AArch64.h"
 #include "AArch64MachineFunctionInfo.h"
 #include "AArch64Subtarget.h"
 #include "Utils/AArch64BaseInfo.h"
@@ -40,9 +39,13 @@ enum : unsigned {
   BTIMask = BTIC | BTIJ,
 };
 
-class AArch64BranchTargetsImpl {
+class AArch64BranchTargets : public MachineFunctionPass {
 public:
-  bool run(MachineFunction &MF);
+  static char ID;
+  AArch64BranchTargets() : MachineFunctionPass(ID) {}
+  void getAnalysisUsage(AnalysisUsage &AU) const override;
+  bool runOnMachineFunction(MachineFunction &MF) override;
+  StringRef getPassName() const override { return AARCH64_BRANCH_TARGETS_NAME; }
 
 private:
   const AArch64Subtarget *Subtarget;
@@ -51,47 +54,23 @@ private:
               bool NeedsWinCFI);
 };
 
-class AArch64BranchTargetsLegacy : public MachineFunctionPass {
-public:
-  static char ID;
-  AArch64BranchTargetsLegacy() : MachineFunctionPass(ID) {}
-  void getAnalysisUsage(AnalysisUsage &AU) const override;
-  bool runOnMachineFunction(MachineFunction &MF) override;
-  StringRef getPassName() const override { return AARCH64_BRANCH_TARGETS_NAME; }
-};
-
 } // end anonymous namespace
 
-char AArch64BranchTargetsLegacy::ID = 0;
+char AArch64BranchTargets::ID = 0;
 
-INITIALIZE_PASS(AArch64BranchTargetsLegacy, "aarch64-branch-targets",
+INITIALIZE_PASS(AArch64BranchTargets, "aarch64-branch-targets",
                 AARCH64_BRANCH_TARGETS_NAME, false, false)
 
-void AArch64BranchTargetsLegacy::getAnalysisUsage(AnalysisUsage &AU) const {
+void AArch64BranchTargets::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesCFG();
   MachineFunctionPass::getAnalysisUsage(AU);
 }
 
 FunctionPass *llvm::createAArch64BranchTargetsPass() {
-  return new AArch64BranchTargetsLegacy();
+  return new AArch64BranchTargets();
 }
 
-bool AArch64BranchTargetsLegacy::runOnMachineFunction(MachineFunction &MF) {
-  return AArch64BranchTargetsImpl().run(MF);
-}
-
-PreservedAnalyses
-AArch64BranchTargetsPass::run(MachineFunction &MF,
-                              MachineFunctionAnalysisManager &MFAM) {
-  bool Changed = AArch64BranchTargetsImpl().run(MF);
-  if (!Changed)
-    return PreservedAnalyses::all();
-  PreservedAnalyses PA = getMachineFunctionPassPreservedAnalyses();
-  PA.preserveSet<CFGAnalyses>();
-  return PA;
-}
-
-bool AArch64BranchTargetsImpl::run(MachineFunction &MF) {
+bool AArch64BranchTargets::runOnMachineFunction(MachineFunction &MF) {
   if (!MF.getInfo<AArch64FunctionInfo>()->branchTargetEnforcement())
     return false;
 
@@ -151,8 +130,8 @@ bool AArch64BranchTargetsImpl::run(MachineFunction &MF) {
   return MadeChange;
 }
 
-void AArch64BranchTargetsImpl::addBTI(MachineBasicBlock &MBB, bool CouldCall,
-                                      bool CouldJump, bool HasWinCFI) {
+void AArch64BranchTargets::addBTI(MachineBasicBlock &MBB, bool CouldCall,
+                                  bool CouldJump, bool HasWinCFI) {
   LLVM_DEBUG(dbgs() << "Adding BTI " << (CouldJump ? "j" : "")
                     << (CouldCall ? "c" : "") << " to " << MBB.getName()
                     << "\n");

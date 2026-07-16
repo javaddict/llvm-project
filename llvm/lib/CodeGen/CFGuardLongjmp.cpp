@@ -39,7 +39,9 @@ class CFGuardLongjmp : public MachineFunctionPass {
 public:
   static char ID;
 
-  CFGuardLongjmp() : MachineFunctionPass(ID) {}
+  CFGuardLongjmp() : MachineFunctionPass(ID) {
+    initializeCFGuardLongjmpPass(*PassRegistry::getPassRegistry());
+  }
 
   StringRef getPassName() const override {
     return "Control Flow Guard longjmp targets";
@@ -60,8 +62,7 @@ FunctionPass *llvm::createCFGuardLongjmpPass() { return new CFGuardLongjmp(); }
 bool CFGuardLongjmp::runOnMachineFunction(MachineFunction &MF) {
 
   // Skip modules for which the cfguard flag is not set.
-  if (MF.getFunction().getParent()->getControlFlowGuardMode() ==
-      ControlFlowGuardMode::Disabled)
+  if (!MF.getFunction().getParent()->getModuleFlag("cfguard"))
     return false;
 
   // Skip functions that do not have calls to _setjmp.

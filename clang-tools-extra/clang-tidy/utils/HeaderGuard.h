@@ -10,6 +10,7 @@
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_UTILS_HEADERGUARD_H
 
 #include "../ClangTidyCheck.h"
+#include "../utils/FileExtensionsUtils.h"
 
 namespace clang::tidy::utils {
 
@@ -17,7 +18,8 @@ namespace clang::tidy::utils {
 class HeaderGuardCheck : public ClangTidyCheck {
 public:
   HeaderGuardCheck(StringRef Name, ClangTidyContext *Context)
-      : ClangTidyCheck(Name, Context) {}
+      : ClangTidyCheck(Name, Context),
+        HeaderFileExtensions(Context->getHeaderFileExtensions()) {}
 
   void registerPPCallbacks(const SourceManager &SM, Preprocessor *PP,
                            Preprocessor *ModuleExpanderPP) override;
@@ -41,6 +43,9 @@ public:
   /// Gets the canonical header guard for a file.
   virtual std::string getHeaderGuard(StringRef Filename,
                                      StringRef OldGuard = StringRef()) = 0;
+
+private:
+  FileExtensionsSet HeaderFileExtensions;
 };
 
 } // namespace clang::tidy::utils

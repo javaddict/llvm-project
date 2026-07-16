@@ -12,26 +12,16 @@
 
 // class map
 
-// mapped_type& operator[](const key_type& k); // constexpr since C++26
+// mapped_type& operator[](const key_type& k);
 
 // https://llvm.org/PR16542
 
 #include <map>
 #include <tuple>
 
-#include <cassert>
-#include "test_macros.h"
-
-TEST_CONSTEXPR_CXX26 bool test() {
+int main(int, char**) {
   std::map<std::tuple<int, int>, std::size_t> m;
   m[std::make_tuple(2, 3)] = 7;
-  return true;
-}
 
-int main(int, char**) {
-  test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
   return 0;
 }

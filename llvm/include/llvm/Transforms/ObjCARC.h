@@ -27,19 +27,19 @@ class Pass;
 //
 LLVM_ABI Pass *createObjCARCContractPass();
 
-struct ObjCARCOptPass : public OptionalPassInfoMixin<ObjCARCOptPass> {
+struct ObjCARCOptPass : public PassInfoMixin<ObjCARCOptPass> {
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
-struct ObjCARCContractPass : public OptionalPassInfoMixin<ObjCARCContractPass> {
+struct ObjCARCContractPass : public PassInfoMixin<ObjCARCContractPass> {
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
-struct ObjCARCExpandPass : public OptionalPassInfoMixin<ObjCARCExpandPass> {
+struct ObjCARCExpandPass : public PassInfoMixin<ObjCARCExpandPass> {
   LLVM_ABI PreservedAnalyses run(Function &M, FunctionAnalysisManager &AM);
 };
 
-struct PAEvalPass : public OptionalPassInfoMixin<PAEvalPass> {
+struct PAEvalPass : public PassInfoMixin<PAEvalPass> {
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 

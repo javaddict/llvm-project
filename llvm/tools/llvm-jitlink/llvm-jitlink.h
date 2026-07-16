@@ -16,15 +16,12 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ExecutionEngine/Orc/COFF.h"
 #include "llvm/ExecutionEngine/Orc/Core.h"
-#include "llvm/ExecutionEngine/Orc/DylibManager.h"
 #include "llvm/ExecutionEngine/Orc/ExecutorProcessControl.h"
 #include "llvm/ExecutionEngine/Orc/LazyObjectLinkingLayer.h"
 #include "llvm/ExecutionEngine/Orc/LazyReexports.h"
-#include "llvm/ExecutionEngine/Orc/MemoryAccess.h"
 #include "llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h"
 #include "llvm/ExecutionEngine/Orc/RedirectionManager.h"
 #include "llvm/ExecutionEngine/Orc/SimpleRemoteEPC.h"
-#include "llvm/ExecutionEngine/Orc/WaitingOnGraphOpReplay.h"
 #include "llvm/ExecutionEngine/RuntimeDyldChecker.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/Regex.h"
@@ -36,41 +33,16 @@ namespace llvm {
 
 struct Session {
 
-  class WaitingOnGraphOpRecorder
-      : public orc::detail::WaitingOnGraphOpStreamRecorder<
-            orc::JITDylib *, orc::NonOwningSymbolStringPtr> {
-  public:
-    static Expected<std::unique_ptr<WaitingOnGraphOpRecorder>>
-    Create(StringRef Path) {
-      std::error_code EC;
-      std::unique_ptr<WaitingOnGraphOpRecorder> Instance(
-          new WaitingOnGraphOpRecorder(Path, EC));
-
-      if (EC)
-        return createFileError(Path, EC);
-      return std::move(Instance);
-    }
-
-  private:
-    WaitingOnGraphOpRecorder(StringRef Path, std::error_code EC)
-        : orc::detail::WaitingOnGraphOpStreamRecorder<
-              orc::JITDylib *, orc::NonOwningSymbolStringPtr>(OutStream),
-          OutStream(Path, EC) {}
-    raw_fd_ostream OutStream;
-  };
-
   struct LazyLinkingSupport {
     LazyLinkingSupport(
-        std::unique_ptr<orc::MemoryAccess> MemAccess,
         std::unique_ptr<orc::RedirectableSymbolManager> RSMgr,
         std::shared_ptr<orc::SimpleLazyReexportsSpeculator> Speculator,
         std::unique_ptr<orc::LazyReexportsManager> LRMgr,
         orc::ObjectLinkingLayer &ObjLinkingLayer)
-        : MemAccess(std::move(MemAccess)), RSMgr(std::move(RSMgr)),
-          Speculator(std::move(Speculator)), LRMgr(std::move(LRMgr)),
+        : RSMgr(std::move(RSMgr)), Speculator(std::move(Speculator)),
+          LRMgr(std::move(LRMgr)),
           LazyObjLinkingLayer(ObjLinkingLayer, *this->LRMgr) {}
 
-    std::unique_ptr<orc::MemoryAccess> MemAccess;
     std::unique_ptr<orc::RedirectableSymbolManager> RSMgr;
     std::shared_ptr<orc::SimpleLazyReexportsSpeculator> Speculator;
     std::unique_ptr<orc::LazyReexportsManager> LRMgr;
@@ -78,12 +50,10 @@ struct Session {
   };
 
   orc::ExecutionSession ES;
-  std::unique_ptr<jitlink::JITLinkMemoryManager> MemoryMgr;
-  std::unique_ptr<orc::DylibManager> DylibMgr;
   orc::JITDylib *MainJD = nullptr;
   orc::JITDylib *ProcessSymsJD = nullptr;
   orc::JITDylib *PlatformJD = nullptr;
-  std::unique_ptr<orc::ObjectLinkingLayer> ObjLayer;
+  orc::ObjectLinkingLayer ObjLayer;
   std::unique_ptr<LazyLinkingSupport> LazyLinking;
   orc::JITDylibSearchOrder JDSearchOrder;
   SubtargetFeatures Features;
@@ -138,7 +108,7 @@ struct Session {
            "Lazy linking requested but not available");
     return Lazy ? static_cast<orc::ObjectLayer &>(
                       LazyLinking->LazyObjLinkingLayer)
-                : static_cast<orc::ObjectLayer &>(*ObjLayer);
+                : static_cast<orc::ObjectLayer &>(ObjLayer);
   }
 
   Expected<FileInfo &> findFileInfo(StringRef FileName);
@@ -173,8 +143,6 @@ struct Session {
 
 private:
   Session(std::unique_ptr<orc::ExecutorProcessControl> EPC, Error &Err);
-
-  std::unique_ptr<WaitingOnGraphOpRecorder> GOpRecorder;
 };
 
 /// Record symbols, GOT entries, stubs, and sections for ELF file.

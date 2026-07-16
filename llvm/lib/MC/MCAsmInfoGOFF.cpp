@@ -13,19 +13,17 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCAsmInfoGOFF.h"
-#include "llvm/ADT/StringExtras.h"
 #include "llvm/BinaryFormat/GOFF.h"
 #include "llvm/MC/MCSectionGOFF.h"
-#include "llvm/MC/MCSymbolGOFF.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 
-MCAsmInfoGOFF::MCAsmInfoGOFF(const MCTargetOptions &Options)
-    : MCAsmInfo(Options) {
+MCAsmInfoGOFF::MCAsmInfoGOFF() {
   Data64bitsDirective = "\t.quad\t";
   WeakRefDirective = "WXTRN";
-  InternalSymbolPrefix = "L#";
+  PrivateGlobalPrefix = "L#";
+  PrivateLabelPrefix = "L#";
   ZeroDirective = "\t.space\t";
 }
 
@@ -85,21 +83,17 @@ static void emitCATTR(raw_ostream &OS, StringRef Name, GOFF::ESDRmode Rmode,
   OS << '\n';
 }
 
-static void emitXATTR(raw_ostream &OS, StringRef Name, MCSectionGOFF *ADA,
+static void emitXATTR(raw_ostream &OS, StringRef Name,
                       GOFF::ESDLinkageType Linkage,
                       GOFF::ESDExecutable Executable,
                       GOFF::ESDBindingScope BindingScope) {
-  llvm::ListSeparator Sep(",");
   OS << Name << " XATTR ";
-  OS << Sep << "LINKAGE(" << (Linkage == GOFF::ESD_LT_OS ? "OS" : "XPLINK")
-     << ")";
+  OS << "LINKAGE(" << (Linkage == GOFF::ESD_LT_OS ? "OS" : "XPLINK") << "),";
   if (Executable != GOFF::ESD_EXE_Unspecified)
-    OS << Sep << "REFERENCE("
-       << (Executable == GOFF::ESD_EXE_CODE ? "CODE" : "DATA") << ")";
-  if (ADA)
-    OS << Sep << "PSECT(" << ADA->getName() << ")";
+    OS << "REFERENCE(" << (Executable == GOFF::ESD_EXE_CODE ? "CODE" : "DATA")
+       << "),";
   if (BindingScope != GOFF::ESD_BSC_Unspecified) {
-    OS << Sep << "SCOPE(";
+    OS << "SCOPE(";
     switch (BindingScope) {
     case GOFF::ESD_BSC_Section:
       OS << "SECTION";
@@ -126,15 +120,10 @@ void MCAsmInfoGOFF::printSwitchToSection(const MCSection &Section,
                                          raw_ostream &OS) const {
   auto &Sec =
       const_cast<MCSectionGOFF &>(static_cast<const MCSectionGOFF &>(Section));
-  auto EmitExternalName = [&Sec, &OS]() {
-    if (Sec.hasExternalName())
-      OS << Sec.getName() << " ALIAS C'" << Sec.getExternalName() << "'\n";
-  };
   switch (Sec.SymbolType) {
   case GOFF::ESD_ST_SectionDefinition: {
     OS << Sec.getName() << " CSECT\n";
     Sec.Emitted = true;
-    EmitExternalName();
     break;
   }
   case GOFF::ESD_ST_ElementDefinition: {
@@ -144,14 +133,7 @@ void MCAsmInfoGOFF::printSwitchToSection(const MCSection &Section,
                 Sec.EDAttributes.Alignment, Sec.EDAttributes.LoadBehavior,
                 GOFF::ESD_EXE_Unspecified, Sec.EDAttributes.IsReadOnly, 0,
                 Sec.EDAttributes.FillByteValue, StringRef());
-      if (auto *BeginSym = static_cast<MCSymbolGOFF *>(Sec.getBeginSymbol())) {
-        if (BeginSym->getADA())
-          emitXATTR(OS, BeginSym->getName(), BeginSym->getADA(),
-                    GOFF::ESD_LT_XPLink, GOFF::ESD_EXE_Unspecified,
-                    GOFF::ESD_BSC_Section);
-      }
       Sec.Emitted = true;
-      EmitExternalName();
     } else
       OS << Sec.getName() << " CATTR\n";
     break;
@@ -165,15 +147,10 @@ void MCAsmInfoGOFF::printSwitchToSection(const MCSection &Section,
                 Sec.PRAttributes.Executable, ED->EDAttributes.IsReadOnly,
                 Sec.PRAttributes.SortKey, ED->EDAttributes.FillByteValue,
                 Sec.getName());
-      MCSectionGOFF *ADA =
-          Sec.getBeginSymbol() != nullptr
-              ? static_cast<MCSymbolGOFF *>(Sec.getBeginSymbol())->getADA()
-              : nullptr;
-      emitXATTR(OS, Sec.getName(), ADA, Sec.PRAttributes.Linkage,
+      emitXATTR(OS, Sec.getName(), Sec.PRAttributes.Linkage,
                 Sec.PRAttributes.Executable, Sec.PRAttributes.BindingScope);
       ED->Emitted = true;
       Sec.Emitted = true;
-      EmitExternalName();
     } else
       OS << ED->getName() << " CATTR PART(" << Sec.getName() << ")\n";
     break;

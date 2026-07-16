@@ -99,6 +99,7 @@ public:
         InProcessMemoryAccess(Triple(TT).isArch64Bit()) {
     this->TargetTriple = Triple(TT);
     this->PageSize = PageSize;
+    this->MemAccess = this;
   }
 
   Expected<int32_t> runAsMain(ExecutorAddr MainFnAddr,
@@ -117,19 +118,6 @@ public:
   void callWrapperAsync(ExecutorAddr WrapperFnAddr,
                         IncomingWFRHandler OnComplete,
                         ArrayRef<char> ArgBuffer) override {
-    llvm_unreachable("Unsupported");
-  }
-
-  Expected<std::unique_ptr<jitlink::JITLinkMemoryManager>>
-  createDefaultMemoryManager() override {
-    llvm_unreachable("Unsupported");
-  }
-
-  Expected<std::unique_ptr<DylibManager>> createDefaultDylibMgr() override {
-    llvm_unreachable("Unsupported");
-  }
-
-  Expected<std::unique_ptr<MemoryAccess>> createDefaultMemoryAccess() override {
     llvm_unreachable("Unsupported");
   }
 

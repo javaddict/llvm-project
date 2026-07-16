@@ -15,30 +15,12 @@ using namespace lldb_private;
 using namespace llvm;
 
 namespace {
-struct ZipFileDesc {
-  std::string zip_name;
-  std::string lib_path;
-  size_t lib_offset;
-  size_t lib_size;
-};
-
 class ZipFileResolverTest : public ::testing::Test {
   SubsystemRAII<FileSystem> subsystems;
 };
 
-std::vector<ZipFileDesc> TestZipFiles() {
-  return {
-      // Simple uncompressed zip file, making use of extra fields
-      {"zip-test.zip", "lib/arm64-v8a/libzip-test.so", 4096, 3600},
-
-      // Simple uncompressed zip file, where the shared library is the last
-      // entry, and the entry has no extra field or comment
-      {"zip-test-no-extras.zip", "lib/arm64-v8a/libzip-test.so", 140, 3600},
-  };
-}
-
-std::string TestZipPath(const ZipFileDesc &desc) {
-  FileSpec zip_spec(GetInputFilePath(desc.zip_name));
+std::string TestZipPath() {
+  FileSpec zip_spec(GetInputFilePath("zip-test.zip"));
   FileSystem::Instance().Resolve(zip_spec);
   return zip_spec.GetPath();
 }
@@ -61,7 +43,7 @@ TEST_F(ZipFileResolverTest, ResolveSharedLibraryPathWithNormalFile) {
 }
 
 TEST_F(ZipFileResolverTest, ResolveSharedLibraryPathWithZipMissing) {
-  const std::string zip_path = TestZipPath(TestZipFiles().at(0));
+  const std::string zip_path = TestZipPath();
   const FileSpec file_spec(zip_path + "!/lib/arm64-v8a/libmissing.so");
 
   ZipFileResolver::FileKind file_kind;
@@ -73,20 +55,18 @@ TEST_F(ZipFileResolverTest, ResolveSharedLibraryPathWithZipMissing) {
 }
 
 TEST_F(ZipFileResolverTest, ResolveSharedLibraryPathWithZipExisting) {
-  for (const auto &zip_desc : TestZipFiles()) {
-    const std::string zip_path = TestZipPath(zip_desc);
-    const FileSpec file_spec(zip_path + "!/" + zip_desc.lib_path);
+  const std::string zip_path = TestZipPath();
+  const FileSpec file_spec(zip_path + "!/lib/arm64-v8a/libzip-test.so");
 
-    ZipFileResolver::FileKind file_kind;
-    std::string file_path;
-    lldb::offset_t file_offset;
-    lldb::offset_t file_size;
-    ASSERT_TRUE(ZipFileResolver::ResolveSharedLibraryPath(
-        file_spec, file_kind, file_path, file_offset, file_size));
+  ZipFileResolver::FileKind file_kind;
+  std::string file_path;
+  lldb::offset_t file_offset;
+  lldb::offset_t file_size;
+  ASSERT_TRUE(ZipFileResolver::ResolveSharedLibraryPath(
+      file_spec, file_kind, file_path, file_offset, file_size));
 
-    EXPECT_EQ(file_kind, ZipFileResolver::FileKind::eFileKindZip);
-    EXPECT_EQ(file_path, zip_path);
-    EXPECT_EQ(file_offset, zip_desc.lib_offset);
-    EXPECT_EQ(file_size, zip_desc.lib_size);
-  }
+  EXPECT_EQ(file_kind, ZipFileResolver::FileKind::eFileKindZip);
+  EXPECT_EQ(file_path, zip_path);
+  EXPECT_EQ(file_offset, 4096UL);
+  EXPECT_EQ(file_size, 3600UL);
 }

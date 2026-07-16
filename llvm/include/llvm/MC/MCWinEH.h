@@ -59,7 +59,7 @@ struct FrameInfo {
   uint8_t Version = DefaultVersion;
 
   int LastFrameInst = -1;
-  FrameInfo *ChainedParent = nullptr;
+  const FrameInfo *ChainedParent = nullptr;
   std::vector<Instruction> Instructions;
   struct Epilog {
     std::vector<Instruction> Instructions;
@@ -90,9 +90,9 @@ struct FrameInfo {
   FrameInfo(const MCSymbol *Function, const MCSymbol *BeginFuncEHLabel)
       : Begin(BeginFuncEHLabel), Function(Function) {}
   FrameInfo(const MCSymbol *Function, const MCSymbol *BeginFuncEHLabel,
-            FrameInfo *ChainedParent)
+            const FrameInfo *ChainedParent)
       : Begin(BeginFuncEHLabel), Function(Function),
-        Version(ChainedParent->Version), ChainedParent(ChainedParent) {}
+        ChainedParent(ChainedParent) {}
 
   bool empty() const {
     if (!Instructions.empty())

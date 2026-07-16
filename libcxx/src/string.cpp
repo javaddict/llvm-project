@@ -19,7 +19,6 @@
 #endif
 
 _LIBCPP_BEGIN_NAMESPACE_STD
-_LIBCPP_BEGIN_EXPLICIT_ABI_ANNOTATIONS
 
 #if _LIBCPP_AVAILABILITY_MINIMUM_HEADER_VERSION < 14
 
@@ -368,5 +367,4 @@ wstring to_wstring(double val) { return as_string(get_swprintf(), initial_string
 wstring to_wstring(long double val) { return as_string(get_swprintf(), initial_string<wstring>()(), L"%Lf", val); }
 #endif
 
-_LIBCPP_END_EXPLICIT_ABI_ANNOTATIONS
 _LIBCPP_END_NAMESPACE_STD

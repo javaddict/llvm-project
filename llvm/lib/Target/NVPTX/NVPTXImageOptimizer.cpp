@@ -14,9 +14,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "NVPTX.h"
-#include "NVVMProperties.h"
+#include "NVPTXUtilities.h"
 #include "llvm/Analysis/ConstantFolding.h"
-#include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsNVPTX.h"
@@ -38,7 +37,9 @@ public:
   StringRef getPassName() const override { return "NVPTX Image Optimizer"; }
 
 private:
-  bool replaceIsTypeP(Instruction &I, PTXOpaqueType Expected);
+  bool replaceIsTypePSampler(Instruction &I);
+  bool replaceIsTypePSurface(Instruction &I);
+  bool replaceIsTypePTexture(Instruction &I);
   Value *cleanupValue(Value *V);
   void replaceWith(Instruction *From, ConstantInt *To);
 };
@@ -66,13 +67,13 @@ bool NVPTXImageOptimizer::runOnFunction(Function &F) {
           switch (CalledF->getIntrinsicID()) {
           default: break;
           case Intrinsic::nvvm_istypep_sampler:
-            Changed |= replaceIsTypeP(Instr, PTXOpaqueType::Sampler);
+            Changed |= replaceIsTypePSampler(Instr);
             break;
           case Intrinsic::nvvm_istypep_surface:
-            Changed |= replaceIsTypeP(Instr, PTXOpaqueType::Surface);
+            Changed |= replaceIsTypePSurface(Instr);
             break;
           case Intrinsic::nvvm_istypep_texture:
-            Changed |= replaceIsTypeP(Instr, PTXOpaqueType::Texture);
+            Changed |= replaceIsTypePTexture(Instr);
             break;
           }
         }
@@ -87,13 +88,58 @@ bool NVPTXImageOptimizer::runOnFunction(Function &F) {
   return Changed;
 }
 
-bool NVPTXImageOptimizer::replaceIsTypeP(Instruction &I,
-                                         PTXOpaqueType Expected) {
-  PTXOpaqueType OT = getPTXOpaqueType(*cleanupValue(I.getOperand(0)));
-  if (OT == PTXOpaqueType::None)
+bool NVPTXImageOptimizer::replaceIsTypePSampler(Instruction &I) {
+  Value *TexHandle = cleanupValue(I.getOperand(0));
+  if (isSampler(*TexHandle)) {
+    // This is an OpenCL sampler, so it must be a samplerref
+    replaceWith(&I, ConstantInt::getTrue(I.getContext()));
+    return true;
+  } else if (isImage(*TexHandle)) {
+    // This is an OpenCL image, so it cannot be a samplerref
+    replaceWith(&I, ConstantInt::getFalse(I.getContext()));
+    return true;
+  } else {
+    // The image type is unknown, so we cannot eliminate the intrinsic
     return false;
-  replaceWith(&I, ConstantInt::getBool(I.getContext(), OT == Expected));
-  return true;
+  }
+}
+
+bool NVPTXImageOptimizer::replaceIsTypePSurface(Instruction &I) {
+  Value *TexHandle = cleanupValue(I.getOperand(0));
+  if (isImageReadWrite(*TexHandle) ||
+      isImageWriteOnly(*TexHandle)) {
+    // This is an OpenCL read-only/read-write image, so it must be a surfref
+    replaceWith(&I, ConstantInt::getTrue(I.getContext()));
+    return true;
+  } else if (isImageReadOnly(*TexHandle) ||
+             isSampler(*TexHandle)) {
+    // This is an OpenCL read-only/ imageor sampler, so it cannot be
+    // a surfref
+    replaceWith(&I, ConstantInt::getFalse(I.getContext()));
+    return true;
+  } else {
+    // The image type is unknown, so we cannot eliminate the intrinsic
+    return false;
+  }
+}
+
+bool NVPTXImageOptimizer::replaceIsTypePTexture(Instruction &I) {
+  Value *TexHandle = cleanupValue(I.getOperand(0));
+  if (isImageReadOnly(*TexHandle)) {
+    // This is an OpenCL read-only image, so it must be a texref
+    replaceWith(&I, ConstantInt::getTrue(I.getContext()));
+    return true;
+  } else if (isImageWriteOnly(*TexHandle) ||
+             isImageReadWrite(*TexHandle) ||
+             isSampler(*TexHandle)) {
+    // This is an OpenCL read-write/write-only image or a sampler, so it
+    // cannot be a texref
+    replaceWith(&I, ConstantInt::getFalse(I.getContext()));
+    return true;
+  } else {
+    // The image type is unknown, so we cannot eliminate the intrinsic
+    return false;
+  }
 }
 
 void NVPTXImageOptimizer::replaceWith(Instruction *From, ConstantInt *To) {
@@ -101,9 +147,16 @@ void NVPTXImageOptimizer::replaceWith(Instruction *From, ConstantInt *To) {
   // live is actually unreachable and can be trivially eliminated by the
   // unreachable block elimination pass.
   for (Use &U : From->uses()) {
-    if (CondBrInst *BI = dyn_cast<CondBrInst>(U)) {
-      BasicBlock *Dest = BI->getSuccessor(To->isZero() ? 1 : 0);
-      UncondBrInst::Create(Dest, BI->getIterator());
+    if (BranchInst *BI = dyn_cast<BranchInst>(U)) {
+      if (BI->isUnconditional()) continue;
+      BasicBlock *Dest;
+      if (To->isZero())
+        // Get false block
+        Dest = BI->getSuccessor(1);
+      else
+        // Get true block
+        Dest = BI->getSuccessor(0);
+      BranchInst::Create(Dest, BI->getIterator());
       InstrToDelete.push_back(BI);
     }
   }

@@ -1477,9 +1477,10 @@ bool StdLibraryFunctionsChecker::evalCall(const CallEvent &Call,
   switch (Summary.getInvalidationKd()) {
   case EvalCallAsPure: {
     ProgramStateRef State = C.getState();
+    const LocationContext *LC = C.getLocationContext();
     const auto *CE = cast<CallExpr>(Call.getOriginExpr());
     SVal V = C.getSValBuilder().conjureSymbolVal(Call, C.blockCount());
-    State = State->BindExpr(CE, C.getStackFrame(), V);
+    State = State->BindExpr(CE, LC, V);
 
     C.addTransition(State);
 
@@ -2276,7 +2277,7 @@ void StdLibraryFunctionsChecker::initFunctionSummaries(
         Signature(ArgTypes{CharPtrRestrictTy, IntTy, FilePtrRestrictTy},
                   RetType{CharPtrTy}),
         Summary(NoEvalCall)
-            .Case({NotNull(Ret), ReturnValueCondition(BO_EQ, ArgNo(0))},
+            .Case({ReturnValueCondition(BO_EQ, ArgNo(0))},
                   ErrnoMustNotBeChecked, GenericSuccessMsg)
             .Case({IsNull(Ret)}, ErrnoIrrelevant, GenericFailureMsg)
             .ArgConstraint(NotNull(ArgNo(0)))
@@ -2644,7 +2645,7 @@ void StdLibraryFunctionsChecker::initFunctionSummaries(
     addToFunctionSummaryMap(
         "mkdtemp", Signature(ArgTypes{CharPtrTy}, RetType{CharPtrTy}),
         Summary(NoEvalCall)
-            .Case({NotNull(Ret), ReturnValueCondition(BO_EQ, ArgNo(0))},
+            .Case({ReturnValueCondition(BO_EQ, ArgNo(0))},
                   ErrnoMustNotBeChecked, GenericSuccessMsg)
             .Case({IsNull(Ret)}, ErrnoNEZeroIrrelevant, GenericFailureMsg)
             .ArgConstraint(NotNull(ArgNo(0))));
@@ -2656,7 +2657,7 @@ void StdLibraryFunctionsChecker::initFunctionSummaries(
         Summary(NoEvalCall)
             .Case({NotNull(0),
                    ArgumentCondition(1, WithinRange, Range(1, SizeMax)),
-                   ReturnValueCondition(BO_EQ, ArgNo(0)), NotNull(Ret)},
+                   ReturnValueCondition(BO_EQ, ArgNo(0))},
                   ErrnoMustNotBeChecked, GenericSuccessMsg)
             .Case({NotNull(0),
                    ArgumentCondition(1, WithinRange, SingleValue(0)),

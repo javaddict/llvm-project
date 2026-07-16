@@ -15,13 +15,8 @@
 
 #else // overlay mode
 
-// MacOS doesn't provide uchar.h so we use the types provided by LLVM-libc.
-#ifdef __APPLE__
-#include "include/llvm-libc-types/char32_t.h"
-#else
 #include "hdr/uchar_overlay.h"
-#endif
 
-#endif // LIBC_FULL_BUILD
+#endif // LLVM_LIBC_FULL_BUILD
 
 #endif // LLVM_LIBC_HDR_TYPES_CHAR32_T_H

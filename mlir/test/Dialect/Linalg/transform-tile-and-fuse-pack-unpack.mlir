@@ -159,8 +159,7 @@ module {
         -> (!transform.op<"tensor.empty">,
             !transform.op<"linalg.transpose">,
             !transform.op<"tensor.collapse_shape">,
-            !transform.op<"tensor.extract_slice">,
-            !transform.op<"linalg.copy">)
+            !transform.op<"tensor.extract_slice">)
 
       %root = transform.structured.match ops{["linalg.generic"]} in %arg1
           : (!transform.any_op) -> !transform.any_op
@@ -221,8 +220,7 @@ module {
         -> (!transform.op<"tensor.empty">,
             !transform.op<"linalg.transpose">,
             !transform.op<"tensor.collapse_shape">,
-            !transform.op<"tensor.extract_slice">,
-            !transform.op<"linalg.copy">)
+            !transform.op<"tensor.extract_slice">)
 
       %root = transform.structured.match ops{["linalg.generic"]} in %arg1
           : (!transform.any_op) -> !transform.any_op

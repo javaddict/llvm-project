@@ -65,7 +65,8 @@ private:
   StringRef PrintfFormatString;
 
   /// Lazily-created c_str() call matcher
-  std::optional<ast_matchers::StatementMatcher> StringCStrCallExprMatcher;
+  std::optional<clang::ast_matchers::StatementMatcher>
+      StringCStrCallExprMatcher;
 
   const StringLiteral *FormatExpr;
   std::string StandardFormatString;
@@ -81,7 +82,7 @@ private:
   };
 
   std::vector<ArgumentFix> ArgFixes;
-  std::vector<ast_matchers::BoundNodes> ArgCStrRemovals;
+  std::vector<clang::ast_matchers::BoundNodes> ArgCStrRemovals;
 
   // Argument rotations to cope with the fact that std::print puts the value to
   // be formatted first and the width and precision afterwards whereas printf

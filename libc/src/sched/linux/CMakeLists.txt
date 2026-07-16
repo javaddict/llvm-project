@@ -25,17 +25,6 @@ add_entrypoint_object(
 )
 
 add_entrypoint_object(
-  sched_getcpu
-  SRCS
-    sched_getcpu.cpp
-  HDRS
-    ../sched_getcpu.h
-  DEPENDS
-    libc.src.__support.OSUtil.osutil
-    libc.src.errno.errno
-)
-
-add_entrypoint_object(
   sched_setaffinity
   SRCS
     sched_setaffinity.cpp

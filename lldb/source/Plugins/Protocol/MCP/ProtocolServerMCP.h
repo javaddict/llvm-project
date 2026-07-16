@@ -6,19 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROTOCOL_MCP_PROTOCOLSERVERMCP_H
-#define LLDB_SOURCE_PLUGINS_PROTOCOL_MCP_PROTOCOLSERVERMCP_H
+#ifndef LLDB_PLUGINS_PROTOCOL_MCP_PROTOCOLSERVERMCP_H
+#define LLDB_PLUGINS_PROTOCOL_MCP_PROTOCOLSERVERMCP_H
 
 #include "lldb/Core/ProtocolServer.h"
 #include "lldb/Host/MainLoop.h"
 #include "lldb/Host/Socket.h"
 #include "lldb/Protocol/MCP/Server.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Support/Error.h"
-#include <cstddef>
+#include "lldb/Protocol/MCP/Transport.h"
+#include <map>
 #include <memory>
-#include <mutex>
 #include <thread>
+#include <tuple>
 #include <vector>
 
 namespace lldb_private::mcp {

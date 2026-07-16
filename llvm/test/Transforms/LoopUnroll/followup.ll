@@ -47,11 +47,11 @@ for.end:                                          ; preds = %for.body, %entry
 ; COMMON-LABEL: @test(
 
 
-; COUNT: br i1 %exitcond.2, label %for.end.loopexit, label %for.body, !llvm.loop ![[#LOOP:]]
+; COUNT: br i1 %exitcond.2, label %for.end.loopexit, label %for.body, !llvm.loop ![[LOOP:[0-9]+]]
 
-; COUNT: ![[#LOOP]] = distinct !{![[#LOOP]], ![[#FOLLOWUP_ALL:]], ![[#FOLLOWUP_UNROLLED:]]}
-; COUNT: ![[#FOLLOWUP_ALL]] = !{!"FollowupAll"}
-; COUNT: ![[#FOLLOWUP_UNROLLED]] = !{!"FollowupUnrolled"}
+; COUNT: ![[FOLLOWUP_ALL:[0-9]+]] = !{!"FollowupAll"}
+; COUNT: ![[FOLLOWUP_UNROLLED:[0-9]+]] = !{!"FollowupUnrolled"}
+; COUNT: ![[LOOP]] = distinct !{![[LOOP]], ![[FOLLOWUP_ALL]], ![[FOLLOWUP_UNROLLED]]}
 
 
 ; EPILOG: br i1 %niter.ncmp.2, label %for.end.loopexit.unr-lcssa, label %for.body, !llvm.loop ![[LOOP_0:[0-9]+]]

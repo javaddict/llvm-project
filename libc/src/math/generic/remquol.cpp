@@ -7,13 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/remquol.h"
-#include "src/__support/math/remquol.h"
+#include "src/__support/FPUtil/DivisionAndRemainderOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(long double, remquol,
                    (long double x, long double y, int *exp)) {
-  return math::remquol(x, y, exp);
+  return fputil::remquo(x, y, *exp);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

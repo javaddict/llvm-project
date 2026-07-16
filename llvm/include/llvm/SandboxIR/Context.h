@@ -71,7 +71,6 @@ protected:
   friend class Type;              // For LLVMCtx.
   friend class PointerType;       // For LLVMCtx.
   friend class IntegerType;       // For LLVMCtx.
-  friend class ByteType;          // For LLVMCtx.
   friend class StructType;        // For LLVMCtx.
   friend class Region;            // For LLVMCtx.
   friend class IRSnapshotChecker; // To snapshot LLVMModuleToModuleMap.
@@ -179,10 +178,8 @@ protected:
   friend ExtractValueInst; // For createExtractValueInst()
   LLVM_ABI InsertValueInst *createInsertValueInst(llvm::InsertValueInst *IVI);
   friend InsertValueInst; // For createInsertValueInst()
-  LLVM_ABI UncondBrInst *createUncondBrInst(llvm::UncondBrInst *UBI);
-  friend UncondBrInst; // For createUncondBrInst()
-  LLVM_ABI CondBrInst *createCondBrInst(llvm::CondBrInst *CBI);
-  friend CondBrInst; // For createCondBrInst()
+  LLVM_ABI BranchInst *createBranchInst(llvm::BranchInst *I);
+  friend BranchInst; // For createBranchInst()
   LLVM_ABI LoadInst *createLoadInst(llvm::LoadInst *LI);
   friend LoadInst; // For createLoadInst()
   LLVM_ABI StoreInst *createStoreInst(llvm::StoreInst *SI);
@@ -241,7 +238,7 @@ protected:
 
 public:
   LLVM_ABI Context(LLVMContext &LLVMCtx);
-  LLVM_ABI virtual ~Context();
+  LLVM_ABI ~Context();
   /// Clears function-level state.
   LLVM_ABI void clear();
 
@@ -249,9 +246,9 @@ public:
   /// Convenience function for `getTracker().save()`
   void save() { IRTracker.save(); }
   /// Convenience function for `getTracker().revert()`
-  void revert(bool RevertAll = false) { IRTracker.revert(RevertAll); }
+  void revert() { IRTracker.revert(); }
   /// Convenience function for `getTracker().accept()`
-  void accept(bool AcceptAll = false) { IRTracker.accept(AcceptAll); }
+  void accept() { IRTracker.accept(); }
 
   LLVM_ABI sandboxir::Value *getValue(llvm::Value *V) const;
   const sandboxir::Value *getValue(const llvm::Value *V) const {
@@ -318,6 +315,12 @@ template <> struct DenseMapInfo<sandboxir::Context::CallbackID> {
   using CallbackID = sandboxir::Context::CallbackID;
   using ReprInfo = DenseMapInfo<CallbackID::ValTy>;
 
+  static CallbackID getEmptyKey() {
+    return CallbackID{ReprInfo::getEmptyKey()};
+  }
+  static CallbackID getTombstoneKey() {
+    return CallbackID{ReprInfo::getTombstoneKey()};
+  }
   static unsigned getHashValue(const CallbackID &ID) {
     return ReprInfo::getHashValue(ID.Val);
   }

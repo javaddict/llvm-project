@@ -1,4 +1,4 @@
-// RUN: %check_clang_tidy %s cert-dcl16-c %t
+// RUN: %check_clang_tidy %s cert-dcl16-c %t -- -- -I %clang_tidy_headers
 
 #include "integral_constant.h"
 

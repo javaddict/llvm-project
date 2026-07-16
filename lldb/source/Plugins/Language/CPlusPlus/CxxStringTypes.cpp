@@ -10,6 +10,7 @@
 
 #include "llvm/Support/ConvertUTF.h"
 
+#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/DataFormatters/FormattersHelpers.h"
 #include "lldb/DataFormatters/StringPrinter.h"
 #include "lldb/DataFormatters/TypeSummary.h"
@@ -59,15 +60,6 @@ static bool CharStringSummaryProvider(ValueObject &valobj, Stream &stream) {
   options.SetStream(&stream);
   options.SetPrefixToken(getElementTraits(ElemType).first);
 
-  CompilerType ty = valobj.GetCompilerType();
-  uint64_t size = 0;
-  if (ty.IsArrayType(nullptr, &size) && size > 0) {
-    options.SetSourceSize(size);
-    options.SetHasSourceSize(true);
-    options.SetZeroTermination(
-        StringPrinter::ZeroTermination::TrimTrailingZeros);
-  }
-
   if (!StringPrinter::ReadStringAndDumpToStream<ElemType>(options))
     stream.Printf("Summary Unavailable");
 
@@ -97,7 +89,7 @@ static bool CharSummaryProvider(ValueObject &valobj, Stream &stream) {
   options.SetPrefixToken(ElemTraits.first);
   options.SetQuote('\'');
   options.SetSourceSize(1);
-  options.SetZeroTermination(StringPrinter::ZeroTermination::Ignore);
+  options.SetBinaryZeroIsTerminator(false);
 
   return StringPrinter::ReadBufferAndDumpToStream<ElemType>(options);
 }
@@ -134,15 +126,6 @@ bool lldb_private::formatters::WCharStringSummaryProvider(
   options.SetTargetSP(valobj.GetTargetSP());
   options.SetStream(&stream);
   options.SetPrefixToken("L");
-
-  CompilerType ty = valobj.GetCompilerType();
-  uint64_t arr_size = 0;
-  if (ty.IsArrayType(nullptr, &arr_size) && arr_size > 0) {
-    options.SetSourceSize(arr_size);
-    options.SetHasSourceSize(true);
-    options.SetZeroTermination(
-        StringPrinter::ZeroTermination::TrimTrailingZeros);
-  }
 
   switch (wchar_size) {
   case 1:
@@ -197,7 +180,7 @@ bool lldb_private::formatters::WCharSummaryProvider(
   options.SetPrefixToken("L");
   options.SetQuote('\'');
   options.SetSourceSize(1);
-  options.SetZeroTermination(StringPrinter::ZeroTermination::Ignore);
+  options.SetBinaryZeroIsTerminator(false);
 
   switch (wchar_size) {
   case 1:
@@ -264,7 +247,7 @@ bool lldb_private::formatters::StringBufferSummaryProvider(
     options.SetPrefixToken(prefix_token);
   options.SetQuote('"');
   options.SetSourceSize(size);
-  options.SetZeroTermination(StringPrinter::ZeroTermination::Ignore);
+  options.SetBinaryZeroIsTerminator(false);
   return StringPrinter::ReadBufferAndDumpToStream<element_type>(options);
 }
 

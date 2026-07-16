@@ -13,7 +13,6 @@
 #ifndef LLVM_CLANG_LIB_CIR_CIRGENTYPECACHE_H
 #define LLVM_CLANG_LIB_CIR_CIRGENTYPECACHE_H
 
-#include "mlir/Dialect/Ptr/IR/MemorySpaceInterfaces.h"
 #include "clang/AST/CharUnits.h"
 #include "clang/Basic/AddressSpaces.h"
 #include "clang/CIR/Dialect/IR/CIRTypes.h"
@@ -81,7 +80,7 @@ struct CIRGenTypeCache {
     unsigned char SizeAlignInBytes;
   };
 
-  mlir::ptr::MemorySpaceAttrInterface cirAllocaAddressSpace;
+  cir::TargetAddressSpaceAttr cirAllocaAddressSpace;
 
   clang::CharUnits getSizeSize() const {
     return clang::CharUnits::fromQuantity(SizeSizeInBytes);
@@ -94,7 +93,7 @@ struct CIRGenTypeCache {
     return clang::CharUnits::fromQuantity(PointerAlignInBytes);
   }
 
-  mlir::ptr::MemorySpaceAttrInterface getCIRAllocaAddressSpace() const {
+  cir::TargetAddressSpaceAttr getCIRAllocaAddressSpace() const {
     return cirAllocaAddressSpace;
   }
 };

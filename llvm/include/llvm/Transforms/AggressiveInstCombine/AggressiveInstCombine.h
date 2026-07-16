@@ -20,9 +20,9 @@
 namespace llvm {
 
 class AggressiveInstCombinePass
-    : public OptionalPassInfoMixin<AggressiveInstCombinePass> {
+    : public PassInfoMixin<AggressiveInstCombinePass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 }
 

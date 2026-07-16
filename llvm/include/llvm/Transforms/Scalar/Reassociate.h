@@ -71,7 +71,7 @@ class XorOpnd;
 } // end namespace reassociate
 
 /// Reassociate commutative expressions.
-class ReassociatePass : public OptionalPassInfoMixin<ReassociatePass> {
+class ReassociatePass : public PassInfoMixin<ReassociatePass> {
 public:
   using OrderedSet =
       SetVector<AssertingVH<Instruction>, std::deque<AssertingVH<Instruction>>>;

@@ -49,31 +49,6 @@ enum class APIAvailability {
 };
 } // namespace
 
-namespace {
-struct BoundsSafetyNotes {
-  BoundsSafetyInfo::BoundsSafetyKind Kind;
-  std::optional<unsigned> Level;
-  StringRef BoundsExpr = "";
-};
-} // namespace
-
-namespace llvm {
-namespace yaml {
-template <> struct ScalarEnumerationTraits<BoundsSafetyInfo::BoundsSafetyKind> {
-  static void enumeration(IO &IO, BoundsSafetyInfo::BoundsSafetyKind &AA) {
-    IO.enumCase(AA, "counted_by",
-                BoundsSafetyInfo::BoundsSafetyKind::CountedBy);
-    IO.enumCase(AA, "counted_by_or_null",
-                BoundsSafetyInfo::BoundsSafetyKind::CountedByOrNull);
-    IO.enumCase(AA, "sized_by", BoundsSafetyInfo::BoundsSafetyKind::SizedBy);
-    IO.enumCase(AA, "sized_by_or_null",
-                BoundsSafetyInfo::BoundsSafetyKind::SizedByOrNull);
-    IO.enumCase(AA, "ended_by", BoundsSafetyInfo::BoundsSafetyKind::EndedBy);
-  }
-};
-} // namespace yaml
-} // namespace llvm
-
 namespace llvm {
 namespace yaml {
 template <> struct ScalarEnumerationTraits<APIAvailability> {
@@ -111,7 +86,6 @@ struct Param {
   std::optional<bool> Lifetimebound = false;
   std::optional<NullabilityKind> Nullability;
   std::optional<RetainCountConventionKind> RetainCountConvention;
-  std::optional<BoundsSafetyNotes> BoundsSafety;
   StringRef Type;
 };
 
@@ -129,7 +103,7 @@ template <> struct ScalarEnumerationTraits<NullabilityKind> {
     IO.enumCase(NK, "Optional", NullabilityKind::Nullable);
     IO.enumCase(NK, "Unspecified", NullabilityKind::Unspecified);
     IO.enumCase(NK, "NullableResult", NullabilityKind::NullableResult);
-    // TODO: Mapping this to its own value would allow for better cross
+    // TODO: Mapping this to it's own value would allow for better cross
     // checking. Also the default should be Unknown.
     IO.enumCase(NK, "Scalar", NullabilityKind::Unspecified);
 
@@ -163,15 +137,6 @@ template <> struct MappingTraits<Param> {
     IO.mapOptional("NoEscape", P.NoEscape);
     IO.mapOptional("Lifetimebound", P.Lifetimebound);
     IO.mapOptional("Type", P.Type, StringRef(""));
-    IO.mapOptional("BoundsSafety", P.BoundsSafety);
-  }
-};
-
-template <> struct MappingTraits<BoundsSafetyNotes> {
-  static void mapping(IO &IO, BoundsSafetyNotes &BS) {
-    IO.mapRequired("Kind", BS.Kind);
-    IO.mapRequired("BoundedBy", BS.BoundsExpr);
-    IO.mapOptional("Level", BS.Level);
   }
 };
 } // namespace yaml
@@ -351,7 +316,6 @@ struct Function {
   StringRef ResultType;
   StringRef SwiftReturnOwnership;
   SwiftSafetyKind SafetyKind = SwiftSafetyKind::None;
-  bool UnsafeBufferUsage = false;
 };
 
 typedef std::vector<Function> FunctionsSeq;
@@ -377,7 +341,6 @@ template <> struct MappingTraits<Function> {
     IO.mapOptional("SwiftReturnOwnership", F.SwiftReturnOwnership,
                    StringRef(""));
     IO.mapOptional("SwiftSafety", F.SafetyKind, SwiftSafetyKind::None);
-    IO.mapOptional("UnsafeBufferUsage", F.UnsafeBufferUsage, false);
   }
 };
 } // namespace yaml
@@ -780,14 +743,14 @@ class YAMLConverter {
   llvm::raw_ostream &OS;
   llvm::SourceMgr::DiagHandlerTy DiagHandler;
   void *DiagHandlerCtxt;
-  bool ErrorOccurred;
+  bool ErrorOccured;
 
   /// Emit a diagnostic
   bool emitError(llvm::Twine Message) {
     DiagHandler(
         llvm::SMDiagnostic("", llvm::SourceMgr::DK_Error, Message.str()),
         DiagHandlerCtxt);
-    ErrorOccurred = true;
+    ErrorOccured = true;
     return true;
   }
 
@@ -798,7 +761,7 @@ public:
                 void *DiagHandlerCtxt)
       : M(TheModule), Writer(TheModule.Name, SourceFile), OS(OS),
         DiagHandler(DiagHandler), DiagHandlerCtxt(DiagHandlerCtxt),
-        ErrorOccurred(false) {}
+        ErrorOccured(false) {}
 
   void convertAvailability(const AvailabilityItem &Availability,
                            CommonEntityInfo &CEI, llvm::StringRef APIName) {
@@ -824,14 +787,6 @@ public:
       PI.setLifetimebound(P.Lifetimebound);
       PI.setType(std::string(P.Type));
       PI.setRetainCountConvention(P.RetainCountConvention);
-      if (P.BoundsSafety) {
-        BoundsSafetyInfo BSI;
-        BSI.setKindAudited(P.BoundsSafety->Kind);
-        if (P.BoundsSafety->Level)
-          BSI.setLevelAudited(*P.BoundsSafety->Level);
-        BSI.ExternalBounds = P.BoundsSafety->BoundsExpr.str();
-        PI.BoundsSafety = BSI;
-      }
       if (static_cast<int>(OutInfo.Params.size()) <= P.Position)
         OutInfo.Params.resize(P.Position + 1);
       if (P.Position == -1)
@@ -1048,7 +1003,6 @@ public:
     FI.ResultType = std::string(Function.ResultType);
     FI.SwiftReturnOwnership = std::string(Function.SwiftReturnOwnership);
     FI.setRetainCountConvention(Function.RetainCountConvention);
-    FI.UnsafeBufferUsage = Function.UnsafeBufferUsage;
   }
 
   void convertTagContext(std::optional<Context> ParentContext, const Tag &T,
@@ -1280,10 +1234,10 @@ public:
       convertTopLevelItems(/* context */ std::nullopt, Versioned.Items,
                            Versioned.Version);
 
-    if (!ErrorOccurred)
+    if (!ErrorOccured)
       Writer.writeToStream(OS);
 
-    return ErrorOccurred;
+    return ErrorOccured;
   }
 };
 } // namespace

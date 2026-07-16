@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 // This compile-time customization requires cross-file macros, which doesn't work with modules.
-// ADDITIONAL_COMPILE_FLAGS: -fno-modules
+// UNSUPPORTED: clang-modules-build
 
 // Make sure that we can customize the verbose termination function at compile-time by
 // defining _LIBCPP_VERBOSE_ABORT ourselves. Note that this does not have any

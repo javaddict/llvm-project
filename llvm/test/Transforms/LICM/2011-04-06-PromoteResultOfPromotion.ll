@@ -9,12 +9,10 @@ define void @f() {
 ; CHECK-LABEL: define void @f() {
 ; CHECK-NEXT:  [[ENTRY:.*]]:
 ; CHECK-NEXT:    [[L_87_I:%.*]] = alloca [9 x i16], align 16
-; CHECK-NEXT:    store ptr @g_58, ptr @g_116, align 8, !tbaa [[ANYPTR_TBAA0:![0-9]+]]
-; CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr @g_116, align 8, !tbaa [[ANYPTR_TBAA0]]
-; CHECK-NEXT:    [[TMP2_PROMOTED:%.*]] = load i32, ptr [[TMP2]], align 4, !tbaa [[INT_TBAA4:![0-9]+]]
+; CHECK-NEXT:    [[G_58_PROMOTED:%.*]] = load i32, ptr @g_58, align 4, !tbaa [[INT_TBAA0:![0-9]+]]
 ; CHECK-NEXT:    br label %[[FOR_BODY:.*]]
 ; CHECK:       [[FOR_BODY]]:
-; CHECK-NEXT:    [[TMP31:%.*]] = phi i32 [ [[TMP2_PROMOTED]], %[[ENTRY]] ], [ [[OR:%.*]], %[[FOR_BODY]] ]
+; CHECK-NEXT:    [[TMP31:%.*]] = phi i32 [ [[G_58_PROMOTED]], %[[ENTRY]] ], [ [[OR:%.*]], %[[FOR_BODY]] ]
 ; CHECK-NEXT:    [[INC12:%.*]] = phi i32 [ 0, %[[ENTRY]] ], [ [[INC:%.*]], %[[FOR_BODY]] ]
 ; CHECK-NEXT:    [[OR]] = or i32 [[TMP31]], 10
 ; CHECK-NEXT:    [[INC]] = add nsw i32 [[INC12]], 1
@@ -22,7 +20,8 @@ define void @f() {
 ; CHECK-NEXT:    br i1 [[CMP]], label %[[FOR_BODY]], label %[[FOR_END:.*]]
 ; CHECK:       [[FOR_END]]:
 ; CHECK-NEXT:    [[OR_LCSSA:%.*]] = phi i32 [ [[OR]], %[[FOR_BODY]] ]
-; CHECK-NEXT:    store i32 [[OR_LCSSA]], ptr [[TMP2]], align 4, !tbaa [[INT_TBAA4]]
+; CHECK-NEXT:    store ptr @g_58, ptr @g_116, align 8, !tbaa [[ANYPTR_TBAA4:![0-9]+]]
+; CHECK-NEXT:    store i32 [[OR_LCSSA]], ptr @g_58, align 4, !tbaa [[INT_TBAA0]]
 ; CHECK-NEXT:    ret void
 ;
 
@@ -53,10 +52,10 @@ for.end:                                          ; preds = %for.inc
 !5 = !{!"any pointer", !1}
 !6 = !{!"int", !1}
 ;.
-; CHECK: [[ANYPTR_TBAA0]] = !{[[META1:![0-9]+]], [[META1]], i64 0}
-; CHECK: [[META1]] = !{!"any pointer", [[META2:![0-9]+]]}
+; CHECK: [[INT_TBAA0]] = !{[[META1:![0-9]+]], [[META1]], i64 0}
+; CHECK: [[META1]] = !{!"int", [[META2:![0-9]+]]}
 ; CHECK: [[META2]] = !{!"omnipotent char", [[META3:![0-9]+]]}
 ; CHECK: [[META3]] = !{!"Simple C/C++ TBAA"}
-; CHECK: [[INT_TBAA4]] = !{[[META5:![0-9]+]], [[META5]], i64 0}
-; CHECK: [[META5]] = !{!"int", [[META2]]}
+; CHECK: [[ANYPTR_TBAA4]] = !{[[META5:![0-9]+]], [[META5]], i64 0}
+; CHECK: [[META5]] = !{!"any pointer", [[META2]]}
 ;.

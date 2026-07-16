@@ -130,6 +130,7 @@ void CodeMetrics::analyzeBasicBlock(
     const BasicBlock *BB, const TargetTransformInfo &TTI,
     const SmallPtrSetImpl<const Value *> &EphValues, bool PrepareForLTO,
     const Loop *L) {
+  ++NumBlocks;
   InstructionCost NumInstsBeforeThisBB = NumInsts;
   for (const Instruction &I : *BB) {
     // Skip ephemeral values.
@@ -230,7 +231,5 @@ void CodeMetrics::analyzeBasicBlock(
 
   // Remember NumInsts for this BB.
   InstructionCost NumInstsThisBB = NumInsts - NumInstsBeforeThisBB;
-  if (NumBBInsts.size() <= BB->getNumber())
-    NumBBInsts.resize(BB->getParent()->getMaxBlockNumber());
-  NumBBInsts[BB->getNumber()] = NumInstsThisBB;
+  NumBBInsts[BB] = NumInstsThisBB;
 }

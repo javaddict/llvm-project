@@ -8,4 +8,3 @@ add_mlir_generic_tablegen_target(MLIRConversionPassIncGen)
 add_mlir_doc(Passes ConversionPasses ./ -gen-pass-doc)
 
 add_subdirectory(ConvertToLLVM)
-add_subdirectory(ConvertToEmitC)

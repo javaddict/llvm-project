@@ -33,6 +33,7 @@ public:
 
 protected:
   lldb::addr_t m_instruction_address_reference;
+  int32_t m_offset;
 };
 
 } // namespace lldb_dap

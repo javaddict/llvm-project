@@ -26,8 +26,9 @@ Example usage:
   if __name__ == '__main__':
     benchmark.main()
 """
-
 import atexit
+
+from absl import app
 
 from google_benchmark import _benchmark
 from google_benchmark._benchmark import (
@@ -47,8 +48,7 @@ from google_benchmark._benchmark import (
     oNone as oNone,
     oNSquared as oNSquared,
 )
-
-__version__ = "1.9.5"
+from google_benchmark.version import __version__ as __version__
 
 
 class __OptionMaker:
@@ -58,8 +58,7 @@ class __OptionMaker:
     """
 
     class Options:
-        """Pure data class to store options calls, along with the benchmarked
-        function."""
+        """Pure data class to store options calls, along with the benchmarked function."""
 
         def __init__(self, func):
             self.func = func
@@ -82,8 +81,8 @@ class __OptionMaker:
             def __decorator(func_or_options):
                 options = self.make(func_or_options)
                 options.builder_calls.append((builder_name, args, kwargs))
-                # The decorator returns Options so it is not technically a
-                # decorator and needs a final call to @register
+                # The decorator returns Options so it is not technically a decorator
+                # and needs a final call to @register
                 return options
 
             return __decorator
@@ -92,8 +91,8 @@ class __OptionMaker:
 
 
 # Alias for nicer API.
-# We have to instantiate an object, even if stateless, to be able to use
-# __getattr__ on option.range
+# We have to instantiate an object, even if stateless, to be able to use __getattr__
+# on option.range
 option = __OptionMaker()
 
 
@@ -103,8 +102,8 @@ def register(undefined=None, *, name=None):
         # Decorator is called without parenthesis so we return a decorator
         return lambda f: register(f, name=name)
 
-    # We have either the function to benchmark (simple case) or an instance of
-    # Options (@option._ case).
+    # We have either the function to benchmark (simple case) or an instance of Options
+    # (@option._ case).
     options = __OptionMaker.make(undefined)
 
     if name is None:
@@ -120,17 +119,22 @@ def register(undefined=None, *, name=None):
     return options.func
 
 
-def main(argv: list[str] | None = None) -> None:
-    import sys
+def _flags_parser(argv):
+    argv = _benchmark.Initialize(argv)
+    return app.parse_flags_with_usage(argv)
 
-    _benchmark.Initialize(argv or sys.argv)
+
+def _run_benchmarks(argv):
+    if len(argv) > 1:
+        raise app.UsageError("Too many command-line arguments.")
     return _benchmark.RunSpecifiedBenchmarks()
 
 
-# FIXME: can we rerun with disabled ASLR?
+def main(argv=None):
+    return app.run(_run_benchmarks, argv=argv, flags_parser=_flags_parser)
+
 
 # Methods for use with custom main function.
 initialize = _benchmark.Initialize
 run_benchmarks = _benchmark.RunSpecifiedBenchmarks
-add_custom_context = _benchmark.AddCustomContext
 atexit.register(_benchmark.ClearRegisteredBenchmarks)

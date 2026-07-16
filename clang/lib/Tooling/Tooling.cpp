@@ -456,7 +456,10 @@ bool FrontendActionFactory::runInvocation(
   // pass it to an std::unique_ptr declared after the Compiler variable.
   std::unique_ptr<FrontendAction> ScopedToolAction(create());
 
-  return Compiler.ExecuteAction(*ScopedToolAction);
+  const bool Success = Compiler.ExecuteAction(*ScopedToolAction);
+
+  Files->clearStatCache();
+  return Success;
 }
 
 ClangTool::ClangTool(const CompilationDatabase &Compilations,

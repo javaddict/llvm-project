@@ -250,14 +250,10 @@ void RVVType::initClangBuiltinStr() {
     ClangBuiltinStr += "int";
     break;
   case ScalarTypeKind::UnsignedInteger:
+  case ScalarTypeKind::FloatE4M3:
+  case ScalarTypeKind::FloatE5M2:
     ClangBuiltinStr += "uint";
     break;
-  case ScalarTypeKind::FloatE4M3:
-    ClangBuiltinStr += "float8e4m3" + LMUL.str() + "_t";
-    return;
-  case ScalarTypeKind::FloatE5M2:
-    ClangBuiltinStr += "float8e5m2" + LMUL.str() + "_t";
-    return;
   default:
     llvm_unreachable("ScalarTypeKind is invalid");
   }
@@ -331,13 +327,9 @@ void RVVType::initTypeStr() {
     Str += getTypeString("int");
     break;
   case ScalarTypeKind::UnsignedInteger:
-    Str += getTypeString("uint");
-    break;
   case ScalarTypeKind::FloatE4M3:
-    Str += "vfloat8e4m3" + LMUL.str() + "_t";
-    break;
   case ScalarTypeKind::FloatE5M2:
-    Str += "vfloat8e5m2" + LMUL.str() + "_t";
+    Str += getTypeString("uint");
     break;
   default:
     llvm_unreachable("ScalarType is invalid!");
@@ -456,10 +448,6 @@ PrototypeDescriptor::parsePrototypeDescriptor(
     PT = BaseTypeModifier::Vector;
     VTM = VectorTypeModifier::Widening2XVector;
     break;
-  case 'd':
-    PT = BaseTypeModifier::Vector;
-    VTM = VectorTypeModifier::DoubleLMULVector;
-    break;
   case 'q':
     PT = BaseTypeModifier::Vector;
     VTM = VectorTypeModifier::Widening4XVector;
@@ -493,7 +481,7 @@ PrototypeDescriptor::parsePrototypeDescriptor(
   default:
     llvm_unreachable("Illegal primitive type transformers!");
   }
-  PD.PT = PT;
+  PD.PT = static_cast<uint8_t>(PT);
   PrototypeDescriptorStr = PrototypeDescriptorStr.drop_back();
 
   // Compute the vector type transformers, it can only appear one time.
@@ -662,7 +650,7 @@ PrototypeDescriptor::parsePrototypeDescriptor(
       llvm_unreachable("Illegal complex type transformers!");
     }
   }
-  PD.VTM = VTM;
+  PD.VTM = static_cast<uint8_t>(VTM);
 
   // Compute the remain type transformers
   TypeModifier TM = TypeModifier::NoModifier;
@@ -700,7 +688,7 @@ PrototypeDescriptor::parsePrototypeDescriptor(
       llvm_unreachable("Illegal non-primitive type transformer!");
     }
   }
-  PD.TM = TM;
+  PD.TM = static_cast<uint8_t>(TM);
 
   return PD;
 }
@@ -748,10 +736,6 @@ void RVVType::applyModifier(const PrototypeDescriptor &Transformer) {
     if (ScalarType == ScalarTypeKind::FloatE4M3 ||
         ScalarType == ScalarTypeKind::FloatE5M2)
       ScalarType = ScalarTypeKind::BFloat;
-    break;
-  case VectorTypeModifier::DoubleLMULVector:
-    LMUL.MulLog2LMUL(1);
-    Scale = LMUL.getScale(ElementBitwidth);
     break;
   case VectorTypeModifier::Widening4XVector:
     ElementBitwidth *= 4;
@@ -988,9 +972,9 @@ static uint64_t computeRVVTypeHashValue(BasicType BT, int Log2LMUL,
   // | Log2LMUL + 3  | BT  | Proto.PT | Proto.TM | Proto.VTM |
   assert(Log2LMUL >= -3 && Log2LMUL <= 3);
   return (Log2LMUL + 3) | (static_cast<uint64_t>(BT) & 0xffff) << 8 |
-         (static_cast<uint64_t>(Proto.PT) << 24) |
-         (static_cast<uint64_t>(Proto.TM) << 32) |
-         (static_cast<uint64_t>(Proto.VTM) << 40);
+         ((uint64_t)(Proto.PT & 0xff) << 24) |
+         ((uint64_t)(Proto.TM & 0xff) << 32) |
+         ((uint64_t)(Proto.VTM & 0xff) << 40);
 }
 
 std::optional<RVVTypePtr> RVVTypeCache::computeType(BasicType BT, int Log2LMUL,
@@ -1020,19 +1004,21 @@ std::optional<RVVTypePtr> RVVTypeCache::computeType(BasicType BT, int Log2LMUL,
 //===----------------------------------------------------------------------===//
 // RVVIntrinsic implementation
 //===----------------------------------------------------------------------===//
-RVVIntrinsic::RVVIntrinsic(
-    StringRef NewName, StringRef Suffix, StringRef NewOverloadedName,
-    StringRef OverloadedSuffix, StringRef IRName, bool IsMasked,
-    bool HasMaskedOffOperand, bool HasVL, PolicyScheme Scheme,
-    bool SupportOverloading, bool HasBuiltinAlias, StringRef ManualCodegen,
-    const RVVTypes &OutInTypes, const std::vector<int64_t> &NewIntrinsicTypes,
-    unsigned NF, bool HasSegInstSEW, Policy NewPolicyAttrs,
-    bool HasFRMRoundModeOp, unsigned TWiden, bool AltFmt)
+RVVIntrinsic::RVVIntrinsic(StringRef NewName, StringRef Suffix,
+                           StringRef NewOverloadedName,
+                           StringRef OverloadedSuffix, StringRef IRName,
+                           bool IsMasked, bool HasMaskedOffOperand, bool HasVL,
+                           PolicyScheme Scheme, bool SupportOverloading,
+                           bool HasBuiltinAlias, StringRef ManualCodegen,
+                           const RVVTypes &OutInTypes,
+                           const std::vector<int64_t> &NewIntrinsicTypes,
+                           unsigned NF, Policy NewPolicyAttrs,
+                           bool HasFRMRoundModeOp, unsigned TWiden, bool AltFmt)
     : IRName(IRName), IsMasked(IsMasked),
       HasMaskedOffOperand(HasMaskedOffOperand), HasVL(HasVL), Scheme(Scheme),
       SupportOverloading(SupportOverloading), HasBuiltinAlias(HasBuiltinAlias),
-      ManualCodegen(ManualCodegen.str()), NF(NF), HasSegInstSEW(HasSegInstSEW),
-      PolicyAttrs(NewPolicyAttrs), TWiden(TWiden) {
+      ManualCodegen(ManualCodegen.str()), NF(NF), PolicyAttrs(NewPolicyAttrs),
+      TWiden(TWiden) {
 
   // Init BuiltinName, Name and OverloadedName
   BuiltinName = NewName.str();
@@ -1100,9 +1086,10 @@ llvm::SmallVector<PrototypeDescriptor> RVVIntrinsic::computeBuiltinTypes(
       } else if (NF > 1) {
         if (IsTuple) {
           PrototypeDescriptor BasePtrOperand = Prototype[1];
-          PrototypeDescriptor MaskoffType =
-              PrototypeDescriptor(BaseTypeModifier::Vector, getTupleVTM(NF),
-                                  BasePtrOperand.TM & ~TypeModifier::Pointer);
+          PrototypeDescriptor MaskoffType = PrototypeDescriptor(
+              static_cast<uint8_t>(BaseTypeModifier::Vector),
+              static_cast<uint8_t>(getTupleVTM(NF)),
+              BasePtrOperand.TM & ~static_cast<uint8_t>(TypeModifier::Pointer));
           NewPrototype.insert(NewPrototype.begin() + 1, MaskoffType);
         } else {
           // Convert
@@ -1110,7 +1097,7 @@ llvm::SmallVector<PrototypeDescriptor> RVVIntrinsic::computeBuiltinTypes(
           // to
           // (void, op0 address, op1 address, ..., maskedoff0, maskedoff1, ...)
           PrototypeDescriptor MaskoffType = NewPrototype[1];
-          MaskoffType.TM &= ~TypeModifier::Pointer;
+          MaskoffType.TM &= ~static_cast<uint8_t>(TypeModifier::Pointer);
           NewPrototype.insert(NewPrototype.begin() + NF + 1, NF, MaskoffType);
         }
       }
@@ -1138,9 +1125,10 @@ llvm::SmallVector<PrototypeDescriptor> RVVIntrinsic::computeBuiltinTypes(
     } else if (PolicyAttrs.isTUPolicy() && HasPassthruOp) {
       if (IsTuple) {
         PrototypeDescriptor BasePtrOperand = Prototype[0];
-        PrototypeDescriptor MaskoffType =
-            PrototypeDescriptor(BaseTypeModifier::Vector, getTupleVTM(NF),
-                                BasePtrOperand.TM & ~TypeModifier::Pointer);
+        PrototypeDescriptor MaskoffType = PrototypeDescriptor(
+            static_cast<uint8_t>(BaseTypeModifier::Vector),
+            static_cast<uint8_t>(getTupleVTM(NF)),
+            BasePtrOperand.TM & ~static_cast<uint8_t>(TypeModifier::Pointer));
         NewPrototype.insert(NewPrototype.begin(), MaskoffType);
       } else {
         // NF > 1 cases for segment load operations.
@@ -1149,7 +1137,7 @@ llvm::SmallVector<PrototypeDescriptor> RVVIntrinsic::computeBuiltinTypes(
         // to
         // (void, op0 address, op1 address, maskedoff0, maskedoff1, ...)
         PrototypeDescriptor MaskoffType = Prototype[1];
-        MaskoffType.TM &= ~TypeModifier::Pointer;
+        MaskoffType.TM &= ~static_cast<uint8_t>(TypeModifier::Pointer);
         NewPrototype.insert(NewPrototype.begin() + NF + 1, NF, MaskoffType);
       }
     }
@@ -1231,7 +1219,7 @@ void RVVIntrinsic::updateNamesAndPolicy(bool IsMasked, bool HasPolicy,
 
 SmallVector<PrototypeDescriptor> parsePrototypes(StringRef Prototypes) {
   SmallVector<PrototypeDescriptor> PrototypeDescriptors;
-  const StringRef Primaries("evwdqom0ztulf");
+  const StringRef Primaries("evwqom0ztulf");
   while (!Prototypes.empty()) {
     size_t Idx = 0;
     // Skip over complex prototype because it could contain primitive type

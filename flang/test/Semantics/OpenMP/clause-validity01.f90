@@ -200,7 +200,8 @@ use omp_lib
      a = 3.14
   enddo
 
-  !$omp do linear(b: val)
+  !ERROR: A modifier may not be specified in a LINEAR clause on the DO directive
+  !$omp do linear(ref(b))
   do i = 1, N
      a = 3.14
   enddo
@@ -220,7 +221,6 @@ use omp_lib
   !ERROR: Clause LINEAR is not allowed if clause ORDERED appears on the DO directive
   !ERROR: The parameter of the ORDERED clause must be a constant positive integer expression
   !ERROR: 'b' appears in more than one data-sharing clause on the same OpenMP directive
-  !ERROR: The list item 'a' specified without the REF 'linear-modifier' must be of INTEGER type
   !$omp do ordered(1-1) private(b) linear(b) linear(a)
   do i = 1, N
      a = 3.14
@@ -228,7 +228,6 @@ use omp_lib
 
   !ERROR: Clause LINEAR is not allowed if clause ORDERED appears on the DO directive
   !ERROR: The parameter of the ORDERED clause must be a constant positive integer expression
-  !ERROR: The list item 'a' specified without the REF 'linear-modifier' must be of INTEGER type
   !$omp do ordered(1-1) linear(a)
   do i = 1, N
      a = 3.14
@@ -408,8 +407,8 @@ use omp_lib
 !                              do-clause
 
   !ERROR: At most one PROC_BIND clause can appear on the PARALLEL DO directive
-  !ERROR: A REF or UVAL 'linear-modifier' may not be specified in a LINEAR clause on the PARALLEL DO directive
-  !$omp parallel do proc_bind(master) proc_bind(close) linear(b: uval)
+  !ERROR: A modifier may not be specified in a LINEAR clause on the PARALLEL DO directive
+  !$omp parallel do proc_bind(master) proc_bind(close) linear(val(b))
   do i = 1, N
      a = 3.14
   enddo
@@ -483,14 +482,14 @@ use omp_lib
 ! 2.13.1 master
 
   !$omp parallel
-  !WARNING: OpenMP directive MASTER has been deprecated, please use MASKED instead [-Wopenmp-usage]
+  !WARNING: OpenMP directive MASTER has been deprecated, please use MASKED instead. [-Wopen-mp-usage]
   !$omp master
   a=3.14
   !$omp end master
   !$omp end parallel
 
   !$omp parallel
-  !WARNING: OpenMP directive MASTER has been deprecated, please use MASKED instead [-Wopenmp-usage]
+  !WARNING: OpenMP directive MASTER has been deprecated, please use MASKED instead. [-Wopen-mp-usage]
   !ERROR: NUM_THREADS clause is not allowed on the MASTER directive
   !$omp master num_threads(4)
   a=3.14

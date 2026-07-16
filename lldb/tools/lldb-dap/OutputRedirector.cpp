@@ -8,9 +8,6 @@
 
 #include "OutputRedirector.h"
 #include "DAP.h"
-#include "DAPLog.h"
-#include "lldb/Host/File.h"
-#include "lldb/Host/MainLoopBase.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Error.h"
 #include <cstring>
@@ -23,7 +20,8 @@
 #endif
 
 using namespace llvm;
-using namespace lldb_private;
+
+static constexpr auto kCloseSentinel = StringLiteral::withInnerNUL("\0");
 
 namespace lldb_dap {
 
@@ -40,10 +38,9 @@ Expected<int> OutputRedirector::GetWriteFileDescriptor() {
   return m_fd;
 }
 
-Error OutputRedirector::RedirectTo(MainLoopBase &loop, std::FILE *file_override,
-                                   std::function<void(StringRef)> callback,
-                                   Log &log) {
-  assert(m_fd == kInvalidDescriptor && "OutputRedirector already started.");
+Error OutputRedirector::RedirectTo(std::FILE *file_override,
+                                   std::function<void(StringRef)> callback) {
+  assert(m_fd == kInvalidDescriptor && "Output readirector already started.");
   int new_fd[2];
 
 #if defined(_WIN32)
@@ -59,9 +56,6 @@ Error OutputRedirector::RedirectTo(MainLoopBase &loop, std::FILE *file_override,
   int read_fd = new_fd[0];
   m_fd = new_fd[1];
 
-  m_read_obj = std::make_shared<NativeFile>(read_fd, File::eOpenOptionReadOnly,
-                                            NativeFile::Owned);
-
   if (file_override) {
     int override_fd = fileno(file_override);
 
@@ -74,44 +68,46 @@ Error OutputRedirector::RedirectTo(MainLoopBase &loop, std::FILE *file_override,
       return llvm::errorCodeToError(llvm::errnoAsErrorCode());
   }
 
-  auto read_callback = [callback = std::move(callback), this,
-                        &log](MainLoopBase &) {
-    std::array<char, OutputBufferSize> buffer;
-    size_t num_bytes = buffer.size();
+  m_forwarder = std::thread([this, callback, read_fd]() {
+    char buffer[OutputBufferSize];
+    while (!m_stopped) {
+      ssize_t bytes_count = ::read(read_fd, &buffer, sizeof(buffer));
+      if (bytes_count == -1) {
+        // Skip non-fatal errors.
+        if (errno == EAGAIN || errno == EINTR || errno == EWOULDBLOCK)
+          continue;
+        break;
+      }
+      // Skip the null byte used to trigger a Stop.
+      if (bytes_count == 1 && buffer[0] == '\0')
+        continue;
 
-    const Status status = m_read_obj->Read(buffer.data(), num_bytes);
-    if (status.Fail()) {
-      DAP_LOG_ERROR(log, status.ToError(),
-                    "OutputRedirector read failed (handle {1}): error: {0}",
-                    m_read_obj->GetWaitableHandle());
-      m_read_handle.reset();
-      return;
+      StringRef data(buffer, bytes_count);
+      if (m_stopped)
+        data.consume_back(kCloseSentinel);
+      if (data.empty())
+        break;
+
+      callback(data);
     }
-    if (num_bytes == 0) { // EOF
-      m_read_handle.reset();
-      return;
-    }
+    ::close(read_fd);
+  });
 
-    const llvm::StringRef data(buffer.data(), num_bytes);
-    callback(data);
-  };
-
-  Status status;
-  m_read_handle =
-      loop.RegisterReadObject(m_read_obj, std::move(read_callback), status);
-
-  return status.takeError();
+  return Error::success();
 }
 
 void OutputRedirector::Stop() {
-  // Stop polling.
-  m_read_handle.reset();
-  m_read_obj.reset();
+  m_stopped = true;
 
   if (m_fd != kInvalidDescriptor) {
     int fd = m_fd;
     m_fd = kInvalidDescriptor;
+    // Closing the pipe may not be sufficient to wake up the thread in case the
+    // write descriptor is duplicated (to stdout/err or to another process).
+    // Write a null byte to ensure the read call returns.
+    (void)::write(fd, kCloseSentinel.data(), kCloseSentinel.size());
     ::close(fd);
+    m_forwarder.join();
 
     // Restore the fd back to its original state since we stopped the
     // redirection.
@@ -122,7 +118,6 @@ void OutputRedirector::Stop() {
       int original_fd = m_original_fd;
       m_original_fd = kInvalidDescriptor;
       ::dup2(restore_fd, original_fd);
-      ::close(restore_fd);
     }
   }
 }

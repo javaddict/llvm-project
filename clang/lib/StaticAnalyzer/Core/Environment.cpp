@@ -63,9 +63,17 @@ static const Expr *ignoreTransparentExprs(const Expr *E) {
   return ignoreTransparentExprs(E);
 }
 
-EnvironmentEntry::EnvironmentEntry(const Expr *E, const StackFrame *SF)
-    : std::pair<const Expr *, const StackFrame *>(ignoreTransparentExprs(E),
-                                                  SF) {}
+static const Stmt *ignoreTransparentExprs(const Stmt *S) {
+  if (const auto *E = dyn_cast<Expr>(S))
+    return ignoreTransparentExprs(E);
+  return S;
+}
+
+EnvironmentEntry::EnvironmentEntry(const Stmt *S, const LocationContext *L)
+    : std::pair<const Stmt *,
+                const StackFrameContext *>(ignoreTransparentExprs(S),
+                                           L ? L->getStackFrame()
+                                             : nullptr) {}
 
 SVal Environment::lookupExpr(const EnvironmentEntry &E) const {
   const SVal* X = ExprBindings.lookup(E);
@@ -78,10 +86,16 @@ SVal Environment::lookupExpr(const EnvironmentEntry &E) const {
 
 SVal Environment::getSVal(const EnvironmentEntry &Entry,
                           SValBuilder& svalBuilder) const {
-  const Expr *Ex = Entry.getExpr();
-  const StackFrame *SF = Entry.getStackFrame();
+  const Stmt *S = Entry.getStmt();
+  assert(!isa<ObjCForCollectionStmt>(S) &&
+         "Use ExprEngine::hasMoreIteration()!");
+  assert((isa<Expr, ReturnStmt>(S)) &&
+         "Environment can only argue about Exprs, since only they express "
+         "a value! Any non-expression statement stored in Environment is a "
+         "result of a hack!");
+  const LocationContext *LCtx = Entry.getLocationContext();
 
-  switch (Ex->getStmtClass()) {
+  switch (S->getStmtClass()) {
   case Stmt::CXXBindTemporaryExprClass:
   case Stmt::ExprWithCleanupsClass:
   case Stmt::GenericSelectionExprClass:
@@ -104,11 +118,18 @@ SVal Environment::getSVal(const EnvironmentEntry &Entry,
   case Stmt::SizeOfPackExprClass:
   case Stmt::PredefinedExprClass:
     // Known constants; defer to SValBuilder.
-    return *svalBuilder.getConstantVal(Ex);
+    return *svalBuilder.getConstantVal(cast<Expr>(S));
 
-  // Handle all other Expr* using a lookup.
+  case Stmt::ReturnStmtClass: {
+    const auto *RS = cast<ReturnStmt>(S);
+    if (const Expr *RE = RS->getRetValue())
+      return getSVal(EnvironmentEntry(RE, LCtx), svalBuilder);
+    return UndefinedVal();
+  }
+
+  // Handle all other Stmt* using a lookup.
   default:
-    return lookupExpr(EnvironmentEntry(Ex, SF));
+    return lookupExpr(EnvironmentEntry(S, LCtx));
   }
 }
 
@@ -174,7 +195,11 @@ EnvironmentManager::removeDeadBindings(Environment Env,
     const EnvironmentEntry &BlkExpr = I.getKey();
     SVal X = I.getData();
 
-    if (SymReaper.isLive(BlkExpr.getExpr(), BlkExpr.getStackFrame())) {
+    const Expr *E = dyn_cast<Expr>(BlkExpr.getStmt());
+    if (!E)
+      continue;
+
+    if (SymReaper.isLive(E, BlkExpr.getLocationContext())) {
       // Copy the binding to the new map.
       EBMapRef = EBMapRef.add(BlkExpr, X);
 
@@ -188,7 +213,7 @@ EnvironmentManager::removeDeadBindings(Environment Env,
 }
 
 void Environment::printJson(raw_ostream &Out, const ASTContext &Ctx,
-                            const StackFrame *SF, const char *NL,
+                            const LocationContext *LCtx, const char *NL,
                             unsigned int Space, bool IsDot) const {
   Indent(Out, Space, IsDot) << "\"environment\": ";
 
@@ -198,27 +223,28 @@ void Environment::printJson(raw_ostream &Out, const ASTContext &Ctx,
   }
 
   ++Space;
-  if (!SF) {
-    // Find the freshest stack frame.
-    llvm::SmallPtrSet<const StackFrame *, 16> FoundStackFrames;
+  if (!LCtx) {
+    // Find the freshest location context.
+    llvm::SmallPtrSet<const LocationContext *, 16> FoundContexts;
     for (const auto &I : *this) {
-      const StackFrame *CurrentSF = I.first.getStackFrame();
-      if (FoundStackFrames.count(CurrentSF) == 0) {
-        // This stack frame is fresher than all other stack frames so far.
-        SF = CurrentSF;
-        for (const StackFrame *SFI = CurrentSF; SFI; SFI = SFI->getParent())
-          FoundStackFrames.insert(SFI);
+      const LocationContext *LC = I.first.getLocationContext();
+      if (FoundContexts.count(LC) == 0) {
+        // This context is fresher than all other contexts so far.
+        LCtx = LC;
+        for (const LocationContext *LCI = LC; LCI; LCI = LCI->getParent())
+          FoundContexts.insert(LCI);
       }
     }
   }
 
-  assert(SF);
+  assert(LCtx);
 
-  Out << "{ \"pointer\": \"" << (const void *)SF << "\", \"items\": [" << NL;
+  Out << "{ \"pointer\": \"" << (const void *)LCtx->getStackFrame()
+      << "\", \"items\": [" << NL;
   PrintingPolicy PP = Ctx.getPrintingPolicy();
 
-  SF->printJson(Out, NL, Space, IsDot, [&](const StackFrame *SF) {
-    // SF items begin
+  LCtx->printJson(Out, NL, Space, IsDot, [&](const LocationContext *LC) {
+    // LCtx items begin
     bool HasItem = false;
     unsigned int InnerSpace = Space + 1;
 
@@ -226,7 +252,7 @@ void Environment::printJson(raw_ostream &Out, const ASTContext &Ctx,
     BindingsTy::iterator LastI = ExprBindings.end();
     for (BindingsTy::iterator I = ExprBindings.begin(); I != ExprBindings.end();
          ++I) {
-      if (I->first.getStackFrame() != SF)
+      if (I->first.getLocationContext() != LC)
         continue;
 
       if (!HasItem) {
@@ -234,23 +260,23 @@ void Environment::printJson(raw_ostream &Out, const ASTContext &Ctx,
         Out << '[' << NL;
       }
 
-      const Expr *Ex = I->first.getExpr();
-      (void)Ex;
-      assert(Ex != nullptr && "Expected non-null Expr");
+      const Stmt *S = I->first.getStmt();
+      (void)S;
+      assert(S != nullptr && "Expected non-null Stmt");
 
       LastI = I;
     }
 
     for (BindingsTy::iterator I = ExprBindings.begin(); I != ExprBindings.end();
          ++I) {
-      if (I->first.getStackFrame() != SF)
+      if (I->first.getLocationContext() != LC)
         continue;
 
-      const Expr *Ex = I->first.getExpr();
+      const Stmt *S = I->first.getStmt();
       Indent(Out, InnerSpace, IsDot)
-          << "{ \"stmt_id\": " << Ex->getID(Ctx) << ", \"kind\": \""
-          << Ex->getStmtClassName() << "\", \"pretty\": ";
-      Ex->printJson(Out, nullptr, PP, /*AddQuotes=*/true);
+          << "{ \"stmt_id\": " << S->getID(Ctx) << ", \"kind\": \""
+          << S->getStmtClassName() << "\", \"pretty\": ";
+      S->printJson(Out, nullptr, PP, /*AddQuotes=*/true);
 
       Out << ", \"value\": ";
       I->second.printJson(Out, /*AddQuotes=*/true);

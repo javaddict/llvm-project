@@ -76,12 +76,3 @@ template <typename T>
 __underlying_type(T) ft();
 auto x = &ft<E>;
 }
-
-namespace GH177943 {
-enum E {};
-enum E;
-
-enum {
-  a = (__underlying_type(E)){ },
-};
-}

@@ -26,28 +26,13 @@ from datetime import date
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = [
-    "sphinx.ext.todo",
-    "sphinx.ext.mathjax",
-    "sphinx.ext.intersphinx",
-    "myst_parser",
-]
-
-# Add path for llvm_slug module.
-sys.path.insert(0, os.path.abspath(os.path.join("..", "..", "llvm", "docs")))
-
-
-myst_enable_extensions = ["substitution", "colon_fence", "deflist"]
-
-# Automatic anchors for markdown titles
-myst_heading_anchors = 6
-myst_heading_slug_func = "llvm_slug.make_slug"
+extensions = ["sphinx.ext.todo", "sphinx.ext.mathjax", "sphinx.ext.intersphinx"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
 
 # The suffix of source filenames.
-source_suffix = [".rst", ".md"]
+source_suffix = ".rst"
 
 # The encoding of source files.
 # source_encoding = 'utf-8-sig'

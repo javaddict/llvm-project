@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # ===----------------------------------------------------------------------===##
 #
 # Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -28,7 +28,7 @@ def parse_line(line: str) -> Tuple[int, str]:
     """
     match = re.match(r"(\.+) (.+)", line)
     if not match:
-        raise ValueError(f"Line {line} contains invalid data.")
+        raise ArgumentError(f"Line {line} contains invalid data.")
 
     # The number of periods in front of the header name is the nesting level of
     # that header.

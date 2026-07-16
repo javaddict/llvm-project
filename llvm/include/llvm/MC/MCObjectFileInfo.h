@@ -373,8 +373,7 @@ public:
 
   MCSection *getPseudoProbeSection(const MCSection &TextSec) const;
 
-  MCSection *getPseudoProbeDescSection(StringRef FuncName,
-                                       uint64_t FuncHash) const;
+  MCSection *getPseudoProbeDescSection(StringRef FuncName) const;
 
   MCSection *getLLVMStatsSection() const;
 

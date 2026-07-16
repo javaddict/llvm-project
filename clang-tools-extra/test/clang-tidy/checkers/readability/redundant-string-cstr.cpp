@@ -1,4 +1,4 @@
-// RUN: %check_clang_tidy %s readability-redundant-string-cstr %t
+// RUN: %check_clang_tidy %s readability-redundant-string-cstr %t -- -- -isystem %clang_tidy_headers
 #include <string>
 
 template <typename T>

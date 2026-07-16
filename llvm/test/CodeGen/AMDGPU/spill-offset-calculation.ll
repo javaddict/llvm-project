@@ -279,22 +279,20 @@ define amdgpu_kernel void @test_sgpr_offset_subregs_kernel() {
 ; MUBUF-NEXT:    s_addc_u32 s1, s1, 0
 ; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], 0 offset:8 glc
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    buffer_store_dword v0, off, s[0:3], 0 offset:4084 ; 4-byte Folded Spill
-; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], 0 offset:12 glc
+; MUBUF-NEXT:    buffer_load_dword v1, off, s[0:3], 0 offset:12 glc
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    buffer_store_dword v0, off, s[0:3], 0 offset:4088 ; 4-byte Folded Spill
+; MUBUF-NEXT:    buffer_store_dword v0, off, s[0:3], 0 offset:4084 ; 4-byte Folded Spill
+; MUBUF-NEXT:    s_nop 0
+; MUBUF-NEXT:    buffer_store_dword v1, off, s[0:3], 0 offset:4088 ; 4-byte Folded Spill
 ; MUBUF-NEXT:    ;;#ASMSTART
 ; MUBUF-NEXT:    ;;#ASMEND
 ; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], 0 offset:4 glc
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], 0 offset:4088 ; 4-byte Folded Reload
-; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    v_readfirstlane_b32 s5, v0
 ; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], 0 offset:4084 ; 4-byte Folded Reload
+; MUBUF-NEXT:    buffer_load_dword v1, off, s[0:3], 0 offset:4088 ; 4-byte Folded Reload
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    v_readfirstlane_b32 s4, v0
 ; MUBUF-NEXT:    ;;#ASMSTART
-; MUBUF-NEXT:    ; s[4:5]
+; MUBUF-NEXT:    ; v[0:1]
 ; MUBUF-NEXT:    ;;#ASMEND
 ; MUBUF-NEXT:    s_endpgm
 ;
@@ -315,10 +313,8 @@ define amdgpu_kernel void @test_sgpr_offset_subregs_kernel() {
 ; FLATSCR-NEXT:    s_movk_i32 s0, 0xff4
 ; FLATSCR-NEXT:    scratch_load_dwordx2 v[0:1], off, s0 ; 8-byte Folded Reload
 ; FLATSCR-NEXT:    s_waitcnt vmcnt(0)
-; FLATSCR-NEXT:    v_readfirstlane_b32 s1, v1
-; FLATSCR-NEXT:    v_readfirstlane_b32 s0, v0
 ; FLATSCR-NEXT:    ;;#ASMSTART
-; FLATSCR-NEXT:    ; s[0:1]
+; FLATSCR-NEXT:    ; v[0:1]
 ; FLATSCR-NEXT:    ;;#ASMEND
 ; FLATSCR-NEXT:    s_endpgm
 entry:
@@ -349,23 +345,21 @@ define amdgpu_kernel void @test_inst_offset_subregs_kernel() {
 ; MUBUF-NEXT:    s_addc_u32 s1, s1, 0
 ; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], 0 offset:12 glc
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    s_mov_b32 s4, 0x40000
-; MUBUF-NEXT:    buffer_store_dword v0, off, s[0:3], 0 offset:4092 ; 4-byte Folded Spill
-; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], 0 offset:16 glc
+; MUBUF-NEXT:    buffer_load_dword v1, off, s[0:3], 0 offset:16 glc
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
+; MUBUF-NEXT:    s_mov_b32 s4, 0x3ff00
 ; MUBUF-NEXT:    buffer_store_dword v0, off, s[0:3], s4 ; 4-byte Folded Spill
+; MUBUF-NEXT:    s_nop 0
+; MUBUF-NEXT:    buffer_store_dword v1, off, s[0:3], s4 offset:4 ; 4-byte Folded Spill
 ; MUBUF-NEXT:    ;;#ASMSTART
 ; MUBUF-NEXT:    ;;#ASMEND
 ; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], 0 offset:8 glc
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
 ; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], s4 ; 4-byte Folded Reload
+; MUBUF-NEXT:    buffer_load_dword v1, off, s[0:3], s4 offset:4 ; 4-byte Folded Reload
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    v_readfirstlane_b32 s5, v0
-; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], 0 offset:4092 ; 4-byte Folded Reload
-; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    v_readfirstlane_b32 s4, v0
 ; MUBUF-NEXT:    ;;#ASMSTART
-; MUBUF-NEXT:    ; s[4:5]
+; MUBUF-NEXT:    ; v[0:1]
 ; MUBUF-NEXT:    ;;#ASMEND
 ; MUBUF-NEXT:    s_endpgm
 ;
@@ -386,10 +380,8 @@ define amdgpu_kernel void @test_inst_offset_subregs_kernel() {
 ; FLATSCR-NEXT:    s_movk_i32 s0, 0xffc
 ; FLATSCR-NEXT:    scratch_load_dwordx2 v[0:1], off, s0 ; 8-byte Folded Reload
 ; FLATSCR-NEXT:    s_waitcnt vmcnt(0)
-; FLATSCR-NEXT:    v_readfirstlane_b32 s1, v1
-; FLATSCR-NEXT:    v_readfirstlane_b32 s0, v0
 ; FLATSCR-NEXT:    ;;#ASMSTART
-; FLATSCR-NEXT:    ; s[0:1]
+; FLATSCR-NEXT:    ; v[0:1]
 ; FLATSCR-NEXT:    ;;#ASMEND
 ; FLATSCR-NEXT:    s_endpgm
 entry:
@@ -520,22 +512,20 @@ define void @test_sgpr_offset_subregs_function() {
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], s32 offset:8 glc
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    buffer_store_dword v0, off, s[0:3], s32 offset:4084 ; 4-byte Folded Spill
-; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], s32 offset:12 glc
+; MUBUF-NEXT:    buffer_load_dword v1, off, s[0:3], s32 offset:12 glc
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    buffer_store_dword v0, off, s[0:3], s32 offset:4088 ; 4-byte Folded Spill
+; MUBUF-NEXT:    buffer_store_dword v0, off, s[0:3], s32 offset:4084 ; 4-byte Folded Spill
+; MUBUF-NEXT:    s_nop 0
+; MUBUF-NEXT:    buffer_store_dword v1, off, s[0:3], s32 offset:4088 ; 4-byte Folded Spill
 ; MUBUF-NEXT:    ;;#ASMSTART
 ; MUBUF-NEXT:    ;;#ASMEND
 ; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], s32 offset:4 glc
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], s32 offset:4088 ; 4-byte Folded Reload
-; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    v_readfirstlane_b32 s5, v0
 ; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], s32 offset:4084 ; 4-byte Folded Reload
+; MUBUF-NEXT:    buffer_load_dword v1, off, s[0:3], s32 offset:4088 ; 4-byte Folded Reload
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    v_readfirstlane_b32 s4, v0
 ; MUBUF-NEXT:    ;;#ASMSTART
-; MUBUF-NEXT:    ; s[4:5]
+; MUBUF-NEXT:    ; v[0:1]
 ; MUBUF-NEXT:    ;;#ASMEND
 ; MUBUF-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -551,10 +541,8 @@ define void @test_sgpr_offset_subregs_function() {
 ; FLATSCR-NEXT:    s_waitcnt vmcnt(0)
 ; FLATSCR-NEXT:    scratch_load_dwordx2 v[0:1], off, s32 offset:4084 ; 8-byte Folded Reload
 ; FLATSCR-NEXT:    s_waitcnt vmcnt(0)
-; FLATSCR-NEXT:    v_readfirstlane_b32 s1, v1
-; FLATSCR-NEXT:    v_readfirstlane_b32 s0, v0
 ; FLATSCR-NEXT:    ;;#ASMSTART
-; FLATSCR-NEXT:    ; s[0:1]
+; FLATSCR-NEXT:    ; v[0:1]
 ; FLATSCR-NEXT:    ;;#ASMEND
 ; FLATSCR-NEXT:    s_setpc_b64 s[30:31]
 entry:
@@ -588,24 +576,22 @@ define void @test_inst_offset_subregs_function() {
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], s32 offset:12 glc
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    s_add_i32 s4, s32, 0x40000
-; MUBUF-NEXT:    buffer_store_dword v0, off, s[0:3], s32 offset:4092 ; 4-byte Folded Spill
-; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], s32 offset:16 glc
+; MUBUF-NEXT:    buffer_load_dword v1, off, s[0:3], s32 offset:16 glc
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
+; MUBUF-NEXT:    s_add_i32 s4, s32, 0x3ff00
 ; MUBUF-NEXT:    buffer_store_dword v0, off, s[0:3], s4 ; 4-byte Folded Spill
+; MUBUF-NEXT:    s_nop 0
+; MUBUF-NEXT:    buffer_store_dword v1, off, s[0:3], s4 offset:4 ; 4-byte Folded Spill
 ; MUBUF-NEXT:    ;;#ASMSTART
 ; MUBUF-NEXT:    ;;#ASMEND
 ; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], s32 offset:8 glc
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    s_add_i32 s4, s32, 0x40000
+; MUBUF-NEXT:    s_add_i32 s4, s32, 0x3ff00
 ; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], s4 ; 4-byte Folded Reload
+; MUBUF-NEXT:    buffer_load_dword v1, off, s[0:3], s4 offset:4 ; 4-byte Folded Reload
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    v_readfirstlane_b32 s5, v0
-; MUBUF-NEXT:    buffer_load_dword v0, off, s[0:3], s32 offset:4092 ; 4-byte Folded Reload
-; MUBUF-NEXT:    s_waitcnt vmcnt(0)
-; MUBUF-NEXT:    v_readfirstlane_b32 s4, v0
 ; MUBUF-NEXT:    ;;#ASMSTART
-; MUBUF-NEXT:    ; s[4:5]
+; MUBUF-NEXT:    ; v[0:1]
 ; MUBUF-NEXT:    ;;#ASMEND
 ; MUBUF-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -621,10 +607,8 @@ define void @test_inst_offset_subregs_function() {
 ; FLATSCR-NEXT:    s_waitcnt vmcnt(0)
 ; FLATSCR-NEXT:    scratch_load_dwordx2 v[0:1], off, s32 offset:4092 ; 8-byte Folded Reload
 ; FLATSCR-NEXT:    s_waitcnt vmcnt(0)
-; FLATSCR-NEXT:    v_readfirstlane_b32 s1, v1
-; FLATSCR-NEXT:    v_readfirstlane_b32 s0, v0
 ; FLATSCR-NEXT:    ;;#ASMSTART
-; FLATSCR-NEXT:    ; s[0:1]
+; FLATSCR-NEXT:    ; v[0:1]
 ; FLATSCR-NEXT:    ;;#ASMEND
 ; FLATSCR-NEXT:    s_setpc_b64 s[30:31]
 entry:

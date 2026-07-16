@@ -1,5 +1,4 @@
 ! REQUIRES: plugins, examples
-! XFAIL: system-aix
 
 ! RUN: %flang_fc1 -load %llvmshlibdir/flangOmpReport%pluginext -plugin flang-omp-report -fopenmp %s -o - | FileCheck %s
 
@@ -26,7 +25,7 @@ end
 
 ! CHECK:---
 ! CHECK-NEXT:- file:            '{{[^"]*}}omp-atomic.f90'
-! CHECK-NEXT:  line:            [[@LINE-19]]
+! CHECK-NEXT:  line:            9
 ! CHECK-NEXT:  construct:       atomic
 ! CHECK-NEXT:  clauses:
 ! CHECK-NEXT:    - clause:      read
@@ -34,7 +33,7 @@ end
 ! CHECK-NEXT:    - clause:      seq_cst
 ! CHECK-NEXT:      details:     ''
 ! CHECK-NEXT:- file:            '{{[^"]*}}omp-atomic.f90'
-! CHECK-NEXT:  line:            [[@LINE-24]]
+! CHECK-NEXT:  line:            12
 ! CHECK-NEXT:  construct:       atomic
 ! CHECK-NEXT:  clauses:
 ! CHECK-NEXT:    - clause:      seq_cst
@@ -42,7 +41,7 @@ end
 ! CHECK-NEXT:    - clause:      write
 ! CHECK-NEXT:      details:     ''
 ! CHECK-NEXT:- file:            '{{[^"]*}}omp-atomic.f90'
-! CHECK-NEXT:  line:            [[@LINE-28]]
+! CHECK-NEXT:  line:            16
 ! CHECK-NEXT:  construct:       atomic
 ! CHECK-NEXT:  clauses:
 ! CHECK-NEXT:    - clause:      capture
@@ -50,11 +49,11 @@ end
 ! CHECK-NEXT:    - clause:      seq_cst
 ! CHECK-NEXT:      details:     ''
 ! CHECK-NEXT:- file:            '{{[^"]*}}omp-atomic.f90'
-! CHECK-NEXT:  line:            [[@LINE-31]]
+! CHECK-NEXT:  line:            21
 ! CHECK-NEXT:  construct:       atomic
 ! CHECK-NEXT:  clauses:         []
 ! CHECK-NEXT:- file:            '{{[^"]*}}omp-atomic.f90'
-! CHECK-NEXT:  line:            [[@LINE-48]]
+! CHECK-NEXT:  line:            8
 ! CHECK-NEXT:  construct:       parallel
 ! CHECK-NEXT:  clauses:
 ! CHECK-NEXT:    - clause:      num_threads

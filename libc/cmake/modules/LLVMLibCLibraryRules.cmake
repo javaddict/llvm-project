@@ -2,6 +2,17 @@ function(collect_object_file_deps target result)
   # NOTE: This function does add entrypoint targets to |result|.
   # It is expected that the caller adds them separately.
   set(all_deps "")
+  # CMake ALIAS targets (e.g. osutil → baremetal_util) have no TARGET_TYPE
+  # property, so packaging would drop stdin/stdout/exit objects. Follow the
+  # aliasee first (C7 / Haydn baremetal).
+  if(TARGET ${target})
+    get_target_property(_aliased ${target} ALIASED_TARGET)
+    if(_aliased)
+      collect_object_file_deps(${_aliased} _alias_deps)
+      set(${result} ${_alias_deps} PARENT_SCOPE)
+      return()
+    endif()
+  endif()
   get_target_property(target_type ${target} "TARGET_TYPE")
   if(NOT target_type)
     return()
@@ -83,7 +94,7 @@ endfunction()
 # A rule to build a library from a collection of entrypoint objects and bundle
 # it in a single LLVM-IR bitcode file.
 # Usage:
-#     add_bitcode_entrypoint_library(
+#     add_gpu_entrypoint_library(
 #       DEPENDS <list of add_entrypoint_object targets>
 #     )
 function(add_bitcode_entrypoint_library target_name base_target_name)
@@ -109,14 +120,8 @@ function(add_bitcode_entrypoint_library target_name base_target_name)
   endforeach()
 
   add_executable(${target_name} ${objects})
-  if(LIBC_TARGET_ARCHITECTURE_IS_SPIRV)
-      target_link_options(${target_name} PRIVATE "${LIBC_COMPILE_OPTIONS_DEFAULT}"
-                      "-nostdlib" "-emit-llvm")
-  else()  
-      target_link_options(${target_name} PRIVATE "${LIBC_COMPILE_OPTIONS_DEFAULT}"
+  target_link_options(${target_name} PRIVATE "${LIBC_COMPILE_OPTIONS_DEFAULT}"
                       "-r" "-nostdlib" "-flto" "-Wl,--lto-emit-llvm")
-  endif()
-  add_dependencies(${base_target_name} ${target_name})
 endfunction(add_bitcode_entrypoint_library)
 
 # A rule to build a library from a collection of entrypoint objects.

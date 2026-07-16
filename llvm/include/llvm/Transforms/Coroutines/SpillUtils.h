@@ -28,28 +28,28 @@ struct AllocaInfo {
         MayWriteBeforeCoroBegin(MayWriteBeforeCoroBegin) {}
 };
 
-LLVM_ABI void collectSpillsFromArgs(SpillInfo &Spills, Function &F,
-                                    const SuspendCrossingInfo &Checker);
-LLVM_ABI void collectSpillsAndAllocasFromInsts(
+void collectSpillsFromArgs(SpillInfo &Spills, Function &F,
+                           const SuspendCrossingInfo &Checker);
+void collectSpillsAndAllocasFromInsts(
     SpillInfo &Spills, SmallVector<AllocaInfo, 8> &Allocas,
     SmallVector<Instruction *, 4> &DeadInstructions,
     SmallVector<CoroAllocaAllocInst *, 4> &LocalAllocas, Function &F,
     const SuspendCrossingInfo &Checker, const DominatorTree &DT,
     const coro::Shape &Shape);
 
-LLVM_ABI void collectSpillsFromDbgInfo(SpillInfo &Spills, Function &F,
-                                       const SuspendCrossingInfo &Checker);
+void collectSpillsFromDbgInfo(SpillInfo &Spills, Function &F,
+                              const SuspendCrossingInfo &Checker);
 
 /// Async and Retcon{Once} conventions assume that all spill uses can be sunk
 /// after the coro.begin intrinsic.
-LLVM_ABI void
-sinkSpillUsesAfterCoroBegin(const DominatorTree &DT, CoroBeginInst *CoroBegin,
-                            coro::SpillInfo &Spills,
-                            SmallVectorImpl<coro::AllocaInfo> &Allocas);
+void sinkSpillUsesAfterCoroBegin(const DominatorTree &DT,
+                                 CoroBeginInst *CoroBegin,
+                                 coro::SpillInfo &Spills,
+                                 SmallVectorImpl<coro::AllocaInfo> &Allocas);
 
 // Get the insertion point for a spill after a Def.
-LLVM_ABI BasicBlock::iterator
-getSpillInsertionPt(const coro::Shape &, Value *Def, const DominatorTree &DT);
+BasicBlock::iterator getSpillInsertionPt(const coro::Shape &, Value *Def,
+                                         const DominatorTree &DT);
 
 } // namespace llvm::coro
 

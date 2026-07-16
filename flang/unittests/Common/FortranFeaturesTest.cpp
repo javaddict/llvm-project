@@ -135,10 +135,10 @@ TEST(FortranFeaturesTest, CamelCaseToLowerCaseHyphenated) {
       "pause");
   EXPECT_EQ(
       CamelCaseToLowerCaseHyphenated(EnumToString(LanguageFeature::OpenACC)),
-      "openacc");
+      "open-acc");
   EXPECT_EQ(
       CamelCaseToLowerCaseHyphenated(EnumToString(LanguageFeature::OpenMP)),
-      "openmp");
+      "open-mp");
   EXPECT_EQ(CamelCaseToLowerCaseHyphenated(EnumToString(LanguageFeature::CUDA)),
       "cuda");
   EXPECT_EQ(CamelCaseToLowerCaseHyphenated(
@@ -451,7 +451,7 @@ TEST(FortranFeaturesTest, CamelCaseToLowerCaseHyphenated) {
       "scanning");
   EXPECT_EQ(
       CamelCaseToLowerCaseHyphenated(EnumToString(UsageWarning::OpenAccUsage)),
-      "openacc-usage");
+      "open-acc-usage");
   EXPECT_EQ(CamelCaseToLowerCaseHyphenated(
                 EnumToString(UsageWarning::ProcPointerCompatibility)),
       "proc-pointer-compatibility");
@@ -489,7 +489,7 @@ TEST(FortranFeaturesTest, CamelCaseToLowerCaseHyphenated) {
       "unused-forall-index");
   EXPECT_EQ(
       CamelCaseToLowerCaseHyphenated(EnumToString(UsageWarning::OpenMPUsage)),
-      "openmp-usage");
+      "open-mp-usage");
   EXPECT_EQ(
       CamelCaseToLowerCaseHyphenated(EnumToString(UsageWarning::DataLength)),
       "data-length");

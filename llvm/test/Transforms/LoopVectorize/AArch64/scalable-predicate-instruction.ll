@@ -1,5 +1,5 @@
 ; RUN: opt < %s -passes=loop-vectorize -S | FileCheck %s
-; RUN: opt < %s -passes=loop-vectorize -tail-folding-policy=must-fold-tail -S | FileCheck %s
+; RUN: opt < %s -passes=loop-vectorize -prefer-predicate-over-epilogue=predicate-dont-vectorize -S | FileCheck %s
 
 target datalayout = "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128"
 target triple = "aarch64-unknown-linux-gnu"
@@ -13,22 +13,22 @@ target triple = "aarch64-unknown-linux-gnu"
 
 define void  @predication_in_loop(ptr %a, ptr %b, ptr %cond) #0 {
 ; CHECK-LABEL: @predication_in_loop
-; CHECK:  call <vscale x 4 x i32> @llvm.masked.sdiv
+; CHECK:  sdiv <vscale x 4 x i32>
 ;
 entry:
   br label %for.body
 
-for.cond.cleanup:
+for.cond.cleanup:                                 ; preds = %for.inc, %entry
   ret void
 
-for.body:
+for.body:                                         ; preds = %entry, %for.inc
   %i.09 = phi i64 [ %inc, %for.inc ], [ 0, %entry ]
   %arrayidx = getelementptr inbounds i32, ptr %cond, i64 %i.09
   %0 = load i32, ptr %arrayidx, align 4
   %tobool.not = icmp eq i32 %0, 0
   br i1 %tobool.not, label %for.inc, label %if.then
 
-if.then:
+if.then:                                          ; preds = %for.body
   %arrayidx1 = getelementptr inbounds i32, ptr %b, i64 %i.09
   %1 = load i32, ptr %arrayidx1, align 4
   %arrayidx2 = getelementptr inbounds i32, ptr %a, i64 %i.09
@@ -37,7 +37,7 @@ if.then:
   store i32 %div, ptr %arrayidx2, align 4
   br label %for.inc
 
-for.inc:
+for.inc:                                          ; preds = %for.body, %if.then
   %inc = add nuw nsw i64 %i.09, 1
   %exitcond.not = icmp eq i64 %inc, 1024
   br i1 %exitcond.not, label %for.cond.cleanup, label %for.body, !llvm.loop !0
@@ -58,7 +58,7 @@ for.inc:
 
 define void @unpredicated_loop_predication_through_tailfolding(ptr %a, ptr %b) #0 {
 ; CHECK-LABEL: @unpredicated_loop_predication_through_tailfolding
-; CHECK-NOT:  call <vscale x 4 x i32> @llvm.masked.sdiv
+; CHECK-NOT:  sdiv <vscale x 4 x i32>
 
 entry:
   br label %loop

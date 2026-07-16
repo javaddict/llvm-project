@@ -5,12 +5,11 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-
-// REQUIRES: std-at-least-c++20
+// UNSUPPORTED: c++03, c++11, c++14, c++17
 
 // <span>
 
-// constexpr bool empty() const noexcept;
+// [[nodiscard]] constexpr bool empty() const noexcept;
 
 #include <span>
 

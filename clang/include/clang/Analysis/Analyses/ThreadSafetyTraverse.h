@@ -17,7 +17,6 @@
 #define LLVM_CLANG_ANALYSIS_ANALYSES_THREADSAFETYTRAVERSE_H
 
 #include "clang/AST/Decl.h"
-#include "clang/AST/Expr.h"
 #include "clang/Analysis/Analyses/ThreadSafetyTIL.h"
 #include "clang/Analysis/Analyses/ThreadSafetyUtil.h"
 #include "clang/Basic/LLVM.h"
@@ -193,6 +192,7 @@ public:
   R_SExpr reduceUndefined(Undefined &Orig) { return true; }
   R_SExpr reduceWildcard(Wildcard &Orig) { return true; }
 
+  R_SExpr reduceLiteral(Literal &Orig) { return true; }
   template<class T>
   R_SExpr reduceLiteralT(LiteralT<T> &Orig) { return true; }
   R_SExpr reduceLiteralPtr(Literal &Orig) { return true; }
@@ -336,7 +336,7 @@ public:
   CType trueResult() { return true; }
   bool notTrue(CType ct) { return !ct; }
 
-  bool compareIntegers(uint64_t i, uint64_t j) { return i == j; }
+  bool compareIntegers(unsigned i, unsigned j) { return i == j; }
   bool compareStrings (StringRef s, StringRef r) { return s == r; }
   bool comparePointers(const void* P, const void* Q) { return P == Q; }
 
@@ -364,7 +364,7 @@ public:
   CType trueResult() { return true; }
   bool notTrue(CType ct) { return !ct; }
 
-  bool compareIntegers(uint64_t i, uint64_t j) { return i == j; }
+  bool compareIntegers(unsigned i, unsigned j) { return i == j; }
   bool compareStrings (StringRef s, StringRef r) { return s == r; }
   bool comparePointers(const void *P, const void *Q) { return P == Q; }
 
@@ -532,34 +532,88 @@ protected:
     SS << "*";
   }
 
+  template<class T>
+  void printLiteralT(const LiteralT<T> *E, StreamType &SS) {
+    SS << E->value();
+  }
+
+  void printLiteralT(const LiteralT<uint8_t> *E, StreamType &SS) {
+    SS << "'" << E->value() << "'";
+  }
+
   void printLiteral(const Literal *E, StreamType &SS) {
-    ValueType VT = E->valueType();
-    switch (VT.Base) {
-    case ValueType::BT_Bool:
-      if (E->as<bool>().value())
-        SS << "true";
-      else
-        SS << "false";
-      return;
-    case ValueType::BT_Char:
-      CharacterLiteral::print(E->as<char32_t>().value(),
-                              CharacterLiteralKind::UTF32, SS);
-      return;
-    case ValueType::BT_SInt:
-      SS << E->as<int64_t>().value();
-      return;
-    case ValueType::BT_UInt:
-      SS << E->as<uint64_t>().value();
-      return;
-    case ValueType::BT_String:
-      SS << '\"' << E->as<StringRef>().value() << '\"';
-      return;
-    case ValueType::BT_NullPointer:
-      assert(E->as<std::nullptr_t>().value() == nullptr);
-      SS << "nullptr";
+    if (E->clangExpr()) {
+      SS << getSourceLiteralString(E->clangExpr());
       return;
     }
-    llvm_unreachable("Invalid BaseType");
+    else {
+      ValueType VT = E->valueType();
+      switch (VT.Base) {
+      case ValueType::BT_Void:
+        SS << "void";
+        return;
+      case ValueType::BT_Bool:
+        if (E->as<bool>().value())
+          SS << "true";
+        else
+          SS << "false";
+        return;
+      case ValueType::BT_Int:
+        switch (VT.Size) {
+        case ValueType::ST_8:
+          if (VT.Signed)
+            printLiteralT(&E->as<int8_t>(), SS);
+          else
+            printLiteralT(&E->as<uint8_t>(), SS);
+          return;
+        case ValueType::ST_16:
+          if (VT.Signed)
+            printLiteralT(&E->as<int16_t>(), SS);
+          else
+            printLiteralT(&E->as<uint16_t>(), SS);
+          return;
+        case ValueType::ST_32:
+          if (VT.Signed)
+            printLiteralT(&E->as<int32_t>(), SS);
+          else
+            printLiteralT(&E->as<uint32_t>(), SS);
+          return;
+        case ValueType::ST_64:
+          if (VT.Signed)
+            printLiteralT(&E->as<int64_t>(), SS);
+          else
+            printLiteralT(&E->as<uint64_t>(), SS);
+          return;
+        default:
+          break;
+        }
+        break;
+      case ValueType::BT_Float:
+        switch (VT.Size) {
+        case ValueType::ST_32:
+          printLiteralT(&E->as<float>(), SS);
+          return;
+        case ValueType::ST_64:
+          printLiteralT(&E->as<double>(), SS);
+          return;
+        default:
+          break;
+        }
+        break;
+      case ValueType::BT_String:
+        SS << "\"";
+        printLiteralT(&E->as<StringRef>(), SS);
+        SS << "\"";
+        return;
+      case ValueType::BT_Pointer:
+        SS << "#ptr";
+        return;
+      case ValueType::BT_ValueRef:
+        SS << "#vref";
+        return;
+      }
+    }
+    SS << "#lit";
   }
 
   void printLiteralPtr(const LiteralPtr *E, StreamType &SS) {
@@ -664,11 +718,6 @@ protected:
       }
     }
     self()->printSExpr(E->record(), SS, Prec_Postfix);
-    // A projection through an anonymous struct/union has no source-level name;
-    // to avoid stray dots ("x..y") just print the underlying record.
-    if (const auto *FD = dyn_cast<FieldDecl>(E->clangDecl()))
-      if (FD->isAnonymousStructOrUnion())
-        return;
     if (CStyle && E->isArrow())
       SS << "->";
     else
@@ -870,7 +919,7 @@ protected:
   }
 };
 
-class StdPrinter : public PrettyPrinter<StdPrinter, llvm::raw_ostream> {};
+class StdPrinter : public PrettyPrinter<StdPrinter, std::ostream> {};
 
 } // namespace til
 } // namespace threadSafety

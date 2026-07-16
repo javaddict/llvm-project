@@ -2,18 +2,18 @@
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
+#include <limits>
 #include <string>
 
 #include "benchmark/benchmark.h"
 
 // Test that Setup() and Teardown() are called exactly once
 // for each benchmark run (single-threaded).
-namespace {
 namespace singlethreaded {
 static int setup_call = 0;
 static int teardown_call = 0;
 }  // namespace singlethreaded
-}  // namespace
 static void DoSetup1(const benchmark::State& state) {
   ++singlethreaded::setup_call;
 
@@ -40,24 +40,23 @@ BENCHMARK(BM_with_setup)
     ->Teardown(DoTeardown1);
 
 // Test that Setup() and Teardown() are called once for each group of threads.
-namespace {
 namespace concurrent {
 static std::atomic<int> setup_call(0);
 static std::atomic<int> teardown_call(0);
 static std::atomic<int> func_call(0);
 }  // namespace concurrent
 
-void DoSetup2(const benchmark::State& state) {
+static void DoSetup2(const benchmark::State& state) {
   concurrent::setup_call.fetch_add(1, std::memory_order_acquire);
   assert(state.thread_index() == 0);
 }
 
-void DoTeardown2(const benchmark::State& state) {
+static void DoTeardown2(const benchmark::State& state) {
   concurrent::teardown_call.fetch_add(1, std::memory_order_acquire);
   assert(state.thread_index() == 0);
 }
 
-void BM_concurrent(benchmark::State& state) {
+static void BM_concurrent(benchmark::State& state) {
   for (auto s : state) {
   }
   concurrent::func_call.fetch_add(1, std::memory_order_acquire);
@@ -81,7 +80,7 @@ int fixture_setup = 0;
 
 class FIXTURE_BECHMARK_NAME : public ::benchmark::Fixture {
  public:
-  void SetUp(const ::benchmark::State& /*unused*/) override {
+  void SetUp(const ::benchmark::State&) override {
     fixture_interaction::fixture_setup++;
   }
 
@@ -93,7 +92,7 @@ BENCHMARK_F(FIXTURE_BECHMARK_NAME, BM_WithFixture)(benchmark::State& st) {
   }
 }
 
-void DoSetupWithFixture(const benchmark::State& /*unused*/) {
+static void DoSetupWithFixture(const benchmark::State&) {
   fixture_interaction::setup++;
 }
 
@@ -111,10 +110,10 @@ namespace repetitions {
 int setup = 0;
 }
 
-void DoSetupWithRepetitions(const benchmark::State& /*unused*/) {
+static void DoSetupWithRepetitions(const benchmark::State&) {
   repetitions::setup++;
 }
-void BM_WithRep(benchmark::State& state) {
+static void BM_WithRep(benchmark::State& state) {
   for (auto _ : state) {
   }
 }
@@ -127,11 +126,8 @@ BENCHMARK(BM_WithRep)
     ->Setup(DoSetupWithRepetitions)
     ->Iterations(100)
     ->Repetitions(4);
-}  // namespace
 
 int main(int argc, char** argv) {
-  benchmark::MaybeReenterWithoutASLR(argc, argv);
-
   benchmark::Initialize(&argc, argv);
 
   size_t ret = benchmark::RunSpecifiedBenchmarks(".");

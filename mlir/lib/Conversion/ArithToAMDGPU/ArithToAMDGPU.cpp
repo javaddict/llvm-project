@@ -424,11 +424,11 @@ static Value getOriginalVectorValue(Value value) {
   Value current = value;
   while (Operation *definingOp = current.getDefiningOp()) {
     bool skipOp = llvm::TypeSwitch<Operation *, bool>(definingOp)
-                      .Case([&current](vector::ShapeCastOp op) {
+                      .Case<vector::ShapeCastOp>([&current](auto op) {
                         current = op.getSource();
                         return true;
                       })
-                      .Case([&current](vector::BroadcastOp op) {
+                      .Case<vector::BroadcastOp>([&current](auto op) {
                         current = op.getSource();
                         return false;
                       })

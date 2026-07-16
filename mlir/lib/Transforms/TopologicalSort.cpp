@@ -12,7 +12,7 @@
 #include "mlir/IR/RegionKindInterface.h"
 
 namespace mlir {
-#define GEN_PASS_DEF_TOPOLOGICALSORTPASS
+#define GEN_PASS_DEF_TOPOLOGICALSORT
 #include "mlir/Transforms/Passes.h.inc"
 } // namespace mlir
 
@@ -20,7 +20,7 @@ using namespace mlir;
 
 namespace {
 struct TopologicalSortPass
-    : public impl::TopologicalSortPassBase<TopologicalSortPass> {
+    : public impl::TopologicalSortBase<TopologicalSortPass> {
   void runOnOperation() override {
     // Topologically sort the regions of the operation without SSA dominance.
     getOperation()->walk([](RegionKindInterface op) {
@@ -34,3 +34,7 @@ struct TopologicalSortPass
   }
 };
 } // end anonymous namespace
+
+std::unique_ptr<Pass> mlir::createTopologicalSortPass() {
+  return std::make_unique<TopologicalSortPass>();
+}

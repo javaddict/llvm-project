@@ -35,7 +35,9 @@
 
 using namespace lldb_private;
 
-SystemInitializerCommon::SystemInitializerCommon() = default;
+SystemInitializerCommon::SystemInitializerCommon(
+    HostInfo::SharedLibraryDirectoryHelper *helper)
+    : m_shlib_dir_helper(helper) {}
 
 SystemInitializerCommon::~SystemInitializerCommon() = default;
 
@@ -62,10 +64,11 @@ llvm::Error SystemInitializerCommon::Initialize() {
   }
 #endif
 
-  LLDBLogChannel::Initialize();
+  InitializeLldbChannel();
+
   Diagnostics::Initialize();
   FileSystem::Initialize();
-  HostInfo::Initialize();
+  HostInfo::Initialize(m_shlib_dir_helper);
 
   llvm::Error error = Socket::Initialize();
   if (error)
@@ -89,20 +92,13 @@ llvm::Error SystemInitializerCommon::Initialize() {
 void SystemInitializerCommon::Terminate() {
   LLDB_SCOPED_TIMER();
 
-#if defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__) ||       \
-    defined(__OpenBSD__)
-  ProcessPOSIXLog::Terminate();
-#endif
 #if defined(_WIN32)
   ProcessWindowsLog::Terminate();
 #endif
-
-  process_gdb_remote::ProcessGDBRemoteLog::Terminate();
 
   Socket::Terminate();
   HostInfo::Terminate();
   Log::DisableAllLogChannels();
   FileSystem::Terminate();
   Diagnostics::Terminate();
-  LLDBLogChannel::Terminate();
 }

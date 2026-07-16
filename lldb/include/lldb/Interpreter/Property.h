@@ -11,11 +11,9 @@
 
 #include "lldb/Interpreter/OptionValue.h"
 #include "lldb/Utility/Flags.h"
-#include "lldb/Utility/Stream.h"
 #include "lldb/lldb-defines.h"
 #include "lldb/lldb-private-types.h"
 
-#include <optional>
 #include <string>
 
 namespace lldb_private {
@@ -32,10 +30,7 @@ struct PropertyDefinition {
   const char *description;
 };
 
-struct PropertyCollectionDefinition {
-  llvm::ArrayRef<PropertyDefinition> definitions;
-  llvm::StringRef expected_path;
-};
+using PropertyDefinitions = llvm::ArrayRef<PropertyDefinition>;
 
 class Property {
 public:
@@ -60,14 +55,11 @@ public:
   void Dump(const ExecutionContext *exe_ctx, Stream &strm,
             uint32_t dump_mask) const;
 
-  bool DumpQualifiedName(
-      Stream &strm,
-      std::optional<Stream::HighlightSettings> highlight = std::nullopt) const;
+  bool DumpQualifiedName(Stream &strm) const;
 
-  void DumpDescription(
-      CommandInterpreter &interpreter, Stream &strm, uint32_t output_width,
-      bool display_qualified_name,
-      std::optional<Stream::HighlightSettings> highlight = std::nullopt) const;
+  void DumpDescription(CommandInterpreter &interpreter, Stream &strm,
+                       uint32_t output_width,
+                       bool display_qualified_name) const;
 
   void SetValueChangedCallback(std::function<void()> callback);
 

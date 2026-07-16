@@ -239,9 +239,9 @@ void NonNullParamChecker::checkBeginFunction(CheckerContext &Context) const {
   if (!Context.inTopFrame())
     return;
 
-  const StackFrame *SF = Context.getStackFrame();
+  const LocationContext *LocContext = Context.getLocationContext();
 
-  const Decl *FD = SF->getDecl();
+  const Decl *FD = LocContext->getDecl();
   // AnyCall helps us here to avoid checking for FunctionDecl and ObjCMethodDecl
   // separately and aggregates interfaces of these classes.
   auto AbstractCall = AnyCall::forDecl(FD);
@@ -262,7 +262,7 @@ void NonNullParamChecker::checkBeginFunction(CheckerContext &Context) const {
     if (!Parameter->getType()->isPointerType())
       continue;
 
-    Loc ParameterLoc = State->getLValue(Parameter, SF);
+    Loc ParameterLoc = State->getLValue(Parameter, LocContext);
     // We never consider top-level function parameters undefined.
     auto StoredVal =
         State->getSVal(ParameterLoc).castAs<DefinedOrUnknownSVal>();

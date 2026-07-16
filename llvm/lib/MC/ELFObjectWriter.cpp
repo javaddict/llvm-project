@@ -672,8 +672,8 @@ MCSectionELF *ELFWriter::createRelocationSection(MCContext &Ctx,
     Flags = ELF::SHF_GROUP;
 
   const StringRef SectionName = Sec.getName();
-  const MCTargetOptions &TO = Ctx.getTargetOptions();
-  if (TO.Crel) {
+  const MCTargetOptions *TO = Ctx.getTargetOptions();
+  if (TO && TO->Crel) {
     MCSectionELF *RelaSection =
         Ctx.createELFRelSection(".crel" + SectionName, ELF::SHT_CREL, Flags,
                                 /*EntrySize=*/1, Sec.getGroup(), &Sec);
@@ -724,7 +724,8 @@ void ELFWriter::writeSectionData(MCSection &Sec) {
   StringRef SectionName = Section.getName();
   auto &Ctx = Asm.getContext();
   const DebugCompressionType CompressionType =
-      Ctx.getTargetOptions().CompressDebugSections;
+      Ctx.getTargetOptions() ? Ctx.getTargetOptions()->CompressDebugSections
+                             : DebugCompressionType::None;
   if (CompressionType == DebugCompressionType::None ||
       !SectionName.starts_with(".debug_")) {
     Asm.writeSectionData(W.OS, &Section);
@@ -795,7 +796,7 @@ static void encodeCrel(ArrayRef<ELFRelocationEntry> Relocs, raw_ostream &OS) {
 
 void ELFWriter::writeRelocations(const MCSectionELF &Sec) {
   std::vector<ELFRelocationEntry> &Relocs = OWriter.Relocations[&Sec];
-  const MCTargetOptions &TO = getContext().getTargetOptions();
+  const MCTargetOptions *TO = getContext().getTargetOptions();
   const bool Rela = OWriter.usesRela(TO, Sec);
 
   // Sort the relocation entries. MIPS needs this.
@@ -836,7 +837,7 @@ void ELFWriter::writeRelocations(const MCSectionELF &Sec) {
         }
       }
     }
-  } else if (TO.Crel) {
+  } else if (TO && TO->Crel) {
     if (is64Bit())
       encodeCrel<true>(Relocs, W.OS);
     else
@@ -1357,17 +1358,9 @@ void ELFObjectWriter::recordRelocation(const MCFragment &F,
   // Convert SymA to an STT_SECTION symbol if it's defined, local, and meets
   // specific conditions, unless it's a .reloc directive, which disables
   // STT_SECTION adjustment.
-  const MCTargetOptions &TO = Ctx.getTargetOptions();
   bool UseSectionSym = SymA && SymA->getBinding() == ELF::STB_LOCAL &&
                        !SymA->isUndefined() &&
                        !mc::isRelocRelocation(Fixup.getKind());
-  if (UseSectionSym) {
-    auto RSS = TO.RelocSectionSym;
-    UseSectionSym = RSS == RelocSectionSymType::All ||
-                    (RSS == RelocSectionSymType::Internal &&
-                     SymA->getName().starts_with(
-                         Ctx.getAsmInfo().getInternalSymbolPrefix()));
-  }
   if (UseSectionSym && useSectionSymbol(Target, SymA, Addend, Type)) {
     Addend += Asm->getSymbolOffset(*SymA);
     SymA = static_cast<const MCSymbolELF *>(SecA->getBeginSymbol());
@@ -1377,15 +1370,15 @@ void ELFObjectWriter::recordRelocation(const MCFragment &F,
   if (SymA)
     SymA->setUsedInReloc();
 
-  FixedValue = usesRela(TO, Section) ? 0 : Addend;
+  FixedValue = usesRela(Ctx.getTargetOptions(), Section) ? 0 : Addend;
   Relocations[&Section].emplace_back(FixupOffset, SymA, Type, Addend);
 }
 
-bool ELFObjectWriter::usesRela(const MCTargetOptions &TO,
+bool ELFObjectWriter::usesRela(const MCTargetOptions *TO,
                                const MCSectionELF &Sec) const {
   return (hasRelocationAddend() &&
           Sec.getType() != ELF::SHT_LLVM_CALL_GRAPH_PROFILE) ||
-         TO.Crel;
+         (TO && TO->Crel);
 }
 
 bool ELFObjectWriter::isSymbolRefDifferenceFullyResolvedImpl(

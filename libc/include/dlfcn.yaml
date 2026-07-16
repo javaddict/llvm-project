@@ -91,25 +91,25 @@ types:
 functions:
   - name: dlclose
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: void *
   - name: dlerror
     standards:
-      - posix
+      - POSIX
     return_type: char *
     arguments: []
   - name: dlopen
     standards:
-      - posix
+      - POSIX
     return_type: void *
     arguments:
       - type: const char *
       - type: int
   - name: dlsym
     standards:
-      - posix
+      - POSIX
     return_type: void *
     arguments:
       - type: void *__restrict
@@ -124,7 +124,7 @@ functions:
       - type: void *__restrict
   - name: dladdr
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: const void *__restrict

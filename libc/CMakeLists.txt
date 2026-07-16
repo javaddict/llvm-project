@@ -34,6 +34,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_definitions("-D_DEBUG")
 endif()
 
+
 # Default to C++17
 set(CMAKE_CXX_STANDARD 17)
 
@@ -140,8 +141,6 @@ option(LLVM_LIBC_FULL_BUILD "Build and test LLVM libc as if it is the full libc"
 option(LLVM_LIBC_IMPLEMENTATION_DEFINED_TEST_BEHAVIOR "Build LLVM libc tests assuming our implementation-defined behavior" ON)
 option(LLVM_LIBC_ENABLE_LINTING "Enables linting of libc source files" OFF)
 option(LLVM_LIBC_ALL_HEADERS "Outputs all functions in header files, regardless of whether they are enabled on this target" OFF)
-option(LLVM_LIBC_ENABLE_EXPERIMENTAL_ENTRYPOINTS
-  "Enable entrypoints with known-incomplete implementations (off by default)" OFF)
 
 option(LIBC_CONFIG_PATH "The path to user provided folder that configures the build for the target system." OFF)
 
@@ -217,7 +216,7 @@ foreach(opt IN LISTS global_config)
   message(STATUS "${opt_name}: ${opt_value}")
   set(${opt_name} ${opt_value})
 endforeach()
-generate_config_doc(${main_config_file} ${LIBC_BUILD_DIR}/docs/configure.rst)
+generate_config_doc(${main_config_file} ${LIBC_SOURCE_DIR}/docs/configure.rst)
 
 # Load each target specific config.
 foreach(config_path IN LISTS LIBC_CONFIG_JSON_FILE_LIST)
@@ -235,7 +234,6 @@ if(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR)
   cmake_path(NORMAL_PATH LIBC_TARGET_SUBDIR)
 endif()
 
-# TODO: Use common runtimes infrastructure for output and install paths
 if(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR AND (LIBC_ENABLE_USE_BY_CLANG OR LIBC_TARGET_OS_IS_GPU))
   set(LIBC_INCLUDE_DIR ${LLVM_BINARY_DIR}/include/${LLVM_DEFAULT_TARGET_TRIPLE})
   set(LIBC_INSTALL_INCLUDE_DIR ${CMAKE_INSTALL_INCLUDEDIR}/${LLVM_DEFAULT_TARGET_TRIPLE})
@@ -262,7 +260,6 @@ else()
   endif()
 endif()
 
-# TODO: Use common runtimes infrastructure for output and install paths
 if(LIBC_TARGET_TRIPLE)
   set(LIBC_INSTALL_LIBRARY_DIR lib${LLVM_LIBDIR_SUFFIX}/${LIBC_TARGET_TRIPLE})
 elseif(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR)
@@ -273,8 +270,6 @@ endif()
 
 if(LIBC_TARGET_OS_IS_GPU)
   include(prepare_libc_gpu_build)
-  set(LIBC_ENABLE_UNITTESTS OFF)
-elseif(LIBC_TARGET_OS_IS_BAREMETAL)
   set(LIBC_ENABLE_UNITTESTS OFF)
 endif()
 
@@ -355,7 +350,6 @@ include(LLVMLibCRules)
 set(TARGET_LLVMLIBC_ENTRYPOINTS "")
 set(TARGET_LIBC_ENTRYPOINTS "")
 set(TARGET_LIBM_ENTRYPOINTS "")
-set(TARGET_LIBMVEC_ENTRYPOINTS "")
 set(TARGET_LLVMLIBC_REMOVED_ENTRYPOINTS "")
 
 # Check entrypoints.txt
@@ -386,7 +380,6 @@ foreach(removed_entrypoint IN LISTS TARGET_LLVMLIBC_REMOVED_ENTRYPOINTS)
   list(REMOVE_ITEM TARGET_LLVMLIBC_ENTRYPOINTS ${removed_entrypoint})
   list(REMOVE_ITEM TARGET_LIBC_ENTRYPOINTS ${removed_entrypoint})
   list(REMOVE_ITEM TARGET_LIBM_ENTRYPOINTS ${removed_entrypoint})
-  list(REMOVE_ITEM TARGET_LIBMVEC_ENTRYPOINTS ${removed_entrypoint})
 endforeach()
 
 set(TARGET_ENTRYPOINT_NAME_LIST "")
@@ -408,13 +401,12 @@ else()
 endif()
 
 add_subdirectory(include)
-add_subdirectory(shared)
 add_subdirectory(config)
 add_subdirectory(hdr)
 add_subdirectory(src)
 add_subdirectory(utils)
 
-if(LLVM_LIBC_FULL_BUILD AND NOT LIBC_TARGET_ARCHITECTURE_IS_SPIRV)
+if(LLVM_LIBC_FULL_BUILD)
   # The startup system can potentially depend on the library components so add
   # it after the library implementation directories.
   add_subdirectory(startup)

@@ -296,36 +296,24 @@ static std::string computeRISCVDataLayout(const Triple &TT, StringRef ABIName) {
 
   Ret += "-m:e";
 
-  // TODO: Maybe we should move RISCVABI to TargetParser, so we can reuse that
-  // logic here instead of duplicating the string handling?
-  bool IsPureCapABI = ABIName.starts_with("il32pc64") ||
-                      ABIName.starts_with("l64pc128") ||
-                      ABIName.starts_with("cheriot");
-
+  // Pointer and integer sizes.
   if (TT.isRISCV64()) {
-    Ret += "-p:64:64";
-    if (IsPureCapABI)
-      Ret += "-pe200:128:128:128:64";
-    Ret += "-i64:64-i128:128-n32:64";
+    Ret += "-p:64:64-i64:64-i128:128";
+    Ret += "-n32:64";
   } else {
     assert(TT.isRISCV32() && "only RV32 and RV64 are currently supported");
-    Ret += "-p:32:32";
-    if (IsPureCapABI)
-      Ret += "-pe200:64:64:64:32";
-    Ret += "-i64:64-n32";
+    Ret += "-p:32:32-i64:64";
+    Ret += "-n32";
   }
 
   // Stack alignment based on ABI.
-  if (ABIName == "ilp32e")
+  StringRef ABI = ABIName;
+  if (ABI == "ilp32e")
     Ret += "-S32";
-  else if (ABIName == "lp64e")
+  else if (ABI == "lp64e")
     Ret += "-S64";
   else
     Ret += "-S128";
-
-  // TODO: Support non-purecap CHERI ABIs.
-  if (IsPureCapABI)
-    Ret += "-A200-P200-G200";
 
   return Ret;
 }
@@ -368,9 +356,6 @@ static std::string computeSystemZDataLayout(const Triple &TT) {
 
   // Big endian.
   Ret += "E";
-
-  // The natural stack alignment is 64 bits.
-  Ret += "-S64";
 
   // Data mangling.
   Ret += getManglingComponent(TT);
@@ -485,7 +470,8 @@ static std::string computeSPIRVDataLayout(const Triple &TT) {
     return "e-p:32:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-"
            "v256:256-v512:512-v1024:1024-n8:16:32:64-G1";
   if (Arch == Triple::spirv)
-    return "e-ve-i64:64-n8:16:32:64-G10";
+    return "e-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-"
+           "v512:512-v1024:1024-n8:16:32:64-G10";
   if (TT.getVendor() == Triple::VendorType::AMD &&
       TT.getOS() == Triple::OSType::AMDHSA)
     return "e-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-"
@@ -574,8 +560,11 @@ std::string Triple::computeDataLayout(StringRef ABIName) const {
   case Triple::csky:
     return computeCSKYDataLayout(*this);
   case Triple::dxil:
-    return "e-m:e-ve-p:32:32-i1:32-i8:8-i16:16-i32:32-i64:64-f16:16-"
-           "f32:32-f64:64-n8:16:32:64";
+    // TODO: We need to align vectors on the element size generally, but for now
+    // we hard code this for 3-element 32- and 64-bit vectors as a workaround.
+    // See https://github.com/llvm/llvm-project/issues/123968
+    return "e-m:e-p:32:32-i1:32-i8:8-i16:16-i32:32-i64:64-f16:16-"
+           "f32:32-f64:64-n8:16:32:64-v48:16:16-v96:32:32-v192:64:64";
   case Triple::hexagon:
     return "e-m:e-p:32:32:32-a:0-n16:32-"
            "i64:64:64-i32:32:32-i16:16:16-i1:8:8-f32:32:32-f64:64:64-"
@@ -612,20 +601,7 @@ std::string Triple::computeDataLayout(StringRef ABIName) const {
   case Triple::systemz:
     return computeSystemZDataLayout(*this);
   case Triple::tce:
-    return "E-p:32:32:32-i1:8:8-i8:8:32-i16:16:32-i32:32:32-i64:32:32-"
-           "f16:16:16-f32:32:32-f64:32:32-v64:64:64-i128:128-v128:128:128-"
-           "v256:256:256-v512:512:512-v1024:1024:1024-v2048:2048:2048-"
-           "v4096:4096:4096-a0:0:32-n32";
   case Triple::tcele:
-    return "e-p:32:32:32-i1:8:8-i8:8:32-i16:16:32-i32:32:32-i64:32:32-"
-           "f16:16:16-f32:32:32-f64:32:32-v64:64:64-i128:128-v128:128:128-"
-           "v256:256:256-v512:512:512-v1024:1024:1024-v2048:2048:2048-"
-           "v4096:4096:4096-a0:0:32-n32";
-  case Triple::tcele64:
-    return "e-p:64:64:64-i1:8:64-i8:8:64-i16:16:64-i32:32:64-i64:64:64-"
-           "f16:16:64-f32:32:64-f64:64:64-v64:64:64-i128:128-v128:128:128-"
-           "v256:256:256-v512:512:512-v1024:1024:1024-v2048:2048:2048-"
-           "v4096:4096:4096-a0:0:64-n64";
   case Triple::x86:
   case Triple::x86_64:
     return computeX86DataLayout(*this);
@@ -661,6 +637,11 @@ std::string Triple::computeDataLayout(StringRef ABIName) const {
     // These are all virtual ISAs with no LLVM backend, and therefore no fixed
     // LLVM data layout.
     return "";
+
+  case Triple::haydn:
+    // Haydn: 32-bit VLIW DSP, 32-bit pointers, baremetal only
+    // i64/f64 have 32-bit alignment (4 bytes) appropriate for 32-bit architecture
+    return "e-m:e-p:32:32-i64:32-f64:32-v64:32-v128:64-a:0:32-n32-S64";
 
   case Triple::UnknownArch:
     return "";

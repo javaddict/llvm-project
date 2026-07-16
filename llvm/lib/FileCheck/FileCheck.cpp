@@ -28,8 +28,6 @@
 
 using namespace llvm;
 
-constexpr static int BackrefLimit = 20;
-
 StringRef ExpressionFormat::toString() const {
   switch (Value) {
   case Kind::NoFormat:
@@ -1056,11 +1054,10 @@ bool Pattern::parsePattern(StringRef PatternStr, StringRef Prefix,
         if (!IsNumBlock &&
             (It = VariableDefs.find(SubstStr)) != VariableDefs.end()) {
           unsigned CaptureParenGroup = It->second;
-          if (CaptureParenGroup < 1 || CaptureParenGroup > BackrefLimit) {
+          if (CaptureParenGroup < 1 || CaptureParenGroup > 9) {
             SM.PrintMessage(SMLoc::getFromPointer(SubstStr.data()),
                             SourceMgr::DK_Error,
-                            "Can't back-reference more than " +
-                                Twine(BackrefLimit) + " variables");
+                            "Can't back-reference more than 9 variables");
             return true;
           }
           AddBackrefToRegEx(CaptureParenGroup);
@@ -1111,14 +1108,8 @@ bool Pattern::AddRegExToRegEx(StringRef RS, unsigned &CurParen, SourceMgr &SM) {
 }
 
 void Pattern::AddBackrefToRegEx(unsigned BackrefNum) {
-  assert(BackrefNum >= 1 && BackrefNum <= BackrefLimit &&
-         "Invalid backref number");
-  std::string Backref;
-  if (BackrefNum >= 1 && BackrefNum <= 9)
-    Backref = std::string("\\") + std::string(1, '0' + BackrefNum);
-  else
-    Backref = std::string("\\g{") + std::to_string(BackrefNum) + '}';
-
+  assert(BackrefNum >= 1 && BackrefNum <= 9 && "Invalid backref number");
+  std::string Backref = std::string("\\") + std::string(1, '0' + BackrefNum);
   RegExStr += Backref;
 }
 
@@ -1260,7 +1251,8 @@ unsigned Pattern::computeMatchDistance(StringRef Buffer) const {
 
 void Pattern::printSubstitutions(const SourceMgr &SM, StringRef Buffer,
                                  SMRange Range,
-                                 FileCheckDiagList *Diags) const {
+                                 FileCheckDiag::MatchType MatchTy,
+                                 std::vector<FileCheckDiag> *Diags) const {
   // Print what we know about substitutions.
   if (!Substitutions.empty()) {
     for (const auto &Substitution : Substitutions) {
@@ -1279,13 +1271,13 @@ void Pattern::printSubstitutions(const SourceMgr &SM, StringRef Buffer,
       OS.write_escaped(Substitution->getFromString()) << "\" equal to ";
       OS << *MatchedValue;
 
-      // Unlike MatchCustomNoteDiag, PrintMessage needs a location.  We report
-      // only the start of the match/search range to suggest we are reporting
-      // the substitutions as set at the start of the match/search.  Indicating
-      // a non-zero-length range might instead seem to imply that the
+      // We report only the start of the match/search range to suggest we are
+      // reporting the substitutions as set at the start of the match/search.
+      // Indicating a non-zero-length range might instead seem to imply that the
       // substitution matches or was captured from exactly that range.
       if (Diags)
-        Diags->emplace<MatchCustomNoteDiag>(OS.str());
+        Diags->emplace_back(SM, CheckTy, getLoc(), MatchTy,
+                            SMRange(Range.Start, Range.Start), OS.str());
       else
         SM.PrintMessage(Range.Start, SourceMgr::DK_Note, OS.str());
     }
@@ -1293,7 +1285,8 @@ void Pattern::printSubstitutions(const SourceMgr &SM, StringRef Buffer,
 }
 
 void Pattern::printVariableDefs(const SourceMgr &SM,
-                                FileCheckDiagList *Diags) const {
+                                FileCheckDiag::MatchType MatchTy,
+                                std::vector<FileCheckDiag> *Diags) const {
   if (VariableDefs.empty() && NumericVariableDefs.empty())
     return;
   // Build list of variable captures.
@@ -1338,24 +1331,35 @@ void Pattern::printVariableDefs(const SourceMgr &SM,
     raw_svector_ostream OS(Msg);
     OS << "captured var \"" << VC.Name << "\"";
     if (Diags)
-      Diags->emplace<MatchCustomNoteDiag>(VC.Range, OS.str());
+      Diags->emplace_back(SM, CheckTy, getLoc(), MatchTy, VC.Range, OS.str());
     else
       SM.PrintMessage(VC.Range.Start, SourceMgr::DK_Note, OS.str(), VC.Range);
   }
 }
 
-static SMRange buildMatchRange(StringRef Buffer, size_t Pos, size_t Len) {
-  return SMRange(SMLoc::getFromPointer(Buffer.data() + Pos),
-                 SMLoc::getFromPointer(Buffer.data() + Pos + Len));
-}
-
-static SMRange buildSearchRange(StringRef Buffer) {
-  return SMRange(SMLoc::getFromPointer(Buffer.data()),
-                 SMLoc::getFromPointer(Buffer.data() + Buffer.size()));
+static SMRange ProcessMatchResult(FileCheckDiag::MatchType MatchTy,
+                                  const SourceMgr &SM, SMLoc Loc,
+                                  Check::FileCheckType CheckTy,
+                                  StringRef Buffer, size_t Pos, size_t Len,
+                                  std::vector<FileCheckDiag> *Diags,
+                                  bool AdjustPrevDiags = false) {
+  SMLoc Start = SMLoc::getFromPointer(Buffer.data() + Pos);
+  SMLoc End = SMLoc::getFromPointer(Buffer.data() + Pos + Len);
+  SMRange Range(Start, End);
+  if (Diags) {
+    if (AdjustPrevDiags) {
+      SMLoc CheckLoc = Diags->rbegin()->CheckLoc;
+      for (auto I = Diags->rbegin(), E = Diags->rend();
+           I != E && I->CheckLoc == CheckLoc; ++I)
+        I->MatchTy = MatchTy;
+    } else
+      Diags->emplace_back(SM, CheckTy, Loc, MatchTy, Range);
+  }
+  return Range;
 }
 
 void Pattern::printFuzzyMatch(const SourceMgr &SM, StringRef Buffer,
-                              FileCheckDiagList *Diags) const {
+                              std::vector<FileCheckDiag> *Diags) const {
   // Attempt to find the closest/best fuzzy match.  Usually an error happens
   // because some string in the output didn't exactly match. In these cases, we
   // would like to show the user a best guess at what "should have" matched, to
@@ -1395,10 +1399,10 @@ void Pattern::printFuzzyMatch(const SourceMgr &SM, StringRef Buffer,
   // reasonable and not equal to what we showed in the "scanning from here"
   // line.
   if (Best && Best != StringRef::npos && BestQuality < 50) {
-    SMLoc MatchStart = SMLoc::getFromPointer(Buffer.data() + Best);
-    if (Diags)
-      Diags->emplace<MatchFuzzyDiag>(MatchStart);
-    SM.PrintMessage(MatchStart, SourceMgr::DK_Note,
+    SMRange MatchRange =
+        ProcessMatchResult(FileCheckDiag::MatchFuzzy, SM, getLoc(),
+                           getCheckTy(), Buffer, Best, 0, Diags);
+    SM.PrintMessage(MatchRange.Start, SourceMgr::DK_Note,
                     "possible intended match here");
 
     // FIXME: If we wanted to be really friendly we would show why the match
@@ -1504,9 +1508,18 @@ StringRef FileCheck::CanonicalizeFile(MemoryBuffer &MB,
   return StringRef(OutputBuffer.data(), OutputBuffer.size() - 1);
 }
 
-FileCheckDiag::~FileCheckDiag() {}
-MatchResultDiag::~MatchResultDiag() {}
-MatchNoteDiag::~MatchNoteDiag() {}
+FileCheckDiag::FileCheckDiag(const SourceMgr &SM,
+                             const Check::FileCheckType &CheckTy,
+                             SMLoc CheckLoc, MatchType MatchTy,
+                             SMRange InputRange, StringRef Note)
+    : CheckTy(CheckTy), CheckLoc(CheckLoc), MatchTy(MatchTy), Note(Note) {
+  auto Start = SM.getLineAndColumn(InputRange.Start);
+  auto End = SM.getLineAndColumn(InputRange.End);
+  InputStartLine = Start.first;
+  InputStartCol = Start.second;
+  InputEndLine = End.first;
+  InputEndCol = End.second;
+}
 
 static bool IsPartOfWord(char c) {
   return (isAlnum(c) || c == '-' || c == '_');
@@ -1881,17 +1894,17 @@ bool FileCheck::readCheckFile(
     assert(UsedPrefix.data() == Buffer.data() &&
            "Failed to move Buffer's start forward, or pointed prefix outside "
            "of the buffer!");
-
-    [[maybe_unused]] const char *BufferEnd = Buffer.data() + Buffer.size();
     assert(AfterSuffix.data() >= Buffer.data() &&
-           AfterSuffix.data() <= BufferEnd &&
+           AfterSuffix.data() < Buffer.data() + Buffer.size() &&
            "Parsing after suffix doesn't start inside of buffer!");
-
-    // Skip the buffer to the end of the parsed directive suffix.
-    Buffer = AfterSuffix;
 
     // Location to use for error messages.
     const char *UsedPrefixStart = UsedPrefix.data();
+
+    // Skip the buffer to the end of parsed suffix (or just prefix, if no good
+    // suffix was processed).
+    Buffer = AfterSuffix.empty() ? Buffer.drop_front(UsedPrefix.size())
+                                 : AfterSuffix;
 
     // Complain about misspelled directives.
     if (CheckTy == Check::CheckMisspelled) {
@@ -2011,7 +2024,8 @@ static Error printMatch(bool ExpectedMatch, const SourceMgr &SM,
                         StringRef Prefix, SMLoc Loc, const Pattern &Pat,
                         int MatchedCount, StringRef Buffer,
                         Pattern::MatchResult MatchResult,
-                        const FileCheckRequest &Req, FileCheckDiagList *Diags) {
+                        const FileCheckRequest &Req,
+                        std::vector<FileCheckDiag> *Diags) {
   // Suppress some verbosity if there's no error.
   bool HasError = !ExpectedMatch || MatchResult.TheError;
   bool PrintDiag = true;
@@ -2027,16 +2041,15 @@ static Error printMatch(bool ExpectedMatch, const SourceMgr &SM,
   }
 
   // Add "found" diagnostic, substitutions, and variable definitions to Diags.
-  MatchFoundDiag::StatusTy Status =
-      ExpectedMatch ? MatchFoundDiag::Success : MatchFoundDiag::Excluded;
-  SMRange MatchRange = buildMatchRange(Buffer, MatchResult.TheMatch->Pos,
-                                       MatchResult.TheMatch->Len);
-  SMRange SearchRange = buildSearchRange(Buffer);
+  FileCheckDiag::MatchType MatchTy = ExpectedMatch
+                                         ? FileCheckDiag::MatchFoundAndExpected
+                                         : FileCheckDiag::MatchFoundButExcluded;
+  SMRange MatchRange = ProcessMatchResult(MatchTy, SM, Loc, Pat.getCheckTy(),
+                                          Buffer, MatchResult.TheMatch->Pos,
+                                          MatchResult.TheMatch->Len, Diags);
   if (Diags) {
-    Diags->emplace<MatchFoundDiag>(Pat.getCheckTy(), Loc, Status, MatchRange,
-                                   SearchRange);
-    Pat.printSubstitutions(SM, Buffer, MatchRange, Diags);
-    Pat.printVariableDefs(SM, Diags);
+    Pat.printSubstitutions(SM, Buffer, MatchRange, MatchTy, Diags);
+    Pat.printVariableDefs(SM, MatchTy, Diags);
   }
   if (!PrintDiag) {
     assert(!HasError && "expected to report more diagnostics for error");
@@ -2056,8 +2069,8 @@ static Error printMatch(bool ExpectedMatch, const SourceMgr &SM,
                   {MatchRange});
 
   // Print additional information, which can be useful even if there are errors.
-  Pat.printSubstitutions(SM, Buffer, MatchRange, nullptr);
-  Pat.printVariableDefs(SM, nullptr);
+  Pat.printSubstitutions(SM, Buffer, MatchRange, MatchTy, nullptr);
+  Pat.printVariableDefs(SM, MatchTy, nullptr);
 
   // Print errors and add them to Diags.  We report these errors after the match
   // itself because we found them after the match.  If we had found them before
@@ -2066,9 +2079,9 @@ static Error printMatch(bool ExpectedMatch, const SourceMgr &SM,
                   [&](const ErrorDiagnostic &E) {
                     E.log(errs());
                     if (Diags) {
-                      Diags->emplace<MatchCustomNoteDiag>(E.getRange(),
-                                                          E.getMessage().str(),
-                                                          /*AddsError=*/true);
+                      Diags->emplace_back(SM, Pat.getCheckTy(), Loc,
+                                          FileCheckDiag::MatchFoundErrorNote,
+                                          E.getRange(), E.getMessage().str());
                     }
                   });
   return ErrorReported::reportedOrSuccess(HasError);
@@ -2080,18 +2093,20 @@ static Error printMatch(bool ExpectedMatch, const SourceMgr &SM,
 static Error printNoMatch(bool ExpectedMatch, const SourceMgr &SM,
                           StringRef Prefix, SMLoc Loc, const Pattern &Pat,
                           int MatchedCount, StringRef Buffer, Error MatchError,
-                          bool VerboseVerbose, FileCheckDiagList *Diags) {
+                          bool VerboseVerbose,
+                          std::vector<FileCheckDiag> *Diags) {
   // Print any pattern errors, and record them to be added to Diags later.
   bool HasError = ExpectedMatch;
   bool HasPatternError = false;
-  MatchNoneDiag::StatusTy Status =
-      ExpectedMatch ? MatchNoneDiag::Expected : MatchNoneDiag::Success;
+  FileCheckDiag::MatchType MatchTy = ExpectedMatch
+                                         ? FileCheckDiag::MatchNoneButExpected
+                                         : FileCheckDiag::MatchNoneAndExcluded;
   SmallVector<std::string, 4> ErrorMsgs;
   handleAllErrors(
       std::move(MatchError),
       [&](const ErrorDiagnostic &E) {
         HasError = HasPatternError = true;
-        Status = MatchNoneDiag::InvalidPattern;
+        MatchTy = FileCheckDiag::MatchNoneForInvalidPattern;
         E.log(errs());
         if (Diags)
           ErrorMsgs.push_back(E.getMessage().str());
@@ -2117,12 +2132,14 @@ static Error printNoMatch(bool ExpectedMatch, const SourceMgr &SM,
   // errors.  The reason is that we need to attach pattern errors as notes
   // somewhere in the input, and the input search range from the "not found"
   // diagnostic is all we have to anchor them.
-  SMRange SearchRange = buildSearchRange(Buffer);
+  SMRange SearchRange = ProcessMatchResult(MatchTy, SM, Loc, Pat.getCheckTy(),
+                                           Buffer, 0, Buffer.size(), Diags);
   if (Diags) {
-    Diags->emplace<MatchNoneDiag>(Pat.getCheckTy(), Loc, Status, SearchRange);
+    SMRange NoteRange = SMRange(SearchRange.Start, SearchRange.Start);
     for (StringRef ErrorMsg : ErrorMsgs)
-      Diags->emplace<MatchCustomNoteDiag>(ErrorMsg);
-    Pat.printSubstitutions(SM, Buffer, SearchRange, Diags);
+      Diags->emplace_back(SM, Pat.getCheckTy(), Loc, MatchTy, NoteRange,
+                          ErrorMsg);
+    Pat.printSubstitutions(SM, Buffer, SearchRange, MatchTy, Diags);
   }
   if (!PrintDiag) {
     assert(!HasError && "expected to report more diagnostics for error");
@@ -2148,7 +2165,7 @@ static Error printNoMatch(bool ExpectedMatch, const SourceMgr &SM,
 
   // Print additional information, which can be useful even after a pattern
   // error.
-  Pat.printSubstitutions(SM, Buffer, SearchRange, nullptr);
+  Pat.printSubstitutions(SM, Buffer, SearchRange, MatchTy, nullptr);
   if (ExpectedMatch)
     Pat.printFuzzyMatch(SM, Buffer, Diags);
   return ErrorReported::reportedOrSuccess(HasError);
@@ -2161,7 +2178,7 @@ static Error reportMatchResult(bool ExpectedMatch, const SourceMgr &SM,
                                int MatchedCount, StringRef Buffer,
                                Pattern::MatchResult MatchResult,
                                const FileCheckRequest &Req,
-                               FileCheckDiagList *Diags) {
+                               std::vector<FileCheckDiag> *Diags) {
   if (MatchResult.TheMatch)
     return printMatch(ExpectedMatch, SM, Prefix, Loc, Pat, MatchedCount, Buffer,
                       std::move(MatchResult), Req, Diags);
@@ -2196,7 +2213,7 @@ static unsigned CountNumNewlinesBetween(StringRef Range,
 size_t FileCheckString::Check(const SourceMgr &SM, StringRef Buffer,
                               bool IsLabelScanMode, size_t &MatchLen,
                               FileCheckRequest &Req,
-                              FileCheckDiagList *Diags) const {
+                              std::vector<FileCheckDiag> *Diags) const {
   size_t LastPos = 0;
   std::vector<const DagNotPrefixInfo *> NotStrings;
 
@@ -2250,32 +2267,18 @@ size_t FileCheckString::Check(const SourceMgr &SM, StringRef Buffer,
     // If this check is a "CHECK-NEXT", verify that the previous match was on
     // the previous line (i.e. that there is one newline between them).
     if (CheckNext(SM, SkippedRegion)) {
-      if (Diags) {
-        if (Req.Verbose) {
-          Diags->adjustPrevMatchFoundDiag(MatchFoundDiag::WrongLine);
-        } else {
-          Diags->emplace<MatchFoundDiag>(
-              Pat.getCheckTy(), Loc, MatchFoundDiag::WrongLine,
-              buildMatchRange(MatchBuffer, MatchPos, MatchLen),
-              buildSearchRange(MatchBuffer));
-        }
-      }
+      ProcessMatchResult(FileCheckDiag::MatchFoundButWrongLine, SM, Loc,
+                         Pat.getCheckTy(), MatchBuffer, MatchPos, MatchLen,
+                         Diags, Req.Verbose);
       return StringRef::npos;
     }
 
     // If this check is a "CHECK-SAME", verify that the previous match was on
     // the same line (i.e. that there is no newline between them).
     if (CheckSame(SM, SkippedRegion)) {
-      if (Diags) {
-        if (Req.Verbose) {
-          Diags->adjustPrevMatchFoundDiag(MatchFoundDiag::WrongLine);
-        } else {
-          Diags->emplace<MatchFoundDiag>(
-              Pat.getCheckTy(), Loc, MatchFoundDiag::WrongLine,
-              buildMatchRange(MatchBuffer, MatchPos, MatchLen),
-              buildSearchRange(MatchBuffer));
-        }
-      }
+      ProcessMatchResult(FileCheckDiag::MatchFoundButWrongLine, SM, Loc,
+                         Pat.getCheckTy(), MatchBuffer, MatchPos, MatchLen,
+                         Diags, Req.Verbose);
       return StringRef::npos;
     }
 
@@ -2352,7 +2355,7 @@ bool FileCheckString::CheckSame(const SourceMgr &SM, StringRef Buffer) const {
 bool FileCheckString::CheckNot(
     const SourceMgr &SM, StringRef Buffer,
     const std::vector<const DagNotPrefixInfo *> &NotStrings,
-    const FileCheckRequest &Req, FileCheckDiagList *Diags) const {
+    const FileCheckRequest &Req, std::vector<FileCheckDiag> *Diags) const {
   bool DirectiveFail = false;
   for (auto NotInfo : NotStrings) {
     assert((NotInfo->DagNotPat.getCheckTy() == Check::CheckNot) &&
@@ -2374,7 +2377,7 @@ size_t
 FileCheckString::CheckDag(const SourceMgr &SM, StringRef Buffer,
                           std::vector<const DagNotPrefixInfo *> &NotStrings,
                           const FileCheckRequest &Req,
-                          FileCheckDiagList *Diags) const {
+                          std::vector<FileCheckDiag> *Diags) const {
   if (DagNotStrings.empty())
     return 0;
 
@@ -2463,15 +2466,18 @@ FileCheckString::CheckDag(const SourceMgr &SM, StringRef Buffer,
         // Due to their verbosity, we don't print verbose diagnostics here if
         // we're gathering them for a different rendering, but we always print
         // other diagnostics.
-        if (Diags) {
-          Diags->adjustPrevMatchFoundDiag(MatchFoundDiag::Discarded);
-        } else {
+        if (!Diags) {
           SMLoc OldStart = SMLoc::getFromPointer(Buffer.data() + MI->Pos);
           SMLoc OldEnd = SMLoc::getFromPointer(Buffer.data() + MI->End);
           SMRange OldRange(OldStart, OldEnd);
           SM.PrintMessage(OldStart, SourceMgr::DK_Note,
                           "match discarded, overlaps earlier DAG match here",
                           {OldRange});
+        } else {
+          SMLoc CheckLoc = Diags->rbegin()->CheckLoc;
+          for (auto I = Diags->rbegin(), E = Diags->rend();
+               I != E && I->CheckLoc == CheckLoc; ++I)
+            I->MatchTy = FileCheckDiag::MatchFoundButDiscarded;
         }
       }
       MatchPos = MI->End;
@@ -2710,7 +2716,7 @@ void FileCheckPatternContext::clearLocalVars() {
 }
 
 bool FileCheck::checkInput(SourceMgr &SM, StringRef Buffer,
-                           FileCheckDiagList *Diags) {
+                           std::vector<FileCheckDiag> *Diags) {
   bool ChecksFailed = false;
 
   unsigned i = 0, j = 0, e = CheckStrings.size();

@@ -10,6 +10,7 @@
 #include "CFBasicHash.h"
 
 #include "Plugins/LanguageRuntime/ObjC/AppleObjCRuntime/AppleObjCRuntime.h"
+#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/DataFormatters/FormattersHelpers.h"
 #include "lldb/Target/Language.h"
 #include "lldb/Target/Target.h"
@@ -51,6 +52,8 @@ public:
 
   lldb::ChildCacheState Update() override;
 
+  llvm::Expected<size_t> GetIndexOfChildWithName(ConstString name) override;
+
 private:
   struct DataDescriptor_32 {
     uint32_t _used : 26;
@@ -85,6 +88,8 @@ public:
 
   lldb::ChildCacheState Update() override;
 
+  llvm::Expected<size_t> GetIndexOfChildWithName(ConstString name) override;
+
 private:
   struct SetItemDescriptor {
     lldb::addr_t item_ptr;
@@ -113,6 +118,8 @@ public:
   lldb::ValueObjectSP GetChildAtIndex(uint32_t idx) override;
 
   lldb::ChildCacheState Update() override;
+
+  llvm::Expected<size_t> GetIndexOfChildWithName(ConstString name) override;
 
 private:
 
@@ -379,6 +386,21 @@ lldb_private::formatters::NSSetISyntheticFrontEnd::~NSSetISyntheticFrontEnd() {
   m_data_64 = nullptr;
 }
 
+llvm::Expected<size_t>
+lldb_private::formatters::NSSetISyntheticFrontEnd::GetIndexOfChildWithName(
+    ConstString name) {
+  auto optional_idx = ExtractIndexFromString(name.AsCString());
+  if (!optional_idx) {
+    return llvm::createStringError("Type has no child named '%s'",
+                                   name.AsCString());
+  }
+  uint32_t idx = *optional_idx;
+  if (idx >= CalculateNumChildrenIgnoringErrors())
+    return llvm::createStringError("Type has no child named '%s'",
+                                   name.AsCString());
+  return idx;
+}
+
 llvm::Expected<uint32_t>
 lldb_private::formatters::NSSetISyntheticFrontEnd::CalculateNumChildren() {
   if (!m_data_32 && !m_data_64)
@@ -487,7 +509,7 @@ lldb_private::formatters::NSSetISyntheticFrontEnd::GetChildAtIndex(
                        process_sp->GetByteOrder(),
                        process_sp->GetAddressByteSize());
 
-    set_item.valobj_sp = CreateChildValueObjectFromData(
+    set_item.valobj_sp = CreateValueObjectFromData(
         idx_name.GetString(), data, m_exe_ctx_ref,
         m_backend.GetCompilerType().GetBasicTypeFromAST(
             lldb::eBasicTypeObjCID));
@@ -499,6 +521,21 @@ lldb_private::formatters::NSCFSetSyntheticFrontEnd::NSCFSetSyntheticFrontEnd(
     lldb::ValueObjectSP valobj_sp)
     : SyntheticChildrenFrontEnd(*valobj_sp), m_exe_ctx_ref(), m_hashtable(),
       m_pair_type() {}
+
+llvm::Expected<size_t>
+lldb_private::formatters::NSCFSetSyntheticFrontEnd::GetIndexOfChildWithName(
+    ConstString name) {
+  auto optional_idx = ExtractIndexFromString(name.AsCString());
+  if (!optional_idx) {
+    return llvm::createStringError("Type has no child named '%s'",
+                                   name.AsCString());
+  }
+  uint32_t idx = *optional_idx;
+  if (idx >= CalculateNumChildrenIgnoringErrors())
+    return llvm::createStringError("Type has no child named '%s'",
+                                   name.AsCString());
+  return idx;
+}
 
 llvm::Expected<uint32_t>
 lldb_private::formatters::NSCFSetSyntheticFrontEnd::CalculateNumChildren() {
@@ -597,7 +634,7 @@ lldb_private::formatters::NSCFSetSyntheticFrontEnd::GetChildAtIndex(
 
     DataExtractor data(buffer_sp, m_order, m_ptr_size);
 
-    set_item.valobj_sp = CreateChildValueObjectFromData(
+    set_item.valobj_sp = CreateValueObjectFromData(
         idx_name.GetString(), data, m_exe_ctx_ref,
         m_backend.GetCompilerType().GetBasicTypeFromAST(
             lldb::eBasicTypeObjCID));
@@ -622,6 +659,21 @@ lldb_private::formatters::GenericNSSetMSyntheticFrontEnd<D32, D64>::
   m_data_32 = nullptr;
   delete m_data_64;
   m_data_64 = nullptr;
+}
+
+template <typename D32, typename D64>
+llvm::Expected<size_t> lldb_private::formatters::GenericNSSetMSyntheticFrontEnd<
+    D32, D64>::GetIndexOfChildWithName(ConstString name) {
+  auto optional_idx = ExtractIndexFromString(name.AsCString());
+  if (!optional_idx) {
+    return llvm::createStringError("Type has no child named '%s'",
+                                   name.AsCString());
+  }
+  uint32_t idx = *optional_idx;
+  if (idx >= CalculateNumChildrenIgnoringErrors())
+    return llvm::createStringError("Type has no child named '%s'",
+                                   name.AsCString());
+  return idx;
 }
 
 template <typename D32, typename D64>
@@ -737,7 +789,7 @@ lldb_private::formatters::
                        process_sp->GetByteOrder(),
                        process_sp->GetAddressByteSize());
 
-    set_item.valobj_sp = CreateChildValueObjectFromData(
+    set_item.valobj_sp = CreateValueObjectFromData(
         idx_name.GetString(), data, m_exe_ctx_ref,
         m_backend.GetCompilerType().GetBasicTypeFromAST(
             lldb::eBasicTypeObjCID));

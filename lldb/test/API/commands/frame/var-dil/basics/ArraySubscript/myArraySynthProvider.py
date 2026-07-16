@@ -25,7 +25,7 @@ class myArraySynthProvider:
         if name == "[0]":
             return 0
         if name == "[1]":
-            return 1
+            return
         if name == "[2]":
             return 2
         if name == "[3]":

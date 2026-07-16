@@ -162,13 +162,13 @@ void RetainCountChecker::checkPostStmt(const BlockExpr *BE,
   // via captured variables, even though captured variables result in a copy
   // and in implicit increment/decrement of a retain count.
   SmallVector<const MemRegion*, 10> Regions;
-  const StackFrame *SF = C.getStackFrame();
+  const LocationContext *LC = C.getLocationContext();
   MemRegionManager &MemMgr = C.getSValBuilder().getRegionManager();
 
   for (auto Var : ReferencedVars) {
     const VarRegion *VR = Var.getCapturedRegion();
     if (VR->getSuperRegion() == R) {
-      VR = MemMgr.getVarRegion(VR->getDecl(), SF);
+      VR = MemMgr.getVarRegion(VR->getDecl(), LC);
     }
     Regions.push_back(VR);
   }
@@ -229,8 +229,7 @@ void RetainCountChecker::processObjCLiterals(CheckerContext &C,
   ProgramStateRef state = C.getState();
   const ExplodedNode *pred = C.getPredecessor();
   for (const Stmt *Child : Ex->children()) {
-    const auto *ChildAsExpr = dyn_cast<Expr>(Child);
-    SVal V = ChildAsExpr ? pred->getSVal(ChildAsExpr) : UnknownVal();
+    SVal V = pred->getSVal(Child);
     if (SymbolRef sym = V.getAsSymbol())
       if (const RefVal* T = getRefBinding(state, sym)) {
         RefVal::Kind hasErr = (RefVal::Kind) 0;
@@ -245,7 +244,8 @@ void RetainCountChecker::processObjCLiterals(CheckerContext &C,
 
   // Return the object as autoreleased.
   //  RetEffect RE = RetEffect::MakeNotOwned(ObjKind::ObjC);
-  if (SymbolRef sym = state->getSVal(Ex, pred->getStackFrame()).getAsSymbol()) {
+  if (SymbolRef sym =
+        state->getSVal(Ex, pred->getLocationContext()).getAsSymbol()) {
     QualType ResultTy = Ex->getType();
     state = setRefBinding(state, sym,
                           RefVal::makeNotOwned(ObjKind::ObjC, ResultTy));
@@ -339,7 +339,7 @@ static bool isReceiverUnconsumedSelf(const CallEvent &Call) {
     // Check if the message is not consumed, we know it will not be used in
     // an assignment, ex: "self = [super init]".
     return MC->getMethodFamily() == OMF_init && MC->isReceiverSelfOrSuper() &&
-           !Call.getStackFrame()
+           !Call.getLocationContext()
                 ->getAnalysisDeclContext()
                 ->getParentMap()
                 .isConsumedExpr(Call.getOriginExpr());
@@ -909,7 +909,7 @@ bool RetainCountChecker::evalCall(const CallEvent &Call,
   // annotate attribute. If it does, we will not inline it.
   bool hasTrustedImplementationAnnotation = false;
 
-  const StackFrame *SF = C.getStackFrame();
+  const LocationContext *LCtx = C.getLocationContext();
 
   using BehaviorSummary = RetainSummaryManager::BehaviorSummary;
   std::optional<BehaviorSummary> BSmr =
@@ -928,7 +928,7 @@ bool RetainCountChecker::evalCall(const CallEvent &Call,
         (BSmr == BehaviorSummary::IdentityThis)
             ? cast<CXXMemberCallExpr>(CE)->getImplicitObjectArgument()
             : CE->getArg(0);
-    SVal RetVal = state->getSVal(BindReturnTo, SF);
+    SVal RetVal = state->getSVal(BindReturnTo, LCtx);
 
     // If the receiver is unknown or the function has
     // 'rc_ownership_trusted_implementation' annotate attribute, conjure a
@@ -941,7 +941,7 @@ bool RetainCountChecker::evalCall(const CallEvent &Call,
     }
 
     // Bind the value.
-    state = state->BindExpr(CE, SF, RetVal, /*Invalidate=*/false);
+    state = state->BindExpr(CE, LCtx, RetVal, /*Invalidate=*/false);
 
     if (BSmr == BehaviorSummary::IdentityOrZero) {
       // Add a branch where the output is zero.
@@ -949,7 +949,7 @@ bool RetainCountChecker::evalCall(const CallEvent &Call,
 
       // Assume that output is zero on the other branch.
       NullOutputState = NullOutputState->BindExpr(
-          CE, SF, C.getSValBuilder().makeNullWithType(ResultTy),
+          CE, LCtx, C.getSValBuilder().makeNullWithType(ResultTy),
           /*Invalidate=*/false);
       C.addTransition(NullOutputState, &getCastFailTag());
 
@@ -987,7 +987,7 @@ ExplodedNode * RetainCountChecker::processReturn(const ReturnStmt *S,
   ProgramStateRef state = C.getState();
   // We need to dig down to the symbolic base here because various
   // custom allocators do sometimes return the symbol with an offset.
-  SymbolRef Sym = state->getSValAsScalarOrLoc(RetE, C.getStackFrame())
+  SymbolRef Sym = state->getSValAsScalarOrLoc(RetE, C.getLocationContext())
                       .getAsLocSymbol(/*IncludeBaseRegions=*/true);
   if (!Sym)
     return Pred;
@@ -1184,7 +1184,7 @@ ProgramStateRef RetainCountChecker::evalAssume(ProgramStateRef state,
 ProgramStateRef RetainCountChecker::checkRegionChanges(
     ProgramStateRef state, const InvalidatedSymbols *invalidated,
     ArrayRef<const MemRegion *> ExplicitRegions,
-    ArrayRef<const MemRegion *> Regions, const StackFrame *SF,
+    ArrayRef<const MemRegion *> Regions, const LocationContext *LCtx,
     const CallEvent *Call) const {
   if (!invalidated)
     return state;
@@ -1331,8 +1331,8 @@ void RetainCountChecker::checkBeginFunction(CheckerContext &Ctx) const {
     return;
 
   RetainSummaryManager &SmrMgr = getSummaryManager(Ctx);
-  const StackFrame *SF = Ctx.getStackFrame();
-  const Decl *D = SF->getDecl();
+  const LocationContext *LCtx = Ctx.getLocationContext();
+  const Decl *D = LCtx->getDecl();
   std::optional<AnyCall> C = AnyCall::forDecl(D);
 
   if (!C || SmrMgr.isTrustedReferenceCountImplementation(D))
@@ -1344,7 +1344,7 @@ void RetainCountChecker::checkBeginFunction(CheckerContext &Ctx) const {
 
   for (unsigned idx = 0, e = C->param_size(); idx != e; ++idx) {
     const ParmVarDecl *Param = C->parameters()[idx];
-    SymbolRef Sym = state->getSVal(state->getRegion(Param, SF)).getAsSymbol();
+    SymbolRef Sym = state->getSVal(state->getRegion(Param, LCtx)).getAsSymbol();
 
     QualType Ty = Param->getType();
     const ArgEffect *AE = CalleeSideArgEffects.lookup(idx);
@@ -1375,9 +1375,9 @@ void RetainCountChecker::checkEndFunction(const ReturnStmt *RS,
   RefBindingsTy B = state->get<RefBindings>();
 
   // Don't process anything within synthesized bodies.
-  const StackFrame *SF = Pred->getStackFrame();
-  if (SF->getAnalysisDeclContext()->isBodyAutosynthesized()) {
-    assert(!SF->inTopFrame());
+  const LocationContext *LCtx = Pred->getLocationContext();
+  if (LCtx->getAnalysisDeclContext()->isBodyAutosynthesized()) {
+    assert(!LCtx->inTopFrame());
     return;
   }
 
@@ -1387,11 +1387,11 @@ void RetainCountChecker::checkEndFunction(const ReturnStmt *RS,
       return;
   }
 
-  // If the current StackFrame has a parent, don't check for leaks.
+  // If the current LocationContext has a parent, don't check for leaks.
   // We will do that later.
   // FIXME: we should instead check for imbalances of the retain/releases,
   // and suggest annotations.
-  if (SF->getParent())
+  if (LCtx->getParent())
     return;
 
   B = state->get<RefBindings>();

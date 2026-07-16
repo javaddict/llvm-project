@@ -10,8 +10,6 @@ from lldbsuite.test import lldbutil
 
 
 class ChangedInferiorTestCase(TestBase):
-    SHARED_BUILD_TESTCASE = False
-
     @skipIf(hostoslist=["windows"])
     @no_debug_info_test
     def test_inferior_crashing(self):

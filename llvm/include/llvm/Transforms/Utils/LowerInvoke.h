@@ -19,10 +19,11 @@
 
 namespace llvm {
 
-class LowerInvokePass : public OptionalPassInfoMixin<LowerInvokePass> {
+class LowerInvokePass : public PassInfoMixin<LowerInvokePass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
+
 }
 
 #endif // LLVM_TRANSFORMS_UTILS_LOWERINVOKE_H

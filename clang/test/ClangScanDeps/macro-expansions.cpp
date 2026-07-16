@@ -5,10 +5,9 @@
 // RUN: split-file %s %t
 // RUN: sed -e "s|DIR|%/t|g" %t/cdb.json.template > %t/cdb.json
 
-// RUN: clang-scan-deps -compilation-database %t/cdb.json | FileCheck %s %if system-darwin && target={{.*}}-{{darwin|macos}}{{.*}} %{ --check-prefixes=CHECK,CHECK-DARWIN %}
+// RUN: clang-scan-deps -compilation-database %t/cdb.json | FileCheck %s
 
 // CHECK: test.o:
-// CHECK-DARWIN-NEXT: SDKSettings.json
 // CHECK-NEXT: test.cpp
 // CHECK-NEXT: header1.h
 // CHECK-NEXT: header2.h

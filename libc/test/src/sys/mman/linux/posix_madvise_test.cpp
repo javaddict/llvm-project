@@ -6,7 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "hdr/sys_mman_macros.h"
 #include "src/sys/mman/mmap.h"
 #include "src/sys/mman/munmap.h"
 #include "src/sys/mman/posix_madvise.h"

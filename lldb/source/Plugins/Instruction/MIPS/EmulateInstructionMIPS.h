@@ -10,8 +10,6 @@
 #ifndef LLDB_SOURCE_PLUGINS_INSTRUCTION_MIPS_EMULATEINSTRUCTIONMIPS_H
 #define LLDB_SOURCE_PLUGINS_INSTRUCTION_MIPS_EMULATEINSTRUCTIONMIPS_H
 
-#include "llvm/MC/MCTargetOptions.h"
-
 namespace llvm {
 class MCDisassembler;
 class MCSubtargetInfo;
@@ -212,7 +210,6 @@ private:
   std::unique_ptr<llvm::MCSubtargetInfo> m_subtype_info;
   std::unique_ptr<llvm::MCSubtargetInfo> m_alt_subtype_info;
   std::unique_ptr<llvm::MCRegisterInfo> m_reg_info;
-  llvm::MCTargetOptions m_mc_options;
   std::unique_ptr<llvm::MCAsmInfo> m_asm_info;
   std::unique_ptr<llvm::MCContext> m_context;
   std::unique_ptr<llvm::MCInstrInfo> m_insn_info;

@@ -139,8 +139,9 @@ void fuchsia::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   ToolChain.AddFilePathLibArgs(Args, CmdArgs);
 
-  if (auto LTO = ToolChain.getLTOMode(Args); LTO != LTOK_None)
-    addLTOOptions(ToolChain, Args, CmdArgs, Output, Inputs, LTO == LTOK_Thin);
+  if (D.isUsingLTO())
+    addLTOOptions(ToolChain, Args, CmdArgs, Output, Inputs,
+                  D.getLTOMode() == LTOK_Thin);
 
   addLinkerCompressDebugSectionsOption(ToolChain, Args, CmdArgs);
   AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs, JA);
@@ -330,9 +331,8 @@ Fuchsia::Fuchsia(const Driver &D, const llvm::Triple &Triple,
 }
 
 std::string Fuchsia::ComputeEffectiveClangTriple(const ArgList &Args,
-                                                 llvm::StringRef BoundArch,
                                                  types::ID InputType) const {
-  llvm::Triple Triple(ComputeLLVMTriple(Args, BoundArch, InputType));
+  llvm::Triple Triple(ComputeLLVMTriple(Args, InputType));
   return Triple.str();
 }
 
@@ -346,12 +346,12 @@ ToolChain::RuntimeLibType
 Fuchsia::GetRuntimeLibType(const ArgList &Args) const {
   if (Arg *A = Args.getLastArg(options::OPT_rtlib_EQ)) {
     StringRef Value = A->getValue();
-    if (Value != "compiler-rt" && Value != "platform")
-      getDriver().Diag(clang::diag::err_drv_unsupported_rtlib_for_platform)
-          << Value << "Fuchsia";
+    if (Value != "compiler-rt")
+      getDriver().Diag(clang::diag::err_drv_invalid_rtlib_name)
+          << A->getAsString(Args);
   }
 
-  return ToolChain::GetRuntimeLibType(Args);
+  return ToolChain::RLT_CompilerRT;
 }
 
 ToolChain::CXXStdlibType Fuchsia::GetCXXStdlibType(const ArgList &Args) const {
@@ -416,7 +416,7 @@ void Fuchsia::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
     return;
 
   const Driver &D = getDriver();
-  StringRef Target = getTripleString();
+  std::string Target = getTripleString();
 
   auto AddCXXIncludePath = [&](StringRef Path) {
     std::string Version = detectLibcxxVersion(Path);
@@ -472,11 +472,8 @@ void Fuchsia::AddCXXStdlibLibArgs(const ArgList &Args,
   }
 }
 
-SanitizerMask
-Fuchsia::getSupportedSanitizers(StringRef BoundArch,
-                                Action::OffloadKind DeviceOffloadKind) const {
-  SanitizerMask Res =
-      ToolChain::getSupportedSanitizers(BoundArch, DeviceOffloadKind);
+SanitizerMask Fuchsia::getSupportedSanitizers() const {
+  SanitizerMask Res = ToolChain::getSupportedSanitizers();
   Res |= SanitizerKind::Address;
   Res |= SanitizerKind::HWAddress;
   Res |= SanitizerKind::PointerCompare;

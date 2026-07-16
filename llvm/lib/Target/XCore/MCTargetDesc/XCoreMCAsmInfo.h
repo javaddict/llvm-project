@@ -22,7 +22,7 @@ class XCoreMCAsmInfo : public MCAsmInfoELF {
   void anchor() override;
 
 public:
-  explicit XCoreMCAsmInfo(const Triple &TT, const MCTargetOptions &Options);
+  explicit XCoreMCAsmInfo(const Triple &TT);
 };
 
 } // namespace llvm

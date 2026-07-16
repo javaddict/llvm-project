@@ -13,19 +13,17 @@
 
 namespace llvm {
 
-class MachineSinkingPass : public OptionalPassInfoMixin<MachineSinkingPass> {
+class MachineSinkingPass : public PassInfoMixin<MachineSinkingPass> {
   bool EnableSinkAndFold;
 
 public:
   MachineSinkingPass(bool EnableSinkAndFold = false)
       : EnableSinkAndFold(EnableSinkAndFold) {}
 
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &);
+  PreservedAnalyses run(MachineFunction &MF, MachineFunctionAnalysisManager &);
 
-  LLVM_ABI void
-  printPipeline(raw_ostream &OS,
-                function_ref<StringRef(StringRef)> MapClassName2PassName);
+  void printPipeline(raw_ostream &OS,
+                     function_ref<StringRef(StringRef)> MapClassName2PassName);
 };
 
 } // namespace llvm

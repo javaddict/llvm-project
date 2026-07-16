@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/getpayloadf.h"
-#include "src/__support/math/getpayloadf.h"
+#include "src/__support/FPUtil/BasicOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(float, getpayloadf, (const float *x)) {
-  return math::getpayloadf(x);
+  return fputil::getpayload(*x);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

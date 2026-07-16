@@ -39,7 +39,7 @@ using namespace llvm;
 static MCAsmInfo *createCSKYMCAsmInfo(const MCRegisterInfo &MRI,
                                       const Triple &TT,
                                       const MCTargetOptions &Options) {
-  MCAsmInfo *MAI = new CSKYMCAsmInfo(TT, Options);
+  MCAsmInfo *MAI = new CSKYMCAsmInfo(TT);
 
   // Initial state of the frame pointer is SP.
   unsigned Reg = MRI.getDwarfRegNum(CSKY::R14, true);

@@ -1,13 +1,15 @@
-// RUN: %libomptarget-compile-and-run-amdgcn-amd-amdhsa 2>&1 | \
+// RUN: %libomptarget-compile-amdgcn-amd-amdhsa
+// RUN:   %libomptarget-run-generic 2>&1 | \
 // RUN:   %fcheck-amdgcn-amd-amdhsa -check-prefixes=AMD
 
-// RUN: %libomptarget-compile-and-run-nvptx64-nvidia-cuda 2>&1 | \
+// RUN: %libomptarget-compile-nvptx64-nvidia-cuda
+// RUN:   %libomptarget-run-generic 2>&1 | \
 // RUN:   %fcheck-nvptx64-nvidia-cuda -check-prefixes=NVIDIA
 
-// RUN: %libomptarget-compile-and-run-spirv64-intel 2>&1 | \
-// RUN:   %fcheck-spirv64-intel -check-prefixes=INTEL
-
 // REQUIRES: gpu
+// XFAIL: nvptx64-nvidia-cuda
+// XFAIL: nvptx64-nvidia-cuda-LTO
+// XFAIL: intelgpu
 
 #include <omp.h>
 #include <stdio.h>
@@ -52,7 +54,6 @@ int main(int argc, char **argv) {
 
     // AMD: {{.*}} hsa
     // NVIDIA: {{.*}} cuda
-    // INTEL: {{.*}} level_zero
     printf("omp_get_interop_int returned %s\n",
            interop_int_to_string(interop_int));
 
@@ -65,7 +66,6 @@ int main(int argc, char **argv) {
 
     // AMD: {{.*}} amd
     // NVIDIA: {{.*}} nvidia
-    // INTEL: {{.*}} intel
     printf("omp_get_interop_str returned %s\n", interop_vendor);
 
     const char *interop_fr_name =
@@ -77,7 +77,6 @@ int main(int argc, char **argv) {
 
     // AMD: {{.*}} hsa
     // NVIDIA: {{.*}} cuda
-    // INTEL: {{.*}} level_zero
     printf("omp_get_interop_str returned %s\n", interop_fr_name);
 
 #pragma omp interop destroy(iobj)

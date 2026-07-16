@@ -12,12 +12,13 @@
 #include "llvm/IR/PassManager.h"
 
 namespace llvm {
-class MemDerefPrinterPass : public RequiredPassInfoMixin<MemDerefPrinterPass> {
+class MemDerefPrinterPass : public PassInfoMixin<MemDerefPrinterPass> {
   raw_ostream &OS;
 
 public:
   MemDerefPrinterPass(raw_ostream &OS) : OS(OS) {}
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 } // namespace llvm
 

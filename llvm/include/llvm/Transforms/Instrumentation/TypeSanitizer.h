@@ -21,8 +21,9 @@ class Function;
 class FunctionPass;
 class Module;
 
-struct TypeSanitizerPass : public RequiredPassInfoMixin<TypeSanitizerPass> {
+struct TypeSanitizerPass : public PassInfoMixin<TypeSanitizerPass> {
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

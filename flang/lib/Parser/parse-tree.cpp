@@ -50,21 +50,20 @@ bool Designator::EndsInBareName() const {
 }
 
 // R911 data-ref -> part-ref [% part-ref]...
-DataRef::DataRef(std::list<PartRef> &&prl)
-    : u{std::move(std::get<Name>(prl.front().t))} {
+DataRef::DataRef(std::list<PartRef> &&prl) : u{std::move(prl.front().name)} {
   for (bool first{true}; !prl.empty(); first = false, prl.pop_front()) {
-    auto &&[name, subscripts, imageSelector]{prl.front().t};
+    PartRef &pr{prl.front()};
     if (!first) {
       u = common::Indirection<StructureComponent>::Make(
-          std::move(*this), std::move(name));
+          std::move(*this), std::move(pr.name));
     }
-    if (!subscripts.empty()) {
+    if (!pr.subscripts.empty()) {
       u = common::Indirection<ArrayElement>::Make(
-          std::move(*this), std::move(subscripts));
+          std::move(*this), std::move(pr.subscripts));
     }
-    if (imageSelector) {
+    if (pr.imageSelector) {
       u = common::Indirection<CoindexedNamedObject>::Make(
-          std::move(*this), std::move(*imageSelector));
+          std::move(*this), std::move(*pr.imageSelector));
     }
   }
 }
@@ -102,9 +101,8 @@ static Designator MakeArrayElementRef(
     const Name &name, std::list<Expr> &&subscripts) {
   ArrayElement arrayElement{DataRef{Name{name}}, std::list<SectionSubscript>{}};
   for (Expr &expr : subscripts) {
-    std::get<std::list<SectionSubscript>>(arrayElement.t)
-        .push_back(
-            SectionSubscript{Integer{common::Indirection{std::move(expr)}}});
+    arrayElement.subscripts.push_back(
+        SectionSubscript{Integer{common::Indirection{std::move(expr)}}});
   }
   return Designator{DataRef{common::Indirection{std::move(arrayElement)}}};
 }
@@ -114,9 +112,8 @@ static Designator MakeArrayElementRef(
   ArrayElement arrayElement{DataRef{common::Indirection{std::move(sc)}},
       std::list<SectionSubscript>{}};
   for (Expr &expr : subscripts) {
-    std::get<std::list<SectionSubscript>>(arrayElement.t)
-        .push_back(
-            SectionSubscript{Integer{common::Indirection{std::move(expr)}}});
+    arrayElement.subscripts.push_back(
+        SectionSubscript{Integer{common::Indirection{std::move(expr)}}});
   }
   return Designator{DataRef{common::Indirection{std::move(arrayElement)}}};
 }
@@ -188,7 +185,6 @@ StructureConstructor FunctionReference::ConvertToStructureConstructor(
 
 StructureConstructor ArrayElement::ConvertToStructureConstructor(
     const semantics::DerivedTypeSpec &derived) {
-  auto &[base, subscripts]{t};
   Name name{std::get<parser::Name>(base.u)};
   std::list<ComponentSpec> components;
   for (auto &subscript : subscripts) {
@@ -201,7 +197,6 @@ StructureConstructor ArrayElement::ConvertToStructureConstructor(
 }
 
 Substring ArrayElement::ConvertToSubstring() {
-  auto &[base, subscripts]{t};
   auto iter{subscripts.begin()};
   CHECK(iter != subscripts.end());
   auto &triplet{std::get<SubscriptTriplet>(iter->u)};
@@ -347,12 +342,16 @@ llvm::omp::Clause OpenMPAtomicConstruct::GetKind() const {
 
 bool OpenMPAtomicConstruct::IsCapture() const {
   const OmpDirectiveSpecification &dirSpec{std::get<OmpBeginDirective>(t)};
-  return omp::FindClause(dirSpec, llvm::omp::Clause::OMPC_capture);
+  return llvm::any_of(dirSpec.Clauses().v, [](auto &clause) {
+    return clause.Id() == llvm::omp::Clause::OMPC_capture;
+  });
 }
 
 bool OpenMPAtomicConstruct::IsCompare() const {
   const OmpDirectiveSpecification &dirSpec{std::get<OmpBeginDirective>(t)};
-  return omp::FindClause(dirSpec, llvm::omp::Clause::OMPC_compare);
+  return llvm::any_of(dirSpec.Clauses().v, [](auto &clause) {
+    return clause.Id() == llvm::omp::Clause::OMPC_compare;
+  });
 }
 } // namespace Fortran::parser
 

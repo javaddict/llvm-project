@@ -986,7 +986,7 @@ private:
   /// VarLoc correspond to entries in the universal location bucket, which every
   /// VarLoc has exactly 1 entry for. Insert collected IDs into \p Collected.
   static void collectIDsForRegs(VarLocsInRange &Collected,
-                                ArrayRef<Register> Regs,
+                                const DefinedRegsSet &Regs,
                                 const VarLocSet &CollectFrom,
                                 const VarLocMap &VarLocIDs);
 
@@ -1171,8 +1171,9 @@ void VarLocBasedLDV::OpenRangesSet::erase(const VarLocsInRange &KillSet,
 void VarLocBasedLDV::OpenRangesSet::insertFromLocSet(const VarLocSet &ToLoad,
                                                      const VarLocMap &Map) {
   VarLocsInRange UniqueVarLocIDs;
-  Register UniversalLoc = LocIndex::kUniversalLocation;
-  collectIDsForRegs(UniqueVarLocIDs, UniversalLoc, ToLoad, Map);
+  DefinedRegsSet Regs;
+  Regs.insert(LocIndex::kUniversalLocation);
+  collectIDsForRegs(UniqueVarLocIDs, Regs, ToLoad, Map);
   for (uint64_t ID : UniqueVarLocIDs) {
     LocIndex Idx = LocIndex::fromRawInteger(ID);
     const VarLoc &VarL = Map[Idx];
@@ -1201,14 +1202,13 @@ VarLocBasedLDV::OpenRangesSet::getEntryValueBackup(DebugVariable Var) {
 }
 
 void VarLocBasedLDV::collectIDsForRegs(VarLocsInRange &Collected,
-                                       ArrayRef<Register> Regs,
+                                       const DefinedRegsSet &Regs,
                                        const VarLocSet &CollectFrom,
                                        const VarLocMap &VarLocIDs) {
   assert(!Regs.empty() && "Nothing to collect");
   SmallVector<Register, 32> SortedRegs;
   append_range(SortedRegs, Regs);
-  llvm::sort(SortedRegs, [](Register LHS, Register RHS) { return LHS < RHS; });
-  SortedRegs.erase(llvm::unique(SortedRegs), SortedRegs.end());
+  array_pod_sort(SortedRegs.begin(), SortedRegs.end());
   auto It = CollectFrom.find(LocIndex::rawIndexForReg(SortedRegs.front()));
   auto End = CollectFrom.end();
   for (Register Reg : SortedRegs) {
@@ -1596,7 +1596,7 @@ void VarLocBasedLDV::transferRegisterDef(MachineInstr &MI,
   Register SP = TLI->getStackPointerRegisterToSaveRestore();
 
   // Find the regs killed by MI, and find regmasks of preserved regs.
-  SmallVector<Register, 32> DeadRegs;
+  DefinedRegsSet DeadRegs;
   SmallVector<const uint32_t *, 4> RegMasks;
   for (const MachineOperand &MO : MI.operands()) {
     // Determine whether the operand is a register def.
@@ -1604,7 +1604,8 @@ void VarLocBasedLDV::transferRegisterDef(MachineInstr &MI,
         !(MI.isCall() && MO.getReg() == SP)) {
       // Remove ranges of all aliased registers.
       for (MCRegAliasIterator RAI(MO.getReg(), TRI, true); RAI.isValid(); ++RAI)
-        DeadRegs.push_back((*RAI).id());
+        // FIXME: Can we break out of this loop early if no insertion occurs?
+        DeadRegs.insert((*RAI).id());
       RegSetInstrs.erase(MO.getReg());
       RegSetInstrs.insert({MO.getReg(), &MI});
     } else if (MO.isRegMask()) {
@@ -1632,7 +1633,7 @@ void VarLocBasedLDV::transferRegisterDef(MachineInstr &MI,
             return MachineOperand::clobbersPhysReg(RegMask, Reg);
           });
       if (AnyRegMaskKillsReg)
-        DeadRegs.push_back(Reg);
+        DeadRegs.insert(Reg);
       if (AnyRegMaskKillsReg) {
         RegSetInstrs.erase(Reg);
         RegSetInstrs.insert({Reg, &MI});

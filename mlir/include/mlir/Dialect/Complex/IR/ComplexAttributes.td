@@ -57,8 +57,8 @@ def Complex_NumberAttr : Complex_Attr<"Number", "number",
   ];
 
   let extraClassDeclaration = [{
-    mlir::Complex<APFloat> getValue() {
-      return mlir::Complex<APFloat>(getReal(), getImag());
+    std::complex<APFloat> getValue() {
+      return std::complex<APFloat>(getReal(), getImag());
     }
   }];
 

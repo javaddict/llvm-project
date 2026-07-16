@@ -31,7 +31,6 @@ LLVM_ENABLE_BITMASK_ENUMS_IN_NAMESPACE();
 class ProcessPOSIXLog {
 public:
   static void Initialize();
-  static void Terminate();
 };
 
 template <> Log::Channel &LogChannelFor<POSIXLog>();

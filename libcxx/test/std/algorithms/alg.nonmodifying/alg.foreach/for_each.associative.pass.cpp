@@ -19,10 +19,8 @@
 #include <map>
 #include <set>
 
-#include "test_macros.h"
-
 template <class Container, class Converter>
-TEST_CONSTEXPR_CXX26 void test_node_container(Converter conv) {
+void test_node_container(Converter conv) {
   Container c;
   using value_type = typename Container::value_type;
   for (int i = 0; i != 10; ++i)
@@ -70,25 +68,11 @@ TEST_CONSTEXPR_CXX26 void test_node_container(Converter conv) {
   }
 }
 
-TEST_CONSTEXPR_CXX26 bool test() {
-  // FIXME: remove when set is made constexpr
-  if (!TEST_IS_CONSTANT_EVALUATED)
-    test_node_container<std::set<int> >([](int i) { return i; });
-  // FIXME: remove when multiset is made constexpr
-  if (!TEST_IS_CONSTANT_EVALUATED)
-    test_node_container<std::multiset<int> >([](int i) { return i; });
-  test_node_container<std::map<int, int> >([](int i) { return std::make_pair(i, i); });
-  // FIXME: remove when multimap is made constexpr
-  if (!TEST_IS_CONSTANT_EVALUATED)
-    test_node_container<std::multimap<int, int> >([](int i) { return std::make_pair(i, i); });
-
-  return true;
-}
-
 int main(int, char**) {
-  test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
+  test_node_container<std::set<int> >([](int i) { return i; });
+  test_node_container<std::multiset<int> >([](int i) { return i; });
+  test_node_container<std::map<int, int> >([](int i) { return std::make_pair(i, i); });
+  test_node_container<std::multimap<int, int> >([](int i) { return std::make_pair(i, i); });
+
   return 0;
 }

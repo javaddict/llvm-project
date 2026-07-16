@@ -2,7 +2,7 @@ import os
 import sys
 
 
-class TestingConfig:
+class TestingConfig(object):
     """
     TestingConfig - Information on the tests inside a suite.
     """
@@ -89,14 +89,6 @@ class TestingConfig:
             # the current user.
             environment["__COMPAT_LAYER"] = "RunAsInvoker"
 
-        if sys.platform == "zos":
-            pass_vars.append("_BPXK_AUTOCVT")
-            pass_vars.append("_CEE_RUNOPTS")
-            pass_vars.append("_TAG_REDIR_ERR")
-            pass_vars.append("_TAG_REDIR_IN")
-            pass_vars.append("_TAG_REDIR_OUT")
-            pass_vars.append("LIBPATH")
-
         for var in pass_vars:
             val = os.environ.get(var, "")
             # Check for empty string as some variables such as LD_PRELOAD cannot be empty
@@ -125,7 +117,6 @@ class TestingConfig:
             available_features=available_features,
             pipefail=True,
             standalone_tests=False,
-            maxIndividualTestTime=litConfig.maxIndividualTestTime,
         )
 
     def load_from_path(self, path, litConfig):
@@ -138,11 +129,12 @@ class TestingConfig:
 
         # Load the config script data.
         data = None
+        f = open(path)
         try:
-            with open(path) as f:
-                data = f.read()
-        except OSError:
+            data = f.read()
+        except:
             litConfig.fatal("unable to load config file: %r" % (path,))
+        f.close()
 
         # Execute the config script to initialize the object.
         cfg_globals = dict(globals())
@@ -185,7 +177,6 @@ class TestingConfig:
         is_early=False,
         parallelism_group=None,
         standalone_tests=False,
-        maxIndividualTestTime=0,
     ):
         self.parent = parent
         self.name = str(name)
@@ -200,7 +191,6 @@ class TestingConfig:
         self.available_features = set(available_features)
         self.pipefail = pipefail
         self.standalone_tests = standalone_tests
-        self.maxIndividualTestTime = maxIndividualTestTime or 0
         # This list is used by TestRunner.py to restrict running only tests that
         # require one of the features in this list if this list is non-empty.
         # Configurations can set this list to restrict the set of tests to run.
@@ -249,19 +239,6 @@ class TestingConfig:
             and getattr(self, "test_retry_attempts", None) is None
         ):
             self.test_retry_attempts = litConfig.maxRetriesPerTest
-        # Global config is from LIT_OPTS and must override site-specific settings.
-        if litConfig.maxIndividualTestTime is not None:
-            suite_timeout = self.maxIndividualTestTime
-            if suite_timeout > 0 and suite_timeout != litConfig.maxIndividualTestTime:
-                litConfig.note(
-                    (
-                        "The test suite {0!r} configuration requested an individual"
-                        " test timeout of {1} seconds but a timeout of {2} seconds was"
-                        " requested on the command line. Forcing timeout to be {2}"
-                        " seconds."
-                    ).format(self.name, suite_timeout, litConfig.maxIndividualTestTime)
-                )
-            self.maxIndividualTestTime = litConfig.maxIndividualTestTime
 
     @property
     def root(self):

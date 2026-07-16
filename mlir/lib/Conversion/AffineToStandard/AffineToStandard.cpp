@@ -134,7 +134,7 @@ public:
 
   LogicalResult matchAndRewrite(AffineYieldOp op,
                                 PatternRewriter &rewriter) const override {
-    if (isa<scf::ParallelOp, AffineParallelOp>(op->getParentOp())) {
+    if (isa<scf::ParallelOp>(op->getParentOp())) {
       // Terminator is rewritten as part of the "affine.parallel" lowering
       // pattern.
       return failure();
@@ -230,12 +230,8 @@ public:
               static_cast<uint64_t>(cast<IntegerAttr>(reduction).getInt()));
       assert(reductionOp && "Reduction operation cannot be of None Type");
       arith::AtomicRMWKind reductionOpValue = *reductionOp;
-      Value identityVal =
-          arith::getIdentityValue(reductionOpValue, resultType, rewriter, loc);
-      if (!identityVal)
-        return rewriter.notifyMatchFailure(
-            op, "unsupported reduction kind for identity value");
-      identityVals.push_back(identityVal);
+      identityVals.push_back(
+          arith::getIdentityValue(reductionOpValue, resultType, rewriter, loc));
     }
     parOp = scf::ParallelOp::create(rewriter, loc, lowerBoundTuple,
                                     upperBoundTuple, steps, identityVals,

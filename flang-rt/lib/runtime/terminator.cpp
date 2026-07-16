@@ -70,13 +70,10 @@ RT_API_ATTRS void Terminator::CrashHeader() const {
   std::printf("\n");
 #else
   fputc('\n', stderr);
-  // TODO: This should flush the buffers through the RPC interface.
-#if !RT_GPU_TARGET
   // FIXME: re-enable the flush along with the IO enabling.
   io::FlushOutputOnCrash(*this);
 #endif
-#endif
-  NotifyOtherImagesOfErrorTermination(EXIT_FAILURE);
+  NotifyOtherImagesOfErrorTermination();
 #if defined(RT_DEVICE_COMPILATION)
   DeviceTrap();
 #else
@@ -96,48 +93,11 @@ RT_API_ATTRS void Terminator::CrashHeader() const {
       sourceFileName_, sourceLine_);
 }
 
-static RT_VAR_ATTRS void (*normalEndCallback)(int) = nullptr;
-static RT_VAR_ATTRS void (*failImageCallback)(void) = nullptr;
-static RT_VAR_ATTRS void (*errorCallback)(int) = nullptr;
+// TODO: These will be defined in the coarray runtime library
+RT_API_ATTRS void NotifyOtherImagesOfNormalEnd() {}
+RT_API_ATTRS void NotifyOtherImagesOfFailImageStatement() {}
+RT_API_ATTRS void NotifyOtherImagesOfErrorTermination() {}
 
-void SetNormalEndCallback(void (*callback)(int)) {
-  normalEndCallback = callback;
-}
-
-void SetFailImageCallback(void (*callback)(void)) {
-  failImageCallback = callback;
-}
-
-void SetErrorCallback(void (*callback)(int)) { errorCallback = callback; }
-
-[[noreturn]]
-void NormalExit(int exitCode) {
-  SynchronizeImagesOfNormalEnd(exitCode); // might never return
-
-  std::exit(exitCode);
-}
-
-[[noreturn]]
-void ErrorExit(int exitCode) {
-  NotifyOtherImagesOfErrorTermination(exitCode); // might never return
-
-  std::exit(exitCode);
-}
-
-RT_API_ATTRS void SynchronizeImagesOfNormalEnd(int code) {
-  if (normalEndCallback)
-    (*normalEndCallback)(code);
-}
-
-RT_API_ATTRS void NotifyOtherImagesOfFailImageStatement() {
-  if (failImageCallback)
-    (*failImageCallback)();
-}
-
-RT_API_ATTRS void NotifyOtherImagesOfErrorTermination(int code) {
-  if (errorCallback)
-    (*errorCallback)(code);
-}
 RT_OFFLOAD_API_GROUP_END
 
 } // namespace Fortran::runtime

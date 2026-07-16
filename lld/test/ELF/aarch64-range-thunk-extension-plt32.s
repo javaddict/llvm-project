@@ -25,7 +25,7 @@
   .global _start
   .type _start, %function
 _start:
-  .word %pltpcrel(callee)
+  .word callee@PLT - .
 
   .section .text.2, "ax", %progbits
   .global callee

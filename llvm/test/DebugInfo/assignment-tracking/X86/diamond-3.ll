@@ -15,9 +15,10 @@
 ;; if.end:
 ;;    mem(a) = !20 ; two preds disagree that !20 is the last assignment, don't
 ;;                 ; use mem loc.
-;;    ; The escaping call reinstates the memory location. The analysis treats
-;;    ; calls that leak the alloca address as untagged stores, so the memory
-;;    ; location is valid after the call.
+;;    ; This feels highly unfortunate, and highlights the need to reinstate the
+;;    ; memory location at call sites leaking the address (in an ideal world,
+;;    ; the memory location would always be in use at that point and so this
+;;    ; wouldn't be necessary).
 ;;    esc(a)       ; force the memory location
 
 ;; In real world examples this is caused by InstCombine sinking common code
@@ -29,12 +30,10 @@
 ; CHECK-LABEL: bb.1.if.then:
 ; CHECK:         DBG_VALUE 0, $noreg, ![[A]], !DIExpression()
 
-;; After the escaping call to @es, the memory location for 'a' is reinstated.
-;; The analysis treats escaping calls (calls receiving a pointer to a tracked
-;; alloca) like untagged stores, validating the memory location.
-; CHECK-LABEL: bb.2.if.end:
-; CHECK:         CALL64pcrel32 {{.*}}@es
-; CHECK:         DBG_VALUE %stack.0.a.addr, $noreg, ![[A]], !DIExpression(DW_OP_deref)
+;; === TODO / WISHLIST ===
+; LEBAL-KCEHC: bb.2.if.end:
+; KCEHC:         CALL64pcrel32 target-flags(x86-plt) @es
+; KCEHC:         DBG_VALUE %stack.0.a.addr, $noreg, ![[A]], !DIExpression(DW_OP_deref)
 
 target triple = "x86_64-unknown-linux-gnu"
 

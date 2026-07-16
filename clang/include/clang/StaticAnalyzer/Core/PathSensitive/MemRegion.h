@@ -48,7 +48,8 @@ namespace clang {
 class AnalysisDeclContext;
 class CXXRecordDecl;
 class Decl;
-class StackFrame;
+class LocationContext;
+class StackFrameContext;
 
 namespace ento {
 
@@ -418,18 +419,18 @@ public:
 class StackSpaceRegion : public MemSpaceRegion {
   virtual void anchor();
 
-  const StackFrame *SF;
+  const StackFrameContext *SFC;
 
 protected:
-  StackSpaceRegion(MemRegionManager &mgr, Kind k, const StackFrame *SF)
-      : MemSpaceRegion(mgr, k), SF(SF) {
+  StackSpaceRegion(MemRegionManager &mgr, Kind k, const StackFrameContext *sfc)
+      : MemSpaceRegion(mgr, k), SFC(sfc) {
     assert(classof(this));
-    assert(SF);
+    assert(sfc);
   }
 
 public:
   LLVM_ATTRIBUTE_RETURNS_NONNULL
-  const StackFrame *getStackFrame() const { return SF; }
+  const StackFrameContext *getStackFrame() const { return SFC; }
 
   void Profile(llvm::FoldingSetNodeID &ID) const override;
 
@@ -442,8 +443,8 @@ public:
 class StackLocalsSpaceRegion : public StackSpaceRegion {
   friend class MemRegionManager;
 
-  StackLocalsSpaceRegion(MemRegionManager &mgr, const StackFrame *SF)
-      : StackSpaceRegion(mgr, StackLocalsSpaceRegionKind, SF) {}
+  StackLocalsSpaceRegion(MemRegionManager &mgr, const StackFrameContext *sfc)
+      : StackSpaceRegion(mgr, StackLocalsSpaceRegionKind, sfc) {}
 
 public:
   void dumpToStream(raw_ostream &os) const override;
@@ -457,8 +458,8 @@ class StackArgumentsSpaceRegion : public StackSpaceRegion {
 private:
   friend class MemRegionManager;
 
-  StackArgumentsSpaceRegion(MemRegionManager &mgr, const StackFrame *SF)
-      : StackSpaceRegion(mgr, StackArgumentsSpaceRegionKind, SF) {}
+  StackArgumentsSpaceRegion(MemRegionManager &mgr, const StackFrameContext *sfc)
+      : StackSpaceRegion(mgr, StackArgumentsSpaceRegionKind, sfc) {}
 
 public:
   void dumpToStream(raw_ostream &os) const override;
@@ -706,25 +707,26 @@ class BlockDataRegion : public TypedRegion {
   friend class MemRegionManager;
 
   const BlockCodeRegion *BC;
-  const StackFrame *SF;
+  const LocationContext *LC; // Can be null
   unsigned BlockCount;
   void *ReferencedVars = nullptr;
   void *OriginalVars = nullptr;
 
-  BlockDataRegion(const BlockCodeRegion *bc, const StackFrame *SF,
+  BlockDataRegion(const BlockCodeRegion *bc, const LocationContext *lc,
                   unsigned count, const MemSpaceRegion *sreg)
-      : TypedRegion(sreg, BlockDataRegionKind), BC(bc), SF(SF),
+      : TypedRegion(sreg, BlockDataRegionKind), BC(bc), LC(lc),
         BlockCount(count) {
     assert(bc);
     assert(bc->getDecl());
-    assert(SF);
+    assert(lc);
     assert(isa<GlobalImmutableSpaceRegion>(sreg) ||
            isa<StackLocalsSpaceRegion>(sreg) ||
            isa<UnknownSpaceRegion>(sreg));
   }
 
-  static void ProfileRegion(llvm::FoldingSetNodeID &, const BlockCodeRegion *,
-                            const StackFrame *, unsigned, const MemRegion *);
+  static void ProfileRegion(llvm::FoldingSetNodeID&, const BlockCodeRegion *,
+                            const LocationContext *, unsigned,
+                            const MemRegion *);
 
 public:
   LLVM_ATTRIBUTE_RETURNS_NONNULL
@@ -992,7 +994,7 @@ public:
   const VarDecl *getDecl() const override = 0;
 
   /// It might return null.
-  const StackFrame *getStackFrame() const;
+  const StackFrameContext *getStackFrame() const;
 
   QualType getValueType() const override {
     // FIXME: We can cache this if needed.
@@ -1005,10 +1007,6 @@ public:
   }
 };
 
-// TODO: Currently MemRegionManager::getVarRegion returns NonParamVarRegion
-// instances to represent the parameters of the entrypoint stack frame and
-// parameters of outer stack frames that appear as captured within a lambda or
-// a block. This should be overhauled.
 class NonParamVarRegion : public VarRegion {
   friend class MemRegionManager;
 
@@ -1054,8 +1052,7 @@ public:
 /// ParamVarRegion - Represents a region for parameters. Only parameters of the
 /// function in the current stack frame are represented as `ParamVarRegion`s.
 /// Parameters of top-level analyzed functions as well as captured paremeters
-/// by lambdas and blocks are repesented as `NonParamVarRegion`s.
-/// TODO: It would be nice to make this more consistent.
+/// by lambdas and blocks are repesented as `VarRegion`s.
 
 // FIXME: `ParamVarRegion` only supports parameters of functions, C++
 // constructors, blocks and Objective-C methods with existing `Decl`. Upon
@@ -1285,7 +1282,7 @@ public:
   const Expr *getExpr() const { return Ex; }
 
   LLVM_ATTRIBUTE_RETURNS_NONNULL
-  const StackFrame *getStackFrame() const;
+  const StackFrameContext *getStackFrame() const;
 
   QualType getValueType() const override { return Ex->getType(); }
 
@@ -1324,7 +1321,7 @@ public:
   LLVM_ATTRIBUTE_RETURNS_NONNULL
   const ValueDecl *getExtendingDecl() const { return ExD; }
   /// It might return null.
-  const StackFrame *getStackFrame() const;
+  const StackFrameContext *getStackFrame() const;
 
   QualType getValueType() const override { return Ex->getType(); }
 
@@ -1442,10 +1439,10 @@ class MemRegionManager {
   GlobalSystemSpaceRegion *SystemGlobals = nullptr;
   GlobalImmutableSpaceRegion *ImmutableGlobals = nullptr;
 
-  llvm::DenseMap<const StackFrame *, StackLocalsSpaceRegion *>
-      StackLocalsSpaceRegions;
-  llvm::DenseMap<const StackFrame *, StackArgumentsSpaceRegion *>
-      StackArgumentsSpaceRegions;
+  llvm::DenseMap<const StackFrameContext *, StackLocalsSpaceRegion *>
+    StackLocalsSpaceRegions;
+  llvm::DenseMap<const StackFrameContext *, StackArgumentsSpaceRegion *>
+    StackArgumentsSpaceRegions;
   llvm::DenseMap<const CodeTextRegion *, StaticGlobalSpaceRegion *>
     StaticsGlobalSpaceRegions;
 
@@ -1469,12 +1466,13 @@ public:
 
   /// getStackLocalsRegion - Retrieve the memory region associated with the
   ///  specified stack frame.
-  const StackLocalsSpaceRegion *getStackLocalsRegion(const StackFrame *SF);
+  const StackLocalsSpaceRegion *
+  getStackLocalsRegion(const StackFrameContext *STC);
 
   /// getStackArgumentsRegion - Retrieve the memory region associated with
   ///  function/method arguments of the specified stack frame.
   const StackArgumentsSpaceRegion *
-  getStackArgumentsRegion(const StackFrame *SF);
+  getStackArgumentsRegion(const StackFrameContext *STC);
 
   /// getGlobalsRegion - Retrieve the memory region associated with
   ///  global variables.
@@ -1494,17 +1492,18 @@ public:
 
   /// getAllocaRegion - Retrieve a region associated with a call to alloca().
   const AllocaRegion *getAllocaRegion(const Expr *Ex, unsigned Cnt,
-                                      const StackFrame *SF);
+                                      const LocationContext *LC);
 
   /// getCompoundLiteralRegion - Retrieve the region associated with a
   ///  given CompoundLiteral.
-  const CompoundLiteralRegion *
-  getCompoundLiteralRegion(const CompoundLiteralExpr *CL, const StackFrame *SF);
+  const CompoundLiteralRegion*
+  getCompoundLiteralRegion(const CompoundLiteralExpr *CL,
+                           const LocationContext *LC);
 
   /// getCXXThisRegion - Retrieve the [artificial] region associated with the
   ///  parameter 'this'.
   const CXXThisRegion *getCXXThisRegion(QualType thisPointerTy,
-                                        const StackFrame *SF);
+                                        const LocationContext *LC);
 
   /// Retrieve or create a "symbolic" memory region.
   /// If no memory space is specified, `UnknownSpaceRegion` will be used.
@@ -1519,18 +1518,19 @@ public:
   const ObjCStringRegion *getObjCStringRegion(const ObjCStringLiteral *Str);
 
   /// getVarRegion - Retrieve or create the memory region associated with
-  ///  a specified VarDecl and StackFrame.
-  const VarRegion *getVarRegion(const VarDecl *VD, const StackFrame *SF);
+  ///  a specified VarDecl and LocationContext.
+  const VarRegion *getVarRegion(const VarDecl *VD, const LocationContext *LC);
 
   /// getVarRegion - Retrieve or create the memory region associated with
-  ///  a specified VarDecl and StackFrame.
+  ///  a specified VarDecl and LocationContext.
   const NonParamVarRegion *getNonParamVarRegion(const VarDecl *VD,
                                                 const MemRegion *superR);
 
   /// getParamVarRegion - Retrieve or create the memory region
-  /// associated with a specified CallExpr, Index and StackFrame.
+  /// associated with a specified CallExpr, Index and LocationContext.
   const ParamVarRegion *getParamVarRegion(const Expr *OriginExpr,
-                                          unsigned Index, const StackFrame *SF);
+                                          unsigned Index,
+                                          const LocationContext *LC);
 
   /// getElementRegion - Retrieve the memory region associated with the
   ///  associated element type, index, and super region.
@@ -1564,18 +1564,18 @@ public:
                                           const SubRegion* superRegion);
 
   const CXXTempObjectRegion *getCXXTempObjectRegion(Expr const *Ex,
-                                                    StackFrame const *SF);
+                                                    LocationContext const *LC);
 
   /// Create a CXXLifetimeExtendedObjectRegion for temporaries which are
   /// lifetime-extended by local references.
   const CXXLifetimeExtendedObjectRegion *
   getCXXLifetimeExtendedObjectRegion(Expr const *Ex, ValueDecl const *VD,
-                                     StackFrame const *SF);
+                                     LocationContext const *LC);
 
   /// Create a CXXLifetimeExtendedObjectRegion for temporaries which are
   /// lifetime-extended by *static* references.
   /// This differs from \ref getCXXLifetimeExtendedObjectRegion(Expr const *,
-  /// ValueDecl const *, StackFrame const *) in the super-region used.
+  /// ValueDecl const *, LocationContext const *) in the super-region used.
   const CXXLifetimeExtendedObjectRegion *
   getCXXStaticLifetimeExtendedObjectRegion(const Expr *Ex, ValueDecl const *VD);
 
@@ -1610,10 +1610,11 @@ public:
                                             AnalysisDeclContext *AC);
 
   /// getBlockDataRegion - Get the memory region associated with an instance
-  ///  of a block.  Unlike many other MemRegions, the StackFrame * argument
-  /// is allowed to be NULL for cases where we have no known stack frame.
+  ///  of a block.  Unlike many other MemRegions, the LocationContext*
+  ///  argument is allowed to be NULL for cases where we have no known
+  ///  context.
   const BlockDataRegion *getBlockDataRegion(const BlockCodeRegion *bc,
-                                            const StackFrame *SF,
+                                            const LocationContext *lc,
                                             unsigned blockCount);
 
 private:

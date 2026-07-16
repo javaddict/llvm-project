@@ -913,12 +913,11 @@ void ReportFile::Write(const char *buffer, uptr length) {
   }
 }
 
-void* SetAlternateSignalStack() {
+void SetAlternateSignalStack() {
   // FIXME: Decide what to do on Windows.
-  return nullptr;
 }
 
-void UnsetAlternateSignalStack(void* altstack_base) {
+void UnsetAlternateSignalStack() {
   // FIXME: Decide what to do on Windows.
 }
 
@@ -1223,7 +1222,7 @@ int WaitForProcess(pid_t pid) { return -1; }
 // FIXME implement on this platform.
 void GetMemoryProfile(fill_profile_f cb, uptr *stats) {}
 
-void OnDlOpen(const char* filename, int flag) {
+void CheckNoDeepBind(const char *filename, int flag) {
   // Do nothing.
 }
 

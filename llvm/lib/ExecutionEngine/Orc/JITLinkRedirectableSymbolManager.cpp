@@ -86,5 +86,8 @@ Error JITLinkRedirectableSymbolManager::redirect(JITDylib &JD,
     PtrWrites.push_back({PtrSym.getAddress(), DestSym.getAddress()});
   }
 
-  return MemAccess.writePointers(PtrWrites);
+  return ObjLinkingLayer.getExecutionSession()
+      .getExecutorProcessControl()
+      .getMemoryAccess()
+      .writePointers(PtrWrites);
 }

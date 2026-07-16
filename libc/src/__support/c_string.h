@@ -10,7 +10,6 @@
 #define LLVM_LIBC_SRC___SUPPORT_C_STRING_H
 
 #include "src/__support/CPP/string.h"
-#include "src/__support/CPP/string_view.h"
 #include "src/__support/macros/attributes.h" // for LIBC_INLINE
 #include "src/__support/macros/config.h"
 
@@ -31,7 +30,6 @@ public:
   LIBC_INLINE CString(cpp::string in_str) : str(in_str) {}
 
   LIBC_INLINE operator const char *() const { return str.c_str(); }
-  LIBC_INLINE operator cpp::string_view() const { return str; }
 };
 
 } // namespace LIBC_NAMESPACE_DECL

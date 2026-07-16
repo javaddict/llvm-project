@@ -10,8 +10,8 @@
 
 // class map
 
-//       iterator upper_bound(const key_type& k);       // constexpr since C++26
-// const_iterator upper_bound(const key_type& k) const; // constexpr since C++26
+//       iterator upper_bound(const key_type& k);
+// const_iterator upper_bound(const key_type& k) const;
 
 #include <map>
 #include <cassert>
@@ -20,7 +20,7 @@
 #include "min_allocator.h"
 #include "private_constructor.h"
 
-TEST_CONSTEXPR_CXX26 bool test() {
+int main(int, char**) {
   {
     typedef std::pair<const int, double> V;
     typedef std::map<int, double> M;
@@ -281,13 +281,6 @@ TEST_CONSTEXPR_CXX26 bool test() {
     assert(r == std::next(m.begin(), 8));
   }
 #endif
-  return true;
-}
 
-int main(int, char**) {
-  test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
   return 0;
 }

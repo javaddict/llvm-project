@@ -6,10 +6,10 @@ namespace internal {
 
 namespace {
 
-class DummyBenchmark : public benchmark::Benchmark {
+class DummyBenchmark : public Benchmark {
  public:
   DummyBenchmark() : Benchmark("dummy") {}
-  void Run(State& /*state*/) override {}
+  void Run(State&) override {}
 };
 
 TEST(DefaultTimeUnitTest, TimeUnitIsNotSet) {

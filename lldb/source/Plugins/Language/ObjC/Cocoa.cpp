@@ -11,6 +11,7 @@
 #include "ObjCConstants.h"
 
 #include "Plugins/LanguageRuntime/ObjC/AppleObjCRuntime/AppleObjCRuntime.h"
+#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/Core/Mangled.h"
 #include "lldb/DataFormatters/FormattersHelpers.h"
 #include "lldb/DataFormatters/StringPrinter.h"
@@ -29,7 +30,6 @@
 
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/bit.h"
-#include "llvm/Support/ErrorExtras.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -1050,7 +1050,8 @@ public:
   bool MightHaveChildren() override { return false; }
 
   llvm::Expected<size_t> GetIndexOfChildWithName(ConstString name) override {
-    return llvm::createStringErrorV("type has no child named '{0}'", name);
+    return llvm::createStringError("Type has no child named '%s'",
+                                   name.AsCString());
   }
 };
 

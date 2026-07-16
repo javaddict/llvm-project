@@ -18,10 +18,6 @@ using namespace mlir;
 // Common utility functions
 //===----------------------------------------------------------------------===//
 
-static bool isCoreFloat(Type type) {
-  return isa<Float16Type, Float32Type, Float64Type>(type);
-}
-
 // TODO: In the future we should model image operands better, so we can move
 // some verification into ODS.
 static LogicalResult verifyImageOperands(Operation *imageOp,
@@ -54,7 +50,7 @@ static LogicalResult verifyImageOperands(Operation *imageOp,
     if (index + 1 > operands.size())
       return imageOp->emitError("Bias operand requires 1 argument");
 
-    if (!isCoreFloat(operands[index].getType()))
+    if (!isa<FloatType>(operands[index].getType()))
       return imageOp->emitError("Bias must be a floating-point type scalar");
 
     auto samplingOp = cast<spirv::SamplingOpInterface>(imageOp);
@@ -88,7 +84,7 @@ static LogicalResult verifyImageOperands(Operation *imageOp,
     spirv::ImageType imageType;
 
     if (isa<spirv::SamplingOpInterface>(imageOp)) {
-      if (!isCoreFloat(operands[index].getType()))
+      if (!isa<mlir::FloatType>(operands[index].getType()))
         return imageOp->emitError("for sampling operations, Lod must be a "
                                   "floating-point type scalar");
 
@@ -161,12 +157,12 @@ static LogicalResult verifyImageOperands(Operation *imageOp,
             "of components in coordinate, minus the array layer component, if "
             "present");
 
-      if (!isCoreFloat(dXVector.getElementType()) ||
-          !isCoreFloat(dYVector.getElementType()))
+      if (!isa<mlir::FloatType>(dXVector.getElementType()) ||
+          !isa<mlir::FloatType>(dYVector.getElementType()))
         return imageOp->emitError(
             "Grad arguments must be a vector of floating-point type");
-    } else if (isCoreFloat(operands[index].getType()) &&
-               isCoreFloat(operands[index + 1].getType())) {
+    } else if (isa<mlir::FloatType>(operands[index].getType()) &&
+               isa<mlir::FloatType>(operands[index + 1].getType())) {
       if (numberOfComponents != 1)
         return imageOp->emitError(
             "number of components of each Grad argument must equal the number "

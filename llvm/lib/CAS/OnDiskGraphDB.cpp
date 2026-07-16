@@ -49,7 +49,6 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/CAS/OnDiskCASLogger.h"
 #include "llvm/CAS/OnDiskDataAllocator.h"
 #include "llvm/CAS/OnDiskTrieRawHashMap.h"
 #include "llvm/Support/Alignment.h"
@@ -65,7 +64,6 @@
 #include <atomic>
 #include <mutex>
 #include <optional>
-#include <variant>
 
 #define DEBUG_TYPE "on-disk-cas"
 
@@ -354,13 +352,6 @@ private:
 struct OnDiskContent {
   std::optional<DataRecordHandle> Record;
   std::optional<ArrayRef<char>> Bytes;
-
-  ArrayRef<char> getData() const {
-    if (Bytes)
-      return *Bytes;
-    assert(Record && "Expected record or bytes");
-    return Record->getData();
-  }
 };
 
 /// Data loaded inside the memory from standalone file.
@@ -368,12 +359,9 @@ class StandaloneDataInMemory {
 public:
   OnDiskContent getContent() const;
 
-  OnDiskGraphDB::FileBackedData
-  getInternalFileBackedObjectData(StringRef RootPath) const;
-
   StandaloneDataInMemory(std::unique_ptr<sys::fs::mapped_file_region> Region,
-                         TrieRecord::StorageKind SK, FileOffset IndexOffset)
-      : Region(std::move(Region)), SK(SK), IndexOffset(IndexOffset) {
+                         TrieRecord::StorageKind SK)
+      : Region(std::move(Region)), SK(SK) {
 #ifndef NDEBUG
     bool IsStandalone = false;
     switch (SK) {
@@ -392,7 +380,6 @@ public:
 private:
   std::unique_ptr<sys::fs::mapped_file_region> Region;
   TrieRecord::StorageKind SK;
-  FileOffset IndexOffset;
 };
 
 /// Container to lookup loaded standalone objects.
@@ -401,8 +388,7 @@ template <size_t NumShards> class StandaloneDataMap {
 
 public:
   uintptr_t insert(ArrayRef<uint8_t> Hash, TrieRecord::StorageKind SK,
-                   std::unique_ptr<sys::fs::mapped_file_region> Region,
-                   FileOffset IndexOffset);
+                   std::unique_ptr<sys::fs::mapped_file_region> Region);
 
   const StandaloneDataInMemory *lookup(ArrayRef<uint8_t> Hash) const;
   bool count(ArrayRef<uint8_t> Hash) const { return bool(lookup(Hash)); }
@@ -489,14 +475,12 @@ struct OnDiskGraphDB::IndexProxy {
 template <size_t N>
 uintptr_t StandaloneDataMap<N>::insert(
     ArrayRef<uint8_t> Hash, TrieRecord::StorageKind SK,
-    std::unique_ptr<sys::fs::mapped_file_region> Region,
-    FileOffset IndexOffset) {
+    std::unique_ptr<sys::fs::mapped_file_region> Region) {
   auto &S = getShard(Hash);
   std::lock_guard<std::mutex> Lock(S.Mutex);
   auto &V = S.Map[Hash.data()];
   if (!V)
-    V = std::make_unique<StandaloneDataInMemory>(std::move(Region), SK,
-                                                 IndexOffset);
+    V = std::make_unique<StandaloneDataInMemory>(std::move(Region), SK);
   return reinterpret_cast<uintptr_t>(V.get());
 }
 
@@ -520,17 +504,15 @@ namespace {
 /// files and has a signal handler registerd that removes them all.
 class TempFile {
   bool Done = false;
-  TempFile(StringRef Name, int FD, OnDiskCASLogger *Logger)
-      : TmpName(std::string(Name)), FD(FD), Logger(Logger) {}
+  TempFile(StringRef Name, int FD) : TmpName(std::string(Name)), FD(FD) {}
 
 public:
   /// This creates a temporary file with createUniqueFile.
-  static Expected<TempFile> create(const Twine &Model, OnDiskCASLogger *Logger);
+  static Expected<TempFile> create(const Twine &Model);
   TempFile(TempFile &&Other) { *this = std::move(Other); }
   TempFile &operator=(TempFile &&Other) {
     TmpName = std::move(Other.TmpName);
     FD = Other.FD;
-    Logger = Other.Logger;
     Other.Done = true;
     Other.FD = -1;
     return *this;
@@ -541,8 +523,6 @@ public:
 
   // The open file descriptor.
   int FD = -1;
-
-  OnDiskCASLogger *Logger = nullptr;
 
   // Keep this with the given name.
   Error keep(const Twine &Name);
@@ -591,8 +571,6 @@ Error TempFile::discard() {
   std::error_code RemoveEC;
   if (!TmpName.empty()) {
     std::error_code EC = sys::fs::remove(TmpName);
-    if (Logger)
-      Logger->logTempFileRemove(TmpName, EC);
     if (EC)
       return errorCodeToError(EC);
   }
@@ -607,9 +585,6 @@ Error TempFile::keep(const Twine &Name) {
   // Always try to close and rename.
   std::error_code RenameEC = sys::fs::rename(TmpName, Name);
 
-  if (Logger)
-    Logger->logTempFileKeep(TmpName, Name.str(), RenameEC);
-
   if (!RenameEC)
     TmpName = "";
 
@@ -621,17 +596,13 @@ Error TempFile::keep(const Twine &Name) {
   return errorCodeToError(RenameEC);
 }
 
-Expected<TempFile> TempFile::create(const Twine &Model,
-                                    OnDiskCASLogger *Logger) {
+Expected<TempFile> TempFile::create(const Twine &Model) {
   int FD;
   SmallString<128> ResultPath;
   if (std::error_code EC = sys::fs::createUniqueFile(Model, FD, ResultPath))
     return errorCodeToError(EC);
 
-  if (Logger)
-    Logger->logTempFileCreate(ResultPath);
-
-  TempFile Ret(ResultPath, FD, Logger);
+  TempFile Ret(ResultPath, FD);
   return std::move(Ret);
 }
 
@@ -916,9 +887,6 @@ Error OnDiskGraphDB::validate(bool Deep, HashingFuncT Hasher) const {
     if (auto E = UpstreamDB->validate(Deep, Hasher))
       return E;
   }
-  if (!isAligned(Align(8), DataPool.size()))
-    return createStringError(llvm::errc::illegal_byte_sequence,
-                             "data pool bump pointer is not aligned");
   return Index.validate([&](FileOffset Offset,
                             OnDiskTrieRawHashMap::ConstValueProxy Record)
                             -> Error {
@@ -956,34 +924,18 @@ Error OnDiskGraphDB::validate(bool Deep, HashingFuncT Hasher) const {
       // the record. It can be reused by later insertion so just skip this entry
       // for now.
       return Error::success();
-    case TrieRecord::StorageKind::DataPool: {
+    case TrieRecord::StorageKind::DataPool:
       // Check offset is a postive value, and large enough to hold the
       // header for the data record.
       if (D.Offset.get() <= 0 ||
           D.Offset.get() + sizeof(DataRecordHandle::Header) >= DataPool.size())
         return formatError("datapool record out of bound");
-
-      // DataRecord start needs to be aligned.
-      if (!isAligned(Align(8), D.Offset.get()))
-        return formatError("data record offset is not aligned");
-
-      // Validate the layout flags before getFromDataPool calls getTotalSize().
-      auto HeaderData =
-          DataPool.get(D.Offset, sizeof(DataRecordHandle::Header));
-      if (!HeaderData)
-        return formatError(toString(HeaderData.takeError()));
-      auto LF = DataRecordHandle::get(HeaderData->data()).getLayoutFlags();
-      if (LF.NumRefs > DataRecordHandle::NumRefsFlags::Max ||
-          LF.DataSize > DataRecordHandle::DataSizeFlags::Max)
-        return formatError("data record has invalid layout flags");
       break;
-    }
     case TrieRecord::StorageKind::Standalone:
     case TrieRecord::StorageKind::StandaloneLeaf:
     case TrieRecord::StorageKind::StandaloneLeaf0:
       SmallString<256> Path;
-      getStandalonePath(TrieRecord::getStandaloneFilePrefix(D.SK), I->Offset,
-                        Path);
+      getStandalonePath(TrieRecord::getStandaloneFilePrefix(D.SK), *I, Path);
       // If need to validate the content of the file later, just load the
       // buffer here. Otherwise, just check the existance of the file.
       if (Deep) {
@@ -1017,8 +969,6 @@ Error OnDiskGraphDB::validate(bool Deep, HashingFuncT Hasher) const {
         return dataError(toString(DataRecord.takeError()));
 
       for (auto InternRef : DataRecord->getRefs()) {
-        if (InternRef.getFileOffset().get() <= 0)
-          return dataError("invalid ref offset");
         auto Index = getIndexProxyFromRef(InternRef);
         if (!Index)
           return Index.takeError();
@@ -1035,8 +985,6 @@ Error OnDiskGraphDB::validate(bool Deep, HashingFuncT Hasher) const {
         return dataError(
             "data record span passed the end of the standalone file");
       for (auto InternRef : DataRecord.getRefs()) {
-        if (InternRef.getFileOffset().get() <= 0)
-          return dataError("invalid ref offset");
         auto Index = getIndexProxyFromRef(InternRef);
         if (!Index)
           return Index.takeError();
@@ -1065,36 +1013,6 @@ Error OnDiskGraphDB::validate(bool Deep, HashingFuncT Hasher) const {
 
     return Error::success();
   });
-}
-
-Error OnDiskGraphDB::validateObjectID(ObjectID ExternalRef) const {
-  auto formatError = [&](Twine Msg) {
-    return createStringError(
-        llvm::errc::illegal_byte_sequence,
-        "bad ref=0x" +
-            utohexstr(ExternalRef.getOpaqueData(), /*LowerCase=*/true) + ": " +
-            Msg.str());
-  };
-
-  if (ExternalRef.getOpaqueData() == 0)
-    return formatError("zero is not a valid ref");
-
-  InternalRef InternalRef = getInternalRef(ExternalRef);
-  auto I = getIndexProxyFromRef(InternalRef);
-  if (!I)
-    return formatError(llvm::toString(I.takeError()));
-  auto Hash = getDigest(*I);
-
-  OnDiskTrieRawHashMap::ConstOnDiskPtr P = Index.find(Hash);
-  if (!P)
-    return formatError("not found using hash " + toHex(Hash));
-  IndexProxy OtherI = getIndexProxyFromPointer(P);
-  ObjectID OtherRef = getExternalReference(makeInternalRef(OtherI.Offset));
-  if (OtherRef != ExternalRef)
-    return formatError("ref does not match indexed offset " +
-                       utohexstr(OtherRef.getOpaqueData(), /*LowerCase=*/true) +
-                       " for hash " + toHex(Hash));
-  return Error::success();
 }
 
 void OnDiskGraphDB::print(raw_ostream &OS) const {
@@ -1239,37 +1157,28 @@ ArrayRef<uint8_t> OnDiskGraphDB::getDigest(const IndexProxy &I) const {
   return I.Hash;
 }
 
-static std::variant<const StandaloneDataInMemory *, DataRecordHandle>
-getStandaloneDataOrDataRecord(const OnDiskDataAllocator &DataPool,
-                              ObjectHandle OH) {
+static OnDiskContent getContentFromHandle(const OnDiskDataAllocator &DataPool,
+                                          ObjectHandle OH) {
   // Decode ObjectHandle to locate the stored content.
   uint64_t Data = OH.getOpaqueData();
   if (Data & 1) {
     const auto *SDIM =
         reinterpret_cast<const StandaloneDataInMemory *>(Data & (-1ULL << 1));
-    return SDIM;
+    return SDIM->getContent();
   }
 
   auto DataHandle =
       cantFail(DataRecordHandle::getFromDataPool(DataPool, FileOffset(Data)));
   assert(DataHandle.getData().end()[0] == 0 && "Null termination");
-  return DataHandle;
-}
-
-static OnDiskContent getContentFromHandle(const OnDiskDataAllocator &DataPool,
-                                          ObjectHandle OH) {
-  auto SDIMOrRecord = getStandaloneDataOrDataRecord(DataPool, OH);
-  if (std::holds_alternative<const StandaloneDataInMemory *>(SDIMOrRecord)) {
-    return std::get<const StandaloneDataInMemory *>(SDIMOrRecord)->getContent();
-  } else {
-    auto DataHandle = std::get<DataRecordHandle>(std::move(SDIMOrRecord));
-    return OnDiskContent{std::move(DataHandle), std::nullopt};
-  }
+  return OnDiskContent{DataHandle, std::nullopt};
 }
 
 ArrayRef<char> OnDiskGraphDB::getObjectData(ObjectHandle Node) const {
   OnDiskContent Content = getContentFromHandle(DataPool, Node);
-  return Content.getData();
+  if (Content.Bytes)
+    return *Content.Bytes;
+  assert(Content.Record && "Expected record or bytes");
+  return Content.Record->getData();
 }
 
 InternalRefArrayRef OnDiskGraphDB::getInternalRefs(ObjectHandle Node) const {
@@ -1277,18 +1186,6 @@ InternalRefArrayRef OnDiskGraphDB::getInternalRefs(ObjectHandle Node) const {
           getContentFromHandle(DataPool, Node).Record)
     return Record->getRefs();
   return std::nullopt;
-}
-
-OnDiskGraphDB::FileBackedData
-OnDiskGraphDB::getInternalFileBackedObjectData(ObjectHandle Node) const {
-  auto SDIMOrRecord = getStandaloneDataOrDataRecord(DataPool, Node);
-  if (std::holds_alternative<const StandaloneDataInMemory *>(SDIMOrRecord)) {
-    auto *SDIM = std::get<const StandaloneDataInMemory *>(SDIMOrRecord);
-    return SDIM->getInternalFileBackedObjectData(RootPath);
-  } else {
-    auto DataHandle = std::get<DataRecordHandle>(std::move(SDIMOrRecord));
-    return FileBackedData{DataHandle.getData(), /*FileInfo=*/std::nullopt};
-  }
 }
 
 Expected<std::optional<ObjectHandle>>
@@ -1328,8 +1225,7 @@ OnDiskGraphDB::load(ObjectID ExternalRef) {
   // suitably 0-padded. Requiring null-termination here would be too expensive
   // for extremely large objects that happen to be page-aligned.
   SmallString<256> Path;
-  getStandalonePath(TrieRecord::getStandaloneFilePrefix(Object.SK), I->Offset,
-                    Path);
+  getStandalonePath(TrieRecord::getStandaloneFilePrefix(Object.SK), *I, Path);
 
   auto BypassSandbox = sys::sandbox::scopedDisable();
 
@@ -1351,7 +1247,7 @@ OnDiskGraphDB::load(ObjectID ExternalRef) {
 
   return ObjectHandle::fromMemory(
       static_cast<StandaloneDataMapTy *>(StandaloneData)
-          ->insert(I->Hash, Object.SK, std::move(Region), I->Offset));
+          ->insert(I->Hash, Object.SK, std::move(Region)));
 }
 
 Expected<bool> OnDiskGraphDB::isMaterialized(ObjectID Ref) {
@@ -1397,17 +1293,11 @@ InternalRef OnDiskGraphDB::makeInternalRef(FileOffset IndexOffset) {
   return InternalRef::getFromOffset(IndexOffset);
 }
 
-static void getStandalonePath(StringRef RootPath, StringRef Prefix,
-                              FileOffset IndexOffset,
-                              SmallVectorImpl<char> &Path) {
+void OnDiskGraphDB::getStandalonePath(StringRef Prefix, const IndexProxy &I,
+                                      SmallVectorImpl<char> &Path) const {
   Path.assign(RootPath.begin(), RootPath.end());
   sys::path::append(Path,
-                    Prefix + Twine(IndexOffset.get()) + "." + CASFormatVersion);
-}
-
-void OnDiskGraphDB::getStandalonePath(StringRef Prefix, FileOffset IndexOffset,
-                                      SmallVectorImpl<char> &Path) const {
-  return ::getStandalonePath(RootPath, Prefix, IndexOffset, Path);
+                    Prefix + Twine(I.Offset.get()) + "." + CASFormatVersion);
 }
 
 OnDiskContent StandaloneDataInMemory::getContent() const {
@@ -1440,35 +1330,12 @@ OnDiskContent StandaloneDataInMemory::getContent() const {
   return OnDiskContent{Record, std::nullopt};
 }
 
-OnDiskGraphDB::FileBackedData
-StandaloneDataInMemory::getInternalFileBackedObjectData(
-    StringRef RootPath) const {
-  switch (SK) {
-  case TrieRecord::StorageKind::Unknown:
-  case TrieRecord::StorageKind::DataPool:
-    llvm_unreachable("unexpected storage kind");
-  case TrieRecord::StorageKind::Standalone:
-    return OnDiskGraphDB::FileBackedData{getContent().getData(),
-                                         /*FileInfo=*/std::nullopt};
-  case TrieRecord::StorageKind::StandaloneLeaf0:
-  case TrieRecord::StorageKind::StandaloneLeaf:
-    bool IsFileNulTerminated = SK == TrieRecord::StorageKind::StandaloneLeaf0;
-    SmallString<256> Path;
-    ::getStandalonePath(RootPath, TrieRecord::getStandaloneFilePrefix(SK),
-                        IndexOffset, Path);
-    return OnDiskGraphDB::FileBackedData{
-        getContent().getData(), OnDiskGraphDB::FileBackedData::FileInfoTy{
-                                    std::string(Path), IsFileNulTerminated}};
-  }
-  llvm_unreachable("Unknown StorageKind enum");
-}
-
-static Expected<MappedTempFile>
-createTempFile(StringRef FinalPath, uint64_t Size, OnDiskCASLogger *Logger) {
+static Expected<MappedTempFile> createTempFile(StringRef FinalPath,
+                                               uint64_t Size) {
   auto BypassSandbox = sys::sandbox::scopedDisable();
 
   assert(Size && "Unexpected request for an empty temp file");
-  Expected<TempFile> File = TempFile::create(FinalPath + ".%%%%%%", Logger);
+  Expected<TempFile> File = TempFile::create(FinalPath + ".%%%%%%");
   if (!File)
     return File.takeError();
 
@@ -1502,13 +1369,13 @@ Error OnDiskGraphDB::createStandaloneLeaf(IndexProxy &I, ArrayRef<char> Data) {
 
   SmallString<256> Path;
   int64_t FileSize = Data.size() + Leaf0;
-  getStandalonePath(TrieRecord::getStandaloneFilePrefix(SK), I.Offset, Path);
+  getStandalonePath(TrieRecord::getStandaloneFilePrefix(SK), I, Path);
 
   auto BypassSandbox = sys::sandbox::scopedDisable();
 
   // Write the file. Don't reuse this mapped_file_region, which is read/write.
   // Let load() pull up one that's read-only.
-  Expected<MappedTempFile> File = createTempFile(Path, FileSize, Logger.get());
+  Expected<MappedTempFile> File = createTempFile(Path, FileSize);
   if (!File)
     return File.takeError();
   assert(File->size() == (uint64_t)FileSize);
@@ -1573,8 +1440,8 @@ Error OnDiskGraphDB::store(ObjectID ID, ArrayRef<ObjectID> Refs,
   auto AllocStandaloneFile = [&](size_t Size) -> Expected<char *> {
     getStandalonePath(TrieRecord::getStandaloneFilePrefix(
                           TrieRecord::StorageKind::Standalone),
-                      I->Offset, Path);
-    if (Error E = createTempFile(Path, Size, Logger.get()).moveInto(File))
+                      *I, Path);
+    if (Error E = createTempFile(Path, Size).moveInto(File))
       return std::move(E);
     assert(File->size() == Size);
     FileSize = Size;
@@ -1656,96 +1523,6 @@ Error OnDiskGraphDB::store(ObjectID ID, ArrayRef<ObjectID> Refs,
   return Error::success();
 }
 
-Error OnDiskGraphDB::storeFile(ObjectID ID, StringRef FilePath) {
-  return storeFile(ID, FilePath, /*ImportKind=*/std::nullopt);
-}
-
-Error OnDiskGraphDB::storeFile(
-    ObjectID ID, StringRef FilePath,
-    std::optional<InternalUpstreamImportKind> ImportKind) {
-  auto I = getIndexProxyFromRef(getInternalRef(ID));
-  if (LLVM_UNLIKELY(!I))
-    return I.takeError();
-
-  // Early return in case the node exists.
-  {
-    TrieRecord::Data Existing = I->Ref.load();
-    if (Existing.SK != TrieRecord::StorageKind::Unknown)
-      return Error::success();
-  }
-
-  auto BypassSandbox = sys::sandbox::scopedDisable();
-
-  uint64_t FileSize;
-  if (std::error_code EC = sys::fs::file_size(FilePath, FileSize))
-    return createFileError(FilePath, EC);
-
-  if (FileSize <= TrieRecord::MaxEmbeddedSize) {
-    auto Buf = MemoryBuffer::getFile(FilePath);
-    if (!Buf)
-      return createFileError(FilePath, Buf.getError());
-    return store(ID, {}, arrayRefFromStringRef<char>((*Buf)->getBuffer()));
-  }
-
-  UniqueTempFile UniqueTmp;
-  auto ExpectedPath = UniqueTmp.createAndCopyFrom(RootPath, FilePath);
-  if (!ExpectedPath)
-    return ExpectedPath.takeError();
-  StringRef TmpPath = *ExpectedPath;
-
-  TrieRecord::StorageKind SK;
-  if (ImportKind.has_value()) {
-    // Importing the file from upstream, the nul is already added if necessary.
-    switch (*ImportKind) {
-    case InternalUpstreamImportKind::Leaf:
-      SK = TrieRecord::StorageKind::StandaloneLeaf;
-      break;
-    case InternalUpstreamImportKind::Leaf0:
-      SK = TrieRecord::StorageKind::StandaloneLeaf0;
-      break;
-    }
-  } else {
-    bool Leaf0 = isAligned(Align(getPageSize()), FileSize);
-    SK = Leaf0 ? TrieRecord::StorageKind::StandaloneLeaf0
-               : TrieRecord::StorageKind::StandaloneLeaf;
-
-    if (Leaf0) {
-      // Add a nul byte at the end.
-      std::error_code EC;
-      raw_fd_ostream OS(TmpPath, EC, sys::fs::CD_OpenExisting,
-                        sys::fs::FA_Write, sys::fs::OF_Append);
-      if (EC)
-        return createFileError(TmpPath, EC);
-      OS.write(0);
-      OS.close();
-      if (OS.has_error())
-        return createFileError(TmpPath, OS.error());
-    }
-  }
-
-  SmallString<256> StandalonePath;
-  getStandalonePath(TrieRecord::getStandaloneFilePrefix(SK), I->Offset,
-                    StandalonePath);
-  if (Error E = UniqueTmp.renameTo(StandalonePath))
-    return E;
-
-  // Store the object reference.
-  TrieRecord::Data Existing;
-  {
-    TrieRecord::Data Leaf{SK, FileOffset()};
-    if (I->Ref.compare_exchange_strong(Existing, Leaf)) {
-      recordStandaloneSizeIncrease(FileSize);
-      return Error::success();
-    }
-  }
-
-  // If there was a race, confirm that the new value has valid storage.
-  if (Existing.SK == TrieRecord::StorageKind::Unknown)
-    return createCorruptObjectError(getDigest(*I));
-
-  return Error::success();
-}
-
 void OnDiskGraphDB::recordStandaloneSizeIncrease(size_t SizeIncrease) {
   standaloneStorageSize().fetch_add(SizeIncrease, std::memory_order_relaxed);
 }
@@ -1774,7 +1551,6 @@ unsigned OnDiskGraphDB::getHardStorageLimitUtilization() const {
 Expected<std::unique_ptr<OnDiskGraphDB>>
 OnDiskGraphDB::open(StringRef AbsPath, StringRef HashName,
                     unsigned HashByteSize, OnDiskGraphDB *UpstreamDB,
-                    std::shared_ptr<OnDiskCASLogger> Logger,
                     FaultInPolicy Policy) {
   if (std::error_code EC = sys::fs::create_directories(AbsPath))
     return createFileError(AbsPath, EC);
@@ -1803,7 +1579,7 @@ OnDiskGraphDB::open(StringRef AbsPath, StringRef HashName,
                     IndexPath, IndexTableName + "[" + HashName + "]",
                     HashByteSize * CHAR_BIT,
                     /*DataSize=*/sizeof(TrieRecord), MaxIndexSize,
-                    /*MinFileSize=*/MB, Logger)
+                    /*MinFileSize=*/MB)
                     .moveInto(Index))
     return std::move(E);
 
@@ -1817,7 +1593,7 @@ OnDiskGraphDB::open(StringRef AbsPath, StringRef HashName,
   if (Error E = OnDiskDataAllocator::create(
                     DataPoolPath,
                     DataPoolTableName + "[" + HashName + "]" + PolicyName,
-                    MaxDataPoolSize, /*MinFileSize=*/MB, UserHeaderSize, Logger,
+                    MaxDataPoolSize, /*MinFileSize=*/MB, UserHeaderSize,
                     [](void *UserHeaderPtr) {
                       new (UserHeaderPtr) std::atomic<uint64_t>(0);
                     })
@@ -1828,18 +1604,15 @@ OnDiskGraphDB::open(StringRef AbsPath, StringRef HashName,
                              "unexpected user header in '" + DataPoolPath +
                                  "'");
 
-  return std::unique_ptr<OnDiskGraphDB>(
-      new OnDiskGraphDB(AbsPath, std::move(*Index), std::move(*DataPool),
-                        UpstreamDB, Policy, std::move(Logger)));
+  return std::unique_ptr<OnDiskGraphDB>(new OnDiskGraphDB(
+      AbsPath, std::move(*Index), std::move(*DataPool), UpstreamDB, Policy));
 }
 
 OnDiskGraphDB::OnDiskGraphDB(StringRef RootPath, OnDiskTrieRawHashMap Index,
                              OnDiskDataAllocator DataPool,
-                             OnDiskGraphDB *UpstreamDB, FaultInPolicy Policy,
-                             std::shared_ptr<OnDiskCASLogger> Logger)
+                             OnDiskGraphDB *UpstreamDB, FaultInPolicy Policy)
     : Index(std::move(Index)), DataPool(std::move(DataPool)),
-      RootPath(RootPath.str()), UpstreamDB(UpstreamDB), FIPolicy(Policy),
-      Logger(std::move(Logger)) {
+      RootPath(RootPath.str()), UpstreamDB(UpstreamDB), FIPolicy(Policy) {
   /// Lifetime for "big" objects not in DataPool.
   ///
   /// NOTE: Could use ThreadSafeTrieRawHashMap here. For now, doing something
@@ -1894,6 +1667,8 @@ Error OnDiskGraphDB::importFullTree(ObjectID PrimaryID,
     UpstreamCursor &Cur = CursorStack.back();
     if (Cur.RefI == Cur.RefE) {
       // Copy the node data into the primary store.
+      // FIXME: Use hard-link or cloning if the file-system supports it and data
+      // is stored into a separate file.
 
       // The bottom of \p PrimaryNodesStack contains the primary ID for the
       // current node plus the list of imported referenced IDs.
@@ -1901,7 +1676,8 @@ Error OnDiskGraphDB::importFullTree(ObjectID PrimaryID,
       ObjectID PrimaryID = *(PrimaryNodesStack.end() - Cur.RefsCount - 1);
       auto PrimaryRefs = ArrayRef(PrimaryNodesStack)
                              .slice(PrimaryNodesStack.size() - Cur.RefsCount);
-      if (Error E = importUpstreamData(PrimaryID, PrimaryRefs, Cur.Node))
+      auto Data = UpstreamDB->getObjectData(Cur.Node);
+      if (Error E = store(PrimaryID, PrimaryRefs, Data))
         return E;
       // Remove the current node and its IDs from the stack.
       PrimaryNodesStack.truncate(PrimaryNodesStack.size() - Cur.RefsCount);
@@ -1936,6 +1712,10 @@ Error OnDiskGraphDB::importSingleNode(ObjectID PrimaryID,
                                       ObjectHandle UpstreamNode) {
   // Copies only a single node, it doesn't copy the referenced nodes.
 
+  // Copy the node data into the primary store.
+  // FIXME: Use hard-link or cloning if the file-system supports it and data is
+  // stored into a separate file.
+  auto Data = UpstreamDB->getObjectData(UpstreamNode);
   auto UpstreamRefs = UpstreamDB->getObjectRefs(UpstreamNode);
   SmallVector<ObjectID, 64> Refs;
   Refs.reserve(llvm::size(UpstreamRefs));
@@ -1946,29 +1726,7 @@ Error OnDiskGraphDB::importSingleNode(ObjectID PrimaryID,
     Refs.push_back(*Ref);
   }
 
-  return importUpstreamData(PrimaryID, Refs, UpstreamNode);
-}
-
-Error OnDiskGraphDB::importUpstreamData(ObjectID PrimaryID,
-                                        ArrayRef<ObjectID> PrimaryRefs,
-                                        ObjectHandle UpstreamNode) {
-  // If there are references we can't copy an upstream's standalone file because
-  // we need to re-resolve the reference offsets it contains.
-  if (PrimaryRefs.empty()) {
-    auto FBData = UpstreamDB->getInternalFileBackedObjectData(UpstreamNode);
-    if (FBData.FileInfo.has_value()) {
-      // Disk-space optimization, import the file directly since it is a
-      // standalone leaf.
-      return storeFile(
-          PrimaryID, FBData.FileInfo->FilePath,
-          /*InternalUpstreamImport=*/FBData.FileInfo->IsFileNulTerminated
-              ? InternalUpstreamImportKind::Leaf0
-              : InternalUpstreamImportKind::Leaf);
-    }
-  }
-
-  auto Data = UpstreamDB->getObjectData(UpstreamNode);
-  return store(PrimaryID, PrimaryRefs, Data);
+  return store(PrimaryID, Refs, Data);
 }
 
 Expected<std::optional<ObjectHandle>>

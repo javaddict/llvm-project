@@ -658,10 +658,7 @@ public:
   /// or "id" if NSNumber is unavailable.
   ExprResult BuildObjCNumericLiteral(SourceLocation AtLoc, Expr *Number);
   ExprResult ActOnObjCBoolLiteral(SourceLocation AtLoc, SourceLocation ValueLoc,
-                                  bool Value) {
-    return BuildObjCNumericLiteral(
-        AtLoc, SemaRef.BuildBoolLiteral(ValueLoc, Value).get());
-  }
+                                  bool Value);
   ExprResult BuildObjCArrayLiteral(SourceRange SR, MultiExprArg Elements);
 
   /// BuildObjCBoxedExpr - builds an ObjCBoxedExpr AST node for the

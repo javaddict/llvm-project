@@ -98,19 +98,19 @@ static QualType getStatusOrValueType(ClassTemplateSpecializationDecl *TRD) {
 }
 
 static auto ofClassStatus() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return ofClass(hasName("::absl::Status"));
 }
 
 static auto isStatusMemberCallWithName(llvm::StringRef member_name) {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxMemberCallExpr(
       on(expr(unless(cxxThisExpr()))),
       callee(cxxMethodDecl(hasName(member_name), ofClassStatus())));
 }
 
 static auto isStatusOrMemberCallWithName(llvm::StringRef member_name) {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxMemberCallExpr(
       on(expr(unless(cxxThisExpr()))),
       callee(cxxMethodDecl(
@@ -119,7 +119,7 @@ static auto isStatusOrMemberCallWithName(llvm::StringRef member_name) {
 }
 
 static auto isStatusOrOperatorCallWithName(llvm::StringRef operator_name) {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxOperatorCallExpr(
       hasOverloadedOperatorName(operator_name),
       callee(cxxMethodDecl(
@@ -127,19 +127,19 @@ static auto isStatusOrOperatorCallWithName(llvm::StringRef operator_name) {
 }
 
 static auto valueCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return anyOf(isStatusOrMemberCallWithName("value"),
                isStatusOrMemberCallWithName("ValueOrDie"));
 }
 
 static auto valueOperatorCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return expr(anyOf(isStatusOrOperatorCallWithName("*"),
                     isStatusOrOperatorCallWithName("->")));
 }
 
 static auto isComparisonOperatorCall(llvm::StringRef operator_name) {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxOperatorCallExpr(
       hasOverloadedOperatorName(operator_name), argumentCountIs(2),
       hasArgument(0, anyOf(hasType(statusType()), hasType(statusOrType()))),
@@ -147,12 +147,12 @@ static auto isComparisonOperatorCall(llvm::StringRef operator_name) {
 }
 
 static auto isOkStatusCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return callExpr(callee(functionDecl(hasName("::absl::OkStatus"))));
 }
 
 static auto isNotOkStatusCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return callExpr(callee(functionDecl(hasAnyName(
       "::absl::AbortedError", "::absl::AlreadyExistsError",
       "::absl::CancelledError", "::absl::DataLossError",
@@ -165,7 +165,7 @@ static auto isNotOkStatusCall() {
 }
 
 static auto isPointerComparisonOperatorCall(std::string operator_name) {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return binaryOperator(hasOperatorName(operator_name),
                         hasLHS(hasType(hasCanonicalType(pointerType(
                             pointee(anyOf(statusOrType(), statusType())))))),
@@ -178,7 +178,7 @@ static auto isPointerComparisonOperatorCall(std::string operator_name) {
 // nullptr does not match the bound type.
 // TODO: be less restrictive around convertible types in general.
 static auto isStatusOrValueAssignmentCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxOperatorCallExpr(
       hasOverloadedOperatorName("="),
       callee(cxxMethodDecl(ofClass(statusOrClass()))),
@@ -188,7 +188,7 @@ static auto isStatusOrValueAssignmentCall() {
 }
 
 static auto isStatusOrValueConstructor() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxConstructExpr(
       hasType(statusOrType()),
       hasArgument(0,
@@ -199,83 +199,85 @@ static auto isStatusOrValueConstructor() {
 }
 
 static auto isStatusOrConstructor() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxConstructExpr(hasType(statusOrType()));
 }
 
 static auto isStatusConstructor() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxConstructExpr(hasType(statusType()));
 }
 static auto isLoggingGetReferenceableValueCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return callExpr(callee(
       functionDecl(hasName("::absl::log_internal::GetReferenceableValue"))));
 }
 
 static auto isLoggingCheckEqImpl() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return callExpr(
       callee(functionDecl(hasName("::absl::log_internal::Check_EQImpl"))));
 }
 
 static auto isAsStatusCallWithStatus() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return callExpr(
       callee(functionDecl(hasName("::absl::log_internal::AsStatus"))),
       hasArgument(0, hasType(statusClass())));
 }
 
 static auto isAsStatusCallWithStatusOr() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return callExpr(
       callee(functionDecl(hasName("::absl::log_internal::AsStatus"))),
       hasArgument(0, hasType(statusOrType())));
 }
 
 static auto possiblyReferencedStatusOrType() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return anyOf(statusOrType(), referenceType(pointee(statusOrType())));
 }
 
-static auto isConstAccessorMemberCall() {
-  using namespace ::clang::ast_matchers;
+static auto isConstStatusOrAccessorMemberCall() {
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
+  return cxxMemberCallExpr(callee(
+      cxxMethodDecl(parameterCountIs(0), isConst(),
+                    returns(qualType(possiblyReferencedStatusOrType())))));
+}
+
+static auto isConstStatusOrAccessorMemberOperatorCall() {
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
+  return cxxOperatorCallExpr(
+      callee(cxxMethodDecl(parameterCountIs(0), isConst(),
+                           returns(possiblyReferencedStatusOrType()))));
+}
+
+static auto isConstStatusOrPointerAccessorMemberCall() {
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxMemberCallExpr(callee(cxxMethodDecl(
       parameterCountIs(0), isConst(),
-      returns(hasCanonicalType(anyOf(referenceType(), recordType()))))));
+      returns(pointerType(pointee(possiblyReferencedStatusOrType()))))));
 }
 
-static auto isConstAccessorMemberOperatorCall() {
-  using namespace ::clang::ast_matchers;
+static auto isConstStatusOrPointerAccessorMemberOperatorCall() {
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxOperatorCallExpr(callee(cxxMethodDecl(
       parameterCountIs(0), isConst(),
-      returns(hasCanonicalType(anyOf(referenceType(), recordType()))))));
-}
-
-static auto isConstPointerAccessorMemberCall() {
-  using namespace ::clang::ast_matchers;
-  return cxxMemberCallExpr(callee(
-      cxxMethodDecl(parameterCountIs(0), isConst(), returns(pointerType()))));
-}
-
-static auto isConstPointerAccessorMemberOperatorCall() {
-  using namespace ::clang::ast_matchers;
-  return cxxOperatorCallExpr(callee(
-      cxxMethodDecl(parameterCountIs(0), isConst(), returns(pointerType()))));
+      returns(pointerType(pointee(possiblyReferencedStatusOrType()))))));
 }
 
 static auto isNonConstMemberCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxMemberCallExpr(callee(cxxMethodDecl(unless(isConst()))));
 }
 
 static auto isNonConstMemberOperatorCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxOperatorCallExpr(callee(cxxMethodDecl(unless(isConst()))));
 }
 
 static auto isMakePredicateFormatterFromIsOkMatcherCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return callExpr(
       callee(functionDecl(
           hasName("::testing::internal::MakePredicateFormatterFromMatcher"))),
@@ -288,7 +290,7 @@ static auto isMakePredicateFormatterFromIsOkMatcherCall() {
 }
 
 static auto isStatusIsOkMatcherCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return callExpr(callee(functionDecl(hasAnyName(
                       "::testing::status::StatusIs", "absl_testing::StatusIs",
                       "::testing::status::CanonicalStatusIs",
@@ -298,7 +300,7 @@ static auto isStatusIsOkMatcherCall() {
 }
 
 static auto isMakePredicateFormatterFromStatusIsMatcherCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return callExpr(
       callee(functionDecl(
           hasName("::testing::internal::MakePredicateFormatterFromMatcher"))),
@@ -312,7 +314,7 @@ static auto isMakePredicateFormatterFromStatusIsMatcherCall() {
 }
 
 static auto isPredicateFormatterFromStatusMatcherCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxOperatorCallExpr(
       hasOverloadedOperatorName("()"),
       callee(cxxMethodDecl(ofClass(
@@ -321,7 +323,7 @@ static auto isPredicateFormatterFromStatusMatcherCall() {
 }
 
 static auto isPredicateFormatterFromStatusOrMatcherCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxOperatorCallExpr(
       hasOverloadedOperatorName("()"),
       callee(cxxMethodDecl(ofClass(
@@ -330,7 +332,7 @@ static auto isPredicateFormatterFromStatusOrMatcherCall() {
 }
 
 static auto isAssertionResultOperatorBoolCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxMemberCallExpr(
       on(expr(unless(cxxThisExpr()))),
       callee(cxxMethodDecl(hasName("operator bool"),
@@ -338,62 +340,29 @@ static auto isAssertionResultOperatorBoolCall() {
 }
 
 static auto isAssertionResultConstructFromBoolCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxConstructExpr(
       hasType(recordDecl(hasName("testing::AssertionResult"))),
       hasArgument(0, hasType(booleanType())));
 }
 
 static auto isStatusOrReturningCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return callExpr(
       callee(functionDecl(returns(possiblyReferencedStatusOrType()))));
 }
 
 static auto isStatusOrPtrReturningCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return callExpr(callee(functionDecl(returns(hasUnqualifiedDesugaredType(
       pointerType(pointee(possiblyReferencedStatusOrType())))))));
 }
 
 static auto isStatusPtrReturningCall() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return callExpr(callee(functionDecl(returns(hasUnqualifiedDesugaredType(
       pointerType(pointee(hasUnqualifiedDesugaredType(
           recordType(hasDeclaration(statusClass()))))))))));
-}
-
-static auto ofClassReturnIfErrorAdaptor() {
-  using namespace ::clang::ast_matchers;
-  return ofClass(
-      hasName("::absl::status_macro_internal::ReturnIfErrorAdaptor"));
-}
-
-static auto returnIfErrorAdaptorClass() {
-  using namespace ::clang::ast_matchers;
-  return cxxRecordDecl(
-      hasName("::absl::status_macro_internal::ReturnIfErrorAdaptor"));
-}
-
-static auto returnIfErrorAdaptorType() {
-  using namespace ::clang::ast_matchers;
-  return hasUnqualifiedDesugaredType(
-      recordType(hasDeclaration(returnIfErrorAdaptorClass())));
-}
-
-static auto isReturnIfErrorAdaptorOperatorBoolCall() {
-  using namespace ::clang::ast_matchers;
-  return cxxMemberCallExpr(
-      on(expr(unless(cxxThisExpr()))),
-      callee(cxxMethodDecl(hasName("operator bool"),
-                           ofClassReturnIfErrorAdaptor())));
-}
-
-static auto isMacroAdaptorCall() {
-  using namespace ::clang::ast_matchers;
-  return callExpr(callee(
-      functionDecl(hasName("::absl::status_macro_internal::MacroAdaptor"),
-                   returns(returnIfErrorAdaptorType()))));
 }
 
 static auto
@@ -450,30 +419,30 @@ BoolValue &initializeStatusOr(RecordStorageLocation &StatusOrLoc,
 }
 
 clang::ast_matchers::DeclarationMatcher statusOrClass() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return classTemplateSpecializationDecl(
       hasName("absl::StatusOr"),
       hasTemplateArgument(0, refersToType(type().bind("T"))));
 }
 
 clang::ast_matchers::DeclarationMatcher statusClass() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxRecordDecl(hasName("absl::Status"));
 }
 
 clang::ast_matchers::DeclarationMatcher statusOrOperatorBaseClass() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return classTemplateSpecializationDecl(
       hasName("absl::internal_statusor::OperatorBase"));
 }
 
 clang::ast_matchers::TypeMatcher statusOrType() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return hasCanonicalType(qualType(hasDeclaration(statusOrClass())));
 }
 
 clang::ast_matchers::TypeMatcher statusType() {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return hasCanonicalType(qualType(hasDeclaration(statusClass())));
 }
 
@@ -505,11 +474,6 @@ static bool isStatusIsMatcherType(QualType Type) {
                      "CanonicalStatusIsMatcher");
 }
 
-static bool IsMacroAdaptorType(clang::QualType type) {
-  return isTypeNamed(type, {"absl", "status_macro_internal"},
-                     "ReturnIfErrorAdaptor");
-}
-
 llvm::StringMap<QualType> getSyntheticFields(QualType Ty, QualType StatusType,
                                              const CXXRecordDecl &RD) {
   if (auto *TRD = getStatusOrBaseClass(Ty))
@@ -523,8 +487,6 @@ llvm::StringMap<QualType> getSyntheticFields(QualType Ty, QualType StatusType,
     return {{"ok_predicate", RD.getASTContext().BoolTy}};
   if (isStatusIsMatcherType(Ty))
     return {{"ok_matcher", RD.getASTContext().BoolTy}};
-  if (IsMacroAdaptorType(Ty))
-    return {{"status", StatusType}};
   return {};
 }
 
@@ -912,9 +874,10 @@ static void transferStatusOrReturningCall(const CallExpr *Expr,
     initializeStatusOr(*StatusOrLoc, State.Env);
 }
 
-static bool doHandleConstAccessorMemberCall(
+static bool doHandleConstStatusOrAccessorMemberCall(
     const CallExpr *Expr, RecordStorageLocation *RecordLoc,
     const MatchFinder::MatchResult &Result, LatticeTransferState &State) {
+  assert(isStatusOrType(Expr->getType()));
   if (RecordLoc == nullptr)
     return false;
   const FunctionDecl *DirectCallee = Expr->getDirectCallee();
@@ -923,8 +886,7 @@ static bool doHandleConstAccessorMemberCall(
   StorageLocation &Loc =
       State.Lattice.getOrCreateConstMethodReturnStorageLocation(
           *RecordLoc, DirectCallee, State.Env, [&](StorageLocation &Loc) {
-            if (isStatusOrType(Expr->getType()))
-              initializeStatusOr(cast<RecordStorageLocation>(Loc), State.Env);
+            initializeStatusOr(cast<RecordStorageLocation>(Loc), State.Env);
           });
   if (Expr->isPRValue()) {
     auto &ResultLoc = State.Env.getResultObjectLocation(*Expr);
@@ -935,14 +897,13 @@ static bool doHandleConstAccessorMemberCall(
   return true;
 }
 
-static void handleConstAccessorMemberCall(
+static void handleConstStatusOrAccessorMemberCall(
     const CallExpr *Expr, RecordStorageLocation *RecordLoc,
     const MatchFinder::MatchResult &Result, LatticeTransferState &State) {
-  if (!doHandleConstAccessorMemberCall(Expr, RecordLoc, Result, State) &&
-      isStatusOrType(Expr->getType()))
+  if (!doHandleConstStatusOrAccessorMemberCall(Expr, RecordLoc, Result, State))
     transferStatusOrReturningCall(Expr, State);
 }
-static void handleConstPointerAccessorMemberCall(
+static void handleConstStatusOrPointerAccessorMemberCall(
     const CallExpr *Expr, RecordStorageLocation *RecordLoc,
     const MatchFinder::MatchResult &Result, LatticeTransferState &State) {
   if (RecordLoc == nullptr)
@@ -953,42 +914,34 @@ static void handleConstPointerAccessorMemberCall(
 }
 
 static void
-transferConstAccessorMemberCall(const CXXMemberCallExpr *Expr,
-                                const MatchFinder::MatchResult &Result,
-                                LatticeTransferState &State) {
-  auto Type = Expr->getType();
-  if (!Type->isRecordType() && !Type->isReferenceType())
-    return;
-  handleConstAccessorMemberCall(
-      Expr, getImplicitObjectLocation(*Expr, State.Env), Result, State);
-}
-
-static void
-transferConstAccessorMemberOperatorCall(const CXXOperatorCallExpr *Expr,
+transferConstStatusOrAccessorMemberCall(const CXXMemberCallExpr *Expr,
                                         const MatchFinder::MatchResult &Result,
                                         LatticeTransferState &State) {
-  auto Type = Expr->getArg(0)->getType();
-  if (!Type->isRecordType() && !Type->isReferenceType())
-    return;
-  auto *RecordLoc = cast_or_null<RecordStorageLocation>(
-      State.Env.getStorageLocation(*Expr->getArg(0)));
-  handleConstAccessorMemberCall(Expr, RecordLoc, Result, State);
-}
-
-static void
-transferConstPointerAccessorMemberCall(const CXXMemberCallExpr *Expr,
-                                       const MatchFinder::MatchResult &Result,
-                                       LatticeTransferState &State) {
-  handleConstPointerAccessorMemberCall(
+  handleConstStatusOrAccessorMemberCall(
       Expr, getImplicitObjectLocation(*Expr, State.Env), Result, State);
 }
 
-static void transferConstPointerAccessorMemberOperatorCall(
+static void transferConstStatusOrAccessorMemberOperatorCall(
     const CXXOperatorCallExpr *Expr, const MatchFinder::MatchResult &Result,
     LatticeTransferState &State) {
   auto *RecordLoc = cast_or_null<RecordStorageLocation>(
       State.Env.getStorageLocation(*Expr->getArg(0)));
-  handleConstPointerAccessorMemberCall(Expr, RecordLoc, Result, State);
+  handleConstStatusOrAccessorMemberCall(Expr, RecordLoc, Result, State);
+}
+
+static void transferConstStatusOrPointerAccessorMemberCall(
+    const CXXMemberCallExpr *Expr, const MatchFinder::MatchResult &Result,
+    LatticeTransferState &State) {
+  handleConstStatusOrPointerAccessorMemberCall(
+      Expr, getImplicitObjectLocation(*Expr, State.Env), Result, State);
+}
+
+static void transferConstStatusOrPointerAccessorMemberOperatorCall(
+    const CXXOperatorCallExpr *Expr, const MatchFinder::MatchResult &Result,
+    LatticeTransferState &State) {
+  auto *RecordLoc = cast_or_null<RecordStorageLocation>(
+      State.Env.getStorageLocation(*Expr->getArg(0)));
+  handleConstStatusOrPointerAccessorMemberCall(Expr, RecordLoc, Result, State);
 }
 
 static void handleNonConstMemberCall(const CallExpr *Expr,
@@ -1183,36 +1136,11 @@ getSmartPtrLikeStorageLocation(const Expr &E, const Environment &Env) {
         &PointerVal->getPointeeLoc());
   return nullptr;
 }
-static void transferMacroAdaptorCall(const clang::CallExpr *Expr,
-                                     const MatchFinder::MatchResult &,
-                                     LatticeTransferState &State) {
-  assert(Expr->getNumArgs() > 0);
-
-  auto *StatusAdaptorLoc =
-      State.Env.get<RecordStorageLocation>(*Expr->getArg(0));
-  if (StatusAdaptorLoc == nullptr)
-    return;
-
-  copyRecord(*StatusAdaptorLoc,
-             locForStatus(State.Env.getResultObjectLocation(*Expr)), State.Env);
-}
-
-static void transferReturnIfErrorAdaptorOperatorBoolCall(
-    const clang::CXXMemberCallExpr *Expr, const MatchFinder::MatchResult &,
-    LatticeTransferState &State) {
-  RecordStorageLocation *StatusAdaptorLoc =
-      getImplicitObjectLocation(*Expr, State.Env);
-  if (StatusAdaptorLoc == nullptr)
-    return;
-
-  auto &OkVal = valForOk(locForStatus(*StatusAdaptorLoc), State.Env);
-  State.Env.setValue(*Expr, OkVal);
-}
 
 CFGMatchSwitch<LatticeTransferState>
 buildTransferMatchSwitch(ASTContext &Ctx,
                          CFGMatchSwitchBuilder<LatticeTransferState> Builder) {
-  using namespace ::clang::ast_matchers;
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return std::move(Builder)
       .CaseOfCFGStmt<CallExpr>(
           isMakePredicateFormatterFromIsOkMatcherCall(),
@@ -1337,16 +1265,17 @@ buildTransferMatchSwitch(ASTContext &Ctx,
                 [](StorageLocation &Loc) {});
           })
       // const accessor calls
-      .CaseOfCFGStmt<CXXMemberCallExpr>(isConstAccessorMemberCall(),
-                                        transferConstAccessorMemberCall)
+      .CaseOfCFGStmt<CXXMemberCallExpr>(isConstStatusOrAccessorMemberCall(),
+                                        transferConstStatusOrAccessorMemberCall)
       .CaseOfCFGStmt<CXXOperatorCallExpr>(
-          isConstAccessorMemberOperatorCall(),
-          transferConstAccessorMemberOperatorCall)
-      .CaseOfCFGStmt<CXXMemberCallExpr>(isConstPointerAccessorMemberCall(),
-                                        transferConstPointerAccessorMemberCall)
+          isConstStatusOrAccessorMemberOperatorCall(),
+          transferConstStatusOrAccessorMemberOperatorCall)
+      .CaseOfCFGStmt<CXXMemberCallExpr>(
+          isConstStatusOrPointerAccessorMemberCall(),
+          transferConstStatusOrPointerAccessorMemberCall)
       .CaseOfCFGStmt<CXXOperatorCallExpr>(
-          isConstPointerAccessorMemberOperatorCall(),
-          transferConstPointerAccessorMemberOperatorCall)
+          isConstStatusOrPointerAccessorMemberOperatorCall(),
+          transferConstStatusOrPointerAccessorMemberOperatorCall)
       // non-const member calls that may modify the state of an object.
       .CaseOfCFGStmt<CXXMemberCallExpr>(isNonConstMemberCall(),
                                         transferNonConstMemberCall)
@@ -1377,11 +1306,6 @@ buildTransferMatchSwitch(ASTContext &Ctx,
       .CaseOfCFGStmt<ImplicitCastExpr>(
           implicitCastExpr(hasCastKind(CK_PointerToBoolean)),
           transferPointerToBoolean)
-      .CaseOfCFGStmt<clang::CXXMemberCallExpr>(
-          isReturnIfErrorAdaptorOperatorBoolCall(),
-          transferReturnIfErrorAdaptorOperatorBoolCall)
-      .CaseOfCFGStmt<clang::CallExpr>(isMacroAdaptorCall(),
-                                      transferMacroAdaptorCall)
       .Build();
 }
 

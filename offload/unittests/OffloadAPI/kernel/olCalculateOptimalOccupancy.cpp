@@ -10,12 +10,7 @@
 #include <OffloadAPI.h>
 #include <gtest/gtest.h>
 
-struct olCalculateOptimalOccupancyTest : OffloadKernelTest {
-  void SetUp() override {
-    RETURN_ON_FATAL_FAILURE(OffloadKernelTest::SetUp());
-    SKIP_KNOWN_FAILURE(LevelZero{"unsupported feature"});
-  }
-};
+using olCalculateOptimalOccupancyTest = OffloadKernelTest;
 OFFLOAD_TESTS_INSTANTIATE_DEVICE_FIXTURE(olCalculateOptimalOccupancyTest);
 
 TEST_P(olCalculateOptimalOccupancyTest, Success) {

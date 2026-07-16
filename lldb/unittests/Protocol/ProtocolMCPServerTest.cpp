@@ -157,18 +157,22 @@ public:
   }
 
   void SetUp() override {
-    std::tie(to_client, to_server) = Transport::createPair(loop);
+    std::tie(to_client, to_server) = Transport::createPair();
 
     server_up = std::make_unique<TestServer>(
         "lldb-mcp", "0.1.0",
         [this](StringRef msg) { logged_messages.push_back(msg.str()); });
     binder = server_up->Bind(*to_client);
+    auto server_handle = to_server->RegisterMessageHandler(loop, *binder);
+    EXPECT_THAT_EXPECTED(server_handle, Succeeded());
     binder->OnError([](llvm::Error error) {
       llvm::errs() << formatv("Server transport error: {0}", error);
     });
+    handles[0] = std::move(*server_handle);
 
-    EXPECT_THAT_ERROR(to_server->RegisterMessageHandler(*binder), Succeeded());
-    EXPECT_THAT_ERROR(to_client->RegisterMessageHandler(client), Succeeded());
+    auto client_handle = to_client->RegisterMessageHandler(loop, client);
+    EXPECT_THAT_EXPECTED(client_handle, Succeeded());
+    handles[1] = std::move(*client_handle);
   }
 
   template <typename Result, typename Params>

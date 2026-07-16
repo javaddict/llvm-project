@@ -7,16 +7,11 @@ aaron@aaronballman.com (email), AaronBallman (Discourse), AaronBallman (GitHub),
 
 Secretary
 ---------
-Corentin Jabot
-corentin.jabot@gmail.com (email), cor3ntin (Discourse), cor3ntin (GitHub), cor3ntin (Discord)
+Reid Kleckner
+rnk@google.com (email), rnk (Discourse), rnk (GitHub), rnk (Discord)
 
 Other Members
 -------------
 Eli Friedman
-efriedma@qti.qualcomm.com (email), efriedma-quic (Discourse), efriedma-quic (GitHub), efriedma (Discord)
+efriedma@qti.qualcomm.com> (email), efriedma-quic (Discourse), efriedma-quic (GitHub)
 
-Erich Keane
-ekeane@nvidia.com (email), ErichKeane (Discourse), erichkeane (GitHub), erichkeane (Discord)
-
-Shafik Yaghmour
-shafik.yaghmour@intel.com (email), shafik (GitHub), shafik.yaghmour (Discord), shafik (Discourse)

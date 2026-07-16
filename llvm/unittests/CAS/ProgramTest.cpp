@@ -92,8 +92,7 @@ TEST_F(CASProgramTest, MappedFileRegionArenaTest) {
     std::optional<MappedFileRegionArena> Alloc;
     ASSERT_THAT_ERROR(
         MappedFileRegionArena::create(Path, /*Capacity=*/10 * 1024 * 1024,
-                                      /*HeaderOffset=*/0, /*Logger=*/nullptr,
-                                      emptyConstructor)
+                                      /*HeaderOffset=*/0, emptyConstructor)
             .moveInto(Alloc),
         Succeeded());
 
@@ -166,7 +165,6 @@ TEST_F(CASProgramTest, MappedFileRegionArenaSizeTest) {
     std::optional<MappedFileRegionArena> Alloc;
     ASSERT_THAT_ERROR(MappedFileRegionArena::create(File, /*Capacity=*/1024,
                                                     /*HeaderOffset=*/0,
-                                                    /*Logger=*/nullptr,
                                                     emptyConstructor)
                           .moveInto(Alloc),
                       Succeeded());
@@ -175,7 +173,6 @@ TEST_F(CASProgramTest, MappedFileRegionArenaSizeTest) {
     Alloc.reset();
     ASSERT_THAT_ERROR(MappedFileRegionArena::create(File, /*Capacity=*/4096,
                                                     /*HeaderOffset=*/0,
-                                                    /*Logger=*/nullptr,
                                                     emptyConstructor)
                           .moveInto(Alloc),
                       Succeeded());
@@ -184,15 +181,13 @@ TEST_F(CASProgramTest, MappedFileRegionArenaSizeTest) {
 
     ASSERT_THAT_ERROR(
         MappedFileRegionArena::create(File, /*Capacity=*/2048,
-                                      /*HeaderOffset=*/32,
-                                      /*Logger=*/nullptr, emptyConstructor)
+                                      /*HeaderOffset=*/32, emptyConstructor)
             .moveInto(Alloc),
         FailedWithMessage(
             "specified header offset (32) does not match existing config (0)"));
 
     ASSERT_THAT_ERROR(MappedFileRegionArena::create(File, /*Capacity=*/2048,
                                                     /*HeaderOffset=*/0,
-                                                    /*Logger=*/nullptr,
                                                     emptyConstructor)
                           .moveInto(Alloc),
                       Succeeded());
@@ -218,7 +213,6 @@ TEST_F(CASProgramTest, MappedFileRegionArenaSizeTest) {
   std::optional<MappedFileRegionArena> Alloc;
   ASSERT_THAT_ERROR(MappedFileRegionArena::create(FilePath, /*Capacity=*/2048,
                                                   /*HeaderOffset=*/0,
-                                                  /*Logger=*/nullptr,
                                                   emptyConstructor)
                         .moveInto(Alloc),
                     Succeeded());

@@ -13,7 +13,7 @@
 
 using namespace llvm;
 
-struct TestModulePass : public OptionalPassInfoMixin<TestModulePass> {
+struct TestModulePass : public PassInfoMixin<TestModulePass> {
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM) {
     return PreservedAnalyses::all();
   }

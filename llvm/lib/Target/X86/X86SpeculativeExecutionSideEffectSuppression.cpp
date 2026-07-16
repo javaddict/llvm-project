@@ -56,23 +56,21 @@ static cl::opt<bool>
 
 namespace {
 
-constexpr StringRef X86SESESPassName =
-    "X86 Speculative Execution Side Effect Suppression";
-
-class X86SpeculativeExecutionSideEffectSuppressionLegacy
+class X86SpeculativeExecutionSideEffectSuppression
     : public MachineFunctionPass {
 public:
-  X86SpeculativeExecutionSideEffectSuppressionLegacy()
-      : MachineFunctionPass(ID) {}
+  X86SpeculativeExecutionSideEffectSuppression() : MachineFunctionPass(ID) {}
 
   static char ID;
-  StringRef getPassName() const override { return X86SESESPassName; }
+  StringRef getPassName() const override {
+    return "X86 Speculative Execution Side Effect Suppression";
+  }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 };
 } // namespace
 
-char X86SpeculativeExecutionSideEffectSuppressionLegacy::ID = 0;
+char X86SpeculativeExecutionSideEffectSuppression::ID = 0;
 
 // This function returns whether the passed instruction uses a memory addressing
 // mode that is constant. We treat all memory addressing modes that read
@@ -87,8 +85,8 @@ static bool hasConstantAddressingMode(const MachineInstr &MI) {
   return true;
 }
 
-static bool
-runX86SpeculativeExecutionSideEffectSuppression(MachineFunction &MF) {
+bool X86SpeculativeExecutionSideEffectSuppression::runOnMachineFunction(
+    MachineFunction &MF) {
 
   const auto &OptLevel = MF.getTarget().getOptLevel();
   const X86Subtarget &Subtarget = MF.getSubtarget<X86Subtarget>();
@@ -101,8 +99,8 @@ runX86SpeculativeExecutionSideEffectSuppression(MachineFunction &MF) {
       !Subtarget.useSpeculativeExecutionSideEffectSuppression())
     return false;
 
-  LLVM_DEBUG(dbgs() << "********** " << X86SESESPassName << " : "
-                    << MF.getName() << " **********\n");
+  LLVM_DEBUG(dbgs() << "********** " << getPassName() << " : " << MF.getName()
+                    << " **********\n");
   bool Modified = false;
   const X86InstrInfo *TII = Subtarget.getInstrInfo();
   for (MachineBasicBlock &MBB : MF) {
@@ -175,24 +173,10 @@ runX86SpeculativeExecutionSideEffectSuppression(MachineFunction &MF) {
   return Modified;
 }
 
-bool X86SpeculativeExecutionSideEffectSuppressionLegacy::runOnMachineFunction(
-    MachineFunction &MF) {
-  return runX86SpeculativeExecutionSideEffectSuppression(MF);
+FunctionPass *llvm::createX86SpeculativeExecutionSideEffectSuppression() {
+  return new X86SpeculativeExecutionSideEffectSuppression();
 }
 
-PreservedAnalyses X86SpeculativeExecutionSideEffectSuppressionPass::run(
-    MachineFunction &MF, MachineFunctionAnalysisManager &MFAM) {
-  return runX86SpeculativeExecutionSideEffectSuppression(MF)
-             ? getMachineFunctionPassPreservedAnalyses()
-                   .preserveSet<CFGAnalyses>()
-             : PreservedAnalyses::all();
-}
-
-FunctionPass *
-llvm::createX86SpeculativeExecutionSideEffectSuppressionLegacyPass() {
-  return new X86SpeculativeExecutionSideEffectSuppressionLegacy();
-}
-
-INITIALIZE_PASS(X86SpeculativeExecutionSideEffectSuppressionLegacy, "x86-seses",
+INITIALIZE_PASS(X86SpeculativeExecutionSideEffectSuppression, "x86-seses",
                 "X86 Speculative Execution Side Effect Suppression", false,
                 false)

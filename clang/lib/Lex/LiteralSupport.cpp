@@ -1710,7 +1710,7 @@ bool NumericLiteralParser::GetFixedPointValue(llvm::APInt &StoreVal, unsigned Sc
     IntOverflowOccurred |= Val.zext(MaxVal.getBitWidth()).ugt(MaxVal);
     StoreVal = Val.zext(StoreVal.getBitWidth());
   } else {
-    StoreVal = std::move(Val);
+    StoreVal = Val;
   }
 
   return IntOverflowOccurred || ExpOverflowOccurred;

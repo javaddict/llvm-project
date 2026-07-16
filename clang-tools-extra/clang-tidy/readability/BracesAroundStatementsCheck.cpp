@@ -154,8 +154,7 @@ bool BracesAroundStatementsCheck::checkStmt(
       S, Result.Context->getLangOpts(), *Result.SourceManager, StartLoc,
       EndLocHint);
   if (BraceInsertionHints) {
-    if (ShortStatementLines && BraceInsertionHints.offersFixIts() &&
-        !ForceBracesStmts.erase(S) &&
+    if (ShortStatementLines && !ForceBracesStmts.erase(S) &&
         BraceInsertionHints.resultingCompoundLineExtent(*Result.SourceManager) <
             ShortStatementLines)
       return false;

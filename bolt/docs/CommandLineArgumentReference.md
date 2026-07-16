@@ -724,7 +724,7 @@
 
 - `--plt=<value>`
 
-  Optimize PLT calls (requires linking with -znow on non-x86 architectures)
+  Optimize PLT calls (requires linking with -znow)
   - `none`: do not optimize PLT calls
   - `hot`: optimize executed (hot) PLT calls
   - `all`: optimize all PLT calls

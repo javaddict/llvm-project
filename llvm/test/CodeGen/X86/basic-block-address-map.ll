@@ -1,8 +1,7 @@
 ; Check the basic block sections labels option
-; RUN: llc < %s -mtriple=x86_64 -function-sections -unique-section-names=true -basic-block-address-map | FileCheck %s --check-prefixes=CHECK,ELF,UNIQ
-; RUN: llc < %s -mtriple=x86_64 -function-sections -unique-section-names=false -basic-block-address-map | FileCheck %s --check-prefixes=CHECK,ELF,NOUNIQ
-; RUN: llc < %s -mtriple=x86_64 -function-sections -unique-section-names=true -basic-block-address-map -split-machine-functions | FileCheck %s --check-prefixes=CHECK,ELF,UNIQ
-; RUN: llc < %s -mtriple=x86_64-pc-windows-msvc -function-sections -basic-block-address-map | FileCheck %s --check-prefixes=CHECK,COFF
+; RUN: llc < %s -mtriple=x86_64 -function-sections -unique-section-names=true -basic-block-address-map | FileCheck %s --check-prefixes=CHECK,UNIQ
+; RUN: llc < %s -mtriple=x86_64 -function-sections -unique-section-names=false -basic-block-address-map | FileCheck %s --check-prefixes=CHECK,NOUNIQ
+; RUN: llc < %s -mtriple=x86_64 -function-sections -unique-section-names=true -basic-block-address-map -split-machine-functions | FileCheck %s --check-prefixes=CHECK,UNIQ
 
 define void @_Z3bazb(i1 zeroext, i1 zeroext) personality ptr @__gxx_personality_v0 {
   br i1 %0, label %3, label %8
@@ -53,7 +52,6 @@ declare i32 @__gxx_personality_v0(...)
 ; UNIQ:			.section	.llvm_bb_addr_map,"o",@llvm_bb_addr_map,.text._Z3bazb{{$}}
 ;; Verify that with -unique-section-names=false, the unique id of the text section gets assigned to the llvm_bb_addr_map section.
 ; NOUNIQ:		.section	.llvm_bb_addr_map,"o",@llvm_bb_addr_map,.text,unique,1
-; COFF:			.section	.llvm_bb_addr_map,"drD",associative,_Z3bazb,unique,0{{$}}
 ; CHECK-NEXT:   .byte   5		# version
 ; CHECK-NEXT:   .short  32		# feature
 ; CHECK-NEXT:	.quad	.Lfunc_begin0	# function address
@@ -89,7 +87,4 @@ declare i32 @__gxx_personality_v0(...)
 ; CHECK-NEXT:	.uleb128 .LBB0_5-.LBB_END0_4
 ; CHECK-NEXT:   .byte	0		# number of callsites
 ; CHECK-NEXT:	.uleb128 .LBB_END0_5-.LBB0_5
-;; The landingpad block metadata differs: ELF uses eh_frame (HasReturn set),
-;; COFF uses SEH (HasReturn not set).
-; ELF-NEXT:	.byte	5
-; COFF-NEXT:	.byte	4
+; CHECK-NEXT:	.byte	5

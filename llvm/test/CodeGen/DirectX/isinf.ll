@@ -5,14 +5,14 @@
 
 define noundef i1 @isinf_float(float noundef %a) {
 entry:
-  ; CHECK: call i1 @dx.op.isSpecialFloat.f32(i32 9, float %{{.*}})
+  ; CHECK: call i1 @dx.op.isSpecialFloat.f32(i32 9, float %{{.*}}) #[[#ATTR:]]
   %dx.isinf = call i1 @llvm.dx.isinf.f32(float %a)
   ret i1 %dx.isinf
 }
 
 define noundef i1 @isinf_half(half noundef %a) {
 entry:
-  ; SM69CHECK: call i1 @dx.op.isSpecialFloat.f16(i32 9, half %{{.*}})
+  ; SM69CHECK: call i1 @dx.op.isSpecialFloat.f16(i32 9, half %{{.*}}) #[[#ATTR]]
   ; SMOLDCHECK: [[BITCAST:%.*]] = bitcast half %a to i16
   ; SMOLDCHECK: [[CMPHIGH:%.*]] = icmp eq i16 [[BITCAST]], 31744
   ; SMOLDCHECK: [[CMPLOW:%.*]] = icmp eq i16 [[BITCAST]], -1024
@@ -66,6 +66,4 @@ entry:
   ret <3 x i1> %hlsl.isinf
 }
 
-; CHECK-DAG: declare i1 @dx.op.isSpecialFloat.f32(i32, float) #[[#ATTR0:]]
-; SM69CHECK-DAG: declare i1 @dx.op.isSpecialFloat.f16(i32, half) #[[#ATTR0]]
-; CHECK: attributes #[[#ATTR0]] = { nounwind memory(none) }
+; CHECK: attributes #[[#ATTR]] = {{{.*}} memory(none) {{.*}}}

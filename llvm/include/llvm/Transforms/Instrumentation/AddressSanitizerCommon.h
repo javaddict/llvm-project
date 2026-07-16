@@ -20,20 +20,18 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
-#include "llvm/Support/Compiler.h"
 
 namespace llvm {
 // Get AddressSanitizer parameters.
-LLVM_ABI void getAddressSanitizerParams(const Triple &TargetTriple,
-                                        int LongSize, bool IsKasan,
-                                        uint64_t *ShadowBase, int *MappingScale,
-                                        bool *OrShadowOffset);
+void getAddressSanitizerParams(const Triple &TargetTriple, int LongSize,
+                               bool IsKasan, uint64_t *ShadowBase,
+                               int *MappingScale, bool *OrShadowOffset);
 
 /// Remove memory attributes that are incompatible with the instrumentation
 /// added by AddressSanitizer and HWAddressSanitizer.
 /// \p ReadsArgMem - indicates whether function arguments may be read by
 /// instrumentation and require removing `writeonly` attributes.
-LLVM_ABI void removeASanIncompatibleFnAttributes(Function &F, bool ReadsArgMem);
+void removeASanIncompatibleFnAttributes(Function &F, bool ReadsArgMem);
 
 } // namespace llvm
 

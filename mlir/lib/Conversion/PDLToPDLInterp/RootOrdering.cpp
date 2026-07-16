@@ -52,11 +52,12 @@ static void contract(RootOrderingGraph &graph, ArrayRef<Value> cycle,
 
   // Now, contract the cycle, marking the actual sources and targets.
   DenseMap<Value, RootOrderingEntry> repEntries;
-  for (auto &[target, edges] : graph) {
+  for (auto outer = graph.begin(), e = graph.end(); outer != e; ++outer) {
+    Value target = outer->first;
     if (cycleSet.contains(target)) {
       // Target in the cycle => edges incoming to the cycle or within the cycle.
       unsigned parentDepth = parentDepths.lookup(target);
-      for (const auto &inner : edges) {
+      for (const auto &inner : outer->second) {
         Value source = inner.first;
         // Ignore edges within the cycle.
         if (cycleSet.contains(source))
@@ -80,36 +81,35 @@ static void contract(RootOrderingGraph &graph, ArrayRef<Value> cycle,
           repEntries[source].cost = cost;
         }
       }
-      // Defer erasing graph[target] until after the loop; backward-shift
-      // erase would otherwise invalidate the surrounding iterator.
+      // Erase the node in the cycle.
+      graph.erase(outer);
     } else {
       // Target not in cycle => edges going away from or unrelated to the cycle.
+      DenseMap<Value, RootOrderingEntry> &entries = outer->second;
       Value bestSource;
       std::pair<unsigned, unsigned> bestCost;
-      edges.remove_if([&](const auto &inner) {
-        Value source = inner.first;
-        if (!cycleSet.contains(source))
-          return false;
-        // Going-away edge => get its cost and erase it.
-        if (!bestSource || bestCost > inner.second.cost) {
-          bestSource = source;
-          bestCost = inner.second.cost;
+      auto inner = entries.begin(), innerE = entries.end();
+      while (inner != innerE) {
+        Value source = inner->first;
+        if (cycleSet.contains(source)) {
+          // Going-away edge => get its cost and erase it.
+          if (!bestSource || bestCost > inner->second.cost) {
+            bestSource = source;
+            bestCost = inner->second.cost;
+          }
+          entries.erase(inner++);
+        } else {
+          ++inner;
         }
-        return true;
-      });
+      }
 
       // There were going-away edges, contract them.
       if (bestSource) {
-        edges[rep].cost = bestCost;
+        entries[rep].cost = bestCost;
         actualSource[target] = bestSource;
       }
     }
   }
-
-  // Erase all in-cycle nodes from the graph. Done after the iteration above
-  // because backward-shift erase relocates surviving entries.
-  for (Value node : cycle)
-    graph.erase(node);
 
   // Store the edges to the representative.
   graph[rep] = std::move(repEntries);

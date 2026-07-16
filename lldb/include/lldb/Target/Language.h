@@ -180,6 +180,8 @@ public:
 
   virtual bool IsSourceFile(llvm::StringRef file_path) const = 0;
 
+  virtual const Highlighter *GetHighlighter() const { return nullptr; }
+
   virtual lldb::TypeCategoryImplSP GetFormatters();
 
   virtual HardcodedFormatters::HardcodedFormatFinder GetHardcodedFormats();
@@ -468,7 +470,7 @@ public:
     return ConstString();
   }
 
-  virtual llvm::StringRef GetInstanceName() { return {}; }
+  virtual llvm::StringRef GetInstanceVariableName() { return {}; }
 
   /// Given a symbol context list of matches which supposedly represent the
   /// same file and line number in a CU, erases those that should be ignored

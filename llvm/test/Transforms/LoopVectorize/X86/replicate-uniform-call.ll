@@ -57,3 +57,4 @@ exit:
   ret void
 }
 
+declare i64 @llvm.smax.i64(i64, i64)

@@ -9,7 +9,6 @@ from lldbsuite.test.decorators import *
 import lldbsuite.test.lldbutil as lldbutil
 
 
-@skipIfWasm  # no expression evaluation
 class TestCase(TestBase):
     def _run_cmd(self, cmd: str) -> str:
         """Run the given lldb command and return its output."""
@@ -193,4 +192,4 @@ class TestCase(TestBase):
         lldbutil.run_to_source_breakpoint(
             self, "break here", lldb.SBFileSpec("main.cpp")
         )
-        self._expect_cmd("dwim-print gGlobal", "expression")
+        self._expect_cmd("dwim-print gGlobal", "frame variable")

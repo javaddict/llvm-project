@@ -127,9 +127,8 @@ __attribute__((target_version("jscvt"))) int default_def_with_version_decls(void
 // CHECK-NEXT:    ret i32 0
 //
 //
-// CHECK: Function Attrs: disable_sanitizer_instrumentation
-// CHECK-LABEL: define {{[^@]+}}@implicit_default.resolver
-// CHECK-SAME: () #[[ATTR7:[0-9]+]] comdat {
+// CHECK-LABEL: define {{[^@]+}}@implicit_default.resolver()
+// CHECK-SAME: #[[ATTR_RESOLVER:[0-9]+]] comdat {
 // CHECK-NEXT:  resolver_entry:
 // CHECK-NEXT:    call void @__init_cpu_features_resolver()
 // CHECK-NEXT:    [[TMP0:%.*]] = load i64, ptr @__aarch64_cpu_features, align 8
@@ -167,9 +166,8 @@ __attribute__((target_version("jscvt"))) int default_def_with_version_decls(void
 // CHECK-NEXT:    ret ptr @implicit_default.default
 //
 //
-// CHECK: Function Attrs: disable_sanitizer_instrumentation
-// CHECK-LABEL: define {{[^@]+}}@explicit_default.resolver
-// CHECK-SAME: () #[[ATTR7]] comdat {
+// CHECK-LABEL: define {{[^@]+}}@explicit_default.resolver()
+// CHECK-SAME: #[[ATTR_RESOLVER]] comdat {
 // CHECK-NEXT:  resolver_entry:
 // CHECK-NEXT:    call void @__init_cpu_features_resolver()
 // CHECK-NEXT:    [[TMP0:%.*]] = load i64, ptr @__aarch64_cpu_features, align 8
@@ -207,9 +205,8 @@ __attribute__((target_version("jscvt"))) int default_def_with_version_decls(void
 // CHECK-NEXT:    ret ptr @explicit_default.default
 //
 //
-// CHECK: Function Attrs: disable_sanitizer_instrumentation
-// CHECK-LABEL: define {{[^@]+}}@default_def_with_version_decls.resolver
-// CHECK-SAME: () #[[ATTR7]] comdat {
+// CHECK-LABEL: define {{[^@]+}}@default_def_with_version_decls.resolver()
+// CHECK-SAME: #[[ATTR_RESOLVER]] comdat {
 // CHECK-NEXT:  resolver_entry:
 // CHECK-NEXT:    call void @__init_cpu_features_resolver()
 // CHECK-NEXT:    [[TMP0:%.*]] = load i64, ptr @__aarch64_cpu_features, align 8
@@ -261,7 +258,9 @@ __attribute__((target_version("jscvt"))) int default_def_with_version_decls(void
 // CHECK-NOFMV-NEXT:    ret i32 0
 //
 //.
-// CHECK: [[META0:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
+// CHECK: [[META0:![0-9]+]] = !{i32 1, !"wchar_size", i32 4}
+// CHECK: [[META1:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
 //.
-// CHECK-NOFMV: [[META0:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
+// CHECK-NOFMV: [[META0:![0-9]+]] = !{i32 1, !"wchar_size", i32 4}
+// CHECK-NOFMV: [[META1:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
 //.

@@ -1,6 +1,6 @@
 include "../../../../include/lldb/Core/PropertiesBase.td"
 
-let Definition = "jitloadergdb", Path = "plugin.jit-loader.gdb" in {
+let Definition = "jitloadergdb" in {
   def Enable: Property<"enable", "Enum">,
     Global,
     DefaultEnumValue<"eEnableJITLoaderGDBDefault">,

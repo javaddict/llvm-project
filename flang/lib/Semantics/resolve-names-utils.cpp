@@ -519,8 +519,8 @@ bool EquivalenceSets::CheckDataRef(
             return false;
           },
           [&](const common::Indirection<parser::ArrayElement> &elem) {
-            bool ok{CheckDataRef(source, elem.value().Base())};
-            for (const auto &subscript : elem.value().Subscripts()) {
+            bool ok{CheckDataRef(source, elem.value().base)};
+            for (const auto &subscript : elem.value().subscripts) {
               ok &= common::visit(
                   common::visitors{
                       [&](const parser::SubscriptTriplet &) {

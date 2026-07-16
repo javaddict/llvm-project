@@ -29,7 +29,7 @@ namespace llvm {
 class MachineFunction;
 
 using namespace sampleprof;
-class LLVM_ABI MIRAddFSDiscriminators : public MachineFunctionPass {
+class MIRAddFSDiscriminators : public MachineFunctionPass {
   MachineFunction *MF = nullptr;
   FSDiscriminatorPass Pass;
   unsigned LowBit;

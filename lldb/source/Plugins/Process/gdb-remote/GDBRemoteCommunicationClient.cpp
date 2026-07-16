@@ -23,7 +23,6 @@
 #include "lldb/Target/MemoryRegionInfo.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/UnixSignals.h"
-#include "lldb/Utility/AcceleratorGDBRemotePackets.h"
 #include "lldb/Utility/Args.h"
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/LLDBAssert.h"
@@ -40,7 +39,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Config/llvm-config.h" // for LLVM_ENABLE_ZLIB
-#include "llvm/Support/ErrorExtras.h"
 #include "llvm/Support/JSON.h"
 
 #if HAVE_LIBCOMPRESSION
@@ -219,85 +217,6 @@ bool GDBRemoteCommunicationClient::GetMultiMemReadSupported() {
   return m_supports_multi_mem_read == eLazyBoolYes;
 }
 
-bool GDBRemoteCommunicationClient::GetMultiBreakpointSupported() {
-  if (m_supports_multi_breakpoint == eLazyBoolCalculate)
-    GetRemoteQSupported();
-  return m_supports_multi_breakpoint == eLazyBoolYes;
-}
-
-bool GDBRemoteCommunicationClient::GetAcceleratorPluginsSupported() {
-  if (m_supports_accelerator_plugins == eLazyBoolCalculate)
-    GetRemoteQSupported();
-  return m_supports_accelerator_plugins == eLazyBoolYes;
-}
-
-llvm::Expected<std::vector<AcceleratorActions>>
-GDBRemoteCommunicationClient::GetAcceleratorInitializeActions() {
-  // Get the initial actions (e.g. breakpoints to set) requested by any
-  // accelerator plugins using the "jAcceleratorPluginInitialize" packet. This
-  // is sent once when a native process is launched or attached. The empty
-  // state (no plugins / no actions) is modelled as an empty vector; errors are
-  // returned to the caller to report.
-  if (!GetAcceleratorPluginsSupported())
-    return std::vector<AcceleratorActions>();
-
-  StringExtractorGDBRemote response;
-  response.SetResponseValidatorToJSON();
-  if (SendPacketAndWaitForResponse("jAcceleratorPluginInitialize", response) !=
-      PacketResult::Success)
-    return llvm::createStringError(
-        "failed to send jAcceleratorPluginInitialize packet");
-
-  if (response.IsUnsupportedResponse())
-    return std::vector<AcceleratorActions>();
-
-  if (response.IsErrorResponse())
-    return response.GetStatus().takeError();
-
-  llvm::Expected<std::vector<AcceleratorActions>> actions =
-      llvm::json::parse<std::vector<AcceleratorActions>>(response.Peek(),
-                                                         "AcceleratorActions");
-  if (actions)
-    return actions;
-
-  // A bare JSON parse error (e.g. "missing comma at line 4") is meaningless on
-  // its own, so include both the full response and the parse error; the caller
-  // logs this and the user can spot the problem in the response.
-  return llvm::createStringErrorV(
-      "malformed jAcceleratorPluginInitialize response '{0}': {1}",
-      response.GetStringRef(), llvm::toString(actions.takeError()));
-}
-
-llvm::Expected<AcceleratorBreakpointHitResponse>
-GDBRemoteCommunicationClient::AcceleratorBreakpointHit(
-    const AcceleratorBreakpointHitArgs &args) {
-  StreamGDBRemote packet;
-  packet.PutCString("jAcceleratorPluginBreakpointHit:");
-  packet.PutAsJSON(args, /*hex_ascii=*/false);
-
-  StringExtractorGDBRemote response;
-  if (SendPacketAndWaitForResponse(packet.GetString(), response) !=
-      PacketResult::Success)
-    return llvm::createStringError(
-        "failed to send jAcceleratorPluginBreakpointHit packet");
-
-  if (response.IsErrorResponse())
-    return response.GetStatus().takeError();
-
-  llvm::Expected<AcceleratorBreakpointHitResponse> hit_response =
-      llvm::json::parse<AcceleratorBreakpointHitResponse>(
-          response.Peek(), "AcceleratorBreakpointHitResponse");
-  if (hit_response)
-    return hit_response;
-
-  // A bare JSON parse error (e.g. "missing comma at line 4") is meaningless on
-  // its own, so include both the full response and the parse error; the caller
-  // logs this and the user can spot the problem in the response.
-  return llvm::createStringErrorV(
-      "malformed jAcceleratorPluginBreakpointHit response '{0}': {1}",
-      response.GetStringRef(), llvm::toString(hit_response.takeError()));
-}
-
 bool GDBRemoteCommunicationClient::QueryNoAckModeSupported() {
   if (m_supports_not_sending_acks == eLazyBoolCalculate) {
     m_send_acks = true;
@@ -396,7 +315,6 @@ void GDBRemoteCommunicationClient::ResetDiscoverableSettings(bool did_exec) {
     m_x_packet_state.reset();
     m_supports_reverse_continue = eLazyBoolCalculate;
     m_supports_reverse_step = eLazyBoolCalculate;
-    m_supports_accelerator_plugins = eLazyBoolCalculate;
     m_supports_qProcessInfoPID = true;
     m_supports_qfProcessInfo = true;
     m_supports_qUserName = true;
@@ -428,7 +346,6 @@ void GDBRemoteCommunicationClient::ResetDiscoverableSettings(bool did_exec) {
     m_supported_async_json_packets_sp.reset();
     m_supports_jModulesInfo = true;
     m_supports_multi_mem_read = eLazyBoolCalculate;
-    m_supports_multi_breakpoint = eLazyBoolCalculate;
   }
 
   // These flags should be reset when we first connect to a GDB server and when
@@ -456,8 +373,6 @@ void GDBRemoteCommunicationClient::GetRemoteQSupported() {
   m_supports_reverse_continue = eLazyBoolNo;
   m_supports_reverse_step = eLazyBoolNo;
   m_supports_multi_mem_read = eLazyBoolNo;
-  m_supports_multi_breakpoint = eLazyBoolNo;
-  m_supports_accelerator_plugins = eLazyBoolNo;
 
   m_max_packet_size = UINT64_MAX; // It's supposed to always be there, but if
                                   // not, we assume no limit
@@ -519,10 +434,6 @@ void GDBRemoteCommunicationClient::GetRemoteQSupported() {
         m_supports_reverse_step = eLazyBoolYes;
       else if (x == "MultiMemRead+")
         m_supports_multi_mem_read = eLazyBoolYes;
-      else if (x == "jMultiBreakpoint+")
-        m_supports_multi_breakpoint = eLazyBoolYes;
-      else if (x == "accelerator-plugins+")
-        m_supports_accelerator_plugins = eLazyBoolYes;
       // Look for a list of compressions in the features list e.g.
       // qXfer:features:read+;PacketSize=20000;qEcho+;SupportedCompressions=zlib-
       // deflate,lzma
@@ -569,9 +480,7 @@ bool GDBRemoteCommunicationClient::GetThreadSuffixSupported() {
   }
   return m_supports_thread_suffix;
 }
-
-bool GDBRemoteCommunicationClient::GetVContSupported(llvm::StringRef flavor) {
-  assert(!flavor.empty());
+bool GDBRemoteCommunicationClient::GetVContSupported(char flavor) {
   if (m_supports_vCont_c == eLazyBoolCalculate) {
     StringExtractorGDBRemote response;
     m_supports_vCont_any = eLazyBoolNo;
@@ -582,16 +491,18 @@ bool GDBRemoteCommunicationClient::GetVContSupported(llvm::StringRef flavor) {
     m_supports_vCont_S = eLazyBoolNo;
     if (SendPacketAndWaitForResponse("vCont?", response) ==
         PacketResult::Success) {
-      for (llvm::StringRef token : llvm::split(response.GetStringRef(), ';')) {
-        if (token == "c")
-          m_supports_vCont_c = eLazyBoolYes;
-        if (token == "C")
-          m_supports_vCont_C = eLazyBoolYes;
-        if (token == "s")
-          m_supports_vCont_s = eLazyBoolYes;
-        if (token == "S")
-          m_supports_vCont_S = eLazyBoolYes;
-      }
+      const char *response_cstr = response.GetStringRef().data();
+      if (::strstr(response_cstr, ";c"))
+        m_supports_vCont_c = eLazyBoolYes;
+
+      if (::strstr(response_cstr, ";C"))
+        m_supports_vCont_C = eLazyBoolYes;
+
+      if (::strstr(response_cstr, ";s"))
+        m_supports_vCont_s = eLazyBoolYes;
+
+      if (::strstr(response_cstr, ";S"))
+        m_supports_vCont_S = eLazyBoolYes;
 
       if (m_supports_vCont_c == eLazyBoolYes &&
           m_supports_vCont_C == eLazyBoolYes &&
@@ -609,14 +520,23 @@ bool GDBRemoteCommunicationClient::GetVContSupported(llvm::StringRef flavor) {
     }
   }
 
-  return llvm::StringSwitch<bool>(flavor)
-      .Case("a", m_supports_vCont_any)
-      .Case("A", m_supports_vCont_all)
-      .Case("c", m_supports_vCont_c)
-      .Case("C", m_supports_vCont_C)
-      .Case("s", m_supports_vCont_s)
-      .Case("S", m_supports_vCont_S)
-      .Default(false);
+  switch (flavor) {
+  case 'a':
+    return m_supports_vCont_any;
+  case 'A':
+    return m_supports_vCont_all;
+  case 'c':
+    return m_supports_vCont_c;
+  case 'C':
+    return m_supports_vCont_C;
+  case 's':
+    return m_supports_vCont_s;
+  case 'S':
+    return m_supports_vCont_S;
+  default:
+    break;
+  }
+  return false;
 }
 
 GDBRemoteCommunication::PacketResult
@@ -1521,14 +1441,13 @@ bool GDBRemoteCommunicationClient::GetHostInfo(bool force) {
   return m_qHostInfo_is_valid == eLazyBoolYes;
 }
 
-int GDBRemoteCommunicationClient::SendStdinNotification(
-    const char *data, size_t data_len, std::chrono::seconds interrupt_timeout) {
+int GDBRemoteCommunicationClient::SendStdinNotification(const char *data,
+                                                        size_t data_len) {
   StreamString packet;
   packet.PutCString("I");
   packet.PutBytesAsRawHex8(data, data_len);
   StringExtractorGDBRemote response;
-  if (SendPacketAndWaitForResponse(packet.GetString(), response,
-                                   interrupt_timeout) ==
+  if (SendPacketAndWaitForResponse(packet.GetString(), response) ==
       PacketResult::Success) {
     return 0;
   }
@@ -1700,28 +1619,28 @@ Status GDBRemoteCommunicationClient::GetMemoryRegionInfo(
           saw_permissions = true;
           if (region_info.GetRange().Contains(addr)) {
             if (value.contains('r'))
-              region_info.SetReadable(eLazyBoolYes);
+              region_info.SetReadable(MemoryRegionInfo::eYes);
             else
-              region_info.SetReadable(eLazyBoolNo);
+              region_info.SetReadable(MemoryRegionInfo::eNo);
 
             if (value.contains('w'))
-              region_info.SetWritable(eLazyBoolYes);
+              region_info.SetWritable(MemoryRegionInfo::eYes);
             else
-              region_info.SetWritable(eLazyBoolNo);
+              region_info.SetWritable(MemoryRegionInfo::eNo);
 
             if (value.contains('x'))
-              region_info.SetExecutable(eLazyBoolYes);
+              region_info.SetExecutable(MemoryRegionInfo::eYes);
             else
-              region_info.SetExecutable(eLazyBoolNo);
+              region_info.SetExecutable(MemoryRegionInfo::eNo);
 
-            region_info.SetMapped(eLazyBoolYes);
+            region_info.SetMapped(MemoryRegionInfo::eYes);
           } else {
             // The reported region does not contain this address -- we're
             // looking at an unmapped page
-            region_info.SetReadable(eLazyBoolNo);
-            region_info.SetWritable(eLazyBoolNo);
-            region_info.SetExecutable(eLazyBoolNo);
-            region_info.SetMapped(eLazyBoolNo);
+            region_info.SetReadable(MemoryRegionInfo::eNo);
+            region_info.SetWritable(MemoryRegionInfo::eNo);
+            region_info.SetExecutable(MemoryRegionInfo::eNo);
+            region_info.SetMapped(MemoryRegionInfo::eNo);
           }
         } else if (name == "name") {
           StringExtractorGDBRemote name_extractor(value);
@@ -1729,8 +1648,8 @@ Status GDBRemoteCommunicationClient::GetMemoryRegionInfo(
           name_extractor.GetHexByteString(name);
           region_info.SetName(name.c_str());
         } else if (name == "flags") {
-          region_info.SetMemoryTagged(eLazyBoolNo);
-          region_info.SetIsShadowStack(eLazyBoolNo);
+          region_info.SetMemoryTagged(MemoryRegionInfo::eNo);
+          region_info.SetIsShadowStack(MemoryRegionInfo::eNo);
 
           llvm::StringRef flags = value;
           llvm::StringRef flag;
@@ -1740,17 +1659,17 @@ Status GDBRemoteCommunicationClient::GetMemoryRegionInfo(
             // To account for trailing whitespace
             if (flag.size()) {
               if (flag == "mt")
-                region_info.SetMemoryTagged(eLazyBoolYes);
+                region_info.SetMemoryTagged(MemoryRegionInfo::eYes);
               else if (flag == "ss")
-                region_info.SetIsShadowStack(eLazyBoolYes);
+                region_info.SetIsShadowStack(MemoryRegionInfo::eYes);
             }
           }
         } else if (name == "type") {
           for (llvm::StringRef entry : llvm::split(value, ',')) {
             if (entry == "stack")
-              region_info.SetIsStackMemory(eLazyBoolYes);
+              region_info.SetIsStackMemory(MemoryRegionInfo::eYes);
             else if (entry == "heap")
-              region_info.SetIsStackMemory(eLazyBoolNo);
+              region_info.SetIsStackMemory(MemoryRegionInfo::eNo);
           }
         } else if (name == "error") {
           StringExtractorGDBRemote error_extractor(value);
@@ -1767,10 +1686,6 @@ Status GDBRemoteCommunicationClient::GetMemoryRegionInfo(
               dirty_page_list.push_back(page);
           }
           region_info.SetDirtyPageList(dirty_page_list);
-        } else if (name == "protection-key") {
-          unsigned protection_key = 0;
-          if (!value.getAsInteger(10, protection_key))
-            region_info.SetProtectionKey(protection_key);
         }
       }
 
@@ -1781,10 +1696,10 @@ Status GDBRemoteCommunicationClient::GetMemoryRegionInfo(
         // We got a valid address range back but no permissions -- which means
         // this is an unmapped page
         if (!saw_permissions) {
-          region_info.SetReadable(eLazyBoolNo);
-          region_info.SetWritable(eLazyBoolNo);
-          region_info.SetExecutable(eLazyBoolNo);
-          region_info.SetMapped(eLazyBoolNo);
+          region_info.SetReadable(MemoryRegionInfo::eNo);
+          region_info.SetWritable(MemoryRegionInfo::eNo);
+          region_info.SetExecutable(MemoryRegionInfo::eNo);
+          region_info.SetMapped(MemoryRegionInfo::eNo);
         }
       } else {
         // We got an invalid address range back
@@ -1893,14 +1808,14 @@ Status GDBRemoteCommunicationClient::LoadQXferMemoryMap() {
     region.GetRange().SetRangeBase(start);
     region.GetRange().SetByteSize(length);
     if (type == "rom") {
-      region.SetReadable(eLazyBoolYes);
+      region.SetReadable(MemoryRegionInfo::eYes);
       this->m_qXfer_memory_map.push_back(region);
     } else if (type == "ram") {
-      region.SetReadable(eLazyBoolYes);
-      region.SetWritable(eLazyBoolYes);
+      region.SetReadable(MemoryRegionInfo::eYes);
+      region.SetWritable(MemoryRegionInfo::eYes);
       this->m_qXfer_memory_map.push_back(region);
     } else if (type == "flash") {
-      region.SetFlash(eLazyBoolYes);
+      region.SetFlash(MemoryRegionInfo::eYes);
       memory_node.ForEachChildElement(
           [&region](const XMLNode &prop_node) -> bool {
             if (!prop_node.IsElement())
@@ -2708,7 +2623,18 @@ void GDBRemoteCommunicationClient::TestPacketSpeed(const uint32_t num_packets,
 bool GDBRemoteCommunicationClient::SendSpeedTestPacket(uint32_t send_size,
                                                        uint32_t recv_size) {
   StreamString packet;
-  MakeSpeedTestPacket(packet, send_size, recv_size);
+  packet.Printf("qSpeedTest:response_size:%i;data:", recv_size);
+  uint32_t bytes_left = send_size;
+  while (bytes_left > 0) {
+    if (bytes_left >= 26) {
+      packet.PutCString("abcdefghijklmnopqrstuvwxyz");
+      bytes_left -= 26;
+    } else {
+      packet.Printf("%*.*s;", bytes_left, bytes_left,
+                    "abcdefghijklmnopqrstuvwxyz");
+      bytes_left = 0;
+    }
+  }
 
   StringExtractorGDBRemote response;
   return SendPacketAndWaitForResponse(packet.GetString(), response) ==
@@ -3066,9 +2992,7 @@ lldb_private::Status GDBRemoteCommunicationClient::RunShellCommand(
     int *signo_ptr,  // Pass NULL if you don't want the signal that caused the
                      // process to exit
     std::string
-        *command_output, // Pass nullptr if you don't want the command output
-    std::string *separated_error_output, // Pass nullptr if you don't want the
-                                         // command error output
+        *command_output, // Pass NULL if you don't want the command output
     const Timeout<std::micro> &timeout) {
   lldb_private::StreamString stream;
   stream.PutCString("qPlatform_shell:");
@@ -4442,7 +4366,7 @@ bool GDBRemoteCommunicationClient::UsesNativeSignals() {
 
 llvm::Expected<int> GDBRemoteCommunicationClient::KillProcess(lldb::pid_t pid) {
   StringExtractorGDBRemote response;
-  GDBRemoteCommunication::ScopedTimeout timeout(*this, seconds(3));
+  GDBRemoteCommunication::ScopedTimeout(*this, seconds(3));
 
   // LLDB server typically sends no response for "k", so we shouldn't try
   // to sync on timeout.

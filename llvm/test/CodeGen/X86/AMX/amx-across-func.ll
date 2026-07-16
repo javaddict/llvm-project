@@ -230,7 +230,7 @@ define dso_local i32 @test_loop(i32 %0) nounwind {
 ; CHECK-NEXT:    testl %ebx, %ebx
 ; CHECK-NEXT:    jg .LBB2_4
 ; CHECK-NEXT:  # %bb.1: # %.preheader
-; CHECK-NEXT:    xorl %ebp, %ebp
+; CHECK-NEXT:    movl $7, %ebp
 ; CHECK-NEXT:    movl $buf, %r14d
 ; CHECK-NEXT:    movl $32, %r15d
 ; CHECK-NEXT:    movw $8, %r12w
@@ -248,12 +248,13 @@ define dso_local i32 @test_loop(i32 %0) nounwind {
 ; CHECK-NEXT:    callq foo
 ; CHECK-NEXT:    ldtilecfg (%rsp)
 ; CHECK-NEXT:    decl %ebp
+; CHECK-NEXT:    cmpl $7, %ebp
 ; CHECK-NEXT:    jne .LBB2_2
 ; CHECK-NEXT:  # %bb.3:
 ; CHECK-NEXT:    cmpl $3, %ebx
 ; CHECK-NEXT:    jne .LBB2_4
 ; CHECK-NEXT:  # %bb.6:
-; CHECK-NEXT:    cmpl $-7, %ebp
+; CHECK-NEXT:    testl %ebp, %ebp
 ; CHECK-NEXT:    jne .LBB2_5
 ; CHECK-NEXT:  # %bb.7:
 ; CHECK-NEXT:    incl %ebx
@@ -294,7 +295,7 @@ define dso_local i32 @test_loop(i32 %0) nounwind {
 ; IPRA-NEXT:    testl %edi, %edi
 ; IPRA-NEXT:    jg .LBB2_4
 ; IPRA-NEXT:  # %bb.1: # %.preheader
-; IPRA-NEXT:    xorl %ecx, %ecx
+; IPRA-NEXT:    movl $7, %ecx
 ; IPRA-NEXT:    movl $buf, %edx
 ; IPRA-NEXT:    movl $32, %esi
 ; IPRA-NEXT:    movw $8, %di
@@ -306,12 +307,13 @@ define dso_local i32 @test_loop(i32 %0) nounwind {
 ; IPRA-NEXT:    tilestored %tmm0, (%r8,%rsi)
 ; IPRA-NEXT:    callq foo
 ; IPRA-NEXT:    decl %ecx
+; IPRA-NEXT:    cmpl $7, %ecx
 ; IPRA-NEXT:    jne .LBB2_2
 ; IPRA-NEXT:  # %bb.3:
 ; IPRA-NEXT:    cmpl $3, %eax
 ; IPRA-NEXT:    jne .LBB2_4
 ; IPRA-NEXT:  # %bb.6:
-; IPRA-NEXT:    cmpl $-7, %ecx
+; IPRA-NEXT:    testl %ecx, %ecx
 ; IPRA-NEXT:    jne .LBB2_5
 ; IPRA-NEXT:  # %bb.7:
 ; IPRA-NEXT:    incl %eax

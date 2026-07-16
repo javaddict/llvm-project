@@ -17,6 +17,6 @@
 
 #include <sys/types.h>
 
-#endif // LIBC_FULL_BUILD
+#endif // LLVM_LIBC_FULL_BUILD
 
 #endif // LLVM_LIBC_HDR_TYPES_GID_T_H

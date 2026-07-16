@@ -16,8 +16,7 @@ namespace llvm {
 class Pass;
 class Function;
 
-class LoadStoreVectorizerPass
-    : public OptionalPassInfoMixin<LoadStoreVectorizerPass> {
+class LoadStoreVectorizerPass : public PassInfoMixin<LoadStoreVectorizerPass> {
 public:
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };

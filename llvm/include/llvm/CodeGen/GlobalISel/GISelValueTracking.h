@@ -142,14 +142,6 @@ public:
                                    FPClassTest InterestedClasses,
                                    unsigned Depth);
 
-  /// Returns true if \p Val can be assumed to never be a NaN. If \p SNaN is
-  /// true, this returns whether \p Val can be assumed to never be a signaling
-  /// NaN.
-  bool isKnownNeverNaN(Register Val, bool SNaN = false);
-
-  /// Returns true if \p Val can be assumed to never be a signaling NaN.
-  bool isKnownNeverSNaN(Register Val) { return isKnownNeverNaN(Val, true); }
-
   // Observer API. No-op for non-caching implementation.
   void erasingInstr(MachineInstr &MI) override {}
   void createdInstr(MachineInstr &MI) override {}
@@ -173,7 +165,10 @@ class LLVM_ABI GISelValueTrackingAnalysisLegacy : public MachineFunctionPass {
 
 public:
   static char ID;
-  GISelValueTrackingAnalysisLegacy() : MachineFunctionPass(ID) {}
+  GISelValueTrackingAnalysisLegacy() : MachineFunctionPass(ID) {
+    initializeGISelValueTrackingAnalysisLegacyPass(
+        *PassRegistry::getPassRegistry());
+  }
   GISelValueTracking &get(MachineFunction &MF);
   void getAnalysisUsage(AnalysisUsage &AU) const override;
   bool runOnMachineFunction(MachineFunction &MF) override;
@@ -193,7 +188,7 @@ public:
 };
 
 class GISelValueTrackingPrinterPass
-    : public RequiredPassInfoMixin<GISelValueTrackingPrinterPass> {
+    : public PassInfoMixin<GISelValueTrackingPrinterPass> {
   raw_ostream &OS;
 
 public:

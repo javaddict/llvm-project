@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Host/HostInfo.h"
-#include "lldb/Host/windows/LazyImport.h"
 #include "lldb/Target/Unwind.h"
 #include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
@@ -30,6 +29,9 @@
 using namespace lldb;
 using namespace lldb_private;
 
+using GetThreadDescriptionFunctionPtr =
+    HRESULT(WINAPI *)(HANDLE hThread, PWSTR *ppszThreadDescription);
+
 TargetThreadWindows::TargetThreadWindows(ProcessWindows &process,
                                          const HostThread &thread)
     : Thread(process, thread.GetNativeThread().GetThreadId()),
@@ -39,6 +41,7 @@ TargetThreadWindows::~TargetThreadWindows() { DestroyThread(); }
 
 void TargetThreadWindows::RefreshStateAfterStop() {
   ::SuspendThread(m_host_thread.GetNativeThread().GetSystemHandle());
+  SetState(eStateStopped);
   GetRegisterContext()->InvalidateIfNeeded(false);
 }
 
@@ -163,7 +166,7 @@ Status TargetThreadWindows::DoResume() {
       // explicitly compare with -1.
       previous_suspend_count = ::ResumeThread(thread_handle);
 
-      if (previous_suspend_count == static_cast<DWORD>(-1))
+      if (previous_suspend_count == (DWORD)-1)
         return Status(::GetLastError(), eErrorTypeWin32);
 
     } while (previous_suspend_count > 1);
@@ -174,12 +177,17 @@ Status TargetThreadWindows::DoResume() {
 
 const char *TargetThreadWindows::GetName() {
   Log *log = GetLog(LLDBLog::Thread);
-  static LazyImport<HRESULT(WINAPI *)(HANDLE, PWSTR *)>
-      s_get_thread_description{L"Kernel32.dll", "GetThreadDescription"};
-  if (!s_get_thread_description)
+  static GetThreadDescriptionFunctionPtr GetThreadDescription = []() {
+    HMODULE hModule = ::LoadLibraryW(L"Kernel32.dll");
+    return hModule
+               ? reinterpret_cast<GetThreadDescriptionFunctionPtr>(
+                     (void *)::GetProcAddress(hModule, "GetThreadDescription"))
+               : nullptr;
+  }();
+  LLDB_LOGF(log, "GetProcAddress: %p",
+            reinterpret_cast<void *>(GetThreadDescription));
+  if (!GetThreadDescription)
     return m_name.c_str();
-  auto GetThreadDescription = *s_get_thread_description;
-
   PWSTR pszThreadName;
   if (SUCCEEDED(GetThreadDescription(
           m_host_thread.GetNativeThread().GetSystemHandle(), &pszThreadName))) {

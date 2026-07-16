@@ -25,11 +25,11 @@ class Loop;
 //===--------------------------------------------------------------------===//
 // Implementation of DDG DOT Printer for a loop.
 //===--------------------------------------------------------------------===//
-class DDGDotPrinterPass : public RequiredPassInfoMixin<DDGDotPrinterPass> {
+class DDGDotPrinterPass : public PassInfoMixin<DDGDotPrinterPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
-                                 LoopStandardAnalysisResults &AR,
-                                 LPMUpdater &U);
+  PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
+                        LoopStandardAnalysisResults &AR, LPMUpdater &U);
+  static bool isRequired() { return true; }
 };
 
 //===--------------------------------------------------------------------===//
@@ -49,24 +49,20 @@ struct DOTGraphTraits<const DataDependenceGraph *>
 
   /// Print a DDG node either in concise form (-ddg-dot-only) or
   /// verbose mode (-ddg-dot).
-  LLVM_ABI std::string getNodeLabel(const DDGNode *Node,
-                                    const DataDependenceGraph *Graph);
+  std::string getNodeLabel(const DDGNode *Node,
+                           const DataDependenceGraph *Graph);
 
   /// Print attributes of an edge in the DDG graph. If the edge
   /// is a MemoryDependence edge, then detailed dependence info
   /// available from DependenceAnalysis is displayed.
-  LLVM_ABI std::string
+  std::string
   getEdgeAttributes(const DDGNode *Node,
                     GraphTraits<const DDGNode *>::ChildIteratorType I,
                     const DataDependenceGraph *G);
 
   /// Do not print nodes that are part of a pi-block separately. They
   /// will be printed when their containing pi-block is being printed.
-  LLVM_ABI bool isNodeHidden(const DDGNode *Node, const DataDependenceGraph *G);
-
-  /// Return DOT attributes for a node (e.g. border and fill for pi-blocks).
-  LLVM_ABI static std::string getNodeAttributes(const DDGNode *Node,
-                                                const DataDependenceGraph *G);
+  bool isNodeHidden(const DDGNode *Node, const DataDependenceGraph *G);
 
 private:
   /// Print a DDG node in concise form.

@@ -268,11 +268,11 @@ void IteratorModeling::checkPostStmt(const BinaryOperator *BO,
   const BinaryOperatorKind OK = BO->getOpcode();
   const Expr *const LHS = BO->getLHS();
   const Expr *const RHS = BO->getRHS();
-  const SVal LVal = State->getSVal(LHS, C.getStackFrame());
-  const SVal RVal = State->getSVal(RHS, C.getStackFrame());
+  const SVal LVal = State->getSVal(LHS, C.getLocationContext());
+  const SVal RVal = State->getSVal(RHS, C.getLocationContext());
 
   if (isSimpleComparisonOperator(BO->getOpcode())) {
-    SVal Result = State->getSVal(BO, C.getStackFrame());
+    SVal Result = State->getSVal(BO, C.getLocationContext());
     handleComparison(C, BO, C.getCFGElementRef(), Result, LVal, RVal,
                      BinaryOperator::getOverloadedOperator(OK));
   } else if (isRandomIncrOrDecrOperator(OK)) {
@@ -472,7 +472,7 @@ void IteratorModeling::handleComparison(CheckerContext &C, const Expr *CE,
   SymbolRef Sym;
   if (!LPos || !RPos) {
     auto &SymMgr = C.getSymbolManager();
-    Sym = SymMgr.conjureSymbol(Elem, C.getStackFrame(),
+    Sym = SymMgr.conjureSymbol(Elem, C.getLocationContext(),
                                C.getASTContext().LongTy, C.blockCount());
     State = assumeNoOverflow(State, Sym, 4);
   }
@@ -497,10 +497,10 @@ void IteratorModeling::handleComparison(CheckerContext &C, const Expr *CE,
   // instead.
   if (RetVal.isUnknown()) {
     auto &SymMgr = C.getSymbolManager();
-    auto *SF = C.getStackFrame();
+    auto *LCtx = C.getLocationContext();
     RetVal = nonloc::SymbolVal(SymMgr.conjureSymbol(
-        Elem, SF, C.getASTContext().BoolTy, C.blockCount()));
-    State = State->BindExpr(CE, SF, RetVal);
+        Elem, LCtx, C.getASTContext().BoolTy, C.blockCount()));
+    State = State->BindExpr(CE, LCtx, RetVal);
   }
 
   processComparison(C, State, LPos->getOffset(), RPos->getOffset(), RetVal, Op);
@@ -641,7 +641,7 @@ void IteratorModeling::handlePtrIncrOrDecr(CheckerContext &C,
   QualType ElementType = PtrType->getPointeeType();
 
   ProgramStateRef State = C.getState();
-  SVal OldVal = State->getSVal(Iterator, C.getStackFrame());
+  SVal OldVal = State->getSVal(Iterator, C.getLocationContext());
 
   const IteratorPosition *OldPos = getIteratorPosition(State, OldVal);
   if (!OldPos)
@@ -694,8 +694,9 @@ void IteratorModeling::assignToContainer(CheckerContext &C,
   Cont = Cont->getMostDerivedObjectRegion();
 
   auto State = C.getState();
-  const auto *SF = C.getStackFrame();
-  State = createIteratorPosition(State, RetVal, Cont, Elem, SF, C.blockCount());
+  const auto *LCtx = C.getLocationContext();
+  State =
+      createIteratorPosition(State, RetVal, Cont, Elem, LCtx, C.blockCount());
 
   C.addTransition(State);
 }

@@ -11,9 +11,8 @@
 
 #include <cassert>
 #include <climits>
-#include <cstdint>
-#include <limits>
 #include <memory>
+#include <cstdint>
 
 namespace clang {
 namespace interp {
@@ -25,48 +24,26 @@ private:
   using T = uint64_t;
   /// Bits stored in a single field.
   static constexpr uint64_t PER_FIELD = sizeof(T) * CHAR_BIT;
-  /// Number of fields in the init map.
-  unsigned NumElems;
   /// Number of fields not initialized.
   unsigned UninitFields;
-  unsigned DeadFields = 0;
   std::unique_ptr<T[]> Data;
 
 public:
   /// Initializes the map with no fields set.
-  explicit InitMap(unsigned N)
-      : NumElems(N), UninitFields(N),
-        Data(std::make_unique<T[]>(numFields(N))) {}
-  explicit InitMap(unsigned N, bool AllInitialized)
-      : NumElems(N), UninitFields(AllInitialized ? 0 : N),
-        Data(std::make_unique<T[]>(numFields(N))) {
-    if (AllInitialized) {
-      for (unsigned I = 0; I != (numFields(N) / 2); ++I)
-        Data[I] = std::numeric_limits<T>::max();
-    }
-  }
+  explicit InitMap(unsigned N);
 
-  void startElementLifetime(unsigned I);
-  void endElementLifetime(unsigned I);
+private:
+  friend class Pointer;
 
-  bool isElementAlive(unsigned I) const {
-    unsigned LifetimeIndex = (NumElems + I);
-    unsigned Bucket = numFields(NumElems) / 2 + (I / PER_FIELD);
-    return !(data()[Bucket] & (T(1) << (LifetimeIndex % PER_FIELD)));
-  }
-
-  bool allElementsAlive() const { return DeadFields == 0; }
+  /// Returns a pointer to storage.
+  T *data() { return Data.get(); }
+  const T *data() const { return Data.get(); }
 
   /// Initializes an element. Returns true when object if fully initialized.
   bool initializeElement(unsigned I);
 
   /// Checks if an element was initialized.
   bool isElementInitialized(unsigned I) const;
-
-private:
-  /// Returns a pointer to storage.
-  T *data() { return Data.get(); }
-  const T *data() const { return Data.get(); }
 
   static constexpr size_t numFields(unsigned N) {
     return ((N + PER_FIELD - 1) / PER_FIELD) * 2;
@@ -117,6 +94,7 @@ struct InitMapPtr final {
   };
 };
 static_assert(sizeof(InitMapPtr) == sizeof(void *));
+
 } // namespace interp
 } // namespace clang
 

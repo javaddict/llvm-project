@@ -6771,10 +6771,8 @@ define i64 @test_xchg_i64() {
 ; CHECK-ARM8-NEXT:    sub sp, sp, #16
 ; CHECK-ARM8-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-ARM8-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-ARM8-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM8-NEXT:    mov r0, r3
-; CHECK-ARM8-NEXT:    mov r1, r2
-; CHECK-ARM8-NEXT:    clrex
+; CHECK-ARM8-NEXT:    ldr r1, [r0]
+; CHECK-ARM8-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM8-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    b .LBB33_1
@@ -6834,9 +6832,8 @@ define i64 @test_xchg_i64() {
 ; CHECK-ARM6-NEXT:    .pad #16
 ; CHECK-ARM6-NEXT:    sub sp, sp, #16
 ; CHECK-ARM6-NEXT:    ldr r0, .LCPI33_0
-; CHECK-ARM6-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM6-NEXT:    mov r0, r3
-; CHECK-ARM6-NEXT:    mov r1, r2
+; CHECK-ARM6-NEXT:    ldr r1, [r0]
+; CHECK-ARM6-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM6-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    b .LBB33_1
@@ -6900,8 +6897,8 @@ define i64 @test_xchg_i64() {
 ; CHECK-THUMB7-NEXT:    sub sp, #16
 ; CHECK-THUMB7-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-THUMB7-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB7-NEXT:    ldrexd r1, r0, [r0]
-; CHECK-THUMB7-NEXT:    clrex
+; CHECK-THUMB7-NEXT:    ldr r1, [r0]
+; CHECK-THUMB7-NEXT:    ldr r0, [r0, #4]
 ; CHECK-THUMB7-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    b .LBB33_1
@@ -6996,10 +6993,8 @@ define i64 @test_add_i64() {
 ; CHECK-ARM8-NEXT:    sub sp, sp, #16
 ; CHECK-ARM8-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-ARM8-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-ARM8-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM8-NEXT:    mov r0, r3
-; CHECK-ARM8-NEXT:    mov r1, r2
-; CHECK-ARM8-NEXT:    clrex
+; CHECK-ARM8-NEXT:    ldr r1, [r0]
+; CHECK-ARM8-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM8-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    b .LBB34_1
@@ -7059,9 +7054,8 @@ define i64 @test_add_i64() {
 ; CHECK-ARM6-NEXT:    .pad #16
 ; CHECK-ARM6-NEXT:    sub sp, sp, #16
 ; CHECK-ARM6-NEXT:    ldr r0, .LCPI34_0
-; CHECK-ARM6-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM6-NEXT:    mov r0, r3
-; CHECK-ARM6-NEXT:    mov r1, r2
+; CHECK-ARM6-NEXT:    ldr r1, [r0]
+; CHECK-ARM6-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM6-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    b .LBB34_1
@@ -7125,8 +7119,8 @@ define i64 @test_add_i64() {
 ; CHECK-THUMB7-NEXT:    sub sp, #16
 ; CHECK-THUMB7-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-THUMB7-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB7-NEXT:    ldrexd r1, r0, [r0]
-; CHECK-THUMB7-NEXT:    clrex
+; CHECK-THUMB7-NEXT:    ldr r1, [r0]
+; CHECK-THUMB7-NEXT:    ldr r0, [r0, #4]
 ; CHECK-THUMB7-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    b .LBB34_1
@@ -7221,10 +7215,8 @@ define i64 @test_sub_i64() {
 ; CHECK-ARM8-NEXT:    sub sp, sp, #16
 ; CHECK-ARM8-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-ARM8-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-ARM8-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM8-NEXT:    mov r0, r3
-; CHECK-ARM8-NEXT:    mov r1, r2
-; CHECK-ARM8-NEXT:    clrex
+; CHECK-ARM8-NEXT:    ldr r1, [r0]
+; CHECK-ARM8-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM8-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    b .LBB35_1
@@ -7284,9 +7276,8 @@ define i64 @test_sub_i64() {
 ; CHECK-ARM6-NEXT:    .pad #16
 ; CHECK-ARM6-NEXT:    sub sp, sp, #16
 ; CHECK-ARM6-NEXT:    ldr r0, .LCPI35_0
-; CHECK-ARM6-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM6-NEXT:    mov r0, r3
-; CHECK-ARM6-NEXT:    mov r1, r2
+; CHECK-ARM6-NEXT:    ldr r1, [r0]
+; CHECK-ARM6-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM6-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    b .LBB35_1
@@ -7350,8 +7341,8 @@ define i64 @test_sub_i64() {
 ; CHECK-THUMB7-NEXT:    sub sp, #16
 ; CHECK-THUMB7-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-THUMB7-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB7-NEXT:    ldrexd r1, r0, [r0]
-; CHECK-THUMB7-NEXT:    clrex
+; CHECK-THUMB7-NEXT:    ldr r1, [r0]
+; CHECK-THUMB7-NEXT:    ldr r0, [r0, #4]
 ; CHECK-THUMB7-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    b .LBB35_1
@@ -7446,10 +7437,8 @@ define i64 @test_and_i64() {
 ; CHECK-ARM8-NEXT:    sub sp, sp, #16
 ; CHECK-ARM8-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-ARM8-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-ARM8-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM8-NEXT:    mov r0, r3
-; CHECK-ARM8-NEXT:    mov r1, r2
-; CHECK-ARM8-NEXT:    clrex
+; CHECK-ARM8-NEXT:    ldr r1, [r0]
+; CHECK-ARM8-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM8-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    b .LBB36_1
@@ -7509,9 +7498,8 @@ define i64 @test_and_i64() {
 ; CHECK-ARM6-NEXT:    .pad #16
 ; CHECK-ARM6-NEXT:    sub sp, sp, #16
 ; CHECK-ARM6-NEXT:    ldr r0, .LCPI36_0
-; CHECK-ARM6-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM6-NEXT:    mov r0, r3
-; CHECK-ARM6-NEXT:    mov r1, r2
+; CHECK-ARM6-NEXT:    ldr r1, [r0]
+; CHECK-ARM6-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM6-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    b .LBB36_1
@@ -7575,8 +7563,8 @@ define i64 @test_and_i64() {
 ; CHECK-THUMB7-NEXT:    sub sp, #16
 ; CHECK-THUMB7-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-THUMB7-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB7-NEXT:    ldrexd r1, r0, [r0]
-; CHECK-THUMB7-NEXT:    clrex
+; CHECK-THUMB7-NEXT:    ldr r1, [r0]
+; CHECK-THUMB7-NEXT:    ldr r0, [r0, #4]
 ; CHECK-THUMB7-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    b .LBB36_1
@@ -7671,10 +7659,8 @@ define i64 @test_nand_i64() {
 ; CHECK-ARM8-NEXT:    sub sp, sp, #16
 ; CHECK-ARM8-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-ARM8-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-ARM8-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM8-NEXT:    mov r0, r3
-; CHECK-ARM8-NEXT:    mov r1, r2
-; CHECK-ARM8-NEXT:    clrex
+; CHECK-ARM8-NEXT:    ldr r1, [r0]
+; CHECK-ARM8-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM8-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    b .LBB37_1
@@ -7736,9 +7722,8 @@ define i64 @test_nand_i64() {
 ; CHECK-ARM6-NEXT:    .pad #16
 ; CHECK-ARM6-NEXT:    sub sp, sp, #16
 ; CHECK-ARM6-NEXT:    ldr r0, .LCPI37_0
-; CHECK-ARM6-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM6-NEXT:    mov r0, r3
-; CHECK-ARM6-NEXT:    mov r1, r2
+; CHECK-ARM6-NEXT:    ldr r1, [r0]
+; CHECK-ARM6-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM6-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    b .LBB37_1
@@ -7804,8 +7789,8 @@ define i64 @test_nand_i64() {
 ; CHECK-THUMB7-NEXT:    sub sp, #16
 ; CHECK-THUMB7-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-THUMB7-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB7-NEXT:    ldrexd r1, r0, [r0]
-; CHECK-THUMB7-NEXT:    clrex
+; CHECK-THUMB7-NEXT:    ldr r1, [r0]
+; CHECK-THUMB7-NEXT:    ldr r0, [r0, #4]
 ; CHECK-THUMB7-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    b .LBB37_1
@@ -7901,10 +7886,8 @@ define i64 @test_or_i64() {
 ; CHECK-ARM8-NEXT:    sub sp, sp, #16
 ; CHECK-ARM8-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-ARM8-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-ARM8-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM8-NEXT:    mov r0, r3
-; CHECK-ARM8-NEXT:    mov r1, r2
-; CHECK-ARM8-NEXT:    clrex
+; CHECK-ARM8-NEXT:    ldr r1, [r0]
+; CHECK-ARM8-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM8-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    b .LBB38_1
@@ -7963,9 +7946,8 @@ define i64 @test_or_i64() {
 ; CHECK-ARM6-NEXT:    .pad #16
 ; CHECK-ARM6-NEXT:    sub sp, sp, #16
 ; CHECK-ARM6-NEXT:    ldr r0, .LCPI38_0
-; CHECK-ARM6-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM6-NEXT:    mov r0, r3
-; CHECK-ARM6-NEXT:    mov r1, r2
+; CHECK-ARM6-NEXT:    ldr r1, [r0]
+; CHECK-ARM6-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM6-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    b .LBB38_1
@@ -8028,8 +8010,8 @@ define i64 @test_or_i64() {
 ; CHECK-THUMB7-NEXT:    sub sp, #16
 ; CHECK-THUMB7-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-THUMB7-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB7-NEXT:    ldrexd r1, r0, [r0]
-; CHECK-THUMB7-NEXT:    clrex
+; CHECK-THUMB7-NEXT:    ldr r1, [r0]
+; CHECK-THUMB7-NEXT:    ldr r0, [r0, #4]
 ; CHECK-THUMB7-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    b .LBB38_1
@@ -8123,10 +8105,8 @@ define i64 @test_xor_i64() {
 ; CHECK-ARM8-NEXT:    sub sp, sp, #16
 ; CHECK-ARM8-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-ARM8-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-ARM8-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM8-NEXT:    mov r0, r3
-; CHECK-ARM8-NEXT:    mov r1, r2
-; CHECK-ARM8-NEXT:    clrex
+; CHECK-ARM8-NEXT:    ldr r1, [r0]
+; CHECK-ARM8-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM8-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    b .LBB39_1
@@ -8185,9 +8165,8 @@ define i64 @test_xor_i64() {
 ; CHECK-ARM6-NEXT:    .pad #16
 ; CHECK-ARM6-NEXT:    sub sp, sp, #16
 ; CHECK-ARM6-NEXT:    ldr r0, .LCPI39_0
-; CHECK-ARM6-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM6-NEXT:    mov r0, r3
-; CHECK-ARM6-NEXT:    mov r1, r2
+; CHECK-ARM6-NEXT:    ldr r1, [r0]
+; CHECK-ARM6-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM6-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    b .LBB39_1
@@ -8250,8 +8229,8 @@ define i64 @test_xor_i64() {
 ; CHECK-THUMB7-NEXT:    sub sp, #16
 ; CHECK-THUMB7-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-THUMB7-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB7-NEXT:    ldrexd r1, r0, [r0]
-; CHECK-THUMB7-NEXT:    clrex
+; CHECK-THUMB7-NEXT:    ldr r1, [r0]
+; CHECK-THUMB7-NEXT:    ldr r0, [r0, #4]
 ; CHECK-THUMB7-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    b .LBB39_1
@@ -8346,10 +8325,8 @@ define i64 @test_max_i64() {
 ; CHECK-ARM8-NEXT:    sub sp, sp, #16
 ; CHECK-ARM8-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-ARM8-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-ARM8-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM8-NEXT:    mov r0, r3
-; CHECK-ARM8-NEXT:    mov r1, r2
-; CHECK-ARM8-NEXT:    clrex
+; CHECK-ARM8-NEXT:    ldr r1, [r0]
+; CHECK-ARM8-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM8-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    b .LBB40_1
@@ -8415,9 +8392,8 @@ define i64 @test_max_i64() {
 ; CHECK-ARM6-NEXT:    .pad #16
 ; CHECK-ARM6-NEXT:    sub sp, sp, #16
 ; CHECK-ARM6-NEXT:    ldr r0, .LCPI40_0
-; CHECK-ARM6-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM6-NEXT:    mov r0, r3
-; CHECK-ARM6-NEXT:    mov r1, r2
+; CHECK-ARM6-NEXT:    ldr r1, [r0]
+; CHECK-ARM6-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM6-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    b .LBB40_1
@@ -8487,8 +8463,8 @@ define i64 @test_max_i64() {
 ; CHECK-THUMB7-NEXT:    sub sp, #16
 ; CHECK-THUMB7-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-THUMB7-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB7-NEXT:    ldrexd r1, r0, [r0]
-; CHECK-THUMB7-NEXT:    clrex
+; CHECK-THUMB7-NEXT:    ldr r1, [r0]
+; CHECK-THUMB7-NEXT:    ldr r0, [r0, #4]
 ; CHECK-THUMB7-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    b .LBB40_1
@@ -8571,12 +8547,12 @@ define i64 @test_max_i64() {
 ; CHECK-THUMB8BASE-NEXT:    push {r4, lr}
 ; CHECK-THUMB8BASE-NEXT:    .pad #72
 ; CHECK-THUMB8BASE-NEXT:    sub sp, #72
-; CHECK-THUMB8BASE-NEXT:    movw r0, :lower16:atomic_i64
-; CHECK-THUMB8BASE-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB8BASE-NEXT:    movs r1, #0
-; CHECK-THUMB8BASE-NEXT:    bl __atomic_load_8
-; CHECK-THUMB8BASE-NEXT:    str r0, [sp, #56] @ 4-byte Spill
-; CHECK-THUMB8BASE-NEXT:    str r1, [sp, #60] @ 4-byte Spill
+; CHECK-THUMB8BASE-NEXT:    movw r1, :lower16:atomic_i64
+; CHECK-THUMB8BASE-NEXT:    movt r1, :upper16:atomic_i64
+; CHECK-THUMB8BASE-NEXT:    ldr r0, [r1, #4]
+; CHECK-THUMB8BASE-NEXT:    ldr r1, [r1]
+; CHECK-THUMB8BASE-NEXT:    str r1, [sp, #56] @ 4-byte Spill
+; CHECK-THUMB8BASE-NEXT:    str r0, [sp, #60] @ 4-byte Spill
 ; CHECK-THUMB8BASE-NEXT:    b .LBB40_1
 ; CHECK-THUMB8BASE-NEXT:  .LBB40_1: @ %atomicrmw.start
 ; CHECK-THUMB8BASE-NEXT:    @ =>This Inner Loop Header: Depth=1
@@ -8662,10 +8638,8 @@ define i64 @test_min_i64() {
 ; CHECK-ARM8-NEXT:    sub sp, sp, #16
 ; CHECK-ARM8-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-ARM8-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-ARM8-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM8-NEXT:    mov r0, r3
-; CHECK-ARM8-NEXT:    mov r1, r2
-; CHECK-ARM8-NEXT:    clrex
+; CHECK-ARM8-NEXT:    ldr r1, [r0]
+; CHECK-ARM8-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM8-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    b .LBB41_1
@@ -8731,9 +8705,8 @@ define i64 @test_min_i64() {
 ; CHECK-ARM6-NEXT:    .pad #16
 ; CHECK-ARM6-NEXT:    sub sp, sp, #16
 ; CHECK-ARM6-NEXT:    ldr r0, .LCPI41_0
-; CHECK-ARM6-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM6-NEXT:    mov r0, r3
-; CHECK-ARM6-NEXT:    mov r1, r2
+; CHECK-ARM6-NEXT:    ldr r1, [r0]
+; CHECK-ARM6-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM6-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    b .LBB41_1
@@ -8803,8 +8776,8 @@ define i64 @test_min_i64() {
 ; CHECK-THUMB7-NEXT:    sub sp, #16
 ; CHECK-THUMB7-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-THUMB7-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB7-NEXT:    ldrexd r1, r0, [r0]
-; CHECK-THUMB7-NEXT:    clrex
+; CHECK-THUMB7-NEXT:    ldr r1, [r0]
+; CHECK-THUMB7-NEXT:    ldr r0, [r0, #4]
 ; CHECK-THUMB7-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    b .LBB41_1
@@ -8887,12 +8860,12 @@ define i64 @test_min_i64() {
 ; CHECK-THUMB8BASE-NEXT:    push {r4, lr}
 ; CHECK-THUMB8BASE-NEXT:    .pad #72
 ; CHECK-THUMB8BASE-NEXT:    sub sp, #72
-; CHECK-THUMB8BASE-NEXT:    movw r0, :lower16:atomic_i64
-; CHECK-THUMB8BASE-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB8BASE-NEXT:    movs r1, #0
-; CHECK-THUMB8BASE-NEXT:    bl __atomic_load_8
-; CHECK-THUMB8BASE-NEXT:    str r0, [sp, #56] @ 4-byte Spill
-; CHECK-THUMB8BASE-NEXT:    str r1, [sp, #60] @ 4-byte Spill
+; CHECK-THUMB8BASE-NEXT:    movw r1, :lower16:atomic_i64
+; CHECK-THUMB8BASE-NEXT:    movt r1, :upper16:atomic_i64
+; CHECK-THUMB8BASE-NEXT:    ldr r0, [r1, #4]
+; CHECK-THUMB8BASE-NEXT:    ldr r1, [r1]
+; CHECK-THUMB8BASE-NEXT:    str r1, [sp, #56] @ 4-byte Spill
+; CHECK-THUMB8BASE-NEXT:    str r0, [sp, #60] @ 4-byte Spill
 ; CHECK-THUMB8BASE-NEXT:    b .LBB41_1
 ; CHECK-THUMB8BASE-NEXT:  .LBB41_1: @ %atomicrmw.start
 ; CHECK-THUMB8BASE-NEXT:    @ =>This Inner Loop Header: Depth=1
@@ -8978,10 +8951,8 @@ define i64 @test_umax_i64() {
 ; CHECK-ARM8-NEXT:    sub sp, sp, #16
 ; CHECK-ARM8-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-ARM8-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-ARM8-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM8-NEXT:    mov r0, r3
-; CHECK-ARM8-NEXT:    mov r1, r2
-; CHECK-ARM8-NEXT:    clrex
+; CHECK-ARM8-NEXT:    ldr r1, [r0]
+; CHECK-ARM8-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM8-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    b .LBB42_1
@@ -9047,9 +9018,8 @@ define i64 @test_umax_i64() {
 ; CHECK-ARM6-NEXT:    .pad #16
 ; CHECK-ARM6-NEXT:    sub sp, sp, #16
 ; CHECK-ARM6-NEXT:    ldr r0, .LCPI42_0
-; CHECK-ARM6-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM6-NEXT:    mov r0, r3
-; CHECK-ARM6-NEXT:    mov r1, r2
+; CHECK-ARM6-NEXT:    ldr r1, [r0]
+; CHECK-ARM6-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM6-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    b .LBB42_1
@@ -9119,8 +9089,8 @@ define i64 @test_umax_i64() {
 ; CHECK-THUMB7-NEXT:    sub sp, #16
 ; CHECK-THUMB7-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-THUMB7-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB7-NEXT:    ldrexd r1, r0, [r0]
-; CHECK-THUMB7-NEXT:    clrex
+; CHECK-THUMB7-NEXT:    ldr r1, [r0]
+; CHECK-THUMB7-NEXT:    ldr r0, [r0, #4]
 ; CHECK-THUMB7-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    b .LBB42_1
@@ -9203,12 +9173,12 @@ define i64 @test_umax_i64() {
 ; CHECK-THUMB8BASE-NEXT:    push {r4, lr}
 ; CHECK-THUMB8BASE-NEXT:    .pad #72
 ; CHECK-THUMB8BASE-NEXT:    sub sp, #72
-; CHECK-THUMB8BASE-NEXT:    movw r0, :lower16:atomic_i64
-; CHECK-THUMB8BASE-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB8BASE-NEXT:    movs r1, #0
-; CHECK-THUMB8BASE-NEXT:    bl __atomic_load_8
-; CHECK-THUMB8BASE-NEXT:    str r0, [sp, #56] @ 4-byte Spill
-; CHECK-THUMB8BASE-NEXT:    str r1, [sp, #60] @ 4-byte Spill
+; CHECK-THUMB8BASE-NEXT:    movw r1, :lower16:atomic_i64
+; CHECK-THUMB8BASE-NEXT:    movt r1, :upper16:atomic_i64
+; CHECK-THUMB8BASE-NEXT:    ldr r0, [r1, #4]
+; CHECK-THUMB8BASE-NEXT:    ldr r1, [r1]
+; CHECK-THUMB8BASE-NEXT:    str r1, [sp, #56] @ 4-byte Spill
+; CHECK-THUMB8BASE-NEXT:    str r0, [sp, #60] @ 4-byte Spill
 ; CHECK-THUMB8BASE-NEXT:    b .LBB42_1
 ; CHECK-THUMB8BASE-NEXT:  .LBB42_1: @ %atomicrmw.start
 ; CHECK-THUMB8BASE-NEXT:    @ =>This Inner Loop Header: Depth=1
@@ -9294,10 +9264,8 @@ define i64 @test_umin_i64() {
 ; CHECK-ARM8-NEXT:    sub sp, sp, #16
 ; CHECK-ARM8-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-ARM8-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-ARM8-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM8-NEXT:    mov r0, r3
-; CHECK-ARM8-NEXT:    mov r1, r2
-; CHECK-ARM8-NEXT:    clrex
+; CHECK-ARM8-NEXT:    ldr r1, [r0]
+; CHECK-ARM8-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM8-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM8-NEXT:    b .LBB43_1
@@ -9363,9 +9331,8 @@ define i64 @test_umin_i64() {
 ; CHECK-ARM6-NEXT:    .pad #16
 ; CHECK-ARM6-NEXT:    sub sp, sp, #16
 ; CHECK-ARM6-NEXT:    ldr r0, .LCPI43_0
-; CHECK-ARM6-NEXT:    ldrexd r2, r3, [r0]
-; CHECK-ARM6-NEXT:    mov r0, r3
-; CHECK-ARM6-NEXT:    mov r1, r2
+; CHECK-ARM6-NEXT:    ldr r1, [r0]
+; CHECK-ARM6-NEXT:    ldr r0, [r0, #4]
 ; CHECK-ARM6-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-ARM6-NEXT:    b .LBB43_1
@@ -9435,8 +9402,8 @@ define i64 @test_umin_i64() {
 ; CHECK-THUMB7-NEXT:    sub sp, #16
 ; CHECK-THUMB7-NEXT:    movw r0, :lower16:atomic_i64
 ; CHECK-THUMB7-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB7-NEXT:    ldrexd r1, r0, [r0]
-; CHECK-THUMB7-NEXT:    clrex
+; CHECK-THUMB7-NEXT:    ldr r1, [r0]
+; CHECK-THUMB7-NEXT:    ldr r0, [r0, #4]
 ; CHECK-THUMB7-NEXT:    str r1, [sp, #8] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    str r0, [sp, #12] @ 4-byte Spill
 ; CHECK-THUMB7-NEXT:    b .LBB43_1
@@ -9519,12 +9486,12 @@ define i64 @test_umin_i64() {
 ; CHECK-THUMB8BASE-NEXT:    push {r4, lr}
 ; CHECK-THUMB8BASE-NEXT:    .pad #72
 ; CHECK-THUMB8BASE-NEXT:    sub sp, #72
-; CHECK-THUMB8BASE-NEXT:    movw r0, :lower16:atomic_i64
-; CHECK-THUMB8BASE-NEXT:    movt r0, :upper16:atomic_i64
-; CHECK-THUMB8BASE-NEXT:    movs r1, #0
-; CHECK-THUMB8BASE-NEXT:    bl __atomic_load_8
-; CHECK-THUMB8BASE-NEXT:    str r0, [sp, #56] @ 4-byte Spill
-; CHECK-THUMB8BASE-NEXT:    str r1, [sp, #60] @ 4-byte Spill
+; CHECK-THUMB8BASE-NEXT:    movw r1, :lower16:atomic_i64
+; CHECK-THUMB8BASE-NEXT:    movt r1, :upper16:atomic_i64
+; CHECK-THUMB8BASE-NEXT:    ldr r0, [r1, #4]
+; CHECK-THUMB8BASE-NEXT:    ldr r1, [r1]
+; CHECK-THUMB8BASE-NEXT:    str r1, [sp, #56] @ 4-byte Spill
+; CHECK-THUMB8BASE-NEXT:    str r0, [sp, #60] @ 4-byte Spill
 ; CHECK-THUMB8BASE-NEXT:    b .LBB43_1
 ; CHECK-THUMB8BASE-NEXT:  .LBB43_1: @ %atomicrmw.start
 ; CHECK-THUMB8BASE-NEXT:    @ =>This Inner Loop Header: Depth=1

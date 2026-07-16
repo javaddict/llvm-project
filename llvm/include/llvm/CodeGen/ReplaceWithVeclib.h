@@ -15,20 +15,23 @@
 #define LLVM_CODEGEN_REPLACEWITHVECLIB_H
 
 #include "llvm/IR/PassManager.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/PassRegistry.h"
 #include "llvm/Support/Compiler.h"
 
 namespace llvm {
 class Function;
-struct ReplaceWithVeclib : public RequiredPassInfoMixin<ReplaceWithVeclib> {
+struct ReplaceWithVeclib : public PassInfoMixin<ReplaceWithVeclib> {
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
 // Legacy pass
 struct LLVM_ABI ReplaceWithVeclibLegacy : public FunctionPass {
   static char ID;
-  ReplaceWithVeclibLegacy() : FunctionPass(ID) {}
+  ReplaceWithVeclibLegacy() : FunctionPass(ID) {
+    initializeReplaceWithVeclibLegacyPass(*PassRegistry::getPassRegistry());
+  }
   void getAnalysisUsage(AnalysisUsage &AU) const override;
   bool runOnFunction(Function &F) override;
 };

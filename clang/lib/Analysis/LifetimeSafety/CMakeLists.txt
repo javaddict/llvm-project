@@ -8,7 +8,6 @@ add_clang_library(clangAnalysisLifetimeSafety
   LifetimeStats.cpp
   Loans.cpp
   LoanPropagation.cpp
-  MovedLoans.cpp
   Origins.cpp
 
   LINK_LIBS

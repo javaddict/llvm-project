@@ -42,11 +42,10 @@ static cl::opt<bool, true> DebugPrintingX(
     cl::desc("Add printf calls that show the values loaded/stored."),
     cl::location(PollyDebugPrinting), cl::Hidden, cl::cat(PollyCategory));
 
-bool TraceStmts;
-static cl::opt<bool, true> TraceStmtsX(
+static cl::opt<bool> TraceStmts(
     "polly-codegen-trace-stmts",
     cl::desc("Add printf calls that print the statement being executed"),
-    cl::location(TraceStmts), cl::Hidden, cl::cat(PollyCategory));
+    cl::Hidden, cl::cat(PollyCategory));
 
 static cl::opt<bool> TraceScalars(
     "polly-codegen-trace-scalars",
@@ -388,7 +387,10 @@ void BlockGenerator::removeDeadInstructions(BasicBlock *BB, ValueMapT &BBMap) {
     if (!isInstructionTriviallyDead(NewInst))
       continue;
 
-    BBMap.remove_if([&](const auto &Pair) { return Pair.second == NewInst; });
+    for (auto Pair : BBMap)
+      if (Pair.second == NewInst) {
+        BBMap.erase(Pair.first);
+      }
 
     NewInst->eraseFromParent();
     I = NewBB->rbegin();
@@ -622,7 +624,7 @@ void BlockGenerator::generateConditionalExecution(
   DomTreeUpdater DTU(GenDT, DomTreeUpdater::UpdateStrategy::Eager);
   SplitBlockAndInsertIfThen(Cond, Builder.GetInsertPoint(), false, nullptr,
                             &DTU, GenLI);
-  CondBrInst *Branch = cast<CondBrInst>(HeadBlock->getTerminator());
+  BranchInst *Branch = cast<BranchInst>(HeadBlock->getTerminator());
   BasicBlock *ThenBlock = Branch->getSuccessor(0);
   BasicBlock *TailBlock = Branch->getSuccessor(1);
 
@@ -776,12 +778,12 @@ void BlockGenerator::generateScalarStores(
 
           Val = getNewValue(Stmt, Val, BBMap, LTS, L);
           assert((!isa<Instruction>(Val) ||
-                  GenDT->dominates(cast<Instruction>(Val)->getParent(),
-                                   Builder.GetInsertBlock())) &&
+                  DT.dominates(cast<Instruction>(Val)->getParent(),
+                               Builder.GetInsertBlock())) &&
                  "Domination violation");
           assert((!isa<Instruction>(Address) ||
-                  GenDT->dominates(cast<Instruction>(Address)->getParent(),
-                                   Builder.GetInsertBlock())) &&
+                  DT.dominates(cast<Instruction>(Address)->getParent(),
+                               Builder.GetInsertBlock())) &&
                  "Domination violation");
 
           Builder.CreateStore(Val, Address);
@@ -1317,12 +1319,12 @@ void RegionGenerator::generateScalarStores(
           Value *Address = getImplicitAddress(*MA, getLoopForStmt(Stmt), LTS,
                                               BBMap, NewAccesses);
           assert((!isa<Instruction>(NewVal) ||
-                  GenDT->dominates(cast<Instruction>(NewVal)->getParent(),
-                                   Builder.GetInsertBlock())) &&
+                  DT.dominates(cast<Instruction>(NewVal)->getParent(),
+                               Builder.GetInsertBlock())) &&
                  "Domination violation");
           assert((!isa<Instruction>(Address) ||
-                  GenDT->dominates(cast<Instruction>(Address)->getParent(),
-                                   Builder.GetInsertBlock())) &&
+                  DT.dominates(cast<Instruction>(Address)->getParent(),
+                               Builder.GetInsertBlock())) &&
                  "Domination violation");
           Builder.CreateStore(NewVal, Address);
         });

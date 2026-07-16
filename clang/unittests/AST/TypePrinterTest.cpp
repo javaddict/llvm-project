@@ -315,16 +315,14 @@ TEST(TypePrinter, NestedNameSpecifiers) {
       Code, {}, varDecl(hasName("imem"), hasType(qualType().bind("id"))),
       "struct (unnamed)", [](PrintingPolicy &Policy) {
         Policy.FullyQualifiedName = true;
-        Policy.AnonymousTagNameStyle =
-            llvm::to_underlying(PrintingPolicy::AnonymousTagMode::Plain);
+        Policy.AnonymousTagLocations = false;
       }));
 
   ASSERT_TRUE(PrintedTypeMatches(
       Code, {}, varDecl(hasName("imem"), hasType(qualType().bind("id"))),
       "struct (unnamed)", [](PrintingPolicy &Policy) {
         Policy.FullyQualifiedName = false;
-        Policy.AnonymousTagNameStyle =
-            llvm::to_underlying(PrintingPolicy::AnonymousTagMode::Plain);
+        Policy.AnonymousTagLocations = false;
       }));
 
   // Further levels of nesting print the entire scope.
@@ -333,16 +331,14 @@ TEST(TypePrinter, NestedNameSpecifiers) {
       "union level1()::Inner::Inner(int)::(unnamed struct)::(unnamed)",
       [](PrintingPolicy &Policy) {
         Policy.FullyQualifiedName = true;
-        Policy.AnonymousTagNameStyle =
-            llvm::to_underlying(PrintingPolicy::AnonymousTagMode::Plain);
+        Policy.AnonymousTagLocations = false;
       }));
 
   ASSERT_TRUE(PrintedTypeMatches(
       Code, {}, fieldDecl(hasName("u"), hasType(qualType().bind("id"))),
       "union (unnamed)", [](PrintingPolicy &Policy) {
         Policy.FullyQualifiedName = false;
-        Policy.AnonymousTagNameStyle =
-            llvm::to_underlying(PrintingPolicy::AnonymousTagMode::Plain);
+        Policy.AnonymousTagLocations = false;
       }));
 }
 
@@ -361,7 +357,6 @@ TEST(TypePrinter, NestedNameSpecifiersTypedef) {
       Code, {}, fieldDecl(hasName("bar"), hasType(qualType().bind("id"))),
       "struct foo::(anonymous struct)::(unnamed)", [](PrintingPolicy &Policy) {
         Policy.FullyQualifiedName = true;
-        Policy.AnonymousTagNameStyle =
-            llvm::to_underlying(PrintingPolicy::AnonymousTagMode::Plain);
+        Policy.AnonymousTagLocations = false;
       }));
 }

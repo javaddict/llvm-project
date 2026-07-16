@@ -1,4 +1,4 @@
-!RUN: %python %S/../test_errors.py %s %flang -fopenmp -fopenmp-version=50 -Werror -Wno-experimental-option
+!RUN: %python %S/../test_errors.py %s %flang -fopenmp -fopenmp-version=50 -Werror
 
 subroutine f00
   !$omp target defaultmap(tofrom)

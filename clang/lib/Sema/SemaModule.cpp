@@ -59,6 +59,23 @@ static void checkModuleImportContext(Sema &S, Module *M,
   }
 }
 
+// We represent the primary and partition names as 'Paths' which are sections
+// of the hierarchical access path for a clang module.  However for C++20
+// the periods in a name are just another character, and we will need to
+// flatten them into a string.
+static std::string stringFromPath(ModuleIdPath Path) {
+  std::string Name;
+  if (Path.empty())
+    return Name;
+
+  for (auto &Piece : Path) {
+    if (!Name.empty())
+      Name += ".";
+    Name += Piece.getIdentifierInfo()->getName();
+  }
+  return Name;
+}
+
 /// Helper function for makeTransitiveImportsVisible to decide whether
 /// the \param Imported module unit is in the same module with the \param
 /// CurrentModule.
@@ -289,7 +306,7 @@ Sema::ActOnModuleDecl(SourceLocation StartLoc, SourceLocation ModuleLoc,
     // We were asked to compile a module interface unit but this is a module
     // implementation unit.
     Diag(ModuleLoc, diag::err_module_interface_implementation_mismatch)
-        << FixItHint::CreateInsertion(ModuleLoc, "export ");
+      << FixItHint::CreateInsertion(ModuleLoc, "export ");
     MDK = ModuleDeclKind::Interface;
     break;
 
@@ -356,10 +373,10 @@ Sema::ActOnModuleDecl(SourceLocation StartLoc, SourceLocation ModuleLoc,
   // Flatten the dots in a module name. Unlike Clang's hierarchical module map
   // modules, the dots here are just another character that can appear in a
   // module name.
-  std::string ModuleName = ModuleLoader::getFlatNameFromPath(Path);
+  std::string ModuleName = stringFromPath(Path);
   if (IsPartition) {
     ModuleName += ":";
-    ModuleName += ModuleLoader::getFlatNameFromPath(Partition);
+    ModuleName += stringFromPath(Partition);
   }
   // If a module name was explicitly specified on the command line, it must be
   // correct.
@@ -372,7 +389,7 @@ Sema::ActOnModuleDecl(SourceLocation StartLoc, SourceLocation ModuleLoc,
         << getLangOpts().CurrentModule;
     return nullptr;
   }
-  const_cast<LangOptions &>(getLangOpts()).CurrentModule = ModuleName;
+  const_cast<LangOptions&>(getLangOpts()).CurrentModule = ModuleName;
 
   auto &Map = PP.getHeaderSearchInfo().getModuleMap();
   Module *Mod;                 // The module we are creating.
@@ -386,9 +403,9 @@ Sema::ActOnModuleDecl(SourceLocation StartLoc, SourceLocation ModuleLoc,
       Diag(Path[0].getLoc(), diag::err_module_redefinition) << ModuleName;
       if (M->DefinitionLoc.isValid())
         Diag(M->DefinitionLoc, diag::note_prev_module_definition);
-      else if (const ModuleFileName *FileName = M->getASTFileName())
+      else if (OptionalFileEntryRef FE = M->getASTFile())
         Diag(M->DefinitionLoc, diag::note_prev_module_definition_from_ast_file)
-            << *FileName;
+            << FE->getName();
       Mod = M;
       break;
     }
@@ -417,7 +434,7 @@ Sema::ActOnModuleDecl(SourceLocation StartLoc, SourceLocation ModuleLoc,
     Interface = getModuleLoader().loadModule(ModuleLoc, {ModuleNameLoc},
                                              Module::AllVisible,
                                              /*IsInclusionDirective=*/false);
-    const_cast<LangOptions &>(getLangOpts()).CurrentModule = ModuleName;
+    const_cast<LangOptions&>(getLangOpts()).CurrentModule = ModuleName;
 
     if (!Interface) {
       Diag(ModuleLoc, diag::err_module_not_defined) << ModuleName;
@@ -465,6 +482,9 @@ Sema::ActOnModuleDecl(SourceLocation StartLoc, SourceLocation ModuleLoc,
 
   getASTContext().setCurrentNamedModule(Mod);
 
+  if (auto *Listener = getASTMutationListener())
+    Listener->EnteringModulePurview();
+
   // We already potentially made an implicit import (in the case of a module
   // implementation unit importing its interface).  Make this module visible
   // and return the import decl to be added to the current TU.
@@ -483,7 +503,7 @@ Sema::ActOnModuleDecl(SourceLocation StartLoc, SourceLocation ModuleLoc,
     // Sequence initialization of the imported module before that of the current
     // module, if any.
     Context.addModuleInitializer(ModuleScopes.back().Module, Import);
-    Mod->Imports.push_back(Interface); // As if we imported it.
+    Mod->Imports.insert(Interface); // As if we imported it.
     // Also save this as a shortcut to checking for decls in the interface
     ThePrimaryInterface = Interface;
     // If we made an implicit import of the module interface, then return the
@@ -577,12 +597,12 @@ DeclResult Sema::ActOnModuleImport(SourceLocation StartLoc,
     // otherwise, the name of the importing named module.
     ModuleName = NamedMod->getPrimaryModuleInterfaceName().str();
     ModuleName += ":";
-    ModuleName += ModuleLoader::getFlatNameFromPath(Path);
+    ModuleName += stringFromPath(Path);
     ModuleNameLoc =
         IdentifierLoc(Path[0].getLoc(), PP.getIdentifierInfo(ModuleName));
     Path = ModuleIdPath(ModuleNameLoc);
   } else if (getLangOpts().CPlusPlusModules) {
-    ModuleName = ModuleLoader::getFlatNameFromPath(Path);
+    ModuleName = stringFromPath(Path);
     ModuleNameLoc =
         IdentifierLoc(Path[0].getLoc(), PP.getIdentifierInfo(ModuleName));
     Path = ModuleIdPath(ModuleNameLoc);
@@ -710,7 +730,7 @@ DeclResult Sema::ActOnModuleImport(SourceLocation StartLoc,
     if (ExportLoc.isValid() || getEnclosingExportDecl(Import))
       getCurrentModule()->Exports.emplace_back(Mod, false);
     else
-      getCurrentModule()->Imports.push_back(Mod);
+      getCurrentModule()->Imports.insert(Mod);
   }
 
   HadImportedNamedModules = true;
@@ -935,22 +955,10 @@ static bool checkExportedDecl(Sema &S, Decl *D, SourceLocation BlockStart) {
   // HLSL: export declaration is valid only on functions
   if (S.getLangOpts().HLSL) {
     // Export-within-export was already diagnosed in ActOnStartExportDecl
-    if (!isa<FunctionDecl, ExportDecl, ExplicitInstantiationDecl>(D)) {
+    if (!isa<FunctionDecl, ExportDecl>(D)) {
       S.Diag(D->getBeginLoc(), diag::err_hlsl_export_not_on_function);
       D->setInvalidDecl();
       return false;
-    }
-
-    if (isa<FunctionDecl>(D)) {
-      FunctionDecl *FD = cast<FunctionDecl>(D);
-      for (const ParmVarDecl *PVD : FD->parameters()) {
-        if (PVD->hasAttr<HLSLGroupSharedAddressSpaceAttr>()) {
-          S.Diag(D->getBeginLoc(), diag::err_hlsl_attr_incompatible)
-              << "'export'" << "'groupshared' parameter";
-          D->setInvalidDecl();
-          return false;
-        }
-      }
     }
   }
 
@@ -1474,7 +1482,7 @@ public:
     if (DRE->isNonOdrUse() && (L == Linkage::Internal || L == Linkage::None))
       if (auto *VD = dyn_cast<VarDecl>(Referenced);
           VD && VD->getInit() && !VD->getInit()->isValueDependent() &&
-          VD->getInit()->isConstantInitializer(Context))
+          VD->getInit()->isConstantInitializer(Context, /*IsForRef=*/false))
         return true;
 
     Callback(DRE, Referenced);

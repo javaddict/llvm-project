@@ -7,7 +7,7 @@ a.out: main.o padding1.o padding2.o padding3.o padding4.o foo.o
 	${CC} ${LDFLAGS} foo.o padding1.o padding2.o padding3.o padding4.o main.o -o a.out
 
 %.o: $(SRCDIR)/%.s
-	${CC} ${CFLAGS} -c $<
+	${CC} -c $<
 
 #padding1.o: padding1.s
 #	${CC} -c $(SRCDIR)/padding1.s

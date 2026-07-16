@@ -1,4 +1,4 @@
-// REQUIRES: omp_taskgraph_experimental
+// REQUIRES: ompx_taskgraph
 // RUN: %libomp-cxx-compile-and-run
 #include <iostream>
 #include <fstream>

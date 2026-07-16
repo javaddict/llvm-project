@@ -13,7 +13,7 @@
 
 namespace LIBC_NAMESPACE_DECL {
 
-extern char **environ;
+extern "C" char **environ;
 
 } // namespace LIBC_NAMESPACE_DECL
 

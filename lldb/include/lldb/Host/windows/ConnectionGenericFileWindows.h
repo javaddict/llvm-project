@@ -43,7 +43,6 @@ public:
 
 protected:
   OVERLAPPED m_overlapped;
-  bool m_read_pending = false;
   HANDLE m_file;
   HANDLE m_event_handles[2];
   bool m_owns_file;

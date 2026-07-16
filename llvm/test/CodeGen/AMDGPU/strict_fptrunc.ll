@@ -11,6 +11,8 @@ define half @v_constrained_fptrunc_f32_to_f16_fpexcept_strict(float %arg) #0 {
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cvt_f16_f32_e32 v0, v0
+; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; SI-NEXT:    v_cvt_f32_f16_e32 v0, v0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX89-LABEL: v_constrained_fptrunc_f32_to_f16_fpexcept_strict:
@@ -46,9 +48,10 @@ define <2 x half> @v_constrained_fptrunc_v2f32_to_v2f16_fpexcept_strict(<2 x flo
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cvt_f16_f32_e32 v1, v1
 ; SI-NEXT:    v_cvt_f16_f32_e32 v0, v0
-; SI-NEXT:    v_lshlrev_b32_e32 v1, 16, v1
+; SI-NEXT:    v_and_b32_e32 v1, 0xffff, v1
 ; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
-; SI-NEXT:    v_or_b32_e32 v0, v0, v1
+; SI-NEXT:    v_cvt_f32_f16_e32 v0, v0
+; SI-NEXT:    v_cvt_f32_f16_e32 v1, v1
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX8-LABEL: v_constrained_fptrunc_v2f32_to_v2f16_fpexcept_strict:
@@ -100,12 +103,14 @@ define <3 x half> @v_constrained_fptrunc_v3f32_to_v3f16_fpexcept_strict(<3 x flo
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cvt_f16_f32_e32 v2, v2
-; SI-NEXT:    v_cvt_f16_f32_e32 v3, v1
+; SI-NEXT:    v_cvt_f16_f32_e32 v1, v1
 ; SI-NEXT:    v_cvt_f16_f32_e32 v0, v0
-; SI-NEXT:    v_and_b32_e32 v1, 0xffff, v2
-; SI-NEXT:    v_lshlrev_b32_e32 v2, 16, v3
+; SI-NEXT:    v_and_b32_e32 v2, 0xffff, v2
+; SI-NEXT:    v_and_b32_e32 v1, 0xffff, v1
 ; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
-; SI-NEXT:    v_or_b32_e32 v0, v0, v2
+; SI-NEXT:    v_cvt_f32_f16_e32 v0, v0
+; SI-NEXT:    v_cvt_f32_f16_e32 v1, v1
+; SI-NEXT:    v_cvt_f32_f16_e32 v2, v2
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX8-LABEL: v_constrained_fptrunc_v3f32_to_v3f16_fpexcept_strict:
@@ -211,7 +216,9 @@ define half @v_constrained_fneg_fptrunc_f32_to_f16_fpexcept_strict(float %arg) #
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cvt_f16_f32_e32 v0, v0
-; SI-NEXT:    v_xor_b32_e32 v0, 0xffff8000, v0
+; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; SI-NEXT:    v_cvt_f32_f16_e32 v0, v0
+; SI-NEXT:    v_xor_b32_e32 v0, 0x80000000, v0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX89-LABEL: v_constrained_fneg_fptrunc_f32_to_f16_fpexcept_strict:
@@ -251,6 +258,8 @@ define half @v_constrained_fptrunc_fneg_f32_to_f16_fpexcept_strict(float %arg) #
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cvt_f16_f32_e64 v0, -v0
+; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; SI-NEXT:    v_cvt_f32_f16_e32 v0, v0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX89-LABEL: v_constrained_fptrunc_fneg_f32_to_f16_fpexcept_strict:
@@ -309,6 +318,8 @@ define void @v_constrained_fptrunc_f32_to_f16_fpexcept_strict_noabi(float %arg, 
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cvt_f16_f32_e32 v0, v0
+; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; SI-NEXT:    v_cvt_f32_f16_e32 v0, v0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX89-LABEL: v_constrained_fptrunc_f32_to_f16_fpexcept_strict_noabi:
@@ -346,10 +357,15 @@ define void @v_constrained_fptrunc_v2f32_to_v2f16_fpexcept_strict_noabi(<2 x flo
 ; SI-NEXT:    v_cvt_f16_f32_e32 v0, v0
 ; SI-NEXT:    s_mov_b32 s6, 0
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
-; SI-NEXT:    v_lshlrev_b32_e32 v1, 16, v1
+; SI-NEXT:    v_and_b32_e32 v1, 0xffff, v1
+; SI-NEXT:    v_cvt_f32_f16_e32 v1, v1
 ; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; SI-NEXT:    v_cvt_f32_f16_e32 v0, v0
 ; SI-NEXT:    s_mov_b32 s4, s6
+; SI-NEXT:    v_cvt_f16_f32_e32 v1, v1
 ; SI-NEXT:    s_mov_b32 s5, s6
+; SI-NEXT:    v_cvt_f16_f32_e32 v0, v0
+; SI-NEXT:    v_lshlrev_b32_e32 v1, 16, v1
 ; SI-NEXT:    v_or_b32_e32 v0, v0, v1
 ; SI-NEXT:    buffer_store_dword v0, v[2:3], s[4:7], 0 addr64
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0)
@@ -411,6 +427,8 @@ define void @v_constrained_fptrunc_f32_to_f16_fpexcept_strict_noabi_fneg(float %
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cvt_f16_f32_e64 v0, -v0
+; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; SI-NEXT:    v_cvt_f32_f16_e32 v0, v0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX89-LABEL: v_constrained_fptrunc_f32_to_f16_fpexcept_strict_noabi_fneg:
@@ -446,6 +464,8 @@ define void @v_constrained_fptrunc_f32_to_f16_fpexcept_strict_noabi_fabs(float %
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cvt_f16_f32_e64 v0, |v0|
+; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; SI-NEXT:    v_cvt_f32_f16_e32 v0, v0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX89-LABEL: v_constrained_fptrunc_f32_to_f16_fpexcept_strict_noabi_fabs:

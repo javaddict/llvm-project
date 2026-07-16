@@ -250,8 +250,6 @@ private:
   Error parseSection(WasmSection &Sec);
   Error parseCustomSection(WasmSection &Sec, ReadContext &Ctx);
 
-  Error parseImport(ReadContext &Ctx, wasm::WasmImport &Im);
-
   // Standard section types
   Error parseTypeSection(ReadContext &Ctx);
   Error parseImportSection(ReadContext &Ctx);

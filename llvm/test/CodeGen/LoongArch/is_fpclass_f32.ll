@@ -447,7 +447,10 @@ entry:
 define i1 @isnone_f(float %x) {
 ; CHECK-LABEL: isnone_f:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    move $a0, $zero
+; CHECK-NEXT:    fclass.s $fa0, $fa0
+; CHECK-NEXT:    movfr2gr.s $a0, $fa0
+; CHECK-NEXT:    andi $a0, $a0, 0
+; CHECK-NEXT:    sltu $a0, $zero, $a0
 ; CHECK-NEXT:    ret
 entry:
   %0 = tail call i1 @llvm.is.fpclass.f32(float %x, i32 0)
@@ -457,7 +460,10 @@ entry:
 define i1 @isany_f(float %x) {
 ; CHECK-LABEL: isany_f:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    ori $a0, $zero, 1
+; CHECK-NEXT:    fclass.s $fa0, $fa0
+; CHECK-NEXT:    movfr2gr.s $a0, $fa0
+; CHECK-NEXT:    andi $a0, $a0, 1023
+; CHECK-NEXT:    sltu $a0, $zero, $a0
 ; CHECK-NEXT:    ret
 entry:
   %0 = tail call i1 @llvm.is.fpclass.f32(float %x, i32 1023)

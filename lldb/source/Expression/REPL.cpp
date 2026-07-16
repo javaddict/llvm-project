@@ -38,14 +38,19 @@ REPL::~REPL() = default;
 lldb::REPLSP REPL::Create(Status &err, lldb::LanguageType language,
                           Debugger *debugger, Target *target,
                           const char *repl_options) {
+  uint32_t idx = 0;
   lldb::REPLSP ret;
 
-  for (auto &cbs : PluginManager::GetREPLCallbacks()) {
-    if (!cbs.supported_languages[language])
+  while (REPLCreateInstance create_instance =
+             PluginManager::GetREPLCreateCallbackAtIndex(idx)) {
+    LanguageSet supported_languages =
+        PluginManager::GetREPLSupportedLanguagesAtIndex(idx++);
+    if (!supported_languages[language])
       continue;
-    ret = (*cbs.create_callback)(err, language, debugger, target, repl_options);
-    if (ret)
+    ret = (*create_instance)(err, language, debugger, target, repl_options);
+    if (ret) {
       break;
+    }
   }
 
   return ret;
@@ -184,30 +189,29 @@ int REPL::IOHandlerFixIndentation(IOHandler &io_handler,
 }
 
 static bool ReadCode(const std::string &path, std::string &code,
-                     lldb::LockableStreamFileSP &error_stream_sp) {
+                     lldb::StreamFileSP &error_sp) {
   auto &fs = FileSystem::Instance();
   llvm::Twine pathTwine(path);
   if (!fs.Exists(pathTwine)) {
-    error_stream_sp->Lock().Printf("no such file at path '%s'\n", path.c_str());
+    error_sp->Printf("no such file at path '%s'\n", path.c_str());
     return false;
   }
   if (!fs.Readable(pathTwine)) {
-    error_stream_sp->Lock().Printf("could not read file at path '%s'\n",
-                                   path.c_str());
+    error_sp->Printf("could not read file at path '%s'\n", path.c_str());
     return false;
   }
   const size_t file_size = fs.GetByteSize(pathTwine);
   const size_t max_size = code.max_size();
   if (file_size > max_size) {
-    error_stream_sp->Lock().Printf("file at path '%s' too large: "
-                                   "file_size = %zu, max_size = %zu\n",
-                                   path.c_str(), file_size, max_size);
+    error_sp->Printf("file at path '%s' too large: "
+                     "file_size = %zu, max_size = %zu\n",
+                     path.c_str(), file_size, max_size);
     return false;
   }
   auto data_sp = fs.CreateDataBuffer(pathTwine);
   if (data_sp == nullptr) {
-    error_stream_sp->Lock().Printf(
-        "could not create buffer for file at path '%s'\n", path.c_str());
+    error_sp->Printf("could not create buffer for file at path '%s'\n",
+                     path.c_str());
     return false;
   }
   code.assign((const char *)data_sp->GetBytes(), data_sp->GetByteSize());
@@ -215,10 +219,10 @@ static bool ReadCode(const std::string &path, std::string &code,
 }
 
 void REPL::IOHandlerInputComplete(IOHandler &io_handler, std::string &code) {
-  lldb::LockableStreamFileSP output_stream_sp =
-      io_handler.GetOutputStreamFileSP();
-  lldb::LockableStreamFileSP error_stream_sp =
-      io_handler.GetErrorStreamFileSP();
+  lldb::StreamFileSP output_sp = std::make_shared<StreamFile>(
+      io_handler.GetOutputStreamFileSP()->GetUnlockedFileSP());
+  lldb::StreamFileSP error_sp = std::make_shared<StreamFile>(
+      io_handler.GetErrorStreamFileSP()->GetUnlockedFileSP());
   bool extra_line = false;
   bool did_quit = false;
 
@@ -254,10 +258,8 @@ void REPL::IOHandlerInputComplete(IOHandler &io_handler, std::string &code) {
 
         // Execute the command
         CommandReturnObject result(debugger.GetUseColor());
-        result.SetImmediateOutputStream(std::make_shared<StreamFile>(
-            output_stream_sp->GetUnlockedFileSP()));
-        result.SetImmediateErrorStream(
-            std::make_shared<StreamFile>(error_stream_sp->GetUnlockedFileSP()));
+        result.SetImmediateOutputStream(output_sp);
+        result.SetImmediateErrorStream(error_sp);
         ci.HandleCommand(code.c_str(), eLazyBoolNo, result);
 
         if (saved_prompt_on_quit)
@@ -300,7 +302,7 @@ void REPL::IOHandlerInputComplete(IOHandler &io_handler, std::string &code) {
         // User wants to read code from a file.
         // Interpret rest of line as a literal path.
         auto path = llvm::StringRef(code.substr(1)).trim().str();
-        if (!ReadCode(path, code, error_stream_sp)) {
+        if (!ReadCode(path, code, error_sp)) {
           return;
         }
       }
@@ -316,8 +318,7 @@ void REPL::IOHandlerInputComplete(IOHandler &io_handler, std::string &code) {
         }
       }
 
-      const bool colorize_err =
-          error_stream_sp->Lock().GetFile().GetIsTerminalWithColors();
+      const bool colorize_err = error_sp->GetFile().GetIsTerminalWithColors();
 
       EvaluateExpressionOptions expr_options = m_expr_options;
       expr_options.SetCoerceToId(m_varobj_options.use_object_desc);
@@ -346,7 +347,7 @@ void REPL::IOHandlerInputComplete(IOHandler &io_handler, std::string &code) {
       if (llvm::Error err = OnExpressionEvaluated(exe_ctx, code, expr_options,
                                                   execution_results,
                                                   result_valobj_sp, error)) {
-        error_stream_sp->Lock() << llvm::toString(std::move(err)) << "\n";
+        *error_sp << llvm::toString(std::move(err)) << "\n";
       } else if (process_sp && process_sp->IsAlive()) {
         bool add_to_code = true;
         bool handled = false;
@@ -354,12 +355,11 @@ void REPL::IOHandlerInputComplete(IOHandler &io_handler, std::string &code) {
           lldb::Format format = m_format_options.GetFormat();
 
           if (result_valobj_sp->GetError().Success()) {
-            handled |=
-                PrintOneVariable(debugger, output_stream_sp, result_valobj_sp);
+            handled |= PrintOneVariable(debugger, output_sp, result_valobj_sp);
           } else if (result_valobj_sp->GetError().GetError() ==
                      UserExpression::kNoResult) {
             if (format != lldb::eFormatVoid && debugger.GetNotifyVoid()) {
-              error_stream_sp->Lock().PutCString("(void)\n");
+              error_sp->PutCString("(void)\n");
               handled = true;
             }
           }
@@ -372,53 +372,48 @@ void REPL::IOHandlerInputComplete(IOHandler &io_handler, std::string &code) {
                 persistent_state->GetVariableAtIndex(vi);
             lldb::ValueObjectSP valobj_sp = persistent_var_sp->GetValueObject();
 
-            PrintOneVariable(debugger, output_stream_sp, valobj_sp,
+            PrintOneVariable(debugger, output_sp, valobj_sp,
                              persistent_var_sp.get());
           }
         }
 
         if (!handled) {
-          LockedStreamFile locked_error_stream = error_stream_sp->Lock();
-          bool useColors =
-              locked_error_stream.GetFile().GetIsTerminalWithColors();
+          bool useColors = error_sp->GetFile().GetIsTerminalWithColors();
           switch (execution_results) {
           case lldb::eExpressionSetupError:
           case lldb::eExpressionParseError:
             add_to_code = false;
             [[fallthrough]];
           case lldb::eExpressionDiscarded:
-            locked_error_stream.Printf("%s\n", error.AsCString());
+            error_sp->Printf("%s\n", error.AsCString());
             break;
 
           case lldb::eExpressionCompleted:
             break;
           case lldb::eExpressionInterrupted:
             if (useColors) {
-              locked_error_stream.Printf(ANSI_ESCAPE1(ANSI_FG_COLOR_RED));
-              locked_error_stream.Printf(ANSI_ESCAPE1(ANSI_CTRL_BOLD));
+              error_sp->Printf(ANSI_ESCAPE1(ANSI_FG_COLOR_RED));
+              error_sp->Printf(ANSI_ESCAPE1(ANSI_CTRL_BOLD));
             }
-            locked_error_stream.Printf("Execution interrupted. ");
+            error_sp->Printf("Execution interrupted. ");
             if (useColors)
-              locked_error_stream.Printf(ANSI_ESCAPE1(ANSI_CTRL_NORMAL));
-            locked_error_stream.Printf(
-                "Enter code to recover and continue.\nEnter LLDB "
-                "commands to investigate (type :help for "
-                "assistance.)\n");
+              error_sp->Printf(ANSI_ESCAPE1(ANSI_CTRL_NORMAL));
+            error_sp->Printf("Enter code to recover and continue.\nEnter LLDB "
+                             "commands to investigate (type :help for "
+                             "assistance.)\n");
             break;
 
           case lldb::eExpressionHitBreakpoint:
             // Breakpoint was hit, drop into LLDB command interpreter
             if (useColors) {
-              locked_error_stream.Printf(ANSI_ESCAPE1(ANSI_FG_COLOR_RED));
-              locked_error_stream.Printf(ANSI_ESCAPE1(ANSI_CTRL_BOLD));
+              error_sp->Printf(ANSI_ESCAPE1(ANSI_FG_COLOR_RED));
+              error_sp->Printf(ANSI_ESCAPE1(ANSI_CTRL_BOLD));
             }
-            output_stream_sp->Lock().Printf(
-                "Execution stopped at breakpoint.  ");
+            output_sp->Printf("Execution stopped at breakpoint.  ");
             if (useColors)
-              locked_error_stream.Printf(ANSI_ESCAPE1(ANSI_CTRL_NORMAL));
-            locked_error_stream.Printf(
-                "Enter LLDB commands to investigate (type help "
-                "for assistance.)\n");
+              error_sp->Printf(ANSI_ESCAPE1(ANSI_CTRL_NORMAL));
+            output_sp->Printf("Enter LLDB commands to investigate (type help "
+                              "for assistance.)\n");
             {
               lldb::IOHandlerSP io_handler_sp(ci.GetIOHandler());
               if (io_handler_sp) {
@@ -429,24 +424,24 @@ void REPL::IOHandlerInputComplete(IOHandler &io_handler, std::string &code) {
             break;
 
           case lldb::eExpressionTimedOut:
-            locked_error_stream.Printf("error: timeout\n");
+            error_sp->Printf("error: timeout\n");
             if (error.AsCString())
-              locked_error_stream.Printf("error: %s\n", error.AsCString());
+              error_sp->Printf("error: %s\n", error.AsCString());
             break;
           case lldb::eExpressionResultUnavailable:
             // Shoulnd't happen???
-            locked_error_stream.Printf("error: could not fetch result -- %s\n",
-                                       error.AsCString());
+            error_sp->Printf("error: could not fetch result -- %s\n",
+                             error.AsCString());
             break;
           case lldb::eExpressionStoppedForDebug:
             // Shoulnd't happen???
-            locked_error_stream.Printf("error: stopped for debug -- %s\n",
-                                       error.AsCString());
+            error_sp->Printf("error: stopped for debug -- %s\n",
+                             error.AsCString());
             break;
           case lldb::eExpressionThreadVanished:
             // Shoulnd't happen???
-            locked_error_stream.Printf(
-                "error: expression thread vanished -- %s\n", error.AsCString());
+            error_sp->Printf("error: expression thread vanished -- %s\n",
+                             error.AsCString());
             break;
           }
         }
@@ -471,9 +466,8 @@ void REPL::IOHandlerInputComplete(IOHandler &io_handler, std::string &code) {
               file.get()->Close();
             } else {
               std::string message = llvm::toString(file.takeError());
-              error_stream_sp->Lock().Printf("error: couldn't open %s: %s\n",
-                                             m_repl_source_path.c_str(),
-                                             message.c_str());
+              error_sp->Printf("error: couldn't open %s: %s\n",
+                               m_repl_source_path.c_str(), message.c_str());
             }
 
             // Now set the default file and line to the REPL source file
@@ -484,15 +478,16 @@ void REPL::IOHandlerInputComplete(IOHandler &io_handler, std::string &code) {
           static_cast<IOHandlerEditline &>(io_handler)
               .SetBaseLineNumber(m_code.GetSize() + 1);
         }
-        if (extra_line)
-          output_stream_sp->Lock().Printf("\n");
+        if (extra_line) {
+          output_sp->Printf("\n");
+        }
       }
     }
 
     // Don't complain about the REPL process going away if we are in the
     // process of quitting.
     if (!did_quit && (!process_sp || !process_sp->IsAlive())) {
-      error_stream_sp->Lock().Printf(
+      error_sp->Printf(
           "error: REPL process is no longer alive, exiting REPL\n");
       io_handler.SetIsDone(true);
     }

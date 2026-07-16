@@ -7,13 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/ufromfpl.h"
-#include "src/__support/math/ufromfpl.h"
+#include "src/__support/FPUtil/NearestIntegerOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(long double, ufromfpl,
                    (long double x, int rnd, unsigned int width)) {
-  return math::ufromfpl(x, rnd, width);
+  return fputil::fromfp</*IsSigned=*/false>(x, rnd, width);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

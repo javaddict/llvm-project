@@ -9,7 +9,6 @@ from lldbsuite.test.lldbtest import *
 import lldbsuite.test.lldbutil as lldbutil
 
 
-@skipIfTargetDoesNotSupportThreads()
 class ThreadExitTestCase(TestBase):
     def setUp(self):
         # Call super's setUp().

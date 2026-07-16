@@ -53,7 +53,9 @@ private:
 class OptimizePHIsLegacy : public MachineFunctionPass {
 public:
   static char ID;
-  OptimizePHIsLegacy() : MachineFunctionPass(ID) {}
+  OptimizePHIsLegacy() : MachineFunctionPass(ID) {
+    initializeOptimizePHIsLegacyPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &MF) override {
     if (skipFunction(MF.getFunction()))

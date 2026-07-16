@@ -5,9 +5,8 @@
 
 #include "Inputs/cuda.h"
 
-// Explicit __device__ virtual dtor ~B() reached from device code via
-// destruction of a local variable should be walked by the deferred diag
-// visitor and reach the host_fun() call in the dtor chain.
+// Virtual dtor ~B() of explicit instantiation B<float> must
+// be emitted, which causes host_fun() called.
 namespace ExplicitInstantiationExplicitDevDtor {
 void host_fun() // dev-note {{'host_fun' declared here}}
 {}
@@ -26,21 +25,19 @@ struct A {
 template <typename T>
 struct B {
 public:
-  virtual __device__ ~B() = default; // dev-note {{called by 'foo'}}
+  virtual __device__ ~B() = default;
   A _a;
 };
 
 template class B<float>;
-__device__ void foo() {
-  B<float> x;
-}
 }
 
-// Implicit H+D virtual dtor ~B() of an explicit instantiation that is
-// not used from device code should not be eagerly walked by the deferred
-// diag visitor. The host-only chain reachable from ~B() through ~A() is
-// only relevant if device code actually constructs/destroys B<float>.
-// C<float> is used from device foo() but its dtor chain is trivial.
+// The implicit host/device attrs of virtual dtor ~B() should be
+// conservatively inferred, where constexpr member dtor's should
+// not be considered device since they may call host functions.
+// Therefore B<float>::~B() should not have implicit device attr.
+// However C<float>::~C() should have implicit device attr since
+// it is trivial.
 namespace ExplicitInstantiationDtorNoAttr {
 void host_fun()
 {}

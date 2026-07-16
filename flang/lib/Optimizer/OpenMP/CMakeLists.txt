@@ -7,7 +7,7 @@ add_flang_library(FlangOpenMPTransforms
   GenericLoopConversion.cpp
   MapsForPrivatizedSymbols.cpp
   MapInfoFinalization.cpp
-  DeleteUnreachableTargets.cpp
+  MarkDeclareTarget.cpp
   LowerWorkdistribute.cpp
   LowerWorkshare.cpp
   LowerNontemporal.cpp
@@ -35,7 +35,6 @@ add_flang_library(FlangOpenMPTransforms
   MLIR_LIBS
   MLIRFuncDialect
   MLIROpenMPDialect
-  MLIROpenMPTransforms
   MLIRIR
   MLIRPass
   MLIRTransformUtils

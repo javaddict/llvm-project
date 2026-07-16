@@ -53,7 +53,7 @@ void testRunPassOnModule(void) {
   // CHECK: func.return        , 1
   {
     MlirPassManager pm = mlirPassManagerCreate(ctx);
-    MlirPass printOpStatPass = mlirCreateTransformsPrintOpStatsPass();
+    MlirPass printOpStatPass = mlirCreateTransformsPrintOpStats();
     mlirPassManagerAddOwnedPass(pm, printOpStatPass);
     MlirLogicalResult success = mlirPassManagerRunOnOp(pm, func);
     if (mlirLogicalResultIsFailure(success)) {
@@ -98,7 +98,7 @@ void testRunPassOnNestedModule(void) {
     MlirPassManager pm = mlirPassManagerCreate(ctx);
     MlirOpPassManager nestedFuncPm = mlirPassManagerGetNestedUnder(
         pm, mlirStringRefCreateFromCString("func.func"));
-    MlirPass printOpStatPass = mlirCreateTransformsPrintOpStatsPass();
+    MlirPass printOpStatPass = mlirCreateTransformsPrintOpStats();
     mlirOpPassManagerAddOwnedPass(nestedFuncPm, printOpStatPass);
     MlirLogicalResult success = mlirPassManagerRunOnOp(pm, module);
     if (mlirLogicalResultIsFailure(success))
@@ -116,7 +116,7 @@ void testRunPassOnNestedModule(void) {
         pm, mlirStringRefCreateFromCString("builtin.module"));
     MlirOpPassManager nestedFuncPm = mlirOpPassManagerGetNestedUnder(
         nestedModulePm, mlirStringRefCreateFromCString("func.func"));
-    MlirPass printOpStatPass = mlirCreateTransformsPrintOpStatsPass();
+    MlirPass printOpStatPass = mlirCreateTransformsPrintOpStats();
     mlirOpPassManagerAddOwnedPass(nestedFuncPm, printOpStatPass);
     MlirLogicalResult success = mlirPassManagerRunOnOp(pm, module);
     if (mlirLogicalResultIsFailure(success))
@@ -147,7 +147,7 @@ void testPrintPassPipeline(void) {
       pm, mlirStringRefCreateFromCString("builtin.module"));
   MlirOpPassManager nestedFuncPm = mlirOpPassManagerGetNestedUnder(
       nestedModulePm, mlirStringRefCreateFromCString("func.func"));
-  MlirPass printOpStatPass = mlirCreateTransformsPrintOpStatsPass();
+  MlirPass printOpStatPass = mlirCreateTransformsPrintOpStats();
   mlirOpPassManagerAddOwnedPass(nestedFuncPm, printOpStatPass);
 
   // Print the top level pass manager
@@ -192,7 +192,7 @@ void testParsePassPipeline(void) {
     exit(EXIT_FAILURE);
   }
   // Try again after registrating the pass.
-  mlirRegisterTransformsPrintOpStatsPass();
+  mlirRegisterTransformsPrintOpStats();
   status = mlirParsePassPipeline(
       mlirPassManagerGetAsOpPassManager(pm),
       mlirStringRefCreateFromCString(

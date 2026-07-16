@@ -1,4 +1,5 @@
 ; RUN: opt < %s -passes=inline -S | FileCheck %s
+; RUN: opt < %s -passes='cgscc(inline)' -S | FileCheck %s
 ; RUN: opt < %s -passes='module-inline' -S | FileCheck %s
 
 ; InlineFunction would assert inside the loop that leaves lifetime markers if

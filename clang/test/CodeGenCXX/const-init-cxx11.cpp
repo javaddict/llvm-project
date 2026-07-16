@@ -1,9 +1,6 @@
 // RUN: %clang_cc1 -w -fmerge-all-constants -triple x86_64-elf-gnu -emit-llvm -o - %s -std=c++11 | FileCheck %s
 // RUN: %clang_cc1 -w -fmerge-all-constants -triple x86_64-elf-gnu -emit-llvm -o - %s -std=c++20 | FileCheck -check-prefix=CHECK20 %s
 
-// RUN: %clang_cc1 -w -fmerge-all-constants -triple x86_64-elf-gnu -emit-llvm -o - %s -std=c++11 -fexperimental-new-constant-interpreter | FileCheck %s
-// RUN: %clang_cc1 -w -fmerge-all-constants -triple x86_64-elf-gnu -emit-llvm -o - %s -std=c++20 -fexperimental-new-constant-interpreter | FileCheck -check-prefix=CHECK20 %s
-
 // FIXME: The padding in all these objects should be zero-initialized.
 namespace StructUnion {
   struct A {
@@ -229,7 +226,8 @@ namespace LiteralReference {
     int n;
   };
 
-  // CHECK: @[[TEMP:.*]] = internal constant {{.*}} { i32 5 }, align 4
+  // This creates a non-const temporary and binds a reference to it.
+  // CHECK: @[[TEMP:.*]] = internal global {{.*}} { i32 5 }, align 4
   // CHECK: @_ZN16LiteralReference3litE ={{.*}} constant {{.*}} @[[TEMP]], align 8
   const Lit &lit = Lit();
 

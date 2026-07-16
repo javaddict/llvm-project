@@ -36,7 +36,7 @@ public:
   class IOEvent {
   public:
     IOEvent(handle_t event) : m_event(event) {}
-    virtual ~IOEvent() = default;
+    virtual ~IOEvent() {}
     virtual void WillPoll() {}
     virtual void DidPoll() {}
     virtual void Disarm() {}

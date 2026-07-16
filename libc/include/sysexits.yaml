@@ -1,10 +1,9 @@
 header: sysexits.h
+header_template: sysexits.h.def
 standards:
-  - bsd
-  - gnu
-macros:
-  - macro_name: EX_OK
-    macro_header: sysexits-macros.h
+  - BSDExtensions
+  - GNUExtensions
+macros: []
 types: []
 enums: []
 objects: []

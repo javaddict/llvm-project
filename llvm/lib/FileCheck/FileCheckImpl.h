@@ -733,15 +733,17 @@ public:
                                       const SourceMgr &SM) const;
   /// Prints the value of successful substitutions.
   void printSubstitutions(const SourceMgr &SM, StringRef Buffer,
-                          SMRange MatchRange, FileCheckDiagList *Diags) const;
+                          SMRange MatchRange, FileCheckDiag::MatchType MatchTy,
+                          std::vector<FileCheckDiag> *Diags) const;
   void printFuzzyMatch(const SourceMgr &SM, StringRef Buffer,
-                       FileCheckDiagList *Diags) const;
+                       std::vector<FileCheckDiag> *Diags) const;
 
   bool hasVariable() const {
     return !(Substitutions.empty() && VariableDefs.empty());
   }
-  LLVM_ABI_FOR_TEST void printVariableDefs(const SourceMgr &SM,
-                                           FileCheckDiagList *Diags) const;
+  LLVM_ABI_FOR_TEST void
+  printVariableDefs(const SourceMgr &SM, FileCheckDiag::MatchType MatchTy,
+                    std::vector<FileCheckDiag> *Diags) const;
 
   Check::FileCheckType getCheckTy() const { return CheckTy; }
 
@@ -868,7 +870,7 @@ struct FileCheckString {
   /// Matches check string and its "not strings" and/or "dag strings".
   size_t Check(const SourceMgr &SM, StringRef Buffer, bool IsLabelScanMode,
                size_t &MatchLen, FileCheckRequest &Req,
-               FileCheckDiagList *Diags) const;
+               std::vector<FileCheckDiag> *Diags) const;
 
   /// Verifies that there is a single line in the given \p Buffer. Errors are
   /// reported against \p SM.
@@ -881,11 +883,13 @@ struct FileCheckString {
   /// \p Diags according to the verbosity level set in \p Req.
   bool CheckNot(const SourceMgr &SM, StringRef Buffer,
                 const std::vector<const DagNotPrefixInfo *> &NotStrings,
-                const FileCheckRequest &Req, FileCheckDiagList *Diags) const;
+                const FileCheckRequest &Req,
+                std::vector<FileCheckDiag> *Diags) const;
   /// Matches "dag strings" and their mixed "not strings".
   size_t CheckDag(const SourceMgr &SM, StringRef Buffer,
                   std::vector<const DagNotPrefixInfo *> &NotStrings,
-                  const FileCheckRequest &Req, FileCheckDiagList *Diags) const;
+                  const FileCheckRequest &Req,
+                  std::vector<FileCheckDiag> *Diags) const;
 };
 
 } // namespace llvm

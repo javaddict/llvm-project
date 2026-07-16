@@ -35,14 +35,10 @@
 #include "llvm/CodeGen/SlotIndexes.h"
 #include "llvm/CodeGen/VirtRegMap.h"
 #include "llvm/InitializePasses.h"
-#include "llvm/Support/DebugCounter.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "amdgpu-rewrite-agpr-copy-mfma"
-
-DEBUG_COUNTER(RewriteAGPRCopyMFMACounter, DEBUG_TYPE,
-              "Controls which MFMA chains are rewritten to AGPR form");
 
 namespace {
 
@@ -209,8 +205,7 @@ bool AMDGPURewriteAGPRCopyMFMAImpl::recomputeRegClassExceptRewritable(
       if (!NewRC || NewRC == OldRC) {
         LLVM_DEBUG(dbgs() << "User of " << printReg(Reg, &TRI)
                           << " cannot be reassigned to "
-                          << (NewRC ? TRI.getRegClassName(NewRC) : "NULL")
-                          << ": " << *MI);
+                          << TRI.getRegClassName(NewRC) << ": " << *MI);
         return false;
       }
     }
@@ -272,8 +267,7 @@ bool AMDGPURewriteAGPRCopyMFMAImpl::tryReassigningMFMAChain(
     LRM.unassign(LI);
   }
 
-  if (!DebugCounter::shouldExecute(RewriteAGPRCopyMFMACounter) ||
-      !attemptReassignmentsToAGPR(RewriteRegs, PhysRegHint)) {
+  if (!attemptReassignmentsToAGPR(RewriteRegs, PhysRegHint)) {
     // Roll back the register assignments to the original state.
     for (auto [LI, OldAssign] : TentativeReassignments) {
       if (VRM.hasPhys(LI->reg()))
@@ -554,26 +548,7 @@ void AMDGPURewriteAGPRCopyMFMAImpl::eliminateSpillsOfReassignedVGPRs() const {
       // replacement vreg uses.
       LiveInterval &NewLI = LIS.createAndComputeVirtRegInterval(NewVReg);
       VRM.grow();
-
-      // A spill slot can be stored to multiple times, so the replacement
-      // vreg may have multiple disconnected live range components. Split
-      // them into separate vregs to maintain the single-component invariant.
-      SmallVector<LiveInterval *, 4> SplitLIs;
-      LIS.splitSeparateComponents(NewLI, SplitLIs);
-
-      LLVM_DEBUG({
-        if (!SplitLIs.empty()) {
-          dbgs() << "Split unspilled interval into " << (SplitLIs.size() + 1)
-                 << " components\n";
-        }
-      });
-
       LRM.assign(NewLI, PhysReg);
-      for (LiveInterval *SplitLI : SplitLIs) {
-        VRM.grow();
-        LRM.assign(*SplitLI, PhysReg);
-      }
-
       MFI.RemoveStackObject(Slot);
       break;
     }
@@ -620,7 +595,10 @@ public:
   static char ID;
   RegisterClassInfo RegClassInfo;
 
-  AMDGPURewriteAGPRCopyMFMALegacy() : MachineFunctionPass(ID) {}
+  AMDGPURewriteAGPRCopyMFMALegacy() : MachineFunctionPass(ID) {
+    initializeAMDGPURewriteAGPRCopyMFMALegacyPass(
+        *PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 

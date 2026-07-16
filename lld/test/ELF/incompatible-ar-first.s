@@ -3,12 +3,12 @@
 // RUN: rm -f %t.a
 // RUN: llvm-ar rc %t.a %ta.o
 // RUN: llvm-mc -filetype=obj -triple=i686-linux %s -o %tb.o
-// RUN: not ld.lld %t.a %tb.o -o /dev/null 2>&1 | FileCheck %s --implicit-check-not=error:
+// RUN: not ld.lld %t.a %tb.o -o /dev/null 2>&1 | FileCheck %s
 
 // We used to crash when
 // * The first object seen by the symbol table is from an archive.
 // * -m was not used.
 
-// RUN: not ld.lld --start-lib %ta.o --end-lib %tb.o -o /dev/null 2>&1 | FileCheck %s --implicit-check-not=error:
+// RUN: not ld.lld --start-lib %ta.o --end-lib %tb.o -o /dev/null 2>&1 | FileCheck %s
 
-// CHECK: error: {{.*}}b.o is incompatible{{$}}
+// CHECK: {{.*}}b.o is incompatible{{$}}

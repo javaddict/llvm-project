@@ -151,11 +151,12 @@ static std::string ParseAndGenerateDWARF(llvm::StringRef expr) {
   }
 
   const size_t addr_size = 4;
-  StreamString dwarf(Stream::eBinary, lldb::eByteOrderLittle);
+  StreamString dwarf(Stream::eBinary, addr_size, lldb::eByteOrderLittle);
   ToDWARF(*ast, dwarf);
 
   // print dwarf expression to comparable textual representation
-  llvm::DataExtractor extractor(dwarf.GetString(), /*IsLittleEndian=*/true);
+  llvm::DataExtractor extractor(dwarf.GetString(), /*IsLittleEndian=*/true,
+                                addr_size);
 
   std::string result;
   llvm::raw_string_ostream os(result);

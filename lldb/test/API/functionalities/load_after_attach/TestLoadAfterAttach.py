@@ -4,7 +4,6 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
 
-@skipIfTargetDoesNotSupportSharedLibraries()
 class TestCase(TestBase):
     NO_DEBUG_INFO_TESTCASE = True
 
@@ -16,7 +15,8 @@ class TestCase(TestBase):
             self, "process_ready"
         )
 
-        lib_name = self.platformContext.getFullLibName("lib_b")
+        ctx = self.platformContext
+        lib_name = ctx.shlib_prefix + "lib_b." + ctx.shlib_extension
 
         exe = self.getBuildArtifact("a.out")
         lib = self.getBuildArtifact(lib_name)

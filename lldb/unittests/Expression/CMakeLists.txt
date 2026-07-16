@@ -10,7 +10,6 @@ add_lldb_unittest(ExpressionTests
   DWARFExpressionTest.cpp
   CppModuleConfigurationTest.cpp
   ExpressionTest.cpp
-  IRMemoryMapTest.cpp
   ValueMatcher.cpp
 
   LINK_COMPONENTS

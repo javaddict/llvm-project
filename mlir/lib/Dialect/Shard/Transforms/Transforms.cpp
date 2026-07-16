@@ -66,7 +66,7 @@ struct ProcessMultiIndexOpLowering
                     [&completeMultiIndex](GridAxis gridAxis) {
                       return completeMultiIndex[gridAxis];
                     });
-    rewriter.replaceOp(op, multiIndex);
+    rewriter.replaceAllUsesWith(op.getResults(), multiIndex);
     return success();
   }
 };
@@ -157,7 +157,8 @@ struct AllSliceOpLowering
                                                  offsets, sizes, strides);
     Value newResult =
         tensor::CastOp::create(builder, op.getResult().getType(), slice);
-    rewriter.replaceOp(op, newResult);
+    rewriter.replaceAllUsesWith(op.getResult(), newResult);
+
     return success();
   }
 };
@@ -208,9 +209,9 @@ createCollectiveProcessGroupSize(GridOp grid, ArrayRef<GridAxis> axes,
 }
 
 TypedValue<IndexType>
-createProcessLinearIndex(ImplicitLocOpBuilder &builder, StringRef grid,
-                         ValueRange processInGroupMultiIndex,
-                         ArrayRef<GridAxis> gridAxes) {
+createProcessLinearIndex(StringRef grid, ValueRange processInGroupMultiIndex,
+                         ArrayRef<GridAxis> gridAxes,
+                         ImplicitLocOpBuilder &builder) {
   Operation::result_range processGroupShape =
       GridShapeOp::create(builder, grid, gridAxes).getResult();
   OpFoldResult processInGroupLinearIndex = affine::linearizeIndex(
@@ -224,12 +225,11 @@ createProcessLinearIndex(ImplicitLocOpBuilder &builder, StringRef grid,
   return cast<TypedValue<IndexType>>(res);
 }
 
-TypedValue<IndexType> createProcessLinearIndex(ImplicitLocOpBuilder &builder,
-                                               StringRef grid,
-                                               ArrayRef<GridAxis> gridAxes) {
+TypedValue<IndexType> createProcessLinearIndex(StringRef grid,
+                                               ArrayRef<GridAxis> gridAxes,
+                                               ImplicitLocOpBuilder &builder) {
   return createProcessLinearIndex(
-      builder, grid,
-      ProcessMultiIndexOp::create(builder, grid, gridAxes).getResults(),
-      gridAxes);
+      grid, ProcessMultiIndexOp::create(builder, grid, gridAxes).getResults(),
+      gridAxes, builder);
 }
 } // namespace mlir::shard

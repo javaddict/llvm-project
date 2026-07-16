@@ -117,7 +117,8 @@ void ObjCSuperDeallocChecker::checkPostObjCMessage(const ObjCMethodCall &M,
     return;
 
   ProgramStateRef State = C.getState();
-  SymbolRef SelfSymbol = State->getSelfSVal(C.getStackFrame()).getAsSymbol();
+  const LocationContext *LC = C.getLocationContext();
+  SymbolRef SelfSymbol = State->getSelfSVal(LC).getAsSymbol();
   assert(SelfSymbol && "No receiver symbol at call to [super dealloc]?");
 
   // We add this transition in checkPostObjCMessage to avoid warning when

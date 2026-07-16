@@ -3,6 +3,7 @@
 // CHECK-SAME: acc
 // CHECK-SAME: affine
 // CHECK-SAME: amdgpu
+// CHECK-SAME: amx
 // CHECK-SAME: arith
 // CHECK-SAME: arm_neon
 // CHECK-SAME: arm_sme
@@ -40,7 +41,7 @@
 // CHECK-SAME: tosa
 // CHECK-SAME: transform
 // CHECK-SAME: vector
-// CHECK-SAME: x86
+// CHECK-SAME: x86vector
 
 // RUN: mlir-opt --help-hidden | FileCheck %s -check-prefix=CHECK-HELP
 // CHECK-HELP: -p - Alias for --pass-pipeline

@@ -17,7 +17,6 @@
 #include "llvm/DebugInfo/DWARF/DWARFFormValue.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/Format.h"
-#include "llvm/Support/FormatAdapters.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
@@ -44,7 +43,7 @@ using ContentDescriptors = SmallVector<ContentDescriptor, 4>;
 } // end anonymous namespace
 
 static bool versionIsSupported(uint16_t Version) {
-  return Version >= 2 && Version <= 6;
+  return Version >= 2 && Version <= 5;
 }
 
 void DWARFDebugLine::ContentTypeTracker::trackContentType(
@@ -122,25 +121,23 @@ void DWARFDebugLine::Prologue::dump(raw_ostream &OS,
     return;
   int OffsetDumpWidth = 2 * dwarf::getDwarfOffsetByteSize(FormParams.Format);
   OS << "Line table prologue:\n"
-     << formatv("    total_length: 0x{0:x-}\n",
-                fmt_align(TotalLength, AlignStyle::Right, OffsetDumpWidth, '0'))
+     << format("    total_length: 0x%0*" PRIx64 "\n", OffsetDumpWidth,
+               TotalLength)
      << "          format: " << dwarf::FormatString(FormParams.Format) << "\n"
-     << formatv("         version: {0}\n", getVersion());
+     << format("         version: %u\n", getVersion());
   if (!versionIsSupported(getVersion()))
     return;
   if (getVersion() >= 5)
-    OS << formatv("    address_size: {0}\n", getAddressSize())
-       << formatv(" seg_select_size: {0}\n", SegSelectorSize);
-  OS << formatv(
-            " prologue_length: 0x{0:x-}\n",
-            fmt_align(PrologueLength, AlignStyle::Right, OffsetDumpWidth, '0'))
-     << formatv(" min_inst_length: {0}\n", MinInstLength);
-  if (getVersion() >= 4)
-    OS << formatv("max_ops_per_inst: {0}\n", MaxOpsPerInst);
-  OS << formatv(" default_is_stmt: {0}\n", DefaultIsStmt)
-     << formatv("       line_base: {0}\n", static_cast<int>(LineBase))
-     << formatv("      line_range: {0}\n", LineRange)
-     << formatv("     opcode_base: {0}\n", OpcodeBase);
+    OS << format("    address_size: %u\n", getAddressSize())
+       << format(" seg_select_size: %u\n", SegSelectorSize);
+  OS << format(" prologue_length: 0x%0*" PRIx64 "\n", OffsetDumpWidth,
+               PrologueLength)
+     << format(" min_inst_length: %u\n", MinInstLength)
+     << format(getVersion() >= 4 ? "max_ops_per_inst: %u\n" : "", MaxOpsPerInst)
+     << format(" default_is_stmt: %u\n", DefaultIsStmt)
+     << format("       line_base: %i\n", LineBase)
+     << format("      line_range: %u\n", LineRange)
+     << format("     opcode_base: %u\n", OpcodeBase);
 
   for (uint32_t I = 0; I != StandardOpcodeLengths.size(); ++I)
     OS << formatv("standard_opcode_lengths[{0}] = {1}\n",
@@ -151,7 +148,7 @@ void DWARFDebugLine::Prologue::dump(raw_ostream &OS,
     // DWARF v5 starts directory indexes at 0.
     uint32_t DirBase = getVersion() >= 5 ? 0 : 1;
     for (uint32_t I = 0; I != IncludeDirectories.size(); ++I) {
-      OS << formatv("include_directories[{0,3}] = ", I + DirBase);
+      OS << format("include_directories[%3u] = ", I + DirBase);
       IncludeDirectories[I].dump(OS, DumpOptions);
       OS << '\n';
     }
@@ -162,16 +159,16 @@ void DWARFDebugLine::Prologue::dump(raw_ostream &OS,
     uint32_t FileBase = getVersion() >= 5 ? 0 : 1;
     for (uint32_t I = 0; I != FileNames.size(); ++I) {
       const FileNameEntry &FileEntry = FileNames[I];
-      OS << formatv("file_names[{0,3}]:\n", I + FileBase);
+      OS << format("file_names[%3u]:\n", I + FileBase);
       OS << "           name: ";
       FileEntry.Name.dump(OS, DumpOptions);
-      OS << '\n' << formatv("      dir_index: {0}\n", FileEntry.DirIdx);
+      OS << '\n' << format("      dir_index: %" PRIu64 "\n", FileEntry.DirIdx);
       if (ContentTypes.HasMD5)
         OS << "   md5_checksum: " << FileEntry.Checksum.digest() << '\n';
       if (ContentTypes.HasModTime)
-        OS << formatv("       mod_time: {0:x8}\n", FileEntry.ModTime);
+        OS << format("       mod_time: 0x%8.8" PRIx64 "\n", FileEntry.ModTime);
       if (ContentTypes.HasLength)
-        OS << formatv("         length: {0:x8}\n", FileEntry.Length);
+        OS << format("         length: 0x%8.8" PRIx64 "\n", FileEntry.Length);
       if (ContentTypes.HasSource) {
         auto Source = FileEntry.Source.getAsCString();
         if (!Source)
@@ -518,8 +515,8 @@ void DWARFDebugLine::Row::dumpTableHeader(raw_ostream &OS, unsigned Indent) {
 }
 
 void DWARFDebugLine::Row::dump(raw_ostream &OS) const {
-  OS << formatv("{0:x16} {1,6} {2,6}", Address.Address, Line, Column)
-     << formatv(" {0,6} {1,3} {2,13} {3,7} ", File, Isa, Discriminator, OpIndex)
+  OS << format("0x%16.16" PRIx64 " %6u %6u", Address.Address, Line, Column)
+     << format(" %6u %3u %13u %7u ", File, Isa, Discriminator, OpIndex)
      << (IsStmt ? " is_stmt" : "") << (BasicBlock ? " basic_block" : "")
      << (PrologueEnd ? " prologue_end" : "")
      << (EpilogueBegin ? " epilogue_begin" : "")
@@ -872,14 +869,14 @@ Error DWARFDebugLine::LineTable::parse(
     DataExtractor::Cursor Cursor(*OffsetPtr);
 
     if (Verbose)
-      *OS << formatv("{0:x8}: ", *OffsetPtr);
+      *OS << format("0x%08.08" PRIx64 ": ", *OffsetPtr);
 
     uint64_t OpcodeOffset = *OffsetPtr;
     uint8_t Opcode = TableData.getU8(Cursor);
     size_t RowCount = Rows.size();
 
     if (Cursor && Verbose)
-      *OS << formatv("{0:x-2} ", Opcode);
+      *OS << format("%02.02" PRIx8 " ", Opcode);
 
     if (Opcode == 0) {
       // Extended Opcodes always start with a zero opcode followed by
@@ -1014,8 +1011,8 @@ Error DWARFDebugLine::LineTable::parse(
           FileEntry.Length = TableData.getULEB128(Cursor);
           Prologue.FileNames.push_back(FileEntry);
           if (Cursor && Verbose)
-            *OS << " (" << Name << ", dir=" << FileEntry.DirIdx
-                << ", mod_time=" << formatv("({0:x16})", FileEntry.ModTime)
+            *OS << " (" << Name << ", dir=" << FileEntry.DirIdx << ", mod_time="
+                << format("(0x%16.16" PRIx64 ")", FileEntry.ModTime)
                 << ", length=" << FileEntry.Length << ")";
         }
         break;
@@ -1028,8 +1025,8 @@ Error DWARFDebugLine::LineTable::parse(
 
       default:
         if (Cursor && Verbose)
-          *OS << formatv("Unrecognized extended op {0:x2}", SubOpcode)
-              << formatv(" length {0:x-}", Len);
+          *OS << format("Unrecognized extended op 0x%02.02" PRIx8, SubOpcode)
+              << format(" length %" PRIx64, Len);
         // Len doesn't include the zero opcode byte or the length itself, but
         // it does include the sub_opcode, so we have to adjust for that.
         TableData.skip(Cursor, Len - 1);
@@ -1052,7 +1049,7 @@ Error DWARFDebugLine::LineTable::parse(
         if (ByteCursor) {
           *OS << " (<parsing error>";
           do {
-            *OS << formatv(" {0:x-2}", Byte);
+            *OS << format(" %2.2" PRIx8, Byte);
             Byte = TableData.getU8(ByteCursor);
           } while (ByteCursor);
           *OS << ")";
@@ -1152,8 +1149,9 @@ Error DWARFDebugLine::LineTable::parse(
           ParsingState::OpcodeAdvanceResults Advance =
               State.advanceForOpcode(Opcode, OpcodeOffset);
           if (Verbose)
-            *OS << formatv(" (addr += {0:x16}, op-index += {1})",
-                           Advance.AddrDelta, Advance.OpIndexDelta);
+            *OS << format(" (addr += 0x%16.16" PRIx64 ", op-index += %" PRIu8
+                          ")",
+                          Advance.AddrDelta, Advance.OpIndexDelta);
         }
         break;
 
@@ -1174,7 +1172,8 @@ Error DWARFDebugLine::LineTable::parse(
             State.Row.Address.Address += PCOffset;
             State.Row.OpIndex = 0;
             if (Verbose)
-              *OS << formatv(" (addr += {0:x4}, op-index = 0)", PCOffset);
+              *OS << format(" (addr += 0x%4.4" PRIx16 ", op-index = 0)",
+                            PCOffset);
           }
         }
         break;
@@ -1223,7 +1222,7 @@ Error DWARFDebugLine::LineTable::parse(
             *OS << " (operands: ";
             ListSeparator LS;
             for (uint64_t Value : Operands)
-              *OS << LS << formatv("{0:x16}", Value);
+              *OS << LS << format("0x%16.16" PRIx64, Value);
             *OS << ')';
           }
         }

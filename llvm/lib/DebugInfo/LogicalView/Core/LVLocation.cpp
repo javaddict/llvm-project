@@ -33,7 +33,7 @@ std::string LVOperation::getOperandsDWARFInfo() {
     // 2.5.1.1 Literal encodings.
     //-----------------------------------------------------------------------
     if (dwarf::DW_OP_lit0 <= Code && Code <= dwarf::DW_OP_lit31) {
-      Stream << formatv("lit{0}", Code - dwarf::DW_OP_lit0);
+      Stream << format("lit%d", Code - dwarf::DW_OP_lit0);
       return;
     }
 
@@ -42,8 +42,8 @@ std::string LVOperation::getOperandsDWARFInfo() {
     //-----------------------------------------------------------------------
     if (dwarf::DW_OP_breg0 <= Code && Code <= dwarf::DW_OP_breg31) {
       std::string RegisterName(getReader().getRegisterName(Code, Operands));
-      Stream << formatv("breg{0}+{1}{2}", Code - dwarf::DW_OP_breg0,
-                        Operands[0], RegisterName);
+      Stream << format("breg%d+%d%s", Code - dwarf::DW_OP_breg0, Operands[0],
+                       RegisterName.c_str());
       return;
     }
 
@@ -52,11 +52,12 @@ std::string LVOperation::getOperandsDWARFInfo() {
     //-----------------------------------------------------------------------
     if (dwarf::DW_OP_reg0 <= Code && Code <= dwarf::DW_OP_reg31) {
       std::string RegisterName(getReader().getRegisterName(Code, Operands));
-      Stream << formatv("reg{0}{1}", Code - dwarf::DW_OP_reg0, RegisterName);
+      Stream << format("reg%d%s", Code - dwarf::DW_OP_reg0,
+                       RegisterName.c_str());
       return;
     }
 
-    Stream << formatv("#{0:x2} ", Code) << hexString(Operands[0]) << " "
+    Stream << format("#0x%02x ", Code) << hexString(Operands[0]) << " "
            << hexString(Operands[1]) << "#";
   };
 
@@ -99,14 +100,14 @@ std::string LVOperation::getOperandsDWARFInfo() {
     break;
   case dwarf::DW_OP_bregx: {
     std::string RegisterName(getReader().getRegisterName(Opcode, Operands));
-    Stream << formatv("bregx {0}{1}+{2}", Operands[0], RegisterName,
-                      unsigned(Operands[1]));
+    Stream << format("bregx %d%s+%d", Operands[0], RegisterName.c_str(),
+                     unsigned(Operands[1]));
     break;
   }
   case dwarf::DW_OP_regval_type: {
     std::string RegisterName(getReader().getRegisterName(Opcode, Operands));
-    Stream << formatv("regval_type {0}{1}+{2}", Operands[0], RegisterName,
-                      unsigned(Operands[1]));
+    Stream << format("regval_type %d%s+%d", Operands[0], RegisterName.c_str(),
+                     unsigned(Operands[1]));
     break;
   }
 
@@ -373,12 +374,6 @@ std::string LVOperation::getOperandsCodeViewInfo() {
     Stream << "register_rel " << getReader().getRegisterName(Opcode, Operands)
            << " offset " << int(Operands[1]);
     break;
-  // Operands: [Register, Offset, OffsetInUdt].
-  case codeview::SymbolKind::S_DEFRANGE_REGISTER_REL_INDIR:
-    Stream << "register_rel_indir "
-           << getReader().getRegisterName(Opcode, Operands) << " offset "
-           << int(Operands[1]) << " offset_in_udt " << int(Operands[2]);
-    break;
 
   // Operands: [Program].
   case codeview::SymbolKind::S_DEFRANGE:
@@ -389,7 +384,7 @@ std::string LVOperation::getOperandsCodeViewInfo() {
     break;
 
   default:
-    Stream << formatv("#{0:x2}: ", Opcode) << hexString(Operands[0]) << " "
+    Stream << format("#0x%02x: ", Opcode) << hexString(Operands[0]) << " "
            << hexString(Operands[1]) << "#";
     break;
   }
@@ -638,10 +633,10 @@ void LVLocation::print(LVLocations *Locations, raw_ostream &OS, bool Full) {
     // The coverage is dependent on the kind of location.
     std::string String;
     raw_string_ostream Stream(String);
-    Stream << formatv("{0:f2}%", Percentage);
+    Stream << format("%.2f%%", Percentage);
     if (!Location->getIsLocationSimple())
-      Stream << formatv(" ({0}/{1})", Symbol->getCoverageFactor(),
-                        Symbol->getParentScope()->getCoverageFactor());
+      Stream << format(" (%d/%d)", Symbol->getCoverageFactor(),
+                       Symbol->getParentScope()->getCoverageFactor());
     Symbol->printAttributes(OS, Full, "{Coverage} ", Symbol, StringRef(String),
                             /*UseQuotes=*/false,
                             /*PrintRef=*/false);

@@ -30,14 +30,12 @@ struct ImplicitTypeIDRegistry {
     // Perform a heuristic check to see if this type is in an anonymous
     // namespace. String equality is not valid for anonymous types, so we try to
     // abort whenever we see them.
-    // Check all known anonymous-namespace markers unconditionally:
-    //   Clang : "(anonymous namespace)"
-    //   GCC   : "{anonymous}"
-    //   MSVC  : "anonymous-namespace"
 #ifndef NDEBUG
-    if (typeName.contains("anonymous namespace") ||
-        typeName.contains("{anonymous}") ||
-        typeName.contains("anonymous-namespace")) {
+#if defined(_MSC_VER)
+    if (typeName.contains("anonymous-namespace")) {
+#else
+    if (typeName.contains("anonymous namespace")) {
+#endif
       std::string errorStr;
       {
         llvm::raw_string_ostream errorOS(errorStr);

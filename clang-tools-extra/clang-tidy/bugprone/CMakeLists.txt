@@ -7,7 +7,6 @@ add_clang_library(clangTidyBugproneModule STATIC
   ArgumentCommentCheck.cpp
   AssertSideEffectCheck.cpp
   AssignmentInIfConditionCheck.cpp
-  AssignmentInSelectionStatementCheck.cpp
   BadSignalToKillThreadCheck.cpp
   BitwisePointerCastCheck.cpp
   BoolPointerImplicitConversionCheck.cpp
@@ -38,10 +37,8 @@ add_clang_library(clangTidyBugproneModule STATIC
   IncorrectEnableIfCheck.cpp
   IncorrectEnableSharedFromThisCheck.cpp
   InvalidEnumDefaultInitializationCheck.cpp
-  MissingEndComparisonCheck.cpp
   UnintendedCharOstreamOutputCheck.cpp
   ReturnConstRefFromParameterCheck.cpp
-  StdExceptionBaseclassCheck.cpp
   SuspiciousStringviewDataUsageCheck.cpp
   SwitchMissingDefaultCaseCheck.cpp
   IncDecInConditionsCheck.cpp
@@ -76,7 +73,6 @@ add_clang_library(clangTidyBugproneModule STATIC
   ReturnConstRefFromParameterCheck.cpp
   SharedPtrArrayMismatchCheck.cpp
   SignalHandlerCheck.cpp
-  SignedBitwiseCheck.cpp
   SignedCharMisuseCheck.cpp
   SizeofContainerCheck.cpp
   SizeofExpressionCheck.cpp
@@ -108,12 +104,10 @@ add_clang_library(clangTidyBugproneModule STATIC
   UncheckedStringToNumberConversionCheck.cpp
   UndefinedMemoryManipulationCheck.cpp
   UndelegatedConstructorCheck.cpp
-  UnhandledCodePathsCheck.cpp
   UnhandledExceptionAtNewCheck.cpp
   UnhandledSelfAssignmentCheck.cpp
   UniquePtrArrayMismatchCheck.cpp
   UnsafeFunctionsCheck.cpp
-  UnsafeToAllowExceptionsCheck.cpp
   UnusedLocalNonTrivialVariableCheck.cpp
   UnusedRaiiCheck.cpp
   UnusedReturnValueCheck.cpp

@@ -57,7 +57,7 @@ namespace tooling {
 ///   auto ExpectedParser =
 ///       CommonOptionsParser::create(argc, argv, MyToolCategory);
 ///   if (!ExpectedParser) {
-///     llvm::errs() << llvm::toString(ExpectedParser.takeError());
+///     llvm::errs() << ExpectedParser.takeError();
 ///     return 1;
 ///   }
 ///   CommonOptionsParser& OptionsParser = ExpectedParser.get();

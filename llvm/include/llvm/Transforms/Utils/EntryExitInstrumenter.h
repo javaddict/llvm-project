@@ -22,16 +22,17 @@ namespace llvm {
 class Function;
 
 struct EntryExitInstrumenterPass
-    : public RequiredPassInfoMixin<EntryExitInstrumenterPass> {
+    : public PassInfoMixin<EntryExitInstrumenterPass> {
   EntryExitInstrumenterPass(bool PostInlining) : PostInlining(PostInlining) {}
 
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 
-  LLVM_ABI void
-  printPipeline(raw_ostream &OS,
-                function_ref<StringRef(StringRef)> MapClassName2PassName);
+  void printPipeline(raw_ostream &OS,
+                     function_ref<StringRef(StringRef)> MapClassName2PassName);
 
   bool PostInlining;
+
+  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

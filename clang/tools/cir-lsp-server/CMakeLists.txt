@@ -4,7 +4,6 @@ include_directories(${CMAKE_BINARY_DIR}/tools/mlir/include)
 set(LIBS
   ${test_libs}
   clangCIR
-  CIRRegisterAllDialects
   clangCIRLoweringDirectToLLVM
   MLIRAffineAnalysis
   MLIRAnalysis

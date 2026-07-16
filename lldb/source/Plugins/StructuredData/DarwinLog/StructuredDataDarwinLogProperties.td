@@ -1,6 +1,6 @@
 include "../../../../include/lldb/Core/PropertiesBase.td"
 
-let Definition = "darwinlog", Path = "plugin.structured-data.darwin-log" in {
+let Definition = "darwinlog" in {
   def EnableOnStartup: Property<"enable-on-startup", "Boolean">,
     Global,
     DefaultFalse,

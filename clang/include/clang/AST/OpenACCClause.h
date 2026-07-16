@@ -455,6 +455,11 @@ public:
     return getExprs()[0];
   }
 
+  ArrayRef<Expr *> getVarList() {
+    assert(!HasConditionExpr.has_value() &&
+           "Condition Expr self clause asked about var list");
+    return getExprs();
+  }
   ArrayRef<Expr *> getVarList() const {
     assert(!HasConditionExpr.has_value() &&
            "Condition Expr self clause asked about var list");
@@ -554,6 +559,9 @@ public:
   SourceLocation getQueuesLoc() const { return QueuesLoc; }
   bool hasDevNumExpr() const { return getExprs()[0]; }
   Expr *getDevNumExpr() const { return getExprs()[0]; }
+  ArrayRef<Expr *> getQueueIdExprs() {
+    return OpenACCClauseWithExprs::getExprs().drop_front();
+  }
   ArrayRef<Expr *> getQueueIdExprs() const {
     return OpenACCClauseWithExprs::getExprs().drop_front();
   }
@@ -582,6 +590,8 @@ public:
   Create(const ASTContext &C, SourceLocation BeginLoc, SourceLocation LParenLoc,
          ArrayRef<Expr *> IntExprs, SourceLocation EndLoc);
 
+  ArrayRef<Expr *> getIntExprs() { return OpenACCClauseWithExprs::getExprs(); }
+
   ArrayRef<Expr *> getIntExprs() const {
     return OpenACCClauseWithExprs::getExprs();
   }
@@ -606,6 +616,7 @@ public:
                                    SourceLocation LParenLoc,
                                    ArrayRef<Expr *> SizeExprs,
                                    SourceLocation EndLoc);
+  ArrayRef<Expr *> getSizeExprs() { return OpenACCClauseWithExprs::getExprs(); }
 
   ArrayRef<Expr *> getSizeExprs() const {
     return OpenACCClauseWithExprs::getExprs();
@@ -816,6 +827,7 @@ protected:
 
 public:
   static bool classof(const OpenACCClause *C);
+  ArrayRef<Expr *> getVarList() { return getExprs(); }
   ArrayRef<Expr *> getVarList() const { return getExprs(); }
 };
 
@@ -858,6 +870,11 @@ public:
   }
   // Gets a list of 'made up' `VarDecl` objects that can be used by codegen to
   // ensure that we properly initialize each of these variables.
+  ArrayRef<OpenACCPrivateRecipe> getInitRecipes() {
+    return ArrayRef<OpenACCPrivateRecipe>{
+        getTrailingObjects<OpenACCPrivateRecipe>(), getExprs().size()};
+  }
+
   ArrayRef<OpenACCPrivateRecipe> getInitRecipes() const {
     return ArrayRef<OpenACCPrivateRecipe>{
         getTrailingObjects<OpenACCPrivateRecipe>(), getExprs().size()};
@@ -916,6 +933,11 @@ public:
 
   // Gets a list of 'made up' `VarDecl` objects that can be used by codegen to
   // ensure that we properly initialize each of these variables.
+  ArrayRef<OpenACCFirstPrivateRecipe> getInitRecipes() {
+    return ArrayRef<OpenACCFirstPrivateRecipe>{
+        getTrailingObjects<OpenACCFirstPrivateRecipe>(), getExprs().size()};
+  }
+
   ArrayRef<OpenACCFirstPrivateRecipe> getInitRecipes() const {
     return ArrayRef<OpenACCFirstPrivateRecipe>{
         getTrailingObjects<OpenACCFirstPrivateRecipe>(), getExprs().size()};
@@ -1342,6 +1364,11 @@ class OpenACCReductionClause final
 public:
   static bool classof(const OpenACCClause *C) {
     return C->getClauseKind() == OpenACCClauseKind::Reduction;
+  }
+
+  ArrayRef<OpenACCReductionRecipe> getRecipes() {
+    return ArrayRef<OpenACCReductionRecipe>{
+        getTrailingObjects<OpenACCReductionRecipe>(), getExprs().size()};
   }
 
   ArrayRef<OpenACCReductionRecipe> getRecipes() const {

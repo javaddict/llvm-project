@@ -674,8 +674,7 @@ static LogicalResult emit(SolverOp solver, const SMTEmissionOptions &options,
   if (result.wasInterrupted())
     return failure();
 
-  if (options.emitReset)
-    stream << "(reset)\n";
+  stream << "(reset)\n";
   return success();
 }
 

@@ -1,9 +1,6 @@
 ; Test spills of zero extensions when high GR32s are available.
 ;
-; RUN: llc < %s -mtriple=s390x-linux-gnu -mcpu=z196 -generic-sched | FileCheck %s
-;
-; TODO: Some spills here with SystemZPreRASchedStrategy to all the stores in
-; bottom of region.
+; RUN: llc < %s -mtriple=s390x-linux-gnu -mcpu=z196 | FileCheck %s
 
 ; Test a case where we spill the source of at least one LLCRMux.  We want
 ; to use LLC(H) if possible.

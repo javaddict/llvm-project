@@ -25,15 +25,13 @@
 
 // Keep input + output help + names consistent across the various modes via a
 // hideous macro.
-#define OUTPUT_COMMAND_LINE_OPTIONS(SUBOPT)                                    \
-  static cl::opt<std::string> OutputFileName(                                  \
-      "o", cl::init("-"), cl::desc("Output"), cl::value_desc("filename"),      \
-      cl::sub(SUBOPT));
 #define INPUT_OUTPUT_COMMAND_LINE_OPTIONS(SUBOPT)                              \
   static cl::opt<std::string> InputFileName(cl::Positional, cl::init("-"),     \
                                             cl::desc("<input file>"),          \
                                             cl::sub(SUBOPT));                  \
-  OUTPUT_COMMAND_LINE_OPTIONS(SUBOPT)
+  static cl::opt<std::string> OutputFileName(                                  \
+      "o", cl::init("-"), cl::desc("Output"), cl::value_desc("filename"),      \
+      cl::sub(SUBOPT));
 
 // Keep Input format and names consistent accross the modes via a macro.
 #define INPUT_FORMAT_COMMAND_LINE_OPTIONS(SUBOPT)                              \

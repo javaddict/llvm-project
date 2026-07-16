@@ -16,7 +16,7 @@
 namespace llvm {
 class GlobalValue;
 
-class ExtractGVPass : public OptionalPassInfoMixin<ExtractGVPass> {
+class ExtractGVPass : public PassInfoMixin<ExtractGVPass> {
 private:
   SetVector<GlobalValue *> Named;
   bool deleteStuff;

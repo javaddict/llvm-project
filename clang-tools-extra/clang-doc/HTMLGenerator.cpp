@@ -21,17 +21,19 @@
 using namespace llvm;
 using namespace llvm::json;
 using namespace llvm::mustache;
-using namespace clang::doc;
 
-namespace {
+namespace clang {
+namespace doc {
 
 static std::unique_ptr<MustacheTemplateFile> NamespaceTemplate = nullptr;
+
 static std::unique_ptr<MustacheTemplateFile> RecordTemplate = nullptr;
+
 static std::unique_ptr<MustacheTemplateFile> IndexTemplate = nullptr;
 
 class HTMLGenerator : public MustacheGenerator {
 public:
-  static StringRef Format;
+  static const char *Format;
   Error createResources(ClangDocContext &CDCtx) override;
   Error generateDocForInfo(Info *I, raw_ostream &OS,
                            const ClangDocContext &CDCtx) override;
@@ -42,13 +44,10 @@ public:
   // Populates templates with CSS stylesheets, JS scripts paths.
   Error setupTemplateResources(const ClangDocContext &CDCtx, json::Value &V,
                                SmallString<128> RelativeRootPath);
-  llvm::Error generateDocumentation(StringRef RootDir,
-                                    llvm::StringMap<Info *> Infos,
-                                    const ClangDocContext &CDCtx,
-                                    std::string DirName) override;
+  llvm::Error generateDocumentation(
+      StringRef RootDir, llvm::StringMap<std::unique_ptr<doc::Info>> Infos,
+      const ClangDocContext &CDCtx, std::string DirName) override;
 };
-
-} // namespace
 
 Error HTMLGenerator::setupTemplateFiles(const ClangDocContext &CDCtx) {
   // Template files need to use the native path when they're opened,
@@ -183,21 +182,21 @@ Error HTMLGenerator::createResources(ClangDocContext &CDCtx) {
   return Error::success();
 }
 
-Error HTMLGenerator::generateDocumentation(StringRef RootDir,
-                                           llvm::StringMap<Info *> Infos,
-                                           const ClangDocContext &CDCtx,
-                                           std::string DirName) {
+Error HTMLGenerator::generateDocumentation(
+    StringRef RootDir, llvm::StringMap<std::unique_ptr<doc::Info>> Infos,
+    const ClangDocContext &CDCtx, std::string DirName) {
   return MustacheGenerator::generateDocumentation(RootDir, std::move(Infos),
                                                   CDCtx, "html");
 }
 
-StringRef HTMLGenerator::Format = "html";
+const char *HTMLGenerator::Format = "html";
 
 static GeneratorRegistry::Add<HTMLGenerator>
     HTML(HTMLGenerator::Format, "Generator for mustache HTML output.");
 
-namespace clang::doc {
 // This anchor is used to force the linker to link in the generated object
 // file and thus register the generator.
 volatile int HTMLGeneratorAnchorSource = 0;
-} // namespace clang::doc
+
+} // namespace doc
+} // namespace clang

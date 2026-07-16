@@ -54,10 +54,6 @@ private:
   /// at the root.
   GenericCycle *ParentCycle = nullptr;
 
-  /// The top-level cycle this cycle is part of. Points to itself if this is
-  /// a top-level cycle.
-  GenericCycle *TopLevelCycle;
-
   /// The entry block(s) of the cycle. The header is the only entry if
   /// this is a loop. Is empty for the root "cycle", to avoid
   /// unnecessary memory use.
@@ -107,7 +103,7 @@ private:
   GenericCycle &operator=(GenericCycle &&Rhs) = delete;
 
 public:
-  GenericCycle() : TopLevelCycle(this) {}
+  GenericCycle() = default;
 
   /// \brief Whether the cycle is a natural loop.
   bool isReducible() const { return Entries.size() == 1; }
@@ -160,7 +156,7 @@ public:
   void getExitingBlocks(SmallVectorImpl<BlockT *> &TmpStorage) const;
 
   /// Return the preheader block for this cycle. Pre-header is well-defined for
-  /// reducible cycle in docs/LoopTerminology.md as: the only one entering
+  /// reducible cycle in docs/LoopTerminology.rst as: the only one entering
   /// block and its only edge is to the entry block. Return null for irreducible
   /// cycles.
   BlockT *getCyclePreheader() const;
@@ -266,10 +262,12 @@ public:
 
 private:
   ContextT Context;
-  unsigned BlockNumberEpoch;
 
-  /// Map basic block numbers to their inner-most containing cycle.
-  SmallVector<CycleT *> BlockMap;
+  /// Map basic blocks to their inner-most containing cycle.
+  DenseMap<BlockT *, CycleT *> BlockMap;
+
+  /// Map basic blocks to their top level containing cycle.
+  DenseMap<BlockT *, CycleT *> BlockMapTopLevel;
 
   /// Top-level cycles discovered by any DFS.
   ///
@@ -282,9 +280,6 @@ private:
   /// Note: This is an incomplete operation that does not update the depth of
   /// the subtree.
   void moveTopLevelCycleToNewParent(CycleT *NewParent, CycleT *Child);
-
-  void verifyBlockNumberEpoch(const FunctionT *Fn) const;
-  void addToBlockMap(BlockT *Block, CycleT *Cycle);
 
 public:
   GenericCycleInfo() = default;
@@ -302,7 +297,7 @@ public:
   CycleT *getSmallestCommonCycle(CycleT *A, CycleT *B) const;
   CycleT *getSmallestCommonCycle(BlockT *A, BlockT *B) const;
   unsigned getCycleDepth(const BlockT *Block) const;
-  CycleT *getTopLevelParentCycle(const BlockT *Block) const;
+  CycleT *getTopLevelParentCycle(BlockT *Block);
 
   /// Assumes that \p Cycle is the innermost cycle containing \p Block.
   /// \p Block will be appended to \p Cycle and all of its parent cycles.

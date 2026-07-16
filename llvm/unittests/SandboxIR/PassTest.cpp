@@ -125,7 +125,7 @@ define i8 @foo(i8 %v0, i8 %v1) {
   EXPECT_EQ(TPass.getName(), "test-pass");
   // Check runOnRegion();
   llvm::SmallVector<std::unique_ptr<Region>> Regions =
-      Region::createRegionsFromMD(*F);
+      Region::createRegionsFromMD(*F, *TTI);
   ASSERT_EQ(Regions.size(), 1u);
   TPass.runOnRegion(*Regions[0], Analyses::emptyForTesting());
   EXPECT_EQ(InstCount, 2u);
@@ -248,7 +248,7 @@ define i8 @foo(i8 %v0, i8 %v1) {
   RPM.addPass(std::make_unique<TestPass2>(InstCount2));
   // Check runOnRegion().
   llvm::SmallVector<std::unique_ptr<Region>> Regions =
-      Region::createRegionsFromMD(*F);
+      Region::createRegionsFromMD(*F, *TTI);
   ASSERT_EQ(Regions.size(), 1u);
   RPM.runOnRegion(*Regions[0], Analyses::emptyForTesting());
   EXPECT_EQ(InstCount1, 2u);
@@ -272,56 +272,44 @@ define void @f() {
   class FooPass final : public FunctionPass {
     std::string &Str;
     std::string Args;
-    std::string AuxArg;
 
   public:
-    FooPass(std::string &Str, llvm::StringRef Args, llvm::StringRef AuxArg)
-        : FunctionPass("foo-pass"), Str(Str), Args(Args.str()),
-          AuxArg(AuxArg.str()) {}
+    FooPass(std::string &Str, llvm::StringRef Args)
+        : FunctionPass("foo-pass"), Str(Str), Args(Args.str()) {}
     bool runOnFunction(Function &F, const Analyses &A) final {
-      Str += "foo";
-      if (!AuxArg.empty())
-        Str += "(" + AuxArg + ")";
-      Str += "<" + Args + ">";
+      Str += "foo<" + Args + ">";
       return false;
     }
   };
   class BarPass final : public FunctionPass {
     std::string &Str;
     std::string Args;
-    std::string AuxArg;
 
   public:
-    BarPass(std::string &Str, llvm::StringRef Args, llvm::StringRef AuxArg)
-        : FunctionPass("bar-pass"), Str(Str), Args(Args.str()),
-          AuxArg(AuxArg.str()) {}
+    BarPass(std::string &Str, llvm::StringRef Args)
+        : FunctionPass("bar-pass"), Str(Str), Args(Args.str()) {}
     bool runOnFunction(Function &F, const Analyses &A) final {
-      Str += "bar";
-      if (!AuxArg.empty())
-        Str += "(" + AuxArg + ")";
-      Str += "<" + Args + ">";
+      Str += "bar<" + Args + ">";
       return false;
     }
   };
 
   std::string Str;
   auto CreatePass =
-      [&Str](llvm::StringRef Name, llvm::StringRef Args,
-             llvm::StringRef AuxArg) -> std::unique_ptr<FunctionPass> {
+      [&Str](llvm::StringRef Name,
+             llvm::StringRef Args) -> std::unique_ptr<FunctionPass> {
     if (Name == "foo")
-      return std::make_unique<FooPass>(Str, Args, AuxArg);
+      return std::make_unique<FooPass>(Str, Args);
     if (Name == "bar")
-      return std::make_unique<BarPass>(Str, Args, AuxArg);
+      return std::make_unique<BarPass>(Str, Args);
     return nullptr;
   };
 
   FunctionPassManager FPM("test-fpm");
-  FPM.setPassPipeline(
-      "foo(aux1)<abc>,bar<nested1(aux2)<nested2<nested3()>>>,foo(aux3)",
-      CreatePass);
+  FPM.setPassPipeline("foo<abc>,bar<nested1<nested2<nested3>>>,foo",
+                      CreatePass);
   FPM.runOnFunction(*F, Analyses::emptyForTesting());
-  EXPECT_EQ(Str,
-            "foo(aux1)<abc>bar<nested1(aux2)<nested2<nested3()>>>foo(aux3)<>");
+  EXPECT_EQ(Str, "foo<abc>bar<nested1<nested2<nested3>>>foo<>");
 
   // A second call to setPassPipeline will trigger an assertion in debug mode.
 #ifndef NDEBUG
@@ -342,13 +330,6 @@ define void @f() {
   EXPECT_DEATH(FPM2.setPassPipeline("foo,<>", CreatePass),
                ".*empty pass name.*");
 
-  EXPECT_DEATH(FPM2.setPassPipeline("()", CreatePass), ".*empty pass name.*");
-  EXPECT_DEATH(FPM2.setPassPipeline("()foo", CreatePass), "Expected.*");
-  EXPECT_DEATH(FPM2.setPassPipeline("foo,()", CreatePass),
-               ".*empty pass name.*");
-  EXPECT_DEATH(FPM2.setPassPipeline("foo,()", CreatePass),
-               ".*empty pass name.*");
-
   // Mismatched argument brackets.
   EXPECT_DEATH(FPM2.setPassPipeline("foo<", CreatePass), ".*Missing '>'.*");
   EXPECT_DEATH(FPM2.setPassPipeline("foo<bar", CreatePass), ".*Missing '>'.*");
@@ -356,17 +337,6 @@ define void @f() {
                ".*Missing '>'.*");
   EXPECT_DEATH(FPM2.setPassPipeline("foo>", CreatePass), ".*Unexpected '>'.*");
   EXPECT_DEATH(FPM2.setPassPipeline(">foo", CreatePass), ".*Unexpected '>'.*");
-
-  EXPECT_DEATH(FPM2.setPassPipeline("foo(", CreatePass), ".*Missing '\\)'.*");
-  EXPECT_DEATH(FPM2.setPassPipeline("foo(bar", CreatePass),
-               ".*Missing '\\)'.*");
-  EXPECT_DEATH(FPM2.setPassPipeline("foo(bar()", CreatePass),
-               ".*Missing '\\)'.*");
-  EXPECT_DEATH(FPM2.setPassPipeline("foo)", CreatePass),
-               ".*Unexpected '\\)'.*");
-  EXPECT_DEATH(FPM2.setPassPipeline(")foo", CreatePass),
-               ".*Unexpected '\\)'.*");
-
   // Extra garbage between args and next delimiter/end-of-string.
   EXPECT_DEATH(FPM2.setPassPipeline("foo<bar<>>>", CreatePass),
                ".*Expected delimiter.*");
@@ -377,16 +347,5 @@ define void @f() {
   EXPECT_DEATH(FPM2.setPassPipeline("foo<args><more-args>", CreatePass),
                ".*Expected delimiter.*");
   EXPECT_DEATH(FPM2.setPassPipeline("foo<args>bar", CreatePass),
-               ".*Expected delimiter.*");
-
-  EXPECT_DEATH(FPM2.setPassPipeline("foo(bar()))", CreatePass),
-               ".*Expected delimiter.*");
-  EXPECT_DEATH(FPM2.setPassPipeline("bar()foo", CreatePass),
-               ".*Expected delimiter.*");
-  EXPECT_DEATH(FPM2.setPassPipeline("bar()foo,baz", CreatePass),
-               ".*Expected delimiter.*");
-  EXPECT_DEATH(FPM2.setPassPipeline("foo(args)(more-args)", CreatePass),
-               ".*Expected delimiter.*");
-  EXPECT_DEATH(FPM2.setPassPipeline("foo(args)bar", CreatePass),
                ".*Expected delimiter.*");
 }

@@ -22,9 +22,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include <mutex>
 
-#ifdef _WIN32
-#include "lldb/Host/windows/PosixApi.h"
-#else
+#if !defined(_WIN32)
 #include <unistd.h>
 #endif
 
@@ -37,7 +35,8 @@ using namespace lldb_dap::protocol;
 
 namespace lldb_dap {
 
-static std::vector<const char *> MakeArgv(const llvm::ArrayRef<String> &strs) {
+static std::vector<const char *>
+MakeArgv(const llvm::ArrayRef<std::string> &strs) {
   // Create and return an array of "const char *", one for each C string in
   // "strs" and terminate the list with a NULL. This can be used for argument
   // vectors (argv) or environment vectors (envp) like those passed to the
@@ -59,27 +58,28 @@ static uint32_t SetLaunchFlag(uint32_t flags, bool flag,
   return flags;
 }
 
-static void SetupIORedirection(const std::vector<std::optional<String>> &stdio,
-                               lldb::SBLaunchInfo &launch_info) {
-  for (const auto &[idx, value_opt] : llvm::enumerate(stdio)) {
-    if (!value_opt)
+static void
+SetupIORedirection(const std::vector<std::optional<std::string>> &stdio,
+                   lldb::SBLaunchInfo &launch_info) {
+  size_t n = std::max(stdio.size(), static_cast<size_t>(3));
+  for (size_t i = 0; i < n; i++) {
+    std::optional<std::string> path;
+    if (stdio.size() <= i)
+      path = stdio.back();
+    else
+      path = stdio[i];
+    if (!path)
       continue;
-    const std::string &path = value_opt.value();
-    assert(!path.empty() && "paths should not be empty");
-
-    const int fd = static_cast<int>(idx);
-    switch (fd) {
+    switch (i) {
     case 0:
-      launch_info.AddOpenFileAction(STDIN_FILENO, path.c_str(), true, false);
+      launch_info.AddOpenFileAction(i, path->c_str(), true, false);
       break;
     case 1:
-      launch_info.AddOpenFileAction(STDOUT_FILENO, path.c_str(), false, true);
-      break;
     case 2:
-      launch_info.AddOpenFileAction(STDERR_FILENO, path.c_str(), false, true);
+      launch_info.AddOpenFileAction(i, path->c_str(), false, true);
       break;
     default:
-      launch_info.AddOpenFileAction(fd, path.c_str(), true, true);
+      launch_info.AddOpenFileAction(i, path->c_str(), true, true);
       break;
     }
   }
@@ -103,9 +103,9 @@ RunInTerminal(DAP &dap, const protocol::LaunchRequestArguments &arguments) {
       CreateRunInTerminalCommFile();
   if (!comm_file_or_err)
     return comm_file_or_err.takeError();
-  std::shared_ptr<FifoFile> comm_file = *comm_file_or_err;
+  FifoFile &comm_file = *comm_file_or_err.get();
 
-  RunInTerminalDebugAdapterCommChannel comm_channel(comm_file);
+  RunInTerminalDebugAdapterCommChannel comm_channel(comm_file.m_path);
 
   lldb::pid_t debugger_pid = LLDB_INVALID_PROCESS_ID;
 #if !defined(_WIN32)
@@ -114,12 +114,11 @@ RunInTerminal(DAP &dap, const protocol::LaunchRequestArguments &arguments) {
 
   llvm::json::Object reverse_request = CreateRunInTerminalReverseRequest(
       arguments.configuration.program, arguments.args, arguments.env,
-      arguments.cwd, comm_file->GetPath(), debugger_pid, arguments.stdio,
+      arguments.cwd, comm_file.m_path, debugger_pid, arguments.stdio,
       arguments.console == protocol::eConsoleExternalTerminal);
   dap.SendReverseRequest<LogFailureResponseHandler>("runInTerminal",
                                                     std::move(reverse_request));
-  // We need to wait for the client to connect to the pipe.
-  comm_file->Connect();
+
   if (llvm::Expected<lldb::pid_t> pid = comm_channel.GetLauncherPid())
     attach_info.SetProcessID(*pid);
   else
@@ -139,20 +138,16 @@ RunInTerminal(DAP &dap, const protocol::LaunchRequestArguments &arguments) {
   std::future<lldb::SBError> did_attach_message_success =
       comm_channel.NotifyDidAttach();
 
-// We just attached to the runInTerminal launcher, which was waiting to be
-// attached. We now resume it, so it can receive the didAttach notification
-// and then perform the exec. Upon continuing, the debugger will stop the
-// process right in the middle of the exec. To the user, what we are doing is
-// transparent, as they will only be able to see the process since the exec,
-// completely unaware of the preparatory work.
-//
-// On Windows, the debuggee itself is waiting to be attached to. There is no
-// need to continue.
-#ifndef _WIN32
+  // We just attached to the runInTerminal launcher, which was waiting to be
+  // attached. We now resume it, so it can receive the didAttach notification
+  // and then perform the exec. Upon continuing, the debugger will stop the
+  // process right in the middle of the exec. To the user, what we are doing is
+  // transparent, as they will only be able to see the process since the exec,
+  // completely unaware of the preparatory work.
   dap.target.GetProcess().Continue();
-#endif
 
-  // Return the debugger to its prior async state.
+  // Now that the actual target is just starting (i.e. exec was just invoked),
+  // we return the debugger to its sync state.
   scope_sync_mode.reset();
 
   // If sending the notification failed, the launcher should be dead by now and
@@ -194,7 +189,7 @@ void BaseRequestHandler::Run(const Request &request) {
 
 llvm::Error BaseRequestHandler::LaunchProcess(
     const protocol::LaunchRequestArguments &arguments) const {
-  const std::vector<String> &launchCommands = arguments.launchCommands;
+  const std::vector<std::string> &launchCommands = arguments.launchCommands;
 
   // Instantiate a launch info instance for the target.
   auto launch_info = dap.target.GetLaunchInfo();
@@ -228,10 +223,6 @@ llvm::Error BaseRequestHandler::LaunchProcess(
       SetLaunchFlag(flags, arguments.disableASLR, lldb::eLaunchFlagDisableASLR);
   flags = SetLaunchFlag(flags, arguments.disableSTDIO,
                         lldb::eLaunchFlagDisableSTDIO);
-#ifdef _WIN32
-  flags = SetLaunchFlag(flags, arguments.console == protocol::eConsoleInternal,
-                        lldb::eLaunchFlagUsePipes);
-#endif
   launch_info.SetLaunchFlags(flags | lldb::eLaunchFlagDebug |
                              lldb::eLaunchFlagStopAtEntry);
 
@@ -241,10 +232,6 @@ llvm::Error BaseRequestHandler::LaunchProcess(
     ScopeSyncMode scope_sync_mode(dap.debugger);
 
     if (arguments.console != protocol::eConsoleInternal) {
-      if (!dap.clientFeatures.contains(eClientFeatureRunInTerminalRequest))
-        return llvm::make_error<DAPError>(
-            R"(Client does not support RunInTerminal. Please set '"console": "integratedConsole"' in your launch configuration)");
-
       if (llvm::Error err = RunInTerminal(dap, arguments))
         return err;
     } else if (launchCommands.empty()) {
@@ -261,7 +248,7 @@ llvm::Error BaseRequestHandler::LaunchProcess(
 
       // The custom commands might have created a new target so we should use
       // the selected target after these commands are run.
-      dap.SetTarget(dap.debugger.GetSelectedTarget());
+      dap.target = dap.debugger.GetSelectedTarget();
     }
   }
 
@@ -347,8 +334,8 @@ void BaseRequestHandler::BuildErrorResponse(
         error_message.format = err.getMessage();
         error_message.showUser = err.getShowUser();
         error_message.id = err.convertToErrorCode().value();
-        error_message.url = err.getURL().value_or("");
-        error_message.urlLabel = err.getURLLabel().value_or("");
+        error_message.url = err.getURL();
+        error_message.urlLabel = err.getURLLabel();
         protocol::ErrorResponseBody body;
         body.error = error_message;
 

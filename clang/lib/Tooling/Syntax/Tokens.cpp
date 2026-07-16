@@ -681,18 +681,8 @@ private:
 TokenCollector::TokenCollector(Preprocessor &PP) : PP(PP) {
   // Collect the expanded token stream during preprocessing.
   PP.setTokenWatcher([this](const clang::Token &T) {
-    if (T.is(tok::annot_module_name)) {
-      auto &SM = this->PP.getSourceManager();
-      StringRef Text = Lexer::getSourceText(
-          CharSourceRange::getTokenRange(T.getAnnotationRange()), SM,
-          this->PP.getLangOpts());
-      Expanded.push_back(
-          syntax::Token(T.getLocation(), Text.size(), tok::annot_module_name));
-    } else if (T.isAnnotation()) {
+    if (T.isAnnotation())
       return;
-    } else {
-      Expanded.push_back(syntax::Token(T));
-    }
     DEBUG_WITH_TYPE("collect-tokens", llvm::dbgs()
                                           << "Token: "
                                           << syntax::Token(T).dumpForTests(
@@ -700,6 +690,7 @@ TokenCollector::TokenCollector(Preprocessor &PP) : PP(PP) {
                                           << "\n"
 
     );
+    Expanded.push_back(syntax::Token(T));
   });
   // And locations of macro calls, to properly recover boundaries of those in
   // case of empty expansions.
@@ -721,15 +712,7 @@ public:
 
   TokenBuffer build() && {
     assert(!Result.ExpandedTokens.empty());
-
-    // When the parser hits a hard limit (e.g. bracket depth or function scope
-    // depth), it halts prematurely and leaves the expanded token stream
-    // truncated with no final `eof` token. To keep the invariant, synthesize an
-    // `eof` at the location of the last collected token.
-    if (Result.ExpandedTokens.back().kind() != tok::eof) {
-      SourceLocation Loc = Result.ExpandedTokens.back().location();
-      Result.ExpandedTokens.emplace_back(Loc, 0, tok::eof);
-    }
+    assert(Result.ExpandedTokens.back().kind() == tok::eof);
 
     // Tokenize every file that contributed tokens to the expanded stream.
     buildSpelledTokens();

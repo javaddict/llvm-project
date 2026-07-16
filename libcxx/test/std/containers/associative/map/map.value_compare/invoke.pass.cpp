@@ -10,26 +10,24 @@
 
 // class value_compare
 
-// bool operator()( const value_type& lhs, const value_type& rhs ) const; // constexpr since C++26
+// bool operator()( const value_type& lhs, const value_type& rhs ) const;
 
 #include <map>
 #include <cassert>
 #include <string>
 #include <utility>
 
-#include "test_macros.h"
-
 template <typename Map>
 struct CallCompMember : Map::value_compare {
-  TEST_CONSTEXPR_CXX26 CallCompMember(const typename Map::value_compare& vc) : Map::value_compare(vc) {}
+  CallCompMember(const typename Map::value_compare& vc) : Map::value_compare(vc) {}
 
   typedef typename Map::value_type value_type;
-  TEST_CONSTEXPR_CXX26 bool operator()(const value_type& value1, const value_type& value2) const {
+  bool operator()(const value_type& value1, const value_type& value2) const {
     return this->comp(value1.first, value2.first);
   }
 };
 
-TEST_CONSTEXPR_CXX26 bool test() {
+int main(int, char**) {
   typedef std::map<int, std::string> map_type;
 
   map_type m;
@@ -44,13 +42,6 @@ TEST_CONSTEXPR_CXX26 bool test() {
 
   assert(!vc(*p2.first, *p1.first));
   assert(!call_comp(*p2.first, *p1.first));
-  return true;
-}
 
-int main(int, char**) {
-  test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
   return 0;
 }

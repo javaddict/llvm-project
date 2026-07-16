@@ -134,7 +134,7 @@ entry:
 
 trap:
   call void @llvm.trap()
-  store volatile i32 1234, ptr addrspace(3) zeroinitializer
+  store volatile i32 1234, ptr addrspace(3) null
   br label %ret
 
 ret:

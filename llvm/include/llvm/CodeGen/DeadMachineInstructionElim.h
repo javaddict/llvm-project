@@ -14,10 +14,10 @@
 namespace llvm {
 
 class DeadMachineInstructionElimPass
-    : public OptionalPassInfoMixin<DeadMachineInstructionElimPass> {
+    : public PassInfoMixin<DeadMachineInstructionElimPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
 };
 
 } // namespace llvm

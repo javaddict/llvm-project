@@ -11,16 +11,14 @@
 #include "lldb/Utility/Stream.h"
 
 #include "llvm/ADT/StringMap.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/DJB.h"
 #include "llvm/Support/FormatProviders.h"
+#include "llvm/Support/RWMutex.h"
 #include "llvm/Support/Threading.h"
 
 #include <array>
-#include <mutex>
-#include <shared_mutex>
 #include <utility>
 
 #include <cinttypes>
@@ -28,31 +26,6 @@
 #include <cstring>
 
 using namespace lldb_private;
-
-#if !defined(__APPLE__)
-using PoolMutex = std::shared_mutex;
-#else
-#include <os/lock.h>
-
-namespace {
-/// On Apple platforms os_unfair_lock is significantly faster than
-/// pthread_rwlock for concurrent writes, and roughly on par for concurrent
-/// reads.
-///
-/// The class satisfies both Lockable and SharedLockable so it composes with
-/// std::lock_guard and std::shared_lock.
-class PoolMutex {
-public:
-  void lock() { os_unfair_lock_lock(&m_lock); }
-  void unlock() { os_unfair_lock_unlock(&m_lock); }
-  void lock_shared() { os_unfair_lock_lock(&m_lock); }
-  void unlock_shared() { os_unfair_lock_unlock(&m_lock); }
-
-private:
-  os_unfair_lock m_lock = OS_UNFAIR_LOCK_INIT;
-};
-} // namespace
-#endif
 
 class Pool {
 public:
@@ -99,16 +72,15 @@ public:
       // Since the entry is read only, and we derive the entry entirely from
       // the pointer, we don't need the lock.
       const StringPoolEntryType &entry = GetStringMapEntryFromKeyData(ccstr);
-      return entry.getKeyLength();
+      return entry.getKey().size();
     }
     return 0;
   }
 
-  StringPoolValueType GetMangledCounterpart(llvm::StringRef str) {
-    const char *const ccstr = str.data();
+  StringPoolValueType GetMangledCounterpart(const char *ccstr) {
     if (ccstr != nullptr) {
-      const PoolEntry &pool = selectPool(str);
-      std::shared_lock<PoolMutex> lock(pool.m_mutex);
+      const PoolEntry &pool = selectPool(llvm::StringRef(ccstr));
+      llvm::sys::SmartScopedReader<false> rlock(pool.m_mutex);
       return GetStringMapEntryFromKeyData(ccstr).getValue();
     }
     return nullptr;
@@ -132,13 +104,13 @@ public:
       PoolEntry &pool = selectPool(string_hash);
 
       {
-        std::shared_lock<PoolMutex> lock(pool.m_mutex);
+        llvm::sys::SmartScopedReader<false> rlock(pool.m_mutex);
         auto it = pool.m_string_map.find(string_ref, string_hash);
         if (it != pool.m_string_map.end())
           return it->getKeyData();
       }
 
-      std::lock_guard<PoolMutex> lock(pool.m_mutex);
+      llvm::sys::SmartScopedWriter<false> wlock(pool.m_mutex);
       StringPoolEntryType &entry =
           *pool.m_string_map
                .insert(std::make_pair(string_ref, nullptr), string_hash)
@@ -148,15 +120,15 @@ public:
     return nullptr;
   }
 
-  const char *GetConstCStringAndSetMangledCounterPart(llvm::StringRef demangled,
-                                                      llvm::StringRef mangled) {
+  const char *
+  GetConstCStringAndSetMangledCounterPart(llvm::StringRef demangled,
+                                          const char *mangled_ccstr) {
     const char *demangled_ccstr = nullptr;
-    const char *const mangled_ccstr = mangled.data();
 
     {
       const uint32_t demangled_hash = StringPool::hash(demangled);
       PoolEntry &pool = selectPool(demangled_hash);
-      std::lock_guard<PoolMutex> lock(pool.m_mutex);
+      llvm::sys::SmartScopedWriter<false> wlock(pool.m_mutex);
 
       // Make or update string pool entry with the mangled counterpart
       StringPool &map = pool.m_string_map;
@@ -172,8 +144,8 @@ public:
     {
       // Now assign the demangled const string as the counterpart of the
       // mangled const string...
-      PoolEntry &pool = selectPool(mangled);
-      std::lock_guard<PoolMutex> lock(pool.m_mutex);
+      PoolEntry &pool = selectPool(llvm::StringRef(mangled_ccstr));
+      llvm::sys::SmartScopedWriter<false> wlock(pool.m_mutex);
       GetStringMapEntryFromKeyData(mangled_ccstr).setValue(demangled_ccstr);
     }
 
@@ -193,7 +165,7 @@ public:
   ConstString::MemoryStats GetMemoryStats() const {
     ConstString::MemoryStats stats;
     for (const auto &pool : m_string_pools) {
-      std::shared_lock<PoolMutex> lock(pool.m_mutex);
+      llvm::sys::SmartScopedReader<false> rlock(pool.m_mutex);
       const Allocator &alloc = pool.m_string_map.getAllocator();
       stats.bytes_total += alloc.getTotalMemory();
       stats.bytes_used += alloc.getBytesAllocated();
@@ -203,7 +175,7 @@ public:
 
 protected:
   struct PoolEntry {
-    mutable PoolMutex m_mutex;
+    mutable llvm::sys::SmartRWMutex<false> m_mutex;
     StringPool m_string_map;
   };
 
@@ -343,11 +315,11 @@ void ConstString::SetString(llvm::StringRef s) {
 void ConstString::SetStringWithMangledCounterpart(llvm::StringRef demangled,
                                                   ConstString mangled) {
   m_string = StringPool().GetConstCStringAndSetMangledCounterPart(
-      demangled, mangled.GetStringRef());
+      demangled, mangled.m_string);
 }
 
 bool ConstString::GetMangledCounterpart(ConstString &counterpart) const {
-  counterpart.m_string = StringPool().GetMangledCounterpart(GetStringRef());
+  counterpart.m_string = StringPool().GetMangledCounterpart(m_string);
   return (bool)counterpart;
 }
 

@@ -75,21 +75,23 @@ static FixItHint generateFixItHint(const FunctionDecl *Decl) {
   if (NewName != Name)
     return FixItHint::CreateReplacement(
         CharSourceRange::getTokenRange(SourceRange(Decl->getLocation())),
-        StringRef(NewName));
+        llvm::StringRef(NewName));
 
   return {};
 }
 
 void FunctionNamingCheck::registerMatchers(MatchFinder *Finder) {
   // Enforce Objective-C function naming conventions on all functions except:
+  // • Functions defined in system headers.
   // • C++ member functions.
   // • Namespaced functions.
   // • Implicitly defined functions.
   // • The main function.
   Finder->addMatcher(
       functionDecl(
-          unless(anyOf(cxxMethodDecl(), hasAncestor(namespaceDecl()), isMain(),
-                       isImplicit(), matchesName(validFunctionNameRegex(true)),
+          unless(anyOf(isExpansionInSystemHeader(), cxxMethodDecl(),
+                       hasAncestor(namespaceDecl()), isMain(), isImplicit(),
+                       matchesName(validFunctionNameRegex(true)),
                        allOf(isStaticStorageClass(),
                              matchesName(validFunctionNameRegex(false))))))
           .bind("function"),

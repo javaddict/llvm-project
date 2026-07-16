@@ -102,9 +102,9 @@
 // clang-format on
 //
 
-#ifdef _LIBCPP_COMPILER_GCC
+#if _LIBCPP_HAS_GCC_ATOMIC_IMP
 #  include <__atomic/support/gcc.h>
-#else
+#elif _LIBCPP_HAS_C_ATOMIC_IMP
 #  include <__atomic/support/c11.h>
 #endif
 

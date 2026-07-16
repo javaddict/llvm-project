@@ -679,17 +679,12 @@ class FileHandleTestCase(lldbtest.TestBase):
             lines = [x for x in f.read().strip().split() if x != "7"]
             self.assertEqual(lines, ["foobar"])
 
+    @skipIf(hostoslist=["windows"])
     def test_stdout_file_interactive(self):
         """Ensure when we read stdin from a file, outputs from python goes to the right I/O stream."""
         with open(self.in_filename, "w") as f:
             f.write(
-                """script --language python --
-import sys
-variable = 250 + 5
-print(variable)
-print("wrote to", "stderr", file=sys.stderr)
-quit
-"""
+                "script --language python --\nvalue = 250 + 5\nprint(value)\nprint(vel)"
             )
 
         with open(self.out_filename, "w") as outf, open(
@@ -717,7 +712,7 @@ quit
             )
             self.dbg.GetOutputFile().Flush()
         expected_out_text = "255"
-        expected_err_text = "wrote to stderr"
+        expected_err_text = "NameError"
         # check stdout
         with open(self.out_filename, "r") as f:
             out_text = f.read()
@@ -868,6 +863,4 @@ quit
         with open(self.out_filename, "r") as f:
             output = f.read()
             self.assertIn("Show a list of all debugger commands", output)
-            self.assertIn(
-                "List debugger commands and settings related to a word", output
-            )
+            self.assertIn("List debugger commands related to a word", output)

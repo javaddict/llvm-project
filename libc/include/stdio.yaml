@@ -1,6 +1,5 @@
 header: stdio.h
-standards:
-  - stdc
+header_template: stdio.h.def
 macros:
   - macro_name: "NULL"
     macro_header: null-macro.h
@@ -10,29 +9,11 @@ macros:
     macro_value: stdin
   - macro_name: stderr
     macro_value: stderr
-  - macro_name: SEEK_SET
-    macro_header: file-seek-macros.h
-  - macro_name: SEEK_CUR
-    macro_header: file-seek-macros.h
-  - macro_name: SEEK_END
-    macro_header: file-seek-macros.h
-  - macro_name: EOF
-    macro_header: stdio-macros.h
-  - macro_name: BUFSIZ
-    macro_header: stdio-macros.h
-  - macro_name: _IONBF
-    macro_header: stdio-macros.h
-  - macro_name: _IOLBF
-    macro_header: stdio-macros.h
-  - macro_name: _IOFBF
-    macro_header: stdio-macros.h
 types:
-  - type_name: rsize_t
   - type_name: size_t
   - type_name: off_t
   - type_name: cookie_io_functions_t
   - type_name: FILE
-  - type_name: errno_t
 enums: []
 objects:
   - object_name: stdin
@@ -44,14 +25,12 @@ objects:
 functions:
   - name: asprintf
     standards:
-      - gnu
+      - GNUExtensions
     return_type: int
     arguments:
       - type: char **__restrict
       - type: const char *__restrict
       - type: '...'
-    attributes:
-      - _LIBC_MODULAR_FORMAT_PRINTF(__asprintf_modular, 2, 3)
   - name: clearerr
     standards:
       - stdc
@@ -60,7 +39,7 @@ functions:
       - type: FILE *
   - name: clearerr_unlocked
     standards:
-      - gnu
+      - GNUExtensions
     return_type: void
     arguments:
       - type: FILE *
@@ -72,7 +51,7 @@ functions:
       - type: FILE *
   - name: fdopen
     standards:
-      - posix
+      - POSIX
     return_type: FILE *
     arguments:
       - type: int
@@ -85,7 +64,7 @@ functions:
       - type: FILE *
   - name: feof_unlocked
     standards:
-      - gnu
+      - GNUExtensions
     return_type: int
     arguments:
       - type: FILE *
@@ -97,7 +76,7 @@ functions:
       - type: FILE *
   - name: ferror_unlocked
     standards:
-      - gnu
+      - GNUExtensions
     return_type: int
     arguments:
       - type: FILE *
@@ -115,7 +94,7 @@ functions:
       - type: FILE *
   - name: fgetc_unlocked
     standards:
-      - gnu
+      - GNUExtensions
     return_type: int
     arguments:
       - type: FILE *
@@ -129,13 +108,13 @@ functions:
       - type: FILE *__restrict
   - name: fileno
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: FILE *
   - name: flockfile
     standards:
-      - posix
+      - POSIX
     return_type: void
     arguments:
       - type: FILE *
@@ -148,7 +127,7 @@ functions:
       - type: const char *
   - name: fopencookie
     standards:
-      - gnu
+      - GNUExtensions
     return_type: FILE *
     arguments:
       - type: void *
@@ -187,7 +166,7 @@ functions:
       - type: FILE *__restrict
   - name: fread_unlocked
     standards:
-      - gnu
+      - GNUExtensions
     return_type: size_t
     arguments:
       - type: void *__restrict
@@ -218,15 +197,9 @@ functions:
       - type: FILE *
       - type: long
       - type: int
-  - name: rewind
-    standards:
-      - stdc
-    return_type: void
-    arguments:
-      - type: FILE *
   - name: fseeko
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: FILE *
@@ -240,13 +213,13 @@ functions:
       - type: FILE *
   - name: ftello
     standards:
-      - posix
+      - POSIX
     return_type: off_t
     arguments:
       - type: FILE *
   - name: funlockfile
     standards:
-      - posix
+      - POSIX
     return_type: void
     arguments:
       - type: FILE *
@@ -261,7 +234,7 @@ functions:
       - type: FILE *__restrict
   - name: fwrite_unlocked
     standards:
-      - gnu
+      - GNUExtensions
     return_type: size_t
     arguments:
       - type: const void *__restrict
@@ -276,7 +249,7 @@ functions:
       - type: FILE *
   - name: getc_unlocked
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments:
       - type: FILE *
@@ -287,7 +260,7 @@ functions:
     arguments: []
   - name: getchar_unlocked
     standards:
-      - posix
+      - POSIX
     return_type: int
     arguments: []
   - name: perror
@@ -303,8 +276,6 @@ functions:
     arguments:
       - type: const char *__restrict
       - type: '...'
-    attributes:
-      - _LIBC_MODULAR_FORMAT_PRINTF(__printf_modular, 1, 2)
   - name: putc
     standards:
       - stdc
@@ -376,8 +347,6 @@ functions:
       - type: size_t
       - type: const char *__restrict
       - type: '...'
-    attributes:
-      - _LIBC_MODULAR_FORMAT_PRINTF(__snprintf_modular, 3, 4)
   - name: sprintf
     standards:
       - stdc
@@ -386,8 +355,6 @@ functions:
       - type: char *__restrict
       - type: const char *__restrict
       - type: '...'
-    attributes:
-      - _LIBC_MODULAR_FORMAT_PRINTF(__sprintf_modular, 2, 3)
   - name: sscanf
     standards:
       - stdc
@@ -405,14 +372,12 @@ functions:
       - type: FILE *
   - name: vasprintf
     standards:
-      - gnu
+      - GNUExtensions
     return_type: int
     arguments:
       - type: char **__restrict
       - type: const char *__restrict
       - type: va_list
-    attributes:
-      - _LIBC_MODULAR_FORMAT_PRINTF(__vasprintf_modular, 2, 0)
   - name: vfprintf
     standards:
       - stdc
@@ -428,8 +393,6 @@ functions:
     arguments:
       - type: const char *__restrict
       - type: va_list
-    attributes:
-      - _LIBC_MODULAR_FORMAT_PRINTF(__vprintf_modular, 1, 0)
   - name: vsnprintf
     standards:
       - stdc
@@ -439,8 +402,6 @@ functions:
       - type: size_t
       - type: const char *__restrict
       - type: va_list
-    attributes:
-      - _LIBC_MODULAR_FORMAT_PRINTF(__vsnprintf_modular, 3, 0)
   - name: vsprintf
     standards:
       - stdc
@@ -449,8 +410,6 @@ functions:
       - type: char *__restrict
       - type: const char *__restrict
       - type: va_list
-    attributes:
-      - _LIBC_MODULAR_FORMAT_PRINTF(__vsprintf_modular, 2, 0)
   - name: vsscanf
     standards:
       - stdc

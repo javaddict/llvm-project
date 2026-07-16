@@ -61,16 +61,10 @@ static std::error_code getLastSocketErrorCode() {
 #endif
 }
 
-static Expected<sockaddr_un> setSocketAddr(StringRef SocketPath) {
+static sockaddr_un setSocketAddr(StringRef SocketPath) {
   struct sockaddr_un Addr;
   memset(&Addr, 0, sizeof(Addr));
   Addr.sun_family = AF_UNIX;
-
-  if (sizeof(sockaddr_un::sun_path) <= SocketPath.size())
-    return make_error<StringError>(
-        std::make_error_code(std::errc::filename_too_long),
-        "Socket path exceeds sockaddr_un::sun_path size limit");
-
   strncpy(Addr.sun_path, SocketPath.str().c_str(), sizeof(Addr.sun_path) - 1);
   return Addr;
 }
@@ -96,15 +90,10 @@ static Expected<int> getSocketFD(StringRef SocketPath) {
   // off the handshake (and SO_PEERCRED/getpeereid support).
   setsockopt(Socket, SOL_SOCKET, SO_PEERCRED, NULL, 0);
 #endif
-  Expected<struct sockaddr_un> Addr = setSocketAddr(SocketPath);
-  if (!Addr)
-    return Addr.takeError();
-
-  if (::connect(Socket, (struct sockaddr *)&*Addr, sizeof(*Addr)) == -1) {
-    ::close(Socket);
+  struct sockaddr_un Addr = setSocketAddr(SocketPath);
+  if (::connect(Socket, (struct sockaddr *)&Addr, sizeof(Addr)) == -1)
     return llvm::make_error<StringError>(getLastSocketErrorCode(),
                                          "Connect socket failed");
-  }
 
 #ifdef _WIN32
   return _open_osfhandle(Socket, 0);
@@ -176,11 +165,8 @@ Expected<ListeningSocket> ListeningSocket::createUnix(StringRef SocketPath,
   // off the handshake (and SO_PEERCRED/getpeereid support).
   setsockopt(Socket, SOL_SOCKET, SO_PEERCRED, NULL, 0);
 #endif
-  Expected<struct sockaddr_un> Addr = setSocketAddr(SocketPath);
-  if (!Addr)
-    return Addr.takeError();
-
-  if (::bind(Socket, (struct sockaddr *)&*Addr, sizeof(*Addr)) == -1) {
+  struct sockaddr_un Addr = setSocketAddr(SocketPath);
+  if (::bind(Socket, (struct sockaddr *)&Addr, sizeof(Addr)) == -1) {
     // Grab error code from call to ::bind before calling ::close
     std::error_code EC = getLastSocketErrorCode();
     ::close(Socket);

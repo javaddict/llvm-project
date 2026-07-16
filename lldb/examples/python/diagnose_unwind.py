@@ -83,10 +83,10 @@ def backtrace_print_frame(target, frame_num, addr, fp):
 # seen and the second element is a list of addresses seen during the backtrace.
 
 
-def simple_backtrace(exe_ctx):
-    target = exe_ctx.target
-    process = exe_ctx.process
-    cur_thread = exe_ctx.thread
+def simple_backtrace(debugger):
+    target = debugger.GetSelectedTarget()
+    process = target.GetProcess()
+    cur_thread = process.GetSelectedThread()
 
     initial_fp = cur_thread.GetFrameAtIndex(0).GetFP()
 
@@ -178,7 +178,7 @@ def print_stack_frame(process, fp):
         return
 
 
-def diagnose_unwind(debugger, command, exe_ctx, result, internal_dict):
+def diagnose_unwind(debugger, command, result, dict):
     """
     Gather diagnostic information to help debug incorrect unwind (backtrace)
     behavior in lldb.  When there is a backtrace that doesn't look
@@ -193,11 +193,11 @@ def diagnose_unwind(debugger, command, exe_ctx, result, internal_dict):
         (options, args) = parser.parse_args(command_args)
     except:
         return
-    target = exe_ctx.target
+    target = debugger.GetSelectedTarget()
     if target:
-        process = exe_ctx.process
+        process = target.GetProcess()
         if process:
-            thread = exe_ctx.thread
+            thread = process.GetSelectedThread()
             if thread:
                 lldb_versions_match = re.search(
                     r"[lL][lL][dD][bB]-(\d+)([.](\d+))?([.](\d+))?",

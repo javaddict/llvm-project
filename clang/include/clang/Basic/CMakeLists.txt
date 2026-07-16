@@ -42,10 +42,6 @@ clang_tablegen(DiagnosticIndexName.inc -gen-clang-diags-index-name
   SOURCE Diagnostic.td
   TARGET ClangDiagnosticIndexName)
 
-clang_tablegen(DiagnosticStableIDs.inc -gen-clang-diags-stable-ids
-  SOURCE Diagnostic.td
-  TARGET ClangDiagnosticStableIDs)
-
 clang_tablegen(DiagnosticAllCompatIDs.inc
   -gen-clang-diags-compat-ids
   SOURCE Diagnostic.td
@@ -94,14 +90,6 @@ clang_tablegen(Builtins.inc -gen-clang-builtins
   SOURCE Builtins.td
   TARGET ClangBuiltins)
 
-clang_tablegen(BuiltinsAArch64.inc -gen-clang-builtins
-  SOURCE BuiltinsAArch64.td
-  TARGET ClangBuiltinsAArch64)
-
-clang_tablegen(BuiltinsAMDGPU.inc -gen-clang-builtins
-  SOURCE BuiltinsAMDGPU.td
-  TARGET ClangBuiltinsAMDGPU)
-
 clang_tablegen(BuiltinsBPF.inc -gen-clang-builtins
   SOURCE BuiltinsBPF.td
   TARGET ClangBuiltinsBPF)
@@ -109,6 +97,10 @@ clang_tablegen(BuiltinsBPF.inc -gen-clang-builtins
 clang_tablegen(BuiltinsDirectX.inc -gen-clang-builtins
   SOURCE BuiltinsDirectX.td
   TARGET ClangBuiltinsDirectX)
+
+clang_tablegen(BuiltinsHaydn.inc -gen-clang-builtins
+  SOURCE BuiltinsHaydn.td
+  TARGET ClangBuiltinsHaydn)
 
 clang_tablegen(BuiltinsHexagon.inc -gen-clang-builtins
   SOURCE BuiltinsHexagon.td
@@ -133,10 +125,6 @@ clang_tablegen(BuiltinsSPIRVVK.inc -gen-clang-builtins
 clang_tablegen(BuiltinsSPIRVCL.inc -gen-clang-builtins
   SOURCE BuiltinsSPIRVCL.td
   TARGET ClangBuiltinsSPIRVCL)
-
-clang_tablegen(BuiltinsSystemZ.inc -gen-clang-builtins
-  SOURCE BuiltinsSystemZ.td
-  TARGET ClangBuiltinsSystemZ)
 
 clang_tablegen(BuiltinsX86.inc -gen-clang-builtins
   SOURCE BuiltinsX86.td

@@ -15,7 +15,6 @@
 #include "src/stdio/printf_core/core_structs.h"
 #include "src/stdio/printf_core/error_mapper.h"
 #include "src/stdio/printf_core/vfprintf_internal.h"
-#include "src/stdio/stdout.h"
 
 #include "hdr/types/FILE.h"
 #include <stdarg.h>

@@ -397,10 +397,18 @@ public:
   /// The maximum size in 8-bit (host) bytes of an opcode.
   uint32_t GetMaximumOpcodeByteSize() const;
 
-  LLDB_DEPRECATED("Always returns 1.")
+  /// Architecture data byte width accessor
+  ///
+  /// \return
+  /// The size in 8-bit (host) bytes of a minimum addressable
+  /// unit from the Architecture's data bus
   uint32_t GetDataByteSize();
 
-  LLDB_DEPRECATED("Always returns 1.")
+  /// Architecture code byte width accessor
+  ///
+  /// \return
+  /// The size in 8-bit (host) bytes of a minimum addressable
+  /// unit from the Architecture's code bus
   uint32_t GetCodeByteSize();
 
   /// Gets the target.max-children-count value
@@ -637,14 +645,6 @@ public:
   ///     The amount of data read in host bytes.
   size_t ReadMemory(const SBAddress addr, void *buf, size_t size,
                     lldb::SBError &error);
-
-  /// Adds a breakpoint override implemented by class_name.  Returns the ID
-  /// of the new override or LLDB_INVALID_INDEX64 on error.
-  uint64_t AddBreakpointOverride(const char *class_name,
-                                 const char *description,
-                                 SBStructuredData &args_data, SBError &status);
-
-  bool RemoveBreakpointOverride(uint64_t id);
 
   lldb::SBBreakpoint BreakpointCreateByLocation(const char *file,
                                                 uint32_t line);
@@ -1058,8 +1058,6 @@ protected:
   friend class SBVariablesOptions;
 
   friend class lldb_private::python::SWIGBridge;
-  friend class lldb_private::lua::SWIGBridge;
-  friend class lldb_private::ScriptInterpreter;
 
   // Constructors are private, use static Target::Create function to create an
   // instance of this class.

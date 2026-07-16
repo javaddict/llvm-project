@@ -44,9 +44,6 @@ struct BytecodeWriterConfig::Impl {
   /// file.
   bool shouldElideResourceData = false;
 
-  /// A flag specifying whether to elide emission of locations.
-  bool shouldElideLocations = false;
-
   /// A map containing dialect version information for each dialect to emit.
   llvm::StringMap<std::unique_ptr<DialectVersion>> dialectVersionMap;
 
@@ -103,14 +100,6 @@ void BytecodeWriterConfig::attachResourcePrinter(
 void BytecodeWriterConfig::setElideResourceDataFlag(
     bool shouldElideResourceData) {
   impl->shouldElideResourceData = shouldElideResourceData;
-}
-
-void BytecodeWriterConfig::setElideLocations(bool shouldElideLocations) {
-  impl->shouldElideLocations = shouldElideLocations;
-}
-
-bool BytecodeWriterConfig::shouldElideLocations() const {
-  return impl->shouldElideLocations;
 }
 
 void BytecodeWriterConfig::setDesiredBytecodeVersion(int64_t bytecodeVersion) {
@@ -471,14 +460,6 @@ public:
   void writeOwnedBlob(ArrayRef<char> blob) override {
     emitter.emitVarInt(blob.size(), "dialect blob");
     emitter.emitOwnedBlob(
-        ArrayRef<uint8_t>(reinterpret_cast<const uint8_t *>(blob.data()),
-                          blob.size()),
-        "dialect blob");
-  }
-
-  void writeUnownedBlob(ArrayRef<char> blob) override {
-    emitter.emitVarInt(blob.size(), "dialect blob");
-    emitter.emitBytes(
         ArrayRef<uint8_t>(reinterpret_cast<const uint8_t *>(blob.data()),
                           blob.size()),
         "dialect blob");
@@ -1105,7 +1086,7 @@ void BytecodeWriter::writeUseListOrders(EncodingEmitter &emitter,
                                         uint8_t &opEncodingMask,
                                         ValueRange range) {
   // Loop over the results and store the use-list order per result index.
-  llvm::MapVector<unsigned, llvm::SmallVector<unsigned>> map;
+  DenseMap<unsigned, llvm::SmallVector<unsigned>> map;
   for (auto item : llvm::enumerate(range)) {
     auto value = item.value();
     // No need to store a custom use-list order if the result does not have
@@ -1158,7 +1139,10 @@ void BytecodeWriter::writeUseListOrders(EncodingEmitter &emitter,
     emitter.emitVarInt(map.size(), "custom use-list size");
   }
 
-  for (const auto &[resultIdx, useListOrder] : map) {
+  for (const auto &item : map) {
+    auto resultIdx = item.getFirst();
+    auto useListOrder = item.getSecond();
+
     // Compute the number of uses that are actually shuffled. If those are less
     // than half of the total uses, encoding the index pair `(src, dst)` is more
     // space efficient.

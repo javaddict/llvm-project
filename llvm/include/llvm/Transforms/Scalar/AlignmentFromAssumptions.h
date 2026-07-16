@@ -30,19 +30,18 @@ class Value;
 
 struct AlignmentFromAssumptionsPass
     : public PassInfoMixin<AlignmentFromAssumptionsPass> {
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 
   // Glue for old PM.
-  LLVM_ABI bool runImpl(Function &F, AssumptionCache &AC, ScalarEvolution *SE_,
-                        DominatorTree *DT_);
+  bool runImpl(Function &F, AssumptionCache &AC, ScalarEvolution *SE_,
+               DominatorTree *DT_);
 
   ScalarEvolution *SE = nullptr;
   DominatorTree *DT = nullptr;
 
-  LLVM_ABI bool extractAlignmentInfo(CallInst *I, unsigned Idx, Value *&AAPtr,
-                                     const SCEV *&AlignSCEV,
-                                     const SCEV *&OffSCEV);
-  LLVM_ABI bool processAssumption(CallInst *I, unsigned Idx);
+  bool extractAlignmentInfo(CallInst *I, unsigned Idx, Value *&AAPtr,
+                            const SCEV *&AlignSCEV, const SCEV *&OffSCEV);
+  bool processAssumption(CallInst *I, unsigned Idx);
 };
 }
 

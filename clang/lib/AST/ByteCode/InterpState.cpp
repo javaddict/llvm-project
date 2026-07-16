@@ -17,12 +17,10 @@
 using namespace clang;
 using namespace clang::interp;
 
-InterpState::InterpState(const State &Parent, Program &P, InterpStack &Stk,
+InterpState::InterpState(State &Parent, Program &P, InterpStack &Stk,
                          Context &Ctx, SourceMapper *M)
-    : State(Ctx.getASTContext(), Parent.getEvalStatus()), M(M), P(P), Stk(Stk),
-      Ctx(Ctx), BottomFrame(*this), Current(&BottomFrame),
-      StepsLeft(Ctx.getLangOpts().ConstexprStepLimit),
-      InfiniteSteps(StepsLeft == 0), EvalID(Ctx.getEvalID()) {
+    : Parent(Parent), M(M), P(P), Stk(Stk), Ctx(Ctx), BottomFrame(*this),
+      Current(&BottomFrame) {
   InConstantContext = Parent.InConstantContext;
   CheckingPotentialConstantExpression =
       Parent.CheckingPotentialConstantExpression;
@@ -30,12 +28,11 @@ InterpState::InterpState(const State &Parent, Program &P, InterpStack &Stk,
   EvalMode = Parent.EvalMode;
 }
 
-InterpState::InterpState(const State &Parent, Program &P, InterpStack &Stk,
+InterpState::InterpState(State &Parent, Program &P, InterpStack &Stk,
                          Context &Ctx, const Function *Func)
-    : State(Ctx.getASTContext(), Parent.getEvalStatus()), M(nullptr), P(P),
-      Stk(Stk), Ctx(Ctx), BottomFrame(*this), Current(&BottomFrame),
-      StepsLeft(Ctx.getLangOpts().ConstexprStepLimit),
-      InfiniteSteps(StepsLeft == 0), EvalID(Ctx.getEvalID()) {
+    : Parent(Parent), M(nullptr), P(P), Stk(Stk), Ctx(Ctx),
+      BottomFrame(*this, Func, nullptr, CodePtr(), Func->getArgSize()),
+      Current(&BottomFrame) {
   InConstantContext = Parent.InConstantContext;
   CheckingPotentialConstantExpression =
       Parent.CheckingPotentialConstantExpression;
@@ -78,7 +75,7 @@ void InterpState::cleanup() {
     Alloc->cleanup();
 }
 
-const Frame *InterpState::getCurrentFrame() { return Current; }
+Frame *InterpState::getCurrentFrame() { return Current; }
 
 void InterpState::deallocate(Block *B) {
   assert(B);
@@ -155,16 +152,4 @@ StdAllocatorCaller InterpState::getStdAllocatorCaller(StringRef Name) const {
   }
 
   return {};
-}
-
-bool InterpState::noteStep(CodePtr OpPC) {
-  if (InfiniteSteps)
-    return true;
-
-  --StepsLeft;
-  if (StepsLeft != 0)
-    return true;
-
-  FFDiag(Current->getSource(OpPC), diag::note_constexpr_step_limit_exceeded);
-  return false;
 }

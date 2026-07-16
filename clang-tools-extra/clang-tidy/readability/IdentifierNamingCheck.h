@@ -116,7 +116,7 @@ public:
         StringRef TypeName, const NamedDecl *ND,
         const IdentifierNamingCheck::HungarianNotationOption &HNOption) const;
 
-    StringRef getClassPrefix(
+    std::string getClassPrefix(
         const CXXRecordDecl *CRD,
         const IdentifierNamingCheck::HungarianNotationOption &HNOption) const;
 

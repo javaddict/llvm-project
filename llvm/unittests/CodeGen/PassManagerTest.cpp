@@ -75,8 +75,7 @@ private:
 
 AnalysisKey TestMachineFunctionAnalysis::Key;
 
-struct TestMachineFunctionPass
-    : public OptionalPassInfoMixin<TestMachineFunctionPass> {
+struct TestMachineFunctionPass : public PassInfoMixin<TestMachineFunctionPass> {
   TestMachineFunctionPass(int &Count, std::vector<int> &Counts)
       : Count(Count), Counts(Counts) {}
 
@@ -102,8 +101,7 @@ struct TestMachineFunctionPass
   std::vector<int> &Counts;
 };
 
-struct TestMachineModulePass
-    : public OptionalPassInfoMixin<TestMachineModulePass> {
+struct TestMachineModulePass : public PassInfoMixin<TestMachineModulePass> {
   TestMachineModulePass(int &Count, std::vector<int> &Counts)
       : Count(Count), Counts(Counts) {}
 
@@ -127,7 +125,7 @@ struct TestMachineModulePass
   std::vector<int> &Counts;
 };
 
-struct ReportWarningPass : public OptionalPassInfoMixin<ReportWarningPass> {
+struct ReportWarningPass : public PassInfoMixin<ReportWarningPass> {
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM) {
     auto &Ctx = MF.getContext();

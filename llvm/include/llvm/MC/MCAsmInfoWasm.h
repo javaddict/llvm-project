@@ -17,7 +17,7 @@ class MCAsmInfoWasm : public MCAsmInfo {
                             raw_ostream &) const final;
 
 protected:
-  MCAsmInfoWasm(const MCTargetOptions &Options);
+  MCAsmInfoWasm();
 };
 } // namespace llvm
 

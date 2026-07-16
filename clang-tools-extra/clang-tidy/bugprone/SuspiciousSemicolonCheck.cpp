@@ -16,16 +16,14 @@ using namespace clang::ast_matchers;
 namespace clang::tidy::bugprone {
 
 void SuspiciousSemicolonCheck::registerMatchers(MatchFinder *Finder) {
-  Finder->addMatcher(ifStmt(hasThen(nullStmt().bind("semi")),
-                            unless(hasElse(stmt())), unless(isConstexpr()))
-                         .bind("stmt"),
-                     this);
-  Finder->addMatcher(forStmt(hasBody(nullStmt().bind("semi"))).bind("stmt"),
-                     this);
   Finder->addMatcher(
-      cxxForRangeStmt(hasBody(nullStmt().bind("semi"))).bind("stmt"), this);
-  Finder->addMatcher(whileStmt(hasBody(nullStmt().bind("semi"))).bind("stmt"),
-                     this);
+      stmt(anyOf(ifStmt(hasThen(nullStmt().bind("semi")),
+                        unless(hasElse(stmt())), unless(isConstexpr())),
+                 forStmt(hasBody(nullStmt().bind("semi"))),
+                 cxxForRangeStmt(hasBody(nullStmt().bind("semi"))),
+                 whileStmt(hasBody(nullStmt().bind("semi")))))
+          .bind("stmt"),
+      this);
 }
 
 void SuspiciousSemicolonCheck::check(const MatchFinder::MatchResult &Result) {
@@ -39,16 +37,16 @@ void SuspiciousSemicolonCheck::check(const MatchFinder::MatchResult &Result) {
     return;
 
   ASTContext &Ctxt = *Result.Context;
-  const auto &SM = *Result.SourceManager;
+  auto Token = utils::lexer::getPreviousToken(LocStart, Ctxt.getSourceManager(),
+                                              Ctxt.getLangOpts());
+  auto &SM = *Result.SourceManager;
   const unsigned SemicolonLine = SM.getSpellingLineNumber(LocStart);
 
   const auto *Statement = Result.Nodes.getNodeAs<Stmt>("stmt");
   const bool IsIfStmt = isa<IfStmt>(Statement);
 
-  const std::optional<Token> PrevTok = utils::lexer::getPreviousToken(
-      LocStart, Ctxt.getSourceManager(), Ctxt.getLangOpts());
-  if (!PrevTok || (!IsIfStmt && SM.getSpellingLineNumber(
-                                    PrevTok->getLocation()) != SemicolonLine))
+  if (!IsIfStmt &&
+      SM.getSpellingLineNumber(Token.getLocation()) != SemicolonLine)
     return;
 
   const SourceLocation LocEnd = Semicolon->getEndLoc();
@@ -57,7 +55,6 @@ void SuspiciousSemicolonCheck::check(const MatchFinder::MatchResult &Result) {
   Lexer Lexer(SM.getLocForStartOfFile(FID), Ctxt.getLangOpts(),
               Buffer.getBufferStart(), SM.getCharacterData(LocEnd) + 1,
               Buffer.getBufferEnd());
-  Token Token;
   if (Lexer.LexFromRawLexer(Token))
     return;
 

@@ -7,12 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/bf16mulf128.h"
-#include "src/__support/math/bf16mulf128.h"
+#include "src/__support/FPUtil/bfloat16.h"
+#include "src/__support/FPUtil/generic/mul.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(bfloat16, bf16mulf128, (float128 x, float128 y)) {
-  return math::bf16mulf128(x, y);
+  return fputil::generic::mul<bfloat16>(x, y);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

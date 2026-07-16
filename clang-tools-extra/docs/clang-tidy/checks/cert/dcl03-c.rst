@@ -1,4 +1,6 @@
 .. title:: clang-tidy - cert-dcl03-c
+.. meta::
+   :http-equiv=refresh: 5;URL=../misc/static-assert.html
 
 cert-dcl03-c
 ============

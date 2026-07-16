@@ -69,7 +69,6 @@ class LLVM_LIBRARY_VISIBILITY PPCTargetInfo : public TargetInfo {
   bool HasFrsqrte = false;
   bool HasFrsqrtes = false;
   bool HasP10Vector = false;
-  bool HasFutureVector = false;
   bool HasPCRelativeMemops = false;
   bool HasQuadwordAtomics = false;
   bool UseLongCalls = false;
@@ -199,10 +198,6 @@ public:
                          bool Enabled) const override;
 
   bool supportsTargetAttributeTune() const override { return true; }
-
-  ParsedTargetAttr parseTargetAttr(StringRef Str) const override;
-
-  llvm::APInt getFMVPriority(ArrayRef<StringRef> Features) const override;
 
   ArrayRef<const char *> getGCCRegNames() const override;
 

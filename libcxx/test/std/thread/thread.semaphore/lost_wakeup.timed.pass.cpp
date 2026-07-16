@@ -14,25 +14,27 @@
 // Test that counting_semaphore::try_acquire_for does not suffer from lost wakeup
 // under stress testing.
 
+#include <barrier>
 #include <chrono>
-#include <functional>
 #include <semaphore>
 #include <thread>
 #include <vector>
 
 #include "make_test_thread.h"
 
+static std::counting_semaphore<> s(0);
 constexpr auto num_acquirer   = 100;
 constexpr auto num_iterations = 5000;
+static std::barrier<> b(num_acquirer + 1);
 
-void acquire(std::counting_semaphore<>& s) {
+void acquire() {
   for (int i = 0; i < num_iterations; ++i) {
     while (!s.try_acquire_for(std::chrono::seconds(1))) {
     }
   }
 }
 
-void release(std::counting_semaphore<>& s) {
+void release() {
   for (int i = 0; i < num_iterations; ++i) {
     s.release(num_acquirer);
   }
@@ -40,11 +42,11 @@ void release(std::counting_semaphore<>& s) {
 
 int main(int, char**) {
   std::vector<std::thread> threads;
-  std::counting_semaphore<> s(0);
   for (int i = 0; i < num_acquirer; ++i)
-    threads.push_back(support::make_test_thread(acquire, std::ref(s)));
+    threads.push_back(support::make_test_thread(acquire));
 
-  threads.push_back(support::make_test_thread(release, std::ref(s)));
+  threads.push_back(support::make_test_thread(release));
+
   for (auto& thread : threads)
     thread.join();
 

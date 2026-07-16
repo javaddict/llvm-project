@@ -13,7 +13,7 @@
 
 using namespace llvm;
 
-TEST_F(AMDGPUTestBase, ExecMayBeModifiedBeforeAnyUse) {
+TEST(AMDGPU, ExecMayBeModifiedBeforeAnyUse) {
   auto TM = createAMDGPUTargetMachine("amdgcn-amd-", "gfx906", "");
   if (!TM)
     GTEST_SKIP();

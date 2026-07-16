@@ -3,8 +3,7 @@
 bugprone-argument-comment
 =========================
 
-Checks that argument comments match parameter names and can optionally add
-missing comments for literals, init-lists, and constructed temporaries.
+Checks that argument comments match parameter names.
 
 The check understands argument comments in the form ``/*parameter_name=*/``
 that are placed right before the argument.
@@ -18,8 +17,7 @@ that are placed right before the argument.
   f(/*bar=*/true);
   // warning: argument name 'bar' in comment does not match parameter name 'foo'
 
-The check tries to detect typos and suggest automated fixes for them. It can
-also insert missing comments for configured argument kinds.
+The check tries to detect typos and suggest automated fixes for them.
 
 Options
 -------
@@ -33,28 +31,6 @@ Options
 .. option:: IgnoreSingleArgument
 
    When `true`, the check will ignore the single argument. Default is `false`.
-
-.. option:: CommentAnonymousInitLists
-
-   When `true`, the check will add argument comments in the format
-   ``/*ParameterName=*/`` right before anonymous braced-init list arguments
-   such as ``{}`` and ``{1, 2, 3}``. Default is `false`.
-
-Before:
-
-.. code-block:: c++
-
-  void foo(const std::vector<int> &Dims);
-
-  foo({});
-
-After:
-
-.. code-block:: c++
-
-  void foo(const std::vector<int> &Dims);
-
-  foo(/*Dims=*/{});
 
 .. option:: CommentBoolLiterals
 
@@ -78,50 +54,6 @@ After:
 
   foo(/*TurnKey=*/true, /*PressButton=*/false);
 
-.. option:: CommentCharacterLiterals
-
-   When `true`, the check will add argument comments in the format
-   ``/*ParameterName=*/`` right before the character literal argument.
-   Default is `false`.
-
-Before:
-
-.. code-block:: c++
-
-  void foo(char *Character);
-
-  foo('A');
-
-After:
-
-.. code-block:: c++
-
-  void foo(char *Character);
-
-  foo(/*Character=*/'A');
-
-.. option:: CommentFloatLiterals
-
-   When `true`, the check will add argument comments in the format
-   ``/*ParameterName=*/`` right before the float/double literal argument.
-   Default is `false`.
-
-Before:
-
-.. code-block:: c++
-
-  void foo(float Pi);
-
-  foo(3.14159);
-
-After:
-
-.. code-block:: c++
-
-  void foo(float Pi);
-
-  foo(/*Pi=*/3.14159);
-
 .. option:: CommentIntegerLiterals
 
    When `true`, the check will add argument comments in the format
@@ -144,61 +76,27 @@ After:
 
   foo(/*MeaningOfLife=*/42);
 
-.. option:: CommentNullPtrs
+.. option:: CommentFloatLiterals
 
    When `true`, the check will add argument comments in the format
-   ``/*ParameterName=*/`` right before the nullptr literal argument.
+   ``/*ParameterName=*/`` right before the float/double literal argument.
    Default is `false`.
 
 Before:
 
 .. code-block:: c++
 
-  void foo(A* Value);
+  void foo(float Pi);
 
-  foo(nullptr);
-
-After:
-
-.. code-block:: c++
-
-  void foo(A* Value);
-
-  foo(/*Value=*/nullptr);
-
-.. option:: CommentParenthesizedTemporaries
-
-   When `true`, the check will add argument comments in the format
-   ``/*ParameterName=*/`` right before explicit temporary constructions such as
-   ``Type()`` and ``Type(1, 2, 3)``. Default is `false`.
-
-Before:
-
-.. code-block:: c++
-
-  struct Dims {
-    Dims();
-    Dims(int, int, int);
-  };
-
-  void foo(const Dims &DimsValue);
-
-  foo(Dims());
-  foo(Dims(1, 2, 3));
+  foo(3.14159);
 
 After:
 
 .. code-block:: c++
 
-  struct Dims {
-    Dims();
-    Dims(int, int, int);
-  };
+  void foo(float Pi);
 
-  void foo(const Dims &DimsValue);
-
-  foo(/*DimsValue=*/Dims());
-  foo(/*DimsValue=*/Dims(1, 2, 3));
+  foo(/*Pi=*/3.14159);
 
 .. option:: CommentStringLiterals
 
@@ -226,27 +124,27 @@ After:
   foo(/*String=*/"Hello World");
   foo(/*WideString=*/L"Hello World");
 
-.. option:: CommentTypedInitLists
+.. option:: CommentCharacterLiterals
 
    When `true`, the check will add argument comments in the format
-   ``/*ParameterName=*/`` right before typed braced-init list arguments such
-   as ``Type{}``. Default is `false`.
+   ``/*ParameterName=*/`` right before the character literal argument.
+   Default is `false`.
 
 Before:
 
 .. code-block:: c++
 
-  void foo(const std::vector<int> &Dims);
+  void foo(char *Character);
 
-  foo(std::vector<int>{});
+  foo('A');
 
 After:
 
 .. code-block:: c++
 
-  void foo(const std::vector<int> &Dims);
+  void foo(char *Character);
 
-  foo(/*Dims=*/std::vector<int>{});
+  foo(/*Character=*/'A');
 
 .. option:: CommentUserDefinedLiterals
 
@@ -273,3 +171,25 @@ After:
   double operator"" _km(long double);
 
   foo(/*Distance=*/402.0_km);
+
+.. option:: CommentNullPtrs
+
+   When `true`, the check will add argument comments in the format
+   ``/*ParameterName=*/`` right before the nullptr literal argument.
+   Default is `false`.
+
+Before:
+
+.. code-block:: c++
+
+  void foo(A* Value);
+
+  foo(nullptr);
+
+After:
+
+.. code-block:: c++
+
+  void foo(A* Value);
+
+  foo(/*Value=*/nullptr);

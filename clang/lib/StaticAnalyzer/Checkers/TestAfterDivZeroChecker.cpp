@@ -28,26 +28,26 @@ class ZeroState {
 private:
   SymbolRef ZeroSymbol;
   unsigned BlockID;
-  const StackFrame *SF;
+  const StackFrameContext *SFC;
 
 public:
-  ZeroState(SymbolRef S, unsigned B, const StackFrame *SF)
-      : ZeroSymbol(S), BlockID(B), SF(SF) {}
+  ZeroState(SymbolRef S, unsigned B, const StackFrameContext *SFC)
+      : ZeroSymbol(S), BlockID(B), SFC(SFC) {}
 
-  const StackFrame *getStackFrame() const { return SF; }
+  const StackFrameContext *getStackFrameContext() const { return SFC; }
 
   bool operator==(const ZeroState &X) const {
-    return BlockID == X.BlockID && SF == X.SF && ZeroSymbol == X.ZeroSymbol;
+    return BlockID == X.BlockID && SFC == X.SFC && ZeroSymbol == X.ZeroSymbol;
   }
 
   bool operator<(const ZeroState &X) const {
-    return std::tie(BlockID, SF, ZeroSymbol) <
-           std::tie(X.BlockID, X.SF, X.ZeroSymbol);
+    return std::tie(BlockID, SFC, ZeroSymbol) <
+           std::tie(X.BlockID, X.SFC, X.ZeroSymbol);
   }
 
   void Profile(llvm::FoldingSetNodeID &ID) const {
     ID.AddInteger(BlockID);
-    ID.AddPointer(SF);
+    ID.AddPointer(SFC);
     ID.AddPointer(ZeroSymbol);
   }
 };
@@ -55,16 +55,16 @@ public:
 class DivisionBRVisitor : public BugReporterVisitor {
 private:
   SymbolRef ZeroSymbol;
-  const StackFrame *SF;
+  const StackFrameContext *SFC;
   bool Satisfied;
 
 public:
-  DivisionBRVisitor(SymbolRef ZeroSymbol, const StackFrame *SF)
-      : ZeroSymbol(ZeroSymbol), SF(SF), Satisfied(false) {}
+  DivisionBRVisitor(SymbolRef ZeroSymbol, const StackFrameContext *SFC)
+      : ZeroSymbol(ZeroSymbol), SFC(SFC), Satisfied(false) {}
 
   void Profile(llvm::FoldingSetNodeID &ID) const override {
     ID.Add(ZeroSymbol);
-    ID.Add(SF);
+    ID.Add(SFC);
   }
 
   PathDiagnosticPieceRef VisitNode(const ExplodedNode *Succ,
@@ -111,7 +111,7 @@ DivisionBRVisitor::VisitNode(const ExplodedNode *Succ, BugReporterContext &BRC,
     return nullptr;
 
   SVal S = Succ->getSVal(E);
-  if (ZeroSymbol == S.getAsSymbol() && SF == Succ->getStackFrame()) {
+  if (ZeroSymbol == S.getAsSymbol() && SFC == Succ->getStackFrame()) {
     Satisfied = true;
 
     // Construct a new PathDiagnosticPiece.
@@ -184,7 +184,7 @@ void TestAfterDivZeroChecker::checkEndFunction(const ReturnStmt *,
 
   DivZeroMapTy::Factory &F = State->get_context<DivZeroMap>();
   for (const ZeroState &ZS : DivZeroes) {
-    if (ZS.getStackFrame() == C.getStackFrame())
+    if (ZS.getStackFrameContext() == C.getStackFrame())
       DivZeroes = F.remove(DivZeroes, ZS);
   }
   C.addTransition(State->set<DivZeroMap>(DivZeroes));
@@ -242,7 +242,7 @@ void TestAfterDivZeroChecker::checkBranchCondition(const Stmt *Condition,
     if (hasDivZeroMap(Val, C))
       reportBug(Val, C);
     else {
-      SVal Val = C.getSVal(IE);
+      SVal Val = C.getSVal(Condition);
 
       if (hasDivZeroMap(Val, C))
         reportBug(Val, C);

@@ -162,7 +162,7 @@ void BasicBlockFiller::addInstruction(const MCInst &Inst, const DebugLoc &DL) {
     const MCOperand &Op = Inst.getOperand(OpIndex);
     if (Op.isReg()) {
       const bool IsDef = OpIndex < MCID.getNumDefs();
-      RegState Flags = {};
+      unsigned Flags = 0;
       const MCOperandInfo &OpInfo = MCID.operands().begin()[OpIndex];
       if (IsDef && !OpInfo.isOptionalDef())
         Flags |= RegState::Define;
@@ -292,7 +292,7 @@ Error assembleToStream(const ExegesisTarget &ET,
   }
 
   const bool IsSnippetSetupComplete = generateSnippetSetupCode(
-      ET, &TM->getMCSubtargetInfo(), Entry, Key, GenerateMemoryInstructions);
+      ET, TM->getMCSubtargetInfo(), Entry, Key, GenerateMemoryInstructions);
 
   // If the snippet setup is not complete, we disable liveliness tracking. This
   // means that we won't know what values are in the registers.
@@ -381,8 +381,7 @@ Expected<ExecutableFunction> ExecutableFunction::create(
          "Cannot find the symbol for FunctionID");
   uintptr_t CodeSize = SymbolIt->second;
 
-  auto EJITOrErr =
-      orc::LLJITBuilder().setDataLayout(TM->createDataLayout()).create();
+  auto EJITOrErr = orc::LLJITBuilder().create();
   if (!EJITOrErr)
     return EJITOrErr.takeError();
 

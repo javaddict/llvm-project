@@ -10,13 +10,6 @@ add_entrypoint_object(
 )
 
 add_entrypoint_object(
-  memfd_create
-  ALIAS
-  DEPENDS
-    .${LIBC_TARGET_OS}.memfd_create
-)
-
-add_entrypoint_object(
   mmap
   ALIAS
   DEPENDS

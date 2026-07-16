@@ -21,9 +21,8 @@ namespace llvm {
 class Module;
 
 /// Pass to convert @llvm.global.annotations to !annotation metadata.
-struct Annotation2MetadataPass
-    : public OptionalPassInfoMixin<Annotation2MetadataPass> {
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+struct Annotation2MetadataPass : public PassInfoMixin<Annotation2MetadataPass> {
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
 
 } // end namespace llvm

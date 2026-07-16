@@ -49,7 +49,6 @@ public:
   Triple TheTriple;
 
   std::unique_ptr<MCRegisterInfo> MRI;
-  MCTargetOptions MCOptions;
   std::unique_ptr<MCAsmInfo> MAI;
   std::unique_ptr<const MCSubtargetInfo> STI;
   const Target *TheTarget;
@@ -65,7 +64,7 @@ public:
       return;
 
     MRI.reset(TheTarget->createMCRegInfo(TheTriple));
-    MAI.reset(TheTarget->createMCAsmInfo(*MRI, TheTriple, MCOptions));
+    MAI.reset(TheTarget->createMCAsmInfo(*MRI, TheTriple, MCTargetOptions()));
     STI.reset(TheTarget->createMCSubtargetInfo(TheTriple, "", ""));
   }
 
@@ -101,7 +100,9 @@ public:
 DWARFExpressionCopyBytesTest::StreamerContext
 DWARFExpressionCopyBytesTest::createStreamer(raw_pwrite_stream &OS) {
   StreamerContext Res;
-  Res.Ctx = std::make_unique<MCContext>(Triple(TripleName), *MAI, *MRI, *STI);
+  Res.Ctx =
+      std::make_unique<MCContext>(Triple(TripleName), MAI.get(), MRI.get(),
+                                  /*MSTI=*/nullptr);
   Res.MOFI.reset(TheTarget->createMCObjectFileInfo(*Res.Ctx,
                                                    /*PIC=*/false));
   Res.Ctx->setObjectFileInfo(Res.MOFI.get());
@@ -130,7 +131,7 @@ SmallString<0> DWARFExpressionCopyBytesTest::emitObjFile(StringRef ExprBytes) {
   SmallString<0> Storage;
   raw_svector_ostream VecOS(Storage);
   StreamerContext C = createStreamer(VecOS);
-  C.Streamer->initSections(*STI);
+  C.Streamer->initSections(false, *STI);
   MCSection *Section = C.MOFI->getTextSection();
   Section->setHasInstructions(true);
   C.Streamer->switchSection(Section);
@@ -189,7 +190,7 @@ void DWARFExpressionCopyBytesTest::testExpr(ArrayRef<uint8_t> ExprData) {
   if (!MRI)
     GTEST_SKIP();
 
-  DataExtractor DE(ExprData, true);
+  DataExtractor DE(ExprData, true, 8);
   DWARFExpression Expr(DE, 8);
 
   // Copy this expression into the CFI of a binary and check that we are able to

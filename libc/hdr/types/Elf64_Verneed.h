@@ -17,6 +17,6 @@
 
 #include <elf.h>
 
-#endif // LIBC_FULL_BUILD
+#endif // LLVM_LIBC_FULL_BUILD
 
 #endif // LLVM_LIBC_HDR_TYPES_ELF64_VERNEED_H

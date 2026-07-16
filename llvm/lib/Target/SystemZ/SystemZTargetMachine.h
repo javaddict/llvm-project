@@ -55,10 +55,6 @@ public:
   MachineFunctionInfo *
   createMachineFunctionInfo(BumpPtrAllocator &Allocator, const Function &F,
                             const TargetSubtargetInfo *STI) const override;
-
-  ScheduleDAGInstrs *
-  createMachineScheduler(MachineSchedContext *C) const override;
-
   ScheduleDAGInstrs *
   createPostMachineScheduler(MachineSchedContext *C) const override;
 

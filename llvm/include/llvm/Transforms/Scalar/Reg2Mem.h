@@ -17,9 +17,9 @@
 
 namespace llvm {
 
-class RegToMemPass : public OptionalPassInfoMixin<RegToMemPass> {
+class RegToMemPass : public PassInfoMixin<RegToMemPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
 } // end namespace llvm

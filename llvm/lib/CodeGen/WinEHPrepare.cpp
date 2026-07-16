@@ -1396,12 +1396,12 @@ void WinEHPrepareImpl::replaceUseWithLoad(
       //     br label %PHIBlock
       // So move the terminators to each others' blocks and swap their
       // successors.
-      UncondBrInst *Goto = cast<UncondBrInst>(IncomingBlock->getTerminator());
+      BranchInst *Goto = cast<BranchInst>(IncomingBlock->getTerminator());
       Goto->removeFromParent();
       CatchRet->removeFromParent();
       CatchRet->insertInto(IncomingBlock, IncomingBlock->end());
       Goto->insertInto(NewBlock, NewBlock->end());
-      Goto->setSuccessor(PHIBlock);
+      Goto->setSuccessor(0, PHIBlock);
       CatchRet->setSuccessor(NewBlock);
       // Update the color mapping for the newly split edge.
       // Grab a reference to the ColorVector to be inserted before getting the

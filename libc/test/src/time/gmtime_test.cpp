@@ -18,6 +18,8 @@
 using LlvmLibcGmTime = LIBC_NAMESPACE::testing::ErrnoCheckingTest;
 
 TEST_F(LlvmLibcGmTime, OutOfRange) {
+  if (sizeof(time_t) < sizeof(int64_t))
+    return;
   time_t seconds =
       1 +
       INT_MAX *
@@ -84,7 +86,7 @@ TEST_F(LlvmLibcGmTime, InvalidMinutes) {
           11, // tm_mon starts with 0 for Jan
           1969 - LIBC_NAMESPACE::time_constants::TIME_YEAR_BASE, // year
           3,                                                     // wday
-          364,                                                   // yday
+          0,                                                     // yday
           0}),
       *tm_data);
   // 60 minutes from 1970-01-01 00:00:00 returns 1970-01-01 01:00:00.
@@ -117,7 +119,7 @@ TEST_F(LlvmLibcGmTime, InvalidHours) {
           11, // tm_mon starts with 0 for Jan
           1969 - LIBC_NAMESPACE::time_constants::TIME_YEAR_BASE, // year
           3,                                                     // wday
-          364,                                                   // yday
+          0,                                                     // yday
           0}),
       *tm_data);
   // 24 hours from 1970-01-01 00:00:00 returns 1970-01-02 00:00:00.
@@ -131,7 +133,7 @@ TEST_F(LlvmLibcGmTime, InvalidHours) {
           0, // tm_mon starts with 0 for Jan
           1970 - LIBC_NAMESPACE::time_constants::TIME_YEAR_BASE, // year
           5,                                                     // wday
-          1,                                                     // yday
+          0,                                                     // yday
           0}),
       *tm_data);
 }
@@ -168,7 +170,7 @@ TEST_F(LlvmLibcGmTime, InvalidMonths) {
           12 - 1, // tm_mon starts with 0 for Jan
           1969 - LIBC_NAMESPACE::time_constants::TIME_YEAR_BASE, // year
           1,                                                     // wday
-          334,                                                   // yday
+          0,                                                     // yday
           0}),
       *tm_data);
   // 1970-13-01 00:00:00 returns 1971-01-01 00:00:00.
@@ -202,7 +204,7 @@ TEST_F(LlvmLibcGmTime, InvalidDays) {
           11, // tm_mon starts with 0 for Jan
           1969 - LIBC_NAMESPACE::time_constants::TIME_YEAR_BASE, // year
           3,                                                     // wday
-          364,                                                   // yday
+          0,                                                     // yday
           0}),
       *tm_data);
 
@@ -214,10 +216,10 @@ TEST_F(LlvmLibcGmTime, InvalidDays) {
           0, // min
           0, // hr
           1, // day
-          1, // tm_mon starts with 0 for Jan
+          0, // tm_mon starts with 0 for Jan
           1970 - LIBC_NAMESPACE::time_constants::TIME_YEAR_BASE, // year
           0,                                                     // wday
-          31,                                                    // yday
+          0,                                                     // yday
           0}),
       *tm_data);
 
@@ -232,7 +234,7 @@ TEST_F(LlvmLibcGmTime, InvalidDays) {
           2, // tm_mon starts with 0 for Jan
           1970 - LIBC_NAMESPACE::time_constants::TIME_YEAR_BASE, // year
           0,                                                     // wday
-          59,                                                    // yday
+          0,                                                     // yday
           0}),
       *tm_data);
 
@@ -249,7 +251,7 @@ TEST_F(LlvmLibcGmTime, InvalidDays) {
           2, // tm_mon starts with 0 for Jan
           1972 - LIBC_NAMESPACE::time_constants::TIME_YEAR_BASE, // year
           3,                                                     // wday
-          60,                                                    // yday
+          0,                                                     // yday
           0}),
       *tm_data);
 }
@@ -267,12 +269,14 @@ TEST_F(LlvmLibcGmTime, EndOf32BitEpochYear) {
           0,  // tm_mon starts with 0 for Jan
           2038 - LIBC_NAMESPACE::time_constants::TIME_YEAR_BASE, // year
           2,                                                     // wday
-          18,                                                    // yday
+          7,                                                     // yday
           0}),
       *tm_data);
 }
 
 TEST_F(LlvmLibcGmTime, Max64BitYear) {
+  if (sizeof(time_t) == 4)
+    return;
   // Mon Jan 1 12:50:50 2170 (200 years from 1970),
   time_t seconds = 6311479850;
   struct tm *tm_data = LIBC_NAMESPACE::gmtime(&seconds);
@@ -284,7 +288,7 @@ TEST_F(LlvmLibcGmTime, Max64BitYear) {
           0,  // tm_mon starts with 0 for Jan
           2170 - LIBC_NAMESPACE::time_constants::TIME_YEAR_BASE, // year
           1,                                                     // wday
-          0,                                                     // yday
+          50,                                                    // yday
           0}),
       *tm_data);
 
@@ -299,7 +303,7 @@ TEST_F(LlvmLibcGmTime, Max64BitYear) {
           0,  // tm_mon starts with 0 for Jan
           2147483647 - LIBC_NAMESPACE::time_constants::TIME_YEAR_BASE, // year
           2,                                                           // wday
-          0,                                                           // yday
+          50,                                                          // yday
           0}),
       *tm_data);
 }

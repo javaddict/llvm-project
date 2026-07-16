@@ -20,6 +20,7 @@
 #  include <__support/ibm/gettod_zos.h> // gettimeofdayMonotonic
 #endif
 
+#include "include/apple_availability.h"
 #include <time.h> // clock_gettime and CLOCK_{MONOTONIC,REALTIME,MONOTONIC_RAW}
 
 #if __has_include(<unistd.h>)
@@ -30,7 +31,7 @@
 #  include <sys/time.h> // for gettimeofday and timeval
 #endif
 
-#if _LIBCPP_LIBC_LLVM_LIBC
+#if defined(__LLVM_LIBC__)
 #  define _LIBCPP_HAS_TIMESPEC_GET
 #endif
 
@@ -63,7 +64,6 @@
 #endif
 
 _LIBCPP_BEGIN_NAMESPACE_STD
-_LIBCPP_BEGIN_EXPLICIT_ABI_ANNOTATIONS
 
 namespace chrono {
 
@@ -262,5 +262,4 @@ steady_clock::time_point steady_clock::now() noexcept { return __libcpp_steady_c
 
 } // namespace chrono
 
-_LIBCPP_END_EXPLICIT_ABI_ANNOTATIONS
 _LIBCPP_END_NAMESPACE_STD

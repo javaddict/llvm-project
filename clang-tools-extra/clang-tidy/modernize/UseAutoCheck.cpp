@@ -428,13 +428,13 @@ void UseAutoCheck::replaceExpr(
 
   // Space after 'auto' to handle cases where the '*' in the pointer type is
   // next to the identifier. This avoids changing 'int *p' into 'autop'.
-  const StringRef Auto = ShouldReplenishVariableName
-                             ? (RemoveStars ? "auto " : "auto *")
-                             : (RemoveStars ? "auto " : "auto");
+  const llvm::StringRef Auto = ShouldReplenishVariableName
+                                   ? (RemoveStars ? "auto " : "auto *")
+                                   : (RemoveStars ? "auto " : "auto");
   const std::string ReplenishedVariableName =
       ShouldReplenishVariableName ? FirstDecl->getQualifiedNameAsString() : "";
   const std::string Replacement =
-      (Auto + StringRef{ReplenishedVariableName}).str();
+      (Auto + llvm::StringRef{ReplenishedVariableName}).str();
   Diag << FixItHint::CreateReplacement(Range, Replacement) << StarRemovals;
 }
 

@@ -21,27 +21,27 @@ using namespace clang;
 ProgramPointTag::~ProgramPointTag() {}
 
 ProgramPoint ProgramPoint::getProgramPoint(const Stmt *S, ProgramPoint::Kind K,
-                                           const StackFrame *SF,
-                                           const ProgramPointTag *tag) {
+                                           const LocationContext *LC,
+                                           const ProgramPointTag *tag){
   switch (K) {
     default:
       llvm_unreachable("Unhandled ProgramPoint kind");
     case ProgramPoint::PreStmtKind:
-      return PreStmt(S, SF, tag);
+      return PreStmt(S, LC, tag);
     case ProgramPoint::PostStmtKind:
-      return PostStmt(S, SF, tag);
+      return PostStmt(S, LC, tag);
     case ProgramPoint::PreLoadKind:
-      return PreLoad(S, SF, tag);
+      return PreLoad(S, LC, tag);
     case ProgramPoint::PostLoadKind:
-      return PostLoad(S, SF, tag);
+      return PostLoad(S, LC, tag);
     case ProgramPoint::PreStoreKind:
-      return PreStore(S, SF, tag);
+      return PreStore(S, LC, tag);
     case ProgramPoint::PostLValueKind:
-      return PostLValue(S, SF, tag);
+      return PostLValue(S, LC, tag);
     case ProgramPoint::PostStmtPurgeDeadSymbolsKind:
-      return PostStmtPurgeDeadSymbols(S, SF, tag);
+      return PostStmtPurgeDeadSymbols(S, LC, tag);
     case ProgramPoint::PreStmtPurgeDeadSymbolsKind:
-      return PreStmtPurgeDeadSymbols(S, SF, tag);
+      return PreStmtPurgeDeadSymbols(S, LC, tag);
   }
 }
 
@@ -95,8 +95,6 @@ StringRef ProgramPoint::getProgramPointKindName(Kind K) {
     return "PostImplicitCall";
   case LoopExitKind:
     return "LoopExit";
-  case LifetimeEndKind:
-    return "LifetimeEnd";
   case EpsilonKind:
     return "Epsilon";
   }
@@ -160,10 +158,6 @@ std::optional<SourceLocation> ProgramPoint::getSourceLocation() const {
     if (const Stmt *S = castAs<LoopExit>().getLoopStmt())
       return S->getBeginLoc();
     return std::nullopt;
-  case LifetimeEndKind:
-    if (const Stmt *S = castAs<LifetimeEnd>().getTriggerStmt())
-      return S->getBeginLoc();
-    return std::nullopt;
   case EpsilonKind:
     return std::nullopt;
   }
@@ -172,7 +166,7 @@ std::optional<SourceLocation> ProgramPoint::getSourceLocation() const {
 
 void ProgramPoint::printJson(llvm::raw_ostream &Out, const char *NL) const {
   const ASTContext &Context =
-      getStackFrame()->getAnalysisDeclContext()->getASTContext();
+      getLocationContext()->getAnalysisDeclContext()->getASTContext();
   const SourceManager &SM = Context.getSourceManager();
   const PrintingPolicy &PP = Context.getPrintingPolicy();
   const bool AddQuotes = true;
@@ -205,7 +199,7 @@ void ProgramPoint::printJson(llvm::raw_ostream &Out, const char *NL) const {
   case ProgramPoint::CallEnterKind:
     Out << "CallEnter\", \"callee_decl\": \"";
     Out << AnalysisDeclContext::getFunctionName(
-               castAs<CallEnter>().getCalleeStackFrame()->getDecl())
+               castAs<CallEnter>().getCalleeContext()->getDecl())
         << '\"';
     break;
   case ProgramPoint::CallExitBeginKind:
@@ -221,11 +215,6 @@ void ProgramPoint::printJson(llvm::raw_ostream &Out, const char *NL) const {
   case ProgramPoint::LoopExitKind:
     Out << "LoopExit\", \"stmt\": \""
         << castAs<LoopExit>().getLoopStmt()->getStmtClassName() << '\"';
-    break;
-
-  case ProgramPoint::LifetimeEndKind:
-    Out << "LifetimeEnd\", \"var\": \""
-        << castAs<LifetimeEnd>().getDecl()->getNameAsString() << '\"';
     break;
 
   case ProgramPoint::PreImplicitCallKind: {

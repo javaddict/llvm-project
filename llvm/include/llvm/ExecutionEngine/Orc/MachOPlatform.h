@@ -20,9 +20,7 @@
 #include "llvm/ExecutionEngine/Orc/Shared/ExecutorAddress.h"
 #include "llvm/Support/Compiler.h"
 
-#include <array>
 #include <future>
-#include <optional>
 #include <thread>
 #include <vector>
 
@@ -90,15 +88,9 @@ public:
     /// List of LC_BUILD_VERSIONs.
     std::vector<BuildVersionOpts> BuildVersions;
 
-    /// Optional UUID. If set, this will be used to add an LC_UUID command.
-    std::optional<std::array<uint8_t, 16>> UUID;
-
     HeaderOptions() = default;
     HeaderOptions(Dylib D) : IDDylib(std::move(D)) {}
   };
-
-  /// Callback for generating HeaderOptions structs for new JITDylibs.
-  using HeaderOptionsBuilder = unique_function<HeaderOptions(JITDylib &JD)>;
 
   /// Used by setupJITDylib to create MachO header MaterializationUnits for
   /// JITDylibs.
@@ -151,7 +143,6 @@ public:
   static Expected<std::unique_ptr<MachOPlatform>>
   Create(ObjectLinkingLayer &ObjLinkingLayer, JITDylib &PlatformJD,
          std::unique_ptr<DefinitionGenerator> OrcRuntime,
-         HeaderOptionsBuilder BuildHeaderOpts = defaultHeaderOpts,
          HeaderOptions PlatformJDOpts = {},
          MachOHeaderMUBuilder BuildMachOHeaderMU = buildSimpleMachOHeaderMU,
          std::optional<SymbolAliasMap> RuntimeAliases = std::nullopt);
@@ -159,9 +150,7 @@ public:
   /// Construct using a path to the ORC runtime.
   static Expected<std::unique_ptr<MachOPlatform>>
   Create(ObjectLinkingLayer &ObjLinkingLayer, JITDylib &PlatformJD,
-         const char *OrcRuntimePath,
-         HeaderOptionsBuilder BuildHeaderOpts = defaultHeaderOpts,
-         HeaderOptions PlatformJDOpts = {},
+         const char *OrcRuntimePath, HeaderOptions PlatformJDOpts = {},
          MachOHeaderMUBuilder BuildMachOHeaderMU = buildSimpleMachOHeaderMU,
          std::optional<SymbolAliasMap> RuntimeAliases = std::nullopt);
 
@@ -199,8 +188,6 @@ public:
   /// ORC runtime.
   static ArrayRef<std::pair<const char *, const char *>>
   standardLazyCompilationAliases();
-
-  static HeaderOptions defaultHeaderOpts(JITDylib &JD);
 
 private:
   using SymbolTableVector = SmallVector<
@@ -318,7 +305,6 @@ private:
 
   MachOPlatform(ObjectLinkingLayer &ObjLinkingLayer, JITDylib &PlatformJD,
                 std::unique_ptr<DefinitionGenerator> OrcRuntimeGenerator,
-                HeaderOptionsBuilder BuildHeaderOpts,
                 HeaderOptions PlatformJDOpts,
                 MachOHeaderMUBuilder BuildMachOHeaderMU, Error &Err);
 
@@ -348,7 +334,6 @@ private:
   ExecutionSession &ES;
   JITDylib &PlatformJD;
   ObjectLinkingLayer &ObjLinkingLayer;
-  HeaderOptionsBuilder BuildHeaderOpts;
   MachOHeaderMUBuilder BuildMachOHeaderMU;
 
   SymbolStringPtr MachOHeaderStartSymbol = ES.intern("___dso_handle");

@@ -284,7 +284,7 @@ public:
   /// \returns The index of the object parameter in \c Args if one exists.
   /// Returns std::nullopt otherwise.
   std::optional<unsigned> constructSubprogramArguments(DIE &Buffer,
-                                                       DITypeArray Args);
+                                                       DITypeRefArray Args);
 
   /// Create a DIE with the given Tag, add the DIE to its parent, and
   /// call insertDIE if MD is not null.
@@ -350,7 +350,7 @@ protected:
   void emitCommonHeader(bool UseOffsets, dwarf::UnitType UT);
 
   bool shouldPlaceInUnitDIE(const DISubprogram *SP, bool Minimal) {
-    // Add subprogram definitions to the CU die directly.
+    // Add subprogram declarations to the CU die directly.
     return Minimal || SP->getDeclaration();
   }
 
@@ -365,10 +365,6 @@ private:
   DISourceLanguageName getLanguage() const {
     return CUNode->getSourceLanguage();
   }
-
-  /// Emit the bytes of an APInt value into an existing DIEBlock,
-  /// respecting target endianness.
-  void addIntToBlock(DIEBlock &Block, const APInt &Val);
 
   /// A helper to add a wide integer constant to a DIE using a block
   /// form.

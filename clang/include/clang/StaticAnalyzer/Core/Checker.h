@@ -206,21 +206,6 @@ public:
   }
 };
 
-class LifetimeEnd {
-  template <typename CHECKER>
-  static void _checkLifetimeEnd(void *checker, const VarDecl *D,
-                                CheckerContext &C) {
-    ((const CHECKER *)checker)->checkLifetimeEnd(D, C);
-  }
-
-public:
-  template <typename CHECKER>
-  static void _register(CHECKER *checker, CheckerManager &mgr) {
-    mgr._registerForLifetimeEnd(CheckerManager::CheckLifetimeEndFunc(
-        checker, _checkLifetimeEnd<CHECKER>));
-  }
-};
-
 class Bind {
   template <typename CHECKER>
   static void _checkBind(void *checker, SVal location, SVal val, const Stmt *S,
@@ -361,13 +346,16 @@ public:
 class RegionChanges {
   template <typename CHECKER>
   static ProgramStateRef
-  _checkRegionChanges(void *checker, ProgramStateRef state,
+  _checkRegionChanges(void *checker,
+                      ProgramStateRef state,
                       const InvalidatedSymbols *invalidated,
                       ArrayRef<const MemRegion *> Explicits,
-                      ArrayRef<const MemRegion *> Regions, const StackFrame *SF,
+                      ArrayRef<const MemRegion *> Regions,
+                      const LocationContext *LCtx,
                       const CallEvent *Call) {
-    return ((const CHECKER *)checker)
-        ->checkRegionChanges(state, invalidated, Explicits, Regions, SF, Call);
+    return ((const CHECKER *) checker)->checkRegionChanges(state, invalidated,
+                                                           Explicits, Regions,
+                                                           LCtx, Call);
   }
 
 public:

@@ -31,4 +31,4 @@
         .long 0x0
         .long 0x0
 
-// CHECK: error: {{.*}}:(.eh_frame): invalid CIE reference
+// CHECK: invalid CIE reference

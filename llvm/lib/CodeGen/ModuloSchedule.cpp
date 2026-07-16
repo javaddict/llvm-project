@@ -2033,6 +2033,7 @@ void PeelingModuloScheduleExpander::validateAgainstModuloScheduleExpander() {
   std::string ScheduleDump;
   raw_string_ostream OS(ScheduleDump);
   Schedule.print(OS);
+  OS.flush();
 
   // First, run the normal ModuleScheduleExpander. We don't support any
   // InstrChanges.
@@ -2779,7 +2780,9 @@ class ModuloScheduleTest : public MachineFunctionPass {
 public:
   static char ID;
 
-  ModuloScheduleTest() : MachineFunctionPass(ID) {}
+  ModuloScheduleTest() : MachineFunctionPass(ID) {
+    initializeModuloScheduleTestPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
   void runOnLoop(MachineFunction &MF, MachineLoop &L);

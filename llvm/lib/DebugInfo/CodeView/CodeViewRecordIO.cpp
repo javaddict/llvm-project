@@ -209,7 +209,6 @@ Error CodeViewRecordIO::mapEncodedInteger(APSInt &Value, const Twine &Comment) {
 
 Error CodeViewRecordIO::mapStringZ(StringRef &Value, const Twine &Comment) {
   if (isStreaming()) {
-    assert(Value.data()[Value.size()] == '\0' && "Expected null terminator.");
     auto NullTerminatedString = StringRef(Value.data(), Value.size() + 1);
     emitComment(Comment);
     Streamer->emitBytes(NullTerminatedString);

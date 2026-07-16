@@ -9,8 +9,6 @@
 #ifndef MLIR_DIALECT_TRANSFORM_IR_UTILS_H
 #define MLIR_DIALECT_TRANSFORM_IR_UTILS_H
 
-#include "mlir/Support/LLVM.h"
-
 namespace mlir {
 class InFlightDiagnostic;
 class Operation;
@@ -32,12 +30,8 @@ namespace detail {
 //       function to clone (or move) `other` in order to improve efficiency.
 //       This might primarily make sense if we can also prune the symbols that
 //       are merged to a subset (such as those that are actually used).
-LogicalResult mergeSymbolsInto(Operation *target,
-                               OwningOpRef<Operation *> other);
-
-/// Verify that the call graph inside `root` contains no cycles. Emit a
-/// diagnostic and return failure if it does.
-LogicalResult verifyNoRecursionInCallGraph(Operation *root);
+InFlightDiagnostic mergeSymbolsInto(Operation *target,
+                                    OwningOpRef<Operation *> other);
 
 } // namespace detail
 } // namespace transform

@@ -34,10 +34,7 @@ class TestExpeditedThreadPCs(TestBase):
         self.source = "main.cpp"
         self.build()
         (target, process, thread, bkpt) = lldbutil.run_to_source_breakpoint(
-            self,
-            "break here",
-            lldb.SBFileSpec(self.source, False),
-            extra_images=["foo"],
+            self, "break here", lldb.SBFileSpec(self.source, False)
         )
 
         # verify that libfoo.dylib hasn't loaded yet
@@ -52,7 +49,6 @@ class TestExpeditedThreadPCs(TestBase):
         thread.StepInto()
 
         # verify that libfoo.dylib has loaded
-        found_libfoo = False
         for m in target.modules:
             if m.GetFileSpec().GetFilename() == "libfoo.dylib":
                 found_libfoo = True

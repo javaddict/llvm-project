@@ -17,6 +17,6 @@
 
 #include "hdr/fcntl_overlay.h"
 
-#endif // LIBC_FULL_BUILD
+#endif // LLVM_LIBC_FULL_BUILD
 
 #endif // LLVM_LIBC_HDR_FCNTL_MACROS_H

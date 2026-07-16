@@ -13,13 +13,10 @@
 
 namespace llvm {
 
-class ExpandPostRAPseudosPass
-    : public RequiredPassInfoMixin<ExpandPostRAPseudosPass> {
+class ExpandPostRAPseudosPass : public PassInfoMixin<ExpandPostRAPseudosPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
-  // We need to expand pseudoinstructions regardless of optimization level or
-  // otherwise later passes (e.g., AsmPrinter) will fail.
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
 };
 
 } // namespace llvm

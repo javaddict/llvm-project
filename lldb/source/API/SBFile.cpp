@@ -57,8 +57,8 @@ SBFile::SBFile(FILE *file, const char *mode, bool transfer_ownership) {
       std::make_shared<NativeFile>(file, options.get(), transfer_ownership);
 }
 
-SBFile::SBFile(int fd, const char *mode, bool transfer_ownership) {
-  LLDB_INSTRUMENT_VA(this, fd, mode, transfer_ownership);
+SBFile::SBFile(int fd, const char *mode, bool transfer_owndership) {
+  LLDB_INSTRUMENT_VA(this, fd, mode, transfer_owndership);
 
   auto options = File::GetOptionsFromMode(mode);
   if (!options) {
@@ -66,7 +66,7 @@ SBFile::SBFile(int fd, const char *mode, bool transfer_ownership) {
     return;
   }
   m_opaque_sp =
-      std::make_shared<NativeFile>(fd, options.get(), transfer_ownership);
+      std::make_shared<NativeFile>(fd, options.get(), transfer_owndership);
 }
 
 SBError SBFile::Read(uint8_t *buf, size_t num_bytes, size_t *bytes_read) {

@@ -196,8 +196,7 @@ bool BlockExtractor::runOnModule(Module &M) {
 BlockExtractorPass::BlockExtractorPass(
     std::vector<std::vector<BasicBlock *>> &&GroupsOfBlocks,
     bool EraseFunctions)
-    : GroupsOfBlocks(std::move(GroupsOfBlocks)),
-      EraseFunctions(EraseFunctions) {}
+    : GroupsOfBlocks(GroupsOfBlocks), EraseFunctions(EraseFunctions) {}
 
 PreservedAnalyses BlockExtractorPass::run(Module &M,
                                           ModuleAnalysisManager &AM) {

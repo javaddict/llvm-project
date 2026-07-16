@@ -60,9 +60,9 @@
 // as "not reading" and/or "not writing".
 
 #include "mlir/Dialect/Bufferization/Transforms/OneShotModuleBufferize.h"
+
 #include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
-#include "mlir/Dialect/Bufferization/IR/BufferizationTypeInterfaces.h"
 #include "mlir/Dialect/Bufferization/Transforms/Bufferize.h"
 #include "mlir/Dialect/Bufferization/Transforms/FuncBufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Bufferization/Transforms/OneShotAnalysis.h"
@@ -71,8 +71,6 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Operation.h"
-#include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/SmallVectorExtras.h"
 
 using namespace mlir;
 using namespace mlir::bufferization;
@@ -101,9 +99,9 @@ static void annotateEquivalentReturnBbArg(OpOperand &returnVal,
   SmallVector<int64_t> equivBbArgs;
   if (op->hasAttr(kEquivalentArgsAttr)) {
     auto attr = cast<ArrayAttr>(op->getAttr(kEquivalentArgsAttr));
-    equivBbArgs = llvm::map_to_vector<4>(attr, [](Attribute a) {
+    equivBbArgs = llvm::to_vector<4>(llvm::map_range(attr, [](Attribute a) {
       return cast<IntegerAttr>(a).getValue().getSExtValue();
-    });
+    }));
   } else {
     equivBbArgs.append(op->getNumOperands(), -1);
   }
@@ -123,10 +121,10 @@ aliasingFuncOpBBArgsAnalysis(FuncOp funcOp, OneShotAnalysisState &state,
     // return value may alias with any tensor bbArg.
     FunctionType type = funcOp.getFunctionType();
     for (const auto &inputIt : llvm::enumerate(type.getInputs())) {
-      if (!isa<TensorLikeType>(inputIt.value()))
+      if (!isa<TensorType>(inputIt.value()))
         continue;
       for (const auto &resultIt : llvm::enumerate(type.getResults())) {
-        if (!isa<TensorLikeType>(resultIt.value()))
+        if (!isa<TensorType>(resultIt.value()))
           continue;
         int64_t returnIdx = resultIt.index();
         int64_t bbArgIdx = inputIt.index();
@@ -146,13 +144,13 @@ aliasingFuncOpBBArgsAnalysis(FuncOp funcOp, OneShotAnalysisState &state,
 
   // Build alias sets. Merge all aliases from all func.return ops.
   for (BlockArgument bbArg : funcOp.getArguments()) {
-    if (isa<TensorLikeType>(bbArg.getType())) {
+    if (isa<RankedTensorType>(bbArg.getType())) {
       int64_t bbArgIdx = bbArg.getArgNumber();
       // Store aliases in a set, so that we don't add the same alias twice.
       SetVector<int64_t> aliases;
       for (func::ReturnOp returnOp : returnOps) {
         for (OpOperand &returnVal : returnOp->getOpOperands()) {
-          if (isa<TensorLikeType>(returnVal.get().getType())) {
+          if (isa<RankedTensorType>(returnVal.get().getType())) {
             int64_t returnIdx = returnVal.getOperandNumber();
             if (state.areAliasingBufferizedValues(returnVal.get(), bbArg))
               aliases.insert(returnIdx);
@@ -171,10 +169,10 @@ aliasingFuncOpBBArgsAnalysis(FuncOp funcOp, OneShotAnalysisState &state,
   auto findEquivalentBlockArgIdx =
       [&](OpOperand &opOperand) -> std::optional<int64_t> {
     Value v = opOperand.get();
-    if (!isa<TensorLikeType>(v.getType()))
+    if (!isa<TensorType>(v.getType()))
       return std::nullopt;
     for (BlockArgument bbArg : funcOp.getArguments()) {
-      if (isa<TensorLikeType>(bbArg.getType())) {
+      if (isa<RankedTensorType>(bbArg.getType())) {
         if (state.areEquivalentBufferizedValues(v, bbArg)) {
           if (state.getOptions().testAnalysisOnly)
             annotateEquivalentReturnBbArg(opOperand, bbArg);
@@ -244,7 +242,7 @@ funcOpBbArgReadWriteAnalysis(FuncOp funcOp, OneShotAnalysisState &state,
   for (int64_t idx = 0, e = funcOp.getFunctionType().getNumInputs(); idx < e;
        ++idx) {
     // Skip non-tensor arguments.
-    if (!isa<TensorLikeType>(funcOp.getFunctionType().getInput(idx)))
+    if (!isa<TensorType>(funcOp.getFunctionType().getInput(idx)))
       continue;
     bool isRead;
     bool isWritten;
@@ -298,9 +296,9 @@ getCalledFunction(func::CallOp callOp,
 /// Return "true" if the given function signature has tensor semantics.
 static bool hasTensorSignature(func::FuncOp funcOp) {
   return llvm::any_of(funcOp.getFunctionType().getInputs(),
-                      llvm::IsaPred<TensorLikeType>) ||
+                      llvm::IsaPred<TensorType>) ||
          llvm::any_of(funcOp.getFunctionType().getResults(),
-                      llvm::IsaPred<TensorLikeType>);
+                      llvm::IsaPred<TensorType>);
 }
 
 /// Store all functions of the `moduleOp` in `orderedFuncOps`, sorted by
@@ -318,9 +316,9 @@ static LogicalResult getFuncOpsOrderedByCalls(
     SymbolTableCollection &symbolTables) {
   // For each FuncOp, the set of functions called by it (i.e. the union of
   // symbols of all nested func::CallOp).
-  DenseMap<func::FuncOp, SetVector<func::FuncOp>> calledBy;
+  DenseMap<func::FuncOp, DenseSet<func::FuncOp>> calledBy;
   // For each FuncOp, the number of func::CallOp it contains.
-  llvm::MapVector<func::FuncOp, unsigned> numberCallOpsContainedInFuncOp;
+  DenseMap<func::FuncOp, unsigned> numberCallOpsContainedInFuncOp;
   for (mlir::Region &region : moduleOp->getRegions()) {
     for (mlir::Block &block : region.getBlocks()) {
       for (func::FuncOp funcOp : block.getOps<func::FuncOp>()) {
@@ -335,7 +333,7 @@ static LogicalResult getFuncOpsOrderedByCalls(
             return WalkResult::skip();
 
           callerMap[calledFunction].insert(callOp);
-          if (calledBy[calledFunction].insert(funcOp)) {
+          if (calledBy[calledFunction].insert(funcOp).second) {
             numberCallOpsContainedInFuncOp[funcOp]++;
           }
           return WalkResult::advance();
@@ -379,17 +377,9 @@ static LogicalResult getFuncOpsOrderedByCalls(
 
 /// Helper function that extracts the source from a memref.cast. If the given
 /// value is not a memref.cast result, simply returns the given value.
-/// Only unpacks casts where the source is at least as specific as the result
-/// (i.e., does not unpack casts from unranked to ranked memref, which would
-/// downgrade the type).
 static Value unpackCast(Value v) {
   auto castOp = v.getDefiningOp<memref::CastOp>();
   if (!castOp)
-    return v;
-  // Do not unpack a cast from unranked to ranked memref: folding would
-  // downgrade the function return type from ranked to unranked.
-  if (isa<UnrankedMemRefType>(castOp.getSource().getType()) &&
-      isa<MemRefType>(v.getType()))
     return v;
   return castOp.getSource();
 }

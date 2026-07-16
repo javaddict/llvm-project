@@ -2094,7 +2094,7 @@ static void relocationViaAlloca(
       // slightly easier to debug SEGVs.  Note that on large IR files with
       // lots of gc.statepoints this is extremely costly both memory and time
       // wise.
-      SmallVector<std::pair<Type *, AllocaInst *>, 64> ToClobber;
+      SmallVector<AllocaInst *, 64> ToClobber;
       for (auto Pair : AllocaMap) {
         Value *Def = Pair.first;
         AllocaInst *Alloca = Pair.second;
@@ -2103,17 +2103,17 @@ static void relocationViaAlloca(
         if (VisitedLiveValues.count(Def)) {
           continue;
         }
-        // Track Def's type since the alloca was created with that type.
-        ToClobber.push_back({Def->getType(), Alloca});
+        ToClobber.push_back(Alloca);
       }
 
       auto InsertClobbersAt = [&](BasicBlock::iterator IP) {
-        for (auto &[Ty, AI] : ToClobber) {
+        for (auto *AI : ToClobber) {
+          auto AT = AI->getAllocatedType();
           Constant *CPN;
-          if (Ty->isVectorTy())
-            CPN = ConstantAggregateZero::get(Ty);
+          if (AT->isVectorTy())
+            CPN = ConstantAggregateZero::get(AT);
           else
-            CPN = ConstantPointerNull::get(cast<PointerType>(Ty));
+            CPN = ConstantPointerNull::get(cast<PointerType>(AT));
           new StoreInst(CPN, AI, IP);
         }
       };
@@ -2161,17 +2161,15 @@ static void relocationViaAlloca(
         PHINode *Phi = cast<PHINode>(Use);
         for (unsigned i = 0; i < Phi->getNumIncomingValues(); i++) {
           if (Def == Phi->getIncomingValue(i)) {
-            // Use Def's type since the alloca was created with that type.
             LoadInst *Load = new LoadInst(
-                Def->getType(), Alloca, "",
+                Alloca->getAllocatedType(), Alloca, "",
                 Phi->getIncomingBlock(i)->getTerminator()->getIterator());
             Phi->setIncomingValue(i, Load);
           }
         }
       } else {
-        // Use Def's type since the alloca was created with that type.
-        LoadInst *Load =
-            new LoadInst(Def->getType(), Alloca, "", Use->getIterator());
+        LoadInst *Load = new LoadInst(Alloca->getAllocatedType(), Alloca, "",
+                                      Use->getIterator());
         Use->replaceUsesOfWith(Def, Load);
       }
     }
@@ -3115,8 +3113,9 @@ bool RewriteStatepointsForGC::runOnFunction(Function &F, DominatorTree &DT,
   // as long as all statepoints are in rare blocks.  If we had in-register
   // lowering for live values this would be a much safer transform.
   auto getConditionInst = [](Instruction *TI) -> Instruction * {
-    if (auto *BI = dyn_cast<CondBrInst>(TI))
-      return dyn_cast<Instruction>(BI->getCondition());
+    if (auto *BI = dyn_cast<BranchInst>(TI))
+      if (BI->isConditional())
+        return dyn_cast<Instruction>(BI->getCondition());
     // TODO: Extend this to handle switches
     return nullptr;
   };

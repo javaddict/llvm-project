@@ -18,12 +18,10 @@
 
 using namespace llvm;
 
-XtensaMCAsmInfo::XtensaMCAsmInfo(const Triple &TT,
-                                 const MCTargetOptions &Options)
-    : MCAsmInfoELF(Options) {
+XtensaMCAsmInfo::XtensaMCAsmInfo(const Triple &TT) {
   CodePointerSize = 4;
   CalleeSaveStackSlotSize = 4;
-  InternalSymbolPrefix = ".L";
+  PrivateGlobalPrefix = ".L";
   CommentString = "#";
   ZeroDirective = "\t.space\t";
   Data64bitsDirective = "\t.quad\t";

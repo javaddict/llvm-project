@@ -34,10 +34,6 @@ public:
 
   void Clear() override;
 
-  bool IsDefault() const override {
-    return m_current_format == m_default_format;
-  }
-
   void AutoComplete(CommandInterpreter &interpreter,
                     CompletionRequest &request) override;
 

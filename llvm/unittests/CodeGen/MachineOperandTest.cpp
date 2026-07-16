@@ -349,13 +349,9 @@ TEST(MachineOperandTest, PrintMetadata) {
 }
 
 TEST(MachineOperandTest, PrintMCSymbol) {
-  MCTargetOptions MCOptions;
-  MCAsmInfo MAI(MCOptions);
-  MCRegisterInfo MRI;
+  MCAsmInfo MAI;
   Triple T = Triple("unknown-unknown-unknown");
-  MCSubtargetInfo STI(T, "", "", "", {}, {}, {}, nullptr, nullptr, nullptr,
-                      nullptr, nullptr, nullptr);
-  MCContext Ctx(T, MAI, MRI, STI);
+  MCContext Ctx(T, &MAI, /*MRI=*/nullptr, /*MSTI=*/nullptr);
   MCSymbol *Sym = Ctx.getOrCreateSymbol("foo");
 
   // Create a MachineOperand with a metadata and print it.

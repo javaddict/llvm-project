@@ -11,9 +11,8 @@ namespace benchmark {
 BM_DECLARE_string(benchmark_perf_counters);
 
 }  // namespace benchmark
-namespace {
 
-void BM_Simple(benchmark::State& state) {
+static void BM_Simple(benchmark::State& state) {
   for (auto _ : state) {
     auto iterations = double(state.iterations()) * double(state.iterations());
     benchmark::DoNotOptimize(iterations);
@@ -67,21 +66,19 @@ static void CheckSimple(Results const& e) {
 double withoutPauseResumeInstrCount = 0.0;
 double withPauseResumeInstrCount = 0.0;
 
-void SaveInstrCountWithoutResume(Results const& e) {
+static void SaveInstrCountWithoutResume(Results const& e) {
   withoutPauseResumeInstrCount = e.GetAs<double>("INSTRUCTIONS");
 }
 
-void SaveInstrCountWithResume(Results const& e) {
+static void SaveInstrCountWithResume(Results const& e) {
   withPauseResumeInstrCount = e.GetAs<double>("INSTRUCTIONS");
 }
 
 CHECK_BENCHMARK_RESULTS("BM_Simple", &CheckSimple);
 CHECK_BENCHMARK_RESULTS("BM_WithoutPauseResume", &SaveInstrCountWithoutResume);
 CHECK_BENCHMARK_RESULTS("BM_WithPauseResume", &SaveInstrCountWithResume);
-}  // end namespace
 
 int main(int argc, char* argv[]) {
-  benchmark::MaybeReenterWithoutASLR(argc, argv);
   if (!benchmark::internal::PerfCounters::kSupported) {
     return 0;
   }

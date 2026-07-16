@@ -6,7 +6,6 @@ set(LLVM_LINK_COMPONENTS
   MC
   MCDisassembler
   Object
-  ObjectYAML
   TargetParser
   )
 

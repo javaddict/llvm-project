@@ -113,9 +113,8 @@ struct FormatMessage {
 
 // This declaration is logically private to class FormatValidator.
 // It is placed here to work around a clang compilation problem.
-ENUM_CLASS(TokenKind, None, A, AT, B, BN, BZ, D, DC, DP, DT, E, EN, ES, EX, F,
-    G, I, L, LZ, LZP, LZS, O, P, RC, RD, RN, RP, RU, RZ, S, SP, SS, T, TL, TR,
-    X, Z, Colon, Slash,
+ENUM_CLASS(TokenKind, None, A, B, BN, BZ, D, DC, DP, DT, E, EN, ES, EX, F, G, I,
+    L, O, P, RC, RD, RN, RP, RU, RZ, S, SP, SS, T, TL, TR, X, Z, Colon, Slash,
     Backslash, // nonstandard: inhibit newline on output
     Dollar, // nonstandard: inhibit newline on output on terminals
     Star, LParen, RParen, Comma, Point, Sign,
@@ -137,10 +136,10 @@ public:
 
 private:
   common::EnumSet<TokenKind, TokenKind_enumSize> itemsWithLeadingInts_{
-      TokenKind::A, TokenKind::AT, TokenKind::B, TokenKind::D, TokenKind::DT,
-      TokenKind::E, TokenKind::EN, TokenKind::ES, TokenKind::EX, TokenKind::F,
-      TokenKind::G, TokenKind::I, TokenKind::L, TokenKind::O, TokenKind::P,
-      TokenKind::X, TokenKind::Z, TokenKind::Slash, TokenKind::LParen};
+      TokenKind::A, TokenKind::B, TokenKind::D, TokenKind::DT, TokenKind::E,
+      TokenKind::EN, TokenKind::ES, TokenKind::EX, TokenKind::F, TokenKind::G,
+      TokenKind::I, TokenKind::L, TokenKind::O, TokenKind::P, TokenKind::X,
+      TokenKind::Z, TokenKind::Slash, TokenKind::LParen};
 
   struct Token {
     Token &set_kind(TokenKind kind) {
@@ -220,7 +219,7 @@ private:
   std::int64_t knrValue_{-1}; // -1 ==> not present
   std::int64_t scaleFactorValue_{}; // signed k in kP
   std::int64_t wValue_{-1};
-  char argString_[4]{}; // 1-3 character msg arg; usually edit descriptor name
+  char argString_[3]{}; // 1-2 character msg arg; usually edit descriptor name
   bool formatHasErrors_{false};
   bool unterminatedFormatError_{false};
   bool suppressMessageCascade_{false};
@@ -334,11 +333,7 @@ template <typename CHAR> void FormatValidator<CHAR>::NextToken() {
     break;
   }
   case 'A':
-    if (LookAheadChar() == 'T') {
-      Advance(TokenKind::AT);
-    } else {
-      token_.set_kind(TokenKind::A);
-    }
+    token_.set_kind(TokenKind::A);
     break;
   case 'B':
     switch (LookAheadChar()) {
@@ -395,25 +390,7 @@ template <typename CHAR> void FormatValidator<CHAR>::NextToken() {
     token_.set_kind(TokenKind::I);
     break;
   case 'L':
-    switch (LookAheadChar()) {
-    case 'Z':
-      // Advance past 'Z', then look ahead for 'S' or 'P'
-      Advance(TokenKind::LZ);
-      switch (LookAheadChar()) {
-      case 'S':
-        Advance(TokenKind::LZS);
-        break;
-      case 'P':
-        Advance(TokenKind::LZP);
-        break;
-      default:
-        break;
-      }
-      break;
-    default:
-      token_.set_kind(TokenKind::L);
-      break;
-    }
+    token_.set_kind(TokenKind::L);
     break;
   case 'O':
     token_.set_kind(TokenKind::O);
@@ -697,22 +674,9 @@ template <typename CHAR> bool FormatValidator<CHAR>::Check() {
       ReportError("Unexpected '%s' in format expression", signToken);
     }
     // Default message argument.
-    // Alphabetic edit descriptor names are one to three characters in length.
+    // Alphabetic edit descriptor names are one or two characters in length.
     argString_[0] = toupper(format_[token_.offset()]);
-    if (token_.length() > 2) {
-      // Three-character descriptor names (e.g., LZP, LZS).
-      // token_.offset() has the first character and *cursor_ has the last;
-      // find the middle character by scanning past any blanks.
-      const CHAR *mid{format_ + token_.offset() + 1};
-      while (mid < cursor_ && IsWhite(*mid)) {
-        ++mid;
-      }
-      argString_[1] = toupper(*mid);
-      argString_[2] = toupper(*cursor_);
-    } else {
-      argString_[1] = token_.length() > 1 ? toupper(*cursor_) : 0;
-      argString_[2] = 0;
-    }
+    argString_[1] = token_.length() > 1 ? toupper(*cursor_) : 0;
     // Process one format edit descriptor or do format list management.
     switch (token_.kind()) {
     case TokenKind::A:
@@ -721,23 +685,6 @@ template <typename CHAR> bool FormatValidator<CHAR>::Check() {
       check_r();
       NextToken();
       check_w();
-      break;
-    case TokenKind::AT:
-      // F2023 data-edit-desc -> AT (no w allowed)
-      hasDataEditDesc = true;
-      check_r();
-      NextToken();
-      if (token_.kind() == TokenKind::UnsignedInteger) {
-        ReportError("'AT' edit descriptor does not accept a width value");
-        NextToken();
-        // reset to allow the Read check below to also report
-        suppressMessageCascade_ = false;
-      }
-      if (stmt_ == IoStmtKind::Read) {
-        ReportError("'AT' edit descriptor must not be used for input");
-        // reset to allow subsequent '.' check to also report
-        suppressMessageCascade_ = false;
-      }
       break;
     case TokenKind::B:
     case TokenKind::I:
@@ -847,9 +794,6 @@ template <typename CHAR> bool FormatValidator<CHAR>::Check() {
     case TokenKind::BZ:
     case TokenKind::DC:
     case TokenKind::DP:
-    case TokenKind::LZ:
-    case TokenKind::LZS:
-    case TokenKind::LZP:
     case TokenKind::RC:
     case TokenKind::RD:
     case TokenKind::RN:
@@ -863,7 +807,6 @@ template <typename CHAR> bool FormatValidator<CHAR>::Check() {
       // R1318 blank-interp-edit-desc -> BN | BZ
       // R1319 round-edit-desc -> RU | RD | RZ | RN | RC | RP
       // R1320 decimal-edit-desc -> DC | DP
-      // F202X leading-zero-edit-desc -> LZ | LZS | LZP
       check_r(false);
       NextToken();
       break;
@@ -965,9 +908,6 @@ template <typename CHAR> bool FormatValidator<CHAR>::Check() {
       }
       if (++nestLevel > maxNesting_) {
         maxNesting_ = nestLevel;
-      }
-      if (LookAheadChar() == ')') {
-        ReportError("Nested parenthesized format item list is empty");
       }
       break;
     case TokenKind::RParen:

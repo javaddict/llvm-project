@@ -33,7 +33,6 @@ LLVM_ENABLE_BITMASK_ENUMS_IN_NAMESPACE();
 class ProcessKDPLog {
 public:
   static void Initialize();
-  static void Terminate();
 };
 
 template <> Log::Channel &LogChannelFor<KDPLog>();

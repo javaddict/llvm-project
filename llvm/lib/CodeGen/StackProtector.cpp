@@ -69,15 +69,13 @@ static cl::opt<bool> DisableCheckNoReturn("disable-check-noreturn-call",
 ///  - The prologue code loads and stores the stack guard onto the stack.
 ///  - The epilogue checks the value stored in the prologue against the original
 ///    value. It calls __stack_chk_fail if they differ.
-static bool InsertStackProtectors(const TargetLowering &TLI,
-                                  const LibcallLoweringInfo &Libcalls,
-                                  Function *F, DomTreeUpdater *DTU,
-                                  bool &HasPrologue, bool &HasIRCheck);
+static bool InsertStackProtectors(const TargetMachine *TM, Function *F,
+                                  DomTreeUpdater *DTU, bool &HasPrologue,
+                                  bool &HasIRCheck);
 
 /// CreateFailBB - Create a basic block to jump to when the stack protector
 /// check fails.
-static BasicBlock *CreateFailBB(Function *F,
-                                const LibcallLoweringInfo &Libcalls);
+static BasicBlock *CreateFailBB(Function *F, const TargetLowering &TLI);
 
 bool SSPLayoutInfo::shouldEmitSDCheck(const BasicBlock &BB) const {
   return HasPrologue && !HasIRCheck && isa<ReturnInst>(BB.getTerminator());
@@ -133,23 +131,8 @@ PreservedAnalyses StackProtectorPass::run(Function &F,
       return PreservedAnalyses::all();
   }
 
-  auto &MAMProxy = FAM.getResult<ModuleAnalysisManagerFunctionProxy>(F);
-  const LibcallLoweringModuleAnalysisResult *LibcallLowering =
-      MAMProxy.getCachedResult<LibcallLoweringModuleAnalysis>(*F.getParent());
-
-  if (!LibcallLowering) {
-    F.getContext().emitError("'" + LibcallLoweringModuleAnalysis::name() +
-                             "' analysis required");
-    return PreservedAnalyses::all();
-  }
-
-  const TargetSubtargetInfo *STI = TM->getSubtargetImpl(F);
-  const TargetLowering *TLI = STI->getTargetLowering();
-  const LibcallLoweringInfo &Libcalls =
-      LibcallLowering->getLibcallLowering(*STI);
-
   ++NumFunProtected;
-  bool Changed = InsertStackProtectors(*TLI, Libcalls, &F, DT ? &DTU : nullptr,
+  bool Changed = InsertStackProtectors(TM, &F, DT ? &DTU : nullptr,
                                        Info.HasPrologue, Info.HasIRCheck);
 #ifdef EXPENSIVE_CHECKS
   assert((!DT ||
@@ -167,11 +150,12 @@ PreservedAnalyses StackProtectorPass::run(Function &F,
 
 char StackProtector::ID = 0;
 
-StackProtector::StackProtector() : FunctionPass(ID) {}
+StackProtector::StackProtector() : FunctionPass(ID) {
+  initializeStackProtectorPass(*PassRegistry::getPassRegistry());
+}
 
 INITIALIZE_PASS_BEGIN(StackProtector, DEBUG_TYPE,
                       "Insert stack protectors", false, true)
-INITIALIZE_PASS_DEPENDENCY(LibcallLoweringInfoWrapper)
 INITIALIZE_PASS_DEPENDENCY(TargetPassConfig)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_END(StackProtector, DEBUG_TYPE,
@@ -180,7 +164,6 @@ INITIALIZE_PASS_END(StackProtector, DEBUG_TYPE,
 FunctionPass *llvm::createStackProtectorPass() { return new StackProtector(); }
 
 void StackProtector::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<LibcallLoweringInfoWrapper>();
   AU.addRequired<TargetPassConfig>();
   AU.addPreserved<DominatorTreeWrapperPass>();
 }
@@ -207,16 +190,9 @@ bool StackProtector::runOnFunction(Function &Fn) {
       return false;
   }
 
-  const TargetSubtargetInfo *Subtarget = TM->getSubtargetImpl(Fn);
-  const LibcallLoweringInfo &Libcalls =
-      getAnalysis<LibcallLoweringInfoWrapper>().getLibcallLowering(*M,
-                                                                   *Subtarget);
-
-  const TargetLowering *TLI = Subtarget->getTargetLowering();
-
   ++NumFunProtected;
   bool Changed =
-      InsertStackProtectors(*TLI, Libcalls, F, DTU ? &*DTU : nullptr,
+      InsertStackProtectors(TM, F, DTU ? &*DTU : nullptr,
                             LayoutInfo.HasPrologue, LayoutInfo.HasIRCheck);
 #ifdef EXPENSIVE_CHECKS
   assert((!DTU ||
@@ -519,23 +495,22 @@ bool SSPLayoutAnalysis::requiresStackProtector(Function *F,
           continue;
         }
 
-        if (Strong) {
-          std::optional<TypeSize> AllocSize =
-              AI->getAllocationSize(M->getDataLayout());
-          if (!AllocSize || HasAddressTaken(AI, *AllocSize, M, VisitedPHIs)) {
-            ++NumAddrTaken;
-            if (!Layout)
-              return true;
-            Layout->insert(std::make_pair(AI, MachineFrameInfo::SSPLK_AddrOf));
-            ORE.emit([&]() {
-              return OptimizationRemark(DEBUG_TYPE,
-                                        "StackProtectorAddressTaken", &I)
-                     << "Stack protection applied to function "
-                     << ore::NV("Function", F)
-                     << " due to the address of a local variable being taken";
-            });
-            NeedsProtector = true;
-          }
+        if (Strong &&
+            HasAddressTaken(
+                AI, M->getDataLayout().getTypeAllocSize(AI->getAllocatedType()),
+                M, VisitedPHIs)) {
+          ++NumAddrTaken;
+          if (!Layout)
+            return true;
+          Layout->insert(std::make_pair(AI, MachineFrameInfo::SSPLK_AddrOf));
+          ORE.emit([&]() {
+            return OptimizationRemark(DEBUG_TYPE, "StackProtectorAddressTaken",
+                                      &I)
+                   << "Stack protection applied to function "
+                   << ore::NV("Function", F)
+                   << " due to the address of a local variable being taken";
+          });
+          NeedsProtector = true;
         }
         // Clear any PHIs that we visited, to make sure we examine all uses of
         // any subsequent allocas that we look at.
@@ -549,11 +524,10 @@ bool SSPLayoutAnalysis::requiresStackProtector(Function *F,
 
 /// Create a stack guard loading and populate whether SelectionDAG SSP is
 /// supported.
-static Value *getStackGuard(const TargetLoweringBase &TLI,
-                            const LibcallLoweringInfo &Libcalls, Module *M,
+static Value *getStackGuard(const TargetLoweringBase *TLI, Module *M,
                             IRBuilder<> &B,
                             bool *SupportsSelectionDAGSP = nullptr) {
-  Value *Guard = TLI.getIRStackGuard(B, Libcalls);
+  Value *Guard = TLI->getIRStackGuard(B);
   StringRef GuardMode = M->getStackProtectorGuard();
   if ((GuardMode == "tls" || GuardMode.empty()) && Guard)
     return B.CreateLoad(B.getPtrTy(), Guard, true, "StackGuard");
@@ -571,7 +545,7 @@ static Value *getStackGuard(const TargetLoweringBase &TLI,
   // actually conveys the same information getIRStackGuard() already gives.
   if (SupportsSelectionDAGSP)
     *SupportsSelectionDAGSP = true;
-  TLI.insertSSPDeclarations(*M, Libcalls);
+  TLI->insertSSPDeclarations(*M);
   return B.CreateIntrinsic(Intrinsic::stackguard, {});
 }
 
@@ -586,32 +560,29 @@ static Value *getStackGuard(const TargetLoweringBase &TLI,
 /// Returns true if the platform/triple supports the stackprotectorcreate pseudo
 /// node.
 static bool CreatePrologue(Function *F, Module *M, Instruction *CheckLoc,
-                           const TargetLoweringBase *TLI,
-                           const LibcallLoweringInfo &Libcalls,
-                           AllocaInst *&AI) {
+                           const TargetLoweringBase *TLI, AllocaInst *&AI) {
   bool SupportsSelectionDAGSP = false;
   IRBuilder<> B(&F->getEntryBlock().front());
   PointerType *PtrTy = PointerType::getUnqual(CheckLoc->getContext());
   AI = B.CreateAlloca(PtrTy, nullptr, "StackGuardSlot");
 
-  Value *GuardSlot =
-      getStackGuard(*TLI, Libcalls, M, B, &SupportsSelectionDAGSP);
+  Value *GuardSlot = getStackGuard(TLI, M, B, &SupportsSelectionDAGSP);
   B.CreateIntrinsic(Intrinsic::stackprotector, {GuardSlot, AI});
   return SupportsSelectionDAGSP;
 }
 
-bool InsertStackProtectors(const TargetLowering &TLI,
-                           const LibcallLoweringInfo &Libcalls, Function *F,
+bool InsertStackProtectors(const TargetMachine *TM, Function *F,
                            DomTreeUpdater *DTU, bool &HasPrologue,
                            bool &HasIRCheck) {
   auto *M = F->getParent();
+  auto *TLI = TM->getSubtargetImpl(*F)->getTargetLowering();
 
   // If the target wants to XOR the frame pointer into the guard value, it's
   // impossible to emit the check in IR, so the target *must* support stack
   // protection in SDAG.
   bool SupportsSelectionDAGSP =
-      TLI.useStackGuardXorFP() ||
-      (EnableSelectionDAGSP && !TLI.getTargetMachine().Options.EnableFastISel);
+      TLI->useStackGuardXorFP() ||
+      (EnableSelectionDAGSP && !TM->Options.EnableFastISel);
   AllocaInst *AI = nullptr; // Place on stack that stores the stack guard.
   BasicBlock *FailBB = nullptr;
 
@@ -644,8 +615,7 @@ bool InsertStackProtectors(const TargetLowering &TLI,
     // Generate prologue instrumentation if not already generated.
     if (!HasPrologue) {
       HasPrologue = true;
-      SupportsSelectionDAGSP &=
-          CreatePrologue(F, M, CheckLoc, &TLI, Libcalls, AI);
+      SupportsSelectionDAGSP &= CreatePrologue(F, M, CheckLoc, TLI, AI);
     }
 
     // SelectionDAG based code generation. Nothing else needs to be done here.
@@ -670,13 +640,13 @@ bool InsertStackProtectors(const TargetLowering &TLI,
     // inserted before the call rather than between it and the return.
     Instruction *Prev = CheckLoc->getPrevNode();
     if (auto *CI = dyn_cast_if_present<CallInst>(Prev))
-      if (CI->isTailCall() && isInTailCallPosition(*CI, TLI.getTargetMachine()))
+      if (CI->isTailCall() && isInTailCallPosition(*CI, *TM))
         CheckLoc = Prev;
 
     // Generate epilogue instrumentation. The epilogue intrumentation can be
     // function-based or inlined depending on which mechanism the target is
     // providing.
-    if (Function *GuardCheck = TLI.getSSPStackGuardCheck(*M, Libcalls)) {
+    if (Function *GuardCheck = TLI->getSSPStackGuardCheck(*M)) {
       // Generate the function-based epilogue instrumentation.
       // The target provides a guard check function, generate a call to it.
       IRBuilder<> B(CheckLoc);
@@ -715,10 +685,10 @@ bool InsertStackProtectors(const TargetLowering &TLI,
       // merge pass will merge together all of the various BB into one including
       // fail BB generated by the stack protector pseudo instruction.
       if (!FailBB)
-        FailBB = CreateFailBB(F, Libcalls);
+        FailBB = CreateFailBB(F, *TLI);
 
       IRBuilder<> B(CheckLoc);
-      Value *Guard = getStackGuard(TLI, Libcalls, M, B);
+      Value *Guard = getStackGuard(TLI, M, B);
       LoadInst *LI2 = B.CreateLoad(B.getPtrTy(), AI, true);
       auto *Cmp = cast<ICmpInst>(B.CreateICmpNE(Guard, LI2));
       auto SuccessProb =
@@ -733,7 +703,7 @@ bool InsertStackProtectors(const TargetLowering &TLI,
                                 /*Unreachable=*/false, Weights, DTU,
                                 /*LI=*/nullptr, /*ThenBlock=*/FailBB);
 
-      auto *BI = cast<CondBrInst>(Cmp->getParent()->getTerminator());
+      auto *BI = cast<BranchInst>(Cmp->getParent()->getTerminator());
       BasicBlock *NewBB = BI->getSuccessor(1);
       NewBB->setName("SP_return");
       NewBB->moveAfter(&BB);
@@ -748,7 +718,7 @@ bool InsertStackProtectors(const TargetLowering &TLI,
   return HasPrologue;
 }
 
-BasicBlock *CreateFailBB(Function *F, const LibcallLoweringInfo &Libcalls) {
+BasicBlock *CreateFailBB(Function *F, const TargetLowering &TLI) {
   auto *M = F->getParent();
   LLVMContext &Context = F->getContext();
   BasicBlock *FailBB = BasicBlock::Create(Context, "CallStackCheckFailBlk", F);
@@ -759,16 +729,14 @@ BasicBlock *CreateFailBB(Function *F, const LibcallLoweringInfo &Libcalls) {
   FunctionCallee StackChkFail;
   SmallVector<Value *, 1> Args;
 
-  if (RTLIB::LibcallImpl ChkFailImpl =
-          Libcalls.getLibcallImpl(RTLIB::STACKPROTECTOR_CHECK_FAIL)) {
-    StackChkFail = M->getOrInsertFunction(
-        RTLIB::RuntimeLibcallsInfo::getLibcallImplName(ChkFailImpl),
-        Type::getVoidTy(Context));
-  } else if (RTLIB::LibcallImpl SSHImpl =
-                 Libcalls.getLibcallImpl(RTLIB::STACK_SMASH_HANDLER)) {
-    StackChkFail = M->getOrInsertFunction(
-        RTLIB::RuntimeLibcallsInfo::getLibcallImplName(SSHImpl),
-        Type::getVoidTy(Context), PointerType::getUnqual(Context));
+  if (const char *ChkFailName =
+          TLI.getLibcallName(RTLIB::STACKPROTECTOR_CHECK_FAIL)) {
+    StackChkFail =
+        M->getOrInsertFunction(ChkFailName, Type::getVoidTy(Context));
+  } else if (const char *SSHName =
+                 TLI.getLibcallName(RTLIB::STACK_SMASH_HANDLER)) {
+    StackChkFail = M->getOrInsertFunction(SSHName, Type::getVoidTy(Context),
+                                          PointerType::getUnqual(Context));
     Args.push_back(B.CreateGlobalString(F->getName(), "SSH"));
   } else {
     Context.emitError("no libcall available for stack protector");

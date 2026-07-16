@@ -128,7 +128,7 @@ GeneratePCHAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
 
   std::string OutputFile;
   std::unique_ptr<raw_pwrite_stream> OS =
-      CreateOutputFile(CI, InFile, /*ref*/ OutputFile, SetOnlyIfDifferent);
+      CreateOutputFile(CI, InFile, /*ref*/ OutputFile);
   if (!OS)
     return nullptr;
 
@@ -142,7 +142,8 @@ GeneratePCHAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
       CI.getPreprocessor(), CI.getModuleCache(), OutputFile, Sysroot, Buffer,
       CI.getCodeGenOpts(), FrontendOpts.ModuleFileExtensions,
       CI.getPreprocessorOpts().AllowPCHWithCompilerErrors,
-      FrontendOpts.IncludeTimestamps, FrontendOpts.BuildingImplicitModule));
+      FrontendOpts.IncludeTimestamps, FrontendOpts.BuildingImplicitModule,
+      +CI.getLangOpts().CacheGeneratedPCH));
   Consumers.push_back(CI.getPCHContainerWriter().CreatePCHContainerGenerator(
       CI, std::string(InFile), OutputFile, std::move(OS), Buffer));
 
@@ -162,13 +163,10 @@ bool GeneratePCHAction::ComputeASTConsumerArguments(CompilerInstance &CI,
 
 std::unique_ptr<llvm::raw_pwrite_stream>
 GeneratePCHAction::CreateOutputFile(CompilerInstance &CI, StringRef InFile,
-                                    std::string &OutputFile,
-                                    bool SetOnlyIfDifferent) {
+                                    std::string &OutputFile) {
   // Because this is exposed via libclang we must disable RemoveFileOnSignal.
   std::unique_ptr<raw_pwrite_stream> OS = CI.createDefaultOutputFile(
-      /*Binary=*/true, InFile, /*Extension=*/"", /*RemoveFileOnSignal=*/false,
-      /*CreateMissingDirectories=*/false, /*ForceUseTemporary=*/false,
-      SetOnlyIfDifferent);
+      /*Binary=*/true, InFile, /*Extension=*/"", /*RemoveFileOnSignal=*/false);
   if (!OS)
     return nullptr;
 
@@ -190,8 +188,7 @@ bool GeneratePCHAction::BeginSourceFileAction(CompilerInstance &CI) {
 std::vector<std::unique_ptr<ASTConsumer>>
 GenerateModuleAction::CreateMultiplexConsumer(CompilerInstance &CI,
                                               StringRef InFile) {
-  if (!OS)
-    OS = CreateOutputFile(CI, InFile);
+  std::unique_ptr<raw_pwrite_stream> OS = CreateOutputFile(CI, InFile);
   if (!OS)
     return {};
 
@@ -209,7 +206,9 @@ GenerateModuleAction::CreateMultiplexConsumer(CompilerInstance &CI,
       /*IncludeTimestamps=*/
       +CI.getFrontendOpts().BuildingImplicitModule &&
           +CI.getFrontendOpts().IncludeTimestamps,
-      /*BuildingImplicitModule=*/+CI.getFrontendOpts().BuildingImplicitModule));
+      /*BuildingImplicitModule=*/+CI.getFrontendOpts().BuildingImplicitModule,
+      /*ShouldCacheASTInMemory=*/
+      +CI.getFrontendOpts().BuildingImplicitModule));
   Consumers.push_back(CI.getPCHContainerWriter().CreatePCHContainerGenerator(
       CI, std::string(InFile), OutputFile, std::move(OS), Buffer));
   return Consumers;
@@ -252,17 +251,16 @@ GenerateModuleFromModuleMapAction::CreateOutputFile(CompilerInstance &CI,
       ModuleMapFile = InFile;
 
     HeaderSearch &HS = CI.getPreprocessor().getHeaderSearchInfo();
-    ModuleFileName FileName = HS.getCachedModuleFileName(
-        CI.getLangOpts().CurrentModule, ModuleMapFile);
-    CI.getFrontendOpts().OutputFile = FileName.str();
+    CI.getFrontendOpts().OutputFile =
+        HS.getCachedModuleFileName(CI.getLangOpts().CurrentModule,
+                                   ModuleMapFile);
   }
 
   // Because this is exposed via libclang we must disable RemoveFileOnSignal.
   return CI.createDefaultOutputFile(/*Binary=*/true, InFile, /*Extension=*/"",
                                     /*RemoveFileOnSignal=*/false,
                                     /*CreateMissingDirectories=*/true,
-                                    /*ForceUseTemporary=*/true,
-                                    /*SetOnlyIfDifferent=*/SetOnlyIfDifferent);
+                                    /*ForceUseTemporary=*/true);
 }
 
 bool GenerateModuleInterfaceAction::PrepareToExecuteAction(
@@ -369,9 +367,11 @@ void VerifyPCHAction::ExecuteAction() {
       /*AllowConfigurationMismatch*/ true,
       /*ValidateSystemInputs*/ true, /*ForceValidateUserInputs*/ true));
 
-  Reader->ReadAST(ModuleFileName::makeExplicit(getCurrentFile()),
-                  Preamble ? serialization::MK_Preamble : serialization::MK_PCH,
-                  SourceLocation(), ASTReader::ARR_ConfigurationMismatch);
+  Reader->ReadAST(getCurrentFile(),
+                  Preamble ? serialization::MK_Preamble
+                           : serialization::MK_PCH,
+                  SourceLocation(),
+                  ASTReader::ARR_ConfigurationMismatch);
 }
 
 namespace {
@@ -454,6 +454,8 @@ private:
       return "ConstraintsCheck";
     case CodeSynthesisContext::ConstraintSubstitution:
       return "ConstraintSubstitution";
+    case CodeSynthesisContext::ConstraintNormalization:
+      return "ConstraintNormalization";
     case CodeSynthesisContext::RequirementParameterInstantiation:
       return "RequirementParameterInstantiation";
     case CodeSynthesisContext::ParameterMappingSubstitution:
@@ -474,10 +476,6 @@ private:
       return "TypeAliasTemplateInstantiation";
     case CodeSynthesisContext::PartialOrderingTTP:
       return "PartialOrderingTTP";
-    case CodeSynthesisContext::SYCLKernelLaunchLookup:
-      return "SYCLKernelLaunchLookup";
-    case CodeSynthesisContext::SYCLKernelLaunchOverloadResolution:
-      return "SYCLKernelLaunchOverloadResolution";
     }
     return "";
   }
@@ -621,11 +619,9 @@ namespace {
   /// file.
   class DumpModuleInfoListener : public ASTReaderListener {
     llvm::raw_ostream &Out;
-    FileManager &FileMgr;
 
   public:
-    DumpModuleInfoListener(llvm::raw_ostream &Out, FileManager &FileMgr)
-        : Out(Out), FileMgr(FileMgr) {}
+    DumpModuleInfoListener(llvm::raw_ostream &Out) : Out(Out) { }
 
 #define DUMP_BOOLEAN(Value, Text)                       \
     Out.indent(4) << Text << ": " << (Value? "Yes" : "No") << "\n"
@@ -716,12 +712,8 @@ namespace {
 
     bool ReadHeaderSearchOptions(const HeaderSearchOptions &HSOpts,
                                  StringRef ModuleFilename,
-                                 StringRef ContextHash,
+                                 StringRef SpecificModuleCachePath,
                                  bool Complain) override {
-      std::string SpecificModuleCachePath = createSpecificModuleCachePath(
-          FileMgr, HSOpts.ModuleCachePath, HSOpts.DisableModuleHash,
-          std::string(ContextHash));
-
       Out.indent(2) << "Header search options:\n";
       Out.indent(4) << "System root [-isysroot=]: '" << HSOpts.Sysroot << "'\n";
       Out.indent(4) << "Resource dir [ -resource-dir=]: '" << HSOpts.ResourceDir << "'\n";
@@ -909,7 +901,7 @@ void DumpModuleInfoAction::ExecuteAction() {
   Out << "  Module format: " << (IsRaw ? "raw" : "obj") << "\n";
 
   Preprocessor &PP = CI.getPreprocessor();
-  DumpModuleInfoListener Listener(Out, CI.getFileManager());
+  DumpModuleInfoListener Listener(Out);
   const HeaderSearchOptions &HSOpts =
       PP.getHeaderSearchInfo().getHeaderSearchOpts();
 
@@ -962,18 +954,18 @@ void DumpModuleInfoAction::ExecuteAction() {
     if (Primary) {
       if (!Primary->submodules().empty())
         Out << "   Sub Modules:\n";
-      for (Module *MI : Primary->submodules()) {
+      for (auto *MI : Primary->submodules()) {
         PrintSubMapEntry(MI->Name, MI->Kind);
       }
       if (!Primary->Imports.empty())
         Out << "   Imports:\n";
-      for (Module *IMP : Primary->Imports) {
+      for (auto *IMP : Primary->Imports) {
         PrintSubMapEntry(IMP->Name, IMP->Kind);
       }
       if (!Primary->Exports.empty())
         Out << "   Exports:\n";
       for (unsigned MN = 0, N = Primary->Exports.size(); MN != N; ++MN) {
-        if (Module *M = Primary->Exports[MN].first) {
+        if (Module *M = Primary->Exports[MN].getPointer()) {
           PrintSubMapEntry(M->Name, M->Kind);
         }
       }

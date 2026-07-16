@@ -20,15 +20,15 @@ namespace llvm {
 class Function;
 
 /// Basic Dead Code Elimination pass.
-class DCEPass : public OptionalPassInfoMixin<DCEPass> {
+class DCEPass : public PassInfoMixin<DCEPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
 class RedundantDbgInstEliminationPass
-    : public OptionalPassInfoMixin<RedundantDbgInstEliminationPass> {
+    : public PassInfoMixin<RedundantDbgInstEliminationPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 }
 

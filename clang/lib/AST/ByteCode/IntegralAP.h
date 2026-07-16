@@ -138,8 +138,7 @@ public:
 
   constexpr uint32_t bitWidth() const { return BitWidth; }
   constexpr unsigned numWords() const { return APInt::getNumWords(BitWidth); }
-  constexpr bool singleWord() const { return numWords() <= 1; }
-  constexpr static bool isNumber() { return true; }
+  constexpr bool singleWord() const { return numWords() == 1; }
 
   APSInt toAPSInt(unsigned Bits = 0) const {
     if (Bits == 0)

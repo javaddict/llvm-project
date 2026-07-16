@@ -314,7 +314,9 @@ std::optional<StdLibLocation> StdLibSet::add(const LangOptions &LO,
     case DirectoryLookup::LT_NormalDir: {
       Path = DL.getDirRef()->getName();
       llvm::sys::path::append(Path, ProbeHeader);
-      if (HS.getFileMgr().getOptionalFileRef(Path))
+      llvm::vfs::Status Stat;
+      if (!HS.getFileMgr().getNoncachedStatValue(Path, Stat) &&
+          Stat.isRegularFile())
         RecordHeaderPath(Path);
       break;
     }

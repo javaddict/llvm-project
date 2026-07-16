@@ -20,9 +20,9 @@ namespace llvm {
 
 class Function;
 
-class LoopFusePass : public OptionalPassInfoMixin<LoopFusePass> {
+class LoopFusePass : public PassInfoMixin<LoopFusePass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
 } // end namespace llvm

@@ -190,11 +190,9 @@ bool AttrOrTypeDef::genVerifyDecl() const {
 }
 
 bool AttrOrTypeDef::genVerifyInvariantsImpl() const {
-  return any_of(parameters,
-                [](const AttrOrTypeParameter &p) {
-                  return p.getConstraint() != std::nullopt;
-                }) ||
-         any_of(traits, [](const Trait &t) { return isa<PredTrait>(&t); });
+  return any_of(parameters, [](const AttrOrTypeParameter &p) {
+    return p.getConstraint() != std::nullopt;
+  });
 }
 
 std::optional<StringRef> AttrOrTypeDef::getExtraDecls() const {

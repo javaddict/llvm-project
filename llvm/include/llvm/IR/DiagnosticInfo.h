@@ -469,7 +469,7 @@ private:
   const Function &Fn;
 
   /// Description of the resource type (e.g. stack size)
-  const Twine &ResourceName;
+  const char *ResourceName;
 
   /// The computed size usage
   uint64_t ResourceSize;
@@ -480,14 +480,13 @@ private:
 public:
   /// \p The function that is concerned by this stack size diagnostic.
   /// \p The computed stack size.
-  DiagnosticInfoResourceLimit(const Function &Fn,
-                              const Twine &ResourceName LLVM_LIFETIME_BOUND,
+  DiagnosticInfoResourceLimit(const Function &Fn, const char *ResourceName,
                               uint64_t ResourceSize, uint64_t ResourceLimit,
                               DiagnosticSeverity Severity = DS_Warning,
                               DiagnosticKind Kind = DK_ResourceLimit);
 
   const Function &getFunction() const { return Fn; }
-  const Twine &getResourceName() const { return ResourceName; }
+  const char *getResourceName() const { return ResourceName; }
   uint64_t getResourceSize() const { return ResourceSize; }
   uint64_t getResourceLimit() const { return ResourceLimit; }
 
@@ -501,14 +500,13 @@ public:
 
 class LLVM_ABI DiagnosticInfoStackSize : public DiagnosticInfoResourceLimit {
   void anchor() override;
-  const Twine ResourceNameStr{"stack frame size"};
 
 public:
   DiagnosticInfoStackSize(const Function &Fn, uint64_t StackSize,
                           uint64_t StackLimit,
                           DiagnosticSeverity Severity = DS_Warning)
-      : DiagnosticInfoResourceLimit(Fn, ResourceNameStr, StackSize, StackLimit,
-                                    Severity, DK_StackSize) {}
+      : DiagnosticInfoResourceLimit(Fn, "stack frame size", StackSize,
+                                    StackLimit, Severity, DK_StackSize) {}
 
   uint64_t getStackSize() const { return getResourceSize(); }
   uint64_t getStackLimit() const { return getResourceLimit(); }
@@ -1194,41 +1192,19 @@ public:
 
 LLVM_ABI void diagnoseDontCall(const CallInst &CI);
 
-/// Inlining location extracted from debug info.
-struct DebugInlineInfo {
-  StringRef FuncName;
-  StringRef Filename;
-  unsigned Line;
-  unsigned Column;
-};
-
 class LLVM_ABI DiagnosticInfoDontCall : public DiagnosticInfo {
   StringRef CalleeName;
   StringRef Note;
   uint64_t LocCookie;
-  MDNode *InlinedFromMD = nullptr;
-  SmallVector<DebugInlineInfo, 4> DebugInlineChain;
 
 public:
   DiagnosticInfoDontCall(StringRef CalleeName, StringRef Note,
-                         DiagnosticSeverity DS, uint64_t LocCookie,
-                         MDNode *InlinedFromMD = nullptr)
+                         DiagnosticSeverity DS, uint64_t LocCookie)
       : DiagnosticInfo(DK_DontCall, DS), CalleeName(CalleeName), Note(Note),
-        LocCookie(LocCookie), InlinedFromMD(InlinedFromMD) {}
-
+        LocCookie(LocCookie) {}
   StringRef getFunctionName() const { return CalleeName; }
   StringRef getNote() const { return Note; }
   uint64_t getLocCookie() const { return LocCookie; }
-  MDNode *getInlinedFromMD() const { return InlinedFromMD; }
-  SmallVector<std::pair<StringRef, uint64_t>> getInliningDecisions() const;
-
-  void setDebugInlineChain(SmallVector<DebugInlineInfo, 4> &&Chain) {
-    DebugInlineChain = std::move(Chain);
-  }
-  ArrayRef<DebugInlineInfo> getDebugInlineChain() const {
-    return DebugInlineChain;
-  }
-
   void print(DiagnosticPrinter &DP) const override;
   static bool classof(const DiagnosticInfo *DI) {
     return DI->getKind() == DK_DontCall;

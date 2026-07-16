@@ -35,6 +35,7 @@ using llvm::Instruction;
 using llvm::LoadInst;
 using llvm::Loop;
 using llvm::LoopInfo;
+using llvm::LoopToScevMapT;
 using llvm::MapVector;
 using llvm::PHINode;
 using llvm::ScalarEvolution;

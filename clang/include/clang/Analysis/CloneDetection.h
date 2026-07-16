@@ -14,7 +14,7 @@
 #ifndef LLVM_CLANG_ANALYSIS_CLONEDETECTION_H
 #define LLVM_CLANG_ANALYSIS_CLONEDETECTION_H
 
-#include "clang/Basic/SourceLocation.h"
+#include "clang/AST/StmtVisitor.h"
 #include "llvm/Support/Regex.h"
 #include <vector>
 

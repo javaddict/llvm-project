@@ -349,8 +349,13 @@ TEST_F(ZeroArguments, ECLGeneralErrorCommandErrorSync) {
   RTNAME(ExecuteCommandLine)
   (*command.get(), wait, exitStat.get(), cmdStat.get(), cmdMsg.get());
   CheckDescriptorEqInt<std::int64_t>(exitStat.get(), 1);
-  CheckDescriptorEqInt<std::int64_t>(cmdStat.get(), 0);
-  CheckDescriptorEqStr(cmdMsg.get(), "cmd msg buffer XXXXXXXXXXXXXX");
+#if defined(_WIN32)
+  CheckDescriptorEqInt<std::int64_t>(cmdStat.get(), 6);
+  CheckDescriptorEqStr(cmdMsg.get(), "Invalid command lineXXXXXXXXX");
+#else
+  CheckDescriptorEqInt<std::int64_t>(cmdStat.get(), 3);
+  CheckDescriptorEqStr(cmdMsg.get(), "Command line execution failed");
+#endif
 }
 
 TEST_F(ZeroArguments, ECLNotExecutedCommandErrorSync) {
@@ -360,23 +365,18 @@ TEST_F(ZeroArguments, ECLNotExecutedCommandErrorSync) {
   bool wait{true};
   OwningPtr<Descriptor> exitStat{IntDescriptor(404)};
   OwningPtr<Descriptor> cmdStat{IntDescriptor(202)};
-  // Use longer character string to check padding
-  OwningPtr<Descriptor> cmdMsg{CharDescriptor(
-      "Command cannot be executed with exit code: XXXXXXXXXXX.")};
+  OwningPtr<Descriptor> cmdMsg{CharDescriptor("cmd msg buffer XXXXXXXX")};
 
   RTNAME(ExecuteCommandLine)
   (*command.get(), wait, exitStat.get(), cmdStat.get(), cmdMsg.get());
 #ifdef _WIN32
-  CheckDescriptorEqInt<std::int64_t>(exitStat.get(), 9009);
-  CheckDescriptorEqInt<std::int64_t>(cmdStat.get(), 5);
-  CheckDescriptorEqStr(
-      cmdMsg.get(), GetPaddedStr("Command not found.", cmdMsg->ElementBytes()));
+  CheckDescriptorEqInt<std::int64_t>(exitStat.get(), 1);
+  CheckDescriptorEqInt<std::int64_t>(cmdStat.get(), 6);
+  CheckDescriptorEqStr(cmdMsg.get(), "Invalid command lineXXX");
 #else
   CheckDescriptorEqInt<std::int64_t>(exitStat.get(), 126);
   CheckDescriptorEqInt<std::int64_t>(cmdStat.get(), 4);
-  CheckDescriptorEqStr(cmdMsg.get(),
-      GetPaddedStr("Command cannot be executed with exit code: 126.",
-          cmdMsg->ElementBytes()));
+  CheckDescriptorEqStr(cmdMsg.get(), "Command cannot be execu");
   // removing the file only on Linux (file is not created on Win)
   OwningPtr<Descriptor> commandClean{
       CharDescriptor("rm -f NotExecutedCommandFile")};
@@ -399,15 +399,13 @@ TEST_F(ZeroArguments, ECLNotFoundCommandErrorSync) {
   RTNAME(ExecuteCommandLine)
   (*command.get(), wait, exitStat.get(), cmdStat.get(), cmdMsg.get());
 #ifdef _WIN32
-  CheckDescriptorEqInt<std::int64_t>(exitStat.get(), 9009);
-  CheckDescriptorEqInt<std::int64_t>(cmdStat.get(), 5);
-  CheckDescriptorEqStr(
-      cmdMsg.get(), GetPaddedStr("Command not found.", cmdMsg->ElementBytes()));
+  CheckDescriptorEqInt<std::int64_t>(exitStat.get(), 1);
+  CheckDescriptorEqInt<std::int64_t>(cmdStat.get(), 6);
+  CheckDescriptorEqStr(cmdMsg.get(), "Invalid command lineXXXXXXX");
 #else
   CheckDescriptorEqInt<std::int64_t>(exitStat.get(), 127);
   CheckDescriptorEqInt<std::int64_t>(cmdStat.get(), 5);
-  CheckDescriptorEqStr(cmdMsg.get(),
-      GetPaddedStr("Command not found with exit", cmdMsg->ElementBytes()));
+  CheckDescriptorEqStr(cmdMsg.get(), "Command not found with exit");
 #endif
 }
 
@@ -419,7 +417,7 @@ TEST_F(ZeroArguments, ECLInvalidCommandTerminatedSync) {
 #ifdef _WIN32
   EXPECT_DEATH(RTNAME(ExecuteCommandLine)(
                    *command.get(), wait, nullptr, nullptr, cmdMsg.get()),
-      "Command not found.");
+      "Invalid command quit with exit status code: 1");
 #else
   EXPECT_DEATH(RTNAME(ExecuteCommandLine)(
                    *command.get(), wait, nullptr, nullptr, cmdMsg.get()),
@@ -497,7 +495,7 @@ TEST_F(ZeroArguments, SystemInvalidCommandExitStat) {
   RTNAME(ExecuteCommandLine)
   (*command.get(), wait, exitStat.get(), cmdStat.get(), nullptr);
 #ifdef _WIN32
-  CheckDescriptorEqInt<std::int64_t>(exitStat.get(), 9009);
+  CheckDescriptorEqInt<std::int64_t>(exitStat.get(), 1);
 #else
   CheckDescriptorEqInt<std::int64_t>(exitStat.get(), 127);
 #endif

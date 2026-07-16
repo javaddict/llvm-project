@@ -1098,12 +1098,13 @@ static __isl_give PW *FN(PW,gist_last)(__isl_take PW *pw,
 static __isl_give PW *FN(PW,gist_fn)(__isl_take PW *pw,
 	__isl_take isl_set *context,
 	__isl_give isl_set *(*fn_dom)(__isl_take isl_set *set,
-				    __isl_take isl_set *context),
+				    __isl_take isl_basic_set *bset),
 	__isl_give isl_set *intersect_context(__isl_take isl_set *set,
 		__isl_take isl_set *context))
 {
 	int i;
 	int is_universe;
+	isl_basic_set *hull = NULL;
 
 	pw = FN(PW,sort_unique)(pw);
 	if (!pw || !context)
@@ -1139,6 +1140,7 @@ static __isl_give PW *FN(PW,gist_fn)(__isl_take PW *pw,
 	}
 
 	context = isl_set_compute_divs(context);
+	hull = isl_set_simple_hull(isl_set_copy(context));
 
 	for (i = pw->n - 1; i >= 0; --i) {
 		isl_set *set_i;
@@ -1150,8 +1152,10 @@ static __isl_give PW *FN(PW,gist_fn)(__isl_take PW *pw,
 			equal = isl_set_plain_is_equal(pw->p[i].set, context);
 			if (equal < 0)
 				goto error;
-			if (equal)
+			if (equal) {
+				isl_basic_set_free(hull);
 				return FN(PW,gist_last)(pw, context);
+			}
 		}
 		set_i = FN(PW,get_domain_at)(pw, i);
 		set_i = intersect_context(set_i, isl_set_copy(context));
@@ -1160,7 +1164,7 @@ static __isl_give PW *FN(PW,gist_fn)(__isl_take PW *pw,
 		el = FN(EL,gist)(el, set_i);
 		pw = FN(PW,restore_base_at)(pw, i, el);
 		set_i = FN(PW,take_domain_at)(pw, i);
-		set_i = fn_dom(set_i, isl_set_copy(context));
+		set_i = fn_dom(set_i, isl_basic_set_copy(hull));
 		pw = FN(PW,restore_domain_at)(pw, i, set_i);
 		if (empty < 0 || !pw)
 			goto error;
@@ -1173,25 +1177,27 @@ static __isl_give PW *FN(PW,gist_fn)(__isl_take PW *pw,
 		}
 	}
 
+	isl_basic_set_free(hull);
 	isl_set_free(context);
 
 	return pw;
 error:
 	FN(PW,free)(pw);
+	isl_basic_set_free(hull);
 	isl_set_free(context);
 	return NULL;
 }
 
 __isl_give PW *FN(PW,gist)(__isl_take PW *pw, __isl_take isl_set *context)
 {
-	return FN(PW,gist_fn)(pw, context, &isl_set_gist,
+	return FN(PW,gist_fn)(pw, context, &isl_set_gist_basic_set,
 					&isl_set_intersect);
 }
 
 __isl_give PW *FN(PW,gist_params)(__isl_take PW *pw,
 	__isl_take isl_set *context)
 {
-	return FN(PW,gist_fn)(pw, context, &isl_set_gist_params,
+	return FN(PW,gist_fn)(pw, context, &isl_set_gist_params_basic_set,
 					&isl_set_intersect_params);
 }
 
@@ -1357,9 +1363,31 @@ __isl_give PW *FN(PW,project_domain_on_params)(__isl_take PW *pw)
 	return pw;
 }
 
-#undef TYPE
-#define TYPE	PW
-#include "isl_drop_unused_params_templ.c"
+/* Drop all parameters not referenced by "pw".
+ */
+__isl_give PW *FN(PW,drop_unused_params)(__isl_take PW *pw)
+{
+	isl_size n;
+	int i;
+
+	if (FN(PW,check_named_params)(pw) < 0)
+		return FN(PW,free)(pw);
+
+	n = FN(PW,dim)(pw, isl_dim_param);
+	if (n < 0)
+		return FN(PW,free)(pw);
+	for (i = n - 1; i >= 0; i--) {
+		isl_bool involves;
+
+		involves = FN(PW,involves_dims)(pw, isl_dim_param, i, 1);
+		if (involves < 0)
+			return FN(PW,free)(pw);
+		if (!involves)
+			pw = FN(PW,drop_dims)(pw, isl_dim_param, i, 1);
+	}
+
+	return pw;
+}
 
 isl_size FN(PW,dim)(__isl_keep PW *pw, enum isl_dim_type type)
 {

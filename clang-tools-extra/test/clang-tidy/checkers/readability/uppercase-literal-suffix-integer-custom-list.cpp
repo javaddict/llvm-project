@@ -1,4 +1,5 @@
-// RUN: %check_clang_tidy %s readability-uppercase-literal-suffix %t -- -config="{CheckOptions: {readability-uppercase-literal-suffix.NewSuffixes: 'L;uL'}}"
+// RUN: %check_clang_tidy %s readability-uppercase-literal-suffix %t -- -config="{CheckOptions: {readability-uppercase-literal-suffix.NewSuffixes: 'L;uL'}}" -- -I %clang_tidy_headers
+
 #include "integral_constant.h"
 
 void integer_suffix() {

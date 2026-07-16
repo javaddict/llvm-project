@@ -46,26 +46,9 @@ public:
   /// Destroys the frame, killing all live pointers to stack slots.
   ~InterpFrame();
 
-  /// Returns the number of bytes needed to allocate an InterpFrame for the
-  /// given function.
-  static size_t allocSize(const Function *F) {
-    return sizeof(InterpFrame) + F->getFrameSize() +
-           (F->getArgSize() + (sizeof(Block) * F->getNumWrittenParams()));
-  }
-
-  std::string getName() const {
-    if (!Func)
-      return "Bottom frame";
-    return Func->getName();
-  }
-
   static void free(InterpFrame *F) {
-    if (!F->isBottomFrame()) {
-      F->~InterpFrame();
-      delete[] reinterpret_cast<char *>(F);
-    } else {
-      F->~InterpFrame();
-    }
+    if (!F->isBottomFrame())
+      delete F;
   }
 
   /// Invokes the destructors for a scope.
@@ -104,7 +87,6 @@ public:
   template <typename T> void setLocal(unsigned Offset, const T &Value) {
     localRef<T>(Offset) = Value;
     localInlineDesc(Offset)->IsInitialized = true;
-    localInlineDesc(Offset)->LifeState = Lifetime::Started;
   }
 
   /// Returns a pointer to a local variables.
@@ -112,23 +94,22 @@ public:
   Block *getLocalBlock(unsigned Offset) const;
 
   /// Returns the value of an argument.
-  template <typename T> const T &getParam(unsigned Index) const {
-    Block *ArgBlock = argBlock(Index);
-    if (!ArgBlock->isInitialized())
-      return stackRef<T>(Func->getParamDescriptor(Index).Offset);
-    return ArgBlock->deref<T>();
+  template <typename T> const T &getParam(unsigned Offset) const {
+    auto Pt = Params.find(Offset);
+    if (Pt == Params.end())
+      return stackRef<T>(Offset);
+    return reinterpret_cast<const Block *>(Pt->second.get())->deref<T>();
   }
 
   /// Mutates a local copy of a parameter.
-  template <typename T> void setParam(unsigned Index, const T &Value) {
-    argBlock(Index)->deref<T>() = Value;
+  template <typename T> void setParam(unsigned Offset, const T &Value) {
+    getParamPointer(Offset).deref<T>() = Value;
   }
 
   /// Returns a pointer to an argument - lazily creates a block.
   Pointer getParamPointer(unsigned Offset);
 
   bool hasThisPointer() const { return Func && Func->hasThisPointer(); }
-
   /// Returns the 'this' pointer.
   const Pointer &getThis() const {
     assert(hasThisPointer());
@@ -180,32 +161,14 @@ private:
     return localBlock(Offset)->deref<T>();
   }
 
-  /// Pointer to local memory.
-  char *locals() const {
-    return (reinterpret_cast<char *>(const_cast<InterpFrame *>(this))) +
-           align(sizeof(InterpFrame));
-  }
-
-  /// Pointer to argument memory.
-  char *args() const {
-    return (reinterpret_cast<char *>(const_cast<InterpFrame *>(this))) +
-           sizeof(InterpFrame) + Func->getFrameSize();
-  }
-
   /// Returns a pointer to a local's block.
   Block *localBlock(unsigned Offset) const {
-    return reinterpret_cast<Block *>(locals() + Offset - sizeof(Block));
-  }
-
-  /// Returns a pointer to an argument block.
-  Block *argBlock(unsigned Index) const {
-    unsigned ByteOffset = Func->getParamDescriptor(Index).BlockOffset;
-    return reinterpret_cast<Block *>(args() + ByteOffset);
+    return reinterpret_cast<Block *>(Locals.get() + Offset - sizeof(Block));
   }
 
   /// Returns the inline descriptor of the local.
   InlineDescriptor *localInlineDesc(unsigned Offset) const {
-    return reinterpret_cast<InlineDescriptor *>(locals() + Offset);
+    return reinterpret_cast<InlineDescriptor *>(Locals.get() + Offset);
   }
 
 private:
@@ -223,11 +186,12 @@ private:
   const unsigned ArgSize;
   /// Pointer to the arguments in the callee's frame.
   char *Args = nullptr;
+  /// Fixed, initial storage for known local variables.
+  std::unique_ptr<char[]> Locals;
   /// Offset on the stack at entry.
   const size_t FrameOffset;
-
-public:
-  unsigned MSVCConstexprAllowed = 0;
+  /// Mapping from arg offsets to their argument blocks.
+  llvm::DenseMap<unsigned, std::unique_ptr<char[]>> Params;
 };
 
 } // namespace interp

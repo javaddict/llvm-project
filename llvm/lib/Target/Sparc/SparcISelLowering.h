@@ -138,7 +138,8 @@ namespace llvm {
 
     SDValue LowerF128_LibCallArg(SDValue Chain, ArgListTy &Args, SDValue Arg,
                                  const SDLoc &DL, SelectionDAG &DAG) const;
-    SDValue LowerF128Op(SDValue Op, SelectionDAG &DAG, RTLIB::Libcall LibFunc,
+    SDValue LowerF128Op(SDValue Op, SelectionDAG &DAG,
+                        const char *LibFuncName,
                         unsigned numArgs) const;
     SDValue LowerF128Compare(SDValue LHS, SDValue RHS, unsigned &SPCC,
                              const SDLoc &DL, SelectionDAG &DAG) const;
@@ -192,8 +193,7 @@ namespace llvm {
       return true;
     }
 
-    AtomicExpansionKind
-    shouldExpandAtomicRMWInIR(const AtomicRMWInst *AI) const override;
+    AtomicExpansionKind shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
 
     void ReplaceNodeResults(SDNode *N,
                             SmallVectorImpl<SDValue>& Results,

@@ -397,18 +397,6 @@ void Input::releaseHNodeBuffers() {
   MapHNodeAllocator.DestroyAll();
 }
 
-void Input::saveAliasHNode(Node *N, HNode *HN) {
-  StringRef Anchor = N->getAnchor();
-  if (!Anchor.empty())
-    // YAML 1.2.2 - 3.2.2.2. Anchors and Aliases:
-    //
-    // An alias event refers to the most recent event in the serialization
-    // having the specified anchor. Therefore, anchors need not be unique within
-    // a serialization. In addition, an anchor need not have an alias node
-    // referring to it.
-    AliasMap[Anchor] = HN;
-}
-
 Input::HNode *Input::createHNodes(Node *N) {
   SmallString<128> StringStorage;
   switch (N->getType()) {
@@ -419,17 +407,12 @@ Input::HNode *Input::createHNodes(Node *N) {
       // Copy string to permanent storage
       KeyStr = StringStorage.str().copy(StringAllocator);
     }
-    auto *SHNode = new (ScalarHNodeAllocator.Allocate()) ScalarHNode(N, KeyStr);
-    saveAliasHNode(SN, SHNode);
-    return SHNode;
+    return new (ScalarHNodeAllocator.Allocate()) ScalarHNode(N, KeyStr);
   }
   case Node::NK_BlockScalar: {
     BlockScalarNode *BSN = dyn_cast<BlockScalarNode>(N);
     StringRef ValueCopy = BSN->getValue().copy(StringAllocator);
-    auto *BSHNode =
-        new (ScalarHNodeAllocator.Allocate()) ScalarHNode(N, ValueCopy);
-    saveAliasHNode(BSN, BSHNode);
-    return BSHNode;
+    return new (ScalarHNodeAllocator.Allocate()) ScalarHNode(N, ValueCopy);
   }
   case Node::NK_Sequence: {
     SequenceNode *SQ = dyn_cast<SequenceNode>(N);
@@ -440,7 +423,6 @@ Input::HNode *Input::createHNodes(Node *N) {
         break;
       SQHNode->Entries.push_back(Entry);
     }
-    saveAliasHNode(SQ, SQHNode);
     return SQHNode;
   }
   case Node::NK_Mapping: {
@@ -448,7 +430,7 @@ Input::HNode *Input::createHNodes(Node *N) {
     auto mapHNode = new (MapHNodeAllocator.Allocate()) MapHNode(N);
     for (KeyValueNode &KVN : *Map) {
       Node *KeyNode = KVN.getKey();
-      ScalarNode *Key = dyn_cast_if_present<ScalarNode>(KeyNode);
+      ScalarNode *Key = dyn_cast_or_null<ScalarNode>(KeyNode);
       Node *Value = KVN.getValue();
       if (!Key || !Value) {
         if (!Key)
@@ -474,23 +456,10 @@ Input::HNode *Input::createHNodes(Node *N) {
       mapHNode->Mapping[KeyStr] =
           std::make_pair(std::move(ValueHNode), KeyNode->getSourceRange());
     }
-    saveAliasHNode(Map, mapHNode);
     return std::move(mapHNode);
   }
   case Node::NK_Null:
-    // TODO: Anchor is not set for NullNode in the parser. Update the parser to
-    // faithfully preserve anchors.
     return new (EmptyHNodeAllocator.Allocate()) EmptyHNode(N);
-  case Node::NK_Alias: {
-    AliasNode *AN = dyn_cast<AliasNode>(N);
-    auto AliasName = AN->getName();
-    auto AHN = AliasMap.find(AliasName);
-    if (AHN == AliasMap.end()) {
-      setError(AN, Twine("undefined alias '" + AliasName + "'"));
-      return nullptr;
-    }
-    return AHN->second;
-  }
   default:
     setError(N, "unknown node kind");
     return nullptr;

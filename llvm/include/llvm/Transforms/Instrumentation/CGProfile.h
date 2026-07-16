@@ -16,10 +16,10 @@
 
 namespace llvm {
 class Module;
-class CGProfilePass : public OptionalPassInfoMixin<CGProfilePass> {
+class CGProfilePass : public PassInfoMixin<CGProfilePass> {
 public:
   CGProfilePass(bool InLTO) : InLTO(InLTO) {}
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 
 private:
   bool InLTO = false;

@@ -17,7 +17,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/iterator_range.h"
-#include "llvm/IR/Type.h"
 #include "llvm/IR/Use.h"
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/CBindingWrapping.h"
@@ -51,6 +50,7 @@ class ModuleSlotTracker;
 class raw_ostream;
 template<typename ValueTy> class StringMapEntry;
 class Twine;
+class Type;
 class User;
 
 using ValueName = StringMapEntry<Value *>;
@@ -77,11 +77,11 @@ class Value {
   unsigned char HasValueHandle : 1; // Has a ValueHandle pointing to this?
 
 protected:
-  /// Hold arbitary subclass data.
+  /// Hold subclass data that can be dropped.
   ///
-  /// This member is similar to SubclassData, however it is often used for
-  /// holding information which may be used to aid optimization, but which may
-  /// be cleared to zero without affecting conservative interpretation.
+  /// This member is similar to SubclassData, however it is for holding
+  /// information which may be used to aid optimization, but which may be
+  /// cleared to zero without affecting conservative interpretation.
   unsigned char SubclassOptionalData : 7;
 
 private:
@@ -105,12 +105,13 @@ protected:
   ///
   /// Note, this should *NOT* be used directly by any class other than User.
   /// User uses this value to find the Use list.
-  enum : unsigned { NumUserOperandsBits = 28 };
+  enum : unsigned { NumUserOperandsBits = 27 };
   unsigned NumUserOperands : NumUserOperandsBits;
 
   // Use the same type as the bitfield above so that MSVC will pack them.
   unsigned IsUsedByMD : 1;
   unsigned HasName : 1;
+  unsigned HasMetadata : 1; // Has metadata attached to this?
   unsigned HasHungOffUses : 1;
   unsigned HasDescriptor : 1;
 
@@ -255,7 +256,7 @@ public:
   Type *getType() const { return VTy; }
 
   /// All values hold a context through their type.
-  LLVMContext &getContext() const { return VTy->getContext(); }
+  LLVM_ABI LLVMContext &getContext() const;
 
   // All values can potentially be named.
   bool hasName() const { return HasName; }
@@ -309,8 +310,7 @@ public:
   /// to "V" if the callback ShouldReplace returns true for the given Use.
   /// Unlike replaceAllUsesWith() this function does not support basic block
   /// values.
-  /// Returns whether any uses have been replaced.
-  LLVM_ABI bool
+  LLVM_ABI void
   replaceUsesWithIf(Value *New, llvm::function_ref<bool(Use &U)> ShouldReplace);
 
   /// replaceUsesOutsideBlock - Go through the uses list for this definition and
@@ -551,6 +551,16 @@ public:
     return SubclassOptionalData;
   }
 
+  /// Clear the optional flags contained in this value.
+  void clearSubclassOptionalData() {
+    SubclassOptionalData = 0;
+  }
+
+  /// Check the optional flags for equality.
+  bool hasSameSubclassOptionalData(const Value *V) const {
+    return SubclassOptionalData == V->SubclassOptionalData;
+  }
+
   /// Return true if there is a value handle associated with this value.
   bool hasValueHandle() const { return HasValueHandle; }
 
@@ -563,20 +573,43 @@ protected:
   /// These functions require that the value have at most a single attachment
   /// of the given kind, and return \c nullptr if such an attachment is missing.
   /// @{
-  LLVM_ABI MDNode *getMetadata(StringRef Kind) const LLVM_READONLY;
+  MDNode *getMetadata(unsigned KindID) const {
+    if (!HasMetadata)
+      return nullptr;
+    return getMetadataImpl(KindID);
+  }
+  LLVM_ABI MDNode *getMetadata(StringRef Kind) const;
   /// @}
 
-private:
-  LLVM_ABI unsigned getMetadataIndex() const;
-  LLVM_ABI unsigned &getMetadataIndex();
+  /// Appends all attachments with the given ID to \c MDs in insertion order.
+  /// If the Value has no attachments with the given ID, or if ID is invalid,
+  /// leaves MDs unchanged.
+  /// @{
+  LLVM_ABI void getMetadata(unsigned KindID,
+                            SmallVectorImpl<MDNode *> &MDs) const;
+  LLVM_ABI void getMetadata(StringRef Kind,
+                            SmallVectorImpl<MDNode *> &MDs) const;
+  /// @}
 
-protected:
   /// Appends all metadata attached to this value to \c MDs, sorting by
   /// KindID. The first element of each pair returned is the KindID, the second
   /// element is the metadata value. Attachments with the same ID appear in
   /// insertion order.
   LLVM_ABI void
   getAllMetadata(SmallVectorImpl<std::pair<unsigned, MDNode *>> &MDs) const;
+
+  /// Return true if this value has any metadata attached to it.
+  bool hasMetadata() const { return (bool)HasMetadata; }
+
+  /// Return true if this value has the given type of metadata attached.
+  /// @{
+  bool hasMetadata(unsigned KindID) const {
+    return getMetadata(KindID) != nullptr;
+  }
+  bool hasMetadata(StringRef Kind) const {
+    return getMetadata(Kind) != nullptr;
+  }
+  /// @}
 
   /// Set a particular kind of metadata attachment.
   ///
@@ -607,7 +640,7 @@ protected:
   /// Get metadata for the given kind, if any.
   /// This is an internal function that must only be called after
   /// checking that `hasMetadata()` returns true.
-  LLVM_ABI MDNode *getMetadataImpl(unsigned KindID) const LLVM_READONLY;
+  LLVM_ABI MDNode *getMetadataImpl(unsigned KindID) const;
 
 public:
   /// Return true if this value is a swifterror value.
@@ -699,10 +732,9 @@ public:
   ///
   /// Note that this function will never return a nullptr. It will also never
   /// manipulate the \p Offset in a way that would not match the difference
-  /// between the underlying value and the returned one. Thus, if a variable
-  /// offset is encountered during traversal, the returned value is the first
-  /// traversed Value that introduces a non-constant offset and \p Offset is the
-  /// accumulated constant offset up to that point.
+  /// between the underlying value and the returned one. Thus, if no constant
+  /// offset was found, the returned value is the underlying one and \p Offset
+  /// is unchanged.
   LLVM_ABI const Value *stripAndAccumulateConstantOffsets(
       const DataLayout &DL, APInt &Offset, bool AllowNonInbounds,
       bool AllowInvariantGroup = false,

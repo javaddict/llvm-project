@@ -606,7 +606,8 @@ bool AggressiveAntiDepBreaker::FindSuitableFreeRegisters(
   // FIXME: Using getMinimalPhysRegClass is very conservative. We should
   // check every use of the register and find the largest register class
   // that can be used in all of them.
-  const TargetRegisterClass *SuperRC = TRI->getMinimalPhysRegClass(SuperReg);
+  const TargetRegisterClass *SuperRC =
+    TRI->getMinimalPhysRegClass(SuperReg, MVT::Other);
 
   ArrayRef<MCPhysReg> Order = RegClassInfo.getOrder(SuperRC);
   if (Order.empty()) {

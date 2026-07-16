@@ -1,22 +1,20 @@
 // RUN: mlir-opt %s -wrap-emitc-func-in-class -split-input-file | FileCheck %s
-// RUN: mlir-opt %s -wrap-emitc-func-in-class=func-name=execute -split-input-file | FileCheck %s --check-prefixes=EXECUTE
 
 emitc.func @foo(%arg0 : !emitc.array<1xf32>) {
   emitc.call_opaque "bar" (%arg0) : (!emitc.array<1xf32>) -> ()
   emitc.return
 }
 
+// CHECK: module {
 // CHECK:   emitc.class @fooClass {
 // CHECK:     emitc.field @fieldName0 : !emitc.array<1xf32>
-// CHECK:     emitc.func @"operator()"() {
+// CHECK:     emitc.func @execute() {
 // CHECK:       %0 = get_field @fieldName0 : !emitc.array<1xf32>
 // CHECK:       call_opaque "bar"(%0) : (!emitc.array<1xf32>) -> ()
 // CHECK:       return
 // CHECK:     }
 // CHECK:   }
-
-// EXECUTE-NOT: operator
-// EXECUTE: execute()
+// CHECK: }
 
 // -----
 
@@ -36,11 +34,12 @@ module attributes { } {
   }
 }
 
+// CHECK: module {
 // CHECK:   emitc.class @modelClass {
 // CHECK:     emitc.field @fieldName0 : !emitc.array<1xf32> {emitc.name_hint = "another_feature"}
 // CHECK:     emitc.field @fieldName1 : !emitc.array<1xf32>  {emitc.name_hint = "some_feature"}
 // CHECK:     emitc.field @fieldName2 : !emitc.array<1xf32>  {emitc.name_hint = "output_0"}
-// CHECK:     emitc.func @"operator()"() {
+// CHECK:     emitc.func @execute() {
 // CHECK:       get_field @fieldName0 : !emitc.array<1xf32>
 // CHECK:       get_field @fieldName1 : !emitc.array<1xf32>
 // CHECK:       get_field @fieldName2 : !emitc.array<1xf32>
@@ -55,6 +54,4 @@ module attributes { } {
 // CHECK:       return
 // CHECK:     }
 // CHECK:   }
-
-// EXECUTE-NOT: operator
-// EXECUTE: execute()
+// CHECK: }

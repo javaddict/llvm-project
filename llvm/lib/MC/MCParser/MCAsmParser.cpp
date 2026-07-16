@@ -175,8 +175,7 @@ bool MCAsmParser::parseSymbol(MCSymbol *&Res) {
 void MCParsedAsmOperand::dump() const {
   // Cannot completely remove virtual function even in release mode.
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
-  MCTargetOptions Opts;
   dbgs() << "  ";
-  print(dbgs(), MCAsmInfo(Opts));
+  print(dbgs(), MCAsmInfo());
 #endif
 }

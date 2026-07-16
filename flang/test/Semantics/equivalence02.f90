@@ -7,21 +7,23 @@ type t0
 end type
 type t1
   sequence
-  integer, dimension(2):: i/41, 2/
+  integer, dimension(2):: i/41, 2/      
 end type
 type t2
   sequence
   integer :: j(2) = [42, 2]
 end type
+! ERROR: Distinct default component initializations of equivalenced objects affect 'o1' more than once
 type (t0) :: O1
-! ERROR: Default component initializations of equivalenced objects affect 'a%i(1_8)' more than once, distinctly
+! ERROR: Distinct default component initializations of equivalenced objects affect 'a%i(1_8)' more than once
 type (t1) :: A
-! ERROR: Default component initializations of equivalenced objects affect 'b%j(1_8)' more than once, distinctly
+! ERROR: Distinct default component initializations of equivalenced objects affect 'b%j(1_8)' more than once
 type (t2) :: B
-! ERROR: Default component initializations of equivalenced objects affect 'x' more than once, distinctly
+! ERROR: Distinct default component initializations of equivalenced objects affect 'x' more than once
+! ERROR: Distinct default component initializations of equivalenced objects affect 'o2(1_8)' more than once
 integer :: x, O2(0)
 data x/42/
-! ERROR: Default component initializations of equivalenced objects affect 'undeclared' more than once, distinctly
+! ERROR: Distinct default component initializations of equivalenced objects affect 'undeclared' more than once
 equivalence (A, B, x, O1, O2, Undeclared)
 call p(x)
 call s()
@@ -36,12 +38,12 @@ subroutine s()
     sequence
     integer(kind=8)::d = 2_8
   end type
-  ! ERROR: Default component initializations of equivalenced objects affect 'c%d' more than once, distinctly
+  ! ERROR: Distinct default component initializations of equivalenced objects affect 'c%d' more than once
   type (g1) :: C
-  ! ERROR: Default component initializations of equivalenced objects affect 'd%d' more than once, distinctly
+  ! ERROR: Distinct default component initializations of equivalenced objects affect 'd%d' more than once
   type (g2) :: D
-  ! ERROR: Default component initializations of equivalenced objects affect 'x' more than once, distinctly
-  ! ERROR: Default component initializations of equivalenced objects affect 'y' more than once, distinctly
+  ! ERROR: Distinct default component initializations of equivalenced objects affect 'x' more than once
+  ! ERROR: Distinct default component initializations of equivalenced objects affect 'y' more than once
   integer :: x, y
   data x/1/, y/2/
   equivalence (C, x)

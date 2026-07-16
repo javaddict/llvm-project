@@ -63,7 +63,7 @@ using namespace llvm;
 STATISTIC(NumCondBranchesTraced, "Number of conditional branches traced");
 STATISTIC(NumBranchesUntraced, "Number of branches unable to trace");
 STATISTIC(NumAddrRegsHardened,
-          "Number of address mode used registers hardened");
+          "Number of address mode used registers hardaned");
 STATISTIC(NumPostLoadRegsHardened,
           "Number of post-load register values hardened");
 STATISTIC(NumCallsOrJumpsHardened,
@@ -117,25 +117,18 @@ static cl::opt<bool> HardenIndirectCallsAndJumps(
 
 namespace {
 
-constexpr StringRef X86SLHPassName = "X86 speculative load hardening";
-
-class X86SpeculativeLoadHardeningLegacy : public MachineFunctionPass {
+class X86SpeculativeLoadHardeningPass : public MachineFunctionPass {
 public:
-  X86SpeculativeLoadHardeningLegacy() : MachineFunctionPass(ID) {}
+  X86SpeculativeLoadHardeningPass() : MachineFunctionPass(ID) { }
 
-  StringRef getPassName() const override { return X86SLHPassName; }
+  StringRef getPassName() const override {
+    return "X86 speculative load hardening";
+  }
   bool runOnMachineFunction(MachineFunction &MF) override;
   void getAnalysisUsage(AnalysisUsage &AU) const override;
 
   /// Pass identification, replacement for typeid.
   static char ID;
-};
-
-class X86SpeculativeLoadHardeningImpl {
-public:
-  X86SpeculativeLoadHardeningImpl() = default;
-
-  bool run(MachineFunction &MF);
 
 private:
   /// The information about a block's conditional terminators needed to trace
@@ -218,18 +211,9 @@ private:
 
 } // end anonymous namespace
 
-bool X86SpeculativeLoadHardeningLegacy::runOnMachineFunction(
-    MachineFunction &MF) {
-  X86SpeculativeLoadHardeningImpl Impl;
-  bool Changed = Impl.run(MF);
-  LLVM_DEBUG(dbgs() << "Final speculative load hardened function:\n"; MF.dump();
-             dbgs() << "\n"; MF.verify(this));
-  return Changed;
-}
+char X86SpeculativeLoadHardeningPass::ID = 0;
 
-char X86SpeculativeLoadHardeningLegacy::ID = 0;
-
-void X86SpeculativeLoadHardeningLegacy::getAnalysisUsage(
+void X86SpeculativeLoadHardeningPass::getAnalysisUsage(
     AnalysisUsage &AU) const {
   MachineFunctionPass::getAnalysisUsage(AU);
 }
@@ -356,6 +340,7 @@ static void canonicalizePHIOperands(MachineFunction &MF) {
 
       // Now walk the duplicate indices, removing both the block and value. Note
       // that these are stored as a vector making this element-wise removal
+      // :w
       // potentially quadratic.
       //
       // FIXME: It is really frustrating that we have to use a quadratic
@@ -407,8 +392,9 @@ static bool hasVulnerableLoad(MachineFunction &MF) {
   return false;
 }
 
-bool X86SpeculativeLoadHardeningImpl::run(MachineFunction &MF) {
-  LLVM_DEBUG(dbgs() << "********** " << X86SLHPassName << " : " << MF.getName()
+bool X86SpeculativeLoadHardeningPass::runOnMachineFunction(
+    MachineFunction &MF) {
+  LLVM_DEBUG(dbgs() << "********** " << getPassName() << " : " << MF.getName()
                     << " **********\n");
 
   // Only run if this pass is forced enabled or we detect the relevant function
@@ -500,6 +486,7 @@ bool X86SpeculativeLoadHardeningImpl::run(MachineFunction &MF) {
     ZeroEFLAGSDefOp->setIsDead(true);
     BuildMI(Entry, EntryInsertPt, Loc, TII->get(X86::SUBREG_TO_REG),
             PS->InitialReg)
+        .addImm(0)
         .addReg(PredStateSubReg)
         .addImm(X86::sub_32bit);
   }
@@ -562,6 +549,8 @@ bool X86SpeculativeLoadHardeningImpl::run(MachineFunction &MF) {
       PS->SSA.RewriteUse(Op);
     }
 
+  LLVM_DEBUG(dbgs() << "Final speculative load hardened function:\n"; MF.dump();
+             dbgs() << "\n"; MF.verify(this));
   return true;
 }
 
@@ -571,7 +560,7 @@ bool X86SpeculativeLoadHardeningImpl::run(MachineFunction &MF) {
 /// We include this as an alternative mostly for the purpose of comparison. The
 /// performance impact of this is expected to be extremely severe and not
 /// practical for any real-world users.
-void X86SpeculativeLoadHardeningImpl::hardenEdgesWithLFENCE(
+void X86SpeculativeLoadHardeningPass::hardenEdgesWithLFENCE(
     MachineFunction &MF) {
   // First, we scan the function looking for blocks that are reached along edges
   // that we might want to harden.
@@ -603,8 +592,8 @@ void X86SpeculativeLoadHardeningImpl::hardenEdgesWithLFENCE(
   }
 }
 
-SmallVector<X86SpeculativeLoadHardeningImpl::BlockCondInfo, 16>
-X86SpeculativeLoadHardeningImpl::collectBlockCondInfo(MachineFunction &MF) {
+SmallVector<X86SpeculativeLoadHardeningPass::BlockCondInfo, 16>
+X86SpeculativeLoadHardeningPass::collectBlockCondInfo(MachineFunction &MF) {
   SmallVector<BlockCondInfo, 16> Infos;
 
   // Walk the function and build up a summary for each block's conditions that
@@ -696,7 +685,7 @@ X86SpeculativeLoadHardeningImpl::collectBlockCondInfo(MachineFunction &MF) {
 /// uses of the predicate state rewritten into proper SSA form once it is
 /// complete.
 SmallVector<MachineInstr *, 16>
-X86SpeculativeLoadHardeningImpl::tracePredStateThroughCFG(
+X86SpeculativeLoadHardeningPass::tracePredStateThroughCFG(
     MachineFunction &MF, ArrayRef<BlockCondInfo> Infos) {
   // Collect the inserted cmov instructions so we can rewrite their uses of the
   // predicate state into SSA form.
@@ -854,7 +843,7 @@ getRegClassForUnfoldedLoad(const X86InstrInfo &TII, unsigned Opcode) {
   return TII.getRegClass(MCID, Index);
 }
 
-void X86SpeculativeLoadHardeningImpl::unfoldCallAndJumpLoads(
+void X86SpeculativeLoadHardeningPass::unfoldCallAndJumpLoads(
     MachineFunction &MF) {
   for (MachineBasicBlock &MBB : MF)
     // We use make_early_inc_range here so we can remove instructions if needed
@@ -965,7 +954,7 @@ void X86SpeculativeLoadHardeningImpl::unfoldCallAndJumpLoads(
 /// calls, however, cannot be mitigated through this technique without changing
 /// the ABI in a fundamental way.
 SmallVector<MachineInstr *, 16>
-X86SpeculativeLoadHardeningImpl::tracePredStateThroughIndirectBranches(
+X86SpeculativeLoadHardeningPass::tracePredStateThroughIndirectBranches(
     MachineFunction &MF) {
   // We use the SSAUpdater to insert PHI nodes for the target addresses of
   // indirect branches. We don't actually need the full power of the SSA updater
@@ -1269,7 +1258,7 @@ static bool isEFLAGSLive(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
 ///
 /// These two passes are applied to each basic block. We operate one block at a
 /// time to simplify reasoning about reachability and sequencing.
-void X86SpeculativeLoadHardeningImpl::tracePredStateThroughBlocksAndHarden(
+void X86SpeculativeLoadHardeningPass::tracePredStateThroughBlocksAndHarden(
     MachineFunction &MF) {
   SmallPtrSet<MachineInstr *, 16> HardenPostLoad;
   SmallPtrSet<MachineInstr *, 16> HardenLoadAddr;
@@ -1498,7 +1487,7 @@ void X86SpeculativeLoadHardeningImpl::tracePredStateThroughBlocksAndHarden(
 /// Note that LLVM can only lower very simple patterns of saved and restored
 /// EFLAGS registers. The restore should always be within the same basic block
 /// as the save so that no PHI nodes are inserted.
-Register X86SpeculativeLoadHardeningImpl::saveEFLAGS(
+Register X86SpeculativeLoadHardeningPass::saveEFLAGS(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator InsertPt,
     const DebugLoc &Loc) {
   // FIXME: Hard coding this to a 32-bit register class seems weird, but matches
@@ -1516,7 +1505,7 @@ Register X86SpeculativeLoadHardeningImpl::saveEFLAGS(
 ///
 /// This must be done within the same basic block as the save in order to
 /// reliably lower.
-void X86SpeculativeLoadHardeningImpl::restoreEFLAGS(
+void X86SpeculativeLoadHardeningPass::restoreEFLAGS(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator InsertPt,
     const DebugLoc &Loc, Register Reg) {
   BuildMI(MBB, InsertPt, Loc, TII->get(X86::COPY), X86::EFLAGS).addReg(Reg);
@@ -1527,7 +1516,7 @@ void X86SpeculativeLoadHardeningImpl::restoreEFLAGS(
 /// stack pointer. The state is essentially a single bit, but we merge this in
 /// a way that won't form non-canonical pointers and also will be preserved
 /// across normal stack adjustments.
-void X86SpeculativeLoadHardeningImpl::mergePredStateIntoSP(
+void X86SpeculativeLoadHardeningPass::mergePredStateIntoSP(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator InsertPt,
     const DebugLoc &Loc, Register PredStateReg) {
   Register TmpReg = MRI->createVirtualRegister(PS->RC);
@@ -1547,7 +1536,7 @@ void X86SpeculativeLoadHardeningImpl::mergePredStateIntoSP(
 }
 
 /// Extracts the predicate state stored in the high bits of the stack pointer.
-Register X86SpeculativeLoadHardeningImpl::extractPredStateFromSP(
+Register X86SpeculativeLoadHardeningPass::extractPredStateFromSP(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator InsertPt,
     const DebugLoc &Loc) {
   Register PredStateReg = MRI->createVirtualRegister(PS->RC);
@@ -1568,7 +1557,7 @@ Register X86SpeculativeLoadHardeningImpl::extractPredStateFromSP(
   return PredStateReg;
 }
 
-void X86SpeculativeLoadHardeningImpl::hardenLoadAddr(
+void X86SpeculativeLoadHardeningPass::hardenLoadAddr(
     MachineInstr &MI, MachineOperand &BaseMO, MachineOperand &IndexMO,
     SmallDenseMap<Register, Register, 32> &AddrRegToHardenedReg) {
   MachineBasicBlock &MBB = *MI.getParent();
@@ -1770,7 +1759,7 @@ void X86SpeculativeLoadHardeningImpl::hardenLoadAddr(
     restoreEFLAGS(MBB, InsertPt, Loc, FlagsReg);
 }
 
-MachineInstr *X86SpeculativeLoadHardeningImpl::sinkPostLoadHardenedInst(
+MachineInstr *X86SpeculativeLoadHardeningPass::sinkPostLoadHardenedInst(
     MachineInstr &InitialMI, SmallPtrSetImpl<MachineInstr *> &HardenedInstrs) {
   assert(X86InstrInfo::isDataInvariantLoad(InitialMI) &&
          "Cannot get here with a non-invariant load!");
@@ -1860,7 +1849,7 @@ MachineInstr *X86SpeculativeLoadHardeningImpl::sinkPostLoadHardenedInst(
   return MI;
 }
 
-bool X86SpeculativeLoadHardeningImpl::canHardenRegister(Register Reg) {
+bool X86SpeculativeLoadHardeningPass::canHardenRegister(Register Reg) {
   // We only support hardening virtual registers.
   if (!Reg.isVirtual())
     return false;
@@ -1907,7 +1896,7 @@ bool X86SpeculativeLoadHardeningImpl::canHardenRegister(Register Reg) {
 ///
 /// The new, hardened virtual register is returned. It will have the same
 /// register class as `Reg`.
-Register X86SpeculativeLoadHardeningImpl::hardenValueInRegister(
+Register X86SpeculativeLoadHardeningPass::hardenValueInRegister(
     Register Reg, MachineBasicBlock &MBB, MachineBasicBlock::iterator InsertPt,
     const DebugLoc &Loc) {
   assert(canHardenRegister(Reg) && "Cannot harden this register!");
@@ -1924,7 +1913,7 @@ Register X86SpeculativeLoadHardeningImpl::hardenValueInRegister(
     unsigned SubRegImm = SubRegImms[Log2_32(Bytes)];
     Register NarrowStateReg = MRI->createVirtualRegister(RC);
     BuildMI(MBB, InsertPt, Loc, TII->get(TargetOpcode::COPY), NarrowStateReg)
-        .addReg(StateReg, {}, SubRegImm);
+        .addReg(StateReg, 0, SubRegImm);
     StateReg = NarrowStateReg;
   }
 
@@ -1957,7 +1946,7 @@ Register X86SpeculativeLoadHardeningImpl::hardenValueInRegister(
 /// execution and coercing them to one is sufficient.
 ///
 /// Returns the newly hardened register.
-Register X86SpeculativeLoadHardeningImpl::hardenPostLoad(MachineInstr &MI) {
+Register X86SpeculativeLoadHardeningPass::hardenPostLoad(MachineInstr &MI) {
   MachineBasicBlock &MBB = *MI.getParent();
   const DebugLoc &Loc = MI.getDebugLoc();
 
@@ -2008,7 +1997,7 @@ Register X86SpeculativeLoadHardeningImpl::hardenPostLoad(MachineInstr &MI) {
 /// speculatively even during a BCBS-attacked return until the steering takes
 /// effect. Whenever this happens, the caller can recover the (poisoned)
 /// predicate state from the stack pointer and continue to harden loads.
-void X86SpeculativeLoadHardeningImpl::hardenReturnInstr(MachineInstr &MI) {
+void X86SpeculativeLoadHardeningPass::hardenReturnInstr(MachineInstr &MI) {
   MachineBasicBlock &MBB = *MI.getParent();
   const DebugLoc &Loc = MI.getDebugLoc();
   auto InsertPt = MI.getIterator();
@@ -2054,7 +2043,7 @@ void X86SpeculativeLoadHardeningImpl::hardenReturnInstr(MachineInstr &MI) {
 /// immediately following the call (the observed return address). If these
 /// mismatch, we have detected misspeculation and can poison our predicate
 /// state.
-void X86SpeculativeLoadHardeningImpl::tracePredStateThroughCall(
+void X86SpeculativeLoadHardeningPass::tracePredStateThroughCall(
     MachineInstr &MI) {
   MachineBasicBlock &MBB = *MI.getParent();
   MachineFunction &MF = *MBB.getParent();
@@ -2214,7 +2203,7 @@ void X86SpeculativeLoadHardeningImpl::tracePredStateThroughCall(
 /// execution. We forcibly unfolded all relevant loads above and so will always
 /// have an opportunity to post-load harden here, we just need to scan for cases
 /// not already flagged and add them.
-void X86SpeculativeLoadHardeningImpl::hardenIndirectCallOrJumpInstr(
+void X86SpeculativeLoadHardeningPass::hardenIndirectCallOrJumpInstr(
     MachineInstr &MI,
     SmallDenseMap<Register, Register, 32> &AddrRegToHardenedReg) {
   switch (MI.getOpcode()) {
@@ -2268,23 +2257,11 @@ void X86SpeculativeLoadHardeningImpl::hardenIndirectCallOrJumpInstr(
   ++NumCallsOrJumpsHardened;
 }
 
-PreservedAnalyses
-X86SpeculativeLoadHardeningPass::run(MachineFunction &MF,
-                                     MachineFunctionAnalysisManager &MFAM) {
-  X86SpeculativeLoadHardeningImpl Impl;
-  const bool Changed = Impl.run(MF);
-  LLVM_DEBUG(dbgs() << "Final speculative load hardened function:\n"; MF.dump();
-             dbgs() << "\n"; MF.verify(MFAM));
-  return Changed ? getMachineFunctionPassPreservedAnalyses()
-                       .preserveSet<CFGAnalyses>()
-                 : PreservedAnalyses::all();
-}
-
-INITIALIZE_PASS_BEGIN(X86SpeculativeLoadHardeningLegacy, PASS_KEY,
+INITIALIZE_PASS_BEGIN(X86SpeculativeLoadHardeningPass, PASS_KEY,
                       "X86 speculative load hardener", false, false)
-INITIALIZE_PASS_END(X86SpeculativeLoadHardeningLegacy, PASS_KEY,
+INITIALIZE_PASS_END(X86SpeculativeLoadHardeningPass, PASS_KEY,
                     "X86 speculative load hardener", false, false)
 
-FunctionPass *llvm::createX86SpeculativeLoadHardeningLegacyPass() {
-  return new X86SpeculativeLoadHardeningLegacy();
+FunctionPass *llvm::createX86SpeculativeLoadHardeningPass() {
+  return new X86SpeculativeLoadHardeningPass();
 }

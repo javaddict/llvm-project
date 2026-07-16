@@ -144,9 +144,10 @@ template <typename T, typename ST> struct omptarget_nvptx_LoopSupport {
       if (chunk > 0) {
         // round up to make sure the chunk is enough to cover all iterations
         T tripCount = ub - lb + 1; // +1 because ub is inclusive
-        T span = utils::roundUp(tripCount, numberOfActiveOMPThreads);
+        T span = (tripCount + numberOfActiveOMPThreads - 1) /
+                 numberOfActiveOMPThreads;
         // perform chunk adjustment
-        chunk = utils::alignUp(span, chunk);
+        chunk = (span + chunk - 1) & ~(chunk - 1);
 
         ASSERT0(LT_FUSSY, ub >= lb, "ub must be >= lb.");
         T oldUb = ub;
@@ -289,9 +290,9 @@ template <typename T, typename ST> struct omptarget_nvptx_LoopSupport {
       ST stride;
       int lastiter = 0;
       // round up to make sure the chunk is enough to cover all iterations
-      T span = utils::roundUp(tripCount, tnum);
+      T span = (tripCount + tnum - 1) / tnum;
       // perform chunk adjustment
-      chunk = utils::alignUp(span, chunk);
+      chunk = (span + chunk - 1) & ~(chunk - 1);
 
       T oldUb = ub;
       ForStaticChunk(lastiter, lb, ub, stride, chunk, threadId, tnum);
@@ -338,7 +339,7 @@ template <typename T, typename ST> struct omptarget_nvptx_LoopSupport {
 
   static uint64_t NextIter() {
     __kmpc_impl_lanemask_t active = mapping::activemask();
-    uint32_t leader = utils::ctz(active);
+    uint32_t leader = utils::ffs(active) - 1;
     uint32_t change = utils::popc(active);
     __kmpc_impl_lanemask_t lane_mask_lt = mapping::lanemaskLT();
     unsigned int rank = utils::popc(active & lane_mask_lt);

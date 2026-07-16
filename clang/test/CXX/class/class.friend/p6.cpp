@@ -19,5 +19,4 @@ class A {
 #else
   friend thread_local class G; // expected-error {{'thread_local' is invalid in friend declarations}}
 #endif
-  friend register enum; // expected-error {{expected identifier or '{'}} expected-error {{'register' is invalid in friend declarations}}
 };

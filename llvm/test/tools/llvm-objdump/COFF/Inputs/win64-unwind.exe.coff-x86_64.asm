@@ -19,8 +19,9 @@ func:
     .seh_handlerdata
     .long 0
     .text
+    .seh_startchained
     .seh_endprologue
-    .seh_splitchained
+    .seh_endchained
     lea (%rbx), %rsp
     pop %rbx
     addq $24, %rsp

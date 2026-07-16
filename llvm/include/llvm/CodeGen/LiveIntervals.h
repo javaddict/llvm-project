@@ -160,12 +160,6 @@ public:
     return LI;
   }
 
-  LiveInterval &createAndComputeVirtRegInterval(Register Reg, bool &NeedSplit) {
-    LiveInterval &LI = createEmptyInterval(Reg);
-    NeedSplit = computeVirtRegInterval(LI);
-    return LI;
-  }
-
   /// Return an existing interval for \p Reg.
   /// If \p Reg has no interval then this creates a new empty one instead.
   /// Note: does not trigger interval computation.
@@ -528,13 +522,14 @@ public:
 };
 
 class LiveIntervalsPrinterPass
-    : public RequiredPassInfoMixin<LiveIntervalsPrinterPass> {
+    : public PassInfoMixin<LiveIntervalsPrinterPass> {
   raw_ostream &OS;
 
 public:
   explicit LiveIntervalsPrinterPass(raw_ostream &OS) : OS(OS) {}
   LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
                                  MachineFunctionAnalysisManager &MFAM);
+  static bool isRequired() { return true; }
 };
 
 class LLVM_ABI LiveIntervalsWrapperPass : public MachineFunctionPass {

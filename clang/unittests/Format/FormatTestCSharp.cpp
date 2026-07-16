@@ -881,7 +881,7 @@ public class Test
     private static void ComplexLambda(BuildReport protoReport)
     {
         allSelectedScenes =
-            veryVeryLongCollectionNameThatPutsTheLineLengthAboveTheThresholds.Where(scene => scene.enabled)
+            veryVeryLongCollectionNameThatPutsTheLineLenghtAboveTheThresholds.Where(scene => scene.enabled)
                 .Select(scene => scene.path)
                 .ToArray();
         if (allSelectedScenes.Count == 0)
@@ -899,7 +899,7 @@ public class Test
   verifyFormat(R"(//
 public class Test {
   private static void ComplexLambda(BuildReport protoReport) {
-    allSelectedScenes = veryVeryLongCollectionNameThatPutsTheLineLengthAboveTheThresholds
+    allSelectedScenes = veryVeryLongCollectionNameThatPutsTheLineLenghtAboveTheThresholds
                             .Where(scene => scene.enabled)
                             .Select(scene => scene.path)
                             .ToArray();
@@ -925,7 +925,7 @@ public class Test
     private static void MultipleLambdas(BuildReport protoReport)
     {
         allSelectedScenes =
-            veryVeryLongCollectionNameThatPutsTheLineLengthAboveTheThresholds.Where(scene => scene.enabled)
+            veryVeryLongCollectionNameThatPutsTheLineLenghtAboveTheThresholds.Where(scene => scene.enabled)
                 .Select(scene => scene.path)
                 .ToArray();
         preBindEnumerators.RemoveAll(enumerator => !enumerator.MoveNext());
@@ -944,7 +944,7 @@ public class Test
   verifyFormat(R"(//
 public class Test {
   private static void MultipleLambdas(BuildReport protoReport) {
-    allSelectedScenes = veryVeryLongCollectionNameThatPutsTheLineLengthAboveTheThresholds
+    allSelectedScenes = veryVeryLongCollectionNameThatPutsTheLineLenghtAboveTheThresholds
                             .Where(scene => scene.enabled)
                             .Select(scene => scene.path)
                             .ToArray();
@@ -1673,8 +1673,7 @@ TEST_F(FormatTestCSharp, EmptyShortBlock) {
 TEST_F(FormatTestCSharp, ShortFunctions) {
   FormatStyle Style = getLLVMStyle(FormatStyle::LK_CSharp);
   Style.NamespaceIndentation = FormatStyle::NI_All;
-  Style.AllowShortFunctionsOnASingleLine =
-      FormatStyle::ShortFunctionStyle::setEmptyAndInline();
+  Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_Inline;
   verifyFormat("interface Interface {\n"
                "  void f() { return; }\n"
                "};",

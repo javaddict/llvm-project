@@ -79,7 +79,6 @@ static bool supportsAArch64(uint64_t Type) {
   case ELF::R_AARCH64_PREL16:
   case ELF::R_AARCH64_PREL32:
   case ELF::R_AARCH64_PREL64:
-  case ELF::R_AARCH64_TLS_DTPREL64:
     return true;
   default:
     return false;
@@ -92,7 +91,6 @@ static uint64_t resolveAArch64(uint64_t Type, uint64_t Offset, uint64_t S,
   case ELF::R_AARCH64_ABS32:
     return (S + Addend) & 0xFFFFFFFF;
   case ELF::R_AARCH64_ABS64:
-  case ELF::R_AARCH64_TLS_DTPREL64:
     return S + Addend;
   case ELF::R_AARCH64_PREL16:
     return (S + Addend - Offset) & 0xFFFF;
@@ -599,6 +597,31 @@ static uint64_t resolveLoongArch(uint64_t Type, uint64_t Offset, uint64_t S,
   }
 }
 
+static bool supportsHaydn(uint64_t Type) {
+  switch (Type) {
+  case ELF::R_HAYDN_NONE:
+  case ELF::R_HAYDN_32:
+  case ELF::R_HAYDN_32_PCREL:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static uint64_t resolveHaydn(uint64_t Type, uint64_t Offset, uint64_t S,
+                             uint64_t LocData, int64_t Addend) {
+  switch (Type) {
+  case ELF::R_HAYDN_NONE:
+    return LocData;
+  case ELF::R_HAYDN_32:
+    return (S + Addend) & 0xFFFFFFFF;
+  case ELF::R_HAYDN_32_PCREL:
+    return (S + Addend - Offset) & 0xFFFFFFFF;
+  default:
+    llvm_unreachable("Invalid relocation type");
+  }
+}
+
 static bool supportsCOFFX86(uint64_t Type) {
   switch (Type) {
   case COFF::IMAGE_REL_I386_SECREL:
@@ -680,27 +703,6 @@ static uint64_t resolveCOFFARM64(uint64_t Type, uint64_t Offset, uint64_t S,
     return (S + LocData) & 0xFFFFFFFF;
   case COFF::IMAGE_REL_ARM64_ADDR64:
     return S + LocData;
-  default:
-    llvm_unreachable("Invalid relocation type");
-  }
-}
-
-static bool supportsCOFFMIPS(uint64_t Type) {
-  switch (Type) {
-  case COFF::IMAGE_REL_MIPS_SECREL:
-  case COFF::IMAGE_REL_MIPS_REFWORD:
-    return true;
-  default:
-    return false;
-  }
-}
-
-static uint64_t resolveCOFFMIPS(uint64_t Type, uint64_t Offset, uint64_t S,
-                                uint64_t LocData, int64_t /*Addend*/) {
-  switch (Type) {
-  case COFF::IMAGE_REL_MIPS_SECREL:
-  case COFF::IMAGE_REL_MIPS_REFWORD:
-    return (S + LocData) & 0xFFFFFFFF;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -806,8 +808,6 @@ getRelocationResolver(const ObjectFile &Obj) {
       return {supportsCOFFARM, resolveCOFFARM};
     case Triple::aarch64:
       return {supportsCOFFARM64, resolveCOFFARM64};
-    case Triple::mipsel:
-      return {supportsCOFFMIPS, resolveCOFFMIPS};
     default:
       return {nullptr, nullptr};
     }
@@ -874,6 +874,8 @@ getRelocationResolver(const ObjectFile &Obj) {
       return {supportsSparc32, resolveSparc32};
     case Triple::hexagon:
       return {supportsHexagon, resolveHexagon};
+    case Triple::haydn:
+      return {supportsHaydn, resolveHaydn};
     case Triple::r600:
       return {supportsAmdgpu, resolveAmdgpu};
     case Triple::riscv32:

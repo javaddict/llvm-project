@@ -29,27 +29,7 @@ using namespace mlir::linalg;
 #define DEBUG_TYPE "linalg-fold-into-elementwise"
 
 namespace {
-template <typename ProducerOpTy>
-struct ElementwiseOpFolder {
-  // Helper function to fold broadcast etc into elementwise op.
-  // Producer in this context is `broadcast op` etc, consumer is elwise operand.
-  static bool fold(OpOperand *elwiseOperand, AffineMap elwiseMap,
-                   SmallVector<Value> &newIns,
-                   SmallVector<AffineMap> &newMaps) {
-    auto producerOp = elwiseOperand->get().getDefiningOp<ProducerOpTy>();
-    if (!producerOp || !elwiseMap.isProjectedPermutation())
-      return false;
-    newIns.push_back(producerOp.getInput());
-    // push in the new composed affine map
-    newMaps.push_back(
-        producerOp.getMatchingIndexingMap(producerOp.getDpsInputOperand(0))
-            .compose(elwiseMap));
-    return true;
-  }
-};
-
-template <typename... ProducerOps>
-struct FoldIntoElementwisePattern : public OpRewritePattern<ElementwiseOp> {
+struct FoldTransposePattern : public OpRewritePattern<ElementwiseOp> {
   using OpRewritePattern<ElementwiseOp>::OpRewritePattern;
 
   LogicalResult matchAndRewrite(ElementwiseOp op,
@@ -58,17 +38,20 @@ struct FoldIntoElementwisePattern : public OpRewritePattern<ElementwiseOp> {
     SmallVector<Value> newIns;
     SmallVector<AffineMap> newMaps;
     for (OpOperand *operand : op.getDpsInputOperands()) {
-      AffineMap consumerMap = op.getMatchingIndexingMap(operand);
-      const bool folded = (ElementwiseOpFolder<ProducerOps>::fold(
-                               operand, consumerMap, newIns, newMaps) ||
-                           ...);
-      if (folded) {
-        changed = true;
-      } else {
+      AffineMap map = op.getMatchingIndexingMap(operand);
+      auto transposeOp = operand->get().getDefiningOp<TransposeOp>();
+
+      if (!map.isIdentity() || !transposeOp) {
         // push in original operand and its map.
         newIns.push_back(operand->get());
-        newMaps.push_back(consumerMap);
+        newMaps.push_back(map);
+        continue;
       }
+      newIns.push_back(transposeOp.getInput());
+      // push in transposeOp's inverse permutation map.
+      newMaps.push_back(transposeOp.getMatchingIndexingMap(
+          transposeOp.getDpsInputOperand(0)));
+      changed = true;
     }
     if (!changed)
       return failure();
@@ -100,6 +83,5 @@ struct LinalgFoldIntoElementwisePass
 
 void mlir::linalg::populateLinalgFoldIntoElementwisePatterns(
     RewritePatternSet &patterns) {
-  patterns.add<FoldIntoElementwisePattern<TransposeOp, BroadcastOp>>(
-      patterns.getContext());
+  patterns.add<FoldTransposePattern>(patterns.getContext());
 }

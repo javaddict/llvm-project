@@ -1,4 +1,3 @@
-//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -36,7 +35,7 @@ struct TestFetchXor {
   void operator()() const {
     static_assert(std::is_integral_v<T>);
 
-    alignas(std::atomic_ref<T>::required_alignment) T x(T(1));
+    T x(T(1));
     std::atomic_ref<T> const a(x);
 
     {

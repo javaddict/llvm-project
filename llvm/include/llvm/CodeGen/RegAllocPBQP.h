@@ -506,15 +506,15 @@ public:
   PBQPRAGraph(GraphMetadata Metadata) : BaseT(std::move(Metadata)) {}
 
   /// Dump this graph to dbgs().
-  LLVM_ABI void dump() const;
+  void dump() const;
 
   /// Dump this graph to an output stream.
   /// @param OS Output stream to print on.
-  LLVM_ABI void dump(raw_ostream &OS) const;
+  void dump(raw_ostream &OS) const;
 
   /// Print a representation of this graph in DOT format.
   /// @param OS Output stream to print on.
-  LLVM_ABI void printDot(raw_ostream &OS) const;
+  void printDot(raw_ostream &OS) const;
 };
 
 inline Solution solve(PBQPRAGraph& G) {
@@ -528,7 +528,7 @@ inline Solution solve(PBQPRAGraph& G) {
 } // end namespace PBQP
 
 /// Create a PBQP register allocator instance.
-LLVM_ABI FunctionPass *
+FunctionPass *
 createPBQPRegisterAllocator(char *customPassID = nullptr);
 
 } // end namespace llvm

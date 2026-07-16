@@ -40,7 +40,7 @@ private:
   Kind TheKind;
 
   static const auto &getABIMap() {
-    static const llvm::StringMap<Kind> ABIMap = {
+    static llvm::StringMap<Kind> ABIMap = {
 #define CXXABI(Name, Str) {Str, Name},
 #include "TargetCXXABI.def"
     };
@@ -48,7 +48,7 @@ private:
   }
 
   static const auto &getSpellingMap() {
-    static const std::map<Kind, std::string> SpellingMap = {
+    static std::map<Kind, std::string> SpellingMap = {
 #define CXXABI(Name, Str) {Name, Str},
 #include "TargetCXXABI.def"
     };

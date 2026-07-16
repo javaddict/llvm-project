@@ -13,3 +13,4 @@ body:             |
     RET64 $eax
 ...
 # CHECK: Reaching definitions for for machine function: is_odd
+# CHECK-NEXT: RDA results for is_odd

@@ -21,13 +21,12 @@ namespace llvm {
 
 class TargetMachine;
 
-class InterleavedAccessPass
-    : public OptionalPassInfoMixin<InterleavedAccessPass> {
+class InterleavedAccessPass : public PassInfoMixin<InterleavedAccessPass> {
   const TargetMachine *TM;
 
 public:
   explicit InterleavedAccessPass(const TargetMachine &TM) : TM(&TM) {}
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
 
 } // namespace llvm

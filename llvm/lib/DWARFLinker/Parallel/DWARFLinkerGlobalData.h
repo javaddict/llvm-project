@@ -48,6 +48,9 @@ struct DWARFLinkerOptions {
   /// function.
   bool KeepFunctionForStatic = false;
 
+  /// Allow to generate valid, but non deterministic output.
+  bool AllowNonDeterministicOutput = false;
+
   /// Number of threads.
   unsigned Threads = 1;
 

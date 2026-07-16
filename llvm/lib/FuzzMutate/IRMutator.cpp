@@ -338,7 +338,7 @@ void InstModificationIRStrategy::mutate(Instruction &Inst,
     // constant 0.
     Value *Operand = Inst.getOperand(0);
     if (Constant *C = dyn_cast<Constant>(Operand)) {
-      if (!C->isNullValue()) {
+      if (!C->isZeroValue()) {
         ShuffleItems = {0, 1};
       }
     }
@@ -518,7 +518,7 @@ void InsertCFGStrategy::mutate(BasicBlock &BB, RandomIRBuilder &IB) {
   uint64_t IP = uniform<uint64_t>(IB.Rand, 0, Insts.size() - 1);
   auto InstsBeforeSplit = ArrayRef(Insts).slice(0, IP);
 
-  // `Sink` inherits Blocks' terminator, `Source` will have a UncondBrInst
+  // `Sink` inherits Blocks' terminator, `Source` will have a BranchInst
   // directly jumps to `Sink`. Here, we have to create a new terminator for
   // `Source`.
   BasicBlock *Block = Insts[IP]->getParent();
@@ -535,7 +535,7 @@ void InsertCFGStrategy::mutate(BasicBlock &BB, RandomIRBuilder &IB) {
     Value *Cond =
         IB.findOrCreateSource(*Source, InstsBeforeSplit, {},
                               fuzzerop::onlyType(Type::getInt1Ty(C)), false);
-    CondBrInst *Branch = CondBrInst::Create(Cond, IfTrue, IfFalse);
+    BranchInst *Branch = BranchInst::Create(IfTrue, IfFalse, Cond);
     // Remove the old terminator.
     ReplaceInstWithInst(Source->getTerminator(), Branch);
     // Connect these blocks to `Sink`
@@ -607,7 +607,7 @@ void InsertCFGStrategy::connectBlocksToSink(ArrayRef<BasicBlock *> Blocks,
       break;
     }
     case CFGToSink::DirectSink: {
-      UncondBrInst::Create(Sink, BB);
+      BranchInst::Create(Sink, BB);
       break;
     }
     case CFGToSink::SinkOrSelfLoop: {
@@ -616,7 +616,7 @@ void InsertCFGStrategy::connectBlocksToSink(ArrayRef<BasicBlock *> Blocks,
       uint64_t coin = uniform<uint64_t>(IB.Rand, 0, 1);
       Value *Cond = IB.findOrCreateSource(
           *BB, {}, {}, fuzzerop::onlyType(Type::getInt1Ty(C)), false);
-      CondBrInst::Create(Cond, Branches[coin], Branches[1 - coin], BB);
+      BranchInst::Create(Branches[coin], Branches[1 - coin], Cond, BB);
       break;
     }
     case CFGToSink::EndOfCFGToLink:

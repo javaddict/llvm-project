@@ -29,39 +29,25 @@ class Symbol;
 
 struct SymbolDataInitialization {
   using Range = common::Interval<common::ConstantSubscript>;
-  struct Item {
-    Item(Range r, bool isD) : range{r}, isDuplicate{isD} {}
-    bool operator<(const Item &that) const { return range < that.range; }
-    Range range;
-    bool isDuplicate;
-  };
   explicit SymbolDataInitialization(std::size_t bytes) : image{bytes} {}
   SymbolDataInitialization(SymbolDataInitialization &&) = default;
 
-  void NoteInitializedRange(Range range, bool isDuplicate = false) {
-    if (!initializationItems.empty()) {
-      auto &last{initializationItems.back()};
-      if (last.isDuplicate == isDuplicate &&
-          last.range.AnnexIfPredecessor(range)) {
-        return;
-      }
+  void NoteInitializedRange(Range range) {
+    if (initializedRanges.empty() ||
+        !initializedRanges.back().AnnexIfPredecessor(range)) {
+      initializedRanges.emplace_back(range);
     }
-    if (!range.empty()) {
-      initializationItems.emplace_back(range, isDuplicate);
-    }
-  }
-  void NoteInitializedRange(common::ConstantSubscript offset, std::size_t size,
-      bool isDuplicate = false) {
-    NoteInitializedRange(Range{offset, size}, isDuplicate);
   }
   void NoteInitializedRange(
-      evaluate::OffsetSymbol offsetSymbol, bool isDuplicate = false) {
-    NoteInitializedRange(
-        offsetSymbol.offset(), offsetSymbol.size(), isDuplicate);
+      common::ConstantSubscript offset, std::size_t size) {
+    NoteInitializedRange(Range{offset, size});
+  }
+  void NoteInitializedRange(evaluate::OffsetSymbol offsetSymbol) {
+    NoteInitializedRange(offsetSymbol.offset(), offsetSymbol.size());
   }
 
   evaluate::InitialImage image;
-  std::list<Item> initializationItems;
+  std::list<Range> initializedRanges;
 };
 
 using DataInitializations = std::map<const Symbol *, SymbolDataInitialization>;

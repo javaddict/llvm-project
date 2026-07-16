@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_OPERATINGSYSTEM_PYTHON_OPERATINGSYSTEMPYTHON_H
-#define LLDB_SOURCE_PLUGINS_OPERATINGSYSTEM_PYTHON_OPERATINGSYSTEMPYTHON_H
+#ifndef liblldb_OperatingSystemPython_h_
+#define liblldb_OperatingSystemPython_h_
 
 #include "lldb/Host/Config.h"
 
@@ -84,4 +84,4 @@ protected:
 
 #endif // LLDB_ENABLE_PYTHON
 
-#endif // LLDB_SOURCE_PLUGINS_OPERATINGSYSTEM_PYTHON_OPERATINGSYSTEMPYTHON_H
+#endif // liblldb_OperatingSystemPython_h_

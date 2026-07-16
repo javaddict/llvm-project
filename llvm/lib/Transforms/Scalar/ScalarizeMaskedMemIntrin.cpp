@@ -28,7 +28,6 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
-#include "llvm/IR/ProfDataUtils.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 #include "llvm/InitializePasses.h"
@@ -541,13 +540,9 @@ static void scalarizeMaskedGather(const DataLayout &DL,
     //  %Elt = load i32* %EltAddr
     //  VResult = insertelement <16 x i32> VResult, i32 %Elt, i32 Idx
     //
-    // We mark the branch weights as explicitly unknown given they would only
-    // be derivable from the mask which we do not have VP information for.
     Instruction *ThenTerm =
         SplitBlockAndInsertIfThen(Predicate, InsertPt, /*Unreachable=*/false,
-                                  getExplicitlyUnknownBranchWeightsIfProfiled(
-                                      *CI->getFunction(), DEBUG_TYPE),
-                                  DTU);
+                                  /*BranchWeights=*/nullptr, DTU);
 
     BasicBlock *CondBlock = ThenTerm->getParent();
     CondBlock->setName("cond.load");
@@ -675,13 +670,9 @@ static void scalarizeMaskedScatter(const DataLayout &DL,
     //  %Ptr1 = extractelement <16 x i32*> %Ptrs, i32 1
     //  %store i32 %Elt1, i32* %Ptr1
     //
-    // We mark the branch weights as explicitly unknown given they would only
-    // be derivable from the mask which we do not have VP information for.
     Instruction *ThenTerm =
         SplitBlockAndInsertIfThen(Predicate, InsertPt, /*Unreachable=*/false,
-                                  getExplicitlyUnknownBranchWeightsIfProfiled(
-                                      *CI->getFunction(), DEBUG_TYPE),
-                                  DTU);
+                                  /*BranchWeights=*/nullptr, DTU);
 
     BasicBlock *CondBlock = ThenTerm->getParent();
     CondBlock->setName("cond.store");

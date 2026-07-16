@@ -32,8 +32,10 @@ SBMemoryRegionInfo::SBMemoryRegionInfo(const char *name, lldb::addr_t begin,
   m_opaque_up->GetRange().SetRangeBase(begin);
   m_opaque_up->GetRange().SetRangeEnd(end);
   m_opaque_up->SetLLDBPermissions(permissions);
-  m_opaque_up->SetMapped(mapped ? eLazyBoolYes : eLazyBoolNo);
-  m_opaque_up->SetIsStackMemory(stack_memory ? eLazyBoolYes : eLazyBoolNo);
+  m_opaque_up->SetMapped(mapped ? MemoryRegionInfo::eYes
+                                : MemoryRegionInfo::eNo);
+  m_opaque_up->SetIsStackMemory(stack_memory ? MemoryRegionInfo::eYes
+                                             : MemoryRegionInfo::eNo);
 }
 
 SBMemoryRegionInfo::SBMemoryRegionInfo(const MemoryRegionInfo *lldb_object_ptr)
@@ -95,31 +97,31 @@ lldb::addr_t SBMemoryRegionInfo::GetRegionEnd() {
 bool SBMemoryRegionInfo::IsReadable() {
   LLDB_INSTRUMENT_VA(this);
 
-  return m_opaque_up->GetReadable() == eLazyBoolYes;
+  return m_opaque_up->GetReadable() == MemoryRegionInfo::eYes;
 }
 
 bool SBMemoryRegionInfo::IsWritable() {
   LLDB_INSTRUMENT_VA(this);
 
-  return m_opaque_up->GetWritable() == eLazyBoolYes;
+  return m_opaque_up->GetWritable() == MemoryRegionInfo::eYes;
 }
 
 bool SBMemoryRegionInfo::IsExecutable() {
   LLDB_INSTRUMENT_VA(this);
 
-  return m_opaque_up->GetExecutable() == eLazyBoolYes;
+  return m_opaque_up->GetExecutable() == MemoryRegionInfo::eYes;
 }
 
 bool SBMemoryRegionInfo::IsMapped() {
   LLDB_INSTRUMENT_VA(this);
 
-  return m_opaque_up->GetMapped() == eLazyBoolYes;
+  return m_opaque_up->GetMapped() == MemoryRegionInfo::eYes;
 }
 
 const char *SBMemoryRegionInfo::GetName() {
   LLDB_INSTRUMENT_VA(this);
 
-  return m_opaque_up->GetName().AsCString(nullptr);
+  return m_opaque_up->GetName().AsCString();
 }
 
 bool SBMemoryRegionInfo::HasDirtyMemoryPageList() {

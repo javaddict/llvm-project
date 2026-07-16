@@ -172,7 +172,7 @@ extern int TestVarDeclSC;
 // CHECK:      VarDecl{{.*}} TestVarDeclSC 'int' extern
 
 __thread int TestVarDeclThread;
-// CHECK:      VarDecl{{.*}} TestVarDeclThread 'int' tls external-linkage{{$}}
+// CHECK:      VarDecl{{.*}} TestVarDeclThread 'int' tls{{$}}
 
 __module_private__ int TestVarDeclPrivate;
 // CHECK-MODULE:      VarDecl{{.*}} TestVarDeclPrivate 'int' __module_private__

@@ -23,7 +23,7 @@ class ARCMCAsmInfo : public MCAsmInfoELF {
   void anchor() override;
 
 public:
-  explicit ARCMCAsmInfo(const Triple &TT, const MCTargetOptions &Options);
+  explicit ARCMCAsmInfo(const Triple &TT);
 };
 
 } // end namespace llvm

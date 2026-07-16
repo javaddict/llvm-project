@@ -47,7 +47,7 @@ SymbolFileWasm::GetVendorDWARFOpcodeSize(const DataExtractor &data,
 }
 
 bool SymbolFileWasm::ParseVendorDWARFOpcode(uint8_t op,
-                                            const llvm::DataExtractor &opcodes,
+                                            const DataExtractor &opcodes,
                                             lldb::offset_t &offset,
                                             RegisterContext *reg_ctx,
                                             lldb::RegisterKind reg_kind,
@@ -63,22 +63,22 @@ bool SymbolFileWasm::ParseVendorDWARFOpcode(uint8_t op,
   /// |0                    | Local                 |
   /// |1 or 3               | Global                |
   /// |2                    | Operand Stack         |
-  const uint8_t wasm_op = opcodes.getU8(&offset);
+  const uint8_t wasm_op = opcodes.GetU8(&offset);
   switch (wasm_op) {
   case 0: // LOCAL
-    index = opcodes.getULEB128(&offset);
+    index = opcodes.GetULEB128(&offset);
     tag = eWasmTagLocal;
     break;
   case 1: // GLOBAL_FIXED
-    index = opcodes.getULEB128(&offset);
+    index = opcodes.GetULEB128(&offset);
     tag = eWasmTagGlobal;
     break;
   case 2: // OPERAND_STACK
-    index = opcodes.getULEB128(&offset);
+    index = opcodes.GetULEB128(&offset);
     tag = eWasmTagOperandStack;
     break;
   case 3: // GLOBAL_RELOC
-    index = opcodes.getU32(&offset);
+    index = opcodes.GetU32(&offset);
     tag = eWasmTagGlobal;
     break;
   default:

@@ -318,14 +318,6 @@ const MemoryMapParams Linux_LoongArch64_MemoryMapParams = {
     0x100000000000, // OriginBase
 };
 
-// s390x Linux
-const MemoryMapParams Linux_S390X_MemoryMapParams = {
-    0xC00000000000, // AndMask
-    0,              // XorMask (not used)
-    0x080000000000, // ShadowBase
-    0x1C0000000000, // OriginBase
-};
-
 namespace {
 
 class DFSanABIList {
@@ -836,7 +828,7 @@ public:
   void visitSelectInst(SelectInst &I);
   void visitMemSetInst(MemSetInst &I);
   void visitMemTransferInst(MemTransferInst &I);
-  void visitCondBrInst(CondBrInst &BR);
+  void visitBranchInst(BranchInst &BR);
   void visitSwitchInst(SwitchInst &SW);
 
 private:
@@ -1153,9 +1145,6 @@ bool DataFlowSanitizer::initializeModule(Module &M) {
     break;
   case Triple::loongarch64:
     MapParams = &Linux_LoongArch64_MemoryMapParams;
-    break;
-  case Triple::systemz:
-    MapParams = &Linux_S390X_MemoryMapParams;
     break;
   default:
     report_fatal_error("unsupported architecture");
@@ -1790,7 +1779,7 @@ bool DataFlowSanitizer::runImpl(
         Value *PrimitiveShadow = DFSF.collapseToPrimitiveShadow(V, Pos);
         Value *Ne =
             IRB.CreateICmpNE(PrimitiveShadow, DFSF.DFS.ZeroPrimitiveShadow);
-        UncondBrInst *BI = cast<UncondBrInst>(SplitBlockAndInsertIfThen(
+        BranchInst *BI = cast<BranchInst>(SplitBlockAndInsertIfThen(
             Ne, Pos, /*Unreachable=*/false, ColdCallWeights));
         IRBuilder<> ThenIRB(BI);
         ThenIRB.CreateCall(DFSF.DFS.DFSanNonzeroLabelFn, {});
@@ -2363,7 +2352,7 @@ DFSanFunction::loadShadowOrigin(Value *Addr, uint64_t Size, Align InstAlignment,
     if (ClTrackOrigins == 2) {
       IRBuilder<> IRB(Pos->getParent(), Pos);
       auto *ConstantShadow = dyn_cast<Constant>(PrimitiveShadow);
-      if (!ConstantShadow || !ConstantShadow->isNullValue())
+      if (!ConstantShadow || !ConstantShadow->isZeroValue())
         Origin = updateOriginIfTainted(PrimitiveShadow, Origin, IRB);
     }
   }
@@ -2552,7 +2541,7 @@ void DFSanFunction::storeOrigin(BasicBlock::iterator Pos, Value *Addr,
   Value *CollapsedShadow = collapseToPrimitiveShadow(Shadow, Pos);
   IRBuilder<> IRB(Pos->getParent(), Pos);
   if (auto *ConstantShadow = dyn_cast<Constant>(CollapsedShadow)) {
-    if (!ConstantShadow->isNullValue())
+    if (!ConstantShadow->isZeroValue())
       paintOrigin(IRB, updateOrigin(Origin, IRB), StoreOriginAddr, Size,
                   OriginAlignment);
     return;
@@ -2976,7 +2965,10 @@ void DFSanVisitor::visitMemTransferInst(MemTransferInst &I) {
   }
 }
 
-void DFSanVisitor::visitCondBrInst(CondBrInst &BR) {
+void DFSanVisitor::visitBranchInst(BranchInst &BR) {
+  if (!BR.isConditional())
+    return;
+
   DFSF.addConditionalCallbacksIfEnabled(BR, BR.getCondition());
 }
 
@@ -3381,7 +3373,8 @@ void DFSanVisitor::visitCallBase(CallBase &CB) {
     }
   }
 
-  auto UnwrappedFnIt = DFSF.DFS.UnwrappedFnMap.find(CB.getCalledOperand());
+  DenseMap<Value *, Function *>::iterator UnwrappedFnIt =
+      DFSF.DFS.UnwrappedFnMap.find(CB.getCalledOperand());
   if (UnwrappedFnIt != DFSF.DFS.UnwrappedFnMap.end())
     if (visitWrappedCallBase(*UnwrappedFnIt->second, CB))
       return;

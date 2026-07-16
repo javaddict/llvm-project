@@ -8,7 +8,4 @@ add_clang_library(clangdRemoteMarshalling STATIC
 
   DEPENDS
   clangdRemoteIndexProto
-
-  # Disable PCH, gRPC adds -pthread.
-  DISABLE_PCH_REUSE
   )

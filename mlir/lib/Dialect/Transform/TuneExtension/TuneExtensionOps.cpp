@@ -123,18 +123,13 @@ void transform::tune::AlternativesOp::getSuccessorRegions(
   if (point.isParent())
     if (auto selectedRegionIdx = getSelectedRegionAttr())
       regions.emplace_back(
-          &getAlternatives()[selectedRegionIdx->getSExtValue()]);
+          &getAlternatives()[selectedRegionIdx->getSExtValue()],
+          Block::BlockArgListType());
     else
       for (Region &alternative : getAlternatives())
-        regions.emplace_back(&alternative);
+        regions.emplace_back(&alternative, Block::BlockArgListType());
   else
-    regions.push_back(RegionSuccessor::parent());
-}
-
-ValueRange
-transform::tune::AlternativesOp::getSuccessorInputs(RegionSuccessor successor) {
-  return successor.isParent() ? ValueRange(getOperation()->getResults())
-                              : ValueRange();
+    regions.emplace_back(getOperation(), getOperation()->getResults());
 }
 
 void transform::tune::AlternativesOp::getRegionInvocationBounds(

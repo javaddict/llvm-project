@@ -116,14 +116,15 @@ public:
 };
 
 /// Printer pass for DemandedBits
-class DemandedBitsPrinterPass
-    : public RequiredPassInfoMixin<DemandedBitsPrinterPass> {
+class DemandedBitsPrinterPass : public PassInfoMixin<DemandedBitsPrinterPass> {
   raw_ostream &OS;
 
 public:
   explicit DemandedBitsPrinterPass(raw_ostream &OS) : OS(OS) {}
 
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 };
 
 } // end namespace llvm

@@ -82,7 +82,6 @@ void AcceleratorRecordsSaver::save(const DWARFDebugInfoEntry *InputDieEntry,
   case dwarf::DW_TAG_string_type:
   case dwarf::DW_TAG_structure_type:
   case dwarf::DW_TAG_subroutine_type:
-  case dwarf::DW_TAG_template_alias:
   case dwarf::DW_TAG_typedef:
   case dwarf::DW_TAG_union_type:
   case dwarf::DW_TAG_ptr_to_member_type:
@@ -117,9 +116,8 @@ void AcceleratorRecordsSaver::save(const DWARFDebugInfoEntry *InputDieEntry,
               InputDIE.find(dwarf::DW_AT_APPLE_objc_complete_type))
               .value_or(0);
 
-      saveTypeRecord(InputDieEntry, AttrInfo.Name, OutDIE,
-                     InputDieEntry->getTag(), Hash, ObjCClassIsImplementation,
-                     TypeEntry);
+      saveTypeRecord(AttrInfo.Name, OutDIE, InputDieEntry->getTag(), Hash,
+                     ObjCClassIsImplementation, TypeEntry);
     }
   } break;
   case dwarf::DW_TAG_namespace: {
@@ -127,29 +125,28 @@ void AcceleratorRecordsSaver::save(const DWARFDebugInfoEntry *InputDieEntry,
       AttrInfo.Name =
           GlobalData.getStringPool().insert("(anonymous namespace)").first;
 
-    saveNamespaceRecord(InputDieEntry, AttrInfo.Name, OutDIE,
-                        InputDieEntry->getTag(), TypeEntry);
+    saveNamespaceRecord(AttrInfo.Name, OutDIE, InputDieEntry->getTag(),
+                        TypeEntry);
   } break;
   case dwarf::DW_TAG_imported_declaration: {
     if (AttrInfo.Name != nullptr)
-      saveNamespaceRecord(InputDieEntry, AttrInfo.Name, OutDIE,
-                          InputDieEntry->getTag(), TypeEntry);
+      saveNamespaceRecord(AttrInfo.Name, OutDIE, InputDieEntry->getTag(),
+                          TypeEntry);
   } break;
   case dwarf::DW_TAG_compile_unit:
   case dwarf::DW_TAG_lexical_block: {
     // Nothing to do.
   } break;
   default:
-    // HasLiveAddress / HasRanges below decides whether a DIE carries enough
-    // information of its own to warrant a name record; the output unit is
-    // incidental and routed by the helpers.
+    if (TypeEntry)
+      // Do not store this kind of accelerator entries for type entries.
+      return;
 
     if (AttrInfo.HasLiveAddress || AttrInfo.HasRanges) {
       if (AttrInfo.Name)
-        saveNameRecord(
-            InputDieEntry, AttrInfo.Name, OutDIE, InputDieEntry->getTag(),
-            InputDieEntry->getTag() == dwarf::DW_TAG_inlined_subroutine,
-            TypeEntry);
+        saveNameRecord(AttrInfo.Name, OutDIE, InputDieEntry->getTag(),
+                       InputDieEntry->getTag() ==
+                           dwarf::DW_TAG_inlined_subroutine);
 
       // Look for mangled name recursively if mangled name is not known yet.
       if (!AttrInfo.MangledName)
@@ -158,11 +155,9 @@ void AcceleratorRecordsSaver::save(const DWARFDebugInfoEntry *InputDieEntry,
               GlobalData.getStringPool().insert(LinkageName).first;
 
       if (AttrInfo.MangledName && AttrInfo.MangledName != AttrInfo.Name)
-        saveNameRecord(InputDieEntry, AttrInfo.MangledName, OutDIE,
-                       InputDieEntry->getTag(),
+        saveNameRecord(AttrInfo.MangledName, OutDIE, InputDieEntry->getTag(),
                        InputDieEntry->getTag() ==
-                           dwarf::DW_TAG_inlined_subroutine,
-                       TypeEntry);
+                           dwarf::DW_TAG_inlined_subroutine);
 
       // Strip template parameters from the short name.
       if (AttrInfo.Name && AttrInfo.MangledName != AttrInfo.Name &&
@@ -172,21 +167,20 @@ void AcceleratorRecordsSaver::save(const DWARFDebugInfoEntry *InputDieEntry,
           StringEntry *NameWithoutTemplateParams =
               GlobalData.getStringPool().insert(*Name).first;
 
-          saveNameRecord(InputDieEntry, NameWithoutTemplateParams, OutDIE,
-                         InputDieEntry->getTag(), true, TypeEntry);
+          saveNameRecord(NameWithoutTemplateParams, OutDIE,
+                         InputDieEntry->getTag(), true);
         }
       }
 
       if (AttrInfo.Name)
-        saveObjC(InputDieEntry, OutDIE, AttrInfo, TypeEntry);
+        saveObjC(InputDieEntry, OutDIE, AttrInfo);
     }
     break;
   }
 }
 
 void AcceleratorRecordsSaver::saveObjC(const DWARFDebugInfoEntry *InputDieEntry,
-                                       DIE *OutDIE, AttributesInfo &AttrInfo,
-                                       TypeEntry *TypeEntry) {
+                                       DIE *OutDIE, AttributesInfo &AttrInfo) {
   std::optional<ObjCSelectorNames> Names =
       getObjCNamesIfSelector(AttrInfo.Name->getKey());
   if (!Names)
@@ -194,84 +188,38 @@ void AcceleratorRecordsSaver::saveObjC(const DWARFDebugInfoEntry *InputDieEntry,
 
   StringEntry *Selector =
       GlobalData.getStringPool().insert(Names->Selector).first;
-  saveNameRecord(InputDieEntry, Selector, OutDIE, InputDieEntry->getTag(), true,
-                 TypeEntry);
+  saveNameRecord(Selector, OutDIE, InputDieEntry->getTag(), true);
   StringEntry *ClassName =
       GlobalData.getStringPool().insert(Names->ClassName).first;
-  saveObjCNameRecord(InputDieEntry, ClassName, OutDIE, InputDieEntry->getTag(),
-                     TypeEntry);
+  saveObjCNameRecord(ClassName, OutDIE, InputDieEntry->getTag());
   if (Names->ClassNameNoCategory) {
     StringEntry *ClassNameNoCategory =
         GlobalData.getStringPool().insert(*Names->ClassNameNoCategory).first;
-    saveObjCNameRecord(InputDieEntry, ClassNameNoCategory, OutDIE,
-                       InputDieEntry->getTag(), TypeEntry);
+    saveObjCNameRecord(ClassNameNoCategory, OutDIE, InputDieEntry->getTag());
   }
   if (Names->MethodNameNoCategory) {
     StringEntry *MethodNameNoCategory =
         GlobalData.getStringPool().insert(*Names->MethodNameNoCategory).first;
-    saveNameRecord(InputDieEntry, MethodNameNoCategory, OutDIE,
-                   InputDieEntry->getTag(), true, TypeEntry);
+    saveNameRecord(MethodNameNoCategory, OutDIE, InputDieEntry->getTag(), true);
   }
 }
 
-std::optional<uint64_t> AcceleratorRecordsSaver::getDefiningParentOutOffset(
-    const DWARFDebugInfoEntry *InputDieEntry) {
-  // getDieOutOffset returns this for input DIEs that were not cloned into
-  // this CU's plain DWARF (e.g. routed only into the artificial type unit).
-  // OutDieOffsetArray is zero-initialized and a real DIE never lives at
-  // offset 0 (the CU header occupies the first bytes of the unit), so 0 is
-  // an unambiguous "no plain-DWARF copy" sentinel.
-  constexpr uint64_t NotClonedInPlainDWARF = 0;
+void AcceleratorRecordsSaver::saveNameRecord(StringEntry *Name, DIE *OutDIE,
+                                             dwarf::Tag Tag,
+                                             bool AvoidForPubSections) {
+  DwarfUnit::AccelInfo Info;
 
-  std::optional<uint32_t> ParentIdx = InputDieEntry->getParentIdx();
-  if (!ParentIdx)
-    return std::nullopt;
-  // Skip parents marked as declarations; the name table should only reference
-  // definitions.
-  if (dwarf::toUnsigned(InUnit.find(*ParentIdx, dwarf::DW_AT_declaration), 0))
-    return std::nullopt;
-  uint64_t ParentOutOffset = InUnit.getDieOutOffset(*ParentIdx);
-  if (ParentOutOffset == NotClonedInPlainDWARF)
-    return std::nullopt;
-  return ParentOutOffset;
-}
-
-void AcceleratorRecordsSaver::saveNameRecord(
-    const DWARFDebugInfoEntry *InputDieEntry, StringEntry *Name, DIE *OutDIE,
-    dwarf::Tag Tag, bool AvoidForPubSections, TypeEntry *TypeEntry) {
-  if (OutUnit.isCompileUnit()) {
-    assert(TypeEntry == nullptr);
-    DwarfUnit::AccelInfo Info;
-
-    Info.Type = DwarfUnit::AccelType::Name;
-    Info.String = Name;
-    Info.OutOffset = OutDIE->getOffset();
-    Info.ParentOffset = getDefiningParentOutOffset(InputDieEntry);
-    Info.Tag = Tag;
-    Info.AvoidForPubSections = AvoidForPubSections;
-
-    OutUnit.getAsCompileUnit()->saveAcceleratorInfo(Info);
-    return;
-  }
-
-  // TODO: compute DW_IDX_parent for entries emitted into the artificial type
-  // unit (see saveNamespaceRecord).
-
-  assert(TypeEntry != nullptr);
-  TypeUnit::TypeUnitAccelInfo Info;
   Info.Type = DwarfUnit::AccelType::Name;
   Info.String = Name;
-  Info.OutOffset = 0xbaddef;
+  Info.OutOffset = OutDIE->getOffset();
   Info.Tag = Tag;
   Info.AvoidForPubSections = AvoidForPubSections;
-  Info.OutDIE = OutDIE;
-  Info.TypeEntryBodyPtr = TypeEntry->getValue().load();
 
-  OutUnit.getAsTypeUnit()->saveAcceleratorInfo(Info);
+  OutUnit.getAsCompileUnit()->saveAcceleratorInfo(Info);
 }
-void AcceleratorRecordsSaver::saveNamespaceRecord(
-    const DWARFDebugInfoEntry *InputDieEntry, StringEntry *Name, DIE *OutDIE,
-    dwarf::Tag Tag, TypeEntry *TypeEntry) {
+void AcceleratorRecordsSaver::saveNamespaceRecord(StringEntry *Name,
+                                                  DIE *OutDIE, dwarf::Tag Tag,
+                                                  TypeEntry *TypeEntry) {
   if (OutUnit.isCompileUnit()) {
     assert(TypeEntry == nullptr);
     DwarfUnit::AccelInfo Info;
@@ -279,16 +227,11 @@ void AcceleratorRecordsSaver::saveNamespaceRecord(
     Info.Type = DwarfUnit::AccelType::Namespace;
     Info.String = Name;
     Info.OutOffset = OutDIE->getOffset();
-    Info.ParentOffset = getDefiningParentOutOffset(InputDieEntry);
     Info.Tag = Tag;
 
     OutUnit.getAsCompileUnit()->saveAcceleratorInfo(Info);
     return;
   }
-
-  // TODO: compute DW_IDX_parent for entries emitted into the artificial type
-  // unit. The parent lookup via the input-side DIE tree is only valid for
-  // DIEs cloned into this CU's plain DWARF.
 
   assert(TypeEntry != nullptr);
   TypeUnit::TypeUnitAccelInfo Info;
@@ -302,44 +245,24 @@ void AcceleratorRecordsSaver::saveNamespaceRecord(
   OutUnit.getAsTypeUnit()->saveAcceleratorInfo(Info);
 }
 
-void AcceleratorRecordsSaver::saveObjCNameRecord(
-    const DWARFDebugInfoEntry *InputDieEntry, StringEntry *Name, DIE *OutDIE,
-    dwarf::Tag Tag, TypeEntry *TypeEntry) {
-  if (OutUnit.isCompileUnit()) {
-    assert(TypeEntry == nullptr);
-    DwarfUnit::AccelInfo Info;
+void AcceleratorRecordsSaver::saveObjCNameRecord(StringEntry *Name, DIE *OutDIE,
+                                                 dwarf::Tag Tag) {
+  DwarfUnit::AccelInfo Info;
 
-    Info.Type = DwarfUnit::AccelType::ObjC;
-    Info.String = Name;
-    Info.OutOffset = OutDIE->getOffset();
-    Info.ParentOffset = getDefiningParentOutOffset(InputDieEntry);
-    Info.Tag = Tag;
-    Info.AvoidForPubSections = true;
-
-    OutUnit.getAsCompileUnit()->saveAcceleratorInfo(Info);
-    return;
-  }
-
-  // TODO: compute DW_IDX_parent for entries emitted into the artificial type
-  // unit (see saveNamespaceRecord).
-
-  assert(TypeEntry != nullptr);
-  TypeUnit::TypeUnitAccelInfo Info;
   Info.Type = DwarfUnit::AccelType::ObjC;
   Info.String = Name;
-  Info.OutOffset = 0xbaddef;
+  Info.OutOffset = OutDIE->getOffset();
   Info.Tag = Tag;
   Info.AvoidForPubSections = true;
-  Info.OutDIE = OutDIE;
-  Info.TypeEntryBodyPtr = TypeEntry->getValue().load();
 
-  OutUnit.getAsTypeUnit()->saveAcceleratorInfo(Info);
+  OutUnit.getAsCompileUnit()->saveAcceleratorInfo(Info);
 }
 
-void AcceleratorRecordsSaver::saveTypeRecord(
-    const DWARFDebugInfoEntry *InputDieEntry, StringEntry *Name, DIE *OutDIE,
-    dwarf::Tag Tag, uint32_t QualifiedNameHash, bool ObjcClassImplementation,
-    TypeEntry *TypeEntry) {
+void AcceleratorRecordsSaver::saveTypeRecord(StringEntry *Name, DIE *OutDIE,
+                                             dwarf::Tag Tag,
+                                             uint32_t QualifiedNameHash,
+                                             bool ObjcClassImplementation,
+                                             TypeEntry *TypeEntry) {
   if (OutUnit.isCompileUnit()) {
     assert(TypeEntry == nullptr);
     DwarfUnit::AccelInfo Info;
@@ -347,7 +270,6 @@ void AcceleratorRecordsSaver::saveTypeRecord(
     Info.Type = DwarfUnit::AccelType::Type;
     Info.String = Name;
     Info.OutOffset = OutDIE->getOffset();
-    Info.ParentOffset = getDefiningParentOutOffset(InputDieEntry);
     Info.Tag = Tag;
     Info.QualifiedNameHash = QualifiedNameHash;
     Info.ObjcClassImplementation = ObjcClassImplementation;
@@ -355,9 +277,6 @@ void AcceleratorRecordsSaver::saveTypeRecord(
     OutUnit.getAsCompileUnit()->saveAcceleratorInfo(Info);
     return;
   }
-
-  // TODO: compute DW_IDX_parent for entries emitted into the artificial type
-  // unit (see saveNamespaceRecord).
 
   assert(TypeEntry != nullptr);
   TypeUnit::TypeUnitAccelInfo Info;

@@ -657,7 +657,8 @@ LogicalResult VariableOp::verify() {
   }
 
   auto getDecorationAttr = [op = getOperation()](spirv::Decoration decoration) {
-    return op->getAttr(spirv::getDecorationString(decoration));
+    return op->getAttr(
+        llvm::convertToSnakeFromCamelCase(stringifyDecoration(decoration)));
   };
 
   // TODO: generate these strings using ODS.
@@ -666,7 +667,8 @@ LogicalResult VariableOp::verify() {
         spirv::Decoration::BuiltIn}) {
     if (auto attr = getDecorationAttr(decoration))
       return emitOpError("cannot have '")
-             << spirv::getDecorationString(decoration)
+             << llvm::convertToSnakeFromCamelCase(
+                    stringifyDecoration(decoration))
              << "' attribute (only allowed in spirv.GlobalVariable)";
   }
 

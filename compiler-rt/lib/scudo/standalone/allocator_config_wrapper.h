@@ -51,16 +51,6 @@ template <typename AllocatorConfig> struct BaseConfig {
   }
 
 #include "allocator_config.def"
-
-  static void getConfigValues(ScopedString *Str) {
-#define BASE_OPTIONAL(TYPE, NAME, DEFAULT)                                     \
-  Str->append(#NAME);                                                          \
-  Str->append(": ");                                                           \
-  Str->append(get##NAME());                                                    \
-  Str->append("; ");
-#include "allocator_config.def"
-  }
-
 }; // BaseConfig
 
 template <typename AllocatorConfig> struct PrimaryConfig {
@@ -96,15 +86,6 @@ template <typename AllocatorConfig> struct PrimaryConfig {
   using NAME = typename NAME##Type<typename AllocatorConfig::Primary>::NAME;
 
 #include "allocator_config.def"
-
-  static void getConfigValues(ScopedString *Str) {
-#define PRIMARY_OPTIONAL(TYPE, NAME, DEFAULT)                                  \
-  Str->append(#NAME);                                                          \
-  Str->append(": ");                                                           \
-  Str->append(get##NAME());                                                    \
-  Str->append("; ");
-#include "allocator_config.def"
-  }
 
 }; // PrimaryConfig
 
@@ -148,29 +129,8 @@ template <typename AllocatorConfig> struct SecondaryConfig {
     return NAME##State<typename AllocatorConfig::Secondary>::getValue();       \
   }
 #include "allocator_config.def"
-
-    static void getConfigValues(ScopedString *Str) {
-#define SECONDARY_CACHE_OPTIONAL(TYPE, NAME, DEFAULT)                          \
-  Str->append(#NAME);                                                          \
-  Str->append(": ");                                                           \
-  Str->append(get##NAME());                                                    \
-  Str->append("; ");
-#include "allocator_config.def"
-    }
-
   }; // CacheConfig
-
-  static void getConfigValues(ScopedString *Str) {
-#define SECONDARY_OPTIONAL(TYPE, NAME, DEFAULT)                                \
-  Str->append(#NAME);                                                          \
-  Str->append(": ");                                                           \
-  Str->append(get##NAME());                                                    \
-  Str->append("; ");
-#include "allocator_config.def"
-    Str->append("\nConfig Stats Secondary Cache: ");
-    CacheConfig::getConfigValues(Str);
-  }
-}; // SecondaryConfig
+};   // SecondaryConfig
 
 #undef OPTIONAL_TEMPLATE
 #undef OPTIONAL_TEMPLATE_TYPE

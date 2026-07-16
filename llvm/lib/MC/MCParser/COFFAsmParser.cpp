@@ -79,8 +79,10 @@ class COFFAsmParser : public MCAsmParserExtension {
         ".seh_endproc");
     addDirectiveHandler<&COFFAsmParser::parseSEHDirectiveEndFuncletOrFunc>(
         ".seh_endfunclet");
-    addDirectiveHandler<&COFFAsmParser::parseSEHDirectiveSplitChained>(
-        ".seh_splitchained");
+    addDirectiveHandler<&COFFAsmParser::parseSEHDirectiveStartChained>(
+        ".seh_startchained");
+    addDirectiveHandler<&COFFAsmParser::parseSEHDirectiveEndChained>(
+        ".seh_endchained");
     addDirectiveHandler<&COFFAsmParser::parseSEHDirectiveHandler>(
         ".seh_handler");
     addDirectiveHandler<&COFFAsmParser::parseSEHDirectiveHandlerData>(
@@ -140,7 +142,8 @@ class COFFAsmParser : public MCAsmParserExtension {
   bool parseSEHDirectiveStartProc(StringRef, SMLoc);
   bool parseSEHDirectiveEndProc(StringRef, SMLoc);
   bool parseSEHDirectiveEndFuncletOrFunc(StringRef, SMLoc);
-  bool parseSEHDirectiveSplitChained(StringRef, SMLoc);
+  bool parseSEHDirectiveStartChained(StringRef, SMLoc);
+  bool parseSEHDirectiveEndChained(StringRef, SMLoc);
   bool parseSEHDirectiveHandler(StringRef, SMLoc);
   bool parseSEHDirectiveHandlerData(StringRef, SMLoc);
   bool parseSEHDirectiveAllocStack(StringRef, SMLoc);
@@ -681,9 +684,15 @@ bool COFFAsmParser::parseSEHDirectiveEndFuncletOrFunc(StringRef, SMLoc Loc) {
   return false;
 }
 
-bool COFFAsmParser::parseSEHDirectiveSplitChained(StringRef, SMLoc Loc) {
+bool COFFAsmParser::parseSEHDirectiveStartChained(StringRef, SMLoc Loc) {
   Lex();
-  getStreamer().emitWinCFISplitChained(Loc);
+  getStreamer().emitWinCFIStartChained(Loc);
+  return false;
+}
+
+bool COFFAsmParser::parseSEHDirectiveEndChained(StringRef, SMLoc Loc) {
+  Lex();
+  getStreamer().emitWinCFIEndChained(Loc);
   return false;
 }
 

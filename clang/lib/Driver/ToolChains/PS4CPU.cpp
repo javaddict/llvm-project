@@ -167,8 +167,8 @@ void tools::PS4cpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   // LTO indeed occurs.
   if (Args.hasFlag(options::OPT_funified_lto, options::OPT_fno_unified_lto,
                    true))
-    CmdArgs.push_back(TC.getLTOMode(Args) == LTOK_Thin ? "--lto=thin"
-                                                       : "--lto=full");
+    CmdArgs.push_back(D.getLTOMode() == LTOK_Thin ? "--lto=thin"
+                                                  : "--lto=full");
   if (UseJMC)
     AddLTOFlag("-enable-jmc-instrument");
 
@@ -348,8 +348,8 @@ void tools::PS5cpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   if (Args.hasFlag(options::OPT_funified_lto, options::OPT_fno_unified_lto,
                    true))
-    CmdArgs.push_back(TC.getLTOMode(Args) == LTOK_Thin ? "--lto=thin"
-                                                       : "--lto=full");
+    CmdArgs.push_back(D.getLTOMode() == LTOK_Thin ? "--lto=thin"
+                                                  : "--lto=full");
 
   if (Args.hasFlag(options::OPT_ffat_lto_objects,
                    options::OPT_fno_fat_lto_objects, false))
@@ -560,10 +560,8 @@ Tool *toolchains::PS5CPU::buildLinker() const {
   return new tools::PS5cpu::Linker(*this);
 }
 
-SanitizerMask toolchains::PS4PS5Base::getSupportedSanitizers(
-    StringRef BoundArch, Action::OffloadKind DeviceOffloadKind) const {
-  SanitizerMask Res =
-      ToolChain::getSupportedSanitizers(BoundArch, DeviceOffloadKind);
+SanitizerMask toolchains::PS4PS5Base::getSupportedSanitizers() const {
+  SanitizerMask Res = ToolChain::getSupportedSanitizers();
   Res |= SanitizerKind::Address;
   Res |= SanitizerKind::PointerCompare;
   Res |= SanitizerKind::PointerSubtract;
@@ -571,10 +569,8 @@ SanitizerMask toolchains::PS4PS5Base::getSupportedSanitizers(
   return Res;
 }
 
-SanitizerMask toolchains::PS5CPU::getSupportedSanitizers(
-    StringRef BoundArch, Action::OffloadKind DeviceOffloadKind) const {
-  SanitizerMask Res =
-      PS4PS5Base::getSupportedSanitizers(BoundArch, DeviceOffloadKind);
+SanitizerMask toolchains::PS5CPU::getSupportedSanitizers() const {
+  SanitizerMask Res = PS4PS5Base::getSupportedSanitizers();
   Res |= SanitizerKind::Thread;
   return Res;
 }

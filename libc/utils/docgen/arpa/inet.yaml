@@ -1,8 +1,3 @@
-macros:
-  INET_ADDRSTRLEN:
-    in-latest-posix: ''
-  INET6_ADDRSTRLEN:
-    in-latest-posix: ''
 functions:
   htonl:
     in-latest-posix: ''

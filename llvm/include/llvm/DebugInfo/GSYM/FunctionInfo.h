@@ -12,7 +12,6 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/DebugInfo/GSYM/CallSiteInfo.h"
 #include "llvm/DebugInfo/GSYM/ExtractRanges.h"
-#include "llvm/DebugInfo/GSYM/GsymTypes.h"
 #include "llvm/DebugInfo/GSYM/InlineInfo.h"
 #include "llvm/DebugInfo/GSYM/LineTable.h"
 #include "llvm/DebugInfo/GSYM/LookupResult.h"
@@ -26,7 +25,6 @@ class raw_ostream;
 
 namespace gsym {
 
-class GsymCreator;
 class GsymReader;
 /// Function information in GSYM files encodes information for one contiguous
 /// address range. If a function has discontiguous address ranges, they will
@@ -94,7 +92,7 @@ class GsymReader;
 /// Where "N" is the number of tuples.
 struct FunctionInfo {
   AddressRange Range;
-  gsym_strp_t Name; ///< String table offset in the string table.
+  uint32_t Name; ///< String table offset in the string table.
   std::optional<LineTable> OptLineTable;
   std::optional<InlineInfo> Inline;
   std::optional<MergedFunctionsInfo> MergedFunctions;
@@ -104,8 +102,8 @@ struct FunctionInfo {
   /// GSYM file.
   SmallString<32> EncodingCache;
 
-  FunctionInfo(uint64_t Addr = 0, uint64_t Size = 0, gsym_strp_t Name = 0)
-      : Range(Addr, Addr + Size), Name(Name) {}
+  FunctionInfo(uint64_t Addr = 0, uint64_t Size = 0, uint32_t N = 0)
+      : Range(Addr, Addr + Size), Name(N) {}
 
   /// Query if a FunctionInfo has rich debug info.
   ///
@@ -141,7 +139,7 @@ struct FunctionInfo {
   ///
   /// \returns An FunctionInfo or an error describing the issue that was
   /// encountered during decoding.
-  LLVM_ABI static llvm::Expected<FunctionInfo> decode(GsymDataExtractor &Data,
+  LLVM_ABI static llvm::Expected<FunctionInfo> decode(DataExtractor &Data,
                                                       uint64_t BaseAddr);
 
   /// Encode this object into FileWriter stream.
@@ -171,7 +169,7 @@ struct FunctionInfo {
   ///
   /// \returns The size in bytes of the FunctionInfo if it were to be encoded
   /// into a byte stream.
-  LLVM_ABI uint64_t cacheEncoding(GsymCreator &GC);
+  LLVM_ABI uint64_t cacheEncoding();
 
   /// Lookup an address within a FunctionInfo object's data stream.
   ///
@@ -191,7 +189,7 @@ struct FunctionInfo {
   ///
   /// \param Addr The address to lookup.
   ///
-  /// \param MergedFuncsData A pointer to an optional GsymDataExtractor that, if
+  /// \param MergedFuncsData A pointer to an optional DataExtractor that, if
   /// non-null, will be set to the raw data of the MergedFunctionInfo, if
   /// present.
   ///
@@ -199,9 +197,9 @@ struct FunctionInfo {
   /// encountered during decoding. An error should only be returned if the
   /// address is not contained in the FunctionInfo or if the data is corrupted.
   LLVM_ABI static llvm::Expected<LookupResult>
-  lookup(GsymDataExtractor &Data, const GsymReader &GR, uint64_t FuncAddr,
+  lookup(DataExtractor &Data, const GsymReader &GR, uint64_t FuncAddr,
          uint64_t Addr,
-         std::optional<GsymDataExtractor> *MergedFuncsData = nullptr);
+         std::optional<DataExtractor> *MergedFuncsData = nullptr);
 
   uint64_t startAddress() const { return Range.start(); }
   uint64_t endAddress() const { return Range.end(); }
@@ -217,8 +215,7 @@ struct FunctionInfo {
 
 inline bool operator==(const FunctionInfo &LHS, const FunctionInfo &RHS) {
   return LHS.Range == RHS.Range && LHS.Name == RHS.Name &&
-         LHS.OptLineTable == RHS.OptLineTable && LHS.Inline == RHS.Inline &&
-         LHS.CallSites == RHS.CallSites;
+         LHS.OptLineTable == RHS.OptLineTable && LHS.Inline == RHS.Inline;
 }
 inline bool operator!=(const FunctionInfo &LHS, const FunctionInfo &RHS) {
   return !(LHS == RHS);
@@ -234,17 +231,13 @@ inline bool operator!=(const FunctionInfo &LHS, const FunctionInfo &RHS) {
 /// inline information with the most entries will appeear last. If the inline
 /// information match, either by both function infos not having any or both
 /// being exactly the same, we will then compare line tables. Comparing line
-/// tables allows the entry with the most line entries to appear last. As a
-/// final tiebreaker, an entry that has call site information sorts after one
-/// that does not, so that within a single address range the entry with the
-/// most debug info always appears last. This ensures we are able to save the
-/// FunctionInfo with the most debug info into the GSYM file.
+/// tables allows the entry with the most line entries to appear last. This
+/// ensures we are able to save the FunctionInfo with the most debug info into
+/// the GSYM file.
 inline bool operator<(const FunctionInfo &LHS, const FunctionInfo &RHS) {
   // First sort by address range
-  const bool LHSHasCallSites = LHS.CallSites.has_value();
-  const bool RHSHasCallSites = RHS.CallSites.has_value();
-  return std::tie(LHS.Range, LHS.Inline, LHS.OptLineTable, LHSHasCallSites) <
-         std::tie(RHS.Range, RHS.Inline, RHS.OptLineTable, RHSHasCallSites);
+  return std::tie(LHS.Range, LHS.Inline, LHS.OptLineTable) <
+         std::tie(RHS.Range, RHS.Inline, RHS.OptLineTable);
 }
 
 LLVM_ABI raw_ostream &operator<<(raw_ostream &OS, const FunctionInfo &R);

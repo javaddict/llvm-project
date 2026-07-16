@@ -14,8 +14,7 @@
 
 namespace clang::tidy::bugprone {
 
-/// Checks that argument comments match parameter names and can optionally add
-/// missing comments for literals, init-lists, and constructed temporaries.
+/// Checks that argument comments match parameter names.
 ///
 /// The check understands argument comments in the form `/*parameter_name=*/`
 /// that are placed right before the argument.
@@ -29,8 +28,7 @@ namespace clang::tidy::bugprone {
 ///   'foo'
 /// \endcode
 ///
-/// The check tries to detect typos and suggest automated fixes for them. It can
-/// also insert missing comments for configured argument kinds.
+/// The check tries to detect typos and suggest automated fixes for them.
 class ArgumentCommentCheck : public ClangTidyCheck {
 public:
   ArgumentCommentCheck(StringRef Name, ClangTidyContext *Context);
@@ -40,31 +38,22 @@ public:
   void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
 
 private:
-  enum class CommentKind {
-    None,
-    Literal,
-    NonLiteral,
-  };
-
   const unsigned StrictMode : 1;
   const unsigned IgnoreSingleArgument : 1;
-  const unsigned CommentAnonymousInitLists : 1;
   const unsigned CommentBoolLiterals : 1;
-  const unsigned CommentCharacterLiterals : 1;
-  const unsigned CommentFloatLiterals : 1;
   const unsigned CommentIntegerLiterals : 1;
-  const unsigned CommentNullPtrs : 1;
-  const unsigned CommentParenthesizedTemporaries : 1;
+  const unsigned CommentFloatLiterals : 1;
   const unsigned CommentStringLiterals : 1;
-  const unsigned CommentTypedInitLists : 1;
   const unsigned CommentUserDefinedLiterals : 1;
+  const unsigned CommentCharacterLiterals : 1;
+  const unsigned CommentNullPtrs : 1;
   llvm::Regex IdentRE;
 
   void checkCallArgs(ASTContext *Ctx, const FunctionDecl *Callee,
                      SourceLocation ArgBeginLoc,
                      llvm::ArrayRef<const Expr *> Args);
 
-  CommentKind shouldAddComment(const Expr *Arg) const;
+  bool shouldAddComment(const Expr *Arg) const;
 };
 
 } // namespace clang::tidy::bugprone

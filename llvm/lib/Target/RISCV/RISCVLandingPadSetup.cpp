@@ -13,7 +13,6 @@
 
 #include "RISCV.h"
 #include "RISCVInstrInfo.h"
-#include "RISCVMachineFunctionInfo.h"
 #include "RISCVSubtarget.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -49,7 +48,7 @@ bool RISCVLandingPadSetup::runOnMachineFunction(MachineFunction &MF) {
   const auto &STI = MF.getSubtarget<RISCVSubtarget>();
   const RISCVInstrInfo &TII = *STI.getInstrInfo();
 
-  if (!MF.getInfo<RISCVMachineFunctionInfo>()->hasCFProtectionBranch())
+  if (!STI.hasStdExtZicfilp())
     return false;
 
   uint32_t Label = 0;
@@ -67,9 +66,9 @@ bool RISCVLandingPadSetup::runOnMachineFunction(MachineFunction &MF) {
   bool Changed = false;
   for (MachineBasicBlock &MBB : MF)
     for (MachineInstr &MI : llvm::make_early_inc_range(MBB)) {
-      if (MI.getOpcode() != RISCV::PseudoBRIND &&
-          MI.getOpcode() != RISCV::PseudoCALLIndirect &&
-          MI.getOpcode() != RISCV::PseudoTAILIndirect)
+      if (MI.getOpcode() != RISCV::PseudoBRINDNonX7 &&
+          MI.getOpcode() != RISCV::PseudoCALLIndirectNonX7 &&
+          MI.getOpcode() != RISCV::PseudoTAILIndirectNonX7)
         continue;
       BuildMI(MBB, MI, MI.getDebugLoc(), TII.get(RISCV::LUI), RISCV::X7)
           .addImm(Label);

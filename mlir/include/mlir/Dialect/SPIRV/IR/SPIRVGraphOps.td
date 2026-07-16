@@ -116,7 +116,7 @@ def InGraphScope : PredOpTrait<
 
 // -----
 
-def SPIRV_GraphConstantARMOp : SPIRV_GraphARMOp<"GraphConstant", [InGraphScope, Pure]> {
+def SPIRV_GraphConstantARMOp : SPIRV_GraphARMOp<"GraphConstant", [InGraphScope, Pure, ConstantLike]> {
   let summary = "Declare a graph constant.";
 
   let description = [{

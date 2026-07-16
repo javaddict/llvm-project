@@ -138,7 +138,7 @@ public:
   LLVM_ABI GlobalsAAResult run(Module &M, ModuleAnalysisManager &AM);
 };
 
-struct RecomputeGlobalsAAPass : OptionalPassInfoMixin<RecomputeGlobalsAAPass> {
+struct RecomputeGlobalsAAPass : PassInfoMixin<RecomputeGlobalsAAPass> {
   LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
 

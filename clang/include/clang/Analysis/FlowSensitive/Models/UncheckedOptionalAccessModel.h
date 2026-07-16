@@ -62,9 +62,8 @@ class UncheckedOptionalAccessModel
 public:
   UncheckedOptionalAccessModel(ASTContext &Ctx, dataflow::Environment &Env);
 
-  /// Returns a matcher for calls to optional classes diagnosed by this model.
-  static ast_matchers::StatementMatcher memberCallToOptionalClass();
-  static ast_matchers::StatementMatcher operatorCallToOptionalClass();
+  /// Returns a matcher for the optional classes covered by this model.
+  static ast_matchers::DeclarationMatcher optionalClassDecl();
 
   static UncheckedOptionalAccessLattice initialElement() { return {}; }
 

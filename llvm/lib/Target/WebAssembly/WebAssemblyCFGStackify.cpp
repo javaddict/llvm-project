@@ -34,6 +34,7 @@
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
+#include "llvm/CodeGen/WasmEHFuncInfo.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/Target/TargetMachine.h"
 using namespace llvm;
@@ -1576,18 +1577,6 @@ static void splitEndLoopBB(MachineBasicBlock *EndTryTableBB) {
   EndLoopBB->addSuccessor(EndTryTableBB);
 }
 
-// Print the BB name in the form of bb.NUMBER.ORIGINAL_NAME.
-// e.g., bb.3.catch.start
-[[maybe_unused]] static std::string getBBName(const MachineBasicBlock *MBB) {
-  std::string Name = "bb.";
-  Name += Twine(MBB->getNumber()).str();
-  if (MBB->getBasicBlock()) {
-    Name += ".";
-    Name += MBB->getBasicBlock()->getName();
-  }
-  return Name;
-}
-
 bool WebAssemblyCFGStackify::fixCallUnwindMismatches(MachineFunction &MF) {
   // This function is used for both the legacy EH and the standard (exnref) EH,
   // and the reason we have unwind mismatches is the same for the both of them,
@@ -1804,7 +1793,7 @@ bool WebAssemblyCFGStackify::fixCallUnwindMismatches(MachineFunction &MF) {
   //
   // Now if bar() throws, it is going to end up in bb2, when it is supposed
   // throw up to the caller. We solve this problem in the same way, but in this
-  // case 'catch_all_ref's immediate argument is the number of block depths + 1,
+  // case 'delegate's immediate argument is the number of block depths + 1,
   // which means it rethrows to the caller.
   // block exnref                       ;; (new)
   //   block
@@ -1932,10 +1921,10 @@ bool WebAssemblyCFGStackify::fixCallUnwindMismatches(MachineFunction &MF) {
       // If not, record the range.
       UnwindDestToTryRanges[UnwindDest].push_back(
           TryRange(RangeBegin, RangeEnd));
-      LLVM_DEBUG(dbgs() << "- Call unwind mismatch: MBB = " << getBBName(&MBB)
+      LLVM_DEBUG(dbgs() << "- Call unwind mismatch: MBB = " << MBB.getName()
                         << "\nCall = " << MI
-                        << "\nOriginal dest = " << getBBName(UnwindDest)
-                        << "  Current dest = " << getBBName(EHPadStack.back())
+                        << "\nOriginal dest = " << UnwindDest->getName()
+                        << "  Current dest = " << EHPadStack.back()->getName()
                         << "\n\n");
     }
   }
@@ -1954,11 +1943,11 @@ bool WebAssemblyCFGStackify::fixCallUnwindMismatches(MachineFunction &MF) {
     UnwindDestToTryRanges[getFakeCallerBlock(MF)].push_back(
         TryRange(RangeBegin, RangeEnd));
     LLVM_DEBUG(dbgs() << "- Call unwind mismatch: MBB = "
-                      << getBBName(RangeBegin->getParent())
+                      << RangeBegin->getParent()->getName()
                       << "\nRange begin = " << *RangeBegin
                       << "Range end = " << *RangeEnd
                       << "\nOriginal dest = caller  Current dest = "
-                      << getBBName(CurrentDest) << "\n\n");
+                      << CurrentDest->getName() << "\n\n");
     RangeBegin = RangeEnd = nullptr; // Reset range pointers
   };
 
@@ -2071,6 +2060,24 @@ bool WebAssemblyCFGStackify::fixCallUnwindMismatches(MachineFunction &MF) {
   return true;
 }
 
+// Returns the single destination of try_table, if there is one. All try_table
+// we generate in this pass has a single destination, i.e., a single catch
+// clause.
+static MachineBasicBlock *getSingleUnwindDest(const MachineInstr *TryTable) {
+  if (TryTable->getOperand(1).getImm() != 1)
+    return nullptr;
+  switch (TryTable->getOperand(2).getImm()) {
+  case wasm::WASM_OPCODE_CATCH:
+  case wasm::WASM_OPCODE_CATCH_REF:
+    return TryTable->getOperand(4).getMBB();
+  case wasm::WASM_OPCODE_CATCH_ALL:
+  case wasm::WASM_OPCODE_CATCH_ALL_REF:
+    return TryTable->getOperand(3).getMBB();
+  default:
+    llvm_unreachable("try_table: Invalid catch clause\n");
+  }
+}
+
 bool WebAssemblyCFGStackify::fixCatchUnwindMismatches(MachineFunction &MF) {
   // This function is used for both the legacy EH and the standard (exnref) EH,
   // and the reason we have unwind mismatches is the same for the both of them,
@@ -2172,34 +2179,8 @@ bool WebAssemblyCFGStackify::fixCatchUnwindMismatches(MachineFunction &MF) {
   // The right destination may be another EH pad or the caller. (The example
   // here shows the case it is the caller.)
 
-  // Returns whether the next unwind destination exists when an exception is not
-  // caught by the given EHPad. It is guaranteed that the next successor of the
-  // given EHPad's predecessor is the next unwind destination, due to the order
-  // we add successors in findUnwindDestinations in SelectionDAGBuilder.
-  auto HasUnwindDest = [&](const MachineBasicBlock *EHPad) {
-    assert(!EHPad->pred_empty() && "EHPad has no predecessors");
-    auto *InvokeBB = *EHPad->pred_begin();
-    for (auto I = InvokeBB->succ_begin(), E = InvokeBB->succ_end(); I != E; ++I)
-      if (*I == EHPad)
-        return std::next(I) != E;
-    llvm_unreachable("EHPad not found in its predecessor's successors");
-  };
-
-  // Returns the next unwind destination when an exception is not caught by the
-  // given EHPad. Returns nullptr when it doesn't exist.
-  auto GetUnwindDest = [&](const MachineBasicBlock *EHPad) {
-    assert(!EHPad->pred_empty() && "EHPad has no predecessors");
-    auto *InvokeBB = *EHPad->pred_begin();
-    for (auto I = InvokeBB->succ_begin(), E = InvokeBB->succ_end(); I != E;
-         ++I) {
-      if (*I == EHPad) {
-        auto *Next = std::next(I);
-        return Next == E ? nullptr : *Next;
-      }
-    }
-    llvm_unreachable("EHPad not found in its predecessor's successors");
-  };
-
+  const auto *EHInfo = MF.getWasmEHFuncInfo();
+  assert(EHInfo);
   SmallVector<const MachineBasicBlock *, 8> EHPadStack;
   // For EH pads that have catch unwind mismatches, a map of <EH pad, its
   // correct unwind destination>.
@@ -2207,12 +2188,24 @@ bool WebAssemblyCFGStackify::fixCatchUnwindMismatches(MachineFunction &MF) {
 
   for (auto &MBB : reverse(MF)) {
     for (auto &MI : reverse(MBB)) {
-      if (WebAssembly::isTry(MI.getOpcode())) {
+      if (MI.getOpcode() == WebAssembly::TRY)
         EHPadStack.pop_back();
-      } else if (MI.getOpcode() == WebAssembly::DELEGATE) {
+      else if (MI.getOpcode() == WebAssembly::TRY_TABLE) {
+        // We want to exclude try_tables created in fixCallUnwindMismatches.
+        // Check if the try_table's unwind destination matches the EH pad stack
+        // top. If it is created in fixCallUnwindMismatches, it wouldn't.
+        if (getSingleUnwindDest(&MI) == EHPadStack.back())
+          EHPadStack.pop_back();
+      } else if (MI.getOpcode() == WebAssembly::DELEGATE)
         EHPadStack.push_back(&MBB);
-      } else if (WebAssembly::isCatch(MI.getOpcode())) {
+      else if (WebAssembly::isCatch(MI.getOpcode())) {
         auto *EHPad = &MBB;
+
+        // If the BB has a catch pseudo instruction but is not marked as an EH
+        // pad, it's a trampoline BB we created in fixCallUnwindMismatches. Skip
+        // it.
+        if (!EHPad->isEHPad())
+          continue;
 
         // catch_all always catches an exception, so we don't need to do
         // anything
@@ -2221,8 +2214,8 @@ bool WebAssemblyCFGStackify::fixCatchUnwindMismatches(MachineFunction &MF) {
 
         // This can happen when the unwind dest was removed during the
         // optimization, e.g. because it was unreachable.
-        else if (EHPadStack.empty() && HasUnwindDest(EHPad)) {
-          LLVM_DEBUG(dbgs() << "EHPad (" << getBBName(EHPad)
+        else if (EHPadStack.empty() && EHInfo->hasUnwindDest(EHPad)) {
+          LLVM_DEBUG(dbgs() << "EHPad (" << EHPad->getName()
                             << "'s unwind destination does not exist anymore"
                             << "\n\n");
         }
@@ -2230,24 +2223,24 @@ bool WebAssemblyCFGStackify::fixCatchUnwindMismatches(MachineFunction &MF) {
         // The EHPad's next unwind destination is the caller, but we incorrectly
         // unwind to another EH pad.
         else if (!EHPadStack.empty() && EHPadStack.back() != FakeCallerBB &&
-                 !HasUnwindDest(EHPad)) {
+                 !EHInfo->hasUnwindDest(EHPad)) {
           EHPadToUnwindDest[EHPad] = getFakeCallerBlock(MF);
           LLVM_DEBUG(dbgs()
-                     << "- Catch unwind mismatch:\nEHPad = " << getBBName(EHPad)
+                     << "- Catch unwind mismatch:\nEHPad = " << EHPad->getName()
                      << "  Original dest = caller  Current dest = "
-                     << getBBName(EHPadStack.back()) << "\n\n");
+                     << EHPadStack.back()->getName() << "\n\n");
         }
 
         // The EHPad's next unwind destination is an EH pad, whereas we
         // incorrectly unwind to another EH pad.
-        else if (!EHPadStack.empty() && HasUnwindDest(EHPad)) {
-          auto *UnwindDest = GetUnwindDest(EHPad);
+        else if (!EHPadStack.empty() && EHInfo->hasUnwindDest(EHPad)) {
+          auto *UnwindDest = EHInfo->getUnwindDest(EHPad);
           if (EHPadStack.back() != UnwindDest) {
             EHPadToUnwindDest[EHPad] = UnwindDest;
             LLVM_DEBUG(dbgs() << "- Catch unwind mismatch:\nEHPad = "
-                              << getBBName(EHPad) << "  Original dest = "
-                              << getBBName(UnwindDest) << "  Current dest = "
-                              << getBBName(EHPadStack.back()) << "\n\n");
+                              << EHPad->getName() << "  Original dest = "
+                              << UnwindDest->getName() << "  Current dest = "
+                              << EHPadStack.back()->getName() << "\n\n");
           }
         }
 
@@ -2366,6 +2359,7 @@ void WebAssemblyCFGStackify::recalculateScopeTops(MachineFunction &MF) {
   // Renumber BBs and recalculate ScopeTop info because new BBs might have been
   // created and inserted during fixing unwind mismatches.
   MF.RenumberBlocks();
+  MDT->updateBlockNumbers();
   ScopeTops.clear();
   ScopeTops.resize(MF.getNumBlockIDs());
   for (auto &MBB : reverse(MF)) {
@@ -2512,11 +2506,11 @@ void WebAssemblyCFGStackify::placeMarkers(MachineFunction &MF) {
   for (auto &MBB : MF)
     placeLoopMarker(MBB);
 
-  const MCAsmInfo &MCAI = MF.getTarget().getMCAsmInfo();
+  const MCAsmInfo *MCAI = MF.getTarget().getMCAsmInfo();
   for (auto &MBB : MF) {
     if (MBB.isEHPad()) {
       // Place the TRY/TRY_TABLE for MBB if MBB is the EH pad of an exception.
-      if (MCAI.getExceptionHandlingType() == ExceptionHandling::Wasm &&
+      if (MCAI->getExceptionHandlingType() == ExceptionHandling::Wasm &&
           MF.getFunction().hasPersonalityFn()) {
         if (WebAssembly::WasmUseLegacyEH)
           placeTryMarker(MBB);
@@ -2529,7 +2523,7 @@ void WebAssemblyCFGStackify::placeMarkers(MachineFunction &MF) {
     }
   }
 
-  if (MCAI.getExceptionHandlingType() == ExceptionHandling::Wasm &&
+  if (MCAI->getExceptionHandlingType() == ExceptionHandling::Wasm &&
       MF.getFunction().hasPersonalityFn()) {
     const auto &TII = *MF.getSubtarget<WebAssemblySubtarget>().getInstrInfo();
     // Add an 'unreachable' after 'end_try_table's.
@@ -2700,7 +2694,7 @@ bool WebAssemblyCFGStackify::runOnMachineFunction(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "********** CFG Stackifying **********\n"
                        "********** Function: "
                     << MF.getName() << '\n');
-  const MCAsmInfo &MCAI = MF.getTarget().getMCAsmInfo();
+  const MCAsmInfo *MCAI = MF.getTarget().getMCAsmInfo();
   MDT = &getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
 
   releaseMemory();
@@ -2713,7 +2707,7 @@ bool WebAssemblyCFGStackify::runOnMachineFunction(MachineFunction &MF) {
   placeMarkers(MF);
 
   // Remove unnecessary instructions possibly introduced by try/end_trys.
-  if (MCAI.getExceptionHandlingType() == ExceptionHandling::Wasm &&
+  if (MCAI->getExceptionHandlingType() == ExceptionHandling::Wasm &&
       MF.getFunction().hasPersonalityFn() && WebAssembly::WasmUseLegacyEH)
     removeUnnecessaryInstrs(MF);
 

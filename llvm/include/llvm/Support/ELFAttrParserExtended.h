@@ -25,7 +25,7 @@ class ScopedPrinter;
 class LLVM_ABI ELFExtendedAttrParser : public ELFAttributeParser {
 protected:
   ScopedPrinter *Sw;
-  DataExtractor De{ArrayRef<uint8_t>{}, true};
+  DataExtractor De{ArrayRef<uint8_t>{}, true, 0};
   DataExtractor::Cursor Cursor{0};
 
   // Data structure for holding Extended ELF Build Attribute subsection

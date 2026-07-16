@@ -14,7 +14,7 @@
 
 // pair<iterator, bool> insert( value_type&& v);  // C++17 and later
 // template <class P>
-//   constexpr pair<iterator, bool> insert(P&& p); // constexpr since C++26
+//   pair<iterator, bool> insert(P&& p);
 
 #include <map>
 #include <cassert>
@@ -24,7 +24,7 @@
 #include "test_macros.h"
 
 template <class Container, class Pair>
-TEST_CONSTEXPR_CXX26 bool do_insert_rv_test() {
+void do_insert_rv_test() {
   typedef Container M;
   typedef Pair P;
   typedef std::pair<typename M::iterator, bool> R;
@@ -56,11 +56,9 @@ TEST_CONSTEXPR_CXX26 bool do_insert_rv_test() {
   assert(m.size() == 3);
   assert(r.first->first == 3);
   assert(r.first->second == 3);
-
-  return true;
 }
 
-TEST_CONSTEXPR_CXX26 bool test() {
+int main(int, char**) {
   do_insert_rv_test<std::map<int, MoveOnly>, std::pair<int, MoveOnly>>();
   do_insert_rv_test<std::map<int, MoveOnly>, std::pair<const int, MoveOnly>>();
 
@@ -103,13 +101,6 @@ TEST_CONSTEXPR_CXX26 bool test() {
     assert(r.first->first == 3);
     assert(r.first->second == 3);
   }
-  return true;
-}
 
-int main(int, char**) {
-  test();
-#if TEST_STD_VER >= 26
-  static_assert(test());
-#endif
   return 0;
 }

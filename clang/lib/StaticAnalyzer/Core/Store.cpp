@@ -43,11 +43,11 @@ StoreManager::StoreManager(ProgramStateManager &stateMgr)
       MRMgr(svalBuilder.getRegionManager()), Ctx(stateMgr.getContext()) {}
 
 BindResult StoreManager::enterStackFrame(Store OldStore, const CallEvent &Call,
-                                         const StackFrame *SF) {
+                                         const StackFrameContext *LCtx) {
   BindResult Result{StoreRef(OldStore, *this), {}};
 
   SmallVector<CallEvent::FrameBindingTy, 16> InitialBindings;
-  Call.getInitialStackFrameContents(SF, InitialBindings);
+  Call.getInitialStackFrameContents(LCtx, InitialBindings);
 
   for (const auto &[Location, Val] : InitialBindings) {
     Store S = Result.ResultingStore.getStore();

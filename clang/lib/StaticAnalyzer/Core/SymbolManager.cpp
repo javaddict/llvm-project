@@ -115,16 +115,14 @@ const Stmt *SymbolConjured::getStmt() const {
     return Elem->castAs<CFGTemporaryDtor>().getBindTemporaryExpr();
   case CFGElement::CleanupFunction:
     return nullptr;
-  case CFGElement::FullExprCleanup:
-    return nullptr;
   }
   return nullptr;
 }
 
 void SymbolConjured::dumpToStream(raw_ostream &os) const {
-  os << getKindStr() << getSymbolID() << '{' << T << ", LC" << SF->getID();
+  os << getKindStr() << getSymbolID() << '{' << T << ", LC" << LCtx->getID();
   if (auto *S = getStmt())
-    os << ", S" << S->getID(SF->getDecl()->getASTContext());
+    os << ", S" << S->getID(LCtx->getDecl()->getASTContext());
   else
     os << ", no stmt";
   os << ", #" << Count << '}';
@@ -386,14 +384,15 @@ bool SymbolReaper::isLive(SymbolRef sym) {
   return KnownLive;
 }
 
-bool SymbolReaper::isLive(const Expr *ExprVal, const StackFrame *ESF) const {
-  if (SF == nullptr)
+bool
+SymbolReaper::isLive(const Expr *ExprVal, const LocationContext *ELCtx) const {
+  if (LCtx == nullptr)
     return false;
 
-  if (SF != ESF) {
-    // If the reaper's stack frame is a parent of the expression's
-    // stack frame, then the expression value is now "out of scope".
-    if (SF->isParentOf(ESF))
+  if (LCtx != ELCtx) {
+    // If the reaper's location context is a parent of the expression's
+    // location context, then the expression value is now "out of scope".
+    if (LCtx->isParentOf(ELCtx))
       return false;
     return true;
   }
@@ -403,20 +402,20 @@ bool SymbolReaper::isLive(const Expr *ExprVal, const StackFrame *ESF) const {
   if (!Loc)
     return true;
 
-  return SF->getAnalysis<RelaxedLiveVariables>()->isLive(Loc, ExprVal);
+  return LCtx->getAnalysis<RelaxedLiveVariables>()->isLive(Loc, ExprVal);
 }
 
 bool SymbolReaper::isLive(const VarRegion *VR, bool includeStoreBindings) const{
-  const StackFrame *VarSF = VR->getStackFrame();
+  const StackFrameContext *VarContext = VR->getStackFrame();
 
-  if (!VarSF)
+  if (!VarContext)
     return true;
 
-  if (!SF)
+  if (!LCtx)
     return false;
-  const StackFrame *CurrentSF = SF;
+  const StackFrameContext *CurrentContext = LCtx->getStackFrame();
 
-  if (VarSF == CurrentSF) {
+  if (VarContext == CurrentContext) {
     // If no statement is provided, everything is live.
     if (!Loc)
       return true;
@@ -426,7 +425,7 @@ bool SymbolReaper::isLive(const VarRegion *VR, bool includeStoreBindings) const{
     if (isa<CXXInheritedCtorInitExpr>(Loc))
       return true;
 
-    if (SF->getAnalysis<RelaxedLiveVariables>()->isLive(Loc, VR->getDecl()))
+    if (LCtx->getAnalysis<RelaxedLiveVariables>()->isLive(Loc, VR->getDecl()))
       return true;
 
     if (!includeStoreBindings)
@@ -450,5 +449,5 @@ bool SymbolReaper::isLive(const VarRegion *VR, bool includeStoreBindings) const{
     return false;
   }
 
-  return VarSF->isParentOf(CurrentSF);
+  return VarContext->isParentOf(CurrentContext);
 }

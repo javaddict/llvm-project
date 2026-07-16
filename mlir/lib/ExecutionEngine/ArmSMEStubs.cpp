@@ -34,6 +34,11 @@
 
 extern "C" {
 
+bool MLIR_ARMSMEABISTUBS_EXPORTED __aarch64_sme_accessible() {
+  // The ArmSME tests are run within an emulator so we assume SME is available.
+  return true;
+}
+
 struct sme_state {
   int64_t x0;
   int64_t x1;

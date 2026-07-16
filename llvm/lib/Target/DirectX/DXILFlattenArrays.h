@@ -14,7 +14,7 @@
 namespace llvm {
 
 /// A pass that transforms multidimensional arrays into one-dimensional arrays.
-class DXILFlattenArrays : public OptionalPassInfoMixin<DXILFlattenArrays> {
+class DXILFlattenArrays : public PassInfoMixin<DXILFlattenArrays> {
 public:
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &);
 };

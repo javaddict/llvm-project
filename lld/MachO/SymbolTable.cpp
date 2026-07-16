@@ -433,7 +433,7 @@ static bool recoverFromUndefinedSymbol(const Undefined &sym) {
     return true;
 
   // Handle -U.
-  if (config->explicitDynamicLookups.contains(sym.getName())) {
+  if (config->explicitDynamicLookups.count(sym.getName())) {
     symtab->addDynamicLookup(sym.getName());
     return true;
   }

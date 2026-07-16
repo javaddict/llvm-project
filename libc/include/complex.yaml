@@ -1,19 +1,6 @@
 header: complex.h
-standards:
-  - stdc
-macros:
-  - macro_name: complex
-    macro_header: complex-macros.h
-  - macro_name: _Complex_I
-    macro_header: complex-macros.h
-  - macro_name: I
-    macro_header: complex-macros.h
-  - macro_name: CMPLX
-    macro_header: complex-macros.h
-  - macro_name: CMPLXF
-    macro_header: complex-macros.h
-  - macro_name: CMPLXL
-    macro_header: complex-macros.h
+header_template: complex.h.def
+macros: []
 types:
   - type_name: cfloat16
   - type_name: cfloat128

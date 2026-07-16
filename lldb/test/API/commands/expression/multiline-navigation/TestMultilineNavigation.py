@@ -36,6 +36,7 @@ class TestCase(PExpectTest):
         # and not 123 (the one we initially typed).
         self.child.expect_exact("(int) $0 = 124")
 
+        self.quit()
 
     @skipIfAsan
     @skipIfEditlineSupportMissing
@@ -67,6 +68,7 @@ class TestCase(PExpectTest):
         # us back to the second line.
         self.child.expect_exact("(int) $0 = 334")
 
+        self.quit()
 
     @skipIfAsan
     @skipIfEditlineSupportMissing
@@ -99,3 +101,4 @@ class TestCase(PExpectTest):
         self.child.send("\n\n")
         self.expect_prompt()
 
+        self.quit()

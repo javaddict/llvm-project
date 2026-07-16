@@ -42,7 +42,6 @@
 #include "mlir/Reducer/ReductionPatternInterface.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include <cstdint>
-#include <memory>
 #include <numeric>
 #include <optional>
 
@@ -244,24 +243,6 @@ getDynamicGenericOp(TestDialect *dialect) {
 }
 
 static std::unique_ptr<DynamicOpDefinition>
-getDynamicTerminatorOp(TestDialect *dialect) {
-  auto def = DynamicOpDefinition::get(
-      "dynamic_terminator", dialect, [](Operation *op) { return success(); },
-      [](Operation *op) { return success(); });
-  def->addTrait(std::make_unique<DynamicOpTraits::IsTerminator>());
-  return def;
-}
-
-static std::unique_ptr<DynamicOpDefinition>
-getDynamicNoTerminatorOp(TestDialect *dialect) {
-  auto def = DynamicOpDefinition::get(
-      "dynamic_noterminator", dialect, [](Operation *op) { return success(); },
-      [](Operation *op) { return success(); });
-  def->addTrait(std::make_unique<DynamicOpTraits::NoTerminator>());
-  return def;
-}
-
-static std::unique_ptr<DynamicOpDefinition>
 getDynamicOneOperandTwoResultsOp(TestDialect *dialect) {
   return DynamicOpDefinition::get(
       "dynamic_one_operand_two_results", dialect,
@@ -348,8 +329,6 @@ void TestDialect::initialize() {
   addOperations<ManualCppOpWithFold>();
   registerTestDialectOperations(this);
   registerDynamicOp(getDynamicGenericOp(this));
-  registerDynamicOp(getDynamicTerminatorOp(this));
-  registerDynamicOp(getDynamicNoTerminatorOp(this));
   registerDynamicOp(getDynamicOneOperandTwoResultsOp(this));
   registerDynamicOp(getDynamicCustomParserPrinterOp(this));
   registerInterfaces();

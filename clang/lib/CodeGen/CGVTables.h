@@ -154,6 +154,9 @@ public:
 
   /// Return the type used as components for a vtable.
   llvm::Type *getVTableComponentType() const;
+
+  /// Return true if the relative vtable layout is used.
+  bool useRelativeLayout() const;
 };
 
 } // end namespace CodeGen

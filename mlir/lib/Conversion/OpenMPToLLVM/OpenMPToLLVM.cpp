@@ -154,9 +154,6 @@ void mlir::populateOpenMPToLLVMConversionPatterns(LLVMTypeConverter &converter,
   // discarded on lowering to LLVM-IR from the OpenMP dialect.
   converter.addConversion(
       [&](omp::MapBoundsType type) -> Type { return type; });
-  converter.addConversion(
-      [&](omp::AffinityEntryType type) -> Type { return type; });
-  converter.addConversion([&](omp::IteratedType type) -> Type { return type; });
 
   // Add conversions for all OpenMP operations.
   addOpenMPOpConversions<
@@ -201,9 +198,7 @@ void ConvertOpenMPToLLVMPass::runOnOperation() {
 namespace {
 /// Implement the interface to convert OpenMP to LLVM.
 struct OpenMPToLLVMDialectInterface : public ConvertToLLVMPatternInterface {
-  OpenMPToLLVMDialectInterface(Dialect *dialect)
-      : ConvertToLLVMPatternInterface(dialect) {}
-
+  using ConvertToLLVMPatternInterface::ConvertToLLVMPatternInterface;
   void loadDependentDialects(MLIRContext *context) const final {
     context->loadDialect<LLVM::LLVMDialect>();
   }

@@ -1,8 +1,8 @@
 group("unittests") {
   deps = [
     "Core:CoreTests",
-    "Passes:PassTests",
     "Profile:ProfileTests",
+    "Passes:PassTests",
   ]
   testonly = true
 }

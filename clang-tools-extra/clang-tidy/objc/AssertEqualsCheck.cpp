@@ -46,7 +46,7 @@ void AssertEqualsCheck::check(
       diag(MacroCallsite,
            (Twine("use ") + TargetName + " for comparing objects").str())
           << FixItHint::CreateReplacement(
-                 CharSourceRange::getCharRange(
+                 clang::CharSourceRange::getCharRange(
                      MacroCallsite,
                      MacroCallsite.getLocWithOffset(CurrName.size())),
                  TargetName);

@@ -1,7 +1,7 @@
 // RUN: %check_clang_tidy -std=c++14-or-later %s modernize-make-unique %t -- -- -I %S/Inputs/smart-ptr
 
 #include "unique_ptr.h"
-#include <vector>
+#include "initializer_list.h"
 // CHECK-FIXES: #include <memory>
 
 struct Base {

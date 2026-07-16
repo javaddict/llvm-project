@@ -50,11 +50,11 @@ public:
     LaneBitmask DefinedLanes;
   };
 
-  LLVM_ABI DeadLaneDetector(const MachineRegisterInfo *MRI,
-                            const TargetRegisterInfo *TRI);
+  DeadLaneDetector(const MachineRegisterInfo *MRI,
+                   const TargetRegisterInfo *TRI);
 
   /// Update the \p DefinedLanes and the \p UsedLanes for all virtual registers.
-  LLVM_ABI void computeSubRegisterLaneBitInfo();
+  void computeSubRegisterLaneBitInfo();
 
   const VRegInfo &getVRegInfo(unsigned RegIdx) const {
     return VRegInfos[RegIdx];
@@ -85,15 +85,13 @@ public:
   /// Given a mask \p DefinedLanes of lanes defined at operand \p OpNum
   /// of COPY-like instruction, determine which lanes are defined at the output
   /// operand \p Def.
-  LLVM_ABI LaneBitmask transferDefinedLanes(const MachineOperand &Def,
-                                            unsigned OpNum,
-                                            LaneBitmask DefinedLanes) const;
+  LaneBitmask transferDefinedLanes(const MachineOperand &Def, unsigned OpNum,
+                                   LaneBitmask DefinedLanes) const;
 
   /// Given a mask \p UsedLanes used from the output of instruction \p MI
   /// determine which lanes are used from operand \p MO of this instruction.
-  LLVM_ABI LaneBitmask transferUsedLanes(const MachineInstr &MI,
-                                         LaneBitmask UsedLanes,
-                                         const MachineOperand &MO) const;
+  LaneBitmask transferUsedLanes(const MachineInstr &MI, LaneBitmask UsedLanes,
+                                const MachineOperand &MO) const;
 
 private:
   LaneBitmask determineInitialDefinedLanes(Register Reg);
@@ -118,10 +116,11 @@ private:
   BitVector DefinedByCopy;
 };
 
-class DetectDeadLanesPass : public RequiredPassInfoMixin<DetectDeadLanesPass> {
+class DetectDeadLanesPass : public PassInfoMixin<DetectDeadLanesPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+  static bool isRequired() { return true; }
 };
 
 } // end namespace llvm

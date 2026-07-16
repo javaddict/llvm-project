@@ -31,7 +31,6 @@
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/CycleInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Dominators.h"
@@ -197,48 +196,47 @@ static bool areBothVScale(const Value *V1, const Value *V2) {
 
 CaptureAnalysis::~CaptureAnalysis() = default;
 
-CaptureComponents SimpleCaptureAnalysis::getCapturesBefore(
-    const Value *Object, const Instruction *I, bool OrAt, bool ReturnCaptures) {
+CaptureComponents SimpleCaptureAnalysis::getCapturesBefore(const Value *Object,
+                                                           const Instruction *I,
+                                                           bool OrAt) {
   if (!isIdentifiedFunctionLocal(Object))
     return CaptureComponents::Provenance;
 
-  auto [CacheIt, Inserted] = IsCapturedCache.try_emplace(Object);
-  if (Inserted)
-    CacheIt->second = PointerMayBeCaptured(
-        Object, CaptureComponents::Provenance,
-        [](CaptureComponents CC) { return capturesFullProvenance(CC); });
+  auto [CacheIt, Inserted] =
+      IsCapturedCache.insert({Object, CaptureComponents::Provenance});
+  if (!Inserted)
+    return CacheIt->second;
 
-  return ReturnCaptures ? CacheIt->second.WithRet : CacheIt->second.WithoutRet;
+  CaptureComponents Ret = PointerMayBeCaptured(
+      Object, /*ReturnCaptures=*/false, CaptureComponents::Provenance,
+      [](CaptureComponents CC) { return capturesFullProvenance(CC); });
+  CacheIt->second = Ret;
+  return Ret;
 }
 
 static bool isNotInCycle(const Instruction *I, const DominatorTree *DT,
-                         const LoopInfo *LI, const CycleInfo *CI) {
-  if (CI)
-    return !CI->getCycle(I->getParent());
-
+                         const LoopInfo *LI) {
   BasicBlock *BB = const_cast<BasicBlock *>(I->getParent());
   SmallVector<BasicBlock *> Succs(successors(BB));
   return Succs.empty() ||
          !isPotentiallyReachableFromMany(Succs, BB, nullptr, DT, LI);
 }
 
-CaptureComponents EarliestEscapeAnalysis::getCapturesBefore(
-    const Value *Object, const Instruction *I, bool OrAt, bool ReturnCaptures) {
+CaptureComponents
+EarliestEscapeAnalysis::getCapturesBefore(const Value *Object,
+                                          const Instruction *I, bool OrAt) {
   if (!isIdentifiedFunctionLocal(Object))
     return CaptureComponents::Provenance;
 
   auto Iter = EarliestEscapes.try_emplace(Object);
   if (Iter.second) {
-    auto [EarliestInst, Res] = FindEarliestCapture(
-        Object, *DT.getRoot()->getParent(), DT, CaptureComponents::Provenance);
-    if (EarliestInst)
-      Inst2Obj[EarliestInst].push_back(Object);
-    Iter.first->second = {EarliestInst, Res};
-  }
-
-  if (ReturnCaptures) {
-    assert(!I && "Context instruction not supported if ReturnCaptures");
-    return Iter.first->second.second.WithRet;
+    std::pair<Instruction *, CaptureComponents> EarliestCapture =
+        FindEarliestCapture(Object, *DT.getRoot()->getParent(),
+                            /*ReturnCaptures=*/false, DT,
+                            CaptureComponents::Provenance);
+    if (EarliestCapture.first)
+      Inst2Obj[EarliestCapture.first].push_back(Object);
+    Iter.first->second = EarliestCapture;
   }
 
   auto IsNotCapturedBefore = [&]() {
@@ -254,14 +252,14 @@ CaptureComponents EarliestEscapeAnalysis::getCapturesBefore(
     if (I == CaptureInst) {
       if (OrAt)
         return false;
-      return isNotInCycle(I, &DT, LI, CI);
+      return isNotInCycle(I, &DT, LI);
     }
 
-    return !isPotentiallyReachable(CaptureInst, I, nullptr, &DT, LI, CI);
+    return !isPotentiallyReachable(CaptureInst, I, nullptr, &DT, LI);
   };
   if (IsNotCapturedBefore())
     return CaptureComponents::None;
-  return Iter.first->second.second.WithoutRet;
+  return Iter.first->second.second;
 }
 
 void EarliestEscapeAnalysis::removeInstruction(Instruction *I) {
@@ -622,11 +620,9 @@ BasicAAResult::DecomposeGEPExpression(const Value *V, const DataLayout &DL,
     if (Op->getOpcode() == Instruction::BitCast ||
         Op->getOpcode() == Instruction::AddrSpaceCast) {
       Value *NewV = Op->getOperand(0);
-      auto *NewVTy = NewV->getType();
-      // Don't look through casts to non-scalar-pointer types or address spaces
-      // with differing index widths.
-      if (!isa<PointerType>(NewVTy) ||
-          DL.getIndexTypeSizeInBits(NewVTy) != IndexSize) {
+      // Don't look through casts between address spaces with differing index
+      // widths.
+      if (DL.getIndexTypeSizeInBits(NewV->getType()) != IndexSize) {
         Decomposed.Base = V;
         return Decomposed;
       }
@@ -652,11 +648,7 @@ BasicAAResult::DecomposeGEPExpression(const Value *V, const DataLayout &DL,
         // because it should be in sync with CaptureTracking. Not using it may
         // cause weird miscompilations where 2 aliasing pointers are assumed to
         // noalias.
-        // Pass MustPreserveOffset=true so we exclude llvm.ptrmask, which can
-        // change the byte offset by clearing low bits and would otherwise
-        // corrupt the symbolic offset we are accumulating in `Decomposed`.
-        if (auto *RP = getArgumentAliasingToReturnedPointer(
-                Call, /*MustPreserveOffset=*/true)) {
+        if (auto *RP = getArgumentAliasingToReturnedPointer(Call, false)) {
           V = RP;
           continue;
         }
@@ -963,20 +955,6 @@ ModRefInfo BasicAAResult::getModRefInfo(const CallBase *Call,
   ModRefInfo ErrnoMR = ME.getModRef(IRMemLocation::ErrnoMem);
   ModRefInfo OtherMR = ME.getModRef(IRMemLocation::Other);
 
-  // Take into account potential synchronization effects of the call.
-  // We assume synchronization can not occur if the call does not read/write
-  // other memory (this in particular ensures that readonly/argmemonly continue
-  // to work as expected for frontends that do not emit nosync).
-  // FIXME: This should apply to all calls, but is limited to inline asm to
-  // limit impact. This ensures that inline asm memory barriers work correctly.
-  ModRefInfo SyncMR = ModRefInfo::NoModRef;
-  if (isModAndRefSet(OtherMR) && Call->maySynchronize() &&
-      Call->isInlineAsm()) {
-    SyncMR = getSyncEffects(&AAQI.AAR, Loc, AAQI);
-    if (isModAndRefSet(SyncMR))
-      return SyncMR;
-  }
-
   // An identified function-local object that does not escape can only be
   // accessed via call arguments. Reduce OtherMR (which includes accesses to
   // escaped memory) based on that.
@@ -987,8 +965,8 @@ ModRefInfo BasicAAResult::getModRefInfo(const CallBase *Call,
   // non-volatile stores for them.
   if (isModOrRefSet(OtherMR) && !isa<Constant>(Object) && Call != Object &&
       (isa<AllocaInst>(Object) || !Call->hasFnAttr(Attribute::ReturnsTwice))) {
-    CaptureComponents CC = AAQI.CA->getCapturesBefore(
-        Object, Call, /*OrAt=*/false, /*ReturnCaptures=*/false);
+    CaptureComponents CC =
+        AAQI.CA->getCapturesBefore(Object, Call, /*OrAt=*/false);
     if (capturesNothing(CC))
       OtherMR = ModRefInfo::NoModRef;
     else if (capturesReadProvenanceOnly(CC))
@@ -1020,7 +998,7 @@ ModRefInfo BasicAAResult::getModRefInfo(const CallBase *Call,
     ArgMR = NewArgMR;
   }
 
-  ModRefInfo Result = ArgMR | OtherMR | SyncMR;
+  ModRefInfo Result = ArgMR | OtherMR;
 
   // Refine accesses to errno memory.
   if ((ErrnoMR | Result) != Result) {
@@ -1309,33 +1287,19 @@ AliasResult BasicAAResult::aliasGEP(
   for (unsigned i = 0, e = DecompGEP1.VarIndices.size(); i != e; ++i) {
     const VariableGEPIndex &Index = DecompGEP1.VarIndices[i];
     const APInt &Scale = Index.Scale;
-
-    SimplifyQuery SQ(DL, DT, &AC, Index.CxtI, /*UseInstrInfo=*/true);
-    KnownBits Known = computeKnownBits(Index.Val.V, SQ);
-
     APInt ScaleForGCD = Scale;
     if (!Index.IsNSW)
       ScaleForGCD =
           APInt::getOneBitSet(Scale.getBitWidth(), Scale.countr_zero());
-
-    // If V has known trailing zeros, V is a multiple of 2^VarTZ, so
-    // V*Scale is a multiple of ScaleForGCD * 2^VarTZ. Shift ScaleForGCD
-    // left to account for this (trailing zeros compose additively through
-    // multiplication, even in Z/2^n).
-    unsigned VarTZ = Known.countMinTrailingZeros();
-    if (VarTZ > 0) {
-      unsigned MaxShift =
-          Scale.getBitWidth() - ScaleForGCD.getSignificantBits();
-      ScaleForGCD <<= std::min(VarTZ, MaxShift);
-    }
 
     if (i == 0)
       GCD = ScaleForGCD.abs();
     else
       GCD = APIntOps::GreatestCommonDivisor(GCD, ScaleForGCD.abs());
 
-    ConstantRange CR =
-        computeConstantRange(Index.Val.V, /*ForSigned=*/false, SQ);
+    ConstantRange CR = computeConstantRange(Index.Val.V, /* ForSigned */ false,
+                                            true, &AC, Index.CxtI);
+    KnownBits Known = computeKnownBits(Index.Val.V, DL, &AC, Index.CxtI, DT);
     CR = CR.intersectWith(
         ConstantRange::fromKnownBits(Known, /* Signed */ true),
         ConstantRange::Signed);
@@ -1656,10 +1620,10 @@ AliasResult BasicAAResult::aliasCheck(const Value *V1, LocationSize V1Size,
   // Null values in the default address space don't point to any object, so they
   // don't alias any other pointer.
   if (const ConstantPointerNull *CPN = dyn_cast<ConstantPointerNull>(O1))
-    if (!NullPointerIsDefined(&F, CPN->getPointerType()->getAddressSpace()))
+    if (!NullPointerIsDefined(&F, CPN->getType()->getAddressSpace()))
       return AliasResult::NoAlias;
   if (const ConstantPointerNull *CPN = dyn_cast<ConstantPointerNull>(O2))
-    if (!NullPointerIsDefined(&F, CPN->getPointerType()->getAddressSpace()))
+    if (!NullPointerIsDefined(&F, CPN->getType()->getAddressSpace()))
       return AliasResult::NoAlias;
 
   if (O1 != O2) {
@@ -1682,13 +1646,13 @@ AliasResult BasicAAResult::aliasCheck(const Value *V1, LocationSize V1Size,
     // temporary store the nocapture argument's value in a temporary memory
     // location if that memory location doesn't escape. Or it may pass a
     // nocapture value to other functions as long as they don't capture it.
-    if (isEscapeSource(O1) && capturesNothing(AAQI.CA->getCapturesBefore(
-                                  O2, dyn_cast<Instruction>(O1), /*OrAt=*/true,
-                                  /*ReturnCaptures=*/false)))
+    if (isEscapeSource(O1) &&
+        capturesNothing(AAQI.CA->getCapturesBefore(
+            O2, dyn_cast<Instruction>(O1), /*OrAt*/ true)))
       return AliasResult::NoAlias;
-    if (isEscapeSource(O2) && capturesNothing(AAQI.CA->getCapturesBefore(
-                                  O1, dyn_cast<Instruction>(O2), /*OrAt=*/true,
-                                  /*ReturnCaptures=*/false)))
+    if (isEscapeSource(O2) &&
+        capturesNothing(AAQI.CA->getCapturesBefore(
+            O1, dyn_cast<Instruction>(O2), /*OrAt*/ true)))
       return AliasResult::NoAlias;
   }
 
@@ -1933,7 +1897,7 @@ bool BasicAAResult::isValueEqualInPotentialCycles(const Value *V,
   if (!Inst || Inst->getParent()->isEntryBlock())
     return true;
 
-  return isNotInCycle(Inst, getDT(AAQI), /*LI=*/nullptr, /*CI=*/nullptr);
+  return isNotInCycle(Inst, getDT(AAQI), /*LI*/ nullptr);
 }
 
 /// Computes the symbolic difference between two de-composed GEPs.

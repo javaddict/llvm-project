@@ -14,10 +14,10 @@
 namespace llvm {
 
 class RemoveLoadsIntoFakeUsesPass
-    : public OptionalPassInfoMixin<RemoveLoadsIntoFakeUsesPass> {
+    : public PassInfoMixin<RemoveLoadsIntoFakeUsesPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
 
   MachineFunctionProperties getRequiredProperties() const {
     return MachineFunctionProperties().setNoVRegs();

@@ -51,14 +51,6 @@ void test1(int i, T... t) {
   auto lambda = [k{t...}] {};
   //CHECK: [k{t...}] {
 }
-{
-  auto lambda = [i]{
-    (void)i;
-  };
-  //CHECK: [i] {
-  //CHECK-NEXT: (void)i;
-  //CHECK-NEXT: };
-}
 }
 
 };

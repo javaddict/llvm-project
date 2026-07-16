@@ -1,4 +1,3 @@
-//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -35,7 +34,7 @@ template <typename T>
 struct TestOperatorMinusEquals {
   void operator()() const {
     if constexpr (std::is_arithmetic_v<T>) {
-      alignas(std::atomic_ref<T>::required_alignment) T x(T(3));
+      T x(T(3));
       std::atomic_ref<T> const a(x);
 
       std::same_as<T> decltype(auto) y = (a -= T(2));
@@ -45,7 +44,7 @@ struct TestOperatorMinusEquals {
     } else if constexpr (std::is_pointer_v<T>) {
       using U = std::remove_pointer_t<T>;
       U t[9]  = {};
-      alignas(std::atomic_ref<T>::required_alignment) T p{&t[3]};
+      T p{&t[3]};
       std::atomic_ref<T> const a(p);
 
       std::same_as<T> decltype(auto) y = (a -= 2);

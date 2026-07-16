@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Utility/FileSpecList.h"
+#include "lldb/Target/Statistics.h"
+#include "lldb/Target/Target.h"
 #include "lldb/Utility/ConstString.h"
 #include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"

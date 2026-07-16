@@ -10,8 +10,6 @@ from lldbsuite.test import lldbutil
 
 
 class AbiTagLookupTestCase(TestBase):
-    SHARED_BUILD_TESTCASE = False
-
     @skipIfWindows
     @expectedFailureAll(debug_info=["dwarf", "gmodules", "dwo"])
     def test_abi_tag_lookup(self):

@@ -29,7 +29,7 @@ def TosaShapeOperator : NativeOpTrait<"TosaShapeOperator"> {
 }
 
 class Tosa_ShapeOp<string mnemonic, list<Trait> traits = []>
-    : Tosa_Op<mnemonic, !listconcat(traits, [TosaShapeOperator])> {
+    : Tosa_Op<mnemonic, !listconcat(traits, [TosaShapeOperator, Pure])> {
   list<Availability> availability = [
     Profile<[Tosa_PRO_INT, Tosa_PRO_FP]>,
     Extension<[Tosa_EXT_SHAPE]>,
@@ -67,8 +67,6 @@ def Tosa_AddShapeOp : Tosa_ElementwiseShapeOp<"add_shape", [Pure]> {
   );
 
   let results = (outs Tosa_Shape:$output);
-
-  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -89,8 +87,6 @@ def Tosa_ConcatShapeOp : Tosa_ShapeOp<"concat_shape", [Pure]> {
   let results = (outs Tosa_Shape:$output);
 
   let hasVerifier = 1;
-
-  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -140,14 +136,7 @@ def Tosa_DimOp : Tosa_ShapeOp<"dim", [Pure]> {
 
   let results = (outs Tosa_Shape:$output);
 
-  list<Availability> availability = [
-    Profile<[Tosa_PRO_INT, Tosa_PRO_FP]>,
-    Extension<[Tosa_EXT_SHAPE, Tosa_EXT_FP8E4M3, Tosa_EXT_FP8E5M2, Tosa_EXT_BF16, Tosa_EXT_MXFP, Tosa_EXT_INT64]>,
-  ];
-
   let hasVerifier = 1;
-
-  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -166,8 +155,6 @@ def Tosa_DivCeilShapeOp : Tosa_ElementwiseShapeOp<"div_ceil_shape", [Pure]> {
   );
 
   let results = (outs Tosa_Shape:$output);
-
-  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -186,8 +173,6 @@ def Tosa_DivFloorShapeOp : Tosa_ElementwiseShapeOp<"div_floor_shape", [Pure]> {
   );
 
   let results = (outs Tosa_Shape:$output);
-
-  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -205,8 +190,6 @@ def Tosa_Exp2ShapeOp : Tosa_ElementwiseShapeOp<"exp2_shape", [Pure]> {
   );
 
   let results = (outs Tosa_Shape:$output);
-
-  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -224,8 +207,6 @@ def Tosa_Log2CeilShapeOp : Tosa_ElementwiseShapeOp<"log2_ceil_shape", [Pure]> {
   );
 
   let results = (outs Tosa_Shape:$output);
-
-  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -243,8 +224,6 @@ def Tosa_Log2FloorShapeOp : Tosa_ElementwiseShapeOp<"log2_floor_shape", [Pure]> 
   );
 
   let results = (outs Tosa_Shape:$output);
-
-  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -263,8 +242,6 @@ def Tosa_MaxShapeOp : Tosa_ElementwiseShapeOp<"max_shape", [Pure]> {
   );
 
   let results = (outs Tosa_Shape:$output);
-
-  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -283,8 +260,6 @@ def Tosa_MinShapeOp : Tosa_ElementwiseShapeOp<"min_shape", [Pure]> {
   );
 
   let results = (outs Tosa_Shape:$output);
-
-  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -303,8 +278,6 @@ def Tosa_ModShapeOp : Tosa_ElementwiseShapeOp<"mod_shape", [Pure]> {
   );
 
   let results = (outs Tosa_Shape:$output);
-
-  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -323,8 +296,6 @@ def Tosa_MulShapeOp : Tosa_ElementwiseShapeOp<"mul_shape", [Pure]> {
   );
 
   let results = (outs Tosa_Shape:$output);
-
-  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -346,8 +317,6 @@ def Tosa_SliceShapeOp : Tosa_ShapeOp<"slice_shape", [Pure]> {
   let results = (outs Tosa_Shape:$output);
 
   let hasVerifier = 1;
-
-  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -366,26 +335,6 @@ def Tosa_SubShapeOp : Tosa_ElementwiseShapeOp<"sub_shape", [Pure]> {
   );
 
   let results = (outs Tosa_Shape:$output);
-
-  let hasFolder = 1;
-}
-
-//===----------------------------------------------------------------------===//
-// Operator: AssertEqualShape
-//===----------------------------------------------------------------------===//
-def Tosa_AssertEqualShapeOp
-    : Tosa_ShapeOp<"assert_equal_shape", [TosaShapeOperatorWithSameRanks]> {
-  let summary = "Verify two shapes are equal.";
-
-  let description = [{
-      Verify input1 and input2 are equal. If allow_broadcast is set, shapes which
-      are broadcast compatible are allowed.
-  }];
-
-  let arguments = (ins Tosa_Shape:$input1, Tosa_Shape:$input2,
-      BoolAttr:$allow_broadcast);
-
-  let results = (outs);
 }
 
 #endif // TOSA_SHAPE_OPS

@@ -13,7 +13,6 @@
 #ifndef OPENMP_LIBOMPTARGET_PLUGINS_NEXTGEN_LEVEL_ZERO_L0CONTEXT_H
 #define OPENMP_LIBOMPTARGET_PLUGINS_NEXTGEN_LEVEL_ZERO_L0CONTEXT_H
 
-#include "L0Event.h"
 #include "L0Memory.h"
 #include "PerThreadTable.h"
 
@@ -136,11 +135,6 @@ public:
 
   const MemAllocatorTy &getHostMemAllocator() const { return HostMemAllocator; }
   MemAllocatorTy &getHostMemAllocator() { return HostMemAllocator; }
-
-  /// Level Zero extension function pointer for kernel argument size query.
-  ze_result_t(ZE_APICALL *zexKernelGetArgumentSize)(
-      ze_kernel_handle_t hKernel, uint32_t argIndex,
-      uint32_t *pArgSize) = nullptr;
 };
 
 } // namespace llvm::omp::target::plugin

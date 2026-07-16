@@ -85,9 +85,6 @@ enum Iostat {
   IostatBadNewUnit,
   IostatBadListDirectedInputSeparator,
   IostatNonExternalDefinedUnformattedIo,
-  IostatOpenNewExtant,
-  IostatParentAsynchronous,
-  IostatChildAsynchronous,
 };
 
 } // namespace Fortran::runtime::io

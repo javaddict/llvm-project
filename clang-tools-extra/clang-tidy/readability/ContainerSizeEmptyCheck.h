@@ -37,7 +37,7 @@ public:
   }
 
 private:
-  std::vector<StringRef> ExcludedComparisonTypes;
+  std::vector<llvm::StringRef> ExcludedComparisonTypes;
 };
 
 } // namespace clang::tidy::readability

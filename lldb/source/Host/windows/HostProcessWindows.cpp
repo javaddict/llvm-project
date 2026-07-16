@@ -38,13 +38,14 @@ HostProcessWindows::~HostProcessWindows() { Close(); }
 void HostProcessWindows::SetOwnsHandle(bool owns) { m_owns_handle = owns; }
 
 Status HostProcessWindows::Terminate() {
+  Status error;
   if (m_process == nullptr)
-    return Status(ERROR_INVALID_HANDLE, lldb::eErrorTypeWin32);
+    error = Status(ERROR_INVALID_HANDLE, lldb::eErrorTypeWin32);
 
   if (!::TerminateProcess(m_process, 0))
-    return Status(::GetLastError(), lldb::eErrorTypeWin32);
+    error = Status(::GetLastError(), lldb::eErrorTypeWin32);
 
-  return Status();
+  return error;
 }
 
 lldb::pid_t HostProcessWindows::GetProcessId() const {

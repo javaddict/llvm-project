@@ -355,24 +355,23 @@ static bool NameInfoEquals(const DemangledNameInfo &lhs,
 
 TEST(MangledTest, DemangledNameInfo_SetMangledResets) {
   Mangled mangled;
-  EXPECT_EQ(mangled.GetDemangledInfo(), nullptr);
+  EXPECT_EQ(mangled.GetDemangledInfo(), std::nullopt);
 
   mangled.SetMangledName(ConstString("_Z3foov"));
   ASSERT_TRUE(mangled);
 
-  ASSERT_NE(mangled.GetDemangledInfo(), nullptr);
-  // Keep a copy of the original demangled info.
-  DemangledNameInfo info1 = *mangled.GetDemangledInfo();
-  EXPECT_TRUE(info1.hasBasename());
+  auto info1 = mangled.GetDemangledInfo();
+  EXPECT_NE(info1, std::nullopt);
+  EXPECT_TRUE(info1->hasBasename());
 
   mangled.SetMangledName(ConstString("_Z4funcv"));
 
   // Should have re-calculated demangled-info since mangled name changed.
-  ASSERT_NE(mangled.GetDemangledInfo(), nullptr);
-  DemangledNameInfo info2 = *mangled.GetDemangledInfo();
-  EXPECT_TRUE(info2.hasBasename());
+  auto info2 = mangled.GetDemangledInfo();
+  ASSERT_NE(info2, std::nullopt);
+  EXPECT_TRUE(info2->hasBasename());
 
-  EXPECT_FALSE(NameInfoEquals(info1, info2));
+  EXPECT_FALSE(NameInfoEquals(info1.value(), info2.value()));
   EXPECT_EQ(mangled.GetDemangledName(), "func()");
 }
 
@@ -384,46 +383,45 @@ TEST(MangledTest, DemangledNameInfo_SetDemangledResets) {
 
   // Mangled name hasn't changed, so GetDemangledInfo causes re-demangling
   // of previously set mangled name.
-  EXPECT_NE(mangled.GetDemangledInfo(), nullptr);
+  EXPECT_NE(mangled.GetDemangledInfo(), std::nullopt);
   EXPECT_EQ(mangled.GetDemangledName(), "foo()");
 }
 
 TEST(MangledTest, DemangledNameInfo_Clear) {
   Mangled mangled("_Z3foov");
   ASSERT_TRUE(mangled);
-  EXPECT_NE(mangled.GetDemangledInfo(), nullptr);
+  EXPECT_NE(mangled.GetDemangledInfo(), std::nullopt);
 
   mangled.Clear();
 
-  EXPECT_EQ(mangled.GetDemangledInfo(), nullptr);
+  EXPECT_EQ(mangled.GetDemangledInfo(), std::nullopt);
 }
 
 TEST(MangledTest, DemangledNameInfo_SetValue) {
   Mangled mangled("_Z4funcv");
   ASSERT_TRUE(mangled);
 
-  ASSERT_NE(mangled.GetDemangledInfo(), nullptr);
-  // Keep a copy of the original demangled info.
-  DemangledNameInfo demangled_func = *mangled.GetDemangledInfo();
+  auto demangled_func = mangled.GetDemangledInfo();
 
   // SetValue(mangled) resets demangled-info
   mangled.SetValue(ConstString("_Z3foov"));
-  ASSERT_NE(mangled.GetDemangledInfo(), nullptr);
-  DemangledNameInfo demangled_foo = *mangled.GetDemangledInfo();
-  EXPECT_FALSE(NameInfoEquals(demangled_foo, demangled_func));
+  auto demangled_foo = mangled.GetDemangledInfo();
+  EXPECT_NE(demangled_foo, std::nullopt);
+  EXPECT_FALSE(NameInfoEquals(demangled_foo.value(), demangled_func.value()));
 
   // SetValue(demangled) resets demangled-info
   mangled.SetValue(ConstString("_Z4funcv"));
-  EXPECT_TRUE(NameInfoEquals(*mangled.GetDemangledInfo(), demangled_func));
+  EXPECT_TRUE(NameInfoEquals(mangled.GetDemangledInfo().value(),
+                             demangled_func.value()));
 
   // SetValue(empty) resets demangled-info
   mangled.SetValue(ConstString());
-  EXPECT_EQ(mangled.GetDemangledInfo(), nullptr);
+  EXPECT_EQ(mangled.GetDemangledInfo(), std::nullopt);
 
   // Demangling invalid mangled name will set demangled-info
   // (without a valid basename).
   mangled.SetValue(ConstString("_Zinvalid"));
-  ASSERT_NE(mangled.GetDemangledInfo(), nullptr);
+  ASSERT_NE(mangled.GetDemangledInfo(), std::nullopt);
   EXPECT_FALSE(mangled.GetDemangledInfo()->hasBasename());
 }
 

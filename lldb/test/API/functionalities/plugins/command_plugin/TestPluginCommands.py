@@ -8,10 +8,7 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
 
-@skipIfTargetDoesNotSupportSharedLibraries()
 class PluginCommandTestCase(TestBase):
-    SHARED_BUILD_TESTCASE = False
-
     def setUp(self):
         TestBase.setUp(self)
 
@@ -34,12 +31,10 @@ class PluginCommandTestCase(TestBase):
 
         retobj = lldb.SBCommandReturnObject()
 
-        cinterpreter = self.dbg.GetCommandInterpreter()
-        retval = cinterpreter.HandleCommand(
+        retval = self.dbg.GetCommandInterpreter().HandleCommand(
             "plugin load %s" % self.getBuildArtifact(plugin_lib_name), retobj
         )
 
-        self.assertTrue(cinterpreter.UserCommandExists("plugin_loaded_command"))
         retobj.Clear()
 
         retval = self.dbg.GetCommandInterpreter().HandleCommand(

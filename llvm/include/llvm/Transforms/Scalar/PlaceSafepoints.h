@@ -56,11 +56,11 @@ namespace llvm {
 
 class TargetLibraryInfo;
 
-class PlaceSafepointsPass : public OptionalPassInfoMixin<PlaceSafepointsPass> {
+class PlaceSafepointsPass : public PassInfoMixin<PlaceSafepointsPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 
-  LLVM_ABI bool runImpl(Function &F, const TargetLibraryInfo &TLI);
+  bool runImpl(Function &F, const TargetLibraryInfo &TLI);
 
   void cleanup() {}
 

@@ -2,7 +2,8 @@
 // RUN:   -config="{CheckOptions: \
 // RUN:             {readability-redundant-string-cstr.StringParameterFunctions: \
 // RUN:              '::fmt::format; ::fmt::print; ::BaseLogger::operator(); ::BaseLogger::Log'} \
-// RUN:             }"
+// RUN:             }" \
+// RUN:   -- -isystem %clang_tidy_headers
 #include <string>
 
 namespace fmt {

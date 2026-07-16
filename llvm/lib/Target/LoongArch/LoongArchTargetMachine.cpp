@@ -13,7 +13,6 @@
 #include "LoongArchTargetMachine.h"
 #include "LoongArch.h"
 #include "LoongArchMachineFunctionInfo.h"
-#include "LoongArchTargetObjectFile.h"
 #include "LoongArchTargetTransformInfo.h"
 #include "MCTargetDesc/LoongArchBaseInfo.h"
 #include "TargetInfo/LoongArchTargetInfo.h"
@@ -99,7 +98,7 @@ LoongArchTargetMachine::LoongArchTargetMachine(
     : CodeGenTargetMachineImpl(T, TT.computeDataLayout(), TT, CPU, FS, Options,
                                getEffectiveRelocModel(RM),
                                getEffectiveLoongArchCodeModel(TT, CM), OL),
-      TLOF(std::make_unique<LoongArchELFTargetObjectFile>()) {
+      TLOF(std::make_unique<TargetLoweringObjectFileELF>()) {
   initAsmInfo();
 }
 
@@ -121,6 +120,10 @@ LoongArchTargetMachine::getSubtargetImpl(const Function &F) const {
   std::string Key = CPU + TuneCPU + FS;
   auto &I = SubtargetMap[Key];
   if (!I) {
+    // This needs to be done before we create a new subtarget since any
+    // creation will depend on the TM and the code generation flags on the
+    // function that reside in TargetOptions.
+    resetTargetOptions(F);
     auto ABIName = Options.MCOptions.getABIName();
     if (const MDString *ModuleTargetABI = dyn_cast_or_null<MDString>(
             F.getParent()->getModuleFlag("target-abi"))) {

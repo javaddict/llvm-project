@@ -1,0 +1,127 @@
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+; Status : R_CMP operand-flag XFAIL stale; CHECKs use DAG for bundle order.
+; REGRESSION TEST: DR64 masked scalar intrinsics and SFR register transfer.
+;
+; Bug (fixed,): SFR-related instructions (slt64, sle64, seq64
+; movt64, movf64, movesfr2gpr, movegpr2sfr, zero_sfr) were defined via
+; HaydnInst without encoding bits. TableGen marked them MCID::Pseudo and
+; the AsmPrinter silently dropped them — function bodies emitted as empty
+; bundles { xor32 r0, r0, r0; nop; nop }.
+;
+; Fix: real 32-bit R-type encodings assigned in HaydnInstrInfo.td under
+; opcode 0x67, funct 0x187..0x19A. Each mnemonic now reaches
+; assembly. If a regression reintroduces the blanket pseudo (no Inst{}
+; fields), the corresponding CHECK line fails because the mnemonic
+; disappears from the output.
+
+;===----------------------------------------------------------------------===;
+; Intrinsic declarations
+;===----------------------------------------------------------------------===;
+
+declare i64 @llvm.haydn.slt64(i64)
+declare i64 @llvm.haydn.sle64(i64)
+declare i64 @llvm.haydn.movt64(i64)
+declare i64 @llvm.haydn.movf64(i64)
+declare i32 @llvm.haydn.movesfr2gpr()
+declare void @llvm.haydn.movegpr2sfr(i32)
+declare void @llvm.haydn.zero.sfr()
+
+;===----------------------------------------------------------------------===;
+; Scalar 64-bit SFR Compare
+;===----------------------------------------------------------------------===;
+
+; SLT64: set SFR if value < tied_operand (signed 64-bit)
+define dso_local i64 @test_slt64(i64 %a) {
+; CHECK-LABEL: test_slt64:
+; CHECK: slt64
+  %1 = call i64 @llvm.haydn.slt64(i64 %a)
+  ret i64 %1
+}
+
+; SLE64: set SFR if value <= tied_operand (signed 64-bit)
+define dso_local i64 @test_sle64(i64 %a) {
+; CHECK-LABEL: test_sle64:
+; CHECK: sle64
+  %1 = call i64 @llvm.haydn.sle64(i64 %a)
+  ret i64 %1
+}
+
+;===----------------------------------------------------------------------===;
+; Scalar 64-bit SFR Conditional Move
+;===----------------------------------------------------------------------===;
+
+; MOVT64: move if SFR true (SFR == 4'b1111)
+define dso_local i64 @test_movt64(i64 %a) {
+; CHECK-LABEL: test_movt64:
+; CHECK: slt64
+; CHECK: movt64
+  %1 = call i64 @llvm.haydn.slt64(i64 %a)
+  %2 = call i64 @llvm.haydn.movt64(i64 %a)
+  ret i64 %2
+}
+
+; MOVF64: move if SFR false (SFR == 4'b0000)
+define dso_local i64 @test_movf64(i64 %a) {
+; CHECK-LABEL: test_movf64:
+; CHECK: sle64
+; CHECK: movf64
+  %1 = call i64 @llvm.haydn.sle64(i64 %a)
+  %2 = call i64 @llvm.haydn.movf64(i64 %a)
+  ret i64 %2
+}
+
+;===----------------------------------------------------------------------===;
+; SFR Register Transfer
+;===----------------------------------------------------------------------===;
+
+; MOVESFR2GPR: read SFR into GPR32
+define dso_local i32 @test_movesfr2gpr() {
+; CHECK-LABEL: test_movesfr2gpr:
+; CHECK: movesfr2gpr
+  %1 = call i32 @llvm.haydn.movesfr2gpr()
+  ret i32 %1
+}
+
+; MOVEGPR2SFR: write GPR32 to SFR
+define dso_local void @test_movegpr2sfr(i32 %val) {
+; CHECK-LABEL: test_movegpr2sfr:
+; CHECK: movegpr2sfr
+  call void @llvm.haydn.movegpr2sfr(i32 %val)
+  ret void
+}
+
+; ZERO_SFR: clear SFR
+define dso_local void @test_zero_sfr() {
+; CHECK-LABEL: test_zero_sfr:
+; CHECK: zero_sfr
+  call void @llvm.haydn.zero.sfr()
+  ret void
+}
+
+;===----------------------------------------------------------------------===;
+; Combined pattern: compare -> SFR -> conditional select
+;===----------------------------------------------------------------------===;
+
+; Full scalar predication: compare, then conditionally move
+define dso_local i64 @test_scalar_predication(i64 %a) {
+; CHECK-LABEL: test_scalar_predication:
+; CHECK: slt64
+; CHECK: movt64
+  %cmp = call i64 @llvm.haydn.slt64(i64 %a)
+  %result = call i64 @llvm.haydn.movt64(i64 %cmp)
+  ret i64 %result
+}
+
+;===----------------------------------------------------------------------===;
+; SFR save/restore pattern via GPR
+;===----------------------------------------------------------------------===;
+
+; Save SFR to GPR, do a compare, then restore SFR
+define dso_local i64 @test_sfr_save_restore(i64 %a, i32 %saved_sfr) {
+; CHECK-LABEL: test_sfr_save_restore:
+; CHECK-DAG: movegpr2sfr
+; CHECK-DAG: slt64
+  call void @llvm.haydn.movegpr2sfr(i32 %saved_sfr)
+  %1 = call i64 @llvm.haydn.slt64(i64 %a)
+  ret i64 %1
+}

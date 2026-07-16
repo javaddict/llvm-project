@@ -15,7 +15,6 @@
 #define MLIR_INTERFACES_SIDEEFFECTINTERFACES_H
 
 #include "mlir/IR/OpDefinition.h"
-#include "llvm/ADT/Twine.h"
 
 namespace mlir {
 namespace SideEffects {
@@ -76,15 +75,7 @@ private:
 //===----------------------------------------------------------------------===//
 
 /// This class represents a specific resource that an effect applies to. This
-/// class represents an abstract interface for a given resource. Resources
-/// form a hierarchy via getParent(); disjointness (isDisjointFrom) is used to
-/// determine whether effects can conflict.
-///
-/// Scope: The resource hierarchy is for disjointness of *abstract* resources
-/// (e.g. addressable memory vs. runtime state). It is deliberately *not*
-/// intended for fine-grained regions with specific addresses/sizes, or for
-/// alias classes / offset-based disambiguation; such concerns are out of scope
-/// and should be handled by alias analysis or other mechanisms.
+/// class represents an abstract interface for a given resource.
 class Resource {
 public:
   virtual ~Resource() = default;
@@ -93,9 +84,7 @@ public:
   template <typename DerivedResource, typename BaseResource = Resource>
   class Base : public BaseResource {
   public:
-    /// Use the current instantiation so get()/getResourceID() refer to this
-    /// hierarchy's singleton, not Base<DerivedResource, Resource>'s.
-    using BaseT = Base<DerivedResource, BaseResource>;
+    using BaseT = Base<DerivedResource>;
 
     /// Returns a unique instance for the given effect class.
     static DerivedResource *get() {
@@ -106,99 +95,39 @@ public:
     /// Return the unique identifier for the base resource class.
     static TypeID getResourceID() { return TypeID::get<DerivedResource>(); }
 
-    /// 'classof' used to support llvm style cast functionality. Returns true
-    /// iff the resource is the same as or a descendant of this resource type
-    /// in the hierarchy (so isa/cast work for ancestor checks).
+    /// 'classof' used to support llvm style cast functionality.
     static bool classof(const Resource *resource) {
-      return resource->isSubresourceOf(BaseT::get());
+      return resource->getResourceID() == BaseT::getResourceID();
     }
 
   protected:
-    Base() : BaseResource(BaseT::getResourceID()) {}
-    /// Constructor for use when this type is used as a parent (BaseResource);
-    /// allows the derived resource to pass its TypeID so the hierarchy is
-    /// correct.
-    Base(TypeID id) : BaseResource(id) {}
+    Base() : BaseResource(BaseT::getResourceID()){};
   };
 
   /// Return the unique identifier for the base resource class.
   TypeID getResourceID() const { return id; }
 
   /// Return a string name of the resource.
-  virtual StringRef getName() const = 0;
-
-  /// Return the parent resource in the hierarchy.
-  virtual Resource *getParent() const;
-
-  /// Returns true if this resource is addressable (effects on it can alias
-  /// pointer-based memory). Default is true.
-  virtual bool isAddressable() const { return true; }
-
-  /// Returns true if this resource is a subresource of (or equal to) another.
-  bool isSubresourceOf(const Resource *other) const {
-    for (const Resource *r = this; r != nullptr; r = r->getParent()) {
-#ifdef EXPENSIVE_CHECKS
-      r->verifyImmediateParentAddressability();
-#endif // EXPENSIVE_CHECKS
-      if (r == other)
-        return true;
-    }
-    return false;
-  }
-
-  /// Returns true if this resource is disjoint from another. Two resources are
-  /// disjoint if neither is an ancestor of the other.
-  bool isDisjointFrom(const Resource *other) const {
-    return !isSubresourceOf(other) && !other->isSubresourceOf(this);
-  }
+  virtual StringRef getName() = 0;
 
 protected:
   Resource(TypeID id) : id(id) {}
 
 private:
-#ifdef EXPENSIVE_CHECKS
-  /// Verifies the single-link invariant: an addressable resource must not have
-  /// a non-addressable parent. Used from isSubresourceOf() under
-  /// EXPENSIVE_CHECKS so the invariant is checked when the hierarchy is
-  /// traversed.
-  void verifyImmediateParentAddressability() const {
-    Resource *parent = getParent();
-    if (parent && isAddressable() && !parent->isAddressable())
-      llvm::report_fatal_error(
-          llvm::Twine("Resource '") + getName() +
-          "' is addressable but has non-addressable parent '" +
-          parent->getName() + "'");
-  }
-#endif // EXPENSIVE_CHECKS
-
   /// The id of the derived resource class.
   TypeID id;
 };
 
-/// The default resource kind. It serves as the root of the resource hierarchy:
-/// all resources that do not override getParent() have DefaultResource as their
-/// parent.
+/// A conservative default resource kind.
 struct DefaultResource : public Resource::Base<DefaultResource> {
-  DefaultResource() = default;
-  StringRef getName() const override { return "<Default>"; }
-  Resource *getParent() const override { return nullptr; }
-
-protected:
-  /// For use when this type is the parent of another resource; allows the
-  /// derived resource to pass its TypeID so the hierarchy is correct.
-  DefaultResource(TypeID id) : Base(id) {}
+  StringRef getName() final { return "<Default>"; }
 };
-
-/// All resources that do not override getParent() have DefaultResource
-/// as their parent.
-inline Resource *Resource::getParent() const { return DefaultResource::get(); }
 
 /// An automatic allocation-scope resource that is valid in the context of a
 /// parent AutomaticAllocationScope trait.
 struct AutomaticAllocationScopeResource
-    : public Resource::Base<AutomaticAllocationScopeResource, DefaultResource> {
-  StringRef getName() const final { return "AutomaticAllocationScope"; }
-  Resource *getParent() const override { return DefaultResource::get(); }
+    : public Resource::Base<AutomaticAllocationScopeResource> {
+  StringRef getName() final { return "AutomaticAllocationScope"; }
 };
 
 /// This class represents a specific instance of an effect. It contains the
@@ -223,9 +152,7 @@ public:
   EffectInstance(EffectT *effect, T value,
                  Resource *resource = DefaultResource::get())
       : effect(effect), resource(resource), value(value), stage(0),
-        effectOnFullRegion(false) {
-    checkResourceAllowsValue();
-  }
+        effectOnFullRegion(false) {}
   template <typename T,
             std::enable_if_t<
                 llvm::is_one_of<T, OpOperand *, OpResult, BlockArgument>::value,
@@ -233,9 +160,7 @@ public:
   EffectInstance(EffectT *effect, T value, int stage, bool effectOnFullRegion,
                  Resource *resource = DefaultResource::get())
       : effect(effect), resource(resource), value(value), stage(stage),
-        effectOnFullRegion(effectOnFullRegion) {
-    checkResourceAllowsValue();
-  }
+        effectOnFullRegion(effectOnFullRegion) {}
   EffectInstance(EffectT *effect, SymbolRefAttr symbol,
                  Resource *resource = DefaultResource::get())
       : effect(effect), resource(resource), value(symbol), stage(0),
@@ -261,9 +186,7 @@ public:
   EffectInstance(EffectT *effect, T value, Attribute parameters,
                  Resource *resource = DefaultResource::get())
       : effect(effect), resource(resource), value(value),
-        parameters(parameters), stage(0), effectOnFullRegion(false) {
-    checkResourceAllowsValue();
-  }
+        parameters(parameters), stage(0), effectOnFullRegion(false) {}
   template <typename T,
             std::enable_if_t<
                 llvm::is_one_of<T, OpOperand *, OpResult, BlockArgument>::value,
@@ -273,9 +196,7 @@ public:
                  Resource *resource = DefaultResource::get())
       : effect(effect), resource(resource), value(value),
         parameters(parameters), stage(stage),
-        effectOnFullRegion(effectOnFullRegion) {
-    checkResourceAllowsValue();
-  }
+        effectOnFullRegion(effectOnFullRegion) {}
   EffectInstance(EffectT *effect, SymbolRefAttr symbol, Attribute parameters,
                  Resource *resource = DefaultResource::get())
       : effect(effect), resource(resource), value(symbol),
@@ -335,14 +256,6 @@ public:
   bool getEffectOnFullRegion() const { return effectOnFullRegion; }
 
 private:
-  /// Effect on a non-addressable resource cannot have an associated Value.
-  void checkResourceAllowsValue() {
-    if (value && resource && !resource->isAddressable())
-      llvm::report_fatal_error(
-          llvm::Twine("EffectInstance: resource '") + resource->getName() +
-          "' is non-addressable and cannot have an associated Value");
-  }
-
   /// The specific effect being applied.
   EffectT *effect;
 

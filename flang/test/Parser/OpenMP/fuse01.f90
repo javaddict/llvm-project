@@ -21,7 +21,7 @@ subroutine openmp_fuse(x)
 !$omp end fuse
 
 !PARSE-TREE: OpenMPConstruct -> OpenMPLoopConstruct
-!PARSE-TREE: OmpBeginDirective
+!PARSE-TREE: OmpBeginLoopDirective
 !PARSE-TREE: OmpDirectiveName -> llvm::omp::Directive = fuse
 
 END subroutine openmp_fuse

@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++03, c++11, c++14, c++17, c++20
+// UNSUPPORTED: clang-modules-build
 // UNSUPPORTED: gcc
 
 // TODO: This test is currently written in a way that is specific to libc++, but it's really trying to test a property
@@ -14,9 +15,6 @@
 // REQUIRES: stdlib=libc++
 
 // XFAIL: has-no-cxx-module-support
-
-// C++20 modules are incompatible with Clang modules
-// ADDITIONAL_COMPILE_FLAGS: -fno-modules
 
 // Make sure that the compile flags contain the expected elements.
 // The tests only look for the expected components and not the exact flags.

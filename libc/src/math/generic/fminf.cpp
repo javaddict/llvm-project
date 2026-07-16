@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/fminf.h"
-#include "src/__support/math/fminf.h"
+#include "src/__support/FPUtil/BasicOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(float, fminf, (float x, float y)) {
-  return math::fminf(x, y);
+  return fputil::fmin(x, y);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

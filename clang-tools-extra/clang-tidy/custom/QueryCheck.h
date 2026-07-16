@@ -22,14 +22,15 @@ namespace clang::tidy::custom {
 /// Not directly visible to users.
 class QueryCheck : public ClangTidyCheck {
 public:
-  QueryCheck(StringRef Name, const ClangTidyOptions::CustomCheckValue &V,
+  QueryCheck(llvm::StringRef Name, const ClangTidyOptions::CustomCheckValue &V,
              ClangTidyContext *Context);
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
 
 private:
-  SmallVector<ast_matchers::dynamic::DynTypedMatcher> Matchers;
-  using BindNameMapToDiagMessage = llvm::StringMap<SmallVector<std::string>>;
+  llvm::SmallVector<ast_matchers::dynamic::DynTypedMatcher> Matchers;
+  using BindNameMapToDiagMessage =
+      llvm::StringMap<llvm::SmallVector<std::string>>;
   using DiagMaps =
       llvm::DenseMap<DiagnosticIDs::Level, BindNameMapToDiagMessage>;
   DiagMaps Diags;

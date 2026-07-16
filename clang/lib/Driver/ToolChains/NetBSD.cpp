@@ -531,13 +531,10 @@ llvm::ExceptionHandling NetBSD::GetExceptionModel(const ArgList &Args) const {
   return llvm::ExceptionHandling::None;
 }
 
-SanitizerMask
-NetBSD::getSupportedSanitizers(StringRef BoundArch,
-                               Action::OffloadKind DeviceOffloadKind) const {
+SanitizerMask NetBSD::getSupportedSanitizers() const {
   const bool IsX86 = getTriple().getArch() == llvm::Triple::x86;
   const bool IsX86_64 = getTriple().getArch() == llvm::Triple::x86_64;
-  SanitizerMask Res =
-      ToolChain::getSupportedSanitizers(BoundArch, DeviceOffloadKind);
+  SanitizerMask Res = ToolChain::getSupportedSanitizers();
   if (IsX86 || IsX86_64) {
     Res |= SanitizerKind::Address;
     Res |= SanitizerKind::PointerCompare;

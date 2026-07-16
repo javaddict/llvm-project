@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 
 def __lldb_init_module(debugger, internal_dict):

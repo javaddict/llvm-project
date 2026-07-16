@@ -45,43 +45,52 @@ void initializeBPFMIPreEmitPeepholePass(PassRegistry &);
 void initializeBPFMISimplifyPatchablePass(PassRegistry &);
 
 class BPFAbstractMemberAccessPass
-    : public RequiredPassInfoMixin<BPFAbstractMemberAccessPass> {
+    : public PassInfoMixin<BPFAbstractMemberAccessPass> {
   BPFTargetMachine *TM;
 
 public:
   BPFAbstractMemberAccessPass(BPFTargetMachine *TM) : TM(TM) {}
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 };
 
-class BPFPreserveDITypePass
-    : public RequiredPassInfoMixin<BPFPreserveDITypePass> {
+class BPFPreserveDITypePass : public PassInfoMixin<BPFPreserveDITypePass> {
 public:
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 };
 
-class BPFIRPeepholePass : public RequiredPassInfoMixin<BPFIRPeepholePass> {
+class BPFIRPeepholePass : public PassInfoMixin<BPFIRPeepholePass> {
 public:
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 };
 
 class BPFASpaceCastSimplifyPass
-    : public RequiredPassInfoMixin<BPFASpaceCastSimplifyPass> {
+    : public PassInfoMixin<BPFASpaceCastSimplifyPass> {
 public:
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 };
 
-class BPFAdjustOptPass : public OptionalPassInfoMixin<BPFAdjustOptPass> {
+class BPFAdjustOptPass : public PassInfoMixin<BPFAdjustOptPass> {
 public:
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
 
 class BPFPreserveStaticOffsetPass
-    : public RequiredPassInfoMixin<BPFPreserveStaticOffsetPass> {
+    : public PassInfoMixin<BPFPreserveStaticOffsetPass> {
   bool AllowPartial;
 
 public:
   BPFPreserveStaticOffsetPass(bool AllowPartial) : AllowPartial(AllowPartial) {}
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 
   static std::pair<GetElementPtrInst *, LoadInst *>
   reconstructLoad(CallInst *Call);

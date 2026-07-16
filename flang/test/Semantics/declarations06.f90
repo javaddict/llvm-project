@@ -8,11 +8,11 @@ module m
   class(t) v1
   class(t), allocatable :: v2 ! ok
   class(t), pointer :: v3 ! ok
-  !ERROR: Polymorphic function 'p1' must have an explicit interface whose result is ALLOCATABLE or POINTER
+  !ERROR: CLASS entity 'p1' must be a dummy argument, allocatable, or object pointer
   procedure(cf1) :: p1
   procedure(cf2) :: p2
   procedure(cf3) :: p3
-  !ERROR: Polymorphic function pointer 'pp1' must have an explicit interface whose result is ALLOCATABLE or POINTER
+  !ERROR: CLASS entity 'pp1' must be a dummy argument, allocatable, or object pointer
   procedure(cf1), pointer :: pp1
   procedure(cf2), pointer :: pp2
   procedure(cf3), pointer :: pp3
@@ -29,9 +29,9 @@ module m
   end
   subroutine test(d1,d2,d3)
     class(t) d1 ! ok
-    !ERROR: Polymorphic function 'd2' must have an explicit interface whose result is ALLOCATABLE or POINTER
+    !ERROR: CLASS entity 'd2' must be a dummy argument, allocatable, or object pointer
     class(t), external :: d2
-    !ERROR: Polymorphic function pointer 'd3' must have an explicit interface whose result is ALLOCATABLE or POINTER
+    !ERROR: CLASS entity 'd3' must be a dummy argument, allocatable, or object pointer
     class(t), external, pointer :: d3
   end
   function cf4()

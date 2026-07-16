@@ -56,7 +56,8 @@ Error BuildIDRewriter::sectionInitializer() {
       continue;
 
     StringRef Buf = NoteSection.getContents();
-    DataExtractor DE = DataExtractor(Buf, BC.AsmInfo->isLittleEndian());
+    DataExtractor DE = DataExtractor(Buf, BC.AsmInfo->isLittleEndian(),
+                                     BC.AsmInfo->getCodePointerSize());
     DataExtractor::Cursor Cursor(0);
     while (Cursor && !DE.eof(Cursor)) {
       const uint32_t NameSz = DE.getU32(Cursor);

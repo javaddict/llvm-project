@@ -1,5 +1,4 @@
 ; RUN: opt -S -x86-winehstate < %s | FileCheck %s --check-prefix=IR
-; RUN: opt -S -passes=x86-winehstate < %s | FileCheck %s --check-prefix=IR
 ; RUN: llc < %s | FileCheck %s --check-prefix=ASM
 
 ; IR-NOT: define.*__ehhandler

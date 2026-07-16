@@ -6,7 +6,8 @@
 // RUN: -config='{CheckOptions: { \
 // RUN:   readability-qualified-auto.AllowedTypes: "[iI]terator$;my::ns::Ignored1;std::array<.*>::Ignored2;MyIgnoredPtr", \
 // RUN:   readability-qualified-auto.IgnoreAliasing: false \
-// RUN: }}' -check-suffix=ALIAS
+// RUN: }}' -check-suffix=ALIAS -- 
+
 namespace typedefs {
 typedef int *MyPtr;
 typedef int &MyRef;
@@ -178,7 +179,18 @@ void macroTest() {
 #undef _CONST
 }
 
-#include <vector>
+namespace std {
+template <typename T>
+class vector { // dummy impl
+  T _data[1];
+
+public:
+  T *begin() { return _data; }
+  const T *begin() const { return _data; }
+  T *end() { return &_data[1]; }
+  const T *end() const { return &_data[1]; }
+};
+} // namespace std
 
 void change(int &);
 void observe(const int &);

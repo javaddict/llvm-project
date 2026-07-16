@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "hdr/fcntl_macros.h"
-#include "hdr/sys_stat_macros.h"
 #include "src/__support/libc_errno.h"
 #include "src/__support/macros/config.h"
 #include "src/fcntl/open.h"

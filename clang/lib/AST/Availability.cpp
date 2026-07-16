@@ -48,11 +48,9 @@ static void createInfoForDecl(const clang::Decl *Decl,
   // Collect availability attributes from all redeclarations.
   for (const auto *RD : Decl->redecls()) {
     for (const auto *A : RD->specific_attrs<clang::AvailabilityAttr>()) {
-      const auto *Eff = A->getEffectiveAttr();
       Availabilities.insert(clang::AvailabilityInfo(
-          Eff->getPlatform()->getName(), Eff->getIntroduced(),
-          Eff->getDeprecated(), Eff->getObsoleted(), Eff->getUnavailable(),
-          false, false));
+          A->getPlatform()->getName(), A->getIntroduced(), A->getDeprecated(),
+          A->getObsoleted(), A->getUnavailable(), false, false));
     }
 
     if (const auto *A = RD->getAttr<clang::UnavailableAttr>())

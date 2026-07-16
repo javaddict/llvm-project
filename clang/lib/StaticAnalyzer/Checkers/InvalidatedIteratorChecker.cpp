@@ -74,7 +74,7 @@ void InvalidatedIteratorChecker::checkPreStmt(const UnaryOperator *UO,
 
   ProgramStateRef State = C.getState();
   UnaryOperatorKind OK = UO->getOpcode();
-  SVal SubVal = State->getSVal(UO->getSubExpr(), C.getStackFrame());
+  SVal SubVal = State->getSVal(UO->getSubExpr(), C.getLocationContext());
 
   if (isAccessOperator(OK)) {
     verifyAccess(C, SubVal);
@@ -85,7 +85,7 @@ void InvalidatedIteratorChecker::checkPreStmt(const BinaryOperator *BO,
                                               CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   BinaryOperatorKind OK = BO->getOpcode();
-  SVal LVal = State->getSVal(BO->getLHS(), C.getStackFrame());
+  SVal LVal = State->getSVal(BO->getLHS(), C.getLocationContext());
 
   if (isAccessOperator(OK)) {
     verifyAccess(C, LVal);
@@ -95,7 +95,7 @@ void InvalidatedIteratorChecker::checkPreStmt(const BinaryOperator *BO,
 void InvalidatedIteratorChecker::checkPreStmt(const ArraySubscriptExpr *ASE,
                                               CheckerContext &C) const {
   ProgramStateRef State = C.getState();
-  SVal LVal = State->getSVal(ASE->getLHS(), C.getStackFrame());
+  SVal LVal = State->getSVal(ASE->getLHS(), C.getLocationContext());
   verifyAccess(C, LVal);
 }
 
@@ -105,7 +105,7 @@ void InvalidatedIteratorChecker::checkPreStmt(const MemberExpr *ME,
     return;
 
   ProgramStateRef State = C.getState();
-  SVal BaseVal = State->getSVal(ME->getBase(), C.getStackFrame());
+  SVal BaseVal = State->getSVal(ME->getBase(), C.getLocationContext());
   verifyAccess(C, BaseVal);
 }
 

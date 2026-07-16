@@ -92,8 +92,7 @@ static LLVM_THREAD_LOCAL const CrashRecoveryContext *IsRecoveringFromCrash;
 
 } // namespace
 
-static void
-installExceptionOrSignalHandlers(bool NeedsPOSIXUtilitySignalHandling);
+static void installExceptionOrSignalHandlers();
 static void uninstallExceptionOrSignalHandlers();
 
 CrashRecoveryContextCleanup::~CrashRecoveryContextCleanup() = default;
@@ -138,13 +137,13 @@ CrashRecoveryContext *CrashRecoveryContext::GetCurrent() {
   return CRCI->CRC;
 }
 
-void CrashRecoveryContext::Enable(bool NeedsPOSIXUtilitySignalHandling) {
+void CrashRecoveryContext::Enable() {
   std::lock_guard<std::mutex> L(getCrashRecoveryContextMutex());
   // FIXME: Shouldn't this be a refcount or something?
   if (gCrashRecoveryEnabled)
     return;
   gCrashRecoveryEnabled = true;
-  installExceptionOrSignalHandlers(NeedsPOSIXUtilitySignalHandling);
+  installExceptionOrSignalHandlers();
 }
 
 void CrashRecoveryContext::Disable() {
@@ -194,8 +193,7 @@ CrashRecoveryContext::unregisterCleanup(CrashRecoveryContextCleanup *cleanup) {
 // catches exceptions if they would bubble out from the stack frame with __try /
 // __except.
 
-static void
-installExceptionOrSignalHandlers(bool NeedsPOSIXUtilitySignalHandling) {}
+static void installExceptionOrSignalHandlers() {}
 static void uninstallExceptionOrSignalHandlers() {}
 
 // We need this function because the call to GetExceptionInformation() can only
@@ -311,8 +309,7 @@ static LONG CALLBACK ExceptionHandler(PEXCEPTION_POINTERS ExceptionInfo)
 // non-NULL, valid VEH handles, or NULL.
 static LLVM_THREAD_LOCAL const void* sCurrentExceptionHandle;
 
-static void
-installExceptionOrSignalHandlers(bool NeedsPOSIXUtilitySignalHandling) {
+static void installExceptionOrSignalHandlers() {
   // We can set up vectored exception handling now.  We will install our
   // handler as the front of the list, though there's no assurances that
   // it will remain at the front (another call could install itself before
@@ -393,8 +390,7 @@ static void CrashRecoverySignalHandler(int Signal) {
     const_cast<CrashRecoveryContextImpl *>(CRCI)->HandleCrash(RetCode, Signal);
 }
 
-static void
-installExceptionOrSignalHandlers(bool NeedsPOSIXUtilitySignalHandling) {
+static void installExceptionOrSignalHandlers() {
   // Setup the signal handler.
   struct sigaction Handler;
   Handler.sa_handler = CrashRecoverySignalHandler;
@@ -402,14 +398,7 @@ installExceptionOrSignalHandlers(bool NeedsPOSIXUtilitySignalHandling) {
   sigemptyset(&Handler.sa_mask);
 
   for (unsigned i = 0; i != NumSignals; ++i) {
-    if (NeedsPOSIXUtilitySignalHandling) {
-      // Don't install the new handler if the signal disposition is SIG_IGN.
-      struct sigaction act;
-      if (sigaction(Signals[i], NULL, &act) == 0 && act.sa_handler != SIG_IGN)
-        sigaction(Signals[i], &Handler, &PrevActions[i]);
-    } else {
-      sigaction(Signals[i], &Handler, &PrevActions[i]);
-    }
+    sigaction(Signals[i], &Handler, &PrevActions[i]);
   }
 }
 
@@ -537,5 +526,10 @@ bool CrashRecoveryContext::RunSafelyOnThread(function_ref<void()> Fn,
 
 bool CrashRecoveryContext::RunSafelyOnNewStack(function_ref<void()> Fn,
                                                unsigned RequestedStackSize) {
+#ifdef LLVM_HAS_SPLIT_STACKS
+  return runOnNewStack(RequestedStackSize,
+                       function_ref<bool()>([&]() { return RunSafely(Fn); }));
+#else
   return RunSafelyOnThread(Fn, RequestedStackSize);
+#endif
 }

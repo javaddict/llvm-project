@@ -18,7 +18,6 @@
 ; DEFAULT: Greedy Register Allocator
 ; DEFAULT-NEXT: Virtual Register Rewriter
 ; DEFAULT-NEXT: Stack Slot Coloring
-; DEFAULT-NEXT: Machine Cycle Info Analysis
 ; DEFAULT-NEXT: SI lower SGPR spill instructions
 ; DEFAULT-NEXT: Virtual Register Map
 ; DEFAULT-NEXT: Live Register Matrix
@@ -38,7 +37,6 @@
 ; DEFAULT-NEXT: Stack Slot Coloring
 
 ; O0: Fast Register Allocator
-; O0-NEXT: Machine Cycle Info Analysis
 ; O0-NEXT: SI lower SGPR spill instructions
 ; O0-NEXT: Slot index numbering
 ; O0-NEXT: Live Interval Analysis
@@ -63,7 +61,6 @@
 ; BASIC-DEFAULT-NEXT: Basic Register Allocator
 ; BASIC-DEFAULT-NEXT: Virtual Register Rewriter
 ; BASIC-DEFAULT-NEXT: Stack Slot Coloring
-; BASIC-DEFAULT-NEXT: Machine Cycle Info Analysis
 ; BASIC-DEFAULT-NEXT: SI lower SGPR spill instructions
 ; BASIC-DEFAULT-NEXT: Virtual Register Map
 ; BASIC-DEFAULT-NEXT: Live Register Matrix
@@ -91,7 +88,6 @@
 ; DEFAULT-BASIC: Greedy Register Allocator
 ; DEFAULT-BASIC-NEXT: Virtual Register Rewriter
 ; DEFAULT-BASIC-NEXT: Stack Slot Coloring
-; DEFAULT-BASIC-NEXT: Machine Cycle Info Analysis
 ; DEFAULT-BASIC-NEXT: SI lower SGPR spill instructions
 ; DEFAULT-BASIC-NEXT: Virtual Register Map
 ; DEFAULT-BASIC-NEXT: Live Register Matrix
@@ -121,7 +117,6 @@
 ; BASIC-BASIC-NEXT: Basic Register Allocator
 ; BASIC-BASIC-NEXT: Virtual Register Rewriter
 ; BASIC-BASIC-NEXT: Stack Slot Coloring
-; BASIC-BASIC-NEXT: Machine Cycle Info Analysis
 ; BASIC-BASIC-NEXT: SI lower SGPR spill instructions
 ; BASIC-BASIC-NEXT: Virtual Register Map
 ; BASIC-BASIC-NEXT: Live Register Matrix

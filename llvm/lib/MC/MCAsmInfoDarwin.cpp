@@ -55,8 +55,7 @@ bool MCAsmInfoDarwin::isSectionAtomizableBySymbols(
   }
 }
 
-MCAsmInfoDarwin::MCAsmInfoDarwin(const MCTargetOptions &Options)
-    : MCAsmInfo(Options) {
+MCAsmInfoDarwin::MCAsmInfoDarwin() {
   // Common settings for all Darwin targets.
   // Syntax:
   LinkerPrivateGlobalPrefix = "l";

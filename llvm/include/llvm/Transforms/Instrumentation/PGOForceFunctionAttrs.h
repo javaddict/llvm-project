@@ -15,10 +15,10 @@
 namespace llvm {
 
 struct PGOForceFunctionAttrsPass
-    : public OptionalPassInfoMixin<PGOForceFunctionAttrsPass> {
+    : public PassInfoMixin<PGOForceFunctionAttrsPass> {
   PGOForceFunctionAttrsPass(PGOOptions::ColdFuncOpt ColdType)
       : ColdType(ColdType) {}
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 
 private:
   PGOOptions::ColdFuncOpt ColdType;

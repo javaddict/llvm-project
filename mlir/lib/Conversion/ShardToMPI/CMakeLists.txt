@@ -15,11 +15,6 @@ add_mlir_conversion_library(MLIRShardToMPI
   MLIRFuncDialect
   MLIRIR
   MLIRLinalgTransforms
-  MLIRAffineDialect
-  MLIRArithDialect
-  MLIRControlFlowDialect
-  MLIRSCFDialect
-  MLIRTensorDialect
   MLIRMemRefDialect
   MLIRPass
   MLIRShardDialect

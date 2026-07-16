@@ -22,14 +22,14 @@ class Function;
 class TargetMachine;
 
 struct ComplexDeinterleavingPass
-    : public OptionalPassInfoMixin<ComplexDeinterleavingPass> {
+    : public PassInfoMixin<ComplexDeinterleavingPass> {
 private:
   const TargetMachine *TM;
 
 public:
   ComplexDeinterleavingPass(const TargetMachine &TM) : TM(&TM) {}
 
-  LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
 enum class ComplexDeinterleavingOperation {

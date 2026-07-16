@@ -13,7 +13,7 @@
 open Llvm
 open Llvm_irreader
 
-let context = create_context ()
+let context = global_context ()
 
 (* Tiny unit test framework - really just to help find which line is busted *)
 let print_checkpoints = false
@@ -75,5 +75,4 @@ let test_irreader () =
 (*===-- Driver ------------------------------------------------------------===*)
 
 let _ =
-  suite "irreader" test_irreader;
-  dispose_context context
+  suite "irreader" test_irreader

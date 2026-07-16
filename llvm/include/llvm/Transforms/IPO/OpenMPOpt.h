@@ -24,40 +24,39 @@ using Kernel = Function *;
 using KernelSet = SetVector<Kernel>;
 
 /// Helper to determine if \p M contains OpenMP.
-LLVM_ABI bool containsOpenMP(Module &M);
+bool containsOpenMP(Module &M);
 
 /// Helper to determine if \p M is a OpenMP target offloading device module.
-LLVM_ABI bool isOpenMPDevice(Module &M);
+bool isOpenMPDevice(Module &M);
 
 /// Return true iff \p Fn is an OpenMP GPU kernel; \p Fn has the "kernel"
 /// attribute.
-LLVM_ABI bool isOpenMPKernel(Function &Fn);
+bool isOpenMPKernel(Function &Fn);
 
 /// Get OpenMP device kernels in \p M.
-LLVM_ABI KernelSet getDeviceKernels(Module &M);
+KernelSet getDeviceKernels(Module &M);
 
 } // namespace omp
 
 /// OpenMP optimizations pass.
-class OpenMPOptPass : public OptionalPassInfoMixin<OpenMPOptPass> {
+class OpenMPOptPass : public PassInfoMixin<OpenMPOptPass> {
 public:
   OpenMPOptPass() = default;
   OpenMPOptPass(ThinOrFullLTOPhase LTOPhase) : LTOPhase(LTOPhase) {}
 
-  LLVM_ABI PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 
 private:
   const ThinOrFullLTOPhase LTOPhase = ThinOrFullLTOPhase::None;
 };
 
-class OpenMPOptCGSCCPass : public OptionalPassInfoMixin<OpenMPOptCGSCCPass> {
+class OpenMPOptCGSCCPass : public PassInfoMixin<OpenMPOptCGSCCPass> {
 public:
   OpenMPOptCGSCCPass() = default;
   OpenMPOptCGSCCPass(ThinOrFullLTOPhase LTOPhase) : LTOPhase(LTOPhase) {}
 
-  LLVM_ABI PreservedAnalyses run(LazyCallGraph::SCC &C,
-                                 CGSCCAnalysisManager &AM, LazyCallGraph &CG,
-                                 CGSCCUpdateResult &UR);
+  PreservedAnalyses run(LazyCallGraph::SCC &C, CGSCCAnalysisManager &AM,
+                        LazyCallGraph &CG, CGSCCUpdateResult &UR);
 
 private:
   const ThinOrFullLTOPhase LTOPhase = ThinOrFullLTOPhase::None;

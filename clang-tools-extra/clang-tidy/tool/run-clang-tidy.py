@@ -42,7 +42,6 @@ import json
 import multiprocessing
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -668,7 +667,7 @@ async def main() -> None:
         subprocess.check_call(
             invocation, stdout=subprocess.DEVNULL if args.quiet else None
         )
-    except Exception:
+    except:
         print("Unable to run clang-tidy.", file=sys.stderr)
         sys.exit(1)
 
@@ -682,7 +681,7 @@ async def main() -> None:
     if args.source_filter:
         try:
             source_filter_re = re.compile(args.source_filter)
-        except Exception:
+        except:
             print(
                 "Error: unable to compile regex from arg -source-filter:",
                 file=sys.stderr,
@@ -733,7 +732,7 @@ async def main() -> None:
             progress = f"[{i + 1: >{len(f'{len(files)}')}}/{len(files)}]"
             runtime = f"[{result.elapsed:.1f}s]"
             if not args.hide_progress:
-                print(f"{progress}{runtime} {shlex.join(result.invocation)}")
+                print(f"{progress}{runtime} {' '.join(result.invocation)}")
             if result.stdout:
                 print(result.stdout, end=("" if result.stderr else "\n"))
             if result.stderr:
@@ -765,7 +764,7 @@ async def main() -> None:
         try:
             assert export_fixes_dir
             merge_replacement_files(export_fixes_dir, args.export_fixes)
-        except Exception:
+        except:
             print("Error exporting fixes.\n", file=sys.stderr)
             traceback.print_exc()
             returncode = 1
@@ -776,7 +775,7 @@ async def main() -> None:
         try:
             assert export_fixes_dir
             apply_fixes(args, clang_apply_replacements_binary, export_fixes_dir)
-        except Exception:
+        except:
             print("Error applying fixes.\n", file=sys.stderr)
             traceback.print_exc()
             returncode = 1

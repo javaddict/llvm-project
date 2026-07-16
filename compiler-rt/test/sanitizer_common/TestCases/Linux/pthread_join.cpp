@@ -44,10 +44,8 @@ int main(int argc, char **argv) {
     while (pthread_tryjoin_np(thread[1], &res))
       sleep(1);
     assert(~(uintptr_t)res == 1001);
-    if (!check_invalid_join) {
-      int err = pthread_tryjoin_np(thread[1], &res);
-      assert(err == EBUSY || err == 0);
-    }
+    assert(check_invalid_join ||
+           (pthread_tryjoin_np(thread[1], &res) == EBUSY));
   }
 
   {
@@ -56,22 +54,15 @@ int main(int argc, char **argv) {
     while (pthread_timedjoin_np(thread[2], &res, &tm))
       sleep(1);
     assert(~(uintptr_t)res == 1002);
-    if (!check_invalid_join) {
-      res = nullptr;
-      int err = pthread_timedjoin_np(thread[2], &res, &tm);
-      assert(err == ESRCH || err == 0);
-    }
+    assert(check_invalid_join ||
+           (pthread_timedjoin_np(thread[2], &res, &tm) == ESRCH));
   }
 
   {
     void *res;
     assert(!pthread_join(thread[3], &res));
     assert(~(uintptr_t)res == 1003);
-    if (!check_invalid_join) {
-      res = nullptr;
-      int err = pthread_join(thread[3], &res);
-      assert(err == ESRCH || err == 0);
-    }
+    assert(check_invalid_join || (pthread_join(thread[3], &res) == ESRCH));
   }
 
   return 0;

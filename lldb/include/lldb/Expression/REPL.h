@@ -144,7 +144,7 @@ protected:
   virtual lldb::LanguageType GetLanguage() = 0;
 
   virtual bool PrintOneVariable(Debugger &debugger,
-                                lldb::LockableStreamFileSP &output_stream_sp,
+                                lldb::StreamFileSP &output_sp,
                                 lldb::ValueObjectSP &valobj_sp,
                                 ExpressionVariable *var = nullptr) = 0;
 

@@ -56,6 +56,7 @@ private:
   bool tryMergeNullishCoalescingEqual();
   bool tryTransformCSharpForEach();
   bool tryMergeForEach();
+  bool tryTransformTryUsageForC();
 
   // Merge the most recently lexed tokens into a single token if their kinds are
   // correct.
@@ -140,17 +141,11 @@ private:
   llvm::Regex MacroBlockBeginRegex;
   llvm::Regex MacroBlockEndRegex;
 
-  // The next line is a Verilog protected block that should not be split into
-  // tokens. Set at the 'pragma protect' line. Cleared at the next line.
-  bool VerilogProtectedBlock;
-
   // Targets that may appear inside a C# attribute.
   static const llvm::StringSet<> CSharpAttributeTargets;
 
-  /// Handle Verilog opaque protected stuff.
-  bool readVerilogProtected(FormatToken &Tok);
   /// Handle Verilog-specific tokens.
-  bool readRawTokenVerilogSpecific(FormatToken &Tok);
+  bool readRawTokenVerilogSpecific(Token &Tok);
 
   void readRawToken(FormatToken &Tok);
 

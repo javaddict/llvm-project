@@ -35,7 +35,7 @@ TEST_F(DisconnectRequestHandlerTest, DisconnectTriggersTerminated) {
 }
 
 // Is flaky on Linux, see https://github.com/llvm/llvm-project/issues/154763.
-#if LLDB_ENABLE_PYTHON && !defined(__linux__)
+#ifndef __linux__
 TEST_F(DisconnectRequestHandlerTest, DisconnectTriggersTerminateCommands) {
   CreateDebugger();
 

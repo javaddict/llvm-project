@@ -11,8 +11,9 @@ declare <1024 x i1> @llvm.ppc.mma.dmxvi8gerx4(<256 x i1>, <16 x i8>)
 define void @test_dmxvi8gerx4(ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-LABEL: test_dmxvi8gerx4:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    lxvp vsp34, 0(r3)
+; CHECK-NEXT:    lxv v2, 16(r3)
 ; CHECK-NEXT:    lxv vs0, 0(r4)
+; CHECK-NEXT:    lxv v3, 0(r3)
 ; CHECK-NEXT:    dmxvi8gerx4 dmr0, vsp34, vs0
 ; CHECK-NEXT:    dmxxextfdmr512 vsp34, vsp36, wacc0, 0
 ; CHECK-NEXT:    stxvp vsp34, 96(r5)
@@ -24,8 +25,9 @@ define void @test_dmxvi8gerx4(ptr %vpp, ptr %vcp, ptr %resp) {
 ;
 ; CHECK-BE-LABEL: test_dmxvi8gerx4:
 ; CHECK-BE:       # %bb.0: # %entry
-; CHECK-BE-NEXT:    lxvp vsp34, 0(r3)
+; CHECK-BE-NEXT:    lxv v2, 0(r3)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r4)
+; CHECK-BE-NEXT:    lxv v3, 16(r3)
 ; CHECK-BE-NEXT:    dmxvi8gerx4 dmr0, vsp34, vs0
 ; CHECK-BE-NEXT:    dmxxextfdmr512 vsp34, vsp36, wacc_hi0, 1
 ; CHECK-BE-NEXT:    stxvp vsp36, 96(r5)
@@ -51,7 +53,8 @@ define void @test_dmxvi8gerx4pp(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -70,7 +73,8 @@ define void @test_dmxvi8gerx4pp(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -100,7 +104,8 @@ define void @test_dmxvi8gerx4spp(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -119,7 +124,8 @@ define void @test_dmxvi8gerx4spp(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -149,7 +155,8 @@ define void @test_pmdmxvi8gerx4pp(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -168,7 +175,8 @@ define void @test_pmdmxvi8gerx4pp(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -194,8 +202,9 @@ declare <1024 x i1> @llvm.ppc.mma.pmdmxvi8gerx4(<256 x i1>, <16 x i8>, i32, i32,
 define void @test_pmdmxvi8gerx4(ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-LABEL: test_pmdmxvi8gerx4:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    lxvp vsp34, 0(r3)
+; CHECK-NEXT:    lxv v2, 16(r3)
 ; CHECK-NEXT:    lxv vs0, 0(r4)
+; CHECK-NEXT:    lxv v3, 0(r3)
 ; CHECK-NEXT:    pmdmxvi8gerx4 dmr0, vsp34, vs0, 55, 5, 10
 ; CHECK-NEXT:    dmxxextfdmr512 vsp34, vsp36, wacc0, 0
 ; CHECK-NEXT:    stxvp vsp34, 96(r5)
@@ -207,8 +216,9 @@ define void @test_pmdmxvi8gerx4(ptr %vpp, ptr %vcp, ptr %resp) {
 ;
 ; CHECK-BE-LABEL: test_pmdmxvi8gerx4:
 ; CHECK-BE:       # %bb.0: # %entry
-; CHECK-BE-NEXT:    lxvp vsp34, 0(r3)
+; CHECK-BE-NEXT:    lxv v2, 0(r3)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r4)
+; CHECK-BE-NEXT:    lxv v3, 16(r3)
 ; CHECK-BE-NEXT:    pmdmxvi8gerx4 dmr0, vsp34, vs0, 55, 5, 10
 ; CHECK-BE-NEXT:    dmxxextfdmr512 vsp34, vsp36, wacc_hi0, 1
 ; CHECK-BE-NEXT:    stxvp vsp36, 96(r5)
@@ -234,7 +244,8 @@ define dso_local void @test_pmdmxvi8gerx4spp(ptr %vop, ptr %vpp, ptr %vcp, ptr %
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -253,7 +264,8 @@ define dso_local void @test_pmdmxvi8gerx4spp(ptr %vop, ptr %vpp, ptr %vcp, ptr %
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -279,8 +291,9 @@ declare <1024 x i1> @llvm.ppc.mma.dmxvbf16gerx2(<256 x i1>, <16 x i8>)
 define void @test_dmxvbf16gerx2(ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-LABEL: test_dmxvbf16gerx2:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    lxvp vsp34, 0(r3)
+; CHECK-NEXT:    lxv v2, 16(r3)
 ; CHECK-NEXT:    lxv vs0, 0(r4)
+; CHECK-NEXT:    lxv v3, 0(r3)
 ; CHECK-NEXT:    dmxvbf16gerx2 dmr0, vsp34, vs0
 ; CHECK-NEXT:    dmxxextfdmr512 vsp34, vsp36, wacc0, 0
 ; CHECK-NEXT:    stxvp vsp34, 96(r5)
@@ -292,8 +305,9 @@ define void @test_dmxvbf16gerx2(ptr %vpp, ptr %vcp, ptr %resp) {
 ;
 ; CHECK-BE-LABEL: test_dmxvbf16gerx2:
 ; CHECK-BE:       # %bb.0: # %entry
-; CHECK-BE-NEXT:    lxvp vsp34, 0(r3)
+; CHECK-BE-NEXT:    lxv v2, 0(r3)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r4)
+; CHECK-BE-NEXT:    lxv v3, 16(r3)
 ; CHECK-BE-NEXT:    dmxvbf16gerx2 dmr0, vsp34, vs0
 ; CHECK-BE-NEXT:    dmxxextfdmr512 vsp34, vsp36, wacc_hi0, 1
 ; CHECK-BE-NEXT:    stxvp vsp36, 96(r5)
@@ -319,7 +333,8 @@ define void @test_dmxvbf16gerx2pp(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -338,7 +353,8 @@ define void @test_dmxvbf16gerx2pp(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -368,7 +384,8 @@ define void @test_dmxvbf16gerx2pn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -387,7 +404,8 @@ define void @test_dmxvbf16gerx2pn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -417,7 +435,8 @@ define void @test_dmxvbf16gerx2np(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -436,7 +455,8 @@ define void @test_dmxvbf16gerx2np(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -466,7 +486,8 @@ define void @test_dmxvbf16gerx2nn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -485,7 +506,8 @@ define void @test_dmxvbf16gerx2nn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -511,8 +533,9 @@ declare <1024 x i1> @llvm.ppc.mma.pmdmxvbf16gerx2(<256 x i1>, <16 x i8>, i32, i3
 define void @test_pmdmxvbf16gerx2(ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-LABEL: test_pmdmxvbf16gerx2:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    lxvp vsp34, 0(r3)
+; CHECK-NEXT:    lxv v2, 16(r3)
 ; CHECK-NEXT:    lxv vs0, 0(r4)
+; CHECK-NEXT:    lxv v3, 0(r3)
 ; CHECK-NEXT:    pmdmxvbf16gerx2 dmr0, vsp34, vs0, 33, 5, 2
 ; CHECK-NEXT:    dmxxextfdmr512 vsp34, vsp36, wacc0, 0
 ; CHECK-NEXT:    stxvp vsp34, 96(r5)
@@ -524,8 +547,9 @@ define void @test_pmdmxvbf16gerx2(ptr %vpp, ptr %vcp, ptr %resp) {
 ;
 ; CHECK-BE-LABEL: test_pmdmxvbf16gerx2:
 ; CHECK-BE:       # %bb.0: # %entry
-; CHECK-BE-NEXT:    lxvp vsp34, 0(r3)
+; CHECK-BE-NEXT:    lxv v2, 0(r3)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r4)
+; CHECK-BE-NEXT:    lxv v3, 16(r3)
 ; CHECK-BE-NEXT:    pmdmxvbf16gerx2 dmr0, vsp34, vs0, 33, 5, 2
 ; CHECK-BE-NEXT:    dmxxextfdmr512 vsp34, vsp36, wacc_hi0, 1
 ; CHECK-BE-NEXT:    stxvp vsp36, 96(r5)
@@ -551,7 +575,8 @@ define void @test_pmdmxvbf16gerx2pp(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -570,7 +595,8 @@ define void @test_pmdmxvbf16gerx2pp(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -600,7 +626,8 @@ define void @test_pmdmxvbf16gerx2pn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -619,7 +646,8 @@ define void @test_pmdmxvbf16gerx2pn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -649,7 +677,8 @@ define void @test_pmdmxvbf16gerx2np(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -668,7 +697,8 @@ define void @test_pmdmxvbf16gerx2np(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -698,7 +728,8 @@ define void @test_pmdmxvbf16gerx2nn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -717,7 +748,8 @@ define void @test_pmdmxvbf16gerx2nn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -742,8 +774,9 @@ declare <1024 x i1> @llvm.ppc.mma.dmxvf16gerx2(<256 x i1>, <16 x i8>)
 define void @test_dmxvf16gerx2(ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-LABEL: test_dmxvf16gerx2:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    lxvp vsp34, 0(r3)
+; CHECK-NEXT:    lxv v2, 16(r3)
 ; CHECK-NEXT:    lxv vs0, 0(r4)
+; CHECK-NEXT:    lxv v3, 0(r3)
 ; CHECK-NEXT:    dmxvf16gerx2 dmr0, vsp34, vs0
 ; CHECK-NEXT:    dmxxextfdmr512 vsp34, vsp36, wacc0, 0
 ; CHECK-NEXT:    stxvp vsp34, 96(r5)
@@ -755,8 +788,9 @@ define void @test_dmxvf16gerx2(ptr %vpp, ptr %vcp, ptr %resp) {
 ;
 ; CHECK-BE-LABEL: test_dmxvf16gerx2:
 ; CHECK-BE:       # %bb.0: # %entry
-; CHECK-BE-NEXT:    lxvp vsp34, 0(r3)
+; CHECK-BE-NEXT:    lxv v2, 0(r3)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r4)
+; CHECK-BE-NEXT:    lxv v3, 16(r3)
 ; CHECK-BE-NEXT:    dmxvf16gerx2 dmr0, vsp34, vs0
 ; CHECK-BE-NEXT:    dmxxextfdmr512 vsp34, vsp36, wacc_hi0, 1
 ; CHECK-BE-NEXT:    stxvp vsp36, 96(r5)
@@ -782,7 +816,8 @@ define void @test_dmxvf16gerx2pp(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -801,7 +836,8 @@ define void @test_dmxvf16gerx2pp(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -831,7 +867,8 @@ define void @test_dmxvf16gerx2pn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -850,7 +887,8 @@ define void @test_dmxvf16gerx2pn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -880,7 +918,8 @@ define void @test_dmxvf16gerx2np(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -899,7 +938,8 @@ define void @test_dmxvf16gerx2np(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -929,7 +969,8 @@ define void @test_dmxvf16gerx2nn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -948,7 +989,8 @@ define void @test_dmxvf16gerx2nn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -974,8 +1016,9 @@ declare <1024 x i1> @llvm.ppc.mma.pmdmxvf16gerx2(<256 x i1>, <16 x i8>, i32, i32
 define void @test_pmdmxvf16gerx2(ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-LABEL: test_pmdmxvf16gerx2:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    lxvp vsp34, 0(r3)
+; CHECK-NEXT:    lxv v2, 16(r3)
 ; CHECK-NEXT:    lxv vs0, 0(r4)
+; CHECK-NEXT:    lxv v3, 0(r3)
 ; CHECK-NEXT:    pmdmxvf16gerx2 dmr0, vsp34, vs0, 33, 5, 2
 ; CHECK-NEXT:    dmxxextfdmr512 vsp34, vsp36, wacc0, 0
 ; CHECK-NEXT:    stxvp vsp34, 96(r5)
@@ -987,8 +1030,9 @@ define void @test_pmdmxvf16gerx2(ptr %vpp, ptr %vcp, ptr %resp) {
 ;
 ; CHECK-BE-LABEL: test_pmdmxvf16gerx2:
 ; CHECK-BE:       # %bb.0: # %entry
-; CHECK-BE-NEXT:    lxvp vsp34, 0(r3)
+; CHECK-BE-NEXT:    lxv v2, 0(r3)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r4)
+; CHECK-BE-NEXT:    lxv v3, 16(r3)
 ; CHECK-BE-NEXT:    pmdmxvf16gerx2 dmr0, vsp34, vs0, 33, 5, 2
 ; CHECK-BE-NEXT:    dmxxextfdmr512 vsp34, vsp36, wacc_hi0, 1
 ; CHECK-BE-NEXT:    stxvp vsp36, 96(r5)
@@ -1014,7 +1058,8 @@ define void @test_pmdmxvf16gerx2pp(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -1033,7 +1078,8 @@ define void @test_pmdmxvf16gerx2pp(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -1063,7 +1109,8 @@ define void @test_pmdmxvf16gerx2pn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -1082,7 +1129,8 @@ define void @test_pmdmxvf16gerx2pn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -1112,7 +1160,8 @@ define void @test_pmdmxvf16gerx2np(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -1131,7 +1180,8 @@ define void @test_pmdmxvf16gerx2np(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -1161,7 +1211,8 @@ define void @test_pmdmxvf16gerx2nn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-NEXT:    lxvp vsp36, 32(r3)
 ; CHECK-NEXT:    lxvp vsp32, 64(r3)
 ; CHECK-NEXT:    lxvp vsp38, 96(r3)
-; CHECK-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-NEXT:    lxv v8, 16(r4)
+; CHECK-NEXT:    lxv v9, 0(r4)
 ; CHECK-NEXT:    lxv vs0, 0(r5)
 ; CHECK-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0
@@ -1180,7 +1231,8 @@ define void @test_pmdmxvf16gerx2nn(ptr %vop, ptr %vpp, ptr %vcp, ptr %resp) {
 ; CHECK-BE-NEXT:    lxvp vsp36, 64(r3)
 ; CHECK-BE-NEXT:    lxvp vsp32, 32(r3)
 ; CHECK-BE-NEXT:    lxvp vsp38, 0(r3)
-; CHECK-BE-NEXT:    lxvp vsp40, 0(r4)
+; CHECK-BE-NEXT:    lxv v8, 0(r4)
+; CHECK-BE-NEXT:    lxv v9, 16(r4)
 ; CHECK-BE-NEXT:    lxv vs0, 0(r5)
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc_hi0, vsp36, vsp34, 1
 ; CHECK-BE-NEXT:    dmxxinstdmr512 wacc0, vsp38, vsp32, 0

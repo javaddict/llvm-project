@@ -38,6 +38,7 @@ int convertForTestingMain(int argc, const char *argv[]) {
     std::string Buf;
     raw_string_ostream OS(Buf);
     logAllUnhandledErrors(ObjErr.takeError(), OS);
+    OS.flush();
     errs() << "error: " << Buf;
     return 1;
   }

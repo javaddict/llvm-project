@@ -32,7 +32,7 @@ class Type;
 
 /// Abstract base class for all machine specific constantpool value subclasses.
 ///
-class LLVM_ABI MachineConstantPoolValue {
+class MachineConstantPoolValue {
   virtual void anchor();
 
   Type *Ty;
@@ -94,14 +94,14 @@ public:
 
   Align getAlign() const { return Alignment; }
 
-  LLVM_ABI unsigned getSizeInBytes(const DataLayout &DL) const;
+  unsigned getSizeInBytes(const DataLayout &DL) const;
 
   /// This method classifies the entry according to whether or not it may
   /// generate a relocation entry.  This must be conservative, so if it might
   /// codegen to a relocatable entry, it should say so.
-  LLVM_ABI bool needsRelocation() const;
+  bool needsRelocation() const;
 
-  LLVM_ABI SectionKind getSectionKind(const DataLayout *DL) const;
+  SectionKind getSectionKind(const DataLayout *DL) const;
 };
 
 /// The MachineConstantPool class keeps track of constants referenced by a
@@ -127,7 +127,7 @@ public:
   /// The only constructor.
   explicit MachineConstantPool(const DataLayout &DL)
       : PoolAlignment(1), DL(DL) {}
-  LLVM_ABI ~MachineConstantPool();
+  ~MachineConstantPool();
 
   /// Return the alignment required by the whole constant pool, of which the
   /// first element must be aligned.
@@ -136,9 +136,8 @@ public:
   /// getConstantPoolIndex - Create a new entry in the constant pool or return
   /// an existing one.  User must specify the minimum required alignment for
   /// the object.
-  LLVM_ABI unsigned getConstantPoolIndex(const Constant *C, Align Alignment);
-  LLVM_ABI unsigned getConstantPoolIndex(MachineConstantPoolValue *V,
-                                         Align Alignment);
+  unsigned getConstantPoolIndex(const Constant *C, Align Alignment);
+  unsigned getConstantPoolIndex(MachineConstantPoolValue *V, Align Alignment);
 
   /// isEmpty - Return true if this constant pool contains no constants.
   bool isEmpty() const { return Constants.empty(); }
@@ -149,10 +148,10 @@ public:
 
   /// print - Used by the MachineFunction printer to print information about
   /// constant pool objects.  Implemented in MachineFunction.cpp
-  LLVM_ABI void print(raw_ostream &OS) const;
+  void print(raw_ostream &OS) const;
 
   /// dump - Call print(cerr) to be called from the debugger.
-  LLVM_ABI void dump() const;
+  void dump() const;
 };
 
 } // end namespace llvm

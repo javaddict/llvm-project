@@ -31,7 +31,10 @@ INITIALIZE_PASS_END(LazyMachineBlockFrequencyInfoPass, DEBUG_TYPE,
 char LazyMachineBlockFrequencyInfoPass::ID = 0;
 
 LazyMachineBlockFrequencyInfoPass::LazyMachineBlockFrequencyInfoPass()
-    : MachineFunctionPass(ID) {}
+    : MachineFunctionPass(ID) {
+  initializeLazyMachineBlockFrequencyInfoPassPass(
+      *PassRegistry::getPassRegistry());
+}
 
 void LazyMachineBlockFrequencyInfoPass::getAnalysisUsage(
     AnalysisUsage &AU) const {

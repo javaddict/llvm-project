@@ -50,7 +50,7 @@ struct TestSCFForUtilsPass
             "test.trip-count",
             IntegerAttr::get(IntegerType::get(&getContext(),
                                               tripCount.value().getBitWidth()),
-                             tripCount.value().getZExtValue()));
+                             tripCount.value().getSExtValue()));
       else
         loopOp->setDiscardableAttr("test.trip-count",
                                    StringAttr::get(&getContext(), "none"));

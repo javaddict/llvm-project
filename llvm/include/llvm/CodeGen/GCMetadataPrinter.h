@@ -38,7 +38,7 @@ extern template class LLVM_TEMPLATE_ABI Registry<GCMetadataPrinter>;
 
 /// GCMetadataPrinter - Emits GC metadata as assembly code.  Instances are
 /// created, managed, and owned by the AsmPrinter.
-class LLVM_ABI GCMetadataPrinter {
+class GCMetadataPrinter {
 private:
   friend class AsmPrinter;
 

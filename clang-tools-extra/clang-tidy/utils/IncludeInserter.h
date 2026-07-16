@@ -72,14 +72,15 @@ public:
   /// Returns ``std::nullopt`` on error or if the inclusion directive already
   /// exists.
   std::optional<FixItHint> createIncludeInsertion(FileID FileID,
-                                                  StringRef Header);
+                                                  llvm::StringRef Header);
 
   /// Creates a \p Header inclusion directive fixit in the main file.
   /// When \p Header is enclosed in angle brackets, uses angle brackets in the
   /// inclusion directive, otherwise uses quotes.
   /// Returns ``std::nullopt`` on error or if the inclusion directive already
   /// exists.
-  std::optional<FixItHint> createMainFileIncludeInsertion(StringRef Header);
+  std::optional<FixItHint>
+  createMainFileIncludeInsertion(llvm::StringRef Header);
 
   IncludeSorter::IncludeStyle getStyle() const { return Style; }
 

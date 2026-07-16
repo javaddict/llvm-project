@@ -68,7 +68,8 @@ void SDTRewriter::readSection() {
     return;
 
   StringRef Buf = SDTSection->getContents();
-  DataExtractor DE = DataExtractor(Buf, BC.AsmInfo->isLittleEndian());
+  DataExtractor DE = DataExtractor(Buf, BC.AsmInfo->isLittleEndian(),
+                                   BC.AsmInfo->getCodePointerSize());
   uint64_t Offset = 0;
 
   while (DE.isValidOffset(Offset)) {

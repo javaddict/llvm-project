@@ -18,7 +18,9 @@ static Error ExtractDebugNames(StringRef NamesSecData, StringRef StrSecData) {
   DWARFDataExtractor NamesExtractor(NamesSecData,
                                     /*isLittleEndian=*/true,
                                     /*AddrSize=*/4);
-  DataExtractor StrExtractor(StrSecData, /*isLittleEndian=*/true);
+  DataExtractor StrExtractor(StrSecData,
+                             /*isLittleEndian=*/true,
+                             /*AddrSize=*/4);
   DWARFDebugNames Table(NamesExtractor, StrExtractor);
   return Table.extract();
 }

@@ -69,7 +69,5 @@ func.func private @f() -> (
 
 // -----
 
-// Erasing no results from a void llvm.func (0 results) is a no-op and should
-// succeed. Previously this crashed with an assertion in LLVMFunctionType::clone.
-// CHECK: llvm.func @llvm_func(!llvm.ptr, i64)
+// expected-error @below {{failed to erase results}}
 llvm.func @llvm_func(!llvm.ptr, i64)

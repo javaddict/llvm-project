@@ -1,5 +1,5 @@
 add_mlir_dialect_library(MLIRShardTransforms
-  Simplify.cpp
+  Simplifications.cpp
   ShardingPropagation.cpp
   Partition.cpp
   Transforms.cpp
@@ -26,5 +26,4 @@ add_mlir_dialect_library(MLIRShardTransforms
   MLIRSupport
   MLIRTensorDialect
   MLIRTosaShardingInterfaceImpl
-  MLIRTransformUtils
 )

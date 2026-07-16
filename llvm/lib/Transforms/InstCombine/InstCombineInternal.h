@@ -58,28 +58,19 @@ class ProfileSummaryInfo;
 class TargetLibraryInfo;
 class User;
 
-/// Enum to specify how shift operations should be evaluated in
-/// canEvaluateShifted.
-/// Lossy: Allows lossy transformations
-/// Signed: Requires lossless transformation, using ashr to restore for shl,
-///         or represents ashr handling for right shifts
-/// Unsigned: Requires lossless transformation, using lshr to restore for shl,
-///           or represents lshr handling for right shifts
-enum class ShiftSemantics { Lossy, Signed, Unsigned };
-
 class LLVM_LIBRARY_VISIBILITY InstCombinerImpl final
     : public InstCombiner,
       public InstVisitor<InstCombinerImpl, Instruction *> {
 public:
-  InstCombinerImpl(InstructionWorklist &Worklist, Function &F, AAResults *AA,
-                   AssumptionCache &AC, TargetLibraryInfo &TLI,
-                   TargetTransformInfo &TTI, DominatorTree &DT,
-                   OptimizationRemarkEmitter &ORE, BlockFrequencyInfo *BFI,
-                   BranchProbabilityInfo *BPI, ProfileSummaryInfo *PSI,
-                   const DataLayout &DL,
+  InstCombinerImpl(InstructionWorklist &Worklist, BuilderTy &Builder,
+                   Function &F, AAResults *AA, AssumptionCache &AC,
+                   TargetLibraryInfo &TLI, TargetTransformInfo &TTI,
+                   DominatorTree &DT, OptimizationRemarkEmitter &ORE,
+                   BlockFrequencyInfo *BFI, BranchProbabilityInfo *BPI,
+                   ProfileSummaryInfo *PSI, const DataLayout &DL,
                    ReversePostOrderTraversal<BasicBlock *> &RPOT)
-      : InstCombiner(Worklist, F, AA, AC, TLI, TTI, DT, ORE, BFI, BPI, PSI, DL,
-                     RPOT) {}
+      : InstCombiner(Worklist, Builder, F, AA, AC, TLI, TTI, DT, ORE, BFI, BPI,
+                     PSI, DL, RPOT) {}
 
   ~InstCombinerImpl() override = default;
 
@@ -120,7 +111,6 @@ public:
   Instruction *visitSDiv(BinaryOperator &I);
   Instruction *visitFDiv(BinaryOperator &I);
   Value *simplifyRangeCheck(ICmpInst *Cmp0, ICmpInst *Cmp1, bool Inverted);
-  Instruction *FoldOrOfLogicalAnds(Value *Op0, Value *Op1);
   Instruction *visitAnd(BinaryOperator &I);
   Instruction *visitOr(BinaryOperator &I);
   bool sinkNotIntoLogicalOp(Instruction &I);
@@ -157,7 +147,7 @@ public:
   Instruction *visitIntToPtr(IntToPtrInst &CI);
   Instruction *visitBitCast(BitCastInst &CI);
   Instruction *visitAddrSpaceCast(AddrSpaceCastInst &CI);
-  template <typename FPToIntTy> Instruction *foldItoFPtoI(FPToIntTy &FI);
+  Instruction *foldItoFPtoI(CastInst &FI);
   Instruction *visitSelectInst(SelectInst &SI);
   Instruction *foldShuffledIntrinsicOperands(IntrinsicInst *II);
   Value *foldReversedIntrinsicOperands(IntrinsicInst *II);
@@ -175,8 +165,8 @@ public:
   Instruction *visitLoadInst(LoadInst &LI);
   Instruction *visitStoreInst(StoreInst &SI);
   Instruction *visitAtomicRMWInst(AtomicRMWInst &SI);
-  Instruction *visitUncondBrInst(UncondBrInst &BI);
-  Instruction *visitCondBrInst(CondBrInst &BI);
+  Instruction *visitUnconditionalBranchInst(BranchInst &BI);
+  Instruction *visitBranchInst(BranchInst &BI);
   Instruction *visitFenceInst(FenceInst &FI);
   Instruction *visitSwitchInst(SwitchInst &SI);
   Instruction *visitReturnInst(ReturnInst &RI);
@@ -211,6 +201,23 @@ public:
 
   LoadInst *combineLoadToNewType(LoadInst &LI, Type *NewTy,
                                  const Twine &Suffix = "");
+
+  KnownFPClass computeKnownFPClass(Value *Val, FastMathFlags FMF,
+                                   FPClassTest Interested = fcAllFlags,
+                                   const Instruction *CtxI = nullptr,
+                                   unsigned Depth = 0) const {
+    return llvm::computeKnownFPClass(
+        Val, FMF, Interested, getSimplifyQuery().getWithInstruction(CtxI),
+        Depth);
+  }
+
+  KnownFPClass computeKnownFPClass(Value *Val,
+                                   FPClassTest Interested = fcAllFlags,
+                                   const Instruction *CtxI = nullptr,
+                                   unsigned Depth = 0) const {
+    return llvm::computeKnownFPClass(
+        Val, Interested, getSimplifyQuery().getWithInstruction(CtxI), Depth);
+  }
 
   /// Check if fmul \p MulVal, +0.0 will yield +0.0 (or signed zero is
   /// ignorable).
@@ -441,11 +448,6 @@ private:
                               bool InvertFalseVal = false);
   Value *getSelectCondition(Value *A, Value *B, bool ABIsTheSame);
 
-  bool canEvaluateShifted(Value *V, unsigned NumBits, bool IsLeftShift,
-                          ShiftSemantics Semantics, Instruction *CxtI);
-  Value *getShiftedValue(Value *V, unsigned NumBits, bool IsLeftShift,
-                         ShiftSemantics Semantics);
-
   Instruction *foldLShrOverflowBit(BinaryOperator &I);
   Instruction *foldExtractOfOverflowIntrinsic(ExtractValueInst &EV);
   Instruction *foldIntrinsicWithOverflowCommon(IntrinsicInst *II);
@@ -558,12 +560,6 @@ public:
   /// (Binop (cast C), (select C, T, F))
   ///    -> (select C, C0, C1)
   Instruction *foldBinOpOfSelectAndCastOfSelectCondition(BinaryOperator &I);
-  /// Fold both forms of the div_ceil idiom:
-  ///   (add (udiv X, Y), (zext (icmp ne (urem X, Y), 0)))
-  ///     -> (udiv (add nuw X, Y-1), Y)
-  ///   (add (zext (udiv X, Y)), (zext (icmp ne (urem X, Y), 0)))
-  ///     -> (zext (udiv (add nuw X, Y-1), Y))
-  Instruction *foldDivCeil(BinaryOperator &I);
 
   /// This tries to simplify binary operations by factorizing out common terms
   /// (e. g. "(A*B)+(A*C)" -> "A*(B+C)").
@@ -616,19 +612,16 @@ public:
   /// Attempts to replace V with a simpler value based on the demanded
   /// floating-point classes
   Value *SimplifyDemandedUseFPClass(Instruction *I, FPClassTest DemandedMask,
-                                    KnownFPClass &Known, const SimplifyQuery &Q,
+                                    KnownFPClass &Known, Instruction *CxtI,
                                     unsigned Depth = 0);
   Value *SimplifyMultipleUseDemandedFPClass(Instruction *I,
                                             FPClassTest DemandedMask,
                                             KnownFPClass &Known,
-                                            const SimplifyQuery &Q,
-                                            unsigned Depth);
+                                            Instruction *CxtI, unsigned Depth);
 
   bool SimplifyDemandedFPClass(Instruction *I, unsigned Op,
                                FPClassTest DemandedMask, KnownFPClass &Known,
-                               const SimplifyQuery &Q, unsigned Depth = 0);
-
-  bool SimplifyDemandedInstructionFPClass(Instruction &Inst);
+                               unsigned Depth = 0);
 
   /// Common transforms for add / disjoint or
   Instruction *foldAddLikeCommutative(Value *LHS, Value *RHS, bool NSW,
@@ -727,7 +720,6 @@ public:
   Instruction *foldFCmpIntToFPConst(FCmpInst &I, Instruction *LHSI,
                                     Constant *RHSC);
   Instruction *foldICmpAddOpConst(Value *X, const APInt &C, CmpPredicate Pred);
-  Instruction *foldCmpSelectOfConstants(CmpInst &I);
   Instruction *foldICmpWithCastOp(ICmpInst &ICmp);
   Instruction *foldICmpWithZextOrSext(ICmpInst &ICmp);
 
@@ -813,7 +805,6 @@ public:
   Instruction *foldSelectExtConst(SelectInst &Sel);
   Instruction *foldSelectEqualityTest(SelectInst &SI);
   Instruction *foldSelectOpOp(SelectInst &SI, Instruction *TI, Instruction *FI);
-  Instruction *foldSelectIntrinsic(SelectInst &SI);
   Instruction *foldSelectIntoOp(SelectInst &SI, Value *, Value *);
   Instruction *foldSPFofSPF(Instruction *Inner, SelectPatternFlavor SPF1,
                             Value *A, Value *B, Instruction &Outer,
@@ -822,9 +813,6 @@ public:
   Value *foldSelectWithConstOpToBinOp(ICmpInst *Cmp, Value *TrueVal,
                                       Value *FalseVal);
   Instruction *foldSelectValueEquivalence(SelectInst &SI, CmpInst &CI);
-
-  Instruction *foldExtractionOfVectorDeinterleave(ZExtInst &RootZExt);
-
   bool replaceInInstruction(Value *V, Value *Old, Value *New,
                             unsigned Depth = 0);
 

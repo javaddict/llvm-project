@@ -3,7 +3,7 @@ target triple = "x86_64-grtev4-linux-gnu"
 
 declare void @external_fct(i32)
 
-define dso_local i32 @top() minsize {
+define dso_local i32 @top() {
   %a = call i32 @multiplier(i32 5)
   %b = call i32 @adder(i32 10)
   %ret = add nsw i32 %a, %b
@@ -11,7 +11,7 @@ define dso_local i32 @top() minsize {
   ret i32 %ret
 }
 
-define internal dso_local i32 @adder(i32) minsize {
+define internal dso_local i32 @adder(i32) {
   %2 = alloca i32, align 4
   store i32 %0, ptr %2, align 4
   %3 = load i32, ptr %2, align 4
@@ -22,7 +22,7 @@ define internal dso_local i32 @adder(i32) minsize {
   ret i32 %7
 }
 
-define internal i32 @multiplier(i32) minsize {
+define internal i32 @multiplier(i32) {
   %2 = alloca i32, align 4
   store i32 %0, ptr %2, align 4
   %3 = load i32, ptr %2, align 4
@@ -31,7 +31,7 @@ define internal i32 @multiplier(i32) minsize {
   ret i32 %5
 }
 
-define i32 @switcher(i32) minsize {
+define i32 @switcher(i32) {
   %2 = alloca i32, align 4
   %3 = alloca i32, align 4
   store i32 %0, ptr %3, align 4
@@ -63,6 +63,6 @@ define i32 @switcher(i32) minsize {
   ret i32 %13
 }
 
-; CHECK-NOT: @multiplier
-; DEFAULT-LABEL:        define internal i32 @adder
+; CHECK-NOT: @adder
+; DEFAULT-LABEL:        @adder
 ; DEFAULT-NEXT:         %2 = mul

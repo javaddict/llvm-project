@@ -49,7 +49,7 @@ add_llvm_target(DirectXCodeGen
   DXILBitWriter
   DirectXDesc
   DirectXInfo
-  DirectXIRPasses
+  DirectXPointerTypeAnalysis
   FrontendHLSL
   IPO
   MC

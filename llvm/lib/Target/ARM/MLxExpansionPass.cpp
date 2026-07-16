@@ -29,7 +29,7 @@ using namespace llvm;
 #define DEBUG_TYPE "mlx-expansion"
 
 static cl::opt<bool>
-ForceExpand("expand-all-fp-mlx", cl::init(false), cl::Hidden);
+ForceExapnd("expand-all-fp-mlx", cl::init(false), cl::Hidden);
 static cl::opt<unsigned>
 ExpandLimit("expand-limit", cl::init(~0U), cl::Hidden);
 
@@ -211,7 +211,7 @@ bool MLxExpansion::FindMLxHazard(MachineInstr *MI) {
   if (NumExpand >= ExpandLimit)
     return false;
 
-  if (ForceExpand)
+  if (ForceExapnd)
     return true;
 
   MachineInstr *DefMI = getAccDefMI(MI);

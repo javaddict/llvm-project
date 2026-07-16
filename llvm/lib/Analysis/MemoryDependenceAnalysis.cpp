@@ -880,16 +880,13 @@ void MemoryDependenceResults::getNonLocalPointerDependency(
   const DataLayout &DL = FromBB->getDataLayout();
   PHITransAddr Address(const_cast<Value *>(Loc.Ptr), DL, &AC);
 
-  // NonLocalPointerDepVisited is the set of blocks we've inspected, and the
-  // pointer we consider in each block.  Because of critical edges, we currently
-  // bail out if querying a block with multiple different pointers.  This can
-  // happen during PHI translation.
-  ++NonLocalPointerDepEpoch;
-  assert(NonLocalPointerDepEpoch > 0 &&
-         "NonLocalPointerDepVisitedEpoch overflow");
-  NonLocalPointerDepVisited.resize(FromBB->getParent()->getMaxBlockNumber());
+  // This is the set of blocks we've inspected, and the pointer we consider in
+  // each block.  Because of critical edges, we currently bail out if querying
+  // a block with multiple different pointers.  This can happen during PHI
+  // translation.
+  SmallDenseMap<BasicBlock *, Value *, 16> Visited;
   if (getNonLocalPointerDepFromBB(QueryInst, Address, Loc, isLoad, FromBB,
-                                  Result, true))
+                                   Result, Visited, true))
     return;
   Result.clear();
   Result.push_back(NonLocalDepResult(FromBB, MemDepResult::getUnknown(),
@@ -1024,29 +1021,11 @@ SortNonLocalDepInfoCache(MemoryDependenceResults::NonLocalDepInfo &Cache,
   }
 }
 
-void MemoryDependenceResults::setNonLocalPointerDepVisited(BasicBlock *BB,
-                                                           Value *V) {
-  NonLocalPointerDepVisited[BB->getNumber()] = {V, NonLocalPointerDepEpoch};
-}
-
-bool MemoryDependenceResults::isNonLocalPointerDepVisited(
-    BasicBlock *BB) const {
-  return NonLocalPointerDepVisited[BB->getNumber()].second ==
-         NonLocalPointerDepEpoch;
-}
-
-Value *
-MemoryDependenceResults::lookupNonLocalPointerDepVisited(BasicBlock *BB) const {
-  assert(isNonLocalPointerDepVisited(BB) &&
-         "Visited value requested for unseen block");
-  return NonLocalPointerDepVisited[BB->getNumber()].first;
-}
-
 /// Perform a dependency query based on pointer/pointeesize starting at the end
 /// of StartBB.
 ///
 /// Add any clobber/def results to the results vector and keep track of which
-/// blocks are visited in 'NonLocalPointerDepVisited'.
+/// blocks are visited in 'Visited'.
 ///
 /// This has special behavior for the first block queries (when SkipFirstBlock
 /// is true).  In this special case, it ignores the contents of the specified
@@ -1058,7 +1037,8 @@ MemoryDependenceResults::lookupNonLocalPointerDepVisited(BasicBlock *BB) const {
 bool MemoryDependenceResults::getNonLocalPointerDepFromBB(
     Instruction *QueryInst, const PHITransAddr &Pointer,
     const MemoryLocation &Loc, bool isLoad, BasicBlock *StartBB,
-    SmallVectorImpl<NonLocalDepResult> &Result, bool SkipFirstBlock,
+    SmallVectorImpl<NonLocalDepResult> &Result,
+    SmallDenseMap<BasicBlock *, Value *, 16> &Visited, bool SkipFirstBlock,
     bool IsIncomplete) {
   // Look up the cached info for Pointer.
   ValueIsLoadPair CacheKey(Pointer.getAddr(), isLoad);
@@ -1119,7 +1099,7 @@ bool MemoryDependenceResults::getNonLocalPointerDepFromBB(
       if (Loc.AATags)
         return getNonLocalPointerDepFromBB(
             QueryInst, Pointer, Loc.getWithoutAATags(), isLoad, StartBB, Result,
-            SkipFirstBlock, IsIncomplete);
+            Visited, SkipFirstBlock, IsIncomplete);
     }
   }
 
@@ -1136,22 +1116,23 @@ bool MemoryDependenceResults::getNonLocalPointerDepFromBB(
     // that we don't already have conflicting results for these blocks.  Check
     // to ensure that if a block in the results set is in the visited set that
     // it was for the same pointer query.
-    for (auto &Entry : *Cache) {
-      if (!isNonLocalPointerDepVisited(Entry.getBB()))
-        continue;
-      Value *Prev = lookupNonLocalPointerDepVisited(Entry.getBB());
-      if (Prev == Pointer.getAddr())
-        continue;
+    if (!Visited.empty()) {
+      for (auto &Entry : *Cache) {
+        DenseMap<BasicBlock *, Value *>::iterator VI =
+            Visited.find(Entry.getBB());
+        if (VI == Visited.end() || VI->second == Pointer.getAddr())
+          continue;
 
-      // We have a pointer mismatch in a block.  Just return false, saying
-      // that something was clobbered in this result.  We could also do a
-      // non-fully cached query, but there is little point in doing this.
-      return false;
+        // We have a pointer mismatch in a block.  Just return false, saying
+        // that something was clobbered in this result.  We could also do a
+        // non-fully cached query, but there is little point in doing this.
+        return false;
+      }
     }
 
     Value *Addr = Pointer.getAddr();
     for (auto &Entry : *Cache) {
-      setNonLocalPointerDepVisited(Entry.getBB(), Addr);
+      Visited.insert(std::make_pair(Entry.getBB(), Addr));
       if (Entry.getResult().isNonLocal()) {
         continue;
       }
@@ -1224,8 +1205,7 @@ bool MemoryDependenceResults::getNonLocalPointerDepFromBB(
     if (!SkipFirstBlock) {
       // Analyze the dependency of *Pointer in FromBB.  See if we already have
       // been here.
-      assert(isNonLocalPointerDepVisited(BB) &&
-             "Should check 'visited' before adding to WL");
+      assert(Visited.count(BB) && "Should check 'visited' before adding to WL");
 
       // Get the dependency info for Pointer in BB.  If we have cached
       // information, we will use it, otherwise we compute it.
@@ -1251,21 +1231,22 @@ bool MemoryDependenceResults::getNonLocalPointerDepFromBB(
       SmallVector<BasicBlock *, 16> NewBlocks;
       for (BasicBlock *Pred : PredCache.get(BB)) {
         // Verify that we haven't looked at this block yet.
-        if (!isNonLocalPointerDepVisited(Pred)) {
-          setNonLocalPointerDepVisited(Pred, Pointer.getAddr());
+        std::pair<DenseMap<BasicBlock *, Value *>::iterator, bool> InsertRes =
+            Visited.insert(std::make_pair(Pred, Pointer.getAddr()));
+        if (InsertRes.second) {
           // First time we've looked at *PI.
           NewBlocks.push_back(Pred);
           continue;
         }
-        Value *Prev = lookupNonLocalPointerDepVisited(Pred);
+
         // If we have seen this block before, but it was with a different
         // pointer then we have a phi translation failure and we have to treat
         // this as a clobber.
-        if (Prev != Pointer.getAddr()) {
+        if (InsertRes.first->second != Pointer.getAddr()) {
           // Make sure to clean up the Visited map before continuing on to
           // PredTranslationFailure.
           for (auto *NewBlock : NewBlocks)
-            setNonLocalPointerDepVisited(NewBlock, nullptr);
+            Visited.erase(NewBlock);
           goto PredTranslationFailure;
         }
       }
@@ -1273,7 +1254,7 @@ bool MemoryDependenceResults::getNonLocalPointerDepFromBB(
         // Make sure to clean up the Visited map before continuing on to
         // PredTranslationFailure.
         for (auto *NewBlock : NewBlocks)
-          setNonLocalPointerDepVisited(NewBlock, nullptr);
+          Visited.erase(NewBlock);
         GotWorklistLimit = true;
         goto PredTranslationFailure;
       }
@@ -1313,30 +1294,29 @@ bool MemoryDependenceResults::getNonLocalPointerDepFromBB(
       // with PHI translation when a critical edge exists and the PHI node in
       // the successor translates to a pointer value different than the
       // pointer the block was first analyzed with.
-      if (!isNonLocalPointerDepVisited(Pred)) {
-        setNonLocalPointerDepVisited(Pred, PredPtrVal);
-        continue;
+      std::pair<DenseMap<BasicBlock *, Value *>::iterator, bool> InsertRes =
+          Visited.insert(std::make_pair(Pred, PredPtrVal));
+
+      if (!InsertRes.second) {
+        // We found the pred; take it off the list of preds to visit.
+        PredList.pop_back();
+
+        // If the predecessor was visited with PredPtr, then we already did
+        // the analysis and can ignore it.
+        if (InsertRes.first->second == PredPtrVal)
+          continue;
+
+        // Otherwise, the block was previously analyzed with a different
+        // pointer.  We can't represent the result of this case, so we just
+        // treat this as a phi translation failure.
+
+        // Make sure to clean up the Visited map before continuing on to
+        // PredTranslationFailure.
+        for (const auto &Pred : PredList)
+          Visited.erase(Pred.first);
+
+        goto PredTranslationFailure;
       }
-      Value *PrevVal = lookupNonLocalPointerDepVisited(Pred);
-
-      // We found the pred; take it off the list of preds to visit.
-      PredList.pop_back();
-
-      // If the predecessor was visited with PredPtr, then we already did
-      // the analysis and can ignore it.
-      if (PrevVal == PredPtrVal)
-        continue;
-
-      // Otherwise, the block was previously analyzed with a different
-      // pointer.  We can't represent the result of this case, so we just
-      // treat this as a phi translation failure.
-
-      // Make sure to clean up the Visited map before continuing on to
-      // PredTranslationFailure.
-      for (const auto &Pred : PredList)
-        setNonLocalPointerDepVisited(Pred.first, nullptr);
-
-      goto PredTranslationFailure;
     }
 
     // Actually process results here; this need to be a separate loop to avoid
@@ -1367,8 +1347,8 @@ bool MemoryDependenceResults::getNonLocalPointerDepFromBB(
       // assume it is unknown, but this also does not block PRE of the load.
       if (!CanTranslate ||
           !getNonLocalPointerDepFromBB(QueryInst, PredPointer,
-                                       Loc.getWithNewPtr(PredPtrVal), isLoad,
-                                       Pred, Result)) {
+                                      Loc.getWithNewPtr(PredPtrVal), isLoad,
+                                      Pred, Result, Visited)) {
         // Add the entry to the Result list.
         NonLocalDepResult Entry(Pred, MemDepResult::getUnknown(), PredPtrVal);
         Result.push_back(Entry);

@@ -89,6 +89,7 @@ llvm_config.feature_config(
                 "AMDGPU": "amdgpu",
                 "ARM": "arm",
                 "AVR": "avr",
+                "Haydn": "haydn",
                 "Hexagon": "hexagon",
                 "LoongArch": "loongarch",
                 "Mips": "mips",

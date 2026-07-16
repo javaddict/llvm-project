@@ -39,7 +39,6 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Analysis/CaptureTracking.h"
 #include "llvm/Analysis/MemoryLocation.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/PassManager.h"
@@ -58,7 +57,6 @@ class AtomicCmpXchgInst;
 class BasicBlock;
 class CatchPadInst;
 class CatchReturnInst;
-class CycleInfo;
 class DominatorTree;
 class FenceInst;
 class LoopInfo;
@@ -156,20 +154,19 @@ struct LLVM_ABI CaptureAnalysis {
   /// are also considered.
   ///
   /// If I is nullptr, then captures at any point will be considered.
-  virtual CaptureComponents getCapturesBefore(const Value *Object,
-                                              const Instruction *I, bool OrAt,
-                                              bool ReturnCaptures) = 0;
+  virtual CaptureComponents
+  getCapturesBefore(const Value *Object, const Instruction *I, bool OrAt) = 0;
 };
 
 /// Context-free CaptureAnalysis provider, which computes and caches whether an
 /// object is captured in the function at all, but does not distinguish whether
 /// it was captured before or after the context instruction.
 class LLVM_ABI SimpleCaptureAnalysis final : public CaptureAnalysis {
-  SmallDenseMap<const Value *, CaptureResult, 8> IsCapturedCache;
+  SmallDenseMap<const Value *, CaptureComponents, 8> IsCapturedCache;
 
 public:
   CaptureComponents getCapturesBefore(const Value *Object, const Instruction *I,
-                                      bool OrAt, bool ReturnCaptures) override;
+                                      bool OrAt) override;
 };
 
 /// Context-sensitive CaptureAnalysis provider, which computes and caches the
@@ -178,14 +175,13 @@ public:
 class LLVM_ABI EarliestEscapeAnalysis final : public CaptureAnalysis {
   DominatorTree &DT;
   const LoopInfo *LI;
-  const CycleInfo *CI;
 
   /// Map from identified local object to an instruction before which it does
   /// not escape (or nullptr if it never escapes) and the possible components
   /// that may be captured (by any instruction, not necessarily the earliest
   /// one). The "earliest" instruction may be a conservative approximation,
   /// e.g. the first instruction in the function is always a legal choice.
-  DenseMap<const Value *, std::pair<Instruction *, CaptureResult>>
+  DenseMap<const Value *, std::pair<Instruction *, CaptureComponents>>
       EarliestEscapes;
 
   /// Reverse map from instruction to the objects it is the earliest escape for.
@@ -193,12 +189,11 @@ class LLVM_ABI EarliestEscapeAnalysis final : public CaptureAnalysis {
   DenseMap<Instruction *, TinyPtrVector<const Value *>> Inst2Obj;
 
 public:
-  EarliestEscapeAnalysis(DominatorTree &DT, const LoopInfo *LI = nullptr,
-                         const CycleInfo *CI = nullptr)
-      : DT(DT), LI(LI), CI(CI) {}
+  EarliestEscapeAnalysis(DominatorTree &DT, const LoopInfo *LI = nullptr)
+      : DT(DT), LI(LI) {}
 
   CaptureComponents getCapturesBefore(const Value *Object, const Instruction *I,
-                                      bool OrAt, bool ReturnCaptures) override;
+                                      bool OrAt) override;
 
   void removeInstruction(Instruction *I);
 };
@@ -217,6 +212,14 @@ struct AACacheLoc {
 };
 
 template <> struct DenseMapInfo<AACacheLoc> {
+  static inline AACacheLoc getEmptyKey() {
+    return {DenseMapInfo<AACacheLoc::PtrTy>::getEmptyKey(),
+            DenseMapInfo<LocationSize>::getEmptyKey()};
+  }
+  static inline AACacheLoc getTombstoneKey() {
+    return {DenseMapInfo<AACacheLoc::PtrTy>::getTombstoneKey(),
+            DenseMapInfo<LocationSize>::getTombstoneKey()};
+  }
   static unsigned getHashValue(const AACacheLoc &Val) {
     return DenseMapInfo<AACacheLoc::PtrTy>::getHashValue(Val.Ptr) ^
            DenseMapInfo<LocationSize>::getHashValue(Val.Size);
@@ -656,8 +659,6 @@ class BatchAAResults {
   AAQueryInfo AAQI;
   SimpleCaptureAnalysis SimpleCA;
 
-  friend class BatchAACrossIterationScope;
-
 public:
   BatchAAResults(AAResults &AAR) : AA(AAR), AAQI(AAR, &SimpleCA) {}
   BatchAAResults(AAResults &AAR, CaptureAnalysis *CA)
@@ -682,9 +683,6 @@ public:
   }
   ModRefInfo getModRefInfo(const Instruction *I, const CallBase *Call2) {
     return AA.getModRefInfo(I, Call2, AAQI);
-  }
-  ModRefInfo getModRefInfo(const Instruction *I, const Instruction *I2) {
-    return AA.getModRefInfo(I, I2, AAQI);
   }
   ModRefInfo getArgModRefInfo(const CallBase *Call, unsigned ArgIdx) {
     return AA.getArgModRefInfo(Call, ArgIdx);
@@ -716,21 +714,6 @@ public:
 
   /// Disable the use of the dominator tree during alias analysis queries.
   void disableDominatorTree() { AAQI.UseDominatorTree = false; }
-};
-
-/// Temporarily set the cross iteration mode on a BatchAA instance.
-class BatchAACrossIterationScope {
-  BatchAAResults &BAA;
-  bool OrigCrossIteration;
-
-public:
-  BatchAACrossIterationScope(BatchAAResults &BAA, bool CrossIteration)
-      : BAA(BAA), OrigCrossIteration(BAA.AAQI.MayBeCrossIteration) {
-    BAA.AAQI.MayBeCrossIteration = CrossIteration;
-  }
-  ~BatchAACrossIterationScope() {
-    BAA.AAQI.MayBeCrossIteration = OrigCrossIteration;
-  }
 };
 
 /// Temporary typedef for legacy code that uses a generic \c AliasAnalysis
@@ -807,12 +790,6 @@ public:
   virtual ModRefInfo getModRefInfo(const CallBase *Call1, const CallBase *Call2,
                                    AAQueryInfo &AAQI) = 0;
 
-  /// getModRefInfo (for fences) - Return information about whether
-  /// a particular fence modifies or reads the specified memory location.
-  virtual ModRefInfo getModRefInfo(const FenceInst *F,
-                                   const MemoryLocation &Loc,
-                                   AAQueryInfo &AAQI) = 0;
-
   /// @}
 };
 
@@ -864,11 +841,6 @@ public:
   ModRefInfo getModRefInfo(const CallBase *Call1, const CallBase *Call2,
                            AAQueryInfo &AAQI) override {
     return Result.getModRefInfo(Call1, Call2, AAQI);
-  }
-
-  ModRefInfo getModRefInfo(const FenceInst *F, const MemoryLocation &Loc,
-                           AAQueryInfo &AAQI) override {
-    return Result.getModRefInfo(F, Loc, AAQI);
   }
 };
 
@@ -928,11 +900,6 @@ public:
                            AAQueryInfo &AAQI) {
     return ModRefInfo::ModRef;
   }
-
-  ModRefInfo getModRefInfo(const FenceInst *F, const MemoryLocation &Loc,
-                           AAQueryInfo &AAQI) {
-    return ModRefInfo::ModRef;
-  }
 };
 
 /// Return true if this pointer is returned by a noalias function.
@@ -986,11 +953,6 @@ LLVM_ABI bool isNotVisibleOnUnwind(const Value *Object,
 /// loads.
 LLVM_ABI bool isWritableObject(const Value *Object,
                                bool &ExplicitlyDereferenceableOnly);
-
-/// Get ModRefInfo for a synchronizing operation, such as a fence or stronger
-/// than monotonic atomic load/store.
-LLVM_ABI ModRefInfo getSyncEffects(AAResults *AA, const MemoryLocation &Loc,
-                                   AAQueryInfo &AAQI);
 
 /// A manager for alias analyses.
 ///

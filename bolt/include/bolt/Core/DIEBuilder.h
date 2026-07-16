@@ -61,7 +61,7 @@ public:
     bool IsConstructed = false;
     // A map of DIE offsets in original DWARF section to DIE ID.
     // Which is used to access DieInfoVector.
-    DenseMap<uint64_t, uint32_t> DIEIDMap;
+    std::unordered_map<uint64_t, uint32_t> DIEIDMap;
 
     // Some STL implementations don't have a noexcept move constructor for
     // unordered_map (e.g. https://github.com/microsoft/STL/issues/165 explains
@@ -105,9 +105,9 @@ private:
 
   struct State {
     /// A map of Units to Unit Index.
-    DenseMap<uint64_t, uint32_t> UnitIDMap;
+    std::unordered_map<uint64_t, uint32_t> UnitIDMap;
     /// A map of Type Units to Type DIEs.
-    DenseMap<DWARFUnit *, DIE *> TypeDIEMap;
+    std::unordered_map<DWARFUnit *, DIE *> TypeDIEMap;
     std::list<DWARFUnit *> DUList;
     std::vector<DWARFUnitInfo> CloneUnitCtxMap;
     std::vector<std::pair<DIEInfo *, AddrReferenceInfo>> AddrReferences;
@@ -132,6 +132,9 @@ private:
   uint64_t DebugNamesUnitSize{0};
   llvm::DenseSet<uint64_t> AllProcessed;
   DWARF5AcceleratorTable &DebugNamesTable;
+  // Unordered map to handle name collision if output DWO directory is
+  // specified.
+  std::unordered_map<std::string, uint32_t> NameToIndexMap;
 
   /// Returns current state of the DIEBuilder
   State &getState() { return *BuilderState; }
@@ -216,9 +219,6 @@ private:
 
   /// Returns true if DWARFUnit is registered successfully.
   bool registerUnit(DWARFUnit &DU, bool NeedSort);
-
-  /// Builds type units needed in the DWO.
-  void buildDWPTypeUnitsForUnit(DWARFUnit &U);
 
   /// \return the unique ID of \p U if it exists.
   std::optional<uint32_t> getUnitId(const DWARFUnit &DU);
@@ -392,12 +392,12 @@ public:
   std::string updateDWONameCompDir(DebugStrOffsetsWriter &StrOffstsWriter,
                                    DebugStrWriter &StrWriter,
                                    DWARFUnit &SkeletonCU,
-                                   StringRef DwarfOutputPath,
-                                   const StringRef DWOName);
+                                   std::optional<StringRef> DwarfOutputPath,
+                                   std::optional<StringRef> DWONameToUse);
   /// Updates DWO Name and Compilation directory for Type Units.
   void updateDWONameCompDirForTypes(DebugStrOffsetsWriter &StrOffstsWriter,
                                     DebugStrWriter &StrWriter, DWARFUnit &Unit,
-                                    StringRef DwarfOutputPath,
+                                    std::optional<StringRef> DwarfOutputPath,
                                     const StringRef DWOName);
 };
 } // namespace bolt

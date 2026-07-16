@@ -76,5 +76,6 @@ exit:
   ret i32 %final.load
 }
 
+declare void @llvm.assume(i1 noundef)
 
 attributes #0 = { "target-cpu"="skylake-avx512" }

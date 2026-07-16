@@ -27,7 +27,7 @@ define void @f(i64 %n) #0 {
 ; RV64-NEXT:    # =>This Inner Loop Header: Depth=1
 ; RV64-NEXT:    sub sp, sp, a1
 ; RV64-NEXT:    sd zero, 0(sp)
-; RV64-NEXT:    bltu a0, sp, .LBB0_1
+; RV64-NEXT:    blt a0, sp, .LBB0_1
 ; RV64-NEXT:  # %bb.2: # %entry
 ; RV64-NEXT:    mv sp, a0
 ; RV64-NEXT:    lui a1, 5
@@ -76,7 +76,7 @@ define void @f(i64 %n) #0 {
 ; RV32-NEXT:    # =>This Inner Loop Header: Depth=1
 ; RV32-NEXT:    sub sp, sp, a1
 ; RV32-NEXT:    sw zero, 0(sp)
-; RV32-NEXT:    bltu a0, sp, .LBB0_1
+; RV32-NEXT:    blt a0, sp, .LBB0_1
 ; RV32-NEXT:  # %bb.2: # %entry
 ; RV32-NEXT:    mv sp, a0
 ; RV32-NEXT:    lui a1, 5

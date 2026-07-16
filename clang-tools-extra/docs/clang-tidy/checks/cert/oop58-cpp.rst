@@ -1,4 +1,6 @@
 .. title:: clang-tidy - cert-oop58-cpp
+.. meta::
+   :http-equiv=refresh: 5;URL=../bugprone/copy-constructor-mutates-argument.html
 
 cert-oop58-cpp
 ==============

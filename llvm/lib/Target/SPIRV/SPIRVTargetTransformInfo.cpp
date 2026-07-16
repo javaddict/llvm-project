@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "SPIRVTargetTransformInfo.h"
-#include "SPIRVSubtarget.h"
 #include "llvm/IR/IntrinsicsSPIRV.h"
 
 using namespace llvm;
@@ -38,12 +37,4 @@ Value *llvm::SPIRVTTIImpl::rewriteIntrinsicWithAddressSpace(IntrinsicInst *II,
   default:
     return nullptr;
   }
-}
-
-bool SPIRVTTIImpl::isLegalMaskedGather(Type *DataType, Align Alignment) const {
-  return ST->canUseExtension(SPIRV::Extension::SPV_INTEL_masked_gather_scatter);
-}
-
-bool SPIRVTTIImpl::isLegalMaskedScatter(Type *DataType, Align Alignment) const {
-  return ST->canUseExtension(SPIRV::Extension::SPV_INTEL_masked_gather_scatter);
 }

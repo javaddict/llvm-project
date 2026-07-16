@@ -14,10 +14,10 @@
 namespace llvm {
 
 class RemoveRedundantDebugValuesPass
-    : public OptionalPassInfoMixin<RemoveRedundantDebugValuesPass> {
+    : public PassInfoMixin<RemoveRedundantDebugValuesPass> {
 public:
-  LLVM_ABI PreservedAnalyses run(MachineFunction &MF,
-                                 MachineFunctionAnalysisManager &MFAM);
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
 };
 
 } // namespace llvm

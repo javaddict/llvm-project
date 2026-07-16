@@ -171,7 +171,6 @@ Parser::TPResult Parser::TryConsumeDeclarationSpecifier() {
     }
     [[fallthrough]];
   case tok::kw_typeof:
-  case tok::kw_typeof_unqual:
   case tok::kw___attribute:
 #define TRANSFORM_TYPE_TRAIT_DEF(_, Trait) case tok::kw___##Trait:
 #include "clang/Basic/TransformTypeTraits.def"
@@ -589,9 +588,6 @@ bool Parser::isCXXTypeId(TentativeCXXTypeIdContext Context, bool &isAmbiguous) {
       isAmbiguous = true;
 
     } else if (Context == TentativeCXXTypeIdContext::InTrailingReturnType) {
-      TPR = TPResult::True;
-      isAmbiguous = true;
-    } else if (Context == TentativeCXXTypeIdContext::AsReflectionOperand) {
       TPR = TPResult::True;
       isAmbiguous = true;
     } else
@@ -1193,7 +1189,6 @@ Parser::isCXXDeclarationSpecifier(ImplicitTypenameContext AllowImplicitTypename,
   case tok::kw_inline:
   case tok::kw_virtual:
   case tok::kw_explicit:
-  case tok::kw__Noreturn:
 
     // Modules
   case tok::kw___module_private__:
@@ -1244,21 +1239,12 @@ Parser::isCXXDeclarationSpecifier(ImplicitTypenameContext AllowImplicitTypename,
   case tok::kw_in:
   case tok::kw_inout:
   case tok::kw_out:
-    // HLSL matrix layout qualifiers
-  case tok::kw_row_major:
-  case tok::kw_column_major:
 
     // GNU
   case tok::kw_restrict:
   case tok::kw__Complex:
-  case tok::kw__Imaginary:
   case tok::kw___attribute:
   case tok::kw___auto_type:
-    return TPResult::True;
-
-    // OverflowBehaviorTypes
-  case tok::kw___ob_wrap:
-  case tok::kw___ob_trap:
     return TPResult::True;
 
     // Microsoft
@@ -1526,8 +1512,7 @@ Parser::isCXXDeclarationSpecifier(ImplicitTypenameContext AllowImplicitTypename,
     return TPResult::True;
 
   // GNU typeof support.
-  case tok::kw_typeof:
-  case tok::kw_typeof_unqual: {
+  case tok::kw_typeof: {
     if (NextToken().isNot(tok::l_paren))
       return TPResult::True;
 
@@ -1592,7 +1577,6 @@ bool Parser::isCXXDeclarationSpecifierAType() {
   case tok::annot_template_id:
   case tok::annot_typename:
   case tok::kw_typeof:
-  case tok::kw_typeof_unqual:
 #define TRANSFORM_TYPE_TRAIT_DEF(_, Trait) case tok::kw___##Trait:
 #include "clang/Basic/TransformTypeTraits.def"
     return true;
@@ -1653,8 +1637,7 @@ bool Parser::isCXXDeclarationSpecifierAType() {
 }
 
 Parser::TPResult Parser::TryParseTypeofSpecifier() {
-  assert(Tok.isOneOf(tok::kw_typeof, tok::kw_typeof_unqual) &&
-         "Expected 'typeof' or 'typeof_unqual'!");
+  assert(Tok.is(tok::kw_typeof) && "Expected 'typeof'!");
   ConsumeToken();
 
   assert(Tok.is(tok::l_paren) && "Expected '('");

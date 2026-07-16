@@ -74,9 +74,7 @@ VE::Fixups VE::getFixupKind(uint8_t S) {
 
 void VEELFMCAsmInfo::anchor() {}
 
-VEELFMCAsmInfo::VEELFMCAsmInfo(const Triple &TheTriple,
-                               const MCTargetOptions &Options)
-    : MCAsmInfoELF(Options) {
+VEELFMCAsmInfo::VEELFMCAsmInfo(const Triple &TheTriple) {
 
   CodePointerSize = CalleeSaveStackSlotSize = 8;
   MaxInstLength = MinInstAlignment = 8;

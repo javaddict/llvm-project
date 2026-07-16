@@ -7,12 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/iscanonical.h"
-#include "src/__support/math/iscanonical.h"
+#include "src/__support/FPUtil/BasicOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
+#undef iscanonical
 LLVM_LIBC_FUNCTION(int, iscanonical, (double x)) {
-  return math::iscanonical(x);
+  double temp;
+  return fputil::canonicalize(temp, x) == 0;
 }
 
 } // namespace LIBC_NAMESPACE_DECL

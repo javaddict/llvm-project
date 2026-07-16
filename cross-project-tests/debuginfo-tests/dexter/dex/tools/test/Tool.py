@@ -12,20 +12,13 @@ import csv
 import pickle
 import shutil
 import platform
-import json
-from typing import Optional
 
 from dex.command.ParseCommand import get_command_infos
 from dex.debugger.Debuggers import run_debugger_subprocess
 from dex.debugger.DebuggerControllers.DefaultController import DefaultController
 from dex.debugger.DebuggerControllers.ConditionalController import ConditionalController
-from dex.debugger.DebuggerControllers.ScriptDebuggerController import (
-    ScriptDebuggerController,
-)
 from dex.dextIR.DextIR import DextIR
-from dex.evaluation import DebuggerRunMatch
 from dex.heuristic import Heuristic
-from dex.test_script.Script import get_dexter_script
 from dex.tools import TestToolBase
 from dex.utils.Exceptions import DebuggerException
 from dex.utils.Exceptions import BuildScriptException, HeuristicException
@@ -34,18 +27,10 @@ from dex.utils.ReturnCode import ReturnCode
 
 
 class TestCase(object):
-    def __init__(
-        self,
-        context,
-        name,
-        heuristic: Optional[Heuristic] = None,
-        error=None,
-        run_match: Optional[DebuggerRunMatch] = None,
-    ):
+    def __init__(self, context, name, heuristic, error):
         self.context = context
         self.name = name
         self.heuristic = heuristic
-        self.run_match = run_match
         self.error = error
 
     @property
@@ -86,11 +71,9 @@ class TestCase(object):
         else:
             error = ""
 
-        if self.heuristic is not None:
+        try:
             summary = self.heuristic.summary_string
-        elif self.run_match is not None:
-            summary = "\n" + self.run_match.get_metric_output()
-        else:
+        except AttributeError:
             summary = "<r>nan/nan (nan)</>"
         return "{}: {}{}\n{}".format(self.name, summary, error, verbose_error)
 
@@ -123,16 +106,6 @@ class Tool(TestToolBase):
             action="store_true",
             help="calculate the average score of every test run",
         )
-        parser.add_argument(
-            "--skip-run",
-            action="store_true",
-            help="if true, skip running the debugger and produce no output; used for testing purposes",
-        )
-        parser.add_argument(
-            "--skip-evaluate",
-            action="store_true",
-            help="if true, skip evaluating the ouput from the debugger and just print the seen steps; used for testing purposes",
-        )
         super(Tool, self).add_tool_arguments(parser, defaults)
 
     def _init_debugger_controller(self):
@@ -142,49 +115,27 @@ class Tool(TestToolBase):
             dexter_version=self.context.version,
         )
 
-        if self.context.options.use_script:
-            step_collection.script, new_source_files = get_dexter_script(
-                self.context,
-                self.context.options.test_files[0],
-                self.context.options.source_root_dir,
-            )
-        else:
-            step_collection.commands, new_source_files = get_command_infos(
-                self.context.options.test_files, self.context.options.source_root_dir
-            )
+        step_collection.commands, new_source_files = get_command_infos(
+            self.context.options.test_files, self.context.options.source_root_dir
+        )
 
         self.context.options.source_files.extend(list(new_source_files))
 
-        # If we are not running a debugger, return the DextIR instead of a DebuggerController.
-        if self.context.options.skip_run:
-            return step_collection
-
-        if self.context.options.use_script:
-            debugger_controller = ScriptDebuggerController(
-                self.context, step_collection
-            )
+        cond_controller_cmds = ["DexLimitSteps", "DexStepFunction", "DexContinue"]
+        if any(c in step_collection.commands for c in cond_controller_cmds):
+            debugger_controller = ConditionalController(self.context, step_collection)
         else:
-            cond_controller_cmds = ["DexLimitSteps", "DexStepFunction", "DexContinue"]
-            if any(c in step_collection.commands for c in cond_controller_cmds):
-                debugger_controller = ConditionalController(
-                    self.context, step_collection
-                )
-            else:
-                debugger_controller = DefaultController(self.context, step_collection)
+            debugger_controller = DefaultController(self.context, step_collection)
 
         return debugger_controller
 
     def _get_steps(self):
         """Generate a list of debugger steps from a test case."""
         debugger_controller = self._init_debugger_controller()
-
-        if self.context.options.skip_run:
-            self.context.logger.warning("Skipping run...")
-            return debugger_controller
         debugger_controller = run_debugger_subprocess(
             debugger_controller, self.context.working_directory.path
         )
-        steps: DextIR = debugger_controller.step_collection
+        steps = debugger_controller.step_collection
         return steps
 
     def _get_results_basename(self, test_name):
@@ -211,11 +162,6 @@ class Tool(TestToolBase):
         test_results_path = self._get_results_path(test_name)
         return "{}.txt".format(test_results_path)
 
-    def _get_results_json_path(self, test_name):
-        """Returns path results .json file for test denoted by test_name."""
-        test_results_path = self._get_results_path(test_name)
-        return "{}.json".format(test_results_path)
-
     def _get_results_pickle_path(self, test_name):
         """Returns path results .dextIR file for test denoted by test_name."""
         test_results_path = self._get_results_path(test_name)
@@ -234,7 +180,7 @@ class Tool(TestToolBase):
             with open(output_dextIR_path, "wb") as fp:
                 pickle.dump(steps, fp, protocol=pickle.HIGHEST_PROTOCOL)
 
-    def _record_dex_command_heuristic_score(self, test_name, heuristic):
+    def _record_score(self, test_name, heuristic):
         """Write out the test's heuristic score to the results .txt file
         if a results directory has been specified.
         """
@@ -242,17 +188,6 @@ class Tool(TestToolBase):
             output_text_path = self._get_results_text_path(test_name)
             with open(output_text_path, "a") as fp:
                 self.context.o.auto(heuristic.verbose_output, stream=Stream(fp))
-
-    def _record_structured_script_metric_results(
-        self, test_name, run_match: DebuggerRunMatch
-    ):
-        """Write out the test's metrics scores to the results .txt file
-        if a results directory has been specified.
-        """
-        if self.context.options.results_directory:
-            output_json_path = self._get_results_json_path(test_name)
-            with open(output_json_path, "w") as fp:
-                json.dump(run_match.get_metric_json_output(), fp)
 
     def _record_test_and_display(self, test_case):
         """Output test case to o stream and record test case internally for
@@ -265,28 +200,18 @@ class Tool(TestToolBase):
         """Instantiate a failed test case with failure exception and
         store internally.
         """
-        test_case = TestCase(self.context, test_name, error=exception)
+        test_case = TestCase(self.context, test_name, None, exception)
         self._record_test_and_display(test_case)
 
-    def _record_successful_test_heuristic(self, test_name, steps, heuristic):
+    def _record_successful_test(self, test_name, steps, heuristic):
         """Instantiate a successful test run, store test for handling later.
         Display verbose output for test case if required.
         """
-        test_case = TestCase(self.context, test_name, heuristic=heuristic)
+        test_case = TestCase(self.context, test_name, heuristic, None)
         self._record_test_and_display(test_case)
         if self.context.options.verbose:
             self.context.o.auto("\n{}\n".format(steps))
             self.context.o.auto(heuristic.verbose_output)
-
-    def _record_successful_test_match(self, test_name, steps, result: DebuggerRunMatch):
-        """Instantiate a successful test run, store test for handling later.
-        Display verbose output for test case if required.
-        """
-        test_case = TestCase(self.context, test_name, run_match=result)
-        if self.context.options.verbose:
-            self.context.o.auto(f"\n{steps}\n")
-            self.context.o.auto(f"{result.dump_step_results()}\n")
-        self._record_test_and_display(test_case)
 
     def _run_test(self, test_name):
         """Attempt to run test files specified in options.source_files. Store
@@ -302,28 +227,15 @@ class Tool(TestToolBase):
                     self.context.options.binary, self.context.options.executable
                 )
             steps = self._get_steps()
-            if self.context.options.skip_run:
-                if steps.script is not None:
-                    print(steps.script.dump())
-                return
-            if self.context.options.skip_evaluate:
-                self.context.logger.warning("Skipping evaluation...")
-                for step in steps.steps:
-                    print("\n".join(step.detailed_print()))
-                return
             self._record_steps(test_name, steps)
-            if self.context.options.use_script:
-                run_match = DebuggerRunMatch(self.context, steps)
-                self._record_structured_script_metric_results(test_name, run_match)
-                self._record_successful_test_match(test_name, steps, run_match)
-            else:
-                heuristic_score = Heuristic(self.context, steps)
-                self._record_dex_command_heuristic_score(test_name, heuristic_score)
-                self._record_successful_test_heuristic(
-                    test_name, steps, heuristic_score
-                )
+            heuristic_score = Heuristic(self.context, steps)
+            self._record_score(test_name, heuristic_score)
         except (BuildScriptException, DebuggerException, HeuristicException) as e:
             self._record_failed_test(test_name, e)
+            return
+
+        self._record_successful_test(test_name, steps, heuristic_score)
+        return
 
     def _handle_results(self) -> ReturnCode:
         return_code = ReturnCode.OK

@@ -7,10 +7,18 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/ceil.h"
-#include "src/__support/math/ceil.h"
+#include "src/__support/FPUtil/NearestIntegerOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
-LLVM_LIBC_FUNCTION(double, ceil, (double x)) { return math::ceil(x); }
+LLVM_LIBC_FUNCTION(double, ceil, (double x)) {
+#ifdef __LIBC_USE_BUILTIN_CEIL_FLOOR_RINT_TRUNC
+  return __builtin_ceil(x);
+#else
+  return fputil::ceil(x);
+#endif
+}
 
 } // namespace LIBC_NAMESPACE_DECL

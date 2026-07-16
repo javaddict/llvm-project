@@ -15,7 +15,7 @@
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/Math/Transforms/Passes.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
-#include "mlir/Dialect/X86/X86Dialect.h"
+#include "mlir/Dialect/X86Vector/X86VectorDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
@@ -37,7 +37,7 @@ struct TestMathPolynomialApproximationPass
     registry.insert<arith::ArithDialect, math::MathDialect,
                     vector::VectorDialect>();
     if (enableAvx2)
-      registry.insert<x86::X86Dialect>();
+      registry.insert<x86vector::X86VectorDialect>();
   }
   StringRef getArgument() const final {
     return "test-math-polynomial-approximation";
@@ -49,7 +49,7 @@ struct TestMathPolynomialApproximationPass
   Option<bool> enableAvx2{
       *this, "enable-avx2",
       llvm::cl::desc("Enable approximations that emit AVX2 intrinsics via the "
-                     "X86 dialect"),
+                     "X86Vector dialect"),
       llvm::cl::init(false)};
 };
 } // namespace

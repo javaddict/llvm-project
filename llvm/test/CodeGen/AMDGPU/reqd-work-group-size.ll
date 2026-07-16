@@ -1,4 +1,5 @@
 ; RUN: opt -mtriple=amdgcn-amd-amdhsa -S -passes=amdgpu-lower-kernel-attributes,instcombine,infer-alignment %s | FileCheck -enable-var-scope %s
+; RUN: opt -mtriple=amdgcn-amd-amdhsa -S -passes=amdgpu-lower-kernel-attributes,instcombine,infer-alignment %s | FileCheck -enable-var-scope %s
 
 ; CHECK-LABEL: @invalid_reqd_work_group_size(
 ; CHECK: load i16,
@@ -444,10 +445,10 @@ declare i32 @llvm.umin.i32(i32, i32) #1
 declare i32 @llvm.smin.i32(i32, i32) #1
 declare i32 @llvm.umax.i32(i32, i32) #1
 
-attributes #0 = { nounwind "uniform-work-group-size" }
+attributes #0 = { nounwind "uniform-work-group-size"="true" }
 attributes #1 = { nounwind readnone speculatable }
-attributes #2 = { nounwind "uniform-work-group-size" }
-attributes #3 = { nounwind }
+attributes #2 = { nounwind "uniform-work-group-size"="true" }
+attributes #3 = { nounwind "uniform-work-group-size"="false" }
 
 !0 = !{i32 8, i32 16, i32 2}
 !1 = !{i32 8, i32 16}

@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <utility>
+
 #include "mlir/Dialect/Shape/IR/Shape.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -23,10 +25,8 @@
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/SetOperations.h"
-#include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
-#include <utility>
 
 using namespace mlir;
 using namespace mlir::shape;
@@ -193,7 +193,7 @@ LogicalResult ShapeDialect::verifyOperationAttribute(Operation *op,
           return op->emitError(
               "only SymbolRefAttr allowed in shape.lib attribute array");
 
-        auto shapeFnLib = dyn_cast_or_null<shape::FunctionLibraryOp>(
+        auto shapeFnLib = dyn_cast<shape::FunctionLibraryOp>(
             SymbolTable::lookupSymbolIn(op, llvm::cast<SymbolRefAttr>(it)));
         if (!shapeFnLib)
           return op->emitError()
@@ -346,15 +346,11 @@ void AssumingOp::getSuccessorRegions(
   // parent, so return the correct RegionSuccessor purely based on the index
   // being None or 0.
   if (!point.isParent()) {
-    regions.push_back(RegionSuccessor::parent());
+    regions.push_back(RegionSuccessor(getOperation(), getResults()));
     return;
   }
 
   regions.push_back(RegionSuccessor(&getDoRegion()));
-}
-
-ValueRange AssumingOp::getSuccessorInputs(RegionSuccessor successor) {
-  return successor.isParent() ? ValueRange(getResults()) : ValueRange();
 }
 
 void AssumingOp::inlineRegionIntoParent(AssumingOp &op,
@@ -652,18 +648,18 @@ OpFoldResult BroadcastOp::fold(FoldAdaptor adaptor) {
     return getShapes().front();
   }
 
-  auto firstAttr =
-      dyn_cast_or_null<DenseIntElementsAttr>(adaptor.getShapes().front());
-  if (!firstAttr)
+  if (!adaptor.getShapes().front())
     return nullptr;
 
-  SmallVector<int64_t, 6> resultShape(firstAttr.getValues<int64_t>());
+  SmallVector<int64_t, 6> resultShape(
+      llvm::cast<DenseIntElementsAttr>(adaptor.getShapes().front())
+          .getValues<int64_t>());
 
   for (auto next : adaptor.getShapes().drop_front()) {
-    auto nextAttr = dyn_cast_or_null<DenseIntElementsAttr>(next);
-    if (!nextAttr)
+    if (!next)
       return nullptr;
-    auto nextShape = llvm::to_vector<6>(nextAttr.getValues<int64_t>());
+    auto nextShape = llvm::to_vector<6>(
+        llvm::cast<DenseIntElementsAttr>(next).getValues<int64_t>());
 
     SmallVector<int64_t, 6> tmpShape;
     // If the shapes are not compatible, we can't fold it.
@@ -813,8 +809,8 @@ struct CanonicalizeCastExtentTensorOperandsPattern
       }
       return operand;
     };
-    auto newOperands =
-        llvm::map_to_vector<8>(op.getOperands(), canonicalizeOperand);
+    auto newOperands = llvm::to_vector<8>(
+        llvm::map_range(op.getOperands(), canonicalizeOperand));
 
     // Rewrite op if any change required.
     if (!anyChange)
@@ -1203,13 +1199,11 @@ void IndexToSizeOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 //===----------------------------------------------------------------------===//
 
 OpFoldResult FromExtentsOp::fold(FoldAdaptor adaptor) {
+  if (llvm::any_of(adaptor.getExtents(), [](Attribute a) { return !a; }))
+    return nullptr;
   SmallVector<int64_t, 6> extents;
-  for (Attribute attr : adaptor.getExtents()) {
-    auto intAttr = llvm::dyn_cast_if_present<IntegerAttr>(attr);
-    if (!intAttr)
-      return nullptr;
-    extents.push_back(intAttr.getInt());
-  }
+  for (auto attr : adaptor.getExtents())
+    extents.push_back(llvm::cast<IntegerAttr>(attr).getInt());
   Builder builder(getContext());
   return builder.getIndexTensorAttr(extents);
 }
@@ -1706,20 +1700,14 @@ struct ShapeOfOpToConstShapeOp : public OpRewritePattern<shape::ShapeOfOp> {
     auto type = llvm::dyn_cast<ShapedType>(op.getArg().getType());
     if (!type || !type.hasStaticShape())
       return failure();
-
-    Type resultType = op.getResult().getType();
     Location loc = op.getLoc();
-    Type constResType =
-        isa<ShapeType>(resultType)
-            ? resultType
-            : RankedTensorType::get({type.getRank()}, rewriter.getIndexType());
     Value constShape =
-        ConstShapeOp::create(rewriter, loc, constResType,
+        ConstShapeOp::create(rewriter, loc,
                              rewriter.getIndexTensorAttr(type.getShape()))
             .getResult();
-    if (constShape.getType() != resultType)
-      constShape =
-          tensor::CastOp::create(rewriter, loc, resultType, constShape);
+    if (constShape.getType() != op.getResult().getType())
+      constShape = tensor::CastOp::create(rewriter, loc,
+                                          op.getResult().getType(), constShape);
     rewriter.replaceOp(op, constShape);
     return success();
   }

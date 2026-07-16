@@ -48,26 +48,11 @@ private:
   SmallVector<OpFoldResult> mixedStrides;
 };
 
-// Inline size chosen empirically based on compilation profiling.
-// Profiled: 488K calls, avg=1.5+-0.5. N=2 covers >90% of cases inline.
-using ValueDimList = SmallVector<std::pair<Value, std::optional<int64_t>>, 2>;
-
-/// Options that control value bound computation.
-struct ValueBoundsOptions {
-  /// By default, lower/equal bounds are closed and upper bounds are open. If
-  /// `closedUB` is set to "true", upper bounds are also closed.
-  bool closedUB = false;
-
-  /// If set to "true", integer-typed SSA values are treated like index-typed
-  /// SSA values. The value bounds infrastructure assumes that such integer
-  /// computations do not overflow. If set to "false", integer-typed SSA values
-  /// are rejected.
-  bool allowIntegerType = false;
-};
+using ValueDimList = SmallVector<std::pair<Value, std::optional<int64_t>>>;
 
 /// A helper class to be used with `ValueBoundsOpInterface`. This class stores a
-/// constraint system and mapping of constrained variables to index-typed values
-/// or dimension sizes of shaped values.
+/// constraint system and mapping of constrained variables to index-typed
+/// values or dimension sizes of shaped values.
 ///
 /// Interface implementations of `ValueBoundsOpInterface` use `addBounds` to
 /// insert constraints about their results and/or region block arguments into
@@ -189,21 +174,19 @@ public:
   /// `ValueBoundsOpInterface` for each visited value.
   ///
   /// By default, lower/equal bounds are closed and upper bounds are open. If
-  /// `options.closedUB` is set to "true", upper bounds are also closed.
+  /// `closedUB` is set to "true", upper bounds are also closed.
   static LogicalResult
   computeBound(AffineMap &resultMap, ValueDimList &mapOperands,
                presburger::BoundType type, const Variable &var,
-               StopConditionFn stopCondition, ValueBoundsOptions options = {});
+               StopConditionFn stopCondition, bool closedUB = false);
 
   /// Compute a bound in terms of the values/dimensions in `dependencies`. The
   /// computed bound consists of only constant terms and dependent values (or
   /// dimension sizes thereof).
-  static LogicalResult computeDependentBound(AffineMap &resultMap,
-                                             ValueDimList &mapOperands,
-                                             presburger::BoundType type,
-                                             const Variable &var,
-                                             ValueDimList dependencies,
-                                             ValueBoundsOptions options = {});
+  static LogicalResult
+  computeDependentBound(AffineMap &resultMap, ValueDimList &mapOperands,
+                        presburger::BoundType type, const Variable &var,
+                        ValueDimList dependencies, bool closedUB = false);
 
   /// Compute a bound in that is independent of all values in `independencies`.
   ///
@@ -213,12 +196,10 @@ public:
   /// must be made independent of loop induction variables (in the case of "for"
   /// loops). Loop induction variables are the independencies; they may not
   /// appear in the computed bound.
-  static LogicalResult computeIndependentBound(AffineMap &resultMap,
-                                               ValueDimList &mapOperands,
-                                               presburger::BoundType type,
-                                               const Variable &var,
-                                               ValueRange independencies,
-                                               ValueBoundsOptions options = {});
+  static LogicalResult
+  computeIndependentBound(AffineMap &resultMap, ValueDimList &mapOperands,
+                          presburger::BoundType type, const Variable &var,
+                          ValueRange independencies, bool closedUB = false);
 
   /// Compute a constant bound for the given variable.
   ///
@@ -233,11 +214,11 @@ public:
   /// computed.
   ///
   /// By default, lower/equal bounds are closed and upper bounds are open. If
-  /// `options.closedUB` is set to "true", upper bounds are also closed.
+  /// `closedUB` is set to "true", upper bounds are also closed.
   static FailureOr<int64_t>
   computeConstantBound(presburger::BoundType type, const Variable &var,
                        const StopConditionFn &stopCondition = nullptr,
-                       ValueBoundsOptions options = {});
+                       bool closedUB = false);
 
   /// Compute a constant delta between the given two values. Return "failure"
   /// if a constant delta could not be determined.
@@ -347,7 +328,6 @@ protected:
 
   ValueBoundsConstraintSet(MLIRContext *ctx,
                            const StopConditionFn &stopCondition,
-                           ValueBoundsOptions options = {},
                            bool addConservativeSemiAffineBounds = false);
 
   /// Return "true" if, based on the current state of the constraint system,
@@ -435,9 +415,7 @@ protected:
   void projectOutAnonymous(std::optional<int64_t> except = std::nullopt);
 
   /// Mapping of columns to values/shape dimensions.
-  // Inline size chosen empirically based on compilation profiling.
-  // Profiled: 2.1M calls, avg=3.0+-1.9. N=4 covers ~70% of cases inline.
-  SmallVector<std::optional<ValueDim>, 4> positionToValueDim;
+  SmallVector<std::optional<ValueDim>> positionToValueDim;
   /// Reverse mapping of values/shape dimensions to columns.
   DenseMap<ValueDim, int64_t> valueDimToPosition;
 
@@ -452,9 +430,6 @@ protected:
 
   /// The current stop condition function.
   StopConditionFn stopCondition = nullptr;
-
-  /// Options that control value bound computation.
-  ValueBoundsOptions options;
 
   /// Should conservative bounds be added for semi-affine expressions.
   bool addConservativeSemiAffineBounds = false;

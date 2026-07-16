@@ -109,7 +109,6 @@ define i32 @loop_shared_header(ptr %exe, i32 %exesz, i32 %headsize, i32 %min, i3
 ; CHECK-NEXT:    testb %al, %al
 ; CHECK-NEXT:    jne .LBB1_12
 ; CHECK-NEXT:  # %bb.2: # %if.end50
-; CHECK-NEXT:    # implicit-def: $rsi
 ; CHECK-NEXT:    movq %r14, %rdi
 ; CHECK-NEXT:    movq %r15, %rdx
 ; CHECK-NEXT:    callq memcpy@PLT
@@ -171,7 +170,6 @@ define i32 @loop_shared_header(ptr %exe, i32 %exesz, i32 %headsize, i32 %min, i3
 ; CHECK-NEXT:  .LBB1_11: # %if.then99.i
 ; CHECK-NEXT:    movq .str.6@GOTPCREL(%rip), %rdi
 ; CHECK-NEXT:    xorl %ebx, %ebx
-; CHECK-NEXT:    # implicit-def: $esi
 ; CHECK-NEXT:    xorl %eax, %eax
 ; CHECK-NEXT:    callq cli_dbgmsg@PLT
 ; CHECK-NEXT:  .LBB1_12: # %cleanup

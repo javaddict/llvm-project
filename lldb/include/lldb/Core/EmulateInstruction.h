@@ -44,7 +44,7 @@ public:
       std::unique_ptr<EmulateInstruction> emulator_up)
       : m_emulator_up{std::move(emulator_up)} {}
 
-  virtual llvm::Expected<BreakpointLocations> GetBreakpointLocations();
+  virtual BreakpointLocations GetBreakpointLocations(Status &status);
 
   virtual llvm::Expected<unsigned>
   GetBreakpointSize([[maybe_unused]] lldb::addr_t bp_addr) {
@@ -58,10 +58,10 @@ protected:
   // in the binary file. Essentially, it reads the value of the PC register,
   // determines the size of the current instruction (where the PC is pointing),
   // and returns the sum of these two values.
-  llvm::Expected<lldb::addr_t> GetNextInstructionAddress();
+  lldb::addr_t GetNextInstructionAddress(Status &error);
 
-  llvm::Expected<lldb::addr_t>
-  GetBreakpointLocationAddress(lldb::addr_t entry_pc);
+  lldb::addr_t GetBreakpointLocationAddress(lldb::addr_t entry_pc,
+                                            Status &error);
 
   std::unique_ptr<EmulateInstruction> m_emulator_up;
   bool m_emulation_result = false;
@@ -452,8 +452,8 @@ public:
                              lldb::RegisterKind reg_kind, uint32_t reg_num,
                              uint64_t reg_value);
 
-  bool ReadMemory(const Context &context, lldb::addr_t addr, void *dst,
-                  size_t dst_len);
+  size_t ReadMemory(const Context &context, lldb::addr_t addr, void *dst,
+                    size_t dst_len);
 
   uint64_t ReadMemoryUnsigned(const Context &context, lldb::addr_t addr,
                               size_t byte_size, uint64_t fail_value,

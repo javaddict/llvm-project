@@ -30,8 +30,7 @@ class ARMMCAsmInfoDarwin : public MCAsmInfoDarwin {
   virtual void anchor();
 
 public:
-  explicit ARMMCAsmInfoDarwin(const Triple &TheTriple,
-                              const MCTargetOptions &Options);
+  explicit ARMMCAsmInfoDarwin(const Triple &TheTriple);
   void printSpecifierExpr(raw_ostream &OS,
                           const MCSpecifierExpr &Expr) const override {
     ARM::printSpecifierExpr(*this, OS, Expr);
@@ -46,7 +45,7 @@ class ARMELFMCAsmInfo : public MCAsmInfoELF {
   void anchor() override;
 
 public:
-  explicit ARMELFMCAsmInfo(const Triple &TT, const MCTargetOptions &Options);
+  explicit ARMELFMCAsmInfo(const Triple &TT);
 
   void setUseIntegratedAssembler(bool Value) override;
   void printSpecifierExpr(raw_ostream &OS,
@@ -63,7 +62,7 @@ class ARMCOFFMCAsmInfoMicrosoft : public MCAsmInfoMicrosoft {
   void anchor() override;
 
 public:
-  explicit ARMCOFFMCAsmInfoMicrosoft(const MCTargetOptions &Options);
+  explicit ARMCOFFMCAsmInfoMicrosoft();
   void printSpecifierExpr(raw_ostream &OS,
                           const MCSpecifierExpr &Expr) const override {
     ARM::printSpecifierExpr(*this, OS, Expr);
@@ -78,7 +77,7 @@ class ARMCOFFMCAsmInfoGNU : public MCAsmInfoGNUCOFF {
   void anchor() override;
 
 public:
-  explicit ARMCOFFMCAsmInfoGNU(const MCTargetOptions &Options);
+  explicit ARMCOFFMCAsmInfoGNU();
   void printSpecifierExpr(raw_ostream &OS,
                           const MCSpecifierExpr &Expr) const override {
     ARM::printSpecifierExpr(*this, OS, Expr);

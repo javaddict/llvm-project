@@ -6,16 +6,15 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 
-#ifndef LLVM_LIB_TARGET_SPIRV_SPIRVPUSHCONSTANTACCESS_H
-#define LLVM_LIB_TARGET_SPIRV_SPIRVPUSHCONSTANTACCESS_H
+#ifndef LLVM_LIB_TARGET_SPIRV_SPIRVPUSHCONSTANTACCESS_H_
+#define LLVM_LIB_TARGET_SPIRV_SPIRVPUSHCONSTANTACCESS_H_
 
 #include "SPIRVTargetMachine.h"
 #include "llvm/IR/PassManager.h"
 
 namespace llvm {
 
-class SPIRVPushConstantAccess
-    : public OptionalPassInfoMixin<SPIRVPushConstantAccess> {
+class SPIRVPushConstantAccess : public PassInfoMixin<SPIRVPushConstantAccess> {
   const SPIRVTargetMachine &TM;
 
 public:
@@ -25,4 +24,4 @@ public:
 
 } // namespace llvm
 
-#endif // LLVM_LIB_TARGET_SPIRV_SPIRVPUSHCONSTANTACCESS_H
+#endif // LLVM_LIB_TARGET_SPIRV_SPIRVPUSHCONSTANTACCESS_H_

@@ -165,10 +165,3 @@ namespace GH162855 {
   template struct C<D<int>>;
 } // namespace GH162855
 #endif
-
-namespace DependentWithQualifier {
-  template <class> struct A;
-  template <class> struct B;
-  template <class T> struct A<const B<T> > {};
-  template struct A<const B<int> >;
-} // namespace DependentWithQualifier

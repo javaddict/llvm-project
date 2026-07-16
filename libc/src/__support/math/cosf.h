@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIBC_SRC___SUPPORT_MATH_COSF_H
-#define LLVM_LIBC_SRC___SUPPORT_MATH_COSF_H
+#ifndef LIBC_SRC___SUPPORT_MATH_COSF_H
+#define LIBC_SRC___SUPPORT_MATH_COSF_H
 
 #include "src/__support/FPUtil/FEnvImpl.h"
 #include "src/__support/FPUtil/FPBits.h"
@@ -26,7 +26,7 @@
 namespace LIBC_NAMESPACE_DECL {
 namespace math {
 
-LIBC_INLINE float cosf(float x) {
+LIBC_INLINE static constexpr float cosf(float x) {
   return sincosf_float_eval::sincosf_eval</*IS_SIN*/ false>(x);
 }
 
@@ -41,8 +41,7 @@ namespace LIBC_NAMESPACE_DECL {
 
 namespace math {
 
-LIBC_INLINE float cosf(float x) {
-  using namespace sincosf_utils_internal;
+LIBC_INLINE static constexpr float cosf(float x) {
 
 #ifndef LIBC_MATH_HAS_SKIP_ACCURATE_PASS
   // Exceptional cases for cosf.
@@ -170,6 +169,6 @@ LIBC_INLINE float cosf(float x) {
 
 } // namespace LIBC_NAMESPACE_DECL
 
-#endif // LIBC_MATH_HAS_INTERMEDIATE_COMP_IN_FLOAT
+#endif // LIBC_SRC___SUPPORT_MATH_COSF_H
 
-#endif // LLVM_LIBC_SRC___SUPPORT_MATH_COSF_H
+#endif // LIBC_MATH_HAS_INTERMEDIATE_COMP_IN_FLOAT

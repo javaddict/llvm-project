@@ -61,9 +61,7 @@ LLVM_C_EXTERN_C_BEGIN
 typedef enum {
   /* Terminator Instructions */
   LLVMRet            = 1,
-  /* removed 2 due to API changes */
-  LLVMUncondBr       = 70,
-  LLVMCondBr         = 71,
+  LLVMBr             = 2,
   LLVMSwitch         = 3,
   LLVMIndirectBr     = 4,
   LLVMInvoke         = 5,
@@ -171,7 +169,6 @@ typedef enum {
   LLVMBFloatTypeKind = 18,         /**< 16 bit brain floating point type */
   LLVMX86_AMXTypeKind = 19,        /**< X86 AMX */
   LLVMTargetExtTypeKind = 20,      /**< Target extension type */
-  LLVMByteTypeKind = 21,           /**< Arbitrary bit width bytes */
 } LLVMTypeKind;
 
 typedef enum {
@@ -281,7 +278,6 @@ typedef enum {
   LLVMConstantDataArrayValueKind,
   LLVMConstantDataVectorValueKind,
   LLVMConstantIntValueKind,
-  LLVMConstantByteValueKind,
   LLVMConstantFPValueKind,
   LLVMConstantPointerNullValueKind,
   LLVMConstantTokenNoneValueKind,
@@ -403,12 +399,6 @@ typedef enum {
                            original using an floating point comparison and
                            return the old one */
   LLVMAtomicRMWBinOpFMinimum, /**< Sets the value if it's smaller than the
-                           original using an floating point comparison and
-                           return the old one */
-  LLVMAtomicRMWBinOpFMaximumNum, /**< Sets the value if it's greater than the
-                           original using an floating point comparison and
-                           return the old one */
-  LLVMAtomicRMWBinOpFMinimumNum, /**< Sets the value if it's smaller than the
                            original using an floating point comparison and
                            return the old one */
 } LLVMAtomicRMWBinOp;
@@ -740,40 +730,6 @@ LLVM_C_ABI LLVMTypeRef LLVMGetTypeAttributeValue(LLVMAttributeRef A);
 LLVM_C_ABI LLVMAttributeRef LLVMCreateConstantRangeAttribute(
     LLVMContextRef C, unsigned KindID, unsigned NumBits,
     const uint64_t LowerWords[], const uint64_t UpperWords[]);
-
-/**
- * Represent different denormal handling kinds for use with
- * LLVMCreateDenormalFPEnvAttribute.
- */
-typedef enum {
-  LLVMDenormalModeKindIEEE = 0,
-  LLVMDenormalModeKindPreserveSign = 1,
-  LLVMDenormalModeKindPositiveZero = 2,
-  LLVMDenormalModeKindDynamic = 3
-} LLVMDenormalModeKind;
-
-/**
- * Create a DenormalFPEnv attribute.
- *
- * \p DefaultModeOutput is the assumed denormal handling for the outputs of most
- *    floating-point types.
- *
- * \p DefaultModeInput is the assumed denormal handling for the inputs of most
- *    floating-point types.
- *
- * \p FloatModeOutput is the assumed denormal handling for the outputs of
- *    float. This should always be the same as as DefaultModeOutput for most
- *    targets.
- *
- * \p FloatModeInput is the assumed denormal handling for the inputs of
- *    float. This should always be the same as as DefaultModeInput for most
- *    targets.
- *
- */
-LLVM_C_ABI LLVMAttributeRef LLVMCreateDenormalFPEnvAttribute(
-    LLVMContextRef C, LLVMDenormalModeKind DefaultModeOutput,
-    LLVMDenormalModeKind DefaultModeInput, LLVMDenormalModeKind FloatModeOutput,
-    LLVMDenormalModeKind FloatModeInput);
 
 /**
  * Create a string attribute.
@@ -1355,7 +1311,6 @@ LLVM_C_ABI void LLVMSetModuleInlineAsm(LLVMModuleRef M, const char *Asm);
  *
  *   types:
  *     integer type
- *     byte type
  *     real type
  *     function type
  *     sequence types:
@@ -1406,25 +1361,6 @@ LLVM_C_ABI void LLVMDumpType(LLVMTypeRef Val);
  * @see llvm::Type::print()
  */
 LLVM_C_ABI char *LLVMPrintTypeToString(LLVMTypeRef Val);
-
-/**
- * @}
- */
-
-/**
- * @defgroup LLVMCCoreTypeByte Byte Types
- *
- * Functions in this section operate on byte types.
- *
- * @{
- */
-
-/**
- * Obtain a byte type from a context with specified bit width.
- */
-LLVM_C_ABI LLVMTypeRef LLVMByteTypeInContext(LLVMContextRef C,
-                                             unsigned NumBits);
-LLVM_C_ABI unsigned LLVMGetByteTypeWidth(LLVMTypeRef ByteTy);
 
 /**
  * @defgroup LLVMCCoreTypeInt Integer Types
@@ -2042,7 +1978,6 @@ LLVM_C_ABI unsigned LLVMGetTargetExtTypeIntParam(LLVMTypeRef TargetExtTy,
       macro(ConstantExpr)                   \
       macro(ConstantFP)                     \
       macro(ConstantInt)                    \
-      macro(ConstantByte)                   \
       macro(ConstantPointerNull)            \
       macro(ConstantStruct)                 \
       macro(ConstantTokenNone)              \
@@ -2081,8 +2016,7 @@ LLVM_C_ABI unsigned LLVMGetTargetExtTypeIntParam(LLVMTypeRef TargetExtTy,
       macro(SelectInst)                     \
       macro(ShuffleVectorInst)              \
       macro(StoreInst)                      \
-      macro(UncondBrInst)                   \
-      macro(CondBrInst)                     \
+      macro(BranchInst)                     \
       macro(IndirectBrInst)                 \
       macro(InvokeInst)                     \
       macro(ReturnInst)                     \
@@ -2228,10 +2162,6 @@ LLVM_C_ABI LLVMBool LLVMIsPoison(LLVMValueRef Val);
 #define LLVM_DECLARE_VALUE_CAST(name)                                          \
   LLVM_C_ABI LLVMValueRef LLVMIsA##name(LLVMValueRef Val);
 LLVM_FOR_EACH_VALUE_SUBCLASS(LLVM_DECLARE_VALUE_CAST)
-
-LLVM_C_ABI LLVM_ATTRIBUTE_C_DEPRECATED(
-    LLVMValueRef LLVMIsABranchInst(LLVMValueRef Val),
-    "Use LLVMIsAUncondBrInst/LLVMIsACondBrInst instead");
 
 LLVM_C_ABI LLVMValueRef LLVMIsAMDNode(LLVMValueRef Val);
 LLVM_C_ABI LLVMValueRef LLVMIsAValueAsMetadata(LLVMValueRef Val);
@@ -2460,36 +2390,6 @@ LLVM_C_ABI LLVMValueRef LLVMConstIntOfStringAndSize(LLVMTypeRef IntTy,
                                                     uint8_t Radix);
 
 /**
- * Obtain a constant value for a byte type.
- *
- * The returned value corresponds to a llvm::ConstantByte.
- *
- * @see llvm::ConstantByte::get()
- *
- * @param ByteTy Byte type to obtain value of.
- * @param N The value the returned instance should refer to.
- */
-LLVM_C_ABI LLVMValueRef LLVMConstByte(LLVMTypeRef ByteTy, unsigned long long N);
-
-/**
- * Obtain a constant value for a byte of arbitrary precision.
- *
- * @see llvm::ConstantByte::get()
- */
-LLVM_C_ABI LLVMValueRef LLVMConstByteOfArbitraryPrecision(
-    LLVMTypeRef ByteTy, unsigned NumWords, const uint64_t Words[]);
-
-/**
- * Obtain a constant value for a byte parsed from a string with specified
- * length.
- * @see llvm::ConstantByte::get()
- */
-LLVM_C_ABI LLVMValueRef LLVMConstByteOfStringAndSize(LLVMTypeRef ByteTy,
-                                                     const char *Text,
-                                                     size_t SLen,
-                                                     uint8_t Radix);
-
-/**
  * Obtain a constant value referring to a double floating point value.
  */
 LLVM_C_ABI LLVMValueRef LLVMConstReal(LLVMTypeRef RealTy, double N);
@@ -2532,21 +2432,6 @@ LLVMConstIntGetZExtValue(LLVMValueRef ConstantVal);
  * @see llvm::ConstantInt::getSExtValue()
  */
 LLVM_C_ABI long long LLVMConstIntGetSExtValue(LLVMValueRef ConstantVal);
-
-/**
- * Obtain the zero extended value for a byte constant value.
- *
- * @see llvm::ConstantByte::getZExtValue()
- */
-LLVM_C_ABI unsigned long long
-LLVMConstByteGetZExtValue(LLVMValueRef ConstantVal);
-
-/**
- * Obtain the sign extended value for a byte constant value.
- *
- * @see llvm::ConstantByte::getSExtValue()
- */
-LLVM_C_ABI long long LLVMConstByteGetSExtValue(LLVMValueRef ConstantVal);
 
 /**
  * Obtain the double value for an floating point constant value.
@@ -3147,25 +3032,25 @@ LLVM_C_ABI unsigned LLVMLookupIntrinsicID(const char *Name, size_t NameLen);
 LLVM_C_ABI unsigned LLVMGetIntrinsicID(LLVMValueRef Fn);
 
 /**
- * Get or insert the declaration of an intrinsic. For overloaded intrinsics,
- * overload types must be provided to uniquely identify an overload.
+ * Get or insert the declaration of an intrinsic.  For overloaded intrinsics,
+ * parameter types must be provided to uniquely identify an overload.
  *
  * @see llvm::Intrinsic::getOrInsertDeclaration()
  */
 LLVM_C_ABI LLVMValueRef LLVMGetIntrinsicDeclaration(LLVMModuleRef Mod,
                                                     unsigned ID,
-                                                    LLVMTypeRef *OverloadTypes,
-                                                    size_t OverloadCount);
+                                                    LLVMTypeRef *ParamTypes,
+                                                    size_t ParamCount);
 
 /**
- * Retrieves the type of an intrinsic. For overloaded intrinsics, overload
+ * Retrieves the type of an intrinsic.  For overloaded intrinsics, parameter
  * types must be provided to uniquely identify an overload.
  *
  * @see llvm::Intrinsic::getType()
  */
 LLVM_C_ABI LLVMTypeRef LLVMIntrinsicGetType(LLVMContextRef Ctx, unsigned ID,
-                                            LLVMTypeRef *OverloadTypes,
-                                            size_t OverloadCount);
+                                            LLVMTypeRef *ParamTypes,
+                                            size_t ParamCount);
 
 /**
  * Retrieves the name of an intrinsic.
@@ -3176,13 +3061,13 @@ LLVM_C_ABI const char *LLVMIntrinsicGetName(unsigned ID, size_t *NameLength);
 
 /** Deprecated: Use LLVMIntrinsicCopyOverloadedName2 instead. */
 LLVM_C_ABI char *LLVMIntrinsicCopyOverloadedName(unsigned ID,
-                                                 LLVMTypeRef *OverloadTypes,
-                                                 size_t OverloadCount,
+                                                 LLVMTypeRef *ParamTypes,
+                                                 size_t ParamCount,
                                                  size_t *NameLength);
 
 /**
  * Copies the name of an overloaded intrinsic identified by a given list of
- * overload types.
+ * parameter types.
  *
  * Unlike LLVMIntrinsicGetName, the caller is responsible for freeing the
  * returned string.
@@ -3193,8 +3078,8 @@ LLVM_C_ABI char *LLVMIntrinsicCopyOverloadedName(unsigned ID,
  */
 LLVM_C_ABI char *LLVMIntrinsicCopyOverloadedName2(LLVMModuleRef Mod,
                                                   unsigned ID,
-                                                  LLVMTypeRef *OverloadTypes,
-                                                  size_t OverloadCount,
+                                                  LLVMTypeRef *ParamTypes,
+                                                  size_t ParamCount,
                                                   size_t *NameLength);
 
 /**
@@ -4376,27 +4261,29 @@ LLVM_C_ABI void LLVMSetSuccessor(LLVMValueRef Term, unsigned i,
                                  LLVMBasicBlockRef block);
 
 /**
- * Return if an instruction is a conditional branch.
+ * Return if a branch is conditional.
  *
- * Deprecated: Use LLVMIsACondBrInst instead.
+ * This only works on llvm::BranchInst instructions.
+ *
+ * @see llvm::BranchInst::isConditional
  */
 LLVM_C_ABI LLVMBool LLVMIsConditional(LLVMValueRef Branch);
 
 /**
  * Return the condition of a branch instruction.
  *
- * This only works on llvm::CondBrInst instructions.
+ * This only works on llvm::BranchInst instructions.
  *
- * @see llvm::CondBrInst::getCondition
+ * @see llvm::BranchInst::getCondition
  */
 LLVM_C_ABI LLVMValueRef LLVMGetCondition(LLVMValueRef Branch);
 
 /**
  * Set the condition of a branch instruction.
  *
- * This only works on llvm::CondBrInst instructions.
+ * This only works on llvm::BranchInst instructions.
  *
- * @see llvm::CondBrInst::setCondition
+ * @see llvm::BranchInst::setCondition
  */
 LLVM_C_ABI void LLVMSetCondition(LLVMValueRef Branch, LLVMValueRef Cond);
 

@@ -57,17 +57,9 @@ ScriptedThread::Create(ScriptedProcess &process,
   }
 
   ExecutionContext exe_ctx(process);
-  // The legacy thread-spawn path (no script_object) needs to instantiate a
-  // *thread* Python class whose name comes from the process plugin, not the
-  // process's own class name. Build a thread-specific metadata for that case;
-  // when script_object is non-null the class name is unused so we just forward
-  // the process's metadata.
-  ScriptedMetadata thread_metadata =
-      script_object ? process.m_scripted_metadata
-                    : ScriptedMetadata(thread_class_name,
-                                       process.m_scripted_metadata.GetArgsSP());
   auto obj_or_err = scripted_thread_interface->CreatePluginObject(
-      thread_metadata, exe_ctx, script_object);
+      thread_class_name, exe_ctx, process.m_scripted_metadata.GetArgsSP(),
+      script_object);
 
   if (!obj_or_err) {
     llvm::consumeError(obj_or_err.takeError());
@@ -102,7 +94,7 @@ const char *ScriptedThread::GetName() {
   std::optional<std::string> thread_name = GetInterface()->GetName();
   if (!thread_name)
     return nullptr;
-  return ConstString(*thread_name).AsCString(nullptr);
+  return ConstString(thread_name->c_str()).AsCString();
 }
 
 const char *ScriptedThread::GetQueueName() {
@@ -110,7 +102,7 @@ const char *ScriptedThread::GetQueueName() {
   std::optional<std::string> queue_name = GetInterface()->GetQueue();
   if (!queue_name)
     return nullptr;
-  return ConstString(*queue_name).AsCString(nullptr);
+  return ConstString(queue_name->c_str()).AsCString();
 }
 
 void ScriptedThread::WillResume(StateType resume_state) {}
@@ -172,23 +164,18 @@ bool ScriptedThread::LoadArtificialStackFrames() {
         error, LLDBLog::Thread);
 
   size_t arr_size = arr_sp->GetSize();
-  if (!arr_size)
-    return ScriptedInterface::ErrorWithMessage<bool>(
-        LLVM_PRETTY_FUNCTION, "StackFrame array is empty.", error,
-        LLDBLog::Thread);
-
   if (arr_size > std::numeric_limits<uint32_t>::max())
     return ScriptedInterface::ErrorWithMessage<bool>(
         LLVM_PRETTY_FUNCTION,
         llvm::Twine(
             "StackFrame array size (" + llvm::Twine(arr_size) +
-            ") is greater than maximum authorized for a StackFrameList.")
+            llvm::Twine(
+                ") is greater than maximum authorized for a StackFrameList."))
             .str(),
         error, LLDBLog::Thread);
 
   auto create_frame_from_dict =
-      [this, arr_sp](size_t idx,
-                     uint32_t frame_list_idx) -> llvm::Expected<StackFrameSP> {
+      [this, arr_sp](size_t idx) -> llvm::Expected<StackFrameSP> {
     Status error;
     std::optional<StructuredData::Dictionary *> maybe_dict =
         arr_sp->GetItemAtIndexAsDictionary(idx);
@@ -219,12 +206,12 @@ bool ScriptedThread::LoadArtificialStackFrames() {
     lldb::addr_t cfa = LLDB_INVALID_ADDRESS;
     bool cfa_is_valid = false;
     const bool artificial = false;
-    const bool behaves_like_zeroth_frame = (frame_list_idx == 0);
+    const bool behaves_like_zeroth_frame = false;
     SymbolContext sc;
     symbol_addr.CalculateSymbolContext(&sc);
 
-    return std::make_shared<StackFrame>(shared_from_this(), frame_list_idx, idx,
-                                        cfa, cfa_is_valid, pc,
+    return std::make_shared<StackFrame>(shared_from_this(), idx, idx, cfa,
+                                        cfa_is_valid, pc,
                                         StackFrame::Kind::Synthetic, artificial,
                                         behaves_like_zeroth_frame, &sc);
   };
@@ -260,22 +247,19 @@ bool ScriptedThread::LoadArtificialStackFrames() {
   };
 
   StackFrameListSP frames = GetStackFrameList();
-  uint32_t frame_list_idx = 0;
 
   for (size_t idx = 0; idx < arr_size; idx++) {
     StackFrameSP synth_frame_sp = nullptr;
 
-    auto frame_from_dict_or_err = create_frame_from_dict(idx, frame_list_idx);
+    auto frame_from_dict_or_err = create_frame_from_dict(idx);
     if (!frame_from_dict_or_err) {
       auto frame_from_script_obj_or_err = create_frame_from_script_object(idx);
 
       if (!frame_from_script_obj_or_err) {
         return ScriptedInterface::ErrorWithMessage<bool>(
             LLVM_PRETTY_FUNCTION,
-            llvm::Twine(
-                "Couldn't add artificial frame (" + llvm::Twine(idx) +
-                llvm::Twine(") to ScriptedThread StackFrameList: ") +
-                llvm::toString(frame_from_script_obj_or_err.takeError()))
+            llvm::Twine("Couldn't add artificial frame (" + llvm::Twine(idx) +
+                        llvm::Twine(") to ScriptedThread StackFrameList."))
                 .str(),
             error, LLDBLog::Thread);
       } else {
@@ -286,24 +270,14 @@ bool ScriptedThread::LoadArtificialStackFrames() {
       synth_frame_sp = *frame_from_dict_or_err;
     }
 
-    if (!frames->SetFrameAtIndex(frame_list_idx, synth_frame_sp))
+    if (!frames->SetFrameAtIndex(static_cast<uint32_t>(idx), synth_frame_sp))
       return ScriptedInterface::ErrorWithMessage<bool>(
           LLVM_PRETTY_FUNCTION,
           llvm::Twine("Couldn't add frame (" + llvm::Twine(idx) +
                       llvm::Twine(") to ScriptedThread StackFrameList."))
               .str(),
           error, LLDBLog::Thread);
-    frame_list_idx++;
-
-    // Synthesize inline frames, mirroring StackFrameList::FetchFramesUpTo().
-    frame_list_idx += frames->SynthesizeInlineFrames(
-        synth_frame_sp, /*cfa=*/LLDB_INVALID_ADDRESS);
   }
-
-  // Mark the stack as fully unwound so the regular unwinder doesn't try to
-  // extend it beyond the artificial frames (e.g. by reading lr/fp from the
-  // register context).
-  frames->SetAllFramesFetched();
 
   return true;
 }
@@ -322,10 +296,9 @@ bool ScriptedThread::CalculateStopInfo() {
   // if we CreateStopReasonWithBreakpointSiteID.
   if (RegisterContextSP reg_ctx_sp = GetRegisterContext()) {
     addr_t pc = reg_ctx_sp->GetPC();
-    ProcessSP proc = GetProcess();
     if (BreakpointSiteSP bp_site_sp =
-            proc->GetBreakpointSiteList().FindByAddress(pc))
-      if (proc->IsBreakpointSitePhysicallyEnabled(*bp_site_sp))
+            GetProcess()->GetBreakpointSiteList().FindByAddress(pc))
+      if (bp_site_sp->IsEnabled())
         SetThreadStoppedAtUnexecutedBP(pc);
   }
 

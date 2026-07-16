@@ -35,7 +35,9 @@ namespace {
 class LowerEmuTLS : public ModulePass {
 public:
   static char ID; // Pass identification, replacement for typeid
-  LowerEmuTLS() : ModulePass(ID) {}
+  LowerEmuTLS() : ModulePass(ID) {
+    initializeLowerEmuTLSPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnModule(Module &M) override;
 };
@@ -146,7 +148,7 @@ bool addEmuTlsVar(Module &M, const GlobalVariable *GV) {
     return true;
 
   Type *GVType = GV->getValueType();
-  Align GVAlignment = GV->getPointerAlignment(DL);
+  Align GVAlignment = DL.getValueOrABITypeAlignment(GV->getAlign(), GVType);
 
   // Define "__emutls_t.*" if there is InitValue
   GlobalVariable *EmuTlsTmplVar = nullptr;

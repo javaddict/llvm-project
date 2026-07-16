@@ -78,16 +78,12 @@ bool PPCDispatchGroupSBHazardRecognizer::isBCTRAfterSet(SUnit *SU) {
 }
 
 // FIXME: Remove this when we don't need this:
-namespace llvm {
-namespace PPC {
-extern int32_t getNonRecordFormOpcode(uint32_t);
-}
-} // namespace llvm
+namespace llvm { namespace PPC { extern int getNonRecordFormOpcode(uint16_t); } }
 
 // FIXME: A lot of code in PPCDispatchGroupSBHazardRecognizer is P7 specific.
 
 bool PPCDispatchGroupSBHazardRecognizer::mustComeFirst(const MCInstrDesc *MCID,
-                                                       unsigned &NSlots) const {
+                                                       unsigned &NSlots) {
   // FIXME: Indirectly, this information is contained in the itinerary, and
   // we should derive it from there instead of separately specifying it
   // here.
@@ -147,7 +143,7 @@ PPCDispatchGroupSBHazardRecognizer::getHazardType(SUnit *SU, int Stalls) {
   return ScoreboardHazardRecognizer::getHazardType(SU, Stalls);
 }
 
-bool PPCDispatchGroupSBHazardRecognizer::ShouldPreferAnother(SUnit *SU) const {
+bool PPCDispatchGroupSBHazardRecognizer::ShouldPreferAnother(SUnit *SU) {
   const MCInstrDesc *MCID = DAG->getInstrDesc(SU);
   unsigned NSlots;
   if (MCID && mustComeFirst(MCID, NSlots) && CurSlots)

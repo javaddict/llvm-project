@@ -127,7 +127,6 @@ public:
 
   // Debug information queries.
   Register getFrameRegister(const MachineFunction &MF) const override;
-  unsigned getLocalAddressRegister(const MachineFunction &MF) const;
   Register getBaseRegister() const { return BasePtr; }
 
   /// emitLoadConstPool - Emits a load from constpool to materialize the

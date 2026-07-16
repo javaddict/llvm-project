@@ -179,14 +179,14 @@ bool DataInitializationCompiler<DSV>::Scan(
 template <typename DSV>
 bool DataInitializationCompiler<DSV>::Scan(const parser::DataImpliedDo &ido) {
   const auto &bounds{std::get<parser::DataImpliedDo::Bounds>(ido.t)};
-  const auto &name{parser::UnwrapRef<parser::Name>(bounds.Name())};
-  const auto *lowerExpr{GetExpr(exprAnalyzer_.context(),
-      parser::UnwrapRef<parser::Expr>(bounds.Lower()))};
-  const auto *upperExpr{GetExpr(exprAnalyzer_.context(),
-      parser::UnwrapRef<parser::Expr>(bounds.Upper()))};
-  const auto *stepExpr{bounds.Step()
+  const auto &name{parser::UnwrapRef<parser::Name>(bounds.name)};
+  const auto *lowerExpr{GetExpr(
+      exprAnalyzer_.context(), parser::UnwrapRef<parser::Expr>(bounds.lower))};
+  const auto *upperExpr{GetExpr(
+      exprAnalyzer_.context(), parser::UnwrapRef<parser::Expr>(bounds.upper))};
+  const auto *stepExpr{bounds.step
           ? GetExpr(exprAnalyzer_.context(),
-                parser::UnwrapRef<parser::Expr>(bounds.Step()))
+                parser::UnwrapRef<parser::Expr>(bounds.step))
           : nullptr};
   if (lowerExpr && upperExpr) {
     // Fold the bounds expressions (again) in case any of them depend
@@ -335,7 +335,7 @@ bool DataInitializationCompiler<DSV>::InitElement(
       return ss.str();
     }
   }};
-  const auto GetSymbolInit{[&]() -> SymbolDataInitialization & {
+  const auto GetImage{[&]() -> evaluate::InitialImage & {
     // This could be (and was) written to always call std::map<>::emplace(),
     // which should handle duplicate entries gracefully, but it was still
     // causing memory allocation & deallocation with gcc.
@@ -343,7 +343,9 @@ bool DataInitializationCompiler<DSV>::InitElement(
     if (iter == inits_.end()) {
       iter = inits_.emplace(&symbol, symbol.size()).first;
     }
-    return iter->second;
+    auto &symbolInit{iter->second};
+    symbolInit.NoteInitializedRange(offsetSymbol);
+    return symbolInit.image;
   }};
   const auto OutOfRangeError{[&]() {
     evaluate::AttachDeclaration(
@@ -392,10 +394,7 @@ bool DataInitializationCompiler<DSV>::InitElement(
                 scope,
                 /*isBoundsRemapping=*/false, /*isAssumedRank=*/false)) {
           if (lastSymbol->has<ProcEntityDetails>()) {
-            auto &symInit{GetSymbolInit()};
-            symInit.NoteInitializedRange(offsetSymbol, /*isDuplicate=*/
-                symInit.image.AddPointer(offsetSymbol.offset(), *expr) ==
-                    evaluate::InitialImage::OkNoChange);
+            GetImage().AddPointer(offsetSymbol.offset(), *expr);
             return true;
           } else {
             evaluate::AttachDeclaration(
@@ -416,10 +415,7 @@ bool DataInitializationCompiler<DSV>::InitElement(
           expr->AsFortran(), DescribeElement());
     } else if (CheckInitialDataPointerTarget(
                    exprAnalyzer_.context(), designator, *expr, scope)) {
-      auto &symInit{GetSymbolInit()};
-      symInit.NoteInitializedRange(offsetSymbol, /*isDuplicate=*/
-          symInit.image.AddPointer(offsetSymbol.offset(), *expr) ==
-              evaluate::InitialImage::OkNoChange);
+      GetImage().AddPointer(offsetSymbol.offset(), *expr);
       return true;
     }
   } else if (evaluate::IsNullPointer(expr)) {
@@ -452,14 +448,9 @@ bool DataInitializationCompiler<DSV>::InitElement(
       // Rewritten from a switch() in order to avoid getting complaints
       // about a missing "default:" from some compilers and complaints
       // about a redundant "default:" from others.
-      auto &symInit{GetSymbolInit()};
-      auto status{symInit.image.Add(
+      auto status{GetImage().Add(
           offsetSymbol.offset(), offsetSymbol.size(), folded, context)};
       if (status == evaluate::InitialImage::Ok) {
-        symInit.NoteInitializedRange(offsetSymbol, /*isDuplicate=*/false);
-        return true;
-      } else if (status == evaluate::InitialImage::OkNoChange) {
-        symInit.NoteInitializedRange(offsetSymbol, /*isDuplicate=*/true);
         return true;
       } else if (status == evaluate::InitialImage::NotAConstant) {
         exprAnalyzer_.Say(
@@ -576,36 +567,48 @@ static void PopulateWithComponentDefaults(SymbolDataInitialization &init,
       if (!IsAllocatable(component) && !IsAutomatic(component)) {
         bool initialized{false};
         if (object->init()) {
+          initialized = true;
           if (IsPointer(component)) {
-            if (init.image.AddPointer(componentOffset, *object->init()) ==
-                evaluate::InitialImage::Ok) {
-              initialized = true;
+            if (auto extant{init.image.AsConstantPointer(componentOffset)}) {
+              initialized = !(*extant == *object->init());
+            }
+            if (initialized) {
+              init.image.AddPointer(componentOffset, *object->init());
             }
           } else { // data, not pointer
-            if (init.image.Add(componentOffset, component.size(),
-                    *object->init(),
-                    foldingContext) == evaluate::InitialImage::Ok) {
-              initialized = true;
+            if (auto dyType{evaluate::DynamicType::From(component)}) {
+              if (auto extents{evaluate::GetConstantExtents(
+                      foldingContext, component)}) {
+                if (auto extant{init.image.AsConstant(foldingContext, *dyType,
+                        std::nullopt, *extents, false /*don't pad*/,
+                        componentOffset)}) {
+                  initialized = !(*extant == *object->init());
+                }
+              }
+            }
+            if (initialized) {
+              init.image.Add(componentOffset, component.size(), *object->init(),
+                  foldingContext);
             }
           }
-        } else if (const DeclTypeSpec *type{component.GetType()}) {
+        } else if (const DeclTypeSpec * type{component.GetType()}) {
           if (const DerivedTypeSpec * componentDerived{type->AsDerived()}) {
             PopulateWithComponentDefaults(init, componentOffset,
                 *componentDerived, foldingContext, component);
           }
         }
         if (initialized) {
-          init.NoteInitializedRange(componentOffset, component.size(),
-              /*isDuplicate=*/false);
+          init.NoteInitializedRange(componentOffset, component.size());
         }
       }
     } else if (const auto *proc{component.detailsIf<ProcEntityDetails>()}) {
       if (proc->init() && *proc->init()) {
         SomeExpr procPtrInit{evaluate::ProcedureDesignator{**proc->init()}};
-        init.NoteInitializedRange(componentOffset,
-            component.size(), /*isDuplicate=*/
-            init.image.AddPointer(componentOffset, std::move(procPtrInit)) ==
-                evaluate::InitialImage::OkNoChange);
+        auto extant{init.image.AsConstantPointer(componentOffset)};
+        if (!extant || !(*extant == procPtrInit)) {
+          init.NoteInitializedRange(componentOffset, component.size());
+          init.image.AddPointer(componentOffset, std::move(procPtrInit));
+        }
       }
     }
   }
@@ -617,56 +620,27 @@ static bool CheckForOverlappingInitialization(
     evaluate::ExpressionAnalyzer &exprAnalyzer, const std::string &what) {
   bool result{true};
   auto &context{exprAnalyzer.GetFoldingContext()};
-  initialization.initializationItems.sort();
+  initialization.initializedRanges.sort();
   ConstantSubscript next{0};
-  SourceOrderedSymbolSet errors;
-  // Emit errors for multiple distinct initializations
-  for (const auto &item : initialization.initializationItems) {
-    const auto &range{item.range};
-    if (range.start() < next && !item.isDuplicate) {
+  for (const auto &range : initialization.initializedRanges) {
+    if (range.start() < next) {
       result = false; // error: overlap
       bool hit{false};
       for (const Symbol &symbol : symbols) {
         auto offset{range.start() -
             static_cast<ConstantSubscript>(
                 symbol.offset() - symbols.front()->offset())};
-        if (offset >= 0 && static_cast<std::size_t>(offset) < symbol.size()) {
+        if (offset >= 0) {
           if (auto badDesignator{evaluate::OffsetToDesignator(
                   context, symbol, offset, range.size())}) {
             hit = true;
-            errors.insert(symbol);
             exprAnalyzer.Say(symbol.name(),
-                "%s affect '%s' more than once, distinctly"_err_en_US, what,
+                "%s affect '%s' more than once"_err_en_US, what,
                 badDesignator->AsFortran());
           }
         }
       }
       CHECK(hit);
-    }
-    next = range.start() + range.size();
-    CHECK(next <= static_cast<ConstantSubscript>(initialization.image.size()));
-  }
-  // Emit warnings for multiple identical initializations
-  next = 0;
-  for (const auto &item : initialization.initializationItems) {
-    const auto &range{item.range};
-    if (range.start() < next && item.isDuplicate) {
-      for (const Symbol &symbol : symbols) {
-        if (errors.find(symbol) == errors.end()) {
-          auto offset{range.start() -
-              static_cast<ConstantSubscript>(
-                  symbol.offset() - symbols.front()->offset())};
-          if (offset >= 0) {
-            if (auto badDesignator{evaluate::OffsetToDesignator(
-                    context, symbol, offset, range.size())}) {
-              exprAnalyzer.Warn(common::LanguageFeature::MultipleIdenticalDATA,
-                  symbol.name(),
-                  "%s affect '%s' more than once, identically"_port_en_US, what,
-                  badDesignator->AsFortran());
-            }
-          }
-        }
-      }
     }
     next = range.start() + range.size();
     CHECK(next <= static_cast<ConstantSubscript>(initialization.image.size()));
@@ -681,13 +655,11 @@ static void IncorporateExplicitInitialization(
   auto iter{inits.find(&symbol)};
   const auto offset{symbol.offset() - firstOffset};
   if (iter != inits.end()) { // DATA statement initialization
-    for (const auto &item : iter->second.initializationItems) {
-      auto at{offset + item.range.start()};
-      if (combined.image.Incorporate(
-              at, iter->second.image, item.range.start(), item.range.size())) {
-        combined.NoteInitializedRange(
-            at, item.range.size(), /*isDuplicate=*/false);
-      }
+    for (const auto &range : iter->second.initializedRanges) {
+      auto at{offset + range.start()};
+      combined.NoteInitializedRange(at, range.size());
+      combined.image.Incorporate(
+          at, iter->second.image, range.start(), range.size());
     }
     if (removeOriginalInits) {
       inits.erase(iter);
@@ -697,21 +669,17 @@ static void IncorporateExplicitInitialization(
     if (IsPointer(mutableSymbol)) {
       if (auto *object{mutableSymbol.detailsIf<ObjectEntityDetails>()}) {
         if (object->init()) {
-          combined.NoteInitializedRange(offset,
-              mutableSymbol.size(), /*isDuplicate=*/
-              combined.image.AddPointer(offset, *object->init()) ==
-                  evaluate::InitialImage::OkNoChange);
+          combined.NoteInitializedRange(offset, mutableSymbol.size());
+          combined.image.AddPointer(offset, *object->init());
           if (removeOriginalInits) {
             object->init().reset();
           }
         }
       } else if (auto *proc{mutableSymbol.detailsIf<ProcEntityDetails>()}) {
         if (proc->init() && *proc->init()) {
-          combined.NoteInitializedRange(offset,
-              mutableSymbol.size(), /*isDuplicate=*/
-              combined.image.AddPointer(offset,
-                  SomeExpr{evaluate::ProcedureDesignator{**proc->init()}}) ==
-                  evaluate::InitialImage::OkNoChange);
+          combined.NoteInitializedRange(offset, mutableSymbol.size());
+          combined.image.AddPointer(
+              offset, SomeExpr{evaluate::ProcedureDesignator{**proc->init()}});
           if (removeOriginalInits) {
             proc->init().reset();
           }
@@ -719,10 +687,9 @@ static void IncorporateExplicitInitialization(
       }
     } else if (auto *object{mutableSymbol.detailsIf<ObjectEntityDetails>()}) {
       if (!IsNamedConstant(mutableSymbol) && object->init()) {
-        auto status{combined.image.Add(
-            offset, mutableSymbol.size(), *object->init(), foldingContext)};
-        combined.NoteInitializedRange(offset, mutableSymbol.size(),
-            status == evaluate::InitialImage::OkNoChange);
+        combined.NoteInitializedRange(offset, mutableSymbol.size());
+        combined.image.Add(
+            offset, mutableSymbol.size(), *object->init(), foldingContext);
         if (removeOriginalInits) {
           object->init().reset();
         }
@@ -792,12 +759,12 @@ static bool CombineEquivalencedInitialization(
     }
   }
   if (!CheckForOverlappingInitialization(associated, combined, exprAnalyzer,
-          "Default component initializations of equivalenced objects"s)) {
+          "Distinct default component initializations of equivalenced objects"s)) {
     return false;
   }
   // Don't complain about overlap between explicit initializations and
   // default initializations.
-  combined.initializationItems.clear();
+  combined.initializedRanges.clear();
   // Now overlay all explicit initializations from DATA statements and
   // from initializers in declarations.
   for (const Symbol &symbol : associated) {

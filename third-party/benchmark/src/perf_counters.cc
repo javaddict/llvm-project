@@ -26,6 +26,8 @@
 namespace benchmark {
 namespace internal {
 
+constexpr size_t PerfCounterValues::kMaxCounters;
+
 #if defined HAVE_LIBPFM
 
 size_t PerfCounterValues::Read(const std::vector<int>& leaders) {
@@ -37,8 +39,7 @@ size_t PerfCounterValues::Read(const std::vector<int>& leaders) {
     auto read_bytes = ::read(lead, ptr, size);
     if (read_bytes >= ssize_t(sizeof(uint64_t))) {
       // Actual data bytes are all bytes minus initial padding
-      std::size_t data_bytes =
-          static_cast<std::size_t>(read_bytes) - sizeof(uint64_t);
+      std::size_t data_bytes = read_bytes - sizeof(uint64_t);
       // This should be very cheap since it's in hot cache
       std::memmove(ptr, ptr + sizeof(uint64_t), data_bytes);
       // Increment our counters
@@ -155,8 +156,7 @@ PerfCounters PerfCounters::Create(
     attr.exclude_hv = true;
 
     // Read all counters in a group in one read.
-    attr.read_format = PERF_FORMAT_GROUP;  //| PERF_FORMAT_TOTAL_TIME_ENABLED |
-                                           // PERF_FORMAT_TOTAL_TIME_RUNNING;
+    attr.read_format = PERF_FORMAT_GROUP;
 
     int id = -1;
     while (id < 0) {
@@ -214,9 +214,9 @@ PerfCounters PerfCounters::Create(
       // This should never happen but if it does, we give up on the
       // entire batch as recovery would be a mess.
       GetErrorLogInstance() << "***WARNING*** Failed to start counters. "
-                               "Clearing out all counters.\n";
+                               "Claring out all counters.\n";
 
-      // Close all performance counters
+      // Close all peformance counters
       for (int id : counter_ids) {
         ::close(id);
       }

@@ -20,13 +20,12 @@ namespace llvm {
 class LPMUpdater;
 class LoopNest;
 
-class LoopFlattenPass : public OptionalPassInfoMixin<LoopFlattenPass> {
+class LoopFlattenPass : public PassInfoMixin<LoopFlattenPass> {
 public:
   LoopFlattenPass() = default;
 
-  LLVM_ABI PreservedAnalyses run(LoopNest &LN, LoopAnalysisManager &LAM,
-                                 LoopStandardAnalysisResults &AR,
-                                 LPMUpdater &U);
+  PreservedAnalyses run(LoopNest &LN, LoopAnalysisManager &LAM,
+                        LoopStandardAnalysisResults &AR, LPMUpdater &U);
 };
 
 } // end namespace llvm

@@ -37,7 +37,7 @@ def GPUTargetAttrInterface : AttrInterface<"TargetAttrInterface"> {
         is meant to be used for passing additional options that are not in the
         attribute.
       }],
-      "std::optional<SerializedObject>", "serializeToObject",
+      "std::optional<::mlir::SmallVector<char, 0>>", "serializeToObject",
       (ins "::mlir::Operation*":$module,
            "const ::mlir::gpu::TargetOptions&":$options)>,
     InterfaceMethod<[{
@@ -50,7 +50,7 @@ def GPUTargetAttrInterface : AttrInterface<"TargetAttrInterface"> {
         attribute.
       }], "::mlir::Attribute", "createObject",
         (ins "::mlir::Operation *":$module,
-             "const ::mlir::gpu::SerializedObject &":$object,
+             "const ::llvm::SmallVector<char, 0> &":$object,
              "const ::mlir::gpu::TargetOptions &":$options)>
   ];
 }

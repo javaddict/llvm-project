@@ -2,6 +2,8 @@
 search.h
 ========
 
+.. include:: ../check.rst
+
 ---------------
 Source Location
 ---------------

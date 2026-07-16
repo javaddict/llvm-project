@@ -152,6 +152,5 @@ struct FoldExpressionOp : public OpRewritePattern<ExpressionOp> {
 } // namespace
 
 void mlir::emitc::populateExpressionPatterns(RewritePatternSet &patterns) {
-  ExpressionOp::getCanonicalizationPatterns(patterns, patterns.getContext());
   patterns.add<FoldExpressionOp>(patterns.getContext());
 }

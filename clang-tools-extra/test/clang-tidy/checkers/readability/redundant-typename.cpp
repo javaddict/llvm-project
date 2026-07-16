@@ -218,10 +218,6 @@ public:
   // CHECK-MESSAGES-20: :[[@LINE-1]]:3: warning: redundant 'typename' [readability-redundant-typename]
   // CHECK-FIXES-20: T::R v;
 
-  static typename T::R StaticDataMember;
-  // CHECK-MESSAGES-20: :[[@LINE-1]]:10: warning: redundant 'typename' [readability-redundant-typename]
-  // CHECK-FIXES-20: static T::R StaticDataMember;
-
   typename T::R
   // CHECK-MESSAGES-20: :[[@LINE-1]]:3: warning: redundant 'typename' [readability-redundant-typename]
   // CHECK-FIXES-20: T::R
@@ -340,41 +336,3 @@ typename ClassWithNestedStruct<T>::Nested ClassWithNestedStruct<T>::g() {
 // CHECK-FIXES-20: ClassWithNestedStruct<T>::Nested ClassWithNestedStruct<T>::g() {
   return {};
 }
-
-#if __cplusplus >= 201402L
-
-struct Foo {
-  template <typename T, typename>
-  static typename T::R PartiallySpecializedDataMember;
-  // CHECK-MESSAGES-20: :[[@LINE-1]]:10: warning: redundant 'typename' [readability-redundant-typename]
-  // CHECK-FIXES-20: static T::R PartiallySpecializedDataMember;
-
-  template <typename T>
-  static typename T::R PartiallySpecializedDataMember<T, typename T::R> = false;
-  // CHECK-MESSAGES-20: :[[@LINE-1]]:10: warning: redundant 'typename' [readability-redundant-typename]
-  // CHECK-FIXES-20: static T::R PartiallySpecializedDataMember<T, typename T::R> = false;
-};
-
-template <typename T, typename>
-typename T::R Foo::PartiallySpecializedDataMember = true;
-// CHECK-MESSAGES-20: :[[@LINE-1]]:1: warning: redundant 'typename' [readability-redundant-typename]
-// CHECK-FIXES-20: T::R Foo::PartiallySpecializedDataMember = true;
-
-template <typename T>
-typename T::R Foo::PartiallySpecializedDataMember<T, typename T::V> = false;
-// CHECK-MESSAGES-20: :[[@LINE-1]]:1: warning: redundant 'typename' [readability-redundant-typename]
-// CHECK-FIXES-20: T::R Foo::PartiallySpecializedDataMember<T, typename T::V> = false;
-
-#endif // __cplusplus >= 201402L
-
-struct Int {
-  using R = int;
-};
-
-template <typename T>
-struct BaseClass {};
-
-template <typename T>
-struct SubClass : BaseClass<typename T::R> {};
-
-template struct SubClass<Int>;

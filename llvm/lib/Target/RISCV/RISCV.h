@@ -26,8 +26,7 @@ class RISCVRegisterBankInfo;
 class RISCVSubtarget;
 class RISCVTargetMachine;
 
-class RISCVCodeGenPreparePass
-    : public OptionalPassInfoMixin<RISCVCodeGenPreparePass> {
+class RISCVCodeGenPreparePass : public PassInfoMixin<RISCVCodeGenPreparePass> {
 private:
   const RISCVTargetMachine *TM;
 

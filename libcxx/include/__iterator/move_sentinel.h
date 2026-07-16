@@ -44,7 +44,7 @@ public:
     return *this;
   }
 
-  [[nodiscard]] _LIBCPP_HIDE_FROM_ABI constexpr _Sent base() const { return __last_; }
+  _LIBCPP_HIDE_FROM_ABI constexpr _Sent base() const { return __last_; }
 
 private:
   _Sent __last_ = _Sent();

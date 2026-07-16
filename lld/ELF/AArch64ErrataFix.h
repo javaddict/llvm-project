@@ -11,7 +11,6 @@
 
 #include "lld/Common/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallVector.h"
 #include <vector>
 
 namespace lld::elf {

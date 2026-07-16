@@ -40,12 +40,6 @@ functions:
     arguments:
       - type: _Float16
     guard: LIBC_TYPES_HAS_FLOAT16
-  - name: acospif
-    standards:
-      - stdc
-    return_type: float
-    arguments:
-      - type: float
   - name: acospif16
     standards:
       - stdc
@@ -85,18 +79,6 @@ functions:
     arguments:
       - type: _Float16
     guard: LIBC_TYPES_HAS_FLOAT16
-  - name: asinpi
-    standards:
-      - stdc
-    return_type: double
-    arguments:
-      - type: double
-  - name: asinpif
-    standards:
-      - stdc
-    return_type: float
-    arguments:
-      - type: float
   - name: asinpif16
     standards:
       - stdc
@@ -139,14 +121,6 @@ functions:
       - type: float128
       - type: float128
     guard: LIBC_TYPES_HAS_FLOAT128
-  - name: atan2f16
-    standards:
-      - stdc
-    return_type: _Float16
-    arguments:
-      - type: _Float16
-      - type: _Float16
-    guard: LIBC_TYPES_HAS_FLOAT16
   - name: atanf
     standards:
       - stdc
@@ -167,7 +141,7 @@ functions:
     arguments:
       - type: float
   - name: atanhf16
-    standards:
+    standatds:
       - stdc
     return_type: _Float16
     arguments:
@@ -422,20 +396,6 @@ functions:
     return_type: float
     arguments:
       - type: float
-  - name: erff16
-    standards:
-      - stdc
-    return_type: _Float16
-    arguments:
-      - type: _Float16
-    guard: LIBC_TYPES_HAS_FLOAT16
-  - name: erfcf16
-    standards:
-      - stdc
-    return_type: _Float16
-    arguments:
-      - type: _Float16
-    guard: LIBC_TYPES_HAS_FLOAT16
   - name: exp
     standards:
       - stdc
@@ -779,7 +739,7 @@ functions:
     guard: LIBC_TYPES_HAS_FLOAT128
   - name: faddl
     standards:
-      - stdc
+      - faddl
     return_type: float
     arguments:
       - type: long double
@@ -1604,29 +1564,22 @@ functions:
       - type: long double
   - name: isnan
     standards:
-      - bsd
+      - BSDExtensions
     return_type: int
     arguments:
       - type: double
   - name: isnanf
     standards:
-      - bsd
+      - BSDExtensions
     return_type: int
     arguments:
       - type: float
   - name: isnanl
     standards:
-      - bsd
+      - BSDExtensions
     return_type: int
     arguments:
       - type: long double
-  - name: isnanf16
-    standards:
-      - bsd
-    return_type: int
-    arguments:
-      - type: _Float16
-    guard: LIBC_TYPES_HAS_FLOAT16
   - name: ldexp
     standards:
       - stdc
@@ -1818,20 +1771,6 @@ functions:
     arguments:
       - type: float
   - name: log10f16
-    standards:
-      - stdc
-    return_type: _Float16
-    arguments:
-      - type: _Float16
-    guard: LIBC_TYPES_HAS_FLOAT16
-  - name: log10p1f16
-    standards:
-      - stdc
-    return_type: _Float16
-    arguments:
-      - type: _Float16
-    guard: LIBC_TYPES_HAS_FLOAT16
-  - name: log2p1f16
     standards:
       - stdc
     return_type: _Float16
@@ -2224,15 +2163,13 @@ functions:
       - type: float
       - type: float
   - name: powi
-    standards:
-      - llvm_libc_ext
+    standards: llvm_libc_ext
     return_type: double
     arguments:
       - type: double
       - type: int
   - name: powif
-    standards:
-      - llvm_libc_ext
+    standards: llvm_libc_ext
     return_type: float
     arguments:
       - type: float

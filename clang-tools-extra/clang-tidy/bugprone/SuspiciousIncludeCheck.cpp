@@ -39,13 +39,15 @@ private:
 SuspiciousIncludeCheck::SuspiciousIncludeCheck(StringRef Name,
                                                ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
-      IgnoredRegexString(Options.get("IgnoredRegex").value_or("")),
+      HeaderFileExtensions(Context->getHeaderFileExtensions()),
+      ImplementationFileExtensions(Context->getImplementationFileExtensions()),
+      IgnoredRegexString(Options.get("IgnoredRegex").value_or(StringRef{})),
       IgnoredRegex(IgnoredRegexString) {}
 
 void SuspiciousIncludeCheck::registerPPCallbacks(
     const SourceManager &SM, Preprocessor *PP, Preprocessor *ModuleExpanderPP) {
   PP->addPPCallbacks(
-      std::make_unique<SuspiciousIncludePPCallbacks>(*this, SM, PP));
+      ::std::make_unique<SuspiciousIncludePPCallbacks>(*this, SM, PP));
 }
 
 void SuspiciousIncludeCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
@@ -66,15 +68,15 @@ void SuspiciousIncludePPCallbacks::InclusionDirective(
 
   const SourceLocation DiagLoc = FilenameRange.getBegin().getLocWithOffset(1);
 
-  const std::optional<StringRef> IFE = utils::getFileExtension(
-      FileName, Check.getImplementationFileExtensions());
+  const std::optional<StringRef> IFE =
+      utils::getFileExtension(FileName, Check.ImplementationFileExtensions);
   if (!IFE)
     return;
 
   Check.diag(DiagLoc, "suspicious #%0 of file with '%1' extension")
       << IncludeTok.getIdentifierInfo()->getName() << *IFE;
 
-  for (const auto &HFE : Check.getHeaderFileExtensions()) {
+  for (const auto &HFE : Check.HeaderFileExtensions) {
     SmallString<128> GuessedFileName(FileName);
     llvm::sys::path::replace_extension(GuessedFileName,
                                        (!HFE.empty() ? "." : "") + HFE);

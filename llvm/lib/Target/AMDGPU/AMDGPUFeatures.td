@@ -7,26 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 def FeatureFP64 : SubtargetFeature<"fp64",
-  "HasFP64",
+  "FP64",
   "true",
   "Enable double precision operations"
 >;
 
 def FeatureFMA : SubtargetFeature<"fmaf",
-  "HasFMA",
+  "FMA",
   "true",
   "Enable single precision FMA (not as fast as mul+add, but fused)"
 >;
-
-class SubtargetFeatureFlatOffsetBits <int Value> : SubtargetFeature<
-  "flat-offset-bits-" # Value,
-  "FlatOffsetBitWidth",
-  !cast<string>(Value),
-  "Number of bits for flat offset encoding"
->;
-
-def FeatureFlatOffsetBits12 : SubtargetFeatureFlatOffsetBits<12>;
-def FeatureFlatOffsetBits24 : SubtargetFeatureFlatOffsetBits<24>;
 
 // Addressable local memory size is the maximum number of bytes of LDS that can
 // be allocated to a single workgroup.
@@ -58,4 +48,10 @@ class SubtargetFeatureGeneration <string Value, string FeatureName,
                                   list<SubtargetFeature> Implies> :
         SubtargetFeature <FeatureName, "Gen", Subtarget#"::"#Value,
                           Value#" GPU generation", Implies>;
+
+def FeaturePromoteAlloca : SubtargetFeature <"promote-alloca",
+  "EnablePromoteAlloca",
+  "true",
+  "Enable promote alloca pass"
+>;
 

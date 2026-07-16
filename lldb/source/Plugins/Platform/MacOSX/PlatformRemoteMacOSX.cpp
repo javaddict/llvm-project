@@ -38,6 +38,8 @@ static uint32_t g_initialize_count = 0;
 
 // Static Functions
 void PlatformRemoteMacOSX::Initialize() {
+  PlatformDarwin::Initialize();
+
   if (g_initialize_count++ == 0) {
     PluginManager::RegisterPlugin(PlatformRemoteMacOSX::GetPluginNameStatic(),
                                   PlatformRemoteMacOSX::GetDescriptionStatic(),
@@ -51,6 +53,8 @@ void PlatformRemoteMacOSX::Terminate() {
       PluginManager::UnregisterPlugin(PlatformRemoteMacOSX::CreateInstance);
     }
   }
+
+  PlatformDarwin::Terminate();
 }
 
 PlatformSP PlatformRemoteMacOSX::CreateInstance(bool force,

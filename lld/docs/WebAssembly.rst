@@ -108,7 +108,9 @@ WebAssembly-specific options:
      this means inputs should be compiled with `-fPIC` (i.e. `pic` or
      `dynamic-no-pic` relocation models).  This options is useful for linking
      binaries that are themselves static (non-relocatable) but whose undefined
-     symbols are resolved by a dynamic linker.
+     symbols are resolved by a dynamic linker.  Since the dynamic linking API is
+     experimental, this option currently requires `--experimental-pic` to also
+     be specified.
 
 .. option:: --import-memory
 
@@ -257,8 +259,8 @@ Missing features
 
 - Merging of data section similar to ``SHF_MERGE`` in the ELF world is not
   supported.
-- Dynamic linking support is still experimental.  The spec for this is not
-  yet finalized:
+- No support for creating shared libraries.  The spec for shared libraries in
+  WebAssembly is still in flux:
   https://github.com/WebAssembly/tool-conventions/blob/main/DynamicLinking.md
 
 .. _linking: https://github.com/WebAssembly/tool-conventions/blob/main/Linking.md

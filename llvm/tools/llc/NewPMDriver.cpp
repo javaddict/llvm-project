@@ -174,8 +174,7 @@ int llvm::compileModuleWithNewPM(
 
   } else {
     ExitOnErr(Target->buildCodeGenPipeline(
-        MPM, MAM, *OS, DwoOut ? &DwoOut->os() : nullptr, FileType, Opt,
-        MMI.getContext(), &PIC));
+        MPM, *OS, DwoOut ? &DwoOut->os() : nullptr, FileType, Opt, &PIC));
   }
 
   // If user only wants to print the pipeline, print it before parsing the MIR.

@@ -803,7 +803,7 @@ void DWARFUnit::updateVariableDieMap(DWARFDie Die) {
 
   for (const DWARFLocationExpression &Location : *Locations) {
     uint8_t AddressSize = getAddressByteSize();
-    DataExtractor Data(Location.Expr, isLittleEndian());
+    DataExtractor Data(Location.Expr, isLittleEndian(), AddressSize);
     DWARFExpression Expr(Data, AddressSize);
     auto It = Expr.begin();
     if (It == Expr.end())
@@ -1219,7 +1219,8 @@ DWARFUnit::determineStringOffsetsTableContributionDWO(DWARFDataExtractor &DA) {
 }
 
 std::optional<uint64_t> DWARFUnit::getRnglistOffset(uint32_t Index) {
-  DataExtractor RangesData(RangeSection->Data, IsLittleEndian);
+  DataExtractor RangesData(RangeSection->Data, IsLittleEndian,
+                           getAddressByteSize());
   DWARFDataExtractor RangesDA(Context.getDWARFObj(), *RangeSection,
                               IsLittleEndian, 0);
   if (std::optional<uint64_t> Off = llvm::DWARFListTableHeader::getOffsetEntry(

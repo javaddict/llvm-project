@@ -138,8 +138,8 @@ public:
 
       // For conditional branches, we can perform simple conditional propagation on
       // the condition value itself.
-      const CondBrInst *BI = dyn_cast<CondBrInst>(TI);
-      if (!BI || !isa<Constant>(BI->getCondition()))
+      const BranchInst *BI = dyn_cast<BranchInst>(TI);
+      if (!BI || !BI->isConditional() || !isa<Constant>(BI->getCondition()))
         continue;
 
       // If a branch has two identical successors, we cannot declare either dead.
@@ -209,7 +209,9 @@ namespace {
 
 struct SafepointIRVerifier : public FunctionPass {
   static char ID; // Pass identification, replacement for typeid
-  SafepointIRVerifier() : FunctionPass(ID) {}
+  SafepointIRVerifier() : FunctionPass(ID) {
+    initializeSafepointIRVerifierPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnFunction(Function &F) override {
     auto &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();

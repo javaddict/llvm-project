@@ -25,7 +25,6 @@
 #include "llvm/ExecutionEngine/Orc/EPCIndirectionUtils.h"
 #include "llvm/ExecutionEngine/Orc/ExecutorProcessControl.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
-#include "llvm/ExecutionEngine/Orc/MemoryAccess.h"
 #include "llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h"
 #include "llvm/ExecutionEngine/Orc/OrcABISupport.h"
 #include "llvm/ExecutionEngine/Orc/SelfExecutorProcessControl.h"
@@ -146,12 +145,7 @@ int main(int argc, char *argv[]) {
       });
 
   // (3) Create stubs and call-through managers:
-  auto MemAccess = ExitOnErr(J->getExecutionSession()
-                                 .getExecutorProcessControl()
-                                 .createDefaultMemoryAccess());
-  auto EPCIU = ExitOnErr(EPCIndirectionUtils::Create(
-      J->getExecutionSession().getExecutorProcessControl(),
-      J->getMemoryManager(), *MemAccess));
+  auto EPCIU = ExitOnErr(EPCIndirectionUtils::Create(J->getExecutionSession()));
   ExitOnErr(EPCIU->writeResolverBlock(ExecutorAddr::fromPtr(&reenter),
                                       ExecutorAddr::fromPtr(EPCIU.get())));
   EPCIU->createLazyCallThroughManager(

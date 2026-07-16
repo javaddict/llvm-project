@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/math/roundl.h"
-#include "src/__support/math/roundl.h"
+#include "src/__support/FPUtil/NearestIntegerOperations.h"
+#include "src/__support/common.h"
+#include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(long double, roundl, (long double x)) {
-  return math::roundl(x);
+  return fputil::round(x);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

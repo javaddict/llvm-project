@@ -55,22 +55,18 @@ release_links = (
     (
         (
             "LINUX_X86",
-            "* Linux x86_64: [xz archive]({0}) ([signature]({1})), [zstd archive]({2}) ([signature]({3}))",
+            "* [Linux x86_64]({0}) ([signature]({1}))",
             (
                 "LLVM-{release}-Linux-X64.tar.xz",
                 "LLVM-{release}-Linux-X64.tar.xz.jsonl",
-                "LLVM-{release}-Linux-X64.tar.zst",
-                "LLVM-{release}-Linux-X64.tar.zst.jsonl",
             ),
         ),
         (
             "LINUX_ARM64",
-            "* Linux Arm64: [xz archive]({0}) ([signature]({1})), [zstd archive]({2}) ([signature]({3}))",
+            "* [Linux Arm64]({0}) ([signature]({1}))",
             (
                 "LLVM-{release}-Linux-ARM64.tar.xz",
                 "LLVM-{release}-Linux-ARM64.tar.xz.jsonl",
-                "LLVM-{release}-Linux-ARM64.tar.zst",
-                "LLVM-{release}-Linux-ARM64.tar.zst.jsonl",
             ),
         ),
         (
@@ -85,36 +81,30 @@ release_links = (
     (
         (
             "MACOS_ARM64",
-            "* macOS Apple Silicon (ARM64): [xz archive]({0}) ([signature]({1})), [zstd archive]({2}) ([signature]({3}))",
+            "* [macOS Apple Silicon]({0}) (ARM64) ([signature]({1}))",
             (
                 "LLVM-{release}-macOS-ARM64.tar.xz",
                 "LLVM-{release}-macOS-ARM64.tar.xz.jsonl",
-                "LLVM-{release}-macOS-ARM64.tar.zst",
-                "LLVM-{release}-macOS-ARM64.tar.zst.jsonl",
             ),
         ),
         (
             "MACOS_X86",
-            "* macOS Intel (x86-64): [xz archive]({0}) ([signature]({1})), [zstd archive]({2}) ([signature]({3}))",
+            "* [macOS Intel]({0}) (x86-64) ([signature]({1}))",
             (
                 "LLVM-{release}-macOS-X64.tar.xz",
                 "LLVM-{release}-macOS-X64.tar.xz.jsonl",
-                "LLVM-{release}-macOS-X64.tar.zst",
-                "LLVM-{release}-macOS-X64.tar.zst.jsonl",
             ),
         ),
     ),
     (
         (
             "WINDOWS_X64",
-            "* Windows x64 (64-bit): [installer]({0}) ([signature]({1})), [xz archive]({2}) ([signature]({3})), [zstd archive]({4}) ([signature]({5}))",
+            "* Windows x64 (64-bit): [installer]({0}) ([signature]({1})), [archive]({2}) ([signature]({3}))",
             (
                 "LLVM-{release}-win64.exe",
                 "LLVM-{release}-win64.exe.jsonl",
                 "clang+llvm-{release}-x86_64-pc-windows-msvc.tar.xz",
                 "clang+llvm-{release}-x86_64-pc-windows-msvc.tar.xz.jsonl",
-                "clang+llvm-{release}-x86_64-pc-windows-msvc.tar.zst",
-                "clang+llvm-{release}-x86_64-pc-windows-msvc.tar.zst.jsonl",
             ),
         ),
         (
@@ -124,14 +114,12 @@ release_links = (
         ),
         (
             "WINDOWS_ARM64",
-            "* Windows on Arm (ARM64): [installer]({0}) ([signature]({1})), [xz archive]({2}) ([signature]({3})), [zstd archive]({4}) ([signature]({5}))",
+            "* Windows on Arm (ARM64): [installer]({0}) ([signature]({1})), [archive]({2}) ([signature]({3}))",
             (
                 "LLVM-{release}-woa64.exe",
                 "LLVM-{release}-woa64.exe.jsonl",
                 "clang+llvm-{release}-aarch64-pc-windows-msvc.tar.xz",
                 "clang+llvm-{release}-aarch64-pc-windows-msvc.tar.xz.jsonl",
-                "clang+llvm-{release}-aarch64-pc-windows-msvc.tar.zst",
-                "clang+llvm-{release}-aarch64-pc-windows-msvc.tar.zst.jsonl",
             ),
         ),
     ),
@@ -182,7 +170,7 @@ If you do not find a release package for your platform, you may be able to find 
 
 ## Package Types
 
-Each platform has binary release packages. The file name starts with either `LLVM-` or `clang+llvm-` and ends with the platform's name. For example, `LLVM-{release}-Linux-ARM64.tar.xz` contains LLVM binaries for Arm64 Linux. Binary archive packages may be available as `.tar.xz` or `.tar.zst` files. The `.tar.zst` files contain the same package contents, but use zstd compression.
+Each platform has one binary release package. The file name starts with either `LLVM-` or `clang+llvm-` and ends with the platform's name. For example, `LLVM-{release}-Linux-ARM64.tar.xz` contains LLVM binaries for Arm64 Linux.
 
 Except for Windows. Where `LLVM-*.exe` is an installer intended for using LLVM as a toolchain and the archive `clang+llvm-` contains the contents of the installer, plus libraries and tools not normally used in a toolchain. You most likely want the `LLVM-` installer, unless you are developing software which itself uses LLVM, in which case choose `clang+llvm-`.
 
@@ -292,7 +280,7 @@ parser.add_argument("--files", nargs="+", type=str)
 
 args = parser.parse_args()
 
-gh = github.Github(auth=github.Auth.Token(args.token))
+gh = github.Github(args.token)
 llvm_org = gh.get_organization("llvm")
 llvm_repo = llvm_org.get_repo("llvm-project")
 
@@ -303,7 +291,7 @@ if args.user:
     # Validate that this user is allowed to modify releases.
     user = gh.get_user(args.user)
     team = (
-        github.Github(auth=github.Auth.Token(args.user_token))
+        github.Github(args.user_token)
         .get_organization("llvm")
         .get_team_by_slug("llvm-release-managers")
     )

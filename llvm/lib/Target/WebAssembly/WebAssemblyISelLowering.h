@@ -34,13 +34,10 @@ private:
   /// right decision when generating code for different targets.
   const WebAssemblySubtarget *Subtarget;
 
-  AtomicExpansionKind
-  shouldExpandAtomicRMWInIR(const AtomicRMWInst *) const override;
+  AtomicExpansionKind shouldExpandAtomicRMWInIR(AtomicRMWInst *) const override;
   bool shouldScalarizeBinop(SDValue VecOp) const override;
-  FastISel *
-  createFastISel(FunctionLoweringInfo &FuncInfo,
-                 const TargetLibraryInfo *LibInfo,
-                 const LibcallLoweringInfo *LibcallLowering) const override;
+  FastISel *createFastISel(FunctionLoweringInfo &FuncInfo,
+                           const TargetLibraryInfo *LibInfo) const override;
   MVT getScalarShiftAmountTy(const DataLayout &DL, EVT) const override;
   MachineBasicBlock *
   EmitInstrWithCustomInserter(MachineInstr &MI,
@@ -61,8 +58,8 @@ private:
   bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
   EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
                          EVT VT) const override;
-  void getTgtMemIntrinsic(SmallVectorImpl<IntrinsicInfo> &Infos,
-                          const CallBase &I, MachineFunction &MF,
+  bool getTgtMemIntrinsic(IntrinsicInfo &Info, const CallBase &I,
+                          MachineFunction &MF,
                           unsigned Intrinsic) const override;
 
   void computeKnownBitsForTargetNode(const SDValue Op, KnownBits &Known,
@@ -74,12 +71,6 @@ private:
   getPreferredVectorAction(MVT VT) const override;
   bool isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
                                   EVT VT) const override;
-
-  bool isProfitableToCombineMinNumMaxNum(EVT VT) const override {
-    // Prefer leaving cmp + select alone to form pmin/pmax,
-    // or relaxed_fmin/relaxed_fmax with appropriate FMF.
-    return false;
-  }
 
   SDValue LowerCall(CallLoweringInfo &CLI,
                     SmallVectorImpl<SDValue> &InVals) const override;
@@ -125,8 +116,6 @@ private:
   SDValue LowerAccessVectorElement(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerShift(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFP_TO_INT_SAT(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerFMIN(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerFMAX(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerLoad(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerStore(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerMUL_LOHI(SDValue Op, SelectionDAG &DAG) const;
@@ -141,8 +130,7 @@ private:
 
 namespace WebAssembly {
 FastISel *createFastISel(FunctionLoweringInfo &funcInfo,
-                         const TargetLibraryInfo *libInfo,
-                         const LibcallLoweringInfo *libcallLowering);
+                         const TargetLibraryInfo *libInfo);
 } // end namespace WebAssembly
 
 } // end namespace llvm

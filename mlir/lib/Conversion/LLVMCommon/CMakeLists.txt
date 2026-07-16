@@ -1,6 +1,5 @@
 add_mlir_conversion_library(MLIRLLVMCommonConversion
   ConversionTarget.cpp
-  LowerFunctionDiscardablesToLLVM.cpp
   LoweringOptions.cpp
   MemRefBuilder.cpp
   Pattern.cpp

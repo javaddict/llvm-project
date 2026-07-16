@@ -7,8 +7,9 @@ define i32 @vmask_popcount_i32_v8i8(<8 x i8> %a, <8 x i8> %b) {
 ; CHECK-LABEL: vmask_popcount_i32_v8i8:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    cmgt v0.8b, v1.8b, v0.8b
-; CHECK-NEXT:    addv b0, v0.8b
-; CHECK-NEXT:    smov w8, v0.b[0]
+; CHECK-NEXT:    sshll v0.8h, v0.8b, #0
+; CHECK-NEXT:    saddlv s0, v0.8h
+; CHECK-NEXT:    fmov w8, s0
 ; CHECK-NEXT:    neg w0, w8
 ; CHECK-NEXT:    ret
   %mask = icmp slt <8 x i8> %a, %b
@@ -22,8 +23,13 @@ define i32 @vmask_popcount_i32_v16i8(<16 x i8> %a, <16 x i8> %b) {
 ; CHECK-LABEL: vmask_popcount_i32_v16i8:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    cmgt v0.16b, v1.16b, v0.16b
-; CHECK-NEXT:    addv b0, v0.16b
-; CHECK-NEXT:    smov w8, v0.b[0]
+; CHECK-NEXT:    sshll2 v1.8h, v0.16b, #0
+; CHECK-NEXT:    sshll v0.8h, v0.8b, #0
+; CHECK-NEXT:    saddl2 v2.4s, v0.8h, v1.8h
+; CHECK-NEXT:    saddl v0.4s, v0.4h, v1.4h
+; CHECK-NEXT:    add v0.4s, v0.4s, v2.4s
+; CHECK-NEXT:    addv s0, v0.4s
+; CHECK-NEXT:    fmov w8, s0
 ; CHECK-NEXT:    neg w0, w8
 ; CHECK-NEXT:    ret
   %mask = icmp slt <16 x i8> %a, %b
@@ -37,8 +43,8 @@ define i32 @vmask_popcount_i32_v4i16(<4 x i16> %a, <4 x i16> %b) {
 ; CHECK-LABEL: vmask_popcount_i32_v4i16:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    cmgt v0.4h, v1.4h, v0.4h
-; CHECK-NEXT:    addv h0, v0.4h
-; CHECK-NEXT:    smov w8, v0.h[0]
+; CHECK-NEXT:    saddlv s0, v0.4h
+; CHECK-NEXT:    fmov w8, s0
 ; CHECK-NEXT:    neg w0, w8
 ; CHECK-NEXT:    ret
   %mask = icmp slt <4 x i16> %a, %b
@@ -52,8 +58,8 @@ define i32 @vmask_popcount_i32_v8i16(<8 x i16> %a, <8 x i16> %b) {
 ; CHECK-LABEL: vmask_popcount_i32_v8i16:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    cmgt v0.8h, v1.8h, v0.8h
-; CHECK-NEXT:    addv h0, v0.8h
-; CHECK-NEXT:    smov w8, v0.h[0]
+; CHECK-NEXT:    saddlv s0, v0.8h
+; CHECK-NEXT:    fmov w8, s0
 ; CHECK-NEXT:    neg w0, w8
 ; CHECK-NEXT:    ret
   %mask = icmp slt <8 x i16> %a, %b
@@ -114,7 +120,8 @@ define i32 @vmask_popcount_i32_v2i64(<2 x i64> %a, <2 x i64> %b) {
 ; CHECK-LABEL: vmask_popcount_i32_v2i64:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    cmgt v0.2d, v1.2d, v0.2d
-; CHECK-NEXT:    addp d0, v0.2d
+; CHECK-NEXT:    xtn v0.2s, v0.2d
+; CHECK-NEXT:    addp v0.2s, v0.2s, v0.2s
 ; CHECK-NEXT:    fmov w8, s0
 ; CHECK-NEXT:    neg w0, w8
 ; CHECK-NEXT:    ret
@@ -129,8 +136,9 @@ define i64 @vmask_popcount_i64_v8i8(<8 x i8> %a, <8 x i8> %b) {
 ; CHECK-LABEL: vmask_popcount_i64_v8i8:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    cmgt v0.8b, v1.8b, v0.8b
-; CHECK-NEXT:    addv b0, v0.8b
-; CHECK-NEXT:    smov w8, v0.b[0]
+; CHECK-NEXT:    sshll v0.8h, v0.8b, #0
+; CHECK-NEXT:    saddlv s0, v0.8h
+; CHECK-NEXT:    fmov w8, s0
 ; CHECK-NEXT:    neg w0, w8
 ; CHECK-NEXT:    ret
   %mask = icmp slt <8 x i8> %a, %b
@@ -144,8 +152,13 @@ define i64 @vmask_popcount_i64_v16i8(<16 x i8> %a, <16 x i8> %b) {
 ; CHECK-LABEL: vmask_popcount_i64_v16i8:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    cmgt v0.16b, v1.16b, v0.16b
-; CHECK-NEXT:    addv b0, v0.16b
-; CHECK-NEXT:    smov w8, v0.b[0]
+; CHECK-NEXT:    sshll2 v1.8h, v0.16b, #0
+; CHECK-NEXT:    sshll v0.8h, v0.8b, #0
+; CHECK-NEXT:    saddl2 v2.4s, v0.8h, v1.8h
+; CHECK-NEXT:    saddl v0.4s, v0.4h, v1.4h
+; CHECK-NEXT:    add v0.4s, v0.4s, v2.4s
+; CHECK-NEXT:    addv s0, v0.4s
+; CHECK-NEXT:    fmov w8, s0
 ; CHECK-NEXT:    neg w0, w8
 ; CHECK-NEXT:    ret
   %mask = icmp slt <16 x i8> %a, %b
@@ -159,8 +172,8 @@ define i64 @vmask_popcount_i64_v4i16(<4 x i16> %a, <4 x i16> %b) {
 ; CHECK-LABEL: vmask_popcount_i64_v4i16:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    cmgt v0.4h, v1.4h, v0.4h
-; CHECK-NEXT:    addv h0, v0.4h
-; CHECK-NEXT:    smov w8, v0.h[0]
+; CHECK-NEXT:    saddlv s0, v0.4h
+; CHECK-NEXT:    fmov w8, s0
 ; CHECK-NEXT:    neg w0, w8
 ; CHECK-NEXT:    ret
   %mask = icmp slt <4 x i16> %a, %b
@@ -174,8 +187,8 @@ define i64 @vmask_popcount_i64_v8i16(<8 x i16> %a, <8 x i16> %b) {
 ; CHECK-LABEL: vmask_popcount_i64_v8i16:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    cmgt v0.8h, v1.8h, v0.8h
-; CHECK-NEXT:    addv h0, v0.8h
-; CHECK-NEXT:    smov w8, v0.h[0]
+; CHECK-NEXT:    saddlv s0, v0.8h
+; CHECK-NEXT:    fmov w8, s0
 ; CHECK-NEXT:    neg w0, w8
 ; CHECK-NEXT:    ret
   %mask = icmp slt <8 x i16> %a, %b
@@ -236,7 +249,8 @@ define i64 @vmask_popcount_i64_v2i64(<2 x i64> %a, <2 x i64> %b) {
 ; CHECK-LABEL: vmask_popcount_i64_v2i64:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    cmgt v0.2d, v1.2d, v0.2d
-; CHECK-NEXT:    addp d0, v0.2d
+; CHECK-NEXT:    xtn v0.2s, v0.2d
+; CHECK-NEXT:    addp v0.2s, v0.2s, v0.2s
 ; CHECK-NEXT:    fmov w8, s0
 ; CHECK-NEXT:    neg w0, w8
 ; CHECK-NEXT:    ret
@@ -297,39 +311,5 @@ define i32 @non_vmask_popcount_2(<8 x i16> %a) {
   %t1 = bitcast <8 x i2> %mask to i16
   %t2 = call i16 @llvm.ctpop(i16 %t1)
   %t3 = zext i16 %t2 to i32
-  ret i32 %t3
-}
-
-define i32 @vmask_negate_popcount(<16 x i8> %a, <16 x i8> %b)  {
-; CHECK-LABEL: vmask_negate_popcount:
-; CHECK:       // %bb.0:
-; CHECK-NEXT:    cmeq v0.16b, v0.16b, v1.16b
-; CHECK-NEXT:    addv b0, v0.16b
-; CHECK-NEXT:    smov w0, v0.b[0]
-; CHECK-NEXT:    ret
-  %mask = icmp eq <16 x i8> %a, %b
-  %t1 = bitcast <16 x i1> %mask to i16
-  %t2 = tail call i16 @llvm.ctpop.i16(i16 %t1)
-  %t3 = sub i16 0, %t2
-  %t4 = sext i16 %t3 to i32
-  ret i32 %t4
-}
-
-define i32 @vmask_popcount_i32_v8i1(<8 x i1> %a, <8 x i1> %b) {
-; CHECK-LABEL: vmask_popcount_i32_v8i1:
-; CHECK:       // %bb.0:
-; CHECK-NEXT:    movi v2.8b, #1
-; CHECK-NEXT:    eor v0.8b, v0.8b, v1.8b
-; CHECK-NEXT:    eor v0.8b, v0.8b, v2.8b
-; CHECK-NEXT:    shl v0.8b, v0.8b, #7
-; CHECK-NEXT:    cmlt v0.8b, v0.8b, #0
-; CHECK-NEXT:    addv b0, v0.8b
-; CHECK-NEXT:    smov w8, v0.b[0]
-; CHECK-NEXT:    neg w0, w8
-; CHECK-NEXT:    ret
-  %mask = icmp eq <8 x i1> %a, %b
-  %t1 = bitcast <8 x i1> %mask to i8
-  %t2 = call i8 @llvm.ctpop(i8 %t1)
-  %t3 = zext i8 %t2 to i32
   ret i32 %t3
 }

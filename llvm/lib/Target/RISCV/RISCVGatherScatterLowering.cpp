@@ -167,7 +167,7 @@ static std::pair<Value *, Value *> matchStridedStart(Value *Start,
   default:
     llvm_unreachable("Unexpected opcode");
   case Instruction::Or:
-    Start = Builder.CreateDisjointOr(Start, Splat);
+    Start = Builder.CreateOr(Start, Splat, "", /*IsDisjoint=*/true);
     break;
   case Instruction::Add:
     Start = Builder.CreateAdd(Start, Splat);

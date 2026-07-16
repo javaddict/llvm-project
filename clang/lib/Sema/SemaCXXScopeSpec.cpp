@@ -19,7 +19,6 @@
 #include "clang/Sema/DeclSpec.h"
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/Template.h"
-#include "clang/Sema/TypoCorrection.h"
 #include "llvm/ADT/STLExtras.h"
 using namespace clang;
 
@@ -380,16 +379,17 @@ namespace {
 // Callback to only accept typo corrections that can be a valid C++ member
 // initializer: either a non-static field member or a base class.
 class NestedNameSpecifierValidatorCCC final
-    : public QualifiedLookupValidatorCCC {
+    : public CorrectionCandidateCallback {
 public:
   explicit NestedNameSpecifierValidatorCCC(Sema &SRef, bool HasQualifier)
-      : QualifiedLookupValidatorCCC(HasQualifier), SRef(SRef) {}
+      : SRef(SRef), HasQualifier(HasQualifier) {}
 
   bool ValidateCandidate(const TypoCorrection &candidate) override {
-    if (!QualifiedLookupValidatorCCC::ValidateCandidate(candidate))
-      return false;
     const NamedDecl *ND = candidate.getCorrectionDecl();
     if (!SRef.isAcceptableNestedNameSpecifier(ND))
+      return false;
+    // A template type parameter cannot have a nested name specifier.
+    if (HasQualifier && isa<TemplateTypeParmDecl>(ND))
       return false;
     return true;
   }
@@ -399,8 +399,10 @@ public:
   }
 
  private:
-   Sema &SRef;
+  Sema &SRef;
+  bool HasQualifier;
 };
+
 }
 
 [[nodiscard]] static bool ExtendNestedNameSpecifier(Sema &S, CXXScopeSpec &SS,
@@ -681,7 +683,8 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S, NestedNameSpecInfo &IdInfo,
       }
     }
 
-    MarkAnyDeclReferenced(SD->getLocation(), SD, /*OdrUse=*/false);
+    if (auto *TD = dyn_cast_or_null<TypedefNameDecl>(SD))
+      MarkAnyDeclReferenced(TD->getLocation(), TD, /*OdrUse=*/false);
 
     // If we're just performing this lookup for error-recovery purposes,
     // don't extend the nested-name-specifier. Just return now.
@@ -789,8 +792,7 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S, NestedNameSpecInfo &IdInfo,
           << IdInfo.Identifier << getLangOpts().CPlusPlus;
       return true;
     }
-    if (Found.getLookupKind() == LookupNestedNameSpecifierName &&
-        ::ExtendNestedNameSpecifier(*this, SS, ND, IdInfo.IdentifierLoc,
+    if (::ExtendNestedNameSpecifier(*this, SS, ND, IdInfo.IdentifierLoc,
                                     IdInfo.CCLoc)) {
       const Type *T = SS.getScopeRep().getAsType();
       Diag(IdInfo.IdentifierLoc, diag::err_expected_class_or_namespace)

@@ -64,12 +64,10 @@ TEST(Profiling, DeducedTemplateSpecializationType_Name) {
 
   auto *T1 = cast<DeducedTemplateSpecializationType>(
       Ctx.getDeducedTemplateSpecializationType(
-          DeducedKind::Undeduced, /*DeducedAsType=*/QualType(),
-          ElaboratedTypeKeyword::None, TemplateName(CTD1)));
+          ElaboratedTypeKeyword::None, TemplateName(CTD1), QualType(), false));
   auto *T2 = cast<DeducedTemplateSpecializationType>(
       Ctx.getDeducedTemplateSpecializationType(
-          DeducedKind::Undeduced, /*DeducedAsType=*/QualType(),
-          ElaboratedTypeKeyword::None, TemplateName(CTD2)));
+          ElaboratedTypeKeyword::None, TemplateName(CTD2), QualType(), false));
   testTypeNode(T1, T2);
 }
 

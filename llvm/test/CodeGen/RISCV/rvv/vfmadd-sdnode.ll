@@ -4,17 +4,17 @@
 ; RUN: llc -mtriple=riscv64 -mattr=+m,+d,+zvfh,+zfbfmin,+zvfbfmin,+v -target-abi=lp64d \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,ZVFBFMIN,ZVFH
 ; RUN: llc -mtriple=riscv32 -mattr=+m,+d,+zfhmin,+zvfhmin,+zfbfmin,+zvfbfmin,+v -target-abi=ilp32d \
-; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,ZVFHMIN,ZVFBFMIN
+; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,ZVFBFMIN,ZVFHMIN
 ; RUN: llc -mtriple=riscv64 -mattr=+m,+d,+zfhmin,+zvfhmin,+zfbfmin,+zvfbfmin,+v -target-abi=lp64d \
-; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,ZVFHMIN,ZVFBFMIN
+; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,ZVFBFMIN,ZVFHMIN
 ; RUN: llc -mtriple=riscv32 -mattr=+m,+d,+zfhmin,+zvfhmin,+experimental-zvfbfa,+v \
-; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,ZVFHMIN,ZVFBFA
+; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,ZVFBFA,ZVFHMIN
 ; RUN: llc -mtriple=riscv64 -mattr=+m,+d,+zfhmin,+zvfhmin,+experimental-zvfbfa,+v \
-; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,ZVFHMIN,ZVFBFA
+; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,ZVFBFA,ZVFHMIN
 ; RUN: llc -mtriple=riscv32 -mattr=+m,+d,+zfhmin,+zvfhmin,+zvfbfwma,+v \
-; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,ZVFHMIN,ZVFBFWMA
+; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,ZVFBFWMA,ZVFHMIN
 ; RUN: llc -mtriple=riscv64 -mattr=+m,+d,+zfhmin,+zvfhmin,+zvfbfwma,+v \
-; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,ZVFHMIN,ZVFBFWMA
+; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,ZVFBFWMA,ZVFHMIN
 
 ; This tests a mix of vfmacc and vfmadd by using different operand orders to
 ; trigger commuting in TwoAddressInstructionPass.

@@ -86,11 +86,12 @@ IRInstructionData::IRInstructionData(IRInstructionDataList &IDList)
 
 void IRInstructionData::setBranchSuccessors(
     DenseMap<BasicBlock *, unsigned> &BasicBlockToInteger) {
-  assert((isa<UncondBrInst, CondBrInst>(Inst)) && "Instruction must be branch");
+  assert(isa<BranchInst>(Inst) && "Instruction must be branch");
 
+  BranchInst *BI = cast<BranchInst>(Inst);
   DenseMap<BasicBlock *, unsigned>::iterator BBNumIt;
 
-  BBNumIt = BasicBlockToInteger.find(Inst->getParent());
+  BBNumIt = BasicBlockToInteger.find(BI->getParent());
   assert(BBNumIt != BasicBlockToInteger.end() &&
          "Could not find location for BasicBlock!");
 
@@ -109,10 +110,14 @@ void IRInstructionData::setBranchSuccessors(
 }
 
 ArrayRef<Value *> IRInstructionData::getBlockOperVals() {
-  if (isa<UncondBrInst>(Inst))
-    return OperVals;
-  if (isa<CondBrInst>(Inst))
-    return ArrayRef<Value *>(OperVals).drop_front(1);
+  assert((isa<BranchInst>(Inst) ||
+         isa<PHINode>(Inst)) && "Instruction must be branch or PHINode");
+  
+  if (BranchInst *BI = dyn_cast<BranchInst>(Inst))
+    return ArrayRef<Value *>(
+      std::next(OperVals.begin(), BI->isConditional() ? 1 : 0),
+      OperVals.end()
+    );
 
   if (PHINode *PN = dyn_cast<PHINode>(Inst))
     return ArrayRef<Value *>(
@@ -120,7 +125,7 @@ ArrayRef<Value *> IRInstructionData::getBlockOperVals() {
       OperVals.end()
     );
 
-  llvm_unreachable("Instruction must be branch or PHINode");
+  return ArrayRef<Value *>();
 }
 
 void IRInstructionData::setCalleeName(bool MatchByName) {
@@ -272,8 +277,7 @@ bool IRSimilarity::isClose(const IRInstructionData &A,
       return false;
   }
 
-  if (isa<UncondBrInst, CondBrInst>(A.Inst) &&
-      isa<UncondBrInst, CondBrInst>(B.Inst) &&
+  if (isa<BranchInst>(A.Inst) && isa<BranchInst>(B.Inst) &&
       A.RelativeBlockLocations.size() != B.RelativeBlockLocations.size())
     return false;
 
@@ -332,7 +336,7 @@ unsigned IRInstructionMapper::mapToLegalUnsigned(
   IRInstructionData *ID = allocateIRInstructionData(*It, true, *IDL);
   InstrListForBB.push_back(ID);
 
-  if (isa<UncondBrInst, CondBrInst>(*It))
+  if (isa<BranchInst>(*It))
     ID->setBranchSuccessors(BasicBlockToInteger);
 
   if (isa<CallInst>(*It))
@@ -358,6 +362,11 @@ unsigned IRInstructionMapper::mapToLegalUnsigned(
   // Make sure we don't overflow or use any integers reserved by the DenseMap.
   assert(LegalInstrNumber < IllegalInstrNumber &&
          "Instruction mapping overflow!");
+
+  assert(LegalInstrNumber != DenseMapInfo<unsigned>::getEmptyKey() &&
+         "Tried to assign DenseMap tombstone or empty key to instruction.");
+  assert(LegalInstrNumber != DenseMapInfo<unsigned>::getTombstoneKey() &&
+         "Tried to assign DenseMap tombstone or empty key to instruction.");
 
   return INumber;
 }
@@ -404,6 +413,12 @@ unsigned IRInstructionMapper::mapToIllegalUnsigned(
 
   assert(LegalInstrNumber < IllegalInstrNumber &&
          "Instruction mapping overflow!");
+
+  assert(IllegalInstrNumber != DenseMapInfo<unsigned>::getEmptyKey() &&
+         "IllegalInstrNumber cannot be DenseMap tombstone or empty key!");
+
+  assert(IllegalInstrNumber != DenseMapInfo<unsigned>::getTombstoneKey() &&
+         "IllegalInstrNumber cannot be DenseMap tombstone or empty key!");
 
   return INumber;
 }
@@ -709,12 +724,7 @@ bool IRSimilarityCandidate::compareAssignmentMapping(
   if (!WasInserted && !ValueMappingIt->second.contains(InstValB))
     return false;
   else if (ValueMappingIt->second.size() != 1) {
-    // Snapshot the set before iterating: when InstValA maps to itself the
-    // erase below removes InstValA from the very set being iterated, which
-    // invalidates the range iterator under backward-shift deletion.
-    SmallVector<unsigned> OtherVals(ValueMappingIt->second.begin(),
-                                    ValueMappingIt->second.end());
-    for (unsigned OtherVal : OtherVals) {
+    for (unsigned OtherVal : ValueMappingIt->second) {
       if (OtherVal == InstValB)
         continue;
       auto OtherValIt = ValueNumberMappingA.find(OtherVal);
@@ -847,8 +857,8 @@ bool IRSimilarityCandidate::compareStructure(
     // region.  So, at this point, in each location we target a specific block
     // outside the region, we are targeting a corresponding block in each
     // analagous location in the region we are comparing to.
-    if (!isa<UncondBrInst, CondBrInst, PHINode>(IA) ||
-        IA->getOpcode() != IB->getOpcode())
+    if (!(isa<BranchInst>(IA) && isa<BranchInst>(IB)) &&
+        !(isa<PHINode>(IA) && isa<PHINode>(IB)))
       continue;
 
     SmallVector<int, 4> &RelBlockLocsA = ItA->RelativeBlockLocations;
@@ -1069,8 +1079,9 @@ void IRSimilarityCandidate::createCanonicalRelationFrom(
     // If the basic block is the starting block, then the shared instruction may
     // not be the first instruction in the block, it will be the first
     // instruction in the similarity region.
-    Value *FirstOutlineInst =
-        BB == getStartBB() ? frontInstruction() : &*BB->begin();
+    Value *FirstOutlineInst = BB == getStartBB()
+                                  ? frontInstruction()
+                                  : &*BB->instructionsWithoutDebug().begin();
 
     unsigned FirstInstGVN = *getGVN(FirstOutlineInst);
     unsigned FirstInstCanonNum = *getCanonicalNum(FirstInstGVN);

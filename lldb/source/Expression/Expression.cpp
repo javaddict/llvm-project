@@ -14,7 +14,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Error.h"
-#include "llvm/Support/ErrorExtras.h"
 
 using namespace lldb_private;
 
@@ -39,12 +38,12 @@ lldb_private::FunctionCallLabel::fromString(llvm::StringRef label) {
   label.split(components, ":", /*MaxSplit=*/4);
 
   if (components.size() != 5)
-    return llvm::createStringError("malformed function call label");
+    return llvm::createStringError("malformed function call label.");
 
   if (components[0] != FunctionCallLabelPrefix)
-    return llvm::createStringErrorV(
+    return llvm::createStringError(llvm::formatv(
         "expected function call label prefix '{0}' but found '{1}' instead.",
-        FunctionCallLabelPrefix, components[0]);
+        FunctionCallLabelPrefix, components[0]));
 
   llvm::StringRef discriminator = components[1];
   llvm::StringRef module_label = components[2];
@@ -53,13 +52,13 @@ lldb_private::FunctionCallLabel::fromString(llvm::StringRef label) {
 
   lldb::user_id_t module_id = 0;
   if (!llvm::to_integer(module_label, module_id))
-    return llvm::createStringErrorV("failed to parse module ID from '{0}'",
-                                    module_label);
+    return llvm::createStringError(
+        llvm::formatv("failed to parse module ID from '{0}'.", module_label));
 
   lldb::user_id_t die_id;
   if (!llvm::to_integer(die_label, die_id))
-    return llvm::createStringErrorV("failed to parse symbol ID from '{0}'",
-                                    die_label);
+    return llvm::createStringError(
+        llvm::formatv("failed to parse symbol ID from '{0}'.", die_label));
 
   return FunctionCallLabel{/*.discriminator=*/discriminator,
                            /*.module_id=*/module_id,
@@ -75,8 +74,9 @@ std::string lldb_private::FunctionCallLabel::toString() const {
 
 void llvm::format_provider<FunctionCallLabel>::format(
     const FunctionCallLabel &label, raw_ostream &OS, StringRef Style) {
-  OS << llvm::formatv("FunctionCallLabel{{ discriminator: {}, module_id: "
-                      "{:x}, symbol_id: {:x}, lookup_name: {} }}",
+  OS << llvm::formatv("FunctionCallLabel{ discriminator: {0}, module_id: "
+                      "{1:x}, symbol_id: {2:x}, "
+                      "lookup_name: {3} }",
                       label.discriminator, label.module_id, label.symbol_id,
                       label.lookup_name);
 }

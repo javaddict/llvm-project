@@ -1,8 +1,5 @@
 // RUN: %libomp-compile-and-run
 
-// https://github.com/llvm/llvm-project/issues/176451
-// UNSUPPORTED: linux && x86-target-arch
-
 #include <stdio.h>
 #include <omp.h>
 

@@ -1,4 +1,6 @@
 .. title:: clang-tidy - cert-msc32-c
+.. meta::
+   :http-equiv=refresh: 5;URL=../bugprone/random-generator-seed.html
 
 cert-msc32-c
 ============

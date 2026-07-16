@@ -15,7 +15,7 @@
 
 using namespace llvm;
 
-TEST_F(AMDGPUTestBase, TestCSEForRegisterClassOrBankAndLLT) {
+TEST(AMDGPU, TestCSEForRegisterClassOrBankAndLLT) {
   auto TM = createAMDGPUTargetMachine("amdgcn-amd-", "gfx1100", "");
   if (!TM)
     GTEST_SKIP();

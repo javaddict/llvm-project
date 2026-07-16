@@ -83,7 +83,7 @@ struct DbgValueDef {
   bool operator==(DbgValueDef Other) const { return agreesWith(Other); }
   bool operator!=(DbgValueDef Other) const { return !agreesWith(Other); }
 
-  LLVM_ABI void print(raw_ostream &OS) const;
+  void print(raw_ostream &OS) const;
 };
 
 class DbgSSABlock;
@@ -109,7 +109,7 @@ public:
     IncomingValues.push_back({BB, DV});
   }
 
-  LLVM_ABI void print(raw_ostream &OS) const;
+  void print(raw_ostream &OS) const;
 };
 
 inline raw_ostream &operator<<(raw_ostream &OS, const DbgValueDef &DV) {
@@ -139,7 +139,7 @@ public:
     return *this;
   }
 
-  LLVM_ABI DbgSSABlock *operator*();
+  DbgSSABlock *operator*();
 };
 
 /// Thin wrapper around a block successor iterator.
@@ -160,7 +160,7 @@ public:
     return *this;
   }
 
-  LLVM_ABI DbgSSABlock *operator*();
+  DbgSSABlock *operator*();
 };
 
 class DbgSSABlock {
@@ -231,7 +231,7 @@ private:
 public:
   /// If InsertedPHIs is specified, it will be filled
   /// in with all PHI Nodes created by rewriting.
-  LLVM_ABI explicit DebugSSAUpdater(
+  explicit DebugSSAUpdater(
       SmallVectorImpl<DbgSSAPhi *> *InsertedPHIs = nullptr);
   DebugSSAUpdater(const DebugSSAUpdater &) = delete;
   DebugSSAUpdater &operator=(const DebugSSAUpdater &) = delete;
@@ -250,7 +250,7 @@ public:
     BlockMap.clear();
   }
 
-  LLVM_ABI void initialize();
+  void initialize();
 
   /// For a given BB, create a wrapper block for it. Stores it in the
   /// DebugSSAUpdater block map.
@@ -265,19 +265,19 @@ public:
 
   /// Indicate that a rewritten value is available in the specified block
   /// with the specified value.
-  LLVM_ABI void addAvailableValue(DbgSSABlock *BB, DbgValueDef DV);
+  void addAvailableValue(DbgSSABlock *BB, DbgValueDef DV);
 
   /// Return true if the DebugSSAUpdater already has a value for the specified
   /// block.
-  LLVM_ABI bool hasValueForBlock(DbgSSABlock *BB) const;
+  bool hasValueForBlock(DbgSSABlock *BB) const;
 
   /// Return the value for the specified block if the DebugSSAUpdater has one,
   /// otherwise return nullptr.
-  LLVM_ABI DbgValueDef findValueForBlock(DbgSSABlock *BB) const;
+  DbgValueDef findValueForBlock(DbgSSABlock *BB) const;
 
   /// Construct SSA form, materializing a value that is live at the end
   /// of the specified block.
-  LLVM_ABI DbgValueDef getValueAtEndOfBlock(DbgSSABlock *BB);
+  DbgValueDef getValueAtEndOfBlock(DbgSSABlock *BB);
 
   /// Construct SSA form, materializing a value that is live in the
   /// middle of the specified block.
@@ -299,7 +299,7 @@ public:
   /// their respective blocks.  However, the use of X happens in the *middle* of
   /// a block.  Because of this, we need to insert a new PHI node in SomeBB to
   /// merge the appropriate values, and this value isn't live out of the block.
-  LLVM_ABI DbgValueDef getValueInMiddleOfBlock(DbgSSABlock *BB);
+  DbgValueDef getValueInMiddleOfBlock(DbgSSABlock *BB);
 
 private:
   DbgValueDef getValueAtEndOfBlockInternal(DbgSSABlock *BB);
@@ -324,7 +324,7 @@ class SSAValueNameMap {
 
 public:
   using ValueID = uint64_t;
-  LLVM_ABI ValueID addValue(Value *V);
+  ValueID addValue(Value *V);
   std::string getName(ValueID ID) { return ValueIDToNameMap[ID]; }
 
 private:
@@ -358,7 +358,7 @@ public:
     return OrigSingleLocVariableValueTable[DVA];
   }
 
-  LLVM_ABI void printValues(DebugVariableAggregate DVA, raw_ostream &OS);
+  void printValues(DebugVariableAggregate DVA, raw_ostream &OS);
 };
 
 } // end namespace llvm

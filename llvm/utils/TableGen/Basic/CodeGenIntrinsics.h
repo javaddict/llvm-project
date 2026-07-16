@@ -117,9 +117,6 @@ struct CodeGenIntrinsic {
   // True if the intrinsic is marked as IntrNoCreateUndefOrPoison.
   bool isNoCreateUndefOrPoison = false;
 
-  // True if the intrinsic is marked as IntrTriviallyScalarizable.
-  bool isTriviallyScalarizable = false;
-
   enum ArgAttrKind {
     NoCapture,
     NoAlias,

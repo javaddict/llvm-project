@@ -22,3 +22,4 @@ class DisabledBreakpointsTest(PExpectTest):
         self.expect("b main")
         self.expect("br dis")
         self.expect("br l", substrs=[ansi_red_color_code + "1:"])
+        self.quit()

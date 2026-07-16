@@ -7,7 +7,9 @@
 //===----------------------------------------------------------------------===//
 //
 // This implements an analysis pass that tries to delinearize all GEP
-// instructions in all loops using the SCEV analysis functionality.
+// instructions in all loops using the SCEV analysis functionality. This pass is
+// only used for testing purposes: if your pass needs delinearization, please
+// use the on-demand SCEVAddRecExpr::delinearize() function.
 //
 //===----------------------------------------------------------------------===//
 
@@ -32,7 +34,7 @@ using namespace llvm;
 #define DEBUG_TYPE DL_NAME
 
 static cl::opt<bool> UseFixedSizeArrayHeuristic(
-    "delinearize-use-fixed-size-array-heuristic", cl::init(true), cl::Hidden,
+    "delinearize-use-fixed-size-array-heuristic", cl::init(false), cl::Hidden,
     cl::desc("When printing analysis, use the heuristic for fixed-size arrays "
              "if the default delinearizetion fails."));
 
@@ -133,7 +135,7 @@ struct SCEVCollectAddRecMultiplies {
   bool follow(const SCEV *S) {
     if (auto *Mul = dyn_cast<SCEVMulExpr>(S)) {
       bool HasAddRec = false;
-      SmallVector<SCEVUse, 0> Operands;
+      SmallVector<const SCEV *, 0> Operands;
       for (const SCEV *Op : Mul->operands()) {
         const SCEVUnknown *Unknown = dyn_cast<SCEVUnknown>(Op);
         if (Unknown && !isa<CallInst>(Unknown->getValue())) {
@@ -207,7 +209,7 @@ static bool findArrayDimensionsRec(ScalarEvolution &SE,
   // End of recursion.
   if (Last == 0) {
     if (const SCEVMulExpr *M = dyn_cast<SCEVMulExpr>(Step)) {
-      SmallVector<SCEVUse, 2> Qs;
+      SmallVector<const SCEV *, 2> Qs;
       for (const SCEV *Op : M->operands())
         if (!isa<SCEVConstant>(Op))
           Qs.push_back(Op);
@@ -266,7 +268,7 @@ static const SCEV *removeConstantFactors(ScalarEvolution &SE, const SCEV *T) {
     return T;
 
   if (const SCEVMulExpr *M = dyn_cast<SCEVMulExpr>(T)) {
-    SmallVector<SCEVUse, 2> Factors;
+    SmallVector<const SCEV *, 2> Factors;
     for (const SCEV *Op : M->operands())
       if (!isa<SCEVConstant>(Op))
         Factors.push_back(Op);

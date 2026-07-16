@@ -12,7 +12,7 @@
 
 // class map
 
-// map(map&& m, const allocator_type& a); // constexpr since C++26
+// map(map&& m, const allocator_type& a);
 
 #include <map>
 #include <cassert>
@@ -20,20 +20,18 @@
 
 #include "test_macros.h"
 #include "MoveOnly.h"
-#include "CopyConstructible.h"
 #include "../../../test_compare.h"
 #include "test_allocator.h"
 #include "min_allocator.h"
 #include "Counter.h"
 
-template <typename TKeyType>
-TEST_CONSTEXPR_CXX26 bool test_move_alloc() {
+int main(int, char**) {
   {
-    typedef std::pair<TKeyType, MoveOnly> V;
-    typedef std::pair<const TKeyType, MoveOnly> VC;
-    typedef test_less<TKeyType> C;
+    typedef std::pair<MoveOnly, MoveOnly> V;
+    typedef std::pair<const MoveOnly, MoveOnly> VC;
+    typedef test_less<MoveOnly> C;
     typedef test_allocator<VC> A;
-    typedef std::map<TKeyType, MoveOnly, C, A> M;
+    typedef std::map<MoveOnly, MoveOnly, C, A> M;
     typedef std::move_iterator<V*> I;
     V a1[] = {V(1, 1), V(1, 2), V(1, 3), V(2, 1), V(2, 2), V(2, 3), V(3, 1), V(3, 2), V(3, 3)};
     M m1(I(a1), I(a1 + sizeof(a1) / sizeof(a1[0])), C(5), A(7));
@@ -46,11 +44,11 @@ TEST_CONSTEXPR_CXX26 bool test_move_alloc() {
     LIBCPP_ASSERT(m1.empty());
   }
   {
-    typedef std::pair<TKeyType, MoveOnly> V;
-    typedef std::pair<const TKeyType, MoveOnly> VC;
-    typedef test_less<TKeyType> C;
+    typedef std::pair<MoveOnly, MoveOnly> V;
+    typedef std::pair<const MoveOnly, MoveOnly> VC;
+    typedef test_less<MoveOnly> C;
     typedef test_allocator<VC> A;
-    typedef std::map<TKeyType, MoveOnly, C, A> M;
+    typedef std::map<MoveOnly, MoveOnly, C, A> M;
     typedef std::move_iterator<V*> I;
     V a1[] = {V(1, 1), V(1, 2), V(1, 3), V(2, 1), V(2, 2), V(2, 3), V(3, 1), V(3, 2), V(3, 3)};
     M m1(I(a1), I(a1 + sizeof(a1) / sizeof(a1[0])), C(5), A(7));
@@ -63,11 +61,11 @@ TEST_CONSTEXPR_CXX26 bool test_move_alloc() {
     LIBCPP_ASSERT(m1.empty());
   }
   {
-    typedef std::pair<TKeyType, MoveOnly> V;
-    typedef std::pair<const TKeyType, MoveOnly> VC;
-    typedef test_less<TKeyType> C;
+    typedef std::pair<MoveOnly, MoveOnly> V;
+    typedef std::pair<const MoveOnly, MoveOnly> VC;
+    typedef test_less<MoveOnly> C;
     typedef other_allocator<VC> A;
-    typedef std::map<TKeyType, MoveOnly, C, A> M;
+    typedef std::map<MoveOnly, MoveOnly, C, A> M;
     typedef std::move_iterator<V*> I;
     V a1[] = {V(1, 1), V(1, 2), V(1, 3), V(2, 1), V(2, 2), V(2, 3), V(3, 1), V(3, 2), V(3, 3)};
     M m1(I(a1), I(a1 + sizeof(a1) / sizeof(a1[0])), C(5), A(7));
@@ -79,7 +77,7 @@ TEST_CONSTEXPR_CXX26 bool test_move_alloc() {
     assert(m3.key_comp() == C(5));
     LIBCPP_ASSERT(m1.empty());
   }
-  if (!TEST_IS_CONSTANT_EVALUATED) {
+  {
     typedef Counter<int> T;
     typedef std::pair<int, T> V;
     typedef std::pair<const int, T> VC;
@@ -119,11 +117,11 @@ TEST_CONSTEXPR_CXX26 bool test_move_alloc() {
     assert(Counter_base::gConstructed == 0);
   }
   {
-    typedef std::pair<TKeyType, MoveOnly> V;
-    typedef std::pair<const TKeyType, MoveOnly> VC;
-    typedef test_less<TKeyType> C;
+    typedef std::pair<MoveOnly, MoveOnly> V;
+    typedef std::pair<const MoveOnly, MoveOnly> VC;
+    typedef test_less<MoveOnly> C;
     typedef min_allocator<VC> A;
-    typedef std::map<TKeyType, MoveOnly, C, A> M;
+    typedef std::map<MoveOnly, MoveOnly, C, A> M;
     typedef std::move_iterator<V*> I;
     V a1[] = {V(1, 1), V(1, 2), V(1, 3), V(2, 1), V(2, 2), V(2, 3), V(3, 1), V(3, 2), V(3, 3)};
     M m1(I(a1), I(a1 + sizeof(a1) / sizeof(a1[0])), C(5), A());
@@ -136,11 +134,11 @@ TEST_CONSTEXPR_CXX26 bool test_move_alloc() {
     LIBCPP_ASSERT(m1.empty());
   }
   {
-    typedef std::pair<TKeyType, MoveOnly> V;
-    typedef std::pair<const TKeyType, MoveOnly> VC;
-    typedef test_less<TKeyType> C;
+    typedef std::pair<MoveOnly, MoveOnly> V;
+    typedef std::pair<const MoveOnly, MoveOnly> VC;
+    typedef test_less<MoveOnly> C;
     typedef explicit_allocator<VC> A;
-    typedef std::map<TKeyType, MoveOnly, C, A> M;
+    typedef std::map<MoveOnly, MoveOnly, C, A> M;
     typedef std::move_iterator<V*> I;
     V a1[] = {V(1, 1), V(1, 2), V(1, 3), V(2, 1), V(2, 2), V(2, 3), V(3, 1), V(3, 2), V(3, 3)};
     M m1(I(a1), I(a1 + sizeof(a1) / sizeof(a1[0])), C(5), A{});
@@ -152,18 +150,6 @@ TEST_CONSTEXPR_CXX26 bool test_move_alloc() {
     assert(m3.key_comp() == C(5));
     LIBCPP_ASSERT(m1.empty());
   }
-  return true;
-}
-
-int main(int, char**) {
-  test_move_alloc<MoveOnly>();
-  test_move_alloc<CopyConstructible>();
-
-#if TEST_STD_VER >= 26
-  // FIXME: It is not yet possible to replace a `const MoveOnly` key subobject during constant evaluation.
-  // static_assert(test_move_alloc<MoveOnly>());
-  static_assert(test_move_alloc<CopyConstructible>());
-#endif
 
   return 0;
 }

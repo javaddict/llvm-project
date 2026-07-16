@@ -19,6 +19,7 @@
 #include "lldb/Symbol/UnwindPlan.h"
 #include "lldb/Utility/Flags.h"
 #include "lldb/Utility/RangeMap.h"
+#include "lldb/Utility/VMRange.h"
 #include "lldb/lldb-private.h"
 
 namespace lldb_private {

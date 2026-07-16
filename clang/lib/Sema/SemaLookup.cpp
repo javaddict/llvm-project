@@ -193,7 +193,7 @@ namespace {
       list.push_back(UnqualUsingEntry(UD->getNominatedNamespace(), Common));
     }
 
-    void done() { llvm::stable_sort(list, UnqualUsingEntry::Comparator()); }
+    void done() { llvm::sort(list, UnqualUsingEntry::Comparator()); }
 
     typedef ListTy::const_iterator const_iterator;
 
@@ -1589,19 +1589,17 @@ static Module *getDefiningModule(Sema &S, Decl *Entity) {
     // If this function was instantiated from a template, the defining module is
     // the module containing the pattern.
     if (FunctionDecl *Pattern = FD->getTemplateInstantiationPattern())
-      Entity = Pattern->getDefinition();
+      Entity = Pattern;
   } else if (CXXRecordDecl *RD = dyn_cast<CXXRecordDecl>(Entity)) {
     if (CXXRecordDecl *Pattern = RD->getTemplateInstantiationPattern())
-      Entity = Pattern->getDefinition();
+      Entity = Pattern;
   } else if (EnumDecl *ED = dyn_cast<EnumDecl>(Entity)) {
     if (auto *Pattern = ED->getTemplateInstantiationPattern())
-      Entity = Pattern->getDefinition();
+      Entity = Pattern;
   } else if (VarDecl *VD = dyn_cast<VarDecl>(Entity)) {
     if (VarDecl *Pattern = VD->getTemplateInstantiationPattern())
-      Entity = Pattern->getDefinition();
+      Entity = Pattern;
   }
-  if (!Entity)
-    return nullptr;
 
   // Walk up to the containing context. That might also have been instantiated
   // from a template.
@@ -2034,8 +2032,7 @@ bool LookupResult::isReachableSlow(Sema &SemaRef, NamedDecl *D) {
   // Directly imported module are necessarily reachable.
   // Since we can't export import a module implementation partition unit, we
   // don't need to count for Exports here.
-  if (CurrentM &&
-      llvm::is_contained(CurrentM->getTopLevelModule()->Imports, DeclTopModule))
+  if (CurrentM && CurrentM->getTopLevelModule()->Imports.count(DeclTopModule))
     return true;
 
   // Then we treat all module implementation partition unit as unreachable.
@@ -3303,8 +3300,6 @@ addAssociatedClassesAndNamespaces(AssociatedLookup &Result, QualType Ty) {
     // Inline SPIR-V types are treated as fundamental types.
     case Type::HLSLInlineSpirv:
       break;
-    case Type::OverflowBehavior:
-      T = cast<OverflowBehaviorType>(T)->getUnderlyingType().getTypePtr();
     }
 
     if (Queue.empty())
@@ -4753,7 +4748,7 @@ void TypoCorrectionConsumer::addCorrection(TypoCorrection Correction) {
           RI->getAsString(SemaRef.getLangOpts())};
 
       if (NewKey < PrevKey)
-        *RI = std::move(Correction);
+        *RI = Correction;
       return;
     }
   }
@@ -5490,7 +5485,7 @@ TypoCorrection Sema::CorrectTypo(const DeclarationNameInfo &TypoName,
 
     if (BestTC.getCorrection().getAsString() != "super") {
       if (SecondBestTC.getCorrection().getAsString() == "super")
-        BestTC = std::move(SecondBestTC);
+        BestTC = SecondBestTC;
       else if ((*Consumer)["super"].front().isKeyword())
         BestTC = (*Consumer)["super"].front();
     }

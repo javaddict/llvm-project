@@ -79,7 +79,8 @@ void OverrideWithDifferentVisibilityCheck::registerMatchers(
   Finder->addMatcher(
       cxxMethodDecl(
           isVirtual(), FilterDestructors, FilterOperators,
-          ofClass(cxxRecordDecl().bind("class")),
+          ofClass(
+              cxxRecordDecl(unless(isExpansionInSystemHeader())).bind("class")),
           forEachOverridden(cxxMethodDecl(ofClass(cxxRecordDecl().bind("base")),
                                           unless(IgnoredDecl))
                                 .bind("base_func")))

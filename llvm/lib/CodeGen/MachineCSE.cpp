@@ -136,7 +136,9 @@ class MachineCSELegacy : public MachineFunctionPass {
 public:
   static char ID; // Pass identification
 
-  MachineCSELegacy() : MachineFunctionPass(ID) {}
+  MachineCSELegacy() : MachineFunctionPass(ID) {
+    initializeMachineCSELegacyPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
@@ -517,7 +519,7 @@ void MachineCSEImpl::EnterScope(MachineBasicBlock *MBB) {
 
 void MachineCSEImpl::ExitScope(MachineBasicBlock *MBB) {
   LLVM_DEBUG(dbgs() << "Exiting: " << MBB->getName() << '\n');
-  auto SI = ScopeMap.find(MBB);
+  DenseMap<MachineBasicBlock*, ScopeType*>::iterator SI = ScopeMap.find(MBB);
   assert(SI != ScopeMap.end());
   delete SI->second;
   ScopeMap.erase(SI);
@@ -775,9 +777,8 @@ bool MachineCSEImpl::PerformCSE(MachineDomTreeNode *Node) {
   do {
     Node = WorkList.pop_back_val();
     Scopes.push_back(Node);
-    size_t WorkListSize = WorkList.size();
+    OpenChildren[Node] = Node->getNumChildren();
     append_range(WorkList, Node->children());
-    OpenChildren[Node] = WorkList.size() - WorkListSize; // Number of children.
   } while (!WorkList.empty());
 
   // Now perform CSE.
