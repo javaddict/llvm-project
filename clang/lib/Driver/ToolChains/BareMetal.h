@@ -51,6 +51,8 @@ public:
 
   StringRef getOSLibName() const override { return "baremetal"; }
 
+  const char *getDefaultLinker() const override;
+
   UnwindTableLevel
   getDefaultUnwindTableLevel(const llvm::opt::ArgList &Args) const override {
     return UnwindTableLevel::None;

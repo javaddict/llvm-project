@@ -1,0 +1,104 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+# RUN:   -run-pass=pipeliner -verify-machineinstrs %s -o - | FileCheck %s
+#
+# REGRESSION TEST (unit-level): Software-pipeliner prologue-skip guard polarity.
+#
+# Bug: HaydnPipelinerLoopInfo::createTripCountGreaterCondition (HaydnInstrInfo.cpp)
+# emitted the prologue skip-branch with the wrong polarity — BEQZ, which fires
+# when the SLT result is 0 (trip > TC = the EXECUTE case) instead of BNEZ (fires
+# when trip <= TC = the SKIP case). The upstream PeelingModuloScheduleExpander
+# contract (ModuloSchedule.cpp) requires the Cond to be branch-taken when the
+# trip count is NOT greater than TC (skip the prologue); Haydn violated it, so
+# software-pipelined loops had their guard inverted and were bypassed.
+#
+# This MIR test runs ONLY the pipeliner (-run-pass=pipeliner) on the
+# pre-pipeliner MIR of a countable reduction loop and asserts the generated
+# prologue guard is `SLT32` + `BNEZ` (the skip-branch), NOT `BEQZ`.
+#
+# What breaks if this regresses: the SLT32 feeding the prologue skip-branch is
+# followed by BEQZ, so the BNEZ assertion on the next line fails.
+#
+# Companion to swpipeline-prologue-guard-polarity.ll (end-to-end.s check).
+#
+# CHECK-LABEL: name: guard_test
+# CHECK: %13:gpr32 = SLTU32 %8, %1
+# CHECK-NEXT: BNEZ_W{{(_S[012]_FLEX)?}} %{{[0-9]+}}
+
+--- |
+  define i32 @guard_test(ptr captures(none) %p, i32 %n) #0 {
+  entry:
+    br label %loop
+  loop:
+    %lsr.iv = phi ptr [ %scevgep, %loop ], [ %p, %entry ]
+    %i = phi i32 [ 0, %entry ], [ %i2, %loop ]
+    %s = phi i32 [ 0, %entry ], [ %s2, %loop ]
+    %ld = load i32, ptr %lsr.iv, align 4
+    %s2 = add nsw i32 %s, %ld
+    %i2 = add nuw i32 %i, 1
+    %scevgep = getelementptr i8, ptr %lsr.iv, i32 4
+    %c = icmp ult i32 %i2, %n
+    br i1 %c, label %loop, label %exit
+  exit:
+    ret i32 %s2
+  }
+  attributes #0 = { "target-features"="-hwloop" }
+...
+---
+name:            guard_test
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          false
+isSSA:           true
+noVRegs:         false
+registers:
+  - { id: 0, class: gpr32, preferred-register: '', flags: [  ] }
+  - { id: 1, class: gpr32, preferred-register: '', flags: [  ] }
+  - { id: 2, class: gpr32, preferred-register: '', flags: [  ] }
+  - { id: 3, class: gpr32, preferred-register: '', flags: [  ] }
+  - { id: 4, class: gpr32, preferred-register: '', flags: [  ] }
+  - { id: 5, class: gpr32, preferred-register: '', flags: [  ] }
+  - { id: 6, class: gpr32, preferred-register: '', flags: [  ] }
+  - { id: 7, class: gpr32, preferred-register: '', flags: [  ] }
+  - { id: 8, class: gpr32, preferred-register: '', flags: [  ] }
+  - { id: 9, class: gpr32, preferred-register: '', flags: [  ] }
+  - { id: 10, class: gpr32, preferred-register: '', flags: [  ] }
+  - { id: 11, class: gpr32, preferred-register: '', flags: [  ] }
+  - { id: 12, class: gpr32, preferred-register: '', flags: [  ] }
+  - { id: 13, class: gpr32, preferred-register: '', flags: [  ] }
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.1.entry:
+    successors: %bb.2(0x80000000)
+    liveins: $r1, $r2
+
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %7:gpr32 = ADDI32 $r0, 1
+    %12:gpr32 = ADDI32 $r0, 0
+
+  bb.2.loop:
+    successors: %bb.2(0x7c000000), %bb.3(0x04000000)
+
+    %2:gpr32 = PHI %10, %bb.2, %0, %bb.1
+    %3:gpr32 = PHI %12, %bb.1, %8, %bb.2
+    %4:gpr32 = PHI %12, %bb.1, %6, %bb.2
+    %5:gpr32 = LD32 %2, 0 :: (load (s32) from %ir.lsr.iv)
+    %6:gpr32 = ADD32 %4, %5
+    %8:gpr32 = ADD32 %3, %7
+    %10:gpr32 = ADDI32 %2, 4
+    %13:gpr32 = SLTU32 %8, %1
+    BNEZ_W %13, %bb.2
+    B %bb.3
+
+  bb.3.exit:
+    $r1 = COPY %6
+    RET implicit $r15, implicit $r1, implicit $r15
+...

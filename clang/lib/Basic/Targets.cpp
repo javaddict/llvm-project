@@ -21,6 +21,7 @@
 #include "Targets/BPF.h"
 #include "Targets/CSKY.h"
 #include "Targets/DirectX.h"
+#include "Targets/Haydn.h"
 #include "Targets/Hexagon.h"
 #include "Targets/Lanai.h"
 #include "Targets/LoongArch.h"
@@ -764,6 +765,11 @@ std::unique_ptr<TargetInfo> AllocateTarget(const llvm::Triple &Triple,
     default:
       return std::make_unique<CSKYTargetInfo>(Triple, Opts);
     }
+
+  case llvm::Triple::haydn:
+    // Haydn is baremetal only
+    return std::make_unique<HaydnTargetInfo>(Triple, Opts);
+
   case llvm::Triple::loongarch32:
     switch (os) {
     case llvm::Triple::Linux:

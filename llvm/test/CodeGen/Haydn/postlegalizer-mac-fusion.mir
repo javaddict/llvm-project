@@ -1,0 +1,27 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-postlegalizer-combiner -verify-machineinstrs %s -o - | FileCheck %s
+#
+# Test that the PostLegalizerCombiner infrastructure runs without errors.
+#
+# NOTE: MAC fusion (G_MUL + G_ADD -> MAC32) is NOT performed here because
+# this combiner runs before RegBankSelect — registers are still generic but
+# MAC32 requires GPR32. MAC fusion is done in PostSelectOptimize instead.
+# This test verifies the combiner pass runs correctly and preserves generic MIR.
+
+---
+name:            test_combiner_passthrough
+legalized:       true
+# CHECK-LABEL: name: test_combiner_passthrough
+# The combiner should pass through G_MUL + G_ADD unchanged (no MAC fusion here).
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1, $r2
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = COPY $r2
+    ; CHECK: G_MUL
+    ; CHECK: G_ADD
+    %3:_(s32) = G_MUL %0, %1
+    %4:_(s32) = G_ADD %3, %2
+    $r0 = COPY %4(s32)
+    RET implicit $r0, implicit $r15
+...

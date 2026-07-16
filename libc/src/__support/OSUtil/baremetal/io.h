@@ -18,23 +18,20 @@ namespace LIBC_NAMESPACE_DECL {
 
 // These are intended to be provided by the vendor.
 //
+// Cookie layout: see stdio_cookie.h (C-compatible).
+//   `{ int fd; unsigned char eof; unsigned char err; }` with `fd` at offset 0.
+// Plat I/O only needs `fd`. `eof`/`err` are C stream indicators updated by
+// baremetal stdio (feof/ferror/clearerr); static std cookies must zero them.
+// fopen allocates `sizeof(__llvm_libc_stdio_cookie)` and zeros indicators.
+// Vendors may append private fields after this layout.
+//
 // The signature of these types and functions intentionally match `fopencookie`
 // which allows the following:
 //
 // ```
-// struct __llvm_libc_stdio_cookie { ... };
-// ...
-// struct __llvm_libc_stdio_cookie __llvm_libc_stdin_cookie;
-// cookie_io_functions_t stdin_func = { .read = __llvm_libc_stdio_read };
-// FILE *stdin = fopencookie(&__llvm_libc_stdin_cookie, "r", stdin_func);
-// ...
-// struct __llvm_libc_stdio_cookie __llvm_libc_stdout_cookie;
-// cookie_io_functions_t stdout_func = { .write = __llvm_libc_stdio_write };
-// FILE *stdout = fopencookie(&__llvm_libc_stdout_cookie, "w", stdout_func);
-// ...
-// struct __llvm_libc_stdio_cookie __llvm_libc_stderr_cookie;
-// cookie_io_functions_t stderr_func = { .write = __llvm_libc_stdio_write };
-// FILE *stderr = fopencookie(&__llvm_libc_stderr_cookie, "w", stderr_func);
+// struct __llvm_libc_stdio_cookie c = { .fd = ..., .eof = 0, .err = 0 };
+// cookie_io_functions_t f = { .read = __llvm_libc_stdio_read, ... };
+// FILE *fp = fopencookie(&c, "r", f);
 // ```
 //
 // At the same time, implementation of functions like `printf` and `scanf` can
@@ -42,10 +39,9 @@ namespace LIBC_NAMESPACE_DECL {
 // the extra indirection.
 //
 // All three symbols `__llvm_libc_stdin_cookie`, `__llvm_libc_stdout_cookie`,
-// and `__llvm_libc_stderr_cookie` must be provided, even if they don't point
-// at anything.
+// and `__llvm_libc_stderr_cookie` must be provided (with zeroed eof/err).
 
-struct __llvm_libc_stdio_cookie;
+#include "src/__support/OSUtil/baremetal/stdio_cookie.h"
 
 extern "C" struct __llvm_libc_stdio_cookie __llvm_libc_stdin_cookie;
 extern "C" struct __llvm_libc_stdio_cookie __llvm_libc_stdout_cookie;

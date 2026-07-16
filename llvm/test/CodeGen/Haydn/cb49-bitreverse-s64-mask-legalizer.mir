@@ -1,0 +1,43 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=legalizer %s -o - | FileCheck %s
+#
+# REGRESSION TEST, MIR level -- the DECISIVE guard for the s64
+# bitreverse byte-mask sign-extension bug. The companion asm test
+# cb49-bitreverse-s64-mask-regression.ll covers the same bug end-to-end but
+# is susceptible to post-legalizer combiner folds; this test pins the
+# G_CONSTANT value the legalizer emits directly, before any folding can
+# obscure it.
+#
+# Bug: LegalizerHelper::lowerBswap computes byte masks as `0xFF << (i*8)` in
+# SIGNED int (LegalizerHelper.cpp:9716). For i=3 this is signed overflow
+# (-16777216), which APInt(64,...) sign-extends to 0xFFFFFFFFFF000000
+# instead of the correct unsigned 0x00000000FF000000, dropping the innermost
+# byte pair of the 8-byte bswap and corrupting any 64-bit bitreverse whose
+# bytes 3 and 4 differ. The fix lives in
+# HaydnLegalizerInfo::legalizeCustom (constraint #0: never modify upstream):
+# G_BSWAP/G_BITREVERSE on s64 are custom-lowered with uint64_t masks.
+#
+# Test design: feed G_BITREVERSE on an s64 vreg to the legalizer. The custom
+# lowerer emits four byte-mask G_CONSTANTs (0xFF00, 0xFF0000, 0xFF000000) and
+# the SwapN masks (0xF0F0.., 0xCCCC.., 0xAAAA..). The byte-3 mask is the
+# ONLY one with a sign-extension hazard (the others fit in 31 bits). MIR
+# prints s64 G_CONSTANT as `G_CONSTANT i64 <signed-decimal>`:
+#   FIXED: 0x00000000FF000000 -> i64 4278190080  (positive, hi32 == 0)
+#   BUGGY: 0xFFFFFFFFFF000000 -> i64 -16777216   (negative, hi32 == 0xFFFFFFFF)
+# The CHECK below pins the FIXED value; the CHECK-NOT fires on the BUGGY one.
+# If the upstream-generic sign-extension regression returns, the legalizer
+# emits `G_CONSTANT i64 -16777216` and this test fails.
+
+---
+name:            cb49_bitreverse_s64_mask
+legalized:       false
+# CHECK-LABEL: name: cb49_bitreverse_s64_mask
+# CHECK:      G_CONSTANT i64 4278190080
+# CHECK-NOT:  G_CONSTANT i64 -16777216
+body:             |
+  bb.0.entry:
+    liveins: $d0
+    %0:_(s64) = COPY $d0
+    %1:_(s64) = G_BITREVERSE %0(s64)
+    $d0 = COPY %1(s64)
+    RET implicit $d0, implicit $r0, implicit $r15
+...

@@ -122,6 +122,7 @@ add_clang_library(clangCodeGen
   TargetBuiltins/AMDGPU.cpp
   TargetBuiltins/DirectX.cpp
   TargetBuiltins/Hexagon.cpp
+  TargetBuiltins/Haydn.cpp
   TargetBuiltins/NVPTX.cpp
   TargetBuiltins/PPC.cpp
   TargetBuiltins/RISCV.cpp
@@ -143,6 +144,7 @@ add_clang_library(clangCodeGen
   Targets/LoongArch.cpp
   Targets/M68k.cpp
   Targets/MSP430.cpp
+  Targets/Haydn.cpp
   Targets/Mips.cpp
   Targets/NVPTX.cpp
   Targets/PPC.cpp

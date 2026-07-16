@@ -2,6 +2,10 @@ set(LLVM_TARGET_DEFINITIONS Options.td)
 tablegen(LLVM Options.inc -gen-opt-parser-defs)
 add_public_tablegen_target(ELFOptionsTableGen)
 
+# The Haydn ELF arch handler shares the single-source reloc bit-layout table
+# (HaydnRelocLayout.h) with the backend, so MC and lld can never diverge (CB-76).
+include_directories(${LLVM_MAIN_SRC_DIR}/lib/Target/Haydn/MCTargetDesc)
+
 if(LLVM_ENABLE_ZLIB)
   set(imported_libs ZLIB::ZLIB)
 endif()
@@ -25,6 +29,8 @@ add_lld_library(lldELF
   Arch/ARM.cpp
   Arch/AVR.cpp
   Arch/Hexagon.cpp
+  Arch/Haydn.cpp
+  Arch/HaydnThunks.cpp
   Arch/LoongArch.cpp
   Arch/Mips.cpp
   Arch/MipsArchTree.cpp

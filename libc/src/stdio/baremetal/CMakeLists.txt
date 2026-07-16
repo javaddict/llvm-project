@@ -44,6 +44,34 @@ add_header_library(
 )
 
 add_entrypoint_object(
+  fopen
+  SRCS
+    fopen.cpp
+  HDRS
+    ../fopen.h
+  DEPENDS
+    libc.hdr.errno_macros
+    libc.hdr.func.malloc
+    libc.hdr.types.FILE
+    libc.src.errno.errno
+)
+
+add_entrypoint_object(
+  fclose
+  SRCS
+    fclose.cpp
+  HDRS
+    ../fclose.h
+  DEPENDS
+    libc.hdr.errno_macros
+    libc.hdr.func.free
+    libc.hdr.stdio_macros
+    libc.hdr.types.FILE
+    libc.src.__support.OSUtil.osutil
+    libc.src.errno.errno
+)
+
+add_entrypoint_object(
   feof
   SRCS
     feof.cpp
@@ -51,6 +79,7 @@ add_entrypoint_object(
     ../feof.h
   DEPENDS
     libc.hdr.types.FILE
+    libc.src.__support.OSUtil.osutil
 )
 
 add_entrypoint_object(
@@ -61,6 +90,18 @@ add_entrypoint_object(
     ../ferror.h
   DEPENDS
     libc.hdr.types.FILE
+    libc.src.__support.OSUtil.osutil
+)
+
+add_entrypoint_object(
+  clearerr
+  SRCS
+    clearerr.cpp
+  HDRS
+    ../clearerr.h
+  DEPENDS
+    libc.hdr.types.FILE
+    libc.src.__support.OSUtil.osutil
 )
 
 add_entrypoint_object(

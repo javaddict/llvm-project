@@ -1,0 +1,199 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-postlegalizer-combiner -verify-machineinstrs %s -o - | FileCheck %s
+#
+# REGRESSION TEST: Redundant extension elimination in the post-legalizer combiner.
+#
+# Tests that cascading extension sequences are collapsed or eliminated:
+# 1. G_SEXT(G_ZEXT x) -> G_ZEXT x (sext of zero-extended = zero-extended)
+# 2. G_ZEXT(G_ZEXT x) -> single G_ZEXT (collapse cascading zext)
+# 3. G_SEXT(G_SEXT x) -> single G_SEXT (collapse cascading sext)
+# 4. G_TRUNC(G_ZEXT/G_SEXT x) where result type == source type -> COPY
+# 5. G_ZEXT(G_TRUNC x) where result type == source type is NOT identity (preserved)
+#
+# These patterns commonly arise after legalizer widening and must be cleaned up
+# to avoid redundant instructions in the final code.
+
+--- |
+  define i64 @sext_of_zext(i8 %x) nounwind { ret i64 0 }
+  define i64 @double_zext(i8 %x) nounwind { ret i64 0 }
+  define i64 @double_sext(i8 %x) nounwind { ret i64 0 }
+  define i32 @trunc_zext_identity(i8 %x) nounwind { ret i32 0 }
+  define i32 @trunc_sext_identity(i8 %x) nounwind { ret i32 0 }
+  define i32 @zext_trunc_identity(i32 %x) nounwind { ret i32 0 }
+  define i32 @sext_trunc_not_identity(i32 %x) nounwind { ret i32 0 }
+  define i32 @zext_preserved(i16 %x) nounwind { ret i32 0 }
+  define i32 @sext_preserved(i16 %x) nounwind { ret i32 0 }
+...
+
+---
+# Test 1: G_SEXT(G_ZEXT x) -> G_ZEXT x (to wider type).
+# Sign-extending a zero-extended value is equivalent to zero-extension because
+# the inner zext guarantees sign bit = 0.
+# Input: G_ZEXT s8->s16, G_SEXT s16->s64
+# Output: G_ZEXT s8->s64
+name:            sext_of_zext
+legalized:       true
+# CHECK-LABEL: name: sext_of_zext
+body:             |
+  bb.0:
+    liveins: $r1
+    %0:_(s32) = COPY $r1
+    %1:_(s8) = G_TRUNC %0(s32)
+    %2:_(s16) = G_ZEXT %1(s8)
+    ; The outer G_SEXT is replaced with a single G_ZEXT from s8 to s64.
+    ; CHECK-NOT: G_SEXT
+    ; CHECK: G_ZEXT %1
+    %3:_(s64) = G_SEXT %2(s16)
+    $d0 = COPY %3(s64)
+    RET implicit $r15, implicit $d0
+...
+
+---
+# Test 2: G_ZEXT(G_ZEXT x) -> single G_ZEXT (collapse cascading zero-extensions).
+# Two consecutive zero-extensions from s8->s16->s64 collapse to one s8->s64.
+name:            double_zext
+legalized:       true
+# CHECK-LABEL: name: double_zext
+body:             |
+  bb.0:
+    liveins: $r1
+    %0:_(s32) = COPY $r1
+    %1:_(s8) = G_TRUNC %0(s32)
+    %2:_(s16) = G_ZEXT %1(s8)
+    ; CHECK: G_ZEXT %1
+    ; CHECK-NOT: G_ZEXT %2
+    %3:_(s64) = G_ZEXT %2(s16)
+    $d0 = COPY %3(s64)
+    RET implicit $r15, implicit $d0
+...
+
+---
+# Test 3: G_SEXT(G_SEXT x) -> single G_SEXT (collapse cascading sign-extensions).
+# Two consecutive sign-extensions from s8->s16->s64 collapse to one s8->s64.
+name:            double_sext
+legalized:       true
+# CHECK-LABEL: name: double_sext
+body:             |
+  bb.0:
+    liveins: $r1
+    %0:_(s32) = COPY $r1
+    %1:_(s8) = G_TRUNC %0(s32)
+    %2:_(s16) = G_SEXT %1(s8)
+    ; CHECK: G_SEXT %1
+    ; CHECK-NOT: G_SEXT %2
+    %3:_(s64) = G_SEXT %2(s16)
+    $d0 = COPY %3(s64)
+    RET implicit $r15, implicit $d0
+...
+
+---
+# Test 4a: G_TRUNC(G_ZEXT x) where result type == source type -> COPY.
+# Extending s8 to s32, then truncating back to s8 is identity.
+name:            trunc_zext_identity
+legalized:       true
+# CHECK-LABEL: name: trunc_zext_identity
+body:             |
+  bb.0:
+    liveins: $r1
+    %0:_(s32) = COPY $r1
+    %1:_(s8) = G_TRUNC %0(s32)
+    %2:_(s32) = G_ZEXT %1(s8)
+    ; The G_TRUNC of G_ZEXT back to the original type is identity -> COPY.
+    ; CHECK-NOT: G_TRUNC %2
+    ; CHECK: COPY %1
+    %3:_(s8) = G_TRUNC %2(s32)
+    %4:_(s32) = G_ZEXT %3(s8)
+    $r1 = COPY %4(s32)
+    RET implicit $r1, implicit $r15
+...
+
+---
+# Test 4b: G_TRUNC(G_SEXT x) where result type == source type -> COPY.
+name:            trunc_sext_identity
+legalized:       true
+# CHECK-LABEL: name: trunc_sext_identity
+body:             |
+  bb.0:
+    liveins: $r1
+    %0:_(s32) = COPY $r1
+    %1:_(s8) = G_TRUNC %0(s32)
+    %2:_(s32) = G_SEXT %1(s8)
+    ; The G_TRUNC of G_SEXT back to the original type is identity -> COPY.
+    ; CHECK-NOT: G_TRUNC %2
+    ; CHECK: COPY %1
+    %3:_(s8) = G_TRUNC %2(s32)
+    %4:_(s32) = G_ANYEXT %3(s8)
+    $r1 = COPY %4(s32)
+    RET implicit $r1, implicit $r15
+...
+
+---
+# Test 5: G_ZEXT(G_TRUNC x) where result type == source type is NOT identity.
+# Truncating s32 to s16 drops upper 16 bits; zext s16->s32 zero-extends
+# producing x & 0xFFFF (not x). The G_ZEXT must be preserved.
+name:            zext_trunc_identity
+legalized:       true
+# CHECK-LABEL: name: zext_trunc_identity
+body:             |
+  bb.0:
+    liveins: $r1
+    %0:_(s32) = COPY $r1
+    %1:_(s16) = G_TRUNC %0(s32)
+    ; G_ZEXT of G_TRUNC is NOT identity (it masks upper bits).
+    ; CHECK: G_ZEXT %1
+    %2:_(s32) = G_ZEXT %1(s16)
+    $r1 = COPY %2(s32)
+    RET implicit $r1, implicit $r15
+...
+
+---
+# Test 5b: G_SEXT(G_TRUNC x) is NOT identity for zext-trunc round-trips.
+# Truncating s32 to s16 then SEXT back to s32 is NOT the same as the original
+# because the original s32 may have non-zero upper bits that the sext would
+# sign-extend from bit 15. The G_SEXT must be preserved.
+name:            sext_trunc_not_identity
+legalized:       true
+# CHECK-LABEL: name: sext_trunc_not_identity
+body:             |
+  bb.0:
+    liveins: $r1
+    %0:_(s32) = COPY $r1
+    %1:_(s16) = G_TRUNC %0(s32)
+    ; G_SEXT of G_TRUNC is NOT identity -> preserved.
+    ; CHECK: G_SEXT %1
+    %2:_(s32) = G_SEXT %1(s16)
+    $r1 = COPY %2(s32)
+    RET implicit $r1, implicit $r15
+...
+
+---
+# Control: G_ZEXT from s8 to s32 (via G_TRUNC of input) is preserved because
+# the source is from G_IMPLICIT_DEF, not from a trunc/zext chain.
+name:            zext_preserved
+legalized:       true
+# CHECK-LABEL: name: zext_preserved
+body:             |
+  bb.0:
+    liveins: $r1
+    %0:_(s32) = COPY $r1
+    ; CHECK: G_ZEXT
+    %1:_(s8) = G_IMPLICIT_DEF
+    %2:_(s32) = G_ZEXT %1(s8)
+    $r1 = COPY %2(s32)
+    RET implicit $r1, implicit $r15
+...
+
+---
+# Control: G_SEXT from s16 to s32 should be preserved (legitimate sign-extension).
+name:            sext_preserved
+legalized:       true
+# CHECK-LABEL: name: sext_preserved
+body:             |
+  bb.0:
+    liveins: $r1
+    %0:_(s32) = COPY $r1
+    %1:_(s16) = G_TRUNC %0(s32)
+    ; CHECK: G_SEXT %1
+    %2:_(s32) = G_SEXT %1(s16)
+    $r1 = COPY %2(s32)
+    RET implicit $r1, implicit $r15
+...

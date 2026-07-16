@@ -1,0 +1,278 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select %s -o - | FileCheck %s
+
+# Test that G_* arithmetic operations are selected to ADD32/SUB32/MUL32/etc.
+
+---
+name:            test_select_add32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_add32
+# CHECK: ADD32
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_ADD %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_addi32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_addi32
+# Immediate add may stay ADDI32_W or become ADD32 of a materialized constant.
+# CHECK: {{ADDI32|ADD32}}
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = G_CONSTANT i32 42
+    %2:_(s32) = G_ADD %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_sub32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_sub32
+# CHECK: SUB32
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_SUB %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_subi32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_subi32
+# CHECK: SUB32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = G_CONSTANT i32 -10
+    %2:_(s32) = G_SUB %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_mul32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_mul32
+# No native GPR32 multiply — G_MUL <s32> selects to the real MUL64_LL
+# + bank-move sequence (sext32t64/folded MOV_GPR_TO_DR64, MUL64_LL, MOVE32_DR_L).
+# CHECK: MUL64_LL
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_MUL %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_and32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_and32
+# CHECK: AND32
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_AND %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_andi32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_andi32
+# CHECK: AND32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = G_CONSTANT i32 255
+    %2:_(s32) = G_AND %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_or32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_or32
+# CHECK: OR32
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_OR %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_ori32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_ori32
+# CHECK: OR32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = G_CONSTANT i32 128
+    %2:_(s32) = G_OR %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_xor32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_xor32
+# CHECK: XOR32
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_XOR %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_xori32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_xori32
+# CHECK: XOR32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = G_CONSTANT i32 64
+    %2:_(s32) = G_XOR %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_sll32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_sll32
+# CHECK: SLL32
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_SHL %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_slli32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_slli32
+# CHECK: SLL32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = G_CONSTANT i32 4
+    %2:_(s32) = G_SHL %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_srl32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_srl32
+# CHECK: SRL32
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_LSHR %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_srli32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_srli32
+# CHECK: SRL32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = G_CONSTANT i32 8
+    %2:_(s32) = G_LSHR %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_sra32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_sra32
+# CHECK: SRA32
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_ASHR %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_srai32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_select_srai32
+# CHECK: SRA32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = G_CONSTANT i32 16
+    %2:_(s32) = G_ASHR %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...

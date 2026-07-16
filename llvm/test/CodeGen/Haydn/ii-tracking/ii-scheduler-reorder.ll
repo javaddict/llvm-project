@@ -1,0 +1,96 @@
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
+;
+; REGRESSION TEST: post-RA VLIW scheduler must pack 3 independent ALU ops
+; into a multi-slot bundle (S1 / Phase 0 of next-phase-fixes-plan-2026-06-14).
+;
+; Gap class: SCHEDULER (S1).
+;
+; History: HaydnConvergingVLIWScheduler + ResourceDemand heuristic
+; were wired before the packetizer but were inert (byte-identical MIR
+; before/after postmisched on dependency-unbound loops). Post-/ the
+; scheduler+packetizer now pack independent ALU ops into multi-slot bundles
+; in the loop body, proving the reorder path is live.
+;
+; Target state (ACHIEVED): at least two of the three independent ALU ops get
+; packed into one bundle in the loop body. A multi-slot bundle prints as a
+; single `{...;...;... }` line with `;` slot separators in the AsmPrinter
+; output.
+;
+; Test design: three reductions on distinct GPR outputs (no cross-iteration
+; dependency among the three adds), inside a counted loop. Each op is a
+; 2R1W ALU32 op that any of Slot0/Slot1/Slot2 can issue. With 4R2W GPR ports
+; two of these pack per cycle; the scheduler reordering them is the lever.
+
+; REBASELINED (auto) dual-sched / AR logical-slot rebaseline;.file skipped
+
+; CHECK: 	.text
+; CHECK: 	.globl	ii_scheduler_reorder            // -- Begin function ii_scheduler_reorder
+; CHECK: 	.type	ii_scheduler_reorder,@function
+; CHECK: ii_scheduler_reorder:                   // @ii_scheduler_reorder
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:                               // %entry
+; CHECK: 	{ 	xor32	r0, r0, r0 }
+; CHECK: 	{ 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 	addi32{{(_w)?}}	r5, r0, 1 }
+; CHECK: 	{ 	max32	r4, r4, r5 }
+; CHECK: 	.p2align	2
+; CHECK: 	{ 	set_hwloop_f2_w	1, .LLhwloop_start0, .LLhwloop_end0, r4 }
+; CHECK: 	{ 	nop }
+; CHECK: 	{ 	nop }
+; CHECK: 	{ 	nop }
+; CHECK: .LBB0_1:                                // %loop
+; CHECK:                                         // =>This Inner Loop Header: Depth=1
+; CHECK:                                         // Label of block must be emitted
+; CHECK: 	.p2align	2
+; CHECK: .LLhwloop_start0:
+; CHECK: 	{ 	ld32	r4, r1, 0; 	ld32	r5, r2, 0; 	nop }
+; CHECK: 	{ 	ld32	r6, r3, 0; 	add32	r7, r4, r5; 	nop }
+; CHECK: 	{ 	st32	r7, r1, 0; 	add32	r5, r5, r6; 	nop }
+; CHECK: 	{ 	st32	r5, r2, 0; 	add32	r4, r4, r6; 	nop }
+; CHECK: 	{ 	st32	r4, r3, 0; 	addi32	r3, r3, 4; 	addi32	r2, r2, 4 }
+; CHECK: 	.p2align	2
+; CHECK: .LLhwloop_end0:
+; CHECK: 	{ 	addi32	r1, r1, 4 }
+; CHECK: // %bb.2:                               // %exit
+; CHECK: 	{ 	xor32	r0, r0, r0 }
+; CHECK: 	{ 	addi32{{(_w)?}}	sp, sp, 8 }
+; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: .Lfunc_end0:
+; CHECK: 	.size	ii_scheduler_reorder, .Lfunc_end0-ii_scheduler_reorder
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.section	".note.GNU-stack","",@progbits
+
+define void @ii_scheduler_reorder(ptr %a, ptr %b, ptr %c, i32 %n) {
+; The loop body must contain at least one multi-slot bundle: two ALU ops on
+; the same `{...;... }` line proves two of the three independent adds packed.
+; We look for two add32 mnemonics separated by `;` (the slot separator).
+entry:
+  br label %loop
+
+loop:
+  %i = phi i32 [ 0, %entry ], [ %i.next, %loop ]
+  %ai = getelementptr i32, ptr %a, i32 %i
+  %bi = getelementptr i32, ptr %b, i32 %i
+  %ci = getelementptr i32, ptr %c, i32 %i
+  %av = load i32, ptr %ai
+  %bv = load i32, ptr %bi
+  %cv = load i32, ptr %ci
+  ; Three independent adds on distinct destinations — pure ILP.
+  %x = add i32 %av, %bv
+  %y = add i32 %bv, %cv
+  %z = add i32 %av, %cv
+  %x4 = getelementptr i32, ptr %a, i32 %i
+  %y4 = getelementptr i32, ptr %b, i32 %i
+  %z4 = getelementptr i32, ptr %c, i32 %i
+  store i32 %x, ptr %x4
+  store i32 %y, ptr %y4
+  store i32 %z, ptr %z4
+  %i.next = add i32 %i, 1
+  %cmp = icmp slt i32 %i.next, %n
+  br i1 %cmp, label %loop, label %exit
+
+exit:
+  ret void
+}

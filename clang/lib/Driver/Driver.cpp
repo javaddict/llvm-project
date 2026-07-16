@@ -6995,6 +6995,9 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
       case llvm::Triple::riscv64:
         TC = std::make_unique<toolchains::BareMetal>(*this, Target, Args);
         break;
+      case llvm::Triple::haydn:
+        TC = std::make_unique<toolchains::BareMetal>(*this, Target, Args);
+        break;
       case llvm::Triple::ve:
         TC = std::make_unique<toolchains::VEToolChain>(*this, Target, Args);
         break;

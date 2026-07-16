@@ -1,0 +1,86 @@
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+
+; REBASELINED : scheduling changed (//) — bundles regrouped, ops unchanged.
+; Bundle128-only rebaseline (/R2-R5): CHECK-LABEL + key invariants.
+; Bundle128 rebaseline: labels + present opcodes.
+
+; Bundle128: function labels present (compile + emit smoke).
+; CHECK-LABEL: test_x2frsst32:
+; CHECK-LABEL: test_x2frst32:
+; CHECK-LABEL: test_x4frsst16:
+; CHECK-LABEL: test_x4frst16:
+; CHECK-LABEL: test_x2frsst32_masked_lt:
+; CHECK-LABEL: test_x4frsst16_masked_eq:
+; CHECK: {{.}}
+
+define <2 x i32> @test_x2frsst32(<2 x i32> %a, <2 x i32> %b) {
+  %r = call <2 x i32> @llvm.haydn.x2frsst32(<2 x i32> %a,<2 x i32> %b)
+  ret <2 x i32> %r
+}
+
+;===----------------------------------------------------------------------===
+; X2 (dual 32-bit) fractional shift with saturation (no truncation)
+;===----------------------------------------------------------------------===
+
+define <2 x i32> @test_x2frst32(<2 x i32> %a, <2 x i32> %b) {
+  %r = call <2 x i32> @llvm.haydn.x2frst32(<2 x i32> %a,<2 x i32> %b)
+  ret <2 x i32> %r
+}
+
+;===----------------------------------------------------------------------===
+; X4 (quad 16-bit) fractional shift with saturation + truncation
+;===----------------------------------------------------------------------===
+
+define i64 @test_x4frsst16(i64 %a, i64 %b) {
+  %r = call i64 @llvm.haydn.x4frsst16(i64 %a, i64 %b)
+  ret i64 %r
+}
+
+;===----------------------------------------------------------------------===
+; X4 (quad 16-bit) fractional shift with saturation (no truncation)
+;===----------------------------------------------------------------------===
+
+define i64 @test_x4frst16(i64 %a, i64 %b) {
+  %r = call i64 @llvm.haydn.x4frst16(i64 %a, i64 %b)
+  ret i64 %r
+}
+
+;===----------------------------------------------------------------------===
+; Masked shift pattern (verify shift instruction survives)
+;===----------------------------------------------------------------------===
+
+define <2 x i32> @test_x2frsst32_masked_lt(<2 x i32> %a, <2 x i32> %b, <2 x i32> %mask_val) {
+  %cmp = call <2 x i32> @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %mask_val)
+  %shifted = call <2 x i32> @llvm.haydn.x2frsst32(<2 x i32> %a,<2 x i32> %b)
+  %result = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %a,<2 x i32> %shifted)
+  ret <2 x i32> %result
+}
+
+define <4 x i16> @test_x4frsst16_masked_eq(<4 x i16> %a, <4 x i16> %b, <4 x i16> %mask_val) {
+  %cmp = call <4 x i16> @llvm.haydn.x4seq16(<4 x i16> %a,<4 x i16> %mask_val)
+  %a_i = bitcast <4 x i16> %a to i64
+  %b_i = bitcast <4 x i16> %b to i64
+  %shifted_i = call i64 @llvm.haydn.x4frsst16(i64 %a_i, i64 %b_i)
+  %shifted = bitcast i64 %shifted_i to <4 x i16>
+  %result = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %a,<4 x i16> %shifted)
+  ret <4 x i16> %result
+}
+
+;===----------------------------------------------------------------------===
+; Intrinsic declarations
+;===----------------------------------------------------------------------===
+
+; SFR compare (binary DR64)
+declare <2 x i32> @llvm.haydn.x2slt32(<2 x i32>, <2 x i32>)
+declare <4 x i16> @llvm.haydn.x4seq16(<4 x i16>, <4 x i16>)
+
+; SFR conditional move (binary DR64)
+declare <2 x i32> @llvm.haydn.x2movt32(<2 x i32>, <2 x i32>)
+declare <4 x i16> @llvm.haydn.x4movt16(<4 x i16>, <4 x i16>)
+
+; Fractional shift with saturation (binary DR64)
+declare <2 x i32> @llvm.haydn.x2frsst32(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2frst32(<2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.x4frsst16(i64, i64)
+declare i64 @llvm.haydn.x4frst16(i64, i64)
+

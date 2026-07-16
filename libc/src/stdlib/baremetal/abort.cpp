@@ -13,6 +13,13 @@
 
 namespace LIBC_NAMESPACE_DECL {
 
-LLVM_LIBC_FUNCTION(void, abort, ()) { __builtin_trap(); }
+// Vendor MUST provide this (BundleSim: plat/abort_llvm_libc.c).
+// Required strong symbol — mirror __llvm_libc_exit. Weak undeclared + null
+// check emitted JAL to 0 on Haydn; BundleSim code_image rejects.
+extern "C" [[noreturn]] void __llvm_libc_abort(void);
+
+[[noreturn]] LLVM_LIBC_FUNCTION(void, abort, ()) {
+  __llvm_libc_abort();
+}
 
 } // namespace LIBC_NAMESPACE_DECL

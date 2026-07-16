@@ -60,6 +60,20 @@ typedef struct {
 #if __ARM_FP
   long fopaque[8]; // d8-d15
 #endif
+#elif defined(__haydn__) || defined(__HAYDN__)
+  // Callee-saved GPRs + return state. Offsets must match
+  // libc/src/setjmp/haydn/{setjmp,longjmp}.cpp:
+  //   0:r8  4:r9  8:r10  12:r11  16:sp  20:lr
+  //   24:d8  32:d9  40:d10  48:d11  56:d12  64:d13  72:d14  80:d15
+  long r8;
+  long r9;
+  long r10;
+  long r11;
+  long sp;
+  long lr;
+  // Callee-saved FP regs d8-d15 (64-bit each). Placed after 24-byte GPR
+  // block so natural long-long alignment needs no padding.
+  long long dregs[8];
 #else
 #error "__jmp_buf not available for your target architecture."
 #endif

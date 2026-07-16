@@ -1,0 +1,377 @@
+; RUN: llc -haydn-enable-ldst-opt=true -mtriple=haydn-unknown-elf -verify-machineinstrs -global-isel-abort=1 -O2 < %s | FileCheck %s
+
+; REBASELINED : ldst-opt forms SP-base d_ldw_post_imm for stack constants in many_copies; copy-elim contract unchanged (or64 for DR64).
+; REBASELINED : / pipeline reorder (ExpandPseudos/BitSimplify pre-scheduler + materialize at leaveRegion) — bundles regrouped, ops unchanged.
+; REBASELINED : scheduling changed (//) — bundles regrouped, ops unchanged.
+
+;
+; REBASELINE NOTE (Stream B post-RA scheduler, decision):
+; A post-RA MachineScheduler was activated for Haydn (createPostMachineScheduler
+; previously returned nullptr). It now reorders for ILP and the packetizer forms
+; denser VLIW bundles. The DR64 copy-elim semantics is UNCHANGED -- DR64 copies
+; still use `or64 rd, rs, rs`, never an add64-with-r0 in the DR64 bank. Only the
+; bundle layout changed. The CHECK-NOT below was tightened from a greedy form
+; (whose `{{.*}}` matched an entire bundle line that contained a real `add64
+; dN, dM, dK` arithmetic op in one slot AND a separate `addi32 rN, r0,...` in
+; another slot) to a regex anchored to the instruction form, which matches only
+; a genuine DR64-add-with-r0 (the wrong copy pattern) and does not cross bundle
+; slots. Do NOT loosen it back.
+;
+; REGRESSION TEST: Copy elimination for DR64 and GPR registers.
+;
+; Purpose: Verify that the HaydnCopyElim pass correctly eliminates redundant
+; copies in the post-RA stage. Specifically:
+; DR64 copies use OR64 rd, rs, rs (identity: rd = rs | rs)
+; Identity copies (COPY rA, rA) are eliminated
+; Dead copies (destination overwritten before use) are eliminated
+; Copies to R0 (soft-zero) are eliminated
+; OR64 rd, rd, rd (all same register) is eliminated
+;
+; Why this test exists:
+; The HaydnCopyElim pass (HaydnCopyElim.cpp) runs post-RA and eliminates
+; four patterns: identity copies, dead copies, copies to R0, and OR64
+; identity copies. Without this pass, the codegen would emit unnecessary
+; OR64 dN, dN, dN for DR64 register copies where source equals destination
+; wasting VLIW issue slots. This test ensures the elimination is effective.
+;
+; What these tests guard:
+; 1. DR64 copies via OR64 are correctly generated (not ADD64 with GPR zero)
+; 2. Identity OR64 copies (rd == rs == rs) are eliminated
+; 3. Post-RA redundant copies are removed
+; 4. The function still produces correct results after elimination
+;
+; If these tests fail, investigate HaydnCopyElim::runOnMachineFunction and
+; the copyPhysReg implementation in HaydnInstrInfo.
+; Do NOT update CHECK lines without understanding which copies are eliminated.
+;
+
+; REBASELINED (auto) llc <stdin>;.file skipped
+
+; CHECK:  	.text
+; CHECK:  	.globl	test_dr64_copy_or64             // -- Begin function test_dr64_copy_or64
+; CHECK:  	.type	test_dr64_copy_or64,@function
+; CHECK:  test_dr64_copy_or64:                    // @test_dr64_copy_or64
+; CHECK:  // %bb.0:                               // %entry
+; CHECK:  	{ 	xor32	r0, r0, r0 }
+; CHECK:  	{ 	subi32	sp, sp, 40 }
+; CHECK:  	{ 	st32	lr, sp, 36 }
+; CHECK:  	{ 	addi32{{(_w)?}}	r1, sp, 8 }
+; CHECK:  	{ 	st64	d10, r1, 0 }
+; CHECK:  	{ 	st64	d9, r1, 8 }
+; CHECK:  	{ 	st64	d8, r1, 16 }
+; CHECK:  	{ 	or64	d8, d0, d0 }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	or64	d9, d0, d0; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	or64	d10, d0, d0; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	add64	d1, d9, d10; 	nop }
+; CHECK:  	{ 	add64	d0, d1, d0 }
+; CHECK:  	{ 	add64	d0, d0, d8 }
+; CHECK:  	{ 	xor32	r0, r0, r0 }
+; CHECK:  	{ 	ld64	d10, sp, 8 }
+; CHECK:  	{ 	ld64	d9, sp, 16 }
+; CHECK:  	{ 	ld64	d8, sp, 24 }
+; CHECK:  	{ 	ld32	lr, sp, 36 }
+; CHECK:  	{ 	addi32{{(_w)?}}	sp, sp, 40 }
+; CHECK:  	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK:  .Lfunc_end0:
+; CHECK:  	.size	test_dr64_copy_or64, .Lfunc_end0-test_dr64_copy_or64
+; CHECK:                                          // -- End function
+; CHECK:  	.globl	test_dr64_many_copies           // -- Begin function test_dr64_many_copies
+; CHECK:  	.type	test_dr64_many_copies,@function
+; CHECK:  test_dr64_many_copies:                  // @test_dr64_many_copies
+; CHECK:  // %bb.0:                               // %entry
+; CHECK:  	{ 	xor32	r0, r0, r0 }
+; CHECK:  	{ 	subi32	sp, sp, 48 }
+; CHECK:  	{ 	st32	lr, sp, 44 }
+; CHECK:  	{ 	addi32{{(_w)?}}	r1, sp, 8 }
+; CHECK:  	{ 	st64	d11, r1, 0 }
+; CHECK:  	{ 	st64	d10, r1, 8 }
+; CHECK:  	{ 	st64	d9, r1, 16 }
+; CHECK:  	{ 	st64	d8, r1, 24 }
+; CHECK:  	{ 	subi32	sp, sp, 8 }
+; CHECK:  	{ 	addi32{{(_w)?}}	r1, r0, 1 }
+; CHECK:  	{ 	st32	r1, sp, 0 }
+; CHECK:  	{ 	addi32{{(_w)?}}	r1, r0, 0 }
+; CHECK:  	{ 	st32	r1, sp, 4 }
+; CHECK:  	{ 	d_ldw_post_imm	d4, sp, 1 }
+; CHECK:  	{ 	subi32	sp, sp, 8; 	add64	d8, d0, d4; 	nop }
+; CHECK:  	{ 	addi32{{(_w)?}}	r1, r0, 2; 	or64	d0, d8, d8; 	nop }
+; CHECK:  	{ 	st32	r1, sp, 0 }
+; CHECK:  	{ 	addi32{{(_w)?}}	r1, r0, 0 }
+; CHECK:  	{ 	st32	r1, sp, 4 }
+; CHECK:  	{ 	d_ldw_post_imm	d5, sp, 1 }
+; CHECK:  	{ 	subi32	sp, sp, 8; 	add64	d9, d1, d5; 	nop }
+; CHECK:  	{ 	addi32{{(_w)?}}	r1, r0, 3 }
+; CHECK:  	{ 	st32	r1, sp, 0 }
+; CHECK:  	{ 	addi32{{(_w)?}}	r1, r0, 0 }
+; CHECK:  	{ 	st32	r1, sp, 4 }
+; CHECK:  	{ 	d_ldw_post_imm	d6, sp, 1 }
+; CHECK:  	{ 	subi32	sp, sp, 8; 	add64	d10, d2, d6; 	nop }
+; CHECK:  	{ 	addi32{{(_w)?}}	r1, r0, 4 }
+; CHECK:  	{ 	st32	r1, sp, 0 }
+; CHECK:  	{ 	addi32{{(_w)?}}	r1, r0, 0 }
+; CHECK:  	{ 	st32	r1, sp, 4 }
+; CHECK:  	{ 	d_ldw_post_imm	d7, sp, 1 }
+; CHECK:  	{ 	add64	d11, d3, d7 }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, use_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	or64	d0, d9, d9; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, use_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	or64	d0, d10, d10; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, use_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	or64	d0, d11, d11; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, use_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	add64	d0, d8, d9; 	nop }
+; CHECK:  	{ 	add64	d0, d0, d10 }
+; CHECK:  	{ 	add64	d0, d0, d11 }
+; CHECK:  	{ 	xor32	r0, r0, r0 }
+; CHECK:  	{ 	ld64	d11, sp, 8 }
+; CHECK:  	{ 	ld64	d10, sp, 16 }
+; CHECK:  	{ 	ld64	d9, sp, 24 }
+; CHECK:  	{ 	ld64	d8, sp, 32 }
+; CHECK:  	{ 	ld32	lr, sp, 44 }
+; CHECK:  	{ 	addi32{{(_w)?}}	sp, sp, 48 }
+; CHECK:  	{ 	nop }
+; CHECK:  	{ 	nop }
+; CHECK:  	{ 	nop }
+; CHECK:  	{ 	nop }
+; CHECK:  	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK:  .Lfunc_end1:
+; CHECK:  	.size	test_dr64_many_copies, .Lfunc_end1-test_dr64_many_copies
+; CHECK:                                          // -- End function
+; CHECK:  	.globl	test_no_identity_copy           // -- Begin function test_no_identity_copy
+; CHECK:  	.type	test_no_identity_copy,@function
+; CHECK:  test_no_identity_copy:                  // @test_no_identity_copy
+; CHECK:  // %bb.0:                               // %entry
+; CHECK:  	{ 	xor32	r0, r0, r0 }
+; CHECK:  	{ 	subi32	sp, sp, 8 }
+; CHECK:  	{ 	xor32	r0, r0, r0 }
+; CHECK:  	{ 	addi32{{(_w)?}}	sp, sp, 8 }
+; CHECK:  	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK:  .Lfunc_end2:
+; CHECK:  	.size	test_no_identity_copy, .Lfunc_end2-test_no_identity_copy
+; CHECK:                                          // -- End function
+; CHECK:  	.globl	test_no_dr64_identity           // -- Begin function test_no_dr64_identity
+; CHECK:  	.type	test_no_dr64_identity,@function
+; CHECK:  test_no_dr64_identity:                  // @test_no_dr64_identity
+; CHECK:  // %bb.0:                               // %entry
+; CHECK:  	{ 	xor32	r0, r0, r0 }
+; CHECK:  	{ 	subi32	sp, sp, 8 }
+; CHECK:  	{ 	xor32	r0, r0, r0 }
+; CHECK:  	{ 	addi32{{(_w)?}}	sp, sp, 8 }
+; CHECK:  	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK:  .Lfunc_end3:
+; CHECK:  	.size	test_no_dr64_identity, .Lfunc_end3-test_no_dr64_identity
+; CHECK:                                          // -- End function
+; CHECK:  	.globl	test_copy_elim_stress           // -- Begin function test_copy_elim_stress
+; CHECK:  	.type	test_copy_elim_stress,@function
+; CHECK:  test_copy_elim_stress:                  // @test_copy_elim_stress
+; CHECK:  // %bb.0:                               // %entry
+; CHECK:  	{ 	xor32	r0, r0, r0 }
+; CHECK:  	{ 	subi32	sp, sp, 72 }
+; CHECK:  	{ 	xor32	r1, r1, r1 }
+; CHECK:  	{ 	addi32{{(_w)?}}	r1, r1, 68 }
+; CHECK:  	{ 	st32_reg	lr, sp, r1 }
+; CHECK:  	{ 	addi32{{(_w)?}}	r1, sp, 8 }
+; CHECK:  	{ 	st64	d14, r1, 0 }
+; CHECK:  	{ 	st64	d13, r1, 8 }
+; CHECK:  	{ 	st64	d12, r1, 16 }
+; CHECK:  	{ 	st64	d11, r1, 24 }
+; CHECK:  	{ 	st64	d10, r1, 32 }
+; CHECK:  	{ 	st64	d9, r1, 40 }
+; CHECK:  	{ 	st64	d8, r1, 48 }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	or64	d8, d0, d0; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	or64	d9, d0, d0; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	or64	d10, d0, d0; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	or64	d11, d0, d0; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	or64	d12, d0, d0; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	or64	d13, d0, d0; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	or64	d14, d0, d0; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i64 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	add64	d1, d8, d9; 	nop }
+; CHECK:  	{ 	add64	d1, d1, d10 }
+; CHECK:  	{ 	add64	d1, d1, d11 }
+; CHECK:  	{ 	add64	d1, d1, d12 }
+; CHECK:  	{ 	add64	d1, d1, d13 }
+; CHECK:  	{ 	add64	d1, d1, d14 }
+; CHECK:  	{ 	add64	d0, d1, d0 }
+; CHECK:  	{ 	xor32	r0, r0, r0 }
+; CHECK:  	{ 	ld64	d14, sp, 8 }
+; CHECK:  	{ 	ld64	d13, sp, 16 }
+; CHECK:  	{ 	ld64	d12, sp, 24 }
+; CHECK:  	{ 	ld64	d11, sp, 32 }
+; CHECK:  	{ 	ld64	d10, sp, 40 }
+; CHECK:  	{ 	ld64	d9, sp, 48 }
+; CHECK:  	{ 	ld64	d8, sp, 56 }
+; CHECK:  	{ 	ld32	lr, sp, 68 }
+; CHECK:  	{ 	addi32{{(_w)?}}	sp, sp, 72 }
+; CHECK:  	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK:  .Lfunc_end4:
+; CHECK:  	.size	test_copy_elim_stress, .Lfunc_end4-test_copy_elim_stress
+; CHECK:                                          // -- End function
+; CHECK:  	.globl	test_gpr_copy_elim_stress       // -- Begin function test_gpr_copy_elim_stress
+; CHECK:  	.type	test_gpr_copy_elim_stress,@function
+; CHECK:  test_gpr_copy_elim_stress:              // @test_gpr_copy_elim_stress
+; CHECK:  // %bb.0:                               // %entry
+; CHECK:  	{ 	xor32	r0, r0, r0 }
+; CHECK:  	{ 	subi32	sp, sp, 40 }
+; CHECK:  	{ 	addi32{{(_w)?}}	r1, sp, 20 }
+; CHECK:  	{ 	st32	lr, r1, 0 }
+; CHECK:  	{ 	st32	r11, r1, 4 }
+; CHECK:  	{ 	st32	r10, r1, 8 }
+; CHECK:  	{ 	st32	r9, r1, 12 }
+; CHECK:  	{ 	st32	r8, r1, 16 }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i32 }
+; CHECK:  	{ 	st32	r1, sp, 16; 	xor32	r0, r0, r0; 	nop } // 4-byte Folded Spill
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i32 }
+; CHECK:  	{ 	st32	r1, sp, 12; 	xor32	r0, r0, r0; 	nop } // 4-byte Folded Spill
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i32 }
+; CHECK:  	{ 	st32	r1, sp, 8; 	xor32	r0, r0, r0; 	nop } // 4-byte Folded Spill
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i32 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	move32	r11, r1; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i32 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	move32	r8, r1; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i32 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	move32	r9, r1; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i32 }
+; CHECK:  	{ 	xor32	r0, r0, r0; 	move32	r10, r1; 	nop }
+; CHECK:  	{ 	jal_w{{(\.s[012])?}}	lr, get_i32 }
+; CHECK:  	{ 	ld32	r2, sp, 16; 	ld32	r3, sp, 12; 	xor32	r0, r0, r0 } // 8-byte Folded Reload
+; CHECK:  	{ 	add32	r2, r2, r3; 	ld32	r3, sp, 8; 	nop } // 4-byte Folded Reload
+; CHECK:  	{ 	add32	r2, r2, r3 }
+; CHECK:  	{ 	add32	r2, r2, r11 }
+; CHECK:  	{ 	add32	r2, r2, r8 }
+; CHECK:  	{ 	add32	r2, r2, r9 }
+; CHECK:  	{ 	add32	r2, r2, r10 }
+; CHECK:  	{ 	add32	r1, r2, r1 }
+; CHECK:  	{ 	xor32	r0, r0, r0 }
+; CHECK:  	{ 	ld32	lr, sp, 20 }
+; CHECK:  	{ 	ld32	r11, sp, 24 }
+; CHECK:  	{ 	ld32	r10, sp, 28 }
+; CHECK:  	{ 	ld32	r9, sp, 32 }
+; CHECK:  	{ 	ld32	r8, sp, 36 }
+; CHECK:  	{ 	addi32{{(_w)?}}	sp, sp, 40 }
+; CHECK:  	{ 	nop }
+; CHECK:  	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK:  .Lfunc_end5:
+; CHECK:  	.size	test_gpr_copy_elim_stress, .Lfunc_end5-test_gpr_copy_elim_stress
+; CHECK:                                          // -- End function
+; CHECK:  	.section	".note.GNU-stack","",@progbits
+
+; SP-base post-inc load of stack constant (d_ldw_post_imm), then add64 into save regs.
+; DR64 copies still use or64 (never add64-with-r0); identity or64s eliminated where possible.
+
+
+declare i64 @get_i64()
+declare void @use_i64(i64)
+declare i32 @get_i32()
+
+;Test 1: DR64 copy pattern — OR64 used for DR64 register moves.
+;When the register allocator generates a DR64 copy, it should use
+;OR64 rd, rs, rs (not ADD64 rd, rs, R0 which would be a register bank error).
+
+define i64 @test_dr64_copy_or64(i64 %a) nounwind {
+entry:
+; DR64 operations should use OR64 for copies, not ADD64 with GPR registers
+  %v1 = call i64 @get_i64()
+  %v2 = call i64 @get_i64()
+  %v3 = call i64 @get_i64()
+  %s1 = add i64 %v1, %v2
+  %s2 = add i64 %s1, %v3
+  %s3 = add i64 %s2, %a
+  ret i64 %s3
+}
+
+;Test 2: Multiple DR64 values forcing register-to-register copies.
+;When many i64 values are live, the allocator may need to move values
+;between DR64 registers. These moves should use OR64, not GPR instructions.
+
+define i64 @test_dr64_many_copies(i64 %a, i64 %b, i64 %c, i64 %d) nounwind {
+entry:
+; DR64 copies should use or64 (not add64 with GPR zero reg)
+  %v1 = add i64 %a, 1
+  %v2 = add i64 %b, 2
+  %v3 = add i64 %c, 3
+  %v4 = add i64 %d, 4
+  call void @use_i64(i64 %v1)
+  call void @use_i64(i64 %v2)
+  call void @use_i64(i64 %v3)
+  call void @use_i64(i64 %v4)
+  %s1 = add i64 %v1, %v2
+  %s2 = add i64 %s1, %v3
+  %s3 = add i64 %s2, %v4
+  ret i64 %s3
+}
+
+;Test 3: GPR identity pattern — returning argument directly should
+;not produce a COPY from R1 to R1.
+
+define i32 @test_no_identity_copy(i32 %x) nounwind {
+entry:
+; Should not have a COPY r1, r1 or MOVE32 r1, r1
+  ret i32 %x
+}
+
+;Test 4: DR64 return — returning DR64 argument directly.
+;Should not produce OR64 d0, d0, d0 (identity eliminated).
+
+define i64 @test_no_dr64_identity(i64 %x) nounwind {
+entry:
+; Returning %x directly in D0 — no OR64 d0, d0, d0 needed
+  ret i64 %x
+}
+
+;Test 5: Stress copy elimination with many DR64 values across calls.
+;Generates many DR64 copies; the copy eliminator should remove redundancies.
+
+define i64 @test_copy_elim_stress() nounwind {
+entry:
+  %c1 = call i64 @get_i64()
+  %c2 = call i64 @get_i64()
+  %c3 = call i64 @get_i64()
+  %c4 = call i64 @get_i64()
+  %c5 = call i64 @get_i64()
+  %c6 = call i64 @get_i64()
+  %c7 = call i64 @get_i64()
+  %c8 = call i64 @get_i64()
+  ; All c1-c8 are live — forces DR64 register shuffling
+  %s1 = add i64 %c1, %c2
+  %s2 = add i64 %s1, %c3
+  %s3 = add i64 %s2, %c4
+  %s4 = add i64 %s3, %c5
+  %s5 = add i64 %s4, %c6
+  %s6 = add i64 %s5, %c7
+  %s7 = add i64 %s6, %c8
+  ret i64 %s7
+}
+
+;Test 6: GPR copy stress — many i32 values across calls.
+;Tests that GPR copies (COPY/MOVE32) are eliminated when redundant.
+
+define i32 @test_gpr_copy_elim_stress() nounwind {
+entry:
+  %c1 = call i32 @get_i32()
+  %c2 = call i32 @get_i32()
+  %c3 = call i32 @get_i32()
+  %c4 = call i32 @get_i32()
+  %c5 = call i32 @get_i32()
+  %c6 = call i32 @get_i32()
+  %c7 = call i32 @get_i32()
+  %c8 = call i32 @get_i32()
+  %s1 = add i32 %c1, %c2
+  %s2 = add i32 %s1, %c3
+  %s3 = add i32 %s2, %c4
+  %s4 = add i32 %s3, %c5
+  %s5 = add i32 %s4, %c6
+  %s6 = add i32 %s5, %c7
+  %s7 = add i32 %s6, %c8
+  ret i32 %s7
+}

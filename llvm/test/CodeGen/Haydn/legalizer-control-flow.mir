@@ -1,0 +1,122 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=legalizer %s -o - | FileCheck %s
+#
+# Test control flow legalization (branches, G_BRCOND, G_BR, G_PHI, G_SELECT).
+# These should be legal for Haydn (pass through unchanged by the legalizer).
+
+---
+name:            test_brcond
+legalized:       false
+tracksRegLiveness: true
+registers:
+  - { id: 0, class: _, preferred-register: '' }
+  - { id: 1, class: _, preferred-register: '' }
+  - { id: 2, class: _, preferred-register: '' }
+  - { id: 3, class: _, preferred-register: '' }
+  - { id: 4, class: _, preferred-register: '' }
+# CHECK-LABEL: name: test_brcond
+# CHECK: G_BRCOND
+# CHECK: G_BR
+body:             |
+  bb.0.entry:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $r0, $r1
+
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(sgt), %0, %1
+    G_BRCOND %2(s1), %bb.1
+    G_BR %bb.2
+
+  bb.1:
+    %3:_(s32) = G_ADD %0, %1
+    $r0 = COPY %3
+    RET implicit $r0, implicit $r15
+
+  bb.2:
+    %4:_(s32) = G_SUB %0, %1
+    $r0 = COPY %4
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_br
+legalized:       false
+tracksRegLiveness: true
+registers:
+  - { id: 0, class: _, preferred-register: '' }
+  - { id: 1, class: _, preferred-register: '' }
+  - { id: 2, class: _, preferred-register: '' }
+# CHECK-LABEL: name: test_br
+# CHECK: G_BR %bb.1
+body:             |
+  bb.0.entry:
+    successors: %bb.1(0x80000000)
+    liveins: $r0
+
+    %0:_(s32) = COPY $r0
+    G_BR %bb.1
+
+  bb.1:
+    %1:_(s32) = G_CONSTANT i32 42
+    %2:_(s32) = G_ADD %0, %1
+    $r0 = COPY %2
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_phi_s32
+legalized:       false
+tracksRegLiveness: true
+registers:
+  - { id: 0, class: _, preferred-register: '' }
+  - { id: 1, class: _, preferred-register: '' }
+  - { id: 2, class: _, preferred-register: '' }
+  - { id: 3, class: _, preferred-register: '' }
+  - { id: 4, class: _, preferred-register: '' }
+  - { id: 5, class: _, preferred-register: '' }
+# CHECK-LABEL: name: test_phi_s32
+# CHECK: G_PHI
+body:             |
+  bb.0.entry:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $r0, $r1
+
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(sgt), %0, %1
+    G_BRCOND %2(s1), %bb.1
+    G_BR %bb.2
+
+  bb.1:
+    successors: %bb.3(0x80000000)
+
+    %3:_(s32) = G_ADD %0, %1
+    G_BR %bb.3
+
+  bb.2:
+    successors: %bb.3(0x80000000)
+
+    %4:_(s32) = G_SUB %0, %1
+    G_BR %bb.3
+
+  bb.3:
+    %5:_(s32) = G_PHI %3, %bb.1, %4, %bb.2
+    $r0 = COPY %5
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_select_s32
+legalized:       false
+# CHECK-LABEL: name: test_select_s32
+# CHECK: G_SELECT
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(sgt), %0, %1
+    %3:_(s32) = G_SELECT %2, %0, %1
+    $r0 = COPY %3
+    RET implicit $r0, implicit $r15
+...

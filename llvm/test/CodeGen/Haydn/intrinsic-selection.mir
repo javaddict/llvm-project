@@ -1,0 +1,94 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select -verify-machineinstrs %s -o - | FileCheck %s
+#
+# Test that G_INTRINSIC for Haydn DSP intrinsics is correctly selected
+# to target instructions by the instruction selector.
+
+---
+name:            test_mul64_ss_ll
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_mul64_ss_ll
+# CHECK: MUL64_LL
+# CHECK-NOT: G_INTRINSIC
+body:             |
+  bb.0.entry:
+    liveins: $d0, $d1
+    %0:_(s64) = COPY $d0
+    %1:_(s64) = COPY $d1
+    %2:_(s64) = G_INTRINSIC intrinsic(@llvm.haydn.mul64.ss.ll), %0(s64), %1(s64)
+    $d0 = COPY %2(s64)
+    RET implicit $d0, implicit $r0, implicit $r15
+...
+
+---
+name:            test_add32s
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_add32s
+# CHECK: ADD32S
+# CHECK-NOT: G_INTRINSIC
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_INTRINSIC intrinsic(@llvm.haydn.add32s), %0(s32), %1(s32)
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_nsa32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_nsa32
+# CHECK: NSA32
+# CHECK-NOT: G_INTRINSIC
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = G_INTRINSIC intrinsic(@llvm.haydn.nsa32), %0(s32)
+    $r0 = COPY %1(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_mac32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_mac32
+# Haydn_mac32 (acc + a*b) lowers to a*b via MUL64_LL + bank moves (the
+# invented MUL32 was removed) then ADD32. The distinctive instr is MUL64_LL.
+# CHECK: MUL64_LL
+# CHECK-NOT: G_INTRINSIC
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1, $r2
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = COPY $r2
+    %3:_(s32) = G_INTRINSIC intrinsic(@llvm.haydn.mac32), %0(s32), %1(s32), %2(s32)
+    $r0 = COPY %3(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            test_mula64_ss_ll
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: test_mula64_ss_ll
+# MULA64_LL is the acc-form MAC: the selector emits an OR64 (seed the
+# destination with the accumulator) followed by MULA64_LL.
+# CHECK: MULA64_LL
+# CHECK-NOT: G_INTRINSIC
+body:             |
+  bb.0.entry:
+    liveins: $d0, $d1, $d2
+    %0:_(s64) = COPY $d0
+    %1:_(s64) = COPY $d1
+    %acc:_(s64) = COPY $d2
+    %2:_(s64) = G_INTRINSIC intrinsic(@llvm.haydn.mula64.ss.ll), %acc(s64), %0(s64), %1(s64)
+    $d0 = COPY %2(s64)
+    RET implicit $d0, implicit $r0, implicit $r15
+...

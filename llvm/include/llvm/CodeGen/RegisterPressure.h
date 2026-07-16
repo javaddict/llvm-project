@@ -401,6 +401,10 @@ public:
   RegPressureTracker(IntervalPressure &rp) : P(rp), RequireIntervals(true) {}
   RegPressureTracker(RegionPressure &rp) : P(rp), RequireIntervals(false) {}
 
+  /// Live register set at the current tracker position (AIE PreRA pressure
+  /// heuristics / estimatePressureDiff).
+  const LiveRegSet &getLiveRegs() const { return LiveRegs; }
+
   LLVM_ABI void reset();
 
   LLVM_ABI void init(const MachineFunction *mf, const RegisterClassInfo *rci,

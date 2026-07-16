@@ -1,0 +1,35 @@
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+# RUN:   -run-pass=finalize-isel -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s
+#
+# REGRESSION TEST: B3 — MULSSH/MULSUH/MULUUH are NON-destructive.
+#
+# Bug: Legacy MULSSH/MULSUH/MULUUH defs (HaydnInstrInfoAuto.td) had a spurious
+# `let Constraints = "$rd = $rs2"` (destructive tied-def). Golden
+# (slot1_mac_instruction_list.json) says these are NON-destructive: rt, rs1, rs2
+# are distinct (GPR_Write_Port=[rt], GPR_Read_Port=[rs1,rs2], no tie). The
+# spurious tie forced a TwoAddress MOV copy and corrupted the result when the
+# caller passed the same register for rt and rs2 with different intent.
+#
+# Fix (B3): REMOVE the `let Constraints = "$rd = $rs2"` from the 3 legacy
+# defs. `(outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2)` — no tie.
+#
+# Test design: MIR with a MULSSH where rt, rs1, rs2 are distinct vregs. Before
+# the fix, the tied constraint forced rt==rs2 (a copy), which a strict verifier
+# flags as a constraint violation when they're distinct. After the fix, no tie.
+---
+name:            test_mulssh_nondestructive
+tracksRegLiveness: true
+selected: true
+body:             |
+  bb.0.entry:
+    %0:gpr32 = IMPLICIT_DEF
+    %1:gpr32 = IMPLICIT_DEF
+    %2:gpr32 = MULSSH %0:gpr32, %1:gpr32
+    $r0 = COPY %2:gpr32
+    RET implicit $r0, implicit $r15
+...
+
+# CHECK-LABEL: name: test_mulssh_nondestructive
+# CHECK: MULSSH %0, %1
+# CHECK-NOT: tied

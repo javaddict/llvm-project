@@ -1,0 +1,27 @@
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
+
+; Simple load/store
+define void @test_store(ptr %p, i32 %v) {
+  store i32 %v, ptr %p
+  ret void
+}
+; CHECK-LABEL: test_store:
+; CHECK: st32
+
+define i32 @test_load(ptr %p) {
+  %v = load i32, ptr %p
+  ret i32 %v
+}
+; CHECK-LABEL: test_load:
+; CHECK: ld32
+
+; Array access
+define i32 @test_array(ptr %p, i32 %idx) {
+  %ptr = getelementptr i32, ptr %p, i32 %idx
+  %v = load i32, ptr %ptr
+  ret i32 %v
+}
+; CHECK-LABEL: test_array:
+; CHECK: sll32
+; CHECK: add32
+; CHECK: ld32
