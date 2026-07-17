@@ -127,7 +127,7 @@
 ; CHECK:  	{ 	st32	lr, sp, 28 }
 ; CHECK:  	.cfi_def_cfa_offset 32
 ; CHECK:  	.cfi_offset lr, 28
-; CHECK:  	{ 	subi32	sp, sp, 12 }
+; CHECK:  	{ 	subi32	sp, sp, 16 }
 ; CHECK:  	{ 	st32	r1, sp, 8 }
 ; CHECK:  	{ 	addi32{{(_w)?}}	r12, r0, 1 }
 ; CHECK:  	{ 	addi32{{(_w)?}}	r2, r0, 2; 	move32	r1, r12; 	nop }
@@ -140,7 +140,7 @@
 ; CHECK:  	{ 	st32	fp, sp, 0 }
 ; CHECK:  	{ 	jal_w	lr, many_params }
 ; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32{{(_w)?}}	sp, sp, 12 }
+; CHECK:  	{ 	addi32{{(_w)?}}	sp, sp, 16 }
 ; CHECK:  	{ 	xor32	r0, r0, r0 }
 ; CHECK:  	{ 	ld32	lr, sp, 28 }
 ; CHECK:  	{ 	addi32{{(_w)?}}	sp, sp, 32 }
@@ -159,7 +159,7 @@
 ; CHECK:  	{ 	st32	lr, sp, 44 }
 ; CHECK:  	.cfi_def_cfa_offset 48
 ; CHECK:  	.cfi_offset lr, 44
-; CHECK:  	{ 	addi32{{(_w)?}}	r2, sp, 24; 	subi32	sp, sp, 12; 	nop }
+; CHECK:  	{ 	addi32{{(_w)?}}	r2, sp, 24; 	subi32	sp, sp, 16; 	nop }
 ; CHECK:  	{ 	st32	r1, r2, 0 }
 ; CHECK:  	{ 	ld32	r1, r2, 0 }
 ; CHECK:  	{ 	addi32{{(_w)?}}	r2, r0, 2 }
@@ -174,7 +174,7 @@
 ; CHECK:  	{ 	st32	fp, sp, 8 }
 ; CHECK:  	{ 	jal_w	lr, many_params }
 ; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32{{(_w)?}}	sp, sp, 12 }
+; CHECK:  	{ 	addi32{{(_w)?}}	sp, sp, 16 }
 ; CHECK:  	{ 	xor32	r0, r0, r0 }
 ; CHECK:  	{ 	ld32	lr, sp, 44 }
 ; CHECK:  	{ 	addi32{{(_w)?}}	sp, sp, 48 }

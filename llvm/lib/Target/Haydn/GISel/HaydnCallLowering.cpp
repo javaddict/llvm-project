@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnCallLowering.h"
+#include "HaydnFrameLowering.h"
 #include "HaydnISelLowering.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnRegisterInfo.h"
@@ -25,6 +26,8 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/Function.h"
+#include "llvm/Support/Alignment.h"
+#include "llvm/Support/MathExtras.h"
 
 using namespace llvm;
 
@@ -501,13 +504,21 @@ bool HaydnCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
 
   // Patch the now-known outgoing stack size into the already-inserted
   // ADJCALLSTACKDOWN, then insert the call and ADJCALLSTACKUP. The pseudos set
-  // MaxCallFrameSize (read by determineFrameLayout to reserve outgoing-arg
-  // space in the static frame) and are erased by ExpandPseudos / PEI. For the
-  // dynamic-alloca case where the space can't be reserved statically
-  // HaydnFrameLowering::eliminateCallFramePseudoInstr emits real SP
-  // adjustments. The frame-index eliminator observes the call sequence via
-  // SPAdj.
-  CallSeqStart.addImm(Assigner.StackSize).addImm(/*align*/ 0);
+  // MaxCallFrameSize (read by determineFrameLayout) and are expanded by
+  // eliminateCallFramePseudoInstr. Round StackSize up to the target stack
+  // alignment so SP never becomes ≡4 mod 8 across a call (B1: single i32
+  // stack arg with Size=4 left StackSize=4; callee DR st64 then faults).
+  // Bundle128 is 16-byte text only — SP ABI stays StackAlign(8) for DR.
+  // Round StackSize up to StackAlign so SP never becomes ≡4 mod 8 across a
+  // call (B1). Operand 1 of ADJCALLSTACK* is the FrameSetup/Destroy twin
+  // amount for the verifier (must match op0, not "align") — keep 0 as
+  // Haydn/RISC-V style second imm when unused, or pass the same amount.
+  // Bundle128 is 16-byte text only; SP ABI stays StackAlign(8) for DR st64.
+  const Align StackAlign =
+      MF.getSubtarget<HaydnSubtarget>().getFrameLowering()->getStackAlign();
+  const uint64_t CallFrameBytes =
+      alignTo(static_cast<uint64_t>(Assigner.StackSize), StackAlign);
+  CallSeqStart.addImm(static_cast<int64_t>(CallFrameBytes)).addImm(0);
 
   // Attach the call-preserved regmask (CSR_Haydn = R8-R11, R15, D8-D15).
   // Without it, only TableGen Defs count as call clobbers. That list covers
@@ -527,8 +538,8 @@ bool HaydnCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
 
   MIRBuilder.insertInstr(MIB);
   MIRBuilder.buildInstr(Haydn::ADJCALLSTACKUP)
-      .addImm(Assigner.StackSize)
-      .addImm(/*align*/ 0);
+      .addImm(static_cast<int64_t>(CallFrameBytes))
+      .addImm(0);
 
   // Copy returned values into result vregs. Mirrors RISCVCallLowering::lowerCall
   // X86CallLowering::lowerCall: splitToValueTypes + RetCC + CallReturnHandler

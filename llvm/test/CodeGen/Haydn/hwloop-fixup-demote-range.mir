@@ -1,22 +1,24 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
-# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,DEFAULT
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,PRODUCT
 # RUN: llc -haydn-enable-hwloop-demote=true -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
-# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,DEFAULT
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,PRODUCT
+# RUN: llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,DEBUGOFF
 #
-# REGRESSION (P0.1 /): HaydnFixupHwLoops must NOT fatal when HWLR_BEGIN
-# (uimm6) overflows after layout, and must NOT erase-setup only (single-pass
-# body after Role B killed the soft back-edge). Product default demotes to a
-# software loop (LoopDec+LoopJNZ). First RUN uses default flags (no
-# experimental-only opt-in) to prove soft control remains for out-of-range.
+# W0.2 / G-RISK-DEMOTE product lock:
+# - Product default (demote ON): out-of-range SET demotes to LoopDec+LoopJNZ.
+# - demote=true explicit: same as product (not an experimental opt-in).
+# - demote=false: debug-only force erase-setup — SET gone, NO soft edge
+#   (once-through body risk). NOT a product setting.
 #
 # demote_uimm6: spacer MBB between preheader and header makes StartOff > 252
 # even with only t−3 NOPs after SET. Shorten cannot pull spacer MIs into the
-# preheader, so the pass demotes: SET_HWLOOP is erased and the latch gets a
-# countable back-edge (loop_dec + loop_jnz).
+# preheader, so the product path demotes: SET_HWLOOP is erased and the latch
+# gets a countable back-edge (loop_dec + loop_jnz).
 #
 # shorten_uimm6: many NOPs after SET in the *same* preheader — StartOff would
 # exceed uimm6, but shorten moves them before SET while keeping ≥3 after SET.
-# SET_HWLOOP is retained.
+# SET_HWLOOP is retained (both product and debug-off).
 
 --- |
   define dso_local void @demote_uimm6(ptr nocapture writeonly %out) {
@@ -96,9 +98,14 @@ body:             |
     RET implicit killed $r15
 
 # CHECK-LABEL: name: demote_uimm6
-# DEFAULT-NOT: SET_HWLOOP
-# CHECK: LoopDec
-# CHECK: LoopJNZ
+# Product demote-first: soft countable edge (not erase-only once-through).
+# PRODUCT-NOT: SET_HWLOOP
+# PRODUCT: LoopDec
+# PRODUCT: LoopJNZ
+# Debug demote OFF: erase-setup only — no soft edge (once-through risk).
+# DEBUGOFF-NOT: SET_HWLOOP
+# DEBUGOFF-NOT: LoopDec
+# DEBUGOFF-NOT: LoopJNZ
 # CHECK: bb.3.exit
 
 ...

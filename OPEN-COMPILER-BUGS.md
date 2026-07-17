@@ -7,7 +7,7 @@
 > `BundleSim/work/yarpgen_fail_archive_20260716/` re-run against HEAD.
 >
 > Product freestanding + pipeline Step 0–1 + residual wave: **green** (see
-> `haydn-plans/Haydn_Master_Plan.md`). Kernel-side GISEL CSEMap ICE and HWLOOP
+> `haydn-plans/STATUS.md`). Kernel-side GISEL CSEMap ICE and HWLOOP
 > t−3 geometry fixed on `new_yolo_3`. No OPEN hunt bugs.
 >
 > ### Currently OPEN

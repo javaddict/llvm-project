@@ -12,6 +12,12 @@
 //
 // Numeric limits: HaydnHWLoopContracts.h (shared with formation).
 //
+// Product narrative (W0.2 / G-RISK-DEMOTE): demote-first, NOT erase-only.
+// Role B already removed the software back-edge when forming ZOL. Erasing
+// SET alone on a *live* body yields a once-through fallthrough (wrong-code).
+// Product recovery is soft LoopDec+LoopJNZ when a free counter exists;
+// live demote failure is fatal. demote OFF is debug-only (force erase-setup).
+//
 // Closed contracts (no recover-by-fatal, no monkey-patch special cases):
 //
 // 1. Live MBB operands
@@ -49,7 +55,8 @@
 // d. If demote cannot install a correct soft edge on a *live* body
 // report_fatal_error — never erase-only once-through.
 // Dead Header/Latch still allow erase-setup only (body gone).
-// Debug: -haydn-enable-hwloop-demote=false force erase-setup.
+// Debug only: -haydn-enable-hwloop-demote=false force erase-setup
+// (once-through body risk — never a product setting).
 // 4. Pipeline
 // addPreEmit: BranchRelaxation → FixupHwLoops → BranchRelaxation again
 // so Fixup growth cannot leave branches past simm12.
@@ -82,7 +89,7 @@ using namespace llvm;
 
 #define DEBUG_TYPE "haydn-fixup-hwloops"
 
-// Product demote policy (update): default ON.
+// Product demote policy (W0.2 lock): default ON — demote-first, not erase-only.
 // Out-of-range / unencodable SET must not drop control and leave a single-pass
 // body (Role B already removed the software back-edge). Recovery ladder:
 // a) demoteToSoftwareLoop (LoopDec+LoopJNZ) when free counter GPR exists
@@ -90,13 +97,14 @@ using namespace llvm;
 // c) live body but demote cannot install soft edge → report_fatal_error
 // (never silent erase-only once-through)
 // Counter pick: LivePhysRegs at SET site + loop-block mention filter; never
-// invent a clobbering free AT. Flag OFF = debug force erase-setup only.
+// invent a clobbering free AT.
+// Flag OFF = debug-only force erase-setup (once-through risk; not product).
 static cl::opt<bool> EnableHaydnHwLoopDemote(
     "haydn-enable-hwloop-demote", cl::Hidden, cl::init(true),
     cl::desc("Demote out-of-range / invalid ZOL to software LoopDec+LoopJNZ "
              "when a free counter GPR exists (LivePhysRegs). Default ON "
-             "(product). OFF = force erase-setup only (debug; not "
-             "semantics-preserving)."));
+             "(product demote-first). OFF = force erase-setup only "
+             "(debug only; once-through body risk; not product)."));
 namespace {
 
 // Aliases from HaydnHWLoopContracts.h (sole numeric source).
@@ -168,7 +176,8 @@ private:
   static void stripResidualCountdown(MachineBasicBlock *Latch, Register Reg);
 
   // Pick a free GPR for soft-loop countdown at \p InsertPt in \p Preheader.
-  // Returns invalid Register if none is free (caller must erase-only).
+  // Returns invalid Register if none is free (caller must refuse erase-only
+  // on a live body — fatal via recoverRangeOrOrder).
   Register pickCounterReg(const LoopBlockSet &Blocks, Register Prefer,
                           const HaydnSubtarget &ST, MachineBasicBlock &Preheader,
                           MachineBasicBlock::iterator InsertPt) const;
@@ -971,13 +980,15 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
          "t-3 setup gap must be satisfied after deficit-only pad");
 #endif
 
-  // Range re-check (begin + end) — one path for SET_* and LoopStart
-  // Product : always demote-first on unencodable/range-bad SET.
-  // Flag OFF is debug force erase-setup only (not semantics-preserving).
+  // Range re-check (begin + end) — one path for SET_* and LoopStart.
+  // Product (default demote ON): demote-first on unencodable/range-bad SET.
+  // Debug only (demote OFF): force erase-setup — once-through body risk;
+  // never a product setting (W0.2 / G-RISK-DEMOTE).
   auto recoverRangeOrOrder = [&](const char *Why) -> bool {
     if (!EnableHaydnHwLoopDemote) {
       LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: " << Why
-                        << " — erase setup only (demote disabled/debug)\n");
+                        << " — erase setup only (demote disabled/debug; "
+                           "not product)\n");
       return eraseHardwareSetup(SetMI);
     }
     LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: " << Why

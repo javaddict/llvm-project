@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 //
 // This file implements a post-register-allocation pass that eliminates
-// redundant COPY instructions for the Haydn VLIW DSP target. Four patterns
-// are handled:
+// redundant COPY instructions for the Haydn VLIW DSP target. Patterns
+// handled:
 //
 // 1. Identity COPY: COPY rA, rA (source == dest) -> remove entirely.
 // A copy from a register to itself is a no-op.
@@ -17,8 +17,10 @@
 // before any subsequent use -> remove. The copy's result is never
 // consumed, so it is dead code. Works for both GPR32 and DR64.
 //
-// 3. COPY to R0: NOT eliminated. R0 is soft-zero (silicon does not force
-// zero); only generic dead-copy analysis may remove unused R0 defs.
+// 3. COPY/MOVE32/OR{32,64} *to* R0: never eliminated as dead. R0 is
+// soft-zero (silicon does not force zero). Writes to R0 may be deliberate
+// temps that later sequences re-zero; deadness analysis must not drop them.
+// True identity forms (src == dst) remain removable as pure no-ops.
 //
 // 4. OR64 identity copy: OR64 dN, dN, dN where all three operands are
 // the same DR64 register -> remove. OR64 rd, rs, rs is the standard
@@ -51,8 +53,6 @@ STATISTIC(NumIdentityCopiesEliminated,
           "Number of identity copies eliminated (src == dst)");
 STATISTIC(NumDeadCopiesEliminated,
           "Number of dead copies eliminated (dst overwritten before use)");
-STATISTIC(NumCopiesToR0Eliminated,
-          "Number of copies to R0 eliminated (R0 is hardwired zero)");
 STATISTIC(NumOR64IdentityEliminated,
           "Number of OR64 identity copies eliminated (DR64 rd, rs, rs where rd==rs)");
 STATISTIC(NumOR32IdentityEliminated,
@@ -172,6 +172,11 @@ bool HaydnCopyElim::runOnMachineFunction(MachineFunction &MF) {
         continue;
       }
 
+      // Soft-zero R0: never delete non-identity bank-copies into R0 as dead.
+      // (W0.3 / durable rule 31 — silicon does not force R0=0.)
+      if (DstReg == Haydn::R0)
+        continue;
+
       if (isDeadCopy(MI, DstReg, MBB)) {
         if (IsOR64) {
           LLVM_DEBUG(dbgs() << "  Eliminating dead OR64 bank-copy: " << MI);
@@ -220,13 +225,17 @@ bool HaydnCopyElim::runOnMachineFunction(MachineFunction &MF) {
         continue;
       }
 
-      // R0 is a *soft-zero* (HaydnRegisterInfo / HaydnInstrInfo): silicon does
-      // not force R0=0. Never delete writes to R0 as "hardwired".
-      // Deadness of R0 defs is handled only by the normal dead-copy check below
-      // when liveness proves the def unused.
+      // Case 2: Soft-zero R0 — never eliminate non-identity COPY/MOVE32 into
+      // R0. Silicon does not hardwire R0=0; treating writes as free "dead"
+      // hardwired sinks is incorrect (W0.3 / durable rule 31). True identity
+      // COPY r0,r0 is already handled above.
+      if (DstReg == Haydn::R0) {
+        LLVM_DEBUG(dbgs() << "  Keeping write to soft-zero R0: " << MI);
+        continue;
+      }
 
-      // Case 2: Dead copy -- the destination is overwritten before any use.
-      // Works for both GPR32 and DR64 registers.
+      // Case 3: Dead copy -- the destination is overwritten before any use.
+      // Works for both GPR32 and DR64 registers. R0 is excluded above.
       if (isDeadCopy(MI, DstReg, MBB)) {
         LLVM_DEBUG(dbgs() << "  Eliminating dead copy: " << MI);
         ++NumDeadCopiesEliminated;

@@ -56,9 +56,15 @@ def CC_Haydn : CallingConv<[
   CCIfType<[i32], CCAssignToReg<[R1, R2, R3, R4, R5, R6, R7]>>,
   CCIfType<[f32], CCBitConvertToType<i32>>,
 
-  // Stack fallback with 8-byte alignment
-  CCIfType<[i32, f32, i64, f64, v2i32, v2f32, v4i16],
-    CCAssignToStack<4, 8>>
+  // Stack fallback. Slot size matches natural width; MinAlign is 8 so DR
+  // (st64) and i64 stack slots stay 8-byte aligned. i32/f32 use Size=8 (not
+  // 4) so a single stack-passed int still advances StackSize by 8 — otherwise
+  // ADJCALLSTACKDOWN 4 leaves SP at ≡4 mod 8 and the callee's DR CSR spills
+  // MEMORY_FAULT (B1 fir_blms* freestanding dual). Bundle128 is a 16-byte
+  // *text* parcel; stack ABI remains 8-byte (DR min). Call-frame SP adjust
+  // still rounds up to StackAlign in FrameLowering / CallLowering.
+  CCIfType<[i32, f32], CCAssignToStack<8, 8>>,
+  CCIfType<[i64, f64, v2i32, v2f32, v4i16], CCAssignToStack<8, 8>>
 ]>;
 
 // Return value convention: R1-R2 for i32/ptr (R0 is reserved soft-zero).

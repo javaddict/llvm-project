@@ -26,6 +26,11 @@ class HaydnFrameLowering : public TargetFrameLowering {
   const HaydnSubtarget &STI;
 
 public:
+  // Stack ABI alignment is 8 bytes: DR64 st64/ld64 require 8-byte addresses
+  // (BundleSim D_SDW_* MEMORY_FAULT otherwise). Bundle128 is a 16-byte *text*
+  // parcel only — do not confuse code alignment with SP ABI. Call-frame
+  // adjustments always round up to this StackAlign (see
+  // eliminateCallFramePseudoInstr + CallLowering).
   explicit HaydnFrameLowering(const HaydnSubtarget &STI)
       : TargetFrameLowering(StackGrowsDown,
                             /*StackAlignment=*/Align(8),
@@ -79,9 +84,9 @@ public:
 
   // Expand ADJCALLSTACKDOWN/UP pseudos to real SP adjustments. Because
   // hasReservedCallFrame is false, outgoing stack args are not pre-reserved
-  // in the prologue, so each call must adjust SP around itself. The amount is
-  // operand 0; operand 1 is the alignment (currently unused — stack alignment
-  // is fixed at 8 bytes). F17.
+  // in the prologue, so each call must adjust SP around itself. Operand 0 is
+  // the byte amount; it is rounded up to StackAlign (8) so SP never lands at
+  // ≡4 mod 8 across a call (B1). Operand 1 is the requested align (optional).
   MachineBasicBlock::iterator
   eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
                                 MachineBasicBlock::iterator MI) const override;

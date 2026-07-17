@@ -522,7 +522,9 @@ void HaydnPassConfig::addPreEmitPass() {
   // fixups after pack (size model). Pattern matches Hexagon: relax
   // then target fixup that can grow layout, then relax again.
   // 1. BranchRelaxation — Bundle128 simm fields
-  // 2. HaydnFixupHwLoops — SET_HWLOOP Off1/Off2 ÷4; erase-only demote
+  // 2. HaydnFixupHwLoops — SET_HWLOOP Off1/Off2 ÷4; product demote-first
+  //    (LoopDec+LoopJNZ when free counter; fatal if live demote fails).
+  //    demote OFF = debug erase-setup only — not product.
   // 3. BranchRelaxation — re-close after Fixup growth (e.g. long BEQZ_W)
   // No pack / no PostMachineScheduler here.
   addPass(&BranchRelaxationPassID);
