@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// AIE2 dual-scheduler contract (AIE_Sched_Flow_Adoption_Plan):
+// AIE2 dual-scheduler contract (topics/scheduling/TOPIC.md):
 //
 // Pre-RA: HaydnScheduleDAGMILive + HaydnPreRASchedStrategy
 // (pressure / live-range order for RA; CopyConstrain + mutations).
@@ -18,7 +18,7 @@
 // Do NOT revive VLIWMachineScheduler / ConvergingVLIWScheduler (G21/ UAF).
 // Do NOT use bare GenericScheduler via nullptr factory fallback.
 //
-// Plan: /ssd2/mhyang/haydn-plans/AIE_Sched_Flow_Adoption_Plan.md
+// Plan: /ssd2/mhyang/haydn-plans/topics/scheduling/TOPIC.md
 //
 //===----------------------------------------------------------------------===//
 

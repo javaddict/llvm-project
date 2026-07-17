@@ -111,6 +111,8 @@ cl::opt<bool> EnableHaydnHRResourceCycle(
 // ~4096 B un-relaxed; buffer=512 clears the seed. Default 1024 keeps
 // Hexagon-style headroom for yarpgen-scale TUs without forcing every
 // mid-range branch to long form.
+// W0.4 product floor: default MUST remain >= 1024 (do not lower without
+// re-proving yarpgen-scale BR undercount). Flag override is debug-only.
 // AIE has empty addPreEmitPass (no BR) — N/A there.
 static cl::opt<uint32_t> BranchRelaxSafetyBuffer(
     "haydn-branch-relax-safety-buffer", cl::Hidden, cl::init(1024),
@@ -1197,13 +1199,15 @@ void HaydnInstrInfo::insertIndirectBranch(
   // 2. If still no free reg: spill R11 to that FI, jump via RestoreBB
   // restore R11 there (same as RISCVInstrInfo::insertIndirectBranch).
   //
-  // AllowSpill=true was wrong here. Under greedy RA (high
-  // live pressure across a far branch), scavengeRegisterBackwards spilled a
-  // live-out GPR and reinserted the reload *after* the JALR_W terminator
-  // in the trampoline MBB. The reload is dead (never executed); the dest
-  // block saw a clobbered live-in → wrong oracle_u64 (seed2 @ -O1/-O2;
-  // seed7 @ -O2 same class). RISC-V uses AllowSpill=false and the RestoreBB
-  // path for the no-free-reg case; match that.
+  // PERMANENT PRODUCT CONTRACT (W0.4 / H5,A1): AllowSpill MUST stay false
+  // for branch-relax scavenging. Do not flip to true "to help pressure".
+  // AllowSpill=true was wrong here. Under greedy RA (high live pressure
+  // across a far branch), scavengeRegisterBackwards spilled a live-out GPR
+  // and reinserted the reload *after* the JALR_W terminator in the
+  // trampoline MBB. The reload is dead (never executed); the dest block saw
+  // a clobbered live-in → wrong oracle_u64 (seed2 @ -O1/-O2; seed7 @ -O2
+  // same class). RISC-V uses AllowSpill=false and the RestoreBB path for
+  // the no-free-reg case; match that. No-free-reg → manual R11 spill only.
   assert(RS && "RegScavenger required for long branching");
   assert(MBB.pred_size() == 1);
 
@@ -1225,7 +1229,7 @@ void HaydnInstrInfo::insertIndirectBranch(
 
   auto scavengeScratch = [&](MachineBasicBlock::iterator From) -> Register {
     // Scavenge only (AIE model: R12 is allocatable, never a free AT).
-    // AllowSpill must be false — see comment block above.
+    // W0.4 permanent contract: AllowSpill=false (see product-contract block).
     Register S = RS->scavengeRegisterBackwards(
         Haydn::GPR32RegClass, From, /*RestoreAfter=*/false, /*SpAdj=*/0,
         /*AllowSpill=*/false);

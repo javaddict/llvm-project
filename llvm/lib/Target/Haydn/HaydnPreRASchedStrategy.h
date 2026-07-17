@@ -11,7 +11,7 @@
 // MachineScheduler so Haydn can delay pressure-worsening SUnits exactly as AIE
 // does — not inventing a dual path).
 //
-// Plan: /ssd2/mhyang/haydn-plans/AIE_Sched_Flow_Adoption_Plan.md
+// Plan: /ssd2/mhyang/haydn-plans/topics/scheduling/TOPIC.md
 //
 //===----------------------------------------------------------------------===//
 

@@ -1056,20 +1056,29 @@ MachineBasicBlock::iterator HaydnFrameLowering::eliminateCallFramePseudoInstr(
     MachineFunction &MF, MachineBasicBlock &MBB,
     MachineBasicBlock::iterator MI) const {
   // F17: Expand ADJCALLSTACKDOWN/UP. hasReservedCallFrame is false, so each
-  // call sequence must adjust SP by the outgoing stack-arg size. The amount is
-  // operand 0; ADJCALLSTACKDOWN decrements SP (negate), ADJCALLSTACKUP
-  // increments it. A zero amount is a no-op. See F17 / -adjcallstack.
+  // call sequence must adjust SP by the outgoing stack-arg size. Operand 0 is
+  // the raw byte amount from CallLowering; ADJCALLSTACKDOWN decrements SP,
+  // ADJCALLSTACKUP restores it. Zero (after alignment) is a no-op.
+  //
+  // Alignment (B1 / fir_blms* freestanding dual): SP must stay StackAlign(8)
+  // across the call so the callee's DR CSR st64 spills never see ≡4 mod 8.
+  // CC can report StackSize=4 for a single i32 stack arg if Size=4 was used;
+  // always round Amount up to StackAlign (and to operand-1 align if larger).
   const HaydnInstrInfo *TII = MF.getSubtarget<HaydnSubtarget>().getInstrInfo();
   DebugLoc DL = MI->getDebugLoc();
   int64_t Amount = MI->getOperand(0).getImm();
+  // Defensive: CallLowering already rounds; re-align so any other producer
+  // of ADJCALLSTACK* cannot leave SP ≡4 mod StackAlign.
+  if (Amount > 0)
+    Amount = static_cast<int64_t>(
+        alignTo(static_cast<uint64_t>(Amount), getStackAlign()));
 
   if (Amount != 0) {
     unsigned AdjOpc;
     if (MI->getOpcode() == Haydn::ADJCALLSTACKDOWN) {
       // SP must DECREASE by Amount on ADJCALLSTACKDOWN. SUBI32 sp,sp,+Amount
-      // does exactly that. Do NOT negate Amount here — a prior `Amount =
-      // Amount` plus SUBI32 cancelled to a SP *increase* (grew up into the
-      // caller's frame, mis-aligned the next 8-byte spill, HANG).
+      // does exactly that. Do NOT negate Amount here — a prior bug plus
+      // SUBI32 cancelled to a SP *increase* (grew into the caller's frame).
       AdjOpc = Haydn::SUBI32;
     } else {
       AdjOpc = Haydn::ADDI32_W;
