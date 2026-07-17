@@ -6,7 +6,8 @@
 ; Pass optimizations tested here:
 ; Identity copy: COPY rA, rA (src == dst) → removed
 ; Dead copy: COPY rA, rB where rA overwritten before use → removed
-; Copy to R0: COPY r0, rX → removed (R0 is hardwired zero)
+; Copy to R0: NOT eliminated as "hardwired" — R0 is soft-zero (see
+; soft-zero-copy-r0.mir). True identity COPY r0,r0 may still be removed.
 
 ;===--- Identity copy: trivial self-copy should be eliminated ---===
 ; The compiler may not emit these directly, but if register allocation
@@ -31,15 +32,15 @@ define i32 @dead_copy_test(i32 %a, i32 %b) nounwind {
   ret i32 %r
 }
 
-;===--- Copy to R0 eliminated ---===
-; R0 is hardwired to zero. Any write to R0 is a no-op and should be
-; eliminated. We force a write to R0 by using a volatile store of 0
-; and returning 0 (which maps to R0).
+;===--- Soft-zero R0 is not a hardwired sink ---===
+; Returning 0 must not rely on "COPY to R0 is free/dead". R0 is soft-zero:
+; prologue zeros it; non-identity writes into R0 are preserved by CopyElim
+; (negative MIR coverage in soft-zero-copy-r0.mir).
 
 define i32 @copy_to_r0_test() nounwind {
 ; CHECK-LABEL: copy_to_r0_test:
-; R0 should never appear as a COPY destination.
-; CHECK-NOT: copy{{.*}}r0,
+; Soft-zero entry + return via JALR discarding link into R0 (function exit).
+; CHECK: xor32{{.*}}r0, r0, r0
 ; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
   ret i32 0
 }

@@ -96,20 +96,13 @@ void HaydnAsmPrinter::registerSymbolicOperands(const MCInst &Inst) const {
 }
 
 void HaydnAsmPrinter::emitWrappedInst(const MCInst &Inst) {
-  // E2b: BARE-EMIT — no BUNDLE wrap. The MCInst goes directly to the
-  // stream; the MC encoder's encodeInstruction (non-BUNDLE path) emits it via
-  // encodeSingleInstruction at its natural encoded width (EW_16/32/48/64Bit)
-  // through pure-tblgen getBinaryCodeForInstr. This is the AIE format-first
-  // model the user directed: dense variable-width parcels within the 8-byte
-  // fetch record, NO force-bundle, NO NOP insertion. The format-first decoder
-  // (HaydnDisassembler::getInstruction, low-nibble→Size dispatch on a byte
-  // stream) handles the variable-width output.
+  // Product encode path is Bundle128 only (16 B parcels). The MCInst is
+  // streamed; HaydnMCCodeEmitter routes through encodeBundle128 (FlexMap
+  // materializes private slot peers at MCInst). No multi-width Mode-0/1/3
+  // product path. registerSymbolicOperands registers Expr fixups.
   //
-  // History: the force-BUNDLE-wrap (-era) + NOP-pad-to-3-slots existed to
-  // satisfy the OLD bundle-probe decoder + VLIW-fetch-alignment contract. E2
-  // removed the NOP-pad (byte-neutral — NOPs were skipped). E2b removes the
-  // BUNDLE wrap itself now that the decoder is format-first. registerSymbolicOperands
-  // is still called (Expr operands need symbol registration for relocation).
+  // History (retired): force-BUNDLE wrap + NOP-pad and variable-width
+  // EW_16/32/48/64 bare emit were pre-Bundle128 cutover experiments.
   registerSymbolicOperands(Inst);
   EmitToStreamer(*OutStreamer, Inst);
 }

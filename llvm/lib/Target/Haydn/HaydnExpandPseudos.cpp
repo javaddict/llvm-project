@@ -81,19 +81,34 @@ static MachineInstrBuilder buildSoftZeroR0(MachineBasicBlock &MBB,
 bool HaydnExpandPseudos::insertSoftZeroR0Maintenance(MachineFunction &MF) {
   bool Modified = false;
 
-  // Jump-table targets: BR_JT expands to JALR r0, addr (printer), which
-  // clobbers soft-zero R0. Insert re-zero at the head of every JT successor
-  // so PostRA pack and size models see the bytes.
-  DenseSet<MachineBasicBlock *> JtTargets;
+  // Indirect transfers that write the link into soft-zero R0 clobber the
+  // architectural zero invariant. Re-zero at the head of every successor so
+  // PostRA pack and size models see the bytes (not AsmPrinter injection):
+  //   * BR_JT → expands to JALR_W r0, addr (printer)
+  //   * JALR_W / JALR with rd=R0 (G_BRINDIRECT pure jump; not a call)
+  // RET is also JALR_W r0,lr but has no executable successors that need zero.
+  DenseSet<MachineBasicBlock *> SoftZeroTargets;
   for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB) {
-      if (MI.getOpcode() != Haydn::BR_JT)
+      unsigned Opc = MI.getOpcode();
+      bool NeedsSuccRezero = false;
+      if (Opc == Haydn::BR_JT) {
+        NeedsSuccRezero = true;
+      } else if ((Opc == Haydn::JALR_W || Opc == Haydn::JALR) &&
+                 MI.getNumExplicitOperands() >= 1 && MI.getOperand(0).isReg() &&
+                 MI.getOperand(0).getReg() == Haydn::R0) {
+        // Pure jump / discard-link form (rd = R0). Skip if this looks like a
+        // fall-through-less return-only edge set: still safe to re-zero any
+        // listed successors (empty set for normal RET).
+        NeedsSuccRezero = true;
+      }
+      if (!NeedsSuccRezero)
         continue;
       for (MachineBasicBlock *Succ : MBB.successors())
-        JtTargets.insert(Succ);
+        SoftZeroTargets.insert(Succ);
     }
   }
-  for (MachineBasicBlock *MBB : JtTargets) {
+  for (MachineBasicBlock *MBB : SoftZeroTargets) {
     MachineBasicBlock::iterator InsertPt = MBB->begin();
     while (InsertPt != MBB->end() &&
            (InsertPt->isMetaInstruction() || InsertPt->isDebugInstr() ||
@@ -104,7 +119,8 @@ bool HaydnExpandPseudos::insertSoftZeroR0Maintenance(MachineFunction &MF) {
     DebugLoc DL = InsertPt != MBB->end() ? InsertPt->getDebugLoc() : DebugLoc();
     buildSoftZeroR0(*MBB, InsertPt, DL, TII);
     Modified = true;
-    LLVM_DEBUG(dbgs() << "HaydnExpandPseudos: soft-zero R0 at JT target bb."
+    LLVM_DEBUG(dbgs() << "HaydnExpandPseudos: soft-zero R0 at indirect-target "
+                         "bb."
                       << MBB->getNumber() << '\n');
   }
 

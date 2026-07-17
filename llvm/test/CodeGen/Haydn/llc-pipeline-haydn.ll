@@ -29,6 +29,15 @@
 ;
 ; addBlockPlacement is empty (no second MBP after pack).
 ; LoadStoreOpt form is opt-in (default OFF) - not a dual product path.
+;
+; Densify landmines (product default OFF — W0.1 / G-RISK-FLAGS):
+;   -haydn-enable-interblock       (Stage-0 IB inside PostRA leaveMBB; not a pass)
+;   -haydn-enable-post-pipeliner   (Stage-0 PP inside schedule; not a pass)
+;   -haydn-hwloop-role-b           (same Haydn Hardware Loop Detection pass)
+;   -haydn-enable-ldst-opt         (Haydn Load/Store Optimizer — locked NOT below)
+;   -haydn-enable-circular-buffer  (Haydn Circular Buffer Detection — NOT below)
+;   -haydn-enable-redundant-copy-elim
+; IB/PP/Role-B flag state also locked by densify-defaults-off.ll (-debug-only).
 ; Style note - no space after CHECK-prefix colon (match-full-lines / AMDGPU).
 
 define i32 @f(i32 %a, i32 %b) {
@@ -75,7 +84,10 @@ define i32 @f(i32 %a, i32 %b) {
 ; O0-NOT:      Branch Probability Basic Block Placement
 ; O0:      Branch relaxation pass
 ; O0-NOT:      Haydn Hardware Loop Fixup
+; Densify/quarantine absent at product defaults (W0.1):
 ; O0-NOT:      Haydn Load/Store Optimizer
+; O0-NOT:      Haydn Circular Buffer Detection
+; O0-NOT:      Haydn Redundant Copy Elimination
 ; O0-NOT:      Haydn Pre-RA Load-to-Slot1 Promotion
 ; O0-NOT:      Modulo Software Pipelining
 
@@ -121,5 +133,11 @@ define i32 @f(i32 %a, i32 %b) {
 ; O123:      Branch relaxation pass
 ; O123-NEXT:      Haydn Hardware Loop Fixup
 ; O123-NEXT:      Branch relaxation pass
+; Densify/quarantine absent at product defaults (W0.1):
 ; O123-NOT:      Haydn Load/Store Optimizer
+; O123-NOT:      Haydn Circular Buffer Detection
+; O123-NOT:      Haydn Redundant Copy Elimination
 ; O123-NOT:      Haydn Pre-RA Load-to-Slot1 Promotion
+; IB/PP not separate Structure passes (PostRA-internal, default OFF). Role B is
+; a residual flag on Hardware Loop Detection above — not a separate pass line.
+; Flag locks: densify-defaults-off.ll.
