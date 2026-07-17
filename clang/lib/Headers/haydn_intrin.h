@@ -403,38 +403,24 @@ int64_t __haydn_mulfp32x16x2ras_high(int64_t acc, int64_t a32, int64_t b16) {
 #define __haydn_x4add16s __builtin_haydn_x4add16s
 /// Quad 16-bit SIMD saturating subtract
 #define __haydn_x4sub16s __builtin_haydn_x4sub16s
-// Golden X4ABS16 / X4ABS16S as soft DR64 helpers.
-// Builtins exist (__builtin_haydn_x4abs16{,s}) and GISel has patterns, but the
-// selected X4ABS16S pseudo is not reliably expanded on freestanding paths
-// (observed empty/wrong body). Soft lane model matches golden Behavior and
-// host_emul / pure haydn_x4abs16s. Prefer soft until HW emit is lit-gated.
+// Golden X4ABS16 / X4ABS16S — native builtins (E4s) wrapped for DR64 /
+// ae_int16x4 (opaque long long), same union pattern as x2abs32s.
+// Base opcodes are real FmtALU64Unary (not MCID::Pseudo); FlexMap rewrites
+// to X4ABS16{,S}_S1/_S2 for Bundle128 emit.
+typedef short __haydn_v4i16_t __attribute__((ext_vector_type(4)));
 static __inline__ __attribute__((__always_inline__, __nodebug__))
 long long __haydn_x4abs16(long long a) {
-  /* X4ABS16: wrap at 0x8000 (no sat) */
-  unsigned long long u = (unsigned long long)a, o = 0;
-  int i;
-  for (i = 0; i < 4; i++) {
-    short x = (short)((u >> (16 * i)) & 0xffffu);
-    short r = (x < 0) ? (short)(-x) : x; /* 0x8000 → 0x8000 wrap */
-    o |= ((unsigned long long)(unsigned short)r) << (16 * i);
-  }
-  return (long long)o;
+  union { long long ll; __haydn_v4i16_t v; } u, r;
+  u.ll = a;
+  r.v = __builtin_haydn_x4abs16(u.v);
+  return r.ll;
 }
 static __inline__ __attribute__((__always_inline__, __nodebug__))
 long long __haydn_x4abs16s(long long a) {
-  /* X4ABS16S: SAT16(ABS); 0x8000 → 0x7FFF */
-  unsigned long long u = (unsigned long long)a, o = 0;
-  int i;
-  for (i = 0; i < 4; i++) {
-    short x = (short)((u >> (16 * i)) & 0xffffu);
-    short r;
-    if ((unsigned short)x == 0x8000u)
-      r = 0x7fff;
-    else
-      r = (x < 0) ? (short)(-x) : x;
-    o |= ((unsigned long long)(unsigned short)r) << (16 * i);
-  }
-  return (long long)o;
+  union { long long ll; __haydn_v4i16_t v; } u, r;
+  u.ll = a;
+  r.v = __builtin_haydn_x4abs16s(u.v);
+  return r.ll;
 }
 // __haydn_x4addsub16s / __haydn_x4subadd16s retired in D208 Phase 2 (ISA-36
 // gap; AE_ADDANDSUBRNG16RAS_* now compose via __builtin_ae_addandsubrng16ras_s*
