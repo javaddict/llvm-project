@@ -1277,6 +1277,24 @@ def X2NEG32S_L : FmtALU64Unary<0x67, 0x1A6, (outs DR64:$rd), (ins DR64:$rs1),
   let TSFlags{4-3} = 0b01;
 }
 
+// X4ABS16 / X4ABS16S — 4x16-bit abs (golden slot1/2 ALU).
+// Was HaydnInst<4> isPseudo stubs in HaydnInstrInfoAuto.td; AsmPrinter
+// dropped MCID::Pseudo so llvm.haydn.x4abs16{,s} selected but never emitted
+// (empty function body). Same fix as X2ABS32S / ABS64:
+// real FmtALU64Unary base + FlexMap → X4ABS16{,S}_S1/_S2
+// (HaydnFormatsALU64.td 0b01111000 / 0b01111001).
+// Functs 0x1AC / 0x1AD continue the 0x67 allocation after NOT64 (0x1AB).
+def X4ABS16 : FmtALU64Unary<0x67, 0x1AC, (outs DR64:$rd), (ins DR64:$rs1),
+                            "x4abs16\t$rd, $rs1", []> {
+  let TSFlags{2-0} = 0b110;
+  let TSFlags{4-3} = 0b01;
+}
+def X4ABS16S : FmtALU64Unary<0x67, 0x1AD, (outs DR64:$rd), (ins DR64:$rs1),
+                             "x4abs16s\t$rd, $rs1", []> {
+  let TSFlags{2-0} = 0b110;
+  let TSFlags{4-3} = 0b01;
+}
+
 // X2 SIMD compare → SFR (binary DR64 → sets SFR). Passthrough return.
 let hasSideEffects = 0, Defs = [SFR] in {
 def X2SEQ32 : FmtALU64Binary<0x67, 0x18D, (outs DR64:$rd),

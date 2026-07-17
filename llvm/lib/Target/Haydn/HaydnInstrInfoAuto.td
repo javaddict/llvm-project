@@ -3747,15 +3747,9 @@ def X2SWAP32 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2swap32	$rd, $rs", []>;
 
-let TSFlags = 14 in
-def X4ABS16 : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4abs16	$rd, $rs", []>;
-
-let TSFlags = 14 in
-def X4ABS16S : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4abs16s	$rd, $rs", []>;
+// X4ABS16 / X4ABS16S promoted to real FmtALU64Unary in HaydnInstrInfo.td
+// (same EMPTY_SEL / AsmPrinter MCID::Pseudo drop as ABS64/X2ABS32S).
+// Slot forms remain X4ABS16{,S}_S1/_S2 in HaydnFormatsALU64.td.
 
 let TSFlags = 14 in
 def X4CMUL16 : HaydnInst<4, (outs DR64:$rd),
