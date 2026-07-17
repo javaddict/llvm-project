@@ -320,43 +320,88 @@ typedef long long ae_p48;
 #define __HAYDN_AR_STORE_SEL 1
 
 // --- Single implementation layer (all AE_LA/SA_* route here) ---------------
+//
+// ISS soft path (2026-07-17): BundleSim still has PLDWWUA/FLAR/D_*WUA_POST
+// dispatch as NULL. Functional golden semantics are trivial for seed/flush;
+// unaligned 8B load/store is implemented with memcpy so NatureDSP AE_LA/SA
+// streams produce correct data on freestanding BundleSim without relying on
+// the missing ISS ops. HW can re-enable builtins later via
+// HAYDN_USE_HW_UA_STREAM=1 once ISS models land. Pointer post-inc remains C
+// GEP (SCEV-visible); HW writeback of AR is not returned either way.
+
+#ifndef HAYDN_USE_HW_UA_STREAM
+#define HAYDN_USE_HW_UA_STREAM 0
+#endif
 
 /// Seed AR from ptr. `ar` is 0..3.
 static inline ae_valign __haydn_ae_la64_pp_ar(int ar, const void *ptr) {
   ar &= 3;
+#if HAYDN_USE_HW_UA_STREAM
   __haydn_pldwwua(ar, (int)(uintptr_t)ptr);
+#else
+  (void)ptr; /* soft: ar_sel token only; no PLDWWUA */
+#endif
   return (ae_valign)ar;
 }
 static inline ae_valign __haydn_ae_la64_pp(const void *ptr) {
   return __haydn_ae_la64_pp_ar(__HAYDN_AR_LOAD_SEL, ptr);
 }
 static inline ae_valign __haydn_ae_zalign64(void) {
+#if HAYDN_USE_HW_UA_STREAM
   __haydn_flar(__HAYDN_AR_STORE_SEL);
+#endif
   return (ae_valign)__HAYDN_AR_STORE_SEL;
 }
 static inline ae_valign __haydn_ae_zalign64_ar(int ar) {
   ar &= 3;
+#if HAYDN_USE_HW_UA_STREAM
   __haydn_flar(ar);
+#endif
   return (ae_valign)ar;
 }
 
 /// Load 8 B unaligned (16x4 or 32x2 layout is type-level only). dir: 0/1.
 static inline int64_t __haydn_ae_la64_step(int ar, int p, int stride, int dir) {
+#if HAYDN_USE_HW_UA_STREAM
   return __haydn_d_ltwua_post(p, ar & 3, stride, dir & 1);
+#else
+  int64_t v;
+  (void)ar; (void)stride; (void)dir;
+  __builtin_memcpy(&v, (const void *)(uintptr_t)(unsigned)p, 8);
+  return v;
+#endif
 }
 static inline int64_t __haydn_ae_la16x4_step(int ar, int p, int stride, int dir) {
+#if HAYDN_USE_HW_UA_STREAM
   return __haydn_d_lqhwua_post(p, ar & 3, stride, dir & 1);
+#else
+  return __haydn_ae_la64_step(ar, p, stride, dir);
+#endif
 }
 static inline void __haydn_ae_sa64_step(int64_t data, int ar, int p, int stride,
                                         int dir) {
+#if HAYDN_USE_HW_UA_STREAM
   __haydn_d_stwua_post(data, p, ar & 3, stride, dir & 1);
+#else
+  (void)ar; (void)stride; (void)dir;
+  __builtin_memcpy((void *)(uintptr_t)(unsigned)p, &data, 8);
+#endif
 }
 static inline void __haydn_ae_sa16x4_step(int64_t data, int ar, int p, int stride,
                                           int dir) {
+#if HAYDN_USE_HW_UA_STREAM
   __haydn_d_sqhwua_post(data, p, ar & 3, stride, dir & 1);
+#else
+  __haydn_ae_sa64_step(data, ar, p, stride, dir);
+#endif
 }
 static inline void __haydn_ae_sa64pos(int ar, int p, int dir) {
+#if HAYDN_USE_HW_UA_STREAM
   __haydn_wbarwua(ar & 3, p, dir & 1);
+#else
+  /* soft: SA*_IP already wrote full 8B; residual flush is a no-op */
+  (void)ar; (void)p; (void)dir;
+#endif
 }
 
 // --- Public AE surface (thin wrappers; do not re-implement later) ----------
@@ -2467,7 +2512,27 @@ static inline void AE_MULFD24X2_FIR_H(ae_int64 *q0, ae_int64 *q1,
 #define AE_TRUNCA32F64S(q, s)      __haydn_satsr64((q), (s))
 #define AE_SRAA64(q, s)            ((ae_int64)((q) >> (s)))
 #define AE_SLAA64(q, s)            ((ae_int64)((ae_int64)(q) << (s)))
-#define AE_SLAA64S(q, s)           ((ae_int64)((ae_int64)(q) << (s)))
+/* Saturating arithmetic left shift (64-bit). Soft model matches NatureDSP
+ * AE_SLAA64S / AE_F64_SLAS: clamp to INT64_MIN/MAX on overflow. */
+static inline ae_int64 __haydn_ae_slaa64s(ae_int64 q, int s) {
+  int64_t v = (int64_t)q;
+  if (s <= 0)
+    return (ae_int64)(s == 0 ? v : (v >> (-s)));
+  if (s >= 63) {
+    if (v == 0) return (ae_int64)0;
+    return (ae_int64)(v > 0 ? (int64_t)0x7FFFFFFFFFFFFFFFLL
+                            : (int64_t)0x8000000000000000LL);
+  }
+  {
+    int64_t maxv = (int64_t)0x7FFFFFFFFFFFFFFFLL >> s;
+    int64_t minv = (int64_t)((uint64_t)0x8000000000000000ULL) >> s;
+    /* ASR of INT64_MIN: force arithmetic min bound */
+    if (v > maxv) return (ae_int64)(int64_t)0x7FFFFFFFFFFFFFFFLL;
+    if (v < minv) return (ae_int64)(int64_t)0x8000000000000000LL;
+    return (ae_int64)(v << s);
+  }
+}
+#define AE_SLAA64S(q, s)           __haydn_ae_slaa64s((q), (int)(s))
 #define AE_SLAS64S(q, s)           ((ae_int64)((ae_int64)(q) >> (s)))
 #define AE_SLAI64S(q, s)           ((ae_int64)((ae_int64)(q) << (s)))
 #define AE_SLLI64(q, s)            ((ae_int64)((ae_int64)(q) << (s)))
@@ -2551,7 +2616,9 @@ static inline ae_int16x4 __ae_sraa16(ae_int16x4 a, int s) {
 //---- 16-bit lane arithmetic -------------------------------------------
 #define AE_ADD16S_(a, b) __haydn_x4add16s((a), (b))
 #define AE_SUB16S_(a, b) __haydn_x4sub16s((a), (b))
-#define AE_ABS16S(a)  __haydn_x4sra16((a), 0)
+/* Golden X4ABS16S: per-lane SAT16(ABS); 0x8000→0x7FFF.
+ * NEVER map to x4sra16(a,0) — that is identity, not abs. */
+#define AE_ABS16S(a)  ((ae_int16x4)__haydn_x4abs16s((long long)(a)))
 #define AE_ABS16S_(a) AE_ABS16S(a)
 #define AE_AND16(a, b) ((a) & (b))
 #define AE_OR16(a, b)  ((a) | (b))
@@ -2652,10 +2719,9 @@ static inline ae_int16x4 __ae_sraa16(ae_int16x4 a, int s) {
 // In Haydn both are 64-bit types in DR64 — this is a bitcast (no-op).
 #define AE_MOVINT32X2_FROMF64(a) ((ae_int32x2)(a))
 #define AE_MULFP16X4S_vector(a, b) AE_MULFP16X4S((a), (b))
-/// Per-lane saturating absolute value: abs(x) = max(x, -x).
+/// Per-lane saturating absolute value (golden X4ABS16S).
 static inline ae_int16x4 AE_ABS16S_vector(ae_int16x4 a) {
-  ae_int16x4 neg = (ae_int16x4)__haydn_x4sub16s((ae_int16x4)0, a);
-  return (ae_int16x4)__ae_min16x4(a, neg);
+  return (ae_int16x4)__haydn_x4abs16s((long long)(a));
 }
 
 //===----------------------------------------------------------------------===//
@@ -2903,10 +2969,9 @@ static inline ae_int64 __AE_INT64X2_RADD_1(ae_int64x2 a) {
 #define AE_MULFP16X4S_(a, b)  AE_MULFP16X4S(a, b)
 #define AE_MULFP32X16X2RAS_H(acc, a, b) __haydn_mulfp32x16x2ras_high((acc), (a), (b))
 #define AE_MULFP32X16X2RAS_L(acc, a, b) __haydn_mulfp32x16x2ras_low((acc), (a), (b))
-// AE_MULFP32X2RS: 2-arg returning (kernel consumes the high pair as the
-// fractional product; X2MUL32's low pair is unused → DCE'd).
-#define AE_MULFP32X2RS(a, b) \
-  ((ae_int32x2)__haydn_x2mul32((uint64_t)(a), (uint64_t)(b)).hi)
+// AE_MULFP32X2RS: fractional mul with round (same family as RAS / FF2).
+// Was wrongly mapped to integer X2MUL32 (no round / wrong Q scale).
+#define AE_MULFP32X2RS(a, b) __haydn_ff2mul32rs_ll((a), (b))
 #define AE_MULP32X16X2_H(a, b) __haydn_mul64_ss_hh((a), (b))
 #define AE_MULP32X2_S2(a, b)  AE_MULP32X2(a, b)
 #define AE_MULF48Q32SP16S_L(acc, a, b) __haydn_fmula32s_ll((acc), (a), (b))
@@ -5232,12 +5297,9 @@ static inline void AE_MULFD32X16X2_FIR_HL(ae_int64 *q0, ae_int64 *q1,
   do { (dst) = (ae_f24x2)__haydn_packsr32((q), (sh)); } while (0)
 
 //---- AE_F64_SLAS (64-bit shift-left with saturation) -------------------
-// Kernel: acc0 = AE_F64_SLAS(acc0, 1+gain). Saturating shift-left. Haydn
-//   has no scalar saturating shift-left; lower to a plain shift (the
-//   optimizer adds saturation via __haydn_satsr64 only if overflow is
-//   detectable — for IIR gain<32 this never saturates). ISA-25 records the
-//   scalar saturating-shift-left gap.
-#define AE_F64_SLAS(q, n) ((ae_f64)(((ae_f64)(q)) << (n)))
+// Kernel: acc0 = AE_F64_SLAS(acc0, 1+gain). Use soft AE_SLAA64S (was plain
+// << with no saturation — wrong on overflow).
+#define AE_F64_SLAS(q, n) ((ae_f64)__haydn_ae_slaa64s((ae_int64)(q), (int)(n)))
 
 //---- AE_MULSF32R_HL (fractional MSU, HL lane, rounding+sat) ------------
 // Completes the HH/LL set (part 11) with the HL lane. __haydn_ff2muls32rs
