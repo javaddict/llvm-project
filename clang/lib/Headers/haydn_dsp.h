@@ -320,88 +320,46 @@ typedef long long ae_p48;
 #define __HAYDN_AR_STORE_SEL 1
 
 // --- Single implementation layer (all AE_LA/SA_* route here) ---------------
-//
-// ISS soft path (2026-07-17): BundleSim still has PLDWWUA/FLAR/D_*WUA_POST
-// dispatch as NULL. Functional golden semantics are trivial for seed/flush;
-// unaligned 8B load/store is implemented with memcpy so NatureDSP AE_LA/SA
-// streams produce correct data on freestanding BundleSim without relying on
-// the missing ISS ops. HW can re-enable builtins later via
-// HAYDN_USE_HW_UA_STREAM=1 once ISS models land. Pointer post-inc remains C
-// GEP (SCEV-visible); HW writeback of AR is not returned either way.
-
-#ifndef HAYDN_USE_HW_UA_STREAM
-#define HAYDN_USE_HW_UA_STREAM 0
-#endif
+// HW AR/UA only: PLDWWUA / FLAR / D_*WUA_POST / WBARWUA (BundleSim + golden).
+// Pointer post-inc remains C GEP (SCEV-visible); HW AGU writeback is not
+// returned to IR/C.
 
 /// Seed AR from ptr. `ar` is 0..3.
 static inline ae_valign __haydn_ae_la64_pp_ar(int ar, const void *ptr) {
   ar &= 3;
-#if HAYDN_USE_HW_UA_STREAM
   __haydn_pldwwua(ar, (int)(uintptr_t)ptr);
-#else
-  (void)ptr; /* soft: ar_sel token only; no PLDWWUA */
-#endif
   return (ae_valign)ar;
 }
 static inline ae_valign __haydn_ae_la64_pp(const void *ptr) {
   return __haydn_ae_la64_pp_ar(__HAYDN_AR_LOAD_SEL, ptr);
 }
 static inline ae_valign __haydn_ae_zalign64(void) {
-#if HAYDN_USE_HW_UA_STREAM
   __haydn_flar(__HAYDN_AR_STORE_SEL);
-#endif
   return (ae_valign)__HAYDN_AR_STORE_SEL;
 }
 static inline ae_valign __haydn_ae_zalign64_ar(int ar) {
   ar &= 3;
-#if HAYDN_USE_HW_UA_STREAM
   __haydn_flar(ar);
-#endif
   return (ae_valign)ar;
 }
 
 /// Load 8 B unaligned (16x4 or 32x2 layout is type-level only). dir: 0/1.
 static inline int64_t __haydn_ae_la64_step(int ar, int p, int stride, int dir) {
-#if HAYDN_USE_HW_UA_STREAM
   return __haydn_d_ltwua_post(p, ar & 3, stride, dir & 1);
-#else
-  int64_t v;
-  (void)ar; (void)stride; (void)dir;
-  __builtin_memcpy(&v, (const void *)(uintptr_t)(unsigned)p, 8);
-  return v;
-#endif
 }
 static inline int64_t __haydn_ae_la16x4_step(int ar, int p, int stride, int dir) {
-#if HAYDN_USE_HW_UA_STREAM
   return __haydn_d_lqhwua_post(p, ar & 3, stride, dir & 1);
-#else
-  return __haydn_ae_la64_step(ar, p, stride, dir);
-#endif
 }
 static inline void __haydn_ae_sa64_step(int64_t data, int ar, int p, int stride,
                                         int dir) {
-#if HAYDN_USE_HW_UA_STREAM
   __haydn_d_stwua_post(data, p, ar & 3, stride, dir & 1);
-#else
-  (void)ar; (void)stride; (void)dir;
-  __builtin_memcpy((void *)(uintptr_t)(unsigned)p, &data, 8);
-#endif
 }
 static inline void __haydn_ae_sa16x4_step(int64_t data, int ar, int p, int stride,
                                           int dir) {
-#if HAYDN_USE_HW_UA_STREAM
   __haydn_d_sqhwua_post(data, p, ar & 3, stride, dir & 1);
-#else
-  __haydn_ae_sa64_step(data, ar, p, stride, dir);
-#endif
 }
 static inline void __haydn_ae_sa64pos(int ar, int p, int dir) {
-#if HAYDN_USE_HW_UA_STREAM
   __haydn_wbarwua(ar & 3, p, dir & 1);
-#else
-  /* soft: SA*_IP already wrote full 8B; residual flush is a no-op */
-  (void)ar; (void)p; (void)dir;
-#endif
 }
 
 // --- Public AE surface (thin wrappers; do not re-implement later) ----------
