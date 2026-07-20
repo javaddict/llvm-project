@@ -50,12 +50,9 @@ class LLVM_LIBRARY_VISIBILITY HaydnAsmPrinter : public AsmPrinter {
   // instructions are not supported by the hardware.
   void emitWrappedInst(const MCInst &Inst);
 
-  // spill/restore R12 via in-frame R12ScratchFI (PEI slot).
-  // AIE model: no free AT — always save around AT use. Never adjusts SP.
-  void emitATScratchSaveIfNeeded();
-  void emitATScratchRestoreIfNeeded();
-  // ST32/LD32 R12 at [FrameReg+Off]; simm16 direct, else R0-temp far path.
-  void emitATScratchMemOp(Register FrameReg, int64_t Off, bool IsStore);
+  // W1.2: print-time fixed-R12 AT spill removed. VASTART/VACOPY expand via
+  // withPostRAScratch in ExpandPseudos (free GPR first; spill only if
+  // needed). Printer is representation-only for that class.
 
   // Walk the operands of an MCInst (descending into nested sub-instructions
   // i.e. VLIW bundle children) and register every MCExpr operand with the

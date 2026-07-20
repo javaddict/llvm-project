@@ -53,20 +53,18 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   // false-trigger, skipping va_list initialization.
   bool HasVarArgsSaveAreas = false;
 
-  // Frame index of a permanent 4-byte spill for R12 when it is used as AT
-  // scratch at emit time (VASTART / VACOPY / MatInt / residual SET_HWLOOP).
-  // Reserved by determineCalleeSaves (AIE model: R12 always allocatable).
-  // Lives ABOVE SP inside the PEI frame (no red zone, interrupt-safe).
-  // AsmPrinter must spill here — never via temporary `subi sp` — so
-  // SP-relative FI materialization stays valid. See /. -1 when not
-  // yet reserved.
-  int R12ScratchFI = -1;
+  // Permanent 4-byte in-frame spill *home* for post-RA GPR scavenge when no
+  // free physreg is available (HaydnPostRAScratch: MatInt, VASTART/VACOPY, …).
+  // Any scavenged GPR may land here — not tied to R12. Reserved by
+  // determineCalleeSaves; lives ABOVE SP (no red zone / transient subi).
+  // -1 when not yet reserved.
+  int PostRAScratchFI = -1;
 
   // Frame index for BranchRelaxation insertIndirectBranch when all GPRs are
   // live (seed 3148 / large yarpgen). BranchRelaxation builds a fresh
   // RegScavenger without PEI's scavenger FIs, so this dedicated spill is
   // re-registered on that RS (or used for a manual spill like RISC-V).
-  // 1 when not reserved. See.
+  // -1 when not reserved.
   int BranchRelaxationScratchFI = -1;
 
   // slice 2a: function-lifetime alt-descriptor side-map. The post-RA
@@ -113,11 +111,10 @@ public:
   int getVarArgsDrSize() const { return VarArgsDrSize; }
   void setVarArgsDrSize(int Size) { VarArgsDrSize = Size; }
 
-  // \name R12 AT-scratch spill slot.
-  // In-frame slot for AsmPrinter AT spill. -1 when not yet reserved.
+  // \name Post-RA emergency GPR spill home (any scavenged physreg).
   //@{
-  int getR12ScratchFI() const { return R12ScratchFI; }
-  void setR12ScratchFI(int FI) { R12ScratchFI = FI; }
+  int getPostRAScratchFI() const { return PostRAScratchFI; }
+  void setPostRAScratchFI(int FI) { PostRAScratchFI = FI; }
   //@}
 
   // \name Branch-relaxation scratch spill.

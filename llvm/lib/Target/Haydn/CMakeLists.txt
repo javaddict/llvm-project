@@ -44,7 +44,6 @@ add_llvm_target(HaydnCodeGen
   HaydnTargetTransformInfo.cpp
   HaydnSubtarget.cpp
   HaydnRegisterInfo.cpp
-  HaydnATScratch.cpp
   HaydnPostRAScratch.cpp
   HaydnInstrInfo.cpp
   HaydnFrameLowering.cpp

@@ -20,7 +20,8 @@
 ; CHECK-LABEL: name: test_cb_and_linear_load
 ; CHECK: D_LDW_CB_IMM
 define i64 @test_cb_and_linear_load(i32 %cb_ptr, ptr %linear_ptr) {
-  %cb_val = call i64 @llvm.haydn.ldw.cb.imm(i32 %cb_ptr, i32 0, i32 8)
+  %cb_val_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %cb_ptr, i32 0, i32 8)
+  %cb_val = extractvalue { i64, i32 } %cb_val_pair, 0
   %lin_val = load i64, ptr %linear_ptr
   %result = add i64 %cb_val, %lin_val
   ret i64 %result
@@ -33,7 +34,7 @@ define i64 @test_cb_and_linear_load(i32 %cb_ptr, ptr %linear_ptr) {
 ; CHECK-LABEL: name: test_cb_and_linear_store
 ; CHECK: D_SDW_CB_IMM
 define void @test_cb_and_linear_store(i64 %data, i32 %cb_ptr, ptr %linear_ptr) {
-  call void @llvm.haydn.sdw.cb.imm(i64 %data, i32 %cb_ptr, i32 0, i32 8)
+  call i32 @llvm.haydn.sdw.cb.imm(i64 %data, i32 %cb_ptr, i32 0, i32 8)
   store i64 %data, ptr %linear_ptr
   ret void
 }
@@ -47,7 +48,8 @@ define void @test_cb_and_linear_store(i64 %data, i32 %cb_ptr, ptr %linear_ptr) {
 ; CHECK: D_LDW_CB_IMM
 define i64 @test_brev_and_cb_load(i32 %brev_ptr, i32 %cb_ptr) {
   %brev_val = call i32 @llvm.haydn.ldw.brev.imm(i32 %brev_ptr, i32 4)
-  %cb_val = call i64 @llvm.haydn.ldw.cb.imm(i32 %cb_ptr, i32 0, i32 8)
+  %cb_val_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %cb_ptr, i32 0, i32 8)
+  %cb_val = extractvalue { i64, i32 } %cb_val_pair, 0
   %ext = zext i32 %brev_val to i64
   %result = add i64 %cb_val, %ext
   ret i64 %result
@@ -61,8 +63,10 @@ define i64 @test_brev_and_cb_load(i32 %brev_ptr, i32 %cb_ptr) {
 ; CHECK: D_LDW_CB_IMM
 ; CHECK: D_LDW_CB_IMM
 define i64 @test_dual_cb_channels(i32 %ptr0, i32 %ptr1) {
-  %val0 = call i64 @llvm.haydn.ldw.cb.imm(i32 %ptr0, i32 0, i32 8)
-  %val1 = call i64 @llvm.haydn.ldw.cb.imm(i32 %ptr1, i32 1, i32 8)
+  %val0_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %ptr0, i32 0, i32 8)
+  %val0 = extractvalue { i64, i32 } %val0_pair, 0
+  %val1_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %ptr1, i32 1, i32 8)
+  %val1 = extractvalue { i64, i32 } %val1_pair, 0
   %result = add i64 %val0, %val1
   ret i64 %result
 }
@@ -75,9 +79,10 @@ define i64 @test_dual_cb_channels(i32 %ptr0, i32 %ptr1) {
 ; CHECK: D_LDW_CB_IMM
 ; CHECK: D_SDW_CB_IMM
 define i64 @test_cb_load_compute_store(i32 %ptr, i64 %coeff) {
-  %sample = call i64 @llvm.haydn.ldw.cb.imm(i32 %ptr, i32 0, i32 8)
+  %sample_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %ptr, i32 0, i32 8)
+  %sample = extractvalue { i64, i32 } %sample_pair, 0
   %result = mul i64 %sample, %coeff
-  call void @llvm.haydn.sdw.cb.imm(i64 %result, i32 %ptr, i32 0, i32 8)
+  call i32 @llvm.haydn.sdw.cb.imm(i64 %result, i32 %ptr, i32 0, i32 8)
   ret i64 %result
 }
 
@@ -103,7 +108,8 @@ define i32 @test_brev_mixed_width(i32 %ptr32, i32 %ptr64) {
 ; CHECK: D_LDW_CB_IMM
 ; CHECK: D_LDW_BREV_IMM
 define i64 @test_register_pressure(i32 %ptr_cb, i32 %ptr_brev, i64 %a, i64 %b, i64 %c, i64 %d) {
-  %cb_val = call i64 @llvm.haydn.ldw.cb.imm(i32 %ptr_cb, i32 0, i32 8)
+  %cb_val_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %ptr_cb, i32 0, i32 8)
+  %cb_val = extractvalue { i64, i32 } %cb_val_pair, 0
   %brev_ext = call i32 @llvm.haydn.ldw.brev.imm(i32 %ptr_brev, i32 4)
   %brev_val = zext i32 %brev_ext to i64
   %sum1 = add i64 %a, %b
@@ -122,18 +128,20 @@ define i64 @test_register_pressure(i32 %ptr_cb, i32 %ptr_brev, i64 %a, i64 %b, i
 ; CHECK: D_LDW_CB_IMM
 ; CHECK: D_LDW_CB_REG
 define i64 @test_cb_mixed_stride(i32 %ptr, i32 %reg_stride) {
-  %val1 = call i64 @llvm.haydn.ldw.cb.imm(i32 %ptr, i32 0, i32 8)
-  %val2 = call i64 @llvm.haydn.ldw.cb.reg(i32 %ptr, i32 1, i32 %reg_stride)
+  %val1_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %ptr, i32 0, i32 8)
+  %val1 = extractvalue { i64, i32 } %val1_pair, 0
+  %val2_pair = call { i64, i32 } @llvm.haydn.ldw.cb.reg(i32 %ptr, i32 1, i32 %reg_stride)
+  %val2 = extractvalue { i64, i32 } %val2_pair, 0
   %result = add i64 %val1, %val2
   ret i64 %result
 }
 
 ;Intrinsic declarations
 
-declare i64 @llvm.haydn.ldw.cb.imm(i32, i32, i32)
-declare i64 @llvm.haydn.ldw.cb.reg(i32, i32, i32)
-declare void @llvm.haydn.sdw.cb.imm(i64, i32, i32, i32)
-declare void @llvm.haydn.sdw.cb.reg(i64, i32, i32, i32)
+declare { i64, i32 } @llvm.haydn.ldw.cb.imm(i32, i32, i32)
+declare { i64, i32 } @llvm.haydn.ldw.cb.reg(i32, i32, i32)
+declare i32 @llvm.haydn.sdw.cb.imm(i64, i32, i32, i32)
+declare i32 @llvm.haydn.sdw.cb.reg(i64, i32, i32, i32)
 
 declare i32 @llvm.haydn.ldw.brev.imm(i32, i32)
 declare i32 @llvm.haydn.ldw.brev.reg(i32, i32)

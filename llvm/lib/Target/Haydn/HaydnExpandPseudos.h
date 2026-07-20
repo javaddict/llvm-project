@@ -93,6 +93,12 @@ private:
 
   // Expand ST64_POST_INC pseudo into ST64 + ADDI32.
   bool expandST64PostInc(MachineBasicBlock &MBB, MachineInstr &MI);
+
+  // W1.2: expand VASTART/VACOPY before pack (was AsmPrinter-only). Uses
+  // withPostRAScratch (free GPR first; spill only if needed) + FrameLowering
+  // FI refs. Residual at AsmPrinter is fatal.
+  bool expandVASTART(MachineBasicBlock &MBB, MachineInstr &MI);
+  bool expandVACOPY(MachineBasicBlock &MBB, MachineInstr &MI);
 };
 
 // Creates and returns a HaydnExpandPseudos pass.

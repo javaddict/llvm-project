@@ -57,7 +57,7 @@ body:             |
 # slice Z: ZERO_GPR pseudo retired -> XOR32 $r0, $r0 (x^x=0), frame-setup.
 # Flex cutover: XOR32 -> XOR32_S0 (slot-suffixed Flex form).
 # CHECK: frame-setup XOR32 $r0, $r0
-# R12ScratchFI may force a small frame even for otherwise frameless
+# PostRAScratchFI may force a small frame even for otherwise frameless
 # leaves when R12 is allocatable. Accept either no-SUBI32 or SUBI32 for that slot.
 # CHECK: RET
 
@@ -119,7 +119,7 @@ body:             |
 # CHECK: frame-setup XOR32 $r0, $r0
 # CHECK: $r13 = frame-setup SUBI32 $r13, {{64|72}}
 # CHECK: frame-setup CFI_INSTRUCTION def_cfa_offset {{64|72}}
-# Epilogue: SP increment by 64 (+ optional R12Scratch)
+# Epilogue: SP increment by 64 (+ optional PostRAScratch)
 # CHECK: $r13 = frame-destroy ADDI32_W $r13, {{64|72}}
 # CHECK: RET
 

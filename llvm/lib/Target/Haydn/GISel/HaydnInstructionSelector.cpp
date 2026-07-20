@@ -4166,15 +4166,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_mulafq16x2_fir_3:
   case haydn_mulafq16x2_fir_1: {
     // These 6 intrinsics are declared haydn_ternary_intrinsic (acc, a, b).
-    // Per spec (haydn_instruction_db.json): the four *A* (accumulate) forms
-    // read rtd as an accumulator input and use selectAccMAC; the two
-    // non-*A* forms (FMUL16_HS00/HS22) are pure overwrites with NO rtd
-    // read and must use a 2-source selection (the acc arg is a no-op for
-    // them). Routing all six through selectAccMAC was a -era shortcut
-    // that silently miscompiled the non-*A* forms AND broke compilation
-    // under -verify-machineinstrs after the tied-def MIR modeling
-    // landed (FMUL16_HS00/HS22 are FmtALU64, not FmtALU64Acc, so they
-    // reject the tied-def 4th operand). See, and codex §1B.
+    // The four *A* (accumulate) forms read rtd via selectAccMAC
+    // (FmtALU64Acc). The two non-*A* init forms lower to FMULZAA16_*
+    // (dual-product overwrite, FmtALU64 binary) and drop the acc arg.
     unsigned MacOpc;
     bool IsAccumulate;
     bool NeedsCoefWiden;
@@ -4195,15 +4189,18 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       NeedsCoefWiden = true;
       break;
     case haydn_mulfq16x2_fir_3:
-      // Spec: rtd[63:32] = sat(rsd1[15:00] * rsd2[15:00]); NO rtd read.
-      // 16x16 op — coef width already matches (no widen needed).
-      MacOpc = FMUL16_HS00;
+      // Fresh dual-product (lanes 1+0): matches AE_MULFQ / FMULZAA16_HS_11_00
+      // semantics (p1+p0 into rtd[63:32], no prior acc add). Previously
+      // FMUL16_HS00 (single product) which under-counted vs the accumulate
+      // form FMULAA16_HS_11_00 (two products).
+      MacOpc = FMULZAA16_HS_11_00;
       IsAccumulate = false;
       NeedsCoefWiden = false;
       break;
     case haydn_mulfq16x2_fir_1:
-      // Spec: rtd[63:32] = sat(rsd1[47:32] * rsd2[47:32]); NO rtd read.
-      MacOpc = FMUL16_HS22;
+      // Fresh dual-product (lanes 3+2): FMULZAA16_HS_33_22. Pair of the
+      // accumulate form FMULAA16_HS_33_22 used by mulafq16x2_fir_1.
+      MacOpc = FMULZAA16_HS_33_22;
       IsAccumulate = false;
       NeedsCoefWiden = false;
       break;
@@ -4213,14 +4210,10 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       NeedsCoefWiden = false;
       break;
     case haydn_mulafq16x2_fir_1:
-      // Spec reads rtd (accumulate); but FMULAA16_HS_33_22 is currently
-      // FmtALU64 (not yet migrated to FmtALU64Acc). Route through a
-      // tied-def-ready selectAccMAC only when the target opcode is
-      // FmtALU64Acc; otherwise drop the acc arg and use selectBinary.
-      // TODO: migrate FMULAA16_HS_33_22 to FmtALU64Acc once the encoding
-      // 4-operand contract for the 0x67/0x067 slot is verified.
+      // Spec/DB: rtd[63:32] = SATQ1.31(rtd[63:32] + p3 + p2). Migrated to
+      // FmtALU64Acc (encoding unchanged; tied $rd_in models the acc read).
       MacOpc = FMULAA16_HS_33_22;
-      IsAccumulate = false;
+      IsAccumulate = true;
       NeedsCoefWiden = false;
       break;
     }
@@ -4647,6 +4640,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   //===-----------------------------------------------------------------===
   case haydn_fmul16_hs00:     return selectBinary(FMUL16_HS00,       DR64RegClass);
   case haydn_fmulaa16_hs_11_00: return selectAccMAC(FMULAA16_HS_11_00);
+  case haydn_fmulaa16_hs_33_22: return selectAccMAC(FMULAA16_HS_33_22);
   case haydn_fmulss16_hs_11_00: return selectAccMAC(FMULSS16_HS_11_00);
 
   //===-----------------------------------------------------------------===
@@ -4835,7 +4829,6 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   // Wave 4: FMULAA16 HS/LS MAC variants (binary DR64)
   //===---------------------------------------------------------------===
   case haydn_fmulaa16_hs_13_02: return selectBinary(FMULAA16_HS_13_02, DR64RegClass);
-  case haydn_fmulaa16_hs_33_22: return selectBinary(FMULAA16_HS_33_22, DR64RegClass);
   case haydn_fmulaa16_ls_11_00: return selectBinary(FMULAA16_LS_11_00, DR64RegClass);
   case haydn_fmulaa16_ls_13_02: return selectBinary(FMULAA16_LS_13_02, DR64RegClass);
   case haydn_fmulaa16_ls_33_22: return selectBinary(FMULAA16_LS_33_22, DR64RegClass);
@@ -5350,43 +5343,43 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   }
 
   //===---------------------------------------------------------------===
-  // Circular Buffer Load/Store (CBR) — data-only (supersedes).
-  // CB loads : intrinsic(ptr_base, cbr_sel, stride) -> data
-  // gmir: op(0)=data def, op(1)=intrinsic id, op(2)=ptr_base
-  // op(3)=cbr_sel, op(4)=stride
-  // CB stores: intrinsic(data, ptr_base, cbr_sel, stride) -> void
-  // gmir (G_INTRINSIC_W_SIDE_EFFECTS): op(0)=intrinsic id, op(1)=data
-  // op(2)=ptr_base, op(3)=cbr_sel, op(4)=stride
-  // The CB instruction DOES compute the next pointer in hardware (rs = rs +
-  // stride, wrapped at CBR bounds) — but the compiler does NOT model that
-  // update. The stride is a tracked value (index-derived, supplied per
-  // call); the pointer is hardware-managed and persists across iterations of
-  // a hardware loop (the body is opaque to the optimizer). CBR is a boundary
-  // guard, not a value the program reads back. No tied-def.
-  // The cbr_sel is an immediate operand (0 or 1) selecting a CBR set.
+  // Circular Buffer Load/Store (CBR) — 2-ret load / ptr-ret store (D208).
+  // CB loads : intrinsic(ptr_base, cbr_sel, stride) -> {data, new_ptr}
+  // gmir: op(0)=data, op(1)=new_ptr, op(2)=id, op(3)=ptr_base,
+  //       op(4)=cbr_sel, op(5)=stride
+  // CB stores: intrinsic(data, ptr_base, cbr_sel, stride) -> new_ptr
+  // gmir: op(0)=new_ptr, op(1)=id, op(2)=data, op(3)=ptr_base,
+  //       op(4)=cbr_sel, op(5)=stride
+  // MI keeps tied rs_wb; now live IR def, not a dead vreg.
   //===---------------------------------------------------------------===
   case haydn_ldw_cb_imm: {
-    Register PtrBase = I.getOperand(2).getReg();
-    Register CbrSelReg = I.getOperand(3).getReg();
-    Register StrideReg = I.getOperand(4).getReg();
+    // Intrinsic: (ptr, cbr_sel, stride) -> {data, new_ptr}
+    // MI: rtd, rs_wb, rs, cbr_sel, imm.
+    Register DataReg = I.getOperand(0).getReg();
+    Register WbReg = I.getOperand(1).getReg();
+    Register PtrBase = I.getOperand(3).getReg();
+    Register CbrSelReg = I.getOperand(4).getReg();
+    Register StrideReg = I.getOperand(5).getReg();
 
     auto CbrCst = getIConstantVRegValWithLookThrough(CbrSelReg, MRI);
     if (!CbrCst) {
       LLVM_DEBUG(dbgs() << "LDW_CB_IMM: cbr_sel must be a constant\n");
       return false;
     }
-    if (DstReg.isVirtual())
-      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
+    if (DataReg.isVirtual())
+      RBI.constrainGenericRegister(DataReg, DR64RegClass, MRI);
+    if (WbReg.isVirtual())
+      RBI.constrainGenericRegister(WbReg, GPR32RegClass, MRI);
     if (PtrBase.isVirtual())
       RBI.constrainGenericRegister(PtrBase, GPR32RegClass, MRI);
 
     auto StrideCst = getIConstantVRegValWithLookThrough(StrideReg, MRI);
     if (!StrideCst) {
-      // Variable stride (FFT kernels): emit register-stride D_LDW_CB_REG.
       if (StrideReg.isVirtual())
         RBI.constrainGenericRegister(StrideReg, GPR32RegClass, MRI);
       MachineInstr *MI = MIB.buildInstr(D_LDW_CB_REG)
-                             .addDef(DstReg)
+                             .addDef(DataReg)
+                             .addDef(WbReg)
                              .addReg(PtrBase)
                              .addImm(CbrCst->Value.getZExtValue())
                              .addReg(StrideReg);
@@ -5396,7 +5389,8 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     }
 
     MachineInstr *MI = MIB.buildInstr(D_LDW_CB_IMM)
-                           .addDef(DstReg)
+                           .addDef(DataReg)
+                           .addDef(WbReg)
                            .addReg(PtrBase)
                            .addImm(CbrCst->Value.getZExtValue())
                            .addImm(StrideCst->Value.getSExtValue());
@@ -5405,24 +5399,30 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     return true;
   }
   case haydn_ldw_cb_reg: {
-    Register PtrBase = I.getOperand(2).getReg();
-    Register CbrSelReg = I.getOperand(3).getReg();
-    Register StrideReg = I.getOperand(4).getReg();
+    // MI: rtd, rs1_wb, rs1, cbr_sel, rs2
+    Register DataReg = I.getOperand(0).getReg();
+    Register WbReg = I.getOperand(1).getReg();
+    Register PtrBase = I.getOperand(3).getReg();
+    Register CbrSelReg = I.getOperand(4).getReg();
+    Register StrideReg = I.getOperand(5).getReg();
 
     auto CbrCst = getIConstantVRegValWithLookThrough(CbrSelReg, MRI);
     if (!CbrCst) {
       LLVM_DEBUG(dbgs() << "LDW_CB_REG: cbr_sel must be a constant\n");
       return false;
     }
-    if (DstReg.isVirtual())
-      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
+    if (DataReg.isVirtual())
+      RBI.constrainGenericRegister(DataReg, DR64RegClass, MRI);
+    if (WbReg.isVirtual())
+      RBI.constrainGenericRegister(WbReg, GPR32RegClass, MRI);
     if (PtrBase.isVirtual())
       RBI.constrainGenericRegister(PtrBase, GPR32RegClass, MRI);
     if (StrideReg.isVirtual())
       RBI.constrainGenericRegister(StrideReg, GPR32RegClass, MRI);
 
     MachineInstr *MI = MIB.buildInstr(D_LDW_CB_REG)
-                           .addDef(DstReg)
+                           .addDef(DataReg)
+                           .addDef(WbReg)
                            .addReg(PtrBase)
                            .addImm(CbrCst->Value.getZExtValue())
                            .addReg(StrideReg);
@@ -5431,14 +5431,14 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     return true;
   }
   case haydn_sdw_cb_imm: {
-    // Store: void intrinsic(data, ptr_base, cbr_sel, stride)
-    // Dispatched via G_INTRINSIC_W_SIDE_EFFECTS:
-    // op(0) = intrinsic ID, op(1) = data, op(2) = ptr_base
-    // op(3) = cbr_sel, op(4) = stride
-    Register Data = I.getOperand(1).getReg();
-    Register PtrBase = I.getOperand(2).getReg();
-    Register CbrSelReg = I.getOperand(3).getReg();
-    Register StrideReg = I.getOperand(4).getReg();
+    // Intrinsic: (data, ptr_base, cbr_sel, stride) -> new_ptr
+    // MI: rs_wb, rtd, rs, cbr_sel, imm — tied AGU writeback (B6).
+    // DstReg is new_ptr (op0); args at op2..op5 after intrinsic id at op1.
+    Register WbReg = I.getOperand(0).getReg();
+    Register Data = I.getOperand(2).getReg();
+    Register PtrBase = I.getOperand(3).getReg();
+    Register CbrSelReg = I.getOperand(4).getReg();
+    Register StrideReg = I.getOperand(5).getReg();
 
     auto CbrCst = getIConstantVRegValWithLookThrough(CbrSelReg, MRI);
     if (!CbrCst) {
@@ -5449,15 +5449,15 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(Data, DR64RegClass, MRI);
     if (PtrBase.isVirtual())
       RBI.constrainGenericRegister(PtrBase, GPR32RegClass, MRI);
+    if (WbReg.isVirtual())
+      RBI.constrainGenericRegister(WbReg, GPR32RegClass, MRI);
 
     auto StrideCst = getIConstantVRegValWithLookThrough(StrideReg, MRI);
     if (!StrideCst) {
-      // Stride is a runtime variable (FFT kernels with variable step): emit the
-      // register-stride form D_SDW_CB_REG instead of failing. NatureDSP AE_SA*
-      // macros call sdw_cb_imm with (offs >> 3) which is runtime when offs is.
       if (StrideReg.isVirtual())
         RBI.constrainGenericRegister(StrideReg, GPR32RegClass, MRI);
       MachineInstr *MI = MIB.buildInstr(D_SDW_CB_REG)
+                             .addDef(WbReg)
                              .addReg(Data)
                              .addReg(PtrBase)
                              .addImm(CbrCst->Value.getZExtValue())
@@ -5468,6 +5468,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     }
 
     MachineInstr *MI = MIB.buildInstr(D_SDW_CB_IMM)
+                           .addDef(WbReg)
                            .addReg(Data)
                            .addReg(PtrBase)
                            .addImm(CbrCst->Value.getZExtValue())
@@ -5477,13 +5478,13 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     return true;
   }
   case haydn_sdw_cb_reg: {
-    // Store: void intrinsic(data, ptr_base, cbr_sel, stride_reg)
-    // op(0) = intrinsic ID, op(1) = data, op(2) = ptr_base
-    // op(3) = cbr_sel, op(4) = stride_reg
-    Register Data = I.getOperand(1).getReg();
-    Register PtrBase = I.getOperand(2).getReg();
-    Register CbrSelReg = I.getOperand(3).getReg();
-    Register StrideReg = I.getOperand(4).getReg();
+    // MI: rs1_wb, rtd, rs1, cbr_sel, rs2
+    // Intrinsic returns new_ptr in op0; args shift by one vs void form.
+    Register WbReg = I.getOperand(0).getReg();
+    Register Data = I.getOperand(2).getReg();
+    Register PtrBase = I.getOperand(3).getReg();
+    Register CbrSelReg = I.getOperand(4).getReg();
+    Register StrideReg = I.getOperand(5).getReg();
 
     auto CbrCst = getIConstantVRegValWithLookThrough(CbrSelReg, MRI);
     if (!CbrCst) {
@@ -5496,8 +5497,11 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(PtrBase, GPR32RegClass, MRI);
     if (StrideReg.isVirtual())
       RBI.constrainGenericRegister(StrideReg, GPR32RegClass, MRI);
+    if (WbReg.isVirtual())
+      RBI.constrainGenericRegister(WbReg, GPR32RegClass, MRI);
 
     MachineInstr *MI = MIB.buildInstr(D_SDW_CB_REG)
+                           .addDef(WbReg)
                            .addReg(Data)
                            .addReg(PtrBase)
                            .addImm(CbrCst->Value.getZExtValue())
@@ -5756,7 +5760,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   //===---------------------------------------------------------------===
   case haydn_pldwwua: {
     // void pldwwua(ar_sel, ptr) — G_INTRINSIC_W_SIDE_EFFECTS:
-    // op(0)=id, op(1)=ar_sel, op(2)=ptr
+    // op(0)=id, op(1)=ar_sel, op(2)=ptr. BundleSim writes AR[ar_sel].
     Register ArSelReg = I.getOperand(1).getReg();
     Register PtrReg = I.getOperand(2).getReg();
     auto ArCst = getIConstantVRegValWithLookThrough(ArSelReg, MRI);
@@ -5766,23 +5770,33 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     }
     if (PtrReg.isVirtual())
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
+    unsigned ArSel = ArCst->Value.getZExtValue();
+    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1, Haydn::AR2,
+                                       Haydn::AR3};
     MachineInstr *MI = MIB.buildInstr(PLDWWUA)
                            .addReg(PtrReg)
-                           .addImm(ArCst->Value.getZExtValue());
+                           .addImm(ArSel)
+                           .addDef(ArRegs[ArSel], RegState::Implicit);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
   case haydn_flar: {
     // void flar(ar_sel) — op(0)=id, op(1)=ar_sel
+    // BundleSim: pw_ar(ar_sel). Model Def of ARn so PostRA pack cannot
+    // co-issue two AR writers on the same stream (B6 AR WRITE_CONFLICT).
     Register ArSelReg = I.getOperand(1).getReg();
     auto ArCst = getIConstantVRegValWithLookThrough(ArSelReg, MRI);
     if (!ArCst || ArCst->Value.getZExtValue() > 3) {
       LLVM_DEBUG(dbgs() << "FLAR: ar_sel must be constant 0..3\n");
       return false;
     }
+    unsigned ArSel = ArCst->Value.getZExtValue();
+    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1, Haydn::AR2,
+                                       Haydn::AR3};
     MachineInstr *MI =
-        MIB.buildInstr(FLAR).addImm(ArCst->Value.getZExtValue());
+        MIB.buildInstr(FLAR).addImm(ArSel).addDef(ArRegs[ArSel],
+                                                  RegState::Implicit);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
@@ -5803,10 +5817,16 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     if (PtrReg.isVirtual())
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
     // Logical: (outs), (ins GPR32:$rs, uimm2:$ar_sel, uimm1:$dir_sel)
+    unsigned ArSel = ArCst->Value.getZExtValue();
+    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1, Haydn::AR2,
+                                       Haydn::AR3};
     MachineInstr *MI = MIB.buildInstr(WBARWUA)
                            .addReg(PtrReg)
-                           .addImm(ArCst->Value.getZExtValue())
-                           .addImm(DirCst->Value.getZExtValue());
+                           .addImm(ArSel)
+                           .addImm(DirCst->Value.getZExtValue())
+                           .addDef(ArRegs[ArSel], RegState::Implicit)
+                           .addUse(ArRegs[ArSel],
+                                   RegState::Implicit | RegState::Undef);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
@@ -5814,8 +5834,10 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_d_lqhwua_post:
   case haydn_d_ltwua_post: {
     // i64 load(ptr, ar_sel, stride, dir_sel)
-    // op(0)=dst, op(1)=id, op(2)=ptr, op(3)=ar_sel, op(4)=stride, op(5)=dir
     // MC: [rtd, rs1_wb, rs1, rs2, ar_sel, dir_sel]
+    // C next-ptr is IR GEP (haydn_dsp.h); HW base writeback stays Dead for MC
+    // shape. BundleSim also writes AR[ar_sel] — implicit Def so PostRA cannot
+    // pack two same-stream UA/FLAR ops (B6 AR WRITE_CONFLICT).
     unsigned Opc = (IntrID == haydn_d_lqhwua_post) ? D_LQHWUA_POST
                                                    : D_LTWUA_POST;
     Register PtrReg = I.getOperand(2).getReg();
@@ -5835,14 +5857,20 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
     if (StrideReg.isVirtual())
       RBI.constrainGenericRegister(StrideReg, GPR32RegClass, MRI);
+    unsigned ArSel = ArCst->Value.getZExtValue();
+    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1, Haydn::AR2,
+                                       Haydn::AR3};
     Register WbReg = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
     MachineInstr *MI = MIB.buildInstr(Opc)
                            .addDef(DstReg)
                            .addDef(WbReg, RegState::Dead)
                            .addReg(PtrReg)
                            .addReg(StrideReg)
-                           .addImm(ArCst->Value.getZExtValue())
-                           .addImm(DirCst->Value.getZExtValue());
+                           .addImm(ArSel)
+                           .addImm(DirCst->Value.getZExtValue())
+                           .addDef(ArRegs[ArSel], RegState::Implicit)
+                           .addUse(ArRegs[ArSel],
+                                   RegState::Implicit | RegState::Undef);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
@@ -5850,8 +5878,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_d_sqhwua_post:
   case haydn_d_stwua_post: {
     // void store(data, ptr, ar_sel, stride, dir_sel)
-    // op(0)=id, op(1)=data, op(2)=ptr, op(3)=ar_sel, op(4)=stride, op(5)=dir
-    // MC: [rs1_wb, rtd, rs1, rs2, ar_sel, dir_sel]
+    // MC: [rs1_wb, rtd, rs1, rs2, ar_sel, dir_sel] + implicit AR write
     unsigned Opc = (IntrID == haydn_d_sqhwua_post) ? D_SQHWUA_POST
                                                    : D_STWUA_POST;
     Register DataReg = I.getOperand(1).getReg();
@@ -5872,14 +5899,20 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
     if (StrideReg.isVirtual())
       RBI.constrainGenericRegister(StrideReg, GPR32RegClass, MRI);
+    unsigned ArSel = ArCst->Value.getZExtValue();
+    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1, Haydn::AR2,
+                                       Haydn::AR3};
     Register WbReg = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
     MachineInstr *MI = MIB.buildInstr(Opc)
                            .addDef(WbReg, RegState::Dead)
                            .addReg(DataReg)
                            .addReg(PtrReg)
                            .addReg(StrideReg)
-                           .addImm(ArCst->Value.getZExtValue())
-                           .addImm(DirCst->Value.getZExtValue());
+                           .addImm(ArSel)
+                           .addImm(DirCst->Value.getZExtValue())
+                           .addDef(ArRegs[ArSel], RegState::Implicit)
+                           .addUse(ArRegs[ArSel],
+                                   RegState::Implicit | RegState::Undef);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;

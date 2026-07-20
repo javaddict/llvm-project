@@ -4,8 +4,8 @@
 ; Optional register-policy features (ABI-like target options):
 ; mattr=+frame-pointer force dedicated FP (R14)
 ; Default (AIE model): omit FP when ABI allows; R12 is a normal allocatable GPR
-; (no free AT). ATScratch (R12ScratchFI) is the late VASTART/address path when
-; R12 is live.
+; (no free AT). Post-RA address/const math uses free-reg scavenge
+; (PostRAScratchFI only if no free GPR).
 ;
 ; leaf_stack: fixed locals only — no VLA/realign/frameaddress.
 ; large_frame: EFI scavenger must compile with allocatable R12.

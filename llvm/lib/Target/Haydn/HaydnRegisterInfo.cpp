@@ -58,7 +58,7 @@ BitVector HaydnRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   markSuperRegs(Reserved, Haydn::R0);
 
   // R12 is a normal allocatable caller-saved GPR (AIE model: no free AT).
-  // MatInt uses HaydnPostRAScratch; VASTART may use R12 + R12ScratchFI.
+  // MatInt / VASTART use HaydnPostRAScratch (free GPR first; PostRAScratchFI spill home).
 
   // Reserve R13 (SP) and R15 (LR) always
   markSuperRegs(Reserved, Haydn::R13); // SP

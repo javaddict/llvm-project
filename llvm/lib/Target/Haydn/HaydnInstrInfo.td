@@ -1744,7 +1744,7 @@ def ORI32_W   : Fmt48_WideGPRImm<0x06, (outs GPR32:$rt),
 
 // Calls (Phase 1a): JAL_W/JALR_W are the canonical call forms.
 // They mirror legacy JAL/JALR — isCall + caller-saved clobber Defs (same set
-// as the legacy block, including R12 AT scratch —). JAL_W is NOT
+// as the legacy block, including R12 as normal call-clobbered GPR). JAL_W is NOT
 // isTerminator (a call returns); JALR_W is isTerminator (RET/indirect-branch
 // use) + isCall + isIndirectBranch. The prior `isBranch=isTerminator=
 // hasSideEffects=1` wrapping was wrong: it made JAL_W a terminator so

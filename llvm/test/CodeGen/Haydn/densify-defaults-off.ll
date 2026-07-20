@@ -25,11 +25,13 @@
 ; Pipeline Structure dump only sees LoadStoreOpt as a pass; IB/PP gate inside
 ; PostRA (not Structure lines); Role B is a flag on HaydnHardwareLoops.
 ;
-; Locked flags (all cl::init(false) product):
+; Locked flags (all cl::init(false) product unless noted):
 ;   -haydn-enable-ldst-opt         PIPE-NOT Load/Store; contrast LDST-ON
 ;   -haydn-hwloop-role-b           ROLEB-OFF residual=off; ON flips residual=on
 ;   -haydn-enable-post-pipeliner   PP-OFF no Success / took-region under default
 ;   -haydn-enable-interblock       IB-OFF no Stage-0 motion debug under default
+;   -haydn-accurate-memory-latency W2.1 soak-only (default OFF = latency 1)
+;   -haydn-enable-form-macs        W2.5 soak-only (default OFF; Acc1 residual)
 ;
 ; Behavioral ON fixtures (keep separate; do not enable densify here):
 ;   post-pipeliner-stage0.ll, interblock-fallthrough-pack.mir,

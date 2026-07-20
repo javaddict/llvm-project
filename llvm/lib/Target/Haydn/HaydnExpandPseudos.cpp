@@ -21,7 +21,10 @@
 
 #include "Haydn.h"
 #include "HaydnExpandPseudos.h"
+#include "HaydnFrameLowering.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnMachineFunctionInfo.h"
+#include "HaydnPostRAScratch.h"
 #include "HaydnRegisterInfo.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMatInt.h"
@@ -559,7 +562,121 @@ bool HaydnExpandPseudos::expandMI(MachineBasicBlock &MBB, MachineInstr &MI,
 
   case Haydn::ST64_POST_INC:
     return expandST64PostInc(MBB, MI);
+
+  case Haydn::VASTART:
+    return expandVASTART(MBB, MI);
+
+  case Haydn::VACOPY:
+    return expandVACOPY(MBB, MI);
+
+  case Haydn::VAEND:
+    // Baremetal va_list has no owned resources.
+    MI.eraseFromParent();
+    return true;
   }
+}
+
+//===----------------------------------------------------------------------===//
+// VASTART / VACOPY — W1.2 pre-pack expand (was AsmPrinter-only)
+//===----------------------------------------------------------------------===//
+
+bool HaydnExpandPseudos::expandVASTART(MachineBasicBlock &MBB,
+                                       MachineInstr &MI) {
+  MachineFunction &MF = *MBB.getParent();
+  auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
+  if (!FuncInfo->hasVarArgsSaveAreas()) {
+    MI.eraseFromParent();
+    return true;
+  }
+
+  DebugLoc DL = MI.getDebugLoc();
+  Register VaListPtr = MI.getOperand(0).getReg();
+  const HaydnFrameLowering *TFL = STI->getFrameLowering();
+  MachineBasicBlock::iterator InsertPt = MI.getIterator();
+
+  const int GprFI = FuncInfo->getVarArgsGprFI();
+  const int DrFI = FuncInfo->getVarArgsDrFI();
+  const int StackFI = FuncInfo->getVarArgsStackFI();
+  const int GprSize = FuncInfo->getVarArgsGprSize();
+  const int DrSize = FuncInfo->getVarArgsDrSize();
+
+  // Free-reg first via LivePhysRegs (HaydnPostRAScratch); spill only if none.
+  // PreferNotR12: R12 is a normal GPR, not free AT. Exclude VaListPtr so we
+  // never steal the base used by ST32 field writes. Frame layout is final
+  // (ExpandPseudos runs after PEI in addPreSched2).
+  const Register Exclude[] = {VaListPtr};
+  withPostRAScratch(
+      MBB, InsertPt, DL, *TII, *STI, /*PreferNotR12=*/true,
+      [&](Register Scr) {
+        auto StoreFIAddr = [&](int FI, int64_t Extra, int FieldOff) {
+          Register FrameReg;
+          int64_t Offset =
+              TFL->getFrameIndexReference(MF, FI, FrameReg).getFixed() + Extra;
+          if (Offset == 0) {
+            BuildMI(MBB, InsertPt, DL, TII->get(Haydn::OR32), Scr)
+                .addReg(FrameReg)
+                .addReg(FrameReg);
+          } else {
+            BuildMI(MBB, InsertPt, DL, TII->get(Haydn::ADDI32_W), Scr)
+                .addReg(FrameReg)
+                .addImm(Offset);
+          }
+          BuildMI(MBB, InsertPt, DL, TII->get(Haydn::ST32))
+              .addReg(Scr)
+              .addReg(VaListPtr)
+              .addImm(FieldOff);
+        };
+
+        // __stack @0, __gr_top @4, __vr_top @8
+        StoreFIAddr(StackFI, /*Extra=*/0, /*FieldOff=*/0);
+        StoreFIAddr(GprFI, /*Extra=*/GprSize, /*FieldOff=*/4);
+        StoreFIAddr(DrFI, /*Extra=*/DrSize, /*FieldOff=*/8);
+
+        // __gr_offs @12 = -GprSize; __vr_offs @16 = -DrSize (R0 soft-zero base)
+        auto StoreNegSizeOff = [&](int BankSize, int FieldOff) {
+          BuildMI(MBB, InsertPt, DL, TII->get(Haydn::ADDI32_W), Scr)
+              .addReg(Haydn::R0)
+              .addImm(-BankSize);
+          BuildMI(MBB, InsertPt, DL, TII->get(Haydn::ST32))
+              .addReg(Scr)
+              .addReg(VaListPtr)
+              .addImm(FieldOff);
+        };
+        StoreNegSizeOff(GprSize, /*FieldOff=*/12);
+        StoreNegSizeOff(DrSize, /*FieldOff=*/16);
+      },
+      Exclude);
+
+  MI.eraseFromParent();
+  return true;
+}
+
+bool HaydnExpandPseudos::expandVACOPY(MachineBasicBlock &MBB,
+                                      MachineInstr &MI) {
+  DebugLoc DL = MI.getDebugLoc();
+  Register DstPtr = MI.getOperand(0).getReg();
+  Register SrcPtr = MI.getOperand(1).getReg();
+  MachineBasicBlock::iterator InsertPt = MI.getIterator();
+
+  const Register Exclude[] = {DstPtr, SrcPtr};
+  withPostRAScratch(
+      MBB, InsertPt, DL, *TII, *STI, /*PreferNotR12=*/true,
+      [&](Register Scr) {
+        for (unsigned W = 0; W < 5; ++W) {
+          int64_t Off = static_cast<int64_t>(W) * 4;
+          BuildMI(MBB, InsertPt, DL, TII->get(Haydn::LD32), Scr)
+              .addReg(SrcPtr)
+              .addImm(Off);
+          BuildMI(MBB, InsertPt, DL, TII->get(Haydn::ST32))
+              .addReg(Scr)
+              .addReg(DstPtr)
+              .addImm(Off);
+        }
+      },
+      Exclude);
+
+  MI.eraseFromParent();
+  return true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -727,8 +844,8 @@ bool HaydnExpandPseudos::expandPseudoCALL(MachineBasicBlock &MBB,
       HasRegMask = true;
     MIB.add(MO);
   }
-  // Ensure the expanded call carries a regmask : R12 AT scratch and
-  // other non-CSR regs must appear clobbered to post-RA cleanup/scheduling.
+  // Ensure the expanded call carries a regmask so caller-saved GPRs
+  // (incl. R12) appear clobbered to post-RA cleanup/scheduling.
   if (!HasRegMask) {
     const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
     const uint32_t *Mask =

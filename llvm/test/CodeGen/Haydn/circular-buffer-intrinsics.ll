@@ -35,27 +35,43 @@
 ; survives DCE. If any intrinsic fails to lower, llc will crash with
 ; global-isel-abort=1.
 
-;Circular Buffer Load (CBR)
+;Circular Buffer Load (CBR) — D208: {data, new_ptr}
 
 ; CHECK-LABEL: test_ldw_cb_imm:
 ; CHECK: d_ldw_cb_imm
 define i64 @test_ldw_cb_imm(i32 %ptr) {
-  %r = call i64 @llvm.haydn.ldw.cb.imm(i32 %ptr, i32 0, i32 8)
-  ret i64 %r
+  %r = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %ptr, i32 0, i32 1)
+  %d = extractvalue { i64, i32 } %r, 0
+  ret i64 %d
+}
+
+; CHECK-LABEL: test_ldw_cb_imm_chain:
+; Two CB loads must use the AGU-updated pointer (new_ptr), not re-feed %ptr.
+; CHECK: d_ldw_cb_imm
+; CHECK: d_ldw_cb_imm
+define i64 @test_ldw_cb_imm_chain(i32 %ptr) {
+  %r0 = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %ptr, i32 0, i32 1)
+  %p1 = extractvalue { i64, i32 } %r0, 1
+  %r1 = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %p1, i32 0, i32 1)
+  %d1 = extractvalue { i64, i32 } %r1, 0
+  ret i64 %d1
 }
 
 ; CHECK-LABEL: test_ldw_cb_reg:
 ; CHECK: d_ldw_cb_reg
 define i64 @test_ldw_cb_reg(i32 %ptr, i32 %stride) {
-  %r = call i64 @llvm.haydn.ldw.cb.reg(i32 %ptr, i32 1, i32 %stride)
-  ret i64 %r
+  %r = call { i64, i32 } @llvm.haydn.ldw.cb.reg(i32 %ptr, i32 1, i32 %stride)
+  %d = extractvalue { i64, i32 } %r, 0
+  ret i64 %d
 }
 
-;Circular Buffer Store (CBR)
-; CB store intrinsics are void IntrWriteMem — they survive DCE because they
-; have side effects. The selector builds D_SDW_CB_IMM/REG. These instrs are
-; still pseudos (4-operand shape, no encoding yet — see). Not checked
-; here.
+;Circular Buffer Store (CBR) — returns updated ptr (D208)
+; CHECK-LABEL: test_sdw_cb_imm:
+; CHECK: d_sdw_cb_imm
+define i32 @test_sdw_cb_imm(i64 %data, i32 %ptr) {
+  %np = call i32 @llvm.haydn.sdw.cb.imm(i64 %data, i32 %ptr, i32 0, i32 1)
+  ret i32 %np
+}
 
 ;Bit-Reversed Load
 
@@ -132,11 +148,11 @@ define i32 @test_sw_brev_reg(i32 %ptr, i32 %stride) {
 
 ;Intrinsic declarations
 
-; Circular Buffer — ptr_base is GPR32 (i32) per IntrinsicsHaydn.td
-declare i64 @llvm.haydn.ldw.cb.imm(i32, i32, i32)
-declare i64 @llvm.haydn.ldw.cb.reg(i32, i32, i32)
-declare void @llvm.haydn.sdw.cb.imm(i64, i32, i32, i32)
-declare void @llvm.haydn.sdw.cb.reg(i64, i32, i32, i32)
+; Circular Buffer — D208: load -> {data, new_ptr}; store -> new_ptr
+declare { i64, i32 } @llvm.haydn.ldw.cb.imm(i32, i32, i32)
+declare { i64, i32 } @llvm.haydn.ldw.cb.reg(i32, i32, i32)
+declare i32 @llvm.haydn.sdw.cb.imm(i64, i32, i32, i32)
+declare i32 @llvm.haydn.sdw.cb.reg(i64, i32, i32, i32)
 
 ; Bit-Reversed Load
 declare i32 @llvm.haydn.ldw.brev.imm(i32, i32)

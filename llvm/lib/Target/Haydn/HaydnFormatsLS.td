@@ -1229,31 +1229,64 @@ defm S_SB_WITH_REG : LS3_S_ST_RR_With<0b1011001, "s_sb_with_reg">;
 // #90 S_SB_PRE_REG (RR)
 defm S_SB_PRE_REG : LS3_S_ST_RR_PostPre<0b1011010, "s_sb_pre_reg">;
 
+// #91–#94 Circular buffer load/store (CBRI / CBRR)
+//
+// HW AGU post-updates the base GPR (BundleSim pw_gpr). Model as tied writeback
+// so PostRA pack cannot co-issue two CB ops that write the same base (B6
+// WRITE_CONFLICT: three d_ldw_cb_imm same r5 in one bundle).
+//
+// Operand list MUST match public logical D_*_CB_* (HaydnInstrInfoAuto.td) and
+// GISel: encodeBundle128 Flex materialize is setOpcode-only. Bit layout binds
+// by name (cbr_sel, imm8, rtd, rs) — $rs is the encoded base (use).
+//
+//   LDW_IMM: (outs rtd, rs_wb), (ins rs, cbr_sel, imm8)  Constraints rs=rs_wb
+//   LDW_REG: (outs rtd, rs1_wb), (ins rs1, cbr_sel, rs2)
+//   SDW_IMM: (outs rs_wb), (ins rtd, rs, cbr_sel, imm8)
+//   SDW_REG: (outs rs1_wb), (ins rtd, rs1, cbr_sel, rs2)
+//
 // #91 D_LDW_CB_IMM (CBRI)
-// LDW is a load — rtd(DR64) is the dest, rs(GPR32) is the base ADDRESS
-// (not written). Legacy D_LDW_CB_IMM (HaydnInstrInfoAuto.td:3940) has rs in
-// (ins), not (outs). FLEX port wrongly put $rs in (outs) -> "def marked as use".
-def D_LDW_CB_IMM_S0 : HaydnFU_LS_S0_CBRI<0b1011011, (outs DR64:$rtd), (ins GPR32:$rs, simm8:$imm8, uimm2:$cbr_sel), "d_ldw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []>;
-def D_LDW_CB_IMM_S1 : HaydnFU_LS_S1_CBRI<0b1011011, (outs DR64:$rtd), (ins GPR32:$rs, simm8:$imm8, uimm2:$cbr_sel), "d_ldw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []>;
-def D_LDW_CB_IMM_S2 : HaydnFU_LS_S2_CBRI<0b1011011, (outs DR64:$rtd), (ins GPR32:$rs, simm8:$imm8, uimm2:$cbr_sel), "d_ldw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []>;
+def D_LDW_CB_IMM_S0 : HaydnFU_LS_S0_CBRI<0b1011011, (outs DR64:$rtd, GPR32:$rs_wb), (ins GPR32:$rs, uimm2:$cbr_sel, simm8:$imm8), "d_ldw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []> {
+  let Constraints = "$rs = $rs_wb";
+}
+def D_LDW_CB_IMM_S1 : HaydnFU_LS_S1_CBRI<0b1011011, (outs DR64:$rtd, GPR32:$rs_wb), (ins GPR32:$rs, uimm2:$cbr_sel, simm8:$imm8), "d_ldw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []> {
+  let Constraints = "$rs = $rs_wb";
+}
+def D_LDW_CB_IMM_S2 : HaydnFU_LS_S2_CBRI<0b1011011, (outs DR64:$rtd, GPR32:$rs_wb), (ins GPR32:$rs, uimm2:$cbr_sel, simm8:$imm8), "d_ldw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []> {
+  let Constraints = "$rs = $rs_wb";
+}
 
 // #92 D_LDW_CB_REG (CBRR)
-// same fix as D_LDW_CB_IMM — LDW is a load, rs1(GPR32) is the base
-// address (read, not written). Legacy (HaydnInstrInfoAuto.td:3966) has rs1
-// in (ins). FLEX port wrongly put $rs1 in (outs).
-def D_LDW_CB_REG_S0 : HaydnFU_LS_S0_CBRR<0b1011100, (outs DR64:$rtd), (ins GPR32:$rs1, GPR32:$rs2, uimm2:$cbr_sel), "d_ldw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []>;
-def D_LDW_CB_REG_S1 : HaydnFU_LS_S1_CBRR<0b1011100, (outs DR64:$rtd), (ins GPR32:$rs1, GPR32:$rs2, uimm2:$cbr_sel), "d_ldw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []>;
-def D_LDW_CB_REG_S2 : HaydnFU_LS_S2_CBRR<0b1011100, (outs DR64:$rtd), (ins GPR32:$rs1, GPR32:$rs2, uimm2:$cbr_sel), "d_ldw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []>;
+def D_LDW_CB_REG_S0 : HaydnFU_LS_S0_CBRR<0b1011100, (outs DR64:$rtd, GPR32:$rs1_wb), (ins GPR32:$rs1, uimm2:$cbr_sel, GPR32:$rs2), "d_ldw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs1_wb";
+}
+def D_LDW_CB_REG_S1 : HaydnFU_LS_S1_CBRR<0b1011100, (outs DR64:$rtd, GPR32:$rs1_wb), (ins GPR32:$rs1, uimm2:$cbr_sel, GPR32:$rs2), "d_ldw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs1_wb";
+}
+def D_LDW_CB_REG_S2 : HaydnFU_LS_S2_CBRR<0b1011100, (outs DR64:$rtd, GPR32:$rs1_wb), (ins GPR32:$rs1, uimm2:$cbr_sel, GPR32:$rs2), "d_ldw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs1_wb";
+}
 
 // #93 D_SDW_CB_IMM (CBRI)
-def D_SDW_CB_IMM_S0 : HaydnFU_LS_S0_CBRI<0b1011101, (outs GPR32:$rs), (ins DR64:$rtd, simm8:$imm8, uimm2:$cbr_sel), "d_sdw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []>;
-def D_SDW_CB_IMM_S1 : HaydnFU_LS_S1_CBRI<0b1011101, (outs GPR32:$rs), (ins DR64:$rtd, simm8:$imm8, uimm2:$cbr_sel), "d_sdw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []>;
-def D_SDW_CB_IMM_S2 : HaydnFU_LS_S2_CBRI<0b1011101, (outs GPR32:$rs), (ins DR64:$rtd, simm8:$imm8, uimm2:$cbr_sel), "d_sdw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []>;
+def D_SDW_CB_IMM_S0 : HaydnFU_LS_S0_CBRI<0b1011101, (outs GPR32:$rs_wb), (ins DR64:$rtd, GPR32:$rs, uimm2:$cbr_sel, simm8:$imm8), "d_sdw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []> {
+  let Constraints = "$rs = $rs_wb";
+}
+def D_SDW_CB_IMM_S1 : HaydnFU_LS_S1_CBRI<0b1011101, (outs GPR32:$rs_wb), (ins DR64:$rtd, GPR32:$rs, uimm2:$cbr_sel, simm8:$imm8), "d_sdw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []> {
+  let Constraints = "$rs = $rs_wb";
+}
+def D_SDW_CB_IMM_S2 : HaydnFU_LS_S2_CBRI<0b1011101, (outs GPR32:$rs_wb), (ins DR64:$rtd, GPR32:$rs, uimm2:$cbr_sel, simm8:$imm8), "d_sdw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []> {
+  let Constraints = "$rs = $rs_wb";
+}
 
 // #94 D_SDW_CB_REG (CBRR)
-def D_SDW_CB_REG_S0 : HaydnFU_LS_S0_CBRR<0b1011110, (outs GPR32:$rs1), (ins DR64:$rtd, GPR32:$rs2, uimm2:$cbr_sel), "d_sdw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []>;
-def D_SDW_CB_REG_S1 : HaydnFU_LS_S1_CBRR<0b1011110, (outs GPR32:$rs1), (ins DR64:$rtd, GPR32:$rs2, uimm2:$cbr_sel), "d_sdw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []>;
-def D_SDW_CB_REG_S2 : HaydnFU_LS_S2_CBRR<0b1011110, (outs GPR32:$rs1), (ins DR64:$rtd, GPR32:$rs2, uimm2:$cbr_sel), "d_sdw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []>;
+def D_SDW_CB_REG_S0 : HaydnFU_LS_S0_CBRR<0b1011110, (outs GPR32:$rs1_wb), (ins DR64:$rtd, GPR32:$rs1, uimm2:$cbr_sel, GPR32:$rs2), "d_sdw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs1_wb";
+}
+def D_SDW_CB_REG_S1 : HaydnFU_LS_S1_CBRR<0b1011110, (outs GPR32:$rs1_wb), (ins DR64:$rtd, GPR32:$rs1, uimm2:$cbr_sel, GPR32:$rs2), "d_sdw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs1_wb";
+}
+def D_SDW_CB_REG_S2 : HaydnFU_LS_S2_CBRR<0b1011110, (outs GPR32:$rs1_wb), (ins DR64:$rtd, GPR32:$rs1, uimm2:$cbr_sel, GPR32:$rs2), "d_sdw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs1_wb";
+}
 
 // #95 D_LDW_BREV_IMM (RI6)
 // BREV load is a tied-def POST-increment on the base (rs) — legacy

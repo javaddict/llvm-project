@@ -786,22 +786,19 @@ After no-long strip, first hash DIFF was `tf_2_var_293` (host=1 guest low8=0)
 | Layer | Status |
 |-------|--------|
 | PEI exit / large guest_exit | **FIXED** (D492) |
-| `LOADI64` clobber live R12 → UNMAPPED | **FIXED** (D494 ATScratch; later **PostRAScratch** — MatInt no longer fixed-R12) |
+| `LOADI64` clobber live R12 → UNMAPPED | **FIXED** (PostRAScratch free-reg scavenge; no fixed-R12 AT) |
 | host≠sim content hash | **DROPPED** — invalid test, not a fix target |
 
 **AIE policy (2026-07-17):** R12 = normal allocatable caller-saved GPR.
 **No free AT** — `FeatureReserveR12AT` / `-mreserve-r12-at` **deleted**.
-MatInt: LOADI32→Dst (RISCV `movImm` style); LOADI64→`HaydnPostRAScratch`
-(LivePhysRegs scavenge, PreferNotR12). VASTART emit-time may still bracket
-R12 via PEI `R12ScratchFI`. EFI large offset: `createVirtualRegister` (RISCV/AIE).
+MatInt: LOADI32→Dst (RISCV `movImm` style); LOADI64/VASTART→`HaydnPostRAScratch`
+(LivePhysRegs free-reg first, PreferNotR12; spill home `PostRAScratchFI` only
+if none free). EFI large offset: `createVirtualRegister` (RISCV/AIE).
 
-**P0 L2 — R12ScratchFI ST32 / llvm-libc (2026-07-16 Track D + Track C):**
-Large vararg frame + frame pointer used to hard-fatal AsmPrinter
-`R12ScratchFI offset out of ST32 range`. Minimal C: `va_start` +
-`volatile char pad[1024]` + `-fno-omit-frame-pointer`.
-**Track C FIXED (backend):** `emitATScratchSaveIfNeeded` now uses ST32/LD32
-RI16 simm16 (not scaled-simm6); outside simm16 materializes EA via R0 and
-re-zeros. Lit: `llvm/test/CodeGen/Haydn/vastart-r12scratch-large-fp.ll`.
+**P0 L2 — post-RA spill FI far offset / llvm-libc (2026-07-16 Track D + C):**
+Large vararg frame + FP used to hard-fatal print-time fixed-R12 AT spill.
+**FIXED:** VASTART uses pre-pack `withPostRAScratch`; far FI via R0+re-zero in
+spill path. Lit: `llvm/test/CodeGen/Haydn/vastart-large-fp.ll`.
 **llvm-libc policy unchanged (Track D):** omit-FP only in
 `libc/cmake/caches/haydn-unknown-elf.cmake`.
 

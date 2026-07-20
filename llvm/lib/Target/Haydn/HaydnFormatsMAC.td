@@ -2884,12 +2884,18 @@ def FMULAA16_HS_11_00_S2 : HaydnFU_MAC_S2_D_RRA<0b100011001,
   let Constraints = "$rta = $rtd";
 }
 
-def FMULAA16_HS_33_22_S1 : HaydnFU_MAC_S1_D_RR<0b100011010,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "fmulaa16.hs.33.22\t$rtd, $rsd1, $rsd2", []>;
-def FMULAA16_HS_33_22_S2 : HaydnFU_MAC_S2_D_RR<0b100011010,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "fmulaa16.hs.33.22\t$rtd, $rsd1, $rsd2", []>;
+// Acc form (mirrors FMULAA16_HS_11_00_S*): silicon reads rtd as accumulator.
+// Wire encoding identical to D_RR (rta tied to rtd, not encoded).
+def FMULAA16_HS_33_22_S1 : HaydnFU_MAC_S1_D_RRA<0b100011010,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "fmulaa16.hs.33.22\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def FMULAA16_HS_33_22_S2 : HaydnFU_MAC_S2_D_RRA<0b100011010,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "fmulaa16.hs.33.22\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
 def FMULAA16_HS_13_02_S1 : HaydnFU_MAC_S1_D_RR<0b100011011,
     (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),

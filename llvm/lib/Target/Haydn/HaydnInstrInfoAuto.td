@@ -627,10 +627,16 @@ def FMULAA16_HS_13_02 : FmtALU64<0x67, 0x066,
     (ins DR64:$rs1, DR64:$rs2),
     "fmulaa16_hs_13_02	$rd, $rs1, $rs2", []>;
 
-def FMULAA16_HS_33_22 : FmtALU64<0x67, 0x067,
+// Spec/DB: rtd[63:32] = SATQ1.31(rtd[63:32] + p3 + p2); DR_Read_Port
+// includes rtd. Encoding is byte-identical to prior FmtALU64 form
+// (FmtALU64Acc only adds a tied $rd_in MIR operand; wire layout unchanged).
+// Migrated so GISel selectAccMAC / FIR_1 can preserve the accumulator.
+def FMULAA16_HS_33_22 : FmtALU64Acc<0x67, 0x067,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulaa16_hs_33_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulaa16_hs_33_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 def FMULAA16_LS_11_00 : FmtALU64<0x67, 0x068,
     (outs DR64:$rd),
@@ -3901,10 +3907,13 @@ def ZERO_DR : HaydnInst<4, (outs DR64:$rd),
 // SMS DFA ResMII treat every CB load as exclusive S0 — bkfir ResMII 10 vs
 // HiFi 8. Issue-width + dual MAC still bound the floor; this only fixes the
 // DFA fallback / itinerary view to match FlexMap (P3).
+// AGU writeback of base (tied) — matches BundleSim and FormatsLS Flex peers.
+// Prevents PostRA multi-issue of same-base CB ops (B6 WRITE_CONFLICT).
 let isAsmParserOnly = 1, isPseudo = 0, mayLoad = 1 in
-def D_LDW_CB_IMM : HaydnInst<4, (outs DR64:$rtd),
+def D_LDW_CB_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, i32imm:$cbr_sel, simm16:$imm),
     "d_ldw_cb_imm\t$rtd, $cbr_sel, $rs, $imm", []> {
+  let Constraints = "$rs = $rs_wb";
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
   let Itinerary = Slot01_LD;
@@ -3929,9 +3938,10 @@ def D_LDW_CB_IMM : HaydnInst<4, (outs DR64:$rtd),
 // [1:0]=0b00
 // Mirror D_LDW_CB_IMM: multi-slot load itinerary for dual CB-load ResMII (P3).
 let isAsmParserOnly = 1, isPseudo = 0, mayLoad = 1 in
-def D_LDW_CB_REG : HaydnInst<4, (outs DR64:$rtd),
+def D_LDW_CB_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs1_wb),
     (ins GPR32:$rs1, i32imm:$cbr_sel, GPR32:$rs2),
     "d_ldw_cb_reg\t$rtd, $cbr_sel, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs1_wb";
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
   let Itinerary = Slot01_LD;
@@ -3964,9 +3974,10 @@ def D_LDW_CB_REG : HaydnInst<4, (outs DR64:$rtd),
 // two differences:
 // 1. mayStore = 1 (instead of mayLoad = 1).
 // 2. rtd is a SOURCE operand (store data) — moved from (outs) to (ins).
-// The hardware still encodes rtd in Inst[21:18]; only the def/use
-// direction flips. The selector already emits the operand in the
-// correct order: addReg(Data).addReg(PtrBase).addImm(cbr).addImm/Reg.
+// Operand order (must match FormatsLS Flex peers — setOpcode-only encode):
+//   LDW: rtd, rs_wb, rs, cbr_sel, imm/rs2
+//   SDW: rs_wb, rtd, rs, cbr_sel, imm/rs2
+// Selector builds tied base writeback (B6).
 //
 // Opcodes 0x9B/0x9C are the next sequential allocation after 's
 // 0x99/0x9A. The FmtALU32/FmtI opcode-space collision is accepted under
@@ -3974,9 +3985,10 @@ def D_LDW_CB_REG : HaydnInst<4, (outs DR64:$rtd),
 //===----------------------------------------------------------------------===//
 
 let isAsmParserOnly = 1, isPseudo = 0, mayStore = 1 in
-def D_SDW_CB_IMM : HaydnInst<4, (outs),
+def D_SDW_CB_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, i32imm:$cbr_sel, simm16:$imm),
     "d_sdw_cb_imm\t$cbr_sel, $rtd, $rs, $imm", []> {
+  let Constraints = "$rs = $rs_wb";
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
   let Itinerary = Slot0_LS;
@@ -3997,9 +4009,10 @@ def D_SDW_CB_IMM : HaydnInst<4, (outs),
 // D_SDW_CB_IMM but stride is GPR32. Layout mirrors D_LDW_CB_REG with the
 // data operand flipped to a source.
 let isAsmParserOnly = 1, isPseudo = 0, mayStore = 1 in
-def D_SDW_CB_REG : HaydnInst<4, (outs),
+def D_SDW_CB_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins DR64:$rtd, GPR32:$rs1, i32imm:$cbr_sel, GPR32:$rs2),
     "d_sdw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs1_wb";
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
   let Itinerary = Slot0_LS;

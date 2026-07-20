@@ -848,30 +848,39 @@ static inline haydn_dpair_t __haydn_x2cmul32s(uint64_t a, uint64_t b) {
 #define __haydn_move32_dr_h __builtin_haydn_move32_dr_h
 
 //===----------------------------------------------------------------------===//
-// Circular Buffer Load/Store (CBR)
+// Circular Buffer Load/Store (CBR) — D208 2-ret model
 //
 // Haydn has 2 hardware circular-buffer sets (cbr_sel 0/1). Each CBR set is a
 // CSR pair CBR_BEGIN/CBR_END (Rev 2: no CBR_SIZE — size = END-BEGIN+1). The
-// CB load/store instructions automatically wrap the address pointer within
-// the buffer boundaries, and the hardware ALWAYS post-increments the base
-// register in place.
+// CB load/store instructions wrap the address and post-increment the base
+// GPR. IR models that as SSA: load returns {data, new_ptr}, store returns
+// new_ptr. C surface uses frexp-pattern pair builtins + struct wrappers so
+// default access is .data while .ptr is available for NatureDSP XC cursors.
 //
-// D206 two-def API: the pointer is passed BY POINTER (in/out) so the
-// compiler surfaces the hardware's updated cursor (Hexagon
-// `memd(Rx++#I:circ(Mu))` / AIE G_AIE_POSTINC_LOAD idiom). The builtin:
-//   int64_t data = __haydn_ldw_cb_imm(&ptr, 0, 8);  // ptr updated in place
-// returns the loaded data AND writes the wrapped cursor back to *ptr.
+//   haydn_cb_ld_t r = __haydn_ldw_cb_imm(ptr, cbr, stride);
+//   data = r.data;  ptr = r.ptr;
 //
-// The cbr_sel parameter (0 or 1) selects which CBR set wraps.
+// Stride is the CB imm (bytes>>3 for IMM form macros in haydn_dsp.h).
 //===----------------------------------------------------------------------===//
 
-/// 64-bit load from circular buffer (data-only; pointer is hardware-managed — D207).
-#define __haydn_ldw_cb_imm __builtin_haydn_ldw_cb_imm
-/// 64-bit load from circular buffer, register stride.
-#define __haydn_ldw_cb_reg __builtin_haydn_ldw_cb_reg
-/// 64-bit store to circular buffer.
+typedef struct {
+  long long data;
+  int new_ptr; /* AGU-updated base; not named `ptr` (macro arg collision) */
+} haydn_cb_ld_t;
+
+/// 64-bit CB load: returns data and AGU-updated cursor.
+static inline haydn_cb_ld_t __haydn_ldw_cb_imm(int base, int cbr_sel, int stride) {
+  haydn_cb_ld_t r;
+  r.data = __builtin_haydn_ldw_cb_imm_pair(&r.new_ptr, base, cbr_sel, stride);
+  return r;
+}
+static inline haydn_cb_ld_t __haydn_ldw_cb_reg(int base, int cbr_sel, int stride) {
+  haydn_cb_ld_t r;
+  r.data = __builtin_haydn_ldw_cb_reg_pair(&r.new_ptr, base, cbr_sel, stride);
+  return r;
+}
+/// 64-bit CB store: returns AGU-updated cursor (ignore if fire-and-forget).
 #define __haydn_sdw_cb_imm __builtin_haydn_sdw_cb_imm
-/// 64-bit store to circular buffer, register stride.
 #define __haydn_sdw_cb_reg __builtin_haydn_sdw_cb_reg
 
 //===----------------------------------------------------------------------===//

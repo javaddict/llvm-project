@@ -96,7 +96,8 @@ do.body:
   ; Circular load via the CB intrinsic — the compat-header path.
   ; This is what eliminates the C-level `(n+m) % N` modulo (and thus the
   ; __umodsi3 libcall that would block hwloop recognition).
-  %1 = tail call i64 @llvm.haydn.ldw.cb.imm(i32 %xbase, i32 0, i32 1)
+  %cb = tail call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %xbase, i32 0, i32 1)
+  %1 = extractvalue { i64, i32 } %cb, 0
   %2 = shl i64 %1, 32
   %conv10 = ashr exact i64 %2, 32
   %3 = load i32, ptr %Yscalar.029, align 4
@@ -118,4 +119,4 @@ for.end:
   ret void
 }
 
-declare i64 @llvm.haydn.ldw.cb.imm(i32, i32, i32)
+declare { i64, i32 } @llvm.haydn.ldw.cb.imm(i32, i32, i32)

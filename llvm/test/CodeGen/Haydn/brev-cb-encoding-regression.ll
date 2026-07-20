@@ -43,8 +43,8 @@ declare i32 @llvm.haydn.lw.brev.imm(i32, i32)
 declare i32 @llvm.haydn.lw.brev.reg(i32, i32)
 declare i32 @llvm.haydn.sdw.brev.imm(i32, i32, i32)
 declare i32 @llvm.haydn.sw.brev.imm(i32, i32)
-declare i64 @llvm.haydn.ldw.cb.imm(i32, i32, i32)
-declare i64 @llvm.haydn.ldw.cb.reg(i32, i32, i32)
+declare { i64, i32 } @llvm.haydn.ldw.cb.imm(i32, i32, i32)
+declare { i64, i32 } @llvm.haydn.ldw.cb.reg(i32, i32, i32)
 
 ; 64-bit BREV load with immediate stride
 define i32 @test_ldw_brev_imm(i32 %p) {
@@ -98,7 +98,8 @@ define i32 @test_sw_brev_imm(i32 %p) {
 define i64 @test_ldw_cb_imm(i32 %p) {
 ; CHECK-LABEL: test_ldw_cb_imm:
 ; CHECK: d_ldw_cb_imm
-  %r = call i64 @llvm.haydn.ldw.cb.imm(i32 %p, i32 0, i32 8)
+  %r_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %p, i32 0, i32 8)
+  %r = extractvalue { i64, i32 } %r_pair, 0
   ret i64 %r
 }
 
@@ -106,6 +107,7 @@ define i64 @test_ldw_cb_imm(i32 %p) {
 define i64 @test_ldw_cb_reg(i32 %p, i32 %s) {
 ; CHECK-LABEL: test_ldw_cb_reg:
 ; CHECK: d_ldw_cb_reg
-  %r = call i64 @llvm.haydn.ldw.cb.reg(i32 %p, i32 1, i32 %s)
+  %r_pair = call { i64, i32 } @llvm.haydn.ldw.cb.reg(i32 %p, i32 1, i32 %s)
+  %r = extractvalue { i64, i32 } %r_pair, 0
   ret i64 %r
 }

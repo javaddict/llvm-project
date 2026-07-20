@@ -707,12 +707,17 @@ def int_haydn_fmul16_ls23 : haydn_binary_intrinsic<"haydn_fmul16_ls23", llvm_i64
 def int_haydn_fmul16_ls33 : haydn_binary_intrinsic<"haydn_fmul16_ls33", llvm_i64_ty, llvm_i64_ty>;
 
 //===----------------------------------------------------------------------===//
-// Wave 4: FMULAA16 HS/LS MAC variants (binary DR64)
+// Wave 4: FMULAA16 HS/LS MAC variants
 // Q15*Q15 MAC into Q31, accumulate-add, lane-pair select.
+// Spec/DB: all AA forms read rtd as accumulator. HS_11_00 and HS_33_22 are
+// ternary Acc (FmtALU64Acc); remaining variants still binary-selected pending
+// Acc migration (same encoding class as 11_00/33_22).
 //===----------------------------------------------------------------------===//
 
 def int_haydn_fmulaa16_hs_13_02 : haydn_binary_intrinsic<"haydn_fmulaa16_hs_13_02", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmulaa16_hs_33_22 : haydn_binary_intrinsic<"haydn_fmulaa16_hs_33_22", llvm_i64_ty, llvm_i64_ty>;
+// Ternary Acc: rtd[63:32] = SATQ1.31(rtd[63:32] + p3 + p2). Migrated with
+// FMULAA16_HS_33_22 -> FmtALU64Acc for AE_MULAFQ16X2_FIR_1 correctness.
+def int_haydn_fmulaa16_hs_33_22 : haydn_ternary_intrinsic<"haydn_fmulaa16_hs_33_22", llvm_i64_ty, llvm_i64_ty>;
 def int_haydn_fmulaa16_ls_11_00 : haydn_binary_intrinsic<"haydn_fmulaa16_ls_11_00", llvm_i64_ty, llvm_i64_ty>;
 def int_haydn_fmulaa16_ls_13_02 : haydn_binary_intrinsic<"haydn_fmulaa16_ls_13_02", llvm_i64_ty, llvm_i64_ty>;
 def int_haydn_fmulaa16_ls_33_22 : haydn_binary_intrinsic<"haydn_fmulaa16_ls_33_22", llvm_i64_ty, llvm_i64_ty>;
@@ -1086,53 +1091,42 @@ def int_haydn_move32_dr_h : Haydn_Intrinsic<"haydn_move32_dr_h",
 //===----------------------------------------------------------------------===//
 
 // D_LDW_CB_IMM — 64-bit load from circular buffer.
-// Intrinsic: (i32 ptr_base, i32 cbr_sel, i32 stride) -> i64 data
+// Intrinsic: (i32 ptr_base, i32 cbr_sel, i32 stride) -> {i64 data, i32 new_ptr}
 //
-// MODEL (D207, supersedes D206): the pointer fed to a CB load/store is a
-// NORMAL value the program computes (from the loop index, possibly via
-// modular arithmetic). The CBR is a *boundary guard* — it enforces the
-// wrap at the buffer edges in hardware — NOT a producer of a new pointer
-// value the program needs. Each CB call receives a freshly-computed
-// pointer (the program overwrites it before the next call anyway), so the
-// hardware post-increment is never read back. The intrinsic returns ONLY
-// the loaded data; no updated-ptr output, no tied-def, no cursor tracking.
-// (D206's Hexagon 2-def was for the contract where the program relies on
-// the HW to produce the next pointer; Haydn's contract is the program
-// computes the pointer, so the 2-def is wrong for it.) The only path to
-// *convert* a plain-C loop to CB is detecting modular arithmetic on an
-// index-derived pointer (the Phase-C detection pass) — that operates on
-// normal values, not a tracked CBR pointer.
+// MODEL (D208, supersedes D207 for freestanding + NatureDSP XC):
+// Hardware AGU writes wrap(base+stride) into the base GPR. That result is a
+// real SSA value the program may need (freestanding NatureDSP AE_*_XC mutates
+// the C pointer). Return BOTH loaded data and the updated cursor so IR models
+// the same deterministic step as BundleSim / MI rs_wb.
+//
+// No ClangBuiltin auto-map: multi-result needs frexp-pattern _pair builtins
+// (see EmitHaydnBuiltinExpr). C headers expose .data / .ptr via struct wrapper.
 //   Note: cbr_sel is encoded as an immediate (0 or 1).
-//   Note: ptr_base is GPR32 (i32) despite the D_ prefix (DR64 data operand).
-def int_haydn_ldw_cb_imm : Haydn_Intrinsic<"haydn_ldw_cb_imm",
-    // D215 BUG-2: IntrHasSideEffects — the CB hardware advances the circular
-    // buffer pointer implicitly on each call, so consecutive calls with the
-    // same ptr_base arg return DIFFERENT data. IntrReadMem would let LICM
-    // hoist this out of the loop (the ptr_base looks loop-invariant), collapsing
-    // an M-tap FIR into M×(first tap). IntrHasSideEffects prevents hoisting.
-    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+//   Note: ptr_base is GPR32 (i32); data is DR64 (i64).
+// IntrHasSideEffects: consecutive calls with same base differ (also blocks LICM).
+def int_haydn_ldw_cb_imm : DefaultAttrsIntrinsic<
+    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
     [IntrHasSideEffects, IntrWillReturn]>;
 
 // D_LDW_CB_REG — 64-bit load from circular buffer, register stride.
-// Intrinsic: (i32 ptr_base, i32 cbr_sel, i32 stride_reg) -> i64 data
-def int_haydn_ldw_cb_reg : Haydn_Intrinsic<"haydn_ldw_cb_reg",
-    // D215 BUG-2: IntrHasSideEffects — same CB-pointer-advancement semantics
-    // as ldw_cb_imm. See ldw_cb_imm comment.
-    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+// Intrinsic: (i32 ptr_base, i32 cbr_sel, i32 stride_reg) -> {i64 data, i32 new_ptr}
+def int_haydn_ldw_cb_reg : DefaultAttrsIntrinsic<
+    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
     [IntrHasSideEffects, IntrWillReturn]>;
 
 // D_SDW_CB_IMM — 64-bit store to circular buffer.
-// Intrinsic: (i64 data, i32 ptr_base, i32 cbr_sel, i32 stride) -> void
+// Intrinsic: (i64 data, i32 ptr_base, i32 cbr_sel, i32 stride) -> i32 new_ptr
+// Returns the AGU-updated base (same as MI rs_wb). Callers that ignore the
+// return keep D207-style fire-and-forget stores; freestanding XC assigns it.
 def int_haydn_sdw_cb_imm : Haydn_Intrinsic<"haydn_sdw_cb_imm",
-    // D215 BUG-2: IntrHasSideEffects — CB store advances the pointer implicitly.
-    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
     [IntrHasSideEffects, IntrWillReturn]>;
 
 // D_SDW_CB_REG — 64-bit store to circular buffer, register stride.
-// Intrinsic: (i64 data, i32 ptr_base, i32 cbr_sel, i32 stride_reg) -> void
+// Intrinsic: (i64 data, i32 ptr_base, i32 cbr_sel, i32 stride_reg) -> i32 new_ptr
 def int_haydn_sdw_cb_reg : Haydn_Intrinsic<"haydn_sdw_cb_reg",
-    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrWillReturn]>;
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
 // Circular Buffer Setup (CBR programming via CSRW)
@@ -1548,22 +1542,22 @@ def int_haydn_mulaa32s_fir_hl : haydn_ternary_intrinsic<
 
 // AE_MULFQ16X2_FIR_3: 16x16 fractional multiply init, lane-pair 0/1.
 // Non-accumulating: overwrites rtd[63:32] with the Q1.31 product.
-// Lowers to FMUL16_HS00 acc, a, b.
+// Lowers to FMULZAA16_HS_11_00 (zero-acc dual product, lanes 1+0).
 def int_haydn_mulfq16x2_fir_3 : haydn_ternary_intrinsic<
     "haydn_mulfq16x2_fir_3", llvm_i64_ty, llvm_i64_ty>;
 
-// AE_MULFQ16X2_FIR_1: 16x16 fractional multiply init, lane-pair 2/3.
-// Lowers to FMUL16_HS22 acc, a, b.
+// AE_MULFQ16X2_FIR_1: 16x16 fractional dual-product init, lane-pair 3+2.
+// Lowers to FMULZAA16_HS_33_22 (zero-acc dual product).
 def int_haydn_mulfq16x2_fir_1 : haydn_ternary_intrinsic<
     "haydn_mulfq16x2_fir_1", llvm_i64_ty, llvm_i64_ty>;
 
 // AE_MULAFQ16X2_FIR_3: 16x16 fractional MAC, lane-pair 1+0 → Q1.31.
-// Lowers to FMULAA16_HS_11_00 acc, a, b.
+// Lowers to FMULAA16_HS_11_00 acc, a, b (FmtALU64Acc).
 def int_haydn_mulafq16x2_fir_3 : haydn_ternary_intrinsic<
     "haydn_mulafq16x2_fir_3", llvm_i64_ty, llvm_i64_ty>;
 
 // AE_MULAFQ16X2_FIR_1: 16x16 fractional MAC, lane-pair 3+2 → Q1.31.
-// Lowers to FMULAA16_HS_33_22 acc, a, b.
+// Lowers to FMULAA16_HS_33_22 acc, a, b (FmtALU64Acc; Acc migration B8).
 def int_haydn_mulafq16x2_fir_1 : haydn_ternary_intrinsic<
     "haydn_mulafq16x2_fir_1", llvm_i64_ty, llvm_i64_ty>;
 
