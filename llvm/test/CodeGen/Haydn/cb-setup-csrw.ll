@@ -24,7 +24,7 @@
 
 declare void @llvm.haydn.setcbr.begin(i32, i32)
 declare void @llvm.haydn.setcbr.end(i32, i32)
-declare i64 @llvm.haydn.ldw.cb.imm(i32, i32, i32)
+declare { i64, i32 } @llvm.haydn.ldw.cb.imm(i32, i32, i32)
 
 ; Setup CBR set 0, then a CB load on set 0. The setup must survive.
 ; CSR addresses: CBR_BEGIN[0]=0x2C=44, CBR_END[0]=0x2D=45.
@@ -35,7 +35,8 @@ declare i64 @llvm.haydn.ldw.cb.imm(i32, i32, i32)
 define i64 @test_cb_setup_set0(i32 %begin, i32 %end, i32 %ptr) {
   call void @llvm.haydn.setcbr.begin(i32 0, i32 %begin)
   call void @llvm.haydn.setcbr.end(i32 0, i32 %end)
-  %d = call i64 @llvm.haydn.ldw.cb.imm(i32 %ptr, i32 0, i32 1)
+  %d_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %ptr, i32 0, i32 1)
+  %d = extractvalue { i64, i32 } %d_pair, 0
   ret i64 %d
 }
 

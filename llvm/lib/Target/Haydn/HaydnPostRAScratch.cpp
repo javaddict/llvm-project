@@ -24,15 +24,24 @@ using namespace llvm;
 
 // Call-clobbered first (R1–R7), then callee-saved temps that may still be
 // dead at I (R11…R8). R12 is last and only considered when PreferNotR12 is
-// false — MatInt never "acquires" fixed R12 as AT.
+// false — never "acquire" fixed R12 as free AT.
 static constexpr MCPhysReg PostRAScratchPriority[] = {
     Haydn::R1, Haydn::R2,  Haydn::R3,  Haydn::R4, Haydn::R5, Haydn::R6,
     Haydn::R7, Haydn::R11, Haydn::R10, Haydn::R9, Haydn::R8, Haydn::R12,
 };
 
+static bool isExcluded(MCPhysReg Cand, ArrayRef<Register> Exclude) {
+  for (Register E : Exclude) {
+    if (E.isPhysical() && E.id() == Cand)
+      return true;
+  }
+  return false;
+}
+
 Register llvm::findPostRAScratchGPR(MachineBasicBlock &MBB,
                                     MachineBasicBlock::iterator I,
-                                    bool PreferNotR12, bool &NeedsSpill) {
+                                    bool PreferNotR12, bool &NeedsSpill,
+                                    ArrayRef<Register> Exclude) {
   const MachineFunction &MF = *MBB.getParent();
   const MachineRegisterInfo &MRI = MF.getRegInfo();
   const TargetRegisterInfo &TRI = *MF.getSubtarget().getRegisterInfo();
@@ -50,6 +59,8 @@ Register llvm::findPostRAScratchGPR(MachineBasicBlock &MBB,
       continue;
     if (MRI.isReserved(Cand))
       continue;
+    if (isExcluded(Cand, Exclude))
+      continue;
     if (!FirstPreferred)
       FirstPreferred = Cand;
     if (LPR.available(MRI, Cand)) {
@@ -58,12 +69,20 @@ Register llvm::findPostRAScratchGPR(MachineBasicBlock &MBB,
     }
   }
 
-  // Nothing free: spill the first preferred candidate (R1 when unreserved).
+  // Nothing free: spill the first preferred non-excluded candidate.
   NeedsSpill = true;
   if (FirstPreferred)
     return FirstPreferred;
-  // Extreme fallback if every preferred reg is reserved.
-  return Haydn::R11;
+  // Extreme fallback if every preferred reg is reserved/excluded.
+  for (MCPhysReg Cand : PostRAScratchPriority) {
+    if (PreferNotR12 && Cand == Haydn::R12)
+      continue;
+    if (isExcluded(Cand, Exclude) || MRI.isReserved(Cand))
+      continue;
+    return Cand;
+  }
+  report_fatal_error(
+      "Haydn: no post-RA scratch GPR (all candidates reserved/excluded)");
 }
 
 static void emitScratchMemOp(MachineBasicBlock &MBB,
@@ -107,28 +126,25 @@ void llvm::withPostRAScratch(MachineBasicBlock &MBB,
                              MachineBasicBlock::iterator I, const DebugLoc &DL,
                              const TargetInstrInfo &TII,
                              const HaydnSubtarget &ST, bool PreferNotR12,
-                             function_ref<void(Register Scr)> Fn) {
+                             function_ref<void(Register Scr)> Fn,
+                             ArrayRef<Register> Exclude) {
   bool NeedsSpill = false;
   const Register Scr =
-      findPostRAScratchGPR(MBB, I, PreferNotR12, NeedsSpill);
+      findPostRAScratchGPR(MBB, I, PreferNotR12, NeedsSpill, Exclude);
 
   if (!NeedsSpill) {
     Fn(Scr);
     return;
   }
 
-  // Spill/restore around Fn. Prefer a PEI emergency / R12ScratchFI slot so
-  // the MatInt pack sequence can still use a temporary SP bracket without
-  // nesting two SP adjusts incorrectly against frame offsets.
-  //
-  // Last resort (MIR lit without PEI slots): balanced 8-byte SP bracket.
-  // Documented because expandPostRAPseudo has no RegScavenger; SP is the
-  // only portable phys spill when frame layout has no reserved FI.
+  // Spill/restore only when no free GPR. Prefer PEI emergency /
+  // PostRAScratchFI (spill *home* for any scavenged GPR). Last resort (MIR
+  // without PEI): balanced 8-byte SP bracket — no RegScavenger here.
   MachineFunction &MF = *MBB.getParent();
   auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
   int SpillFI = FuncInfo->getBranchRelaxationScratchFI();
   if (SpillFI < 0)
-    SpillFI = FuncInfo->getR12ScratchFI();
+    SpillFI = FuncInfo->getPostRAScratchFI();
 
   if (SpillFI >= 0) {
     const HaydnFrameLowering *TFL = ST.getFrameLowering();

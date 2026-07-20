@@ -25,10 +25,10 @@
 ; dropped, leaving only the load mnemonic. The volatile sink forces the
 ; store to survive.
 
-declare i64 @llvm.haydn.ldw.cb.imm(i32, i32, i32)
-declare i64 @llvm.haydn.ldw.cb.reg(i32, i32, i32)
-declare void @llvm.haydn.sdw.cb.imm(i64, i32, i32, i32)
-declare void @llvm.haydn.sdw.cb.reg(i64, i32, i32, i32)
+declare { i64, i32 } @llvm.haydn.ldw.cb.imm(i32, i32, i32)
+declare { i64, i32 } @llvm.haydn.ldw.cb.reg(i32, i32, i32)
+declare i32 @llvm.haydn.sdw.cb.imm(i64, i32, i32, i32)
+declare i32 @llvm.haydn.sdw.cb.reg(i64, i32, i32, i32)
 
 @sink = global i64 0
 
@@ -39,8 +39,9 @@ define void @test_cb_load_then_store_imm(i32 %base) {
 ; CHECK: d_ldw_cb_imm
 ; CHECK: d_sdw_cb_imm
 entry:
-  %v = call i64 @llvm.haydn.ldw.cb.imm(i32 %base, i32 0, i32 8)
-  call void @llvm.haydn.sdw.cb.imm(i64 %v, i32 %base, i32 0, i32 8)
+  %v_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %base, i32 0, i32 8)
+  %v = extractvalue { i64, i32 } %v_pair, 0
+  call i32 @llvm.haydn.sdw.cb.imm(i64 %v, i32 %base, i32 0, i32 8)
   ret void
 }
 
@@ -50,8 +51,9 @@ define void @test_cb_load_then_store_reg(i32 %base, i32 %stride) {
 ; CHECK: d_ldw_cb_reg
 ; CHECK: d_sdw_cb_reg
 entry:
-  %v = call i64 @llvm.haydn.ldw.cb.reg(i32 %base, i32 1, i32 %stride)
-  call void @llvm.haydn.sdw.cb.reg(i64 %v, i32 %base, i32 1, i32 %stride)
+  %v_pair = call { i64, i32 } @llvm.haydn.ldw.cb.reg(i32 %base, i32 1, i32 %stride)
+  %v = extractvalue { i64, i32 } %v_pair, 0
+  call i32 @llvm.haydn.sdw.cb.reg(i64 %v, i32 %base, i32 1, i32 %stride)
   ret void
 }
 
@@ -62,7 +64,7 @@ define void @test_sdw_cb_imm_only(i64 %data, i32 %base) {
 ; CHECK-LABEL: test_sdw_cb_imm_only:
 ; CHECK: d_sdw_cb_imm
 entry:
-  call void @llvm.haydn.sdw.cb.imm(i64 %data, i32 %base, i32 2, i32 16)
+  call i32 @llvm.haydn.sdw.cb.imm(i64 %data, i32 %base, i32 2, i32 16)
   ret void
 }
 
@@ -71,6 +73,6 @@ define void @test_sdw_cb_reg_only(i64 %data, i32 %base, i32 %stride) {
 ; CHECK-LABEL: test_sdw_cb_reg_only:
 ; CHECK: d_sdw_cb_reg
 entry:
-  call void @llvm.haydn.sdw.cb.reg(i64 %data, i32 %base, i32 3, i32 %stride)
+  call i32 @llvm.haydn.sdw.cb.reg(i64 %data, i32 %base, i32 3, i32 %stride)
   ret void
 }

@@ -11,9 +11,9 @@
 // **Live product rule:** elideCrossBankRoundTrips only (ST64/LD64 +
 // MOV_GPR↔DR64 pack/unpack → paired ST32/LD32; sext-shape fold).
 //
-// **Disabled / residual:** formMACs / optimizeSIMD (Track A — phantom MAC /
-// incomplete defs). Keep source until registered MIR matrix exists; do not
-// call from the driver. Slot commit is post-RA FlexMap only.
+// **formMACs / optimizeSIMD:** default OFF (-haydn-enable-form-macs); Acc1 /
+// phantom residual. Product driver only calls elideCrossBankRoundTrips.
+// Slot commit is post-RA FlexMap only.
 //===----------------------------------------------------------------------===//
 
 #include "HaydnPostSelectOptimize.h"
@@ -28,6 +28,7 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/GlobalISel/Utils.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/InitializePasses.h"
 
@@ -431,13 +432,20 @@ bool HaydnPostSelectOptimize::formMACs(MachineFunction &MF) {
   return Changed;
 }
 
+// W2.5 / G-MAC: product OFF. Scalar MAC32/MUL32 removed from ISA DB; SIMD
+// form paths still invent Acc1 / drop second X2MUL def. Opt-in for matrix
+// soak only — re-enable product only with registered MIR -run-pass matrix.
+static cl::opt<bool> EnableFormMACs(
+    "haydn-enable-form-macs", cl::Hidden, cl::init(false),
+    cl::desc("W2.5: PostSelect formMACs/optimizeSIMD (default OFF; Acc1/"
+             "phantom residual). Not product until MIR matrix exits."));
+
 bool HaydnPostSelectOptimize::runOnMachineFunction(MachineFunction &MF) {
   bool Changed = false;
-  // formMACs + optimizeSIMD disabled (Track A / Codex residual): SIMD
-  // MAC/MSUB fabricates undef Acc1 and drops second X2MUL def; keep off until
-  // every def/use/lane is proven with registered -run-pass tests.
-  // Changed |= formMACs(MF);
-  // Changed |= optimizeSIMD(MF);
+  if (EnableFormMACs) {
+    Changed |= formMACs(MF);
+    Changed |= optimizeSIMD(MF);
+  }
   Changed |= elideCrossBankRoundTrips(MF);
   // slot commitment moved OUT of pre-RA. materializeFlexVariants
   // previously rewrote every legacy opcode to `_S0`/`_S1` via

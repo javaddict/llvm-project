@@ -34,7 +34,8 @@
 ; CHECK-LABEL: name: test_ldw_cb_imm
 ; CHECK: D_LDW_CB_IMM
 define i64 @test_ldw_cb_imm(i32 %ptr) {
-  %r = call i64 @llvm.haydn.ldw.cb.imm(i32 %ptr, i32 0, i32 8)
+  %r_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %ptr, i32 0, i32 8)
+  %r = extractvalue { i64, i32 } %r_pair, 0
   ret i64 %r
 }
 
@@ -46,7 +47,8 @@ define i64 @test_ldw_cb_imm(i32 %ptr) {
 ; CHECK-LABEL: name: test_ldw_cb_reg
 ; CHECK: D_LDW_CB_REG
 define i64 @test_ldw_cb_reg(i32 %ptr, i32 %stride) {
-  %r = call i64 @llvm.haydn.ldw.cb.reg(i32 %ptr, i32 1, i32 %stride)
+  %r_pair = call { i64, i32 } @llvm.haydn.ldw.cb.reg(i32 %ptr, i32 1, i32 %stride)
+  %r = extractvalue { i64, i32 } %r_pair, 0
   ret i64 %r
 }
 
@@ -58,14 +60,14 @@ define i64 @test_ldw_cb_reg(i32 %ptr, i32 %stride) {
 ; CHECK-LABEL: name: test_sdw_cb_imm
 ; CHECK: D_SDW_CB_IMM
 define void @test_sdw_cb_imm(i64 %data, i32 %ptr) {
-  call void @llvm.haydn.sdw.cb.imm(i64 %data, i32 %ptr, i32 0, i32 8)
+  call i32 @llvm.haydn.sdw.cb.imm(i64 %data, i32 %ptr, i32 0, i32 8)
   ret void
 }
 
 ; CHECK-LABEL: name: test_sdw_cb_reg
 ; CHECK: D_SDW_CB_REG
 define void @test_sdw_cb_reg(i64 %data, i32 %ptr, i32 %stride) {
-  call void @llvm.haydn.sdw.cb.reg(i64 %data, i32 %ptr, i32 1, i32 %stride)
+  call i32 @llvm.haydn.sdw.cb.reg(i64 %data, i32 %ptr, i32 1, i32 %stride)
   ret void
 }
 
@@ -162,17 +164,18 @@ define i32 @test_fft_butterfly(i32 %ptr_in, i32 %ptr_out) {
 ; CHECK: D_LDW_CB_IMM
 ; CHECK: D_SDW_CB_IMM
 define i64 @test_cb_delay_line(i32 %ptr, i64 %new_sample) {
-  %old_sample = call i64 @llvm.haydn.ldw.cb.imm(i32 %ptr, i32 0, i32 8)
-  call void @llvm.haydn.sdw.cb.imm(i64 %new_sample, i32 %ptr, i32 0, i32 8)
+  %old_sample_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %ptr, i32 0, i32 8)
+  %old_sample = extractvalue { i64, i32 } %old_sample_pair, 0
+  call i32 @llvm.haydn.sdw.cb.imm(i64 %new_sample, i32 %ptr, i32 0, i32 8)
   ret i64 %old_sample
 }
 
 ;Intrinsic declarations
 
-declare i64 @llvm.haydn.ldw.cb.imm(i32, i32, i32)
-declare i64 @llvm.haydn.ldw.cb.reg(i32, i32, i32)
-declare void @llvm.haydn.sdw.cb.imm(i64, i32, i32, i32)
-declare void @llvm.haydn.sdw.cb.reg(i64, i32, i32, i32)
+declare { i64, i32 } @llvm.haydn.ldw.cb.imm(i32, i32, i32)
+declare { i64, i32 } @llvm.haydn.ldw.cb.reg(i32, i32, i32)
+declare i32 @llvm.haydn.sdw.cb.imm(i64, i32, i32, i32)
+declare i32 @llvm.haydn.sdw.cb.reg(i64, i32, i32, i32)
 
 declare i32 @llvm.haydn.ldw.brev.imm(i32, i32)
 declare i32 @llvm.haydn.ldw.brev.reg(i32, i32)

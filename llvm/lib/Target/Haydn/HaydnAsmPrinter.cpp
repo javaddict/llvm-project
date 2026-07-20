@@ -13,12 +13,9 @@
 
 #include "HaydnAsmPrinter.h"
 #include "Haydn.h"
-#include "HaydnATScratch.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
-#include "HaydnFrameLowering.h"
 #include "HaydnInstrInfo.h"
-#include "HaydnMachineFunctionInfo.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnFixupKinds.h"
@@ -107,112 +104,8 @@ void HaydnAsmPrinter::emitWrappedInst(const MCInst &Inst) {
   EmitToStreamer(*OutStreamer, Inst);
 }
 
-// Emit ST32/LD32 of R12 to/from [FrameReg+Off] for the PEI R12ScratchFI slot.
-// ST32/LD32 are logical RI16 (simm16 byte offset via FlexMap ST32_S0/LD32_S0).
-// Large FP frames can put the slot well outside scaled-simm6 (±128B) while
-// still inside simm16 (±32KiB) — e.g. va_start + large locals +
-// fno-omit-frame-pointer. Prefer a correct wider sequence over hard-fatal.
-// Outside simm16: materialize EA into R0 (soft-zero), access at offset 0
-// re-zero R0. R12 cannot be the address temp (holds the value being moved).
-void HaydnAsmPrinter::emitATScratchMemOp(Register FrameReg, int64_t Off,
-                                         bool IsStore) {
-  const Register Scr = HaydnATScratch::phys();
-  auto emitLS = [&](Register Base, int64_t Imm) {
-    MCInst I;
-    I.setOpcode(IsStore ? Haydn::ST32 : Haydn::LD32);
-    I.addOperand(MCOperand::createReg(Scr));
-    I.addOperand(MCOperand::createReg(Base));
-    I.addOperand(MCOperand::createImm(Imm));
-    emitWrappedInst(I);
-  };
-
-  // Direct RI16 path (ST32_S0/LD32_S0). Slot is 4-aligned by PEI.
-  if (isInt<16>(Off)) {
-    emitLS(FrameReg, Off);
-    return;
-  }
-
-  // Far path: EA in R0, then [R0+0]. R0 is architectural soft-zero.
-  const Register Tmp = Haydn::R0;
-  if (isInt<20>(Off)) {
-    MCInst Add;
-    Add.setOpcode(Haydn::ADDI32_W);
-    Add.addOperand(MCOperand::createReg(Tmp));
-    Add.addOperand(MCOperand::createReg(FrameReg));
-    Add.addOperand(MCOperand::createImm(Off));
-    emitWrappedInst(Add);
-  } else {
-    // Materialize Off into R0 (MatInt sequence), then R0 = FrameReg + R0.
-    HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(Off);
-    for (unsigned Idx = 0, E = Seq.size(); Idx != E; ++Idx) {
-      const HaydnMatInt::Inst &Inst = Seq[Idx];
-      MCInst M;
-      M.setOpcode(Inst.Opc);
-      M.addOperand(MCOperand::createReg(Tmp));
-      switch (Inst.Opc) {
-      case Haydn::LUI:
-      case Haydn::ADDI32:
-      case Haydn::ADDI32_W:
-      case Haydn::ORI32:
-      case Haydn::SLLI32:
-        // First instr sources R0 (zero); later chain through Tmp.
-        M.addOperand(MCOperand::createReg(Idx == 0 ? Haydn::R0 : Tmp));
-        M.addOperand(MCOperand::createImm(Inst.Imm));
-        break;
-      default:
-        report_fatal_error(
-            "Haydn: unexpected MatInt opc for R12ScratchFI far offset");
-      }
-      emitWrappedInst(M);
-    }
-    MCInst Add;
-    Add.setOpcode(Haydn::ADD32);
-    Add.addOperand(MCOperand::createReg(Tmp));
-    Add.addOperand(MCOperand::createReg(FrameReg));
-    Add.addOperand(MCOperand::createReg(Tmp));
-    emitWrappedInst(Add);
-  }
-  emitLS(Tmp, /*Imm=*/0);
-
-  // Restore soft-zero invariant (xor r0,r0,r0).
-  MCInst Zero;
-  Zero.setOpcode(Haydn::XOR32);
-  Zero.addOperand(MCOperand::createReg(Tmp));
-  Zero.addOperand(MCOperand::createReg(Tmp));
-  Zero.addOperand(MCOperand::createReg(Tmp));
-  emitWrappedInst(Zero);
-}
-
-void HaydnAsmPrinter::emitATScratchSaveIfNeeded() {
-  const auto &ST = MF->getSubtarget<HaydnSubtarget>();
-  // AIE model: no free AT. Always spill R12 into the PEI-reserved in-frame
-  // slot (R12ScratchFI). Never adjust SP: VASTART/other FI materialization
-  // uses getFrameIndexReference against the PEI SP; a temporary subi would
-  // shift every SP-relative address.
-  auto *FuncInfo = MF->getInfo<HaydnMachineFunctionInfo>();
-  int FI = FuncInfo->getR12ScratchFI();
-  if (FI < 0)
-    report_fatal_error(
-        "Haydn: R12ScratchFI missing for AT spill (allocate in "
-        "determineCalleeSaves)");
-  const HaydnFrameLowering *TFL = ST.getFrameLowering();
-  Register FrameReg;
-  int64_t Off = TFL->getFrameIndexReference(*MF, FI, FrameReg).getFixed();
-  emitATScratchMemOp(FrameReg, Off, /*IsStore=*/true);
-}
-
-void HaydnAsmPrinter::emitATScratchRestoreIfNeeded() {
-  const auto &ST = MF->getSubtarget<HaydnSubtarget>();
-  auto *FuncInfo = MF->getInfo<HaydnMachineFunctionInfo>();
-  int FI = FuncInfo->getR12ScratchFI();
-  if (FI < 0)
-    report_fatal_error(
-        "Haydn: R12ScratchFI missing for AT restore");
-  const HaydnFrameLowering *TFL = ST.getFrameLowering();
-  Register FrameReg;
-  int64_t Off = TFL->getFrameIndexReference(*MF, FI, FrameReg).getFixed();
-  emitATScratchMemOp(FrameReg, Off, /*IsStore=*/false);
-}
+// W1.2: print-time fixed-R12 AT helpers removed. VASTART/VACOPY expand via
+// withPostRAScratch (free GPR first; PostRAScratchFI only if spill needed).
 
 // Emit a single Bundle128 SET_HWLOOP setup (Phase B2).
 // Per encoding_manual.md §5.11-§5.13 there are three WIDE forms (logical
@@ -844,149 +737,18 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     // before AsmPrinter runs. If one reaches here it has a zero size and is a
     // no-op.
     return;
-  case Haydn::VAEND: {
-    // va_end is a no-op for the baremetal Haydn va_list (no owned resources).
+  case Haydn::VAEND:
+    // Expanded (no-op erase) in HaydnExpandPseudos; residual = skip.
     return;
-  }
-  case Haydn::VASTART: {
-    // VASTART: initialize the structured __builtin_va_list (AArch64-style, 5
-    // fields) at *va_list. The save-area frame indices/sizes are recorded by
-    // HaydnCallLowering::saveVarArgRegisters. See /.
-    //
-    // va_list field layout (32-bit target: ptr=4B, int=4B):
-    // @0 void *__stack = &VarArgsStackFI; overflow base
-    // @4 void *__gr_top = &VarArgsGprFI + GprSize; one past GPR area
-    // @8 void *__vr_top = &VarArgsDrFI + DrSize; one past DR area
-    // @12 int __gr_offs = -GprSize; negative (AArch64-style)
-    // @16 int __vr_offs = -DrSize; negative (AArch64-style)
-    // __gr_top/__vr_top point PAST the end of each bank's save area; the
-    // matching *_offs starts NEGATIVE and advances by the type size, so a read
-    // is an UPWARD walk (load at top + offs). With the ascending spill (R2 at
-    // base+0... R7 at base+GprSize-4), the first read lands at the bottom of
-    // the save area (the FIRST spilled variadic reg); when offs reaches 0 the
-    // bank is exhausted and va_arg falls through to __stack. Mirrors AArch64
-    // (LowerAAPCS_VASTART stores -GPRSize/-FPRSize) adapted to the Haydn GPR
-    // R1–R7 / DR D0–D3 banks.
-    //
-    // Scratch: fixed R12 for VASTART address math only (not MatInt / not free
-    // AT). Spill/restore via PEI R12ScratchFI when R12 is allocatable.
-    MachineFunction &FuncMF = *MF;
-    auto *FuncInfo = FuncMF.getInfo<HaydnMachineFunctionInfo>();
-    int GprFI = FuncInfo->getVarArgsGprFI();
-    int DrFI = FuncInfo->getVarArgsDrFI();
-    int StackFI = FuncInfo->getVarArgsStackFI();
-    // Gate on the explicit save-areas flag, NOT on `FI < 0`: CreateFixedObject
-    // returns negative indices by LLVM contract, which collides with the `-1`
-    // "unset" sentinel on the FI fields and would skip va_list initialization
-    // for every variadic function.
-    if (!FuncInfo->hasVarArgsSaveAreas()) {
-      // Not a variadic function or save areas not set — emit nothing.
-      return;
-    }
-    Register VaListPtr = MI->getOperand(0).getReg();
-    const HaydnFrameLowering *TFI =
-        FuncMF.getSubtarget<HaydnSubtarget>().getFrameLowering();
-
-    // Helper: materialize (FrameReg + BaseOffset + Extra) into R12, then store
-    // R12 into [VaListPtr + FieldOff]. Captures the frame reg + offset for a
-    // given FI via getFrameIndexReference, folds in an extra displacement (used
-    // to point __gr_top/__vr_top one-past-the-end).
-    //
-    // The va_list field offsets (FieldOff = 0/4/8/12/16) all fit the s0 LS
-    // imm4 scaled range ([0,60], 4-aligned). : emit ST32 (auto-pairs to
-    // ST32_S0 via FlexMap) instead of the retired Mode-0 alias
-    // ST32_M0S0LS (no flex variant). The 3 operands (rt, rs, offset) bind
-    // positionally to ST32_S0. The encoded Bundle128 slot window carries
-    // the same store semantics; the encoder's getFlexVariant resolves the
-    // legacy ST32 -> ST32_S0. Mirrors emitCSRStore in
-    // HaydnFrameLowering.cpp.
-    // Scratch = R12 for emit-time address math only (not MatInt AT).
-    // Spill/restore via in-frame R12ScratchFI when allocatable — SP is never
-    // adjusted (see emitATScratchSaveIfNeeded).
-    const Register Scr = HaydnATScratch::phys();
-    auto StoreFIAddr = [&](int FI, int64_t Extra, int FieldOff) {
-      Register FrameReg;
-      StackOffset Off = TFI->getFrameIndexReference(FuncMF, FI, FrameReg);
-      int64_t Offset = Off.getFixed() + Extra;
-      MCInst AddrInst;
-      if (Offset == 0) {
-        AddrInst.setOpcode(Haydn::OR32);
-        AddrInst.addOperand(MCOperand::createReg(Scr));
-        AddrInst.addOperand(MCOperand::createReg(FrameReg));
-        AddrInst.addOperand(MCOperand::createReg(FrameReg));
-      } else {
-        AddrInst.setOpcode(Haydn::ADDI32_W);
-        AddrInst.addOperand(MCOperand::createReg(Scr));
-        AddrInst.addOperand(MCOperand::createReg(FrameReg));
-        AddrInst.addOperand(MCOperand::createImm(Offset));
-      }
-      emitWrappedInst(AddrInst);
-      MCInst StoreInst;
-      StoreInst.setOpcode(Haydn::ST32);
-      StoreInst.addOperand(MCOperand::createReg(Scr));
-      StoreInst.addOperand(MCOperand::createReg(VaListPtr));
-      StoreInst.addOperand(MCOperand::createImm(FieldOff));
-      emitWrappedInst(StoreInst);
-    };
-
-    emitATScratchSaveIfNeeded();
-
-    // __stack @0 = &VarArgsStackFI
-    StoreFIAddr(StackFI, /*Extra=*/0, /*FieldOff=*/0);
-    // __gr_top @4 = &VarArgsGprFI + GprSize (one past the GPR save area)
-    StoreFIAddr(GprFI, /*Extra=*/FuncInfo->getVarArgsGprSize(), /*FieldOff=*/4);
-    // __vr_top @8 = &VarArgsDrFI + DrSize (one past the DR save area)
-    StoreFIAddr(DrFI, /*Extra=*/FuncInfo->getVarArgsDrSize(), /*FieldOff=*/8);
-
-    // __gr_offs @12 = -GprSize; __vr_offs @16 = -DrSize (negative, AArch64-style).
-    // Materialize Scr = (0 - BankSize) via ADDI32 R0, -BankSize (R0 is soft-zero).
-    int GprSize = FuncInfo->getVarArgsGprSize();
-    int DrSize = FuncInfo->getVarArgsDrSize();
-    auto StoreNegSizeOff = [&](int BankSize, int FieldOff) {
-      MCInst Z;
-      Z.setOpcode(Haydn::ADDI32_W);
-      Z.addOperand(MCOperand::createReg(Scr));
-      Z.addOperand(MCOperand::createReg(Haydn::R0));
-      Z.addOperand(MCOperand::createImm(-BankSize));
-      emitWrappedInst(Z);
-      MCInst S;
-      S.setOpcode(Haydn::ST32);
-      S.addOperand(MCOperand::createReg(Scr));
-      S.addOperand(MCOperand::createReg(VaListPtr));
-      S.addOperand(MCOperand::createImm(FieldOff));
-      emitWrappedInst(S);
-    };
-    StoreNegSizeOff(GprSize, /*FieldOff=*/12);
-    StoreNegSizeOff(DrSize, /*FieldOff=*/16);
-
-    emitATScratchRestoreIfNeeded();
+  case Haydn::VASTART:
+  case Haydn::VACOPY:
+    // W1.2: expanded pre-pack in HaydnExpandPseudos (withPostRAScratch).
+    // Residual here means ExpandPseudos was disabled — fail closed rather
+    // than re-introduce late layout growth.
+    report_fatal_error(
+        "HaydnAsmPrinter: VASTART/VACOPY must be expanded by "
+        "HaydnExpandPseudos before pack (enable -haydn-enable-expand-pseudos)");
     return;
-  }
-  case Haydn::VACOPY: {
-    // VACOPY: copy the full structured va_list (5 words = 20 bytes).
-    // Scratch R12 under AT policy (save/restore when allocatable).
-    Register DstPtr = MI->getOperand(0).getReg();
-    Register SrcPtr = MI->getOperand(1).getReg();
-    const Register Scr = HaydnATScratch::phys();
-    emitATScratchSaveIfNeeded();
-    for (unsigned W = 0; W < 5; ++W) {
-      int64_t Off = static_cast<int64_t>(W) * 4;
-      MCInst LoadInst;
-      LoadInst.setOpcode(Haydn::LD32);
-      LoadInst.addOperand(MCOperand::createReg(Scr));
-      LoadInst.addOperand(MCOperand::createReg(SrcPtr));
-      LoadInst.addOperand(MCOperand::createImm(Off));
-      emitWrappedInst(LoadInst);
-      MCInst StoreInst;
-      StoreInst.setOpcode(Haydn::ST32);
-      StoreInst.addOperand(MCOperand::createReg(Scr));
-      StoreInst.addOperand(MCOperand::createReg(DstPtr));
-      StoreInst.addOperand(MCOperand::createImm(Off));
-      emitWrappedInst(StoreInst);
-    }
-    emitATScratchRestoreIfNeeded();
-    return;
-  }
   case Haydn::MOV_GPR_TO_DR64:
   case Haydn::MOV_DR64_TO_GPR:
   case Haydn::LIBCALL_MUL64:

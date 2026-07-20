@@ -337,9 +337,9 @@ entry:
 ; CHECK-LABEL: test_fmulaa16_hs_13_02:
 ; CHECK: fmulaa16_hs_13_02
 
-define dso_local i64 @test_fmulaa16_hs_33_22(i64 %a, i64 %b) {
+define dso_local i64 @test_fmulaa16_hs_33_22(i64 %acc, i64 %a, i64 %b) {
 entry:
-  %r = call i64 @llvm.haydn.fmulaa16.hs.33.22(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.fmulaa16.hs.33.22(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 ; CHECK-LABEL: test_fmulaa16_hs_33_22:
@@ -540,7 +540,7 @@ declare i64 @llvm.haydn.fmul16.ls33(i64, i64)
 
 ; FMULAA16 HS/LS MAC
 declare i64 @llvm.haydn.fmulaa16.hs.13.02(i64, i64)
-declare i64 @llvm.haydn.fmulaa16.hs.33.22(i64, i64)
+declare i64 @llvm.haydn.fmulaa16.hs.33.22(i64, i64, i64)
 declare i64 @llvm.haydn.fmulaa16.ls.11.00(i64, i64)
 declare i64 @llvm.haydn.fmulaa16.ls.13.02(i64, i64)
 declare i64 @llvm.haydn.fmulaa16.ls.33.22(i64, i64)

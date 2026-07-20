@@ -365,7 +365,10 @@ def : Pat<(int_haydn_fmul16_ls33 DR64:$a, DR64:$b), (FMUL16_LS33 DR64:$a, DR64:$
 //===----------------------------------------------------------------------===//
 
 def : Pat<(int_haydn_fmulaa16_hs_13_02 DR64:$a, DR64:$b), (FMULAA16_HS_13_02 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmulaa16_hs_33_22 DR64:$a, DR64:$b), (FMULAA16_HS_33_22 DR64:$a, DR64:$b)>;
+// Ternary Acc (FmtALU64Acc): GISel selectAccMAC is the live path; SDAG Pat
+// kept consistent with the tied-def shape.
+def : Pat<(int_haydn_fmulaa16_hs_33_22 DR64:$acc, DR64:$a, DR64:$b),
+          (FMULAA16_HS_33_22 DR64:$acc, DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_fmulaa16_ls_11_00 DR64:$a, DR64:$b), (FMULAA16_LS_11_00 DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_fmulaa16_ls_13_02 DR64:$a, DR64:$b), (FMULAA16_LS_13_02 DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_fmulaa16_ls_33_22 DR64:$a, DR64:$b), (FMULAA16_LS_33_22 DR64:$a, DR64:$b)>;

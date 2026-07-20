@@ -178,7 +178,7 @@ define i64 @test_fmul16_ls33(i64 %a, i64 %b) {
 ;===----------------------------------------------------------------------===;
 
 declare i64 @llvm.haydn.fmulaa16.hs.13.02(i64, i64)
-declare i64 @llvm.haydn.fmulaa16.hs.33.22(i64, i64)
+declare i64 @llvm.haydn.fmulaa16.hs.33.22(i64, i64, i64)
 declare i64 @llvm.haydn.fmulaa16.ls.11.00(i64, i64)
 declare i64 @llvm.haydn.fmulaa16.ls.13.02(i64, i64)
 declare i64 @llvm.haydn.fmulaa16.ls.33.22(i64, i64)
@@ -190,10 +190,10 @@ define i64 @test_fmulaa16_hs_13_02(i64 %a, i64 %b) {
   ret i64 %r
 }
 
-define i64 @test_fmulaa16_hs_33_22(i64 %a, i64 %b) {
+define i64 @test_fmulaa16_hs_33_22(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_fmulaa16_hs_33_22:
 ; CHECK: fmulaa16_hs_33_22
-  %r = call i64 @llvm.haydn.fmulaa16.hs.33.22(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.fmulaa16.hs.33.22(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 

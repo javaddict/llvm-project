@@ -1238,7 +1238,7 @@ let isTerminator = 1, isCall = 1, isIndirectBranch = 1 in
 def JALR_W_S0 : HaydnFU_ALU32_S0_RI12<0b1000100,
     (outs GPR32:$rt), (ins GPR32:$rs, calltarget_wide_ri12:$imm12),
     "jalr_w\t$rt, $rs, $imm12", []>;
-} // Defs = caller-saved clobbers for calls (incl. R12 AT)
+} // Defs = caller-saved clobbers for calls (incl. R12 as normal CSR-excluded GPR)
 
 // Conditional branches: isBranch + isTerminator only (no side effects, no
 // caller-saved clobbers — mirrors the legacy _W conditional branch block).

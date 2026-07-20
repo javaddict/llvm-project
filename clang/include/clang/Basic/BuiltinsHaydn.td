@@ -482,15 +482,14 @@ def fmuls16_ls23 : HaydnBuiltin<"int64_t(int64_t, int64_t)">;
 def fmuls16_ls33 : HaydnBuiltin<"int64_t(int64_t, int64_t)">;
 
 //===----------------------------------------------------------------------===//
-// Wave 4: FMULAA16 HS/LS MAC variants (binary, matched to LLVM intrinsics)
-// Q15*Q15 fractional MAC, lane-pair select. NOTE: despite the "AA" suffix,
-// the Haydn instructions FMULAA16_HS_{13_02,33_22}/FMULAA16_LS_* are 2-input
-// pure-mul ops (selected via selectBinary, NOT selectAccMAC). Only the
-// _11_00 forms are true 3-arg accumulator MACs (D100/D112).
+// Wave 4: FMULAA16 HS/LS MAC variants (matched to LLVM intrinsics)
+// Spec/DB: AA forms accumulate into rtd[63:32]. HS_11_00 and HS_33_22 are
+// ternary Acc (selectAccMAC / FmtALU64Acc). Other AA lane pairs remain binary
+// selection pending Acc migration (same silicon class).
 //===----------------------------------------------------------------------===//
 
 def fmulaa16_hs_13_02 : HaydnBuiltin<"int64_t(int64_t, int64_t)">;
-def fmulaa16_hs_33_22 : HaydnBuiltin<"int64_t(int64_t, int64_t)">;
+def fmulaa16_hs_33_22 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)">;
 def fmulaa16_ls_11_00 : HaydnBuiltin<"int64_t(int64_t, int64_t)">;
 def fmulaa16_ls_13_02 : HaydnBuiltin<"int64_t(int64_t, int64_t)">;
 def fmulaa16_ls_33_22 : HaydnBuiltin<"int64_t(int64_t, int64_t)">;
@@ -847,24 +846,22 @@ def move32_dr_h : HaydnBuiltin<"unsigned int(int64_t)">;
 // Circular Buffer Load/Store (CBR — memory operations, NOT pure)
 //
 // CB loads: load from circular buffer with automatic boundary wrapping.
-//   (ptr_base, cbr_sel, stride) -> data
-// CB stores: store to circular buffer with automatic boundary wrapping.
-//   (data, ptr_base, cbr_sel, stride) -> void
+// Multi-result IR is {data, new_ptr}. Clang Prototype cannot return structs
+// for auto-map, so loads use frexp-pattern _pair builtins (HaydnPairBuiltin):
+//   int64_t data = __builtin_haydn_ldw_cb_imm_pair(int *new_ptr_out,
+//                                                  int ptr, int cbr, int stride);
+// CB stores return the updated cursor (i32); auto-map works for single ret.
 //
-// Model (D207, supersedes D206): the CB instruction computes the next
-// pointer in hardware (rs = rs + stride, wrapped at CBR bounds), but the
-// compiler does NOT model that update. The stride is a tracked value
-// (index-derived, supplied per call); the pointer is hardware-managed and
-// persists across iterations of a hardware loop (body opaque to the
-// optimizer). CBR is a boundary guard, not a value the program reads back.
-// Hence the intrinsic returns ONLY data (load) / void (store) — no cursor
-// output. cbr_sel selects CBR set 0 or 1 (Rev 2: 2 sets, no CBR_SIZE).
+// Model (D208): IR models AGU writeback as SSA (same as BundleSim rs_wb).
+// cbr_sel selects CBR set 0 or 1 (Rev 2: 2 sets, no CBR_SIZE).
 //===----------------------------------------------------------------------===//
 
-def ldw_cb_imm : HaydnBuiltin<"int64_t(int, int, int)">;
-def ldw_cb_reg : HaydnBuiltin<"int64_t(int, int, int)">;
-def sdw_cb_imm : HaydnBuiltin<"void(int64_t, int, int, int)">;
-def sdw_cb_reg : HaydnBuiltin<"void(int64_t, int, int, int)">;
+// Load pair: return data, store new_ptr to *arg0 (frexp pattern).
+def ldw_cb_imm_pair : HaydnPairBuiltin<"int64_t(int*, int, int, int)">;
+def ldw_cb_reg_pair : HaydnPairBuiltin<"int64_t(int*, int, int, int)">;
+// Store: return new_ptr (single result — ClangBuiltin auto-map OK).
+def sdw_cb_imm : HaydnBuiltin<"int(int64_t, int, int, int)">;
+def sdw_cb_reg : HaydnBuiltin<"int(int64_t, int, int, int)">;
 
 //===----------------------------------------------------------------------===//
 // Circular Buffer Setup (CBR programming via CSRW — side-effecting CSR write)

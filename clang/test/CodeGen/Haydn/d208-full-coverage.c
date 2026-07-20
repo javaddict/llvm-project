@@ -574,8 +574,8 @@ long long test_fmulaa16_hs_13_02(long long a0, long long a1) {
   sink_ll = (long long)r;
 }
 
-long long test_fmulaa16_hs_33_22(long long a0, long long a1) {
-  long long r = __builtin_haydn_fmulaa16_hs_33_22(a0, a1);
+long long test_fmulaa16_hs_33_22(long long acc, long long a0, long long a1) {
+  long long r = __builtin_haydn_fmulaa16_hs_33_22(acc, a0, a1);
   sink_ll = (long long)r;
 }
 

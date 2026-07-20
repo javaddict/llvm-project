@@ -998,19 +998,15 @@ void HaydnFrameLowering::determineCalleeSaves(MachineFunction &MF,
     SavedRegs.set(Haydn::R15);
   }
 
-  // permanent in-frame R12 spill slot for VASTART/VACOPY address
-  // math (not MatInt AT). AIE model: R12 is always allocatable. Lives ABOVE SP
-  // inside the PEI frame (no red zone, no SP dance). Consumers: AsmPrinter
-  // emitATScratch*; residual SET_HWLOOP. MatInt uses HaydnPostRAScratch.
-  //
-  // Do NOT spill AT with `subi sp, 8` at emit time: FI addresses are relative
-  // to the PEI-established SP; a temporary SP adjust makes getFrameIndexReference
-  // point 8 bytes wrong (va_arg reads garbage under O1/O2).
+  // Permanent in-frame 4-byte spill *home* for post-RA scavenge when no free
+  // GPR is available (HaydnPostRAScratch). Any physreg may use it — not R12
+  // specific. Lives ABOVE SP (no red zone). Do NOT open a transient
+  // `subi sp, 8` around scavenge windows: FI addresses are PEI-relative.
   auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
-  if (FuncInfo->getR12ScratchFI() < 0) {
+  if (FuncInfo->getPostRAScratchFI() < 0) {
     int FI = MF.getFrameInfo().CreateStackObject(/*Size=*/4, /*Alignment=*/Align(4),
                                                  /*SpillSlot=*/true);
-    FuncInfo->setR12ScratchFI(FI);
+    FuncInfo->setPostRAScratchFI(FI);
   }
 }
 

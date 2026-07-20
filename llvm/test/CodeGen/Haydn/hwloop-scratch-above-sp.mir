@@ -1,0 +1,104 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=prologepilog -simplify-mir %s -o - | FileCheck %s
+#
+# REGRESSION: post-RA emergency spill *home* (PostRAScratchFI) must live ABOVE SP
+# inside the allocated frame, NOT in a transient slot opened by `SUBI32 sp, 8`
+# below SP (no red zone on baremetal Haydn).
+#
+# Historical bug: fixed-R12 AT spill used SUBI/ADDI around SET_HWLOOP; IRQ could
+# clobber the transient slot. Fix: determineCalleeSaves reserves PostRAScratchFI
+# above SP; PEI folds it into frame size.
+#
+# @imm_hwloop / @reg_hwloop — both get an in-frame PostRAScratchFI (always
+# reserved under AIE no-free-AT product model for post-RA scavenge spill home).
+# Prologue SUBI32 covers the slot; never a below-SP dance.
+#
+--- |
+  define dso_local void @imm_hwloop(ptr nocapture writeonly %out) {
+  entry:
+    br label %for.body
+  for.body:
+    store i32 0, ptr %out, align 4
+    br label %for.body
+  exit:
+    ret void
+  }
+
+  define dso_local void @reg_hwloop(ptr nocapture writeonly %out) {
+  entry:
+    br label %for.body
+  for.body:
+    store i32 0, ptr %out, align 4
+    br label %for.body
+  exit:
+    ret void
+  }
+...
+---
+name:            imm_hwloop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP 0, %bb.1, %bb.1, 8
+
+  bb.1.for.body:
+    liveins: $r1, $r0
+    successors: %bb.2
+
+    ST32 $r0, $r1, 0
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+---
+name:            reg_hwloop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r4, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_REG 0, %bb.1, %bb.1, $r4
+
+  bb.1.for.body:
+    liveins: $r1, $r0
+    successors: %bb.2
+
+    ST32 $r0, $r1, 0
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+# imm_hwloop: SET_HWLOOP (immediate count) reserves the R12 scratch slot.
+# frameInfo.stackSize > 0 (the slot is folded into the frame)
+# a 4-byte stack object exists (the reserved slot, offset -4 from SP)
+# prologue SUBI32 / epilogue ADDI32 materialize the frame so the AsmPrinter
+# spill ST32 r12,[sp,off] / LD32 r12,[sp,off] addresses valid memory above
+# the post-prologue SP (interrupt-safe — the fix).
+# CHECK-LABEL: name:            imm_hwloop
+# CHECK:       stackSize:       [[FRAMESIZE:[0-9]+]]
+# CHECK:       - { id: 0, type: spill-slot, offset: -4, size: 4, alignment: 4 }
+# Flex cutover: SUBI32 -> SUBI32_S0 (slot-suffixed Flex form).
+# CHECK:       $r13 = frame-setup SUBI32 $r13, [[FRAMESIZE]]
+# CHECK:       SET_HWLOOP 0, %bb.1, %bb.1, 8
+# CHECK:       $r13 = frame-destroy ADDI32_W $r13, [[FRAMESIZE]]
+#
+# reg_hwloop: SET_HWLOOP_REG still gets PostRAScratchFI under AT policy
+# (in-frame, above SP). Must NOT open a transient below-SP slot.
+# CHECK-LABEL: name:            reg_hwloop
+# CHECK:       stackSize:       [[RFSIZE:[0-9]+]]
+# CHECK:       - { id: 0, type: spill-slot, offset: -4, size: 4, alignment: 4 }
+# CHECK:       $r13 = frame-setup SUBI32 $r13, [[RFSIZE]]
+# CHECK:       SET_HWLOOP_REG 0, %bb.1, %bb.1, $r4
+# CHECK:       $r13 = frame-destroy ADDI32_W $r13, [[RFSIZE]]
+# CHECK-NOT:   SUBI32 $r13, $r13, 8

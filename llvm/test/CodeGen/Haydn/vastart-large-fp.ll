@@ -1,24 +1,23 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O0 -frame-pointer=all < %s | FileCheck %s --check-prefix=FP
 ; RUN: llc -mtriple=haydn-unknown-elf -O0 < %s | FileCheck %s --check-prefix=OMIT
 ;
-; P0 L2 / Track C: large locals + va_start + frame pointer must not hard-fatal
-; in AsmPrinter emitATScratchSaveIfNeeded (R12ScratchFI beyond scaled-simm6).
-; ST32/LD32 use RI16 simm16; offsets like ~-1KiB from FP must compile.
-; AIE model: R12 allocatable → FP path uses R12ScratchFI spill around VASTART.
+; Large locals + va_start + frame pointer must compile (no hard-fatal on far FI).
+; VASTART uses withPostRAScratch: free GPR first; spill only if none free
+; (PostRAScratchFI is spill *home* only when scavenge finds no free GPR).
 ;
 ; Minimal C shape: volatile char pad[1024]; va_start; va_arg; under
 ; fno-omit-frame-pointer.
 
 define i32 @sum_large_fp(i32 %n, ...) nounwind {
 ; FP-LABEL: sum_large_fp:
-; VASTART brackets: spill/restore R12 via in-frame slot.
-; Offset from FP is outside scaled-simm6 but inside simm16 → direct st32/ld32.
-; FP: st32{{.*}} r12, {{fp|r14}},
-; FP: ld32{{.*}} r12, {{fp|r14}},
+; Va_list field stores must appear (5-field init).
+; FP: st32 {{r[0-9]+}}, {{r[0-9]+}}, 0
+; FP: st32 {{r[0-9]+}}, {{r[0-9]+}}, 16
 ; FP: jalr
 ;
-; OMIT-FP still compiles (slot near SP).
+; OMIT-FP still compiles.
 ; OMIT-LABEL: sum_large_fp:
+; OMIT: st32 {{r[0-9]+}}, {{r[0-9]+}}, 0
 ; OMIT: jalr
 entry:
   %pad = alloca [1024 x i8], align 1

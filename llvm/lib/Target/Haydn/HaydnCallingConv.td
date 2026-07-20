@@ -25,9 +25,8 @@
 
 // Callee-saved registers: R8-R11, R15(LR), D8-D15.
 // R12 is an ordinary caller-saved GPR (AIE model) — not in CSR set.
-// MatInt (LOADI64) scavenges a live-checked GPR via HaydnPostRAScratch and
-// does not hardcode R12. VASTART may still use R12 + R12ScratchFI for address
-// math only.
+// MatInt / VASTART scavenge a live-checked GPR via HaydnPostRAScratch (free
+// first; spill to PostRAScratchFI only if none free). R12 is not free AT.
 // R15 (LR) is saved/ restored for non-leaf functions (JAL writes the return
 // address into R15). determineCalleeSaves only marks it saved when the
 // function contains a call, so leaf functions pay no cost. AR2/AR3 are NOT in

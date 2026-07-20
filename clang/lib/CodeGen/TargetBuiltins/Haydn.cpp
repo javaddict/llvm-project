@@ -129,6 +129,25 @@ Value *emitPairRRA2(CodeGenFunction &CGF, unsigned ID, const CallExpr *E) {
   CGF.EmitStoreOfScalar(Rtd2, Rtd2LV);
   return CGF.Builder.CreateExtractValue(Call, 0);
 }
+
+/// CB load frexp pattern (D208):
+///   int64_t data = __builtin_haydn_ldw_cb_*_pair(int *new_ptr_out,
+///                                                int ptr, int cbr, int stride);
+/// Underlying intrinsic returns {i64 data, i32 new_ptr}. Store field 1 to
+/// *new_ptr_out and return field 0.
+Value *emitCbLoadPair(CodeGenFunction &CGF, unsigned ID, const CallExpr *E) {
+  Value *NewPtrOut = CGF.EmitScalarExpr(E->getArg(0));
+  Value *Ptr = CGF.EmitScalarExpr(E->getArg(1));
+  Value *Cbr = CGF.EmitScalarExpr(E->getArg(2));
+  Value *Stride = CGF.EmitScalarExpr(E->getArg(3));
+  Value *Call =
+      CGF.Builder.CreateCall(CGF.CGM.getIntrinsic(ID), {Ptr, Cbr, Stride});
+  Value *NewPtr = CGF.Builder.CreateExtractValue(Call, 1);
+  QualType PointeeTy = E->getArg(0)->getType()->getPointeeType();
+  LValue NewPtrLV = CGF.MakeNaturalAlignAddrLValue(NewPtrOut, PointeeTy);
+  CGF.EmitStoreOfScalar(NewPtr, NewPtrLV);
+  return CGF.Builder.CreateExtractValue(Call, 0);
+}
 } // namespace
 
 Value *CodeGenFunction::EmitHaydnBuiltinExpr(unsigned BuiltinID,
@@ -235,6 +254,12 @@ Value *CodeGenFunction::EmitHaydnBuiltinExpr(unsigned BuiltinID,
     return emitPairRRA2(*this, haydn_x4ff2mula16s, E);
   case Haydn::BI__builtin_haydn_x4ff2muls16s_pair:
     return emitPairRRA2(*this, haydn_x4ff2muls16s, E);
+
+  //--- D208: CB load 2-ret (data + AGU-updated ptr) frexp _pair builtins ---//
+  case Haydn::BI__builtin_haydn_ldw_cb_imm_pair:
+    return emitCbLoadPair(*this, haydn_ldw_cb_imm, E);
+  case Haydn::BI__builtin_haydn_ldw_cb_reg_pair:
+    return emitCbLoadPair(*this, haydn_ldw_cb_reg, E);
   }
 
   return nullptr;

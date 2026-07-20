@@ -921,10 +921,10 @@ void tools::getTargetFeatures(const Driver &D, const llvm::Triple &Triple,
     break;
   case llvm::Triple::haydn:
     // AIE / Hexagon / RISC-V model: no free assembler temporary.
-    // R12 is a normal allocatable caller-saved GPR. MatInt goes into Dst
-    // (LOADI32) or a LivePhysRegs-scavenged GPR (LOADI64); large FI offsets
-    // use createVirtualRegister like RISCV/AIE EFI. VASTART still brackets
-    // fixed R12 via PEI R12ScratchFI (emit-time, no scavenger).
+    // R12 is a normal allocatable caller-saved GPR. MatInt / VASTART use
+    // LivePhysRegs free-reg scavenge (HaydnPostRAScratch); spill home is
+    // PostRAScratchFI only when no free GPR. Large FI: createVirtualRegister
+    // like RISCV/AIE EFI.
     break;
   }
 

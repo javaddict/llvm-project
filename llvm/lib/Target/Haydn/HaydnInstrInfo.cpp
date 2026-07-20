@@ -120,6 +120,14 @@ static cl::opt<uint32_t> BranchRelaxSafetyBuffer(
              "conditional is in WIDE_BranchSImm12 range (Hexagon-style "
              "branch-relax-safety-buffer). /."));
 
+// W2.1 / G-MEMCYCLE: product path keeps class-agnostic latency 1 (AIE
+// AccurateMemEdges=false peer). Opt-in accurate path for soak / A/B only —
+// do not default-ON without NatureDSP + densify lit green.
+static cl::opt<bool> AccurateMemoryLatency(
+    "haydn-accurate-memory-latency", cl::Hidden, cl::init(false),
+    cl::desc("W2.1: compute getMemoryLatency from First/LastMemoryCycle "
+             "(default OFF = product latency 1). Soak-only; not densify enable."));
+
 #define GET_INSTRINFO_CTOR_DTOR
 #include "HaydnGenInstrInfo.inc"
 #include "HaydnGenDFAPacketizer.inc"
@@ -1372,8 +1380,6 @@ unsigned HaydnInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
     return B * 5;
   case Haydn::ADJCALLSTACKDOWN:
   case Haydn::ADJCALLSTACKUP:
-  case Haydn::VASTART:
-  case Haydn::VACOPY:
   case Haydn::VAEND:
   case Haydn::LIBCALL_SDIV:
   case Haydn::LIBCALL_UDIV:
@@ -1382,6 +1388,14 @@ unsigned HaydnInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   case Haydn::LIBCALL_MUL64:
   case Haydn::WFI:
     return 0;
+  case Haydn::VASTART:
+    // W1.4: was 0 while AsmPrinter emitted ~12+ Bundle128 parcels → BR undercount.
+    // Expanded pre-pack via free-reg scavenge (often no spill). Upper bound:
+    // optional spill/restore + 3×(addr+st) + 2×(neg+st); far FI ≤ ~16 parcels.
+    return B * 16;
+  case Haydn::VACOPY:
+    // Free-reg scavenge; worst-case spill + 5×(ld+st) ≤ ~14 parcels.
+    return B * 14;
   }
 
   if (MI.isPseudo() || MI.isMetaInstruction() || MI.isDebugInstr() ||
@@ -1476,13 +1490,19 @@ HaydnInstrInfo::getLastMemoryCycle(unsigned SchedClass) const {
 std::optional<int>
 HaydnInstrInfo::getMemoryLatency(unsigned SrcSchedClass,
                                  unsigned DstSchedClass) const {
-  // Product path matches AIE AccurateMemEdges=false: class-agnostic latency 1.
-  // getFirst/LastMemoryCycle tables exist for a future accurate path; enabling
-  // them here (Last-First+1) raised store→load to 2 and regressed packing /
-  // lit densify (MemoryEdges default ON). Flip only with NatureDSP A/B + lit.
-  (void)SrcSchedClass;
-  (void)DstSchedClass;
-  return 1;
+  // Product default: AIE AccurateMemEdges=false peer — class-agnostic latency 1.
+  // Unconditional Last-First+1 regressed packing / densify lit (MemoryEdges ON).
+  // W2.1: accurate path is opt-in only (-haydn-accurate-memory-latency).
+  if (!AccurateMemoryLatency)
+    return 1;
+
+  std::optional<int> LastSrc = getLastMemoryCycle(SrcSchedClass);
+  std::optional<int> FirstDst = getFirstMemoryCycle(DstSchedClass);
+  if (!LastSrc || !FirstDst)
+    return 1;
+  // AIE-style: last cycle of producer memory → first cycle of consumer memory.
+  int Lat = *LastSrc - *FirstDst + 1;
+  return std::max(1, Lat);
 }
 
 unsigned HaydnInstrInfo::getMaxResultLatency(const MachineInstr &MI) const {
