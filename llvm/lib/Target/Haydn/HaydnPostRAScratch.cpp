@@ -1,4 +1,4 @@
-//===-- HaydnPostRAScratch.cpp - Post-RA MatInt GPR scratch ---------------===//
+//===-- HaydnPostRAScratch.cpp - Post-RA GPR scratch + remat --------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -14,13 +14,17 @@
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 
 using namespace llvm;
+
+#define DEBUG_TYPE "haydn-postra-scratch"
 
 // Call-clobbered first (R1–R7), then callee-saved temps that may still be
 // dead at I (R11…R8). R12 is last and only considered when PreferNotR12 is
@@ -69,11 +73,9 @@ Register llvm::findPostRAScratchGPR(MachineBasicBlock &MBB,
     }
   }
 
-  // Nothing free: spill the first preferred non-excluded candidate.
   NeedsSpill = true;
   if (FirstPreferred)
     return FirstPreferred;
-  // Extreme fallback if every preferred reg is reserved/excluded.
   for (MCPhysReg Cand : PostRAScratchPriority) {
     if (PreferNotR12 && Cand == Haydn::R12)
       continue;
@@ -85,11 +87,18 @@ Register llvm::findPostRAScratchGPR(MachineBasicBlock &MBB,
       "Haydn: no post-RA scratch GPR (all candidates reserved/excluded)");
 }
 
-static void emitScratchMemOp(MachineBasicBlock &MBB,
-                             MachineBasicBlock::iterator I, const DebugLoc &DL,
-                             const TargetInstrInfo &TII, Register Scr,
-                             Register FrameReg, int64_t Off, bool IsStore,
-                             unsigned StoreFlags) {
+namespace {
+
+struct ScratchSpillHome {
+  enum Kind { None, FrameIndex, SPBracket } K = None;
+  Register FrameReg;
+  int64_t Off = 0;
+};
+
+void emitScratchMemOp(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                      const DebugLoc &DL, const TargetInstrInfo &TII,
+                      Register Scr, Register FrameReg, int64_t Off,
+                      bool IsStore, unsigned StoreFlags) {
   if (isInt<16>(Off)) {
     if (IsStore)
       BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
@@ -103,8 +112,6 @@ static void emitScratchMemOp(MachineBasicBlock &MBB,
     return;
   }
 
-  // Far slot: EA in R0 (soft-zero), access at [R0+0], re-zero. Scratch holds
-  // the value being moved so it cannot be the address temp.
   const Register Tmp = Haydn::R0;
   if (!isInt<20>(Off))
     report_fatal_error(
@@ -122,6 +129,103 @@ static void emitScratchMemOp(MachineBasicBlock &MBB,
   BuildMI(MBB, I, DL, TII.get(Haydn::XOR32), Tmp).addReg(Tmp).addReg(Tmp);
 }
 
+ScratchSpillHome beginSpill(MachineBasicBlock &MBB,
+                            MachineBasicBlock::iterator I, const DebugLoc &DL,
+                            const TargetInstrInfo &TII, const HaydnSubtarget &ST,
+                            Register Scr) {
+  MachineFunction &MF = *MBB.getParent();
+  auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
+  int SpillFI = FuncInfo->getBranchRelaxationScratchFI();
+  if (SpillFI < 0)
+    SpillFI = FuncInfo->getPostRAScratchFI();
+
+  ScratchSpillHome Home;
+  if (SpillFI >= 0) {
+    const HaydnFrameLowering *TFL = ST.getFrameLowering();
+    Home.K = ScratchSpillHome::FrameIndex;
+    Home.Off =
+        TFL->getFrameIndexReference(MF, SpillFI, Home.FrameReg).getFixed();
+    emitScratchMemOp(MBB, I, DL, TII, Scr, Home.FrameReg, Home.Off,
+                     /*IsStore=*/true, /*StoreFlags=*/0);
+    return Home;
+  }
+
+  Home.K = ScratchSpillHome::SPBracket;
+  BuildMI(MBB, I, DL, TII.get(Haydn::SUBI32), Haydn::R13)
+      .addReg(Haydn::R13)
+      .addImm(8);
+  BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
+      .addReg(Scr)
+      .addReg(Haydn::R13)
+      .addImm(0);
+  return Home;
+}
+
+void endSpill(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+              const DebugLoc &DL, const TargetInstrInfo &TII, Register Scr,
+              const ScratchSpillHome &Home) {
+  if (Home.K == ScratchSpillHome::None)
+    return;
+  if (Home.K == ScratchSpillHome::FrameIndex) {
+    emitScratchMemOp(MBB, I, DL, TII, Scr, Home.FrameReg, Home.Off,
+                     /*IsStore=*/false, /*StoreFlags=*/0);
+    return;
+  }
+  BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Scr)
+      .addReg(Haydn::R13)
+      .addImm(0);
+  BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32_W), Haydn::R13)
+      .addReg(Haydn::R13)
+      .addImm(8);
+}
+
+/// Make UseMI a top-level (unbundled) instruction so emit/splice is safe.
+void unbundleIfNeeded(MachineInstr &UseMI) {
+  if (UseMI.isBundledWithPred())
+    UseMI.unbundleFromPred();
+  if (UseMI.isBundledWithSucc())
+    UseMI.unbundleFromSucc();
+}
+
+/// Bundle RematDef with UseMI; mark Dest uses on UseMI as Kill.
+/// Both must be top-level and in the same MBB. Leaves UseMI as the use.
+void glueDefToUse(MachineInstr &RematDef, MachineInstr &UseMI) {
+  assert(RematDef.getParent() == UseMI.getParent());
+  MachineBasicBlock &MBB = *RematDef.getParent();
+
+  if (RematDef.getNumExplicitDefs() >= 1 && RematDef.getOperand(0).isReg()) {
+    Register Dest = RematDef.getOperand(0).getReg();
+    for (MachineOperand &MO : UseMI.operands()) {
+      if (MO.isReg() && MO.isUse() && !MO.isImplicit() && MO.getReg() == Dest)
+        MO.setIsKill(true);
+    }
+  }
+
+  MachineBasicBlock::iterator DefIt = RematDef.getIterator();
+  MachineBasicBlock::iterator UseIt = UseMI.getIterator();
+  if (std::next(DefIt) != UseIt) {
+    MachineBasicBlock::iterator InsertAfter = std::next(DefIt);
+    while (InsertAfter != MBB.end() && InsertAfter->isDebugInstr())
+      ++InsertAfter;
+    if (UseIt != InsertAfter)
+      MBB.splice(InsertAfter, &MBB, UseIt);
+  }
+
+  if (RematDef.isBundledWithSucc() || UseMI.isBundledWithPred())
+    return;
+
+  MachineBasicBlock::iterator AfterDef = std::next(RematDef.getIterator());
+  while (AfterDef != MBB.end() && AfterDef->isDebugInstr())
+    ++AfterDef;
+  assert(AfterDef != MBB.end() && &*AfterDef == &UseMI &&
+         "remat use not adjacent after splice");
+  UseMI.bundleWithPred();
+  finalizeBundle(MBB, RematDef.getIterator());
+  LLVM_DEBUG(dbgs() << "HaydnPostRAScratch: glued remat def→use\n");
+}
+
+} // namespace
+
 void llvm::withPostRAScratch(MachineBasicBlock &MBB,
                              MachineBasicBlock::iterator I, const DebugLoc &DL,
                              const TargetInstrInfo &TII,
@@ -137,41 +241,69 @@ void llvm::withPostRAScratch(MachineBasicBlock &MBB,
     return;
   }
 
-  // Spill/restore only when no free GPR. Prefer PEI emergency /
-  // PostRAScratchFI (spill *home* for any scavenged GPR). Last resort (MIR
-  // without PEI): balanced 8-byte SP bracket — no RegScavenger here.
-  MachineFunction &MF = *MBB.getParent();
-  auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
-  int SpillFI = FuncInfo->getBranchRelaxationScratchFI();
-  if (SpillFI < 0)
-    SpillFI = FuncInfo->getPostRAScratchFI();
+  ScratchSpillHome Home = beginSpill(MBB, I, DL, TII, ST, Scr);
+  Fn(Scr);
+  endSpill(MBB, I, DL, TII, Scr, Home);
+}
 
-  if (SpillFI >= 0) {
-    const HaydnFrameLowering *TFL = ST.getFrameLowering();
-    Register FrameReg;
-    const int64_t Off =
-        TFL->getFrameIndexReference(MF, SpillFI, FrameReg).getFixed();
-    emitScratchMemOp(MBB, I, DL, TII, Scr, FrameReg, Off, /*IsStore=*/true,
-                     /*StoreFlags=*/0);
-    Fn(Scr);
-    emitScratchMemOp(MBB, I, DL, TII, Scr, FrameReg, Off, /*IsStore=*/false,
-                     /*StoreFlags=*/0);
-    return;
+Register llvm::rematerializeAddImmForUse(MachineInstr &UseMI,
+                                         unsigned UseOpIdx, int64_t Adj,
+                                         ArrayRef<Register> ExtraExclude) {
+  assert(UseOpIdx < UseMI.getNumOperands() && UseMI.getOperand(UseOpIdx).isReg() &&
+         "rematerializeAddImmForUse: bad use operand");
+
+  MachineOperand &UseMO = UseMI.getOperand(UseOpIdx);
+  Register Src = UseMO.getReg();
+  if (Adj == 0)
+    return Src;
+
+  assert(Src.isPhysical() && Src != Haydn::R0 &&
+         "rematerializeAddImmForUse expects non-R0 phys Src");
+
+  unbundleIfNeeded(UseMI);
+
+  MachineBasicBlock &MBB = *UseMI.getParent();
+  MachineFunction &MF = *MBB.getParent();
+  const HaydnSubtarget &ST = MF.getSubtarget<HaydnSubtarget>();
+  const TargetInstrInfo &TII = *ST.getInstrInfo();
+  DebugLoc DL = UseMI.getDebugLoc();
+  MachineBasicBlock::iterator InsertPt = UseMI.getIterator();
+
+  // Never Dest == Src: remat creates a new value; Src may still be live.
+  SmallVector<Register, 4> Exclude;
+  Exclude.push_back(Src);
+  Exclude.append(ExtraExclude.begin(), ExtraExclude.end());
+
+  bool NeedsSpill = false;
+  Register Dest =
+      findPostRAScratchGPR(MBB, InsertPt, /*PreferNotR12=*/true, NeedsSpill,
+                           Exclude);
+
+  ScratchSpillHome Home;
+  if (NeedsSpill) {
+    Home = beginSpill(MBB, InsertPt, DL, TII, ST, Dest);
+    LLVM_DEBUG(dbgs() << "HaydnPostRAScratch: remat spill " << printReg(Dest)
+                      << " for " << printReg(Src) << "+" << Adj << "\n");
   }
 
-  // SP bracket (8-byte align for callers that also use LD64 on SP).
-  BuildMI(MBB, I, DL, TII.get(Haydn::SUBI32), Haydn::R13)
-      .addReg(Haydn::R13)
-      .addImm(8);
-  BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
-      .addReg(Scr)
-      .addReg(Haydn::R13)
-      .addImm(0);
-  Fn(Scr);
-  BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Scr)
-      .addReg(Haydn::R13)
-      .addImm(0);
-  BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32_W), Haydn::R13)
-      .addReg(Haydn::R13)
-      .addImm(8);
+  // Src not killed — may still be live after the use.
+  MachineInstr *RematDef =
+      BuildMI(MBB, InsertPt, DL, TII.get(Haydn::ADDI32_W), Dest)
+          .addReg(Src)
+          .addImm(Adj);
+
+  UseMO.setReg(Dest);
+  UseMO.setIsKill(true);
+
+  // Restore after UseMI consumed Dest, before gluing (top-level iterators).
+  if (NeedsSpill) {
+    MachineBasicBlock::iterator AfterUse = std::next(UseMI.getIterator());
+    endSpill(MBB, AfterUse, DL, TII, Dest, Home);
+  }
+
+  glueDefToUse(*RematDef, UseMI);
+
+  LLVM_DEBUG(dbgs() << "HaydnPostRAScratch: remat-for-use " << printReg(Dest)
+                    << " = " << printReg(Src) << " + " << Adj << "\n");
+  return Dest;
 }

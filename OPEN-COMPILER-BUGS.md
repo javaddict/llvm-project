@@ -1,19 +1,24 @@
 # OPEN Haydn compiler bugs blocking BundleSim
 
-> **STATUS (2026-07-17, residual-wave refresh)** — live tools under
+> **STATUS (2026-07-21, gcc-c-torture wave)** — live tools under
 > `/ssd2/mhyang/haydn-build/bin`. BundleSim product path is **greenfield only**
 > (`build/BundleSim` + `build/run_c` + product BSP `build/bsp-stage/` via
-> `haydn_bsp`). FAIL packages under
-> `BundleSim/work/yarpgen_fail_archive_20260716/` re-run against HEAD.
+> `haydn_bsp`).
 >
-> Product freestanding + pipeline Step 0–1 + residual wave: **green** (see
-> `haydn-plans/STATUS.md`). Kernel-side GISEL CSEMap ICE and HWLOOP
-> t−3 geometry fixed on `new_yolo_3`. No OPEN hunt bugs.
+> Yarpgen/CoreMark residual wave remains green (CB-122…125 closed). **New OPEN**
+> from llvm-testsuite `gcc-c-torture/execute` freestanding + BundleSim sweep
+> (~1514 tests @ -O2: 1312 PASS / 86 skip / 116 issue) — see **CB-126…CB-131**.
 >
 > ### Currently OPEN
 >
-> **None.** Yarpgen/CoreMark hunt closed 2026-07-17 (CB-122 DROPPED, CB-123 CLOSED,
-> CB-124/125 FIXED, CoreMark CRC FIXED incl. **all-O2** MATCH i386 ILP32).
+> | ID | Pri | Class | Symptom |
+> |----|-----|-------|---------|
+> | **CB-126** | P1 | GISel legalize | narrow/unaligned `G_LOAD`/`G_STORE` → s64 |
+> | **CB-127** | P2 | GISel ISel | `G_PREFETCH` cannot select |
+> | **CB-128** | P2 | GISel ISel | `@llvm.returnaddress` cannot select |
+> | **CB-129** | P2 | CodeGen assert | `MachineBlockPlacement::buildCFGChains` (computed goto) |
+> | **CB-130** | P2 | GISel legalize | vector ops (`G_LSHR`/`G_XOR`/extract/…) |
+> | **CB-131** | P1 | ABI / miscompile | `va_arg` / stdarg / struct-return → guest `abort` |
 >
 > ### Recently closed (hunt wave — not OPEN)
 >
@@ -153,6 +158,12 @@
 
 | ID | Pri | State | Notes |
 |----|-----|-------|-------|
+| **CB-126** | **P1** | **OPEN** | GISel legalize narrow/unaligned `G_LOAD`/`G_STORE`→s64; repro `20040709-2.c` / `strct-pack-1.c`. |
+| **CB-127** | **P2** | **OPEN** | `G_PREFETCH` cannot select; repro `builtin-prefetch-1.c`. |
+| **CB-128** | **P2** | **OPEN** | `@llvm.returnaddress` cannot select; repro `20030323-1.c`. |
+| **CB-129** | **P2** | **OPEN** | `MachineBlockPlacement` assert (computed goto); repro `comp-goto-1.c`. |
+| **CB-130** | **P2** | **OPEN** | vector legalize (`G_LSHR`/`G_XOR`/…); repro `pr53645.c` / `simd-1.c`. |
+| **CB-131** | **P1** | **OPEN** | va_arg/stdarg/struct-ret miscompile → BundleSim ABORT; repro `haydn_torture_run va-arg-1.c`. |
 | **CB-119** | **P0** | **FIXED** | Bundle128 `simm20` signed DecoderMethod; lit `cb119-addi32-simm20-signed-decode.s`. F1 ILL@entry cleared. Prevent-reg: `yarpgen_seed{10,45,…}`. |
 | **CB-120** | **P0** | **FIXED** | Misaligned load root: unaligned/bitfield ISel; Family F2. Prevent-reg: `yarpgen_seed{8,12,14,24,…}`. |
 | **CB-121** | **P1** | **FIXED (O0/O1)** | Seed7 ILP32 host + call hygiene; O0/O1 match `0x1ab4…`. **O2 residual → CB-125 FIXED**. |
@@ -171,7 +182,239 @@
 
 # Currently OPEN
 
-*(none — CB-124/CB-125 closed 2026-07-17; CoreMark CRC FIXED.)*
+Source sweep: llvm-testsuite
+`SingleSource/Regression/C/gcc-c-torture/execute` @ `-O2`, freestanding
+Haydn link + BundleSim (not full lit yet). Evidence dir:
+`/tmp/bundlesim-672/gcc-c-torture/run/` (`summary-O2.json`, `results-O2.jsonl`).
+
+**Env (all repros):**
+
+```bash
+export HAYDN=/ssd2/mhyang/haydn-build/bin
+export PATH="$HAYDN:$PATH"
+export TORTURE=/ssd/mhyang/llvm/llvm-testsuite/SingleSource/Regression/C/gcc-c-torture/execute
+export BSP=/ssd2/mhyang/BundleSim/build/bsp-stage
+export SYSROOT=/ssd2/mhyang/haydn-build/sysroot/haydn-unknown-elf
+export BSIM=/ssd2/mhyang/BundleSim/build/BundleSim
+# compile-only ICE (no libc needed unless noted):
+#   $HAYDN/clang --target=haydn-unknown-elf -O2 -c $TORTURE/FILE.c -o /tmp/t.o \
+#     -w -Wno-implicit-int -Wno-implicit-function-declaration
+```
+
+**Runtime helper (exit 0 = PASS; ABORT/nonzero = FAIL):**
+
+```bash
+haydn_torture_run() {  # usage: haydn_torture_run FILE.c [-O2]
+  local src="$TORTURE/$1" opt="${2:--O2}" base=/tmp/haydn-torture-$$
+  mkdir -p "$base"
+  "$HAYDN/clang" --target=haydn-unknown-elf "$opt" -ffreestanding \
+    -isystem "$BSP/include" -isystem "$SYSROOT/include" \
+    -w -Wno-implicit-int -Wno-implicit-function-declaration -Wno-int-conversion \
+    -c "$src" -o "$base/t.o" || return 2
+  "$HAYDN/ld.lld" -m elf32haydn -T "$BSP/lib/bundlesim/bundlesim.ld" \
+    --gc-sections --build-id=none \
+    "$BSP/lib/bundlesim/crt0.o" "$base/t.o" --start-group \
+    "$BSP/lib/bundlesim/libbundlesim_crt.a" \
+    "$SYSROOT/lib/libc.a" "$SYSROOT/lib/libm.a" \
+    "$BSP/lib/bundlesim/libbundlesim_plat.a" \
+    "$BSP/lib/bundlesim/libbundlesim_sys.a" \
+    "$BSP/lib/bundlesim/libclang_rt.builtins-haydn.a" \
+    --end-group -o "$base/t.elf" || return 3
+  "$BSIM" --objdump "$HAYDN/llvm-objdump" "$base/t.elf" \
+    --result-json "$base/r.json" --stdio null
+  python3 -c "import json;d=json.load(open('$base/r.json'));print(d.get('status'),d.get('stop_reason'),d.get('guest_exit_code'))"
+}
+```
+
+---
+
+## CB-126 — OPEN (GISel legalize: narrow/unaligned G_LOAD/G_STORE → s64)
+
+**Pri P1. Compiler. Not BundleSim.**
+
+| Field | Value |
+|-------|--------|
+| Class | GlobalISel legalizer |
+| Symptom | `error in backend: unable to legalize instruction: %N:_(s64) = G_LOAD … (load (s8\|s16) from …)` or `G_STORE` s64 → narrow mem |
+| Opt | `-O2` (also seen at lower opts for some) |
+| Cluster size | ~16 compile ICEs in torture @ -O2 |
+
+**Examples:** `20040709-2.c`, `20040709-3.c`, `pr57344-1..4.c`, `strct-pack-1.c`,
+`va-arg-22.c`, `pr29006.c`, `pr53688.c`, `pr58570.c`, `pr70903.c`,
+`pr52979-1/2.c`, `pr79737-2.c`, `20051113-1.c`.
+
+### Reproduce
+
+```bash
+# minimal — expect: unable to legalize … G_LOAD … (load (s8) …)  or (s16)
+$HAYDN/clang --target=haydn-unknown-elf -O2 -c \
+  $TORTURE/20040709-2.c -o /tmp/t.o \
+  -w -Wno-implicit-int -Wno-implicit-function-declaration
+
+# packed struct variant
+$HAYDN/clang --target=haydn-unknown-elf -O2 -c \
+  $TORTURE/strct-pack-1.c -o /tmp/t.o \
+  -w -Wno-implicit-int -Wno-implicit-function-declaration
+```
+
+**Expected (bug present):** non-zero exit; `fatal error: error in backend: unable to legalize instruction: … G_LOAD …`.
+
+**Related:** may share root with historical **CB-120** unaligned/bitfield work;
+these residual forms are s64 legalize of sub-word mem ops, still ICE on HEAD.
+
+---
+
+## CB-127 — OPEN (G_PREFETCH cannot select)
+
+**Pri P2. Compiler. Not BundleSim.**
+
+| Field | Value |
+|-------|--------|
+| Class | GISel instruction select |
+| Symptom | `cannot select: G_PREFETCH %…:gpr32(p0), …` |
+| Tests | `builtin-prefetch-1.c` … `builtin-prefetch-6.c` (all 6) |
+
+### Reproduce
+
+```bash
+$HAYDN/clang --target=haydn-unknown-elf -O2 -c \
+  $TORTURE/builtin-prefetch-1.c -o /tmp/t.o \
+  -w -Wno-implicit-int -Wno-implicit-function-declaration
+# expect: cannot select: G_PREFETCH …
+```
+
+**Fix direction:** lower `__builtin_prefetch` / `G_PREFETCH` to nop (or Haydn
+prefetch op if ISA has one); do not ICE.
+
+---
+
+## CB-128 — OPEN (`llvm.returnaddress` cannot select)
+
+**Pri P2. Compiler. Not BundleSim.**
+
+| Field | Value |
+|-------|--------|
+| Class | GISel ISel of `@llvm.returnaddress` |
+| Symptom | `cannot select: %…:gpr32(p0) = G_INTRINSIC intrinsic(@llvm.returnaddress), N` |
+| Tests | `20030323-1.c`, `20030811-1.c`, `pr17377.c` |
+
+### Reproduce
+
+```bash
+$HAYDN/clang --target=haydn-unknown-elf -O2 -c \
+  $TORTURE/20030323-1.c -o /tmp/t.o \
+  -w -Wno-implicit-int -Wno-implicit-function-declaration
+# expect: cannot select: … intrinsic(@llvm.returnaddress)
+```
+
+**Fix direction:** select `LR`/frame walk for depth 0; undef or 0 for depth>0
+(document as unsupported) — must not ICE.
+
+---
+
+## CB-129 — OPEN (MachineBlockPlacement assert on computed goto)
+
+**Pri P2. Compiler. Not BundleSim.**
+
+| Field | Value |
+|-------|--------|
+| Class | `MachineBlockPlacement::buildCFGChains` assert |
+| Symptom | `Assertion '(!TII->analyzeBranch(*PrevBB, …) \|\| …)' failed` @ `MachineBlockPlacement.cpp:2914` |
+| Tests | `comp-goto-1.c`, `20000815-1.c`, `20071210-1.c` |
+
+### Reproduce
+
+```bash
+# needs sysroot headers (stdlib.h)
+$HAYDN/clang --target=haydn-unknown-elf -O2 -c \
+  $TORTURE/comp-goto-1.c -o /tmp/t.o \
+  -isystem $SYSROOT/include -isystem $BSP/include \
+  -w -Wno-implicit-int -Wno-implicit-function-declaration
+# expect: Assertion … MachineBlockPlacement::buildCFGChains
+```
+
+**Note:** `analyzeBranch` / terminator modeling for indirectbr / computed-goto
+edges — likely incomplete Haydn branch analysis rather than generic LLVM bug.
+
+---
+
+## CB-130 — OPEN (vector legalize: G_LSHR / G_XOR / extract / …)
+
+**Pri P2. Compiler. Not BundleSim.**
+
+| Field | Value |
+|-------|--------|
+| Class | GISel legalizer for scalable/fixed vectors |
+| Symptom | `unable to legalize instruction: %…_(<N x sM>) = G_LSHR\|G_XOR\|G_MUL\|G_EXTRACT_VECTOR_ELT …` |
+| Tests | `simd-1.c`, `simd-2.c`, `simd-6.c`, `pr53645.c`, `pr53645-2.c`, `pr60960.c`, `pr65427.c`, `pr85169.c`, plus related FP/vector ICEs |
+
+### Reproduce
+
+```bash
+$HAYDN/clang --target=haydn-unknown-elf -O2 -c \
+  $TORTURE/pr53645.c -o /tmp/t.o -w
+# expect: unable to legalize … G_LSHR … <4 x s32>
+
+$HAYDN/clang --target=haydn-unknown-elf -O2 -c \
+  $TORTURE/simd-1.c -o /tmp/t.o \
+  -w -Wno-implicit-int -Wno-implicit-function-declaration
+# expect: unable to legalize … G_XOR … <4 x s32>
+```
+
+**Fix direction:** scalarize unsupported vector ops in Haydn legalizer; or
+reject vectors in FE if out of product scope (still should not backend-ICE).
+
+---
+
+## CB-131 — OPEN (va_arg / stdarg / struct-return miscompile → abort)
+
+**Pri P1. Compiler (ABI/codegen). Not BundleSim** — sim correctly runs guest
+`abort()` after wrong value check.
+
+| Field | Value |
+|-------|--------|
+| Class | Calling convention / varargs / aggregate return |
+| Symptom | freestanding link OK; BundleSim `stop=ABORT` `guest_exit_code=134` |
+| Cluster | `va-arg-{1,2,9,10,15,16,17,19,24}.c`, `stdarg-3.c`, `struct-ret-1.c` (+ more runtime aborts may share root) |
+
+### Reproduce
+
+```bash
+# single representative
+haydn_torture_run va-arg-1.c -O2
+# expect (bug present): OK ABORT 134   (or status with stop_reason=ABORT)
+
+haydn_torture_run va-arg-2.c -O2
+haydn_torture_run stdarg-3.c -O2
+haydn_torture_run struct-ret-1.c -O2
+```
+
+**One-liner without helper:**
+
+```bash
+SRC=$TORTURE/va-arg-1.c
+$HAYDN/clang --target=haydn-unknown-elf -O2 -ffreestanding \
+  -isystem $BSP/include -isystem $SYSROOT/include \
+  -w -Wno-implicit-int -Wno-implicit-function-declaration \
+  -c $SRC -o /tmp/va.o
+$HAYDN/ld.lld -m elf32haydn -T $BSP/lib/bundlesim/bundlesim.ld \
+  --gc-sections --build-id=none \
+  $BSP/lib/bundlesim/crt0.o /tmp/va.o --start-group \
+  $BSP/lib/bundlesim/libbundlesim_crt.a $SYSROOT/lib/libc.a $SYSROOT/lib/libm.a \
+  $BSP/lib/bundlesim/libbundlesim_plat.a $BSP/lib/bundlesim/libbundlesim_sys.a \
+  $BSP/lib/bundlesim/libclang_rt.builtins-haydn.a --end-group -o /tmp/va.elf
+$BSIM --objdump $HAYDN/llvm-objdump /tmp/va.elf --result-json /tmp/va.json --stdio null
+python3 -c "import json;d=json.load(open('/tmp/va.json'));print(d)"
+# guest_exit_code 134 / stop_reason ABORT = bug still present
+# guest_exit_code 0 / GUEST_EXIT = fixed
+```
+
+**Not in this ticket (reclass later):** `strlen-*`/`memchr` exit 1 may be
+llvm-libc; soft-float `__float*` / `alloca` / hosted `tmpnam` are **link /
+sysroot** holes, not sim; `BUNDLE_LIMIT` long loops need infinite-loop vs
+limit recheck before filing.
+
+---
 
 ## CB-124 — FIXED (yarpgen seed2 @ -O1/-O2; branch-relax scavenger)
 

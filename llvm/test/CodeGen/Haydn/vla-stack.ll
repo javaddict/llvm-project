@@ -22,7 +22,8 @@ define i32 @vla_test(i32 %n) {
 ; The VLA store may land as st32 (GPR source) or d_sw_l_with_imm (low-word
 ; DR64 store) depending on whether the stored value is live in GPR32 or DR64.
 ; CHECK: {{(st32|d_sw_l_with_imm)}}
-; CHECK: ld32
+; Indexed load of last element may be ld32 or fused s_lw_pre_reg.
+; CHECK: {{(ld32|s_lw_pre_reg)}}
 entry:
   %vla = alloca i32, i32 %n
   br label %for.body

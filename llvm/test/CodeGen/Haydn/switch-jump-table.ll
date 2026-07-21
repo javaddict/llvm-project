@@ -28,7 +28,7 @@
 
 
 
-; CHECK:  	.file	"<stdin>"
+; CHECK:  	.file
 ; CHECK:  	.text
 ; CHECK:  	.globl	switch_jt_8                     // -- Begin function switch_jt_8
 ; CHECK:  	.type	switch_jt_8,@function

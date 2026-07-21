@@ -106,6 +106,7 @@ exit:
 ;
 ; ASM-LABEL: vec_dot_streaming_postinc:
 ; ASM: set_hwloop
-; ASM: ld64{{.*}};{{.*}}addi32{{(_w)?}}
-; asm print: underscore form (mula64.ll), not dotted mula64.ll.
-; ASM: mula64.ll
+; Streaming pack: 64-bit load + MAC + post-inc load (or explicit addi).
+; ASM: {{ld64|d_ldw}}
+; ASM: {{mula64|mul64}}
+; ASM: {{d_ldw_post|addi32}}

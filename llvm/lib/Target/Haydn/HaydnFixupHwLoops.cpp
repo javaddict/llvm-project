@@ -12,13 +12,22 @@
 //
 // Numeric limits: HaydnHWLoopContracts.h (shared with formation).
 //
+// Opt before RA; post-RA Fixup is correctness only.
+//
+// Count-unit law (reg trip SET_HWLOOP_REG): late remat owns
+//   Dest = Src + adj  →  SET …, Dest
+// Fixup must NEVER splice between remat and SET (splits the def→use).
+// Free lifts land *before the count-unit head* (remat if present).
+// Never lift a dangerous MI (defs remat Src / uses remat Dest). Prefer
+// demote / fatal over wrong trip at SET (CoreMark MEMORY_FAULT @ post-inc).
+//
 // Product narrative (W0.2 / G-RISK-DEMOTE): demote-first, NOT erase-only.
 // Role B already removed the software back-edge when forming ZOL. Erasing
 // SET alone on a *live* body yields a once-through fallthrough (wrong-code).
 // Product recovery is soft LoopDec+LoopJNZ when a free counter exists;
 // live demote failure is fatal. demote OFF is debug-only (force erase-setup).
 //
-// Closed contracts (no recover-by-fatal, no monkey-patch special cases):
+// Closed contracts:
 //
 // 1. Live MBB operands
 // SET_HWLOOP{,_REG} carries Header/Latch as MBB operands. Later CFG
@@ -34,13 +43,11 @@
 // from the MI after SET. If Header is not after SET in layout, Off is
 // unknown → treat as range-bad.
 //
-// 3. Recoverability ladder (always prefer MC-safe over "keep HW")
+// 3. Recoverability ladder (correctness only)
 // a. Pad setup gap only (deficit-only t−3 NOPs after SET → BEGIN).
-//    Body min-length is not product law; END >= BEGIN (inclusive) is legal.
-// b. tryShortenStartOffset — order-preserving (first post-SET MI only).
-// c. demoteToSoftwareLoop — AIE expands LoopDec+LoopJNZ to JNZD or
-// strips empty ZOL; it never half-demotes. We must demote when
-// layout forbids forward Off1/Off2 (latch before header, etc.).
+// b. tryShortenStartOffset — free-only lifts before count unit (not SET
+//    alone); never across remat→SET; never dangerous peel.
+// c. demoteToSoftwareLoop when hard Off1/Off2 still illegal.
 // Soft-loop restore is *closed* (total, like AIE expand):
 // • Collect loop blocks by CFG (reverse from Latch to Header)
 // never by layout range — layout can put Latch before Header.
@@ -67,12 +74,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "Haydn.h"
+#include "HaydnFrameLowering.h"
 #include "HaydnHWLoopContracts.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnMachineFunctionInfo.h"
+#include "HaydnPostRAScratch.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -365,8 +376,205 @@ bool HaydnFixupHwLoops::computeOffsets(MachineInstr &SetMI,
   return true;
 }
 
-// Move post-SET preheader instructions back before SET until StartOff fits
-// uimm6, while keeping ≥ MinSetupBundles after SET (t−3).
+//===----------------------------------------------------------------------===//
+// Count unit + free-only Off1 shorten (correctness)
+//
+// Reg trip: Dest = Src+adj → SET …, Dest. Never insert between remat and SET.
+// HEAD bug: splice before SET after unbundle left peel between remat and SET
+// so SET latched data in Dest (MEMORY_FAULT). Splice before count-unit head;
+// refuse dangerous peel.
+//===----------------------------------------------------------------------===//
+
+static Register getHwloopCountReg(const MachineInstr &SetMI) {
+  unsigned Opc = SetMI.getOpcode();
+  if (Opc == Haydn::SET_HWLOOP_REG && SetMI.getNumOperands() >= 4 &&
+      SetMI.getOperand(3).isReg())
+    return SetMI.getOperand(3).getReg();
+  if (Opc == Haydn::LoopStart && SetMI.getNumOperands() >= 1 &&
+      SetMI.getOperand(0).isReg())
+    return SetMI.getOperand(0).getReg();
+  return Register();
+}
+
+static bool miOrBundleDefines(const MachineInstr &MI, Register Reg) {
+  if (!Reg)
+    return false;
+  auto defs = [&](const MachineInstr &I) {
+    for (const MachineOperand &MO : I.operands())
+      if (MO.isReg() && MO.isDef() && MO.getReg() == Reg)
+        return true;
+    return false;
+  };
+  if (MI.isBundle()) {
+    for (const MachineInstr *I = MI.getNextNode();
+         I && I->isBundledWithPred(); I = I->getNextNode())
+      if (defs(*I))
+        return true;
+    return false;
+  }
+  return defs(MI);
+}
+
+// Remat ADDI that defs Count immediately before SET, else SET itself.
+static MachineInstr &getCountUnitHead(MachineInstr &SetMI) {
+  Register Count = getHwloopCountReg(SetMI);
+  if (!Count)
+    return SetMI;
+  MachineBasicBlock *MBB = SetMI.getParent();
+  MachineBasicBlock::iterator It = SetMI.getIterator();
+  if (It == MBB->begin())
+    return SetMI;
+  MachineBasicBlock::iterator PrevIt = std::prev(It);
+  while (PrevIt != MBB->begin() &&
+         (PrevIt->isMetaInstruction() || PrevIt->isDebugInstr() ||
+          PrevIt->isKill() || PrevIt->isImplicitDef()))
+    --PrevIt;
+  // After unbundle, remat may be a BUNDLE containing only ADDI, or bare ADDI.
+  if (miOrBundleDefines(*PrevIt, Count))
+    return *PrevIt;
+  return SetMI;
+}
+
+static void collectCountUnitExtLiveIns(const MachineInstr &Head,
+                                       const MachineInstr &SetMI,
+                                       SmallSet<Register, 8> &LiveIns) {
+  SmallSet<Register, 8> HeadDefs;
+  auto oneDef = [&](const MachineInstr &MI) {
+    for (const MachineOperand &MO : MI.operands())
+      if (MO.isReg() && MO.isDef() && MO.getReg().isPhysical())
+        HeadDefs.insert(MO.getReg());
+  };
+  auto oneUse = [&](const MachineInstr &MI, SmallSet<Register, 8> &Uses) {
+    for (const MachineOperand &MO : MI.operands())
+      if (MO.isReg() && MO.isUse() && !MO.isImplicit() &&
+          MO.getReg().isPhysical())
+        Uses.insert(MO.getReg());
+  };
+  auto walk = [&](const MachineInstr &I, bool CollectDefs,
+                  SmallSet<Register, 8> *Uses) {
+    if (I.isBundle()) {
+      for (const MachineInstr *J = I.getNextNode();
+           J && J->isBundledWithPred(); J = J->getNextNode()) {
+        if (CollectDefs)
+          oneDef(*J);
+        else if (Uses)
+          oneUse(*J, *Uses);
+      }
+    } else {
+      if (CollectDefs)
+        oneDef(I);
+      else if (Uses)
+        oneUse(I, *Uses);
+    }
+  };
+  walk(Head, /*CollectDefs=*/true, nullptr);
+  SmallSet<Register, 8> Uses;
+  walk(Head, /*CollectDefs=*/false, &Uses);
+  if (&Head != &SetMI)
+    walk(SetMI, /*CollectDefs=*/false, &Uses);
+  LiveIns.clear();
+  for (Register U : Uses)
+    if (!HeadDefs.contains(U))
+      LiveIns.insert(U);
+}
+
+static void collectCountUnitHeadDefs(const MachineInstr &Head,
+                                     SmallSet<Register, 8> &Defs) {
+  Defs.clear();
+  auto one = [&](const MachineInstr &MI) {
+    for (const MachineOperand &MO : MI.operands())
+      if (MO.isReg() && MO.isDef() && MO.getReg().isPhysical())
+        Defs.insert(MO.getReg());
+  };
+  if (Head.isBundle()) {
+    for (const MachineInstr *J = Head.getNextNode();
+         J && J->isBundledWithPred(); J = J->getNextNode())
+      one(*J);
+  } else {
+    one(Head);
+  }
+}
+
+template <unsigned N>
+static bool miOrBundleDefsAny(const MachineInstr &MI,
+                              const SmallSet<Register, N> &Regs) {
+  if (Regs.empty())
+    return false;
+  auto defs = [&](const MachineInstr &I) {
+    for (const MachineOperand &MO : I.operands())
+      if (MO.isReg() && MO.isDef() && Regs.contains(MO.getReg()))
+        return true;
+    return false;
+  };
+  if (MI.isBundle()) {
+    for (const MachineInstr *I = MI.getNextNode();
+         I && I->isBundledWithPred(); I = I->getNextNode())
+      if (defs(*I))
+        return true;
+    return false;
+  }
+  return defs(MI);
+}
+
+template <unsigned N>
+static bool miOrBundleUsesAny(const MachineInstr &MI,
+                              const SmallSet<Register, N> &Regs) {
+  if (Regs.empty())
+    return false;
+  auto uses = [&](const MachineInstr &I) {
+    for (const MachineOperand &MO : I.operands())
+      if (MO.isReg() && MO.isUse() && !MO.isImplicit() &&
+          Regs.contains(MO.getReg()))
+        return true;
+    return false;
+  };
+  if (MI.isBundle()) {
+    for (const MachineInstr *I = MI.getNextNode();
+         I && I->isBundledWithPred(); I = I->getNextNode())
+      if (uses(*I))
+        return true;
+    return false;
+  }
+  return uses(MI);
+}
+
+template <unsigned N, unsigned M>
+static bool isDangerousToLiftBeforeCountUnit(
+    const MachineInstr &MI, const SmallSet<Register, N> &ExtLiveIns,
+    const SmallSet<Register, M> &HeadDefs) {
+  // Def Src before remat → wrong trip. Use Dest before remat → use-before-def.
+  if (miOrBundleDefsAny(MI, ExtLiveIns))
+    return true;
+  if (miOrBundleUsesAny(MI, HeadDefs))
+    return true;
+  return false;
+}
+
+static void collectMiPhysDefUse(const MachineInstr &MI,
+                                SmallSet<Register, 16> &Defs,
+                                SmallSet<Register, 16> &Uses) {
+  auto one = [&](const MachineInstr &I) {
+    for (const MachineOperand &MO : I.operands()) {
+      if (!MO.isReg() || !MO.getReg().isPhysical())
+        continue;
+      if (MO.isDef())
+        Defs.insert(MO.getReg());
+      else if (MO.isUse() && !MO.isImplicit())
+        Uses.insert(MO.getReg());
+    }
+  };
+  if (MI.isBundle()) {
+    for (const MachineInstr *J = MI.getNextNode();
+         J && J->isBundledWithPred(); J = J->getNextNode())
+      one(*J);
+  } else {
+    one(MI);
+  }
+}
+
+// Free-only Off1 legality. Never split remat→SET. Never lift dangerous peel.
+// Order-preserving among free candidates: always take first free post-SET MI
+// (not last — reversing free MIs still breaks chains).
 bool HaydnFixupHwLoops::tryShortenStartOffset(MachineInstr &SetMI,
                                               const HaydnInstrInfo &TII,
                                               int64_t &StartOff,
@@ -379,24 +587,22 @@ bool HaydnFixupHwLoops::tryShortenStartOffset(MachineInstr &SetMI,
   MachineBasicBlock *StartMBB = nullptr;
   MachineBasicBlock *EndMBB = nullptr;
 
-  // Greedily move post-SET preheader work before SET while keeping
-  // ≥ MinSetupBundles after SET (t−3).
-  //
-  // CRITICAL: always move the *first* size-bearing MI after SET, never the
-  // last. Repeatedly splicing the last MI in front of SET reverses relative
-  // order of the preheader (SET, A, B, C → C, B, A, SET). That breaks
-  // reduction chains: the final MAX32 may land first with intermediate
-  // operands while later MAX32s update a different physreg; the hwloop body
-  // still live-ins the early reg → wrong mx/cnt (BundleSim cb44 residual
-  // host=145 sim=138 after PEI fixes).
+  MachineInstr &Head = getCountUnitHead(SetMI);
+  SmallSet<Register, 8> ExtLiveIns;
+  SmallSet<Register, 8> HeadDefs;
+  collectCountUnitExtLiveIns(Head, SetMI, ExtLiveIns);
+  collectCountUnitHeadDefs(Head, HeadDefs);
+
   while (StartOff > MaxOff1BytesSafe) {
     unsigned Following = countFollowingBundles(SetMI, TII);
     if (Following <= MinSetupBundles)
       break;
 
-    // Bundle-safe start : never construct iterators mid-bundle.
-    MachineInstr *First = nullptr;
-    unsigned FirstBundles = 0;
+    SmallSet<Register, 16> BarrierDefs;
+    SmallSet<Register, 16> BarrierUses;
+
+    MachineInstr *Cand = nullptr;
+    unsigned CandBundles = 0;
     for (MachineBasicBlock::iterator I = nextBundleBoundary(SetMI),
                                      E = MBB->end();
          I != E; ++I) {
@@ -408,25 +614,46 @@ bool HaydnFixupHwLoops::tryShortenStartOffset(MachineInstr &SetMI,
       unsigned Bytes = TII.getInstSizeInBytes(*I);
       if (Bytes == 0)
         continue;
-      First = &*I;
-      FirstBundles = (Bytes + Bundle128Bytes - 1) / Bundle128Bytes;
+
+      const bool IsNop = I->getOpcode() == Haydn::NOP;
+      const bool UnitDanger =
+          !IsNop && isDangerousToLiftBeforeCountUnit(*I, ExtLiveIns, HeadDefs);
+      const bool CrossBarrier =
+          !IsNop && (miOrBundleUsesAny(*I, BarrierDefs) ||
+                     miOrBundleDefsAny(*I, BarrierUses));
+
+      if (UnitDanger || CrossBarrier) {
+        LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: skip dangerous/dependent "
+                             "(leave remat→SET intact): "
+                          << *I);
+        collectMiPhysDefUse(*I, BarrierDefs, BarrierUses);
+        continue;
+      }
+
+      Cand = &*I;
+      CandBundles = (Bytes + Bundle128Bytes - 1) / Bundle128Bytes;
       break;
     }
-    if (!First || FirstBundles == 0)
+    if (!Cand || CandBundles == 0)
       break;
-    if (Following - FirstBundles < MinSetupBundles)
+    if (Following - CandBundles < MinSetupBundles)
       break;
 
-    // Move First to immediately before SET (preserves order of remaining work).
-    MBB->splice(SetMI.getIterator(), MBB, First->getIterator());
+    // Splice before count-unit head (remat), NEVER before SET alone.
+    MachineInstr &CurHead = getCountUnitHead(SetMI);
+    MBB->splice(CurHead.getIterator(), MBB, Cand->getIterator());
     Changed = true;
-    LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: shortened StartOff — moved MI "
-                         "before SET: "
-                      << *First);
+    LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: free lift before count unit: "
+                      << *Cand);
 
     if (!computeOffsets(SetMI, TII, StartOff, EndOff, StartMBB, EndMBB))
       break;
   }
+
+  // Do NOT sink trip-load+remat+SET past peel: peel leaves body live-ins in
+  // those physregs (e.g. r1 pointer). Moving LD32 trip after peel clobbers
+  // them → MEMORY_FAULT. If free lifts cannot fix Off1, demote (possibly
+  // stack-counter) instead.
 
   return Changed;
 }
@@ -799,12 +1026,23 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
   // Snapshot soft-loop decision *before* erasing SetMI (operands die with it).
   Register CountReg;
   bool InstallSoftLoop = false;
+  bool UseStackCounter = false;
+  int StackCounterFI = -1;
   const HaydnSubtarget &ST = MF.getSubtarget<HaydnSubtarget>();
+  const HaydnFrameLowering *TFL = ST.getFrameLowering();
+  auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
 
   auto canUsePreferAsCounter = [&]() -> bool {
     return Prefer.isPhysical() && Prefer != Haydn::R0 && Prefer != Haydn::R13 &&
            Prefer != Haydn::R15 &&
            !regClobberedNonCountdownIn(Prefer, LoopBlocks);
+  };
+
+  auto resolveScratchFI = [&]() -> int {
+    int FI = FuncInfo->getBranchRelaxationScratchFI();
+    if (FI < 0)
+      FI = FuncInfo->getPostRAScratchFI();
+    return FI;
   };
 
   if ((IsLoopStart || Opc == Haydn::SET_HWLOOP_REG) && Prefer.isPhysical() &&
@@ -840,6 +1078,71 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
     }
   }
 
+  // No free body-wide counter: keep trip on a post-RA scratch FI and reload
+  // each latch with a short-lived scratch (does not steal body physregs).
+  if (!InstallSoftLoop) {
+    StackCounterFI = resolveScratchFI();
+    if (StackCounterFI >= 0 &&
+        ((Prefer.isPhysical() && Prefer != Haydn::R0) || HasImm)) {
+      MachineBasicBlock::iterator Ins = SetMI.getIterator();
+      Register FrameReg;
+      int64_t Off =
+          TFL->getFrameIndexReference(MF, StackCounterFI, FrameReg).getFixed();
+      if (HasImm) {
+        // Materialize imm into a free/scratch temp, then store to FI.
+        withPostRAScratch(
+            *Preheader, Ins, DL, TII, ST, /*PreferNotR12=*/true,
+            [&](Register Scr) {
+              materializeTripCount(*Preheader, Ins, DL, TII, Scr, Prefer, Imm,
+                                   /*HasImm=*/true);
+              if (isInt<16>(Off))
+                BuildMI(*Preheader, Ins, DL, TII.get(Haydn::ST32))
+                    .addReg(Scr, getKillRegState(true))
+                    .addReg(FrameReg)
+                    .addImm(Off);
+              else {
+                // Rare large FI: use R0 as address temp (xor-zero after).
+                BuildMI(*Preheader, Ins, DL, TII.get(Haydn::ADDI32_W), Haydn::R0)
+                    .addReg(FrameReg)
+                    .addImm(Off);
+                BuildMI(*Preheader, Ins, DL, TII.get(Haydn::ST32))
+                    .addReg(Scr, getKillRegState(true))
+                    .addReg(Haydn::R0)
+                    .addImm(0);
+                BuildMI(*Preheader, Ins, DL, TII.get(Haydn::XOR32), Haydn::R0)
+                    .addReg(Haydn::R0)
+                    .addReg(Haydn::R0);
+              }
+            },
+            /*Exclude=*/Prefer.isPhysical() ? ArrayRef<Register>{Prefer}
+                                            : ArrayRef<Register>{});
+      } else {
+        // Prefer holds trip at SET; store it to FI before erase.
+        if (isInt<16>(Off))
+          BuildMI(*Preheader, Ins, DL, TII.get(Haydn::ST32))
+              .addReg(Prefer)
+              .addReg(FrameReg)
+              .addImm(Off);
+        else {
+          BuildMI(*Preheader, Ins, DL, TII.get(Haydn::ADDI32_W), Haydn::R0)
+              .addReg(FrameReg)
+              .addImm(Off);
+          BuildMI(*Preheader, Ins, DL, TII.get(Haydn::ST32))
+              .addReg(Prefer)
+              .addReg(Haydn::R0)
+              .addImm(0);
+          BuildMI(*Preheader, Ins, DL, TII.get(Haydn::XOR32), Haydn::R0)
+              .addReg(Haydn::R0)
+              .addReg(Haydn::R0);
+        }
+      }
+      UseStackCounter = true;
+      InstallSoftLoop = true;
+      LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: demote stack-counter FI#"
+                        << StackCounterFI << "\n");
+    }
+  }
+
   if (!InstallSoftLoop) {
     // Live body, no free counter / unusable trip — refuse erase-only.
     LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: demote refused — no free counter "
@@ -849,7 +1152,10 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
 
   // Strip residual countdown of CountReg *before* erasing SET / rewriting
   // latch, while Latch is still intact. (Role B leaves Prefer+=-1.)
-  stripResidualCountdown(Latch, CountReg);
+  if (!UseStackCounter)
+    stripResidualCountdown(Latch, CountReg);
+  else if (Prefer.isPhysical())
+    stripResidualCountdown(Latch, Prefer);
 
   // L1: erase hardware setup (SET + PLE)
   eraseHardwareSetup(SetMI);
@@ -860,8 +1166,7 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
     return true;
 
   // L2: rewrite latch to software counted back-edge
-  // CountReg is live at SET/preheader and into every loop block.
-  {
+  if (!UseStackCounter) {
     auto ensureLiveIn = [](MachineBasicBlock *MBB, Register R) {
       if (!R.isPhysical() || !MBB)
         return;
@@ -891,14 +1196,65 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
   if (Exit != Header)
     Latch->addSuccessor(Exit);
 
-  // Always the AIE JNZD pair: one dec, one branch. Residual was stripped.
-  BuildMI(*Latch, Latch->end(), DL, TII.get(Haydn::LoopDec), CountReg)
-      .addReg(CountReg);
-  BuildMI(*Latch, Latch->end(), DL, TII.get(Haydn::LoopJNZ))
-      .addReg(CountReg)
-      .addMBB(Header);
-  LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: demote LoopDec+LoopJNZ on "
-                    << printReg(CountReg) << "\n");
+  if (UseStackCounter) {
+    Register FrameReg;
+    int64_t Off =
+        TFL->getFrameIndexReference(MF, StackCounterFI, FrameReg).getFixed();
+    MachineBasicBlock::iterator LatchEnd = Latch->end();
+    withPostRAScratch(
+        *Latch, LatchEnd, DL, TII, ST, /*PreferNotR12=*/true,
+        [&](Register Scr) {
+          if (isInt<16>(Off))
+            BuildMI(*Latch, LatchEnd, DL, TII.get(Haydn::LD32), Scr)
+                .addReg(FrameReg)
+                .addImm(Off);
+          else {
+            BuildMI(*Latch, LatchEnd, DL, TII.get(Haydn::ADDI32_W), Haydn::R0)
+                .addReg(FrameReg)
+                .addImm(Off);
+            BuildMI(*Latch, LatchEnd, DL, TII.get(Haydn::LD32), Scr)
+                .addReg(Haydn::R0)
+                .addImm(0);
+            BuildMI(*Latch, LatchEnd, DL, TII.get(Haydn::XOR32), Haydn::R0)
+                .addReg(Haydn::R0)
+                .addReg(Haydn::R0);
+          }
+          BuildMI(*Latch, LatchEnd, DL, TII.get(Haydn::LoopDec), Scr)
+              .addReg(Scr);
+          if (isInt<16>(Off))
+            BuildMI(*Latch, LatchEnd, DL, TII.get(Haydn::ST32))
+                .addReg(Scr)
+                .addReg(FrameReg)
+                .addImm(Off);
+          else {
+            BuildMI(*Latch, LatchEnd, DL, TII.get(Haydn::ADDI32_W), Haydn::R0)
+                .addReg(FrameReg)
+                .addImm(Off);
+            BuildMI(*Latch, LatchEnd, DL, TII.get(Haydn::ST32))
+                .addReg(Scr)
+                .addReg(Haydn::R0)
+                .addImm(0);
+            BuildMI(*Latch, LatchEnd, DL, TII.get(Haydn::XOR32), Haydn::R0)
+                .addReg(Haydn::R0)
+                .addReg(Haydn::R0);
+          }
+          BuildMI(*Latch, LatchEnd, DL, TII.get(Haydn::LoopJNZ))
+              .addReg(Scr, getKillRegState(true))
+              .addMBB(Header);
+        });
+    LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: demote stack-counter LoopDec+JNZ "
+                         "FI#"
+                      << StackCounterFI << "\n");
+  } else {
+    // Always the AIE JNZD pair: one dec, one branch. Residual was stripped.
+    BuildMI(*Latch, Latch->end(), DL, TII.get(Haydn::LoopDec), CountReg)
+        .addReg(CountReg);
+    BuildMI(*Latch, Latch->end(), DL, TII.get(Haydn::LoopJNZ))
+        .addReg(CountReg)
+        .addMBB(Header);
+    LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: demote LoopDec+LoopJNZ on "
+                      << printReg(CountReg) << "\n");
+  }
 
   MachineFunction::iterator LatchIt = Latch->getIterator();
   MachineFunction::iterator NextIt = std::next(LatchIt);
@@ -920,10 +1276,9 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
     return false;
   const MachineFunction &MF = *Pre->getParent();
 
-  // Closed rule: SET/LoopStart must be a *top-level* MI. PostRASched may have
-  // bundled it with neighbors; MBB::iterator / getFirstTerminator / splice
-  // all assert if handed a mid-bundle instr_iterator. Unbundle before any
-  // distance math or CFG edit (same contract as nextBundleBoundary).
+  // SET/LoopStart must be top-level for MBB iterators. Unbundle for safety.
+  // Remat ADDI (if unbundled from SET) stays the previous MI — free lifts
+  // splice before that head, not between remat and SET.
   if (SetMI.isBundledWithPred() || SetMI.isBundledWithSucc()) {
     if (SetMI.isBundledWithPred())
       SetMI.unbundleFromPred();
@@ -1009,38 +1364,36 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
     return recoverRangeOrOrder("computeOffsets failed");
   }
 
-  auto rangeBad = [&]() {
-    // Unknown distance is unsafe (layout order).
+  auto rangeBad = [&](bool HardOff1Only) {
     if (StartOff < 0 || EndOff < 0)
       return true;
-    // Use MaxOff1BytesSafe (not hard MaxOff1Bytes) — see Off1SafetyMargin.
-    if (StartOff > MaxOff1BytesSafe)
+    // Soft: try free lifts under safety margin. Hard: demote only past uimm6.
+    int64_t Off1Lim = HardOff1Only ? MaxOff1Bytes : MaxOff1BytesSafe;
+    if (StartOff > Off1Lim)
       return true;
     if (EndOff > MaxOff2Bytes)
       return true;
-    // Inclusive END (BundleSim): END >= BEGIN is legal; only inverted range
-    // is bad. Primary hard rule is t−3 (pad above), not body length.
     if (EndOff < StartOff)
       return true;
-    // SET must land at least MinSetupBundles before BEGIN (bytes).
     if (StartOff < static_cast<int64_t>(MinSetupBundles) * Bundle128Bytes)
       return true;
     return false;
   };
 
-  if (rangeBad()) {
-    // Prefer shortening StartOff (move post-SET preheader work back before SET).
-    // LoopStart usually has no post-SET payload; shorten is a no-op then demote.
+  if (rangeBad(/*HardOff1Only=*/false)) {
+    // Free-only lifts; remat→SET stays glued. No peel across count unit.
     if (StartOff > MaxOff1BytesSafe)
       Changed |= tryShortenStartOffset(SetMI, TII, StartOff, EndOff);
 
-    // Recompute after shorten.
-    if (!computeOffsets(SetMI, TII, StartOff, EndOff, StartMBB, EndMBB) ||
-        rangeBad()) {
-      LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: range still bad after shorten "
-                           "(startOff="
-                        << StartOff << " endOff=" << EndOff << ")\n");
-      return recoverRangeOrOrder("range still bad after shorten");
+    if (!computeOffsets(SetMI, TII, StartOff, EndOff, StartMBB, EndMBB))
+      return recoverRangeOrOrder("computeOffsets failed after free lifts");
+
+    // Soft miss OK if hard uimm6 holds. Else demote (never break remat).
+    if (rangeBad(/*HardOff1Only=*/true)) {
+      LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: hard Off1 still bad startOff="
+                        << StartOff << " endOff=" << EndOff
+                        << " (remat→SET intact; demote)\n");
+      return recoverRangeOrOrder("range still bad after free lifts only");
     }
   }
   LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: startOff=" << StartOff

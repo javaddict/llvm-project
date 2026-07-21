@@ -133,32 +133,26 @@ exit:
   ret i32 %result
 }
 
-; Dual-sched rebaseline : intentional form is LD + ADDI32 (not
-; fused D_LDW_POST_IMM / S_LW_POST_IMM). Contract: streaming load + correct
-; stride base bump present; large-stride keeps ADDI32 256 and no fused form.
+; Product form: encodable strides fuse to D_LDW_POST_IMM / S_LW_POST_IMM.
+; Large-stride (imm6 out of range) keeps LD64 + ADDI32 256 (no fused form).
 ;
 ; MIR-LABEL: name: vec_dot_streaming_i64
-; MIR-DAG: LD64
-; MIR-DAG: ADDI32 {{.*}}, 8
+; MIR-DAG: {{LD64|D_LDW_POST_IMM}}
 ; MIR: MULA64_LL
 
 ; MIR-LABEL: name: streaming_i32
-; MIR-DAG: LD32
-; MIR-DAG: ADDI32 {{.*}}, 4
+; MIR: S_LW_POST_IMM
 
 ; MIR-LABEL: name: streaming_i64_large_stride
 ; MIR: ADDI32 {{.*}}, 256
 ; MIR-NOT: D_LDW_POST_IMM
 ; MIR-NOT: S_LW_POST_IMM
 
-; Note: large-stride fallback + cross-bank extract; encodable cases use
-; co-packed ld + addi32 (checked via MIR above).
-;
 ; ASM-LABEL: vec_dot_streaming_i64:
-; ASM: ld64{{.*}};{{.*}}addi32{{(_w)?}}
+; ASM: {{d_ldw_post_imm|ld64}}
 ; ASM: mula64.ll
 ; ASM-LABEL: streaming_i32:
-; ASM: ld32{{.*}};{{.*}}addi32{{(_w)?}}
+; ASM: s_lw_post_imm
 ; ASM-LABEL: streaming_i64_large_stride:
 ; The cross-bank DR64→GPR32 extract now uses native move32_dr_l
 ; (1 op) instead of the 5-op stack spill (ld32 from stack).

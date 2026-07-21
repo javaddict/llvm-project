@@ -16,6 +16,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnMachineFunctionInfo.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnFixupKinds.h"
@@ -58,6 +59,12 @@ static cl::opt<bool> HaydnAsmPrinterStrictBundles(
 STATISTIC(NumAsmPrinterBundleSplits,
           "HaydnAsmPrinter emergency splits of oversubscribed bundles");
 
+// HiFi-like SMS bounds in product -S (observe-only; default ON).
+static cl::opt<bool> HaydnAsmSWPS(
+    "haydn-asm-swps", cl::Hidden, cl::init(true),
+    cl::desc("Emit #<swps> SMS ResMII/RecMII/II comments on pipelined loop "
+             "kernels in assembly (default ON)"));
+
 HaydnAsmPrinter::HaydnAsmPrinter(llvm::TargetMachine &TM,
                                 std::unique_ptr<llvm::MCStreamer> Streamer)
     : AsmPrinter(TM, std::move(Streamer)), MCInstLowering(OutContext, *this) {}
@@ -70,6 +77,73 @@ bool HaydnAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   PendingHwloopEndLabels.clear();
   PendingHwloopStartLabels.clear();
   return AsmPrinter::runOnMachineFunction(MF);
+}
+
+void HaydnAsmPrinter::emitSMSSWPSComments(const MachineBasicBlock &MBB) {
+  if (!HaydnAsmSWPS || !MF)
+    return;
+  const auto *HMFI = MF->getInfo<HaydnMachineFunctionInfo>();
+  if (!HMFI)
+    return;
+  const auto *Info = HMFI->getSMSLoop(&MBB);
+  if (!Info)
+    return;
+
+  // Achieved II ≈ number of Bundle128 parcels (issue cycles) in the kernel.
+  unsigned AchievedII = 0;
+  for (const MachineInstr &MI : MBB) {
+    if (MI.isBundle())
+      ++AchievedII;
+    else if (!MI.isMetaInstruction() && !MI.isDebugInstr() &&
+             !MI.isCFIInstruction() && !MI.isImplicitDef() && !MI.isKill() &&
+             !MI.isInlineAsm())
+      // Unbundled real MI still issues as one parcel on Haydn.
+      ++AchievedII;
+  }
+  if (AchievedII == 0)
+    AchievedII = Info->ScheduledII;
+
+  unsigned Res = Info->ResMII;
+  unsigned Rec = Info->RecMII;
+  unsigned Bound = Res > Rec ? Res : Rec;
+  const char *Verdict = "dual-limited";
+  if (AchievedII > Bound + 0)
+    Verdict = "schedule-limited";
+  else if (Res > Rec)
+    Verdict = "resource-limited";
+  else if (Rec > Res)
+    Verdict = "recurrence-limited";
+
+  // Haydn comment string is "//"; tag includes #<swps> for HiFi-like grepping.
+  // emitRawComment → "// #<swps> …"
+  OutStreamer->emitRawComment(
+      " #<swps> loop bb." + Twine(MBB.getNumber()) + " @" + MF->getName(),
+      /*TabPrefix=*/false);
+  OutStreamer->emitRawComment(
+      " #<swps> II=" + Twine(Info->ScheduledII) +
+          " cycles per pipeline stage (SMS schedule)",
+      /*TabPrefix=*/false);
+  OutStreamer->emitRawComment(
+      " #<swps> stages=" + Twine(Info->StageCount), /*TabPrefix=*/false);
+  OutStreamer->emitRawComment(
+      " #<swps> ops=" + Twine(Info->NumOps) + " (non-meta at SMS)",
+      /*TabPrefix=*/false);
+  OutStreamer->emitRawComment(" #<swps> ResMII=" + Twine(Res),
+                              /*TabPrefix=*/false);
+  OutStreamer->emitRawComment(" #<swps> RecMII=" + Twine(Rec),
+                              /*TabPrefix=*/false);
+  OutStreamer->emitRawComment(
+      " #<swps> MII=max(res,rec)=" + Twine(Info->MII), /*TabPrefix=*/false);
+  OutStreamer->emitRawComment(
+      " #<swps> AchievedII=" + Twine(AchievedII) + " (kernel parcels)",
+      /*TabPrefix=*/false);
+  OutStreamer->emitRawComment(" #<swps> verdict=" + Twine(Verdict),
+                              /*TabPrefix=*/false);
+}
+
+void HaydnAsmPrinter::emitBasicBlockStart(const MachineBasicBlock &MBB) {
+  AsmPrinter::emitBasicBlockStart(MBB);
+  emitSMSSWPSComments(MBB);
 }
 
 void HaydnAsmPrinter::registerSymbolicOperands(const MCInst &Inst) const {

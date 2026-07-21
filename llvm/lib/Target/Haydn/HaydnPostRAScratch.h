@@ -1,4 +1,4 @@
-//===-- HaydnPostRAScratch.h - Post-RA MatInt GPR scratch -------*- C++ -*-===//
+//===-- HaydnPostRAScratch.h - Post-RA GPR scratch + remat -------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,16 +6,24 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Post-RA physical GPR scratch (MatInt, VASTART/VACOPY address math, …).
+// Unified post-RA physical-GPR temporary facility (no free assembler AT).
 //
-// RISC-V / AIE model: there is no free assembler temporary.
-// Expand chooses an available call-clobbered-first GPR via LivePhysRegs;
-// R12 is never preferred (and is excluded when PreferNotR12). If every
-// candidate is live, pick a preferred reg and spill/restore it around the
-// sequence (BranchRelaxationScratchFI or PostRAScratchFI home, else SP bracket).
+// Two layers, one scavenger:
 //
-// Always prefer a free reg; spill only when the scavenger finds none.
-// Not free AT, not permanent reserved MatInt AT.
+// 1) Scratch — short-lived temp for expand sequences that fully own the reg
+//    between acquire and release:
+//      findPostRAScratchGPR / withPostRAScratch
+//    Free via LivePhysRegs; spill/restore only when none free.
+//
+// 2) Remat — materialize (Src + Imm) into a scavenged GPR and bind it to an
+//    existing use operand, with a correct def→use dep chain:
+//      rematerializeAddImmForUse
+//    Free-reg or spill; never clobbers Src; glues remat def to the use so
+//    later schedule/pack cannot redefine Dest before the consumer.
+//
+// Consumers (MatInt LOADI64 expand, VASTART, hwloop count adjust, …) must
+// call these helpers — do not reimplement LivePhysRegs free-reg pick or
+// silent clobber of a live GPR.
 //
 //===----------------------------------------------------------------------===//
 
@@ -31,26 +39,46 @@ namespace llvm {
 
 class DebugLoc;
 class HaydnSubtarget;
+class MachineInstr;
 class TargetInstrInfo;
 
-// Find a post-RA GPR scratch at \p I using LivePhysRegs.
-// Priority (available first): R1–R7, R11, R10, R9, R8; R12 only if
-// PreferNotR12 is false and nothing else is free. \p Exclude is never
-// chosen (operand regs that Fn still needs). If none are available
-// returns the first preferred non-excluded candidate and sets \p NeedsSpill.
+// --- Layer 1: short-lived scratch ------------------------------------------
+
+// Find a post-RA GPR at \p I (LivePhysRegs). Priority: R1–R7, R11…R8; R12
+// only if PreferNotR12 is false. \p Exclude is never chosen. If none free,
+// returns first preferred candidate and sets NeedsSpill.
 Register findPostRAScratchGPR(MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator I, bool PreferNotR12,
                               bool &NeedsSpill,
                               ArrayRef<Register> Exclude = {});
 
-// Bracket \p Fn with a post-RA scratch: free reg first, spill only if needed;
-// call Fn(Scr), restore if spilled. All BuildMIs in Fn insert before \p I.
-// \p Exclude: registers Fn still uses (e.g. va_list base) — never stolen.
+// Bracket \p Fn with a scratch: free first, else spill → Fn → restore.
+// All BuildMIs in Fn insert before \p I. \p Exclude: regs Fn still needs.
 void withPostRAScratch(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                        const DebugLoc &DL, const TargetInstrInfo &TII,
                        const HaydnSubtarget &ST, bool PreferNotR12,
                        function_ref<void(Register Scr)> Fn,
                        ArrayRef<Register> Exclude = {});
+
+// --- Layer 2: rematerialize (Src + Imm) into a use -------------------------
+
+// Rewrite UseMI's register operand \p UseOpIdx to hold rematerialized
+// (Src + Adj), where Src is the operand's current register.
+//
+// Contract:
+//  * Adj == 0 → no-op, returns Src.
+//  * Never clobbers Src (Dest is a distinct scavenged GPR).
+//  * Free reg via findPostRAScratchGPR; spill/restore around the remat→use
+//    window when none free (never silent clobber).
+//  * Emits ADDI32_W Dest, Src, Adj immediately before UseMI, rewrites the
+//    use to Dest (Kill), and bundles remat def with UseMI so postmisched
+//    cannot insert a redef of Dest between them.
+//  * Unbundles UseMI first if it was mid-bundle (safe top-level emit).
+//
+// Returns Dest (or Src when Adj == 0).
+Register rematerializeAddImmForUse(MachineInstr &UseMI, unsigned UseOpIdx,
+                                   int64_t Adj,
+                                   ArrayRef<Register> ExtraExclude = {});
 
 } // namespace llvm
 

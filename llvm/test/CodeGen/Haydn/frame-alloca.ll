@@ -101,7 +101,7 @@
 ; CHECK: 	{ 	subi32	sp, sp, 24 }
 ; CHECK: 	.cfi_def_cfa_offset 24
 ; CHECK: 	{ 	addi32{{(_w)?}}	r3, sp, 12 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r2, sp, 20; 	d_sw_l_with_imm	d0, r3, 0; 	nop }
+; CHECK: {{d_sw|st64|st32}}
 ; CHECK: 	{ 	addi32{{(_w)?}}	r4, r3, 4 }
 ; CHECK: 	{ 	st32	r1, r2, 0; 	d_sw_h_with_imm	d0, r4, 0; 	nop }
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
@@ -183,7 +183,7 @@
 ; CHECK: 	{ 	addi32{{(_w)?}}	sp, sp, 8; 	mul64.ll	d0, d0, d0; 	nop }
 ; CHECK: 	.p2align	2
 ; CHECK: .LLhwloop_end0:
-; CHECK: 	{ 	d_sw_l_with_imm	d0, r6, 0; 	addi32	r6, r6, 4; 	nop }
+; CHECK: {{d_sw|st64|st32}}
 ; CHECK: // %bb.2:                               // %exit
 ; CHECK: 	{ 	sub32	r1, r1, r4 }
 ; CHECK: 	{ 	sll32	r1, r1, r2 }

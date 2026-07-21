@@ -1032,11 +1032,64 @@ bool HaydnInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
   // this fence the scheduler can reorder body peels / address setup across
   // SET (lc_dp_merge: s_lw_post with unscaled index after SET → ALIGNMENT).
   // Treat remaining LoopStart the same until fully expanded.
+  // Compare Flex base opcodes — FLEX rewrite may leave *_S0 suffix enums.
   unsigned Opc = MI.getOpcode();
-  if (Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG ||
-      Opc == Haydn::SET_HWLOOP_W || Opc == Haydn::SET_HWLOOP_F2_W ||
-      Opc == Haydn::SET_HWLOOP_REG_W || Opc == Haydn::LoopStart)
+  unsigned HwBase = getHaydnFlexBaseOpcode(Opc, *this);
+  if (HwBase == Haydn::SET_HWLOOP || HwBase == Haydn::SET_HWLOOP_REG ||
+      HwBase == Haydn::SET_HWLOOP_W || HwBase == Haydn::SET_HWLOOP_F2_W ||
+      HwBase == Haydn::SET_HWLOOP_REG_W || HwBase == Haydn::LoopStart ||
+      Opc == Haydn::LoopStart)
     return true;
+
+  // Remat ADDI* that feeds SET_HWLOOP* use of Dest (rematerializeAddImmForUse
+  // also bundles them). Region-split as a second fence when unbundled.
+  // Look through debug/NOP. FlexMap may rewrite ADDI32_W → ADDI32_W_S0.
+  {
+    unsigned BaseOpc = getHaydnFlexBaseOpcode(Opc, *this);
+    if (BaseOpc == Haydn::ADDI32 || BaseOpc == Haydn::ADDI32_W) {
+      if (MI.getNumExplicitOperands() >= 1 && MI.getOperand(0).isReg()) {
+        Register Dest = MI.getOperand(0).getReg();
+        // Bundled remat def: whole BUNDLE is a boundary via SET inside, but
+        // also fence the def itself when it is the bundle start interior.
+        if (MI.isBundledWithSucc())
+          return true;
+        MachineBasicBlock::const_iterator I =
+            std::next(MachineBasicBlock::const_iterator(MI.getIterator()));
+        // Skip debug, kill, implicit-def, and pure NOPs (t−3 layout pads are
+        // *after* SET; any NOP between remat and SET is still a fence gap).
+        while (I != MBB->end() &&
+               (I->isDebugInstr() || I->isKill() || I->isImplicitDef() ||
+                I->getOpcode() == Haydn::NOP))
+          ++I;
+        if (I != MBB->end()) {
+          unsigned NBase = getHaydnFlexBaseOpcode(I->getOpcode(), *this);
+          if (NBase == Haydn::SET_HWLOOP_REG || NBase == Haydn::SET_HWLOOP_F2_W ||
+              NBase == Haydn::SET_HWLOOP_REG_W || NBase == Haydn::SET_HWLOOP ||
+              NBase == Haydn::SET_HWLOOP_W || NBase == Haydn::LoopStart) {
+            for (const MachineOperand &MO : I->operands()) {
+              if (MO.isReg() && MO.isUse() && !MO.isImplicit() &&
+                  MO.getReg() == Dest)
+                return true;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // BUNDLE that contains SET_HWLOOP / remat pair — hard region edge.
+  // MBB::iterator only visits the BUNDLE header; interior SET is invisible
+  // unless we inspect the bundle here.
+  if (MI.isBundle()) {
+    for (const MachineInstr *I = MI.getNextNode();
+         I && I->isBundledWithPred(); I = I->getNextNode()) {
+      unsigned B = getHaydnFlexBaseOpcode(I->getOpcode(), *this);
+      if (B == Haydn::SET_HWLOOP || B == Haydn::SET_HWLOOP_REG ||
+          B == Haydn::SET_HWLOOP_W || B == Haydn::SET_HWLOOP_F2_W ||
+          B == Haydn::SET_HWLOOP_REG_W || B == Haydn::LoopStart)
+        return true;
+    }
+  }
 
   // Frame-setup / frame-destroy instructions modify the stack pointer (R13):
   // the prologue SUBI32 $r13 and the epilogue ADDI32 $r13. They MUST be
@@ -1670,6 +1723,23 @@ bool HaydnPipelinerLoopInfo::shouldIgnoreForPipelining(
                 MI->getOpcode() == Haydn::LoopStart))
     return true;
   return false;
+}
+
+void HaydnPipelinerLoopInfo::recordSuccessfulSMS(
+    MachineFunction &MFIn, MachineBasicBlock *KernelBB, unsigned ResMII,
+    unsigned RecMII, unsigned MII, unsigned StageCount, unsigned NumOps,
+    unsigned ScheduledII) {
+  if (!KernelBB)
+    return;
+  auto &HMFI = *MFIn.getInfo<HaydnMachineFunctionInfo>();
+  HaydnMachineFunctionInfo::SMSSWPSInfo Info;
+  Info.ResMII = ResMII;
+  Info.RecMII = RecMII;
+  Info.MII = MII;
+  Info.StageCount = StageCount;
+  Info.NumOps = NumOps;
+  Info.ScheduledII = ScheduledII;
+  HMFI.recordSMSLoop(KernelBB, Info);
 }
 
 bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
@@ -2479,5 +2549,306 @@ bool HaydnInstrInfo::commitSlotFlexVariant(MachineInstr &MI,
                     << " (no setDesc)\n");
   // true = placement recorded. Opcode is intentionally left logical.
   return true;
+}
+
+//===----------------------------------------------------------------------===//
+// Pre/post-inc/dec load/store addressing-mode hooks (SMS + mem clustering)
+//===----------------------------------------------------------------------===//
+//
+// Operand layouts (explicit defs only; no implicit):
+//
+//   Fused LOAD POST/PRE IMM/REG:
+//     (outs Data:$rt, GPR32:$rs_wb), (ins GPR32:$rs, ImmOrReg:$delta)
+//     indices: rt=0, rs_wb=1, rs=2, delta=3
+//
+//   Fused STORE POST/PRE IMM/REG (incl. ST32_POST / ST64_POST):
+//     (outs GPR32:$rs_wb), (ins Data:$rt, GPR32:$rs, ImmOrReg:$delta)
+//     indices: rs_wb=0, rt=1, rs=2, delta=3
+//
+//   Pseudo LD*_POST_INC:
+//     (outs Data:$rt), (ins GPR32:$base, i32imm:$stride_bytes, i32imm:$offset)
+//     indices: rt=0, base=1, stride=2, offset=3
+//
+//   Pseudo ST*_POST_INC:
+//     (outs), (ins Data:$rt, GPR32:$base, i32imm:$stride_bytes, i32imm:$offset)
+//     indices: rt=0, base=1, stride=2, offset=3
+//
+//   Plain LD32/LD64: (outs rt), (ins base, imm_offset) → base=1, off=2
+//   Plain ST32/ST64: (outs), (ins rt, base, imm_offset) → base=1, off=2
+//
+// Scaled IMM is element index; byte delta = imm << ScaleShift.
+// Negative imm = pre/post-decrement. REG forms have no compile-time delta.
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+enum class HaydnUpdateAM {
+  None,
+  PostImm,       // access then base += imm<<scale
+  PreImm,        // base += imm<<scale then access
+  PostReg,       // access then base += reg
+  PreReg,        // base += reg then access
+  PostIncPseudo, // LD/ST*_POST_INC (byte stride + access offset)
+};
+
+// Classify by opcode name so every logical + Flex/slot private variant is
+// covered without enumerating hundreds of enum values.
+HaydnUpdateAM classifyUpdateAM(const TargetInstrInfo &TII, unsigned Opc) {
+  switch (Opc) {
+  case Haydn::LD32_POST_INC:
+  case Haydn::LD64_POST_INC:
+  case Haydn::ST32_POST_INC:
+  case Haydn::ST64_POST_INC:
+    return HaydnUpdateAM::PostIncPseudo;
+  default:
+    break;
+  }
+
+  StringRef N = TII.getName(Opc);
+  // Order matters: POST_INC already handled; POST_IMM before bare POST.
+  if (N.contains("POST_IMM"))
+    return HaydnUpdateAM::PostImm;
+  if (N.contains("PRE_IMM"))
+    return HaydnUpdateAM::PreImm;
+  if (N.contains("POST_REG"))
+    return HaydnUpdateAM::PostReg;
+  if (N.contains("PRE_REG"))
+    return HaydnUpdateAM::PreReg;
+  // Short codegen aliases: LD32_POST / LD64_POST / ST32_POST / ST64_POST
+  // (and slot forms that keep the bare _POST suffix without _IMM).
+  if (N.contains("POST") && !N.contains("PRE")) {
+    // Exclude non-addr-mode POST names if any appear later.
+    if (N.contains("LD") || N.contains("ST") || N.contains("LW") ||
+        N.contains("SW") || N.contains("SDW") || N.contains("SHW") ||
+        N.contains("SB") || N.contains("LHW") || N.contains("LBS") ||
+        N.contains("LBU"))
+      return HaydnUpdateAM::PostImm;
+  }
+  return HaydnUpdateAM::None;
+}
+
+// Element → byte scale for scaled-imm post/pre forms.
+unsigned updateAMScaleShift(const TargetInstrInfo &TII, unsigned Opc) {
+  StringRef N = TII.getName(Opc);
+  // 64-bit double-word streams (D_LDW / D_SDW / LD64 / ST64).
+  if (N.contains("LDW") || N.contains("SDW") || N.contains("LD64") ||
+      N.contains("ST64"))
+    return 3;
+  // Halfword.
+  if (N.contains("LHW") || N.contains("SHW") || N.contains("LHWS") ||
+      N.contains("LHWU"))
+    return 1;
+  // Byte.
+  if (N.contains("LBS") || N.contains("LBU") || N.contains("SB"))
+    return 0;
+  // Default word (S_LW / S_SW / LD32 / ST32 / D_LW / D_SW_*).
+  return 2;
+}
+
+LocationSize updateAMAccessWidth(const TargetInstrInfo &TII, unsigned Opc) {
+  StringRef N = TII.getName(Opc);
+  // 64-bit data (DR64 load/store family).
+  if (N.contains("LD64") || N.contains("ST64") || N.contains("LDW") ||
+      N.contains("SDW") || N.contains("D_LW") || N.contains("D_LHW"))
+    return LocationSize::precise(8);
+  // Halfword.
+  if (N.contains("LHW") || N.contains("SHW") || N.contains("LHWS") ||
+      N.contains("LHWU"))
+    return LocationSize::precise(2);
+  // Byte.
+  if (N.contains("LBS") || N.contains("LBU") ||
+      (N.contains("SB") && !N.contains("SBE")))
+    return LocationSize::precise(1);
+  // Default word.
+  return LocationSize::precise(4);
+}
+
+} // namespace
+
+bool HaydnInstrInfo::isPostIncrement(const MachineInstr &MI) const {
+  HaydnUpdateAM AM = classifyUpdateAM(*this, MI.getOpcode());
+  return AM == HaydnUpdateAM::PostImm || AM == HaydnUpdateAM::PostReg ||
+         AM == HaydnUpdateAM::PostIncPseudo;
+}
+
+bool HaydnInstrInfo::isPreIncrement(const MachineInstr &MI) const {
+  HaydnUpdateAM AM = classifyUpdateAM(*this, MI.getOpcode());
+  return AM == HaydnUpdateAM::PreImm || AM == HaydnUpdateAM::PreReg;
+}
+
+bool HaydnInstrInfo::getBaseAndOffsetPosition(const MachineInstr &MI,
+                                              unsigned &BasePos,
+                                              unsigned &OffsetPos) const {
+  unsigned Opc = MI.getOpcode();
+  HaydnUpdateAM AM = classifyUpdateAM(*this, Opc);
+
+  if (AM == HaydnUpdateAM::PostIncPseudo) {
+    // LDs: [rt, base, stride, offset]; STs: [rt, base, stride, offset]
+    // For SMS post-inc rewrite, OffsetPos is the *increment* field (stride).
+    BasePos = 1;
+    OffsetPos = 2;
+    if (MI.getNumOperands() <= OffsetPos)
+      return false;
+    if (!MI.getOperand(BasePos).isReg() || !MI.getOperand(OffsetPos).isImm())
+      return false;
+    return true;
+  }
+
+  if (AM != HaydnUpdateAM::None) {
+    // Fused load/store: base at 2, delta at 3.
+    BasePos = 2;
+    OffsetPos = 3;
+    if (MI.getNumOperands() <= OffsetPos)
+      return false;
+    if (!MI.getOperand(BasePos).isReg())
+      return false;
+    // REG forms: offset is a register — still report positions; callers that
+    // require Imm (getIncrementValue) check isImm themselves.
+    return true;
+  }
+
+  // Plain base+imm loads/stores used by canUseLastOffsetValue rewrite.
+  switch (Opc) {
+  case Haydn::LD32:
+  case Haydn::LD64:
+    BasePos = 1;
+    OffsetPos = 2;
+    break;
+  case Haydn::ST32:
+  case Haydn::ST64:
+    BasePos = 1;
+    OffsetPos = 2;
+    break;
+  default:
+    return false;
+  }
+  if (MI.getNumOperands() <= OffsetPos)
+    return false;
+  return MI.getOperand(BasePos).isReg() && MI.getOperand(OffsetPos).isImm();
+}
+
+bool HaydnInstrInfo::getIncrementValue(const MachineInstr &MI,
+                                       int &Value) const {
+  unsigned Opc = MI.getOpcode();
+  HaydnUpdateAM AM = classifyUpdateAM(*this, Opc);
+
+  if (AM == HaydnUpdateAM::PostImm || AM == HaydnUpdateAM::PreImm ||
+      AM == HaydnUpdateAM::PostIncPseudo) {
+    unsigned BasePos = 0, OffsetPos = 0;
+    if (!getBaseAndOffsetPosition(MI, BasePos, OffsetPos))
+      return false;
+    const MachineOperand &OffOp = MI.getOperand(OffsetPos);
+    if (!OffOp.isImm())
+      return false;
+    int64_t Imm = OffOp.getImm();
+    if (AM == HaydnUpdateAM::PostIncPseudo) {
+      // Pseudo stride is already in bytes (may be negative = post-dec).
+      if (!isInt<32>(Imm))
+        return false;
+      Value = static_cast<int>(Imm);
+      return true;
+    }
+    // Scaled element index → signed byte delta (negative = decrement).
+    unsigned Shift = updateAMScaleShift(*this, Opc);
+    int64_t Bytes = Imm << Shift;
+    if (!isInt<32>(Bytes))
+      return false;
+    Value = static_cast<int>(Bytes);
+    return true;
+  }
+
+  // Plain ADDI is the split post-inc fallback (and common IV step).
+  if (Opc == Haydn::ADDI32 || Opc == Haydn::ADDI32_W) {
+    const MachineOperand &ImmOp = MI.getOperand(2);
+    if (!ImmOp.isImm() || !isInt<32>(ImmOp.getImm()))
+      return false;
+    Value = static_cast<int>(ImmOp.getImm());
+    return true;
+  }
+
+  return false;
+}
+
+bool HaydnInstrInfo::getMemOperandsWithOffsetWidth(
+    const MachineInstr &MI, SmallVectorImpl<const MachineOperand *> &BaseOps,
+    int64_t &Offset, bool &OffsetIsScalable, LocationSize &Width,
+    const TargetRegisterInfo * /*TRI*/) const {
+  BaseOps.clear();
+  OffsetIsScalable = false;
+  unsigned Opc = MI.getOpcode();
+  HaydnUpdateAM AM = classifyUpdateAM(*this, Opc);
+
+  if (AM == HaydnUpdateAM::PostIncPseudo) {
+    if (!MI.mayLoad() && !MI.mayStore())
+      return false;
+    // Access at base+offset (op3); post-update is op2 stride (not EA offset).
+    if (MI.getNumOperands() < 4 || !MI.getOperand(1).isReg() ||
+        !MI.getOperand(3).isImm())
+      return false;
+    BaseOps.push_back(&MI.getOperand(1));
+    Offset = MI.getOperand(3).getImm();
+    Width = MI.mayLoad() && Opc == Haydn::LD64_POST_INC
+                ? LocationSize::precise(8)
+                : (MI.mayStore() && Opc == Haydn::ST64_POST_INC
+                       ? LocationSize::precise(8)
+                       : LocationSize::precise(4));
+    return true;
+  }
+
+  if (AM == HaydnUpdateAM::PostImm || AM == HaydnUpdateAM::PostReg) {
+    // Post-*: EA is [rs] (offset 0); delta is writeback only.
+    if (MI.getNumOperands() < 4 || !MI.getOperand(2).isReg())
+      return false;
+    BaseOps.push_back(&MI.getOperand(2));
+    Offset = 0;
+    Width = updateAMAccessWidth(*this, Opc);
+    return true;
+  }
+
+  if (AM == HaydnUpdateAM::PreImm) {
+    // Pre-imm: EA is [rs + imm<<scale] relative to the pre-update base that
+    // SMS tracks (the rs use before writeback).
+    if (MI.getNumOperands() < 4 || !MI.getOperand(2).isReg() ||
+        !MI.getOperand(3).isImm())
+      return false;
+    BaseOps.push_back(&MI.getOperand(2));
+    Offset = MI.getOperand(3).getImm() << updateAMScaleShift(*this, Opc);
+    Width = updateAMAccessWidth(*this, Opc);
+    return true;
+  }
+
+  if (AM == HaydnUpdateAM::PreReg) {
+    // Pre-reg: EA depends on a register delta — not a fixed offset.
+    if (MI.getNumOperands() < 4 || !MI.getOperand(2).isReg())
+      return false;
+    BaseOps.push_back(&MI.getOperand(2));
+    Offset = 0;
+    Width = updateAMAccessWidth(*this, Opc);
+    return true;
+  }
+
+  // Plain LD/ST base+imm.
+  switch (Opc) {
+  case Haydn::LD32:
+  case Haydn::LD64:
+    if (MI.getNumOperands() < 3 || !MI.getOperand(1).isReg() ||
+        !MI.getOperand(2).isImm())
+      return false;
+    BaseOps.push_back(&MI.getOperand(1));
+    Offset = MI.getOperand(2).getImm();
+    Width = LocationSize::precise(Opc == Haydn::LD64 ? 8 : 4);
+    return true;
+  case Haydn::ST32:
+  case Haydn::ST64:
+    if (MI.getNumOperands() < 3 || !MI.getOperand(1).isReg() ||
+        !MI.getOperand(2).isImm())
+      return false;
+    BaseOps.push_back(&MI.getOperand(1));
+    Offset = MI.getOperand(2).getImm();
+    Width = LocationSize::precise(Opc == Haydn::ST64 ? 8 : 4);
+    return true;
+  default:
+    return false;
+  }
 }
 

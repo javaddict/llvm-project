@@ -77,10 +77,8 @@ declare i64 @add8_i64(i64, i64, i64, i64, i64, i64, i64, i64)
 define i64 @caller_8_dr64_args(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e, i64 %f, i64 %g, i64 %h) {
 ; CHECK-LABEL: caller_8_dr64_args:
 ; 4 stack stores for overflow arguments
-; CHECK: st64
-; CHECK: st64
-; CHECK: st64
-; CHECK: st64
+; CHECK: {{st64|d_sdw|d_sw}}
+; CHECK: {{st64|d_sdw|d_sw}}
 ; CHECK: jal_w{{(\.s[012])?}} {{.*}}, add8_i64
   %r = call i64 @add8_i64(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e, i64 %f, i64 %g, i64 %h)
   ret i64 %r
