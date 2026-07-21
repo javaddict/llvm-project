@@ -237,6 +237,9 @@ struct SchedRegion {
 /// MachineSchedStrategy - Interface to the scheduling algorithm used by
 /// ScheduleDAGMI.
 ///
+// Forward: used by MachineSchedStrategy::isAvailableNode (AIE peer).
+class SchedBoundary;
+
 /// Initialization sequence:
 ///   initPolicy -> shouldTrackPressure -> initialize(DAG) -> registerRoots
 class LLVM_ABI MachineSchedStrategy {
@@ -299,6 +302,12 @@ public:
   /// When all successor dependencies have been resolved, free this node for
   /// bottom-up scheduling.
   virtual void releaseBottomNode(SUnit *SU) = 0;
+
+  /// Whether \p SU can enter the Available queue of \p Zone.
+  /// Default: ready-cycle (if VerifyReadyCycle) + !Zone.checkHazard.
+  /// Targets may delay pressure-worsening nodes (AIE isAvailableNode peer).
+  virtual bool isAvailableNode(SUnit &SU, SchedBoundary &Zone,
+                               bool VerifyReadyCycle);
 };
 
 /// ScheduleDAGMI is an implementation of ScheduleDAGInstrs that simply
@@ -863,6 +872,8 @@ public:
   };
 
   ScheduleDAGMI *DAG = nullptr;
+  /// Strategy that owns this boundary (AIE dual-sched: isAvailableNode).
+  MachineSchedStrategy *SchedImpl = nullptr;
   const TargetSchedModel *SchedModel = nullptr;
   SchedRemainder *Rem = nullptr;
 
@@ -974,8 +985,8 @@ public:
 
   LLVM_ABI void reset();
 
-  LLVM_ABI void init(ScheduleDAGMI *dag, const TargetSchedModel *smodel,
-                     SchedRemainder *rem);
+  LLVM_ABI void init(ScheduleDAGMI *dag, MachineSchedStrategy *simpl,
+                     const TargetSchedModel *smodel, SchedRemainder *rem);
 
   bool isTop() const {
     return Available.getID() == TopQID;
