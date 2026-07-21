@@ -59,6 +59,7 @@ add_clang_library(clangDriver
   ToolChains/Fuchsia.cpp
   ToolChains/Gnu.cpp
   ToolChains/Haiku.cpp
+  ToolChains/Haydn.cpp
   ToolChains/HIPUtility.cpp
   ToolChains/HIPAMD.cpp
   ToolChains/HIPSPV.cpp
