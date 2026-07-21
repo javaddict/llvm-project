@@ -1,0 +1,535 @@
+//===-- HaydnTargetMachine.cpp - Define TargetMachine for Haydn ----------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// Implements the info about Haydn target spec.
+//
+//===----------------------------------------------------------------------===//
+
+#include "HaydnTargetMachine.h"
+#include "GISel/HaydnPostLegalizerCombiner.h"
+#include "GISel/HaydnPostSelectOptimize.h"
+#include "GISel/HaydnPreLegalizerCombiner.h"
+#include "Haydn.h"
+#include "HaydnBitSimplify.h"
+#include "HaydnCFGOptimizer.h"
+#include "HaydnCircularBuffer.h"
+#include "HaydnConditionOptimizer.h"
+#include "HaydnCopyElim.h"
+#include "HaydnRedundantCopyElim.h"
+#include "HaydnExpandPseudos.h"
+#include "HaydnExpandPostIncEarly.h"
+// HaydnGFormatSelect is forward-declared via Haydn.h (no header — the class
+// lives entirely in HaydnGFormatSelect.cpp and is created via factory).
+#include "HaydnLoadStoreOptimizer.h"
+#include "HaydnEnsureTerminators.h"
+#include "HaydnPEIPeephole.h"
+#include "HaydnMachineFunctionInfo.h"
+#include "HaydnMachineScheduler.h"
+#include "HaydnPostRASchedStrategy.h"
+#include "HaydnSubtarget.h"
+#include "HaydnTargetTransformInfo.h"
+#include "llvm/CodeGen/MachineFunctionPass.h"
+#include "TargetInfo/HaydnTargetInfo.h"
+#include "llvm/CodeGen/BranchRelaxation.h"
+#include "llvm/CodeGen/Passes.h" // EarlyIfConverterLegacyID
+#include "llvm/CodeGen/GlobalISel/CSEInfo.h"
+#include "llvm/CodeGen/GlobalISel/IRTranslator.h"
+#include "llvm/CodeGen/GlobalISel/InstructionSelect.h"
+#include "llvm/CodeGen/GlobalISel/Legalizer.h"
+#include "llvm/CodeGen/GlobalISel/RegBankSelect.h"
+#include "llvm/CodeGen/MachinePipeliner.h"
+#include "llvm/CodeGen/MachineScheduler.h"
+#include "llvm/CodeGen/Passes.h"
+#include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
+#include "llvm/CodeGen/TargetPassConfig.h"
+#include "llvm/CodeGen/VLIWMachineScheduler.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Support/CommandLine.h"
+#include <optional>
+
+using namespace llvm;
+
+//===----------------------------------------------------------------------===//
+// Per-pass enable flags (pass bisection). Default ON; disable with
+// `-mllvm -haydn-enable-<name>=0` (llc) / `-mllvm -haydn-enable-<name>=0` (clang).
+// Pipeline-gated (conditional addPass) — the AArch64/AMDGPU/Hexagon idiom.
+// Load-bearing passes (marked *) warn in desc; disabling them yields invalid
+// asm. See ~/haydn-pass-pipeline.md for the full table.
+//===----------------------------------------------------------------------===//
+static cl::opt<bool> EnableHaydnPreLegalizerCombiner(
+    "haydn-enable-prelegalizer-combiner", cl::init(true), cl::Hidden,
+    cl::desc("Enable HaydnPreLegalizerCombiner (GISel pre-legalize)."));
+static cl::opt<bool> EnableHaydnPostLegalizerCombiner(
+    "haydn-enable-postlegalizer-combiner", cl::init(true), cl::Hidden,
+    cl::desc("Enable HaydnPostLegalizerCombiner (GISel post-legalize; "
+             "installed at addPreRegBankSelect, O1+)."));
+static cl::opt<bool> EnableHaydnPostSelectOptimize(
+    "haydn-enable-postselect-opt", cl::init(true), cl::Hidden,
+    cl::desc("Enable HaydnPostSelectOptimize (O1+; live: cross-bank elide)."));
+// Post-inc single-home contract: 
+// ExpandPostIncEarly (default ON) is the product expand home.
+// LoadStoreOpt form is opt-in only (default OFF) — feature-test
+// lit opt-in; not a dual product path. Do not re-enable by default.
+static cl::opt<bool> EnableHaydnLoadStoreOptimizer(
+    "haydn-enable-ldst-opt", cl::init(false), cl::Hidden,
+    cl::desc("Opt-in: Enable HaydnLoadStoreOptimizer (form post-inc "
+             "pseudos + redun-load/store-fwd). Default OFF. Feature-test / lit "
+             "opt-in only — NOT the product post-inc path (see "
+             "haydn-enable-expand-post-inc-early). Track A: reg-stride "
+             "use-before-def + MMO loss on form; re-enable only with "
+             "stride-liveness + MMO tests."));
+static cl::opt<bool> EnableHaydnExpandPostIncEarly(
+    "haydn-enable-expand-post-inc-early", cl::init(true), cl::Hidden,
+    cl::desc("Enable HaydnExpandPostIncEarly (product post-inc expand; lower "
+             "*_POST_INC pseudos to LD/ST + ADDI pre-packetize). Default ON. "
+             "Sole product home for post-inc expansion."));
+// Retired multi-width passes — keep cl::opts as no-ops so existing
+// RUN lines with these flags do not make llc dump --help.
+static cl::opt<bool> EnableHaydnGFormatSelect(
+    "haydn-enable-gformat-select", cl::init(false), cl::Hidden,
+    cl::desc("RETIRED Bundle128-only: G-format select is a no-op."));
+static cl::opt<bool> EnableM0SlotOR(
+    "haydn-m0-slot-or", cl::init(false), cl::Hidden,
+    cl::desc("RETIRED Bundle128-only: Mode-0 slot-OR is a no-op."));
+static cl::opt<bool> EnableHaydnCompress(
+    "haydn-enable-compress", cl::init(false), cl::Hidden,
+    cl::desc("RETIRED Bundle128-only: 16-bit compress is a no-op."));
+static cl::opt<bool> EnableHaydnCFGOptimizer(
+    "haydn-enable-cfg-opt", cl::init(true), cl::Hidden,
+    cl::desc("Enable HaydnCFGOptimizer (unreachable/empty/tail merge)."));
+static cl::opt<bool> EnableHaydnConditionOptimizer(
+    "haydn-enable-cond-opt", cl::init(true), cl::Hidden,
+    cl::desc("Enable HaydnConditionOptimizer (compare simplification)."));
+static cl::opt<bool> EnableHaydnCopyElim(
+    "haydn-enable-copy-elim", cl::init(true), cl::Hidden,
+    cl::desc("Enable HaydnCopyElim (identity/dead/R0 copies)."));
+static cl::opt<bool> EnableHaydnRedundantCopyElim(
+    "haydn-enable-redundant-copy-elim", cl::init(false), cl::Hidden,
+    cl::desc("Enable HaydnRedundantCopyElim (cond-based redundant copies). "
+             "Default OFF (P0-7): range-for+push_back UB + asymmetric equality "
+             "kill. Re-enable only with worklist + LivePhysRegs tests."));
+static cl::opt<bool> EnableHaydnHardwareLoops(
+    "haydn-enable-hwloops", cl::init(true), cl::Hidden,
+    cl::desc("Enable HaydnHardwareLoops (post-RA SET_HWLOOP formation)."));
+static cl::opt<bool> EnableHaydnCircularBuffer(
+    "haydn-enable-circular-buffer", cl::init(false), cl::Hidden,
+    cl::desc("Enable HaydnCircularBuffer (circular-buffer pattern detect). "
+             "Default OFF: production stats-only pass with no consumer."));
+static cl::opt<bool> EnableHaydnPostRASched(
+    "haydn-enable-post-ra-sched", cl::init(true), cl::Hidden,
+    cl::desc("Enable post-RA VLIW scheduler (bundle formation). LOAD-BEARING: "
+             "disabling yields unbundled/invalid asm; for bisection only."));
+static cl::opt<bool> EnableHaydnExpandPseudos(
+    "haydn-enable-expand-pseudos", cl::init(true), cl::Hidden,
+    cl::desc("Enable HaydnExpandPseudos (expand remaining pseudos, incl. in "
+             "bundles). LOAD-BEARING: disabling yields invalid asm; bisection only."));
+static cl::opt<bool> EnableHaydnPEIPeephole(
+    "haydn-enable-pei-peephole", cl::init(true), cl::Hidden,
+    cl::desc("Enable HaydnPEIPeephole (dead ZERO_GPR/FP-setup/prologue waste)."));
+// HaydnPushPopOpt deleted (default-off zombie with ABI/SP/CFI bugs).
+// Not re-enabled under FrameLowering; PEIPeephole remains for prologue waste.
+static cl::opt<bool> EnableHaydnBitSimplify(
+    "haydn-enable-bit-simplify", cl::init(true), cl::Hidden,
+    cl::desc("Enable HaydnBitSimplify (identity masks, AND+OR pairs, XOR fold)."));
+
+extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnTarget() {
+  RegisterTargetMachine<HaydnTargetMachine> X(getTheHaydnTarget());
+  PassRegistry &PR = *PassRegistry::getPassRegistry();
+  initializeIRTranslatorPass(PR);
+  initializeLegalizerPass(PR);
+  initializeRegBankSelectPass(PR);
+  initializeInstructionSelectPass(PR);
+  initializeGISelCSEAnalysisWrapperPassPass(PR);
+  initializeHaydnPostLegalizerCombinerPass(PR);
+  initializeHaydnPreLegalizerCombinerPass(PR);
+  initializeHaydnPostSelectOptimizePass(PR);
+  initializeHaydnExpandPseudosPass(PR);
+  initializeHaydnExpandPostIncEarlyPass(PR);
+  initializeHaydnLoadStoreOptimizerPass(PR);
+  initializeHaydnCFGOptimizerPass(PR);
+  initializeHaydnConditionOptimizerPass(PR);
+  initializeHaydnCopyElimPass(PR);
+  initializeHaydnRedundantCopyElimPass(PR);
+  initializeHaydnPEIPeepholePass(PR);
+  initializeHaydnEnsureTerminatorsPass(PR);
+  initializeHaydnCircularBufferPass(PR);
+  initializeHaydnBitSimplifyPass(PR);
+  initializeHaydnHardwareLoopsPass(PR);
+  initializeHaydnFixupHwLoopsPass(PR);
+  initializeBranchRelaxationLegacyPass(PR);
+  initializeMachinePipelinerPass(PR);
+}
+
+HaydnTargetMachine::HaydnTargetMachine(const Target &T, const Triple &TT,
+                                     StringRef CPU, StringRef FS,
+                                     const TargetOptions &Options,
+                                     std::optional<Reloc::Model> RM,
+                                     std::optional<CodeModel::Model> CM,
+                                     CodeGenOptLevel OL, bool JIT)
+    : CodeGenTargetMachineImpl(T, TT.computeDataLayout(), TT, CPU, FS, Options,
+                               RM.value_or(Reloc::Static),
+                               getEffectiveCodeModel(CM, CodeModel::Small), OL),
+      TLOF(std::make_unique<TargetLoweringObjectFileELF>()) {
+  initAsmInfo();
+  setGlobalISel(true);
+  setGlobalISelAbort(GlobalISelAbortMode::Enable); // abort=1, no SDAG fallback
+  setSupportsDefaultOutlining(false);
+}
+
+const HaydnSubtarget *
+HaydnTargetMachine::getSubtargetImpl(const Function &F) const {
+  Attribute CPUAttr = F.getFnAttribute("target-cpu");
+  Attribute TuneAttr = F.getFnAttribute("tune-cpu");
+  Attribute FSAttr = F.getFnAttribute("target-features");
+
+  std::string CPU =
+      CPUAttr.isValid() ? CPUAttr.getValueAsString().str() : TargetCPU;
+  std::string TuneCPU =
+      TuneAttr.isValid() ? TuneAttr.getValueAsString().str() : CPU;
+  std::string FS =
+      FSAttr.isValid() ? FSAttr.getValueAsString().str() : TargetFS;
+
+  std::string Key = CPU + TuneCPU + FS;
+  auto &I = SubtargetMap[Key];
+  if (!I) {
+    I = std::make_unique<HaydnSubtarget>(TargetTriple, CPU, TuneCPU, FS, *this);
+  }
+  return I.get();
+}
+
+MachineFunctionInfo *HaydnTargetMachine::createMachineFunctionInfo(
+    BumpPtrAllocator &Allocator, const Function &F,
+    const TargetSubtargetInfo *STI) const {
+  return HaydnMachineFunctionInfo::create<HaydnMachineFunctionInfo>(Allocator, F,
+                                                                     STI);
+}
+
+ScheduleDAGInstrs *
+HaydnTargetMachine::createMachineScheduler(MachineSchedContext *C) const {
+  // AIE2 dual-scheduler contract: always return an owned
+  // pre-RA DAG. NEVER return nullptr — upstream treats null as GenericScheduler
+  // (MachineScheduler.cpp createSchedLive), which caused silent O2 miscompiles
+  // (yarpgen seed1 sticky) and 19 historical regressions.
+  //
+  // Pre-RA = pressure / order for RA (HaydnPreRASchedStrategy).
+  // Post-RA = sole VLIW pack owner (createPostMachineScheduler).
+  // Do not revive VLIWMachineScheduler / ConvergingVLIWScheduler (G21 UAF).
+  return createHaydnPreRAScheduler(C);
+}
+
+ScheduleDAGInstrs *
+HaydnTargetMachine::createPostMachineScheduler(MachineSchedContext *C) const {
+  // Stream B Phase B2: bundle formation in leaveRegion/leaveMBB
+  // (HaydnScheduleDAGMI + HaydnPostRASchedStrategy + HaydnHazardRecognizer).
+  // UAF inapplicable: never instantiates VLIWMachineScheduler.
+  return createHaydnPostRAScheduler(C);
+}
+
+namespace {
+
+//===----------------------------------------------------------------------===//
+// Haydn codegen pass pipeline (execution order). Every Haydn pass has a
+// DEBUG_TYPE for -debug-only= / -print-after= (assertions build). Full table +
+// opt-level (O0 vs O1+) notes + bisection recipe:
+// ~/haydn-pass-pipeline.md.
+//
+// IR: AtomicExpand; HardwareLoops(O1+) [haydn-tti]
+// GISel: IRTranslator; PreLegalizerCombiner;
+// Legalizer; PostLegalizerCombiner(O1+); RegBankSelect;
+// InstructionSelect; PostSelectOptimize(O1+)
+// Pre-RA: MachinePipeliner/SMS(O2+); DeadMIElim after SMS;
+// MachineScheduler/HaydnPreRASchedStrategy (AIE dual-sched) *
+// register allocation (upstream)
+// Post-RA (addPreSched2, AIE2-aligned):
+// EnsureTerminators *; ExpandPostIncEarly * (product post-inc);
+// CFG/cond/copy peeps (O1+); MBP (O1+) BEFORE HardwareLoops;
+// HardwareLoops (O1+); ExpandPseudos *; BitSimplify/PEIPeephole (O1+);
+// PostMachineScheduler/HaydnPostRA pack * (sole pack, all levels)
+// Layout: addBlockPlacement empty (AIE2: placement already in PreSched2)
+// Pre-emit: BranchRelaxation; FixupHwLoops(O1+); BranchRelaxation
+// (Haydn-specific range/hwloop — AIE PreEmit is empty)
+// Asm: AsmPrinter
+// (O1+) = opt-gated; * = load-bearing / legal encode. Deleted: PushPopOpt
+// CommonGEP deleted. PreRALoadPromote deleted.
+//
+// Pack ownership follows AIE2 (AIE2TargetMachine::addPreSched2):
+// DeadMI → MBP (O1+) → HardwareLoops → PseudoExpand → PostMachineScheduler
+// Suppress generic post-pack MBP via addBlockPlacement override. PreEmit never
+// re-packs.
+//===----------------------------------------------------------------------===//
+class HaydnPassConfig : public TargetPassConfig {
+public:
+  HaydnPassConfig(HaydnTargetMachine &TM, PassManagerBase &PM)
+      : TargetPassConfig(TM, PM) {
+    // AIE2 dual-sched: pre-RA MachineScheduler stays in the pipeline;
+    // createMachineScheduler never returns nullptr (no silent GenericScheduler).
+  }
+
+  HaydnTargetMachine &getHaydnTargetMachine() const {
+    return getTM<HaydnTargetMachine>();
+  }
+
+  void addIRPasses() override;
+  bool addPreISel() override;
+  bool addIRTranslator() override;
+  void addPreLegalizeMachineIR() override;
+  bool addLegalizeMachineIR() override;
+  void addPreRegBankSelect() override;
+  bool addRegBankSelect() override;
+  bool addGlobalInstructionSelect() override;
+  bool addInstSelector() override;
+  // SSA EarlyIfConversion (speculate + insertSelect → MOVT/MOVF).
+  bool addILPOpts() override;
+  void addPreRegAlloc() override;
+  // EnsureTerminators before PEI so invented RET gets epilogue.
+  void addPostRegAlloc() override;
+  void addPreSched2() override;
+  // AIE2: MBP runs in addPreSched2 before PostRA pack — suppress late MBP.
+  void addBlockPlacement() override;
+  void addPreEmitPass() override;
+
+  // AIE peer: full CSE above O0; empty at O0 (fast RA).
+  std::unique_ptr<CSEConfigBase> getCSEConfig() const override;
+};
+
+} // namespace
+
+TargetTransformInfo
+HaydnTargetMachine::getTargetTransformInfo(const Function &F) const {
+  return TargetTransformInfo(std::make_unique<HaydnTTIImpl>(this, F));
+}
+
+TargetPassConfig *HaydnTargetMachine::createPassConfig(PassManagerBase &PM) {
+  return new HaydnPassConfig(*this, PM);
+}
+
+void HaydnPassConfig::addIRPasses() {
+  addPass(createAtomicExpandLegacyPass());
+  TargetPassConfig::addIRPasses();
+}
+
+bool HaydnPassConfig::addPreISel() {
+  // IR-level hardware-loop recognition. The upstream HardwareLoops pass
+  // (llvm/lib/CodeGen/HardwareLoops.cpp) queries
+  // HaydnTargetTransformInfo::isHardwareLoopProfitable, which uses
+  // ScalarEvolution to derive trip counts symbolically. This runs BEFORE
+  // instruction selection, so the IV/limit/step are still clean SSA values
+  // SCEV resolves runtime inits, runtime limits, and non-unit strides that
+  // the post-RA recognizer cannot recover from physical registers after
+  // spills. The pass inserts llvm.set.loop.iterations / llvm.loop.decrement
+  // intrinsics, which the GlobalISel selector (Phase 3) lowers to
+  // LoopStart / PseudoLoopEnd pseudos. Mirrors AIE's addPreISel
+  // (AIE2TargetMachine.cpp:80-86). Runs at O1+ only.
+  if (TM->getOptLevel() != CodeGenOptLevel::None)
+    addPass(createHardwareLoopsLegacyPass());
+  return false;
+}
+
+bool HaydnPassConfig::addIRTranslator() {
+  addPass(new IRTranslator(getOptLevel()));
+  return false;
+}
+
+void HaydnPassConfig::addPreLegalizeMachineIR() {
+  // Pre-legalizer combiner: simplifies generic G_* instructions before
+  // type/action legalization. Handles trunc-of-anyext, redundant extensions
+  // identity and/or, constant folding, shift-by-zero, and chained ptr_add.
+  if (EnableHaydnPreLegalizerCombiner)
+    addPass(createHaydnPreLegalizerCombiner());
+  // CommonGEP deleted. PreLegalizer already folds chained G_PTR_ADD;
+  // optional CSE is via standard CSE config, not a duplicate pass.
+}
+
+bool HaydnPassConfig::addLegalizeMachineIR() {
+  // Legalizer only — PostLegalizerCombiner lives at addPreRegBankSelect
+  // (AIE2 / standard GlobalISel boundary; Track C).
+  addPass(new Legalizer());
+  return false;
+}
+
+void HaydnPassConfig::addPreRegBankSelect() {
+  // O1+: profitable post-legalize combines before register-bank selection.
+  if (getOptLevel() != CodeGenOptLevel::None && EnableHaydnPostLegalizerCombiner)
+    addPass(createHaydnPostLegalizerCombiner());
+}
+
+bool HaydnPassConfig::addRegBankSelect() {
+  addPass(new RegBankSelect());
+  return false;
+}
+
+bool HaydnPassConfig::addGlobalInstructionSelect() {
+  addPass(new InstructionSelect(getOptLevel()));
+  // Profitability (MAC fusion etc.): O1+ only (PL / 1e).
+  if (getOptLevel() != CodeGenOptLevel::None && EnableHaydnPostSelectOptimize)
+    addPass(createHaydnPostSelectOptimizePass());
+  return false;
+}
+
+bool HaydnPassConfig::addInstSelector() {
+  // GlobalISel-only backend: no SelectionDAG ISel
+  return false;
+}
+
+bool HaydnPassConfig::addILPOpts() {
+  // generic SSA EarlyIfConverter rewrites diamonds/triangles
+  // via HaydnInstrInfo::insertSelect (MOVT32/MOVF32). Replaces GenMux
+  // Pattern 2 (post-RA branch CMOV). Gated by Subtarget::enableEarlyIfConversion.
+  // Ref: HexagonEarlyIfConv, AIE EarlyIfConverterLegacy, EarlyIfConversion.cpp.
+  addPass(&EarlyIfConverterLegacyID);
+  return true;
+}
+
+std::unique_ptr<CSEConfigBase> HaydnPassConfig::getCSEConfig() const {
+  // AIE peer: no CSE at O0 (RegAllocFast); standard CSE above O0.
+  // Legalizer must not raw-constrain CSE-tracked vregs (G_MUL widen path).
+  if (TM->getOptLevel() == CodeGenOptLevel::None)
+    return std::make_unique<CSEConfigBase>();
+  return getStandardCSEConfigForOpt(TM->getOptLevel());
+}
+
+void HaydnPassConfig::addPostRegAlloc() {
+  // invent soft RET on dead-end MBBs *before* PEI so epilogue/CSR
+  // restore can attach. Post-PEI insert left returns without frame teardown.
+  addPass(createHaydnEnsureTerminatorsPass());
+}
+
+void HaydnPassConfig::addPreRegAlloc() {
+  // Software pipelining (Swing Modulo Scheduling) for VLIW DSP loops.
+  // Runs on the naive countable loop (SEQ32/SLT32 + BNEZ/BEQZ), so the expander
+  // never has to round-trip hwloop pseudos -- no expander-compatibility surface.
+  // Hardware-loop formation happens POST-RA (addPreSched2 -> HaydnHardwareLoops)
+  // after SMS. AIE2 order: MBP (O1+) then HardwareLoops (still post-RA). The
+  // pre-RA hwloop pass was removed : forming hwloops pre-RA corrupted
+  // SET_HWLOOP_REG MBB operands (.LBB_-1) because later block-placement
+  // renumbering moved or erased referenced blocks. SMS uses virtual registers
+  // for renaming across pipeline stages, so it must run before RA.
+  if (getOptLevel() >= CodeGenOptLevel::Default) {
+    // PreRALoadPromote deleted (zombie: AltDescs side-effect, always false;
+    // SMS uses ResourceCycle; post-RA promoteLoadsToSlot1 is the placement home).
+    addPass(&MachinePipelinerID);
+    // AIE-faithful: remove unused debris after SWP (AIE2TargetMachine
+    // addPreRegAlloc: MachinePipeliner → DeadMachineInstructionElim).
+    addPass(&DeadMachineInstructionElimID);
+  }
+}
+
+void HaydnPassConfig::addPreSched2() {
+  // AIE2 order (AIE2TargetMachine::addPreSched2):
+  // DeadMIElim → MBP (O1+) → HardwareLoops → PseudoExpand → PostMachineScheduler
+  // EnsureTerminators already ran in addPostRegAlloc (pre-PEI).
+  // O1+ peeps, then MBP → HardwareLoops → ExpandPseudos → PostRA pack.
+
+  // Post-inc (single home): form via LoadStoreOpt is opt-in (default OFF
+  // feature tests). ExpandPostIncEarly (default ON) lowers any *_POST_INC
+  // pseudos to LD/ST + ADDI before pack so they are not packetize boundaries
+  // Product default runs expand only. All opt levels.
+  if (EnableHaydnLoadStoreOptimizer)
+    addPass(createHaydnLoadStoreOptimizerPass());
+  if (EnableHaydnExpandPostIncEarly)
+    addPass(createHaydnExpandPostIncEarlyPass());
+
+  // Profitability peeps: O1+ only (PL / 1e). Not required for legal encode.
+  if (getOptLevel() != CodeGenOptLevel::None) {
+    // CFG optimization: unreachable block removal, empty block forwarding
+    // identical successor merging, and simple tail merging.
+    if (EnableHaydnCFGOptimizer)
+      addPass(createHaydnCFGOptimizerPass());
+
+    // GenMux fully retired. s32/s64 G_SELECT → MOVT(s) at isel;
+    // branchy PHIs → SSA EarlyIfConversion + insertSelect.
+
+    // Condition optimization: simplifies comparison patterns — eliminates
+    // self-comparisons (SLT r,r → 0) and reuses inverse comparison results
+    // (SLT a,b followed by SLT b,a → XORI a,1).
+    if (EnableHaydnConditionOptimizer)
+      addPass(createHaydnConditionOptimizerPass());
+
+    // Redundant copy elimination: removes identity copies (COPY rA, rA)
+    // dead copies (destination overwritten before use), and writes to R0
+    // (hardwired zero register).
+    if (EnableHaydnCopyElim)
+      addPass(createHaydnCopyElimPass());
+
+    // Condition-based redundant copy elimination: leverages dominating
+    // condition information (BEQZ/BNEZ/BEQ/BNE + SEQ32). Default OFF.
+    if (EnableHaydnRedundantCopyElim)
+      addPass(createHaydnRedundantCopyElimPass());
+
+    // MachineBlockPlacement BEFORE HardwareLoops (AIE2 order).
+    // Block placement before pack so the packer sees final CFG.
+    addPass(&MachineBlockPlacementID);
+
+    // Hardware loop detection / residual Role B. O1+ only (: no
+    // hwloop form at O0 without Fixup). Role A (IR HardwareLoops in
+    // addPreISel) preferred for single-BB ZOL — this pass expands LoopStart
+    // → SET_HWLOOP_REG, strips empty shells, forms residual Role B SET_HWLOOP
+    // pads t−3 after SET. FixupHwLoops (addPreEmit) only pads
+    // order-preserving-shorten / demotes.
+    // See.omc/plans/haydn-hwloop-aie-hexagon-reform.md.
+    if (EnableHaydnHardwareLoops)
+      addPass(createHaydnHardwareLoopsPass());
+  }
+
+  // Circular buffer detection: analysis-only, default OFF (no consumer).
+  if (EnableHaydnCircularBuffer)
+    addPass(createHaydnCircularBufferPass());
+
+  // HaydnGFormatSelect retired — G-format is not Bundle128. (cl::opt
+  // kept as no-op stub above.)
+
+  // Pseudo expansion BEFORE the post-RA scheduler so ALL MIs exist
+  // before bundle formation (leaveRegion/leaveMBB). Mirrors AIE
+  // (AIEPseudoBranchExpansion in addPreSched2; AIE PreEmit empty).
+  // Load-bearing: needed for legal encode at all opt levels.
+  //
+  // Safety: addPreSched2 runs AFTER PEI (post-RA + post-PEI) so
+  // MFI.isCalleeSavedInfoValid and hasVarSizedObjects are final; ABI
+  // physical regs exist. ExpandPseudos moves args to those physical regs.
+  if (EnableHaydnExpandPseudos)
+    addPass(createHaydnExpandPseudosPass());
+
+  // BitSimplify / PEIPeephole: profitability peeps, O1+ only (PL / 1e).
+  if (getOptLevel() != CodeGenOptLevel::None) {
+    if (EnableHaydnBitSimplify)
+      addPass(createHaydnBitSimplifyPass());
+
+    // PEIPeephole: post-PEI, pre-pack (AIE keeps PreEmit empty of MI rewrites).
+    if (EnableHaydnPEIPeephole)
+      addPass(createHaydnPEIPeepholePass());
+  }
+
+  // Sole Bundle128 pack: leaveRegion/leaveMBB. Packetizer retired.
+  // AIE2 always runs PostRA for bundle/NoOp correctness (incl. O0).
+  // targetSchedulesPostRAScheduling skips the duplicate upstream slot.
+  // CopyConstrain is pre-RA only (AIE CopyConstrain placement).
+  if (EnableHaydnPostRASched)
+    addPass(&PostMachineSchedulerID);
+}
+
+void HaydnPassConfig::addBlockPlacement() {
+  // AIE2TargetMachine::addBlockPlacement: placement already done in addPreSched2.
+}
+
+void HaydnPassConfig::addPreEmitPass() {
+  // AIE PreEmit is empty. Haydn needs Bundle128 branch range + hwloop Off
+  // fixups after pack (size model). Pattern matches Hexagon: relax
+  // then target fixup that can grow layout, then relax again.
+  // 1. BranchRelaxation — Bundle128 simm fields
+  // 2. HaydnFixupHwLoops — SET_HWLOOP Off1/Off2 ÷4; product demote-first
+  //    (LoopDec+LoopJNZ when free counter; fatal if live demote fails).
+  //    demote OFF = debug erase-setup only — not product.
+  // 3. BranchRelaxation — re-close after Fixup growth (e.g. long BEQZ_W)
+  // No pack / no PostMachineScheduler here.
+  addPass(&BranchRelaxationPassID);
+  if (getOptLevel() != CodeGenOptLevel::None && EnableHaydnHardwareLoops) {
+    addPass(createHaydnFixupHwLoopsPass());
+    addPass(&BranchRelaxationPassID);
+  }
+}
