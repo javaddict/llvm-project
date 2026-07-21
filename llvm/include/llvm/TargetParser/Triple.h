@@ -60,6 +60,7 @@ public:
     bpfeb,       // eBPF or extended BPF or 64-bit BPF (big endian)
     csky,        // CSKY: csky
     dxil,        // DXIL 32-bit DirectX bytecode
+    haydn,       // Haydn: haydn
     hexagon,     // Hexagon: hexagon
     loongarch32, // LoongArch (32-bit): loongarch32
     loongarch64, // LoongArch (64-bit): loongarch64
@@ -1158,6 +1159,9 @@ public:
   bool isCSKY() const {
     return getArch() == Triple::csky;
   }
+
+  // Tests whether the target is Haydn
+  bool isHaydn() const { return getArch() == Triple::haydn; }
 
   /// Tests whether the target is the Apple "arm64e" AArch64 subarch.
   bool isArm64e() const {
