@@ -21,6 +21,7 @@
 //===---------------------------------------------------------------------===//
 
 #include "Thunks.h"
+#include "Arch/HaydnThunks.h"
 #include "Config.h"
 #include "InputFiles.h"
 #include "InputSection.h"
@@ -1830,9 +1831,11 @@ std::unique_ptr<Thunk> elf::addThunk(Ctx &ctx, const InputSection &isec,
     return addThunkPPC64(ctx, rel.type, s, a);
   case EM_HEXAGON:
     return addThunkHexagon(ctx, isec, rel, s);
+  case EM_HAYDN:
+    return addThunkHaydn(ctx, isec, rel, s);
   default:
     llvm_unreachable(
-        "add Thunk only supported for ARM, AVR, Hexagon, Mips and PowerPC");
+        "add Thunk only supported for ARM, AVR, Haydn, Hexagon, Mips and PowerPC");
   }
 }
 
