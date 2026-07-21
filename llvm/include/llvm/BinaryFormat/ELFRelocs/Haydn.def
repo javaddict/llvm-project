@@ -1,0 +1,54 @@
+#ifndef ELF_RELOC
+#error "ELF_RELOC must be defined"
+#endif
+
+// Haydn ELF relocations for 3-issue VLIW DSP
+// 32-bit baremetal architecture with variable-width bundles
+
+// Basic relocations
+ELF_RELOC(R_HAYDN_NONE,          0)
+ELF_RELOC(R_HAYDN_32,            1)
+ELF_RELOC(R_HAYDN_SImm16,        2)
+ELF_RELOC(R_HAYDN_BranchSImm16,  3)
+ELF_RELOC(R_HAYDN_CallSImm20,    4)
+ELF_RELOC(R_HAYDN_HI20,          5)
+ELF_RELOC(R_HAYDN_LO16,          6)
+ELF_RELOC(R_HAYDN_32_PCREL,      7)
+ELF_RELOC(R_HAYDN_GOT_HI20,      8)
+ELF_RELOC(R_HAYDN_TPREL_HI20,    9)
+ELF_RELOC(R_HAYDN_TPREL_LO16,   10)
+// Narrow absolute DATA relocations (FK_Data_1 / FK_Data_2). Live in data
+// sections as plain 1/2-byte values -- distinct from R_HAYDN_SImm16, which is
+// a 16-bit field inside a 32-bit instruction word. Reusing SImm16 for .byte/.short
+// made LLD's 4-byte read/mask/write clobber the following bytes. See D176/L144.
+ELF_RELOC(R_HAYDN_8,             11)
+ELF_RELOC(R_HAYDN_16,            12)
+// Wide-imm (48-bit) addressing relocations for the LUI(imm12) + ADDI32_W(imm20)
+// 2-instruction materialization pair (encoding_manual.md section 5 Class 000,
+// D254/D255). These supersede the stale R_HAYDN_HI20/LO16 pair, which assumed a
+// 16-bit LUI field; Haydn LUI is uimm12 (bits[31:20]) post-ISA-43.
+//   R_HAYDN_HI12     -- LUI imm12 field:           (S + A + 0x80000) >> 20
+//   R_HAYDN_LO20     -- ADDI32_W imm20 (absolute): (S + A) & 0xFFFFF
+//   R_HAYDN_PC_LO20  -- ADDI32_W imm20 (PC-rel):   (S + A - P) & 0xFFFFF
+ELF_RELOC(R_HAYDN_HI12,          13)
+ELF_RELOC(R_HAYDN_LO20,          14)
+ELF_RELOC(R_HAYDN_PC_LO20,       15)
+// WIDE SET_HWLOOP / SET_HWLOOP_F2 (encoding_manual.md §5.11/§5.12) offset
+// fields. Two independent offset fields share a single 48-bit parcel:
+//   R_HAYDN_HWLoopOff1 -- uimm6_offset1  at bits[31:26], value = (S+A-P) >> 2
+//   R_HAYDN_HWLoopOff2 -- uimm12_offset2 at bits[25:14], value = (S+A-P) >> 2
+// Both 4-byte-unit PC-relative. BUG-2: the prior single R_HAYDN_BranchSImm16
+// mapping clobbered whichever fixup ran second because both wrote to bits[15:0].
+ELF_RELOC(R_HAYDN_HWLoopOff1,     16)
+ELF_RELOC(R_HAYDN_HWLoopOff2,     17)
+// WIDE / Bundle128 branch/call (encoding_manual.md §5.5, ÷2 per §5.14 D1).
+// Geometry is Bundle128 s0 (D479+), not the legacy 48-bit high-end parcel:
+//   R_HAYDN_WIDE_BranchSImm12    -- I12  one-reg (BEQZ_W/…): imm12 @ bits[15:4]
+//   R_HAYDN_WIDE_CallSImm20      -- I20  call (JAL family): imm20 @ bits[23:4]
+//   R_HAYDN_WIDE_BranchSImm12_RI -- RI12 two-reg (BEQ_W/BNE_W/…): imm12 @
+//                                  bits[19:8] (CB-94; was MC-only → llvm-mc
+//                                  crash on unresolved external_target)
+// PC-relative, halfword-scaled (ValueShift=1) unless noted otherwise.
+ELF_RELOC(R_HAYDN_WIDE_BranchSImm12,    18)
+ELF_RELOC(R_HAYDN_WIDE_CallSImm20,      19)
+ELF_RELOC(R_HAYDN_WIDE_BranchSImm12_RI, 20)
