@@ -740,6 +740,8 @@ bool MachinePipeliner::useWindowScheduler(bool Changed) {
 }
 
 void SwingSchedulerDAG::setMII(unsigned ResMII, unsigned RecMII) {
+  ComputedResMII = ResMII;
+  ComputedRecMII = RecMII;
   if (SwpForceII > 0)
     MII = SwpForceII;
   else if (II_setByPragma > 0)
@@ -931,19 +933,52 @@ void SwingSchedulerDAG::schedule() {
     MSTI.annotate();
     return;
   }
+
+  // Snapshot SMS metrics before expand (schedule object still valid).
+  // HaydnAsmPrinter looks up by kernel MBB; expand creates a *new* kernel
+  // block, so we must re-record against the rewritten kernel below.
+  unsigned SMSResMII = 0, SMSRecMII = 0, SMSMII = 0, SMSStageCount = 0,
+           SMSNumOps = 0, SMSScheduledII = 0;
+  if (LoopPipelinerInfo) {
+    SMSResMII = ComputedResMII;
+    SMSRecMII = ComputedRecMII;
+    SMSMII = MII;
+    SMSStageCount = Schedule.getMaxStageCount() + 1;
+    SMSScheduledII =
+        static_cast<unsigned>(Schedule.getInitiationInterval());
+    for (const SUnit &SU : SUnits)
+      if (!SU.isBoundaryNode())
+        ++SMSNumOps;
+  }
+
+  MachineBasicBlock *RewrittenKernel = nullptr;
   // The experimental code generator can't work if there are InstChanges.
   if (ExperimentalCodeGen && NewInstrChanges.empty()) {
     PeelingModuloScheduleExpander MSE(MF, MS, &LIS);
     MSE.expand();
+    // Peeling expander has no getRewrittenKernel(); use loop header.
+    RewrittenKernel = Loop.getHeader();
   } else if (MVECodeGen && NewInstrChanges.empty() &&
              LoopPipelinerInfo->isMVEExpanderSupported() &&
              ModuloScheduleExpanderMVE::canApply(Loop)) {
     ModuloScheduleExpanderMVE MSE(MF, MS, LIS);
     MSE.expand();
+    RewrittenKernel = Loop.getHeader();
   } else {
     ModuloScheduleExpander MSE(MF, MS, LIS, std::move(NewInstrChanges));
     MSE.expand();
+    RewrittenKernel = MSE.getRewrittenKernel();
     MSE.cleanup();
+  }
+
+  // Bind SMS metrics to the post-expand kernel so release -S // #<swps>
+  // comments resolve (pre-expand Header pointer is stale after expand).
+  if (LoopPipelinerInfo) {
+    MachineBasicBlock *AnnotBB =
+        RewrittenKernel ? RewrittenKernel : Loop.getHeader();
+    LoopPipelinerInfo->recordSuccessfulSMS(MF, AnnotBB, SMSResMII, SMSRecMII,
+                                           SMSMII, SMSStageCount, SMSNumOps,
+                                           SMSScheduledII);
   }
   ++NumPipelined;
 }
@@ -2905,6 +2940,9 @@ bool SwingSchedulerDAG::schedulePipeline(SMSchedule &Schedule) {
              << ", MaxStageCount: "
              << ore::NV("MaxStageCount", Schedule.getMaxStageCount());
     });
+    // SMS metrics for release asm are recorded *after* ModuloSchedule
+    // expand (see SwingSchedulerDAG expand path) against the rewritten
+    // kernel MBB. Pre-expand Header is a stale key once expand runs.
   } else
     Schedule.reset();
 
