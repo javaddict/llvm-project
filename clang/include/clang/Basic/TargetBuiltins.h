@@ -228,6 +228,17 @@ namespace clang {
   };
   } // namespace RISCV
 
+  /// Haydn builtins
+  namespace Haydn {
+  enum {
+    LastTIBuiltin = clang::Builtin::FirstTSBuiltin - 1,
+#define GET_BUILTIN_ENUMERATORS
+#include "clang/Basic/BuiltinsHaydn.inc"
+#undef GET_BUILTIN_ENUMERATORS
+    LastTSBuiltin
+  };
+  } // namespace Haydn
+
   /// LoongArch builtins
   namespace LoongArch {
   enum {
