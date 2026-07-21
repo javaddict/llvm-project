@@ -14,6 +14,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/MachineScheduler.h"
+#include "llvm/CodeGen/ResourceCycle.h"
 #include "llvm/CodeGen/TargetSchedule.h"
 #include <limits>
 #include <memory>
@@ -35,7 +36,7 @@ protected:
   /// ResourcesModel - Represents VLIW state.
   /// Not limited to VLIW targets per se, but assumes definition of resource
   /// model by a target.
-  DFAPacketizer *ResourcesModel;
+  ResourceCycle *ResourcesModel;
 
   const TargetSchedModel *SchedModel;
 
@@ -62,7 +63,7 @@ public:
   bool isInPacket(SUnit *SU) const { return is_contained(Packet, SU); }
 
 protected:
-  virtual DFAPacketizer *createPacketizer(const TargetSubtargetInfo &STI) const;
+  virtual ResourceCycle *createPacketizer(const TargetSubtargetInfo &STI) const;
 };
 
 /// Extend the standard ScheduleDAGMILive to provide more context and override

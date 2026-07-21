@@ -44,6 +44,7 @@ namespace llvm {
 
 class DFAPacketizer;
 class InstrItineraryData;
+class ResourceCycle;
 class LiveIntervals;
 class LiveVariables;
 class MachineLoop;
@@ -2057,7 +2058,7 @@ public:
                                          const TargetRegisterInfo *TRI) const {}
 
   /// Create machine specific model for scheduling.
-  virtual DFAPacketizer *
+  virtual ResourceCycle *
   CreateTargetScheduleState(const TargetSubtargetInfo &) const {
     return nullptr;
   }
