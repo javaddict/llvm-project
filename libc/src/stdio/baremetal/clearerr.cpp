@@ -1,4 +1,4 @@
-//===-- Implementation of feof for baremetal --------------------*- C++ -*-===//
+//===-- Implementation of clearerr for baremetal ----------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "src/stdio/feof.h"
+#include "src/stdio/clearerr.h"
 
 #include "hdr/types/FILE.h"
 #include "src/__support/OSUtil/baremetal/stdio_cookie.h"
@@ -15,11 +15,12 @@
 
 namespace LIBC_NAMESPACE_DECL {
 
-LLVM_LIBC_FUNCTION(int, feof, (::FILE * stream)) {
+LLVM_LIBC_FUNCTION(void, clearerr, (::FILE * stream)) {
   if (stream == nullptr)
-    return 0;
+    return;
   auto *cookie = reinterpret_cast<__llvm_libc_stdio_cookie *>(stream);
-  return cookie->eof ? 1 : 0;
+  cookie->eof = 0;
+  cookie->err = 0;
 }
 
 } // namespace LIBC_NAMESPACE_DECL
