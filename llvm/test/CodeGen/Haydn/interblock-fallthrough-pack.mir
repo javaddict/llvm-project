@@ -1,0 +1,80 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
+# RUN:     %s -o - | FileCheck %s --check-prefix=OFF
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
+# RUN:     -haydn-enable-interblock %s -o - | FileCheck %s --check-prefix=ON
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
+# RUN:     -haydn-enable-interblock -debug-only=haydn-interblock %s -o - 2>&1 \
+# RUN:     | FileCheck %s --check-prefix=DBG
+#
+# Stage-0 Haydn inter-block scheduling (default OFF; ON needs explicit flag).
+#
+# Fixture: acyclic fallthrough Pred → Succ. Pred has a lone ADDI32; Succ has an
+# independent ADDI32 (different regs) plus a return. Without inter-block, each
+# BB schedules alone and the Succ ADDI stays in bb.1. With inter-block ON
+# the independent ADDI is pulled into bb.0 and co-issued into a BUNDLE with
+# Pred's ADDI — measurable cross-BB pack.
+#
+# Scope note (see HaydnInterBlockScheduling.h): Stage-0 is acyclic fallthrough
+# pack only. ZOL exit→preheader hoist was removed (not in AIE; reject-contract
+# cost exceeded benefit). Full AIE fixpoint / residual scoreboard deferred.
+
+--- |
+  define void @fallthrough_pack() { ret void }
+...
+---
+name:            fallthrough_pack
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  ; OFF-LABEL: name: fallthrough_pack
+  ; OFF: bb.0:
+  ; OFF: $r1 = ADDI32 $r0, 1
+  ; OFF-NOT: $r7 = ADDI32
+  ; OFF: bb.1:
+  ; OFF: $r7 = ADDI32
+  ; OFF: JALR
+
+  ; ON-LABEL: name: fallthrough_pack
+  ; ON: bb.0:
+  ; Independent Succ ADDI pulled into Pred and co-issued.
+  ; ON: BUNDLE
+  ; ON-DAG: $r1 = ADDI32 $r0, 1
+  ; ON-DAG: $r7 = ADDI32
+  ; ON: bb.1:
+  ; ON-NOT: ADDI32
+  ; ON: JALR
+
+  ; DBG: haydn-interblock: move
+  ; DBG: haydn-interblock: co-issued
+
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $r0, $r3
+
+    $r1 = ADDI32 $r0, 1, implicit-def dead $sfr
+
+  bb.1:
+    liveins: $r0, $r1, $r3, $r15
+
+    $r7 = ADDI32 $r3, 2, implicit-def dead $sfr
+    $r0 = COPY killed $r7
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...

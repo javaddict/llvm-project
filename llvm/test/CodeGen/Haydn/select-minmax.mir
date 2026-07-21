@@ -1,0 +1,194 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-postlegalizer-combiner -verify-machineinstrs %s -o - | FileCheck %s
+#
+# Tests for select-to-minmax combiner rule in HaydnPostLegalizerCombiner.
+#
+# Combiner rule tested:
+# select (a > b), a, b -> smax(a, b)
+# select (a > b), b, a -> smin(a, b)
+# select (a < b), a, b -> smin(a, b)
+# select (a < b), b, a -> smax(a, b)
+# Same for unsigned variants with ugt/ult -> umax/umin.
+#
+# The combiner should convert G_SELECT(G_ICMP(...)) patterns into
+# G_SMAX/G_SMIN/G_UMAX/G_UMIN when the select is equivalent to a min/max.
+
+---
+# select (a > b), a, b -> smax(a, b)
+name:            select_sgt_smax
+legalized:       true
+# CHECK-LABEL: name: select_sgt_smax
+# CHECK: %{{[0-9]+}}:_(s32) = G_SMAX
+# CHECK-NOT: G_SELECT
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(sgt), %0, %1
+    %3:_(s32) = G_SELECT %2, %0, %1
+    $r0 = COPY %3(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+# select (a > b), b, a -> smin(a, b) [operand swap]
+name:            select_sgt_smin
+legalized:       true
+# CHECK-LABEL: name: select_sgt_smin
+# CHECK: %{{[0-9]+}}:_(s32) = G_SMIN
+# CHECK-NOT: G_SELECT
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(sgt), %0, %1
+    %3:_(s32) = G_SELECT %2, %1, %0
+    $r0 = COPY %3(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+# select (a < b), a, b -> smin(a, b)
+name:            select_slt_smin
+legalized:       true
+# CHECK-LABEL: name: select_slt_smin
+# CHECK: %{{[0-9]+}}:_(s32) = G_SMIN
+# CHECK-NOT: G_SELECT
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(slt), %0, %1
+    %3:_(s32) = G_SELECT %2, %0, %1
+    $r0 = COPY %3(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+# select (a < b), b, a -> smax(a, b) [operand swap]
+name:            select_slt_smax
+legalized:       true
+# CHECK-LABEL: name: select_slt_smax
+# CHECK: %{{[0-9]+}}:_(s32) = G_SMAX
+# CHECK-NOT: G_SELECT
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(slt), %0, %1
+    %3:_(s32) = G_SELECT %2, %1, %0
+    $r0 = COPY %3(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+# select (a >u b), a, b -> umax(a, b)
+name:            select_ugt_umax
+legalized:       true
+# CHECK-LABEL: name: select_ugt_umax
+# CHECK: %{{[0-9]+}}:_(s32) = G_UMAX
+# CHECK-NOT: G_SELECT
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(ugt), %0, %1
+    %3:_(s32) = G_SELECT %2, %0, %1
+    $r0 = COPY %3(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+# select (a >u b), b, a -> umin(a, b) [operand swap]
+name:            select_ugt_umin
+legalized:       true
+# CHECK-LABEL: name: select_ugt_umin
+# CHECK: %{{[0-9]+}}:_(s32) = G_UMIN
+# CHECK-NOT: G_SELECT
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(ugt), %0, %1
+    %3:_(s32) = G_SELECT %2, %1, %0
+    $r0 = COPY %3(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+# select (a <u b), a, b -> umin(a, b)
+name:            select_ult_umin
+legalized:       true
+# CHECK-LABEL: name: select_ult_umin
+# CHECK: %{{[0-9]+}}:_(s32) = G_UMIN
+# CHECK-NOT: G_SELECT
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(ult), %0, %1
+    %3:_(s32) = G_SELECT %2, %0, %1
+    $r0 = COPY %3(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+# select (a <u b), b, a -> umax(a, b) [operand swap]
+name:            select_ult_umax
+legalized:       true
+# CHECK-LABEL: name: select_ult_umax
+# CHECK: %{{[0-9]+}}:_(s32) = G_UMAX
+# CHECK-NOT: G_SELECT
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(ult), %0, %1
+    %3:_(s32) = G_SELECT %2, %1, %0
+    $r0 = COPY %3(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+# Negative test: select with different operands (false val %2 != %1) — should NOT combine.
+name:            select_no_match
+legalized:       true
+# CHECK-LABEL: name: select_no_match
+# CHECK: G_SELECT
+# CHECK-NOT: G_SMAX
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1, $r2
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = COPY $r2
+    %3:_(s1) = G_ICMP intpred(sgt), %0, %1
+    %4:_(s32) = G_SELECT %3, %0, %2
+    $r0 = COPY %4(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+# Negative test: sge predicate — should NOT combine (only sgt/slt/ugt/ult).
+name:            select_sge_no_combine
+legalized:       true
+# CHECK-LABEL: name: select_sge_no_combine
+# CHECK: G_SELECT
+# CHECK-NOT: G_SMAX
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(sge), %0, %1
+    %3:_(s32) = G_SELECT %2, %0, %1
+    $r0 = COPY %3(s32)
+    RET implicit $r0, implicit $r15
+...

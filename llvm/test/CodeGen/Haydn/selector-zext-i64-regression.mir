@@ -1,0 +1,70 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select -verify-machineinstrs %s -o - | FileCheck %s
+#
+# REGRESSION TEST: G_ZEXT i8/i16 -> i64 must select without "cannot select" error.
+# (prior revision)
+#
+# Bug: The instruction selector had no case for G_ZEXT from s8/s16 to s64.
+# The legalizer declared {s64, s8} and {s64, s16} as legal type pairs for G_ZEXT
+# so these passed through the legalizer unmodified. But the selector's G_ZEXT
+# handler only matched s32->s64, s1->s32, s8->s32, and s16->s32. When a function
+# zero-extended a byte/short to uint64_t, the selector crashed with:
+# "cannot select: %x:_(s64) = G_ZEXT %y:_(s8)"
+#
+# Fix: Added s8->s64 and s16->s64 selection cases. The selector zero-extends
+# to s32 via AND mask (0xFF for i8, 0xFFFF for i16), then uses MOV_GPR_TO_DR64
+# with R0 as the upper half.
+#
+# This MIR test directly exercises the selector on G_ZEXT i8->i64 and i16->i64
+# generic opcodes, verifying they produce valid machine instructions (not crash).
+#
+# If the selection path is removed, llc will crash with "cannot select".
+# Do NOT update CHECK lines without understanding the root cause.
+
+--- |
+  define i64 @test_zext_i8_to_i64(i8 %x) nounwind { ret i64 0 }
+  define i64 @test_zext_i16_to_i64(i16 %x) nounwind { ret i64 0 }
+...
+---
+# G_ZEXT i8 -> i64: zero-extend byte to 64-bit
+# The input is s8 in GPR32. G_ZEXT to s64 should produce a DR64 value.
+# The selector will AND with 0xFF to clear upper bits, then MOV_GPR_TO_DR64.
+# CHECK-LABEL: name: test_zext_i8_to_i64
+# CHECK: AND32
+# CHECK: MOV_GPR_TO_DR64
+name:            test_zext_i8_to_i64
+legalized:       true
+regBankSelected: false
+registers:
+  - { id: 0, class: _, preferred-register: '' }
+  - { id: 1, class: _, preferred-register: '' }
+body:             |
+  bb.0:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s8) = G_TRUNC %0(s32)
+    %2:_(s64) = G_ZEXT %1(s8)
+    $d0 = COPY %2(s64)
+    RET implicit $r15, implicit $d0
+...
+---
+# G_ZEXT i16 -> i64: zero-extend short to 64-bit
+# The input is s16 in GPR32. G_ZEXT to s64 should produce a DR64 value.
+# The selector will AND with 0xFFFF to clear upper bits, then MOV_GPR_TO_DR64.
+# CHECK-LABEL: name: test_zext_i16_to_i64
+# CHECK: AND32
+# CHECK: MOV_GPR_TO_DR64
+name:            test_zext_i16_to_i64
+legalized:       true
+regBankSelected: false
+registers:
+  - { id: 0, class: _, preferred-register: '' }
+  - { id: 1, class: _, preferred-register: '' }
+body:             |
+  bb.0:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s16) = G_TRUNC %0(s32)
+    %2:_(s64) = G_ZEXT %1(s16)
+    $d0 = COPY %2(s64)
+    RET implicit $r15, implicit $d0
+...

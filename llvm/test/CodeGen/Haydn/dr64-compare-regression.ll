@@ -1,0 +1,105 @@
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+; REGRESSION FILED : DR64 R_CMP instructions (SLT64_S1
+; SEQ64_S1, SLE64_S1 and _S0/_S2 variants) have an operand-flag
+; bug in HaydnFormatsALU64.td that aborts the MachineVerifier ("Explicit
+; operand marked as def"). The.td marks operand 0 ($rd) as a def with
+; hasSideEffects = 1 (implicit SFR write) — the verifier rejects this
+; combination. Regressed in the Flex cutover. Selector is correct
+; (MIR shows real emission); only the.td operand flags need adjusting.
+; Track under / Flex cutover (DR64 R_CMP operand flags). Do NOT
+; rebaseline CHECKs to silence the verifier abort.
+;
+; REGRESSION TEST: DR64 scalar compare and conditional move intrinsics.
+;
+; Purpose: Verify that 64-bit SFR compare (SLT64, SLE64, SEQ64) and
+; conditional move (MOVT64, MOVF64) intrinsics emit the correct
+; instructions. These intrinsics have IntrHasSideEffects because they
+; interact with the SFR register.
+;
+; Why this test: The SFR compare/move intrinsics use a side-effect
+; protocol: the compare writes SFR flags, and the move reads them.
+; If hasSideEffects is incorrectly set (known bug #1: SFR writers with
+; hasSideEffects=0 get eliminated as dead), the compare instruction
+; gets DCE'd and the subsequent MOV reads stale SFR state. This test
+; catches that regression by chaining compare→move in each function.
+;
+; Test design: Each function chains a compare intrinsic with a
+; conditional move intrinsic, returning the move result. This forces
+; both instructions to survive. If the compare is eliminated as dead
+; the move will produce incorrect results and the CHECK lines will fail
+; (or llc will crash with a verifier error).
+
+;===----------------------------------------------------------------------===;
+; SLT64 + MOVT64 chain
+;===----------------------------------------------------------------------===;
+
+declare i64 @llvm.haydn.slt64(i64)
+declare i64 @llvm.haydn.movt64(i64)
+
+define dso_local i64 @test_slt64_movt64(i64 %a) {
+; CHECK-LABEL: test_slt64_movt64:
+; CHECK: slt64
+; CHECK: movt64
+  %cmp = call i64 @llvm.haydn.slt64(i64 %a)
+  %r = call i64 @llvm.haydn.movt64(i64 %cmp)
+  ret i64 %r
+}
+
+;===----------------------------------------------------------------------===;
+; SLE64 + MOVF64 chain
+;===----------------------------------------------------------------------===;
+
+declare i64 @llvm.haydn.sle64(i64)
+declare i64 @llvm.haydn.movf64(i64)
+
+define dso_local i64 @test_sle64_movf64(i64 %a) {
+; CHECK-LABEL: test_sle64_movf64:
+; CHECK: sle64
+; CHECK: movf64
+  %cmp = call i64 @llvm.haydn.sle64(i64 %a)
+  %r = call i64 @llvm.haydn.movf64(i64 %cmp)
+  ret i64 %r
+}
+
+;===----------------------------------------------------------------------===;
+; SEQ64 standalone (sets SFR, returns passthrough)
+;===----------------------------------------------------------------------===;
+
+declare i64 @llvm.haydn.seq64(i64)
+
+define dso_local i64 @test_seq64(i64 %a) {
+; CHECK-LABEL: test_seq64:
+; CHECK: seq64
+  %r = call i64 @llvm.haydn.seq64(i64 %a)
+  ret i64 %r
+}
+
+;===----------------------------------------------------------------------===;
+; SFR register transfer: MOVESFR2GPR / MOVEGPR2SFR / ZERO_SFR
+; These verify the SFR↔GPR32 transfer instructions survive codegen.
+;===----------------------------------------------------------------------===;
+
+declare i32 @llvm.haydn.movesfr2gpr()
+declare void @llvm.haydn.movegpr2sfr(i32)
+declare void @llvm.haydn.zero.sfr()
+
+define dso_local i32 @test_movesfr2gpr() {
+; CHECK-LABEL: test_movesfr2gpr:
+; CHECK: movesfr2gpr
+  %r = call i32 @llvm.haydn.movesfr2gpr()
+  ret i32 %r
+}
+
+define dso_local void @test_movegpr2sfr(i32 %a) {
+; CHECK-LABEL: test_movegpr2sfr:
+; CHECK: movegpr2sfr
+  call void @llvm.haydn.movegpr2sfr(i32 %a)
+  ret void
+}
+
+define dso_local void @test_zero_sfr() {
+; CHECK-LABEL: test_zero_sfr:
+; CHECK: zero_sfr
+  call void @llvm.haydn.zero.sfr()
+  ret void
+}

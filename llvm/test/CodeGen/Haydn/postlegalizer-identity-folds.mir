@@ -1,0 +1,308 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-postlegalizer-combiner -global-isel-abort=1 %s -o - | FileCheck %s
+#
+# Tests for identity fold combiner rules in HaydnPostLegalizerCombiner.
+#
+# Combiner rules tested:
+# and_all_ones: G_AND x, -1 -> COPY x (AND with all-ones is identity)
+# or_zero: G_OR x, 0 -> COPY x (OR with zero is identity)
+# add_zero: G_ADD x, 0 -> COPY x (ADD with zero is identity)
+# sub_zero: G_SUB x, 0 -> COPY x (SUB with zero RHS is identity)
+# shl_zero: G_SHL x, 0 -> COPY x (shift by zero is identity)
+# lshr_zero: G_LSHR x, 0 -> COPY x (logical shift right by zero is identity)
+# ashr_zero: G_ASHR x, 0 -> COPY x (arithmetic shift right by zero is identity)
+# mul_zero: G_MUL x, 0 -> G_CONSTANT 0 (multiply by zero is always zero)
+
+---
+# AND with all-ones: G_AND x, -1 -> COPY x
+name:            and_all_ones
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: and_all_ones
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 -1
+    ; CHECK-NOT: G_AND
+    ; CHECK: COPY %0
+    %2:_(s32) = G_AND %0, %1
+    $r1 = COPY %2
+...
+
+---
+# AND with all-ones (commuted): G_AND -1, x -> COPY x
+name:            and_all_ones_commuted
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: and_all_ones_commuted
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 -1
+    ; CHECK-NOT: G_AND
+    ; CHECK: COPY %0
+    %2:_(s32) = G_AND %1, %0
+    $r1 = COPY %2
+...
+
+---
+# OR with zero: G_OR x, 0 -> COPY x
+name:            or_zero
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: or_zero
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 0
+    ; CHECK-NOT: G_OR
+    ; CHECK: COPY %0
+    %2:_(s32) = G_OR %0, %1
+    $r1 = COPY %2
+...
+
+---
+# OR with zero (commuted): G_OR 0, x -> COPY x
+name:            or_zero_commuted
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: or_zero_commuted
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 0
+    ; CHECK-NOT: G_OR
+    ; CHECK: COPY %0
+    %2:_(s32) = G_OR %1, %0
+    $r1 = COPY %2
+...
+
+---
+# ADD with zero: G_ADD x, 0 -> COPY x
+name:            add_zero
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: add_zero
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 0
+    ; CHECK-NOT: G_ADD
+    ; CHECK: COPY %0
+    %2:_(s32) = G_ADD %0, %1
+    $r1 = COPY %2
+...
+
+---
+# ADD with zero (commuted): G_ADD 0, x -> COPY x
+name:            add_zero_commuted
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: add_zero_commuted
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 0
+    ; CHECK-NOT: G_ADD
+    ; CHECK: COPY %0
+    %2:_(s32) = G_ADD %1, %0
+    $r1 = COPY %2
+...
+
+---
+# SUB with zero: G_SUB x, 0 -> COPY x
+name:            sub_zero
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: sub_zero
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 0
+    ; CHECK-NOT: G_SUB
+    ; CHECK: COPY %0
+    %2:_(s32) = G_SUB %0, %1
+    $r1 = COPY %2
+...
+
+---
+# SHL by zero: G_SHL x, 0 -> COPY x
+name:            shl_zero
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: shl_zero
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 0
+    ; CHECK-NOT: G_SHL
+    ; CHECK: COPY %0
+    %2:_(s32) = G_SHL %0, %1
+    $r1 = COPY %2
+...
+
+---
+# LSHR by zero: G_LSHR x, 0 -> COPY x
+name:            lshr_zero
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: lshr_zero
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 0
+    ; CHECK-NOT: G_LSHR
+    ; CHECK: COPY %0
+    %2:_(s32) = G_LSHR %0, %1
+    $r1 = COPY %2
+...
+
+---
+# ASHR by zero: G_ASHR x, 0 -> COPY x
+name:            ashr_zero
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: ashr_zero
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 0
+    ; CHECK-NOT: G_ASHR
+    ; CHECK: COPY %0
+    %2:_(s32) = G_ASHR %0, %1
+    $r1 = COPY %2
+...
+
+---
+# MUL by zero: G_MUL x, 0 -> constant 0
+name:            mul_zero
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: mul_zero
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 0
+    ; CHECK-NOT: G_MUL
+    %2:_(s32) = G_MUL %0, %1
+    $r1 = COPY %2
+...
+
+---
+# MUL by zero (commuted): G_MUL 0, x -> constant 0
+name:            mul_zero_commuted
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: mul_zero_commuted
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 0
+    ; CHECK-NOT: G_MUL
+    %2:_(s32) = G_MUL %1, %0
+    $r1 = COPY %2
+...
+
+---
+# i64 variants: AND with all-ones, OR with zero, ADD with zero
+# G_AND x, -1 -> COPY x (i64)
+name:            and_all_ones_i64
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: and_all_ones_i64
+    %0:_(s64) = G_IMPLICIT_DEF
+    %1:_(s64) = G_CONSTANT i64 -1
+    ; CHECK-NOT: G_AND
+    ; CHECK: COPY %0
+    %2:_(s64) = G_AND %0, %1
+    $d0 = COPY %2
+...
+
+---
+# G_OR x, 0 -> COPY x (i64)
+name:            or_zero_i64
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: or_zero_i64
+    %0:_(s64) = G_IMPLICIT_DEF
+    %1:_(s64) = G_CONSTANT i64 0
+    ; CHECK-NOT: G_OR
+    ; CHECK: COPY %0
+    %2:_(s64) = G_OR %0, %1
+    $d0 = COPY %2
+...
+
+---
+# G_ADD x, 0 -> COPY x (i64)
+name:            add_zero_i64
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: add_zero_i64
+    %0:_(s64) = G_IMPLICIT_DEF
+    %1:_(s64) = G_CONSTANT i64 0
+    ; CHECK-NOT: G_ADD
+    ; CHECK: COPY %0
+    %2:_(s64) = G_ADD %0, %1
+    $d0 = COPY %2
+...
+
+---
+# Negative test: AND with non-all-ones should NOT be eliminated.
+name:            and_non_ones
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: and_non_ones
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 -2
+    ; CHECK: G_AND
+    %2:_(s32) = G_AND %0, %1
+    $r1 = COPY %2
+...
+
+---
+# Negative test: OR with non-zero should NOT be eliminated.
+name:            or_nonzero
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: or_nonzero
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 42
+    ; CHECK: G_OR
+    %2:_(s32) = G_OR %0, %1
+    $r1 = COPY %2
+...
+
+---
+# Negative test: SUB x, non-zero should NOT be eliminated.
+name:            sub_nonzero
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: sub_nonzero
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 1
+    ; CHECK: G_SUB
+    %2:_(s32) = G_SUB %0, %1
+    $r1 = COPY %2
+...
+
+---
+# Negative test: SHL by non-zero should NOT be eliminated.
+name:            shl_nonzero
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: shl_nonzero
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 1
+    ; CHECK: G_SHL
+    %2:_(s32) = G_SHL %0, %1
+    $r1 = COPY %2
+...
+
+---
+# Negative test: MUL by non-zero/non-special constant should NOT be eliminated.
+# Use constant 11 which is not 0, -1, pow2, pow2+1, or pow2-1.
+name:            mul_nonzero
+legalized:       true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: mul_nonzero
+    %0:_(s32) = G_IMPLICIT_DEF
+    %1:_(s32) = G_CONSTANT i32 11
+    ; CHECK: G_MUL
+    %2:_(s32) = G_MUL %0, %1
+    $r1 = COPY %2
+...

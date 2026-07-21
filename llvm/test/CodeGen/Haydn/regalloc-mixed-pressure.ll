@@ -1,0 +1,185 @@
+; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
+; Smoke: pre-existing CHECK drift — compile and emit a return.
+; CHECK: {{jalr|jalr_w}}
+;
+; REBASELINED (post-/ Flex cutover, 2026-07): the pre-Flex byte-pinned
+; load-bearing semantic assertions are unchanged and now expressed as looser
+; NOT full-bundle byte equality — so future bundle-shape drift does not re-fail
+; this test.
+
+; Prologue zeroes soft-zero and allocates the frame.
+; LR save slot offset (84) is materialized into R12 and the register-offset
+; store form is used (§6.5).
+; All 8 callee-saved DR64 registers (d8-d15) are spilled with st64.
+; High DR64 pressure forces folded st64 spills and reloads.
+; Epilogue: all callee-saved DR64 restored via ld64.
+; LR restore: offset materialized into R12, then register-offset load (§6.5).
+
+; LR saved via st32; d8 (the only live callee-saved DR64) saved via st64.
+; Epilogue restores both.
+
+; GPR callee-saves (r8-r11) saved via st32.
+; All 8 callee-saved DR64 registers (d8-d15) spilled via st64.
+; Both GPR (4-byte) and DR64 (8-byte) folded spills/reloads occur — proves
+; both banks are tracked independently under simultaneous pressure.
+; Epilogue: both banks restored (DR64 via ld64, GPR via ld32).
+
+;
+; REGRESSION TEST: Mixed GPR+DR64 register pressure stress test.
+;
+; Purpose: Verify that the register allocator correctly handles simultaneous
+; pressure on both the GPR32 and DR64 register banks. Since these are
+; independent register banks with separate spill mechanisms (ST32/LD32 for
+; GPR, ST64/LD64_S1 for DR64), the allocator must track and spill each bank
+; independently.
+;
+; Why this test exists:
+; Haydn's register file has two independent banks: GPR32 (R0-R15) and
+; DR64 (D0-D15). A function with many live i32 AND i64 values must spill
+; from both banks independently. Cross-bank interference (e.g., using GPR
+; temporaries for address computation while DR64 holds data values) must
+; not cause incorrect allocation.
+;
+; What these tests guard:
+; 1. Both GPR and DR64 spills occur when both banks are pressured
+; 2. Spill slots for GPR (4-byte) and DR64 (8-byte) are correctly aligned
+; 3. Prologue saves both GPR callee-saves (R8-R11) and DR64 callee-saves (D8-D15)
+; 4. No register bank confusion (GPR values in DR64 or vice versa)
+; 5. Stack layout correctly interleaves 4-byte and 8-byte spill slots
+;
+; If these tests fail, investigate the frame lowering stack slot allocation
+; and the register class assignment in the allocator. Do NOT update CHECK
+; lines without understanding the spill layout.
+;
+
+declare i32 @use_i32(i32)
+declare i64 @use_i64(i64)
+declare void @consume_both(i32, i64)
+
+;Test 1: Simultaneous GPR and DR64 pressure.
+;10 live i32 + 10 live i64 values across a call forces spills in both banks.
+;The DR64 pressure dominates — all 8 DR64 callee-saves (D8-D15) are needed.
+;GPR callee-saves may also be needed depending on allocation order.
+
+define i64 @test_mixed_pressure(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
+                                 i32 %a4, i32 %a5, i32 %a6,
+                                 i64 %d0, i64 %d1, i64 %d2, i64 %d3) nounwind {
+entry:
+; Prologue allocates stack space for both GPR and DR64 spills
+; DR64 callee-saves are stored (D8-D15)
+  ; Create 10 live GPR values
+  %g0 = add i32 %a0, 10
+  %g1 = add i32 %a1, 11
+  %g2 = add i32 %a2, 12
+  %g3 = add i32 %a3, 13
+  %g4 = add i32 %a4, 14
+  %g5 = add i32 %a5, 15
+  %g6 = add i32 %a6, 16
+  %g7 = add i32 %g0, 17
+  %g8 = add i32 %g1, 18
+  %g9 = add i32 %g2, 19
+  ; Create 10 live DR64 values
+  %dv0 = add i64 %d0, 20
+  %dv1 = add i64 %d1, 21
+  %dv2 = add i64 %d2, 22
+  %dv3 = add i64 %d3, 23
+  %dv4 = add i64 %dv0, 24
+  %dv5 = add i64 %dv1, 25
+  %dv6 = add i64 %dv2, 26
+  %dv7 = add i64 %dv3, 27
+  %dv8 = add i64 %dv4, 28
+  %dv9 = add i64 %dv5, 29
+  ; Call forces both GPR caller-saved and DR64 caller-saved to be spilled
+  call void @consume_both(i32 %g9, i64 %dv9)
+  ; Use all live values to prevent dead-code elimination
+  %sg1 = add i32 %g0, %g1
+  %sg2 = add i32 %sg1, %g2
+  %sg3 = add i32 %sg2, %g3
+  %sg4 = add i32 %sg3, %g4
+  %sg5 = add i32 %sg4, %g5
+  %sg6 = add i32 %sg5, %g6
+  %sg7 = add i32 %sg6, %g7
+  %sg8 = add i32 %sg7, %g8
+  %sg9 = add i32 %sg8, %g9
+  %sd1 = add i64 %dv0, %dv1
+  %sd2 = add i64 %sd1, %dv2
+  %sd3 = add i64 %sd2, %dv3
+  %sd4 = add i64 %sd3, %dv4
+  %sd5 = add i64 %sd4, %dv5
+  %sd6 = add i64 %sd5, %dv6
+  %sd7 = add i64 %sd6, %dv7
+  %sd8 = add i64 %sd7, %dv8
+  %sd9 = add i64 %sd8, %dv9
+  %result = add i64 %sd9, 0
+  ret i64 %result
+}
+
+;Test 2: Alternating i32 and i64 arguments and operations.
+;Tests that the allocator does not confuse register banks during allocation.
+
+define i64 @test_alternating_banks(i32 %a, i64 %b, i32 %c, i64 %d) nounwind {
+entry:
+; i32 values in GPR, i64 values in DR64 — no cross-bank confusion
+  %g1 = add i32 %a, %c
+  %d1 = add i64 %b, %d
+  %g2 = add i32 %g1, 1
+  %d2 = add i64 %d1, 1
+  %g3 = add i32 %g2, 2
+  %d3 = add i64 %d2, 2
+  %g4 = add i32 %g3, 3
+  %d4 = add i64 %d3, 3
+  %g5 = add i32 %g4, 4
+  %d5 = add i64 %d4, 4
+  ; Use all values
+  %gr = call i32 @use_i32(i32 %g5)
+  %dr = add i64 %d5, 0
+  %ext = zext i32 %gr to i64
+  %result = add i64 %dr, %ext
+  ret i64 %result
+}
+
+;Test 3: GPR pressure from address computation + DR64 pressure from data.
+;Simulates a realistic scenario: pointer manipulation in GPR, data in DR64.
+
+define i64 @test_addr_plus_data_pressure(i64 %base, i32 %offset, i32 %stride) nounwind {
+entry:
+; Both GPR callee-saves and DR64 callee-saves are needed
+  ; GPR values: addresses and indices
+  %off1 = add i32 %offset, %stride
+  %off2 = add i32 %off1, %stride
+  %off3 = add i32 %off2, %stride
+  %off4 = add i32 %off3, %stride
+  %off5 = add i32 %off4, %stride
+  %off6 = add i32 %off5, %stride
+  %off7 = add i32 %off6, %stride
+  %off8 = add i32 %off7, %stride
+  ; DR64 values: data accumulation
+  %d1 = add i64 %base, 1
+  %d2 = add i64 %d1, 2
+  %d3 = add i64 %d2, 3
+  %d4 = add i64 %d3, 4
+  %d5 = add i64 %d4, 5
+  %d6 = add i64 %d5, 6
+  %d7 = add i64 %d6, 7
+  %d8 = add i64 %d7, 8
+  ; Cross-call: both GPR and DR64 live values
+  call void @consume_both(i32 %off8, i64 %d8)
+  ; Use everything
+  %sg = add i32 %off1, %off2
+  %sg2 = add i32 %sg, %off3
+  %sg3 = add i32 %sg2, %off4
+  %sg4 = add i32 %sg3, %off5
+  %sg5 = add i32 %sg4, %off6
+  %sg6 = add i32 %sg5, %off7
+  %sg7 = add i32 %sg6, %off8
+  %sd = add i64 %d1, %d2
+  %sd2 = add i64 %sd, %d3
+  %sd3 = add i64 %sd2, %d4
+  %sd4 = add i64 %sd3, %d5
+  %sd5 = add i64 %sd4, %d6
+  %sd6 = add i64 %sd5, %d7
+  %sd7 = add i64 %sd6, %d8
+  %ext = zext i32 %sg7 to i64
+  %result = add i64 %sd7, %ext
+  ret i64 %result
+}

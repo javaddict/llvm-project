@@ -1,0 +1,51 @@
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -verify-machineinstrs < %s | FileCheck %s
+;
+; PEI epilogue must not use R1 as the CSR-restore offset scratch.
+;
+; Integer return values live in R1 across the epilogue. Offsets that do not
+; fit golden scaled-simm6 CSR loads are materialized into a PEI scratch via
+; xor+addi (emitCSRLoad). If that scratch is R1, the return value is replaced
+; by the last restore offset (BundleSim cb44: guest_exit=196).
+;
+; Force large stack + GPR CSRs live across a call → REG-offset restores.
+; Fixed: offset materialize uses a non-r1 scratch (typically r2).
+
+declare void @ext(ptr)
+
+define i32 @ret_after_csr_epilogue(i32 %x) {
+; CHECK-LABEL: ret_after_csr_epilogue:
+; CHECK: // %bb.0:
+; CHECK: subi32{{.*}}sp
+; Return sum lands in r1.
+; CHECK: add32{{.*}}r1
+; Epilogue must not self-xor r1 (that was the clobber).
+; CHECK-NOT: xor32{{.*}}r1,{{.*}}r1,{{.*}}r1
+; Scratch is some other call-clobbered GPR (r2 in the current allocator).
+; CHECK: xor32{{.*}}r2,{{.*}}r2,{{.*}}r2
+; CHECK: addi32{{.*}}r2
+; CHECK: ld32_reg
+; CHECK: jalr{{.*}}lr
+entry:
+  %buf = alloca [48 x i32], align 4
+  call void @ext(ptr %buf)
+  %a = add i32 %x, 1
+  %b = add i32 %x, 2
+  %c = add i32 %x, 3
+  %d = add i32 %x, 4
+  store i32 %a, ptr %buf
+  %p1 = getelementptr [48 x i32], ptr %buf, i32 0, i32 10
+  store i32 %b, ptr %p1
+  %p2 = getelementptr [48 x i32], ptr %buf, i32 0, i32 20
+  store i32 %c, ptr %p2
+  %p3 = getelementptr [48 x i32], ptr %buf, i32 0, i32 30
+  store i32 %d, ptr %p3
+  call void @ext(ptr %buf)
+  %v0 = load i32, ptr %buf
+  %v1 = load i32, ptr %p1
+  %v2 = load i32, ptr %p2
+  %v3 = load i32, ptr %p3
+  %s1 = add i32 %v0, %v1
+  %s2 = add i32 %v2, %v3
+  %s = add i32 %s1, %s2
+  ret i32 %s
+}
