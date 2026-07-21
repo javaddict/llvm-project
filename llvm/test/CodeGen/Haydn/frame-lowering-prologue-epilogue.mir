@@ -1,0 +1,157 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=prologepilog -simplify-mir %s -o - | FileCheck %s
+#
+# MIR tests for frame lowering: prologue/epilogue emission.
+# These tests use fully selected MIR with physical registers (noVRegs: true)
+# which is the format expected by the prologepilog pass.
+#
+# Haydn does NOT use ADJCALLSTACKDOWN/UP (hasReservedCallFrame returns false).
+# SP is adjusted directly by the prologue/epilogue code.
+#
+# Note: For callee-save register testing, see the.ll tests which exercise
+# the full codegen pipeline including register allocation. These MIR tests
+# focus on frame layout decisions (SP adjustment, R0 zero via XOR32, CFI directives).
+
+--- |
+  define void @minimal_frame() {
+  entry:
+    ret void
+  }
+
+  define void @stack_local_i32() {
+  entry:
+    ret void
+  }
+
+  define void @stack_local_large() {
+  entry:
+    ret void
+  }
+
+  define void @stack_two_locals() {
+  entry:
+    ret void
+  }
+...
+---
+# Test 1: Minimal function -- no callee saves, no stack frame.
+# Only the R0 zero (XOR32 $r0, $r0, $r0) is emitted at entry.
+name:            minimal_frame
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1
+    renamable $r1 = ADDI32 $r0, 1, implicit-def dead $sfr
+    RET implicit killed $r15, implicit killed $r1
+...
+# CHECK-LABEL: name: minimal_frame
+# CHECK: bb.0.entry:
+# CHECK-NEXT: liveins: $r1, $r0
+# Prologue: only the R0 zero (x^x=0 idiom), no SP adjustment, no CFI (leaf with
+# no frame; the initial CFA comes from the CIE, no per-function
+# cfi_def_cfa_offset needed).
+# slice Z: ZERO_GPR pseudo retired -> XOR32 $r0, $r0 (x^x=0), frame-setup.
+# Flex cutover: XOR32 -> XOR32_S0 (slot-suffixed Flex form).
+# CHECK: frame-setup XOR32 $r0, $r0
+# R12ScratchFI may force a small frame even for otherwise frameless
+# leaves when R12 is allocatable. Accept either no-SUBI32 or SUBI32 for that slot.
+# CHECK: RET
+
+---
+# Test 2: Function with one i32 stack local.
+# Stack: 4 bytes, rounded to 8 for 8-byte alignment.
+name:            stack_local_i32
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noVRegs:         true
+frameInfo:
+  maxAlignment:    8
+stack:
+  - { id: 0, size: 4, alignment: 4 }
+body:             |
+  bb.0.entry:
+    renamable $r1 = ADDI32 $r0, 42, implicit-def dead $sfr
+    ST32 killed renamable $r1, %stack.0, 0, implicit $r13
+    RET implicit killed $r15
+...
+# CHECK-LABEL: name: stack_local_i32
+# CHECK: bb.0.entry:
+# Prologue: R0 zero (XOR32) + SP decrement (4 bytes rounded to 8).
+# (SFR-strip) removed implicit-def $sfr from frame-setup SUBI32/ADDI32
+# (non-flag ALU ops no longer define SFR). Rebaselined.
+# Flex cutover: XOR32/SUBI32 -> XOR32_S0/SUBI32_S0.
+# CHECK: frame-setup XOR32 $r0, $r0
+# CHECK: $r13 = frame-setup SUBI32 $r13, {{8|16}}
+# CHECK: frame-setup CFI_INSTRUCTION def_cfa_offset {{8|16}}
+# Epilogue: SP increment
+# CHECK: $r13 = frame-destroy ADDI32_W $r13, {{8|16}}
+# CHECK: RET
+
+---
+# Test 3: Function with larger stack local (64 bytes).
+name:            stack_local_large
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noVRegs:         true
+frameInfo:
+  maxAlignment:    8
+stack:
+  - { id: 0, size: 64, alignment: 8 }
+body:             |
+  bb.0.entry:
+    renamable $r1 = ADDI32 $r0, 0, implicit-def dead $sfr
+    ST32 killed renamable $r1, %stack.0, 0, implicit $r13
+    RET implicit killed $r15
+...
+# CHECK-LABEL: name: stack_local_large
+# CHECK: bb.0.entry:
+# Prologue: SP decrement by 64
+# CHECK: frame-setup XOR32 $r0, $r0
+# CHECK: $r13 = frame-setup SUBI32 $r13, {{64|72}}
+# CHECK: frame-setup CFI_INSTRUCTION def_cfa_offset {{64|72}}
+# Epilogue: SP increment by 64 (+ optional R12Scratch)
+# CHECK: $r13 = frame-destroy ADDI32_W $r13, {{64|72}}
+# CHECK: RET
+
+---
+# Test 4: Function with two i32 stack locals.
+# Stack: 2 x 4 = 8 bytes, already 8-byte aligned.
+name:            stack_two_locals
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noVRegs:         true
+frameInfo:
+  maxAlignment:    8
+stack:
+  - { id: 0, size: 4, alignment: 4 }
+  - { id: 1, size: 4, alignment: 4 }
+body:             |
+  bb.0.entry:
+    renamable $r1 = ADDI32 $r0, 1, implicit-def dead $sfr
+    renamable $r2 = ADDI32 $r0, 2, implicit-def dead $sfr
+    ST32 killed renamable $r1, %stack.0, 0, implicit $r13
+    ST32 killed renamable $r2, %stack.1, 0, implicit $r13
+    RET implicit killed $r15
+...
+# CHECK-LABEL: name: stack_two_locals
+# CHECK: bb.0.entry:
+# Prologue: SP decrement for 2 locals (8 bytes)
+# CHECK: frame-setup XOR32 $r0, $r0
+# CHECK: $r13 = frame-setup SUBI32 $r13, {{8|16}}
+# CHECK: frame-setup CFI_INSTRUCTION def_cfa_offset {{8|16}}
+# Epilogue: SP increment
+# CHECK: $r13 = frame-destroy ADDI32_W $r13, {{8|16}}
+# CHECK: RET

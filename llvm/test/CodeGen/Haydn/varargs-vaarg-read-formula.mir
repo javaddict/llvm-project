@@ -1,0 +1,73 @@
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+# RUN:     -run-pass=instruction-select -verify-machineinstrs %s -o - \
+# RUN:     | FileCheck %s
+#
+# REGRESSION TEST (amendment, codex-review DEBATE 1 HIGH): the G_VAARG
+# read-order bug.
+#
+# Bug: saveVarArgRegisters spills variadic GPRs ASCENDING (R2 at base+0...
+# R7 at base+20). The original shipped selector used the DOWNWARD formula
+# addr = __gr_top - (__gr_offs + TypeSize)
+# with __gr_offs initialized to 0, so the first va_arg read base+20 = R7 (the
+# LAST spilled reg) -- reversed argument order for any callee with >=2 unnamed
+# args in a bank.
+#
+# Fix (AArch64-style, Option 1): G_VAARG uses the UPWARD formula
+# addr = __gr_top + __gr_offs
+# and VASTART initializes __gr_offs to the NEGATIVE bank size. This MIR test is
+# the surgical guard on the READ FORMULA specifically: it asserts the selected
+# G_VAARG lowering uses ADD32 (upward), NOT SUB32 (downward). The companion IR
+# test `va_order_init_offsets` in varargs-two-bank-va-list.ll guards the
+# VASTART-side initial-offset store. Together they pin both halves of the fix.
+#
+# Why MIR: the read-formula opcode (ADD32 vs SUB32) is an internal detail of
+# the selector and is not directly visible in the final asm (the scavenger may
+# fold the add). Asserting the post-instruction-select MIR is the only way to
+# surgically pin it. We pre-build a va_list struct in GPR32 regs (a stand-in
+# for what VASTART would store) and feed G_VAARG a pointer to it.
+#
+# Test design: a single G_VAARG of an i32 must select to a sequence containing
+# ADD32 <addr>, <gr_top reg>, <gr_offs reg>
+# (upward). Before the fix it selected to
+# SUB32 <addr>, <gr_top reg>, <off+size reg>
+# (downward). The CHECK for `add32` after the `G_VAARG` selection point and the
+# NEGATIVE-CHECK for `sub32` together pin the upward formula. If the read-order
+# bug returns, this test fails (sub32 appears instead of add32).
+
+--- |
+  define void @vaarg_gpr_read_formula(ptr %ap) {
+    %v = va_arg ptr %ap, i32
+    ret void
+  }
+...
+
+---
+name: vaarg_gpr_read_formula
+legalized: true
+regBankSelected: true
+tracksRegLiveness: true
+registers:
+  - { id: 0, class: gpr32regbank }
+  - { id: 1, class: gpr32regbank }
+body: |
+  bb.0:
+    liveins: $r1
+
+    %0:gpr32regbank(p0) = COPY $r1
+    ; G_VAARG [Dst(0), VaListPtr(1), Align(2)]. Dst is i32 (GPR bank), so the
+    ; selector must take the __gr_top/__gr_offs cursor and form the read address
+    ; as `top + offs` (ADD32, upward) -- NOT `top - (offs+size)` (SUB32).
+    %1:gpr32regbank(s32) = G_VAARG %0(p0), 4
+    $r1 = COPY %1(s32)
+    RET implicit $r15, implicit $r1
+
+# CHECK-LABEL: name: vaarg_gpr_read_formula
+# The selected G_VAARG read address must be an UPWARD walk:
+# addr = ADD32 top, offs
+# (MIR opcodes are uppercase). We match `= ADD32` so the check anchors on the
+# def form (`%4:gpr32 = ADD32 %3, %2`) and cannot be confused with the
+# lowercase `gpr32` register-class string in the `registers:` block above.
+# CHECK: = ADD32
+# The downward SUB32 formula must NOT appear (it was the pre-fix shape).
+# CHECK-NOT: = SUB32
+...
