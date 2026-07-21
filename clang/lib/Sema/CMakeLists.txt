@@ -60,6 +60,7 @@ add_clang_library(clangSema
   SemaFixItUtils.cpp
   SemaFunctionEffects.cpp
   SemaHLSL.cpp
+  SemaHaydn.cpp
   SemaHexagon.cpp
   SemaInit.cpp
   SemaLambda.cpp
