@@ -78,6 +78,12 @@ set(hexagon_files
   hvx_hexagon_protos.h
   )
 
+set(haydn_files
+  haydn_intrin.h
+  haydn_dsp.h
+  haydn_types.h
+  )
+
 set(hip_files
   __clang_hip_libdevice_declares.h
   __clang_hip_cmath.h
@@ -317,6 +323,7 @@ set(files
   ${arm_only_files}
   ${aarch64_only_files}
   ${cuda_files}
+  ${haydn_files}
   ${hexagon_files}
   ${hip_files}
   ${loongarch_files}
@@ -534,6 +541,7 @@ add_dependencies("clang-resource-headers"
                  "arm-resource-headers"
                  "aarch64-resource-headers"
                  "cuda-resource-headers"
+                 "haydn-resource-headers"
                  "hexagon-resource-headers"
                  "hip-resource-headers"
                  "hlsl-resource-headers"
@@ -562,6 +570,7 @@ add_header_target("arm-resource-headers" "${arm_only_files};${arm_only_generated
 add_header_target("aarch64-resource-headers" "${aarch64_only_files};${aarch64_only_generated_files}")
 add_header_target("cuda-resource-headers" "${cuda_files};${cuda_wrapper_files};${cuda_wrapper_bits_files};${cuda_wrapper_utility_files}")
 add_header_target("hexagon-resource-headers" "${hexagon_files}")
+add_header_target("haydn-resource-headers" "${haydn_files}")
 add_header_target("hip-resource-headers" "${hip_files}")
 add_header_target("loongarch-resource-headers" "${loongarch_files}")
 add_header_target("mips-resource-headers" "${mips_msa_files}")
@@ -692,6 +701,12 @@ install(
   DESTINATION ${header_install_dir}
   EXCLUDE_FROM_ALL
   COMPONENT hexagon-resource-headers)
+
+install(
+  FILES ${haydn_files}
+  DESTINATION ${header_install_dir}
+  EXCLUDE_FROM_ALL
+  COMPONENT haydn-resource-headers)
 
 install(
   FILES ${hip_files}
@@ -853,6 +868,9 @@ if (NOT LLVM_ENABLE_IDE)
   add_llvm_install_targets(install-hexagon-resource-headers
                            DEPENDS hexagon-resource-headers
                            COMPONENT hexagon-resource-headers)
+  add_llvm_install_targets(install-haydn-resource-headers
+                           DEPENDS haydn-resource-headers
+                           COMPONENT haydn-resource-headers)
   add_llvm_install_targets(install-hip-resource-headers
                            DEPENDS hip-resource-headers
                            COMPONENT hip-resource-headers)
