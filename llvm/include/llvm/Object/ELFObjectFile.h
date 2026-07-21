@@ -1457,6 +1457,9 @@ template <class ELFT> Triple::ArchType ELFObjectFile<ELFT>::getArch() const {
   case ELF::EM_XTENSA:
     return Triple::xtensa;
 
+  case ELF::EM_HAYDN:
+    return Triple::haydn;
+
   default:
     return Triple::UnknownArch;
   }
