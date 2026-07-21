@@ -279,6 +279,9 @@ class SwingSchedulerDAG : public ScheduleDAGInstrs {
 
   /// The minimum initiation interval between iterations for this schedule.
   unsigned MII = 0;
+  /// Last computed resource / recurrence bounds (for target asm annotation).
+  unsigned ComputedResMII = 0;
+  unsigned ComputedRecMII = 0;
   /// The maximum initiation interval between iterations for this schedule.
   unsigned MAX_II = 0;
   /// Set to true if a valid pipelined schedule is found for the loop.

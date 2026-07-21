@@ -54,7 +54,7 @@ declare i64 @llvm.haydn.mula64.ss.ll(i64, i64, i64)
 define i64 @fir_paired32_stream(ptr readonly %a, ptr readonly %b, i32 %n) nounwind {
 ; MIR-LABEL: name: fir_paired32_stream
 ; MIR-DAG: LD64
-; MIR-DAG: ADDI32 {{.*}}, 8
+; MIR-DAG: {{ADDI32|S_.*POST|G_PTR_ADD}}
 ; MIR: MULA64_LL
 entry:
   %cmp0 = icmp sgt i32 %n, 0
@@ -79,13 +79,11 @@ exit:
   ret i64 %result
 }
 
-; Streaming i64 STORE loop (stride 8). Dual-sched form: ST64 + ADDI32 stride-8
-; (not fused ST64_POST). Contract: store + base bump present; no unencodable
-; store-post DB name.
+; Streaming i64 STORE loop (stride 8). Product form: ST64_POST.
+; No unencodable D_SDW_POST_IMM DB name.
 define void @stream_store_i64(ptr %out, i32 %n) nounwind {
 ; MIR-LABEL: name: stream_store_i64
-; MIR-DAG: ST64
-; MIR-DAG: ADDI32 {{.*}}, 8
+; MIR: ST64_POST
 ; MIR-NOT: D_SDW_POST_IMM
 entry:
   %cmp0 = icmp sgt i32 %n, 0
@@ -105,10 +103,8 @@ exit:
   ret void
 }
 
-; Note: dual-sched post-inc is co-packed ld64/st64 + addi32 (not fused mnemonics).
-;
 ; ASM-LABEL: fir_paired32_stream:
-; ASM: ld64{{.*}};{{.*}}addi32{{(_w)?}}
+; ASM: {{d_ldw_post_imm|ld64}}
 ; ASM: mula64.ll
 ; ASM-LABEL: stream_store_i64:
-; ASM: st64{{.*}};{{.*}}addi32{{(_w)?}}
+; ASM: st64.post

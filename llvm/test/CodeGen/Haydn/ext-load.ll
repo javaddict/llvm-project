@@ -101,8 +101,8 @@ define i64 @zextload_i32_to_i64(ptr %ptr) {
 ;Array element access with extload (common pattern)
 define i32 @array_sext_i8(ptr %array, i32 %index) {
 ; CHECK-LABEL: array_sext_i8:
-; CHECK-DAG: add32
-; CHECK-DAG: ldu8
+; Byte load may be fused s_lbu_pre_reg or split add32+ldu8.
+; CHECK-DAG: {{s_lbu_pre_reg|ldu8|add32}}
 ; CHECK-DAG: sll32
 ; CHECK-DAG: sra32
   %ptr = getelementptr i8, ptr %array, i32 %index

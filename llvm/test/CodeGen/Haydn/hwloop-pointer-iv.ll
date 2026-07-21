@@ -43,13 +43,11 @@
 ; ~/haydn-plans/decisions/-hwloop-recognizer-broaden-g2-g3-g4.md
 
 define i32 @pointer_iv_i32(ptr readonly %p, ptr readnone %end) nounwind {
-; Dual-sched form: pointer IV is LD32 + ADDI32 stride-4 (not fused
-; S_LW_POST_IMM). Contract: HWLoop conversion still fires (SET_HWLOOP +
-; PseudoLoopEnd) with streaming load + base bump present.
+; Product form: pointer IV fuses to S_LW_POST_IMM. Contract: HWLoop
+; conversion still fires (SET_HWLOOP + PseudoLoopEnd).
 ; CHECK-LABEL: name: pointer_iv_i32
 ; CHECK: SET_HWLOOP
-; CHECK-DAG: LD32
-; CHECK-DAG: ADDI32 {{.*}}, 4
+; CHECK: S_LW_POST_IMM
 ; CHECK: PseudoLoopEnd
 entry:
   br label %loop
@@ -72,8 +70,8 @@ exit:
 define i64 @pointer_iv_i64(ptr readonly %p, ptr readnone %end) nounwind {
 ; CHECK-LABEL: name: pointer_iv_i64
 ; CHECK: SET_HWLOOP
-; CHECK-DAG: LD32
-; CHECK-DAG: ADDI32 {{.*}}, 8
+; Accept split LD32 pairs or fused D_LDW_POST_IMM.
+; CHECK-DAG: {{LD32|D_LDW_POST_IMM|LD64}}
 ; CHECK: PseudoLoopEnd
 entry:
   br label %loop

@@ -113,6 +113,11 @@ public:
   // canAcceptII.
   bool shouldUseSchedule(SwingSchedulerDAG &SSD, SMSchedule &SMS) override;
 
+  void recordSuccessfulSMS(MachineFunction &MF, MachineBasicBlock *KernelBB,
+                           unsigned ResMII, unsigned RecMII, unsigned MII,
+                           unsigned StageCount, unsigned NumOps,
+                           unsigned ScheduledII) override;
+
   std::optional<bool>
   createTripCountGreaterCondition(int TC, MachineBasicBlock &MBB,
                                   SmallVectorImpl<MachineOperand> &Cond) override;
@@ -312,6 +317,29 @@ public:
   // opcode is never rewritten (I1: logical ops after ISel).
   bool commitSlotFlexVariant(MachineInstr &MI,
                              std::optional<unsigned> Slot = std::nullopt) const;
+
+  //===------------------------------------------------------------------===
+  // Addressing-mode hooks for SMS (MachinePipeliner) and mem clustering.
+  // Cover fused pre/post-inc/dec loads+stores (AGU writeback) and the
+  // LD/ST*_POST_INC pseudos. Post-dec / pre-dec are the same opcodes with a
+  // negative scaled imm. See HaydnInstrInfo.cpp for operand layouts.
+  //===------------------------------------------------------------------===
+
+  bool isPostIncrement(const MachineInstr &MI) const override;
+
+  // Haydn-local: true for PRE_* forms (rs += delta, then access). Upstream
+  // SMS only queries isPostIncrement; this exists for target peeps/tests.
+  bool isPreIncrement(const MachineInstr &MI) const;
+
+  bool getBaseAndOffsetPosition(const MachineInstr &MI, unsigned &BasePos,
+                                unsigned &OffsetPos) const override;
+
+  bool getIncrementValue(const MachineInstr &MI, int &Value) const override;
+
+  bool getMemOperandsWithOffsetWidth(
+      const MachineInstr &MI, SmallVectorImpl<const MachineOperand *> &BaseOps,
+      int64_t &Offset, bool &OffsetIsScalable, LocationSize &Width,
+      const TargetRegisterInfo *TRI) const override;
 };
 
 } // namespace llvm

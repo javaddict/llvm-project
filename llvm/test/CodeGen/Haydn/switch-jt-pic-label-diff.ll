@@ -35,10 +35,9 @@ default: ret i32 0
 ; CHECK-LABEL: switch_jt_pic:
 ; CHECK:       .LJTI0_0
 ; CHECK:       slli32
+; CHECK:       {{s_lw_pre_reg|ld32}}
+; After load of a LabelDifference32 entry, ADD base back before jalr:
 ; CHECK:       add32
-; CHECK:       ld32
-; After LD of a LabelDifference32 entry, ADD base back before jalr:
-; CHECK-NEXT:  add32
 ; CHECK:       jalr_w
 ; CHECK:       .LJTI0_0:
 ; CHECK:       .long	.LBB0_{{[0-9]+}}-.LJTI0_0

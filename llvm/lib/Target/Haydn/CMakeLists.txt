@@ -51,6 +51,8 @@ add_llvm_target(HaydnCodeGen
   HaydnAsmPrinter.cpp
   HaydnExpandPseudos.cpp
   HaydnExpandPostIncEarly.cpp
+  # Retired pass body emptied; keep source listed for LLVM source-file check.
+  HaydnFormUpdateAddr.cpp
   HaydnMCInstLower.cpp
   HaydnMachineFunctionInfo.cpp
   HaydnMachineScheduler.cpp

@@ -52,3 +52,47 @@ def G_MULA64 : HaydnGenericInstruction {
   let hasSideEffects = 0;
   let isCommutable = 1;  // rs1 <-> rs2 commute
 }
+
+//===----------------------------------------------------------------------===//
+// Pre/post-inc/dec memory (AIE-style gMIR). Formed by the post-legalizer
+// combiner from G_LOAD/G_STORE + G_PTR_ADD (const offset). Selected to fused
+// AGU writeback ops (S_LW_POST_IMM / D_LDW_* / ST*_POST / *_PRE_IMM).
+//
+//   POST: access at $base, then $ptr = $base + $offset
+//   PRE:  $ptr = $base + $offset, then access at $ptr
+//
+// $offset is a scalar (usually G_CONSTANT); negative = decrement.
+// type0 = pointer, type1 = offset scalar, type2 = data.
+//===----------------------------------------------------------------------===//
+
+// %val, %ptr = G_HAYDN_POSTINC_LOAD %base, %offset
+def G_HAYDN_POSTINC_LOAD : HaydnGenericInstruction {
+  let OutOperandList = (outs type2:$val, type0:$ptr);
+  let InOperandList = (ins type0:$base, type1:$offset);
+  let hasSideEffects = 0;
+  let mayLoad = 1;
+}
+
+// %val, %ptr = G_HAYDN_PREINC_LOAD %base, %offset
+def G_HAYDN_PREINC_LOAD : HaydnGenericInstruction {
+  let OutOperandList = (outs type2:$val, type0:$ptr);
+  let InOperandList = (ins type0:$base, type1:$offset);
+  let hasSideEffects = 0;
+  let mayLoad = 1;
+}
+
+// %ptr = G_HAYDN_POSTINC_STORE %val, %base, %offset
+def G_HAYDN_POSTINC_STORE : HaydnGenericInstruction {
+  let OutOperandList = (outs type0:$ptr);
+  let InOperandList = (ins type2:$val, type0:$base, type1:$offset);
+  let hasSideEffects = 0;
+  let mayStore = 1;
+}
+
+// %ptr = G_HAYDN_PREINC_STORE %val, %base, %offset
+def G_HAYDN_PREINC_STORE : HaydnGenericInstruction {
+  let OutOperandList = (outs type0:$ptr);
+  let InOperandList = (ins type2:$val, type0:$base, type1:$offset);
+  let hasSideEffects = 0;
+  let mayStore = 1;
+}

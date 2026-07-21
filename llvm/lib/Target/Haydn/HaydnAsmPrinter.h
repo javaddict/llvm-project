@@ -20,6 +20,9 @@ namespace llvm {
 class LLVM_LIBRARY_VISIBILITY HaydnAsmPrinter : public AsmPrinter {
   HaydnMCInstLower MCInstLowering;
 
+  /// Emit HiFi-like `#<swps>` SMS bounds when this MBB is a recorded kernel.
+  void emitSMSSWPSComments(const MachineBasicBlock &MBB);
+
   // Pending HWLOOP inclusive-END labels, keyed by the latch MBB. Per
   // the authoritative `fibonacci_hw_loop.asm`, HWLR_END is INCLUSIVE: the
   // address of the LAST instruction of the loop body (not the first
@@ -96,6 +99,8 @@ public:
   StringRef getPassName() const override { return "Haydn Assembly Printer"; }
 
   void emitInstruction(const MachineInstr *MI) override;
+
+  void emitBasicBlockStart(const MachineBasicBlock &MBB) override;
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 

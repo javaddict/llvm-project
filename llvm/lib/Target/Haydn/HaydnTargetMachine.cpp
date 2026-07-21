@@ -89,6 +89,12 @@ static cl::opt<bool> EnableHaydnExpandPostIncEarly(
     cl::desc("Enable HaydnExpandPostIncEarly (product post-inc expand; lower "
              "*_POST_INC pseudos to LD/ST + ADDI pre-packetize). Default ON. "
              "Sole product home for post-inc expansion."));
+// Retired FormUpdateAddr (pre-RA LD/ST+ADD → AGU). Product fuse is GISel only
+// (-haydn-enable-gisel-update-addr). Flag kept as no-op so old RUN lines
+// do not dump --help.
+static cl::opt<bool> EnableHaydnFormUpdateAddr(
+    "haydn-enable-form-update-addr", cl::init(false), cl::Hidden,
+    cl::desc("RETIRED: FormUpdateAddr removed; use GISel update-addr fuse."));
 // Retired multi-width passes — keep cl::opts as no-ops so existing
 // RUN lines with these flags do not make llc dump --help.
 static cl::opt<bool> EnableHaydnGFormatSelect(
@@ -243,8 +249,8 @@ namespace {
 // GISel: IRTranslator; PreLegalizerCombiner;
 // Legalizer; PostLegalizerCombiner(O1+); RegBankSelect;
 // InstructionSelect; PostSelectOptimize(O1+)
-// Pre-RA: MachinePipeliner/SMS(O2+); DeadMIElim after SMS;
-// MachineScheduler/HaydnPreRASchedStrategy (AIE dual-sched) *
+// Pre-RA: MachinePipeliner/SMS(O2+); (AGU fuse is GISel-only)
+// DeadMIElim after SMS; MachineScheduler/HaydnPreRASchedStrategy *
 // register allocation (upstream)
 // Post-RA (addPreSched2, AIE2-aligned):
 // EnsureTerminators *; ExpandPostIncEarly * (product post-inc);
@@ -401,6 +407,9 @@ void HaydnPassConfig::addPostRegAlloc() {
 }
 
 void HaydnPassConfig::addPreRegAlloc() {
+  // AGU pre/post-inc form is GISel-only (HaydnPostLegalizerCombiner).
+  // FormUpdateAddr (post-ISel MIR fold) was removed — dual fuse paths diverged.
+
   // Software pipelining (Swing Modulo Scheduling) for VLIW DSP loops.
   // Runs on the naive countable loop (SEQ32/SLT32 + BNEZ/BEQZ), so the expander
   // never has to round-trip hwloop pseudos -- no expander-compatibility surface.

@@ -2877,7 +2877,9 @@ def D_LHW_POST_REG : FmtLSPostIncReg<0x4D, 0x2, (outs DR64:$rt, GPR32:$rs_wb),
 }
 
 // PRE_IMM / PRE_REG forms — update base, then load. Same two-def shape.
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+// isCodeGenOnly: GISel / ExpandPostIncEarly form these so SMS
+// sees a live base writeback before MachinePipeliner.
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def D_LDW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_ldw_pre_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2904,7 +2906,7 @@ def D_LHW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def D_LDW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_ldw_pre_reg\t$rtd, $rs, $rs2", []> {
@@ -3055,7 +3057,8 @@ def D_SW_L_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 
 // PRE_IMM — update base, then store. DR64 data.
-let isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+// isCodeGenOnly: selected by GISel update-addr fuse (pre-RA).
+let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def D_SDW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sdw_pre_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3246,7 +3249,7 @@ def SRAI64R : HaydnInst<4, (outs DR64:$rd),
 //===---------------------------------------------------------------===//
 
 // S_LBS (sign-extended byte). DB: rt = sext(mem8[rs]); POST: rs += imm6.
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBS_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lbs_post_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3255,7 +3258,7 @@ def S_LBS_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBS_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lbs_post_reg\t$rt, $rs, $rs2", []> {
@@ -3264,7 +3267,7 @@ def S_LBS_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBS_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lbs_pre_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3273,7 +3276,7 @@ def S_LBS_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBS_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lbs_pre_reg\t$rt, $rs, $rs2", []> {
@@ -3301,7 +3304,7 @@ def S_LBS_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
 }
 
 // S_LBU (zero-extended byte).
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBU_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lbu_post_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3310,7 +3313,7 @@ def S_LBU_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBU_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lbu_post_reg\t$rt, $rs, $rs2", []> {
@@ -3319,7 +3322,7 @@ def S_LBU_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBU_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lbu_pre_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3328,7 +3331,7 @@ def S_LBU_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBU_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lbu_pre_reg\t$rt, $rs, $rs2", []> {
@@ -3356,7 +3359,7 @@ def S_LBU_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
 }
 
 // S_LHWS (sign-extended halfword).
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWS_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lhws_post_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3365,7 +3368,7 @@ def S_LHWS_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWS_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lhws_post_reg\t$rt, $rs, $rs2", []> {
@@ -3374,7 +3377,7 @@ def S_LHWS_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWS_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lhws_pre_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3383,7 +3386,7 @@ def S_LHWS_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWS_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lhws_pre_reg\t$rt, $rs, $rs2", []> {
@@ -3411,7 +3414,7 @@ def S_LHWS_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
 }
 
 // S_LHWU (zero-extended halfword).
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWU_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lhwu_post_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3420,7 +3423,7 @@ def S_LHWU_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWU_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lhwu_post_reg\t$rt, $rs, $rs2", []> {
@@ -3429,7 +3432,7 @@ def S_LHWU_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWU_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lhwu_pre_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3438,7 +3441,7 @@ def S_LHWU_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWU_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lhwu_pre_reg\t$rt, $rs, $rs2", []> {
@@ -3510,7 +3513,7 @@ def S_LW_POST_IMM : FmtLSPostInc<0x48, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LW_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lw_post_reg\t$rt, $rs, $rs2", []> {
@@ -3519,7 +3522,8 @@ def S_LW_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+// isCodeGenOnly: GISel forms pre-inc/dec word loads.
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LW_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lw_pre_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3528,7 +3532,7 @@ def S_LW_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LW_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lw_pre_reg\t$rt, $rs, $rs2", []> {
@@ -3564,7 +3568,7 @@ def S_LW_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
 //===---------------------------------------------------------------===//
 
 // POST_IMM — GPR32 data. DB: mem8[rs] = rt[7:0]; rs += imm6 (SB, no shift).
-let isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def S_SB_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_sb_post_imm	$rt, $rs, $scaled_imm", []> {
@@ -3573,7 +3577,7 @@ def S_SB_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def S_SHW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_shw_post_imm	$rt, $rs, $scaled_imm", []> {
@@ -3593,7 +3597,7 @@ def S_SW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 
 // PRE_IMM — update base, then store. GPR32 data.
-let isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def S_SB_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_sb_pre_imm	$rt, $rs, $scaled_imm", []> {
@@ -3602,7 +3606,7 @@ def S_SB_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def S_SHW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_shw_pre_imm	$rt, $rs, $scaled_imm", []> {
@@ -3611,7 +3615,8 @@ def S_SHW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+// isCodeGenOnly: GISel forms pre-inc/dec word stores.
+let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def S_SW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_sw_pre_imm	$rt, $rs, $scaled_imm", []> {

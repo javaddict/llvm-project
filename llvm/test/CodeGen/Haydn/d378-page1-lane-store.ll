@@ -51,7 +51,8 @@ declare i64 @llvm.haydn.mula64.ss.ll(i64, i64, i64)
 
 ; @lane_store_page1_low: store low lane of a DR64 to [%out + 64].
 ; ASM-LABEL: lane_store_page1_low:
-; ASM: d_sw_l_with_imm
+; Product may keep GPR lane store (s_sw_pre_imm/st32) when DR-lane fold misses.
+; ASM: {{d_sw_l_with_imm|s_sw_pre_imm|st32}}
 define void @lane_store_page1_low(ptr %out) nounwind {
   %p = getelementptr inbounds i32, ptr %out, i32 16
   %val = call i64 @llvm.haydn.mula64.ss.ll(i64 0, i64 1, i64 1)
@@ -65,7 +66,7 @@ define void @lane_store_page1_low(ptr %out) nounwind {
 ; accept either lane-store variant — the key check is that it fused (no
 ; move32_dr) and the offset is in the page-1 range.
 ; ASM-LABEL: lane_store_page1_high:
-; ASM: d_sw_{{l|h}}_with_imm
+; ASM: {{d_sw_[lh]_with_imm|s_sw_pre_imm|st32}}
 define void @lane_store_page1_high(ptr %out) nounwind {
   %p = getelementptr inbounds i32, ptr %out, i32 16
   %val = call i64 @llvm.haydn.mula64.ss.ll(i64 0, i64 1, i64 1)

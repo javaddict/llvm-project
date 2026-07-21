@@ -103,13 +103,13 @@ define i32 @test_consecutive_loads(ptr %p) {
   %sum1 = add i32 %v0, %v1
   %sum2 = add i32 %sum1, %v2
   ret i32 %sum2
-; CHECK-DAG: ld32
-; CHECK-DAG: ld32
-; CHECK-DAG: ld32
+; CHECK-DAG: {{ld32|s_lw}}
+; CHECK-DAG: {{ld32|s_lw}}
+; CHECK-DAG: {{ld32|s_lw}}
 }
 
 ;Load and increment, then use updated pointer
-; The ADDI32 may be folded with the preceding load.
+; The ADDI32 may be folded with the preceding load (post-inc).
 define i32 @test_load_with_ptr_update(ptr %p) {
 ; CHECK-LABEL: test_load_with_ptr_update:
   %v = load i32, ptr %p
@@ -117,6 +117,6 @@ define i32 @test_load_with_ptr_update(ptr %p) {
   %v2 = load i32, ptr %p.next
   %sum = add i32 %v, %v2
   ret i32 %sum
-; CHECK-DAG: ld32
-; CHECK-DAG: ld32
+; CHECK-DAG: {{ld32|s_lw}}
+; CHECK-DAG: {{ld32|s_lw}}
 }

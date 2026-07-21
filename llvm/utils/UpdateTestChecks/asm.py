@@ -76,6 +76,16 @@ ASM_FUNCTION_HEXAGON_RE = re.compile(
     flags=(re.M | re.S),
 )
 
+# Haydn VLIW: "mac_loop: // @mac_loop" then optional .cfi_startproc, body,
+# .Lfunc_endN: (// comments, VLIW bundles with braces).
+ASM_FUNCTION_HAYDN_RE = re.compile(
+    r'^_?(?P<func>[^:\n]+):[ \t]*//[ \t]*@(?P=func)\n'
+    r"(?:[ \t]*\.cfi_startproc\n)?"
+    r"(?P<body>.*?)\n"
+    r"\.Lfunc_end[0-9]+:\n",
+    flags=(re.M | re.S),
+)
+
 ASM_FUNCTION_M68K_RE = re.compile(
     r'^_?(?P<func>[^:]+):[ \t]*;[ \t]*@"?(?P=func)"?\n'
     r'(?:\.L(?P=func)\$local:\n)?'  # drop .L<func>$local:
@@ -354,6 +364,17 @@ def scrub_asm_bpf(asm, args):
     return asm
 
 
+def scrub_asm_haydn(asm, args):
+    # Scrub runs of whitespace out of the assembly, but leave the leading
+    # whitespace in place.
+    asm = common.SCRUB_WHITESPACE_RE.sub(r" ", asm)
+    # Expand the tabs used for indentation.
+    asm = string.expandtabs(asm, 2)
+    # Strip trailing whitespace.
+    asm = common.SCRUB_TRAILING_WHITESPACE_RE.sub(r"", asm)
+    return asm
+
+
 def scrub_asm_hexagon(asm, args):
     # Scrub runs of whitespace out of the assembly, but leave the leading
     # whitespace in place.
@@ -564,6 +585,7 @@ def get_run_handler(triple):
         "bpfel": (scrub_asm_bpf, ASM_FUNCTION_BPF_RE),
         "bpfeb": (scrub_asm_bpf, ASM_FUNCTION_BPF_RE),
         "hexagon": (scrub_asm_hexagon, ASM_FUNCTION_HEXAGON_RE),
+        "haydn": (scrub_asm_haydn, ASM_FUNCTION_HAYDN_RE),
         "r600": (scrub_asm_amdgpu, ASM_FUNCTION_AMDGPU_RE),
         "amdgcn": (scrub_asm_amdgpu, ASM_FUNCTION_AMDGPU_RE),
         "arm": (scrub_asm_arm_eabi, ASM_FUNCTION_ARM_RE),

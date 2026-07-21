@@ -816,11 +816,16 @@ def PseudoLongB    : HaydnLongBranchPseudo<(outs), (ins brtarget:$offset), "long
 // The asm printer expands these to SET_HWLOOP/SET_HWLOOP_F2 instructions
 // with PC-relative offsets computed from the MBB symbols.
 // Operands: sel (0=outer, 1=inner), loop_start MBB, loop_end MBB, trip count.
+// hasSideEffects=1 matches LoopStart: programs HWLR; must not be DCE'd or
+// freely reordered relative to the remat count producer (post-RA free-reg
+// remat → SET dep chain).
+let hasSideEffects = 1, isNotDuplicable = 1 in {
 def SET_HWLOOP : HaydnPseudo<(outs), (ins uimm5:$sel, brtarget:$loop_start, brtarget:$loop_end, uimm16:$cnt),
                                "set_hwloop\t$sel, $loop_start, $loop_end, $cnt", []>;
 
 def SET_HWLOOP_REG : HaydnPseudo<(outs), (ins uimm5:$sel, brtarget:$loop_start, brtarget:$loop_end, GPR32:$rs),
                                   "set_hwloop_f2\t$sel, $loop_start, $loop_end, $rs", []>;
+} // hasSideEffects = 1, isNotDuplicable = 1
 
 //===----------------------------------------------------------------------===//
 // SMS-safe hardware-loop pseudos (AIE design).

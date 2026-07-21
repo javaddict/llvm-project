@@ -865,6 +865,31 @@ public:
     /// Return true if the target can expand pipelined schedule with modulo
     /// variable expansion.
     virtual bool isMVEExpanderSupported() { return false; }
+
+    /// Called after a successful Swing Modulo schedule is accepted (and will
+    /// be expanded). Targets may record ResMII/RecMII/II for release asm
+    /// annotation (e.g. Haydn `#<swps>`). Default: no-op.
+    /// \p KernelBB  loop header / kernel block (stable MBB number)
+    /// \p ResMII    resource lower bound
+    /// \p RecMII    recurrence lower bound
+    /// \p MII       max(Res,Rec) (or forced II)
+    /// \p StageCount  prologue stages + 1
+    /// \p NumOps    non-boundary SUnits at SMS time
+    /// \p ScheduledII  initiation interval of the accepted schedule
+    virtual void recordSuccessfulSMS(MachineFunction &MF,
+                                     MachineBasicBlock *KernelBB,
+                                     unsigned ResMII, unsigned RecMII,
+                                     unsigned MII, unsigned StageCount,
+                                     unsigned NumOps, unsigned ScheduledII) {
+      (void)MF;
+      (void)KernelBB;
+      (void)ResMII;
+      (void)RecMII;
+      (void)MII;
+      (void)StageCount;
+      (void)NumOps;
+      (void)ScheduledII;
+    }
   };
 
   /// Analyze loop L, which must be a single-basic-block loop, and if the

@@ -64,6 +64,7 @@
 #include "Haydn.h"
 #include "HaydnHWLoopContracts.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnPostRAScratch.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/DenseSet.h"
@@ -74,6 +75,7 @@
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/InitializePasses.h"
@@ -508,79 +510,20 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
     Header->setLabelMustBeEmitted();
     Latch->setLabelMustBeEmitted();
 
-    // Pipeliner adj: AIE expands LoopStart as
-    // SetLoopCount LC, src, adj; LC = src + adj, **src GPR preserved**
-    // SetLoopStart / SetLoopEnd
-    // (AIEBaseHardwareLoops::expandLoopStart). Haydn has no separate LC
-    // register — SET_HWLOOP_REG takes a GPR count. Never ADDI in-place into
-    // TripReg: it is often still live (outer-loop bound N re-used as trip
-    // source each row). CoreMark matrix_sum @ -O2: LoopStart $r1, -1 in the
-    // outer header clobbered N → set_hwloop(N-1), then N-2, … and MEMORY_FAULT.
+    // Innermost ZOL uses sel=1. Count starts as TripReg; post-RA remat
+    // (HaydnPostRAScratch::rematerializeAddImmForUse) applies pipeliner adj
+    // without clobbering Src — same facility as MatInt/VA expand, not a
+    // hwloop-private scavenger. AIE writes dedicated LC; Haydn remats to GPR.
     MachineBasicBlock::iterator InsertPt = LS->getIterator();
-    Register CountForSet = TripReg;
-    if (Adj != 0 && TripReg.isPhysical() && TripReg != Haydn::R0) {
-      const TargetRegisterInfo &TRI = *MF.getSubtarget().getRegisterInfo();
-      const MachineRegisterInfo &MRI = MF.getRegInfo();
-
-      LivePhysRegs LPR(TRI);
-      LPR.addLiveOuts(*Preheader);
-      for (MachineBasicBlock::iterator II = Preheader->end(); II != InsertPt;) {
-        --II;
-        LPR.stepBackward(*II);
-      }
-
-      // Dest for (src + adj). Prefer free GPR != TripReg. Only reuse TripReg
-      // when it is dead at the insert point (true in-place then).
-      static constexpr MCPhysReg ScratchPri[] = {
-          Haydn::R1, Haydn::R2,  Haydn::R3,  Haydn::R4, Haydn::R5, Haydn::R6,
-          Haydn::R7, Haydn::R11, Haydn::R10, Haydn::R9, Haydn::R8,
-      };
-      Register Dest;
-      for (MCPhysReg Cand : ScratchPri) {
-        if (Cand == TripReg || MRI.isReserved(Cand))
-          continue;
-        if (LPR.available(MRI, Cand)) {
-          Dest = Cand;
-          break;
-        }
-      }
-      if (!Dest && LPR.available(MRI, TripReg))
-        Dest = TripReg;
-      if (!Dest) {
-        // No dead scratch: still must not clobber TripReg. Overwrite some
-        // other GPR (last resort — preserves N / outer bound).
-        for (MCPhysReg Cand : ScratchPri) {
-          if (Cand != TripReg && !MRI.isReserved(Cand)) {
-            Dest = Cand;
-            break;
-          }
-        }
-        assert(Dest && Dest != TripReg);
-        LLVM_DEBUG(dbgs() << "HaydnHWLoops: Role A adj: no dead scratch; "
-                             "overwriting "
-                          << printReg(Dest) << " (TripReg preserved)\n");
-      }
-
-      BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::ADDI32_W), Dest)
-          .addReg(TripReg)
-          .addImm(Adj);
-      CountForSet = Dest;
-      LLVM_DEBUG(dbgs() << "HaydnHWLoops: Role A expand adj=" << Adj
-                        << " src=" << printReg(TripReg)
-                        << " count=" << printReg(CountForSet)
-                        << " (AIE-like preserve src)\n");
-    }
-
-    // Innermost ZOL uses sel=1 (same convention as Role A skip path).
     MachineInstr *SetMI =
         BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP_REG))
             .addImm(/*Sel=*/1)
             .addMBB(Header)
             .addMBB(Latch)
-            .addReg(CountForSet);
+            .addReg(TripReg);
 
-    // t−3: only deficit NOPs after SET (layout-owned). Pre-existing post-LS
-    // work (rare pre-expand) stays after SET; Fixup may demote if range-bad.
+    // t−3 pads while SET is still top-level (safe MBB::iterator). Remat
+    // below inserts ADDI before SET and glues the pair; pads stay after.
     {
       unsigned FollowingBundles = 0;
       for (MachineBasicBlock::iterator I = std::next(SetMI->getIterator()),
@@ -607,6 +550,14 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
         LLVM_DEBUG(dbgs() << "HaydnHWLoops: Role A expand t−3 pad " << Deficit
                           << " NOP bundle(s)\n");
       }
+    }
+
+    if (Adj != 0 && TripReg.isPhysical() && TripReg != Haydn::R0) {
+      Register Count =
+          rematerializeAddImmForUse(*SetMI, /*UseOpIdx=*/3, Adj);
+      LLVM_DEBUG(dbgs() << "HaydnHWLoops: Role A count remat adj=" << Adj
+                        << " src=" << printReg(TripReg)
+                        << " dest=" << printReg(Count) << "\n");
     }
 
     // Body length is not a legality floor (BEGIN <= END is valid; t−3 is

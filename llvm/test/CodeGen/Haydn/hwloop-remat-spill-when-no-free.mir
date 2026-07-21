@@ -1,0 +1,57 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+#
+# When every preferred GPR is live at LoopStart, remat must spill/restore
+# (never silent clobber). Src $r1 stays un-redefined in-place.
+#
+# CHECK-LABEL: name: remat_spill_no_free
+# Live GPRs force NeedsSpill — ST32 of chosen scratch before ADDI, LD32 after SET.
+# CHECK: ST32
+# CHECK: $r{{[0-9]+}} = ADDI32_W $r1, -1
+# CHECK-NOT: $r1 = ADDI32_W $r1, -1
+# CHECK: SET_HWLOOP_REG
+# CHECK: LD32
+
+--- |
+  define dso_local void @remat_spill_no_free(i32 %n, ptr %p) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            remat_spill_no_free
+tracksRegLiveness: true
+noVRegs:         true
+stack:
+  - { id: 0, name: '', type: spill-slot, offset: -4, size: 4, alignment: 4 }
+body:             |
+  bb.0.entry:
+    ; All R1–R11 live-out so scavenger finds no free scratch.
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    LoopStart $r1, -1
+    NOP
+    NOP
+    NOP
+
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r15
+
+    $r2 = ADD32 $r2, $r3
+    $r4 = ADD32 $r4, $r5
+    $r6 = ADD32 $r6, $r7
+    $r8 = ADD32 $r8, $r9
+    $r10 = ADD32 $r10, $r11
+    PseudoLoopEnd %bb.1
+
+  bb.2.exit:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r15
+    $r0 = JALR_W $r15, 0, implicit $r15

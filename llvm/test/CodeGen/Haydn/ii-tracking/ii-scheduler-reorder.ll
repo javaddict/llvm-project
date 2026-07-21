@@ -47,11 +47,11 @@
 ; CHECK: 	{ 	ld32	r4, r1, 0; 	ld32	r5, r2, 0; 	nop }
 ; CHECK: 	{ 	ld32	r6, r3, 0; 	add32	r7, r4, r5; 	nop }
 ; CHECK: 	{ 	st32	r7, r1, 0; 	add32	r5, r5, r6; 	nop }
-; CHECK: 	{ 	st32	r5, r2, 0; 	add32	r4, r4, r6; 	nop }
-; CHECK: 	{ 	st32	r4, r3, 0; 	addi32	r3, r3, 4; 	addi32	r2, r2, 4 }
+; CHECK: 	{ 	add32	r4, r4, r6; 	addi32	r1, r1, 4; 	nop }
+; CHECK: 	{ 	st32	r5, r2, 0; 	addi32	r2, r2, 4; 	nop }
 ; CHECK: 	.p2align	2
 ; CHECK: .LLhwloop_end0:
-; CHECK: 	{ 	addi32	r1, r1, 4 }
+; CHECK: 	{ 	st32.post	r4, r3, 1 }
 ; CHECK: // %bb.2:                               // %exit
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	sp, sp, 8 }

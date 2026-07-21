@@ -14,6 +14,7 @@
 #define LLVM_LIB_TARGET_HAYDN_HAYDNMACHINEFUNCTIONINFO_H
 
 #include "HaydnAlternateDescriptors.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/CodeGen/MachineFunction.h"
 
 namespace llvm {
@@ -76,6 +77,22 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   HaydnAlternateDescriptors AltDescs;
 
 public:
+  /// SMS result for release `#<swps>` asm comments (HiFi-like). Keyed by
+  /// kernel / loop-header MBB number (stable across ModuloSchedule expand).
+  struct SMSSWPSInfo {
+    unsigned ResMII = 0;
+    unsigned RecMII = 0;
+    unsigned MII = 0;
+    unsigned StageCount = 0;
+    unsigned NumOps = 0;
+    unsigned ScheduledII = 0;
+  };
+
+private:
+  // Key by MBB pointer (stable through layout; numbers are renumbered).
+  DenseMap<const MachineBasicBlock *, SMSSWPSInfo> SMSLoopInfos;
+
+public:
   HaydnMachineFunctionInfo(const Function &F, const TargetSubtargetInfo *STI);
 
   MachineFunctionInfo *
@@ -127,6 +144,14 @@ public:
   // finalizer reads.
   HaydnAlternateDescriptors &getAltDescs() { return AltDescs; }
   const HaydnAlternateDescriptors &getAltDescs() const { return AltDescs; }
+
+  void recordSMSLoop(const MachineBasicBlock *KernelBB, SMSSWPSInfo Info) {
+    SMSLoopInfos[KernelBB] = Info;
+  }
+  const SMSSWPSInfo *getSMSLoop(const MachineBasicBlock *KernelBB) const {
+    auto It = SMSLoopInfos.find(KernelBB);
+    return It == SMSLoopInfos.end() ? nullptr : &It->second;
+  }
 };
 
 } // namespace llvm

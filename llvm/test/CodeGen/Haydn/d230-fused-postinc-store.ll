@@ -39,14 +39,11 @@
 ; HaydnExpandPostIncEarly must emit the fused ST32_POST / ST64_POST.
 
 ; MIR checks (post-expand-post-inc-early)
-; Dual-sched rebaseline : intentional form is ST + ADDI32 (stride
-; matching element size), not fused ST32_POST / ST64_POST. Contract: store +
-; base bump present with correct stride.
+; Product form: fused ST32_POST / ST64_POST for encodable store strides.
 
-; @stream_store_i32: ST32 + ADDI32 stride 4.
+; @stream_store_i32: ST32_POST imm6=1 (stride 4).
 ; MIR-LABEL: name: stream_store_i32
-; MIR-DAG: ST32
-; MIR-DAG: ADDI32 {{.*}}, 4
+; MIR: ST32_POST
 define void @stream_store_i32(ptr %out, i32 %n) nounwind {
 entry:
   %cmp0 = icmp sgt i32 %n, 0
@@ -65,12 +62,11 @@ exit:
   ret void
 }
 
-; @stream_store_i64: ST64 + ADDI32 stride 8. The mula64 intrinsic produces a
-; real i64 that must be stored via ST64 (not split into two ST32).
+; @stream_store_i64: ST64_POST imm6=1 (stride 8). The mula64 intrinsic produces a
+; real i64 that must be stored via ST64 path (not split into two ST32).
 declare i64 @llvm.haydn.mula64.ss.ll(i64, i64, i64)
 ; MIR-LABEL: name: stream_store_i64
-; MIR-DAG: ST64
-; MIR-DAG: ADDI32 {{.*}}, 8
+; MIR: ST64_POST
 define void @stream_store_i64(ptr %out, i32 %n) nounwind {
 entry:
   %cmp0 = icmp sgt i32 %n, 0
@@ -90,10 +86,9 @@ exit:
   ret void
 }
 
-; @stream_store_i32_stride8: ST32 + ADDI32 stride 8.
+; @stream_store_i32_stride8: ST32_POST imm6=2 (stride 8).
 ; MIR-LABEL: name: stream_store_i32_stride8
-; MIR-DAG: ST32
-; MIR-DAG: ADDI32 {{.*}}, 8
+; MIR: ST32_POST
 define void @stream_store_i32_stride8(ptr %out, i32 %n) nounwind {
 entry:
   %cmp0 = icmp sgt i32 %n, 0
@@ -113,9 +108,8 @@ exit:
 }
 
 ; ASM checks (final assembly)
-; Dual-sched: co-packed st + addi32 (post-inc semantics via packet).
 
 ; ASM-LABEL: stream_store_i32:
-; ASM: st32{{.*}};{{.*}}addi32{{(_w)?}}
+; ASM: st32.post
 ; ASM-LABEL: stream_store_i64:
-; ASM: st64{{.*}};{{.*}}addi32{{(_w)?}}
+; ASM: st64.post

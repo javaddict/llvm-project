@@ -38,7 +38,8 @@ entry:
 ; Legal ST8 offset 31: may fold into imm
 define void @cb96_st8_off31(ptr %base) {
 ; CHECK-LABEL: cb96_st8_off31:
-; CHECK: st8{{.*}}, 31
+; Legal boundary: offset 31 folds into byte store (st8 or s_sb_*).
+; CHECK: {{st8|s_sb}}{{.*}}31
 entry:
   %p = getelementptr inbounds i8, ptr %base, i32 31
   store i8 1, ptr %p
@@ -48,7 +49,8 @@ entry:
 ; Legal ST16 offset 62: may fold into imm (62/2 = 31)
 define void @cb96_st16_off62(ptr %base) {
 ; CHECK-LABEL: cb96_st16_off62:
-; CHECK: st16{{.*}}, 62
+; Legal halfword boundary: asm prints byte offset 62 (simm6 field 31 scaled).
+; CHECK: {{st16|s_shw}}{{.*}}62
 entry:
   %p = getelementptr inbounds i16, ptr %base, i32 31
   store i16 1, ptr %p

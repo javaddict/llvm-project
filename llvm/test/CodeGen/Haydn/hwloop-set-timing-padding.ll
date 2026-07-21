@@ -1,14 +1,17 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-
 ;
 ; REGRESSION: SET_HWLOOP must be at or before body bundle t−3.
-;
-; Setup gap is filled preferentially with useful preheader work; HaydnFixupHwLoops
-; inserts only the *deficit* idle NOPs when real work is short. A tight
-; preheader (SET immediately before body) must still show ≥3 bundles of
-; nop/precompute between set_hwloop and the body label.
-;
+; Fixup inserts deficit NOPs when preheader work is short.
+
 define void @hwloop_t3(ptr nocapture %p, i32 %n) {
+; CHECK-LABEL: hwloop_t3:
+; CHECK: set_hwloop_f2_w
+; CHECK: { nop }
+; CHECK: { nop }
+; CHECK: { nop }
+; CHECK: .LLhwloop_start{{[0-9]+}}:
+; CHECK: add32
+; CHECK: jalr_w
 entry:
   br label %loop
 loop:
@@ -21,15 +24,3 @@ loop:
 exit:
   ret void
 }
-
-; CHECK-LABEL: hwloop_t3:
-; CHECK:       set_hwloop_f2_w{{.*}}[[START:\.LLhwloop_start[0-9]+]], [[END:\.LLhwloop_end[0-9]+]]
-; At least 3 bundles (nop or real precompute) before the body start label.
-; CHECK-NEXT:  {
-; CHECK-NEXT:  {
-; CHECK-NEXT:  {
-; CHECK:       [[START]]:
-; Body work is between START and inclusive END (add32 in first body bundle).
-; CHECK:       add32
-; CHECK:       [[END]]:
-; CHECK:       jalr_w

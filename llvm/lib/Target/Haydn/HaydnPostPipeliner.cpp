@@ -30,12 +30,12 @@
 #include "Haydn.h"
 #include "HaydnHazardRecognizer.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnPostRAScratch.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
@@ -500,56 +500,15 @@ void HaydnPostPipeliner::adjustTripCount(int Delta) const {
     return;
   }
 
-  // Form B — SET_HWLOOP_REG: sel, start, end, rs(count). AIE peer writes the
-  // adjusted count into LC without clobbering the source GPR. Haydn has no LC
-  // never ADDI in-place into Cnt when it may still be live (outer N). Rewrite
-  // the SET operand to a fresh dead GPR holding Cnt+Delta when possible.
+  // Form B — SET_HWLOOP_REG count adjust: general post-RA remat (not
+  // hwloop-private). AIE writes LC; Haydn rematerializeAddImmForUse.
   if (Opc == Haydn::SET_HWLOOP_REG) {
     assert(TripCountDef->getOperand(3).isReg());
     Register Cnt = TripCountDef->getOperand(3).getReg();
-    MachineFunction &MF = *Preheader->getParent();
-    const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
-    const TargetRegisterInfo &TRI = *MF.getSubtarget().getRegisterInfo();
-    const MachineRegisterInfo &MRI = MF.getRegInfo();
-    DebugLoc DL = TripCountDef->getDebugLoc();
-    MachineBasicBlock::iterator InsertPt = TripCountDef->getIterator();
-
-    LivePhysRegs LPR(TRI);
-    LPR.addLiveOuts(*Preheader);
-    for (MachineBasicBlock::iterator II = Preheader->end(); II != InsertPt;) {
-      --II;
-      LPR.stepBackward(*II);
-    }
-
-    static constexpr MCPhysReg ScratchPri[] = {
-        Haydn::R1, Haydn::R2,  Haydn::R3,  Haydn::R4, Haydn::R5, Haydn::R6,
-        Haydn::R7, Haydn::R11, Haydn::R10, Haydn::R9, Haydn::R8,
-    };
-    Register Dest;
-    for (MCPhysReg Cand : ScratchPri) {
-      if (Cand == Cnt || MRI.isReserved(Cand))
-        continue;
-      if (LPR.available(MRI, Cand)) {
-        Dest = Cand;
-        break;
-      }
-    }
-    if (!Dest && LPR.available(MRI, Cnt))
-      Dest = Cnt;
-    if (!Dest) {
-      for (MCPhysReg Cand : ScratchPri) {
-        if (Cand != Cnt && !MRI.isReserved(Cand)) {
-          Dest = Cand;
-          break;
-        }
-      }
-    }
-    assert(Dest);
-    BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::ADDI32_W), Dest)
-        .addReg(Cnt)
-        .addImm(Delta);
-    if (Dest != Cnt)
-      TripCountDef->getOperand(3).setReg(Dest);
+    if (!Cnt.isPhysical() || Cnt == Haydn::R0 || Delta == 0)
+      return;
+    Register Dest =
+        rematerializeAddImmForUse(*TripCountDef, /*UseOpIdx=*/3, Delta);
     LLVM_DEBUG(dbgs() << "HaydnPostPipeliner: SET_HWLOOP_REG cnt "
                       << printReg(Cnt) << " + " << Delta << " -> "
                       << printReg(Dest) << "\n");

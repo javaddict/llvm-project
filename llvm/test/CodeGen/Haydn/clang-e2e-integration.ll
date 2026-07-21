@@ -601,8 +601,8 @@ define i32 @two_globals() {
 ; C: int struct_read(struct point *p) { return p->x + p->y; }
 define i32 @struct_read(ptr %p) {
 ; CHECK-LABEL: struct_read:
-; CHECK-DAG: ld32
-; CHECK-DAG: ld32
+; Field loads may be ld32 or fused s_lw_* forms.
+; CHECK-DAG: {{ld32|s_lw}}
 ; CHECK-DAG: add32
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %x = load i32, ptr %p
@@ -631,10 +631,9 @@ define void @struct_write(ptr %p, i32 %x, i32 %y) {
 ; }
 define void @struct_copy(ptr %dst, ptr %src) {
 ; CHECK-LABEL: struct_copy:
-; CHECK-DAG: ld32
-; CHECK-DAG: st32
-; CHECK-DAG: ld32
-; CHECK-DAG: st32
+; Field copy may use ld32/st32 or fused s_lw_*/s_sw_* forms.
+; CHECK-DAG: {{ld32|s_lw}}
+; CHECK-DAG: {{st32|s_sw}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %sx = load i32, ptr %src
   store i32 %sx, ptr %dst

@@ -18,6 +18,7 @@
 
 #include "HaydnPostLegalizerCombiner.h"
 #include "HaydnSubtarget.h"
+#include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/GlobalISel/CSEInfo.h"
 #include "llvm/CodeGen/GlobalISel/Combiner.h"
 #include "llvm/CodeGen/GlobalISel/CombinerHelper.h"
@@ -30,6 +31,7 @@
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 
 #define GET_GICOMBINER_DEPS
@@ -40,6 +42,33 @@
 
 using namespace llvm;
 using namespace MIPatternMatch;
+
+// Product AIE-style form (GISel post-legalizer): G_LOAD/STORE + G_PTR_ADD
+// → G_HAYDN_*INC_* → AGU PRE/POST at InstructionSelect.
+// Modeled on llvm-aie AIECombinerHelper::findPostIncMatch /
+// checkRegUsesDominate (aie-postinc-combine default ON;
+// aie-greedy-address-combines default OFF).
+// All of PRE/POST/IMM/REG default ON. Sole product AGU fuse path (FormUpdateAddr retired).
+static cl::opt<bool> EnableHaydnGISelUpdateAddr(
+    "haydn-enable-gisel-update-addr", cl::init(true), cl::Hidden,
+    cl::desc("Enable GISel AGU update-addr form (PRE+POST, IMM+REG). "
+             "Default ON. Disable: -haydn-enable-gisel-update-addr=0."));
+static cl::opt<bool> EnableHaydnGISelPostInc(
+    "haydn-enable-gisel-post-inc", cl::init(true), cl::Hidden,
+    cl::desc("GISel form POST-inc/dec. Default ON (AIE aie-postinc-combine)."));
+static cl::opt<bool> EnableHaydnGISelPreInc(
+    "haydn-enable-gisel-pre-inc", cl::init(true), cl::Hidden,
+    cl::desc("GISel form PRE-inc/dec. Default ON."));
+static cl::opt<bool> EnableHaydnGISelRegStride(
+    "haydn-enable-gisel-reg-stride", cl::init(true), cl::Hidden,
+    cl::desc("GISel form non-const (REG) stride. Default ON."));
+// AIE aie-greedy-address-combines: default OFF. When false, require every
+// use of the pre-update base to dominate the insertion point (ignore the
+// folded G_PTR_ADD). When true, fuse even if base is used later (unsafe).
+static cl::opt<bool> EnableHaydnGISelGreedyAddr(
+    "haydn-enable-gisel-greedy-addr", cl::init(false), cl::Hidden,
+    cl::desc("GISel form: allow fuse when base is used after insert "
+             "(AIE greedy; default OFF)."));
 
 namespace {
 
@@ -1929,6 +1958,362 @@ void applySelectToMinMax(MachineInstr &MI, MachineRegisterInfo &MRI,
 }
 
 //===----------------------------------------------------------------------===//
+// AIE-style pre/post-inc/dec: G_LOAD/STORE + G_PTR_ADD → G_HAYDN_*INC_*
+//===----------------------------------------------------------------------===//
+
+struct HaydnIncMemInfo {
+  MachineInstr *MemI = nullptr;
+  MachineInstr *PtrAddI = nullptr;
+  Register Data;     // load dest or store src
+  Register Base;     // pointer before update
+  Register NewPtr;   // G_PTR_ADD def (= writeback)
+  Register OffsetReg;
+  int64_t OffsetBytes = 0;
+  unsigned ScaleShift = 0; // 0=byte,1=half,2=word,3=dword
+  unsigned MemBytes = 0;   // access size 1/2/4/8
+  bool IsSExtLoad = false; // i8/i16 signed load (LBS/LHWS)
+  bool IsPost = true;
+  bool IsLoad = true;
+  bool IsRegStride = false; // offset is non-const reg
+};
+
+// Const byte offset from G_PTR_ADD's offset operand (G_CONSTANT / G_CONSTANT
+// through copies). Returns false if not a compile-time constant.
+static bool getPtrAddConstBytes(const MachineInstr &PtrAdd,
+                                MachineRegisterInfo &MRI, int64_t &Bytes) {
+  if (PtrAdd.getOpcode() != TargetOpcode::G_PTR_ADD)
+    return false;
+  Register Off = PtrAdd.getOperand(2).getReg();
+  auto C = getIConstantVRegValWithLookThrough(Off, MRI);
+  if (!C)
+    return false;
+  Bytes = C->Value.getSExtValue();
+  return true;
+}
+
+static bool strideFitsScaledImm6(int64_t Bytes, unsigned ScaleShift) {
+  int64_t Step = int64_t(1) << ScaleShift;
+  if (Bytes % Step != 0)
+    return false;
+  return isInt<6>(Bytes >> ScaleShift);
+}
+
+// Access size + scale from MMO (preferred) or data LLT. Covers i8/i16/i32/i64.
+static bool memAccessInfo(const MachineInstr &MemI, MachineRegisterInfo &MRI,
+                          unsigned &MemBytes, unsigned &ScaleShift,
+                          bool &IsSExtLoad) {
+  IsSExtLoad = MemI.getOpcode() == TargetOpcode::G_SEXTLOAD;
+  uint64_t Sz = 0;
+  if (!MemI.memoperands_empty()) {
+    auto SzOpt = (*MemI.memoperands_begin())->getSize();
+    if (SzOpt.hasValue())
+      Sz = SzOpt.getValue();
+  }
+  if (Sz == 0) {
+    LLT Ty = MRI.getType(MemI.getOperand(0).getReg());
+    if (!Ty.isValid() || Ty.isPointer() || Ty.isVector())
+      return false;
+    Sz = Ty.getSizeInBits() / 8;
+  }
+  switch (Sz) {
+  case 1:
+    MemBytes = 1;
+    ScaleShift = 0;
+    return true;
+  case 2:
+    MemBytes = 2;
+    ScaleShift = 1;
+    return true;
+  case 4:
+    MemBytes = 4;
+    ScaleShift = 2;
+    return true;
+  case 8:
+    MemBytes = 8;
+    ScaleShift = 3;
+    return true;
+  default:
+    return false;
+  }
+}
+
+// True if no instruction strictly between A and B (same MBB) is a mem op or
+// defs NewPtr (other than PtrAdd).
+static bool gapSafeForInc(MachineInstr &A, MachineInstr &B, Register NewPtr,
+                          MachineRegisterInfo &MRI) {
+  if (A.getParent() != B.getParent())
+    return false;
+  MachineBasicBlock::iterator Begin = A.getIterator();
+  MachineBasicBlock::iterator End = B.getIterator();
+  if (std::distance(A.getParent()->begin(), Begin) >
+      std::distance(A.getParent()->begin(), End))
+    std::swap(Begin, End);
+  for (auto I = std::next(Begin); I != End; ++I) {
+    if (I->isDebugInstr())
+      continue;
+    if (I->mayLoadOrStore())
+      return false;
+    if (I->definesRegister(NewPtr, /*TRI=*/nullptr))
+      return false;
+  }
+  return true;
+}
+
+// AIE CombinerHelper::checkRegUsesDominate — every non-dbg use of Reg must
+// dominate Instr, except IgnoreUser (the folded G_PTR_ADD). Ensures the
+// original pointer is not needed after the fused insert point.
+static bool checkRegUsesDominate(Register Reg, MachineInstr &Instr,
+                                 MachineInstr &IgnoreUser,
+                                 MachineRegisterInfo &MRI,
+                                 const CombinerHelper &Helper) {
+  for (MachineInstr &Use : MRI.use_nodbg_instructions(Reg)) {
+    if (&Use == &IgnoreUser)
+      continue;
+    if (!Helper.dominates(Use, Instr))
+      return false;
+  }
+  return true;
+}
+
+static bool matchPostIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
+                            const CombinerHelper &Helper,
+                            HaydnIncMemInfo &Info) {
+  const bool IsLoad = MemI.getOpcode() == TargetOpcode::G_LOAD ||
+                      MemI.getOpcode() == TargetOpcode::G_ZEXTLOAD;
+  // G_SEXTLOAD: not fused (no signedness on G_HAYDN_*INC_*; would select LBU/LHWU).
+  if (!IsLoad && MemI.getOpcode() != TargetOpcode::G_STORE)
+    return false;
+
+  unsigned MemBytes = 0, Scale = 0;
+  bool IsSExt = false;
+  if (!memAccessInfo(MemI, MRI, MemBytes, Scale, IsSExt))
+    return false;
+  // G_LOAD/G_ZEXTLOAD → unsigned byte/half forms at select.
+  IsSExt = false;
+
+  Register Data = MemI.getOperand(0).getReg();
+  Register Base = MemI.getOperand(1).getReg();
+  if (!Base.isVirtual())
+    return false;
+  if (IsLoad && Data == Base)
+    return false;
+
+  // Find G_PTR_ADD Base, Off that is dominated by Mem (post) and uses Base.
+  for (MachineInstr &U : MRI.use_nodbg_instructions(Base)) {
+    if (U.getOpcode() != TargetOpcode::G_PTR_ADD)
+      continue;
+    if (U.getOperand(1).getReg() != Base)
+      continue;
+    if (U.getParent() != MemI.getParent())
+      continue;
+    // Post: Mem dominates PtrAdd (Mem before PtrAdd).
+    if (!Helper.dominates(MemI, U))
+      continue;
+
+    Register OffReg = U.getOperand(2).getReg();
+    int64_t Bytes = 0;
+    bool IsReg = !getPtrAddConstBytes(U, MRI, Bytes);
+    if (IsReg && !EnableHaydnGISelRegStride)
+      continue;
+    if (!IsReg && !strideFitsScaledImm6(Bytes, Scale))
+      continue;
+
+    Register NewPtr = U.getOperand(0).getReg();
+    if (IsLoad && Data == NewPtr)
+      continue;
+    if (!IsLoad && Data == NewPtr)
+      continue;
+    if (!gapSafeForInc(MemI, U, NewPtr, MRI))
+      continue;
+
+    // Between Mem and PtrAdd, Base should not be redefined.
+    bool BaseClobbered = false;
+    for (auto I = std::next(MemI.getIterator()); I != U.getIterator(); ++I) {
+      if (I->modifiesRegister(Base, /*TRI=*/nullptr)) {
+        BaseClobbered = true;
+        break;
+      }
+    }
+    if (BaseClobbered)
+      continue;
+
+    // REG stride must dominate Mem (we insert fused op at Mem).
+    if (IsReg) {
+      MachineInstr *OffDef = MRI.getVRegDef(OffReg);
+      if (!OffDef || !Helper.dominates(*OffDef, MemI))
+        continue;
+    }
+
+    // AIE: only combine if original pointer is not used after insert point
+    // (all uses dominate insert; ignore the folded ptradd). Greedy opt-in.
+    if (!EnableHaydnGISelGreedyAddr &&
+        !checkRegUsesDominate(Base, MemI, /*IgnoreUser=*/U, MRI, Helper))
+      continue;
+
+    // Updated pointer must be used (otherwise fold is dead).
+    if (MRI.use_nodbg_empty(NewPtr))
+      continue;
+
+    Info.MemI = &MemI;
+    Info.PtrAddI = &U;
+    Info.Data = Data;
+    Info.Base = Base;
+    Info.NewPtr = NewPtr;
+    Info.OffsetReg = OffReg;
+    Info.OffsetBytes = Bytes;
+    Info.ScaleShift = Scale;
+    Info.MemBytes = MemBytes;
+    Info.IsSExtLoad = IsSExt;
+    Info.IsPost = true;
+    Info.IsLoad = IsLoad;
+    Info.IsRegStride = IsReg;
+    return true;
+  }
+  return false;
+}
+
+static bool matchPreIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
+                           const CombinerHelper &Helper, HaydnIncMemInfo &Info) {
+  const bool IsLoad = MemI.getOpcode() == TargetOpcode::G_LOAD ||
+                      MemI.getOpcode() == TargetOpcode::G_ZEXTLOAD;
+  if (!IsLoad && MemI.getOpcode() != TargetOpcode::G_STORE)
+    return false;
+
+  unsigned MemBytes = 0, Scale = 0;
+  bool IsSExt = false;
+  if (!memAccessInfo(MemI, MRI, MemBytes, Scale, IsSExt))
+    return false;
+  IsSExt = false;
+
+  Register Data = MemI.getOperand(0).getReg();
+  Register MemBase = MemI.getOperand(1).getReg();
+  if (!MemBase.isVirtual())
+    return false;
+
+  MachineInstr *PtrAdd = MRI.getVRegDef(MemBase);
+  if (!PtrAdd || PtrAdd->getOpcode() != TargetOpcode::G_PTR_ADD)
+    return false;
+  if (PtrAdd->getParent() != MemI.getParent())
+    return false;
+  // Pre: PtrAdd dominates Mem.
+  if (!Helper.dominates(*PtrAdd, MemI))
+    return false;
+
+  Register Base = PtrAdd->getOperand(1).getReg();
+  Register NewPtr = PtrAdd->getOperand(0).getReg();
+  if (NewPtr != MemBase)
+    return false;
+
+  Register OffReg = PtrAdd->getOperand(2).getReg();
+  int64_t Bytes = 0;
+  bool IsReg = !getPtrAddConstBytes(*PtrAdd, MRI, Bytes);
+  if (IsReg && !EnableHaydnGISelRegStride)
+    return false;
+  if (!IsReg && !strideFitsScaledImm6(Bytes, Scale))
+    return false;
+  if (!gapSafeForInc(*PtrAdd, MemI, NewPtr, MRI))
+    return false;
+
+  // No use of NewPtr strictly between PtrAdd and Mem (PRE inserts at Mem;
+  // NewPtr's def moves from PtrAdd to the fused op at Mem).
+  for (auto I = std::next(PtrAdd->getIterator()); I != MemI.getIterator();
+       ++I) {
+    if (I->readsRegister(NewPtr, /*TRI=*/nullptr))
+      return false;
+  }
+
+  // Load dest must not alias base/writeback (tied AGU forms).
+  if (IsLoad && (Data == Base || Data == NewPtr))
+    return false;
+  // Store data must not be the writeback vreg (would be a self-ref on PRE).
+  if (!IsLoad && Data == NewPtr)
+    return false;
+
+  // PRE is emitted at Mem (see applyIncMem). Store data / load is already
+  // at Mem; Base and OffReg are used by PtrAdd which dominates Mem — OK.
+  // Reject if Base is redefined between PtrAdd and Mem.
+  for (auto I = std::next(PtrAdd->getIterator()); I != MemI.getIterator();
+       ++I) {
+    if (I->modifiesRegister(Base, /*TRI=*/nullptr))
+      return false;
+  }
+
+  // AIE-style base liveness at insert point (Mem). Ignore folded PtrAdd.
+  if (!EnableHaydnGISelGreedyAddr &&
+      !checkRegUsesDominate(Base, MemI, /*IgnoreUser=*/*PtrAdd, MRI, Helper))
+    return false;
+
+  Info.MemI = &MemI;
+  Info.PtrAddI = PtrAdd;
+  Info.Data = Data;
+  Info.Base = Base;
+  Info.NewPtr = NewPtr;
+  Info.OffsetReg = OffReg;
+  Info.OffsetBytes = Bytes;
+  Info.ScaleShift = Scale;
+  Info.MemBytes = MemBytes;
+  Info.IsSExtLoad = IsSExt;
+  Info.IsPost = false;
+  Info.IsLoad = IsLoad;
+  Info.IsRegStride = IsReg;
+  return true;
+}
+
+static void applyIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
+                        MachineIRBuilder &B, GISelChangeObserver &Observer,
+                        HaydnIncMemInfo &Info) {
+  // Always insert at the memory op. PRE used to insert at G_PTR_ADD, which
+  // hoisted store-data uses above their defs when %data was defined between
+  // ptradd and store (coremark core_main: S_SW_PRE_IMM LiveIntervals
+  // "Use not jointly dominated by defs"). Same-MBB matcher already forbids
+  // NewPtr uses between PtrAdd and Mem, so moving the NewPtr def down to Mem
+  // is SSA-safe.
+  B.setInstrAndDebugLoc(MemI);
+
+  // IMM strides: always emit a fresh G_CONSTANT at the insert point so the
+  // offset use is dominated (CSE may leave the original constant *after* the
+  // load). REG strides keep OffsetReg (must already dominate PtrAdd/Mem).
+  Register OffsetUse = Info.OffsetReg;
+  if (!Info.IsRegStride) {
+    auto Cst = B.buildConstant(LLT::scalar(32), Info.OffsetBytes);
+    OffsetUse = Cst.getReg(0);
+  }
+
+  unsigned Opc;
+  if (Info.IsLoad)
+    Opc = Info.IsPost ? Haydn::G_HAYDN_POSTINC_LOAD : Haydn::G_HAYDN_PREINC_LOAD;
+  else
+    Opc =
+        Info.IsPost ? Haydn::G_HAYDN_POSTINC_STORE : Haydn::G_HAYDN_PREINC_STORE;
+
+  MachineInstrBuilder MIB = B.buildInstr(Opc);
+  if (Info.IsLoad) {
+    MIB.addDef(Info.Data);
+    MIB.addDef(Info.NewPtr);
+    MIB.addUse(Info.Base);
+    MIB.addUse(OffsetUse);
+  } else {
+    MIB.addDef(Info.NewPtr);
+    MIB.addUse(Info.Data);
+    MIB.addUse(Info.Base);
+    MIB.addUse(OffsetUse);
+  }
+  for (auto *MMO : MemI.memoperands())
+    MIB.addMemOperand(MMO);
+
+  LLVM_DEBUG(dbgs() << "Haydn postleg combine " << (Info.IsPost ? "POST" : "PRE")
+                    << (Info.IsLoad ? "INC_LOAD" : "INC_STORE")
+                    << " stride=" << Info.OffsetBytes
+                    << (Info.IsRegStride ? " REG" : " IMM") << "\n  -> "
+                    << *MIB);
+
+  Observer.erasingInstr(*Info.PtrAddI);
+  Info.PtrAddI->eraseFromParent();
+  Observer.erasingInstr(MemI);
+  MemI.eraseFromParent();
+}
+
+//===----------------------------------------------------------------------===//
 // HaydnPostLegalizerCombinerImpl
 //===----------------------------------------------------------------------===//
 
@@ -1988,6 +2373,29 @@ bool HaydnPostLegalizerCombinerImpl::tryCombineAll(MachineInstr &MI) const {
   switch (Opc) {
   default:
     break;
+  case TargetOpcode::G_LOAD:
+  case TargetOpcode::G_ZEXTLOAD:
+  case TargetOpcode::G_STORE: {
+    // AIE-style: fuse G_LOAD/STORE + G_PTR_ADD into G_HAYDN_*INC_* so
+    // InstructionSelect emits fused AGU writeback. Default ON
+    // (-haydn-enable-gisel-update-addr). G_SEXTLOAD intentionally omitted:
+    // selector always emits LBU/LHWU for 1/2-byte fused loads (no signedness
+    // on G_HAYDN_*INC_* yet).
+    if (EnableHaydnGISelUpdateAddr) {
+      HaydnIncMemInfo Info;
+      bool Matched = false;
+      if (EnableHaydnGISelPostInc && matchPostIncMem(MI, MRI, Helper, Info))
+        Matched = true;
+      else if (EnableHaydnGISelPreInc &&
+               matchPreIncMem(MI, MRI, Helper, Info))
+        Matched = true;
+      if (Matched) {
+        applyIncMem(MI, MRI, B, Observer, Info);
+        return true;
+      }
+    }
+    break;
+  }
   case TargetOpcode::G_TRUNC: {
     // G_TRUNC(G_ANYEXT x) -> COPY x
     // Eliminates trivial trunc-of-anyext identity patterns.

@@ -1349,6 +1349,140 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     return true;
   }
 
+  // AIE-style fused pre/post-inc/dec memory (gMIR → AGU writeback).
+  // Formed by HaydnPostLegalizerCombiner from G_LOAD/STORE + G_PTR_ADD.
+  // Imm stride → *_POST/PRE_IMM; non-const offset → *_POST/PRE_REG.
+  // Access size from MMO (1/2/4/8): byte/half/word/dword forms.
+  case Haydn::G_HAYDN_POSTINC_LOAD:
+  case Haydn::G_HAYDN_PREINC_LOAD:
+  case Haydn::G_HAYDN_POSTINC_STORE:
+  case Haydn::G_HAYDN_PREINC_STORE: {
+    const bool IsLoad = Opcode == Haydn::G_HAYDN_POSTINC_LOAD ||
+                        Opcode == Haydn::G_HAYDN_PREINC_LOAD;
+    const bool IsPost = Opcode == Haydn::G_HAYDN_POSTINC_LOAD ||
+                        Opcode == Haydn::G_HAYDN_POSTINC_STORE;
+
+    Register Data, PtrOut, Base, OffsetReg;
+    if (IsLoad) {
+      Data = I.getOperand(0).getReg();
+      PtrOut = I.getOperand(1).getReg();
+      Base = I.getOperand(2).getReg();
+      OffsetReg = I.getOperand(3).getReg();
+    } else {
+      PtrOut = I.getOperand(0).getReg();
+      Data = I.getOperand(1).getReg();
+      Base = I.getOperand(2).getReg();
+      OffsetReg = I.getOperand(3).getReg();
+    }
+
+    // Access width from MMO (handles s8/s16 loaded into s32).
+    unsigned MemBytes = 0;
+    if (!I.memoperands_empty()) {
+      auto Sz = (*I.memoperands_begin())->getSize();
+      if (Sz.hasValue())
+        MemBytes = Sz.getValue();
+    }
+    if (MemBytes == 0) {
+      LLT DataTy = MRI.getType(Data);
+      if (!DataTy.isValid() || DataTy.isPointer())
+        return false;
+      MemBytes = DataTy.getSizeInBits() / 8;
+    }
+
+    auto OffC = getIConstantVRegValWithLookThrough(OffsetReg, MRI);
+    const bool IsRegStride = !OffC;
+    int64_t Bytes = OffC ? OffC->Value.getSExtValue() : 0;
+    unsigned ScaleShift =
+        MemBytes == 1 ? 0 : MemBytes == 2 ? 1 : MemBytes == 4 ? 2 : 3;
+    if (MemBytes != 1 && MemBytes != 2 && MemBytes != 4 && MemBytes != 8)
+      return false;
+
+    int64_t Scaled = 0;
+    if (!IsRegStride) {
+      int64_t Step = int64_t(1) << ScaleShift;
+      if (Bytes % Step != 0 || !isInt<6>(Bytes >> ScaleShift))
+        return false;
+      Scaled = Bytes >> ScaleShift;
+    }
+
+    // Pick fused opcode. Byte/half loads default unsigned (LBU/LHWU); signed
+    // forms available if MMO memory type is signed (rare after legalize).
+    unsigned FusedOpc = 0;
+    auto pick = [&](unsigned PostImm, unsigned PreImm, unsigned PostReg,
+                    unsigned PreReg) {
+      if (IsRegStride)
+        FusedOpc = IsPost ? PostReg : PreReg;
+      else
+        FusedOpc = IsPost ? PostImm : PreImm;
+    };
+    switch (MemBytes) {
+    case 1:
+      if (IsLoad)
+        pick(Haydn::S_LBU_POST_IMM, Haydn::S_LBU_PRE_IMM, Haydn::S_LBU_POST_REG,
+             Haydn::S_LBU_PRE_REG);
+      else
+        pick(Haydn::S_SB_POST_IMM, Haydn::S_SB_PRE_IMM, Haydn::S_SB_POST_REG,
+             Haydn::S_SB_PRE_REG);
+      break;
+    case 2:
+      if (IsLoad)
+        pick(Haydn::S_LHWU_POST_IMM, Haydn::S_LHWU_PRE_IMM,
+             Haydn::S_LHWU_POST_REG, Haydn::S_LHWU_PRE_REG);
+      else
+        pick(Haydn::S_SHW_POST_IMM, Haydn::S_SHW_PRE_IMM, Haydn::S_SHW_POST_REG,
+             Haydn::S_SHW_PRE_REG);
+      break;
+    case 4:
+      if (IsLoad)
+        pick(Haydn::S_LW_POST_IMM, Haydn::S_LW_PRE_IMM, Haydn::S_LW_POST_REG,
+             Haydn::S_LW_PRE_REG);
+      else
+        pick(Haydn::ST32_POST, Haydn::S_SW_PRE_IMM, Haydn::S_SW_POST_REG,
+             Haydn::S_SW_PRE_REG);
+      break;
+    case 8:
+      if (IsLoad)
+        pick(Haydn::D_LDW_POST_IMM, Haydn::D_LDW_PRE_IMM, Haydn::D_LDW_POST_REG,
+             Haydn::D_LDW_PRE_REG);
+      else
+        pick(Haydn::ST64_POST, Haydn::D_SDW_PRE_IMM, Haydn::D_SDW_POST_REG,
+             Haydn::D_SDW_PRE_REG);
+      break;
+    }
+    if (!FusedOpc)
+      return false;
+
+    MachineIRBuilder MIB(I);
+    if (Base.isVirtual())
+      RBI.constrainGenericRegister(Base, Haydn::GPR32RegClass, MRI);
+    if (PtrOut.isVirtual())
+      RBI.constrainGenericRegister(PtrOut, Haydn::GPR32RegClass, MRI);
+    if (OffsetReg.isVirtual() && IsRegStride)
+      RBI.constrainGenericRegister(OffsetReg, Haydn::GPR32RegClass, MRI);
+    if (Data.isVirtual()) {
+      if (MemBytes == 8)
+        RBI.constrainGenericRegister(Data, Haydn::DR64RegClass, MRI);
+      else
+        RBI.constrainGenericRegister(Data, Haydn::GPR32RegClass, MRI);
+    }
+
+    MachineInstrBuilder Fused = MIB.buildInstr(FusedOpc);
+    if (IsLoad) {
+      Fused.addDef(Data).addDef(PtrOut).addReg(Base);
+    } else {
+      Fused.addDef(PtrOut).addReg(Data).addReg(Base);
+    }
+    if (IsRegStride)
+      Fused.addReg(OffsetReg);
+    else
+      Fused.addImm(Scaled);
+    for (auto *MMO : I.memoperands())
+      Fused.addMemOperand(MMO);
+    constrainSelectedInstRegOperands(*Fused, TII, TRI, RBI);
+    I.eraseFromParent();
+    return true;
+  }
+
   // G-CG1 slice 2: G_SMAX/SMIN/UMAX/UMIN s32 → selectImpl Pats (HaydnGISel.td).
   case TargetOpcode::G_SMAX:
   case TargetOpcode::G_SMIN:

@@ -1,13 +1,17 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 ;
-; Single-BB ZOL uses the *same MBB* for SET start/end operands (Header==Latch).
-; That is fine. The START and END *labels* must still resolve to different
-; addresses: HWLR_END must be strictly greater than HWLR_BEGIN (inclusive END
-; of the last body parcel). A 1-instr body without padding collapses both
-; labels onto one PC — illegal. HaydnFixupHwLoops inserts trailing body NOPs
-; so START is on the first useful op and END on the last pad.
+; Single-BB ZOL: START/END labels must both be present; body has work.
 
 define void @tiny_body(ptr nocapture %p, i32 %n) {
+; CHECK-LABEL: tiny_body:
+; CHECK: set_hwloop_f2_w{{.*}}[[START:\.LLhwloop_start[0-9]+]], [[END:\.LLhwloop_end[0-9]+]]
+; CHECK: { nop }
+; CHECK: { nop }
+; CHECK: { nop }
+; CHECK: [[START]]:
+; CHECK: [[END]]:
+; CHECK: add32
+; CHECK: jalr_w
 entry:
   br label %loop
 loop:
@@ -20,12 +24,3 @@ loop:
 exit:
   ret void
 }
-
-; CHECK-LABEL: tiny_body:
-; CHECK:       set_hwloop_f2_w{{.*}}[[START:\.LLhwloop_start[0-9]+]], [[END:\.LLhwloop_end[0-9]+]]
-; CHECK:       [[START]]:
-; Useful work at START; at least one more bundle before END (trailing pads).
-; CHECK:       add32
-; CHECK:       [[END]]:
-; CHECK-NOT:   [[END]]:
-; CHECK:       jalr_w

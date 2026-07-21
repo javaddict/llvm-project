@@ -1,0 +1,58 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-hwloops,postmisched,haydn-fixup-hwloops \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+#
+# After Fixup free-lift-only tryShorten (never moves remat/SET), remat ADDI Dest must
+# stay next to SET using Dest — no LDU16 Dest between them.
+#
+# CHECK-LABEL: name: fixup_preserves_remat_count
+# Remat def and SET stay adjacent (possibly inside/ending a BUNDLE).
+# CHECK: $r{{[0-9]+}} = ADDI32_W $r1, -1
+# CHECK: SET_HWLOOP_REG 1, %bb.1, %bb.1, {{.*}}killed $r{{[0-9]+}}
+# No LDU16 of the remat dest between ADDI and SET — FileCheck is sequential
+# so any intervening LDU16 of that dest would need to appear before SET.
+# CHECK-NOT: LDU16 {{.*}}-2
+
+--- |
+  define dso_local void @fixup_preserves_remat_count(i32 %n, ptr %p, ptr %q) {
+  entry:
+    br label %body
+  body:
+    %v = load i16, ptr %p
+    store i16 %v, ptr %q
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            fixup_preserves_remat_count
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    LoopStart $r1, -1
+    NOP
+    NOP
+    NOP
+    ; Post-SET-ish work that would be dangerous if spliced between remat and SET
+    $r4 = LDU16 $r2, 0
+    $r5 = LDU16 $r3, 0
+    $r2 = ADDI32 $r2, 2
+    $r3 = ADDI32 $r3, 2
+
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r3, $r4, $r5, $r15
+
+    $r6 = ADD32 $r4, $r5
+    ST16 $r6, $r2, -2
+    PseudoLoopEnd %bb.1
+
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15

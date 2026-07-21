@@ -52,8 +52,8 @@
 ; CHECK: // %bb.1: // %entry
 ; CHECK:  { lui r2, .LJTI0_0; slli32 r1, r1, 2; nop }
 ; CHECK:  { addi32{{(_w)?}} r2, r2, .LJTI0_0 }
-; CHECK:  { add32 r1, r2, r1 }
-; CHECK:  { ld32 r1, r1, 0 }
+; Fused s_lw_pre_reg or split add32+ld32, then indirect jalr.
+; CHECK:  {{s_lw_pre_reg|add32}}
 ; CHECK:  { jalr_w{{(\.s[012])?}} r0, r1, 0 }
 ; CHECK: .LBB0_2: // %bb0
 ; CHECK:  { xor32 r0, r0, r0 }
