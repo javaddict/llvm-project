@@ -638,6 +638,11 @@ std::string Triple::computeDataLayout(StringRef ABIName) const {
     // LLVM data layout.
     return "";
 
+  case Triple::haydn:
+    // Haydn: 32-bit VLIW DSP, 32-bit pointers, baremetal only
+    // i64/f64 have 32-bit alignment (4 bytes) appropriate for 32-bit architecture
+    return "e-m:e-p:32:32-i64:32-f64:32-v64:32-v128:64-a:0:32-n32-S64";
+
   case Triple::UnknownArch:
     return "";
   }
