@@ -1,0 +1,90 @@
+# RUN: not llc -haydn-enable-hwloop-demote=true -mtriple=haydn-unknown-elf \
+# RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %s -o - 2>&1 | FileCheck %s --check-prefix=FATAL
+#
+# W0.2 / G-RISK-DEMOTE: live body + demote cannot install soft edge must be
+# fatal — never silent erase-only once-through. Product demote stays ON.
+#
+# Range is forced bad via a spacer MBB (same pattern as demote_uimm6). Soft
+# demote needs a free counter GPR (LivePhysRegs + not mentioned in loop
+# blocks). Body mentions every pickCounterReg candidate so demote refuses
+# → report_fatal_error (gen_crash_diag=false → non-zero exit, not abort).
+
+--- |
+  define dso_local void @demote_nofree_counter(ptr nocapture writeonly %out) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+...
+---
+name:            demote_nofree_counter
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r7, $r8, $r9, $r10, $r11, $r12, $r15
+    successors: %bb.1
+
+    SET_HWLOOP 0, %bb.2, %bb.2, 8
+    NOP
+    NOP
+    NOP
+
+  ; Spacer forces StartOff past MaxStartOffsetBytesSafe → range-bad.
+  bb.1.spacer:
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Mention every demote counter candidate (R11..R1, R12). Prefer empty for
+  ; imm SET_HWLOOP; pickCounterReg has nowhere free → demote returns false.
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r7, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.3
+    $r1 = XOR32 $r1, $r1
+    $r2 = XOR32 $r2, $r2
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    ST32 $r1, $r2, 0
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# FATAL: cannot demote to software loop
+# FATAL: refusing erase-only once-through
