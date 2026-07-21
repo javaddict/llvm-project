@@ -1,0 +1,24 @@
+# RUN: llc -mtriple=haydn -run-pass=postrapseudos -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=ALLOC
+
+# LOADI64 MatInt uses a scavenged post-RA GPR (HaydnPostRAScratch)
+# not fixed free AT / not hardcoded R12. Live R12 must remain available for
+# the subsequent LDU16; expansion must not clobber R12 as MatInt dest.
+# AIE model: R12 is a normal allocatable GPR (no free AT / no +reserve-r12-at).
+
+---
+name: loadi64_preserves_live_r12
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $r12, $r15
+    ; ALLOC-NOT: {{ST32|LD32}} $r12
+    ; ALLOC: $r13 = SUBI32 $r13, 8
+    ; ALLOC: ST32 $r{{[0-9]+}}, $r13, 0
+    ; ALLOC: $d0 = LD64 $r13, 0
+    ; ALLOC: $r13 = ADDI32_W $r13, 8
+    ; ALLOC: $r1 = LDU16 $r12, 32
+    $d0 = LOADI64 9223372036854743039
+    $r1 = LDU16 $r12, 32
+    RET implicit $r1, implicit $r15
+...
