@@ -236,6 +236,8 @@ public:
 
     eCore_wasm32,
 
+    eCore_haydn, // Haydn 3-issue VLIW DSP (ILP32 baremetal)
+
     kNumCores,
 
     kCore_invalid,
