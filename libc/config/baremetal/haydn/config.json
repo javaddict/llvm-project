@@ -1,0 +1,15 @@
+{
+  "errno": {
+    "LIBC_CONF_ERRNO_MODE": {
+      "value": "LIBC_ERRNO_MODE_EXTERNAL"
+    }
+  },
+  "codegen": {
+    "LIBC_CONF_KEEP_FRAME_POINTER": {
+      "value": false
+    },
+    "LIBC_CONF_ENABLE_STRONG_STACK_PROTECTOR": {
+      "value": false
+    }
+  }
+}
