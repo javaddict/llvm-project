@@ -634,9 +634,7 @@ void baremetal::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     return;
   }
 
-  // Haydn: forward to Haydn-owned helper to append the baremetal linker
-  // script (`-T<haydn.ld>`) if the user hasn't supplied one via -T. All
-  // Haydn-specific linker policy lives in ToolChains/Haydn.cpp (HC#0).
+  // Haydn: optional target hook (currently a no-op; libc from llvm-libc).
   if (Triple.getArch() == llvm::Triple::haydn)
     toolchains::addHaydnLinkArgs(TC, Triple, Args, CmdArgs);
 
@@ -714,15 +712,10 @@ void baremetal::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs)) {
     CmdArgs.push_back("--start-group");
-    // Haydn ships its own runtime as libhaydn.a (mem*, atomics, integer
-    // div/mod, and the compiler-rt soft-float builtins — see D251); do not
-    // pull in libclang_rt.builtins.a or -lc, neither of which is built for
-    // the Haydn target. libhaydn.a itself is appended earlier via
-    // toolchains::addHaydnLinkArgs() (see Haydn.cpp, HC#0).
-    bool IsHaydn = Triple.getArch() == llvm::Triple::haydn;
-    if (!IsHaydn)
-      AddRunTimeLibs(TC, D, CmdArgs, Args);
-    if (!IsHaydn && !Args.hasArg(options::OPT_nolibc))
+    // Haydn uses the same baremetal default libs as other targets (compiler-rt
+    // builtins + -lc from llvm-libc when the sysroot provides them).
+    AddRunTimeLibs(TC, D, CmdArgs, Args);
+    if (!Args.hasArg(options::OPT_nolibc))
       CmdArgs.push_back("-lc");
     if (TC.hasValidGCCInstallation() || detectGCCToolchainAdjacent(D))
       CmdArgs.push_back("-lgloss");
