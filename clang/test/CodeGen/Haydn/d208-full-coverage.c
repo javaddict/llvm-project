@@ -1986,28 +1986,9 @@ long long test_or64(long long a0, long long a1) {
   sink_ll = (long long)r;
 }
 
-int test_packsr32(long long a0, int a1) {
-  int r = __builtin_haydn_packsr32(a0, a1);
-  sink_i = (int)r;
-}
-
-long long test_packsr32x2_hh(long long a0, long long a1, int a2) {
-  long long r = __builtin_haydn_packsr32x2_hh(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
-long long test_packsr32x2_hl(long long a0, long long a1, int a2) {
-  long long r = __builtin_haydn_packsr32x2_hl(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
-long long test_packsr32x2_lh(long long a0, long long a1, int a2) {
-  long long r = __builtin_haydn_packsr32x2_lh(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
-long long test_packsr32x2_ll(long long a0, long long a1, int a2) {
-  long long r = __builtin_haydn_packsr32x2_ll(a0, a1, a2);
+/* packsr32/satsr64/packsr32x2_* removed: not golden encodings (haydn_dsp.h). */
+long long test_sra64r(long long a0, int a1) {
+  long long r = __builtin_haydn_sra64r(a0, a1);
   sink_ll = (long long)r;
 }
 
@@ -2026,11 +2007,6 @@ int test_recip(int a0) {
   sink_i = (int)r;
 }
 
-int test_satsr64(long long a0, int a1) {
-  int r = __builtin_haydn_satsr64(a0, a1);
-  sink_i = (int)r;
-}
-
 long long test_seq64(long long a0) {
   long long r = __builtin_haydn_seq64(a0);
   sink_ll = (long long)r;
@@ -2041,9 +2017,9 @@ long long test_sle64(long long a0) {
   sink_ll = (long long)r;
 }
 
-int test_sll64(int a0, int a1) {
-  int r = __builtin_haydn_sll64(a0, a1);
-  sink_i = (int)r;
+long long test_sll64(long long a0, int a1) {
+  long long r = __builtin_haydn_sll64(a0, a1);
+  sink_ll = (long long)r;
 }
 
 long long test_slt64(long long a0) {
@@ -2256,24 +2232,21 @@ int test_sqrt(int a0) {
   sink_i = (int)r;
 }
 
-int test_sra64(long long a0, int a1) {
-  int r = __builtin_haydn_sra64(a0, a1);
-  sink_i = (int)r;
+long long test_sra64(long long a0, int a1) {
+  long long r = __builtin_haydn_sra64(a0, a1);
+  sink_ll = (long long)r;
 }
 
-int test_sra64r(long long a0, int a1) {
-  int r = __builtin_haydn_sra64r(a0, a1);
-  sink_i = (int)r;
-}
+/* test_sra64r defined once above (golden i64,i32 -> i64). */
 
 long long test_srai64r(long long a0, int a1) {
   long long r = __builtin_haydn_srai64r(a0, a1);
   sink_ll = (long long)r;
 }
 
-int test_srl64(long long a0, int a1) {
-  int r = __builtin_haydn_srl64(a0, a1);
-  sink_i = (int)r;
+long long test_srl64(long long a0, int a1) {
+  long long r = __builtin_haydn_srl64(a0, a1);
+  sink_ll = (long long)r;
 }
 
 int test_sub32s(int a0, int a1) {
@@ -2401,33 +2374,33 @@ v2i test_x2fmul32ts(v2i a0, v2i a1) {
   sink_v2 = r;
 }
 
-v2i test_x2fmula32rs(v2i a0, v2i a1) {
-  v2i r = __builtin_haydn_x2fmula32rs(a0, a1);
+v2i test_x2fmula32rs(v2i acc, v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmula32rs(acc, a0, a1);
   sink_v2 = r;
 }
 
-v2i test_x2fmula32rss(v2i a0, v2i a1) {
-  v2i r = __builtin_haydn_x2fmula32rss(a0, a1);
+v2i test_x2fmula32rss(v2i acc, v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmula32rss(acc, a0, a1);
   sink_v2 = r;
 }
 
-v2i test_x2fmula32ts(v2i a0, v2i a1) {
-  v2i r = __builtin_haydn_x2fmula32ts(a0, a1);
+v2i test_x2fmula32ts(v2i acc, v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmula32ts(acc, a0, a1);
   sink_v2 = r;
 }
 
-v2i test_x2fmuls32rs(v2i a0, v2i a1) {
-  v2i r = __builtin_haydn_x2fmuls32rs(a0, a1);
+v2i test_x2fmuls32rs(v2i acc, v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmuls32rs(acc, a0, a1);
   sink_v2 = r;
 }
 
-v2i test_x2fmuls32rss(v2i a0, v2i a1) {
-  v2i r = __builtin_haydn_x2fmuls32rss(a0, a1);
+v2i test_x2fmuls32rss(v2i acc, v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmuls32rss(acc, a0, a1);
   sink_v2 = r;
 }
 
-v2i test_x2fmuls32ts(v2i a0, v2i a1) {
-  v2i r = __builtin_haydn_x2fmuls32ts(a0, a1);
+v2i test_x2fmuls32ts(v2i acc, v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmuls32ts(acc, a0, a1);
   sink_v2 = r;
 }
 
@@ -2501,13 +2474,13 @@ v2i test_x2movt32(v2i a0, v2i a1) {
   sink_v2 = r;
 }
 
-v2i test_x2mulaph32(v2i a0, v2i a1) {
-  v2i r = __builtin_haydn_x2mulaph32(a0, a1);
+v2i test_x2mulaph32(v2i acc, v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2mulaph32(acc, a0, a1);
   sink_v2 = r;
 }
 
-v2i test_x2mulapl32(v2i a0, v2i a1) {
-  v2i r = __builtin_haydn_x2mulapl32(a0, a1);
+v2i test_x2mulapl32(v2i acc, v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2mulapl32(acc, a0, a1);
   sink_v2 = r;
 }
 
@@ -2521,13 +2494,13 @@ v2i test_x2mulpl32(v2i a0, v2i a1) {
   sink_v2 = r;
 }
 
-v2i test_x2mulsph32(v2i a0, v2i a1) {
-  v2i r = __builtin_haydn_x2mulsph32(a0, a1);
+v2i test_x2mulsph32(v2i acc, v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2mulsph32(acc, a0, a1);
   sink_v2 = r;
 }
 
-v2i test_x2mulspl32(v2i a0, v2i a1) {
-  v2i r = __builtin_haydn_x2mulspl32(a0, a1);
+v2i test_x2mulspl32(v2i acc, v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2mulspl32(acc, a0, a1);
   sink_v2 = r;
 }
 
@@ -2691,24 +2664,24 @@ v4s test_x4add16s(v4s a0, v4s a1) {
   sink_v4 = r;
 }
 
-v4s test_x4cjmul16s_h(v4s a0, v4s a1) {
-  v4s r = __builtin_haydn_x4cjmul16s_h(a0, a1);
-  sink_v4 = r;
+v2i test_x4cjmul16s_h(v4s a0, v4s a1) {
+  v2i r = __builtin_haydn_x4cjmul16s_h(a0, a1);
+  sink_v2 = r;
 }
 
-v4s test_x4cjmul16s_l(v4s a0, v4s a1) {
-  v4s r = __builtin_haydn_x4cjmul16s_l(a0, a1);
-  sink_v4 = r;
+v2i test_x4cjmul16s_l(v4s a0, v4s a1) {
+  v2i r = __builtin_haydn_x4cjmul16s_l(a0, a1);
+  sink_v2 = r;
 }
 
-v4s test_x4cjmula16s_h(v4s a0, v4s a1) {
-  v4s r = __builtin_haydn_x4cjmula16s_h(a0, a1);
-  sink_v4 = r;
+v2i test_x4cjmula16s_h(v2i acc, v4s a0, v4s a1) {
+  v2i r = __builtin_haydn_x4cjmula16s_h(acc, a0, a1);
+  sink_v2 = r;
 }
 
-v4s test_x4cjmula16s_l(v4s a0, v4s a1) {
-  v4s r = __builtin_haydn_x4cjmula16s_l(a0, a1);
-  sink_v4 = r;
+v2i test_x4cjmula16s_l(v2i acc, v4s a0, v4s a1) {
+  v2i r = __builtin_haydn_x4cjmula16s_l(acc, a0, a1);
+  sink_v2 = r;
 }
 
 v4s test_x4clamp16(v4s a0, v4s a1) {
@@ -2716,44 +2689,44 @@ v4s test_x4clamp16(v4s a0, v4s a1) {
   sink_v4 = r;
 }
 
-v4s test_x4cmul16(v4s a0) {
-  v4s r = __builtin_haydn_x4cmul16(a0);
-  sink_v4 = r;
+v2i test_x4cmul16(v4s a0) {
+  v2i r = __builtin_haydn_x4cmul16(a0);
+  sink_v2 = r;
 }
 
-v4s test_x4cmul16_f2(v4s a0) {
-  v4s r = __builtin_haydn_x4cmul16_f2(a0);
-  sink_v4 = r;
+v2i test_x4cmul16_f2(v4s a0) {
+  v2i r = __builtin_haydn_x4cmul16_f2(a0);
+  sink_v2 = r;
 }
 
-v4s test_x4cmul16s(v4s a0) {
-  v4s r = __builtin_haydn_x4cmul16s(a0);
-  sink_v4 = r;
+v2i test_x4cmul16s(v4s a0) {
+  v2i r = __builtin_haydn_x4cmul16s(a0);
+  sink_v2 = r;
 }
 
-v4s test_x4cmul16s_f2(v4s a0) {
-  v4s r = __builtin_haydn_x4cmul16s_f2(a0);
-  sink_v4 = r;
+v2i test_x4cmul16s_f2(v4s a0) {
+  v2i r = __builtin_haydn_x4cmul16s_f2(a0);
+  sink_v2 = r;
 }
 
-v4s test_x4cmul16s_h(v4s a0, v4s a1) {
-  v4s r = __builtin_haydn_x4cmul16s_h(a0, a1);
-  sink_v4 = r;
+v2i test_x4cmul16s_h(v4s a0, v4s a1) {
+  v2i r = __builtin_haydn_x4cmul16s_h(a0, a1);
+  sink_v2 = r;
 }
 
-v4s test_x4cmul16s_l(v4s a0, v4s a1) {
-  v4s r = __builtin_haydn_x4cmul16s_l(a0, a1);
-  sink_v4 = r;
+v2i test_x4cmul16s_l(v4s a0, v4s a1) {
+  v2i r = __builtin_haydn_x4cmul16s_l(a0, a1);
+  sink_v2 = r;
 }
 
-v4s test_x4cmula16s_h(v4s a0, v4s a1) {
-  v4s r = __builtin_haydn_x4cmula16s_h(a0, a1);
-  sink_v4 = r;
+v2i test_x4cmula16s_h(v2i acc, v4s a0, v4s a1) {
+  v2i r = __builtin_haydn_x4cmula16s_h(acc, a0, a1);
+  sink_v2 = r;
 }
 
-v4s test_x4cmula16s_l(v4s a0, v4s a1) {
-  v4s r = __builtin_haydn_x4cmula16s_l(a0, a1);
-  sink_v4 = r;
+v2i test_x4cmula16s_l(v2i acc, v4s a0, v4s a1) {
+  v2i r = __builtin_haydn_x4cmula16s_l(acc, a0, a1);
+  sink_v2 = r;
 }
 
 v4s test_x4conj16(v4s a0) {

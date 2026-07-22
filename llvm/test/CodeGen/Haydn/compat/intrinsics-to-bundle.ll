@@ -214,26 +214,27 @@ define i64 @test_x4mula16s(i64 %acc, i64 %acc2, i64 %a, i64 %b) {
 
 ;===----------------------------------------------------------------------===;
 ; (6) Pack / Shift / Round family
+; packsr32/satsr64 are NOT IR (composites in haydn_dsp.h). Use DB sra64r/sra64.
 ;===----------------------------------------------------------------------===;
 
-declare i32 @llvm.haydn.packsr32(i64, i32)
-declare i32 @llvm.haydn.satsr64(i64, i32)
+declare i64 @llvm.haydn.sra64r(i64, i32)
+declare i64 @llvm.haydn.sra64(i64, i32)
 declare <2 x i32> @llvm.haydn.x2sra32(<2 x i32>, i32)
 declare <4 x i16> @llvm.haydn.x4sra16(<4 x i16>, i32)
 declare i64 @llvm.haydn.srai64r(i64, i32)
 declare <2 x i32> @llvm.haydn.x2sra32r(<2 x i32>, i32)
 
-define i32 @test_packsr32(i64 %ps) {
-; CHECK-LABEL: test_packsr32:
+define i64 @test_sra64r_pack(i64 %ps) {
+; CHECK-LABEL: test_sra64r_pack:
 ; CHECK: sra64r
-  %r = call i32 @llvm.haydn.packsr32(i64 %ps, i32 0)
-  ret i32 %r
+  %r = call i64 @llvm.haydn.sra64r(i64 %ps, i32 0)
+  ret i64 %r
 }
-define i32 @test_satsr64(i64 %q) {
-; CHECK-LABEL: test_satsr64:
-; CHECK: satsr64
-  %r = call i32 @llvm.haydn.satsr64(i64 %q, i32 15)
-  ret i32 %r
+define i64 @test_sra64_sat_shift(i64 %q) {
+; CHECK-LABEL: test_sra64_sat_shift:
+; CHECK: sra64
+  %r = call i64 @llvm.haydn.sra64(i64 %q, i32 15)
+  ret i64 %r
 }
 define <2 x i32> @test_x2sra32(<2 x i32> %a) {
 ; CHECK-LABEL: test_x2sra32:

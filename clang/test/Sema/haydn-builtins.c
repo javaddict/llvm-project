@@ -64,12 +64,13 @@ haydn_x4int16 test_x4seli16_bad(haydn_x4int16 a, haydn_x4int16 b) {
   return __builtin_haydn_x4seli16(a, b, 16);
 }
 
-int test_packsr32_ok(int64_t a) {
-  return __builtin_haydn_packsr32(a, 0);
+// packsr32 is not a builtin (composite in haydn_dsp.h). ImmArg range on SRAI64R:
+int64_t test_srai64r_ok(int64_t a) {
+  return __builtin_haydn_srai64r(a, 0);
 }
-int test_packsr32_bad(int64_t a) {
+int64_t test_srai64r_bad(int64_t a) {
   // expected-error@+1 {{argument value 64 is outside the valid range [0, 63]}}
-  return __builtin_haydn_packsr32(a, 64);
+  return __builtin_haydn_srai64r(a, 64);
 }
 
 // *i* forms require a constant imm (ISA encoding); use variable-shift ops for regs.

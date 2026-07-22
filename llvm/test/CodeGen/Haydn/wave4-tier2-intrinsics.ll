@@ -288,12 +288,12 @@ define dso_local i64 @test_x2sel32_ll(i64 %a, i64 %b) {
 }
 
 declare <2 x i32> @llvm.haydn.x2addsub32(<2 x i32>, <2 x i32>)
-declare i64 @llvm.haydn.x2addsub32.hllh(i64, i64)
-declare i64 @llvm.haydn.x2addsub32s.hllh(i64, i64)
+declare <2 x i32> @llvm.haydn.x2addsub32.hllh(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2addsub32s.hllh(<2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2subadd32(<2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2subadd32s(<2 x i32>, <2 x i32>)
-declare i64 @llvm.haydn.x2subadd32.hllh(i64, i64)
-declare i64 @llvm.haydn.x2subadd32s.hllh(i64, i64)
+declare <2 x i32> @llvm.haydn.x2subadd32.hllh(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2subadd32s.hllh(<2 x i32>, <2 x i32>)
 
 define dso_local <2 x i32> @test_x2addsub32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2addsub32:
@@ -302,18 +302,18 @@ define dso_local <2 x i32> @test_x2addsub32(<2 x i32> %a, <2 x i32> %b) {
   ret <2 x i32> %r
 }
 
-define dso_local i64 @test_x2addsub32_hllh(i64 %a, i64 %b) {
+define dso_local <2 x i32> @test_x2addsub32_hllh(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2addsub32_hllh:
 ; CHECK: x2addsub32_hllh
-  %r = call i64 @llvm.haydn.x2addsub32.hllh(i64 %a, i64 %b)
-  ret i64 %r
+  %r = call <2 x i32> @llvm.haydn.x2addsub32.hllh(<2 x i32> %a, <2 x i32> %b)
+  ret <2 x i32> %r
 }
 
-define dso_local i64 @test_x2addsub32s_hllh(i64 %a, i64 %b) {
+define dso_local <2 x i32> @test_x2addsub32s_hllh(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2addsub32s_hllh:
 ; CHECK: x2addsub32s_hllh
-  %r = call i64 @llvm.haydn.x2addsub32s.hllh(i64 %a, i64 %b)
-  ret i64 %r
+  %r = call <2 x i32> @llvm.haydn.x2addsub32s.hllh(<2 x i32> %a, <2 x i32> %b)
+  ret <2 x i32> %r
 }
 
 define dso_local <2 x i32> @test_x2subadd32(<2 x i32> %a, <2 x i32> %b) {
@@ -330,18 +330,18 @@ define dso_local <2 x i32> @test_x2subadd32s(<2 x i32> %a, <2 x i32> %b) {
   ret <2 x i32> %r
 }
 
-define dso_local i64 @test_x2subadd32_hllh(i64 %a, i64 %b) {
+define dso_local <2 x i32> @test_x2subadd32_hllh(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2subadd32_hllh:
 ; CHECK: x2subadd32_hllh
-  %r = call i64 @llvm.haydn.x2subadd32.hllh(i64 %a, i64 %b)
-  ret i64 %r
+  %r = call <2 x i32> @llvm.haydn.x2subadd32.hllh(<2 x i32> %a, <2 x i32> %b)
+  ret <2 x i32> %r
 }
 
-define dso_local i64 @test_x2subadd32s_hllh(i64 %a, i64 %b) {
+define dso_local <2 x i32> @test_x2subadd32s_hllh(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2subadd32s_hllh:
 ; CHECK: x2subadd32s_hllh
-  %r = call i64 @llvm.haydn.x2subadd32s.hllh(i64 %a, i64 %b)
-  ret i64 %r
+  %r = call <2 x i32> @llvm.haydn.x2subadd32s.hllh(<2 x i32> %a, <2 x i32> %b)
+  ret <2 x i32> %r
 }
 
 ;===----------------------------------------------------------------------===;
@@ -488,35 +488,35 @@ define dso_local i64 @test_sub64_l(i64 %a, i64 %b) {
 }
 
 ;===----------------------------------------------------------------------===;
-; D. SLL64 (GPR32 binary: i32, i32 -> i32)
+; D. SLL64 (golden: i64 data, i32 shift -> i64)
 ;===----------------------------------------------------------------------===;
 
-declare i32 @llvm.haydn.sll64(i32, i32)
+declare i64 @llvm.haydn.sll64(i64, i32)
 
-define dso_local i32 @test_sll64(i32 %a, i32 %b) {
+define dso_local i64 @test_sll64(i64 %a, i32 %b) {
 ; CHECK-LABEL: test_sll64:
 ; CHECK: sll64
-  %r = call i32 @llvm.haydn.sll64(i32 %a, i32 %b)
-  ret i32 %r
+  %r = call i64 @llvm.haydn.sll64(i64 %a, i32 %b)
+  ret i64 %r
 }
 
 ;===----------------------------------------------------------------------===;
-; D. SRA64 / SRL64 (cross-type: i64 accum, i32 shift -> i32)
+; D. SRA64 / SRL64 (golden: i64 data, i32 shift -> i64)
 ;===----------------------------------------------------------------------===;
 
-declare i32 @llvm.haydn.sra64(i64, i32)
-declare i32 @llvm.haydn.srl64(i64, i32)
+declare i64 @llvm.haydn.sra64(i64, i32)
+declare i64 @llvm.haydn.srl64(i64, i32)
 
-define dso_local i32 @test_sra64(i64 %accum, i32 %shift) {
+define dso_local i64 @test_sra64(i64 %accum, i32 %shift) {
 ; CHECK-LABEL: test_sra64:
 ; CHECK: sra64
-  %r = call i32 @llvm.haydn.sra64(i64 %accum, i32 %shift)
-  ret i32 %r
+  %r = call i64 @llvm.haydn.sra64(i64 %accum, i32 %shift)
+  ret i64 %r
 }
 
-define dso_local i32 @test_srl64(i64 %accum, i32 %shift) {
+define dso_local i64 @test_srl64(i64 %accum, i32 %shift) {
 ; CHECK-LABEL: test_srl64:
 ; CHECK: srl64
-  %r = call i32 @llvm.haydn.srl64(i64 %accum, i32 %shift)
-  ret i32 %r
+  %r = call i64 @llvm.haydn.srl64(i64 %accum, i32 %shift)
+  ret i64 %r
 }

@@ -1110,16 +1110,18 @@ def X4ADD16 : FmtALU64<0x5B, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
   let TSFlags{2-0} = 0b110;
 }
 
-// X4MUL16 — DB restricts to slot 1 only (capstone-schedule-port-audit §(b)-1).
-// (Path B): TRUE 2-output (golden DR_Write_Port=[rtd1,rtd2]). 2 dests +
-// 2 srcs so MI.setDesc(legacy -> _S<k>) preserves operand/def counts;
+// X4MUL16 — golden D-MAC slots 1+2 (X4MUL16_S1/S2 in HaydnFormatsMAC.td).
+// (Path B): TRUE 2-output (golden DR_Write_Port=[rtd1,rtd2]). Not G_MUL:
+// four signed 16x16->32 products pack into rtd1={p3,p2}, rtd2={p1,p0}.
+// C/IR: only llvm.haydn.x4mul16 / haydn_x4mul16 (dpair). Elementwise
+// G_MUL <4 x i16> is scalarized in the legalizer — never this opcode.
 // $rtd2 is encoded into the legacy funct slot (bits{9-6}) — same device as
 // X2MUL32 / FmtMAC2Dest. See FmtALU64_2Dest header comment for the rationale.
 def X4MUL16 : FmtALU64_2Dest<0x5C, 0x00,
                              (outs DR64:$rd, DR64:$rtd2), (ins DR64:$rs1, DR64:$rs2),
                              "x4mul16\t$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_ALU;
-  let TSFlags{2-0} = 0b010;
+  let Itinerary = Slot12_ALU;
+  let TSFlags{2-0} = 0b110; // slots 1+2 (was 0b010 slot1-only; golden has both)
 }
 
 def X4SUB16 : FmtALU64<0x5D, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),

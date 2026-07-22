@@ -239,6 +239,34 @@ def int_haydn_mulss64_uu_ulh : haydn_ternary_intrinsic<"haydn_mulss64_uu_ulh", l
 
 // 32-bit saturating add/sub (GPR32 binary)
 def int_haydn_add32s : haydn_binary_intrinsic<"haydn_add32s", llvm_i32_ty, llvm_i32_ty>;
+
+// Golden slot0 scalar-32 shifts: (i32 data, i32 amount) -> i32.
+// Imm forms (slli32/srli32/srai32/srai32r) require constant amount (Sema ImmArg).
+// Reg forms (sll32/srl32/sra32/sra32r) take variable signed amount.
+def int_haydn_slli32 : Haydn_Intrinsic<"haydn_slli32",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_srli32 : Haydn_Intrinsic<"haydn_srli32",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_srai32 : Haydn_Intrinsic<"haydn_srai32",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_srai32r : Haydn_Intrinsic<"haydn_srai32r",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_sll32 : Haydn_Intrinsic<"haydn_sll32",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_srl32 : Haydn_Intrinsic<"haydn_srl32",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_sra32 : Haydn_Intrinsic<"haydn_sra32",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_sra32r : Haydn_Intrinsic<"haydn_sra32r",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_sub32s : haydn_binary_intrinsic<"haydn_sub32s", llvm_i32_ty, llvm_i32_ty>;
 
 // 32-bit saturating absolute/negate (GPR32 unary)
@@ -440,65 +468,10 @@ def int_haydn_mulss32_hhll : haydn_binary_intrinsic<"haydn_mulss32_hhll", llvm_i
 def int_haydn_mulss32_hllh : haydn_binary_intrinsic<"haydn_mulss32_hllh", llvm_i64_ty, llvm_i64_ty>;
 
 //===----------------------------------------------------------------------===//
-// Saturating shift-right and pack-shift-round
-// These are composite operations for IIR filter kernels.
-//
-// SATSR64: Saturating right shift of 64-bit accumulator, producing 32-bit result.
-//   rt = SAT32(accum >> shift)
-//   where SAT32 clamps to [-2^31, 2^31-1].
-//   Implemented as: SRAI64 accum, shift -> DR64, then extract low 32 bits
-//   and apply SAT32 if needed (or just truncate if no overflow).
-//
-// PACKSR32: Pack-shift-round — extract 32-bit value from 64-bit accumulator
-//   with rounding right shift.
-//   rt = SAT32((accum + round) >> shift)
-//   where round = 1 << (shift - 1) for rounding.
-//   Implemented using SRAI64R (shift with rounding) + truncation.
+// NOTE: satsr64 / packsr32 / packsr32x2_* are NOT golden encodings.
+// Composites live in haydn_dsp.h (SRA64/SRA64R/X2SRA32R+X2SEL32_*).
+// Do not re-add as LLVM IR intrinsics.
 //===----------------------------------------------------------------------===//
-
-// Saturating right shift: (i64 accum, i32 shift) -> i32
-// Result = SAT32(sext(accum[63:0]) >> shift)
-def int_haydn_satsr64 : Haydn_Intrinsic<"haydn_satsr64",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
-
-// Pack-shift-round: (i64 accum, i32 shift) -> i32
-// Result = SAT32((accum + rounding) >> shift)
-def int_haydn_packsr32 : Haydn_Intrinsic<"haydn_packsr32",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
-
-//===----------------------------------------------------------------------===//
-// PACKSR32 lane family: AE_PKSR32-style dual-accumulator pack.
-//
-// Packs two 32-bit results from a 64-bit accumulator pair (a, b) with shared
-// per-lane arithmetic-right-shift + rounding + saturation. Each variant picks
-// which 32-bit lane of each source feeds the high/low lane of the result:
-//   packsr32x2_hh: result.H = SAT32(a.H >> shift + rnd), result.L = SAT32(b.H >> shift + rnd)
-//   packsr32x2_hl: result.H from a.H,  result.L from b.L
-//   packsr32x2_lh: result.H from a.L,  result.L from b.H
-//   packsr32x2_ll: result.H from a.L,  result.L from b.L
-//
-// Used by NatureDSP IIR biquad kernels (bqriir32x16_df1/df2, bqriir32x32_df1/df2)
-// for the delay-line update + saturation pack that AE_PKSR32 performs.
-//
-// Decomposition (no native Haydn encoding; X2 SIMD sub-encoded space is full):
-//   tmp_a = X2SRA32R a, shift
-//   tmp_b = X2SRA32R b, shift
-//   result = X2SEL32_<lane> tmp_a, tmp_b
-//===----------------------------------------------------------------------===//
-def int_haydn_packsr32x2_hh : Haydn_Intrinsic<"haydn_packsr32x2_hh",
-    [llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
-def int_haydn_packsr32x2_hl : Haydn_Intrinsic<"haydn_packsr32x2_hl",
-    [llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
-def int_haydn_packsr32x2_lh : Haydn_Intrinsic<"haydn_packsr32x2_lh",
-    [llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
-def int_haydn_packsr32x2_ll : Haydn_Intrinsic<"haydn_packsr32x2_ll",
-    [llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
 // AE_MAXABS32S: per-lane saturating abs-max of two DR64 SIMD values.
@@ -555,6 +528,17 @@ def int_haydn_f2mulss32rs_hhll : haydn_ternary_intrinsic<"haydn_f2mulss32rs_hhll
 // (i64 accum, i32 shift_imm) -> i64
 // Note: The hardware instruction uses simm16 for the shift amount.
 def int_haydn_srai64r : Haydn_Intrinsic<"haydn_srai64r",
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+
+// DB imm 64-bit shifts (RI6). Reg twins: sra64 / sll64 / srl64.
+def int_haydn_srai64 : Haydn_Intrinsic<"haydn_srai64",
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_slli64 : Haydn_Intrinsic<"haydn_slli64",
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_srli64 : Haydn_Intrinsic<"haydn_srli64",
     [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
     [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
@@ -648,13 +632,13 @@ def int_haydn_x2fmul32rs  : haydn_binary_intrinsic<"haydn_x2fmul32rs",  llvm_v2i
 def int_haydn_x2fmul32rss : haydn_binary_intrinsic<"haydn_x2fmul32rss", llvm_v2i32_ty, llvm_v2i32_ty>;
 def int_haydn_x2fmul32ts  : haydn_binary_intrinsic<"haydn_x2fmul32ts",  llvm_v2i32_ty, llvm_v2i32_ty>;
 
-def int_haydn_x2fmula32rs  : haydn_binary_intrinsic<"haydn_x2fmula32rs",  llvm_v2i32_ty, llvm_v2i32_ty>;
-def int_haydn_x2fmula32rss : haydn_binary_intrinsic<"haydn_x2fmula32rss", llvm_v2i32_ty, llvm_v2i32_ty>;
-def int_haydn_x2fmula32ts  : haydn_binary_intrinsic<"haydn_x2fmula32ts",  llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fmula32rs  : haydn_ternary_intrinsic<"haydn_x2fmula32rs",  llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fmula32rss : haydn_ternary_intrinsic<"haydn_x2fmula32rss", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fmula32ts  : haydn_ternary_intrinsic<"haydn_x2fmula32ts",  llvm_v2i32_ty, llvm_v2i32_ty>;
 
-def int_haydn_x2fmuls32rs  : haydn_binary_intrinsic<"haydn_x2fmuls32rs",  llvm_v2i32_ty, llvm_v2i32_ty>;
-def int_haydn_x2fmuls32rss : haydn_binary_intrinsic<"haydn_x2fmuls32rss", llvm_v2i32_ty, llvm_v2i32_ty>;
-def int_haydn_x2fmuls32ts  : haydn_binary_intrinsic<"haydn_x2fmuls32ts",  llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fmuls32rs  : haydn_ternary_intrinsic<"haydn_x2fmuls32rs",  llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fmuls32rss : haydn_ternary_intrinsic<"haydn_x2fmuls32rss", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fmuls32ts  : haydn_ternary_intrinsic<"haydn_x2fmuls32ts",  llvm_v2i32_ty, llvm_v2i32_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4: X4 SIMD fractional multiply (binary DR64)
@@ -794,10 +778,10 @@ def int_haydn_x4mjswap16s : haydn_unary_intrinsic<"haydn_x4mjswap16s", llvm_v4i1
 def int_haydn_x4conj16  : haydn_unary_intrinsic<"haydn_x4conj16",  llvm_v4i16_ty, llvm_v4i16_ty>;
 def int_haydn_x4conj16s : haydn_unary_intrinsic<"haydn_x4conj16s", llvm_v4i16_ty, llvm_v4i16_ty>;
 def int_haydn_x4energy16 : haydn_unary_intrinsic<"haydn_x4energy16", llvm_i64_ty, llvm_v4i16_ty>;
-def int_haydn_x4cmul16   : haydn_unary_intrinsic<"haydn_x4cmul16",   llvm_v4i16_ty, llvm_v4i16_ty>;
-def int_haydn_x4cmul16s  : haydn_unary_intrinsic<"haydn_x4cmul16s",  llvm_v4i16_ty, llvm_v4i16_ty>;
-def int_haydn_x4cmul16s_f2 : haydn_unary_intrinsic<"haydn_x4cmul16s_f2", llvm_v4i16_ty, llvm_v4i16_ty>;
-def int_haydn_x4cmul16_f2  : haydn_unary_intrinsic<"haydn_x4cmul16_f2",  llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4cmul16   : Haydn_Intrinsic<"haydn_x4cmul16",   [llvm_v2i32_ty], [llvm_v4i16_ty], [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_x4cmul16s  : Haydn_Intrinsic<"haydn_x4cmul16s",  [llvm_v2i32_ty], [llvm_v4i16_ty], [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_x4cmul16s_f2 : Haydn_Intrinsic<"haydn_x4cmul16s_f2", [llvm_v2i32_ty], [llvm_v4i16_ty], [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_x4cmul16_f2  : Haydn_Intrinsic<"haydn_x4cmul16_f2",  [llvm_v2i32_ty], [llvm_v4i16_ty], [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 // X2/X4 binary (DR64 binary: i64, i64 -> i64)
 def int_haydn_x2max32   : haydn_binary_intrinsic<"haydn_x2max32",   llvm_v2i32_ty, llvm_v2i32_ty>;
@@ -834,16 +818,16 @@ def int_haydn_x2subadd32s_hllh : haydn_binary_intrinsic<"haydn_x2subadd32s_hllh"
 //===----------------------------------------------------------------------===//
 
 // X4CMUL16S — per-half complex multiply, saturating (binary DR64)
-def int_haydn_x4cmul16s_h  : haydn_binary_intrinsic<"haydn_x4cmul16s_h",  llvm_v4i16_ty, llvm_v4i16_ty>;
-def int_haydn_x4cmul16s_l  : haydn_binary_intrinsic<"haydn_x4cmul16s_l",  llvm_v4i16_ty, llvm_v4i16_ty>;
-def int_haydn_x4cmula16s_h : haydn_binary_intrinsic<"haydn_x4cmula16s_h", llvm_v4i16_ty, llvm_v4i16_ty>;
-def int_haydn_x4cmula16s_l : haydn_binary_intrinsic<"haydn_x4cmula16s_l", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4cmul16s_h  : Haydn_Intrinsic<"haydn_x4cmul16s_h",  [llvm_v2i32_ty], [llvm_v4i16_ty, llvm_v4i16_ty], [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_x4cmul16s_l  : Haydn_Intrinsic<"haydn_x4cmul16s_l",  [llvm_v2i32_ty], [llvm_v4i16_ty, llvm_v4i16_ty], [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_x4cmula16s_h : Haydn_Intrinsic<"haydn_x4cmula16s_h", [llvm_v2i32_ty], [llvm_v2i32_ty, llvm_v4i16_ty, llvm_v4i16_ty], [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_x4cmula16s_l : Haydn_Intrinsic<"haydn_x4cmula16s_l", [llvm_v2i32_ty], [llvm_v2i32_ty, llvm_v4i16_ty, llvm_v4i16_ty], [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 // X4CJMUL16S — per-half conjugated complex multiply, saturating (binary DR64)
-def int_haydn_x4cjmul16s_h  : haydn_binary_intrinsic<"haydn_x4cjmul16s_h",  llvm_v4i16_ty, llvm_v4i16_ty>;
-def int_haydn_x4cjmul16s_l  : haydn_binary_intrinsic<"haydn_x4cjmul16s_l",  llvm_v4i16_ty, llvm_v4i16_ty>;
-def int_haydn_x4cjmula16s_h : haydn_binary_intrinsic<"haydn_x4cjmula16s_h", llvm_v4i16_ty, llvm_v4i16_ty>;
-def int_haydn_x4cjmula16s_l : haydn_binary_intrinsic<"haydn_x4cjmula16s_l", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4cjmul16s_h  : Haydn_Intrinsic<"haydn_x4cjmul16s_h",  [llvm_v2i32_ty], [llvm_v4i16_ty, llvm_v4i16_ty], [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_x4cjmul16s_l  : Haydn_Intrinsic<"haydn_x4cjmul16s_l",  [llvm_v2i32_ty], [llvm_v4i16_ty, llvm_v4i16_ty], [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_x4cjmula16s_h : Haydn_Intrinsic<"haydn_x4cjmula16s_h", [llvm_v2i32_ty], [llvm_v2i32_ty, llvm_v4i16_ty, llvm_v4i16_ty], [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_x4cjmula16s_l : Haydn_Intrinsic<"haydn_x4cjmula16s_l", [llvm_v2i32_ty], [llvm_v2i32_ty, llvm_v4i16_ty, llvm_v4i16_ty], [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 2: 64-bit scalar ops
@@ -863,19 +847,21 @@ def int_haydn_add64_l : haydn_binary_intrinsic<"haydn_add64_l", llvm_i64_ty, llv
 def int_haydn_sub64_h : haydn_binary_intrinsic<"haydn_sub64_h", llvm_i64_ty, llvm_i64_ty>;
 def int_haydn_sub64_l : haydn_binary_intrinsic<"haydn_sub64_l", llvm_i64_ty, llvm_i64_ty>;
 
-// SLL64: i32, i32 -> i32 (64-bit shift producing 32-bit result)
-def int_haydn_sll64 : haydn_binary_intrinsic<"haydn_sll64", llvm_i32_ty, llvm_i32_ty>;
+// SLL64: golden rtd,rsd,rs — (i64 data, i32 shift) -> i64. Imm twin: slli64.
+def int_haydn_sll64 : Haydn_Intrinsic<"haydn_sll64",
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 // D220 Tier 2: DR64 bitwise AND/OR (map AE_AND32/OR32/AND64).
 def int_haydn_and64 : haydn_binary_intrinsic<"haydn_and64", llvm_i64_ty, llvm_i64_ty>;
 def int_haydn_or64  : haydn_binary_intrinsic<"haydn_or64",  llvm_i64_ty, llvm_i64_ty>;
 
-// SRA64/SRL64: i64, i32 -> i32 (64-bit shift producing 32-bit result)
+// SRA64/SRL64: golden rtd,rsd,rs — (i64 data, i32 shift) -> i64. Imm twins: srai64/srli64.
 def int_haydn_sra64 : Haydn_Intrinsic<"haydn_sra64",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty],
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
     [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_srl64 : Haydn_Intrinsic<"haydn_srl64",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty],
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
     [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
@@ -993,12 +979,12 @@ def int_haydn_fmulsa32s_hllh : haydn_ternary_intrinsic<"haydn_fmulsa32s_hllh", l
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 3: SRA64R — 64-bit arithmetic right shift with rounding
-// Cross-type: (i64 accum, i32 shift) -> i32
-// Unlike SRAI64R (which takes an immediate), this uses a register shift amount.
+// Golden: rtd,rsd (DR64), rs (GPR32) -> full i64. Imm twin: srai64r.
+// Pack-to-i32 uses trunc/cast at the call site (haydn_packsr32 in haydn_dsp.h).
 //===----------------------------------------------------------------------===//
 
 def int_haydn_sra64r : Haydn_Intrinsic<"haydn_sra64r",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty],
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
     [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
@@ -1409,10 +1395,10 @@ def int_haydn_x4mul16 : haydn_simd_mac_2dest_v4i16_intrinsic<"haydn_x4mul16">;
 
 def int_haydn_x2mulph32  : haydn_binary_intrinsic<"haydn_x2mulph32",  llvm_v2i32_ty, llvm_v2i32_ty>;
 def int_haydn_x2mulpl32  : haydn_binary_intrinsic<"haydn_x2mulpl32",  llvm_v2i32_ty, llvm_v2i32_ty>;
-def int_haydn_x2mulaph32 : haydn_binary_intrinsic<"haydn_x2mulaph32", llvm_v2i32_ty, llvm_v2i32_ty>;
-def int_haydn_x2mulapl32 : haydn_binary_intrinsic<"haydn_x2mulapl32", llvm_v2i32_ty, llvm_v2i32_ty>;
-def int_haydn_x2mulsph32 : haydn_binary_intrinsic<"haydn_x2mulsph32", llvm_v2i32_ty, llvm_v2i32_ty>;
-def int_haydn_x2mulspl32 : haydn_binary_intrinsic<"haydn_x2mulspl32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2mulaph32 : haydn_ternary_intrinsic<"haydn_x2mulaph32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2mulapl32 : haydn_ternary_intrinsic<"haydn_x2mulapl32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2mulsph32 : haydn_ternary_intrinsic<"haydn_x2mulsph32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2mulspl32 : haydn_ternary_intrinsic<"haydn_x2mulspl32", llvm_v2i32_ty, llvm_v2i32_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2 32-bit complex fractional multiply (binary DR64)
@@ -1456,6 +1442,10 @@ def int_haydn_x4sat32t16 : Haydn_Intrinsic<"haydn_x4sat32t16",
     [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 def int_haydn_x4seli16 : Haydn_Intrinsic<"haydn_x4seli16",
+    [llvm_v4i16_ty], [llvm_v4i16_ty, llvm_v4i16_ty, llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+// Reg twin: mask in GPR (DB X4SEL16).
+def int_haydn_x4sel16 : Haydn_Intrinsic<"haydn_x4sel16",
     [llvm_v4i16_ty], [llvm_v4i16_ty, llvm_v4i16_ty, llvm_i32_ty],
     [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
@@ -1766,3 +1756,309 @@ def int_haydn_popcount64 : Haydn_Intrinsic<"haydn_popcount64",
     [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 } // TargetPrefix = "haydn"
+
+//===----------------------------------------------------------------------===
+// Golden D-ALU + LS coverage (generated)
+//===----------------------------------------------------------------------===
+
+def int_haydn_add64 : haydn_binary_intrinsic<"haydn_add64", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_sub64 : haydn_binary_intrinsic<"haydn_sub64", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_xor64 : haydn_binary_intrinsic<"haydn_xor64", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_add64s_h : haydn_binary_intrinsic<"haydn_add64s_h", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_add64s_l : haydn_binary_intrinsic<"haydn_add64s_l", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_sub64s_h : haydn_binary_intrinsic<"haydn_sub64s_h", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_sub64s_l : haydn_binary_intrinsic<"haydn_sub64s_l", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_move64 : haydn_unary_intrinsic<"haydn_move64", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_transf64_h : haydn_unary_intrinsic<"haydn_transf64_h", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_transf64_l : haydn_unary_intrinsic<"haydn_transf64_l", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_sext32t64 : Haydn_Intrinsic<"haydn_sext32t64",
+    [llvm_i64_ty], [llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_transf64 : Haydn_Intrinsic<"haydn_transf64",
+    [llvm_i64_ty], [llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_transf64f2 : Haydn_Intrinsic<"haydn_transf64f2",
+    [llvm_i64_ty], [llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_movei_h : Haydn_Intrinsic<"haydn_movei_h",
+    [llvm_i64_ty], [llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_movei_l : Haydn_Intrinsic<"haydn_movei_l",
+    [llvm_i64_ty], [llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_zero_dr : Haydn_Intrinsic<"haydn_zero_dr",
+    [llvm_i64_ty], [],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_sin_cos : Haydn_Intrinsic<"haydn_sin_cos",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_haydn_d_ldw_post_imm : Haydn_Intrinsic<"haydn_d_ldw_post_imm",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_ldw_post_reg : Haydn_Intrinsic<"haydn_d_ldw_post_reg",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_ldw_pre_imm : Haydn_Intrinsic<"haydn_d_ldw_pre_imm",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_ldw_pre_reg : Haydn_Intrinsic<"haydn_d_ldw_pre_reg",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_ldw_with_imm : Haydn_Intrinsic<"haydn_d_ldw_with_imm",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_ldw_with_reg : Haydn_Intrinsic<"haydn_d_ldw_with_reg",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_lhw_post_imm : Haydn_Intrinsic<"haydn_d_lhw_post_imm",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_lhw_post_reg : Haydn_Intrinsic<"haydn_d_lhw_post_reg",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_lhw_pre_imm : Haydn_Intrinsic<"haydn_d_lhw_pre_imm",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_lhw_pre_reg : Haydn_Intrinsic<"haydn_d_lhw_pre_reg",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_lhw_with_imm : Haydn_Intrinsic<"haydn_d_lhw_with_imm",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_lhw_with_reg : Haydn_Intrinsic<"haydn_d_lhw_with_reg",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_lw_post_imm : Haydn_Intrinsic<"haydn_d_lw_post_imm",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_lw_post_reg : Haydn_Intrinsic<"haydn_d_lw_post_reg",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_lw_pre_imm : Haydn_Intrinsic<"haydn_d_lw_pre_imm",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_lw_pre_reg : Haydn_Intrinsic<"haydn_d_lw_pre_reg",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_lw_with_imm : Haydn_Intrinsic<"haydn_d_lw_with_imm",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_lw_with_reg : Haydn_Intrinsic<"haydn_d_lw_with_reg",
+    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sdw_post_imm : Haydn_Intrinsic<"haydn_d_sdw_post_imm",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sdw_post_reg : Haydn_Intrinsic<"haydn_d_sdw_post_reg",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sdw_pre_imm : Haydn_Intrinsic<"haydn_d_sdw_pre_imm",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sdw_pre_reg : Haydn_Intrinsic<"haydn_d_sdw_pre_reg",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sdw_with_imm : Haydn_Intrinsic<"haydn_d_sdw_with_imm",
+    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sdw_with_reg : Haydn_Intrinsic<"haydn_d_sdw_with_reg",
+    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_shw_post_imm : Haydn_Intrinsic<"haydn_d_shw_post_imm",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_shw_post_reg : Haydn_Intrinsic<"haydn_d_shw_post_reg",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_shw_pre_imm : Haydn_Intrinsic<"haydn_d_shw_pre_imm",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_shw_pre_reg : Haydn_Intrinsic<"haydn_d_shw_pre_reg",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_shw_with_imm : Haydn_Intrinsic<"haydn_d_shw_with_imm",
+    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_shw_with_reg : Haydn_Intrinsic<"haydn_d_shw_with_reg",
+    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_h_post_imm : Haydn_Intrinsic<"haydn_d_sw_h_post_imm",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_h_post_reg : Haydn_Intrinsic<"haydn_d_sw_h_post_reg",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_h_pre_imm : Haydn_Intrinsic<"haydn_d_sw_h_pre_imm",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_h_pre_reg : Haydn_Intrinsic<"haydn_d_sw_h_pre_reg",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_h_with_imm : Haydn_Intrinsic<"haydn_d_sw_h_with_imm",
+    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_h_with_reg : Haydn_Intrinsic<"haydn_d_sw_h_with_reg",
+    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_l_post_imm : Haydn_Intrinsic<"haydn_d_sw_l_post_imm",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_l_post_reg : Haydn_Intrinsic<"haydn_d_sw_l_post_reg",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_l_pre_imm : Haydn_Intrinsic<"haydn_d_sw_l_pre_imm",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_l_pre_reg : Haydn_Intrinsic<"haydn_d_sw_l_pre_reg",
+    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_l_with_imm : Haydn_Intrinsic<"haydn_d_sw_l_with_imm",
+    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_l_with_reg : Haydn_Intrinsic<"haydn_d_sw_l_with_reg",
+    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lbs_post_imm : Haydn_Intrinsic<"haydn_s_lbs_post_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lbs_post_reg : Haydn_Intrinsic<"haydn_s_lbs_post_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lbs_pre_imm : Haydn_Intrinsic<"haydn_s_lbs_pre_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lbs_pre_reg : Haydn_Intrinsic<"haydn_s_lbs_pre_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lbs_with_imm : Haydn_Intrinsic<"haydn_s_lbs_with_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lbs_with_reg : Haydn_Intrinsic<"haydn_s_lbs_with_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lbu_post_imm : Haydn_Intrinsic<"haydn_s_lbu_post_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lbu_post_reg : Haydn_Intrinsic<"haydn_s_lbu_post_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lbu_pre_imm : Haydn_Intrinsic<"haydn_s_lbu_pre_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lbu_pre_reg : Haydn_Intrinsic<"haydn_s_lbu_pre_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lbu_with_imm : Haydn_Intrinsic<"haydn_s_lbu_with_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lbu_with_reg : Haydn_Intrinsic<"haydn_s_lbu_with_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lhws_post_imm : Haydn_Intrinsic<"haydn_s_lhws_post_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lhws_post_reg : Haydn_Intrinsic<"haydn_s_lhws_post_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lhws_pre_imm : Haydn_Intrinsic<"haydn_s_lhws_pre_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lhws_pre_reg : Haydn_Intrinsic<"haydn_s_lhws_pre_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lhws_with_imm : Haydn_Intrinsic<"haydn_s_lhws_with_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lhws_with_reg : Haydn_Intrinsic<"haydn_s_lhws_with_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lhwu_post_imm : Haydn_Intrinsic<"haydn_s_lhwu_post_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lhwu_post_reg : Haydn_Intrinsic<"haydn_s_lhwu_post_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lhwu_pre_imm : Haydn_Intrinsic<"haydn_s_lhwu_pre_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lhwu_pre_reg : Haydn_Intrinsic<"haydn_s_lhwu_pre_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lhwu_with_imm : Haydn_Intrinsic<"haydn_s_lhwu_with_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lhwu_with_reg : Haydn_Intrinsic<"haydn_s_lhwu_with_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lw_post_imm : Haydn_Intrinsic<"haydn_s_lw_post_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lw_post_reg : Haydn_Intrinsic<"haydn_s_lw_post_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lw_pre_imm : Haydn_Intrinsic<"haydn_s_lw_pre_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lw_pre_reg : Haydn_Intrinsic<"haydn_s_lw_pre_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lw_with_imm : Haydn_Intrinsic<"haydn_s_lw_with_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_lw_with_reg : Haydn_Intrinsic<"haydn_s_lw_with_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_sb_post_imm : Haydn_Intrinsic<"haydn_s_sb_post_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_sb_post_reg : Haydn_Intrinsic<"haydn_s_sb_post_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_sb_pre_imm : Haydn_Intrinsic<"haydn_s_sb_pre_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_sb_pre_reg : Haydn_Intrinsic<"haydn_s_sb_pre_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_sb_with_imm : Haydn_Intrinsic<"haydn_s_sb_with_imm",
+    [], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_sb_with_reg : Haydn_Intrinsic<"haydn_s_sb_with_reg",
+    [], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_shw_post_imm : Haydn_Intrinsic<"haydn_s_shw_post_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_shw_post_reg : Haydn_Intrinsic<"haydn_s_shw_post_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_shw_pre_imm : Haydn_Intrinsic<"haydn_s_shw_pre_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_shw_pre_reg : Haydn_Intrinsic<"haydn_s_shw_pre_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_shw_with_imm : Haydn_Intrinsic<"haydn_s_shw_with_imm",
+    [], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_shw_with_reg : Haydn_Intrinsic<"haydn_s_shw_with_reg",
+    [], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_sw_post_imm : Haydn_Intrinsic<"haydn_s_sw_post_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_sw_post_reg : Haydn_Intrinsic<"haydn_s_sw_post_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_sw_pre_imm : Haydn_Intrinsic<"haydn_s_sw_pre_imm",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_sw_pre_reg : Haydn_Intrinsic<"haydn_s_sw_pre_reg",
+    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_sw_with_imm : Haydn_Intrinsic<"haydn_s_sw_with_imm",
+    [], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_s_sw_with_reg : Haydn_Intrinsic<"haydn_s_sw_with_reg",
+    [], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;

@@ -2075,75 +2075,115 @@ def FF2MULS32RS_HH_S2 : HaydnFU_MAC_S2_D_RRA<0b001110011,
   let Constraints = "$rta = $rtd";
 }
 
-def X2FMULA32RS_S1 : HaydnFU_MAC_S1_D_RR<0b001110110,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2fmula32rs\t$rtd, $rsd1, $rsd2", []>;
-def X2FMULA32RS_S2 : HaydnFU_MAC_S2_D_RR<0b001110110,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2fmula32rs\t$rtd, $rsd1, $rsd2", []>;
+def X2FMULA32RS_S1 : HaydnFU_MAC_S1_D_RRA<0b001110110,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2fmula32rs\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def X2FMULA32RS_S2 : HaydnFU_MAC_S2_D_RRA<0b001110110,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2fmula32rs\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
-def X2FMULA32RSS_S1 : HaydnFU_MAC_S1_D_RR<0b001110111,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2fmula32rss\t$rtd, $rsd1, $rsd2", []>;
-def X2FMULA32RSS_S2 : HaydnFU_MAC_S2_D_RR<0b001110111,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2fmula32rss\t$rtd, $rsd1, $rsd2", []>;
+def X2FMULA32RSS_S1 : HaydnFU_MAC_S1_D_RRA<0b001110111,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2fmula32rss\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def X2FMULA32RSS_S2 : HaydnFU_MAC_S2_D_RRA<0b001110111,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2fmula32rss\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
-def X2FMULS32RS_S1 : HaydnFU_MAC_S1_D_RR<0b001111000,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2fmuls32rs\t$rtd, $rsd1, $rsd2", []>;
-def X2FMULS32RS_S2 : HaydnFU_MAC_S2_D_RR<0b001111000,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2fmuls32rs\t$rtd, $rsd1, $rsd2", []>;
+def X2FMULS32RS_S1 : HaydnFU_MAC_S1_D_RRA<0b001111000,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2fmuls32rs\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def X2FMULS32RS_S2 : HaydnFU_MAC_S2_D_RRA<0b001111000,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2fmuls32rs\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
-def X2FMULS32RSS_S1 : HaydnFU_MAC_S1_D_RR<0b001111001,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2fmuls32rss\t$rtd, $rsd1, $rsd2", []>;
-def X2FMULS32RSS_S2 : HaydnFU_MAC_S2_D_RR<0b001111001,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2fmuls32rss\t$rtd, $rsd1, $rsd2", []>;
+def X2FMULS32RSS_S1 : HaydnFU_MAC_S1_D_RRA<0b001111001,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2fmuls32rss\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def X2FMULS32RSS_S2 : HaydnFU_MAC_S2_D_RRA<0b001111001,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2fmuls32rss\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
-def X2FMULA32TS_S1 : HaydnFU_MAC_S1_D_RR<0b001111011,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2fmula32ts\t$rtd, $rsd1, $rsd2", []>;
-def X2FMULA32TS_S2 : HaydnFU_MAC_S2_D_RR<0b001111011,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2fmula32ts\t$rtd, $rsd1, $rsd2", []>;
+def X2FMULA32TS_S1 : HaydnFU_MAC_S1_D_RRA<0b001111011,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2fmula32ts\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def X2FMULA32TS_S2 : HaydnFU_MAC_S2_D_RRA<0b001111011,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2fmula32ts\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
-def X2FMULS32TS_S1 : HaydnFU_MAC_S1_D_RR<0b001111100,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2fmuls32ts\t$rtd, $rsd1, $rsd2", []>;
-def X2FMULS32TS_S2 : HaydnFU_MAC_S2_D_RR<0b001111100,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2fmuls32ts\t$rtd, $rsd1, $rsd2", []>;
+def X2FMULS32TS_S1 : HaydnFU_MAC_S1_D_RRA<0b001111100,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2fmuls32ts\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def X2FMULS32TS_S2 : HaydnFU_MAC_S2_D_RRA<0b001111100,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2fmuls32ts\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
-def X2MULAPL32_S1 : HaydnFU_MAC_S1_D_RR<0b001111110,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2mulapl32\t$rtd, $rsd1, $rsd2", []>;
-def X2MULAPL32_S2 : HaydnFU_MAC_S2_D_RR<0b001111110,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2mulapl32\t$rtd, $rsd1, $rsd2", []>;
+def X2MULAPL32_S1 : HaydnFU_MAC_S1_D_RRA<0b001111110,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2mulapl32\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def X2MULAPL32_S2 : HaydnFU_MAC_S2_D_RRA<0b001111110,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2mulapl32\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
-def X2MULSPL32_S1 : HaydnFU_MAC_S1_D_RR<0b001111111,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2mulspl32\t$rtd, $rsd1, $rsd2", []>;
-def X2MULSPL32_S2 : HaydnFU_MAC_S2_D_RR<0b001111111,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2mulspl32\t$rtd, $rsd1, $rsd2", []>;
+def X2MULSPL32_S1 : HaydnFU_MAC_S1_D_RRA<0b001111111,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2mulspl32\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def X2MULSPL32_S2 : HaydnFU_MAC_S2_D_RRA<0b001111111,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2mulspl32\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
-def X2MULAPH32_S1 : HaydnFU_MAC_S1_D_RR<0b010000001,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2mulaph32\t$rtd, $rsd1, $rsd2", []>;
-def X2MULAPH32_S2 : HaydnFU_MAC_S2_D_RR<0b010000001,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2mulaph32\t$rtd, $rsd1, $rsd2", []>;
+def X2MULAPH32_S1 : HaydnFU_MAC_S1_D_RRA<0b010000001,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2mulaph32\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def X2MULAPH32_S2 : HaydnFU_MAC_S2_D_RRA<0b010000001,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2mulaph32\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
-def X2MULSPH32_S1 : HaydnFU_MAC_S1_D_RR<0b010000010,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2mulsph32\t$rtd, $rsd1, $rsd2", []>;
-def X2MULSPH32_S2 : HaydnFU_MAC_S2_D_RR<0b010000010,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x2mulsph32\t$rtd, $rsd1, $rsd2", []>;
+def X2MULSPH32_S1 : HaydnFU_MAC_S1_D_RRA<0b010000010,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2mulsph32\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def X2MULSPH32_S2 : HaydnFU_MAC_S2_D_RRA<0b010000010,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x2mulsph32\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
 def X2FCMULA32RS_S1 : HaydnFU_MAC_S1_D_RRA<0b010001001,
     (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
@@ -2962,33 +3002,49 @@ def MUL16AQ_S2 : HaydnFU_MAC_S2_D_RRA<0b100110101,
   let Constraints = "$rta = $rtd";
 }
 
-def X4CMULA16S_H_S1 : HaydnFU_MAC_S1_D_RR<0b100111000,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x4cmula16s.h\t$rtd, $rsd1, $rsd2", []>;
-def X4CMULA16S_H_S2 : HaydnFU_MAC_S2_D_RR<0b100111000,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x4cmula16s.h\t$rtd, $rsd1, $rsd2", []>;
+def X4CMULA16S_H_S1 : HaydnFU_MAC_S1_D_RRA<0b100111000,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x4cmula16s.h\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def X4CMULA16S_H_S2 : HaydnFU_MAC_S2_D_RRA<0b100111000,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x4cmula16s.h\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
-def X4CMULA16S_L_S1 : HaydnFU_MAC_S1_D_RR<0b100111001,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x4cmula16s.l\t$rtd, $rsd1, $rsd2", []>;
-def X4CMULA16S_L_S2 : HaydnFU_MAC_S2_D_RR<0b100111001,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x4cmula16s.l\t$rtd, $rsd1, $rsd2", []>;
+def X4CMULA16S_L_S1 : HaydnFU_MAC_S1_D_RRA<0b100111001,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x4cmula16s.l\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def X4CMULA16S_L_S2 : HaydnFU_MAC_S2_D_RRA<0b100111001,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x4cmula16s.l\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
-def X4CJMULA16S_H_S1 : HaydnFU_MAC_S1_D_RR<0b100111100,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x4cjmula16s.h\t$rtd, $rsd1, $rsd2", []>;
-def X4CJMULA16S_H_S2 : HaydnFU_MAC_S2_D_RR<0b100111100,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x4cjmula16s.h\t$rtd, $rsd1, $rsd2", []>;
+def X4CJMULA16S_H_S1 : HaydnFU_MAC_S1_D_RRA<0b100111100,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x4cjmula16s.h\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def X4CJMULA16S_H_S2 : HaydnFU_MAC_S2_D_RRA<0b100111100,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x4cjmula16s.h\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
-def X4CJMULA16S_L_S1 : HaydnFU_MAC_S1_D_RR<0b100111101,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x4cjmula16s.l\t$rtd, $rsd1, $rsd2", []>;
-def X4CJMULA16S_L_S2 : HaydnFU_MAC_S2_D_RR<0b100111101,
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
-    "x4cjmula16s.l\t$rtd, $rsd1, $rsd2", []>;
+def X4CJMULA16S_L_S1 : HaydnFU_MAC_S1_D_RRA<0b100111101,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x4cjmula16s.l\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
+def X4CJMULA16S_L_S2 : HaydnFU_MAC_S2_D_RRA<0b100111101,
+    (outs DR64:$rtd), (ins DR64:$rta, DR64:$rsd1, DR64:$rsd2),
+    "x4cjmula16s.l\t$rtd, $rsd1, $rsd2", []> {
+  let Constraints = "$rta = $rtd";
+}
 
 def SMULA16_00_S1 : HaydnFU_MAC_S1_D_RR<0b100111110,
     (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),

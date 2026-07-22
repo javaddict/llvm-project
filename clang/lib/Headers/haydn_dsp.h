@@ -30,6 +30,10 @@
  * (x2fcmul*, fir*, fmul32s*, …) use the bitcast helpers from haydn.h:
  *   __haydn_v2_as_i64 / __haydn_i64_as_v2
  *   __haydn_v4_as_i64 / __haydn_i64_as_v4
+ *
+ * Non-ISA composites (not golden encodings) live HERE only:
+ *   haydn_satsr64, haydn_packsr32, haydn_packsr32x2_*
+ * haydn.h / builtins must not invent these as mnemonics.
  *===----------------------------------------------------------------------===*/
 
 #ifndef __AE_V2I
@@ -37,6 +41,83 @@
 #define __AE_I2V(i) __haydn_i64_as_v2(i)
 #define __AE_V4I(v) __haydn_v4_as_i64(v)
 #define __AE_I4V(i) __haydn_i64_as_v4(i)
+#endif
+
+/*===----------------------------------------------------------------------===
+ * Composites (no PACKSR / SATSR encoding in golden DB)
+ *
+ *   packsr32     -> DB SRA64R (haydn_sra64r): sat32((acc+rnd)>>sh)
+ *   satsr64      -> soft SAT32(acc>>sh); no single sat-shift mnemonic
+ *   packsr32x2_* -> DB X2SRA32R + X2SEL32_* (AE_PKSR-style dual pack)
+ *
+ * int shift of any value is OK here (helpers / reg forms, not ImmArg ISA).
+ *===----------------------------------------------------------------------===*/
+
+#ifndef haydn_satsr64
+/** Soft SAT32(acc >> sh). Not a golden mnemonic. */
+__HAYDN_INTRIN_FN int haydn_satsr64(int64_t a, int sh) {
+  int64_t x;
+  if (sh <= 0)
+    x = a;
+  else if (sh >= 63)
+    x = a < 0 ? (int64_t)-1 : (int64_t)0;
+  else
+    x = a >> sh;
+  if (x > 0x7fffffffLL)
+    return (int)0x7fffffff;
+  if (x < (int64_t)(int32_t)0x80000000)
+    return (int)0x80000000;
+  return (int)x;
+}
+#endif
+
+#ifndef haydn_packsr32
+/** Compose DB SRA64R (full i64) then narrow to 32-bit pack result. */
+__HAYDN_INTRIN_FN int haydn_packsr32(int64_t a, int sh) {
+  return (int)haydn_sra64r(a, sh);
+}
+#endif
+
+#ifndef haydn_packsr32x2_hh
+/** Compose X2SRA32R + X2SEL32_HH (not a single encoding). */
+__HAYDN_INTRIN_FN haydn_x2int32 haydn_packsr32x2_hh(int64_t a, int64_t b,
+                                                      int sh) {
+  haydn_x2int32 ta = haydn_x2sra32r(__haydn_i64_as_v2(a), sh);
+  haydn_x2int32 tb = haydn_x2sra32r(__haydn_i64_as_v2(b), sh);
+  return haydn_x2sel32_hh(ta, tb);
+}
+__HAYDN_INTRIN_FN haydn_x2int32 haydn_packsr32x2_hl(int64_t a, int64_t b,
+                                                      int sh) {
+  haydn_x2int32 ta = haydn_x2sra32r(__haydn_i64_as_v2(a), sh);
+  haydn_x2int32 tb = haydn_x2sra32r(__haydn_i64_as_v2(b), sh);
+  return haydn_x2sel32_hl(ta, tb);
+}
+__HAYDN_INTRIN_FN haydn_x2int32 haydn_packsr32x2_lh(int64_t a, int64_t b,
+                                                      int sh) {
+  haydn_x2int32 ta = haydn_x2sra32r(__haydn_i64_as_v2(a), sh);
+  haydn_x2int32 tb = haydn_x2sra32r(__haydn_i64_as_v2(b), sh);
+  return haydn_x2sel32_lh(ta, tb);
+}
+__HAYDN_INTRIN_FN haydn_x2int32 haydn_packsr32x2_ll(int64_t a, int64_t b,
+                                                      int sh) {
+  haydn_x2int32 ta = haydn_x2sra32r(__haydn_i64_as_v2(a), sh);
+  haydn_x2int32 tb = haydn_x2sra32r(__haydn_i64_as_v2(b), sh);
+  return haydn_x2sel32_ll(ta, tb);
+}
+#endif
+
+/* Legacy underscore names used by some ports / cheatsheets. */
+#ifndef __haydn_satsr64
+#define __haydn_satsr64 haydn_satsr64
+#endif
+#ifndef __haydn_packsr32
+#define __haydn_packsr32 haydn_packsr32
+#endif
+#ifndef __haydn_packsr32x2_hh
+#define __haydn_packsr32x2_hh haydn_packsr32x2_hh
+#define __haydn_packsr32x2_hl haydn_packsr32x2_hl
+#define __haydn_packsr32x2_lh haydn_packsr32x2_lh
+#define __haydn_packsr32x2_ll haydn_packsr32x2_ll
 #endif
 
 
@@ -838,14 +919,15 @@ static inline ae_int32x2 AE_SRAA32(ae_int32x2 a, int s) { return haydn_x2sra32(a
 /// Dual 32-bit logical right shift by register
 static inline ae_int32x2 AE_SRLA32(ae_int32x2 a, int s) { return haydn_x2srl32(a, s); }
 
-/// Dual 32-bit arithmetic left shift by immediate
-static inline ae_int32x2 AE_SLLI32(ae_int32x2 a, int s) { return haydn_x2slli32(a, s); }
+/// Dual 32-bit left shift (HiFi AE_SLLI32 API takes int; map to DB reg form
+/// X2SLL32 — ImmArg x2slli32 only when call site passes a literal).
+static inline ae_int32x2 AE_SLLI32(ae_int32x2 a, int s) { return haydn_x2sll32(a, s); }
 
-/// Dual 32-bit arithmetic right shift by immediate
-static inline ae_int32x2 AE_SRAI32(ae_int32x2 a, int s) { return haydn_x2srai32(a, s); }
+/// Dual 32-bit arithmetic right shift (reg form; see AE_SLLI32).
+static inline ae_int32x2 AE_SRAI32(ae_int32x2 a, int s) { return haydn_x2sra32(a, s); }
 
-/// Dual 32-bit logical right shift by immediate
-static inline ae_int32x2 AE_SRLI32(ae_int32x2 a, int s) { return haydn_x2srli32(a, s); }
+/// Dual 32-bit logical right shift (reg form; see AE_SLLI32).
+static inline ae_int32x2 AE_SRLI32(ae_int32x2 a, int s) { return haydn_x2srl32(a, s); }
 
 /// Quad 16-bit arithmetic left shift by register
 static inline ae_int16x4 AE_SLLA16X4(ae_int16x4 a, int s) { return haydn_x4sll16(a, s); }
@@ -856,23 +938,31 @@ static inline ae_int16x4 AE_SRAA16X4(ae_int16x4 a, int s) { return haydn_x4sra16
 /// Quad 16-bit logical right shift by register
 static inline ae_int16x4 AE_SRLA16X4(ae_int16x4 a, int s) { return haydn_x4srl16(a, s); }
 
-/// Quad 16-bit arithmetic left shift by immediate
-static inline ae_int16x4 AE_SLLI16X4(ae_int16x4 a, int s) { return haydn_x4slli16(a, s); }
+/// Quad 16-bit left shift (AE int amount -> DB reg form X4SLL16).
+static inline ae_int16x4 AE_SLLI16X4(ae_int16x4 a, int s) { return haydn_x4sll16(a, s); }
 
-/// Quad 16-bit arithmetic right shift by immediate
-static inline ae_int16x4 AE_SRAI16X4(ae_int16x4 a, int s) { return haydn_x4srai16(a, s); }
+/// Quad 16-bit arithmetic right shift (reg form).
+static inline ae_int16x4 AE_SRAI16X4(ae_int16x4 a, int s) { return haydn_x4sra16(a, s); }
 
-/// Quad 16-bit logical right shift by immediate
-static inline ae_int16x4 AE_SRLI16X4(ae_int16x4 a, int s) { return haydn_x4srli16(a, s); }
+/// Quad 16-bit logical right shift (reg form).
+static inline ae_int16x4 AE_SRLI16X4(ae_int16x4 a, int s) { return haydn_x4srl16(a, s); }
 
-/// 64-bit arithmetic left shift by immediate
-#define AE_SLAI64(a, s) ((ae_int64)(a) << (s))
+/// 64-bit left shift (HiFi int amount → DB reg form SLL64; ImmArg slli64 only
+/// for direct haydn_slli64(literal) call sites — ImmArg cannot live behind a
+/// C ternary / choose_expr with a variable arm).
+static inline ae_int64 AE_SLAI64(ae_int64 a, int s) {
+  return (ae_int64)haydn_sll64(a, s);
+}
 
-/// 64-bit arithmetic right shift by immediate
-#define AE_SRAI64(a, s) haydn_srai64r((a), (s))
+/// 64-bit arithmetic right shift → DB reg form SRA64 (see AE_SLAI64).
+static inline ae_int64 AE_SRAI64(ae_int64 a, int s) {
+  return (ae_int64)haydn_sra64(a, s);
+}
 
-/// 64-bit logical right shift by immediate
-#define AE_SRLI64(a, s) ((ae_int64)((unsigned long long)(a) >> (s)))
+/// 64-bit logical right shift → DB reg form SRL64 (see AE_SLAI64).
+static inline ae_int64 AE_SRLI64(ae_int64 a, int s) {
+  return (ae_int64)haydn_srl64(a, s);
+}
 
 /// Shift right by SAR register (replaced with explicit shift on Haydn)
 #define AE_SRAS32(a, s) haydn_x2sra32((a), (s))
@@ -913,8 +1003,8 @@ static inline ae_int32x2 AE_SRAA32RS(ae_int32x2 a, int s) { return haydn_x2sra32
 /// Quad 16-bit arithmetic right shift with rounding by register
 static inline ae_int16x4 AE_SRAA16RS(ae_int16x4 a, int s) { return haydn_x4sra16r(a, s); }
 
-/// Dual 32-bit fractional shift by immediate
-#define AE_F32X2_SRAI(a, s) haydn_x2srai32((a), (s))
+/// Dual 32-bit fractional shift (reg form when s is not a literal ImmArg).
+#define AE_F32X2_SRAI(a, s) haydn_x2sra32((a), (s))
 
 //===----------------------------------------------------------------------===//
 // Rounding / Conversion / Truncation
@@ -922,9 +1012,9 @@ static inline ae_int16x4 AE_SRAA16RS(ae_int16x4 a, int s) { return haydn_x4sra16
 
 /// Round 2x64-bit to 2x32-bit with symmetric saturation
 /// Uses paired pack-shift-round: SAT32((acc + rounding) >> shift)
-/// uses haydn_packsr32x2_hh (the paired intrinsic at
-/// IntrinsicsHaydn.td:448) to do both shifts in DR64 without crossing to
-/// GPR32. Previously this was 2x scalar packsr32 + manual <<32 |, which
+/// uses haydn_packsr32x2_hh (composite in this header: X2SRA32R + X2SEL32)
+/// to do both shifts in DR64 without crossing to GPR32. Previously this
+/// was 2x scalar packsr32 + manual <<32 |, which
 /// caused the DR64->GPR32->DR64 cross-bank round-trip (~6 ops per lane,
 /// ~12 per call, repeated once per lattice stage — the dominant latr bloat).
 static inline ae_int32x2 AE_ROUND32X2F48S(ae_int64 a, ae_int64 b,
@@ -1042,8 +1132,12 @@ static inline ae_int32x2 AE_CVT32X2F16_10(ae_int16x4 a) {
 /// Pack high+low halfwords.
 #define AE_SEL32_HL(a, b) ((ae_int32x2)haydn_x2sel32_hl((a), (b)))
 
-/// Select with 4-bit immediate -- maps directly to Haydn x4seli16
-#define AE_SEL16(a, b, imm) ((ae_int16x4)haydn_x4seli16((a), (b), (imm)))
+/// Select 4×16 lanes. AE API takes int mask → always DB reg form X4SEL16.
+/// ImmArg X4SELI16 is haydn_x4seli16(a,b,literal) for constant call sites only
+/// (ImmArg cannot sit behind a ternary with a variable arm — Sema checks both).
+static inline ae_int16x4 AE_SEL16(ae_int16x4 a, ae_int16x4 b, int m) {
+  return (ae_int16x4)haydn_x4sel16(a, b, m);
+}
 
 /// 16-bit select patterns used in NatureDSP
 // TODO: no Haydn equivalent - needs workaround with x4seli16 and appropriate imm
@@ -1820,14 +1914,12 @@ ae_int32x2 AE_MAXABS32S(ae_int32x2 d0, ae_int32x2 d1) {
 #define AE_MULPL32(a, b) haydn_x2mulpl32((a), (b))
 
 /// Dual 32-bit multiply-accumulate pair high.
-/// haydn_x2mulaph32 is BINARY (2-arg returning); compose explicit add-back.
-/// (See for arity reconciliation; arity from BuiltinsHaydn.td:680.)
-#define AE_MULAPH32(acc, a, b) (acc) = ((acc) + haydn_x2mulaph32((a), (b)))
+/// Golden X2MULAPH32: tied-acc MAC. Intrinsic is ternary (acc, a, b).
+#define AE_MULAPH32(acc, a, b) (acc) = haydn_x2mulaph32((acc), (a), (b))
 
 /// Dual 32-bit multiply-accumulate pair low.
-/// haydn_x2mulapl32 is BINARY (2-arg returning); compose explicit add-back.
-/// (See ; arity from BuiltinsHaydn.td:681.)
-#define AE_MULAPL32(acc, a, b) (acc) = ((acc) + haydn_x2mulapl32((a), (b)))
+/// Golden X2MULAPL32: tied-acc MAC. Intrinsic is ternary (acc, a, b).
+#define AE_MULAPL32(acc, a, b) (acc) = haydn_x2mulapl32((acc), (a), (b))
 
 //===----------------------------------------------------------------------===//
 // Q-format multiply/accumulate
@@ -2631,8 +2723,9 @@ static inline ae_int64 haydn_ae_slaa64s(ae_int64 q, int s) {
 }
 #define AE_SLAA64S(q, s)           haydn_ae_slaa64s((q), (int)(s))
 #define AE_SLAS64S(q, s)           ((ae_int64)((ae_int64)(q) >> (s)))
-#define AE_SLAI64S(q, s)           ((ae_int64)((ae_int64)(q) << (s)))
-#define AE_SLLI64(q, s)            ((ae_int64)((ae_int64)(q) << (s)))
+#define AE_SLAI64S(q, s)           AE_SLAI64((q), (s))
+/* AE_SLLI64: same as AE_SLAI64 — ImmArg SLLI64 / reg SLL64 via constant_p. */
+#define AE_SLLI64(q, s)            AE_SLAI64((q), (s))
 #define AE_NEG64S(q)               haydn_neg64s((q))
 #define AE_ZEROP48()               ((ae_int64)0)
 
@@ -2664,12 +2757,10 @@ static inline ae_int16x4 __ae_srai16r(ae_int16x4 a, int s) {
   return (ae_int16x4)((long long)(unsigned short)l0 | ((long long)(unsigned short)l1 << 16) |
                      ((long long)(unsigned short)l2 << 32) | ((long long)(unsigned short)l3 << 48));
 }
-/// uses the native X2SRAI32R instruction (1 op) instead of
-/// the scalar C expansion (~8 ops per call with lshr i64 32 lane extraction).
-/// This is the dominant fix for MDCT/IMDCT (8.9-12.2x bloat) and all
-/// AE_SRAI32R users across FFT/DCT (~100 kernels).
+/// Native X2SRA32R (reg form; ImmArg x2srai32r only for literal call sites).
+/// Dominant path for MDCT/IMDCT and AE_SRAI32R users across FFT/DCT.
 static inline ae_int32x2 __ae_srai32r(ae_int32x2 a, int s) {
-  return haydn_x2srai32r(a, s);
+  return haydn_x2sra32r(a, s);
 }
 static inline ae_int16x4 __ae_srla16(ae_int16x4 a, int s) {
   long long v = (long long)a;
@@ -4734,7 +4825,7 @@ typedef int ae_p24s;
 // the dropped-return-value bug fixed above. Left unchanged to avoid
 // guessing the wrong semantic; tracked for a future ISA-mapping pass:
 //   * AE_MUL32X16_H0..H3 -> haydn_smula16_00..30 (BINARY, HW accum reg)
-//   * AE_MULAPH32/MULAPL32 -> haydn_x2mulaph32/pl32 (BINARY)
+//   * AE_MULAPH32/MULAPL32 -> haydn_x2mulaph32/pl32 (ternary, fixed)
 //   * AE_MULA32U_LL -> haydn_mula64_uu_ull (BINARY)
 //   * AE_MULFC24RA/MULAFC24RA/MULSFC24RA -> haydn_x2cmul32s (BINARY, and
 //     HiFi source uses 2-arg form `AE_MULFC24RA(X0, cs)` returning a value)
@@ -4907,10 +4998,12 @@ static inline int XT_NSA(int x) { return (int)haydn_nsa32((ae_int32)x); }
 #define AE_F64_SLAIS(q, n) ((ae_f64)(((ae_f64)(q)) << (n)))
 // AE_F64_SUBS(qa, qb): 64-bit fractional subtract. Maps to haydn_sub64s.
 #define AE_F64_SUBS(qa, qb) ((ae_f64)haydn_sub64s((ae_int64)(qa), (ae_int64)(qb)))
-// AE_F32X2_SLAIS(v, n): dual-32 arithmetic shift LEFT by immediate n.
-//   Haydn SIMD haydn_x2slli32 shifts a packed dual-32 by an immediate.
+// AE_F32X2_SLAIS(v, n): dual-32 shift left. Prefer ImmArg x2slli32 when n is
+// a literal; use reg form X2SLL32 so variable n is legal in AE macros.
 #define AE_F32X2_SLAIS(v, n) \
-  ((ae_f32x2)haydn_x2slli32((ae_int32x2)(v), (n)))
+  ((ae_f32x2)((__builtin_constant_p(n) \
+                   ? haydn_x2slli32((ae_int32x2)(v), (n)) \
+                   : haydn_x2sll32((ae_int32x2)(v), (int)(n)))))
 
 //---- Scalar load/store spellings missing from the original surface -------
 // ae_f32_loadip / ae_f32_storeip: scalar 32-bit fractional load/store with

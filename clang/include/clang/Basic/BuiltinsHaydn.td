@@ -88,6 +88,9 @@ class HaydnPublicAPI {
 
   // NEON-style immediate argument range checks for Sema
   // (→ haydn_builtin_sema.inc). Empty = no imm range check.
+  // ImmArg ops (non-empty ImmChecks) MUST have a DB reg-form twin when the
+  // ISA encodes both (e.g. x2srai32 + x2sra32, x4seli16 + x4sel16). Variable
+  // shift/mask amount uses the reg twin — do not soft-invent a third API.
   list<ImmCheck> ImmChecks = [];
 }
 
@@ -628,6 +631,60 @@ def abs32s : HaydnBuiltin<"int(int)"> {
   let Mnemonic = "ABS32S";
   let Semantics = "computes the absolute value of rs as a signed 32-bit integer, with saturation of the result. If rs = 0x80000000, the result saturates to 0x7FFFFFFF.";
 }
+// Golden slot0 scalar-32 shifts (IMM RI5 + REG RR). REG amount is signed
+// bidirectional simm in rs2; IMM is unsigned one-way uimm5.
+def slli32 : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "slli32";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "SLLI32";
+  let ImmChecks = [ImmCheck<1, ImmCheck0_31>];
+  let Semantics = "32-bit logical left by uimm5 (golden SLLI32). Variable: haydn_sll32.";
+}
+def srli32 : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "srli32";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "SRLI32";
+  let ImmChecks = [ImmCheck<1, ImmCheck0_31>];
+  let Semantics = "32-bit logical right by uimm5 (golden SRLI32). Variable: haydn_srl32.";
+}
+def srai32 : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "srai32";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "SRAI32";
+  let ImmChecks = [ImmCheck<1, ImmCheck0_31>];
+  let Semantics = "32-bit arithmetic right by uimm5 (golden SRAI32). Variable: haydn_sra32.";
+}
+def srai32r : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "srai32r";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "SRAI32R";
+  let ImmChecks = [ImmCheck<1, ImmCheck0_31>];
+  let Semantics = "32-bit arithmetic right with rounding by uimm5 (golden SRAI32R). Variable: haydn_sra32r.";
+}
+def sll32 : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "sll32";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "SLL32";
+  let Semantics = "32-bit variable left/right logical by signed amount in rs2 (golden SLL32). Imm: haydn_slli32.";
+}
+def srl32 : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "srl32";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "SRL32";
+  let Semantics = "32-bit variable right/left logical by signed amount in rs2 (golden SRL32). Imm: haydn_srli32.";
+}
+def sra32 : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "sra32";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "SRA32";
+  let Semantics = "32-bit variable ASR/left by signed amount in rs2 (golden SRA32). Imm: haydn_srai32.";
+}
+def sra32r : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "sra32r";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "SRA32R";
+  let Semantics = "32-bit variable ASR+round/left by signed amount in rs2 (golden SRA32R). Imm: haydn_srai32r.";
+}
 def neg32s : HaydnBuiltin<"int(int)"> {
   let PublicName = "neg32s";
   let PublicPrototype = "int(int)";
@@ -1012,41 +1069,9 @@ def mulss32_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
   let Mnemonic = "MULSS32_HLLH";
   let Semantics = "performs two signed × signed 32-bit × 32-bit multiplications and accumulates both 64-bit products into the 64-bit accumulator rtd by subtraction. No saturation is performed; the accumulation uses 6...";
 }
-def satsr64 : HaydnBuiltin<"int(int64_t, int)"> {
-  let PublicName = "satsr64";
-  let PublicPrototype = "int(int64_t, int)";
-  let Mnemonic = "SATSR64";
-}
-def packsr32 : HaydnBuiltin<"int(int64_t, int)"> {
-  let PublicName = "packsr32";
-  let PublicPrototype = "int(int64_t, int)";
-  let Mnemonic = "PACKSR32";
-  let ImmChecks = [ImmCheck<1, ImmCheck0_63>];
-}
-def packsr32x2_hh : HaydnBuiltin<"int64_t(int64_t, int64_t, int)"> {
-  let PublicName = "packsr32x2_hh";
-  let PublicPrototype = "haydn_x2int32(int64_t, int64_t, int)";
-  let Mnemonic = "PACKSR32X2_HH";
-  let ImmChecks = [ImmCheck<2, ImmCheck0_63>];
-}
-def packsr32x2_hl : HaydnBuiltin<"int64_t(int64_t, int64_t, int)"> {
-  let PublicName = "packsr32x2_hl";
-  let PublicPrototype = "haydn_x2int32(int64_t, int64_t, int)";
-  let Mnemonic = "PACKSR32X2_HL";
-  let ImmChecks = [ImmCheck<2, ImmCheck0_63>];
-}
-def packsr32x2_lh : HaydnBuiltin<"int64_t(int64_t, int64_t, int)"> {
-  let PublicName = "packsr32x2_lh";
-  let PublicPrototype = "haydn_x2int32(int64_t, int64_t, int)";
-  let Mnemonic = "PACKSR32X2_LH";
-  let ImmChecks = [ImmCheck<2, ImmCheck0_63>];
-}
-def packsr32x2_ll : HaydnBuiltin<"int64_t(int64_t, int64_t, int)"> {
-  let PublicName = "packsr32x2_ll";
-  let PublicPrototype = "haydn_x2int32(int64_t, int64_t, int)";
-  let Mnemonic = "PACKSR32X2_LL";
-  let ImmChecks = [ImmCheck<2, ImmCheck0_63>];
-}
+// NOTE: satsr64 / packsr32 / packsr32x2_* are NOT golden encodings.
+// They are composites (SRA64/SRA64R/X2SRA32R+X2SEL32_* or soft sat) and live
+// only in haydn_dsp.h — do not re-add as builtins/intrinsics.
 // Golden MAXABS32S: dual 32-bit abs+max lanes (same shape as X2 abs/max family).
 def maxabs32s : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "maxabs32s";
@@ -1396,6 +1421,28 @@ def srai64r : HaydnBuiltin<"int64_t(int64_t, int)"> {
   let ImmChecks = [ImmCheck<1, ImmCheck0_63>];
   let Semantics = "performs a 64-bit arithmetic right shift of rsd by uimm6 bits with rounding. If uimm6 > 0, a rounding bias of 1 << (uimm6 - 1) is added to rsd before shifting. If uimm6 == 0, the result is equal to...";
 }
+// Imm forms (DB SRAI64/SLLI64/SRLI64). Reg twins: sra64 / sll64 / srl64.
+def srai64 : HaydnBuiltin<"int64_t(int64_t, int)"> {
+  let PublicName = "srai64";
+  let PublicPrototype = "int64_t(int64_t, int)";
+  let Mnemonic = "SRAI64";
+  let ImmChecks = [ImmCheck<1, ImmCheck0_63>];
+  let Semantics = "64-bit arithmetic right shift by immediate uimm6 (DB SRAI64). Variable shift: haydn_sra64.";
+}
+def slli64 : HaydnBuiltin<"int64_t(int64_t, int)"> {
+  let PublicName = "slli64";
+  let PublicPrototype = "int64_t(int64_t, int)";
+  let Mnemonic = "SLLI64";
+  let ImmChecks = [ImmCheck<1, ImmCheck0_63>];
+  let Semantics = "64-bit logical left shift by immediate uimm6 (DB SLLI64). Variable shift: haydn_sll64.";
+}
+def srli64 : HaydnBuiltin<"int64_t(int64_t, int)"> {
+  let PublicName = "srli64";
+  let PublicPrototype = "int64_t(int64_t, int)";
+  let Mnemonic = "SRLI64";
+  let ImmChecks = [ImmCheck<1, ImmCheck0_63>];
+  let Semantics = "64-bit logical right shift by immediate uimm6 (DB SRLI64). Variable shift: haydn_srl64.";
+}
 def x4fcmul16rs : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "x4fcmul16rs";
   let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
@@ -1672,15 +1719,15 @@ def smuls16s_33 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
   let Mnemonic = "SMULS16S_33";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def x4cmul16s : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>)"> {
+def x4cmul16s : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<4, short>)"> {
   let PublicName = "x4cmul16s";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16)";
+  let PublicPrototype = "haydn_x2int32(haydn_x4int16)";
   let Mnemonic = "X4CMUL16S";
   let Semantics = "performs a complex 16-bit × 16-bit multiplication using two complex operands packed into a single 64-bit source register, with signed 32-bit saturation applied to the real and imaginary results. Th...";
 }
-def x4cmul16s_f2 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>)"> {
+def x4cmul16s_f2 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<4, short>)"> {
   let PublicName = "x4cmul16s_f2";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16)";
+  let PublicPrototype = "haydn_x2int32(haydn_x4int16)";
   let Mnemonic = "X4CMUL16S_F2";
   let Semantics = "performs a complex 16-bit × 16-bit multiplication using two complex operands packed into a single 64-bit source register, using the same alternative result format (Format-2) as X4CMUL16_F2, and app...";
 }
@@ -1708,51 +1755,51 @@ def x2sel32_ll : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector
   let Mnemonic = "X2SEL32_LL";
   let Semantics = "selects and reorders 32-bit sub-words from two source registers rsd1 and rsd2, and packs them into the destination register rtd.";
 }
-def x4cmul16s_h : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)"> {
+def x4cmul16s_h : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "x4cmul16s_h";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x2int32(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4CMUL16S_H";
   let Semantics = "performs a saturated complex 16-bit × 16-bit multiplication on the high complex elements (lane 3 and lane 2) of two packed 64-bit source registers. Each source register rsdX is interpreted as four ...";
 }
-def x4cmul16s_l : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)"> {
+def x4cmul16s_l : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "x4cmul16s_l";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x2int32(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4CMUL16S_L";
   let Semantics = "performs a saturated complex 16-bit × 16-bit multiplication on the low complex elements (lane 1 and lane 0) of two packed 64-bit source registers. Each source register rsdX is interpreted as four s...";
 }
-def x4cmula16s_h : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)"> {
+def x4cmula16s_h : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "x4cmula16s_h";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4CMULA16S_H";
   let Semantics = "performs a saturated complex 16-bit × 16-bit multiply-accumulate operation on the high complex elements (lane 3 and lane 2) of two packed 64-bit source registers. Each source register rsdX is inter...";
 }
-def x4cmula16s_l : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)"> {
+def x4cmula16s_l : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "x4cmula16s_l";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4CMULA16S_L";
   let Semantics = "performs a saturated complex 16-bit × 16-bit multiply-accumulate operation on the low complex elements (lane 1 and lane 0) of two packed 64-bit source registers. Each source register rsdX is interp...";
 }
-def x4cjmul16s_h : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)"> {
+def x4cjmul16s_h : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "x4cjmul16s_h";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x2int32(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4CJMUL16S_H";
   let Semantics = "performs a saturated complex 16-bit × 16-bit multiplication between the high complex element of rsd1 and the complex-conjugate of the high complex element of rsd2. Each source register rsdX is inte...";
 }
-def x4cjmul16s_l : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)"> {
+def x4cjmul16s_l : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "x4cjmul16s_l";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x2int32(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4CJMUL16S_L";
   let Semantics = "performs a saturated complex 16-bit × 16-bit multiplication between the low complex element of rsd1 and the complex-conjugate of the low complex element of rsd2. Each source register rsdX is interp...";
 }
-def x4cjmula16s_h : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)"> {
+def x4cjmula16s_h : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "x4cjmula16s_h";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4CJMULA16S_H";
   let Semantics = "performs a saturated complex 16-bit × 16-bit multiply-accumulate between the high complex element of rsd1 and the complex-conjugate of the high complex element of rsd2. Each source register rsdX is...";
 }
-def x4cjmula16s_l : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)"> {
+def x4cjmula16s_l : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "x4cjmula16s_l";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4CJMULA16S_L";
   let Semantics = "performs a saturated complex 16-bit × 16-bit multiply-accumulate between the low complex element of rsd1 and the complex-conjugate of the low complex element of rsd2. Each source register rsdX is i...";
 }
@@ -1804,11 +1851,12 @@ def mul64_ll : HaydnBuiltin<"int64_t(int, int)"> {
   let Mnemonic = "MUL64_LL";
   let Semantics = "performs a signed × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and rsd2. The full 64-bit product is written to rtd.";
 }
-def sll64 : HaydnBuiltin<"int(int, int)"> {
+// Golden SLL64: rtd, rsd (DR64), rs (GPR32 shift). Reg twin of SLLI64.
+def sll64 : HaydnBuiltin<"int64_t(int64_t, int)"> {
   let PublicName = "sll64";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "int64_t(int64_t, int)";
   let Mnemonic = "SLL64";
-  let Semantics = "performs a 64-bit logical variable left or right shift by a signed 7-bit amount. simm7 is a signed 7-bit two's complement value encoded in rs[6:0]. The valid range of simm7 is -64 to +63. If simm7 ...";
+  let Semantics = "64-bit logical variable left/right shift of rsd by signed amount in rs (DB SLL64: rtd,rsd,rs). Immediate twin: haydn_slli64.";
 }
 def and64 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
   let PublicName = "and64";
@@ -1822,23 +1870,24 @@ def or64 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
   let Mnemonic = "OR64";
   let Semantics = "performs a 64-bit bitwise OR operation between rsd1 and rsd2, and writes the result to rtd.";
 }
-def sra64 : HaydnBuiltin<"int(int64_t, int)"> {
+// Golden SRA64/SRL64/SRA64R: rtd, rsd (DR64), rs (GPR32). Full 64-bit result.
+def sra64 : HaydnBuiltin<"int64_t(int64_t, int)"> {
   let PublicName = "sra64";
-  let PublicPrototype = "int(int64_t, int)";
+  let PublicPrototype = "int64_t(int64_t, int)";
   let Mnemonic = "SRA64";
-  let Semantics = "performs a 64-bit arithmetic variable right or logical variable left shift by a signed 7-bit amount. simm7 is a signed 7-bit two's complement value encoded in rs[6:0]. The valid range of simm7 is -...";
+  let Semantics = "64-bit arithmetic variable right (or logical left) shift of rsd by amount in rs (DB SRA64). Immediate twin: haydn_srai64.";
 }
-def sra64r : HaydnBuiltin<"int(int64_t, int)"> {
+def sra64r : HaydnBuiltin<"int64_t(int64_t, int)"> {
   let PublicName = "sra64r";
-  let PublicPrototype = "int(int64_t, int)";
+  let PublicPrototype = "int64_t(int64_t, int)";
   let Mnemonic = "SRA64R";
-  let Semantics = "performs a 64-bit arithmetic variable right shift with rounding or logical variable left shift by a signed 7-bit amount. simm7 is a signed 7-bit two's complement value encoded in rs[6:0]. The valid...";
+  let Semantics = "64-bit arithmetic variable right shift with rounding of rsd by amount in rs (DB SRA64R). Immediate twin: haydn_srai64r. Pack-to-i32 composites cast the low 32 bits in haydn_dsp.h.";
 }
-def srl64 : HaydnBuiltin<"int(int64_t, int)"> {
+def srl64 : HaydnBuiltin<"int64_t(int64_t, int)"> {
   let PublicName = "srl64";
-  let PublicPrototype = "int(int64_t, int)";
+  let PublicPrototype = "int64_t(int64_t, int)";
   let Mnemonic = "SRL64";
-  let Semantics = "performs a 64-bit logical variable right or left shift by a signed 7-bit amount. simm7 is a signed 7-bit two's complement value encoded in rs[6:0]. The valid range of simm7 is -64 to +63. If simm7 ...";
+  let Semantics = "64-bit logical variable right (or left) shift of rsd by amount in rs (DB SRL64). Immediate twin: haydn_srli64.";
 }
 def f2mulas32r_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
   let PublicName = "f2mulas32r_hhll";
@@ -2130,51 +2179,51 @@ def x2fmul32ts : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector
   let Mnemonic = "X2FMUL32TS";
   let Semantics = "performs two parallel 32-bit fixed-point multiplications on packed Q1.31 operands and writes the Q1.31 truncated products to the destination lanes with saturation. rsd1[63:32] and rsd2[63:32] are i...";
 }
-def x2fmula32rs : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
+def x2fmula32rs : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "x2fmula32rs";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FMULA32RS";
   let Semantics = "performs two parallel 32-bit fixed-point multiply-accumulate operations on packed Q1.31 operands, with rounding and saturation applied on both the product and the accumulator. rsd1[63:32] and rsd2[...";
 }
-def x2fmula32rss : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
+def x2fmula32rss : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "x2fmula32rss";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FMULA32RSS";
   let Semantics = "performs two parallel 32-bit fixed-point multiply-accumulate operations on packed Q1.31 operands, with symmetric rounding and saturation applied on both the product and the accumulator. rsd1[63:32]...";
 }
-def x2fmula32ts : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
+def x2fmula32ts : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "x2fmula32ts";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FMULA32TS";
   let Semantics = "performs two parallel 32-bit fixed-point multiply-accumulate operations on packed Q1.31 operands, with truncation and saturation applied on the product and saturation on the accumulator. The upper ...";
 }
-def x2fmuls32rs : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
+def x2fmuls32rs : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "x2fmuls32rs";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FMULS32RS";
   let Semantics = "performs two parallel 32-bit fixed-point multiply-subtract operations on packed Q1.31 operands, with rounding and saturation applied on both the product and the accumulator. rsd1[63:32] and rsd2[63...";
 }
-def x2fmuls32rss : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
+def x2fmuls32rss : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "x2fmuls32rss";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FMULS32RSS";
   let Semantics = "performs two parallel 32-bit fixed-point multiply-subtract operations on packed Q1.31 operands, with symmetric rounding and saturation applied on both the product and the accumulator. rsd1[63:32] a...";
 }
-def x2fmuls32ts : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
+def x2fmuls32ts : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "x2fmuls32ts";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FMULS32TS";
   let Semantics = "performs two parallel 32-bit fixed-point multiply-subtract operations on packed Q1.31 operands, with truncation and saturation applied on the product and saturation on the accumulator. The upper 32...";
 }
-def x4cmul16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>)"> {
+def x4cmul16 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<4, short>)"> {
   let PublicName = "x4cmul16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16)";
+  let PublicPrototype = "haydn_x2int32(haydn_x4int16)";
   let Mnemonic = "X4CMUL16";
   let Semantics = "performs a complex 16-bit × 16-bit multiplication using two complex operands packed into a single 64-bit source register. The source register rsd is interpreted as four signed 16-bit values: rsd[63...";
 }
-def x4cmul16_f2 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>)"> {
+def x4cmul16_f2 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<4, short>)"> {
   let PublicName = "x4cmul16_f2";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16)";
+  let PublicPrototype = "haydn_x2int32(haydn_x4int16)";
   let Mnemonic = "X4CMUL16_F2";
   let Semantics = "performs a complex 16-bit × 16-bit multiplication using two complex operands packed into a single 64-bit source register, and writes the result in an alternative output format (Format-2). The sourc...";
 }
@@ -2410,22 +2459,22 @@ def move32_dr_h : HaydnBuiltin<"unsigned int(int64_t)"> {
 def ldw_cb_imm_pair : HaydnPairBuiltin<"int64_t(int*, int, int, int)"> {
   let PublicName = "ldw_cb_imm";
   let PublicPrototype = "haydn_cb_ld_t(int, int, int)";
-  let Mnemonic = "LDW_CB_IMM";
+  let Mnemonic = "D_LDW_CB_IMM";
 }
 def ldw_cb_reg_pair : HaydnPairBuiltin<"int64_t(int*, int, int, int)"> {
   let PublicName = "ldw_cb_reg";
   let PublicPrototype = "haydn_cb_ld_t(int, int, int)";
-  let Mnemonic = "LDW_CB_REG";
+  let Mnemonic = "D_LDW_CB_REG";
 }
 def sdw_cb_imm : HaydnBuiltin<"int(int64_t, int, int, int)"> {
   let PublicName = "sdw_cb_imm";
   let PublicPrototype = "int(int64_t, int, int, int)";
-  let Mnemonic = "SDW_CB_IMM";
+  let Mnemonic = "D_SDW_CB_IMM";
 }
 def sdw_cb_reg : HaydnBuiltin<"int(int64_t, int, int, int)"> {
   let PublicName = "sdw_cb_reg";
   let PublicPrototype = "int(int64_t, int, int, int)";
-  let Mnemonic = "SDW_CB_REG";
+  let Mnemonic = "D_SDW_CB_REG";
 }
 def setcbr_begin : HaydnBuiltin<"void(int, int)"> {
   let PublicName = "setcbr_begin";
@@ -2482,42 +2531,42 @@ def d_stwua_post : HaydnBuiltin<"void(int64_t, int, int, int, int)"> {
 def ldw_brev_imm : HaydnBuiltin<"int(int, int)"> {
   let PublicName = "ldw_brev_imm";
   let PublicPrototype = "int(int, int)";
-  let Mnemonic = "LDW_BREV_IMM";
+  let Mnemonic = "D_LDW_BREV_IMM";
 }
 def ldw_brev_reg : HaydnBuiltin<"int(int, int)"> {
   let PublicName = "ldw_brev_reg";
   let PublicPrototype = "int(int, int)";
-  let Mnemonic = "LDW_BREV_REG";
+  let Mnemonic = "D_LDW_BREV_REG";
 }
 def lw_brev_imm : HaydnBuiltin<"int(int, int)"> {
   let PublicName = "lw_brev_imm";
   let PublicPrototype = "int(int, int)";
-  let Mnemonic = "LW_BREV_IMM";
+  let Mnemonic = "S_LW_BREV_IMM";
 }
 def lw_brev_reg : HaydnBuiltin<"int(int, int)"> {
   let PublicName = "lw_brev_reg";
   let PublicPrototype = "int(int, int)";
-  let Mnemonic = "LW_BREV_REG";
+  let Mnemonic = "S_LW_BREV_REG";
 }
 def sdw_brev_imm : HaydnBuiltin<"int(int, int, int)"> {
   let PublicName = "sdw_brev_imm";
   let PublicPrototype = "int(int, int, int)";
-  let Mnemonic = "SDW_BREV_IMM";
+  let Mnemonic = "D_SDW_BREV_IMM";
 }
 def sdw_brev_reg : HaydnBuiltin<"int(int, int, int)"> {
   let PublicName = "sdw_brev_reg";
   let PublicPrototype = "int(int, int, int)";
-  let Mnemonic = "SDW_BREV_REG";
+  let Mnemonic = "D_SDW_BREV_REG";
 }
 def sw_brev_imm : HaydnBuiltin<"int(int, int)"> {
   let PublicName = "sw_brev_imm";
   let PublicPrototype = "int(int, int)";
-  let Mnemonic = "SW_BREV_IMM";
+  let Mnemonic = "S_SW_BREV_IMM";
 }
 def sw_brev_reg : HaydnBuiltin<"int(int, int)"> {
   let PublicName = "sw_brev_reg";
   let PublicPrototype = "int(int, int)";
-  let Mnemonic = "SW_BREV_REG";
+  let Mnemonic = "S_SW_BREV_REG";
 }
 def x2add32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "x2add32";
@@ -2773,27 +2822,27 @@ def x2mulpl32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<
   let Mnemonic = "X2MULPL32";
   let Semantics = "performs two parallel 32-bit × 32-bit signed multiplications on packed 32-bit operands. For each lane, the full 64-bit product is computed and the lower 32 bits of the product are written to the co...";
 }
-def x2mulaph32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
+def x2mulaph32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "x2mulaph32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2MULAPH32";
   let Semantics = "performs two parallel 32-bit × 32-bit signed multiply-accumulate operations on packed 32-bit operands. For each lane, the full 64-bit product is computed, its upper 32 bits are added to the corresp...";
 }
-def x2mulapl32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
+def x2mulapl32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "x2mulapl32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2MULAPL32";
   let Semantics = "performs two parallel 32-bit × 32-bit signed multiply-accumulate operations on packed 32-bit operands. For each lane, the full 64-bit product is computed, its lower 32 bits are added to the corresp...";
 }
-def x2mulsph32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
+def x2mulsph32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "x2mulsph32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2MULSPH32";
   let Semantics = "performs two parallel 32-bit × 32-bit signed multiply-subtract operations on packed 32-bit operands. For each lane, the full 64-bit product is computed, its upper 32 bits are subtracted from the co...";
 }
-def x2mulspl32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
+def x2mulspl32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "x2mulspl32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2MULSPL32";
   let Semantics = "performs two parallel 32-bit × 32-bit signed multiply-subtract operations on packed 32-bit operands. For each lane, the full 64-bit product is computed, its lower 32 bits are subtracted from the co...";
 }
@@ -2875,6 +2924,13 @@ def x4seli16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVect
   let Mnemonic = "X4SELI16";
   let ImmChecks = [ImmCheck<2, ImmCheck0_15>];
   let Semantics = "selects and reorders four 16-bit sub-words from two source registers rsd1 and rsd2 according to a 4-bit immediate uimm4, and packs them into the destination register rtd. The immediate selects one ...";
+}
+// Reg twin of X4SELI16 (DB X4SEL16): mask in GPR — any int / variable OK.
+def x4sel16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>, int)"> {
+  let PublicName = "x4sel16";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, int)";
+  let Mnemonic = "X4SEL16";
+  let Semantics = "selects and reorders four 16-bit sub-words from rsd1/rsd2 with lane mask in register rs (DB X4SEL16). Immediate mask: haydn_x4seli16.";
 }
 def movda32 : HaydnBuiltin<"int64_t(int)"> {
   let PublicName = "movda32";
@@ -3926,3 +3982,654 @@ def addandsubrng16ras_s2 : HaydnAeBuiltin<"int64_t(int64_t, int64_t)"> {
   let CodeGen = "AddAndSubRng";
 }
 } // Attributes = [NoThrow, Const]
+
+//===----------------------------------------------------------------------===
+// Golden D-ALU coverage (auto-added; S-ALU skipped by policy)
+//===----------------------------------------------------------------------===
+def add64 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "add64";
+  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let Mnemonic = "ADD64";
+  let Semantics = "Golden D-ALU ADD64.";
+}
+def sub64 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "sub64";
+  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let Mnemonic = "SUB64";
+  let Semantics = "Golden D-ALU SUB64.";
+}
+def xor64 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "xor64";
+  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let Mnemonic = "XOR64";
+  let Semantics = "Golden D-ALU XOR64.";
+}
+def add64s_h : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "add64s_h";
+  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let Mnemonic = "ADD64S_H";
+  let Semantics = "Golden D-ALU ADD64S_H.";
+}
+def add64s_l : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "add64s_l";
+  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let Mnemonic = "ADD64S_L";
+  let Semantics = "Golden D-ALU ADD64S_L.";
+}
+def sub64s_h : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "sub64s_h";
+  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let Mnemonic = "SUB64S_H";
+  let Semantics = "Golden D-ALU SUB64S_H.";
+}
+def sub64s_l : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "sub64s_l";
+  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let Mnemonic = "SUB64S_L";
+  let Semantics = "Golden D-ALU SUB64S_L.";
+}
+def move64 : HaydnBuiltin<"int64_t(int64_t)"> {
+  let PublicName = "move64";
+  let PublicPrototype = "int64_t(int64_t)";
+  let Mnemonic = "MOVE64";
+  let Semantics = "Golden D-ALU MOVE64.";
+}
+def transf64_h : HaydnBuiltin<"int64_t(int64_t)"> {
+  let PublicName = "transf64_h";
+  let PublicPrototype = "int64_t(int64_t)";
+  let Mnemonic = "TRANSF64_H";
+  let Semantics = "Golden D-ALU TRANSF64_H.";
+}
+def transf64_l : HaydnBuiltin<"int64_t(int64_t)"> {
+  let PublicName = "transf64_l";
+  let PublicPrototype = "int64_t(int64_t)";
+  let Mnemonic = "TRANSF64_L";
+  let Semantics = "Golden D-ALU TRANSF64_L.";
+}
+def sext32t64 : HaydnBuiltin<"int64_t(int)"> {
+  let PublicName = "sext32t64";
+  let PublicPrototype = "int64_t(int)";
+  let Mnemonic = "SEXT32T64";
+  let Semantics = "Golden D-ALU SEXT32T64.";
+}
+def transf64 : HaydnBuiltin<"int64_t(int)"> {
+  let PublicName = "transf64";
+  let PublicPrototype = "int64_t(int)";
+  let Mnemonic = "TRANSF64";
+  let Semantics = "Golden D-ALU TRANSF64.";
+}
+def transf64f2 : HaydnBuiltin<"int64_t(int)"> {
+  let PublicName = "transf64f2";
+  let PublicPrototype = "int64_t(int)";
+  let Mnemonic = "TRANSF64F2";
+  let Semantics = "Golden D-ALU TRANSF64F2.";
+}
+def movei_h : HaydnBuiltin<"int64_t(int)"> {
+  let PublicName = "movei_h";
+  let PublicPrototype = "int64_t(int)";
+  let Mnemonic = "MOVEI_H";
+  let Semantics = "Golden D-ALU MOVEI_H — materialize imm32 into DR high half.";
+}
+def movei_l : HaydnBuiltin<"int64_t(int)"> {
+  let PublicName = "movei_l";
+  let PublicPrototype = "int64_t(int)";
+  let Mnemonic = "MOVEI_L";
+  let Semantics = "Golden D-ALU MOVEI_L — materialize imm32 into DR low half.";
+}
+def zero_dr : HaydnBuiltin<"int64_t()"> {
+  let PublicName = "zero_dr";
+  let PublicPrototype = "int64_t()";
+  let Mnemonic = "ZERO_DR";
+  let Semantics = "Golden D-ALU ZERO_DR.";
+}
+def sin_cos : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "sin_cos";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "SIN_COS";
+  let ImmChecks = [ImmCheck<1, ImmCheck0_15>];
+  let Semantics = "Golden D-ALU SIN_COS rtd, rs, uimm4.";
+}
+
+//===----------------------------------------------------------------------===
+// Golden Load&Store coverage (D_* and S_*; systematic)
+//===----------------------------------------------------------------------===
+def d_ldw_post_imm : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_ldw_post_imm";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LDW_POST_IMM";
+  let Semantics = "Golden LS D_LDW_POST_IMM.";
+}
+def d_ldw_post_reg : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_ldw_post_reg";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LDW_POST_REG";
+  let Semantics = "Golden LS D_LDW_POST_REG.";
+}
+def d_ldw_pre_imm : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_ldw_pre_imm";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LDW_PRE_IMM";
+  let Semantics = "Golden LS D_LDW_PRE_IMM.";
+}
+def d_ldw_pre_reg : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_ldw_pre_reg";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LDW_PRE_REG";
+  let Semantics = "Golden LS D_LDW_PRE_REG.";
+}
+def d_ldw_with_imm : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_ldw_with_imm";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LDW_WITH_IMM";
+  let Semantics = "Golden LS D_LDW_WITH_IMM.";
+}
+def d_ldw_with_reg : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_ldw_with_reg";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LDW_WITH_REG";
+  let Semantics = "Golden LS D_LDW_WITH_REG.";
+}
+def d_lhw_post_imm : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_lhw_post_imm";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LHW_POST_IMM";
+  let Semantics = "Golden LS D_LHW_POST_IMM.";
+}
+def d_lhw_post_reg : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_lhw_post_reg";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LHW_POST_REG";
+  let Semantics = "Golden LS D_LHW_POST_REG.";
+}
+def d_lhw_pre_imm : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_lhw_pre_imm";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LHW_PRE_IMM";
+  let Semantics = "Golden LS D_LHW_PRE_IMM.";
+}
+def d_lhw_pre_reg : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_lhw_pre_reg";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LHW_PRE_REG";
+  let Semantics = "Golden LS D_LHW_PRE_REG.";
+}
+def d_lhw_with_imm : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_lhw_with_imm";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LHW_WITH_IMM";
+  let Semantics = "Golden LS D_LHW_WITH_IMM.";
+}
+def d_lhw_with_reg : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_lhw_with_reg";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LHW_WITH_REG";
+  let Semantics = "Golden LS D_LHW_WITH_REG.";
+}
+def d_lw_post_imm : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_lw_post_imm";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LW_POST_IMM";
+  let Semantics = "Golden LS D_LW_POST_IMM.";
+}
+def d_lw_post_reg : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_lw_post_reg";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LW_POST_REG";
+  let Semantics = "Golden LS D_LW_POST_REG.";
+}
+def d_lw_pre_imm : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_lw_pre_imm";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LW_PRE_IMM";
+  let Semantics = "Golden LS D_LW_PRE_IMM.";
+}
+def d_lw_pre_reg : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_lw_pre_reg";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LW_PRE_REG";
+  let Semantics = "Golden LS D_LW_PRE_REG.";
+}
+def d_lw_with_imm : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_lw_with_imm";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LW_WITH_IMM";
+  let Semantics = "Golden LS D_LW_WITH_IMM.";
+}
+def d_lw_with_reg : HaydnBuiltin<"int64_t(int, int)"> {
+  let PublicName = "d_lw_with_reg";
+  let PublicPrototype = "int64_t(int, int)";
+  let Mnemonic = "D_LW_WITH_REG";
+  let Semantics = "Golden LS D_LW_WITH_REG.";
+}
+def d_sdw_post_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_sdw_post_imm";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SDW_POST_IMM";
+  let Semantics = "Golden LS D_SDW_POST_IMM.";
+}
+def d_sdw_post_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_sdw_post_reg";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SDW_POST_REG";
+  let Semantics = "Golden LS D_SDW_POST_REG.";
+}
+def d_sdw_pre_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_sdw_pre_imm";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SDW_PRE_IMM";
+  let Semantics = "Golden LS D_SDW_PRE_IMM.";
+}
+def d_sdw_pre_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_sdw_pre_reg";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SDW_PRE_REG";
+  let Semantics = "Golden LS D_SDW_PRE_REG.";
+}
+def d_sdw_with_imm : HaydnBuiltin<"void(int64_t, int, int)"> {
+  let PublicName = "d_sdw_with_imm";
+  let PublicPrototype = "void(int64_t, int, int)";
+  let Mnemonic = "D_SDW_WITH_IMM";
+  let Semantics = "Golden LS D_SDW_WITH_IMM.";
+}
+def d_sdw_with_reg : HaydnBuiltin<"void(int64_t, int, int)"> {
+  let PublicName = "d_sdw_with_reg";
+  let PublicPrototype = "void(int64_t, int, int)";
+  let Mnemonic = "D_SDW_WITH_REG";
+  let Semantics = "Golden LS D_SDW_WITH_REG.";
+}
+def d_shw_post_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_shw_post_imm";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SHW_POST_IMM";
+  let Semantics = "Golden LS D_SHW_POST_IMM.";
+}
+def d_shw_post_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_shw_post_reg";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SHW_POST_REG";
+  let Semantics = "Golden LS D_SHW_POST_REG.";
+}
+def d_shw_pre_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_shw_pre_imm";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SHW_PRE_IMM";
+  let Semantics = "Golden LS D_SHW_PRE_IMM.";
+}
+def d_shw_pre_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_shw_pre_reg";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SHW_PRE_REG";
+  let Semantics = "Golden LS D_SHW_PRE_REG.";
+}
+def d_shw_with_imm : HaydnBuiltin<"void(int64_t, int, int)"> {
+  let PublicName = "d_shw_with_imm";
+  let PublicPrototype = "void(int64_t, int, int)";
+  let Mnemonic = "D_SHW_WITH_IMM";
+  let Semantics = "Golden LS D_SHW_WITH_IMM.";
+}
+def d_shw_with_reg : HaydnBuiltin<"void(int64_t, int, int)"> {
+  let PublicName = "d_shw_with_reg";
+  let PublicPrototype = "void(int64_t, int, int)";
+  let Mnemonic = "D_SHW_WITH_REG";
+  let Semantics = "Golden LS D_SHW_WITH_REG.";
+}
+def d_sw_h_post_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_sw_h_post_imm";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SW_H_POST_IMM";
+  let Semantics = "Golden LS D_SW_H_POST_IMM.";
+}
+def d_sw_h_post_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_sw_h_post_reg";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SW_H_POST_REG";
+  let Semantics = "Golden LS D_SW_H_POST_REG.";
+}
+def d_sw_h_pre_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_sw_h_pre_imm";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SW_H_PRE_IMM";
+  let Semantics = "Golden LS D_SW_H_PRE_IMM.";
+}
+def d_sw_h_pre_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_sw_h_pre_reg";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SW_H_PRE_REG";
+  let Semantics = "Golden LS D_SW_H_PRE_REG.";
+}
+def d_sw_h_with_imm : HaydnBuiltin<"void(int64_t, int, int)"> {
+  let PublicName = "d_sw_h_with_imm";
+  let PublicPrototype = "void(int64_t, int, int)";
+  let Mnemonic = "D_SW_H_WITH_IMM";
+  let Semantics = "Golden LS D_SW_H_WITH_IMM.";
+}
+def d_sw_h_with_reg : HaydnBuiltin<"void(int64_t, int, int)"> {
+  let PublicName = "d_sw_h_with_reg";
+  let PublicPrototype = "void(int64_t, int, int)";
+  let Mnemonic = "D_SW_H_WITH_REG";
+  let Semantics = "Golden LS D_SW_H_WITH_REG.";
+}
+def d_sw_l_post_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_sw_l_post_imm";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SW_L_POST_IMM";
+  let Semantics = "Golden LS D_SW_L_POST_IMM.";
+}
+def d_sw_l_post_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_sw_l_post_reg";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SW_L_POST_REG";
+  let Semantics = "Golden LS D_SW_L_POST_REG.";
+}
+def d_sw_l_pre_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_sw_l_pre_imm";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SW_L_PRE_IMM";
+  let Semantics = "Golden LS D_SW_L_PRE_IMM.";
+}
+def d_sw_l_pre_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
+  let PublicName = "d_sw_l_pre_reg";
+  let PublicPrototype = "int(int64_t, int, int)";
+  let Mnemonic = "D_SW_L_PRE_REG";
+  let Semantics = "Golden LS D_SW_L_PRE_REG.";
+}
+def d_sw_l_with_imm : HaydnBuiltin<"void(int64_t, int, int)"> {
+  let PublicName = "d_sw_l_with_imm";
+  let PublicPrototype = "void(int64_t, int, int)";
+  let Mnemonic = "D_SW_L_WITH_IMM";
+  let Semantics = "Golden LS D_SW_L_WITH_IMM.";
+}
+def d_sw_l_with_reg : HaydnBuiltin<"void(int64_t, int, int)"> {
+  let PublicName = "d_sw_l_with_reg";
+  let PublicPrototype = "void(int64_t, int, int)";
+  let Mnemonic = "D_SW_L_WITH_REG";
+  let Semantics = "Golden LS D_SW_L_WITH_REG.";
+}
+def s_lbs_post_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lbs_post_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LBS_POST_IMM";
+  let Semantics = "Golden LS S_LBS_POST_IMM.";
+}
+def s_lbs_post_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lbs_post_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LBS_POST_REG";
+  let Semantics = "Golden LS S_LBS_POST_REG.";
+}
+def s_lbs_pre_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lbs_pre_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LBS_PRE_IMM";
+  let Semantics = "Golden LS S_LBS_PRE_IMM.";
+}
+def s_lbs_pre_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lbs_pre_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LBS_PRE_REG";
+  let Semantics = "Golden LS S_LBS_PRE_REG.";
+}
+def s_lbs_with_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lbs_with_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LBS_WITH_IMM";
+  let Semantics = "Golden LS S_LBS_WITH_IMM.";
+}
+def s_lbs_with_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lbs_with_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LBS_WITH_REG";
+  let Semantics = "Golden LS S_LBS_WITH_REG.";
+}
+def s_lbu_post_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lbu_post_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LBU_POST_IMM";
+  let Semantics = "Golden LS S_LBU_POST_IMM.";
+}
+def s_lbu_post_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lbu_post_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LBU_POST_REG";
+  let Semantics = "Golden LS S_LBU_POST_REG.";
+}
+def s_lbu_pre_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lbu_pre_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LBU_PRE_IMM";
+  let Semantics = "Golden LS S_LBU_PRE_IMM.";
+}
+def s_lbu_pre_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lbu_pre_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LBU_PRE_REG";
+  let Semantics = "Golden LS S_LBU_PRE_REG.";
+}
+def s_lbu_with_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lbu_with_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LBU_WITH_IMM";
+  let Semantics = "Golden LS S_LBU_WITH_IMM.";
+}
+def s_lbu_with_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lbu_with_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LBU_WITH_REG";
+  let Semantics = "Golden LS S_LBU_WITH_REG.";
+}
+def s_lhws_post_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lhws_post_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LHWS_POST_IMM";
+  let Semantics = "Golden LS S_LHWS_POST_IMM.";
+}
+def s_lhws_post_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lhws_post_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LHWS_POST_REG";
+  let Semantics = "Golden LS S_LHWS_POST_REG.";
+}
+def s_lhws_pre_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lhws_pre_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LHWS_PRE_IMM";
+  let Semantics = "Golden LS S_LHWS_PRE_IMM.";
+}
+def s_lhws_pre_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lhws_pre_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LHWS_PRE_REG";
+  let Semantics = "Golden LS S_LHWS_PRE_REG.";
+}
+def s_lhws_with_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lhws_with_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LHWS_WITH_IMM";
+  let Semantics = "Golden LS S_LHWS_WITH_IMM.";
+}
+def s_lhws_with_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lhws_with_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LHWS_WITH_REG";
+  let Semantics = "Golden LS S_LHWS_WITH_REG.";
+}
+def s_lhwu_post_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lhwu_post_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LHWU_POST_IMM";
+  let Semantics = "Golden LS S_LHWU_POST_IMM.";
+}
+def s_lhwu_post_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lhwu_post_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LHWU_POST_REG";
+  let Semantics = "Golden LS S_LHWU_POST_REG.";
+}
+def s_lhwu_pre_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lhwu_pre_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LHWU_PRE_IMM";
+  let Semantics = "Golden LS S_LHWU_PRE_IMM.";
+}
+def s_lhwu_pre_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lhwu_pre_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LHWU_PRE_REG";
+  let Semantics = "Golden LS S_LHWU_PRE_REG.";
+}
+def s_lhwu_with_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lhwu_with_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LHWU_WITH_IMM";
+  let Semantics = "Golden LS S_LHWU_WITH_IMM.";
+}
+def s_lhwu_with_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lhwu_with_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LHWU_WITH_REG";
+  let Semantics = "Golden LS S_LHWU_WITH_REG.";
+}
+def s_lw_post_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lw_post_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LW_POST_IMM";
+  let Semantics = "Golden LS S_LW_POST_IMM.";
+}
+def s_lw_post_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lw_post_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LW_POST_REG";
+  let Semantics = "Golden LS S_LW_POST_REG.";
+}
+def s_lw_pre_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lw_pre_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LW_PRE_IMM";
+  let Semantics = "Golden LS S_LW_PRE_IMM.";
+}
+def s_lw_pre_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lw_pre_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LW_PRE_REG";
+  let Semantics = "Golden LS S_LW_PRE_REG.";
+}
+def s_lw_with_imm : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lw_with_imm";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LW_WITH_IMM";
+  let Semantics = "Golden LS S_LW_WITH_IMM.";
+}
+def s_lw_with_reg : HaydnBuiltin<"int(int, int)"> {
+  let PublicName = "s_lw_with_reg";
+  let PublicPrototype = "int(int, int)";
+  let Mnemonic = "S_LW_WITH_REG";
+  let Semantics = "Golden LS S_LW_WITH_REG.";
+}
+def s_sb_post_imm : HaydnBuiltin<"int(int, int, int)"> {
+  let PublicName = "s_sb_post_imm";
+  let PublicPrototype = "int(int, int, int)";
+  let Mnemonic = "S_SB_POST_IMM";
+  let Semantics = "Golden LS S_SB_POST_IMM.";
+}
+def s_sb_post_reg : HaydnBuiltin<"int(int, int, int)"> {
+  let PublicName = "s_sb_post_reg";
+  let PublicPrototype = "int(int, int, int)";
+  let Mnemonic = "S_SB_POST_REG";
+  let Semantics = "Golden LS S_SB_POST_REG.";
+}
+def s_sb_pre_imm : HaydnBuiltin<"int(int, int, int)"> {
+  let PublicName = "s_sb_pre_imm";
+  let PublicPrototype = "int(int, int, int)";
+  let Mnemonic = "S_SB_PRE_IMM";
+  let Semantics = "Golden LS S_SB_PRE_IMM.";
+}
+def s_sb_pre_reg : HaydnBuiltin<"int(int, int, int)"> {
+  let PublicName = "s_sb_pre_reg";
+  let PublicPrototype = "int(int, int, int)";
+  let Mnemonic = "S_SB_PRE_REG";
+  let Semantics = "Golden LS S_SB_PRE_REG.";
+}
+def s_sb_with_imm : HaydnBuiltin<"void(int, int, int)"> {
+  let PublicName = "s_sb_with_imm";
+  let PublicPrototype = "void(int, int, int)";
+  let Mnemonic = "S_SB_WITH_IMM";
+  let Semantics = "Golden LS S_SB_WITH_IMM.";
+}
+def s_sb_with_reg : HaydnBuiltin<"void(int, int, int)"> {
+  let PublicName = "s_sb_with_reg";
+  let PublicPrototype = "void(int, int, int)";
+  let Mnemonic = "S_SB_WITH_REG";
+  let Semantics = "Golden LS S_SB_WITH_REG.";
+}
+def s_shw_post_imm : HaydnBuiltin<"int(int, int, int)"> {
+  let PublicName = "s_shw_post_imm";
+  let PublicPrototype = "int(int, int, int)";
+  let Mnemonic = "S_SHW_POST_IMM";
+  let Semantics = "Golden LS S_SHW_POST_IMM.";
+}
+def s_shw_post_reg : HaydnBuiltin<"int(int, int, int)"> {
+  let PublicName = "s_shw_post_reg";
+  let PublicPrototype = "int(int, int, int)";
+  let Mnemonic = "S_SHW_POST_REG";
+  let Semantics = "Golden LS S_SHW_POST_REG.";
+}
+def s_shw_pre_imm : HaydnBuiltin<"int(int, int, int)"> {
+  let PublicName = "s_shw_pre_imm";
+  let PublicPrototype = "int(int, int, int)";
+  let Mnemonic = "S_SHW_PRE_IMM";
+  let Semantics = "Golden LS S_SHW_PRE_IMM.";
+}
+def s_shw_pre_reg : HaydnBuiltin<"int(int, int, int)"> {
+  let PublicName = "s_shw_pre_reg";
+  let PublicPrototype = "int(int, int, int)";
+  let Mnemonic = "S_SHW_PRE_REG";
+  let Semantics = "Golden LS S_SHW_PRE_REG.";
+}
+def s_shw_with_imm : HaydnBuiltin<"void(int, int, int)"> {
+  let PublicName = "s_shw_with_imm";
+  let PublicPrototype = "void(int, int, int)";
+  let Mnemonic = "S_SHW_WITH_IMM";
+  let Semantics = "Golden LS S_SHW_WITH_IMM.";
+}
+def s_shw_with_reg : HaydnBuiltin<"void(int, int, int)"> {
+  let PublicName = "s_shw_with_reg";
+  let PublicPrototype = "void(int, int, int)";
+  let Mnemonic = "S_SHW_WITH_REG";
+  let Semantics = "Golden LS S_SHW_WITH_REG.";
+}
+def s_sw_post_imm : HaydnBuiltin<"int(int, int, int)"> {
+  let PublicName = "s_sw_post_imm";
+  let PublicPrototype = "int(int, int, int)";
+  let Mnemonic = "S_SW_POST_IMM";
+  let Semantics = "Golden LS S_SW_POST_IMM.";
+}
+def s_sw_post_reg : HaydnBuiltin<"int(int, int, int)"> {
+  let PublicName = "s_sw_post_reg";
+  let PublicPrototype = "int(int, int, int)";
+  let Mnemonic = "S_SW_POST_REG";
+  let Semantics = "Golden LS S_SW_POST_REG.";
+}
+def s_sw_pre_imm : HaydnBuiltin<"int(int, int, int)"> {
+  let PublicName = "s_sw_pre_imm";
+  let PublicPrototype = "int(int, int, int)";
+  let Mnemonic = "S_SW_PRE_IMM";
+  let Semantics = "Golden LS S_SW_PRE_IMM.";
+}
+def s_sw_pre_reg : HaydnBuiltin<"int(int, int, int)"> {
+  let PublicName = "s_sw_pre_reg";
+  let PublicPrototype = "int(int, int, int)";
+  let Mnemonic = "S_SW_PRE_REG";
+  let Semantics = "Golden LS S_SW_PRE_REG.";
+}
+def s_sw_with_imm : HaydnBuiltin<"void(int, int, int)"> {
+  let PublicName = "s_sw_with_imm";
+  let PublicPrototype = "void(int, int, int)";
+  let Mnemonic = "S_SW_WITH_IMM";
+  let Semantics = "Golden LS S_SW_WITH_IMM.";
+}
+def s_sw_with_reg : HaydnBuiltin<"void(int, int, int)"> {
+  let PublicName = "s_sw_with_reg";
+  let PublicPrototype = "void(int, int, int)";
+  let Mnemonic = "S_SW_WITH_REG";
+  let Semantics = "Golden LS S_SW_WITH_REG.";
+}
