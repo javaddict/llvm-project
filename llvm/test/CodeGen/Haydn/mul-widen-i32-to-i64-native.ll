@@ -5,7 +5,7 @@
 ;
 ; Bug #19: G_MUL <s64> from `(int64_t)(int32_t)a * (int32_t)b` was lowered to
 ; LIBCALL_MUL64 -> JAL __muldi3, but no runtime stub exists for __muldi3
-; (haydn-rt/m6-int-div-stubs.c provides the 8 division stubs but no multiply
+; (llvm-libc / compiler-rt provides the 8 division stubs but no multiply
 ; stub). The jal_w target therefore resolved to ELF symbol index 0 (null) and
 ; every FIR/IIR/Q31 kernel using the C widening multiply crashed at runtime
 ; (jal_w -> 0x0), plus the call cost 30-50 cycles. Fix : in

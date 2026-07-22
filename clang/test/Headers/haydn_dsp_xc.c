@@ -10,7 +10,7 @@
 //        with a non-8-byte stride corrupted its circular-buffer pointer.
 //   F22: AE_S32X2_XC / AE_S16X4_XC passed arguments as (ptr, data, ...) but
 //        the underlying builtin is declared data-first
-//        (__haydn_sdw_cb_imm(int64_t data, int ptr, int cbr_sel, int offs)).
+//        (haydn_sdw_cb_imm(int64_t data, int ptr, int cbr_sel, int offs)).
 //   F23: AE_L16_XC loaded a full 64-bit DR64 then truncated; this test only
 //        checks that the macro still accepts its 4-arg signature and compiles.
 //

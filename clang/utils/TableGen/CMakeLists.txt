@@ -22,6 +22,7 @@ add_tablegen(clang-tblgen CLANG
   ClangSyntaxEmitter.cpp
   ClangTypeNodesEmitter.cpp
   MveEmitter.cpp
+  HaydnIntrinEmitter.cpp
   NeonEmitter.cpp
   RISCVVEmitter.cpp
   SveEmitter.cpp

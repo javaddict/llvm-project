@@ -174,6 +174,16 @@ void EmitMveBuiltinAliases(const llvm::RecordKeeper &Records,
 
 void EmitRVVHeader(const llvm::RecordKeeper &Records, llvm::raw_ostream &OS);
 void EmitRVVBuiltins(const llvm::RecordKeeper &Records, llvm::raw_ostream &OS);
+
+/// Generate haydn.h from BuiltinsHaydn.td.
+void EmitHaydnIntrinHeader(const llvm::RecordKeeper &Records,
+                           llvm::raw_ostream &OS);
+/// Generate haydn_builtin_cg.inc (pair/frexp CodeGen cases).
+void EmitHaydnBuiltinCG(const llvm::RecordKeeper &Records,
+                        llvm::raw_ostream &OS);
+/// Generate haydn_builtin_sema.inc (public metadata table).
+void EmitHaydnBuiltinSema(const llvm::RecordKeeper &Records,
+                          llvm::raw_ostream &OS);
 void EmitRVVBuiltinCG(const llvm::RecordKeeper &Records, llvm::raw_ostream &OS);
 void EmitRVVBuiltinSema(const llvm::RecordKeeper &Records,
                         llvm::raw_ostream &OS);

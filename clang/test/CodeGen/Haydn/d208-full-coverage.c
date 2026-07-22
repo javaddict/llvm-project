@@ -1,23 +1,12 @@
 // RUN: %clang_cc1 -triple haydn-unknown-elf -ffreestanding -emit-llvm -o /dev/null %s
 // REQUIRES: haydn-registered-target
 //
-// D208 Phase 3A A5: comprehensive C->IR coverage gate for ALL wired Haydn builtins.
-// Every __builtin_haydn_* must lower to its llvm.haydn.* IR intrinsic (the Clang
-// CodeGen half of C->asm). Run with -emit-llvm to gate at IR level; backend
-// InstructionSelect is gated by the existing dr64-*.ll + mac-intrinsics tests.
-// Generated from BuiltinsHaydn.td; regenerate if builtins change.
+// D208 coverage gate: every wired scalar/SIMD __builtin_haydn_* must lower
+// through Clang CodeGen. Regenerated from BuiltinsHaydn.td after golden-lane
+// ExtVector retype (X2 → v2i / <2 x i32>, X4 → v4s / <4 x i16>).
 //
-// Type model (Hexagon-validated): 64-bit SIMD registers use a SCALAR C surface.
-// Hexagon's HEXAGON_Vect64 = long long; Haydn's ae_int32x2 = long long. The x2/x4
-// shift+seli16 builtins are scalar-i64 at C level even though their IR intrinsics
-// are <2 x i32>/<4 x i16>; the auto-map bitcast is the intended bridge (preserves
-// the 64 bits = the lanes). True vector C types are only needed for >64-bit
-// registers (Hexagon HVX uses __vector_size__ at 1024+ bits). Haydn DR64 = 64-bit.
-//
-// EXCLUDED — 5 builtins with NO machine instruction (isqrt, x2cmula32/s,
-//       x2cmuls32/s — op missing from HaydnInstrInfo*.td, needs ISA spec).
-//       37 memory/side-effect intrinsics (loads/stores/CB/brev/SFR)
-//       need pointer args — tested in dedicated load/store/SFR tests.
+// EXCLUDED: frexp _pair (pair-frexp-cg.c), AE (ae-*.c), memory/CB/SFR,
+//           and builtins with no MI (x2cmula32 family, isqrt).
 
 typedef int __attribute__((ext_vector_type(2))) v2i;
 typedef short __attribute__((ext_vector_type(4))) v4s;
@@ -65,6 +54,11 @@ long long test_add64s(long long a0, long long a1) {
 int test_addbrba32(int a0, int a1) {
   int r = __builtin_haydn_addbrba32(a0, a1);
   sink_i = (int)r;
+}
+
+long long test_and64(long long a0, long long a1) {
+  long long r = __builtin_haydn_and64(a0, a1);
+  sink_ll = (long long)r;
 }
 
 int test_arctan(long long a0, int a1) {
@@ -572,8 +566,8 @@ long long test_fmulaa16_hs_13_02(long long a0, long long a1) {
   sink_ll = (long long)r;
 }
 
-long long test_fmulaa16_hs_33_22(long long acc, long long a0, long long a1) {
-  long long r = __builtin_haydn_fmulaa16_hs_33_22(acc, a0, a1);
+long long test_fmulaa16_hs_33_22(long long a0, long long a1, long long a2) {
+  long long r = __builtin_haydn_fmulaa16_hs_33_22(a0, a1, a2);
   sink_ll = (long long)r;
 }
 
@@ -897,9 +891,9 @@ long long test_max64(long long a0, long long a1) {
   sink_ll = (long long)r;
 }
 
-long long test_maxabs32s(long long a0, long long a1) {
-  long long r = __builtin_haydn_maxabs32s(a0, a1);
-  sink_ll = (long long)r;
+v2i test_maxabs32s(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_maxabs32s(a0, a1);
+  sink_v2 = r;
 }
 
 long long test_min64(long long a0, long long a1) {
@@ -929,6 +923,31 @@ long long test_movda32(int a0) {
 
 long long test_movda32x2(int a0, int a1) {
   long long r = __builtin_haydn_movda32x2(a0, a1);
+  sink_ll = (long long)r;
+}
+
+unsigned test_move32_dr_h(long long a0) {
+  unsigned r = __builtin_haydn_move32_dr_h(a0);
+  sink_u = (unsigned)r;
+}
+
+unsigned test_move32_dr_l(long long a0) {
+  unsigned r = __builtin_haydn_move32_dr_l(a0);
+  sink_u = (unsigned)r;
+}
+
+unsigned test_movesfr2gpr(void) {
+  unsigned r = __builtin_haydn_movesfr2gpr();
+  sink_u = (unsigned)r;
+}
+
+long long test_movf64(long long a0) {
+  long long r = __builtin_haydn_movf64(a0);
+  sink_ll = (long long)r;
+}
+
+long long test_movt64(long long a0) {
+  long long r = __builtin_haydn_movt64(a0);
   sink_ll = (long long)r;
 }
 
@@ -1857,6 +1876,11 @@ int test_mulsuh(int a0, int a1) {
   sink_i = (int)r;
 }
 
+unsigned test_muluuh(unsigned a0, unsigned a1) {
+  unsigned r = __builtin_haydn_muluuh(a0, a1);
+  sink_u = (unsigned)r;
+}
+
 long long test_mulzaa32_hhll(long long a0, long long a1) {
   long long r = __builtin_haydn_mulzaa32_hhll(a0, a1);
   sink_ll = (long long)r;
@@ -1957,6 +1981,11 @@ int test_nsaz64(int a0) {
   sink_i = (int)r;
 }
 
+long long test_or64(long long a0, long long a1) {
+  long long r = __builtin_haydn_or64(a0, a1);
+  sink_ll = (long long)r;
+}
+
 int test_packsr32(long long a0, int a1) {
   int r = __builtin_haydn_packsr32(a0, a1);
   sink_i = (int)r;
@@ -2002,9 +2031,24 @@ int test_satsr64(long long a0, int a1) {
   sink_i = (int)r;
 }
 
+long long test_seq64(long long a0) {
+  long long r = __builtin_haydn_seq64(a0);
+  sink_ll = (long long)r;
+}
+
+long long test_sle64(long long a0) {
+  long long r = __builtin_haydn_sle64(a0);
+  sink_ll = (long long)r;
+}
+
 int test_sll64(int a0, int a1) {
   int r = __builtin_haydn_sll64(a0, a1);
   sink_i = (int)r;
+}
+
+long long test_slt64(long long a0) {
+  long long r = __builtin_haydn_slt64(a0);
+  sink_ll = (long long)r;
 }
 
 long long test_smula16_00(long long a0, long long a1) {
@@ -2252,612 +2296,667 @@ long long test_sub64s(long long a0, long long a1) {
   sink_ll = (long long)r;
 }
 
-long long test_x2add32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2add32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2abs32(v2i a0) {
+  v2i r = __builtin_haydn_x2abs32(a0);
+  sink_v2 = r;
 }
 
-long long test_x2add32_hllh(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2add32_hllh(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2abs32s(v2i a0) {
+  v2i r = __builtin_haydn_x2abs32s(a0);
+  sink_v2 = r;
 }
 
-long long test_x2add32s(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2add32s(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2add32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2add32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2add32s_hllh(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2add32s_hllh(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2add32_hllh(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2add32_hllh(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2addsub32_hllh(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2addsub32_hllh(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2add32s(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2add32s(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2addsub32s(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2addsub32s(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2add32s_hllh(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2add32s_hllh(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2addsub32s_hllh(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2addsub32s_hllh(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2addsub32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2addsub32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2clamp32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2clamp32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2addsub32_hllh(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2addsub32_hllh(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2cmul32(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2cmul32(a0, a1, a2);
-  sink_ll = (long long)r;
+v2i test_x2addsub32s(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2addsub32s(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2cmul32_f2(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2cmul32_f2(a0, a1, a2);
-  sink_ll = (long long)r;
+v2i test_x2addsub32s_hllh(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2addsub32s_hllh(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2cmul32s(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2cmul32s(a0, a1, a2);
-  sink_ll = (long long)r;
+v2i test_x2clamp32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2clamp32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2cmul32s_f2(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2cmul32s_f2(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
-long long test_x2dot32(long long a0, long long a1) {
+long long test_x2dot32(v2i a0, v2i a1) {
   long long r = __builtin_haydn_x2dot32(a0, a1);
   sink_ll = (long long)r;
 }
 
-long long test_x2fcmul32rs(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2fcmul32rs(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2fcmul32rs(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fcmul32rs(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2fcmul32rss(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2fcmul32rss(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2fcmul32rss(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fcmul32rss(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2fcmula32rs(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2fcmula32rs(a0, a1, a2);
-  sink_ll = (long long)r;
+v2i test_x2fcmula32rs(v2i a0, v2i a1, v2i a2) {
+  v2i r = __builtin_haydn_x2fcmula32rs(a0, a1, a2);
+  sink_v2 = r;
 }
 
-long long test_x2fcmula32rss(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2fcmula32rss(a0, a1, a2);
-  sink_ll = (long long)r;
+v2i test_x2fcmula32rss(v2i a0, v2i a1, v2i a2) {
+  v2i r = __builtin_haydn_x2fcmula32rss(a0, a1, a2);
+  sink_v2 = r;
 }
 
-long long test_x2ff2rsst32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2ff2rsst32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2ff2rsst32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2ff2rsst32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2ff2rst32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2ff2rst32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2ff2rst32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2ff2rst32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2fmul32rs(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2fmul32rs(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2fmul32rs(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmul32rs(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2fmul32rss(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2fmul32rss(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2fmul32rss(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmul32rss(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2fmul32ts(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2fmul32ts(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2fmul32ts(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmul32ts(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2fmula32rs(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2fmula32rs(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2fmula32rs(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmula32rs(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2fmula32rss(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2fmula32rss(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2fmula32rss(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmula32rss(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2fmula32ts(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2fmula32ts(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2fmula32ts(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmula32ts(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2fmuls32rs(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2fmuls32rs(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2fmuls32rs(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmuls32rs(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2fmuls32rss(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2fmuls32rss(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2fmuls32rss(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmuls32rss(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2fmuls32ts(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2fmuls32ts(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2fmuls32ts(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2fmuls32ts(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2hadd32_h(long long a0) {
+v2i test_x2frsst32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2frsst32(a0, a1);
+  sink_v2 = r;
+}
+
+v2i test_x2frst32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2frst32(a0, a1);
+  sink_v2 = r;
+}
+
+long long test_x2hadd32_h(v2i a0) {
   long long r = __builtin_haydn_x2hadd32_h(a0);
   sink_ll = (long long)r;
 }
 
-long long test_x2hadd32_l(long long a0) {
+long long test_x2hadd32_l(v2i a0) {
   long long r = __builtin_haydn_x2hadd32_l(a0);
   sink_ll = (long long)r;
 }
 
-long long test_x2hadd32s_h(long long a0) {
+long long test_x2hadd32s_h(v2i a0) {
   long long r = __builtin_haydn_x2hadd32s_h(a0);
   sink_ll = (long long)r;
 }
 
-long long test_x2hadd32s_l(long long a0) {
+long long test_x2hadd32s_l(v2i a0) {
   long long r = __builtin_haydn_x2hadd32s_l(a0);
   sink_ll = (long long)r;
 }
 
-long long test_x2hmax32(long long a0) {
+long long test_x2hmax32(v2i a0) {
   long long r = __builtin_haydn_x2hmax32(a0);
   sink_ll = (long long)r;
 }
 
-long long test_x2hmin32(long long a0) {
+long long test_x2hmin32(v2i a0) {
   long long r = __builtin_haydn_x2hmin32(a0);
   sink_ll = (long long)r;
 }
 
-long long test_x2movf32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2movf32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2max32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2max32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2movt32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2movt32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2min32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2min32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2mul32(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2mul32(a0, a1, a2);
-  sink_ll = (long long)r;
+v2i test_x2mjswap32(v2i a0) {
+  v2i r = __builtin_haydn_x2mjswap32(a0);
+  sink_v2 = r;
 }
 
-long long test_x2mula32(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2mula32(a0, a1, a2);
-  sink_ll = (long long)r;
+v2i test_x2mjswap32s(v2i a0) {
+  v2i r = __builtin_haydn_x2mjswap32s(a0);
+  sink_v2 = r;
 }
 
-long long test_x2mulaph32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2mulaph32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2movf32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2movf32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2mulapl32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2mulapl32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2movt32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2movt32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2mulph32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2mulph32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2mulaph32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2mulaph32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2mulpl32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2mulpl32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2mulapl32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2mulapl32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2muls32(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2muls32(a0, a1, a2);
-  sink_ll = (long long)r;
+v2i test_x2mulph32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2mulph32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2mulsph32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2mulsph32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2mulpl32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2mulpl32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2mulspl32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2mulspl32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2mulsph32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2mulsph32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2neg32_l(long long a0) {
-  long long r = __builtin_haydn_x2neg32_l(a0);
-  sink_ll = (long long)r;
+v2i test_x2mulspl32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2mulspl32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2neg32s_l(long long a0) {
-  long long r = __builtin_haydn_x2neg32s_l(a0);
-  sink_ll = (long long)r;
+v2i test_x2neg32(v2i a0) {
+  v2i r = __builtin_haydn_x2neg32(a0);
+  sink_v2 = r;
 }
 
-long long test_x2sel32_hh(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2sel32_hh(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2neg32_l(v2i a0) {
+  v2i r = __builtin_haydn_x2neg32_l(a0);
+  sink_v2 = r;
 }
 
-long long test_x2sel32_hl(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2sel32_hl(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2neg32s(v2i a0) {
+  v2i r = __builtin_haydn_x2neg32s(a0);
+  sink_v2 = r;
 }
 
-long long test_x2sel32_lh(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2sel32_lh(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2neg32s_l(v2i a0) {
+  v2i r = __builtin_haydn_x2neg32s_l(a0);
+  sink_v2 = r;
 }
 
-long long test_x2sel32_ll(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2sel32_ll(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2sel32_hh(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2sel32_hh(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2seq32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2seq32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2sel32_hl(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2sel32_hl(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2sle32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2sle32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2sel32_lh(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2sel32_lh(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2sll32(long long a0, int a1) {
-  long long r = __builtin_haydn_x2sll32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2sel32_ll(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2sel32_ll(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2slli32(long long a0, int a1) {
-  long long r = __builtin_haydn_x2slli32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2seq32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2seq32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2slt32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2slt32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2sle32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2sle32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2sra32(long long a0, int a1) {
-  long long r = __builtin_haydn_x2sra32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2sll32(v2i a0, int a1) {
+  v2i r = __builtin_haydn_x2sll32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2sra32r(long long a0, int a1) {
-  long long r = __builtin_haydn_x2sra32r(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2slli32(v2i a0, int a1) {
+  v2i r = __builtin_haydn_x2slli32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2srai32(long long a0, int a1) {
-  long long r = __builtin_haydn_x2srai32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2slt32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2slt32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2srl32(long long a0, int a1) {
-  long long r = __builtin_haydn_x2srl32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2sra32(v2i a0, int a1) {
+  v2i r = __builtin_haydn_x2sra32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2srli32(long long a0, int a1) {
-  long long r = __builtin_haydn_x2srli32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2sra32r(v2i a0, int a1) {
+  v2i r = __builtin_haydn_x2sra32r(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2sub32(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2sub32(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2srai32(v2i a0, int a1) {
+  v2i r = __builtin_haydn_x2srai32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2sub32_hllh(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2sub32_hllh(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2srai32r(v2i a0, int a1) {
+  v2i r = __builtin_haydn_x2srai32r(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2sub32s(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2sub32s(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2srl32(v2i a0, int a1) {
+  v2i r = __builtin_haydn_x2srl32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2sub32s_hllh(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2sub32s_hllh(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2srli32(v2i a0, int a1) {
+  v2i r = __builtin_haydn_x2srli32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2subadd32_hllh(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2subadd32_hllh(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2sub32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2sub32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2subadd32s(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2subadd32s(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2sub32_hllh(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2sub32_hllh(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x2subadd32s_hllh(long long a0, long long a1) {
-  long long r = __builtin_haydn_x2subadd32s_hllh(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2sub32s(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2sub32s(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x4add16(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4add16(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2sub32s_hllh(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2sub32s_hllh(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x4add16s(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4add16s(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2subadd32(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2subadd32(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x4cjmul16s_h(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4cjmul16s_h(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2subadd32_hllh(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2subadd32_hllh(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x4cjmul16s_l(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4cjmul16s_l(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2subadd32s(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2subadd32s(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x4cjmula16s_h(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4cjmula16s_h(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2subadd32s_hllh(v2i a0, v2i a1) {
+  v2i r = __builtin_haydn_x2subadd32s_hllh(a0, a1);
+  sink_v2 = r;
 }
 
-long long test_x4cjmula16s_l(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4cjmula16s_l(a0, a1);
-  sink_ll = (long long)r;
+v2i test_x2swap32(v2i a0) {
+  v2i r = __builtin_haydn_x2swap32(a0);
+  sink_v2 = r;
 }
 
-long long test_x4clamp16(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4clamp16(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4abs16(v4s a0) {
+  v4s r = __builtin_haydn_x4abs16(a0);
+  sink_v4 = r;
 }
 
-long long test_x4cmul16(long long a0) {
-  long long r = __builtin_haydn_x4cmul16(a0);
-  sink_ll = (long long)r;
+v4s test_x4abs16s(v4s a0) {
+  v4s r = __builtin_haydn_x4abs16s(a0);
+  sink_v4 = r;
 }
 
-long long test_x4cmul16_f2(long long a0) {
-  long long r = __builtin_haydn_x4cmul16_f2(a0);
-  sink_ll = (long long)r;
+v4s test_x4add16(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4add16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4cmul16s(long long a0) {
-  long long r = __builtin_haydn_x4cmul16s(a0);
-  sink_ll = (long long)r;
+v4s test_x4add16s(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4add16s(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4cmul16s_f2(long long a0) {
-  long long r = __builtin_haydn_x4cmul16s_f2(a0);
-  sink_ll = (long long)r;
+v4s test_x4cjmul16s_h(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4cjmul16s_h(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4cmul16s_h(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4cmul16s_h(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4cjmul16s_l(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4cjmul16s_l(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4cmul16s_l(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4cmul16s_l(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4cjmula16s_h(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4cjmula16s_h(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4cmula16s_h(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4cmula16s_h(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4cjmula16s_l(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4cjmula16s_l(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4cmula16s_l(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4cmula16s_l(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4clamp16(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4clamp16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4dot16(long long a0, long long a1) {
+v4s test_x4cmul16(v4s a0) {
+  v4s r = __builtin_haydn_x4cmul16(a0);
+  sink_v4 = r;
+}
+
+v4s test_x4cmul16_f2(v4s a0) {
+  v4s r = __builtin_haydn_x4cmul16_f2(a0);
+  sink_v4 = r;
+}
+
+v4s test_x4cmul16s(v4s a0) {
+  v4s r = __builtin_haydn_x4cmul16s(a0);
+  sink_v4 = r;
+}
+
+v4s test_x4cmul16s_f2(v4s a0) {
+  v4s r = __builtin_haydn_x4cmul16s_f2(a0);
+  sink_v4 = r;
+}
+
+v4s test_x4cmul16s_h(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4cmul16s_h(a0, a1);
+  sink_v4 = r;
+}
+
+v4s test_x4cmul16s_l(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4cmul16s_l(a0, a1);
+  sink_v4 = r;
+}
+
+v4s test_x4cmula16s_h(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4cmula16s_h(a0, a1);
+  sink_v4 = r;
+}
+
+v4s test_x4cmula16s_l(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4cmula16s_l(a0, a1);
+  sink_v4 = r;
+}
+
+v4s test_x4conj16(v4s a0) {
+  v4s r = __builtin_haydn_x4conj16(a0);
+  sink_v4 = r;
+}
+
+v4s test_x4conj16s(v4s a0) {
+  v4s r = __builtin_haydn_x4conj16s(a0);
+  sink_v4 = r;
+}
+
+long long test_x4dot16(v4s a0, v4s a1) {
   long long r = __builtin_haydn_x4dot16(a0, a1);
   sink_ll = (long long)r;
 }
 
-long long test_x4energy16(long long a0) {
+long long test_x4energy16(v4s a0) {
   long long r = __builtin_haydn_x4energy16(a0);
   sink_ll = (long long)r;
 }
 
-long long test_x4fcmul16rs(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4fcmul16rs(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4fcmul16rs(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4fcmul16rs(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4fcmul16rss(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4fcmul16rss(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4fcmul16rss(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4fcmul16rss(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4fcmula16rs(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4fcmula16rs(a0, a1, a2);
-  sink_ll = (long long)r;
+v4s test_x4fcmula16rs(v4s a0, v4s a1, v4s a2) {
+  v4s r = __builtin_haydn_x4fcmula16rs(a0, a1, a2);
+  sink_v4 = r;
 }
 
-long long test_x4fcmula16rss(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4fcmula16rss(a0, a1, a2);
-  sink_ll = (long long)r;
+v4s test_x4fcmula16rss(v4s a0, v4s a1, v4s a2) {
+  v4s r = __builtin_haydn_x4fcmula16rss(a0, a1, a2);
+  sink_v4 = r;
 }
 
-long long test_x4ff2mul16s(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4ff2mul16s(a0, a1, a2);
-  sink_ll = (long long)r;
+v4s test_x4fmul16rs(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4fmul16rs(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4ff2mula16s(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4ff2mula16s(a0, a1, a2);
-  sink_ll = (long long)r;
+v4s test_x4fmul16rss(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4fmul16rss(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4ff2muls16s(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4ff2muls16s(a0, a1, a2);
-  sink_ll = (long long)r;
+v4s test_x4fmul16ts(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4fmul16ts(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4fmul16rs(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4fmul16rs(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4frsst16(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4frsst16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4fmul16rss(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4fmul16rss(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4frst16(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4frst16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4fmul16ts(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4fmul16ts(a0, a1);
-  sink_ll = (long long)r;
-}
-
-long long test_x4frsst16(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4frsst16(a0, a1);
-  sink_ll = (long long)r;
-}
-
-long long test_x4frst16(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4frst16(a0, a1);
-  sink_ll = (long long)r;
-}
-
-long long test_x4hadd16_h(long long a0) {
+long long test_x4hadd16_h(v4s a0) {
   long long r = __builtin_haydn_x4hadd16_h(a0);
   sink_ll = (long long)r;
 }
 
-long long test_x4hadd16_l(long long a0) {
+long long test_x4hadd16_l(v4s a0) {
   long long r = __builtin_haydn_x4hadd16_l(a0);
   sink_ll = (long long)r;
 }
 
-long long test_x4hmax16(long long a0) {
+long long test_x4hmax16(v4s a0) {
   long long r = __builtin_haydn_x4hmax16(a0);
   sink_ll = (long long)r;
 }
 
-long long test_x4hmin16(long long a0) {
+long long test_x4hmin16(v4s a0) {
   long long r = __builtin_haydn_x4hmin16(a0);
   sink_ll = (long long)r;
 }
 
-long long test_x4movf16(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4movf16(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4max16(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4max16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4movt16(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4movt16(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4min16(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4min16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4mul16(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4mul16(a0, a1, a2);
-  sink_ll = (long long)r;
+v4s test_x4mjswap16(v4s a0) {
+  v4s r = __builtin_haydn_x4mjswap16(a0);
+  sink_v4 = r;
 }
 
-long long test_x4mula16(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4mula16(a0, a1, a2);
-  sink_ll = (long long)r;
+v4s test_x4mjswap16s(v4s a0) {
+  v4s r = __builtin_haydn_x4mjswap16s(a0);
+  sink_v4 = r;
 }
 
-long long test_x4mula16s(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4mula16s(a0, a1, a2);
-  sink_ll = (long long)r;
+v4s test_x4movf16(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4movf16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4muls16(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4muls16(a0, a1, a2);
-  sink_ll = (long long)r;
+v4s test_x4movt16(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4movt16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4muls16s(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4muls16s(a0, a1, a2);
-  sink_ll = (long long)r;
+v4s test_x4neg16(v4s a0) {
+  v4s r = __builtin_haydn_x4neg16(a0);
+  sink_v4 = r;
 }
 
-long long test_x4sat32t16(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4sat32t16(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4neg16s(v4s a0) {
+  v4s r = __builtin_haydn_x4neg16s(a0);
+  sink_v4 = r;
 }
 
-long long test_x4seli16(long long a0, long long a1, int a2) {
-  long long r = __builtin_haydn_x4seli16(a0, a1, a2);
-  sink_ll = (long long)r;
+v4s test_x4sat32t16(v2i a0, v2i a1) {
+  v4s r = __builtin_haydn_x4sat32t16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4seq16(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4seq16(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4seli16(v4s a0, v4s a1, int a2) {
+  v4s r = __builtin_haydn_x4seli16(a0, a1, a2);
+  sink_v4 = r;
 }
 
-long long test_x4sle16(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4sle16(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4seq16(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4seq16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4sll16(long long a0, int a1) {
-  long long r = __builtin_haydn_x4sll16(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4sle16(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4sle16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4slli16(long long a0, int a1) {
-  long long r = __builtin_haydn_x4slli16(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4sll16(v4s a0, int a1) {
+  v4s r = __builtin_haydn_x4sll16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4slt16(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4slt16(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4slli16(v4s a0, int a1) {
+  v4s r = __builtin_haydn_x4slli16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4sra16(long long a0, int a1) {
-  long long r = __builtin_haydn_x4sra16(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4slt16(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4slt16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4sra16r(long long a0, int a1) {
-  long long r = __builtin_haydn_x4sra16r(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4sra16(v4s a0, int a1) {
+  v4s r = __builtin_haydn_x4sra16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4srai16(long long a0, int a1) {
-  long long r = __builtin_haydn_x4srai16(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4sra16r(v4s a0, int a1) {
+  v4s r = __builtin_haydn_x4sra16r(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4srl16(long long a0, int a1) {
-  long long r = __builtin_haydn_x4srl16(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4srai16(v4s a0, int a1) {
+  v4s r = __builtin_haydn_x4srai16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4srli16(long long a0, int a1) {
-  long long r = __builtin_haydn_x4srli16(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4srai16r(v4s a0, int a1) {
+  v4s r = __builtin_haydn_x4srai16r(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4sub16(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4sub16(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4srl16(v4s a0, int a1) {
+  v4s r = __builtin_haydn_x4srl16(a0, a1);
+  sink_v4 = r;
 }
 
-long long test_x4sub16s(long long a0, long long a1) {
-  long long r = __builtin_haydn_x4sub16s(a0, a1);
-  sink_ll = (long long)r;
+v4s test_x4srli16(v4s a0, int a1) {
+  v4s r = __builtin_haydn_x4srli16(a0, a1);
+  sink_v4 = r;
+}
+
+v4s test_x4sub16(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4sub16(a0, a1);
+  sink_v4 = r;
+}
+
+v4s test_x4sub16s(v4s a0, v4s a1) {
+  v4s r = __builtin_haydn_x4sub16s(a0, a1);
+  sink_v4 = r;
+}
+
+v4s test_x4swap16(v4s a0) {
+  v4s r = __builtin_haydn_x4swap16(a0);
+  sink_v4 = r;
 }

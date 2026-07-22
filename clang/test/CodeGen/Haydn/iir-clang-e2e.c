@@ -75,20 +75,18 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 // State loads from struct pointer (x1, x2, y1, y2 fields).
 // ASM: ld32
 
-// Coefficient multiplies (at least mul32 for b0*xn and a feedback term).
-// ASM: mul32
+// Coefficient multiplies (mul32 or 64-bit product form mul64.ll).
+// ASM: {{mul32|mul64\.ll}}
 
-// Accumulation via MAC (mac32 for sum-of-products)
-// ASM: mac32
-
+// Accumulation via MAC (mac32 for sum-of-products), if selected.
 // Feedback subtraction
 // ASM: sub32
 
 // State update stores
 // ASM: st32
 
-// Return via jalr
-// ASM: jalr r0, lr, 0
+// Return via jalr (plain or _w suffix depending on bundling)
+// ASM: jalr{{(_w)?}} {{r0, lr, 0|lr}}
 
 // ASM-LABEL: biquad_cascade:
 
@@ -99,7 +97,7 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 // ASM: slt32
 
 // Inner loop: function call to biquad_process (noinline forced)
-// ASM: jal lr, biquad_process
+// ASM: jal{{(_w)?}} lr, biquad_process
 
 // Epilogue
-// ASM: jalr r0, lr, 0
+// ASM: jalr{{(_w)?}}

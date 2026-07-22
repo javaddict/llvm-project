@@ -3,7 +3,7 @@
 // REQUIRES: haydn-registered-target
 //
 // Contract: AE_MULSSFD32* dual MSU macros must update the accumulator
-// (return of __haydn_fmuls32s_* / f2mulss must not be discarded).
+// (return of haydn_fmuls32s_* / f2mulss must not be discarded).
 //
 // CHECK-LABEL: @mulss_s_hhll
 // CHECK: call {{.*}}@llvm.haydn.fmuls32s.hh

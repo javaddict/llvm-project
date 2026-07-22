@@ -12,6 +12,13 @@
 // not collapse back to the pre-D208 opaque long long typedef.
 
 #include <haydn_types.h>
+// NatureDSP-compatible aliases (same underlying vector types as haydn_dsp.h).
+typedef haydn_x4int16 ae_int16x4;
+typedef haydn_x2int32 ae_int32x2;
+typedef haydn_x2fract32 ae_f32x2;
+typedef haydn_x4fract16 ae_f16x4;
+typedef haydn_dr64_t ae_int64;
+typedef haydn_dr64_t ae_f64;
 
 // CHECK: define dso_local noundef <4 x i16> @add_v4i16(<4 x i16> noundef %a, <4 x i16> noundef %b)
 // CHECK: %add = add <4 x i16> %{{.*}}, %{{.*}}
@@ -49,24 +56,24 @@ _Static_assert(sizeof(ae_f64) == 8, "ae_f64 is one DR64 (8 bytes)");
 // with the HiFi ae_* aliases (they are the same underlying type).
 // CHECK: define dso_local noundef <4 x i16> @native_add16(<4 x i16> noundef %a, <4 x i16> noundef %b)
 // CHECK: %add = add <4 x i16> %{{.*}}, %{{.*}}
-haydn_4xint16 native_add16(haydn_4xint16 a, haydn_4xint16 b) {
+haydn_x4int16 native_add16(haydn_x4int16 a, haydn_x4int16 b) {
   return a + b;
 }
 
 // CHECK: define dso_local noundef <2 x i32> @native_add32(<2 x i32> noundef %a, <2 x i32> noundef %b)
 // CHECK: %add = add <2 x i32> %{{.*}}, %{{.*}}
-haydn_2xint32 native_add32(haydn_2xint32 a, haydn_2xint32 b) {
+haydn_x2int32 native_add32(haydn_x2int32 a, haydn_x2int32 b) {
   return a + b;
 }
 
-// Cross-assignable: ae_int16x4 and haydn_4xint16 are the same type.
+// Cross-assignable: ae_int16x4 and haydn_x4int16 are the same type.
 // CHECK: define dso_local noundef <4 x i16> @cross_assign(<4 x i16> noundef returned %x)
-haydn_4xint16 cross_assign(ae_int16x4 x) {
+haydn_x4int16 cross_assign(ae_int16x4 x) {
   return x;
 }
 
-_Static_assert(sizeof(haydn_4xint16) == 8, "haydn_4xint16 is 8 bytes");
-_Static_assert(sizeof(haydn_2xint32) == 8, "haydn_2xint32 is 8 bytes");
-_Static_assert(sizeof(haydn_4xfract16) == 8, "haydn_4xfract16 is 8 bytes");
-_Static_assert(sizeof(haydn_2xfract32) == 8, "haydn_2xfract32 is 8 bytes");
-_Static_assert(sizeof(haydn_2xfloat32) == 8, "haydn_2xfloat32 is 8 bytes");
+_Static_assert(sizeof(haydn_x4int16) == 8, "haydn_x4int16 is 8 bytes");
+_Static_assert(sizeof(haydn_x2int32) == 8, "haydn_x2int32 is 8 bytes");
+_Static_assert(sizeof(haydn_x4fract16) == 8, "haydn_x4fract16 is 8 bytes");
+_Static_assert(sizeof(haydn_x2fract32) == 8, "haydn_x2fract32 is 8 bytes");
+_Static_assert(sizeof(haydn_x2float32) == 8, "haydn_x2float32 is 8 bytes");

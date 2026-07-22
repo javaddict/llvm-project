@@ -5452,7 +5452,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   // NatureDSP AE_MULFC32X16RAS_{L,H} compatibility intrinsics. The Haydn
   // ISA has no single instruction covering this exact operation (see
   // ~/haydn-plans/isa-improve/ISA-08-mulfc32x16ras.md). The C wrapper in
-  // haydn_intrin.h sign-extends the 16-bit twiddle lanes to 32-bit (there
+  // haydn.h sign-extends the 16-bit twiddle lanes to 32-bit (there
   // is no cross-lane 16->32 pack instruction on Haydn) and invokes this
   // intrinsic with the widened 32-bit complex twiddle in b.
   //
