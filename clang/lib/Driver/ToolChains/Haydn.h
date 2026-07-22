@@ -6,16 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Haydn-specific driver helpers. Lives in a Haydn-owned file so the shared
-// upstream `BareMetal.cpp` only retains a minimal Haydn dispatch hook
-// (a `Triple::haydn` test that forwards here), satisfying HC#0.
+// Haydn-specific driver helpers. The shared `BareMetal.cpp` retains only a
+// minimal `Triple::haydn` dispatch that forwards here.
 //
-// Two responsibilities are Haydn-owned here:
-//   1. `getDefaultHaydnLinker()` — Haydn baremetal has no system ld; always
-//      use ld.lld.
-//   2. `addHaydnLinkArgs(...)` — append Haydn-specific linker flags:
-//      automatically provide `haydn.ld` linker script (if not -T supplied)
-//      and `libhaydn.o` runtime (memset/memcpy/atomics/64-bit arithmetic).
+//   1. `getDefaultHaydnLinker()` — always ld.lld (no system ld).
+//   2. `addHaydnLinkArgs(...)` — reserved hook; currently a no-op. Haydn
+//      uses the normal baremetal link set (compiler-rt / llvm-libc).
 //
 //===----------------------------------------------------------------------===//
 
@@ -30,17 +26,10 @@ namespace driver {
 namespace toolchains {
 
 // Returns the default linker executable for Haydn baremetal targets.
-// Haydn has no system ld, so always ld.lld.
 const char *getDefaultHaydnLinker();
 
-// Append Haydn-specific linker arguments to CmdArgs:
-//   - `-T<haydn.ld>` if the user has not supplied a linker script via -T
-//   - `libhaydn.o` runtime path (mem*, atomics, integer div/mod), if resolved
-//     path exists. Lookup is by basename so a `-L` override still works.
-//
-// `Triple` is the effective target triple. `TC` is the active toolchain
-// (used to resolve file paths via GetFilePath). `Args` and `CmdArgs` are the
-// driver argument list and the outgoing linker argument list, respectively.
+// Optional Haydn-specific linker args. Currently empty — runtime comes from
+// the configured sysroot (llvm-libc), not a private libhaydn archive.
 void addHaydnLinkArgs(const ToolChain &TC, const llvm::Triple &Triple,
                       const llvm::opt::ArgList &Args,
                       llvm::opt::ArgStringList &CmdArgs);
