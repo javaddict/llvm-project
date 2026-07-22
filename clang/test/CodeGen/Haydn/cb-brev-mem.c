@@ -20,30 +20,32 @@
 // no subsequent read. If the intrinsics regress to IntrNoMem, both calls
 // vanish from the IR.
 
-#include <haydn_intrin.h>
+#include <haydn.h>
 
 // CHECK-LABEL: @cb_load_not_dced
-// CHECK: call i64 @llvm.haydn.ldw.cb.imm
+// Frexp CB load: {data, new_ptr}; presence of the call is the DCE check.
+// CHECK: call { i64, i32 } @llvm.haydn.ldw.cb.imm
 void cb_load_not_dced(int ptr, int cbr_sel) {
   // Result discarded. IntrReadMem keeps the call live.
-  (void)__haydn_ldw_cb_imm(ptr, cbr_sel, 1);
+  (void)haydn_ldw_cb_imm(ptr, cbr_sel, 1);
 }
 
 // CHECK-LABEL: @cb_store_not_dced
-// CHECK: call void @llvm.haydn.sdw.cb.imm
+// CB store returns updated pointer (i32); presence is the DCE check.
+// CHECK: call i32 @llvm.haydn.sdw.cb.imm
 void cb_store_not_dced(long long data, int ptr, int cbr_sel) {
   // No subsequent read. IntrWriteMem keeps the call live.
-  __haydn_sdw_cb_imm(data, ptr, cbr_sel, 1);
+  haydn_sdw_cb_imm(data, ptr, cbr_sel, 1);
 }
 
 // CHECK-LABEL: @brev_load_not_dced
 // CHECK: call i32 @llvm.haydn.lw.brev.imm
 void brev_load_not_dced(int ptr) {
-  (void)__haydn_lw_brev_imm(ptr, 1);
+  (void)haydn_lw_brev_imm(ptr, 1);
 }
 
 // CHECK-LABEL: @brev_store_not_dced
 // CHECK: call i32 @llvm.haydn.sw.brev.imm
 void brev_store_not_dced(int ptr) {
-  (void)__haydn_sw_brev_imm(ptr, 1);
+  (void)haydn_sw_brev_imm(ptr, 1);
 }

@@ -59,20 +59,34 @@ class haydn_sfr_compare_intrinsic<string name, LLVMType res_ty, LLVMType op_ty>
 /// MachineInstr matching the _D_RR2 / _D_RRA2 _FLEX format classes (every
 /// format-class bits-field binds 1:1 to a dag operand — no orphan fields).
 /// Non-accum form: {rtd1, rtd2} = op(src1, src2).
+/// Golden X2 lanes: sources are packed dual-32 vectors (v2i32).
 class haydn_simd_mac_2dest_intrinsic<string name>
     : Haydn_Intrinsic<name,
                        [llvm_i64_ty, llvm_i64_ty],
+                       [llvm_v2i32_ty, llvm_v2i32_ty],
+                       [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+
+/// Golden X4 lanes: sources are packed quad-16 vectors (v4i16).
+class haydn_simd_mac_2dest_v4i16_intrinsic<string name>
+    : Haydn_Intrinsic<name,
                        [llvm_i64_ty, llvm_i64_ty],
+                       [llvm_v4i16_ty, llvm_v4i16_ty],
                        [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 /// D400 (Path B): 2-output SIMD MAC accumulate/subtract intrinsic. Both
 /// destination registers are also read as accumulators (tied-def in the .td).
 /// {rtd1, rtd2} = {acc1 +/- (src1*src2)_high, acc2 +/- (src1*src2)_low}.
-/// Accumulator operands come first so the selector ties acc1->rtd1, acc2->rtd2.
+/// Accumulators stay i64 (full products); sources are lane vectors.
 class haydn_simd_maca_2dest_intrinsic<string name>
     : Haydn_Intrinsic<name,
                        [llvm_i64_ty, llvm_i64_ty],
-                       [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty],
+                       [llvm_i64_ty, llvm_i64_ty, llvm_v2i32_ty, llvm_v2i32_ty],
+                       [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+
+class haydn_simd_maca_2dest_v4i16_intrinsic<string name>
+    : Haydn_Intrinsic<name,
+                       [llvm_i64_ty, llvm_i64_ty],
+                       [llvm_i64_ty, llvm_i64_ty, llvm_v4i16_ty, llvm_v4i16_ty],
                        [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
@@ -377,10 +391,10 @@ def int_haydn_x4sub16s  : haydn_binary_intrinsic<"haydn_x4sub16s",  llvm_v4i16_t
 
 def int_haydn_x2mula32  : haydn_simd_maca_2dest_intrinsic<"haydn_x2mula32">;
 def int_haydn_x2muls32  : haydn_simd_maca_2dest_intrinsic<"haydn_x2muls32">;
-def int_haydn_x4mula16  : haydn_simd_maca_2dest_intrinsic<"haydn_x4mula16">;
-def int_haydn_x4muls16  : haydn_simd_maca_2dest_intrinsic<"haydn_x4muls16">;
-def int_haydn_x4mula16s : haydn_simd_maca_2dest_intrinsic<"haydn_x4mula16s">;
-def int_haydn_x4muls16s : haydn_simd_maca_2dest_intrinsic<"haydn_x4muls16s">;
+def int_haydn_x4mula16  : haydn_simd_maca_2dest_v4i16_intrinsic<"haydn_x4mula16">;
+def int_haydn_x4muls16  : haydn_simd_maca_2dest_v4i16_intrinsic<"haydn_x4muls16">;
+def int_haydn_x4mula16s : haydn_simd_maca_2dest_v4i16_intrinsic<"haydn_x4mula16s">;
+def int_haydn_x4muls16s : haydn_simd_maca_2dest_v4i16_intrinsic<"haydn_x4muls16s">;
 
 //===----------------------------------------------------------------------===//
 // Transcendental Functions
@@ -500,7 +514,7 @@ def int_haydn_packsr32x2_ll : Haydn_Intrinsic<"haydn_packsr32x2_ll",
 //   tmp_b = X2ABS32S b
 //   result = X2MAX32 tmp_a, tmp_b
 //===----------------------------------------------------------------------===//
-def int_haydn_maxabs32s : haydn_binary_intrinsic<"haydn_maxabs32s", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_maxabs32s : haydn_binary_intrinsic<"haydn_maxabs32s", llvm_v2i32_ty, llvm_v2i32_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 2: LC3 BASOP 16x16 fractional multiply
@@ -549,20 +563,20 @@ def int_haydn_srai64r : Haydn_Intrinsic<"haydn_srai64r",
 //===----------------------------------------------------------------------===//
 
 // X4FCMUL16RS — Quad 16-bit complex multiply, sat+round (binary DR64)
-def int_haydn_x4fcmul16rs : haydn_binary_intrinsic<"haydn_x4fcmul16rs", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x4fcmul16rs : haydn_binary_intrinsic<"haydn_x4fcmul16rs", llvm_v4i16_ty, llvm_v4i16_ty>;
 
 // X4FCMULA16RS — Quad 16-bit complex MAC, sat+round. Ternary: reads rtd as
 // accumulator (DB behavior: rtd[lane] = SAT(rtd[lane] + fcmul(a,b))). Was
 // misdeclared binary (D211/L185) — the implicit accumulator was dropped,
 // producing silent miscompute. Now ternary (acc, a, b) per DB.
-def int_haydn_x4fcmula16rs : haydn_ternary_intrinsic<"haydn_x4fcmula16rs", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x4fcmula16rs : haydn_ternary_intrinsic<"haydn_x4fcmula16rs", llvm_v4i16_ty, llvm_v4i16_ty>;
 
 // X4FCMUL16RSS — Quad 16-bit complex multiply, sat+round variant (binary DR64)
-def int_haydn_x4fcmul16rss : haydn_binary_intrinsic<"haydn_x4fcmul16rss", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x4fcmul16rss : haydn_binary_intrinsic<"haydn_x4fcmul16rss", llvm_v4i16_ty, llvm_v4i16_ty>;
 
 // X4FCMULA16RSS — Quad 16-bit complex MAC, sat+round variant. Ternary
 // accumulator (same DB-behavior shape as _RS above — reads rtd). D211/L185.
-def int_haydn_x4fcmula16rss : haydn_ternary_intrinsic<"haydn_x4fcmula16rss", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x4fcmula16rss : haydn_ternary_intrinsic<"haydn_x4fcmula16rss", llvm_v4i16_ty, llvm_v4i16_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 3: 32-bit complex multiply (D400 Path B: 2-dest DR64)
@@ -630,26 +644,26 @@ def int_haydn_x4movt16 : haydn_binary_intrinsic<"haydn_x4movt16", llvm_v4i16_ty,
 //   TS  = with rounding + truncation
 //===----------------------------------------------------------------------===//
 
-def int_haydn_x2fmul32rs  : haydn_binary_intrinsic<"haydn_x2fmul32rs",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2fmul32rss : haydn_binary_intrinsic<"haydn_x2fmul32rss", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2fmul32ts  : haydn_binary_intrinsic<"haydn_x2fmul32ts",  llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x2fmul32rs  : haydn_binary_intrinsic<"haydn_x2fmul32rs",  llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fmul32rss : haydn_binary_intrinsic<"haydn_x2fmul32rss", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fmul32ts  : haydn_binary_intrinsic<"haydn_x2fmul32ts",  llvm_v2i32_ty, llvm_v2i32_ty>;
 
-def int_haydn_x2fmula32rs  : haydn_binary_intrinsic<"haydn_x2fmula32rs",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2fmula32rss : haydn_binary_intrinsic<"haydn_x2fmula32rss", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2fmula32ts  : haydn_binary_intrinsic<"haydn_x2fmula32ts",  llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x2fmula32rs  : haydn_binary_intrinsic<"haydn_x2fmula32rs",  llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fmula32rss : haydn_binary_intrinsic<"haydn_x2fmula32rss", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fmula32ts  : haydn_binary_intrinsic<"haydn_x2fmula32ts",  llvm_v2i32_ty, llvm_v2i32_ty>;
 
-def int_haydn_x2fmuls32rs  : haydn_binary_intrinsic<"haydn_x2fmuls32rs",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2fmuls32rss : haydn_binary_intrinsic<"haydn_x2fmuls32rss", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2fmuls32ts  : haydn_binary_intrinsic<"haydn_x2fmuls32ts",  llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x2fmuls32rs  : haydn_binary_intrinsic<"haydn_x2fmuls32rs",  llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fmuls32rss : haydn_binary_intrinsic<"haydn_x2fmuls32rss", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fmuls32ts  : haydn_binary_intrinsic<"haydn_x2fmuls32ts",  llvm_v2i32_ty, llvm_v2i32_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4: X4 SIMD fractional multiply (binary DR64)
 // X4FMUL16RS/RSS/TS — quad 16-bit fractional multiply with rounding
 //===----------------------------------------------------------------------===//
 
-def int_haydn_x4fmul16rs  : haydn_binary_intrinsic<"haydn_x4fmul16rs",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4fmul16rss : haydn_binary_intrinsic<"haydn_x4fmul16rss", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4fmul16ts  : haydn_binary_intrinsic<"haydn_x4fmul16ts",  llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x4fmul16rs  : haydn_binary_intrinsic<"haydn_x4fmul16rs",  llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4fmul16rss : haydn_binary_intrinsic<"haydn_x4fmul16rss", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4fmul16ts  : haydn_binary_intrinsic<"haydn_x4fmul16ts",  llvm_v4i16_ty, llvm_v4i16_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4: X2/X4 shift with rounding (binary DR64)
@@ -659,8 +673,8 @@ def int_haydn_x4fmul16ts  : haydn_binary_intrinsic<"haydn_x4fmul16ts",  llvm_i64
 
 def int_haydn_x2frsst32 : haydn_binary_intrinsic<"haydn_x2frsst32", llvm_v2i32_ty, llvm_v2i32_ty>;
 def int_haydn_x2frst32  : haydn_binary_intrinsic<"haydn_x2frst32",  llvm_v2i32_ty, llvm_v2i32_ty>;
-def int_haydn_x4frsst16 : haydn_binary_intrinsic<"haydn_x4frsst16", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4frst16  : haydn_binary_intrinsic<"haydn_x4frst16",  llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x4frsst16 : haydn_binary_intrinsic<"haydn_x4frsst16", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4frst16  : haydn_binary_intrinsic<"haydn_x4frst16",  llvm_v4i16_ty, llvm_v4i16_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4: X2/X4 immediate shift with rounding
@@ -763,8 +777,8 @@ def int_haydn_x2neg32   : haydn_unary_intrinsic<"haydn_x2neg32",   llvm_v2i32_ty
 def int_haydn_x2neg32s  : haydn_unary_intrinsic<"haydn_x2neg32s",  llvm_v2i32_ty, llvm_v2i32_ty>;
 // X2NEG32_L / X2NEG32S_L negate only the LOW lane (high lane passes through) -
 // cross-halfword semantics, NOT a clean per-lane map. Stay opaque i64 (D208).
-def int_haydn_x2neg32_l : haydn_unary_intrinsic<"haydn_x2neg32_l", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2neg32s_l : haydn_unary_intrinsic<"haydn_x2neg32s_l", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x2neg32_l : haydn_unary_intrinsic<"haydn_x2neg32_l", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2neg32s_l : haydn_unary_intrinsic<"haydn_x2neg32s_l", llvm_v2i32_ty, llvm_v2i32_ty>;
 def int_haydn_x2swap32  : haydn_unary_intrinsic<"haydn_x2swap32",  llvm_v2i32_ty, llvm_v2i32_ty>;
 def int_haydn_x2mjswap32  : haydn_unary_intrinsic<"haydn_x2mjswap32",  llvm_v2i32_ty, llvm_v2i32_ty>;
 def int_haydn_x2mjswap32s : haydn_unary_intrinsic<"haydn_x2mjswap32s", llvm_v2i32_ty, llvm_v2i32_ty>;
@@ -779,39 +793,39 @@ def int_haydn_x4mjswap16  : haydn_unary_intrinsic<"haydn_x4mjswap16",  llvm_v4i1
 def int_haydn_x4mjswap16s : haydn_unary_intrinsic<"haydn_x4mjswap16s", llvm_v4i16_ty, llvm_v4i16_ty>;
 def int_haydn_x4conj16  : haydn_unary_intrinsic<"haydn_x4conj16",  llvm_v4i16_ty, llvm_v4i16_ty>;
 def int_haydn_x4conj16s : haydn_unary_intrinsic<"haydn_x4conj16s", llvm_v4i16_ty, llvm_v4i16_ty>;
-def int_haydn_x4energy16 : haydn_unary_intrinsic<"haydn_x4energy16", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4cmul16   : haydn_unary_intrinsic<"haydn_x4cmul16",   llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4cmul16s  : haydn_unary_intrinsic<"haydn_x4cmul16s",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4cmul16s_f2 : haydn_unary_intrinsic<"haydn_x4cmul16s_f2", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4cmul16_f2  : haydn_unary_intrinsic<"haydn_x4cmul16_f2",  llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x4energy16 : haydn_unary_intrinsic<"haydn_x4energy16", llvm_i64_ty, llvm_v4i16_ty>;
+def int_haydn_x4cmul16   : haydn_unary_intrinsic<"haydn_x4cmul16",   llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4cmul16s  : haydn_unary_intrinsic<"haydn_x4cmul16s",  llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4cmul16s_f2 : haydn_unary_intrinsic<"haydn_x4cmul16s_f2", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4cmul16_f2  : haydn_unary_intrinsic<"haydn_x4cmul16_f2",  llvm_v4i16_ty, llvm_v4i16_ty>;
 
 // X2/X4 binary (DR64 binary: i64, i64 -> i64)
 def int_haydn_x2max32   : haydn_binary_intrinsic<"haydn_x2max32",   llvm_v2i32_ty, llvm_v2i32_ty>;
 def int_haydn_x2min32   : haydn_binary_intrinsic<"haydn_x2min32",   llvm_v2i32_ty, llvm_v2i32_ty>;
-def int_haydn_x2clamp32 : haydn_binary_intrinsic<"haydn_x2clamp32", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x2clamp32 : haydn_binary_intrinsic<"haydn_x2clamp32", llvm_v2i32_ty, llvm_v2i32_ty>;
 def int_haydn_x4max16   : haydn_binary_intrinsic<"haydn_x4max16",   llvm_v4i16_ty, llvm_v4i16_ty>;
 def int_haydn_x4min16   : haydn_binary_intrinsic<"haydn_x4min16",   llvm_v4i16_ty, llvm_v4i16_ty>;
-def int_haydn_x4clamp16 : haydn_binary_intrinsic<"haydn_x4clamp16", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x4clamp16 : haydn_binary_intrinsic<"haydn_x4clamp16", llvm_v4i16_ty, llvm_v4i16_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 2: Shuffle/Pack ops
 //===----------------------------------------------------------------------===//
 
 // X2SEL32 lane variants (binary DR64)
-def int_haydn_x2sel32_hh : haydn_binary_intrinsic<"haydn_x2sel32_hh", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2sel32_hl : haydn_binary_intrinsic<"haydn_x2sel32_hl", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2sel32_lh : haydn_binary_intrinsic<"haydn_x2sel32_lh", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2sel32_ll : haydn_binary_intrinsic<"haydn_x2sel32_ll", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x2sel32_hh : haydn_binary_intrinsic<"haydn_x2sel32_hh", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2sel32_hl : haydn_binary_intrinsic<"haydn_x2sel32_hl", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2sel32_lh : haydn_binary_intrinsic<"haydn_x2sel32_lh", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2sel32_ll : haydn_binary_intrinsic<"haydn_x2sel32_ll", llvm_v2i32_ty, llvm_v2i32_ty>;
 
 // X2ADDSUB32 / X2SUBADD32 variants (binary DR64)
 // Note: int_haydn_x2addsub32s already defined above in SIMD X2 section.
 def int_haydn_x2addsub32      : haydn_binary_intrinsic<"haydn_x2addsub32",      llvm_v2i32_ty, llvm_v2i32_ty>;
-def int_haydn_x2addsub32_hllh : haydn_binary_intrinsic<"haydn_x2addsub32_hllh", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2addsub32s_hllh : haydn_binary_intrinsic<"haydn_x2addsub32s_hllh", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x2addsub32_hllh : haydn_binary_intrinsic<"haydn_x2addsub32_hllh", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2addsub32s_hllh : haydn_binary_intrinsic<"haydn_x2addsub32s_hllh", llvm_v2i32_ty, llvm_v2i32_ty>;
 def int_haydn_x2subadd32      : haydn_binary_intrinsic<"haydn_x2subadd32",      llvm_v2i32_ty, llvm_v2i32_ty>;
 def int_haydn_x2subadd32s     : haydn_binary_intrinsic<"haydn_x2subadd32s",     llvm_v2i32_ty, llvm_v2i32_ty>;
-def int_haydn_x2subadd32_hllh : haydn_binary_intrinsic<"haydn_x2subadd32_hllh", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2subadd32s_hllh : haydn_binary_intrinsic<"haydn_x2subadd32s_hllh", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x2subadd32_hllh : haydn_binary_intrinsic<"haydn_x2subadd32_hllh", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2subadd32s_hllh : haydn_binary_intrinsic<"haydn_x2subadd32s_hllh", llvm_v2i32_ty, llvm_v2i32_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 2: X4 Complex Multiply variants (binary DR64)
@@ -820,16 +834,16 @@ def int_haydn_x2subadd32s_hllh : haydn_binary_intrinsic<"haydn_x2subadd32s_hllh"
 //===----------------------------------------------------------------------===//
 
 // X4CMUL16S — per-half complex multiply, saturating (binary DR64)
-def int_haydn_x4cmul16s_h  : haydn_binary_intrinsic<"haydn_x4cmul16s_h",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4cmul16s_l  : haydn_binary_intrinsic<"haydn_x4cmul16s_l",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4cmula16s_h : haydn_binary_intrinsic<"haydn_x4cmula16s_h", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4cmula16s_l : haydn_binary_intrinsic<"haydn_x4cmula16s_l", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x4cmul16s_h  : haydn_binary_intrinsic<"haydn_x4cmul16s_h",  llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4cmul16s_l  : haydn_binary_intrinsic<"haydn_x4cmul16s_l",  llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4cmula16s_h : haydn_binary_intrinsic<"haydn_x4cmula16s_h", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4cmula16s_l : haydn_binary_intrinsic<"haydn_x4cmula16s_l", llvm_v4i16_ty, llvm_v4i16_ty>;
 
 // X4CJMUL16S — per-half conjugated complex multiply, saturating (binary DR64)
-def int_haydn_x4cjmul16s_h  : haydn_binary_intrinsic<"haydn_x4cjmul16s_h",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4cjmul16s_l  : haydn_binary_intrinsic<"haydn_x4cjmul16s_l",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4cjmula16s_h : haydn_binary_intrinsic<"haydn_x4cjmula16s_h", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4cjmula16s_l : haydn_binary_intrinsic<"haydn_x4cjmula16s_l", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x4cjmul16s_h  : haydn_binary_intrinsic<"haydn_x4cjmul16s_h",  llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4cjmul16s_l  : haydn_binary_intrinsic<"haydn_x4cjmul16s_l",  llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4cjmula16s_h : haydn_binary_intrinsic<"haydn_x4cjmula16s_h", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4cjmula16s_l : haydn_binary_intrinsic<"haydn_x4cjmula16s_l", llvm_v4i16_ty, llvm_v4i16_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 2: 64-bit scalar ops
@@ -1295,10 +1309,10 @@ def int_haydn_x4sub16 : haydn_binary_intrinsic<"haydn_x4sub16", llvm_v4i16_ty, l
 // Wave 5: X2 SIMD HLLH cross-lane variants (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def int_haydn_x2add32_hllh  : haydn_binary_intrinsic<"haydn_x2add32_hllh",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2add32s_hllh : haydn_binary_intrinsic<"haydn_x2add32s_hllh", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2sub32_hllh  : haydn_binary_intrinsic<"haydn_x2sub32_hllh",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2sub32s_hllh : haydn_binary_intrinsic<"haydn_x2sub32s_hllh", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x2add32_hllh  : haydn_binary_intrinsic<"haydn_x2add32_hllh",  llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2add32s_hllh : haydn_binary_intrinsic<"haydn_x2add32s_hllh", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2sub32_hllh  : haydn_binary_intrinsic<"haydn_x2sub32_hllh",  llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2sub32s_hllh : haydn_binary_intrinsic<"haydn_x2sub32s_hllh", llvm_v2i32_ty, llvm_v2i32_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2/X4 SIMD register shifts (binary DR64)
@@ -1361,23 +1375,23 @@ def int_haydn_x4sra16r : Haydn_Intrinsic<"haydn_x4sra16r",
 // Wave 5: X2/X4 SIMD horizontal reductions (unary DR64)
 //===----------------------------------------------------------------------===//
 
-def int_haydn_x2hadd32_h  : haydn_unary_intrinsic<"haydn_x2hadd32_h",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2hadd32s_h : haydn_unary_intrinsic<"haydn_x2hadd32s_h", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2hadd32_l  : haydn_unary_intrinsic<"haydn_x2hadd32_l",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2hadd32s_l : haydn_unary_intrinsic<"haydn_x2hadd32s_l", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4hadd16_h  : haydn_unary_intrinsic<"haydn_x4hadd16_h",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4hadd16_l  : haydn_unary_intrinsic<"haydn_x4hadd16_l",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2hmax32 : haydn_unary_intrinsic<"haydn_x2hmax32", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2hmin32 : haydn_unary_intrinsic<"haydn_x2hmin32", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4hmax16 : haydn_unary_intrinsic<"haydn_x4hmax16", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4hmin16 : haydn_unary_intrinsic<"haydn_x4hmin16", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x2hadd32_h  : haydn_unary_intrinsic<"haydn_x2hadd32_h",  llvm_i64_ty, llvm_v2i32_ty>;
+def int_haydn_x2hadd32s_h : haydn_unary_intrinsic<"haydn_x2hadd32s_h", llvm_i64_ty, llvm_v2i32_ty>;
+def int_haydn_x2hadd32_l  : haydn_unary_intrinsic<"haydn_x2hadd32_l",  llvm_i64_ty, llvm_v2i32_ty>;
+def int_haydn_x2hadd32s_l : haydn_unary_intrinsic<"haydn_x2hadd32s_l", llvm_i64_ty, llvm_v2i32_ty>;
+def int_haydn_x4hadd16_h  : haydn_unary_intrinsic<"haydn_x4hadd16_h",  llvm_i64_ty, llvm_v4i16_ty>;
+def int_haydn_x4hadd16_l  : haydn_unary_intrinsic<"haydn_x4hadd16_l",  llvm_i64_ty, llvm_v4i16_ty>;
+def int_haydn_x2hmax32 : haydn_unary_intrinsic<"haydn_x2hmax32", llvm_i64_ty, llvm_v2i32_ty>;
+def int_haydn_x2hmin32 : haydn_unary_intrinsic<"haydn_x2hmin32", llvm_i64_ty, llvm_v2i32_ty>;
+def int_haydn_x4hmax16 : haydn_unary_intrinsic<"haydn_x4hmax16", llvm_i64_ty, llvm_v4i16_ty>;
+def int_haydn_x4hmin16 : haydn_unary_intrinsic<"haydn_x4hmin16", llvm_i64_ty, llvm_v4i16_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2/X4 SIMD dot product (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def int_haydn_x2dot32 : haydn_binary_intrinsic<"haydn_x2dot32", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x4dot16 : haydn_binary_intrinsic<"haydn_x4dot16", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x2dot32 : haydn_binary_intrinsic<"haydn_x2dot32", llvm_i64_ty, llvm_v2i32_ty>;
+def int_haydn_x4dot16 : haydn_binary_intrinsic<"haydn_x4dot16", llvm_i64_ty, llvm_v4i16_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2/X4 SIMD multiply (D400 Path B: 2-dest DR64)
@@ -1387,27 +1401,27 @@ def int_haydn_x4dot16 : haydn_binary_intrinsic<"haydn_x4dot16", llvm_i64_ty, llv
 //===----------------------------------------------------------------------===//
 
 def int_haydn_x2mul32 : haydn_simd_mac_2dest_intrinsic<"haydn_x2mul32">;
-def int_haydn_x4mul16 : haydn_simd_mac_2dest_intrinsic<"haydn_x4mul16">;
+def int_haydn_x4mul16 : haydn_simd_mac_2dest_v4i16_intrinsic<"haydn_x4mul16">;
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2 SIMD multiply-pair variants (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def int_haydn_x2mulph32  : haydn_binary_intrinsic<"haydn_x2mulph32",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2mulpl32  : haydn_binary_intrinsic<"haydn_x2mulpl32",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2mulaph32 : haydn_binary_intrinsic<"haydn_x2mulaph32", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2mulapl32 : haydn_binary_intrinsic<"haydn_x2mulapl32", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2mulsph32 : haydn_binary_intrinsic<"haydn_x2mulsph32", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2mulspl32 : haydn_binary_intrinsic<"haydn_x2mulspl32", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x2mulph32  : haydn_binary_intrinsic<"haydn_x2mulph32",  llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2mulpl32  : haydn_binary_intrinsic<"haydn_x2mulpl32",  llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2mulaph32 : haydn_binary_intrinsic<"haydn_x2mulaph32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2mulapl32 : haydn_binary_intrinsic<"haydn_x2mulapl32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2mulsph32 : haydn_binary_intrinsic<"haydn_x2mulsph32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2mulspl32 : haydn_binary_intrinsic<"haydn_x2mulspl32", llvm_v2i32_ty, llvm_v2i32_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2 32-bit complex fractional multiply (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def int_haydn_x2fcmul32rs  : haydn_binary_intrinsic<"haydn_x2fcmul32rs",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2fcmul32rss : haydn_binary_intrinsic<"haydn_x2fcmul32rss", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2fcmula32rs  : haydn_ternary_intrinsic<"haydn_x2fcmula32rs",  llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_x2fcmula32rss : haydn_ternary_intrinsic<"haydn_x2fcmula32rss", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_x2fcmul32rs  : haydn_binary_intrinsic<"haydn_x2fcmul32rs",  llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fcmul32rss : haydn_binary_intrinsic<"haydn_x2fcmul32rss", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fcmula32rs  : haydn_ternary_intrinsic<"haydn_x2fcmula32rs",  llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2fcmula32rss : haydn_ternary_intrinsic<"haydn_x2fcmula32rss", llvm_v2i32_ty, llvm_v2i32_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2 CMUL F2 variants (D400 Path B: 2-dest DR64)
@@ -1428,15 +1442,18 @@ def int_haydn_x2ff2rst32  : haydn_binary_intrinsic<"haydn_x2ff2rst32",  llvm_v2i
 // Wave 5: X4 FF2MUL variants (ternary DR64)
 //===----------------------------------------------------------------------===//
 
-def int_haydn_x4ff2mul16s  : haydn_simd_mac_2dest_intrinsic<"haydn_x4ff2mul16s">;
-def int_haydn_x4ff2mula16s : haydn_simd_maca_2dest_intrinsic<"haydn_x4ff2mula16s">;
-def int_haydn_x4ff2muls16s : haydn_simd_maca_2dest_intrinsic<"haydn_x4ff2muls16s">;
+def int_haydn_x4ff2mul16s : haydn_simd_mac_2dest_v4i16_intrinsic<"haydn_x4ff2mul16s">;
+def int_haydn_x4ff2mula16s : haydn_simd_maca_2dest_v4i16_intrinsic<"haydn_x4ff2mula16s">;
+def int_haydn_x4ff2muls16s : haydn_simd_maca_2dest_v4i16_intrinsic<"haydn_x4ff2muls16s">;
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X4 pack/sat/sel
 //===----------------------------------------------------------------------===//
 
-def int_haydn_x4sat32t16 : haydn_binary_intrinsic<"haydn_x4sat32t16", llvm_i64_ty, llvm_i64_ty>;
+// Golden X4SAT32T16: four 32-bit lanes (two v2i32) → four saturated i16 (v4i16).
+def int_haydn_x4sat32t16 : Haydn_Intrinsic<"haydn_x4sat32t16",
+    [llvm_v4i16_ty], [llvm_v2i32_ty, llvm_v2i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 def int_haydn_x4seli16 : Haydn_Intrinsic<"haydn_x4seli16",
     [llvm_v4i16_ty], [llvm_v4i16_ty, llvm_v4i16_ty, llvm_i32_ty],
@@ -1485,7 +1502,7 @@ def int_haydn_movad32_high : Haydn_Intrinsic<"haydn_movad32_high",
 // rounding-and-saturation. The single hottest intrinsic in upstream NatureDSP
 // FFT kernels (494 uses). The Haydn ISA has no native instruction for this
 // exact operation (see ~/haydn-plans/isa-improve/ISA-08-mulfc32x16ras.md and
-// decision D90-mulfc32x16ras-intrinsic.md). The C wrapper in haydn_intrin.h
+// decision D90-mulfc32x16ras-intrinsic.md). The C wrapper in haydn.h
 // performs the 16->32 lane widen of the twiddle (b) using AE_CVT32X2F16_*
 // semantics, then dispatches to llvm.haydn.x2fcmula32rs (32x32 complex MAC
 // with round+saturation). The ISel selector maps these intrinsics onto the

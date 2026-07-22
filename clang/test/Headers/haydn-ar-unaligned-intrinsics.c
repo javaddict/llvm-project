@@ -3,17 +3,17 @@
 //
 // REQUIRES: haydn-registered-target
 //
-// E2E: C surface __haydn_* AR unaligned builtins lower to llvm.haydn.* IR
+// E2E: C surface haydn_* AR unaligned builtins lower to llvm.haydn.* IR
 // and emit native AR mnemonics in assembly.
 
-#include <haydn_intrin.h>
+#include <haydn.h>
 
 // CHECK-LABEL: @c_pldwwua
 // CHECK: call void @llvm.haydn.pldwwua
 // ASM-LABEL: c_pldwwua
 // ASM: pldwwua
 void c_pldwwua(int ptr) {
-  __haydn_pldwwua(0, ptr);
+  haydn_pldwwua(0, ptr);
 }
 
 // CHECK-LABEL: @c_flar
@@ -21,7 +21,7 @@ void c_pldwwua(int ptr) {
 // ASM-LABEL: c_flar
 // ASM: flar
 void c_flar(void) {
-  __haydn_flar(0);
+  haydn_flar(0);
 }
 
 // CHECK-LABEL: @c_wbarwua
@@ -29,7 +29,7 @@ void c_flar(void) {
 // ASM-LABEL: c_wbarwua
 // ASM: wbarwua
 void c_wbarwua(int ptr) {
-  __haydn_wbarwua(0, ptr, 0);
+  haydn_wbarwua(0, ptr, 0);
 }
 
 // CHECK-LABEL: @c_lqhwua
@@ -37,7 +37,7 @@ void c_wbarwua(int ptr) {
 // ASM-LABEL: c_lqhwua
 // ASM: d_lqhwua_post
 int64_t c_lqhwua(int ptr, int stride) {
-  return __haydn_d_lqhwua_post(ptr, 0, stride, 0);
+  return haydn_d_lqhwua_post(ptr, 0, stride, 0);
 }
 
 // CHECK-LABEL: @c_ltwua
@@ -45,7 +45,7 @@ int64_t c_lqhwua(int ptr, int stride) {
 // ASM-LABEL: c_ltwua
 // ASM: d_ltwua_post
 int64_t c_ltwua(int ptr, int stride) {
-  return __haydn_d_ltwua_post(ptr, 1, stride, 0);
+  return haydn_d_ltwua_post(ptr, 1, stride, 0);
 }
 
 // CHECK-LABEL: @c_sqhwua
@@ -53,7 +53,7 @@ int64_t c_ltwua(int ptr, int stride) {
 // ASM-LABEL: c_sqhwua
 // ASM: d_sqhwua_post
 void c_sqhwua(int64_t data, int ptr, int stride) {
-  __haydn_d_sqhwua_post(data, ptr, 0, stride, 0);
+  haydn_d_sqhwua_post(data, ptr, 0, stride, 0);
 }
 
 // CHECK-LABEL: @c_stwua
@@ -61,7 +61,7 @@ void c_sqhwua(int64_t data, int ptr, int stride) {
 // ASM-LABEL: c_stwua
 // ASM: d_stwua_post
 void c_stwua(int64_t data, int ptr, int stride) {
-  __haydn_d_stwua_post(data, ptr, 0, stride, 0);
+  haydn_d_stwua_post(data, ptr, 0, stride, 0);
 }
 
 // CHECK-LABEL: @c_stream_load
@@ -73,9 +73,9 @@ void c_stwua(int64_t data, int ptr, int stride) {
 // ASM: d_lqhwua_post
 // ASM: flar
 int64_t c_stream_load(int base, int ptr, int stride) {
-  __haydn_pldwwua(0, base);
-  int64_t v = __haydn_d_lqhwua_post(ptr, 0, stride, 0);
-  __haydn_flar(0);
+  haydn_pldwwua(0, base);
+  int64_t v = haydn_d_lqhwua_post(ptr, 0, stride, 0);
+  haydn_flar(0);
   return v;
 }
 
@@ -83,5 +83,5 @@ int64_t c_stream_load(int base, int ptr, int stride) {
 // CHECK: call i64 @llvm.haydn.d.lqhwua.post
 // Streaming helper updates the C cursor after the HW op.
 int64_t c_stream_ip(int *pptr, int stride) {
-  return __haydn_d_lqhwua_post_ip(pptr, 0, stride, 0);
+  return haydn_d_lqhwua_post_ip(pptr, 0, stride, 0);
 }

@@ -101,6 +101,13 @@ clang_tablegen(BuiltinsDirectX.inc -gen-clang-builtins
 clang_tablegen(BuiltinsHaydn.inc -gen-clang-builtins
   SOURCE BuiltinsHaydn.td
   TARGET ClangBuiltinsHaydn)
+# Pair/frexp CodeGen cases + public metadata (same TD as BuiltinsHaydn.inc / haydn.h).
+clang_tablegen(haydn_builtin_cg.inc -gen-haydn-builtin-codegen
+  SOURCE BuiltinsHaydn.td
+  TARGET ClangHaydnBuiltinCG)
+clang_tablegen(haydn_builtin_sema.inc -gen-haydn-builtin-sema
+  SOURCE BuiltinsHaydn.td
+  TARGET ClangHaydnBuiltinSema)
 
 clang_tablegen(BuiltinsHexagon.inc -gen-clang-builtins
   SOURCE BuiltinsHexagon.td

@@ -14,7 +14,7 @@
 ; 5. mixed full + ext (i64 arg * (int64_t)(int32_t)b)
 ; A vec/complex/math/matop audit found 47/201 kernels still emitting __muldi3
 ; (23%). Haydn has no __muldi3 runtime stub (only the 8 division stubs in
-; haydn-rt/m6-int-div-stubs.c), so the jal_w resolved to ELF symbol index 0
+; llvm-libc / compiler-rt), so the jal_w resolved to ELF symbol index 0
 ; (null) and crashed at runtime -- a correctness defect on top of the
 ; 30-50 cycle call cost.
 ;

@@ -120,25 +120,28 @@ int64_t test_fmula32s_ll(int64_t acc, int64_t a, int64_t b) {
   return __builtin_haydn_fmula32s_ll(acc, a, b);
 }
 
-// === SIMD saturating ===
+// === SIMD saturating (golden lanes: ExtVector / <2 x i32> / <4 x i16>) ===
+
+typedef int haydn_x2int32 __attribute__((__vector_size__(8)));
+typedef short haydn_x4int16 __attribute__((__vector_size__(8)));
 
 // CHECK-LABEL: @test_x2add32s
-int64_t test_x2add32s(int64_t a, int64_t b) {
+haydn_x2int32 test_x2add32s(haydn_x2int32 a, haydn_x2int32 b) {
   // CHECK: call <2 x i32> @llvm.haydn.x2add32s(<2 x i32> %{{.*}}, <2 x i32> %{{.*}})
   return __builtin_haydn_x2add32s(a, b);
 }
 
 // CHECK-LABEL: @test_x4add16s
-int64_t test_x4add16s(int64_t a, int64_t b) {
+haydn_x4int16 test_x4add16s(haydn_x4int16 a, haydn_x4int16 b) {
   // CHECK: call <4 x i16> @llvm.haydn.x4add16s(<4 x i16> %{{.*}}, <4 x i16> %{{.*}})
   return __builtin_haydn_x4add16s(a, b);
 }
 
-// === SIMD MAC ===
+// === SIMD MAC (reduce: vector srcs → i64) ===
 
 // CHECK-LABEL: @test_x2dot32
-int64_t test_x2dot32(int64_t a, int64_t b) {
-  // CHECK: call i64 @llvm.haydn.x2dot32
+int64_t test_x2dot32(haydn_x2int32 a, haydn_x2int32 b) {
+  // CHECK: call i64 @llvm.haydn.x2dot32(<2 x i32>
   return __builtin_haydn_x2dot32(a, b);
 }
 

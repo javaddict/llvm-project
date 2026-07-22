@@ -109,6 +109,9 @@ enum ActionType {
   GenArmCdeBuiltinAliases,
   GenRISCVVectorHeader,
   GenRISCVVectorBuiltins,
+  GenHaydnIntrinHeader,
+  GenHaydnBuiltinCG,
+  GenHaydnBuiltinSema,
   GenRISCVVectorBuiltinCG,
   GenRISCVVectorBuiltinSema,
   GenRISCVSiFiveVectorBuiltins,
@@ -318,6 +321,12 @@ cl::opt<ActionType> Action(
                    "Generate list of valid ARM CDE builtin aliases for clang"),
         clEnumValN(GenRISCVVectorHeader, "gen-riscv-vector-header",
                    "Generate riscv_vector.h for clang"),
+        clEnumValN(GenHaydnIntrinHeader, "gen-haydn-intrin-header",
+                   "Generate haydn.h for clang"),
+        clEnumValN(GenHaydnBuiltinCG, "gen-haydn-builtin-codegen",
+                   "Generate haydn_builtin_cg.inc for clang"),
+        clEnumValN(GenHaydnBuiltinSema, "gen-haydn-builtin-sema",
+                   "Generate haydn_builtin_sema.inc for clang"),
         clEnumValN(GenRISCVVectorBuiltins, "gen-riscv-vector-builtins",
                    "Generate riscv_vector_builtins.inc for clang"),
         clEnumValN(GenRISCVVectorBuiltinCG, "gen-riscv-vector-builtin-codegen",
@@ -617,6 +626,15 @@ bool ClangTableGenMain(raw_ostream &OS, const RecordKeeper &Records) {
     break;
   case GenRISCVVectorHeader:
     EmitRVVHeader(Records, OS);
+    break;
+  case GenHaydnIntrinHeader:
+    EmitHaydnIntrinHeader(Records, OS);
+    break;
+  case GenHaydnBuiltinCG:
+    EmitHaydnBuiltinCG(Records, OS);
+    break;
+  case GenHaydnBuiltinSema:
+    EmitHaydnBuiltinSema(Records, OS);
     break;
   case GenRISCVVectorBuiltins:
     EmitRVVBuiltins(Records, OS);

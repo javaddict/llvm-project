@@ -79,7 +79,7 @@ set(hexagon_files
   )
 
 set(haydn_files
-  haydn_intrin.h
+  # haydn.h is generated from BuiltinsHaydn.td (see below).
   haydn_dsp.h
   haydn_types.h
   )
@@ -507,6 +507,11 @@ if(RISCV IN_LIST LLVM_TARGETS_TO_BUILD)
     )
 endif()
 
+# Generate haydn.h from BuiltinsHaydn.td (NEON/RVV-style public wrappers).
+set(haydn_generated_files)
+clang_generate_header(-gen-haydn-intrin-header BuiltinsHaydn.td haydn.h)
+list(APPEND haydn_generated_files "${CMAKE_CURRENT_BINARY_DIR}/haydn.h")
+
 
 # Check if the generated headers are included in a target specific lists
 # Currently, all generated headers are target specific.
@@ -514,7 +519,8 @@ set(all_target_specific_generated_files
   ${arm_common_generated_files}
   ${arm_only_generated_files}
   ${aarch64_only_generated_files}
-  ${riscv_generated_files})
+  ${riscv_generated_files}
+  ${haydn_generated_files})
 foreach( f ${generated_files} )
   if (NOT ${f} IN_LIST all_target_specific_generated_files)
     message(WARNING "${f} is a generated header but it is not included in any "
@@ -570,7 +576,7 @@ add_header_target("arm-resource-headers" "${arm_only_files};${arm_only_generated
 add_header_target("aarch64-resource-headers" "${aarch64_only_files};${aarch64_only_generated_files}")
 add_header_target("cuda-resource-headers" "${cuda_files};${cuda_wrapper_files};${cuda_wrapper_bits_files};${cuda_wrapper_utility_files}")
 add_header_target("hexagon-resource-headers" "${hexagon_files}")
-add_header_target("haydn-resource-headers" "${haydn_files}")
+add_header_target("haydn-resource-headers" "${haydn_files};${haydn_generated_files}")
 add_header_target("hip-resource-headers" "${hip_files}")
 add_header_target("loongarch-resource-headers" "${loongarch_files}")
 add_header_target("mips-resource-headers" "${mips_msa_files}")
@@ -703,7 +709,7 @@ install(
   COMPONENT hexagon-resource-headers)
 
 install(
-  FILES ${haydn_files}
+  FILES ${haydn_files} ${haydn_generated_files}
   DESTINATION ${header_install_dir}
   EXCLUDE_FROM_ALL
   COMPONENT haydn-resource-headers)

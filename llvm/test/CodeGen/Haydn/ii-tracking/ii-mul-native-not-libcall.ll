@@ -6,7 +6,7 @@
 ; Bug: an `(int64_t)(int32_t)a * b` (sign-extended 32-bit mul producing a
 ; 64-bit result) lowered to a __mulsi3/__muldi3 libcall. The libcall target
 ; symbol was emitted as NULL (no runtime stub exists for __muldi3 in
-; haydn-rt/m6-int-div-stubs.c), so the `jal_w` resolved to address 0 at runtime
+; llvm-libc / compiler-rt), so the `jal_w` resolved to address 0 at runtime
 ; a correctness crash -- on top of costing 30-50 cycles per call. This
 ; dominated the hot loops of 10/14 firother, 11/12 firblk, both IIR kernels
 ; complex2mag32x32, and CoreMark.
