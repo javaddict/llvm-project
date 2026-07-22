@@ -2027,35 +2027,47 @@ def X2FMUL32TS : FmtALU64<0x67, 0x14E,
     (ins DR64:$rs1, DR64:$rs2),
     "x2fmul32ts	$rd, $rs1, $rs2", []>;
 
-def X2FMULA32RS : FmtALU64<0x67, 0x14F,
+def X2FMULA32RS : FmtALU64Acc<0x67, 0x14F,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2fmula32rs	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x2fmula32rs	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def X2FMULA32RSS : FmtALU64<0x67, 0x150,
+def X2FMULA32RSS : FmtALU64Acc<0x67, 0x150,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2fmula32rss	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x2fmula32rss	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def X2FMULA32TS : FmtALU64<0x67, 0x151,
+def X2FMULA32TS : FmtALU64Acc<0x67, 0x151,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2fmula32ts	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x2fmula32ts	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def X2FMULS32RS : FmtALU64<0x67, 0x152,
+def X2FMULS32RS : FmtALU64Acc<0x67, 0x152,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2fmuls32rs	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x2fmuls32rs	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def X2FMULS32RSS : FmtALU64<0x67, 0x153,
+def X2FMULS32RSS : FmtALU64Acc<0x67, 0x153,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2fmuls32rss	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x2fmuls32rss	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def X2FMULS32TS : FmtALU64<0x67, 0x154,
+def X2FMULS32TS : FmtALU64Acc<0x67, 0x154,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2fmuls32ts	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x2fmuls32ts	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 def X2FRSST32 : FmtALU64<0x67, 0x155,
     (outs DR64:$rd),
@@ -2077,15 +2089,19 @@ def X2MIN32 : FmtALU64<0x67, 0x158,
     (ins DR64:$rs1, DR64:$rs2),
     "x2min32	$rd, $rs1, $rs2", []>;
 
-def X2MULAPH32 : FmtALU64<0x67, 0x159,
+def X2MULAPH32 : FmtALU64Acc<0x67, 0x159,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2mulaph32	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x2mulaph32	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def X2MULAPL32 : FmtALU64<0x67, 0x15A,
+def X2MULAPL32 : FmtALU64Acc<0x67, 0x15A,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2mulapl32	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x2mulapl32	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 def X2MULPH32 : FmtALU64<0x67, 0x15B,
     (outs DR64:$rd),
@@ -2097,15 +2113,19 @@ def X2MULPL32 : FmtALU64<0x67, 0x15C,
     (ins DR64:$rs1, DR64:$rs2),
     "x2mulpl32	$rd, $rs1, $rs2", []>;
 
-def X2MULSPH32 : FmtALU64<0x67, 0x15D,
+def X2MULSPH32 : FmtALU64Acc<0x67, 0x15D,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2mulsph32	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x2mulsph32	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def X2MULSPL32 : FmtALU64<0x67, 0x15E,
+def X2MULSPL32 : FmtALU64Acc<0x67, 0x15E,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2mulspl32	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x2mulspl32	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 def X2SEL32_HH : FmtALU64<0x67, 0x15F,
     (outs DR64:$rd),
@@ -2183,15 +2203,19 @@ def X4CJMUL16S_L : FmtALU64<0x67, 0x16D,
     (ins DR64:$rs1, DR64:$rs2),
     "x4cjmul16s_l	$rd, $rs1, $rs2", []>;
 
-def X4CJMULA16S_H : FmtALU64<0x67, 0x16E,
+def X4CJMULA16S_H : FmtALU64Acc<0x67, 0x16E,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4cjmula16s_h	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x4cjmula16s_h	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def X4CJMULA16S_L : FmtALU64<0x67, 0x16F,
+def X4CJMULA16S_L : FmtALU64Acc<0x67, 0x16F,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4cjmula16s_l	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x4cjmula16s_l	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 def X4CLAMP16 : FmtALU64<0x67, 0x170,
     (outs DR64:$rd),
@@ -2208,15 +2232,19 @@ def X4CMUL16S_L : FmtALU64<0x67, 0x172,
     (ins DR64:$rs1, DR64:$rs2),
     "x4cmul16s_l	$rd, $rs1, $rs2", []>;
 
-def X4CMULA16S_H : FmtALU64<0x67, 0x173,
+def X4CMULA16S_H : FmtALU64Acc<0x67, 0x173,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4cmula16s_h	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x4cmula16s_h	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def X4CMULA16S_L : FmtALU64<0x67, 0x174,
+def X4CMULA16S_L : FmtALU64Acc<0x67, 0x174,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4cmula16s_l	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x4cmula16s_l	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 def X4DOT16 : FmtALU64<0x67, 0x175,
     (outs DR64:$rd),

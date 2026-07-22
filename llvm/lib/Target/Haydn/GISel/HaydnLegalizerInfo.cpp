@@ -61,13 +61,19 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // <s64> to the selector's LIBCALL_MUL64 fallback; libcallFor fails because
   // Haydn's call lowering doesn't handle the LLVM Type*-based arg splitting
   // for libcalls correctly.
-  // SIMD: G_MUL is legal for v2i32 (X2MUL32) and v4i16 (X4MUL16)
+  // G_MUL elementwise wrap:
+  //   s32  — MUL64_LL low half (no native GPR32 mul)
+  //   v2i32 — X2MULPL32 (golden: low 32 of each dual 32x32 product)
+  //   v4i16 — NOT X4MUL16 (that is 2-dest 16x16->32 DSP mul). Scalarize
+  //           to s16 then minScalar->s32. True ISA X4MUL16 is only via
+  //           llvm.haydn.x4mul16 / haydn_x4mul16 (2-result dpair).
   getActionDefinitionsBuilder(G_MUL)
-      .legalFor({S32, V2I32, V4I16})
+      .legalFor({S32, V2I32})
       .customFor({S64})
       .minScalar(0, S32)
       .maxScalar(0, S64)
-      .widenScalarToNextPow2(0);
+      .widenScalarToNextPow2(0)
+      .scalarize(0);
 
   // Haydn has no native division/remainder - use libcalls
   getActionDefinitionsBuilder({G_SDIV, G_UDIV, G_SREM, G_UREM, G_SDIVREM, G_UDIVREM})

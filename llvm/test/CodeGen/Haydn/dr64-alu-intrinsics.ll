@@ -206,62 +206,43 @@ define i64 @test_mulss32_hllh(i64 %a, i64 %b) {
 }
 
 ;===----------------------------------------------------------------------===;
-; Cross-type shifts (GPR32/DR64 mixed)
+; DR64 reg shifts (golden: i64 data + i32 amount -> i64)
 ;===----------------------------------------------------------------------===;
 
-declare i32 @llvm.haydn.sll64(i32, i32)
-declare i32 @llvm.haydn.sra64(i64, i32)
-declare i32 @llvm.haydn.srl64(i64, i32)
-declare i32 @llvm.haydn.sra64r(i64, i32)
+declare i64 @llvm.haydn.sll64(i64, i32)
+declare i64 @llvm.haydn.sra64(i64, i32)
+declare i64 @llvm.haydn.srl64(i64, i32)
+declare i64 @llvm.haydn.sra64r(i64, i32)
 
-define i32 @test_sll64(i32 %a, i32 %b) {
+define i64 @test_sll64(i64 %a, i32 %b) {
 ; CHECK-LABEL: test_sll64:
 ; CHECK: sll64
-  %r = call i32 @llvm.haydn.sll64(i32 %a, i32 %b)
-  ret i32 %r
+  %r = call i64 @llvm.haydn.sll64(i64 %a, i32 %b)
+  ret i64 %r
 }
 
-define i32 @test_sra64(i64 %a, i32 %b) {
+define i64 @test_sra64(i64 %a, i32 %b) {
 ; CHECK-LABEL: test_sra64:
 ; CHECK: sra64
-  %r = call i32 @llvm.haydn.sra64(i64 %a, i32 %b)
-  ret i32 %r
+  %r = call i64 @llvm.haydn.sra64(i64 %a, i32 %b)
+  ret i64 %r
 }
 
-define i32 @test_srl64(i64 %a, i32 %b) {
+define i64 @test_srl64(i64 %a, i32 %b) {
 ; CHECK-LABEL: test_srl64:
 ; CHECK: srl64
-  %r = call i32 @llvm.haydn.srl64(i64 %a, i32 %b)
-  ret i32 %r
+  %r = call i64 @llvm.haydn.srl64(i64 %a, i32 %b)
+  ret i64 %r
 }
 
-define i32 @test_sra64r(i64 %a, i32 %b) {
+define i64 @test_sra64r(i64 %a, i32 %b) {
 ; CHECK-LABEL: test_sra64r:
 ; CHECK: sra64r
-  %r = call i32 @llvm.haydn.sra64r(i64 %a, i32 %b)
-  ret i32 %r
+  %r = call i64 @llvm.haydn.sra64r(i64 %a, i32 %b)
+  ret i64 %r
 }
 
-;===----------------------------------------------------------------------===;
-; Composite shift operations (satsr64, packsr32)
-;===----------------------------------------------------------------------===;
-
-declare i32 @llvm.haydn.satsr64(i64, i32)
-declare i32 @llvm.haydn.packsr32(i64, i32)
-
-define i32 @test_satsr64(i64 %a, i32 %b) {
-; CHECK-LABEL: test_satsr64:
-; CHECK: sra64
-  %r = call i32 @llvm.haydn.satsr64(i64 %a, i32 %b)
-  ret i32 %r
-}
-
-define i32 @test_packsr32(i64 %a, i32 %b) {
-; CHECK-LABEL: test_packsr32:
-; CHECK: sra64
-  %r = call i32 @llvm.haydn.packsr32(i64 %a, i32 %b)
-  ret i32 %r
-}
+; (Removed invented satsr64/packsr32 IR — composites live in haydn_dsp.h.)
 
 ;===----------------------------------------------------------------------===;
 ; X2 SIMD non-saturating add/sub
@@ -388,72 +369,72 @@ define <4 x i16> @test_x4sub16s(<4 x i16> %a, <4 x i16> %b) {
 ; X2 HLLH cross-lane variants
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.x2add32.hllh(i64, i64)
-declare i64 @llvm.haydn.x2add32s.hllh(i64, i64)
-declare i64 @llvm.haydn.x2sub32.hllh(i64, i64)
-declare i64 @llvm.haydn.x2sub32s.hllh(i64, i64)
+declare <2 x i32> @llvm.haydn.x2add32.hllh(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2add32s.hllh(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2sub32.hllh(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2sub32s.hllh(<2 x i32>, <2 x i32>)
 
-define i64 @test_x2add32_hllh(i64 %a, i64 %b) {
+define <2 x i32> @test_x2add32_hllh(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2add32_hllh:
 ; CHECK: x2add32_hllh
-  %r = call i64 @llvm.haydn.x2add32.hllh(i64 %a, i64 %b)
-  ret i64 %r
+  %r = call <2 x i32> @llvm.haydn.x2add32.hllh(<2 x i32> %a, <2 x i32> %b)
+  ret <2 x i32> %r
 }
 
-define i64 @test_x2add32s_hllh(i64 %a, i64 %b) {
+define <2 x i32> @test_x2add32s_hllh(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2add32s_hllh:
 ; CHECK: x2add32s_hllh
-  %r = call i64 @llvm.haydn.x2add32s.hllh(i64 %a, i64 %b)
-  ret i64 %r
+  %r = call <2 x i32> @llvm.haydn.x2add32s.hllh(<2 x i32> %a, <2 x i32> %b)
+  ret <2 x i32> %r
 }
 
-define i64 @test_x2sub32_hllh(i64 %a, i64 %b) {
+define <2 x i32> @test_x2sub32_hllh(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2sub32_hllh:
 ; CHECK: x2sub32_hllh
-  %r = call i64 @llvm.haydn.x2sub32.hllh(i64 %a, i64 %b)
-  ret i64 %r
+  %r = call <2 x i32> @llvm.haydn.x2sub32.hllh(<2 x i32> %a, <2 x i32> %b)
+  ret <2 x i32> %r
 }
 
-define i64 @test_x2sub32s_hllh(i64 %a, i64 %b) {
+define <2 x i32> @test_x2sub32s_hllh(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2sub32s_hllh:
 ; CHECK: x2sub32s_hllh
-  %r = call i64 @llvm.haydn.x2sub32s.hllh(i64 %a, i64 %b)
-  ret i64 %r
+  %r = call <2 x i32> @llvm.haydn.x2sub32s.hllh(<2 x i32> %a, <2 x i32> %b)
+  ret <2 x i32> %r
 }
 
 ;===----------------------------------------------------------------------===;
 ; X2 ADDSUB/SUBADD HLLH cross-lane variants
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.x2addsub32.hllh(i64, i64)
-declare i64 @llvm.haydn.x2addsub32s.hllh(i64, i64)
-declare i64 @llvm.haydn.x2subadd32.hllh(i64, i64)
-declare i64 @llvm.haydn.x2subadd32s.hllh(i64, i64)
+declare <2 x i32> @llvm.haydn.x2addsub32.hllh(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2addsub32s.hllh(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2subadd32.hllh(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2subadd32s.hllh(<2 x i32>, <2 x i32>)
 
-define i64 @test_x2addsub32_hllh(i64 %a, i64 %b) {
+define <2 x i32> @test_x2addsub32_hllh(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2addsub32_hllh:
 ; CHECK: x2addsub32_hllh
-  %r = call i64 @llvm.haydn.x2addsub32.hllh(i64 %a, i64 %b)
-  ret i64 %r
+  %r = call <2 x i32> @llvm.haydn.x2addsub32.hllh(<2 x i32> %a, <2 x i32> %b)
+  ret <2 x i32> %r
 }
 
-define i64 @test_x2addsub32s_hllh(i64 %a, i64 %b) {
+define <2 x i32> @test_x2addsub32s_hllh(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2addsub32s_hllh:
 ; CHECK: x2addsub32s_hllh
-  %r = call i64 @llvm.haydn.x2addsub32s.hllh(i64 %a, i64 %b)
-  ret i64 %r
+  %r = call <2 x i32> @llvm.haydn.x2addsub32s.hllh(<2 x i32> %a, <2 x i32> %b)
+  ret <2 x i32> %r
 }
 
-define i64 @test_x2subadd32_hllh(i64 %a, i64 %b) {
+define <2 x i32> @test_x2subadd32_hllh(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2subadd32_hllh:
 ; CHECK: x2subadd32_hllh
-  %r = call i64 @llvm.haydn.x2subadd32.hllh(i64 %a, i64 %b)
-  ret i64 %r
+  %r = call <2 x i32> @llvm.haydn.x2subadd32.hllh(<2 x i32> %a, <2 x i32> %b)
+  ret <2 x i32> %r
 }
 
-define i64 @test_x2subadd32s_hllh(i64 %a, i64 %b) {
+define <2 x i32> @test_x2subadd32s_hllh(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2subadd32s_hllh:
 ; CHECK: x2subadd32s_hllh
-  %r = call i64 @llvm.haydn.x2subadd32s.hllh(i64 %a, i64 %b)
-  ret i64 %r
+  %r = call <2 x i32> @llvm.haydn.x2subadd32s.hllh(<2 x i32> %a, <2 x i32> %b)
+  ret <2 x i32> %r
 }

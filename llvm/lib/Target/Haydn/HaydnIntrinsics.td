@@ -306,13 +306,13 @@ def : Pat<(int_haydn_x2fmul32rs  DR64:$a, DR64:$b), (X2FMUL32RS  DR64:$a, DR64:$
 def : Pat<(int_haydn_x2fmul32rss DR64:$a, DR64:$b), (X2FMUL32RSS DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_x2fmul32ts  DR64:$a, DR64:$b), (X2FMUL32TS  DR64:$a, DR64:$b)>;
 
-def : Pat<(int_haydn_x2fmula32rs  DR64:$a, DR64:$b), (X2FMULA32RS  DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_x2fmula32rss DR64:$a, DR64:$b), (X2FMULA32RSS DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_x2fmula32ts  DR64:$a, DR64:$b), (X2FMULA32TS  DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2fmula32rs DR64:$acc, DR64:$a, DR64:$b), (X2FMULA32RS DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2fmula32rss DR64:$acc, DR64:$a, DR64:$b), (X2FMULA32RSS DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2fmula32ts DR64:$acc, DR64:$a, DR64:$b), (X2FMULA32TS DR64:$acc, DR64:$a, DR64:$b)>;
 
-def : Pat<(int_haydn_x2fmuls32rs  DR64:$a, DR64:$b), (X2FMULS32RS  DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_x2fmuls32rss DR64:$a, DR64:$b), (X2FMULS32RSS DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_x2fmuls32ts  DR64:$a, DR64:$b), (X2FMULS32TS  DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2fmuls32rs DR64:$acc, DR64:$a, DR64:$b), (X2FMULS32RS DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2fmuls32rss DR64:$acc, DR64:$a, DR64:$b), (X2FMULS32RSS DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2fmuls32ts DR64:$acc, DR64:$a, DR64:$b), (X2FMULS32TS DR64:$acc, DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4: X4 SIMD fractional multiply (binary DR64)
@@ -421,10 +421,13 @@ def : Pat<(int_haydn_x4mjswap16s DR64:$a), (X4MJSWAP16S DR64:$a)>;
 def : Pat<(int_haydn_x4conj16  DR64:$a), (X4CONJ16  DR64:$a)>;
 def : Pat<(int_haydn_x4conj16s DR64:$a), (X4CONJ16S DR64:$a)>;
 def : Pat<(int_haydn_x4energy16 DR64:$a), (X4ENERGY16 DR64:$a)>;
-def : Pat<(int_haydn_x4cmul16   DR64:$a), (X4CMUL16   DR64:$a)>;
-def : Pat<(int_haydn_x4cmul16s  DR64:$a), (X4CMUL16S  DR64:$a)>;
-def : Pat<(int_haydn_x4cmul16s_f2 DR64:$a), (X4CMUL16S_F2 DR64:$a)>;
-def : Pat<(int_haydn_x4cmul16_f2  DR64:$a), (X4CMUL16_F2  DR64:$a)>;
+// X4CMUL16* Auto.td stubs are MCID::Pseudo (AsmPrinter drops them). Do NOT
+// Pat to those stubs — custom GISel selectIntrinsic uses FormatsMAC
+// X4CMUL16{,S,_F2}_S1 encodings instead (see HaydnInstructionSelector.cpp).
+//def : Pat<(int_haydn_x4cmul16   DR64:$a), (X4CMUL16   DR64:$a)>;
+//def : Pat<(int_haydn_x4cmul16s  DR64:$a), (X4CMUL16S  DR64:$a)>;
+//def : Pat<(int_haydn_x4cmul16s_f2 DR64:$a), (X4CMUL16S_F2 DR64:$a)>;
+//def : Pat<(int_haydn_x4cmul16_f2  DR64:$a), (X4CMUL16_F2  DR64:$a)>;
 
 // X2/X4 binary (DR64 binary)
 def : Pat<(int_haydn_x2max32   DR64:$a, DR64:$b), (X2MAX32   DR64:$a, DR64:$b)>;
@@ -460,13 +463,13 @@ def : Pat<(int_haydn_x2subadd32s_hllh DR64:$a, DR64:$b), (X2SUBADD32S_HLLH DR64:
 
 def : Pat<(int_haydn_x4cmul16s_h  DR64:$a, DR64:$b), (X4CMUL16S_H  DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_x4cmul16s_l  DR64:$a, DR64:$b), (X4CMUL16S_L  DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_x4cmula16s_h DR64:$a, DR64:$b), (X4CMULA16S_H DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_x4cmula16s_l DR64:$a, DR64:$b), (X4CMULA16S_L DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x4cmula16s_h DR64:$acc, DR64:$a, DR64:$b), (X4CMULA16S_H DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x4cmula16s_l DR64:$acc, DR64:$a, DR64:$b), (X4CMULA16S_L DR64:$acc, DR64:$a, DR64:$b)>;
 
 def : Pat<(int_haydn_x4cjmul16s_h  DR64:$a, DR64:$b), (X4CJMUL16S_H  DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_x4cjmul16s_l  DR64:$a, DR64:$b), (X4CJMUL16S_L  DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_x4cjmula16s_h DR64:$a, DR64:$b), (X4CJMULA16S_H DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_x4cjmula16s_l DR64:$a, DR64:$b), (X4CJMULA16S_L DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x4cjmula16s_h DR64:$acc, DR64:$a, DR64:$b), (X4CJMULA16S_H DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x4cjmula16s_l DR64:$acc, DR64:$a, DR64:$b), (X4CJMULA16S_L DR64:$acc, DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 2: 64-bit scalar ops
@@ -699,10 +702,10 @@ def : Pat<(int_haydn_x2sub32s_hllh DR64:$a, DR64:$b), (X2SUB32S_HLLH DR64:$a, DR
 
 //def : Pat<(int_haydn_x2mulph32 DR64:$a, DR64:$b), (X2MULPH32 DR64:$a, DR64:$b)>;
 //def : Pat<(int_haydn_x2mulpl32 DR64:$a, DR64:$b), (X2MULPL32 DR64:$a, DR64:$b)>;
-//def : Pat<(int_haydn_x2mulaph32 DR64:$a, DR64:$b), (X2MULAPH32 DR64:$a, DR64:$b)>;
-//def : Pat<(int_haydn_x2mulapl32 DR64:$a, DR64:$b), (X2MULAPL32 DR64:$a, DR64:$b)>;
-//def : Pat<(int_haydn_x2mulsph32 DR64:$a, DR64:$b), (X2MULSPH32 DR64:$a, DR64:$b)>;
-//def : Pat<(int_haydn_x2mulspl32 DR64:$a, DR64:$b), (X2MULSPL32 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2mulaph32 DR64:$acc, DR64:$a, DR64:$b), (X2MULAPH32 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2mulapl32 DR64:$acc, DR64:$a, DR64:$b), (X2MULAPL32 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2mulsph32 DR64:$acc, DR64:$a, DR64:$b), (X2MULSPH32 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2mulspl32 DR64:$acc, DR64:$a, DR64:$b), (X2MULSPL32 DR64:$acc, DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2 32-bit complex fractional multiply (binary DR64)

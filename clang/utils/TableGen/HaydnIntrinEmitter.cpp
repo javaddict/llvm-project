@@ -270,6 +270,19 @@ static void emitFn(raw_ostream &OS, StringRef Ret, StringRef Name,
   OS << "}\n\n";
 }
 
+/// ImmArg-safe public API: macro so ImmArg/Sema checks the *user* call site.
+/// ParamsMacro is comma-separated names, e.g. "a, sh". Expansion is the
+/// full builtin expression (no trailing semicolon).
+static void emitImmMacro(raw_ostream &OS, StringRef Ret, StringRef Name,
+                         StringRef ParamsMacro, StringRef Expansion,
+                         StringRef Doc = {}) {
+  if (!Doc.empty())
+    OS << "/// " << Doc << "\n";
+  OS << "/* ImmArg: require constant imm at call site (not a C function). */\n"
+     << "#define haydn_" << Name << "(" << ParamsMacro << ") "
+     << "((" << Ret << ")(" << Expansion << "))\n\n";
+}
+
 static void emitPreamble(raw_ostream &OS) {
   OS << R"HDR(/*===---- haydn.h - Haydn DSP public API ---------------------*- C -*-===
  *
@@ -429,7 +442,34 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
       CallExpr = "__haydn_i64_as_v2(" + CallExpr + ")";
     else if (RetT == "haydn_x4int16" || RetT == "haydn_x4fract16")
       CallExpr = "__haydn_i64_as_v4(" + CallExpr + ")";
-    if (RetT == "void")
+    if (!E.ImmChecks.empty()) {
+      // Macro params: same order as PNames.
+      std::string MacroParams;
+      for (unsigned I = 0, N = PNames.size(); I != N; ++I) {
+        if (I)
+          MacroParams += ", ";
+        MacroParams += PNames[I];
+      }
+      // Parenthesize each arg in the expansion for safety.
+      std::string ExpCall;
+      for (unsigned I = 0, N = ArgTs.size(); I != N; ++I) {
+        if (I)
+          ExpCall += ", ";
+        std::string Arg = "(" + PNames[I] + ")";
+        if (ArgTs[I] == "haydn_x2int32" || ArgTs[I] == "haydn_x2fract32")
+          ExpCall += "__haydn_v2_as_i64" + Arg;
+        else if (ArgTs[I] == "haydn_x4int16" || ArgTs[I] == "haydn_x4fract16")
+          ExpCall += "__haydn_v4_as_i64" + Arg;
+        else
+          ExpCall += Arg;
+      }
+      std::string Exp = E.Builtin + "(" + ExpCall + ")";
+      if (RetT == "haydn_x2int32" || RetT == "haydn_x2fract32")
+        Exp = "__haydn_i64_as_v2(" + Exp + ")";
+      else if (RetT == "haydn_x4int16" || RetT == "haydn_x4fract16")
+        Exp = "__haydn_i64_as_v4(" + Exp + ")";
+      emitImmMacro(OS, RetT, E.PublicName, MacroParams, Exp, Doc);
+    } else if (RetT == "void")
       emitFn(OS, RetT, E.PublicName, Params.empty() ? "void" : Params,
              {CallExpr + ";"}, Doc);
     else
@@ -453,11 +493,16 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
     static const char *N2[] = {"a", "b"};
     static const char *N3[] = {"acc", "a", "b"};
     static const char *N4[] = {"a0", "a1", "a2", "a3"};
+    // X4SEL*: two vector sources + lane mask (imm or reg) — not a MAC acc form.
+    const bool IsX4Sel =
+        E.PublicName == "x4seli16" || E.PublicName == "x4sel16";
     SmallVector<std::string, 6> PNames;
     for (unsigned I = 0, N = A.size(); I != N; ++I) {
       std::string P;
       if (StringRef(A[I]).ends_with("*"))
         P = "out";
+      else if (IsX4Sel && N == 3)
+        P = (I == 0) ? "a" : (I == 1) ? "b" : "mask";
       else if (N == 1)
         P = N1[0];
       else if (N == 2)
@@ -468,14 +513,16 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
         P = N4[I];
       else
         P = "a" + std::to_string(I);
-      // imm shift second/last arg
-      if ((A[I] == "int" || A[I] == "unsigned int") &&
-          (I + 1 == N || I == 1))
-        P = (I + 1 == N && N >= 2) ? (N == 3 && I == 2 ? "imm" : "sh") : P;
-      if (N == 3 && I == 2 && (A[2] == "int" || A[2] == "unsigned int"))
-        P = "imm";
-      if (N == 2 && I == 1 && (A[1] == "int" || A[1] == "unsigned int"))
-        P = "sh";
+      // imm shift second/last arg (skip X4SEL mask naming above)
+      if (!IsX4Sel) {
+        if ((A[I] == "int" || A[I] == "unsigned int") &&
+            (I + 1 == N || I == 1))
+          P = (I + 1 == N && N >= 2) ? (N == 3 && I == 2 ? "imm" : "sh") : P;
+        if (N == 3 && I == 2 && (A[2] == "int" || A[2] == "unsigned int"))
+          P = "imm";
+        if (N == 2 && I == 1 && (A[1] == "int" || A[1] == "unsigned int"))
+          P = "sh";
+      }
       PNames.push_back(P);
     }
     std::string Params, Call;
@@ -487,7 +534,19 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
       Params += A[I] + " " + PNames[I];
       Call += PNames[I];
     }
-    if (R == "void")
+    if (!E.ImmChecks.empty()) {
+      std::string MacroParams, ExpCall;
+      for (unsigned I = 0, N = A.size(); I != N; ++I) {
+        if (I) {
+          MacroParams += ", ";
+          ExpCall += ", ";
+        }
+        MacroParams += PNames[I];
+        ExpCall += "(" + PNames[I] + ")";
+      }
+      emitImmMacro(OS, R, E.PublicName, MacroParams,
+                   E.Builtin + "(" + ExpCall + ")", Doc);
+    } else if (R == "void")
       emitFn(OS, R, E.PublicName, Params.empty() ? "void" : Params,
              {E.Builtin + "(" + Call + ");"}, Doc);
     else
@@ -578,21 +637,31 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
     if (N == 1)
       emitFn(OS, "haydn_x2int32", E.PublicName, "haydn_x2int32 a",
              {"return " + wrap(E.Builtin + "(" + castA("a") + ")") + ";"}, Doc);
-    else if (N == 2 && isImm(Args[1]))
-      emitFn(OS, "haydn_x2int32", E.PublicName, "haydn_x2int32 a, int sh",
-             {"return " +
-              wrap(E.Builtin + "(" + castA("a") + ", sh)") +
-              ";"},
-             Doc);
-    else if (N == 3 && isImm(Args[2]))
-      emitFn(OS, "haydn_x2int32", E.PublicName,
-             "haydn_x2int32 a, haydn_x2int32 b, int imm",
-             {"return " +
-              wrap(E.Builtin + "(" + castA("a") + ", " + castA("b") +
-                   ", imm)") +
-              ";"},
-             Doc);
-    else
+    else if (N == 2 && isImm(Args[1])) {
+      if (!E.ImmChecks.empty())
+        emitImmMacro(OS, "haydn_x2int32", E.PublicName, "a, sh",
+                     wrap(E.Builtin + "(" + castA("(a)") + ", (sh)"), Doc);
+      else
+        emitFn(OS, "haydn_x2int32", E.PublicName, "haydn_x2int32 a, int sh",
+               {"return " +
+                wrap(E.Builtin + "(" + castA("a") + ", sh)") +
+                ";"},
+               Doc);
+    } else if (N == 3 && isImm(Args[2])) {
+      if (!E.ImmChecks.empty())
+        emitImmMacro(OS, "haydn_x2int32", E.PublicName, "a, b, imm",
+                     wrap(E.Builtin + "(" + castA("(a)") + ", " + castA("(b)") +
+                          ", (imm)"),
+                     Doc);
+      else
+        emitFn(OS, "haydn_x2int32", E.PublicName,
+               "haydn_x2int32 a, haydn_x2int32 b, int imm",
+               {"return " +
+                wrap(E.Builtin + "(" + castA("a") + ", " + castA("b") +
+                     ", imm)") +
+                ";"},
+               Doc);
+    } else
       emitFn(OS, "haydn_x2int32", E.PublicName,
              "haydn_x2int32 a, haydn_x2int32 b",
              {"return " +
@@ -615,24 +684,35 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
         return std::string(V);
       return "__haydn_v4_as_i64(" + std::string(V) + ")";
     };
-    if (E.PublicName == "x4seli16")
-      emitFn(OS, "haydn_x4int16", E.PublicName,
-             "haydn_x4int16 a, haydn_x4int16 b, int imm",
-             {"return " +
-              wrap(E.Builtin + "(" + castA("a") + ", " + castA("b") +
-                   ", imm)") +
-              ";"},
-             Doc);
-    else if (N == 1)
+    if (E.PublicName == "x4seli16" || E.PublicName == "x4sel16") {
+      // Select: sources a,b + lane mask (imm form is ImmArg macro).
+      if (!E.ImmChecks.empty())
+        emitImmMacro(OS, "haydn_x4int16", E.PublicName, "a, b, mask",
+                     wrap(E.Builtin + "(" + castA("(a)") + ", " + castA("(b)") +
+                          ", (mask)"),
+                     Doc);
+      else
+        emitFn(OS, "haydn_x4int16", E.PublicName,
+               "haydn_x4int16 a, haydn_x4int16 b, int mask",
+               {"return " +
+                wrap(E.Builtin + "(" + castA("a") + ", " + castA("b") +
+                     ", mask)") +
+                ";"},
+               Doc);
+    } else if (N == 1)
       emitFn(OS, "haydn_x4int16", E.PublicName, "haydn_x4int16 a",
              {"return " + wrap(E.Builtin + "(" + castA("a") + ")") + ";"}, Doc);
-    else if (N == 2 && (Args[1] == "int" || Args[1] == "unsigned int"))
-      emitFn(OS, "haydn_x4int16", E.PublicName, "haydn_x4int16 a, int sh",
-             {"return " +
-              wrap(E.Builtin + "(" + castA("a") + ", sh)") +
-              ";"},
-             Doc);
-    else
+    else if (N == 2 && (Args[1] == "int" || Args[1] == "unsigned int")) {
+      if (!E.ImmChecks.empty())
+        emitImmMacro(OS, "haydn_x4int16", E.PublicName, "a, sh",
+                     wrap(E.Builtin + "(" + castA("(a)") + ", (sh)"), Doc);
+      else
+        emitFn(OS, "haydn_x4int16", E.PublicName, "haydn_x4int16 a, int sh",
+               {"return " +
+                wrap(E.Builtin + "(" + castA("a") + ", sh)") +
+                ";"},
+               Doc);
+    } else
       emitFn(OS, "haydn_x4int16", E.PublicName,
              "haydn_x4int16 a, haydn_x4int16 b",
              {"return " +
@@ -643,13 +723,9 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
     return;
   }
   case Kind::Scalar: {
-    // packsr: i64 sources, v2 result bag (not full parallel lanes in/out).
-    if (StringRef(E.PublicName).starts_with("packsr32x2")) {
-      emitFn(OS, "haydn_x2int32", E.PublicName, "int64_t a, int64_t b, int sh",
-             {"return __haydn_i64_as_v2(" + E.Builtin + "(a, b, sh));"}, Doc);
-      Mark();
-      return;
-    }
+    // packsr32 / satsr64 / packsr32x2_* are not builtins (composites in
+    // haydn_dsp.h only). Scalar ImmArg ops (e.g. srai64r) use macros via
+    // emitGenericWithNames when ImmChecks is non-empty.
     emitGenericWithNames(Ret, Args);
     Mark();
     return;
