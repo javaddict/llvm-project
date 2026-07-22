@@ -27,8 +27,8 @@ declare <2 x i32> @llvm.haydn.x2abs32(<2 x i32>)
 declare <2 x i32> @llvm.haydn.x2abs32s(<2 x i32>)
 declare <2 x i32> @llvm.haydn.x2neg32(<2 x i32>)
 declare <2 x i32> @llvm.haydn.x2neg32s(<2 x i32>)
-declare i64 @llvm.haydn.x2neg32.l(i64)
-declare i64 @llvm.haydn.x2neg32s.l(i64)
+declare <2 x i32> @llvm.haydn.x2neg32.l(<2 x i32>)
+declare <2 x i32> @llvm.haydn.x2neg32s.l(<2 x i32>)
 declare <2 x i32> @llvm.haydn.x2swap32(<2 x i32>)
 declare <2 x i32> @llvm.haydn.x2mjswap32(<2 x i32>)
 declare <2 x i32> @llvm.haydn.x2mjswap32s(<2 x i32>)
@@ -64,14 +64,18 @@ define dso_local <2 x i32> @test_x2neg32s(<2 x i32> %a) {
 define dso_local i64 @test_x2neg32_l(i64 %a) {
 ; MIR-LABEL: name: test_x2neg32_l
 ; MIR: X2NEG32_L
-  %r = call i64 @llvm.haydn.x2neg32.l(i64 %a)
+  %bc.1 = bitcast i64 %a to <2 x i32>
+  %call.2 = call <2 x i32> @llvm.haydn.x2neg32.l(<2 x i32> %bc.1)
+  %r = bitcast <2 x i32> %call.2 to i64
   ret i64 %r
 }
 
 define dso_local i64 @test_x2neg32s_l(i64 %a) {
 ; MIR-LABEL: name: test_x2neg32s_l
 ; MIR: X2NEG32S_L
-  %r = call i64 @llvm.haydn.x2neg32s.l(i64 %a)
+  %bc.3 = bitcast i64 %a to <2 x i32>
+  %call.4 = call <2 x i32> @llvm.haydn.x2neg32s.l(<2 x i32> %bc.3)
+  %r = bitcast <2 x i32> %call.4 to i64
   ret i64 %r
 }
 
@@ -109,10 +113,9 @@ declare <4 x i16> @llvm.haydn.x4mjswap16(<4 x i16>)
 declare <4 x i16> @llvm.haydn.x4mjswap16s(<4 x i16>)
 declare <4 x i16> @llvm.haydn.x4conj16(<4 x i16>)
 declare <4 x i16> @llvm.haydn.x4conj16s(<4 x i16>)
-declare i64 @llvm.haydn.x4energy16(i64)
-declare i64 @llvm.haydn.x4cmul16(i64)
-declare i64 @llvm.haydn.x4cmul16s(i64)
-
+declare i64 @llvm.haydn.x4energy16(<4 x i16>)
+declare <2 x i32> @llvm.haydn.x4cmul16(<4 x i16>)
+declare <2 x i32> @llvm.haydn.x4cmul16s(<4 x i16>)
 define dso_local <4 x i16> @test_x4abs16(<4 x i16> %a) {
 ; MIR-LABEL: name: test_x4abs16
 ; MIR: X4ABS16
@@ -179,21 +182,26 @@ define dso_local <4 x i16> @test_x4conj16s(<4 x i16> %a) {
 define dso_local i64 @test_x4energy16(i64 %a) {
 ; MIR-LABEL: name: test_x4energy16
 ; MIR: X4ENERGY16
-  %r = call i64 @llvm.haydn.x4energy16(i64 %a)
+  %bc.5 = bitcast i64 %a to <4 x i16>
+  %r = call i64 @llvm.haydn.x4energy16(<4 x i16> %bc.5)
   ret i64 %r
 }
 
 define dso_local i64 @test_x4cmul16(i64 %a) {
 ; MIR-LABEL: name: test_x4cmul16
 ; MIR: X4CMUL16
-  %r = call i64 @llvm.haydn.x4cmul16(i64 %a)
+  %bc.6 = bitcast i64 %a to <4 x i16>
+  %call.7 = call <2 x i32> @llvm.haydn.x4cmul16(<4 x i16> %bc.6)
+  %r = bitcast <2 x i32> %call.7 to i64
   ret i64 %r
 }
 
 define dso_local i64 @test_x4cmul16s(i64 %a) {
 ; MIR-LABEL: name: test_x4cmul16s
 ; MIR: X4CMUL16S
-  %r = call i64 @llvm.haydn.x4cmul16s(i64 %a)
+  %bc.8 = bitcast i64 %a to <4 x i16>
+  %call.9 = call <2 x i32> @llvm.haydn.x4cmul16s(<4 x i16> %bc.8)
+  %r = bitcast <2 x i32> %call.9 to i64
   ret i64 %r
 }
 
@@ -203,11 +211,10 @@ define dso_local i64 @test_x4cmul16s(i64 %a) {
 
 declare <2 x i32> @llvm.haydn.x2max32(<2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2min32(<2 x i32>, <2 x i32>)
-declare i64 @llvm.haydn.x2clamp32(i64, i64)
+declare <2 x i32> @llvm.haydn.x2clamp32(<2 x i32>, <2 x i32>)
 declare <4 x i16> @llvm.haydn.x4max16(<4 x i16>, <4 x i16>)
 declare <4 x i16> @llvm.haydn.x4min16(<4 x i16>, <4 x i16>)
-declare i64 @llvm.haydn.x4clamp16(i64, i64)
-
+declare <4 x i16> @llvm.haydn.x4clamp16(<4 x i16>, <4 x i16>)
 define dso_local <2 x i32> @test_x2max32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2max32:
 ; CHECK: x2max32
@@ -225,7 +232,10 @@ define dso_local <2 x i32> @test_x2min32(<2 x i32> %a, <2 x i32> %b) {
 define dso_local i64 @test_x2clamp32(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x2clamp32:
 ; CHECK: x2clamp32
-  %r = call i64 @llvm.haydn.x2clamp32(i64 %a, i64 %b)
+  %bc.10 = bitcast i64 %a to <2 x i32>
+  %bc.11 = bitcast i64 %b to <2 x i32>
+  %call.12 = call <2 x i32> @llvm.haydn.x2clamp32(<2 x i32> %bc.10, <2 x i32> %bc.11)
+  %r = bitcast <2 x i32> %call.12 to i64
   ret i64 %r
 }
 
@@ -246,7 +256,10 @@ define dso_local <4 x i16> @test_x4min16(<4 x i16> %a, <4 x i16> %b) {
 define dso_local i64 @test_x4clamp16(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x4clamp16:
 ; CHECK: x4clamp16
-  %r = call i64 @llvm.haydn.x4clamp16(i64 %a, i64 %b)
+  %bc.13 = bitcast i64 %a to <4 x i16>
+  %bc.14 = bitcast i64 %b to <4 x i16>
+  %call.15 = call <4 x i16> @llvm.haydn.x4clamp16(<4 x i16> %bc.13, <4 x i16> %bc.14)
+  %r = bitcast <4 x i16> %call.15 to i64
   ret i64 %r
 }
 
@@ -254,36 +267,47 @@ define dso_local i64 @test_x4clamp16(i64 %a, i64 %b) {
 ; B. Shuffle/Pack ops
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.x2sel32.hh(i64, i64)
-declare i64 @llvm.haydn.x2sel32.hl(i64, i64)
-declare i64 @llvm.haydn.x2sel32.lh(i64, i64)
-declare i64 @llvm.haydn.x2sel32.ll(i64, i64)
-
+declare <2 x i32> @llvm.haydn.x2sel32.hh(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2sel32.hl(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2sel32.lh(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2sel32.ll(<2 x i32>, <2 x i32>)
 define dso_local i64 @test_x2sel32_hh(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x2sel32_hh:
 ; CHECK: x2sel32_hh
-  %r = call i64 @llvm.haydn.x2sel32.hh(i64 %a, i64 %b)
+  %bc.16 = bitcast i64 %a to <2 x i32>
+  %bc.17 = bitcast i64 %b to <2 x i32>
+  %call.18 = call <2 x i32> @llvm.haydn.x2sel32.hh(<2 x i32> %bc.16, <2 x i32> %bc.17)
+  %r = bitcast <2 x i32> %call.18 to i64
   ret i64 %r
 }
 
 define dso_local i64 @test_x2sel32_hl(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x2sel32_hl:
 ; CHECK: x2sel32_hl
-  %r = call i64 @llvm.haydn.x2sel32.hl(i64 %a, i64 %b)
+  %bc.19 = bitcast i64 %a to <2 x i32>
+  %bc.20 = bitcast i64 %b to <2 x i32>
+  %call.21 = call <2 x i32> @llvm.haydn.x2sel32.hl(<2 x i32> %bc.19, <2 x i32> %bc.20)
+  %r = bitcast <2 x i32> %call.21 to i64
   ret i64 %r
 }
 
 define dso_local i64 @test_x2sel32_lh(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x2sel32_lh:
 ; CHECK: x2sel32_lh
-  %r = call i64 @llvm.haydn.x2sel32.lh(i64 %a, i64 %b)
+  %bc.22 = bitcast i64 %a to <2 x i32>
+  %bc.23 = bitcast i64 %b to <2 x i32>
+  %call.24 = call <2 x i32> @llvm.haydn.x2sel32.lh(<2 x i32> %bc.22, <2 x i32> %bc.23)
+  %r = bitcast <2 x i32> %call.24 to i64
   ret i64 %r
 }
 
 define dso_local i64 @test_x2sel32_ll(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x2sel32_ll:
 ; CHECK: x2sel32_ll
-  %r = call i64 @llvm.haydn.x2sel32.ll(i64 %a, i64 %b)
+  %bc.25 = bitcast i64 %a to <2 x i32>
+  %bc.26 = bitcast i64 %b to <2 x i32>
+  %call.27 = call <2 x i32> @llvm.haydn.x2sel32.ll(<2 x i32> %bc.25, <2 x i32> %bc.26)
+  %r = bitcast <2 x i32> %call.27 to i64
   ret i64 %r
 }
 
@@ -348,68 +372,91 @@ define dso_local <2 x i32> @test_x2subadd32s_hllh(<2 x i32> %a, <2 x i32> %b) {
 ; C. X4 Complex Multiply variants (binary DR64)
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.x4cmul16s.h(i64, i64)
-declare i64 @llvm.haydn.x4cmul16s.l(i64, i64)
-declare i64 @llvm.haydn.x4cmula16s.h(i64, i64)
-declare i64 @llvm.haydn.x4cmula16s.l(i64, i64)
-declare i64 @llvm.haydn.x4cjmul16s.h(i64, i64)
-declare i64 @llvm.haydn.x4cjmul16s.l(i64, i64)
-declare i64 @llvm.haydn.x4cjmula16s.h(i64, i64)
-declare i64 @llvm.haydn.x4cjmula16s.l(i64, i64)
-
+declare <2 x i32> @llvm.haydn.x4cmul16s.h(<4 x i16>, <4 x i16>)
+declare <2 x i32> @llvm.haydn.x4cmul16s.l(<4 x i16>, <4 x i16>)
+declare <2 x i32> @llvm.haydn.x4cmula16s.h(<2 x i32>, <4 x i16>, <4 x i16>)
+declare <2 x i32> @llvm.haydn.x4cmula16s.l(<2 x i32>, <4 x i16>, <4 x i16>)
+declare <2 x i32> @llvm.haydn.x4cjmul16s.h(<4 x i16>, <4 x i16>)
+declare <2 x i32> @llvm.haydn.x4cjmul16s.l(<4 x i16>, <4 x i16>)
+declare <2 x i32> @llvm.haydn.x4cjmula16s.h(<2 x i32>, <4 x i16>, <4 x i16>)
+declare <2 x i32> @llvm.haydn.x4cjmula16s.l(<2 x i32>, <4 x i16>, <4 x i16>)
 define dso_local i64 @test_x4cmul16s_h(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x4cmul16s_h:
 ; CHECK: x4cmul16s_h
-  %r = call i64 @llvm.haydn.x4cmul16s.h(i64 %a, i64 %b)
+  %bc.28 = bitcast i64 %a to <4 x i16>
+  %bc.29 = bitcast i64 %b to <4 x i16>
+  %call.30 = call <2 x i32> @llvm.haydn.x4cmul16s.h(<4 x i16> %bc.28, <4 x i16> %bc.29)
+  %r = bitcast <2 x i32> %call.30 to i64
   ret i64 %r
 }
 
 define dso_local i64 @test_x4cmul16s_l(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x4cmul16s_l:
 ; CHECK: x4cmul16s_l
-  %r = call i64 @llvm.haydn.x4cmul16s.l(i64 %a, i64 %b)
+  %bc.31 = bitcast i64 %a to <4 x i16>
+  %bc.32 = bitcast i64 %b to <4 x i16>
+  %call.33 = call <2 x i32> @llvm.haydn.x4cmul16s.l(<4 x i16> %bc.31, <4 x i16> %bc.32)
+  %r = bitcast <2 x i32> %call.33 to i64
   ret i64 %r
 }
 
 define dso_local i64 @test_x4cmula16s_h(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x4cmula16s_h:
 ; CHECK: x4cmula16s_h
-  %r = call i64 @llvm.haydn.x4cmula16s.h(i64 %a, i64 %b)
+  %bc.1 = bitcast i64 %a to <2 x i32>
+  %bc.2 = bitcast i64 %b to <4 x i16>
+  %call.3 = call <2 x i32> @llvm.haydn.x4cmula16s.h(<2 x i32> %bc.1, <4 x i16> %bc.2, <4 x i16> zeroinitializer)
+  %r = bitcast <2 x i32> %call.3 to i64
   ret i64 %r
 }
 
 define dso_local i64 @test_x4cmula16s_l(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x4cmula16s_l:
 ; CHECK: x4cmula16s_l
-  %r = call i64 @llvm.haydn.x4cmula16s.l(i64 %a, i64 %b)
+  %bc.4 = bitcast i64 %a to <2 x i32>
+  %bc.5 = bitcast i64 %b to <4 x i16>
+  %call.6 = call <2 x i32> @llvm.haydn.x4cmula16s.l(<2 x i32> %bc.4, <4 x i16> %bc.5, <4 x i16> zeroinitializer)
+  %r = bitcast <2 x i32> %call.6 to i64
   ret i64 %r
 }
 
 define dso_local i64 @test_x4cjmul16s_h(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x4cjmul16s_h:
 ; CHECK: x4cjmul16s_h
-  %r = call i64 @llvm.haydn.x4cjmul16s.h(i64 %a, i64 %b)
+  %bc.34 = bitcast i64 %a to <4 x i16>
+  %bc.35 = bitcast i64 %b to <4 x i16>
+  %call.36 = call <2 x i32> @llvm.haydn.x4cjmul16s.h(<4 x i16> %bc.34, <4 x i16> %bc.35)
+  %r = bitcast <2 x i32> %call.36 to i64
   ret i64 %r
 }
 
 define dso_local i64 @test_x4cjmul16s_l(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x4cjmul16s_l:
 ; CHECK: x4cjmul16s_l
-  %r = call i64 @llvm.haydn.x4cjmul16s.l(i64 %a, i64 %b)
+  %bc.37 = bitcast i64 %a to <4 x i16>
+  %bc.38 = bitcast i64 %b to <4 x i16>
+  %call.39 = call <2 x i32> @llvm.haydn.x4cjmul16s.l(<4 x i16> %bc.37, <4 x i16> %bc.38)
+  %r = bitcast <2 x i32> %call.39 to i64
   ret i64 %r
 }
 
 define dso_local i64 @test_x4cjmula16s_h(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x4cjmula16s_h:
 ; CHECK: x4cjmula16s_h
-  %r = call i64 @llvm.haydn.x4cjmula16s.h(i64 %a, i64 %b)
+  %bc.7 = bitcast i64 %a to <2 x i32>
+  %bc.8 = bitcast i64 %b to <4 x i16>
+  %call.9 = call <2 x i32> @llvm.haydn.x4cjmula16s.h(<2 x i32> %bc.7, <4 x i16> %bc.8, <4 x i16> zeroinitializer)
+  %r = bitcast <2 x i32> %call.9 to i64
   ret i64 %r
 }
 
 define dso_local i64 @test_x4cjmula16s_l(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x4cjmula16s_l:
 ; CHECK: x4cjmula16s_l
-  %r = call i64 @llvm.haydn.x4cjmula16s.l(i64 %a, i64 %b)
+  %bc.10 = bitcast i64 %a to <2 x i32>
+  %bc.11 = bitcast i64 %b to <4 x i16>
+  %call.12 = call <2 x i32> @llvm.haydn.x4cjmula16s.l(<2 x i32> %bc.10, <4 x i16> %bc.11, <4 x i16> zeroinitializer)
+  %r = bitcast <2 x i32> %call.12 to i64
   ret i64 %r
 }
 
@@ -419,7 +466,6 @@ define dso_local i64 @test_x4cjmula16s_l(i64 %a, i64 %b) {
 
 declare i64 @llvm.haydn.not64(i64)
 declare i64 @llvm.haydn.seq64(i64)
-
 define dso_local i64 @test_not64(i64 %a) {
 ; MIR-LABEL: name: test_not64
 ; MIR: NOT64
@@ -444,7 +490,6 @@ declare i64 @llvm.haydn.add64.h(i64, i64)
 declare i64 @llvm.haydn.add64.l(i64, i64)
 declare i64 @llvm.haydn.sub64.h(i64, i64)
 declare i64 @llvm.haydn.sub64.l(i64, i64)
-
 define dso_local i64 @test_max64(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_max64:
 ; CHECK: max64
@@ -492,7 +537,6 @@ define dso_local i64 @test_sub64_l(i64 %a, i64 %b) {
 ;===----------------------------------------------------------------------===;
 
 declare i64 @llvm.haydn.sll64(i64, i32)
-
 define dso_local i64 @test_sll64(i64 %a, i32 %b) {
 ; CHECK-LABEL: test_sll64:
 ; CHECK: sll64
@@ -506,7 +550,6 @@ define dso_local i64 @test_sll64(i64 %a, i32 %b) {
 
 declare i64 @llvm.haydn.sra64(i64, i32)
 declare i64 @llvm.haydn.srl64(i64, i32)
-
 define dso_local i64 @test_sra64(i64 %accum, i32 %shift) {
 ; CHECK-LABEL: test_sra64:
 ; CHECK: sra64

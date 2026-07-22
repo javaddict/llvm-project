@@ -179,8 +179,8 @@ def : Pat<(int_haydn_muluuh GPR32:$a, GPR32:$b), (MULUUH GPR32:$a, GPR32:$b)>;
 // the C++ selector handles the lowering.
 //===----------------------------------------------------------------------===//
 
-// MAC32 was removed : the ISA DB's MULA* family targets DR64, not GPR32.
-// haydn_mac32 is now lowered to MUL32 + ADD32 in the C++ selector.
+// MAC32 is not a DB opcode (MULA* targets DR64). haydn_mac32 lowers to
+// MULL + ADD32 in the C++ selector.
 
 //===----------------------------------------------------------------------===//
 // SIMD X2 Operations (dual 32-bit)

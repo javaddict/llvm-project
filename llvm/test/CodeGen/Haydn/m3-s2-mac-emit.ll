@@ -45,20 +45,23 @@
 ; opcode space reused for s2 MAC per assumption).
 ; Related decision: (Mode 3 s2 MAC decode + emit), (s1 MAC slice).
 
-declare { i64, i64 } @llvm.haydn.x2mula32(i64, i64, i64, i64)
-declare { i64, i64 } @llvm.haydn.x2muls32(i64, i64, i64, i64)
-
+declare { i64, i64 } @llvm.haydn.x2mula32(i64, i64, <2 x i32>, <2 x i32>)
+declare { i64, i64 } @llvm.haydn.x2muls32(i64, i64, <2 x i32>, <2 x i32>)
 ; Accumulate: dN += dN * dN. With the finalizer OFF the generic X2MULA32
 ; reaches the encoder, which routes it to s2 (Mode 3) via getM3S2Variant.
 ; (Path B): 2-dest accum — args (acc1, acc2, src1, src2), returns {i64,i64}.
 define i64 @test_x2mula32_s2_mode3(i64 %acc, i64 %acc2, i64 %a, i64 %b) {
-  %r = call { i64, i64 } @llvm.haydn.x2mula32(i64 %acc, i64 %acc2, i64 %a, i64 %b)
+  %bc.1 = bitcast i64 %a to <2 x i32>
+  %bc.2 = bitcast i64 %b to <2 x i32>
+  %r = call { i64, i64 } @llvm.haydn.x2mula32(i64 %acc, i64 %acc2, <2 x i32> %bc.1, <2 x i32> %bc.2)
   %hi = extractvalue { i64, i64 } %r, 0
   ret i64 %hi
 }
 
 define i64 @test_x2muls32_s2_mode3(i64 %acc, i64 %acc2, i64 %a, i64 %b) {
-  %r = call { i64, i64 } @llvm.haydn.x2muls32(i64 %acc, i64 %acc2, i64 %a, i64 %b)
+  %bc.3 = bitcast i64 %a to <2 x i32>
+  %bc.4 = bitcast i64 %b to <2 x i32>
+  %r = call { i64, i64 } @llvm.haydn.x2muls32(i64 %acc, i64 %acc2, <2 x i32> %bc.3, <2 x i32> %bc.4)
   %hi = extractvalue { i64, i64 } %r, 0
   ret i64 %hi
 }

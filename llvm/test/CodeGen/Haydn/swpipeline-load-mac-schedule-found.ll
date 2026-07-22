@@ -24,7 +24,9 @@ loop:
   %pb = getelementptr inbounds i64, ptr %b, i32 %i
   %va = load i64, ptr %pa, align 4
   %vb = load i64, ptr %pb, align 4
-  %acc.n = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %acc, i64 %va, i64 %vb)
+  %bc.1 = bitcast i64 %va to <2 x i32>
+  %bc.2 = bitcast i64 %vb to <2 x i32>
+  %acc.n = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %acc, <2 x i32> %bc.1, <2 x i32> %bc.2)
   %i.next = add nuw nsw i32 %i, 1
   %done = icmp eq i32 %i.next, %n
   br i1 %done, label %exit, label %loop
@@ -34,4 +36,4 @@ exit:
   ret i64 %r
 }
 
-declare i64 @llvm.haydn.f2mulaa32rs.hhll(i64, i64, i64)
+declare i64 @llvm.haydn.f2mulaa32rs.hhll(i64, <2 x i32>, <2 x i32>)

@@ -35,7 +35,7 @@ define i32 @sub(i32 %a, i32 %b) {
 define i32 @mul(i32 %a, i32 %b) {
   %r = mul i32 %a, %b
   ret i32 %r
-; Scalar s32 mul lowers to sext32t64 (x2) + mul64.ll + move32_dr_l.
+; Scalar s32 mul lowers to mull.
 }
 
 ;Bitwise operations

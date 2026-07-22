@@ -55,8 +55,8 @@
 define i32 @vec_dot(ptr nocapture readonly %a, ptr nocapture readonly %b, i32 %n) {
 ; CHECK-LABEL: vec_dot:
 ; The scalar multiply must survive -- SMS never drops instructions.
-; Post- the s32 multiply lowers via the DR64 MAC unit (mul64.ll), not mac32.
-; CHECK:        mul64
+; Post- the s32 multiply lowers via the DR64 MAC unit (mull), not mac32.
+; CHECK:        mull
 ; G4 acceptance bar: the recognizer must NOT reject this loop. The debug
 ; output must NOT contain the pre--rework rejection banner.
 ; SWP-NOT:      Unable to analyzeLoop

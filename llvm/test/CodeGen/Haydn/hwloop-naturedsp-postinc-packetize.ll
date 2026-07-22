@@ -61,8 +61,7 @@
 ; ~/haydn-plans/naturedsp-haydn/disasm/kernel-sdiff/PATTERNS.md §B
 ; (POST_INC load split — highest-ROI packetization gap).
 
-declare i64 @llvm.haydn.mula64.ss.ll(i64, i64, i64)
-
+declare i64 @llvm.haydn.mula64.ss.ll(i64, <2 x i32>, <2 x i32>)
 ; vec_dot64x64i hot loop: two independent streaming i64 loads + MAC accumulate.
 ; HiFi3 source: for(n=0;n<N;n++){ AE_L64_IP(xw0,px,8); AE_L64_IP(yw0,py,8);
 ; AE_MULA32U_LL(ACC, x0, y0); }
@@ -78,7 +77,9 @@ loop:
   %acc = phi i64 [ 0, %entry ], [ %mac, %loop ]
   %xa  = load i64, ptr %px, align 8
   %xb  = load i64, ptr %py, align 8
-  %mac = call i64 @llvm.haydn.mula64.ss.ll(i64 %acc, i64 %xa, i64 %xb)
+  %bc.1 = bitcast i64 %xa to <2 x i32>
+  %bc.2 = bitcast i64 %xb to <2 x i32>
+  %mac = call i64 @llvm.haydn.mula64.ss.ll(i64 %acc, <2 x i32> %bc.1, <2 x i32> %bc.2)
   %px.next = getelementptr inbounds i64, ptr %px, i32 1
   %py.next = getelementptr inbounds i64, ptr %py, i32 1
   %i.next   = add i32 %i, 1

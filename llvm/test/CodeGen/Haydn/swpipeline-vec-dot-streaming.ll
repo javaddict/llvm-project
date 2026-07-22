@@ -5,7 +5,7 @@
 ; STALE-FAILMARKER-REMOVED (, post- cutover): the SMS
 ; analyzability regression has cleared — analyzeLoopForPipelining now accepts
 ; this canonical vec_dot_streaming loop and SMS profitably schedules it
-; (Schedule Found? 1, II=2). The SWP-NOT acceptance bar and the mul64.ll
+; (Schedule Found? 1, II=2). The SWP-NOT acceptance bar and the mull
 ; kernel-body CHECK both pass.
 ;
 ; REGRESSION TEST (G4 / -rework): MachinePipeliner (Swing Modulo Scheduling)
@@ -50,7 +50,7 @@
 ; mattr=-hwloop so the HaydnHardwareLoops pass does not convert this loop to a
 ; zero-overhead hardware loop, leaving it visible to SMS. The
 ; verify-machineinstrs flag fails the build if the modulo schedule expander
-; ever produces broken phi/renaming. The mul64.ll assertion proves the loop body
+; ever produces broken phi/renaming. The mull assertion proves the loop body
 ; survived (the pipeliner never silently drops instructions).
 ;
 ; SWP asserts the G4 acceptance bar ("Unable to analyzeLoop" is GONE). The
@@ -64,10 +64,10 @@ define i32 @vec_dot_streaming(ptr nocapture readonly %a, ptr nocapture readonly 
 ; CHECK-LABEL: vec_dot_streaming:
 ; Default path (hwloops enabled): the loop lowers as a zero-overhead hardware
 ; loop. Post-inc fusion (+ LD64/LD32 candidate-gate fix): the two
-; streaming loads fuse to s_lw_post_imm. The mul64.ll must survive.
+; streaming loads fuse to s_lw_post_imm. The mull must survive.
 ; CHECK:        // =>This Inner Loop Header: Depth=1
 ; CHECK:        s_lw_post_imm
-; CHECK:        mul64
+; CHECK:        mull
 entry:
   br label %for.body
 

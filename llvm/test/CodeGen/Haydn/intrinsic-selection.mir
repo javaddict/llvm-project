@@ -58,9 +58,9 @@ name:            test_mac32
 legalized:       true
 regBankSelected: false
 # CHECK-LABEL: name: test_mac32
-# Haydn_mac32 (acc + a*b) lowers to a*b via MUL64_LL + bank moves (the
-# invented MUL32 was removed) then ADD32. The distinctive instr is MUL64_LL.
-# CHECK: MUL64_LL
+# haydn_mac32(acc,a,b) → MULL + ADD32.
+# CHECK: MULL
+# CHECK: ADD32
 # CHECK-NOT: G_INTRINSIC
 body:             |
   bb.0.entry:

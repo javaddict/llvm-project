@@ -2240,7 +2240,7 @@ long long test_sra64(long long a0, int a1) {
 /* test_sra64r defined once above (golden i64,i32 -> i64). */
 
 long long test_srai64r(long long a0, int a1) {
-  long long r = __builtin_haydn_srai64r(a0, a1);
+  long long r = __builtin_haydn_srai64r(a0, 1);
   sink_ll = (long long)r;
 }
 
@@ -2560,7 +2560,7 @@ v2i test_x2sll32(v2i a0, int a1) {
 }
 
 v2i test_x2slli32(v2i a0, int a1) {
-  v2i r = __builtin_haydn_x2slli32(a0, a1);
+  v2i r = __builtin_haydn_x2slli32(a0, 1);
   sink_v2 = r;
 }
 
@@ -2580,12 +2580,12 @@ v2i test_x2sra32r(v2i a0, int a1) {
 }
 
 v2i test_x2srai32(v2i a0, int a1) {
-  v2i r = __builtin_haydn_x2srai32(a0, a1);
+  v2i r = __builtin_haydn_x2srai32(a0, 1);
   sink_v2 = r;
 }
 
 v2i test_x2srai32r(v2i a0, int a1) {
-  v2i r = __builtin_haydn_x2srai32r(a0, a1);
+  v2i r = __builtin_haydn_x2srai32r(a0, 1);
   sink_v2 = r;
 }
 
@@ -2595,7 +2595,7 @@ v2i test_x2srl32(v2i a0, int a1) {
 }
 
 v2i test_x2srli32(v2i a0, int a1) {
-  v2i r = __builtin_haydn_x2srli32(a0, a1);
+  v2i r = __builtin_haydn_x2srli32(a0, 1);
   sink_v2 = r;
 }
 
@@ -2860,7 +2860,7 @@ v4s test_x4sat32t16(v2i a0, v2i a1) {
 }
 
 v4s test_x4seli16(v4s a0, v4s a1, int a2) {
-  v4s r = __builtin_haydn_x4seli16(a0, a1, a2);
+  v4s r = __builtin_haydn_x4seli16(a0, a1, 1);
   sink_v4 = r;
 }
 
@@ -2880,7 +2880,7 @@ v4s test_x4sll16(v4s a0, int a1) {
 }
 
 v4s test_x4slli16(v4s a0, int a1) {
-  v4s r = __builtin_haydn_x4slli16(a0, a1);
+  v4s r = __builtin_haydn_x4slli16(a0, 1);
   sink_v4 = r;
 }
 
@@ -2900,12 +2900,12 @@ v4s test_x4sra16r(v4s a0, int a1) {
 }
 
 v4s test_x4srai16(v4s a0, int a1) {
-  v4s r = __builtin_haydn_x4srai16(a0, a1);
+  v4s r = __builtin_haydn_x4srai16(a0, 1);
   sink_v4 = r;
 }
 
 v4s test_x4srai16r(v4s a0, int a1) {
-  v4s r = __builtin_haydn_x4srai16r(a0, a1);
+  v4s r = __builtin_haydn_x4srai16r(a0, 1);
   sink_v4 = r;
 }
 
@@ -2915,7 +2915,7 @@ v4s test_x4srl16(v4s a0, int a1) {
 }
 
 v4s test_x4srli16(v4s a0, int a1) {
-  v4s r = __builtin_haydn_x4srli16(a0, a1);
+  v4s r = __builtin_haydn_x4srli16(a0, 1);
   sink_v4 = r;
 }
 

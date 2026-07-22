@@ -7,7 +7,7 @@
 ; assembly for representative C patterns. Each function corresponds to a common
 ; C construct (function calls, stack ops, arithmetic, control flow, loops, i64
 ; globals, structs). The CHECK lines validate:
-; Correct instruction selection (add32, sub32, mul64.ll (s32 mul,), jal_w, beqz_w, bnez_w, etc.)
+; Correct instruction selection (add32, sub32, mull (s32 mul,), jal_w, beqz_w, bnez_w, etc.)
 ; Reasonable register allocation (no obviously wrong register usage)
 ; Prologue/epilogue presence (stack adjustment, callee-save, return via jalr_w)
 ;
@@ -176,7 +176,7 @@ define i32 @arith(i32 %a, i32 %b) {
 ; CHECK-LABEL: arith:
 ; CHECK-DAG: add32
 ; CHECK-DAG: sub32
-; CHECK-DAG: mul64.ll
+; CHECK-DAG: mull
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %sum = add i32 %a, %b
   %diff = sub i32 %a, %b

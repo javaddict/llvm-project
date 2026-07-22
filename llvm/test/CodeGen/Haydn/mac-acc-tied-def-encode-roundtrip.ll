@@ -37,18 +37,19 @@
 ; spec: Database/haydn_instruction_db.json — every MAC listed has
 ; slots.1.DR_Read_Port = [rsd1, rsd2, rtd]
 
-declare i64 @llvm.haydn.mula64.ss.ll(i64, i64, i64)
-declare i64 @llvm.haydn.muls64.ss.ll(i64, i64, i64)
-declare i64 @llvm.haydn.ff2mula32rs.lh(i64, i64, i64)
-declare i64 @llvm.haydn.x2fcmula32rs(i64, i64, i64)
-
+declare i64 @llvm.haydn.mula64.ss.ll(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.muls64.ss.ll(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.ff2mula32rs.lh(i64, <2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2fcmula32rs(<2 x i32>, <2 x i32>, <2 x i32>)
 ; MIR-LABEL: test_mula64_ll:
 ; MIR-NOT: or64
 ; MIR:     mula64.ll
 ; OBJ-LABEL: <test_mula64_ll>:
 ; OBJ:     mula64.ll
 define i64 @test_mula64_ll(i64 %acc, i64 %a, i64 %b) {
-  %r = call i64 @llvm.haydn.mula64.ss.ll(i64 %acc, i64 %a, i64 %b)
+  %bc.1 = bitcast i64 %a to <2 x i32>
+  %bc.2 = bitcast i64 %b to <2 x i32>
+  %r = call i64 @llvm.haydn.mula64.ss.ll(i64 %acc, <2 x i32> %bc.1, <2 x i32> %bc.2)
   ret i64 %r
 }
 
@@ -58,7 +59,9 @@ define i64 @test_mula64_ll(i64 %acc, i64 %a, i64 %b) {
 ; OBJ-LABEL: <test_muls64_ll>:
 ; OBJ:     muls64.ll
 define i64 @test_muls64_ll(i64 %acc, i64 %a, i64 %b) {
-  %r = call i64 @llvm.haydn.muls64.ss.ll(i64 %acc, i64 %a, i64 %b)
+  %bc.3 = bitcast i64 %a to <2 x i32>
+  %bc.4 = bitcast i64 %b to <2 x i32>
+  %r = call i64 @llvm.haydn.muls64.ss.ll(i64 %acc, <2 x i32> %bc.3, <2 x i32> %bc.4)
   ret i64 %r
 }
 
@@ -69,7 +72,9 @@ define i64 @test_muls64_ll(i64 %acc, i64 %a, i64 %b) {
 ; OBJ-LABEL: <test_ff2mula32rs_lh>:
 ; OBJ:     ff2mula32rs.lh
 define i64 @test_ff2mula32rs_lh(i64 %acc, i64 %a, i64 %b) {
-  %r = call i64 @llvm.haydn.ff2mula32rs.lh(i64 %acc, i64 %a, i64 %b)
+  %bc.5 = bitcast i64 %a to <2 x i32>
+  %bc.6 = bitcast i64 %b to <2 x i32>
+  %r = call i64 @llvm.haydn.ff2mula32rs.lh(i64 %acc, <2 x i32> %bc.5, <2 x i32> %bc.6)
   ret i64 %r
 }
 
@@ -79,6 +84,10 @@ define i64 @test_ff2mula32rs_lh(i64 %acc, i64 %a, i64 %b) {
 ; OBJ-LABEL: <test_x2fcmula32rs>:
 ; OBJ:     x2fcmula32rs
 define i64 @test_x2fcmula32rs(i64 %acc, i64 %a, i64 %b) {
-  %r = call i64 @llvm.haydn.x2fcmula32rs(i64 %acc, i64 %a, i64 %b)
+  %bc.7 = bitcast i64 %acc to <2 x i32>
+  %bc.8 = bitcast i64 %a to <2 x i32>
+  %bc.9 = bitcast i64 %b to <2 x i32>
+  %call.10 = call <2 x i32> @llvm.haydn.x2fcmula32rs(<2 x i32> %bc.7, <2 x i32> %bc.8, <2 x i32> %bc.9)
+  %r = bitcast <2 x i32> %call.10 to i64
   ret i64 %r
 }

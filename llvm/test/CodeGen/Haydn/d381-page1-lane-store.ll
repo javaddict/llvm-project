@@ -44,15 +44,16 @@
 ; word index to byte offset (the page-1 EncoderMethod expects bytes). If the
 ; rewrite regresses, the ASM check below finds no d_sw_l_with_imm.
 
-declare i64 @llvm.haydn.mula64.ss.ll(i64, i64, i64)
-
+declare i64 @llvm.haydn.mula64.ss.ll(i64, <2 x i32>, <2 x i32>)
 ; @lane_store_page1_low: store low lane of a DR64 to [%out + 64].
 ; ASM-LABEL: lane_store_page1_low:
 ; Product may keep GPR lane store when DR-lane fold misses.
 ; ASM:       {{d_sw_l_with_imm|s_sw_pre_imm|st32}}
 define void @lane_store_page1_low(ptr %out) nounwind {
   %p = getelementptr inbounds i32, ptr %out, i32 16
-  %val = call i64 @llvm.haydn.mula64.ss.ll(i64 0, i64 1, i64 1)
+  %vc.1 = bitcast i64 1 to <2 x i32>
+  %vc.2 = bitcast i64 1 to <2 x i32>
+  %val = call i64 @llvm.haydn.mula64.ss.ll(i64 0, <2 x i32> %vc.1, <2 x i32> %vc.2)
   %lo = trunc i64 %val to i32
   store i32 %lo, ptr %p, align 4
   ret void
@@ -65,7 +66,9 @@ define void @lane_store_page1_low(ptr %out) nounwind {
 ; ASM:       {{d_sw_[lh]_with_imm|s_sw_pre_imm|st32}}
 define void @lane_store_page1_high(ptr %out) nounwind {
   %p = getelementptr inbounds i32, ptr %out, i32 16
-  %val = call i64 @llvm.haydn.mula64.ss.ll(i64 0, i64 1, i64 1)
+  %vc.3 = bitcast i64 1 to <2 x i32>
+  %vc.4 = bitcast i64 1 to <2 x i32>
+  %val = call i64 @llvm.haydn.mula64.ss.ll(i64 0, <2 x i32> %vc.3, <2 x i32> %vc.4)
   %hi32 = lshr i64 %val, 32
   %hi = trunc i64 %hi32 to i32
   store i32 %hi, ptr %p, align 4

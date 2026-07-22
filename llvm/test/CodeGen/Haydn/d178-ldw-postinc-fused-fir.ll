@@ -46,8 +46,7 @@
 ; ~/haydn-plans/Database/haydn_instruction_db.json (D_LDW_POST_IMM)
 ; LD32X2F24 spec §2.4 (fir_paired32 — the kernel shape this mirrors)
 
-declare i64 @llvm.haydn.mula64.ss.ll(i64, i64, i64)
-
+declare i64 @llvm.haydn.mula64.ss.ll(i64, <2 x i32>, <2 x i32>)
 ; FIR-style hot loop: streaming i64 loads (stride 8) feeding a MAC.
 ; Dual-sched form : LD64 + ADDI32 stride-8 (not fused
 ; D_LDW_POST_IMM). Contract: both streams load + bump, MAC present.
@@ -67,7 +66,9 @@ loop:
   %acc = phi i64 [ 0, %entry ], [ %mac, %loop ]
   %xa  = load i64, ptr %pa, align 8
   %xb  = load i64, ptr %pb, align 8
-  %mac = call i64 @llvm.haydn.mula64.ss.ll(i64 %acc, i64 %xa, i64 %xb)
+  %bc.1 = bitcast i64 %xa to <2 x i32>
+  %bc.2 = bitcast i64 %xb to <2 x i32>
+  %mac = call i64 @llvm.haydn.mula64.ss.ll(i64 %acc, <2 x i32> %bc.1, <2 x i32> %bc.2)
   %pa.next = getelementptr i64, ptr %pa, i32 1
   %pb.next = getelementptr i64, ptr %pb, i32 1
   %i.next  = add i32 %i, 1
@@ -92,7 +93,9 @@ entry:
 loop:
   %i    = phi i32 [ 0, %entry ], [ %i.next, %loop ]
   %po   = phi ptr [ %out, %entry ], [ %po.next, %loop ]
-  %val  = call i64 @llvm.haydn.mula64.ss.ll(i64 0, i64 1, i64 1)
+  %vc.1 = bitcast i64 1 to <2 x i32>
+  %vc.2 = bitcast i64 1 to <2 x i32>
+  %val = call i64 @llvm.haydn.mula64.ss.ll(i64 0, <2 x i32> %vc.1, <2 x i32> %vc.2)
   store i64 %val, ptr %po, align 8
   %po.next = getelementptr i64, ptr %po, i32 1
   %i.next  = add i32 %i, 1

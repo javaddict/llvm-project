@@ -6,7 +6,7 @@
 ;
 ; STALE-FAILMARKER REMOVED (, post- cutover): SMS fires on this
 ; loop with rec=1 — the core acc-feedback latency-1 assertion this test guards
-; still holds. The s32 mul lowers via the DR64 MAC unit (mul64.ll, not mac32);
+; still holds. The s32 mul lowers via the DR64 MAC unit (mull, not mac32);
 ; the feedback path is d0->d0 on the DR64 accumulator.
 ; Bundle::canAdd no longer treats Instrs-empty + non-zero
 ; OccupiedSlots as "empty" (SMS reserveByOpcode path). ResMII now reflects
@@ -24,7 +24,7 @@
 ; formula latency = DefCycle - UseCycle + 1 yields acc->acc = 2-2+1 = 1.
 ;
 ; Expected result: SMS reports rec=1 and a profitable schedule. Post- the
-; s32 mul lowers via the DR64 MAC unit (mul64.ll) and the feedback path is
+; s32 mul lowers via the DR64 MAC unit (mull) and the feedback path is
 ; d0->d0 across iterations on the DR64 accumulator.
 ;
 ; Test design: %acc.next = add(%acc, mul(%xv, %hv)) lowers (post-) to a
@@ -37,7 +37,7 @@ define i32 @mac_acc_feedback(ptr nocapture readonly %x, ptr nocapture readonly %
 ; The kernel must contain a DR64 multiply (mul64.ll) that reads its own
 ; accumulator register d0 (feedback path proving acc->acc latency 1).
 ; ASM:       // =>This Inner Loop Header: Depth=1
-; ASM:       mul64
+; ASM:       mull
 entry:
   br label %loop
 

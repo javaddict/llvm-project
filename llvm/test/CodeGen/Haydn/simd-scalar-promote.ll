@@ -47,7 +47,7 @@ define <2 x i32> @test_promote_sub(i64 %a, i64 %b) nounwind {
 ; TEST 3: Scalar multiplication pair promotion to X2MUL32
 define <2 x i32> @test_promote_mul(i64 %a, i64 %b) nounwind {
 ; CHECK-LABEL: test_promote_mul:
-; CHECK: x2mul32
+; CHECK: x2mulpl32
   %va = bitcast i64 %a to <2 x i32>
   %vb = bitcast i64 %b to <2 x i32>
   %result = mul <2 x i32> %va, %vb

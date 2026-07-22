@@ -33,7 +33,6 @@
 
 declare i32 @llvm.haydn.nsa32(i32)
 declare i32 @llvm.haydn.nsau32(i32)
-
 define i32 @test_nsa32(i32 %a) {
 ; CHECK-LABEL: test_nsa32:
 ; CHECK: nsa32
@@ -52,12 +51,14 @@ define i32 @test_nsau32(i32 %a) {
 ; X4 pack/sat
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.x4sat32t16(i64, i64)
-
+declare <4 x i16> @llvm.haydn.x4sat32t16(<2 x i32>, <2 x i32>)
 define i64 @test_x4sat32t16(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x4sat32t16:
 ; CHECK: x4sat32t16
-  %r = call i64 @llvm.haydn.x4sat32t16(i64 %a, i64 %b)
+  %bc.1 = bitcast i64 %a to <2 x i32>
+  %bc.2 = bitcast i64 %b to <2 x i32>
+  %call.3 = call <4 x i16> @llvm.haydn.x4sat32t16(<2 x i32> %bc.1, <2 x i32> %bc.2)
+  %r = bitcast <4 x i16> %call.3 to i64
   ret i64 %r
 }
 
@@ -65,13 +66,14 @@ define i64 @test_x4sat32t16(i64 %a, i64 %b) {
 ; X2 CMUL F2 variants (ternary DR64)
 ;===----------------------------------------------------------------------===;
 
-declare { i64, i64 } @llvm.haydn.x2cmul32.f2(i64, i64)
-declare { i64, i64 } @llvm.haydn.x2cmul32s.f2(i64, i64)
-
+declare { i64, i64 } @llvm.haydn.x2cmul32.f2(<2 x i32>, <2 x i32>)
+declare { i64, i64 } @llvm.haydn.x2cmul32s.f2(<2 x i32>, <2 x i32>)
 define i64 @test_x2cmul32_f2(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x2cmul32_f2:
 ; CHECK: x2cmul32_f2
-  %r = call { i64, i64 } @llvm.haydn.x2cmul32.f2(i64 %a, i64 %b)
+  %bc.4 = bitcast i64 %a to <2 x i32>
+  %bc.5 = bitcast i64 %b to <2 x i32>
+  %r = call { i64, i64 } @llvm.haydn.x2cmul32.f2(<2 x i32> %bc.4, <2 x i32> %bc.5)
   %hi = extractvalue { i64, i64 } %r, 0
   ret i64 %hi
 }
@@ -79,7 +81,9 @@ define i64 @test_x2cmul32_f2(i64 %a, i64 %b) {
 define i64 @test_x2cmul32s_f2(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x2cmul32s_f2:
 ; CHECK: x2cmul32s_f2
-  %r = call { i64, i64 } @llvm.haydn.x2cmul32s.f2(i64 %a, i64 %b)
+  %bc.6 = bitcast i64 %a to <2 x i32>
+  %bc.7 = bitcast i64 %b to <2 x i32>
+  %r = call { i64, i64 } @llvm.haydn.x2cmul32s.f2(<2 x i32> %bc.6, <2 x i32> %bc.7)
   %hi = extractvalue { i64, i64 } %r, 0
   ret i64 %hi
 }

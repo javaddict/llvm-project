@@ -16,28 +16,31 @@
 #include <haydn_dsp.h>
 
 void use_all_xc_macros(ae_int32x2 *p32x2, ae_int16x4 *p16x4,
-                       ae_int32 *p32, ae_int16 *p16, int cbr_sel) {
+                       ae_int32 *p32, ae_int16 *p16) {
   ae_int32x2 d32x2;
   ae_int16x4 d16x4;
   ae_int32   d32;
   ae_int16   d16;
 
-  // Circular-buffer XC family (F21/F22/F23): offs and cbr_sel are exercised.
-  AE_L32X2_XC(d32x2, p32x2, 16, cbr_sel);
-  AE_S32X2_XC(d32x2, p32x2, 16, cbr_sel);
-  AE_L16X4_XC(d16x4, p16x4, 16, cbr_sel);
-  AE_S16X4_XC(d16x4, p16x4, 16, cbr_sel);
-  AE_L16_XC(d16, p16, 16, cbr_sel);
+  // Circular-buffer XC family (F21/F22/F23): ImmArg cbr_sel must be 0/1 const.
+  AE_L32X2_XC(d32x2, p32x2, 16, 0);
+  AE_S32X2_XC(d32x2, p32x2, 16, 0);
+  AE_L16X4_XC(d16x4, p16x4, 16, 0);
+  AE_S16X4_XC(d16x4, p16x4, 16, 0);
+  AE_L16_XC(d16, p16, 16, 0);
 
   // Reverse-increment / aligned-IC variants (also exercise haydn_ldw_cb_imm).
-  AE_L16X4_RIC(d16x4, p16x4, 16, cbr_sel);
-  AE_LA16X4_IC(d16x4, p16x4, 16, cbr_sel);
-  AE_LA16X4_RIC(d16x4, p16x4, 16, cbr_sel);
-  AE_LA32X2_IC(d32x2, p32x2, 16, cbr_sel);
+  AE_L16X4_RIC(d16x4, p16x4, 16, 0);
+  AE_LA16X4_IC(d16x4, p16x4, 16, 0);
+  AE_LA16X4_RIC(d16x4, p16x4, 16, 0);
+  AE_LA32X2_IC(d32x2, p32x2, 16, 0);
 
   // Bit-reversed addressing (F06: haydn_lw_brev_imm / haydn_ldw_brev_imm).
-  ae_int32 rv32 = AE_L32_BREV_IP(p32, 16);
-  ae_int32x2 rv32x2 = AE_L32X2_BREV_IP(p32x2, 16);
+  // ImmArg: stride is a compile-time constant; 3-arg form updates ptr.
+  ae_int32 rv32;
+  ae_int32x2 rv32x2;
+  AE_L32_BREV_IP(rv32, p32, 16);
+  AE_L32X2_BREV_IP(rv32x2, p32x2, 16);
   (void)rv32;
   (void)rv32x2;
 

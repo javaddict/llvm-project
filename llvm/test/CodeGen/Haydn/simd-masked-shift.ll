@@ -32,7 +32,10 @@ define <2 x i32> @test_x2frst32(<2 x i32> %a, <2 x i32> %b) {
 ;===----------------------------------------------------------------------===
 
 define i64 @test_x4frsst16(i64 %a, i64 %b) {
-  %r = call i64 @llvm.haydn.x4frsst16(i64 %a, i64 %b)
+  %bc.1 = bitcast i64 %a to <4 x i16>
+  %bc.2 = bitcast i64 %b to <4 x i16>
+  %call.3 = call <4 x i16> @llvm.haydn.x4frsst16(<4 x i16> %bc.1, <4 x i16> %bc.2)
+  %r = bitcast <4 x i16> %call.3 to i64
   ret i64 %r
 }
 
@@ -41,7 +44,10 @@ define i64 @test_x4frsst16(i64 %a, i64 %b) {
 ;===----------------------------------------------------------------------===
 
 define i64 @test_x4frst16(i64 %a, i64 %b) {
-  %r = call i64 @llvm.haydn.x4frst16(i64 %a, i64 %b)
+  %bc.4 = bitcast i64 %a to <4 x i16>
+  %bc.5 = bitcast i64 %b to <4 x i16>
+  %call.6 = call <4 x i16> @llvm.haydn.x4frst16(<4 x i16> %bc.4, <4 x i16> %bc.5)
+  %r = bitcast <4 x i16> %call.6 to i64
   ret i64 %r
 }
 
@@ -60,7 +66,10 @@ define <4 x i16> @test_x4frsst16_masked_eq(<4 x i16> %a, <4 x i16> %b, <4 x i16>
   %cmp = call <4 x i16> @llvm.haydn.x4seq16(<4 x i16> %a,<4 x i16> %mask_val)
   %a_i = bitcast <4 x i16> %a to i64
   %b_i = bitcast <4 x i16> %b to i64
-  %shifted_i = call i64 @llvm.haydn.x4frsst16(i64 %a_i, i64 %b_i)
+  %bc.7 = bitcast i64 %a_i to <4 x i16>
+  %bc.8 = bitcast i64 %b_i to <4 x i16>
+  %call.9 = call <4 x i16> @llvm.haydn.x4frsst16(<4 x i16> %bc.7, <4 x i16> %bc.8)
+  %shifted_i = bitcast <4 x i16> %call.9 to i64
   %shifted = bitcast i64 %shifted_i to <4 x i16>
   %result = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %a,<4 x i16> %shifted)
   ret <4 x i16> %result
@@ -81,6 +90,5 @@ declare <4 x i16> @llvm.haydn.x4movt16(<4 x i16>, <4 x i16>)
 ; Fractional shift with saturation (binary DR64)
 declare <2 x i32> @llvm.haydn.x2frsst32(<2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2frst32(<2 x i32>, <2 x i32>)
-declare i64 @llvm.haydn.x4frsst16(i64, i64)
-declare i64 @llvm.haydn.x4frst16(i64, i64)
-
+declare <4 x i16> @llvm.haydn.x4frsst16(<4 x i16>, <4 x i16>)
+declare <4 x i16> @llvm.haydn.x4frst16(<4 x i16>, <4 x i16>)

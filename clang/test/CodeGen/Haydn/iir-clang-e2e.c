@@ -75,8 +75,8 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 // State loads from struct pointer (x1, x2, y1, y2 fields).
 // ASM: ld32
 
-// Coefficient multiplies (mul32 or 64-bit product form mul64.ll).
-// ASM: {{mul32|mul64\.ll}}
+// Coefficient multiplies (mul32 or 64-bit product form mull).
+// ASM: mull
 
 // Accumulation via MAC (mac32 for sum-of-products), if selected.
 // Feedback subtraction

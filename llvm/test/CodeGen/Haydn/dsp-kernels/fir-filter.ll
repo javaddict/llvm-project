@@ -14,8 +14,7 @@
 define i32 @fir_filter(ptr %input, ptr %coeffs, i32 %n) {
 ; Post-inc fusion : streaming loads fuse to s_lw_post_imm and the loop
 ; lowers as a zero-overhead hardware loop. The multiply-accumulate is
-; now sext32t64 (x2) + mul64.ll + move32_dr_l + add32 (removed MUL32;
-; MAC32 was already removed — not in the ISA DB).
+; now mull + add32 (no scalar GPR MAC opcode in the ISA DB).
 entry:
   br label %loop
 

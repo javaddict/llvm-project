@@ -531,16 +531,11 @@ def MOVF32 : FmtALU32<0x1E, (outs GPR32:$rd), (ins GPR32:$rd_src, GPR32:$rs1, GP
 } // Constraints
 
 //===----------------------------------------------------------------------===//
-// Scalar 32-bit multiply — REMOVED
+// Scalar 32-bit multiply — MULL / MULSSH / MULSUH / MULUUH (MAC GRR)
 //
-// Haydn has NO native GPR32 multiply: the slot-0 scalar ALU has no multiply
-// unit, and all multiplies live on the DR64/MAC unit in slots 1/2. The former
-// `MUL32` (FmtALU32<0x1F>, "mul32 $rd, $rs1, $rs2") was invented and is not in
-// the ISA DB, so the ISS decoded it as garbage (dropped conditional
-// multiply, scheduler stale-read). G_MUL <s32> and the haydn_mac32
-// intrinsic now lower to the real MUL64_LL + bank-move sequence — see
-// HaydnInstructionSelector::emitScalarMul32 (MOV_GPR_TO_DR64 x2 + MUL64_LL +
-// MOVE32_DR_L). Same "not in ISA DB -> remove" rule as MAC32.
+// Defined in HaydnInstrInfoAuto.td + HaydnFormatsMAC.td (not the retired
+// phantom MUL32). GISel: G_MUL s32 → MULL; G_SMULH/UMULH s32 → MULSSH/MULUUH
+// (HaydnInstructionSelector::emitScalarMul32 and G_SMULH/G_UMULH cases).
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
@@ -1483,9 +1478,9 @@ def ZERO_SFR : HaydnInst<4, (outs), (ins),
 // MOVE32_DR_L rt, rsd — rt = rsd[31:00] (slot 0 ALU, DR_Read=[rsd], GPR_Write=[rt])
 // MOVE32_DR_H rt, rsd — rt = rsd[63:32] (slot 0 ALU, DR_Read=[rsd], GPR_Write=[rt])
 // These are the first *real* DR→GPR cross-bank moves in the ISA. The earlier
-// existing MOV_DR64_TO_GPR pseudo is a SP-spill shim (Haydn has no native
-// cross-bank move at that layer — / ISA-10); these two slot-0 ALU ops
-// are the hardware path that shim has been approximating. The encoding is
+// MOV_DR64_TO_GPR pseudo is a SP-spill shim (ISA-10: no prior native
+// cross-bank move); these two slot-0 ALU ops are the hardware path that
+// shim has been approximating. The encoding is
 // hypothesized (no bit layout in the.docx) so they are isAsmParserOnly=1
 // matching the wave-2 DSP-op convention (ISA-02). Operand shape (1 DR64 src
 // 1 GPR32 dst) does not fit FmtALU32 (all-GPR), so use HaydnInst<4> with
@@ -1557,11 +1552,8 @@ def SETCBR_END : HaydnPseudo<(outs), (ins i32imm:$cbr_sel, GPR32:$val),
 // compatibility and lowered in HaydnInstructionSelector to real ISA sequences
 // (MULSSH for mulq31, MULSSH+ADD32 for macq31, MUL64_LL for mulq63). See.
 //
-// MAC32 (scalar GPR32 multiply-accumulate) was REMOVED: it does not exist in
-// the ISA DB — the DB's MULA* family targets DR64 (rtd), not GPR32. The
-// haydn_mac32 intrinsic now selects to MUL32 + ADD32 (software equivalent).
-// The tryFormMAC/tryFormShiftAddMAC combines that formed MAC32 from
-// MUL32+ADD32 / shift+add are disabled.
+// No scalar GPR MAC opcode: MULA* targets DR64, not GPR32. haydn_mac32
+// selects to MULL + ADD32. tryFormMAC / tryFormShiftAddMAC stay disabled.
 
 //===----------------------------------------------------------------------===//
 // Slot 1/2 — MAC Instructions (Multiply-Accumulate)

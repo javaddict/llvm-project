@@ -1,51 +1,50 @@
 // RUN: %clang_cc1 -triple haydn-unknown-elf -emit-llvm -o - %s | FileCheck %s
 // REQUIRES: haydn-registered-target
 
-// REGRESSION TEST: CB / BREV memory intrinsics must not be DCE'd or marked
-// IntrNoMem (F20).
-//
-// Bug (F20 / consolidated-fix-list §2): the circular-buffer and bit-reversed
-// load/store intrinsics (ldw_cb_imm, ldw_cb_reg, sdw_cb_imm, sdw_cb_reg,
-// ldw_brev_imm, ldw_brev_reg, lw_brev_imm, lw_brev_reg, sdw_brev_imm,
-// sdw_brev_reg, sw_brev_imm, sw_brev_reg) were declared IntrNoMem in
-// IntrinsicsHaydn.td. IntrNoMem tells the optimizer the call does not touch
-// memory, so a load whose result is unused is DCE'd, and stores can be
-// reordered with surrounding memory ops — silently breaking FFT/circular-
-// buffer kernels.
-//
-// The fix changes loads to IntrReadMem and stores to IntrWriteMem so
-// MemorySSA / MemoryDependence see the access.
-//
-// Test design: call a CB load and discard the result; call a CB store with
-// no subsequent read. If the intrinsics regress to IntrNoMem, both calls
-// vanish from the IR.
+// REGRESSION: CB / BREV memory intrinsics must not be DCE'd.
+// BREV frexp pair model matches CB: loads return {data, new_ptr}.
 
 #include <haydn.h>
 
 // CHECK-LABEL: @cb_load_not_dced
 // Frexp CB load: {data, new_ptr}; presence of the call is the DCE check.
 // CHECK: call { i64, i32 } @llvm.haydn.ldw.cb.imm
-void cb_load_not_dced(int ptr, int cbr_sel) {
-  // Result discarded. IntrReadMem keeps the call live.
-  (void)haydn_ldw_cb_imm(ptr, cbr_sel, 1);
+void cb_load_not_dced(int ptr) {
+  // ImmArg: cbr_sel + stride must be constants.
+  (void)haydn_ldw_cb_imm(ptr, /*cbr_sel=*/0, /*stride=*/1);
 }
 
 // CHECK-LABEL: @cb_store_not_dced
 // CB store returns updated pointer (i32); presence is the DCE check.
 // CHECK: call i32 @llvm.haydn.sdw.cb.imm
-void cb_store_not_dced(long long data, int ptr, int cbr_sel) {
-  // No subsequent read. IntrWriteMem keeps the call live.
-  haydn_sdw_cb_imm(data, ptr, cbr_sel, 1);
+void cb_store_not_dced(long long data, int ptr) {
+  haydn_sdw_cb_imm(data, ptr, /*cbr_sel=*/0, /*stride=*/1);
 }
 
 // CHECK-LABEL: @brev_load_not_dced
-// CHECK: call i32 @llvm.haydn.lw.brev.imm
+// S_LW_BREV frexp pair {i32 data, i32 new_ptr}
+// CHECK: call { i32, i32 } @llvm.haydn.lw.brev.imm
 void brev_load_not_dced(int ptr) {
   (void)haydn_lw_brev_imm(ptr, 1);
 }
 
+// CHECK-LABEL: @brev_d_load_not_dced
+// D_LDW_BREV frexp pair {i64 data, i32 new_ptr}
+// CHECK: call { i64, i32 } @llvm.haydn.ldw.brev.imm
+void brev_d_load_not_dced(int ptr) {
+  (void)haydn_ldw_brev_imm(ptr, 1);
+}
+
 // CHECK-LABEL: @brev_store_not_dced
+// S_SW_BREV: (data, ptr, stride) -> new_ptr
 // CHECK: call i32 @llvm.haydn.sw.brev.imm
-void brev_store_not_dced(int ptr) {
-  (void)haydn_sw_brev_imm(ptr, 1);
+void brev_store_not_dced(int data, int ptr) {
+  (void)haydn_sw_brev_imm(data, ptr, 1);
+}
+
+// CHECK-LABEL: @brev_d_store_not_dced
+// D_SDW_BREV: (i64 data, ptr, stride) -> new_ptr
+// CHECK: call i32 @llvm.haydn.sdw.brev.imm
+void brev_d_store_not_dced(long long data, int ptr) {
+  (void)haydn_sdw_brev_imm(data, ptr, 1);
 }

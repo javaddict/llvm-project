@@ -50,8 +50,7 @@
 ; ~/haydn-plans/decisions/ (reverted FIX B — do not repeat)
 ; ~/haydn-plans/lessons/-*.md (COPY dropped in-bundle → wrong code)
 
-declare i64 @llvm.haydn.mula64.ss.ll(i64, i64, i64)
-
+declare i64 @llvm.haydn.mula64.ss.ll(i64, <2 x i32>, <2 x i32>)
 ; vec_dot-style hot loop: two independent streaming i64 loads + MAC accumulate.
 ; The two LD64_S1 + their ADDI32 bumps + the MAC should pack densely.
 define i64 @vec_dot_streaming(ptr readonly %a, ptr readonly %b, i32 %n) nounwind {
@@ -66,7 +65,9 @@ loop:
   %acc = phi i64 [ 0, %entry ], [ %mac, %loop ]
   %xa  = load i64, ptr %pa, align 8
   %xb  = load i64, ptr %pb, align 8
-  %mac = call i64 @llvm.haydn.mula64.ss.ll(i64 %acc, i64 %xa, i64 %xb)
+  %bc.1 = bitcast i64 %xa to <2 x i32>
+  %bc.2 = bitcast i64 %xb to <2 x i32>
+  %mac = call i64 @llvm.haydn.mula64.ss.ll(i64 %acc, <2 x i32> %bc.1, <2 x i32> %bc.2)
   %pa.next = getelementptr i64, ptr %pa, i32 1
   %pb.next = getelementptr i64, ptr %pb, i32 1
   %i.next  = add i32 %i, 1

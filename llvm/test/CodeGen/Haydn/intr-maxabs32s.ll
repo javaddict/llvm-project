@@ -32,8 +32,7 @@
 ; tracking in butterfly stages)
 ; NatureDSP iir/math kernels (overflow detection)
 
-declare i64 @llvm.haydn.maxabs32s(i64, i64)
-
+declare <2 x i32> @llvm.haydn.maxabs32s(<2 x i32>, <2 x i32>)
 define dso_local i64 @test_maxabs32s(i64 %a, i64 %b) {
 ; MIR-LABEL: name: test_maxabs32s
 ; MIR: X2ABS32S
@@ -43,6 +42,9 @@ define dso_local i64 @test_maxabs32s(i64 %a, i64 %b) {
 ; CHECK: x2abs32s
 ; CHECK: x2abs32s
 ; CHECK: x2max32
-  %r = call i64 @llvm.haydn.maxabs32s(i64 %a, i64 %b)
+  %bc.1 = bitcast i64 %a to <2 x i32>
+  %bc.2 = bitcast i64 %b to <2 x i32>
+  %call.3 = call <2 x i32> @llvm.haydn.maxabs32s(<2 x i32> %bc.1, <2 x i32> %bc.2)
+  %r = bitcast <2 x i32> %call.3 to i64
   ret i64 %r
 }

@@ -27,14 +27,15 @@
 // silent literal substitution. The values must be multiples of 8 because
 // D_LDW_CB_IMM / D_SDW_CB_IMM post-increment by imm<<3.
 void exercise_xc_macros(ae_int32x2 *p32x2, ae_int16x4 *p16x4,
-                        ae_int16 *p16, int cbr_sel) {
+                        ae_int16 *p16) {
   ae_int32x2 d32x2 = {0};
   ae_int16x4 d16x4 = {0};
   ae_int16   d16 = 0;
 
-  AE_L32X2_XC(d32x2, p32x2, 32, cbr_sel);   // F21: offs must reach the builtin
-  AE_S32X2_XC(d32x2, p32x2, 32, cbr_sel);   // F21 + F22: data-first, offs passed
-  AE_L16X4_XC(d16x4, p16x4, 32, cbr_sel);   // F21
-  AE_S16X4_XC(d16x4, p16x4, 32, cbr_sel);   // F21 + F22
-  AE_L16_XC(d16, p16, 32, cbr_sel);         // F23: 4-arg signature preserved
+  // ImmArg: cbr_sel must be a constant 0/1 (ISA encodes 1-bit select).
+  AE_L32X2_XC(d32x2, p32x2, 32, 0);   // F21: offs must reach the builtin
+  AE_S32X2_XC(d32x2, p32x2, 32, 0);   // F21 + F22: data-first, offs passed
+  AE_L16X4_XC(d16x4, p16x4, 32, 0);   // F21
+  AE_S16X4_XC(d16x4, p16x4, 32, 0);   // F21 + F22
+  AE_L16_XC(d16, p16, 32, 0);         // F23: 4-arg signature preserved
 }

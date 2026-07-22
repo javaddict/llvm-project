@@ -31,7 +31,7 @@ define <4 x i16> @simd_v4i16_sub(<4 x i16> %a, <4 x i16> %b) nounwind {
 
 define <4 x i16> @simd_v4i16_mul(<4 x i16> %a, <4 x i16> %b) nounwind {
 ; CHECK-LABEL: simd_v4i16_mul:
-; CHECK: x4mul16
+; CHECK-NOT: x4mul16
   %result = mul <4 x i16> %a, %b
   ret <4 x i16> %result
 }

@@ -190,11 +190,14 @@ bool HaydnPostSelectOptimize::tryFuseAddMulToMAC(MachineInstr &AddInst,
   return true;
 }
 
-// Try to form a scalar MAC32 from ADD32 + MUL32.
+// No scalar GPR MAC in the golden ISA (MULA* is DR64). Leave MULL+ADD32.
 bool HaydnPostSelectOptimize::tryFormMAC(MachineInstr &AddInst,
                                           MachineRegisterInfo &MRI,
                                           const HaydnInstrInfo &TII) {
-  return false; // MAC32 not in ISA DB
+  (void)AddInst;
+  (void)MRI;
+  (void)TII;
+  return false;
 }
 
 // Try to form a SIMD X2MULA32 from X2ADD32 + X2MUL32 (v2i32).
@@ -399,7 +402,7 @@ bool HaydnPostSelectOptimize::formMACs(MachineFunction &MF) {
         continue;
 
       // Try each pattern in priority order. First match wins.
-      // 1. Scalar MAC32: ADD32 + MUL32
+      // 1. Scalar MAC fuse (stub: no ISA MAC32; MULL+ADD32 stands)
       if (tryFormMAC(*MI, MRI, TII)) {
         Changed = true;
         continue;
@@ -432,7 +435,7 @@ bool HaydnPostSelectOptimize::formMACs(MachineFunction &MF) {
   return Changed;
 }
 
-// W2.5 / G-MAC: product OFF. Scalar MAC32/MUL32 removed from ISA DB; SIMD
+// W2.5 / G-MAC: product OFF. No scalar GPR MAC opcode in ISA DB; SIMD
 // form paths still invent Acc1 / drop second X2MUL def. Opt-in for matrix
 // soak only — re-enable product only with registered MIR -run-pass matrix.
 static cl::opt<bool> EnableFormMACs(
@@ -620,7 +623,7 @@ bool HaydnPostSelectOptimize::tryFormSIMDDotProduct(MachineInstr &HAddInst,
 // %r1 = ADD32 %hi0, %hi1
 // %result = MOV_GPR_TO_DR64 %r0, %r1
 // => %result = X2ADD32 %vec_a, %vec_b
-// Works for ADD32->X2ADD32, SUB32->X2SUB32, MUL32->X2MUL32.
+// Works for ADD32->X2ADD32, SUB32->X2SUB32 (MULL is not dual-lane SIMD).
 bool HaydnPostSelectOptimize::tryPromoteScalarPairToSIMD(
     MachineInstr &MI, MachineRegisterInfo &MRI, const HaydnInstrInfo &TII) {
   // We scan for MOV_GPR_TO_DR64 that merges two scalar results.

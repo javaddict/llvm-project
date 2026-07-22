@@ -46,25 +46,57 @@ loop:
   %c1 = load i64, ptr %pc1, align 4
   %pc.n = getelementptr inbounds i64, ptr %pc, i32 2
 
-  %q0.a = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q0, i64 %d01, i64 %c0)
-  %q0.b = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q0.a, i64 %d01, i64 %c0)
-  %q0.c = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q0.b, i64 %d23, i64 %c1)
-  %q0.n = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q0.c, i64 %d23, i64 %c1)
+  %bc.1 = bitcast i64 %d01 to <2 x i32>
+  %bc.2 = bitcast i64 %c0 to <2 x i32>
+  %q0.a = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q0, <2 x i32> %bc.1, <2 x i32> %bc.2)
+  %bc.3 = bitcast i64 %d01 to <2 x i32>
+  %bc.4 = bitcast i64 %c0 to <2 x i32>
+  %q0.b = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q0.a, <2 x i32> %bc.3, <2 x i32> %bc.4)
+  %bc.5 = bitcast i64 %d23 to <2 x i32>
+  %bc.6 = bitcast i64 %c1 to <2 x i32>
+  %q0.c = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q0.b, <2 x i32> %bc.5, <2 x i32> %bc.6)
+  %bc.7 = bitcast i64 %d23 to <2 x i32>
+  %bc.8 = bitcast i64 %c1 to <2 x i32>
+  %q0.n = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q0.c, <2 x i32> %bc.7, <2 x i32> %bc.8)
 
-  %q1.a = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q1, i64 %d12, i64 %c0)
-  %q1.b = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q1.a, i64 %d12, i64 %c0)
-  %q1.c = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q1.b, i64 %d34, i64 %c1)
-  %q1.n = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q1.c, i64 %d34, i64 %c1)
+  %bc.9 = bitcast i64 %d12 to <2 x i32>
+  %bc.10 = bitcast i64 %c0 to <2 x i32>
+  %q1.a = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q1, <2 x i32> %bc.9, <2 x i32> %bc.10)
+  %bc.11 = bitcast i64 %d12 to <2 x i32>
+  %bc.12 = bitcast i64 %c0 to <2 x i32>
+  %q1.b = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q1.a, <2 x i32> %bc.11, <2 x i32> %bc.12)
+  %bc.13 = bitcast i64 %d34 to <2 x i32>
+  %bc.14 = bitcast i64 %c1 to <2 x i32>
+  %q1.c = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q1.b, <2 x i32> %bc.13, <2 x i32> %bc.14)
+  %bc.15 = bitcast i64 %d34 to <2 x i32>
+  %bc.16 = bitcast i64 %c1 to <2 x i32>
+  %q1.n = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q1.c, <2 x i32> %bc.15, <2 x i32> %bc.16)
 
-  %q2.a = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q2, i64 %d23, i64 %c0)
-  %q2.b = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q2.a, i64 %d23, i64 %c0)
-  %q2.c = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q2.b, i64 %d45, i64 %c1)
-  %q2.n = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q2.c, i64 %d45, i64 %c1)
+  %bc.17 = bitcast i64 %d23 to <2 x i32>
+  %bc.18 = bitcast i64 %c0 to <2 x i32>
+  %q2.a = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q2, <2 x i32> %bc.17, <2 x i32> %bc.18)
+  %bc.19 = bitcast i64 %d23 to <2 x i32>
+  %bc.20 = bitcast i64 %c0 to <2 x i32>
+  %q2.b = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q2.a, <2 x i32> %bc.19, <2 x i32> %bc.20)
+  %bc.21 = bitcast i64 %d45 to <2 x i32>
+  %bc.22 = bitcast i64 %c1 to <2 x i32>
+  %q2.c = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q2.b, <2 x i32> %bc.21, <2 x i32> %bc.22)
+  %bc.23 = bitcast i64 %d45 to <2 x i32>
+  %bc.24 = bitcast i64 %c1 to <2 x i32>
+  %q2.n = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q2.c, <2 x i32> %bc.23, <2 x i32> %bc.24)
 
-  %q3.a = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q3, i64 %d34, i64 %c0)
-  %q3.b = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q3.a, i64 %d34, i64 %c0)
-  %q3.c = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q3.b, i64 %d56, i64 %c1)
-  %q3.n = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q3.c, i64 %d56, i64 %c1)
+  %bc.25 = bitcast i64 %d34 to <2 x i32>
+  %bc.26 = bitcast i64 %c0 to <2 x i32>
+  %q3.a = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q3, <2 x i32> %bc.25, <2 x i32> %bc.26)
+  %bc.27 = bitcast i64 %d34 to <2 x i32>
+  %bc.28 = bitcast i64 %c0 to <2 x i32>
+  %q3.b = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q3.a, <2 x i32> %bc.27, <2 x i32> %bc.28)
+  %bc.29 = bitcast i64 %d56 to <2 x i32>
+  %bc.30 = bitcast i64 %c1 to <2 x i32>
+  %q3.c = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q3.b, <2 x i32> %bc.29, <2 x i32> %bc.30)
+  %bc.31 = bitcast i64 %d56 to <2 x i32>
+  %bc.32 = bitcast i64 %c1 to <2 x i32>
+  %q3.n = tail call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %q3.c, <2 x i32> %bc.31, <2 x i32> %bc.32)
 
   %i.next = add nuw nsw i32 %i, 1
   %done = icmp eq i32 %i.next, %M4
@@ -85,4 +117,4 @@ exit:
   ret void
 }
 
-declare i64 @llvm.haydn.f2mulaa32rs.hhll(i64, i64, i64)
+declare i64 @llvm.haydn.f2mulaa32rs.hhll(i64, <2 x i32>, <2 x i32>)
