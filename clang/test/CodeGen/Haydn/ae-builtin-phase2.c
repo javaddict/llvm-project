@@ -86,11 +86,10 @@ ae_int16x4 mulafc16ras_macro(ae_int16x4 acc, ae_int16x4 a, ae_int16x4 b) {
 // CHECK-LABEL: define dso_local i64 @mulafc16ras_macro
 // CHECK: call i64 @llvm.haydn.x4fcmula16rs(i64 %{{.+}}, i64 %{{.+}}, i64 %{{.+}})
 
-ae_int16x4 addsub_macro(ae_int16x4 a, ae_int16x4 b) {
-  return AE_ADDANDSUBRNG16RAS_S0(a, b);
-}
-// CHECK-LABEL: define dso_local i64 @addsub_macro
-// CHECK: call <4 x i16> @llvm.haydn.x4add16s(<4 x i16> %{{.+}}, <4 x i16> %{{.+}})
-// CHECK: call <4 x i16> @llvm.haydn.x4sub16s(<4 x i16> %{{.+}}, <4 x i16> %{{.+}})
-// CHECK: call void @llvm.haydn.movegpr2sfr(i32 5)
-// CHECK: call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %{{.+}}, <4 x i16> %{{.+}})
+// NOTE: AE_ADDANDSUBRNG16RAS_S* has NO macro-parity entry here. Unlike the
+// pure-function builtins above, the haydn_dsp.h macro is deliberately a
+// dual-write statement (`a := sat(a+b); b := sat(a-b)`) — the HiFi FFT
+// butterfly contract (DFT4XI2/stage_*). A pure function returning one
+// interleaved vector (the __builtin_ae_addandsubrng16ras_s0 form) is wrong
+// for that call shape (D210), so `return MACRO(a,b)` is not valid C and the
+// macro cannot be parity-tested against the direct builtin.

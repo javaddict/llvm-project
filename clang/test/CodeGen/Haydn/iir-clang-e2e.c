@@ -75,11 +75,12 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 // State loads from struct pointer (x1, x2, y1, y2 fields).
 // ASM: ld32
 
-// Coefficient multiplies (at least mul32 for b0*xn and a feedback term).
-// ASM: mul32
+// Coefficient multiplies. Haydn has no scalar GPR 32x32 multiply; scalar
+// multiplies lower to the DR64 MAC unit (mul64.ll + move32_dr_l).
+// ASM: mul64.ll
 
-// Accumulation via MAC (mac32 for sum-of-products)
-// ASM: mac32
+// Accumulation of the sum-of-products (add32; there is no scalar GPR MAC).
+// ASM: add32
 
 // Feedback subtraction
 // ASM: sub32
@@ -88,7 +89,7 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 // ASM: st32
 
 // Return via jalr
-// ASM: jalr r0, lr, 0
+// ASM: jalr_w r0, lr, 0
 
 // ASM-LABEL: biquad_cascade:
 
@@ -99,7 +100,7 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 // ASM: slt32
 
 // Inner loop: function call to biquad_process (noinline forced)
-// ASM: jal lr, biquad_process
+// ASM: jal_w lr, biquad_process
 
 // Epilogue
-// ASM: jalr r0, lr, 0
+// ASM: jalr_w r0, lr, 0

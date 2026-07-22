@@ -43,12 +43,13 @@
 
 # ---------------------------------------------------------------------------
 # Disassembly checks — code placed at 0x10000 (RAM ORIGIN)
-# Note: ADD32 R0, R0, R0 is the canonical NOP encoding.
+# Note: each instruction is emitted as a 16-byte Bundle128, so successive
+# instructions are 0x10 apart (0x10000, 0x10010, 0x10020).
 # ---------------------------------------------------------------------------
 # DISASM: <_start>:
-# DISASM: 10000: {{.*}} nop
-# DISASM: 10004: {{.*}} addi32 r1, r0, 0
-# DISASM: 10008: {{.*}} addi32 r0, r0, 42
+# DISASM: 10000: {{.*}} add32 r0, r0, r0
+# DISASM: 10010: {{.*}} addi32 r1, r0, 0
+# DISASM: 10020: {{.*}} addi32 r0, r0, 42
 
     .globl _start
     .type _start, @function

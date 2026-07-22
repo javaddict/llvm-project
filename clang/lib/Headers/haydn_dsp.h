@@ -4384,10 +4384,24 @@ typedef int ae_p24s;
 //---- AE_MULA32X2 / AE_MULS32X2 / AE_MULA16X4 / AE_MULS16X4 (SIMD, D400 Path B) -------
 // 3-arg form: single accumulator updated from the high-pair result (low pair
 // unused → DCE'd). Matches NatureDSP `AE_MULA32X2(acc, a, b)` scalar-acc shape.
+// AE_MULA32X2 also has a 4-arg 2-dest form (`AE_MULA32X2(acc_hi, acc_lo, a, b)`
+// updates BOTH accumulators — golden DR_Write_Port:[rtd1,rtd2]); dispatch on
+// arity via a variadic overload (same pattern as AE_MULSF16X4SS) so both call
+// shapes stay reachable.
 #undef  AE_MULA32X2
-#define AE_MULA32X2(acc, a, b) \
+#define AE_MULA32X2(...) __AE_MULA32X2_OVERLOAD(__VA_ARGS__)
+#define __AE_MULA32X2_GET(_1, _2, _3, _4, NAME, ...) NAME
+#define __AE_MULA32X2_OVERLOAD(...) \
+  __AE_MULA32X2_GET(__VA_ARGS__, __AE_MULA32X2_4, __AE_MULA32X2_3)(__VA_ARGS__)
+#define __AE_MULA32X2_3(acc, a, b) \
   (acc) = (ae_int64)__haydn_x2mula32((uint64_t)(acc), (uint64_t)0, \
                                      (uint64_t)(a), (uint64_t)(b)).hi
+#define __AE_MULA32X2_4(acc_hi, acc_lo, a, b) \
+  do { \
+    haydn_dpair_t _r = __haydn_x2mula32((uint64_t)(acc_hi), (uint64_t)(acc_lo), \
+                                        (uint64_t)(a), (uint64_t)(b)); \
+    (acc_hi) = (ae_int64)_r.hi; (acc_lo) = (ae_int64)_r.lo; \
+  } while (0)
 #undef  AE_MULS32X2
 #define AE_MULS32X2(acc, a, b) \
   (acc) = (ae_int64)__haydn_x2muls32((uint64_t)(acc), (uint64_t)0, \

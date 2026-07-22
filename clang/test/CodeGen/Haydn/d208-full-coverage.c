@@ -18,6 +18,8 @@
 //       x2cmuls32/s — op missing from HaydnInstrInfo*.td, needs ISA spec).
 //       37 memory/side-effect intrinsics (loads/stores/CB/brev/SFR)
 //       need pointer args — tested in dedicated load/store/SFR tests.
+//       The 2-dest `_pair` builtins (x2cmul32/x2cmul32s and their _f2 forms)
+//       take an out-pointer arg and are covered by two-dest-mac.c.
 
 typedef int __attribute__((ext_vector_type(2))) v2i;
 typedef short __attribute__((ext_vector_type(4))) v4s;
@@ -2292,26 +2294,6 @@ long long test_x2clamp32(long long a0, long long a1) {
   sink_ll = (long long)r;
 }
 
-long long test_x2cmul32(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2cmul32(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
-long long test_x2cmul32_f2(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2cmul32_f2(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
-long long test_x2cmul32s(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2cmul32s(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
-long long test_x2cmul32s_f2(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2cmul32s_f2(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
 long long test_x2dot32(long long a0, long long a1) {
   long long r = __builtin_haydn_x2dot32(a0, a1);
   sink_ll = (long long)r;
@@ -2432,16 +2414,6 @@ long long test_x2movt32(long long a0, long long a1) {
   sink_ll = (long long)r;
 }
 
-long long test_x2mul32(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2mul32(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
-long long test_x2mula32(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2mula32(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
 long long test_x2mulaph32(long long a0, long long a1) {
   long long r = __builtin_haydn_x2mulaph32(a0, a1);
   sink_ll = (long long)r;
@@ -2459,11 +2431,6 @@ long long test_x2mulph32(long long a0, long long a1) {
 
 long long test_x2mulpl32(long long a0, long long a1) {
   long long r = __builtin_haydn_x2mulpl32(a0, a1);
-  sink_ll = (long long)r;
-}
-
-long long test_x2muls32(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x2muls32(a0, a1, a2);
   sink_ll = (long long)r;
 }
 
@@ -2697,21 +2664,6 @@ long long test_x4fcmula16rss(long long a0, long long a1, long long a2) {
   sink_ll = (long long)r;
 }
 
-long long test_x4ff2mul16s(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4ff2mul16s(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
-long long test_x4ff2mula16s(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4ff2mula16s(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
-long long test_x4ff2muls16s(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4ff2muls16s(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
 long long test_x4fmul16rs(long long a0, long long a1) {
   long long r = __builtin_haydn_x4fmul16rs(a0, a1);
   sink_ll = (long long)r;
@@ -2764,31 +2716,6 @@ long long test_x4movf16(long long a0, long long a1) {
 
 long long test_x4movt16(long long a0, long long a1) {
   long long r = __builtin_haydn_x4movt16(a0, a1);
-  sink_ll = (long long)r;
-}
-
-long long test_x4mul16(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4mul16(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
-long long test_x4mula16(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4mula16(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
-long long test_x4mula16s(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4mula16s(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
-long long test_x4muls16(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4muls16(a0, a1, a2);
-  sink_ll = (long long)r;
-}
-
-long long test_x4muls16s(long long a0, long long a1, long long a2) {
-  long long r = __builtin_haydn_x4muls16s(a0, a1, a2);
   sink_ll = (long long)r;
 }
 
