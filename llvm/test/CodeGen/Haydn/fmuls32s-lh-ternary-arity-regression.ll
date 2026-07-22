@@ -33,27 +33,32 @@
 ; sibling test: test/CodeGen/Haydn/acc-mac-3arg-regression.ll 
 ; spec: Database/haydn_instruction_db.json FMULS32S_LH/LL/HH (all 3-operand)
 
-declare i64 @llvm.haydn.fmuls32s.lh(i64, i64, i64)
-declare i64 @llvm.haydn.fmuls32s.ll(i64, i64, i64)
-declare i64 @llvm.haydn.fmuls32s.hh(i64, i64, i64)
-
+declare i64 @llvm.haydn.fmuls32s.lh(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.fmuls32s.ll(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.fmuls32s.hh(i64, <2 x i32>, <2 x i32>)
 ; CHECK-LABEL: test_fmuls32s_lh:
 ; CHECK: fmuls32s_lh
 define i64 @test_fmuls32s_lh(i64 %acc, i64 %a, i64 %b) {
- %r = call i64 @llvm.haydn.fmuls32s.lh(i64 %acc, i64 %a, i64 %b)
+  %bc.1 = bitcast i64 %a to <2 x i32>
+  %bc.2 = bitcast i64 %b to <2 x i32>
+ %r = call i64 @llvm.haydn.fmuls32s.lh(i64 %acc, <2 x i32> %bc.1, <2 x i32> %bc.2)
  ret i64 %r
 }
 
 ; CHECK-LABEL: test_fmuls32s_ll:
 ; CHECK: fmuls32s_ll
 define i64 @test_fmuls32s_ll(i64 %acc, i64 %a, i64 %b) {
- %r = call i64 @llvm.haydn.fmuls32s.ll(i64 %acc, i64 %a, i64 %b)
+  %bc.3 = bitcast i64 %a to <2 x i32>
+  %bc.4 = bitcast i64 %b to <2 x i32>
+ %r = call i64 @llvm.haydn.fmuls32s.ll(i64 %acc, <2 x i32> %bc.3, <2 x i32> %bc.4)
  ret i64 %r
 }
 
 ; CHECK-LABEL: test_fmuls32s_hh:
 ; CHECK: fmuls32s_hh
 define i64 @test_fmuls32s_hh(i64 %acc, i64 %a, i64 %b) {
- %r = call i64 @llvm.haydn.fmuls32s.hh(i64 %acc, i64 %a, i64 %b)
+  %bc.5 = bitcast i64 %a to <2 x i32>
+  %bc.6 = bitcast i64 %b to <2 x i32>
+ %r = call i64 @llvm.haydn.fmuls32s.hh(i64 %acc, <2 x i32> %bc.5, <2 x i32> %bc.6)
  ret i64 %r
 }

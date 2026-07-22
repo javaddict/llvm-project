@@ -42,7 +42,7 @@ define i32 @convolve(ptr %signal, ptr %kernel, i32 %sig_len, i32 %kern_len) {
 ; (an ancestor of the preheader) and flow through an empty preheader into the
 ; loop. Either set_hwloop_f2 (pre-RA pass) or set_hwloop_f2 (post-RA pass)
 ; wins; either way the loop iterates correctly.
-; Scalar s32 mul lowers to sext32t64 (x2) + mul64.ll + move32_dr_l.
+; Scalar s32 mul lowers to mull.
 entry:
   br label %loop
 

@@ -7,10 +7,7 @@
 ;
 ; REBASELINED (post-/ Flex cutover, 2026-07): the slot-2 MAC
 ; destructive-constraint emitter error no longer fires — the selector now
-; lowers 32-bit mul via sext32t64 + mul64.ll (not mul32/mac32), and the full
-; llc | llvm-mc | objdump pipeline round-trips cleanly. ASM and OBJDUMP
-; CHECKs were regenerated to match the new mnemonics (mul64.ll, move32_dr_l
-; or32 for the r12 scratch) and slot-suffixed printer output.
+; lowers wrap 32-bit mul via mull; full llc | llvm-mc | objdump round-trips.
 ;
 ; Exercises the full Haydn pipeline: LLVM IR -> GlobalISel -> VLIW packetizer
 ; > MC emission -> ELF object -> objdump disassembly.
@@ -18,12 +15,12 @@
 ; Specifically tests:
 ; GPR32 argument passing (7 args: R1-R7, 7th arg = ptr via R7)
 ; Struct field access via ld32/st32 with GEP offsets
-; 32-bit multiply (mul32) — FIR coefficient multiplies
-; 32-bit multiply-accumulate (mac32) — IIR sum-of-products
+; 32-bit wrap multiply (mull) — FIR coefficient multiplies
+; 32-bit mul+add (mull + add32) — IIR sum-of-products
 ; 32-bit subtract (sub32) — feedback path
 ; State update stores (st32)
 ; Callee-saved register save/restore (R8-R11) using R12 as scratch
-; Return value in R1 (or32 copy)
+; Return value in R1
 ;
 ; REGRESSION TEST: R7 must NOT be used as the callee-save scratch register.
 ;
@@ -96,10 +93,10 @@ entry:
 ; Load state values from struct pointer via R7 (7th arg, preserved)
 ; ASM: ld32{{.*}}{{r[0-9]+|fp}}, r7, 0
 
-; Coefficient multiplies (selector lowers 32-bit mul via sext32t64 + mul64.ll).
-; ASM: mul64.ll
-; ASM: mul64.ll
-; ASM: mul64.ll
+; Coefficient multiplies (mull).
+; ASM: mull
+; ASM: mull
+; ASM: mull
 
 ; Accumulation via add32 (the selector no longer emits mac32; the adds sum the
 ; per-tap products).
@@ -122,13 +119,13 @@ entry:
 ; === Objdump-level checks ===
 ; Verify the ELF object disassembles correctly, catching encoding/decoding bugs.
 ; REBASELINED (post-/): the full bundle now decodes cleanly — no
-; <unknown> tokens. The objdump uses mul64.ll (not mul32) and move32_dr_l.
+; <unknown> tokens. Objdump shows mull for wrap s32 mul.
 
 ; OBJDUMP-LABEL: <biquad_df1_simple>:
 
 ; OBJDUMP: subi32{{.*}}sp, sp
-; OBJDUMP-DAG: mul64.ll
-; OBJDUMP-DAG: mul64.ll
-; OBJDUMP-DAG: mul64.ll
+; OBJDUMP-DAG: mull
+; OBJDUMP-DAG: mull
+; OBJDUMP-DAG: mull
 ; OBJDUMP-DAG: sub32
 ; OBJDUMP-DAG: jalr_w{{.*}}r0, lr, 0

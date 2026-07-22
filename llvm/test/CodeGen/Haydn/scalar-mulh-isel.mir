@@ -1,0 +1,54 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select -verify-machineinstrs -global-isel-abort=1 %s -o - | FileCheck %s
+#
+# G_SMULH / G_UMULH s32 → MULSSH / MULUUH (not MULL).
+
+---
+name:            smulh_s32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: smulh_s32
+# CHECK: MULSSH
+# CHECK-NOT: MULL
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_SMULH %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            umulh_s32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: umulh_s32
+# CHECK: MULUUH
+# CHECK-NOT: MULL
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_UMULH %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            mull_s32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: mull_s32
+# CHECK: MULL
+# CHECK-NOT: MULSSH
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = G_MUL %0, %1
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...

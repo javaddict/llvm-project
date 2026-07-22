@@ -53,16 +53,19 @@ define i64 @sub64(i64 %a, i64 %b) {
 }
 
 ;DSP multiply intrinsic (MUL64_LL, signed-signed, low-low)
-declare i64 @llvm.haydn.mul64.ss.ll(i64, i64)
-
+declare i64 @llvm.haydn.mul64.ss.ll(<2 x i32>, <2 x i32>)
 define i64 @test_mul64_ss_ll(i64 %a, i64 %b) {
-  %r = call i64 @llvm.haydn.mul64.ss.ll(i64 %a, i64 %b)
+  %bc.1 = bitcast i64 %a to <2 x i32>
+  %bc.2 = bitcast i64 %b to <2 x i32>
+  %r = call i64 @llvm.haydn.mul64.ss.ll(<2 x i32> %bc.1, <2 x i32> %bc.2)
   ret i64 %r
 }
 
 ;DSP multiply-accumulate pattern (MUL64 + ADD64)
 define i64 @test_mula64_ss_ll(i64 %a, i64 %b, i64 %acc) {
-  %prod = call i64 @llvm.haydn.mul64.ss.ll(i64 %a, i64 %b)
+  %bc.3 = bitcast i64 %a to <2 x i32>
+  %bc.4 = bitcast i64 %b to <2 x i32>
+  %prod = call i64 @llvm.haydn.mul64.ss.ll(<2 x i32> %bc.3, <2 x i32> %bc.4)
   %r = add i64 %acc, %prod
   ret i64 %r
 }
@@ -70,9 +73,13 @@ define i64 @test_mula64_ss_ll(i64 %a, i64 %b, i64 %acc) {
 ;Conditional MAC (branchless select with DSP)
 define i64 @conditional_mac(i64 %a, i64 %b, i64 %c, i32 %flag) {
   %cmp = icmp eq i32 %flag, 0
-  %prod1 = call i64 @llvm.haydn.mul64.ss.ll(i64 %a, i64 %b)
+  %bc.5 = bitcast i64 %a to <2 x i32>
+  %bc.6 = bitcast i64 %b to <2 x i32>
+  %prod1 = call i64 @llvm.haydn.mul64.ss.ll(<2 x i32> %bc.5, <2 x i32> %bc.6)
   %sum1 = add i64 %prod1, %c
-  %prod2 = call i64 @llvm.haydn.mul64.ss.ll(i64 %a, i64 %c)
+  %bc.7 = bitcast i64 %a to <2 x i32>
+  %bc.8 = bitcast i64 %c to <2 x i32>
+  %prod2 = call i64 @llvm.haydn.mul64.ss.ll(<2 x i32> %bc.7, <2 x i32> %bc.8)
   %sum2 = add i64 %prod2, %b
   %r = select i1 %cmp, i64 %sum2, i64 %sum1
   ret i64 %r
@@ -92,7 +99,9 @@ loop:
   %pb = getelementptr i64, ptr %b, i32 %i
   %va = load i64, ptr %pa
   %vb = load i64, ptr %pb
-  %prod = call i64 @llvm.haydn.mul64.ss.ll(i64 %va, i64 %vb)
+  %bc.9 = bitcast i64 %va to <2 x i32>
+  %bc.10 = bitcast i64 %vb to <2 x i32>
+  %prod = call i64 @llvm.haydn.mul64.ss.ll(<2 x i32> %bc.9, <2 x i32> %bc.10)
   %sum.next = add i64 %sum, %prod
   %i.next = add i32 %i, 1
   %cond = icmp slt i32 %i.next, %n

@@ -85,7 +85,7 @@ private:
   bool tryCSEConstantDR64(MachineInstr &MovInst, MachineRegisterInfo &MRI,
                           const HaydnInstrInfo &TII);
 
-  // Try to form a scalar MAC32 from ADD32 + MUL32.
+  // Scalar GPR MAC fuse is unavailable (no ISA MAC32). Stub returns false.
   bool tryFormMAC(MachineInstr &AddInst, MachineRegisterInfo &MRI,
                   const HaydnInstrInfo &TII);
 

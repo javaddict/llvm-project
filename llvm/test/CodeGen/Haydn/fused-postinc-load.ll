@@ -55,8 +55,7 @@
 ; S_LW_POST_IMM — the spec entries this instruction implements)
 ; HiFi3z ae_l64.ip / ae_l32.ip (the analog this matches)
 
-declare i64 @llvm.haydn.mula64.ss.ll(i64, i64, i64)
-
+declare i64 @llvm.haydn.mula64.ss.ll(i64, <2 x i32>, <2 x i32>)
 ; vec_dot-style hot loop: streaming i64 loads, stride 8 (sizeof(i64)).
 ; Should lower to LD64_POST (D_LDW_POST_IMM) — the ae_l64.ip analog.
 define i64 @vec_dot_streaming_i64(ptr readonly %a, ptr readonly %b, i32 %n) nounwind {
@@ -71,7 +70,9 @@ loop:
   %acc = phi i64 [ 0, %entry ], [ %mac, %loop ]
   %xa  = load i64, ptr %pa, align 8
   %xb  = load i64, ptr %pb, align 8
-  %mac = call i64 @llvm.haydn.mula64.ss.ll(i64 %acc, i64 %xa, i64 %xb)
+  %bc.1 = bitcast i64 %xa to <2 x i32>
+  %bc.2 = bitcast i64 %xb to <2 x i32>
+  %mac = call i64 @llvm.haydn.mula64.ss.ll(i64 %acc, <2 x i32> %bc.1, <2 x i32> %bc.2)
   %pa.next = getelementptr i64, ptr %pa, i32 1
   %pb.next = getelementptr i64, ptr %pb, i32 1
   %i.next  = add i32 %i, 1

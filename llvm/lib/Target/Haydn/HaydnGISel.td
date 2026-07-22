@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 //
 // G-CG1: incremental GlobalISel Pats. selectImpl matches these before the C++
-// switch in HaydnInstructionSelector; C++ remains fallback for multi-instr
-// lowers (G_MUL, s64 icmp, SIMD shifts, loads).
+// switch in HaydnInstructionSelector. C++ covers G_MUL (MULL / X2MULPL32),
+// G_SMULH/UMULH, s64 icmp, SIMD shifts, loads, and other multi-instr lowers.
 //
 //===----------------------------------------------------------------------===//
 

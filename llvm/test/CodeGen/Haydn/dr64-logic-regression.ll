@@ -185,7 +185,7 @@ define i32 @test_mulq31(i32 %a, i32 %b, i32 %c) {
 
 define i32 @test_macq31(i32 %a, i32 %b, i32 %c) {
 ; CHECK-LABEL: test_macq31:
-; Lowered to ADD32(acc, mul32) (phantom MACQ31 removed).
+; Lowered to ADD32(acc, MULL) or MULSSH for Q31 (phantom MACQ31 removed).
 ; CHECK: add32
   %r = call i32 @llvm.haydn.macq31(i32 %a, i32 %b, i32 %c)
   ret i32 %r

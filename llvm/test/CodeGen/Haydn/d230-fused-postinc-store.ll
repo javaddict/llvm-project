@@ -64,7 +64,7 @@ exit:
 
 ; @stream_store_i64: ST64_POST imm6=1 (stride 8). The mula64 intrinsic produces a
 ; real i64 that must be stored via ST64 path (not split into two ST32).
-declare i64 @llvm.haydn.mula64.ss.ll(i64, i64, i64)
+declare i64 @llvm.haydn.mula64.ss.ll(i64, <2 x i32>, <2 x i32>)
 ; MIR-LABEL: name: stream_store_i64
 ; MIR: ST64_POST
 define void @stream_store_i64(ptr %out, i32 %n) nounwind {
@@ -75,7 +75,9 @@ entry:
 loop:
   %i  = phi i32 [ 0, %entry ], [ %i.next, %loop ]
   %po = phi ptr [ %out, %entry ], [ %po.next, %loop ]
-  %val = call i64 @llvm.haydn.mula64.ss.ll(i64 0, i64 1, i64 1)
+  %vc.1 = bitcast i64 1 to <2 x i32>
+  %vc.2 = bitcast i64 1 to <2 x i32>
+  %val = call i64 @llvm.haydn.mula64.ss.ll(i64 0, <2 x i32> %vc.1, <2 x i32> %vc.2)
   store i64 %val, ptr %po, align 8
   %po.next = getelementptr i64, ptr %po, i32 1
   %i.next  = add i32 %i, 1

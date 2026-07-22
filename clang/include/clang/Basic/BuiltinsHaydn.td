@@ -50,6 +50,8 @@ def ImmCheck0_31 : ImmCheckType<0, 31>;  // uimm5 — X2 32-bit lane shift
 def ImmCheck0_63 : ImmCheckType<0, 63>;  // uimm6 — 64-bit / pack shift
 def ImmCheck0_1  : ImmCheckType<0, 1>;   // 1-bit selects
 def ImmCheck0_3  : ImmCheckType<0, 3>;   // 2-bit selects (ar_sel / cbr pair)
+def ImmCheckSimm6 : ImmCheckType<-32, 31>; // simm6 — LS POST/PRE/WITH element index
+def ImmCheckSimm8 : ImmCheckType<-128, 127>; // simm8 — CB IMM stride element index
 
 /// NEON-style: ImmCheck<ImmArgIdx, ImmCheckType>.
 class ImmCheck<int immArgIdx, ImmCheckType kind> {
@@ -127,285 +129,285 @@ let Attributes = [NoThrow, Const] in {
 //===----------------------------------------------------------------------===//
 
 // Signed-signed: _ll, _lh, _hl, _hh
-def mul64_ss_ll  : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_ss_ll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_ss_ll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_LL";
   let Semantics = "signed×signed multiply, low×low 32-bit lanes → 64-bit product";
 }
-def mul64_ss_lh  : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_ss_lh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let Mnemonic = "MUL64_LH";
   let Semantics = "signed×signed multiply, low×high lanes → 64-bit product";
 }
-def mul64_ss_hl  : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_ss_hl : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let Mnemonic = "MUL64_HL";
 }
-def mul64_ss_hh  : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_ss_hh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let Mnemonic = "MUL64_HH";
 }
 
 // Signed-unsigned: _lul, _ulh, _uhl, _uhh
-def mul64_su_lul : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_su_lul : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_su_lul";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_LUL";
   let Semantics = "performs a signed × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as signed and the lower 32 bits of rsd2 as unsigned. The full 64-bit product is written to rtd.";
 }
-def mul64_su_ulh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_su_ulh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_su_ulh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_ULH";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed. The full 64-bit product is written to rtd.";
 }
-def mul64_su_uhl : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_su_uhl : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_su_uhl";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_UHL";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 as unsigned and the lower 32 bits of rsd2 as signed. The full 64-bit product is written to rtd.";
 }
-def mul64_su_uhh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_su_uhh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_su_uhh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_UHH";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed. The full 64-bit product is written to rtd.";
 }
-def mul64_us_luh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_us_luh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_us_luh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_LUH";
   let Semantics = "performs a signed × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as signed and the upper 32 bits of rsd2 as unsigned. The full 64-bit product is written to rtd.";
 }
-def mul64_us_uhuh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_us_uhuh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_us_uhuh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_UHUH";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and rsd2. The full 64-bit product is written to rtd.";
 }
-def mul64_us_hul : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_us_hul : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_us_hul";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_HUL";
   let Semantics = "performs a signed × unsigned 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 as signed and the lower 32 bits of rsd2 as unsigned. The full 64-bit product is written to rtd.";
 }
-def mul64_us_uhul : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_us_uhul : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_us_uhul";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_UHUL";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and the lower 32 bits of rsd2. The full 64-bit product is written to rtd.";
 }
-def mul64_uu_uluh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_uu_uluh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_uu_uluh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_ULUH";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and the upper 32 bits of rsd2. The full 64-bit product is written to rtd.";
 }
-def mul64_uu_ulul : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_uu_ulul : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_uu_ulul";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_ULUL";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and rsd2. The full 64-bit product is written to rtd.";
 }
-def mul64_uu_ull : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_uu_ull : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_uu_ull";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_ULL";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as unsigned and the lower 32 bits of rsd2 as signed. The full 64-bit product is written to rtd.";
 }
-def mul64_uu_ulh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_uu_ulh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_uu_ulh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_ULH";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed. The full 64-bit product is written to rtd.";
 }
-def mula64_ss_ll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_ss_ll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_ss_ll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_LL";
   let Semantics = "performs a signed × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and rsd2, and accumulates the 64-bit product into the 64-bit target register rtd.";
 }
-def mula64_ss_lh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_ss_lh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_ss_lh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_LH";
   let Semantics = "performs a signed × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and the upper 32 bits of rsd2, and accumulates the 64-bit product into rtd.";
 }
-def mula64_ss_hl : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_ss_hl : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_ss_hl";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_HL";
   let Semantics = "performs a signed × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and the lower 32 bits of rsd2, and accumulates the 64-bit product into rtd.";
 }
-def mula64_ss_hh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_ss_hh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_ss_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_HH";
   let Semantics = "performs a signed × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and rsd2, and accumulates the 64-bit product into rtd.";
 }
-def mula64_su_lul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_su_lul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_su_lul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_LUL";
   let Semantics = "performs a signed × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as signed and the lower 32 bits of rsd2 as unsigned, and accumulates the 64-bit product into rtd.";
 }
-def mula64_su_ulh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_su_ulh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_su_ulh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_ULH";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed, and accumulates the 64-bit product into rtd.";
 }
-def mula64_su_uhl : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_su_uhl : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_su_uhl";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_UHL";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 as unsigned and the lower 32 bits of rsd2 as signed, and accumulates the 64-bit product into rtd.";
 }
-def mula64_su_uhh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_su_uhh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_su_uhh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_UHH";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed, and accumulates the 64-bit product into rtd.";
 }
-def mula64_us_luh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_us_luh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_us_luh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_LUH";
   let Semantics = "performs a signed × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as signed and the upper 32 bits of rsd2 as unsigned, and accumulates the 64-bit product into rtd.";
 }
-def mula64_us_uhuh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_us_uhuh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_us_uhuh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_UHUH";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and rsd2, and accumulates the 64-bit product into rtd.";
 }
-def mula64_us_hul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_us_hul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_us_hul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_HUL";
   let Semantics = "performs a signed × unsigned 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 as signed and the lower 32 bits of rsd2 as unsigned, and accumulates the 64-bit product into rtd.";
 }
-def mula64_us_uhul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_us_uhul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_us_uhul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_UHUL";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and the lower 32 bits of rsd2, and accumulates the 64-bit product into rtd.";
 }
-def mula64_uu_uluh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_uu_uluh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_uu_uluh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_ULUH";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and the upper 32 bits of rsd2, and accumulates the 64-bit product into rtd.";
 }
-def mula64_uu_ulul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_uu_ulul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_uu_ulul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_ULUL";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and rsd2, and accumulates the 64-bit product into rtd.";
 }
-def mula64_uu_ull : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_uu_ull : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_uu_ull";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_ULL";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as unsigned and the lower 32 bits of rsd2 as signed, and accumulates the 64-bit product into rtd.";
 }
-def mula64_uu_ulh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_uu_ulh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_uu_ulh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_ULH";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed, and accumulates the 64-bit product into rtd.";
 }
-def muls64_ss_ll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_ss_ll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_ss_ll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_LL";
   let Semantics = "signed × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and rsd2, then subtracts the 64-bit product from the 64-bit accumulator rtd.";
 }
-def muls64_ss_lh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_ss_lh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_ss_lh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_LH";
   let Semantics = "signed × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and the upper 32 bits of rsd2, then subtracts the product from rtd.";
 }
-def muls64_ss_hl : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_ss_hl : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_ss_hl";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_HL";
   let Semantics = "signed × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and the lower 32 bits of rsd2, then subtracts the product from rtd.";
 }
-def muls64_ss_hh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_ss_hh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_ss_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_HH";
   let Semantics = "signed × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and rsd2, then subtracts the product from rtd.";
 }
-def muls64_su_lul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_su_lul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_su_lul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_LUL";
   let Semantics = "signed × unsigned multiplication using the lower 32 bits of rsd1 as signed and the lower 32 bits of rsd2 as unsigned, then subtracts the product from rtd.";
 }
-def muls64_su_ulh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_su_ulh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_su_ulh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_ULH";
   let Semantics = "unsigned × signed multiplication using the lower 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed, then subtracts the product from rtd.";
 }
-def muls64_su_uhl : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_su_uhl : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_su_uhl";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_UHL";
   let Semantics = "unsigned × signed multiplication using the upper 32 bits of rsd1 as unsigned and the lower 32 bits of rsd2 as signed, then subtracts the product from rtd.";
 }
-def muls64_su_uhh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_su_uhh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_su_uhh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_UHH";
   let Semantics = "unsigned × signed multiplication using the upper 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed, then subtracts the product from rtd.";
 }
-def muls64_us_luh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_us_luh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_us_luh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_LUH";
   let Semantics = "signed × unsigned multiplication using the lower 32 bits of rsd1 as signed and the upper 32 bits of rsd2 as unsigned, then subtracts the product from rtd.";
 }
-def muls64_us_uhuh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_us_uhuh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_us_uhuh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_UHUH";
   let Semantics = "unsigned × unsigned multiplication using the upper 32 bits of rsd1 and rsd2, then subtracts the product from rtd.";
 }
-def muls64_us_hul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_us_hul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_us_hul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_HUL";
   let Semantics = "signed × unsigned multiplication using the upper 32 bits of rsd1 as signed and the lower 32 bits of rsd2 as unsigned, then subtracts the product from rtd.";
 }
-def muls64_us_uhul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_us_uhul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_us_uhul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_UHUL";
   let Semantics = "unsigned × unsigned multiplication using the upper 32 bits of rsd1 and the lower 32 bits of rsd2, then subtracts the product from rtd.";
 }
-def muls64_uu_uluh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_uu_uluh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_uu_uluh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_ULUH";
   let Semantics = "unsigned × unsigned multiplication using the lower 32 bits of rsd1 and the upper 32 bits of rsd2, then subtracts the product from rtd.";
 }
-def muls64_uu_ulul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_uu_ulul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_uu_ulul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_ULUL";
   let Semantics = "unsigned × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and rsd2, then subtracts the product from rtd.";
 }
-def muls64_uu_ull : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_uu_ull : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_uu_ull";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_ULL";
   let Semantics = "unsigned × signed multiplication using the lower 32 bits of rsd1 as unsigned and the lower 32 bits of rsd2 as signed, then subtracts the product from rtd.";
 }
-def muls64_uu_ulh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_uu_ulh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_uu_ulh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_ULH";
   let Semantics = "unsigned × signed multiplication using the lower 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed, then subtracts the product from rtd.";
 }
@@ -721,165 +723,165 @@ def neg64 : HaydnBuiltin<"int64_t(int64_t)"> {
   let Mnemonic = "NEG64";
   let Semantics = "computes the two's complement negation of the 64-bit signed value in rsd, and writes the result to rtd.";
 }
-def fmul32s_ll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul32s_ll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "fmul32s_ll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FMUL32S_LL";
   let Semantics = "performs a signed fixed-point multiplication between the lower 32-bit Q1.31 operands of rsd1 and rsd2, and writes the saturated Q1.63 result to rtd. rsd1[31:0] and rsd2[31:0] are interpreted as sig...";
 }
-def fmul32s_lh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul32s_lh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "fmul32s_lh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FMUL32S_LH";
   let Semantics = "performs a signed fixed-point multiplication between the lower 32-bit Q1.31 operand of rsd1 and the upper 32-bit Q1.31 operand of rsd2, and writes the saturated Q1.63 result to rtd. rsd1[31:0] and ...";
 }
-def fmul32s_hh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul32s_hh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "fmul32s_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FMUL32S_HH";
   let Semantics = "performs a signed fixed-point multiplication between the upper 32-bit Q1.31 operands of rsd1 and rsd2, and writes the saturated Q1.63 result to rtd. rsd1[63:32] and rsd2[63:32] are interpreted as s...";
 }
-def fmula32s_ll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula32s_ll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "fmula32s_ll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FMULA32S_LL";
   let Semantics = "performs a signed fixed-point multiply-accumulate operation. The lower 32-bit Q1.31 operands of rsd1 and rsd2 are multiplied to produce a 64-bit intermediate product in Q2.62 format. The final sum ...";
 }
-def fmula32s_lh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula32s_lh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "fmula32s_lh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FMULA32S_LH";
   let Semantics = "performs a signed fixed-point multiply-accumulate operation. The lower 32-bit Q1.31 operand of rsd1 and the upper 32-bit Q1.31 operand of rsd2 are multiplied to produce a 64-bit intermediate produc...";
 }
-def fmula32s_hh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula32s_hh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "fmula32s_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FMULA32S_HH";
   let Semantics = "performs a signed fixed-point multiply-accumulate operation. The upper 32-bit Q1.31 operands of rsd1 and rsd2 are multiplied to produce a 64-bit intermediate product in Q2.62 format. The final sum ...";
 }
-def fmuls32s_ll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmuls32s_ll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "fmuls32s_ll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FMULS32S_LL";
   let Semantics = "performs a signed fixed-point multiply-subtract operation with Q1.63 saturation. The lower 32-bit Q1.31 operands of rsd1 and rsd2 are multiplied to produce a 64-bit product, which is converted to Q...";
 }
-def fmuls32s_lh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmuls32s_lh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "fmuls32s_lh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FMULS32S_LH";
   let Semantics = "performs a signed fixed-point multiply-subtract operation with Q1.63 saturation. The lower 32-bit Q1.31 operand of rsd1 and the upper 32-bit Q1.31 operand of rsd2 are multiplied to produce a 64-bit...";
 }
-def fmuls32s_hh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmuls32s_hh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "fmuls32s_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FMULS32S_HH";
   let Semantics = "performs a signed fixed-point multiply-subtract operation with Q1.63 saturation. The upper 32-bit Q1.31 operands of rsd1 and rsd2 are multiplied to produce a 64-bit product, which is converted to Q...";
 }
-def ff2mul32rs_ll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def ff2mul32rs_ll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2mul32rs_ll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MUL32RS_LL";
   let Semantics = "performs a signed 32×32 fixed-point multiplication on the lower 32-bit lanes of rsd1 and rsd2, treating them as Q1.31 values. The 64-bit product is interpreted as Q2.62 and then converted to Q17.47...";
 }
-def ff2mul32rs_lh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def ff2mul32rs_lh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2mul32rs_lh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MUL32RS_LH";
   let Semantics = "performs a signed 32×32 fixed-point multiplication on the lower 32-bit lane of rsd1 and the upper 32-bit lane of rsd2, treating them as Q1.31 values. The 64-bit product is interpreted as Q2.62 and ...";
 }
-def ff2mul32rs_hh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def ff2mul32rs_hh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2mul32rs_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MUL32RS_HH";
   let Semantics = "performs a signed 32×32 fixed-point multiplication on the upper 32-bit lanes of rsd1 and rsd2, treating them as Q1.31 values. The 64-bit product is interpreted as Q2.62 and then converted to Q17.47...";
 }
-def ff2mula32rs_ll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def ff2mula32rs_ll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2mula32rs_ll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MULA32RS_LL";
   let Semantics = "performs a signed fixed-point multiply-accumulate operation. The lower 32-bit Q1.31 operands of rsd1 and rsd2 are multiplied to produce a 64-bit intermediate product in Q2.62 format. The product is...";
 }
-def ff2mula32rs_lh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def ff2mula32rs_lh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2mula32rs_lh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MULA32RS_LH";
   let Semantics = "performs a signed fixed-point multiply-accumulate operation. The lower 32-bit Q1.31 operand of rsd1 and the upper 32-bit Q1.31 operand of rsd2 are multiplied to produce a 64-bit intermediate produc...";
 }
-def ff2mula32rs_hh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def ff2mula32rs_hh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2mula32rs_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MULA32RS_HH";
   let Semantics = "performs a signed fixed-point multiply-accumulate operation. The upper 32-bit Q1.31 operands of rsd1 and rsd2 are multiplied to produce a 64-bit intermediate product in Q2.62 format. The product is...";
 }
-def ff2muls32rs_ll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def ff2muls32rs_ll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2muls32rs_ll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MULS32RS_LL";
   let Semantics = "performs a signed fixed-point multiply-subtract operation in Q17.47 format. The lower 32-bit Q1.31 operands of rsd1 and rsd2 are multiplied to produce a 64-bit intermediate product in Q2.62 format....";
 }
-def ff2muls32rs_lh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def ff2muls32rs_lh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2muls32rs_lh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MULS32RS_LH";
   let Semantics = "performs a signed fixed-point multiply-subtract operation in Q17.47 format. The lower 32-bit Q1.31 operand of rsd1 and the upper 32-bit Q1.31 operand of rsd2 are multiplied to produce a 64-bit inte...";
 }
-def ff2muls32rs_hh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def ff2muls32rs_hh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2muls32rs_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MULS32RS_HH";
   let Semantics = "performs a signed fixed-point multiply-subtract operation in Q17.47 format. The upper 32-bit Q1.31 operands of rsd1 and rsd2 are multiplied to produce a 64-bit intermediate product in Q2.62 format....";
 }
-def ff2mul32r_ll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def ff2mul32r_ll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2mul32r_ll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MUL32R_LL";
   let Semantics = "performs a signed 32×32 fixed-point multiplication on the lower 32-bit lanes of rsd1 and rsd2, treating them as Q1.31 values. The 64-bit product is interpreted as Q2.62 and then converted to Q17.47...";
 }
-def ff2mul32r_lh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def ff2mul32r_lh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2mul32r_lh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MUL32R_LH";
   let Semantics = "performs a signed 32×32 fixed-point multiplication on the lower 32-bit lane of rsd1 and the upper 32-bit lane of rsd2, treating them as Q1.31 values. The 64-bit product is interpreted as Q2.62 and ...";
 }
-def ff2mul32r_hh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def ff2mul32r_hh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2mul32r_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MUL32R_HH";
   let Semantics = "performs a signed 32×32 fixed-point multiplication on the upper 32-bit lanes of rsd1 and rsd2, treating them as Q1.31 values. The 64-bit product is interpreted as Q2.62 and then converted to Q17.47...";
 }
-def ff2mula32r_ll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def ff2mula32r_ll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2mula32r_ll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MULA32R_LL";
   let Semantics = "performs a signed fixed-point multiply-accumulate operation. The lower 32-bit Q1.31 operands of rsd1 and rsd2 are multiplied to produce a 64-bit intermediate product in Q2.62 format. The product is...";
 }
-def ff2mula32r_lh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def ff2mula32r_lh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2mula32r_lh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MULA32R_LH";
   let Semantics = "performs a signed fixed-point multiply-accumulate operation. The lower 32-bit Q1.31 operand of rsd1 and the upper 32-bit Q1.31 operand of rsd2 are multiplied to produce a 64-bit intermediate produc...";
 }
-def ff2mula32r_hh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def ff2mula32r_hh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2mula32r_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MULA32R_HH";
   let Semantics = "performs a signed fixed-point multiply-accumulate operation. The upper 32-bit Q1.31 operands of rsd1 and rsd2 are multiplied to produce a 64-bit intermediate product in Q2.62 format. The product is...";
 }
-def ff2muls32r_ll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def ff2muls32r_ll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2muls32r_ll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MULS32R_LL";
   let Semantics = "performs a signed fixed-point multiply-subtract operation in Q17.47 format. The lower 32-bit Q1.31 operands of rsd1 and rsd2 are multiplied to produce a 64-bit intermediate product in Q2.62 format....";
 }
-def ff2muls32r_lh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def ff2muls32r_lh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2muls32r_lh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MULS32R_LH";
   let Semantics = "performs a signed fixed-point multiply-subtract operation in Q17.47 format. The lower 32-bit Q1.31 operand of rsd1 and the upper 32-bit Q1.31 operand of rsd2 are multiplied to produce a 64-bit inte...";
 }
-def ff2muls32r_hh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def ff2muls32r_hh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "ff2muls32r_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FF2MULS32R_HH";
   let Semantics = "performs a signed fixed-point multiply-subtract operation in Q17.47 format. The upper 32-bit Q1.31 operands of rsd1 and rsd2 are multiplied to produce a 64-bit intermediate product in Q2.62 format....";
 }
@@ -1078,135 +1080,135 @@ def maxabs32s : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<
   let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MAXABS32S";
 }
-def fmul16_hs00 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_hs00 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_hs00";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_HS00";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the upper 32 bits of rtd. Each 64-bit source r...";
 }
-def fmulaa16_hs_11_00 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmulaa16_hs_11_00 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmulaa16_hs_11_00";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULAA16_HS_11_00";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation with Q1.31 saturation into the upper 32 bits of rtd. Each 64-bit source register rsdX is treated as four signed 16-bit Q1.15 lanes. For ea...";
 }
-def fmulss16_hs_11_00 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmulss16_hs_11_00 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmulss16_hs_11_00";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULSS16_HS_11_00";
   let Semantics = "perform a signed fixed-point multiply-subtract operation with Q1.31 saturation on 16-bit lanes, accumulating into the upper 32 bits of rtd. Each 64-bit source register rsdX is treated as four signe...";
 }
-def fmul16_hs01 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_hs01 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_hs01";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_HS01";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the upper 32 bits of rtd.";
 }
-def fmul16_hs02 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_hs02 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_hs02";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_HS02";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the upper 32 bits of rtd.";
 }
-def fmul16_hs03 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_hs03 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_hs03";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_HS03";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the upper 32 bits of rtd.";
 }
-def fmul16_hs11 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_hs11 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_hs11";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_HS11";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the upper 32 bits of rtd.";
 }
-def fmul16_hs12 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_hs12 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_hs12";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_HS12";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the upper 32 bits of rtd.";
 }
-def fmul16_hs13 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_hs13 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_hs13";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_HS13";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the upper 32 bits of rtd.";
 }
-def fmul16_hs22 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_hs22 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_hs22";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_HS22";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the upper 32 bits of rtd.";
 }
-def fmul16_hs23 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_hs23 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_hs23";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_HS23";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the upper 32 bits of rtd.";
 }
-def fmul16_hs33 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_hs33 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_hs33";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_HS33";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the upper 32 bits of rtd.";
 }
-def fmul16_ls00 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_ls00 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_ls00";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_LS00";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the lower 32 bits of rtd. Each 64-bit source r...";
 }
-def fmul16_ls01 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_ls01 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_ls01";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_LS01";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the lower 32 bits of rtd.";
 }
-def fmul16_ls02 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_ls02 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_ls02";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_LS02";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the lower 32 bits of rtd.";
 }
-def fmul16_ls03 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_ls03 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_ls03";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_LS03";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the lower 32 bits of rtd.";
 }
-def fmul16_ls11 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_ls11 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_ls11";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_LS11";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the lower 32 bits of rtd.";
 }
-def fmul16_ls12 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_ls12 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_ls12";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_LS12";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the lower 32 bits of rtd.";
 }
-def fmul16_ls13 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_ls13 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_ls13";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_LS13";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the lower 32 bits of rtd.";
 }
-def fmul16_ls22 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_ls22 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_ls22";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_LS22";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the lower 32 bits of rtd.";
 }
-def fmul16_ls23 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_ls23 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_ls23";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_LS23";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the lower 32 bits of rtd.";
 }
-def fmul16_ls33 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmul16_ls33 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_ls33";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMUL16_LS33";
   let Semantics = "perform a signed fixed-point multiplication between two selected 16-bit Q1.15 lanes from rsd1 and rsd2, and write the saturated 32-bit Q1.31 result to the lower 32 bits of rtd.";
 }
@@ -1330,87 +1332,87 @@ def fmuls16_ls33 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
   let Mnemonic = "FMULS16_LS33";
   let Semantics = "perform a signed fixed-point multiply-subtract operation on selected 16-bit Q1.15 lanes and update the lower 32 bits of rtd with Q1.31 saturation.";
 }
-def fmulaa16_hs_13_02 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmulaa16_hs_13_02 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmulaa16_hs_13_02";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULAA16_HS_13_02";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation with Q1.31 saturation into the upper 32 bits of rtd.";
 }
-def fmulaa16_hs_33_22 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmulaa16_hs_33_22 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmulaa16_hs_33_22";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULAA16_HS_33_22";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation with Q1.31 saturation into the upper 32 bits of rtd.";
 }
-def fmulaa16_ls_11_00 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmulaa16_ls_11_00 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmulaa16_ls_11_00";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULAA16_LS_11_00";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation with Q1.31 saturation on 16-bit lanes. Each 64-bit source register rsdX is treated as four signed 16-bit Q1.15 lanes: rsdX[15:0] - lane 0 ...";
 }
-def fmulaa16_ls_13_02 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmulaa16_ls_13_02 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmulaa16_ls_13_02";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULAA16_LS_13_02";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation with Q1.31 saturation on 16-bit lanes.";
 }
-def fmulaa16_ls_33_22 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmulaa16_ls_33_22 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmulaa16_ls_33_22";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULAA16_LS_33_22";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation with Q1.31 saturation on 16-bit lanes.";
 }
-def fmulss16_hs_13_02 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmulss16_hs_13_02 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmulss16_hs_13_02";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULSS16_HS_13_02";
   let Semantics = "perform a signed fixed-point multiply-subtract operation with Q1.31 saturation on 16-bit lanes, accumulating into the upper 32 bits of rtd.";
 }
-def fmulss16_hs_33_22 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmulss16_hs_33_22 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmulss16_hs_33_22";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULSS16_HS_33_22";
   let Semantics = "perform a signed fixed-point multiply-subtract operation with Q1.31 saturation on 16-bit lanes, accumulating into the upper 32 bits of rtd.";
 }
-def fmulss16_ls_11_00 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmulss16_ls_11_00 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmulss16_ls_11_00";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULSS16_LS_11_00";
   let Semantics = "performs a signed fixed-point multiply-subtract operation with Q1.31 saturation on 16-bit lanes. Each 64-bit source register rsdX is treated as four signed 16-bit Q1.15 lanes: rsdX[15:0] - lane 0 (...";
 }
-def fmulss16_ls_13_02 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmulss16_ls_13_02 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmulss16_ls_13_02";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULSS16_LS_13_02";
   let Semantics = "performs a signed fixed-point multiply-subtract operation with Q1.31 saturation on 16-bit lanes.";
 }
-def fmulss16_ls_33_22 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def fmulss16_ls_33_22 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmulss16_ls_33_22";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULSS16_LS_33_22";
   let Semantics = "performs a signed fixed-point multiply-subtract operation with Q1.31 saturation on 16-bit lanes.";
 }
-def f2mulaa32rs_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def f2mulaa32rs_hhll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulaa32rs_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULAA32RS_HHLL";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by SYM_ROUNDING17.47(). Both Q17.4...";
 }
-def f2mulaa32rs_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def f2mulaa32rs_hllh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulaa32rs_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULAA32RS_HLLH";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by SYM_ROUNDING17.47(). Both Q17.4...";
 }
-def f2mulss32rs_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def f2mulss32rs_hhll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulss32rs_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULSS32RS_HHLL";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by SYM_ROUNDING17.47(). Both Q17.4...";
 }
-def f2mulss32rs_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def f2mulss32rs_hllh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulss32rs_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULSS32RS_HLLH";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by SYM_ROUNDING17.47(). Both Q17.4...";
 }
@@ -1889,51 +1891,51 @@ def srl64 : HaydnBuiltin<"int64_t(int64_t, int)"> {
   let Mnemonic = "SRL64";
   let Semantics = "64-bit logical variable right (or left) shift of rsd by amount in rs (DB SRL64). Immediate twin: haydn_srli64.";
 }
-def f2mulas32r_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulas32r_hhll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulas32r_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULAS32R_HHLL";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by ROUNDING17.47(). The upper-lane...";
 }
-def f2mulas32r_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulas32r_hllh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulas32r_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULAS32R_HLLH";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by ROUNDING17.47(). The upper-lane...";
 }
-def f2mulas32rs_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulas32rs_hhll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulas32rs_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULAS32RS_HHLL";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by SYM_ROUNDING17.47(). The upper-...";
 }
-def f2mulas32rs_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulas32rs_hllh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulas32rs_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULAS32RS_HLLH";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by SYM_ROUNDING17.47(). The upper-...";
 }
-def f2mulsa32r_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulsa32r_hhll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulsa32r_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULSA32R_HHLL";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by ROUNDING17.47(). The upper-lane...";
 }
-def f2mulsa32r_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulsa32r_hllh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulsa32r_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULSA32R_HLLH";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by ROUNDING17.47(). The upper-lane...";
 }
-def f2mulsa32rs_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulsa32rs_hhll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulsa32rs_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULSA32RS_HHLL";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by SYM_ROUNDING17.47(). The upper-...";
 }
-def f2mulsa32rs_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulsa32rs_hllh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulsa32rs_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULSA32RS_HLLH";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by SYM_ROUNDING17.47(). The upper-...";
 }
@@ -2460,6 +2462,7 @@ def ldw_cb_imm_pair : HaydnPairBuiltin<"int64_t(int*, int, int, int)"> {
   let PublicName = "ldw_cb_imm";
   let PublicPrototype = "haydn_cb_ld_t(int, int, int)";
   let Mnemonic = "D_LDW_CB_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheck0_1>, ImmCheck<3, ImmCheckSimm8>];
 }
 def ldw_cb_reg_pair : HaydnPairBuiltin<"int64_t(int*, int, int, int)"> {
   let PublicName = "ldw_cb_reg";
@@ -2470,6 +2473,7 @@ def sdw_cb_imm : HaydnBuiltin<"int(int64_t, int, int, int)"> {
   let PublicName = "sdw_cb_imm";
   let PublicPrototype = "int(int64_t, int, int, int)";
   let Mnemonic = "D_SDW_CB_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheck0_1>, ImmCheck<3, ImmCheckSimm8>];
 }
 def sdw_cb_reg : HaydnBuiltin<"int(int64_t, int, int, int)"> {
   let PublicName = "sdw_cb_reg";
@@ -2528,44 +2532,53 @@ def d_stwua_post : HaydnBuiltin<"void(int64_t, int, int, int, int)"> {
   let Mnemonic = "D_STWUA_POST";
   let Semantics = "store two words hardware unaligned access mechanism, post-increment. handles accesses where the data is 4-byte aligned but not necessarily 8-byte aligned. bytes before the first data element within...";
 }
-def ldw_brev_imm : HaydnBuiltin<"int(int, int)"> {
+// BREV loads: frexp pair {data, new_ptr} (same AGU model as CB loads).
+// Clang Prototype is frexp (out* for new_ptr); public returns haydn_*_ld_t.
+// D_LDW_BREV: i64 data; S_LW_BREV: i32 data. IMM stride is ImmArg (simm6).
+def ldw_brev_imm_pair : HaydnPairBuiltin<"int64_t(int*, int, int)"> {
   let PublicName = "ldw_brev_imm";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_cb_ld_t(int, int)";
   let Mnemonic = "D_LDW_BREV_IMM";
+  // frexp args: out*, base, stride — ImmCheck on stride.
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
 }
-def ldw_brev_reg : HaydnBuiltin<"int(int, int)"> {
+def ldw_brev_reg_pair : HaydnPairBuiltin<"int64_t(int*, int, int)"> {
   let PublicName = "ldw_brev_reg";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_cb_ld_t(int, int)";
   let Mnemonic = "D_LDW_BREV_REG";
 }
-def lw_brev_imm : HaydnBuiltin<"int(int, int)"> {
+def lw_brev_imm_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "lw_brev_imm";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LW_BREV_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
 }
-def lw_brev_reg : HaydnBuiltin<"int(int, int)"> {
+def lw_brev_reg_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "lw_brev_reg";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LW_BREV_REG";
 }
-def sdw_brev_imm : HaydnBuiltin<"int(int, int, int)"> {
+// BREV stores: return AGU-updated base. D data is DR64 (i64); S data is GPR.
+def sdw_brev_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
   let PublicName = "sdw_brev_imm";
-  let PublicPrototype = "int(int, int, int)";
+  let PublicPrototype = "int(int64_t, int, int)";
   let Mnemonic = "D_SDW_BREV_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
 }
-def sdw_brev_reg : HaydnBuiltin<"int(int, int, int)"> {
+def sdw_brev_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
   let PublicName = "sdw_brev_reg";
-  let PublicPrototype = "int(int, int, int)";
+  let PublicPrototype = "int(int64_t, int, int)";
   let Mnemonic = "D_SDW_BREV_REG";
 }
-def sw_brev_imm : HaydnBuiltin<"int(int, int)"> {
+def sw_brev_imm : HaydnBuiltin<"int(int, int, int)"> {
   let PublicName = "sw_brev_imm";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "int(int, int, int)";
   let Mnemonic = "S_SW_BREV_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
 }
-def sw_brev_reg : HaydnBuiltin<"int(int, int)"> {
+def sw_brev_reg : HaydnBuiltin<"int(int, int, int)"> {
   let PublicName = "sw_brev_reg";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "int(int, int, int)";
   let Mnemonic = "S_SW_BREV_REG";
 }
 def x2add32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
@@ -2969,14 +2982,14 @@ def mulfc32x16ras_high : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "MULFC32X16RAS_HIGH";
 }
-def mulaa32s_fir_hh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mulaa32s_fir_hh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mulaa32s_fir_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULAA32S_FIR_HH";
 }
-def mulaa32s_fir_hl : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mulaa32s_fir_hl : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mulaa32s_fir_hl";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULAA32S_FIR_HL";
 }
 def mulfq16x2_fir_3 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
@@ -2999,255 +3012,255 @@ def mulafq16x2_fir_1 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "MULAFQ16X2_FIR_1";
 }
-def f2mulaa32r_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def f2mulaa32r_hhll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulaa32r_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULAA32R_HHLL";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by ROUNDING17.47(). Both Q17.47 pr...";
 }
-def f2mulaa32r_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def f2mulaa32r_hllh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulaa32r_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULAA32R_HLLH";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by ROUNDING17.47(). Both Q17.47 pr...";
 }
-def f2mulss32r_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def f2mulss32r_hhll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulss32r_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULSS32R_HHLL";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by ROUNDING17.47(). Both Q17.47 pr...";
 }
-def f2mulss32r_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def f2mulss32r_hllh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulss32r_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULSS32R_HLLH";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by ROUNDING17.47(). Both Q17.47 pr...";
 }
-def f2mulzaa32rs_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzaa32rs_hhll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzaa32rs_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZAA32RS_HHLL";
   let Semantics = "performs two signed fixed-point multiplications between pairs of 32-bit Q1.31 operands. Each 32×32-bit multiplication produces a 64-bit intermediate product in Q2.62 format. The product is then con...";
 }
-def f2mulzaa32rs_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzaa32rs_hllh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzaa32rs_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZAA32RS_HLLH";
   let Semantics = "performs two signed fixed-point multiplications between pairs of 32-bit Q1.31 operands. Each 32×32-bit multiplication produces a 64-bit intermediate product in Q2.62 format. The product is then con...";
 }
-def f2mulzaa32r_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzaa32r_hhll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzaa32r_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZAA32R_HHLL";
   let Semantics = "performs two signed fixed-point multiplications between pairs of 32-bit Q1.31 operands. Each 32×32-bit multiplication produces a 64-bit intermediate product in Q2.62 format. The product is then con...";
 }
-def f2mulzaa32r_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzaa32r_hllh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzaa32r_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZAA32R_HLLH";
   let Semantics = "performs two signed fixed-point multiplications between pairs of 32-bit Q1.31 operands. Each 32×32-bit multiplication produces a 64-bit intermediate product in Q2.62 format. The product is then con...";
 }
-def f2mulzas32rs_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzas32rs_hhll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzas32rs_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZAS32RS_HHLL";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by SYM_ROUNDING17.47(). The upper-...";
 }
-def f2mulzas32rs_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzas32rs_hllh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzas32rs_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZAS32RS_HLLH";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by SYM_ROUNDING17.47(). The upper-...";
 }
-def f2mulzas32r_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzas32r_hhll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzas32r_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZAS32R_HHLL";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by ROUNDING17.47(). The upper-lane...";
 }
-def f2mulzas32r_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzas32r_hllh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzas32r_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZAS32R_HLLH";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit Q2.62 product is converted to Q17.47 by ROUNDING17.47(). The upper-lane...";
 }
-def f2mulzsa32rs_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzsa32rs_hhll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzsa32rs_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZSA32RS_HHLL";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit product is a signed Q2.62 value, which is converted to Q17.47 by SYM_RO...";
 }
-def f2mulzsa32rs_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzsa32rs_hllh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzsa32rs_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZSA32RS_HLLH";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit product is a signed Q2.62 value, which is converted to Q17.47 by SYM_RO...";
 }
-def f2mulzsa32r_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzsa32r_hhll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzsa32r_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZSA32R_HHLL";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit product is a signed Q2.62 value, which is converted to Q17.47 by ROUNDI...";
 }
-def f2mulzsa32r_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzsa32r_hllh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzsa32r_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZSA32R_HLLH";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit product is a signed Q2.62 value, which is converted to Q17.47 by ROUNDI...";
 }
-def f2mulzss32rs_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzss32rs_hhll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzss32rs_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZSS32RS_HHLL";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit product is a signed Q2.62 value, which is converted to Q17.47 by SYM_RO...";
 }
-def f2mulzss32rs_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzss32rs_hllh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzss32rs_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZSS32RS_HLLH";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit product is a signed Q2.62 value, which is converted to Q17.47 by SYM_RO...";
 }
-def f2mulzss32r_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzss32r_hhll : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzss32r_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZSS32R_HHLL";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit product is a signed Q2.62 value, which is converted to Q17.47 by ROUNDI...";
 }
-def f2mulzss32r_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def f2mulzss32r_hllh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulzss32r_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "F2MULZSS32R_HLLH";
   let Semantics = "performs two signed fixed-point multiplications using the upper and lower 32-bit Q1.31 lanes of rsd1 and rsd2. Each 32×32-bit product is a signed Q2.62 value, which is converted to Q17.47 by ROUNDI...";
 }
-def fmula16_hs00 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_hs00 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_hs00";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_HS00";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the upper 32 bits of rtd. Each 64-bit source register...";
 }
-def fmula16_hs01 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_hs01 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_hs01";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_HS01";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the upper 32 bits of rtd.";
 }
-def fmula16_hs02 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_hs02 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_hs02";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_HS02";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the upper 32 bits of rtd.";
 }
-def fmula16_hs03 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_hs03 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_hs03";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_HS03";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the upper 32 bits of rtd.";
 }
-def fmula16_hs11 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_hs11 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_hs11";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_HS11";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the upper 32 bits of rtd.";
 }
-def fmula16_hs12 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_hs12 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_hs12";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_HS12";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the upper 32 bits of rtd.";
 }
-def fmula16_hs13 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_hs13 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_hs13";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_HS13";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the upper 32 bits of rtd.";
 }
-def fmula16_hs22 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_hs22 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_hs22";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_HS22";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the upper 32 bits of rtd.";
 }
-def fmula16_hs23 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_hs23 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_hs23";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_HS23";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the upper 32 bits of rtd.";
 }
-def fmula16_hs33 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_hs33 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_hs33";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_HS33";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the upper 32 bits of rtd.";
 }
-def fmula16_ls00 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_ls00 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_ls00";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_LS00";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the lower 32 bits of rtd. Each 64-bit source register...";
 }
-def fmula16_ls01 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_ls01 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_ls01";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_LS01";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the lower 32 bits of rtd.";
 }
-def fmula16_ls02 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_ls02 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_ls02";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_LS02";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the lower 32 bits of rtd.";
 }
-def fmula16_ls03 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_ls03 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_ls03";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_LS03";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the lower 32 bits of rtd.";
 }
-def fmula16_ls11 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_ls11 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_ls11";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_LS11";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the lower 32 bits of rtd.";
 }
-def fmula16_ls12 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_ls12 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_ls12";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_LS12";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the lower 32 bits of rtd.";
 }
-def fmula16_ls13 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_ls13 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_ls13";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_LS13";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the lower 32 bits of rtd.";
 }
-def fmula16_ls22 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_ls22 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_ls22";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_LS22";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the lower 32 bits of rtd.";
 }
-def fmula16_ls23 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_ls23 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_ls23";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_LS23";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the lower 32 bits of rtd.";
 }
-def fmula16_ls33 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmula16_ls33 : HaydnBuiltin<"int64_t(int64_t, _ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmula16_ls33";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "FMULA16_LS33";
   let Semantics = "perform a signed fixed-point multiply-accumulate operation on selected 16-bit Q1.15 lanes and accumulate the saturated 32-bit Q1.31 result into the lower 32 bits of rtd.";
 }
-def fmulaa32s_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmulaa32s_hhll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "fmulaa32s_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FMULAA32S_HHLL";
   let Semantics = "performs a signed fixed-point multiply-accumulate operation on two 32-bit Q1.31 lane pairs with add/add combination and writes the saturated Q1.63 result to rtd. The instruction operates on the pac...";
 }
-def fmulaa32s_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def fmulaa32s_hllh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "fmulaa32s_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "FMULAA32S_HLLH";
   let Semantics = "performs a signed fixed-point multiply-accumulate operation on two cross-lane 32-bit Q1.31 pairs with add/add combination and writes the saturated Q1.63 result to rtd. The instruction operates on t...";
 }
@@ -3395,201 +3408,201 @@ def mul16zaq : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
   let Mnemonic = "MUL16ZAQ";
   let Semantics = "performs four parallel signed 16-bit × 16-bit multiplications on packed 16-bit operands from rsd1 and rsd2, and accumulates the sum of all four 32-bit products into the 64-bit destination register ...";
 }
-def mul64_hh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_hh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_HH";
   let Semantics = "Performs a signed × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and rsd2. The full 64-bit product is written to rtd.";
 }
-def mul64_hl : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_hl : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_hl";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_HL";
   let Semantics = "performs a signed × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and the lower 32 bits of rsd2. The full 64-bit product is written to rtd.";
 }
-def mul64_huh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_huh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_huh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_HUH";
   let Semantics = "Performs a signed × unsigned 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 as signed and the upper 32 bits of rsd2 as unsigned. The full 64-bit product is written to rtd.";
 }
-def mul64_hul : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_hul : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_hul";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_HUL";
   let Semantics = "performs a signed × unsigned 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 as signed and the lower 32 bits of rsd2 as unsigned. The full 64-bit product is written to rtd.";
 }
-def mul64_lh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_lh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_lh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_LH";
   let Semantics = "performs a signed × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and the upper 32 bits of rsd2. The full 64-bit product is written to rtd.";
 }
-def mul64_luh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_luh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_luh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_LUH";
   let Semantics = "performs a signed × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as signed and the upper 32 bits of rsd2 as unsigned. The full 64-bit product is written to rtd.";
 }
-def mul64_lul : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_lul : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_lul";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_LUL";
   let Semantics = "performs a signed × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as signed and the lower 32 bits of rsd2 as unsigned. The full 64-bit product is written to rtd.";
 }
-def mul64_uhh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_uhh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_uhh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_UHH";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed. The full 64-bit product is written to rtd.";
 }
-def mul64_uhl : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_uhl : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_uhl";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_UHL";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 as unsigned and the lower 32 bits of rsd2 as signed. The full 64-bit product is written to rtd.";
 }
-def mul64_uhuh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_uhuh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_uhuh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_UHUH";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and rsd2. The full 64-bit product is written to rtd.";
 }
-def mul64_uhul : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_uhul : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_uhul";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_UHUL";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and the lower 32 bits of rsd2. The full 64-bit product is written to rtd.";
 }
-def mul64_ulh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_ulh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_ulh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_ULH";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed. The full 64-bit product is written to rtd.";
 }
-def mul64_ull : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_ull : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_ull";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_ULL";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as unsigned and the lower 32 bits of rsd2 as signed. The full 64-bit product is written to rtd.";
 }
-def mul64_uluh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_uluh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_uluh";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_ULUH";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and the upper 32 bits of rsd2. The full 64-bit product is written to rtd.";
 }
-def mul64_ulul : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def mul64_ulul : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mul64_ulul";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MUL64_ULUL";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and rsd2. The full 64-bit product is written to rtd.";
 }
-def mula64_hh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_hh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_HH";
   let Semantics = "performs a signed × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and rsd2, and accumulates the 64-bit product into rtd.";
 }
-def mula64_hl : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_hl : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_hl";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_HL";
   let Semantics = "performs a signed × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and the lower 32 bits of rsd2, and accumulates the 64-bit product into rtd.";
 }
-def mula64_huh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_huh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_huh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_HUH";
   let Semantics = "performs a signed × unsigned 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 as signed and the upper 32 bits of rsd2 as unsigned, and accumulates the 64-bit product into rtd.";
 }
-def mula64_hul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_hul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_hul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_HUL";
   let Semantics = "performs a signed × unsigned 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 as signed and the lower 32 bits of rsd2 as unsigned, and accumulates the 64-bit product into rtd.";
 }
-def mula64_lh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_lh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_lh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_LH";
   let Semantics = "performs a signed × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and the upper 32 bits of rsd2, and accumulates the 64-bit product into rtd.";
 }
-def mula64_ll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_ll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_ll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_LL";
   let Semantics = "performs a signed × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and rsd2, and accumulates the 64-bit product into the 64-bit target register rtd.";
 }
-def mula64_luh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_luh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_luh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_LUH";
   let Semantics = "performs a signed × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as signed and the upper 32 bits of rsd2 as unsigned, and accumulates the 64-bit product into rtd.";
 }
-def mula64_lul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_lul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_lul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_LUL";
   let Semantics = "performs a signed × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as signed and the lower 32 bits of rsd2 as unsigned, and accumulates the 64-bit product into rtd.";
 }
-def mula64_uhh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_uhh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_uhh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_UHH";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed, and accumulates the 64-bit product into rtd.";
 }
-def mula64_uhl : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_uhl : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_uhl";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_UHL";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 as unsigned and the lower 32 bits of rsd2 as signed, and accumulates the 64-bit product into rtd.";
 }
-def mula64_uhuh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_uhuh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_uhuh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_UHUH";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and rsd2, and accumulates the 64-bit product into rtd.";
 }
-def mula64_uhul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_uhul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_uhul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_UHUL";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and the lower 32 bits of rsd2, and accumulates the 64-bit product into rtd.";
 }
-def mula64_ulh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_ulh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_ulh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_ULH";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed, and accumulates the 64-bit product into rtd.";
 }
-def mula64_ull : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_ull : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_ull";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_ULL";
   let Semantics = "performs an unsigned × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 as unsigned and the lower 32 bits of rsd2 as signed, and accumulates the 64-bit product into rtd.";
 }
-def mula64_uluh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_uluh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_uluh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_ULUH";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and the upper 32 bits of rsd2, and accumulates the 64-bit product into rtd.";
 }
-def mula64_ulul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mula64_ulul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mula64_ulul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULA64_ULUL";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and rsd2, and accumulates the 64-bit product into rtd.";
 }
-def mulaa32_hhll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mulaa32_hhll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mulaa32_hhll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULAA32_HHLL";
   let Semantics = "performs two signed × signed 32-bit × 32-bit multiplications and accumulates both 64-bit products into the 64-bit accumulator rtd by addition. No saturation is performed; the accumulation uses 64-b...";
 }
-def mulaa32_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def mulaa32_hllh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mulaa32_hllh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULAA32_HLLH";
   let Semantics = "performs two signed × signed 32-bit × 32-bit multiplications and accumulates both 64-bit products into the 64-bit accumulator rtd by addition. No saturation is performed; the accumulation uses 64-b...";
 }
@@ -3701,99 +3714,99 @@ def mulas64_ulul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let Mnemonic = "MULAS64_ULUL";
   let Semantics = "performs an unsigned × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and rsd2, then adds the 64-bit product to the 64-bit accumulator rtd with signed 64-bit saturation.";
 }
-def muls64_hh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_hh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_hh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_HH";
   let Semantics = "signed × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and rsd2, then subtracts the product from rtd.";
 }
-def muls64_hl : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_hl : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_hl";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_HL";
   let Semantics = "signed × signed 32-bit × 32-bit multiplication using the upper 32 bits of rsd1 and the lower 32 bits of rsd2, then subtracts the product from rtd.";
 }
-def muls64_huh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_huh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_huh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_HUH";
   let Semantics = "signed × unsigned multiplication using the upper 32 bits of rsd1 as signed and the upper 32 bits of rsd2 as unsigned, then subtracts the product from rtd.";
 }
-def muls64_hul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_hul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_hul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_HUL";
   let Semantics = "signed × unsigned multiplication using the upper 32 bits of rsd1 as signed and the lower 32 bits of rsd2 as unsigned, then subtracts the product from rtd.";
 }
-def muls64_lh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_lh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_lh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_LH";
   let Semantics = "signed × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and the upper 32 bits of rsd2, then subtracts the product from rtd.";
 }
-def muls64_ll : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_ll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_ll";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_LL";
   let Semantics = "signed × signed 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and rsd2, then subtracts the 64-bit product from the 64-bit accumulator rtd.";
 }
-def muls64_luh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_luh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_luh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_LUH";
   let Semantics = "signed × unsigned multiplication using the lower 32 bits of rsd1 as signed and the upper 32 bits of rsd2 as unsigned, then subtracts the product from rtd.";
 }
-def muls64_lul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_lul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_lul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_LUL";
   let Semantics = "signed × unsigned multiplication using the lower 32 bits of rsd1 as signed and the lower 32 bits of rsd2 as unsigned, then subtracts the product from rtd.";
 }
-def muls64_uhh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_uhh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_uhh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_UHH";
   let Semantics = "unsigned × signed multiplication using the upper 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed, then subtracts the product from rtd.";
 }
-def muls64_uhl : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_uhl : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_uhl";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_UHL";
   let Semantics = "unsigned × signed multiplication using the upper 32 bits of rsd1 as unsigned and the lower 32 bits of rsd2 as signed, then subtracts the product from rtd.";
 }
-def muls64_uhuh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_uhuh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_uhuh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_UHUH";
   let Semantics = "unsigned × unsigned multiplication using the upper 32 bits of rsd1 and rsd2, then subtracts the product from rtd.";
 }
-def muls64_uhul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_uhul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_uhul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_UHUL";
   let Semantics = "unsigned × unsigned multiplication using the upper 32 bits of rsd1 and the lower 32 bits of rsd2, then subtracts the product from rtd.";
 }
-def muls64_ulh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_ulh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_ulh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_ULH";
   let Semantics = "unsigned × signed multiplication using the lower 32 bits of rsd1 as unsigned and the upper 32 bits of rsd2 as signed, then subtracts the product from rtd.";
 }
-def muls64_ull : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_ull : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_ull";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_ULL";
   let Semantics = "unsigned × signed multiplication using the lower 32 bits of rsd1 as unsigned and the lower 32 bits of rsd2 as signed, then subtracts the product from rtd.";
 }
-def muls64_uluh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_uluh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_uluh";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_ULUH";
   let Semantics = "unsigned × unsigned multiplication using the lower 32 bits of rsd1 and the upper 32 bits of rsd2, then subtracts the product from rtd.";
 }
-def muls64_ulul : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+def muls64_ulul : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "muls64_ulul";
-  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULS64_ULUL";
   let Semantics = "unsigned × unsigned 32-bit × 32-bit multiplication using the lower 32 bits of rsd1 and rsd2, then subtracts the product from rtd.";
 }
@@ -4093,34 +4106,37 @@ def sin_cos : HaydnBuiltin<"int64_t(int, int)"> {
 //===----------------------------------------------------------------------===
 // Golden Load&Store coverage (D_* and S_*; systematic)
 //===----------------------------------------------------------------------===
-def d_ldw_post_imm : HaydnBuiltin<"int64_t(int, int)"> {
+def d_ldw_post_imm_pair : HaydnPairBuiltin<"int64_t(int*, int, int)"> {
   let PublicName = "d_ldw_post_imm";
-  let PublicPrototype = "int64_t(int, int)";
+  let PublicPrototype = "haydn_cb_ld_t(int, int)";
   let Mnemonic = "D_LDW_POST_IMM";
-  let Semantics = "Golden LS D_LDW_POST_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS D_LDW_POST_IMM: data + AGU writeback (mem64).";
 }
-def d_ldw_post_reg : HaydnBuiltin<"int64_t(int, int)"> {
+def d_ldw_post_reg_pair : HaydnPairBuiltin<"int64_t(int*, int, int)"> {
   let PublicName = "d_ldw_post_reg";
-  let PublicPrototype = "int64_t(int, int)";
+  let PublicPrototype = "haydn_cb_ld_t(int, int)";
   let Mnemonic = "D_LDW_POST_REG";
-  let Semantics = "Golden LS D_LDW_POST_REG.";
+  let Semantics = "Golden LS D_LDW_POST_REG: data + AGU writeback (mem64).";
 }
-def d_ldw_pre_imm : HaydnBuiltin<"int64_t(int, int)"> {
+def d_ldw_pre_imm_pair : HaydnPairBuiltin<"int64_t(int*, int, int)"> {
   let PublicName = "d_ldw_pre_imm";
-  let PublicPrototype = "int64_t(int, int)";
+  let PublicPrototype = "haydn_cb_ld_t(int, int)";
   let Mnemonic = "D_LDW_PRE_IMM";
-  let Semantics = "Golden LS D_LDW_PRE_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS D_LDW_PRE_IMM: data + AGU writeback (mem64).";
 }
-def d_ldw_pre_reg : HaydnBuiltin<"int64_t(int, int)"> {
+def d_ldw_pre_reg_pair : HaydnPairBuiltin<"int64_t(int*, int, int)"> {
   let PublicName = "d_ldw_pre_reg";
-  let PublicPrototype = "int64_t(int, int)";
+  let PublicPrototype = "haydn_cb_ld_t(int, int)";
   let Mnemonic = "D_LDW_PRE_REG";
-  let Semantics = "Golden LS D_LDW_PRE_REG.";
+  let Semantics = "Golden LS D_LDW_PRE_REG: data + AGU writeback (mem64).";
 }
 def d_ldw_with_imm : HaydnBuiltin<"int64_t(int, int)"> {
   let PublicName = "d_ldw_with_imm";
   let PublicPrototype = "int64_t(int, int)";
   let Mnemonic = "D_LDW_WITH_IMM";
+  let ImmChecks = [ImmCheck<1, ImmCheckSimm6>];
   let Semantics = "Golden LS D_LDW_WITH_IMM.";
 }
 def d_ldw_with_reg : HaydnBuiltin<"int64_t(int, int)"> {
@@ -4129,34 +4145,37 @@ def d_ldw_with_reg : HaydnBuiltin<"int64_t(int, int)"> {
   let Mnemonic = "D_LDW_WITH_REG";
   let Semantics = "Golden LS D_LDW_WITH_REG.";
 }
-def d_lhw_post_imm : HaydnBuiltin<"int64_t(int, int)"> {
+def d_lhw_post_imm_pair : HaydnPairBuiltin<"int64_t(int*, int, int)"> {
   let PublicName = "d_lhw_post_imm";
-  let PublicPrototype = "int64_t(int, int)";
+  let PublicPrototype = "haydn_cb_ld_t(int, int)";
   let Mnemonic = "D_LHW_POST_IMM";
-  let Semantics = "Golden LS D_LHW_POST_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS D_LHW_POST_IMM: data + AGU writeback (broadcast mem16→DR64).";
 }
-def d_lhw_post_reg : HaydnBuiltin<"int64_t(int, int)"> {
+def d_lhw_post_reg_pair : HaydnPairBuiltin<"int64_t(int*, int, int)"> {
   let PublicName = "d_lhw_post_reg";
-  let PublicPrototype = "int64_t(int, int)";
+  let PublicPrototype = "haydn_cb_ld_t(int, int)";
   let Mnemonic = "D_LHW_POST_REG";
-  let Semantics = "Golden LS D_LHW_POST_REG.";
+  let Semantics = "Golden LS D_LHW_POST_REG: data + AGU writeback (broadcast mem16→DR64).";
 }
-def d_lhw_pre_imm : HaydnBuiltin<"int64_t(int, int)"> {
+def d_lhw_pre_imm_pair : HaydnPairBuiltin<"int64_t(int*, int, int)"> {
   let PublicName = "d_lhw_pre_imm";
-  let PublicPrototype = "int64_t(int, int)";
+  let PublicPrototype = "haydn_cb_ld_t(int, int)";
   let Mnemonic = "D_LHW_PRE_IMM";
-  let Semantics = "Golden LS D_LHW_PRE_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS D_LHW_PRE_IMM: data + AGU writeback (broadcast mem16→DR64).";
 }
-def d_lhw_pre_reg : HaydnBuiltin<"int64_t(int, int)"> {
+def d_lhw_pre_reg_pair : HaydnPairBuiltin<"int64_t(int*, int, int)"> {
   let PublicName = "d_lhw_pre_reg";
-  let PublicPrototype = "int64_t(int, int)";
+  let PublicPrototype = "haydn_cb_ld_t(int, int)";
   let Mnemonic = "D_LHW_PRE_REG";
-  let Semantics = "Golden LS D_LHW_PRE_REG.";
+  let Semantics = "Golden LS D_LHW_PRE_REG: data + AGU writeback (broadcast mem16→DR64).";
 }
 def d_lhw_with_imm : HaydnBuiltin<"int64_t(int, int)"> {
   let PublicName = "d_lhw_with_imm";
   let PublicPrototype = "int64_t(int, int)";
   let Mnemonic = "D_LHW_WITH_IMM";
+  let ImmChecks = [ImmCheck<1, ImmCheckSimm6>];
   let Semantics = "Golden LS D_LHW_WITH_IMM.";
 }
 def d_lhw_with_reg : HaydnBuiltin<"int64_t(int, int)"> {
@@ -4165,34 +4184,37 @@ def d_lhw_with_reg : HaydnBuiltin<"int64_t(int, int)"> {
   let Mnemonic = "D_LHW_WITH_REG";
   let Semantics = "Golden LS D_LHW_WITH_REG.";
 }
-def d_lw_post_imm : HaydnBuiltin<"int64_t(int, int)"> {
+def d_lw_post_imm_pair : HaydnPairBuiltin<"int64_t(int*, int, int)"> {
   let PublicName = "d_lw_post_imm";
-  let PublicPrototype = "int64_t(int, int)";
+  let PublicPrototype = "haydn_cb_ld_t(int, int)";
   let Mnemonic = "D_LW_POST_IMM";
-  let Semantics = "Golden LS D_LW_POST_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS D_LW_POST_IMM: data + AGU writeback (broadcast mem32→DR64).";
 }
-def d_lw_post_reg : HaydnBuiltin<"int64_t(int, int)"> {
+def d_lw_post_reg_pair : HaydnPairBuiltin<"int64_t(int*, int, int)"> {
   let PublicName = "d_lw_post_reg";
-  let PublicPrototype = "int64_t(int, int)";
+  let PublicPrototype = "haydn_cb_ld_t(int, int)";
   let Mnemonic = "D_LW_POST_REG";
-  let Semantics = "Golden LS D_LW_POST_REG.";
+  let Semantics = "Golden LS D_LW_POST_REG: data + AGU writeback (broadcast mem32→DR64).";
 }
-def d_lw_pre_imm : HaydnBuiltin<"int64_t(int, int)"> {
+def d_lw_pre_imm_pair : HaydnPairBuiltin<"int64_t(int*, int, int)"> {
   let PublicName = "d_lw_pre_imm";
-  let PublicPrototype = "int64_t(int, int)";
+  let PublicPrototype = "haydn_cb_ld_t(int, int)";
   let Mnemonic = "D_LW_PRE_IMM";
-  let Semantics = "Golden LS D_LW_PRE_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS D_LW_PRE_IMM: data + AGU writeback (broadcast mem32→DR64).";
 }
-def d_lw_pre_reg : HaydnBuiltin<"int64_t(int, int)"> {
+def d_lw_pre_reg_pair : HaydnPairBuiltin<"int64_t(int*, int, int)"> {
   let PublicName = "d_lw_pre_reg";
-  let PublicPrototype = "int64_t(int, int)";
+  let PublicPrototype = "haydn_cb_ld_t(int, int)";
   let Mnemonic = "D_LW_PRE_REG";
-  let Semantics = "Golden LS D_LW_PRE_REG.";
+  let Semantics = "Golden LS D_LW_PRE_REG: data + AGU writeback (broadcast mem32→DR64).";
 }
 def d_lw_with_imm : HaydnBuiltin<"int64_t(int, int)"> {
   let PublicName = "d_lw_with_imm";
   let PublicPrototype = "int64_t(int, int)";
   let Mnemonic = "D_LW_WITH_IMM";
+  let ImmChecks = [ImmCheck<1, ImmCheckSimm6>];
   let Semantics = "Golden LS D_LW_WITH_IMM.";
 }
 def d_lw_with_reg : HaydnBuiltin<"int64_t(int, int)"> {
@@ -4205,6 +4227,7 @@ def d_sdw_post_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
   let PublicName = "d_sdw_post_imm";
   let PublicPrototype = "int(int64_t, int, int)";
   let Mnemonic = "D_SDW_POST_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS D_SDW_POST_IMM.";
 }
 def d_sdw_post_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
@@ -4217,6 +4240,7 @@ def d_sdw_pre_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
   let PublicName = "d_sdw_pre_imm";
   let PublicPrototype = "int(int64_t, int, int)";
   let Mnemonic = "D_SDW_PRE_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS D_SDW_PRE_IMM.";
 }
 def d_sdw_pre_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
@@ -4229,6 +4253,7 @@ def d_sdw_with_imm : HaydnBuiltin<"void(int64_t, int, int)"> {
   let PublicName = "d_sdw_with_imm";
   let PublicPrototype = "void(int64_t, int, int)";
   let Mnemonic = "D_SDW_WITH_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS D_SDW_WITH_IMM.";
 }
 def d_sdw_with_reg : HaydnBuiltin<"void(int64_t, int, int)"> {
@@ -4241,6 +4266,7 @@ def d_shw_post_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
   let PublicName = "d_shw_post_imm";
   let PublicPrototype = "int(int64_t, int, int)";
   let Mnemonic = "D_SHW_POST_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS D_SHW_POST_IMM.";
 }
 def d_shw_post_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
@@ -4253,6 +4279,7 @@ def d_shw_pre_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
   let PublicName = "d_shw_pre_imm";
   let PublicPrototype = "int(int64_t, int, int)";
   let Mnemonic = "D_SHW_PRE_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS D_SHW_PRE_IMM.";
 }
 def d_shw_pre_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
@@ -4265,6 +4292,7 @@ def d_shw_with_imm : HaydnBuiltin<"void(int64_t, int, int)"> {
   let PublicName = "d_shw_with_imm";
   let PublicPrototype = "void(int64_t, int, int)";
   let Mnemonic = "D_SHW_WITH_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS D_SHW_WITH_IMM.";
 }
 def d_shw_with_reg : HaydnBuiltin<"void(int64_t, int, int)"> {
@@ -4277,6 +4305,7 @@ def d_sw_h_post_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
   let PublicName = "d_sw_h_post_imm";
   let PublicPrototype = "int(int64_t, int, int)";
   let Mnemonic = "D_SW_H_POST_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS D_SW_H_POST_IMM.";
 }
 def d_sw_h_post_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
@@ -4289,6 +4318,7 @@ def d_sw_h_pre_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
   let PublicName = "d_sw_h_pre_imm";
   let PublicPrototype = "int(int64_t, int, int)";
   let Mnemonic = "D_SW_H_PRE_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS D_SW_H_PRE_IMM.";
 }
 def d_sw_h_pre_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
@@ -4301,6 +4331,7 @@ def d_sw_h_with_imm : HaydnBuiltin<"void(int64_t, int, int)"> {
   let PublicName = "d_sw_h_with_imm";
   let PublicPrototype = "void(int64_t, int, int)";
   let Mnemonic = "D_SW_H_WITH_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS D_SW_H_WITH_IMM.";
 }
 def d_sw_h_with_reg : HaydnBuiltin<"void(int64_t, int, int)"> {
@@ -4313,6 +4344,7 @@ def d_sw_l_post_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
   let PublicName = "d_sw_l_post_imm";
   let PublicPrototype = "int(int64_t, int, int)";
   let Mnemonic = "D_SW_L_POST_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS D_SW_L_POST_IMM.";
 }
 def d_sw_l_post_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
@@ -4325,6 +4357,7 @@ def d_sw_l_pre_imm : HaydnBuiltin<"int(int64_t, int, int)"> {
   let PublicName = "d_sw_l_pre_imm";
   let PublicPrototype = "int(int64_t, int, int)";
   let Mnemonic = "D_SW_L_PRE_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS D_SW_L_PRE_IMM.";
 }
 def d_sw_l_pre_reg : HaydnBuiltin<"int(int64_t, int, int)"> {
@@ -4337,6 +4370,7 @@ def d_sw_l_with_imm : HaydnBuiltin<"void(int64_t, int, int)"> {
   let PublicName = "d_sw_l_with_imm";
   let PublicPrototype = "void(int64_t, int, int)";
   let Mnemonic = "D_SW_L_WITH_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS D_SW_L_WITH_IMM.";
 }
 def d_sw_l_with_reg : HaydnBuiltin<"void(int64_t, int, int)"> {
@@ -4345,34 +4379,37 @@ def d_sw_l_with_reg : HaydnBuiltin<"void(int64_t, int, int)"> {
   let Mnemonic = "D_SW_L_WITH_REG";
   let Semantics = "Golden LS D_SW_L_WITH_REG.";
 }
-def s_lbs_post_imm : HaydnBuiltin<"int(int, int)"> {
+def s_lbs_post_imm_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lbs_post_imm";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LBS_POST_IMM";
-  let Semantics = "Golden LS S_LBS_POST_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS S_LBS_POST_IMM: data + AGU writeback (sext mem8).";
 }
-def s_lbs_post_reg : HaydnBuiltin<"int(int, int)"> {
+def s_lbs_post_reg_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lbs_post_reg";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LBS_POST_REG";
-  let Semantics = "Golden LS S_LBS_POST_REG.";
+  let Semantics = "Golden LS S_LBS_POST_REG: data + AGU writeback (sext mem8).";
 }
-def s_lbs_pre_imm : HaydnBuiltin<"int(int, int)"> {
+def s_lbs_pre_imm_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lbs_pre_imm";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LBS_PRE_IMM";
-  let Semantics = "Golden LS S_LBS_PRE_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS S_LBS_PRE_IMM: data + AGU writeback (sext mem8).";
 }
-def s_lbs_pre_reg : HaydnBuiltin<"int(int, int)"> {
+def s_lbs_pre_reg_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lbs_pre_reg";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LBS_PRE_REG";
-  let Semantics = "Golden LS S_LBS_PRE_REG.";
+  let Semantics = "Golden LS S_LBS_PRE_REG: data + AGU writeback (sext mem8).";
 }
 def s_lbs_with_imm : HaydnBuiltin<"int(int, int)"> {
   let PublicName = "s_lbs_with_imm";
   let PublicPrototype = "int(int, int)";
   let Mnemonic = "S_LBS_WITH_IMM";
+  let ImmChecks = [ImmCheck<1, ImmCheckSimm6>];
   let Semantics = "Golden LS S_LBS_WITH_IMM.";
 }
 def s_lbs_with_reg : HaydnBuiltin<"int(int, int)"> {
@@ -4381,34 +4418,37 @@ def s_lbs_with_reg : HaydnBuiltin<"int(int, int)"> {
   let Mnemonic = "S_LBS_WITH_REG";
   let Semantics = "Golden LS S_LBS_WITH_REG.";
 }
-def s_lbu_post_imm : HaydnBuiltin<"int(int, int)"> {
+def s_lbu_post_imm_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lbu_post_imm";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LBU_POST_IMM";
-  let Semantics = "Golden LS S_LBU_POST_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS S_LBU_POST_IMM: data + AGU writeback (zext mem8).";
 }
-def s_lbu_post_reg : HaydnBuiltin<"int(int, int)"> {
+def s_lbu_post_reg_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lbu_post_reg";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LBU_POST_REG";
-  let Semantics = "Golden LS S_LBU_POST_REG.";
+  let Semantics = "Golden LS S_LBU_POST_REG: data + AGU writeback (zext mem8).";
 }
-def s_lbu_pre_imm : HaydnBuiltin<"int(int, int)"> {
+def s_lbu_pre_imm_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lbu_pre_imm";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LBU_PRE_IMM";
-  let Semantics = "Golden LS S_LBU_PRE_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS S_LBU_PRE_IMM: data + AGU writeback (zext mem8).";
 }
-def s_lbu_pre_reg : HaydnBuiltin<"int(int, int)"> {
+def s_lbu_pre_reg_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lbu_pre_reg";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LBU_PRE_REG";
-  let Semantics = "Golden LS S_LBU_PRE_REG.";
+  let Semantics = "Golden LS S_LBU_PRE_REG: data + AGU writeback (zext mem8).";
 }
 def s_lbu_with_imm : HaydnBuiltin<"int(int, int)"> {
   let PublicName = "s_lbu_with_imm";
   let PublicPrototype = "int(int, int)";
   let Mnemonic = "S_LBU_WITH_IMM";
+  let ImmChecks = [ImmCheck<1, ImmCheckSimm6>];
   let Semantics = "Golden LS S_LBU_WITH_IMM.";
 }
 def s_lbu_with_reg : HaydnBuiltin<"int(int, int)"> {
@@ -4417,34 +4457,37 @@ def s_lbu_with_reg : HaydnBuiltin<"int(int, int)"> {
   let Mnemonic = "S_LBU_WITH_REG";
   let Semantics = "Golden LS S_LBU_WITH_REG.";
 }
-def s_lhws_post_imm : HaydnBuiltin<"int(int, int)"> {
+def s_lhws_post_imm_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lhws_post_imm";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LHWS_POST_IMM";
-  let Semantics = "Golden LS S_LHWS_POST_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS S_LHWS_POST_IMM: data + AGU writeback (sext mem16).";
 }
-def s_lhws_post_reg : HaydnBuiltin<"int(int, int)"> {
+def s_lhws_post_reg_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lhws_post_reg";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LHWS_POST_REG";
-  let Semantics = "Golden LS S_LHWS_POST_REG.";
+  let Semantics = "Golden LS S_LHWS_POST_REG: data + AGU writeback (sext mem16).";
 }
-def s_lhws_pre_imm : HaydnBuiltin<"int(int, int)"> {
+def s_lhws_pre_imm_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lhws_pre_imm";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LHWS_PRE_IMM";
-  let Semantics = "Golden LS S_LHWS_PRE_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS S_LHWS_PRE_IMM: data + AGU writeback (sext mem16).";
 }
-def s_lhws_pre_reg : HaydnBuiltin<"int(int, int)"> {
+def s_lhws_pre_reg_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lhws_pre_reg";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LHWS_PRE_REG";
-  let Semantics = "Golden LS S_LHWS_PRE_REG.";
+  let Semantics = "Golden LS S_LHWS_PRE_REG: data + AGU writeback (sext mem16).";
 }
 def s_lhws_with_imm : HaydnBuiltin<"int(int, int)"> {
   let PublicName = "s_lhws_with_imm";
   let PublicPrototype = "int(int, int)";
   let Mnemonic = "S_LHWS_WITH_IMM";
+  let ImmChecks = [ImmCheck<1, ImmCheckSimm6>];
   let Semantics = "Golden LS S_LHWS_WITH_IMM.";
 }
 def s_lhws_with_reg : HaydnBuiltin<"int(int, int)"> {
@@ -4453,34 +4496,37 @@ def s_lhws_with_reg : HaydnBuiltin<"int(int, int)"> {
   let Mnemonic = "S_LHWS_WITH_REG";
   let Semantics = "Golden LS S_LHWS_WITH_REG.";
 }
-def s_lhwu_post_imm : HaydnBuiltin<"int(int, int)"> {
+def s_lhwu_post_imm_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lhwu_post_imm";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LHWU_POST_IMM";
-  let Semantics = "Golden LS S_LHWU_POST_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS S_LHWU_POST_IMM: data + AGU writeback (zext mem16).";
 }
-def s_lhwu_post_reg : HaydnBuiltin<"int(int, int)"> {
+def s_lhwu_post_reg_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lhwu_post_reg";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LHWU_POST_REG";
-  let Semantics = "Golden LS S_LHWU_POST_REG.";
+  let Semantics = "Golden LS S_LHWU_POST_REG: data + AGU writeback (zext mem16).";
 }
-def s_lhwu_pre_imm : HaydnBuiltin<"int(int, int)"> {
+def s_lhwu_pre_imm_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lhwu_pre_imm";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LHWU_PRE_IMM";
-  let Semantics = "Golden LS S_LHWU_PRE_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS S_LHWU_PRE_IMM: data + AGU writeback (zext mem16).";
 }
-def s_lhwu_pre_reg : HaydnBuiltin<"int(int, int)"> {
+def s_lhwu_pre_reg_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lhwu_pre_reg";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LHWU_PRE_REG";
-  let Semantics = "Golden LS S_LHWU_PRE_REG.";
+  let Semantics = "Golden LS S_LHWU_PRE_REG: data + AGU writeback (zext mem16).";
 }
 def s_lhwu_with_imm : HaydnBuiltin<"int(int, int)"> {
   let PublicName = "s_lhwu_with_imm";
   let PublicPrototype = "int(int, int)";
   let Mnemonic = "S_LHWU_WITH_IMM";
+  let ImmChecks = [ImmCheck<1, ImmCheckSimm6>];
   let Semantics = "Golden LS S_LHWU_WITH_IMM.";
 }
 def s_lhwu_with_reg : HaydnBuiltin<"int(int, int)"> {
@@ -4489,34 +4535,37 @@ def s_lhwu_with_reg : HaydnBuiltin<"int(int, int)"> {
   let Mnemonic = "S_LHWU_WITH_REG";
   let Semantics = "Golden LS S_LHWU_WITH_REG.";
 }
-def s_lw_post_imm : HaydnBuiltin<"int(int, int)"> {
+def s_lw_post_imm_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lw_post_imm";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LW_POST_IMM";
-  let Semantics = "Golden LS S_LW_POST_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS S_LW_POST_IMM: data + AGU writeback (mem32).";
 }
-def s_lw_post_reg : HaydnBuiltin<"int(int, int)"> {
+def s_lw_post_reg_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lw_post_reg";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LW_POST_REG";
-  let Semantics = "Golden LS S_LW_POST_REG.";
+  let Semantics = "Golden LS S_LW_POST_REG: data + AGU writeback (mem32).";
 }
-def s_lw_pre_imm : HaydnBuiltin<"int(int, int)"> {
+def s_lw_pre_imm_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lw_pre_imm";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LW_PRE_IMM";
-  let Semantics = "Golden LS S_LW_PRE_IMM.";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "Golden LS S_LW_PRE_IMM: data + AGU writeback (mem32).";
 }
-def s_lw_pre_reg : HaydnBuiltin<"int(int, int)"> {
+def s_lw_pre_reg_pair : HaydnPairBuiltin<"int(int*, int, int)"> {
   let PublicName = "s_lw_pre_reg";
-  let PublicPrototype = "int(int, int)";
+  let PublicPrototype = "haydn_sld_t(int, int)";
   let Mnemonic = "S_LW_PRE_REG";
-  let Semantics = "Golden LS S_LW_PRE_REG.";
+  let Semantics = "Golden LS S_LW_PRE_REG: data + AGU writeback (mem32).";
 }
 def s_lw_with_imm : HaydnBuiltin<"int(int, int)"> {
   let PublicName = "s_lw_with_imm";
   let PublicPrototype = "int(int, int)";
   let Mnemonic = "S_LW_WITH_IMM";
+  let ImmChecks = [ImmCheck<1, ImmCheckSimm6>];
   let Semantics = "Golden LS S_LW_WITH_IMM.";
 }
 def s_lw_with_reg : HaydnBuiltin<"int(int, int)"> {
@@ -4529,6 +4578,7 @@ def s_sb_post_imm : HaydnBuiltin<"int(int, int, int)"> {
   let PublicName = "s_sb_post_imm";
   let PublicPrototype = "int(int, int, int)";
   let Mnemonic = "S_SB_POST_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SB_POST_IMM.";
 }
 def s_sb_post_reg : HaydnBuiltin<"int(int, int, int)"> {
@@ -4541,6 +4591,7 @@ def s_sb_pre_imm : HaydnBuiltin<"int(int, int, int)"> {
   let PublicName = "s_sb_pre_imm";
   let PublicPrototype = "int(int, int, int)";
   let Mnemonic = "S_SB_PRE_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SB_PRE_IMM.";
 }
 def s_sb_pre_reg : HaydnBuiltin<"int(int, int, int)"> {
@@ -4553,6 +4604,7 @@ def s_sb_with_imm : HaydnBuiltin<"void(int, int, int)"> {
   let PublicName = "s_sb_with_imm";
   let PublicPrototype = "void(int, int, int)";
   let Mnemonic = "S_SB_WITH_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SB_WITH_IMM.";
 }
 def s_sb_with_reg : HaydnBuiltin<"void(int, int, int)"> {
@@ -4565,6 +4617,7 @@ def s_shw_post_imm : HaydnBuiltin<"int(int, int, int)"> {
   let PublicName = "s_shw_post_imm";
   let PublicPrototype = "int(int, int, int)";
   let Mnemonic = "S_SHW_POST_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SHW_POST_IMM.";
 }
 def s_shw_post_reg : HaydnBuiltin<"int(int, int, int)"> {
@@ -4577,6 +4630,7 @@ def s_shw_pre_imm : HaydnBuiltin<"int(int, int, int)"> {
   let PublicName = "s_shw_pre_imm";
   let PublicPrototype = "int(int, int, int)";
   let Mnemonic = "S_SHW_PRE_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SHW_PRE_IMM.";
 }
 def s_shw_pre_reg : HaydnBuiltin<"int(int, int, int)"> {
@@ -4589,6 +4643,7 @@ def s_shw_with_imm : HaydnBuiltin<"void(int, int, int)"> {
   let PublicName = "s_shw_with_imm";
   let PublicPrototype = "void(int, int, int)";
   let Mnemonic = "S_SHW_WITH_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SHW_WITH_IMM.";
 }
 def s_shw_with_reg : HaydnBuiltin<"void(int, int, int)"> {
@@ -4601,6 +4656,7 @@ def s_sw_post_imm : HaydnBuiltin<"int(int, int, int)"> {
   let PublicName = "s_sw_post_imm";
   let PublicPrototype = "int(int, int, int)";
   let Mnemonic = "S_SW_POST_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SW_POST_IMM.";
 }
 def s_sw_post_reg : HaydnBuiltin<"int(int, int, int)"> {
@@ -4613,6 +4669,7 @@ def s_sw_pre_imm : HaydnBuiltin<"int(int, int, int)"> {
   let PublicName = "s_sw_pre_imm";
   let PublicPrototype = "int(int, int, int)";
   let Mnemonic = "S_SW_PRE_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SW_PRE_IMM.";
 }
 def s_sw_pre_reg : HaydnBuiltin<"int(int, int, int)"> {
@@ -4625,6 +4682,7 @@ def s_sw_with_imm : HaydnBuiltin<"void(int, int, int)"> {
   let PublicName = "s_sw_with_imm";
   let PublicPrototype = "void(int, int, int)";
   let Mnemonic = "S_SW_WITH_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SW_WITH_IMM.";
 }
 def s_sw_with_reg : HaydnBuiltin<"void(int, int, int)"> {

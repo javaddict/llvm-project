@@ -141,7 +141,7 @@ ret_b:
 
 define i32 @test_csr_preserve(i32 %a) nounwind {
 ; CHECK-LABEL: test_csr_preserve:
-; CHECK: mul64.ll
+; CHECK: mull
 ; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
   %r = mul i32 %a, %a
   ret i32 %r

@@ -19,14 +19,15 @@
 ; it with the fused lane-store. If the combine regresses, the ASM check loses
 ; d_sw_l_with_imm and falls back to move32_dr_l + st32.
 
-declare i64 @llvm.haydn.mula64.ss.ll(i64, i64, i64)
-
+declare i64 @llvm.haydn.mula64.ss.ll(i64, <2 x i32>, <2 x i32>)
 ; @lane_store_low: store low 32 bits of a DR64 value.
 ; ASM-LABEL: lane_store_low:
 ; ASM: d_sw_l_with_imm
 ; ASM-NOT: move32_dr_l
 define void @lane_store_low(ptr %out) nounwind {
-  %val = call i64 @llvm.haydn.mula64.ss.ll(i64 0, i64 1, i64 1)
+  %vc.1 = bitcast i64 1 to <2 x i32>
+  %vc.2 = bitcast i64 1 to <2 x i32>
+  %val = call i64 @llvm.haydn.mula64.ss.ll(i64 0, <2 x i32> %vc.1, <2 x i32> %vc.2)
   %lo = trunc i64 %val to i32
   store i32 %lo, ptr %out, align 4
   ret void
@@ -39,7 +40,9 @@ define void @lane_store_low(ptr %out) nounwind {
 ; ASM: d_sw_{{l|h}}_with_imm
 ; ASM-NOT: move32_dr
 define void @lane_store_high(ptr %out) nounwind {
-  %val = call i64 @llvm.haydn.mula64.ss.ll(i64 0, i64 1, i64 1)
+  %vc.3 = bitcast i64 1 to <2 x i32>
+  %vc.4 = bitcast i64 1 to <2 x i32>
+  %val = call i64 @llvm.haydn.mula64.ss.ll(i64 0, <2 x i32> %vc.3, <2 x i32> %vc.4)
   %hi32 = lshr i64 %val, 32
   %hi = trunc i64 %hi32 to i32
   store i32 %hi, ptr %out, align 4

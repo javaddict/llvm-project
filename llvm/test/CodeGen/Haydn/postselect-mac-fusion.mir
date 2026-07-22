@@ -1,28 +1,20 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select -verify-machineinstrs %s -o - | FileCheck %s
 #
-# Instruction-select output for MUL+ADD patterns after scalar MAC32/MUL32
-# removal (/). tryFormMAC is a no-op; expect MUL64_LL + ADD32.
-# (Stale e2e mac-fusion.ll / post-select-mac.ll / shift-add-mac.ll deleted
-# they asserted a non-existent mac32 mnemonic.)
+# Instruction-select: G_MUL s32 + G_ADD → MULL + ADD32.
 
 ---
-# Scalar multiply + ADD32 pattern. G_MUL <s32> now selects to the real
-# MUL64_LL + bank-move sequence (: the invented MUL32 was removed); G_ADD
-# selects to ADD32. (Scalar MAC32 fusion is dead — MAC32 removed, and
-# MUL32 removed, so tryFormMAC is a no-op.)
 name:            test_scalar_mul_add
 legalized:       true
 regBankSelected: false
 # CHECK-LABEL: name: test_scalar_mul_add
-# After instruction-select, we should see MUL64_LL and ADD32.
+# CHECK: MULL
+# CHECK: ADD32
 body:             |
   bb.0.entry:
     liveins: $r0, $r1, $r2
     %0:_(s32) = COPY $r0
     %1:_(s32) = COPY $r1
     %2:_(s32) = COPY $r2
-    ; CHECK: MUL64_LL
-    ; CHECK: ADD32
     %3:_(s32) = G_MUL %0, %1
     %4:_(s32) = G_ADD %3, %2
     $r0 = COPY %4(s32)

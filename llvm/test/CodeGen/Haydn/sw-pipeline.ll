@@ -64,10 +64,10 @@ exit:
 ; The pipeliner should recognize this loop with 4 body instructions.
 define i32 @mac_loop(ptr nocapture readonly %x, ptr nocapture readonly %h, i32 %n) {
 ; CHECK-LABEL: mac_loop:
-; DR64 multiply (mul64.ll post- s32-via-MAC-unit lowering) in the kernel.
+; DR64 multiply (mull post- s32-via-MAC-unit lowering) in the kernel.
 ; Multi-stage SMS may emit a second epilogue mul64; single-stage keeps one.
 ; CHECK:        // =>This Inner Loop Header: Depth=1
-; CHECK:        mul64
+; CHECK:        mull
 ; CHECK-DAG:    {{(slt32|blt_w|bnez_w)}}
 ; SMS finds a schedule for this MAC (mul-acc) kernel.
 ; SWP:          Schedule Found? 1 (II={{[0-9]+}})

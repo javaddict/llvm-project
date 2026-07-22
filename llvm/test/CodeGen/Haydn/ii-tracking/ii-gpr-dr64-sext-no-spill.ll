@@ -26,8 +26,7 @@
 ; XFAIL above and confirm the CHECKs match. Do NOT relax the CHECK-NOTs to
 ; match the spill-emitting codegen — fix the selector instead.
 
-declare { i64, i64 } @llvm.haydn.x2mul32(i64, i64)
-
+declare { i64, i64 } @llvm.haydn.x2mul32(<2 x i32>, <2 x i32>)
 define i64 @ii_gpr_dr64_sext_no_spill(ptr %p, i64 %acc) {
 ; CHECK-LABEL: ii_gpr_dr64_sext_no_spill:
 ; CHECK:       x2mul32
@@ -40,7 +39,9 @@ entry:
   ; through the stack, st32+ld64 appear and this test fails (as it should
   ; today, hence XFAIL).
   ; (Path B): x2mul32 is 2-dest non-accum — args (src1, src2), returns {i64,i64}.
-  %r = call { i64, i64 } @llvm.haydn.x2mul32(i64 %a64, i64 %a64)
+  %bc.1 = bitcast i64 %a64 to <2 x i32>
+  %bc.2 = bitcast i64 %a64 to <2 x i32>
+  %r = call { i64, i64 } @llvm.haydn.x2mul32(<2 x i32> %bc.1, <2 x i32> %bc.2)
   %hi = extractvalue { i64, i64 } %r, 0
   ret i64 %hi
 }

@@ -37,32 +37,42 @@
 ; Z-prefix families zero the accumulator)
 
 ; TERNARY (acc-read) families: (acc, a, b). DB: rtd = rtd +...
-declare i64 @llvm.haydn.fmula16.hs00(i64, i64, i64)    ; FMULA16_HS00: rtd[63:32]+=...
-declare i64 @llvm.haydn.fmula16.ls33(i64, i64, i64)    ; FMULA16_LS33: rtd[31:00]+=...
-declare i64 @llvm.haydn.f2mulaa32r.hhll(i64, i64, i64) ; F2MULAA32R_HHLL: rtd+=round(hh+ll)
-declare i64 @llvm.haydn.f2mulss32r.hllh(i64, i64, i64) ; F2MULSS32R_HLLH: rtd-=cross
-declare i64 @llvm.haydn.mulaa32.hhll(i64, i64, i64)    ; MULAA32_HHLL: rtd += hh + ll
+declare i64 @llvm.haydn.fmula16.hs00(i64, <4 x i16>, <4 x i16>)    ; FMULA16_HS00: rtd[63:32]+=...
+declare i64 @llvm.haydn.fmula16.ls33(i64, <4 x i16>, <4 x i16>)    ; FMULA16_LS33: rtd[31:00]+=...
+declare i64 @llvm.haydn.f2mulaa32r.hhll(i64, <2 x i32>, <2 x i32>) ; F2MULAA32R_HHLL: rtd+=round(hh+ll)
+declare i64 @llvm.haydn.f2mulss32r.hllh(i64, <2 x i32>, <2 x i32>) ; F2MULSS32R_HLLH: rtd-=cross
+declare i64 @llvm.haydn.mulaa32.hhll(i64, <2 x i32>, <2 x i32>)    ; MULAA32_HHLL: rtd += hh + ll
 declare i64 @llvm.haydn.mulas32.hllh(i64, i64, i64)    ; MULAS32_HLLH: rtd += cross
 declare i64 @llvm.haydn.mul16aq(i64, i64, i64)         ; MUL16AQ: rtd += 4-lane quad mac
 
 ; BINARY (zero-accumulate / Z-prefix) families: (a, b). DB: rtd = 0 +...
-declare i64 @llvm.haydn.f2mulzaa32rs.hhll(i64, i64)    ; F2MULZAA32RS: rtd = 0 + r(hh)+r(ll)
-declare i64 @llvm.haydn.f2mulzss32rs.hllh(i64, i64)    ; F2MULZSS32RS_HLLH: rtd = 0 - cross
+declare i64 @llvm.haydn.f2mulzaa32rs.hhll(<2 x i32>, <2 x i32>)    ; F2MULZAA32RS: rtd = 0 + r(hh)+r(ll)
+declare i64 @llvm.haydn.f2mulzss32rs.hllh(<2 x i32>, <2 x i32>)    ; F2MULZSS32RS_HLLH: rtd = 0 - cross
 declare i64 @llvm.haydn.fmulzaa32s.hhll(i64, i64)      ; FMULZAA32S: rtd = SAT(0 + hh + ll)
 declare i64 @llvm.haydn.fmulzss32s.hllh(i64, i64)      ; FMULZSS32S_HLLH: rtd = SAT(0 - cross)
 
 ; Pure multiply (already-correct binary anchors from)
-declare i64 @llvm.haydn.mul64.hh(i64, i64)             ; MUL64_HH: rtd = hh*hh
+declare i64 @llvm.haydn.mul64.hh(<2 x i32>, <2 x i32>)             ; MUL64_HH: rtd = hh*hh
 declare i32 @llvm.haydn.brev32(i32, i32)               ; BREV32: rt = bitrev(bitrev(rs1)+rs2)
 
 ; If any of these intrinsics reverts to binary, `opt` fails the verifier
 ; ("Callsite was not defined with variable arguments!") and this RUN fails.
 define i64 @anchor_ternary_acc_read(i64 %acc, i64 %a, i64 %b) {
-  %t0 = call i64 @llvm.haydn.fmula16.hs00(i64 %acc, i64 %a, i64 %b)
-  %t1 = call i64 @llvm.haydn.fmula16.ls33(i64 %t0, i64 %a, i64 %b)
-  %t2 = call i64 @llvm.haydn.f2mulaa32r.hhll(i64 %t1, i64 %a, i64 %b)
-  %t3 = call i64 @llvm.haydn.f2mulss32r.hllh(i64 %t2, i64 %a, i64 %b)
-  %t4 = call i64 @llvm.haydn.mulaa32.hhll(i64 %t3, i64 %a, i64 %b)
+  %bc.1 = bitcast i64 %a to <4 x i16>
+  %bc.2 = bitcast i64 %b to <4 x i16>
+  %t0 = call i64 @llvm.haydn.fmula16.hs00(i64 %acc, <4 x i16> %bc.1, <4 x i16> %bc.2)
+  %bc.3 = bitcast i64 %a to <4 x i16>
+  %bc.4 = bitcast i64 %b to <4 x i16>
+  %t1 = call i64 @llvm.haydn.fmula16.ls33(i64 %t0, <4 x i16> %bc.3, <4 x i16> %bc.4)
+  %bc.5 = bitcast i64 %a to <2 x i32>
+  %bc.6 = bitcast i64 %b to <2 x i32>
+  %t2 = call i64 @llvm.haydn.f2mulaa32r.hhll(i64 %t1, <2 x i32> %bc.5, <2 x i32> %bc.6)
+  %bc.7 = bitcast i64 %a to <2 x i32>
+  %bc.8 = bitcast i64 %b to <2 x i32>
+  %t3 = call i64 @llvm.haydn.f2mulss32r.hllh(i64 %t2, <2 x i32> %bc.7, <2 x i32> %bc.8)
+  %bc.9 = bitcast i64 %a to <2 x i32>
+  %bc.10 = bitcast i64 %b to <2 x i32>
+  %t4 = call i64 @llvm.haydn.mulaa32.hhll(i64 %t3, <2 x i32> %bc.9, <2 x i32> %bc.10)
   %t5 = call i64 @llvm.haydn.mulas32.hllh(i64 %t4, i64 %a, i64 %b)
   %t6 = call i64 @llvm.haydn.mul16aq(i64 %t5, i64 %a, i64 %b)
   ret i64 %t6
@@ -71,11 +81,17 @@ define i64 @anchor_ternary_acc_read(i64 %acc, i64 %a, i64 %b) {
 ; If any of these Z-prefix intrinsics reverts to ternary, `opt` fails the
 ; verifier ("Intrinsic has incorrect argument type!") and this RUN fails.
 define i64 @anchor_binary_zero_init(i64 %a, i64 %b) {
-  %z0 = call i64 @llvm.haydn.f2mulzaa32rs.hhll(i64 %a, i64 %b)
-  %z1 = call i64 @llvm.haydn.f2mulzss32rs.hllh(i64 %a, i64 %b)
+  %bc.11 = bitcast i64 %a to <2 x i32>
+  %bc.12 = bitcast i64 %b to <2 x i32>
+  %z0 = call i64 @llvm.haydn.f2mulzaa32rs.hhll(<2 x i32> %bc.11, <2 x i32> %bc.12)
+  %bc.13 = bitcast i64 %a to <2 x i32>
+  %bc.14 = bitcast i64 %b to <2 x i32>
+  %z1 = call i64 @llvm.haydn.f2mulzss32rs.hllh(<2 x i32> %bc.13, <2 x i32> %bc.14)
   %z2 = call i64 @llvm.haydn.fmulzaa32s.hhll(i64 %a, i64 %b)
   %z3 = call i64 @llvm.haydn.fmulzss32s.hllh(i64 %a, i64 %b)
-  %m  = call i64 @llvm.haydn.mul64.hh(i64 %a, i64 %b)
+  %bc.15 = bitcast i64 %a to <2 x i32>
+  %bc.16 = bitcast i64 %b to <2 x i32>
+  %m = call i64 @llvm.haydn.mul64.hh(<2 x i32> %bc.15, <2 x i32> %bc.16)
   %s0 = add i64 %z0, %z1
   %s1 = add i64 %s0, %z2
   %s2 = add i64 %s1, %z3

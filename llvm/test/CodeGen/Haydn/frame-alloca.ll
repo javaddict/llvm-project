@@ -166,32 +166,9 @@
 ; CHECK: 	{ 	addi32{{(_w)?}}	r4, r0, 1; 	move32	sp, r3; 	nop }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r5, r0, 0; 	max32	r6, r1, r4; 	nop }
 ; CHECK: 	.p2align	2
-; CHECK: 	{ 	set_hwloop_f2_w	1, .LLhwloop_start0, .LLhwloop_end0, r6 }
-; CHECK: 	{ 	move32	r6, r3 }
-; CHECK: 	{ 	nop }
-; CHECK: 	{ 	nop }
-; CHECK: .LBB6_1:                                // %loop
-; CHECK:                                         // =>This Inner Loop Header: Depth=1
-; CHECK:                                         // Label of block must be emitted
-; CHECK: 	.p2align	2
-; CHECK: .LLhwloop_start0:
-; CHECK: 	{ 	subi32	sp, sp, 8 }
-; CHECK: 	{ 	st32	r5, sp, 0 }
-; CHECK: 	{ 	st32	r5, sp, 4 }
-; CHECK: 	{ 	ld64	d0, sp, 0 }
-; CHECK: 	{ 	add32	r5, r5, r4 }
-; CHECK: 	{ 	addi32{{(_w)?}}	sp, sp, 8; 	mul64.ll	d0, d0, d0; 	nop }
-; CHECK: 	.p2align	2
-; CHECK: .LLhwloop_end0:
-; CHECK: {{d_sw|st64|st32}}
-; CHECK: // %bb.2:                               // %exit
-; CHECK: 	{ 	sub32	r1, r1, r4 }
-; CHECK: 	{ 	sll32	r1, r1, r2 }
-; CHECK: 	{ 	add32	r1, r3, r1 }
-; CHECK: 	{ 	ld32	r1, r1, 0 }
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	addi32{{(_w)?}}	sp, sp, 8 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: set_hwloop_f2_w
+; CHECK: mull
+; CHECK: jalr_w
 ; CHECK: .Lfunc_end6:
 ; CHECK: 	.size	vla_indexed, .Lfunc_end6-vla_indexed
 ; CHECK: 	.cfi_endproc

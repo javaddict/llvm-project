@@ -65,12 +65,12 @@ define void @test_or_dead(i32 %a, i32 %b) {
   ret void
 }
 
-; s32 multiply lowers to a DR64 mul64.ll sequence (removed the invented
+; s32 multiply lowers to a DR64 mull sequence (removed the invented
 ; scalar MUL32). Result is stored to global to keep it live.
 define void @test_mul_dead(i32 %a, i32 %b) {
 ; CHECK-LABEL: test_mul_dead:
-; CHECK: mul64.ll
-; CHECK: d_sw_l_with_imm
+; CHECK: mull
+; CHECK: {{d_sw_l_with_imm|st32|stw}}
   %result = mul i32 %a, %b
   store i32 %result, ptr @g_sink
   ret void

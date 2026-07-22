@@ -47,11 +47,11 @@ define void @test_cb_and_linear_store(i64 %data, i32 %cb_ptr, ptr %linear_ptr) {
 ; CHECK: D_LDW_BREV_IMM
 ; CHECK: D_LDW_CB_IMM
 define i64 @test_brev_and_cb_load(i32 %brev_ptr, i32 %cb_ptr) {
-  %brev_val = call i32 @llvm.haydn.ldw.brev.imm(i32 %brev_ptr, i32 4)
+  %brev_pair = call { i64, i32 } @llvm.haydn.ldw.brev.imm(i32 %brev_ptr, i32 4)
+  %brev_val = extractvalue { i64, i32 } %brev_pair, 0
   %cb_val_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %cb_ptr, i32 0, i32 8)
   %cb_val = extractvalue { i64, i32 } %cb_val_pair, 0
-  %ext = zext i32 %brev_val to i64
-  %result = add i64 %cb_val, %ext
+  %result = add i64 %cb_val, %brev_val
   ret i64 %result
 }
 
@@ -94,9 +94,12 @@ define i64 @test_cb_load_compute_store(i32 %ptr, i64 %coeff) {
 ; CHECK: S_LW_BREV_IMM
 ; CHECK: D_LDW_BREV_IMM
 define i32 @test_brev_mixed_width(i32 %ptr32, i32 %ptr64) {
-  %val32 = call i32 @llvm.haydn.lw.brev.imm(i32 %ptr32, i32 2)
-  %val64_ext = call i32 @llvm.haydn.ldw.brev.imm(i32 %ptr64, i32 4)
-  %result = add i32 %val32, %val64_ext
+  %val32_pair = call { i32, i32 } @llvm.haydn.lw.brev.imm(i32 %ptr32, i32 2)
+  %val32 = extractvalue { i32, i32 } %val32_pair, 0
+  %val64_pair = call { i64, i32 } @llvm.haydn.ldw.brev.imm(i32 %ptr64, i32 4)
+  %val64 = extractvalue { i64, i32 } %val64_pair, 0
+  %val64_lo = trunc i64 %val64 to i32
+  %result = add i32 %val32, %val64_lo
   ret i32 %result
 }
 
@@ -110,8 +113,8 @@ define i32 @test_brev_mixed_width(i32 %ptr32, i32 %ptr64) {
 define i64 @test_register_pressure(i32 %ptr_cb, i32 %ptr_brev, i64 %a, i64 %b, i64 %c, i64 %d) {
   %cb_val_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %ptr_cb, i32 0, i32 8)
   %cb_val = extractvalue { i64, i32 } %cb_val_pair, 0
-  %brev_ext = call i32 @llvm.haydn.ldw.brev.imm(i32 %ptr_brev, i32 4)
-  %brev_val = zext i32 %brev_ext to i64
+  %brev_pair = call { i64, i32 } @llvm.haydn.ldw.brev.imm(i32 %ptr_brev, i32 4)
+  %brev_val = extractvalue { i64, i32 } %brev_pair, 0
   %sum1 = add i64 %a, %b
   %sum2 = add i64 %c, %d
   %sum3 = add i64 %cb_val, %brev_val
@@ -143,11 +146,11 @@ declare { i64, i32 } @llvm.haydn.ldw.cb.reg(i32, i32, i32)
 declare i32 @llvm.haydn.sdw.cb.imm(i64, i32, i32, i32)
 declare i32 @llvm.haydn.sdw.cb.reg(i64, i32, i32, i32)
 
-declare i32 @llvm.haydn.ldw.brev.imm(i32, i32)
-declare i32 @llvm.haydn.ldw.brev.reg(i32, i32)
-declare i32 @llvm.haydn.lw.brev.imm(i32, i32)
-declare i32 @llvm.haydn.lw.brev.reg(i32, i32)
-declare i32 @llvm.haydn.sdw.brev.imm(i32, i32, i32)
-declare i32 @llvm.haydn.sdw.brev.reg(i32, i32, i32)
-declare i32 @llvm.haydn.sw.brev.imm(i32, i32)
-declare i32 @llvm.haydn.sw.brev.reg(i32, i32)
+declare { i64, i32 } @llvm.haydn.ldw.brev.imm(i32, i32)
+declare { i64, i32 } @llvm.haydn.ldw.brev.reg(i32, i32)
+declare { i32, i32 } @llvm.haydn.lw.brev.imm(i32, i32)
+declare { i32, i32 } @llvm.haydn.lw.brev.reg(i32, i32)
+declare i32 @llvm.haydn.sdw.brev.imm(i64, i32, i32)
+declare i32 @llvm.haydn.sdw.brev.reg(i64, i32, i32)
+declare i32 @llvm.haydn.sw.brev.imm(i32, i32, i32)
+declare i32 @llvm.haydn.sw.brev.reg(i32, i32, i32)

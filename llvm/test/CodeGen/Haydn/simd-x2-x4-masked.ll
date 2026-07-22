@@ -97,13 +97,17 @@ define i64 @test_x2sel32_ll(i64 %a, i64 %b) {
 ;===----------------------------------------------------------------------===
 
 define i64 @test_x2cmul32(i64 %a, i64 %b) {
-  %r = call { i64, i64 } @llvm.haydn.x2cmul32(i64 %a, i64 %b)
+  %bc.1 = bitcast i64 %a to <2 x i32>
+  %bc.2 = bitcast i64 %b to <2 x i32>
+  %r = call { i64, i64 } @llvm.haydn.x2cmul32(<2 x i32> %bc.1, <2 x i32> %bc.2)
   %hi = extractvalue { i64, i64 } %r, 0
   ret i64 %hi
 }
 
 define i64 @test_x2cmul32s(i64 %a, i64 %b) {
-  %r = call { i64, i64 } @llvm.haydn.x2cmul32s(i64 %a, i64 %b)
+  %bc.3 = bitcast i64 %a to <2 x i32>
+  %bc.4 = bitcast i64 %b to <2 x i32>
+  %r = call { i64, i64 } @llvm.haydn.x2cmul32s(<2 x i32> %bc.3, <2 x i32> %bc.4)
   %hi = extractvalue { i64, i64 } %r, 0
   ret i64 %hi
 }
@@ -172,7 +176,9 @@ define <2 x i32> @test_x2cmul32_masked_eq(<2 x i32> %acc, <2 x i32> %a, <2 x i32
   %acc_i = bitcast <2 x i32> %acc to i64
   %a_i   = bitcast <2 x i32> %a to i64
   %b_i   = bitcast <2 x i32> %b to i64
-  %cmul_i = call { i64, i64 } @llvm.haydn.x2cmul32(i64 %a_i, i64 %b_i)
+  %bc.5 = bitcast i64 %a_i to <2 x i32>
+  %bc.6 = bitcast i64 %b_i to <2 x i32>
+  %cmul_i = call { i64, i64 } @llvm.haydn.x2cmul32(<2 x i32> %bc.5, <2 x i32> %bc.6)
   %cmul_h = extractvalue { i64, i64 } %cmul_i, 0
   %cmul   = bitcast i64 %cmul_h to <2 x i32>
   %result = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %acc,<2 x i32> %cmul)
@@ -193,7 +199,10 @@ define <2 x i32> @test_x2clamp32_masked_sle(<2 x i32> %a, <2 x i32> %b, <2 x i32
   %cmp = call <2 x i32> @llvm.haydn.x2sle32(<2 x i32> %a,<2 x i32> %mask_val)
   %a_i = bitcast <2 x i32> %a to i64
   %b_i = bitcast <2 x i32> %b to i64
-  %clamped_i = call i64 @llvm.haydn.x2clamp32(i64 %a_i, i64 %b_i)
+  %bc.7 = bitcast i64 %a_i to <2 x i32>
+  %bc.8 = bitcast i64 %b_i to <2 x i32>
+  %call.9 = call <2 x i32> @llvm.haydn.x2clamp32(<2 x i32> %bc.7, <2 x i32> %bc.8)
+  %clamped_i = bitcast <2 x i32> %call.9 to i64
   %clamped   = bitcast i64 %clamped_i to <2 x i32>
   %result = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %a,<2 x i32> %clamped)
   ret <2 x i32> %result
@@ -232,12 +241,10 @@ declare i64 @llvm.haydn.x2sel32_lh(i64, i64)
 declare i64 @llvm.haydn.x2sel32_ll(i64, i64)
 
 ; X2/X4 clamp (binary DR64)
-declare i64 @llvm.haydn.x2clamp32(i64, i64)
-
+declare <2 x i32> @llvm.haydn.x2clamp32(<2 x i32>, <2 x i32>)
 ; X2 complex multiply (Path B: 2-dest DR64)
-declare { i64, i64 } @llvm.haydn.x2cmul32(i64, i64)
-declare { i64, i64 } @llvm.haydn.x2cmul32s(i64, i64)
-
+declare { i64, i64 } @llvm.haydn.x2cmul32(<2 x i32>, <2 x i32>)
+declare { i64, i64 } @llvm.haydn.x2cmul32s(<2 x i32>, <2 x i32>)
 ; X4 complex multiply per-half (binary DR64)
 declare i64 @llvm.haydn.x4cmul16s_h(i64, i64)
 declare i64 @llvm.haydn.x4cmul16s_l(i64, i64)

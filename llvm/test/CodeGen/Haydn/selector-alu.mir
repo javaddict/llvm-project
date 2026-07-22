@@ -1,6 +1,6 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select %s -o - | FileCheck %s
 
-# Test that G_* arithmetic operations are selected to ADD32/SUB32/MUL32/etc.
+# Test that G_* arithmetic operations are selected to ADD32/SUB32/MULL/etc.
 
 ---
 name:            test_select_add32
@@ -72,9 +72,9 @@ name:            test_select_mul32
 legalized:       true
 regBankSelected: false
 # CHECK-LABEL: name: test_select_mul32
-# No native GPR32 multiply — G_MUL <s32> selects to the real MUL64_LL
-# + bank-move sequence (sext32t64/folded MOV_GPR_TO_DR64, MUL64_LL, MOVE32_DR_L).
-# CHECK: MUL64_LL
+# G_MUL <s32> → MULL (golden GPR32 MAC GRR low-half product).
+# CHECK: MULL
+# CHECK-NOT: MUL64_LL
 body:             |
   bb.0.entry:
     liveins: $r0, $r1

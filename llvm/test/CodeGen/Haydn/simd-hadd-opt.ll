@@ -15,7 +15,7 @@
 ;
 ; TODO: Add a PostSelectOptimize rule that recognizes X2ADD32 where only the
 ; lower half of MOV_DR64_TO_GPR is used, and replace with X2HADD32_L.
-; Similarly, recognize X2MUL32 followed by X2HADD32_L → X2DOT32.
+; Similarly, recognize dual-product + X2HADD32_L → X2DOT32 (when formMACs on).
 ;
 ; Once those combines are implemented, update these CHECK lines to expect
 ; x2hadd32_l and x2dot32 instead.
@@ -43,20 +43,20 @@ define i32 @test_vecreduce_add_after_simd(<2 x i32> %a, <2 x i32> %b) nounwind {
 }
 
 ; TEST 3: Reduction of multiply result
-; multiply two vectors then reduce -- produces X2MUL32 for the vector mul.
+; multiply two vectors then reduce -- G_MUL v2i32 → x2mulpl32 (wrap low).
 define i32 @test_vecreduce_mul_then_add(<2 x i32> %a, <2 x i32> %b) nounwind {
 ; CHECK-LABEL: test_vecreduce_mul_then_add:
-; CHECK: x2mul32
+; CHECK: x2mulpl32
   %mul = mul <2 x i32> %a, %b
   %r = call i32 @llvm.vector.reduce.add.v2i32(<2 x i32> %mul)
   ret i32 %r
 }
 
 ; TEST 4: Reduction with accumulator
-; acc += reduce_add(a * b) -- produces X2MUL32 + ADD32.
+; acc += reduce_add(a * b) -- x2mulpl32 (or x2mul32) + add path.
 define i32 @test_vecreduce_dot_acc(<2 x i32> %a, <2 x i32> %b, i32 %acc) nounwind {
 ; CHECK-LABEL: test_vecreduce_dot_acc:
-; CHECK: x2mul32
+; CHECK: x2mulpl32
 ; CHECK: add32
   %mul = mul <2 x i32> %a, %b
   %dot = call i32 @llvm.vector.reduce.add.v2i32(<2 x i32> %mul)

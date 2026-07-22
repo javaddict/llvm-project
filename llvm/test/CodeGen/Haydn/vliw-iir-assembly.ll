@@ -71,7 +71,7 @@ exit:
 ; ASM-DAG: xor32
 ; ASM-DAG: subi32 sp, sp
 ; ASM-DAG: ld32
-; ASM-DAG: mul64.ll
+; ASM-DAG: mull
 ; ASM-DAG: st32
 ; ASM-DAG: add32
 ; (SFR-strip) changed bundle layout — rebaselined.

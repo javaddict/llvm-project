@@ -12,7 +12,7 @@
 ; CHECK-LABEL: main:
 ; CHECK: {{.}}
 
-declare i64 @llvm.haydn.mul64.ss.ll(i64, i64) nounwind readnone
+declare i64 @llvm.haydn.mul64.ss.ll(<2 x i32>, <2 x i32>) nounwind readnone
 
 ; State structure
 ; Layout: { b0, b1, b2, a1, a2, sx0, sx1, sy0, sy1 } -- 9 x i32 = 36 bytes
@@ -84,15 +84,21 @@ for.body:
   ; Feedforward: acc = b0*xn + b1*sx0 + b2*sx1
   %b0.ext = sext i32 %b0 to i64
   %xn.ext = sext i32 %xn to i64
-  %acc_b0 = call i64 @llvm.haydn.mul64.ss.ll(i64 %b0.ext, i64 %xn.ext)
+  %bc.1 = bitcast i64 %b0.ext to <2 x i32>
+  %bc.2 = bitcast i64 %xn.ext to <2 x i32>
+  %acc_b0 = call i64 @llvm.haydn.mul64.ss.ll(<2 x i32> %bc.1, <2 x i32> %bc.2)
 
   %b1.ext = sext i32 %b1 to i64
   %sx0.ext = sext i32 %sx0 to i64
-  %acc_b1 = call i64 @llvm.haydn.mul64.ss.ll(i64 %b1.ext, i64 %sx0.ext)
+  %bc.3 = bitcast i64 %b1.ext to <2 x i32>
+  %bc.4 = bitcast i64 %sx0.ext to <2 x i32>
+  %acc_b1 = call i64 @llvm.haydn.mul64.ss.ll(<2 x i32> %bc.3, <2 x i32> %bc.4)
 
   %b2.ext = sext i32 %b2 to i64
   %sx1.ext = sext i32 %sx1 to i64
-  %acc_b2 = call i64 @llvm.haydn.mul64.ss.ll(i64 %b2.ext, i64 %sx1.ext)
+  %bc.5 = bitcast i64 %b2.ext to <2 x i32>
+  %bc.6 = bitcast i64 %sx1.ext to <2 x i32>
+  %acc_b2 = call i64 @llvm.haydn.mul64.ss.ll(<2 x i32> %bc.5, <2 x i32> %bc.6)
 
   %sum01  = add i64 %acc_b0, %acc_b1
   %sum012 = add i64 %sum01,  %acc_b2
@@ -100,11 +106,15 @@ for.body:
   ; Feedback: acc -= a1*sy0 + a2*sy1
   %a1.ext = sext i32 %a1 to i64
   %sy0.ext = sext i32 %sy0 to i64
-  %acc_a1 = call i64 @llvm.haydn.mul64.ss.ll(i64 %a1.ext, i64 %sy0.ext)
+  %bc.7 = bitcast i64 %a1.ext to <2 x i32>
+  %bc.8 = bitcast i64 %sy0.ext to <2 x i32>
+  %acc_a1 = call i64 @llvm.haydn.mul64.ss.ll(<2 x i32> %bc.7, <2 x i32> %bc.8)
 
   %a2.ext = sext i32 %a2 to i64
   %sy1.ext = sext i32 %sy1 to i64
-  %acc_a2 = call i64 @llvm.haydn.mul64.ss.ll(i64 %a2.ext, i64 %sy1.ext)
+  %bc.9 = bitcast i64 %a2.ext to <2 x i32>
+  %bc.10 = bitcast i64 %sy1.ext to <2 x i32>
+  %acc_a2 = call i64 @llvm.haydn.mul64.ss.ll(<2 x i32> %bc.9, <2 x i32> %bc.10)
 
   %sum34 = add i64 %acc_a1, %acc_a2
   %acc   = sub i64 %sum012, %sum34

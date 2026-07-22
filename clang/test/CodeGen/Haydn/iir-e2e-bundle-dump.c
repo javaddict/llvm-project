@@ -8,11 +8,11 @@
 //
 // E2E Clang → Haydn pipeline for a cascaded biquad IIR workload.
 // FileCheck-only (re-scoped 2026-07-15): pins stable contracts, not schedule
-// noise or retired MAC32/MUL32 phantoms (ISA-47 — no scalar GPR 32×32 MAC).
+// noise or retired phantom MAC32; wrap mul is mull.
 //
 // Contracts:
-//   - s64 DF1 uses DR64 mul/mac (mul64.ll / mula64.ll) + sub64, not dead mul32
-//   - s32 DF1 also lowers via mul64.ll + lane extract (soft 32×32 path)
+//   - s64 DF1 uses widening MUL64_LL / MULA64_LL + sub64
+//   - s32 DF1 uses MULL (GPR32 low-half product)
 //   - Block/cascade loops: slt32 + branch + jal to biquad_df1
 //   - ELF objdump shows same mnemonics + call reloc class
 
@@ -40,7 +40,7 @@ int32_t biquad_df1(int32_t xn, int32_t b0, int32_t b1, int32_t b2,
     return yn;
 }
 
-// 32-bit product sum — Haydn has no GPR mul32 (ISA-47); expect mul64.ll path.
+// 32-bit product sum — expect mull (golden MAC GRR).
 __attribute__((noinline))
 int32_t biquad_df1_32bit(int32_t xn, int32_t b0, int32_t b1, int32_t b2,
                          int32_t a1, int32_t a2, biquad_state_t *state) {
@@ -89,7 +89,7 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 
 // ASM-LABEL: biquad_df1_32bit:
 // ASM-DAG: subi32
-// ASM-DAG: mul64.ll
+// ASM-DAG: mull
 // ASM-DAG: sub32
 // ASM-DAG: ld32
 // ASM-DAG: st32
@@ -122,7 +122,7 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 // BUNDLE: jalr
 
 // BUNDLE-LABEL: <biquad_df1_32bit>:
-// BUNDLE-DAG: mul64.ll
+// BUNDLE-DAG: mull
 // BUNDLE-DAG: sub32
 // BUNDLE-DAG: ld32
 // BUNDLE-DAG: st32

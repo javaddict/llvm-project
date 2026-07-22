@@ -26,19 +26,19 @@ typedef unsigned int uint32_t;
 
 // CHECK-LABEL: @test_mul64_ss_ll
 int64_t test_mul64_ss_ll(int64_t a, int64_t b) {
-  // CHECK: call i64 @llvm.haydn.mul64.ss.ll(i64 %{{.*}}, i64 %{{.*}})
+  // CHECK: call i64 @llvm.haydn.mul64.ss.ll(<2 x i32> %{{.*}}, <2 x i32> %{{.*}})
   return __builtin_haydn_mul64_ss_ll(a, b);
 }
 
 // CHECK-LABEL: @test_mul64_ss_hh
 int64_t test_mul64_ss_hh(int64_t a, int64_t b) {
-  // CHECK: call i64 @llvm.haydn.mul64.ss.hh(i64 %{{.*}}, i64 %{{.*}})
+  // CHECK: call i64 @llvm.haydn.mul64.ss.hh(<2 x i32> %{{.*}}, <2 x i32> %{{.*}})
   return __builtin_haydn_mul64_ss_hh(a, b);
 }
 
 // CHECK-LABEL: @test_mul64_uu_ull
 int64_t test_mul64_uu_ull(int64_t a, int64_t b) {
-  // CHECK: call i64 @llvm.haydn.mul64.uu.ull(i64 %{{.*}}, i64 %{{.*}})
+  // CHECK: call i64 @llvm.haydn.mul64.uu.ull(<2 x i32> %{{.*}}, <2 x i32> %{{.*}})
   return __builtin_haydn_mul64_uu_ull(a, b);
 }
 
@@ -46,7 +46,7 @@ int64_t test_mul64_uu_ull(int64_t a, int64_t b) {
 
 // CHECK-LABEL: @test_mula64_ss_ll
 int64_t test_mula64_ss_ll(int64_t acc, int64_t a, int64_t b) {
-  // CHECK: call i64 @llvm.haydn.mula64.ss.ll(i64 %{{.*}}, i64 %{{.*}}, i64 %{{.*}})
+  // CHECK: call i64 @llvm.haydn.mula64.ss.ll(i64 %{{.*}}, <2 x i32> %{{.*}}, <2 x i32> %{{.*}})
   return __builtin_haydn_mula64_ss_ll(acc, a, b);
 }
 
@@ -54,7 +54,7 @@ int64_t test_mula64_ss_ll(int64_t acc, int64_t a, int64_t b) {
 
 // CHECK-LABEL: @test_muls64_ss_ll
 int64_t test_muls64_ss_ll(int64_t acc, int64_t a, int64_t b) {
-  // CHECK: call i64 @llvm.haydn.muls64.ss.ll(i64 %{{.*}}, i64 %{{.*}}, i64 %{{.*}})
+  // CHECK: call i64 @llvm.haydn.muls64.ss.ll(i64 %{{.*}}, <2 x i32> %{{.*}}, <2 x i32> %{{.*}})
   return __builtin_haydn_muls64_ss_ll(acc, a, b);
 }
 
@@ -110,13 +110,13 @@ int test_neg32s(int a) {
 
 // CHECK-LABEL: @test_fmul32s_ll
 int64_t test_fmul32s_ll(int64_t a, int64_t b) {
-  // CHECK: call i64 @llvm.haydn.fmul32s.ll(i64 %{{.*}}, i64 %{{.*}})
+  // CHECK: call i64 @llvm.haydn.fmul32s.ll(<2 x i32> %{{.*}}, <2 x i32> %{{.*}})
   return __builtin_haydn_fmul32s_ll(a, b);
 }
 
 // CHECK-LABEL: @test_fmula32s_ll
 int64_t test_fmula32s_ll(int64_t acc, int64_t a, int64_t b) {
-  // CHECK: call i64 @llvm.haydn.fmula32s.ll(i64 %{{.*}}, i64 %{{.*}}, i64 %{{.*}})
+  // CHECK: call i64 @llvm.haydn.fmula32s.ll(i64 %{{.*}}, <2 x i32> %{{.*}}, <2 x i32> %{{.*}})
   return __builtin_haydn_fmula32s_ll(acc, a, b);
 }
 

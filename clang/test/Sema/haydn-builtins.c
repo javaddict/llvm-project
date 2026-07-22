@@ -23,14 +23,32 @@ int64_t test_pair_null(haydn_x2int32 a, haydn_x2int32 b) {
   return __builtin_haydn_x2mul32_pair((int64_t *)0, a, b);
 }
 
-int64_t test_cb_pair_null(int base, int cbr, int stride) {
+int64_t test_cb_pair_null(int base) {
   // expected-warning@+1 {{null passed to a callee that requires a non-null argument}}
-  return __builtin_haydn_ldw_cb_imm_pair((int *)0, base, cbr, stride);
+  return __builtin_haydn_ldw_cb_imm_pair((int *)0, base, /*cbr=*/0, /*stride=*/1);
 }
 
-int64_t test_cb_pair_ok(int base, int cbr, int stride) {
+int64_t test_cb_pair_ok(int base) {
   int np;
-  return __builtin_haydn_ldw_cb_imm_pair(&np, base, cbr, stride);
+  return __builtin_haydn_ldw_cb_imm_pair(&np, base, /*cbr=*/0, /*stride=*/1);
+}
+
+// LS IMM offset / CB ImmArg ranges
+long long test_d_ldw_with_imm_ok(int base) {
+  return __builtin_haydn_d_ldw_with_imm(base, 0);
+}
+long long test_d_ldw_with_imm_bad(int base) {
+  // expected-error@+1 {{argument value 32 is outside the valid range [-32, 31]}}
+  return __builtin_haydn_d_ldw_with_imm(base, 32);
+}
+void test_d_sdw_with_imm_bad(long long data, int base) {
+  // expected-error@+1 {{argument value -33 is outside the valid range [-32, 31]}}
+  __builtin_haydn_d_sdw_with_imm(data, base, -33);
+}
+int64_t test_ldw_cb_imm_cbr_bad(int base) {
+  int np;
+  // expected-error@+1 {{argument value 2 is outside the valid range [0, 1]}}
+  return __builtin_haydn_ldw_cb_imm_pair(&np, base, 2, 1);
 }
 
 //===----------------------------------------------------------------------===//

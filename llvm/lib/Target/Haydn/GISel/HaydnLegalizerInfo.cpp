@@ -52,21 +52,14 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .maxScalar(0, S64)
       .widenScalarToNextPow2(0);
 
-  // s32 mul selects to the real MUL64_LL + bank-move sequence (Haydn has no
-  // native GPR32 multiply; removed the invented MUL32); s64 mul is
-  // custom-lowered in legalizeCustom to native MUL64_LL (widening 32x32->64)
-  // or a native schoolbook sequence of MUL64_LL partials (true 64x64) -- never
-  // a __muldi3 libcall.
-  // We use customFor, NOT legalFor or libcallFor: legalFor would route G_MUL
-  // <s64> to the selector's LIBCALL_MUL64 fallback; libcallFor fails because
-  // Haydn's call lowering doesn't handle the LLVM Type*-based arg splitting
-  // for libcalls correctly.
   // G_MUL elementwise wrap:
-  //   s32  — MUL64_LL low half (no native GPR32 mul)
-  //   v2i32 — X2MULPL32 (golden: low 32 of each dual 32x32 product)
-  //   v4i16 — NOT X4MUL16 (that is 2-dest 16x16->32 DSP mul). Scalarize
-  //           to s16 then minScalar->s32. True ISA X4MUL16 is only via
-  //           llvm.haydn.x4mul16 / haydn_x4mul16 (2-result dpair).
+  //   s32   — MULL (golden MAC GRR low-half product)
+  //   v2i32 — X2MULPL32 (low 32 of each dual 32x32 product)
+  //   v4i16 — NOT X4MUL16 (2-dest DSP mul). Scalarize; true X4MUL16 only via
+  //           llvm.haydn.x4mul16 / haydn_x4mul16.
+  // s64: custom MUL64_LL (widen 32x32->64) or schoolbook partials — never
+  // __muldi3. Use customFor for s64, not legalFor/libcallFor (legalFor would
+  // hit selector LIBCALL_MUL64; libcallFor fails Haydn call arg splitting).
   getActionDefinitionsBuilder(G_MUL)
       .legalFor({S32, V2I32})
       .customFor({S64})
@@ -82,23 +75,17 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .maxScalar(0, S64);
 
   // G_UMULH — unsigned multiply high.
-  // s64: custom (native MUL64_LL schoolbook, see legalizeCustom)
-  // s32: lower (generic decomposition)
-  // s8/s16/s24: custom (zero-extend operands to s32, MUL s32, LShr by DstBits
-  // truncate). See legalizeCustom. s24 arises from 23-bit signed
-  // bitfields (int member : 23 -> load i24). Fixes "unable to
-  // legalize G_UMULH s8/s16/s24" (yarpgen seeds 10, 92).
+  // s32: MULUUH (legal). s64: custom schoolbook. s8/s16/s24: custom widen.
   getActionDefinitionsBuilder(G_UMULH)
-      .customFor({S8, S16, LLT::scalar(24), S64})
-      .lowerFor({S32});
+      .legalFor({S32})
+      .customFor({S8, S16, LLT::scalar(24), S64});
 
-  // G_SMULH — signed multiply high. s32/s64 lower via the generic path;
-  // narrow s8/s16/s24 are custom-lowered in legalizeCustom (sign-extend
-  // operands to s32, MUL s32, AShr by DstBits, truncate). s24 arises from
-  // 23-bit signed bitfields. Fixes G_SMULH s8/s16/s24 (yarpgen seeds 1, 6, 92).
+  // G_SMULH — signed multiply high.
+  // s32: MULSSH (legal). s64: generic lower. s8/s16/s24: custom widen.
   getActionDefinitionsBuilder(G_SMULH)
+      .legalFor({S32})
       .customFor({S8, S16, LLT::scalar(24)})
-      .lowerFor({S32, S64});
+      .lowerFor({S64});
 
   //===--------------------------------------------------------------------===
   // Bitwise Logic

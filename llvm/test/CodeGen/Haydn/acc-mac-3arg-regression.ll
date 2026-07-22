@@ -25,15 +25,14 @@
 ; ~/haydn-plans/lessons/isel-multiple-def-dst-reg.md
 ; spec: Database/haydn_instruction_db.json MULA64_LL/MULS64_LL/FMULA32S_LL
 
-declare i64 @llvm.haydn.mula64.ss.ll(i64, i64, i64)
-declare i64 @llvm.haydn.muls64.ss.ll(i64, i64, i64)
+declare i64 @llvm.haydn.mula64.ss.ll(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.muls64.ss.ll(i64, <2 x i32>, <2 x i32>)
 declare i64 @llvm.haydn.mulas64.ss.ll(i64, i64, i64)
 declare i64 @llvm.haydn.mulss64.ss.ll(i64, i64, i64)
-declare i64 @llvm.haydn.fmula32s.ll(i64, i64, i64)
-declare i64 @llvm.haydn.ff2mula32rs.ll(i64, i64, i64)
-declare i64 @llvm.haydn.f2mulaa32rs.hhll(i64, i64, i64)
-declare i64 @llvm.haydn.x2fcmula32rs(i64, i64, i64)
-
+declare i64 @llvm.haydn.fmula32s.ll(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.ff2mula32rs.ll(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.f2mulaa32rs.hhll(i64, <2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2fcmula32rs(<2 x i32>, <2 x i32>, <2 x i32>)
 ; CHECK: 	.globl	test_mula64_ss_ll               // -- Begin function test_mula64_ss_ll
 ; CHECK: 	.type	test_mula64_ss_ll,@function
 ; CHECK-LABEL: test_mula64_ss_ll:                      // @test_mula64_ss_ll
@@ -47,7 +46,9 @@ declare i64 @llvm.haydn.x2fcmula32rs(i64, i64, i64)
 ; CHECK: 	.cfi_endproc
 ; CHECK:                                         // -- End function
 define i64 @test_mula64_ss_ll(i64 %acc, i64 %a, i64 %b) {
-  %r = call i64 @llvm.haydn.mula64.ss.ll(i64 %acc, i64 %a, i64 %b)
+  %bc.1 = bitcast i64 %a to <2 x i32>
+  %bc.2 = bitcast i64 %b to <2 x i32>
+  %r = call i64 @llvm.haydn.mula64.ss.ll(i64 %acc, <2 x i32> %bc.1, <2 x i32> %bc.2)
   ret i64 %r
 }
 
@@ -64,7 +65,9 @@ define i64 @test_mula64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK: 	.cfi_endproc
 ; CHECK:                                         // -- End function
 define i64 @test_muls64_ss_ll(i64 %acc, i64 %a, i64 %b) {
-  %r = call i64 @llvm.haydn.muls64.ss.ll(i64 %acc, i64 %a, i64 %b)
+  %bc.3 = bitcast i64 %a to <2 x i32>
+  %bc.4 = bitcast i64 %b to <2 x i32>
+  %r = call i64 @llvm.haydn.muls64.ss.ll(i64 %acc, <2 x i32> %bc.3, <2 x i32> %bc.4)
   ret i64 %r
 }
 
@@ -115,7 +118,9 @@ define i64 @test_mulss64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK: 	.cfi_endproc
 ; CHECK:                                         // -- End function
 define i64 @test_fmula32s_ll(i64 %acc, i64 %a, i64 %b) {
-  %r = call i64 @llvm.haydn.fmula32s.ll(i64 %acc, i64 %a, i64 %b)
+  %bc.5 = bitcast i64 %a to <2 x i32>
+  %bc.6 = bitcast i64 %b to <2 x i32>
+  %r = call i64 @llvm.haydn.fmula32s.ll(i64 %acc, <2 x i32> %bc.5, <2 x i32> %bc.6)
   ret i64 %r
 }
 
@@ -132,7 +137,9 @@ define i64 @test_fmula32s_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK: 	.cfi_endproc
 ; CHECK:                                         // -- End function
 define i64 @test_ff2mula32rs_ll(i64 %acc, i64 %a, i64 %b) {
-  %r = call i64 @llvm.haydn.ff2mula32rs.ll(i64 %acc, i64 %a, i64 %b)
+  %bc.7 = bitcast i64 %a to <2 x i32>
+  %bc.8 = bitcast i64 %b to <2 x i32>
+  %r = call i64 @llvm.haydn.ff2mula32rs.ll(i64 %acc, <2 x i32> %bc.7, <2 x i32> %bc.8)
   ret i64 %r
 }
 
@@ -149,7 +156,9 @@ define i64 @test_ff2mula32rs_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK: 	.cfi_endproc
 ; CHECK:                                         // -- End function
 define i64 @test_f2mulaa32rs_hhll(i64 %acc, i64 %a, i64 %b) {
-  %r = call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %acc, i64 %a, i64 %b)
+  %bc.9 = bitcast i64 %a to <2 x i32>
+  %bc.10 = bitcast i64 %b to <2 x i32>
+  %r = call i64 @llvm.haydn.f2mulaa32rs.hhll(i64 %acc, <2 x i32> %bc.9, <2 x i32> %bc.10)
   ret i64 %r
 }
 
@@ -166,6 +175,10 @@ define i64 @test_f2mulaa32rs_hhll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK: 	.cfi_endproc
 ; CHECK:                                         // -- End function
 define i64 @test_x2fcmula32rs(i64 %acc, i64 %a, i64 %b) {
-  %r = call i64 @llvm.haydn.x2fcmula32rs(i64 %acc, i64 %a, i64 %b)
+  %bc.11 = bitcast i64 %acc to <2 x i32>
+  %bc.12 = bitcast i64 %a to <2 x i32>
+  %bc.13 = bitcast i64 %b to <2 x i32>
+  %call.14 = call <2 x i32> @llvm.haydn.x2fcmula32rs(<2 x i32> %bc.11, <2 x i32> %bc.12, <2 x i32> %bc.13)
+  %r = bitcast <2 x i32> %call.14 to i64
   ret i64 %r
 }

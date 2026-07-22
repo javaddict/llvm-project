@@ -106,6 +106,36 @@ Value *emitCbLoadPair(CodeGenFunction &CGF, unsigned ID, const CallExpr *E) {
   return CGF.Builder.CreateExtractValue(Call, 0);
 }
 
+/// POST/PRE AGU writeback load frexp: {data, new_ptr} = op(base, off).
+/// Builtin: data_ty(int *new_ptr_out, int base, int off). Data may be i32 or i64.
+Value *emitLoadWbPair(CodeGenFunction &CGF, unsigned ID, const CallExpr *E) {
+  Value *NewPtrOut = CGF.EmitScalarExpr(E->getArg(0));
+  Value *Base = CGF.EmitScalarExpr(E->getArg(1));
+  Value *Off = CGF.EmitScalarExpr(E->getArg(2));
+  Value *Call =
+      CGF.Builder.CreateCall(CGF.CGM.getIntrinsic(ID), {Base, Off});
+  Value *NewPtr = CGF.Builder.CreateExtractValue(Call, 1);
+  QualType PointeeTy = E->getArg(0)->getType()->getPointeeType();
+  LValue NewPtrLV = CGF.MakeNaturalAlignAddrLValue(NewPtrOut, PointeeTy);
+  CGF.EmitStoreOfScalar(NewPtr, NewPtrLV);
+  return CGF.Builder.CreateExtractValue(Call, 0);
+}
+
+/// BREV load frexp: {data, i32 new_ptr} — no cbr_sel (ptr, stride only).
+/// Covers D_LDW_BREV (i64 data) and S_LW_BREV (i32 data).
+Value *emitBrevLoadPair(CodeGenFunction &CGF, unsigned ID, const CallExpr *E) {
+  Value *NewPtrOut = CGF.EmitScalarExpr(E->getArg(0));
+  Value *Ptr = CGF.EmitScalarExpr(E->getArg(1));
+  Value *Stride = CGF.EmitScalarExpr(E->getArg(2));
+  Value *Call =
+      CGF.Builder.CreateCall(CGF.CGM.getIntrinsic(ID), {Ptr, Stride});
+  Value *NewPtr = CGF.Builder.CreateExtractValue(Call, 1);
+  QualType PointeeTy = E->getArg(0)->getType()->getPointeeType();
+  LValue NewPtrLV = CGF.MakeNaturalAlignAddrLValue(NewPtrOut, PointeeTy);
+  CGF.EmitStoreOfScalar(NewPtr, NewPtrLV);
+  return CGF.Builder.CreateExtractValue(Call, 0);
+}
+
 /// AE_ADDANDSUBRNG16RAS: alternating add/sub interleave via SFR masked move
 /// (D210). X4ADDSUB16S is an ISA gap; slot suffix is HiFi-only (identical IR).
 Value *emitAeAddAndSubRng(CodeGenFunction &CGF, const CallExpr *E) {

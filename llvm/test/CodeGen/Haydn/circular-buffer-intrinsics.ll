@@ -73,76 +73,67 @@ define i32 @test_sdw_cb_imm(i64 %data, i32 %ptr) {
   ret i32 %np
 }
 
-;Bit-Reversed Load
+;Bit-Reversed Load — frexp pair {data, new_ptr}
 
 ; CHECK-LABEL: test_ldw_brev_imm:
 ; CHECK: d_ldw_brev_imm
-define i32 @test_ldw_brev_imm(i32 %ptr) {
-  %r = call i32 @llvm.haydn.ldw.brev.imm(i32 %ptr, i32 4)
-  ret i32 %r
+define i64 @test_ldw_brev_imm(i32 %ptr) {
+  %r = call { i64, i32 } @llvm.haydn.ldw.brev.imm(i32 %ptr, i32 4)
+  %d = extractvalue { i64, i32 } %r, 0
+  ret i64 %d
 }
 
 ; CHECK-LABEL: test_ldw_brev_reg:
 ; CHECK: d_ldw_brev_reg
-define i32 @test_ldw_brev_reg(i32 %ptr, i32 %stride) {
-  %r = call i32 @llvm.haydn.ldw.brev.reg(i32 %ptr, i32 %stride)
-  ret i32 %r
+define i64 @test_ldw_brev_reg(i32 %ptr, i32 %stride) {
+  %r = call { i64, i32 } @llvm.haydn.ldw.brev.reg(i32 %ptr, i32 %stride)
+  %d = extractvalue { i64, i32 } %r, 0
+  ret i64 %d
 }
-
-; fixed the four remaining MCID::Pseudo BREV defs (S_LW_BREV_IMM/REG
-; S_SW_BREV_IMM, D_SDW_BREV_IMM): they lived inside the `let isPseudo = 1 in
-; {... }` block at HaydnInstrInfoAuto.td:2413 and LACKED the `let isPseudo
-; = 0` override that D_LDW_BREV_IMM/REG at line 2467/2477 correctly carry
-; (same defect class as the fix for D_LDW_POST_IMM / S_LW_POST_IMM).
-; Before, AsmPrinter silently dropped them — the BREV load/store never
-; reached assembly, so the intrinsic had NO effect (e.g. test_lw_brev_imm
-; emitted just `{ xor32 r0, r0, r0; move32 r1, r2; nop }` — no load). The CHECKs
-; below now verify the mnemonics reach assembly; if the isPseudo=0 override
-; regresses, the load/store will vanish again — the silent-wrong-code failure.
 
 define i32 @test_lw_brev_imm(i32 %ptr) {
 ; CHECK-LABEL: test_lw_brev_imm:
 ; CHECK: s_lw_brev_imm
-  %r = call i32 @llvm.haydn.lw.brev.imm(i32 %ptr, i32 2)
-  ret i32 %r
+  %r = call { i32, i32 } @llvm.haydn.lw.brev.imm(i32 %ptr, i32 2)
+  %d = extractvalue { i32, i32 } %r, 0
+  ret i32 %d
 }
 
 define i32 @test_lw_brev_reg(i32 %ptr, i32 %stride) {
 ; CHECK-LABEL: test_lw_brev_reg:
 ; CHECK: s_lw_brev_reg
-  %r = call i32 @llvm.haydn.lw.brev.reg(i32 %ptr, i32 %stride)
-  ret i32 %r
+  %r = call { i32, i32 } @llvm.haydn.lw.brev.reg(i32 %ptr, i32 %stride)
+  %d = extractvalue { i32, i32 } %r, 0
+  ret i32 %d
 }
 
-;Bit-Reversed Store
-; Per /, SDW_BREV intrinsics take (data, ptr_base, stride) and return
-; the updated ptr_base. The result must be used or the call is DCE'd.
+;Bit-Reversed Store — (data, ptr, stride) -> new_ptr
 
-define i32 @test_sdw_brev_imm(i32 %data, i32 %ptr, i32 %stride) {
+define i32 @test_sdw_brev_imm(i64 %data, i32 %ptr) {
 ; CHECK-LABEL: test_sdw_brev_imm:
 ; CHECK: d_sdw_brev_imm
-  %r = call i32 @llvm.haydn.sdw.brev.imm(i32 %data, i32 %ptr, i32 8)
+  %r = call i32 @llvm.haydn.sdw.brev.imm(i64 %data, i32 %ptr, i32 8)
   ret i32 %r
 }
 
 ; CHECK-LABEL: test_sdw_brev_reg:
 ; CHECK: d_sdw_brev_reg
-define i32 @test_sdw_brev_reg(i32 %data, i32 %ptr, i32 %stride) {
-  %r = call i32 @llvm.haydn.sdw.brev.reg(i32 %data, i32 %ptr, i32 %stride)
+define i32 @test_sdw_brev_reg(i64 %data, i32 %ptr, i32 %stride) {
+  %r = call i32 @llvm.haydn.sdw.brev.reg(i64 %data, i32 %ptr, i32 %stride)
   ret i32 %r
 }
 
-define i32 @test_sw_brev_imm(i32 %ptr, i32 %stride) {
+define i32 @test_sw_brev_imm(i32 %data, i32 %ptr) {
 ; CHECK-LABEL: test_sw_brev_imm:
 ; CHECK: s_sw_brev_imm
-  %r = call i32 @llvm.haydn.sw.brev.imm(i32 %ptr, i32 4)
+  %r = call i32 @llvm.haydn.sw.brev.imm(i32 %data, i32 %ptr, i32 4)
   ret i32 %r
 }
 
 ; CHECK-LABEL: test_sw_brev_reg:
 ; CHECK: s_sw_brev_reg
-define i32 @test_sw_brev_reg(i32 %ptr, i32 %stride) {
-  %r = call i32 @llvm.haydn.sw.brev.reg(i32 %ptr, i32 %stride)
+define i32 @test_sw_brev_reg(i32 %data, i32 %ptr, i32 %stride) {
+  %r = call i32 @llvm.haydn.sw.brev.reg(i32 %data, i32 %ptr, i32 %stride)
   ret i32 %r
 }
 
@@ -154,14 +145,13 @@ declare { i64, i32 } @llvm.haydn.ldw.cb.reg(i32, i32, i32)
 declare i32 @llvm.haydn.sdw.cb.imm(i64, i32, i32, i32)
 declare i32 @llvm.haydn.sdw.cb.reg(i64, i32, i32, i32)
 
-; Bit-Reversed Load
-declare i32 @llvm.haydn.ldw.brev.imm(i32, i32)
-declare i32 @llvm.haydn.ldw.brev.reg(i32, i32)
-declare i32 @llvm.haydn.lw.brev.imm(i32, i32)
-declare i32 @llvm.haydn.lw.brev.reg(i32, i32)
-; Bit-Reversed Store — SDW_BREV takes (data, ptr_base, stride) per.
-declare i32 @llvm.haydn.sdw.brev.imm(i32, i32, i32)
-declare i32 @llvm.haydn.sdw.brev.reg(i32, i32, i32)
-; S_SW_BREV variants take (ptr_base, stride) per.td
-declare i32 @llvm.haydn.sw.brev.imm(i32, i32)
-declare i32 @llvm.haydn.sw.brev.reg(i32, i32)
+; Bit-Reversed Load — frexp pair
+declare { i64, i32 } @llvm.haydn.ldw.brev.imm(i32, i32)
+declare { i64, i32 } @llvm.haydn.ldw.brev.reg(i32, i32)
+declare { i32, i32 } @llvm.haydn.lw.brev.imm(i32, i32)
+declare { i32, i32 } @llvm.haydn.lw.brev.reg(i32, i32)
+; Bit-Reversed Store
+declare i32 @llvm.haydn.sdw.brev.imm(i64, i32, i32)
+declare i32 @llvm.haydn.sdw.brev.reg(i64, i32, i32)
+declare i32 @llvm.haydn.sw.brev.imm(i32, i32, i32)
+declare i32 @llvm.haydn.sw.brev.reg(i32, i32, i32)

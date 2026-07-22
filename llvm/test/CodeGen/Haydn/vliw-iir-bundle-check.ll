@@ -24,13 +24,13 @@
 ; yn = b0*xn + b1*x1 + b2*x2 - a1*y1 - a2*y2
 ;
 ; This is the most common DSP filter operation and produces a mix of:
-; Multiply-accumulate chains (MUL32 -> MAC32 -> MAC32 ->...)
-; Subtractions for the feedback path (SUB32)
-; Loads for coefficient and state access (LD32)
-; Stores for state updates (ST32)
+; Multiply-accumulate chains (mull + add32; no scalar GPR MAC opcode)
+; Subtractions for the feedback path (sub32)
+; Loads for coefficient and state access (ld32)
+; Stores for state updates (st32)
 
 ; Simple IIR biquad inner product: pure register-based ALU.
-; Exercises MUL32 -> MAC32 forwarding.
+; Exercises mull + add32.
 define i32 @biquad_simple(i32 %b0, i32 %xn, i32 %b1, i32 %x_nm1,
                           i32 %a1, i32 %y_nm1) nounwind {
 entry:
@@ -43,7 +43,7 @@ entry:
 }
 
 ; ASM-LABEL: biquad_simple:
-; ASM-DAG: mul64.ll
+; ASM-DAG: mull
 ; ASM-DAG: sub32
 ; ASM: jalr_w
 
@@ -68,7 +68,7 @@ entry:
 
 ; ASM-LABEL: biquad_with_state:
 ; ASM-DAG: ld32
-; ASM-DAG: mul64.ll
+; ASM-DAG: mull
 ; ASM-DAG: sub32
 ; ASM-DAG: st32
 ; ASM: jalr_w
@@ -117,9 +117,9 @@ exit:
 }
 
 ; ASM-LABEL: biquad_process_block:
-; ASM-DAG: mul64.ll
+; ASM-DAG: mull
 ; ASM-DAG: {{bnez_w|blt_w|beqz_w}}
-; ASM-DAG: mul64.ll
+; ASM-DAG: mull
 ; ASM-DAG: sub32
 ; ASM-DAG: ld32
 ; ASM-DAG: st32

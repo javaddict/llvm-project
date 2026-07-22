@@ -28,7 +28,7 @@ define <2 x i32> @simd_v2i32_sub(<2 x i32> %a, <2 x i32> %b) nounwind {
 
 define <2 x i32> @simd_v2i32_mul(<2 x i32> %a, <2 x i32> %b) nounwind {
 ; CHECK-LABEL: simd_v2i32_mul:
-; CHECK: x2mul32
+; CHECK: x2mulpl32
   %result = mul <2 x i32> %a, %b
   ret <2 x i32> %result
 }

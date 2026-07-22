@@ -25,6 +25,7 @@
 #include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
 #include <cctype>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,9 @@ enum class Kind {
   PairRR2,
   PairRRA2,
   PairCbLoad,
+  PairBrevLoad,
+  /// POST/PRE AGU writeback loads: frexp (int* new_ptr, base, off) → {data,new_ptr}.
+  PairLdWb,
   Skip,
 };
 
@@ -99,6 +103,13 @@ static Kind classify(StringRef Name, StringRef Proto) {
   if (Name.ends_with("_pair")) {
     if (Name.starts_with("ldw_cb_"))
       return Kind::PairCbLoad;
+    // BREV loads: frexp {data, new_ptr} without cbr_sel (ptr, stride).
+    if (Name.starts_with("ldw_brev_") || Name.starts_with("lw_brev_"))
+      return Kind::PairBrevLoad;
+    // POST/PRE AGU writeback loads: frexp int* new_ptr (not int64_t* MAC pairs).
+    // Prototype: data_ty(int*, int, int) — same frexp shape as BREV.
+    if (Proto.contains("(int*,"))
+      return Kind::PairLdWb;
     // RR2: out*, a, b  → 2 top-level commas (3 args)
     // RRA2: out*, acc1, acc2, a, b → 4 top-level commas (5 args)
     // Must ignore commas inside _ExtVector<N, T>.
@@ -317,11 +328,20 @@ typedef struct {
   haydn_dr64_t lo;
 } haydn_dpair_t;
 
-/// Circular-buffer load result: data + AGU-updated base.
+/// Circular-buffer / 64-bit BREV load result: data + AGU-updated base.
 typedef struct {
   haydn_dr64_t data;
   int new_ptr;
 } haydn_cb_ld_t;
+
+/// 32-bit BREV / S_* load result: data + AGU-updated base.
+typedef struct {
+  int data;
+  int new_ptr;
+} haydn_sld_t;
+
+/// Alias used by POST/PRE load frexp public wrappers (S_* GPR data).
+typedef haydn_sld_t haydn_ld_t;
 
 typedef int __haydn_ext_v2i32 __attribute__((__ext_vector_type__(2)));
 typedef short __haydn_ext_v4i16 __attribute__((__ext_vector_type__(4)));
@@ -380,6 +400,8 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
 
   static const char *SpecialPublic[] = {
       "ldw_cb_imm",          "ldw_cb_reg",
+      "ldw_brev_imm",        "ldw_brev_reg",
+      "lw_brev_imm",         "lw_brev_reg",
       "mulfp32x16x2ras_low", "mulfp32x16x2ras_high",
       "mulfc32x16ras_low",   "mulfc32x16ras_high",
       "d_lqhwua_post",       "d_ltwua_post",
@@ -477,18 +499,43 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
              {"return " + CallExpr + ";"}, Doc);
   };
 
-  // ExtVector clang Prototype (golden lanes) → thin passthrough, no bag
-  // bitcasts. Covers same-width SIMD, reduce (i64 out), ternary MAC, imm
-  // shifts, and mixed (x4sat32t16: v4i16(v2i32,v2i32)).
+  // ExtVector clang Prototype (golden lanes). Public C API:
+  //   - same-width SIMD (ret vector): thin passthrough
+  //   - reduce/product (ret int64_t, args v2i32/v4i16): bag-friendly
+  //     int64_t params with __haydn_i64_as_v2/v4 into the ExtVector builtin
+  //     (NatureDSP/BundleSim historically pass DR64 bags).
   auto emitThinExt = [&]() {
+    // Builtin types always from clang Prototype (ExtVector / mixed).
+    std::string BRet;
+    SmallVector<std::string, 6> BArgs;
+    parseProto(E.Prototype, BRet, BArgs);
+
     std::string R;
     SmallVector<std::string, 6> A;
     if (HasPub) {
       R = Ret;
       A.assign(Args.begin(), Args.end());
     } else {
-      parseProto(E.Prototype, R, A);
+      R = BRet;
+      A = BArgs;
     }
+    // Align public arity with builtin if PublicPrototype omitted slots.
+    if (A.size() != BArgs.size()) {
+      R = BRet;
+      A = BArgs;
+    }
+
+    // Bag-friendly public form for i64-result lane products/MACs.
+    const bool BagFriendly =
+        (R == "int64_t" || R == "long long" || R == "haydn_dr64_t");
+    if (BagFriendly) {
+      for (unsigned I = 0, N = A.size(); I != N; ++I) {
+        if (A[I] == "haydn_x2int32" || A[I] == "haydn_x2fract32" ||
+            A[I] == "haydn_x4int16" || A[I] == "haydn_x4fract16")
+          A[I] = "int64_t";
+      }
+    }
+
     static const char *N1[] = {"a"};
     static const char *N2[] = {"a", "b"};
     static const char *N3[] = {"acc", "a", "b"};
@@ -532,7 +579,20 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
         Call += ", ";
       }
       Params += A[I] + " " + PNames[I];
-      Call += PNames[I];
+      // Map public bag → ExtVector for the builtin when needed.
+      std::string Arg = PNames[I];
+      if (I < BArgs.size()) {
+        const std::string &BT = BArgs[I];
+        const bool PubBag =
+            A[I] == "int64_t" || A[I] == "long long" || A[I] == "haydn_dr64_t";
+        if (PubBag && (BT.find("ExtVector") != std::string::npos ||
+                       BT == "haydn_x2int32" || BT == "haydn_x2fract32"))
+          Arg = "__haydn_i64_as_v2(" + PNames[I] + ")";
+        else if (PubBag &&
+                 (BT == "haydn_x4int16" || BT == "haydn_x4fract16"))
+          Arg = "__haydn_i64_as_v4(" + PNames[I] + ")";
+      }
+      Call += Arg;
     }
     if (!E.ImmChecks.empty()) {
       std::string MacroParams, ExpCall;
@@ -542,7 +602,20 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
           ExpCall += ", ";
         }
         MacroParams += PNames[I];
-        ExpCall += "(" + PNames[I] + ")";
+        // Same bag→vector cast as Call.
+        std::string Arg = "(" + PNames[I] + ")";
+        if (I < BArgs.size()) {
+          const std::string &BT = BArgs[I];
+          const bool PubBag =
+              A[I] == "int64_t" || A[I] == "long long" || A[I] == "haydn_dr64_t";
+          if (PubBag && (BT.find("ExtVector") != std::string::npos ||
+                         BT == "haydn_x2int32" || BT == "haydn_x2fract32"))
+            Arg = "__haydn_i64_as_v2" + Arg;
+          else if (PubBag &&
+                   (BT == "haydn_x4int16" || BT == "haydn_x4fract16"))
+            Arg = "__haydn_i64_as_v4" + Arg;
+        }
+        ExpCall += Arg;
       }
       emitImmMacro(OS, R, E.PublicName, MacroParams,
                    E.Builtin + "(" + ExpCall + ")", Doc);
@@ -554,8 +627,11 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
              {"return " + E.Builtin + "(" + Call + ");"}, Doc);
   };
 
+  // PublicPrototype call-through only for plain APIs. Pair frexp kinds must
+  // hit the switch below (PairLdWb / PairBrevLoad / PairCbLoad / MAC pairs).
   if (HasPub && E.K != Kind::PairRR2 && E.K != Kind::PairRRA2 &&
-      E.K != Kind::ExtV2 && E.K != Kind::ExtV4) {
+      E.K != Kind::PairLdWb && E.K != Kind::PairBrevLoad &&
+      E.K != Kind::PairCbLoad && E.K != Kind::ExtV2 && E.K != Kind::ExtV4) {
     emitGenericWithNames(Ret, Args);
     Mark();
     return;
@@ -614,6 +690,32 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
               "r.hi = " + E.Builtin + "(&r.lo, acc1, acc2, a, b);",
               "return r;"},
              Doc);
+    Mark();
+    return;
+  }
+  case Kind::PairLdWb: {
+    // POST/PRE load frexp: public returns {.data, .new_ptr}.
+    // S_* → haydn_sld_t (i32 data); D_* → haydn_cb_ld_t (i64 data).
+    // IMM forms use macros so ImmArg/Sema sees a constant at the user site.
+    StringRef RetT = "haydn_sld_t";
+    if (StringRef(E.Prototype).starts_with("int64_t"))
+      RetT = "haydn_cb_ld_t";
+    StringRef PN = E.PublicName;
+    if (!E.ImmChecks.empty()) {
+      // Macro: (base, off) — off must be an integer constant expression.
+      OS << "/* ImmArg: require constant imm at call site (not a C function). */\n";
+      if (!Doc.empty())
+        OS << "/// " << Doc << "\n";
+      OS << "#define haydn_" << PN << "(base, off) \\\n"
+         << "  ({ " << RetT << " r; r.data = " << E.Builtin
+         << "(&r.new_ptr, (base), (off)); r; })\n\n";
+    } else {
+      emitFn(OS, RetT, PN, "int base, int off",
+             {std::string(RetT) + " r;",
+              "r.data = " + E.Builtin + "(&r.new_ptr, base, off);",
+              "return r;"},
+             Doc);
+    }
     Mark();
     return;
   }
@@ -732,6 +834,7 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
   }
   case Kind::Skip:
   case Kind::PairCbLoad:
+  case Kind::PairBrevLoad:
     return;
   }
 }
@@ -741,18 +844,49 @@ static void emitSpecials(raw_ostream &OS) {
         "// Specials (composed / frexp CB / AR helpers)\n"
         "//===----------------------------------------------------------------------===//\n\n";
 
-  emitFn(OS, "haydn_cb_ld_t", "ldw_cb_imm", "int base, int cbr_sel, int stride",
-         {"haydn_cb_ld_t r;",
-          "r.data = __builtin_haydn_ldw_cb_imm_pair(&r.new_ptr, base, cbr_sel, "
-          "stride);",
-          "return r;"},
-         "ISA: LDW_CB_IMM — circular-buffer load (imm stride).");
+  // CB/BREV IMM frexp wrappers are macros so ImmArg/Sema checks the *user*
+  // call site (cbr_sel / stride constants). REG forms stay as functions.
+  OS << "/// ISA: LDW_CB_IMM — circular-buffer load (imm stride).\n"
+        "/* ImmArg: cbr_sel [0,1], stride simm8 at call site. */\n"
+        "#define haydn_ldw_cb_imm(base, cbr_sel, stride) \\\n"
+        "  ({ haydn_cb_ld_t r; \\\n"
+        "     r.data = __builtin_haydn_ldw_cb_imm_pair(&r.new_ptr, (base), "
+        "(cbr_sel), (stride)); \\\n"
+        "     r; })\n\n";
   emitFn(OS, "haydn_cb_ld_t", "ldw_cb_reg", "int base, int cbr_sel, int stride",
          {"haydn_cb_ld_t r;",
           "r.data = __builtin_haydn_ldw_cb_reg_pair(&r.new_ptr, base, cbr_sel, "
           "stride);",
           "return r;"},
          "ISA: LDW_CB_REG — circular-buffer load (reg stride).");
+
+  // BREV loads — frexp {data, new_ptr}; IMM stride is ImmArg (simm6).
+  OS << "/// ISA: D_LDW_BREV_IMM — 64-bit bit-reversed load (imm stride).\n"
+        "/* ImmArg: stride simm6 at call site. */\n"
+        "#define haydn_ldw_brev_imm(base, stride) \\\n"
+        "  ({ haydn_cb_ld_t r; \\\n"
+        "     r.data = __builtin_haydn_ldw_brev_imm_pair(&r.new_ptr, (base), "
+        "(stride)); \\\n"
+        "     r; })\n\n";
+  emitFn(OS, "haydn_cb_ld_t", "ldw_brev_reg", "int base, int stride",
+         {"haydn_cb_ld_t r;",
+          "r.data = __builtin_haydn_ldw_brev_reg_pair(&r.new_ptr, base, "
+          "stride);",
+          "return r;"},
+         "ISA: D_LDW_BREV_REG — 64-bit bit-reversed load (reg stride).");
+  OS << "/// ISA: S_LW_BREV_IMM — 32-bit bit-reversed load (imm stride).\n"
+        "/* ImmArg: stride simm6 at call site. */\n"
+        "#define haydn_lw_brev_imm(base, stride) \\\n"
+        "  ({ haydn_sld_t r; \\\n"
+        "     r.data = __builtin_haydn_lw_brev_imm_pair(&r.new_ptr, (base), "
+        "(stride)); \\\n"
+        "     r; })\n\n";
+  emitFn(OS, "haydn_sld_t", "lw_brev_reg", "int base, int stride",
+         {"haydn_sld_t r;",
+          "r.data = __builtin_haydn_lw_brev_reg_pair(&r.new_ptr, base, "
+          "stride);",
+          "return r;"},
+         "ISA: S_LW_BREV_REG — 32-bit bit-reversed load (reg stride).");
 
   emitFn(OS, "haydn_x2fract32", "mulfp32x16x2ras_low",
          "haydn_x2fract32 acc, haydn_x2fract32 a32, haydn_x4fract16 b16",
@@ -856,7 +990,8 @@ void clang::EmitHaydnBuiltinCG(const RecordKeeper &Records, raw_ostream &OS) {
         "// Included inside EmitHaydnBuiltinExpr switch (after default:).\n"
         "//\n"
         "// Covers:\n"
-        "//   - frexp-pattern _pair / CB load (PairRR2 / PairRRA2 / PairCbLoad)\n"
+        "//   - frexp-pattern _pair / CB+BREV+POST/PRE load (PairRR2 /\n"
+        "//     PairRRA2 / PairCbLoad / PairBrevLoad / PairLdWb)\n"
         "//   - HaydnAeBuiltin CodeGen= recipes (LanewiseUnary / TernaryI64 /\n"
         "//     AddAndSubRng)\n"
         "//\n"
@@ -883,6 +1018,15 @@ void clang::EmitHaydnBuiltinCG(const RecordKeeper &Records, raw_ostream &OS) {
       std::string Intr = llvmIntrinSuffix(E.Name);
       OS << "  case " << caseId(E) << ":\n"
          << "    return emitCbLoadPair(*this, haydn_" << Intr << ", E);\n";
+    } else if (E.K == Kind::PairBrevLoad) {
+      std::string Intr = llvmIntrinSuffix(E.Name);
+      OS << "  case " << caseId(E) << ":\n"
+         << "    return emitBrevLoadPair(*this, haydn_" << Intr << ", E);\n";
+    } else if (E.K == Kind::PairLdWb) {
+      // Same frexp shape as BREV: (int* new_ptr, base, off) → {data, new_ptr}.
+      std::string Intr = llvmIntrinSuffix(E.Name);
+      OS << "  case " << caseId(E) << ":\n"
+         << "    return emitLoadWbPair(*this, haydn_" << Intr << ", E);\n";
     }
   }
 
@@ -963,7 +1107,8 @@ void clang::EmitHaydnBuiltinSema(const RecordKeeper &Records, raw_ostream &OS) {
 
   for (const BuiltinEntry &E : Entries) {
     bool Pair = E.K == Kind::PairRR2 || E.K == Kind::PairRRA2 ||
-                E.K == Kind::PairCbLoad || E.IsPair;
+                E.K == Kind::PairCbLoad || E.K == Kind::PairBrevLoad ||
+                E.K == Kind::PairLdWb || E.IsPair;
     OS << "  {" << builtinId(E) << ", \"haydn_" << esc(E.PublicName) << "\", \""
        << esc(E.Mnemonic) << "\", \"" << esc(E.Semantics) << "\", "
        << (Pair ? "true" : "false") << "},\n";
@@ -979,58 +1124,64 @@ void clang::EmitHaydnBuiltinSema(const RecordKeeper &Records, raw_ostream &OS) {
         "} // namespace\n\n";
 
   //--- Switch cases as a macro (expand inside switch (BuiltinID)) ---------//
+  // One case body per unique (frexp-null?, ImmCheck-list) signature so frexp
+  // pairs with ImmArg and multi-ImmCheck CB forms never emit duplicate labels.
   OS << "// clang-format off\n"
         "#define HAYDN_BUILTIN_SEMA_CASES \\\n";
 
-  // Frexp-pattern pair / CB: warn on null out-pointer constant.
-  SmallVector<std::string, 32> PairCases;
-  for (const BuiltinEntry &E : Entries) {
-    if (!(E.K == Kind::PairRR2 || E.K == Kind::PairRRA2 ||
-          E.K == Kind::PairCbLoad ||
-          (E.IsPair && StringRef(E.Name).ends_with("_pair"))))
-      continue;
-    PairCases.push_back(builtinId(E));
-  }
-  if (!PairCases.empty()) {
-    for (const std::string &C : PairCases)
-      OS << "  case " << C << ": \\\n";
-    OS << "    if (const Expr *Out = TheCall->getArg(0)->IgnoreParenCasts()) { \\\n"
-          "      if (Out->isNullPointerConstant(getASTContext(), \\\n"
-          "                                     Expr::NPC_ValueDependentIsNotNull)) { \\\n"
-          "        Diag(Out->getExprLoc(), diag::warn_null_arg) \\\n"
-          "            << Out->getSourceRange(); \\\n"
-          "      } \\\n"
-          "    } \\\n"
-          "    break; \\\n";
-  }
-
-  // Immediate ranges from TD ImmChecks, grouped by (ArgIdx, Lo, Hi).
-  struct ImmGroup {
-    unsigned ArgIdx;
-    int Lo, Hi;
-    SmallVector<std::string, 8> Cases;
+  auto isFrexpPair = [](const BuiltinEntry &E) {
+    return E.K == Kind::PairRR2 || E.K == Kind::PairRRA2 ||
+           E.K == Kind::PairCbLoad || E.K == Kind::PairBrevLoad ||
+           E.K == Kind::PairLdWb ||
+           (E.IsPair && StringRef(E.Name).ends_with("_pair"));
   };
-  SmallVector<ImmGroup, 8> Groups;
+
+  // Key: "F|..." or "N|arg:lo:hi;..." → case ids sharing that body.
+  std::map<std::string, SmallVector<std::string, 8>> BodyByKey;
   for (const BuiltinEntry &E : Entries) {
+    bool Frexp = isFrexpPair(E);
+    if (!Frexp && E.ImmChecks.empty())
+      continue;
+    std::string Key = Frexp ? "F|" : "N|";
     for (const ImmCheckSpec &IC : E.ImmChecks) {
-      auto *G = llvm::find_if(Groups, [&](const ImmGroup &X) {
-        return X.ArgIdx == IC.ArgIdx && X.Lo == IC.Lo && X.Hi == IC.Hi;
-      });
-      if (G == Groups.end())
-        Groups.push_back({IC.ArgIdx, IC.Lo, IC.Hi, {builtinId(E)}});
-      else
-        G->Cases.push_back(builtinId(E));
+      Key += std::to_string(IC.ArgIdx) + ':' + std::to_string(IC.Lo) + ':' +
+             std::to_string(IC.Hi) + ';';
     }
+    BodyByKey[Key].push_back(builtinId(E));
   }
 
-  for (const ImmGroup &G : Groups) {
-    for (const std::string &C : G.Cases)
+  for (const auto &KV : BodyByKey) {
+    for (const std::string &C : KV.second)
       OS << "  case " << C << ": \\\n";
-    // NEON/ARM style: require a constant imm in range [Lo, Hi].
-    OS << "    if (SemaRef.BuiltinConstantArgRange(TheCall, " << G.ArgIdx
-       << ", " << G.Lo << ", " << G.Hi << ")) \\\n"
-          "      return true; \\\n"
-          "    break; \\\n";
+    StringRef Key = KV.first;
+    bool Frexp = Key.starts_with("F|");
+    Key = Key.drop_front(2);
+    if (Frexp) {
+      OS << "    if (const Expr *Out = TheCall->getArg(0)->IgnoreParenCasts()) { \\\n"
+            "      if (Out->isNullPointerConstant(getASTContext(), \\\n"
+            "                                     Expr::NPC_ValueDependentIsNotNull)) { \\\n"
+            "        Diag(Out->getExprLoc(), diag::warn_null_arg) \\\n"
+            "            << Out->getSourceRange(); \\\n"
+            "      } \\\n"
+            "    } \\\n";
+    }
+    if (!Key.empty()) {
+      SmallVector<StringRef, 4> Parts;
+      Key.split(Parts, ';', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
+      for (StringRef Part : Parts) {
+        unsigned ArgIdx = 0;
+        int Lo = 0, Hi = 0;
+        auto A = Part.split(':');
+        auto B = A.second.split(':');
+        if (A.first.getAsInteger(10, ArgIdx) || B.first.getAsInteger(10, Lo) ||
+            B.second.getAsInteger(10, Hi))
+          continue;
+        OS << "    if (SemaRef.BuiltinConstantArgRange(TheCall, " << ArgIdx
+           << ", " << Lo << ", " << Hi << ")) \\\n"
+              "      return true; \\\n";
+      }
+    }
+    OS << "    break; \\\n";
   }
 
   OS << "\n// clang-format on\n";
