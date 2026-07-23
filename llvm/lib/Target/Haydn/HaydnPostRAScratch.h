@@ -6,24 +6,29 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Unified post-RA physical-GPR temporary facility (no free assembler AT).
+// Unified post-RA physical-GPR temporary facility (no free assembler AT on R12).
 //
-// Two layers, one scavenger:
+// Soft-zero R0 contract
+// ---------------------
+// R0 is reserved as *soft*-zero (not hardwired). Invariant outside a borrow
+// window: R0 holds 0. Restore is XOR32 R0,R0,R0.
 //
-// 1) Scratch — short-lived temp for expand sequences that fully own the reg
-//    between acquire and release:
-//      findPostRAScratchGPR / withPostRAScratch
-//    Free via LivePhysRegs; spill/restore only when none free.
+// withPostRAScratch policies:
+//   AllowBorrow    — if R0 is still soft-zero at I (last reaching def is a
+//                    soft-zero restore / entry), borrow it for Scr and XOR
+//                    restore after Fn. If R0 is dirty (someone already wrote
+//                    a non-zero temp without restore), fall through to the
+//                    scavenger. Never silently clobber a dirty R0.
+//   NeedsZeroBase  — Fn uses R0 as MatInt / ADDI …, R0, imm *zero source*.
+//                    Scr must not be R0 (would destroy the zero mid-Fn).
+//                    Always scavenger (spill if needed). Do not hard-Exclude
+//                    R0 at call sites; this policy encodes the rule.
 //
-// 2) Remat — materialize (Src + Imm) into a scavenged GPR and bind it to an
-//    existing use operand, with a correct def→use dep chain:
-//      rematerializeAddImmForUse
-//    Free-reg or spill; never clobbers Src; glues remat def to the use so
-//    later schedule/pack cannot redefine Dest before the consumer.
+// Remat Dest stays a scavenged non-R0 GPR (live value into a glued use).
+// R12 is never reserved as free AT — only optional scavenger last resort.
 //
-// Consumers (MatInt LOADI64 expand, VASTART, hwloop count adjust, …) must
-// call these helpers — do not reimplement LivePhysRegs free-reg pick or
-// silent clobber of a live GPR.
+// Consumers (MatInt LOADI64, VASTART, hwloop count adjust, …) must call these
+// helpers — do not reimplement LivePhysRegs free-reg pick or silent clobber.
 //
 //===----------------------------------------------------------------------===//
 
@@ -42,11 +47,30 @@ class HaydnSubtarget;
 class MachineInstr;
 class TargetInstrInfo;
 
+// --- Soft-zero R0 ----------------------------------------------------------
+
+// How withPostRAScratch treats soft-zero R0.
+enum class PostRASoftZero : uint8_t {
+  // Prefer borrow R0 when clean; XOR restore. Dirty → scavenger.
+  AllowBorrow,
+  // Fn needs R0 as zero source; never Scr=R0; always scavenger.
+  NeedsZeroBase,
+};
+
+// True if the soft-zero invariant holds at \p I (R0 is 0 / safe to read as
+// zero, and safe to borrow under AllowBorrow). Walks backward for the last
+// R0 def: XOR R0,R0,R0 → clean; any other def → dirty; no def in MBB → clean
+// only for the entry block (prologue zeros R0) or when R0 is not live-in
+// from a dirty path (conservative: non-entry requires a local restore).
+bool isSoftZeroR0Clean(const MachineBasicBlock &MBB,
+                       MachineBasicBlock::const_iterator I);
+
 // --- Layer 1: short-lived scratch ------------------------------------------
 
 // Find a post-RA GPR at \p I (LivePhysRegs). Priority: R1–R7, R11…R8; R12
-// only if PreferNotR12 is false. \p Exclude is never chosen. If none free,
-// returns first preferred candidate and sets NeedsSpill.
+// only if PreferNotR12 is false. \p Exclude is never chosen. R0 is never
+// returned (reserved; use withPostRAScratch for soft-zero borrow). If none
+// free, returns first preferred candidate and sets NeedsSpill.
 Register findPostRAScratchGPR(MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator I, bool PreferNotR12,
                               bool &NeedsSpill,
@@ -54,11 +78,13 @@ Register findPostRAScratchGPR(MachineBasicBlock &MBB,
 
 // Bracket \p Fn with a scratch: free first, else spill → Fn → restore.
 // All BuildMIs in Fn insert before \p I. \p Exclude: regs Fn still needs.
+// \p SoftZero selects R0 borrow vs zero-base policy (see PostRASoftZero).
 void withPostRAScratch(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                        const DebugLoc &DL, const TargetInstrInfo &TII,
                        const HaydnSubtarget &ST, bool PreferNotR12,
                        function_ref<void(Register Scr)> Fn,
-                       ArrayRef<Register> Exclude = {});
+                       ArrayRef<Register> Exclude = {},
+                       PostRASoftZero SoftZero = PostRASoftZero::AllowBorrow);
 
 // --- Layer 2: rematerialize (Src + Imm) into a use -------------------------
 

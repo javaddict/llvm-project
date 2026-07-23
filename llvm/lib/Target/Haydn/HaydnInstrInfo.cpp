@@ -63,13 +63,8 @@ cl::opt<bool> EnableZOLPipelining(
     "haydn-zol-pipelining", cl::Hidden, cl::init(true),
     cl::desc("Enable SMS pipelining of ZOL-form loops (default on)"));
 
-// PR8 / AIE preferPostPipeliner seed. DEFAULT OFF: Stage-0 PostPipeliner is
-// real but narrower than SMS (single-BB ZOL, limited stage count). Preferring
-// it would reject SMS for all ZOL; keep off until Stage-1 quality is proven.
-static cl::opt<bool> EnableZOLPreferPostPipeliner(
-    "haydn-zol-prefer-post-pipeliner", cl::Hidden, cl::init(false),
-    cl::desc("Prefer post-pipeliner over SMS for ZOL (rejects SMS). Default "
-             "OFF — Stage-0 PostPipeliner is not yet a full SMS replacement."));
+// Stage-0 PostPipeliner deleted — prefer-PP path retired (always false).
+static constexpr bool EnableZOLPreferPostPipeliner = false;
 
 // PPS-3: AIE-style stage-count gate for SMS (into shouldUseSchedule).
 static cl::opt<unsigned> HaydnSMSMaxStageCount(
@@ -349,23 +344,25 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
     bool IsUnconditional = false;
     MachineBasicBlock *Target = nullptr;
 
-    if (Opc == Haydn::B) {
+    if (Opc == Haydn::B && I->getNumOperands() > 0 &&
+        I->getOperand(0).isMBB()) {
       IsUnconditional = true;
       Target = I->getOperand(0).getMBB();
     } else if ((Opc == Haydn::JAL || Opc == Haydn::JAL_W) &&
+               I->getNumOperands() > 1 && I->getOperand(0).isReg() &&
                I->getOperand(0).getReg() == Haydn::R0 &&
-               I->getNumOperands() > 1 && I->getOperand(1).isMBB()) {
+               I->getOperand(1).isMBB()) {
       // Phase 1a: CodeGen now selects JAL_W; legacy JAL kept for the
       // asm parser / decoder. Both have the same (rd, target) operand shape.
       IsUnconditional = true;
       Target = I->getOperand(1).getMBB();
-    } else if (Opc == Haydn::BEQZ_W &&
+    } else if (Opc == Haydn::BEQZ_W && I->getNumOperands() > 1 &&
+               I->getOperand(0).isReg() &&
                I->getOperand(0).getReg() == Haydn::R0 &&
+               I->getOperand(1).isMBB() &&
                !MBB.getParent()->getRegInfo().isLiveIn(Haydn::R0)) {
       // BEQZ_W R0 is only unconditional when R0 is not a function argument
       // (i1 values passed in R0 make this a genuine conditional branch).
-      // Phase 1b : the WIDE 48-bit form is the CodeGen-selected
-      // conditional branch (encoding_manual.md §5.5, opcode 0x2C).
       IsUnconditional = true;
       Target = I->getOperand(1).getMBB();
     }
@@ -401,9 +398,15 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
     // scanning and keep the branch analysis. Without this, BranchRelaxation
     // asserts "branches to be relaxed must be analyzable" whenever
     // a far cond-branch sits after a call in the same MBB.
+    // JAL/JAL_W libcall (non-MBB target): mid-block after a parsed branch →
+    // stop and keep analysis. As sole terminator (noreturn abort): continue
+    // so empty Cond means analyzable fallthrough for MBP (20000815-1).
+    // Only for non-terminator calls — true terminators stay unanalyzable.
     if (Opc == Haydn::JAL || Opc == Haydn::JAL_W) {
       if (!Cond.empty() || UncondTarget)
         break;
+      if (!I->isTerminator())
+        continue;
       return true;
     }
 
@@ -422,6 +425,8 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
     if (Opc == Haydn::BNEZ_W || Opc == Haydn::BEQZ_W ||
         Opc == Haydn::BGEZ_W || Opc == Haydn::BLTZ_W) {
       if (Cond.empty()) {
+        if (I->getNumOperands() < 2 || !I->getOperand(1).isMBB())
+          return true;
         MachineBasicBlock *TargetBB = I->getOperand(1).getMBB();
         Cond.push_back(MachineOperand::CreateImm(Opc));
         Cond.push_back(I->getOperand(0));
@@ -440,6 +445,8 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
     else if (Opc == Haydn::BEQ_W || Opc == Haydn::BNE_W || Opc == Haydn::BGE_W ||
              Opc == Haydn::BGEU_W || Opc == Haydn::BLT_W || Opc == Haydn::BLTU_W) {
       if (Cond.empty()) {
+        if (I->getNumOperands() < 3 || !I->getOperand(2).isMBB())
+          return true;
         MachineBasicBlock *TargetBB = I->getOperand(2).getMBB();
         Cond.push_back(MachineOperand::CreateImm(Opc));
         Cond.push_back(I->getOperand(0));
@@ -460,6 +467,8 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
     // (AIEBaseInstrInfo.cpp:112-130).
     else if (Opc == Haydn::PseudoLoopEnd) {
       if (Cond.empty()) {
+        if (I->getNumOperands() < 1 || !I->getOperand(0).isMBB())
+          return true;
         Cond.push_back(MachineOperand::CreateImm(Opc));
         TBB = I->getOperand(0).getMBB();
         if (UncondTarget) {
@@ -474,6 +483,8 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
     // Cond = [Imm(LoopJNZ), <counter reg>].
     else if (Opc == Haydn::LoopJNZ) {
       if (Cond.empty()) {
+        if (I->getNumOperands() < 2 || !I->getOperand(1).isMBB())
+          return true;
         Cond.push_back(MachineOperand::CreateImm(Opc));
         Cond.push_back(I->getOperand(0)); // counter reg
         TBB = I->getOperand(1).getMBB();
@@ -844,9 +855,10 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     // HaydnMatInt's 64-bit early-out; applied here because G_CONSTANT
     // selects LOADI64 and expansion owns the final halves.
     //
-    // MatInt scratch is NOT free AT / not fixed R12. withPostRAScratch
-    // picks an available call-clobbered-first GPR (PreferNotR12); spills
-    // only when every candidate is live.
+    // MatInt chains from soft-zero R0 as the *source* of the first instr
+    // (ADDI/LUI/ORI rd, R0, imm). NeedsZeroBase: never Scr=R0 (would destroy
+    // the zero between lo and hi materialization). Scavenger if R0 dirty or
+    // for the dest temp itself.
     Register DstReg = MI.getOperand(0).getReg(); // DR64
     int64_t Imm = MI.getOperand(1).getImm();
     uint64_t Val = static_cast<uint64_t>(Imm);
@@ -857,6 +869,8 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
         MBB.getParent()->getSubtarget<HaydnSubtarget>();
 
     auto emitConst32 = [&](int32_t V, Register Target) {
+      assert(Target != Haydn::R0 &&
+             "LOADI64 MatInt dest must not be soft-zero R0");
       HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(V);
       Register Cur = Haydn::R0;
       for (size_t I = 0; I < Seq.size(); ++I) {
@@ -868,7 +882,8 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     };
 
     withPostRAScratch(
-        MBB, MBBI, DL, *this, ST, /*PreferNotR12=*/true, [&](Register Scr) {
+        MBB, MBBI, DL, *this, ST, /*PreferNotR12=*/true,
+        [&](Register Scr) {
           BuildMI(MBB, MBBI, DL, get(Haydn::SUBI32), Haydn::R13)
               .addReg(Haydn::R13)
               .addImm(8);
@@ -895,7 +910,8 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
           BuildMI(MBB, MBBI, DL, get(Haydn::ADDI32_W), Haydn::R13)
               .addReg(Haydn::R13)
               .addImm(8);
-        });
+        },
+        /*Exclude=*/{}, PostRASoftZero::NeedsZeroBase);
 
     MI.eraseFromParent();
     return true;

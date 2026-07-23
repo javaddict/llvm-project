@@ -42,6 +42,50 @@ static bool isExcluded(MCPhysReg Cand, ArrayRef<Register> Exclude) {
   return false;
 }
 
+// Soft-zero restore idiom: xor32 r0, r0, r0.
+static bool isSoftZeroRestore(const MachineInstr &MI) {
+  if (MI.getOpcode() != Haydn::XOR32 || MI.getNumExplicitOperands() < 3)
+    return false;
+  if (!MI.getOperand(0).isReg() || !MI.getOperand(1).isReg() ||
+      !MI.getOperand(2).isReg())
+    return false;
+  return MI.getOperand(0).getReg() == Haydn::R0 &&
+         MI.getOperand(1).getReg() == Haydn::R0 &&
+         MI.getOperand(2).getReg() == Haydn::R0;
+}
+
+bool llvm::isSoftZeroR0Clean(const MachineBasicBlock &MBB,
+                             MachineBasicBlock::const_iterator I) {
+  // Walk backward to the last explicit def of R0 in this MBB.
+  for (MachineBasicBlock::const_iterator II = I; II != MBB.begin();) {
+    --II;
+    if (II->isDebugInstr() || II->isMetaInstruction())
+      continue;
+    bool DefsR0 = false;
+    for (const MachineOperand &MO : II->operands()) {
+      if (MO.isReg() && MO.isDef() && !MO.isDead() && MO.getReg() == Haydn::R0) {
+        DefsR0 = true;
+        break;
+      }
+    }
+    if (!DefsR0)
+      continue;
+    // Last reaching def: soft-zero restore → clean; anything else → dirty.
+    return isSoftZeroRestore(*II);
+  }
+
+  // No def of R0 in this MBB before I.
+  // Entry: prologue zeros R0 (FrameLowering) — treat as clean at block start.
+  if (MBB.isEntryBlock())
+    return true;
+
+  // Non-entry, no local def: only treat as clean if R0 is not live-in as a
+  // stale value. Live-in R0 usually means "ABI soft-zero carried in"; after
+  // ExpandPseudos call sites insert XOR restores, so live-in is the common
+  // clean case. If R0 is *not* live-in, nothing proves it is zero → dirty.
+  return MBB.isLiveIn(Haydn::R0);
+}
+
 Register llvm::findPostRAScratchGPR(MachineBasicBlock &MBB,
                                     MachineBasicBlock::iterator I,
                                     bool PreferNotR12, bool &NeedsSpill,
@@ -231,10 +275,35 @@ void llvm::withPostRAScratch(MachineBasicBlock &MBB,
                              const TargetInstrInfo &TII,
                              const HaydnSubtarget &ST, bool PreferNotR12,
                              function_ref<void(Register Scr)> Fn,
-                             ArrayRef<Register> Exclude) {
+                             ArrayRef<Register> Exclude,
+                             PostRASoftZero SoftZero) {
+  // Soft-zero R0 is never a scavenger candidate (reserved). Borrow is a
+  // separate, optional path under AllowBorrow only.
+  auto excluded = [&](MCPhysReg R) {
+    for (Register E : Exclude)
+      if (E.isPhysical() && E.id() == R)
+        return true;
+    return false;
+  };
+
+  // NeedsZeroBase: Fn reads R0 as MatInt/ADDI zero source. Scr must not be
+  // R0 — that would clobber the zero mid-sequence (LOADI64 hi=lo bug,
+  // VASTART __gr_offs poison). Always scavenger; leave R0 as soft-zero.
+  // AllowBorrow: only if R0 is still clean soft-zero and not excluded.
+  // Dirty R0 (prior un-restored write) → scavenger, never overwrite.
+  if (SoftZero == PostRASoftZero::AllowBorrow && !excluded(Haydn::R0) &&
+      isSoftZeroR0Clean(MBB, I)) {
+    Fn(Haydn::R0);
+    BuildMI(MBB, I, DL, TII.get(Haydn::XOR32), Haydn::R0)
+        .addReg(Haydn::R0)
+        .addReg(Haydn::R0);
+    return;
+  }
+
   bool NeedsSpill = false;
   const Register Scr =
       findPostRAScratchGPR(MBB, I, PreferNotR12, NeedsSpill, Exclude);
+  assert(Scr != Haydn::R0 && "scavenger must not return soft-zero R0");
 
   if (!NeedsSpill) {
     Fn(Scr);
