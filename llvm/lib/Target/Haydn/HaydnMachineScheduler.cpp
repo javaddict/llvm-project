@@ -13,11 +13,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnMachineScheduler.h"
-#include "HaydnPostPipeliner.h"
 #include "HaydnPostRASchedStrategy.h"
 #include "HaydnSchedMutations.h"
 #include "llvm/CodeGen/MachineScheduler.h"
-#include "llvm/Support/Debug.h"
 #include <memory>
 
 using namespace llvm;
@@ -25,32 +23,8 @@ using namespace llvm;
 #define DEBUG_TYPE "haydn-machine-scheduler"
 
 void HaydnScheduleDAGMI::schedule() {
-  // Default OFF: bit-identical path to base ScheduleDAGMI::schedule.
-  if (EnableHaydnPostPipeliner) {
-    // Build the region DAG the same way ScheduleDAGMI::schedule would, so
-    // PostPipeliner can read SDeps / SUnits. On failure the base schedule
-    // rebuilds the graph from scratch.
-    buildSchedGraph(AA);
-    postProcessDAG();
-
-    HaydnPostPipeliner PostSWP;
-    if (PostSWP.schedule(*this, /*IIHint=*/0)) {
-      // leaveRegion gates on RegionWasScheduled. Do NOT call schedNode
-      // PostGenericScheduler::schedNode → bumpNode requires live SchedBoundary
-      // queues that only exist during list schedule.
-      auto *S = static_cast<HaydnPostRASchedStrategy *>(SchedImpl.get());
-      S->noteRegionScheduledByPostPipeliner();
-      // materializeMultiOpcodeInstrs walks [begin, top) and [bottom, end).
-      // List schedule leaves top==bottom at the region end; mirror that so
-      // the full region is covered and we do not dereference a stale CurrentTop.
-      CurrentTop = end();
-      CurrentBottom = end();
-      LLVM_DEBUG(dbgs() << "HaydnScheduleDAGMI: PostPipeliner took region "
-                        << "II=" << PostSWP.getII()
-                        << " NStages=" << PostSWP.getStageCount() << "\n");
-      return;
-    }
-  }
+  // Product: list schedule only. Stage-0 PostPipeliner deleted (YOLO densify
+  // kill). Pre-RA MachinePipeliner remains the SWP home.
   ScheduleDAGMI::schedule();
 }
 

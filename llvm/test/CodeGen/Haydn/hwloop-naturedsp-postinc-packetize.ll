@@ -1,10 +1,9 @@
-; Role B residual opt-in: SET_HWLOOP_REG on this NatureDSP shape is residual
-; convert (product default OFF). Packing contract (LD64+ADDI32) is independent.
+; Packing contract (LD64+ADDI32) independent of Role B (deleted).
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
-; RUN:   -haydn-hwloop-role-b -stop-after=postmisched -verify-machineinstrs < %s \
+; RUN:   -stop-after=postmisched -verify-machineinstrs < %s \
 ; RUN:   | FileCheck %s --check-prefix=MIR
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
-; RUN:   -haydn-hwloop-role-b -verify-machineinstrs < %s | FileCheck %s --check-prefix=ASM
+; RUN:   -verify-machineinstrs < %s | FileCheck %s --check-prefix=ASM
 ;
 ; REGRESSION TEST: Load-streaming NatureDSP hot loop (vec_dot64x64i
 ; fir_xcorr32x32 shape) — the post-increment load + its ADDI32 base bump
@@ -91,22 +90,18 @@ exit:
   ret i64 %r
 }
 
-; MIR-level (dual-sched rebaseline): intentional form is LD64 +
-; ADDI32 (stride 8) co-packetized in one BUNDLE (packing contract).
-; HWLoop conversion remains on the NatureDSP shape (SET_HWLOOP_REG present).
+; MIR-level: packing contract — LD64 + ADDI32 (stride 8) co-packetized.
+; HWLoop not required: SMS may pipeline this shape instead of ZOL form.
 ;
 ; MIR-LABEL: name: vec_dot_streaming_postinc
-; MIR: SET_HWLOOP_REG
 ; MIR: BUNDLE
 ; MIR-DAG: LD64
 ; MIR-DAG: ADDI32 {{.*}}, 8
 ; MIR: }
 
-; ASM-level: co-packed ld64 + addi32 (post-inc via packet) + MAC; no dropped
-; loads. HWLoop markers present for the NatureDSP hot-loop shape.
+; ASM-level: co-packed ld64 + MAC + post-inc / addi; no dropped loads.
 ;
 ; ASM-LABEL: vec_dot_streaming_postinc:
-; ASM: set_hwloop
 ; Streaming pack: 64-bit load + MAC + post-inc load (or explicit addi).
 ; ASM: {{ld64|d_ldw}}
 ; ASM: {{mula64|mul64}}

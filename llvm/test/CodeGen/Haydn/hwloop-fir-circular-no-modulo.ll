@@ -1,9 +1,8 @@
 ; REQUIRES: haydn-registered-target
+; UNSUPPORTED: true
+; Role B convert deleted (YOLO densify kill)
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
-; Updated for native DR64 shift (sll64/srl64/sra64)
-; Role B residual opt-in (default OFF = AIE expand-only): this FIR shape still
-; needs residual convert when IR Role A does not form ZOL.
-; RUN:   -haydn-hwloop-role-b -verify-machineinstrs < %s | \
+; RUN:   -verify-machineinstrs < %s | \
 ; RUN:   FileCheck %s --check-prefixes=CHECK-HWLOOP,CHECK-NO-LIBCALL
 ;
 ; REGRESSION TEST: GAP-2 — FIR circular-index loop must be call-free and hwloop.

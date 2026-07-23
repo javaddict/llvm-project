@@ -29,11 +29,9 @@
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNPOSTRASCHEDSTRATEGY_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNPOSTRASCHEDSTRATEGY_H
 
-#include "HaydnInterBlockScheduling.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
-#include <optional>
 
 namespace llvm {
 
@@ -72,23 +70,10 @@ public:
     PostGenericScheduler::schedNode(SU, IsTopNode);
   }
 
-  // Stage-0 PostPipeliner path: mark the region as scheduled without
-  // touching SchedBoundary queues (which are only live during list schedule).
-  // leaveRegion requires RegionWasScheduled to form bundles from TopReadyCycle.
-  // \p SkipMultiOpcode when true, leaveRegion skips materializeMultiOpcodeInstrs
-  // (PostPipeliner never ran the HR auction, so AltDescs slots are empty and
-  // begin/top region iterators may not match the list-schedule contract).
-  void noteRegionScheduledByPostPipeliner() {
-    RegionWasScheduled = true;
-    PostPipelinerRegion = true;
-  }
-
   // Materialize the accumulated per-region bundle lists into the MBB: insert
   // a standalone NOP for each empty cycle (AIE-style cycle-level padding) and
   // a real BUNDLE MI for each non-empty cycle. Stock bundleWithPred +
   // finalizeBundle (MachineInstrBundle.h). Port of AIE commitBlockSchedule.
-  // When -haydn-enable-interblock is on, runs Stage-0 HaydnInterBlockScheduling
-  // after materialize (acyclic fallthrough pack only; no ZOL exit hoist).
   void leaveMBB() override;
 
   // ensure each scheduler-placed MI has a recorded placement slot in
@@ -122,10 +107,6 @@ private:
 
   const HaydnInstrInfo *HII = nullptr;
 
-  // Stage-0 inter-block helper (constructed in ctor; gated by
-  // haydn-enable-interblock inside runOnMBB).
-  std::optional<HaydnInterBlockScheduling> InterBlock;
-
   // Current MBB (stashed in enterMBB; the DAG's BB is protected and has no
   // public accessor, so the strategy tracks the block itself).
   MachineBasicBlock *CurrentMBB = nullptr;
@@ -136,10 +117,6 @@ private:
   // 866) — leaveRegion must not compute bundles for those, because the DAG's
   // SUnits/region iterators are stale from the previous region.
   bool RegionWasScheduled = false;
-
-  // True when this region was scheduled by HaydnPostPipeliner (not list
-  // schedule). Cleared together with RegionWasScheduled in leaveRegion.
-  bool PostPipelinerRegion = false;
 
   // Push the in-progress bundle as the current cycle, then pad with empty
   // bundles until reaching \p ToCycle. Invariant: Bundles.size == current

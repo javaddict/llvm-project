@@ -17,9 +17,9 @@
 ;
 ; NOTE: this test uses `-stop-after=haydn-hwloops` so it is unaffected by the
 ; SMS pipeliner. The previous "SMS BUG" comment was stale.
-; RUN: llc -haydn-enable-ldst-opt=true -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
-; RUN: llc -haydn-enable-ldst-opt=true -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=-hwloop -stop-after=haydn-hwloops < %s | FileCheck --check-prefix=NOHW %s
 ;
 ; Hardware loop detection tests for the Haydn backend.

@@ -1,4 +1,4 @@
-; RUN: llc -haydn-enable-ldst-opt=true -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 < %s | FileCheck %s
 ; Status : intent CHECKs re-goldened for Bundle128/cmov.
 ;
 ; Comprehensive Clang end-to-end integration test for the Haydn backend.

@@ -1,3 +1,5 @@
+; UNSUPPORTED: true
+; RedundantCopyElim deleted (YOLO phase-out)
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 ;
 ; Tests for the HaydnRedundantCopyElim pass (post-RA condition-based elimination).

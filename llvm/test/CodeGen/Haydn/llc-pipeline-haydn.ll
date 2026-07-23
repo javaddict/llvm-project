@@ -28,16 +28,9 @@
 ; Opt2+ - MachinePipeliner -> DeadMIElim (pre-RA); PreRALoadPromote deleted
 ;
 ; addBlockPlacement is empty (no second MBP after pack).
-; LoadStoreOpt form is opt-in (default OFF) - not a dual product path.
-;
-; Densify landmines (product default OFF — W0.1 / G-RISK-FLAGS):
-;   -haydn-enable-interblock       (Stage-0 IB inside PostRA leaveMBB; not a pass)
-;   -haydn-enable-post-pipeliner   (Stage-0 PP inside schedule; not a pass)
-;   -haydn-hwloop-role-b           (same Haydn Hardware Loop Detection pass)
-;   -haydn-enable-ldst-opt         (Haydn Load/Store Optimizer — locked NOT below)
-;   -haydn-enable-circular-buffer  (Haydn Circular Buffer Detection — NOT below)
-;   -haydn-enable-redundant-copy-elim
-; IB/PP/Role-B flag state also locked by densify-defaults-off.ll (-debug-only).
+; YOLO phase-out: LoadStoreOpt / CircularBuffer / RedundantCopyElim / Stage-0
+; IB/PP / Role B / formMACs deleted from product pipeline. Form = GISel only.
+; densify-defaults-off.ll locks Structure absence of deleted passes.
 ; Style note - no space after CHECK-prefix colon (match-full-lines / AMDGPU).
 
 define i32 @f(i32 %a, i32 %b) {

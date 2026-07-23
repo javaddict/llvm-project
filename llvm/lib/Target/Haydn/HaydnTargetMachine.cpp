@@ -17,15 +17,10 @@
 #include "Haydn.h"
 #include "HaydnBitSimplify.h"
 #include "HaydnCFGOptimizer.h"
-#include "HaydnCircularBuffer.h"
 #include "HaydnConditionOptimizer.h"
 #include "HaydnCopyElim.h"
-#include "HaydnRedundantCopyElim.h"
 #include "HaydnExpandPseudos.h"
 #include "HaydnExpandPostIncEarly.h"
-// HaydnGFormatSelect is forward-declared via Haydn.h (no header — the class
-// lives entirely in HaydnGFormatSelect.cpp and is created via factory).
-#include "HaydnLoadStoreOptimizer.h"
 #include "HaydnEnsureTerminators.h"
 #include "HaydnPEIPeephole.h"
 #include "HaydnMachineFunctionInfo.h"
@@ -72,40 +67,15 @@ static cl::opt<bool> EnableHaydnPostLegalizerCombiner(
 static cl::opt<bool> EnableHaydnPostSelectOptimize(
     "haydn-enable-postselect-opt", cl::init(true), cl::Hidden,
     cl::desc("Enable HaydnPostSelectOptimize (O1+; live: cross-bank elide)."));
-// Post-inc single-home contract: 
-// ExpandPostIncEarly (default ON) is the product expand home.
-// LoadStoreOpt form is opt-in only (default OFF) — feature-test
-// lit opt-in; not a dual product path. Do not re-enable by default.
-static cl::opt<bool> EnableHaydnLoadStoreOptimizer(
-    "haydn-enable-ldst-opt", cl::init(false), cl::Hidden,
-    cl::desc("Opt-in: Enable HaydnLoadStoreOptimizer (form post-inc "
-             "pseudos + redun-load/store-fwd). Default OFF. Feature-test / lit "
-             "opt-in only — NOT the product post-inc path (see "
-             "haydn-enable-expand-post-inc-early). Track A: reg-stride "
-             "use-before-def + MMO loss on form; re-enable only with "
-             "stride-liveness + MMO tests."));
+// Post-inc: form = GISel only; expand residual = ExpandPostIncEarly (ON).
 static cl::opt<bool> EnableHaydnExpandPostIncEarly(
     "haydn-enable-expand-post-inc-early", cl::init(true), cl::Hidden,
-    cl::desc("Enable HaydnExpandPostIncEarly (product post-inc expand; lower "
-             "*_POST_INC pseudos to LD/ST + ADDI pre-packetize). Default ON. "
-             "Sole product home for post-inc expansion."));
-// Retired FormUpdateAddr (pre-RA LD/ST+ADD → AGU). Product fuse is GISel only
-// (-haydn-enable-gisel-update-addr). Flag kept as no-op so old RUN lines
-// do not dump --help.
-static cl::opt<bool> EnableHaydnFormUpdateAddr(
-    "haydn-enable-form-update-addr", cl::init(false), cl::Hidden,
-    cl::desc("RETIRED: FormUpdateAddr removed; use GISel update-addr fuse."));
-// Retired multi-width passes — keep cl::opts as no-ops so existing
-// RUN lines with these flags do not make llc dump --help.
-static cl::opt<bool> EnableHaydnGFormatSelect(
-    "haydn-enable-gformat-select", cl::init(false), cl::Hidden,
-    cl::desc("RETIRED Bundle128-only: G-format select is a no-op."));
-static cl::opt<bool> EnableM0SlotOR(
-    "haydn-m0-slot-or", cl::init(false), cl::Hidden,
-    cl::desc("RETIRED Bundle128-only: Mode-0 slot-OR is a no-op."));
-static cl::opt<bool> EnableHaydnCompress(
-    "haydn-enable-compress", cl::init(false), cl::Hidden,
-    cl::desc("RETIRED Bundle128-only: 16-bit compress is a no-op."));
+    cl::desc("Enable HaydnExpandPostIncEarly (residual *_POST_INC → LD/ST + "
+             "ADDI pre-pack). Default ON. Form is GISel-only."));
+// FULL FATE (2026-07-23): invent densify deleted permanently — not default-OFF
+// quarantine. FATED: LoadStoreOpt, CircularBuffer stats, RedundantCopyElim,
+// FormUpdateAddr, PostPipeliner Stage-0, InterBlock Stage-0, formMACs, Role B
+// convert. Sole AGU form = GISel. contracts/pipeline.md §6.
 static cl::opt<bool> EnableHaydnCFGOptimizer(
     "haydn-enable-cfg-opt", cl::init(true), cl::Hidden,
     cl::desc("Enable HaydnCFGOptimizer (unreachable/empty/tail merge)."));
@@ -115,18 +85,9 @@ static cl::opt<bool> EnableHaydnConditionOptimizer(
 static cl::opt<bool> EnableHaydnCopyElim(
     "haydn-enable-copy-elim", cl::init(true), cl::Hidden,
     cl::desc("Enable HaydnCopyElim (identity/dead/R0 copies)."));
-static cl::opt<bool> EnableHaydnRedundantCopyElim(
-    "haydn-enable-redundant-copy-elim", cl::init(false), cl::Hidden,
-    cl::desc("Enable HaydnRedundantCopyElim (cond-based redundant copies). "
-             "Default OFF (P0-7): range-for+push_back UB + asymmetric equality "
-             "kill. Re-enable only with worklist + LivePhysRegs tests."));
 static cl::opt<bool> EnableHaydnHardwareLoops(
     "haydn-enable-hwloops", cl::init(true), cl::Hidden,
-    cl::desc("Enable HaydnHardwareLoops (post-RA SET_HWLOOP formation)."));
-static cl::opt<bool> EnableHaydnCircularBuffer(
-    "haydn-enable-circular-buffer", cl::init(false), cl::Hidden,
-    cl::desc("Enable HaydnCircularBuffer (circular-buffer pattern detect). "
-             "Default OFF: production stats-only pass with no consumer."));
+    cl::desc("Enable HaydnHardwareLoops (Role A expand; Role B deleted)."));
 static cl::opt<bool> EnableHaydnPostRASched(
     "haydn-enable-post-ra-sched", cl::init(true), cl::Hidden,
     cl::desc("Enable post-RA VLIW scheduler (bundle formation). LOAD-BEARING: "
@@ -157,14 +118,11 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnTarget() {
   initializeHaydnPostSelectOptimizePass(PR);
   initializeHaydnExpandPseudosPass(PR);
   initializeHaydnExpandPostIncEarlyPass(PR);
-  initializeHaydnLoadStoreOptimizerPass(PR);
   initializeHaydnCFGOptimizerPass(PR);
   initializeHaydnConditionOptimizerPass(PR);
   initializeHaydnCopyElimPass(PR);
-  initializeHaydnRedundantCopyElimPass(PR);
   initializeHaydnPEIPeepholePass(PR);
   initializeHaydnEnsureTerminatorsPass(PR);
-  initializeHaydnCircularBufferPass(PR);
   initializeHaydnBitSimplifyPass(PR);
   initializeHaydnHardwareLoopsPass(PR);
   initializeHaydnFixupHwLoopsPass(PR);
@@ -408,7 +366,6 @@ void HaydnPassConfig::addPostRegAlloc() {
 
 void HaydnPassConfig::addPreRegAlloc() {
   // AGU pre/post-inc form is GISel-only (HaydnPostLegalizerCombiner).
-  // FormUpdateAddr (post-ISel MIR fold) was removed — dual fuse paths diverged.
 
   // Software pipelining (Swing Modulo Scheduling) for VLIW DSP loops.
   // Runs on the naive countable loop (SEQ32/SLT32 + BNEZ/BEQZ), so the expander
@@ -435,63 +392,24 @@ void HaydnPassConfig::addPreSched2() {
   // EnsureTerminators already ran in addPostRegAlloc (pre-PEI).
   // O1+ peeps, then MBP → HardwareLoops → ExpandPseudos → PostRA pack.
 
-  // Post-inc (single home): form via LoadStoreOpt is opt-in (default OFF
-  // feature tests). ExpandPostIncEarly (default ON) lowers any *_POST_INC
-  // pseudos to LD/ST + ADDI before pack so they are not packetize boundaries
-  // Product default runs expand only. All opt levels.
-  if (EnableHaydnLoadStoreOptimizer)
-    addPass(createHaydnLoadStoreOptimizerPass());
+  // Post-inc residual expand (form is GISel-only). All opt levels.
   if (EnableHaydnExpandPostIncEarly)
     addPass(createHaydnExpandPostIncEarlyPass());
 
-  // Profitability peeps: O1+ only (PL / 1e). Not required for legal encode.
+  // Profitability peeps: O1+ only. Not required for legal encode.
   if (getOptLevel() != CodeGenOptLevel::None) {
-    // CFG optimization: unreachable block removal, empty block forwarding
-    // identical successor merging, and simple tail merging.
     if (EnableHaydnCFGOptimizer)
       addPass(createHaydnCFGOptimizerPass());
-
-    // GenMux fully retired. s32/s64 G_SELECT → MOVT(s) at isel;
-    // branchy PHIs → SSA EarlyIfConversion + insertSelect.
-
-    // Condition optimization: simplifies comparison patterns — eliminates
-    // self-comparisons (SLT r,r → 0) and reuses inverse comparison results
-    // (SLT a,b followed by SLT b,a → XORI a,1).
     if (EnableHaydnConditionOptimizer)
       addPass(createHaydnConditionOptimizerPass());
-
-    // Redundant copy elimination: removes identity copies (COPY rA, rA)
-    // dead copies (destination overwritten before use), and writes to R0
-    // (hardwired zero register).
     if (EnableHaydnCopyElim)
       addPass(createHaydnCopyElimPass());
 
-    // Condition-based redundant copy elimination: leverages dominating
-    // condition information (BEQZ/BNEZ/BEQ/BNE + SEQ32). Default OFF.
-    if (EnableHaydnRedundantCopyElim)
-      addPass(createHaydnRedundantCopyElimPass());
-
-    // MachineBlockPlacement BEFORE HardwareLoops (AIE2 order).
-    // Block placement before pack so the packer sees final CFG.
+    // MBP BEFORE HardwareLoops (AIE2). Role A expand only (Role B deleted).
     addPass(&MachineBlockPlacementID);
-
-    // Hardware loop detection / residual Role B. O1+ only (: no
-    // hwloop form at O0 without Fixup). Role A (IR HardwareLoops in
-    // addPreISel) preferred for single-BB ZOL — this pass expands LoopStart
-    // → SET_HWLOOP_REG, strips empty shells, forms residual Role B SET_HWLOOP
-    // pads t−3 after SET. FixupHwLoops (addPreEmit) only pads
-    // order-preserving-shorten / demotes.
-    // See.omc/plans/haydn-hwloop-aie-hexagon-reform.md.
     if (EnableHaydnHardwareLoops)
       addPass(createHaydnHardwareLoopsPass());
   }
-
-  // Circular buffer detection: analysis-only, default OFF (no consumer).
-  if (EnableHaydnCircularBuffer)
-    addPass(createHaydnCircularBufferPass());
-
-  // HaydnGFormatSelect retired — G-format is not Bundle128. (cl::opt
-  // kept as no-op stub above.)
 
   // Pseudo expansion BEFORE the post-RA scheduler so ALL MIs exist
   // before bundle formation (leaveRegion/leaveMBB). Mirrors AIE

@@ -1,4 +1,4 @@
-; GISel form default ON (product). FormUpdateAddr post-ISel residual OFF.
+; GISel form is the sole product AGU form home (default ON).
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
 ; RUN:     -stop-after=instruction-select -verify-machineinstrs < %s \
 ; RUN:     | FileCheck %s --check-prefix=ISEL
@@ -11,13 +11,6 @@
 ; RUN:     -stop-after=instruction-select -verify-machineinstrs < %s \
 ; RUN:     | FileCheck %s --check-prefix=GISEL-OFF
 ;
-; Both form homes OFF at ISel → plain LD + ADDI.
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
-; RUN:     -haydn-enable-gisel-update-addr=0 \
-; RUN:     -haydn-enable-form-update-addr=0 \
-; RUN:     -stop-after=instruction-select -verify-machineinstrs < %s \
-; RUN:     | FileCheck %s --check-prefix=BOTH-OFF
-;
 ; Product GISel form: G_LOAD/STORE + G_PTR_ADD → fused S_LW_POST_IMM / ST32_POST.
 
 ; ISEL-LABEL: name: postinc_stream_i32
@@ -25,9 +18,6 @@
 ; GISEL-OFF-LABEL: name: postinc_stream_i32
 ; GISEL-OFF-DAG: LD32
 ; GISEL-OFF-DAG: ADDI32
-; BOTH-OFF-LABEL: name: postinc_stream_i32
-; BOTH-OFF-DAG: LD32
-; BOTH-OFF-DAG: ADDI32
 ; ASM-LABEL: postinc_stream_i32:
 ; ASM: s_lw_post_imm
 define i32 @postinc_stream_i32(ptr %p, i32 %n) {

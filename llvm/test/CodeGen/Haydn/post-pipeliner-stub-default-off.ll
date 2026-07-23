@@ -1,7 +1,7 @@
+; UNSUPPORTED: true
+; Stage-0 PostPipeliner deleted (YOLO densify kill)
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:     -O2 < %s | FileCheck %s --check-prefix=OFF
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:     -O2 -haydn-enable-post-pipeliner < %s | FileCheck %s --check-prefix=ON
 ;
 ; Stage-0 PostPipeliner default OFF. ON needs explicit flag.
 ; Both paths must remain verifier-clean.
