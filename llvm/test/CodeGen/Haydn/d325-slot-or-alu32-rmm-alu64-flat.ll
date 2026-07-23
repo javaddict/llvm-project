@@ -1,19 +1,12 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
-; RUN:     -filetype=obj < %s -o %t_off.o
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
-; RUN:     -haydn-m0-slot-or=1 -filetype=obj < %s -o %t_on.o
-; RUN: llvm-objcopy -O binary --only-section=.text %t_off.o %t_off.bin
-; RUN: llvm-objcopy -O binary --only-section=.text %t_on.o %t_on.bin
-; RUN: cmp %t_off.bin %t_on.bin
+; RUN:     -filetype=obj < %s -o %t.o
+; RUN: llvm-objcopy -O binary --only-section=.text %t.o %t.bin
 ;
-; REGRESSION TEST: — extend getM0Variant to retire packInstructionIntoSlot
-; for the remaining s0 ALU32 RI/MOVT/MULL + s1 ALU64-flat families.
+; REGRESSION TEST: encode s0 ALU32 RI/MOVT/MULL + s1 ALU64-flat families
+; through the product Bundle128 encoder (retired -haydn-m0-slot-or dual path).
 ;
-; Bug class: before, the HaydnSlotVariantFinalizer's getM0Variant did NOT
-; cover these families, so under -haydn-m0-slot-or=1 a bundle containing one
-; of them was left generic (all-or-nothing rule), forcing the whole bundle
-; onto the hand-rolled packInstructionIntoSlot path. The slot-OR encoder
-; never fired for them.
+; Historical bug: Mode-0 slot-OR finalizer left these families generic and
+; forced hand-rolled packInstructionIntoSlot; product path is single encode.
 ;
 ; Fix :
 ; (1) s0 ALU32 RI (12 ops) + MOVT32/MOVF32 (2) + MULL family (4) → the

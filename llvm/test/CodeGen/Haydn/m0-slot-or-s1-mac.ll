@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -haydn-m0-slot-or=1 \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -filetype=obj < %s -o %t.o && \
 ; RUN:     llvm-objdump -d %t.o | FileCheck %s
 ; Status : previously-XFAIL regression resolved; lit PASS.

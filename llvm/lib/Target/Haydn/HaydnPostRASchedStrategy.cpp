@@ -22,7 +22,7 @@
 #include "HaydnPostRASchedStrategy.h"
 #include "HaydnAlternateDescriptors.h"
 #include "HaydnInstrInfo.h"
-#include "HaydnInterBlockScheduling.h"
+
 #include "HaydnMachineFunctionInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/STLExtras.h"
@@ -82,7 +82,6 @@ HaydnPostRASchedStrategy::HaydnPostRASchedStrategy(const MachineSchedContext *C)
   // (ScheduleDAGMI::startBlock -> SchedImpl->enterMBB happens before any
   // region's initialize; see MachineScheduler.cpp:824 vs :858/.)
   HII = static_cast<const HaydnInstrInfo *>(C->MF->getSubtarget().getInstrInfo());
-  InterBlock.emplace(HII);
 }
 
 bool HaydnPostRASchedStrategy::tryCandidate(SchedCandidate &Cand,
@@ -156,11 +155,7 @@ void HaydnPostRASchedStrategy::leaveMBB() {
     materializeBundles(*CurrentMBB, MBBBundles);
     MBBBundles.clear();
   }
-  // Stage-0 inter-block: after this MBB's bundles exist, try acyclic
-  // fallthrough pack. No-op when -haydn-enable-interblock is false.
-  // (ZOL exit→preheader hoist removed — not AIE; reject-contract tax too high.)
-  if (CurrentMBB && InterBlock)
-    InterBlock->runOnMBB(*CurrentMBB);
+  // Stage-0 InterBlock densify deleted (YOLO). Pack ownership = leaveRegion only.
   PostGenericScheduler::leaveMBB();
 }
 
@@ -391,22 +386,6 @@ void HaydnPostRASchedStrategy::leaveRegion(const SUnit &ExitSU) {
   if (!RegionWasScheduled)
     return;
   RegionWasScheduled = false;
-  const bool FromPostPipeliner = PostPipelinerRegion;
-  PostPipelinerRegion = false;
-
-  // PostPipeliner already finalized same-mod-cycle BUNDLEs in materialize
-  // and set SU->TopReadyCycle = ModuloCycle. Re-run computeRegionBundles so
-  // leaveMBB sees the kernel's II cycles (for stats / idle-NOP bookkeeping).
-  // Skip materializeMultiOpcodeInstrs: HR auction never ran for PP (no
-  // AltDescs slots); Flex encode derives slots from opcode at emit time.
-  if (FromPostPipeliner) {
-    SmallVector<CycleBundle> RegionBundles = computeRegionBundles();
-    for (CycleBundle &CB : RegionBundles)
-      MBBBundles.push_back(std::move(CB));
-    LLVM_DEBUG(dbgs() << "  << leaveRegion: post-pipeliner " << RegionBundles.size()
-                      << " mod-cycle(s)\n");
-    return;
-  }
 
   // record each scheduled MI's HR-auction slot in AltDescs BEFORE bundle
   // formation (placement only — no setDesc Flex bake). Bundle children keep

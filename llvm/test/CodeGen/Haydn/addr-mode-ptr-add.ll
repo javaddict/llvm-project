@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs -haydn-enable-gformat-select=1 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 
 ; CHECK: 	.globl	test_ptradd_const_offset        // -- Begin function test_ptradd_const_offset
 ; CHECK: 	.type	test_ptradd_const_offset,@function

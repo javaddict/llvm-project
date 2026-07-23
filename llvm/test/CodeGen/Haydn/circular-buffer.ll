@@ -1,5 +1,8 @@
+; UNSUPPORTED: true
+; CircularBuffer stats pass deleted (YOLO phase-out)
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -stop-after=haydn-circular-buffer < %s | FileCheck %s
+; RUN:   -stop-after=haydn-circular-buffer < %s \
+; RUN:   | FileCheck %s
 ;
 ; Circular buffer detection tests for the Haydn backend.
 ;

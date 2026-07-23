@@ -435,20 +435,12 @@ bool HaydnPostSelectOptimize::formMACs(MachineFunction &MF) {
   return Changed;
 }
 
-// W2.5 / G-MAC: product OFF. No scalar GPR MAC opcode in ISA DB; SIMD
-// form paths still invent Acc1 / drop second X2MUL def. Opt-in for matrix
-// soak only — re-enable product only with registered MIR -run-pass matrix.
-static cl::opt<bool> EnableFormMACs(
-    "haydn-enable-form-macs", cl::Hidden, cl::init(false),
-    cl::desc("W2.5: PostSelect formMACs/optimizeSIMD (default OFF; Acc1/"
-             "phantom residual). Not product until MIR matrix exits."));
+// formMACs / optimizeSIMD deleted from product path (YOLO densify kill).
+// Dead methods retained below for archaeology; never called.
 
 bool HaydnPostSelectOptimize::runOnMachineFunction(MachineFunction &MF) {
   bool Changed = false;
-  if (EnableFormMACs) {
-    Changed |= formMACs(MF);
-    Changed |= optimizeSIMD(MF);
-  }
+  // Live: cross-bank LD64/ST64 round-trip elide only.
   Changed |= elideCrossBankRoundTrips(MF);
   // slot commitment moved OUT of pre-RA. materializeFlexVariants
   // previously rewrote every legacy opcode to `_S0`/`_S1` via

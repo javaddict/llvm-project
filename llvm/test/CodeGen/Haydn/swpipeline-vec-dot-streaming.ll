@@ -1,6 +1,6 @@
-; RUN: llc -haydn-enable-ldst-opt=true -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs -O2 -debug-only=pipeliner < %s 2>&1 | FileCheck %s --check-prefix=SWP
-; RUN: llc -haydn-enable-ldst-opt=true -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs -O2 < %s | FileCheck %s
 ; STALE-FAILMARKER-REMOVED (, post- cutover): the SMS
 ; analyzability regression has cleared — analyzeLoopForPipelining now accepts

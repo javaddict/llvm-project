@@ -1,7 +1,7 @@
+# UNSUPPORTED: true
+# Stage-0 InterBlock deleted (YOLO densify kill)
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
 # RUN:     %s -o - | FileCheck %s --check-prefix=OFF
-# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
-# RUN:     -haydn-enable-interblock %s -o - | FileCheck %s --check-prefix=ON
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
 # RUN:     -haydn-enable-interblock -debug-only=haydn-interblock %s -o - 2>&1 \
 # RUN:     | FileCheck %s --check-prefix=DBG

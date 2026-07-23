@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs -haydn-enable-gformat-select=1 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 
 ; REBASELINED : / pipeline reorder (ExpandPseudos/BitSimplify pre-scheduler + materialize at leaveRegion) — bundles regrouped, ops unchanged.
 ; REBASELINED : scheduling changed (//) — bundles regrouped, ops unchanged.

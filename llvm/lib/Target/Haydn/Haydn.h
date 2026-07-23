@@ -23,10 +23,11 @@ class Target;
 // Target registration
 Target &getTheHaydnTarget();
 
-// Pass creation functions
+// Pass creation functions (product pipeline only).
+// Deleted 2026-07 YOLO phase-out: LoadStoreOpt, CircularBuffer, RedundantCopyElim,
+// FormUpdateAddr, PostPipeliner, InterBlock Stage-0 — see TargetMachine comments.
 FunctionPass *createHaydnPostLegalizerCombiner();
 FunctionPass *createHaydnPostSelectOptimizePass();
-FunctionPass *createHaydnLoadStoreOptimizerPass();
 FunctionPass *createHaydnExpandPseudosPass();
 FunctionPass *createHaydnExpandPostIncEarlyPass();
 FunctionPass *createHaydnHardwareLoopsPass();
@@ -34,16 +35,13 @@ FunctionPass *createHaydnFixupHwLoopsPass();
 FunctionPass *createHaydnCFGOptimizerPass();
 FunctionPass *createHaydnConditionOptimizerPass();
 FunctionPass *createHaydnCopyElimPass();
-FunctionPass *createHaydnRedundantCopyElimPass();
 FunctionPass *createHaydnPEIPeepholePass();
 FunctionPass *createHaydnEnsureTerminatorsPass();
-FunctionPass *createHaydnCircularBufferPass();
 FunctionPass *createHaydnBitSimplifyPass();
 
 // Pass initialization declarations
 void initializeHaydnPostLegalizerCombinerPass(PassRegistry &);
 void initializeHaydnPostSelectOptimizePass(PassRegistry &);
-void initializeHaydnLoadStoreOptimizerPass(PassRegistry &);
 void initializeHaydnExpandPseudosPass(PassRegistry &);
 void initializeHaydnExpandPostIncEarlyPass(PassRegistry &);
 void initializeHaydnHardwareLoopsPass(PassRegistry &);
@@ -51,10 +49,8 @@ void initializeHaydnFixupHwLoopsPass(PassRegistry &);
 void initializeHaydnCFGOptimizerPass(PassRegistry &);
 void initializeHaydnConditionOptimizerPass(PassRegistry &);
 void initializeHaydnCopyElimPass(PassRegistry &);
-void initializeHaydnRedundantCopyElimPass(PassRegistry &);
 void initializeHaydnPEIPeepholePass(PassRegistry &);
 void initializeHaydnEnsureTerminatorsPass(PassRegistry &);
-void initializeHaydnCircularBufferPass(PassRegistry &);
 void initializeHaydnBitSimplifyPass(PassRegistry &);
 
 } // namespace llvm

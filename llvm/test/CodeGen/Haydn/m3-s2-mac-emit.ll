@@ -1,5 +1,5 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
-; RUN:     -haydn-m0-slot-or=0 -filetype=obj < %s -o %t.o && \
+; RUN:     -filetype=obj < %s -o %t.o && \
 ; RUN:     llvm-objdump -d %t.o | FileCheck %s
 ; Status : previously-XFAIL regression resolved; lit PASS.
 ; Phase-2 collateral: the 48-bit funct-flat fallback (deleted in

@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs -haydn-enable-gformat-select=1 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 ;
 ; Overflow intrinsics return { result, i1 flag }. After RetCC multi-field
 ; fix, both fields are live: result in R1, flag in R2.

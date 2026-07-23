@@ -5,10 +5,10 @@
 ; `loop_zero_trip` correctly stays unconverted (zero iterations). The only
 ; remaining G1 gap is `multi_bb_reg_count` (multi-BB if/else body), now
 ; documented as a CHECK-NOT: LoopStart negative assertion.
-; Role B residual convert is product-default OFF (
-; AIE expand-only). This suite covers residual soft→SET shapes: opt-in Role B.
-; RUN: llc -haydn-enable-ldst-opt=true -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-hwloop-role-b -stop-after=haydn-hwloops < %s | FileCheck %s
+; UNSUPPORTED: true
+; Role B convert deleted (YOLO densify kill; Role A expand only)
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
 ;
 ; Extended hardware loop detection tests for the Haydn backend.
 ;
