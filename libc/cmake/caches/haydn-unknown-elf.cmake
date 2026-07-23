@@ -12,8 +12,10 @@ include(${CMAKE_CURRENT_LIST_DIR}/baremetal_common.cmake)
 # baremetal freestanding wants the extra GPR. AIE model: R12 is a normal
 # allocatable caller-saved GPR (no free AT / no -mreserve-r12-at).
 #
-# Hwloops left enabled (default): L1 BAD_PC was PIC G_BRJT missing +JTBase for
-# EK_LabelDifference32, not ZOL.
+# Hwloops left enabled (default). Global -hwloop was a blunt workaround for
+# rare large-body uimm overflows (scanf/strtod_l) and miscompiled soft-loop
+# string routines (memcpy only wrote 1 byte). Prefer FixupHwLoops / per-TU
+# opts for oversized bodies — not a libc-wide feature kill.
 set(LIBC_COMPILE_OPTIONS_DEFAULT
     "-fomit-frame-pointer"
     CACHE STRING "Extra libc compile flags for Haydn baremetal" FORCE)

@@ -520,15 +520,9 @@ bool HaydnCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
       alignTo(static_cast<uint64_t>(Assigner.StackSize), StackAlign);
   CallSeqStart.addImm(static_cast<int64_t>(CallFrameBytes)).addImm(0);
 
-  // Attach the call-preserved regmask (CSR_Haydn = R8-R11, R15, D8-D15).
-  // Without it, only TableGen Defs count as call clobbers. That list covers
-  // allocatable caller-saved regs but not reserved scratch R12 (AT).
-  // PEI then rematerializes large stack offsets into R12 before each use;
-  // MachineLateInstrsCleanup sees identical LOADI32 R12, C across a call
-  // treats R12 as still live (modifiesRegister false), and deletes the
-  // post-call remats — leaving ld32_reg/st32_reg reading a callee-clobbered
-  // R12 (CoreMark core_init_matrix). RISC-V/AArch64 always add the
-  // mask here; mirror that.
+  // Call-preserved regmask via getCallPreservedMask: CSR bank R8–R11, R14,
+  // R15, D8–D15 (R14 always CSR; hasFP reserves it as frame base). R12 is
+  // normal call-clobbered.
   {
     const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
     const uint32_t *Mask = TRI->getCallPreservedMask(MF, Info.CallConv);

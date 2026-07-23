@@ -81,6 +81,14 @@ def VASTART : HaydnPseudo<(outs), (ins GPR32:$ptr),
 // Loads from src_ptr and stores to dst_ptr
 def VACOPY : HaydnPseudo<(outs), (ins GPR32:$dst, GPR32:$src),
                            "vacopy\t$dst, $src", []>;
+
+// CB-131: G_VAARG → thin ISel to these; ExpandPseudos implements the full
+// AArch64-style two-bank + stack-overflow algorithm (reg step 4/8, stack
+// step 8 per CCAssignToStack<8,8>). hasSideEffects so DCE cannot delete.
+def VAARG_I32 : HaydnPseudo<(outs GPR32:$rd), (ins GPR32:$valist),
+                             "vaarg.i32\t$rd, $valist", []>;
+def VAARG_I64 : HaydnPseudo<(outs DR64:$rd), (ins GPR32:$valist),
+                             "vaarg.i64\t$rd, $valist", []>;
 } // hasSideEffects = 1
 
 // Pseudo for va_end - no-op for baremetal
@@ -101,15 +109,10 @@ def ADJCALLSTACKUP : HaydnPseudo<(outs), (ins i32imm:$amt, i32imm:$align),
 // These are emitted by the InstructionSelector and expanded by ExpandPseudos
 // into direct calls to compiler-rt functions (__divsi3, __udivsi3, etc.).
 //
-// All caller-saved registers must be listed as Defs (clobbers) so the
-// register allocator does not keep live values across the libcall.
-// Caller-saved: GPR R1-R7, R12(AT reserved scratch), R14, DR64 D0-D7, LR (R15).
-// Callee-saved: GPR R8-R11, DR64 D8-D15, AR2-AR3.
-// R12 (AT) is reserved and never allocated, but PEI/frame-lowering use
-// it as a pure scratch for large stack offsets (LOADI32 R12, off + WITH_REG
-// LS). Callees may clobber it, so libcalls must def R12 or LateInstrsCleanup
-// will delete post-call remats of the same constant.
-let Defs = [R1, R2, R3, R4, R5, R6, R7, R12, R14,
+// Call clobbers (all R* are GPRs). R1–R7, R12, D0–D7, R15(link).
+// R14: never in Defs — always CSR via regmask (s0-style). CSR bank:
+// R8–R11, R14, R15, D8–D15.
+let Defs = [R1, R2, R3, R4, R5, R6, R7, R12,
             D0, D1, D2, D3, D4, D5, D6, D7,
             R15] in {
 def LIBCALL_SDIV : HaydnPseudo<(outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
@@ -686,25 +689,11 @@ def B : HaydnPseudo<(outs), (ins brtarget:$offset),
 // Jump / Link Instructions
 //===----------------------------------------------------------------------===//
 //
-// JAL/JALR with isCall=1 need caller-saved register clobbers so the register
-// allocator does not keep live values across calls. Caller-saved registers
-// (everything NOT in CSR_Haydn = R8-R11, R15, D8-D15):
-// GPR: R1-R7, R12(AT), R14 (R8-R11 callee-saved; R0=zero; R13=SP; R15=LR)
-// DR64: D0-D7 (D8-D15 callee-saved)
-// R14 (FP) is caller-saved: CSR_Haydn does NOT list it, and hasFP reserves it
-// only when an actual frame pointer is in use. When hasFP is false, R14 is
-// freely allocatable as scratch and callees may clobber it — so JAL/JALR must
-// list R14 in Defs, else the register allocator keeps values live across calls
-// in R14 and they are silently destroyed by the callee (e.g. fib holding 'n'
-// in R14 across its recursive call).
-// R12 is reserved AT — never allocated, but PEI materializes large
-// frame offsets into it. Callees may clobber R12, so it must be listed in Defs
-// (and CallLowering must attach the call-preserved regmask) or
-// MachineLateInstrsCleanup will treat a pre-call LOADI32 R12,C as still live
-// and delete post-call remats.
-// The link register R15 is written by JAL/JALR to hold the return address.
+// JAL/JALR isCall clobbers: R1–R7, R12, D0–D7, R15. All R* are GPRs.
+// R14 via regmask only (not Defs): always CSR (s0-style); hasFP reserves
+// frame base. R12 normal call-clobbered (not free AT).
 
-let Defs = [R1, R2, R3, R4, R5, R6, R7, R12, R14,
+let Defs = [R1, R2, R3, R4, R5, R6, R7, R12,
             D0, D1, D2, D3, D4, D5, D6, D7,
             R15] in {
 def JAL : FmtJ<0x37, (outs GPR32:$rd), (ins calltarget:$target),
@@ -1750,14 +1739,19 @@ def ORI32_W   : Fmt48_WideGPRImm<0x06, (outs GPR32:$rt),
 // ADJCALLSTACKUP landed after a terminator (verifier error) AND omitted the
 // caller-saved Defs (lost live-across-call tracking).
 // Note: R15 (LR) is the explicit $rt output of JAL_W/JALR_W, not listed here.
-let Defs = [R1, R2, R3, R4, R5, R6, R7, R12, R14,
+// R14 is a GPR; clobber/preserve via regmask only (not Defs).
+let Defs = [R1, R2, R3, R4, R5, R6, R7, R12,
             D0, D1, D2, D3, D4, D5, D6, D7] in {
 let isCall = 1 in
 def JAL_W : Fmt48_WideBR_I20<0x20, (outs GPR32:$rt),
                              (ins brtarget_wide_i20:$offset),
                              "jal_w\t$rt, $offset", []>;
 
-let isTerminator = 1, isCall = 1, isIndirectBranch = 1 in
+// CB-129: isBarrier required so MachineBlockPlacement does not treat an
+// unanalyzable indirect jump/RET as fallthrough (assert in buildCFGChains
+// on computed-goto). PseudoCALLIndirect expands to JALR_W only at print time
+// (post-MBP); pure jumps/RETs are MIR terminators that never fall through.
+let isTerminator = 1, isBarrier = 1, isCall = 1, isIndirectBranch = 1 in
 def JALR_W : Fmt48_WideBR_RI12<0x30, (outs GPR32:$rt),
                                (ins GPR32:$rs, calltarget_wide_ri12:$offset),
                                "jalr_w\t$rt, $rs, $offset", []>;

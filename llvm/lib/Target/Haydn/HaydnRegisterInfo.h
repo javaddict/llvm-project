@@ -28,7 +28,15 @@ struct HaydnRegisterInfo : public HaydnGenRegisterInfo {
 
   BitVector getReservedRegs(const MachineFunction &MF) const override;
 
+  /// SP (R13) when !hasFP; architectural FP R14 ("fp") when hasFP.
+  /// Dyn-alloca fixed-frame base is the same FP (BP folded into FP).
   Register getFrameRegister(const MachineFunction &MF) const override;
+
+  /// No separate base pointer — always false. BP role is on FP (R14).
+  bool hasBasePointer(const MachineFunction &MF) const;
+
+  /// Same as architectural FP (R14). API compatibility only.
+  Register getBaseRegister() const;
 
   const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
 
@@ -42,9 +50,6 @@ struct HaydnRegisterInfo : public HaydnGenRegisterInfo {
     return true;
   }
 
-  // Materialize out-of-range FI bases with virtual registers during PEI;
-  // scavengeFrameVirtualRegs assigns phys regs afterward. Avoids nested
-  // phys-reg scavenge+spill inside eliminateFrameIndex (RISC-V / Hexagon).
   bool requiresFrameIndexScavenging(const MachineFunction &MF) const override {
     return true;
   }
