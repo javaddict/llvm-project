@@ -1221,20 +1221,18 @@ def ORI32_W_S0 : HaydnFU_ALU32_S0_RI20<0b1110001,
 // pre-RA scheduler's materializeMultiOpcodeInstrs commits them to `_W_S0`
 // so by BranchRelaxation time the live opcodes are the FLEX variants.
 
-// Calls: caller-saved clobber Defs (same block as legacy JAL_W/JALR_W).
-// Must include R12 (AT scratch) — / : PEI and late remats use
-// R12; callees may clobber it. JAL_W lists R12; the S0 commit form must too
-// or post-RA sched / MachineLateInstrsCleanup keep R12 live across calls.
-// JAL_W_S0: isCall only (a call returns — NOT isTerminator).
-// JALR_W_S0: isTerminator + isCall + isIndirectBranch (RET / indirect).
-let Defs = [R1, R2, R3, R4, R5, R6, R7, R12, R14,
+// Calls: caller-saved clobber Defs (same as legacy JAL_W). R12 call-clobbered;
+// R14 via regmask only (always CSR, not in Defs). JAL_W_S0: isCall only.
+// JALR_W_S0: isTerminator + isCall + isIndirectBranch.
+let Defs = [R1, R2, R3, R4, R5, R6, R7, R12,
             D0, D1, D2, D3, D4, D5, D6, D7] in {
 let isCall = 1 in
 def JAL_W_S0 : HaydnFU_ALU32_S0_I20<0b1000011,
     (outs GPR32:$rt), (ins brtarget_wide_i20:$imm20),
     "jal_w\t$rt, $imm20", []>;
 
-let isTerminator = 1, isCall = 1, isIndirectBranch = 1 in
+// CB-129: isBarrier — see JALR_W in HaydnInstrInfo.td.
+let isTerminator = 1, isBarrier = 1, isCall = 1, isIndirectBranch = 1 in
 def JALR_W_S0 : HaydnFU_ALU32_S0_RI12<0b1000100,
     (outs GPR32:$rt), (ins GPR32:$rs, calltarget_wide_ri12:$imm12),
     "jalr_w\t$rt, $rs, $imm12", []>;

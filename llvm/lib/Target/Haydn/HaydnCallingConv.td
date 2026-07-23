@@ -23,17 +23,17 @@
 // Returns: GPR R1-R2 for i32/ptr, DR D0 for i64/SIMD.
 //===----------------------------------------------------------------------===//
 
-// Callee-saved registers: R8-R11, R15(LR), D8-D15.
-// R12 is an ordinary caller-saved GPR (AIE model) — not in CSR set.
-// MatInt / VASTART scavenge a live-checked GPR via HaydnPostRAScratch (free
-// first; spill to PostRAScratchFI only if none free). R12 is not free AT.
-// R15 (LR) is saved/ restored for non-leaf functions (JAL writes the return
-// address into R15). determineCalleeSaves only marks it saved when the
-// function contains a call, so leaf functions pay no cost. AR2/AR3 are NOT in
-// the CSR list: there is no instruction to spill/restore them, so claiming
-// they are callee-saved would be a lie (F32). See CLAUDE.md register map.
+// All R0–R15 are GPRs. Soft roles only: R0 soft-zero, R13 SP, R14 frame
+// base when hasFP, R15 LR — not separate hardware classes.
+//
+// CSR bank (RISC-V s0-style): R8–R11, R14, R15, D8–D15.
+// R14 is always callee-saved. When hasFP it is reserved as the frame base
+// (BP folded into FP) and force-saved by PEI; when !hasFP regalloc may use
+// it as a normal callee-saved temp. Single mask — no WithFP dual list.
+// Call Defs never list R14 (regmask owns clobber/preserve).
 def CSR_Haydn : CalleeSavedRegs<(add
   (sequence "R%u", 8, 11),
+  R14,
   R15,
   (sequence "D%u", 8, 15)
 )>;

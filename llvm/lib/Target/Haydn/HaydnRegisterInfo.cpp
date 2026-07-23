@@ -39,40 +39,47 @@ HaydnRegisterInfo::HaydnRegisterInfo(unsigned HwMode)
 const uint32_t *
 HaydnRegisterInfo::getCallPreservedMask(const MachineFunction &MF,
                                         CallingConv::ID Id) const {
+  (void)Id;
+  (void)MF;
+  // Single CSR mask: R8–R11, R14, R15, D8–D15. R14 always callee-saved
+  // (s0-style); hasFP only reserves + force-saves it as frame base.
   return CSR_Haydn_RegMask;
 }
 
 Register HaydnRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
   const HaydnFrameLowering *TFI = MF.getSubtarget<HaydnSubtarget>().getFrameLowering();
+  // R14 is a GPR; when hasFP it is the frame base (BP folded into FP).
   return TFI->hasFP(MF) ? Haydn::R14 : Haydn::R13;
 }
+
+bool HaydnRegisterInfo::hasBasePointer(const MachineFunction &MF) const {
+  // No separate BP — all R* are GPRs; BP role is on R14 when hasFP.
+  (void)MF;
+  return false;
+}
+
+Register HaydnRegisterInfo::getBaseRegister() const { return Haydn::R14; }
 
 BitVector HaydnRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   const HaydnSubtarget &ST = MF.getSubtarget<HaydnSubtarget>();
   const HaydnFrameLowering *TFI = ST.getFrameLowering();
   BitVector Reserved(getNumRegs());
 
-  // Reserve R0 as soft-zero register (initialized to 0 in prologue, never
-  // allocated). The codegen uses R0 as a constant-zero source for ADDI32
-  // copyPhysReg, and constant materialization.
+  // Reserve R0 as soft-zero. Short-lived expand/frame/remat may borrow R0
+  // when no soft-zero user, then XOR32 R0,R0,R0 to restore.
   markSuperRegs(Reserved, Haydn::R0);
 
-  // R12 is a normal allocatable caller-saved GPR (AIE model: no free AT).
-  // MatInt / VASTART use HaydnPostRAScratch (free GPR first; PostRAScratchFI spill home).
+  // R12 is a normal allocatable caller-saved GPR — do not reserve as free AT.
 
   // Reserve R13 (SP) and R15 (LR) always
   markSuperRegs(Reserved, Haydn::R13); // SP
   markSuperRegs(Reserved, Haydn::R15); // LR
 
-  // Reserve R14 (FP) only when the function has a dedicated frame pointer
-  // (-mattr=+frame-pointer, -fno-omit-frame-pointer, or ABI-required).
+  // R14 is a normal GPR; reserve only when it is the live frame base.
   if (TFI->hasFP(MF))
-    markSuperRegs(Reserved, Haydn::R14); // FP
+    markSuperRegs(Reserved, Haydn::R14);
 
-  // SFR is a 4-bit status-flag register, never allocatable. Mark reserved so
-  // MachineVerifier allows Uses=[SFR] on cmovs even when the preceding compare
-  // is outside the function under test (simd-masked-compare.ll isolated
-  // movt/movf cases). Compare ops still Defs=[SFR] for true RAW edges.
+  // SFR is a 4-bit status-flag register, never allocatable.
   markSuperRegs(Reserved, Haydn::SFR);
 
   return Reserved;
@@ -80,6 +87,9 @@ BitVector HaydnRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
 
 const MCPhysReg *
 HaydnRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
+  (void)MF;
+  // R14 is always in the CSR bank; PEI spills it if used or force-saved
+  // (hasFP frame base via determineCalleeSaves).
   return CSR_Haydn_SaveList;
 }
 
@@ -241,27 +251,10 @@ bool HaydnRegisterInfo::getRegAllocationHints(
   // caller-saved registers over callee-saved ones. This reduces callee-save
   // spill/restore overhead.
   //
-  // Haydn register convention (AIE model: no free AT):
-  // R0 = soft-zero (reserved)
-  // R1-R7 = arguments/return/caller-saved
-  // R8-R11 = callee-saved
-  // R12 = normal allocatable caller-saved GPR (not free AT; MatInt
-  // scavenges any dead GPR via HaydnPostRAScratch)
-  // R13 = SP (reserved)
-  // R14 = FP (conditionally reserved; caller-saved when allocatable)
-  // R15 = LR (reserved)
-  //
-  // D0-D7 = caller-saved DR64
-  // D8-D15 = callee-saved DR64
-  //
-  // By hinting caller-saved registers first, the allocator avoids using
-  // callee-saved registers for short-lived temporaries, which would require
-  // unnecessary save/restore in prologue/epilogue.
-  //
-  // R12 must be treated as caller-saved so greedy prefers it for
-  // short-lived temps like other call-clobbered GPRs, instead of treating it
-  // as an unhinted "last resort" that absorbs long-lived values while R8–R11
-  // pay CSR cost.
+  // All R* are GPRs. Soft roles: R0 soft-zero; R13 SP; R14 CSR (fp when
+  // hasFP); R15 LR. CSR bank: R8–R11, R14. R12 caller-saved (not free AT).
+  // D0–D7 caller-saved / D8–D15 CSR DR banks.
+  // Hint caller-saved first so short temps avoid CSR spill cost.
 
   SmallSet<MCPhysReg, 16> HintedRegs;
   for (MCPhysReg PhysReg : Hints)
@@ -270,9 +263,7 @@ bool HaydnRegisterInfo::getRegAllocationHints(
   // Check if this virtual register is in GPR32 or DR64.
   const TargetRegisterClass *RC = MRI.getRegClass(VirtReg);
 
-  // Caller-saved ranges include R12. R14 is call-clobbered when allocatable
-  // but left unhinted here — PEI/FP interactions make a soft preference for
-  // R14 more subtle; CSR avoidance for R1–R7+R12 is enough for.
+  // Caller-saved GPRs: R1–R7 + R12. R14 is CSR (not caller-saved).
   auto isCallerSaved = [&](MCPhysReg Reg) -> bool {
     // GPR32 caller-saved: R1-R7 and R12.
     if (Haydn::GPR32RegClass.contains(Reg)) {

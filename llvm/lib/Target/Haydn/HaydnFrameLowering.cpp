@@ -61,9 +61,9 @@ static void emitMaterializeImm32(MachineBasicBlock &MBB,
 // PEI \c emitPrologue runs post-RA and often without a live scavenger at the
 // insert point, so we need a phys scratch up front. The **only** safe filter
 // is the **ABI call-preserved set**, not RA liveness:
-// \c TRI->getCalleeSavedRegs / CSR_Haydn = R8–R11, R15, D8–D15.
-// Call-clobbered GPRs (R1–R7, R12 when not reserved as AT) may be used
-// at entry if they are not entry live-ins.
+// \c TRI->getCalleeSavedRegs / CSR bank = R8–R11, R15, D8–D15 (+R14 if hasFP).
+// Call-clobbered GPRs (R1–R7, R12) may be used at entry if
+// they are not entry live-ins.
 // \c !MRI.isPhysRegUsed(R8) is **not** permission to clobber R8: RA not
 // allocating R8 in *this* function still means R8 belongs to the
 // *caller* and must be preserved unless it is on CSI and already saved.
@@ -193,13 +193,9 @@ static void emitCSRStore(MachineBasicBlock &MBB,
   // logical REG forms only; private *_S0 peers are MC encode-only.
   unsigned RegOpc = (StoreOpc == Haydn::ST64) ? Haydn::ST64_REG_M0S0LS
                                               : Haydn::ST32_REG_M0S0LS;
-  // Offset scratch: getPEIScratchReg (ABI-safe). Self-XOR zeros without R0.
-  Register OffReg =
-      getPEIScratchReg(*MBB.getParent(), /*Avoid=*/SrcReg);
-  BuildMI(MBB, MBBI, DL, TII->get(Haydn::XOR32), OffReg)
-      .addReg(OffReg, RegState::Undef)
-      .addReg(OffReg, RegState::Undef)
-      .setMIFlag(FrameFlag);
+  // Short-lived offset: soft-zero R0 when free; restore after store.
+  assert(SrcReg != Haydn::R0 && BaseReg != Haydn::R0);
+  Register OffReg = Haydn::R0;
   if (Offset != 0) {
     if (isInt<20>(Offset)) {
       BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), OffReg)
@@ -216,6 +212,10 @@ static void emitCSRStore(MachineBasicBlock &MBB,
       .addReg(SrcReg)
       .addReg(BaseReg)
       .addReg(OffReg)
+      .setMIFlag(FrameFlag);
+  BuildMI(MBB, MBBI, DL, TII->get(Haydn::XOR32), Haydn::R0)
+      .addReg(Haydn::R0)
+      .addReg(Haydn::R0)
       .setMIFlag(FrameFlag);
 }
 
@@ -246,17 +246,9 @@ static void emitCSRLoad(MachineBasicBlock &MBB,
     return;
   }
   unsigned RegOpc = Is64 ? Haydn::LD64_REG_M0S0LS : Haydn::LD32_REG_M0S0LS;
-  // Offset scratch: getPEIScratchReg (ABI-safe; avoid DstReg).
-  // Epilogue (FrameDestroy): also avoid R1 — integer return value is live
-  // across CSR restore and must not be used as the offset materialize temp.
-  Register AvoidRet =
-      (FrameFlag == MachineInstr::FrameDestroy) ? Haydn::R1 : Register();
-  Register OffReg =
-      getPEIScratchReg(*MBB.getParent(), /*Avoid=*/DstReg, AvoidRet);
-  BuildMI(MBB, MBBI, DL, TII->get(Haydn::XOR32), OffReg)
-      .addReg(OffReg, RegState::Undef)
-      .addReg(OffReg, RegState::Undef)
-      .setMIFlag(FrameFlag);
+  // Soft-zero R0 as short-lived offset temp (avoids stealing R1 return).
+  assert(DstReg != Haydn::R0 && BaseReg != Haydn::R0);
+  Register OffReg = Haydn::R0;
   if (Offset != 0) {
     if (isInt<20>(Offset)) {
       BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), OffReg)
@@ -272,6 +264,10 @@ static void emitCSRLoad(MachineBasicBlock &MBB,
   BuildMI(MBB, MBBI, DL, TII->get(RegOpc), DstReg)
       .addReg(BaseReg)
       .addReg(OffReg)
+      .setMIFlag(FrameFlag);
+  BuildMI(MBB, MBBI, DL, TII->get(Haydn::XOR32), Haydn::R0)
+      .addReg(Haydn::R0)
+      .addReg(Haydn::R0)
       .setMIFlag(FrameFlag);
 }
 
@@ -647,36 +643,34 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
   }
 
   // Set up frame pointer if needed.
-  // FP points to the top of the frame (old SP), so FP = SP + AlignedStackSize.
-  // This ensures offsets relative to FP are consistent between prologue and
-  // epilogue, and locals accessed via FP have positive offsets downward.
+  // FP (R14) = top of fixed frame (old SP): FP = SP + AlignedStackSize.
+  // BP is folded into FP: dyn-alloca only moves SP; epilogue recovers
+  // fixed-frame SP as SP = FP - StackSize. No separate base-pointer reg.
   if (hasFP(MF)) {
+    Register FP = TRI->getFrameRegister(MF); // R14
     if (AlignedStackSize == 0) {
-      // No stack allocation — FP = SP directly
-      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), Haydn::R14)
+      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), FP)
           .addReg(Haydn::R13)
           .addImm(0)
           .setMIFlag(MachineInstr::FrameSetup);
     } else if (isInt<16>(AlignedStackSize)) {
-      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), Haydn::R14)
+      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), FP)
           .addReg(Haydn::R13)
           .addImm(AlignedStackSize)
           .setMIFlag(MachineInstr::FrameSetup);
     } else {
-      // Large frame: MatInt(size) into PEI scratch, ADD32 FP, SP, scratch.
-      Register TempReg = getPEIScratchReg(MF, /*Avoid=*/Haydn::R14);
+      Register TempReg = getPEIScratchReg(MF, /*Avoid=*/FP);
       emitMaterializeImm32(MBB, MBBI, DL, TII, TempReg,
                            static_cast<int64_t>(AlignedStackSize),
                            MachineInstr::FrameSetup);
-      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADD32), Haydn::R14)
+      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADD32), FP)
           .addReg(Haydn::R13)
           .addReg(TempReg)
           .setMIFlag(MachineInstr::FrameSetup);
     }
 
-    // cfi_def_cfa_register fp
     CFIIndex = MF.addFrameInst(MCCFIInstruction::createDefCfaRegister(
-        nullptr, MCRI->getDwarfRegNum(Haydn::R14, true)));
+        nullptr, MCRI->getDwarfRegNum(FP, true)));
     BuildMI(MBB, MBBI, DL, TII->get(TargetOpcode::CFI_INSTRUCTION))
         .addCFIIndex(CFIIndex)
         .setMIFlags(MachineInstr::FrameSetup);
@@ -781,6 +775,35 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
 
   // Get the number of bytes to allocate from the FrameInfo.
   uint64_t StackSize = MFI.getStackSize();
+
+  // Dyn-alloca / VLA moves SP. CSR restores need post-prologue SP.
+  // Recover from FP (R14): prologue set FP = SP + StackSize, so
+  // fixed-frame SP = FP - StackSize. BP is folded into FP.
+  if (MFI.hasVarSizedObjects()) {
+    assert(hasFP(MF) && "var-sized objects require FP (BP folded into FP)");
+    Register FP = TRI->getFrameRegister(MF);
+    if (StackSize == 0) {
+      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), Haydn::R13)
+          .addReg(FP)
+          .addImm(0)
+          .setMIFlag(MachineInstr::FrameDestroy);
+    } else if (isInt<16>(static_cast<int64_t>(StackSize))) {
+      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), Haydn::R13)
+          .addReg(FP)
+          .addImm(-static_cast<int64_t>(StackSize))
+          .setMIFlag(MachineInstr::FrameDestroy);
+    } else {
+      Register TempReg =
+          getPEIScratchReg(MF, /*Avoid=*/FP, /*Avoid2=*/Haydn::R13);
+      emitMaterializeImm32(MBB, MBBI, DL, TII, TempReg,
+                           static_cast<int64_t>(StackSize),
+                           MachineInstr::FrameDestroy);
+      BuildMI(MBB, MBBI, DL, TII->get(Haydn::SUB32), Haydn::R13)
+          .addReg(FP)
+          .addReg(TempReg)
+          .setMIFlag(MachineInstr::FrameDestroy);
+    }
+  }
 
   // Restore callee-saved registers in reverse order of saving
   const std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
@@ -984,16 +1007,13 @@ void HaydnFrameLowering::determineCalleeSaves(MachineFunction &MF,
   // Call the base implementation to get the default callee-saved registers
   TargetFrameLowering::determineCalleeSaves(MF, SavedRegs, RS);
 
-  // Haydn-specific: ensure FP is marked as callee-saved if we're using it
+  // R14 is always CSR. When hasFP it is the reserved frame base (BP folded
+  // in): force PEI save even if the allocator never "used" it as a temp.
   if (hasFP(MF)) {
     SavedRegs.set(Haydn::R14);
   }
 
-  // F13: JAL writes the link address into R15 (LR). Any function that contains
-  // a call (non-leaf) must therefore save and restore R15 across the call so the
-  // caller's return path is preserved. The base TargetFrameLowering treats R15
-  // as reserved (not in CSR_Haydn) so it is not saved by default; force it here
-  // for non-leaf functions. See CLAUDE.md register map (R15=LR).
+  // F13: JAL writes LR (R15). Non-leaf must save/restore R15.
   if (MF.getFrameInfo().hasCalls()) {
     SavedRegs.set(Haydn::R15);
   }
