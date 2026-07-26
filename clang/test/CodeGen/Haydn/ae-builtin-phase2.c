@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple haydn-unknown-elf -ffreestanding -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -ffreestanding -emit-llvm -o - %s | FileCheck %s
 //
 // D208 Phase 2 (D210): native __builtin_ae_* composed builtins.
 // Each __builtin_ae_* bypasses ClangBuiltin auto-map and lowers through

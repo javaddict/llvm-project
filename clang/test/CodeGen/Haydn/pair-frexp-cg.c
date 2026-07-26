@@ -1,9 +1,9 @@
-// RUN: %clang_cc1 -triple haydn-unknown-elf -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -emit-llvm -o - %s | FileCheck %s
 //
 // CodeGen for frexp-pattern _pair builtins (haydn_builtin_cg.inc).
 // Golden lanes: X2 sources are <2 x i32>, X4 sources are <4 x i16>;
 // products/accs stay i64. Switch arms emit {i64,i64} + extractvalue.
-// CB load remains {i64,i32}.
+// CB load remains {i64,ptr}.
 
 typedef long long int64_t;
 typedef int haydn_x2int32 __attribute__((__vector_size__(8)));
@@ -38,57 +38,57 @@ int64_t test_x4mul16_pair(haydn_x4int16 a, haydn_x4int16 b) {
 }
 
 // CHECK-LABEL: @test_ldw_cb_imm_pair
-int64_t test_ldw_cb_imm_pair(int base) {
-  int np;
+int64_t test_ldw_cb_imm_pair(const void *base) {
+  void *np;
   // ImmArg: cbr_sel + stride constants.
-  // CHECK: call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %{{.*}}, i32 0, i32 1)
-  // CHECK: extractvalue { i64, i32 } %{{.*}}, 1
-  // CHECK: extractvalue { i64, i32 } %{{.*}}, 0
+  // CHECK: call { i64, ptr } @llvm.haydn.ldw.cb.imm(ptr %{{.*}}, i32 0, i32 1)
+  // CHECK: extractvalue { i64, ptr } %{{.*}}, 1
+  // CHECK: extractvalue { i64, ptr } %{{.*}}, 0
   return __builtin_haydn_ldw_cb_imm_pair(&np, base, /*cbr=*/0, /*stride=*/1);
 }
 
-// POST/PRE AGU writeback loads: {data, new_ptr}.
+// POST/PRE AGU writeback loads: {data, ptr new_ptr}.
 // CHECK-LABEL: @test_s_lw_post_imm_pair
-int test_s_lw_post_imm_pair(int base) {
-  int np;
-  // CHECK: call { i32, i32 } @llvm.haydn.s.lw.post.imm(i32 %{{.*}}, i32 1)
-  // CHECK: extractvalue { i32, i32 } %{{.*}}, 1
-  // CHECK: extractvalue { i32, i32 } %{{.*}}, 0
+int test_s_lw_post_imm_pair(const void *base) {
+  void *np;
+  // CHECK: call { i32, ptr } @llvm.haydn.s.lw.post.imm(ptr %{{.*}}, i32 1)
+  // CHECK: extractvalue { i32, ptr } %{{.*}}, 1
+  // CHECK: extractvalue { i32, ptr } %{{.*}}, 0
   return __builtin_haydn_s_lw_post_imm_pair(&np, base, 1);
 }
 
 // CHECK-LABEL: @test_s_lw_post_reg_pair
-int test_s_lw_post_reg_pair(int base, int off) {
-  int np;
-  // CHECK: call { i32, i32 } @llvm.haydn.s.lw.post.reg
-  // CHECK: extractvalue { i32, i32 } %{{.*}}, 1
-  // CHECK: extractvalue { i32, i32 } %{{.*}}, 0
+int test_s_lw_post_reg_pair(const void *base, int off) {
+  void *np;
+  // CHECK: call { i32, ptr } @llvm.haydn.s.lw.post.reg
+  // CHECK: extractvalue { i32, ptr } %{{.*}}, 1
+  // CHECK: extractvalue { i32, ptr } %{{.*}}, 0
   return __builtin_haydn_s_lw_post_reg_pair(&np, base, off);
 }
 
 // CHECK-LABEL: @test_d_ldw_post_imm_pair
-int64_t test_d_ldw_post_imm_pair(int base) {
-  int np;
-  // CHECK: call { i64, i32 } @llvm.haydn.d.ldw.post.imm(i32 %{{.*}}, i32 1)
-  // CHECK: extractvalue { i64, i32 } %{{.*}}, 1
-  // CHECK: extractvalue { i64, i32 } %{{.*}}, 0
+int64_t test_d_ldw_post_imm_pair(const void *base) {
+  void *np;
+  // CHECK: call { i64, ptr } @llvm.haydn.d.ldw.post.imm(ptr %{{.*}}, i32 1)
+  // CHECK: extractvalue { i64, ptr } %{{.*}}, 1
+  // CHECK: extractvalue { i64, ptr } %{{.*}}, 0
   return __builtin_haydn_d_ldw_post_imm_pair(&np, base, 1);
 }
 
 // CHECK-LABEL: @test_d_ldw_pre_reg_pair
-int64_t test_d_ldw_pre_reg_pair(int base, int off) {
-  int np;
-  // CHECK: call { i64, i32 } @llvm.haydn.d.ldw.pre.reg
-  // CHECK: extractvalue { i64, i32 } %{{.*}}, 1
-  // CHECK: extractvalue { i64, i32 } %{{.*}}, 0
+int64_t test_d_ldw_pre_reg_pair(const void *base, int off) {
+  void *np;
+  // CHECK: call { i64, ptr } @llvm.haydn.d.ldw.pre.reg
+  // CHECK: extractvalue { i64, ptr } %{{.*}}, 1
+  // CHECK: extractvalue { i64, ptr } %{{.*}}, 0
   return __builtin_haydn_d_ldw_pre_reg_pair(&np, base, off);
 }
 
 // CHECK-LABEL: @test_s_lbs_pre_imm_pair
-int test_s_lbs_pre_imm_pair(int base) {
-  int np;
-  // CHECK: call { i32, i32 } @llvm.haydn.s.lbs.pre.imm(i32 %{{.*}}, i32 3)
-  // CHECK: extractvalue { i32, i32 } %{{.*}}, 1
-  // CHECK: extractvalue { i32, i32 } %{{.*}}, 0
+int test_s_lbs_pre_imm_pair(const void *base) {
+  void *np;
+  // CHECK: call { i32, ptr } @llvm.haydn.s.lbs.pre.imm(ptr %{{.*}}, i32 3)
+  // CHECK: extractvalue { i32, ptr } %{{.*}}, 1
+  // CHECK: extractvalue { i32, ptr } %{{.*}}, 0
   return __builtin_haydn_s_lbs_pre_imm_pair(&np, base, 3);
 }

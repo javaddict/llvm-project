@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple haydn-unknown-elf -O1 -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -O1 -emit-llvm -o - %s | FileCheck %s
 //
 // Phase 0 test for D208 (native AE_* builtins + vector types).
 //

@@ -184,6 +184,18 @@ void EmitHaydnBuiltinCG(const llvm::RecordKeeper &Records,
 /// Generate haydn_builtin_sema.inc (public metadata table).
 void EmitHaydnBuiltinSema(const llvm::RecordKeeper &Records,
                           llvm::raw_ostream &OS);
+/// Generate haydn_op_manifest.inc (C5.1 public-op contract + CI parity).
+void EmitHaydnOpManifest(const llvm::RecordKeeper &Records,
+                         llvm::raw_ostream &OS);
+/// Generate exhaustive PublicEnabled C→object closure probe (C5.1).
+void EmitHaydnOpClosureProbe(const llvm::RecordKeeper &Records,
+                             llvm::raw_ostream &OS);
+/// Generate exhaustive ImmCheck non-ICE + range-negative Sema audit (C5.1).
+void EmitHaydnOpImmAudit(const llvm::RecordKeeper &Records,
+                         llvm::raw_ostream &OS);
+/// Generate exhaustive Features-gate Sema audit (C5.1).
+void EmitHaydnOpFeatureAudit(const llvm::RecordKeeper &Records,
+                             llvm::raw_ostream &OS);
 void EmitRVVBuiltinCG(const llvm::RecordKeeper &Records, llvm::raw_ostream &OS);
 void EmitRVVBuiltinSema(const llvm::RecordKeeper &Records,
                         llvm::raw_ostream &OS);

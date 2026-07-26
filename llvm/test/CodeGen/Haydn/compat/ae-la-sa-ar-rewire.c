@@ -4,7 +4,9 @@
 // unaligned ops (PLDWWUA / D_L*UA_POST / D_S*UA_POST / WBARWUA / FLAR)
 // not plain loads/stores.
 //
-// RUN: clang -target haydn-unknown-elf \
+// Full model (-mcpu=haydn): simd + bit-reversed + CB gates so haydn.h parses.
+// Default CPU generic is agu+hwloop only and fails feature-gated builtins.
+// RUN: clang -target haydn-unknown-elf -mcpu=haydn \
 // RUN: -mllvm -global-isel-abort=1 -O2 -ffreestanding \
 // RUN: -S -o - %s | FileCheck %s
 

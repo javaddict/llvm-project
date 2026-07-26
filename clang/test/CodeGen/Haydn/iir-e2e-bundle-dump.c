@@ -1,7 +1,7 @@
-// RUN: %clang -target haydn-unknown-elf -mllvm -global-isel-abort=1 -O2 \
+// RUN: %clang -target haydn-unknown-elf -mcpu=haydn -mllvm -global-isel-abort=1 -O2 \
 // RUN:   -S -o %t.s %s
 // RUN: FileCheck %s --check-prefix=ASM --input-file %t.s
-// RUN: %clang -target haydn-unknown-elf -mllvm -global-isel-abort=1 -O2 \
+// RUN: %clang -target haydn-unknown-elf -mcpu=haydn -mllvm -global-isel-abort=1 -O2 \
 // RUN:   -c -o %t.o %s
 // RUN: llvm-objdump -d -r %t.o | FileCheck %s --check-prefix=BUNDLE
 // REQUIRES: haydn-registered-target
@@ -80,9 +80,10 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 
 // ASM-LABEL: biquad_df1:
 // ASM-DAG: subi32
-// ASM-DAG: mul64.ll
+// 64-bit mul may be mul64.ll or widened mul64.ulul + add64 (legalization).
+// ASM-DAG: {{mul64\.ll|mul64\.ulul}}
 // ASM-DAG: mula64.ll
-// ASM-DAG: sub64
+// ASM-DAG: {{sub64|add64}}
 // ASM-DAG: ld32
 // ASM-DAG: st32
 // ASM: jalr
@@ -114,7 +115,7 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 // === Objdump checks ===
 
 // BUNDLE-LABEL: <biquad_df1>:
-// BUNDLE-DAG: mul64.ll
+// BUNDLE-DAG: {{mul64\.ll|mul64\.ulul}}
 // BUNDLE-DAG: mula64.ll
 // BUNDLE-DAG: sub64
 // BUNDLE-DAG: st32

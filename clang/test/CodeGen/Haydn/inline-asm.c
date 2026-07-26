@@ -1,6 +1,8 @@
 // RUN: %clang_cc1 -triple haydn-unknown-elf -emit-llvm -o - %s | FileCheck %s
-
-// Test inline assembly with register constraints for Haydn
+//
+// Inline asm constraints for Haydn. Constraint 'd' (DR64) is rejected at Sema
+// until the backend implements a real DR constraint path (A.4) — covered by
+// Sema/haydn-feature-gates.c, not here.
 
 // Basic register constraint 'r' for GPR (R0-R15)
 int test_gpr_constraint(int a, int b) {
@@ -10,17 +12,6 @@ int test_gpr_constraint(int a, int b) {
     // CHECK-SAME: "add32 $0, $1, $2"
     // CHECK-SAME: "=r,r,r"
     asm("add32 %0, %1, %2" : "=r"(result) : "r"(a), "r"(b));
-    return result;
-}
-
-// DR64 register constraint 'd' for D0-D15
-long long test_dr64_constraint(long long a, long long b) {
-    long long result;
-    // CHECK: define dso_local i64 @test_dr64_constraint(i64 noundef %a, i64 noundef %b)
-    // CHECK: call i64 asm
-    // CHECK-SAME: "add64 $0, $1, $2"
-    // CHECK-SAME: "=d,d,d"
-    asm("add64 %0, %1, %2" : "=d"(result) : "d"(a), "d"(b));
     return result;
 }
 
@@ -59,14 +50,4 @@ void test_lr_register(void) {
     // CHECK: call void asm sideeffect
     // CHECK-SAME: "{lr}"
     asm volatile("" : : "r"(lr));
-}
-
-// Test DR64 register names
-void test_explicit_dr64(void) {
-    register long long d0 asm("d0");
-    register long long d1 asm("d1");
-    // CHECK: define dso_local void @test_explicit_dr64()
-    // CHECK: call void asm sideeffect
-    // CHECK-SAME: "{d0},{d1}"
-    asm volatile("" : : "d"(d0), "d"(d1));
 }
