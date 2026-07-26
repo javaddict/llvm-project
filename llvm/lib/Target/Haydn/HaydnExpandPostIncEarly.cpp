@@ -129,8 +129,8 @@ bool HaydnExpandPostIncEarly::expandMI(MachineBasicBlock &MBB,
           .addImm(Stride >> 2);                     // $scaled_imm (imm6 index)
       break;
     }
-    // LD32 takes slot 0 (Slot0_LS); promoteLoadsToSlot1 in the packetizer will
-    // still upgrade it to LD32_S1 if a preceding slot-0-LS op demands it.
+    // Logical LD32 (Slot01_LD); post-RA HR tryAddProduct picks LD32_S0/S1
+    // and leaveRegion setDesc materializes the member (B3.exit.3).
     BuildMI(MBB, MI, DL, TII->get(Haydn::LD32), DstReg)
         .addReg(BaseReg)
         .addImm(Offset);

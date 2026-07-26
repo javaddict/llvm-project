@@ -42,6 +42,12 @@ include "HaydnFormatsALU64.td"  // ADD64_S1 (ALU64 s1, DR64)
 include "HaydnFormatsLS.td"     // LD32_S0 (LS s0, imm6)
 include "HaydnFormatsLD.td"     // LD64_S1 (LD s1, DR64+GPR32 base)
 include "HaydnFormatsMAC.td"    // X2MULA32_S2 (MAC s2, RRRR accum)
+// B2.1: MultiSlot_Pseudo / materializableInto class (AIE2InstrFormats.td:21-31).
+// After slot-format members so list<HaydnFormatInst> can name *_S0/*_S1/*_S2.
+// Explicit MultiSlot_Pseudo defs are optional; CodeGenFormat also synthesizes
+// GET_ALTERNATE_INST_OPCODE_FUNC from Full-format `_S*` members via
+// collectSparseAltSlotMemberRows (sparse AlternateInsts slot-member discovery).
+include "HaydnMultiSlotPseudo.td"
 // P4: re-include the 128-bit Bundle128 composite. This forces
 // gen-emitter into the APInt getBinaryCodeForInstr signature (max Inst width
 // 128 > 64) and -gen-instr-format to emit the composite MCFormatDesc. The

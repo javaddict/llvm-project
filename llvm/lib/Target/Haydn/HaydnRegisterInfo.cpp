@@ -142,7 +142,7 @@ bool HaydnRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   switch (Opc) {
   case Haydn::LD32:
     Scale = 4;
-    RegOpc = Haydn::LD32_REG_M0S0LS; // logical; MC FlexMaps → *_S0
+    RegOpc = Haydn::LD32_REG_M0S0LS; // logical; post-RA setDesc / member Desc-as-is at encode
     break;
   case Haydn::ST32:
     Scale = 4;

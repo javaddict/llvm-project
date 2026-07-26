@@ -42,8 +42,9 @@ HaydnSubtarget &HaydnSubtarget::initializeSubtargetDependencies(
     const Triple &TT, StringRef CPUName, StringRef TuneCPUName, StringRef FS) {
 
   // Default to the "generic" CPU. The generic model carries FeatureHWLoop
-  // (Haydn.td) so zero-overhead hardware loops fire by default. The
-  // full "haydn" CPU (all features) is opt-in via -mcpu=haydn.
+  // + FeatureAGU (product baseline: post/pre-inc fuse is the sole update-addr
+  // path). Full "haydn" CPU adds CircularBuffer / BitReversed / SIMD via
+  // -mcpu=haydn. Disable AGU densify with -mattr=-agu.
   if (CPUName.empty())
     CPUName = "generic";
   if (TuneCPUName.empty())
@@ -320,14 +321,14 @@ void HaydnSubtarget::initLibcallLoweringInfo(
   Info.setLibcallImpl(RTLIB::ATOMIC_FETCH_NAND_16,
                       RTLIB::impl___atomic_fetch_nand_16);
 
-  // Soft-float libcalls (Haydn has no FPU)
-  // 32-bit float arithmetic
+  // Soft-float (no FPU): compiler-rt arithmetic/compare/convert + libm
+  // rounding/min/max. Keep in sync with HaydnTargetLowering setLibcallImpl
+  // (GISel LegalizerHelper::createLibcall reads TLI; LibcallLoweringInfo
+  // feeds IR-level expands). Baremetal defaults leave floorf/fminf unset.
   Info.setLibcallImpl(RTLIB::ADD_F32, RTLIB::impl___addsf3);
   Info.setLibcallImpl(RTLIB::SUB_F32, RTLIB::impl___subsf3);
   Info.setLibcallImpl(RTLIB::MUL_F32, RTLIB::impl___mulsf3);
   Info.setLibcallImpl(RTLIB::DIV_F32, RTLIB::impl___divsf3);
-
-  // 32-bit float comparisons
   Info.setLibcallImpl(RTLIB::OEQ_F32, RTLIB::impl___eqsf2);
   Info.setLibcallImpl(RTLIB::UNE_F32, RTLIB::impl___nesf2);
   Info.setLibcallImpl(RTLIB::OLT_F32, RTLIB::impl___ltsf2);
@@ -335,8 +336,6 @@ void HaydnSubtarget::initLibcallLoweringInfo(
   Info.setLibcallImpl(RTLIB::OGE_F32, RTLIB::impl___gesf2);
   Info.setLibcallImpl(RTLIB::OGT_F32, RTLIB::impl___gtsf2);
   Info.setLibcallImpl(RTLIB::UO_F32, RTLIB::impl___unordsf2);
-
-  // 32-bit float conversions
   Info.setLibcallImpl(RTLIB::FPTOSINT_F32_I32, RTLIB::impl___fixsfsi);
   Info.setLibcallImpl(RTLIB::FPTOSINT_F32_I64, RTLIB::impl___fixsfdi);
   Info.setLibcallImpl(RTLIB::FPTOUINT_F32_I32, RTLIB::impl___fixunssfsi);
@@ -346,13 +345,10 @@ void HaydnSubtarget::initLibcallLoweringInfo(
   Info.setLibcallImpl(RTLIB::UINTTOFP_I32_F32, RTLIB::impl___floatunsisf);
   Info.setLibcallImpl(RTLIB::UINTTOFP_I64_F32, RTLIB::impl___floatundisf);
 
-  // 64-bit float (double) arithmetic
   Info.setLibcallImpl(RTLIB::ADD_F64, RTLIB::impl___adddf3);
   Info.setLibcallImpl(RTLIB::SUB_F64, RTLIB::impl___subdf3);
   Info.setLibcallImpl(RTLIB::MUL_F64, RTLIB::impl___muldf3);
   Info.setLibcallImpl(RTLIB::DIV_F64, RTLIB::impl___divdf3);
-
-  // 64-bit float comparisons
   Info.setLibcallImpl(RTLIB::OEQ_F64, RTLIB::impl___eqdf2);
   Info.setLibcallImpl(RTLIB::UNE_F64, RTLIB::impl___nedf2);
   Info.setLibcallImpl(RTLIB::OLT_F64, RTLIB::impl___ltdf2);
@@ -360,8 +356,6 @@ void HaydnSubtarget::initLibcallLoweringInfo(
   Info.setLibcallImpl(RTLIB::OGE_F64, RTLIB::impl___gedf2);
   Info.setLibcallImpl(RTLIB::OGT_F64, RTLIB::impl___gtdf2);
   Info.setLibcallImpl(RTLIB::UO_F64, RTLIB::impl___unorddf2);
-
-  // 64-bit float conversions
   Info.setLibcallImpl(RTLIB::FPTOSINT_F64_I32, RTLIB::impl___fixdfsi);
   Info.setLibcallImpl(RTLIB::FPTOSINT_F64_I64, RTLIB::impl___fixdfdi);
   Info.setLibcallImpl(RTLIB::FPTOUINT_F64_I32, RTLIB::impl___fixunsdfsi);
@@ -370,8 +364,20 @@ void HaydnSubtarget::initLibcallLoweringInfo(
   Info.setLibcallImpl(RTLIB::SINTTOFP_I64_F64, RTLIB::impl___floatdidf);
   Info.setLibcallImpl(RTLIB::UINTTOFP_I32_F64, RTLIB::impl___floatunsidf);
   Info.setLibcallImpl(RTLIB::UINTTOFP_I64_F64, RTLIB::impl___floatundidf);
-
-  // Float <-> Double conversions
   Info.setLibcallImpl(RTLIB::FPEXT_F32_F64, RTLIB::impl___extendsfdf2);
   Info.setLibcallImpl(RTLIB::FPROUND_F64_F32, RTLIB::impl___truncdfsf2);
+
+  // libm (compile succeeds; missing libm → link error, not legalizer crash)
+  Info.setLibcallImpl(RTLIB::FLOOR_F32, RTLIB::impl_floorf);
+  Info.setLibcallImpl(RTLIB::FLOOR_F64, RTLIB::impl_floor);
+  Info.setLibcallImpl(RTLIB::CEIL_F32, RTLIB::impl_ceilf);
+  Info.setLibcallImpl(RTLIB::CEIL_F64, RTLIB::impl_ceil);
+  Info.setLibcallImpl(RTLIB::RINT_F32, RTLIB::impl_rintf);
+  Info.setLibcallImpl(RTLIB::RINT_F64, RTLIB::impl_rint);
+  Info.setLibcallImpl(RTLIB::NEARBYINT_F32, RTLIB::impl_nearbyintf);
+  Info.setLibcallImpl(RTLIB::NEARBYINT_F64, RTLIB::impl_nearbyint);
+  Info.setLibcallImpl(RTLIB::FMIN_F32, RTLIB::impl_fminf);
+  Info.setLibcallImpl(RTLIB::FMIN_F64, RTLIB::impl_fmin);
+  Info.setLibcallImpl(RTLIB::FMAX_F32, RTLIB::impl_fmaxf);
+  Info.setLibcallImpl(RTLIB::FMAX_F64, RTLIB::impl_fmax);
 }

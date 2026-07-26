@@ -46,13 +46,16 @@ def CC_Haydn : CallingConv<[
   // Promote small integers to i32
   CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
 
-  // i64, f64, SIMD types use DR registers D0-D3
+  // i64, f64, 64-bit SIMD use DR registers D0-D3 (G-ABI-VEC).
+  // v8i8 is a native 64-bit SIMD shape (DR64) alongside v2i32/v4i16/v2f32.
   CCIfType<[i64], CCAssignToReg<[D0, D1, D2, D3]>>,
   CCIfType<[f64], CCAssignToReg<[D0, D1, D2, D3]>>,
-  CCIfType<[v2i32, v2f32, v4i16], CCAssignToReg<[D0, D1, D2, D3]>>,
+  CCIfType<[v2i32, v2f32, v4i16, v8i8], CCAssignToReg<[D0, D1, D2, D3]>>,
 
-  // i32/pointer uses GPR R1-R7 (R0 is reserved as soft-zero)
+  // i32/pointer uses GPR R1-R7 (R0 is reserved as soft-zero).
+  // Residual 32-bit SLP vectors (v2i16/v4i8) pack into one GPR32 (G-ABI-VEC).
   CCIfType<[i32], CCAssignToReg<[R1, R2, R3, R4, R5, R6, R7]>>,
+  CCIfType<[v2i16, v4i8], CCAssignToReg<[R1, R2, R3, R4, R5, R6, R7]>>,
   CCIfType<[f32], CCBitConvertToType<i32>>,
 
   // Stack fallback. Slot size matches natural width; MinAlign is 8 so DR
@@ -62,8 +65,8 @@ def CC_Haydn : CallingConv<[
   // MEMORY_FAULT (B1 fir_blms* freestanding dual). Bundle128 is a 16-byte
   // *text* parcel; stack ABI remains 8-byte (DR min). Call-frame SP adjust
   // still rounds up to StackAlign in FrameLowering / CallLowering.
-  CCIfType<[i32, f32], CCAssignToStack<8, 8>>,
-  CCIfType<[i64, f64, v2i32, v2f32, v4i16], CCAssignToStack<8, 8>>
+  CCIfType<[i32, f32, v2i16, v4i8], CCAssignToStack<8, 8>>,
+  CCIfType<[i64, f64, v2i32, v2f32, v4i16, v8i8], CCAssignToStack<8, 8>>
 ]>;
 
 // Return value convention: R1-R2 for i32/ptr (R0 is reserved soft-zero).
@@ -71,11 +74,12 @@ def CC_Haydn : CallingConv<[
 def RetCC_Haydn : CallingConv<[
   CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
 
-  // i32/pointer returns in R1, R2 (R0 is reserved as soft-zero)
+  // i32/pointer and residual 32-bit SLP vectors return in R1, R2.
   CCIfType<[i32], CCAssignToReg<[R1, R2]>>,
+  CCIfType<[v2i16, v4i8], CCAssignToReg<[R1, R2]>>,
   CCIfType<[f32], CCBitConvertToType<i32>>,
 
-  // i64/f64/SIMD returns in D0
+  // i64/f64/64-bit SIMD returns in D0
   CCIfType<[i64, f64], CCAssignToReg<[D0]>>,
-  CCIfType<[v2i32, v2f32, v4i16], CCAssignToReg<[D0]>>,
+  CCIfType<[v2i32, v2f32, v4i16, v8i8], CCAssignToReg<[D0]>>,
 ]>;

@@ -189,6 +189,17 @@ std::string BareMetal::computeSysRoot() const {
   if (!inferredSysRoot.empty() && llvm::sys::fs::exists(inferredSysRoot))
     return std::string(inferredSysRoot);
 
+  // Haydn G-SYSROOT: BundleSim / install_haydn_sysroot.sh layout is
+  //   $HAYDN_BIN/../sysroot/haydn-unknown-elf/{include,lib}
+  // Prefer that over empty clang-runtimes when present (libc.a + headers).
+  if (getTriple().getArch() == llvm::Triple::haydn) {
+    SmallString<128> HaydnSysRoot;
+    llvm::sys::path::append(HaydnSysRoot, D.Dir, "..", "sysroot",
+                            D.getTargetTriple());
+    if (llvm::sys::fs::exists(HaydnSysRoot))
+      return std::string(HaydnSysRoot);
+  }
+
   // Use the clang-runtimes path.
   return computeClangRuntimesSysRoot(D, /*IncludeTriple*/ true);
 }

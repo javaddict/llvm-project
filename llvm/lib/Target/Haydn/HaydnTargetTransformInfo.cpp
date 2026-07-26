@@ -8,44 +8,84 @@
 
 #include "HaydnTargetTransformInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/Type.h"
 #include "llvm/Support/Debug.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "haydn-tti"
 
+namespace {
+
+// DR bank is 64-bit. Prefer partial UF so scalar element streams fill a DR:
+//   32-bit → ×2, 16-bit → ×4, 8-bit → ×8. Wider (≥64) needs no densify UF.
+// Returns 0 when element size is unknown / not a DR sub-multiple.
+unsigned preferDRFillUnrollFactor(unsigned EltBits) {
+  if (EltBits == 0 || EltBits >= 64 || (64 % EltBits) != 0)
+    return 0;
+  return 64 / EltBits;
+}
+
+unsigned typeSizeInBits(Type *Ty, const DataLayout &DL) {
+  if (!Ty)
+    return 0;
+  if (Ty->isPointerTy())
+    return DL.getPointerSizeInBits(Ty->getPointerAddressSpace());
+  TypeSize TS = DL.getTypeSizeInBits(Ty);
+  if (TS.isScalable())
+    return 0;
+  return TS.getFixedValue();
+}
+
+} // namespace
+
 void HaydnTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
                                             TTI::UnrollingPreferences &UP,
                                             OptimizationRemarkEmitter *ORE) const {
   BaseT::getUnrollingPreferences(L, SE, UP, ORE);
-  // P1: HiFi dual-stream MAC SWPS uses unroll=2 (vec_dot ops=6 fill=3.0 vs
-  // Haydn ops=4 fill=2.0). Enable a *narrow* runtime partial unroll:
-  // innermost single-BB only
-  // hard MaxCount=2 (never full-unroll FIR/FFT giants)
-  // only small IR bodies (≤24 non-PHI/non-debug ops) so FIR/FFT stay out
-  // AllowRemainder so trip need not be multiple of 2; remainder is a
-  // separate soft loop, main unrolled body stays single-BB ZOL-eligible
-  // Prior global enable broke ZOL on larger loops — size cap is the catch.
+  // Prefer partial/runtime densify for short single-BB ZOL-eligible streams.
+  // Architecture: 1 load + 1 store per cycle; DR is 64-bit → preferred UF is
+  // 64/eltBits (i32×2, i16×4, i8×8). Remainder stays a soft epilog so the
+  // main body remains single-BB hwloop-eligible.
+  //
+  // Eligible classes only (keeps FIR/FFT out):
+  //   dual-stream MAC: ≥2 loads + mul/mac
+  //   memcopy stream:  1 load + 1 store, tiny body, no mul
+  //
+  // Spill / profitability: do not invent local pressure heuristics. Leave
+  // Force off and let LoopUnroll's cost model (PartialThreshold + size)
+  // refuse unprofitable / high-pressure cases.
   if (!L || !L->isInnermost() || L->getNumBlocks() != 1)
     return;
-  // Extremely narrow: only tiny dual-stream MAC kernels (vec_dot class).
-  // Broader caps (≤24) unrolled FIR/corr loops and destroyed their ZOLs.
+
   unsigned InstCount = 0;
   unsigned Loads = 0;
+  unsigned Stores = 0;
+  unsigned MinEltBits = 0;
   bool HasMul = false;
+  const DataLayout &DL = getDataLayout();
+
   for (BasicBlock *BB : L->blocks()) {
     for (Instruction &I : *BB) {
       if (isa<PHINode>(I) || I.isDebugOrPseudoInst() || I.isTerminator())
         continue;
       ++InstCount;
-      if (isa<LoadInst>(I))
+      if (auto *LI = dyn_cast<LoadInst>(&I)) {
         ++Loads;
-      if (auto *BO = dyn_cast<BinaryOperator>(&I)) {
+        unsigned B = typeSizeInBits(LI->getType(), DL);
+        if (B && (!MinEltBits || B < MinEltBits))
+          MinEltBits = B;
+      } else if (auto *SI = dyn_cast<StoreInst>(&I)) {
+        ++Stores;
+        unsigned B = typeSizeInBits(SI->getValueOperand()->getType(), DL);
+        if (B && (!MinEltBits || B < MinEltBits))
+          MinEltBits = B;
+      } else if (auto *BO = dyn_cast<BinaryOperator>(&I)) {
         if (BO->getOpcode() == Instruction::Mul ||
             BO->getOpcode() == Instruction::FMul)
           HasMul = true;
-      }
-      if (auto *CB = dyn_cast<CallBase>(&I)) {
+      } else if (auto *CB = dyn_cast<CallBase>(&I)) {
         if (const Function *F = CB->getCalledFunction()) {
           StringRef N = F->getName();
           if (N.contains_insensitive("mul") || N.contains_insensitive("mac"))
@@ -54,24 +94,38 @@ void HaydnTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
       }
     }
   }
-  // NAT-P1: dual-stream MAC densify (vec_dot class). ≥2 loads + mul/mac.
-  // Cap raised 12→18 so slightly larger dual-stream bodies still get ×2
-  // without opening FIR/FFT (those are InstCount≫18 or single-stream).
-  // Remainder loop stays separate → main body single-BB ZOL-eligible.
-  if (InstCount == 0 || InstCount > 18 || !HasMul || Loads < 2)
+
+  // Size guard only: densify is for short kernels; large bodies stay ZOL as-is.
+  if (InstCount == 0 || InstCount > 18)
     return;
+
+  const bool DualStreamMAC = HasMul && Loads >= 2;
+  const bool MemCopyStream =
+      !HasMul && Loads == 1 && Stores == 1 && InstCount <= 8;
+  if (!DualStreamMAC && !MemCopyStream)
+    return;
+
+  // DR fill. Unknown element size → single densify step (legacy MAC default).
+  unsigned UF = preferDRFillUnrollFactor(MinEltBits);
+  if (UF == 0)
+    UF = 2;
+
   UP.Partial = true;
   UP.Runtime = true;
   UP.AllowRemainder = true;
   UP.UnrollRemainder = true;
-  // No Force: cost model still gates; threshold 96 densifies dual-stream.
-  UP.Count = 2;
-  UP.MaxCount = 2;
-  if (UP.PartialThreshold < 96)
-    UP.PartialThreshold = 96;
-  LLVM_DEBUG(dbgs() << "HaydnTTI NAT-P1: partial/runtime unroll×2 dual-stream "
-                       "MAC (InstCount="
-                    << InstCount << " Loads=" << Loads << ")\n");
+  // Never Force: unroller cost model is the spill/profit gate.
+  UP.Count = UF;
+  UP.MaxCount = UF;
+  // Allow DR-fill bodies through partial cost checks (i8×8 is still small).
+  if (UP.PartialThreshold < 200)
+    UP.PartialThreshold = 200;
+
+  LLVM_DEBUG(dbgs() << "HaydnTTI: prefer partial/runtime unroll×" << UF << " "
+                    << (DualStreamMAC ? "dual-stream-MAC" : "memcopy-stream")
+                    << " (InstCount=" << InstCount << " Loads=" << Loads
+                    << " Stores=" << Stores << " MinEltBits=" << MinEltBits
+                    << ")\n");
 }
 
 bool HaydnTTIImpl::isIndexedLoadLegal(TTI::MemIndexedMode Mode, Type *Ty) const {
@@ -160,6 +214,12 @@ bool HaydnTTIImpl::isHardwareLoopProfitable(
   for (BasicBlock *BB : L->blocks()) {
     for (Instruction &I : *BB) {
       if (isa<CallInst>(I) || isa<InvokeInst>(I))
+        return false;
+      // CB-131: va_arg expands post-RA into a multi-MBB diamond
+      // (ExpandPseudos::expandVAARG). A ZOL formed over the pre-expand
+      // single-BB body freezes wrong BEGIN/END and drops the software
+      // backedge → looped va_arg runs once (stdarg-3). Reject at IR.
+      if (isa<VAArgInst>(I))
         return false;
       // Also reject loops containing arithmetic that this target
       // expands to a runtime libcall. The IR-level call scan above only

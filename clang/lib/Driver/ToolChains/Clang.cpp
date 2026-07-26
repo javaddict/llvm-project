@@ -1212,6 +1212,7 @@ static bool isSignedCharDefault(const llvm::Triple &Triple) {
     return false;
 
   case llvm::Triple::csky:
+  case llvm::Triple::haydn: // baremetal DSP: match ARM/RISC-V/Hexagon ELF
   case llvm::Triple::hexagon:
   case llvm::Triple::msp430:
   case llvm::Triple::ppcle:
