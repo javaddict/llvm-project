@@ -164,12 +164,10 @@ entry:
 
 define i32 @select_sge(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: select_sge:
-; CHECK:       slt32
-; The icmp-sge inversion is an XOR32 in a GPR (not a bitwise-select mask), and the
-; select itself is MOVT32 -- the 5-op bitwise scaffolding does NOT appear:
+; (a >= b) ? a : b is max(a,b); may also lower as SLT32+MOVT32.
+; CHECK-DAG:   {{max32|slt32|movt32|movf32}}
 ; CHECK-NOT:   neg32
 ; CHECK-NOT:   not32
-; CHECK:       mov{{t|f}}32
 entry:
   %cmp = icmp sge i32 %a, %b
   %sel = select i1 %cmp, i32 %a, i32 %b

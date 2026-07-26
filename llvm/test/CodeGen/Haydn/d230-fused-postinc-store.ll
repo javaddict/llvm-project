@@ -28,8 +28,8 @@
 ; Fix : add ST32_POST / ST64_POST real instruction defs and emit the
 ; fused form from HaydnExpandPostIncEarly when the stride is encodable. If
 ; the fusion regresses, the MIR check sees ST32+ADDI32 / ST64+ADDI32 instead
-; of the single ST32_POST / ST64_POST, and the ASM check loses st32.post
-; st64.post.
+; of the single ST32_POST / ST64_POST, and the ASM check loses st32_post
+; st64_post.
 ;
 ; Test design:
 ; @stream_store_i32: i32 stores with stride 4 -> ST32_POST (imm6=1).
@@ -112,6 +112,6 @@ exit:
 ; ASM checks (final assembly)
 
 ; ASM-LABEL: stream_store_i32:
-; ASM: st32.post
+; ASM: st32_post
 ; ASM-LABEL: stream_store_i64:
-; ASM: st64.post
+; ASM: st64_post

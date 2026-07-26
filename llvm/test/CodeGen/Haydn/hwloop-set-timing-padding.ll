@@ -6,9 +6,9 @@
 define void @hwloop_t3(ptr nocapture %p, i32 %n) {
 ; CHECK-LABEL: hwloop_t3:
 ; CHECK: set_hwloop_f2_w
-; CHECK: { nop }
-; CHECK: { nop }
-; CHECK: { nop }
+; CHECK: { nop; nop; nop }
+; CHECK: { nop; nop; nop }
+; CHECK: { nop; nop; nop }
 ; CHECK: .LLhwloop_start{{[0-9]+}}:
 ; CHECK: add32
 ; CHECK: jalr_w

@@ -107,11 +107,11 @@ muls64.hh d0, d1, d2
 # ROUNDTRIP: muls64.ll	d3, d4, d5
 muls64.ll d3, d4, d5
 
-# CHECK: mulss64.hh d6, d7, d8
+# CHECK: mulss64_hh d6, d7, d8
 # ROUNDTRIP: mulss64.hh	d6, d7, d8
 mulss64_hh d6, d7, d8
 
-# CHECK: mulss64.ll d9, d10, d11
+# CHECK: mulss64_ll d9, d10, d11
 # ROUNDTRIP: mulss64.ll	d9, d10, d11
 mulss64_ll d9, d10, d11
 
@@ -119,19 +119,19 @@ mulss64_ll d9, d10, d11
 # 32x32→64 Accumulator operations (MULAS64 / MULAA32 / MULSS32)
 #===----------------------------------------------------------------------===
 
-# CHECK: mulas64.hh d0, d1, d2
+# CHECK: mulas64_hh d0, d1, d2
 # ROUNDTRIP: mulas64.hh	d0, d1, d2
 mulas64_hh d0, d1, d2
 
-# CHECK: mulas32.hhll d3, d4, d5
+# CHECK: mulas32_hhll d3, d4, d5
 # ROUNDTRIP: mulas32.hhll	d3, d4, d5
 mulas32_hhll d3, d4, d5
 
-# CHECK: mulaa32.hhll d6, d7, d8
+# CHECK: mulaa32_hhll d6, d7, d8
 # ROUNDTRIP: mulaa32.hhll	d6, d7, d8
 mulaa32_hhll d6, d7, d8
 
-# CHECK: mulss32.hhll d9, d10, d11
+# CHECK: mulss32_hhll d9, d10, d11
 # ROUNDTRIP: mulss32.hhll	d9, d10, d11
 mulss32_hhll d9, d10, d11
 
@@ -139,23 +139,23 @@ mulss32_hhll d9, d10, d11
 # 16-bit Sum-of-Products (SMULA / SMULS)
 #===----------------------------------------------------------------------===
 
-# CHECK: smula16s.00 d0, d1, d2
+# CHECK: smula16s_00 d0, d1, d2
 # ROUNDTRIP: smula16s.00	d0, d1, d2
 smula16s_00 d0, d1, d2
 
-# CHECK: smula16s.33 d3, d4, d5
+# CHECK: smula16s_33 d3, d4, d5
 # ROUNDTRIP: smula16s.33	d3, d4, d5
 smula16s_33 d3, d4, d5
 
-# CHECK: smula16.00 d6, d7, d8
+# CHECK: smula16_00 d6, d7, d8
 # ROUNDTRIP: smula16.00	d6, d7, d8
 smula16_00 d6, d7, d8
 
-# CHECK: smuls16s.00 d9, d10, d11
+# CHECK: smuls16s_00 d9, d10, d11
 # ROUNDTRIP: smuls16s.00	d9, d10, d11
 smuls16s_00 d9, d10, d11
 
-# CHECK: smuls16.33 d12, d13, d14
+# CHECK: smuls16_33 d12, d13, d14
 # ROUNDTRIP: smuls16.33	d12, d13, d14
 smuls16_33 d12, d13, d14
 
@@ -163,35 +163,35 @@ smuls16_33 d12, d13, d14
 # Fractional Multiply (FMUL / FMULA / FMULS)
 #===----------------------------------------------------------------------===
 
-# CHECK: fmul16.hs00 d0, d1, d2
+# CHECK: fmul16_hs00 d0, d1, d2
 # ROUNDTRIP: fmul16.hs00	d0, d1, d2
 fmul16_hs00 d0, d1, d2
 
-# CHECK: fmul16.ls33 d3, d4, d5
+# CHECK: fmul16_ls33 d3, d4, d5
 # ROUNDTRIP: fmul16.ls33	d3, d4, d5
 fmul16_ls33 d3, d4, d5
 
-# CHECK: fmul32s.hh d6, d7, d8
+# CHECK: fmul32s_hh d6, d7, d8
 # ROUNDTRIP: fmul32s.hh	d6, d7, d8
 fmul32s_hh d6, d7, d8
 
-# CHECK: fmul32s.ll d9, d10, d11
+# CHECK: fmul32s_ll d9, d10, d11
 # ROUNDTRIP: fmul32s.ll	d9, d10, d11
 fmul32s_ll d9, d10, d11
 
-# CHECK: fmula16.hs00 d0, d1, d2
+# CHECK: fmula16_hs00 d0, d1, d2
 # ROUNDTRIP: fmula16.hs00	d0, d1, d2
 fmula16_hs00 d0, d1, d2
 
-# CHECK: fmula32s.hh d3, d4, d5
+# CHECK: fmula32s_hh d3, d4, d5
 # ROUNDTRIP: fmula32s.hh	d3, d4, d5
 fmula32s_hh d3, d4, d5
 
-# CHECK: fmuls16.hs00 d6, d7, d8
+# CHECK: fmuls16_hs00 d6, d7, d8
 # ROUNDTRIP: fmuls16.hs00	d6, d7, d8
 fmuls16_hs00 d6, d7, d8
 
-# CHECK: fmuls32s.hh d9, d10, d11
+# CHECK: fmuls32s_hh d9, d10, d11
 # ROUNDTRIP: fmuls32s.hh	d9, d10, d11
 fmuls32s_hh d9, d10, d11
 

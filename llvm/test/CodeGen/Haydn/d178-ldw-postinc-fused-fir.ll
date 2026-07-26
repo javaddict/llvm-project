@@ -110,4 +110,4 @@ exit:
 ; ASM: {{d_ldw_post_imm|ld64}}
 ; ASM: mula64.ll
 ; ASM-LABEL: stream_store_i64:
-; ASM: st64.post
+; ASM: st64_post

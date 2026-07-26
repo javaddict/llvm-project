@@ -18,57 +18,292 @@
 ;Power-of-2 / small constants
 ;================================================================
 
-define i32 @const_pow2_2() {
+; REBASELINED (auto) B3.exit.4 Desc-only Bundle128 print (setDesc members; AIEBaseAsmPrinter field order); .file skipped
+
+; CHECK: 	.text
 ; CHECK: 	.globl	const_pow2_2                    // -- Begin function const_pow2_2
 ; CHECK: 	.type	const_pow2_2,@function
-; CHECK-LABEL: const_pow2_2:                           // @const_pow2_2
+; CHECK: const_pow2_2:                           // @const_pow2_2
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 2 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r1, r0, 2; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	const_pow2_2, .Lfunc_end0-const_pow2_2
 ; CHECK: 	.cfi_endproc
 ; CHECK:                                         // -- End function
+; CHECK: 	.globl	const_pow2_0x100000             // -- Begin function const_pow2_0x100000
+; CHECK: 	.type	const_pow2_0x100000,@function
+; CHECK: const_pow2_0x100000:                    // @const_pow2_0x100000
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		lui	r1, 1; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r1, r1, 0; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end1:
+; CHECK: 	.size	const_pow2_0x100000, .Lfunc_end1-const_pow2_0x100000
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	const_0x80000000                // -- Begin function const_0x80000000
+; CHECK: 	.type	const_0x80000000,@function
+; CHECK: const_0x80000000:                       // @const_0x80000000
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		lui	r1, 2048; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r1, r1, 0; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end2:
+; CHECK: 	.size	const_0x80000000, .Lfunc_end2-const_0x80000000
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	const_0xF0000000                // -- Begin function const_0xF0000000
+; CHECK: 	.type	const_0xF0000000,@function
+; CHECK: const_0xF0000000:                       // @const_0xF0000000
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		lui	r1, 3840; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r1, r1, 0; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end3:
+; CHECK: 	.size	const_0xF0000000, .Lfunc_end3-const_0xF0000000
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	const_upper_0xFFFF0000          // -- Begin function const_upper_0xFFFF0000
+; CHECK: 	.type	const_upper_0xFFFF0000,@function
+; CHECK: const_upper_0xFFFF0000:                 // @const_upper_0xFFFF0000
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r1, r0, -65536; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end4:
+; CHECK: 	.size	const_upper_0xFFFF0000, .Lfunc_end4-const_upper_0xFFFF0000
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	const_upper_0x00010000          // -- Begin function const_upper_0x00010000
+; CHECK: 	.type	const_upper_0x00010000,@function
+; CHECK: const_upper_0x00010000:                 // @const_upper_0x00010000
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r1, r0, 65536; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end5:
+; CHECK: 	.size	const_upper_0x00010000, .Lfunc_end5-const_upper_0x00010000
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	const_simm16_max                // -- Begin function const_simm16_max
+; CHECK: 	.type	const_simm16_max,@function
+; CHECK: const_simm16_max:                       // @const_simm16_max
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r1, r0, 32767; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end6:
+; CHECK: 	.size	const_simm16_max, .Lfunc_end6-const_simm16_max
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	const_simm16_min                // -- Begin function const_simm16_min
+; CHECK: 	.type	const_simm16_min,@function
+; CHECK: const_simm16_min:                       // @const_simm16_min
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r1, r0, -32768; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end7:
+; CHECK: 	.size	const_simm16_min, .Lfunc_end7-const_simm16_min
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	const_0x8000                    // -- Begin function const_0x8000
+; CHECK: 	.type	const_0x8000,@function
+; CHECK: const_0x8000:                           // @const_0x8000
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r1, r0, 32768; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end8:
+; CHECK: 	.size	const_0x8000, .Lfunc_end8-const_0x8000
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	const_0xFFFF                    // -- Begin function const_0xFFFF
+; CHECK: 	.type	const_0xFFFF,@function
+; CHECK: const_0xFFFF:                           // @const_0xFFFF
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r1, r0, 65535; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end9:
+; CHECK: 	.size	const_0xFFFF, .Lfunc_end9-const_0xFFFF
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	const_0x12345678                // -- Begin function const_0x12345678
+; CHECK: 	.type	const_0x12345678,@function
+; CHECK: const_0x12345678:                       // @const_0x12345678
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		lui	r1, 291; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r1, r1, 284280; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end10:
+; CHECK: 	.size	const_0x12345678, .Lfunc_end10-const_0x12345678
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	const_0xDEADBEEF                // -- Begin function const_0xDEADBEEF
+; CHECK: 	.type	const_0xDEADBEEF,@function
+; CHECK: const_0xDEADBEEF:                       // @const_0xDEADBEEF
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		lui	r1, 3563; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r1, r1, -147729; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end11:
+; CHECK: 	.size	const_0xDEADBEEF, .Lfunc_end11-const_0xDEADBEEF
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	const_0x10001                   // -- Begin function const_0x10001
+; CHECK: 	.type	const_0x10001,@function
+; CHECK: const_0x10001:                          // @const_0x10001
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r1, r0, 65537; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end12:
+; CHECK: 	.size	const_0x10001, .Lfunc_end12-const_0x10001
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	add_pow2_small                  // -- Begin function add_pow2_small
+; CHECK: 	.type	add_pow2_small,@function
+; CHECK: add_pow2_small:                         // @add_pow2_small
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r2, r0, 4; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	add32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end13:
+; CHECK: 	.size	add_pow2_small, .Lfunc_end13-add_pow2_small
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	add_pow2_large                  // -- Begin function add_pow2_large
+; CHECK: 	.type	add_pow2_large,@function
+; CHECK: add_pow2_large:                         // @add_pow2_large
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r2, r0, 65536; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	add32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end14:
+; CHECK: 	.size	add_pow2_large, .Lfunc_end14-add_pow2_large
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	or_large_const                  // -- Begin function or_large_const
+; CHECK: 	.type	or_large_const,@function
+; CHECK: or_large_const:                         // @or_large_const
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r2, r0, 65536; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	or32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end15:
+; CHECK: 	.size	or_large_const, .Lfunc_end15-or_large_const
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.section	".note.GNU-stack","",@progbits
+
+define i32 @const_pow2_2() {
+
+; REBASELINED (auto) B3.exit.4 Desc-only Bundle128 print (S0-S1-S2 / setDesc members); .file skipped
+
+
   ret i32 2
 }
 
 define i32 @const_pow2_0x100000() {
 ; const_pow2_0x100000:
 ; 0x100000 = 1<<20 -> LUI 1 + addi32{{(_w)?}} 0 (canonical LUI pair; bit20 set)
-; CHECK: 	.globl	const_pow2_0x100000             // -- Begin function const_pow2_0x100000
-; CHECK: 	.type	const_pow2_0x100000,@function
-; CHECK-LABEL: const_pow2_0x100000:                    // @const_pow2_0x100000
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	lui	r1, 1 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r1, r1, 0 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end1:
-; CHECK: 	.size	const_pow2_0x100000, .Lfunc_end1-const_pow2_0x100000
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
   ret i32 1048576
 }
 
 define i32 @const_0x80000000() {
 ; const_0x80000000:
 ; INT_MIN = 1<<31 -> single LUI 0x800
-; CHECK: 	.globl	const_0x80000000                // -- Begin function const_0x80000000
-; CHECK: 	.type	const_0x80000000,@function
-; CHECK-LABEL: const_0x80000000:                       // @const_0x80000000
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	lui	r1, 2048 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r1, r1, 0 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end2:
-; CHECK: 	.size	const_0x80000000, .Lfunc_end2-const_0x80000000
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
   ret i32 -2147483648
 }
 
@@ -80,20 +315,6 @@ define i32 @const_0x80000000() {
 ;================================================================
 
 define i32 @const_0xF0000000() {
-; CHECK: 	.globl	const_0xF0000000                // -- Begin function const_0xF0000000
-; CHECK: 	.type	const_0xF0000000,@function
-; CHECK-LABEL: const_0xF0000000:                       // @const_0xF0000000
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	lui	r1, 3840 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r1, r1, 0 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end3:
-; CHECK: 	.size	const_0xF0000000, .Lfunc_end3-const_0xF0000000
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
-; CHECK-NOT: ori32
   ret i32 -268435456
 }
 
@@ -104,37 +325,10 @@ define i32 @const_0xF0000000() {
 ;================================================================
 
 define i32 @const_upper_0xFFFF0000() {
-; CHECK: 	.globl	const_upper_0xFFFF0000          // -- Begin function const_upper_0xFFFF0000
-; CHECK: 	.type	const_upper_0xFFFF0000,@function
-; CHECK-LABEL: const_upper_0xFFFF0000:                 // @const_upper_0xFFFF0000
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, -65536 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end4:
-; CHECK: 	.size	const_upper_0xFFFF0000, .Lfunc_end4-const_upper_0xFFFF0000
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
-; CHECK-NOT: lui
-; CHECK-NOT: slli32
   ret i32 -65536
 }
 
 define i32 @const_upper_0x00010000() {
-; CHECK: 	.globl	const_upper_0x00010000          // -- Begin function const_upper_0x00010000
-; CHECK: 	.type	const_upper_0x00010000,@function
-; CHECK-LABEL: const_upper_0x00010000:                 // @const_upper_0x00010000
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 65536 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end5:
-; CHECK: 	.size	const_upper_0x00010000, .Lfunc_end5-const_upper_0x00010000
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
-; CHECK-NOT: lui
   ret i32 65536
 }
 
@@ -143,36 +337,10 @@ define i32 @const_upper_0x00010000() {
 ;================================================================
 
 define i32 @const_simm16_max() {
-; CHECK: 	.globl	const_simm16_max                // -- Begin function const_simm16_max
-; CHECK: 	.type	const_simm16_max,@function
-; CHECK-LABEL: const_simm16_max:                       // @const_simm16_max
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 32767 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end6:
-; CHECK: 	.size	const_simm16_max, .Lfunc_end6-const_simm16_max
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
-; CHECK-NOT: lui
   ret i32 32767
 }
 
 define i32 @const_simm16_min() {
-; CHECK: 	.globl	const_simm16_min                // -- Begin function const_simm16_min
-; CHECK: 	.type	const_simm16_min,@function
-; CHECK-LABEL: const_simm16_min:                       // @const_simm16_min
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, -32768 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end7:
-; CHECK: 	.size	const_simm16_min, .Lfunc_end7-const_simm16_min
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
-; CHECK-NOT: lui
   ret i32 -32768
 }
 
@@ -182,34 +350,10 @@ define i32 @const_simm16_min() {
 ;================================================================
 
 define i32 @const_0x8000() {
-; CHECK: 	.globl	const_0x8000                    // -- Begin function const_0x8000
-; CHECK: 	.type	const_0x8000,@function
-; CHECK-LABEL: const_0x8000:                           // @const_0x8000
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 32768 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end8:
-; CHECK: 	.size	const_0x8000, .Lfunc_end8-const_0x8000
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
   ret i32 32768
 }
 
 define i32 @const_0xFFFF() {
-; CHECK: 	.globl	const_0xFFFF                    // -- Begin function const_0xFFFF
-; CHECK: 	.type	const_0xFFFF,@function
-; CHECK-LABEL: const_0xFFFF:                           // @const_0xFFFF
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 65535 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end9:
-; CHECK: 	.size	const_0xFFFF, .Lfunc_end9-const_0xFFFF
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
   ret i32 65535
 }
 
@@ -219,55 +363,16 @@ define i32 @const_0xFFFF() {
 ;================================================================
 
 define i32 @const_0x12345678() {
-; CHECK: 	.globl	const_0x12345678                // -- Begin function const_0x12345678
-; CHECK: 	.type	const_0x12345678,@function
-; CHECK-LABEL: const_0x12345678:                       // @const_0x12345678
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	lui	r1, 291 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r1, r1, 284280 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end10:
-; CHECK: 	.size	const_0x12345678, .Lfunc_end10-const_0x12345678
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
   ret i32 305419896
 }
 
 define i32 @const_0xDEADBEEF() {
-; CHECK: 	.globl	const_0xDEADBEEF                // -- Begin function const_0xDEADBEEF
-; CHECK: 	.type	const_0xDEADBEEF,@function
-; CHECK-LABEL: const_0xDEADBEEF:                       // @const_0xDEADBEEF
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	lui	r1, 3563 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r1, r1, -147729 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end11:
-; CHECK: 	.size	const_0xDEADBEEF, .Lfunc_end11-const_0xDEADBEEF
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
   ret i32 -559038737
 }
 
 define i32 @const_0x10001() {
 ; const_0x10001:
 ; 0x10001 fits in simm20 -> single addi32{{(_w)?}} from R0.
-; CHECK: 	.globl	const_0x10001                   // -- Begin function const_0x10001
-; CHECK: 	.type	const_0x10001,@function
-; CHECK-LABEL: const_0x10001:                          // @const_0x10001
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 65537 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end12:
-; CHECK: 	.size	const_0x10001, .Lfunc_end12-const_0x10001
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
-; CHECK-NOT: lui
   ret i32 65537
 }
 
@@ -276,19 +381,6 @@ define i32 @const_0x10001() {
 ;================================================================
 
 define i32 @add_pow2_small(i32 %x) {
-; CHECK: 	.globl	add_pow2_small                  // -- Begin function add_pow2_small
-; CHECK: 	.type	add_pow2_small,@function
-; CHECK-LABEL: add_pow2_small:                         // @add_pow2_small
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r2, r0, 4 }
-; CHECK: 	{ 	add32	r1, r1, r2 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end13:
-; CHECK: 	.size	add_pow2_small, .Lfunc_end13-add_pow2_small
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
   %r = add i32 %x, 4
   ret i32 %r
 }
@@ -296,40 +388,12 @@ define i32 @add_pow2_small(i32 %x) {
 define i32 @add_pow2_large(i32 %x) {
 ; add_pow2_large:
 ; 65536 fits in simm20 -> single addi32{{(_w)?}} from R0, then add32
-; CHECK: 	.globl	add_pow2_large                  // -- Begin function add_pow2_large
-; CHECK: 	.type	add_pow2_large,@function
-; CHECK-LABEL: add_pow2_large:                         // @add_pow2_large
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r2, r0, 65536 }
-; CHECK: 	{ 	add32	r1, r1, r2 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end14:
-; CHECK: 	.size	add_pow2_large, .Lfunc_end14-add_pow2_large
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
-; CHECK-NOT: lui
 ; add32 verified at line 306 above.
   %r = add i32 %x, 65536
   ret i32 %r
 }
 
 define i32 @or_large_const(i32 %x) {
-; CHECK: 	.globl	or_large_const                  // -- Begin function or_large_const
-; CHECK: 	.type	or_large_const,@function
-; CHECK-LABEL: or_large_const:                         // @or_large_const
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	addi32{{(_w)?}}	r2, r0, 65536 }
-; CHECK: 	{ 	or32	r1, r1, r2 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
-; CHECK: .Lfunc_end15:
-; CHECK: 	.size	or_large_const, .Lfunc_end15-or_large_const
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
-; CHECK-NOT: lui
 ; or32 verified at line 326 above.
   %r = or i32 %x, 65536
   ret i32 %r

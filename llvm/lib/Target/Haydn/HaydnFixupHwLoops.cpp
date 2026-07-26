@@ -21,7 +21,7 @@
 // Never lift a dangerous MI (defs remat Src / uses remat Dest). Prefer
 // demote / fatal over wrong trip at SET (CoreMark MEMORY_FAULT @ post-inc).
 //
-// Product narrative (W0.2 / G-RISK-DEMOTE): demote-first, NOT erase-only.
+// Product narrative: demote-first, NOT erase-only.
 // Role B already removed the software back-edge when forming ZOL. Erasing
 // SET alone on a *live* body yields a once-through fallthrough (wrong-code).
 // Product recovery is soft LoopDec+LoopJNZ when a free counter exists;
@@ -100,7 +100,7 @@ using namespace llvm;
 
 #define DEBUG_TYPE "haydn-fixup-hwloops"
 
-// Product demote policy (W0.2 lock): default ON — demote-first, not erase-only.
+// Product demote policy: default ON — demote-first, not erase-only.
 // Out-of-range / unencodable SET must not drop control and leave a single-pass
 // body (Role B already removed the software back-edge). Recovery ladder:
 // a) demoteToSoftwareLoop (LoopDec+LoopJNZ) when free counter GPR exists
@@ -118,10 +118,26 @@ static cl::opt<bool> EnableHaydnHwLoopDemote(
              "(debug only; once-through body risk; not product)."));
 namespace {
 
-// Aliases from HaydnHWLoopContracts.h (sole numeric source).
+// Real wide forms (post ExpandPseudos) + residual logicals + setDesc members.
+static bool isHwloopSetup(unsigned Opc) {
+  return Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG ||
+         Opc == Haydn::SET_HWLOOP_W || Opc == Haydn::SET_HWLOOP_F2_W ||
+         Opc == Haydn::SET_HWLOOP_W_S0 || Opc == Haydn::SET_HWLOOP_F2_W_S0;
+}
+static bool isHwloopRegTrip(unsigned Opc) {
+  return Opc == Haydn::SET_HWLOOP_REG || Opc == Haydn::SET_HWLOOP_F2_W ||
+         Opc == Haydn::SET_HWLOOP_F2_W_S0;
+}
+static bool isHwloopImmTrip(unsigned Opc) {
+  return Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_W ||
+         Opc == Haydn::SET_HWLOOP_W_S0;
+}
+
+// Aliases from HaydnHWLoopContracts.h / BundlePlan EncodedBytes (B4.4).
+// Ceil byte→parcel and setup distances use productParcelBytes /
+// ceilProductParcels — not a second hard-coded 16.
 static constexpr unsigned MinSetupBundles = haydn::hwloop::MinSetupBundles;
-static constexpr unsigned Bundle128Bytes =
-    static_cast<unsigned>(haydn::hwloop::Bundle128Bytes);
+static constexpr int64_t MinSetupBytes = haydn::hwloop::MinSetupBytes;
 static constexpr int64_t MaxOff1Bytes = haydn::hwloop::MaxStartOffsetBytes;
 static constexpr int64_t MaxOff2Bytes = haydn::hwloop::MaxEndOffsetBytes;
 static constexpr int64_t MaxOff1BytesSafe =
@@ -204,15 +220,34 @@ private:
     return MBB && MBB->getParent() == &MF && MBB->getNumber() >= 0;
   }
 
+  // If \p BundleRoot has no remaining children after an unbundle, erase it.
+  // B1.2: HaydnFinalizeBundle wraps SET/LoopStart as singleton BUNDLEs;
+  // unbundling the only child must not leave an empty BUNDLE shell that still
+  // carries kill flags (verifier: "Using an undefined physical register").
+  static void eraseEmptyBundleRoot(MachineInstr *BundleRoot) {
+    if (!BundleRoot || !BundleRoot->isBundle() || !BundleRoot->getParent())
+      return;
+    MachineBasicBlock::instr_iterator Next =
+        std::next(BundleRoot->getIterator());
+    MachineBasicBlock *MBB = BundleRoot->getParent();
+    if (Next != MBB->instr_end() && Next->isBundledWithPred())
+      return; // still has children
+    BundleRoot->eraseFromParent();
+  }
+
   // Safe erase of a (possibly bundled) MI collected by pointer.
   static void eraseInstrSafe(MachineInstr *MI) {
     if (!MI || !MI->getParent())
       return;
-    if (MI->isBundledWithPred())
+    MachineInstr *BundleRoot = nullptr;
+    if (MI->isBundledWithPred()) {
+      BundleRoot = &*getBundleStart(MI->getIterator());
       MI->unbundleFromPred();
+    }
     if (MI->isBundledWithSucc())
       MI->unbundleFromSucc();
     MI->eraseFromParent();
+    eraseEmptyBundleRoot(BundleRoot);
   }
 };
 
@@ -260,7 +295,8 @@ unsigned HaydnFixupHwLoops::countFollowingBundles(
     unsigned Bytes = TII.getInstSizeInBytes(*I);
     if (Bytes == 0)
       continue;
-    Bundles += (Bytes + Bundle128Bytes - 1) / Bundle128Bytes;
+    // B4.4: parcel count via product EncodedBytes (ProductFormatDesc.Bytes).
+    Bundles += haydn::bundle::ceilProductParcels(Bytes);
   }
   return Bundles;
 }
@@ -299,7 +335,7 @@ HaydnFixupHwLoops::resolveBodyMBB(MachineInstr &SetMI) const {
     return nullptr;
 
   unsigned Opc = SetMI.getOpcode();
-  if ((Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG) &&
+  if (isHwloopSetup(Opc) &&
       SetMI.getNumOperands() >= 3 && SetMI.getOperand(1).isMBB()) {
     MachineBasicBlock *H = SetMI.getOperand(1).getMBB();
     return isLiveMBB(*MF, H) ? H : nullptr;
@@ -387,7 +423,7 @@ bool HaydnFixupHwLoops::computeOffsets(MachineInstr &SetMI,
 
 static Register getHwloopCountReg(const MachineInstr &SetMI) {
   unsigned Opc = SetMI.getOpcode();
-  if (Opc == Haydn::SET_HWLOOP_REG && SetMI.getNumOperands() >= 4 &&
+  if (isHwloopRegTrip(Opc) && SetMI.getNumOperands() >= 4 &&
       SetMI.getOperand(3).isReg())
     return SetMI.getOperand(3).getReg();
   if (Opc == Haydn::LoopStart && SetMI.getNumOperands() >= 1 &&
@@ -631,7 +667,8 @@ bool HaydnFixupHwLoops::tryShortenStartOffset(MachineInstr &SetMI,
       }
 
       Cand = &*I;
-      CandBundles = (Bytes + Bundle128Bytes - 1) / Bundle128Bytes;
+      // B4.4: ceil by committed product EncodedBytes, not a dual magic 16.
+      CandBundles = haydn::bundle::ceilProductParcels(Bytes);
       break;
     }
     if (!Cand || CandBundles == 0)
@@ -935,7 +972,7 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
                                              const HaydnInstrInfo &TII) {
   unsigned Opc = SetMI.getOpcode();
   const bool IsLoopStart = Opc == Haydn::LoopStart;
-  if (Opc != Haydn::SET_HWLOOP && Opc != Haydn::SET_HWLOOP_REG && !IsLoopStart)
+  if (!isHwloopSetup(Opc) && !IsLoopStart)
     return false;
 
   MachineBasicBlock *Preheader = SetMI.getParent();
@@ -961,7 +998,7 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
       return eraseHardwareSetup(SetMI);
     Header = SetMI.getOperand(1).getMBB();
     Latch = SetMI.getOperand(2).getMBB();
-    if (Opc == Haydn::SET_HWLOOP_REG) {
+    if (isHwloopRegTrip(Opc)) {
       if (!SetMI.getOperand(3).isReg())
         return eraseHardwareSetup(SetMI);
       Prefer = SetMI.getOperand(3).getReg();
@@ -1045,7 +1082,7 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
     return FI;
   };
 
-  if ((IsLoopStart || Opc == Haydn::SET_HWLOOP_REG) && Prefer.isPhysical() &&
+  if ((IsLoopStart || isHwloopRegTrip(Opc)) && Prefer.isPhysical() &&
       Prefer != Haydn::R0) {
     // Trip reg at LoopStart / SET_HWLOOP_REG.
     // Prefer is correct only if the body does not redefine it as a
@@ -1067,7 +1104,7 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
                           << printReg(CountReg) << "\n");
       }
     }
-  } else if (!IsLoopStart && (Opc == Haydn::SET_HWLOOP || HasImm)) {
+  } else if (!IsLoopStart && (isHwloopImmTrip(Opc) || HasImm)) {
     // Imm form: need a free GPR + materialize.
     MachineBasicBlock::iterator Ins = SetMI.getIterator();
     CountReg = pickCounterReg(LoopBlocks, Prefer, ST, *Preheader, Ins);
@@ -1279,11 +1316,17 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
   // SET/LoopStart must be top-level for MBB iterators. Unbundle for safety.
   // Remat ADDI (if unbundled from SET) stays the previous MI — free lifts
   // splice before that head, not between remat and SET.
+  // B1.2: singleton BUNDLE from HaydnFinalizeBundle — erase empty root after
+  // unbundle so kill flags do not outlive the SET use (verifier).
   if (SetMI.isBundledWithPred() || SetMI.isBundledWithSucc()) {
-    if (SetMI.isBundledWithPred())
+    MachineInstr *BundleRoot = nullptr;
+    if (SetMI.isBundledWithPred()) {
+      BundleRoot = &*getBundleStart(SetMI.getIterator());
       SetMI.unbundleFromPred();
+    }
     if (SetMI.isBundledWithSucc())
       SetMI.unbundleFromSucc();
+    eraseEmptyBundleRoot(BundleRoot);
     Changed = true;
     LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: unbundled SET/LoopStart before "
                          "range check\n");
@@ -1293,7 +1336,7 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
   // SET_HWLOOP with %bb.-1: body was erased after convert. Erase setup only.
   {
     unsigned Opc = SetMI.getOpcode();
-    if (Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG) {
+    if (isHwloopSetup(Opc)) {
       if (SetMI.getNumOperands() >= 3 && SetMI.getOperand(1).isMBB() &&
           SetMI.getOperand(2).isMBB()) {
         MachineBasicBlock *H = SetMI.getOperand(1).getMBB();
@@ -1338,7 +1381,7 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
   // Range re-check (begin + end) — one path for SET_* and LoopStart.
   // Product (default demote ON): demote-first on unencodable/range-bad SET.
   // Debug only (demote OFF): force erase-setup — once-through body risk;
-  // never a product setting (W0.2 / G-RISK-DEMOTE).
+  // never a product setting.
   auto recoverRangeOrOrder = [&](const char *Why) -> bool {
     if (!EnableHaydnHwLoopDemote) {
       LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: " << Why
@@ -1375,7 +1418,8 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
       return true;
     if (EndOff < StartOff)
       return true;
-    if (StartOff < static_cast<int64_t>(MinSetupBundles) * Bundle128Bytes)
+    // B4.4: MinSetupBytes = MinSetupBundles × ProductFormatDesc.Bytes.
+    if (StartOff < MinSetupBytes)
       return true;
     return false;
   };
@@ -1419,8 +1463,7 @@ bool HaydnFixupHwLoops::runOnMachineFunction(MachineFunction &MF) {
   for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB.instrs()) {
       unsigned Opc = MI.getOpcode();
-      if (Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG ||
-          Opc == Haydn::LoopStart)
+      if (isHwloopSetup(Opc) || Opc == Haydn::LoopStart)
         Sets.push_back(&MI);
     }
   }

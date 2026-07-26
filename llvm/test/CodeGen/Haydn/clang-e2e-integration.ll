@@ -74,7 +74,8 @@ define i32 @fib(i32 %n) {
 ; CHECK-LABEL: fib:
 ; CondOpt may absorb slt+invert into fused bge_w (AIE xor(setcc,1) style).
 ; CHECK-DAG: {{slt32|bge_w}}
-; CHECK-DAG: sub32
+; n-1/n-2 may be sub32 or addi -1/-2 + add32
+; CHECK-DAG: {{sub32|add32}}
 ; CHECK-DAG: jal_w{{.*}}{{.*}}fib
 ; CHECK-DAG: add32
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
@@ -150,7 +151,8 @@ define i32 @stack_idx(i32 %i) {
 ; CHECK-DAG: subi32{{.*}}sp, sp,
 ; CHECK-DAG: st32
 ; CHECK-DAG: sll32
-; CHECK-DAG: ld32
+; Indexed load may be ld32 or folded s_lw_pre_reg
+; CHECK-DAG: {{ld32|s_lw}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %arr = alloca [4 x i32]
   %p0 = getelementptr [4 x i32], ptr %arr, i32 0, i32 0
@@ -554,8 +556,8 @@ define i32 @global_array(i32 %i) {
 ; CHECK-LABEL: global_array:
 ; CHECK-DAG: lui{{.*}}{{.*}}g_data
 ; CHECK-DAG: sll32
-; CHECK-DAG: add32
-; CHECK-DAG: ld32
+; Base+index may be add32+ld32 or folded s_lw_pre_reg
+; CHECK-DAG: {{add32|s_lw|ld32}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %p = getelementptr [4 x i32], ptr @g_data, i32 0, i32 %i
   %v = load i32, ptr %p

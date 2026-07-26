@@ -50,7 +50,7 @@ class HaydnFU_ALU32_S0_RR<bits<7> opc, dag outs, dag ins, string asmstr,
 // ALU32 R in S0: rt,rs (2 GPR32). Payload 3+7+30+4+4 = 48b.
 // Some legacy bases that select into this format (MOVE32/ABS32/ABS32S, all
 // FmtALU32) declare a vestigial 2nd source operand ($rs2) that the runtime MI
-// carries but the FLEX encoding does not use. `rs2` is an unencoded field
+// carries but the Bundle128 encoding does not use. `rs2` is an unencoded field
 // (always 0, NOT in the concat) so the operand binds without affecting bytes.
 // Unary legacy bases (FmtALU32Unary: NSA32/NOT32/NEG32/...) do not reference
 // $rs2 and are unaffected. See BUG 1.
@@ -98,8 +98,8 @@ class HaydnFU_ALU32_S0_RI5<bits<7> opc, dag outs, dag ins, string asmstr,
 // ALU32 I12 (LUI) in S0: rt,imm12 (GPR32 + uimm12).
 // Payload 3+7+22+12+4 = 48b.
 // LUI's legacy base (FmtI) declares a vestigial $rs operand (a leftover from
-// the I-type template) that the runtime MI carries but the FLEX encoding does
-// not use. `rs` is an unencoded field (always 0, NOT in the concat) so the
+// the I-type template) that the runtime MI carries but the Bundle128 encoding
+// does not use. `rs` is an unencoded field (always 0, NOT in the concat) so the
 // operand binds without affecting the bytes. See BUG 1.
 class HaydnFU_ALU32_S0_I12<bits<7> opc, dag outs, dag ins, string asmstr,
                            list<dag> pattern>
@@ -1136,7 +1136,7 @@ def CSRR_S0 : HaydnFU_ALU32_S0_CSR<0b1000001,
 // #66 CSRW (I8: uimm8, rs). Two-operand shape (no dead def) — the decoder
 // requires every operand to have an Inst field. Legacy CSRW keeps the 3-op
 // FmtCSR shape for MC parity; encodeSlotSubInst drops the leading dead def
-// when FlexMap rewrites CSRW → CSRW_S0 (see HaydnMCCodeEmitter.cpp).
+// when leaveRegion setDesc commits CSRW → CSRW_S0 (see HaydnMCCodeEmitter.cpp).
 let hasSideEffects = 1, Defs = [SFR] in
 def CSRW_S0 : HaydnFU_ALU32_S0_CSR<0b1000010,
     (outs), (ins uimm8:$csr, GPR32:$r),
@@ -1157,25 +1157,20 @@ def CSRW_W_S0 : HaydnFU_ALU32_S0_CSR<0b1010110,
 // (HaydnExpandPostIncEarly, HaydnExpandPseudos, HaydnAsmPrinter).
 // ORI32_W (uimm20_wide_abs) — exists as a def (paired here for completeness).
 // There is NO legacy SUBI32_W / ANDI32_W / XORI32_W / ADDI32S_W / SUBI32S_W
-// (verified: only ADDI32_W + ORI32_W derive from Fmt48_WideGPRImm). The task
-// brief listed the full 7 but the spec/selector only uses these 2; FLEX defs
-// for non-existent legacy opcodes would be dead (FlexMap pairs nothing).
+// (verified: only ADDI32_W + ORI32_W derive from Fmt48_WideGPRImm). Bundle128
+// _S0 peers for non-existent legacy opcodes would be dead (no AlternateInsts row).
 //
-// v1 aliased them onto the SAME codepoint as the small-imm `_S0`
-// siblings + `isCodeGenOnly = 1`, but that COLLIDED with the small-imm
-// siblings at the encoder fixup geometry (45 frame-test FAILs — the wide-reloc
-// operand pushes FIXUP_HAYDN_LO20 while the small-imm sibling's `simm20` is
-// raw-unsigned, so a shared codepoint forced ONE fixup path).
-//
-// FIX (this revision): DISTINCT codepoints in the free s0-ALU32-FU range
-// (112-113, above the golden set ending at 66). Each `_W_S0` def reuses
-// the EXISTING `HaydnFU_ALU32_S0_RI20` layout (same 20-bit imm20 field) but
-// carries the wide-reloc operand (`simm20_wide_abs` / `uimm20_wide_abs`) so
-// symbolic operands emit `FIXUP_HAYDN_LO20` matching the legacy WIDE encoder.
-// `isCodeGenOnly = 1` excludes them from the decoder trie (no collision with
-// the small-imm siblings OR each other); the emitter table includes them so
-// `getBinaryCodeForInstr` resolves them. The FlexMap suffix-strip rule
-// auto-pairs `<Name>_W` -> `<Name>_W_S0`.
+// DISTINCT codepoints in the free s0-ALU32-FU range (112-113, above the golden
+// set ending at 66). Each `_W_S0` def reuses the EXISTING
+// `HaydnFU_ALU32_S0_RI20` layout (same 20-bit imm20 field) but carries the
+// wide-reloc operand (`simm20_wide_abs` / `uimm20_wide_abs`) so symbolic
+// operands emit `FIXUP_HAYDN_LO20` matching the WIDE encoder. Sharing a
+// codepoint with small-imm `_S0` siblings collides on fixup geometry
+// (wide-reloc FIXUP_HAYDN_LO20 vs raw-unsigned simm20).
+// `isCodeGenOnly = 1` excludes them from the decoder trie; the emitter table
+// includes them so `getBinaryCodeForInstr` resolves them. AlternateInsts
+// name-peer alts: `<Name>_W` -> `<Name>_W_S0`; leaveRegion setDesc commits
+// the member (Desc-as-is encode).
 //===----------------------------------------------------------------------===//
 
 // ADDI32_W (legacy Fmt48_WideGPRImm<0x01>, simm20_wide_abs)
@@ -1218,8 +1213,8 @@ def ORI32_W_S0 : HaydnFU_ALU32_S0_RI20<0b1110001,
 // exactly. Without these, BranchRelaxation cannot recognize the `_W_S0`
 // opcodes as branches/terminators and skips them, causing far-branch overflow
 // (adddf3/divdf3 `-c` crashes). The selector emits the legacy `_W` forms; the
-// pre-RA scheduler's materializeMultiOpcodeInstrs commits them to `_W_S0`
-// so by BranchRelaxation time the live opcodes are the FLEX variants.
+// pre-RA scheduler's materializeMultiOpcodeInstrs setDesc commits them to
+// `_W_S0` so by BranchRelaxation time the live opcodes are the Bundle128 peers.
 
 // Calls: caller-saved clobber Defs (same as legacy JAL_W). R12 call-clobbered;
 // R14 via regmask only (always CSR, not in Defs). JAL_W_S0: isCall only.
@@ -1249,7 +1244,7 @@ def BEQ_W_S0 : HaydnFU_ALU32_S0_RI12<0b1000101,
 // the remaining 5 RI12 conditional far branches (BNE_W, BGE_W, BGEU_W
 // BLT_W, BLTU_W) and 2 I12 zero-branch far forms (BGEZ_W, BLTZ_W) — same
 // idiom as BEQ_W/BEQZ_W/BNEZ_W above. HaydnConditionOptimizer / HardwareLoops
-// emit the full 6-cond + 4-zero-branch `_W` family; without flex variants the
+// emit the full 6-cond + 4-zero-branch `_W` family; without `_W_S0` peers the
 // forcing function fires on whichever the selector picks (BNE_W, BGE_W
 // observed in the test sweep). DISTINCT codepoints 72-78 (free s0-ALU32-FU
 // range above the set 67-71). Same format classes (RI12 / I12_ONE) and
@@ -1320,8 +1315,9 @@ def BLTZ_W_S0 : HaydnFU_ALU32_S0_I12_ONE<0b1010101,
 // remain the decoder entries); the emitter table includes them so
 // getBinaryCodeForInstr resolves them.
 //
-// FlexMap auto-pairs by name: `NOP` -> `NOP_S0`, `C_ADD32` ->
-// `C_ADD32_S0`, etc. (the CodeGenFormat backend's suffix-strip rule).
+// AlternateInsts name-peer alts: `NOP` -> `NOP_S0`,
+// `C_ADD32` -> `C_ADD32_S0`, etc.; leaveRegion setDesc commits them
+// (Desc-as-is encode).
 //===----------------------------------------------------------------------===//
 
 // NOP (legacy HaydnInst16, 16-bit all-zero). A standalone NOP as a Bundle128
@@ -1335,35 +1331,33 @@ def NOP_S0 : HaydnFU_ALU32_S0_HINT<0b0000000,
 }
 
 // C_ADD32 (legacy FmtC_ALU32R<0x00>, destructive rt = rt + rs, GPR32Lo).
-// Legacy MI operands: [rt(out), rs(in)] — 2 operands. FLEX modeled as S0
-// ALU32 R (rt, rs) — 2 operands matching the 1:1 rewrite. The destructive
-// tie is preserved by the operand rewrite (FLEX rt <- legacy rt).
+// Legacy MI operands: [rt(out), rs(in)] — 2 operands. Bundle128 S0 ALU32 R
+// (rt, rs) — 2 operands matching the logical shape for setDesc.
 let isCodeGenOnly = 1 in
 def C_ADD32_S0 : HaydnFU_ALU32_S0_R<0b1001000,
     (outs GPR32:$rt), (ins GPR32:$rs),
     "c_add32\t$rt, $rs", []>;
 
 // C_ADDI32 (legacy FmtC_ALU32SI<0x0>, destructive rt = rt + imm5, GPR32Lo).
-// Legacy MI operands: [rt(out), rt_in(in,tied), imm(in)]. FLEX modeled as S0
-// ALU32 RI5 (rt, rs, imm5): the 1:1 rewrite maps FLEX[1]=$rs <- legacy rt_in
-// (=rt), so rs carries the destructive source correctly.
+// Legacy MI operands: [rt(out), rt_in(in,tied), imm(in)]. Bundle128 S0
+// ALU32 RI5 (rt, rs, imm5): setDesc maps $rs <- legacy rt_in (=rt), so rs
+// carries the destructive source correctly.
 let isCodeGenOnly = 1 in
 def C_ADDI32_S0 : HaydnFU_ALU32_S0_RI5<0b1001001,
     (outs GPR32:$rt), (ins GPR32:$rs, uimm5:$imm5),
     "c_addi32\t$rt, $rs, $imm5", []>;
 
 // SUB32_G (legacy FmtG_S0_ALU32<0x01>, destructive rd = rd - rs1, GPR32Lo).
-// Legacy MI operands: [rd(out), rs1(in)]. FLEX modeled as S0 ALU32 RR
-// (rt=rd, rs1, rs2): the 1:1 rewrite needs operand-count match. Legacy has 2
-// ops (rd, rs1); FLEX RR has 3. Use the R class (2 ops: rt, rs) instead.
+// Legacy MI operands: [rd(out), rs1(in)]. Bundle128 S0: use the R class
+// (2 ops: rt, rs) so setDesc preserves operand count (RR would be 3 ops).
 let isCodeGenOnly = 1 in
 def SUB32_G_S0 : HaydnFU_ALU32_S0_R<0b1001010,
     (outs GPR32:$rt), (ins GPR32:$rs),
     "sub32_g\t$rt, $rs", []>;
 
 // SET_HWLOOP_W — Bundle128 s0 form (legacy wide 0x88 geometry mapped into
-// ALU32 S0). Live emit path: AsmPrinter emits SET_HWLOOP_W → FlexMap →
-// SET_HWLOOP_W_S0 → encodeBundle128.
+// ALU32 S0). Live path: real SET_HWLOOP_W before pack → leaveRegion setDesc
+// → SET_HWLOOP_W_S0 member → Desc-only encodeBundle128.
 //
 // must NOT be isCodeGenOnly. That flag excludes the def from the
 // DecoderTableS048 trie, so llvm-objdump printed `<unknown>` for every

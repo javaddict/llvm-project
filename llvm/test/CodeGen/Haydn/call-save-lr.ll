@@ -14,44 +14,47 @@
 ; The prologue must contain a store of R15, and the epilogue a load. Leaf
 ; functions (leaf below) must NOT save R15.
 
-; REBASELINED (auto) llc <stdin>;.file skipped
 
-; CHECK:  .globl caller // -- Begin function caller
-; CHECK:  .type caller,@function
-; CHECK: caller: // @caller
-; CHECK:  .cfi_startproc
+
+; REBASELINED (auto) B3.exit.4 Desc-only Bundle128 print (setDesc members; AIEBaseAsmPrinter field order); .file skipped
+
+; CHECK: 	.text
+; CHECK: 	.globl	caller                          // -- Begin function caller
+; CHECK: 	.type	caller,@function
+; CHECK: caller:                                 // @caller
+; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK:  { xor32 r0, r0, r0 }
-; CHECK:  { subi32 sp, sp, 16 }
-; CHECK:  { st32 lr, sp, 12 }
-; CHECK:  .cfi_def_cfa_offset 16
-; CHECK:  .cfi_offset lr, 12
-; CHECK:  { jal_w lr, callee }
-; CHECK:  { xor32 r0, r0, r0 }
-; CHECK:  { ld32 lr, sp, 12 }
-; CHECK:  { addi32{{(_w)?}} sp, sp, 16 }
-; CHECK:  { jalr_w{{(\.s[012])?}} r0, lr, 0 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 16 }
+; CHECK: 	{ 		st32	lr, sp, 12; 	nop; 	nop }
+; CHECK: 	.cfi_def_cfa_offset 16
+; CHECK: 	.cfi_offset lr, 12
+; CHECK: 	{ 		jal_w	lr, callee; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	ld32	lr, sp, 12; 	nop }
+; CHECK: 	{ 		addi32_w	sp, sp, 16; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
 ; CHECK: .Lfunc_end0:
-; CHECK:  .size caller, .Lfunc_end0-caller
-; CHECK:  .cfi_endproc
-; CHECK:  // -- End function
-; CHECK:  .globl leaf // -- Begin function leaf
-; CHECK:  .type leaf,@function
-; CHECK: leaf: // @leaf
-; CHECK:  .cfi_startproc
+; CHECK: 	.size	caller, .Lfunc_end0-caller
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	leaf                            // -- Begin function leaf
+; CHECK: 	.type	leaf,@function
+; CHECK: leaf:                                   // @leaf
+; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK:  { xor32 r0, r0, r0 }
-; CHECK:  { subi32 sp, sp, 8 }
-; CHECK:  .cfi_def_cfa_offset 8
-; CHECK:  { add32 r1, r1, r2 }
-; CHECK:  { xor32 r0, r0, r0 }
-; CHECK:  { addi32{{(_w)?}} sp, sp, 8 }
-; CHECK:  { jalr_w{{(\.s[012])?}} r0, lr, 0 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		nop; 	nop; 	add32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
 ; CHECK: .Lfunc_end1:
-; CHECK:  .size leaf, .Lfunc_end1-leaf
-; CHECK:  .cfi_endproc
-; CHECK:  // -- End function
-; CHECK:  .section ".note.GNU-stack","",@progbits
+; CHECK: 	.size	leaf, .Lfunc_end1-leaf
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.section	".note.GNU-stack","",@progbits
 
 declare void @callee()
 

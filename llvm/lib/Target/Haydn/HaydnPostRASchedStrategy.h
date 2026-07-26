@@ -16,13 +16,13 @@
 // picks up automatically via TargetInstrInfo::CreateTargetMIHazardRecognizer
 // (MachineScheduler.cpp:4295-4300).
 //
-// Phase B2 (Stream B, ): bundle formation moves INTO this
-// strategy. enterMBB runs the dual-load slot promotion over the MBB
-// before scheduling; leaveRegion groups same-cycle Top-zone SUs into an
-// in-memory bundle list (port of AIE's computeAndFinalizeBundles); leaveMBB
-// materializes the accumulated list into the MBB — a NOP per empty cycle +
-// bundleWithPred/finalizeBundle for non-empty bundles (port of AIE's
-// commitBlockSchedule). The HaydnVLIWPacketizer pass is retired.
+// Phase B2 (Stream B): bundle formation moves INTO this strategy.
+// enterMBB stashes CurrentMBB; leaveRegion groups same-cycle Top-zone SUs
+// into an in-memory bundle list (port of AIE's computeAndFinalizeBundles);
+// leaveMBB materializes the accumulated list into the MBB — a NOP per empty
+// cycle + bundleWithPred/finalizeBundle for non-empty bundles (port of AIE's
+// commitBlockSchedule). Dual-load packing is HR tryAddProduct → setDesc
+// members (no promoteLoads residual).
 //
 //===----------------------------------------------------------------------===//
 
@@ -49,12 +49,9 @@ public:
 
   ~HaydnPostRASchedStrategy() override = default;
 
-  // Run dual-load slot promotion over the whole MBB BEFORE the base
-  // drive loop begins scheduling regions. The HaydnHazardRecognizer then
-  // sees LD32_S1 (Slot1_LD) naturally and schedules a slot-0 load and the
-  // promoted slot-1 load into the same cycle. (Promotion cannot wait until
-  // leaveRegion because the HR's slot-exclusivity rule would otherwise reject
-  // two LD32s — both {SLOT0} — from ever sharing a cycle.)
+  // Stash CurrentMBB for leaveMBB materialize (DAG BB is not publicly
+  // accessible). Dual-load packing is HR alts tryAdd → setDesc members
+  // (AIEHazardRecognizer.cpp:389; no promoteLoads residual).
   void enterMBB(MachineBasicBlock *MBB) override;
 
   // Override tryCandidate to prioritize memory ops as the cycle's first issue
@@ -76,11 +73,13 @@ public:
   // finalizeBundle (MachineInstrBundle.h). Port of AIE commitBlockSchedule.
   void leaveMBB() override;
 
-  // ensure each scheduler-placed MI has a recorded placement slot in
-  // AltDescs (HR slot or legal-slot derive). Does NOT bake `_S<k>` into
-  // the MachineInstr opcode. Port of AIE's materializeMultiOpcodeInstrs shape
-  // (region-only: DAG top/bottom ranges) without setDesc. Slots persist for
-  // MCInstLower / AsmPrinter; encoder materializes Flex at encode time.
+  // AIE materializeMultiOpcodeInstrs
+  // (AIEMachineScheduler.cpp:1121-1139) — for each MI in the DAG top/bottom
+  // region ranges with a selected format-member opcode in AltDescs, call
+  // MI.setDesc(TII->get(*AltOpcode)). HR wrote the selection via
+  // setAlternateDescriptor in commitPlacementForEmit. Ends with full
+  // AltDescs.clear() (AIEMachineScheduler.cpp:1081-1082;
+  // AIEAlternateDescriptors.h:74).
   void materializeMultiOpcodeInstrs();
 
   // Compute the bundle list for the region just scheduled: walk the Top
@@ -92,9 +91,12 @@ public:
 
 private:
   // A single cycle's worth of instructions, in MBB order. Empty Instrs means
-  // an idle cycle (materialized as a standalone NOP). Mirrors AIE's
-  // MachineBundle but stripped to just the instruction list (no slot/format
-  // bookkeeping — Haydn assigns slots in the MC emitter, not here).
+  // an idle cycle (materialized as a rolling-position NOP). Product format is
+  // always Bundle128Full (HaydnBundlePlan). Multi-MI materialize stamps
+  // FormatID imm on the BUNDLE root. Singletons stay standalone MIR
+  // here and are wrapped by HaydnFinalizeBundle after PostMachineScheduler
+  // (AIEFinalizeBundle peer). Post-commit placement is getSlotKind on
+  // member Desc (AIEBaseMCFormats.cpp:66-75).
   struct CycleBundle {
     SmallVector<MachineInstr *, 3> Instrs;
     bool empty() const { return Instrs.empty(); }

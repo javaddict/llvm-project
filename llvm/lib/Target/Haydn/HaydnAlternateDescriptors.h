@@ -1,4 +1,4 @@
-//===- HaydnAlternateDescriptors.h - Slot placement side-map ----*- C++ -*-===//
+//===- HaydnAlternateDescriptors.h - Alternate opcode descriptors -*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,15 +6,22 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// (G-MC-10 retirement): only the placement-slot map remains.
-// AlternateSlots — HR auction / commitSlotFlexVariant write setSlot;
-// MCInstLower reads getSelectedSlot → HaydnMCFlags. MachineInstr opcodes
-// stay logical (no setDesc(*_S*)).
+// AIE-shaped opcode-alt map for post-RA multi-slot placement
+// (G-BUNDLE-FORMAT B3.exit.3; peer AIEAlternateDescriptors.h:27-75).
 //
-// The old MIAltDescsMap / setAlternateDescriptor / getSelectedDescriptor
-// opcode-alt surface (AIE multi-opcode port) had zero writers after
-// and is deleted. clearDescriptors is a no-op retained for call-site
-// compatibility until leaveRegion is cleaned.
+//   AlternateDescs  — MI → selected format-member MCInstrDesc*.
+//                     HR commitPlacementForEmit writes setAlternateDescriptor
+//                     (MemberOpcode from tryAddProduct; AIEHazardRecognizer.cpp:389).
+//                     leaveRegion materializeMultiOpcodeInstrs reads
+//                     getSelectedOpcode and MI.setDesc
+//                     (AIEMachineScheduler.cpp:1121-1139), then clear()
+//                     (AIEMachineScheduler.cpp:1081-1082;
+//                     AIEAlternateDescriptors.h:74).
+//
+// No slot side-map (AIE has none). Post-commit placement is opcode identity
+// via getSlotKind (AIEBaseMCFormats.cpp:66-75) + Bundle SlotMap
+// (AIEBundle.h:92-104). Product: BUNDLE128_FULL only. N-format-ready via
+// MemberOpcode / FormatID path.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,35 +29,70 @@
 #define LLVM_LIB_TARGET_HAYDN_HAYDNALTERNATEDESCRIPTORS_H
 
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/MC/MCInstrDesc.h"
+#include "llvm/MC/MCInstrInfo.h"
 #include <optional>
 #include <unordered_map>
 
 namespace llvm {
 
-// Per-MI chosen VLIW placement slot (0/1/2).
-using MIAltSlotsMap = std::unordered_map<MachineInstr *, unsigned>;
+// AIE peer: AIEAlternateDescriptors.h:25 — MI → selected format-member Desc.
+using MIAltDescsMap = std::unordered_map<MachineInstr *, const MCInstrDesc *>;
 
 class HaydnAlternateDescriptors {
-  MIAltSlotsMap AlternateSlots;
+  MIAltDescsMap AlternateDescs;
 
 public:
   HaydnAlternateDescriptors() = default;
 
-  // Record the chosen VLIW placement slot (0/1/2) for \p MI.
-  void setSlot(MachineInstr *MI, unsigned Slot) { AlternateSlots[MI] = Slot; }
-  std::optional<unsigned> getSelectedSlot(MachineInstr *MI) const {
-    if (auto It = AlternateSlots.find(MI); It != AlternateSlots.end())
+  // AIE peer AIEAlternateDescriptors.h:39-44: record selected format-member
+  // opcode for multi-slot / format-member logicals. \p TII resolves opcode →
+  // MCInstrDesc (AIE uses Subtarget TII; Haydn takes TII from the HR/caller
+  // so unit tests can inject without a MachineFunction).
+  void setAlternateDescriptor(MachineInstr *MI, unsigned AltInstOpcode,
+                              const MCInstrInfo &TII) {
+    AlternateDescs[MI] = &TII.get(AltInstOpcode);
+  }
+
+  // Direct Desc inject (tests / callers that already hold MCInstrDesc).
+  void setAlternateDescriptor(MachineInstr *MI, const MCInstrDesc *Desc) {
+    AlternateDescs[MI] = Desc;
+  }
+
+  // AIE peer AIEAlternateDescriptors.h:47-52.
+  std::optional<const MCInstrDesc *>
+  getSelectedDescriptor(MachineInstr *MI) const {
+    if (auto It = AlternateDescs.find(MI); It != AlternateDescs.end())
       return It->second;
     return std::nullopt;
   }
 
-  // Historical name: previously cleared the opcode-alt map only. The opcode
-  // map is gone (G-MC-10); this is now a no-op. Prefer not calling it.
-  void clearDescriptors() {}
+  // AIE peer AIEAlternateDescriptors.h:54-61.
+  const MCInstrDesc *getDesc(MachineInstr *MI) const {
+    return getSelectedDescriptor(MI).value_or(&MI->getDesc());
+  }
 
-  // Drop all placement slots. Not used after materialize — wiping slots
-  // before AsmPrinter breaks HaydnMCFlags. Available for full MF teardown.
-  void clear() { AlternateSlots.clear(); }
+  const MCInstrDesc *getDesc(const MachineInstr *MI) const {
+    return getSelectedDescriptor(const_cast<MachineInstr *>(MI))
+        .value_or(&MI->getDesc());
+  }
+
+  // AIE peer AIEAlternateDescriptors.h:64-68 — selected member opcode for
+  // materializeMultiOpcodeInstrs setDesc.
+  std::optional<unsigned> getSelectedOpcode(MachineInstr *MI) const {
+    if (auto It = AlternateDescs.find(MI); It != AlternateDescs.end())
+      return It->second->getOpcode();
+    return std::nullopt;
+  }
+
+  // AIE peer AIEAlternateDescriptors.h:70-72.
+  unsigned getOpcode(MachineInstr *MI) const {
+    return getSelectedOpcode(MI).value_or(MI->getDesc().getOpcode());
+  }
+
+  // AIE peer AIEAlternateDescriptors.h:74 — leaveRegion end-state after
+  // materializeMultiOpcodeInstrs setDesc (AIEMachineScheduler.cpp:1081-1082).
+  void clear() { AlternateDescs.clear(); }
 };
 
 } // end namespace llvm

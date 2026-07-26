@@ -23,17 +23,17 @@
 
 .text
 
-# 2-issue Bundle128
+# 2-issue Bundle128 (B3.5 source-order: add32→S2, add64→S1)
 { add32 r0, r1, r2 ; add64 d0, d1, d2 }
 
-# 3-issue Bundle128
-{ add32 r0, r1, r2 ; add64 d0, d1, d2 ; add64 d3, d4, d5 }
+# 3-issue Bundle128 — pack-friendly source order (two add64 then add32)
+{ add64 d0, d1, d2 ; add64 d3, d4, d5 ; add32 r0, r1, r2 }
 
-# Single-issue control
+# Single-issue control (solitary residual prefers S0)
 add32 r1, r2, r3
 
 # FileCheck: each parcel is exactly one objdump line at +0x10.
-# Printer spacing between mnemonic and operands may vary (xor32 r0); use {{.*}}.
-# CHECK:        0: {{.*}}{ add32{{.*}}r0, r1, r2; add64{{.*}}d0, d1, d2; nop }
-# CHECK-NEXT:  10: {{.*}}{ add32{{.*}}r0, r1, r2; add64{{.*}}d0, d1, d2; add64{{.*}}d3, d4, d5 }
+# Printer spacing between mnemonic and operands may vary; use {{.*}}.
+# CHECK:        0: {{.*}}{ nop; add64{{.*}}d0, d1, d2; add32{{.*}}r0, r1, r2 }
+# CHECK-NEXT:  10: {{.*}}{ add32{{.*}}r0, r1, r2; add64{{.*}}d3, d4, d5; add64{{.*}}d0, d1, d2 }
 # CHECK-NEXT:  20: {{.*}}{ add32{{.*}}r1, r2, r3; nop; nop }

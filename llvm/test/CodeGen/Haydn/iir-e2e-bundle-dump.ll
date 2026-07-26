@@ -86,7 +86,7 @@ entry:
 
 ; Prologue: stack frame setup and callee-save using R12 (not R7!)
 ; ASM: subi32{{.*}}sp, sp
-; ASM: { addi32_w r12, sp, {{[0-9]+}} }
+; ASM: { {{.*}}addi32_w r12, sp, {{[0-9]+}}{{.*}} }
 ; Saved vars are R8-R11 only (R12 is reserved AT, never saved —).
 ; ASM: st32{{.*}}{{r[89]|r1[01]}}, r12
 

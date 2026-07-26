@@ -43,7 +43,8 @@ public:
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
-    AU.setPreservesCFG();
+    // VAARG expand may split MBBs (reg-bank vs stack overflow). Do not claim
+    // CFG preservation.
     MachineFunctionPass::getAnalysisUsage(AU);
   }
 
@@ -99,6 +100,13 @@ private:
   // FI refs. Residual at AsmPrinter is fatal.
   bool expandVASTART(MachineBasicBlock &MBB, MachineInstr &MI);
   bool expandVACOPY(MachineBasicBlock &MBB, MachineInstr &MI);
+
+  // CB-131: expand VAARG_I32/I64 — unified reg-bank + stack overflow.
+  // May split MBB (reg path / stack path / join). \p NextMBBI updated when
+  // the original MBB is split so the expand loop does not rescan new blocks
+  // incorrectly.
+  bool expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
+                   MachineBasicBlock::iterator &NextMBBI, bool IsI64);
 };
 
 // Creates and returns a HaydnExpandPseudos pass.

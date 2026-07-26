@@ -96,7 +96,7 @@ exit:
 ; MIR-LABEL: name: vec_dot_streaming_postinc
 ; MIR: BUNDLE
 ; MIR-DAG: LD64
-; MIR-DAG: ADDI32 {{.*}}, 8
+; MIR-DAG: ADDI32{{[^,.]*}}, 8
 ; MIR: }
 
 ; ASM-level: co-packed ld64 + MAC + post-inc / addi; no dropped loads.

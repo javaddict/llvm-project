@@ -21,11 +21,16 @@
 
 #include "HaydnPostRASchedStrategy.h"
 #include "HaydnAlternateDescriptors.h"
+#include "HaydnBundle.h"
+#include "HaydnBundleMaterialize.h"
+#include "HaydnBundlePlan.h"
+#include "HaydnHazardRecognizer.h"
 #include "HaydnInstrInfo.h"
 
 #include "HaydnMachineFunctionInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/MC/MCInstrInfo.h"
@@ -36,42 +41,32 @@ using namespace llvm;
 
 #define DEBUG_TYPE "haydn-post-ra-sched"
 
-// Safety net only: verify AltDescs/HR-assigned slots form a legal Bundle128.
-// Does **not** treat opcode `_S*` as placement (: slot = AltDescs).
-// Greedy over FlexMap legal slots when AltDescs is empty (late unscheduled).
-static bool cycleCanFormLegalBundle(ArrayRef<MachineInstr *> Instrs,
-                                    HaydnAlternateDescriptors &AltDescs,
-                                    const MCInstrInfo &MCII) {
+STATISTIC(NumIdleCyclesMaterialized,
+          "Number of post-RA idle (stall) cycles materialized as NOP");
+STATISTIC(NumMultiMIBundlesFinalized,
+          "Number of multi-MI cycles finalized as BUNDLE");
+STATISTIC(NumScheduledCyclesSplit,
+          "Number of scheduled cycles explicitly split into >1 encode cycles");
+
+// Safety net only: post-setDesc members form a legal Bundle128 via
+// Bundle.canAdd + fixed getSlotKind (AIEBundle.h:62-105 / :92-104;
+// AIEBaseMCFormats.cpp:66-75). AIE has no AltDescs slot side-map
+// (AIEAlternateDescriptors.h:27-75 opcode-alt only).
+// Shape-mismatch residual logicals still pack via Bundle alts tryAdd.
+static bool cycleCanFormLegalBundle(ArrayRef<MachineInstr *> Instrs) {
   if (Instrs.empty() || Instrs.size() > 3)
     return false;
-  bool Used[3] = {false, false, false};
-  SmallVector<MachineInstr *, 3> Flexible;
+  HaydnMCFormats Fmts;
+  Haydn::MachineBundle Bundle(&Fmts);
   for (MachineInstr *MI : Instrs) {
-    if (std::optional<unsigned> Slot = AltDescs.getSelectedSlot(MI)) {
-      if (*Slot >= 3 || Used[*Slot])
-        return false;
-      if (!getHaydnFlexVariantForSlot(MI->getOpcode(), *Slot, MCII))
-        return false;
-      Used[*Slot] = true;
-    } else {
-      Flexible.push_back(MI);
-    }
-  }
-  for (MachineInstr *MI : Flexible) {
-    bool Placed = false;
-    for (unsigned K = 0; K < 3; ++K) {
-      if (Used[K])
-        continue;
-      if (!getHaydnFlexVariantForSlot(MI->getOpcode(), K, MCII))
-        continue;
-      Used[K] = true;
-      Placed = true;
-      break;
-    }
-    if (!Placed)
+    if (!Bundle.canAdd(MI))
       return false;
+    Bundle.add(MI);
   }
-  return true;
+  // Multi-MI: require a covering packet format (AIE getFormatOrNull).
+  if (Bundle.isStandalone())
+    return false;
+  return Bundle.getFormatOrNull() != nullptr;
 }
 
 HaydnPostRASchedStrategy::HaydnPostRASchedStrategy(const MachineSchedContext *C)
@@ -134,11 +129,10 @@ void HaydnPostRASchedStrategy::bumpCycleForBundles(
 
 void HaydnPostRASchedStrategy::enterMBB(MachineBasicBlock *MBB) {
   CurrentMBB = MBB;
-  // Dual-load placement hint : record AltDescs slot=1 on a second
-  // LD32/LD64 following a slot-0 LS op. Opcodes stay logical (Slot01_LD);
-  // encoder materializes the S1 Flex window from Flags. No setDesc(LD*_S1).
-  HII->promoteLoadsToSlot1(MBB->instr_begin(), MBB->instr_end());
-
+  // Dual-load packing is HR tryAddProduct PlacementAlternatives → setDesc
+  // members (AIEHazardRecognizer.cpp:389; AIEMachineScheduler.cpp:1121-1132).
+  // No promoteLoadsToSlot1 / AlternateSlots residual (AIE
+  // AIEAlternateDescriptors.h:27-75 opcode-alt only).
   PostGenericScheduler::enterMBB(MBB);
 }
 
@@ -200,173 +194,230 @@ HaydnPostRASchedStrategy::computeRegionBundles() {
   return Bundles;
 }
 
+// Splice skippable MIs out of [First,Last] so real members are contiguous.
+// Returns false if a skippable has a reg conflict with a real member (unsafe).
+static bool spliceSkippablesForCycle(MachineBasicBlock &MBB,
+                                     ArrayRef<MachineInstr *> Instrs) {
+  if (Instrs.size() < 2)
+    return true;
+  MachineInstr *First = Instrs.front();
+  MachineInstr *Last = Instrs.back();
+  const TargetRegisterInfo *TRI =
+      MBB.getParent()->getSubtarget().getRegisterInfo();
+  bool BundleUnsafe = false;
+  for (MachineBasicBlock::instr_iterator It = First->getIterator(),
+                                         E = Last->getIterator();
+       It != E;) {
+    MachineInstr &MI = *It;
+    ++It;
+    if (!isBundleSkippable(MI) || &MI == First)
+      continue;
+    bool HasRegConflict = false;
+    for (const MachineOperand &MO : MI.operands()) {
+      if (!MO.isReg() || !MO.isDef() || !MO.getReg())
+        continue;
+      Register DefReg = MO.getReg();
+      for (const MachineInstr *RealMI : Instrs) {
+        if (RealMI == &MI)
+          continue;
+        if (RealMI->readsRegister(DefReg, TRI) ||
+            RealMI->definesRegister(DefReg, TRI)) {
+          HasRegConflict = true;
+          break;
+        }
+      }
+      if (HasRegConflict)
+        break;
+    }
+    if (HasRegConflict) {
+      BundleUnsafe = true;
+      continue;
+    }
+    MBB.splice(First->getIterator(), &MBB, MI.getIterator());
+  }
+  return !BundleUnsafe;
+}
+
+static bool membersContiguous(ArrayRef<MachineInstr *> Instrs) {
+  for (unsigned I = 1; I < Instrs.size(); ++I) {
+    MachineBasicBlock::instr_iterator Prev = Instrs[I - 1]->getIterator();
+    if (std::next(Prev) != Instrs[I]->getIterator())
+      return false;
+  }
+  return true;
+}
+
+// Finalize one multi-MI group that is already contiguous and slot-legal.
+// True AIE applyFormatOrdering path
+// (AIEHazardRecognizer.cpp:278-314, call site applyBundles 343-344 when
+// B.size()>1):
+//   1. Build Haydn::MachineBundle SlotMap from post-setDesc getSlotKind
+//      only (AIEBundle.h:92-104; AIEBaseMCFormats.cpp:66-75).
+//   2. applyFormatOrdering(Bundle, *getFormatOrNull(), BundleEnd) so
+//      children land in Format.getSlots() field order (BUNDLE128_FULL:
+//      S2→S1→S0 per HaydnGenFormats.inc FormatSlotData).
+//   3. stampBundleFormatID(ProductFormatID) on the BUNDLE root (plan §6.3)
+//      — durable MIR/clone truth, not AltDesc.
+static void finalizeLegalMultiMI(MachineBasicBlock &MBB,
+                                 ArrayRef<MachineInstr *> Instrs) {
+  assert(Instrs.size() >= 2 && "multi-MI finalize only");
+
+  HaydnMCFormats Fmts;
+  Haydn::MachineBundle Bundle(&Fmts);
+
+  // SlotMap authority: fixed getSlotKind after setDesc (AIE shape). Bundle
+  // pickSlot handles residual logicals via alts tryAdd.
+  for (MachineInstr *MI : Instrs) {
+    assert(Bundle.canAdd(MI) && "legal multi-MI must pack into Bundle");
+    Bundle.add(MI);
+  }
+
+  // Iterator AFTER the last schedule-order member — re-insert point
+  // (AIEHazardRecognizer.cpp:338-339 getBundleEnd of last instr).
+  MachineBasicBlock::iterator BundleEnd =
+      getBundleEnd(Instrs.back()->getIterator());
+
+  // AIE only reorders when size()>1 (standalone may lack formats on AIE1).
+  assert(Bundle.size() > 1 && "multi-MI finalize requires size()>1");
+  const VLIWFormat *Fmt = Bundle.getFormatOrNull();
+  assert(Fmt && "legal multi-MI cycle must cover a packet format");
+  applyFormatOrdering(Bundle, *Fmt, BundleEnd);
+
+  // First field-order member is now the bundle interior lead; finalizeBundle
+  // (inside applyFormatOrdering) inserted the BUNDLE root before it.
+  MachineInstr &Root =
+      *getBundleStart(Bundle.getInstrs().front()->getIterator());
+  assert(Root.isBundle() && "finalizeBundle must produce a BUNDLE root");
+  haydn::bundle::stampBundleFormatID(Root, haydn::bundle::ProductFormatID);
+  ++NumMultiMIBundlesFinalized;
+}
+
+// When a scheduled cycle cannot form one legal BUNDLE, greedily split
+// into ordered legal sub-cycles (multi-MI BUNDLE or singleton standalone).
+// Never silently leave a multi-MI illegal cycle as an unordered fog — each
+// sub-cycle is an explicit architectural cycle (FormatID Bundle128Full).
+static void materializeMaybeSplitCycle(MachineBasicBlock &MBB,
+                                       ArrayRef<MachineInstr *> Instrs) {
+  if (Instrs.size() < 2)
+    return;
+
+  if (!spliceSkippablesForCycle(MBB, Instrs)) {
+    LLVM_DEBUG(dbgs() << "HaydnPostRASched: unsafe skippable splice — "
+                         "explicit split to singletons\n");
+    ++NumScheduledCyclesSplit;
+    // Explicit N singleton cycles (already sequential in MBB).
+    return;
+  }
+  if (!membersContiguous(Instrs)) {
+    LLVM_DEBUG(dbgs() << "HaydnPostRASched: same-cycle MIs not contiguous — "
+                         "explicit split to singletons\n");
+    ++NumScheduledCyclesSplit;
+    return;
+  }
+
+  if (cycleCanFormLegalBundle(Instrs)) {
+    finalizeLegalMultiMI(MBB, Instrs);
+    return;
+  }
+
+  // Greedy left-to-right legal sub-cycles (Bundle.canAdd / getSlotKind oracle).
+  LLVM_DEBUG(dbgs() << "HaydnPostRASched: scheduled cycle not one legal "
+                       "Bundle128 — explicit greedy split\n");
+  ++NumScheduledCyclesSplit;
+
+  SmallVector<MachineInstr *, 3> Cur;
+  auto flush = [&]() {
+    if (Cur.size() >= 2 && cycleCanFormLegalBundle(Cur) &&
+        membersContiguous(Cur))
+      finalizeLegalMultiMI(MBB, Cur);
+    // size==1 or still-illegal pair: leave as sequential standalone parcels
+    // (each is one Bundle128 encode cycle; product FormatID still Full).
+    Cur.clear();
+  };
+
+  for (MachineInstr *MI : Instrs) {
+    Cur.push_back(MI);
+    if (Cur.size() == 1)
+      continue;
+    if (cycleCanFormLegalBundle(Cur))
+      continue;
+    // Last op does not fit: close prior group, restart at MI.
+    MachineInstr *Overflow = Cur.pop_back_val();
+    flush();
+    Cur.push_back(Overflow);
+  }
+  flush();
+}
+
 void HaydnPostRASchedStrategy::materializeBundles(
     MachineBasicBlock &MBB, SmallVector<CycleBundle> &Bundles) {
-  // Port of AIE materializeEmptyBundles (AIEMachineScheduler.cpp:806-823) +
-  // applyBundles/applyFormatOrdering (AIEHazardRecognizer.cpp:278-351), Top
-  // zone only and with Haydn's NOP insertion. The AsmPrinter still pads each
-  // bundle's idle SLOTS to 3 (HaydnAsmPrinter.cpp:163-167); this handles
-  // idle CYCLES.
+  // Port of AIE materializeEmptyBundles + applyBundles, Top zone only.
+  // Cycle ownership (behavior-preserving Bundle128 encode):
+  // * empty cycle → NOP at rolling position (before next real cycle / term)
+  // * single MI → leave standalone here; HaydnFinalizeBundle wraps + stamps
+  //   FormatID (AIEFinalizeBundle.cpp:40-59 peer)
+  // * 2-3 MIs legal → finalizeBundle + stamp FormatID
+  // * 2-3 MIs illegal → explicit greedy split (not silent fog)
   //
-  // After scheduling, the region's MIs are already in the MBB in scheduled
-  // order (the base scheduler reorders in place via moveInstruction). We walk
-  // the bundle list and, for each non-empty cycle whose MIs are NOT already
-  // contiguous (they should be, since the scheduler places same-cycle MIs
-  // adjacently), we bundle them in place using the MI pointers stored in
-  // CycleBundle.Instrs — NOT by advancing a fragile MBB iterator. This mirrors
-  // AIE's approach of using the stored MI pointers rather than position-walking.
-  //
-  // For each cycle:
-  // * empty cycle -> insert one standalone NOP (idle cycle padding);
-  // * single MI -> leave standalone (no BUNDLE needed);
-  // * 2-3 MIs -> bundleWithPred chain + finalizeBundle into a BUNDLE MI.
-  for (CycleBundle &CB : Bundles) {
+  // Product plan: every encode cycle is FormatID::Bundle128Full / 16 B
+  // (haydn::bundle::BundlePlan). Multi-MI BUNDLE roots carry FormatID imm 0
+  // (stampBundleFormatID). Singleton cycles become BUNDLE + FormatID in
+  // HaydnFinalizeBundle after this scheduler (AIE2 addPreSched2 order).
+  for (unsigned Idx = 0; Idx < Bundles.size(); ++Idx) {
+    CycleBundle &CB = Bundles[Idx];
     if (CB.Instrs.empty()) {
-      // Idle cycle: insert a standalone NOP to pad an entirely idle cycle.
-      // Insert BEFORE the first terminator so the NOP never lands after a
-      // branch (which the verifier rejects as "Non-terminator instruction
-      // after the first terminator"). Idle cycles now arise from the MAC
-      // 2-cycle result latency: when the last MAC's consumer is 2 cycles
-      // away, the scheduler leaves an empty Top-zone cycle that previously
-      // (under the old latency-1 model) never appeared. Inserting at
-      // MBB.end placed the NOP after BNEZ/JALR terminators (D2XX). Use
-      // the first terminator as the anchor; if the block has no terminator
-      // yet (e.g. the exit block), MBB.end is correct.
+      // Rolling idle NOP — before next real cycle's first MI, else term.
       MachineBasicBlock::iterator InsertPt = MBB.getFirstTerminator();
+      for (unsigned J = Idx + 1; J < Bundles.size(); ++J) {
+        if (!Bundles[J].Instrs.empty()) {
+          InsertPt = Bundles[J].Instrs.front()->getIterator();
+          break;
+        }
+      }
       HII->insertNoop(MBB, InsertPt);
+      ++NumIdleCyclesMaterialized;
       continue;
     }
     if (CB.Instrs.size() == 1)
-      continue; // Standalone MI — no BUNDLE needed.
+      continue; // One logical cycle; HaydnFinalizeBundle wraps.
 
-    // 2-3 MIs: bundle them. The MIs in CB.Instrs are in MBB order (the
-    // scheduler emits Top-zone SUs in MBB order). They SHOULD be contiguous
-    // but a pseudo (e.g. LOAD_ADDR) scheduled into the same cycle can end up
-    // interleaved between two real same-cycle MIs. computeRegionBundles skips
-    // pseudos, so CB.Instrs would then be non-contiguous — and bundleWithPred
-    // (which chains to the raw MBB predecessor) would wrongly pull the pseudo
-    // into the bundle while finalizeBundle(First) finalized only a prefix
-    // leaving a dangling bundle with no BUNDLE header. HaydnExpandPseudos then
-    // expands the pseudo-as-bundle-head outside the bundle and DROPS the other
-    // members -> their defs are lost -> "Using an undefined physical register"
-    // (yarpgen seeds 7/8/9/11/15/18). Newly exposed by the MAC 2-cycle result
-    // latency (prior revision), which first interleaved these independent
-    // same-cycle MIs.
-    //
-    // Fix: move any intervening isBundleSkippable MIs to just before the first
-    // real MI so the real MIs are contiguous — exactly as the code already
-    // assumed (but never enforced). Reorder-safety: the post-RA scheduler
-    // emits each cycle's MIs contiguously in MBB order, so a pseudo that lands
-    // BETWEEN two same-cycle real MIs is itself assigned to that same cycle
-    // i.e. it is dependency-independent of them (the scheduler's cycle
-    // assignment is the proof of independence). Moving it earlier within the
-    // same cycle's window therefore preserves all RAW/WAW/WAR edges. (.)
-    MachineInstr *First = CB.Instrs.front();
-    MachineInstr *Last = CB.Instrs.back();
-    const TargetRegisterInfo *TRI =
-        MBB.getParent()->getSubtarget().getRegisterInfo();
-    // if any same-cycle skippable MI cannot be safely spliced before the
-    // bundle (it defines a physreg a bundle member reads/defines — the
-    // "same cycle ⇒ independent" claim is false), refuse to bundle this cycle
-    // at all and leave the MIs standalone. Bundling would require reordering a
-    // dependent pseudo, corrupting the data dependency (LOAD_ADDR defs $r3
-    // spliced before ST8 $r3 -> store reads the address, not the value).
-    bool BundleUnsafe = false;
-    for (MachineBasicBlock::instr_iterator It = First->getIterator(),
-                                            E = Last->getIterator();
-         It != E;) {
-      MachineInstr &MI = *It;
-      ++It;
-      if (!isBundleSkippable(MI) || &MI == First)
-        continue;
-      bool HasRegConflict = false;
-      for (const MachineOperand &MO : MI.operands()) {
-        if (!MO.isReg() || !MO.isDef() || !MO.getReg())
-          continue;
-        Register DefReg = MO.getReg();
-        for (const MachineInstr *RealMI : CB.Instrs) {
-          if (RealMI == &MI)
-            continue;
-          if (RealMI->readsRegister(DefReg, TRI) ||
-              RealMI->definesRegister(DefReg, TRI)) {
-            HasRegConflict = true;
-            break;
-          }
-        }
-        if (HasRegConflict)
-          break;
-      }
-      if (HasRegConflict) {
-        BundleUnsafe = true;
-        continue; // leave this MI where the scheduler placed it
-      }
-      MBB.splice(First->getIterator(), &MBB, MI.getIterator());
-    }
-    if (BundleUnsafe)
-      continue; // leave the whole cycle standalone; do not form an unsafe bundle
-    // Defensive: after splicing skippables, CB.Instrs MUST be contiguous. If a
-    // future change lets a NON-skippable MI interleave same-cycle reals, the
-    // assert fires instead of silently producing a dangling bundle (the original
-    // bug); in a release build (assert compiled out) we skip bundling this
-    // cycle and leave the MIs standalone rather than corrupt the bundle.
-    bool Contiguous = true;
-    for (unsigned I = 1; I < CB.Instrs.size(); ++I) {
-      MachineBasicBlock::instr_iterator Prev =
-          CB.Instrs[I - 1]->getIterator();
-      if (std::next(Prev) != CB.Instrs[I]->getIterator()) {
-        // Do not fatal: NatureDSP math kernels (e.g. vec_atan_32x32) hit this
-        // when a non-skippable MI interleaves same-cycle reals after splice.
-        // Leave the cycle unbundled (correct, denser packing missed) rather
-        // than abort the whole compile.
-        LLVM_DEBUG(dbgs() << "HaydnPostRASched: same-cycle bundle MIs not "
-                             "contiguous after splice — skip bundling\n");
-        Contiguous = false;
-        break;
-      }
-    }
-    if (!Contiguous)
-      continue; // leave MIs standalone; do not form a dangling bundle
-
-    // Slot legality before finalize : dual S0-only same-cycle etc.
-    // Leave standalone rather than emit an oversubscribed BUNDLE that forces
-    // AsmPrinter emergency split / size-model lies.
-    HaydnAlternateDescriptors &AltDescs =
-        MBB.getParent()->getInfo<HaydnMachineFunctionInfo>()->getAltDescs();
-    const MCInstrInfo *MCII =
-        MBB.getParent()->getTarget().getMCInstrInfo();
-    if (!MCII ||
-        !cycleCanFormLegalBundle(CB.Instrs, AltDescs, *MCII)) {
-      LLVM_DEBUG(dbgs() << "HaydnPostRASched: same-cycle MIs not Bundle128-"
-                           "legal (slot collision) — leave unbundled\n");
-      continue;
-    }
-
-    // bundleWithPred each subsequent MI to its (now-adjacent) predecessor.
-    for (unsigned I = 1; I < CB.Instrs.size(); ++I)
-      CB.Instrs[I]->bundleWithPred();
-    // finalizeBundle scans forward from First collecting InsideBundle MIs.
-    finalizeBundle(MBB, First->getIterator());
+    materializeMaybeSplitCycle(MBB, CB.Instrs);
   }
 }
 
 void HaydnPostRASchedStrategy::materializeMultiOpcodeInstrs() {
-  // Phase 1 — placement only, no opcode bake. The HR's per-cycle slot
-  // auction recorded each issued MI's chosen slot in AltDescs. This ensures
-  // every scheduled MI has a recorded slot (nullopt → FU/legal-slot derive via
-  // commitSlotFlexVariant). MachineInstr opcodes stay LOGICAL; AltDescs slots
-  // are the placement vessel through AsmPrinter / MCInstLower (HaydnMCFlags).
+  // AIE port of AIEPostRASchedStrategy::materializeMultiOpcodeInstrs
+  // (AIEMachineScheduler.cpp:1121-1139): when HR selected a format-member
+  // opcode (commitPlacementForEmit → setAlternateDescriptor), bake it into
+  // the MachineInstr via setDesc. Product still Bundle128 Full only.
   //
-  // DO NOT clear AlternateSlots here — MCInstLower needs them until AsmPrinter
-  // (I2). Encoder materializes Flex variants only at encode time.
+  // End-state (AIEMachineScheduler.cpp:1081-1082 +
+  // AIEAlternateDescriptors.h:74): SelectedAltDescs.clear() after setDesc.
+  // Post-commit placement is opcode identity via getSlotKind
+  // (AIEBaseMCFormats.cpp:66-75). No slot side-map.
   HaydnAlternateDescriptors &AltDescs =
       DAG->MF.getInfo<HaydnMachineFunctionInfo>()->getAltDescs();
+
+  auto MaterializePseudo = [&](MachineInstr &MI) {
+    // AIE parity (AIEMachineScheduler.cpp:1126-1132): unconditional
+    // MI.setDesc when getSelectedOpcode is present. AIE alts share operand
+    // structure by construction (AIEAlternateDescriptors.h:64-68); Haydn
+    // members now match logical NumOperands/NumDefs (S_SW_BREV_*_S* / BREV
+    // load *_LD_S* tied shapes). No shape-gate, no MCFlags write.
+    if (std::optional<unsigned> AltOpcode = AltDescs.getSelectedOpcode(&MI))
+      MI.setDesc(HII->get(*AltOpcode));
+  };
+
+  // AIE asserts top==bottom for PostRA; Haydn PostGenericScheduler is
+  // top-down only — walk both ranges like AIE for shape parity.
   for (MachineInstr &MI : make_range(DAG->begin(), DAG->top()))
-    HII->commitSlotFlexVariant(MI, AltDescs.getSelectedSlot(&MI));
+    MaterializePseudo(MI);
   for (MachineInstr &MI : make_range(DAG->bottom(), DAG->end()))
-    HII->commitSlotFlexVariant(MI, AltDescs.getSelectedSlot(&MI));
-  // Keep AlternateSlots for whole MF. Opcode-map side table is unused subsequent
-  // bake removal; drop only that map if anything ever wrote it.
-  AltDescs.clearDescriptors();
+    MaterializePseudo(MI);
+
+  // AIE leaveRegion: materialize then SelectedAltDescs.clear()
+  // (AIEMachineScheduler.cpp:1081-1082). Full clear — no slot side-map survives.
+  AltDescs.clear();
 }
 
 void HaydnPostRASchedStrategy::leaveRegion(const SUnit &ExitSU) {
@@ -387,9 +438,10 @@ void HaydnPostRASchedStrategy::leaveRegion(const SUnit &ExitSU) {
     return;
   RegionWasScheduled = false;
 
-  // record each scheduled MI's HR-auction slot in AltDescs BEFORE bundle
-  // formation (placement only — no setDesc Flex bake). Bundle children keep
-  // logical opcodes; slot authority is AltDescs → HaydnMCFlags → encoder.
+  // Bake selected format-member opcodes via setDesc BEFORE bundle formation,
+  // then full AltDescs.clear() (AIEMachineScheduler.cpp:1081-1082
+  // materializeMultiOpcodeInstrs + SelectedAltDescs.clear before
+  // computeAndFinalizeBundles).
   materializeMultiOpcodeInstrs();
 
   SmallVector<CycleBundle> RegionBundles = computeRegionBundles();

@@ -11,7 +11,7 @@
 ; RUN:     -stop-after=instruction-select -verify-machineinstrs < %s \
 ; RUN:     | FileCheck %s --check-prefix=GISEL-OFF
 ;
-; Product GISel form: G_LOAD/STORE + G_PTR_ADD → fused S_LW_POST_IMM / ST32_POST.
+; Product GISel form: G_LOAD/ZEXTLOAD/SEXTLOAD/STORE + G_PTR_ADD → fused AGU.
 
 ; ISEL-LABEL: name: postinc_stream_i32
 ; ISEL: S_LW_POST_IMM
@@ -112,7 +112,8 @@ exit:
 ; ISEL-LABEL: name: postinc_store_i32
 ; ISEL: {{ST32_POST|S_SW_POST_IMM}}
 ; ASM-LABEL: postinc_store_i32:
-; ASM: st32.post
+; ST32_POST member after leaveRegion setDesc — underscore print (peers d230/ii-scheduler-reorder).
+; ASM: st32_post
 define void @postinc_store_i32(ptr %p, i32 %n, i32 %v) {
 entry:
   %cmp = icmp sgt i32 %n, 0
@@ -129,10 +130,10 @@ exit:
   ret void
 }
 
-; Byte stream: LSR may rewrite to index IV + LDU8 (not ptr post-inc).
+; Byte stream: LSR may rewrite to index IV + AGU PRE_REG (not ptr POST_IMM).
 ; Residual FormUpdateAddr covers LDU8+ADDI when that shape appears (gaps.mir).
 ; ISEL-LABEL: name: postinc_stream_i8
-; ISEL-DAG: {{S_LBU_POST_IMM|S_LBS_POST_IMM|LDU8|LD8}}
+; ISEL-DAG: {{S_LBU_POST_IMM|S_LBU_PRE_IMM|S_LBU_POST_REG|S_LBU_PRE_REG|S_LBS_POST_IMM|S_LBS_PRE_IMM|S_LBS_POST_REG|S_LBS_PRE_REG|LDU8|LD8}}
 ; ASM-LABEL: postinc_stream_i8:
 define i32 @postinc_stream_i8(ptr %p, i32 %n) {
 entry:
@@ -156,7 +157,7 @@ exit:
 
 ; Halfword stream: same LSR caveat as i8; form path covered by gaps.mir.
 ; ISEL-LABEL: name: postinc_stream_i16
-; ISEL-DAG: {{S_LHWU_POST_IMM|S_LHWS_POST_IMM|LDU16|LD16}}
+; ISEL-DAG: {{S_LHWU_POST_IMM|S_LHWU_PRE_IMM|S_LHWU_POST_REG|S_LHWU_PRE_REG|S_LHWS_POST_IMM|S_LHWS_PRE_IMM|S_LHWS_POST_REG|S_LHWS_PRE_REG|LDU16|LD16}}
 ; ASM-LABEL: postinc_stream_i16:
 define i32 @postinc_stream_i16(ptr %p, i32 %n) {
 entry:
@@ -169,6 +170,54 @@ loop:
   %ld = load i16, ptr %bp, align 2
   %z = zext i16 %ld to i32
   %s2 = add i32 %s, %z
+  %bp2 = getelementptr i8, ptr %bp, i32 2
+  %i2 = add i32 %i, 1
+  %c = icmp ult i32 %i2, %n
+  br i1 %c, label %loop, label %exit
+exit:
+  %r = phi i32 [ 0, %entry ], [ %s2, %loop ]
+  ret i32 %r
+}
+
+; Signed byte stream (G_SEXTLOAD fuse → S_LBS_*). LSR may rewrite to PRE_REG.
+; ISEL-LABEL: name: postinc_stream_i8_sext
+; ISEL-DAG: {{S_LBS_POST_IMM|S_LBS_PRE_IMM|S_LBS_POST_REG|S_LBS_PRE_REG|LD8}}
+; ASM-LABEL: postinc_stream_i8_sext:
+define i32 @postinc_stream_i8_sext(ptr %p, i32 %n) {
+entry:
+  %cmp = icmp sgt i32 %n, 0
+  br i1 %cmp, label %loop, label %exit
+loop:
+  %s = phi i32 [ 0, %entry ], [ %s2, %loop ]
+  %i = phi i32 [ 0, %entry ], [ %i2, %loop ]
+  %bp = phi ptr [ %p, %entry ], [ %bp2, %loop ]
+  %ld = load i8, ptr %bp, align 1
+  %x = sext i8 %ld to i32
+  %s2 = add i32 %s, %x
+  %bp2 = getelementptr i8, ptr %bp, i32 1
+  %i2 = add i32 %i, 1
+  %c = icmp ult i32 %i2, %n
+  br i1 %c, label %loop, label %exit
+exit:
+  %r = phi i32 [ 0, %entry ], [ %s2, %loop ]
+  ret i32 %r
+}
+
+; Signed halfword stream (G_SEXTLOAD fuse → S_LHWS_*).
+; ISEL-LABEL: name: postinc_stream_i16_sext
+; ISEL-DAG: {{S_LHWS_POST_IMM|S_LHWS_PRE_IMM|S_LHWS_POST_REG|S_LHWS_PRE_REG|LD16}}
+; ASM-LABEL: postinc_stream_i16_sext:
+define i32 @postinc_stream_i16_sext(ptr %p, i32 %n) {
+entry:
+  %cmp = icmp sgt i32 %n, 0
+  br i1 %cmp, label %loop, label %exit
+loop:
+  %s = phi i32 [ 0, %entry ], [ %s2, %loop ]
+  %i = phi i32 [ 0, %entry ], [ %i2, %loop ]
+  %bp = phi ptr [ %p, %entry ], [ %bp2, %loop ]
+  %ld = load i16, ptr %bp, align 2
+  %x = sext i16 %ld to i32
+  %s2 = add i32 %s, %x
   %bp2 = getelementptr i8, ptr %bp, i32 2
   %i2 = add i32 %i, 1
   %c = icmp ult i32 %i2, %n

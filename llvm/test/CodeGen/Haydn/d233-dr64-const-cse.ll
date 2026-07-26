@@ -14,7 +14,7 @@ define i64 @cse_test(i32 %x) nounwind {
 ; CHECK-LABEL: cse_test:
 ; At most one "subi32 sp, sp, 8" from MOV_GPR_TO_DR64 expansion.
 ; (If CSE fires, duplicates are eliminated.)
-; CHECK: { sext32t64 d0, r1 }
+; CHECK: { {{.*}}sext32t64 d0, r1{{.*}} }
 ; CHECK-NOT: subi32{{.*}} sp, sp, 8
 entry:
   %a = zext i32 %x to i64

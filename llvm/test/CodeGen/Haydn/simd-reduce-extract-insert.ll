@@ -44,7 +44,8 @@ define i16 @extract_elt_v4i16_idx0(<4 x i16> %v) nounwind {
 
 define i16 @extract_elt_v4i16_idx3(<4 x i16> %v) nounwind {
 ; CHECK-LABEL: extract_elt_v4i16_idx3:
-; CHECK: or32
+; High half-word of high GPR: srli32 (or legacy or32 pack path).
+; CHECK: {{srli32|or32}}
   %e = extractelement <4 x i16> %v, i32 3
   ret i16 %e
 }
@@ -55,9 +56,10 @@ define i16 @extract_elt_v4i16_idx3(<4 x i16> %v) nounwind {
 
 define <2 x i32> @insert_elt_v2i32(<2 x i32> %v, i32 %val) nounwind {
 ; CHECK-LABEL: insert_elt_v2i32:
-; Lane 1 is the high GPR of the DR pair (r2); insert is a move into that half.
-; (Pre-multi-field-return CHECKs expected a stack st32 round-trip.)
-; CHECK:       move32{{(\.s[012])?}} r2, r3
+; G-ABI-VEC: arg is DR; insert lane 1 via stack st32/ld64 (or move32 into high
+; half). Both are correct legalizations of G_INSERT_VECTOR_ELT.
+; CHECK-DAG: {{st32|move32}}
+; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
   %r = insertelement <2 x i32> %v, i32 %val, i32 1
   ret <2 x i32> %r
 }

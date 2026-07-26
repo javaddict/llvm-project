@@ -42,12 +42,20 @@
 
 using namespace llvm;
 
-// Forward declaration: the helper is defined after run() and called from it.
-// Emits the D394 legacy -> _S<k>_FLEX map region; see its definition for the
-// full contract.
-static void emitLegacyToFlexMap(raw_ostream &o, const CodeGenTarget &Target,
-                                ArrayRef<const CodeGenInstruction *>
-                                    NumberedInstructions);
+// Forward declarations: helpers defined after run() and called from it.
+// Sparse `_S{0,1,2}` slot-member discovery feeds
+// GET_ALTERNATE_INST_OPCODE_FUNC (AIE MultiSlot_Pseudo / materializableInto
+// peer for targets that still use suffix-discovered Full members).
+struct SlotMemberVariantRow {
+  unsigned Members[3] = {0, 0, 0};
+};
+static std::map<unsigned, SlotMemberVariantRow>
+collectSparseAltSlotMemberRows(
+    ArrayRef<const CodeGenInstruction *> NumberedInstructions);
+static void emitAlternateInstsOpcodeFunc(
+    raw_ostream &o, const CodeGenTarget &Target,
+    ArrayRef<const CodeGenInstruction *> NumberedInstructions,
+    const std::vector<TGInstrLayout> &PseudoInstFormats);
 
 void CodeGenFormat::run(raw_ostream &o) {
   CodeGenTarget Target(Records);
@@ -85,7 +93,7 @@ void CodeGenFormat::run(raw_ostream &o) {
 
   // Instructions are going to be ordered as they are in
   // CodeGenEmitter
-  // NOTE (Haydn port, D394): upstream renamed getInstructionsByEnumValue to
+  // NOTE (Haydn port): upstream renamed getInstructionsByEnumValue to
   // getInstructions (same ArrayRef<const CodeGenInstruction *> return).
   ArrayRef<const CodeGenInstruction *> NumberedInstructions =
       Target.getInstructions();
@@ -150,43 +158,18 @@ void CodeGenFormat::run(raw_ostream &o) {
   o << "  }\n}\n";
   o << "#endif // GET_OPCODE_FORMATS_INDEX_FUNC\n\n";
 
-  o << "#ifdef GET_ALTERNATE_INST_OPCODE_FUNC\n"
-    << "#undef GET_ALTERNATE_INST_OPCODE_FUNC\n";
-
-  if (!PseudoInstFormats.empty()) {
-    o << "static std::vector<unsigned int> const AlternateInsts[] = {\n";
-    for (const auto &Inst : PseudoInstFormats) {
-      Inst.emitAlternateInstsOpcodeSet(o);
-      if (Inst.getInstrName() != PseudoInstFormats.back().getInstrName())
-        o << ", \n";
-    }
-    o << "\n};\n\n";
-  }
-
-  o << "const std::vector<unsigned int> *" << Target.getName().str()
-    << "MCFormats::getAlternateInstsOpcode";
-  o << "(unsigned int Opcode) const {\n";
-  o << "  switch (Opcode) {\n";
-  o << "  default:\n";
-  o << "    return nullptr;\n";
-  for (unsigned int I = 0; I < PseudoInstFormats.size(); I++)
-    PseudoInstFormats[I].emitAlternateInstsOpcode(o, I);
-  o << "  }\n}\n";
-  o << "#endif // GET_ALTERNATE_INST_OPCODE_FUNC\n\n";
-
   // ---------------------------------------------------------------------
-  // GET_LEGACY_TO_FLEX_MAP (D394)
+  // GET_ALTERNATE_INST_OPCODE_FUNC (AIE MultiSlot_Pseudo + Haydn sparse alts)
   // ---------------------------------------------------------------------
-  // Emits a static legacy -> per-slot-FLEX opcode map, .td-driven (no runtime
-  // name-scan). For every instruction whose name ends in `_S{0,1,2}_FLEX` the
-  // suffix is stripped to recover the legacy base name; if a real instruction
-  // of that base name exists, an entry {BaseOpc, [Base_S0, Base_S1,
-  // Base_S2]} (0 for missing slot variants) is emitted. AIE has no
-  // `_S<k>_FLEX` defs and so emits an empty (sentinel-only) table, which is
-  // inert: getFlexVariant always returns 0. The suffix is uniform across all
-  // Haydn Flex defs; stripping mirrors the prior runtime scan in
-  // HaydnFlexMaterialize.
-  emitLegacyToFlexMap(o, Target, NumberedInstructions);
+  // AIE path: MultiSlot_Pseudo materializableInto via
+  // addAlternateInstInMultiSlotPseudo (CodeGenFormat.cpp peer of AIE
+  // CodeGenFormat.cpp:467-499 / emit 142-164).
+  // Haydn: synthesize sparse size-3 AlternateInsts from Full-format
+  // `_S0`/`_S1`/`_S2` slot members (vector index == field/slot; 0 for
+  // missing). PlacementAlternative getLegalSlots ORs non-zero indices;
+  // post-RA leaveRegion setDesc(member); MC encodes Desc as-is.
+  emitAlternateInstsOpcodeFunc(o, Target, NumberedInstructions,
+                               PseudoInstFormats);
 
   if (InstFormats.size() > 0 && Slots.size() > 0) {
     o << "#ifdef GET_FORMATS_FORMATS_DEFS\n"
@@ -308,122 +291,140 @@ void CodeGenFormat::run(raw_ostream &o) {
 }
 
 namespace {
-/// Suffix strings for each slot, indexed 0/1/2. Mirrors the (now retired)
-/// runtime scan in HaydnFlexMaterialize — the suffix digit IS the slot.
-constexpr const char *FlexSlotSuffix[3] = {"_S0", "_S1", "_S2"};
+/// Suffix strings for each slot, indexed 0/1/2. Product contract: the suffix
+/// digit IS the slot (vector index == field/slot for sparse size-3
+/// AlternateInsts).
+constexpr const char *SlotMemberSuffix[3] = {"_S0", "_S1", "_S2"};
 } // end anonymous namespace
 
-/// Emit the GET_LEGACY_TO_FLEX_MAP region: a .td-driven legacy -> per-slot-FLEX
-/// opcode map plus a `getFlexVariant(LegacyOpc, Slot)` member on
-/// `<Target>MCFormats`. For each instruction whose name ends in
-/// `_S{0,1,2}_FLEX`, strip the suffix to recover the legacy base name; if a
-/// real instruction of that base name exists in \p NumberedInstructions, emit a
-/// row `{BaseOpc, {Base_S0, Base_S1, Base_S2}}` (0 for any
-/// missing slot variant). Targets without `_S<k>_FLEX` defs (e.g. AIE) emit a
-/// sentinel-only table, leaving `getFlexVariant` inert (always returns 0).
-static void emitLegacyToFlexMap(raw_ostream &o, const CodeGenTarget &Target,
-                                ArrayRef<const CodeGenInstruction *>
-                                    NumberedInstructions) {
-  const std::string TargetName = Target.getName().str();
-
-  // Map every instruction's name to its enum value (index in
-  // NumberedInstructions). One pass; names are unique.
+/// Collect logical-opcode -> per-slot member opcode rows by stripping
+/// `_S{0,1,2}` suffixes from Inst names. Sole feed for Haydn sparse
+/// AlternateInsts under GET_ALTERNATE_INST_OPCODE_FUNC (PlacementAlternative
+/// slot-member discovery). Not encode authority — post-RA setDesc(member)
+/// + Desc-as-is MC own materialize/encode.
+static std::map<unsigned, SlotMemberVariantRow>
+collectSparseAltSlotMemberRows(
+    ArrayRef<const CodeGenInstruction *> NumberedInstructions) {
   StringMap<unsigned> NameToEnum;
   for (unsigned Opc = 0, E = NumberedInstructions.size(); Opc < E; ++Opc)
     NameToEnum[NumberedInstructions[Opc]->TheDef->getName()] = Opc;
 
-  // Collect `(base, slot) -> FlexOpc` for every `_S<k>_FLEX` def whose base
-  // name resolves to a real legacy opcode. Keyed by the legacy opcode so the
-  // rows are naturally deduplicated and indexed by what the pass looks up.
-  struct FlexRow {
-    unsigned Variants[3] = {0, 0, 0};
-  };
-  std::map<unsigned, FlexRow> RowsByName;
+  std::map<unsigned, SlotMemberVariantRow> RowsByName;
   for (unsigned Opc = 0, E = NumberedInstructions.size(); Opc < E; ++Opc) {
     StringRef Name = NumberedInstructions[Opc]->TheDef->getName();
     for (unsigned Slot = 0; Slot < 3; ++Slot) {
-      StringRef Suffix = FlexSlotSuffix[Slot];
+      StringRef Suffix = SlotMemberSuffix[Slot];
       if (!Name.ends_with(Suffix))
         continue;
       StringRef Base = Name.drop_back(Suffix.size());
       auto It = NameToEnum.find(Base);
       if (It == NameToEnum.end())
-        continue; // Unmapped FLEX def (no legacy base) — decoder-only.
-      RowsByName[It->second].Variants[Slot] = Opc;
+        continue; // Unmapped member (no logical base) — decoder-only.
+      RowsByName[It->second].Members[Slot] = Opc;
     }
   }
+  return RowsByName;
+}
 
-  o << "#ifdef GET_LEGACY_TO_FLEX_MAP\n"
-    << "#undef GET_LEGACY_TO_FLEX_MAP\n\n";
+/// Emit GET_ALTERNATE_INST_OPCODE_FUNC (AIE MultiSlot_Pseudo path + Haydn
+/// sparse `_S*` slot-member synthesis). AIE peer: CodeGenFormat emit
+/// ~142-164 and addAlternateInstInMultiSlotPseudo (AIE dense
+/// materializableInto order). Haydn: sparse-alt rows are always size 3
+/// with 0 for missing slots so vector index == field/slot (FieldSlots =
+/// 1<<index; getLegalSlots ORs non-zero alt indices — sole materialize
+/// member discovery).
+static void emitAlternateInstsOpcodeFunc(
+    raw_ostream &o, const CodeGenTarget &Target,
+    ArrayRef<const CodeGenInstruction *> NumberedInstructions,
+    const std::vector<TGInstrLayout> &PseudoInstFormats) {
+  const std::string TargetName = Target.getName().str();
 
-  // Emit the static row table. Each row references the opcode enumerators by
-  // qualified name (`<Target>::<InstrName>`), so the region must be included
-  // where those enumerators are visible (the `<Target>MCFormats.cpp` includes
-  // `<Target>GenInstrInfo.inc`, which defines them at namespace scope).
-  o << "// Legacy opcode -> per-slot Flex opcode map (D394, .td-driven).\n"
-    << "// One row per legacy opcode that has at least one `_S{0,1,2}` "
-       "variant.\n"
-    << "// Variants[k] is the `_<base>_S<k>` opcode, or 0 if absent.\n"
-    << "struct " << TargetName << "LegacyToFlexEntry {\n"
-    << "  unsigned LegacyOpc;\n"
-    << "  unsigned Variants[3];\n"
-    << "};\n"
-    << "static constexpr const " << TargetName << "LegacyToFlexEntry "
-    << TargetName << "LegacyToFlexMap[] = {\n";
-  if (RowsByName.empty()) {
-    // A zero-size array is ill-formed in C++; emit a single inert sentinel
-    // so the table compiles and getFlexVariant (below) returns 0 for every
-    // query. This is the path targets with no `_S<k>_FLEX` defs take.
-    o << "  { 0, { 0, 0, 0 } } // sentinel (no _S<k> slot variants)\n";
-  } else {
-    for (const auto &KV : RowsByName) {
-      const unsigned LegacyOpc = KV.first;
-      const FlexRow &Row = KV.second;
-      StringRef LegacyName = NumberedInstructions[LegacyOpc]->TheDef->getName();
-      o << "  { " << TargetName << "::" << LegacyName << ", { ";
-      for (unsigned Slot = 0; Slot < 3; ++Slot) {
-        if (Slot)
-          o << ", ";
-        if (Row.Variants[Slot] != 0) {
-          StringRef FlexName =
-              NumberedInstructions[Row.Variants[Slot]]->TheDef->getName();
-          o << TargetName << "::" << FlexName;
-        } else {
-          o << "0";
-        }
+  // Names already covered by true MultiSlot_Pseudo (materializableInto).
+  std::set<std::string> PseudoNames;
+  for (const TGInstrLayout &P : PseudoInstFormats)
+    PseudoNames.insert(P.getInstrName());
+
+  // Sparse `_S*` slot-member logicals: size-3 members (index == slot),
+  // skipping any base that is already a MultiSlot_Pseudo (explicit
+  // materializableInto wins).
+  const auto SparseAltRows =
+      collectSparseAltSlotMemberRows(NumberedInstructions);
+  struct SparseAltEntry {
+    std::string LogicalName;
+    // Always length 3: Target::Name or "0" at missing slots (sparse alts).
+    std::string Members[3];
+  };
+  std::vector<SparseAltEntry> SparseAlts;
+  SparseAlts.reserve(SparseAltRows.size());
+  for (const auto &KV : SparseAltRows) {
+    const unsigned LogicalOpc = KV.first;
+    const SlotMemberVariantRow &Row = KV.second;
+    StringRef LogicalName =
+        NumberedInstructions[LogicalOpc]->TheDef->getName();
+    if (PseudoNames.count(LogicalName.str()))
+      continue;
+    SparseAltEntry Entry;
+    Entry.LogicalName = LogicalName.str();
+    bool Any = false;
+    for (unsigned Slot = 0; Slot < 3; ++Slot) {
+      if (Row.Members[Slot] == 0) {
+        Entry.Members[Slot] = "0";
+        continue;
       }
-      o << " } },\n";
+      Any = true;
+      StringRef MemName =
+          NumberedInstructions[Row.Members[Slot]]->TheDef->getName();
+      Entry.Members[Slot] = TargetName + "::" + MemName.str();
     }
+    if (Any)
+      SparseAlts.push_back(std::move(Entry));
   }
-  o << "};\n\n";
 
-  // O(1) lookup: switch on the legacy opcode to its row index in
-  // LegacyToFlexMap, then return Variants[Slot] (or 0 for an out-of-range
-  // Slot). Mirrors the generated getFormatDescIndex shape (case-per-opcode,
-  // default -> 0). When the table is sentinel-only (no _FLEX defs), the
-  // switch falls through to default and returns 0 for every query.
-  o << "unsigned int " << TargetName
-    << "MCFormats::getFlexVariant(unsigned int LegacyOpc,\n"
-    << "                            unsigned int Slot) const {\n"
-    << "  if (Slot >= 3)\n"
-    << "    return 0;\n"
-    << "  unsigned RowIdx;\n"
-    << "  switch (LegacyOpc) {\n"
-    << "  default:\n"
-    << "    return 0;\n";
-  unsigned RowIdx = 0;
-  for (const auto &KV : RowsByName) {
-    const unsigned LegacyOpc = KV.first;
-    StringRef LegacyName = NumberedInstructions[LegacyOpc]->TheDef->getName();
-    o << "  case " << TargetName << "::" << LegacyName << ":\n"
-      << "    RowIdx = " << RowIdx << ";\n"
-      << "    break;\n";
-    ++RowIdx;
+  const unsigned NumPseudo = PseudoInstFormats.size();
+  const unsigned NumSparseAlt = static_cast<unsigned>(SparseAlts.size());
+  const unsigned NumTotal = NumPseudo + NumSparseAlt;
+
+  o << "#ifdef GET_ALTERNATE_INST_OPCODE_FUNC\n"
+    << "#undef GET_ALTERNATE_INST_OPCODE_FUNC\n";
+
+  if (NumTotal != 0) {
+    o << "// Alternate member opcodes per multi-slot logical / sparse base.\n"
+      << "// MultiSlot_Pseudo materializableInto first (AIE dense path), then\n"
+      << "// Full-format `_S*` members as sparse size-3 (index==field; Haydn).\n"
+      << "// Zero means no member for that slot/field.\n"
+      << "static std::vector<unsigned int> const AlternateInsts[] = {\n";
+    for (unsigned I = 0; I < NumPseudo; ++I) {
+      PseudoInstFormats[I].emitAlternateInstsOpcodeSet(o);
+      if (I + 1 != NumTotal)
+        o << ", \n";
+    }
+    for (unsigned I = 0; I < NumSparseAlt; ++I) {
+      const SparseAltEntry &E = SparseAlts[I];
+      o << "    // " << TargetName << "::" << E.LogicalName
+        << " (Full members, sparse S0/S1/S2)\n";
+      o << "    { " << E.Members[0] << ", " << E.Members[1] << ", "
+        << E.Members[2] << " }";
+      if (NumPseudo + I + 1 != NumTotal)
+        o << ", \n";
+    }
+    o << "\n};\n\n";
   }
-  o << "  }\n"
-    << "  return " << TargetName << "LegacyToFlexMap[RowIdx].Variants[Slot];\n"
-    << "}\n";
-  o << "#endif // GET_LEGACY_TO_FLEX_MAP\n\n";
+
+  o << "const std::vector<unsigned int> *" << TargetName
+    << "MCFormats::getAlternateInstsOpcode";
+  o << "(unsigned int Opcode) const {\n";
+  o << "  switch (Opcode) {\n";
+  o << "  default:\n";
+  o << "    return nullptr;\n";
+  for (unsigned I = 0; I < NumPseudo; ++I)
+    PseudoInstFormats[I].emitAlternateInstsOpcode(o, I);
+  for (unsigned I = 0; I < NumSparseAlt; ++I) {
+    const SparseAltEntry &E = SparseAlts[I];
+    o << "  case " << TargetName << "::" << E.LogicalName << ":\n"
+      << "    return &AlternateInsts[" << (NumPseudo + I) << "];\n";
+  }
+  o << "  }\n}\n";
+  o << "#endif // GET_ALTERNATE_INST_OPCODE_FUNC\n\n";
 }
 
 void CodeGenFormat::computeSlotSets(TGTargetSlots &Slots,
@@ -737,7 +738,7 @@ void TGInstrLayout::resolveMCOperandNumber() {
     // If the operand matches by name, reference according to that
     // operand number. Non-matching operands are assumed to be in
     // order.
-    // NOTE (Haydn port, D394): upstream replaced CGIOperandList::hasOperandNamed
+    // NOTE (Haydn port): upstream replaced CGIOperandList::hasOperandNamed
     // (out-param) with findOperandNamed (returns std::optional<unsigned>); and
     // removed isFlatOperandNotEmitted entirely (vestigial do-not-encode assert).
     if (std::optional<unsigned> OpIdxOpt =
@@ -1041,7 +1042,7 @@ void TGFieldLayout::resolveFieldsDefInHierarchy(
     const TGFieldLayoutPtr &BaseFieldPtr) {
   const Record *const BaseRecord = CGI->TheDef;
 
-  // NOTE (Haydn port, D394): upstream Record::getSuperClasses returns
+  // NOTE (Haydn port): upstream Record::getSuperClasses returns
   // std::vector<const Record *> (post-order); AIE returned
   // ArrayRef<pair<const Record*, SMRange>>. SMRange carried only source loc;
   // the post-order traversal order is identical. Adapted to the vector form.

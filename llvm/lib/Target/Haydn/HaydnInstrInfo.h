@@ -88,6 +88,10 @@ class HaydnPipelinerLoopInfo : public TargetInstrInfo::PipelinerLoopInfo {
   // (AIEBasePipelinerLoopInfo.cpp:644-835).
   bool IsZOL = false;
   MachineInstr *LoopStart = nullptr;
+  // AIE MinTripCount peer (AIEBasePipelinerLoopInfo). 0 = unknown/unbounded.
+  // ZOL SMS is only safe when MinTripCount is known and large enough to cover
+  // prologue stages without a dynamic guard (ZOL cannot reverse its exit).
+  int64_t MinTripCount = 0;
 
 public:
   HaydnPipelinerLoopInfo(MachineFunction *MF, const HaydnInstrInfo *HII,
@@ -99,18 +103,18 @@ public:
 
   // ZOL constructor — for loops already in hardware-loop form.
   HaydnPipelinerLoopInfo(MachineFunction *MF, const HaydnInstrInfo *HII,
-                         MachineInstr *EndLoop, MachineInstr *LoopStart)
+                         MachineInstr *EndLoop, MachineInstr *LoopStart,
+                         int64_t MinTripCount)
       : MF(MF), HII(HII), EndLoop(EndLoop), CmpMI(nullptr),
         TripCountReg(), LoopBB(EndLoop->getParent()),
-        DL(EndLoop->getDebugLoc()), IsZOL(true), LoopStart(LoopStart) {}
+        DL(EndLoop->getDebugLoc()), IsZOL(true), LoopStart(LoopStart),
+        MinTripCount(MinTripCount) {}
 
   bool shouldIgnoreForPipelining(const MachineInstr *MI) const override;
 
-  // Reject schedules that produce no pipeline overlap (StageCount <= 1)
-  // PPS-3 stage-count gate (AIE canAcceptII MaxStageCount), and PPS-3
-  // reg-pressure gate (AIE canAcceptII/canAllocate TrackRegPressure) into
-  // this hook. Mirrors AIEBasePipelinerLoopInfo::shouldUseSchedule
-  // canAcceptII.
+  // Reject schedules that produce no pipeline overlap (StageCount <= 1),
+  // PPS-3 stage-count / reg-pressure gates, and AIE ZeroOverheadLoop
+  // MaxStageCount >= MinTripCount (cannot guard ZOL epilogues).
   bool shouldUseSchedule(SwingSchedulerDAG &SSD, SMSchedule &SMS) override;
 
   void recordSuccessfulSMS(MachineFunction &MF, MachineBasicBlock *KernelBB,
@@ -158,6 +162,21 @@ public:
       int FrameIndex, const TargetRegisterClass *RC, Register VReg,
       unsigned SubReg = 0,
       MachineInstr::MIFlag Flags = MachineInstr::NoFlags) const override;
+
+  // Stack-slot recognition for RA tooling + MachineInstr::getSpillSize /
+  // getRestoreSize (AsmPrinter spill comments / #<spill-kpi>). Port of
+  // AIEBaseInstrInfo.cpp:1965-2028 isStackSlotMemoryAccess (FI base +
+  // FixedStack MMO; Haydn SP = R13). PostFE peers use the same FixedStack
+  // MMO predicate after eliminateFrameIndex (AArch64/X86 shape; needed so
+  // getSpillSize sees CSR/RA spills at print time).
+  Register isLoadFromStackSlot(const MachineInstr &MI,
+                               int &FrameIndex) const override;
+  Register isStoreToStackSlot(const MachineInstr &MI,
+                              int &FrameIndex) const override;
+  Register isLoadFromStackSlotPostFE(const MachineInstr &MI,
+                                     int &FrameIndex) const override;
+  Register isStoreToStackSlotPostFE(const MachineInstr &MI,
+                                    int &FrameIndex) const override;
 
   bool analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                      MachineBasicBlock *&FBB,
@@ -217,7 +236,10 @@ public:
                             int64_t BrOffset = 0,
                             RegScavenger *RS = nullptr) const override;
 
-  // Return the encoded size of a machine instruction in bytes.
+  // Encoded size in bytes (B4.4): BUNDLE → encodedBytesFor(committed
+  // FormatID); bare real → ProductFormatDesc.Bytes. AIE peer:
+  // Format->getSize() (AIEBaseInstrInfo.cpp:546-555) / get(Opcode).getSize()
+  // (AIE1InstrInfo.cpp:646-651). Shared with Fixup + HardwareLoops + BR.
   unsigned getInstSizeInBytes(const MachineInstr &MI) const override;
 
   // Insert a standalone NOP at \p MI. Required for AIE-style cycle-level NOP
@@ -293,30 +315,6 @@ public:
   // no usable trip count, or an ambiguous compare. See HaydnInstrInfo.cpp.
   bool analyzeCountableLoop(MachineBasicBlock *LoopBB,
                             HaydnCountableLoop &Out) const;
-
-  // Dual-load placement hint (single authority).
-  // Over [Begin, End), when an LD32/LD64 follows a slot-0 LS occupant, record
-  // slot=1 on AltDescs only — **never** `setDesc(LD*_S1)`. Logical opcodes
-  // stay LD32/LD64; the encoder materializes the S1 Flex window from
-  // HaydnMCFlags. Bundle position is the public slot; `_S*` is encode-private.
-  // LD32/LD64 use Slot01_LD so the HR can auction S0|S1 without a second
-  // opcode family. Called by post-RA enterMBB before scheduling.
-  void promoteLoadsToSlot1(MachineBasicBlock::iterator Begin,
-                           MachineBasicBlock::iterator End) const;
-
-  // record \p MI's VLIW placement slot without baking it into the
-  // opcode. Slot is written to `HaydnMachineFunctionInfo::getAltDescs`
-  // (`HaydnAlternateDescriptors::setSlot`) and survives through AsmPrinter
-  // MCInstLower (`HaydnMCFlags`). The encoder materializes Flex/private
-  // encode opcodes only at encode time — `MI.setDesc(*_S*)` is gone.
-  // When \p Slot is given, it is used directly (the HR-recorded slot). When
-  // \p Slot is std::nullopt, the slot is derived from FlexMap legal slots
-  // (prefer S0, then S1) for MIs the HR never auctioned.
-  // \returns true if a placement slot was recorded on AltDescs; false if the
-  // MI is not placeable (bundle/pseudo/debug, or no legal slot). The MachineInstr
-  // opcode is never rewritten (I1: logical ops after ISel).
-  bool commitSlotFlexVariant(MachineInstr &MI,
-                             std::optional<unsigned> Slot = std::nullopt) const;
 
   //===------------------------------------------------------------------===
   // Addressing-mode hooks for SMS (MachinePipeliner) and mem clustering.

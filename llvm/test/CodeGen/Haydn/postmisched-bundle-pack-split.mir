@@ -1,0 +1,288 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+#
+# G-BUNDLE-FORMAT / AIE-parity post-RA pack + split regression.
+#
+# 1. Independent ALU ops may BUNDLE (control — pack works).
+# 2. Dual S0-only stores must NOT share one BUNDLE (HR serializes).
+# 3. Dual LD32 may BUNDLE (dual-load product).
+# 4. ST32 + independent ADD32: both present; co-issue optional.
+# 5. ARCTAN stays alone vs independent ALU (issue-alone schedule rule).
+# 6. LD + MAC independent may BUNDLE (DSP density / AIE multi-slot class).
+# 7. Dual MAC may BUNDLE (S1|S2).
+
+--- |
+  define void @pack_two_alu() { ret void }
+  define void @split_dual_store() { ret void }
+  define void @pack_dual_load() { ret void }
+  define void @pack_store_alu() { ret void }
+  define void @arctan_alone() { ret void }
+  define void @pack_ld_mac() { ret void }
+  define void @pack_dual_mac() { ret void }
+...
+---
+name:            pack_two_alu
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r0, $r3, $r4
+
+    ; CHECK-LABEL: name: pack_two_alu
+    ; B1.1: multi-MI BUNDLE root carries durable FormatID imm (Bundle128Full=0).
+    ; CHECK: BUNDLE 0
+    ; CHECK: ADDI32
+    ; CHECK: ADD32
+    ; CHECK: JALR
+    $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
+    $r7 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
+    $r0 = COPY $r2
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+name:            split_dual_store
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4
+
+    ; Two ST32 are S0-only — must not co-issue in one BUNDLE.
+    ; CHECK-LABEL: name: split_dual_store
+    ; CHECK: ST32
+    ; CHECK: ST32
+    ; CHECK-NOT: BUNDLE
+    ; CHECK: JALR
+    ST32 $r1, $r2, 0
+    ST32 $r3, $r4, 4
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+name:            pack_dual_load
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1, $r2
+
+    ; Dual LD32 (S0|S1) should pack when independent.
+    ; CHECK-LABEL: name: pack_dual_load
+    ; CHECK: BUNDLE 0
+    ; CHECK: LD32
+    ; CHECK: LD32
+    ; CHECK: JALR
+    $r3 = LD32 $r1, 0
+    $r4 = LD32 $r2, 0
+    $r0 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+name:            pack_store_alu
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4
+
+    ; ST32 + ADD32 both survive; co-issue is QoR (not required for correctness).
+    ; CHECK-LABEL: name: pack_store_alu
+    ; CHECK-DAG: ST32
+    ; CHECK-DAG: ADD32
+    ; CHECK: JALR
+    ST32 $r1, $r2, 0
+    $r5 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
+    $r0 = COPY $r5
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+name:            arctan_alone
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$r0', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $d0, $r0
+
+    ; ARCTAN issue-alone: no BUNDLE wrapping ARCTAN with ADDI32.
+    ; CHECK-LABEL: name: arctan_alone
+    ; CHECK: ARCTAN
+    ; CHECK: ADDI32
+    ; CHECK-NOT: BUNDLE
+    ; CHECK: JALR
+    $r1 = ARCTAN $d0, 2
+    $r5 = ADDI32 $r0, 10, implicit-def dead $sfr
+    $r0 = COPY $r1
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+name:            pack_ld_mac
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$d4', virtual-reg: '' }
+  - { reg: '$d5', virtual-reg: '' }
+  - { reg: '$d6', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1, $d4, $d5, $d6
+
+    ; LD32 (S0|S1) + F2MULAA32R_HHLL (S1|S2) — AIE-style multi-slot density.
+    ; CHECK-LABEL: name: pack_ld_mac
+    ; CHECK: BUNDLE 0
+    ; CHECK-DAG: LD32
+    ; CHECK-DAG: F2MULAA32R_HHLL
+    ; CHECK: JALR
+    $r3 = LD32 $r1, 0
+    $d4 = F2MULAA32R_HHLL $d4, $d5, $d6, implicit-def dead $sfr
+    $r0 = COPY $r3
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+name:            pack_dual_mac
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$d1', virtual-reg: '' }
+  - { reg: '$d2', virtual-reg: '' }
+  - { reg: '$d3', virtual-reg: '' }
+  - { reg: '$d4', virtual-reg: '' }
+  - { reg: '$d5', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $d2, $d3, $d4, $d5
+
+    ; Dual MAC on S1|S2 should pack when independent.
+    ; CHECK-LABEL: name: pack_dual_mac
+    ; CHECK: BUNDLE 0
+    ; CHECK: F2MULAA32R_HHLL
+    ; CHECK: F2MULAA32R_HHLL
+    ; CHECK: JALR
+    $d0 = F2MULAA32R_HHLL $d0, $d1, $d2, implicit-def dead $sfr
+    $d3 = F2MULAA32R_HHLL $d3, $d4, $d5, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...

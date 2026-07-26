@@ -45,9 +45,11 @@ define i64 @test_zext_i8_arith(i8 %x, i64 %y) nounwind {
   ret i64 %result
 }
 
-; Test i16 -> i64 zero-extend used in shift (common pattern)
+; Test i16 -> i64 zero-extend used in shift (common pattern).
+; Shift amount only needs the low 32 bits, so GISel masks with and32
+; (not and64) before sll64.
 ; CHECK-LABEL: test_zext_i16_shift:
-; CHECK: and64
+; CHECK: and32
 ; CHECK: sll64
 define i64 @test_zext_i16_shift(i16 %x, i64 %y) nounwind {
   %ext = zext i16 %x to i64

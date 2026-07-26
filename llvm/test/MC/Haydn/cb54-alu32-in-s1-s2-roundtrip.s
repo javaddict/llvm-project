@@ -50,9 +50,10 @@
 
 # Each bundle is 16 bytes (cursor advances 0x10 per bundle), proving
 # Bundle128 packing with both slots populated on one objdump line.
-# CHECK:      0: {{.*}} neg32 {{.*}} add64
+# B3.5 source-order S2-first: print is S0-S1-S2 (high-prefer members last).
+# CHECK:      0: {{.*}} add64 {{.*}} neg32
 # CHECK:      10: {{.*}} not32 {{.*}} add64
-# CHECK:      20: {{.*}} not32 {{.*}} popcount32
+# CHECK:      20: {{.*}} popcount32 {{.*}} not32
 # CHECK:      30: {{.*}} add64 {{.*}} add64
 # CHECK-NOT:  <unknown>
 # CHECK-NOT:  c.add

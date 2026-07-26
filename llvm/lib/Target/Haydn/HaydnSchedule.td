@@ -79,10 +79,9 @@ def Slot01_LD    : InstrItinClass;  // Slot 0 or 1 (plain LD64 — : the spec
                                    // D_LDW_WITH_IMM allows a 64-bit load in slot 0
                                    // (Load/Store unit) OR slot 1 (Load unit). A
                                    // choice-set itinerary lets the DFA/SMS pack two
-                                   // such loads (slot0+slot1) in one cycle. The
-                                   // post-RA promoteLoadsToSlot1 rewrites a second
-                                   // LD64 -> LD64_S1 when slot 0 is occupied, so the
-                                   // final encoding is unambiguous.)
+                                   // such loads (slot0+slot1) in one cycle. Post-RA
+                                   // HR tryAddProduct → setDesc materializes
+                                   // LD64_S0/S1 (B3.exit.3; no promoteLoads).)
 def Slot1_ALU    : InstrItinClass;  // Slot 1 only (SIMD-multiply the DB restricts
                                    // to slot 1 — capstone-schedule-port-audit
                                    // §(b)-1, : 16 X2/X4 SIMD-MAC ops

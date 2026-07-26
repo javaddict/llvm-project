@@ -1,0 +1,85 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+#
+# G-PACK-LEGAL rule 1: dual R0 defs in one Bundle128 cycle are WRITE_CONFLICT
+# on BundleSim. R0 is soft-zero (not hardwired). XOR32 R0,R0,R0 and a second
+# def of R0 must NOT co-issue.
+#
+# Without hasSameBundleWAW tracking R0, PostRA packed:
+#   { xor32 r0,r0,r0; addi32_w r0, r1, 0; ... } → ISS WRITE_CONFLICT.
+#
+# CONTROL: independent soft-zero + write to a different reg may still pack.
+
+--- |
+  define void @test_r0_dual_def_no_bundle() { ret void }
+  define void @test_r0_softzero_with_other_def_can_bundle() { ret void }
+...
+---
+name:            test_r0_dual_def_no_bundle
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1
+
+    ; CHECK-LABEL: name: test_r0_dual_def_no_bundle
+    ; Soft-zero then redefine R0 — must stay separate (no BUNDLE wrapping both).
+    ; After B3.1 materialize, opcodes may be format-member (XOR32_S2 etc.).
+    ; CHECK: $r0 = XOR32{{(_S[0-2])?}} $r0, $r0
+    ; CHECK-NOT: BUNDLE{{.*}}$r0 = XOR32{{.*}}$r0 = ADDI32
+    ; CHECK: $r0 = ADDI32{{(_S[0-2])?}}
+    ; CHECK: JALR
+    $r0 = XOR32 $r0, $r0, implicit-def dead $sfr
+    $r0 = ADDI32 $r1, 0, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+name:            test_r0_softzero_with_other_def_can_bundle
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1, $r2
+
+    ; CHECK-LABEL: name: test_r0_softzero_with_other_def_can_bundle
+    ; Soft-zero R0 + independent write to R3 may co-issue (no R0 dual-def).
+    ; CHECK: BUNDLE 0,
+    ; CHECK: XOR32
+    ; CHECK: ADD32
+    ; CHECK: JALR
+    $r0 = XOR32 $r0, $r0, implicit-def dead $sfr
+    $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

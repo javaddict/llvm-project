@@ -31,6 +31,7 @@
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
@@ -162,8 +163,11 @@ bool HaydnExpandPseudos::runOnMachineFunction(MachineFunction &MF) {
   TII = STI->getInstrInfo();
 
   bool Modified = false;
-  for (auto &MBB : MF)
-    Modified |= expandMBB(MBB);
+  // Iterator form so VAARG expand can insert Stack/Reg/Join MBBs and still
+  // expand residual pseudos in Join.
+  for (MachineFunction::iterator MBBI = MF.begin(), MBBE = MF.end();
+       MBBI != MBBE; ++MBBI)
+    Modified |= expandMBB(*MBBI);
 
   // Bundle interior residual expand. Product post-inc home is
   // HaydnExpandPostIncEarly (pre-pack, default ON). LoadStoreOpt form is
@@ -569,9 +573,36 @@ bool HaydnExpandPseudos::expandMI(MachineBasicBlock &MBB, MachineInstr &MI,
   case Haydn::VACOPY:
     return expandVACOPY(MBB, MI);
 
+  case Haydn::VAARG_I32:
+    return expandVAARG(MBB, MI, NextMBBI, /*IsI64=*/false);
+
+  case Haydn::VAARG_I64:
+    return expandVAARG(MBB, MI, NextMBBI, /*IsI64=*/true);
+
   case Haydn::VAEND:
     // Baremetal va_list has no owned resources.
     MI.eraseFromParent();
+    return true;
+
+  // HardwareLoops emits SET_HWLOOP{,_REG} (sel, MBB start/end, count/rs).
+  // Before PostRA pack they must be the real wide forms that materialize
+  // into SET_HWLOOP_{W,F2_W}_S0 (same operand structure: imm + 2×brtarget +
+  // cnt/rs). Flex wrongly pairs SET_HWLOOP_REG → REG_S0 (4 GPRs); packing
+  // that shape corrupts encoding. Convert here so the bundle printer is
+  // pure Desc-only Lower (AIE serialize path).
+  case Haydn::SET_HWLOOP_REG:
+    assert(MI.getNumOperands() >= 4 && MI.getOperand(0).isImm() &&
+           MI.getOperand(1).isMBB() && MI.getOperand(2).isMBB() &&
+           MI.getOperand(3).isReg() &&
+           "SET_HWLOOP_REG shape: sel, start, end, rs");
+    MI.setDesc(TII->get(Haydn::SET_HWLOOP_F2_W));
+    return true;
+  case Haydn::SET_HWLOOP:
+    assert(MI.getNumOperands() >= 4 && MI.getOperand(0).isImm() &&
+           MI.getOperand(1).isMBB() && MI.getOperand(2).isMBB() &&
+           MI.getOperand(3).isImm() &&
+           "SET_HWLOOP shape: sel, start, end, cnt");
+    MI.setDesc(TII->get(Haydn::SET_HWLOOP_W));
     return true;
   }
 }
@@ -604,10 +635,16 @@ bool HaydnExpandPseudos::expandVASTART(MachineBasicBlock &MBB,
   // PreferNotR12: R12 is a normal GPR, not free AT. Exclude VaListPtr so we
   // never steal the base used by ST32 field writes. Frame layout is final
   // (ExpandPseudos runs after PEI in addPreSched2).
+  //
+  // NeedsZeroBase: StoreNegSizeOff does ADDI Scr, R0, -BankSize (R0 = zero
+  // source). Scr must not be R0; policy routes to scavenger (and refuses a
+  // dirty R0 borrow). No hard Exclude of R0 — soft-zero state is checked.
   const Register Exclude[] = {VaListPtr};
   withPostRAScratch(
       MBB, InsertPt, DL, *TII, *STI, /*PreferNotR12=*/true,
       [&](Register Scr) {
+        assert(Scr != Haydn::R0 &&
+               "VASTART scratch must not be soft-zero R0");
         auto StoreFIAddr = [&](int FI, int64_t Extra, int FieldOff) {
           Register FrameReg;
           int64_t Offset =
@@ -645,7 +682,7 @@ bool HaydnExpandPseudos::expandVASTART(MachineBasicBlock &MBB,
         StoreNegSizeOff(GprSize, /*FieldOff=*/12);
         StoreNegSizeOff(DrSize, /*FieldOff=*/16);
       },
-      Exclude);
+      Exclude, PostRASoftZero::NeedsZeroBase);
 
   MI.eraseFromParent();
   return true;
@@ -676,6 +713,371 @@ bool HaydnExpandPseudos::expandVACOPY(MachineBasicBlock &MBB,
       Exclude);
 
   MI.eraseFromParent();
+  return true;
+}
+
+//===----------------------------------------------------------------------===//
+// VAARG_I32 / VAARG_I64 — unified two-bank + stack overflow (CB-131)
+//===----------------------------------------------------------------------===//
+//
+// AArch64-style:
+//   if (offs + n_reg > 0)  // bank exhausted (offs starts at -BankSize; 0 if empty)
+//     val = *__stack;  __stack += 8;   // CCAssignToStack<8,8>
+//   else
+//     val = *(top + offs);  offs += n_reg;  // GR:4, DR:8
+//
+// Post-RA: both paths write the same phys Dst; split MBB for the compare.
+//
+// Scratch contract (must NOT use withPostRAScratch around the branch):
+//   withPostRAScratch restores at InsertPt after the lambda. If the lambda
+//   emits terminators, that restore lands after BNEZ/B → verifier:
+//   "Non-terminator after first terminator". Instead: free-first scavengers;
+//   if a live reg must be borrowed, spill at MBB head and restore at Join
+//   entry (after both arms define Dst).
+
+namespace {
+
+// Spill a live GPR. The shared PostRAScratchFI is only safe for ONE
+// concurrent borrow — if two scratches both need spill they must not share
+// that slot (looped va_arg: IV and a constant both landed on sp+0 → ABORT).
+// UseAllowFI: true only for the first spill in a multi-scratch expand.
+struct VAARGSpillHome {
+  enum Kind { None, FrameIndex, SPBracket } K = None;
+  Register FrameReg;
+  int64_t Off = 0;
+};
+
+static VAARGSpillHome vaargBeginSpill(MachineBasicBlock &MBB,
+                                      MachineBasicBlock::iterator I,
+                                      const DebugLoc &DL,
+                                      const TargetInstrInfo &TII,
+                                      const HaydnSubtarget &ST, Register Scr,
+                                      bool UseAllowFI) {
+  MachineFunction &MF = *MBB.getParent();
+  auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
+  int SpillFI = FuncInfo->getBranchRelaxationScratchFI();
+  if (SpillFI < 0)
+    SpillFI = FuncInfo->getPostRAScratchFI();
+
+  VAARGSpillHome Home;
+  if (UseAllowFI && SpillFI >= 0) {
+    const HaydnFrameLowering *TFL = ST.getFrameLowering();
+    Home.K = VAARGSpillHome::FrameIndex;
+    Home.Off =
+        TFL->getFrameIndexReference(MF, SpillFI, Home.FrameReg).getFixed();
+    if (isInt<16>(Home.Off)) {
+      BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
+          .addReg(Scr)
+          .addReg(Home.FrameReg)
+          .addImm(Home.Off);
+    } else {
+      // Large frame: materialize via soft-zero R0 temp.
+      BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32_W), Haydn::R0)
+          .addReg(Home.FrameReg)
+          .addImm(Home.Off);
+      BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
+          .addReg(Scr)
+          .addReg(Haydn::R0)
+          .addImm(0);
+      BuildMI(MBB, I, DL, TII.get(Haydn::XOR32), Haydn::R0)
+          .addReg(Haydn::R0)
+          .addReg(Haydn::R0);
+    }
+    return Home;
+  }
+
+  // Nested SP brackets: each spill owns 8 bytes at [sp]; restore LIFO.
+  Home.K = VAARGSpillHome::SPBracket;
+  BuildMI(MBB, I, DL, TII.get(Haydn::SUBI32), Haydn::R13)
+      .addReg(Haydn::R13)
+      .addImm(8);
+  BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
+      .addReg(Scr)
+      .addReg(Haydn::R13)
+      .addImm(0);
+  return Home;
+}
+
+static void vaargEndSpill(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                          const DebugLoc &DL, const TargetInstrInfo &TII,
+                          Register Scr, const VAARGSpillHome &Home) {
+  if (Home.K == VAARGSpillHome::None)
+    return;
+  if (Home.K == VAARGSpillHome::FrameIndex) {
+    if (isInt<16>(Home.Off)) {
+      BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Scr)
+          .addReg(Home.FrameReg)
+          .addImm(Home.Off);
+    } else {
+      BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32_W), Haydn::R0)
+          .addReg(Home.FrameReg)
+          .addImm(Home.Off);
+      BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Scr)
+          .addReg(Haydn::R0)
+          .addImm(0);
+      BuildMI(MBB, I, DL, TII.get(Haydn::XOR32), Haydn::R0)
+          .addReg(Haydn::R0)
+          .addReg(Haydn::R0);
+    }
+    return;
+  }
+  BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Scr)
+      .addReg(Haydn::R13)
+      .addImm(0);
+  BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32_W), Haydn::R13)
+      .addReg(Haydn::R13)
+      .addImm(8);
+}
+
+} // namespace
+
+bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
+                                     MachineBasicBlock::iterator &NextMBBI,
+                                     bool IsI64) {
+  MachineFunction &MF = *MBB.getParent();
+  auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
+  DebugLoc DL = MI.getDebugLoc();
+
+  Register Dst = MI.getOperand(0).getReg();
+  Register VaList = MI.getOperand(1).getReg();
+
+  // va_list field offsets (must match VASTART / ISel comments).
+  constexpr int kStackField = 0;
+  constexpr int kGrTopField = 4;
+  constexpr int kVrTopField = 8;
+  constexpr int kGrOffsField = 12;
+  constexpr int kVrOffsField = 16;
+  // HaydnCallingConv.td CCAssignToStack<8, 8>.
+  constexpr int64_t kStackStep = 8;
+
+  const int TopField = IsI64 ? kVrTopField : kGrTopField;
+  const int OffsField = IsI64 ? kVrOffsField : kGrOffsField;
+  const int64_t RegStep = IsI64 ? 8 : 4;
+  const unsigned LoadOpc = IsI64 ? Haydn::LD64 : Haydn::LD32;
+
+  // Do NOT gate on hasVarArgsSaveAreas(). VAARG only walks the structured
+  // va_list in memory; the list may have been created in a *different*
+  // function (stdarg-2: foo(int, va_list) / bar reading global gap). Gating
+  // on the current MF being variadic erased those VAARGs and left Dst
+  // undefined → ABORT. VASTART still requires save areas in *its* MF.
+  (void)FuncInfo;
+
+  // --- Scavenge 3 GPRs at MI (free first; spill live ones). ---
+  // Only one FI home exists; if more than one scratch needs a spill we fall
+  // back to SP brackets (nested). Restores always land on Join, never after
+  // the MBB terminators.
+  SmallVector<Register, 4> Exclude;
+  if (VaList.isPhysical())
+    Exclude.push_back(VaList);
+  if (Dst.isPhysical())
+    Exclude.push_back(Dst);
+
+  bool Spill0 = false, Spill1 = false, Spill2 = false;
+  Register S0 =
+      findPostRAScratchGPR(MBB, MI.getIterator(), /*PreferNotR12=*/true,
+                           Spill0, Exclude);
+  Exclude.push_back(S0);
+  Register S1 =
+      findPostRAScratchGPR(MBB, MI.getIterator(), /*PreferNotR12=*/true,
+                           Spill1, Exclude);
+  Exclude.push_back(S1);
+  Register S2 =
+      findPostRAScratchGPR(MBB, MI.getIterator(), /*PreferNotR12=*/true,
+                           Spill2, Exclude);
+
+  // --- Split MBB at MI: rest → Join; Stack/Reg arms; head stays in MBB. ---
+  const BasicBlock *BB = MBB.getBasicBlock();
+  MachineBasicBlock *StackMBB = MF.CreateMachineBasicBlock(BB);
+  MachineBasicBlock *RegMBB = MF.CreateMachineBasicBlock(BB);
+  MachineBasicBlock *JoinMBB = MF.CreateMachineBasicBlock(BB);
+  MachineFunction::iterator MIt = std::next(MBB.getIterator());
+  // Layout: MBB → Stack → Reg → Join → <old next> (explicit B, no fallthrough).
+  MF.insert(MIt, StackMBB);
+  MF.insert(MIt, RegMBB);
+  MF.insert(MIt, JoinMBB);
+
+  JoinMBB->splice(JoinMBB->end(), &MBB, std::next(MI.getIterator()), MBB.end());
+  JoinMBB->transferSuccessorsAndUpdatePHIs(&MBB);
+
+  // Spill lives at head (before MI). Always SP-bracket (never shared
+  // PostRAScratchFI): the FI is a single slot also used by branch-relax /
+  // other post-RA scavenges in the same window — two st32 to the same home
+  // clobbered the loop IV (looped va_arg ABORT). Nested brackets: S0,S1,S2
+  // then restore S2,S1,S0 at Join.
+  MachineBasicBlock::iterator HeadPt = MI.getIterator();
+  VAARGSpillHome Home0, Home1, Home2;
+  if (Spill0)
+    Home0 = vaargBeginSpill(MBB, HeadPt, DL, *TII, *STI, S0,
+                            /*UseAllowFI=*/false);
+  if (Spill1)
+    Home1 = vaargBeginSpill(MBB, HeadPt, DL, *TII, *STI, S1,
+                            /*UseAllowFI=*/false);
+  if (Spill2)
+    Home2 = vaargBeginSpill(MBB, HeadPt, DL, *TII, *STI, S2,
+                            /*UseAllowFI=*/false);
+
+  // Head: load offs/top, UseStack = (offs + RegStep > 0).
+  //   S0 = CurOff, S1 = Top, S2 = Tentative then UseStack.
+  BuildMI(MBB, HeadPt, DL, TII->get(Haydn::LD32), S0)
+      .addReg(VaList)
+      .addImm(OffsField);
+  BuildMI(MBB, HeadPt, DL, TII->get(Haydn::LD32), S1)
+      .addReg(VaList)
+      .addImm(TopField);
+  BuildMI(MBB, HeadPt, DL, TII->get(Haydn::ADDI32_W), S2)
+      .addReg(S0)
+      .addImm(RegStep);
+  // UseStack = (0 < Tentative) → SLT rd, r0, Tentative; overwrites Tentative.
+  BuildMI(MBB, HeadPt, DL, TII->get(Haydn::SLT32), S2)
+      .addReg(Haydn::R0)
+      .addReg(S2);
+
+  // Drop the pseudo now so terminators are truly last in MBB.
+  MI.eraseFromParent();
+
+  // MBB ends with: BNEZ UseStack → Stack; B → Reg.
+  BuildMI(MBB, MBB.end(), DL, TII->get(Haydn::BNEZ_W))
+      .addReg(S2)
+      .addMBB(StackMBB);
+  BuildMI(MBB, MBB.end(), DL, TII->get(Haydn::B)).addMBB(RegMBB);
+  MBB.addSuccessor(StackMBB);
+  MBB.addSuccessor(RegMBB);
+
+  // Result materialization: never write Dst before va_list stores if Dst may
+  // alias VaList (common: last va_arg into the return GPR that held ap).
+  // I32: load into S2, update list, then Dst = S2. I64: Dst is DR — cannot
+  // alias VaList (GPR); load into Dst after address is ready, still update
+  // list using VaList before any further uses of Dst as a GPR (n/a).
+  auto EmitI32Result = [&](MachineBasicBlock &BB,
+                           MachineBasicBlock::iterator Ins, Register Val) {
+    if (Dst != Val)
+      BuildMI(BB, Ins, DL, TII->get(Haydn::ADD32), Dst)
+          .addReg(Val)
+          .addReg(Haydn::R0);
+  };
+
+  // --- Stack path: val = *__stack; __stack += 8. ---
+  {
+    auto Ins = StackMBB->end();
+    BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::LD32), S1)
+        .addReg(VaList)
+        .addImm(kStackField);
+    if (IsI64) {
+      BuildMI(*StackMBB, Ins, DL, TII->get(LoadOpc), Dst)
+          .addReg(S1)
+          .addImm(0);
+      BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::ADDI32_W), S0)
+          .addReg(S1)
+          .addImm(kStackStep);
+      BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::ST32))
+          .addReg(S0)
+          .addReg(VaList)
+          .addImm(kStackField);
+    } else {
+      // Value in S2 first so VaList stays valid for the cursor store.
+      BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::LD32), S2)
+          .addReg(S1)
+          .addImm(0);
+      BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::ADDI32_W), S0)
+          .addReg(S1)
+          .addImm(kStackStep);
+      BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::ST32))
+          .addReg(S0)
+          .addReg(VaList)
+          .addImm(kStackField);
+      EmitI32Result(*StackMBB, Ins, S2);
+    }
+    BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::B)).addMBB(JoinMBB);
+    StackMBB->addSuccessor(JoinMBB);
+  }
+
+  // --- Reg path: reload offs/top, val = *(top+off), offs += n. ---
+  {
+    auto Ins = RegMBB->end();
+    BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::LD32), S0)
+        .addReg(VaList)
+        .addImm(OffsField);
+    BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::LD32), S1)
+        .addReg(VaList)
+        .addImm(TopField);
+    BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::ADD32), S1)
+        .addReg(S1)
+        .addReg(S0);
+    if (IsI64) {
+      BuildMI(*RegMBB, Ins, DL, TII->get(LoadOpc), Dst)
+          .addReg(S1)
+          .addImm(0);
+      BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::ADDI32_W), S0)
+          .addReg(S0)
+          .addImm(RegStep);
+      BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::ST32))
+          .addReg(S0)
+          .addReg(VaList)
+          .addImm(OffsField);
+    } else {
+      BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::LD32), S2)
+          .addReg(S1)
+          .addImm(0);
+      BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::ADDI32_W), S0)
+          .addReg(S0)
+          .addImm(RegStep);
+      BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::ST32))
+          .addReg(S0)
+          .addReg(VaList)
+          .addImm(OffsField);
+      EmitI32Result(*RegMBB, Ins, S2);
+    }
+    BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::B)).addMBB(JoinMBB);
+    RegMBB->addSuccessor(JoinMBB);
+  }
+
+  // Restore borrowed lives at Join entry (before residual code). Reverse of
+  // spill order so nested SP brackets unwind correctly.
+  {
+    auto JoinPt = JoinMBB->begin();
+    if (Spill2)
+      vaargEndSpill(*JoinMBB, JoinPt, DL, *TII, S2, Home2);
+    if (Spill1)
+      vaargEndSpill(*JoinMBB, JoinPt, DL, *TII, S1, Home1);
+    if (Spill0)
+      vaargEndSpill(*JoinMBB, JoinPt, DL, *TII, S0, Home0);
+  }
+
+  // Post-RA split live-ins: regs live across the original VAARG must enter
+  // Stack/Reg/Join; Dst is defined on both arms → live-in Join; VaList used
+  // on both arms.
+  {
+    const TargetRegisterInfo &TRI = *MF.getSubtarget().getRegisterInfo();
+    LivePhysRegs LPR(TRI);
+    LPR.addLiveOuts(*JoinMBB);
+    for (MachineBasicBlock::iterator II = JoinMBB->end();
+         II != JoinMBB->begin();) {
+      --II;
+      LPR.stepBackward(*II);
+    }
+    for (MCRegister R : LPR) {
+      if (!R)
+        continue;
+      if (!StackMBB->isLiveIn(R))
+        StackMBB->addLiveIn(R);
+      if (!RegMBB->isLiveIn(R))
+        RegMBB->addLiveIn(R);
+      if (!JoinMBB->isLiveIn(R))
+        JoinMBB->addLiveIn(R);
+    }
+    if (Dst.isPhysical() && !JoinMBB->isLiveIn(Dst))
+      JoinMBB->addLiveIn(Dst);
+    if (VaList.isPhysical()) {
+      if (!StackMBB->isLiveIn(VaList))
+        StackMBB->addLiveIn(VaList);
+      if (!RegMBB->isLiveIn(VaList))
+        RegMBB->addLiveIn(VaList);
+    }
+  }
+
+  // Expand loop: do not walk into the new Stack/Reg/Join blocks from here;
+  // runOnMachineFunction iterates all MBBs and will expand Join later.
+  NextMBBI = MBB.end();
   return true;
 }
 

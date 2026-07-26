@@ -42,10 +42,9 @@ define <4 x i16> @simd_v4i16_mul(<4 x i16> %a, <4 x i16> %b) nounwind {
 
 define void @simd_v4i16_load_store(ptr %ptr, <4 x i16> %val) nounwind {
 ; CHECK-LABEL: simd_v4i16_load_store:
-; The store may be emitted as ST64 (DR64) or two ST32s after the
-; MOV_GPR_TO_DR64 + ST64 peephole fold in HaydnPostSelectOptimize.
-; Both correctly store the 8-byte <4 x i16> value.
-; CHECK: st32
+; G-ABI-VEC: <4 x i16> lives in DR; store is dual d_sw_{l,h}_with_imm (or
+; ST64 / ST32 pair after peephole). Accept any of these encodings.
+; CHECK-DAG: {{d_sw_l_with_imm|st64|st32}}
 ; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
   %loaded = load <4 x i16>, ptr %ptr
   store <4 x i16> %val, ptr %ptr

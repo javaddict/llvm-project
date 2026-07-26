@@ -16,6 +16,10 @@
 // ports of AIEMachineScheduler.cpp helpers (same logic; VirtRegOrUnit for
 // stock RegisterPressure API).
 //
+// B4.1: productFeasibleFormatMask is the Pre-RA FormatID frontier (size-1
+// Full). No setDesc / no FormatID freeze before RA (plan §7.1). SMS shares
+// the same Bundle/ResourceCycle getFeasibleFormatMask adapters.
+//
 //===----------------------------------------------------------------------===//
 
 #include "HaydnPreRASchedStrategy.h"

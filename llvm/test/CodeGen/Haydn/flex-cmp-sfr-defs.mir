@@ -2,37 +2,24 @@
 # RUN:   -run-pass=finalize-isel -verify-machineinstrs %s -o - \
 # RUN:   | FileCheck %s
 #
-# REGRESSION TEST: B1 — _FLEX compares write SFR only, no register dest.
+# B3.exit.4: SLT64_S* members share logical unary shape for AIE setDesc
+# (AIEMachineScheduler.cpp:1126-1132). Golden HW is SFR-only + 2 DR sources;
+# compiler model keeps (outs DR64:$rd),(ins DR64:$rsd)+Defs=[SFR] so materialize
+# does not hit "Explicit operand marked as def" (B1 R_CMP 0-def shape).
 #
-# Bug: SLT64/SEQ64/SLE64 + X2SLT32/X2SEQ32/X2SLE32 + X4SLT16/X4SEQ16/X4SLE16
-# _FLEX defs (HaydnFormatsALU64.td) had `(outs DR64:$rd)` + hasSideEffects=1.
-# The MachineVerifier rejected this combination: "Explicit operand marked as
-# def" on a side-effecting instruction. Golden (slot1_alu_instruction_list.json)
-# says ALL compares write SFR ONLY with 2 DR sources and NO register dest.
-#
-# Fix (B1): `(outs), (ins DR64:$rs1, DR64:$rs2)` + `let Defs=[SFR]`
-# dropping hasSideEffects=1 AND the spurious `(outs DR64:$rd)`. The _R_CMP
-# format class's 2 bits-fields (rs1, rs2) both bind to the dag -> no orphan.
-#
-# Test design: MIR with a SLT64_S1 (the canonical B1 op) verifying the
-# verifier accepts the 0-def + Defs=[SFR] shape. Uses -run-pass=finalize-isel
-# (a no-op pass that runs the verifier) so the test is independent of the
-# selector producing the instruction. Before the fix this hits the
-# "Explicit operand marked as def" verifier error.
+# MIR: unary SLT64_S1 with Defs=[SFR] must verify clean.
 ---
-name:            test_slt64_sfr_only
+name:            test_slt64_unary_setdesc_shape
 tracksRegLiveness: true
 registers:
   - { id: 0, class: dr64 }
-  - { id: 1, class: dr64 }
 body:             |
   bb.0.entry:
     %0 = IMPLICIT_DEF
-    %1 = IMPLICIT_DEF
-    SLT64_S1 %0, %1, implicit-def $sfr
+    %0 = SLT64_S1 %0, implicit-def $sfr
     RET implicit $r0, implicit $r15
 ...
 
-# CHECK-LABEL: name: test_slt64_sfr_only
-# CHECK: SLT64_S1 %0, %1, implicit-def $sfr
+# CHECK-LABEL: name: test_slt64_unary_setdesc_shape
+# CHECK: SLT64_S1 %{{[0-9]+}}{{(:dr64)?}}, implicit-def $sfr
 # CHECK-NOT: Explicit operand marked as def

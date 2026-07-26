@@ -26,4 +26,8 @@ HaydnMCAsmInfo::HaydnMCAsmInfo(const Triple &TargetTriple) {
   UsesELFSectionDirectiveForBSS = true;
 
   ExceptionsType = ExceptionHandling::DwarfCFI;
+
+  // A.6 / Bundle128: every instruction/parcel is 16 bytes. Code alignment and
+  // writeNopData only produce full Bundle128 NOP parcels (all-zero 16 B).
+  MinInstAlignment = 16;
 }
