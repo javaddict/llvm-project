@@ -51,6 +51,10 @@ public:
   void relocate(uint8_t *loc, const Relocation &rel,
                 uint64_t val) const override;
   uint32_t calcEFlags() const override;
+  // Pre-create ThunkSections so far sites inside a large .text can still
+  // reach an island (G-LLD-VENEER V1). Sized from the narrowest thunked
+  // reloc: WIDE_BranchSImm12 / _RI → isInt<13> ≈ ±4 KiB.
+  uint32_t getThunkSectionSpacing() const override { return 0x1000; }
 };
 
 } // namespace
