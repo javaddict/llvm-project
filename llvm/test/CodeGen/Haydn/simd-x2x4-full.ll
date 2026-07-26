@@ -51,10 +51,11 @@ declare i64 @llvm.haydn.x2hadd32.l(<2 x i32>)
 declare i64 @llvm.haydn.x2hadd32s.l(<2 x i32>)
 declare i64 @llvm.haydn.x4hadd16.h(<4 x i16>)
 declare i64 @llvm.haydn.x4hadd16.l(<4 x i16>)
-declare i64 @llvm.haydn.x2hmax32(<2 x i32>)
-declare i64 @llvm.haydn.x2hmin32(<2 x i32>)
-declare i64 @llvm.haydn.x4hmax16(<4 x i16>)
-declare i64 @llvm.haydn.x4hmin16(<4 x i16>)
+; R_GD: horizontal max/min reduce to GPR32 (FormatsALU64 / G3), not i64.
+declare i32 @llvm.haydn.x2hmax32(<2 x i32>)
+declare i32 @llvm.haydn.x2hmin32(<2 x i32>)
+declare i32 @llvm.haydn.x4hmax16(<4 x i16>)
+declare i32 @llvm.haydn.x4hmin16(<4 x i16>)
 declare i64 @llvm.haydn.x2dot32(<2 x i32>, <2 x i32>)
 declare i64 @llvm.haydn.x4dot16(<4 x i16>, <4 x i16>)
 declare { i64, i64 } @llvm.haydn.x2mul32(<2 x i32>, <2 x i32>)
@@ -239,20 +240,20 @@ define i64 @test_x4hadd16_h(i64 %a) nounwind {
   ret i64 %r
 }
 
-define i64 @test_x2hmax32(i64 %a) nounwind {
+define i32 @test_x2hmax32(i64 %a) nounwind {
 ; CHECK-LABEL: test_x2hmax32:
 ; CHECK: x2hmax32
   %bc.10 = bitcast i64 %a to <2 x i32>
-  %r = call i64 @llvm.haydn.x2hmax32(<2 x i32> %bc.10)
-  ret i64 %r
+  %r = call i32 @llvm.haydn.x2hmax32(<2 x i32> %bc.10)
+  ret i32 %r
 }
 
-define i64 @test_x4hmin16(i64 %a) nounwind {
+define i32 @test_x4hmin16(i64 %a) nounwind {
 ; CHECK-LABEL: test_x4hmin16:
 ; CHECK: x4hmin16
   %bc.11 = bitcast i64 %a to <4 x i16>
-  %r = call i64 @llvm.haydn.x4hmin16(<4 x i16> %bc.11)
-  ret i64 %r
+  %r = call i32 @llvm.haydn.x4hmin16(<4 x i16> %bc.11)
+  ret i32 %r
 }
 
 ;===----------------------------------------------------------------------===;

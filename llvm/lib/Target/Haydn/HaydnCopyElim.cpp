@@ -173,7 +173,7 @@ bool HaydnCopyElim::runOnMachineFunction(MachineFunction &MF) {
       }
 
       // Soft-zero R0: never delete non-identity bank-copies into R0 as dead.
-      // (W0.3 / durable rule 31 — silicon does not force R0=0.)
+      // Silicon does not force R0=0.
       if (DstReg == Haydn::R0)
         continue;
 
@@ -227,8 +227,8 @@ bool HaydnCopyElim::runOnMachineFunction(MachineFunction &MF) {
 
       // Case 2: Soft-zero R0 — never eliminate non-identity COPY/MOVE32 into
       // R0. Silicon does not hardwire R0=0; treating writes as free "dead"
-      // hardwired sinks is incorrect (W0.3 / durable rule 31). True identity
-      // COPY r0,r0 is already handled above.
+      // hardwired sinks is incorrect. True identity COPY r0,r0 is already
+      // handled above.
       if (DstReg == Haydn::R0) {
         LLVM_DEBUG(dbgs() << "  Keeping write to soft-zero R0: " << MI);
         continue;

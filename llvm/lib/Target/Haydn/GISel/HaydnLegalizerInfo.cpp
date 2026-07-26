@@ -12,12 +12,15 @@
 #include "HaydnLegalizerInfo.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/CodeGen/GlobalISel/GenericMachineInstrs.h"
 #include "llvm/CodeGen/GlobalISel/LegalizerHelper.h"
 #include "llvm/CodeGen/GlobalISel/MachineIRBuilder.h"
-#include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/CodeGen/GlobalISel/MIPatternMatch.h"
 #include "llvm/CodeGen/GlobalISel/Utils.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
+#include "llvm/Support/MathExtras.h"
 
 using namespace llvm;
 using namespace LegalityPredicates;
@@ -35,6 +38,7 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   const LLT S16 = LLT::scalar(16);    // NOLINT
   const LLT S32 = LLT::scalar(32);    // NOLINT
   const LLT S64 = LLT::scalar(64);    // NOLINT
+  const LLT S128 = LLT::scalar(128);  // NOLINT
   const LLT P0 = LLT::pointer(0, 32); // NOLINT
   // NOLINTEND(readability-identifier-naming)
 
@@ -46,8 +50,24 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   const LLT V2I32 = LLT::fixed_vector(2, 32);  // NOLINT
   const LLT V4I16 = LLT::fixed_vector(4, 16);  // NOLINT
   const LLT V8I8 = LLT::fixed_vector(8, 8);    // NOLINT
+  const LLT V4I8 = LLT::fixed_vector(4, 8);    // residual SLP (not native)
+  const LLT V2I16 = LLT::fixed_vector(2, 16);  // residual SLP
+  // CB-130: vectors wider than 64 bits (e.g. <4 x s32>) are out of product
+  // SIMD scope — scalarize to s32/s64 ops. Haydn native SIMD is 64-bit only
+  // (v2i32 / v4i16 / v8i8 in DR64).
+  auto ScalarizeWideVec = [](unsigned TypeIdx = 0) {
+    return [=](const LegalityQuery &Query) {
+      const LLT Ty = Query.Types[TypeIdx];
+      return Ty.isVector() && Ty.getSizeInBits() > 64;
+    };
+  };
+
   getActionDefinitionsBuilder({G_ADD, G_SUB})
       .legalFor({S32, S64, V2I32, V4I16})
+      .scalarizeIf(ScalarizeWideVec(0), 0)
+      // Residual non-native vectors (e.g. v2i16 from SLP/CoreMark after
+      // G-ABI-VEC registers v4i16/v2i32) — scalarize, do not leave illegal.
+      .scalarize(0)
       .minScalar(0, S32)
       .maxScalar(0, S64)
       .widenScalarToNextPow2(0);
@@ -63,14 +83,18 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   getActionDefinitionsBuilder(G_MUL)
       .legalFor({S32, V2I32})
       .customFor({S64})
+      .scalarizeIf(ScalarizeWideVec(0), 0)
       .minScalar(0, S32)
       .maxScalar(0, S64)
       .widenScalarToNextPow2(0)
       .scalarize(0);
 
-  // Haydn has no native division/remainder - use libcalls
+  // Haydn has no native division/remainder - use libcalls.
   getActionDefinitionsBuilder({G_SDIV, G_UDIV, G_SREM, G_UREM, G_SDIVREM, G_UDIVREM})
       .libcallFor({S32, S64})
+      .scalarizeIf(ScalarizeWideVec(0), 0)
+      // pr60960 f3: v4s8 G_UDIV — not a legal SIMD shape; scalarize residual.
+      .scalarize(0)
       .minScalar(0, S32)
       .maxScalar(0, S64);
 
@@ -78,15 +102,16 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // s32: MULUUH (legal). s64: custom schoolbook. s8/s16/s24: custom widen.
   getActionDefinitionsBuilder(G_UMULH)
       .legalFor({S32})
-      .customFor({S8, S16, LLT::scalar(24), S64});
+      .customFor({S8, S16, LLT::scalar(24), S64})
+      .scalarizeIf(ScalarizeWideVec(0), 0);
 
   // G_SMULH — signed multiply high.
   // s32: MULSSH (legal). s64: generic lower. s8/s16/s24: custom widen.
   getActionDefinitionsBuilder(G_SMULH)
       .legalFor({S32})
       .customFor({S8, S16, LLT::scalar(24)})
+      .scalarizeIf(ScalarizeWideVec(0), 0)
       .lowerFor({S64});
-
   //===--------------------------------------------------------------------===
   // Bitwise Logic
   //===--------------------------------------------------------------------===
@@ -101,8 +126,15 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // V8I8 (no proven v8i8 arithmetic path).
   getActionDefinitionsBuilder({G_AND, G_OR, G_XOR})
       .legalFor({S32, S64, V2I32, V4I16})
-      .clampScalar(0, S32, S64)
-      .widenScalarToNextPow2(0);
+      .scalarizeIf(ScalarizeWideVec(0), 0)
+      // Residual vectors (v2i16 etc.) before scalar widen/clamp.
+      .scalarize(0)
+      // pr79737-1: s72 bitfield RMW (`and` mask to clear field e). Widen to
+      // next pow2 (s128) BEFORE clampScalar max=s64. clamp-first half-splits
+      // s72 via G_EXTRACT s64+s8 and remerges as illegal 9×s8 G_MERGE_VALUES.
+      // Order matches AArch64/RISC-V and the shift rule for pr79737-2.
+      .widenScalarToNextPow2(0)
+      .clampScalar(0, S32, S64);
 
   //===--------------------------------------------------------------------===
   // Shifts
@@ -114,7 +146,20 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // the scalar shift amount from element 0 and passes it as GPR32.
   getActionDefinitionsBuilder({G_SHL, G_LSHR, G_ASHR})
       .legalFor({{S32, S32}, {S64, S32}, {V2I32, V2I32}, {V4I16, V4I16}})
+      .scalarizeIf(ScalarizeWideVec(0), 0)
+      // pr60960: v4s8 (32-bit) is under the 64-bit wide-vector gate but not a
+      // legal SIMD shift shape — scalarize residual vectors (not just >64b).
+      .scalarize(0)
       .minScalar(0, S32)
+      // pr79737-2: s72 bitfield shifts — widen to s128 before maxScalar can
+      // half-split s72 into illegal s36 G_UNMERGE_VALUES.
+      .widenScalarIf(
+          [](const LegalityQuery &Query) {
+            return Query.Types[0].isScalar() &&
+                   Query.Types[0].getSizeInBits() > 64 &&
+                   Query.Types[0].getSizeInBits() < 128;
+          },
+          changeTo(0, S128))
       .maxScalar(0, S64)
       .clampScalar(1, S32, S32)
       .widenScalarToNextPow2(0);
@@ -137,11 +182,19 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // predicate, so signedness is preserved.
   getActionDefinitionsBuilder(G_ICMP)
       .legalFor({{S1, S32}, {S1, S64}, {S1, P0}, {S32, S32}, {S32, P0}})
+      // CB-130: compare of wide vectors → scalarize element type (idx 1).
+      .scalarizeIf(ScalarizeWideVec(1), 1)
+      // Residual SLP vectors (v2i16/v4i8/…) after G-ABI-VEC — not native SIMD.
+      .scalarize(1)
       .widenScalarToNextPow2(1)
       .clampScalar(1, S32, S64);
 
   getActionDefinitionsBuilder(G_SELECT)
       .legalFor({{S32, S1}, {S64, S1}, {P0, S1}, {V2I32, S1}, {V4I16, S1}, {V8I8, S1}})
+      // CB-130: vector-select of wide SIMD (v4s32 / v4s1 mask).
+      .scalarizeIf(ScalarizeWideVec(0), 0)
+      // Residual: v4i8 + vector-cond G_SELECT from SLP (ssad/usad torture).
+      .scalarize(0)
       .clampScalar(0, S32, S64)
       .widenScalarToNextPow2(0);
 
@@ -155,7 +208,9 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // PHI
   //===--------------------------------------------------------------------===
   getActionDefinitionsBuilder(G_PHI)
-      .legalFor({S32, S64, P0, V2I32, V4I16, V8I8})
+      .legalFor({S32, S64, P0, V2I32, V4I16, V8I8, V4I8, V2I16})
+      .scalarizeIf(ScalarizeWideVec(0), 0)
+      .scalarize(0) // residual e.g. odd vectors (G-ABI-VEC + SLP)
       .clampScalar(0, S32, S64)
       .widenScalarToNextPow2(0);
 
@@ -182,7 +237,6 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // select". Keeping it only in customFor routes all three ext ops' s1->s8
   // (and any narrow-result extension) through the widen-to-s32 + G_TRUNC path
   // in legalizeCustom, which is correct for SEXT/ZEXT/ANYEXT alike.
-  const LLT S128 = LLT::scalar(128);  // NOLINT(readability-identifier-naming)
   // s128 destination extensions (s64 -> s128) are custom-lowered in
   // legalizeCustom to G_MERGE_VALUES <src>, <zero|sext-high>. This is the
   // feeding extension for the i128 multiply that IR instcombine
@@ -201,6 +255,16 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
                  {S64, S8}, {S64, S16}, {S64, S1}})
       .customFor({{S16, S1}, {S16, S8}, {S8, S1}, {S8, S8}, {S16, S16},
                   {S128, S64}})
+      // pr79737-2: G_ANYEXT s72→s128 from non-pow2 bitfield store widen.
+      .customIf([](const LegalityQuery &Query) {
+        const LLT DstTy = Query.Types[0];
+        const LLT SrcTy = Query.Types[1];
+        return DstTy.isScalar() && SrcTy.isScalar() &&
+               DstTy.getSizeInBits() == 128 && SrcTy.getSizeInBits() < 128 &&
+               SrcTy.getSizeInBits() != 64;
+      })
+      // Residual vector extends (v2i16→v2i32 etc. from SLP after G-ABI-VEC).
+      .scalarize(0)
       .legalIf([](const LegalityQuery &Query) {
         const LLT DstTy = Query.Types[0];
         const LLT SrcTy = Query.Types[1];
@@ -242,6 +306,7 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
                  {S8, S16}, {S16, S32}, {S8, S32},
                  {S32, S64}, {S16, S64}, {S8, S64}})
       .customFor({{V4I16, V4I32}})
+      .scalarize(0) // residual vector trunc e.g. v2i32→v2i16
       .legalIf([](const LegalityQuery &Query) {
         const LLT DstTy = Query.Types[0];
         const LLT SrcTy = Query.Types[1];
@@ -256,14 +321,83 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
                  {V4I16, S64}, {S64, V4I16},
                  {V2I32, V8I8}, {V8I8, V2I32},
                  {V4I16, V8I8}, {V8I8, V4I16},
-                 {S64, V8I8}, {V8I8, S64}});
+                 {S64, V8I8}, {V8I8, S64},
+                 // Residual SLP v4i8 pack lives in one s32 GPR.
+                 {V4I8, S32}, {S32, V4I8},
+                 {V2I16, S32}, {S32, V2I16}})
+      // Wide / mismatched vectors (pr70903 <32 x s8>↔<4 x s64>): generic lower.
+      .lower();
 
   //===--------------------------------------------------------------------===
   // Multi-value / Composite
   //===--------------------------------------------------------------------===
-  getActionDefinitionsBuilder({G_MERGE_VALUES, G_UNMERGE_VALUES})
-      .legalFor({{S32, S64}, {S64, S32}, {S32, V2I32}, {S16, V4I16},
-                 {S16, S64}, {S64, S16}});
+  // {narrow, wide} covers G_UNMERGE wide→narrow and G_MERGE narrow→wide
+  // (and the swapped pair covers the opposite opcode). s64↔s128 needed for
+  // i72 bitfield legalization (pr79737-2 anyext/load split).
+  // Merge/unmerge split so clampMaxNumElements applies only to the vector
+  // type index (UNMERGE src = type 1; MERGE dst = type 0). Combined rules
+  // wrongly clamped scalar operands and asserted in fewerElementsVectorMerge.
+  getActionDefinitionsBuilder(G_MERGE_VALUES)
+      .legalFor({{S32, S64}, {S64, S32}, {S64, S128}, {S128, S64},
+                 {S32, S16}, {S16, S32},
+                 {S32, V2I32}, {S16, V4I16}, {S8, V8I8},
+                 {S8, V4I8}, {S16, V2I16},
+                 {S16, S64}, {S64, S16}})
+      // pr79737-1: G_MERGE_VALUES 9×s8 → s72 bitfield pack.
+      .customIf([](const LegalityQuery &Query) {
+        return Query.Types[0].isScalar() &&
+               !isPowerOf2_32(Query.Types[0].getSizeInBits());
+      })
+      .lower();
+
+  getActionDefinitionsBuilder(G_UNMERGE_VALUES)
+      .legalFor({{S32, S64}, {S64, S32}, {S64, S128}, {S128, S64},
+                 {S32, S16}, {S16, S32},
+                 {S32, V2I32}, {S16, V4I16}, {S8, V8I8},
+                 {S8, V4I8}, {S16, V2I16},
+                 {S16, S64}, {S64, S16}})
+      // Wide residual SLP: fewer-elements only when unmerging *to scalars*
+      // (type0 scalar). Intermediate unmerge-to-v2 pieces must not re-enter
+      // clamp (NarrowTy==DstTy → UnableToLegalize hang/fail).
+      .fewerElementsIf(
+          [=](const LegalityQuery &Query) {
+            return Query.Types[0].isScalar() && Query.Types[1].isFixedVector() &&
+                   Query.Types[1].getElementType() == S32 &&
+                   Query.Types[1].getNumElements() > 2;
+          },
+          [=](const LegalityQuery &Query) {
+            (void)Query;
+            return std::make_pair(1, V2I32);
+          })
+      .fewerElementsIf(
+          [=](const LegalityQuery &Query) {
+            return Query.Types[0].isScalar() && Query.Types[1].isFixedVector() &&
+                   Query.Types[1].getElementType() == S16 &&
+                   Query.Types[1].getNumElements() > 4;
+          },
+          [=](const LegalityQuery &Query) {
+            (void)Query;
+            return std::make_pair(1, V4I16);
+          })
+      .fewerElementsIf(
+          [=](const LegalityQuery &Query) {
+            return Query.Types[0].isScalar() && Query.Types[1].isFixedVector() &&
+                   Query.Types[1].getElementType() == S8 &&
+                   Query.Types[1].getNumElements() > 8;
+          },
+          [=](const LegalityQuery &Query) {
+            (void)Query;
+            return std::make_pair(1, V8I8);
+          })
+      // Intermediate fewer-elements artifact: unmerge v2N → N-element vectors
+      // (e.g. v4s32 → 2×v2s32). Lower via bitcast to legal scalar unmerge.
+      .customIf([](const LegalityQuery &Query) {
+        return Query.Types[0].isVector() && Query.Types[1].isVector() &&
+               Query.Types[1].getSizeInBits() > 64 &&
+               Query.Types[1].getSizeInBits() % Query.Types[0].getSizeInBits() ==
+                   0;
+      })
+      .lower();
 
   getActionDefinitionsBuilder({G_INSERT, G_EXTRACT})
       .legalFor({{S32, S32}, {S64, S64}})
@@ -294,9 +428,46 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
                                  {S32, P0, S8, 8},
                                  {S32, P0, S16, 16}})
       .legalFor({{V2I32, P0}, {V4I16, P0}, {V8I8, P0}})
+      // CB-130: <4 x s32> (128-bit) mem — scalarize to s32 loads/stores.
+      .scalarizeIf(ScalarizeWideVec(0), 0)
+      // pr60960: v4s8 stack spill/reload is 32-bit, under the wide-vector
+      // gate, and not a legal SIMD mem shape — scalarize residual vectors.
+      .scalarize(0)
       .minScalar(0, S8)
-      .widenScalarToNextPow2(0, /*Min=*/8)
+      // CB-126 / pr79737-2: clamp extending load / trunc store results when
+      // MMO type differs. lowerLoad of s72 emits s128 = G_LOAD/ZEXTLOAD of
+      // s64 — must narrow to s64 (not s32; result must be ≥ mem width), then
+      // anyext s64→s128. s64 anyext from s8/s16 still narrows to s32.
+      .narrowScalarIf(
+          [](const LegalityQuery &Query) {
+            return Query.Types[0].isScalar() && !Query.MMODescrs.empty() &&
+                   Query.Types[0] != Query.MMODescrs[0].MemoryTy &&
+                   Query.Types[0].getSizeInBits() > 64;
+          },
+          changeTo(0, S64))
+      .narrowScalarIf(
+          [](const LegalityQuery &Query) {
+            return Query.Types[0].isScalar() && !Query.MMODescrs.empty() &&
+                   Query.Types[0] != Query.MMODescrs[0].MemoryTy &&
+                   Query.Types[0].getSizeInBits() > 32 &&
+                   Query.MMODescrs[0].MemoryTy.getSizeInBits() <= 32;
+          },
+          changeTo(0, S32))
+      // CB-126 residual: G_STORE s32 value into s64 MMO (after non-pow2
+      // split) — generic lower returns UnableToLegalize. Custom: match
+      // value width to mem width and rewrite MMO.
+      .customIf(
+          [](const LegalityQuery &Query) {
+            return Query.Opcode == TargetOpcode::G_STORE &&
+                   Query.Types[0].isScalar() && !Query.MMODescrs.empty() &&
+                   Query.Types[0] != Query.MMODescrs[0].MemoryTy &&
+                   Query.MMODescrs[0].MemoryTy.isScalar() &&
+                   isPowerOf2_32(Query.MMODescrs[0].MemoryTy.getSizeInBits());
+          })
+      // Non-pow2 mem (i40/i72 bitfields) MUST lower before widenScalar, or
+      // widen turns G_STORE s72 into G_STORE s128 + G_ANYEXT s72→s128 (abort).
       .lowerIfMemSizeNotByteSizePow2()
+      .widenScalarToNextPow2(0, /*Min=*/8)
       .lower();
 
   getActionDefinitionsBuilder(G_PTR_ADD)
@@ -310,42 +481,51 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // Pointer Conversions
   //===--------------------------------------------------------------------===
   // G_INTTOPTR: s32 → p0; G_PTRTOINT: p0 → s32
-  // For s64, the selector will decompose these operations
+  // For s64, the selector will decompose these operations.
+  // clampScalar: pr17252 does `ptrtoint to i8` — widen result to s32 then
+  // artifact-trunc (generic lower cannot PTRTOINT to s8).
   getActionDefinitionsBuilder({G_INTTOPTR, G_PTRTOINT})
-      .legalFor({{P0, S32}, {S32, P0}, {P0, S64}, {S64, P0}});
+      .legalFor({{P0, S32}, {S32, P0}, {P0, S64}, {S64, P0}})
+      .clampScalar(0, S32, S64);
 
   //===--------------------------------------------------------------------===
   // Constants and Undef
   //===--------------------------------------------------------------------===
-  // s32/s64/p0 constants are legal; selector handles materialization
+  // s32/s64/p0 constants are legal; selector handles materialization.
+  // Types wider than 64 (s72 bitfield containers from pr79737-2) must NOT
+  // hit maxScalar→s64: that narrows via insertParts into a G_MERGE of
+  // leftovers, so later G_ANYEXT s72→s128 cannot constant-fold and fails.
+  // Custom-split to s64 halves (merged s128 + trunc back) instead.
+  // Only 65..128-bit custom: >128 (e.g. s640 from odd vector bitcasts) falls
+  // through to clampScalar→s64 (APInt::zext(128) asserts if width > 128).
   getActionDefinitionsBuilder(G_CONSTANT)
       .legalFor({S1, S8, S16, S32, S64, P0})
+      .customIf([](const LegalityQuery &Query) {
+        if (!Query.Types[0].isScalar())
+          return false;
+        unsigned B = Query.Types[0].getSizeInBits();
+        return B > 64 && B <= 128;
+      })
       .clampScalar(0, S32, S64)
       .widenScalarToNextPow2(0);
 
   getActionDefinitionsBuilder(G_IMPLICIT_DEF)
-      .legalFor({S32, S64, P0, V2I32, V4I16, V8I8})
+      .legalFor({S32, S64, P0, V2I32, V4I16, V8I8, V4I8, V2I16})
+      .scalarizeIf(ScalarizeWideVec(0), 0)
+      .scalarize(0) // residual e.g. odd vectors
       .clampScalar(0, S32, S64)
       .widenScalarToNextPow2(0);
 
   //===--------------------------------------------------------------------===
-  // Floating-point — all libcall (soft-float)
+  // Floating-point — soft-float (no FPU; values live as IEEE bits in GPR/DR)
   //===--------------------------------------------------------------------===
-  // G_FNEG / G_FABS are deliberately NOT in the bulk.libcallFor block below.
-  // The upstream generic libcall path (LegalizerHelper::libcall in
-  // llvm/lib/CodeGen/GlobalISel/LegalizerHelper.cpp) has NO case for G_FNEG or
-  // G_FABS — they fall through to `default: return UnableToLegalize`, so
-  // declaring `.libcallFor` for them makes the legalizer abort with
-  // "unable to legalize instruction: %.._(s32) = G_FNEG/G_FABS". There is no
-  // __negsf2 libcall (negation is a sign-bit flip), and although FABS_F32
-  // FABS_F64 exist in RuntimeLibcalls.td, the generic libcall path does not
-  // dispatch to them. The canonical soft-float lowering for both — used by
-  // SelectionDAG on RISC-V / other soft-float targets — is the integer
-  // bit-trick on the IEEE-754 bit-pattern: fneg = XOR with the sign bit
-  // (0x8000...0), fabs = AND with the magnitude mask (0x7FFF...F). Since
-  // Haydn stores every float in a GPR/DR64 as its bit-cast integer, we
-  // custom-lower these to G_XOR / G_AND on the integer representation
-  // (see legalizeCustom).
+  // Shape (mirrors RISC-V softfloat GISel):
+  //   * arith / libm / converts → .libcallFor (compiler-rt / libm)
+  //   * fneg / fabs / copysign  → generic .lower (sign-bit integer tricks)
+  //   * fconstant              → custom bitcast→G_CONSTANT (not constpool)
+  //   * minimum/maximum*       → custom → fminnum/fmaxnum libcall
+  // Generic LegalizerHelper has no libcall cases for fneg/fabs/copysign;
+  // .lower is the canonical soft-float path (do not reimplement in custom).
   getActionDefinitionsBuilder({
       G_FADD, G_FSUB, G_FMUL, G_FDIV, G_FREM,
       G_FMA, G_FMAD, G_FSQRT,
@@ -353,56 +533,60 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       G_FPOWI, G_FPOW,
       G_FCEIL, G_FFLOOR, G_FRINT, G_FNEARBYINT,
       G_FMINNUM, G_FMAXNUM,
-      G_FPTRUNC, G_FPEXT,
-      G_FPTOSI, G_FPTOUI, G_SITOFP, G_UITOFP,
       G_STRICT_FADD, G_STRICT_FSUB, G_STRICT_FMUL, G_STRICT_FDIV,
       G_STRICT_FREM, G_STRICT_FSQRT, G_STRICT_FMA, G_STRICT_FLDEXP,
-  }).libcallFor({S32, S64});
+  })
+      // Soft-float scalars only. Vectors (e.g. v4f32) have no libcall form —
+      // scalarize then libcall per lane.
+      .libcallFor({S32, S64})
+      .scalarizeIf(ScalarizeWideVec(0), 0)
+      .scalarize(0);
 
-  // G_FNEG / G_FABS — soft-float integer bit-manipulation lowering. See the
-  // long comment above for why these cannot use.libcallFor, and the
-  // G_FNEG / G_FABS case in legalizeCustom for the actual lowering.
-  //
-  // G_FCOPYSIGN is ALSO custom-lowered with an integer bit-trick (sign-bit
-  // graft: result = (x & 0x7FFF..F) | (y & 0x8000..0)). Like FNEG/FABS, the
-  // upstream generic libcall path (LegalizerHelper::libcall) has NO case for
-  // G_FCOPYSIGN, so.libcallFor would abort with "unable to legalize". The
-  // bit-trick is the canonical, IEEE-correct soft-float copysign (NaN sign
-  // handled, since NaN carries a sign bit) and needs no runtime symbol..
-  //
-  // G_FMINIMUM / G_FMAXIMUM (llvm.minimum/maximum) and G_FMINIMUMNUM
-  // G_FMAXIMUMNUM likewise cannot use the generic libcall path: FMINIMUM
-  // FMAXIMUM have NO case in LegalizerHelper::libcall, and FMINIMUMNUM
-  // FMAXIMUMNUM have a case but no RuntimeLibcallImpl in the.td (so
-  // getLibcallName returns null). All four are custom-mapped to
-  // G_FMINNUM/G_FMAXNUM (see legalizeCustom), which then take the libcall path.
-  // C frontends emit FMINNUM (via __builtin_fmin), never these, so this mapping
-  // only matters for IR using the intrinsics directly. The only difference is
-  // NaN-signaling, which baremetal soft-float does not track.
-  getActionDefinitionsBuilder({G_FNEG, G_FABS, G_FCOPYSIGN,
-                               G_FMINIMUM, G_FMAXIMUM,
+  // FP ↔ int / FP size conversions are multi-type. Narrow integer results
+  // (s16 = G_FPTOUI s64) must clamp to s32 before libcall; same for sitofp
+  // sources. fptrunc/fpext stay s32↔s64 libcalls.
+  getActionDefinitionsBuilder({G_FPTOSI, G_FPTOUI})
+      .libcallForCartesianProduct({S32, S64}, {S32, S64})
+      .clampScalar(0, S32, S64)
+      .clampScalar(1, S32, S64)
+      .scalarize(0);
+  getActionDefinitionsBuilder({G_SITOFP, G_UITOFP})
+      .libcallForCartesianProduct({S32, S64}, {S32, S64})
+      .clampScalar(0, S32, S64)
+      .clampScalar(1, S32, S64)
+      .scalarize(0);
+  getActionDefinitionsBuilder({G_FPTRUNC, G_FPEXT})
+      .libcallFor({{S32, S64}, {S64, S32}})
+      .clampScalar(0, S32, S64)
+      .clampScalar(1, S32, S64);
+
+  // Sign-bit ops: use generic lower (XOR/AND/copysign graft). Same code as
+  // RISCVLegalizerInfo softfloat — no target custom needed.
+  getActionDefinitionsBuilder({G_FNEG, G_FABS})
+      .lowerFor({S32, S64})
+      .scalarize(0);
+  getActionDefinitionsBuilder(G_FCOPYSIGN)
+      .lowerFor({{S32, S32}, {S64, S64}})
+      .scalarize(0);
+
+  // llvm.minimum/maximum and *num: no reliable baremetal libcall (and generic
+  // .lower of *num emits G_FCANONICALIZE we do not select). Map to
+  // fminnum/fmaxnum libcalls (fminf/fmaxf). NaN-signaling is not tracked.
+  getActionDefinitionsBuilder({G_FMINIMUM, G_FMAXIMUM,
                                G_FMINIMUMNUM, G_FMAXIMUMNUM})
-      .customFor({S32, S64});
+      .customFor({S32, S64})
+      .scalarize(0);
 
-  // G_FCONSTANT — soft-float constant materialization. A constant is not a
-  // runtime libcall (libcallFor would crash the legalizer with "unable to
-  // legalize instruction: G_FCONSTANT float 2.5"). Custom-lower by bitcasting
-  // the float's bit-pattern to its integer representation and emitting a
-  // G_CONSTANT of that integer bit-pattern in the float-typed destination vreg.
-  // The selector materializes the integer constant and treats the result as a
-  // float (since Haydn has no FPU, every float value lives in a GPR/DR64 as its
-  // bit-cast integer). This mirrors RISC-V soft-float G_FCONSTANT lowering
-  // (RISCVLegalizerInfo::legalizeCustom, case G_FCONSTANT).
+  // Bitcast IEEE bits → G_CONSTANT in the float-typed vreg. Generic .lower
+  // would load from the constant pool; custom matches RISC-V softfloat.
   getActionDefinitionsBuilder(G_FCONSTANT)
       .customFor({S32, S64});
 
-  // G_FCMP has a distinct type signature: {s1 result, s32/s64 operands}.
-  // It cannot share the bulk.libcallFor({S32, S64}) rule above because that
-  // rule checks type index 0 (the result), which is s1 for comparisons
-  // not S32 or S64. Without this separate rule, G_FCMP fails to legalize
-  // with "unable to legalize instruction".
+  // G_FCMP: result is s1, so it cannot share the bulk {S32,S64} libcall rule.
   getActionDefinitionsBuilder(G_FCMP)
-      .libcallFor({{S1, S32}, {S1, S64}});
+      .libcallFor({{S1, S32}, {S1, S64}})
+      // Residual vector FCMP (complex-5 v2f32 SLP) — scalarize lanes first.
+      .scalarize(1);
 
   //===--------------------------------------------------------------------===
   // Atomics — all lower (no native atomics)
@@ -447,6 +631,34 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .legalForTypesWithMemDesc({{S32, P0, S8, 8},
                                  {S32, P0, S16, 16},
                                  {S16, P0, S8, 8}})
+      // CB-126 residual: non-pow2 load lower emits G_ZEXTLOAD s32←s32 (same
+      // size). Generic lowerLoad returns UnableToLegalize for that shape
+      // (treats it as "aligned pow2 that needs unaligned split"). Rewrite
+      // same-size extload → plain G_LOAD (pr52979/pr57344/pr58570).
+      .customIf(
+          [](const LegalityQuery &Query) {
+            return !Query.MMODescrs.empty() && Query.Types[0].isScalar() &&
+                   Query.Types[0] == Query.MMODescrs[0].MemoryTy;
+          })
+      // pr79737-2: lowerLoad(s72) emits s128 = G_ZEXTLOAD (s64) — narrow to
+      // s64 then anyext (must not collapse to s32; result ≥ mem width).
+      .narrowScalarIf(
+          [](const LegalityQuery &Query) {
+            return Query.Types[0].isScalar() && !Query.MMODescrs.empty() &&
+                   Query.Types[0] != Query.MMODescrs[0].MemoryTy &&
+                   Query.Types[0].getSizeInBits() > 64;
+          },
+          changeTo(0, S64))
+      // CB-126: s64 = G_ZEXTLOAD/G_SEXTLOAD of s8/s16 — narrow result to s32
+      // then anyext (same class as G_LOAD anyext).
+      .narrowScalarIf(
+          [](const LegalityQuery &Query) {
+            return Query.Types[0].isScalar() && !Query.MMODescrs.empty() &&
+                   Query.Types[0] != Query.MMODescrs[0].MemoryTy &&
+                   Query.Types[0].getSizeInBits() > 32 &&
+                   Query.MMODescrs[0].MemoryTy.getSizeInBits() <= 32;
+          },
+          changeTo(0, S32))
       .widenScalarToNextPow2(0, /*Min=*/8)
       .lowerIfMemSizeNotByteSizePow2()
       .lower();
@@ -488,13 +700,30 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .lowerFor({S8, S16, S32, S64})
       .maxScalar(0, S64);
 
+  // G_ABS — native ABS32 (GPR) / ABS64 (DR64). Non-saturating matches
+  // llvm.abs (INT_MIN stays INT_MIN). ABS32S/ABS64S are sat-only intrinsics.
+  // Pats in HaydnGISel.td; selectImpl owns selection (no C++ residual).
+  getActionDefinitionsBuilder(G_ABS)
+      .legalFor({S32, S64})
+      .minScalar(0, S32)
+      .maxScalar(0, S64);
+
+  // G_FSHL/G_FSHR: lower s8 directly (pr56866). minScalar(0,S16) alone is not
+  // enough — funnel-shift widenScalar only rebuilds pow2 shapes reliably, and
+  // leaving s8 unlisted aborts with "unable to legalize G_FSHL s8". Mirror
+  // the bitcount path: lowerFor includes S8 so DstTy==SrcTy for lower.
+  getActionDefinitionsBuilder({G_FSHL, G_FSHR})
+      .lowerFor({S8, S16, S32, S64})
+      // Residual vector funnel shifts (pr56866 v4i8) — scalarize then lower.
+      .scalarize(0)
+      .maxScalar(0, S64);
+
   getActionDefinitionsBuilder({
-      G_ABS,
       G_UADDO, G_USUBO, G_SMULO, G_UMULO,
       G_SADDO, G_SSUBO, G_UADDE, G_USUBE, G_SADDE, G_SSUBE,
       G_UADDSAT, G_SADDSAT, G_USUBSAT, G_SSUBSAT,
       G_USHLSAT, G_SSHLSAT,
-      G_ROTL, G_ROTR, G_FSHL, G_FSHR,
+      G_ROTL, G_ROTR,
       G_SBFX, G_UBFX,
       G_FPTOSI_SAT, G_FPTOUI_SAT,
       G_CONSTANT_FOLD_BARRIER,
@@ -517,14 +746,27 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   getActionDefinitionsBuilder({G_BSWAP, G_BITREVERSE})
       .lowerFor({S16, S32})
       .customFor({S64})
+      // Residual SLP vectors (v2i16 G_BSWAP in pr52760) — scalarize then lower.
+      .scalarize(0)
       .minScalar(0, S16)
       .maxScalar(0, S64);
 
-  // G_SMIN/G_SMAX/G_UMIN/G_UMAX — native MAX32/MIN32/MAXU32/MINU32 for s32.
-  // s64 is lowered to the s32 ops via hi/lo decomposition.
-  getActionDefinitionsBuilder({G_SMIN, G_SMAX, G_UMIN, G_UMAX})
+  // G_SMIN/G_SMAX — native MAX32/MIN32 (s32) and MAX64/MIN64 (s64, signed).
+  // ISA MAX64/MIN64 are signed int64 compares; Pats in HaydnGISel.td.
+  getActionDefinitionsBuilder({G_SMIN, G_SMAX})
+      .legalFor({S32, S64})
+      // Residual SLP vectors (v4i8 etc.) — scalarize before min/max scalar.
+      .scalarize(0)
+      .minScalar(0, S32)
+      .maxScalar(0, S64);
+
+  // G_UMIN/G_UMAX — native MAXU32/MINU32 for s32 only. No MAXU64/MINU64 in
+  // ISA; s64 lowers to select/icmp expansion (hi/lo decomposition).
+  getActionDefinitionsBuilder({G_UMIN, G_UMAX})
       .legalFor({S32})
       .lowerFor({S64})
+      // Residual SLP vectors (v4i8 G_UMAX in pr69691) — scalarize then lower.
+      .scalarize(0)
       .minScalar(0, S32)
       .maxScalar(0, S64);
 
@@ -567,9 +809,12 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       {G_TRAP, G_DEBUGTRAP, G_UBSANTRAP, G_FENCE, G_INVOKE_REGION_START})
       .alwaysLegal();
 
+  // G_PREFETCH has mixed typed/imm operands — legalFor({S32,P0}) mis-indexes
+  // types and can assert in getAction (getReg on imm). Select as nop (erase).
+  getActionDefinitionsBuilder(G_PREFETCH).alwaysLegal();
+
   // Control/misc with type idx (pointers / i32)
   getActionDefinitionsBuilder({
-      G_PREFETCH,
       G_BLOCK_ADDR, G_JUMP_TABLE, G_BRINDIRECT, G_BRJT,
       G_DYN_STACKALLOC,
       G_READ_REGISTER, G_WRITE_REGISTER,
@@ -584,8 +829,14 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       G_INTRINSIC_FPTRUNC_ROUND,
   }).lowerFor({S32, S64});
 
+  // Soft-float: no FP class hardware. Was .legalFor but nothing selects
+  // G_IS_FPCLASS → "cannot select" (divsc3/mulsc3 via crt_isnan/crt_isinf).
+  // Generic lower turns it into integer bit tests on the IEEE bit-pattern
+  // (same as AArch64 .lower() / RISCV softfloat .lowerFor).
   getActionDefinitionsBuilder(G_IS_FPCLASS)
-      .legalFor({{S1, S32}, {S1, S64}});
+      .lowerFor({{S1, S32}, {S1, S64}})
+      .scalarize(0)
+      .lower();
 
   // FP environment
   getActionDefinitionsBuilder({
@@ -616,8 +867,15 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // forced the selector to emit half-selected G_* or ad-hoc SLL/OR sequences.
   getActionDefinitionsBuilder(G_BUILD_VECTOR)
       .legalFor({{V2I32, S32}})
-      .customFor({{V4I16, S16}, {V8I8, S8}})
-      .lowerFor({S32, S64});
+      .customFor({{V4I16, S16}, {V8I8, S8}, {V4I8, S8}, {V2I16, S16}})
+      // Residual SLP builds (v4s32/v16s32/v16s1/…): fewer-elements down to a
+      // legal native shape. Bare .lower() is UnableToLegalize for BUILD_VECTOR
+      // and the artifact-retry loop hangs the legalizer (pr28982a @ -O2).
+      .clampMaxNumElements(0, S32, 2)
+      .clampMaxNumElements(0, S16, 4)
+      .clampMaxNumElements(0, S8, 8)
+      .clampMaxNumElements(0, S1, 1)
+      .lower();
 
   //===--------------------------------------------------------------------===
   // SIMD Vector reductions — custom for supported types
@@ -633,13 +891,23 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // Expanded in legalizeCustom to G_UNMERGE_VALUES + optional shift.
   getActionDefinitionsBuilder(G_EXTRACT_VECTOR_ELT)
       .customFor({{S32, V2I32}, {S16, V4I16}})
-      .lowerFor({S32, S64});
+      // Residual SLP: fewer-elements on the source vector first so generic
+      // lower does not unmerge a v16 and re-create extracts (legalizer hang).
+      .clampMaxNumElements(1, S32, 2)
+      .clampMaxNumElements(1, S16, 4)
+      .clampMaxNumElements(1, S8, 8)
+      .clampMaxNumElements(1, S1, 1)
+      .lower();
 
   // G_INSERT_VECTOR_ELT: custom for v2i32 and v4i16.
   // Expanded in legalizeCustom to G_UNMERGE_VALUES + shift/mask/merge.
   getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT)
       .customFor({{V2I32, S32}, {V4I16, S16}})
-      .lowerFor({S32, S64});
+      .clampMaxNumElements(0, S32, 2)
+      .clampMaxNumElements(0, S16, 4)
+      .clampMaxNumElements(0, S8, 8)
+      .clampMaxNumElements(0, S1, 1)
+      .lower();
 
   //===--------------------------------------------------------------------===
   // G_SHUFFLE_VECTOR — custom for v2i32 (scalarize via extract+build)
@@ -649,15 +917,30 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // We never see G_VECREDUCE_ADD; we see G_SHUFFLE_VECTOR instead. Custom
   // scalarize v2i32 shuffles by extracting elements and rebuilding the vector.
   getActionDefinitionsBuilder(G_SHUFFLE_VECTOR)
-      .customFor({{V2I32, V2I32}})
-      .lowerFor({S32, S64});
+      // All shuffles go through custom: 64-bit v2i32 keeps bitcast-unmerge;
+      // residual SLP (v16s1 from v4s1, etc.) extract+build. Bare .lower()
+      // thrash-hangs on wide masks (pr28982a).
+      .customIf([](const LegalityQuery &Query) {
+        return Query.Types[0].isVector();
+      })
+      .lower();
 
   //===--------------------------------------------------------------------===
   // Vector ops — unsupported (non-SIMD vector types)
   //===--------------------------------------------------------------------===
+  // G_CONCAT_VECTORS: residual SLP fewer-elements produces concat of native
+  // 64-bit pieces (e.g. 8×v2s32 → v16s32). Clamp dest to a native 64-bit
+  // shape so the wide concat is split; bare .lowerFor({S32,S64}) is
+  // UnableToLegalize and artifact-retries forever (pr28982a hang).
+  getActionDefinitionsBuilder(G_CONCAT_VECTORS)
+      .clampMaxNumElements(0, S32, 2)
+      .clampMaxNumElements(0, S16, 4)
+      .clampMaxNumElements(0, S8, 8)
+      .clampMaxNumElements(0, S1, 1)
+      .lower();
+
   getActionDefinitionsBuilder({
       G_BUILD_VECTOR_TRUNC,
-      G_CONCAT_VECTORS,
       G_INSERT_SUBVECTOR, G_EXTRACT_SUBVECTOR,
       G_SPLAT_VECTOR, G_STEP_VECTOR, G_VSCALE,
       G_VECREDUCE_MUL,
@@ -762,6 +1045,128 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
   MachineRegisterInfo &MRI = MI.getMF()->getRegInfo();
 
   //===--------------------------------------------------------------------===
+  // G_MERGE_VALUES → non-power-of-2 result (pr79737-1: 9×s8 → s72).
+  // Build next-pow2 accumulator with zext+shl+or, then trunc.
+  //===--------------------------------------------------------------------===
+  if (MI.getOpcode() == G_MERGE_VALUES) {
+    Register Dst = MI.getOperand(0).getReg();
+    LLT DstTy = MRI.getType(Dst);
+    if (!DstTy.isScalar() || isPowerOf2_32(DstTy.getSizeInBits()))
+      return false;
+    const unsigned DstBits = DstTy.getSizeInBits();
+    const unsigned WideBits = PowerOf2Ceil(DstBits);
+    const LLT WideTy = LLT::scalar(WideBits);
+    const LLT S32 = LLT::scalar(32);
+    MIB.setInstrAndDebugLoc(MI);
+    Register Acc = MIB.buildConstant(WideTy, 0).getReg(0);
+    unsigned Offset = 0;
+    for (unsigned OpIdx = 1, E = MI.getNumOperands(); OpIdx < E; ++OpIdx) {
+      Register Part = MI.getOperand(OpIdx).getReg();
+      LLT PartTy = MRI.getType(Part);
+      if (!PartTy.isScalar()) {
+        // Should not happen for pr79737-1 path; abort cleanly.
+        return false;
+      }
+      const unsigned PartBits = PartTy.getSizeInBits();
+      Register Ext = MIB.buildZExt(WideTy, Part).getReg(0);
+      if (Offset != 0) {
+        auto ShAmt = MIB.buildConstant(S32, Offset);
+        Ext = MIB.buildShl(WideTy, Ext, ShAmt).getReg(0);
+      }
+      Acc = MIB.buildOr(WideTy, Acc, Ext).getReg(0);
+      Offset += PartBits;
+    }
+    if (WideBits == DstBits)
+      MIB.buildCopy(Dst, Acc);
+    else
+      MIB.buildTrunc(Dst, Acc);
+    MI.eraseFromParent();
+    return true;
+  }
+
+  //===--------------------------------------------------------------------===
+  // G_CONSTANT wider than s64 (s72 bitfield containers). Split into two s64
+  // halves, merge to s128, trunc back to the original width so consumers see
+  // a trunc(s128) that G_ANYEXT can unmerge (pr79737-2).
+  //===--------------------------------------------------------------------===
+  if (MI.getOpcode() == G_CONSTANT) {
+    Register Dst = MI.getOperand(0).getReg();
+    LLT DstTy = MRI.getType(Dst);
+    unsigned Bits = DstTy.isScalar() ? DstTy.getSizeInBits() : 0;
+    // Custom path is only for 65..128-bit scalars (see builder rule above).
+    if (!DstTy.isScalar() || Bits <= 64 || Bits > 128)
+      return false;
+    MIB.setInstrAndDebugLoc(MI);
+    const LLT S64 = LLT::scalar(64);
+    const LLT S128 = LLT::scalar(128);
+    // zext only when the ConstantInt is narrower than 128; never zext-down.
+    APInt Raw = MI.getOperand(1).getCImm()->getValue();
+    APInt Val = Raw.getBitWidth() < 128 ? Raw.zext(128)
+               : Raw.getBitWidth() > 128 ? Raw.trunc(128)
+                                         : Raw;
+    auto Lo = MIB.buildConstant(S64, Val.trunc(64));
+    auto Hi = MIB.buildConstant(S64, Val.lshr(64).trunc(64));
+    Register Wide = MRI.createGenericVirtualRegister(S128);
+    MIB.buildMergeLikeInstr(Wide, {Lo.getReg(0), Hi.getReg(0)});
+    if (Bits == 128)
+      MIB.buildCopy(Dst, Wide);
+    else
+      MIB.buildTrunc(Dst, Wide);
+    MI.eraseFromParent();
+    return true;
+  }
+
+  //===--------------------------------------------------------------------===
+  // Same-size G_ZEXTLOAD / G_SEXTLOAD → G_LOAD (CB-126 residual).
+  // Non-pow2 mem lower emits s32 = G_ZEXTLOAD (load s32); generic lowerLoad
+  // then UnableToLegalize. Plain load is legal for s32/s32.
+  //===--------------------------------------------------------------------===
+  if (MI.getOpcode() == G_ZEXTLOAD || MI.getOpcode() == G_SEXTLOAD) {
+    auto &LoadMI = cast<GExtLoad>(MI);
+    Register Dst = LoadMI.getDstReg();
+    Register Ptr = LoadMI.getPointerReg();
+    LLT DstTy = MRI.getType(Dst);
+    LLT MemTy = LoadMI.getMMO().getMemoryType();
+    if (DstTy == MemTy) {
+      MIB.setInstrAndDebugLoc(MI);
+      MIB.buildLoad(Dst, Ptr, LoadMI.getMMO());
+      MI.eraseFromParent();
+      return true;
+    }
+    return false;
+  }
+
+  //===--------------------------------------------------------------------===
+  // G_STORE value-width ≠ MMO mem-width (CB-126 residual, pr79737-2).
+  // After i72 split: G_STORE s32 :: (store s64). Anyext/trunc to match mem,
+  // rewrite MMO size so the store is a natural legal pair.
+  //===--------------------------------------------------------------------===
+  if (MI.getOpcode() == G_STORE) {
+    auto &StoreMI = cast<GStore>(MI);
+    Register Val = StoreMI.getValueReg();
+    Register Ptr = StoreMI.getPointerReg();
+    LLT ValTy = MRI.getType(Val);
+    MachineMemOperand &MMO = StoreMI.getMMO();
+    LLT MemTy = MMO.getMemoryType();
+    if (!ValTy.isScalar() || !MemTy.isScalar() || ValTy == MemTy)
+      return false;
+
+    MIB.setInstrAndDebugLoc(MI);
+    MachineFunction &MF = *MI.getMF();
+    Register StoreVal = Val;
+    if (ValTy.getSizeInBits() < MemTy.getSizeInBits())
+      StoreVal = MIB.buildAnyExt(MemTy, Val).getReg(0);
+    else
+      StoreVal = MIB.buildTrunc(MemTy, Val).getReg(0);
+
+    MachineMemOperand *NewMMO =
+        MF.getMachineMemOperand(&MMO, MMO.getPointerInfo(), MemTy);
+    MIB.buildStore(StoreVal, Ptr, *NewMMO);
+    MI.eraseFromParent();
+    return true;
+  }
+
+  //===--------------------------------------------------------------------===
   // Narrow-result extensions (s1/s8 source -> s8/s16 result). The generic
   // widenScalar helper for G_[SZ]EXT/G_ANYEXT widens the SOURCE register
   // leaving the result type unchanged — so clampScalar(0, S32, S64) cannot
@@ -790,24 +1195,122 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
     // SelectionDAG soft-float targets). /.
     if (DstTy.isScalar() && DstTy.getSizeInBits() == 128) {
       const LLT S64 = LLT::scalar(64);
+      const LLT S32 = LLT::scalar(32);
       Register Src = MI.getOperand(1).getReg();
-      // Source must be s64; any other source width would need a different
-      // decomposition. The legalizer table only declares customFor for
-      // {{S128, S64}}, so this is the only shape that reaches here.
-      if (MRI.getType(Src).getSizeInBits() != 64)
+      LLT SrcTy = MRI.getType(Src);
+      if (!SrcTy.isScalar())
         return false;
+      const unsigned SrcBits = SrcTy.getSizeInBits();
+      if (SrcBits >= 128)
+        return false;
+
+      // SrcBits in (64, 128): build s128 as merge(lo s64, hi s64).
+      // NEVER G_STORE the non-pow2 source — lowerStore(s72) re-emits
+      // G_ANYEXT s72→s128 and that stack path infinite-loops (pr79737-2).
+      if (SrcBits > 64) {
+        MIB.setInstrAndDebugLoc(MI);
+        const unsigned HiBits = SrcBits - 64; // e.g. 8 for s72
+        Register Lo64 = MRI.createGenericVirtualRegister(S64);
+        Register Hi64 = MRI.createGenericVirtualRegister(S64);
+        bool HaveHalves = false;
+
+        // Constant: split the APInt (store i72 C; lowerStore anyexts C).
+        if (auto MaybeCst = getIConstantVRegValWithLookThrough(Src, MRI)) {
+          APInt V = MaybeCst->Value.zext(128);
+          MIB.buildConstant(Lo64, V.trunc(64));
+          MIB.buildConstant(Hi64, V.lshr(64).trunc(64));
+          HaveHalves = true;
+        } else if (MachineInstr *Def = MRI.getVRegDef(Src)) {
+          // Trunc of s128 (typical after lowerLoad): unmerge the wide value.
+          if (Def->getOpcode() == G_TRUNC) {
+            Register Wide = Def->getOperand(1).getReg();
+            LLT WideTy = MRI.getType(Wide);
+            if (WideTy.isScalar() && WideTy.getSizeInBits() == 128) {
+              auto U = MIB.buildUnmerge(S64, Wide);
+              MIB.buildCopy(Lo64, U.getReg(0));
+              MIB.buildCopy(Hi64, U.getReg(1));
+              HaveHalves = true;
+            } else if (WideTy.isScalar() && WideTy.getSizeInBits() > 128) {
+              auto ShAmt = MIB.buildConstant(S32, 64);
+              MIB.buildTrunc(Lo64, Wide);
+              auto HiW = MIB.buildLShr(WideTy, Wide, ShAmt);
+              MIB.buildTrunc(Hi64, HiW);
+              HaveHalves = true;
+            }
+          } else if (Def->getOpcode() == G_LOAD ||
+                     Def->getOpcode() == G_SEXTLOAD ||
+                     Def->getOpcode() == G_ZEXTLOAD) {
+            // Re-load as legal s64 + high fragment (no non-pow2 mem op).
+            auto &LoadMI = cast<GAnyLoad>(*Def);
+            MachineMemOperand &OldMMO = LoadMI.getMMO();
+            if (OldMMO.getMemoryType().getSizeInBits() == SrcBits) {
+              MachineFunction &MF = *MI.getMF();
+              Register Ptr = LoadMI.getPointerReg();
+              const LLT P0 = LLT::pointer(0, 32);
+              MachineMemOperand *LoMMO =
+                  MF.getMachineMemOperand(&OldMMO, 0, 8);
+              auto LoLd = MIB.buildLoad(S64, Ptr, *LoMMO);
+              MIB.buildCopy(Lo64, LoLd.getReg(0));
+              auto Off = MIB.buildConstant(S32, 8);
+              auto PtrHi = MIB.buildPtrAdd(P0, Ptr, Off);
+              unsigned HiBytes = (HiBits + 7) / 8;
+              MachineMemOperand *HiMMO =
+                  MF.getMachineMemOperand(&OldMMO, 8, HiBytes);
+              // High fragment is always zero-extended into the s64 hi half;
+              // whole-value G_SEXT is applied below via s64 sign-extend.
+              auto HiLd =
+                  MIB.buildLoadInstr(G_ZEXTLOAD, S64, PtrHi, *HiMMO);
+              MIB.buildCopy(Hi64, HiLd.getReg(0));
+              HaveHalves = true;
+            }
+          }
+        }
+
+        if (!HaveHalves) {
+          // Last resort: low half only. High bits of the source are lost —
+          // prefer a hard failure over the old non-pow2 stack store loop.
+          return false;
+        }
+
+        // ZEXT: clear bits above the original source width in the hi half.
+        if (MI.getOpcode() == G_ZEXT && HiBits < 64) {
+          auto Mask = MIB.buildConstant(
+              S64, (APInt::getAllOnes(HiBits)).zext(64));
+          Register Masked = MRI.createGenericVirtualRegister(S64);
+          MIB.buildAnd(Masked, Hi64, Mask);
+          Hi64 = Masked;
+        }
+
+        // SEXT: sign-extend from bit (SrcBits-1), which lives in Hi64.
+        // Use only s64 shifts (s128 shifts are not legal on Haydn).
+        if (MI.getOpcode() == G_SEXT) {
+          unsigned Sh = 64 - HiBits;
+          auto ShAmt = MIB.buildConstant(S32, Sh);
+          Register T = MRI.createGenericVirtualRegister(S64);
+          MIB.buildShl(T, Hi64, ShAmt);
+          Register SExtHi = MRI.createGenericVirtualRegister(S64);
+          MIB.buildAShr(SExtHi, T, ShAmt);
+          Hi64 = SExtHi;
+        }
+
+        MIB.buildMergeLikeInstr(DstReg, {Lo64, Hi64});
+        MI.eraseFromParent();
+        return true;
+      }
+
+      Register Lo64 = Src;
+      if (SrcBits < 64)
+        Lo64 = MIB.buildInstr(MI.getOpcode(), {S64}, {Src}).getReg(0);
 
       Register Hi64 = MRI.createGenericVirtualRegister(S64);
       if (MI.getOpcode() == G_SEXT) {
-        // sign-extend-high: Hi64 = ASHR Src, 63
-        Register ShAmt63 = MRI.createGenericVirtualRegister(LLT::scalar(32));
+        Register ShAmt63 = MRI.createGenericVirtualRegister(S32);
         MIB.buildConstant(ShAmt63, 63);
-        MIB.buildAShr(Hi64, Src, ShAmt63);
+        MIB.buildAShr(Hi64, Lo64, ShAmt63);
       } else {
-        // G_ZEXT / G_ANYEXT: high half is zero.
         MIB.buildConstant(Hi64, 0);
       }
-      MIB.buildMergeLikeInstr(DstReg, {Src, Hi64});
+      MIB.buildMergeLikeInstr(DstReg, {Lo64, Hi64});
       MI.eraseFromParent();
       return true;
     }
@@ -1163,16 +1666,7 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
     return true;
   }
 
-  //===--------------------------------------------------------------------===
-  // G_FCONSTANT — soft-float constant materialization via bitcast-to-int.
-  //===--------------------------------------------------------------------===
-  // Haydn has no FPU, so every float value is stored in a GPR/DR64 as its
-  // bit-cast integer. Materialize the float constant by extracting its APInt
-  // bit-pattern (FVal.bitcastToAPInt) and emitting a G_CONSTANT with that
-  // integer value into the original float-typed destination vreg. The
-  // register-bank/selector then treats the result like any other integer
-  // constant. This is the standard soft-float G_FCONSTANT idiom (matches
-  // RISCVLegalizerInfo::legalizeCustom case G_FCONSTANT). See.
+  // Soft-float G_FCONSTANT: bitcast IEEE bits into G_CONSTANT (not constpool).
   if (MI.getOpcode() == G_FCONSTANT) {
     const APFloat &FVal = MI.getOperand(1).getFPImm()->getValueAPF();
     Register DstReg = MI.getOperand(0).getReg();
@@ -1181,87 +1675,7 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
     return true;
   }
 
-  //===--------------------------------------------------------------------===
-  // G_FNEG / G_FABS — soft-float integer bit-manipulation lowering.
-  //===--------------------------------------------------------------------===
-  // Haydn has no FPU, so every float value lives in a GPR/DR64 as its IEEE-754
-  // bit-cast integer. The standard soft-float idiom (matches SelectionDAG
-  // ISel lowering for ISD::FNEG / ISD::FABS on RISC-V and other soft-float
-  // targets) is to manipulate the bit-pattern directly:
-  // fneg(x) = bitcast<x->iN> XOR 0x8000...0 (flip the sign bit)
-  // fabs(x) = bitcast<x->iN> AND 0x7FFF...F (clear the sign bit)
-  // The destination vreg is float-typed but lives in the same storage as an
-  // integer; we emit the bit-trick into it directly. No libcall is involved
-  // (no __negsf2 exists; FABS libcall is not in the upstream GISel libcall
-  // dispatch — see LegalizerHelper::libcall). See,.
-  if (MI.getOpcode() == G_FNEG || MI.getOpcode() == G_FABS) {
-    Register DstReg = MI.getOperand(0).getReg();
-    Register SrcReg = MI.getOperand(1).getReg();
-    LLT DstTy = MRI.getType(DstReg);
-    unsigned BitWidth = DstTy.getSizeInBits();
-
-    // Build the integer mask: sign-bit-only (XOR) for fneg, all-magnitude
-    // (AND) for fabs. For a 32-bit float: 0x80000000 (sign) / 0x7FFFFFFF
-    // (magnitude). For a 64-bit double: 0x8000000000000000
-    // 0x7FFFFFFFFFFFFFFF. APInt handles the wide-constant construction.
-    APInt Mask;
-    if (MI.getOpcode() == G_FNEG)
-      Mask = APInt::getSignMask(BitWidth);
-    else
-      Mask = APInt::getBitsSet(BitWidth, 0, BitWidth - 1);
-
-    Register MaskReg = MRI.createGenericVirtualRegister(DstTy);
-    MIB.buildConstant(MaskReg, Mask);
-
-    if (MI.getOpcode() == G_FNEG)
-      MIB.buildXor(DstReg, SrcReg, MaskReg);
-    else
-      MIB.buildAnd(DstReg, SrcReg, MaskReg);
-
-    MI.eraseFromParent();
-    return true;
-  }
-
-  //===--------------------------------------------------------------------===
-  // G_FCOPYSIGN — soft-float sign-bit graft (no runtime symbol)..
-  //===--------------------------------------------------------------------===
-  // copysign(x, y) = keep x's magnitude, take y's sign:
-  // result = (x & 0x7FFF...F) | (y & 0x8000...0)
-  // Like FNEG/FABS this is the canonical integer bit-trick on the IEEE-754
-  // bit-pattern (NaN sign is handled correctly since NaN carries a sign bit).
-  // No libcall: G_FCOPYSIGN has no case in LegalizerHelper::libcall.
-  if (MI.getOpcode() == G_FCOPYSIGN) {
-    Register DstReg = MI.getOperand(0).getReg();
-    Register XReg = MI.getOperand(1).getReg();  // magnitude source
-    Register YReg = MI.getOperand(2).getReg();  // sign source
-    LLT DstTy = MRI.getType(DstReg);
-    unsigned BitWidth = DstTy.getSizeInBits();
-
-    APInt MagMask = APInt::getBitsSet(BitWidth, 0, BitWidth - 1);  // 0x7FFF..F
-    APInt SignMask = APInt::getSignMask(BitWidth);                 // 0x8000..0
-
-    Register MagMaskReg = MRI.createGenericVirtualRegister(DstTy);
-    Register SignMaskReg = MRI.createGenericVirtualRegister(DstTy);
-    MIB.buildConstant(MagMaskReg, MagMask);
-    MIB.buildConstant(SignMaskReg, SignMask);
-
-    Register MagPart = MRI.createGenericVirtualRegister(DstTy);
-    Register SignPart = MRI.createGenericVirtualRegister(DstTy);
-    MIB.buildAnd(MagPart, XReg, MagMaskReg);
-    MIB.buildAnd(SignPart, YReg, SignMaskReg);
-    MIB.buildOr(DstReg, MagPart, SignPart);
-
-    MI.eraseFromParent();
-    return true;
-  }
-
-  // G_FMINIMUM / G_FMAXIMUM / G_FMINIMUMNUM / G_FMAXIMUMNUM — map to
-  // G_FMINNUM / G_FMAXNUM..
-  // FMINIMUM/FMAXIMUM have no case in the generic libcall switch, and
-  // FMINIMUMNUM/FMAXIMUMNUM have no RuntimeLibcallImpl (getLibcallName null).
-  // All four are mapped to FMINNUM/FMAXNUM, which take the standard libcall
-  // path. C frontends emit FMINNUM (__builtin_fmin), never these; the only
-  // difference is NaN-signaling, which baremetal soft-float does not track.
+  // Soft-float minimum/maximum* → fminnum/fmaxnum (libcall to fminf/fmaxf).
   if (MI.getOpcode() == G_FMINIMUM || MI.getOpcode() == G_FMAXIMUM ||
       MI.getOpcode() == G_FMINIMUMNUM || MI.getOpcode() == G_FMAXIMUMNUM) {
     Register DstReg = MI.getOperand(0).getReg();
@@ -1368,6 +1782,26 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
       Register V2 = MRI.createGenericVirtualRegister(V2S32);
       MIB.buildBuildVector(V2, {Lo32, Hi32});
       MIB.buildBitcast(Dst, V2);
+      MI.eraseFromParent();
+      return true;
+    }
+
+    // Residual SLP v4i8 (32-bit): pack four s8 into one s32 + bitcast.
+    if (DstTy == LLT::fixed_vector(4, 8) && MI.getNumOperands() == 5) {
+      Register Packed = packFour8(MI.getOperand(1).getReg(),
+                                  MI.getOperand(2).getReg(),
+                                  MI.getOperand(3).getReg(),
+                                  MI.getOperand(4).getReg());
+      MIB.buildBitcast(Dst, Packed);
+      MI.eraseFromParent();
+      return true;
+    }
+
+    // Residual SLP v2i16 (32-bit): pack two s16 into one s32 + bitcast.
+    if (DstTy == LLT::fixed_vector(2, 16) && MI.getNumOperands() == 3) {
+      Register Packed =
+          packTwo16(MI.getOperand(1).getReg(), MI.getOperand(2).getReg());
+      MIB.buildBitcast(Dst, Packed);
       MI.eraseFromParent();
       return true;
     }
@@ -1531,6 +1965,13 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
       }
     }
 
+    // Do NOT call lowerExtractInsertVectorElt on residual wide vectors:
+    // it unmerges the whole vector to feed one extract, which re-creates
+    // extracts (legalizer hang). Wide extracts must hit clampMaxNumElements
+    // fewer-elements first; signal unable so the legalizer applies rules.
+    if (SrcVecTy.isVector() && SrcVecTy.getSizeInBits() > 64)
+      return false;
+
     // Fall back to generic lowering for other types / variable indices.
     return Helper.lowerExtractInsertVectorElt(MI) ==
            LegalizerHelper::Legalized;
@@ -1542,9 +1983,47 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
   }
 
   //===--------------------------------------------------------------------===
-  // G_SHUFFLE_VECTOR — lower for v2i32 by bitcasting to s64 and using
-  // G_UNMERGE_VALUES s64 (not v2i32) to extract elements. This avoids
-  // the selector bug with G_UNMERGE_VALUES on vector types.
+  // G_UNMERGE_VALUES of wide residual vectors into smaller vectors
+  // (fewer-elements intermediate: v4s32 → 2×v2s32, v16s32 → 8×v2s32, …).
+  // Avoid bitcast-to-s512 thrash: build each part from element extracts.
+  // EXTRACT/BUILD of residual vectors are clamped to native 64-bit shapes.
+  //===--------------------------------------------------------------------===
+  if (MI.getOpcode() == TargetOpcode::G_UNMERGE_VALUES) {
+    const unsigned NumDefs = MI.getNumOperands() - 1;
+    Register SrcReg = MI.getOperand(NumDefs).getReg();
+    LLT SrcTy = MRI.getType(SrcReg);
+    LLT DstTy = MRI.getType(MI.getOperand(0).getReg());
+    if (!SrcTy.isVector() || !DstTy.isVector())
+      return false;
+    if (SrcTy.getElementType() != DstTy.getElementType())
+      return false;
+    if (SrcTy.getSizeInBits() <= 64)
+      return false;
+    if (NumDefs * DstTy.getNumElements() != SrcTy.getNumElements())
+      return false;
+
+    MIB.setInstrAndDebugLoc(MI);
+    const LLT S32 = LLT::scalar(32);
+    const LLT EltTy = DstTy.getElementType();
+    const unsigned EltsPerPart = DstTy.getNumElements();
+    for (unsigned P = 0; P < NumDefs; ++P) {
+      SmallVector<Register, 8> Elts;
+      Elts.reserve(EltsPerPart);
+      for (unsigned E = 0; E < EltsPerPart; ++E) {
+        auto Idx = MIB.buildConstant(S32, P * EltsPerPart + E);
+        Elts.push_back(
+            MIB.buildExtractVectorElement(EltTy, SrcReg, Idx).getReg(0));
+      }
+      MIB.buildBuildVector(MI.getOperand(P).getReg(), Elts);
+    }
+    MI.eraseFromParent();
+    return true;
+  }
+
+  //===--------------------------------------------------------------------===
+  // G_SHUFFLE_VECTOR — scalarize any residual size via extract + build.
+  // Native 64-bit v2i32 keeps the bitcast-to-s64 path; wider/mismatched
+  // SLP shuffles (v16s1 from v4s1, etc.) use extractelement.
   //===--------------------------------------------------------------------===
   if (MI.getOpcode() == G_SHUFFLE_VECTOR) {
     Register DstReg = MI.getOperand(0).getReg();
@@ -1552,62 +2031,92 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
     LLT DstTy = MRI.getType(DstReg);
     LLT SrcTy = MRI.getType(Src1Reg);
 
-    if (!SrcTy.isVector() || SrcTy != DstTy)
-      return false;
-    if (SrcTy.getSizeInBits() != 64)
+    if (!SrcTy.isVector() || !DstTy.isVector())
       return false;
 
     unsigned NumSrcElems = SrcTy.getNumElements();
     LLT ElemTy = SrcTy.getElementType();
+    if (DstTy.getElementType() != ElemTy)
+      return false;
     unsigned NumDstElems = DstTy.getNumElements();
-    const LLT S64 = LLT::scalar(64);
-
-    // Extract source 1 elements via bitcast to s64 + G_UNMERGE_VALUES s64.
-    Register Src1S64 = MRI.createGenericVirtualRegister(S64);
-    MIB.buildBitcast(Src1S64, Src1Reg);
-    SmallVector<Register, 4> Src1Elems;
-    for (unsigned I = 0; I < NumSrcElems; ++I)
-      Src1Elems.push_back(MRI.createGenericVirtualRegister(ElemTy));
-    MIB.buildUnmerge(Src1Elems, Src1S64);
-
-    // Extract source 2 elements if any mask entry references them.
-    SmallVector<Register, 4> Src2Elems;
+    const LLT S32 = LLT::scalar(32);
     ArrayRef<int> Mask = MI.getOperand(3).getShuffleMask();
-    bool NeedsSrc2 = llvm::any_of(Mask, [NumSrcElems](int M) {
-      return M >= 0 && static_cast<unsigned>(M) >= NumSrcElems;
-    });
-    if (NeedsSrc2) {
-      Register Src2Reg = MI.getOperand(2).getReg();
-      Register Src2S64 = MRI.createGenericVirtualRegister(S64);
-      MIB.buildBitcast(Src2S64, Src2Reg);
+
+    auto extractLane = [&](Register Vec, unsigned Lane) -> Register {
+      // Prefer unmerge of 64-bit native vectors (selector-friendly).
+      if (MRI.getType(Vec).getSizeInBits() == 64 &&
+          MRI.getType(Vec).getNumElements() == NumSrcElems &&
+          NumSrcElems <= 4) {
+        // Fall through to extract; bitcast path only for pure v2i32 identity
+        // shapes handled below.
+      }
+      auto Idx = MIB.buildConstant(S32, Lane);
+      return MIB.buildExtractVectorElement(ElemTy, Vec, Idx).getReg(0);
+    };
+
+    // Fast path: same-shape 64-bit vectors via s64 bitcast + unmerge.
+    if (SrcTy == DstTy && SrcTy.getSizeInBits() == 64) {
+      const LLT S64 = LLT::scalar(64);
+      Register Src1S64 = MRI.createGenericVirtualRegister(S64);
+      MIB.buildBitcast(Src1S64, Src1Reg);
+      SmallVector<Register, 4> Src1Elems;
       for (unsigned I = 0; I < NumSrcElems; ++I)
-        Src2Elems.push_back(MRI.createGenericVirtualRegister(ElemTy));
-      MIB.buildUnmerge(Src2Elems, Src2S64);
+        Src1Elems.push_back(MRI.createGenericVirtualRegister(ElemTy));
+      MIB.buildUnmerge(Src1Elems, Src1S64);
+
+      SmallVector<Register, 4> Src2Elems;
+      bool NeedsSrc2 = llvm::any_of(Mask, [NumSrcElems](int M) {
+        return M >= 0 && static_cast<unsigned>(M) >= NumSrcElems;
+      });
+      if (NeedsSrc2) {
+        Register Src2Reg = MI.getOperand(2).getReg();
+        Register Src2S64 = MRI.createGenericVirtualRegister(S64);
+        MIB.buildBitcast(Src2S64, Src2Reg);
+        for (unsigned I = 0; I < NumSrcElems; ++I)
+          Src2Elems.push_back(MRI.createGenericVirtualRegister(ElemTy));
+        MIB.buildUnmerge(Src2Elems, Src2S64);
+      }
+
+      SmallVector<Register, 4> ResultElems;
+      for (unsigned I = 0; I < NumDstElems; ++I) {
+        int MaskVal = Mask.size() > I ? Mask[I] : -1;
+        if (MaskVal < 0) {
+          Register UndefReg = MRI.createGenericVirtualRegister(ElemTy);
+          MIB.buildUndef(UndefReg);
+          ResultElems.push_back(UndefReg);
+        } else if (static_cast<unsigned>(MaskVal) < NumSrcElems) {
+          ResultElems.push_back(Src1Elems[MaskVal]);
+        } else if (static_cast<unsigned>(MaskVal) < 2 * NumSrcElems &&
+                   !Src2Elems.empty()) {
+          ResultElems.push_back(
+              Src2Elems[static_cast<unsigned>(MaskVal) - NumSrcElems]);
+        } else {
+          return false;
+        }
+      }
+      MIB.buildBuildVector(DstReg, ResultElems);
+      MI.eraseFromParent();
+      return true;
     }
 
-    // Build result elements per the mask.
-    SmallVector<Register, 4> ResultElems;
+    // Residual SLP (including mismatched src/dst lengths, e.g. v4s1→v16s1).
+    SmallVector<Register, 16> ResultElems;
+    Register Src2Reg = MI.getOperand(2).getReg();
     for (unsigned I = 0; I < NumDstElems; ++I) {
       int MaskVal = Mask.size() > I ? Mask[I] : -1;
       if (MaskVal < 0) {
-        // Undef lane — use G_IMPLICIT_DEF to avoid a false dependency on any
-        // source element. Substituting Src1Elems[0] created a data dependency
-        // on element 0 of the source vector, which the scheduler / register
-        // allocator cannot elide.
         Register UndefReg = MRI.createGenericVirtualRegister(ElemTy);
         MIB.buildUndef(UndefReg);
         ResultElems.push_back(UndefReg);
       } else if (static_cast<unsigned>(MaskVal) < NumSrcElems) {
-        ResultElems.push_back(Src1Elems[MaskVal]);
-      } else if (static_cast<unsigned>(MaskVal) < 2 * NumSrcElems &&
-                 !Src2Elems.empty()) {
+        ResultElems.push_back(extractLane(Src1Reg, MaskVal));
+      } else if (static_cast<unsigned>(MaskVal) < 2 * NumSrcElems) {
         ResultElems.push_back(
-            Src2Elems[static_cast<unsigned>(MaskVal) - NumSrcElems]);
+            extractLane(Src2Reg, static_cast<unsigned>(MaskVal) - NumSrcElems));
       } else {
         return false;
       }
     }
-
     MIB.buildBuildVector(DstReg, ResultElems);
     MI.eraseFromParent();
     return true;

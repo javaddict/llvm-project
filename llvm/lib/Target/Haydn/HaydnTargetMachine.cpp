@@ -22,6 +22,8 @@
 #include "HaydnExpandPseudos.h"
 #include "HaydnExpandPostIncEarly.h"
 #include "HaydnEnsureTerminators.h"
+#include "HaydnFinalizeBundle.h"
+#include "HaydnVerifyBundles.h"
 #include "HaydnPEIPeephole.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnMachineScheduler.h"
@@ -124,6 +126,8 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnTarget() {
   initializeHaydnPEIPeepholePass(PR);
   initializeHaydnEnsureTerminatorsPass(PR);
   initializeHaydnBitSimplifyPass(PR);
+  initializeHaydnFinalizeBundlePass(PR);
+  initializeHaydnVerifyBundlesPass(PR);
   initializeHaydnHardwareLoopsPass(PR);
   initializeHaydnFixupHwLoopsPass(PR);
   initializeBranchRelaxationLegacyPass(PR);
@@ -214,7 +218,8 @@ namespace {
 // EnsureTerminators *; ExpandPostIncEarly * (product post-inc);
 // CFG/cond/copy peeps (O1+); MBP (O1+) BEFORE HardwareLoops;
 // HardwareLoops (O1+); ExpandPseudos *; BitSimplify/PEIPeephole (O1+);
-// PostMachineScheduler/HaydnPostRA pack * (sole pack, all levels)
+// PostMachineScheduler/HaydnPostRA pack * (sole pack, all levels);
+// HaydnFinalizeBundle * (singleton → BUNDLE + FormatID; AIE FinalizeBundle)
 // Layout: addBlockPlacement empty (AIE2: placement already in PreSched2)
 // Pre-emit: BranchRelaxation; FixupHwLoops(O1+); BranchRelaxation
 // (Haydn-specific range/hwloop — AIE PreEmit is empty)
@@ -377,8 +382,9 @@ void HaydnPassConfig::addPreRegAlloc() {
   // renumbering moved or erased referenced blocks. SMS uses virtual registers
   // for renaming across pipeline stages, so it must run before RA.
   if (getOptLevel() >= CodeGenOptLevel::Default) {
-    // PreRALoadPromote deleted (zombie: AltDescs side-effect, always false;
-    // SMS uses ResourceCycle; post-RA promoteLoadsToSlot1 is the placement home).
+    // PreRALoadPromote / promoteLoadsToSlot1 deleted (B3.exit.3): dual-load
+    // packing is HR tryAddProduct PlacementAlternatives → setDesc members
+    // (AIEHazardRecognizer.cpp:389; AIEMachineScheduler.cpp:1121-1132).
     addPass(&MachinePipelinerID);
     // AIE-faithful: remove unused debris after SWP (AIE2TargetMachine
     // addPreRegAlloc: MachinePipeliner → DeadMachineInstructionElim).
@@ -438,6 +444,17 @@ void HaydnPassConfig::addPreSched2() {
   // CopyConstrain is pre-RA only (AIE CopyConstrain placement).
   if (EnableHaydnPostRASched)
     addPass(&PostMachineSchedulerID);
+  // After scheduling, wrap remaining standalone MIs as singleton BUNDLEs
+  // with FormatID imm (AIE2TargetMachine.cpp:242-244 createAIEFinalizeBundle;
+  // AIEFinalizeBundle.cpp:40-59). Multi-MI already stamped in
+  // HaydnPostRASchedStrategy::finalizeLegalMultiMI (B1.1).
+  if (EnableHaydnPostRASched)
+    addPass(createHaydnFinalizeBundlePass());
+  // B1.4: fail-closed committed-cycle verifier immediately after finalize
+  // (AIEBaseInstrInfo.cpp:1440-1459 verifyInstruction peer; AIE finalize
+  // commit surface AIEHazardRecognizer.cpp:278-312 under test).
+  if (EnableHaydnPostRASched)
+    addPass(createHaydnVerifyBundlesPass());
 }
 
 void HaydnPassConfig::addBlockPlacement() {
@@ -445,18 +462,35 @@ void HaydnPassConfig::addBlockPlacement() {
 }
 
 void HaydnPassConfig::addPreEmitPass() {
-  // AIE PreEmit is empty. Haydn needs Bundle128 branch range + hwloop Off
-  // fixups after pack (size model). Pattern matches Hexagon: relax
-  // then target fixup that can grow layout, then relax again.
+  // AIE PreEmit is empty (AIE2TargetMachine.cpp:88;
+  // AIEBaseTargetMachine.cpp:388) — setDesc+finalize never need a second
+  // pass. Haydn needs Bundle128 branch range + hwloop Off fixups after pack
+  // (size model). Pattern matches Hexagon: relax then target fixup that can
+  // grow layout, then relax again.
   // 1. BranchRelaxation — Bundle128 simm fields
   // 2. HaydnFixupHwLoops — SET_HWLOOP Off1/Off2 ÷4; product demote-first
   //    (LoopDec+LoopJNZ when free counter; fatal if live demote fails).
   //    demote OFF = debug erase-setup only — not product.
   // 3. BranchRelaxation — re-close after Fixup growth (e.g. long BEQZ_W)
-  // No pack / no PostMachineScheduler here.
+  // 4. B4.3 late layout firewall: re-apply AIE commit surfaces after allowed
+  //    late growth (no 2nd packer / no silent reshape / no MCFlags):
+  //      materialize bare MIs via empty-cycle tryAdd → setDesc
+  //        (AIEMachineScheduler.cpp:1121-1139; AIEHazardRecognizer.cpp:174-214;
+  //         HaydnBundleMaterialize commitLateProductCycle)
+  //      FinalizeBundle singleton wrap + FormatID
+  //        (AIEFinalizeBundle.cpp:40-59; AIE2TargetMachine.cpp:242-244)
+  //      fail-closed verifyCommittedBundle
+  //        (AIEBaseInstrInfo.cpp:1440-1459; haydn-verify-bundles)
+  // Do not move BR before pack (sizes wrong). No PostMachineScheduler here.
   addPass(&BranchRelaxationPassID);
   if (getOptLevel() != CodeGenOptLevel::None && EnableHaydnHardwareLoops) {
     addPass(createHaydnFixupHwLoopsPass());
     addPass(&BranchRelaxationPassID);
+  }
+  // Late re-commit only when pack path produced committed cycles (same gate
+  // as post-RA Finalize/Verify in addPreSched2).
+  if (EnableHaydnPostRASched) {
+    addPass(createHaydnFinalizeBundlePass());
+    addPass(createHaydnVerifyBundlesPass());
   }
 }

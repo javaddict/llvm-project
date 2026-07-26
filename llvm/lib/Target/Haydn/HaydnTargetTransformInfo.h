@@ -41,10 +41,9 @@ public:
       : BaseT(TM, F.getParent()->getDataLayout()), ST(*TM->getSubtargetImpl(F)),
         TLI(*ST.getTargetLowering()) {}
 
-  // Enable runtime partial unrolling. This is the prerequisite for SMS:
-  // Haydn's MAC-reduction loops are too short for multi-stage pipelining
-  // because ResMII ≈ schedule span. Unrolling ×2 doubles the body →
-  // span > II → multi-stage schedules appear. Mirrors Hexagon's approach.
+  // Prefer partial/runtime densify UF = 64/eltBits (DR=64: i32×2, i16×4,
+  // i8×8) for short dual-stream MAC and 1-ld/1-st memcopy loops. Spill gate
+  // is the unroller cost model (Force stays off), not a local heuristic.
   void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
                                TTI::UnrollingPreferences &UP,
                                OptimizationRemarkEmitter *ORE) const override;
@@ -71,6 +70,32 @@ public:
   bool isHardwareLoopProfitable(Loop *L, ScalarEvolution &SE,
                                 AssumptionCache &AC, TargetLibraryInfo *LibInfo,
                                 HardwareLoopInfo &HWLoopInfo) const override;
+
+  /// Native SIMD / DR bank is 64-bit (v2i32 / v4i16 / v8i8). Cap SLP and
+  /// LoopVectorize so residual wider vectors (v16s32 etc.) never enter GISel
+  /// and thrash the legalizer (pr28982a hang after G-ABI-VEC).
+  TypeSize
+  getRegisterBitWidth(TargetTransformInfo::RegisterKind K) const override {
+    switch (K) {
+    case TargetTransformInfo::RGK_Scalar:
+      return TypeSize::getFixed(32);
+    case TargetTransformInfo::RGK_FixedWidthVector:
+      return TypeSize::getFixed(64);
+    case TargetTransformInfo::RGK_ScalableVector:
+      return TypeSize::getZero();
+    }
+    llvm_unreachable("unknown register kind");
+  }
+
+  unsigned getMinVectorRegisterBitWidth() const override { return 32; }
+
+  unsigned getNumberOfRegisters(unsigned ClassID) const override {
+    // ClassID 0 = scalar GPR, non-zero used as vector bank by some analyses.
+    bool Vector = (ClassID != 0);
+    if (Vector)
+      return 16; // D0–D15
+    return 16;   // R0–R15 (soft-zero / SP / LR reserved at RA)
+  }
 };
 
 } // namespace llvm

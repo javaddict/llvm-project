@@ -49,7 +49,7 @@
 # (RESOLVED — see escalation block below.)
 #
 # What breaks if regresses (gate removed):
-# test1's pair would land in ONE BUNDLE -> the CHECK (two standalone instrs
+# test1's pair would land in ONE BUNDLE 0, -> the CHECK (two standalone instrs
 # no BUNDLE) fails. The base VLIWPacketizerList only emits a BUNDLE MI for
 # multi-instruction packets; a forced-sequential pair shows up as two
 # un-bundled instrs (same shape as the WAW test postmisched-waw-dst-reg).

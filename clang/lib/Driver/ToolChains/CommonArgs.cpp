@@ -831,6 +831,15 @@ std::string tools::getCPUName(const Driver &D, const ArgList &Args,
     if (const Arg *A = Args.getLastArg(options::OPT_mcpu_EQ))
       return A->getValue();
     return "";
+
+  // C3.1 / G-CAPI-FEATURE: mirror HaydnGeneric.td ProcessorModels.
+  // -mcpu=generic → agu+hwloop; -mcpu=haydn → full ISA. Empty → generic
+  // (same default as HaydnSubtarget). Claims OPT_mcpu so TargetSpecific
+  // validation accepts the flag for haydn-unknown-elf.
+  case llvm::Triple::haydn:
+    if (const Arg *A = Args.getLastArg(options::OPT_mcpu_EQ))
+      return A->getValue();
+    return "generic";
   }
 }
 
