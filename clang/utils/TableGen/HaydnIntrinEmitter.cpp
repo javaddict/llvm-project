@@ -8,15 +8,32 @@
 //
 // TableGen backends driven by BuiltinsHaydn.td:
 //
-//   -gen-haydn-intrin-header   → haydn.h
-//   -gen-haydn-builtin-codegen → haydn_builtin_cg.inc
-//   -gen-haydn-builtin-sema    → haydn_builtin_sema.inc
+//   -gen-haydn-intrin-header      → haydn.h
+//   -gen-haydn-builtin-codegen    → haydn_builtin_cg.inc
+//   -gen-haydn-builtin-sema       → haydn_builtin_sema.inc
+//   -gen-haydn-op-manifest        → haydn_op_manifest.inc (public-op contract)
+//   -gen-haydn-op-closure-probe   → exhaustive PublicEnabled C probe
+//   -gen-haydn-op-imm-audit       → exhaustive Imm non-ICE + range-neg Sema
+//   -gen-haydn-op-feature-audit   → exhaustive Features-gate Sema audit
 //
 // BuiltinsHaydn.inc is still produced by -gen-clang-builtins (shared TD).
+//
+// PublicEnabled (HaydnPublicAPI): haydn.h emits only PublicEnabled=1 ops.
+// HaydnAeBuiltin defaults PublicEnabled=0. Publish checks are fail-closed.
+// Manifest columns cover effect, features, arity, ImmChecks, prototype so CI
+// can audit every public op without FormatID/slot/AltDesc leakage.
+// Exhaustive probe calls every public haydn_* with type dummies + ImmArg ICE
+// (OpenCL exhaustive-test peer) so C → Sema → IR → ISel → object is proven.
+// Imm audit emits -verify non-ICE + out-of-range calls on __builtin_haydn_*
+// (Sema ImmCheck home; not UA public switch wrappers).
+// Feature audit emits multi-verify generic/full/noagu on every PublicEnabled
+// op with non-empty Features (err_builtin_needs_feature; Hexagon peer =
+// checkTargetFeatures).
 //
 //===----------------------------------------------------------------------===//
 
 #include "TableGenBackends.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -27,6 +44,7 @@
 #include <cctype>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace llvm;
@@ -43,7 +61,7 @@ enum class Kind {
   PairRRA2,
   PairCbLoad,
   PairBrevLoad,
-  /// POST/PRE AGU writeback loads: frexp (int* new_ptr, base, off) → {data,new_ptr}.
+  /// POST/PRE AGU writeback loads: frexp (void** new_ptr, base, off) → {data,new_ptr}.
   PairLdWb,
   Skip,
 };
@@ -64,10 +82,18 @@ struct BuiltinEntry {
   std::string Mnemonic;
   std::string Semantics;
   std::string CodeGen; // optional EmitHaydnBuiltinExpr recipe (AE / specials)
+  /// Effect category: Pure|SFR|State|Mem|StateMem (from TD Effect=).
+  std::string Effect = "Pure";
+  /// TargetBuiltin Features expression (comma=AND, pipe=OR).
+  std::string Features;
+  /// Arity of clang Prototype (ImmCheck ImmArgIdx is 0-based against this).
+  unsigned Arity = 0;
   SmallVector<ImmCheckSpec, 2> ImmChecks; // from TD ImmChecks = [ImmCheck<…>]
   Kind K = Kind::Scalar;
   bool IsAe = false;
   bool IsPair = false;
+  /// When false, skip haydn.h wrapper (builtin may still exist for dsp/CG).
+  bool PublicEnabled = true;
 };
 
 static std::string upperSnake(StringRef N) {
@@ -106,9 +132,9 @@ static Kind classify(StringRef Name, StringRef Proto) {
     // BREV loads: frexp {data, new_ptr} without cbr_sel (ptr, stride).
     if (Name.starts_with("ldw_brev_") || Name.starts_with("lw_brev_"))
       return Kind::PairBrevLoad;
-    // POST/PRE AGU writeback loads: frexp int* new_ptr (not int64_t* MAC pairs).
-    // Prototype: data_ty(int*, int, int) — same frexp shape as BREV.
-    if (Proto.contains("(int*,"))
+    // POST/PRE AGU writeback loads: frexp void** new_ptr (not int64_t* MAC pairs).
+    // Prototype: data_ty(void**, void const*, int) — same frexp shape as BREV.
+    if (Proto.contains("(void**,") || Proto.contains("(int*,"))
       return Kind::PairLdWb;
     // RR2: out*, a, b  → 2 top-level commas (3 args)
     // RRA2: out*, acc1, acc2, a, b → 4 top-level commas (5 args)
@@ -171,6 +197,14 @@ static std::string mapCType(StringRef T) {
     return "int64_t *";
   if (T == "int*")
     return "int *";
+  if (T == "void**")
+    return "void **";
+  if (T == "void*")
+    return "void *";
+  if (T == "void const*" || T == "const void*")
+    return "const void *";
+  if (T == "size_t*")
+    return "size_t *";
   if (T == "_ExtVector<2, int>")
     return "haydn_x2int32";
   if (T == "_ExtVector<4, short>")
@@ -210,6 +244,79 @@ static bool parseProto(StringRef Proto, std::string &Ret,
   return true;
 }
 
+/// Fail-closed publish / contract checks.
+/// Aborts clang-tblgen rather than silently shipping a broken public wrapper
+/// or an invalid Effect/ImmCheck contract.
+static void validatePublish(const BuiltinEntry &E) {
+  // Effect must be one of the five documented categories (all records).
+  if (E.Effect != "Pure" && E.Effect != "SFR" && E.Effect != "State" &&
+      E.Effect != "Mem" && E.Effect != "StateMem")
+    PrintFatalError("HaydnIntrin: op '" + E.Name + "' has invalid Effect='" +
+                    E.Effect +
+                    "' (want Pure|SFR|State|Mem|StateMem)");
+
+  // ImmArgIdx must address a real clang-Prototype argument.
+  // ImmChecks are on the builtin frexp/clang Prototype, not PublicPrototype.
+  {
+    std::string RetB;
+    SmallVector<std::string, 8> ArgsB;
+    if (!parseProto(E.Prototype, RetB, ArgsB))
+      PrintFatalError("HaydnIntrin: op '" + E.Name +
+                      "' has unparseable clang Prototype '" + E.Prototype +
+                      "'");
+    if (E.Arity != ArgsB.size())
+      PrintFatalError("HaydnIntrin: op '" + E.Name +
+                      "' Arity cache mismatch vs Prototype");
+    for (const ImmCheckSpec &IC : E.ImmChecks) {
+      if (IC.ArgIdx >= ArgsB.size())
+        PrintFatalError(
+            "HaydnIntrin: op '" + E.Name + "' ImmArgIdx=" +
+            std::to_string(IC.ArgIdx) + " >= Prototype arity " +
+            std::to_string(ArgsB.size()) + " ('" + E.Prototype + "')");
+      if (IC.Lo > IC.Hi)
+        PrintFatalError("HaydnIntrin: op '" + E.Name +
+                        "' ImmCheck inverted range [" + std::to_string(IC.Lo) +
+                        "," + std::to_string(IC.Hi) + "]");
+    }
+  }
+
+  if (!E.PublicEnabled)
+    return;
+
+  if (E.PublicName.empty())
+    PrintFatalError("HaydnIntrin: PublicEnabled op '" + E.Name +
+                    "' has empty PublicName");
+
+  // Bundle format / slot / AltDesc stay backend-side (not public C surface).
+  StringRef PN = E.PublicName;
+  StringRef Mn = E.Mnemonic;
+  auto forbidden = [](StringRef S) {
+    return S.contains_insensitive("formatid") ||
+           S.contains_insensitive("altdesc") ||
+           S.contains_insensitive("bundle") ||
+           S.contains_insensitive("_slot") || S.ends_with_insensitive("slot");
+  };
+  if (forbidden(PN) || forbidden(Mn))
+    PrintFatalError(
+        "HaydnIntrin: PublicEnabled op '" + E.Name +
+        "' leaks FormatID/AltDesc/Bundle/slot into public name/mnemonic ('" +
+        E.PublicName + "' / '" + E.Mnemonic + "')");
+
+  // AE bag builtins are unpublished by default; re-enable only with a recipe.
+  if (E.IsAe && E.CodeGen.empty())
+    PrintFatalError("HaydnIntrin: PublicEnabled HaydnAeBuiltin '" + E.Name +
+                    "' requires non-empty CodeGen= recipe");
+
+  // Public wrapper prototype must be parseable for any published path.
+  std::string Ret;
+  SmallVector<std::string, 6> Args;
+  StringRef Proto =
+      E.PublicPrototype.empty() ? StringRef(E.Prototype) : StringRef(E.PublicPrototype);
+  if (!parseProto(Proto, Ret, Args))
+    PrintFatalError("HaydnIntrin: PublicEnabled op '" + E.Name +
+                    "' has unparseable prototype '" + Proto.str() + "'");
+}
+
 static std::vector<BuiltinEntry> collect(const RecordKeeper &Records) {
   std::vector<BuiltinEntry> Entries;
   for (StringRef Cls : {"HaydnBuiltin", "HaydnPairBuiltin", "HaydnAeBuiltin"}) {
@@ -220,6 +327,7 @@ static std::vector<BuiltinEntry> collect(const RecordKeeper &Records) {
       E.IsAe = Cls == "HaydnAeBuiltin";
       E.IsPair = Cls == "HaydnPairBuiltin" || StringRef(E.Name).ends_with("_pair");
       E.K = classify(E.Name, E.Prototype);
+      E.PublicEnabled = R->getValueAsBit("PublicEnabled");
 
       std::string Pub = R->getValueAsString("PublicName").str();
       if (Pub.empty()) {
@@ -239,6 +347,13 @@ static std::vector<BuiltinEntry> collect(const RecordKeeper &Records) {
       }
       E.Semantics = R->getValueAsString("Semantics").str();
       E.CodeGen = R->getValueAsString("CodeGen").str();
+      // Pure|SFR|State|Mem|StateMem — drives op-manifest + attr parity.
+      E.Effect = R->getValueAsString("Effect").str();
+      if (E.Effect.empty())
+        E.Effect = "Pure";
+
+      // TargetBuiltin feature expression (empty = always available).
+      E.Features = R->getValueAsString("Features").str();
 
       // NEON-style ImmChecks = [ImmCheck<ArgIdx, ImmCheck0_31>, …]
       for (const Record *IC : R->getValueAsListOfDefs("ImmChecks")) {
@@ -250,16 +365,25 @@ static std::vector<BuiltinEntry> collect(const RecordKeeper &Records) {
         E.ImmChecks.push_back(S);
       }
 
+      // Arity from clang Prototype (ImmArgIdx contract surface).
+      {
+        std::string RetA;
+        SmallVector<std::string, 8> ArgsA;
+        if (parseProto(E.Prototype, RetA, ArgsA))
+          E.Arity = static_cast<unsigned>(ArgsA.size());
+        else
+          E.Arity = 0;
+      }
+
       if (E.IsAe)
         E.Builtin = "__builtin_ae_" + E.Name;
       else
         E.Builtin = "__builtin_haydn_" + E.Name;
 
-      // AR ops re-emitted as specials with vector surface.
-      if (E.Name == "d_lqhwua_post" || E.Name == "d_ltwua_post" ||
-          E.Name == "d_sqhwua_post" || E.Name == "d_stwua_post")
-        continue;
+      validatePublish(E);
 
+      // AR load/store still participate in Sema ImmCheck emission; public
+      // vector wrappers live in emitSpecials (SpecialPublic skip in emitOne).
       Entries.push_back(std::move(E));
     }
   }
@@ -315,7 +439,15 @@ static void emitPreamble(raw_ostream &OS) {
 #ifndef __HAYDN_H
 #define __HAYDN_H
 
+/* Fail-closed target + toolchain guard (haydn_types.h owns the
+ * architecture #error; also require compiler capability macros so a
+ * stale/non-Haydn frontend cannot silently publish empty feature surface).
+ * Never emit FormatID / slot / AltDesc macros here. */
 #include "haydn_types.h"
+
+#if !defined(__HAYDN_ARCH__)
+#error "haydn.h requires a Haydn-aware Clang that defines __HAYDN_ARCH__"
+#endif
 
 #ifndef __HAYDN_INTRIN_FN
 #define __HAYDN_INTRIN_FN \
@@ -328,16 +460,16 @@ typedef struct {
   haydn_dr64_t lo;
 } haydn_dpair_t;
 
-/// Circular-buffer / 64-bit BREV load result: data + AGU-updated base.
+/// Circular-buffer / 64-bit BREV load result: data + AGU-updated base pointer.
 typedef struct {
   haydn_dr64_t data;
-  int new_ptr;
+  void *new_ptr;
 } haydn_cb_ld_t;
 
-/// 32-bit BREV / S_* load result: data + AGU-updated base.
+/// 32-bit BREV / S_* load result: data + AGU-updated base pointer.
 typedef struct {
   int data;
-  int new_ptr;
+  void *new_ptr;
 } haydn_sld_t;
 
 /// Alias used by POST/PRE load frexp public wrappers (S_* GPR data).
@@ -393,6 +525,9 @@ static std::string docLine(const BuiltinEntry &E) {
 
 static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
                     StringSet<> &Emitted) {
+  // Only PublicEnabled ops appear in haydn.h.
+  if (!E.PublicEnabled)
+    return;
   if (E.K == Kind::Skip)
     return;
   if (Emitted.contains(E.PublicName))
@@ -428,7 +563,11 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
     static const char *A2[] = {"a", "b"};
     for (unsigned I = 0, N = ArgTs.size(); I != N; ++I) {
       std::string P;
-      if (StringRef(ArgTs[I]).ends_with("*"))
+      if (StringRef(ArgTs[I]).ends_with("**"))
+        P = "out";
+      else if (StringRef(ArgTs[I]).contains("void"))
+        P = "base";
+      else if (StringRef(ArgTs[I]).ends_with("*"))
         P = "out";
       else if (N == 1)
         P = "a";
@@ -694,7 +833,7 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
     return;
   }
   case Kind::PairLdWb: {
-    // POST/PRE load frexp: public returns {.data, .new_ptr}.
+    // POST/PRE load frexp: public returns {.data, .new_ptr} with pointer base/wb.
     // S_* → haydn_sld_t (i32 data); D_* → haydn_cb_ld_t (i64 data).
     // IMM forms use macros so ImmArg/Sema sees a constant at the user site.
     StringRef RetT = "haydn_sld_t";
@@ -703,14 +842,18 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
     StringRef PN = E.PublicName;
     if (!E.ImmChecks.empty()) {
       // Macro: (base, off) — off must be an integer constant expression.
+      // Hygiene: reserved temp so caller identifiers (e.g. `r` as base/off)
+      // are not captured by the stmt-expr locals; __extension__ for -pedantic.
       OS << "/* ImmArg: require constant imm at call site (not a C function). */\n";
       if (!Doc.empty())
         OS << "/// " << Doc << "\n";
       OS << "#define haydn_" << PN << "(base, off) \\\n"
-         << "  ({ " << RetT << " r; r.data = " << E.Builtin
-         << "(&r.new_ptr, (base), (off)); r; })\n\n";
+         << "  __extension__ ({ " << RetT << " __haydn_frexp; \\\n"
+         << "     __haydn_frexp.data = " << E.Builtin
+         << "(&__haydn_frexp.new_ptr, (base), (off)); \\\n"
+         << "     __haydn_frexp; })\n\n";
     } else {
-      emitFn(OS, RetT, PN, "int base, int off",
+      emitFn(OS, RetT, PN, "const void *base, int off",
              {std::string(RetT) + " r;",
               "r.data = " + E.Builtin + "(&r.new_ptr, base, off);",
               "return r;"},
@@ -845,30 +988,33 @@ static void emitSpecials(raw_ostream &OS) {
         "//===----------------------------------------------------------------------===//\n\n";
 
   // CB/BREV IMM frexp wrappers are macros so ImmArg/Sema checks the *user*
-  // call site (cbr_sel / stride constants). REG forms stay as functions.
+  // call site (cbr_sel / stride constants). CB REG cbr_sel is also ImmArg.
+  // Hygiene: reserved __haydn_frexp temp (never capture caller `r` used as
+  // base/offset/stride) + __extension__ for pedantic C (Hexagon peer pattern).
   OS << "/// ISA: LDW_CB_IMM — circular-buffer load (imm stride).\n"
         "/* ImmArg: cbr_sel [0,1], stride simm8 at call site. */\n"
         "#define haydn_ldw_cb_imm(base, cbr_sel, stride) \\\n"
-        "  ({ haydn_cb_ld_t r; \\\n"
-        "     r.data = __builtin_haydn_ldw_cb_imm_pair(&r.new_ptr, (base), "
-        "(cbr_sel), (stride)); \\\n"
-        "     r; })\n\n";
-  emitFn(OS, "haydn_cb_ld_t", "ldw_cb_reg", "int base, int cbr_sel, int stride",
-         {"haydn_cb_ld_t r;",
-          "r.data = __builtin_haydn_ldw_cb_reg_pair(&r.new_ptr, base, cbr_sel, "
-          "stride);",
-          "return r;"},
-         "ISA: LDW_CB_REG — circular-buffer load (reg stride).");
+        "  __extension__ ({ haydn_cb_ld_t __haydn_frexp; \\\n"
+        "     __haydn_frexp.data = __builtin_haydn_ldw_cb_imm_pair("
+        "&__haydn_frexp.new_ptr, (base), (cbr_sel), (stride)); \\\n"
+        "     __haydn_frexp; })\n\n";
+  OS << "/// ISA: LDW_CB_REG — circular-buffer load (reg stride).\n"
+        "/* ImmArg: cbr_sel [0,1] at call site; stride is variable GPR. */\n"
+        "#define haydn_ldw_cb_reg(base, cbr_sel, stride) \\\n"
+        "  __extension__ ({ haydn_cb_ld_t __haydn_frexp; \\\n"
+        "     __haydn_frexp.data = __builtin_haydn_ldw_cb_reg_pair("
+        "&__haydn_frexp.new_ptr, (base), (cbr_sel), (stride)); \\\n"
+        "     __haydn_frexp; })\n\n";
 
   // BREV loads — frexp {data, new_ptr}; IMM stride is ImmArg (simm6).
   OS << "/// ISA: D_LDW_BREV_IMM — 64-bit bit-reversed load (imm stride).\n"
         "/* ImmArg: stride simm6 at call site. */\n"
         "#define haydn_ldw_brev_imm(base, stride) \\\n"
-        "  ({ haydn_cb_ld_t r; \\\n"
-        "     r.data = __builtin_haydn_ldw_brev_imm_pair(&r.new_ptr, (base), "
-        "(stride)); \\\n"
-        "     r; })\n\n";
-  emitFn(OS, "haydn_cb_ld_t", "ldw_brev_reg", "int base, int stride",
+        "  __extension__ ({ haydn_cb_ld_t __haydn_frexp; \\\n"
+        "     __haydn_frexp.data = __builtin_haydn_ldw_brev_imm_pair("
+        "&__haydn_frexp.new_ptr, (base), (stride)); \\\n"
+        "     __haydn_frexp; })\n\n";
+  emitFn(OS, "haydn_cb_ld_t", "ldw_brev_reg", "const void *base, int stride",
          {"haydn_cb_ld_t r;",
           "r.data = __builtin_haydn_ldw_brev_reg_pair(&r.new_ptr, base, "
           "stride);",
@@ -877,11 +1023,11 @@ static void emitSpecials(raw_ostream &OS) {
   OS << "/// ISA: S_LW_BREV_IMM — 32-bit bit-reversed load (imm stride).\n"
         "/* ImmArg: stride simm6 at call site. */\n"
         "#define haydn_lw_brev_imm(base, stride) \\\n"
-        "  ({ haydn_sld_t r; \\\n"
-        "     r.data = __builtin_haydn_lw_brev_imm_pair(&r.new_ptr, (base), "
-        "(stride)); \\\n"
-        "     r; })\n\n";
-  emitFn(OS, "haydn_sld_t", "lw_brev_reg", "int base, int stride",
+        "  __extension__ ({ haydn_sld_t __haydn_frexp; \\\n"
+        "     __haydn_frexp.data = __builtin_haydn_lw_brev_imm_pair("
+        "&__haydn_frexp.new_ptr, (base), (stride)); \\\n"
+        "     __haydn_frexp; })\n\n";
+  emitFn(OS, "haydn_sld_t", "lw_brev_reg", "const void *base, int stride",
          {"haydn_sld_t r;",
           "r.data = __builtin_haydn_lw_brev_reg_pair(&r.new_ptr, base, "
           "stride);",
@@ -921,41 +1067,83 @@ static void emitSpecials(raw_ostream &OS) {
           "__haydn_v2_as_i64(acc), __haydn_v2_as_i64(data), "
           "__haydn_v2_as_i64(tw_widened)));"});
 
+  // UA ar_sel/dir_sel are ImmArg encoding fields. Public wrappers accept
+  // runtime ar/dir (NatureDSP ar&=3) but only pass literal 0..3 / 0..1 to
+  // builtins via switch so Sema ImmCheck sees ICE at the builtin call site.
+  OS << "/* ImmArg ar_sel/dir: switch-literal dispatch. */\n";
   emitFn(OS, "haydn_x4int16", "d_lqhwua_post",
-         "int ptr, int ar_sel, int stride, int dir_sel",
-         {"return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post("
-          "ptr, ar_sel, stride, dir_sel));"});
+         "const void *ptr, int ar_sel, int stride, int dir_sel",
+         {"ar_sel &= 3; dir_sel &= 1;",
+          "switch ((ar_sel << 1) | dir_sel) {",
+          "case 0: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 0, stride, 0));",
+          "case 1: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 0, stride, 1));",
+          "case 2: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 1, stride, 0));",
+          "case 3: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 1, stride, 1));",
+          "case 4: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 2, stride, 0));",
+          "case 5: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 2, stride, 1));",
+          "case 6: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 3, stride, 0));",
+          "default: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 3, stride, 1));",
+          "}"});
   emitFn(OS, "haydn_x2int32", "d_ltwua_post",
-         "int ptr, int ar_sel, int stride, int dir_sel",
-         {"return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post("
-          "ptr, ar_sel, stride, dir_sel));"});
+         "const void *ptr, int ar_sel, int stride, int dir_sel",
+         {"ar_sel &= 3; dir_sel &= 1;",
+          "switch ((ar_sel << 1) | dir_sel) {",
+          "case 0: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 0, stride, 0));",
+          "case 1: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 0, stride, 1));",
+          "case 2: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 1, stride, 0));",
+          "case 3: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 1, stride, 1));",
+          "case 4: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 2, stride, 0));",
+          "case 5: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 2, stride, 1));",
+          "case 6: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 3, stride, 0));",
+          "default: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 3, stride, 1));",
+          "}"});
   emitFn(OS, "void", "d_sqhwua_post",
-         "haydn_x4int16 data, int ptr, int ar_sel, int stride, int dir_sel",
-         {"__builtin_haydn_d_sqhwua_post(__haydn_v4_as_i64(data), ptr, ar_sel, "
-          "stride, dir_sel);"});
+         "haydn_x4int16 data, void *ptr, int ar_sel, int stride, int dir_sel",
+         {"int64_t d = __haydn_v4_as_i64(data);",
+          "ar_sel &= 3; dir_sel &= 1;",
+          "switch ((ar_sel << 1) | dir_sel) {",
+          "case 0: __builtin_haydn_d_sqhwua_post(d, ptr, 0, stride, 0); break;",
+          "case 1: __builtin_haydn_d_sqhwua_post(d, ptr, 0, stride, 1); break;",
+          "case 2: __builtin_haydn_d_sqhwua_post(d, ptr, 1, stride, 0); break;",
+          "case 3: __builtin_haydn_d_sqhwua_post(d, ptr, 1, stride, 1); break;",
+          "case 4: __builtin_haydn_d_sqhwua_post(d, ptr, 2, stride, 0); break;",
+          "case 5: __builtin_haydn_d_sqhwua_post(d, ptr, 2, stride, 1); break;",
+          "case 6: __builtin_haydn_d_sqhwua_post(d, ptr, 3, stride, 0); break;",
+          "default: __builtin_haydn_d_sqhwua_post(d, ptr, 3, stride, 1); break;",
+          "}"});
   emitFn(OS, "void", "d_stwua_post",
-         "haydn_x2int32 data, int ptr, int ar_sel, int stride, int dir_sel",
-         {"__builtin_haydn_d_stwua_post(__haydn_v2_as_i64(data), ptr, ar_sel, "
-          "stride, dir_sel);"});
+         "haydn_x2int32 data, void *ptr, int ar_sel, int stride, int dir_sel",
+         {"int64_t d = __haydn_v2_as_i64(data);",
+          "ar_sel &= 3; dir_sel &= 1;",
+          "switch ((ar_sel << 1) | dir_sel) {",
+          "case 0: __builtin_haydn_d_stwua_post(d, ptr, 0, stride, 0); break;",
+          "case 1: __builtin_haydn_d_stwua_post(d, ptr, 0, stride, 1); break;",
+          "case 2: __builtin_haydn_d_stwua_post(d, ptr, 1, stride, 0); break;",
+          "case 3: __builtin_haydn_d_stwua_post(d, ptr, 1, stride, 1); break;",
+          "case 4: __builtin_haydn_d_stwua_post(d, ptr, 2, stride, 0); break;",
+          "case 5: __builtin_haydn_d_stwua_post(d, ptr, 2, stride, 1); break;",
+          "case 6: __builtin_haydn_d_stwua_post(d, ptr, 3, stride, 0); break;",
+          "default: __builtin_haydn_d_stwua_post(d, ptr, 3, stride, 1); break;",
+          "}"});
 
   emitFn(OS, "haydn_x4int16", "d_lqhwua_post_ip",
-         "int *pptr, int ar_sel, int stride, int dir_sel",
+         "void **pptr, int ar_sel, int stride, int dir_sel",
          {"haydn_x4int16 v = haydn_d_lqhwua_post(*pptr, ar_sel, stride, dir_sel);",
-          "*pptr = dir_sel ? (*pptr - stride) : (*pptr + stride);",
+          "*pptr = (void *)((char *)*pptr + ((dir_sel & 1) ? -stride : stride));",
           "return v;"});
   emitFn(OS, "haydn_x2int32", "d_ltwua_post_ip",
-         "int *pptr, int ar_sel, int stride, int dir_sel",
+         "void **pptr, int ar_sel, int stride, int dir_sel",
          {"haydn_x2int32 v = haydn_d_ltwua_post(*pptr, ar_sel, stride, dir_sel);",
-          "*pptr = dir_sel ? (*pptr - stride) : (*pptr + stride);",
+          "*pptr = (void *)((char *)*pptr + ((dir_sel & 1) ? -stride : stride));",
           "return v;"});
   emitFn(OS, "void", "d_sqhwua_post_ip",
-         "haydn_x4int16 data, int *pptr, int ar_sel, int stride, int dir_sel",
+         "haydn_x4int16 data, void **pptr, int ar_sel, int stride, int dir_sel",
          {"haydn_d_sqhwua_post(data, *pptr, ar_sel, stride, dir_sel);",
-          "*pptr = dir_sel ? (*pptr - stride) : (*pptr + stride);"});
+          "*pptr = (void *)((char *)*pptr + ((dir_sel & 1) ? -stride : stride));"});
   emitFn(OS, "void", "d_stwua_post_ip",
-         "haydn_x2int32 data, int *pptr, int ar_sel, int stride, int dir_sel",
+         "haydn_x2int32 data, void **pptr, int ar_sel, int stride, int dir_sel",
          {"haydn_d_stwua_post(data, *pptr, ar_sel, stride, dir_sel);",
-          "*pptr = dir_sel ? (*pptr - stride) : (*pptr + stride);"});
+          "*pptr = (void *)((char *)*pptr + ((dir_sel & 1) ? -stride : stride));"});
 
   OS << "#define haydn_movad32_h haydn_movad32_high\n"
         "#define haydn_movad32_l haydn_movad32_low\n\n";
@@ -968,19 +1156,936 @@ static std::string llvmIntrinSuffix(StringRef Name) {
   return Name.str();
 }
 
+//===----------------------------------------------------------------------===//
+// Exhaustive PublicEnabled closure probe (OpenCL builtin-tests peer)
+//===----------------------------------------------------------------------===//
+
+/// Specials hard-coded in emitSpecials (skipped by emitOne). Public shapes here
+/// must match haydn.h, not a stale PublicPrototype bag form.
+static bool specialPublicShape(StringRef PN, std::string &Ret,
+                               SmallVectorImpl<std::string> &Args) {
+  Args.clear();
+  if (PN == "ldw_cb_imm" || PN == "ldw_cb_reg") {
+    Ret = "haydn_cb_ld_t";
+    Args.assign({"const void *", "int", "int"});
+    return true;
+  }
+  if (PN == "ldw_brev_imm" || PN == "ldw_brev_reg") {
+    Ret = "haydn_cb_ld_t";
+    Args.assign({"const void *", "int"});
+    return true;
+  }
+  if (PN == "lw_brev_imm" || PN == "lw_brev_reg") {
+    Ret = "haydn_sld_t";
+    Args.assign({"const void *", "int"});
+    return true;
+  }
+  if (PN == "mulfp32x16x2ras_low" || PN == "mulfp32x16x2ras_high" ||
+      PN == "mulfc32x16ras_low" || PN == "mulfc32x16ras_high") {
+    Ret = "haydn_x2fract32";
+    Args.assign({"haydn_x2fract32", "haydn_x2fract32", "haydn_x4fract16"});
+    return true;
+  }
+  // UA wrappers accept runtime ar/dir (switch-literal ImmArg at builtin).
+  if (PN == "d_lqhwua_post") {
+    Ret = "haydn_x4int16";
+    Args.assign({"const void *", "int", "int", "int"});
+    return true;
+  }
+  if (PN == "d_ltwua_post") {
+    Ret = "haydn_x2int32";
+    Args.assign({"const void *", "int", "int", "int"});
+    return true;
+  }
+  if (PN == "d_sqhwua_post") {
+    Ret = "void";
+    Args.assign({"haydn_x4int16", "void *", "int", "int", "int"});
+    return true;
+  }
+  if (PN == "d_stwua_post") {
+    Ret = "void";
+    Args.assign({"haydn_x2int32", "void *", "int", "int", "int"});
+    return true;
+  }
+  return false;
+}
+
+/// How many leading frexp out-pointer args the clang Prototype has that the
+/// public haydn_* surface drops (Pair frexp → haydn_dpair_t / cb_ld / sld).
+static unsigned frexpOutDrop(const BuiltinEntry &E) {
+  std::string RetB;
+  SmallVector<std::string, 8> ArgsB;
+  if (!parseProto(E.Prototype, RetB, ArgsB) || ArgsB.empty())
+    return 0;
+  auto isOutPtr = [](StringRef T) {
+    return T == "int64_t *" || T == "void **" || T == "int *" ||
+           T == "size_t *";
+  };
+  if (!isOutPtr(ArgsB[0]))
+    return 0;
+  // PublicPrototype (when set) should not start with the frexp out pointer.
+  if (!E.PublicPrototype.empty()) {
+    std::string RetP;
+    SmallVector<std::string, 8> ArgsP;
+    if (parseProto(E.PublicPrototype, RetP, ArgsP) && !ArgsP.empty() &&
+        isOutPtr(ArgsP[0]))
+      return 0;
+  }
+  return 1;
+}
+
+/// Apply emitThinExt bag-friendly rewrite: i64-result lane products/MACs
+/// publish vector operands as int64_t DR64 bags (NatureDSP peer).
+static void applyBagFriendlyPublic(std::string &Ret,
+                                   SmallVectorImpl<std::string> &Args) {
+  if (Ret != "int64_t" && Ret != "long long" && Ret != "haydn_dr64_t")
+    return;
+  for (std::string &A : Args) {
+    if (A == "haydn_x2int32" || A == "haydn_x2fract32" ||
+        A == "haydn_x4int16" || A == "haydn_x4fract16" ||
+        A == "_ExtVector<2, int>" || A == "_ExtVector<4, short>")
+      A = "int64_t";
+  }
+}
+
+/// Resolve the public haydn_<PublicName> C signature used by the probe.
+/// Must match emitOne / emitThinExt / emitSpecials (not stale TD bags).
+static bool resolvePublicShape(const BuiltinEntry &E, std::string &Ret,
+                               SmallVectorImpl<std::string> &Args) {
+  if (specialPublicShape(E.PublicName, Ret, Args))
+    return true;
+
+  // Prefer PublicPrototype when set (same as emitOne HasPub path).
+  bool HasPub = !E.PublicPrototype.empty() &&
+                parseProto(E.PublicPrototype, Ret, Args);
+
+  // Kind-based fallback when PublicPrototype is empty (mirrors emitOne).
+  if (!HasPub) {
+    switch (E.K) {
+    case Kind::PairRR2: {
+      Ret = "haydn_dpair_t";
+      StringRef PN = E.PublicName;
+      if (PN.starts_with("x2"))
+        Args.assign({"haydn_x2int32", "haydn_x2int32"});
+      else if (PN.starts_with("x4"))
+        Args.assign({"haydn_x4int16", "haydn_x4int16"});
+      else
+        Args.assign({"int64_t", "int64_t"});
+      break;
+    }
+    case Kind::PairRRA2: {
+      Ret = "haydn_dpair_t";
+      StringRef PN = E.PublicName;
+      if (PN.starts_with("x2"))
+        Args.assign(
+            {"int64_t", "int64_t", "haydn_x2int32", "haydn_x2int32"});
+      else if (PN.starts_with("x4"))
+        Args.assign(
+            {"int64_t", "int64_t", "haydn_x4int16", "haydn_x4int16"});
+      else
+        Args.assign({"int64_t", "int64_t", "int64_t", "int64_t"});
+      break;
+    }
+    case Kind::PairLdWb: {
+      Ret = StringRef(E.Prototype).starts_with("int64_t") ? "haydn_cb_ld_t"
+                                                          : "haydn_sld_t";
+      Args.assign({"const void *", "int"});
+      break;
+    }
+    case Kind::PairCbLoad: {
+      Ret = "haydn_cb_ld_t";
+      Args.assign({"const void *", "int", "int"});
+      break;
+    }
+    case Kind::PairBrevLoad: {
+      if (StringRef(E.PublicName).starts_with("lw_")) {
+        Ret = "haydn_sld_t";
+        Args.assign({"const void *", "int"});
+      } else {
+        Ret = "haydn_cb_ld_t";
+        Args.assign({"const void *", "int"});
+      }
+      break;
+    }
+    case Kind::V2: {
+      std::string RetP;
+      SmallVector<std::string, 8> ArgsP;
+      if (!parseProto(E.Prototype, RetP, ArgsP))
+        return false;
+      if (!StringRef(E.Prototype).contains("_ExtVector")) {
+        Ret = "haydn_x2int32";
+        Args.clear();
+        for (unsigned I = 0, N = ArgsP.size(); I != N; ++I) {
+          if (ArgsP[I] == "int" || ArgsP[I] == "unsigned int")
+            Args.push_back(ArgsP[I]);
+          else
+            Args.push_back("haydn_x2int32");
+        }
+      } else {
+        Ret = RetP;
+        Args = ArgsP;
+      }
+      break;
+    }
+    case Kind::V4: {
+      std::string RetP;
+      SmallVector<std::string, 8> ArgsP;
+      if (!parseProto(E.Prototype, RetP, ArgsP))
+        return false;
+      if (!StringRef(E.Prototype).contains("_ExtVector")) {
+        Ret = "haydn_x4int16";
+        Args.clear();
+        for (unsigned I = 0, N = ArgsP.size(); I != N; ++I) {
+          if (ArgsP[I] == "int" || ArgsP[I] == "unsigned int")
+            Args.push_back(ArgsP[I]);
+          else
+            Args.push_back("haydn_x4int16");
+        }
+      } else {
+        Ret = RetP;
+        Args = ArgsP;
+      }
+      break;
+    }
+    case Kind::ExtV2:
+    case Kind::ExtV4:
+    case Kind::Scalar:
+    case Kind::Skip:
+      if (!parseProto(E.Prototype, Ret, Args))
+        return false;
+      break;
+    }
+  }
+
+  // emitThinExt: for ExtV2/ExtV4, align arity with clang Prototype and apply
+  // bag-friendly rewrite (vector public args → int64_t when ret is i64).
+  if (E.K == Kind::ExtV2 || E.K == Kind::ExtV4) {
+    std::string BRet;
+    SmallVector<std::string, 8> BArgs;
+    if (parseProto(E.Prototype, BRet, BArgs) && Args.size() != BArgs.size()) {
+      // PublicPrototype omitted slots — fall back to clang Prototype mapped.
+      Ret = BRet;
+      Args = BArgs;
+    }
+    applyBagFriendlyPublic(Ret, Args);
+  }
+
+  return true;
+}
+
+static int pickInRangeImm(int Lo, int Hi) {
+  if (Lo <= 0 && 0 <= Hi)
+    return 0;
+  if (Lo <= 1 && 1 <= Hi)
+    return 1;
+  return Lo;
+}
+
+static void emitSinkOf(raw_ostream &OS, StringRef Ret, StringRef Tmp) {
+  if (Ret == "void")
+    return;
+  if (Ret == "void *" || Ret == "void*") {
+    OS << "  sink_p = (void *)(" << Tmp << ");\n";
+    return;
+  }
+  if (Ret == "int" || Ret == "unsigned int" || Ret == "haydn_pred2_t" ||
+      Ret == "haydn_pred4_t") {
+    OS << "  sink_i = (int)(" << Tmp << ");\n";
+    return;
+  }
+  if (Ret == "int64_t" || Ret == "long long" || Ret == "haydn_dr64_t") {
+    OS << "  sink_ll = (long long)(" << Tmp << ");\n";
+    return;
+  }
+  if (Ret == "haydn_x2int32" || Ret == "haydn_x2fract32") {
+    OS << "  sink_v2 = (" << Tmp << ");\n";
+    return;
+  }
+  if (Ret == "haydn_x4int16" || Ret == "haydn_x4fract16") {
+    OS << "  sink_v4 = (" << Tmp << ");\n";
+    return;
+  }
+  if (Ret == "haydn_dpair_t") {
+    OS << "  sink_ll = (long long)((" << Tmp << ").hi ^ (" << Tmp
+       << ").lo);\n";
+    return;
+  }
+  if (Ret == "haydn_cb_ld_t") {
+    OS << "  sink_ll = (long long)((" << Tmp << ").data);\n"
+       << "  sink_p = (" << Tmp << ").new_ptr;\n";
+    return;
+  }
+  if (Ret == "haydn_sld_t" || Ret == "haydn_ld_t") {
+    OS << "  sink_i = (" << Tmp << ").data;\n"
+       << "  sink_p = (" << Tmp << ").new_ptr;\n";
+    return;
+  }
+  // Fallback: bit-cast-ish keep-alive via volatile char sink.
+  OS << "  sink_i ^= (int)(long)(void *)&(" << Tmp << ");\n";
+}
+
+static void emitOneClosureProbe(raw_ostream &OS, const BuiltinEntry &E,
+                                StringSet<> &Emitted) {
+  if (!E.PublicEnabled)
+    return;
+  if (Emitted.contains(E.PublicName))
+    return;
+
+  std::string Ret;
+  SmallVector<std::string, 8> Args;
+  if (!resolvePublicShape(E, Ret, Args))
+    PrintFatalError("HaydnIntrin: closure probe: cannot resolve public shape "
+                    "for '" +
+                    E.Name + "' / haydn_" + E.PublicName);
+
+  // Map ImmCheck (clang Prototype indices) → public arg indices.
+  unsigned Drop = frexpOutDrop(E);
+  DenseMap<unsigned, std::pair<int, int>> ImmAt;
+  for (const ImmCheckSpec &IC : E.ImmChecks) {
+    if (IC.ArgIdx < Drop)
+      PrintFatalError("HaydnIntrin: closure probe: ImmArgIdx=" +
+                      std::to_string(IC.ArgIdx) + " under frexp drop on '" +
+                      E.Name + "'");
+    unsigned PubIdx = IC.ArgIdx - Drop;
+    if (PubIdx >= Args.size())
+      PrintFatalError("HaydnIntrin: closure probe: public ImmArgIdx=" +
+                      std::to_string(PubIdx) + " out of range for haydn_" +
+                      E.PublicName + " arity " + std::to_string(Args.size()));
+    ImmAt[PubIdx] = {IC.Lo, IC.Hi};
+  }
+
+  Emitted.insert(E.PublicName);
+
+  // External linkage so -O2 does not DCE unreferenced probes.
+  OS << "// PUB " << E.Name << " → haydn_" << E.PublicName << " effect="
+     << E.Effect;
+  if (!E.Features.empty())
+    OS << " features=" << E.Features;
+  OS << "\n";
+  OS << "void capi_op_closure_" << E.PublicName << "(";
+  // Non-ImmArg parameters only (type-driven dummies from caller).
+  bool FirstParam = true;
+  for (unsigned I = 0, N = Args.size(); I != N; ++I) {
+    if (ImmAt.count(I))
+      continue;
+    if (!FirstParam)
+      OS << ", ";
+    FirstParam = false;
+    OS << Args[I] << " a" << I;
+  }
+  if (FirstParam)
+    OS << "void";
+  OS << ") {\n";
+
+  // Build call: ImmArg slots get in-range ICE; others use parameters.
+  std::string Call = "haydn_" + E.PublicName + "(";
+  for (unsigned I = 0, N = Args.size(); I != N; ++I) {
+    if (I)
+      Call += ", ";
+    auto It = ImmAt.find(I);
+    if (It != ImmAt.end()) {
+      Call += std::to_string(pickInRangeImm(It->second.first, It->second.second));
+    } else {
+      Call += "a" + std::to_string(I);
+    }
+  }
+  Call += ")";
+
+  if (Ret == "void") {
+    OS << "  " << Call << ";\n";
+  } else {
+    OS << "  " << Ret << " r = " << Call << ";\n";
+    emitSinkOf(OS, Ret, "r");
+  }
+  OS << "}\n\n";
+}
+
 } // namespace
 
 void clang::EmitHaydnIntrinHeader(const RecordKeeper &Records, raw_ostream &OS) {
   emitPreamble(OS);
   auto Entries = collect(Records);
   OS << "//===----------------------------------------------------------------------===//\n"
-        "// Generated from BuiltinsHaydn.td\n"
+        "// Generated from BuiltinsHaydn.td (PublicEnabled only)\n"
         "//===----------------------------------------------------------------------===//\n\n";
   StringSet<> Emitted;
   for (const BuiltinEntry &E : Entries)
     emitOne(OS, E, Emitted);
   emitSpecials(OS);
   OS << "#endif /* __HAYDN_H */\n";
+}
+
+/// Public-op contract manifest for continuous CI parity audits.
+/// Columns cover publish bit, effect, features, arity, ImmChecks, prototype.
+/// No FormatID / slot / AltDesc / draft bundle fields — backend only.
+void clang::EmitHaydnOpManifest(const RecordKeeper &Records, raw_ostream &OS) {
+  OS << "//===-- haydn_op_manifest.inc - Haydn public op contract -===//\n"
+        "//\n"
+        "// Automatically generated from BuiltinsHaydn.td. DO NOT EDIT.\n"
+        "// Backend: clang-tblgen -gen-haydn-op-manifest\n"
+        "//\n"
+        "// Fail-closed PublicEnabled vs unpublished listing.\n"
+        "// Effect column (Pure|SFR|State|Mem|StateMem) for attr parity.\n"
+        "// Full public-op contract — features, arity, ImmChecks, prototype.\n"
+        "// CI audits every public op for type/arity, Imm boundaries,\n"
+        "// feature gates, IR effects (no FormatID/slot/AltDesc).\n"
+        "//\n"
+        "// Columns (comma-separated after the tag; field commas → '_'):\n"
+        "//   HAYDN_OP_{PUB|UNPUB},<td_name>,<public_name>,<builtin>,<mnemonic>,\n"
+        "//     <codegen>,<effect>,<features>,<arity>,<imm_list>,<prototype>\n"
+        "//   imm_list: empty | idx:lo:hi | idx:lo:hi;idx:lo:hi (0-based)\n"
+        "//   prototype: clang Prototype (ImmCheck surface), not PublicPrototype\n"
+        "//\n"
+        "// No FormatID / slot / AltDesc / draft bundle fields — backend only.\n"
+        "//\n"
+        "//===----------------------------------------------------------------------===//\n\n";
+
+  auto Entries = collect(Records);
+  unsigned Pub = 0, Unpub = 0;
+  unsigned NPure = 0, NSFR = 0, NState = 0, NMem = 0, NStateMem = 0, NOther = 0;
+  unsigned NFeat = 0, NImm = 0;
+  for (const BuiltinEntry &E : Entries) {
+    auto esc = [](StringRef S) {
+      std::string O;
+      for (char C : S) {
+        if (C == ',' || C == '\\' || C == '\n' || C == '\r')
+          O.push_back('_');
+        else
+          O.push_back(C);
+      }
+      return O;
+    };
+    auto immList = [](const BuiltinEntry &BE) {
+      std::string O;
+      for (unsigned I = 0, N = BE.ImmChecks.size(); I < N; ++I) {
+        if (I)
+          O.push_back(';');
+        const ImmCheckSpec &IC = BE.ImmChecks[I];
+        O += std::to_string(IC.ArgIdx);
+        O.push_back(':');
+        O += std::to_string(IC.Lo);
+        O.push_back(':');
+        O += std::to_string(IC.Hi);
+      }
+      return O;
+    };
+    StringRef Eff = E.Effect;
+    if (Eff == "Pure")
+      ++NPure;
+    else if (Eff == "SFR")
+      ++NSFR;
+    else if (Eff == "State")
+      ++NState;
+    else if (Eff == "Mem")
+      ++NMem;
+    else if (Eff == "StateMem")
+      ++NStateMem;
+    else
+      ++NOther;
+    if (!E.Features.empty())
+      ++NFeat;
+    if (!E.ImmChecks.empty())
+      ++NImm;
+    const char *Tag = E.PublicEnabled ? "HAYDN_OP_PUB" : "HAYDN_OP_UNPUB";
+    if (E.PublicEnabled)
+      ++Pub;
+    else
+      ++Unpub;
+    OS << Tag << "," << esc(E.Name) << "," << esc(E.PublicName) << ","
+       << esc(E.Builtin) << "," << esc(E.Mnemonic) << "," << esc(E.CodeGen)
+       << "," << esc(E.Effect) << "," << esc(E.Features) << "," << E.Arity
+       << "," << immList(E) << "," << esc(E.Prototype) << "\n";
+  }
+  OS << "\n// Summary: PublicEnabled=" << Pub << " unpublished=" << Unpub
+     << " total=" << (Pub + Unpub) << "\n";
+  OS << "// Effect: Pure=" << NPure << " SFR=" << NSFR << " State=" << NState
+     << " Mem=" << NMem << " StateMem=" << NStateMem;
+  if (NOther)
+    OS << " Other=" << NOther;
+  OS << "\n";
+  OS << "// Contract: with_features=" << NFeat << " with_immchecks=" << NImm
+     << "\n";
+}
+
+/// Exhaustive PublicEnabled C probe (continuous closure).
+/// OpenCL `-gen-clang-opencl-builtin-tests` peer over BuiltinsHaydn.td.
+/// Each public haydn_* is called with type-driven dummies + in-range ImmArg
+/// ICE so lit can prove C → Sema → IR → ISel → object at -O0/-O2.
+/// No FormatID / slot / AltDesc / draft bundle fields in the public surface.
+void clang::EmitHaydnOpClosureProbe(const RecordKeeper &Records,
+                                    raw_ostream &OS) {
+  OS << "/*===-- haydn-op-closure-probe.c - PublicEnabled C→object matrix -===//\n"
+        " *\n"
+        " * Automatically generated from BuiltinsHaydn.td. DO NOT EDIT.\n"
+        " * Backend: clang-tblgen -gen-haydn-op-closure-probe\n"
+        " *\n"
+        " * Continuous PublicEnabled closure:\n"
+        " *   Every PublicEnabled op has a haydn_* call site with type-driven\n"
+        " *   dummies and in-range ImmArg ICE. Compile this TU to object at\n"
+        " *   -O0 and -O2 (fail closed: fix ISel or unpublish any miss).\n"
+        " *\n"
+        " * Hexagon peer = ImmArg / feature-gated public surface.\n"
+        " * Never emits FormatID / slot / AltDesc / draft compact formats.\n"
+        " *\n"
+        " *===-------------------------------------------------------------------===*/\n"
+        "\n"
+        "#include <haydn.h>\n"
+        "\n"
+        "/* Keep results live under -O2 (pure ops still touch volatile). */\n"
+        "volatile long long sink_ll;\n"
+        "volatile int sink_i;\n"
+        "volatile void *sink_p;\n"
+        "volatile haydn_x2int32 sink_v2;\n"
+        "volatile haydn_x4int16 sink_v4;\n"
+        "\n";
+
+  auto Entries = collect(Records);
+  StringSet<> Emitted;
+  unsigned N = 0;
+  for (const BuiltinEntry &E : Entries) {
+    if (!E.PublicEnabled)
+      continue;
+    if (Emitted.contains(E.PublicName))
+      continue;
+    emitOneClosureProbe(OS, E, Emitted);
+    ++N;
+  }
+  OS << "/* Summary: probed=" << N
+     << " PublicEnabled unique public names (haydn_*) */\n";
+}
+
+//===----------------------------------------------------------------------===//
+// Imm non-ICE + range-negative Sema audit
+//===----------------------------------------------------------------------===//
+
+/// True for frexp out-pointer slots on the clang Prototype (not public shape).
+static bool isFrexpOutPtrType(StringRef T) {
+  return T == "void **" || T == "int64_t *" || T == "int *" || T == "size_t *";
+}
+
+static void emitFrexpOutLocals(raw_ostream &OS, ArrayRef<std::string> Args) {
+  for (unsigned I = 0, N = Args.size(); I != N; ++I) {
+    if (Args[I] == "void **")
+      OS << "  void *o" << I << ";\n";
+    else if (Args[I] == "int64_t *")
+      OS << "  int64_t o" << I << ";\n";
+    else if (Args[I] == "int *")
+      OS << "  int o" << I << ";\n";
+    else if (Args[I] == "size_t *")
+      OS << "  size_t o" << I << ";\n";
+  }
+}
+
+/// Emit one ImmArg expression: frexp local, under-test (nc / bad ICE), sibling
+/// ImmArg in-range ICE, or non-imm parameter aN.
+static void appendImmAuditArg(
+    raw_ostream &OS, StringRef T, unsigned ArgIdx, unsigned UnderTest,
+    bool HasImmOverride, int ImmOverride,
+    const DenseMap<unsigned, std::pair<int, int>> &ImmAt) {
+  if (isFrexpOutPtrType(T)) {
+    OS << "&o" << ArgIdx;
+    return;
+  }
+  if (ArgIdx == UnderTest) {
+    if (HasImmOverride)
+      OS << ImmOverride;
+    else
+      OS << "nc";
+    return;
+  }
+  auto It = ImmAt.find(ArgIdx);
+  if (It != ImmAt.end()) {
+    OS << pickInRangeImm(It->second.first, It->second.second);
+    return;
+  }
+  OS << "a" << ArgIdx;
+}
+
+static void emitImmAuditFnHeader(raw_ostream &OS, const BuiltinEntry &E,
+                                 StringRef Ret, ArrayRef<std::string> Args,
+                                 const DenseMap<unsigned, std::pair<int, int>> &ImmAt,
+                                 StringRef Suffix, unsigned UnderTest,
+                                 bool NeedsNcParam) {
+  OS << Ret << " imm_audit_" << E.Name << "_" << Suffix << "(";
+  bool First = true;
+  for (unsigned I = 0, N = Args.size(); I != N; ++I) {
+    if (isFrexpOutPtrType(Args[I]))
+      continue;
+    if (I == UnderTest) {
+      if (!NeedsNcParam)
+        continue; // range form: Imm is a literal in the call
+      if (!First)
+        OS << ", ";
+      First = false;
+      OS << "int nc";
+      continue;
+    }
+    if (ImmAt.count(I))
+      continue; // sibling ImmArgs are ICE literals
+    if (!First)
+      OS << ", ";
+    First = false;
+    OS << Args[I] << " a" << I;
+  }
+  if (First)
+    OS << "void";
+  OS << ") {\n";
+}
+
+static void emitImmAuditCall(raw_ostream &OS, const BuiltinEntry &E,
+                             StringRef Ret, ArrayRef<std::string> Args,
+                             const DenseMap<unsigned, std::pair<int, int>> &ImmAt,
+                             unsigned UnderTest, bool HasImmOverride,
+                             int ImmOverride) {
+  OS << "  ";
+  if (Ret != "void")
+    OS << "return ";
+  OS << E.Builtin << "(";
+  for (unsigned I = 0, N = Args.size(); I != N; ++I) {
+    if (I)
+      OS << ", ";
+    appendImmAuditArg(OS, Args[I], I, UnderTest, HasImmOverride, ImmOverride,
+                      ImmAt);
+  }
+  OS << ");\n";
+  if (Ret == "void")
+    OS << "  return;\n";
+}
+
+/// One PublicEnabled ImmChecked builtin → non-ICE + range-negative -verify tests.
+/// Calls __builtin_haydn_* / __builtin_ae_* (Sema ImmCheck home), never UA
+/// public switch wrappers or haydn_dsp.h.
+static void emitOneImmAudit(raw_ostream &OS, const BuiltinEntry &E,
+                            unsigned &NOps, unsigned &NNonConst,
+                            unsigned &NRange) {
+  if (!E.PublicEnabled || E.ImmChecks.empty())
+    return;
+
+  std::string Ret;
+  SmallVector<std::string, 8> Args;
+  if (!parseProto(E.Prototype, Ret, Args))
+    PrintFatalError("HaydnIntrin: imm audit: unparseable Prototype for '" +
+                    E.Name + "'");
+
+  DenseMap<unsigned, std::pair<int, int>> ImmAt;
+  for (const ImmCheckSpec &IC : E.ImmChecks) {
+    if (IC.ArgIdx >= Args.size())
+      PrintFatalError("HaydnIntrin: imm audit: ImmArgIdx=" +
+                      std::to_string(IC.ArgIdx) + " out of range on '" +
+                      E.Name + "'");
+    ImmAt[IC.ArgIdx] = {IC.Lo, IC.Hi};
+  }
+
+  ++NOps;
+  OS << "// --- " << E.Builtin << " ImmChecks=";
+  for (unsigned I = 0, N = E.ImmChecks.size(); I != N; ++I) {
+    if (I)
+      OS << ";";
+    const ImmCheckSpec &IC = E.ImmChecks[I];
+    OS << IC.ArgIdx << ":" << IC.Lo << ":" << IC.Hi;
+  }
+  OS << " effect=" << E.Effect;
+  if (!E.Features.empty())
+    OS << " features=" << E.Features;
+  OS << " ---\n";
+
+  auto emitCase = [&](StringRef Kind, unsigned UnderTest, bool NeedsNc,
+                      bool HasOverride, int OverrideVal, StringRef ErrMsg) {
+    std::string Suffix =
+        std::string(Kind) + "_a" + std::to_string(UnderTest);
+    emitImmAuditFnHeader(OS, E, Ret, Args, ImmAt, Suffix, UnderTest, NeedsNc);
+    emitFrexpOutLocals(OS, Args);
+    // expected-error immediately above the diagnosing call (always next line).
+    OS << "  // expected-error@+1 {{" << ErrMsg << "}}\n";
+    emitImmAuditCall(OS, E, Ret, Args, ImmAt, UnderTest, HasOverride,
+                     OverrideVal);
+    OS << "}\n\n";
+  };
+
+  for (const ImmCheckSpec &IC : E.ImmChecks) {
+    const unsigned A = IC.ArgIdx;
+
+    // non-ICE
+    {
+      std::string Err =
+          "argument to '" + E.Builtin + "' must be a constant integer";
+      emitCase("nc", A, /*NeedsNc=*/true, /*HasOverride=*/false, 0, Err);
+      ++NNonConst;
+    }
+
+    // range high (Hi+1) when representable as signed 32-bit
+    if (IC.Hi < 2147483647) {
+      int Bad = IC.Hi + 1;
+      std::string Err = "argument value " + std::to_string(Bad) +
+                        " is outside the valid range [" +
+                        std::to_string(IC.Lo) + ", " + std::to_string(IC.Hi) +
+                        "]";
+      emitCase("hi", A, /*NeedsNc=*/false, /*HasOverride=*/true, Bad, Err);
+      ++NRange;
+    }
+
+    // range low (Lo-1) when representable as signed 32-bit
+    if (IC.Lo > (-2147483647 - 1)) { // Lo > INT_MIN
+      int Bad = IC.Lo - 1;
+      std::string Err = "argument value " + std::to_string(Bad) +
+                        " is outside the valid range [" +
+                        std::to_string(IC.Lo) + ", " + std::to_string(IC.Hi) +
+                        "]";
+      emitCase("lo", A, /*NeedsNc=*/false, /*HasOverride=*/true, Bad, Err);
+      ++NRange;
+    }
+  }
+}
+
+/// Exhaustive ImmCheck non-ICE + range-negative Sema audit.
+/// NEON ImmCheck / OpenCL exhaustive-test peer over BuiltinsHaydn.td ImmChecks.
+/// Emits a -verify TU that calls every PublicEnabled ImmChecked __builtin_haydn_*
+/// with a runtime non-ICE ImmArg and out-of-range ICE (Lo-1 / Hi+1 when
+/// representable). Full SImm32 (movei) is non-ICE-only (any i32 is in range).
+/// Never emits FormatID / slot / AltDesc / haydn_dsp.h dual-owner surface.
+void clang::EmitHaydnOpImmAudit(const RecordKeeper &Records, raw_ostream &OS) {
+  OS << "/*===-- haydn-op-imm-audit.c - ImmCheck non-ICE + range Sema audit -===//\n"
+        " *\n"
+        " * Automatically generated from BuiltinsHaydn.td. DO NOT EDIT.\n"
+        " * Backend: clang-tblgen -gen-haydn-op-imm-audit\n"
+        " *\n"
+        " * Continuous Imm contract:\n"
+        " *   Every PublicEnabled op with ImmChecks rejects non-ICE ImmArgs and\n"
+        " *   out-of-range constants at the __builtin_haydn_* Sema home\n"
+        " *   (BuiltinConstantArgRange). Do not call UA public switch wrappers.\n"
+        " *\n"
+        " * Hexagon peer = ImmArg-gated builtins. No FormatID / slot / AltDesc.\n"
+        " *\n"
+        " *===-------------------------------------------------------------------===*/\n"
+        "\n"
+        "// NOTE: Lit driver runs this TU under -verify (diag expectations below).\n"
+        "\n"
+        "typedef long long int64_t;\n"
+        "typedef __SIZE_TYPE__ size_t;\n"
+        "typedef int haydn_x2int32 __attribute__((__vector_size__(8)));\n"
+        "typedef short haydn_x4int16 __attribute__((__vector_size__(8)));\n"
+        "\n";
+
+  auto Entries = collect(Records);
+  unsigned NOps = 0, NNonConst = 0, NRange = 0;
+  for (const BuiltinEntry &E : Entries)
+    emitOneImmAudit(OS, E, NOps, NNonConst, NRange);
+
+  OS << "/* Summary: imm_ops=" << NOps << " nonconst_tests=" << NNonConst
+     << " range_tests=" << NRange << " */\n";
+}
+
+//===----------------------------------------------------------------------===//
+// Features-gate Sema audit (generic / full / noagu multi-verify)
+//===----------------------------------------------------------------------===//
+
+/// Profile feature maps (match HaydnTargetInfo / HaydnGeneric.td / product CPU):
+///   generic → agu + hwloop
+///   full    → agu + circular-buffer + bit-reversed + hwloop + simd  (-target-cpu haydn)
+///   noagu   → full minus agu  (-target-cpu haydn -target-feature -agu)
+static bool profileHasFeature(StringRef Profile, StringRef Feat) {
+  Feat = Feat.trim();
+  if (Feat.empty())
+    return true;
+  if (Profile == "full")
+    return true;
+  if (Profile == "generic")
+    return Feat == "agu" || Feat == "hwloop";
+  if (Profile == "noagu")
+    return Feat != "agu";
+  return false;
+}
+
+/// Builtin Features expression: comma=AND, pipe=OR (same as TargetBuiltin).
+static bool featuresSatisfied(StringRef Features, StringRef Profile) {
+  if (Features.empty())
+    return true;
+  SmallVector<StringRef, 4> Ors;
+  Features.split(Ors, '|', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
+  for (StringRef Alt : Ors) {
+    SmallVector<StringRef, 4> Ands;
+    Alt.split(Ands, ',', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
+    bool Ok = !Ands.empty();
+    for (StringRef F : Ands) {
+      if (!profileHasFeature(Profile, F)) {
+        Ok = false;
+        break;
+      }
+    }
+    if (Ok)
+      return true;
+  }
+  return false;
+}
+
+/// One PublicEnabled feature-gated builtin → multi-verify -verify Sema cases.
+/// Calls __builtin_haydn_* / __builtin_ae_* (Sema feature home; Hexagon peer =
+/// checkTargetFeatures). ImmArgs use in-range ICE so only feature diags fire.
+static void emitOneFeatureAudit(raw_ostream &OS, const BuiltinEntry &E,
+                                unsigned &NOps, unsigned &NGenericFail,
+                                unsigned &NNoAguFail, unsigned &NFullFail) {
+  if (!E.PublicEnabled || E.Features.empty())
+    return;
+
+  std::string Ret;
+  SmallVector<std::string, 8> Args;
+  if (!parseProto(E.Prototype, Ret, Args))
+    PrintFatalError("HaydnIntrin: feature audit: unparseable Prototype for '" +
+                    E.Name + "'");
+
+  DenseMap<unsigned, std::pair<int, int>> ImmAt;
+  for (const ImmCheckSpec &IC : E.ImmChecks) {
+    if (IC.ArgIdx >= Args.size())
+      PrintFatalError("HaydnIntrin: feature audit: ImmArgIdx=" +
+                      std::to_string(IC.ArgIdx) + " out of range on '" +
+                      E.Name + "'");
+    ImmAt[IC.ArgIdx] = {IC.Lo, IC.Hi};
+  }
+
+  const bool FailGeneric = !featuresSatisfied(E.Features, "generic");
+  const bool FailFull = !featuresSatisfied(E.Features, "full");
+  const bool FailNoAgu = !featuresSatisfied(E.Features, "noagu");
+  if (FailGeneric)
+    ++NGenericFail;
+  if (FailFull)
+    ++NFullFail;
+  if (FailNoAgu)
+    ++NNoAguFail;
+  ++NOps;
+
+  OS << "// --- " << E.Builtin << " features=" << E.Features
+     << " effect=" << E.Effect << " ---\n";
+  OS << Ret << " feat_audit_" << E.Name << "(";
+  bool First = true;
+  for (unsigned I = 0, N = Args.size(); I != N; ++I) {
+    if (isFrexpOutPtrType(Args[I]) || ImmAt.count(I))
+      continue;
+    if (!First)
+      OS << ", ";
+    First = false;
+    OS << Args[I] << " a" << I;
+  }
+  if (First)
+    OS << "void";
+  OS << ") {\n";
+  emitFrexpOutLocals(OS, Args);
+
+  // Stack multi-prefix expected-error lines immediately above the call.
+  // full should never fail for product feature names (simd|cb|brev|agu|hwloop).
+  unsigned ExpectLines = 0;
+  if (FailGeneric)
+    ++ExpectLines;
+  if (FailFull)
+    ++ExpectLines;
+  if (FailNoAgu)
+    ++ExpectLines;
+  if (ExpectLines == 0) {
+    // Feature available on all three profiles (e.g. hwloop-only, if any).
+    OS << "  // available on generic + full + noagu\n";
+  } else {
+    unsigned Remaining = ExpectLines;
+    auto emitErr = [&](StringRef Prefix) {
+      // expected-error@+N must point at the call (next Remaining lines of
+      // other prefixes + the call itself when Remaining==1).
+      OS << "  // " << Prefix << "-error@+" << Remaining << " {{'" << E.Builtin
+         << "' needs target feature " << E.Features << "}}\n";
+      --Remaining;
+    };
+    if (FailGeneric)
+      emitErr("generic");
+    if (FailFull)
+      emitErr("full");
+    if (FailNoAgu)
+      emitErr("noagu");
+  }
+
+  OS << "  ";
+  if (Ret != "void")
+    OS << "return ";
+  OS << E.Builtin << "(";
+  for (unsigned I = 0, N = Args.size(); I != N; ++I) {
+    if (I)
+      OS << ", ";
+    if (isFrexpOutPtrType(Args[I])) {
+      OS << "&o" << I;
+      continue;
+    }
+    auto It = ImmAt.find(I);
+    if (It != ImmAt.end()) {
+      OS << pickInRangeImm(It->second.first, It->second.second);
+      continue;
+    }
+    OS << "a" << I;
+  }
+  OS << ");\n";
+  if (Ret == "void")
+    OS << "  return;\n";
+  OS << "}\n\n";
+}
+
+/// Exhaustive Features-gate Sema audit.
+/// OpenCL/NEON exhaustive peer: every PublicEnabled op with non-empty
+/// Features is called as __builtin_haydn_* under multi-verify generic /
+/// full / noagu so err_builtin_needs_feature is continuous CI.
+/// Hexagon peer = checkTargetFeatures. No FormatID / slot / AltDesc /
+/// haydn_dsp.h dual-owner surface.
+void clang::EmitHaydnOpFeatureAudit(const RecordKeeper &Records,
+                                    raw_ostream &OS) {
+  OS << "/*===-- haydn-op-feature-audit.c - Features-gate Sema audit -===//\n"
+        " *\n"
+        " * Automatically generated from BuiltinsHaydn.td. DO NOT EDIT.\n"
+        " * Backend: clang-tblgen -gen-haydn-op-feature-audit\n"
+        " *\n"
+        " * Continuous feature contract:\n"
+        " *   Every PublicEnabled op with non-empty Features rejects calls\n"
+        " *   when the caller's target feature map lacks the required\n"
+        " *   simd|circular-buffer|bit-reversed|agu|hwloop expression\n"
+        " *   (SemaHaydn err_builtin_needs_feature). Profiles:\n"
+        " *     generic = agu + hwloop\n"
+        " *     full    = -target-cpu haydn (all five)\n"
+        " *     noagu   = haydn -agu\n"
+        " *   Call __builtin_haydn_* Sema home only (not UA public wrappers).\n"
+        " *\n"
+        " * Hexagon peer = checkTargetFeatures. No FormatID / slot / AltDesc.\n"
+        " *\n"
+        " *===-------------------------------------------------------------------===*/\n"
+        "\n"
+        "// NOTE: Lit driver multi-verifies this TU (generic/full/noagu).\n"
+        "// Product CPU (-target-cpu haydn) enables every gated Features string.\n"
+        "// full-no-diagnostics\n"
+        "\n"
+        "typedef long long int64_t;\n"
+        "typedef __SIZE_TYPE__ size_t;\n"
+        "typedef int haydn_x2int32 __attribute__((__vector_size__(8)));\n"
+        "typedef short haydn_x4int16 __attribute__((__vector_size__(8)));\n"
+        "\n";
+
+  auto Entries = collect(Records);
+  unsigned NOps = 0, NGenericFail = 0, NNoAguFail = 0, NFullFail = 0;
+  unsigned NSimd = 0, NCb = 0, NBrev = 0, NAgu = 0, NOther = 0;
+  for (const BuiltinEntry &E : Entries) {
+    if (!E.PublicEnabled || E.Features.empty())
+      continue;
+    if (E.Features == "simd")
+      ++NSimd;
+    else if (E.Features == "circular-buffer")
+      ++NCb;
+    else if (E.Features == "bit-reversed")
+      ++NBrev;
+    else if (E.Features == "agu")
+      ++NAgu;
+    else
+      ++NOther;
+    emitOneFeatureAudit(OS, E, NOps, NGenericFail, NNoAguFail, NFullFail);
+  }
+
+  OS << "/* Summary: feat_ops=" << NOps << " generic_fail=" << NGenericFail
+     << " full_fail=" << NFullFail << " noagu_fail=" << NNoAguFail
+     << " by_feat: simd=" << NSimd << " circular-buffer=" << NCb
+     << " bit-reversed=" << NBrev << " agu=" << NAgu;
+  if (NOther)
+    OS << " other=" << NOther;
+  OS << " */\n";
 }
 
 void clang::EmitHaydnBuiltinCG(const RecordKeeper &Records, raw_ostream &OS) {
@@ -992,8 +2097,9 @@ void clang::EmitHaydnBuiltinCG(const RecordKeeper &Records, raw_ostream &OS) {
         "// Covers:\n"
         "//   - frexp-pattern _pair / CB+BREV+POST/PRE load (PairRR2 /\n"
         "//     PairRRA2 / PairCbLoad / PairBrevLoad / PairLdWb)\n"
-        "//   - HaydnAeBuiltin CodeGen= recipes (LanewiseUnary / TernaryI64 /\n"
-        "//     AddAndSubRng)\n"
+        "//   - HaydnAeBuiltin / special CodeGen= recipes (LanewiseUnary /\n"
+        "//     TernaryI64 / AddAndSubRng / ComposeCmulAcc / SoftISqrt)\n"
+        "//   - CodeGen= on PairRRA2 overrides auto 1:1 intrinsic (no phantoms)\n"
         "//\n"
         "//===----------------------------------------------------------------------===//\n\n";
 
@@ -1004,8 +2110,12 @@ void clang::EmitHaydnBuiltinCG(const RecordKeeper &Records, raw_ostream &OS) {
     return std::string("Haydn::BI__builtin_haydn_") + E.Name;
   };
 
-  // Frexp-pattern pairs.
+  // Frexp-pattern pairs. Non-empty CodeGen= overrides the auto 1:1 intrinsic
+  // map so composed ops (e.g. x2cmula32 → x2cmul32+add64) do not emit phantom
+  // int_haydn_x2cmula* references.
   for (const BuiltinEntry &E : Entries) {
+    if (!E.CodeGen.empty())
+      continue;
     if (E.K == Kind::PairRR2) {
       std::string Intr = llvmIntrinSuffix(E.Name);
       OS << "  case " << caseId(E) << ":\n"
@@ -1023,15 +2133,16 @@ void clang::EmitHaydnBuiltinCG(const RecordKeeper &Records, raw_ostream &OS) {
       OS << "  case " << caseId(E) << ":\n"
          << "    return emitBrevLoadPair(*this, haydn_" << Intr << ", E);\n";
     } else if (E.K == Kind::PairLdWb) {
-      // Same frexp shape as BREV: (int* new_ptr, base, off) → {data, new_ptr}.
+      // Same frexp shape as BREV: (void** new_ptr, base, off) → {data, new_ptr}.
       std::string Intr = llvmIntrinSuffix(E.Name);
       OS << "  case " << caseId(E) << ":\n"
          << "    return emitLoadWbPair(*this, haydn_" << Intr << ", E);\n";
     }
   }
 
-  // Explicit CodeGen= recipes (primarily HaydnAeBuiltin).
+  // Explicit CodeGen= recipes (AE specials + compose / soft expands).
   SmallVector<std::string, 4> AddAndSubCases;
+  SmallVector<std::string, 4> SoftISqrtCases;
   for (const BuiltinEntry &E : Entries) {
     if (E.CodeGen.empty())
       continue;
@@ -1042,8 +2153,21 @@ void clang::EmitHaydnBuiltinCG(const RecordKeeper &Records, raw_ostream &OS) {
     } else if (CG.consume_front("TernaryI64:")) {
       OS << "  case " << caseId(E) << ":\n"
          << "    return emitTernaryI64(*this, haydn_" << CG << ", E);\n";
+    } else if (CG.consume_front("ComposeCmulAcc:")) {
+      // ComposeCmulAcc:<mul_suffix>:<acc_suffix>
+      // e.g. ComposeCmulAcc:x2cmul32:add64
+      auto Sep = CG.find(':');
+      if (Sep == StringRef::npos)
+        PrintFatalError("ComposeCmulAcc needs <mul>:<acc> on " + E.Name);
+      StringRef Mul = CG.take_front(Sep);
+      StringRef Acc = CG.drop_front(Sep + 1);
+      OS << "  case " << caseId(E) << ":\n"
+         << "    return emitComposeCmulAcc(*this, haydn_" << Mul << ", haydn_"
+         << Acc << ", E);\n";
     } else if (CG == "AddAndSubRng") {
       AddAndSubCases.push_back(caseId(E));
+    } else if (CG == "SoftISqrt") {
+      SoftISqrtCases.push_back(caseId(E));
     } else {
       PrintFatalError("unknown CodeGen recipe '" + E.CodeGen + "' on " +
                       E.Name);
@@ -1053,6 +2177,11 @@ void clang::EmitHaydnBuiltinCG(const RecordKeeper &Records, raw_ostream &OS) {
     for (const std::string &C : AddAndSubCases)
       OS << "  case " << C << ":\n";
     OS << "    return emitAeAddAndSubRng(*this, E);\n";
+  }
+  if (!SoftISqrtCases.empty()) {
+    for (const std::string &C : SoftISqrtCases)
+      OS << "  case " << C << ":\n";
+    OS << "    return emitSoftISqrt(*this, E);\n";
   }
 }
 

@@ -3367,7 +3367,15 @@ bool FunctionDecl::isImmediateFunction() const {
 }
 
 bool FunctionDecl::isMain() const {
-  return isNamed(this, "main") && !getLangOpts().Freestanding &&
+  // Freestanding normally disables hosted `main` special-casing (implicit
+  // return 0, etc.). Haydn baremetal still uses `main` as the program entry
+  // under -ffreestanding; without C99 5.1.2.2.3 fallthrough→0, gcc-torture
+  // freestanding builds leave `ret i32 undef` and BundleSim reports a bogus
+  // non-zero guest exit (e.g. strlen-2/3/6).
+  const bool Freestanding = getLangOpts().Freestanding;
+  const bool HaydnBareMain =
+      Freestanding && getASTContext().getTargetInfo().getTriple().isHaydn();
+  return isNamed(this, "main") && (!Freestanding || HaydnBareMain) &&
          !getLangOpts().HLSL &&
          (getDeclContext()->getRedeclContext()->isTranslationUnit() ||
           isExternC());

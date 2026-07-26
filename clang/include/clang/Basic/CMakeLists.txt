@@ -108,6 +108,10 @@ clang_tablegen(haydn_builtin_cg.inc -gen-haydn-builtin-codegen
 clang_tablegen(haydn_builtin_sema.inc -gen-haydn-builtin-sema
   SOURCE BuiltinsHaydn.td
   TARGET ClangHaydnBuiltinSema)
+# C5.1 / G-CAPI-CLOSURE: public-op contract manifest (effect/features/arity/Imm).
+clang_tablegen(haydn_op_manifest.inc -gen-haydn-op-manifest
+  SOURCE BuiltinsHaydn.td
+  TARGET ClangHaydnOpManifest)
 
 clang_tablegen(BuiltinsHexagon.inc -gen-clang-builtins
   SOURCE BuiltinsHexagon.td

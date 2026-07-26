@@ -1,12 +1,19 @@
-// RUN: %clang_cc1 -triple haydn-unknown-elf -ffreestanding -emit-llvm -o /dev/null %s
+// RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -ffreestanding -emit-llvm -o /dev/null %s
+// C0.5: also require C → object at -O0/-O2 for the full scalar/SIMD surface
+// (public closure gate companion to capi-public-closure-probe.c).
+// RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -ffreestanding -emit-obj -O0 -o %t.o0.o %s
+// RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -ffreestanding -emit-obj -O2 -o %t.o2.o %s
 // REQUIRES: haydn-registered-target
 //
 // D208 coverage gate: every wired scalar/SIMD __builtin_haydn_* must lower
 // through Clang CodeGen. Regenerated from BuiltinsHaydn.td after golden-lane
 // ExtVector retype (X2 → v2i / <2 x i32>, X4 → v4s / <4 x i16>).
 //
-// EXCLUDED: frexp _pair (pair-frexp-cg.c), AE (ae-*.c), memory/CB/SFR,
-//           and builtins with no MI (x2cmula32 family, isqrt).
+// EXCLUDED: frexp _pair (pair-frexp-cg.c + x2cmula-isqrt-probe.c for composed
+//           x2cmula/x2cmuls frexp pairs), AE (ae-*.c; HaydnAeBuiltin
+//           PublicEnabled=0 — not on haydn.h), memory/CB/SFR.
+// C0.3: isqrt SoftISqrt is covered below; complex-MAC compose pairs in probe.
+// C0.5: emit-obj RUN lines above + capi-public-closure-probe.c for public API.
 
 typedef int __attribute__((ext_vector_type(2))) v2i;
 typedef short __attribute__((ext_vector_type(4))) v4s;
@@ -61,8 +68,9 @@ long long test_and64(long long a0, long long a1) {
   sink_ll = (long long)r;
 }
 
-int test_arctan(long long a0, int a1) {
-  int r = __builtin_haydn_arctan(a0, a1);
+// C0.4/C0.5: ImmArg uimm4 — second arg must be ICE (variable form is Sema-error).
+int test_arctan(long long a0) {
+  int r = __builtin_haydn_arctan(a0, 2);
   sink_i = (int)r;
 }
 
@@ -73,6 +81,12 @@ int test_brev32(int a0, int a1) {
 
 int test_exp2(int a0) {
   int r = __builtin_haydn_exp2(a0);
+  sink_i = (int)r;
+}
+
+// C0.3: SoftISqrt pure-ALU path (no native ISQRT / llvm.haydn.isqrt).
+int test_isqrt(int a0) {
+  int r = __builtin_haydn_isqrt(a0);
   sink_i = (int)r;
 }
 

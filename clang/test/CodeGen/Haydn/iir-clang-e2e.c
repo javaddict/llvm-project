@@ -1,5 +1,5 @@
-// RUN: %clang -target haydn-unknown-elf -mllvm -global-isel-abort=1 -O2 -S -emit-llvm -o - %s | FileCheck %s --check-prefix=IR
-// RUN: %clang -target haydn-unknown-elf -mllvm -global-isel-abort=1 -O2 -S -o - %s | FileCheck %s --check-prefix=ASM
+// RUN: %clang -target haydn-unknown-elf -mcpu=haydn -mllvm -global-isel-abort=1 -O2 -S -emit-llvm -o - %s | FileCheck %s --check-prefix=IR
+// RUN: %clang -target haydn-unknown-elf -mcpu=haydn -mllvm -global-isel-abort=1 -O2 -S -o - %s | FileCheck %s --check-prefix=ASM
 // REQUIRES: haydn-registered-target
 //
 // Clang end-to-end integration test: BiQuad IIR DSP kernel.

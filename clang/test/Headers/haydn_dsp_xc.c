@@ -1,4 +1,6 @@
-// RUN: %clang_cc1 -triple haydn-unknown-elf -fsyntax-only -ffreestanding %s
+// RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -fsyntax-only -ffreestanding %s
+// RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -fsyntax-only -ffreestanding \
+// RUN:   -D__HAYDN_ALLOW_INEXACT_AE %s
 //
 // REQUIRES: haydn-registered-target
 
@@ -11,21 +13,23 @@
 //   F22: AE_S32X2_XC / AE_S16X4_XC passed arguments as (ptr, data, ...) but
 //        the underlying builtin is declared data-first
 //        (haydn_sdw_cb_imm(int64_t data, int ptr, int cbr_sel, int offs)).
-//   F23: AE_L16_XC loaded a full 64-bit DR64 then truncated; this test only
-//        checks that the macro still accepts its 4-arg signature and compiles.
+//   F23: AE_L16_XC used D_LDW_CB 64b trunc + offs>>3; C4.2 repairs it as
+//        EMULATED ordinary i16 load + haydn_cbr_step(byte offs) under default
+//        strict mode (no ALLOW_INEXACT required).
 //
 // Test design: this is a compile-only test that exercises each XC macro with
 // a non-default `offs` (32 bytes). If the macros regress to the literal 8
 // or to the wrong arg order, the frontend will still compile, but a sibling
-// FileCheck-based codegen test (cb-brev-mem.c) verifies the IR shape. This
-// test specifically guards against missing-identifier regressions (F06) and
-// arity/argument-order regressions.
+// FileCheck-based codegen test (cb-brev-mem.c / haydn-compat-l16-xc.c)
+// verifies the IR shape. This test specifically guards against
+// missing-identifier regressions (F06) and arity/argument-order regressions.
 
 #include <haydn_dsp.h>
 
 // Use distinct `offs` values per call so a future diagnostic-test can detect
-// silent literal substitution. The values must be multiples of 8 because
-// D_LDW_CB_IMM / D_SDW_CB_IMM post-increment by imm<<3.
+// silent literal substitution. Exact XC family offsets are multiples of 8
+// (D_LDW_CB_IMM / D_SDW_CB_IMM post-increment by imm<<3). L16_XC emulated
+// path accepts any byte stride.
 void exercise_xc_macros(ae_int32x2 *p32x2, ae_int16x4 *p16x4,
                         ae_int16 *p16) {
   ae_int32x2 d32x2 = {0};
@@ -37,5 +41,7 @@ void exercise_xc_macros(ae_int32x2 *p32x2, ae_int16x4 *p16x4,
   AE_S32X2_XC(d32x2, p32x2, 32, 0);   // F21 + F22: data-first, offs passed
   AE_L16X4_XC(d16x4, p16x4, 32, 0);   // F21
   AE_S16X4_XC(d16x4, p16x4, 32, 0);   // F21 + F22
-  AE_L16_XC(d16, p16, 32, 0);         // F23: 4-arg signature preserved
+  // C4.2 EMULATED: i16 + soft CBR; byte offs 32 (not offs>>3).
+  AE_L16_XC(d16, p16, 32, 0);
+  (void)d16;
 }

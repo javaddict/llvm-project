@@ -11,7 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "Haydn.h"
+#include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/TargetBuiltins.h"
+#include "llvm/ADT/StringSwitch.h"
 
 using namespace clang;
 using namespace clang::targets;
@@ -27,7 +29,7 @@ HaydnTargetInfo::HaydnTargetInfo(const llvm::Triple &Triple,
   // The declared ABI "ilp32" mandates sizeof(int)==sizeof(long)==sizeof(ptr)==4.
   // long long stays 64-bit so 64-bit accumulator arithmetic is still available.
   // DR64 accumulator values (i64/f64) are aligned to 32 bits, encoded in the
-  // data layout via i64:32-f64:32. See D102-ilp32-long-width.md.
+  // data layout via i64:32-f64:32.
   PointerWidth = PointerAlign = 32;
   IntWidth = IntAlign = 32;
   LongWidth = LongAlign = 32;
@@ -36,7 +38,7 @@ HaydnTargetInfo::HaydnTargetInfo(const llvm::Triple &Triple,
   FloatWidth = 32;
   FloatAlign = 32;
   DoubleWidth = 64;
-  DoubleAlign = 32;  // double is 64-bit but aligned to 32-bit boundary
+  DoubleAlign = 32; // double is 64-bit but aligned to 32-bit boundary
   LongDoubleWidth = 64;
   LongDoubleAlign = 32;
 
@@ -58,8 +60,104 @@ HaydnTargetInfo::HaydnTargetInfo(const llvm::Triple &Triple,
   // blocks freestanding llvm-libc rand/srand (cpp::Atomic<unsigned long>).
   MaxAtomicPromoteWidth = MaxAtomicInlineWidth = 32;
 
+  // A.4 feature gates (toolchain-architecture-residual Wave A):
+  // Narrow baremetal profile — fail closed on unsupported language/runtime.
+  TLSSupported = false;
+  // Cap _BitInt; wide multi-limb BitInt is not a product path.
+  MaxBitIntWidth = 64;
+
   // Default ABI
   setABI("ilp32");
+
+  // Match LLVM HaydnSubtarget: empty CPU → "generic".
+  if (Opts.CPU.empty())
+    CPU = "generic";
+  else
+    CPU = Opts.CPU;
+}
+
+bool HaydnTargetInfo::isValidCPUName(StringRef Name) const {
+  return llvm::StringSwitch<bool>(Name)
+      .Case("generic", true)
+      .Case("haydn", true)
+      .Default(false);
+}
+
+void HaydnTargetInfo::fillValidCPUList(
+    SmallVectorImpl<StringRef> &Values) const {
+  Values.append({"generic", "haydn"});
+}
+
+bool HaydnTargetInfo::initFeatureMap(
+    llvm::StringMap<bool> &Features, DiagnosticsEngine &Diags, StringRef CPUName,
+    const std::vector<std::string> &FeaturesVec) const {
+  // Mirror HaydnGeneric.td ProcessorModel feature lists.
+  // Empty CPU → generic (same as HaydnSubtarget::initializeSubtargetDependencies).
+  StringRef CPURef = CPUName.empty() ? "generic" : CPUName;
+
+  // Clear ISA feature keys so a later re-init (target attribute) does not
+  // accumulate stale positives before CPU defaults are applied.
+  Features["agu"] = false;
+  Features["circular-buffer"] = false;
+  Features["bit-reversed"] = false;
+  Features["hwloop"] = false;
+  Features["simd"] = false;
+
+  if (CPURef == "generic") {
+    // Product baseline densify path: post/pre-inc fuse + hwloop.
+    Features["agu"] = true;
+    Features["hwloop"] = true;
+  } else if (CPURef == "haydn") {
+    Features["agu"] = true;
+    Features["circular-buffer"] = true;
+    Features["bit-reversed"] = true;
+    Features["hwloop"] = true;
+    Features["simd"] = true;
+  }
+  // Unknown CPU names are rejected by setCPU/isValidCPUName; leave ISA
+  // features false here so +feature overrides still apply cleanly.
+
+  return TargetInfo::initFeatureMap(Features, Diags, CPUName, FeaturesVec);
+}
+
+bool HaydnTargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
+                                           DiagnosticsEngine &Diags) {
+  HasAGU = HasCircularBuffer = HasBitReversed = HasHWLoop = HasSIMD = false;
+
+  for (const auto &F : Features) {
+    if (F == "+agu")
+      HasAGU = true;
+    else if (F == "-agu")
+      HasAGU = false;
+    else if (F == "+circular-buffer")
+      HasCircularBuffer = true;
+    else if (F == "-circular-buffer")
+      HasCircularBuffer = false;
+    else if (F == "+bit-reversed")
+      HasBitReversed = true;
+    else if (F == "-bit-reversed")
+      HasBitReversed = false;
+    else if (F == "+hwloop")
+      HasHWLoop = true;
+    else if (F == "-hwloop")
+      HasHWLoop = false;
+    else if (F == "+simd")
+      HasSIMD = true;
+    else if (F == "-simd")
+      HasSIMD = false;
+  }
+  return true;
+}
+
+bool HaydnTargetInfo::hasFeature(StringRef Feature) const {
+  return llvm::StringSwitch<bool>(Feature)
+      .Case("haydn", true)
+      .Case("agu", HasAGU)
+      .Case("circular-buffer", HasCircularBuffer)
+      .Case("bit-reversed", HasBitReversed)
+      .Case("hwloop", HasHWLoop)
+      .Case("simd", HasSIMD)
+      .Default(false);
 }
 
 void HaydnTargetInfo::getTargetDefines(const LangOptions &Opts,
@@ -78,6 +176,32 @@ void HaydnTargetInfo::getTargetDefines(const LangOptions &Opts,
   // 32-bit target
   Builder.defineMacro("__haydn_32__");
   Builder.defineMacro("__HAYDN_32__");
+
+  // ISA family revision (Hexagon peer: __HEXAGON_ARCH__). Current product
+  // generation is 1 for both -mcpu=generic and -mcpu=haydn. Differentiate
+  // semantic availability with capability macros below — never with bundle
+  // FormatID / slot / AltDesc macros.
+  Builder.defineMacro("__HAYDN_ARCH__", "1");
+
+  // Per-CPU convenience macros (optional compile-time selection).
+  if (CPU == "haydn")
+    Builder.defineMacro("__HAYDN_CPU_HAYDN__");
+  else
+    // Empty / generic / unknown → baseline densify path (matches ctor).
+    Builder.defineMacro("__HAYDN_CPU_GENERIC__");
+
+  // Semantic ISA capability macros. Names track HaydnFeatures.td /
+  // BuiltinsHaydn Features= strings only.
+  if (HasAGU)
+    Builder.defineMacro("__HAYDN_FEATURE_AGU__");
+  if (HasCircularBuffer)
+    Builder.defineMacro("__HAYDN_FEATURE_CIRCULAR_BUFFER__");
+  if (HasBitReversed)
+    Builder.defineMacro("__HAYDN_FEATURE_BIT_REVERSED__");
+  if (HasHWLoop)
+    Builder.defineMacro("__HAYDN_FEATURE_HWLOOP__");
+  if (HasSIMD)
+    Builder.defineMacro("__HAYDN_FEATURE_SIMD__");
 }
 
 ArrayRef<const char *> HaydnTargetInfo::getGCCRegNames() const {
@@ -103,10 +227,10 @@ ArrayRef<TargetInfo::GCCRegAlias> HaydnTargetInfo::getGCCRegAliases() const {
 
 bool HaydnTargetInfo::validateAsmConstraint(
     const char *&Name, TargetInfo::ConstraintInfo &Info) const {
-  // Basic register constraints
+  // Basic register constraints. 'd' (DR64) rejected until backend implements
+  // a real DR constraint path (A.4 — was silently accepted with weak lower).
   switch (*Name) {
   case 'r': // General purpose register (GPR)
-  case 'd': // Data register (DR64)
     Info.setAllowsRegister();
     return true;
   default:

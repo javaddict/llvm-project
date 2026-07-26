@@ -1,4 +1,5 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+; REBASELINED: G-CAPI smoke — residual mulas64/mulss64 member opcodes use dotted print (setDesc), not underscore
 ; Status : previously-XFAIL regression resolved; lit PASS.
 ; this test. The test exercises DR64 MAC intrinsics that crash in the post-Flex
 ; selector/encoder (likely the same X2MULA32-class zero-emit / variant-def bug
@@ -554,112 +555,112 @@ declare i64 @llvm.haydn.mulas64.uu.ull(i64, i64, i64)
 declare i64 @llvm.haydn.mulas64.uu.ulh(i64, i64, i64)
 define i64 @test_mulas64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_ss_ll:
-; CHECK: mulas64_ll
+; CHECK: mulas64.ll
   %r = call i64 @llvm.haydn.mulas64.ss.ll(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_ss_lh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_ss_lh:
-; CHECK: mulas64_lh
+; CHECK: mulas64.lh
   %r = call i64 @llvm.haydn.mulas64.ss.lh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_ss_hl(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_ss_hl:
-; CHECK: mulas64_hl
+; CHECK: mulas64.hl
   %r = call i64 @llvm.haydn.mulas64.ss.hl(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_ss_hh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_ss_hh:
-; CHECK: mulas64_hh
+; CHECK: mulas64.hh
   %r = call i64 @llvm.haydn.mulas64.ss.hh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_su_lul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_su_lul:
-; CHECK: mulas64_lul
+; CHECK: mulas64.lul
   %r = call i64 @llvm.haydn.mulas64.su.lul(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_su_ulh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_su_ulh:
-; CHECK: mulas64_ulh
+; CHECK: mulas64.ulh
   %r = call i64 @llvm.haydn.mulas64.su.ulh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_su_uhl(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_su_uhl:
-; CHECK: mulas64_uhl
+; CHECK: mulas64.uhl
   %r = call i64 @llvm.haydn.mulas64.su.uhl(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_su_uhh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_su_uhh:
-; CHECK: mulas64_uhh
+; CHECK: mulas64.uhh
   %r = call i64 @llvm.haydn.mulas64.su.uhh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_us_luh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_us_luh:
-; CHECK: mulas64_luh
+; CHECK: mulas64.luh
   %r = call i64 @llvm.haydn.mulas64.us.luh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_us_uhuh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_us_uhuh:
-; CHECK: mulas64_uhuh
+; CHECK: mulas64.uhuh
   %r = call i64 @llvm.haydn.mulas64.us.uhuh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_us_hul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_us_hul:
-; CHECK: mulas64_hul
+; CHECK: mulas64.hul
   %r = call i64 @llvm.haydn.mulas64.us.hul(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_us_uhul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_us_uhul:
-; CHECK: mulas64_uhul
+; CHECK: mulas64.uhul
   %r = call i64 @llvm.haydn.mulas64.us.uhul(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_uu_uluh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_uu_uluh:
-; CHECK: mulas64_uluh
+; CHECK: mulas64.uluh
   %r = call i64 @llvm.haydn.mulas64.uu.uluh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_uu_ulul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_uu_ulul:
-; CHECK: mulas64_ulul
+; CHECK: mulas64.ulul
   %r = call i64 @llvm.haydn.mulas64.uu.ulul(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_uu_ull(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_uu_ull:
-; CHECK: mulas64_ull
+; CHECK: mulas64.ull
   %r = call i64 @llvm.haydn.mulas64.uu.ull(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulas64_uu_ulh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulas64_uu_ulh:
-; CHECK: mulas64_ulh
+; CHECK: mulas64.ulh
   %r = call i64 @llvm.haydn.mulas64.uu.ulh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
@@ -686,112 +687,112 @@ declare i64 @llvm.haydn.mulss64.uu.ull(i64, i64, i64)
 declare i64 @llvm.haydn.mulss64.uu.ulh(i64, i64, i64)
 define i64 @test_mulss64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_ss_ll:
-; CHECK: mulss64_ll
+; CHECK: mulss64.ll
   %r = call i64 @llvm.haydn.mulss64.ss.ll(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_ss_lh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_ss_lh:
-; CHECK: mulss64_lh
+; CHECK: mulss64.lh
   %r = call i64 @llvm.haydn.mulss64.ss.lh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_ss_hl(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_ss_hl:
-; CHECK: mulss64_hl
+; CHECK: mulss64.hl
   %r = call i64 @llvm.haydn.mulss64.ss.hl(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_ss_hh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_ss_hh:
-; CHECK: mulss64_hh
+; CHECK: mulss64.hh
   %r = call i64 @llvm.haydn.mulss64.ss.hh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_su_lul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_su_lul:
-; CHECK: mulss64_lul
+; CHECK: mulss64.lul
   %r = call i64 @llvm.haydn.mulss64.su.lul(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_su_ulh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_su_ulh:
-; CHECK: mulss64_ulh
+; CHECK: mulss64.ulh
   %r = call i64 @llvm.haydn.mulss64.su.ulh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_su_uhl(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_su_uhl:
-; CHECK: mulss64_uhl
+; CHECK: mulss64.uhl
   %r = call i64 @llvm.haydn.mulss64.su.uhl(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_su_uhh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_su_uhh:
-; CHECK: mulss64_uhh
+; CHECK: mulss64.uhh
   %r = call i64 @llvm.haydn.mulss64.su.uhh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_us_luh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_us_luh:
-; CHECK: mulss64_luh
+; CHECK: mulss64.luh
   %r = call i64 @llvm.haydn.mulss64.us.luh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_us_uhuh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_us_uhuh:
-; CHECK: mulss64_uhuh
+; CHECK: mulss64.uhuh
   %r = call i64 @llvm.haydn.mulss64.us.uhuh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_us_hul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_us_hul:
-; CHECK: mulss64_hul
+; CHECK: mulss64.hul
   %r = call i64 @llvm.haydn.mulss64.us.hul(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_us_uhul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_us_uhul:
-; CHECK: mulss64_uhul
+; CHECK: mulss64.uhul
   %r = call i64 @llvm.haydn.mulss64.us.uhul(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_uu_uluh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_uu_uluh:
-; CHECK: mulss64_uluh
+; CHECK: mulss64.uluh
   %r = call i64 @llvm.haydn.mulss64.uu.uluh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_uu_ulul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_uu_ulul:
-; CHECK: mulss64_ulul
+; CHECK: mulss64.ulul
   %r = call i64 @llvm.haydn.mulss64.uu.ulul(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_uu_ull(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_uu_ull:
-; CHECK: mulss64_ull
+; CHECK: mulss64.ull
   %r = call i64 @llvm.haydn.mulss64.uu.ull(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss64_uu_ulh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss64_uu_ulh:
-; CHECK: mulss64_ulh
+; CHECK: mulss64.ulh
   %r = call i64 @llvm.haydn.mulss64.uu.ulh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
