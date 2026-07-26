@@ -1,24 +1,168 @@
 # OPEN Haydn compiler bugs blocking BundleSim
 
-> **STATUS (2026-07-21, gcc-c-torture wave)** — live tools under
-> `/ssd2/mhyang/haydn-build/bin`. BundleSim product path is **greenfield only**
-> (`build/BundleSim` + `build/run_c` + product BSP `build/bsp-stage/` via
-> `haydn_bsp`).
+> **STATUS (2026-07-24)** — live tools: `$HAYDN_BIN` / BundleSim `build/`.
+> Product path: `build/BundleSim` + `build/run_c` + `haydn_bsp`.
+> Torture gate: **`scripts/run_gcc_torture_lit.sh`** (llvm-lit + freestanding
+> link + BundleSim). Upstream clang disables = llvm-testsuite
+> `execute/CMakeLists.txt` `TestsToSkip` (**84**). Lit-enabled = **1430**.
 >
-> Yarpgen/CoreMark residual wave remains green (CB-122…125 closed). **New OPEN**
-> from llvm-testsuite `gcc-c-torture/execute` freestanding + BundleSim sweep
-> (~1514 tests @ -O2: 1312 PASS / 86 skip / 116 issue) — see **CB-126…CB-131**.
+> **gcc-c-torture/execute lit-enabled @ -O3** (2026-07-24 full lit retest):
 >
-> ### Currently OPEN
+> | Result | Count | Note |
+> |--------|------:|------|
+> | **PASS** | **1408** | GUEST_EXIT 0 (incl. CB-133/135 + complex-5) |
+> | FAIL | 14 | freestanding link / target / harness only |
+> | TIMEOUT | 1 | `920501-6` default 120s budget |
+> | Haydn UNSUPPORTED | 7 | hang×5 + freestanding×1 + target×1 |
+> | Upstream TestsToSkip | 84 | not run (clang unsupported / known fail) |
+> | Total `.c` | 1514 | log: `/tmp/bundlesim-$UID/lit-residual.log` |
 >
-> | ID | Pri | Class | Symptom |
-> |----|-----|-------|---------|
-> | **CB-126** | P1 | GISel legalize | narrow/unaligned `G_LOAD`/`G_STORE` → s64 |
-> | **CB-127** | P2 | GISel ISel | `G_PREFETCH` cannot select |
-> | **CB-128** | P2 | GISel ISel | `@llvm.returnaddress` cannot select |
-> | **CB-129** | P2 | CodeGen assert | `MachineBlockPlacement::buildCFGChains` (computed goto) |
-> | **CB-130** | P2 | GISel legalize | vector ops (`G_LSHR`/`G_XOR`/extract/…) |
-> | **CB-131** | P1 | ABI / miscompile | `va_arg` / stdarg / struct-return → guest `abort` |
+> Earlier O2 ad-hoc runs (pre-lit) kept for history only:
+>
+> | Run | PASS | skip | ICE | ABORT | other | note |
+> |-----|------|------|-----|-------|-------|------|
+> | baseline (pre CB-126..130) | 1312 | 86 | 47 | 31 | 38 | old `run_torture.py` |
+> | after CB-131 VAARG | cluster | — | 0 crash | residual | residual | va-arg cluster |
+>
+> ### Currently OPEN (compiler / runtime product)
+>
+> | ID | Pri | Class | Tests / symptom |
+> |----|-----|-------|-----------------|
+> | **CB-134** | **P1** | compile hang | `20001111-1`, `20170401-1`, `20180921-1`, `950809-1`, `960312-1` (lit UNSUPPORTED hang skip) |
+> | **CB-126 residual** | P3 | GISel legalize | any remaining non-pow2 / width MMO edge cases outside torture green set |
+>
+> ### Closed / fixed on lit-enabled gate (2026-07-24 wave)
+>
+> | Item | Evidence |
+> |------|----------|
+> | **CB-133** | `920501-8`, `930513-1` → **PASS** @ -O3 lit; baremetal `LIBC_CONF_PRINTF_DISABLE_FLOAT` overridden OFF in `libc/config/baremetal/haydn/config.json` (was writing raw `%f`/`%.0f` into buf) |
+> | **CB-131 residual** | `struct-ret-1`, `va-arg-22` → **PASS** @ -O3 lit (retest 2026-07-24); no longer open |
+> | **CB-135 di softfloat** | BSP `_SF_RELS` + `floatdidf`/`floatundisf`/`fix*di`… → `conversion`, `930622-2`, `pr49218` **PASS** |
+> | **CB-135 residual complex** | `complex-5` → **PASS** @ -O3 full lit (GUEST_EXIT 0, `__divsc3` linked; was OPEN for `G_IS_FPCLASS` ICE) |
+> | **CB-130 residual (torture)** | `pr60960`, `20050604-1`, `20060420-1`, `pr56866` → **PASS** (vector scalarize / FSHL s8 / UDIV / load) |
+> | packed i72 post-inc | `pr57344-3` → **PASS** (no `D_LDW_POST_IMM` when align&lt;8) |
+> | `%hhd` printf | `pr78622` → **PASS** @ -O3 full lit (GUEST_EXIT 0); optional `HAYDN_FREESTANDING_SKIP` if re-gated |
+> | signed overflow harness | `950704-1` → **PASS** with `-fwrapv` (`TestRequiresFWrapV`) |
+> | G_MERGE s16 | `20050316-1` → **PASS** |
+> | G_FPTOUI s16 | `980605-1` → **PASS** |
+>
+> ### Confirmed FIXED earlier (2026-07-22 C+BundleSim)
+>
+> | ID | Pri | Evidence |
+> |----|-----|----------|
+> | **CB-126** (core) | P1 | `20040709-2/3`, `strct-pack-1`, `pr29006`, `pr53688`, `pr70903` → **PASS** |
+> | **CB-127** | P2 | all `builtin-prefetch-1..6` → **PASS** |
+> | **CB-128** | P2 | `20030323-1`, `20030811-1`, `pr17377` → **PASS** |
+> | **CB-129** (core) | P2 | `comp-goto-1`, `20071210-1` → **PASS** |
+> | **CB-131** (core) | P1 | `va-arg-1` + `va-arg-2` → **PASS** |
+> | **CB-132** | P0 | clang SIGSEGV on va_arg cluster → **FIXED** |
+
+## Lit-enabled fail inventory (2026-07-24)
+
+Scope: llvm-testsuite `execute/*.c` **minus** upstream `TestsToSkip` (84).
+Gate: `cd BundleSim && scripts/run_gcc_torture_lit.sh -O3 -j32`  
+(with `LLVM_TESTSUITE` or `TORTURE_SRC` set; no hardcoded host paths in runner).
+
+Upstream clang disables are **not** Haydn bugs — listed once in
+`execute/CMakeLists.txt` (`UnsupportedTests` 76 + `FailingTests` 7 +
+`990413-2` x86-only).
+
+### A. ~~OPEN compiler — miscompile (CB-133)~~ FIXED
+
+| Test | Result | Note |
+|------|--------|------|
+| `920501-8.c` | **PASS** | float printf enabled (haydn libc config) |
+| `930513-1.c` | **PASS** | float printf enabled (haydn libc config) |
+
+### B. OPEN compiler — compile hang (CB-134)
+
+Lit marks these **UNSUPPORTED** (`HAYDN_COMPILE_HANG_SKIP`) so the suite
+finishes; still **open compiler** until hangs are fixed or reduced.
+
+| Test | Result |
+|------|--------|
+| `20001111-1.c` | compile hang (llc/GISel) |
+| `20170401-1.c` | compile hang |
+| `20180921-1.c` | compile hang |
+| `950809-1.c` | compile hang |
+| `960312-1.c` | compile hang |
+
+### C. ~~Compiler-rt softfloat (CB-135)~~ FIXED
+
+**Linked:** `libclang_rt.builtins-haydn.a` + `libm.a` when present.  
+**Not libm** — int↔FP helpers live in compiler-rt / BSP RT.
+
+| Test | Was | Now |
+|------|-----|-----|
+| `conversion.c` | LINK missing `__floatundi*` / `__floatdi*` | **PASS** (di helpers in BSP RT) |
+| `930622-2.c` | LINK `__floatdidf` / `__fixdfdi` | **PASS** |
+| `pr49218.c` | LINK `__fixsfdi` | **PASS** |
+| `complex-5.c` | LINK `__divsc3` | **PASS** @ -O3 full lit (GUEST_EXIT 0, bundles=2842) |
+
+### D. Timeout / budget (not miscompile)
+
+| Test | Result | Note |
+|------|--------|------|
+| `920501-6.c` | TIMEOUT under default lit `--run-timeout 120` | **PASS** with `--bundle-limit 200000000 --run-timeout 300` (bundles=74241286) |
+
+### E. NOT open compiler — freestanding / target feature / harness
+
+| Test | Class | Why not CB |
+|------|-------|------------|
+| `built-in-setjmp.c` | COMPILE_TARGET | no `__builtin_setjmp`/`longjmp` on Haydn |
+| `pr84521.c` | COMPILE_TARGET | same |
+| `pr84748.c` | TARGET_SKIP | no `__int128` this phase — `HAYDN_TARGET_SKIP` |
+| `loop-2f.c` | COMPILE_HOSTED | needs `sys/mman.h` (upstream skips only if `!HAVE_MMAP`) |
+| `loop-2g.c` | COMPILE_HOSTED | same |
+| `920302-1.c` | COMPILE | `-Wincompatible-pointer-types` as error; soft flags / Wno |
+| `20030125-1.c` | FREESTANDING_SKIP | weak floor/sin; needs hosted builtins |
+| `20020314-1.c` | **PASS** (BSP) | `plat/alloca.c` bump pool |
+| `20021113-1.c` | **PASS** (BSP) | same |
+| `20040223-1.c` | **PASS** (BSP) | same |
+| `941202-1.c` | **PASS** (BSP) | same |
+| `pr22061-1.c` | **PASS** (BSP) | same |
+| `20020720-1.c` | LINK freestanding | `link_error` (test sentinel) |
+| `fprintf-2.c` | **PASS** (BSP+lit) | `plat/stdio_extras.c` + lit `--bind guest_tmp:/tmp:rw` + baremetal fscanf ungetc |
+| `printf-2.c` | **PASS** (BSP+lit) | same (`freopen` rebinds stdout cookie) |
+| `user-printf.c` | **PASS** (BSP+lit) | same |
+
+### F. Flat list — every lit-enabled Haydn non-PASS (reduced)
+
+```
+# CB-134 hang (HAYDN_COMPILE_HANG_SKIP → UNSUPPORTED) — only OPEN compiler residual
+20001111-1.c
+20170401-1.c
+20180921-1.c
+950809-1.c
+960312-1.c
+# budget (TIMEOUT default; PASS with higher budget)
+920501-6.c
+# not compiler (target / freestanding / harness) — SKIP
+built-in-setjmp.c
+pr84521.c
+pr84748.c   # HAYDN_TARGET_SKIP — no __int128 this phase
+loop-2f.c
+loop-2g.c
+920302-1.c
+20030125-1.c
+20020720-1.c
+# FIXED via BundleSim BSP + lit VFS + baremetal fscanf ungetc:
+#   alloca: 20020314-1, 20021113-1, 20040223-1, 941202-1, pr22061-1
+#   stdio:  fprintf-2, printf-2, user-printf
+# FIXED earlier this wave: conversion, 930622-2, pr49218, complex-5,
+#   920501-8, 930513-1, struct-ret-1, va-arg-22, pr57344-3, pr78622, pr60960
+```
+
+### Repro (lit gate)
+
+```bash
+export PATH="$HAYDN_BIN:$PATH"   # Haydn clang on PATH
+export LLVM_TESTSUITE=…/llvm-testsuite   # or TORTURE_SRC=…/execute
+cd …/BundleSim
+scripts/run_gcc_torture_lit.sh -O3 -j32
+# focused:
+scripts/run_gcc_torture_lit.sh --filter '920501-8|930513-1|conversion' -j8 -a
+```
 >
 > ### Recently closed (hunt wave — not OPEN)
 >
@@ -158,12 +302,13 @@
 
 | ID | Pri | State | Notes |
 |----|-----|-------|-------|
-| **CB-126** | **P1** | **OPEN** | GISel legalize narrow/unaligned `G_LOAD`/`G_STORE`→s64; repro `20040709-2.c` / `strct-pack-1.c`. |
-| **CB-127** | **P2** | **OPEN** | `G_PREFETCH` cannot select; repro `builtin-prefetch-1.c`. |
-| **CB-128** | **P2** | **OPEN** | `@llvm.returnaddress` cannot select; repro `20030323-1.c`. |
-| **CB-129** | **P2** | **OPEN** | `MachineBlockPlacement` assert (computed goto); repro `comp-goto-1.c`. |
-| **CB-130** | **P2** | **OPEN** | vector legalize (`G_LSHR`/`G_XOR`/…); repro `pr53645.c` / `simd-1.c`. |
-| **CB-131** | **P1** | **OPEN** | va_arg/stdarg/struct-ret miscompile → BundleSim ABORT; repro `haydn_torture_run va-arg-1.c`. |
+| **CB-132** | **P0** | **FIXED** | Mid-ISel CFG / pure-stack crash path removed. Thin ISel → `VAARG_I32/I64`; ExpandPseudos two-bank+overflow. Cluster no longer SIGSEGV. Repro was `va-arg-2.c` → now **PASS**. |
+| **CB-126** | **P1** | **FIXED (core)** | C gate PASS; residual `G_ZEXTLOAD`/`G_STORE` width ICE on `pr57344*`, `pr52979*`, … |
+| **CB-127** | **P2** | **FIXED** | C gate PASS all `builtin-prefetch-*`. |
+| **CB-128** | **P2** | **FIXED** | C gate PASS returnaddress tests. |
+| **CB-129** | **P2** | **FIXED (core)** | `comp-goto-1` PASS; residual MBP assert `20000815-1`. |
+| **CB-130** | **P2** | **PARTIAL** | lit may pass; `simd-*`/`pr60960` still legalize ICE; `pr53645` → MEMORY_FAULT. |
+| **CB-131** | **P1** | **FIXED (core)** | Systematic ExpandPseudos VAARG + Dst≠VaList + non-variadic consumers + no ZOL on va_arg + SP-bracket multi-spill. Cluster **PASS=42**/47; residual: `struct-ret-1`, `va-arg-22`. |
 | **CB-119** | **P0** | **FIXED** | Bundle128 `simm20` signed DecoderMethod; lit `cb119-addi32-simm20-signed-decode.s`. F1 ILL@entry cleared. Prevent-reg: `yarpgen_seed{10,45,…}`. |
 | **CB-120** | **P0** | **FIXED** | Misaligned load root: unaligned/bitfield ISel; Family F2. Prevent-reg: `yarpgen_seed{8,12,14,24,…}`. |
 | **CB-121** | **P1** | **FIXED (O0/O1)** | Seed7 ILP32 host + call hygiene; O0/O1 match `0x1ab4…`. **O2 residual → CB-125 FIXED**. |
@@ -182,10 +327,139 @@
 
 # Currently OPEN
 
+## Retest log (2026-07-22)
+
+```bash
+# rebuild required after ba10662 (stale libLLVMHaydnCodeGen hid all fixes)
+cd /ssd2/mhyang/haydn-build && ninja -j$(nproc) lib/libLLVMHaydnCodeGen.so.22.1 bin/llc bin/clang
+export LD_LIBRARY_PATH=/ssd2/mhyang/haydn-build/lib
+# full suite (runner):
+TORTURE_WORK=/tmp/bundlesim-$UID/gcc-c-torture/run3 \
+  python3 /tmp/bundlesim-672/gcc-c-torture/run_torture.py --opt=-O2 -j16 --timeout 20
+# summary: …/run3/summary-O2.json
+```
+
+| Metric | pre-rebuild | post-rebuild |
+|--------|-------------|--------------|
+| PASS | 1312 | **1298** |
+| COMPILE_BACKEND_ICE | 47 | **72** (see inventory below) |
+| SIM_ABORT | 31 | **19** |
+| FIXED→PASS | — | **20** (19 ICE + `va-arg-1`) |
+| REGRESSED PASS→ICE | — | **34** (all **CB-132** SIGSEGV) |
+
+### Why ICE went 47 → 72 (+25 net)
+
+```text
+  47  baseline ICE
+− 19  ICE fixed → PASS (CB-126/127/128/129 cores)
++ 34  was PASS → SIGSEGV (CB-132 regression)
++ 12  was ABORT → SIGSEGV (same CB-132; no longer miscompile, now crash)
++  1  was MEMORY_FAULT → SIGSEGV (multi-ix)
++  0  new pure legalize ICE (none — residual legalize are STILL_ICE)
+────
+  72  post-rebuild ICE
+```
+
+Math: `47 − 19 + 34 + 12 + 1 − (va-arg-22 was STILL_ICE and still crash) = 72`.
+
+### ICE inventory post-rebuild (**72** total) — by technical class
+
+| Class | N | CB | Origin | What |
+|-------|---|-----|--------|------|
+| **A. SIGSEGV exit 139** | **48** | **CB-132** | 34 PASS + 12 ABORT + 1 MEMFAULT + 1 old ICE | clang frontend crash |
+| **B. LEGALIZE_VECTOR** | **8** | CB-130 residual | all still-ICE | vector PHI/mul/FADD/LSHR/SDIV/BITCAST |
+| **C. LEGALIZE_LOAD** | **7** | CB-126 residual | all still-ICE | `G_ZEXTLOAD` width mismatch |
+| **D. TRANSLATE_CALL** | **4** | (new bucket) | all still-ICE | `unable to translate instruction: call` |
+| **E. LEGALIZE_BITCAST_MISC** | **3** | (misc) | all still-ICE | `G_FPTOUI` / `G_PTRTOINT` / `G_FSHL` |
+| **F. ASSERT_MBP** | **1** | CB-129 residual | still-ICE | `MachineBlockPlacement` (`20000815-1`) |
+| **G. LEGALIZE_STORE** | **1** | CB-126 residual | still-ICE | `G_STORE` s32→s64 mem (`pr79737-2`) |
+| **Total** | **72** | | | |
+
+#### A. SIGSEGV_139 — **48** (CB-132) — *this is the +ICE*
+
+**Regressed was-PASS (34):**  
+`20000519-1`, `20041113-1`, `20041214-1`, `20071213-1`, `920625-1`, `920726-1`, `920908-1`, `931004-{2,4,6,8,10,12,14}`, `980205`, `980716-1`, `pr38151`, `pr44575`, `pr56205`, `stdarg-{1,2,4}`, `strct-stdarg-1`, `strct-varg-1`, `va-arg-{4,5,6,11,13,14,18,20,26,trap-1}`
+
+**Was-ABORT → crash (12):**  
+`920501-8`, `991216-2`, `pr64979`, `stdarg-3`, `va-arg-{2,9,10,15,16,17,19,24}`
+
+**Other origin (2):** `multi-ix` (was MEMFAULT), `va-arg-22` (was legalize ICE)
+
+```bash
+# repro
+$HAYDN/clang --target=haydn-unknown-elf -O2 -c $TORTURE/va-arg-2.c -o /tmp/t.o \
+  -w -Wno-implicit-int -Wno-implicit-function-declaration
+# exit 139
+```
+
+#### B. LEGALIZE_VECTOR — **8** (CB-130 residual)
+
+`20050316-1` (G_BITCAST v2i16), `20050604-1` (G_FADD v4i32), `20060420-1` (G_PHI v4i32),  
+`pr23135` (G_SDIV v2i32), `pr60960` (G_LSHR v4i8), `simd-1` (G_PHI v4i32),  
+`simd-2` (G_PHI v8i16), `simd-6` (G_MUL v8i8)
+
+#### C. LEGALIZE_LOAD — **7** (CB-126 residual)
+
+`pr52979-1`, `pr52979-2`, `pr57344-1`, `pr57344-2`, `pr57344-3`, `pr57344-4`, `pr58570`  
+→ `unable to legalize … G_ZEXTLOAD`
+
+#### D. TRANSLATE_CALL — **4**
+
+`pr65053-2`, `pr65956`, `pr88904`, `stkalign`  
+→ `unable to translate instruction: call`
+
+#### E. LEGALIZE_BITCAST_MISC — **3**
+
+`980605-1` (G_FPTOUI), `pr17252` (G_PTRTOINT), `pr56866` (G_FSHL)
+
+#### F. ASSERT_MBP — **1** (CB-129 residual)
+
+`20000815-1` — `MachineBlockPlacement::buildCFGChains` assert
+
+#### G. LEGALIZE_STORE — **1** (CB-126 residual)
+
+`pr79737-2` — `G_STORE` s32 value to s64 memory
+
+### ICE priority to fix
+
+| Order | Class | N | Why |
+|-------|-------|---|-----|
+| 1 | **A SIGSEGV** | 48 | P0 regression; restore PASS + clear false ICE inflation |
+| 2 | **C+G load/store legalize** | 8 | finish CB-126 |
+| 3 | **B vector** | 8 | finish CB-130 |
+| 4 | **D translate call** | 4 | independent backend hole |
+| 5 | **E misc legalize** | 3 | small |
+| 6 | **F MBP** | 1 | CB-129 leftover |
+
+---
+
+## CB-132 — FIXED (clang SIGSEGV on va_arg/stdarg after ba10662)
+
+**Pri was P0. Fixed 2026-07-22 with CB-131 systematic ExpandPseudos VAARG.**
+
+| Field | Value |
+|-------|--------|
+| Symptom (was) | `clang frontend command failed with exit code 139` (SIGSEGV) |
+| Root | Post-`ba10662` pure-stack / mid-pipeline VAARG paths could not host bank→stack overflow without CFG; crash or wrong pure-stack. |
+| Fix | Thin ISel `G_VAARG` → `VAARG_I32/I64`; `HaydnExpandPseudos::expandVAARG` implements two-bank + stack overflow with MBB split; spill restores land on Join (never after terminators). |
+| Gate | `va-arg-2.c` @ -O2 BundleSim **PASS**; cluster filter no compile SIGSEGV |
+
+### Reproduce (now expect PASS)
+
+```bash
+export LD_LIBRARY_PATH=/ssd2/mhyang/haydn-build/lib
+export TORTURE_WORK=/tmp/bundlesim-$UID/gcc-c-torture/vaarg-cb132-gate
+python3 /tmp/bundlesim-672/gcc-c-torture/run_torture.py --opt=-O2 -j4 \
+  --filter '^(va-arg-1|va-arg-2)\.c$'
+# expect: PASS=2
+```
+
+---
+
 Source sweep: llvm-testsuite
 `SingleSource/Regression/C/gcc-c-torture/execute` @ `-O2`, freestanding
-Haydn link + BundleSim (not full lit yet). Evidence dir:
-`/tmp/bundlesim-672/gcc-c-torture/run/` (`summary-O2.json`, `results-O2.jsonl`).
+Haydn link + BundleSim (not full lit yet). Evidence dirs:
+`/tmp/bundlesim-672/gcc-c-torture/run/` (baseline), `run3/` (post-rebuild).
 
 **Env (all repros):**
 
@@ -228,9 +502,9 @@ haydn_torture_run() {  # usage: haydn_torture_run FILE.c [-O2]
 
 ---
 
-## CB-126 — OPEN (GISel legalize: narrow/unaligned G_LOAD/G_STORE → s64)
+## CB-126 — FIXED core / residual OPEN (narrow load legalize)
 
-**Pri P1. Compiler. Not BundleSim.**
+**Pri was P1. Core FIXED 2026-07-22 retest (rebuilt tree). Residual legalize remains.**
 
 | Field | Value |
 |-------|--------|
@@ -257,14 +531,12 @@ $HAYDN/clang --target=haydn-unknown-elf -O2 -c \
   -w -Wno-implicit-int -Wno-implicit-function-declaration
 ```
 
-**Expected (bug present):** non-zero exit; `fatal error: error in backend: unable to legalize instruction: … G_LOAD …`.
-
-**Related:** may share root with historical **CB-120** unaligned/bitfield work;
-these residual forms are s64 legalize of sub-word mem ops, still ICE on HEAD.
+**Expected after core fix:** exit 0 on `20040709-2` / `strct-pack-1`. Residual
+still ICE: `pr57344-*`, `pr52979-*`, `pr58570`, `pr79737-2`, …
 
 ---
 
-## CB-127 — OPEN (G_PREFETCH cannot select)
+## CB-127 — FIXED (G_PREFETCH cannot select)
 
 **Pri P2. Compiler. Not BundleSim.**
 
@@ -288,7 +560,7 @@ prefetch op if ISA has one); do not ICE.
 
 ---
 
-## CB-128 — OPEN (`llvm.returnaddress` cannot select)
+## CB-128 — FIXED (`llvm.returnaddress` cannot select)
 
 **Pri P2. Compiler. Not BundleSim.**
 
@@ -312,7 +584,7 @@ $HAYDN/clang --target=haydn-unknown-elf -O2 -c \
 
 ---
 
-## CB-129 — OPEN (MachineBlockPlacement assert on computed goto)
+## CB-129 — FIXED core / residual (MachineBlockPlacement / computed goto)
 
 **Pri P2. Compiler. Not BundleSim.**
 
@@ -338,7 +610,7 @@ edges — likely incomplete Haydn branch analysis rather than generic LLVM bug.
 
 ---
 
-## CB-130 — OPEN (vector legalize: G_LSHR / G_XOR / extract / …)
+## CB-130 — PARTIAL (vector legalize: G_LSHR / G_XOR / extract / …)
 
 **Pri P2. Compiler. Not BundleSim.**
 
@@ -366,47 +638,33 @@ reject vectors in FE if out of product scope (still should not backend-ICE).
 
 ---
 
-## CB-131 — OPEN (va_arg / stdarg / struct-return miscompile → abort)
+## CB-131 — FIXED (core); residual ABI miscompiles
 
-**Pri P1. Compiler (ABI/codegen). Not BundleSim** — sim correctly runs guest
-`abort()` after wrong value check.
+**Pri P1. Core fixed 2026-07-22 (systematic ExpandPseudos VAARG).** Residual
+runtime ABORT/MEMFAULT on a few cases still open (struct-return / edge ABI).
 
 | Field | Value |
 |-------|--------|
 | Class | Calling convention / varargs / aggregate return |
-| Symptom | freestanding link OK; BundleSim `stop=ABORT` `guest_exit_code=134` |
-| Cluster | `va-arg-{1,2,9,10,15,16,17,19,24}.c`, `stdarg-3.c`, `struct-ret-1.c` (+ more runtime aborts may share root) |
+| Core fix | `VAARG_I32/I64` + ExpandPseudos: reg bank (`top+offs`, step 4/8) or stack overflow (`__stack` step 8) |
+| Core gates | `va-arg-1.c`, `va-arg-2.c` @ -O2 → **PASS** (`GUEST_EXIT 0`) |
+| Residual | **CLOSED 2026-07-24** — `struct-ret-1` + `va-arg-22` **PASS** @ -O3 freestanding lit |
 
-### Reproduce
+### Reproduce core (expect PASS)
 
 ```bash
-# single representative
-haydn_torture_run va-arg-1.c -O2
-# expect (bug present): OK ABORT 134   (or status with stop_reason=ABORT)
-
-haydn_torture_run va-arg-2.c -O2
-haydn_torture_run stdarg-3.c -O2
-haydn_torture_run struct-ret-1.c -O2
+export LD_LIBRARY_PATH=/ssd2/mhyang/haydn-build/lib
+python3 /tmp/bundlesim-672/gcc-c-torture/run_torture.py --opt=-O2 -j4 \
+  --filter '^(va-arg-1|va-arg-2)\.c$'
+# PASS=2
 ```
 
-**One-liner without helper:**
+### Residual gate
 
 ```bash
-SRC=$TORTURE/va-arg-1.c
-$HAYDN/clang --target=haydn-unknown-elf -O2 -ffreestanding \
-  -isystem $BSP/include -isystem $SYSROOT/include \
-  -w -Wno-implicit-int -Wno-implicit-function-declaration \
-  -c $SRC -o /tmp/va.o
-$HAYDN/ld.lld -m elf32haydn -T $BSP/lib/bundlesim/bundlesim.ld \
-  --gc-sections --build-id=none \
-  $BSP/lib/bundlesim/crt0.o /tmp/va.o --start-group \
-  $BSP/lib/bundlesim/libbundlesim_crt.a $SYSROOT/lib/libc.a $SYSROOT/lib/libm.a \
-  $BSP/lib/bundlesim/libbundlesim_plat.a $BSP/lib/bundlesim/libbundlesim_sys.a \
-  $BSP/lib/bundlesim/libclang_rt.builtins-haydn.a --end-group -o /tmp/va.elf
-$BSIM --objdump $HAYDN/llvm-objdump /tmp/va.elf --result-json /tmp/va.json --stdio null
-python3 -c "import json;d=json.load(open('/tmp/va.json'));print(d)"
-# guest_exit_code 134 / stop_reason ABORT = bug still present
-# guest_exit_code 0 / GUEST_EXIT = fixed
+python3 /tmp/bundlesim-672/gcc-c-torture/run_torture.py --opt=-O2 -j8 \
+  --filter '^(struct-ret-1|stdarg-3|va-arg-22)\.c$'
+# still SIM_ABORT until residual ABI closed
 ```
 
 **Not in this ticket (reclass later):** `strlen-*`/`memchr` exit 1 may be
