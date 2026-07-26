@@ -9,15 +9,12 @@
 // This file implements the targeting of the InstructionSelector class for
 // Haydn.
 // \section gformatrouting G-format routing (encoding_manual.md §3.6)
-// The 32-bit G-format is a SIZE optimization (r0-r7, destructive 2-reg)
-// NOT a correctness requirement. The selector does NOT bias regalloc toward
+// The 32-bit G-format is a SIZE optimization (r0-r7, destructive 2-reg),
+// not a correctness requirement. The selector does not bias regalloc toward
 // r0-r7: every 32-bit ALU32 op is constrained to the full GPR32RegClass
-// (r0-r15) uniformly, so regalloc is free to pick any allocatable GPR.
-// The earlier MC-time G-format emitter (`HaydnMCCodeEmitter::tryEncodeGFormat`)
-// and Mode-0 multi-width emitters (`emitMode0S0Bundle`, …) were RETIRED with
-// Bundle128-only. All real ALU32 RR ops materialize to
-// `_S<k>` forms and ride in a 16-byte Bundle128 parcel via
-// `encodeBundle128`. G-format size optimization is not on the live path.
+// (r0-r15) uniformly. Emit logical opcodes; post-RA HR setDesc picks member
+// `_S*` / AltDesc forms. Encode is Desc-as-is via encodeBundle128. G-format
+// size optimization is not on the live path.
 //===----------------------------------------------------------------------===//
 
 #include "HaydnInstrInfo.h"
@@ -53,7 +50,7 @@ namespace {
 // Logical-not of a 0/1 GPR predicate: `rd = rs ^ 1`.
 // Single authority for s32 and s64 icmp invert (NE/GE/LE and NeedInvert).
 // Must NOT use bitwise NOT32 (~0 = -1, ~1 = -2 — both nonzero → BNEZ always).
-// ISA: XORI32 is ZEXT imm20; emit logical XORI32, FlexMap → XORI32_S* at MC.
+// ISA: XORI32 is ZEXT imm20; emit logical XORI32; post-RA setDesc → XORI32_S*.
 static Register emitInvert01(MachineIRBuilder &MIB, Register Pred01,
                              const TargetInstrInfo &TII,
                              const TargetRegisterInfo &TRI,
@@ -82,6 +79,26 @@ static unsigned getMemAccessBytes(const MachineInstr &I,
       return static_cast<unsigned>(LS.getValue());
   }
   return FallbackBytes;
+}
+
+// C2.2–C2.3 / G-MEM-INTRIN: IRTranslator attaches MMOs via getTgtMemIntrinsic
+// on G_INTRINSIC_W_SIDE_EFFECTS (ordinary MOLoad/MOStore vs stateful
+// MOVolatile). Clone them onto the selected target MI so scheduler/AA see
+// object, size, alignment, and flags. Without this, selected CB/BREV/Golden
+// mem ops print without `:: (load/store …)`.
+static void cloneMemOperands(MachineInstr &Dst, const MachineInstr &Src) {
+  MachineFunction *MF = Dst.getMF();
+  for (MachineMemOperand *MMO : Src.memoperands())
+    Dst.addMemOperand(*MF, MMO);
+}
+
+// Constrain selected regs and preserve any target-mem-intrinsic MMOs.
+static void constrainSelectedMemInst(MachineInstr *MI, MachineInstr &I,
+                                     const TargetInstrInfo &TII,
+                                     const TargetRegisterInfo &TRI,
+                                     const RegisterBankInfo &RBI) {
+  cloneMemOperands(*MI, I);
+  constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
 }
 
 // Scalar mem ops land in GPR32 except full 8-byte LD64/ST64 → DR64.
@@ -291,15 +308,31 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     return true;
   }
 
-  // Try TableGen-generated patterns first
+  // Try TableGen-generated patterns first (HaydnGISel.td Pats).
   if (selectImpl(I, *CoverageInfo))
     return true;
 
-  // Custom C++ selection for patterns not covered by TableGen
+  // C++ residual allowlist. Classes:
+  //   Pat-covered (return false here): s32/s64/v2i32/v4i16 binops, s32/s64
+  //     minmax (signed), s32 shifts, s64 shifts, s32 mul, v2i32 mul, mulh,
+  //     abs s32/s64, s32 select → MOVT32
+  //   Permanent C++ (this switch):
+  //     G_ICMP (s32/s64 multi-instr), G_SELECT s64 (dual MOVT),
+  //     G_MUL s64 splat/libcall residual, G_SHL/LSHR/ASHR SIMD only,
+  //     G_LOAD/STORE/Z/SEXTLOAD (MMO), G_HAYDN_* AGU, G_MULA64*,
+  //     G_Z/S/ANYEXT G_TRUNC multi-width, MERGE/UNMERGE, VAARG/VASTART,
+  //     G_INTRINSIC*, BRJT/dyn stack/trap peeps, BUILD_VECTOR, constants
+  //   Delete candidates: none left for pure 1:1 after Pats (s32 G_SELECT
+  //     dual home removed).
   LLVM_DEBUG(dbgs() << "Falling through to custom selection for: " << I << "\n");
   unsigned Opcode = I.getOpcode();
 
   switch (Opcode) {
+  // CB-127: Haydn has no prefetch ISA; treat as compile-time nop.
+  case TargetOpcode::G_PREFETCH:
+    I.eraseFromParent();
+    return true;
+
   case TargetOpcode::G_CONSTANT: {
     // Materialize constant for s32, s64, and pointer types.
     // Uses HaydnMatInt to compute the optimal instruction sequence.
@@ -565,7 +598,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     // BranchFolding's live-JT scan (BranchFolding.cpp:258, Op.isJTI) recognizes
     // this block as referencing the jump table. With MO_Immediate, BranchFolding
     // marks the JT dead and clears its MBBs (RemoveJumpTable), causing
-    // "Undefined temporary symbol.LJTI" at assembly time (G13). Fixed.
+    // "Undefined temporary symbol.LJTI" at assembly time.
     MachineInstr *BRJTMI = MIB.buildInstr(Haydn::BR_JT)
                                   .addReg(TargetAddr) // absolute target address
                                   .addJumpTableIndex(JTI); // jump table index (MO_JumpTableIndex)
@@ -1048,288 +1081,210 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
   }
 
   case TargetOpcode::G_SELECT: {
-    // Select without basic block splitting.
-    // Use bitwise select: Dst = (TrueVal & -Cond) | (FalseVal & ~(-Cond))
-    // Simplified: Dst = (TrueVal & CondMask) | (FalseVal & ~CondMask)
-    // where CondMask = NEG32(Cond) = 0 if Cond==0, 0xFFFFFFFF if Cond!=0
-    // Result: Dst = TrueVal if Cond!=0, FalseVal if Cond==0
+    // s32 + Cond s32 → MOVT32 Pat (HaydnGISel.td). C++ residual when
+    // selectImpl misses: (1) s32 dest with Cond typed s1 (common after
+    // IRTranslator — not the same type predicate as the Pat); (2) s64 dual
+    // MOVT multi-instr. Not a dual home for the Pat shape.
     Register Dst = I.getOperand(0).getReg();
     Register Cond = I.getOperand(1).getReg();
     Register TrueVal = I.getOperand(2).getReg();
     Register FalseVal = I.getOperand(3).getReg();
     LLT DstTy = MRI.getType(Dst);
-    bool IsS64 = DstTy.isValid() && DstTy.getSizeInBits() == 64;
+    if (!DstTy.isValid())
+      return false;
 
     MachineIRBuilder MIB(I);
+    const unsigned DstBits = DstTy.getSizeInBits();
 
-    if (IsS64) {
-      // s64 select : dual MOVT32 on lo/hi halves — same 0/1 Cond bit0
-      // contract as s32. Replaces the old NEG/AND/NOT/AND/OR chain so
-      // GenMux Pattern 1 (post-RA bitwise fuse) is no longer required.
-      //
-      // {lo,hi}T = unmerge True; {lo,hi}F = unmerge False
-      // lo = MOVT32 FalseLo, TrueLo, Cond
-      // hi = MOVT32 FalseHi, TrueHi, Cond
-      // Dst = merge lo, hi
-      Register TrueValLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      Register TrueValHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      Register FalseValLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      Register FalseValHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      Register DstLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      Register DstHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-
-      if (TrueVal.isVirtual())
-        RBI.constrainGenericRegister(TrueVal, Haydn::DR64RegClass, MRI);
-      if (FalseVal.isVirtual())
-        RBI.constrainGenericRegister(FalseVal, Haydn::DR64RegClass, MRI);
+    // Scalar s32 residual when Cond is not s32 (Pat covers Cond s32 only).
+    if (DstBits == 32 && !DstTy.isVector()) {
+      LLT CondTy = MRI.getType(Cond);
+      if (CondTy.isValid() && CondTy.getSizeInBits() == 32)
+        return false; // Pat should have matched; fail closed if not.
+      RBI.constrainGenericRegister(Dst, Haydn::GPR32RegClass, MRI);
       if (Cond.isVirtual())
         RBI.constrainGenericRegister(Cond, Haydn::GPR32RegClass, MRI);
-
-      MachineInstr *UnmergeTrue = MIB.buildInstr(Haydn::MOV_DR64_TO_GPR)
-                                       .addDef(TrueValLo)
-                                       .addDef(TrueValHi)
-                                       .addReg(TrueVal);
-      constrainSelectedInstRegOperands(*UnmergeTrue, TII, TRI, RBI);
-
-      MachineInstr *UnmergeFalse = MIB.buildInstr(Haydn::MOV_DR64_TO_GPR)
-                                        .addDef(FalseValLo)
-                                        .addDef(FalseValHi)
-                                        .addReg(FalseVal);
-      constrainSelectedInstRegOperands(*UnmergeFalse, TII, TRI, RBI);
-
-      MachineInstr *MovtLo = MIB.buildInstr(Haydn::MOVT32)
-                                 .addDef(DstLo)
-                                 .addReg(FalseValLo)
-                                 .addReg(TrueValLo)
+      if (TrueVal.isVirtual())
+        RBI.constrainGenericRegister(TrueVal, Haydn::GPR32RegClass, MRI);
+      if (FalseVal.isVirtual())
+        RBI.constrainGenericRegister(FalseVal, Haydn::GPR32RegClass, MRI);
+      MachineInstr *MovtMI = MIB.buildInstr(Haydn::MOVT32)
+                                 .addDef(Dst)
+                                 .addReg(FalseVal)
+                                 .addReg(TrueVal)
                                  .addReg(Cond);
-      constrainSelectedInstRegOperands(*MovtLo, TII, TRI, RBI);
-
-      MachineInstr *MovtHi = MIB.buildInstr(Haydn::MOVT32)
-                                 .addDef(DstHi)
-                                 .addReg(FalseValHi)
-                                 .addReg(TrueValHi)
-                                 .addReg(Cond);
-      constrainSelectedInstRegOperands(*MovtHi, TII, TRI, RBI);
-
-      RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-      MachineInstr *MergeMI = MIB.buildInstr(Haydn::MOV_GPR_TO_DR64)
-                                  .addDef(Dst)
-                                  .addReg(DstLo)
-                                  .addReg(DstHi);
-      constrainSelectedInstRegOperands(*MergeMI, TII, TRI, RBI);
-
+      constrainSelectedInstRegOperands(*MovtMI, TII, TRI, RBI);
       I.eraseFromParent();
       return true;
     }
 
-    // s32 select using MOVT32 conditional move (tied two-address def).
-    // G_SELECT: Dst = (Cond != 0) ? TrueVal : FalseVal
-    //
-    // MOVT32 rd, rd_src, rs1, rs2: rd = (rs2[0]==1) ? rs1 : rd_src
-    // (the.td ties $rd = $rd_src, modeling the read-modify-write: when the
-    // condition is false the original $rd_src value is retained as $rd).
-    //
-    // Build the single tied-def MCInst directly on Dst, using FalseVal as the
-    // tied $rd_src fallthrough value (this is the value kept when Cond==0):
-    // %Dst = MOVT32 %Dst(tied)=FalseVal, TrueVal, Cond
-    // This mirrors selectAccMAC : one MCInst, two-address constraint forces
-    // regalloc to coalesce FalseVal and Dst to the same physical register.
-    // NO COPY seed — a COPY+MOVT32 both defining the same vreg would violate
-    // SSA (getVRegDef "at most one definition" assertion in MachineCSE).
-    RBI.constrainGenericRegister(Dst, Haydn::GPR32RegClass, MRI);
+    // 64-bit payload (s64 scalar or v2i32/v4i16 in DR64): dual MOVT32 on
+    // lo/hi halves. Vector types are also 64 bits — must not use isScalar-only.
+    if (DstBits != 64)
+      return false;
+
+    // Dual MOVT multi-instr; not a single Pat.
+    Register TrueValLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+    Register TrueValHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+    Register FalseValLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+    Register FalseValHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+    Register DstLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+    Register DstHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+
+    if (TrueVal.isVirtual())
+      RBI.constrainGenericRegister(TrueVal, Haydn::DR64RegClass, MRI);
+    if (FalseVal.isVirtual())
+      RBI.constrainGenericRegister(FalseVal, Haydn::DR64RegClass, MRI);
     if (Cond.isVirtual())
       RBI.constrainGenericRegister(Cond, Haydn::GPR32RegClass, MRI);
-    if (TrueVal.isVirtual())
-      RBI.constrainGenericRegister(TrueVal, Haydn::GPR32RegClass, MRI);
-    if (FalseVal.isVirtual())
-      RBI.constrainGenericRegister(FalseVal, Haydn::GPR32RegClass, MRI);
 
-    MachineInstr *MovtMI = MIB.buildInstr(Haydn::MOVT32)
-                               .addDef(Dst)
-                               .addReg(FalseVal) // tied $rd_src (fallthrough)
-                               .addReg(TrueVal)  // $rs1 (moved when Cond[0]==1)
-                               .addReg(Cond);    // $rs2 (condition GPR bool)
-    constrainSelectedInstRegOperands(*MovtMI, TII, TRI, RBI);
+    MachineInstr *UnmergeTrue = MIB.buildInstr(Haydn::MOV_DR64_TO_GPR)
+                                     .addDef(TrueValLo)
+                                     .addDef(TrueValHi)
+                                     .addReg(TrueVal);
+    constrainSelectedInstRegOperands(*UnmergeTrue, TII, TRI, RBI);
+
+    MachineInstr *UnmergeFalse = MIB.buildInstr(Haydn::MOV_DR64_TO_GPR)
+                                      .addDef(FalseValLo)
+                                      .addDef(FalseValHi)
+                                      .addReg(FalseVal);
+    constrainSelectedInstRegOperands(*UnmergeFalse, TII, TRI, RBI);
+
+    MachineInstr *MovtLo = MIB.buildInstr(Haydn::MOVT32)
+                               .addDef(DstLo)
+                               .addReg(FalseValLo)
+                               .addReg(TrueValLo)
+                               .addReg(Cond);
+    constrainSelectedInstRegOperands(*MovtLo, TII, TRI, RBI);
+
+    MachineInstr *MovtHi = MIB.buildInstr(Haydn::MOVT32)
+                               .addDef(DstHi)
+                               .addReg(FalseValHi)
+                               .addReg(TrueValHi)
+                               .addReg(Cond);
+    constrainSelectedInstRegOperands(*MovtHi, TII, TRI, RBI);
+
+    RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
+    MachineInstr *MergeMI = MIB.buildInstr(Haydn::MOV_GPR_TO_DR64)
+                                .addDef(Dst)
+                                .addReg(DstLo)
+                                .addReg(DstHi);
+    constrainSelectedInstRegOperands(*MergeMI, TII, TRI, RBI);
 
     I.eraseFromParent();
     return true;
   }
 
-  // G-CG1: G_ADD / G_SUB for s32/s64/v2i32/v4i16 are selectImpl Pats in
-  // HaydnGISel.td. C++ residual only for unsupported vector element widths.
-  case TargetOpcode::G_ADD:
-  case TargetOpcode::G_SUB:
-    return false;
-
-  case TargetOpcode::G_AND:
-  case TargetOpcode::G_OR:
-  case TargetOpcode::G_XOR:
-    // G-CG1: scalar + SIMD (v2i32/v4i16) Pats in HaydnGISel.td (AND64/OR64/XOR64).
-    return false;
+  // G_ADD/SUB/AND/OR/XOR and G_SMAX/SMIN/UMAX/UMIN: selectImpl Pats only
+  // (HaydnGISel.td). No C++ residual arm (unsupported widths → default false).
 
   case TargetOpcode::G_MUL: {
+    // s32 → MULL and v2i32 → X2MULPL32 are selectImpl Pats. Residual: s64
+    // splat/libcall and unsupported vectors.
     Register Dst = I.getOperand(0).getReg();
     Register Src0 = I.getOperand(1).getReg();
     Register Src1 = I.getOperand(2).getReg();
     LLT DstTy = MRI.getType(Dst);
     MachineIRBuilder MIB(I);
 
-    if (DstTy.isVector()) {
-      // Elementwise IR mul must match C/LLVM semantics (wrap to element
-      // width). Golden X2MUL32/X4MUL16 are WIDENING 2-dest DSP ops — they
-      // are NOT G_MUL. Use:
-      //   v2i32: X2MULPL32  (single dest: low 32 of each 32x32 product)
-      //   v4i16: legalizer scalarizes (no single-dest X4MULPL); use
-      //          llvm.haydn.x4mul16 for the true 2-dest X4MUL16 ISA op.
-      if (DstTy == LLT::fixed_vector(2, 32)) {
-        if (Dst.isVirtual())
-          RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-        if (Src0.isVirtual())
-          RBI.constrainGenericRegister(Src0, Haydn::DR64RegClass, MRI);
-        if (Src1.isVirtual())
-          RBI.constrainGenericRegister(Src1, Haydn::DR64RegClass, MRI);
-        MachineInstr *MI = MIB.buildInstr(Haydn::X2MULPL32)
-                               .addDef(Dst)
-                               .addReg(Src0)
-                               .addReg(Src1);
-        constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
-        I.eraseFromParent();
-        return true;
-      }
-      // v4i16 and other vectors: not selected here.
-      return false;
-    }
+    if (DstTy.isVector())
+      return false; // v2i32 matched by Pat; others unsupported
 
-    if (DstTy.getSizeInBits() == 64) {
-      // FIX-G: Fast path for scalar-splat-by-multiply. InstCombine folds
-      // AE_MOVDA32X2(x,x) = (x<<32)|x into mul nuw i64 x, 4294967297 (0x100000001).
-      // Without this, the s64 multiply becomes a __muldi3 libcall or 4× mul64_ll
-      // + 22 stack spills (the scl_bexp 22× explosion). With this, it's a single
-      // MOV_GPR_TO_DR64(x, x) — replicate x into both DR64 lanes.
-      auto getSplatConstant = [&](Register R) -> Register {
-        MachineInstr *Def = MRI.getVRegDef(R);
-        if (!Def || Def->getOpcode() != TargetOpcode::G_CONSTANT)
-          return Register();
-        const APInt &Val = Def->getOperand(1).getCImm()->getValue();
-        if (Val == 4294967297ULL) // 0x100000001 = lane replicate
-          return R;
+    if (DstTy.getSizeInBits() != 64)
+      return false; // s32 matched by Pat
+
+    // FIX-G: Fast path for scalar-splat-by-multiply. InstCombine folds
+    // AE_MOVDA32X2(x,x) = (x<<32)|x into mul nuw i64 x, 4294967297 (0x100000001).
+    // Without this, the s64 multiply becomes a __muldi3 libcall or 4× mul64_ll
+    // + 22 stack spills (the scl_bexp 22× explosion). With this, it's a single
+    // MOV_GPR_TO_DR64(x, x) — replicate x into both DR64 lanes.
+    auto getSplatConstant = [&](Register R) -> Register {
+      MachineInstr *Def = MRI.getVRegDef(R);
+      if (!Def || Def->getOpcode() != TargetOpcode::G_CONSTANT)
         return Register();
-      };
-      Register ConstReg;
-      Register SplatSrc;
-      if ((ConstReg = getSplatConstant(Src1)).isValid())
-        SplatSrc = Src0;
-      else if ((ConstReg = getSplatConstant(Src0)).isValid())
-        SplatSrc = Src1;
+      const APInt &Val = Def->getOperand(1).getCImm()->getValue();
+      if (Val == 4294967297ULL) // 0x100000001 = lane replicate
+        return R;
+      return Register();
+    };
+    Register ConstReg;
+    Register SplatSrc;
+    if ((ConstReg = getSplatConstant(Src1)).isValid())
+      SplatSrc = Src0;
+    else if ((ConstReg = getSplatConstant(Src0)).isValid())
+      SplatSrc = Src1;
 
-      if (SplatSrc.isValid()) {
-        // SplatSrc is s64 but actually a zext of an i32. Extract the GPR32.
-        MachineInstr *SplatDef = MRI.getVRegDef(SplatSrc);
-        Register GPR32Val;
-        if (SplatDef && SplatDef->getOpcode() == TargetOpcode::G_ZEXT &&
-            MRI.getType(SplatDef->getOperand(1).getReg()).getSizeInBits() == 32) {
-          GPR32Val = SplatDef->getOperand(1).getReg();
-        } else {
-          // extract low 32 bits via native MOVE32_DR_L (1 op, no stack).
-          if (SplatSrc.isVirtual())
-            RBI.constrainGenericRegister(SplatSrc, Haydn::DR64RegClass, MRI);
-          GPR32Val = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-          MachineInstr *Extract = MIB.buildInstr(Haydn::MOVE32_DR_L)
-                                      .addDef(GPR32Val).addReg(SplatSrc);
-          constrainSelectedInstRegOperands(*Extract, TII, TRI, RBI);
-        }
-        if (GPR32Val.isVirtual())
-          RBI.constrainGenericRegister(GPR32Val, Haydn::GPR32RegClass, MRI);
-        if (Dst.isVirtual())
-          RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-        MachineInstr *MI = MIB.buildInstr(Haydn::MOV_GPR_TO_DR64)
-                               .addDef(Dst).addReg(GPR32Val).addReg(GPR32Val);
-        constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
-        I.eraseFromParent();
-        return true;
+    if (SplatSrc.isValid()) {
+      // SplatSrc is s64 but actually a zext of an i32. Extract the GPR32.
+      MachineInstr *SplatDef = MRI.getVRegDef(SplatSrc);
+      Register GPR32Val;
+      if (SplatDef && SplatDef->getOpcode() == TargetOpcode::G_ZEXT &&
+          MRI.getType(SplatDef->getOperand(1).getReg()).getSizeInBits() ==
+              32) {
+        GPR32Val = SplatDef->getOperand(1).getReg();
+      } else {
+        // extract low 32 bits via native MOVE32_DR_L (1 op, no stack).
+        if (SplatSrc.isVirtual())
+          RBI.constrainGenericRegister(SplatSrc, Haydn::DR64RegClass, MRI);
+        GPR32Val = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+        MachineInstr *Extract = MIB.buildInstr(Haydn::MOVE32_DR_L)
+                                    .addDef(GPR32Val)
+                                    .addReg(SplatSrc);
+        constrainSelectedInstRegOperands(*Extract, TII, TRI, RBI);
       }
-
-      // s64 multiply — emit libcall pseudo (expanded to __muldi3 by AsmPrinter)
+      if (GPR32Val.isVirtual())
+        RBI.constrainGenericRegister(GPR32Val, Haydn::GPR32RegClass, MRI);
       if (Dst.isVirtual())
         RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-      if (Src0.isVirtual())
-        RBI.constrainGenericRegister(Src0, Haydn::DR64RegClass, MRI);
-      if (Src1.isVirtual())
-        RBI.constrainGenericRegister(Src1, Haydn::DR64RegClass, MRI);
-      MachineInstr *MI = MIB.buildInstr(Haydn::LIBCALL_MUL64)
+      MachineInstr *MI = MIB.buildInstr(Haydn::MOV_GPR_TO_DR64)
                              .addDef(Dst)
-                             .addReg(Src0)
-                             .addReg(Src1);
+                             .addReg(GPR32Val)
+                             .addReg(GPR32Val);
       constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
-    } else {
-      // s32 wrap-mul → MULL (golden MAC GRR low-half product).
-      emitScalarMul32(I, Dst, Src0, Src1, MIB, MRI);
+      I.eraseFromParent();
+      return true;
     }
-    I.eraseFromParent();
-    return true;
-  }
 
-  case TargetOpcode::G_SMULH: {
-    // Signed high-half 32x32 → MULSSH.
-    Register Dst = I.getOperand(0).getReg();
-    Register Src0 = I.getOperand(1).getReg();
-    Register Src1 = I.getOperand(2).getReg();
-    LLT DstTy = MRI.getType(Dst);
-    if (!DstTy.isScalar() || DstTy.getSizeInBits() != 32)
-      return false;
-    MachineIRBuilder MIB(I);
+    // s64 multiply — emit libcall pseudo (expanded to __muldi3 by AsmPrinter)
     if (Dst.isVirtual())
-      RBI.constrainGenericRegister(Dst, Haydn::GPR32RegClass, MRI);
+      RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
     if (Src0.isVirtual())
-      RBI.constrainGenericRegister(Src0, Haydn::GPR32RegClass, MRI);
+      RBI.constrainGenericRegister(Src0, Haydn::DR64RegClass, MRI);
     if (Src1.isVirtual())
-      RBI.constrainGenericRegister(Src1, Haydn::GPR32RegClass, MRI);
-    MachineInstr *MI =
-        MIB.buildInstr(Haydn::MULSSH).addDef(Dst).addReg(Src0).addReg(Src1);
+      RBI.constrainGenericRegister(Src1, Haydn::DR64RegClass, MRI);
+    MachineInstr *MI = MIB.buildInstr(Haydn::LIBCALL_MUL64)
+                           .addDef(Dst)
+                           .addReg(Src0)
+                           .addReg(Src1);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
 
-  case TargetOpcode::G_UMULH: {
-    // Unsigned high-half 32x32 → MULUUH.
-    Register Dst = I.getOperand(0).getReg();
-    Register Src0 = I.getOperand(1).getReg();
-    Register Src1 = I.getOperand(2).getReg();
-    LLT DstTy = MRI.getType(Dst);
-    if (!DstTy.isScalar() || DstTy.getSizeInBits() != 32)
-      return false;
-    MachineIRBuilder MIB(I);
-    if (Dst.isVirtual())
-      RBI.constrainGenericRegister(Dst, Haydn::GPR32RegClass, MRI);
-    if (Src0.isVirtual())
-      RBI.constrainGenericRegister(Src0, Haydn::GPR32RegClass, MRI);
-    if (Src1.isVirtual())
-      RBI.constrainGenericRegister(Src1, Haydn::GPR32RegClass, MRI);
-    MachineInstr *MI =
-        MIB.buildInstr(Haydn::MULUUH).addDef(Dst).addReg(Src0).addReg(Src1);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
-    I.eraseFromParent();
-    return true;
-  }
+  // G_SMULH/UMULH s32 → MULSSH/MULUUH Pats; no C++ residual.
 
-  case Haydn::G_MULA64: {
-    // Target generic op formed early by the pre-legalizer combiner.
-    // G_MULA64 rd(s64), ra(s64), rs1(s64), rs2(s64) -> MULA64_LL (low lane
-    // signed-signed). rd = ra + rs1[31:0] * rs2[31:0]. The tied accumulator
-    // ($rd = $rd_in) is expressed by passing distinct vregs Dst/Ra; the
-    // two-address coalescer resolves the tie post-RA (mirrors selectAccMAC).
+  case Haydn::G_MULA64:
+  case Haydn::G_MULA64U: {
+    // Target generic ops formed early by the pre-legalizer combiner.
+    // G_MULA64  rd, ra, rs1, rs2 -> MULA64_LL   (signed x signed low lane)
+    // G_MULA64U rd, ra, rs1, rs2 -> MULA64_ULUL (unsigned x unsigned low lane)
+    // rd = ra + rs1[31:0] * rs2[31:0] with matching signedness.
+    // NOTE: MULA64_ULL is u×s (mixed), not u×u — do not select it here.
+    // Tied accumulator ($rd = $rd_in) via distinct vregs Dst/Ra; two-address
+    // coalescer resolves the tie post-RA (mirrors selectAccMAC).
     Register Dst = I.getOperand(0).getReg();
     Register Ra = I.getOperand(1).getReg();
     Register Rs1 = I.getOperand(2).getReg();
     Register Rs2 = I.getOperand(3).getReg();
     if (MRI.getType(Dst) != LLT::scalar(64))
       return false;
+    unsigned MulAOpc =
+        Opcode == Haydn::G_MULA64U ? Haydn::MULA64_ULUL : Haydn::MULA64_LL;
     MachineIRBuilder MIB(I);
     for (Register R : {Dst, Ra, Rs1, Rs2})
       if (R.isVirtual())
         RBI.constrainGenericRegister(R, Haydn::DR64RegClass, MRI);
-    MachineInstr *MI = MIB.buildInstr(Haydn::MULA64_LL)
+    MachineInstr *MI = MIB.buildInstr(MulAOpc)
                            .addDef(Dst)
                            .addReg(Ra)
                            .addReg(Rs1)
@@ -1340,9 +1295,10 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
   }
 
   // AIE-style fused pre/post-inc/dec memory (gMIR → AGU writeback).
-  // Formed by HaydnPostLegalizerCombiner from G_LOAD/STORE + G_PTR_ADD.
-  // Imm stride → *_POST/PRE_IMM; non-const offset → *_POST/PRE_REG.
+  // Formed by HaydnPostLegalizerCombiner from G_LOAD/ZEXTLOAD/SEXTLOAD/STORE +
+  // G_PTR_ADD. Imm stride → *_POST/PRE_IMM; non-const offset → *_POST/PRE_REG.
   // Access size from MMO (1/2/4/8): byte/half/word/dword forms.
+  // Load forms carry imm is_sext (op4): 1 → S_LBS/S_LHWS, 0 → S_LBU/S_LHWU.
   case Haydn::G_HAYDN_POSTINC_LOAD:
   case Haydn::G_HAYDN_PREINC_LOAD:
   case Haydn::G_HAYDN_POSTINC_STORE:
@@ -1353,11 +1309,15 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
                         Opcode == Haydn::G_HAYDN_POSTINC_STORE;
 
     Register Data, PtrOut, Base, OffsetReg;
+    bool IsSExt = false;
     if (IsLoad) {
       Data = I.getOperand(0).getReg();
       PtrOut = I.getOperand(1).getReg();
       Base = I.getOperand(2).getReg();
       OffsetReg = I.getOperand(3).getReg();
+      // is_sext imm from combiner (G_SEXTLOAD origin).
+      if (I.getNumExplicitOperands() >= 5 && I.getOperand(4).isImm())
+        IsSExt = I.getOperand(4).getImm() != 0;
     } else {
       PtrOut = I.getOperand(0).getReg();
       Data = I.getOperand(1).getReg();
@@ -1395,8 +1355,132 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
       Scaled = Bytes >> ScaleShift;
     }
 
-    // Pick fused opcode. Byte/half loads default unsigned (LBU/LHWU); signed
-    // forms available if MMO memory type is signed (rare after legalize).
+    // ABI i64:32 allows 4-byte-aligned s64, but D_LDW/D_SDW need 8-byte EA
+    // alignment (BundleSim MEMORY_FAULT on misaligned). Plain G_LOAD/G_STORE
+    // already split to LD32×2 / ST32×2; the post-inc combiner must not re-
+    // fuse those into D_LDW_POST_IMM (pr57344-3 packed i72 at align 4).
+    Align MemAlign = Align(1);
+    if (!I.memoperands_empty())
+      MemAlign = (*I.memoperands_begin())->getAlign();
+    const bool NeedS64AlignSplit = MemBytes == 8 && MemAlign < Align(8);
+    // S_LW / S_SW also fault on misaligned EA — refuse 4-byte fusion below
+    // natural word alignment (byte/half already use 1/2-byte forms).
+    const bool NeedS32AlignSplit = MemBytes == 4 && MemAlign < Align(4);
+
+    MachineIRBuilder MIB(I);
+    if (Base.isVirtual())
+      RBI.constrainGenericRegister(Base, Haydn::GPR32RegClass, MRI);
+    if (PtrOut.isVirtual())
+      RBI.constrainGenericRegister(PtrOut, Haydn::GPR32RegClass, MRI);
+    if (OffsetReg.isVirtual() && IsRegStride)
+      RBI.constrainGenericRegister(OffsetReg, Haydn::GPR32RegClass, MRI);
+    if (Data.isVirtual()) {
+      if (MemBytes == 8)
+        RBI.constrainGenericRegister(Data, Haydn::DR64RegClass, MRI);
+      else
+        RBI.constrainGenericRegister(Data, Haydn::GPR32RegClass, MRI);
+    }
+
+    // Under-aligned s64 post/pre-inc: expand to split mem + separate AGU update.
+    // Access EA is Base (post) or Base+stride (pre); PtrOut always gets the
+    // updated pointer (Base+stride).
+    if (NeedS64AlignSplit) {
+      // Ptr for the memory access.
+      Register AccessBase = Base;
+      if (!IsPost) {
+        // Pre-inc: update pointer first, then access through PtrOut.
+        if (IsRegStride) {
+          MachineInstr *Add =
+              MIB.buildInstr(Haydn::ADD32).addDef(PtrOut).addReg(Base).addReg(
+                  OffsetReg);
+          constrainSelectedInstRegOperands(*Add, TII, TRI, RBI);
+        } else {
+          MachineInstr *Add = MIB.buildInstr(Haydn::ADDI32_W)
+                                  .addDef(PtrOut)
+                                  .addReg(Base)
+                                  .addImm(Bytes);
+          constrainSelectedInstRegOperands(*Add, TII, TRI, RBI);
+        }
+        AccessBase = PtrOut;
+      }
+
+      if (IsLoad) {
+        Register Lo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+        Register Hi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+        Register AddrHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+        MachineInstr *AddHi = MIB.buildInstr(Haydn::ADDI32_W)
+                                  .addDef(AddrHi)
+                                  .addReg(AccessBase)
+                                  .addImm(4);
+        constrainSelectedInstRegOperands(*AddHi, TII, TRI, RBI);
+        MachineInstr *LLo =
+            MIB.buildInstr(Haydn::LD32).addDef(Lo).addReg(AccessBase).addImm(0);
+        LLo->cloneMemRefs(MF, I);
+        constrainSelectedInstRegOperands(*LLo, TII, TRI, RBI);
+        MachineInstr *LHi =
+            MIB.buildInstr(Haydn::LD32).addDef(Hi).addReg(AddrHi).addImm(0);
+        LHi->cloneMemRefs(MF, I);
+        constrainSelectedInstRegOperands(*LHi, TII, TRI, RBI);
+        MachineInstr *Pack = MIB.buildInstr(Haydn::MOV_GPR_TO_DR64)
+                                 .addDef(Data)
+                                 .addReg(Lo)
+                                 .addReg(Hi);
+        constrainSelectedInstRegOperands(*Pack, TII, TRI, RBI);
+      } else {
+        Register Lo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+        Register Hi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+        Register AddrHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+        MachineInstr *LoMI =
+            MIB.buildInstr(Haydn::MOVE32_DR_L).addDef(Lo).addReg(Data);
+        constrainSelectedInstRegOperands(*LoMI, TII, TRI, RBI);
+        MachineInstr *HiMI =
+            MIB.buildInstr(Haydn::MOVE32_DR_H).addDef(Hi).addReg(Data);
+        constrainSelectedInstRegOperands(*HiMI, TII, TRI, RBI);
+        MachineInstr *AddHi = MIB.buildInstr(Haydn::ADDI32_W)
+                                  .addDef(AddrHi)
+                                  .addReg(AccessBase)
+                                  .addImm(4);
+        constrainSelectedInstRegOperands(*AddHi, TII, TRI, RBI);
+        MachineInstr *SLo =
+            MIB.buildInstr(Haydn::ST32).addReg(Lo).addReg(AccessBase).addImm(0);
+        SLo->cloneMemRefs(MF, I);
+        constrainSelectedInstRegOperands(*SLo, TII, TRI, RBI);
+        MachineInstr *SHi =
+            MIB.buildInstr(Haydn::ST32).addReg(Hi).addReg(AddrHi).addImm(0);
+        SHi->cloneMemRefs(MF, I);
+        constrainSelectedInstRegOperands(*SHi, TII, TRI, RBI);
+      }
+
+      if (IsPost) {
+        if (IsRegStride) {
+          MachineInstr *Add =
+              MIB.buildInstr(Haydn::ADD32).addDef(PtrOut).addReg(Base).addReg(
+                  OffsetReg);
+          constrainSelectedInstRegOperands(*Add, TII, TRI, RBI);
+        } else {
+          MachineInstr *Add = MIB.buildInstr(Haydn::ADDI32_W)
+                                  .addDef(PtrOut)
+                                  .addReg(Base)
+                                  .addImm(Bytes);
+          constrainSelectedInstRegOperands(*Add, TII, TRI, RBI);
+        }
+      }
+      I.eraseFromParent();
+      return true;
+    }
+
+    // Under-aligned s32: do not fuse S_LW/S_SW; fall through to unfused
+    // selection is not available here — expand to plain LD32/ST32 + AGU.
+    if (NeedS32AlignSplit) {
+      // Same AGU/access ordering as s64 split, but single word access. Word
+      // forms still require natural align 4; if MemAlign < 4 the plain
+      // G_LOAD path byte-splits via legalizer. Here we only reach align 1/2
+      // if the combiner formed a post-inc before legalizer split — refuse
+      // so the residual is not mis-selected as S_LW.
+      return false;
+    }
+
+    // Pick fused opcode. Byte/half loads: is_sext → S_LBS/S_LHWS else S_LBU/S_LHWU.
     unsigned FusedOpc = 0;
     auto pick = [&](unsigned PostImm, unsigned PreImm, unsigned PostReg,
                     unsigned PreReg) {
@@ -1407,18 +1491,26 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     };
     switch (MemBytes) {
     case 1:
-      if (IsLoad)
-        pick(Haydn::S_LBU_POST_IMM, Haydn::S_LBU_PRE_IMM, Haydn::S_LBU_POST_REG,
-             Haydn::S_LBU_PRE_REG);
-      else
+      if (IsLoad) {
+        if (IsSExt)
+          pick(Haydn::S_LBS_POST_IMM, Haydn::S_LBS_PRE_IMM,
+               Haydn::S_LBS_POST_REG, Haydn::S_LBS_PRE_REG);
+        else
+          pick(Haydn::S_LBU_POST_IMM, Haydn::S_LBU_PRE_IMM,
+               Haydn::S_LBU_POST_REG, Haydn::S_LBU_PRE_REG);
+      } else
         pick(Haydn::S_SB_POST_IMM, Haydn::S_SB_PRE_IMM, Haydn::S_SB_POST_REG,
              Haydn::S_SB_PRE_REG);
       break;
     case 2:
-      if (IsLoad)
-        pick(Haydn::S_LHWU_POST_IMM, Haydn::S_LHWU_PRE_IMM,
-             Haydn::S_LHWU_POST_REG, Haydn::S_LHWU_PRE_REG);
-      else
+      if (IsLoad) {
+        if (IsSExt)
+          pick(Haydn::S_LHWS_POST_IMM, Haydn::S_LHWS_PRE_IMM,
+               Haydn::S_LHWS_POST_REG, Haydn::S_LHWS_PRE_REG);
+        else
+          pick(Haydn::S_LHWU_POST_IMM, Haydn::S_LHWU_PRE_IMM,
+               Haydn::S_LHWU_POST_REG, Haydn::S_LHWU_PRE_REG);
+      } else
         pick(Haydn::S_SHW_POST_IMM, Haydn::S_SHW_PRE_IMM, Haydn::S_SHW_POST_REG,
              Haydn::S_SHW_PRE_REG);
       break;
@@ -1442,20 +1534,6 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     if (!FusedOpc)
       return false;
 
-    MachineIRBuilder MIB(I);
-    if (Base.isVirtual())
-      RBI.constrainGenericRegister(Base, Haydn::GPR32RegClass, MRI);
-    if (PtrOut.isVirtual())
-      RBI.constrainGenericRegister(PtrOut, Haydn::GPR32RegClass, MRI);
-    if (OffsetReg.isVirtual() && IsRegStride)
-      RBI.constrainGenericRegister(OffsetReg, Haydn::GPR32RegClass, MRI);
-    if (Data.isVirtual()) {
-      if (MemBytes == 8)
-        RBI.constrainGenericRegister(Data, Haydn::DR64RegClass, MRI);
-      else
-        RBI.constrainGenericRegister(Data, Haydn::GPR32RegClass, MRI);
-    }
-
     MachineInstrBuilder Fused = MIB.buildInstr(FusedOpc);
     if (IsLoad) {
       Fused.addDef(Data).addDef(PtrOut).addReg(Base);
@@ -1473,14 +1551,11 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     return true;
   }
 
-  // G-CG1 slice 2: G_SMAX/SMIN/UMAX/UMIN s32 → selectImpl Pats (HaydnGISel.td).
-  case TargetOpcode::G_SMAX:
-  case TargetOpcode::G_SMIN:
-  case TargetOpcode::G_UMAX:
-  case TargetOpcode::G_UMIN:
-    return false;
+  // G_SMAX/SMIN/UMAX/UMIN: selectImpl Pats only. No C++ residual.
 
   case TargetOpcode::G_SHL: {
+    // s32/s64 scalar: selectImpl Pats (SLL32/SLL64). Residual: SIMD only
+    // (lane-0 extract is multi-instr).
     Register Dst = I.getOperand(0).getReg();
     Register Src = I.getOperand(1).getReg();
     Register Amt = I.getOperand(2).getReg();
@@ -1489,213 +1564,30 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
 
     // SIMD shift: v2i32 -> X2SLL32, v4i16 -> X4SLL16
     // Per spec: dst=DR64, src=DR64, shift_amount=GPR32 (lane 0 of amt vector).
-    if (DstTy.isVector()) {
-      unsigned EltBits = DstTy.getElementType().getSizeInBits();
-      unsigned Opc = 0;
-      if (EltBits == 32)
-        Opc = Haydn::X2SLL32;
-      else if (EltBits == 16)
-        Opc = Haydn::X4SLL16;
-      else
-        return false;
-      if (Dst.isVirtual())
-        RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-      if (Src.isVirtual())
-        RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI);
-      Register AmtScalar = extractVecLane0AsGPR32(MIB, Amt, MRI);
-      MachineInstr *MI =
-          MIB.buildInstr(Opc).addDef(Dst).addReg(Src).addReg(AmtScalar);
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
-      I.eraseFromParent();
-      return true;
-    }
-
-    if (DstTy.isValid() && DstTy.getSizeInBits() == 64) {
-      // FIX-A: constant-shift-by-32 fast path — the dominant DSP pattern
-      // (shl i64 X, 32 promotes the low lane to high, zeroing low).
-      if (MachineInstr *AmtDef = MRI.getVRegDef(Amt)) {
-        if (AmtDef->getOpcode() == TargetOpcode::G_CONSTANT) {
-          int64_t ShiftAmt =
-              AmtDef->getOperand(1).getCImm()->getValue().getSExtValue();
-          if (ShiftAmt == 32) {
-            // (shl i64 X, 32): low lane -> high, low=0.
-            // Extract low lane via MOV_DR64_TO_GPR, zero-extend to i64.
-            if (Src.isVirtual())
-              RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI);
-            Register Lo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-            Register Zero = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-            MachineInstr *Unmerge = MIB.buildInstr(Haydn::MOV_DR64_TO_GPR)
-                                         .addDef(Lo).addDef(Zero).addReg(Src);
-            constrainSelectedInstRegOperands(*Unmerge, TII, TRI, RBI);
-            // Pack {Lo, 0}: MOV_GPR_TO_DR64 with zero low.
-            Register ZeroLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-            MIB.buildInstr(Haydn::LOADI32).addDef(ZeroLo).addImm(0);
-            if (Dst.isVirtual())
-              RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-            MachineInstr *Pack = MIB.buildInstr(Haydn::MOV_GPR_TO_DR64)
-                                     .addDef(Dst).addReg(ZeroLo).addReg(Lo);
-            constrainSelectedInstRegOperands(*Pack, TII, TRI, RBI);
-            I.eraseFromParent();
-            return true;
-          }
-          if (ShiftAmt == 0) {
-            MIB.buildCopy(Dst, Src);
-            I.eraseFromParent();
-            return true;
-          }
-        }
-      }
-
-      // s64 left shift — use native SLL64 (DR64→DR64, 1 op) instead
-      // of decomposing into 2×s32 + conditional select (~20 ops).
-      if (Dst.isVirtual())
-        RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-      if (Src.isVirtual())
-        RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI);
-      if (Amt.isVirtual())
-        RBI.constrainGenericRegister(Amt, Haydn::GPR32RegClass, MRI);
-      MachineInstr *ShlMI = MIB.buildInstr(Haydn::SLL64)
-                                .addDef(Dst).addReg(Src).addReg(Amt);
-      constrainSelectedInstRegOperands(*ShlMI, TII, TRI, RBI);
-      I.eraseFromParent();
-      return true;
-
-      // s64 left shift: decompose into s32 operations with conditional select
-      // Result = merge(res_lo, res_hi) where:
-      // If amt >= 32: res_lo = 0, res_hi = src_lo << (amt - 32)
-      // If amt < 32: res_lo = src_lo << amt
-      // res_hi = (src_hi << amt) | (src_lo >>u (32 - amt))
-
-      if (Amt.isVirtual())
-        RBI.constrainGenericRegister(Amt, Haydn::GPR32RegClass, MRI);
-
-      // Split src into lo/hi parts
-      Register SrcLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      Register SrcHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      if (Src.isVirtual())
-        RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI);
-      MachineInstr *Unmerge = MIB.buildInstr(Haydn::MOV_DR64_TO_GPR)
-                                   .addDef(SrcLo)
-                                   .addDef(SrcHi)
-                                   .addReg(Src);
-      constrainSelectedInstRegOperands(*Unmerge, TII, TRI, RBI);
-
-      // Constant 32
-      Register C32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *LoadC32 =
-          MIB.buildInstr(Haydn::LOADI32).addDef(C32).addImm(32);
-      constrainSelectedInstRegOperands(*LoadC32, TII, TRI, RBI);
-
-      // Compute shift amounts
-      Register AmtMinus32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SubMI =
-          MIB.buildInstr(Haydn::SUB32).addDef(AmtMinus32).addReg(Amt).addReg(C32);
-      constrainSelectedInstRegOperands(*SubMI, TII, TRI, RBI);
-
-      Register NegAmt = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *NegMI =
-          MIB.buildInstr(Haydn::NEG32).addDef(NegAmt).addReg(Amt);
-      constrainSelectedInstRegOperands(*NegMI, TII, TRI, RBI);
-
-      Register ThirtyTwoMinusAmt = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *AddMI =
-          MIB.buildInstr(Haydn::ADD32).addDef(ThirtyTwoMinusAmt).addReg(NegAmt).addReg(C32);
-      constrainSelectedInstRegOperands(*AddMI, TII, TRI, RBI);
-
-      // Path 1: amt < 32
-      // LoLt32 = src_lo << amt
-      Register LoLt32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SllLo =
-          MIB.buildInstr(Haydn::SLL32).addDef(LoLt32).addReg(SrcLo).addReg(Amt);
-      constrainSelectedInstRegOperands(*SllLo, TII, TRI, RBI);
-
-      // HiLt32 = (src_hi << amt) | (src_lo >>u (32 - amt))
-      Register HiShifted = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SllHi =
-          MIB.buildInstr(Haydn::SLL32).addDef(HiShifted).addReg(SrcHi).addReg(Amt);
-      constrainSelectedInstRegOperands(*SllHi, TII, TRI, RBI);
-
-      Register LoRShifted = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SrlLo =
-          MIB.buildInstr(Haydn::SRL32).addDef(LoRShifted).addReg(SrcLo).addReg(ThirtyTwoMinusAmt);
-      constrainSelectedInstRegOperands(*SrlLo, TII, TRI, RBI);
-
-      Register HiLt32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *OrHi =
-          MIB.buildInstr(Haydn::OR32).addDef(HiLt32).addReg(HiShifted).addReg(LoRShifted);
-      constrainSelectedInstRegOperands(*OrHi, TII, TRI, RBI);
-
-      // Path 2: amt >= 32
-      // LoGe32 = 0
-      // HiGe32 = src_lo << (amt - 32)
-      Register HiGe32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SllBig =
-          MIB.buildInstr(Haydn::SLL32).addDef(HiGe32).addReg(SrcLo).addReg(AmtMinus32);
-      constrainSelectedInstRegOperands(*SllBig, TII, TRI, RBI);
-
-      // Conditional select using bitwise mask
-      // AmtLt32 = (Amt < 32) ? 1 : 0 via SLT32 Amt, C32
-      Register AmtLt32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SltMI =
-          MIB.buildInstr(Haydn::SLT32).addDef(AmtLt32).addReg(Amt).addReg(C32);
-      constrainSelectedInstRegOperands(*SltMI, TII, TRI, RBI);
-
-      // Mask = NEG32(AmtLt32): 0xFFFFFFFF if amt<32, 0x00000000 if amt>=32
-      Register Mask = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *NegMask =
-          MIB.buildInstr(Haydn::NEG32).addDef(Mask).addReg(AmtLt32);
-      constrainSelectedInstRegOperands(*NegMask, TII, TRI, RBI);
-
-      // NotMask = ~Mask
-      Register NotMask = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *NotMI =
-          MIB.buildInstr(Haydn::NOT32).addDef(NotMask).addReg(Mask);
-      constrainSelectedInstRegOperands(*NotMI, TII, TRI, RBI);
-
-      // ResLo = (LoLt32 & Mask) | (0 & NotMask) = LoLt32 & Mask
-      // (since the ge32 path gives 0 for lo, we just AND with Mask)
-      Register ResLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *AndLo =
-          MIB.buildInstr(Haydn::AND32).addDef(ResLo).addReg(LoLt32).addReg(Mask);
-      constrainSelectedInstRegOperands(*AndLo, TII, TRI, RBI);
-
-      // ResHi = (HiLt32 & Mask) | (HiGe32 & NotMask)
-      Register HiMaskedLt = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *AndHiLt =
-          MIB.buildInstr(Haydn::AND32).addDef(HiMaskedLt).addReg(HiLt32).addReg(Mask);
-      constrainSelectedInstRegOperands(*AndHiLt, TII, TRI, RBI);
-
-      Register HiMaskedGe = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *AndHiGe =
-          MIB.buildInstr(Haydn::AND32).addDef(HiMaskedGe).addReg(HiGe32).addReg(NotMask);
-      constrainSelectedInstRegOperands(*AndHiGe, TII, TRI, RBI);
-
-      Register ResHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *OrResHi =
-          MIB.buildInstr(Haydn::OR32).addDef(ResHi).addReg(HiMaskedLt).addReg(HiMaskedGe);
-      constrainSelectedInstRegOperands(*OrResHi, TII, TRI, RBI);
-
-      // Merge back to s64
-      if (Dst.isVirtual())
-        RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-      MachineInstr *Merge = MIB.buildInstr(Haydn::MOV_GPR_TO_DR64)
-                                .addDef(Dst)
-                                .addReg(ResLo)
-                                .addReg(ResHi);
-      constrainSelectedInstRegOperands(*Merge, TII, TRI, RBI);
-
-      I.eraseFromParent();
-      return true;
-    }
-
-    // s32 shift
-    MachineInstr *MI = MIB.buildInstr(Haydn::SLL32).addDef(Dst).addReg(Src).addReg(Amt);
+    if (!DstTy.isVector())
+      return false;
+    unsigned EltBits = DstTy.getElementType().getSizeInBits();
+    unsigned Opc = 0;
+    if (EltBits == 32)
+      Opc = Haydn::X2SLL32;
+    else if (EltBits == 16)
+      Opc = Haydn::X4SLL16;
+    else
+      return false;
+    if (Dst.isVirtual())
+      RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
+    if (Src.isVirtual())
+      RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI);
+    Register AmtScalar = extractVecLane0AsGPR32(MIB, Amt, MRI);
+    MachineInstr *MI =
+        MIB.buildInstr(Opc).addDef(Dst).addReg(Src).addReg(AmtScalar);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
 
   case TargetOpcode::G_LSHR: {
+    // s32/s64 scalar: selectImpl Pats (SRL32/SRL64). Residual: SIMD only.
     Register Dst = I.getOperand(0).getReg();
     Register Src = I.getOperand(1).getReg();
     Register Amt = I.getOperand(2).getReg();
@@ -1703,178 +1595,30 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     MachineIRBuilder MIB(I);
 
     // SIMD logical right shift: v2i32 -> X2SRL32, v4i16 -> X4SRL16
-    // Per spec: dst=DR64, src=DR64, shift_amount=GPR32 (lane 0 of amt vector).
-    if (DstTy.isVector()) {
-      unsigned EltBits = DstTy.getElementType().getSizeInBits();
-      unsigned Opc = 0;
-      if (EltBits == 32)
-        Opc = Haydn::X2SRL32;
-      else if (EltBits == 16)
-        Opc = Haydn::X4SRL16;
-      else
-        return false;
-      if (Dst.isVirtual())
-        RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-      if (Src.isVirtual())
-        RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI);
-      Register AmtScalar = extractVecLane0AsGPR32(MIB, Amt, MRI);
-      MachineInstr *MI =
-          MIB.buildInstr(Opc).addDef(Dst).addReg(Src).addReg(AmtScalar);
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
-      I.eraseFromParent();
-      return true;
-    }
-
-    if (DstTy.isValid() && DstTy.getSizeInBits() == 64) {
-      // s64 logical right shift — use native SRL64 (1 op).
-      if (Dst.isVirtual())
-        RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-      if (Src.isVirtual())
-        RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI);
-      if (Amt.isVirtual())
-        RBI.constrainGenericRegister(Amt, Haydn::GPR32RegClass, MRI);
-      MachineInstr *SrlMI = MIB.buildInstr(Haydn::SRL64)
-                                .addDef(Dst).addReg(Src).addReg(Amt);
-      constrainSelectedInstRegOperands(*SrlMI, TII, TRI, RBI);
-      I.eraseFromParent();
-      return true;
-
-      // s64 logical right shift with conditional select
-      // Result = merge(res_lo, res_hi) where:
-      // If amt >= 32: res_lo = src_hi >>u (amt - 32), res_hi = 0
-      // If amt < 32: res_lo = (src_lo >>u amt) | (src_hi << (32 - amt))
-      // res_hi = src_hi >>u amt
-
-      if (Amt.isVirtual())
-        RBI.constrainGenericRegister(Amt, Haydn::GPR32RegClass, MRI);
-
-      // Split src into lo/hi parts
-      Register SrcLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      Register SrcHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      if (Src.isVirtual())
-        RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI);
-      MachineInstr *Unmerge = MIB.buildInstr(Haydn::MOV_DR64_TO_GPR)
-                                   .addDef(SrcLo)
-                                   .addDef(SrcHi)
-                                   .addReg(Src);
-      constrainSelectedInstRegOperands(*Unmerge, TII, TRI, RBI);
-
-      // Constant 32
-      Register C32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *LoadC32 =
-          MIB.buildInstr(Haydn::LOADI32).addDef(C32).addImm(32);
-      constrainSelectedInstRegOperands(*LoadC32, TII, TRI, RBI);
-
-      // Compute shift amounts
-      Register AmtMinus32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SubMI =
-          MIB.buildInstr(Haydn::SUB32).addDef(AmtMinus32).addReg(Amt).addReg(C32);
-      constrainSelectedInstRegOperands(*SubMI, TII, TRI, RBI);
-
-      Register NegAmt = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *NegMI =
-          MIB.buildInstr(Haydn::NEG32).addDef(NegAmt).addReg(Amt);
-      constrainSelectedInstRegOperands(*NegMI, TII, TRI, RBI);
-
-      Register ThirtyTwoMinusAmt = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *AddMI =
-          MIB.buildInstr(Haydn::ADD32).addDef(ThirtyTwoMinusAmt).addReg(NegAmt).addReg(C32);
-      constrainSelectedInstRegOperands(*AddMI, TII, TRI, RBI);
-
-      // Path 1: amt < 32
-      // LoLt32 = (src_lo >>u amt) | (src_hi << (32 - amt))
-      Register LoRShifted = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SrlLo =
-          MIB.buildInstr(Haydn::SRL32).addDef(LoRShifted).addReg(SrcLo).addReg(Amt);
-      constrainSelectedInstRegOperands(*SrlLo, TII, TRI, RBI);
-
-      Register HiLShifted = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SllHi =
-          MIB.buildInstr(Haydn::SLL32).addDef(HiLShifted).addReg(SrcHi).addReg(ThirtyTwoMinusAmt);
-      constrainSelectedInstRegOperands(*SllHi, TII, TRI, RBI);
-
-      Register LoLt32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *OrLo =
-          MIB.buildInstr(Haydn::OR32).addDef(LoLt32).addReg(LoRShifted).addReg(HiLShifted);
-      constrainSelectedInstRegOperands(*OrLo, TII, TRI, RBI);
-
-      // HiLt32 = src_hi >>u amt
-      Register HiLt32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SrlHi =
-          MIB.buildInstr(Haydn::SRL32).addDef(HiLt32).addReg(SrcHi).addReg(Amt);
-      constrainSelectedInstRegOperands(*SrlHi, TII, TRI, RBI);
-
-      // Path 2: amt >= 32
-      // LoGe32 = src_hi >>u (amt - 32)
-      // HiGe32 = 0
-      Register LoGe32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SrlBig =
-          MIB.buildInstr(Haydn::SRL32).addDef(LoGe32).addReg(SrcHi).addReg(AmtMinus32);
-      constrainSelectedInstRegOperands(*SrlBig, TII, TRI, RBI);
-
-      // Conditional select using bitwise mask
-      // AmtLt32 = (Amt < 32) ? 1 : 0 via SLT32
-      Register AmtLt32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SltMI =
-          MIB.buildInstr(Haydn::SLT32).addDef(AmtLt32).addReg(Amt).addReg(C32);
-      constrainSelectedInstRegOperands(*SltMI, TII, TRI, RBI);
-
-      // Mask = NEG32(AmtLt32): 0xFFFFFFFF if amt<32, 0x00000000 if amt>=32
-      Register Mask = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *NegMask =
-          MIB.buildInstr(Haydn::NEG32).addDef(Mask).addReg(AmtLt32);
-      constrainSelectedInstRegOperands(*NegMask, TII, TRI, RBI);
-
-      // NotMask = ~Mask
-      Register NotMask = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *NotMI =
-          MIB.buildInstr(Haydn::NOT32).addDef(NotMask).addReg(Mask);
-      constrainSelectedInstRegOperands(*NotMI, TII, TRI, RBI);
-
-      // ResLo = (LoLt32 & Mask) | (LoGe32 & NotMask)
-      Register LoMaskedLt = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *AndLoLt =
-          MIB.buildInstr(Haydn::AND32).addDef(LoMaskedLt).addReg(LoLt32).addReg(Mask);
-      constrainSelectedInstRegOperands(*AndLoLt, TII, TRI, RBI);
-
-      Register LoMaskedGe = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *AndLoGe =
-          MIB.buildInstr(Haydn::AND32).addDef(LoMaskedGe).addReg(LoGe32).addReg(NotMask);
-      constrainSelectedInstRegOperands(*AndLoGe, TII, TRI, RBI);
-
-      Register ResLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *OrResLo =
-          MIB.buildInstr(Haydn::OR32).addDef(ResLo).addReg(LoMaskedLt).addReg(LoMaskedGe);
-      constrainSelectedInstRegOperands(*OrResLo, TII, TRI, RBI);
-
-      // ResHi = (HiLt32 & Mask) | (0 & NotMask) = HiLt32 & Mask
-      // (since the ge32 path gives 0 for hi, we just AND with Mask)
-      Register ResHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *AndHi =
-          MIB.buildInstr(Haydn::AND32).addDef(ResHi).addReg(HiLt32).addReg(Mask);
-      constrainSelectedInstRegOperands(*AndHi, TII, TRI, RBI);
-
-      // Merge back to s64
-      if (Dst.isVirtual())
-        RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-      MachineInstr *Merge = MIB.buildInstr(Haydn::MOV_GPR_TO_DR64)
-                                .addDef(Dst)
-                                .addReg(ResLo)
-                                .addReg(ResHi);
-      constrainSelectedInstRegOperands(*Merge, TII, TRI, RBI);
-
-      I.eraseFromParent();
-      return true;
-    }
-
-    // s32 shift
-    MachineInstr *MI = MIB.buildInstr(Haydn::SRL32).addDef(Dst).addReg(Src).addReg(Amt);
+    if (!DstTy.isVector())
+      return false;
+    unsigned EltBits = DstTy.getElementType().getSizeInBits();
+    unsigned Opc = 0;
+    if (EltBits == 32)
+      Opc = Haydn::X2SRL32;
+    else if (EltBits == 16)
+      Opc = Haydn::X4SRL16;
+    else
+      return false;
+    if (Dst.isVirtual())
+      RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
+    if (Src.isVirtual())
+      RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI);
+    Register AmtScalar = extractVecLane0AsGPR32(MIB, Amt, MRI);
+    MachineInstr *MI =
+        MIB.buildInstr(Opc).addDef(Dst).addReg(Src).addReg(AmtScalar);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
 
   case TargetOpcode::G_ASHR: {
+    // s32/s64 scalar: selectImpl Pats (SRA32/SRA64). Residual: SIMD only.
     Register Dst = I.getOperand(0).getReg();
     Register Src = I.getOperand(1).getReg();
     Register Amt = I.getOperand(2).getReg();
@@ -1882,228 +1626,23 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     MachineIRBuilder MIB(I);
 
     // SIMD arithmetic right shift: v2i32 -> X2SRA32, v4i16 -> X4SRA16
-    // Operand shape matches X2SLL32 family: DR64, DR64, GPR32 (not DR64 amt).
-    if (DstTy.isVector()) {
-      unsigned EltBits = DstTy.getElementType().getSizeInBits();
-      unsigned Opc = 0;
-      if (EltBits == 32)
-        Opc = Haydn::X2SRA32;
-      else if (EltBits == 16)
-        Opc = Haydn::X4SRA16;
-      else
-        return false;
-      if (Dst.isVirtual())
-        RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-      if (Src.isVirtual())
-        RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI);
-      Register AmtScalar = extractVecLane0AsGPR32(MIB, Amt, MRI);
-      MachineInstr *MI =
-          MIB.buildInstr(Opc).addDef(Dst).addReg(Src).addReg(AmtScalar);
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
-      I.eraseFromParent();
-      return true;
-    }
-
-    if (DstTy.isValid() && DstTy.getSizeInBits() == 64) {
-      // FIX-A: constant-shift-by-32 fast path — the dominant DSP pattern
-      // (ashr i64 X, 32 extracts the high lane for horizontal reduction).
-      // SRA64 does 64->32 in one op. Avoids the ~20-op general decomposition.
-      if (MachineInstr *AmtDef = MRI.getVRegDef(Amt)) {
-        if (AmtDef->getOpcode() == TargetOpcode::G_CONSTANT) {
-          int64_t ShiftAmt =
-              AmtDef->getOperand(1).getCImm()->getValue().getSExtValue();
-          if (ShiftAmt == 32) {
-            // (ashr i64 X, 32) = native SRA64 by 32. The full DR64 result is
-            // already correct (high = sign, low = X[63:32]).
-            //
-            // the old path did SRA64 + MOVE32_DR_L + pack {V,V}.
-            // Packing {V,V} is NOT a 32→64 sext (sext needs high=0/-1, low=V).
-            // InstCombine turns sext(trunc(x)) into (ashr (shl x, 32), 32);
-            // {V,V} destroyed the value → wrong OR/mod results (host 200 vs
-            // sim 100). One SRA64 is sufficient and correct.
-            if (Dst.isVirtual())
-              RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-            if (Src.isVirtual())
-              RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI);
-            Register Amt32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-            MachineInstr *LoadAmt =
-                MIB.buildInstr(Haydn::LOADI32).addDef(Amt32).addImm(32);
-            constrainSelectedInstRegOperands(*LoadAmt, TII, TRI, RBI);
-            MachineInstr *Sra = MIB.buildInstr(Haydn::SRA64)
-                                    .addDef(Dst)
-                                    .addReg(Src)
-                                    .addReg(Amt32);
-            constrainSelectedInstRegOperands(*Sra, TII, TRI, RBI);
-            I.eraseFromParent();
-            return true;
-          }
-          if (ShiftAmt == 0) {
-            // (ashr i64 X, 0): identity — just copy.
-            MIB.buildCopy(Dst, Src);
-            I.eraseFromParent();
-            return true;
-          }
-        }
-      }
-
-      // s64 arithmetic right shift — use native SRA64 (1 op).
-      if (Dst.isVirtual())
-        RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-      if (Src.isVirtual())
-        RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI);
-      if (Amt.isVirtual())
-        RBI.constrainGenericRegister(Amt, Haydn::GPR32RegClass, MRI);
-      MachineInstr *SraMI = MIB.buildInstr(Haydn::SRA64)
-                                .addDef(Dst).addReg(Src).addReg(Amt);
-      constrainSelectedInstRegOperands(*SraMI, TII, TRI, RBI);
-      I.eraseFromParent();
-      return true;
-
-      // s64 arithmetic right shift with conditional select
-      // Result = merge(res_lo, res_hi) where:
-      // If amt >= 32: res_lo = src_hi >>u (amt - 32), res_hi = src_hi >>s (amt - 32)
-      // (lo gets unsigned bits from hi, hi gets sign-extended)
-      // If amt < 32: res_lo = (src_lo >>u amt) | (src_hi << (32 - amt))
-      // res_hi = src_hi >>s amt
-
-      if (Amt.isVirtual())
-        RBI.constrainGenericRegister(Amt, Haydn::GPR32RegClass, MRI);
-
-      // Split src into lo/hi parts
-      Register SrcLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      Register SrcHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      if (Src.isVirtual())
-        RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI);
-      MachineInstr *Unmerge = MIB.buildInstr(Haydn::MOV_DR64_TO_GPR)
-                                   .addDef(SrcLo)
-                                   .addDef(SrcHi)
-                                   .addReg(Src);
-      constrainSelectedInstRegOperands(*Unmerge, TII, TRI, RBI);
-
-      // Constant 32
-      Register C32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *LoadC32 =
-          MIB.buildInstr(Haydn::LOADI32).addDef(C32).addImm(32);
-      constrainSelectedInstRegOperands(*LoadC32, TII, TRI, RBI);
-
-      // Compute shift amounts
-      Register AmtMinus32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SubMI =
-          MIB.buildInstr(Haydn::SUB32).addDef(AmtMinus32).addReg(Amt).addReg(C32);
-      constrainSelectedInstRegOperands(*SubMI, TII, TRI, RBI);
-
-      Register NegAmt = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *NegMI =
-          MIB.buildInstr(Haydn::NEG32).addDef(NegAmt).addReg(Amt);
-      constrainSelectedInstRegOperands(*NegMI, TII, TRI, RBI);
-
-      Register ThirtyTwoMinusAmt = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *AddMI =
-          MIB.buildInstr(Haydn::ADD32).addDef(ThirtyTwoMinusAmt).addReg(NegAmt).addReg(C32);
-      constrainSelectedInstRegOperands(*AddMI, TII, TRI, RBI);
-
-      // Path 1: amt < 32
-      // LoLt32 = (src_lo >>u amt) | (src_hi << (32 - amt))
-      Register LoRShifted = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SrlLo =
-          MIB.buildInstr(Haydn::SRL32).addDef(LoRShifted).addReg(SrcLo).addReg(Amt);
-      constrainSelectedInstRegOperands(*SrlLo, TII, TRI, RBI);
-
-      Register HiLShifted = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SllHi =
-          MIB.buildInstr(Haydn::SLL32).addDef(HiLShifted).addReg(SrcHi).addReg(ThirtyTwoMinusAmt);
-      constrainSelectedInstRegOperands(*SllHi, TII, TRI, RBI);
-
-      Register LoLt32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *OrLo =
-          MIB.buildInstr(Haydn::OR32).addDef(LoLt32).addReg(LoRShifted).addReg(HiLShifted);
-      constrainSelectedInstRegOperands(*OrLo, TII, TRI, RBI);
-
-      // HiLt32 = src_hi >>s amt
-      Register HiLt32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SraHi =
-          MIB.buildInstr(Haydn::SRA32).addDef(HiLt32).addReg(SrcHi).addReg(Amt);
-      constrainSelectedInstRegOperands(*SraHi, TII, TRI, RBI);
-
-      // Path 2: amt >= 32
-      // LoGe32 = src_hi >>u (amt - 32)
-      Register LoGe32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SrlBigLo =
-          MIB.buildInstr(Haydn::SRL32).addDef(LoGe32).addReg(SrcHi).addReg(AmtMinus32);
-      constrainSelectedInstRegOperands(*SrlBigLo, TII, TRI, RBI);
-
-      // HiGe32 = src_hi >>s (amt - 32)
-      Register HiGe32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SraBigHi =
-          MIB.buildInstr(Haydn::SRA32).addDef(HiGe32).addReg(SrcHi).addReg(AmtMinus32);
-      constrainSelectedInstRegOperands(*SraBigHi, TII, TRI, RBI);
-
-      // Conditional select using bitwise mask
-      // AmtLt32 = (Amt < 32) ? 1 : 0 via SLT32
-      Register AmtLt32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *SltMI =
-          MIB.buildInstr(Haydn::SLT32).addDef(AmtLt32).addReg(Amt).addReg(C32);
-      constrainSelectedInstRegOperands(*SltMI, TII, TRI, RBI);
-
-      // Mask = NEG32(AmtLt32): 0xFFFFFFFF if amt<32, 0x00000000 if amt>=32
-      Register Mask = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *NegMask =
-          MIB.buildInstr(Haydn::NEG32).addDef(Mask).addReg(AmtLt32);
-      constrainSelectedInstRegOperands(*NegMask, TII, TRI, RBI);
-
-      // NotMask = ~Mask
-      Register NotMask = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *NotMI =
-          MIB.buildInstr(Haydn::NOT32).addDef(NotMask).addReg(Mask);
-      constrainSelectedInstRegOperands(*NotMI, TII, TRI, RBI);
-
-      // ResLo = (LoLt32 & Mask) | (LoGe32 & NotMask)
-      Register LoMaskedLt = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *AndLoLt =
-          MIB.buildInstr(Haydn::AND32).addDef(LoMaskedLt).addReg(LoLt32).addReg(Mask);
-      constrainSelectedInstRegOperands(*AndLoLt, TII, TRI, RBI);
-
-      Register LoMaskedGe = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *AndLoGe =
-          MIB.buildInstr(Haydn::AND32).addDef(LoMaskedGe).addReg(LoGe32).addReg(NotMask);
-      constrainSelectedInstRegOperands(*AndLoGe, TII, TRI, RBI);
-
-      Register ResLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *OrResLo =
-          MIB.buildInstr(Haydn::OR32).addDef(ResLo).addReg(LoMaskedLt).addReg(LoMaskedGe);
-      constrainSelectedInstRegOperands(*OrResLo, TII, TRI, RBI);
-
-      // ResHi = (HiLt32 & Mask) | (HiGe32 & NotMask)
-      Register HiMaskedLt = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *AndHiLt =
-          MIB.buildInstr(Haydn::AND32).addDef(HiMaskedLt).addReg(HiLt32).addReg(Mask);
-      constrainSelectedInstRegOperands(*AndHiLt, TII, TRI, RBI);
-
-      Register HiMaskedGe = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *AndHiGe =
-          MIB.buildInstr(Haydn::AND32).addDef(HiMaskedGe).addReg(HiGe32).addReg(NotMask);
-      constrainSelectedInstRegOperands(*AndHiGe, TII, TRI, RBI);
-
-      Register ResHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *OrResHi =
-          MIB.buildInstr(Haydn::OR32).addDef(ResHi).addReg(HiMaskedLt).addReg(HiMaskedGe);
-      constrainSelectedInstRegOperands(*OrResHi, TII, TRI, RBI);
-
-      // Merge back to s64
-      if (Dst.isVirtual())
-        RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-      MachineInstr *Merge = MIB.buildInstr(Haydn::MOV_GPR_TO_DR64)
-                                .addDef(Dst)
-                                .addReg(ResLo)
-                                .addReg(ResHi);
-      constrainSelectedInstRegOperands(*Merge, TII, TRI, RBI);
-
-      I.eraseFromParent();
-      return true;
-    }
-
-    // s32 shift
-    MachineInstr *MI = MIB.buildInstr(Haydn::SRA32).addDef(Dst).addReg(Src).addReg(Amt);
+    if (!DstTy.isVector())
+      return false;
+    unsigned EltBits = DstTy.getElementType().getSizeInBits();
+    unsigned Opc = 0;
+    if (EltBits == 32)
+      Opc = Haydn::X2SRA32;
+    else if (EltBits == 16)
+      Opc = Haydn::X4SRA16;
+    else
+      return false;
+    if (Dst.isVirtual())
+      RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
+    if (Src.isVirtual())
+      RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI);
+    Register AmtScalar = extractVecLane0AsGPR32(MIB, Amt, MRI);
+    MachineInstr *MI =
+        MIB.buildInstr(Opc).addDef(Dst).addReg(Src).addReg(AmtScalar);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
@@ -2114,8 +1653,8 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
   case TargetOpcode::G_SEXTLOAD: {
     // G_LOAD / extload: opcode from MMO width (not SSA result width).
     // Extloads come from legalizer splits of unaligned/i24 mem.
-    // emit logical LD64 (slot choice-set); post-RA promoteLoadsToSlot1
-    // may rewrite a second LD64 → LD64_S1. Never key LD32 on s32←s8/s16.
+    // emit logical LD64 (PlacementAlternatives S0|S1); post-RA HR tryAdd +
+    // setDesc materialize pick LD64_S*. Never key LD32 on s32←s8/s16.
     Register Dst = I.getOperand(0).getReg();
     Register Ptr = I.getOperand(1).getReg();
     LLT DstTy = MRI.getType(Dst);
@@ -2874,6 +2413,50 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
             RBI.constrainGenericRegister(Src, Haydn::GPR32RegClass, MRI);
         }
       }
+    } else if (DstTy.getSizeInBits() == 32 && I.getNumOperands() == 3) {
+      // 2 x s16 -> s32 merge (legalizer: {S32, S16}, e.g. 20050316-1 test4
+      // bitcast <2 x i16> -> i32). Pack as little-endian:
+      //   dst = ((hi & 0xFFFF) << 16) | (lo & 0xFFFF)
+      // Sources live in GPR32 after G_TRUNC (sub-reg identity); mask so
+      // residual high bits from the parent s32 do not leak into the pack.
+      Register Lo = I.getOperand(1).getReg();
+      Register Hi = I.getOperand(2).getReg();
+      MachineIRBuilder MIB(I);
+
+      if (Lo.isVirtual())
+        RBI.constrainGenericRegister(Lo, Haydn::GPR32RegClass, MRI);
+      if (Hi.isVirtual())
+        RBI.constrainGenericRegister(Hi, Haydn::GPR32RegClass, MRI);
+      if (!RBI.constrainGenericRegister(Dst, Haydn::GPR32RegClass, MRI))
+        return false;
+
+      Register LoMasked = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+      Register HiMasked = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+      Register HiShifted = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+
+      MachineInstr *AndLo =
+          MIB.buildInstr(Haydn::ANDI32).addDef(LoMasked).addReg(Lo).addImm(
+              0xFFFF);
+      constrainSelectedInstRegOperands(*AndLo, TII, TRI, RBI);
+
+      MachineInstr *AndHi =
+          MIB.buildInstr(Haydn::ANDI32).addDef(HiMasked).addReg(Hi).addImm(
+              0xFFFF);
+      constrainSelectedInstRegOperands(*AndHi, TII, TRI, RBI);
+
+      MachineInstr *Shl =
+          MIB.buildInstr(Haydn::SLLI32).addDef(HiShifted).addReg(HiMasked).addImm(
+              16);
+      constrainSelectedInstRegOperands(*Shl, TII, TRI, RBI);
+
+      MachineInstr *Or =
+          MIB.buildInstr(Haydn::OR32).addDef(Dst).addReg(LoMasked).addReg(
+              HiShifted);
+      constrainSelectedInstRegOperands(*Or, TII, TRI, RBI);
+    } else {
+      // Unknown merge shape — fail closed rather than erase and leave Dst
+      // without a def (LiveIntervals "Reading virtual register without a def").
+      return false;
     }
     I.eraseFromParent();
     return true;
@@ -3078,127 +2661,24 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
   }
 
   case TargetOpcode::G_VAARG: {
-    // custom selection for the two-bank structured va_list.
-    //
-    // G_VAARG operands are [Dst(0), VaListPtr(1), Align(2)] — the va_list
-    // pointer is operand 1, NOT 2 (operand 2 is the alignment immediate).
-    // Reading operand 2 as a reg crashes in getReg (pitfall #1).
-    //
-    // va_list is the AArch64-style struct (see HaydnAsmPrinter VASTART):
-    // @0 void *__stack @4 void *__gr_top @8 void *__vr_top
-    // @12 int __gr_offs @16 int __vr_offs
-    // __gr_top/__vr_top point PAST the end of each bank's save area; the
-    // matching *_offs is initialized to the NEGATIVE bank size by VASTART and
-    // advances by the type size, so the read address is an UPWARD walk
-    // `top + off` (AArch64-style). With the ascending spill (R2 at base+0
-    // R7 at base+20, GprSize=24; __gr_top=base+24; __gr_offs starts at -24)
-    // the reads are base+0,base+4,...,base+20 = R2,R3,...,R7 IN ORDER (the
-    // first variadic reg first); when offs reaches 0 the bank is exhausted and
-    // the next va_arg must fall through to __stack (overflow path, deferred).
-    // i64/f64 read via the DR cursor (__vr_top@8 / __vr_offs@16, LD64_S1); all
-    // other types read via the GPR cursor (__gr_top@4 / __gr_offs@12, LD32).
-    //
-    // amendment : the original shipped selector used the
-    // DOWNWARD formula `top - (off+size)` with __gr_offs initialized to 0
-    // which read the save area in REVERSE (first va_arg got R7, the last
-    // spilled reg). Codex-verified against AArch64 (LowerAAPCS_VASTART stores
-    // GPRSize; AArch64.cpp:emitVAArg reads reg_top + reg_offs upward).
-    //
-    // pitfall #2: ADD32/SUB32 are pure reg-reg (no immediate); LD32/ST32
-    // ADDI32/LD64_S1 take an immediate, and ST32 has NO defs. A single emit
-    // that always appends an imm produces "Extra explicit operand on
-    // non-variadic instruction" verifier errors, so three helpers are split
-    // below: emitReg (reg-reg, one def), emitLoadImm (reg+imm, one def)
-    // emitStoreImm (ST32, no def, value is a use).
-    //
-    // pitfall #3: building generic G_LOAD/G_PTR_ADD leaves vregs without a
-    // register bank. The selector must lower to CONCRETE Haydn ops and constrain
-    // EACH with constrainSelectedInstRegOperands.
+    // CB-131 systematic: thin map to VAARG_I32/I64. ExpandPseudos implements
+    // the full two-bank + stack-overflow algorithm (same place as VASTART).
+    // Operands: [Dst(0), VaListPtr(1), Align(2)].
     Register Dst = I.getOperand(0).getReg();
     Register VaListPtr = I.getOperand(1).getReg();
     LLT DstTy = MRI.getType(Dst);
     MachineIRBuilder MIB(I);
-
-    // Bank selection by type size: 64-bit -> DR bank, else GPR bank.
-    bool IsDR = DstTy.getSizeInBits() == 64;
-    unsigned TypeSize = IsDR ? 8 : 4;
-    int TopFieldOff = IsDR ? 8 : 4;   // __vr_top @8, __gr_top @4
-    int OffFieldOff = IsDR ? 16 : 12; // __vr_offs@16, __gr_offs@12
-
-    const LLT S32 = LLT::scalar(32);
-
-    // Scratch vregs (GPR32-class; constrained by each emit helper).
-    auto MkGPR = [&]() {
-      Register R = MRI.createGenericVirtualRegister(S32);
-      RBI.constrainGenericRegister(R, Haydn::GPR32RegClass, MRI);
-      return R;
-    };
-    // emitReg: pure reg-reg Haydn op with ONE def and two source regs
-    // (ADD32/SUB32: `(outs rd), (ins rs1, rs2)`). NO immediate — appending one
-    // would hit "Extra explicit operand on non-variadic instruction" (
-    // pitfall #2).
-    auto emitReg = [&](unsigned Opc, Register DstReg, Register Src0,
-                       Register Src1) {
-      MachineInstr *MIr = MIB.buildInstr(Opc, {DstReg}, {Src0, Src1});
-      constrainSelectedInstRegOperands(*MIr, TII, TRI, RBI);
-    };
-    // emitLoadImm: Haydn op with ONE def, one source reg, and an immediate
-    // (LD32/LD64_S1/ADDI32: `(outs rt/rd), (ins rs, imm)`).
-    auto emitLoadImm = [&](unsigned Opc, Register DstReg, Register SrcReg,
-                           int64_t Imm) {
-      MachineInstr *MIi = MIB.buildInstr(Opc, {DstReg}, {SrcReg});
-      MIi->addOperand(MachineOperand::CreateImm(Imm));
-      constrainSelectedInstRegOperands(*MIi, TII, TRI, RBI);
-    };
-    // emitStoreImm: ST32 has NO defs (`(outs), (ins rt, rs, imm)`) — the stored
-    // value rt is the first USE, not a def. buildInstr with no def/use lists
-    // then addReg/addReg/addImm (mirrors the G_STORE -> ST32 selection at line
-    // 2011). Passing rt as a def would be a verifier error.
-    auto emitStoreImm = [&](unsigned Opc, Register ValReg, Register AddrBase,
-                            int64_t Imm) {
-      MachineInstr *MIs = MIB.buildInstr(Opc);
-      MIs->addOperand(MachineOperand::CreateReg(ValReg, /*isDef=*/false));
-      MIs->addOperand(MachineOperand::CreateReg(AddrBase, /*isDef=*/false));
-      MIs->addOperand(MachineOperand::CreateImm(Imm));
-      constrainSelectedInstRegOperands(*MIs, TII, TRI, RBI);
-    };
-    // Load a 32-bit va_list field at [VaListPtr + FieldOff].
-    auto LoadField = [&](int FieldOff) {
-      Register V = MkGPR();
-      emitLoadImm(Haydn::LD32, V, VaListPtr, FieldOff);
-      return V;
-    };
-    // Store a GPR value into a va_list field at [VaListPtr + FieldOff].
-    auto StoreField = [&](Register Val, int FieldOff) {
-      emitStoreImm(Haydn::ST32, Val, VaListPtr, FieldOff);
-    };
-
-    // 1. Read the current bank offset and the bank top pointer.
-    Register CurOff = LoadField(OffFieldOff);
-    Register TopPtr = LoadField(TopFieldOff);
-
-    // 2. Load address = TopPtr + CurOff (UPWARD walk, AArch64-style). VASTART
-    // initializes CurOff to the NEGATIVE bank size, so the first read lands
-    // at the bottom of the save area (the first spilled variadic reg).
-    Register AddrReg = MkGPR();
-    emitReg(Haydn::ADD32, AddrReg, TopPtr, CurOff);
-
-    // 3. Load the argument from the computed address.
-    if (IsDR) {
+    const bool IsI64 = DstTy.getSizeInBits() == 64;
+    if (IsI64)
       RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-      // Logical LD64 only (single authority). Dual-load packing records
-      // slot on AltDescs; encode materializes the S1 Flex window when needed.
-      emitLoadImm(Haydn::LD64, Dst, AddrReg, 0);
-    } else {
+    else
       RBI.constrainGenericRegister(Dst, Haydn::GPR32RegClass, MRI);
-      emitLoadImm(Haydn::LD32, Dst, AddrReg, 0);
-    }
-
-    // 4. Advance the bank offset: CurOff + TypeSize, store it back.
-    Register NewOff = MkGPR();
-    emitLoadImm(Haydn::ADDI32_W, NewOff, CurOff, TypeSize);
-    StoreField(NewOff, OffFieldOff);
-
+    if (VaListPtr.isVirtual())
+      RBI.constrainGenericRegister(VaListPtr, Haydn::GPR32RegClass, MRI);
+    unsigned Opc = IsI64 ? Haydn::VAARG_I64 : Haydn::VAARG_I32;
+    MachineInstr *Pseudo =
+        MIB.buildInstr(Opc).addDef(Dst).addReg(VaListPtr);
+    constrainSelectedInstRegOperands(*Pseudo, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -3293,6 +2773,70 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     case Intrinsic::haydn_s_lbu_post_reg:
     case Intrinsic::haydn_s_lbu_pre_imm:
     case Intrinsic::haydn_s_lbu_pre_reg:
+    // Golden LS POST/PRE stores: single-ret writeback (new_ptr), side-effecting
+    // memory write → G_INTRINSIC_W_SIDE_EFFECTS. Bodies lower like sdw_cb to
+    // (outs wb),(ins data,base,off). Without this allowlist they cannot-select.
+    case Intrinsic::haydn_d_sdw_post_imm:
+    case Intrinsic::haydn_d_sdw_post_reg:
+    case Intrinsic::haydn_d_sdw_pre_imm:
+    case Intrinsic::haydn_d_sdw_pre_reg:
+    case Intrinsic::haydn_d_shw_post_imm:
+    case Intrinsic::haydn_d_shw_post_reg:
+    case Intrinsic::haydn_d_shw_pre_imm:
+    case Intrinsic::haydn_d_shw_pre_reg:
+    case Intrinsic::haydn_d_sw_h_post_imm:
+    case Intrinsic::haydn_d_sw_h_post_reg:
+    case Intrinsic::haydn_d_sw_h_pre_imm:
+    case Intrinsic::haydn_d_sw_h_pre_reg:
+    case Intrinsic::haydn_d_sw_l_post_imm:
+    case Intrinsic::haydn_d_sw_l_post_reg:
+    case Intrinsic::haydn_d_sw_l_pre_imm:
+    case Intrinsic::haydn_d_sw_l_pre_reg:
+    case Intrinsic::haydn_s_sb_post_imm:
+    case Intrinsic::haydn_s_sb_post_reg:
+    case Intrinsic::haydn_s_sb_pre_imm:
+    case Intrinsic::haydn_s_sb_pre_reg:
+    case Intrinsic::haydn_s_shw_post_imm:
+    case Intrinsic::haydn_s_shw_post_reg:
+    case Intrinsic::haydn_s_shw_pre_imm:
+    case Intrinsic::haydn_s_shw_pre_reg:
+    case Intrinsic::haydn_s_sw_post_imm:
+    case Intrinsic::haydn_s_sw_post_reg:
+    case Intrinsic::haydn_s_sw_pre_imm:
+    case Intrinsic::haydn_s_sw_pre_reg:
+    // Golden LS WITH_* (no AGU writeback): IntrHasSideEffects → arrive as
+    // G_INTRINSIC_W_SIDE_EFFECTS. Bodies live in selectIntrinsic (~5454+).
+    // Without this allowlist, e.g. d_lw_with_imm fails "cannot select".
+    case Intrinsic::haydn_d_ldw_with_imm:
+    case Intrinsic::haydn_d_ldw_with_reg:
+    case Intrinsic::haydn_d_lhw_with_imm:
+    case Intrinsic::haydn_d_lhw_with_reg:
+    case Intrinsic::haydn_d_lw_with_imm:
+    case Intrinsic::haydn_d_lw_with_reg:
+    case Intrinsic::haydn_s_lbs_with_imm:
+    case Intrinsic::haydn_s_lbs_with_reg:
+    case Intrinsic::haydn_s_lbu_with_imm:
+    case Intrinsic::haydn_s_lbu_with_reg:
+    case Intrinsic::haydn_s_lhws_with_imm:
+    case Intrinsic::haydn_s_lhws_with_reg:
+    case Intrinsic::haydn_s_lhwu_with_imm:
+    case Intrinsic::haydn_s_lhwu_with_reg:
+    case Intrinsic::haydn_s_lw_with_imm:
+    case Intrinsic::haydn_s_lw_with_reg:
+    case Intrinsic::haydn_d_sdw_with_imm:
+    case Intrinsic::haydn_d_sdw_with_reg:
+    case Intrinsic::haydn_d_shw_with_imm:
+    case Intrinsic::haydn_d_shw_with_reg:
+    case Intrinsic::haydn_d_sw_h_with_imm:
+    case Intrinsic::haydn_d_sw_h_with_reg:
+    case Intrinsic::haydn_d_sw_l_with_imm:
+    case Intrinsic::haydn_d_sw_l_with_reg:
+    case Intrinsic::haydn_s_sb_with_imm:
+    case Intrinsic::haydn_s_sb_with_reg:
+    case Intrinsic::haydn_s_shw_with_imm:
+    case Intrinsic::haydn_s_shw_with_reg:
+    case Intrinsic::haydn_s_sw_with_imm:
+    case Intrinsic::haydn_s_sw_with_reg:
     // AR unaligned stream (PLDWWUA / D_*UA_POST / FLAR / WBARWUA) — AR state
     // + memory; arrive as G_INTRINSIC_W_SIDE_EFFECTS.
     case Intrinsic::haydn_pldwwua:
@@ -3430,15 +2974,22 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     return true;
   }
 
-  // trap → soft RET. Default IRTranslator leaves empty MBBs when
-  // TrapUnreachable is off (no G_* at all). When trap-lowering is on, G_TRAP*
-  // appears here. HaydnEnsureTerminators (post-PEI) is the invariant for empty
-  // dead-end MBBs; this covers explicit trap opcodes.
+  // trap → noreturn call to abort (A.5). Never lower to RET (return into
+  // following code). Do not create new MBBs here — InstructionSelect iterates
+  // MBBs and CFG surgery crashes. Empty unreachable dead-ends still get soft
+  // RET from HaydnEnsureTerminators (separate contract).
   case TargetOpcode::G_TRAP:
   case TargetOpcode::G_DEBUGTRAP:
   case TargetOpcode::G_UBSANTRAP: {
     MachineIRBuilder MIB(I);
-    MIB.buildInstr(Haydn::RET);
+    // Direct WIDE JAL to abort (same path as CallLowering external symbols).
+    // If abort returns, call again (fail closed, no fallthrough RET).
+    for (unsigned N = 0; N < 2; ++N) {
+      MachineInstr *Call = MIB.buildInstr(Haydn::JAL_W)
+                               .addDef(Haydn::R15)
+                               .addExternalSymbol("abort");
+      constrainSelectedInstRegOperands(*Call, TII, TRI, RBI);
+    }
     I.eraseFromParent();
     return true;
   }
@@ -3524,6 +3075,21 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(DstReg, RC, MRI);
     if (SrcReg.isVirtual())
       RBI.constrainGenericRegister(SrcReg, RC, MRI);
+    MachineInstr *MI =
+        MIB.buildInstr(Opcode).addDef(DstReg).addReg(SrcReg);
+    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    I.eraseFromParent();
+    return true;
+  };
+
+  // R_GD unary: GPR32 dest + DR64 source (FormatsALU64 R_GD / POPCOUNT64 shape).
+  // Same-bank selectUnary cannot express the cross-bank constraint.
+  auto selectUnaryR_GD = [&](unsigned Opcode) {
+    Register SrcReg = I.getOperand(2).getReg();
+    if (DstReg.isVirtual())
+      RBI.constrainGenericRegister(DstReg, GPR32RegClass, MRI);
+    if (SrcReg.isVirtual())
+      RBI.constrainGenericRegister(SrcReg, DR64RegClass, MRI);
     MachineInstr *MI =
         MIB.buildInstr(Opcode).addDef(DstReg).addReg(SrcReg);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
@@ -3793,6 +3359,44 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   default:
     break;
 
+  // CB-128: @llvm.returnaddress — depth 0 → LR ($r15); depth >0 unsupported → 0.
+  case returnaddress: {
+    // Operand layout: def Dst, intrinsic_id, depth (imm or G_CONSTANT vreg).
+    if (!DstReg)
+      return false;
+    RBI.constrainGenericRegister(DstReg, Haydn::GPR32RegClass, MRI);
+    unsigned Depth = 0;
+    if (I.getNumOperands() >= 3) {
+      const MachineOperand &DepthMO = I.getOperand(2);
+      if (DepthMO.isImm())
+        Depth = static_cast<unsigned>(DepthMO.getImm());
+      else if (DepthMO.isCImm())
+        Depth = static_cast<unsigned>(DepthMO.getCImm()->getZExtValue());
+      else if (DepthMO.isReg()) {
+        // Fold trivial G_CONSTANT depth.
+        if (MachineInstr *Def = MRI.getVRegDef(DepthMO.getReg())) {
+          if (Def->getOpcode() == TargetOpcode::G_CONSTANT &&
+              Def->getOperand(1).isCImm())
+            Depth =
+                static_cast<unsigned>(Def->getOperand(1).getCImm()->getZExtValue());
+          else
+            Depth = 1; // unknown non-zero → null
+        }
+      }
+    }
+    if (Depth == 0) {
+      // COPY from LR (R15). buildCopy + constrain.
+      MachineInstr *Copy = MIB.buildCopy(DstReg, Register(Haydn::R15));
+      constrainSelectedInstRegOperands(*Copy, TII, TRI, RBI);
+    } else {
+      MachineInstr *Z =
+          MIB.buildInstr(Haydn::LOADI32).addDef(DstReg).addImm(0);
+      constrainSelectedInstRegOperands(*Z, TII, TRI, RBI);
+    }
+    I.eraseFromParent();
+    return true;
+  }
+
   //===-----------------------------------------------------------------===
   // MUL64_LL (32x32->64) — fundamental DSP multiply
   // i32 x i32 -> i64: sign-extend both i32 operands to DR64, then MUL64_LL.
@@ -4059,13 +3663,12 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_srai32:
   case haydn_srai32r: {
     Register Src = I.getOperand(2).getReg();
-    Register ShiftReg = I.getOperand(3).getReg();
-    auto ShiftCst = getIConstantVRegValWithLookThrough(ShiftReg, MRI);
-    if (!ShiftCst) {
+    // ImmArg amount may be bare Imm after legalize (C0.4).
+    int64_t ShiftVal = 0;
+    if (!getConstOpSExt(I.getOperand(3), ShiftVal)) {
       LLVM_DEBUG(dbgs() << "GPR32 imm shift: amount must be a constant\n");
       return false;
     }
-    int64_t ShiftVal = ShiftCst->Value.getSExtValue();
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, GPR32RegClass, MRI);
     if (Src.isVirtual())
@@ -4166,9 +3769,8 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   }
   case haydn_sin_cos: {
     Register Src = I.getOperand(2).getReg();
-    Register ImmR = I.getOperand(3).getReg();
-    auto C = getIConstantVRegValWithLookThrough(ImmR, MRI);
-    if (!C)
+    int64_t ImmVal = 0;
+    if (!getConstOpSExt(I.getOperand(3), ImmVal))
       return false;
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
@@ -4177,7 +3779,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     MachineInstr *MI = MIB.buildInstr(SIN_COS)
                            .addDef(DstReg)
                            .addReg(Src)
-                           .addImm(C->Value.getSExtValue());
+                           .addImm(ImmVal);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
@@ -4185,16 +3787,15 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_movei_h:
   case haydn_movei_l: {
     // Golden MOVEI_H/L exist as S0 I32 forms MOVEI_H_S0 / MOVEI_L_S0.
-    Register ImmR = I.getOperand(2).getReg();
-    auto C = getIConstantVRegValWithLookThrough(ImmR, MRI);
-    if (!C)
+    // ImmArg bare Imm after legalize (C0.4).
+    int64_t ImmVal = 0;
+    if (!getConstOpSExt(I.getOperand(2), ImmVal))
       return false;
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
     unsigned Opc =
         (IntrID == Intrinsic::haydn_movei_h) ? MOVEI_H_S0 : MOVEI_L_S0;
-    MachineInstr *MI =
-        MIB.buildInstr(Opc).addDef(DstReg).addImm(C->Value.getSExtValue());
+    MachineInstr *MI = MIB.buildInstr(Opc).addDef(DstReg).addImm(ImmVal);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
@@ -4755,16 +4356,18 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_sqrt:  return selectUnary(SQRT,  GPR32RegClass);
 
   //===-----------------------------------------------------------------===
-  // Normalization (NSA) — unary GPR32 (input and output both GPR32)
+  // Normalization (NSA)
+  // NSA32/NSAU32: ALU32 R — GPR32→GPR32.
+  // NSA64/NSAZ*/NSA*_L: ALU64 R_GD — DR64→GPR32 (match members / POPCOUNT64).
   //===-----------------------------------------------------------------===
   case haydn_nsa32:    return selectUnary(NSA32,    GPR32RegClass);
   case haydn_nsau32:   return selectUnary(NSAU32,   GPR32RegClass);
-  case haydn_nsa64:    return selectUnary(NSA64,    GPR32RegClass);
-  case haydn_nsa16_l:  return selectUnary(NSA16_L,  GPR32RegClass);
-  case haydn_nsa32_l:  return selectUnary(NSA32_L,  GPR32RegClass);
-  case haydn_nsaz64:   return selectUnary(NSAZ64,   GPR32RegClass);
-  case haydn_nsaz16_l: return selectUnary(NSA32, GPR32RegClass);
-  case haydn_nsaz32_l: return selectUnary(NSA32, GPR32RegClass);
+  case haydn_nsa64:    return selectUnaryR_GD(NSA64);
+  case haydn_nsa16_l:  return selectUnaryR_GD(NSA16_L);
+  case haydn_nsa32_l:  return selectUnaryR_GD(NSA32_L);
+  case haydn_nsaz64:   return selectUnaryR_GD(NSAZ64);
+  case haydn_nsaz16_l: return selectUnaryR_GD(NSAZ16_L);
+  case haydn_nsaz32_l: return selectUnaryR_GD(NSAZ32_L);
 
   //===-----------------------------------------------------------------===
   // MULSA32/MULSS32 — Dual 32-bit multiply-accumulate/subtract (binary DR64)
@@ -4845,14 +4448,11 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_slli64:
   case haydn_srli64: {
     Register Accum = I.getOperand(2).getReg();
-    Register ShiftReg = I.getOperand(3).getReg();
-
-    auto ShiftCst = getIConstantVRegValWithLookThrough(ShiftReg, MRI);
-    if (!ShiftCst) {
+    int64_t ShiftVal = 0;
+    if (!getConstOpSExt(I.getOperand(3), ShiftVal)) {
       LLVM_DEBUG(dbgs() << "DR64 imm shift: shift amount must be a constant\n");
       return false;
     }
-    int64_t ShiftVal = ShiftCst->Value.getSExtValue();
 
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
@@ -4910,6 +4510,101 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_x4movt16: return selectBinary(X4MOVT16, DR64RegClass);
 
   //===---------------------------------------------------------------===
+  // C1.1 / G-PRED-SSA: pure SSA predicate value + fused compare-select
+  //
+  // Hexagon peer: C2_cmplt → i32 pred; C2_mux(Pu, t, f). Expand only to
+  // existing X2/X4SLT + MOVT + MOVESFR2GPR/MOVEGPR2SFR. SFR is a temporary
+  // inside the multi-MI sequence; Defs/Uses=[SFR] keep epochs ordered.
+  // Operand layouts (G_INTRINSIC):
+  //   cmplt:  def pred, id, a, b
+  //   mux:    def dst,  id, pred, true, false
+  //   cmpsel: def dst,  id, a, b, true, false
+  //===---------------------------------------------------------------===
+  case haydn_x2cmplt32:
+  case haydn_x4cmplt16: {
+    // pred = movesfr2gpr(slt(a, b)). Passthrough of SLT is discarded.
+    const bool IsX2 = IntrID == haydn_x2cmplt32;
+    unsigned SltOpc = IsX2 ? X2SLT32 : X4SLT16;
+    Register A = I.getOperand(2).getReg();
+    Register B = I.getOperand(3).getReg();
+    if (A.isVirtual())
+      RBI.constrainGenericRegister(A, DR64RegClass, MRI);
+    if (B.isVirtual())
+      RBI.constrainGenericRegister(B, DR64RegClass, MRI);
+    Register Pass = MRI.createVirtualRegister(&DR64RegClass);
+    MachineInstr *SltMI =
+        MIB.buildInstr(SltOpc).addDef(Pass).addReg(A).addReg(B);
+    constrainSelectedInstRegOperands(*SltMI, TII, TRI, RBI);
+    if (DstReg.isVirtual())
+      RBI.constrainGenericRegister(DstReg, GPR32RegClass, MRI);
+    MachineInstr *MoveMI = MIB.buildInstr(MOVESFR2GPR).addDef(DstReg);
+    constrainSelectedInstRegOperands(*MoveMI, TII, TRI, RBI);
+    I.eraseFromParent();
+    return true;
+  }
+  case haydn_x2mux32:
+  case haydn_x4mux16: {
+    // dst = movt(false, true) after restoring pred into SFR.
+    // Args: pred, true_val, false_val (Hexagon C2_mux order).
+    const bool IsX2 = IntrID == haydn_x2mux32;
+    unsigned MovtOpc = IsX2 ? X2MOVT32 : X4MOVT16;
+    Register Pred = I.getOperand(2).getReg();
+    Register TrueV = I.getOperand(3).getReg();
+    Register FalseV = I.getOperand(4).getReg();
+    if (Pred.isVirtual())
+      RBI.constrainGenericRegister(Pred, GPR32RegClass, MRI);
+    if (TrueV.isVirtual())
+      RBI.constrainGenericRegister(TrueV, DR64RegClass, MRI);
+    if (FalseV.isVirtual())
+      RBI.constrainGenericRegister(FalseV, DR64RegClass, MRI);
+    MachineInstr *SfrMI = MIB.buildInstr(MOVEGPR2SFR).addReg(Pred);
+    constrainSelectedInstRegOperands(*SfrMI, TII, TRI, RBI);
+    if (DstReg.isVirtual())
+      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
+    // X2/X4MOVT: dst = SFR ? rs2(true) : rs1(false)
+    MachineInstr *MovtMI = MIB.buildInstr(MovtOpc)
+                               .addDef(DstReg)
+                               .addReg(FalseV)
+                               .addReg(TrueV);
+    constrainSelectedInstRegOperands(*MovtMI, TII, TRI, RBI);
+    I.eraseFromParent();
+    return true;
+  }
+  case haydn_x2cmpsel32:
+  case haydn_x4cmpsel16: {
+    // Fused: SLT(a,b) then MOVT(false, true). SFR local; no capture.
+    // Args: a, b, true_val, false_val.
+    const bool IsX2 = IntrID == haydn_x2cmpsel32;
+    unsigned SltOpc = IsX2 ? X2SLT32 : X4SLT16;
+    unsigned MovtOpc = IsX2 ? X2MOVT32 : X4MOVT16;
+    Register A = I.getOperand(2).getReg();
+    Register B = I.getOperand(3).getReg();
+    Register TrueV = I.getOperand(4).getReg();
+    Register FalseV = I.getOperand(5).getReg();
+    if (A.isVirtual())
+      RBI.constrainGenericRegister(A, DR64RegClass, MRI);
+    if (B.isVirtual())
+      RBI.constrainGenericRegister(B, DR64RegClass, MRI);
+    if (TrueV.isVirtual())
+      RBI.constrainGenericRegister(TrueV, DR64RegClass, MRI);
+    if (FalseV.isVirtual())
+      RBI.constrainGenericRegister(FalseV, DR64RegClass, MRI);
+    Register Pass = MRI.createVirtualRegister(&DR64RegClass);
+    MachineInstr *SltMI =
+        MIB.buildInstr(SltOpc).addDef(Pass).addReg(A).addReg(B);
+    constrainSelectedInstRegOperands(*SltMI, TII, TRI, RBI);
+    if (DstReg.isVirtual())
+      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
+    MachineInstr *MovtMI = MIB.buildInstr(MovtOpc)
+                               .addDef(DstReg)
+                               .addReg(FalseV)
+                               .addReg(TrueV);
+    constrainSelectedInstRegOperands(*MovtMI, TII, TRI, RBI);
+    I.eraseFromParent();
+    return true;
+  }
+
+  //===---------------------------------------------------------------===
   // Wave 4: X2 SIMD fractional multiply (binary DR64)
   //===---------------------------------------------------------------===
   case haydn_x2fmul32rs:  return selectBinary(X2FMUL32RS,  DR64RegClass);
@@ -4946,14 +4641,11 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   //===---------------------------------------------------------------===
   case haydn_x2srai32r: {
     Register Src = I.getOperand(2).getReg();
-    Register ShiftReg = I.getOperand(3).getReg();
-
-    auto ShiftCst = getIConstantVRegValWithLookThrough(ShiftReg, MRI);
-    if (!ShiftCst) {
+    int64_t ShiftVal = 0;
+    if (!getConstOpSExt(I.getOperand(3), ShiftVal)) {
       LLVM_DEBUG(dbgs() << "X2SRAI32R: shift amount must be a constant\n");
       return false;
     }
-    int64_t ShiftVal = ShiftCst->Value.getSExtValue();
 
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
@@ -4969,14 +4661,11 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
 
   case haydn_x4srai16r: {
     Register Src = I.getOperand(2).getReg();
-    Register ShiftReg = I.getOperand(3).getReg();
-
-    auto ShiftCst = getIConstantVRegValWithLookThrough(ShiftReg, MRI);
-    if (!ShiftCst) {
+    int64_t ShiftVal = 0;
+    if (!getConstOpSExt(I.getOperand(3), ShiftVal)) {
       LLVM_DEBUG(dbgs() << "X4SRAI16R: shift amount must be a constant\n");
       return false;
     }
-    int64_t ShiftVal = ShiftCst->Value.getSExtValue();
 
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
@@ -5339,23 +5028,19 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_setcbr_begin:
   case haydn_setcbr_end: {
     // Void side-effecting intrinsic: op(0) = intrinsic id
-    // op(1) = cbr_sel (constant mat'd as a G_CONSTANT vreg), op(2) = value.
-    // Mirror the CB load/store path: look through the constant vreg.
-    Register CbrSelReg = I.getOperand(1).getReg();
-    auto CbrCst = getIConstantVRegValWithLookThrough(CbrSelReg, MRI);
-    if (!CbrCst) {
-      LLVM_DEBUG(dbgs() << "SETCBR: cbr_sel must be a constant\n");
+    // op(1) = cbr_sel ImmArg (bare Imm or G_CONSTANT), op(2) = value.
+    uint64_t CbrSel = 0;
+    if (!getConstOpZExt(I.getOperand(1), CbrSel) || CbrSel > 1) {
+      LLVM_DEBUG(dbgs() << "SETCBR: cbr_sel must be a constant 0 or 1\n");
       return false;
     }
-    int64_t CbrSel = CbrCst->Value.getZExtValue();
-    assert((CbrSel == 0 || CbrSel == 1) && "setcbr: cbr_sel must be 0 or 1");
     Register Val = I.getOperand(2).getReg();
     if (Val.isVirtual())
       RBI.constrainGenericRegister(Val, GPR32RegClass, MRI);
     unsigned Op =
         IntrID == Intrinsic::haydn_setcbr_begin ? SETCBR_BEGIN : SETCBR_END;
     MachineInstr *MI =
-        MIB.buildInstr(Op).addImm(CbrSel).addReg(Val);
+        MIB.buildInstr(Op).addImm(static_cast<int64_t>(CbrSel)).addReg(Val);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
@@ -5453,7 +5138,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   }
 
   //===---------------------------------------------------------------===
-  // Circular Buffer Load/Store (CBR) — 2-ret load / ptr-ret store (D208).
+  // Circular Buffer Load/Store (CBR) — 2-ret load / ptr-ret store.
   // CB loads : intrinsic(ptr_base, cbr_sel, stride) -> {data, new_ptr}
   // gmir: op(0)=data, op(1)=new_ptr, op(2)=id, op(3)=ptr_base,
   //       op(4)=cbr_sel, op(5)=stride
@@ -5489,7 +5174,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                              .addReg(PtrBase)
                              .addImm(CbrSel)
                              .addImm(StrideImm);
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
       I.eraseFromParent();
       return true;
     }
@@ -5505,7 +5190,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                            .addReg(PtrBase)
                            .addImm(CbrSel)
                            .addReg(StrideReg);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -5537,7 +5222,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                            .addReg(PtrBase)
                            .addImm(CbrSel)
                            .addReg(StrideReg);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -5568,7 +5253,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                              .addReg(PtrBase)
                              .addImm(CbrSel)
                              .addImm(StrideImm);
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
       I.eraseFromParent();
       return true;
     }
@@ -5583,24 +5268,26 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                            .addReg(PtrBase)
                            .addImm(CbrSel)
                            .addReg(StrideReg);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
   case haydn_sdw_cb_reg: {
     // MI: rs1_wb, rtd, rs1, cbr_sel, rs2
     // Intrinsic returns new_ptr in op0; args shift by one vs void form.
+    // ImmArg cbr_sel may be bare Imm on G_INTRINSIC (C0.4 / C5.1); use
+    // getConstOpZExt — never getReg() on the ImmArg slot (assert crash).
     Register WbReg = I.getOperand(0).getReg();
     Register Data = I.getOperand(2).getReg();
     Register PtrBase = I.getOperand(3).getReg();
-    Register CbrSelReg = I.getOperand(4).getReg();
-    Register StrideReg = I.getOperand(5).getReg();
-
-    auto CbrCst = getIConstantVRegValWithLookThrough(CbrSelReg, MRI);
-    if (!CbrCst) {
+    uint64_t CbrSel = 0;
+    if (!getConstOpZExt(I.getOperand(4), CbrSel)) {
       LLVM_DEBUG(dbgs() << "SDW_CB_REG: cbr_sel must be a constant\n");
       return false;
     }
+    if (!I.getOperand(5).isReg())
+      return false;
+    Register StrideReg = I.getOperand(5).getReg();
     if (Data.isVirtual())
       RBI.constrainGenericRegister(Data, DR64RegClass, MRI);
     if (PtrBase.isVirtual())
@@ -5614,9 +5301,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                            .addDef(WbReg)
                            .addReg(Data)
                            .addReg(PtrBase)
-                           .addImm(CbrCst->Value.getZExtValue())
+                           .addImm(CbrSel)
                            .addReg(StrideReg);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -5649,7 +5336,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                            .addDef(WbReg)
                            .addReg(PtrBase)
                            .addImm(StrideImm);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -5672,7 +5359,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                            .addDef(WbReg)
                            .addReg(PtrBase)
                            .addReg(StrideReg);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -5698,7 +5385,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                            .addDef(WbReg)
                            .addReg(PtrBase)
                            .addImm(StrideImm);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -5721,7 +5408,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                            .addDef(WbReg)
                            .addReg(PtrBase)
                            .addReg(StrideReg);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -5747,7 +5434,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                            .addReg(Data)
                            .addReg(PtrBase)
                            .addImm(StrideImm);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -5770,7 +5457,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                            .addReg(Data)
                            .addReg(PtrBase)
                            .addReg(StrideReg);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -5796,7 +5483,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                            .addReg(Data)
                            .addReg(PtrBase)
                            .addImm(StrideImm);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -5819,7 +5506,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                            .addReg(Data)
                            .addReg(PtrBase)
                            .addReg(StrideReg);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -5924,7 +5611,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                              .addDef(WbReg)
                              .addReg(Base)
                              .addImm(OffImm);
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     } else {
       if (!I.getOperand(4).isReg())
         return false;
@@ -5936,7 +5623,155 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                              .addDef(WbReg)
                              .addReg(Base)
                              .addReg(Off);
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
+    }
+    I.eraseFromParent();
+    return true;
+  }
+
+  //===---------------------------------------------------------------===
+  // Golden LS POST/PRE stores — single-ret writeback like sdw_cb:
+  //   IR: new_ptr = store(data, base, off)
+  //   MI: (outs wb), (ins data, base, off)
+  // G_INTRINSIC_W_SIDE_EFFECTS: op0=wb, op1=id, op2=data, op3=base, op4=off.
+  // ImmArg offset uses getConstOpSExt (bare Imm after legalize).
+  //===---------------------------------------------------------------===
+  case haydn_d_sdw_post_imm:
+  case haydn_d_sdw_post_reg:
+  case haydn_d_sdw_pre_imm:
+  case haydn_d_sdw_pre_reg:
+  case haydn_d_shw_post_imm:
+  case haydn_d_shw_post_reg:
+  case haydn_d_shw_pre_imm:
+  case haydn_d_shw_pre_reg:
+  case haydn_d_sw_h_post_imm:
+  case haydn_d_sw_h_post_reg:
+  case haydn_d_sw_h_pre_imm:
+  case haydn_d_sw_h_pre_reg:
+  case haydn_d_sw_l_post_imm:
+  case haydn_d_sw_l_post_reg:
+  case haydn_d_sw_l_pre_imm:
+  case haydn_d_sw_l_pre_reg: {
+    // DR64 data writeback stores.
+    Register WbReg = I.getOperand(0).getReg();
+    Register Data = I.getOperand(2).getReg();
+    Register Base = I.getOperand(3).getReg();
+    unsigned Opc = D_SDW_POST_IMM;
+    bool IsImm = false;
+    switch (IntrID) {
+    case Intrinsic::haydn_d_sdw_post_imm: Opc = D_SDW_POST_IMM; IsImm = true; break;
+    case Intrinsic::haydn_d_sdw_post_reg: Opc = D_SDW_POST_REG; break;
+    case Intrinsic::haydn_d_sdw_pre_imm:  Opc = D_SDW_PRE_IMM;  IsImm = true; break;
+    case Intrinsic::haydn_d_sdw_pre_reg:  Opc = D_SDW_PRE_REG;  break;
+    case Intrinsic::haydn_d_shw_post_imm: Opc = D_SHW_POST_IMM; IsImm = true; break;
+    case Intrinsic::haydn_d_shw_post_reg: Opc = D_SHW_POST_REG; break;
+    case Intrinsic::haydn_d_shw_pre_imm:  Opc = D_SHW_PRE_IMM;  IsImm = true; break;
+    case Intrinsic::haydn_d_shw_pre_reg:  Opc = D_SHW_PRE_REG;  break;
+    case Intrinsic::haydn_d_sw_h_post_imm: Opc = D_SW_H_POST_IMM; IsImm = true; break;
+    case Intrinsic::haydn_d_sw_h_post_reg: Opc = D_SW_H_POST_REG; break;
+    case Intrinsic::haydn_d_sw_h_pre_imm:  Opc = D_SW_H_PRE_IMM;  IsImm = true; break;
+    case Intrinsic::haydn_d_sw_h_pre_reg:  Opc = D_SW_H_PRE_REG;  break;
+    case Intrinsic::haydn_d_sw_l_post_imm: Opc = D_SW_L_POST_IMM; IsImm = true; break;
+    case Intrinsic::haydn_d_sw_l_post_reg: Opc = D_SW_L_POST_REG; break;
+    case Intrinsic::haydn_d_sw_l_pre_imm:  Opc = D_SW_L_PRE_IMM;  IsImm = true; break;
+    case Intrinsic::haydn_d_sw_l_pre_reg:  Opc = D_SW_L_PRE_REG;  break;
+    default:
+      return false;
+    }
+    if (WbReg.isVirtual())
+      RBI.constrainGenericRegister(WbReg, GPR32RegClass, MRI);
+    if (Data.isVirtual())
+      RBI.constrainGenericRegister(Data, DR64RegClass, MRI);
+    if (Base.isVirtual())
+      RBI.constrainGenericRegister(Base, GPR32RegClass, MRI);
+    if (IsImm) {
+      int64_t OffImm = 0;
+      if (!getConstOpSExt(I.getOperand(4), OffImm))
+        return false;
+      MachineInstr *MI = MIB.buildInstr(Opc)
+                             .addDef(WbReg)
+                             .addReg(Data)
+                             .addReg(Base)
+                             .addImm(OffImm);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
+    } else {
+      if (!I.getOperand(4).isReg())
+        return false;
+      Register Off = I.getOperand(4).getReg();
+      if (Off.isVirtual())
+        RBI.constrainGenericRegister(Off, GPR32RegClass, MRI);
+      MachineInstr *MI = MIB.buildInstr(Opc)
+                             .addDef(WbReg)
+                             .addReg(Data)
+                             .addReg(Base)
+                             .addReg(Off);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
+    }
+    I.eraseFromParent();
+    return true;
+  }
+  case haydn_s_sb_post_imm:
+  case haydn_s_sb_post_reg:
+  case haydn_s_sb_pre_imm:
+  case haydn_s_sb_pre_reg:
+  case haydn_s_shw_post_imm:
+  case haydn_s_shw_post_reg:
+  case haydn_s_shw_pre_imm:
+  case haydn_s_shw_pre_reg:
+  case haydn_s_sw_post_imm:
+  case haydn_s_sw_post_reg:
+  case haydn_s_sw_pre_imm:
+  case haydn_s_sw_pre_reg: {
+    // GPR32 data writeback stores.
+    Register WbReg = I.getOperand(0).getReg();
+    Register Data = I.getOperand(2).getReg();
+    Register Base = I.getOperand(3).getReg();
+    unsigned Opc = S_SW_POST_IMM;
+    bool IsImm = false;
+    switch (IntrID) {
+    case Intrinsic::haydn_s_sb_post_imm: Opc = S_SB_POST_IMM; IsImm = true; break;
+    case Intrinsic::haydn_s_sb_post_reg: Opc = S_SB_POST_REG; break;
+    case Intrinsic::haydn_s_sb_pre_imm:  Opc = S_SB_PRE_IMM;  IsImm = true; break;
+    case Intrinsic::haydn_s_sb_pre_reg:  Opc = S_SB_PRE_REG;  break;
+    case Intrinsic::haydn_s_shw_post_imm: Opc = S_SHW_POST_IMM; IsImm = true; break;
+    case Intrinsic::haydn_s_shw_post_reg: Opc = S_SHW_POST_REG; break;
+    case Intrinsic::haydn_s_shw_pre_imm:  Opc = S_SHW_PRE_IMM;  IsImm = true; break;
+    case Intrinsic::haydn_s_shw_pre_reg:  Opc = S_SHW_PRE_REG;  break;
+    case Intrinsic::haydn_s_sw_post_imm: Opc = S_SW_POST_IMM; IsImm = true; break;
+    case Intrinsic::haydn_s_sw_post_reg: Opc = S_SW_POST_REG; break;
+    case Intrinsic::haydn_s_sw_pre_imm:  Opc = S_SW_PRE_IMM;  IsImm = true; break;
+    case Intrinsic::haydn_s_sw_pre_reg:  Opc = S_SW_PRE_REG;  break;
+    default:
+      return false;
+    }
+    if (WbReg.isVirtual())
+      RBI.constrainGenericRegister(WbReg, GPR32RegClass, MRI);
+    if (Data.isVirtual())
+      RBI.constrainGenericRegister(Data, GPR32RegClass, MRI);
+    if (Base.isVirtual())
+      RBI.constrainGenericRegister(Base, GPR32RegClass, MRI);
+    if (IsImm) {
+      int64_t OffImm = 0;
+      if (!getConstOpSExt(I.getOperand(4), OffImm))
+        return false;
+      MachineInstr *MI = MIB.buildInstr(Opc)
+                             .addDef(WbReg)
+                             .addReg(Data)
+                             .addReg(Base)
+                             .addImm(OffImm);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
+    } else {
+      if (!I.getOperand(4).isReg())
+        return false;
+      Register Off = I.getOperand(4).getReg();
+      if (Off.isVirtual())
+        RBI.constrainGenericRegister(Off, GPR32RegClass, MRI);
+      MachineInstr *MI = MIB.buildInstr(Opc)
+                             .addDef(WbReg)
+                             .addReg(Data)
+                             .addReg(Base)
+                             .addReg(Off);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     }
     I.eraseFromParent();
     return true;
@@ -5953,8 +5788,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_d_lhw_with_reg:
   case haydn_d_lw_with_imm:
   case haydn_d_lw_with_reg: {
+    // gmir load: op(0)=data, op(1)=id, op(2)=base, op(3)=off
+    // op3 is ImmArg bare Imm for *_imm, or GPR for *_reg.
     Register Base = I.getOperand(2).getReg();
-    Register Off = I.getOperand(3).getReg();
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
     if (Base.isVirtual())
@@ -5973,19 +5809,21 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                   IntrID == Intrinsic::haydn_d_lhw_with_imm ||
                   IntrID == Intrinsic::haydn_d_lw_with_imm);
     if (IsImm) {
-      auto C = getIConstantVRegValWithLookThrough(Off, MRI);
-      if (!C)
+      int64_t OffImm = 0;
+      if (!getConstOpSExt(I.getOperand(3), OffImm))
         return false;
       MachineInstr *MI =
-          MIB.buildInstr(Opc).addDef(DstReg).addReg(Base).addImm(
-              C->Value.getSExtValue());
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+          MIB.buildInstr(Opc).addDef(DstReg).addReg(Base).addImm(OffImm);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     } else {
+      if (!I.getOperand(3).isReg())
+        return false;
+      Register Off = I.getOperand(3).getReg();
       if (Off.isVirtual())
         RBI.constrainGenericRegister(Off, GPR32RegClass, MRI);
       MachineInstr *MI =
           MIB.buildInstr(Opc).addDef(DstReg).addReg(Base).addReg(Off);
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     }
     I.eraseFromParent();
     return true;
@@ -6001,7 +5839,6 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_s_lw_with_imm:
   case haydn_s_lw_with_reg: {
     Register Base = I.getOperand(2).getReg();
-    Register Off = I.getOperand(3).getReg();
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, GPR32RegClass, MRI);
     if (Base.isVirtual())
@@ -6026,19 +5863,21 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                   IntrID == Intrinsic::haydn_s_lhwu_with_imm ||
                   IntrID == Intrinsic::haydn_s_lw_with_imm);
     if (IsImm) {
-      auto C = getIConstantVRegValWithLookThrough(Off, MRI);
-      if (!C)
+      int64_t OffImm = 0;
+      if (!getConstOpSExt(I.getOperand(3), OffImm))
         return false;
       MachineInstr *MI =
-          MIB.buildInstr(Opc).addDef(DstReg).addReg(Base).addImm(
-              C->Value.getSExtValue());
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+          MIB.buildInstr(Opc).addDef(DstReg).addReg(Base).addImm(OffImm);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     } else {
+      if (!I.getOperand(3).isReg())
+        return false;
+      Register Off = I.getOperand(3).getReg();
       if (Off.isVirtual())
         RBI.constrainGenericRegister(Off, GPR32RegClass, MRI);
       MachineInstr *MI =
           MIB.buildInstr(Opc).addDef(DstReg).addReg(Base).addReg(Off);
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     }
     I.eraseFromParent();
     return true;
@@ -6054,7 +5893,6 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     // void store: op0=id, op1=data, op2=base, op3=off (G_INTRINSIC_W_SIDE_EFFECTS)
     Register Data = I.getOperand(1).getReg();
     Register Base = I.getOperand(2).getReg();
-    Register Off = I.getOperand(3).getReg();
     if (Data.isVirtual())
       RBI.constrainGenericRegister(Data, DR64RegClass, MRI);
     if (Base.isVirtual())
@@ -6076,19 +5914,21 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                   IntrID == Intrinsic::haydn_d_sw_h_with_imm ||
                   IntrID == Intrinsic::haydn_d_sw_l_with_imm);
     if (IsImm) {
-      auto C = getIConstantVRegValWithLookThrough(Off, MRI);
-      if (!C)
+      int64_t OffImm = 0;
+      if (!getConstOpSExt(I.getOperand(3), OffImm))
         return false;
       MachineInstr *MI =
-          MIB.buildInstr(Opc).addReg(Data).addReg(Base).addImm(
-              C->Value.getSExtValue());
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+          MIB.buildInstr(Opc).addReg(Data).addReg(Base).addImm(OffImm);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     } else {
+      if (!I.getOperand(3).isReg())
+        return false;
+      Register Off = I.getOperand(3).getReg();
       if (Off.isVirtual())
         RBI.constrainGenericRegister(Off, GPR32RegClass, MRI);
       MachineInstr *MI =
           MIB.buildInstr(Opc).addReg(Data).addReg(Base).addReg(Off);
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     }
     I.eraseFromParent();
     return true;
@@ -6101,7 +5941,6 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_s_sw_with_reg: {
     Register Data = I.getOperand(1).getReg();
     Register Base = I.getOperand(2).getReg();
-    Register Off = I.getOperand(3).getReg();
     if (Data.isVirtual())
       RBI.constrainGenericRegister(Data, GPR32RegClass, MRI);
     if (Base.isVirtual())
@@ -6120,19 +5959,21 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                   IntrID == Intrinsic::haydn_s_shw_with_imm ||
                   IntrID == Intrinsic::haydn_s_sw_with_imm);
     if (IsImm) {
-      auto C = getIConstantVRegValWithLookThrough(Off, MRI);
-      if (!C)
+      int64_t OffImm = 0;
+      if (!getConstOpSExt(I.getOperand(3), OffImm))
         return false;
       MachineInstr *MI =
-          MIB.buildInstr(Opc).addReg(Data).addReg(Base).addImm(
-              C->Value.getSExtValue());
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+          MIB.buildInstr(Opc).addReg(Data).addReg(Base).addImm(OffImm);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     } else {
+      if (!I.getOperand(3).isReg())
+        return false;
+      Register Off = I.getOperand(3).getReg();
       if (Off.isVirtual())
         RBI.constrainGenericRegister(Off, GPR32RegClass, MRI);
       MachineInstr *MI =
           MIB.buildInstr(Opc).addReg(Data).addReg(Base).addReg(Off);
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+      constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     }
     I.eraseFromParent();
     return true;
@@ -6141,9 +5982,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   //===---------------------------------------------------------------===
   // AR unaligned stream (golden LS #103-#109).
   // emit **logical** opcodes only (PLDWWUA / FLAR / …). Slot is NOT in
-  // the opcode — post-RA HR auction writes AltDescs; MC FlexMap materializes
-  // private _S0/_S1/_S2 at encode. Hardwiring *_S0 made dual AR ops look
-  // exclusive-S0 and oversubscribed Bundle128.
+  // the opcode — post-RA HR auction writes AltDescs; leaveRegion setDesc
+  // commits private _S0/_S1/_S2 members (Desc-as-is at encode). Hardwiring
+  // *_S0 made dual AR ops look exclusive-S0 and oversubscribed Bundle128.
   // ar_sel / dir_sel must be compile-time constants (uimm2 / uimm1).
   //
   // Pointer contract: HW AGU post-inc is lowered as a *dead* tied-def so the
@@ -6152,74 +5993,67 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   //===---------------------------------------------------------------===
   case haydn_pldwwua: {
     // void pldwwua(ar_sel, ptr) — G_INTRINSIC_W_SIDE_EFFECTS:
-    // op(0)=id, op(1)=ar_sel, op(2)=ptr. BundleSim writes AR[ar_sel].
-    Register ArSelReg = I.getOperand(1).getReg();
+    // op(0)=id, op(1)=ar_sel ImmArg, op(2)=ptr. BundleSim writes AR[ar_sel].
+    uint64_t ArSel = 0;
     Register PtrReg = I.getOperand(2).getReg();
-    auto ArCst = getIConstantVRegValWithLookThrough(ArSelReg, MRI);
-    if (!ArCst || ArCst->Value.getZExtValue() > 3) {
+    if (!getConstOpZExt(I.getOperand(1), ArSel) || ArSel > 3) {
       LLVM_DEBUG(dbgs() << "PLDWWUA: ar_sel must be constant 0..3\n");
       return false;
     }
     if (PtrReg.isVirtual())
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
-    unsigned ArSel = ArCst->Value.getZExtValue();
     static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1, Haydn::AR2,
                                        Haydn::AR3};
     MachineInstr *MI = MIB.buildInstr(PLDWWUA)
                            .addReg(PtrReg)
-                           .addImm(ArSel)
+                           .addImm(static_cast<int64_t>(ArSel))
                            .addDef(ArRegs[ArSel], RegState::Implicit);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
   case haydn_flar: {
-    // void flar(ar_sel) — op(0)=id, op(1)=ar_sel
+    // void flar(ar_sel) — op(0)=id, op(1)=ar_sel ImmArg
     // BundleSim: pw_ar(ar_sel). Model Def of ARn so PostRA pack cannot
     // co-issue two AR writers on the same stream (B6 AR WRITE_CONFLICT).
-    Register ArSelReg = I.getOperand(1).getReg();
-    auto ArCst = getIConstantVRegValWithLookThrough(ArSelReg, MRI);
-    if (!ArCst || ArCst->Value.getZExtValue() > 3) {
+    uint64_t ArSel = 0;
+    if (!getConstOpZExt(I.getOperand(1), ArSel) || ArSel > 3) {
       LLVM_DEBUG(dbgs() << "FLAR: ar_sel must be constant 0..3\n");
       return false;
     }
-    unsigned ArSel = ArCst->Value.getZExtValue();
     static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1, Haydn::AR2,
                                        Haydn::AR3};
     MachineInstr *MI =
-        MIB.buildInstr(FLAR).addImm(ArSel).addDef(ArRegs[ArSel],
-                                                  RegState::Implicit);
+        MIB.buildInstr(FLAR)
+            .addImm(static_cast<int64_t>(ArSel))
+            .addDef(ArRegs[ArSel], RegState::Implicit);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
   case haydn_wbarwua: {
-    // void wbarwua(ar_sel, ptr, dir_sel)
+    // void wbarwua(ar_sel, ptr, dir_sel) — ar_sel/dir ImmArg (C0.4).
     // op(0)=id, op(1)=ar_sel, op(2)=ptr, op(3)=dir_sel
-    Register ArSelReg = I.getOperand(1).getReg();
+    uint64_t ArSel = 0, DirSel = 0;
     Register PtrReg = I.getOperand(2).getReg();
-    Register DirReg = I.getOperand(3).getReg();
-    auto ArCst = getIConstantVRegValWithLookThrough(ArSelReg, MRI);
-    auto DirCst = getIConstantVRegValWithLookThrough(DirReg, MRI);
-    if (!ArCst || ArCst->Value.getZExtValue() > 3 || !DirCst ||
-        DirCst->Value.getZExtValue() > 1) {
+    if (!getConstOpZExt(I.getOperand(1), ArSel) || ArSel > 3 ||
+        !getConstOpZExt(I.getOperand(3), DirSel) || DirSel > 1) {
       LLVM_DEBUG(dbgs() << "WBARWUA: ar_sel/dir_sel must be constant\n");
       return false;
     }
     if (PtrReg.isVirtual())
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
     // Logical: (outs), (ins GPR32:$rs, uimm2:$ar_sel, uimm1:$dir_sel)
-    unsigned ArSel = ArCst->Value.getZExtValue();
     static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1, Haydn::AR2,
                                        Haydn::AR3};
     MachineInstr *MI = MIB.buildInstr(WBARWUA)
                            .addReg(PtrReg)
-                           .addImm(ArSel)
-                           .addImm(DirCst->Value.getZExtValue())
+                           .addImm(static_cast<int64_t>(ArSel))
+                           .addImm(static_cast<int64_t>(DirSel))
                            .addDef(ArRegs[ArSel], RegState::Implicit)
                            .addUse(ArRegs[ArSel],
                                    RegState::Implicit | RegState::Undef);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -6230,16 +6064,14 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     // C next-ptr is IR GEP (haydn_dsp.h); HW base writeback stays Dead for MC
     // shape. BundleSim also writes AR[ar_sel] — implicit Def so PostRA cannot
     // pack two same-stream UA/FLAR ops (B6 AR WRITE_CONFLICT).
+    // ar_sel/dir ImmArg bare Imm after legalize (C0.4).
     unsigned Opc = (IntrID == haydn_d_lqhwua_post) ? D_LQHWUA_POST
                                                    : D_LTWUA_POST;
     Register PtrReg = I.getOperand(2).getReg();
-    Register ArSelReg = I.getOperand(3).getReg();
     Register StrideReg = I.getOperand(4).getReg();
-    Register DirReg = I.getOperand(5).getReg();
-    auto ArCst = getIConstantVRegValWithLookThrough(ArSelReg, MRI);
-    auto DirCst = getIConstantVRegValWithLookThrough(DirReg, MRI);
-    if (!ArCst || ArCst->Value.getZExtValue() > 3 || !DirCst ||
-        DirCst->Value.getZExtValue() > 1) {
+    uint64_t ArSel = 0, DirSel = 0;
+    if (!getConstOpZExt(I.getOperand(3), ArSel) || ArSel > 3 ||
+        !getConstOpZExt(I.getOperand(5), DirSel) || DirSel > 1) {
       LLVM_DEBUG(dbgs() << "D_*UA_POST load: ar_sel/dir_sel must be const\n");
       return false;
     }
@@ -6249,7 +6081,6 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
     if (StrideReg.isVirtual())
       RBI.constrainGenericRegister(StrideReg, GPR32RegClass, MRI);
-    unsigned ArSel = ArCst->Value.getZExtValue();
     static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1, Haydn::AR2,
                                        Haydn::AR3};
     Register WbReg = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
@@ -6258,12 +6089,12 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                            .addDef(WbReg, RegState::Dead)
                            .addReg(PtrReg)
                            .addReg(StrideReg)
-                           .addImm(ArSel)
-                           .addImm(DirCst->Value.getZExtValue())
+                           .addImm(static_cast<int64_t>(ArSel))
+                           .addImm(static_cast<int64_t>(DirSel))
                            .addDef(ArRegs[ArSel], RegState::Implicit)
                            .addUse(ArRegs[ArSel],
                                    RegState::Implicit | RegState::Undef);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -6275,13 +6106,10 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                                                    : D_STWUA_POST;
     Register DataReg = I.getOperand(1).getReg();
     Register PtrReg = I.getOperand(2).getReg();
-    Register ArSelReg = I.getOperand(3).getReg();
     Register StrideReg = I.getOperand(4).getReg();
-    Register DirReg = I.getOperand(5).getReg();
-    auto ArCst = getIConstantVRegValWithLookThrough(ArSelReg, MRI);
-    auto DirCst = getIConstantVRegValWithLookThrough(DirReg, MRI);
-    if (!ArCst || ArCst->Value.getZExtValue() > 3 || !DirCst ||
-        DirCst->Value.getZExtValue() > 1) {
+    uint64_t ArSel = 0, DirSel = 0;
+    if (!getConstOpZExt(I.getOperand(3), ArSel) || ArSel > 3 ||
+        !getConstOpZExt(I.getOperand(5), DirSel) || DirSel > 1) {
       LLVM_DEBUG(dbgs() << "D_*UA_POST store: ar_sel/dir_sel must be const\n");
       return false;
     }
@@ -6291,7 +6119,6 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
     if (StrideReg.isVirtual())
       RBI.constrainGenericRegister(StrideReg, GPR32RegClass, MRI);
-    unsigned ArSel = ArCst->Value.getZExtValue();
     static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1, Haydn::AR2,
                                        Haydn::AR3};
     Register WbReg = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
@@ -6300,12 +6127,12 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                            .addReg(DataReg)
                            .addReg(PtrReg)
                            .addReg(StrideReg)
-                           .addImm(ArSel)
-                           .addImm(DirCst->Value.getZExtValue())
+                           .addImm(static_cast<int64_t>(ArSel))
+                           .addImm(static_cast<int64_t>(DirSel))
                            .addDef(ArRegs[ArSel], RegState::Implicit)
                            .addUse(ArRegs[ArSel],
                                    RegState::Implicit | RegState::Undef);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
@@ -6342,116 +6169,36 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   //===---------------------------------------------------------------===
   // Wave 5: X2/X4 SIMD immediate shifts (DR64 src, i32 imm) -> DR64
   //===---------------------------------------------------------------===
-  case haydn_x2slli32: {
-    Register Src = I.getOperand(2).getReg();
-    Register ShiftReg = I.getOperand(3).getReg();
-    auto ShiftCst = getIConstantVRegValWithLookThrough(ShiftReg, MRI);
-    if (!ShiftCst) {
-      LLVM_DEBUG(dbgs() << "X2SLLI32: shift amount must be a constant\n");
-      return false;
-    }
-    int64_t ShiftVal = ShiftCst->Value.getSExtValue();
-    if (DstReg.isVirtual())
-      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
-    if (Src.isVirtual())
-      RBI.constrainGenericRegister(Src, DR64RegClass, MRI);
-    MachineInstr *ShiftMI =
-        MIB.buildInstr(X2SLLI32).addDef(DstReg).addReg(Src).addImm(ShiftVal);
-    constrainSelectedInstRegOperands(*ShiftMI, TII, TRI, RBI);
-    I.eraseFromParent();
-    return true;
-  }
-  case haydn_x2srai32: {
-    Register Src = I.getOperand(2).getReg();
-    Register ShiftReg = I.getOperand(3).getReg();
-    auto ShiftCst = getIConstantVRegValWithLookThrough(ShiftReg, MRI);
-    if (!ShiftCst) {
-      LLVM_DEBUG(dbgs() << "X2SRAI32: shift amount must be a constant\n");
-      return false;
-    }
-    int64_t ShiftVal = ShiftCst->Value.getSExtValue();
-    if (DstReg.isVirtual())
-      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
-    if (Src.isVirtual())
-      RBI.constrainGenericRegister(Src, DR64RegClass, MRI);
-    MachineInstr *ShiftMI =
-        MIB.buildInstr(X2SRAI32).addDef(DstReg).addReg(Src).addImm(ShiftVal);
-    constrainSelectedInstRegOperands(*ShiftMI, TII, TRI, RBI);
-    I.eraseFromParent();
-    return true;
-  }
-  case haydn_x2srli32: {
-    Register Src = I.getOperand(2).getReg();
-    Register ShiftReg = I.getOperand(3).getReg();
-    auto ShiftCst = getIConstantVRegValWithLookThrough(ShiftReg, MRI);
-    if (!ShiftCst) {
-      LLVM_DEBUG(dbgs() << "X2SRLI32: shift amount must be a constant\n");
-      return false;
-    }
-    int64_t ShiftVal = ShiftCst->Value.getSExtValue();
-    if (DstReg.isVirtual())
-      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
-    if (Src.isVirtual())
-      RBI.constrainGenericRegister(Src, DR64RegClass, MRI);
-    MachineInstr *ShiftMI =
-        MIB.buildInstr(X2SRLI32).addDef(DstReg).addReg(Src).addImm(ShiftVal);
-    constrainSelectedInstRegOperands(*ShiftMI, TII, TRI, RBI);
-    I.eraseFromParent();
-    return true;
-  }
-  case haydn_x4slli16: {
-    Register Src = I.getOperand(2).getReg();
-    Register ShiftReg = I.getOperand(3).getReg();
-    auto ShiftCst = getIConstantVRegValWithLookThrough(ShiftReg, MRI);
-    if (!ShiftCst) {
-      LLVM_DEBUG(dbgs() << "X4SLLI16: shift amount must be a constant\n");
-      return false;
-    }
-    int64_t ShiftVal = ShiftCst->Value.getSExtValue();
-    if (DstReg.isVirtual())
-      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
-    if (Src.isVirtual())
-      RBI.constrainGenericRegister(Src, DR64RegClass, MRI);
-    MachineInstr *ShiftMI =
-        MIB.buildInstr(X4SLLI16).addDef(DstReg).addReg(Src).addImm(ShiftVal);
-    constrainSelectedInstRegOperands(*ShiftMI, TII, TRI, RBI);
-    I.eraseFromParent();
-    return true;
-  }
-  case haydn_x4srai16: {
-    Register Src = I.getOperand(2).getReg();
-    Register ShiftReg = I.getOperand(3).getReg();
-    auto ShiftCst = getIConstantVRegValWithLookThrough(ShiftReg, MRI);
-    if (!ShiftCst) {
-      LLVM_DEBUG(dbgs() << "X4SRAI16: shift amount must be a constant\n");
-      return false;
-    }
-    int64_t ShiftVal = ShiftCst->Value.getSExtValue();
-    if (DstReg.isVirtual())
-      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
-    if (Src.isVirtual())
-      RBI.constrainGenericRegister(Src, DR64RegClass, MRI);
-    MachineInstr *ShiftMI =
-        MIB.buildInstr(X4SRAI16).addDef(DstReg).addReg(Src).addImm(ShiftVal);
-    constrainSelectedInstRegOperands(*ShiftMI, TII, TRI, RBI);
-    I.eraseFromParent();
-    return true;
-  }
+  case haydn_x2slli32:
+  case haydn_x2srai32:
+  case haydn_x2srli32:
+  case haydn_x4slli16:
+  case haydn_x4srai16:
   case haydn_x4srli16: {
+    // ImmArg shift amount (C0.4): bare Imm or G_CONSTANT vreg.
     Register Src = I.getOperand(2).getReg();
-    Register ShiftReg = I.getOperand(3).getReg();
-    auto ShiftCst = getIConstantVRegValWithLookThrough(ShiftReg, MRI);
-    if (!ShiftCst) {
-      LLVM_DEBUG(dbgs() << "X4SRLI16: shift amount must be a constant\n");
+    int64_t ShiftVal = 0;
+    if (!getConstOpSExt(I.getOperand(3), ShiftVal)) {
+      LLVM_DEBUG(dbgs() << "X2/X4 imm shift: amount must be a constant\n");
       return false;
     }
-    int64_t ShiftVal = ShiftCst->Value.getSExtValue();
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
     if (Src.isVirtual())
       RBI.constrainGenericRegister(Src, DR64RegClass, MRI);
+    unsigned Opc = X2SLLI32;
+    switch (IntrID) {
+    case Intrinsic::haydn_x2slli32: Opc = X2SLLI32; break;
+    case Intrinsic::haydn_x2srai32: Opc = X2SRAI32; break;
+    case Intrinsic::haydn_x2srli32: Opc = X2SRLI32; break;
+    case Intrinsic::haydn_x4slli16: Opc = X4SLLI16; break;
+    case Intrinsic::haydn_x4srai16: Opc = X4SRAI16; break;
+    case Intrinsic::haydn_x4srli16: Opc = X4SRLI16; break;
+    default:
+      llvm_unreachable("unexpected X2/X4 imm shift");
+    }
     MachineInstr *ShiftMI =
-        MIB.buildInstr(X4SRLI16).addDef(DstReg).addReg(Src).addImm(ShiftVal);
+        MIB.buildInstr(Opc).addDef(DstReg).addReg(Src).addImm(ShiftVal);
     constrainSelectedInstRegOperands(*ShiftMI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
@@ -6473,10 +6220,11 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_x2hadd32s_l: return selectUnary(X2HADD32S_L, DR64RegClass);
   case haydn_x4hadd16_h:  return selectUnary(X4HADD16_H,  DR64RegClass);
   case haydn_x4hadd16_l:  return selectUnary(X4HADD16_L,  DR64RegClass);
-  case haydn_x2hmax32: return selectUnary(X2HMAX32, DR64RegClass);
-  case haydn_x2hmin32: return selectUnary(X2HMIN32, DR64RegClass);
-  case haydn_x4hmax16: return selectUnary(X4HMAX16, DR64RegClass);
-  case haydn_x4hmin16: return selectUnary(X4HMIN16, DR64RegClass);
+  // R_GD horizontal max/min: DR64 src → GPR32 dst (not unary DR64).
+  case haydn_x2hmax32: return selectUnaryR_GD(X2HMAX32);
+  case haydn_x2hmin32: return selectUnaryR_GD(X2HMIN32);
+  case haydn_x4hmax16: return selectUnaryR_GD(X4HMAX16);
+  case haydn_x4hmin16: return selectUnaryR_GD(X4HMIN16);
 
   //===---------------------------------------------------------------===
   // Wave 5: X2/X4 SIMD dot product (binary DR64)
@@ -6545,7 +6293,6 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_x4sel16: {
     Register Src0 = I.getOperand(2).getReg();
     Register Src1 = I.getOperand(3).getReg();
-    Register MaskReg = I.getOperand(4).getReg();
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
     if (Src0.isVirtual())
@@ -6554,21 +6301,21 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(Src1, DR64RegClass, MRI);
 
     MachineInstr *SelMI = nullptr;
-    // haydn_x4seli16: prefer imm encoding when mask is constant uimm4.
+    // haydn_x4seli16: ImmArg mask (uimm4 bare Imm after C0.4).
     // haydn_x4sel16: always reg form (explicit reg API).
     if (IntrID == Intrinsic::haydn_x4seli16) {
-      if (auto ImmCst = getIConstantVRegValWithLookThrough(MaskReg, MRI)) {
-        int64_t ImmVal = ImmCst->Value.getZExtValue();
-        if (ImmVal >= 0 && ImmVal <= 15) {
-          SelMI = MIB.buildInstr(X4SELI16)
-                      .addDef(DstReg)
-                      .addReg(Src0)
-                      .addReg(Src1)
-                      .addImm(ImmVal);
-        }
+      uint64_t ImmVal = 0;
+      if (!getConstOpZExt(I.getOperand(4), ImmVal) || ImmVal > 15) {
+        LLVM_DEBUG(dbgs() << "X4SELI16: mask must be constant uimm4\n");
+        return false;
       }
-    }
-    if (!SelMI) {
+      SelMI = MIB.buildInstr(X4SELI16)
+                  .addDef(DstReg)
+                  .addReg(Src0)
+                  .addReg(Src1)
+                  .addImm(static_cast<int64_t>(ImmVal));
+    } else {
+      Register MaskReg = I.getOperand(4).getReg();
       if (MaskReg.isVirtual())
         RBI.constrainGenericRegister(MaskReg, GPR32RegClass, MRI);
       SelMI = MIB.buildInstr(X4SEL16)
@@ -6596,30 +6343,21 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     I.eraseFromParent();
     return true;
   }
-  case haydn_popcount64: {
-    // POPCOUNT64 rt, rsd — cross-bank DR64 src -> GPR32 dst.
-    Register Src = I.getOperand(2).getReg();
-    if (DstReg.isVirtual())
-      RBI.constrainGenericRegister(DstReg, GPR32RegClass, MRI);
-    if (Src.isVirtual())
-      RBI.constrainGenericRegister(Src, DR64RegClass, MRI);
-    MachineInstr *MI = MIB.buildInstr(POPCOUNT64).addDef(DstReg).addReg(Src);
-    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
-    I.eraseFromParent();
-    return true;
-  }
+  case haydn_popcount64:
+    // POPCOUNT64 rt, rsd — R_GD cross-bank DR64 src -> GPR32 dst.
+    return selectUnaryR_GD(POPCOUNT64);
   case haydn_arctan: {
-    // ARCTAN rt, rsd, uimm4 — GPR32 dst, DR64 src, 16-bit imm.
+    // ARCTAN rt, rsd, uimm4 — GPR32 dst, DR64 src, ImmArg uimm4 (C0.4).
     Register Src = I.getOperand(2).getReg();
-    auto ImmCst = getIConstantVRegValWithLookThrough(I.getOperand(3).getReg(), MRI);
-    if (!ImmCst)
+    int64_t ImmVal = 0;
+    if (!getConstOpSExt(I.getOperand(3), ImmVal))
       return false;
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, GPR32RegClass, MRI);
     if (Src.isVirtual())
       RBI.constrainGenericRegister(Src, DR64RegClass, MRI);
-    MachineInstr *MI = MIB.buildInstr(ARCTAN).addDef(DstReg).addReg(Src)
-                           .addImm(ImmCst->Value.getSExtValue());
+    MachineInstr *MI =
+        MIB.buildInstr(ARCTAN).addDef(DstReg).addReg(Src).addImm(ImmVal);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;

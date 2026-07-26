@@ -97,9 +97,10 @@ body:             |
     %0:_(s32) = COPY $r1
     %1:_(s8) = G_TRUNC %0(s32)
     %2:_(s32) = G_ZEXT %1(s8)
-    ; The G_TRUNC of G_ZEXT back to the original type is identity -> COPY.
+    ; G_TRUNC(G_ZEXT) identity + further zext collapse via cast_combines:
+    ; trunc_zext fold removes the intermediate round-trip, leaving one G_ZEXT.
     ; CHECK-NOT: G_TRUNC %2
-    ; CHECK: COPY %1
+    ; CHECK: G_ZEXT %1
     %3:_(s8) = G_TRUNC %2(s32)
     %4:_(s32) = G_ZEXT %3(s8)
     $r1 = COPY %4(s32)
@@ -117,9 +118,10 @@ body:             |
     %0:_(s32) = COPY $r1
     %1:_(s8) = G_TRUNC %0(s32)
     %2:_(s32) = G_SEXT %1(s8)
-    ; The G_TRUNC of G_SEXT back to the original type is identity -> COPY.
+    ; G_TRUNC(G_SEXT) identity via cast_combines; subsequent anyext of the
+    ; recovered s8 may further collapse (anyext_trunc / cast chains).
+    ; CHECK-NOT: G_SEXT
     ; CHECK-NOT: G_TRUNC %2
-    ; CHECK: COPY %1
     %3:_(s8) = G_TRUNC %2(s32)
     %4:_(s32) = G_ANYEXT %3(s8)
     $r1 = COPY %4(s32)

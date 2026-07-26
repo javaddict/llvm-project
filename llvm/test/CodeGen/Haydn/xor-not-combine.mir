@@ -15,7 +15,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: xor_zero
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 0
     ; CHECK-NOT: G_XOR
     ; CHECK: COPY %0
@@ -30,7 +31,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: xor_zero_commuted
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 0
     ; CHECK-NOT: G_XOR
     ; CHECK: COPY %0
@@ -45,7 +47,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: double_not
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 -1
     %2:_(s32) = G_XOR %0, %1
     ; CHECK-NOT: G_XOR
@@ -61,7 +64,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: xor_zero_i64
-    %0:_(s64) = G_IMPLICIT_DEF
+    liveins: $d0
+    %0:_(s64) = COPY $d0
     %1:_(s64) = G_CONSTANT i64 0
     ; CHECK-NOT: G_XOR
     ; CHECK: COPY %0
@@ -76,7 +80,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: double_not_i64
-    %0:_(s64) = G_IMPLICIT_DEF
+    liveins: $d0
+    %0:_(s64) = COPY $d0
     %1:_(s64) = G_CONSTANT i64 -1
     %2:_(s64) = G_XOR %0, %1
     ; CHECK-NOT: G_XOR
@@ -92,7 +97,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: xor_nonzero
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 42
     ; CHECK: G_XOR
     %2:_(s32) = G_XOR %0, %1
@@ -106,7 +112,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: single_not
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 -1
     ; CHECK: G_XOR
     %2:_(s32) = G_XOR %0, %1

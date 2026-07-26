@@ -176,12 +176,12 @@ body:             |
 ...
 
 ---
-# Negative test: sge predicate — should NOT combine (only sgt/slt/ugt/ult).
-name:            select_sge_no_combine
+# sge is covered by TableGen select_to_iminmax (not only strict sgt/slt).
+name:            select_sge_smax
 legalized:       true
-# CHECK-LABEL: name: select_sge_no_combine
-# CHECK: G_SELECT
-# CHECK-NOT: G_SMAX
+# CHECK-LABEL: name: select_sge_smax
+# CHECK: G_SMAX
+# CHECK-NOT: G_SELECT
 body:             |
   bb.0.entry:
     liveins: $r0, $r1

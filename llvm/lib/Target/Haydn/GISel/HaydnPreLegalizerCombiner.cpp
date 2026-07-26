@@ -8,21 +8,24 @@
 // \file
 // Pre-legalization combines on generic MachineInstrs for the Haydn target.
 // This combiner runs before the Legalizer, operating on fully generic G_*
-// instructions. It performs target-specific simplifications that reduce IR
-// complexity before type/action legalization, including:
-// Trunc elimination: G_TRUNC(G_ANYEXT x) -> COPY x
-// Extension simplification: G_SEXT(G_SEXT x) -> G_SEXT x, etc.
-// Redundant AND/OR with all-ones/all-zeros
-// Constant folding for binary ops
-// Shift by zero elimination
-// Address arithmetic: chained G_PTR_ADD constant folding
-// These combines leverage LLVM's generic CombinerHelper where possible and
-// add Haydn-specific patterns on top.
+// instructions.
+//
+// TableGen (HaydnCombine.td) owns the rule registry:
+//   haydn_pre_generic_combines  — shared generics + intdiv/intrem
+//   haydn_pre_target_combines   — form_mula64 (G_MULA64 / G_MULA64U)
+// Dispatched exclusively via tryCombineAllImpl. Pass shell has no free-form
+// opcode switch.
+//
+// C++ residual is match/apply helpers for TD-registered target fuses only:
+//   - matchCombineMULA64 / applyCombineMULA64 (ss/uu low-lane widening MAC)
+// Cast identities (trunc-of-ext, ext-of-ext) live in cast_combines — no dual
+// home. Product MAC = intrinsic + G_MULA64 (this combiner).
 //===----------------------------------------------------------------------===//
 
 #include "HaydnPreLegalizerCombiner.h"
-#include "MCTargetDesc/HaydnMCTargetDesc.h" // GET_INSTRINFO_ENUM -> Haydn::G_MULA64
+#include "MCTargetDesc/HaydnMCTargetDesc.h" // GET_INSTRINFO_ENUM -> G_MULA64{,U}
 #include "HaydnSubtarget.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/GlobalISel/CSEInfo.h"
 #include "llvm/CodeGen/GlobalISel/Combiner.h"
 #include "llvm/CodeGen/GlobalISel/CombinerHelper.h"
@@ -51,172 +54,31 @@ namespace {
 #include "HaydnGenPreLegalizeGICombiner.inc"
 #undef GET_GICOMBINER_TYPES
 
-// Match G_TRUNC(G_SEXT/G_ZEXT x) where the trunc output type equals the
-// extension's input type. A truncate cancels a sign/zero extension when the
-// narrowed result width matches the value's pre-extension width, so the pair
-// is identity and can be replaced with a COPY of the inner source.
-// Canonicalizing this HERE (in the pre-legalizer) prevents the upstream
-// Legalizer's artifact-combiner `trunc(trunc)` fold from observing a chain
-// whose inner source has already been narrowed to a mismatched width, which
-// otherwise trips `MachineIRBuilder::validateTruncExt` ("invalid widening
-// trunc") on yarpgen-style nested cast chains such as
-// `(long long)X >> (long long)(int)(bool)Y`. Folding the identity before
-// the Legalizer sees it removes the too-narrow inner source entirely.
-bool matchTruncOfExtToIdentity(MachineInstr &MI, MachineRegisterInfo &MRI,
-                               Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_TRUNC);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Src = MI.getOperand(1).getReg();
-  LLT DstTy = MRI.getType(Dst);
-
-  // G_TRUNC(G_SEXT x) where output type == sext input type
-  Register InnerSrc;
-  if (mi_match(Src, MRI, m_GSExt(m_Reg(InnerSrc)))) {
-    if (DstTy == MRI.getType(InnerSrc)) {
-      MatchInfo = InnerSrc;
-      return true;
-    }
-  }
-  // G_TRUNC(G_ZEXT x) where output type == zext input type
-  if (mi_match(Src, MRI, m_GZExt(m_Reg(InnerSrc)))) {
-    if (DstTy == MRI.getType(InnerSrc)) {
-      MatchInfo = InnerSrc;
-      return true;
-    }
-  }
-  return false;
-}
-
-// Match G_TRUNC(G_ANYEXT x) where the trunc output type matches the
-// anyext input type. This is a no-op identity that can be replaced
-// with a COPY.
-bool matchTruncOfAnyExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                        Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_TRUNC);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Src = MI.getOperand(1).getReg();
-  LLT DstTy = MRI.getType(Dst);
-
-  // Look through G_ANYEXT: if the source is G_ANYEXT and the trunc output
-  // type matches the anyext input type, this is a no-op.
-  Register AnyExtSrc;
-  if (mi_match(Src, MRI, m_GAnyExt(m_Reg(AnyExtSrc)))) {
-    LLT InnerTy = MRI.getType(AnyExtSrc);
-    if (DstTy == InnerTy) {
-      MatchInfo = AnyExtSrc;
-      return true;
-    }
-  }
-
-  return false;
-}
-
-// Apply the trunc-of-ext combine: replace with COPY. Shared apply helper
-// for matchTruncOfExtToIdentity (sext/zext) and matchTruncOfAnyExt (anyext)
-// all three ext flavors collapse to the same COPY-of-inner-source shape.
-void applyTruncOfExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                     MachineIRBuilder &Builder,
-                     GISelChangeObserver &Observer,
-                     Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_TRUNC);
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  // Replace G_TRUNC with COPY
-  MI.setDesc(MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_SEXT(G_SEXT x) or G_ZEXT(G_ZEXT x) — collapse cascading same-kind
-// extensions into a single extend from the original source.
-// the old apply rewrote the outer ext to `COPY InnerSrc`, which is
-// only valid when DstTy == type(InnerSrc). For `s64 = G_SEXT(s32 =
-// G_SEXT(s1))` that produced `s64 = COPY s1` (type-mismatched COPY).
-// Upstream getIConstantVRegValWithLookThrough follows COPY without
-// adjusting APInt width; a later G_TRUNC then asserts in APInt::trunc.
-bool matchRedundantExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                       Register &MatchInfo) {
-  unsigned Opc = MI.getOpcode();
-  assert(Opc == TargetOpcode::G_SEXT || Opc == TargetOpcode::G_ZEXT);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Src = MI.getOperand(1).getReg();
-  LLT DstTy = MRI.getType(Dst);
-
-  Register InnerSrc;
-  if ((Opc == TargetOpcode::G_SEXT &&
-       mi_match(Src, MRI, m_GSExt(m_Reg(InnerSrc)))) ||
-      (Opc == TargetOpcode::G_ZEXT &&
-       mi_match(Src, MRI, m_GZExt(m_Reg(InnerSrc))))) {
-    // Only fold when the inner ext is single-use (else we'd duplicate it)
-    // and the original source is strictly narrower than the outer dest.
-    if (!MRI.hasOneNonDBGUse(Src))
-      return false;
-    LLT InnerTy = MRI.getType(InnerSrc);
-    if (!InnerTy.isValid() || !DstTy.isValid() ||
-        InnerTy.getSizeInBits() >= DstTy.getSizeInBits())
-      return false;
-    MatchInfo = InnerSrc;
-    return true;
-  }
-
-  return false;
-}
-
-// Apply double-ext collapse: replace outer G_SEXT/G_ZEXT with a single
-// extend from InnerSrc to the outer destination type. When types already
-// match (true no-op), use COPY.
-void applyRedundantExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                       MachineIRBuilder &Builder,
-                       GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Register Dst = MI.getOperand(0).getReg();
-  LLT DstTy = MRI.getType(Dst);
-  LLT SrcTy = MRI.getType(MatchInfo);
-  Observer.erasingInstr(MI);
-  if (DstTy == SrcTy) {
-    Builder.buildCopy(Dst, MatchInfo);
-  } else if (MI.getOpcode() == TargetOpcode::G_SEXT) {
-    Builder.buildSExt(Dst, MatchInfo);
-  } else {
-    Builder.buildZExt(Dst, MatchInfo);
-  }
-  MI.eraseFromParent();
-}
-
-// Peel through COPY chains to find the real defining instruction of \p Reg.
-// Depth-capped (mirrors HaydnPostSelectOptimize::peekThroughCopies).
-static MachineInstr *peekThroughCopies(Register Reg, MachineRegisterInfo &MRI) {
-  unsigned Depth = 0;
-  while (Reg.isVirtual() && Depth < 6) {
-    MachineInstr *DefMI = MRI.getVRegDef(Reg);
-    if (!DefMI || !DefMI->isCopy())
-      return DefMI;
-    Register SrcReg = DefMI->getOperand(1).getReg();
-    if (!SrcReg.isVirtual())
-      return DefMI;
-    Reg = SrcReg;
-    ++Depth;
-  }
-  return Reg.isVirtual() ? MRI.getVRegDef(Reg) : nullptr;
-}
-
-// Match info for early widening MAC fusion.
+// Match info for early widening MAC fusion (TD form_mula64).
 struct MULA64CombineInfo {
-  Register Acc;   //< s64 accumulator.
-  Register MulA;  //< s64 multiply source 1 (a G_SEXT of s32).
-  Register MulB;  //< s64 multiply source 2 (a G_SEXT of s32).
-  MachineInstr *MulMI = nullptr; //< The G_MUL being folded (to erase).
+  Register Acc;  // s64 accumulator.
+  Register MulA; // s64 multiply source 1 (G_SEXT/G_ZEXT of s32).
+  Register MulB; // s64 multiply source 2 (G_SEXT/G_ZEXT of s32).
+  MachineInstr *MulMI = nullptr; // The G_MUL being folded (to erase).
+  // Single-use COPYs between the G_MUL def and the G_ADD use (to erase).
+  SmallVector<MachineInstr *, 4> DeadCopies;
+  // G_MULA64 (ss → MULA64_LL) or G_MULA64U (uu → MULA64_ULUL).
+  unsigned TargetOpc = Haydn::G_MULA64;
 };
 
-// Match G_ADD<s64>(acc, G_MUL<s64>(G_SEXT s32, G_SEXT s32)) -> G_MULA64.
-// Signed-signed only: both G_MUL operands must be G_SEXT of s32 (the `_ss_`
-// accumulator variant -- unsigned/mixed `_su_`/`_uu_` have no accumulator form
-// and are not fused). Both G_ADD operand orders accepted. The G_MUL result
-// must be single-use. COPY chains on the mul-def and accumulator are peeled.
-static bool matchCombineMULA64(MachineInstr &MI, MachineRegisterInfo &MRI,
-                               MULA64CombineInfo &MatchInfo) {
+// Match G_ADD<s64>(acc, G_MUL<s64>(ext s32, ext s32)) -> G_MULA64{,U}.
+//
+// Supported (low-lane only; high-lane / mixed-sign stay intrinsic-only):
+//   G_SEXT  x G_SEXT  -> G_MULA64  -> MULA64_LL   (signed x signed)
+//   G_ZEXT  x G_ZEXT  -> G_MULA64U -> MULA64_ULUL (unsigned x unsigned)
+//   G_ANYEXT x G_ANYEXT (or mixed with ZEXT) -> G_MULA64U (same as legalizer)
+//
+// NOT fused: mixed SEXT×ZEXT, high-lane LH/HL/HH, subtract forms (MULS64_*).
+// Both G_ADD operand orders accepted. G_MUL result and any intermediate COPY
+// chain from mul to add must be single-use.
+// COPY chains on the mul-def and accumulator are peeled; dead COPYs erased.
+bool matchCombineMULA64(MachineInstr &MI, MachineRegisterInfo &MRI,
+                        MULA64CombineInfo &MatchInfo) {
   assert(MI.getOpcode() == TargetOpcode::G_ADD);
   Register Dst = MI.getOperand(0).getReg();
   if (MRI.getType(Dst) != LLT::scalar(64))
@@ -226,76 +88,142 @@ static bool matchCombineMULA64(MachineInstr &MI, MachineRegisterInfo &MRI,
   if (!Src0.isVirtual() || !Src1.isVirtual())
     return false;
 
-  // Match a single-use G_MUL<s64> whose BOTH operands are G_SEXT of s32.
-  // Returns the G_MUL MI and records the s64 G_SEXT results (not the s32
-  // MULA64_LL takes DR64 s64 operands; the lane is implicitly the low lane).
-  auto tryOperand = [&](Register MaybeMulReg,
-                        Register AccReg) -> MachineInstr * {
-    MachineInstr *MulDef = peekThroughCopies(MaybeMulReg, MRI);
-    if (!MulDef || MulDef->getOpcode() != TargetOpcode::G_MUL)
+  // Peel a single-use COPY chain from \p Start back to a G_MUL. Each
+  // intermediate COPY must have exactly one non-dbg use so apply can erase
+  // the chain without leaving the mul live. Caps depth at 6.
+  auto peelMulThroughCopies =
+      [&](Register Start,
+          SmallVectorImpl<MachineInstr *> &Copies) -> MachineInstr * {
+    Copies.clear();
+    Register Cur = Start;
+    for (unsigned Depth = 0; Depth < 6; ++Depth) {
+      if (!Cur.isVirtual())
+        return nullptr;
+      MachineInstr *Def = MRI.getVRegDef(Cur);
+      if (!Def)
+        return nullptr;
+      if (Def->isCopy()) {
+        Register CopyDst = Def->getOperand(0).getReg();
+        Register CopySrc = Def->getOperand(1).getReg();
+        if (!CopyDst.isVirtual() || !CopySrc.isVirtual())
+          return nullptr;
+        // The first link (Start) is used by the G_ADD; subsequent links are
+        // used only by the previous COPY. All must be single-use.
+        if (!MRI.hasOneNonDBGUse(CopyDst))
+          return nullptr;
+        Copies.push_back(Def);
+        Cur = CopySrc;
+        continue;
+      }
+      if (Def->getOpcode() == TargetOpcode::G_MUL)
+        return Def;
       return nullptr;
+    }
+    return nullptr;
+  };
+
+  // Match a single-use G_MUL<s64> whose BOTH operands are same-kind
+  // extensions of s32. MULA64_* take DR64 s64 operands; the lane is
+  // implicitly the low lane (ext places the s32 in bits [31:0]).
+  auto tryOperand = [&](Register MaybeMulReg, Register AccReg) -> bool {
+    SmallVector<MachineInstr *, 4> CopyChain;
+    MachineInstr *MulDef = peelMulThroughCopies(MaybeMulReg, CopyChain);
+    if (!MulDef)
+      return false;
     Register MulDefReg = MulDef->getOperand(0).getReg();
     if (MRI.getType(MulDefReg) != LLT::scalar(64))
-      return nullptr;
+      return false;
+    // Mul result must be single-use: either the G_ADD directly, or the first
+    // COPY in the chain that leads to the G_ADD.
     if (!MRI.hasOneNonDBGUse(MulDefReg))
-      return nullptr;
+      return false;
+
     Register A = MulDef->getOperand(1).getReg();
     Register B = MulDef->getOperand(2).getReg();
-    // Both multiply sources must be G_SEXT of s32 (signed-signed, `_ss_`).
-    auto isSExtS32 = [&](Register R, Register &Wide) -> bool {
+    // Classify each mul source as SEXT-of-s32, unsigned-ext-of-s32, or fail.
+    // Returns: 1 = SEXT, 2 = ZEXT/ANYEXT, 0 = not a widening ext of s32.
+    auto extKindOfS32 = [&](Register R, Register &Wide) -> int {
       if (!R.isVirtual())
-        return false;
+        return 0;
       MachineInstr *Def = MRI.getVRegDef(R);
-      if (!Def || Def->getOpcode() != TargetOpcode::G_SEXT)
-        return false;
+      if (!Def)
+        return 0;
+      unsigned Op = Def->getOpcode();
+      if (Op != TargetOpcode::G_SEXT && Op != TargetOpcode::G_ZEXT &&
+          Op != TargetOpcode::G_ANYEXT)
+        return 0;
       Register Narrow = Def->getOperand(1).getReg();
-      if (MRI.getType(Narrow) != LLT::scalar(32))
-        return false;
-      Wide = R; // the s64 G_SEXT result
-      return true;
+      if (!Narrow.isVirtual() || MRI.getType(Narrow) != LLT::scalar(32))
+        return 0;
+      Wide = R; // the s64 extension result
+      return Op == TargetOpcode::G_SEXT ? 1 : 2;
     };
     Register WideA, WideB;
-    if (!isSExtS32(A, WideA) || !isSExtS32(B, WideB))
-      return nullptr;
-    // Bypass a COPY on the accumulator input.
-    MachineInstr *AccDef = peekThroughCopies(AccReg, MRI);
-    if (AccDef && AccDef->isCopy()) {
+    int KindA = extKindOfS32(A, WideA);
+    int KindB = extKindOfS32(B, WideB);
+    if (!KindA || !KindB)
+      return false;
+    // Homogeneous signedness only. Mixed SEXT×ZEXT needs ordered LUL/ULL
+    // and is left for the legalizer schoolbook + separate mul/add.
+    if (KindA != KindB)
+      return false;
+    unsigned TargetOpc = KindA == 1 ? Haydn::G_MULA64 : Haydn::G_MULA64U;
+
+    // Peel single-use COPYs on the accumulator (do not erase — still live).
+    Register PeeledAcc = AccReg;
+    for (unsigned Depth = 0; Depth < 6; ++Depth) {
+      if (!PeeledAcc.isVirtual())
+        break;
+      MachineInstr *AccDef = MRI.getVRegDef(PeeledAcc);
+      if (!AccDef || !AccDef->isCopy())
+        break;
       Register AccSrc = AccDef->getOperand(1).getReg();
-      if (AccSrc.isVirtual())
-        AccReg = AccSrc;
+      if (!AccSrc.isVirtual())
+        break;
+      PeeledAcc = AccSrc;
     }
-    MatchInfo.Acc = AccReg;
+
+    MatchInfo.Acc = PeeledAcc;
     MatchInfo.MulA = WideA;
     MatchInfo.MulB = WideB;
     MatchInfo.MulMI = MulDef;
-    return MulDef;
+    MatchInfo.DeadCopies = std::move(CopyChain);
+    MatchInfo.TargetOpc = TargetOpc;
+    return true;
   };
 
   if (tryOperand(Src0, Src1))
     return true;
-  return tryOperand(Src1, Src0) != nullptr;
+  return tryOperand(Src1, Src0);
 }
 
-// Rewrite G_ADD in place into G_MULA64 rd, ra, rs1, rs2; erase the dead G_MUL.
-// The s64 G_SEXT results become the multiply sources (rs1, rs2); the low-lane
-// selection of MULA64_LL is implicit (G_SEXT places the s32 in the low lane).
-static void applyCombineMULA64(MachineInstr &MI, MachineRegisterInfo &MRI,
-                               MachineIRBuilder &Builder,
-                               GISelChangeObserver &Observer,
-                               MULA64CombineInfo &MatchInfo) {
+// Rewrite G_ADD in place into G_MULA64{,U} rd, ra, rs1, rs2; erase dead
+// G_MUL and any intermediate single-use COPYs that linked mul to add.
+void applyCombineMULA64(MachineInstr &MI, MachineRegisterInfo &MRI,
+                        MachineIRBuilder &Builder, GISelChangeObserver &Observer,
+                        MULA64CombineInfo &MatchInfo) {
   assert(MI.getOpcode() == TargetOpcode::G_ADD);
+  assert(MatchInfo.TargetOpc == Haydn::G_MULA64 ||
+         MatchInfo.TargetOpc == Haydn::G_MULA64U);
   Builder.setInstrAndDebugLoc(MI);
   Observer.changingInstr(MI);
-  // Rewrite the G_ADD in place into G_MULA64 rd, ra, rs1, rs2.
+  // Rewrite the G_ADD in place into G_MULA64 / G_MULA64U rd, ra, rs1, rs2.
   MI.setDesc(Builder.getMF().getSubtarget().getInstrInfo()->get(
-      Haydn::G_MULA64));
-  MI.removeOperand(2);                 // drop old src1
-  MI.removeOperand(1);                 // drop old src0
+      MatchInfo.TargetOpc));
+  MI.removeOperand(2); // drop old src1
+  MI.removeOperand(1); // drop old src0
   MI.addOperand(MachineOperand::CreateReg(MatchInfo.Acc, false));  // ra
   MI.addOperand(MachineOperand::CreateReg(MatchInfo.MulA, false)); // rs1
   MI.addOperand(MachineOperand::CreateReg(MatchInfo.MulB, false)); // rs2
   Observer.changedInstr(MI);
-  // Erase the now-dead G_MUL. Its single use (the old G_ADD) is gone.
+
+  // Erase intermediate COPYs first (they held the mul live), then the mul.
+  for (MachineInstr *CopyMI : MatchInfo.DeadCopies) {
+    assert(MRI.use_empty(CopyMI->getOperand(0).getReg()) &&
+           "G_MULA64 fusion left a COPY with live uses");
+    Observer.erasingInstr(*CopyMI);
+    CopyMI->eraseFromParent();
+  }
   if (MatchInfo.MulMI) {
     assert(MRI.use_empty(MatchInfo.MulMI->getOperand(0).getReg()) &&
            "G_MULA64 fusion left the G_MUL with live uses");
@@ -349,163 +277,9 @@ HaydnPreLegalizerCombinerImpl::HaydnPreLegalizerCombinerImpl(
 }
 
 bool HaydnPreLegalizerCombinerImpl::tryCombineAll(MachineInstr &MI) const {
-  if (tryCombineAllImpl(MI))
-    return true;
-
-  unsigned Opc = MI.getOpcode();
-  switch (Opc) {
-  default:
-    break;
-  case TargetOpcode::G_TRUNC: {
-    // G_TRUNC(G_SEXT/G_ZEXT x) -> COPY x (identity when dest == ext input)
-    // Run before the anyext fold: sext/zext carry semantic payload the
-    // generic anyext rule does not peek through, and collapsing the
-    // identity here starves the Legalizer artifact sweep of the
-    // trunc(trunc) shape that would otherwise crash validateTruncExt.
-    Register MatchInfo;
-    if (matchTruncOfExtToIdentity(MI, *B.getMRI(), MatchInfo)) {
-      applyTruncOfExt(const_cast<MachineInstr &>(MI), *B.getMRI(), B,
-                      Observer, MatchInfo);
-      return true;
-    }
-    // G_TRUNC(G_ANYEXT x) -> COPY x
-    // Eliminates trivial trunc-of-anyext patterns that the IRTranslator
-    // can produce for certain integer width conversions.
-    if (matchTruncOfAnyExt(MI, *B.getMRI(), MatchInfo)) {
-      applyTruncOfExt(const_cast<MachineInstr &>(MI), *B.getMRI(), B,
-                      Observer, MatchInfo);
-      return true;
-    }
-    break;
-  }
-  case TargetOpcode::G_SEXT:
-  case TargetOpcode::G_ZEXT: {
-    // G_SEXT(G_SEXT x) -> COPY x
-    // G_ZEXT(G_ZEXT x) -> COPY x
-    // Redundant same-kind extension is a no-op.
-    Register MatchInfo;
-    if (matchRedundantExt(MI, *B.getMRI(), MatchInfo)) {
-      applyRedundantExt(const_cast<MachineInstr &>(MI), *B.getMRI(), B,
-                        Observer, MatchInfo);
-      return true;
-    }
-    break;
-  }
-  case TargetOpcode::G_AND: {
-    // G_AND x, -1 -> COPY x (AND with all-ones is identity)
-    // G_AND -1, x -> COPY x
-    Register Replacement;
-    if (Helper.matchRedundantAnd(MI, Replacement)) {
-      Helper.replaceSingleDefInstWithReg(MI, Replacement);
-      return true;
-    }
-    break;
-  }
-  case TargetOpcode::G_OR: {
-    // G_OR x, 0 -> COPY x (OR with all-zeros is identity)
-    // G_OR 0, x -> COPY x
-    Register Replacement;
-    if (Helper.matchRedundantOr(MI, Replacement)) {
-      Helper.replaceSingleDefInstWithReg(MI, Replacement);
-      return true;
-    }
-    break;
-  }
-  case TargetOpcode::G_SHL:
-  case TargetOpcode::G_LSHR:
-  case TargetOpcode::G_ASHR: {
-    // G_SHL x, 0 -> COPY x
-    // G_LSHR x, 0 -> COPY x
-    // G_ASHR x, 0 -> COPY x
-    // Shift by zero is identity.
-    if (Helper.matchOperandIsZero(MI, 2)) {
-      Helper.replaceSingleDefInstWithReg(MI, MI.getOperand(1).getReg());
-      return true;
-    }
-    break;
-  }
-  case TargetOpcode::G_PTR_ADD: {
-    // G_PTR_ADD(G_PTR_ADD base, C1), C2 -> G_PTR_ADD base, (C1+C2)
-    // Folds chained constant offsets in pointer arithmetic.
-    PtrAddChain MatchInfo;
-    if (Helper.matchPtrAddImmedChain(MI, MatchInfo)) {
-      Helper.applyPtrAddImmedChain(MI, MatchInfo);
-      return true;
-    }
-    break;
-  }
-  case TargetOpcode::G_ADD:
-  case TargetOpcode::G_SUB:
-  case TargetOpcode::G_MUL: {
-    // Constant fold binary operations with two constant operands.
-    // G_ADD const, const -> const
-    // G_SUB const, const -> const
-    // G_MUL const, const -> const
-    APInt MatchInfo;
-    if (Helper.matchConstantFoldBinOp(MI, MatchInfo)) {
-      Helper.replaceInstWithConstant(MI, MatchInfo);
-      return true;
-    }
-    // Early widening MAC fusion, G_ADD only: G_ADD<s64>(acc
-    // G_MUL<s64>(G_SEXT s32, G_SEXT s32)) -> G_MULA64. Runs AFTER
-    // constant-fold. Signed-signed only; both operand orders; COPY-peels.
-    if (Opc == TargetOpcode::G_ADD) {
-      MULA64CombineInfo MULAInfo;
-      if (matchCombineMULA64(MI, *B.getMRI(), MULAInfo)) {
-        applyCombineMULA64(MI, *B.getMRI(), B, Observer, MULAInfo);
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_SDIV:
-  case TargetOpcode::G_UDIV:
-  case TargetOpcode::G_SREM:
-  case TargetOpcode::G_UREM: {
-    // Division/remainder strength reduction.
-    // Haydn has no native divide instruction — without these combines
-    // G_SDIV/G_UDIV/G_SREM/G_UREM by constants lower to __divsi3/__divdi3
-    // libcalls (170 sites across 30+ NatureDSP FFT/DCT kernels, e.g.
-    // fft_cplx16x16.c:701 `N/4`, bit-reversal `i/8`, polyphase `M/3`).
-    // The combines run BEFORE legalization so the division is replaced
-    // with shifts + arithmetic that Haydn can execute natively:
-    // Power-of-2 divisor: sdiv X, 4 → ashr X, 2; udiv X, 4 → lshr X, 2
-    // Non-power-of-2 constant: sdiv X, 3 → magic-number multiply
-    // (mulhi + adjustment, same as SelectionDAG's DAGCombiner).
-    // Uses CombinerHelper's existing division combines (no new algorithm):
-    // matchDivByPow2 + applySDivByPow2/applyUDivByPow2
-    // matchSDivOrSRemByConst + applySDivOrSRemByConst
-    // matchUDivOrURemByConst + applyUDivOrURemByConst
-    // Fixed (Tier 1 optimization wave).
-
-    // Try power-of-2 first (shift — cheapest). matchDivByPow2 only supports
-    // G_SDIV/G_UDIV (it asserts on G_SREM/G_UREM), so gate the opcode.
-    bool IsSigned = (Opc == TargetOpcode::G_SDIV || Opc == TargetOpcode::G_SREM);
-    if ((Opc == TargetOpcode::G_SDIV || Opc == TargetOpcode::G_UDIV) &&
-        Helper.matchDivByPow2(MI, IsSigned)) {
-      if (IsSigned)
-        Helper.applySDivByPow2(MI);
-      else
-        Helper.applyUDivByPow2(MI);
-      return true;
-    }
-    // Fall back to magic-number multiply for non-power-of-2 constants.
-    if (Opc == TargetOpcode::G_SDIV || Opc == TargetOpcode::G_SREM) {
-      if (Helper.matchSDivOrSRemByConst(MI)) {
-        Helper.applySDivOrSRemByConst(MI);
-        return true;
-      }
-    } else {
-      if (Helper.matchUDivOrURemByConst(MI)) {
-        Helper.applyUDivOrURemByConst(MI);
-        return true;
-      }
-    }
-    break;
-  }
-  }
-
-  return false;
+  // TD registry only: haydn_pre_generic_combines + form_mula64.
+  // No free-form C++ opcode switch.
+  return tryCombineAllImpl(MI);
 }
 
 // Pass boilerplate
