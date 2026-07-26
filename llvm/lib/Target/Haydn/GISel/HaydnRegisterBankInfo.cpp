@@ -95,7 +95,9 @@ HaydnRegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
     if (Dst.isReg() && Dst.getReg().isVirtual()) {
       LLT OpTy = MRI.getType(Dst.getReg());
       if (OpTy.isValid()) {
-        if (OpTy.isVector() || OpTy.getSizeInBits() == 64)
+        // 64-bit SIMD (v2i32/v4i16/v8i8) and s64 → DR64. Residual 32-bit
+        // SLP vectors (v4i8/v2i16) share a GPR32 with s32.
+        if (OpTy.getSizeInBits() == 64)
           OpMapping = &ValMappings[4]; // DR64
         else
           OpMapping = &ValMappings[gprMappingIdxForSize(OpTy.getSizeInBits())];
@@ -128,11 +130,10 @@ HaydnRegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
     Register Reg = MI.getOperand(Idx).getReg();
     LLT OpTy = MRI.getType(Reg);
 
-    // Map SIMD vector types (v2i32, v4i16, v8i8) and s64 to DR64. For smaller
-    // scalars (s1/s8/s16/s32) use the GPR32 slot whose meaningful width matches
-    // the operand type so RBI::ValueMapping::verify passes.
+    // 64-bit SIMD (v2i32/v4i16/v8i8) and s64 → DR64. Residual 32-bit SLP
+    // vectors (v4i8/v2i16) and smaller scalars use GPR32 width slots.
     if (OpTy.isValid()) {
-      if (OpTy.isVector() || OpTy.getSizeInBits() == 64)
+      if (OpTy.getSizeInBits() == 64)
         OpMappings[Idx] = &ValMappings[4]; // DR64
       else
         OpMappings[Idx] = &ValMappings[gprMappingIdxForSize(OpTy.getSizeInBits())];

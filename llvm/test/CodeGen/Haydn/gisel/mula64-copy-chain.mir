@@ -1,0 +1,57 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-prelegalizer-combiner \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s
+#
+# T5.1b / T7.3: G_MULA64 fuse must peel a single-use COPY between G_MUL and
+# G_ADD, erase the COPY + G_MUL, and leave no assertion path. Multi-use COPY
+# must not fuse.
+
+---
+name:            mula64_ss_copy_chain
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3
+    ; CHECK-LABEL: name: mula64_ss_copy_chain
+    ; CHECK: G_MULA64
+    ; CHECK-NOT: G_MUL
+    ; CHECK-NOT: COPY {{.*}}%mul
+    %a:_(s32) = COPY $r0
+    %b:_(s32) = COPY $r1
+    %acc_lo:_(s32) = COPY $r2
+    %acc_hi:_(s32) = COPY $r3
+    %acc:_(s64) = G_MERGE_VALUES %acc_lo, %acc_hi
+    %ea:_(s64) = G_SEXT %a
+    %eb:_(s64) = G_SEXT %b
+    %mul:_(s64) = G_MUL %ea, %eb
+    %mulc:_(s64) = COPY %mul
+    %r:_(s64) = G_ADD %mulc, %acc
+    %rlo:_(s32), %rhi:_(s32) = G_UNMERGE_VALUES %r
+    $r0 = COPY %rlo
+    $r1 = COPY %rhi
+...
+
+---
+name:            mula64_ss_multiuse_copy_nofuse
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3
+    ; Multi-use on the COPY of the mul: do not fuse (would drop a use).
+    ; CHECK-LABEL: name: mula64_ss_multiuse_copy_nofuse
+    ; CHECK-NOT: G_MULA64
+    ; CHECK: G_MUL
+    %a:_(s32) = COPY $r0
+    %b:_(s32) = COPY $r1
+    %acc_lo:_(s32) = COPY $r2
+    %acc_hi:_(s32) = COPY $r3
+    %acc:_(s64) = G_MERGE_VALUES %acc_lo, %acc_hi
+    %ea:_(s64) = G_SEXT %a
+    %eb:_(s64) = G_SEXT %b
+    %mul:_(s64) = G_MUL %ea, %eb
+    %mulc:_(s64) = COPY %mul
+    %r:_(s64) = G_ADD %mulc, %acc
+    %r2:_(s64) = G_ADD %r, %mulc
+    %rlo:_(s32), %rhi:_(s32) = G_UNMERGE_VALUES %r2
+    $r0 = COPY %rlo
+    $r1 = COPY %rhi
+...

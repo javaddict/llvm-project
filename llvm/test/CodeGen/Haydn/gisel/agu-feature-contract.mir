@@ -1,0 +1,35 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mcpu=generic \
+# RUN:     -run-pass=haydn-postlegalizer-combiner -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=AGU
+# RUN: llc -mtriple=haydn-unknown-elf -mcpu=generic -mattr=-agu \
+# RUN:     -run-pass=haydn-postlegalizer-combiner -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=NOAGU
+# RUN: llc -mtriple=haydn-unknown-elf -mcpu=haydn \
+# RUN:     -run-pass=haydn-postlegalizer-combiner -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=AGU
+#
+# T7.3 AGU feature contract:
+#   - generic and haydn CPUs have FeatureAGU baseline → fuse
+#   - -mattr=-agu disables form_agu_inc_mem
+
+---
+name:            postinc_i32_agu_contract
+legalized:       true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r0
+    ; AGU-LABEL: name: postinc_i32_agu_contract
+    ; AGU: G_HAYDN_POSTINC_LOAD
+    ; AGU-NOT: G_LOAD
+    ; NOAGU-LABEL: name: postinc_i32_agu_contract
+    ; NOAGU: G_LOAD
+    ; NOAGU: G_PTR_ADD
+    ; NOAGU-NOT: G_HAYDN_POSTINC_LOAD
+    %base:_(p0) = COPY $r0
+    %val:_(s32) = G_LOAD %base(p0) :: (load (s32))
+    %c4:_(s32) = G_CONSTANT i32 4
+    %new:_(p0) = G_PTR_ADD %base, %c4(s32)
+    $r0 = COPY %val
+    $r1 = COPY %new
+...

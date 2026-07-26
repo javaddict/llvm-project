@@ -13,361 +13,345 @@
 
 ;Extract contiguous bits
 
-; CHECK:  	.file	"<stdin>"
-; CHECK:  	.text
-; CHECK:  	.globl	extract_bits                    // -- Begin function extract_bits
-; CHECK:  	.type	extract_bits,@function
-; CHECK:  extract_bits:                           // @extract_bits
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	addi32_w	r2, r0, 4080 }
-; CHECK:  	{ 	and32	r1, r1, r2 }
-; CHECK:  	{ 	addi32_w	r3, r0, 4 }
-; CHECK:  	{ 	srl32	r1, r1, r3 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end0:
-; CHECK:  	.size	extract_bits, .Lfunc_end0-extract_bits
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	extract_low_bits                // -- Begin function extract_low_bits
-; CHECK:  	.type	extract_low_bits,@function
-; CHECK:  extract_low_bits:                       // @extract_low_bits
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	addi32_w	r2, r0, 255 }
-; CHECK:  	{ 	and32	r1, r1, r2 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end1:
-; CHECK:  	.size	extract_low_bits, .Lfunc_end1-extract_low_bits
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	extract_high_bits               // -- Begin function extract_high_bits
-; CHECK:  	.type	extract_high_bits,@function
-; CHECK:  extract_high_bits:                      // @extract_high_bits
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	addi32_w	r2, r0, 24 }
-; CHECK:  	{ 	srl32	r1, r1, r2 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end2:
-; CHECK:  	.size	extract_high_bits, .Lfunc_end2-extract_high_bits
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	insert_bits                     // -- Begin function insert_bits
-; CHECK:  	.type	insert_bits,@function
-; CHECK:  insert_bits:                            // @insert_bits
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	addi32_w	r3, r0, -4081 }
-; CHECK:  	{ 	addi32_w	r4, r0, 4; 	and32	r1, r1, r3; 	nop }
-; CHECK:  	{ 	sll32	r2, r2, r4 }
-; CHECK:  	{ 	addi32_w	r5, r0, 4080 }
-; CHECK:  	{ 	and32	r2, r2, r5 }
-; CHECK:  	{ 	or32	r1, r1, r2 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end3:
-; CHECK:  	.size	insert_bits, .Lfunc_end3-insert_bits
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	insert_low_bits                 // -- Begin function insert_low_bits
-; CHECK:  	.type	insert_low_bits,@function
-; CHECK:  insert_low_bits:                        // @insert_low_bits
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	addi32_w	r3, r0, -256 }
-; CHECK:  	{ 	and32	r1, r1, r3 }
-; CHECK:  	{ 	addi32_w	r4, r0, 255 }
-; CHECK:  	{ 	and32	r2, r2, r4 }
-; CHECK:  	{ 	or32	r1, r1, r2 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end4:
-; CHECK:  	.size	insert_low_bits, .Lfunc_end4-insert_low_bits
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	extract_sign_extended           // -- Begin function extract_sign_extended
-; CHECK:  	.type	extract_sign_extended,@function
-; CHECK:  extract_sign_extended:                  // @extract_sign_extended
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	addi32_w	r2, r0, 8 }
-; CHECK:  	{ 	srl32	r1, r1, r2 }
-; CHECK:  	{ 	addi32_w	r3, r0, 255 }
-; CHECK:  	{ 	and32	r1, r1, r3 }
-; CHECK:  	{ 	addi32_w	r4, r0, 24 }
-; CHECK:  	{ 	sll32	r1, r1, r4 }
-; CHECK:  	{ 	sra32	r1, r1, r4 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end5:
-; CHECK:  	.size	extract_sign_extended, .Lfunc_end5-extract_sign_extended
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	read_multiple_fields            // -- Begin function read_multiple_fields
-; CHECK:  	.type	read_multiple_fields,@function
-; CHECK:  read_multiple_fields:                   // @read_multiple_fields
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	addi32_w	r2, r0, 15 }
-; CHECK:  	{ 	addi32_w	r3, r0, 8; 	and32	r2, r1, r2; 	nop }
-; CHECK:  	{ 	addi32_w	r5, r0, 16; 	srl32	r3, r1, r3; 	nop }
-; CHECK:  	{ 	srl32	r1, r1, r5 }
-; CHECK:  	{ 	addi32_w	r6, r0, 31 }
-; CHECK:  	{ 	and32	r1, r1, r6 }
-; CHECK:  	{ 	addi32_w	r4, r0, 255 }
-; CHECK:  	{ 	and32	r3, r3, r4 }
-; CHECK:  	{ 	add32	r2, r2, r3 }
-; CHECK:  	{ 	add32	r1, r2, r1 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end6:
-; CHECK:  	.size	read_multiple_fields, .Lfunc_end6-read_multiple_fields
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	modify_bit_field                // -- Begin function modify_bit_field
-; CHECK:  	.type	modify_bit_field,@function
-; CHECK:  modify_bit_field:                       // @modify_bit_field
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	addi32_w	r3, r0, 4 }
-; CHECK:  	{ 	srl32	r6, r1, r3 }
-; CHECK:  	{ 	addi32_w	r4, r0, 255 }
-; CHECK:  	{ 	and32	r6, r6, r4 }
-; CHECK:  	{ 	add32	r2, r6, r2 }
-; CHECK:  	{ 	addi32_w	r5, r0, -4081; 	and32	r2, r2, r4; 	nop }
-; CHECK:  	{ 	and32	r1, r1, r5; 	sll32	r2, r2, r3; 	nop }
-; CHECK:  	{ 	or32	r1, r1, r2 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end7:
-; CHECK:  	.size	modify_bit_field, .Lfunc_end7-modify_bit_field
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	extract_bit                     // -- Begin function extract_bit
-; CHECK:  	.type	extract_bit,@function
-; CHECK:  extract_bit:                            // @extract_bit
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	srl32	r1, r1, r2 }
-; CHECK:  	{ 	addi32_w	r3, r0, 1 }
-; CHECK:  	{ 	and32	r1, r1, r3 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end8:
-; CHECK:  	.size	extract_bit, .Lfunc_end8-extract_bit
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	is_bit_set                      // -- Begin function is_bit_set
-; CHECK:  	.type	is_bit_set,@function
-; CHECK:  is_bit_set:                             // @is_bit_set
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	srl32	r1, r1, r2 }
-; CHECK:  	{ 	addi32_w	r3, r0, 1 }
-; CHECK:  	{ 	and32	r1, r1, r3 }
-; CHECK:  	{ 	addi32_w	r4, r0, 0 }
-; CHECK:  	{ 	seq32	r1, r1, r4 }
-; CHECK:  	{ 	xori32	r1, r1, 1 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end9:
-; CHECK:  	.size	is_bit_set, .Lfunc_end9-is_bit_set
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	set_bit                         // -- Begin function set_bit
-; CHECK:  	.type	set_bit,@function
-; CHECK:  set_bit:                                // @set_bit
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	addi32_w	r3, r0, 1 }
-; CHECK:  	{ 	sll32	r2, r3, r2 }
-; CHECK:  	{ 	or32	r1, r1, r2 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end10:
-; CHECK:  	.size	set_bit, .Lfunc_end10-set_bit
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	clear_bit                       // -- Begin function clear_bit
-; CHECK:  	.type	clear_bit,@function
-; CHECK:  clear_bit:                              // @clear_bit
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	addi32_w	r3, r0, 1 }
-; CHECK:  	{ 	sll32	r2, r3, r2 }
-; CHECK:  	{ 	not32	r2, r2 }
-; CHECK:  	{ 	and32	r1, r1, r2 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end11:
-; CHECK:  	.size	clear_bit, .Lfunc_end11-clear_bit
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	toggle_bit                      // -- Begin function toggle_bit
-; CHECK:  	.type	toggle_bit,@function
-; CHECK:  toggle_bit:                             // @toggle_bit
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	addi32_w	r3, r0, 1 }
-; CHECK:  	{ 	sll32	r2, r3, r2 }
-; CHECK:  	{ 	xor32	r1, r1, r2 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end12:
-; CHECK:  	.size	toggle_bit, .Lfunc_end12-toggle_bit
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	extract_bits_from_i64           // -- Begin function extract_bits_from_i64
-; CHECK:  	.type	extract_bits_from_i64,@function
-; CHECK:  extract_bits_from_i64:                  // @extract_bits_from_i64
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	addi32_w	r1, r0, 65535 }
-; CHECK:  	{ 	addi32_w	r2, r0, 16 }
-; CHECK:  	{ 	srl64	d0, d0, r2 }
-; CHECK:  	{ 	move32_dr_l	r2, d0 }
-; CHECK:  	{ 	and32	r1, r2, r1 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end13:
-; CHECK:  	.size	extract_bits_from_i64, .Lfunc_end13-extract_bits_from_i64
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	insert_bits_into_i64            // -- Begin function insert_bits_into_i64
-; CHECK:  	.type	insert_bits_into_i64,@function
-; CHECK:  insert_bits_into_i64:                   // @insert_bits_into_i64
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	{ 	addi32_w	[[R:r[0-9]+]], r0, 65535 }
-; CHECK:  	{ 	st32	[[R]], sp, 0 }
-; CHECK:  	{ 	addi32_w	[[R]], r0, -1 }
-; CHECK:  	{ 	st32	[[R]], sp, 4 }
-; CHECK:  	{ 	ld64	d1, sp, 0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8; 	and64	d0, d0, d1; 	nop }
-; CHECK:  	{ 	subi32	sp, sp, 8; 	sext32t64	d1, r1; 	nop }
-; CHECK:  	{ 	addi32_w	[[R2:r[0-9]+]], r0, -65536; 	slli64	d1, d1, 32; 	nop }
-; CHECK:  	{ 	st32	[[R2]], sp, 0; 	srli64	d1, d1, 32; 	nop }
-; CHECK:  	{ 	addi32_w	r1, r0, 16 }
-; CHECK:  	{ 	addi32_w	[[R2]], r0, 0; 	sll64	d1, d1, r1; 	nop }
-; CHECK:  	{ 	st32	[[R2]], sp, 4 }
-; CHECK:  	{ 	ld64	d2, sp, 0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8; 	and64	d1, d1, d2; 	nop }
-; CHECK:  	{ 	or64	d0, d0, d1 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	nop }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end14:
-; CHECK:  	.size	insert_bits_into_i64, .Lfunc_end14-insert_bits_into_i64
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	extract_odd_offset              // -- Begin function extract_odd_offset
-; CHECK:  	.type	extract_odd_offset,@function
-; CHECK:  extract_odd_offset:                     // @extract_odd_offset
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	addi32_w	r2, r0, 5 }
-; CHECK:  	{ 	srl32	r1, r1, r2 }
-; CHECK:  	{ 	addi32_w	r3, r0, 511 }
-; CHECK:  	{ 	and32	r1, r1, r3 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end15:
-; CHECK:  	.size	extract_odd_offset, .Lfunc_end15-extract_odd_offset
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.globl	reverse_bytes                   // -- Begin function reverse_bytes
-; CHECK:  	.type	reverse_bytes,@function
-; CHECK:  reverse_bytes:                          // @reverse_bytes
-; CHECK:  	.cfi_startproc
-; CHECK:  // %bb.0:
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	subi32	sp, sp, 8 }
-; CHECK:  	.cfi_def_cfa_offset 8
-; CHECK:  	{ 	addi32_w	r2, r0, 24 }
-; CHECK:  	{ 	sll32	r3, r1, r2; 	srl32	r2, r1, r2; 	nop }
-; CHECK:  	{ 	or32	r2, r2, r3 }
-; CHECK:  	{ 	addi32_w	r3, r0, 65280 }
-; CHECK:  	{ 	addi32_w	r4, r0, 8; 	and32	r5, r1, r3; 	nop }
-; CHECK:  	{ 	srl32	r1, r1, r4; 	sll32	r5, r5, r4; 	nop }
-; CHECK:  	{ 	and32	r1, r1, r3; 	or32	r2, r2, r5; 	nop }
-; CHECK:  	{ 	or32	r1, r2, r1 }
-; CHECK:  	{ 	xor32	r0, r0, r0 }
-; CHECK:  	{ 	addi32_w	sp, sp, 8 }
-; CHECK:  	{ 	jalr_w	r0, lr, 0 }
-; CHECK:  .Lfunc_end16:
-; CHECK:  	.size	reverse_bytes, .Lfunc_end16-reverse_bytes
-; CHECK:  	.cfi_endproc
-; CHECK:                                          // -- End function
-; CHECK:  	.section	".note.GNU-stack","",@progbits
+
+
+; REBASELINED (auto) B3.exit.4 Desc-only Bundle128 print (setDesc members; AIEBaseAsmPrinter field order); .file skipped
+
+; CHECK: 	.text
+; CHECK: 	.globl	extract_bits                    // -- Begin function extract_bits
+; CHECK: 	.type	extract_bits,@function
+; CHECK: extract_bits:                           // @extract_bits
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r2, r0, 4080; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r3, r0, 4; 	nop; 	and32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	srl32	r1, r1, r3 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end0:
+; CHECK: 	.size	extract_bits, .Lfunc_end0-extract_bits
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	extract_low_bits                // -- Begin function extract_low_bits
+; CHECK: 	.type	extract_low_bits,@function
+; CHECK: extract_low_bits:                       // @extract_low_bits
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r2, r0, 255; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	and32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end1:
+; CHECK: 	.size	extract_low_bits, .Lfunc_end1-extract_low_bits
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	extract_high_bits               // -- Begin function extract_high_bits
+; CHECK: 	.type	extract_high_bits,@function
+; CHECK: extract_high_bits:                      // @extract_high_bits
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r2, r0, 24; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	srl32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end2:
+; CHECK: 	.size	extract_high_bits, .Lfunc_end2-extract_high_bits
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	insert_bits                     // -- Begin function insert_bits
+; CHECK: 	.type	insert_bits,@function
+; CHECK: insert_bits:                            // @insert_bits
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r3, r0, -4081; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r4, r0, 4; 	nop; 	and32	r1, r1, r3 }
+; CHECK: 	{ 		addi32_w	r5, r0, 4080; 	nop; 	sll32	r2, r2, r4 }
+; CHECK: 	{ 		nop; 	nop; 	and32	r2, r2, r5 }
+; CHECK: 	{ 		nop; 	nop; 	or32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end3:
+; CHECK: 	.size	insert_bits, .Lfunc_end3-insert_bits
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	insert_low_bits                 // -- Begin function insert_low_bits
+; CHECK: 	.type	insert_low_bits,@function
+; CHECK: insert_low_bits:                        // @insert_low_bits
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r3, r0, -256; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r4, r0, 255; 	nop; 	and32	r1, r1, r3 }
+; CHECK: 	{ 		nop; 	nop; 	and32	r2, r2, r4 }
+; CHECK: 	{ 		nop; 	nop; 	or32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end4:
+; CHECK: 	.size	insert_low_bits, .Lfunc_end4-insert_low_bits
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	extract_sign_extended           // -- Begin function extract_sign_extended
+; CHECK: 	.type	extract_sign_extended,@function
+; CHECK: extract_sign_extended:                  // @extract_sign_extended
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r2, r0, 8; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r3, r0, 255; 	nop; 	srl32	r1, r1, r2 }
+; CHECK: 	{ 		addi32_w	r4, r0, 24; 	nop; 	and32	r1, r1, r3 }
+; CHECK: 	{ 		nop; 	nop; 	sll32	r1, r1, r4 }
+; CHECK: 	{ 		nop; 	nop; 	sra32	r1, r1, r4 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end5:
+; CHECK: 	.size	extract_sign_extended, .Lfunc_end5-extract_sign_extended
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	read_multiple_fields            // -- Begin function read_multiple_fields
+; CHECK: 	.type	read_multiple_fields,@function
+; CHECK: read_multiple_fields:                   // @read_multiple_fields
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r2, r0, 15; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r3, r0, 8; 	nop; 	and32	r2, r1, r2 }
+; CHECK: 	{ 		addi32_w	r5, r0, 16; 	nop; 	srl32	r3, r1, r3 }
+; CHECK: 	{ 		addi32_w	r6, r0, 31; 	nop; 	srl32	r1, r1, r5 }
+; CHECK: 	{ 		addi32_w	r4, r0, 255; 	nop; 	and32	r1, r1, r6 }
+; CHECK: 	{ 		nop; 	nop; 	and32	r3, r3, r4 }
+; CHECK: 	{ 		nop; 	nop; 	add32	r2, r2, r3 }
+; CHECK: 	{ 		nop; 	nop; 	add32	r1, r2, r1 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end6:
+; CHECK: 	.size	read_multiple_fields, .Lfunc_end6-read_multiple_fields
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	modify_bit_field                // -- Begin function modify_bit_field
+; CHECK: 	.type	modify_bit_field,@function
+; CHECK: modify_bit_field:                       // @modify_bit_field
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r3, r0, 4; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r4, r0, 255; 	nop; 	srl32	r6, r1, r3 }
+; CHECK: 	{ 		addi32_w	r5, r0, -4081; 	nop; 	and32	r6, r6, r4 }
+; CHECK: 	{ 		nop; 	and32	r1, r1, r5; 	add32	r2, r6, r2 }
+; CHECK: 	{ 		nop; 	nop; 	and32	r2, r2, r4 }
+; CHECK: 	{ 		nop; 	nop; 	sll32	r2, r2, r3 }
+; CHECK: 	{ 		nop; 	nop; 	or32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end7:
+; CHECK: 	.size	modify_bit_field, .Lfunc_end7-modify_bit_field
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	extract_bit                     // -- Begin function extract_bit
+; CHECK: 	.type	extract_bit,@function
+; CHECK: extract_bit:                            // @extract_bit
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r3, r0, 1; 	nop; 	srl32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	and32	r1, r1, r3 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end8:
+; CHECK: 	.size	extract_bit, .Lfunc_end8-extract_bit
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	is_bit_set                      // -- Begin function is_bit_set
+; CHECK: 	.type	is_bit_set,@function
+; CHECK: is_bit_set:                             // @is_bit_set
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		nop; 	nop; 	srl32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end9:
+; CHECK: 	.size	is_bit_set, .Lfunc_end9-is_bit_set
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	set_bit                         // -- Begin function set_bit
+; CHECK: 	.type	set_bit,@function
+; CHECK: set_bit:                                // @set_bit
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r3, r0, 1; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	sll32	r2, r3, r2 }
+; CHECK: 	{ 		nop; 	nop; 	or32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end10:
+; CHECK: 	.size	set_bit, .Lfunc_end10-set_bit
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	clear_bit                       // -- Begin function clear_bit
+; CHECK: 	.type	clear_bit,@function
+; CHECK: clear_bit:                              // @clear_bit
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r3, r0, 1; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	sll32	r2, r3, r2 }
+; CHECK: 	{ 		nop; 	nop; 	not32	r2, r2 }
+; CHECK: 	{ 		nop; 	nop; 	and32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end11:
+; CHECK: 	.size	clear_bit, .Lfunc_end11-clear_bit
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	toggle_bit                      // -- Begin function toggle_bit
+; CHECK: 	.type	toggle_bit,@function
+; CHECK: toggle_bit:                             // @toggle_bit
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r3, r0, 1; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	sll32	r2, r3, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end12:
+; CHECK: 	.size	toggle_bit, .Lfunc_end12-toggle_bit
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	extract_bits_from_i64           // -- Begin function extract_bits_from_i64
+; CHECK: 	.type	extract_bits_from_i64,@function
+; CHECK: extract_bits_from_i64:                  // @extract_bits_from_i64
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r1, r0, 65535; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r2, r0, 16; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	srl64	d0, d0, r2 }
+; CHECK: 	{ 		nop; 	nop; 	move32_dr_l	r2, d0 }
+; CHECK: 	{ 		nop; 	nop; 	and32	r1, r2, r1 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end13:
+; CHECK: 	.size	extract_bits_from_i64, .Lfunc_end13-extract_bits_from_i64
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	insert_bits_into_i64            // -- Begin function insert_bits_into_i64
+; CHECK: 	.type	insert_bits_into_i64,@function
+; CHECK: insert_bits_into_i64:                   // @insert_bits_into_i64
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r2, r0, 65535; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ 		st32	r2, sp, 0; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r2, r0, -1; 	nop; 	nop }
+; CHECK: 	{ 		st32	r2, sp, 4; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	ld64	d1, sp, 0; 	nop }
+; CHECK: 	{ 		addi32_w	r2, r0, -65536; 	and64	d0, d0, d1; 	subi32	sp, sp, 8 }
+; CHECK: 	{ 		st32	r2, sp, 0; 	sext32t64	d1, r1; 	nop }
+; CHECK: 	{ 		addi32_w	r1, r0, 16; 	nop; 	slli64	d1, d1, 32 }
+; CHECK: 	{ 		addi32_w	r2, r0, 0; 	nop; 	srli64	d1, d1, 32 }
+; CHECK: 	{ 		st32	r2, sp, 4; 	nop; 	sll64	d1, d1, r1 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	ld64	d2, sp, 0; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	and64	d1, d1, d2 }
+; CHECK: 	{ 		nop; 	nop; 	or64	d0, d0, d1 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end14:
+; CHECK: 	.size	insert_bits_into_i64, .Lfunc_end14-insert_bits_into_i64
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	extract_odd_offset              // -- Begin function extract_odd_offset
+; CHECK: 	.type	extract_odd_offset,@function
+; CHECK: extract_odd_offset:                     // @extract_odd_offset
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r2, r0, 5; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r3, r0, 511; 	nop; 	srl32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	and32	r1, r1, r3 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end15:
+; CHECK: 	.size	extract_odd_offset, .Lfunc_end15-extract_odd_offset
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	reverse_bytes                   // -- Begin function reverse_bytes
+; CHECK: 	.type	reverse_bytes,@function
+; CHECK: reverse_bytes:                          // @reverse_bytes
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		addi32_w	r2, r0, 24; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	srl32	r2, r1, r2; 	sll32	r3, r1, r2 }
+; CHECK: 	{ 		addi32_w	r3, r0, 65280; 	nop; 	or32	r2, r2, r3 }
+; CHECK: 	{ 		addi32_w	r4, r0, 8; 	nop; 	and32	r5, r1, r3 }
+; CHECK: 	{ 		nop; 	sll32	r5, r5, r4; 	srl32	r1, r1, r4 }
+; CHECK: 	{ 		nop; 	or32	r2, r2, r5; 	and32	r1, r1, r3 }
+; CHECK: 	{ 		nop; 	nop; 	or32	r1, r2, r1 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end16:
+; CHECK: 	.size	reverse_bytes, .Lfunc_end16-reverse_bytes
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.section	".note.GNU-stack","",@progbits
 
 define i32 @extract_bits(i32 %value) {
 ; Extract bits [11:4] (8 bits, starting at bit 4)

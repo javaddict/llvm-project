@@ -1,21 +1,11 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-
-; REGRESSION TEST: full soft-float for Haydn.
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 ;
-; Haydn has no FPU: every f32 lives in a GPR32, every f64 in a DR64, as the
-; IEEE bit-pattern. The GISel legalizer lowers every FP op to a runtime libcall
-; (compiler-rt builtins __addsf3/__adddf3/...), with three exception classes
-; that previously CRASHED ("unable to legalize instruction") and are fixed in
-;
-; 1. G_FCOPYSIGN — no case in LegalizerHelper::libcall; now custom
-; bit-trick-lowered (sign-bit graft via AND/OR). Must NOT emit a copysign
-; libcall. If this regresses, llc aborts "unable to legalize G_FCOPYSIGN".
-; 2. G_FFLOOR/G_FCEIL/G_FRINT/G_FMINNUM/G_FMAXNUM — cases exist but the
-; libcall impls were unset for the baremetal triple (getLibcallName null)
-; > crash; now bound to floorf/ceilf/rintf/fminf/fmaxf (clean libm
-; link-error, not a compile crash).
-;
-; Calls lower to `jal_w lr, <symbol>` inside VLIW bundles.
+; Soft-float surface for Haydn (no FPU):
+;   * arith/cmp/convert → compiler-rt (__addsf3, __eqsf2, …)
+;   * floor/minnum      → libm (floorf/fminf); compile ok, link needs libm
+;   * copysign          → generic .lower (AND/OR), no copysign call
+;   * minimum/maximum*  → mapped to fminnum/fmaxnum → fminf/fmaxf
+;   * is.fpclass        → generic .lower (integer bit tests), no libcall
 
 ; float add -> __addsf3
 define float @fadd(float %a, float %b) {
@@ -41,7 +31,7 @@ define float @d2f(double %a) {
   ret float %r
 }
 
-; float->int -> __fixsfsi (must truncate, not round —)
+; float->int -> __fixsfsi
 define i32 @f2i(float %a) {
 ; CHECK-LABEL: f2i:
 ; CHECK: jal_w{{(\.s[012])?}}	lr, __fixsfsi
@@ -57,7 +47,7 @@ define i1 @feq(float %a, float %b) {
   ret i1 %r
 }
 
-; copysign: bit-trick (AND + OR), NO copysign libcall (fix #1)
+; copysign: bit-trick (AND + OR), NO copysign libcall
 define float @fcopysign(float %a, float %b) {
 ; CHECK-LABEL: fcopysign:
 ; CHECK-NOT: jal_w{{(\.s[012])?}}	lr, copysign
@@ -68,7 +58,7 @@ define float @fcopysign(float %a, float %b) {
   ret float %r
 }
 
-; floor: emits floorf libcall, does NOT crash (fix #2)
+; floor: floorf libcall
 define float @ffloor(float %a) {
 ; CHECK-LABEL: ffloor:
 ; CHECK: jal_w{{(\.s[012])?}}	lr, floorf
@@ -76,7 +66,7 @@ define float @ffloor(float %a) {
   ret float %r
 }
 
-; fmin: emits fminf libcall, does NOT crash (fix #2)
+; fminnum: fminf libcall
 define float @fmin(float %a, float %b) {
 ; CHECK-LABEL: fmin:
 ; CHECK: jal_w{{(\.s[012])?}}	lr, fminf
@@ -84,6 +74,55 @@ define float @fmin(float %a, float %b) {
   ret float %r
 }
 
+; fmaxnum: fmaxf libcall
+define float @fmax(float %a, float %b) {
+; CHECK-LABEL: fmax:
+; CHECK: jal_w{{(\.s[012])?}}	lr, fmaxf
+  %r = call float @llvm.maxnum.f32(float %a, float %b)
+  ret float %r
+}
+
+; llvm.minimum → fminnum path → fminf (no legalizer crash)
+define float @fminimum(float %a, float %b) {
+; CHECK-LABEL: fminimum:
+; CHECK: jal_w{{(\.s[012])?}}	lr, fminf
+  %r = call float @llvm.minimum.f32(float %a, float %b)
+  ret float %r
+}
+
+; llvm.maximum → fmaxf
+define float @fmaximum(float %a, float %b) {
+; CHECK-LABEL: fmaximum:
+; CHECK: jal_w{{(\.s[012])?}}	lr, fmaxf
+  %r = call float @llvm.maximum.f32(float %a, float %b)
+  ret float %r
+}
+
+; is.fpclass: integer bit tests, no runtime call
+define i1 @fisnan(float %a) {
+; CHECK-LABEL: fisnan:
+; CHECK-NOT: jal_w{{(\.s[012])?}}	lr, __
+; CHECK-NOT: jal_w{{(\.s[012])?}}	lr, isnan
+; CHECK: jalr_w
+  %r = call i1 @llvm.is.fpclass.f32(float %a, i32 3)
+  ret i1 %r
+}
+
+; double copysign: AND64/OR64, no libcall
+define double @dcopysign(double %a, double %b) {
+; CHECK-LABEL: dcopysign:
+; CHECK-NOT: jal_w{{(\.s[012])?}}	lr, copysign
+; CHECK: and64
+; CHECK: or64
+  %r = call double @llvm.copysign.f64(double %a, double %b)
+  ret double %r
+}
+
 declare float @llvm.copysign.f32(float, float)
+declare double @llvm.copysign.f64(double, double)
 declare float @llvm.floor.f32(float)
 declare float @llvm.minnum.f32(float, float)
+declare float @llvm.maxnum.f32(float, float)
+declare float @llvm.minimum.f32(float, float)
+declare float @llvm.maximum.f32(float, float)
+declare i1 @llvm.is.fpclass.f32(float, i32)

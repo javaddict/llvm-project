@@ -8,12 +8,17 @@
 // \file
 // Post-legalization combines on generic MachineInstrs for the Haydn target.
 // The combines here must preserve instruction legality and operate on generic
-// (pre-RegBankSelect) MIR. MAC fusion is NOT performed here because MAC32
-// requires GPR32-constrained registers — it's done in PostSelectOptimize
-// instead. This combiner is reserved for generic-MIR optimizations.
-// TableGen-generated rules (from HaydnCombine.td) are dispatched via
-// tryCombineAllImpl. Additional C++ rules that don't map to TableGen
-// patterns are in tryCombineAll after the TableGen dispatch.
+// (pre-RegBankSelect) MIR. MAC fusion is NOT performed here
+// (product MAC = intrinsic + PreLegalizer G_MULA64).
+//
+// TableGen owns the full rule registry (HaydnCombine.td):
+//   haydn_post_generic_combines  — legal-preserving shared generics (no intdiv)
+//   haydn_post_residual_combines — Haydn algebraic residuals
+//   haydn_post_target_combines   — form_agu_inc_mem (G_HAYDN_*INC_*)
+// Dispatched exclusively via tryCombineAllImpl. Pass shell has no free-form
+// opcode switch and no post-legal cast sanitizer.
+//
+// C++ residual is match/apply helpers for TD-registered rules only.
 //===----------------------------------------------------------------------===//
 
 #include "HaydnPostLegalizerCombiner.h"
@@ -43,8 +48,8 @@
 using namespace llvm;
 using namespace MIPatternMatch;
 
-// Product AIE-style form (GISel post-legalizer): G_LOAD/STORE + G_PTR_ADD
-// → G_HAYDN_*INC_* → AGU PRE/POST at InstructionSelect.
+// Product AIE-style form (GISel post-legalizer): G_LOAD/ZEXTLOAD/SEXTLOAD/STORE
+// + G_PTR_ADD → G_HAYDN_*INC_* → AGU PRE/POST at InstructionSelect.
 // Modeled on llvm-aie AIECombinerHelper::findPostIncMatch /
 // checkRegUsesDominate (aie-postinc-combine default ON;
 // aie-greedy-address-combines default OFF).
@@ -77,579 +82,9 @@ namespace {
 #undef GET_GICOMBINER_TYPES
 
 //===----------------------------------------------------------------------===//
-// C++ combine match/apply helpers for patterns not expressible in TableGen.
+// Thin match/apply for haydn_post_residual_combines (HaydnCombine.td).
+// Called only from TableGen-generated tryCombineAllImpl — no dual-home switch.
 //===----------------------------------------------------------------------===//
-
-// Match G_TRUNC(G_SEXT/G_ZEXT x) where the trunc output type matches the
-// extension input type. This is identity: sext/trunc cancels out.
-// Example: G_TRUNC(s32) of G_SEXT(s16->s64) where result is s16 -> COPY src.
-bool matchTruncOfExtToIdentity(MachineInstr &MI, MachineRegisterInfo &MRI,
-                               Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_TRUNC);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Src = MI.getOperand(1).getReg();
-  LLT DstTy = MRI.getType(Dst);
-
-  Register InnerSrc;
-  // G_TRUNC(G_SEXT x) where output type == sext input type
-  if (mi_match(Src, MRI, m_GSExt(m_Reg(InnerSrc)))) {
-    if (DstTy == MRI.getType(InnerSrc)) {
-      MatchInfo = InnerSrc;
-      return true;
-    }
-  }
-  // G_TRUNC(G_ZEXT x) where output type == zext input type
-  if (mi_match(Src, MRI, m_GZExt(m_Reg(InnerSrc)))) {
-    if (DstTy == MRI.getType(InnerSrc)) {
-      MatchInfo = InnerSrc;
-      return true;
-    }
-  }
-  return false;
-}
-
-// Apply the trunc-of-ext identity: replace G_TRUNC with COPY.
-void applyTruncOfExtToIdentity(MachineInstr &MI, MachineRegisterInfo &MRI,
-                               MachineIRBuilder &Builder,
-                               GISelChangeObserver &Observer,
-                               Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_TRUNC(G_ANYEXT x) where the trunc output type matches the anyext
-// input type. This is a no-op identity that can be replaced with COPY.
-bool matchTruncOfAnyExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                        Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_TRUNC);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Src = MI.getOperand(1).getReg();
-  LLT DstTy = MRI.getType(Dst);
-
-  Register AnyExtSrc;
-  if (mi_match(Src, MRI, m_GAnyExt(m_Reg(AnyExtSrc)))) {
-    if (DstTy == MRI.getType(AnyExtSrc)) {
-      MatchInfo = AnyExtSrc;
-      return true;
-    }
-  }
-  return false;
-}
-
-// Apply the trunc-of-anyext combine: replace G_TRUNC with COPY.
-void applyTruncOfAnyExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                        MachineIRBuilder &Builder,
-                        GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match redundant G_SEXT/G_ZEXT followed by G_TRUNC back to the original
-// type. Pattern: dst = G_TRUNC(G_SEXT/G_ZEXT src) where dst type == src type.
-// This is identity extension-truncation.
-bool matchExtTruncIdentity(MachineInstr &MI, MachineRegisterInfo &MRI,
-                           Register &MatchInfo) {
-  unsigned Opc = MI.getOpcode();
-  assert(Opc == TargetOpcode::G_SEXT || Opc == TargetOpcode::G_ZEXT);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Src = MI.getOperand(1).getReg();
-  LLT SrcTy = MRI.getType(Src);
-
-  // Only match if the sole use is a trunc back to the source type.
-  if (!MRI.hasOneNonDBGUse(Dst))
-    return false;
-
-  MachineInstr &UseMI = *MRI.use_instr_nodbg_begin(Dst);
-  if (UseMI.getOpcode() != TargetOpcode::G_TRUNC)
-    return false;
-
-  Register TruncDst = UseMI.getOperand(0).getReg();
-  if (MRI.getType(TruncDst) == SrcTy) {
-    MatchInfo = TruncDst;
-    return true;
-  }
-  return false;
-}
-
-// Apply ext-trunc identity: replace the trunc with COPY of the original src.
-void applyExtTruncIdentity(MachineInstr &MI, MachineRegisterInfo &MRI,
-                           MachineIRBuilder &Builder,
-                           GISelChangeObserver &Observer, Register &MatchInfo) {
-  Register Dst = MI.getOperand(0).getReg();
-  Register Src = MI.getOperand(1).getReg();
-
-  // The MatchInfo is the trunc's destination register.
-  // We replace the trunc with COPY src, and then the ext becomes dead.
-  MachineInstr &TruncMI = *MRI.use_instr_nodbg_begin(Dst);
-  Builder.setInstrAndDebugLoc(TruncMI);
-  Observer.changingInstr(TruncMI);
-  TruncMI.setDesc(
-      TruncMI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (TruncMI.getNumOperands() > 2)
-    TruncMI.removeOperand(TruncMI.getNumOperands() - 1);
-  TruncMI.getOperand(1).setReg(Src);
-  Observer.changedInstr(TruncMI);
-}
-
-// Match G_COPY of the same register: G_COPY x, x -> eliminate.
-bool matchRedundantCopy(MachineInstr &MI, MachineRegisterInfo &MRI) {
-  assert(MI.getOpcode() == TargetOpcode::COPY);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Src = MI.getOperand(1).getReg();
-  return Dst == Src;
-}
-
-// Apply redundant copy elimination: erase the instruction.
-void applyRedundantCopy(MachineInstr &MI, MachineRegisterInfo &MRI,
-                        MachineIRBuilder &Builder,
-                        GISelChangeObserver &Observer) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.erasingInstr(MI);
-  MI.eraseFromParent();
-}
-
-// Match G_ICMP with both operands being known constants.
-// Replaces the compare with a constant 0 or 1 result.
-bool matchConstantFoldICmp(MachineInstr &MI, MachineRegisterInfo &MRI,
-                           int64_t &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_ICMP);
-  auto Pred =
-      static_cast<CmpInst::Predicate>(MI.getOperand(1).getPredicate());
-  Register LHS = MI.getOperand(2).getReg();
-  Register RHS = MI.getOperand(3).getReg();
-
-  // Only fold scalar integer types.
-  LLT LTy = MRI.getType(LHS);
-  if (!LTy.isScalar())
-    return false;
-
-  auto LHSV = getIConstantVRegValWithLookThrough(LHS, MRI);
-  auto RHSV = getIConstantVRegValWithLookThrough(RHS, MRI);
-  if (!LHSV || !RHSV)
-    return false;
-
-  // residual: look-through can surface constants of unequal bit widths
-  // (e.g. trunc/zext chains at -O0). APInt::operator== / ICmpInst::compare
-  // assert BitWidth equality — normalize to the icmp operand type first.
-  unsigned BW = LTy.getSizeInBits();
-  APInt LHSVal = LHSV->Value.sextOrTrunc(BW);
-  APInt RHSVal = RHSV->Value.sextOrTrunc(BW);
-  bool Result = ICmpInst::compare(LHSVal, RHSVal, Pred);
-  MatchInfo = Result ? 1 : 0;
-  return true;
-}
-
-// Apply constant-folded ICMP: replace with constant.
-void applyConstantFoldICmp(MachineInstr &MI, MachineRegisterInfo &MRI,
-                           MachineIRBuilder &Builder,
-                           GISelChangeObserver &Observer, int64_t &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Register Dst = MI.getOperand(0).getReg();
-  Builder.buildConstant(Dst, MatchInfo);
-  Observer.erasingInstr(MI);
-  MI.eraseFromParent();
-}
-
-// Match G_AND with all-ones or all-zeros constant operand.
-// G_AND x, 0 -> 0
-// G_AND 0, x -> 0
-bool matchAndZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                  APInt &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_AND);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Op1 = MI.getOperand(1).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-  unsigned BW = Ty.getSizeInBits();
-
-  // Check G_AND x, 0 or G_AND 0, x — store zero at *destination* width so
-  // applyAndZero → buildConstant never sees a mismatched APInt.
-  auto V2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (V2 && V2->Value.isZero()) {
-    MatchInfo = APInt::getZero(BW);
-    return true;
-  }
-  auto V1 = getIConstantVRegValWithLookThrough(Op1, MRI);
-  if (V1 && V1->Value.isZero()) {
-    MatchInfo = APInt::getZero(BW);
-    return true;
-  }
-  return false;
-}
-
-// Apply G_AND with zero: replace with constant 0.
-void applyAndZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                  MachineIRBuilder &Builder, GISelChangeObserver &Observer,
-                  APInt &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Register Dst = MI.getOperand(0).getReg();
-  Builder.buildConstant(Dst, MatchInfo);
-  Observer.erasingInstr(MI);
-  MI.eraseFromParent();
-}
-
-// Match G_OR with all-ones constant operand.
-// G_OR x, -1 -> -1
-// G_OR -1, x -> -1
-bool matchOrAllOnes(MachineInstr &MI, MachineRegisterInfo &MRI,
-                    APInt &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_OR);
-  Register Op1 = MI.getOperand(1).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(MI.getOperand(0).getReg());
-  if (!Ty.isScalar())
-    return false;
-  unsigned BitWidth = Ty.getSizeInBits();
-  APInt AllOnes = APInt::getAllOnes(BitWidth);
-
-  auto V2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (V2 && V2->Value.sextOrTrunc(BitWidth) == AllOnes) {
-    MatchInfo = AllOnes;
-    return true;
-  }
-  auto V1 = getIConstantVRegValWithLookThrough(Op1, MRI);
-  if (V1 && V1->Value.sextOrTrunc(BitWidth) == AllOnes) {
-    MatchInfo = AllOnes;
-    return true;
-  }
-  return false;
-}
-
-// Apply G_OR with all-ones: replace with constant -1.
-void applyOrAllOnes(MachineInstr &MI, MachineRegisterInfo &MRI,
-                    MachineIRBuilder &Builder, GISelChangeObserver &Observer,
-                    APInt &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Register Dst = MI.getOperand(0).getReg();
-  Builder.buildConstant(Dst, MatchInfo);
-  Observer.erasingInstr(MI);
-  MI.eraseFromParent();
-}
-
-// Match G_BSWAP(G_BSWAP x) -> x. Double bswap is identity.
-bool matchBswapOfBswap(MachineInstr &MI, MachineRegisterInfo &MRI,
-                       Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_BSWAP);
-  Register Src = MI.getOperand(1).getReg();
-
-  auto *InnerBSwap = getOpcodeDef(TargetOpcode::G_BSWAP, Src, MRI);
-  if (!InnerBSwap)
-    return false;
-
-  MatchInfo = InnerBSwap->getOperand(1).getReg();
-  return true;
-}
-
-// Apply bswap-of-bswap: replace with COPY of the original source.
-void applyBswapOfBswap(MachineInstr &MI, MachineRegisterInfo &MRI,
-                       MachineIRBuilder &Builder,
-                       GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_SEXT(G_SEXT x) where the outer extension source is already
-// sign-extended (i.e., the inner sext already covered the bits).
-// This is redundant when the inner sext destination type equals the
-// outer sext destination type, which means the outer is a no-op.
-bool matchRedundantSExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                        Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_SEXT);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Src = MI.getOperand(1).getReg();
-  LLT DstTy = MRI.getType(Dst);
-
-  Register InnerSrc;
-  if (mi_match(Src, MRI, m_GSExt(m_Reg(InnerSrc)))) {
-    // G_SEXT(G_SEXT inner) -> identity if outer dest type == inner dest type
-    // (the inner sext already produced the right type).
-    if (DstTy == MRI.getType(Src)) {
-      MatchInfo = Src;
-      return true;
-    }
-  }
-  return false;
-}
-
-// Apply redundant sext: replace with COPY.
-void applyRedundantSExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                        MachineIRBuilder &Builder,
-                        GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_ZEXT(G_ZEXT x) where the outer extension is a no-op
-// (outer dest type == inner dest type).
-bool matchRedundantZExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                        Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_ZEXT);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Src = MI.getOperand(1).getReg();
-  LLT DstTy = MRI.getType(Dst);
-
-  Register InnerSrc;
-  if (mi_match(Src, MRI, m_GZExt(m_Reg(InnerSrc)))) {
-    if (DstTy == MRI.getType(Src)) {
-      MatchInfo = Src;
-      return true;
-    }
-  }
-  return false;
-}
-
-// Apply redundant zext: replace with COPY.
-void applyRedundantZExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                        MachineIRBuilder &Builder,
-                        GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-//===----------------------------------------------------------------------===//
-// Redundant extension elimination combines.
-//
-// These patterns eliminate redundant cascading extension sequences:
-// double-sext, double-zext, sext-of-zext, zext-of-sext, trunc-zext identity
-// and zext-trunc identity round-trips.
-//===----------------------------------------------------------------------===//
-
-// Match G_ZEXT(G_SEXT x) where the outer zero-extension is a no-op because
-// the destination type equals the inner SEXT's destination type.
-// Pattern: dst = G_ZEXT(G_SEXT x) where DstTy == SextOutTy -> COPY sext_result.
-bool matchZExtOfSExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                     Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_ZEXT);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Src = MI.getOperand(1).getReg();
-  LLT DstTy = MRI.getType(Dst);
-
-  Register InnerSrc;
-  if (mi_match(Src, MRI, m_GSExt(m_Reg(InnerSrc)))) {
-    // G_ZEXT(G_SEXT inner) where outer dest == inner sext dest is a no-op.
-    if (DstTy == MRI.getType(Src)) {
-      MatchInfo = Src;
-      return true;
-    }
-  }
-  return false;
-}
-
-// Apply zext-of-sext: replace with COPY of the inner sext result.
-void applyZExtOfSExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                     MachineIRBuilder &Builder,
-                     GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_SEXT(G_ZEXT x) where the outer sign-extension of a zero-extended
-// value is equivalent to zero-extension. Since G_ZEXT zeros all high bits
-// the sign bit of the zext result is always 0, so G_SEXT of that result also
-// fills high bits with 0 — identical to G_ZEXT.
-// Pattern: dst = G_SEXT(G_ZEXT x) -> replace with G_ZEXT from x to dst type.
-// Valid for ANY wider destination type (the outer sext is always redundant
-// because the inner zext guarantees a non-negative value).
-bool matchSExtOfZExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                     Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_SEXT);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Src = MI.getOperand(1).getReg();
-  LLT DstTy = MRI.getType(Dst);
-
-  Register InnerSrc;
-  if (mi_match(Src, MRI, m_GZExt(m_Reg(InnerSrc)))) {
-    // If the outer dest type == inner zext dest type, it's a simple no-op
-    // (handled by matchRedundantSExt for same-type).
-    if (DstTy == MRI.getType(Src))
-      return false;
-
-    // G_SEXT(G_ZEXT x) from TyA -> TyB -> TyC where TyC > TyB.
-    // Inner zext zeros bits [TyA..TyB). Outer sext zeros bits [TyB..TyC)
-    // because sign bit at position TyB-1 is 0 (zext cleared it).
-    // Equivalent to: G_ZEXT x from TyA -> TyC directly.
-    // Only profitable if the inner zext has a single use.
-    if (!MRI.hasOneNonDBGUse(Src))
-      return false;
-
-    MatchInfo = InnerSrc;
-    return true;
-  }
-  return false;
-}
-
-// Apply sext-of-zext: replace G_SEXT(G_ZEXT x) with G_ZEXT x to the outer
-// destination type.
-void applySExtOfZExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                     MachineIRBuilder &Builder,
-                     GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Register Dst = MI.getOperand(0).getReg();
-  Observer.erasingInstr(MI);
-  Builder.buildZExt(Dst, MatchInfo);
-  MI.eraseFromParent();
-}
-
-// Match G_ZEXT(G_ZEXT x) where cascading zero-extensions can be collapsed
-// into a single zero-extension from the original source to the final type.
-// Pattern: dst = G_ZEXT(G_ZEXT x) from TyA->TyB->TyC -> G_ZEXT x TyA->TyC.
-// Only profitable if the inner zext has a single use.
-bool matchFoldDoubleZExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                         Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_ZEXT);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Src = MI.getOperand(1).getReg();
-  LLT DstTy = MRI.getType(Dst);
-
-  Register InnerSrc;
-  if (mi_match(Src, MRI, m_GZExt(m_Reg(InnerSrc)))) {
-    // If dest type == source type, it's a no-op handled by matchRedundantZExt.
-    if (DstTy == MRI.getType(Src))
-      return false;
-
-    // Collapse: G_ZEXT(G_ZEXT inner) -> G_ZEXT inner from original type to
-    // final type.
-    if (!MRI.hasOneNonDBGUse(Src))
-      return false;
-
-    MatchInfo = InnerSrc;
-    return true;
-  }
-  return false;
-}
-
-// Apply double-zext fold: replace with single G_ZEXT from original source.
-void applyFoldDoubleZExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                         MachineIRBuilder &Builder,
-                         GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Register Dst = MI.getOperand(0).getReg();
-  Observer.erasingInstr(MI);
-  Builder.buildZExt(Dst, MatchInfo);
-  MI.eraseFromParent();
-}
-
-// Match G_SEXT(G_SEXT x) where cascading sign-extensions can be collapsed
-// into a single sign-extension from the original source to the final type.
-// Pattern: dst = G_SEXT(G_SEXT x) from TyA->TyB->TyC -> G_SEXT x TyA->TyC.
-// The inner sext sign-extends from TyA. The outer sext preserves the
-// sign-extension from TyB to TyC. Combined: sext TyA->TyC.
-// Only profitable if the inner sext has a single use.
-bool matchFoldDoubleSExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                         Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_SEXT);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Src = MI.getOperand(1).getReg();
-  LLT DstTy = MRI.getType(Dst);
-
-  Register InnerSrc;
-  if (mi_match(Src, MRI, m_GSExt(m_Reg(InnerSrc)))) {
-    // If dest type == source type, it's a no-op handled by matchRedundantSExt.
-    if (DstTy == MRI.getType(Src))
-      return false;
-
-    // Collapse: G_SEXT(G_SEXT inner) -> G_SEXT inner from original type to
-    // final type.
-    if (!MRI.hasOneNonDBGUse(Src))
-      return false;
-
-    MatchInfo = InnerSrc;
-    return true;
-  }
-  return false;
-}
-
-// Apply double-sext fold: replace with single G_SEXT from original source.
-void applyFoldDoubleSExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                         MachineIRBuilder &Builder,
-                         GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Register Dst = MI.getOperand(0).getReg();
-  Observer.erasingInstr(MI);
-  Builder.buildSExt(Dst, MatchInfo);
-  MI.eraseFromParent();
-}
-
-// Match G_ADD x, G_SUB(0, y) -> G_SUB x, y.
-// Replaces addition of a negated value with subtraction.
-bool matchAddOfNeg(MachineInstr &MI, MachineRegisterInfo &MRI,
-                   std::pair<Register, Register> &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_ADD);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Op1 = MI.getOperand(1).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-
-  // Check if Op2 = G_SUB(0, y)
-  auto *SubMI = getOpcodeDef(TargetOpcode::G_SUB, Op2, MRI);
-  if (!SubMI)
-    return false;
-  auto SubOp1V = getIConstantVRegValWithLookThrough(
-      SubMI->getOperand(1).getReg(), MRI);
-  if (!SubOp1V || !SubOp1V->Value.isZero())
-    return false;
-
-  // Only profitable if the G_SUB has a single use (otherwise we'd duplicate it).
-  if (!MRI.hasOneNonDBGUse(Op2))
-    return false;
-
-  MatchInfo = {Op1, SubMI->getOperand(2).getReg()};
-  return true;
-}
-
-// Apply add-of-neg: replace G_ADD x, G_SUB(0, y) with G_SUB x, y.
-void applyAddOfNeg(MachineInstr &MI, MachineRegisterInfo &MRI,
-                   MachineIRBuilder &Builder,
-                   GISelChangeObserver &Observer,
-                   std::pair<Register, Register> &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::G_SUB));
-  MI.getOperand(1).setReg(MatchInfo.first);
-  MI.getOperand(2).setReg(MatchInfo.second);
-  Observer.changedInstr(MI);
-}
 
 // Match G_SUB x, G_SUB(0, y) -> G_ADD x, y.
 // Replaces subtraction of a negated value with addition.
@@ -692,184 +127,24 @@ void applySubOfNeg(MachineInstr &MI, MachineRegisterInfo &MRI,
   Observer.changedInstr(MI);
 }
 
-// Match G_MUL x, 1 -> x. Multiplication by 1 is identity.
-bool matchMulByOne(MachineInstr &MI, MachineRegisterInfo &MRI,
-                   Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_MUL);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Op1 = MI.getOperand(1).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-
-  unsigned BW = Ty.getSizeInBits();
-  // Check either operand for constant 1.
-  auto V2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (V2 && V2->Value.zextOrTrunc(BW).isOne()) {
-    MatchInfo = Op1;
-    return true;
-  }
-  auto V1 = getIConstantVRegValWithLookThrough(Op1, MRI);
-  if (V1 && V1->Value.zextOrTrunc(BW).isOne()) {
-    MatchInfo = Op2;
-    return true;
-  }
-  return false;
-}
-
-// Apply mul-by-one: replace G_MUL x, 1 with COPY of x.
-void applyMulByOne(MachineInstr &MI, MachineRegisterInfo &MRI,
-                   MachineIRBuilder &Builder,
-                   GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_MUL x, -1 -> G_SUB 0, x.
-// Canonicalizes multiplication by -1 to negation.
-bool matchMulByNegOne(MachineInstr &MI, MachineRegisterInfo &MRI,
-                      Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_MUL);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-
-  auto V2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (!V2)
-    return false;
-
-  unsigned BitWidth = Ty.getSizeInBits();
-  APInt NegOne = APInt::getAllOnes(BitWidth);
-  if (V2->Value.sextOrTrunc(BitWidth) != NegOne)
-    return false;
-
-  MatchInfo = MI.getOperand(1).getReg();
-  return true;
-}
-
-// Apply mul-by-neg-one: replace G_MUL x, -1 with G_SUB 0, x.
-void applyMulByNegOne(MachineInstr &MI, MachineRegisterInfo &MRI,
-                      MachineIRBuilder &Builder,
-                      GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Register Dst = MI.getOperand(0).getReg();
-  LLT Ty = MRI.getType(Dst);
-  Register Zero = Builder.buildConstant(Ty, 0).getReg(0);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::G_SUB));
-  MI.getOperand(1).setReg(Zero);
-  MI.getOperand(2).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_ADD(G_ADD x, C1), C2 -> G_ADD x, (C1+C2).
-// Folds a chain of constant additions into a single add with the combined
-// constant. Only applies when the inner G_ADD has a single use (otherwise
-// we'd duplicate the inner add).
-bool matchAddConstChain(MachineInstr &MI, MachineRegisterInfo &MRI,
-                        std::pair<Register, APInt> &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_ADD);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Op1 = MI.getOperand(1).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-
-  // Outer operand must be constant.
-  auto OuterC = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (!OuterC)
-    return false;
-
-  // Inner must be G_ADD with a constant.
-  auto *InnerAdd = getOpcodeDef(TargetOpcode::G_ADD, Op1, MRI);
-  if (!InnerAdd)
-    return false;
-
-  // Inner G_ADD must have a single use (otherwise we'd duplicate it).
-  if (!MRI.hasOneNonDBGUse(Op1))
-    return false;
-
-  Register InnerOp2 = InnerAdd->getOperand(2).getReg();
-  auto InnerC = getIConstantVRegValWithLookThrough(InnerOp2, MRI);
-  if (!InnerC)
-    return false;
-
-  // Fold: C1 + C2 (normalize widths — look-through can surface unequal APInts).
-  unsigned BW = Ty.getSizeInBits();
-  APInt FoldedC =
-      InnerC->Value.sextOrTrunc(BW) + OuterC->Value.sextOrTrunc(BW);
-  Register Base = InnerAdd->getOperand(1).getReg();
-  MatchInfo = {Base, FoldedC};
-  return true;
-}
-
-// Apply add-constant-chain: replace G_ADD(G_ADD x, C1), C2 with
-// G_ADD x, (C1+C2). If the folded constant is zero, replace with COPY.
-void applyAddConstChain(MachineInstr &MI, MachineRegisterInfo &MRI,
-                        MachineIRBuilder &Builder,
-                        GISelChangeObserver &Observer,
-                        std::pair<Register, APInt> &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Register Dst = MI.getOperand(0).getReg();
-  LLT Ty = MRI.getType(Dst);
-
-  if (MatchInfo.second.isZero()) {
-    // x + 0 == x -> COPY
-    Observer.changingInstr(MI);
-    MI.setDesc(
-        MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-    while (MI.getNumOperands() > 2)
-      MI.removeOperand(MI.getNumOperands() - 1);
-    MI.getOperand(1).setReg(MatchInfo.first);
-    Observer.changedInstr(MI);
-  } else {
-    // Rebuild with folded constant.
-    Register FoldedConst =
-        Builder.buildConstant(Ty, MatchInfo.second).getReg(0);
-    Observer.erasingInstr(MI);
-    Builder.buildAdd(Dst, MatchInfo.first, FoldedConst);
-    MI.eraseFromParent();
-  }
-}
-
-// Match redundant G_SEXT_INREG when the value is already sign-extended
-// by a G_SEXT from the same or smaller type.
-// Pattern: G_SEXT_INREG(G_SEXT x, K) where the sext already guarantees
-// the high bits.
-bool matchSExtInRegOfSExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                          Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_SEXT_INREG);
+// Match G_BSWAP(G_BSWAP x) -> x. Double bswap is identity.
+bool matchBswapOfBswap(MachineInstr &MI, MachineRegisterInfo &MRI,
+                       Register &MatchInfo) {
+  assert(MI.getOpcode() == TargetOpcode::G_BSWAP);
   Register Src = MI.getOperand(1).getReg();
-  int64_t Imm = MI.getOperand(2).getImm();
 
-  Register InnerSrc;
-  if (mi_match(Src, MRI, m_GSExt(m_Reg(InnerSrc)))) {
-    LLT InnerSrcTy = MRI.getType(InnerSrc);
-    // If the inner sext already extended from a type >= the sext_inreg width
-    // the sext_inreg is redundant.
-    if (InnerSrcTy.getSizeInBits() >= static_cast<unsigned>(Imm)) {
-      MatchInfo = Src;
-      return true;
-    }
-  }
-  return false;
+  auto *InnerBSwap = getOpcodeDef(TargetOpcode::G_BSWAP, Src, MRI);
+  if (!InnerBSwap)
+    return false;
+
+  MatchInfo = InnerBSwap->getOperand(1).getReg();
+  return true;
 }
 
-// Apply sext_inreg of sext: replace with COPY.
-void applySExtInRegOfSExt(MachineInstr &MI, MachineRegisterInfo &MRI,
-                          MachineIRBuilder &Builder,
-                          GISelChangeObserver &Observer, Register &MatchInfo) {
+// Apply bswap-of-bswap: replace with COPY of the original source.
+void applyBswapOfBswap(MachineInstr &MI, MachineRegisterInfo &MRI,
+                       MachineIRBuilder &Builder,
+                       GISelChangeObserver &Observer, Register &MatchInfo) {
   Builder.setInstrAndDebugLoc(MI);
   Observer.changingInstr(MI);
   MI.setDesc(
@@ -1079,125 +354,6 @@ void applyAndOrDisjoint(MachineInstr &MI, MachineRegisterInfo &MRI,
   MI.eraseFromParent();
 }
 
-// Match shift-mask simplification: (x >> C) & mask where the mask covers
-// exactly the bits that could be nonzero after the shift.
-// For logical right shift: (x >> C) & ((1 << C2) - 1) where C2 == bitwidth-C.
-// If the mask is all-ones (covers full width), the AND is redundant.
-bool matchShiftMaskRedundant(MachineInstr &MI, MachineRegisterInfo &MRI,
-                             Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_AND);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Op1 = MI.getOperand(1).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-  unsigned BitWidth = Ty.getSizeInBits();
-
-  // Mask must be a constant.
-  auto CV = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (!CV)
-    return false;
-
-  APInt Mask = CV->Value.zextOrTrunc(BitWidth);
-
-  // Check if the LHS is G_LSHR(x, C).
-  // Note: ASHR is excluded because it sign-extends — the AND with low-bit
-  // mask is not redundant when high bits are sign bits, not zero.
-  auto *ShiftMI = getOpcodeDef(TargetOpcode::G_LSHR, Op1, MRI);
-  if (!ShiftMI)
-    return false;
-
-  // Shift amount must be a constant.
-  auto ShiftAmtV = getIConstantVRegValWithLookThrough(
-      ShiftMI->getOperand(2).getReg(), MRI);
-  if (!ShiftAmtV)
-    return false;
-
-  uint64_t ShiftAmt = ShiftAmtV->Value.getZExtValue();
-  if (ShiftAmt == 0 || ShiftAmt >= BitWidth)
-    return false;
-
-  // Compute the expected mask after the shift: (1 << (BitWidth - ShiftAmt)) - 1
-  // For LSHR, this is the bits that remain. For ASHR, high bits are sign bits.
-  // The mask is redundant if it covers all the bits that the shift could produce.
-  APInt ExpectedMask = APInt::getLowBitsSet(BitWidth, BitWidth - ShiftAmt);
-
-  if (Mask != ExpectedMask)
-    return false;
-
-  // Only simplify if the shift has a single use.
-  if (!MRI.hasOneNonDBGUse(Op1))
-    return false;
-
-  MatchInfo = Op1;
-  return true;
-}
-
-// Apply shift-mask simplification: replace G_AND(shift, mask) with the shift.
-void applyShiftMaskRedundant(MachineInstr &MI, MachineRegisterInfo &MRI,
-                             MachineIRBuilder &Builder,
-                             GISelChangeObserver &Observer,
-                             Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match XOR-of-constant with zero constant (covers XOR x, 0 after folding).
-// This is a general constant-fold for G_XOR with a single constant operand
-// where the result is the non-constant operand (i.e., the constant is zero).
-// Pattern: G_XOR x, 0 -> x (identity).
-bool matchXorZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                  Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_XOR);
-  Register Op1 = MI.getOperand(1).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-
-  auto V2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (V2 && V2->Value.isZero()) {
-    MatchInfo = Op1;
-    return true;
-  }
-  auto V1 = getIConstantVRegValWithLookThrough(Op1, MRI);
-  if (V1 && V1->Value.isZero()) {
-    MatchInfo = Op2;
-    return true;
-  }
-  return false;
-}
-
-// Apply XOR with zero: replace with COPY.
-void applyXorZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                  MachineIRBuilder &Builder,
-                  GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match `G_XOR %bool, G_CONSTANT -1` (bitwise NOT) where `%bool` is a known
-// 0-or-1 value (a widened i1). The Legalizer widens `xor i1 %x, true` to
-// `G_XOR (anyext %x), G_CONSTANT i32 -1`, which is a 32-bit bitwise NOT:
-// it maps 0 -> -1 and 1 -> -2. Neither result is zero, so a later `BNEZ`
-// (the Haydn G_BRCOND lowering, which tests the full s32 register non-zero)
-// always branches — regardless of the i1 value. This is the root cause of
-// the BST insert loop's `placed` flag never tests as zero, so the
-// loop spins forever.
-// When the non-constant operand is known-boolean, rewrite the all-ones
-// constant to `1`, turning the operation into a logical NOT (0 -> 1, 1 -> 0)
-// that is correct under both BNEZ (non-zero) and bit-0 tests. This preserves
-// the i1 XOR-with-true semantics that the IR intended.
 namespace {
 // Walk the def chain to determine if `R` is guaranteed to hold a 0-or-1 value
 // (a widened i1 boolean). Recognizes the common boolean producers that the
@@ -1249,7 +405,6 @@ bool isBooleanRegister(Register R, MachineRegisterInfo &MRI, unsigned Depth = 0)
   }
 }
 } // namespace
-
 bool matchXorAllOnesBoolean(MachineInstr &MI, MachineRegisterInfo &MRI,
                             bool &MatchInfo) {
   assert(MI.getOpcode() == TargetOpcode::G_XOR);
@@ -1299,6 +454,24 @@ bool matchXorAllOnesBoolean(MachineInstr &MI, MachineRegisterInfo &MRI,
   if (!OtherDef || OtherDef->getOpcode() != TargetOpcode::G_ANYEXT)
     return false;
 
+  // Anti-ping-pong with generic xor_of_and_with_same_reg:
+  //   xor_allones_boolean:  xor X,-1  ->  xor (and X,1), 1
+  //   xor_of_and_with_same_reg: xor (and X,1), 1  ->  and (xor X,-1), 1
+  //   xor_allones_boolean on the fresh inner xor X,-1  -> infinite loop
+  // If this XOR's only use is `and %xor, 1` (commuted ok), we are already the
+  // inner not of the stable masked form — leave it alone.
+  if (MRI.hasOneNonDBGUse(Dst)) {
+    MachineInstr &UseMI = *MRI.use_instr_nodbg_begin(Dst);
+    if (UseMI.getOpcode() == TargetOpcode::G_AND) {
+      Register OtherAndOp = UseMI.getOperand(1).getReg() == Dst
+                                ? UseMI.getOperand(2).getReg()
+                                : UseMI.getOperand(1).getReg();
+      auto AV = getIConstantVRegValWithLookThrough(OtherAndOp, MRI);
+      if (AV && AV->Value.sextOrTrunc(BitWidth).isOne())
+        return false;
+    }
+  }
+
   MatchInfo = true;
   return true;
 }
@@ -1340,53 +513,6 @@ void applyXorAllOnesBoolean(MachineInstr &MI, MachineRegisterInfo &MRI,
   MI.getOperand(OtherIdx).setReg(Masked);
   MI.getOperand(AllOnesIdx).setReg(OneC);
   Observer.changedInstr(MI);
-}
-
-// Match G_MUL x, C where C is a positive power of 2.
-// Replaces multiplication with left shift: G_SHL x, log2(C).
-// Strength reduction: shift is cheaper than multiply on most targets
-// and Haydn has no hardware multiply in the base ALU slot.
-bool matchMulToShift(MachineInstr &MI, MachineRegisterInfo &MRI,
-                     std::pair<Register, uint64_t> &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_MUL);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Op1 = MI.getOperand(1).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar() || Ty.getSizeInBits() != 32)
-    return false;
-
-  // Check either operand for a power-of-2 constant.
-  auto V2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (V2 && V2->Value.isPowerOf2()) {
-    // G_MUL x, pow2 -> G_SHL x, log2(pow2)
-    MatchInfo = {Op1, V2->Value.exactLogBase2()};
-    return true;
-  }
-
-  auto V1 = getIConstantVRegValWithLookThrough(Op1, MRI);
-  if (V1 && V1->Value.isPowerOf2()) {
-    // G_MUL pow2, x -> G_SHL x, log2(pow2) (commutative)
-    MatchInfo = {Op2, V1->Value.exactLogBase2()};
-    return true;
-  }
-
-  return false;
-}
-
-// Apply mul-to-shift: replace G_MUL x, C with G_SHL x, log2(C).
-void applyMulToShift(MachineInstr &MI, MachineRegisterInfo &MRI,
-                     MachineIRBuilder &Builder,
-                     GISelChangeObserver &Observer,
-                     std::pair<Register, uint64_t> &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Register Dst = MI.getOperand(0).getReg();
-  LLT Ty = MRI.getType(Dst);
-
-  Register ShiftAmt = Builder.buildConstant(Ty, MatchInfo.second).getReg(0);
-  Observer.erasingInstr(MI);
-  Builder.buildShl(Dst, MatchInfo.first, ShiftAmt);
-  MI.eraseFromParent();
 }
 
 // Match G_MUL x, C where C is (pow2 + 1) for s32 types.
@@ -1502,460 +628,53 @@ void applyMulToShiftSub(MachineInstr &MI, MachineRegisterInfo &MRI,
   MI.eraseFromParent();
 }
 
-// Match redundant sign-extend via shifts: if x was obtained by arithmetic
-// right shift of C bits and we sext_inreg to (BitWidth-C) bits, the
-// sext_inreg is redundant because ASHR already sign-extended.
-// Pattern: G_SEXT_INREG(G_ASHR x, C), BitWidth-C where the sext width
-// equals BitWidth-C.
-bool matchSExtInRegOfAShr(MachineInstr &MI, MachineRegisterInfo &MRI,
-                          Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_SEXT_INREG);
+// Match G_SEXT(G_ZEXT x) where the outer sign-extension of a zero-extended
+// value is equivalent to zero-extension. Since G_ZEXT zeros all high bits
+// the sign bit of the zext result is always 0, so G_SEXT of that result also
+// fills high bits with 0 — identical to G_ZEXT.
+// Pattern: dst = G_SEXT(G_ZEXT x) -> replace with G_ZEXT from x to dst type.
+// Valid for ANY wider destination type (the outer sext is always redundant
+// because the inner zext guarantees a non-negative value).
+bool matchSExtOfZExt(MachineInstr &MI, MachineRegisterInfo &MRI,
+                     Register &MatchInfo) {
+  assert(MI.getOpcode() == TargetOpcode::G_SEXT);
   Register Dst = MI.getOperand(0).getReg();
   Register Src = MI.getOperand(1).getReg();
-  int64_t Imm = MI.getOperand(2).getImm();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-  unsigned BitWidth = Ty.getSizeInBits();
+  LLT DstTy = MRI.getType(Dst);
 
-  // Check if Src is G_ASHR(x, C).
-  auto *AshrMI = getOpcodeDef(TargetOpcode::G_ASHR, Src, MRI);
-  if (!AshrMI)
-    return false;
+  Register InnerSrc;
+  if (mi_match(Src, MRI, m_GZExt(m_Reg(InnerSrc)))) {
+    // If the outer dest type == inner zext dest type, it's a simple no-op
+    // (handled by matchRedundantSExt for same-type).
+    if (DstTy == MRI.getType(Src))
+      return false;
 
-  auto ShiftAmtV = getIConstantVRegValWithLookThrough(
-      AshrMI->getOperand(2).getReg(), MRI);
-  if (!ShiftAmtV)
-    return false;
+    // G_SEXT(G_ZEXT x) from TyA -> TyB -> TyC where TyC > TyB.
+    // Inner zext zeros bits [TyA..TyB). Outer sext zeros bits [TyB..TyC)
+    // because sign bit at position TyB-1 is 0 (zext cleared it).
+    // Equivalent to: G_ZEXT x from TyA -> TyC directly.
+    // Only profitable if the inner zext has a single use.
+    if (!MRI.hasOneNonDBGUse(Src))
+      return false;
 
-  uint64_t ShiftAmt = ShiftAmtV->Value.getZExtValue();
-  // sext_inreg width == BitWidth - ShiftAmt means the ASHR already produced
-  // a sign-extended value of exactly that width.
-  if (static_cast<unsigned>(Imm) != BitWidth - ShiftAmt)
-    return false;
-
-  // Only profitable if the ashr has a single use.
-  if (!MRI.hasOneNonDBGUse(Src))
-    return false;
-
-  MatchInfo = Src;
-  return true;
-}
-
-// Apply sext_inreg of ashr: replace with COPY.
-void applySExtInRegOfAShr(MachineInstr &MI, MachineRegisterInfo &MRI,
-                          MachineIRBuilder &Builder,
-                          GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_AND x, -1 -> x (AND with all-ones is identity).
-bool matchAndAllOnes(MachineInstr &MI, MachineRegisterInfo &MRI,
-                     Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_AND);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Op1 = MI.getOperand(1).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-  unsigned BitWidth = Ty.getSizeInBits();
-  APInt AllOnes = APInt::getAllOnes(BitWidth);
-
-  auto V2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (V2 && V2->Value.sextOrTrunc(BitWidth) == AllOnes) {
-    MatchInfo = Op1;
-    return true;
-  }
-  auto V1 = getIConstantVRegValWithLookThrough(Op1, MRI);
-  if (V1 && V1->Value.sextOrTrunc(BitWidth) == AllOnes) {
-    MatchInfo = Op2;
+    MatchInfo = InnerSrc;
     return true;
   }
   return false;
 }
 
-// Apply G_AND x, -1: replace with COPY of the non-constant operand.
-void applyAndAllOnes(MachineInstr &MI, MachineRegisterInfo &MRI,
+// Apply sext-of-zext: replace G_SEXT(G_ZEXT x) with G_ZEXT x to the outer
+// destination type.
+void applySExtOfZExt(MachineInstr &MI, MachineRegisterInfo &MRI,
                      MachineIRBuilder &Builder,
                      GISelChangeObserver &Observer, Register &MatchInfo) {
   Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_OR x, 0 -> x (OR with zero is identity).
-bool matchOrZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                 Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_OR);
-  Register Op1 = MI.getOperand(1).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-
-  auto V2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (V2 && V2->Value.isZero()) {
-    MatchInfo = Op1;
-    return true;
-  }
-  auto V1 = getIConstantVRegValWithLookThrough(Op1, MRI);
-  if (V1 && V1->Value.isZero()) {
-    MatchInfo = Op2;
-    return true;
-  }
-  return false;
-}
-
-// Apply G_OR x, 0: replace with COPY of the non-constant operand.
-void applyOrZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                 MachineIRBuilder &Builder,
-                 GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_ADD x, 0 -> x (ADD with zero is identity).
-bool matchAddZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                  Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_ADD);
   Register Dst = MI.getOperand(0).getReg();
-  Register Op1 = MI.getOperand(1).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-
-  auto V2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (V2 && V2->Value.isZero()) {
-    MatchInfo = Op1;
-    return true;
-  }
-  auto V1 = getIConstantVRegValWithLookThrough(Op1, MRI);
-  if (V1 && V1->Value.isZero()) {
-    MatchInfo = Op2;
-    return true;
-  }
-  return false;
-}
-
-// Apply G_ADD x, 0: replace with COPY of the non-constant operand.
-void applyAddZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                  MachineIRBuilder &Builder,
-                  GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_SUB x, 0 -> x (SUB with zero RHS is identity).
-bool matchSubZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                  Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_SUB);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-
-  auto V2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (V2 && V2->Value.isZero()) {
-    MatchInfo = MI.getOperand(1).getReg();
-    return true;
-  }
-  return false;
-}
-
-// Apply G_SUB x, 0: replace with COPY of the LHS operand.
-void applySubZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                  MachineIRBuilder &Builder,
-                  GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_SHL x, 0 -> x (shift by zero is identity).
-bool matchShlZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                  Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_SHL);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-
-  auto V2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (V2 && V2->Value.isZero()) {
-    MatchInfo = MI.getOperand(1).getReg();
-    return true;
-  }
-  return false;
-}
-
-// Apply G_SHL x, 0: replace with COPY of the value operand.
-void applyShlZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                  MachineIRBuilder &Builder,
-                  GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_LSHR x, 0 -> x (logical shift right by zero is identity).
-bool matchLshrZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                   Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_LSHR);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-
-  auto V2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (V2 && V2->Value.isZero()) {
-    MatchInfo = MI.getOperand(1).getReg();
-    return true;
-  }
-  return false;
-}
-
-// Apply G_LSHR x, 0: replace with COPY of the value operand.
-void applyLshrZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                   MachineIRBuilder &Builder,
-                   GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_ASHR x, 0 -> x (arithmetic shift right by zero is identity).
-bool matchAshrZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                   Register &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_ASHR);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-
-  auto V2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (V2 && V2->Value.isZero()) {
-    MatchInfo = MI.getOperand(1).getReg();
-    return true;
-  }
-  return false;
-}
-
-// Apply G_ASHR x, 0: replace with COPY of the value operand.
-void applyAshrZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                   MachineIRBuilder &Builder,
-                   GISelChangeObserver &Observer, Register &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Observer.changingInstr(MI);
-  MI.setDesc(
-      MI.getMF()->getSubtarget().getInstrInfo()->get(TargetOpcode::COPY));
-  while (MI.getNumOperands() > 2)
-    MI.removeOperand(MI.getNumOperands() - 1);
-  MI.getOperand(1).setReg(MatchInfo);
-  Observer.changedInstr(MI);
-}
-
-// Match G_MUL x, 0 -> 0 (multiply by zero is always zero).
-bool matchMulZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                  APInt &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_MUL);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Op1 = MI.getOperand(1).getReg();
-  Register Op2 = MI.getOperand(2).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-  unsigned BW = Ty.getSizeInBits();
-
-  auto V2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (V2 && V2->Value.isZero()) {
-    MatchInfo = APInt::getZero(BW);
-    return true;
-  }
-  auto V1 = getIConstantVRegValWithLookThrough(Op1, MRI);
-  if (V1 && V1->Value.isZero()) {
-    MatchInfo = APInt::getZero(BW);
-    return true;
-  }
-  return false;
-}
-
-// Apply G_MUL x, 0: replace with constant 0.
-void applyMulZero(MachineInstr &MI, MachineRegisterInfo &MRI,
-                  MachineIRBuilder &Builder,
-                  GISelChangeObserver &Observer, APInt &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Register Dst = MI.getOperand(0).getReg();
-  Builder.buildConstant(Dst, MatchInfo);
   Observer.erasingInstr(MI);
+  Builder.buildZExt(Dst, MatchInfo);
   MI.eraseFromParent();
 }
 
-// Select-to-minmax combine result: holds the target generic opcode to replace
-// with, plus the two source operands for the min/max.
-struct SelectMinMaxMatchInfo {
-  unsigned MinMaxOpcode; // G_SMAX, G_SMIN, G_UMAX, or G_UMIN
-  Register OpA;         // First min/max operand
-  Register OpB;         // Second min/max operand
-};
-
-// Match G_SELECT(G_ICMP(pred, a, b), x, y) where the select is equivalent
-// to a min or max operation.
-// Patterns detected:
-// select (a > b), a, b -> smax(a, b)
-// select (a > b), b, a -> smin(a, b)
-// select (a < b), a, b -> smin(a, b)
-// select (a < b), b, a -> smax(a, b)
-// Same for unsigned variants with ugt/ult -> umax/umin.
-// Only matches when the G_ICMP feeds directly into the G_SELECT (one use)
-// and the comparison operands match the select true/false operands.
-bool matchSelectToMinMax(MachineInstr &MI, MachineRegisterInfo &MRI,
-                         SelectMinMaxMatchInfo &MatchInfo) {
-  assert(MI.getOpcode() == TargetOpcode::G_SELECT);
-  Register Dst = MI.getOperand(0).getReg();
-  Register Cond = MI.getOperand(1).getReg();
-  Register TrueVal = MI.getOperand(2).getReg();
-  Register FalseVal = MI.getOperand(3).getReg();
-  LLT Ty = MRI.getType(Dst);
-  if (!Ty.isScalar())
-    return false;
-
-  // Only combine s32 selects — G_SMAX/G_SMIN/G_UMAX/G_UMIN are legal for s32
-  // but s64 is lowered. Producing them for s64 would fail the legality check.
-  if (Ty.getSizeInBits() != 32)
-    return false;
-
-  // The condition must be a G_ICMP.
-  auto *CmpMI = getOpcodeDef(TargetOpcode::G_ICMP, Cond, MRI);
-  if (!CmpMI)
-    return false;
-
-  // Only fold if the ICMP has a single non-debug use (the SELECT).
-  if (!MRI.hasOneNonDBGUse(Cond))
-    return false;
-
-  auto Pred =
-      static_cast<CmpInst::Predicate>(CmpMI->getOperand(1).getPredicate());
-  Register CmpA = CmpMI->getOperand(2).getReg();
-  Register CmpB = CmpMI->getOperand(3).getReg();
-
-  // Determine the min/max opcode and operand order based on the predicate
-  // and which comparison operand maps to the true/false values of the select.
-  //
-  // For "a > b" (SGT):
-  // select(a > b, a, b) = smax(a, b) [true val is the larger]
-  // select(a > b, b, a) = smin(a, b) [true val is the smaller]
-  //
-  // For "a < b" (SLT):
-  // select(a < b, a, b) = smin(a, b) [true val is the smaller]
-  // select(a < b, b, a) = smax(a, b) [true val is the larger]
-
-  switch (Pred) {
-  default:
-    return false;
-  case CmpInst::ICMP_SGT:
-    // a > b: true=a,false=b -> smax(a,b); true=b,false=a -> smin(a,b)
-    if (TrueVal == CmpA && FalseVal == CmpB) {
-      MatchInfo = {TargetOpcode::G_SMAX, CmpA, CmpB};
-      return true;
-    }
-    if (TrueVal == CmpB && FalseVal == CmpA) {
-      MatchInfo = {TargetOpcode::G_SMIN, CmpB, CmpA};
-      return true;
-    }
-    return false;
-  case CmpInst::ICMP_SLT:
-    // a < b: true=a,false=b -> smin(a,b); true=b,false=a -> smax(a,b)
-    if (TrueVal == CmpA && FalseVal == CmpB) {
-      MatchInfo = {TargetOpcode::G_SMIN, CmpA, CmpB};
-      return true;
-    }
-    if (TrueVal == CmpB && FalseVal == CmpA) {
-      MatchInfo = {TargetOpcode::G_SMAX, CmpB, CmpA};
-      return true;
-    }
-    return false;
-  case CmpInst::ICMP_UGT:
-    // a >u b: true=a,false=b -> umax(a,b); true=b,false=a -> umin(a,b)
-    if (TrueVal == CmpA && FalseVal == CmpB) {
-      MatchInfo = {TargetOpcode::G_UMAX, CmpA, CmpB};
-      return true;
-    }
-    if (TrueVal == CmpB && FalseVal == CmpA) {
-      MatchInfo = {TargetOpcode::G_UMIN, CmpB, CmpA};
-      return true;
-    }
-    return false;
-  case CmpInst::ICMP_ULT:
-    // a <u b: true=a,false=b -> umin(a,b); true=b,false=a -> umax(a,b)
-    if (TrueVal == CmpA && FalseVal == CmpB) {
-      MatchInfo = {TargetOpcode::G_UMIN, CmpA, CmpB};
-      return true;
-    }
-    if (TrueVal == CmpB && FalseVal == CmpA) {
-      MatchInfo = {TargetOpcode::G_UMAX, CmpB, CmpA};
-      return true;
-    }
-    return false;
-  }
-}
-
-// Apply select-to-minmax: replace G_SELECT(G_ICMP) with G_SMAX/G_SMIN/G_UMAX/G_UMIN.
-void applySelectToMinMax(MachineInstr &MI, MachineRegisterInfo &MRI,
-                         MachineIRBuilder &Builder,
-                         GISelChangeObserver &Observer,
-                         SelectMinMaxMatchInfo &MatchInfo) {
-  Builder.setInstrAndDebugLoc(MI);
-  Register Dst = MI.getOperand(0).getReg();
-
-  // The ICMP that fed the SELECT is now dead (it had one use).
-  // Erase the SELECT and build the min/max instruction.
-  Observer.erasingInstr(MI);
-  Builder.buildInstr(MatchInfo.MinMaxOpcode, {Dst},
-                     {MatchInfo.OpA, MatchInfo.OpB});
-  MI.eraseFromParent();
-}
 
 //===----------------------------------------------------------------------===//
 // AIE-style pre/post-inc/dec: G_LOAD/STORE + G_PTR_ADD → G_HAYDN_*INC_*
@@ -2078,9 +797,10 @@ static bool checkRegUsesDominate(Register Reg, MachineInstr &Instr,
 static bool matchPostIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
                             const CombinerHelper &Helper,
                             HaydnIncMemInfo &Info) {
+  // G_SEXTLOAD fuses too: is_sext imm on G_HAYDN_*INC_LOAD selects S_LBS/S_LHWS.
   const bool IsLoad = MemI.getOpcode() == TargetOpcode::G_LOAD ||
-                      MemI.getOpcode() == TargetOpcode::G_ZEXTLOAD;
-  // G_SEXTLOAD: not fused (no signedness on G_HAYDN_*INC_*; would select LBU/LHWU).
+                      MemI.getOpcode() == TargetOpcode::G_ZEXTLOAD ||
+                      MemI.getOpcode() == TargetOpcode::G_SEXTLOAD;
   if (!IsLoad && MemI.getOpcode() != TargetOpcode::G_STORE)
     return false;
 
@@ -2088,8 +808,6 @@ static bool matchPostIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
   bool IsSExt = false;
   if (!memAccessInfo(MemI, MRI, MemBytes, Scale, IsSExt))
     return false;
-  // G_LOAD/G_ZEXTLOAD → unsigned byte/half forms at select.
-  IsSExt = false;
 
   Register Data = MemI.getOperand(0).getReg();
   Register Base = MemI.getOperand(1).getReg();
@@ -2175,7 +893,8 @@ static bool matchPostIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
 static bool matchPreIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
                            const CombinerHelper &Helper, HaydnIncMemInfo &Info) {
   const bool IsLoad = MemI.getOpcode() == TargetOpcode::G_LOAD ||
-                      MemI.getOpcode() == TargetOpcode::G_ZEXTLOAD;
+                      MemI.getOpcode() == TargetOpcode::G_ZEXTLOAD ||
+                      MemI.getOpcode() == TargetOpcode::G_SEXTLOAD;
   if (!IsLoad && MemI.getOpcode() != TargetOpcode::G_STORE)
     return false;
 
@@ -2183,7 +902,6 @@ static bool matchPreIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
   bool IsSExt = false;
   if (!memAccessInfo(MemI, MRI, MemBytes, Scale, IsSExt))
     return false;
-  IsSExt = false;
 
   Register Data = MemI.getOperand(0).getReg();
   Register MemBase = MemI.getOperand(1).getReg();
@@ -2259,9 +977,33 @@ static bool matchPreIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
   return true;
 }
 
-static void applyIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
-                        MachineIRBuilder &B, GISelChangeObserver &Observer,
-                        HaydnIncMemInfo &Info) {
+// TD form_agu_inc_mem entry: fuse G_LOAD/ZEXTLOAD/SEXTLOAD/STORE + G_PTR_ADD
+// into G_HAYDN_*INC_*. Requires Subtarget hasAGU() (baseline on generic and
+// haydn CPUs; disable with -mattr=-agu) and -haydn-enable-gisel-update-addr.
+bool matchCombineAGUIncMem(MachineInstr &MI, MachineRegisterInfo &MRI,
+                           const CombinerHelper &Helper,
+                           HaydnIncMemInfo &Info) {
+  const HaydnSubtarget &ST = MI.getMF()->getSubtarget<HaydnSubtarget>();
+  if (!ST.hasAGU())
+    return false;
+  if (!EnableHaydnGISelUpdateAddr)
+    return false;
+
+  unsigned Opc = MI.getOpcode();
+  if (Opc != TargetOpcode::G_LOAD && Opc != TargetOpcode::G_ZEXTLOAD &&
+      Opc != TargetOpcode::G_SEXTLOAD && Opc != TargetOpcode::G_STORE)
+    return false;
+
+  if (EnableHaydnGISelPostInc && matchPostIncMem(MI, MRI, Helper, Info))
+    return true;
+  if (EnableHaydnGISelPreInc && matchPreIncMem(MI, MRI, Helper, Info))
+    return true;
+  return false;
+}
+
+void applyIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
+                 MachineIRBuilder &B, GISelChangeObserver &Observer,
+                 HaydnIncMemInfo &Info) {
   // Always insert at the memory op. PRE used to insert at G_PTR_ADD, which
   // hoisted store-data uses above their defs when %data was defined between
   // ptradd and store (coremark core_main: S_SW_PRE_IMM LiveIntervals
@@ -2292,6 +1034,8 @@ static void applyIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
     MIB.addDef(Info.NewPtr);
     MIB.addUse(Info.Base);
     MIB.addUse(OffsetUse);
+    // is_sext: 1 → S_LBS/S_LHWS at select; 0 → S_LBU/S_LHWU (or full-width).
+    MIB.addImm(Info.IsSExtLoad ? 1 : 0);
   } else {
     MIB.addDef(Info.NewPtr);
     MIB.addUse(Info.Data);
@@ -2312,6 +1056,7 @@ static void applyIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
   Observer.erasingInstr(MemI);
   MemI.eraseFromParent();
 }
+
 
 //===----------------------------------------------------------------------===//
 // HaydnPostLegalizerCombinerImpl
@@ -2362,436 +1107,11 @@ HaydnPostLegalizerCombinerImpl::HaydnPostLegalizerCombinerImpl(
 }
 
 bool HaydnPostLegalizerCombinerImpl::tryCombineAll(MachineInstr &MI) const {
-  // First try the TableGen-generated rules.
-  if (tryCombineAllImpl(MI))
-    return true;
-
-  // Then try target-specific C++ rules.
-  unsigned Opc = MI.getOpcode();
-  MachineRegisterInfo &MRI = *B.getMRI();
-
-  switch (Opc) {
-  default:
-    break;
-  case TargetOpcode::G_LOAD:
-  case TargetOpcode::G_ZEXTLOAD:
-  case TargetOpcode::G_STORE: {
-    // AIE-style: fuse G_LOAD/STORE + G_PTR_ADD into G_HAYDN_*INC_* so
-    // InstructionSelect emits fused AGU writeback. Default ON
-    // (-haydn-enable-gisel-update-addr). G_SEXTLOAD intentionally omitted:
-    // selector always emits LBU/LHWU for 1/2-byte fused loads (no signedness
-    // on G_HAYDN_*INC_* yet).
-    if (EnableHaydnGISelUpdateAddr) {
-      HaydnIncMemInfo Info;
-      bool Matched = false;
-      if (EnableHaydnGISelPostInc && matchPostIncMem(MI, MRI, Helper, Info))
-        Matched = true;
-      else if (EnableHaydnGISelPreInc &&
-               matchPreIncMem(MI, MRI, Helper, Info))
-        Matched = true;
-      if (Matched) {
-        applyIncMem(MI, MRI, B, Observer, Info);
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_TRUNC: {
-    // G_TRUNC(G_ANYEXT x) -> COPY x
-    // Eliminates trivial trunc-of-anyext identity patterns.
-    {
-      Register MatchInfo;
-      if (matchTruncOfAnyExt(MI, MRI, MatchInfo)) {
-        applyTruncOfAnyExt(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_TRUNC(G_SEXT/G_ZEXT x) where output == input type -> COPY x
-    // Identity extension-truncation cancels out.
-    {
-      Register MatchInfo;
-      if (matchTruncOfExtToIdentity(MI, MRI, MatchInfo)) {
-        applyTruncOfExtToIdentity(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_SEXT:
-  case TargetOpcode::G_ZEXT: {
-    // G_SEXT/G_ZEXT x followed by G_TRUNC back to src type -> COPY x
-    // Eliminates extension-truncation round-trips.
-    {
-      Register MatchInfo;
-      if (matchExtTruncIdentity(MI, MRI, MatchInfo)) {
-        applyExtTruncIdentity(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_SEXT(G_SEXT x) where outer is no-op (same type) -> COPY
-    if (Opc == TargetOpcode::G_SEXT) {
-      Register MatchInfo;
-      if (matchRedundantSExt(MI, MRI, MatchInfo)) {
-        applyRedundantSExt(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_ZEXT(G_ZEXT x) where outer is no-op (same type) -> COPY
-    if (Opc == TargetOpcode::G_ZEXT) {
-      Register MatchInfo;
-      if (matchRedundantZExt(MI, MRI, MatchInfo)) {
-        applyRedundantZExt(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_ZEXT(G_SEXT x) where outer dest == inner sext dest -> COPY
-    // Outer zero-extension is a no-op when the types are already equal.
-    if (Opc == TargetOpcode::G_ZEXT) {
-      Register MatchInfo;
-      if (matchZExtOfSExt(MI, MRI, MatchInfo)) {
-        applyZExtOfSExt(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_SEXT(G_ZEXT x) -> G_ZEXT x (to wider type)
-    // Sign-extending a zero-extended value is equivalent to zero-extension
-    // because the inner zext guarantees a non-negative (sign bit = 0) value.
-    if (Opc == TargetOpcode::G_SEXT) {
-      Register MatchInfo;
-      if (matchSExtOfZExt(MI, MRI, MatchInfo)) {
-        applySExtOfZExt(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_ZEXT(G_ZEXT x) -> G_ZEXT x (collapse to single wider zext)
-    if (Opc == TargetOpcode::G_ZEXT) {
-      Register MatchInfo;
-      if (matchFoldDoubleZExt(MI, MRI, MatchInfo)) {
-        applyFoldDoubleZExt(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_SEXT(G_SEXT x) -> G_SEXT x (collapse to single wider sext)
-    if (Opc == TargetOpcode::G_SEXT) {
-      Register MatchInfo;
-      if (matchFoldDoubleSExt(MI, MRI, MatchInfo)) {
-        applyFoldDoubleSExt(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // NOTE: G_ZEXT(G_TRUNC x) where result type == trunc source type is NOT
-    // identity. trunc(s32->s16) drops upper 16 bits, then zext(s16->s32)
-    // zero-extends, producing x & 0xFFFF, not x. Do NOT fold this pattern.
-    break;
-  }
-  case TargetOpcode::COPY: {
-    // G_COPY x, x -> eliminate (redundant self-copy).
-    if (matchRedundantCopy(MI, MRI)) {
-      applyRedundantCopy(MI, MRI, B, Observer);
-      return true;
-    }
-    break;
-  }
-  case TargetOpcode::G_ICMP: {
-    // G_ICMP const, const -> const 0 or 1
-    // Constant-fold integer comparisons with known constant operands.
-    {
-      int64_t MatchInfo;
-      if (matchConstantFoldICmp(MI, MRI, MatchInfo)) {
-        applyConstantFoldICmp(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_ICMP with known bits -> constant true/false.
-    {
-      int64_t MatchInfo;
-      if (Helper.matchICmpToTrueFalseKnownBits(MI, MatchInfo)) {
-        B.setInstrAndDebugLoc(MI);
-        Register Dst = MI.getOperand(0).getReg();
-        B.buildConstant(Dst, MatchInfo);
-        Observer.erasingInstr(MI);
-        MI.eraseFromParent();
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_SELECT: {
-    // G_SELECT(G_ICMP(pred, a, b), x, y) -> G_SMAX/G_SMIN/G_UMAX/G_UMIN
-    // when the select is equivalent to a min or max operation.
-    {
-      SelectMinMaxMatchInfo MatchInfo;
-      if (matchSelectToMinMax(MI, MRI, MatchInfo)) {
-        applySelectToMinMax(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_AND: {
-    // G_AND x, 0 -> 0 (AND with zero is always zero)
-    {
-      APInt MatchInfo;
-      if (matchAndZero(MI, MRI, MatchInfo)) {
-        applyAndZero(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_AND x, -1 -> x (AND with all-ones is identity)
-    {
-      Register MatchInfo;
-      if (matchAndAllOnes(MI, MRI, MatchInfo)) {
-        applyAndAllOnes(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // (x >> C) & mask where mask == exact remaining bits -> x >> C
-    // Eliminates redundant mask after shift (bit-field extraction pattern).
-    {
-      Register MatchInfo;
-      if (matchShiftMaskRedundant(MI, MRI, MatchInfo)) {
-        applyShiftMaskRedundant(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_OR: {
-    // G_OR x, -1 -> -1 (OR with all-ones is always all-ones)
-    {
-      APInt MatchInfo;
-      if (matchOrAllOnes(MI, MRI, MatchInfo)) {
-        applyOrAllOnes(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_OR x, 0 -> x (OR with zero is identity)
-    {
-      Register MatchInfo;
-      if (matchOrZero(MI, MRI, MatchInfo)) {
-        applyOrZero(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // (A & MaskC) | SetC where MaskC and SetC are disjoint and
-    // MaskC|SetC covers all bits -> A | SetC (AND-OR canonicalization).
-    {
-      std::tuple<Register, APInt, APInt> MatchInfo;
-      if (matchAndOrDisjoint(MI, MRI, MatchInfo)) {
-        applyAndOrDisjoint(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_XOR: {
-    // G_XOR x, 0 -> x (XOR with zero is identity).
-    {
-      Register MatchInfo;
-      if (matchXorZero(MI, MRI, MatchInfo)) {
-        applyXorZero(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // (A ^ C1) ^ C2 -> A ^ (C1^C2) (XOR constant cancellation).
-    {
-      std::pair<Register, APInt> MatchInfo;
-      if (matchXorXorConstantFold(MI, MRI, MatchInfo)) {
-        applyXorXorConstantFold(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // XOR(NOT(x)) -> x (double NOT cancellation).
-    {
-      Register MatchInfo;
-      if (matchDoubleNot(MI, MRI, MatchInfo)) {
-        applyDoubleNot(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // XOR %bool, -1 -> XOR (and %bool,1), 1 when %bool is a widened i1 AND the
-    // XOR result is consumed only by a branch (BNEZ loop). gate:
-    // the s32 bitwise NOT (0/-1, 1/-2) is only equivalent to logical NOT
-    // (0/1, 1/0) under the BNEZ polarity test; for value uses (return/store
-    // arith/PHI) they differ and the combine would mis-compile, so it is
-    // restricted to branch-only Dst users.
-    {
-      bool MatchInfo;
-      if (matchXorAllOnesBoolean(MI, MRI, MatchInfo)) {
-        applyXorAllOnesBoolean(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_BSWAP: {
-    // G_BSWAP(G_BSWAP x) -> COPY x (double bswap is identity)
-    {
-      Register MatchInfo;
-      if (matchBswapOfBswap(MI, MRI, MatchInfo)) {
-        applyBswapOfBswap(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_ADD: {
-    // G_ADD x, 0 -> x (ADD with zero is identity).
-    {
-      Register MatchInfo;
-      if (matchAddZero(MI, MRI, MatchInfo)) {
-        applyAddZero(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_ADD(G_ADD x, C1), C2 -> G_ADD x, (C1+C2)
-    {
-      std::pair<Register, APInt> MatchInfo;
-      if (matchAddConstChain(MI, MRI, MatchInfo)) {
-        applyAddConstChain(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_ADD x, G_SUB(0, y) -> G_SUB x, y
-    {
-      std::pair<Register, Register> MatchInfo;
-      if (matchAddOfNeg(MI, MRI, MatchInfo)) {
-        applyAddOfNeg(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_SUB: {
-    // G_SUB x, 0 -> x (SUB with zero RHS is identity).
-    {
-      Register MatchInfo;
-      if (matchSubZero(MI, MRI, MatchInfo)) {
-        applySubZero(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_SUB x, G_SUB(0, y) -> G_ADD x, y
-    {
-      std::pair<Register, Register> MatchInfo;
-      if (matchSubOfNeg(MI, MRI, MatchInfo)) {
-        applySubOfNeg(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_MUL: {
-    // G_MUL x, 0 -> 0 (multiply by zero is always zero)
-    {
-      APInt MatchInfo;
-      if (matchMulZero(MI, MRI, MatchInfo)) {
-        applyMulZero(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_MUL x, C where C is (pow2 - 1) -> G_SUB (G_SHL x, log2(pow2)), x
-    // Shift-sub: x * 7 = (x << 3) - x. Must check before pow2 match.
-    {
-      std::pair<Register, uint64_t> MatchInfo;
-      if (matchMulToShiftSub(MI, MRI, MatchInfo)) {
-        applyMulToShiftSub(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_MUL x, C where C is (pow2 + 1) -> G_ADD (G_SHL x, log2(pow2)), x
-    // Shift-add: x * 9 = (x << 3) + x. Must check before pow2 match.
-    {
-      std::pair<Register, uint64_t> MatchInfo;
-      if (matchMulToShiftAdd(MI, MRI, MatchInfo)) {
-        applyMulToShiftAdd(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_MUL x, C where C is a power of 2 -> G_SHL x, log2(C)
-    // Strength reduction: shift is cheaper than multiply.
-    {
-      std::pair<Register, uint64_t> MatchInfo;
-      if (matchMulToShift(MI, MRI, MatchInfo)) {
-        applyMulToShift(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_MUL x, 1 -> x (multiplication by 1 is identity).
-    {
-      Register MatchInfo;
-      if (matchMulByOne(MI, MRI, MatchInfo)) {
-        applyMulByOne(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_MUL x, -1 -> G_SUB 0, x (canonicalize negation)
-    {
-      Register MatchInfo;
-      if (matchMulByNegOne(MI, MRI, MatchInfo)) {
-        applyMulByNegOne(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_SHL: {
-    // G_SHL x, 0 -> x (shift by zero is identity).
-    {
-      Register MatchInfo;
-      if (matchShlZero(MI, MRI, MatchInfo)) {
-        applyShlZero(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_LSHR: {
-    // G_LSHR x, 0 -> x (logical shift right by zero is identity).
-    {
-      Register MatchInfo;
-      if (matchLshrZero(MI, MRI, MatchInfo)) {
-        applyLshrZero(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_ASHR: {
-    // G_ASHR x, 0 -> x (arithmetic shift right by zero is identity).
-    {
-      Register MatchInfo;
-      if (matchAshrZero(MI, MRI, MatchInfo)) {
-        applyAshrZero(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    break;
-  }
-  case TargetOpcode::G_SEXT_INREG: {
-    // G_SEXT_INREG(G_SEXT x, K) where sext already covers K bits -> COPY
-    {
-      Register MatchInfo;
-      if (matchSExtInRegOfSExt(MI, MRI, MatchInfo)) {
-        applySExtInRegOfSExt(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    // G_SEXT_INREG(G_ASHR x, C) where sext width == BitWidth-C -> COPY
-    // Redundant sign-extension after arithmetic right shift.
-    {
-      Register MatchInfo;
-      if (matchSExtInRegOfAShr(MI, MRI, MatchInfo)) {
-        applySExtInRegOfAShr(MI, MRI, B, Observer, MatchInfo);
-        return true;
-      }
-    }
-    break;
-  }
-  }
-
-  return false;
+  // TD registry only: post generics + residual + form_agu_inc_mem.
+  // No free-form C++ opcode switch / no sanitizeCastCopies.
+  return tryCombineAllImpl(MI);
 }
+
 
 //===----------------------------------------------------------------------===//
 // Pass boilerplate
@@ -2834,76 +1154,6 @@ HaydnPostLegalizerCombiner::HaydnPostLegalizerCombiner()
     report_fatal_error("Invalid rule identifier");
 }
 
-// residual: sanitize type-mismatched COPY and invalid G_TRUNC before
-// TableGen/C++ combines run.
-// Root cause of the remaining full-seed crash: identity folds (and earlier
-// pipeline stages) leave cross-type COPY such as `s64 = COPY s1`. Upstream
-// getIConstantVRegValWithLookThrough follows COPY without adjusting the
-// constant APInt width; a later G_TRUNC then does Val.trunc(dstW) and
-// asserts "Invalid APInt Truncate request" from isOperandImmEqual.
-// Fix (Haydn-side, no further upstream edits):
-// COPY with DstW > SrcW -> G_ANYEXT
-// COPY with DstW < SrcW -> G_TRUNC
-// G_TRUNC with DstW > SrcW -> G_ANYEXT
-// G_TRUNC with DstW == SrcW -> COPY
-static bool sanitizeCastCopies(MachineFunction &MF) {
-  MachineRegisterInfo &MRI = MF.getRegInfo();
-  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
-  bool Changed = false;
-  unsigned FixedTrunc = 0;
-  unsigned FixedCopy = 0;
-
-  for (MachineBasicBlock &MBB : MF) {
-    for (MachineInstr &MI : MBB) {
-      unsigned Opc = MI.getOpcode();
-      if (Opc != TargetOpcode::G_TRUNC && Opc != TargetOpcode::COPY)
-        continue;
-      if (!MI.getOperand(0).isReg() || !MI.getOperand(1).isReg())
-        continue;
-      Register Dst = MI.getOperand(0).getReg();
-      Register Src = MI.getOperand(1).getReg();
-      if (!Dst.isVirtual() || !Src.isVirtual())
-        continue;
-      LLT DstTy = MRI.getType(Dst);
-      LLT SrcTy = MRI.getType(Src);
-      if (!DstTy.isValid() || !SrcTy.isValid())
-        continue;
-      unsigned DstW = DstTy.getSizeInBits();
-      unsigned SrcW = SrcTy.getSizeInBits();
-
-      if (Opc == TargetOpcode::COPY) {
-        // Cross-type COPY breaks getIConstantVRegValWithLookThrough: it
-        // follows COPY without adjusting APInt width, then a later G_TRUNC
-        // applies trunc(dstW) on the narrow constant and asserts.
-        if (DstW == SrcW)
-          continue;
-        if (DstW > SrcW)
-          MI.setDesc(TII.get(TargetOpcode::G_ANYEXT));
-        else
-          MI.setDesc(TII.get(TargetOpcode::G_TRUNC));
-        ++FixedCopy;
-        Changed = true;
-        continue;
-      }
-
-      // G_TRUNC
-      if (DstW < SrcW)
-        continue; // Proper narrowing.
-      if (DstW == SrcW)
-        MI.setDesc(TII.get(TargetOpcode::COPY));
-      else
-        MI.setDesc(TII.get(TargetOpcode::G_ANYEXT));
-      ++FixedTrunc;
-      Changed = true;
-    }
-  }
-  LLVM_DEBUG(if (FixedTrunc || FixedCopy) {
-    dbgs() << " sanitize: trunc=" << FixedTrunc << " copy=" << FixedCopy
-           << " in " << MF.getName() << '\n';
-  });
-  return Changed;
-}
-
 bool HaydnPostLegalizerCombiner::runOnMachineFunction(MachineFunction &MF) {
   if (MF.getProperties().hasFailedISel())
     return false;
@@ -2920,10 +1170,10 @@ bool HaydnPostLegalizerCombiner::runOnMachineFunction(MachineFunction &MF) {
       &getAnalysis<GISelValueTrackingAnalysisLegacy>().get(MF);
   MachineDominatorTree *MDT =
       &getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
-  // residual: fix type-mismatched COPY / invalid G_TRUNC *before*
-  // CSE is built. setDesc without observer would leave stale CSE
-  // entries if sanitize ran after Wrapper.get.
-  bool Changed = sanitizeCastCopies(MF);
+
+  // No sanitizeCastCopies: PreLegalizer cast_combines + fixed ext collapse
+  // keep the legalization boundary type-clean. Post must not create
+  // unchecked G_ANYEXT/G_TRUNC while ShouldLegalizeIllegal=false.
 
   GISelCSEAnalysisWrapper &Wrapper =
       getAnalysis<GISelCSEAnalysisWrapperPass>().getCSEWrapper();
@@ -2937,8 +1187,7 @@ bool HaydnPostLegalizerCombiner::runOnMachineFunction(MachineFunction &MF) {
   CInfo.ObserverLvl = CombinerInfo::ObserverLevel::SinglePass;
   HaydnPostLegalizerCombinerImpl Impl(MF, CInfo, TPC, *VT, CSEInfo,
                                       RuleConfig, ST, MDT, LI);
-  Changed |= Impl.combineMachineInstrs();
-  return Changed;
+  return Impl.combineMachineInstrs();
 }
 
 char HaydnPostLegalizerCombiner::ID = 0;

@@ -259,15 +259,36 @@ bool InlineAsmLowering::lowerInlineAsm(
         assert(OpTy && "Indirect operand must have elementtype attribute");
       }
 
-      // FIXME: Support aggregate input operands
-      if (!OpTy->isSingleValueType()) {
-        LLVM_DEBUG(
-            dbgs() << "Aggregate input operands are not supported yet\n");
-        return false;
+      // Match TargetLowering::ParseConstraints: unwrap single-element structs
+      // and tile sized aggregates with an integer of the same bit width when
+      // possible. Larger aggregates (e.g. overaligned structs used with =*m)
+      // keep MVT::Other and are only valid as memory constraints.
+      if (StructType *STy = dyn_cast<StructType>(OpTy))
+        if (STy->getNumElements() == 1)
+          OpTy = STy->getElementType(0);
+
+      if (!OpTy->isSingleValueType() && OpTy->isSized()) {
+        unsigned BitSize = DL.getTypeSizeInBits(OpTy);
+        switch (BitSize) {
+        default:
+          break;
+        case 1:
+        case 8:
+        case 16:
+        case 32:
+        case 64:
+        case 128:
+          OpTy = IntegerType::get(OpTy->getContext(), BitSize);
+          break;
+        }
       }
 
-      OpInfo.ConstraintVT =
-          TLI->getAsmOperandValueType(DL, OpTy, true).getSimpleVT();
+      if (!OpTy->isSingleValueType()) {
+        OpInfo.ConstraintVT = MVT::Other;
+      } else {
+        EVT VT = TLI->getAsmOperandValueType(DL, OpTy, true);
+        OpInfo.ConstraintVT = VT.isSimple() ? VT.getSimpleVT() : MVT::Other;
+      }
       ++ArgNo;
     } else if (OpInfo.Type == InlineAsm::isOutput && !OpInfo.isIndirect) {
       assert(!Call.getType()->isVoidTy() && "Bad inline asm!");
@@ -375,7 +396,10 @@ bool InlineAsmLowering::lowerInlineAsm(
                           (OpInfo.isEarlyClobber ? RegState::EarlyClobber : 0));
         }
 
-        // Remember this output operand for later processing
+        // Remember this output operand for later processing. Indirect register
+        // outputs (e.g. "=*r" / "=*imr") still allocate a def register; the
+        // value is stored through the pointer after the INLINEASM, matching
+        // SelectionDAGBuilder.
         OutputOperands.push_back(OpInfo);
       }
 
@@ -392,9 +416,16 @@ bool InlineAsmLowering::lowerInlineAsm(
 
         const InlineAsm::Flag MatchedOperandFlag(Inst->getOperand(InstFlagIdx).getImm());
         if (MatchedOperandFlag.isMemKind()) {
-          LLVM_DEBUG(dbgs() << "Matching input constraint to mem operand not "
-                               "supported. This should be target specific.\n");
-          return false;
+          // Matching input tied to a memory output: reuse the address operand
+          // (SelectionDAGBuilder does the same).
+          assert(MatchedOperandFlag.getNumOperandRegisters() == 1 &&
+                 "Unexpected number of operands");
+          InlineAsm::Flag Flag = MatchedOperandFlag;
+          Flag.clearMemConstraint();
+          Flag.setMatchingOp(DefIdx);
+          Inst.addImm(Flag);
+          Inst.addReg(Inst->getOperand(InstFlagIdx + 1).getReg());
+          break;
         }
         if (!MatchedOperandFlag.isRegDefKind() && !MatchedOperandFlag.isRegDefEarlyClobberKind()) {
           LLVM_DEBUG(dbgs() << "Unknown matching constraint\n");
@@ -588,16 +619,22 @@ bool InlineAsmLowering::lowerInlineAsm(
   // All inputs are handled, insert the instruction now
   MIRBuilder.insertInstr(Inst);
 
-  // Finally, copy the output operands into the output registers
+  // Finally, copy the output operands into the output registers. Indirect
+  // register outputs are stored through their pointer operand instead of
+  // becoming call results (void asm with "=*r"/"=*imr").
   ArrayRef<Register> ResRegs = GetOrCreateVRegs(Call);
-  if (ResRegs.size() != OutputOperands.size()) {
+  unsigned NumDirectOutputs = 0;
+  for (const GISelAsmOperandInfo &OpInfo : OutputOperands)
+    if (!OpInfo.isIndirect)
+      ++NumDirectOutputs;
+
+  if (ResRegs.size() != NumDirectOutputs) {
     LLVM_DEBUG(dbgs() << "Expected the number of output registers to match the "
                          "number of destination registers\n");
     return false;
   }
-  for (unsigned int i = 0, e = ResRegs.size(); i < e; i++) {
-    GISelAsmOperandInfo &OpInfo = OutputOperands[i];
-
+  unsigned ResIdx = 0;
+  for (GISelAsmOperandInfo &OpInfo : OutputOperands) {
     if (OpInfo.Regs.empty())
       continue;
 
@@ -612,7 +649,46 @@ bool InlineAsmLowering::lowerInlineAsm(
 
       Register SrcReg = OpInfo.Regs[0];
       unsigned SrcSize = TRI->getRegSizeInBits(SrcReg, *MRI);
-      LLT ResTy = MRI->getType(ResRegs[i]);
+
+      if (OpInfo.isIndirect) {
+        // Materialize the defined value and store it through the pointer.
+        if (OpInfo.ConstraintVT == MVT::Other ||
+            !OpInfo.ConstraintVT.isValid()) {
+          LLVM_DEBUG(dbgs() << "Cannot store indirect asm output with "
+                               "unknown value type\n");
+          return false;
+        }
+        unsigned ValSize = OpInfo.ConstraintVT.getSizeInBits();
+        Register TmpReg =
+            MRI->createGenericVirtualRegister(LLT::scalar(SrcSize));
+        MIRBuilder.buildCopy(TmpReg, SrcReg);
+        Register StoreVal = TmpReg;
+        if (ValSize < SrcSize) {
+          StoreVal =
+              MIRBuilder.buildTrunc(LLT::scalar(ValSize), TmpReg).getReg(0);
+        } else if (ValSize > SrcSize) {
+          LLVM_DEBUG(dbgs() << "Indirect asm output wider than defining "
+                               "register\n");
+          return false;
+        }
+
+        ArrayRef<Register> PtrRegs =
+            GetOrCreateVRegs(*OpInfo.CallOperandVal);
+        if (PtrRegs.size() != 1) {
+          LLVM_DEBUG(dbgs() << "Expected single pointer register for "
+                               "indirect asm output\n");
+          return false;
+        }
+
+        Type *ValTy = IntegerType::get(F.getContext(), ValSize);
+        Align Alignment = DL.getABITypeAlign(ValTy);
+        MIRBuilder.buildStore(
+            StoreVal, PtrRegs[0],
+            MachinePointerInfo(OpInfo.CallOperandVal), Alignment);
+        break;
+      }
+
+      LLT ResTy = MRI->getType(ResRegs[ResIdx]);
       if (ResTy.isScalar() && ResTy.getSizeInBits() < SrcSize) {
         // First copy the non-typed virtual register into a generic virtual
         // register
@@ -620,14 +696,15 @@ bool InlineAsmLowering::lowerInlineAsm(
             MRI->createGenericVirtualRegister(LLT::scalar(SrcSize));
         MIRBuilder.buildCopy(Tmp1Reg, SrcReg);
         // Need to truncate the result of the register
-        MIRBuilder.buildTrunc(ResRegs[i], Tmp1Reg);
+        MIRBuilder.buildTrunc(ResRegs[ResIdx], Tmp1Reg);
       } else if (ResTy.getSizeInBits() == SrcSize) {
-        MIRBuilder.buildCopy(ResRegs[i], SrcReg);
+        MIRBuilder.buildCopy(ResRegs[ResIdx], SrcReg);
       } else {
         LLVM_DEBUG(dbgs() << "Unhandled output operand with "
                              "mismatched register size\n");
         return false;
       }
+      ++ResIdx;
 
       break;
     }
