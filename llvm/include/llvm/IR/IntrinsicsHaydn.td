@@ -14,6 +14,17 @@
 // Definitions for all Haydn intrinsics.
 //
 // All Haydn intrinsics start with "llvm.haydn.".
+//
+// C1.3 / TOPIC model §6 — effect categories (pair with BuiltinsHaydn.td Effect=):
+//   Pure     → haydn_{binary,unary,ternary}_intrinsic : IntrNoMem+Speculatable
+//   SFR      → haydn_sfr_{compare,cmov}_intrinsic / movesfr* : IntrHasSideEffects
+//   State    → setcbr/flar/pldwwua (CSR/CBR/AR) : IntrHasSideEffects[+WriteMem]
+//   Mem      → Golden LS WITH/POST/PRE : Intr{Read,Write}Mem+ArgMemOnly+NoCapture
+//   StateMem → CB/BREV/UA : Intr{Read,Write}Mem + IntrHasSideEffects
+// C2.3: ordinary Golden LS is AA-argmem only; CB/UA MMO is MOVolatile (ISel).
+// Clang side: only Pure gets Const; SFR/State/Mem/StateMem are [NoThrow] only.
+// Attribute parity is gated by clang/test/CodeGen/Haydn/capi-effect-attr-parity-probe.c
+//===----------------------------------------------------------------------===//
 let TargetPrefix = "haydn" in {
 
 /// Haydn_Intrinsic - Base class for Haydn intrinsics with Clang builtin mapping.
@@ -25,28 +36,37 @@ class Haydn_Intrinsic<string GCCIntSuffix, list<LLVMType> ret_types,
 
 // Convenience classes for common patterns.
 
-/// Binary intrinsic: dst = op(src1, src2)
+/// Pure ALU binary: dst = op(src1, src2). Effect=Pure.
 class haydn_binary_intrinsic<string name, LLVMType res_ty, LLVMType op_ty>
     : Haydn_Intrinsic<name, [res_ty], [op_ty, op_ty],
                        [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
-/// Unary intrinsic: dst = op(src)
+/// Pure ALU unary: dst = op(src). Effect=Pure.
 class haydn_unary_intrinsic<string name, LLVMType res_ty, LLVMType op_ty>
     : Haydn_Intrinsic<name, [res_ty], [op_ty],
                        [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
-/// Ternary intrinsic: dst = op(src1, src2, src3)
+/// Pure ALU ternary: dst = op(src1, src2, src3). Effect=Pure.
 class haydn_ternary_intrinsic<string name, LLVMType res_ty, LLVMType op_ty>
     : Haydn_Intrinsic<name, [res_ty], [op_ty, op_ty, op_ty],
                        [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
-/// SFR-setting compare intrinsic (D215 BUG-1): these intrinsics write to the
-/// implicit SFR (status flag register) as a side effect. If the return value
-/// is unused (as in `(void)__haydn_x2slt32(a,b)` before a MOVT32), DCE would
-/// delete the call because the default IntrSpeculatable+IntrNoMem attributes
-/// make it appear pure. IntrHasSideEffects prevents this, ensuring the SFR
-/// write survives so the subsequent X2MOVT32/X2MOVF16 reads the correct flags.
+/// SFR-setting compare (Effect=SFR / D215 BUG-1): writes implicit SFR.
+/// If the return value is unused (as in `(void)haydn_x2slt32(a,b)` before a
+/// MOVT32), DCE would delete a pure IntrNoMem call. IntrHasSideEffects keeps
+/// the SFR write so subsequent X2MOVT32/X2MOVF16 see the correct flags.
+/// Clang: BuiltinsHaydn.td Effect=SFR → [NoThrow] (no Const).
 class haydn_sfr_compare_intrinsic<string name, LLVMType res_ty, LLVMType op_ty>
+    : Haydn_Intrinsic<name, [res_ty], [op_ty, op_ty],
+                       [IntrHasSideEffects, IntrWillReturn]>;
+
+/// C1.2 ambient SFR cmov (Effect=SFR): x2/x4 movt/movf.
+/// Reads implicit SFR from a preceding ambient compare. Ordered and
+/// non-speculatable so two compare→movt epochs cannot CSE/reorder at -O2.
+/// Mirrors scalar movt64/movf64. GISel: G_INTRINSIC_W_SIDE_EFFECTS.
+/// Prefer C1.1 SSA (x2/x4cmplt + x2/x4mux) for multi-epoch code.
+/// Clang: Effect=SFR → [NoThrow] (no Const).
+class haydn_sfr_cmov_intrinsic<string name, LLVMType res_ty, LLVMType op_ty>
     : Haydn_Intrinsic<name, [res_ty], [op_ty, op_ty],
                        [IntrHasSideEffects, IntrWillReturn]>;
 
@@ -260,20 +280,20 @@ def int_haydn_mulss64_uu_ulh : haydn_ternary_intrinsic<"haydn_mulss64_uu_ulh", l
 def int_haydn_add32s : haydn_binary_intrinsic<"haydn_add32s", llvm_i32_ty, llvm_i32_ty>;
 
 // Golden slot0 scalar-32 shifts: (i32 data, i32 amount) -> i32.
-// Imm forms (slli32/srli32/srai32/srai32r) require constant amount (Sema ImmArg).
+// Imm forms (slli32/srli32/srai32/srai32r) require constant amount (ImmArg).
 // Reg forms (sll32/srl32/sra32/sra32r) take variable signed amount.
 def int_haydn_slli32 : Haydn_Intrinsic<"haydn_slli32",
     [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_srli32 : Haydn_Intrinsic<"haydn_srli32",
     [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_srai32 : Haydn_Intrinsic<"haydn_srai32",
     [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_srai32r : Haydn_Intrinsic<"haydn_srai32r",
     [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_sll32 : Haydn_Intrinsic<"haydn_sll32",
     [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
     [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
@@ -458,12 +478,13 @@ def int_haydn_sqrt  : haydn_unary_intrinsic<"haydn_sqrt",  llvm_i32_ty, llvm_i32
 
 def int_haydn_nsa32   : haydn_unary_intrinsic<"haydn_nsa32",   llvm_i32_ty, llvm_i32_ty>;
 def int_haydn_nsau32  : haydn_unary_intrinsic<"haydn_nsau32",  llvm_i32_ty, llvm_i32_ty>;
-def int_haydn_nsa64   : haydn_unary_intrinsic<"haydn_nsa64",   llvm_i32_ty, llvm_i32_ty>;
-def int_haydn_nsa16_l : haydn_unary_intrinsic<"haydn_nsa16_l", llvm_i32_ty, llvm_i32_ty>;
-def int_haydn_nsa32_l : haydn_unary_intrinsic<"haydn_nsa32_l", llvm_i32_ty, llvm_i32_ty>;
-def int_haydn_nsaz64  : haydn_unary_intrinsic<"haydn_nsaz64",  llvm_i32_ty, llvm_i32_ty>;
-def int_haydn_nsaz16_l : haydn_unary_intrinsic<"haydn_nsaz16_l", llvm_i32_ty, llvm_i32_ty>;
-def int_haydn_nsaz32_l : haydn_unary_intrinsic<"haydn_nsaz32_l", llvm_i32_ty, llvm_i32_ty>;
+// R_GD: GPR32 dest + DR64 source (match FormatsALU64 members / POPCOUNT64).
+def int_haydn_nsa64   : haydn_unary_intrinsic<"haydn_nsa64",   llvm_i32_ty, llvm_i64_ty>;
+def int_haydn_nsa16_l : haydn_unary_intrinsic<"haydn_nsa16_l", llvm_i32_ty, llvm_i64_ty>;
+def int_haydn_nsa32_l : haydn_unary_intrinsic<"haydn_nsa32_l", llvm_i32_ty, llvm_i64_ty>;
+def int_haydn_nsaz64  : haydn_unary_intrinsic<"haydn_nsaz64",  llvm_i32_ty, llvm_i64_ty>;
+def int_haydn_nsaz16_l : haydn_unary_intrinsic<"haydn_nsaz16_l", llvm_i32_ty, llvm_i64_ty>;
+def int_haydn_nsaz32_l : haydn_unary_intrinsic<"haydn_nsaz32_l", llvm_i32_ty, llvm_i64_ty>;
 
 //===----------------------------------------------------------------------===//
 // Non-saturating absolute/negate (64-bit)
@@ -548,18 +569,18 @@ def int_haydn_f2mulss32rs_hhll : haydn_i64_from_v2i32_mac<"haydn_f2mulss32rs_hhl
 // Note: The hardware instruction uses simm16 for the shift amount.
 def int_haydn_srai64r : Haydn_Intrinsic<"haydn_srai64r",
     [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 // DB imm 64-bit shifts (RI6). Reg twins: sra64 / sll64 / srl64.
 def int_haydn_srai64 : Haydn_Intrinsic<"haydn_srai64",
     [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_slli64 : Haydn_Intrinsic<"haydn_slli64",
     [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_srli64 : Haydn_Intrinsic<"haydn_srli64",
     [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
 // Wave 2: Complex multiply
@@ -617,14 +638,16 @@ def int_haydn_x2seq32 : haydn_sfr_compare_intrinsic<"haydn_x2seq32", llvm_v2i32_
 def int_haydn_x2slt32 : haydn_sfr_compare_intrinsic<"haydn_x2slt32", llvm_v2i32_ty, llvm_v2i32_ty>;
 // X2SLE32 — Dual 32-bit signed less-or-equal compare → SFR
 def int_haydn_x2sle32 : haydn_sfr_compare_intrinsic<"haydn_x2sle32", llvm_v2i32_ty, llvm_v2i32_ty>;
-// X2MOVF32 — Dual 32-bit conditional move if SFR false
+// X2MOVF32 — Dual 32-bit conditional move if SFR false (ambient low-level)
 //   dst[i] = (SFR[i] == 0) ? src2[i] : src1[i]
 //   Takes two DR64 operands: src1 (fallthrough/false value), src2 (true value).
 //   The SFR flags must be set by a preceding X2SEQ32/X2SLT32/X2SLE32 compare.
-def int_haydn_x2movf32 : haydn_binary_intrinsic<"haydn_x2movf32", llvm_v2i32_ty, llvm_v2i32_ty>;
-// X2MOVT32 — Dual 32-bit conditional move if SFR true
+//   C1.2: IntrHasSideEffects (not pure binary) so multi-epoch ambient cmovs
+//   cannot CSE/reorder. Prefer x2mux32 SSA for multi-epoch public code.
+def int_haydn_x2movf32 : haydn_sfr_cmov_intrinsic<"haydn_x2movf32", llvm_v2i32_ty, llvm_v2i32_ty>;
+// X2MOVT32 — Dual 32-bit conditional move if SFR true (ambient low-level)
 //   dst[i] = (SFR[i] == 1) ? src2[i] : src1[i]
-def int_haydn_x2movt32 : haydn_binary_intrinsic<"haydn_x2movt32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2movt32 : haydn_sfr_cmov_intrinsic<"haydn_x2movt32", llvm_v2i32_ty, llvm_v2i32_ty>;
 
 // X4SEQ16 — Quad 16-bit signed equal compare → SFR
 def int_haydn_x4seq16 : haydn_sfr_compare_intrinsic<"haydn_x4seq16", llvm_v4i16_ty, llvm_v4i16_ty>;
@@ -632,12 +655,56 @@ def int_haydn_x4seq16 : haydn_sfr_compare_intrinsic<"haydn_x4seq16", llvm_v4i16_
 def int_haydn_x4slt16 : haydn_sfr_compare_intrinsic<"haydn_x4slt16", llvm_v4i16_ty, llvm_v4i16_ty>;
 // X4SLE16 — Quad 16-bit signed less-or-equal compare → SFR
 def int_haydn_x4sle16 : haydn_sfr_compare_intrinsic<"haydn_x4sle16", llvm_v4i16_ty, llvm_v4i16_ty>;
-// X4MOVF16 — Quad 16-bit conditional move if SFR false
+// X4MOVF16 — Quad 16-bit conditional move if SFR false (ambient low-level)
 //   dst[i] = (SFR[i] == 0) ? src2[i] : src1[i]
-def int_haydn_x4movf16 : haydn_binary_intrinsic<"haydn_x4movf16", llvm_v4i16_ty, llvm_v4i16_ty>;
-// X4MOVT16 — Quad 16-bit conditional move if SFR true
+def int_haydn_x4movf16 : haydn_sfr_cmov_intrinsic<"haydn_x4movf16", llvm_v4i16_ty, llvm_v4i16_ty>;
+// X4MOVT16 — Quad 16-bit conditional move if SFR true (ambient low-level)
 //   dst[i] = (SFR[i] == 1) ? src2[i] : src1[i]
-def int_haydn_x4movt16 : haydn_binary_intrinsic<"haydn_x4movt16", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4movt16 : haydn_sfr_cmov_intrinsic<"haydn_x4movt16", llvm_v4i16_ty, llvm_v4i16_ty>;
+
+//===----------------------------------------------------------------------===//
+// C1.1 / G-PRED-SSA: pure SSA predicate value + fused compare-select
+//
+// Ambient x2slt32/x2movt32 couple epochs through SFR (C1.2: both ordered /
+// IntrHasSideEffects). Prefer these pure SSA APIs for multi-epoch code:
+// i32 pred values (Hexagon C2_cmplt / C2_mux peer). IntrNoMem+Speculatable is
+// correct here: SFR is only a temporary inside ISel expansion
+// (X2/X4SLT + MOVT + MOVESFR2GPR/MOVEGPR2SFR).
+//
+//   x2cmplt32(a,b) -> i32 pred2     expand: X2SLT32; MOVESFR2GPR
+//   x4cmplt16(a,b) -> i32 pred4     expand: X4SLT16; MOVESFR2GPR
+//   x2mux32(p,t,f) -> v2i32         expand: MOVEGPR2SFR(p); X2MOVT32(f,t)
+//   x4mux16(p,t,f) -> v4i16         expand: MOVEGPR2SFR(p); X4MOVT16(f,t)
+//   x2cmpsel32(a,b,t,f) -> v2i32    expand: X2SLT32; X2MOVT32(f,t)
+//   x4cmpsel16(a,b,t,f) -> v4i16    expand: X4SLT16; X4MOVT16(f,t)
+// Mux/cmpsel arg order matches Hexagon C2_mux(Pu, Rs_true, Rt_false).
+//===----------------------------------------------------------------------===//
+
+def int_haydn_x2cmplt32 : Haydn_Intrinsic<"haydn_x2cmplt32",
+    [llvm_i32_ty], [llvm_v2i32_ty, llvm_v2i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+
+def int_haydn_x4cmplt16 : Haydn_Intrinsic<"haydn_x4cmplt16",
+    [llvm_i32_ty], [llvm_v4i16_ty, llvm_v4i16_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+
+def int_haydn_x2mux32 : Haydn_Intrinsic<"haydn_x2mux32",
+    [llvm_v2i32_ty], [llvm_i32_ty, llvm_v2i32_ty, llvm_v2i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+
+def int_haydn_x4mux16 : Haydn_Intrinsic<"haydn_x4mux16",
+    [llvm_v4i16_ty], [llvm_i32_ty, llvm_v4i16_ty, llvm_v4i16_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+
+def int_haydn_x2cmpsel32 : Haydn_Intrinsic<"haydn_x2cmpsel32",
+    [llvm_v2i32_ty],
+    [llvm_v2i32_ty, llvm_v2i32_ty, llvm_v2i32_ty, llvm_v2i32_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+
+def int_haydn_x4cmpsel16 : Haydn_Intrinsic<"haydn_x4cmpsel16",
+    [llvm_v4i16_ty],
+    [llvm_v4i16_ty, llvm_v4i16_ty, llvm_v4i16_ty, llvm_v4i16_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4: X2 SIMD fractional multiply (binary DR64)
@@ -686,11 +753,11 @@ def int_haydn_x4frst16  : haydn_binary_intrinsic<"haydn_x4frst16",  llvm_v4i16_t
 
 def int_haydn_x2srai32r : Haydn_Intrinsic<"haydn_x2srai32r",
     [llvm_v2i32_ty], [llvm_v2i32_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 def int_haydn_x4srai16r : Haydn_Intrinsic<"haydn_x4srai16r",
     [llvm_v4i16_ty], [llvm_v4i16_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4: FMUL16_HS remaining variants (binary DR64)
@@ -1092,8 +1159,8 @@ def int_haydn_move32_dr_h : Haydn_Intrinsic<"haydn_move32_dr_h",
 // the data register and base pointer. The base pointer is updated in-place
 // with circular buffer wrapping semantics.
 //
-// CB loads:  (cbr_sel, ptr_base) -> (data_result, updated_ptr)
-// CB stores: (cbr_sel, data, ptr_base) -> updated_ptr
+// CB loads:  (ptr_base, cbr_sel, stride) -> (data_result, updated_ptr)
+// CB stores: (data, ptr_base, cbr_sel, stride) -> updated_ptr
 //
 // IntrNoMem is used instead of IntrReadMem/IntrWriteMem because GlobalISel
 // routes memory-property intrinsics through G_INTRINSIC_W_SIDE_EFFECTS,
@@ -1110,7 +1177,7 @@ def int_haydn_move32_dr_h : Haydn_Intrinsic<"haydn_move32_dr_h",
 //===----------------------------------------------------------------------===//
 
 // D_LDW_CB_IMM — 64-bit load from circular buffer.
-// Intrinsic: (i32 ptr_base, i32 cbr_sel, i32 stride) -> {i64 data, i32 new_ptr}
+// Intrinsic: (ptr ptr_base, i32 cbr_sel, i32 stride) -> {i64 data, ptr new_ptr}
 //
 // MODEL (D208, supersedes D207 for freestanding + NatureDSP XC):
 // Hardware AGU writes wrap(base+stride) into the base GPR. That result is a
@@ -1121,31 +1188,38 @@ def int_haydn_move32_dr_h : Haydn_Intrinsic<"haydn_move32_dr_h",
 // No ClangBuiltin auto-map: multi-result needs frexp-pattern _pair builtins
 // (see EmitHaydnBuiltinExpr). C headers expose .data / .ptr via struct wrapper.
 //   Note: cbr_sel is encoded as an immediate (0 or 1).
-//   Note: ptr_base is GPR32 (i32); data is DR64 (i64).
+//   Note: ptr_base is llvm_ptr_ty (p0/GPR32); data is DR64 (i64).
 // IntrHasSideEffects: consecutive calls with same base differ (also blocks LICM).
+// C2.2: IntrReadMem+IntrArgMemOnly+NoCapture (Hexagon circ/brev peer) so AA
+// sees argmem and getTgtMemIntrinsic can attach a concrete MMO.
 def int_haydn_ldw_cb_imm : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>, IntrReadMem, IntrArgMemOnly,
+     NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 
 // D_LDW_CB_REG — 64-bit load from circular buffer, register stride.
-// Intrinsic: (i32 ptr_base, i32 cbr_sel, i32 stride_reg) -> {i64 data, i32 new_ptr}
+// Intrinsic: (ptr ptr_base, i32 cbr_sel, i32 stride_reg) -> {i64 data, ptr new_ptr}
+// cbr_sel is encoding ImmArg (uimm1); stride stays variable GPR.
 def int_haydn_ldw_cb_reg : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>,
+     IntrHasSideEffects, IntrWillReturn]>;
 
 // D_SDW_CB_IMM — 64-bit store to circular buffer.
-// Intrinsic: (i64 data, i32 ptr_base, i32 cbr_sel, i32 stride) -> i32 new_ptr
+// Intrinsic: (i64 data, ptr ptr_base, i32 cbr_sel, i32 stride) -> ptr new_ptr
 // Returns the AGU-updated base (same as MI rs_wb). Callers that ignore the
 // return keep D207-style fire-and-forget stores; freestanding XC assigns it.
 def int_haydn_sdw_cb_imm : Haydn_Intrinsic<"haydn_sdw_cb_imm",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>, IntrWriteMem, IntrArgMemOnly,
+     NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 
 // D_SDW_CB_REG — 64-bit store to circular buffer, register stride.
-// Intrinsic: (i64 data, i32 ptr_base, i32 cbr_sel, i32 stride_reg) -> i32 new_ptr
+// Intrinsic: (i64 data, ptr ptr_base, i32 cbr_sel, i32 stride_reg) -> ptr new_ptr
 def int_haydn_sdw_cb_reg : Haydn_Intrinsic<"haydn_sdw_cb_reg",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>,
+     IntrHasSideEffects, IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
 // Circular Buffer Setup (CBR programming via CSRW)
@@ -1162,16 +1236,16 @@ def int_haydn_sdw_cb_reg : Haydn_Intrinsic<"haydn_sdw_cb_reg",
 //===----------------------------------------------------------------------===//
 
 // Intrinsic: (i32 cbr_sel, i32 value) -> void
-//   Writes CBR_BEGIN[cbr_sel] = value.
+//   Writes CBR_BEGIN[cbr_sel] = value. cbr_sel is encoding ImmArg (uimm1).
 def int_haydn_setcbr_begin : Haydn_Intrinsic<"haydn_setcbr_begin",
     [], [llvm_i32_ty, llvm_i32_ty],
-    [IntrHasSideEffects, IntrWriteMem]>;
+    [ImmArg<ArgIndex<0>>, IntrHasSideEffects, IntrWriteMem]>;
 
 // Intrinsic: (i32 cbr_sel, i32 value) -> void
-//   Writes CBR_END[cbr_sel] = value.
+//   Writes CBR_END[cbr_sel] = value. cbr_sel is encoding ImmArg (uimm1).
 def int_haydn_setcbr_end : Haydn_Intrinsic<"haydn_setcbr_end",
     [], [llvm_i32_ty, llvm_i32_ty],
-    [IntrHasSideEffects, IntrWriteMem]>;
+    [ImmArg<ArgIndex<0>>, IntrHasSideEffects, IntrWriteMem]>;
 
 //===----------------------------------------------------------------------===//
 // AR (Aligned Register) unaligned load/store stream (golden LS #103-#109)
@@ -1204,39 +1278,46 @@ def int_haydn_setcbr_end : Haydn_Intrinsic<"haydn_setcbr_end",
 // PLDW writes AR (side effect); model as HasSideEffects (not pure read).
 //
 // void pldwwua(i32 ar_sel, i32 ptr) — seed AR from mem (must not DCE)
+// ar_sel is encoding ImmArg (uimm2 0..3).
 def int_haydn_pldwwua : Haydn_Intrinsic<"haydn_pldwwua",
-    [], [llvm_i32_ty, llvm_i32_ty],
-    [IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i32_ty, llvm_ptr_ty],
+    [ImmArg<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 
 // i64 d_lqhwua_post(i32 ptr, i32 ar_sel, i32 stride, i32 dir_sel)
+// ar_sel uimm2 + dir_sel uimm1 are ImmArg; stride stays variable GPR.
 def int_haydn_d_lqhwua_post : Haydn_Intrinsic<"haydn_d_lqhwua_post",
-    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<3>>, IntrReadMem, IntrHasSideEffects,
+     IntrWillReturn]>;
 
 // i64 d_ltwua_post(i32 ptr, i32 ar_sel, i32 stride, i32 dir_sel)
 def int_haydn_d_ltwua_post : Haydn_Intrinsic<"haydn_d_ltwua_post",
-    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<3>>, IntrReadMem, IntrHasSideEffects,
+     IntrWillReturn]>;
 
-// void flar(i32 ar_sel) — AR-only state clear
+// void flar(i32 ar_sel) — AR-only state clear; ar_sel ImmArg uimm2.
 def int_haydn_flar : Haydn_Intrinsic<"haydn_flar",
     [], [llvm_i32_ty],
-    [IntrHasSideEffects, IntrWillReturn]>;
+    [ImmArg<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 
 // void wbarwua(i32 ar_sel, i32 ptr, i32 dir_sel)
 def int_haydn_wbarwua : Haydn_Intrinsic<"haydn_wbarwua",
-    [], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects,
+     IntrWillReturn]>;
 
 // void d_sqhwua_post(i64 data, i32 ptr, i32 ar_sel, i32 stride, i32 dir_sel)
 def int_haydn_d_sqhwua_post : Haydn_Intrinsic<"haydn_d_sqhwua_post",
-    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<4>>, IntrWriteMem, IntrHasSideEffects,
+     IntrWillReturn]>;
 
 // void d_stwua_post(i64 data, i32 ptr, i32 ar_sel, i32 stride, i32 dir_sel)
 def int_haydn_d_stwua_post : Haydn_Intrinsic<"haydn_d_stwua_post",
-    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<4>>, IntrWriteMem, IntrHasSideEffects,
+     IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
 // Bit-Reversed Addressing Load/Store
@@ -1256,47 +1337,56 @@ def int_haydn_d_stwua_post : Haydn_Intrinsic<"haydn_d_stwua_post",
 
 // D_LDW_BREV_IMM — rtd = mem64[REVERSE32(rs)]; rs += imm6<<3
 // Intrinsic: (i32 ptr_base, i32 imm_stride) -> {i64 data, i32 new_ptr}
+// C2.2: IntrArgMemOnly+NoCapture peer Hexagon L2_load*_pbr + getTgtMemIntrinsic.
 def int_haydn_ldw_brev_imm : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects,
+     IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 
 // D_LDW_BREV_REG — rtd = mem64[REVERSE32(rs1)]; rs1 += rs2
 def int_haydn_ldw_brev_reg : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects,
+     IntrWillReturn]>;
 
 // S_LW_BREV_IMM — rt = mem32[REVERSE32(rs)]; rs += imm6<<2
 // Intrinsic: (i32 ptr_base, i32 imm_stride) -> {i32 data, i32 new_ptr}
 def int_haydn_lw_brev_imm : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects,
+     IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 
 // S_LW_BREV_REG — rt = mem32[REVERSE32(rs1)]; rs1 += rs2
 def int_haydn_lw_brev_reg : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects,
+     IntrWillReturn]>;
 
 // D_SDW_BREV_IMM — mem64[REVERSE32(rs)] = rtd; rs += imm6<<3
 // Intrinsic: (i64 data, i32 ptr_base, i32 imm_stride) -> i32 new_ptr
 def int_haydn_sdw_brev_imm : Haydn_Intrinsic<"haydn_sdw_brev_imm",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<2>>]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects,
+     IntrWillReturn, ImmArg<ArgIndex<2>>]>;
 
 // D_SDW_BREV_REG — mem64[REVERSE32(rs1)] = rtd; rs1 += rs2
 def int_haydn_sdw_brev_reg : Haydn_Intrinsic<"haydn_sdw_brev_reg",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects,
+     IntrWillReturn]>;
 
 // S_SW_BREV_IMM — mem32[REVERSE32(rs)] = rt; rs += imm6<<2
 // Intrinsic: (i32 data, i32 ptr_base, i32 imm_stride) -> i32 new_ptr
 def int_haydn_sw_brev_imm : Haydn_Intrinsic<"haydn_sw_brev_imm",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<2>>]>;
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects,
+     IntrWillReturn, ImmArg<ArgIndex<2>>]>;
 
 // S_SW_BREV_REG — mem32[REVERSE32(rs1)] = rt; rs1 += rs2
 def int_haydn_sw_brev_reg : Haydn_Intrinsic<"haydn_sw_brev_reg",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects,
+     IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
 // BREV32 — Bit-reversed add for FFT butterfly addressing.
@@ -1355,22 +1445,22 @@ def int_haydn_x4srl16 : Haydn_Intrinsic<"haydn_x4srl16",
 
 def int_haydn_x2slli32 : Haydn_Intrinsic<"haydn_x2slli32",
     [llvm_v2i32_ty], [llvm_v2i32_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_x2srai32 : Haydn_Intrinsic<"haydn_x2srai32",
     [llvm_v2i32_ty], [llvm_v2i32_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_x2srli32 : Haydn_Intrinsic<"haydn_x2srli32",
     [llvm_v2i32_ty], [llvm_v2i32_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_x4slli16 : Haydn_Intrinsic<"haydn_x4slli16",
     [llvm_v4i16_ty], [llvm_v4i16_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_x4srai16 : Haydn_Intrinsic<"haydn_x4srai16",
     [llvm_v4i16_ty], [llvm_v4i16_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_x4srli16 : Haydn_Intrinsic<"haydn_x4srli16",
     [llvm_v4i16_ty], [llvm_v4i16_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2/X4 SIMD shift with rounding (binary DR64)
@@ -1393,10 +1483,11 @@ def int_haydn_x2hadd32_l  : haydn_unary_intrinsic<"haydn_x2hadd32_l",  llvm_i64_
 def int_haydn_x2hadd32s_l : haydn_unary_intrinsic<"haydn_x2hadd32s_l", llvm_i64_ty, llvm_v2i32_ty>;
 def int_haydn_x4hadd16_h  : haydn_unary_intrinsic<"haydn_x4hadd16_h",  llvm_i64_ty, llvm_v4i16_ty>;
 def int_haydn_x4hadd16_l  : haydn_unary_intrinsic<"haydn_x4hadd16_l",  llvm_i64_ty, llvm_v4i16_ty>;
-def int_haydn_x2hmax32 : haydn_unary_intrinsic<"haydn_x2hmax32", llvm_i64_ty, llvm_v2i32_ty>;
-def int_haydn_x2hmin32 : haydn_unary_intrinsic<"haydn_x2hmin32", llvm_i64_ty, llvm_v2i32_ty>;
-def int_haydn_x4hmax16 : haydn_unary_intrinsic<"haydn_x4hmax16", llvm_i64_ty, llvm_v4i16_ty>;
-def int_haydn_x4hmin16 : haydn_unary_intrinsic<"haydn_x4hmin16", llvm_i64_ty, llvm_v4i16_ty>;
+// R_GD horizontal max/min: scalar GPR32 result from DR64 vector source.
+def int_haydn_x2hmax32 : haydn_unary_intrinsic<"haydn_x2hmax32", llvm_i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2hmin32 : haydn_unary_intrinsic<"haydn_x2hmin32", llvm_i32_ty, llvm_v2i32_ty>;
+def int_haydn_x4hmax16 : haydn_unary_intrinsic<"haydn_x4hmax16", llvm_i32_ty, llvm_v4i16_ty>;
+def int_haydn_x4hmin16 : haydn_unary_intrinsic<"haydn_x4hmin16", llvm_i32_ty, llvm_v4i16_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2/X4 SIMD dot product (binary DR64)
@@ -1469,7 +1560,7 @@ def int_haydn_x4sat32t16 : Haydn_Intrinsic<"haydn_x4sat32t16",
 
 def int_haydn_x4seli16 : Haydn_Intrinsic<"haydn_x4seli16",
     [llvm_v4i16_ty], [llvm_v4i16_ty, llvm_v4i16_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<2>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 // Reg twin: mask in GPR (DB X4SEL16).
 def int_haydn_x4sel16 : Haydn_Intrinsic<"haydn_x4sel16",
     [llvm_v4i16_ty], [llvm_v4i16_ty, llvm_v4i16_ty, llvm_i32_ty],
@@ -1771,7 +1862,7 @@ def int_haydn_mulzss32_hllh : haydn_binary_intrinsic<"haydn_mulzss32_hllh", llvm
 // (cross-bank DR64->GPR32 + immediate). RT = SAT32(arctan(rsd) * uimm4).
 def int_haydn_arctan : Haydn_Intrinsic<"haydn_arctan",
     [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 // POPCOUNT32 rt, rs1 — GPR32 dest + GPR32 source (FmtALU32Unary).
 def int_haydn_popcount32 : haydn_unary_intrinsic<"haydn_popcount32", llvm_i32_ty, llvm_i32_ty>;
@@ -1807,349 +1898,352 @@ def int_haydn_transf64f2 : Haydn_Intrinsic<"haydn_transf64f2",
     [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_movei_h : Haydn_Intrinsic<"haydn_movei_h",
     [llvm_i64_ty], [llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<0>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_movei_l : Haydn_Intrinsic<"haydn_movei_l",
     [llvm_i64_ty], [llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<0>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_zero_dr : Haydn_Intrinsic<"haydn_zero_dr",
     [llvm_i64_ty], [],
     [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_sin_cos : Haydn_Intrinsic<"haydn_sin_cos",
     [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+// C2.3 / G-MEM-INTRIN: Golden LS ordinary Mem — IntrArgMemOnly+NoCapture so
+// AA sees argmem only (co-issue-ready). MMO flags are MOLoad/MOStore (not
+// volatile); CB/UA StateMem use MOVolatile in getTgtMemIntrinsic.
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_d_ldw_post_imm : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_d_ldw_post_reg : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_d_ldw_pre_imm : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_d_ldw_pre_reg : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_ldw_with_imm : Haydn_Intrinsic<"haydn_d_ldw_with_imm",
-    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_ldw_with_reg : Haydn_Intrinsic<"haydn_d_ldw_with_reg",
-    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_d_lhw_post_imm : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_d_lhw_post_reg : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_d_lhw_pre_imm : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_d_lhw_pre_reg : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_lhw_with_imm : Haydn_Intrinsic<"haydn_d_lhw_with_imm",
-    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_lhw_with_reg : Haydn_Intrinsic<"haydn_d_lhw_with_reg",
-    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_d_lw_post_imm : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_d_lw_post_reg : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_d_lw_pre_imm : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_d_lw_pre_reg : DefaultAttrsIntrinsic<
-    [llvm_i64_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_lw_with_imm : Haydn_Intrinsic<"haydn_d_lw_with_imm",
-    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_lw_with_reg : Haydn_Intrinsic<"haydn_d_lw_with_reg",
-    [llvm_i64_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sdw_post_imm : Haydn_Intrinsic<"haydn_d_sdw_post_imm",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sdw_post_reg : Haydn_Intrinsic<"haydn_d_sdw_post_reg",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sdw_pre_imm : Haydn_Intrinsic<"haydn_d_sdw_pre_imm",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sdw_pre_reg : Haydn_Intrinsic<"haydn_d_sdw_pre_reg",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sdw_with_imm : Haydn_Intrinsic<"haydn_d_sdw_with_imm",
-    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sdw_with_reg : Haydn_Intrinsic<"haydn_d_sdw_with_reg",
-    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_shw_post_imm : Haydn_Intrinsic<"haydn_d_shw_post_imm",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_shw_post_reg : Haydn_Intrinsic<"haydn_d_shw_post_reg",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_shw_pre_imm : Haydn_Intrinsic<"haydn_d_shw_pre_imm",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_shw_pre_reg : Haydn_Intrinsic<"haydn_d_shw_pre_reg",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_shw_with_imm : Haydn_Intrinsic<"haydn_d_shw_with_imm",
-    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_shw_with_reg : Haydn_Intrinsic<"haydn_d_shw_with_reg",
-    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sw_h_post_imm : Haydn_Intrinsic<"haydn_d_sw_h_post_imm",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sw_h_post_reg : Haydn_Intrinsic<"haydn_d_sw_h_post_reg",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sw_h_pre_imm : Haydn_Intrinsic<"haydn_d_sw_h_pre_imm",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sw_h_pre_reg : Haydn_Intrinsic<"haydn_d_sw_h_pre_reg",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sw_h_with_imm : Haydn_Intrinsic<"haydn_d_sw_h_with_imm",
-    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sw_h_with_reg : Haydn_Intrinsic<"haydn_d_sw_h_with_reg",
-    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sw_l_post_imm : Haydn_Intrinsic<"haydn_d_sw_l_post_imm",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sw_l_post_reg : Haydn_Intrinsic<"haydn_d_sw_l_post_reg",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sw_l_pre_imm : Haydn_Intrinsic<"haydn_d_sw_l_pre_imm",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sw_l_pre_reg : Haydn_Intrinsic<"haydn_d_sw_l_pre_reg",
-    [llvm_i32_ty], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sw_l_with_imm : Haydn_Intrinsic<"haydn_d_sw_l_with_imm",
-    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_d_sw_l_with_reg : Haydn_Intrinsic<"haydn_d_sw_l_with_reg",
-    [], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lbs_post_imm : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lbs_post_reg : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lbs_pre_imm : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lbs_pre_reg : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_lbs_with_imm : Haydn_Intrinsic<"haydn_s_lbs_with_imm",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_lbs_with_reg : Haydn_Intrinsic<"haydn_s_lbs_with_reg",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lbu_post_imm : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lbu_post_reg : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lbu_pre_imm : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lbu_pre_reg : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_lbu_with_imm : Haydn_Intrinsic<"haydn_s_lbu_with_imm",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_lbu_with_reg : Haydn_Intrinsic<"haydn_s_lbu_with_reg",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lhws_post_imm : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lhws_post_reg : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lhws_pre_imm : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lhws_pre_reg : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_lhws_with_imm : Haydn_Intrinsic<"haydn_s_lhws_with_imm",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_lhws_with_reg : Haydn_Intrinsic<"haydn_s_lhws_with_reg",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lhwu_post_imm : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lhwu_post_reg : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lhwu_pre_imm : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lhwu_pre_reg : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_lhwu_with_imm : Haydn_Intrinsic<"haydn_s_lhwu_with_imm",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_lhwu_with_reg : Haydn_Intrinsic<"haydn_s_lhwu_with_reg",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lw_post_imm : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lw_post_reg : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lw_pre_imm : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lw_pre_reg : DefaultAttrsIntrinsic<
-    [llvm_i32_ty, llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty, llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_lw_with_imm : Haydn_Intrinsic<"haydn_s_lw_with_imm",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_lw_with_reg : Haydn_Intrinsic<"haydn_s_lw_with_reg",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-    [IntrReadMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_i32_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrReadMem, IntrArgMemOnly, NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_sb_post_imm : Haydn_Intrinsic<"haydn_s_sb_post_imm",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_sb_post_reg : Haydn_Intrinsic<"haydn_s_sb_post_reg",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_sb_pre_imm : Haydn_Intrinsic<"haydn_s_sb_pre_imm",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_sb_pre_reg : Haydn_Intrinsic<"haydn_s_sb_pre_reg",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_sb_with_imm : Haydn_Intrinsic<"haydn_s_sb_with_imm",
-    [], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_sb_with_reg : Haydn_Intrinsic<"haydn_s_sb_with_reg",
-    [], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_shw_post_imm : Haydn_Intrinsic<"haydn_s_shw_post_imm",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_shw_post_reg : Haydn_Intrinsic<"haydn_s_shw_post_reg",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_shw_pre_imm : Haydn_Intrinsic<"haydn_s_shw_pre_imm",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_shw_pre_reg : Haydn_Intrinsic<"haydn_s_shw_pre_reg",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_shw_with_imm : Haydn_Intrinsic<"haydn_s_shw_with_imm",
-    [], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_shw_with_reg : Haydn_Intrinsic<"haydn_s_shw_with_reg",
-    [], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_sw_post_imm : Haydn_Intrinsic<"haydn_s_sw_post_imm",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_sw_post_reg : Haydn_Intrinsic<"haydn_s_sw_post_reg",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_sw_pre_imm : Haydn_Intrinsic<"haydn_s_sw_pre_imm",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_sw_pre_reg : Haydn_Intrinsic<"haydn_s_sw_pre_reg",
-    [llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_sw_with_imm : Haydn_Intrinsic<"haydn_s_sw_with_imm",
-    [], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 def int_haydn_s_sw_with_reg : Haydn_Intrinsic<"haydn_s_sw_with_reg",
-    [], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [IntrWriteMem, IntrHasSideEffects, IntrWillReturn]>;
+    [], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 
 } // TargetPrefix = "haydn"

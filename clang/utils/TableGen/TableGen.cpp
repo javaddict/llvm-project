@@ -112,6 +112,10 @@ enum ActionType {
   GenHaydnIntrinHeader,
   GenHaydnBuiltinCG,
   GenHaydnBuiltinSema,
+  GenHaydnOpManifest,
+  GenHaydnOpClosureProbe,
+  GenHaydnOpImmAudit,
+  GenHaydnOpFeatureAudit,
   GenRISCVVectorBuiltinCG,
   GenRISCVVectorBuiltinSema,
   GenRISCVSiFiveVectorBuiltins,
@@ -327,6 +331,14 @@ cl::opt<ActionType> Action(
                    "Generate haydn_builtin_cg.inc for clang"),
         clEnumValN(GenHaydnBuiltinSema, "gen-haydn-builtin-sema",
                    "Generate haydn_builtin_sema.inc for clang"),
+        clEnumValN(GenHaydnOpManifest, "gen-haydn-op-manifest",
+                   "Generate haydn_op_manifest.inc for clang (C5.1 contract)"),
+        clEnumValN(GenHaydnOpClosureProbe, "gen-haydn-op-closure-probe",
+                   "Generate exhaustive PublicEnabled C closure probe (C5.1)"),
+        clEnumValN(GenHaydnOpImmAudit, "gen-haydn-op-imm-audit",
+                   "Generate exhaustive ImmCheck non-ICE + range Sema audit (C5.1)"),
+        clEnumValN(GenHaydnOpFeatureAudit, "gen-haydn-op-feature-audit",
+                   "Generate exhaustive Features-gate Sema audit (C5.1)"),
         clEnumValN(GenRISCVVectorBuiltins, "gen-riscv-vector-builtins",
                    "Generate riscv_vector_builtins.inc for clang"),
         clEnumValN(GenRISCVVectorBuiltinCG, "gen-riscv-vector-builtin-codegen",
@@ -635,6 +647,18 @@ bool ClangTableGenMain(raw_ostream &OS, const RecordKeeper &Records) {
     break;
   case GenHaydnBuiltinSema:
     EmitHaydnBuiltinSema(Records, OS);
+    break;
+  case GenHaydnOpManifest:
+    EmitHaydnOpManifest(Records, OS);
+    break;
+  case GenHaydnOpClosureProbe:
+    EmitHaydnOpClosureProbe(Records, OS);
+    break;
+  case GenHaydnOpImmAudit:
+    EmitHaydnOpImmAudit(Records, OS);
+    break;
+  case GenHaydnOpFeatureAudit:
+    EmitHaydnOpFeatureAudit(Records, OS);
     break;
   case GenRISCVVectorBuiltins:
     EmitRVVBuiltins(Records, OS);

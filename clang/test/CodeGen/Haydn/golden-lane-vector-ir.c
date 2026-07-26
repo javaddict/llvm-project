@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple haydn-unknown-elf -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -emit-llvm -o - %s | FileCheck %s
 //
 // Golden-lane type truth: X2 parallel 32-bit ops lower as <2 x i32>,
 // X4 parallel 16-bit ops as <4 x i16>. Reduce ops take vector srcs and

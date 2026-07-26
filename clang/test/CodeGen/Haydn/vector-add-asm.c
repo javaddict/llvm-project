@@ -1,5 +1,5 @@
-// RUN: %clang_cc1 -triple haydn-unknown-elf -O2 -emit-llvm -o - %s | FileCheck %s --check-prefix=IR
-// RUN: %clang -target haydn-unknown-elf -mllvm -global-isel-abort=1 -O2 -S -o - %s | FileCheck %s --check-prefix=ASM
+// RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -O2 -emit-llvm -o - %s | FileCheck %s --check-prefix=IR
+// RUN: %clang -target haydn-unknown-elf -mcpu=haydn -mllvm -global-isel-abort=1 -O2 -S -o - %s | FileCheck %s --check-prefix=ASM
 // REQUIRES: haydn-registered-target
 //
 // Golden-lane e2e: C `vec + vec` / `vec - vec` on haydn_x2int32 and

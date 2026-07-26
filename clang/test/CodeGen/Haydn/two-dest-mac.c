@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple haydn-unknown-elf -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -emit-llvm -o - %s | FileCheck %s
 //
 // REGRESSION TEST (D400 Path B): frexp-pattern _pair builtins (generated
 // haydn_builtin_cg.inc) lower to 2-result LLVM intrinsics with both

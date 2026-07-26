@@ -22,6 +22,74 @@
 #include "haydn.h"
 
 /*===----------------------------------------------------------------------===
+ * NatureDSP compatibility tier taxonomy
+ *
+ *   HAYDN_COMPAT_NATIVE      — haydn.h exact native ISA surface
+ *   HAYDN_COMPAT_EXACT       — AE_* wraps native with bit-exact semantics
+ *   HAYDN_COMPAT_EMULATED    — software composition, documented soft-exact
+ *   HAYDN_COMPAT_UNSUPPORTED — no correct map; fail closed (no silent alias)
+ *
+ * Residual silent-wrong public AE maps are tier UNSUPPORTED by default.
+ * Opt-in __HAYDN_ALLOW_INEXACT_AE keeps transitional inexact bodies for
+ * NatureDSP -c only. AE_MULZAAFD16SS_33_22 / L16X4_RIC / LA*_RIC are EXACT;
+ * AE_L16_XC is EMULATED (i16 load + soft CBR step; no 64b D_LDW_CB trunc).
+ * AE_ADD64X2_vector is permanent UNSUPPORTED (Haydn ae_int64x2 is one DR64
+ * bag — no dual-64 lane-wise add; scalar i64 add is silent-wrong cross-lane
+ * carry). Hexagon peer = fail-closed / feature-gated C surface, not an AE
+ * tier table. No formMACs, no FormatID / slot / AltDesc in this header.
+ *===----------------------------------------------------------------------===*/
+#ifndef HAYDN_COMPAT_NATIVE
+#define HAYDN_COMPAT_NATIVE      0
+#define HAYDN_COMPAT_EXACT       1
+#define HAYDN_COMPAT_EMULATED    2
+#define HAYDN_COMPAT_UNSUPPORTED 3
+#endif
+
+/* Per-symbol residual tags (silent-wrong audit) + a few exact XC peers. */
+#define HAYDN_COMPAT_TIER_AE_L32X2_XC HAYDN_COMPAT_EXACT
+#define HAYDN_COMPAT_TIER_AE_S32X2_XC HAYDN_COMPAT_EXACT
+#define HAYDN_COMPAT_TIER_AE_L16X4_XC HAYDN_COMPAT_EXACT
+#define HAYDN_COMPAT_TIER_AE_S16X4_XC HAYDN_COMPAT_EXACT
+/* Scalar i16 CB: soft i16 load + haydn_cbr_step(byte offs) (EMULATED).
+ * ISA has no S_LH_CB halfword circular load; not 64b D_LDW_CB trunc. */
+#define HAYDN_COMPAT_TIER_AE_L16_XC HAYDN_COMPAT_EMULATED
+/* Reverse-circular via signed negative D_LDW_CB stride (EXACT). */
+#define HAYDN_COMPAT_TIER_AE_L16X4_RIC HAYDN_COMPAT_EXACT
+/* LA reverse-IC: UA dir=1 ImmArg + haydn_cbr_step(ptr,-8) (EXACT). */
+#define HAYDN_COMPAT_TIER_AE_LA16X4_RIC HAYDN_COMPAT_EXACT
+#define HAYDN_COMPAT_TIER_AE_LA32X2_RIC HAYDN_COMPAT_EXACT
+/* Permanent UNSUPPORTED: HiFi dual-64 lane-wise add has no Haydn map —
+ * ae_int64x2 is one DR64 bag; scalar i64 add is silent-wrong (cross-lane
+ * carry). Not EMULATED; do not invent a bag dual-64 alias. */
+#define HAYDN_COMPAT_TIER_AE_ADD64X2_vector HAYDN_COMPAT_UNSUPPORTED
+/* Dual-high lanes 3+3/2+2 — exact native haydn_fmulaa16_hs_33_22. */
+#define HAYDN_COMPAT_TIER_AE_MULZAAFD16SS_33_22 HAYDN_COMPAT_EXACT
+
+#if defined(__HAYDN_ALLOW_INEXACT_AE)
+#define __HAYDN_AE_COMPAT_STRICT 0
+#else
+#define __HAYDN_AE_COMPAT_STRICT 1
+#endif
+
+/* Fail-closed expansion for residual silent-wrong maps when strict.
+ * Statement form: _Static_assert names the AE symbol.
+ * Expression form: undeclared __haydn_ae_unsupported_<sym>() — loud error. */
+#ifndef __HAYDN_AE_UNSUPPORTED_STMT
+#define __HAYDN_AE_UNSUPPORTED_STMT(sym)                                       \
+  do {                                                                         \
+    _Static_assert(0, "HAYDN AE unsupported (silent-wrong map removed): " #sym \
+                      " — define __HAYDN_ALLOW_INEXACT_AE for transitional "   \
+                      "NatureDSP -c only (compat tier fail-closed)");          \
+  } while (0)
+#endif
+#ifndef __HAYDN_AE_UNSUPPORTED_EXPR
+#define __HAYDN_AE_UNSUPPORTED_EXPR(sym) (__haydn_ae_unsupported_##sym())
+#endif
+#ifndef __HAYDN_AE_UNSUPPORTED
+#define __HAYDN_AE_UNSUPPORTED(sym) __HAYDN_AE_UNSUPPORTED_STMT(sym)
+#endif
+
+/*===----------------------------------------------------------------------===
  * Layer contract vs haydn.h
  *   ae_int32x2  == haydn_x2int32   (vector_size)
  *   ae_int16x4  == haydn_x4int16
@@ -370,11 +438,11 @@ typedef long long ae_p48;
 /// the result back. ('s by-address + store-back was reverted: that was
 /// the wrong contract for Haydn's "program supplies the pointer" model.)
 ///
-/// F21/F22/F23 (consolidated-fix-list §2): the previous version hardcoded
-/// the stride as 8 (silently dropping `offs`), passed store args in the
-/// wrong order, and loaded 64 bits into a 16-bit destination via AE_L16_XC.
-/// The D_LDW_CB_IMM / D_SDW_CB_IMM hardware instructions post-increment by
-/// imm<<3 (i.e. imm is the stride divided by 8). See -cb-brev-builtin-semantics.md.
+/// Prior versions hardcoded the stride as 8 (silently dropping `offs`),
+/// passed store args in the wrong order, and loaded 64 bits into a 16-bit
+/// destination via AE_L16_XC. The D_LDW_CB_IMM / D_SDW_CB_IMM hardware
+/// instructions post-increment by imm<<3 (i.e. imm is the stride divided
+/// by 8).
 
 /* CB load → data + AGU-updated C ptr (haydn_cb_ld_t from haydn.h).
  * mem64 is LE (first word low); AE f32x2 is H-first — swap like AE_L32X2_IP.
@@ -388,64 +456,66 @@ static inline haydn_dr64_t haydn_ae_f32x2_mem_to_reg(haydn_dr64_t le)
 #define __HAYDN_AE_CB_LD64(dst, ptr, cbr_sel, imm) \
   do { \
     haydn_cb_ld_t haydn_cbr = haydn_ldw_cb_imm( \
-        (int)(uintptr_t)(ptr), (int)(cbr_sel), (int)(imm)); \
+        (ptr), (int)(cbr_sel), (int)(imm)); \
     (dst) = (__typeof__(dst))(haydn_dr64_t)haydn_cbr.data; \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)haydn_cbr.new_ptr; \
+    (ptr) = (__typeof__(ptr))haydn_cbr.new_ptr; \
   } while (0)
 /* f32x2 CB load: LE mem → H-first reg. */
 #define __HAYDN_AE_CB_LD_F32X2(dst, ptr, cbr_sel, imm) \
   do { \
     haydn_cb_ld_t haydn_cbr = haydn_ldw_cb_imm( \
-        (int)(uintptr_t)(ptr), (int)(cbr_sel), (int)(imm)); \
+        (ptr), (int)(cbr_sel), (int)(imm)); \
     (dst) = (__typeof__(dst))haydn_ae_f32x2_mem_to_reg( \
         (haydn_dr64_t)haydn_cbr.data); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)haydn_cbr.new_ptr; \
+    (ptr) = (__typeof__(ptr))haydn_cbr.new_ptr; \
   } while (0)
 
 // CB load returns {data, new_ptr}; assign C cursor from AGU writeback.
 #define AE_L32X2_XC(dst, ptr, offs, cbr_sel) \
   do { \
-    haydn_cb_ld_t __r = haydn_ldw_cb_imm((int)(uintptr_t)(ptr), (cbr_sel), \
+    haydn_cb_ld_t __r = haydn_ldw_cb_imm((ptr), (cbr_sel), \
                                            (offs) >> 3); \
     (dst) = (ae_int32x2)haydn_ae_f32x2_mem_to_reg((haydn_dr64_t)__r.data); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__r.new_ptr; \
+    (ptr) = (__typeof__(ptr))__r.new_ptr; \
   } while (0)
 
 /// Store dual 32-bit to circular buffer; AGU-updated cursor → ptr ().
 #define AE_S32X2_XC(src, ptr, offs, cbr_sel) \
   do { \
     haydn_dr64_t __s = haydn_ae_f32x2_mem_to_reg((haydn_dr64_t)(src)); \
-    int __np = haydn_sdw_cb_imm(__s, (int)(uintptr_t)(ptr), (cbr_sel), \
+    void *__np = haydn_sdw_cb_imm(__s, (ptr), (cbr_sel), \
                                   (offs) >> 3); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__np; \
+    (ptr) = (__typeof__(ptr))__np; \
   } while (0)
 
 /// Load quad 16-bit from circular buffer with post-increment.
 #define AE_L16X4_XC(dst, ptr, offs, cbr_sel) \
   do { \
-    haydn_cb_ld_t __r = haydn_ldw_cb_imm((int)(uintptr_t)(ptr), (cbr_sel), \
+    haydn_cb_ld_t __r = haydn_ldw_cb_imm((ptr), (cbr_sel), \
                                            (offs) >> 3); \
     (dst) = (ae_int16x4)__r.data; \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__r.new_ptr; \
+    (ptr) = (__typeof__(ptr))__r.new_ptr; \
   } while (0)
 
 /// Store quad 16-bit to circular buffer with post-increment.
 #define AE_S16X4_XC(src, ptr, offs, cbr_sel) \
   do { \
-    int __np = haydn_sdw_cb_imm((haydn_dr64_t)(src), (int)(uintptr_t)(ptr), \
+    void *__np = haydn_sdw_cb_imm((haydn_dr64_t)(src), (ptr), \
                                   (cbr_sel), (offs) >> 3); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__np; \
+    (ptr) = (__typeof__(ptr))__np; \
   } while (0)
 
 /// Load quad 16-bit from circular buffer with reverse increment.
-// TODO: reverse-circular — currently aliased to forward XC; needs ldw_cb_reg
-// with negative stride (see research/circular-buffer-cross-arch-study §3.7).
+/// D_LDW_CB_IMM/REG expose signed stride (ImmCheckSimm8); reverse-CB is
+/// ISA-correct as negative element stride -((inc)>>3) — hardware
+/// post-increments by imm<<3 and wraps below CBR_BEGIN. Not a silent
+/// forward XC alias.
 #define AE_L16X4_RIC(dst, ptr, inc, cbr_sel) \
   do { \
-    haydn_cb_ld_t __r = haydn_ldw_cb_imm((int)(uintptr_t)(ptr), (cbr_sel), \
-                                           (inc) >> 3); \
+    haydn_cb_ld_t __r = haydn_ldw_cb_imm((ptr), (cbr_sel), \
+                                           -((inc) >> 3)); \
     (dst) = (ae_int16x4)__r.data; \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__r.new_ptr; \
+    (ptr) = (__typeof__(ptr))__r.new_ptr; \
   } while (0)
 
 /// Load quad 16-bit reverse post-increment
@@ -456,22 +526,19 @@ static inline haydn_dr64_t haydn_ae_f32x2_mem_to_reg(haydn_dr64_t le)
     (ptr) = (ae_int16x4 *)((char *)(ptr) - (inc)); \
   } while (0)
 
-/// Load scalar 16-bit from circular buffer.
+/// Load scalar 16-bit from circular buffer (EMULATED).
 ///
-/// F23 (consolidated-fix-list §2): the previous version loaded a full 64-bit
-/// DR64 via haydn_ldw_cb_imm and truncated, which wastes bandwidth and may
-/// overrun the buffer by 6 bytes. The Haydn ISA has no scalar 16-bit circular
-/// load (see ). For correctness we emit the 32-bit S_LW-style path
-/// through the circular buffer: load 32 bits (still wider than 16, but does
-/// not overrun a 4-byte-aligned circular region), then truncate to the low
-/// 16 bits. Once a native 16-bit CB load is added to the ISA, this should
-/// switch to that path (see -scalar-16bit-cb-load.md).
+/// Haydn has no S_LH_CB halfword circular load. The prior map used
+/// D_LDW_CB (64b) + trunc and offs>>3 element units — silent-wrong width
+/// and offset scale. Emulate as ordinary i16 load + soft CBR step on CBR
+/// mirrors (same cursor-wrap pattern as AE_LA*_IC); offs is a byte stride
+/// (NatureDSP / Hexagon L2_loadrh_pci peer units). Not a native CB path —
+/// IR must not call llvm.haydn.ldw.cb.imm.
 #define AE_L16_XC(dst, ptr, offs, cbr_sel) \
   do { \
-    haydn_cb_ld_t __r = haydn_ldw_cb_imm((int)(uintptr_t)(ptr), (cbr_sel), \
-                                           (offs) >> 3); \
-    (dst) = (ae_int16)((int)(haydn_dr64_t)__r.data & 0xFFFF); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__r.new_ptr; \
+    (dst) = *(ae_int16 *)(void *)(ptr); \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
+        (uintptr_t)(ptr), (intptr_t)(offs), (int)(cbr_sel)); \
   } while (0)
 
 //===----------------------------------------------------------------------===//
@@ -534,12 +601,21 @@ static inline uintptr_t haydn_cbr_step(uintptr_t p, intptr_t offs, int sel)
 // HW AR/UA only: PLDWWUA / FLAR / D_*WUA_POST / WBARWUA (BundleSim + golden).
 // Pointer post-inc remains C GEP (SCEV-visible); HW AGU writeback is not
 // returned to IR/C.
+//
+// ar_sel/dir are ImmArg encoding fields. Call sites that only have a
+// runtime ae_valign must switch-literal dispatch so Sema sees ICE 0..3 / 0..1
+// at the haydn_* ImmArg surface (never pass ar&=3 as a non-ICE builtin arg).
 
-/// Seed AR from ptr. `ar` is 0..3.
+/// Seed AR from ptr. `ar` is 0..3 (masked); ImmArg via switch literals.
 static inline ae_valign haydn_ae_la64_pp_ar(int ar, const void *ptr) {
-  ar &= 3;
-  haydn_pldwwua(ar, (int)(uintptr_t)ptr);
-  return (ae_valign)ar;
+  const void *p = ptr;
+  switch (ar & 3) {
+  case 0: haydn_pldwwua(0, p); break;
+  case 1: haydn_pldwwua(1, p); break;
+  case 2: haydn_pldwwua(2, p); break;
+  default: haydn_pldwwua(3, p); break;
+  }
+  return (ae_valign)(ar & 3);
 }
 static inline ae_valign haydn_ae_la64_pp(const void *ptr) {
   return haydn_ae_la64_pp_ar(__HAYDN_AR_LOAD_SEL, ptr);
@@ -549,28 +625,42 @@ static inline ae_valign haydn_ae_zalign64(void) {
   return (ae_valign)__HAYDN_AR_STORE_SEL;
 }
 static inline ae_valign haydn_ae_zalign64_ar(int ar) {
-  ar &= 3;
-  haydn_flar(ar);
-  return (ae_valign)ar;
+  switch (ar & 3) {
+  case 0: haydn_flar(0); break;
+  case 1: haydn_flar(1); break;
+  case 2: haydn_flar(2); break;
+  default: haydn_flar(3); break;
+  }
+  return (ae_valign)(ar & 3);
 }
 
 /// Load 8 B unaligned (16x4 or 32x2 layout is type-level only). dir: 0/1.
-static inline ae_int32x2 haydn_ae_la64_step(int ar, int p, int stride, int dir) {
-  return haydn_d_ltwua_post(p, ar & 3, stride, dir & 1);
+/// haydn_d_*ua_post public wrappers already switch-literal ar/dir (haydn.h).
+static inline ae_int32x2 haydn_ae_la64_step(int ar, const void *p, int stride, int dir) {
+  return haydn_d_ltwua_post(p, ar, stride, dir);
 }
-static inline ae_int16x4 haydn_ae_la16x4_step(int ar, int p, int stride, int dir) {
-  return haydn_d_lqhwua_post(p, ar & 3, stride, dir & 1);
+static inline ae_int16x4 haydn_ae_la16x4_step(int ar, const void *p, int stride, int dir) {
+  return haydn_d_lqhwua_post(p, ar, stride, dir);
 }
-static inline void haydn_ae_sa64_step(ae_int32x2 data, int ar, int p, int stride,
+static inline void haydn_ae_sa64_step(ae_int32x2 data, int ar, void *p, int stride,
                                         int dir) {
-  haydn_d_stwua_post(data, p, ar & 3, stride, dir & 1);
+  haydn_d_stwua_post(data, p, ar, stride, dir);
 }
-static inline void haydn_ae_sa16x4_step(ae_int16x4 data, int ar, int p, int stride,
+static inline void haydn_ae_sa16x4_step(ae_int16x4 data, int ar, void *p, int stride,
                                           int dir) {
-  haydn_d_sqhwua_post(data, p, ar & 3, stride, dir & 1);
+  haydn_d_sqhwua_post(data, p, ar, stride, dir);
 }
-static inline void haydn_ae_sa64pos(int ar, int p, int dir) {
-  haydn_wbarwua(ar & 3, p, dir & 1);
+static inline void haydn_ae_sa64pos(int ar, void *p, int dir) {
+  switch (((ar & 3) << 1) | (dir & 1)) {
+  case 0: haydn_wbarwua(0, p, 0); break;
+  case 1: haydn_wbarwua(0, p, 1); break;
+  case 2: haydn_wbarwua(1, p, 0); break;
+  case 3: haydn_wbarwua(1, p, 1); break;
+  case 4: haydn_wbarwua(2, p, 0); break;
+  case 5: haydn_wbarwua(2, p, 1); break;
+  case 6: haydn_wbarwua(3, p, 0); break;
+  default: haydn_wbarwua(3, p, 1); break;
+  }
 }
 
 // --- Public AE surface (thin wrappers; do not re-implement later) ----------
@@ -588,16 +678,16 @@ static inline void haydn_ae_sa64pos(int ar, int p, int dir) {
 #define AE_ZALIGN64_AR(ar) haydn_ae_zalign64_ar(ar)
 
 #define AE_SA64POS_FP(align, ptr) \
-  haydn_ae_sa64pos(__HAYDN_AR_SEL(align), (int)(uintptr_t)(ptr), 0)
+  haydn_ae_sa64pos(__HAYDN_AR_SEL(align), (ptr), 0)
 #define AE_SA64POS(align, ptr) AE_SA64POS_FP(align, ptr)
 #define AE_SA64NEG_FP(align, ptr) \
-  haydn_ae_sa64pos(__HAYDN_AR_SEL(align), (int)(uintptr_t)(ptr), 1)
+  haydn_ae_sa64pos(__HAYDN_AR_SEL(align), (ptr), 1)
 
 /// Load then advance C ptr (SCEV-visible GEP). HW writeback is not returned.
 #define AE_LA16X4_IP(dst, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     (dst) = (ae_int16x4)haydn_ae_la16x4_step(__ar, __p, 8, 0); \
     (ptr) = (ae_int16x4 *)((char *)(ptr) + 8); \
   } while (0)
@@ -606,7 +696,7 @@ static inline void haydn_ae_sa64pos(int ar, int p, int dir) {
 #define AE_LA32X2_IP(dst, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p, 8, 0); \
     (dst) = (ae_int32x2)haydn_ae_f32x2_mem_to_reg(__le); \
     (ptr) = (ae_int32x2 *)((char *)(ptr) + 8); \
@@ -615,7 +705,7 @@ static inline void haydn_ae_sa64pos(int ar, int p, int dir) {
 #define AE_LA64_IP(dst, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     (dst) = (ae_int64)haydn_ae_la64_step(__ar, __p, 8, 0); \
     (ptr) = (ae_int64 *)((char *)(ptr) + 8); \
   } while (0)
@@ -623,21 +713,21 @@ static inline void haydn_ae_sa64pos(int ar, int p, int dir) {
 #define AE_SA16X4_IP(src, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p, 8, 0); \
     (ptr) = (ae_int16x4 *)((char *)(ptr) + 8); \
   } while (0)
 #define AE_SA32X2_IP(src, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, 8, 0); \
     (ptr) = (ae_int32x2 *)((char *)(ptr) + 8); \
   } while (0)
 #define AE_SA64_IP(src, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, 8, 0); \
     (ptr) = (ae_int64 *)((char *)(ptr) + 8); \
   } while (0)
@@ -645,7 +735,7 @@ static inline void haydn_ae_sa64pos(int ar, int p, int dir) {
 #define AE_SA16X4_IP_X(src, align, ptr, inc) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     int __s = (int)(inc); \
     haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p, __s, 0); \
     (ptr) = (ae_int16x4 *)((char *)(ptr) + (inc)); \
@@ -653,7 +743,7 @@ static inline void haydn_ae_sa64pos(int ar, int p, int dir) {
 #define AE_SA32X2_IP_X(src, align, ptr, inc) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     int __s = (int)(inc); \
     haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, __s, 0); \
     (ptr) = (ae_int32x2 *)((char *)(ptr) + (inc)); \
@@ -662,7 +752,7 @@ static inline void haydn_ae_sa64pos(int ar, int p, int dir) {
 #define AE_LA16X4_RIP(dst, align, ptr, inc) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     int __s = (int)(inc); \
     if (__s < 0) __s = -__s; \
     if (__s == 0) __s = 8; \
@@ -672,7 +762,7 @@ static inline void haydn_ae_sa64pos(int ar, int p, int dir) {
 #define AE_LA32X2_RIP(dst, align, ptr, offs) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     int __s = (int)(offs); \
     if (__s < 0) __s = -__s; \
     if (__s == 0) __s = 8; \
@@ -682,7 +772,7 @@ static inline void haydn_ae_sa64pos(int ar, int p, int dir) {
 #define AE_SA16X4_RIP(src, align, ptr, inc) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     int __s = (int)(inc); \
     if (__s < 0) __s = -__s; \
     if (__s == 0) __s = 8; \
@@ -692,7 +782,7 @@ static inline void haydn_ae_sa64pos(int ar, int p, int dir) {
 #define AE_SA32X2_RIP(src, align, ptr, inc) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     int __s = (int)(inc); \
     if (__s < 0) __s = -__s; \
     if (__s == 0) __s = 8; \
@@ -700,15 +790,17 @@ static inline void haydn_ae_sa64pos(int ar, int p, int dir) {
     (ptr) = (ae_int32x2 *)((char *)(ptr) - ((inc) ? (inc) : 8)); \
   } while (0)
 
-/* Early IC placeholders — late overload block is the public 3/4-arg API. */
+/* Early IC/RIC placeholders — late overload block is the public 3/4-arg API.
+ * RIC must not silent-alias forward IC (dir=0, +8); route to reverse
+ * helpers (dir=1 ImmArg + haydn_cbr_step -8). */
 #define AE_LA16X4_IC(dst, align, ptr, cbr_sel) \
   __AE_LA16X4_IC_4A((dst), (align), (ptr), (cbr_sel))
 #define AE_LA16X4_RIC(dst, align, ptr, cbr_sel) \
-  __AE_LA16X4_IC_4A((dst), (align), (ptr), (cbr_sel))
+  __AE_LA16X4_RIC_4A((dst), (align), (ptr), (cbr_sel))
 #define AE_LA32X2_IC(dst, align, ptr, cbr_sel) \
   __AE_LA32X2_IC_4A((dst), (align), (ptr), (cbr_sel))
 #define AE_LA32X2_RIC(dst, align, ptr, cbr_sel) \
-  __AE_LA32X2_IC_4A((dst), (align), (ptr), (cbr_sel))
+  __AE_LA32X2_RIC_4A((dst), (align), (ptr), (cbr_sel))
 
 /// Seed AR for circular unaligned stream (HiFi POS_PC / NEG_PC).
 #define AE_LA16X4POS_PC(align, ptr) \
@@ -742,18 +834,18 @@ static inline void AE_S32RA64S_IP(ae_int64 acc, ae_int32 *ptr, int shift,
 /// 32-bit load from bit-reversed address; AGU writeback updates ptr.
 #define AE_L32_BREV_IP(dst, ptr, stride) \
   do { \
-    haydn_sld_t __r = haydn_lw_brev_imm((int)(uintptr_t)(ptr), (stride) >> 2); \
+    haydn_sld_t __r = haydn_lw_brev_imm((ptr), (stride) >> 2); \
     (dst) = (ae_int32)__r.data; \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__r.new_ptr; \
+    (ptr) = (__typeof__(ptr))__r.new_ptr; \
   } while (0)
 
 /// 64-bit load from bit-reversed address; AGU writeback updates ptr.
 #define AE_L32X2_BREV_IP(dst, ptr, stride) \
   do { \
     haydn_cb_ld_t __r = \
-        haydn_ldw_brev_imm((int)(uintptr_t)(ptr), (stride) >> 3); \
+        haydn_ldw_brev_imm((ptr), (stride) >> 3); \
     (dst) = (ae_int32x2)__haydn_i64_as_v2((haydn_dr64_t)__r.data); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__r.new_ptr; \
+    (ptr) = (__typeof__(ptr))__r.new_ptr; \
   } while (0)
 
 //===----------------------------------------------------------------------===//
@@ -1291,33 +1383,40 @@ int haydn_recip_q31(int x) {
 }
 
 //===----------------------------------------------------------------------===//
-// Conditional Move (SFR-based predication)
+// Conditional Move (AE_* uses pred SSA mux; ambient movt left low-level)
 //===----------------------------------------------------------------------===//
+//
+// AE_MOVT*/AE_MOVF* take an explicit cond (xtboolN / haydn_predN_t). Map
+// them to pure x2/x4mux so the cond is not ignored. Ambient haydn_x2movt32 /
+// x4movt16 remain for low-level SFR sequencing (ordered, IntrHasSideEffects).
+// 2-arg AE_MOVT64 stays ambient movt64 (no cond operand).
 
-/// Dual 32-bit conditional move if SFR true: dst = (SFR==1) ? src : dst
+/// Dual 32-bit conditional move if true: dst = cond ? src : dst
 #define AE_MOVT32X2(dst, src, cond) \
-  ((dst) = (ae_int32x2)haydn_x2movt32((dst), (src)))
+  ((dst) = (ae_int32x2)haydn_x2mux32((haydn_pred2_t)(cond), (src), (dst)))
 
-/// Dual 32-bit conditional move if SFR false: dst = (SFR==0) ? src : dst
+/// Dual 32-bit conditional move if false: dst = cond ? dst : src
 #define AE_MOVF32X2(dst, src, cond) \
-  ((dst) = (ae_int32x2)haydn_x2movf32((dst), (src)))
+  ((dst) = (ae_int32x2)haydn_x2mux32((haydn_pred2_t)(cond), (dst), (src)))
 
-/// Quad 16-bit conditional move if SFR true
+/// Quad 16-bit conditional move if true: dst = cond ? src : dst
 #define AE_MOVT16X4(dst, src, cond) \
-  ((dst) = (ae_int16x4)haydn_x4movt16((dst), (src)))
+  ((dst) = (ae_int16x4)haydn_x4mux16((haydn_pred4_t)(cond), (src), (dst)))
 
-/// Quad 16-bit conditional move if SFR false
+/// Quad 16-bit conditional move if false: dst = cond ? dst : src
 #define AE_MOVF16X4(dst, src, cond) \
-  ((dst) = (ae_int16x4)haydn_x4movf16((dst), (src)))
+  ((dst) = (ae_int16x4)haydn_x4mux16((haydn_pred4_t)(cond), (dst), (src)))
 
 /// 64-bit conditional move if SFR true
 /// AE_MOVT64 has two spellings:
-///   2-arg (dst, src) : dst = src if SFR set (reads SFR).
+///   2-arg (dst, src) : dst = src if SFR set (reads ambient SFR).
 ///   3-arg (dst, src, cf) : dst = cf ? src : dst (boolean condition).
 #define AE_MOVT64(...) __AE_MOVT64_OVERLOAD(__VA_ARGS__)
+// 2-arg → ambient movt64; 3-arg → boolean cf select. N+1 selector:
+//   GET(a,b, NAME3, NAME2) → NAME2;  GET(a,b,c, NAME3, NAME2) → NAME3.
 #define __AE_MOVT64_GET(_1, _2, _3, NAME, ...) NAME
 #define __AE_MOVT64_OVERLOAD(...) \
-  __AE_MOVT64_GET(__VA_ARGS__, __AE_MOVT64_3, __AE_MOVT64_3, __AE_MOVT64_2)(__VA_ARGS__)
+  __AE_MOVT64_GET(__VA_ARGS__, __AE_MOVT64_3, __AE_MOVT64_2, )(__VA_ARGS__)
 #define __AE_MOVT64_2(dst, src)     ((dst) = (ae_int64)haydn_movt64((src)))
 #define __AE_MOVT64_3(dst, src, cf) ((void)((cf) && ((dst) = (src)), 0))
 
@@ -1325,26 +1424,34 @@ int haydn_recip_q31(int x) {
 #define AE_MOVF64(dst, src) ((dst) = (ae_int64)haydn_movf64((src)))
 
 //===----------------------------------------------------------------------===//
-// Compare
+// Compare (LT via pure cmplt; EQ/LE/SEQ/SLE ambient compare + movesfr2gpr)
 //===----------------------------------------------------------------------===//
+//
+// AE_LT32 / AE_SLT16X4 use x2/x4cmplt (i32 pred SSA) — never cast a
+// vector passthrough from ambient x2slt32 to xtbool. EQ/LE (and X4 SEQ/SLE)
+// still lack pure SSA cmpeq/cmple; capture ambient SFR bits via movesfr2gpr.
 
-/// Dual 32-bit signed equal compare -> SFR flags
-#define AE_EQ32(a, b) ((xtbool2)haydn_x2seq32((a), (b)))
+/// Dual 32-bit signed equal compare → xtbool2 (ambient seq + SFR capture)
+#define AE_EQ32(a, b) \
+  ((void)haydn_x2seq32((a), (b)), (xtbool2)haydn_movesfr2gpr())
 
-/// Dual 32-bit signed less-than compare -> SFR flags
-#define AE_LT32(a, b) ((xtbool2)haydn_x2slt32((a), (b)))
+/// Dual 32-bit signed less-than → xtbool2 (pure SSA cmplt)
+#define AE_LT32(a, b) ((xtbool2)haydn_x2cmplt32((a), (b)))
 
-/// Dual 32-bit signed less-or-equal compare -> SFR flags
-#define AE_LE32(a, b) ((xtbool2)haydn_x2sle32((a), (b)))
+/// Dual 32-bit signed less-or-equal → xtbool2 (ambient sle + SFR capture)
+#define AE_LE32(a, b) \
+  ((void)haydn_x2sle32((a), (b)), (xtbool2)haydn_movesfr2gpr())
 
-/// Quad 16-bit signed equal compare -> SFR flags
-#define AE_SEQ16X4(a, b) ((xtbool4)haydn_x4seq16((a), (b)))
+/// Quad 16-bit signed equal → xtbool4 (ambient seq + SFR capture)
+#define AE_SEQ16X4(a, b) \
+  ((void)haydn_x4seq16((a), (b)), (xtbool4)haydn_movesfr2gpr())
 
-/// Quad 16-bit signed less-than compare -> SFR flags
-#define AE_SLT16X4(a, b) ((xtbool4)haydn_x4slt16((a), (b)))
+/// Quad 16-bit signed less-than → xtbool4 (pure SSA cmplt)
+#define AE_SLT16X4(a, b) ((xtbool4)haydn_x4cmplt16((a), (b)))
 
-/// Quad 16-bit signed less-or-equal compare -> SFR flags
-#define AE_SLE16X4(a, b) ((xtbool4)haydn_x4sle16((a), (b)))
+/// Quad 16-bit signed less-or-equal → xtbool4 (ambient sle + SFR capture)
+#define AE_SLE16X4(a, b) \
+  ((void)haydn_x4sle16((a), (b)), (xtbool4)haydn_movesfr2gpr())
 
 //===----------------------------------------------------------------------===//
 // Normalization (NSA)
@@ -1841,7 +1948,12 @@ static inline ae_int64 AE_MULAAD32X16_H3_L2(ae_int64 acc, ae_int16x4 d,
 #define __AE_MAX32_GET(_1, _2, NAME, ...) NAME
 #define __AE_MAX32_OVERLOAD(...) \
   __AE_MAX32_GET(__VA_ARGS__, __AE_MAX32_2, __AE_MAX32_1)(__VA_ARGS__)
-#define __AE_MAX32_1(a)            haydn_x2hmax32(a)
+// R_GD x2hmax32 returns scalar int; AE 1-arg form replicates into both lanes.
+static inline ae_int32x2 __ae_hmax32_1(ae_int32x2 a) {
+  int m = haydn_x2hmax32(a);
+  return (ae_int32x2){m, m};
+}
+#define __AE_MAX32_1(a)            __ae_hmax32_1(a)
 /// Lane-wise max: result = (a < b) ? b : a per 32-bit lane.
 /// slt32(a,b) sets SFR per lane; movt32(a,b) returns SFR ? b : a.
 static inline ae_int32x2 __ae_max32x2(ae_int32x2 a, ae_int32x2 b) {
@@ -1854,7 +1966,11 @@ static inline ae_int32x2 __ae_max32x2(ae_int32x2 a, ae_int32x2 b) {
 #define __AE_MIN32_GET(_1, _2, NAME, ...) NAME
 #define __AE_MIN32_OVERLOAD(...) \
   __AE_MIN32_GET(__VA_ARGS__, __AE_MIN32_2, __AE_MIN32_1)(__VA_ARGS__)
-#define __AE_MIN32_1(a)            haydn_x2hmin32(a)
+static inline ae_int32x2 __ae_hmin32_1(ae_int32x2 a) {
+  int m = haydn_x2hmin32(a);
+  return (ae_int32x2){m, m};
+}
+#define __AE_MIN32_1(a)            __ae_hmin32_1(a)
 /// Lane-wise min: result = (a < b) ? a : b per 32-bit lane.
 static inline ae_int32x2 __ae_min32x2(ae_int32x2 a, ae_int32x2 b) {
   return (ae_int32x2)haydn_x2min32((a), (b));
@@ -1865,7 +1981,12 @@ static inline ae_int32x2 __ae_min32x2(ae_int32x2 a, ae_int32x2 b) {
 #define __AE_MAX16_GET(_1, _2, NAME, ...) NAME
 #define __AE_MAX16_OVERLOAD(...) \
   __AE_MAX16_GET(__VA_ARGS__, __AE_MAX16_2, __AE_MAX16_1)(__VA_ARGS__)
-#define __AE_MAX16_1(a)            haydn_x4hmax16(a)
+// R_GD x4hmax16 returns scalar int; AE 1-arg form replicates into all lanes.
+static inline ae_int16x4 __ae_hmax16_1(ae_int16x4 a) {
+  short m = (short)haydn_x4hmax16(a);
+  return (ae_int16x4){m, m, m, m};
+}
+#define __AE_MAX16_1(a)            __ae_hmax16_1(a)
 /// Lane-wise max for quad-16.
 static inline ae_int16x4 __ae_max16x4(ae_int16x4 a, ae_int16x4 b) {
   return (ae_int16x4)haydn_x4max16((a), (b));
@@ -1876,7 +1997,11 @@ static inline ae_int16x4 __ae_max16x4(ae_int16x4 a, ae_int16x4 b) {
 #define __AE_MIN16_GET(_1, _2, NAME, ...) NAME
 #define __AE_MIN16_OVERLOAD(...) \
   __AE_MIN16_GET(__VA_ARGS__, __AE_MIN16_2, __AE_MIN16_1)(__VA_ARGS__)
-#define __AE_MIN16_1(a)            haydn_x4hmin16(a)
+static inline ae_int16x4 __ae_hmin16_1(ae_int16x4 a) {
+  short m = (short)haydn_x4hmin16(a);
+  return (ae_int16x4){m, m, m, m};
+}
+#define __AE_MIN16_1(a)            __ae_hmin16_1(a)
 /// Lane-wise min for quad-16.
 static inline ae_int16x4 __ae_min16x4(ae_int16x4 a, ae_int16x4 b) {
   return (ae_int16x4)haydn_x4min16((a), (b));
@@ -2051,11 +2176,12 @@ static inline ae_int16x4 AE_MUL16JS(ae_int16x4 a) {
   return (ae_int16x4)__builtin_ae_mul16js((ae_int64)a);
 }
 
-/// Zero-accumulate-add dual 16-bit MAC, lanes 3+3 and 2+2
-// TODO: no Haydn equivalent - decompose into two MACs from zero
+/// Zero-accumulate-add dual 16-bit MAC, lanes 3+3 and 2+2.
+/// Exact: haydn_fmulaa16_hs_33_22 (FMULAA16_HS_33_22). Not the silent-wrong
+/// _11_00 lane alias.
 static inline ae_int64 AE_MULZAAFD16SS_33_22(ae_int64 acc, ae_int16x4 d,
                                                ae_int16x4 c) {
-  return haydn_fmulaa16_hs_11_00(acc, __AE_TO_I64(d), __AE_TO_I64(c));
+  return haydn_fmulaa16_hs_33_22(acc, __AE_TO_I64(d), __AE_TO_I64(c));
 }
 
 /// Generic 32x32 MAC
@@ -2277,7 +2403,7 @@ static inline float int32_rtor_ae_f32(ae_int32 v) {
 #define AE_LA32X2F24_IP(dst, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     (dst) = (ae_f24x2)haydn_ae_la64_step(__ar, __p, 8, 0); \
     (ptr) = (ae_f24x2 *)((char *)(ptr) + 8); \
   } while (0)
@@ -2303,7 +2429,7 @@ static inline float int32_rtor_ae_f32(ae_int32 v) {
 #define AE_SA32X2F24_IP(src, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, 8, 0); \
     (ptr) = (ae_f24x2 *)((char *)(ptr) + 8); \
   } while (0)
@@ -2537,7 +2663,7 @@ static inline void AE_MULFD24X2_FIR_H(ae_int64 *q0, ae_int64 *q1,
 #define __AE_S16_0_XC_3A(src, ptr, offs) \
   __AE_S16_0_XC_4A(src, ptr, offs, 0)
 #define __AE_S16_0_XC_4A(src, ptr, offs, cbr_sel) \
-  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int16)(src), (int)(ptr), (cbr_sel), (offs) >> 3); } while (0)
+  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int16)(src), (ptr), (cbr_sel), (offs) >> 3); } while (0)
 
 //---- Scalar 32-bit loads/stores (additional spellings) ----------------
 // AE_L32_I has two HiFi3 forms:
@@ -2573,10 +2699,10 @@ static inline void AE_MULFD24X2_FIR_H(ae_int64 *q0, ae_int64 *q1,
   __AE_L32_XC_4A(dst, ptr, offs, 0)
 #define __AE_L32_XC_4A(dst, ptr, offs, cbr_sel) \
   do { \
-    haydn_cb_ld_t __r = haydn_ldw_cb_imm((int)(uintptr_t)(ptr), (cbr_sel), \
+    haydn_cb_ld_t __r = haydn_ldw_cb_imm((ptr), (cbr_sel), \
                                            (offs) >> 3); \
     (dst) = (ae_int32)((int)(haydn_dr64_t)__r.data & 0xFFFFFFFF); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__r.new_ptr; \
+    (ptr) = (__typeof__(ptr))__r.new_ptr; \
   } while (0)
 
 #define AE_S32_L_I(src, ptr, inc) \
@@ -2592,7 +2718,7 @@ static inline void AE_MULFD24X2_FIR_H(ae_int64 *q0, ae_int64 *q1,
 #define __AE_S32_L_XC_3A(src, ptr, offs) \
   __AE_S32_L_XC_4A(src, ptr, offs, 0)
 #define __AE_S32_L_XC_4A(src, ptr, offs, cbr_sel) \
-  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int32)(src), (int)(ptr), (cbr_sel), (offs) >> 3); } while (0)
+  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int32)(src), (ptr), (cbr_sel), (offs) >> 3); } while (0)
 #define AE_S32_L_XP(src, ptr, offs, inc) \
   do { *((ae_int32 *)(ptr) + (offs)) = (ae_int32)(src); (ptr) = (ae_int32 *)((char *)(ptr) + (inc)); } while (0)
 
@@ -2631,7 +2757,8 @@ static inline void AE_MULFD24X2_FIR_H(ae_int64 *q0, ae_int64 *q1,
 //---- Misc load/store spellings ----------------------------------------
 #define AE_L32X2_RIC(dst, ptr, offs, cbr_sel) AE_L32X2_XC(dst, ptr, offs, cbr_sel)
 #define AE_L32X2_RIP(dst, ptr, offs) AE_L32X2_IP(dst, ptr, offs)
-#define AE_L16X4_RIC(dst, ptr, offs, cbr_sel) AE_L16X4_XC(dst, ptr, offs, cbr_sel)
+/* AE_L16X4_RIC: keep primary reverse-CB body (negative D_LDW_CB stride); do
+ * not re-alias to forward XC. Overload block below wins for arity. */
 /* AE_LA16X4_RIP: use primary definition above (AR helpers). */
 
 //---- S32X2 reverse / circular additional spellings --------------------
@@ -2847,8 +2974,9 @@ static inline ae_int16x4 __ae_sraa16(ae_int16x4 a, int s) {
 // Dual-lane abs/neg (ae_int32x2). Golden: X2ABS32 / X2NEG32.
 // Haydn has no separate non-sat 32-bit scalar abs for the vector form; both
 // lanes use the X2* ops. At INT_MIN, non-sat wraps (ISA) / sat clamps.
-#define AE_ABS32(a)   ((ae_int32x2)haydn_x2abs32((long long)(a)))
-#define AE_NEG32(a)   ((ae_int32x2)haydn_x2neg32((long long)(a)))
+// haydn_x2abs32/neg32 take haydn_x2int32, not int64 bag.
+#define AE_ABS32(a)   ((ae_int32x2)haydn_x2abs32(a))
+#define AE_NEG32(a)   ((ae_int32x2)haydn_x2neg32(a))
 #define AE_EQ16(a, b) haydn_x4seq16((a), (b))
 #define AE_LT16(a, b) haydn_x4slt16((a), (b))
 #define AE_LT64(a, b) ((a) < (b))
@@ -3279,7 +3407,7 @@ static inline ae_int64 __AE_INT64X2_RADD_1(ae_int64x2 a) {
 #define __AE_S32X2F24_XC_3A(src, ptr, offs) \
   __AE_S32X2F24_XC_4A(src, ptr, offs, 0)
 #define __AE_S32X2F24_XC_4A(src, ptr, offs, cbr_sel) \
-  do { haydn_sdw_cb_imm((haydn_dr64_t)(src), (int)(ptr), (cbr_sel), (offs) >> 3); } while (0)
+  do { haydn_sdw_cb_imm((haydn_dr64_t)(src), (ptr), (cbr_sel), (offs) >> 3); } while (0)
 
 //===----------------------------------------------------------------------===//
 // HiFi3 source-compat layer: 3-arg forms (no cbr_sel) for XC/IP/RIC loads  //
@@ -3312,9 +3440,9 @@ static inline ae_int64 __AE_INT64X2_RADD_1(ae_int64x2 a) {
   __AE_S16X4_XC_4A(src, ptr, offs, 0)
 #define __AE_S16X4_XC_4A(src, ptr, offs, cbr_sel) \
   do { \
-    int __np = haydn_sdw_cb_imm((haydn_dr64_t)(src), (int)(uintptr_t)(ptr), \
+    void *__np = haydn_sdw_cb_imm((haydn_dr64_t)(src), (ptr), \
                                   (cbr_sel), (offs) >> 3); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__np; \
+    (ptr) = (__typeof__(ptr))__np; \
   } while (0)
 
 //---- AE_L32X2_XC / AE_S32X2_XC overload --------------------------------
@@ -3327,10 +3455,10 @@ static inline ae_int64 __AE_INT64X2_RADD_1(ae_int64x2 a) {
   __AE_L32X2_XC_4A(dst, ptr, offs, 0)
 #define __AE_L32X2_XC_4A(dst, ptr, offs, cbr_sel) \
   do { \
-    haydn_cb_ld_t __r = haydn_ldw_cb_imm((int)(uintptr_t)(ptr), (cbr_sel), \
+    haydn_cb_ld_t __r = haydn_ldw_cb_imm((ptr), (cbr_sel), \
                                            (offs) >> 3); \
     (dst) = (ae_int32x2)haydn_ae_f32x2_mem_to_reg((haydn_dr64_t)__r.data); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__r.new_ptr; \
+    (ptr) = (__typeof__(ptr))__r.new_ptr; \
   } while (0)
 
 #undef  AE_S32X2_XC
@@ -3343,9 +3471,9 @@ static inline ae_int64 __AE_INT64X2_RADD_1(ae_int64x2 a) {
 #define __AE_S32X2_XC_4A(src, ptr, offs, cbr_sel) \
   do { \
     haydn_dr64_t __s = haydn_ae_f32x2_mem_to_reg((haydn_dr64_t)(src)); \
-    int __np = haydn_sdw_cb_imm(__s, (int)(uintptr_t)(ptr), (cbr_sel), \
+    void *__np = haydn_sdw_cb_imm(__s, (ptr), (cbr_sel), \
                                   (offs) >> 3); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__np; \
+    (ptr) = (__typeof__(ptr))__np; \
   } while (0)
 
 //---- AE_S32RA64S_IP overload (3-arg: acc, ptr, inc; fixed shift=16) --------
@@ -3432,6 +3560,8 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
 #define ae_f24x2_loadip(dst, ptr, inc) AE_L32X2_IP(dst, ptr, inc)
 
 //---- AE_L16_XC overload (3-arg: dst, ptr, offs; cbr_sel defaults to linear)
+// EMULATED single owner: ordinary i16 load + haydn_cbr_step(byte offs).
+// Late 64b-trunc redefines collapsed (no D_LDW_CB / offs>>3).
 #undef  AE_L16_XC
 #define AE_L16_XC(...) __AE_L16_XC_OVERLOAD(__VA_ARGS__)
 #define __AE_L16_XC_GET(_1, _2, _3, _4, NAME, ...) NAME
@@ -3441,10 +3571,9 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
   __AE_L16_XC_4A(dst, ptr, offs, 0)
 #define __AE_L16_XC_4A(dst, ptr, offs, cbr_sel) \
   do { \
-    haydn_cb_ld_t __r = haydn_ldw_cb_imm((int)(uintptr_t)(ptr), (cbr_sel), \
-                                           (offs) >> 3); \
-    (dst) = (ae_int16)((int)(haydn_dr64_t)__r.data & 0xFFFF); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__r.new_ptr; \
+    (dst) = *(ae_int16 *)(void *)(ptr); \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
+        (uintptr_t)(ptr), (intptr_t)(offs), (int)(cbr_sel)); \
   } while (0)
 
 //---- AE_LA16X4_IC / AE_LA32X2_IC — AR residual + CBR cursor wrap ----------
@@ -3461,9 +3590,9 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
 #define __AE_LA16X4_IC_4A(dst, align, ptr, cbr_sel) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     (dst) = (ae_int16x4)haydn_ae_la16x4_step(__ar, __p, 8, 0); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)haydn_cbr_step( \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
         (uintptr_t)(ptr), 8, (int)(cbr_sel)); \
   } while (0)
 
@@ -3477,10 +3606,10 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
 #define __AE_LA32X2_IC_4A(dst, align, ptr, cbr_sel) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p, 8, 0); \
     (dst) = (ae_int32x2)haydn_ae_f32x2_mem_to_reg(__le); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)haydn_cbr_step( \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
         (uintptr_t)(ptr), 8, (int)(cbr_sel)); \
   } while (0)
 
@@ -3495,9 +3624,9 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
 #define __AE_SA16X4_IC_4A(src, align, ptr, cbr_sel) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p, 8, 0); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)haydn_cbr_step( \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
         (uintptr_t)(ptr), 8, (int)(cbr_sel)); \
   } while (0)
 
@@ -3511,10 +3640,10 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
 #define __AE_SA32X2_IC_4A(src, align, ptr, cbr_sel) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     haydn_dr64_t __s = haydn_ae_f32x2_mem_to_reg((haydn_dr64_t)(src)); \
     haydn_ae_sa64_step((int64_t)__s, __ar, __p, 8, 0); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)haydn_cbr_step( \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
         (uintptr_t)(ptr), 8, (int)(cbr_sel)); \
   } while (0)
 
@@ -3524,18 +3653,25 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
 // used to live here lowered 3-arg to linear ptr-arith — removed per .)
 
 //---- AE_L16X4_RIC / AE_L16X4_RIP / AE_L32X2_RIP / AE_L32X2_RIC ----------
+// Reverse-CB is EXACT via signed negative D_LDW_CB stride
+// (-((byte_offs)>>3)). Imm form when offs is constant ImmArg; REG form is
+// the hardware twin for variable stride (same element units).
 #undef  AE_L16X4_RIC
 #define AE_L16X4_RIC(...) __AE_L16X4_RIC_OVERLOAD(__VA_ARGS__)
 #define __AE_L16X4_RIC_GET(_1, _2, _3, _4, NAME, ...) NAME
 #define __AE_L16X4_RIC_OVERLOAD(...) \
   __AE_L16X4_RIC_GET(__VA_ARGS__, __AE_L16X4_RIC_4A, __AE_L16X4_RIC_3A, __AE_L16X4_RIC_2A)(__VA_ARGS__)
 #define __AE_L16X4_RIC_2A(dst, ptr) \
-  do { (dst) = *(ae_int16x4 *)(ptr); \
-       (ptr) = (ae_int16x4 *)((char *)(ptr) + 8); } while (0)
+  __AE_L16X4_RIC_4A(dst, ptr, 8, 0)
 #define __AE_L16X4_RIC_3A(dst, ptr, offs) \
   __AE_L16X4_RIC_4A(dst, ptr, offs, 0)
 #define __AE_L16X4_RIC_4A(dst, ptr, offs, cbr_sel) \
-  do { __HAYDN_AE_CB_LD64((dst), (ptr), (cbr_sel), (offs) >> 3); } while (0)
+  do { \
+    haydn_cb_ld_t __r = haydn_ldw_cb_imm((ptr), (cbr_sel), \
+                                           -((offs) >> 3)); \
+    (dst) = (ae_int16x4)__r.data; \
+    (ptr) = (__typeof__(ptr))__r.new_ptr; \
+  } while (0)
 
 #undef  AE_L16X4_RIP
 #define AE_L16X4_RIP(...) __AE_L16X4_RIP_OVERLOAD(__VA_ARGS__)
@@ -3574,6 +3710,43 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
 #define __AE_L32X2_RIC_4A(dst, ptr, offs, cbr_sel) \
   do { __HAYDN_AE_CB_LD64((dst), (ptr), (cbr_sel), (offs) >> 3); } while (0)
 
+//---- AE_LA16X4_RIC / AE_LA32X2_RIC — reverse UA dir=1 + CBR wrap -8 ------
+// EXACT: same unaligned reverse path as AE_LA*_RIP (haydn_ae_la{16x4,64}
+// _step / d_l{qhw,tw}ua_post dir=1 ImmArg) plus haydn_cbr_step(ptr, -8,
+// cbr_sel) for circular wrap. Must not silent-alias forward IC (dir=0, +8).
+#undef  AE_LA16X4_RIC
+#define AE_LA16X4_RIC(...) __AE_LA16X4_RIC_OVERLOAD(__VA_ARGS__)
+#define __AE_LA16X4_RIC_GET(_1, _2, _3, _4, NAME, ...) NAME
+#define __AE_LA16X4_RIC_OVERLOAD(...) \
+  __AE_LA16X4_RIC_GET(__VA_ARGS__, __AE_LA16X4_RIC_4A, __AE_LA16X4_RIC_3A)(__VA_ARGS__)
+#define __AE_LA16X4_RIC_3A(dst, align, ptr) \
+  __AE_LA16X4_RIC_4A(dst, align, ptr, 0)
+#define __AE_LA16X4_RIC_4A(dst, align, ptr, cbr_sel) \
+  do { \
+    int __ar = __HAYDN_AR_SEL(align); \
+    void *__p = (ptr); \
+    (dst) = (ae_int16x4)haydn_ae_la16x4_step(__ar, __p, 8, 1); \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
+        (uintptr_t)(ptr), -8, (int)(cbr_sel)); \
+  } while (0)
+
+#undef  AE_LA32X2_RIC
+#define AE_LA32X2_RIC(...) __AE_LA32X2_RIC_OVERLOAD(__VA_ARGS__)
+#define __AE_LA32X2_RIC_GET(_1, _2, _3, _4, NAME, ...) NAME
+#define __AE_LA32X2_RIC_OVERLOAD(...) \
+  __AE_LA32X2_RIC_GET(__VA_ARGS__, __AE_LA32X2_RIC_4A, __AE_LA32X2_RIC_3A)(__VA_ARGS__)
+#define __AE_LA32X2_RIC_3A(dst, align, ptr) \
+  __AE_LA32X2_RIC_4A(dst, align, ptr, 0)
+#define __AE_LA32X2_RIC_4A(dst, align, ptr, cbr_sel) \
+  do { \
+    int __ar = __HAYDN_AR_SEL(align); \
+    void *__p = (ptr); \
+    haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p, 8, 1); \
+    (dst) = (ae_int32x2)haydn_ae_f32x2_mem_to_reg(__le); \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
+        (uintptr_t)(ptr), -8, (int)(cbr_sel)); \
+  } while (0)
+
 //---- AE_LA16X4_RIP / AE_LA32X2_RIP / AE_LA32X2F24_RIP overload (→ AR helpers)
 #undef  AE_LA16X4_RIP
 #define AE_LA16X4_RIP(...) __AE_LA16X4_RIP_OVERLOAD(__VA_ARGS__)
@@ -3583,14 +3756,14 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
 #define __AE_LA16X4_RIP_3A(dst, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     (dst) = (ae_int16x4)haydn_ae_la16x4_step(__ar, __p, 8, 1); \
     (ptr) = (ae_int16x4 *)((char *)(ptr) - 8); \
   } while (0)
 #define __AE_LA16X4_RIP_4A(dst, align, ptr, inc) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     int __s = (int)(inc); \
     if (__s < 0) __s = -__s; \
     if (__s == 0) __s = 8; \
@@ -3606,14 +3779,14 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
 #define __AE_LA32X2_RIP_3A(dst, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     (dst) = (ae_int32x2)haydn_ae_la64_step(__ar, __p, 8, 1); \
     (ptr) = (ae_int32x2 *)((char *)(ptr) - 8); \
   } while (0)
 #define __AE_LA32X2_RIP_4A(dst, align, ptr, inc) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     int __s = (int)(inc); \
     if (__s < 0) __s = -__s; \
     if (__s == 0) __s = 8; \
@@ -3957,10 +4130,10 @@ static inline ae_int64 AE_MULZAAFD32X16_H2_L3_3A(ae_int64 acc, ae_int16x4 d,
   __AE_L32_XC_4A(dst, ptr, offs, 0)
 #define __AE_L32_XC_4A(dst, ptr, offs, cbr_sel) \
   do { \
-    haydn_cb_ld_t __r = haydn_ldw_cb_imm((int)(uintptr_t)(ptr), (cbr_sel), \
+    haydn_cb_ld_t __r = haydn_ldw_cb_imm((ptr), (cbr_sel), \
                                            (offs) >> 3); \
     (dst) = (ae_int32)((int)(haydn_dr64_t)__r.data & 0xFFFFFFFF); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__r.new_ptr; \
+    (ptr) = (__typeof__(ptr))__r.new_ptr; \
   } while (0)
 
 //---- AE_L32F24_XC : 3-arg (implicit CBR0) ; 4-arg -------------------------
@@ -3973,10 +4146,10 @@ static inline ae_int64 AE_MULZAAFD32X16_H2_L3_3A(ae_int64 acc, ae_int16x4 d,
   __AE_L32F24_XC_4A(dst, ptr, offs, 0)
 #define __AE_L32F24_XC_4A(dst, ptr, offs, cbr_sel) \
   do { \
-    haydn_cb_ld_t __r = haydn_ldw_cb_imm((int)(uintptr_t)(ptr), (cbr_sel), \
+    haydn_cb_ld_t __r = haydn_ldw_cb_imm((ptr), (cbr_sel), \
                                            (offs) >> 3); \
     (dst) = (ae_f24)((int)(haydn_dr64_t)__r.data & 0xFFFFFFFF); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__r.new_ptr; \
+    (ptr) = (__typeof__(ptr))__r.new_ptr; \
   } while (0)
 
 //---- AE_LA24X2_IC : 3-arg (dst, align, ptr) ; 4-arg (with cbr_sel) -----
@@ -4089,7 +4262,7 @@ typedef ae_p24x2 ae_p24x2s;
 #define __AE_SA24X2_IC_3A(src, align, ptr) \
   __AE_SA24X2_IC_4A(src, align, ptr, 0)
 #define __AE_SA24X2_IC_4A(src, align, ptr, cbr_sel) \
-  do { haydn_sdw_cb_imm((haydn_dr64_t)(src), (int)(ptr), (cbr_sel), 1); \
+  do { haydn_sdw_cb_imm((haydn_dr64_t)(src), (ptr), (cbr_sel), 1); \
        (void)(align); } while (0)
 
 //---- AE_L16X4_X overload (2-arg returning form: ptr, offs) ------------
@@ -4196,7 +4369,7 @@ static inline ae_int64 AE_MULZAAFD32X16_H3_L2_3A(ae_int64 acc, ae_int16x4 d,
 #define __AE_S32F24_L_XC_3A(src, ptr, offs) \
   __AE_S32F24_L_XC_4A(src, ptr, offs, 0)
 #define __AE_S32F24_L_XC_4A(src, ptr, offs, cbr_sel) \
-  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int32)(src), (int)(ptr), (cbr_sel), (offs) >> 3); } while (0)
+  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int32)(src), (ptr), (cbr_sel), (offs) >> 3); } while (0)
 
 //---- AE_MULZAAFD24_HL_LH 2-arg overload (a, b; zero-init accumulator) --
 #undef  AE_MULZAAFD24_HL_LH
@@ -4303,7 +4476,7 @@ static inline ae_int64 AE_MULZAAFD32X16_H3_L2_3A(ae_int64 acc, ae_int16x4 d,
 #define __AE_S32_L_XC_3A(src, ptr, offs) \
   __AE_S32_L_XC_4A(src, ptr, offs, 0)
 #define __AE_S32_L_XC_4A(src, ptr, offs, cbr_sel) \
-  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int32)(src), (int)(ptr), (cbr_sel), (offs) >> 3); } while (0)
+  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int32)(src), (ptr), (cbr_sel), (offs) >> 3); } while (0)
 
 //---- AE_L32X2F24_RIP overload (2-arg: dst, ptr; inc implicit 8) --------
 #undef  AE_L32X2F24_RIP
@@ -4327,7 +4500,7 @@ static inline ae_int64 AE_MULZAAFD32X16_H3_L2_3A(ae_int64 acc, ae_int16x4 d,
 #define __AE_SA32X2F24_IC_3A(src, align, ptr) \
   __AE_SA32X2F24_IC_4A(src, align, ptr, 0)
 #define __AE_SA32X2F24_IC_4A(src, align, ptr, cbr_sel) \
-  do { haydn_sdw_cb_imm((haydn_dr64_t)(src), (int)(ptr), (cbr_sel), 1); \
+  do { haydn_sdw_cb_imm((haydn_dr64_t)(src), (ptr), (cbr_sel), 1); \
        (void)(align); } while (0)
 
 #undef  AE_SA16X4_RIP
@@ -4338,14 +4511,14 @@ static inline ae_int64 AE_MULZAAFD32X16_H3_L2_3A(ae_int64 acc, ae_int16x4 d,
 #define __AE_SA16X4_RIP_3A(src, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     haydn_ae_sa16x4_step((int64_t)(src), __ar, __p, 8, 1); \
     (ptr) = (ae_int16x4 *)((char *)(ptr) - 8); \
   } while (0)
 #define __AE_SA16X4_RIP_4A(src, align, ptr, inc) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     int __s = (int)(inc); \
     if (__s < 0) __s = -__s; \
     if (__s == 0) __s = 8; \
@@ -4392,7 +4565,7 @@ static inline ae_int64 AE_MULZAAFD32X16_H3_L2_3A(ae_int64 acc, ae_int16x4 d,
 #define __AE_S16_0_XC_3A(src, ptr, offs) \
   __AE_S16_0_XC_4A(src, ptr, offs, 0)
 #define __AE_S16_0_XC_4A(src, ptr, offs, cbr_sel) \
-  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int16)(src), (int)(ptr), (cbr_sel), (offs) >> 3); } while (0)
+  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int16)(src), (ptr), (cbr_sel), (offs) >> 3); } while (0)
 
 //---- AE_MULZASFD24_HH_LL 2-arg overload (a, b; zero-init accumulator) --
 #undef  AE_MULZASFD24_HH_LL
@@ -4449,7 +4622,7 @@ typedef int ae_p24s;
 #define AE_SA16X4_IP(src, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p, 8, 0); \
     (ptr) = (ae_int16x4 *)((char *)(ptr) + 8); \
   } while (0)
@@ -4458,7 +4631,7 @@ typedef int ae_p24s;
 #define AE_SA32X2_IP(src, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, 8, 0); \
     (ptr) = (ae_int32x2 *)((char *)(ptr) + 8); \
   } while (0)
@@ -4473,30 +4646,10 @@ typedef int ae_p24s;
 #define __AE_ROUNDSQ32F48ASYM_2(q, s) haydn_packsr32((q), (s))
 
 //===----------------------------------------------------------------------===//
-// HiFi3 source-compat layer part 8: final lvalue-cast fix for AE_L16_XC     //
-// (remove ptr update — kernel recomputes cast each call) and the last few   //
-// missing MAC overloads for the interp/convol family.                       //
+// HiFi3 source-compat layer part 8: MAC overloads for interp/convol family. //
+// AE_L16_XC late 64b-trunc redefines collapsed — single EMULATED body       //
+// (i16 load + haydn_cbr_step) lives with the arity overload above.          //
 //===----------------------------------------------------------------------===//
-
-//---- AE_L16_XC lvalue-cast-safe form (no ptr update) ------------------
-// The kernel passes castxcc(ae_int16, D_tmp) which is a non-lvalue cast.
-// The store happens through *ptr; the post-increment is dropped (the kernel
-// recomputes the cast expression each iteration, so the underlying D_tmp
-// is NOT advanced by this macro — the kernel advances it separately).
-#undef  AE_L16_XC
-#define AE_L16_XC(...) __AE_L16_XC_OVERLOAD(__VA_ARGS__)
-#define __AE_L16_XC_GET(_1, _2, _3, _4, NAME, ...) NAME
-#define __AE_L16_XC_OVERLOAD(...) \
-  __AE_L16_XC_GET(__VA_ARGS__, __AE_L16_XC_4A, __AE_L16_XC_3A)(__VA_ARGS__)
-#define __AE_L16_XC_3A(dst, ptr, offs) \
-  __AE_L16_XC_4A(dst, ptr, offs, 0)
-#define __AE_L16_XC_4A(dst, ptr, offs, cbr_sel) \
-  do { \
-    haydn_cb_ld_t __r = haydn_ldw_cb_imm((int)(uintptr_t)(ptr), (cbr_sel), \
-                                           (offs) >> 3); \
-    (dst) = (ae_int16)((int)(haydn_dr64_t)__r.data & 0xFFFF); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__r.new_ptr; \
-  } while (0)
 
 //---- AE_MULFP32X16X2RAS_H / _L (32x16x2 fractional multiply with round) --
 // Maps to the existing haydn_mulfp32x16x2ras_high / _low intrinsics.
@@ -4511,34 +4664,14 @@ typedef int ae_p24s;
   haydn_mulafd32x16x2_fir_hl((acc), __AE_TO_I64((haydn_dr64_t)(a)), __AE_TO_I64((haydn_dr64_t)(b)))
 
 //===----------------------------------------------------------------------===//
-// HiFi3 source-compat layer part 8: final lvalue-cast fix for AE_L16_XC     //
-// (remove ptr update — kernel recomputes cast each call) and the last few   //
-// missing MAC overloads for the interp/convol family.                       //
+// HiFi3 source-compat layer part 8b: 2-arg MULFP / MULF48 forms              //
 //===----------------------------------------------------------------------===//
-
-//---- AE_L16_XC lvalue-cast-safe form (no ptr update) ------------------
-// The kernel passes castxcc(ae_int16, D_tmp) which is a non-lvalue cast.
-// The store happens through *ptr; the post-increment is dropped (the kernel
-// recomputes the cast expression each iteration, so the underlying D_tmp
-// is NOT advanced by this macro — the kernel advances it separately).
-#undef  AE_L16_XC
-#define AE_L16_XC(...) __AE_L16_XC_OVERLOAD(__VA_ARGS__)
-#define __AE_L16_XC_GET(_1, _2, _3, _4, NAME, ...) NAME
-#define __AE_L16_XC_OVERLOAD(...) \
-  __AE_L16_XC_GET(__VA_ARGS__, __AE_L16_XC_4A, __AE_L16_XC_3A)(__VA_ARGS__)
-#define __AE_L16_XC_3A(dst, ptr, offs) \
-  __AE_L16_XC_4A(dst, ptr, offs, 0)
-#define __AE_L16_XC_4A(dst, ptr, offs, cbr_sel) \
-  do { \
-    haydn_cb_ld_t __r = haydn_ldw_cb_imm((int)(uintptr_t)(ptr), (cbr_sel), \
-                                           (offs) >> 3); \
-    (dst) = (ae_int16)((int)(haydn_dr64_t)__r.data & 0xFFFF); \
-    (ptr) = (__typeof__(ptr))(uintptr_t)(unsigned)__r.new_ptr; \
-  } while (0)
 
 //---- AE_MULFP32X16X2RAS_H / _L (32x16x2 fractional multiply with round) --
 // HiFi3 signature: (a, b) returns the rounded product (no accumulator).
 // Maps to the existing haydn_mulfp32x16x2ras_high / _low intrinsics.
+#undef  AE_MULFP32X16X2RAS_H
+#undef  AE_MULFP32X16X2RAS_L
 #define AE_MULFP32X16X2RAS_H(a, b) \
   haydn_mulfp32x16x2ras_high(0, (haydn_dr64_t)(a), (haydn_dr64_t)(b))
 #define AE_MULFP32X16X2RAS_L(a, b) \
@@ -6611,9 +6744,8 @@ static inline int XT_AE_MOVVFCRFSR(xtfloatx2 a) { return XT_RFR(a.f[0]); }
 // ~/haydn-plans/naturedsp-haydn/disasm/all-kernel-gaps/GAP-VEC-COMPLEX-MATH-MATOP.md.
 // Each entry maps a HiFi3 AE_*/XT_* surface symbol that the ORIGINAL kernel
 // source references to either an existing Haydn intrinsic or a correct inline
-// composition. See for the per-symbol semantics analysis and for
-// the one genuine no-native-instr gap (AE_MULZAAFD16SS_33_22 has no
-// dual-high-lane MAC; currently aliases _11_00 — needs a follow-up).
+// composition. AE_MULZAAFD16SS_33_22 uses exact hs_33_22 (not the
+// silent-wrong _11_00 lane alias).
 //===----------------------------------------------------------------------===//
 
 //---- XT_MOVLTZ / XT_MOVGEZ (alias of the _S scalar helpers) -------------
@@ -6706,11 +6838,14 @@ uintptr_t XT_ADDX8(int scale, uintptr_t ptr) {
 #define AE_MULA32X2_vector(acc, a, b) \
   do { (acc) = haydn_f2mulaa32rs_hhll((acc), __AE_TO_I64(a), __AE_TO_I64(b)); } while (0)
 
-// AE_ADD64X2_vector(a, b): dual-64-bit lane-wise add.
-//   Operates on ae_int64x2. Haydn ae_int64x2 is stored as one DR64, so the
-//   "dual-lane add" collapses to a scalar 64-bit add (the two 32-bit halves
-//   add independently with no inter-lane carry, which is exactly what a
-//   single 64-bit integer add does). Equivalent to AE_ADD64(a, b).
+// AE_ADD64X2_vector(a, b): HiFi dual-64-bit lane-wise add (no cross-lane
+//   carry). Haydn ae_int64x2 is a single DR64 bag — there is no exact dual-64
+//   storage or lane-wise add. The scalar i64 body below is KNOWN silent-wrong
+//   (cross-lane carry when low half overflows) and is kept only for
+//   __HAYDN_ALLOW_INEXACT_AE transitional NatureDSP -c. Default mode
+//   redefines this to __HAYDN_AE_UNSUPPORTED_EXPR (permanent product
+//   decision; not EMULATED — do not bag-alias dual-64).
+//   Research: ae-to-haydn-mapping AE_ADD64X2_vector MISSING (128-bit dual-64).
 #define AE_ADD64X2_vector(a, b) ((ae_int64x2)((ae_int64)(a) + (ae_int64)(b)))
 
 //---- AE_S16X4_XP / AE_S32X2_XP / AE_S32X2F24_XP 3-arg overload ----------
@@ -6796,9 +6931,9 @@ uintptr_t XT_ADDX8(int scale, uintptr_t ptr) {
   __AE_MULZAAFD16SS_33_22_GET(__VA_ARGS__, __AE_MULZAAFD16SS_33_22_3, \
                               __AE_MULZAAFD16SS_33_22_2)(__VA_ARGS__)
 #define __AE_MULZAAFD16SS_33_22_2(a, b) \
-  haydn_fmulaa16_hs_11_00((ae_int64)0, __AE_TO_I64(a), __AE_TO_I64(b))
+  haydn_fmulaa16_hs_33_22((ae_int64)0, __AE_TO_I64(a), __AE_TO_I64(b))
 #define __AE_MULZAAFD16SS_33_22_3(acc, a, b) \
-  ((acc) = haydn_fmulaa16_hs_11_00((acc), __AE_TO_I64(a), __AE_TO_I64(b)))
+  ((acc) = haydn_fmulaa16_hs_33_22((acc), __AE_TO_I64(a), __AE_TO_I64(b)))
 
 //---- AE_TRUNCA16P24S_H (truncate f24x2 high lane to saturating int16) --
 // scl_rsqrt16x16: r = AE_TRUNCA16P24S_H(AE_MOVF24X2_FROMF32X2(Y)).
@@ -6946,7 +7081,7 @@ uint32_t AE_TRUNCA16P24S_H(ae_f24x2 x) {
 #define AE_SA32X2F24_RIP(src, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     haydn_ae_sa64_step((int64_t)(src), __ar, __p, 8, 1); \
     (ptr) = (__typeof__(ptr))((char *)(ptr) - 8); \
   } while (0)
@@ -6954,7 +7089,7 @@ uint32_t AE_TRUNCA16P24S_H(ae_f24x2 x) {
 #define AE_SA32X2_RIP(src, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
-    int __p = (int)(uintptr_t)(ptr); \
+    void *__p = (ptr); \
     haydn_ae_sa64_step((int64_t)(src), __ar, __p, 8, 1); \
     (ptr) = (__typeof__(ptr))((char *)(ptr) - 8); \
   } while (0)
@@ -6975,5 +7110,26 @@ uint32_t AE_TRUNCA16P24S_H(ae_f24x2 x) {
 // backstop for such kernels. See /bqir fix + L151.
 #undef castxcc
 #define castxcc(t, p) (*(t **)&(p))
+
+//===----------------------------------------------------------------------===//
+// Residual silent-wrong quarantine — fail closed unless ALLOW_INEXACT
+//
+// Overrides any earlier public AE maps that silently alias a different
+// direction, width, lane, or arithmetic. Transitional NatureDSP -c may define
+// __HAYDN_ALLOW_INEXACT_AE to keep the inexact bodies defined above.
+// MULZAAFD / L16X4_RIC / LA*_RIC are EXACT; L16_XC is EMULATED. Permanent
+// residual: AE_ADD64X2_vector only (no dual-64 ISA map). Do not add new
+// silent aliases.
+//===----------------------------------------------------------------------===//
+#if !defined(__HAYDN_ALLOW_INEXACT_AE)
+
+/* AE_L16_XC EMULATED / L16X4_RIC+LA*_RIC EXACT — not quarantined. */
+
+/* Permanent UNSUPPORTED: no bag dual-64. Hexagon peer is fail-closed /
+ * feature-gated — not a silent scalar alias. */
+#undef AE_ADD64X2_vector
+#define AE_ADD64X2_vector(...) __HAYDN_AE_UNSUPPORTED_EXPR(AE_ADD64X2_vector)
+
+#endif /* !__HAYDN_ALLOW_INEXACT_AE */
 
 #endif /* __HAYDN_DSP_H */

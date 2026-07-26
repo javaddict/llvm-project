@@ -23,13 +23,22 @@ _Static_assert(sizeof(int32_t) == 4, "int32_t is 4 bytes");
 _Static_assert(sizeof(int64_t) == 8, "int64_t is 8 bytes");
 _Static_assert(sizeof(uintptr_t) == 4, "uintptr_t is 4 bytes");
 
+// C1.1 / G-PRED-SSA: haydn_pred2_t / haydn_pred4_t are i32-width SSA values.
+#include <haydn_types.h>
+_Static_assert(sizeof(haydn_pred2_t) == 4, "haydn_pred2_t is 4 bytes");
+_Static_assert(sizeof(haydn_pred4_t) == 4, "haydn_pred4_t is 4 bytes");
+_Static_assert(sizeof(haydn_x2int32) == 8, "haydn_x2int32 is one DR64");
+_Static_assert(sizeof(haydn_x4int16) == 8, "haydn_x4int16 is one DR64");
+
 // Check basic type operations
 int test_int_sizes(void) {
     int x = 0;
     long y = 0;
     long long z = 0;
     void *p = (void*)0;
+    haydn_pred2_t p2 = 0;
+    haydn_pred4_t p4 = 0;
 
     // CHECK: define dso_local i32 @test_int_sizes()
-    return x + (int)y + (int)z + (int)(intptr_t)p;
+    return x + (int)y + (int)z + (int)(intptr_t)p + (int)p2 + (int)p4;
 }

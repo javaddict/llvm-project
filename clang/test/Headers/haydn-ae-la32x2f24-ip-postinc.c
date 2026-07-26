@@ -1,5 +1,5 @@
-// RUN: %clang_cc1 -triple haydn-unknown-elf -O2 -emit-llvm -ffreestanding -o - %s | FileCheck %s
-// RUN: %clang_cc1 -triple haydn-unknown-elf -O2 -S -ffreestanding -o - %s | FileCheck %s --check-prefix=ASM
+// RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -O2 -emit-llvm -ffreestanding -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -O2 -S -ffreestanding -o - %s | FileCheck %s --check-prefix=ASM
 //
 // REQUIRES: haydn-registered-target
 //

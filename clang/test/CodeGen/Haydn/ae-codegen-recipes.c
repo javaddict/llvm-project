@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple haydn-unknown-elf -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -emit-llvm -o - %s | FileCheck %s
 //
 // AE CodeGen= recipes from BuiltinsHaydn.td → haydn_builtin_cg.inc
 // (no hand-rolled switch arms left for these in TargetBuiltins/Haydn.cpp).
