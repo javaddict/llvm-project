@@ -7,9 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnPostRAScratch.h"
+#include "HaydnBundle.h"
+#include "HaydnBundlePlan.h"
 #include "HaydnFrameLowering.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnSubtarget.h"
+#include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -263,8 +266,29 @@ void glueDefToUse(MachineInstr &RematDef, MachineInstr &UseMI) {
     ++AfterDef;
   assert(AfterDef != MBB.end() && &*AfterDef == &UseMI &&
          "remat use not adjacent after splice");
+
+  // Only glue into one Bundle128 cycle when encode-oracle canAdd accepts both
+  // (AIE Bundle canAdd). ADDI remat for SET_HWLOOP_REG is S0-only + SET is
+  // S0-only — co-issue is illegal; leave sequential standalones (two cycles).
+  {
+    HaydnMCFormats Fmts;
+    Haydn::Bundle<MachineInstr> Probe(&Fmts);
+    if (!Probe.canAdd(RematDef.getOpcode()) ||
+        (Probe.add(const_cast<MachineInstr *>(&RematDef)),
+         !Probe.canAdd(UseMI.getOpcode()))) {
+      LLVM_DEBUG(dbgs() << "HaydnPostRAScratch: remat def→use not slot-legal "
+                           "for one cycle — leave sequential\n");
+      return;
+    }
+  }
+
   UseMI.bundleWithPred();
   finalizeBundle(MBB, RematDef.getIterator());
+  // B1.1 / B3.1: durable FormatID on multi-MI BUNDLE roots (same stamp as
+  // HaydnPostRASchedStrategy::finalizeLegalMultiMI).
+  MachineInstr &Root = *getBundleStart(RematDef.getIterator());
+  assert(Root.isBundle() && "finalizeBundle must produce a BUNDLE root");
+  haydn::bundle::stampBundleFormatID(Root, haydn::bundle::ProductFormatID);
   LLVM_DEBUG(dbgs() << "HaydnPostRAScratch: glued remat def→use\n");
 }
 

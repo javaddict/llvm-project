@@ -95,11 +95,11 @@ body:             |
     ; CHECK-LABEL: name: test1_three_alu32
     ; CHECK: liveins: $r0, $r1, $r4, $r5, $r7, $r8
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit $r0, implicit killed $r1, implicit killed $r4, implicit killed $r5 {
-    ; CHECK-NEXT:   $r2 = ADD32 $r0, killed $r1, implicit-def dead $sfr
-    ; CHECK-NEXT:   $r3 = ADD32 killed $r4, killed $r5, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 0, implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit $r0, implicit killed $r1, implicit killed $r4, implicit killed $r5 {
+    ; CHECK-NEXT:   $r2 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
+    ; CHECK-NEXT:   $r3 = ADD32_S1 killed $r4, killed $r5, implicit-def dead $sfr
     ; CHECK-NEXT: }
-    ; CHECK-NEXT: $r6 = ADD32 killed $r7, killed $r8, implicit-def dead $sfr
+    ; CHECK-NEXT: $r6 = ADD32_S2 killed $r7, killed $r8, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
@@ -159,11 +159,11 @@ body:             |
     ; CHECK-LABEL: name: test2_mixed_gpr_dr64
     ; CHECK: liveins: $r0, $r1, $d2, $d3, $d5, $d6
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE implicit-def $r2, implicit-def dead $sfr, implicit-def $d0, implicit-def $d4, implicit $r0, implicit killed $r1, implicit killed $d2, implicit killed $d3, implicit killed $d5, implicit killed $d6 {
-    ; CHECK-NEXT:   $r2 = ADD32 $r0, killed $r1, implicit-def dead $sfr
-    ; CHECK-NEXT:   $d0 = ADD64 killed $d2, killed $d3, implicit-def dead $sfr
-    ; CHECK-NEXT:   $d4 = SUB64 killed $d5, killed $d6, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 0, implicit-def $r2, implicit-def dead $sfr, implicit-def $d0, implicit $r0, implicit killed $r1, implicit killed $d2, implicit killed $d3 {
+    ; CHECK-NEXT:   $r2 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
+    ; CHECK-NEXT:   $d0 = ADD64_S1 killed $d2, killed $d3, implicit-def dead $sfr
     ; CHECK-NEXT: }
+    ; CHECK-NEXT: $d4 = SUB64_S2 killed $d5, killed $d6, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
@@ -223,11 +223,11 @@ body:             |
     ; CHECK-LABEL: name: test3_ld_alu32_alu64
     ; CHECK: liveins: $r0, $r4, $r5, $d0, $d1
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit-def $d2, implicit $r0, implicit killed $r4, implicit killed $r5, implicit killed $d0, implicit killed $d1 {
-    ; CHECK-NEXT:   $r2 = LD32 $r0, 0, implicit-def dead $sfr
-    ; CHECK-NEXT:   $r3 = ADD32 killed $r4, killed $r5, implicit-def dead $sfr
-    ; CHECK-NEXT:   $d2 = ADD64 killed $d0, killed $d1, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 0, implicit-def $r3, implicit-def dead $sfr, implicit-def $r2, implicit killed $r4, implicit killed $r5, implicit $r0 {
+    ; CHECK-NEXT:   $r3 = ADD32_S2 killed $r4, killed $r5, implicit-def dead $sfr
+    ; CHECK-NEXT:   $r2 = LD32_S1 $r0, 0, implicit-def dead $sfr
     ; CHECK-NEXT: }
+    ; CHECK-NEXT: $d2 = ADD64_S2 killed $d0, killed $d1, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = LD32 $r0, 0, implicit-def dead $sfr
@@ -283,11 +283,11 @@ body:             |
     ; CHECK-LABEL: name: test4_dual_load_alu
     ; CHECK: liveins: $r0, $r4, $r5, $r6
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit $r0, implicit killed $r4 {
-    ; CHECK-NEXT:   $r2 = LD32 $r0, 0, implicit-def dead $sfr
-    ; CHECK-NEXT:   $r3 = LD32 killed $r4, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 0, implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit $r0, implicit killed $r4 {
+    ; CHECK-NEXT:   $r2 = LD32_S1 $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT:   $r3 = LD32_S0 killed $r4, 0, implicit-def dead $sfr
     ; CHECK-NEXT: }
-    ; CHECK-NEXT: $r7 = ADD32 killed $r5, killed $r6, implicit-def dead $sfr
+    ; CHECK-NEXT: $r7 = ADD32_S2 killed $r5, killed $r6, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = LD32 $r0, 0, implicit-def dead $sfr
@@ -349,12 +349,12 @@ body:             |
     ; CHECK-LABEL: name: test5_three_dr64
     ; CHECK: liveins: $r0, $d0, $d1, $d2, $d3, $d4, $d5, $d6, $d8, $d9
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE implicit-def $d10, implicit-def dead $sfr, implicit-def $d11, implicit killed $d0, implicit killed $d1, implicit killed $d2, implicit killed $d3 {
-    ; CHECK-NEXT:   $d10 = ADD64 killed $d0, killed $d1, implicit-def dead $sfr
-    ; CHECK-NEXT:   $d11 = SUB64 killed $d2, killed $d3, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 0, implicit-def $d10, implicit-def dead $sfr, implicit-def $d11, implicit killed $d0, implicit killed $d1, implicit killed $d2, implicit killed $d3 {
+    ; CHECK-NEXT:   $d10 = ADD64_S2 killed $d0, killed $d1, implicit-def dead $sfr
+    ; CHECK-NEXT:   $d11 = SUB64_S1 killed $d2, killed $d3, implicit-def dead $sfr
     ; CHECK-NEXT: }
     ; CHECK-NEXT: $r0 = COPY $r0
-    ; CHECK-NEXT: $d12 = OR64 killed $d4, killed $d5, implicit-def dead $sfr
+    ; CHECK-NEXT: $d12 = OR64_S2 killed $d4, killed $d5, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $d10 = ADD64 $d0, $d1, implicit-def dead $sfr
     $d11 = SUB64 $d2, $d3, implicit-def dead $sfr

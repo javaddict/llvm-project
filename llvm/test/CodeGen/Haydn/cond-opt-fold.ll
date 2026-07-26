@@ -28,7 +28,10 @@
 ; branch is a single-register zero-test form, not a 2-register BEQ/BNE.
 ; CHECK-LABEL: fold_eq_zero:
 ; CHECK-NOT: beq_w{{(\.s[012])?}} r{{[0-9]+}}, r{{[0-9]+}}
-; CHECK: bnez_w{{(\.s[012])?}}
+; SEQ32 + XORI invert + BEQZ (T7.5 exact polarity).
+; CHECK: seq32
+; CHECK: xori32
+; CHECK: beqz_w{{(\.s[012])?}}
 ; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
 define void @fold_eq_zero(i32 %a, ptr %p) nounwind {
 entry:
@@ -50,7 +53,9 @@ else:
 ; not a 2-register BNE.
 ; CHECK-LABEL: fold_ne_zero:
 ; CHECK-NOT: bne_w{{(\.s[012])?}} r{{[0-9]+}}, r{{[0-9]+}}
-; CHECK: beqz_w{{(\.s[012])?}}
+; SEQ32 + BNEZ to else (eq → else; fallthrough = then). Not BEQZ-primary.
+; CHECK: seq32
+; CHECK: bnez_w{{(\.s[012])?}}
 ; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
 define void @fold_ne_zero(i32 %a, ptr %p) nounwind {
 entry:
@@ -68,12 +73,11 @@ else:
 
 ;===--- icmp slt against zero (signed: %a < 0) ---===
 ; CHECK-LABEL: fold_slt_zero:
-; Haydn lowers icmp slt via SLT32 + BNEZ. The foldCmpBranch pass may collapse
-; this to BLTZ in a future optimization (M7 work), but the current stable
-; form keeps SLT32 + BNEZ. The test asserts only that a single-register
-; zero-test branch is emitted (not a 2-register BLT).
+; Current form: SLT32 + XORI invert + BEQZ (T7.5 exact). Not 2-reg BLT.
 ; CHECK-NOT: blt_w r{{[0-9]+}}, r{{[0-9]+}}
-; CHECK: bnez_w{{(\.s[012])?}}
+; CHECK: slt32
+; CHECK: xori32
+; CHECK: beqz_w{{(\.s[012])?}}
 ; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
 define void @fold_slt_zero(i32 %a, ptr %p) nounwind {
 entry:

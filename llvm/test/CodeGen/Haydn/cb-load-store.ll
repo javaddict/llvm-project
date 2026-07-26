@@ -23,23 +23,23 @@
 ; variants. The loaded i64 value is returned, forcing the intrinsic call
 ; to survive DCE.
 
-declare { i64, i32 } @llvm.haydn.ldw.cb.imm(i32, i32, i32)
-declare { i64, i32 } @llvm.haydn.ldw.cb.reg(i32, i32, i32)
+declare { i64, ptr } @llvm.haydn.ldw.cb.imm(ptr, i32, i32)
+declare { i64, ptr } @llvm.haydn.ldw.cb.reg(ptr, i32, i32)
 
 ; CB load with immediate stride
-define i64 @test_ldw_cb_imm(i32 %base) {
+define i64 @test_ldw_cb_imm(ptr %base) {
 ; CHECK: test_ldw_cb_imm:
 ; CHECK: d_ldw_cb_imm
-  %r_pair = call { i64, i32 } @llvm.haydn.ldw.cb.imm(i32 %base, i32 0, i32 8)
-  %r = extractvalue { i64, i32 } %r_pair, 0
+  %r_pair = call { i64, ptr } @llvm.haydn.ldw.cb.imm(ptr %base, i32 0, i32 8)
+  %r = extractvalue { i64, ptr } %r_pair, 0
   ret i64 %r
 }
 
 ; CB load with register stride
-define i64 @test_ldw_cb_reg(i32 %base, i32 %stride) {
+define i64 @test_ldw_cb_reg(ptr %base, i32 %stride) {
 ; CHECK: test_ldw_cb_reg:
 ; CHECK: d_ldw_cb_reg
-  %r_pair = call { i64, i32 } @llvm.haydn.ldw.cb.reg(i32 %base, i32 1, i32 %stride)
-  %r = extractvalue { i64, i32 } %r_pair, 0
+  %r_pair = call { i64, ptr } @llvm.haydn.ldw.cb.reg(ptr %base, i32 1, i32 %stride)
+  %r = extractvalue { i64, ptr } %r_pair, 0
   ret i64 %r
 }

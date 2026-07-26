@@ -6,57 +6,80 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Phase 2 step 1: the Haydn SMS-facing resource model. A `ResourceCycle`
-// subclass backed by `Haydn::Bundle<MachineInstr>` — the software pipeliner
+// Haydn SMS-facing resource model. A `ResourceCycle` subclass backed by a
+// *live* `haydn::bundle::CycleState` — the software pipeliner
 // (MachinePipeliner) queries `canReserveResources`/`reserveResources` to decide
-// whether an instruction can issue in the current cycle, so SMS reasons about
-// REAL slot pressure (the Bundle's slot-bitset + format-coverage check) instead
-// of the blind DFA. This is the SWPS wiring entry point — the M7 goal (real
-// loops pipelined) needs this alternative-aware model.
+// whether an instruction can issue in the current cycle, so SMS ResMII uses the
+// same pure tryAddProduct depth as post-RA HR `CurrentCycleState` /
+// `commitPlacementForEmit` (not a weaker OccupiedSlots-only Bundle rebuild).
 //
-// Mirrors AIE's `AIEResourceCycle` (AIEHazardRecognizer.h). difference:
-// head-LLVM's SMS ResourceManager calls the MCInstrDesc overload
-// (MachinePipeliner.cpp `canReserveResources(&SU.getInstr->getDesc)`)
-// whereas AIE's fork calls the MachineInstr overload. So here the MID overload
-// is PRIMARY (opcode-keyed via Bundle::canAdd/reserveByOpcode) and the MI
-// overload delegates to it — the inverse of AIE's stub choice. This is the
-// supported public interface (no upstream MachinePipeliner edit, per #0).
+// AIE peers (port structure; do not invent a parallel packing theory):
+//
+//   * AIEHazardRecognizer.h:315-328  AIEResourceCycle Bundle-backed
+//   * AIEHazardRecognizer.cpp:173-214 canReserve/reserve —
+//       getAlternateInstsOpcode + any_of / first canAdd AltOpcode
+//   * Haydn maps that alt-try to canTryAddProduct / tryAddProduct on live
+//     CycleState (B2.4 solver; B4.2 SMS same depth as post-RA).
+//
+// Head-LLVM's SMS ResourceManager calls the MCInstrDesc overload, so the MID
+// overload is PRIMARY (opcode-keyed) and the MI overload delegates to it
+// (AIE inverted: MI primary; Haydn matches head-LLVM ResourceManager).
+//
+// B4.1: getFeasibleFormatMask exposes the product FormatID frontier.
+// B4.2: mask is the *live* CycleState.FeasibleFormatMask (member Compatible
+// intersections accumulate); productFeasibleFormatMask(Occupied) remains the
+// occupancy-only Pre-RA rebuild. Logical ops only — no FormatID freeze, no
+// setDesc (plan §7.1). Product size-1 Full keeps ProductFormatMask while slots
+// remain Full-coverable. N-format tables ready via CycleState.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNRESOURCECYCLE_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNRESOURCECYCLE_H
 
-#include "HaydnBundle.h"
+#include "HaydnBundleFormatSolver.h"
+#include "HaydnPlacementAlternative.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
-#include "llvm/CodeGen/ResourceCycle.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/ResourceCycle.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
+#include <cstdint>
 
 namespace llvm {
 
 class HaydnResourceCycle : public ResourceCycle {
   HaydnMCFormats Fmts;
-  Haydn::Bundle<MachineInstr> Bundle;
+  /// Live cycle packing state — peer of HaydnHazardRecognizer::CurrentCycleState.
+  haydn::bundle::CycleState State;
+
+  static bool isNoHazardMetaOpcode(unsigned Opcode) {
+    switch (Opcode) {
+    case TargetOpcode::IMPLICIT_DEF:
+    case TargetOpcode::KILL:
+    case TargetOpcode::BUNDLE:
+      return true;
+    default:
+      return false;
+    }
+  }
 
 public:
-  HaydnResourceCycle() : Bundle(&Fmts) {}
+  HaydnResourceCycle() : State(haydn::bundle::makeProductCycleState()) {}
 
-  void clearResources() override { Bundle.clear(); }
+  void clearResources() override {
+    // Reset ProductFormatMask + empty members (B4.1/B4.2).
+    State = haydn::bundle::makeProductCycleState();
+  }
 
   // head-LLVM's SMS ResourceManager calls the MCInstrDesc overload
-  // (MachinePipeliner.cpp `canReserveResources(&SU.getInstr->getDesc)`)
-  // NOT the MachineInstr overload the AIE fork calls. So the MID overload is
-  // the PRIMARY path here and must be implemented (not stubbed). It is
-  // opcode-keyed: the Bundle slot model (getAltSlotSet → getLegalSlots) and
-  // format check (isFormatAvailable) are both keyed on opcode, which the
-  // MCInstrDesc provides via getOpcode. This mirrors DFAPacketizer, where
-  // the MID overload is primary and the MI overload delegates to it.
+  // (MachinePipeliner.cpp `canReserveResources(&SU.getInstr->getDesc)`).
+  // B4.2: live CycleState tryAddProduct (AIE AIEHazardRecognizer.cpp:173-214
+  // Bundle canAdd/add alt try → Haydn pure solver depth = post-RA HR).
   bool canReserveResources(const MCInstrDesc *MID) override {
-    return Bundle.canAdd(MID->getOpcode());
+    return canReserveByOpcode(MID->getOpcode());
   }
   void reserveResources(const MCInstrDesc *MID) override {
-    assert(Bundle.canAdd(MID->getOpcode()) && "reserve without canReserve");
-    Bundle.reserveByOpcode(MID->getOpcode());
+    reserveByOpcode(MID->getOpcode());
   }
 
   // MachineInstr overload: delegate to the MID overload (mirror DFAPacketizer
@@ -70,8 +93,49 @@ public:
     reserveResources(&MI.getDesc());
   }
 
-  // For debug/inspection: the slots occupied in the current cycle.
-  SlotBits getOccupiedSlots() const { return Bundle.getOccupiedSlots(); }
+  // For debug/inspection: slots occupied in the current cycle (live State).
+  SlotBits getOccupiedSlots() const { return State.OccupiedSlots; }
+
+  // B4.1/B4.2: live FormatID frontier for SMS ResMII / cycle occupancy.
+  // AIE ResourceCycle is Bundle-backed without an explicit mask; Haydn exposes
+  // CycleState.FeasibleFormatMask so SMS matches post-RA HR (not
+  // productFeasibleFormatMask(Occupied) rebuild alone — member Compatible
+  // intersections can shrink the live mask under N-format alts).
+  uint64_t getFeasibleFormatMask() const { return State.FeasibleFormatMask; }
+
+  /// Live CycleState (unit tests / ResMII probes). No setDesc.
+  const haydn::bundle::CycleState &getCycleState() const { return State; }
+
+  unsigned getMemberCount() const { return State.memberCount(); }
+
+  // Opcode-keyed reserve without an MCInstrDesc (unit tests / local probes).
+  // Same contract as reserveResources(MID) for alts-bearing logicals.
+  bool canReserveByOpcode(unsigned Opcode) {
+    if (isNoHazardMetaOpcode(Opcode))
+      return true;
+    // PlacementAlternative-bearing logicals: pure canTryAddProduct
+    // (AIEHazardRecognizer.cpp:183-194 any_of Bundle.canAdd AltOpcode).
+    if (hasPlacementAlternatives(Fmts, Opcode))
+      return haydn::bundle::canTryAddProduct(State, Fmts, Opcode);
+    // No-alt opcodes: Bundle empty standalone escape peer (AIEBundle.h:71-73)
+    // — accept only on a truly empty cycle; do not consume slots.
+    return State.empty() && State.OccupiedSlots == 0;
+  }
+
+  void reserveByOpcode(unsigned Opcode) {
+    assert(canReserveByOpcode(Opcode) && "reserve without canReserve");
+    if (isNoHazardMetaOpcode(Opcode))
+      return;
+    if (hasPlacementAlternatives(Fmts, Opcode)) {
+      // AIEHazardRecognizer.cpp:208-211 first canAdd AltOpcode → Bundle.add.
+      bool Ok = haydn::bundle::tryAddProduct(State, Fmts, Opcode);
+      assert(Ok && "canReserve true but tryAddProduct failed");
+      (void)Ok;
+      return;
+    }
+    // No-alt standalone escape: no OccupiedSlots / FeasibleFormatMask change.
+    assert(State.empty() && State.OccupiedSlots == 0);
+  }
 };
 
 } // namespace llvm

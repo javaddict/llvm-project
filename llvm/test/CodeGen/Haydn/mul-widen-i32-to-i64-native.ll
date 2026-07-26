@@ -73,21 +73,29 @@ define i64 @widen_mul_mixed_ext_i32_i64(i32 %a, i32 %b) {
   ret i64 %m
 }
 
-; Accumulator form: `acc += (int64_t)a * b`. Hard constraint #6 mandates MAC
-; fusion in PostSelectOptimize, NOT in the legalizer. So the legalizer must
-; still emit MUL64_LL here (standalone multiply); PostSelectOptimize may later
-; fuse it into MULA64_LL. We check that the multiply does NOT become a libcall;
-; scalar mac32 e2e tests were deleted (opcode not in ISA); see
-; postselect-mac-fusion.mir for select-time mul+add shape.
+; Accumulator form: `acc += (int64_t)a * b`. PreLegalizer fuses to G_MULA64
+; -> MULA64_LL (formMACs is FATED). Standalone MUL64_LL is also acceptable
+; if fusion misses. Either way it must NOT be a libcall.
 define i64 @widen_mul_acc_i32_i64(i32 %a, i32 %b, i64 %acc) {
 ; CHECK-LABEL: widen_mul_acc_i32_i64:
 ; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3
-; PostSelectOptimize fuses this into MULA64_LL (mul+add acc); the standalone
-; MUL64_LL is also acceptable. Either way it must NOT be a libcall.
 ; CHECK-DAG: mul{{64\.ll|a64\.ll}}
   %aa = sext i32 %a to i64
   %bb = sext i32 %b to i64
   %m = mul i64 %aa, %bb
   %r = add i64 %m, %acc
+  ret i64 %r
+}
+
+; Unsigned accumulator form: `acc += (uint64_t)(uint32_t)a * b` fuses to
+; MULA64_ULUL (Wave T5.1). MULA64_ULL is u×s and must NOT be selected.
+define i64 @widen_mul_acc_zext_i32_i64(i32 %a, i32 %b, i64 %acc) {
+; CHECK-LABEL: widen_mul_acc_zext_i32_i64:
+; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK: mula64.ulul
+  %aa = zext i32 %a to i64
+  %bb = zext i32 %b to i64
+  %m = mul i64 %aa, %bb
+  %r = add i64 %acc, %m
   ret i64 %r
 }

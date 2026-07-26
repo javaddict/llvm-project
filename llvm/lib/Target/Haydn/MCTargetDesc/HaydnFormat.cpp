@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// PacketFormats lookup helpers. Hand-authored format tables retired (G-MC-9
+// PacketFormats lookup helpers. Hand-authored format tables retired;
 // the live PacketFormats instance is generated in HaydnGenFormats.inc.
 //
 //===----------------------------------------------------------------------===//

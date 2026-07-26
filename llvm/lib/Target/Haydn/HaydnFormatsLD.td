@@ -234,7 +234,7 @@ class HaydnFU_LD_S1_S_LD_RI6<bits<6> opc, dag outs, dag ins, string asmstr,
 // LD64_S1 (FmtLS<0x44>/<0x43>, simm16). The golden LD codepoints use RI6
 // (imm6 byte offset); the legacy FmtLS promoted loads carry simm16, so a
 // dedicated RI16 class is required. Payload 3+6+7+16+4+4 = 40b. mayLoad=1
-// so commitSlotFlexVariant's setDesc preserves the load memory semantic.
+// so leaveRegion setDesc preserves the load memory semantic.
 class HaydnFU_LD_S1_S_LD_RI16<bits<6> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS1<outs, ins, asmstr, pattern> {
@@ -894,24 +894,54 @@ def S_LBU_PRE_REG_LD_S2 : HaydnFU_LD_S2_S_LD_RR<0b110000, (outs GPR32:$rt, GPR32
 }
 
 // #49 D_LDW_BREV_IMM (RI6) -- golden Index 49.
-def D_LDW_BREV_IMM_LD_S0 : HaydnFU_LD_S0_D_LD_RI6<0b110001, (outs DR64:$rtd, GPR32:$rs), (ins simm6:$imm6), "d_ldw_brev_imm.ld\t$rtd, $rs, $imm6", []>;
-def D_LDW_BREV_IMM_LD_S1 : HaydnFU_LD_S1_D_LD_RI6<0b110001, (outs DR64:$rtd, GPR32:$rs), (ins simm6:$imm6), "d_ldw_brev_imm.ld\t$rtd, $rs, $imm6", []>;
-def D_LDW_BREV_IMM_LD_S2 : HaydnFU_LD_S2_D_LD_RI6<0b110001, (outs DR64:$rtd, GPR32:$rs), (ins simm6:$imm6), "d_ldw_brev_imm.ld\t$rtd, $rs, $imm6", []>;
+// Tied POST-inc shape matching logical D_LDW_BREV_IMM and
+// LS D_LDW_BREV_IMM_S* / D_LDW_POST_IMM_LD_S* (outs rtd,rs_wb + ins rs,imm6).
+// Alts use LS _S* members; post-RA setDesc commits the chosen member.
+def D_LDW_BREV_IMM_LD_S0 : HaydnFU_LD_S0_D_LD_RI6<0b110001, (outs DR64:$rtd, GPR32:$rs_wb), (ins GPR32:$rs, simm6:$imm6), "d_ldw_brev_imm.ld\t$rtd, $rs, $imm6", []> {
+  let Constraints = "$rs = $rs_wb";
+}
+def D_LDW_BREV_IMM_LD_S1 : HaydnFU_LD_S1_D_LD_RI6<0b110001, (outs DR64:$rtd, GPR32:$rs_wb), (ins GPR32:$rs, simm6:$imm6), "d_ldw_brev_imm.ld\t$rtd, $rs, $imm6", []> {
+  let Constraints = "$rs = $rs_wb";
+}
+def D_LDW_BREV_IMM_LD_S2 : HaydnFU_LD_S2_D_LD_RI6<0b110001, (outs DR64:$rtd, GPR32:$rs_wb), (ins GPR32:$rs, simm6:$imm6), "d_ldw_brev_imm.ld\t$rtd, $rs, $imm6", []> {
+  let Constraints = "$rs = $rs_wb";
+}
 
 // #50 D_LDW_BREV_REG (RR) -- golden Index 50.
-def D_LDW_BREV_REG_LD_S0 : HaydnFU_LD_S0_D_LD_RR<0b110010, (outs DR64:$rtd, GPR32:$rs1), (ins GPR32:$rs2), "d_ldw_brev_reg.ld\t$rtd, $rs1, $rs2", []>;
-def D_LDW_BREV_REG_LD_S1 : HaydnFU_LD_S1_D_LD_RR<0b110010, (outs DR64:$rtd, GPR32:$rs1), (ins GPR32:$rs2), "d_ldw_brev_reg.ld\t$rtd, $rs1, $rs2", []>;
-def D_LDW_BREV_REG_LD_S2 : HaydnFU_LD_S2_D_LD_RR<0b110010, (outs DR64:$rtd, GPR32:$rs1), (ins GPR32:$rs2), "d_ldw_brev_reg.ld\t$rtd, $rs1, $rs2", []>;
+// Tied POST-inc shape matching logical / LS D_LDW_BREV_REG_S*.
+def D_LDW_BREV_REG_LD_S0 : HaydnFU_LD_S0_D_LD_RR<0b110010, (outs DR64:$rtd, GPR32:$rs_wb), (ins GPR32:$rs1, GPR32:$rs2), "d_ldw_brev_reg.ld\t$rtd, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs_wb";
+}
+def D_LDW_BREV_REG_LD_S1 : HaydnFU_LD_S1_D_LD_RR<0b110010, (outs DR64:$rtd, GPR32:$rs_wb), (ins GPR32:$rs1, GPR32:$rs2), "d_ldw_brev_reg.ld\t$rtd, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs_wb";
+}
+def D_LDW_BREV_REG_LD_S2 : HaydnFU_LD_S2_D_LD_RR<0b110010, (outs DR64:$rtd, GPR32:$rs_wb), (ins GPR32:$rs1, GPR32:$rs2), "d_ldw_brev_reg.ld\t$rtd, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs_wb";
+}
 
 // #51 S_LW_BREV_IMM (RI6) -- golden Index 51.
-def S_LW_BREV_IMM_LD_S0 : HaydnFU_LD_S0_S_LD_RI6<0b110011, (outs GPR32:$rt, GPR32:$rs), (ins simm6:$imm6), "s_lw_brev_imm.ld\t$rt, $rs, $imm6", []>;
-def S_LW_BREV_IMM_LD_S1 : HaydnFU_LD_S1_S_LD_RI6<0b110011, (outs GPR32:$rt, GPR32:$rs), (ins simm6:$imm6), "s_lw_brev_imm.ld\t$rt, $rs, $imm6", []>;
-def S_LW_BREV_IMM_LD_S2 : HaydnFU_LD_S2_S_LD_RI6<0b110011, (outs GPR32:$rt, GPR32:$rs), (ins simm6:$imm6), "s_lw_brev_imm.ld\t$rt, $rs, $imm6", []>;
+// Tied POST-inc shape matching logical / LS S_LW_BREV_IMM_S*.
+def S_LW_BREV_IMM_LD_S0 : HaydnFU_LD_S0_S_LD_RI6<0b110011, (outs GPR32:$rt, GPR32:$rs_wb), (ins GPR32:$rs, simm6:$imm6), "s_lw_brev_imm.ld\t$rt, $rs, $imm6", []> {
+  let Constraints = "$rs = $rs_wb";
+}
+def S_LW_BREV_IMM_LD_S1 : HaydnFU_LD_S1_S_LD_RI6<0b110011, (outs GPR32:$rt, GPR32:$rs_wb), (ins GPR32:$rs, simm6:$imm6), "s_lw_brev_imm.ld\t$rt, $rs, $imm6", []> {
+  let Constraints = "$rs = $rs_wb";
+}
+def S_LW_BREV_IMM_LD_S2 : HaydnFU_LD_S2_S_LD_RI6<0b110011, (outs GPR32:$rt, GPR32:$rs_wb), (ins GPR32:$rs, simm6:$imm6), "s_lw_brev_imm.ld\t$rt, $rs, $imm6", []> {
+  let Constraints = "$rs = $rs_wb";
+}
 
 // #52 S_LW_BREV_REG (RR) -- golden Index 52.
-def S_LW_BREV_REG_LD_S0 : HaydnFU_LD_S0_S_LD_RR<0b110100, (outs GPR32:$rt, GPR32:$rs1), (ins GPR32:$rs2), "s_lw_brev_reg.ld\t$rt, $rs1, $rs2", []>;
-def S_LW_BREV_REG_LD_S1 : HaydnFU_LD_S1_S_LD_RR<0b110100, (outs GPR32:$rt, GPR32:$rs1), (ins GPR32:$rs2), "s_lw_brev_reg.ld\t$rt, $rs1, $rs2", []>;
-def S_LW_BREV_REG_LD_S2 : HaydnFU_LD_S2_S_LD_RR<0b110100, (outs GPR32:$rt, GPR32:$rs1), (ins GPR32:$rs2), "s_lw_brev_reg.ld\t$rt, $rs1, $rs2", []>;
+// Tied POST-inc shape matching logical / LS S_LW_BREV_REG_S*.
+def S_LW_BREV_REG_LD_S0 : HaydnFU_LD_S0_S_LD_RR<0b110100, (outs GPR32:$rt, GPR32:$rs_wb), (ins GPR32:$rs1, GPR32:$rs2), "s_lw_brev_reg.ld\t$rt, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs_wb";
+}
+def S_LW_BREV_REG_LD_S1 : HaydnFU_LD_S1_S_LD_RR<0b110100, (outs GPR32:$rt, GPR32:$rs_wb), (ins GPR32:$rs1, GPR32:$rs2), "s_lw_brev_reg.ld\t$rt, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs_wb";
+}
+def S_LW_BREV_REG_LD_S2 : HaydnFU_LD_S2_S_LD_RR<0b110100, (outs GPR32:$rt, GPR32:$rs_wb), (ins GPR32:$rs1, GPR32:$rs2), "s_lw_brev_reg.ld\t$rt, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs_wb";
+}
 
 // #53 PLDWWUA (AR) -- golden Index 53.
 def PLDWWUA_LD_S0 : HaydnFU_LD_S0_AR_PLDW<0b110101, (outs), (ins GPR32:$rs, uimm2:$ar_sel), "pldwwua.ld\t$ar_sel, $rs", []>;
@@ -934,15 +964,16 @@ def FLAR_LD_S1 : HaydnFU_LD_S1_AR_FLAR<0b111000, (outs), (ins uimm2:$ar_sel), "f
 def FLAR_LD_S2 : HaydnFU_LD_S2_AR_FLAR<0b111000, (outs), (ins uimm2:$ar_sel), "flar.ld\t$ar_sel", []>;
 
 //===----------------------------------------------------------------------===//
-// Family 7 — S1 Flex encode forms for logical LD32 / LD64.
+// Family 7 — S1 encode peers for logical LD32 / LD64.
 //
-// Format-first single authority: MIR holds only LD32/LD64; AltDescs/Flags
-// record slot; encode materializes these Bundle128 forms via FlexMap
+// Format-first single authority: MIR holds only LD32/LD64; AltDescs
+// record slot; leaveRegion setDesc commits these Bundle128 members
 // LD32 → { LD32_S0, LD32_S1, 0 }
 // LD64 → { LD64_S0, LD64_S1, 0 }
 // No intermediate "logical twin" opcode. Public mnemonic is always ld32/ld64
 // (bundle position is the slot). DISTINCT codepoints 62-63. FlexEmitterOnly
-// keeps them out of the decoder trie. mayLoad=1 at class level.
+// keeps them out of the decoder trie; encode is Desc-as-is after setDesc.
+// mayLoad=1 at class level.
 //===----------------------------------------------------------------------===//
 
 def LD32_S1 : HaydnFU_LD_S1_S_LD_RI16<0b111110,

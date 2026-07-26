@@ -79,6 +79,7 @@
 class HaydnFU_LS_S0_D_LD_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS0<outs, ins, asmstr, pattern> {
+  let mayLoad = 1;  // setDesc preserves load semantic
   let Itinerary = Slot0_LS;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
@@ -96,6 +97,7 @@ class HaydnFU_LS_S0_D_LD_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S0_S_LD_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS0<outs, ins, asmstr, pattern> {
+  let mayLoad = 1;  // setDesc preserves load semantic
   let Itinerary = Slot0_LS;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
@@ -112,6 +114,7 @@ class HaydnFU_LS_S0_S_LD_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S0_D_LD_RR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS0<outs, ins, asmstr, pattern> {
+  let mayLoad = 1;  // setDesc preserves load semantic
   let Itinerary = Slot0_LS;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
@@ -128,6 +131,7 @@ class HaydnFU_LS_S0_D_LD_RR<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S0_S_LD_RR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS0<outs, ins, asmstr, pattern> {
+  let mayLoad = 1;  // setDesc preserves load semantic
   let Itinerary = Slot0_LS;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
@@ -144,6 +148,7 @@ class HaydnFU_LS_S0_S_LD_RR<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S0_D_ST_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS0<outs, ins, asmstr, pattern> {
+  let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
   let Itinerary = Slot0_LS;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
@@ -161,6 +166,7 @@ class HaydnFU_LS_S0_D_ST_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S0_S_ST_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS0<outs, ins, asmstr, pattern> {
+  let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
   let Itinerary = Slot0_LS;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
@@ -178,6 +184,7 @@ class HaydnFU_LS_S0_S_ST_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S0_D_ST_RR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS0<outs, ins, asmstr, pattern> {
+  let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
   let Itinerary = Slot0_LS;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
@@ -195,6 +202,7 @@ class HaydnFU_LS_S0_D_ST_RR<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S0_S_ST_RR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS0<outs, ins, asmstr, pattern> {
+  let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
   let Itinerary = Slot0_LS;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
@@ -324,6 +332,7 @@ class HaydnFU_LS_S0_AR_UA<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S1_D_LD_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS1<outs, ins, asmstr, pattern> {
+  let mayLoad = 1;  // setDesc preserves load semantic
   let Itinerary = Slot1_LD;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
@@ -339,6 +348,7 @@ class HaydnFU_LS_S1_D_LD_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S1_S_LD_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS1<outs, ins, asmstr, pattern> {
+  let mayLoad = 1;  // setDesc preserves load semantic
   let Itinerary = Slot1_LD;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
@@ -354,6 +364,7 @@ class HaydnFU_LS_S1_S_LD_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S1_D_LD_RR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS1<outs, ins, asmstr, pattern> {
+  let mayLoad = 1;  // setDesc preserves load semantic
   let Itinerary = Slot1_LD;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
@@ -369,6 +380,7 @@ class HaydnFU_LS_S1_D_LD_RR<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S1_S_LD_RR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS1<outs, ins, asmstr, pattern> {
+  let mayLoad = 1;  // setDesc preserves load semantic
   let Itinerary = Slot1_LD;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
@@ -385,6 +397,7 @@ class HaydnFU_LS_S1_S_LD_RR<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S1_D_ST_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS1<outs, ins, asmstr, pattern> {
+  let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
   let Itinerary = Slot1_LD;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
@@ -402,6 +415,7 @@ class HaydnFU_LS_S1_D_ST_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S1_S_ST_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS1<outs, ins, asmstr, pattern> {
+  let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
   let Itinerary = Slot1_LD;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
@@ -419,6 +433,7 @@ class HaydnFU_LS_S1_S_ST_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S1_D_ST_RR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS1<outs, ins, asmstr, pattern> {
+  let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
   let Itinerary = Slot1_LD;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
@@ -436,6 +451,7 @@ class HaydnFU_LS_S1_D_ST_RR<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S1_S_ST_RR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS1<outs, ins, asmstr, pattern> {
+  let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
   let Itinerary = Slot1_LD;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
@@ -550,6 +566,7 @@ class HaydnFU_LS_S1_AR_UA<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S2_D_LD_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
+  let mayLoad = 1;  // setDesc preserves load semantic
   let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
@@ -564,6 +581,7 @@ class HaydnFU_LS_S2_D_LD_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S2_S_LD_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
+  let mayLoad = 1;  // setDesc preserves load semantic
   let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
@@ -578,6 +596,7 @@ class HaydnFU_LS_S2_S_LD_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S2_D_LD_RR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
+  let mayLoad = 1;  // setDesc preserves load semantic
   let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
@@ -592,6 +611,7 @@ class HaydnFU_LS_S2_D_LD_RR<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S2_S_LD_RR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
+  let mayLoad = 1;  // setDesc preserves load semantic
   let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
@@ -606,6 +626,7 @@ class HaydnFU_LS_S2_S_LD_RR<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S2_D_ST_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
+  let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
   let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
@@ -621,6 +642,7 @@ class HaydnFU_LS_S2_D_ST_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S2_S_ST_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
+  let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
   let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
@@ -636,6 +658,7 @@ class HaydnFU_LS_S2_S_ST_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S2_D_ST_RR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
+  let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
   let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
@@ -651,6 +674,7 @@ class HaydnFU_LS_S2_D_ST_RR<bits<7> opc, dag outs, dag ins, string asmstr,
 class HaydnFU_LS_S2_S_ST_RR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
+  let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
   let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
   bits<3> FU = 0b001;        // LS
@@ -1103,10 +1127,10 @@ defm D_SDW_PRE_REG : LS3_D_ST_RR_PostPre<0b0110110, "d_sdw_pre_reg">;
 // Batch 3: aligned to legacy tied-def shape. Format class bits field
 // `rs` binds to input $rs (the encoded base register).
 defm S_SW_POST_IMM : LS3_S_ST_RI6_PostPre<0b0110111, "s_sw_post_imm">;
-// ST32_POST (legacy codegen name for S_SW_POST_IMM). The FlexMap pairs by
-// name, so the legacy name needs a matching _S1 def. Same format class +
-// codepoint as S_SW_POST_IMM_S1; isCodeGenOnly excludes it from the
-// decoder trie. ST32_POST is S1 per DClass (FU_LD, S1).
+// ST32_POST (legacy codegen name for S_SW_POST_IMM). AlternateInsts /
+// leaveRegion setDesc needs a matching _S1 member for the legacy name.
+// Same format class + codepoint as S_SW_POST_IMM_S1; isCodeGenOnly
+// excludes it from the decoder trie. ST32_POST is S1 per DClass (FU_LD, S1).
 let isCodeGenOnly = 1 in
 def ST32_POST_S1 : HaydnFU_LS_S1_S_ST_RI6<0b0110111, (outs GPR32:$rs_wb), (ins GPR32:$rt, GPR32:$rs, simm6:$imm6), "st32_post\t$rt, $rs, $imm6", []> {
   let Constraints = "$rs = $rs_wb";
@@ -1114,10 +1138,10 @@ def ST32_POST_S1 : HaydnFU_LS_S1_S_ST_RI6<0b0110111, (outs GPR32:$rs_wb), (ins G
 
 // ST64_POST (legacy codegen name for D_SDW_POST_IMM, FmtLSPostInc<0x49>).
 // Same rationale as ST32_POST above — the fused post-inc store produced by
-// HaydnExpandPostIncEarly carries the legacy name, so the FlexMap needs
-// a matching _S1 def. Same format class (D_ST_RI6 — DR64 source) +
-// codepoint as D_SDW_POST_IMM_S1; isCodeGenOnly excludes it from the
-// decoder trie. ST64_POST is S1 per DClass (FU_LD, S1, opcode 0x4).
+// HaydnExpandPostIncEarly carries the legacy name, so AlternateInsts /
+// setDesc needs a matching _S1 member. Same format class (D_ST_RI6 — DR64
+// source) + codepoint as D_SDW_POST_IMM_S1; isCodeGenOnly excludes it from
+// the decoder trie. ST64_POST is S1 per DClass (FU_LD, S1, opcode 0x4).
 let isCodeGenOnly = 1 in
 def ST64_POST_S1 : HaydnFU_LS_S1_D_ST_RI6<0b0110001, (outs GPR32:$rs_wb), (ins DR64:$rtd, GPR32:$rs, simm6:$imm6), "st64_post\t$rtd, $rs, $imm6", []> {
   let Constraints = "$rs = $rs_wb";
@@ -1236,63 +1260,75 @@ defm S_SB_PRE_REG : LS3_S_ST_RR_PostPre<0b1011010, "s_sb_pre_reg">;
 // WRITE_CONFLICT: three d_ldw_cb_imm same r5 in one bundle).
 //
 // Operand list MUST match public logical D_*_CB_* (HaydnInstrInfoAuto.td) and
-// GISel: encodeBundle128 Flex materialize is setOpcode-only. Bit layout binds
-// by name (cbr_sel, imm8, rtd, rs) — $rs is the encoded base (use).
+// GISel: encodeBundle128 after setDesc is Desc-as-is (no operand rewrite).
+// Bit layout binds by name (cbr_sel, imm8, rtd, rs) — $rs is the encoded base.
 //
 //   LDW_IMM: (outs rtd, rs_wb), (ins rs, cbr_sel, imm8)  Constraints rs=rs_wb
 //   LDW_REG: (outs rtd, rs1_wb), (ins rs1, cbr_sel, rs2)
 //   SDW_IMM: (outs rs_wb), (ins rtd, rs, cbr_sel, imm8)
 //   SDW_REG: (outs rs1_wb), (ins rtd, rs1, cbr_sel, rs2)
 //
-// #91 D_LDW_CB_IMM (CBRI)
+// #91 D_LDW_CB_IMM (CBRI) — mayLoad so setDesc from logical preserves load.
 def D_LDW_CB_IMM_S0 : HaydnFU_LS_S0_CBRI<0b1011011, (outs DR64:$rtd, GPR32:$rs_wb), (ins GPR32:$rs, uimm2:$cbr_sel, simm8:$imm8), "d_ldw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []> {
+  let mayLoad = 1;
   let Constraints = "$rs = $rs_wb";
 }
 def D_LDW_CB_IMM_S1 : HaydnFU_LS_S1_CBRI<0b1011011, (outs DR64:$rtd, GPR32:$rs_wb), (ins GPR32:$rs, uimm2:$cbr_sel, simm8:$imm8), "d_ldw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []> {
+  let mayLoad = 1;
   let Constraints = "$rs = $rs_wb";
 }
 def D_LDW_CB_IMM_S2 : HaydnFU_LS_S2_CBRI<0b1011011, (outs DR64:$rtd, GPR32:$rs_wb), (ins GPR32:$rs, uimm2:$cbr_sel, simm8:$imm8), "d_ldw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []> {
+  let mayLoad = 1;
   let Constraints = "$rs = $rs_wb";
 }
 
 // #92 D_LDW_CB_REG (CBRR)
 def D_LDW_CB_REG_S0 : HaydnFU_LS_S0_CBRR<0b1011100, (outs DR64:$rtd, GPR32:$rs1_wb), (ins GPR32:$rs1, uimm2:$cbr_sel, GPR32:$rs2), "d_ldw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
+  let mayLoad = 1;
   let Constraints = "$rs1 = $rs1_wb";
 }
 def D_LDW_CB_REG_S1 : HaydnFU_LS_S1_CBRR<0b1011100, (outs DR64:$rtd, GPR32:$rs1_wb), (ins GPR32:$rs1, uimm2:$cbr_sel, GPR32:$rs2), "d_ldw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
+  let mayLoad = 1;
   let Constraints = "$rs1 = $rs1_wb";
 }
 def D_LDW_CB_REG_S2 : HaydnFU_LS_S2_CBRR<0b1011100, (outs DR64:$rtd, GPR32:$rs1_wb), (ins GPR32:$rs1, uimm2:$cbr_sel, GPR32:$rs2), "d_ldw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
+  let mayLoad = 1;
   let Constraints = "$rs1 = $rs1_wb";
 }
 
-// #93 D_SDW_CB_IMM (CBRI)
+// #93 D_SDW_CB_IMM (CBRI) — mayStore so setDesc from logical preserves store.
 def D_SDW_CB_IMM_S0 : HaydnFU_LS_S0_CBRI<0b1011101, (outs GPR32:$rs_wb), (ins DR64:$rtd, GPR32:$rs, uimm2:$cbr_sel, simm8:$imm8), "d_sdw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []> {
+  let mayStore = 1;
   let Constraints = "$rs = $rs_wb";
 }
 def D_SDW_CB_IMM_S1 : HaydnFU_LS_S1_CBRI<0b1011101, (outs GPR32:$rs_wb), (ins DR64:$rtd, GPR32:$rs, uimm2:$cbr_sel, simm8:$imm8), "d_sdw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []> {
+  let mayStore = 1;
   let Constraints = "$rs = $rs_wb";
 }
 def D_SDW_CB_IMM_S2 : HaydnFU_LS_S2_CBRI<0b1011101, (outs GPR32:$rs_wb), (ins DR64:$rtd, GPR32:$rs, uimm2:$cbr_sel, simm8:$imm8), "d_sdw_cb_imm\t$cbr_sel, $rtd, $rs, $imm8", []> {
+  let mayStore = 1;
   let Constraints = "$rs = $rs_wb";
 }
 
 // #94 D_SDW_CB_REG (CBRR)
 def D_SDW_CB_REG_S0 : HaydnFU_LS_S0_CBRR<0b1011110, (outs GPR32:$rs1_wb), (ins DR64:$rtd, GPR32:$rs1, uimm2:$cbr_sel, GPR32:$rs2), "d_sdw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
+  let mayStore = 1;
   let Constraints = "$rs1 = $rs1_wb";
 }
 def D_SDW_CB_REG_S1 : HaydnFU_LS_S1_CBRR<0b1011110, (outs GPR32:$rs1_wb), (ins DR64:$rtd, GPR32:$rs1, uimm2:$cbr_sel, GPR32:$rs2), "d_sdw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
+  let mayStore = 1;
   let Constraints = "$rs1 = $rs1_wb";
 }
 def D_SDW_CB_REG_S2 : HaydnFU_LS_S2_CBRR<0b1011110, (outs GPR32:$rs1_wb), (ins DR64:$rtd, GPR32:$rs1, uimm2:$cbr_sel, GPR32:$rs2), "d_sdw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
+  let mayStore = 1;
   let Constraints = "$rs1 = $rs1_wb";
 }
 
 // #95 D_LDW_BREV_IMM (RI6)
 // BREV load is a tied-def POST-increment on the base (rs) — legacy
 // D_LDW_BREV_IMM (HaydnInstrInfoAuto.td) is (outs DR64:$rtd, GPR32:$rs_wb) +
-// (ins GPR32:$rs, simm6:$imm6) + Constraints "$rs = $rs_wb". FLEX port dropped
-// the tie + collapsed rs/rs_wb -> "tied-def without tie" and "extra explicit
+// (ins GPR32:$rs, simm6:$imm6) + Constraints "$rs = $rs_wb". Collapsed
+// 3-op members (no tie) caused "tied-def without tie" / "extra explicit
 // operand" verifier errors. Mirrors D_LDW_POST_IMM shape. AsmString unchanged.
 def D_LDW_BREV_IMM_S0 : HaydnFU_LS_S0_D_LD_RI6<0b1011111, (outs DR64:$rtd, GPR32:$rs_wb), (ins GPR32:$rs, simm6:$imm6), "d_ldw_brev_imm\t$rtd, $rs, $imm6", []> {
   let Constraints = "$rs = $rs_wb";
@@ -1344,8 +1380,8 @@ def S_LW_BREV_REG_S2 : HaydnFU_LS_S2_S_LD_RR<0b1100010, (outs GPR32:$rt, GPR32:$
 // #99 D_SDW_BREV_IMM (RI6)
 // same tied-def POST-increment as D_SDW_BREV_REG. Legacy
 // D_SDW_BREV_IMM (HaydnInstrInfoAuto.td:3011) is (outs GPR32:$rs_wb) +
-// (ins DR64:$rtd, GPR32:$rs, simm6) + Constraints "$rs = $rs_wb". FLEX port
-// dropped the tie + collapsed rs/rs_wb.
+// (ins DR64:$rtd, GPR32:$rs, simm6) + Constraints "$rs = $rs_wb". Collapsed
+// 3-op members (no tie) were invalid for setDesc.
 def D_SDW_BREV_IMM_S0 : HaydnFU_LS_S0_D_ST_RI6<0b1100011, (outs GPR32:$rs_wb), (ins DR64:$rtd, GPR32:$rs, simm6:$imm6), "d_sdw_brev_imm\t$rtd, $rs, $imm6", []> {
   let Constraints = "$rs = $rs_wb";
 }
@@ -1360,8 +1396,8 @@ def D_SDW_BREV_IMM_S2 : HaydnFU_LS_S2_D_ST_RI6<0b1100011, (outs GPR32:$rs_wb), (
 // BREV store is a tied-def POST-increment on the base (rs1) — legacy
 // D_SDW_BREV_REG (HaydnInstrInfoAuto.td:2491) is (outs GPR32:$rs1_wb) +
 // (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2) + Constraints "$rs1 = $rs1_wb".
-// FLEX port dropped the tie + collapsed rs1/rs1_wb -> "tied-def without tie"
-// and "extra explicit operand" verifier errors. Mirrors D_SDW_POST_REG shape.
+// Collapsed members (no tie) caused "tied-def without tie" and
+// "extra explicit operand" verifier errors. Mirrors D_SDW_POST_REG shape.
 def D_SDW_BREV_REG_S0 : HaydnFU_LS_S0_D_ST_RR<0b1100100, (outs GPR32:$rs1_wb), (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2), "d_sdw_brev_reg\t$rtd, $rs1, $rs2", []> {
   let Constraints = "$rs1 = $rs1_wb";
 }
@@ -1373,24 +1409,41 @@ def D_SDW_BREV_REG_S2 : HaydnFU_LS_S2_D_ST_RR<0b1100100, (outs GPR32:$rs1_wb), (
 }
 
 // #101 S_SW_BREV_IMM (RI6)
-def S_SW_BREV_IMM_S0 : HaydnFU_LS_S0_S_ST_RI6<0b1100101, (outs GPR32:$rs), (ins GPR32:$rt, simm6:$imm6), "s_sw_brev_imm\t$rt, $rs, $imm6", []>;
-def S_SW_BREV_IMM_S1 : HaydnFU_LS_S1_S_ST_RI6<0b1100101, (outs GPR32:$rs), (ins GPR32:$rt, simm6:$imm6), "s_sw_brev_imm\t$rt, $rs, $imm6", []>;
-def S_SW_BREV_IMM_S2 : HaydnFU_LS_S2_S_ST_RI6<0b1100101, (outs GPR32:$rs), (ins GPR32:$rt, simm6:$imm6), "s_sw_brev_imm\t$rt, $rs, $imm6", []>;
+// Tied logical shape (HaydnInstrInfoAuto.td:3700-3705 S_SW_BREV_IMM is 4-op
+// `$rs=$rs_wb`). Collapsed 3-op members blocked AIE-unconditional setDesc
+// (AIEMachineScheduler.cpp:1126-1132). Mirror S_SW_POST_IMM / D_SDW_BREV_IMM_S*.
+def S_SW_BREV_IMM_S0 : HaydnFU_LS_S0_S_ST_RI6<0b1100101, (outs GPR32:$rs_wb), (ins GPR32:$rt, GPR32:$rs, simm6:$imm6), "s_sw_brev_imm\t$rt, $rs, $imm6", []> {
+  let Constraints = "$rs = $rs_wb";
+}
+def S_SW_BREV_IMM_S1 : HaydnFU_LS_S1_S_ST_RI6<0b1100101, (outs GPR32:$rs_wb), (ins GPR32:$rt, GPR32:$rs, simm6:$imm6), "s_sw_brev_imm\t$rt, $rs, $imm6", []> {
+  let Constraints = "$rs = $rs_wb";
+}
+def S_SW_BREV_IMM_S2 : HaydnFU_LS_S2_S_ST_RI6<0b1100101, (outs GPR32:$rs_wb), (ins GPR32:$rt, GPR32:$rs, simm6:$imm6), "s_sw_brev_imm\t$rt, $rs, $imm6", []> {
+  let Constraints = "$rs = $rs_wb";
+}
 
 // #102 S_SW_BREV_REG (RR)
-def S_SW_BREV_REG_S0 : HaydnFU_LS_S0_S_ST_RR<0b1100110, (outs GPR32:$rs1), (ins GPR32:$rt, GPR32:$rs2), "s_sw_brev_reg\t$rt, $rs1, $rs2", []>;
-def S_SW_BREV_REG_S1 : HaydnFU_LS_S1_S_ST_RR<0b1100110, (outs GPR32:$rs1), (ins GPR32:$rt, GPR32:$rs2), "s_sw_brev_reg\t$rt, $rs1, $rs2", []>;
-def S_SW_BREV_REG_S2 : HaydnFU_LS_S2_S_ST_RR<0b1100110, (outs GPR32:$rs1), (ins GPR32:$rt, GPR32:$rs2), "s_sw_brev_reg\t$rt, $rs1, $rs2", []>;
+// Tied logical shape (HaydnInstrInfoAuto.td:2534-2539 S_SW_BREV_REG 4-op
+// `$rs1=$rs1_wb`). Mirror S_SW_POST_REG / D_SDW_BREV_REG_S*.
+def S_SW_BREV_REG_S0 : HaydnFU_LS_S0_S_ST_RR<0b1100110, (outs GPR32:$rs1_wb), (ins GPR32:$rt, GPR32:$rs1, GPR32:$rs2), "s_sw_brev_reg\t$rt, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs1_wb";
+}
+def S_SW_BREV_REG_S1 : HaydnFU_LS_S1_S_ST_RR<0b1100110, (outs GPR32:$rs1_wb), (ins GPR32:$rt, GPR32:$rs1, GPR32:$rs2), "s_sw_brev_reg\t$rt, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs1_wb";
+}
+def S_SW_BREV_REG_S2 : HaydnFU_LS_S2_S_ST_RR<0b1100110, (outs GPR32:$rs1_wb), (ins GPR32:$rt, GPR32:$rs1, GPR32:$rs2), "s_sw_brev_reg\t$rt, $rs1, $rs2", []> {
+  let Constraints = "$rs1 = $rs1_wb";
+}
 
 // #103 PLDWWUA (AR) — pre-load AR from 8-byte-aligned mem; mayLoad + AR side-effect.
 // D-AR-INTRIN: **logical** PLDWWUA is GISel + post-RA HR identity
 // (no slot in opcode). Slot = AltDescs from HR auction. Private _S0/_S1/_S2
-// are encode peers only (FlexMap pairs by name at MC materialize). Never
-// ISel/PEI-emit *_S* for AR stream.
+// are encode peers only (leaveRegion setDesc(member); Desc-as-is encode).
+// Never ISel/PEI-emit *_S* for AR stream.
 let mayLoad = 1, hasSideEffects = 1 in
 def PLDWWUA : HaydnInst<4, (outs), (ins GPR32:$rs, uimm2:$ar_sel),
                         "pldwwua\t$ar_sel, $rs", []> {
-  // Multi-slot placeholder; real exclusivity is FlexMap S0|S1|S2 + HR auction.
+  // Multi-slot placeholder; real exclusivity is alts S0|S1|S2 + HR tryAdd.
   let Itinerary = Slot012_ALU;
 }
 let mayLoad = 1 in {
@@ -1506,7 +1559,7 @@ def D_STWUA_POST_S2 : HaydnFU_LS_S2_AR_UA<0b1101101, (outs GPR32:$rs1_wb), (ins 
 
 // AR GISel selects the _S0 encode forms directly (real Bundle128 slot ops
 // not isPseudo). Legal-slots come from the `_S0` name suffix (path).
-// Multi-slot packing can later re-map to _S1/_S2 via name-based Flex lookup.
+// Multi-slot packing re-maps to _S1/_S2 via name-peer _S* alts + post-RA setDesc.
 
 //===----------------------------------------------------------------------===//
 // Family 2 (generic LS) — wide-offset RI16 format classes + _S0 defs.
@@ -1519,18 +1572,18 @@ def D_STWUA_POST_S2 : HaydnFU_LS_S2_AR_UA<0b1101101, (outs GPR32:$rs1_wb), (ins 
 // These new RI16 format classes carry `simm16` in the 48-bit s0 LS window:
 // FU(3) + opcode(7) + reserved(14) + offset(16) + rt(4) + rs(4) = 48b.
 // Field names (`rt`, `rs`, `offset`) match the legacy FmtLS operand names so
-// `commitSlotFlexVariant`'s setDesc-only rewrite binds correctly (encoder
-// reads MI operands by position; the dag operand names match the field names
-// for tablegen field-binding). The D-class fields use `rt` (not the golden
-// `rtd`) to match legacy LD64/ST64's `$rt` operand.
+// leaveRegion setDesc(member) binds correctly (encoder reads MI operands by
+// position; the dag operand names match the field names for tablegen
+// field-binding). The D-class fields use `rt` (not the golden `rtd`) to match
+// legacy LD64/ST64's `$rt` operand.
 //===----------------------------------------------------------------------===//
 
 // LS S_LD_RI16 in S0 (LD32): rt(GPR32 dest), rs(GPR32 base), offset(simm16).
 // Payload 3+7+14+16+4+4 = 48b.
-// mayLoad=1 set at class level so commitSlotFlexVariant's setDesc
-// (legacy LD32 -> LD32_S0) preserves the load memory semantic for the
-// verifier. The golden RI6/RR LD classes omit it (decoder/emitter-only reach);
-// these RI16 defs are reached by CodeGen via the rewrite.
+// mayLoad=1 set at class level so leaveRegion setDesc (legacy LD32 -> LD32_S0)
+// preserves the load memory semantic for the verifier. The golden RI6/RR LD
+// classes omit it (decoder/emitter-only reach); these RI16 defs are reached
+// by CodeGen via post-RA setDesc.
 class HaydnFU_LS_S0_S_LD_RI16<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS0<outs, ins, asmstr, pattern> {
@@ -1654,8 +1707,8 @@ def ST64_S0 : HaydnFU_LS_S0_D_ST_RI16<0b1110001,
 // byte/word semantics as the legacy 64-bit M0 form). DISTINCT codepoints
 // 118-119 in the free s0-LS-FU range above the golden set. DecoderNamespace
 // = "FlexEmitterOnly" keeps them out of the decoder trie (/ idiom)
-// while leaving them matchable by the AsmParser. FlexMap suffix-strip
-// auto-pairs ST8 -> ST8_S0 and LDU8 -> LDU8_S0.
+// while leaving them matchable by the AsmParser. AlternateInsts name-peer
+// alts; leaveRegion setDesc commits ST8 -> ST8_S0 and LDU8 -> LDU8_S0.
 //===----------------------------------------------------------------------===//
 
 // ST8 (legacy FmtLS<0x42>, byte store, GPR32 source)
@@ -1683,8 +1736,8 @@ def LDU16_S0 : HaydnFU_LS_S0_S_LD_RI16<0b1111001,
 // LD16 / LD8 — signed halfword/byte loads.
 // public/codegen identity remains logical LD16/LD8 (FmtLS in
 // HaydnInstrInfo.td). These `_S0` records are **private encode peers only**
-// (Inst bits for Bundle128 s0 LS window). FlexMap pairs LD16→LD16_S0 at MC
-// materialize; selectors must never emit LD16_S0. Same pattern as
+// (Inst bits for Bundle128 s0 LS window). leaveRegion setDesc commits
+// LD16→LD16_S0; selectors must never emit LD16_S0. Same pattern as
 // ST8/LDU8/ST16/LDU16. Codepoints 122-123 free s0-LS-FU range.
 def LD16_S0 : HaydnFU_LS_S0_S_LD_RI16<0b1111010,
     (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
@@ -1699,11 +1752,11 @@ def LD8_S0 : HaydnFU_LS_S0_S_LD_RI16<0b1111011,
 //
 // Public MIR identity (HaydnInstrInfo.td): LD32_REG_M0S0LS / LD64_REG_M0S0LS
 // ST32_REG_M0S0LS / ST64_REG_M0S0LS. These `_S0` records are Bundle128 Inst
-// tables only — ISel/PEI must never emit them. FlexMap auto-pairs logical →
-// peer by name (CodeGenFormat emitLegacyToFlexMap).
+// tables only — ISel/PEI must never emit them. AlternateInsts discover
+// name-peer _S* alts; leaveRegion setDesc commits the member.
 //
-// Operand field names match the logical MI (`rt`, `rs`, `off`) so FlexMap
-// materialize is setDesc-only. DISTINCT codepoints 114-117 in free s0-LS-FU.
+// Operand field names match the logical MI (`rt`, `rs`, `off`) so setDesc
+// is operand-shape-preserving. DISTINCT codepoints 114-117 in free s0-LS-FU.
 // DecoderNamespace FlexEmitterOnly keeps them out of the live decode trie
 // while leaving them matchable by the AsmParser (idiom).
 //===----------------------------------------------------------------------===//

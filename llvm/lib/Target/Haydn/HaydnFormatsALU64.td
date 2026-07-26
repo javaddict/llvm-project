@@ -1184,8 +1184,8 @@ def X4SLL16_S2 : HaydnFU_ALU64_S2_RR_DDG<0b10001000,
 //===----------------------------------------------------------------------===//
 
 // #28 NOT64 — private encode peers for logical NOT64 (FmtALU64Unary).
-// Class field is `$rsd` (HaydnFU_ALU64_*_R_DD); logical uses `$rs1`
-// same ABS64/NEG64 index-based FlexMap materialize.
+// Class field is `$rsd` (HaydnFU_ALU64_*_R_DD); logical uses `$rs1`.
+// Alts index materialize: AlternateInsts + leaveRegion setDesc (same ABS64/NEG64).
 def NOT64_S1 : HaydnFU_ALU64_S1_R_DD<0b00011100,
     (outs DR64:$rd), (ins DR64:$rsd),
     "not64\t$rd, $rsd", []>;
@@ -1547,8 +1547,8 @@ def SEXT32T64_S2 : HaydnFU_ALU64_S2_R_DG<0b00101001,
     (outs DR64:$rd), (ins GPR32:$rs),
     "sext32t64\t$rd, $rs", []>;
 
-// SEXT_GPR32_TO_DR64 (legacy codegen name for SEXT32T64). The FlexMap
-// pairs by name, so the legacy name needs a matching _S1 def. Same format
+// SEXT_GPR32_TO_DR64 (legacy codegen name for SEXT32T64). AlternateInsts /
+// setDesc needs a matching _S1 member for the legacy name. Same format
 // class + codepoint as SEXT32T64_S1; isCodeGenOnly excludes it from the
 // decoder trie (the SEXT32T64_S1 entry is the canonical decoder form).
 let isCodeGenOnly = 1 in
@@ -1614,32 +1614,33 @@ def SQRT_S2 : HaydnFU_ALU64_S2_R_GG<0b10010101,
 //===----------------------------------------------------------------------===//
 
 // #21 SLT64 / #22 SLE64 / #23 SEQ64
-// B1 (golden-authoritative): ALL compares write SFR ONLY, NO register
-// dest, 2 DR sources (golden: SFR_Write_Port=[SFR], DR_Read_Port=[rsd1,rsd2]
-// no DR_Write_Port). The _R_CMP format class declares 2 bits-fields (rs1, rs2)
-// both bound to the dag -> no orphan field. `let Defs = [SFR]` models the
-// implicit SFR write (AIE pattern: `let Defs=[srFPFlags]`); hasSideEffects is
-// DROPPED (it was the B1 verifier-reject cause when combined with an explicit
-// def — AIE never combines the two). The asm string drops the dest operand.
+// Golden HW is R_CMP: 2 DR sources, SFR write only (no DR dest). Compiler
+// logical + GISel are unary FmtALU64Unary (outs DR64:$rd, ins DR64:$rs1) with
+// Defs=[SFR] — see HaydnInstrInfo.td and selectUnary(SLT64).
+// AIE setDesc (AIEMachineScheduler.cpp:1126-1132) requires PlacementAlternative
+// members to share that unary shape. Use R_DD (rd,rsd) — same 2×4b payload as
+// R_CMP — so setDesc preserves NumDefs/NumOperands; do not keep R_CMP's
+// (outs),(ins rs1,rs2) which made verifier reject "Explicit operand marked as
+// def" after setDesc. Encoding fields bind rd/rsd to the unary operands.
 let Defs = [SFR] in {
-def SLT64_S1 : HaydnFU_ALU64_S1_R_CMP<0b00010101,
-    (outs), (ins DR64:$rs1, DR64:$rs2),
-    "slt64\t$rs1, $rs2", []>;
-def SLT64_S2 : HaydnFU_ALU64_S2_R_CMP<0b00010101,
-    (outs), (ins DR64:$rs1, DR64:$rs2),
-    "slt64\t$rs1, $rs2", []>;
-def SLE64_S1 : HaydnFU_ALU64_S1_R_CMP<0b00010110,
-    (outs), (ins DR64:$rs1, DR64:$rs2),
-    "sle64\t$rs1, $rs2", []>;
-def SLE64_S2 : HaydnFU_ALU64_S2_R_CMP<0b00010110,
-    (outs), (ins DR64:$rs1, DR64:$rs2),
-    "sle64\t$rs1, $rs2", []>;
-def SEQ64_S1 : HaydnFU_ALU64_S1_R_CMP<0b00010111,
-    (outs), (ins DR64:$rs1, DR64:$rs2),
-    "seq64\t$rs1, $rs2", []>;
-def SEQ64_S2 : HaydnFU_ALU64_S2_R_CMP<0b00010111,
-    (outs), (ins DR64:$rs1, DR64:$rs2),
-    "seq64\t$rs1, $rs2", []>;
+def SLT64_S1 : HaydnFU_ALU64_S1_R_DD<0b00010101,
+    (outs DR64:$rd), (ins DR64:$rsd),
+    "slt64\t$rd, $rsd", []>;
+def SLT64_S2 : HaydnFU_ALU64_S2_R_DD<0b00010101,
+    (outs DR64:$rd), (ins DR64:$rsd),
+    "slt64\t$rd, $rsd", []>;
+def SLE64_S1 : HaydnFU_ALU64_S1_R_DD<0b00010110,
+    (outs DR64:$rd), (ins DR64:$rsd),
+    "sle64\t$rd, $rsd", []>;
+def SLE64_S2 : HaydnFU_ALU64_S2_R_DD<0b00010110,
+    (outs DR64:$rd), (ins DR64:$rsd),
+    "sle64\t$rd, $rsd", []>;
+def SEQ64_S1 : HaydnFU_ALU64_S1_R_DD<0b00010111,
+    (outs DR64:$rd), (ins DR64:$rsd),
+    "seq64\t$rd, $rsd", []>;
+def SEQ64_S2 : HaydnFU_ALU64_S2_R_DD<0b00010111,
+    (outs DR64:$rd), (ins DR64:$rsd),
+    "seq64\t$rd, $rsd", []>;
 }  // Defs = [SFR] (scalar SLT64/SLE64/SEQ64 block closes here)
 
 // SIMD compares X2SLT32/X2SLE32/X2SEQ32 + X4SLT16/X4SLE16/X4SEQ16.
@@ -1755,6 +1756,11 @@ def X4MOVF16_S2 : HaydnFU_ALU64_S2_RR_DDD<0b10000000,
 // ALU64 RI6 ops -- 2 DR64 + uimm6 (rtd, rsd, uimm6).
 //===----------------------------------------------------------------------===//
 
+// Logical SLLI64/SRLI64/SRAI64 carry Constraints = "$rtd = $rsd"
+// (HaydnInstrInfo.td). Format-members must keep the same tie so MI.setDesc
+// preserves tied-def/use for MachineVerifier (AIE alts share operand
+// structure). Operand names on FU classes are $rd/$rsd.
+let Constraints = "$rd = $rsd" in {
 // #13 SRAI64
 def SRAI64_S1 : HaydnFU_ALU64_S1_RI6<0b00001101,
     (outs DR64:$rd), (ins DR64:$rsd, uimm6:$imm6),
@@ -1771,14 +1777,6 @@ def SRLI64_S1 : HaydnFU_ALU64_S1_RI6<0b00001110,
 def SRLI64_S2 : HaydnFU_ALU64_S2_RI6<0b00001110,
     (outs DR64:$rd), (ins DR64:$rsd, uimm6:$imm6),
     "srli64\t$rd, $rsd, $imm6", []>;
-// #15 SRAI64R
-def SRAI64R_S1 : HaydnFU_ALU64_S1_RI6<0b00001111,
-    (outs DR64:$rd), (ins DR64:$rsd, uimm6:$imm6),
-    "srai64r\t$rd, $rsd, $imm6", []>;
-// #15 SRAI64R
-def SRAI64R_S2 : HaydnFU_ALU64_S2_RI6<0b00001111,
-    (outs DR64:$rd), (ins DR64:$rsd, uimm6:$imm6),
-    "srai64r\t$rd, $rsd, $imm6", []>;
 // #16 SLLI64
 def SLLI64_S1 : HaydnFU_ALU64_S1_RI6<0b00010000,
     (outs DR64:$rd), (ins DR64:$rsd, uimm6:$imm6),
@@ -1787,6 +1785,16 @@ def SLLI64_S1 : HaydnFU_ALU64_S1_RI6<0b00010000,
 def SLLI64_S2 : HaydnFU_ALU64_S2_RI6<0b00010000,
     (outs DR64:$rd), (ins DR64:$rsd, uimm6:$imm6),
     "slli64\t$rd, $rsd, $imm6", []>;
+} // Constraints $rd = $rsd
+
+// #15 SRAI64R — not under logical "$rtd = $rsd" block; no tie.
+def SRAI64R_S1 : HaydnFU_ALU64_S1_RI6<0b00001111,
+    (outs DR64:$rd), (ins DR64:$rsd, uimm6:$imm6),
+    "srai64r\t$rd, $rsd, $imm6", []>;
+// #15 SRAI64R
+def SRAI64R_S2 : HaydnFU_ALU64_S2_RI6<0b00001111,
+    (outs DR64:$rd), (ins DR64:$rsd, uimm6:$imm6),
+    "srai64r\t$rd, $rsd, $imm6", []>;
 
 //===----------------------------------------------------------------------===//
 // ALU64 RI5 ops -- 2 DR64 + uimm5 (rtd, rsd, uimm5).

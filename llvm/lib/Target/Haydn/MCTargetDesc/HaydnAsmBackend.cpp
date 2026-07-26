@@ -36,9 +36,9 @@ bool HaydnAsmBackend::mayNeedRelaxation(unsigned Opcode,
   return false;
 }
 
-// G-MC-8: C_* compressed shells retired. mayNeedRelaxation is always
-// false, so this override is never consulted for product emission. Keep a
-// trivial override that never requests relaxation (do not re-open C_*).
+// C_* compressed shells retired. mayNeedRelaxation is always false, so this
+// override is never consulted for product emission. Keep a trivial override
+// that never requests relaxation (do not re-open C_*).
 bool HaydnAsmBackend::fixupNeedsRelaxationAdvanced(
     const MCFragment &, const MCFixup &, const MCValue &, uint64_t,
     bool) const {
@@ -194,13 +194,17 @@ HaydnAsmBackend::createObjectTargetWriter() const {
 
 bool HaydnAsmBackend::writeNopData(raw_ostream &OS, uint64_t Count,
                                    const MCSubtargetInfo *) const {
-  // Haydn is little-endian with 16-bit minimum instruction size
-  // We'll emit 16-bit NOPs (0x0000) for alignment
-  if ((Count % 2) != 0)
+  // A.6 / Bundle128: executable pad is full 16-byte parcels only (all-zero
+  // Bundle128 NOP). Reject non-multiples so MC/lld cannot leave 2/4/8-byte
+  // executable gaps that the ISS treats as truncated parcels.
+  constexpr uint64_t Bundle128Bytes = 16;
+  if (Count % Bundle128Bytes != 0)
     return false;
 
-  for (uint64_t Idx = 0; Idx < Count; Idx += 2)
-    OS.write("\x00\x00", 2);
+  // All-zero 16-byte little-endian composite (idle s2|s1|s0 windows).
+  static const char Zeros[Bundle128Bytes] = {};
+  for (uint64_t Idx = 0; Idx < Count; Idx += Bundle128Bytes)
+    OS.write(Zeros, Bundle128Bytes);
 
   return true;
 }

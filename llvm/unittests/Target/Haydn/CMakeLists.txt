@@ -18,7 +18,16 @@ set(LLVM_LINK_COMPONENTS
   )
 
 add_llvm_target_unittest(HaydnTests
+  HaydnAIEParityBundleTest.cpp
+  HaydnAlternateDescriptorsTest.cpp
+  HaydnBundleFormatSolverTest.cpp
+  HaydnBundleMaterializeTest.cpp
+  HaydnBundlePlanTest.cpp
   HaydnBundleTest.cpp
+  HaydnBundleVerifyTest.cpp
+  HaydnFormatOrderingTest.cpp
   HaydnMCFormatsTest.cpp
   HaydnHazardRecognizerTest.cpp
+  HaydnMaterializeMultiOpcodeTest.cpp
+  HaydnPlacementAlternativeTest.cpp
   )

@@ -3,7 +3,7 @@
 ; REGRESSION TEST: DR64 shift intrinsics (full family).
 ;
 ; HISTORY (resolved): this file was XFAIL'd since due
-; to (a) a TEST-ONLY IR-signature bug — the X2/X4 SIMD register-form shift
+; to (a) a TEST-ONLY IR-signature bug - the X2/X4 SIMD register-form shift
 ; intrinsics (x2sll32/x2sra32/x2srl32/x4sll16/x4sra16/x4srl16/x2sra32r
 ; x4sra16r) are declared in IntrinsicsHaydn.td as taking/returning vector
 ; types (<2 x i32> / <4 x i16>) but were called in this test as `i64`. That
@@ -23,7 +23,7 @@
 ; assembly for the full family tested here.
 
 ;===----------------------------------------------------------------------===;
-; X2 SIMD register shifts (binary DR64) — WORKING, also in dr64-shift-regform.ll
+; X2 SIMD register shifts (binary DR64) - WORKING, also in dr64-shift-regform.ll
 ;===----------------------------------------------------------------------===;
 
 declare <2 x i32> @llvm.haydn.x2sll32(<2 x i32>, i32)
@@ -52,7 +52,7 @@ define dso_local <2 x i32> @test_x2srl32(<2 x i32> %a, i32 %b) {
 }
 
 ;===----------------------------------------------------------------------===;
-; X4 SIMD register shifts (binary DR64) — WORKING, also in dr64-shift-regform.ll
+; X4 SIMD register shifts (binary DR64) - WORKING, also in dr64-shift-regform.ll
 ;===----------------------------------------------------------------------===;
 
 declare <4 x i16> @llvm.haydn.x4sll16(<4 x i16>, i32)
@@ -81,7 +81,7 @@ define dso_local <4 x i16> @test_x4srl16(<4 x i16> %a, i32 %b) {
 }
 
 ;===----------------------------------------------------------------------===;
-; X2/X4 shift rounding (binary DR64) — WORKING, also in dr64-shift-regform.ll
+; X2/X4 shift rounding (binary DR64) - WORKING, also in dr64-shift-regform.ll
 ;===----------------------------------------------------------------------===;
 
 declare <2 x i32> @llvm.haydn.x2sra32r(<2 x i32>, i32)
@@ -102,7 +102,7 @@ define dso_local <4 x i16> @test_x4sra16r(<4 x i16> %a, i32 %b) {
 }
 
 ;===----------------------------------------------------------------------===;
-; X2 horizontal reductions (unary DR64) — STILL BROKEN (pseudo drop)
+; X2 horizontal reductions (unary DR64) - STILL BROKEN (pseudo drop)
 ;===----------------------------------------------------------------------===;
 
 declare i64 @llvm.haydn.x2hadd32.h(<2 x i32>)
@@ -142,7 +142,7 @@ define dso_local i64 @test_x2hadd32s_l(i64 %a) {
 }
 
 ;===----------------------------------------------------------------------===;
-; X4 horizontal reductions (unary DR64) — STILL BROKEN (pseudo drop)
+; X4 horizontal reductions (unary DR64) - STILL BROKEN (pseudo drop)
 ;===----------------------------------------------------------------------===;
 
 declare i64 @llvm.haydn.x4hadd16.h(<4 x i16>)
@@ -164,43 +164,43 @@ define dso_local i64 @test_x4hadd16_l(i64 %a) {
 }
 
 ;===----------------------------------------------------------------------===;
-; X2/X4 horizontal max/min (unary DR64) — STILL BROKEN (pseudo drop)
+; X2/X4 horizontal max/min - R_GD (DR64 src -> GPR32 scalar dst)
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.x2hmax32(<2 x i32>)
-declare i64 @llvm.haydn.x2hmin32(<2 x i32>)
-declare i64 @llvm.haydn.x4hmax16(<4 x i16>)
-declare i64 @llvm.haydn.x4hmin16(<4 x i16>)
-define dso_local i64 @test_x2hmax32(i64 %a) {
+declare i32 @llvm.haydn.x2hmax32(<2 x i32>)
+declare i32 @llvm.haydn.x2hmin32(<2 x i32>)
+declare i32 @llvm.haydn.x4hmax16(<4 x i16>)
+declare i32 @llvm.haydn.x4hmin16(<4 x i16>)
+define dso_local i32 @test_x2hmax32(i64 %a) {
 ; CHECK-LABEL: test_x2hmax32:
 ; CHECK: x2hmax32
   %bc.7 = bitcast i64 %a to <2 x i32>
-  %r = call i64 @llvm.haydn.x2hmax32(<2 x i32> %bc.7)
-  ret i64 %r
+  %r = call i32 @llvm.haydn.x2hmax32(<2 x i32> %bc.7)
+  ret i32 %r
 }
 
-define dso_local i64 @test_x2hmin32(i64 %a) {
+define dso_local i32 @test_x2hmin32(i64 %a) {
 ; CHECK-LABEL: test_x2hmin32:
 ; CHECK: x2hmin32
   %bc.8 = bitcast i64 %a to <2 x i32>
-  %r = call i64 @llvm.haydn.x2hmin32(<2 x i32> %bc.8)
-  ret i64 %r
+  %r = call i32 @llvm.haydn.x2hmin32(<2 x i32> %bc.8)
+  ret i32 %r
 }
 
-define dso_local i64 @test_x4hmax16(i64 %a) {
+define dso_local i32 @test_x4hmax16(i64 %a) {
 ; CHECK-LABEL: test_x4hmax16:
 ; CHECK: x4hmax16
   %bc.9 = bitcast i64 %a to <4 x i16>
-  %r = call i64 @llvm.haydn.x4hmax16(<4 x i16> %bc.9)
-  ret i64 %r
+  %r = call i32 @llvm.haydn.x4hmax16(<4 x i16> %bc.9)
+  ret i32 %r
 }
 
-define dso_local i64 @test_x4hmin16(i64 %a) {
+define dso_local i32 @test_x4hmin16(i64 %a) {
 ; CHECK-LABEL: test_x4hmin16:
 ; CHECK: x4hmin16
   %bc.10 = bitcast i64 %a to <4 x i16>
-  %r = call i64 @llvm.haydn.x4hmin16(<4 x i16> %bc.10)
-  ret i64 %r
+  %r = call i32 @llvm.haydn.x4hmin16(<4 x i16> %bc.10)
+  ret i32 %r
 }
 
 ;===----------------------------------------------------------------------===;
@@ -502,7 +502,7 @@ define dso_local i64 @test_x4ff2muls16s(i64 %acc, i64 %acc2, i64 %a, i64 %b) {
 }
 
 ;===----------------------------------------------------------------------===;
-; X2/X4 immediate shifts — commented out (CANNOT SELECT)
+; X2/X4 immediate shifts - commented out (CANNOT SELECT)
 ; FIXME: These intrinsics need ISel patterns added to HaydnIntrinsics.td.
 ; The cross-type signature (i64, i32) -> i64 requires special ISel handling.
 ; When ISel patterns are added, uncomment and test:

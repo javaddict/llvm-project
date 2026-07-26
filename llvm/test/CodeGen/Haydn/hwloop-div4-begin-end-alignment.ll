@@ -16,12 +16,12 @@
 ; preheader (`s += a[i] * 0x12345`):
 ;
 ; { set_hwloop_f2_w 1,.LBB0_2,.LLhwloop_end0, r3 } # 6-byte WIDE SET
-; p2align 2 # c8013cb SET-pad
+; p2align 4 # c8013cb SET-pad
 ; { addi32{{(_w)?}} r1, r0,...;... } # 6-byte WIDE parcel
 ; LBB0_2: # HWLR_BEGIN at 2-mod-4
 ;
 ; The fixup resolver then rejects BOTH offset fields:
-; error: hwloop offset must be 4-byte aligned (HaydnAsmBackend.cpp:597)
+; error: hwloop offset must be 16-byte Bundle128 (A.6) aligned (HaydnAsmBackend.cpp:597)
 ; aborting -filetype=obj / -c. -S textual was fine (no fixup resolution).
 ;
 ; Fix : mirror the existing inclusive-END temp-label mechanism
@@ -29,12 +29,12 @@
 ; Lhwloop_start symbol referenced by the SET fixups, and emit
 ; `OutStreamer->emitCodeAlignment(Align(4), &getSubtargetInfo)` immediately
 ; BEFORE emitting BOTH the START label (at the loop body's first emitted instr)
-; and the END label (at the latch's last real instr). This guarantees 4-byte
+; and the END label (at the latch's last real instr). This guarantees 16-byte Bundle128 (A.6)
 ; alignment regardless of intervening 2/6-byte parcels. MBB setAlignment is NOT
 ; used — LLVM's AsmPrinter elides alignment for fallthrough blocks.
 ;
 ; Test design: three parcel-combo cases, each MUST assemble to a valid object.
-; * @sum_arr — all-4-byte body (regression of the c8013cb case).
+; * @sum_arr — all-16-byte Bundle128 (A.6) body (regression of the c8013cb case).
 ; * @bigimm — 6-byte WIDE parcel (hoisted `* 0x12345` materialization)
 ; between the SET and the loop body. The original repro:
 ; failed with 2 align errors before.
@@ -42,15 +42,15 @@
 ; uses hwloop); exercises a second SET_HWLOOP and confirms
 ; the per-instance temp labels stay distinct.
 ;
-; ASM confirms a `.p2align 2` (== 4-byte) directive precedes the loop-body
+; ASM confirms a `.p2align 4` (== 16-byte Bundle128 (A.6)) directive precedes the loop-body
 ; label. The second RUN is the load-bearing one — it aborts pre-fix.
 
-;parcel-combo: all-4-byte body (c8013cb regression)
+;parcel-combo: all-16-byte Bundle128 (A.6) body (c8013cb regression)
 define i32 @sum_arr(ptr %a, i32 %n) {
 ; ASM-LABEL: sum_arr:
 ; ASM:       set_hwloop
-; 4-byte pad so HWLR_BEGIN (the next emitted label) is ÷4-representable:
-; ASM:       .p2align 2
+; 16-byte Bundle128 (A.6) pad so HWLR_BEGIN (the next emitted label) is ÷4-representable:
+; ASM:       .p2align 4
 entry:
   br label %for.body
 
@@ -74,7 +74,7 @@ for.end:
 define i32 @bigimm(ptr %a, i32 %n) {
 ; ASM-LABEL: bigimm:
 ; ASM:       set_hwloop
-; ASM:       .p2align 2
+; ASM:       .p2align 4
 entry:
   br label %for.body
 
@@ -98,7 +98,7 @@ for.end:
 define i32 @nested_hwloop(ptr noalias %a, i32 %n, i32 %m) {
 ; ASM-LABEL: nested_hwloop:
 ; ASM:       set_hwloop
-; ASM:       .p2align 2
+; ASM:       .p2align 4
 entry:
   br label %outer.header
 

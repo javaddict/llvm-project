@@ -19,7 +19,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: and_all_ones
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 -1
     ; CHECK-NOT: G_AND
     ; CHECK: COPY %0
@@ -34,7 +35,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: and_all_ones_commuted
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 -1
     ; CHECK-NOT: G_AND
     ; CHECK: COPY %0
@@ -49,7 +51,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: or_zero
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 0
     ; CHECK-NOT: G_OR
     ; CHECK: COPY %0
@@ -64,7 +67,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: or_zero_commuted
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 0
     ; CHECK-NOT: G_OR
     ; CHECK: COPY %0
@@ -79,7 +83,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: add_zero
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 0
     ; CHECK-NOT: G_ADD
     ; CHECK: COPY %0
@@ -94,7 +99,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: add_zero_commuted
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 0
     ; CHECK-NOT: G_ADD
     ; CHECK: COPY %0
@@ -109,7 +115,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: sub_zero
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 0
     ; CHECK-NOT: G_SUB
     ; CHECK: COPY %0
@@ -124,7 +131,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: shl_zero
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 0
     ; CHECK-NOT: G_SHL
     ; CHECK: COPY %0
@@ -139,7 +147,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: lshr_zero
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 0
     ; CHECK-NOT: G_LSHR
     ; CHECK: COPY %0
@@ -154,7 +163,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: ashr_zero
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 0
     ; CHECK-NOT: G_ASHR
     ; CHECK: COPY %0
@@ -169,7 +179,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: mul_zero
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 0
     ; CHECK-NOT: G_MUL
     %2:_(s32) = G_MUL %0, %1
@@ -183,7 +194,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: mul_zero_commuted
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 0
     ; CHECK-NOT: G_MUL
     %2:_(s32) = G_MUL %1, %0
@@ -198,7 +210,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: and_all_ones_i64
-    %0:_(s64) = G_IMPLICIT_DEF
+    liveins: $d0
+    %0:_(s64) = COPY $d0
     %1:_(s64) = G_CONSTANT i64 -1
     ; CHECK-NOT: G_AND
     ; CHECK: COPY %0
@@ -213,7 +226,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: or_zero_i64
-    %0:_(s64) = G_IMPLICIT_DEF
+    liveins: $d0
+    %0:_(s64) = COPY $d0
     %1:_(s64) = G_CONSTANT i64 0
     ; CHECK-NOT: G_OR
     ; CHECK: COPY %0
@@ -228,7 +242,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: add_zero_i64
-    %0:_(s64) = G_IMPLICIT_DEF
+    liveins: $d0
+    %0:_(s64) = COPY $d0
     %1:_(s64) = G_CONSTANT i64 0
     ; CHECK-NOT: G_ADD
     ; CHECK: COPY %0
@@ -243,7 +258,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: and_non_ones
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 -2
     ; CHECK: G_AND
     %2:_(s32) = G_AND %0, %1
@@ -257,7 +273,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: or_nonzero
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 42
     ; CHECK: G_OR
     %2:_(s32) = G_OR %0, %1
@@ -265,15 +282,18 @@ body:             |
 ...
 
 ---
-# Negative test: SUB x, non-zero should NOT be eliminated.
+# Negative test: SUB x, non-zero should NOT be eliminated as identity.
+# TD sub_to_add rewrites G_SUB x, C -> G_ADD x, -C; still not a COPY of x.
 name:            sub_nonzero
 legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: sub_nonzero
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 1
-    ; CHECK: G_SUB
+    ; CHECK-NOT: $r1 = COPY %0
+    ; CHECK: G_ADD
     %2:_(s32) = G_SUB %0, %1
     $r1 = COPY %2
 ...
@@ -285,7 +305,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: shl_nonzero
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 1
     ; CHECK: G_SHL
     %2:_(s32) = G_SHL %0, %1
@@ -300,7 +321,8 @@ legalized:       true
 body:             |
   bb.0:
     ; CHECK-LABEL: name: mul_nonzero
-    %0:_(s32) = G_IMPLICIT_DEF
+    liveins: $r0
+    %0:_(s32) = COPY $r0
     %1:_(s32) = G_CONSTANT i32 11
     ; CHECK: G_MUL
     %2:_(s32) = G_MUL %0, %1

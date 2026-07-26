@@ -97,9 +97,11 @@ private:
   bool IsComposite;
   /// Is it a MultipleSlotOptions instruction?
   bool IsMultipleSlotOptions;
-  /// Possible instructions pseudo could expand to
-  /// Vector is used to preserve the sequence of Inst. mentioned in TableGen
-  /// This will indirectly help in giving priority to a specific inst/slot
+  /// Possible instructions a MultiSlot_Pseudo could expand to
+  /// (materializableInto). Vector preserves TableGen list order (slot
+  /// priority). Haydn B2.5 also synthesizes sparse size-3 AlternateInsts
+  /// (index==field, 0=hole) from Full-format `_S0`/`_S1`/`_S2` members for
+  /// non-InstFormat logicals (see emitAlternateInstsOpcodeFunc).
   std::vector<std::string> AlternateInsts;
   /// Is it the NOP instruction of a particular slot?
   bool IsSlotNOP;

@@ -8,27 +8,23 @@
 //
 // This file implements the HaydnMCCodeEmitter class.
 //
-// the encoder is Bundle128-ONLY. Every emit path routes
-// through `encodeBundle128` (the 128-bit AIE-model composite). The legacy
-// multi-width emitters (`emitWideLSParcel`, `emitMode0S0Bundle`
-// `emitMode0S1FunctBundle`, `emitMode0S1RR3Bundle`, `emitMode0S1MACBundle`
-// `emitMode0S1LDBundle`, `encodeBundleSlotOR`, `encodeSingleInstruction`, the
-// `emitWord16`/`emitWord32`/`emitWord48`/`emitBundleWord` helpers, and the
-// `HaydnM0FunctVariant.inc` include) are RETIRED.
+// Bundle128-only emitter (AIE serialize-only). Encodes member Desc as-is;
+// post-RA setDesc is the sole materialize authority.
 //
-// Forcing function: an opcode that lacks a `_S<k>` variant (and is not
-// FU-routable by `encodeBundle128`) hits `report_fatal_error` with a clear
-// "add a _S<k> def" message. This is the forcing function — once the
-// remaining FLEX families land, the errors vanish.
+// AIE peers:
+//   AIEBaseMCCodeEmitter.cpp:45-68  encodeInstruction = getBinaryCode + emit
+//   AIEBaseMCCodeEmitter.cpp:122-184 encode nested sub-inst from member Desc
+//   AIEBaseMCFormats.cpp:66-75       getSlotKind on member opcode
+//   AIEBaseAsmPrinter.cpp:161-164    Format->Opcode composite
 //
 // `encodeInstruction` routing:
-// Haydn::BUNDLE -> encodeBundle (collects children, calls
-// encodeBundle128 on the child list)
-// PseudoLongB* -> expandLongBranch (pseudo expansion; the emitted
-// real instructions recurse through
-// encodeInstruction -> encodeBundle128)
-// standalone single-op -> encodeBundle128 (single-op composite)
-// everything else -> report_fatal_error (uncovered opcode)
+//   BUNDLE128_FULL (preformed) -> getBinaryCodeForInstr + emitBundle128Word
+//                                 (no re-slot / no re-auction)
+//   Haydn::BUNDLE (asm residual) -> encodeBundle -> encodeBundle128
+//   PseudoLongB* -> expandLongBranch (recurse encodeInstruction)
+//   standalone single-op -> encodeBundle128 (transient composite; residual
+//                           logical/hand-asm only — not a CodeGen writer)
+//   else -> report_fatal_error (uncovered opcode)
 //
 //===----------------------------------------------------------------------===//
 
@@ -47,6 +43,7 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/EndianStream.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -141,29 +138,29 @@ public:
                          const MCSubtargetInfo &STI) const override;
 
 private:
-  // expand a long branch pseudo to: inverted-conditional-branch + JAL.
-  // Each emitted real instruction recurses through `encodeInstruction`, which
-  // routes to `encodeBundle128` (the single Bundle128 emit path).
+  // Expand a long branch pseudo to: inverted-conditional-branch + JAL.
+  // Each emitted real instruction recurses through `encodeInstruction`.
   void expandLongBranch(const MCInst &MI, SmallVectorImpl<char> &CB,
                         SmallVectorImpl<MCFixup> &Fixups,
                         const MCSubtargetInfo &STI) const;
 
-  // P2b — AIE-model slot sub-instruction encoding. Re-enters
-  // getBinaryCodeForInstr on the sub-inst to recover its standalone slot-window
-  // encoding, then slices the slot window and writes the slot bits into Op.
+  // AIE-model slot sub-instruction encoding (AIEBaseMCCodeEmitter.cpp:122-184).
+  // Always encodes SubInst member Desc as-is. Post-RA setDesc
+  // (AIEMachineScheduler materializeMultiOpcodeInstrs) is the sole
+  // materialize authority.
   void encodeSlotSubInst(const MCInst &Composite, const MCInst &SubInst,
                          APInt &Op, SmallVectorImpl<MCFixup> &Fixups,
                          const MCSubtargetInfo &STI) const;
 
-  // the ONLY bundle emit path. Collects real children from a
-  // Haydn::BUNDLE MCInst and routes them through `encodeBundle128`.
+  // Assembler residual: collect children from Haydn::BUNDLE → encodeBundle128.
+  // CodeGen emits preformed BUNDLE128_FULL (Format->Opcode) and skips this.
   void encodeBundle(const MCInst &MBI, SmallVectorImpl<char> &CB,
                     SmallVectorImpl<MCFixup> &Fixups,
                     const MCSubtargetInfo &STI) const;
 
-  // emit a Bundle128 composite parcel for the children (the
-  // permanent AIE-style CodeGenFormat path). Returns true if every child is a
-  // Bundle128-target opcode (Flex-encodable or FU-routable); false otherwise.
+  // Build a transient BUNDLE128_FULL for residual children (standalone /
+  // hand-asm). Placement is Bundle.add by member getSlotKind / alts — no
+  // Flags, no constrained-first re-auction, no encode-local setOpcode Flex.
   bool encodeBundle128(ArrayRef<const MCInst *> Children,
                        SmallVectorImpl<char> &CB,
                        SmallVectorImpl<MCFixup> &Fixups,
@@ -180,11 +177,9 @@ private:
 } // end anonymous namespace
 
 // Determine the appropriate fixup kind for an expression operand based on
-// the parent instruction opcode. Geometry per / HaydnRelocLayout.
-// slot-variant cutover: `encodeSlotSubInst` maps legacy opcodes → `_S<k>`
-// variants BEFORE `getBinaryCodeForInstr`. The slot encoding DAG routes
-// EVERY symbolic operand through `getMachineOpValue`, so this function is the
-// single fixup-kind decision point for slot-variant opcodes.
+// the parent instruction opcode. Geometry per HaydnRelocLayout.
+// Slot-variant opcodes (post-setDesc members / residual flex) route symbolic
+// operands through getMachineOpValue — this is the single fixup-kind point.
 static unsigned getExprFixupKind(const MCInst &MI) {
   switch (MI.getOpcode()) {
   default:
@@ -301,9 +296,8 @@ static unsigned getExprFixupKind(const MCInst &MI) {
   // FIXUP_HAYDN_LO20 (the 20-bit absolute LO20 reloc, paired with LUI's HI12).
   // Without this, the default FIXUP_HAYDN_32 clobbers the opcode bytes.
   // The legacy ADDI32_W/ORI32_W are also handled here (the AsmParser matches
-  // the bare mnemonic to the legacy opcode, which the FlexMap auto-pairs to
-  // the _S0 variant at emit time — but getExprFixupKind sees the original
-  // opcode before the pairing).
+  // the bare mnemonic to the logical opcode; residual encode materializes the
+  // _S0 member via alts — but getExprFixupKind sees the original opcode).
   case Haydn::ADDI32_W:
   case Haydn::ORI32_W:
   case Haydn::ADDI32_W_S0:
@@ -356,14 +350,26 @@ void HaydnMCCodeEmitter::encodeInstruction(const MCInst &MI,
                                            SmallVectorImpl<char> &CB,
                                            SmallVectorImpl<MCFixup> &Fixups,
                                            const MCSubtargetInfo &STI) const {
-  // 1. Haydn::BUNDLE — the legacy bundle pseudo (TargetOpcode::BUNDLE). Route
-  // to encodeBundle, which collects the children and calls encodeBundle128.
+  // 1. Preformed BUNDLE128_FULL composite (CodeGen AsmPrinter Format->Opcode;
+  // AIEBaseAsmPrinter.cpp:161-164 + AIEBaseMCCodeEmitter.cpp:45-68). Serialize
+  // only — no re-slot, no re-auction. Product sole live packet row is
+  // BUNDLE128_FULL.
+  if (MI.getOpcode() == Haydn::BUNDLE128_FULL) {
+    APInt Binary, Scratch;
+    getBinaryCodeForInstr(MI, Fixups, Binary, Scratch, STI);
+    emitBundle128Word(Binary, CB);
+    return;
+  }
+
+  // 2. Residual TargetOpcode::BUNDLE (legacy / non-asm producers). AsmParser
+  // emits Format->Opcode BUNDLE128_FULL (fast path above); this collects +
+  // packs any remaining generic BUNDLE MCInsts.
   if (MI.getOpcode() == Haydn::BUNDLE) {
     encodeBundle(MI, CB, Fixups, STI);
     return;
   }
-  // 2. Long-branch pseudos — expand to inverted-conditional-branch + JAL. The
-  // emitted real instructions recurse through encodeInstruction.
+
+  // 3. Long-branch pseudos — expand to inverted-conditional-branch + JAL.
   switch (MI.getOpcode()) {
   default:
     break;
@@ -382,21 +388,20 @@ void HaydnMCCodeEmitter::encodeInstruction(const MCInst &MI,
     return;
   }
 
-  // 3. Standalone single-op → Bundle128 composite. This is the single emit
-  // path for every non-bundle, non-pseudo instruction.
+  // 4. Standalone single-op residual → transient Bundle128 composite.
+  // CodeGen bundles already arrived as BUNDLE128_FULL above; this is for
+  // emitWrappedInst / hand-asm singles, not a third CodeGen placement writer.
   const MCInst *Child = &MI;
   if (encodeBundle128({Child}, CB, Fixups, STI))
     return;
 
-  // 5. FORCING FUNCTION : the opcode has no Bundle128 form. This is the
-  // forcing function for the remaining FLEX families — once they land, the
-  // error vanishes. Report a clear, actionable message.
+  // 5. Forcing function: opcode has no Bundle128 form.
   StringRef Name = MII.getName(MI.getOpcode());
   report_fatal_error("Haydn MC: opcode '" + Name + "' (op" +
                          Twine(static_cast<unsigned>(MI.getOpcode())) +
-                         ") has no Bundle128 form — add a *private* encode-peer "
-                         "_S<k> def + FlexMap pair (: public identity stays"
-                         "logical; do not emit _S* from ISel/MIR)",
+                         ") has no Bundle128 form — add a format member / "
+                         "PlacementAlternative (logical public identity; "
+                         "post-RA setDesc materializes _S* for CodeGen)",
                      /*GenCrashDiag=*/false);
 }
 
@@ -426,21 +431,21 @@ void HaydnMCCodeEmitter::encodeBundle(const MCInst &MBI,
     return;
   }
 
-  // The single Bundle128 emit path. If every child is a Bundle128-target opcode
-  // (Flex-encodable or FU-routable), emit the 128-bit composite.
+  // The single Bundle128 emit path. If every child is a Bundle128-target
+  // opcode, emit the 128-bit composite.
   if (encodeBundle128(Children, CB, Fixups, STI))
     return;
 
-  // FORCING FUNCTION : a child lacks a Bundle128 form. Report the first
-  // offending child so the missing FLEX family is actionable.
+  // FORCING FUNCTION: a child lacks a Bundle128 form. Report the first
+  // offending child so the missing member family is actionable.
   for (const MCInst *Child : Children) {
     if (!isBundle128TargetOpcode(Child->getOpcode(), MII)) {
       StringRef Name = MII.getName(Child->getOpcode());
       report_fatal_error("Haydn MC: bundle child opcode '" + Name + "' (op" +
                              Twine(static_cast<unsigned>(Child->getOpcode())) +
                              ") has no Bundle128 form — add a *private* "
-                             "encode-peer _S<k> def + FlexMap pair (:"
-                             "logical public identity only)",
+                             "encode-peer _S<k> def + PlacementAlternative "
+                             "(logical public identity only)",
                          /*GenCrashDiag=*/false);
     }
   }
@@ -454,143 +459,71 @@ void HaydnMCCodeEmitter::encodeBundle(const MCInst &MBI,
 }
 
 //===----------------------------------------------------------------------===//
-// Bundle128 symmetric no-rewrite emit path (AIE two-step compose)
+// Bundle128 residual pack → composite (AIE two-step compose)
 //===----------------------------------------------------------------------===//
 //
-// The Bundle128 path is the permanent AIE-style CodeGenFormat framework: ONE
-// def per op, the EMITTER applies the slot offset (no generic->_M0 variant
-// rewrite). It is wired-but-not-rewriting — the framework drives placement +
-// decode via MCFormatDesc.
+// Serialize-only: CodeGen already emits preformed BUNDLE128_FULL
+// (Format->Opcode). This path builds a transient composite for residual
+// standalone / hand-asm children only.
 //
-// Phase 2 — single public slot authority is placement (HaydnMCFlags
-// Bundle position). Suffix `_S<k>` is legacy-only for already-flex
-// opcodes (hand asm / PEI interim). Encode-local setOpcode to Flex is NOT a
-// second public authority — it is private materialize for the tblgen DAG only
-// (MCInst is not MIR).
+// Placement authority is Bundle.add by member getSlotKind (fixed Desc) or
+// PlacementAlternative tryAdd (logical) — AIEBundle.h:92-145 peer.
+// encodeSlotSubInst serializes member Desc as-is (AIEBaseMCCodeEmitter.cpp:
+// 134-162); residual logicals must already be setDesc'd or asm format members.
 bool HaydnMCCodeEmitter::encodeBundle128(
     ArrayRef<const MCInst *> Children, SmallVectorImpl<char> &CB,
     SmallVectorImpl<MCFixup> &Fixups, const MCSubtargetInfo &STI) const {
-  // P2b — AIE two-step composite encoding. Build a BUNDLE128_FULL MCInst
-  // whose 3 operands are the slot sub-instructions (s0_slot, s1_slot, s2_slot)
-  // then call getBinaryCodeForInstr on it. The encoding DAG walks the slot
-  // operands; the MO.isInst branch in getMachineOpValue re-enters
-  // getBinaryCodeForInstr on each sub-inst, slices the slot window via the
-  // Bundle128 format-desc offsets, and ORs the slot bits into the composite
-  // Inst. The 128-bit Inst is then emitted as 16 bytes little-endian.
-  //
-  // Gate: every real child must be a Bundle128-target opcode (Flex-encodable).
-  // If any child is not, return false and let the caller apply the forcing
-  // function.
+  // Gate: every real child must be a Bundle128-target opcode.
   for (const MCInst *Child : Children)
     if (!isBundle128TargetOpcode(Child->getOpcode(), MII))
       return false;
 
-  // `Haydn::Bundle<MCInst>` as the AIE-faithful shuffler.
-  // Slot HINT priority (Phase 2 / single authority):
-  // 1. HaydnMCFlags::getHaydnSlot — placement (CodeGen AltDescs / AsmParser
-  // source order). Public authority.
-  // 2. `_S<k>` name suffix — legacy for already-flex opcodes only.
-  // 3. Bare (no hint) → Bundle::add auto-picks the first free legal slot.
-  // A hint that is occupied/illegal auto-spreads to a free legal slot (the
-  // `add(Instr, HintSlot)` overload falls back to pickSlot).
+  // Single-pass Bundle.add (no Flags, no constrained-first re-auction).
+  // Fixed getSlotKind members land in their Desc slot; multi-slot logicals
+  // use Bundle pickSlot tryAdd (same canAdd authority).
   //
-  // Solitary S0|S1 load: force S0. Matches llvm-mc demotion of a lone
-  // ld32_s1/ld64 into the S0 window and keeps -c ≡ -S|mc. Dual-load
-  // bundles keep AltDescs slot=1 on the second load.
+  // Residual solitary (non-brace / non-BUNDLE128_FULL) hand-asm: prefer S0
+  // when legal (fixup window / -c≡mc stability). Bundle.add Hint — not Flags.
+  // Multi-child residual BUNDLE packs source-order Bundle.add (no re-auction);
+  // brace asm never reaches here (preformed BUNDLE128_FULL fast path).
   HaydnMCFormatsWithMII Formats(MII);
+  Haydn::MCBundle Bundle(&Formats);
   if (Children.size() == 1) {
     MCInst *Only = const_cast<MCInst *>(Children[0]);
-    SlotBits Legal = Formats.getLegalSlots(Only->getOpcode());
-    if (Legal & Haydn::SLOT0)
-      HaydnMCFlags::setHaydnSlot(*Only, /*Slot=*/0);
-  }
-
-  // Resolve a legal placement hint (Flags or Flex suffix). Illegal source-order
-  // Flags from AsmParser (e.g. ADD64 forced to S0) are dropped.
-  auto resolveHint = [&](const MCInst *Child) -> MCSlotKind {
-    unsigned Opc = Child->getOpcode();
+    unsigned Opc = Only->getOpcode();
+    if (!Bundle.canAdd(Opc))
+      return false;
     SlotBits Legal = Formats.getLegalSlots(Opc);
-    if (auto FlagSlot = HaydnMCFlags::getHaydnSlot(*Child)) {
-      if (Legal & (SlotBits(1) << *FlagSlot))
-        return MCSlotKind::Haydn_SLOT_S0 + *FlagSlot;
-    } else if (int SuffixSlot = getHaydnFlexSlotFromName(Opc, MII);
-               SuffixSlot >= 0) {
-      if (Legal & (SlotBits(1) << static_cast<unsigned>(SuffixSlot)))
-        return MCSlotKind::Haydn_SLOT_S0 + SuffixSlot;
-    }
-    return MCSlotKind(MCSlotKind::SLOT_UNKNOWN);
-  };
-
-  auto tryPack =
-      [&](ArrayRef<const MCInst *> Order, bool UseHints) -> std::optional<Haydn::MCBundle> {
-    Haydn::MCBundle B(&Formats);
-    for (const MCInst *Child : Order) {
+    if (Legal & Haydn::SLOT0)
+      Bundle.add(Only, MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
+    else
+      Bundle.add(Only);
+  } else {
+    for (const MCInst *Child : Children) {
       unsigned Opc = Child->getOpcode();
-      if (!B.canAdd(Opc))
-        return std::nullopt;
-      MCSlotKind Hint = UseHints ? resolveHint(Child)
-                                 : MCSlotKind(MCSlotKind::SLOT_UNKNOWN);
-      if (Hint == MCSlotKind(MCSlotKind::SLOT_UNKNOWN))
-        B.add(const_cast<MCInst *>(Child));
-      else
-        B.add(const_cast<MCInst *>(Child), Hint);
+      if (!Bundle.canAdd(Opc)) {
+        LLVM_DEBUG(dbgs() << "Haydn MC: encodeBundle128 canAdd failed for "
+                          << MII.getName(Opc) << " (source-order pack; no "
+                             "re-auction)\n");
+        return false;
+      }
+      Bundle.add(const_cast<MCInst *>(Child));
     }
-    return B;
-  };
-
-  // Pass 1: source order + legal Flags (CodeGen AltDescs / dual-load).
-  std::optional<Haydn::MCBundle> Packed = tryPack(Children, /*UseHints=*/true);
-  // Pass 2: most-constrained-first free placement. Fixes multi-op hand-asm
-  // like `{ add64; add32; add64 }` where S2-first sequential order starves
-  // the second S1|S2-only op when Flags stamp illegal source order.
-  if (!Packed) {
-    SmallVector<const MCInst *, 3> Ordered(Children.begin(), Children.end());
-    llvm::stable_sort(Ordered, [&](const MCInst *A, const MCInst *B) {
-      auto pop = [&](const MCInst *C) {
-        return llvm::popcount(Formats.getLegalSlots(C->getOpcode()));
-      };
-      return pop(A) < pop(B); // fewer legal slots first
-    });
-    Packed = tryPack(Ordered, /*UseHints=*/false);
   }
-  if (!Packed) {
-    LLVM_DEBUG({
-      dbgs() << "Haydn MC: encodeBundle128 pack failed for "
-             << Children.size() << " child(ren)\n";
-    });
-    return false;
-  }
-  Haydn::MCBundle &Bundle = *Packed;
 
-  // Encode-local materialize: rewrite each child MCInst to its committed
-  // slot's Flex/private variant for the tblgen encoding DAG only. This is not
-  // MIR multi-auth — MCInst is transient and not visible as MachineInstr.
-  SmallVector<const MCInst *, 3> Slots(3, nullptr); // s0, s1, s2
+  // SlotMap → s0/s1/s2; encodeSlotSubInst slices member Desc as-is
+  // (AIE getBinaryCodeForInstr).
+  SmallVector<const MCInst *, 3> Slots(3, nullptr);
   for (const auto &KV : Bundle.getSlotMap()) {
     MCSlotKind Slot = KV.first;
     MCInst *Child = KV.second;
     unsigned SlotIdx = static_cast<unsigned>(Slot) - MCSlotKind::Haydn_SLOT_S0;
     assert(SlotIdx < 3 && "Bundle committed an out-of-range slot");
-    if (unsigned Var = getHaydnFlexVariantForSlot(Child->getOpcode(), SlotIdx, MII)) {
-      // See encodeSlotSubInst: CSRW 3-op → CSRW_S0 2-op must drop dead $rd.
-      if (Child->getOpcode() == Haydn::CSRW && Child->getNumOperands() == 3) {
-        MCOperand Csr = Child->getOperand(1);
-        MCOperand Rs = Child->getOperand(2);
-        Child->clear();
-        Child->setOpcode(Var);
-        Child->addOperand(Csr);
-        Child->addOperand(Rs);
-      } else {
-        Child->setOpcode(Var);
-      }
-    }
     Slots[SlotIdx] = Child;
   }
 
-  // safety net: Bundle::add can leave SlotMap empty while still holding
-  // real children (empty-bundle standalone escape when getLegalSlots==0). That
-  // used to fall through to "3×NOP composite" and silently write 16×0x00 for
-  // ld32_reg/st32_reg. Decline so the caller diagnoses instead of zero-encode.
+  // Safety net: Bundle::add can leave SlotMap empty while still holding real
+  // children (standalone escape when no legal slot). Decline vs silent 16x0.
   bool AnySlot = false;
   for (const MCInst *S : Slots)
     if (S) {
@@ -603,16 +536,14 @@ bool HaydnMCCodeEmitter::encodeBundle128(
     return false;
   }
 
-  // Build the composite MCInst. BUNDLE128_FULL's operand dag is
-  // (ins s0_slot:$s0, s1_slot:$s1, s2_slot:$s2). Push the slot children in
-  // s0/s1/s2 order; missing slots get a NOP placeholder so the operand count
-  // matches the dag.
+  // Build composite. BUNDLE128_FULL dag: (ins s0_slot, s1_slot, s2_slot).
+  // Missing slots get NOP placeholders (AIE SlotInfo NOP peer).
   MCInst Composite;
   Composite.setOpcode(Haydn::BUNDLE128_FULL);
   for (unsigned I = 0; I < 3; ++I) {
     const MCInst *Child = Slots[I];
     if (!Child) {
-      MCInst *Nop = Ctx.createMCInst(); // owned by MCContext, lifetime-safe
+      MCInst *Nop = Ctx.createMCInst();
       Nop->setOpcode(Haydn::NOP);
       Composite.addOperand(MCOperand::createInst(Nop));
     } else {
@@ -620,10 +551,8 @@ bool HaydnMCCodeEmitter::encodeBundle128(
     }
   }
 
-  // AIE two-step: one getBinaryCodeForInstr call composes the 128-bit Inst via
-  // the MO.isInst branches. Fixups are translated slot->composite scope by
-  // encodeSlotSubInst (GAP-MC3: byte-offset translation, no longer a
-  // verbatim copy).
+  // AIE two-step: getBinaryCodeForInstr composes 128-bit Inst via MO.isInst
+  // (encodeSlotSubInst). Same path as preformed BUNDLE128_FULL fast-path.
   APInt Binary, Scratch;
   SmallVector<MCFixup, 4> CompositeFixups;
   getBinaryCodeForInstr(Composite, CompositeFixups, Binary, Scratch, STI);
@@ -635,12 +564,20 @@ bool HaydnMCCodeEmitter::encodeBundle128(
 }
 
 //===----------------------------------------------------------------------===//
-// prototype — pack-from-bundle-metadata encoder model.
+// encodeSlotSubInst — AIE slice path (AIEBaseMCCodeEmitter.cpp:122-184)
+//===----------------------------------------------------------------------===//
 //
-// PROOF: a LEGACY semantic opcode (e.g. ADD32) + an EXTERNAL slot source (the
-// `-haydn-pack-from-metadata` flag, simulating AltDescs metadata the full
-// redesign would propagate) produces byte-identical Bundle128 bytes to the
-// `_S{k}` path. See.
+// AIEBaseMCCodeEmitter.cpp:134-162 encodes SubInst Desc as-is;
+// SubInstFormat/slot geometry come from SubInst.getOpcode().
+//
+// CodeGen path: post-RA setDesc already committed format members
+// (AIEMachineScheduler.cpp:1126-1132 materializeMultiOpcodeInstrs) → encode
+// Desc as-is (AIE getSlotKind post-commit, AIEBaseMCFormats.cpp:66-75).
+//
+// Residual hand-asm: matcher may still match the logical public mnemonic
+// (ADD32 before ADD32_S*). Materialize that residual via sparse
+// getAlternateInstsOpcode[SlotIdx] — the same PlacementAlternative / setDesc
+// member table. Local copy only; no MCFlags.
 void HaydnMCCodeEmitter::encodeSlotSubInst(
     const MCInst &Composite, const MCInst &SubInst, APInt &Op,
     SmallVectorImpl<MCFixup> &Fixups, const MCSubtargetInfo &STI) const {
@@ -669,15 +606,10 @@ void HaydnMCCodeEmitter::encodeSlotSubInst(
   SmallVector<MCFixup, 4> BaseFixups;
   HaydnMCFormats Formats;
 
-  // map legacy opcode → _S<k> variant before encoding, so the slot
-  // window carries slot-form bytes that the decoder's per-slot trie recognizes.
-  unsigned FlexOpc = Formats.getFlexVariant(SubInst.getOpcode(), SlotIdx);
   auto encodeOne = [&](const MCInst &Inst) {
     // CSRW (FmtCSR) is a 3-op shape: (dead $rd, $csr_addr, $rs). CSRW_S0 is
-    // 2-op: ($csr, $r). A blind opcode rewrite (here or in Bundle::slot map)
-    // left Imm:0 in op0 so OpFields wrote csr=0 and truncated the real
-    // address into the 4-bit rs field (BSP putchar/exit → `csrw 0, …`).
-    // Drop the leading dead def whenever we see the 3-op shape on CSRW_S0.
+    // 2-op: ($csr, $r). Drop the leading dead def — operand layout normalize
+    // only.
     if ((Inst.getOpcode() == Haydn::CSRW_S0 ||
          Inst.getOpcode() == Haydn::CSRW) &&
         Inst.getNumOperands() == 3) {
@@ -690,10 +622,20 @@ void HaydnMCCodeEmitter::encodeSlotSubInst(
     }
     getBinaryCodeForInstr(Inst, BaseFixups, SubBinary, SubScratch, STI);
   };
-  if (FlexOpc != 0) {
-    MCInst FlexInst(SubInst);
-    FlexInst.setOpcode(FlexOpc);
-    encodeOne(FlexInst);
+
+  // AIE path: member Desc has fixed getSlotKind → encode as-is
+  // (AIEBaseMCFormats.cpp:66-75 + AIEBaseMCCodeEmitter.cpp:136/161-162).
+  // Residual logical (no fixed slot): AlternateInsts member for this composite
+  // operand index — same table post-RA setDesc uses.
+  MCSlotKind SubKind = Formats.getSlotKind(SubInst.getOpcode());
+  if (SubKind != MCSlotKind()) {
+    encodeOne(SubInst);
+  } else if (const std::vector<unsigned> *Alts =
+                 Formats.getAlternateInstsOpcode(SubInst.getOpcode());
+             Alts && SlotIdx < Alts->size() && (*Alts)[SlotIdx] != 0) {
+    MCInst Member(SubInst);
+    Member.setOpcode((*Alts)[SlotIdx]);
+    encodeOne(Member);
   } else {
     encodeOne(SubInst);
   }
@@ -706,7 +648,7 @@ void HaydnMCCodeEmitter::encodeSlotSubInst(
          "sub-inst encoding narrower than slot window");
   Op = APInt(WindowWidth, SubBinary.extractBitsAsZExtValue(WindowWidth, 0));
 
-  // GAP-MC3 — translate fixups slot-relative → composite-relative.
+  // Translate fixups slot-relative → composite-relative.
   //
   // The Bundle128 composite is 128 bits, MSB-indexed (offset 0 = MSB = bit 127
   // offset 127 = LSB = bit 0). A slot window spans MSB-offsets
@@ -717,8 +659,6 @@ void HaydnMCCodeEmitter::encodeSlotSubInst(
   // byte ((127 - RightOffset) / 8) + X. For Bundle128:
   // S0: RightOffset=127 → base 0; S1: RightOffset=79 → base 6;
   // S2: RightOffset=39 → base 11.
-  // The prior code copied BaseFixups VERBATIM (byte offset 0), which placed
-  // every non-S0 fixup at the wrong composite byte → wrong reloc patches.
   // Mirrors AIE's `translateFixupsInComposite` (AIEBaseMCCodeEmitter.cpp:189).
   // AIE translateFixupsInComposite: remap standalone → composite. We only
   // adjust byte offset (same kind); PCRel must survive (Hexagon addFixup).
@@ -818,9 +758,8 @@ HaydnMCCodeEmitter::getMachineOpValue(const MCInst &MI, const MCOperand &MO,
     return;
   }
   if (MO.isInst()) {
-    // P2b — AIE-model slot composition. A composite MCInst (Haydn::BUNDLE
-    // or Haydn::BUNDLE128_FULL) holds its slot sub-instructions as MCOperand::
-    // isInst operands. Re-enter getBinaryCodeForInstr on the sub-inst.
+    // AIE-model slot composition (AIEBaseMCCodeEmitter.cpp:122-184). Composite
+    // BUNDLE128_FULL holds slot sub-instructions as MCOperand::isInst.
     encodeSlotSubInst(MI, *MO.getInst(), Op, Fixups, STI);
     return;
   }
@@ -951,8 +890,7 @@ void HaydnMCCodeEmitter::getSImmOpValueXStepWide(
 
 // Mode-0 / page-1 EncoderMethods retired with the Mode-0 TableGen
 // islands (legacy-retired). Live emission uses getSImmOpValueXStepWide +
-// getMachineOpValue via Bundle128 FLEX formats only.
-// Deleted: encodeS1LDPostImm6, encodeLSPage1Imm5, encodeLSPage1Reg.
+// getMachineOpValue via Bundle128 formats only.
 
 MCCodeEmitter *llvm::createHaydnMCCodeEmitter(const MCInstrInfo &MCII,
                                                MCContext &Ctx) {

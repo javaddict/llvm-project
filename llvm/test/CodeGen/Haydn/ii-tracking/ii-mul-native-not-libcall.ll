@@ -40,11 +40,11 @@ define i64 @ii_mul_native_not_libcall(i32 %a, i32 %b) {
 ; CHECK-LABEL: ii_mul_native_not_libcall:              // @ii_mul_native_not_libcall
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	sext32t64	d0, r1 }
-; CHECK: 	{ 	sext32t64	d1, r2 }
-; CHECK: 	{ 	mul64.ll	d0, d0, d1 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
+; CHECK: 	{ {{.*}}sext32t64	d0, r1{{.*}} }
+; CHECK: 	{ {{.*}}sext32t64	d1, r2{{.*}} }
+; CHECK: 	{ {{.*}}mul64.ll	d0, d0, d1{{.*}} }
+; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	ii_mul_native_not_libcall, .Lfunc_end0-ii_mul_native_not_libcall
 ; CHECK: 	.cfi_endproc

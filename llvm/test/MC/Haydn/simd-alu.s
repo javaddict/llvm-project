@@ -306,19 +306,19 @@ x4sat32t16 d0, d1, d2
 # SIMD X4 Complex Multiply (non-ternary forms)
 #===----------------------------------------------------------------------===
 
-# CHECK: x4cjmul16s.h d0, d1, d2
+# CHECK: x4cjmul16s_h d0, d1, d2
 # ROUNDTRIP: x4cjmul16s.h	d0, d1, d2
 x4cjmul16s_h d0, d1, d2
 
-# CHECK: x4cjmul16s.l d3, d4, d5
+# CHECK: x4cjmul16s_l d3, d4, d5
 # ROUNDTRIP: x4cjmul16s.l	d3, d4, d5
 x4cjmul16s_l d3, d4, d5
 
-# CHECK: x4cmul16s.h d6, d7, d8
+# CHECK: x4cmul16s_h d6, d7, d8
 # ROUNDTRIP: x4cmul16s.h	d6, d7, d8
 x4cmul16s_h d6, d7, d8
 
-# CHECK: x4cmul16s.l d9, d10, d11
+# CHECK: x4cmul16s_l d9, d10, d11
 # ROUNDTRIP: x4cmul16s.l	d9, d10, d11
 x4cmul16s_l d9, d10, d11
 

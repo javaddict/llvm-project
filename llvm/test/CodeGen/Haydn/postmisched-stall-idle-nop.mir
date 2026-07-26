@@ -1,0 +1,132 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,POST
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched,haydn-finalize-mi-bundles -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,FIN
+#
+# B1.3 — Stall MIR: producer / rolling idle-NOP / consumer order.
+#
+# AIE peers (empty cycle → NOP at rolling position, not terminator dump):
+#   materializeEmptyBundles insertNoop before It (AIEMachineScheduler.cpp:842-858)
+#   bumpCycleForBundles empty padding (AIEMachineScheduler.cpp:133-148)
+#   commitBlockSchedule NOP emit from Bundle sequence (AIEMachineScheduler.cpp:861-897)
+#   unit empty-cycle expectation (AIEScheduleDAGMITest.cpp:172-179)
+#
+# Haydn already materializes empty scheduled cycles as rolling idle NOPs in
+# HaydnPostRASchedStrategy::materializeBundles (empty → insertNoop before next
+# real cycle / term) via bumpCycleForBundles + HaydnInstrInfo::insertNoop.
+#
+# Force latency >= 2 with MAC writeback result → non-tied use (rs1 of next MAC).
+# OperandCycles Slot12_MAC_AccFirst [rd=2, rd_in=2, rs1=1, rs2=1] yield
+# result→rs1 latency 2 (DefCycle-UseCycle+1). Acc→acc is latency 1 (no stall).
+# No gap-filling independent work — empty cycle must appear as NOP between
+# producer and consumer (not only before the terminator).
+#
+# Second pipeline (postmisched + haydn-finalize-mi-bundles): each encode cycle
+# (including idle NOP) is a singleton BUNDLE with FormatID imm 0 (B1.2 peer).
+
+--- |
+  define void @mac_wb_rs1_stall_idle_nop() { ret void }
+  define void @mac_acc_feedback_no_idle_nop() { ret void }
+...
+---
+# Test 1: MAC writeback → non-tied rs1 use → producer / NOP / consumer.
+name:            mac_wb_rs1_stall_idle_nop
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$d1', virtual-reg: '' }
+  - { reg: '$d2', virtual-reg: '' }
+  - { reg: '$d3', virtual-reg: '' }
+  - { reg: '$d4', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $d2, $d3, $d4
+
+    ; CHECK-LABEL: name: mac_wb_rs1_stall_idle_nop
+    ; CHECK: liveins: $d0, $d1, $d2, $d3, $d4
+    ;
+    ; postmisched only — rolling idle NOP between producer and consumer.
+    ; POST: F2MULAA32R_HHLL
+    ; POST-NEXT: NOP
+    ; POST-NEXT: {{.*}}F2MULAA32R_HHLL
+    ; POST: JALR
+    ;
+    ; finalize — each cycle is BUNDLE 0 (FormatID Bundle128Full); NOP mid-stream.
+    ; FIN: BUNDLE 0
+    ; FIN: F2MULAA32R_HHLL
+    ; FIN: BUNDLE 0
+    ; FIN: NOP
+    ; FIN: BUNDLE 0
+    ; FIN: F2MULAA32R_HHLL
+    ; FIN: BUNDLE 0
+    ; FIN: JALR
+    $d0 = F2MULAA32R_HHLL $d0, $d1, $d2, implicit-def dead $sfr
+    $d3 = F2MULAA32R_HHLL $d3, $d0, $d4, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+# Test 2 (CONTROL): MAC acc→acc feedback is latency 1 — must NOT insert an
+# idle NOP between the two MACs (guards over-padding / terminator-only dump
+# of spurious stalls).
+name:            mac_acc_feedback_no_idle_nop
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$d1', virtual-reg: '' }
+  - { reg: '$d2', virtual-reg: '' }
+  - { reg: '$d3', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $d2, $d3
+
+    ; CHECK-LABEL: name: mac_acc_feedback_no_idle_nop
+    ; CHECK: liveins: $d0, $d1, $d2, $d3
+    ;
+    ; postmisched: consecutive MACs, no NOP between them.
+    ; POST: F2MULAA32R_HHLL
+    ; POST-NEXT: {{.*}}F2MULAA32R_HHLL
+    ; POST-NOT: NOP
+    ; POST: JALR
+    ;
+    ; finalize: two MAC bundles then JALR; no NOP BUNDLE between the MAC pair.
+    ; FIN: BUNDLE 0
+    ; FIN: F2MULAA32R_HHLL
+    ; FIN: BUNDLE 0
+    ; FIN: F2MULAA32R_HHLL
+    ; FIN-NOT: NOP
+    ; FIN: BUNDLE 0
+    ; FIN: JALR
+    $d0 = F2MULAA32R_HHLL $d0, $d1, $d2, implicit-def dead $sfr
+    $d0 = F2MULAA32R_HHLL $d0, $d3, $d1, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...

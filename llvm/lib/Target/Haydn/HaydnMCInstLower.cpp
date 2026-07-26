@@ -13,8 +13,6 @@
 
 #include "HaydnMCInstLower.h"
 #include "HaydnAsmPrinter.h"
-#include "HaydnMachineFunctionInfo.h"
-#include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstr.h"
@@ -28,24 +26,42 @@ using namespace llvm;
 
 #define DEBUG_TYPE "haydn-mcinstlower"
 
+static bool isHwloopWideSetup(unsigned Opc) {
+  return Opc == Haydn::SET_HWLOOP_W || Opc == Haydn::SET_HWLOOP_F2_W ||
+         Opc == Haydn::SET_HWLOOP_W_S0 || Opc == Haydn::SET_HWLOOP_F2_W_S0;
+}
+
 void HaydnMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
-  // Logical opcode only. Flex `_S*` forms materialize at encode.
+  // Desc-only lower (AIE serialize-only). Opcode is post-setDesc
+  // format-member when materialize succeeded (B3.1); logical residual
+  // otherwise (hand-asm / pseudo expand). Placement is member Desc
+  // getSlotKind / Format composite (AIEBaseMCFormats.cpp:66-75) — never
+  // MCInst Flags (API deleted B3.6).
   OutMI.setOpcode(MI->getOpcode());
 
-  // placement slot → HaydnMCFlags. Single public slot authority.
-  // Solitary S0|S1 loads are forced to S0 in encodeBundle128 (matches llvm-mc).
-  if (Printer.MF) {
-    if (const auto *FuncInfo =
-            Printer.MF->getInfo<HaydnMachineFunctionInfo>()) {
-      const HaydnAlternateDescriptors &AltDescs = FuncInfo->getAltDescs();
-      if (auto Slot =
-              AltDescs.getSelectedSlot(const_cast<MachineInstr *>(MI)))
-        HaydnMCFlags::setHaydnSlot(OutMI, *Slot);
-    }
-  }
+  // SET_HWLOOP_{W,F2_W}{_S0}: operands are (sel, start, end, cnt/rs).
+  // Start/end are MBB in MIR; emit uses inclusive temp labels (HWLR_BEGIN =
+  // first real of body, HWLR_END = last real of latch) — same contract as
+  // former emitHWLoopWideInst, but owned by Lower so the BUNDLE path stays
+  // pure MCInstLowering.Lower (no per-opcode expand in the printer).
+  const bool Hwloop = isHwloopWideSetup(MI->getOpcode());
 
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);
+    if (Hwloop && (i == 1 || i == 2) && MO.isMBB()) {
+      MachineBasicBlock *MBB = const_cast<MachineBasicBlock *>(MO.getMBB());
+      MachineBasicBlock *Resolved = MBB;
+      if (MBB->getNumber() < 0)
+        Resolved = const_cast<MachineBasicBlock *>(MI->getParent());
+      else if (i == 1 && MBB == MI->getParent())
+        Resolved = const_cast<MachineBasicBlock *>(MI->getParent());
+      auto &HAP = static_cast<HaydnAsmPrinter &>(Printer);
+      MCSymbol *Sym = (i == 1) ? HAP.getOrCreateHwloopStartSym(Resolved)
+                               : HAP.getOrCreateHwloopEndSym(Resolved);
+      OutMI.addOperand(
+          MCOperand::createExpr(MCSymbolRefExpr::create(Sym, Ctx)));
+      continue;
+    }
     MCOperand MCOp = LowerOperand(MO);
 
     if (MCOp.isValid())

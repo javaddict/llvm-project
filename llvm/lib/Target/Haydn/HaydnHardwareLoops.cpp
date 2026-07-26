@@ -101,11 +101,15 @@ STATISTIC(NumEmptyZOLStripped,
 STATISTIC(NumRoleAExpanded,
           "Number of Role A LoopStart expanded to SET_HWLOOP_REG pre-sched");
 
-// Local aliases — sole numeric source is HaydnHWLoopContracts.h.
-using llvm::haydn::hwloop::Bundle128Bytes;
+// Local aliases — sole numeric source is HaydnHWLoopContracts.h /
+// BundlePlan EncodedBytes (B4.4: productParcelBytes, not dual magic 16).
 using llvm::haydn::hwloop::MaxEndOffsetBytes;
 using llvm::haydn::hwloop::MaxStartOffsetBytes;
 using llvm::haydn::hwloop::MinSetupBundles;
+using llvm::haydn::hwloop::MinSetupBytes;
+using llvm::haydn::bundle::ceilProductParcels;
+using llvm::haydn::bundle::productBundlesToBytes;
+using llvm::haydn::bundle::productParcelBytes;
 
 // Compatibility names used throughout this file.
 static constexpr int64_t MaxHWLoopStartOffsetBytes = MaxStartOffsetBytes;
@@ -122,13 +126,8 @@ using namespace llvm;
 // * Layout-owned setup: useful preheader work stays *before* SET; only
 // deficit NOPs after SET (no "smart-setup" after-SET fill).
 
-// Residual Role B soft-branch convert (opt-in). Default OFF = AIE-like
-// expand-only for Role A.
-static cl::opt<bool> EnableHaydnHwloopRoleB(
-    "haydn-hwloop-role-b", cl::init(false), cl::Hidden,
-    cl::desc("Residual Role B opt-in: convert countable soft-branch loops "
-             "without IR ZOL markers. Default OFF = AIE-like expand-only "
-             ""));
+// Role B convert deleted (YOLO densify kill). Product = Role A expand only.
+static constexpr bool EnableHaydnHwloopRoleB = false;
 
 char HaydnHardwareLoops::ID = 0;
 
@@ -332,11 +331,16 @@ static bool isShellZOLBody(const MachineBasicBlock &Body) {
   return classifyZOLBody(Body) == ZOLBodyKind::Shell;
 }
 
-// Strip empty/shell IR-form zero-overhead loops (AIE-style): LoopStart in a
-// preheader paired with a body that is only PseudoLoopEnd (+ maybe B + meta)
-// or store-only shell (P5 poly/alog). SMS may peel all real work; Role A then
-// freezes a useless ZOL. Remove LoopStart and PseudoLoopEnd and restore a
-// normal exit edge.
+// Strip empty IR-form zero-overhead loops (AIE-style): LoopStart in a
+// preheader paired with a body that is only PseudoLoopEnd (+ maybe B + meta).
+// SMS may peel all real work; Role A then freezes a useless ZOL. Remove
+// LoopStart and PseudoLoopEnd and restore a normal exit edge.
+//
+// IMPORTANT: do NOT strip store-only "Shell" bodies. A memset/calloc zeroing
+// loop is exactly one post-inc store + PseudoLoopEnd — classifying that as a
+// shell and stripping it leaves a single store and no back-edge, so calloc
+// zeros only one byte (20020406-1 infinite loop / freestanding heap corruption).
+// Shells are expanded by expandRoleALoopStarts instead.
 static bool stripEmptyZeroOverheadLoops(MachineFunction &MF) {
   const auto *TII = MF.getSubtarget<HaydnSubtarget>().getInstrInfo();
   SmallVector<MachineInstr *, 4> LoopStarts;
@@ -382,9 +386,10 @@ static bool stripEmptyZeroOverheadLoops(MachineFunction &MF) {
     }
     if (!Body || !PLE)
       continue;
-    // Strip empty (SMS peel) and store-only shells (poly/alog).
+    // Strip only Empty (SMS full peel — no payload). Store-only Shell is
+    // real work (memset) and must be expanded by Role A, not deleted.
     ZOLBodyKind Kind = classifyZOLBody(*Body);
-    if (Kind != ZOLBodyKind::Empty && Kind != ZOLBodyKind::Shell)
+    if (Kind != ZOLBodyKind::Empty)
       continue;
 
     // Exit = non-self successor of the body; else layout fallthrough.
@@ -455,7 +460,9 @@ static bool stripEmptyZeroOverheadLoops(MachineFunction &MF) {
 // Useful preheader work stays *before* SET.
 // After SET: only t−3 deficit NOPs (layout-owned setup window).
 // PseudoLoopEnd stays in the body (END label / analyzeBranch).
-// Empty/shell bodies are already stripped; skip if no real body left.
+// Empty bodies are already stripped. Store-only Shell (memset-style post-inc
+// store + PLE) is expanded here — it is real trip-counted work, not SMS peel
+// residue. Skip only NotZOL (no PLE marker).
 static bool expandRoleALoopStarts(MachineFunction &MF) {
   const auto *TII = MF.getSubtarget<HaydnSubtarget>().getInstrInfo();
   SmallVector<MachineInstr *, 4> LoopStarts;
@@ -497,9 +504,14 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
       if (std::next(It) != MF.end())
         Body = &*std::next(It);
     }
-    if (!Body || classifyZOLBody(*Body) != ZOLBodyKind::Real) {
-      LLVM_DEBUG(dbgs() << "HaydnHWLoops: Role A expand skip — no real body "
-                           "for LoopStart in "
+    // Real (load/compute) and Shell (store-only payload, e.g. memset) both
+    // need SET_HWLOOP_REG. Empty is stripped earlier; NotZOL has no PLE.
+    ZOLBodyKind BodyKind =
+        Body ? classifyZOLBody(*Body) : ZOLBodyKind::NotZOL;
+    if (!Body || (BodyKind != ZOLBodyKind::Real &&
+                  BodyKind != ZOLBodyKind::Shell)) {
+      LLVM_DEBUG(dbgs() << "HaydnHWLoops: Role A expand skip — no expandable "
+                           "body for LoopStart in "
                         << printMBBReference(*Preheader) << "\n");
       continue;
     }
@@ -515,8 +527,11 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
     // without clobbering Src — same facility as MatInt/VA expand, not a
     // hwloop-private scavenger. AIE writes dedicated LC; Haydn remats to GPR.
     MachineBasicBlock::iterator InsertPt = LS->getIterator();
+    // Emit the real wide form (not SET_HWLOOP_REG pseudo). Pack materializes
+    // F2_W → F2_W_S0; AsmPrinter is Desc-only Lower (ExpandPseudos also
+    // converts residual REG→F2_W if any older path still emits REG).
     MachineInstr *SetMI =
-        BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP_REG))
+        BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP_F2_W))
             .addImm(/*Sel=*/1)
             .addMBB(Header)
             .addMBB(Latch)
@@ -537,9 +552,8 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
         unsigned Bytes = TII->getInstSizeInBytes(*I);
         if (Bytes == 0)
           continue;
-        FollowingBundles +=
-            (Bytes + static_cast<unsigned>(Bundle128Bytes) - 1) /
-            static_cast<unsigned>(Bundle128Bytes);
+        // B4.4: ceil by ProductFormatDesc.Bytes (EncodedBytes oracle).
+        FollowingBundles += ceilProductParcels(Bytes);
       }
       if (FollowingBundles < HWLoopSetupPadBundles) {
         unsigned Deficit = HWLoopSetupPadBundles - FollowingBundles;
@@ -728,12 +742,17 @@ bool HaydnHardwareLoops::loopBodyFitsRange(const MachineLoop *L) const {
   //
   // uimm6_offset1 (START): max 252 B — tight.
   // uimm12_offset2 (END): max 16380 B — loose for normal bodies.
-  const int64_t MinSetupBytes =
-      static_cast<int64_t>(HWLoopSetupPadBundles) * Bundle128Bytes;
+  // B4.4: MinSetupBytes / productParcelBytes from EncodedBytes oracle
+  // (HaydnHWLoopContracts / ProductFormatDesc), not a free-standing * 16.
+  const int64_t LocalMinSetupBytes =
+      productBundlesToBytes(HWLoopSetupPadBundles);
+  assert(LocalMinSetupBytes == MinSetupBytes &&
+         "setup pad bytes must match hwloop MinSetupBytes");
   // Leave one parcel margin for later layout drift (Fixup pads, relax).
   const int64_t MaxAfterSetBytes =
-      MaxHWLoopStartOffsetBytes - Bundle128Bytes; // 236
-  int64_t AfterSetEstimate = MinSetupBytes;
+      MaxHWLoopStartOffsetBytes -
+      static_cast<int64_t>(productParcelBytes()); // 236
+  int64_t AfterSetEstimate = LocalMinSetupBytes;
   if (const MachineBasicBlock *PH = L->getLoopPreheader()) {
     int64_t PHBytes = 0;
     for (const MachineInstr &MI : *PH) {
@@ -745,7 +764,8 @@ bool HaydnHardwareLoops::loopBodyFitsRange(const MachineLoop *L) const {
       PHBytes += TII->getInstSizeInBytes(MI);
     }
     // Worst case after-SET payload under the smart t−3 move cap.
-    AfterSetEstimate = std::max(MinSetupBytes, std::min(PHBytes, MaxAfterSetBytes));
+    AfterSetEstimate =
+        std::max(LocalMinSetupBytes, std::min(PHBytes, MaxAfterSetBytes));
   }
   const int64_t StartOffsetEstimate = AfterSetEstimate;
   // Inclusive END: body size may be small; t−3 is enforced separately.
@@ -836,6 +856,12 @@ bool HaydnHardwareLoops::containsInvalidInstruction(
           continue;
         return true;
       }
+      // CB-131: ExpandPseudos splits VAARG into Stack/Reg/Join MBBs and
+      // rewrites the host block's terminator layout. A ZOL formed over the
+      // pre-expand single-MBB body freezes wrong BEGIN/END distances → loop
+      // runs once / mis-updates va_list (stdarg-3 looped va_arg ABORT).
+      if (Opc == Haydn::VAARG_I32 || Opc == Haydn::VAARG_I64)
+        return true;
     }
   }
   return false;
@@ -3253,13 +3279,13 @@ bool HaydnHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   // AsmPrinter emits the END label at the latch's last real body instruction.
   MachineInstr *SetMI = nullptr;
   if (TripCountReg.isValid()) {
-    SetMI = BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP_REG))
+    SetMI = BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP_F2_W))
                 .addImm(Sel)
                 .addMBB(Header)
                 .addMBB(Latch)
                 .addReg(TripCountReg);
   } else {
-    SetMI = BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP))
+    SetMI = BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP_W))
                 .addImm(Sel)
                 .addMBB(Header)
                 .addMBB(Latch)
@@ -3283,9 +3309,8 @@ bool HaydnHardwareLoops::convertToHardwareLoop(MachineLoop *L,
       unsigned Bytes = TII->getInstSizeInBytes(*I);
       if (Bytes == 0)
         continue;
-      FollowingBundles +=
-          (Bytes + static_cast<unsigned>(Bundle128Bytes) - 1) /
-          static_cast<unsigned>(Bundle128Bytes);
+      // B4.4: ceil by ProductFormatDesc.Bytes (EncodedBytes oracle).
+      FollowingBundles += ceilProductParcels(Bytes);
     }
     if (FollowingBundles < HWLoopSetupPadBundles) {
       unsigned Deficit = HWLoopSetupPadBundles - FollowingBundles;

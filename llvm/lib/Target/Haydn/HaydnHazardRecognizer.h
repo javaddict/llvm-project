@@ -52,10 +52,13 @@
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNHAZARDRECOGNIZER_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNHAZARDRECOGNIZER_H
 
+#include "HaydnBundle.h"
+#include "HaydnBundleFormatSolver.h"
 #include "HaydnResourceScoreboard.h"
 #include "HaydnStaticBitSet.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/SmallSet.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/Register.h"
 #include "llvm/CodeGen/ScheduleHazardRecognizer.h"
 #include "llvm/MC/MCInstrItineraries.h"
@@ -70,6 +73,13 @@ class TargetInstrInfo;
 class HaydnAlternateDescriptors;
 class TargetRegisterInfo;
 class TargetSubtargetInfo;
+
+// AIE peer: AIEHazardRecognizer.cpp:278-314 applyFormatOrdering —
+// walk Format.getSlots(), Bundle.at(Slot), removeFromBundle+insert+
+// bundleWithPred, then finalizeBundle. B3.2: free function in the same
+// namespace as AIE (llvm::), names match for the AIE clone path.
+void applyFormatOrdering(Haydn::MachineBundle &Bundle, const VLIWFormat &Format,
+                         MachineBasicBlock::iterator InsertPoint);
 
 // Total number of distinct functional-unit resource bits tracked per cycle.
 // This covers the 3 slots (SLOT0/1/2 — the itinerary FuncUnits). GPR port
@@ -305,9 +315,11 @@ private:
   // (cleared on AdvanceCycle/RecedeCycle/Reset); a candidate whose defs
   // overlap it is reported as a Hazard so the scheduler delays it to the next
   // cycle and places its consumers with correct latencies (a post-hoc un-bundle
-  // would instead violate those latencies). R0 (soft-zero) and SFR
-  // (slot-ordered safe parallel writes —; two ALU ops both implicit-def
-  // dead $sfr in one bundle is normal) are excluded.
+  // would instead violate those latencies). SFR (slot-ordered safe parallel
+  // writes — two ALU ops both implicit-def dead $sfr in one bundle is normal)
+  // is excluded. R0 is *not*: soft-zero restores (XOR R0,R0,R0) and R0-borrow
+  // loads are real write-port consumers; dual R0 defs in one bundle are
+  // WRITE_CONFLICT on silicon/BundleSim.
   SmallSet<Register, 8> CurrentCycleDefs;
   // LIVE destination registers written this cycle (defs whose result is
   // consumed, i.e. NOT dead). Used by hasSameBundleRAW. A same-bundle read+write
@@ -321,29 +333,21 @@ private:
   // skip dead: the spec forbids two writes to one register regardless of
   // liveness (write-port/undefined), matching.
   SmallSet<Register, 8> CurrentCycleLiveDefs;
-  // set when an ARCTAN/SIN_COS (DSP math op whose issuing slot's D-ALU
-  // is occupied for (uimm4+2) consecutive bundles per spec §Special) was
-  // issued in the current cycle. Minimal guard: these are forced into a
-  // single-instruction bundle (nothing else may join, and they may not join a
-  // non-empty cycle). This is deliberately over-conservative (the spec still
-  // allows OTHER slots in the issue bundle) but safe, and avoids the variable
-  // length multi-cycle scoreboard reservation that the precise (uimm4+2)
-  // recognizer — deferred to milestone M5, when the real encoding lands
-  // will require. Cleared on AdvanceCycle/RecedeCycle/Reset.
+  // ARCTAN/SIN_COS (G-PACK-LEGAL, current design): force alone in the issue
+  // bundle only. No multi-cycle slot lock / (uimm4+2) scoreboard reservation.
   bool CurrentCycleHasLockedSlotOp = false;
   const TargetRegisterInfo *TRI = nullptr;
 
-  // occupied-slot bitmask for the CURRENT cycle (bit k = slot k
-  // Haydn::SLOT convention). The single-authority slot auction: a candidate
-  // whose FlexMap legal-slots (HaydnMCFormats::getLegalSlots) share no free
-  // bit with ~CurrentCycleSlots is a Hazard (AIE isFormatAvailable / Hexagon
-  // auction). Cleared on AdvanceCycle/RecedeCycle/Reset.
-  SlotBits CurrentCycleSlots = 0;
+  // B2.4: product CycleState for the CURRENT cycle — placement authority
+  // via tryAddProduct (AIEHazardRecognizer.cpp:174-214 alt try +
+  // AIEBundle.h canAdd/add occupancy). Replaces the former getLegalSlots +
+  // S0-first CurrentCycleSlots hand auction. Cleared on Advance/Recede/Reset.
+  // OccupiedSlots bitset is CurrentCycleState.OccupiedSlots (SLOT* bits).
+  haydn::bundle::CycleState CurrentCycleState =
+      haydn::bundle::makeProductCycleState();
 
-  // the slot-bitset model (HaydnMCFormats). Owns no state;
-  // default-constructed. Used to query each candidate's legal slots
-  // (getLegalSlots — the FlexMap-derived tblgen ground truth) for the
-  // single-authority slot auction.
+  // HaydnMCFormats for PlacementAlternative / tryAdd (B2.5 alts-only).
+  // Stateless table lookup.
   HaydnMCFormats Fmts;
 
   // Walk all scheduling classes to compute the scoreboard depth and the
@@ -378,9 +382,17 @@ private:
   void appendDefs(const MachineInstr &MI);
 
   // true iff MI is ARCTAN or SIN_COS (DSP math ops that lock their
-  // issuing slot's D-ALU for (uimm4+2) bundles per spec §Special). Used by
+  // issue alone this cycle only — no multi-cycle slot lock). Used by
   // the minimal single-instruction-bundle guard.
   bool isLockedSlotDspOp(const MachineInstr &MI) const;
+
+  // B2.4–B3.exit.3: commit MI's field into CurrentCycleState via tryAddProduct
+  // (alts-only). Stamps setAlternateDescriptor(MemberOpcode) for leaveRegion
+  // setDesc materialize (AIEHazardRecognizer.cpp:389;
+  // AIEAlternateDescriptors.h:39-44). Placement after materialize is
+  // getSlotKind. No setDesc here — that is materializeMultiOpcodeInstrs.
+  // No new MCFlags writers.
+  void commitPlacementForEmit(MachineInstr *MI);
 };
 
 } // end namespace llvm

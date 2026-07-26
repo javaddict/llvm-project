@@ -25,7 +25,7 @@
 ; no MOV_GPR_TO_DR64 of a zero). If the selector regresses (loses the case)
 ; llc crashes in InstructionSelect.
 ; Part B — combiner fold: f2mulaa32rs_hhll(i64 0,...) must fold to
-; f2mulzaa32rs_hhll. CHECK-NOT: f2mulaa32rs_hhll proves the fold fired.
+; f2mulzaa32rs.hhll. CHECK-NOT: f2mulaa32rs_hhll proves the fold fired.
 ;
 ; References:
 ; ~/haydn-plans/decisions/-f2mulzaa-binary-mac-lowering.md
@@ -44,9 +44,9 @@ declare i64 @llvm.haydn.f2mulaa32rs.hhll(i64, <2 x i32>, <2 x i32>)
 ; CHECK-LABEL: test_f2mulzaa32rs_hhll:                 // @test_f2mulzaa32rs_hhll
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	f2mulzaa32rs_hhll	d0, d0, d1 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
+; CHECK: 	{ {{.*}}f2mulzaa32rs.hhll	d0, d0, d1{{.*}} }
+; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	test_f2mulzaa32rs_hhll, .Lfunc_end0-test_f2mulzaa32rs_hhll
 ; CHECK: 	.cfi_endproc
@@ -63,9 +63,9 @@ define i64 @test_f2mulzaa32rs_hhll(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_f2mulzaa32rs_hllh:                 // @test_f2mulzaa32rs_hllh
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	f2mulzaa32rs_hllh	d0, d0, d1 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
+; CHECK: 	{ {{.*}}f2mulzaa32rs.hllh	d0, d0, d1{{.*}} }
+; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	test_f2mulzaa32rs_hllh, .Lfunc_end1-test_f2mulzaa32rs_hllh
 ; CHECK: 	.cfi_endproc
@@ -82,9 +82,9 @@ define i64 @test_f2mulzaa32rs_hllh(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_f2mulzaa32r_hhll:                  // @test_f2mulzaa32r_hhll
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	f2mulzaa32r_hhll	d0, d0, d1 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
+; CHECK: 	{ {{.*}}f2mulzaa32r.hhll	d0, d0, d1{{.*}} }
+; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	test_f2mulzaa32r_hhll, .Lfunc_end2-test_f2mulzaa32r_hhll
 ; CHECK: 	.cfi_endproc
@@ -101,9 +101,9 @@ define i64 @test_f2mulzaa32r_hhll(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_f2mulzaa32r_hllh:                  // @test_f2mulzaa32r_hllh
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	f2mulzaa32r_hllh	d0, d0, d1 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
+; CHECK: 	{ {{.*}}f2mulzaa32r.hllh	d0, d0, d1{{.*}} }
+; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	test_f2mulzaa32r_hllh, .Lfunc_end3-test_f2mulzaa32r_hllh
 ; CHECK: 	.cfi_endproc
@@ -124,9 +124,9 @@ define i64 @test_f2mulzaa32r_hllh(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_fold_zero_acc:                     // @test_fold_zero_acc
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	f2mulzaa32rs_hhll	d0, d0, d1 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
+; CHECK: 	{ {{.*}}f2mulzaa32rs.hhll	d0, d0, d1{{.*}} }
+; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	test_fold_zero_acc, .Lfunc_end4-test_fold_zero_acc
 ; CHECK: 	.cfi_endproc

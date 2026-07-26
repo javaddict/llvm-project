@@ -13,6 +13,7 @@
 
 #include "HaydnAsmPrinter.h"
 #include "Haydn.h"
+#include "HaydnBundle.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "HaydnInstrInfo.h"
@@ -36,7 +37,6 @@
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/TargetRegistry.h"
-#include "llvm/ADT/Statistic.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -45,25 +45,18 @@ using namespace llvm;
 
 #define DEBUG_TYPE "haydn-asm-printer"
 
-// residual: packer still emits occasional oversubscribed BUNDLEs
-// (27 NatureDSP kernels). AIE fails closed at format assert; Haydn currently
-// splits for product green. Strict mode refuses the silent split.
-// Track: re-enable default-strict after PostRA placement is complete.
-// After PostRA cycleCanFormLegalBundle guard, oversub should be rare.
-// Default ON (AIE-style fail-closed). Escape: -haydn-asmprinter-strict-bundles=0.
-static cl::opt<bool> HaydnAsmPrinterStrictBundles(
-    "haydn-asmprinter-strict-bundles", cl::Hidden, cl::init(true),
-    cl::desc(" fatal on oversubscribed Bundle128 instead of"
-             "emergency multi-bundle split (default ON)"));
-
-STATISTIC(NumAsmPrinterBundleSplits,
-          "HaydnAsmPrinter emergency splits of oversubscribed bundles");
-
 // HiFi-like SMS bounds in product -S (observe-only; default ON).
 static cl::opt<bool> HaydnAsmSWPS(
     "haydn-asm-swps", cl::Hidden, cl::init(true),
     cl::desc("Emit #<swps> SMS ResMII/RecMII/II comments on pipelined loop "
              "kernels in assembly (default ON)"));
+
+// B4.5: spill/reload KPI observe on hot kernels (fail-open; default ON).
+// Greppable in release -S via #<spill-kpi>; no schedule change.
+static cl::opt<bool> HaydnAsmSpillKPI(
+    "haydn-asm-spill-kpi", cl::Hidden, cl::init(true),
+    cl::desc("Emit #<spill-kpi> spill/reload byte counts per function in "
+             "assembly (default ON; observe-only, fail-open for BF4 close)"));
 
 HaydnAsmPrinter::HaydnAsmPrinter(llvm::TargetMachine &TM,
                                 std::unique_ptr<llvm::MCStreamer> Streamer)
@@ -77,6 +70,149 @@ bool HaydnAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   PendingHwloopEndLabels.clear();
   PendingHwloopStartLabels.clear();
   return AsmPrinter::runOnMachineFunction(MF);
+}
+
+/// emitComments - Pretty-print spill/reload comments for bundled instructions.
+/// Port of AIEBaseAsmPrinter.cpp:97-126 (N-byte Spill/Reload via
+/// getSpillSize/getRestoreSize/getFolded*).
+static void emitSpillReloadComments(const MachineInstr *MI,
+                                    raw_ostream &CommentOS) {
+  auto *MF = MI->getMF();
+  auto *TII = MF->getSubtarget().getInstrInfo();
+
+  // We assume a single instruction only has a spill or reload, not both.
+  std::optional<LocationSize> Size;
+  if ((Size = MI->getRestoreSize(TII))) {
+    CommentOS << Size->getValue() << "-byte Reload";
+  } else if ((Size = MI->getFoldedRestoreSize(TII))) {
+    if (!Size->hasValue())
+      CommentOS << "Unknown-size Folded Reload";
+    else if (Size->getValue())
+      CommentOS << Size->getValue() << "-byte Folded Reload";
+  } else if ((Size = MI->getSpillSize(TII))) {
+    CommentOS << Size->getValue() << "-byte Spill";
+  } else if ((Size = MI->getFoldedSpillSize(TII))) {
+    if (!Size->hasValue())
+      CommentOS << "Unknown-size Folded Spill";
+    else if (Size->getValue())
+      CommentOS << Size->getValue() << "-byte Folded Spill";
+  }
+
+  // Check for spill-induced copies (AIEBaseAsmPrinter.cpp:123-125).
+  if (MI->getAsmPrinterFlag(MachineInstr::ReloadReuse))
+    CommentOS << " Reload Reuse";
+}
+
+void HaydnAsmPrinter::emitSpillKPIComments() {
+  if (!HaydnAsmSpillKPI || !MF)
+    return;
+
+  const TargetInstrInfo *TII = MF->getSubtarget().getInstrInfo();
+  unsigned SpillCount = 0;
+  unsigned ReloadCount = 0;
+  uint64_t SpillBytes = 0;
+  uint64_t ReloadBytes = 0;
+
+  auto BestEffortMemBytes = [](const MachineInstr &MI) -> uint64_t {
+    if (!MI.memoperands_empty()) {
+      LocationSize S = (*MI.memoperands_begin())->getSize();
+      if (S.hasValue())
+        return S.getValue().getFixedValue();
+    }
+    // Haydn PEI CSR path often omits MMO; ST32/LD32 = 4, ST64/LD64 = 8.
+    // Opcode may be setDesc member (*_S0/_S1/_S2); use mayLoad width via
+    // operand 0 register class when possible.
+    if (MI.getNumOperands() >= 1 && MI.getOperand(0).isReg()) {
+      Register R = MI.getOperand(0).getReg();
+      if (R.isPhysical()) {
+        const TargetRegisterInfo *TRI =
+            MI.getMF()->getSubtarget().getRegisterInfo();
+        if (const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(R)) {
+          if (RC == &Haydn::DR64RegClass)
+            return 8;
+        }
+      }
+    }
+    return 4;
+  };
+
+  auto CountMI = [&](const MachineInstr &MI) {
+    bool CountedSpill = false;
+    bool CountedReload = false;
+    if (std::optional<LocationSize> Size = MI.getSpillSize(TII)) {
+      ++SpillCount;
+      CountedSpill = true;
+      if (Size->hasValue())
+        SpillBytes += Size->getValue().getFixedValue();
+    } else if (std::optional<LocationSize> Size = MI.getFoldedSpillSize(TII)) {
+      if (Size->hasValue() && Size->getValue().getKnownMinValue()) {
+        ++SpillCount;
+        CountedSpill = true;
+        SpillBytes += Size->getValue().getFixedValue();
+      }
+    }
+    if (std::optional<LocationSize> Size = MI.getRestoreSize(TII)) {
+      ++ReloadCount;
+      CountedReload = true;
+      if (Size->hasValue())
+        ReloadBytes += Size->getValue().getFixedValue();
+    } else if (std::optional<LocationSize> Size =
+                   MI.getFoldedRestoreSize(TII)) {
+      if (Size->hasValue() && Size->getValue().getKnownMinValue()) {
+        ++ReloadCount;
+        CountedReload = true;
+        ReloadBytes += Size->getValue().getFixedValue();
+      }
+    }
+
+    // HaydnFrameLowering PEI CSR save/restore emits FrameSetup ST* /
+    // FrameDestroy LD* with SP/scratch base and often without FixedStack
+    // MMO (unlike storeRegToStackSlot). getSpillSize/getRestoreSize miss
+    // those; soft-count them so hot-kernel KPI observes CSR traffic
+    // (fail-open observe only — not a packing authority).
+    if (!CountedSpill && MI.getFlag(MachineInstr::FrameSetup) &&
+        MI.mayStore() && !MI.mayLoad()) {
+      ++SpillCount;
+      SpillBytes += BestEffortMemBytes(MI);
+    }
+    if (!CountedReload && MI.getFlag(MachineInstr::FrameDestroy) &&
+        MI.mayLoad() && !MI.mayStore()) {
+      ++ReloadCount;
+      ReloadBytes += BestEffortMemBytes(MI);
+    }
+  };
+
+  for (const MachineBasicBlock &MBB : *MF) {
+    for (const MachineInstr &MI : MBB) {
+      if (MI.isBundle()) {
+        // Count children (BUNDLE header itself is not a memory op).
+        // AIEBaseAsmPrinter.cpp:149-156 walks isInsideBundle the same way.
+        MachineBasicBlock::const_instr_iterator I = ++MI.getIterator();
+        for (MachineBasicBlock::const_instr_iterator E = MBB.instr_end();
+             I != E && I->isInsideBundle(); ++I) {
+          if (I->isDebugInstr() || I->isMetaInstruction())
+            continue;
+          CountMI(*I);
+        }
+      } else if (!MI.isMetaInstruction() && !MI.isDebugInstr()) {
+        CountMI(MI);
+      }
+    }
+  }
+
+  // Haydn comment string is "//"; tag includes #<spill-kpi> for grepping.
+  // Patterned after #<swps> (HaydnAsmPrinter.cpp emitSMSSWPSComments).
+  OutStreamer->emitRawComment(
+      " #<spill-kpi> @" + MF->getName() + " spills=" + Twine(SpillCount) +
+          " spill-bytes=" + Twine(SpillBytes) +
+          " reloads=" + Twine(ReloadCount) +
+          " reload-bytes=" + Twine(ReloadBytes),
+      /*TabPrefix=*/false);
+}
+
+void HaydnAsmPrinter::emitFunctionBodyStart() {
+  // Function-level spill/reload KPI before the first BB (release -S greppable).
+  emitSpillKPIComments();
 }
 
 void HaydnAsmPrinter::emitSMSSWPSComments(const MachineBasicBlock &MBB) {
@@ -167,10 +303,10 @@ void HaydnAsmPrinter::registerSymbolicOperands(const MCInst &Inst) const {
 }
 
 void HaydnAsmPrinter::emitWrappedInst(const MCInst &Inst) {
-  // Product encode path is Bundle128 only (16 B parcels). The MCInst is
-  // streamed; HaydnMCCodeEmitter routes through encodeBundle128 (FlexMap
-  // materializes private slot peers at MCInst). No multi-width Mode-0/1/3
-  // product path. registerSymbolicOperands registers Expr fixups.
+  // Product encode path is Bundle128 only (16 B parcels). Standalone MCInst
+  // is streamed; HaydnMCCodeEmitter serialize-only path builds a transient
+  // BUNDLE128_FULL for residual logical/hand-asm (B3.5). CodeGen bundles
+  // already emit Format->Opcode composite. registerSymbolicOperands for Expr.
   //
   // History (retired): force-BUNDLE wrap + NOP-pad and variable-width
   // EW_16/32/48/64 bare emit were pre-Bundle128 cutover experiments.
@@ -228,12 +364,10 @@ void HaydnAsmPrinter::emitHWLoopWideInst(unsigned Sel,
     HWInst.addOperand(MCOperand::createExpr(EndExpr));   // offset2 (brtarget)
     HWInst.addOperand(MCOperand::createReg(RsReg));      // rs (GPR32 count)
   }
-  // align the SET parcel's OWN address to 4 bytes BEFORE emitting it.
-  // The hwloop offset fields are PC-relative to the SET address
-  // (FIXUP_HAYDN_HWLoopOff1/2, ÷4); under Bundle128-only every parcel is
-  // already 16-byte aligned, so this is a safety no-op that stays for any
-  // residual non-16 path.
-  OutStreamer->emitCodeAlignment(Align(4), &getSubtargetInfo());
+  // Align the SET parcel to Bundle128 (16 B) before emit. HWLoop offsets are
+  // PC-relative to the SET address (FIXUP_HAYDN_HWLoopOff1/2). A.6: never
+  // request sub-parcel Align(4) pads — writeNopData only accepts 16 B multiples.
+  OutStreamer->emitCodeAlignment(Align(16), &getSubtargetInfo());
   EmitToStreamer(*OutStreamer, HWInst);
   // Setup-gap NOPs: HaydnFixupHwLoops (addPreEmit after BranchRelaxation).
 }
@@ -329,7 +463,8 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         !MI->isMetaInstruction() && !MI->isDebugInstr()) {
       // Pad first, then labels (÷4). Do not use setPreInstrSymbol for these
       // symbols — parent AsmPrinter would emit PreInstr before this pad.
-      OutStreamer->emitCodeAlignment(Align(4), &getSubtargetInfo());
+      // A.6: Bundle128 pad only (16 B); implies 4-byte PC for ÷4 HWLoop fixups.
+      OutStreamer->emitCodeAlignment(Align(16), &getSubtargetInfo());
       for (MCSymbol *Sym : It->second)
         OutStreamer->emitLabel(Sym);
       It->second.clear();
@@ -358,207 +493,239 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       const MachineInstr *LastReal = getLastRealInstr(Parent);
       if (LastReal == MI) {
         // Pad once before END label(s), then clear (no double-define).
-        OutStreamer->emitCodeAlignment(Align(4), &getSubtargetInfo());
+        // A.6: 16 B Bundle128 parcels only (covers ÷4 HWLoop END alignment).
+        OutStreamer->emitCodeAlignment(Align(16), &getSubtargetInfo());
         for (MCSymbol *Sym : It->second)
           OutStreamer->emitLabel(Sym);
         It->second.clear();
       }
     }
   }
-  // Handle VLIW bundles: create an MC-level BUNDLE with embedded sub-instructions
-  // following Hexagon's pattern. Each child MachineInstr is lowered into a
-  // heap-allocated MCInst (via OutContext.createMCInst) and added as an
-  // MCOperand::createInst operand. The MC layer (InstPrinter, CodeEmitter)
-  // then handles the bundle as a unit.
+  // Handle VLIW bundles: AIEBaseAsmPrinter.cpp:128-184 peer (B3.4).
   //
-  // (single authority = Flags/placement, not opcode suffix): emit children
-  // in SLOT order (s0, s1, s2). Primary slot source after MCInstLower is
-  // HaydnMCFlags (from AltDescs placement). Suffix `_S<k>` is interim
-  // fallback only for PEI/Frame ops still emitted as Flex. Encoder materializes
-  // Flex variants at encode time; logical opcodes stay logical on MIR.
+  //   Bundle.add(children) → getFormatOrNull → for each slot:
+  //     Bundle.at(Slot) or NOP → lower → MC operand of composite
+  //
+  // Placement is Haydn::Bundle SlotMap from member Desc getSlotKind
+  // (AIEBaseMCFormats.cpp:66-75; AIEBundle.h:92-145) after B3.1 setDesc /
+  // B3.3 AltDesc clear. Residual multi-slot logicals still use Bundle
+  // pickSlot tryAdd (same as canAdd authority) — not a third printer
+  // re-slot path.
+  //
+  // Deleted vs pre-B3.4 (plan §1.2 / §3.1 third-authority ban):
+  //   * MCFlags get/set slot re-slot in this path
+  //   * Flex name-suffix auction / flex-variant-for-slot re-place
+  //   * emergency multi-parcel overflow split + split STATISTIC
+  //   * strict-bundles soft-off escape (always fail-closed)
+  //
+  // B3.5: composite MC opcode is Format->Opcode (AIEBaseAsmPrinter.cpp:161-164).
+  // Product sole live row is BUNDLE128_FULL; N-format-ready via Format table
+  // (no second product row). Encode operand order is S0-S1-S2 (BUNDLE128_FULL
+  // dag); MIR field order is Format.getSlots() S2→S1→S0 (B3.2). Keep
+  // BUNDLE-child pseudo expands (B/RET/SETCBR/BR_JT/CALL/LOADI32/LOAD_ADDR).
   if (MI->isBundle()) {
-    MCInst MCB;
-    MCB.setOpcode(Haydn::BUNDLE);
+    // Multi-parcel address materializers (LOADI32 MBB from BranchRelaxation,
+    // LOAD_ADDR) expand to LUI+ADDI32_W (2+ Bundle128 parcels). FinalizeBundle
+    // wraps them as singleton BUNDLEs. The generic isPseudo→continue path used
+    // to drop them silently so the following JALR_W jumped with a stale
+    // scratch (BAD_PC into .data / garbage — cf_branches, yarpgen seeds).
+    // Expand those singleton BUNDLEs via the standalone switch and return.
+    {
+      unsigned Expandable = 0, OtherReal = 0;
+      const MachineInstr *OnlyExpand = nullptr;
+      for (MachineBasicBlock::const_instr_iterator I = ++MI->getIterator(),
+                                                   E = MI->getParent()->instr_end();
+           I != E && I->isInsideBundle(); ++I) {
+        if (I->isDebugInstr() || I->isImplicitDef() || I->isKill() ||
+            I->isCFIInstruction())
+          continue;
+        unsigned Opc = I->getOpcode();
+        if (Opc == Haydn::LOADI32 || Opc == Haydn::LOAD_ADDR) {
+          ++Expandable;
+          OnlyExpand = &*I;
+          continue;
+        }
+        // Zero-size CodeGen pseudos that the child loop also skips.
+        if (I->isPseudo() && Opc != Haydn::B && Opc != Haydn::RET &&
+            Opc != Haydn::BR_JT && Opc != Haydn::PseudoCALLIndirect &&
+            Opc != Haydn::SETCBR_BEGIN && Opc != Haydn::SETCBR_END)
+          continue;
+        ++OtherReal;
+      }
+      if (Expandable == 1 && OtherReal == 0 && OnlyExpand) {
+        emitInstruction(OnlyExpand);
+        return;
+      }
+      if (Expandable > 0 && OtherReal > 0)
+        report_fatal_error(
+            "HaydnAsmPrinter: LOADI32/LOAD_ADDR packed with other ops in "
+            "BUNDLE — multi-parcel expand cannot share a Bundle128 composite");
+    }
 
-    // Lower each real child, then place it into its committed slot. Slots is
-    // indexed 0=S0, 1=S1, 2=S2.
-    const MCInstrInfo *MCInfo = TM.getMCInstrInfo();
-    MCInst *Slots[3] = {nullptr, nullptr, nullptr};
-    SmallVector<MCInst *, 3> UnslottedChildren; // no Flags and no Flex suffix
-    // Over-subscription: AIE-style fail closed. Silent split after
-    // pack invalidates branch/hwloop sizes. Opt-in emergency escape below.
-    SmallVector<MCInst *, 2> Overflow;
-    MachineBasicBlock::const_instr_iterator I = MI->getIterator();
-    ++I; // Skip the BUNDLE instruction itself
-    for (MachineBasicBlock::const_instr_iterator E = MI->getParent()->instr_end();
+    HaydnMCFormats Fmts;
+    Haydn::MCBundle Bundle(&Fmts);
+
+    // AIEBaseAsmPrinter.cpp:143-154: verbose per-slot Spill/Reload comments
+    // on BUNDLE children (base AsmPrinter only comments the BUNDLE header).
+    raw_ostream &CommentOS = OutStreamer->getCommentOS();
+    const bool VerboseSpillComments = isVerbose();
+
+    MachineBasicBlock::const_instr_iterator I = ++MI->getIterator();
+    for (MachineBasicBlock::const_instr_iterator E =
+             MI->getParent()->instr_end();
          I != E && I->isInsideBundle(); ++I) {
-      // Skip debug instructions, implicit defs, and pseudos within the bundle.
-      // These are not real instructions and should not be encoded.
-      if (I->isDebugInstr() || I->isImplicitDef())
+      // Skip debug / pure meta. B1.2 wraps *all* real and byte-emitting
+      // pseudos as BUNDLE children (HaydnFinalizeBundle / AIE FinalizeBundle).
+      // AsmPrinter must expand the same pseudos the standalone path expands
+      // (B→BEQZ_W R0, RET→JALR_W, SETCBR→CSRW_W). Skipping Haydn::B as a
+      // generic isPseudo() turned singleton BUNDLEs into all-NOP parcels —
+      // branch to fallthrough deleted in the binary → MEMORY_FAULT.
+      if (I->isDebugInstr() || I->isImplicitDef() || I->isKill() ||
+          I->isCFIInstruction())
         continue;
-      if (I->isPseudo())
-        continue;
+
+      if (VerboseSpillComments)
+        emitSpillReloadComments(&*I, CommentOS);
 
       // Allocate via MCContext so the child MCInst has stable lifetime.
-      // The MCContext owns the memory and frees it at destruction.
       MCInst *ChildInst = OutContext.createMCInst();
-      MCInstLowering.Lower(&*I, *ChildInst);
-
-      // primary = HaydnMCFlags (placement); fallback = Flex suffix.
-      unsigned SlotIdx = 3; // sentinel: no known placement
-      if (auto FlagSlot = HaydnMCFlags::getHaydnSlot(*ChildInst)) {
-        SlotIdx = *FlagSlot;
-      } else if (MCInfo) {
-        StringRef Name = MCInfo->getName(ChildInst->getOpcode());
-        if (Name.ends_with("_S0"))
-          SlotIdx = 0;
-        else if (Name.ends_with("_S1"))
-          SlotIdx = 1;
-        else if (Name.ends_with("_S2"))
-          SlotIdx = 2;
-      }
-      // True if Opc has a Bundle128 encode form in slot K (legal placement).
-      auto FlexVarInSlot = [&](unsigned Opc, unsigned K) -> unsigned {
-        return MCInfo ? getHaydnFlexVariantForSlot(Opc, K, *MCInfo) : 0;
-      };
-
-      if (SlotIdx < 3) {
-        if (!Slots[SlotIdx] && FlexVarInSlot(ChildInst->getOpcode(), SlotIdx)) {
-          // Ensure Flags carry placement even when only suffix was known.
-          HaydnMCFlags::setHaydnSlot(*ChildInst, SlotIdx);
-          Slots[SlotIdx] = ChildInst;
-        } else {
-          // Collision / illegal preferred slot: free LEGAL slot + re-Flag.
-          // Rewrite opcode only when already Flex (PEI/Frame interim);
-          // logical ops keep opcode (encoder materializes).
-          StringRef Name =
-              MCInfo ? MCInfo->getName(ChildInst->getOpcode()) : StringRef();
-          bool IsFlex = Name.ends_with("_S0") || Name.ends_with("_S1") ||
-                        Name.ends_with("_S2");
-          unsigned Placed = 3;
-          for (unsigned K = 0; K < 3 && Placed == 3; ++K) {
-            if (Slots[K])
-              continue;
-            unsigned Var = FlexVarInSlot(ChildInst->getOpcode(), K);
-            if (!Var)
-              continue; // not legal in this free slot
-            if (IsFlex)
-              ChildInst->setOpcode(Var);
-            HaydnMCFlags::setHaydnSlot(*ChildInst, K);
-            Placed = K;
-          }
-          if (Placed >= 3) {
-            Overflow.push_back(ChildInst);
-          } else {
-            Slots[Placed] = ChildInst;
-          }
+      unsigned ChildOpc = I->getOpcode();
+      if (ChildOpc == Haydn::SETCBR_BEGIN || ChildOpc == Haydn::SETCBR_END) {
+        assert(I->getOperand(0).isImm() && "SETCBR: cbr_sel must be immediate");
+        unsigned CbrSel = I->getOperand(0).getImm();
+        assert((CbrSel == 0 || CbrSel == 1) && "SETCBR: cbr_sel must be 0 or 1");
+        unsigned ValReg = I->getOperand(1).getReg();
+        unsigned CsrBase =
+            (ChildOpc == Haydn::SETCBR_BEGIN) ? 0x2Cu : 0x2Du;
+        unsigned CsrAddr = CsrBase + (CbrSel << 1);
+        ChildInst->setOpcode(Haydn::CSRW_W);
+        ChildInst->addOperand(MCOperand::createImm(CsrAddr));
+        ChildInst->addOperand(MCOperand::createReg(ValReg));
+      } else if (ChildOpc == Haydn::B) {
+        // Unconditional branch pseudo → BEQZ_W R0, target (same as
+        // emitInstruction case Haydn::B). Silent skip left all-NOP parcels
+        // (MEMORY_FAULT / wrong control flow vs pre-B1.2 codegen).
+        ChildInst->setOpcode(Haydn::BEQZ_W);
+        ChildInst->addOperand(MCOperand::createReg(Haydn::R0));
+        bool GotTarget = false;
+        for (const MachineOperand &MO : I->operands()) {
+          if (!MO.isMBB())
+            continue;
+          const MCSymbol *Sym = MO.getMBB()->getSymbol();
+          const MCExpr *Expr = MCSymbolRefExpr::create(Sym, OutContext);
+          ChildInst->addOperand(MCOperand::createExpr(Expr));
+          GotTarget = true;
+          break;
         }
-      } else {
-        UnslottedChildren.push_back(ChildInst);
-      }
-    }
-
-    // Place unslotted children in the first free LEGAL slot and stamp Flags.
-    // Encode strips NOP pads — Flags are the public placement authority.
-    for (MCInst *Child : UnslottedChildren) {
-      unsigned Placed = 3;
-      for (unsigned K = 0; K < 3; ++K) {
-        if (Slots[K])
-          continue;
-        if (!MCInfo ||
-            !getHaydnFlexVariantForSlot(Child->getOpcode(), K, *MCInfo))
-          continue;
-        Placed = K;
-        break;
-      }
-      if (Placed >= 3) {
-        // No free legal slot (e.g. second S0-only) → separate single-op bundle.
-        Overflow.push_back(Child);
+        if (!GotTarget)
+          llvm_unreachable("B pseudo in BUNDLE has no MBB operand");
+      } else if (ChildOpc == Haydn::RET) {
+        ChildInst->setOpcode(Haydn::JALR_W);
+        ChildInst->addOperand(MCOperand::createReg(Haydn::R0));
+        ChildInst->addOperand(MCOperand::createReg(Haydn::R15));
+        ChildInst->addOperand(MCOperand::createImm(0));
+      } else if (ChildOpc == Haydn::BR_JT) {
+        // Jump-table branch → JALR_W R0, addr, 0 (emitInstruction peer).
+        Register AddrReg = I->getOperand(0).getReg();
+        ChildInst->setOpcode(Haydn::JALR_W);
+        ChildInst->addOperand(MCOperand::createReg(Haydn::R0));
+        ChildInst->addOperand(MCOperand::createReg(AddrReg));
+        ChildInst->addOperand(MCOperand::createImm(0));
+      } else if (ChildOpc == Haydn::PseudoCALLIndirect) {
+        // Fnptr call → JALR_W R15, rs, 0 (emitInstruction peer).
+        Register Rs = I->getOperand(1).getReg();
+        ChildInst->setOpcode(Haydn::JALR_W);
+        ChildInst->addOperand(MCOperand::createReg(Haydn::R15));
+        ChildInst->addOperand(MCOperand::createReg(Rs));
+        ChildInst->addOperand(MCOperand::createImm(0));
+      } else if (I->isPseudo()) {
+        // Other CodeGen-only / zero-size pseudos: no Bundle128 child.
         continue;
-      }
-      HaydnMCFlags::setHaydnSlot(*Child, Placed);
-      Slots[Placed] = Child;
-    }
-
-    // Push children in s0/s1/s2 order; NOP-pad empty slots to ISSUE_SLOT_COUNT
-    // (3). Unused slots must be NOP.
-    for (unsigned K = 0; K < llvm::Haydn::ISSUE_SLOT_COUNT; ++K) {
-      if (Slots[K]) {
-        MCB.addOperand(MCOperand::createInst(Slots[K]));
       } else {
-        MCInst *NopInst = OutContext.createMCInst();
-        NopInst->setOpcode(Haydn::NOP);
-        MCB.addOperand(MCOperand::createInst(NopInst));
+        // Desc-only lower (AIE serialize-only). Placement is post-setDesc
+        // member identity / Bundle SlotMap (AIEBaseMCFormats.cpp:66-75).
+        MCInstLowering.Lower(&*I, *ChildInst);
       }
+
+      // AIE Bundle.add pre-condition: canAdd or fail closed (no emergency
+      // multi-parcel split — AIE assert Format / plan §3.1).
+      if (!Bundle.canAdd(ChildInst->getOpcode())) {
+        std::string Msg;
+        raw_string_ostream OS(Msg);
+        OS << "HaydnAsmPrinter: oversubscribed Bundle128 (Bundle.canAdd "
+              "failed) after pack — Desc-only placement, fail-closed (B3.4; "
+              "AIEBaseAsmPrinter.cpp:162 assert Format peer). Fix PostRA "
+              "placement. Bundle MIR:\n";
+        MI->print(OS);
+        report_fatal_error(Twine(OS.str()));
+      }
+      Bundle.add(ChildInst);
     }
 
-    // Register each child's Expr operands (e.g. JAL call targets) so undefined
-    // extern symbols make it into.symtab. See registerSymbolicOperands /.
-    registerSymbolicOperands(MCB);
-
-    EmitToStreamer(*OutStreamer, MCB);
-
-    // Over-subscription: strict mode fail-closed; default = emergency split
-    // (NatureDSP residual) with STATISTIC for packer debt tracking.
-    if (!Overflow.empty() && HaydnAsmPrinterStrictBundles) {
+    // Unsupported single child with no format/slot (standalone escape) must
+    // not silently become a 3×NOP parcel. Post-B3.1 children are members or
+    // expandable pseudos; residual gaps fail closed.
+    if (Bundle.isStandalone()) {
       std::string Msg;
       raw_string_ostream OS(Msg);
-      OS << "HaydnAsmPrinter: oversubscribed Bundle128 (slot collision) after "
-            "pack — refuse silent split (strict). Fix PostRA"
-            "placement or drop -haydn-asmprinter-strict-bundles. Bundle MIR:\n";
+      OS << "HaydnAsmPrinter: standalone unsupported BUNDLE child (no "
+            "getSlotKind / format) — refuse silent drop (B3.4). Bundle MIR:\n";
       MI->print(OS);
       report_fatal_error(Twine(OS.str()));
     }
-    if (!Overflow.empty()) {
-      ++NumAsmPrinterBundleSplits;
-      LLVM_DEBUG(dbgs() << "HaydnAsmPrinter: emergency split of oversubscribed "
-                           "bundle ("
-                        << Overflow.size() << " overflow child(ren))\n");
+
+    // AIE: const VLIWFormat *Format = Bundle.getFormatOrNull(); assert(Format);
+    // Empty stall (all meta skipped) has OccupiedSlots==0; product
+    // BUNDLE128_FULL covers every subset including empty (N-format-ready
+    // table scan via getPacketFormats).
+    const VLIWFormat *Format = Bundle.getFormatOrNull();
+    if (!Format) {
+      std::string Msg;
+      raw_string_ostream OS(Msg);
+      OS << "HaydnAsmPrinter: no covering packet format for OccupiedSlots="
+         << Bundle.getOccupiedSlots()
+         << " (getFormatOrNull null; AIEBaseAsmPrinter.cpp:162-163). "
+            "Bundle MIR:\n";
+      MI->print(OS);
+      report_fatal_error(Twine(OS.str()));
+    }
+    // AIEBaseAsmPrinter.cpp:161-164 — MCBundle.setOpcode(Format->Opcode).
+    // Product sole live row is BUNDLE128_FULL (N-format-ready: when more
+    // packet rows land, Format table selects Opcode; no hard-coded second
+    // product path here).
+    assert(Format->Opcode == Haydn::BUNDLE128_FULL &&
+           "product live format must be BUNDLE128_FULL (table-ready for N)");
+
+    MCInst MCB;
+    MCB.setOpcode(Format->Opcode);
+
+    // Emit in S0-S1-S2 encode order (BUNDLE128_FULL operand dag), not
+    // Format.getSlots() S2→S1→S0 MIR field order. Empty slots → NOP
+    // (AIE SlotInfo NOP peer; HaydnSlots NopOpc is 0 → Haydn::NOP).
+    for (unsigned K = 0; K < llvm::Haydn::ISSUE_SLOT_COUNT; ++K) {
+      MCSlotKind Slot = MCSlotKind(MCSlotKind::Haydn_SLOT_S0 +
+                                   static_cast<int>(K));
+      MCInst *Instr = Bundle.at(Slot);
+      if (!Instr) {
+        Instr = OutContext.createMCInst();
+        // Product HaydnSlots NopOpc is 0; use public Haydn::NOP (encoder
+        // materializes slot peer). N-format-ready: prefer SI->getNOPOpcode()
+        // when tablegen fills per-slot NOPs (AIE SlotInfo NOP peer).
+        unsigned NopOpc = Haydn::NOP;
+        if (const MCSlotInfo *SI = Fmts.getSlotInfo(Slot)) {
+          unsigned TableNop = SI->getNOPOpcode();
+          if (TableNop != 0)
+            NopOpc = TableNop;
+        }
+        Instr->setOpcode(NopOpc);
+      }
+      MCB.addOperand(MCOperand::createInst(Instr));
     }
 
-    // Emergency split path: emit each deferred child alone.
-    for (MCInst *OverChild : Overflow) {
-      unsigned OverSlot = 3;
-      if (auto FlagSlot = HaydnMCFlags::getHaydnSlot(*OverChild))
-        OverSlot = *FlagSlot;
-      else if (MCInfo) {
-        StringRef Nm = MCInfo->getName(OverChild->getOpcode());
-        if (Nm.ends_with("_S0"))
-          OverSlot = 0;
-        else if (Nm.ends_with("_S1"))
-          OverSlot = 1;
-        else if (Nm.ends_with("_S2"))
-          OverSlot = 2;
-      }
-      if (OverSlot >= 3 || !MCInfo ||
-          !getHaydnFlexVariantForSlot(OverChild->getOpcode(), OverSlot,
-                                      *MCInfo)) {
-        OverSlot = 0;
-        if (MCInfo) {
-          for (unsigned K = 0; K < 3; ++K)
-            if (getHaydnFlexVariantForSlot(OverChild->getOpcode(), K, *MCInfo)) {
-              OverSlot = K;
-              break;
-            }
-        }
-      }
-      HaydnMCFlags::setHaydnSlot(*OverChild, OverSlot);
-      MCInst *SlotsO[3] = {nullptr, nullptr, nullptr};
-      SlotsO[OverSlot] = OverChild;
-      MCInst OverMCB;
-      OverMCB.setOpcode(Haydn::BUNDLE);
-      for (unsigned K = 0; K < llvm::Haydn::ISSUE_SLOT_COUNT; ++K) {
-        if (SlotsO[K])
-          OverMCB.addOperand(MCOperand::createInst(SlotsO[K]));
-        else {
-          MCInst *NopInst = OutContext.createMCInst();
-          NopInst->setOpcode(Haydn::NOP);
-          OverMCB.addOperand(MCOperand::createInst(NopInst));
-        }
-      }
-      registerSymbolicOperands(OverMCB);
-      EmitToStreamer(*OutStreamer, OverMCB);
-    }
+    // Register each child's Expr operands (e.g. JAL call targets) so undefined
+    // extern symbols make it into.symtab. See registerSymbolicOperands.
+    registerSymbolicOperands(MCB);
+    EmitToStreamer(*OutStreamer, MCB);
     return;
   }
 
@@ -972,118 +1139,13 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     EmitToStreamer(*OutStreamer, Tmp);
     return;
   }
-  case Haydn::SET_HWLOOP: {
-    // Hardware loop setup with immediate trip count.
-    // The SET_HWLOOP pseudo carries: sel, loop_start MBB, loop_end MBB, cnt.
-    // The hardware semantics:
-    // HWLR_BEGIN[sel] = PC + (offset1 << 2) / loop start address
-    // HWLR_END[sel] = PC + (offset2 << 2) / loop end address
-    // HWLR_COUNT[sel] = cnt / iteration count
-    //
-    // The ISA only has a register-based HWLOOP instruction (SET_HWLOOP_REG
-    // in HWLRRRR format). For immediate counts, emit:
-    // ADDI32 scratch, R0, cnt (load immediate into scratch register)
-    // SET_HWLOOP_REG sel, loop_start, loop_end, scratch
-    assert(MI->getOperand(0).isImm() && "SET_HWLOOP: sel must be immediate");
-    assert(MI->getOperand(1).isMBB() && "SET_HWLOOP: loop_start must be MBB");
-    assert(MI->getOperand(2).isMBB() && "SET_HWLOOP: loop_end must be MBB");
-    assert(MI->getOperand(3).isImm() && "SET_HWLOOP: cnt must be immediate");
-
-    unsigned Sel = MI->getOperand(0).getImm();
-    MachineBasicBlock *StartMBB = MI->getOperand(1).getMBB();
-    MachineBasicBlock *EndMBB = MI->getOperand(2).getMBB();
-    int64_t Cnt = MI->getOperand(3).getImm();
-
-    // Fix for G13 (.LBB_-1): the HWLoop pass captures START=Header, END=Latch
-    // from the loop structure, but a later pass (block-placement or the post-RA
-    // scheduler) can merge the preheader+header+latch+exit into one block or
-    // renumber the referenced MBBs out of the function's MBB list
-    // (getNumber < 0). In that case the symbol renders as ".LBB<fn>_-1"
-    // (invalid). : always use a per-instance temp START symbol
-    // (getOrCreateHwloopStartSym) referenced via PC-relative fixup, mirroring
-    // the inclusive-END mechanism. emitInstruction emits it — preceded by a
-    // 4-byte align pad — at the body's first real instruction, so HWLR_BEGIN
-    // is ÷4-representable regardless of intervening 2/6-byte parcels (the
-    // c8013cb34c4d SET-only pad was insufficient; a hoisted 6-byte WIDE
-    // parcel between SET and body still left the stream at 2-mod-4).
-    //
-    // For END (inclusive), if the captured Latch MBB was renumbered out
-    // fall back to the current block (the merged block IS the latch).
-    MachineBasicBlock *StartBody =
-        (StartMBB->getNumber() < 0 || StartMBB == MI->getParent())
-            ? const_cast<MachineBasicBlock *>(MI->getParent())
-            : StartMBB;
-    MachineBasicBlock *LatchMBB =
-        (EndMBB->getNumber() < 0) ? const_cast<MachineBasicBlock *>(MI->getParent())
-                                  : EndMBB;
-    // Closed rule: never create START/END temp symbols unless the body will
-    // emit real instructions that flush them. Otherwise MC aborts with
-    // "Undefined temporary symbol". FixupHwLoops must demote range-bad ZOLs;
-    // this is the emit-side half of the same contract.
-    if (!getLastRealInstr(StartBody) || !getLastRealInstr(LatchMBB))
-      return;
-    MCSymbol *StartSym = getOrCreateHwloopStartSym(StartBody);
-    MCSymbol *EndSym = getOrCreateHwloopEndSym(LatchMBB);
-
-    // Emit a single 48-bit WIDE SET_HWLOOP_W (§5.11 all-immediate: uimm16_cnt
-    // + uimm6_off1 + uimm12_off2 + hwlr_sel). The count must fit uimm16
-    // (0..65535); the IR-level HardwareLoops pass (HaydnHardwareLoops.cpp
-    // range-overflow check, NumHWLoopRangeOverflow statistic) declines
-    // conversion for pathological loops whose body exceeds the uimm12 END
-    // field, and a uimm16 count overflow is the same class of guard. If a
-    // count outside 0..65535 somehow reaches here, there is no encoding for
-    // it — fail loudly (the OLD R12-spill + SET_HWLOOP_REG placeholder
-    // fallback was removed along with the OLD path).
-    if (Cnt >= 0 && Cnt <= 0xFFFF) {
-      emitHWLoopWideInst(Sel, StartSym, EndSym,
-                         /*CntImm=*/std::optional<int64_t>(Cnt));
-      return;
-    }
-    report_fatal_error("SET_HWLOOP: trip count out of uimm16 range "
-                       "(no WIDE encoding; OLD placeholder path removed)");
-  }
-  case Haydn::SET_HWLOOP_REG: {
-    // Hardware loop setup with register trip count.
-    // The SET_HWLOOP_REG pseudo carries: sel, loop_start MBB, loop_end MBB, rs.
-    // Same as SET_HWLOOP but trip count comes from a register.
-    assert(MI->getOperand(0).isImm() && "SET_HWLOOP_REG: sel must be immediate");
-    assert(MI->getOperand(1).isMBB() && "SET_HWLOOP_REG: loop_start must be MBB");
-    assert(MI->getOperand(2).isMBB() && "SET_HWLOOP_REG: loop_end must be MBB");
-    assert(MI->getOperand(3).isReg() && "SET_HWLOOP_REG: rs must be register");
-
-    unsigned Sel = MI->getOperand(0).getImm();
-    MachineBasicBlock *StartMBB = MI->getOperand(1).getMBB();
-    MachineBasicBlock *EndMBB = MI->getOperand(2).getMBB();
-    unsigned Rs = MI->getOperand(3).getReg();
-
-    // Fix for G13 (.LBB_-1): see SET_HWLOOP case above for rationale. :
-    // route START through getOrCreateHwloopStartSym (per-instance temp symbol
-    // emitted aligned at the body's first real instr) so HWLR_BEGIN is ÷4
-    // representable. When the captured Header/Latch MBBs were renumbered/merged
-    // out (getNumber < 0) or the Header is the same block as this
-    // instruction, fall back to the current block.
-    MachineBasicBlock *StartBody =
-        (StartMBB->getNumber() < 0 || StartMBB == MI->getParent())
-            ? const_cast<MachineBasicBlock *>(MI->getParent())
-            : StartMBB;
-    // HWLR_END is INCLUSIVE (address of the latch's last real body
-    // instruction). The post-RA pass passes the Latch MBB as the END operand.
-    // When the Latch was merged/renumbered out, use the current block.
-    MachineBasicBlock *LatchMBB =
-        (EndMBB->getNumber() < 0) ? const_cast<MachineBasicBlock *>(MI->getParent())
-                                  : EndMBB;
-    // Same closed rule as SET_HWLOOP: no symbols without a real body.
-    if (!getLastRealInstr(StartBody) || !getLastRealInstr(LatchMBB))
-      return;
-    MCSymbol *StartSym = getOrCreateHwloopStartSym(StartBody);
-    MCSymbol *EndSym = getOrCreateHwloopEndSym(LatchMBB);
-
-    // Emit a single 48-bit WIDE SET_HWLOOP_F2_W (§5.12: rs(count) +
-    // uimm6_off1 + uimm12_off2 + hwlr_sel). The offsets remain symbolic
-    // PC-relative (loop_begin/end are forward refs); the count comes from Rs.
-    emitHWLoopWideInst(Sel, StartSym, EndSym, /*CntImm=*/std::nullopt, Rs);
-    return;
-  }
+  case Haydn::SET_HWLOOP:
+  case Haydn::SET_HWLOOP_REG:
+    // Must be SET_HWLOOP_{W,F2_W} before pack (HaydnExpandPseudos /
+    // HaydnHardwareLoops). Printer is Desc-only for those forms.
+    report_fatal_error(
+        "HaydnAsmPrinter: residual SET_HWLOOP{,_REG} pseudo — expand to "
+        "SET_HWLOOP_{W,F2_W} in ExpandPseudos before PostRA pack");
   }
 
   // Skip remaining pseudo instructions that don't have expansions

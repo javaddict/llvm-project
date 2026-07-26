@@ -22,13 +22,18 @@
 // Test design: drive each AE_*XC family (32x2, 16x4, scalar 32, scalar 16)
 // through its 3-arg form after a WUR_AE_CBEGIN0/CEND0 setup, and FileCheck
 // that both `csrw` (setup survives) and `d_ldw_cb_imm`/`d_sdw_cb_imm`
-// (the CB access) appear. The 4-arg form is checked too for parity.
+// (the CB access) appear where the macro is EXACT. AE_L16_XC is EMULATED
+// (i16 load + soft CBR step; no 64b D_LDW_CB trunc) — see HAYDN_COMPAT_TIER.
+// The 4-arg form is checked too for parity.
 //
-// RUN: clang -target haydn-unknown-elf \
+// Full model (-mcpu=haydn): simd + bit-reversed so haydn.h parses. Default
+// generic is agu+hwloop only. Use resource-dir haydn_dsp.h (not source -I).
+// RUN: clang -target haydn-unknown-elf -mcpu=haydn \
 // RUN: -mllvm -global-isel-abort=1 -O1 -ffreestanding \
 // RUN: -Wno-implicit-function-declaration \
 // RUN: -Wno-incompatible-pointer-types -Wno-int-conversion \
-// RUN: -I%S/../../../../../clang/lib/Headers -include stdint.h \
+// RUN: -include stdint.h \
+// RUN: -D__HAYDN_ALLOW_INEXACT_AE \
 // RUN: -include haydn_dsp.h \
 // RUN: -S %s -o %t.s
 // RUN: FileCheck --check-prefix=ASM %s < %t.s
@@ -117,9 +122,10 @@ void cb_store_s32_3arg(ae_int32 *p, ae_int32 v) {
 }
 
 //scalar 16 family: AE_L16_XC / AE_S16_0_XC
+// AE_L16_XC is permanently EMULATED (ld16 + haydn_cbr_step); AE_S16_0_XC is CB.
 
 // ASM-LABEL: cb_load_s16_3arg:
-// ASM: d_ldw_cb_imm{{(\.s[012])?}}
+// ASM: ld16
 ae_int16 cb_load_s16_3arg(ae_int16 *p) {
   ae_int16 t;
   AE_L16_XC(t, p, +2);
