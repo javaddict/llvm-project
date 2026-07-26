@@ -5,9 +5,7 @@
 # RUN: llvm-nm %t | FileCheck --check-prefix=NM %s
 # RUN: llvm-objdump -d --triple=haydn-unknown-elf %t | FileCheck %s
 #
-# REGRESSION: out-of-range BEQ must insert Bundle128 LUI+ADDI32+JALR thunk
-# (R12 AT). Cross-section target so MC emits a reloc instead of failing
-# applyFixup on a same-section .space gap.
+# Out-of-range BEQ → R0 soft-zero borrow veneer (48 B).
 
 # RELOCS: R_HAYDN_WIDE_BranchSImm12_RI far_target
 
@@ -28,12 +26,13 @@ far_target:
     ADD32 R3, R3, R3
     .size far_target, .-far_target
 
-# Address order: thunk @ low, then _start, then far.
-# CHECK-LABEL: <__haydn_thunk_far_target>:
-# CHECK: {{.*}} lui{{.*}}r12,
-# CHECK: {{.*}} addi32{{.*}}r12,
-# CHECK: {{.*}} jalr{{.*}}r0,{{.*}}r12
 # CHECK-LABEL: <_start>:
 # CHECK: {{.*}} beq{{.*}}r0,{{.*}}r1,
+# CHECK-LABEL: <__haydn_thunk_far_target>:
+# CHECK: {{.*}} lui{{.*}}r0,
+# CHECK: {{.*}} addi32{{.*}}r0,{{.*}}r0,
+# CHECK: {{.*}} jalr{{.*}}r0,{{.*}}r0
+# CHECK-NOT: r12
+# CHECK-NOT: subi32
 # CHECK-LABEL: <far_target>:
 # CHECK: {{.*}} add32

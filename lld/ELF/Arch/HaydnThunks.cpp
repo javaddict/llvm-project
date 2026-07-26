@@ -6,35 +6,26 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Haydn long-branch thunk. Extracted from the shared upstream Thunks.cpp so
-// that shared file only retains a minimal `case EM_HAYDN:` dispatch case that
-// forwards to `addThunkHaydn()` (declared in HaydnThunks.h). This satisfies
-// HC#0 ("Never modify upstream LLVM files except via Haydn-specific
-// subdirectories").
+// Haydn long-branch / long-call thunks (G-LLD-VENEER).
 //
-// When a branch (R_HAYDN_BranchSImm16 / R_HAYDN_WIDE_BranchSImm12[_RI]) or
-// call (R_HAYDN_CallSImm20 / R_HAYDN_WIDE_CallSImm20) target is out of
-// range, this thunk is inserted.
+// Bundle128 parcels are 16 bytes. HI12/LO20 materialize the target into a
+// borrowable soft-zero R0, then JALR jumps.
 //
-// Bundle128-only emission (D456 / D489, post multi-width retire):
-// every encoded parcel is 16 bytes `{s2[39:0], s1[39:0], s0[47:0]}` with idle
-// slots zero. The long-call sequence is three Bundle128 parcels (48 bytes):
+// Unified call + branch veneer — 3 parcels (48 B), no R12:
+//   LUI    R0, hi12(target+addend)
+//   ADDI32 R0, R0, lo20(...)
+//   JALR   R0, R0, 0          // PC=target; R0=link (never falls through)
 //
-//   LUI    R12, hi12(target)       ; bits[31:20] = imm12  (HI12 @ s0 bits[15:4])
-//   ADDI32 R12, R12, lo20(target)  ; bits[19:0]  += sext(imm20)
-//   JALR   R0,  R12, 0             ; PC = R12  (link discarded)
+// Why R0, not R12:
+//   * R0 is soft-zero and product law allows borrow (prologue re-zeros on
+//     entry; mid-fn far branch leaves R0=link — documented residual).
+//   * R12 is a normal caller-saved allocatable GPR — do not permanently
+//     reserve it as linker AT (no free AT).
+//   * Call sites already use JAL/JAL_W → LR (R15) holds the real return
+//     address; veneer must not clobber LR. JALR rd=R0 preserves LR.
+//   * Branch sites do not need a stack save of R12; R0 is free scratch.
 //
-// HI/LO split is the ISA-43 / CB-117 convention (pairs with MC HI12/LO20):
-//   HI12 = (VA + 0x80000) >> 20
-//   LO20 = VA - (HI12 << 20)          // signed 20-bit; ADDI32 sign-extends
-// Reconstruction: (HI12 << 20) + sext(LO20) = VA.
-//
-// R12 is the reserved linker/assembler scratch ("AT", D177/L145): never an
-// argument or return register. Mirrors ARM `ip` / MIPS `at`.
-//
-// The previous 12-byte multi-width LUI_W+JALR_W path (6+6 WIDE parcels) is
-// retired: the Bundle128 decoder treats those bytes as a single 16-byte
-// window and prints `<unknown>`, and CodeGen never emits that layout.
+// Relocation addend is honored. getThunkSectionSpacing() lives in Haydn.cpp.
 //
 //===----------------------------------------------------------------------===//
 
@@ -60,90 +51,82 @@ using namespace lld::elf;
 
 namespace {
 
-/// Bundle128 long-call thunk: LUI + ADDI32 + JALR, three 16-byte parcels.
-class HaydnThunk : public Thunk {
-public:
-  HaydnThunk(Ctx &ctx, const InputSection &isec, Relocation &rel, Symbol &dest)
-      : Thunk(ctx, dest, 0), relOffset(rel.offset) {
-    // Bundle128 parcels are 16-byte aligned (D487 size model).
-    alignment = 16;
-  }
-  uint32_t relOffset;
-  uint32_t size() override { return 48; }
-  void writeTo(uint8_t *buf) override;
-  void addSymbols(ThunkSection &isec) override;
-};
-
 /// Write a little-endian 128-bit word as 16 bytes.
 static void writeBundle128LE(uint8_t *Buf, uint64_t Lo, uint64_t Hi) {
   endian::write64le(Buf, Lo);
   endian::write64le(Buf + 8, Hi);
 }
 
-/// Bundle128 LUI R12, Imm12. Template from llvm-mc for `lui r12, 0`; HI12
-/// field is LoWord bits[15:4] (HaydnRelocLayout HI12 / D489).
-static void writeLuiR12(uint8_t *Buf, uint32_t Imm12) {
-  // lui r12, 0 → 0c 00 00 00 c0 05 00 00 00 00 00 00 00 00 00 00
-  // LE u64 of first 8 bytes: 0x000005c00000000c
-  uint64_t Lo = 0x000005c00000000cull;
+static void writeLuiR0(uint8_t *Buf, uint32_t Imm12) {
+  // lui r0, Imm12 — base Lo 0x000005c000000000; HI12 in bits[15:4]
+  uint64_t Lo = 0x000005c000000000ull;
   Lo &= ~0xFFF0ull;
   Lo |= (static_cast<uint64_t>(Imm12 & 0xFFFu) << 4);
   writeBundle128LE(Buf, Lo, 0);
 }
 
-/// Bundle128 ADDI32 R12, R12, Imm20. Template from llvm-mc for
-/// `addi32 r12, r12, 0`; LO20 field is LoWord bits[37:18].
-static void writeAddi32R12(uint8_t *Buf, uint32_t Imm20) {
-  // addi32 r12, r12, 0 → cc 00 00 00 40 02 00 00 00 00 00 00 00 00 00 00
-  // LE u64 of first 8 bytes: 0x00000240000000cc
-  uint64_t Lo = 0x00000240000000ccull;
+static void writeAddi32R0R0(uint8_t *Buf, uint32_t Imm20) {
+  // addi32 r0, r0, Imm20 — base Lo 0x0000024000000000; LO20 in bits[37:18]
+  uint64_t Lo = 0x0000024000000000ull;
   Lo &= ~(0xFFFFFull << 18);
   Lo |= (static_cast<uint64_t>(Imm20 & 0xFFFFFu) << 18);
   writeBundle128LE(Buf, Lo, 0);
 }
 
-/// Bundle128 JALR R0, R12, 0 (discard link, jump through AT).
-static void writeJalrR0R12(uint8_t *Buf) {
-  // jalr r0, r12, 0 → 0c 00 00 00 c0 0e 00 00 00 00 00 00 00 00 00 00
-  // LE u64 of first 8 bytes: 0x00000ec00000000c
-  writeBundle128LE(Buf, 0x00000ec00000000cull, 0);
+static void writeJalrR0R0(uint8_t *Buf) {
+  // jalr r0, r0, 0
+  writeBundle128LE(Buf, 0x00000ec000000000ull, 0);
 }
 
-} // namespace
-
-void HaydnThunk::writeTo(uint8_t *Buf) {
-  uint64_t TargetVA = destination.getVA(ctx, addend);
-
-  // HI12/LO20 MIPS-style split (matches HaydnRelocLayout Hi12/Lo20 + CB-117).
+static void splitHiLo(uint64_t TargetVA, uint32_t &Hi12, uint32_t &Lo20) {
   uint64_t Hi = (TargetVA + 0x80000ull) >> 20;
-  int64_t Lo = static_cast<int64_t>(TargetVA) -
-               static_cast<int64_t>(Hi << 20);
+  int64_t Lo =
+      static_cast<int64_t>(TargetVA) - static_cast<int64_t>(Hi << 20);
   assert(Hi <= 0xFFFu && "HI12 out of range for LUI");
   assert(isInt<20>(Lo) && "LO20 out of range for ADDI32");
-
-  writeLuiR12(Buf + 0, static_cast<uint32_t>(Hi));
-  writeAddi32R12(Buf + 16, static_cast<uint32_t>(Lo) & 0xFFFFFu);
-  writeJalrR0R12(Buf + 32);
+  Hi12 = static_cast<uint32_t>(Hi);
+  Lo20 = static_cast<uint32_t>(Lo) & 0xFFFFFu;
 }
 
-void HaydnThunk::addSymbols(ThunkSection &Isec) {
+/// Far call / far branch veneer. Borrows soft-zero R0; never touches R12/LR.
+/// Size: 3 × 16 = 48 bytes.
+class HaydnLongThunk : public Thunk {
+public:
+  HaydnLongThunk(Ctx &ctx, Relocation &rel, Symbol &dest)
+      : Thunk(ctx, dest, rel.addend) {
+    alignment = 16;
+  }
+  uint32_t size() override { return 48; }
+  void writeTo(uint8_t *buf) override;
+  void addSymbols(ThunkSection &isec) override;
+};
+
+void HaydnLongThunk::writeTo(uint8_t *Buf) {
+  uint32_t Hi12, Lo20;
+  splitHiLo(destination.getVA(ctx, addend), Hi12, Lo20);
+  writeLuiR0(Buf + 0, Hi12);
+  writeAddi32R0R0(Buf + 16, Lo20);
+  writeJalrR0R0(Buf + 32);
+}
+
+void HaydnLongThunk::addSymbols(ThunkSection &Isec) {
   addSymbol(ctx.saver.save("__haydn_thunk_" + destination.getName()), STT_FUNC,
             0, Isec);
 }
 
-// Factory invoked from the shared Thunks.cpp dispatch case for EM_HAYDN.
-// Keep this switch in sync with Haydn::needsThunk — every RelType that can
-// request a thunk must be constructible here.
+} // namespace
+
 std::unique_ptr<Thunk> lld::elf::addThunkHaydn(Ctx &ctx,
                                                const InputSection &Isec,
                                                Relocation &Rel, Symbol &S) {
+  (void)Isec;
   switch (Rel.type) {
-  case R_HAYDN_BranchSImm16:
   case R_HAYDN_CallSImm20:
+  case R_HAYDN_WIDE_CallSImm20:
+  case R_HAYDN_BranchSImm16:
   case R_HAYDN_WIDE_BranchSImm12:
   case R_HAYDN_WIDE_BranchSImm12_RI:
-  case R_HAYDN_WIDE_CallSImm20: // CB-112: JAL_W soft-div/libcall far reach
-    return std::make_unique<HaydnThunk>(ctx, Isec, Rel, S);
+    return std::make_unique<HaydnLongThunk>(ctx, Rel, S);
   default:
     Fatal(ctx) << "unrecognized relocation " << Rel.type << " to " << &S
                << " for Haydn target";

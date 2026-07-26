@@ -2,20 +2,15 @@
 # RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.o
 # RUN: ld.lld %t.o -o %t --section-start=.text=0x10000
 # RUN: llvm-objdump -d --triple=haydn-unknown-elf %t | FileCheck %s
+#
+# Call veneer uses soft-zero R0 only — never R1–R7 (args) or R12.
 
-// REGRESSION TEST (D177 / L145 / F1): Long-call thunk must use R12 (AT), NOT R1.
-//
-// Bundle128 thunk (post D456): LUI r12 + ADDI32 r12,r12 + JALR r0,r12 — three
-// 16-byte parcels (48 bytes). Touches only R12 among GPRs.
-//
-// Comment-string note: Haydn AsmParser CommentString is "//".
-
-// Thunk first (low address).
 # CHECK-LABEL: <__haydn_thunk_callee>:
-# CHECK: lui{{.*}}r12,
-# CHECK: addi32{{.*}}r12,{{.*}}r12,
-# CHECK: jalr{{.*}}r0,{{.*}}r12
+# CHECK: lui{{.*}}r0,
+# CHECK: addi32{{.*}}r0,{{.*}}r0,
+# CHECK: jalr{{.*}}r0,{{.*}}r0
 # CHECK-NOT: lui{{.*}}r1,
+# CHECK-NOT: r12
 
 .section .text
 .globl _start
@@ -29,9 +24,7 @@ _start:
     addi32 r5, r0, 46
     addi32 r6, r0, 47
     addi32 r7, r0, 48
-
     jal lr, callee
-
     .space 0x140000
 
 .globl callee
@@ -39,5 +32,4 @@ callee:
     # CHECK-LABEL: <callee>:
     add32 r1, r1, r1
     .size callee, .-callee
-
     .size _start, .-_start
