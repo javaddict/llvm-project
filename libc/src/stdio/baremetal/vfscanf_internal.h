@@ -25,20 +25,30 @@ namespace LIBC_NAMESPACE_DECL {
 
 namespace internal {
 
+// Baremetal FILE has no libc File::ungetc; scanf converters always
+// read one past and push back once (leading whitespace skip for %s/%d,
+// terminator for %s, etc.). A single-char pushback buffer is required.
 class StreamReader : public scanf_core::Reader<StreamReader> {
   ::FILE *stream;
+  // -1 = empty; otherwise the pushed-back character (as unsigned char).
+  int pushback = -1;
 
 public:
   LIBC_INLINE StreamReader(::FILE *stream) : stream(stream) {}
 
   LIBC_INLINE char getc() {
+    if (pushback >= 0) {
+      char c = static_cast<char>(pushback);
+      pushback = -1;
+      return c;
+    }
     char c;
     auto result = __llvm_libc_stdio_read(stream, &c, 1);
     if (result != 1)
       return '\0';
     return c;
   }
-  LIBC_INLINE void ungetc(int) {}
+  LIBC_INLINE void ungetc(int c) { pushback = c & 0xff; }
 };
 
 } // namespace internal

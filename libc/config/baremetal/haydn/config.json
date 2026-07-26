@@ -11,5 +11,10 @@
     "LIBC_CONF_ENABLE_STRONG_STACK_PROTECTOR": {
       "value": false
     }
+  },
+  "printf": {
+    "LIBC_CONF_PRINTF_DISABLE_FLOAT": {
+      "value": false
+    }
   }
 }
