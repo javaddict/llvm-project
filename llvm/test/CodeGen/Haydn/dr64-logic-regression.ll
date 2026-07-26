@@ -9,33 +9,27 @@
 ;
 ; REGRESSION TEST: DR64 logic and transcendental intrinsics.
 ;
-; Purpose: Verify that 64-bit bitwise NOT, normalization (NSA), and
-; transcendental function intrinsics (LOG2, EXP2, RECIP, SQRT) emit
-; the correct target instructions. These are GPR32 unary operations
-; that are easy to confuse with similar DR64 variants.
-;
-; Why this test: NSA variants (NSA32, NSAU32, NSA64, NSA16_L, NSA32_L
-; NSAZ64, NSAZ16_L, NSAZ32_L) have similar names but different register
-; banks (GPR32 vs DR64) and behavior. Transcendental functions are
-; computed by hardware lookup tables — if the selector maps them to the
-; wrong instruction, the result is silently incorrect. This test catches
-; selector regressions.
+; Purpose: Verify NSA + transcendental intrinsics emit the correct
+; target instructions. NSA32/NSAU32 are ALU32 GPR32→GPR32; NSA64/NSAZ*/
+; NSA*_L are ALU64 R_GD (DR64→GPR32) matching FormatsALU64 members.
+; Transcendentals are GPR32 unary LUT ops. Wrong bank selection is a
+; silent correctness bug; this test catches selector regressions.
 ;
 ; Test design: Each function invokes one intrinsic and returns the
 ; result. GPR32 results are returned in R0, DR64 results in D0.
 
 ;===----------------------------------------------------------------------===;
-; Normalization (NSA) — GPR32 unary
+; Normalization (NSA) — NSA32/U GPR32; NSA64 family R_GD (i64→i32)
 ;===----------------------------------------------------------------------===;
 
 declare i32 @llvm.haydn.nsa32(i32)
 declare i32 @llvm.haydn.nsau32(i32)
-declare i32 @llvm.haydn.nsa64(i32)
-declare i32 @llvm.haydn.nsa16.l(i32)
-declare i32 @llvm.haydn.nsa32.l(i32)
-declare i32 @llvm.haydn.nsaz64(i32)
-declare i32 @llvm.haydn.nsaz16.l(i32)
-declare i32 @llvm.haydn.nsaz32.l(i32)
+declare i32 @llvm.haydn.nsa64(i64)
+declare i32 @llvm.haydn.nsa16.l(i64)
+declare i32 @llvm.haydn.nsa32.l(i64)
+declare i32 @llvm.haydn.nsaz64(i64)
+declare i32 @llvm.haydn.nsaz16.l(i64)
+declare i32 @llvm.haydn.nsaz32.l(i64)
 
 define i32 @test_nsa32(i32 %a) {
 ; CHECK-LABEL: test_nsa32:
@@ -51,45 +45,45 @@ define i32 @test_nsau32(i32 %a) {
   ret i32 %r
 }
 
-define i32 @test_nsa64(i32 %a) {
+define i32 @test_nsa64(i64 %a) {
 ; CHECK-LABEL: test_nsa64:
 ; CHECK: nsa64
-  %r = call i32 @llvm.haydn.nsa64(i32 %a)
+  %r = call i32 @llvm.haydn.nsa64(i64 %a)
   ret i32 %r
 }
 
-define i32 @test_nsa16_l(i32 %a) {
+define i32 @test_nsa16_l(i64 %a) {
 ; CHECK-LABEL: test_nsa16_l:
 ; CHECK: nsa16_l
-  %r = call i32 @llvm.haydn.nsa16.l(i32 %a)
+  %r = call i32 @llvm.haydn.nsa16.l(i64 %a)
   ret i32 %r
 }
 
-define i32 @test_nsa32_l(i32 %a) {
+define i32 @test_nsa32_l(i64 %a) {
 ; CHECK-LABEL: test_nsa32_l:
 ; CHECK: nsa32_l
-  %r = call i32 @llvm.haydn.nsa32.l(i32 %a)
+  %r = call i32 @llvm.haydn.nsa32.l(i64 %a)
   ret i32 %r
 }
 
-define i32 @test_nsaz64(i32 %a) {
+define i32 @test_nsaz64(i64 %a) {
 ; CHECK-LABEL: test_nsaz64:
 ; CHECK: nsaz64
-  %r = call i32 @llvm.haydn.nsaz64(i32 %a)
+  %r = call i32 @llvm.haydn.nsaz64(i64 %a)
   ret i32 %r
 }
 
-define i32 @test_nsaz16_l(i32 %a) {
+define i32 @test_nsaz16_l(i64 %a) {
 ; CHECK-LABEL: test_nsaz16_l:
 ; CHECK: nsaz16_l
-  %r = call i32 @llvm.haydn.nsaz16.l(i32 %a)
+  %r = call i32 @llvm.haydn.nsaz16.l(i64 %a)
   ret i32 %r
 }
 
-define i32 @test_nsaz32_l(i32 %a) {
+define i32 @test_nsaz32_l(i64 %a) {
 ; CHECK-LABEL: test_nsaz32_l:
 ; CHECK: nsaz32_l
-  %r = call i32 @llvm.haydn.nsaz32.l(i32 %a)
+  %r = call i32 @llvm.haydn.nsaz32.l(i64 %a)
   ret i32 %r
 }
 

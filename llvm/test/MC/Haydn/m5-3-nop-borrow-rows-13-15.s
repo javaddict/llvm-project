@@ -77,8 +77,9 @@
 # (no silent drop, no destructive-MAC operand aliasing).
 # (Path B): X2MUL32 is now TRUE 2-output — 4-operand asm form.
 # Every op is a 16-byte Bundle128 composite; slot suffix / appears.
-# CHECK:            add32 r0, r1, r2
+# B3.5 S2-first: x2mul32→S1, add32→S2 → print order x2mul32 then add32.
 # CHECK:            x2mul32 d0, d1, d2, d3
+# CHECK-SAME:       add32 r0, r1, r2
         { add32 r0, r1, r2 ; x2mul32 d0, d1, d2, d3 }
 
 #===----------------------------------------------------------------------===#

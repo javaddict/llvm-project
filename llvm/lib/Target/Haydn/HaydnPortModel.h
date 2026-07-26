@@ -85,8 +85,12 @@ inline constexpr unsigned HAYDN_AR_WRITE_PORTS = 2;
 // hardware move reads a single register (1R/1W, RI-like — see).
 // Without dedup the packetizer would reject a 2-issue packet of two moves
 // as needing 4 read ports when only 2 are physically consumed.
-// 4. **R0 (hardwired zero) consumes no port** (): reads source
-// the constant 0 and writes are architecturally discarded.
+// 4. **No R0 exemption.** R0 is soft-zero, not hardwired (HaydnRegisterInfo):
+// silicon does not force R0==0 and does not discard R0 traffic. A MatInt
+// ADDI rd,R0,imm still reads the R0 file port; XOR32 R0,R0,R0 restore and
+// R0-borrow loads occupy real write ports. Dual R0 defs in one bundle are
+// WRITE_CONFLICT (HaydnHazardRecognizer WAW). Counting R0 is required for
+// correct 4R2W budgeting — the old "R0 is free" assumption was wrong.
 // \returns {Reads, Writes} GPR32 port demand for the instruction.
 inline std::pair<unsigned, unsigned> countGPRPorts(const MachineInstr &MI) {
   unsigned Reads = 0, Writes = 0;
@@ -100,21 +104,10 @@ inline std::pair<unsigned, unsigned> countGPRPorts(const MachineInstr &MI) {
     Register Reg = MO.getReg();
     if (Reg == 0)
       continue;
-    // R0 is the hardwired zero register: reads source the constant 0 and
-    // writes are architecturally discarded, so R0 consumes no physical
-    // register-file read or write port. Counting it would over-count ports
-    // for the very common cases that use R0 as a zero operand — moves emitted
-    // as OR/ADD with R0, ADDI rd, R0, imm immediate materialization, and
-    // zero-initialization — and falsely reject legitimate 2-issue packets
-    // (e.g. two independent ADDI rd, R0, imm would be charged 4R2W when they
-    // really need 0R2W). This matches the documented "R0 is free" assumption
-    // in shouldAddToPacket. See.
-    if (Reg == Haydn::R0)
-      continue;
     // DR64 uses separate register file ports — counted by countDRPorts.
     if (Haydn::DR64RegClass.contains(Reg))
       continue;
-    // Only count GPR32 registers
+    // Only count GPR32 registers (includes soft-zero R0).
     if (!Haydn::GPR32RegClass.contains(Reg))
       continue;
 
@@ -136,13 +129,10 @@ inline std::pair<unsigned, unsigned> countGPRPorts(const MachineInstr &MI) {
 // Accounting mirrors countGPRPorts (read/write counted independently, dead
 // defs still occupy a write port, duplicate sources count once per port
 // type) with two differences:
-// * Only DR64 registers are counted (GPR32 is handled by countGPRPorts).
-// * No zero-register exemption. GPR32's R0 is *soft-zero* — prologue
-// materialized to 0 and reserved (Haydn has NO hardwired-zero register;
-// HaydnInstrInfo.cpp:460), and models its reads/writes as port-free.
-// DR64 has no analogous convention: D0 is a normal allocatable register
-// and when codegen needs a DR64 zero it materializes one (e.g. xor64
-// d,d,d). So every DR64 operand consumes a real port — nothing to skip.
+// * Only DR64 registers are counted (GPR32 — including soft-zero R0 — is
+// handled by countGPRPorts; neither file exempts a "zero" reg from ports).
+// * D0 is a normal allocatable register; materialize zero with xor64 d,d,d.
+// Every DR64 operand consumes a real port — nothing to skip.
 // Tied accumulator operands (FmtALU64Acc `$rd = $rd_in`, e.g. MULA64) appear
 // as one def + one use of the same physical register; with the read/write
 // independent rule this correctly charges one read port (the accumulator

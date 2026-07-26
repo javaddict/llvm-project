@@ -23,6 +23,11 @@ class LLVM_LIBRARY_VISIBILITY HaydnAsmPrinter : public AsmPrinter {
   /// Emit HiFi-like `#<swps>` SMS bounds when this MBB is a recorded kernel.
   void emitSMSSWPSComments(const MachineBasicBlock &MBB);
 
+  /// Emit function-level `#<spill-kpi>` spill/reload observe summary (B4.5).
+  /// Counts MachineInstr::getSpillSize/getRestoreSize (and folded peers) over
+  /// all real MIs including BUNDLE children. Observe-only; default ON.
+  void emitSpillKPIComments();
+
   // Pending HWLOOP inclusive-END labels, keyed by the latch MBB. Per
   // the authoritative `fibonacci_hw_loop.asm`, HWLR_END is INCLUSIVE: the
   // address of the LAST instruction of the loop body (not the first
@@ -84,15 +89,13 @@ class LLVM_LIBRARY_VISIBILITY HaydnAsmPrinter : public AsmPrinter {
                           const MCSymbol *EndSym,
                           std::optional<int64_t> CntImm, unsigned RsReg = 0);
 
-  // Create a fresh inclusive-END MCSymbol for ONE hardware-loop instance
-  // whose latch is \p Latch (pending flush on last real MI after ÷4 pad).
+public:
+  // Inclusive START/END temp labels for SET_HWLOOP_{W,F2_W} (used by
+  // HaydnMCInstLower for Desc-only BUNDLE/standalone Lower — not printer
+  // expand). Pending flush on first/last real MI after Bundle128 pad.
   MCSymbol *getOrCreateHwloopEndSym(MachineBasicBlock *Latch);
-
-  // Create a fresh START MCSymbol for ONE hardware-loop instance whose loop
-  // body is \p LoopBody (pending flush on first real MI after ÷4 pad).
   MCSymbol *getOrCreateHwloopStartSym(MachineBasicBlock *LoopBody);
 
-public:
   explicit HaydnAsmPrinter(TargetMachine &TM,
                           std::unique_ptr<MCStreamer> Streamer);
 
@@ -101,6 +104,8 @@ public:
   void emitInstruction(const MachineInstr *MI) override;
 
   void emitBasicBlockStart(const MachineBasicBlock &MBB) override;
+
+  void emitFunctionBodyStart() override;
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 

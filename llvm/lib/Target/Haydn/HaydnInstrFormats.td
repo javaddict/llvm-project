@@ -11,8 +11,9 @@
 // LIVE encode path : Bundle128 only — 16-byte parcel
 // {s2[39:0], s1[39:0], s0[47:0]} via HaydnFormats*.td + HaydnCompositeFormats.td.
 // These legacy format classes still back codegen *names* (selector MIR) and
-// residual `_W` / G / C defs until Phase-5 M0 island delete; EncodedWidth in
-// TSFlags is NOT consulted by getInstSizeInBytes (always 16 for real parcels).
+// residual `_W` / G / C defs until Phase-5 M0 island delete. EncodedWidth in
+// TSFlags is NOT consulted by getInstSizeInBytes — B4.4 sizes from committed
+// FormatID → EncodedBytes / ProductFormatDesc.Bytes (AIE Format->getSize).
 //
 // TSFlags layout (historical; sizing ignores EncodedWidth subsequent):
 // Bits [2:0] = VLIW slot mask (0b001=Slot0, 0b010=Slot1, 0b100=Slot2)
@@ -686,12 +687,12 @@ class FmtALU64<bits<8> opcode, bits<10> funct, dag outs, dag ins,
 //
 // Used by the 2-dest SIMD-MAC multiply defs X2MUL32 (opcode 0x5A) and X4MUL16
 // (opcode 0x5C). The legacy dag binds (outs rd, rtd2) (ins rs1, rs2) so that
-// materializeFlexVariants' MI.setDesc(legacy -> _S<k>) preserves both the
-// operand count (4) and the def count (2). Both defs have funct=0x000, so the
-// funct field is carved to 6 bits and the freed bits{9-6} carry the 2nd dest
-// `rtd2` — the same legacy-only device used by FmtMAC2Dest (the Haydn32 decoder
-// table is dead per /, and materializeFlexVariants rewrites to slot form
-// before emit). See FmtMAC2Dest's header comment for the full rationale.
+// post-RA materializeMultiOpcodeInstrs setDesc(legacy -> _S<k> member)
+// preserves both the operand count (4) and the def count (2). Both defs have
+// funct=0x000, so the funct field is carved to 6 bits and the freed bits{9-6}
+// carry the 2nd dest `rtd2` — the same legacy-only device used by FmtMAC2Dest
+// (the Haydn32 decoder table is dead; encode is Desc-as-is after setDesc).
+// See FmtMAC2Dest's header comment for the full rationale.
 class FmtALU64_2Dest<bits<8> opcode, bits<6> funct, dag outs, dag ins,
                      string asmstr, list<dag> pattern>
     : HaydnInst<4, outs, ins, asmstr, pattern> {
@@ -898,14 +899,13 @@ class FmtMAC<bits<8> opcode, bits<6> funct, dag outs, dag ins,
 // Mirrors the slot HaydnFU_MAC_*_D_RR2 / D_RRA2 contract: every dag operand
 // binds 1:1 to a declared bits field (no orphans). The legacy dag carries the
 // TRUE 2-destination shape (golden DR_Write_Port=[rtd1,rtd2]) so that
-// materializeFlexVariants' MI.setDesc(legacy -> _S<k>) preserves both the
-// operand count and the def count.
+// post-RA materializeMultiOpcodeInstrs setDesc(legacy -> _S<k> member)
+// preserves both the operand count and the def count.
 //
 // Encoded fields (4): rd, rtd2, rs1, rs2 — rd/rs1/rs2 sit in the same Inst bit
 // positions as FmtMAC. The 2nd dest `rtd2` reuses FmtMAC's old `ra` slot
-// (bits{9-6}). This is a LEGACY-ENCODING-ONLY placement: materializeFlexVariants
-// rewrites every legacy 2-dest def to its _S<k> form (real 40-bit slot
-// encoding) BEFORE emission, so the bytes in.text are always slot-encoded.
+// (bits{9-6}). Post-RA setDesc commits every legacy 2-dest def to its _S<k>
+// member (real 40-bit slot encoding) BEFORE emission; encode is Desc-as-is.
 // The legacy Haydn32 decoder table is generated but NO LONGER CONSULTED by the
 // disassembler (deleted the last consult — HaydnDisassembler.cpp:2206
 // "The legacy DecoderTableHaydn3232 trie... is NO LONGER CONSULTED"). So the
@@ -1062,6 +1062,6 @@ class FmtCSR<bits<6> opcode, dag outs, dag ins, string asmstr,
 //===----------------------------------------------------------------------===//
 // FmtG_S0_ALU32 (32-bit G-format s0 sub-slot) RETIRED.
 // All *_G instruction shells deleted from HaydnInstrInfo.td. Bundle128
-// FLEX path uses SUB32_G_S0 (name only; not G-parcel encoding).
+// Bundle128 path uses SUB32_G_S0 (name only; not G-parcel encoding).
 //===----------------------------------------------------------------------===//
 

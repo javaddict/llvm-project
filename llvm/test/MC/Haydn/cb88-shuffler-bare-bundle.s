@@ -37,8 +37,9 @@ test_cb88_shuffler_bare:
 // in DISTINCT slots (xor32 + add32 — no collision). The wire-Bundle
 // render is single-line `{ op.sN...; op.sN...; op.sN }`, so both ops are
 // matched with independent CHECK directives on the same objdump line.
-// CHECK: xor32 r0, r0, r0
+// B3.5 source-order S2-first: xor32→S2, add32→S1 → print { nop; add32; xor32 }.
 // CHECK: add32 r1, r2, r3
+// CHECK-SAME: xor32 r0, r0, r0
 // Hard bar: zero placeholders (the load-bearing no-misencode contract).
 // CHECK-NOT: <?>
 // CHECK-NOT: <unknown>
@@ -54,8 +55,8 @@ test_cb88_shuffler_hint_collision:
   { lui sp, 1 ; xor32 r0, r0, r0 ; nop }
 
 // CHECK-LABEL: <test_cb88_shuffler_hint_collision>:
-// lui takes S0; xor32 (hint S0 occupied) spreads to S1.
+// lui takes S0; xor32 spreads to free high slot (S2).
 // CHECK: lui sp, 1
-// CHECK: xor32 r0, r0, r0
+// CHECK-SAME: xor32 r0, r0, r0
 // CHECK-NOT: <?>
 // CHECK-NOT: <unknown>

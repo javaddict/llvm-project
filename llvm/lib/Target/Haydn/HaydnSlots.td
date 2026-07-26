@@ -70,10 +70,10 @@ class HaydnFormatInst<dag outs, dag ins, string asmstr, list<dag> pattern>
 // (e.g. "add32\t$rt, $rs1, $rs2"). Matcher strategy deliberately does NOT set
 // isCodeGenOnly on S1/S2: that bit also drops defs from the decoder trie in
 // this tree (see notes on ADDI32_W), which would break Bundle128 decode.
-// Ambiguous matchables are accepted (tblgen may warn); AsmParser assigns slot
-// from source order via setHaydnSlot, and standalone first-match wins (S0).
-// InstPrinter prints the same bare AsmString for every slot; bundle position
-// is the sole slot authority for encode.
+// Ambiguous matchables are accepted (tblgen may warn); standalone first-match
+// wins (S0). InstPrinter prints the same bare AsmString for every slot;
+// post-commit slot authority is member Desc getSlotKind / Bundle SlotMap
+// (AIEBaseMCFormats.cpp:66-75; AIEBundle.h:92-104).
 class HaydnSlotS0<dag outs, dag ins, string asmstr, list<dag> pattern>
     : HaydnFormatInst<outs, ins, asmstr, pattern> {
   let Slot = s0_slot;
@@ -106,3 +106,7 @@ class HaydnSlotS2<dag outs, dag ins, string asmstr, list<dag> pattern>
 // HaydnFormatsLD.td, HaydnFormatsMAC.td) — fresh per-slot ports from the spec
 // (encoding_manual_flex.md + golden). This file holds only the
 // slot infrastructure (InstSlots + HaydnFormatInst + slot-window bases).
+//
+// B2.1 multi-slot logicals (MultiSlot_Pseudo / materializableInto) live in
+// HaydnMultiSlotPseudo.td (AIE2InstrFormats.td:21-31 peer). They reference
+// HaydnFormatInst members defined after this file is included.

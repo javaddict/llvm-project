@@ -19,36 +19,48 @@
 ; Expected (correct) epilogue: restore from SP after SP = FP - StackSize.
 ; FP (R14) is architectural frame pointer (BP folded in); CSR bank saves it.
 
+; REBASELINED (auto) B3.exit.4 Desc-only Bundle128 print (setDesc members; AIEBaseAsmPrinter field order); .file skipped
+
+; CHECK: 	.text
+; CHECK: 	.globl	vla_call_sp_restore             // -- Begin function vla_call_sp_restore
+; CHECK: 	.type	vla_call_sp_restore,@function
+; CHECK: vla_call_sp_restore:                    // @vla_call_sp_restore
+; CHECK: // %bb.0:                               // %entry
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 24 }
+; CHECK: 	{ 		addi32_w	r2, sp, 12; 	nop; 	nop }
+; CHECK: 	{ 		st32	lr, r2, 0; 	nop; 	nop }
+; CHECK: 	{ 		st32	fp, r2, 4; 	nop; 	nop }
+; CHECK: 	{ 		st32	r8, r2, 8; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	fp, sp, 24; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r2, r0, 2; 	nop; 	nop }
+; CHECK: 	{ 		addi32_w	r2, r0, 7; 	nop; 	sll32	r1, r1, r2 }
+; CHECK: 	{ 		addi32_w	r2, r0, -8; 	nop; 	add32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	and32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	sub32	r8, sp, r1 }
+; CHECK: 	{ 		nop; 	nop; 	move32	r1, r8 }
+; CHECK: 	{ 		jal_w	lr, use; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	ld32	r1, r8, 0; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, fp, -24; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	ld32	lr, sp, 12; 	nop }
+; CHECK: 	{ 		nop; 	ld32	fp, sp, 16; 	nop }
+; CHECK: 	{ 		nop; 	ld32	r8, sp, 20; 	nop }
+; CHECK: 	{ 		addi32_w	sp, sp, 24; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end0:
+; CHECK: 	.size	vla_call_sp_restore, .Lfunc_end0-vla_call_sp_restore
+; CHECK:                                         // -- End function
+; CHECK: 	.section	".note.GNU-stack","",@progbits
+
 declare void @use(ptr)
 
 define i32 @vla_call_sp_restore(i32 %n) nounwind {
 ; Epilogue must restore callee-saved regs directly from SP (R13).
-; CHECK-LABEL: vla_call_sp_restore:
-; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0 }
-; CHECK-NEXT:    { subi32 sp, sp, 24 }
-; CHECK-NEXT:    { addi32_w r2, sp, 12 }
-; CHECK-NEXT:    { st32 lr, r2, 0 }
-; CHECK-NEXT:    { st32 fp, r2, 4 }
-; CHECK-NEXT:    { st32 r8, r2, 8 }
-; CHECK-NEXT:    { addi32_w fp, sp, 24 }
-; CHECK-NEXT:    { addi32_w r2, r0, 2 }
-; CHECK-NEXT:    { sll32 r1, r1, r2 }
-; CHECK-NEXT:    { addi32_w r2, r0, 7 }
-; CHECK-NEXT:    { add32 r1, r1, r2 }
-; CHECK-NEXT:    { addi32_w r2, r0, -8 }
-; CHECK-NEXT:    { and32 r1, r1, r2 }
-; CHECK-NEXT:    { sub32 r8, sp, r1 }
-; CHECK-NEXT:    { move32 r1, r8 }
-; CHECK-NEXT:    { jal_w lr, use }
-; CHECK-NEXT:    { ld32 r1, r8, 0; xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0 }
-; CHECK-NEXT:    { addi32_w sp, fp, -24 }
-; CHECK-NEXT:    { ld32 lr, sp, 12 }
-; CHECK-NEXT:    { ld32 fp, sp, 16 }
-; CHECK-NEXT:    { ld32 r8, sp, 20 }
-; CHECK-NEXT:    { addi32_w sp, sp, 24 }
-; CHECK-NEXT:    { jalr_w r0, lr, 0 }
+
+; REBASELINED (auto) B3.exit.4 Desc-only Bundle128 print (S0-S1-S2 / setDesc members); .file skipped
+
+
 entry:
   %v = alloca i32, i32 %n
   call void @use(ptr %v)

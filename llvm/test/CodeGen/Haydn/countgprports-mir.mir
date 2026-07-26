@@ -88,9 +88,9 @@ body:             |
     ; CHECK-LABEL: name: test1_move32_dedup
     ; CHECK: liveins: $r0, $r1
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit $r0, implicit killed $r1 {
-    ; CHECK-NEXT:   $r2 = MOVE32 $r0, $r0, implicit-def dead $sfr
-    ; CHECK-NEXT:   $r3 = MOVE32 killed $r1, $r1, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 0, implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit $r0, implicit killed $r1 {
+    ; CHECK-NEXT:   $r2 = MOVE32_S2 $r0, $r0, implicit-def dead $sfr
+    ; CHECK-NEXT:   $r3 = MOVE32_S1 killed $r1, $r1, implicit-def dead $sfr
     ; CHECK-NEXT: }
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
@@ -148,9 +148,9 @@ body:             |
     ; CHECK-LABEL: name: test2_inplace_rw_independent
     ; CHECK: liveins: $r0, $r1, $r2
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit killed $r2, implicit $r0, implicit killed $r1 {
-    ; CHECK-NEXT:   $r2 = ADD32 killed $r2, $r0, implicit-def dead $sfr
-    ; CHECK-NEXT:   $r3 = ADDI32 killed $r1, 5, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 0, implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit killed $r2, implicit $r0, implicit killed $r1 {
+    ; CHECK-NEXT:   $r2 = ADD32_S2 killed $r2, $r0, implicit-def dead $sfr
+    ; CHECK-NEXT:   $r3 = ADDI32_S1 killed $r1, 5, implicit-def dead $sfr
     ; CHECK-NEXT: }
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
@@ -205,11 +205,11 @@ body:             |
     ; CHECK-LABEL: name: test3_dead_def_writes_count
     ; CHECK: liveins: $r0
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit $r0 {
-    ; CHECK-NEXT:   $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
-    ; CHECK-NEXT:   $r3 = ADDI32 $r0, 20, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 0, implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit $r0 {
+    ; CHECK-NEXT:   $r2 = ADDI32_S2 $r0, 10, implicit-def dead $sfr
+    ; CHECK-NEXT:   $r3 = ADDI32_S1 $r0, 20, implicit-def dead $sfr
     ; CHECK-NEXT: }
-    ; CHECK-NEXT: dead $r4 = ADDI32 $r0, 30, implicit-def dead $sfr
+    ; CHECK-NEXT: dead $r4 = ADDI32_S2 $r0, 30, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADDI32 $r0, 10, implicit-def dead $sfr

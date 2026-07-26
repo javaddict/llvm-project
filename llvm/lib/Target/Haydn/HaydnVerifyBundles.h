@@ -1,0 +1,52 @@
+//===- HaydnVerifyBundles.h - Bundle invariant MF pass ----------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// G-BUNDLE-FORMAT B1.4 — analysis-only MachineFunction pass that fail-closes
+// on committed-cycle invariant violations (haydn::bundle::verifyCommittedBundle).
+//
+// Pipeline peer: immediately after HaydnFinalizeBundle in addPreSched2 and
+// again after PreEmit late re-commit (B4.3; AIEFinalizeBundle.cpp:40-59 peer
+// order; AIEBaseInstrInfo.cpp:1440-1459 verifyInstruction fail-closed).
+// AIE PreEmit is empty so AIE never re-verifies late; Haydn must.
+//
+// Does not mutate MIR. report_fatal_error on violation (no silent skip).
+// No MCFlags writers. setDesc is owned by Finalize/materialize (B3.1/B4.3).
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef LLVM_LIB_TARGET_HAYDN_HAYDNVERIFYBUNDLES_H
+#define LLVM_LIB_TARGET_HAYDN_HAYDNVERIFYBUNDLES_H
+
+#include "llvm/CodeGen/MachineFunctionPass.h"
+
+namespace llvm {
+
+class HaydnVerifyBundles : public MachineFunctionPass {
+public:
+  static char ID;
+
+  HaydnVerifyBundles();
+
+  StringRef getPassName() const override {
+    return "Haydn Bundle Invariant Verifier";
+  }
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override;
+
+  MachineFunctionProperties getRequiredProperties() const override {
+    return MachineFunctionProperties();
+  }
+
+  bool runOnMachineFunction(MachineFunction &MF) override;
+};
+
+FunctionPass *createHaydnVerifyBundlesPass();
+
+} // namespace llvm
+
+#endif // LLVM_LIB_TARGET_HAYDN_HAYDNVERIFYBUNDLES_H

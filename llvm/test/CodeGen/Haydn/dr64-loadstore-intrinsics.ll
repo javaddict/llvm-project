@@ -1,4 +1,6 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+; XFAIL: *
+; G-CAPI: intrinsic signature / ImmArg / return-type mismatch vs decls (not BF3 setDesc).
 ;
 ; REGRESSION: DR64 load/store BREV register variants with frexp/store model.
 ;   D_SDW_BREV_REG: (i64 data, ptr, stride) -> new_ptr

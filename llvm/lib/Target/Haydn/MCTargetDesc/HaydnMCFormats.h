@@ -13,15 +13,13 @@
 // and function bodies slot in directly via the GET_FORMATS_* include guards.
 //
 // Haydn-specific extensions retained as ADDITIVE surface (not present in AIE):
-// `HaydnBaseMCFormats::getLegalSlots` is the single slot
-// authority (FlexMap-derived via getFlexVariant in the concrete subclass).
-// The former hand-DClass `getAltSlotSet` / FU-acceptance side table
-// `getSlotKind(unsigned)` were deleted in — the FlexMap is the.td
-// ground truth and is already FU-aware.
+// `HaydnBaseMCFormats::getLegalSlots` is alts-derived: OR of non-zero sparse
+// AlternateInsts indices. MC encodes member Desc as-is (AIE); residual hand-asm
+// materializes via getAlternateInstsOpcode.
 // HaydnBaseMCFormats::getMode0FormatDesc / getBundle128FormatDesc:
-// Haydn-only format lookups over the dormant hand-authored
-// HaydnFormatDescs table; the generated Formats (ADD32 today) is
-// exposed via getMCFormats per the AIE contract.
+// Haydn-only format lookups; getBundle128FormatDesc delegates to the generated
+// Formats table. The generated Formats (ADD32 today) is exposed via getMCFormats
+// per the AIE contract.
 //
 // Decision §9 (Option A): HaydnGenFormats.inc is the SCHEMA OWNER, not a
 // translation target. Renamed classes to the generic AIE names; field layouts
@@ -118,9 +116,9 @@ public:
 // HaydnGenFormats.inc GET_FORMATS_SLOTS_DEFS:
 // {const char* Name, unsigned Size, SlotBits SlotOccupancy
 // SlotBits ConflictBits, unsigned NopOpc}
-// Haydn's former FU-acceptance bitmask side table was removed
-// the FlexMap `getLegalSlots` is the single slot authority and is already
-// FU-aware. AIE's MCSlotInfo carries no FU field, and so does Haydn's now.
+// Haydn's former FU-acceptance bitmask side table is gone; alts-derived
+// getLegalSlots is the slot legality authority. AIE's MCSlotInfo carries no
+// FU field, and so does Haydn's now.
 class MCSlotInfo {
 private:
   // Name of the slot.
@@ -336,6 +334,17 @@ public:
     assert(!HasMultipleSlotOptions);
     return OpFormatMapper.at(Idx);
   }
+
+  // AIE peer AIEInstFormat::hasSingleSlot / getSlot (AIEMCFormats.cpp:33-56):
+  // a committed format-member (post-setDesc) has exactly one SlotsMap entry.
+  // MultiSlot_Pseudo / MultiOpcode logicals have HasMultipleSlotOptions.
+  bool hasSingleSlot() const {
+    return SlotsMap.size() == 1 && !HasMultipleSlotOptions;
+  }
+  MCSlotKind getSingleSlotKind() const {
+    assert(hasSingleSlot() && "not a single-slot format-member");
+    return SlotsMap.begin()->SlotKind;
+  }
 };
 
 //===----------------------------------------------------------------------===//
@@ -355,8 +364,7 @@ public:
 // backing the Haydn-specific getMode0FormatDesc lookup for the legacy
 // 16/32/48/64-bit slot geometries. These stay until the generated table
 // fully covers them (M0_64 migration, post-P5). getBundle128FormatDesc
-// was DELEGATED to the generated table in GAP-MC1 and no longer
-// reads the dormant row.
+// delegates to the generated table and no longer reads the dormant row.
 class HaydnBaseMCFormats {
 public:
   virtual ~HaydnBaseMCFormats() = default;
@@ -374,48 +382,47 @@ public:
   // First live consumer of the ported format-desc model (Gap 2).
   // HAYDN EXTENSION (not in AIE): backed by the dormant hand-authored
   // HaydnFormatDescs table. M0_64 is NOT yet a generated packet format
-  // (only BUNDLE128_FULL is —), so this query cannot yet delegate to
-  // the generated table; retires when M0_64 migrates (post-P5). GAP-MC1
-  // conservative scope.
+  // (only BUNDLE128_FULL is), so this query cannot yet delegate to
+  // the generated table; retires when M0_64 migrates (post-P5).
   const MCFormatDesc &getMode0FormatDesc() const;
 
   // \returns the Bundle128 format-desc (the 3-slot 128-bit single composite
-  // from). SlotsMap carries the s0/s1/s2 slot-window positions;
+  // form). SlotsMap carries the s0/s1/s2 slot-window positions;
   // use getSlotOffsetsHiBit(SLOT0/1/2) on the result to recover each slot's
   // MSB-indexed window in the 128b word:
   // s0 = [0,47] (48b window; FU(3b) at offset 0)
   // s1 = [48,87] (40b window; FU(3b) at offset 48)
   // s2 = [88,127] (40b window; FU(3b) at offset 88)
-  // Stage-1 vertical slice: ADD64 only.
-  // (GAP-MC1): now DELEGATES to getFormatDesc(Haydn::BUNDLE128_FULL)
-  // reading the GENERATED Haydn::Formats table (single truth). The dormant
-  // HaydnFormatDescs[FDI_BUNDLE128] row + B128S0/S1/S2Field are retained
-  // (table shape uniformity) but no longer back this query.
+  // Delegates to getFormatDesc(Haydn::BUNDLE128_FULL) reading the GENERATED
+  // Haydn::Formats table (single truth).
   const MCFormatDesc &getBundle128FormatDesc() const;
 
   // \returns whether \p Opcode has an entry in the format-desc table.
   virtual bool isSupportedInstruction(unsigned Opcode) const;
 
+  // AIE peer AIEBaseMCFormats::getSlotKind (AIEBaseMCFormats.cpp:66-75):
+  // fixed slot of a committed format-member opcode after setDesc materialize.
+  // Returns default/unknown MCSlotKind() for multi-slot logicals
+  // (HasMultipleSlotOptions) and opcodes not in the Formats table — those
+  // use PlacementAlternative / tryAddProduct instead.
+  virtual MCSlotKind getSlotKind(unsigned Opcode) const;
+
   // \returns Format Description, index based on the opcode.
   virtual std::optional<unsigned>
   getFormatDescIndex(unsigned Opcode) const = 0;
 
-  // \returns a set of opcode for a given multi-slot pseudo intr, for an
-  // unsupported opcode it returns an empty set.
+  // \returns the member-opcode vector for a multi-slot logical / MultiSlot_Pseudo
+  // (AIE AIEMCFormats.h:376-379 peer), or nullptr if \p Opcode has no
+  // alternatives. Rows are sparse size-3: index == field, 0 for missing
+  // members. PlacementAlternative FieldSlots = 1<<index for non-zero entries;
+  // getLegalSlots ORs those indices.
   virtual const std::vector<unsigned> *
   getAlternateInstsOpcode(unsigned Opcode) const = 0;
 
-  // single-authority legal-slot query (: promoted to the base
-  // interface so HaydnBundle / HaydnResourceCycle can call it through the
-  // base pointer). \returns a bitmask (bit k = slot k, Haydn::SLOT
-  // convention: SLOT0=1<<0) of the slots opcode \p Opc can occupy, DERIVED
-  // solely from the FlexMap (the tblgen ground truth): slot k is legal iff
-  // a `_S<k>` variant exists. This is the one slot authority the
-  // scheduler / HR / SMS consult; it replaces the former
-  // `getAltSlotSet` (legal ∩ FU-acceptance) whose hand-DClass derivation
-  // disagreed with the encoder (Bug1). Returns 0 for opcodes with no
-  // flex family (standalone WIDE, pseudo) — callers treat 0 as "not a
-  // bundle-slot op" and skip the slot auction.
+  // Legal-slot bitmask (Haydn::SLOT: bit k = slot k). Derived from sparse
+  // getAlternateInstsOpcode — bit k set iff Alts[k] != 0 (index == field).
+  // Returns 0 with no alt row. Bundle/HR placement uses PlacementAlternative
+  // tryAdd for alts-bearing logicals.
   virtual SlotBits getLegalSlots(unsigned Opc) const = 0;
 
   // \returns the slot descriptor for \p Kind, or nullptr if unknown.
@@ -455,83 +462,47 @@ public:
   ArrayRef<bool> getIsFormatAvailable() const override;
   const PacketFormats &getPacketFormats() const override;
 
-  // \returns the `_<base>_S<Slot>` opcode variant of the legacy opcode
-  // \p LegacyOpc, or 0 if no such variant exists. \p Slot must be 0, 1, or 2
-  // (Haydn slot index). The mapping is.td-driven, emitted into
-  // HaydnGenFormats.inc (GET_LEGACY_TO_FLEX_MAP region) by the CodeGenFormat
-  // backend. Replaces the former runtime name-scan in
-  // HaydnFlexMaterialize.
-  unsigned getFlexVariant(unsigned LegacyOpc, unsigned Slot) const;
-
-  // single-authority legal-slot query (override). \returns a bitmask
-  // (bit k = slot k, Haydn::SLOT convention: SLOT0=1<<0) of the slots opcode
-  // \p Opc can occupy, DERIVED solely from the FlexMap (the tblgen ground
-  // truth): slot k is legal iff a `_S<k>` variant exists
-  // (`getFlexVariant(Opc, k) != 0`). This is the one slot authority the
-  // scheduler/HR consults — it replaces the hand-maintained HaydnDClass
-  // `getLegalSlots`/`getAltSlotSet` tables whose disagreement with the
-  // encoder caused Bug1 (split authority: the itinerary `Slot012_ALU`
-  // claimed all 3 slots for 48-bit ops that are physically S0-only).
-  // Returns 0 for opcodes with no flex family (standalone WIDE, pseudo)
-  // callers treat 0 as "not a bundle-slot op" and skip the slot auction.
-  // NOTE: this override only recognizes LEGACY opcodes (the generated
-  // `getFlexVariant` switch has `case XOR32:` but no `case XOR32_S0:`).
-  // For a flex-opcode-aware query (needed by the MC encoder's Bundle
-  // shuffler), use `HaydnMCFormatsWithMII` (below) or the free helper
-  // `getHaydnFlexVariantForSlot`.
+  // Alts-derived legal slots (OR of non-zero sparse alt indices).
+  // Recognizes logical opcodes with a getAlternateInstsOpcode row. For a
+  // member-opcode-aware query (MC encoder residual on already-_S* children),
+  // use HaydnMCFormatsWithMII (strips `_S<k>` then consults alts / suffix).
+  // MC encode serializes member Desc as-is (AIE).
   SlotBits getLegalSlots(unsigned Opc) const override;
 };
 
 //===----------------------------------------------------------------------===//
-// flex-opcode-aware formats subclass + free helper (GAP-MC2)
+// member-opcode-aware formats subclass
 //===----------------------------------------------------------------------===//
 //
 // The MC encoder wires `Haydn::Bundle<MCInst>` into `encodeBundle128` as the
 // AIE-faithful shuffler. Bundle's `pickSlot` calls `getLegalSlots(Opc)` through
 // the `HaydnBaseMCFormats*` interface. The base `HaydnMCFormats::getLegalSlots`
-// only recognizes LEGACY opcodes (the generated `getFlexVariant` switch misses
-// flex opcodes like `XOR32_S0`). For an already-flex child (produced when
-// the AsmParser matches a `.sN` mnemonic suffix, or when a prior spread
-// rewrites the opcode), `getLegalSlots` returns 0 and `pickSlot` fails
-// 's root.
+// only recognizes logical opcodes (getAlternateInstsOpcode rows). For an
+// already-member child (AsmParser `.sN` / post-setDesc), `getLegalSlots`
+// would return 0 without suffix strip.
 //
-// `HaydnMCFormatsWithMII` is the encoder-side subclass that NORMALIZES a flex
-// opcode to its legacy base (via the `_S<k>` name suffix) BEFORE consulting
-// the generated FlexMap. It carries an `MCInstrInfo&` for the name lookup. The
-// HR/scheduler path (no MII available) keeps using the base `HaydnMCFormats`
-// and never sees flex opcodes (the post-RA packetizer commits legacy opcodes
-// and only the AsmPrinter/encoder materializes the flex variant). This keeps
-// the two consumers on consistent authorities without broadening the generated
-// table.
-
-// \returns the `_S<Slot>` variant opcode of \p Opc for \p Slot, or 0 if
-// none exists. \p Opc may be a LEGACY opcode (e.g. XOR32) OR an already-flex
-// opcode (e.g. XOR32_S0) — the `_S{0,1,2}` suffix is stripped first
-// to recover the base mnemonic, then `Base + "_S<Slot>"` is looked up in
-// \p MII. This is the uniform suffix-strip mechanism (lifted from the
-// `findFlexVariantForSlot` helper that lived in HaydnMCCodeEmitter.cpp).
-unsigned getHaydnFlexVariantForSlot(unsigned Opc, unsigned Slot,
-                                    const MCInstrInfo &MII);
+// `HaydnMCFormatsWithMII` NORMALIZES a `_S<k>` member opcode to its logical
+// base (via the name suffix) BEFORE consulting alts-derived getLegalSlots.
+// It carries an `MCInstrInfo&` for the name lookup. The HR/scheduler path
+// (no MII) keeps using base `HaydnMCFormats` and never sees member opcodes
+// before setDesc.
 
 // \returns the slot index (0/1/2) encoded in \p Opc's `_S<k>` name
-// suffix, or -1 if \p Opc is not a flex opcode.
+// suffix, or -1 if \p Opc is not a format-member opcode.
 int getHaydnFlexSlotFromName(unsigned Opc, const MCInstrInfo &MII);
 
-// `HaydnMCFormats` subclass that normalizes flex opcodes before consulting
-// the FlexMap. Constructed by the MC encoder (which holds an MCInstrInfo).
-// The HR/scheduler path keeps using the base `HaydnMCFormats` (legacy-only).
+// `HaydnMCFormats` subclass that normalizes member opcodes before consulting
+// alts-derived getLegalSlots. Constructed by the MC encoder (holds MCInstrInfo).
+// The HR/scheduler path keeps using the base `HaydnMCFormats` (logical-only).
 class HaydnMCFormatsWithMII : public HaydnMCFormats {
   const MCInstrInfo &MII;
 
 public:
   HaydnMCFormatsWithMII(const MCInstrInfo &MII) : MII(MII) {}
 
-  // Flex-opcode-aware legal-slot query. Strips the `_S<k>` suffix to
-  // recover the legacy base, then queries the base's legal slots via the
-  // generated FlexMap. For a legacy opcode this is identical to the base
-  // implementation; for a flex opcode it returns the SAME legal-slot set as
-  // the legacy base (the flex variants are slot-specific, so the union of
-  // variant slots IS the legal set).
+  // Member-opcode-aware legal-slot query. Strips the `_S<k>` suffix to
+  // recover the logical base, then queries alts-derived getLegalSlots.
+  // For a logical opcode this is identical to the base implementation.
   SlotBits getLegalSlots(unsigned Opc) const override;
 };
 
@@ -544,33 +515,31 @@ public:
 MCSlotKind haydnSlotMaskToKind(SlotBits Mask);
 
 //===----------------------------------------------------------------------===//
-// shared Bundle128-target predicate (Flex-encodable opcodes).
+// shared Bundle128-target predicate (Bundle128 16-byte emit path).
 //===----------------------------------------------------------------------===//
 //
-// The MC encoder (`HaydnMCCodeEmitter::encodeSingleInstruction`
-// `encodeBundle128`) routes BOTH standalone Flex-target opcodes AND formed
-// BUNDLEs whose real children are all Flex-target through `encodeBundle128`
-// emitting a 128-bit (16-byte) Bundle128 composite word via `emitBundle128Word`.
+// The MC encoder (`HaydnMCCodeEmitter::encodeInstruction` / `encodeBundle128`)
+// routes BOTH standalone Bundle128-target opcodes AND formed BUNDLEs whose
+// real children are all Bundle128-target through `encodeBundle128`, emitting a
+// 128-bit (16-byte) Bundle128 composite word via `emitBundle128Word`.
 //
 // A `_S<k>` opcode is SELF-DESCRIBING: its name suffix carries the slot
-// digit (0/1/2 = S0/S1/S2). A legacy opcode that HAS a Flex variant also
-// routes through the Bundle128 path (the encoder maps it to its `_S<k>`
-// form before encoding). Both cases return true here.
+// digit (0/1/2 = S0/S1/S2). A logical opcode with PlacementAlternative members
+// also routes through the Bundle128 path (encode materializes the member via
+// getAlternateInstsOpcode / setDesc). Both cases return true here.
 //
 // SHARED so that `HaydnInstrInfo::getInstSizeInBytes` (consulted by upstream
 // BranchRelaxation's `computeBlockSize`) mirrors the encoder's emit dispatch
-// exactly — the size model MUST predict the post-FLEX-materialize 16-byte
-// emit width, or BranchRelaxation undercounts branch distances (~8x), deems
-// every branch in range, never relaxes, and the WIDE conditional branch
-// overflows `FIXUP_HAYDN_WIDE_BranchSImm12` (±4 KB) at MC-fixup time on fns
-// > ~4 KB (adddf3/divdf3 —). It also prevents the
-// `BranchRelaxation::verify` BlockSize assert (BlockInfo.Size vs post-relax
-// recompute). See (size model) + (FLEX-materialize
-// regression of the size model).
+// exactly — the size model MUST predict the Bundle128 16-byte emit width, or
+// BranchRelaxation undercounts branch distances (~8x), deems every branch in
+// range, never relaxes, and the WIDE conditional branch overflows
+// `FIXUP_HAYDN_WIDE_BranchSImm12` (±4 KB) at MC-fixup time on fns > ~4 KB
+// (adddf3/divdf3). It also prevents the `BranchRelaxation::verify` BlockSize
+// assert (BlockInfo.Size vs post-relax recompute).
 
 // \returns true iff \p Opc is emitted via the 128-bit Bundle128 path:
 // a `_S<k>` opcode (self-describing name suffix), OR
-// a legacy opcode that has a `_S<k>` variant (encoder maps it).
+// a logical opcode with PlacementAlternative members (encode materializes).
 // In both cases the emitted width is 16 bytes. This mirrors the MC encoder's
 // `isBundle128TargetOpcode` gate (`HaydnMCCodeEmitter.cpp`).
 bool isHaydnBundle128TargetOpcode(unsigned Opc, const MCInstrInfo &MII);

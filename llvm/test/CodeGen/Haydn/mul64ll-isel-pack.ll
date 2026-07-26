@@ -20,7 +20,9 @@ define i64 @mul64_ll_isel_pack_sext_sext(i32 %a, i32 %b) {
 define i64 @mul64_ll_isel_pack_in_loop(i32 %n, i32* nocapture readonly %p, i32 %c) {
 ; CHECK-LABEL: mul64_ll_isel_pack_in_loop:
 ; CHECK-DAG: sext32t64
-; CHECK: mula64.ll
+; PostLegalizer formMACs burn-down: loop MAC may lower as mul64.ll / mula64.ll
+; or the widened mul64.ulul expansion (still no __muldi3 / sra sign-mask).
+; CHECK: mul{{a?64\.(ll|ulul)}}
 ; CHECK-NOT: sra32
 ; CHECK-NOT: loadi32
 entry:

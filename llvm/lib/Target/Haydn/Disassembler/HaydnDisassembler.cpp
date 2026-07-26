@@ -8,37 +8,25 @@
 //
 // This file implements the HaydnDisassembler class.
 //
-// Decode strategy (— Bundle128-only; Bundle128-first ordering):
-// 1. tryDecodeBundle128Composite — the primary decode path. Reads 16 bytes
-// validates each non-zero slot window via isValidFlexSlotWindow (strict
-// FU + opcode range contract, Option A) and runs the generated
-// composite trie (DecoderTableBundle128128 → case 164 = BUNDLE128_FULL)
-// which dispatches to the per-slot sub-tries via decodeS0Slot/S1Slot/S2Slot.
-// The all-zero Bundle128 (spec §10 NOP) decodes here as 3 empty NOP slots.
-// 2. < 16 bytes remaining — trailing 16-bit NOP parcel fallback: a
-// leading 0x0000 with fewer than 16 bytes left decodes as Haydn::NOP
-// (Size = 2); any other trailing bytes render <unknown> with
-// Size = Bytes.size (forward progress).
+// Bundle128-only decode (16-byte parcels; variable-width realized as fixed
+// Bundle128 geometry). Size=16 on every Success/Fail from the composite path.
 //
-// reordering: the 2-byte NOP check used to run BEFORE the Bundle128
-// probe and intercepted any parcel whose first 2 bytes were 0x00 — including
-// real Bundle128 parcels whose s0 window (bits[47:0]) is a §4 NOP slot (they
-// start with 6 zero bytes). That misaligned the cursor 2 bytes at a time and
-// caused the Bundle128 decoder regression (d304/flex-bytes-mac/move-instr all
-// failed because their parcels started with 00 00). Bundle128 is now probed
-// first; the 2-byte NOP fallback survives only for the sub-16-byte trailing
-// case where Bundle128 cannot run.
-//
-// The §1.2 width tree (16/32/48/64-bit branches), the D-class classifier
-// (decodeDClassBundle), the G-format / 48-bit / 16-bit TableGen paths, and the
-// tier-2 content-gate fallback to the width tree were RETIRED in when
-// the encoder was cut over to Bundle128-only emission (CLAUDE.md hard
-// constraint #3 — variable-width bundles — is realized as 16-byte parcels).
+// 1. tryDecodeBundle128Composite — primary path when >= 16 bytes remain.
+//    Content gate: each non-zero slot window must pass isValidFlexSlotWindow
+//    (strict FU + opcode range). Geometry via getBundle128FormatDesc peer
+//    offsets (same authority as encodeSlotInBundle128). Generated composite
+//    trie (DecoderTableBundle128128 → case 164 = BUNDLE128_FULL) dispatches
+//    per-slot sub-tries via decodeS0Slot/S1Slot/S2Slot. All-zero Bundle128
+//    (spec §10 NOP) is 3 empty NOP slots. Bundle128 is probed before any
+//    2-byte NOP check so s0-NOP parcels (leading zero bytes) are not stolen.
+// 2. < 16 bytes remaining — trailing 16-bit NOP fallback: leading 0x0000
+//    decodes as Haydn::NOP (Size = 2); other trailing bytes → <unknown>
+//    with Size = Bytes.size (forward progress).
 //
 // CLAUDE.md hard bar: `llvm-objdump -d` MUST NEVER abort on hostile.text.
 // The bounds-safe `<?>` printOperand defense (HaydnInstPrinter) remains the
-// primary anti-crash mechanism; the slot decoders here degrade sub-trie
-// misses to empty NOP slots (always return Success) rather than asserting.
+// primary anti-crash mechanism; slot decoders degrade sub-trie misses to
+// empty NOP slots (always return Success) rather than asserting.
 //
 //===----------------------------------------------------------------------===//
 
@@ -162,10 +150,8 @@ static uint32_t extractBits(uint64_t Word, unsigned Lo, unsigned Width) {
   return static_cast<uint32_t>((Word >> Lo) & ((1ULL << Width) - 1));
 }
 
-// Mode-0 DecoderMethods retired with the Mode-0 TableGen islands
-// (legacy-retired). Bundle128 slot decode uses the generated S0/S1/S2
-// sub-tries + decodeSImmOperandXStepWide / register class helpers only.
-// Deleted: decodeM0S1ALU64Flat2RR3Copy, decodeLSPage1Imm5, decodeLSPage1Reg.
+// Bundle128 slot decode uses the generated S0/S1/S2 sub-tries plus
+// decodeSImmOperandXStepWide / register class helpers only.
 
 //===----------------------------------------------------------------------===//
 // Main disassembler class
@@ -191,7 +177,7 @@ public:
 HaydnDisassembler::HaydnDisassembler(const MCSubtargetInfo &STI, MCContext &Ctx)
     : MCDisassembler(STI, Ctx) {}
 
-// P3 — Bundle128 composite per-slot decoders (forward declarations).
+// Bundle128 composite per-slot decoders (forward declarations).
 //
 // The generated HaydnGenDisassemblerTables.inc defines a template
 // `decodeToMCInst` whose case 164 (the BUNDLE128_FULL decoder) emits:
@@ -237,7 +223,7 @@ static DecodeStatus decodeS2Slot(MCInst &MI, InsnType &Insn, uint64_t Address,
 #define LLVM_DISASSEMBLER_HAYDN_DECODER_TABLES
 #include "HaydnGenDisassemblerTables.inc"
 
-// P3 — Bundle128 composite per-slot decoders (definitions).
+// Bundle128 composite per-slot decoders (definitions).
 //
 // Mirrors AIE's decodeAIE2PSSlot (AIE2PSDisassembler.cpp:75-87): allocate a
 // heap MCInst via MCContext (persists beyond this call), run the per-slot
@@ -314,34 +300,30 @@ Expected<bool> HaydnDisassembler::onSymbolStart(SymbolInfoTy &Symbol,
 }
 
 //===----------------------------------------------------------------------===//
-// Option A — Bundle128 content-gate: strict FU + opcode validation.
+// Bundle128 content-gate: strict FU + opcode validation.
 //===----------------------------------------------------------------------===//
 //
 // isValidFlexSlotWindow validates a Bundle128 slot window's FU and opcode
-// fields against the encoding_manual_flex.md contract. This replaces
-// the ineffective sub-trie probe (the generated DecoderTableS048/S140/S240
-// have DEFAULT catch-all branches that accept any non-zero window). The
-// check mirrors the pre- decodeFlexSlot strict contract (commit
-// 2c9c00ce8eaa^): reject reserved FU (5..7) and out-of-range opcodes.
+// fields against the encoding_manual_flex.md contract. The generated
+// DecoderTableS048/S140/S240 have DEFAULT catch-all branches that accept any
+// non-zero window, so the gate rejects reserved FU (5..7) and out-of-range
+// opcodes before the composite trie runs.
 //
-// single-authority slot geometry. The window's bit positions are NO
-// LONGER hand-coded per slot (the old `IsS0 ? 45 : 37` FU position and
-// `IsS0 ? 44 : 36` opcode start). The window is extracted from the 128-bit
-// Bundle128 word using offsets derived from the Bundle128 format-desc
+// Slot geometry is single-authority: windows are extracted from the 128-bit
+// Bundle128 word using offsets from the Bundle128 format-desc
 // (HaydnMCFormats::getBundle128FormatDesc.getSlotOffsetsHiBit) — the same
-// geometric authority the ENCODER consults (HaydnMCCodeEmitter
+// geometric authority the encoder consults (HaydnMCCodeEmitter
 // encodeSlotInBundle128). \p Window is that extracted value viewed as a
-// standalone Width-bit integer (its MSB is at bit Width-1). FU sits at the
-// top 3 bits of the window (LSB [WindowTopBit-2, WindowTopBit]); the opcode
-// starts just below it (top at WindowTopBit-3). This holds for every slot
-// s0/s1/s2 differ only in window width, not in FU/opcode placement
-// (encoding_manual_flex.md §1.2 + §2).
+// standalone Width-bit integer (MSB at bit Width-1). FU sits at the top 3
+// bits of the window (LSB [WindowTopBit-2, WindowTopBit]); the opcode starts
+// just below it (top at WindowTopBit-3). s0/s1/s2 differ only in window
+// width, not in FU/opcode placement (encoding_manual_flex.md §1.2 + §2).
 //
 // Opcode widths and valid max (from the.td FLEX defs):
 // ALU32 (FU=0): 7b, max 0x71 (113 ops — ADDI32_W=0x70, ORI32_W=0x71)
 // LS (FU=1): 7b, max 0x7B (LD16=0x7A, LD8=0x7B — signed half/byte after LDU16)
 // ALU64 (FU=2): 8b, max 0x9B (155 ops, dense from 0x01)
-// LD (FU=3): 6b, max 0x3F (64 ops — LD max raised from 0x38 to 0x3F)
+// LD (FU=3): 6b, max 0x3F (64 ops)
 // MAC (FU=4): 9b, max 0x165 (357 ops, dense from 0x01)
 //
 // \p WindowTopBit is the LSB index of the window's most-significant bit
@@ -378,7 +360,7 @@ static bool isValidFlexSlotWindow(uint64_t Window, unsigned WindowTopBit) {
 }
 
 //===----------------------------------------------------------------------===//
-// P3 — Bundle128 composite decode (the AIE two-step model).
+// Bundle128 composite decode (AIE two-step model).
 //===----------------------------------------------------------------------===//
 //
 // tryDecodeBundle128Composite is the decoder's symmetric inverse of the
@@ -396,31 +378,25 @@ static bool isValidFlexSlotWindow(uint64_t Window, unsigned WindowTopBit) {
 // always returns Success; a NOP/failed slot becomes an empty sub-MCInst). The
 // top-level composite MCInst is always 3 operands wide (one per slot).
 //
-// Option A — content-gated Bundle128 probe (strict FU+opcode contract
-// restored from earlier prior revision decodeFlexSlot). The composite
-// trie matching alone accepts EVERY 16-byte window; the gate validates each
-// non-zero slot window's FU and opcode via isValidFlexSlotWindow (strict
-// range check — the generated sub-tries have catch-all defaults that accept
-// everything). A non-zero window with reserved FU or out-of-range opcode is
-// NOT a Bundle128 slot — return Fail. The sole exception is the all-zero
-// word (a real §4 Bundle128 NOP): it has no non-zero window to validate, so
-// it passes unconditionally.
+// Content gate (strict FU+opcode via isValidFlexSlotWindow): the composite
+// trie alone accepts every 16-byte window; the gate validates each non-zero
+// slot window's FU and opcode (generated sub-tries have catch-all defaults).
+// A non-zero window with reserved FU or out-of-range opcode is not a
+// Bundle128 slot — return Fail. The all-zero word (real §4 Bundle128 NOP)
+// has no non-zero window to validate and passes unconditionally.
 //
-// post-trie sub-MCInst validation (the second tier of the
-// content gate). A non-zero source window whose sub-MCInst came back EMPTY
-// (sub-trie miss → cleared by the slot decoders) is by construction NOT a
-// real Bundle128 slot. In that case return Fail. An all-zero source window
-// is a valid §4 NOP slot: it has no sub-MCInst content to validate, so it is
-// exempt.
+// Post-trie sub-MCInst validation (second tier): a non-zero source window
+// whose sub-MCInst came back empty (sub-trie miss → cleared by the slot
+// decoders) is not a real Bundle128 slot — return Fail. An all-zero source
+// window is a valid §4 NOP slot and is exempt.
 //
-// Size contract: every Bundle128 parcel is exactly 16 bytes. On Success
-// Size = 16. On Fail, Size is left unset and the caller renders <unknown>
-// with Size = min(Bytes.size, 16) (forward progress).
+// Size contract: every Bundle128 parcel is exactly 16 bytes. On Success or
+// Fail from this path, Size = 16 (forward progress; never leave Size unset).
 static DecodeStatus tryDecodeBundle128Composite(MCInst &Instr, uint64_t &Size,
                                                 ArrayRef<uint8_t> Bytes,
                                                 uint64_t Address,
                                                 const MCDisassembler *DisAsm) {
-  // Stage-1 contract: every Bundle128 parcel is exactly 16 bytes.
+  // Every Bundle128 parcel is exactly 16 bytes.
   if (Bytes.size() < 16) {
     return MCDisassembler::Fail;
   }
@@ -465,21 +441,19 @@ static DecodeStatus tryDecodeBundle128Composite(MCInst &Instr, uint64_t &Size,
       BuildGeo(MCSlotKind::Haydn_SLOT_S2),
   };
 
-  // Option A — content gate (strict FU + opcode validation, mirrors
-  // earlier prior revision decodeFlexSlot contract).
+  // Content gate (strict FU + opcode via isValidFlexSlotWindow).
   //
   // The composite trie (DecoderTableBundle128128) has no fixed bits and
   // matches any 16-byte input (single unconditional OPC_Decode). The gate
   // validates each non-zero slot window by checking (a) FU ∈ {0..4} (reject
   // reserved 5..7 per encoding_manual_flex.md §1.2) and (b) the raw opcode
   // is within the valid dense range for that FU (per the.td FLEX defs).
-  // A non-zero window that fails either check is NOT a Bundle128 slot →
+  // A non-zero window that fails either check is not a Bundle128 slot →
   // return Fail. An all-zero window is a §4 NOP slot and skips the gate.
   //
-  // CRITICAL: every Fail path MUST set Size=16. Leaving Size unset (or 0)
-  // makes llvm-objdump advance by an undefined/tiny amount, desyncing the
-  // 16-byte parcel stream and turning every subsequent parcel into a cascade
-  // of misaligned <unknown>s (seen as unknown at addr%16!=0, e.g. 0x21b4).
+  // Every Fail path MUST set Size=16. Leaving Size unset (or 0) makes
+  // llvm-objdump advance by an undefined/tiny amount, desyncing the 16-byte
+  // parcel stream and cascading misaligned <unknown>s.
   for (const SlotGeo &S : Slots) {
     if (S.Window != 0 && !isValidFlexSlotWindow(S.Window, S.WindowTopBit)) {
       Size = 16;
@@ -501,15 +475,13 @@ static DecodeStatus tryDecodeBundle128Composite(MCInst &Instr, uint64_t &Size,
     return MCDisassembler::Fail;
   }
 
-  // post-trie sub-MCInst validation (the second tier of the
-  // content gate). A non-zero source window whose sub-MCInst came back EMPTY
-  // (sub-trie miss → cleared by decodeS0Slot/S1Slot/S2Slot) is by
-  // construction NOT a real Bundle128 slot. Return Fail so the caller renders
-  // <unknown> with forward-progress Size.
+  // Post-trie sub-MCInst validation (second content-gate tier). A non-zero
+  // source window whose sub-MCInst came back empty (sub-trie miss → cleared
+  // by decodeS0Slot/S1Slot/S2Slot) is not a real Bundle128 slot. Return Fail
+  // so the caller renders <unknown> with forward-progress Size.
   //
-  // An all-zero source window is a valid §4 NOP slot: it has no sub-MCInst
-  // content to validate (the slot decoder's empty-MCInst result is the
-  // intended NOP rendering), so it is exempt from this check.
+  // An all-zero source window is a valid §4 NOP slot: empty sub-MCInst is
+  // the intended NOP rendering, so it is exempt.
   //
   // An empty sub-MCInst has getOpcode==0 and getNumOperands==0 (the slot
   // decoder's `SlotInst->clear` resets it to a default-constructed state).
@@ -535,73 +507,24 @@ MCDisassembler::DecodeStatus HaydnDisassembler::getInstruction(
     MCInst &Instr, uint64_t &Size, ArrayRef<uint8_t> Bytes, uint64_t Address,
     raw_ostream &CStream) const {
 
-  // ======================================================================
-  // Bundle128-only decoder (+ / NOP-parcel handling).
+  // Bundle128-only decoder. Primary path is tryDecodeBundle128Composite
+  // (content gate + composite trie; Size=16 on Success/Fail). Bundle128 is
+  // probed before any 2-byte NOP check so parcels whose s0 window is a §4
+  // NOP (leading zero bytes) are not stolen as standalone 0x0000.
   //
-  // The §1.2 width tree (16/32/48/64-bit branches), the D-class classifier
-  // (decodeDClassBundle), the G-format / 48-bit / 16-bit TableGen paths, and
-  // the tier-2 content-gate fallback to the width tree were RETIRED in
-  // when the encoder was cut over to Bundle128-only emission (CLAUDE.md hard
-  // constraint #3 — variable-width bundles — is realized as 16-byte parcels).
-  // tryDecodeBundle128Composite is the primary decode path.
+  // Size / forward-progress contract:
+  // * >= 16 bytes + composite Success → Size = 16, Success.
+  // * >= 16 bytes + composite Fail (content-gate / trie / post-trie miss)
+  //   → Size = 16, Fail (caller renders <unknown>).
+  // * < 16 bytes + leading 0x0000 → Size = 2, NOP, Success (trailing only).
+  // * < 16 bytes (other) → Size = Bytes.size, Fail (EOF / trailing junk).
   //
-  // Bundle128-first ordering. The standalone 16-bit NOP check
-  // (Bytes[0:2] == 0x0000 -> Size=2 NOP) was originally placed BEFORE the
-  // Bundle128 probe, which intercepted ANY parcel whose first 2 bytes were
-  // 0x00. Real Bundle128 parcels whose s0 window (bits[47:0]) is a §4 NOP
-  // slot start with 6 zero bytes; the check gobbled them 2 bytes at a
-  // time, misaligning the cursor and rendering every subsequent slot
-  // <unknown>. This was the Bundle128 decoder regression (d304 max64
-  // flex-bytes-mac, move-instructions 0x40+ all failed because their parcels
-  // started with 00 00). The fix probes Bundle128 FIRST when 16+ bytes are
-  // available; the all-zero Bundle128 already decodes correctly via
-  // tryDecodeBundle128Composite (3 empty NOP slots). The 2-byte standalone
-  // NOP fallback is retained ONLY for the trailing sub-16-byte case.
-  //
-  // Size / forward-progress contract: 
-  // * >= 16 bytes available + composite Success → Size = 16, return Success.
-  // * >= 16 bytes available + composite Fail (content-gate miss OR
-  // internal trie error OR post-trie sub-MCInst miss) → Size = 16
-  // return Fail (caller renders <unknown>).
-  // * < 16 bytes available + leading 0x0000 → Size = 2, NOP, Success
-  // (trailing-parcel fallback).
-  // * < 16 bytes available (other) → Size = Bytes.size, return Fail
-  // (graceful <unknown> at EOF / trailing bytes; no infinite loop).
-  //
-  // CLAUDE.md hard bar: `llvm-objdump -d` MUST NEVER abort. The bounds-safe
-  // `<?>` printOperand defense (HaydnInstPrinter) remains the primary anti
-  // crash mechanism; the slot decoders degrade sub-trie misses to empty NOP
-  // slots (always return Success) rather than asserting.
-  // ======================================================================
-
-  // Bundle128-first ordering. The standalone 16-bit NOP check
-  // (Bytes[0:2] == 0x0000 -> Size=2 NOP) was placed BEFORE the Bundle128
-  // probe, which intercepted ANY parcel whose first 2 bytes were 0x00. Real
-  // Bundle128 parcels whose s0 window (bits[47:0]) is a §4 NOP slot start
-  // with 6 zero bytes; the check gobbled them 2 bytes at a time
-  // misaligning the cursor and rendering every subsequent slot <unknown>.
-  // This was the Bundle128 decoder regression (d304 max64, flex-bytes-mac
-  // move-instructions 0x40+ all failed because their parcels started with
-  // 00 00).
-  //
-  // The fix is to probe Bundle128 FIRST whenever 16+ bytes are available.
-  // tryDecodeBundle128Composite already decodes the all-zero Bundle128
-  // (spec §10 NOP) correctly: all 3 slot windows are zero -> exempt from the
-  // content gate -> composite trie matches -> each sub-trie misses on
-  // the zero window -> 3 empty NOP slots -> "{ nop; nop; nop }". The encoder
-  // confirms this: encodeBundle emits a 16-byte all-zero Bundle128 for an
-  // all-NOP bundle (HaydnMCCodeEmitter.cpp:372-377), so a standalone `nop`
-  // directive NEVER produces a 2-byte 0x0000 parcel in practice.
-  //
-  // The 2-byte standalone-NOP fallback is retained ONLY for the trailing
-  // sub-16-byte case (hand-crafted hostile.text with a bare 0x0000 at EOF)
-  // where Bundle128 cannot run. This preserves the anti-crash intent
-  // without intercepting real Bundle128 parcels.
+  // All-zero Bundle128 (spec §10 NOP) decodes as 3 empty NOP slots via the
+  // composite path; encodeBundle emits 16-byte all-zero for all-NOP, so a
+  // bare 2-byte 0x0000 parcel only appears as hand-crafted trailing bytes.
+  // CLAUDE.md hard bar: `llvm-objdump -d` MUST NEVER abort.
   if (Bytes.size() < 16) {
-    // trailing standalone 16-bit NOP parcel (0x0000). With < 16 bytes
-    // remaining, Bundle128 cannot run; decode a bare 0x0000 as Haydn::NOP
-    // (Size = 2) for forward progress. Any other trailing bytes render
-    // <unknown> with Size = Bytes.size.
+    // Trailing standalone 16-bit NOP (0x0000) when Bundle128 cannot run.
     if (Bytes.size() >= 2 && Bytes[0] == 0x00 && Bytes[1] == 0x00) {
       Instr.setOpcode(Haydn::NOP);
       Size = 2;

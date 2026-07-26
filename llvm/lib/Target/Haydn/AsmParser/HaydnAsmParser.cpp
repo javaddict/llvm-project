@@ -6,7 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "HaydnBundle.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
+#include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "TargetInfo/HaydnTargetInfo.h"
 #include "llvm/ADT/STLExtras.h"
@@ -666,19 +668,25 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     while (Parser.getTok().is(AsmToken::Space))
       Parser.Lex();
 
-    // Parse one or more instructions within the bundle, then form ONE
-    // Haydn::BUNDLE MCInst whose operands are the per-slot child MCInsts
-    // (allocated via MCContext for stable lifetime). The MC layer (InstPrinter
-    // CodeEmitter, Disassembler) handles the bundle as a unit: encodeBundle
-    // packs the children into a single 128-bit Bundle128 word, and printInst
-    // renders them back as `{ op0; op1; op2 }`. Mirrors how HaydnAsmPrinter
-    // (HaydnAsmPrinter.cpp:345) and HaydnDisassembler (HaydnDisassembler.cpp
-    // 1204) build BUNDLE MCInsts: setOpcode(Haydn::BUNDLE) + one
-    // MCOperand::createInst(child) per real child.
+    // AIE AsmParser shape (AIEBaseAsmParser.h:164-211):
+    //   processMatchedInstruction: Bundle.canAdd(Inst) ? Bundle.add : Error
+    //     "incorrect bundle"
+    //   emitBundle: getFormatOrNull → for each slot emit child or NOP
+    //     → B.setOpcode(Format->Opcode)
+    // Product sole live Format->Opcode is BUNDLE128_FULL. Placement is Bundle
+    // SlotMap (fixed getSlotKind / tryAdd alts); no Flags placement writers.
     //
-    // Instructions are separated by ';' (which the lexer emits as
-    // EndOfStatement) and the bundle ends with '}'.
-    SmallVector<MCInst *, Haydn::ISSUE_SLOT_COUNT> BundleChildren;
+    // Explicit `nop` in `{ op; nop; nop }` is a slot filler (residual
+    // encodeBundle filtered NOP before pack). emitBundle pads empty slots —
+    // do not canAdd/add NOP as a co-issue resource (NOP is S0-only alt).
+    //
+    // Solitary real op: prefer S0 when legal (encodeBundle128 residual peer —
+    // fixup window / -c≡mc). Multi-op: sequential canAdd/add (S2→S1→S0 tryAdd).
+    // Encode operand order is S0-S1-S2 (BUNDLE128_FULL dag), matching
+    // HaydnAsmPrinter.cpp:481-527.
+    HaydnMCFormats Fmts;
+    // Matched real children (NOP fillers excluded) before Bundle pack.
+    SmallVector<MCInst *, Haydn::ISSUE_SLOT_COUNT> RealChildren;
 
     while (true) {
       // The next token should be the instruction mnemonic
@@ -711,15 +719,6 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
           return true;
       }
 
-      // Spec §1: a bundle holds at most ISSUE_SLOT_COUNT (3) ops. Reject a 4th
-      // rather than silently dropping it — the encoder assumes ≤3 children.
-      if (BundleChildren.size() == Haydn::ISSUE_SLOT_COUNT) {
-        return Error(MnemonicLoc,
-                     "bundle exceeds " +
-                         Twine(Haydn::ISSUE_SLOT_COUNT) +
-                         " issue slots");
-      }
-
       // Match this instruction's operands to an MCInst. Allocate the MCInst
       // via MCContext so its lifetime extends through emission and any later
       // disassembly/printing pass that holds a pointer to the child (matches
@@ -734,15 +733,10 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
         return Error(ErrLoc, "failed to match instruction in bundle");
       }
       Child->setLoc(MnemonicLoc);
-      // Stage (b.1) — record the slot from source-order position. Inside a
-      // `{ op0; op1; op2 }` bundle the Nth child occupies slot N (0=S0
-      // 1=S1, 2=S2), matching the spec's left-to-right slot convention and
-      // the encoder's operand-index→slot mapping (HaydnMCCodeEmitter
-      // encodeSlotSubInst :1632-1647). The encoder does NOT read this yet
-      // (stage b.2); purely additive, byte-identical.
-      HaydnMCFlags::setHaydnSlot(*Child,
-                                 static_cast<unsigned>(BundleChildren.size()));
-      BundleChildren.push_back(Child);
+
+      // NOP is emit-time slot padding, not a co-issue resource.
+      if (Child->getOpcode() != Haydn::NOP)
+        RealChildren.push_back(Child);
 
       Operands.clear();
 
@@ -776,20 +770,66 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     if (Parser.getTok().is(AsmToken::EndOfStatement))
       Parser.Lex();
 
-    // Form ONE Haydn::BUNDLE MCInst with N MCOperand::createInst children.
-    // encodeBundle (HaydnMCCodeEmitter.cpp:1642) iterates these operands and
-    // packs every real child into a single 128-bit Bundle128 parcel; printInst
-    // (HaydnInstPrinter.cpp:35) renders them as `{ op0; op1; op2 }`. A 1-child
-    // bundle is the single-op case — same MCInst shape, different fill.
-    MCInst MCB;
-    MCB.setOpcode(Haydn::BUNDLE);
-    for (MCInst *Child : BundleChildren)
-      MCB.addOperand(MCOperand::createInst(Child));
-    Parser.getStreamer().emitInstruction(MCB, getSTI());
+    // AIEBaseAsmParser.h:192-201 — Bundle.canAdd/add fail-closed.
+    // Placement authority is Bundle SlotMap (fixed getSlotKind / tryAdd alts).
+    Haydn::MCBundle Bundle(&Fmts);
+    if (RealChildren.size() == 1) {
+      MCInst *Only = RealChildren[0];
+      unsigned Opc = Only->getOpcode();
+      if (!Bundle.canAdd(Opc))
+        return Error(Only->getLoc(), "incorrect bundle");
+      // Solitary residual hand-asm: prefer S0 when legal (encodeBundle128 peer).
+      SlotBits Legal = Fmts.getLegalSlots(Opc);
+      if (Legal & Haydn::SLOT0)
+        Bundle.add(Only, MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
+      else
+        Bundle.add(Only);
+    } else {
+      for (MCInst *Child : RealChildren) {
+        if (!Bundle.canAdd(Child))
+          return Error(Child->getLoc(), "incorrect bundle");
+        Bundle.add(Child);
+      }
+    }
 
-    // Add a dummy token so the caller (matchAndEmitInstruction) has something.
-    // matchAndEmitInstruction will emit nothing for this — the real BUNDLE
-    // MCInst was emitted above.
+    // emitBundle peer (AIEBaseAsmParser.h:164-181; HaydnAsmPrinter.cpp:481-527).
+    // Empty RealChildren = pure stall (all explicit nops) — OccupiedSlots==0 is
+    // covered by product FormatID BUNDLE128_FULL. Fail closed on standalone
+    // unsupported / missing format.
+    if (Bundle.isStandalone()) {
+      Bundle.clear();
+      return Error(NameLoc, "incorrect bundle");
+    }
+    const VLIWFormat *Format = Bundle.getFormatOrNull();
+    if (!Format) {
+      Bundle.clear();
+      return Error(NameLoc, "incorrect bundle");
+    }
+    assert(Format->Opcode == Haydn::BUNDLE128_FULL &&
+           "product live format must be BUNDLE128_FULL");
+
+    MCInst MCB;
+    MCB.setOpcode(Format->Opcode);
+    for (unsigned K = 0; K < Haydn::ISSUE_SLOT_COUNT; ++K) {
+      MCSlotKind Slot =
+          MCSlotKind(MCSlotKind::Haydn_SLOT_S0 + static_cast<int>(K));
+      MCInst *Instr = Bundle.at(Slot);
+      if (!Instr) {
+        Instr = Parser.getContext().createMCInst();
+        unsigned NopOpc = Haydn::NOP;
+        if (const MCSlotInfo *SI = Fmts.getSlotInfo(Slot)) {
+          unsigned TableNop = SI->getNOPOpcode();
+          if (TableNop != 0)
+            NopOpc = TableNop;
+        }
+        Instr->setOpcode(NopOpc);
+      }
+      MCB.addOperand(MCOperand::createInst(Instr));
+    }
+    Parser.getStreamer().emitInstruction(MCB, getSTI());
+    Bundle.clear();
+
+    // Dummy token so matchAndEmitInstruction skips re-emit (already emitted).
     Operands.push_back(HaydnOperand::CreateToken("__bundle_emitted", NameLoc));
     return false;
   }

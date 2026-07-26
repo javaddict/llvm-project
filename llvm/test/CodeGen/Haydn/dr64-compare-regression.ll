@@ -33,13 +33,113 @@
 ; SLT64 + MOVT64 chain
 ;===----------------------------------------------------------------------===;
 
+; REBASELINED (auto) B3.exit.4 Desc-only Bundle128 print (setDesc members; AIEBaseAsmPrinter field order); .file skipped
+
+; CHECK: 	.text
+; CHECK: 	.globl	test_slt64_movt64               // -- Begin function test_slt64_movt64
+; CHECK: 	.type	test_slt64_movt64,@function
+; CHECK: test_slt64_movt64:                      // @test_slt64_movt64
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		nop; 	nop; 	slt64	d0, d0 }
+; CHECK: 	{ 		nop; 	nop; 	movt64	d0, d0 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end0:
+; CHECK: 	.size	test_slt64_movt64, .Lfunc_end0-test_slt64_movt64
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	test_sle64_movf64               // -- Begin function test_sle64_movf64
+; CHECK: 	.type	test_sle64_movf64,@function
+; CHECK: test_sle64_movf64:                      // @test_sle64_movf64
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		nop; 	nop; 	sle64	d0, d0 }
+; CHECK: 	{ 		nop; 	nop; 	movf64	d0, d0 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end1:
+; CHECK: 	.size	test_sle64_movf64, .Lfunc_end1-test_sle64_movf64
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	test_seq64                      // -- Begin function test_seq64
+; CHECK: 	.type	test_seq64,@function
+; CHECK: test_seq64:                             // @test_seq64
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		nop; 	nop; 	seq64	d0, d0 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end2:
+; CHECK: 	.size	test_seq64, .Lfunc_end2-test_seq64
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	test_movesfr2gpr                // -- Begin function test_movesfr2gpr
+; CHECK: 	.type	test_movesfr2gpr,@function
+; CHECK: test_movesfr2gpr:                       // @test_movesfr2gpr
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		nop; 	nop; 	movesfr2gpr	r1 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end3:
+; CHECK: 	.size	test_movesfr2gpr, .Lfunc_end3-test_movesfr2gpr
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	test_movegpr2sfr                // -- Begin function test_movegpr2sfr
+; CHECK: 	.type	test_movegpr2sfr,@function
+; CHECK: test_movegpr2sfr:                       // @test_movegpr2sfr
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		nop; 	nop; 	movegpr2sfr	r1 }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end4:
+; CHECK: 	.size	test_movegpr2sfr, .Lfunc_end4-test_movegpr2sfr
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.globl	test_zero_sfr                   // -- Begin function test_zero_sfr
+; CHECK: 	.type	test_zero_sfr,@function
+; CHECK: test_zero_sfr:                          // @test_zero_sfr
+; CHECK: 	.cfi_startproc
+; CHECK: // %bb.0:
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	.cfi_def_cfa_offset 8
+; CHECK: 	{ 		nop; 	nop; 	zero_sfr }
+; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
+; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
+; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: .Lfunc_end5:
+; CHECK: 	.size	test_zero_sfr, .Lfunc_end5-test_zero_sfr
+; CHECK: 	.cfi_endproc
+; CHECK:                                         // -- End function
+; CHECK: 	.section	".note.GNU-stack","",@progbits
+
 declare i64 @llvm.haydn.slt64(i64)
 declare i64 @llvm.haydn.movt64(i64)
 
 define dso_local i64 @test_slt64_movt64(i64 %a) {
-; CHECK-LABEL: test_slt64_movt64:
-; CHECK: slt64
-; CHECK: movt64
   %cmp = call i64 @llvm.haydn.slt64(i64 %a)
   %r = call i64 @llvm.haydn.movt64(i64 %cmp)
   ret i64 %r
@@ -53,9 +153,6 @@ declare i64 @llvm.haydn.sle64(i64)
 declare i64 @llvm.haydn.movf64(i64)
 
 define dso_local i64 @test_sle64_movf64(i64 %a) {
-; CHECK-LABEL: test_sle64_movf64:
-; CHECK: sle64
-; CHECK: movf64
   %cmp = call i64 @llvm.haydn.sle64(i64 %a)
   %r = call i64 @llvm.haydn.movf64(i64 %cmp)
   ret i64 %r
@@ -68,8 +165,6 @@ define dso_local i64 @test_sle64_movf64(i64 %a) {
 declare i64 @llvm.haydn.seq64(i64)
 
 define dso_local i64 @test_seq64(i64 %a) {
-; CHECK-LABEL: test_seq64:
-; CHECK: seq64
   %r = call i64 @llvm.haydn.seq64(i64 %a)
   ret i64 %r
 }
@@ -84,22 +179,16 @@ declare void @llvm.haydn.movegpr2sfr(i32)
 declare void @llvm.haydn.zero.sfr()
 
 define dso_local i32 @test_movesfr2gpr() {
-; CHECK-LABEL: test_movesfr2gpr:
-; CHECK: movesfr2gpr
   %r = call i32 @llvm.haydn.movesfr2gpr()
   ret i32 %r
 }
 
 define dso_local void @test_movegpr2sfr(i32 %a) {
-; CHECK-LABEL: test_movegpr2sfr:
-; CHECK: movegpr2sfr
   call void @llvm.haydn.movegpr2sfr(i32 %a)
   ret void
 }
 
 define dso_local void @test_zero_sfr() {
-; CHECK-LABEL: test_zero_sfr:
-; CHECK: zero_sfr
   call void @llvm.haydn.zero.sfr()
   ret void
 }

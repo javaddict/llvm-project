@@ -1,0 +1,140 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles -verify-machineinstrs %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles,haydn-verify-bundles -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=FIN
+#
+# B1.4 — Fail-closed committed-bundle invariant verifier (opt-in lit).
+#
+# AIE peers:
+#   AIEBundle.h:150-156 getFormatOrNull
+#   AIEHazardRecognizer.cpp:278-312 applyFormatOrdering assert + finalizeBundle
+#   AIEBaseInstrInfo.cpp:1440-1459 verifyInstruction fail-closed pattern
+#   AIEFinalizeBundle.cpp:40-59 — verify immediately after finalize
+#
+# haydn-verify-bundles is analysis-only: accepts product BUNDLE + FormatID imm 0
+# with legal members; does not rewrite MIR. No MCFlags / no setDesc (BF3).
+
+--- |
+  define void @legal_singleton() { ret void }
+  define void @legal_multi() { ret void }
+  define void @finalize_then_verify() { ret void }
+...
+---
+# Pre-stamped singleton BUNDLE (B1.2 shape) — verifier must accept.
+name:            legal_singleton
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r0, $r3, $r4
+
+    ; CHECK-LABEL: name: legal_singleton
+    ; CHECK: BUNDLE 0
+    ; CHECK: ADDI32
+    ; CHECK: BUNDLE 0
+    ; CHECK: JALR
+    BUNDLE 0 {
+      $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
+    }
+    BUNDLE 0 {
+      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    }
+
+...
+---
+# Pre-stamped multi-MI BUNDLE (B1.1 shape) — FormatID + encode-oracle pack.
+name:            legal_multi
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r0, $r3, $r4
+
+    ; CHECK-LABEL: name: legal_multi
+    ; CHECK: BUNDLE 0
+    ; CHECK: ADDI32
+    ; CHECK: ADD32
+    ; CHECK: BUNDLE 0
+    ; CHECK: JALR
+    BUNDLE 0 {
+      $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
+      $r7 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
+    }
+    BUNDLE 0 {
+      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    }
+
+...
+---
+# Bare MIs → finalize stamps FormatID → verify accepts (pipeline peer).
+name:            finalize_then_verify
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r0, $r3, $r4
+
+    ; FIN-LABEL: name: finalize_then_verify
+    ; FIN: BUNDLE 0
+    ; FIN: ADDI32
+    ; FIN: BUNDLE 0
+    ; FIN: ADD32
+    ; FIN: BUNDLE 0
+    ; FIN: JALR
+    $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
+    $r7 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...

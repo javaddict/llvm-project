@@ -91,12 +91,11 @@ for.body:
   br i1 %exitcond.not, label %for.cond.cleanup, label %for.body
 }
 
-; With the pre-RA VLIW scheduler disabled the post-RA scheduler fuses the
-; 64-bit multiply+accumulate chains into MUL64_LL / MULA64_LL, so a plain
-; ADD64 no longer appears (the accumulation is folded into the MAC). The
-; kernel still uses a 64-bit subtract, loads/stores, and returns. These are
-; order-independent so CHECK-DAG keeps the test robust to scheduling changes.
-; CHECK-DAG: mul{{64\.ll|a64\.ll}}
+; 64-bit multiply chains select as mul64.ll / mula64.ll or the widened
+; mul64.ulul expansion (GISel TD-first / formMACs burn-down). Kernel still
+; uses a 64-bit subtract, loads/stores, and returns. CHECK-DAG keeps the
+; test robust to scheduling changes.
+; CHECK-DAG: mul{{a?64\.(ll|ulul)}}
 ; CHECK-DAG: sub64
 ; CHECK-DAG: ld32
 ; CHECK-DAG: st32

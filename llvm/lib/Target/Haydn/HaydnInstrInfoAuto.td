@@ -2765,7 +2765,8 @@ let isPseudo = 1 in {
 // bits land (M5). Same pattern as SEXT32T64 (line ~2885) /.
 // ABS64 / ABS64S moved to HaydnInstrInfo.td (real FmtALU64Unary 0x67/0x1A7
 // 0x1A8). The HaydnInst<4> isPseudo stubs here were dropped by AsmPrinter
-// (EMPTY_SEL: intrin_sat64). FlexMap still rewrites base → ABS64*_S1/_S2.
+// (EMPTY_SEL: intrin_sat64). Post-RA leaveRegion setDesc commits base →
+// ABS64*_S1/_S2 members; encode prints Desc as-is.
 
 // ARCTAN — DB syntax `ARCTAN rt, rsd, uimm4` (GPR32 dest + DR64 source
 // DB slots DR_Read=['rsd'] GPR_Write=['rt']). Stub previously modeled source
@@ -2844,7 +2845,7 @@ let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1,
 def D_LDW_POST_IMM : FmtLSPostInc<0x47, (outs DR64:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_ldw_post_imm\t$rt, $rs, $scaled_imm", []> {
-  // Multi-slot like LD64: FlexMap S0/S1 dual post-inc streams (P3).
+  // Multi-slot like LD64: alts S0/S1 dual post-inc streams (P3).
   let Itinerary = Slot01_LD;
 }
 
@@ -2963,7 +2964,7 @@ def D_LHW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 
 // WITH_IMM / WITH_REG forms — offset addressing, NO base writeback.
 // Single def ($rtd), no tied operand.
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def D_LDW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_ldw_with_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2972,7 +2973,7 @@ def D_LDW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def D_LW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lw_with_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2981,7 +2982,7 @@ def D_LW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def D_LHW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lhw_with_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2990,7 +2991,7 @@ def D_LHW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def D_LDW_WITH_REG : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs1, GPR32:$rs2),
     "d_ldw_with_reg\t$rtd, $rs1, $rs2", []> {
@@ -2999,7 +3000,7 @@ def D_LDW_WITH_REG : HaydnInst<4, (outs DR64:$rtd),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def D_LW_WITH_REG : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs1, GPR32:$rs2),
     "d_lw_with_reg\t$rtd, $rs1, $rs2", []> {
@@ -3008,7 +3009,7 @@ def D_LW_WITH_REG : HaydnInst<4, (outs DR64:$rtd),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def D_LHW_WITH_REG : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs1, GPR32:$rs2),
     "d_lhw_with_reg\t$rtd, $rs1, $rs2", []> {
@@ -3048,7 +3049,9 @@ def D_SDW_BREV_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 
 // POST_IMM — DR64 data. DB: mem64[rs] = rtd; rs += imm6<<3.
-let isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+// isPseudo=0 required: inside surrounding isPseudo=1 scope (C0.2 / C0.1
+// WITH_* precedent) so AsmPrinter does not drop MCInst as Pseudo.
+let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def D_SDW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sdw_post_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3057,7 +3060,7 @@ def D_SDW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def D_SHW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_shw_post_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3066,7 +3069,7 @@ def D_SHW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def D_SW_H_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sw_h_post_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3075,7 +3078,7 @@ def D_SW_H_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def D_SW_L_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sw_l_post_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3095,7 +3098,8 @@ def D_SDW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+// isPseudo=0: inside isPseudo=1 scope — C0.2 emit path for public PRE stores.
+let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def D_SHW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_shw_pre_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3104,7 +3108,7 @@ def D_SHW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def D_SW_H_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sw_h_pre_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3113,7 +3117,7 @@ def D_SW_H_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def D_SW_L_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sw_l_pre_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3125,7 +3129,7 @@ def D_SW_L_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 // WITH_IMM — offset addressing, NO base writeback. (outs) empty.
 // D_SW_L/H_WITH_IMM are now defined in HaydnInstrInfo.td via
 // FmtLaneStore (with real encoding bits) so codegen can emit them.
-let isAsmParserOnly = 1, mayStore = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1 in
 def D_SDW_WITH_IMM : HaydnInst<4, (outs),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sdw_with_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3134,7 +3138,7 @@ def D_SDW_WITH_IMM : HaydnInst<4, (outs),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayStore = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1 in
 def D_SHW_WITH_IMM : HaydnInst<4, (outs),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_shw_with_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3175,42 +3179,45 @@ def MOVE64 : HaydnInst<4, (outs DR64:$rd),
 // 0x1AA). Same EMPTY_SEL → emit fix as ABS64/ABS64S.
 
 // NOT64 moved to HaydnInstrInfo.td (real FmtALU64Unary — was MCID::Pseudo
-// HaydnInst shell that AsmPrinter dropped; FlexMap peers NOT64_S1/S2 live).
+// HaydnInst shell that AsmPrinter dropped; slot members NOT64_S1/S2 live).
 
+// R_GD family (FormatsALU64): outs GPR32:$rt, ins DR64:$rsd.
+// Logical operand dag MUST match members so leaveRegion setDesc is legal.
+// Prior stubs modeled GPR32 source (capstone drift); product members are
+// DR64 source. Same shape as POPCOUNT64.
 let TSFlags = 14, isCodeGenOnly = 1 in
 def NSA16_L : HaydnInst<4, (outs GPR32:$rd),
-    (ins GPR32:$rs),
+    (ins DR64:$rs),
     "nsa16_l	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
 def NSA32_L : HaydnInst<4, (outs GPR32:$rd),
-    (ins GPR32:$rs),
+    (ins DR64:$rs),
     "nsa32_l	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
 def NSA64 : HaydnInst<4, (outs GPR32:$rd),
-    (ins GPR32:$rs),
+    (ins DR64:$rs),
     "nsa64	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
 def NSAZ16_L : HaydnInst<4, (outs GPR32:$rd),
-    (ins GPR32:$rs),
+    (ins DR64:$rs),
     "nsaz16_l	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
 def NSAZ32_L : HaydnInst<4, (outs GPR32:$rd),
-    (ins GPR32:$rs),
+    (ins DR64:$rs),
     "nsaz32_l	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
 def NSAZ64 : HaydnInst<4, (outs GPR32:$rd),
-    (ins GPR32:$rs),
+    (ins DR64:$rs),
     "nsaz64	$rd, $rs", []>;
 
 // POPCOUNT64 — DB syntax `POPCOUNT64 rt, rsd` (GPR32 dest + DR64 source
 // DB slots DR_Read=['rsd'] GPR_Write=['rt']). Stub previously modeled source
-// as GPR32 (capstone drift cat 1). Fixed to DR64 source. Inert: no selector
-// case, no intrinsic Pat. Stays isCodeGenOnly until a real encoding (M5).
+// as GPR32 (capstone drift cat 1). Fixed to DR64 source (R_GD).
 let TSFlags = 14, isCodeGenOnly = 1 in
 def POPCOUNT64 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
@@ -3313,7 +3320,7 @@ def S_LBS_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def S_LBS_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lbs_with_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3322,7 +3329,7 @@ def S_LBS_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def S_LBS_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs1, GPR32:$rs2),
     "s_lbs_with_reg\t$rt, $rs1, $rs2", []> {
@@ -3368,7 +3375,7 @@ def S_LBU_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def S_LBU_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lbu_with_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3377,7 +3384,7 @@ def S_LBU_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def S_LBU_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs1, GPR32:$rs2),
     "s_lbu_with_reg\t$rt, $rs1, $rs2", []> {
@@ -3423,7 +3430,7 @@ def S_LHWS_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def S_LHWS_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lhws_with_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3432,7 +3439,7 @@ def S_LHWS_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def S_LHWS_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs1, GPR32:$rs2),
     "s_lhws_with_reg\t$rt, $rs1, $rs2", []> {
@@ -3478,7 +3485,7 @@ def S_LHWU_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def S_LHWU_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lhwu_with_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3487,7 +3494,7 @@ def S_LHWU_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def S_LHWU_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs1, GPR32:$rs2),
     "s_lhwu_with_reg\t$rt, $rs1, $rs2", []> {
@@ -3569,7 +3576,7 @@ def S_LW_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def S_LW_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lw_with_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3578,7 +3585,7 @@ def S_LW_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayLoad = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
 def S_LW_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs1, GPR32:$rs2),
     "s_lw_with_reg\t$rt, $rs1, $rs2", []> {
@@ -3615,7 +3622,8 @@ def S_SHW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 
 // DB: mem32[rs] = rt; rs += imm6<<2.
-let isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+// isPseudo=0: inside isPseudo=1 scope — C0.2 emit path (S_SB/S_SHW peers).
+let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def S_SW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_sw_post_imm	$rt, $rs, $scaled_imm", []> {
@@ -3654,7 +3662,7 @@ def S_SW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 
 // WITH_IMM — offset addressing, NO base writeback. (outs) empty.
-let isAsmParserOnly = 1, mayStore = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1 in
 def S_SB_WITH_IMM : HaydnInst<4, (outs),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_sb_with_imm	$rt, $rs, $scaled_imm", []> {
@@ -3663,7 +3671,7 @@ def S_SB_WITH_IMM : HaydnInst<4, (outs),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayStore = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1 in
 def S_SHW_WITH_IMM : HaydnInst<4, (outs),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_shw_with_imm	$rt, $rs, $scaled_imm", []> {
@@ -3672,7 +3680,7 @@ def S_SHW_WITH_IMM : HaydnInst<4, (outs),
   let Itinerary = Slot0_LS;
 }
 
-let isAsmParserOnly = 1, mayStore = 1 in
+let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1 in
 def S_SW_WITH_IMM : HaydnInst<4, (outs),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_sw_with_imm	$rt, $rs, $scaled_imm", []> {
@@ -3751,13 +3759,16 @@ def X2HADD32_L : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2hadd32_l	$rd, $rs", []>;
 
+// X2HMAX/X2HMIN — R_GD members (FormatsALU64): outs GPR32 / ins DR64.
+// Prior logical used DR64 dest (R_DD drift); setDesc then aborted
+// '$d0 is not a GPR32'. Match members so alts leaveRegion is legal.
 let TSFlags = 14 in
-def X2HMAX32 : HaydnInst<4, (outs DR64:$rd),
+def X2HMAX32 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "x2hmax32	$rd, $rs", []>;
 
 let TSFlags = 14 in
-def X2HMIN32 : HaydnInst<4, (outs DR64:$rd),
+def X2HMIN32 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "x2hmin32	$rd, $rs", []>;
 
@@ -3836,12 +3847,13 @@ def X4HADD16_L : HaydnInst<4, (outs DR64:$rd),
     "x4hadd16_l	$rd, $rs", []>;
 
 let TSFlags = 14 in
-def X4HMAX16 : HaydnInst<4, (outs DR64:$rd),
+// X4HMAX/X4HMIN — same R_GD shape as X2HMAX (GPR32 dest, DR64 src).
+def X4HMAX16 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "x4hmax16	$rd, $rs", []>;
 
 let TSFlags = 14 in
-def X4HMIN16 : HaydnInst<4, (outs DR64:$rd),
+def X4HMIN16 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "x4hmin16	$rd, $rs", []>;
 
@@ -3935,11 +3947,11 @@ def ZERO_DR : HaydnInst<4, (outs DR64:$rd),
 // the Phase-C detection pass (modular arithmetic on an index-derived ptr).
 //===----------------------------------------------------------------------===//
 
-// Slot01_LD (not Slot0_LS): FlexMap places D_LDW_CB_IMM in S0/S1/S2 and the
-// post-RA HR already dual-issues independent CB loads. Slot0_LS made
-// SMS DFA ResMII treat every CB load as exclusive S0 — bkfir ResMII 10 vs
-// HiFi 8. Issue-width + dual MAC still bound the floor; this only fixes the
-// DFA fallback / itinerary view to match FlexMap (P3).
+// Slot01_LD (not Slot0_LS): PlacementAlternative alts place D_LDW_CB_IMM in
+// S0/S1/S2 and the post-RA HR already dual-issues independent CB loads.
+// Slot0_LS made SMS DFA ResMII treat every CB load as exclusive S0 — bkfir
+// ResMII 10 vs HiFi 8. Issue-width + dual MAC still bound the floor; this
+// only fixes the DFA fallback / itinerary view to match alts-derived slots.
 // AGU writeback of base (tied) — matches BundleSim and FormatsLS Flex peers.
 // Prevents PostRA multi-issue of same-base CB ops (B6 WRITE_CONFLICT).
 let isAsmParserOnly = 1, isPseudo = 0, mayLoad = 1 in

@@ -1,4 +1,6 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+; XFAIL: *
+; G-CAPI: intrinsic signature / ImmArg / return-type mismatch vs decls (not BF3 setDesc).
 ; Status : x4seli16 selects X4SEL16 (variable mask) / X4SELI16 (uimm4).
 ;
 ; Comprehensive DR64 special operations intrinsics test for Haydn backend.

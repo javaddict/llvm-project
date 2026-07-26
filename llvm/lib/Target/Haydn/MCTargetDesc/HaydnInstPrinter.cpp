@@ -31,12 +31,13 @@ using namespace llvm;
 void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
                                  StringRef Annot, const MCSubtargetInfo &STI,
                                  raw_ostream &O) {
-  // VLIW bundles: Hexagon-style { slot0; slot1; slot2 } format. Only the
-  // legacy canonical Haydn::BUNDLE (AsmPrinter/asm-parser path) is rendered
-  // here -- the decoded BUNDLE128_FULL composite is tblgen-printed via
-  // its AsmString + printOperand recursing on the isInst slot sub-instructions
-  // (no hand-roll); it falls through to the non-bundle { printSingleInst }
-  // path below.
+  // VLIW bundles: Hexagon-style { slot0; slot1; slot2 } format.
+  // CodeGen + AsmParser emit Format->Opcode BUNDLE128_FULL
+  // (AIEBaseAsmPrinter.cpp:161-164 / AIEBaseAsmParser.h:164-181). BUNDLE128_FULL
+  // is tblgen-printed via its AsmString + printOperand isInst recursion
+  // (falls through to the non-bundle { printSingleInst } path below).
+  // Residual TargetOpcode::BUNDLE (legacy / non-asm producers) still rendered
+  // here for defense-in-depth.
   if (MI->getOpcode() == Haydn::BUNDLE) {
     SmallVector<const MCInst *, 3> Children;
     for (unsigned I = 0, E = MI->getNumOperands(); I != E; ++I) {

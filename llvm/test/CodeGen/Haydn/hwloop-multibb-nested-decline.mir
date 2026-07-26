@@ -9,8 +9,9 @@
 # Outer: multi-BB soft residual → must stay soft (no SET sel=0).
 #
 # CHECK-LABEL: name: multibb_nested_decline
-# CHECK: SET_HWLOOP_REG 1
-# CHECK-NOT: SET_HWLOOP_REG 0
+# Inner Role A expands to real wide SET (sel=1) before pack; outer stays soft.
+# CHECK: SET_HWLOOP_F2_W 1
+# CHECK-NOT: SET_HWLOOP_F2_W 0
 # Soft outer back-edge retained:
 # CHECK: BEQZ_W {{.*}}%bb.1
 

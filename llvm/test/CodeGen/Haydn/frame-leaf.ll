@@ -5,8 +5,8 @@
 ; CHECK-LABEL: void_leaf:                              // @void_leaf
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ nop; nop; xor32	r0, r0, r0 }
+; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	void_leaf, .Lfunc_end0-void_leaf
 ; CHECK: 	.cfi_endproc

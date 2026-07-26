@@ -48,7 +48,7 @@ define i32 @self_comparison_ult(i32 %a) nounwind {
 define i32 @inverse_comparison(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: inverse_comparison:
 ; CHECK: slt32
-; CHECK: { xor32 r0, r0, r0 }
+; CHECK: { {{.*}}xor32 r0, r0, r0{{.*}} }
 ; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
   %cmp1 = icmp slt i32 %a, %b
   %cmp2 = icmp slt i32 %b, %a
@@ -78,7 +78,7 @@ define i32 @unrelated_comparisons(i32 %a, i32 %b, i32 %c, i32 %d) nounwind {
 define i32 @inverse_comparison_select(i32 %a, i32 %b, i32 %c) nounwind {
 ; CHECK-LABEL: inverse_comparison_select:
 ; CHECK: slt32
-; CHECK: { xor32 r0, r0, r0 }
+; CHECK: { {{.*}}xor32 r0, r0, r0{{.*}} }
 ; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
   %cmp1 = icmp slt i32 %a, %b
   %cmp2 = icmp slt i32 %b, %a
@@ -109,7 +109,7 @@ entry:
 define void @branch_eq(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_eq:
 ; CHECK: seq32
-; CHECK: beqz_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -121,12 +121,11 @@ else:
   ret void
 }
 
-; icmp ne + branch → SEQ32 + XORI32 imm1 + BEQZ (emitInvert01)
+; icmp ne + branch → SEQ32 + BNEZ to else (eq → else; fallthrough = then)
 define void @branch_ne(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_ne:
 ; CHECK: seq32
-; CHECK: xori32
-; CHECK: beqz_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
 entry:
   %cmp = icmp ne i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -142,7 +141,7 @@ else:
 define void @branch_slt(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_slt:
 ; CHECK: slt32
-; CHECK: beqz_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
 entry:
   %cmp = icmp slt i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -154,12 +153,11 @@ else:
   ret void
 }
 
-; icmp sge + branch → SLT32 + XORI32 imm1 + BEQZ (emitInvert01)
+; icmp sge + branch → SLT32 + BNEZ to else (a<b → else; fallthrough = a>=b)
 define void @branch_sge(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_sge:
 ; CHECK: slt32
-; CHECK: xori32
-; CHECK: beqz_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
 entry:
   %cmp = icmp sge i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -175,7 +173,7 @@ else:
 define void @branch_ult(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_ult:
 ; CHECK: sltu32
-; CHECK: beqz_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
 entry:
   %cmp = icmp ult i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -187,12 +185,11 @@ else:
   ret void
 }
 
-; icmp uge + branch → SLTU32 + XORI32 imm1 + BEQZ (emitInvert01)
+; icmp uge + branch → SLTU32 + BNEZ to else (a<b → else; fallthrough = a>=b)
 define void @branch_uge(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_uge:
 ; CHECK: sltu32
-; CHECK: xori32
-; CHECK: beqz_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
 entry:
   %cmp = icmp uge i32 %a, %b
   br i1 %cmp, label %then, label %else

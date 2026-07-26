@@ -10,8 +10,7 @@
 // model the post-RA hazard recognizer AND the software pipeliner (SMS) reason
 // about: each instruction has an associated slot, particular combinations of
 // slots (formats) are valid, and a slot can be occupied exactly once. This is
-// the format-first tablegen foundation — Phase 1 dependency infrastructure
-// (inert: no pass wires it yet).
+// the format-first tablegen foundation.
 //
 // A bundle holds instructions in three partially redundant representations:
 // the instructions in original issue order
@@ -19,28 +18,40 @@
 // a bitset of occupied slots
 // A bundle is valid iff `isFormatAvailable(OccupiedSlots)`.
 //
-// Haydn adaptation vs AIE: AIE ops have a SINGLE slot (`getSlotKind`); Haydn
-// ops are multi-slot (`getLegalSlots` returns a SET — e.g. funct-ALU64 is
-// S1|S2, ALU32 is S0|S1|S2). So `canAdd`/`add` PICK the first legal slot that
-// keeps the bundle's format valid (the `findFittingSlot` first-fit logic
-// unified here). The pick is deterministic given the bundle's current
-// occupancy, so SMS sees stable slot pressure.
+// Bundle is a **solver adapter**. For logicals that have PlacementAlternatives,
+// canAdd/add/reserveByOpcode route through pure CycleState tryAddProduct
+// (HaydnBundleFormatSolver.h) — the AIE alt-try shape
+// (AIEHazardRecognizer.cpp:174-214 getAlternateInstsOpcode + first
+// Bundle.canAdd AltOpcode; AIEBundle.h:62-105/110-145 canAdd/add occupancy).
+// OccupiedSlots / SlotMap / empty standalone escape are retained (SMS ResMII).
 //
-// Built on `HaydnMCFormats` (the AIE-parity format interface: getLegalSlots
-// getSlotInfo, isFormatAvailable, isSupportedInstruction —). No
-// upstream patch required for this data model.
+// Alts-only pickSlot: no getLegalSlots no-alt fallback. No-alt opcodes fail
+// pickSlot (nullopt) unless standalone empty-escape accepts them. Prefer
+// S2 → S1 → S0 via tryAdd (loads keep S0).
+//
+// getFeasibleFormatMask exposes the pre-commit FormatID frontier from
+// OccupiedSlots (productFeasibleFormatMask). AIE peer getFormatOrNull
+// (AIEBundle.h:150-156) returns one format; Haydn keeps a mask until post-RA
+// freeze. Logical ops only — no setDesc / no FormatID commit here.
+//
+// Haydn adaptation vs AIE: AIE ops have a SINGLE slot (`getSlotKind`); Haydn
+// multi-slot logicals enumerate PlacementAlternative FieldSlots (S2→S1→S0).
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNBUNDLE_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNBUNDLE_H
 
+#include "HaydnBundleFormatSolver.h"
+#include "HaydnPlacementAlternative.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include <vector>
 
 namespace llvm {
+// AIEBundle.h:35 — MachineInstr lives in llvm, used by MachineBundle alias.
+class MachineInstr;
 namespace Haydn {
 
 // \a I must provide getOpcode.
@@ -49,23 +60,20 @@ public:
   Bundle(const HaydnBaseMCFormats *FormatInterface)
       : FormatInterface(FormatInterface) {}
 
-  // Whether adding \p Instr (by opcode) leaves the bundle valid. Picks the
-  // first legal slot from getLegalSlots whose addition keeps a format
-  // available (isFormatAvailable) and that doesn't conflict with an already
-  // occupied slot. A truly empty bundle (no instructions AND no reserved
-  // slots) always accepts (standalone escape, mirrors AIE AIEBundle.h:71-73);
-  // a standalone bundle (one unsupported op) accepts nothing more.
+  // Whether adding \p Instr (by opcode) leaves the bundle valid.
+  // Committed format-members (post-setDesc): fixed getSlotKind (AIE shape).
+  // Alts-bearing logicals: product CycleState tryAdd.
+  // Else: no getLegalSlots fallback — pickSlot nullopt outside empty escape.
+  // A truly empty bundle (no instructions AND no reserved slots) always
+  // accepts (standalone escape, mirrors AIE AIEBundle.h:71-73); a standalone
+  // bundle (one unsupported op) accepts nothing more.
   // Contract : canAdd and reserveByOpcode/add MUST agree on slot
   // availability. The verdict is derived from the SAME pickSlot call in every
   // branch, so the two can never diverge. The empty-bundle early-out is the
   // ONE exception (AIE-faithful standalone escape): on a bundle with neither
   // Instrs nor OccupiedSlots any op is accepted as a future standalone
   // parcel, and reserveByOpcode/add treat "pickSlot found no slot" as a
-  // graceful no-op (AIE AIEBundle.h:134-139) — NOT an assert. This is the
-  // only way canAdd(true on empty) can hold without pickSlot having to
-  // succeed for every supported opcode (some supported opcodes have
-  // getLegalSlots==0, e.g. a Flex-table opcode with no legacy enc mapping
-  // and no funct routing — pickSlot returns nullopt for them).
+  // graceful no-op (AIE AIEBundle.h:134-139) — NOT an assert.
   // reserveByOpcode updates OccupiedSlots WITHOUT pushing Instrs
   // (SMS ResourceCycle path). empty alone is therefore insufficient
   // after the first reserveResources the bundle still has Instrs.empty
@@ -112,12 +120,11 @@ public:
       assert(Instrs.size() == 1 && "unsupported op added to a non-empty bundle");
       return;
     }
-    // pickSlot may return nullopt for a supported opcode whose getLegalSlots is
-    // empty (no legal slot). On a truly empty bundle canAdd returned true
-    // (the AIE-faithful standalone escape), so this op becomes a standalone
-    // parcel with no OccupiedSlots update — mirroring AIE's add
-    // (AIEBundle.h:134-139, which returns without setting OccupiedSlots when
-    // getSlotKind is unknown). Reserve the slot only when pickSlot finds one.
+    // pickSlot may return nullopt for a supported opcode with no alts /
+    // no free field (alts-only; no getLegalSlots fallback). On a truly empty
+    // bundle canAdd returned true (standalone escape), so this op becomes a
+    // standalone parcel with no OccupiedSlots update — mirroring AIE's add
+    // (AIEBundle.h:134-139). Reserve the slot only when pickSlot finds one.
     auto Slot = pickSlot(Opcode);
     if (!Slot) {
       assert(Instrs.size() == 1 && "no-slot op added to a non-empty bundle");
@@ -126,12 +133,12 @@ public:
     reserveSlot(Instr, *Slot);
   }
 
-  // (GAP-MC2): add \p Instr with a HINT slot. If \p HintSlot is free
-  // legal for \p Instr, and the resulting occupancy has a valid format, place
-  // \p Instr there. Otherwise fall back to the first-fit `pickSlot` (bare
-  // auto-assign). Used by the MC encoder when an explicit `.sN` suffix or
-  // source-order position records the intended slot (AsmParser
-  // `setHaydnSlot`). \pre canAdd(Instr->getOpcode).
+  // add \p Instr with a HINT slot. If \p HintSlot is free, legal under
+  // PlacementAlternative FieldSlots (alts-only),
+  // and the resulting occupancy has a valid format, place \p Instr there.
+  // Otherwise fall back to solver `pickSlot`. Used by the MC encoder when
+  // an explicit `.sN` suffix records the intended slot.
+  // \pre canAdd(Instr->getOpcode).
   void add(I *Instr, MCSlotKind HintSlot) {
     unsigned Opcode = Instr->getOpcode();
     if (isNoHazardMetaInstruction(Opcode)) {
@@ -149,16 +156,16 @@ public:
       assert(Instrs.size() == 1 && "unsupported op added to a non-empty bundle");
       return;
     }
-    // Try the hint first: is it free, legal, and format-valid?
+    // Try the hint first: free + legal under alts/FieldSlots + format-valid.
     std::optional<MCSlotKind> Chosen;
     const MCSlotInfo *HintSI = FormatInterface->getSlotInfo(HintSlot);
     if (HintSI && !(OccupiedSlots & HintSI->getSlotSet()) &&
-        (FormatInterface->getLegalSlots(Opcode) &
-         (SlotBits(1) << static_cast<unsigned>(HintSlot))) &&
-        FormatInterface->isFormatAvailable(OccupiedSlots | HintSI->getSlotSet())) {
+        isHintSlotLegal(Opcode, HintSlot) &&
+        FormatInterface->isFormatAvailable(OccupiedSlots |
+                                           HintSI->getSlotSet())) {
       Chosen = HintSlot;
     }
-    // Hint did not fit: fall back to first-fit pickSlot (bare auto-assign).
+    // Hint did not fit: fall back to solver pickSlot (alts tryAdd).
     if (!Chosen)
       Chosen = pickSlot(Opcode);
     if (!Chosen) {
@@ -180,13 +187,7 @@ public:
   // no-op, NOT an assert — canAdd returns true on a truly empty bundle
   // (Instrs.empty && OccupiedSlots == 0, standalone escape) without
   // consulting pickSlot, so reserveByOpcode must tolerate the same "no slot
-  // found" outcome AIE's add tolerates. The SMS ResourceManager
-  // (MachinePipeliner.cpp calculateResMIIDFA:4155-4156) creates a fresh empty
-  // HaydnResourceCycle, asserts canReserveResources(MI)=true (empty→true), then
-  // calls reserveResources(MI) — a hard assert here crashes SMS on any op whose
-  // getLegalSlots is empty (regression). After the first successful
-  // reserve, OccupiedSlots is non-zero while Instrs stays empty; canAdd then
-  // consults pickSlot so a second same-slot op is rejected and ResMII grows
+  // found" outcome AIE's add tolerates.
   void reserveByOpcode(unsigned Opcode) {
     if (isNoHazardMetaInstruction(Opcode) || Opcode == TargetOpcode::BUNDLE)
       return;
@@ -196,9 +197,6 @@ public:
     // change — the next supported op will start the slot accounting.
     if (!FormatInterface->isSupportedInstruction(Opcode))
       return;
-    // pickSlot may return nullopt for a supported opcode whose getLegalSlots is
-    // empty (no legal slot). No OccupiedSlots change — mirrors AIE's add
-    // standalone behavior and keeps canAdd/reserveByOpcode consistent.
     auto Slot = pickSlot(Opcode);
     if (!Slot)
       return;
@@ -213,6 +211,27 @@ public:
   bool hasValidFormat() const {
     assert(!isStandalone());
     return FormatInterface->isFormatAvailable(OccupiedSlots);
+  }
+
+  // Return the minimum-size valid packet format for OccupiedSlots, if any.
+  // AIE peer: AIEBundle.h:150-156 getFormatOrNull via PacketFormats::getFormat.
+  // Product: sole live row is BUNDLE128_FULL (N-format-ready table scan).
+  const VLIWFormat *getFormatOrNull(unsigned Size = 0) const {
+    assert(!isStandalone());
+    if (Size)
+      return FormatInterface->getPacketFormats().getFormatBySize(OccupiedSlots,
+                                                                 Size);
+    return FormatInterface->getPacketFormats().getFormat(OccupiedSlots);
+  }
+
+  // Feasible FormatID frontier for current OccupiedSlots (logical only).
+  // AIE peer: getFormatOrNull returns one covering VLIWFormat*
+  // (AIEBundle.h:150-156; AIEFormat.cpp:18-27 first-covering). Haydn keeps a
+  // FormatID *mask* so Pre-RA/SMS can reason about multi-format readiness
+  // without freezing FormatID or setDesc (plan §7.1). Product size-1 Full →
+  // ProductFormatMask whenever Full still covers OccupiedSlots.
+  uint64_t getFeasibleFormatMask() const {
+    return haydn::bundle::productFeasibleFormatMask(OccupiedSlots);
   }
 
   void clear() {
@@ -248,18 +267,37 @@ public:
            !FormatInterface->isSupportedInstruction(Instrs.front()->getOpcode());
   }
 
-  // For testing: the slot picked for the LAST added supported instruction.
-  // (Production callers iterate getSlotMap.)
+  // For testing: the slot committed for the LAST reserved instruction.
+  // (Production callers iterate getSlotMap.) Reads SlotMap — does not re-probe
+  // tryAdd (OccupiedSlots already includes the last field).
   MCSlotKind lastPickedSlot() const {
-    return Instrs.empty() ? MCSlotKind()
-                          : pickSlotForOccupied(Instrs.back()->getOpcode());
+    return SlotMap.empty() ? MCSlotKind() : SlotMap.back().first;
   }
 
 private:
-  // Pick the first legal slot for \p Opcode given the CURRENT occupied slots.
-  // Iterates the FlexMap legal-slot set (HaydnMCFormats::getLegalSlots — the
-  // single authority); for each, checks the slot is free and the
-  // resulting occupancy still has a valid format.
+  // True iff \p HintSlot is a legal field for \p Opcode under placement
+  // alternatives (alts-only; no getLegalSlots fallback).
+  // Committed format-members accept only their fixed getSlotKind.
+  bool isHintSlotLegal(unsigned Opcode, MCSlotKind HintSlot) const {
+    MCSlotKind Fixed = FormatInterface->getSlotKind(Opcode);
+    if (Fixed != MCSlotKind())
+      return Fixed == HintSlot;
+    const SlotBits HintBit =
+        SlotBits(1) << static_cast<unsigned>(HintSlot);
+    HaydnMCFormats SolverFmts;
+    SmallVector<PlacementAlternative, 4> Alts;
+    if (!enumeratePlacementAlternatives(SolverFmts, Opcode, Alts))
+      return false;
+    for (const PlacementAlternative &A : Alts)
+      if (A.FieldSlots == HintBit)
+        return true;
+    return false;
+  }
+
+  // Pick the first legal field for \p Opcode given CURRENT occupied slots.
+  // Committed format-member opcodes (post-setDesc) use fixed getSlotKind
+  // (AIEBundle.h:92-104). Alts-bearing logicals: CycleState tryAddProduct.
+  // Else nullopt (no getLegalSlots first-fit).
   std::optional<MCSlotKind> pickSlot(unsigned Opcode) const {
     return pickSlotForOccupied(Opcode, OccupiedSlots);
   }
@@ -272,57 +310,39 @@ private:
     SlotMap.push_back({Slot, Instr});
     OccupiedSlots |= SI->getSlotSet();
   }
+
   std::optional<MCSlotKind>
   pickSlotForOccupied(unsigned Opcode, SlotBits Occ) const {
-    // getLegalSlots (FlexMap-derived) replaces the former getAltSlotSet
-    // (legal ∩ FU-acceptance). The FU-acceptance gate is redundant subsequent :
-    // the FlexMap is already FU-aware (slot k is legal iff a _S<k>
-    // variant exists, and the.td FU/slot assignment produces that variant).
-    // The isFormatAvailable check below still rejects invalid slot combos.
-    SlotBits Alts = FormatInterface->getLegalSlots(Opcode);
-    if (Alts == 0)
-      return std::nullopt;
-    // Prefer higher slots first (S2 → S1 → S0). First-fit S0-first lets
-    // flexible ALU (ADD32/ADDI32, legal on any slot) steal S0/S1 before a
-    // load is scheduled; LD64 is only legal on S0|S1, so the load then
-    // fails to pack into the only cycle its es/ls window allows and SMS
-    // reports Schedule Found=0. Preferring S2 for multi-slot ALU leaves
-    // S0 free for loads (matches the Slot0 LS unit's primary home).
-    for (int B = 2; B >= 0; --B) {
-      SlotBits Bit = SlotBits(1) << B;
-      if (!(Alts & Bit))
-        continue;
-      // Bit is a Haydn::SLOT* bitmask (1/2/4); convert to the MCSlotKind index
-      // (Haydn_SLOT_S0/S1/S2) that getSlotInfo expects.
-      MCSlotKind Slot = haydnSlotMaskToKind(Bit);
-      const MCSlotInfo *SI = FormatInterface->getSlotInfo(Slot);
+    // Already-materialized format-member opcodes (MI.setDesc after
+    // leaveRegion) have a single fixed slot — AIE AIEBundle.h:92-104
+    // getSlotKind + conflict/format check.
+    MCSlotKind Fixed = FormatInterface->getSlotKind(Opcode);
+    if (Fixed != MCSlotKind()) {
+      const MCSlotInfo *SI = FormatInterface->getSlotInfo(Fixed);
       if (!SI)
-        continue;
-      SlotBits NewSlots = Occ | SI->getSlotSet();
-      // Slot must be free, and (if conflict info is available) the slot's
-      // conflict-closure must not overlap the occupied slots. AIE derives
-      // ConflictBits from the defined packet formats (self | slots that no
-      // packet format combines with this slot). wires Haydn's generated
-      // PacketFormats table (GET_FORMATS_PACKETS_TABLE now consumed): with
-      // BUNDLE128_FULL covering {S0,S1,S2}, the backend's computeSlotSets
-      // derives ConflictBits = self-only for every slot (1/2/4 — each slot
-      // co-emits with the other two in Bundle128, so none are excluded). The
-      // SLOT_ALL sentinel branch below therefore never triggers for the real
-      // table; it remains as a defensive fallback for a future slot with no
-      // packet-format membership (ConflictBits would degenerate to AllSlots).
-      // With self-only ConflictBits, `(Occ & ConflictSet & ~SlotSet)` is always
-      // 0 (self is masked out), so this clause is a permissive no-op for valid
-      // combos — correct, since Bundle128 permits any subset of {S0,S1,S2}.
-      if (Occ & SI->getSlotSet())
-        continue;
-      if (SI->getConflictSet() != SLOT_ALL &&
-          (Occ & SI->getConflictSet() & ~SI->getSlotSet()))
-        continue;
+        return std::nullopt;
+      if (Occ & SI->getConflictSet())
+        return std::nullopt;
+      const SlotBits NewSlots = Occ | SI->getSlotSet();
       if (!FormatInterface->isFormatAvailable(NewSlots))
-        continue;
-      return Slot;
+        return std::nullopt;
+      return Fixed;
     }
-    return std::nullopt;
+
+    // PlacementAlternative + product tryAdd for multi-slot logicals
+    // (AIEHazardRecognizer.cpp:174-214 alt try; AIEBundle.h:62-105 canAdd).
+    // Alts-only — no getLegalSlots no-alt fallback.
+    HaydnMCFormats SolverFmts;
+    if (!hasPlacementAlternatives(SolverFmts, Opcode))
+      return std::nullopt;
+    haydn::bundle::CycleState Probe =
+        haydn::bundle::makeProductCycleStateFromOccupied(Occ);
+    if (Probe.FeasibleFormatMask == 0)
+      return std::nullopt;
+    if (!haydn::bundle::tryAddProduct(Probe, SolverFmts, Opcode))
+      return std::nullopt;
+    assert(!Probe.Members.empty());
+    return haydnSlotMaskToKind(Probe.Members.back().FieldSlots);
   }
 
   static bool isNoHazardMetaInstruction(unsigned Opcode) {
@@ -344,6 +364,9 @@ private:
 };
 
 using MCBundle = Bundle<MCInst>;
+// AIE peer: AIEBundle.h:271-273 MachineBundle / ConstMachineBundle.
+using MachineBundle = Bundle<MachineInstr>;
+using ConstMachineBundle = Bundle<const MachineInstr>;
 
 } // namespace Haydn
 } // namespace llvm

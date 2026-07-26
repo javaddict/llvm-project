@@ -5,9 +5,9 @@
 ; CHECK-LABEL: add:                                    // @add
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 	xor32	r0, r0, r0 }
-; CHECK: 	{ 	add32	r1, r1, r2 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ nop; nop; xor32	r0, r0, r0 }
+; CHECK: 	{ nop; nop; add32	r1, r1, r2 }
+; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	add, .Lfunc_end0-add
 ; CHECK: 	.cfi_endproc

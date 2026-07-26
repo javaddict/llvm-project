@@ -17,13 +17,15 @@
 ; HardwareLoops + ExpandPseudos live in addPreSched2 (AFTER PEI).
 ;
 ; Opt0 - EnsureTerminators (pre-PEI) -> PEI -> ExpandPostIncEarly ->
-; ExpandPseudos -> PostMachineScheduler -> BranchRelaxation
+; ExpandPseudos -> PostMachineScheduler -> Finalize/Verify ->
+; BranchRelaxation -> late Finalize/Verify (B4.3)
 ; (no MBP / HardwareLoops / FixupHwLoops / profitability peeps)
 ;
 ; Opt1+ - EnsureTerminators (pre-PEI) -> PEI -> ExpandPostIncEarly ->
 ; CFG/Cond/Copy peeps -> MBP BEFORE HardwareLoops -> ExpandPseudos
-; > BitSimplify/PEI peep -> PostMachineScheduler
-; PreEmit - BranchRelaxation -> FixupHwLoops -> BranchRelaxation
+; > BitSimplify/PEI peep -> PostMachineScheduler -> Finalize/Verify
+; PreEmit - BranchRelaxation -> FixupHwLoops -> BranchRelaxation ->
+; late Finalize/Verify (B4.3 empty-cycle setDesc + wrap; AIE PreEmit empty)
 ;
 ; Opt2+ - MachinePipeliner -> DeadMIElim (pre-RA); PreRALoadPromote deleted
 ;
@@ -77,6 +79,9 @@ define i32 @f(i32 %a, i32 %b) {
 ; O0-NOT:      Branch Probability Basic Block Placement
 ; O0:      Branch relaxation pass
 ; O0-NOT:      Haydn Hardware Loop Fixup
+; B4.3 late layout firewall after PreEmit growth (AIE PreEmit empty):
+; O0-NEXT:      Haydn Bundle Finalization
+; O0-NEXT:      Haydn Bundle Invariant Verifier
 ; Densify/quarantine absent at product defaults (W0.1):
 ; O0-NOT:      Haydn Load/Store Optimizer
 ; O0-NOT:      Haydn Circular Buffer Detection
@@ -122,10 +127,13 @@ define i32 @f(i32 %a, i32 %b) {
 ; O123:      PostRA Machine Instruction Scheduler
 ; Sole MBP (addBlockPlacement empty - no second placement after pack):
 ; O123-NOT:      Branch Probability Basic Block Placement
-; PreEmit - BR / FixupHwLoops / BR
+; PreEmit - BR / FixupHwLoops / BR / B4.3 late Finalize+Verify
+; (AIE PreEmit empty AIE2TargetMachine.cpp:88; Haydn re-commit after growth)
 ; O123:      Branch relaxation pass
 ; O123-NEXT:      Haydn Hardware Loop Fixup
 ; O123-NEXT:      Branch relaxation pass
+; O123-NEXT:      Haydn Bundle Finalization
+; O123-NEXT:      Haydn Bundle Invariant Verifier
 ; Densify/quarantine absent at product defaults (W0.1):
 ; O123-NOT:      Haydn Load/Store Optimizer
 ; O123-NOT:      Haydn Circular Buffer Detection

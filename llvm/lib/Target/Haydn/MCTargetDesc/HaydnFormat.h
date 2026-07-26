@@ -92,7 +92,11 @@ public:
 private:
   // The slots in the format-specific order.
   SlotKindRange Slots;
-  // Encoded parcel size in bits (16/32/48/64/128).
+  // Encoded packet length from the generated table.
+  // Product BUNDLE128_FULL: value is EncodedBytes (16), NOT bits.
+  // Slot field geometry uses MCSlotInfo::Size in EncodedBits (48/40/40).
+  // See haydn::bundle (HaydnBundlePlan.h) for typed accessors — do not
+  // treat this field as bits without an explicit conversion.
   unsigned Size;
 
   // Precomputed OR of the Haydn::SLOT* masks this format can hold.
@@ -118,10 +122,10 @@ private:
   const VLIWFormat *FormatsTable;
 };
 
-// G-MC-9: hand-authored HaydnFormats / HaydnPacketFormats
-// HaydnFormatAvailable deleted. getPacketFormats / getIsFormatAvailable
-// return CodeGenFormat-generated tables (HaydnGenFormats.inc).
-// PacketFormats methods remain below for the generated table wrapper.
+// Hand-authored HaydnFormats / HaydnPacketFormats / HaydnFormatAvailable
+// deleted. getPacketFormats / getIsFormatAvailable return CodeGenFormat-
+// generated tables (HaydnGenFormats.inc). PacketFormats methods remain below
+// for the generated table wrapper.
 
 } // namespace llvm
 

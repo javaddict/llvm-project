@@ -223,7 +223,7 @@ def ADD32 : FmtALU32<0x00, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
 }
 
 //===----------------------------------------------------------------------===//
-// Mode-0 shell islands retired (Bundle128 FLEX-only).
+// Mode-0 shell islands retired (Bundle128-only).
 // Former ADD32_M0 / *_M0 / *_S1_M0 / FMULA16_LS00_M0S1 live shells deleted.
 // Island files remain under legacy-retired/ (not included).
 // public REG identity is logical LD32_REG_M0S0LS etc.; private encode
@@ -248,7 +248,7 @@ def SUB32S : FmtALU32<0x03, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
 //===----------------------------------------------------------------------===//
 // G-format (FmtG_S0_ALU32 / *_G) shells retired (Bundle128-only).
 // HaydnGFormatSelect was removed in /; zero live Haydn::*_G C++ refs.
-// Keep SUB32_G_S0 (HaydnFormatsALU32.td) as FLEX encode-only form.
+// Keep SUB32_G_S0 (HaydnFormatsALU32.td) as Bundle128 encode-only form.
 //===----------------------------------------------------------------------===//
 
 def ADDI32 : FmtI<0x20, (outs GPR32:$rd), (ins GPR32:$rs, simm16:$imm),
@@ -305,9 +305,9 @@ def NOT32 : FmtALU32Unary<0x07, (outs GPR32:$rd), (ins GPR32:$rs1),
 // ANDI32_S* / ORI32_S* / XORI32_S* (HaydnFormatsALU32 RI20, uimm20).
 // ISA: rt = rs OP ZEXT(imm20). Keep FmtI field names ($rd/$rs/$imm) so
 // Inst binds; ImmLeaf is uimm20 (not uimm16) — the ISel contract that
-// matches peers' ZEXT imm20. FmtI Inst is dead on Bundle128 FlexMap
-// (setOpcode-only materialize); bits<16> imm field only constrains the
-// legacy Inst path, not the Flex peer encode.
+// matches peers' ZEXT imm20. FmtI Inst is dead on Bundle128 (post-RA
+// setDesc to member); bits<16> imm field only constrains the
+// legacy Inst path, not the slot-member encode.
 def ANDI32 : FmtI<0x24, (outs GPR32:$rd), (ins GPR32:$rs, uimm20:$imm),
                   "andi32\t$rd, $rs, $imm", []> {
   let TSFlags{2-0} = 0b001;
@@ -905,7 +905,7 @@ def CSRR : FmtCSR<0x39, (outs GPR32:$rd), (ins uimm8:$csr_addr, GPR32:$rs),
 // it stops DCE from dropping a CBR boundary setup.
 //
 // Prefer the Bundle128 CSRW_S0 in the AsmMatcher (2-op, csr encodes
-// correctly). Legacy CSRW stays for GISel/FlexMap with the 3-op FmtCSR
+// correctly). Legacy CSRW stays for GISel/alts with the 3-op FmtCSR
 // shape; encodeSlotSubInst strips the dead $rd when pairing to CSRW_S0.
 let hasSideEffects = 1, isCodeGenOnly = 1 in
 def CSRW : FmtCSR<0x3A, (outs GPR32:$rd), (ins uimm8:$csr_addr, GPR32:$rs),
@@ -920,9 +920,10 @@ def CSRW : FmtCSR<0x3A, (outs GPR32:$rd), (ins uimm8:$csr_addr, GPR32:$rs),
 // FmtLS is defined in HaydnInstrFormats.td
 
 let mayLoad = 1 in {
-// LD32 is logical-only (public mnemonic ld32). Legal in S0|S1
-// via FlexMap {LD32_S0, LD32_S1}; dual-load packing records slot on AltDescs
-// never bakes LD32_S1 into MIR. Slot01_LD matches LD64.
+// LD32 is logical-only (public mnemonic ld32). Legal in S0|S1 via
+// PlacementAlternative {LD32_S0, LD32_S1}; dual-load packing records slot
+// on AltDescs and leaveRegion setDesc(member) — never bakes LD32_S1 into
+// pre-pack MIR. Slot01_LD matches LD64.
 def LD32 : FmtLS<0x3B, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
                  "ld32\t$rt, $rs, $offset",
                  []> {
@@ -951,8 +952,8 @@ def LDU8 : FmtLS<0x3F, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
 }
 
 // plain 64-bit load — DR64, S0|S1 choice-set (Slot01_LD).
-// Dual-load: promoteLoadsToSlot1 records AltDescs slot=1 on the second LD64
-// (placement only; opcode stays LD64). Encoder materializes S1 Flex window.
+// Dual-load: post-RA HR tryAddProduct PlacementAlternatives → setDesc
+// LD64_S0/S1 (no promoteLoads residual).
 def LD64 : FmtLS<0x45, (outs DR64:$rt), (ins GPR32:$rs, simm16:$offset),
                 "ld64\t$rt, $rs, $offset", []> {
   let Itinerary = Slot01_LD;
@@ -986,8 +987,9 @@ def ST8 : FmtLS<0x42, (outs), (ins GPR32:$rt, GPR32:$rs, simm16:$offset),
 // Family 4 — logical reg-offset LS (public MIR only).
 //
 // Operand shape: rt, base rs, offset-reg off (same as private *_S0 peers).
-// FlexMap name-pair: LD32_REG_M0S0LS → LD32_REG_M0S0LS_S0 (etc.). ISel/PEI
-// FrameLowering emit these logical names; never the private *_S0 encode peers.
+// AlternateInsts name-peer alts: LD32_REG_M0S0LS → LD32_REG_M0S0LS_S0 (etc.).
+// ISel/PEI/FrameLowering emit these logical names; never the private *_S0
+// encode peers (leaveRegion setDesc commits the member; Desc-as-is encode).
 // isCodeGenOnly: keep out of the asm matcher so `ld32_reg` still matches the
 // Bundle128 peer only (same CSRW / isCodeGenOnly logical-shell idiom).
 //===----------------------------------------------------------------------===//
@@ -1078,8 +1080,8 @@ def X2SUB32 : FmtALU64<0x59, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
 // dag binds 2 dests + 2 srcs so MI.setDesc(legacy -> _S<k>) preserves the
 // operand count (4) and def count (2); the 2nd dest $rtd2 is encoded into the
 // legacy funct slot (bits{9-6}) — a tablegen-consistency device only, since
-// materializeFlexVariants rewrites to slot form before emit and the Haydn32
-// decoder table is no longer consulted. See FmtMAC2Dest + the
+// leaveRegion setDesc(member) commits the slot form before emit and the
+// Haydn32 decoder table is no longer consulted. See FmtMAC2Dest + the
 // FmtALU64_2Dest header comment for the full rationale.
 def X2MUL32 : FmtALU64_2Dest<0x5A, 0x00,
                              (outs DR64:$rd, DR64:$rtd2), (ins DR64:$rs1, DR64:$rs2),
@@ -1202,9 +1204,9 @@ def X2ABS32S : FmtALU64Unary<0x67, 0x18C, (outs DR64:$rd), (ins DR64:$rs1),
 // Was HaydnInst<4> isPseudo stubs in HaydnInstrInfoAuto.td; AsmPrinter dropped
 // them (MCID::Pseudo) so __haydn_abs64s/neg64s selected but never emitted
 // (EMPTY_SEL at greenfield: intrin_sat64 exit 7). Same pattern as
-// X2ABS32S: real FmtALU64Unary base + FlexMap → ABS64*_S1/_S2
-// (HaydnFormatsALU64.td 0b00100011..0b00101000). Functs 0x1A7..0x1AA continue
-// the 0x67 allocation after X2NEG32S_L (0x1A6).
+// X2ABS32S: real FmtALU64Unary base; post-RA setDesc → ABS64*_S1/_S2
+// members (HaydnFormatsALU64.td 0b00100011..0b00101000). Functs 0x1A7..0x1AA
+// continue the 0x67 allocation after X2NEG32S_L (0x1A6).
 def ABS64 : FmtALU64Unary<0x67, 0x1A7, (outs DR64:$rd), (ins DR64:$rs1),
                           "abs64\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
@@ -1238,8 +1240,9 @@ def NOT64 : FmtALU64Unary<0x67, 0x1AB, (outs DR64:$rd), (ins DR64:$rs1),
 
 // X2 abs/neg unary family (golden slot1/2 ALU Index 81-86).
 // Base Form uses FmtALU64Unary so they are NOT MCID::Pseudo
-// GISel selects the base; FlexMap rewrites to X2*_S1/_S2 for Mode-0 Bundle128
-// emit. Flex opcodes (golden): 0b01010001..0b01010110 in HaydnFormatsALU64.td.
+// GISel selects the base; leaveRegion setDesc commits X2*_S1/_S2 members
+// for Mode-0 Bundle128 emit. Slot opcodes (golden): 0b01010001..0b01010110
+// in HaydnFormatsALU64.td.
 // Backend-internal 0x67 funct 0x1A2..0x1A6 continue the allocation after
 // MOVE32_DR_* (0x1A0/0x1A1).
 def X2ABS32 : FmtALU64Unary<0x67, 0x1A2, (outs DR64:$rd), (ins DR64:$rs1),
@@ -1272,7 +1275,7 @@ def X2NEG32S_L : FmtALU64Unary<0x67, 0x1A6, (outs DR64:$rd), (ins DR64:$rs1),
 // Was HaydnInst<4> isPseudo stubs in HaydnInstrInfoAuto.td; AsmPrinter
 // dropped MCID::Pseudo so llvm.haydn.x4abs16{,s} selected but never emitted
 // (empty function body). Same fix as X2ABS32S / ABS64:
-// real FmtALU64Unary base + FlexMap → X4ABS16{,S}_S1/_S2
+// real FmtALU64Unary base; post-RA setDesc → X4ABS16{,S}_S1/_S2 members
 // (HaydnFormatsALU64.td 0b01111000 / 0b01111001).
 // Functs 0x1AC / 0x1AD continue the 0x67 allocation after NOT64 (0x1AB).
 def X4ABS16 : FmtALU64Unary<0x67, 0x1AC, (outs DR64:$rd), (ins DR64:$rs1),
@@ -1419,7 +1422,12 @@ def X4SRAI16R : FmtALU64ShiftImm<0x70, (outs DR64:$rd),
 // ZERO_SFR — no regs at all (writes SFR implicitly).
 // Use HaydnInst with explicit Inst{...}=... so the operand fields encode
 // correctly even when the MIR operand list has no $rd / no $rs.
-let hasSideEffects = 1 in {
+//
+// C1.1 / G-PRED-SSA: explicit Uses/Defs=[SFR] so SSA pred expand
+// (SLT → MOVESFR2GPR; MOVEGPR2SFR → MOVT) cannot be reordered across
+// independent predicate epochs. hasSideEffects alone is not enough for
+// dataflow; D169 modeled the same Uses/Defs split.
+let hasSideEffects = 1, Uses = [SFR] in {
 def MOVESFR2GPR : HaydnInst<4, (outs GPR32:$rd), (ins),
                             "movesfr2gpr\t$rd", []> {
   let TSFlags{2-0} = 0b110;
@@ -1433,6 +1441,8 @@ def MOVESFR2GPR : HaydnInst<4, (outs GPR32:$rd), (ins),
   let Inst{13 - 10} = 0;
   let Inst{9 - 0} = 0x198;
 }
+}  // hasSideEffects = 1, Uses = [SFR]
+let hasSideEffects = 1, Defs = [SFR] in {
 def MOVEGPR2SFR : HaydnInst<4, (outs), (ins GPR32:$rs),
                             "movegpr2sfr\t$rs", []> {
   let TSFlags{2-0} = 0b110;
@@ -1458,7 +1468,7 @@ def ZERO_SFR : HaydnInst<4, (outs), (ins),
   let Inst{13 - 10} = 0;
   let Inst{9 - 0} = 0x19A;
 }
-}  // hasSideEffects = 1
+}  // hasSideEffects = 1, Defs = [SFR]
 
 //===----------------------------------------------------------------------===//
 // Cross-RF move: DR64 half-lane → GPR32 (MOVE32_DR_L / MOVE32_DR_H)
@@ -1542,7 +1552,7 @@ def SETCBR_END : HaydnPseudo<(outs), (ins i32imm:$cbr_sel, GPR32:$val),
 // (MULSSH for mulq31, MULSSH+ADD32 for macq31, MUL64_LL for mulq63). See.
 //
 // No scalar GPR MAC opcode: MULA* targets DR64, not GPR32. haydn_mac32
-// selects to MULL + ADD32. tryFormMAC / tryFormShiftAddMAC stay disabled.
+// selects to MULL + ADD32. PostSelect formMACs is FATED (deleted).
 
 //===----------------------------------------------------------------------===//
 // Slot 1/2 — MAC Instructions (Multiply-Accumulate)
@@ -1556,8 +1566,8 @@ def SETCBR_END : HaydnPseudo<(outs), (ins i32imm:$cbr_sel, GPR32:$val),
 // SIMD MAC instructions (X2MULA32, X2MULAPL32) are defined in HaydnInstrInfoAuto.td
 
 // no durable MIR opcodes LD32_S1/LD64_S1. Logical loads are LD32/LD64
-// only; S1 Bundle128 forms live in HaydnFormatsLD.td as Flex encode-only
-// (`LD32_S1` / `LD64_S1` under DecoderNamespace FlexEmitterOnly).
+// only; S1 Bundle128 forms live in HaydnFormatsLD.td as encode-only
+// peers (`LD32_S1` / `LD64_S1` under DecoderNamespace FlexEmitterOnly).
 
 //===----------------------------------------------------------------------===//
 // Fused post-increment loads (AGU writeback, spec D_LDW_POST_IMM
@@ -1712,13 +1722,13 @@ def D_SW_H_WITH_IMM : FmtLaneStore<0x4C,
 // DISTINCT-codepoint isCodeGenOnly=1 defs ADDI32_W_S0/ORI32_W_S0
 // (HaydnFormatsALU32.td:1185-1196, derived from HaydnFU_ALU32_S0_RI20).
 // Re-basing the legacy defs onto the SAME format would duplicate those defs
-// and break the FlexMap suffix-strip pairing (`ADDI32_W` ->
+// and break the logical→member alt pairing (`ADDI32_W` ->
 // `ADDI32_W_S0`). The legacy def's role is to carry the (rd, rs, imm20)
-// operand shape and be committed to its _S0 twin by
-// materializeMultiOpcodeInstrs. The Fmt48_WideGPRImm base class is therefore
-// RETAINED (it has live derived defs). Fmt48_* class retirement is blocked
-// until all 21 live Fmt48_* defs migrate to Bundle128 s0/s1/s2 projections
-// (forward work beyond Cycle B scope — see HaydnInstrFormatsC.td note).
+// operand shape and be committed to its _S0 member by post-RA
+// materializeMultiOpcodeInstrs setDesc. The Fmt48_WideGPRImm base class is
+// therefore RETAINED (it has live derived defs). Fmt48_* class retirement is
+// blocked until all 21 live Fmt48_* defs migrate to Bundle128 s0/s1/s2
+// projections (see HaydnInstrFormatsC.td note).
 def ADDI32_W  : Fmt48_WideGPRImm<0x01, (outs GPR32:$rt),
                                  (ins GPR32:$rs, simm20_wide_abs:$imm),
                                  "addi32_w\t$rt, $rs, $imm", []>;

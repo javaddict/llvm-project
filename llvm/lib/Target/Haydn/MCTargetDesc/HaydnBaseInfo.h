@@ -17,9 +17,7 @@
 #define LLVM_LIB_TARGET_HAYDN_MCTARGETDESC_HAYDNBASEINFO_H
 
 #include "llvm/MC/MCInstrDesc.h"
-#include "llvm/MC/MCInst.h"
 #include <cstdint>
-#include <optional>
 
 namespace llvm::Haydn {
 
@@ -76,13 +74,12 @@ enum EncodedWidth : unsigned {
 //
 // These are the ENCODING FU codes (0..4) — the spec's wire format.
 // The former parallel "RESOURCE model" enum HaydnDClass::FUType
-// (FU_ALU32=1..FU_MAC=5) was deleted alongside HaydnDClassInfo.h — the FlexMap
-// (`HaydnMCFormats::getLegalSlots`) is FU-aware by construction (slot k is
-// legal iff a `_S<k>` variant exists, and the.td FU/slot assignment
-// produces that variant), so there is no longer a separate resource-model FU
-// namespace to keep in sync. FU_MAC0=7 / FU_MAC1=8 were resource-only
-// instances of MAC and are NOT encoded (they collapse to MAC=4 at the encode
-// boundary).
+// (FU_ALU32=1..FU_MAC=5) was deleted alongside HaydnDClassInfo.h — alts-derived
+// `HaydnMCFormats::getLegalSlots` covers slot legality (slot k is legal iff a
+// `_S<k>` variant exists, and the .td FU/slot assignment produces that
+// variant), so there is no longer a separate resource-model FU namespace to keep
+// in sync. FU_MAC0=7 / FU_MAC1=8 were resource-only instances of MAC and are
+// NOT encoded (they collapse to MAC=4 at the encode boundary).
 namespace FlexFU {
 constexpr unsigned ALU32 = 0;          //< 000 — 32-bit scalar ALU (GPR). opcode 6b.
 constexpr unsigned LS   = 1;           //< 001 — Load/Store. opcode 7b.
@@ -125,70 +122,8 @@ inline EncodedWidth getEncodedWidth(uint64_t TSFlags) {
 
 } // namespace llvm::Haydn
 
-//===----------------------------------------------------------------------===//
-// MCInst::Flags slot layout (stage b.1 —)
-//===----------------------------------------------------------------------===//
-//
-// MCInst::Flags (MCInst.h:193) is a 32-bit field the comment at :191-192
-// explicitly sanctions for "target subcomponent to target subcomponent" use
-// (X86 uses bits 6+ for IP_USE_* prefix flags, X86BaseInfo.h:59-66). Haydn
-// owns the LOW bits to carry the HR-committed VLIW slot (0/1/2) as runtime
-// metadata — the slot is chosen at packetize (HaydnHazardRecognizer.cpp:625
-// AltDescs->setSlot) and propagated across the MI→MCInst boundary at
-// MCInstLower, set from source-order position in the AsmParser, and set from
-// the decode-slot index in the Disassembler. The encoder (stage b.2) reads
-// this instead of scanning the opcode suffix; stage b.1 is additive plumbing
-// only (zero consumer, byte-identical).
-//
-// Bit layout:
-// Bit 0 : slot-valid (0 = no slot recorded; 1 = slot bits authoritative)
-// Bits 1-2 : slot index (0=S0, 1=S1, 2=S2; 3 reserved)
-// Bits 3+ : UNUSED by Haydn (X86 owns high bits; no Haydn MCInst ever
-// carries X86 prefix flags — the two namespaces never coexist).
-//
-// MCInst is a value object — Flags is stored inline, copies free, no pointer
-// identity needed. This is the value-stable vessel (codex's correction to the
-// DenseMap<MCInst*,unsigned> sketch that lost the slot on copy).
-namespace llvm::HaydnMCFlags {
-
-// Bit position of the slot-valid flag.
-constexpr unsigned SLOT_VALID_BIT = 0;
-// Bit position of the 2-bit slot-index field.
-constexpr unsigned SLOT_INDEX_SHIFT = 1;
-// Mask for the 2-bit slot index.
-constexpr unsigned SLOT_INDEX_MASK = 0x3u;
-
-// Encode a slot index (0/1/2) into an MCInst::Flags word. Sets the valid bit.
-inline unsigned encodeSlot(unsigned Slot) {
-  return (1u << SLOT_VALID_BIT) | ((Slot & SLOT_INDEX_MASK) << SLOT_INDEX_SHIFT);
-}
-
-// \return true iff \p Flags has the slot-valid bit set.
-inline bool hasSlot(unsigned Flags) {
-  return (Flags & (1u << SLOT_VALID_BIT)) != 0;
-}
-
-// \return the slot index encoded in \p Flags. Caller MUST guard with hasSlot.
-inline unsigned getSlot(unsigned Flags) {
-  return (Flags >> SLOT_INDEX_SHIFT) & SLOT_INDEX_MASK;
-}
-
-// Record the HR-committed slot on \p MI. Overwrites any prior slot.
-inline void setHaydnSlot(MCInst &MI, unsigned Slot) {
-  MI.setFlags(encodeSlot(Slot));
-}
-
-// \return the slot recorded on \p MI, or std::nullopt if none.
-inline std::optional<unsigned> getHaydnSlot(const MCInst &MI) {
-  unsigned F = MI.getFlags();
-  if (!hasSlot(F))
-    return std::nullopt;
-  return getSlot(F);
-}
-
-// \return true iff \p MI carries a recorded slot.
-inline bool hasHaydnSlot(const MCInst &MI) { return hasSlot(MI.getFlags()); }
-
-} // namespace llvm::HaydnMCFlags
+// Placement is member Desc getSlotKind / Bundle SlotMap (AIE shape:
+// AIEBaseMCFormats.cpp:66-75, AIEBundle.h:92-104, AIEBaseAsmParser.h:164-211).
+// No MCInst::Flags slot path.
 
 #endif // LLVM_LIB_TARGET_HAYDN_MCTARGETDESC_HAYDNBASEINFO_H
