@@ -54,6 +54,15 @@ public:
   std::pair<unsigned, const TargetRegisterClass *>
   getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                StringRef Constraint, MVT VT) const override;
+
+  // C2.2–C2.3 / G-MEM-INTRIN: mark public CB/BREV/Golden WITH/POST/PRE + UA
+  // mem intrinsics so IRTranslator attaches MachineMemOperands (object, size,
+  // align, flags). GISel select clones those MMOs onto the selected MI.
+  // Ordinary (Golden LS + BREV): MOLoad/MOStore. Stateful (CB + UA): MO* |
+  // MOVolatile. Peer: Hexagon L2_load*_pbr (ordinary) / V6_vgatherm* (volatile).
+  bool getTgtMemIntrinsic(IntrinsicInfo &Info, const CallBase &I,
+                          MachineFunction &MF,
+                          unsigned Intrinsic) const override;
 };
 
 } // namespace llvm

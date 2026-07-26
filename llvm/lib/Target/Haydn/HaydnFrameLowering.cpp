@@ -619,13 +619,8 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
     }
   }
 
-  // Save callee-saved AR registers (AR2-AR3)
-  // Note: AR registers cannot be directly saved/restored with current instructions.
-  // This is deferred until AR register handling is fully specified in the ISA.
-  for (const CalleeSavedInfo &CI : llvm::reverse(CSI)) {
-    Register Reg = CI.getReg();
-    (void)Reg; // Unused until AR save/restore is implemented
-  }
+  // AR0–AR3 are caller-saved (G-AR-MODEL freeze 2026-07-24): not in CSR_Haydn.
+  // No prologue save. Product UA residual uses AR as scratch for PLDWWUA/FLAR/…
 
   // Emit CFI directives.
   // cfi_def_cfa_offset StackSize — only emit when there's an actual stack
@@ -711,13 +706,7 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
           .addCFIIndex(CFIIndex)
           .setMIFlags(MachineInstr::FrameSetup);
     }
-    // Note: AR CFI directives will be added when AR save/restore is implemented
   }
-
-  // Note: AR registers (AR2-AR3) are callee-saved but cannot be directly
-  // saved/restored with current instructions. They may need CSR access or
-  // cross-bank copies through GPRs. This is deferred until AR register handling
-  // is fully specified in the ISA.
 
   // belt: empty entry dead-end (whole-function `unreachable`). Primary
   // invariant is HaydnEnsureTerminators (post-PEI): every succ-empty MBB gets
@@ -808,13 +797,7 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
   // Restore callee-saved registers in reverse order of saving
   const std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
 
-  // Restore callee-saved AR registers (AR2-AR3)
-  // Note: AR registers cannot be directly saved/restored with current instructions.
-  // This is deferred until AR register handling is fully specified in the ISA.
-  for (const CalleeSavedInfo &CI : CSI) {
-    Register Reg = CI.getReg();
-    (void)Reg; // Unused until AR save/restore is implemented
-  }
+  // AR0–AR3 caller-saved (G-AR-MODEL): nothing to restore.
 
   // Restore callee-saved DR64 registers (D8-D15).
   // No stride base-pointer optimization in the epilogue: a PEI scratch
@@ -849,7 +832,7 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
     for (const auto &E : DRCSRegs) {
       // never emit bare LD64 SP, imm for large frames (e.g. +480).
       // emitCSRLoad picks imm when scaled simm6-legal, else LD64_REG + scratch.
-      // Logical LD64 only; slot from placement / encode FlexMap.
+      // Logical LD64 only; slot from placement / setDesc materialize.
       emitCSRLoad(MBB, MBBI, DL, TII, Haydn::LD64, E.Reg, E.BaseReg,
                   E.Offset, MachineInstr::FrameDestroy);
     }

@@ -18,7 +18,8 @@
 // Geometry (match BundleSim code_image + AIE ZOL setup-distance model):
 //   1. Inclusive END: HWLR_END >= HWLR_BEGIN is legal (start <= end).
 //   2. Primary hard rule: SET must issue at or before body bundle t−3
-//      → PC_SET + MinSetupBundles * Bundle128Bytes <= PC_BEGIN.
+//      → PC_SET + MinSetupBundles * productParcelBytes() <= PC_BEGIN
+//      (B4.4: EncodedBytes from ProductFormatDesc, not a dual magic 16).
 //   3. Body length is not a separate legality floor; short bodies are fine
 //      when (1)+(2) hold. Do not invent min-body sprays as product law.
 //
@@ -36,14 +37,25 @@
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNHWLOOPCONTRACTS_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNHWLOOPCONTRACTS_H
 
+#include "HaydnBundlePlan.h"
 #include <cstdint>
 
 namespace llvm {
 namespace haydn {
 namespace hwloop {
 
-// Bundle128 parcel size (bytes).
-inline constexpr int64_t Bundle128Bytes = 16;
+// Bundle128 parcel size (bytes). B4.4: alias of ProductFormatDesc.Bytes
+// (encodedBytesFor(Bundle128Full)), not an independent magic constant.
+// getInstSizeInBytes / Fixup / HardwareLoops share this EncodedBytes oracle.
+inline constexpr int64_t Bundle128Bytes =
+    static_cast<int64_t>(bundle::productParcelBytes().Value);
+static_assert(Bundle128Bytes == 16, "Bundle128 product parcel is 16 bytes");
+static_assert(Bundle128Bytes ==
+                  static_cast<int64_t>(bundle::Bundle128EncodedBytesValue),
+              "hwloop Bundle128Bytes must equal plan EncodedBytes");
+static_assert(Bundle128Bytes ==
+                  static_cast<int64_t>(bundle::ProductFormatDesc.Bytes.Value),
+              "hwloop Bundle128Bytes must equal ProductFormatDesc.Bytes");
 
 // SET_HWLOOP offset field widths (ISA DB).
 inline constexpr unsigned Offset1Bits = 6;  // uimm6 → START
@@ -59,7 +71,8 @@ inline constexpr int64_t MaxEndOffsetBytes =
 // later rejects (label placement, late bundles). Prefer demote over MC fail.
 inline constexpr int64_t Off1SafetyMarginBundles = 3;
 inline constexpr int64_t Off1SafetyMarginBytes =
-    Off1SafetyMarginBundles * Bundle128Bytes; // 48
+    bundle::productBundlesToBytes(
+        static_cast<unsigned>(Off1SafetyMarginBundles)); // 48
 inline constexpr int64_t MaxStartOffsetBytesSafe =
     MaxStartOffsetBytes - Off1SafetyMarginBytes; // 204
 
@@ -67,6 +80,12 @@ inline constexpr int64_t MaxStartOffsetBytesSafe =
 // AIE peer of ZOLSupport::LoopSetupDistance (AIE2 uses 7 bundles to LEND;
 // Haydn measures setup → BEGIN with 3 bundles).
 inline constexpr unsigned MinSetupBundles = 3;
+
+// Min setup distance in bytes (MinSetupBundles × product EncodedBytes).
+// B4.4: single EncodedBytes path; AIE sums Format->getSize()
+// (AIEMachineAlignment.cpp:287+).
+inline constexpr int64_t MinSetupBytes =
+    bundle::productBundlesToBytes(MinSetupBundles);
 
 // Deprecated as a *legality* floor (kept only if a caller still needs a
 // soft heuristic). Product law is MinSetupBundles + END >= BEGIN.

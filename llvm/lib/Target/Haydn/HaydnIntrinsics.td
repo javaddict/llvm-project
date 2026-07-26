@@ -229,12 +229,13 @@ def : Pat<(int_haydn_sqrt GPR32:$a),  (SQRT GPR32:$a)>;
 
 def : Pat<(int_haydn_nsa32 GPR32:$a),    (NSA32 GPR32:$a)>;
 def : Pat<(int_haydn_nsau32 GPR32:$a),   (NSAU32 GPR32:$a)>;
-def : Pat<(int_haydn_nsa64 GPR32:$a),    (NSA64 GPR32:$a)>;
-def : Pat<(int_haydn_nsa16_l GPR32:$a),  (NSA16_L GPR32:$a)>;
-def : Pat<(int_haydn_nsa32_l GPR32:$a),  (NSA32_L GPR32:$a)>;
-def : Pat<(int_haydn_nsaz64 GPR32:$a),   (NSAZ64 GPR32:$a)>;
-def : Pat<(int_haydn_nsaz16_l GPR32:$a), (NSA32 GPR32:$a)>;
-def : Pat<(int_haydn_nsaz32_l GPR32:$a), (NSA32 GPR32:$a)>;
+// R_GD: DR64 source (match FormatsALU64 members / logical dag).
+def : Pat<(int_haydn_nsa64 DR64:$a),    (NSA64 DR64:$a)>;
+def : Pat<(int_haydn_nsa16_l DR64:$a),  (NSA16_L DR64:$a)>;
+def : Pat<(int_haydn_nsa32_l DR64:$a),  (NSA32_L DR64:$a)>;
+def : Pat<(int_haydn_nsaz64 DR64:$a),   (NSAZ64 DR64:$a)>;
+def : Pat<(int_haydn_nsaz16_l DR64:$a), (NSAZ16_L DR64:$a)>;
+def : Pat<(int_haydn_nsaz32_l DR64:$a), (NSAZ32_L DR64:$a)>;
 
 //===----------------------------------------------------------------------===//
 // MULSA32/MULSS32 — Dual 32-bit multiply-accumulate/subtract (binary DR64)
@@ -677,6 +678,8 @@ def : Pat<(int_haydn_x2sub32s_hllh DR64:$a, DR64:$b), (X2SUB32S_HLLH DR64:$a, DR
 //def : Pat<(int_haydn_x2hadd32s_l DR64:$a), (X2HADD32S_L DR64:$a)>;
 //def : Pat<(int_haydn_x4hadd16_h DR64:$a), (X4HADD16_H DR64:$a)>;
 //def : Pat<(int_haydn_x4hadd16_l DR64:$a), (X4HADD16_L DR64:$a)>;
+// R_GD: GPR32 dest is implicit from logical; source is DR64/vector bank.
+// GISel selects via selectUnaryR_GD; keep SDAG pats aligned if enabled.
 //def : Pat<(int_haydn_x2hmax32 DR64:$a), (X2HMAX32 DR64:$a)>;
 //def : Pat<(int_haydn_x2hmin32 DR64:$a), (X2HMIN32 DR64:$a)>;
 //def : Pat<(int_haydn_x4hmax16 DR64:$a), (X4HMAX16 DR64:$a)>;

@@ -38,6 +38,10 @@ FunctionPass *createHaydnCopyElimPass();
 FunctionPass *createHaydnPEIPeepholePass();
 FunctionPass *createHaydnEnsureTerminatorsPass();
 FunctionPass *createHaydnBitSimplifyPass();
+// AIE createAIEFinalizeBundle peer (AIEFinalizeBundle.h / AIE2TargetMachine:244).
+FunctionPass *createHaydnFinalizeBundlePass();
+// B1.4 fail-closed committed-bundle verifier (after FinalizeBundle).
+FunctionPass *createHaydnVerifyBundlesPass();
 
 // Pass initialization declarations
 void initializeHaydnPostLegalizerCombinerPass(PassRegistry &);
@@ -52,6 +56,8 @@ void initializeHaydnCopyElimPass(PassRegistry &);
 void initializeHaydnPEIPeepholePass(PassRegistry &);
 void initializeHaydnEnsureTerminatorsPass(PassRegistry &);
 void initializeHaydnBitSimplifyPass(PassRegistry &);
+void initializeHaydnFinalizeBundlePass(PassRegistry &);
+void initializeHaydnVerifyBundlesPass(PassRegistry &);
 
 } // namespace llvm
 

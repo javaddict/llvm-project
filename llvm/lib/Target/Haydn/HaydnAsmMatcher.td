@@ -21,9 +21,10 @@ include "HaydnGeneric.td"
 //===----------------------------------------------------------------------===//
 // Flex format includes for asm-match. Phase 3 stripped
 // `.sN` from AsmStrings (bare `add32` / `ld32` / `x2mula32` / …); per-slot
-// defs share identical mnemonics. Slot comes from bundle source order
-// (setHaydnSlot), not the mnemonic. Ambiguous matchables: first match wins
-// for standalone; decoder keeps all three slots (no isCodeGenOnly on S1/S2).
+// defs share identical mnemonics. Slot is not in the mnemonic: member
+// getSlotKind / Bundle placement (AIE shape). Ambiguous matchables: first
+// match wins for standalone; decoder keeps all three slots (no isCodeGenOnly
+// on S1/S2).
 //
 // Mirrors the slot block in Haydn.td EXCEPT HaydnCompositeFormats.td is
 // intentionally omitted: the 128-bit Bundle128 composite forces the matcher
