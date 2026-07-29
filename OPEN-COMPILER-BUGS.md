@@ -28,13 +28,16 @@
 >
 > | ID | Pri | Class | Tests / symptom |
 > |----|-----|-------|-----------------|
-> | **CB-134** | **P1** | compile hang | `20001111-1`, `20170401-1`, `20180921-1`, `950809-1`, `960312-1` (lit UNSUPPORTED hang skip) |
+> | **CB-137** | **P1** | misaligned widened load | libc `printf_main` copies the format string with `ld32`; a 1-byte-aligned literal (e.g. `.rodata` 0x5a002) → BundleSim `MEMORY_FAULT` "guest access is misaligned" |
+> | **CB-136** | **P2** | header / target features | `haydn.h` public DSP API bodies are unguarded — plain `#include <haydn.h>` errors under default features (`-simd`, `-bit-reversed`, `-circular-buffer`) |
+> | **CB-134** | **P1** | compile hang | `20001111-1`, `20170401-1`, `20180921-1`, `950809-1`, `960312-1` (lit UNSUPPORTED hang skip) — **partially reduced, see CB-134a** |
 > | **CB-126 residual** | P3 | GISel legalize | any remaining non-pow2 / width MMO edge cases outside torture green set |
 >
 > ### Closed / fixed on lit-enabled gate (2026-07-24 wave)
 >
 > | Item | Evidence |
 > |------|----------|
+> | **CB-134a sub-byte store hang** | `store i1` livelocked the GISel legalizer (unbounded memory, no diagnostic). `HaydnLegalizerInfo` value/mem-mismatch `customIf` now requires whole-byte mem (`>= 8`); sub-byte mem goes to `lowerIfMemSizeNotByteSizePow2()`. Test: `CodeGen/Haydn/gisel/legalizer-subbyte-store.ll`. Was blocking the BundleSim BSP (`bsp/plat/time_llvm_libc.c`) |
 > | **CB-133** | `920501-8`, `930513-1` → **PASS** @ -O3 lit; baremetal `LIBC_CONF_PRINTF_DISABLE_FLOAT` overridden OFF in `libc/config/baremetal/haydn/config.json` (was writing raw `%f`/`%.0f` into buf) |
 > | **CB-131 residual** | `struct-ret-1`, `va-arg-22` → **PASS** @ -O3 lit (retest 2026-07-24); no longer open |
 > | **CB-135 di softfloat** | BSP `_SF_RELS` + `floatdidf`/`floatundisf`/`fix*di`… → `conversion`, `930622-2`, `pr49218` **PASS** |
@@ -86,6 +89,77 @@ finishes; still **open compiler** until hangs are fixed or reduced.
 | `20180921-1.c` | compile hang |
 | `950809-1.c` | compile hang |
 | `960312-1.c` | compile hang |
+
+Not re-tested after **CB-134a** (torture sources are not on every host). One
+concrete hang of this class **is** fixed — see below.
+
+#### CB-134a — `store i1` legalizer livelock (FIXED)
+
+```llvm
+; llc -O0 -mtriple=haydn-unknown-elf  → never returns, RSS grows without bound
+define void @s1(ptr %p) { store i1 true, ptr %p  ret void }
+```
+
+`G_STORE s1 :: (store s1)` cycled forever inside the Legalizer:
+
+1. `.minScalar(0, S8)` widened the value → `G_STORE s8 :: (store s1)`
+2. the value/mem-mismatch `.customIf` matched (`isPowerOf2_32(1)` is true)
+3. the custom handler truncated back to `s1` **and rewrote the MMO to `s1`**
+4. → identical query again, forever (new vregs + MMOs each round, no
+   diagnostic, no abort)
+
+Fix: `customIf` now also requires
+`MMODescrs[0].MemoryTy.getSizeInBits() >= 8`, so sub-byte mem falls through to
+`lowerIfMemSizeNotByteSizePow2()` and becomes a zero-extended byte store.
+
+Not synthetic: InstCombine turns a plain `bool` flag store into `store i1` at
+`-O2`, which is how BundleSim's `bsp/plat/time_llvm_libc.c` hit it (the BSP
+could not be built at all). Regression: `CodeGen/Haydn/gisel/legalizer-subbyte-store.ll`.
+
+Byte-identical `libc.a` / `libm.a` before vs after a clean rebuild — the guard
+only affects shapes that previously hung.
+
+### B2. OPEN compiler — misaligned widened load (CB-137)
+
+Guest dies with BundleSim `MEMORY_FAULT` / "guest access is misaligned",
+`opcode=S_LW_WITH_IMM`, inside llvm-libc `printf_core::printf_main`.
+
+```c
+/* run_c: MEMORY_FAULT at bundle 892, before any output */
+int main(int argc, char **argv) {
+    printf("hello, argc=%d\n", argc);
+    for (int i = 1; i < argc; i++) printf("  argv[%d] = %s\n", i, argv[i]);
+    return 0;
+}
+```
+
+Depends only on the **format-string literal**, not on the code shape:
+`"hello, argc=%d\n"` faults, `"n=%d\n"` in the same program does not. The
+literal lands at `.rodata` `0x5a002` (1-byte aligned) and the format-string
+copy in `printf_main` reads it with 8-byte-per-iteration `ld32` pairs
+(`ld32 rN, base, 0` / `ld32 rM, base+4, 0` under a `set_hwloop_f2_w`), i.e. a
+byte-aligned `char *` copy was widened to 32-bit loads. Haydn only permits
+naturally aligned scalar mem ops, so odd-addressed literals fault.
+
+Independent of CB-134a: the repro has **zero** `store i1`, and `libc.a` is
+byte-identical across that fix. Also the likely cause of regression cases
+`yarpgen_seed1` / `yarpgen_seed67` reporting `MEMORY_FAULT` instead of
+`GUEST_EXIT`.
+
+### B3. OPEN compiler — `haydn.h` unguarded DSP bodies (CB-136)
+
+```console
+$ clang --target=haydn-unknown-elf -c t.c   # t.c: #include <haydn.h>
+haydn.h:165:10: error: '__builtin_haydn_brev32' needs target feature bit-reversed
+haydn.h:3487:10: error: '__builtin_haydn_x2abs32' needs target feature simd
+… (159 errors total with -ferror-limit=0)
+```
+
+Default Haydn features are `+agu,+hwloop,-bit-reversed,-circular-buffer,-simd`,
+but the public API header defines every DSP wrapper body unconditionally, so the
+include fails before the user writes any code. Needs `#if`/`__attribute__((target))`
+guards (or feature-gated sections). Blocks BundleSim regression cases
+`intrin_*`, `mac_mul*64_all`, `ls_brev_addbrba`, `ls_move_dr`, `cbr_wrap_csr`.
 
 ### C. ~~Compiler-rt softfloat (CB-135)~~ FIXED
 
