@@ -2567,8 +2567,98 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
       }
     }
 
-    // Generic fallback: emit COPYs from source to each def.
+    if (SrcTy.getSizeInBits() == 64 && NumDefs == 8) {
+      // s64 -> 8 x s8 split (v8i8 lanes). Same shape as the 4 x s16 case:
+      // two 32-bit halves, then shift+mask each byte out of its half.
+      // Lo32 bytes [7:0]/[15:8]/[23:16]/[31:24] = lanes 0..3, Hi32 = lanes 4..7.
+      LLT DstTy = MRI.getType(I.getOperand(0).getReg());
+      if (DstTy.isValid() && DstTy.getSizeInBits() == 8) {
+        MachineIRBuilder MIB(I);
+
+        if (Src.isVirtual()) {
+          if (!RBI.constrainGenericRegister(Src, Haydn::DR64RegClass, MRI))
+            return false;
+        }
+
+        Register Lo32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+        Register Hi32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+        MachineInstr *LoMI =
+            MIB.buildInstr(Haydn::MOVE32_DR_L).addDef(Lo32).addReg(Src);
+        constrainSelectedInstRegOperands(*LoMI, TII, TRI, RBI);
+        MachineInstr *HiMI =
+            MIB.buildInstr(Haydn::MOVE32_DR_H).addDef(Hi32).addReg(Src);
+        constrainSelectedInstRegOperands(*HiMI, TII, TRI, RBI);
+
+        for (unsigned Idx = 0; Idx < 8; ++Idx) {
+          Register Dst = I.getOperand(Idx).getReg();
+          if (!RBI.constrainGenericRegister(Dst, Haydn::GPR32RegClass, MRI))
+            return false;
+
+          Register Src32 = (Idx < 4) ? Lo32 : Hi32;
+          unsigned Shift = (Idx % 4) * 8;
+
+          Register Tmp = Src32;
+          if (Shift > 0) {
+            Tmp = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+            MIB.buildInstr(Haydn::SRLI32).addDef(Tmp).addReg(Src32).addImm(
+                Shift);
+          }
+          MIB.buildInstr(Haydn::ANDI32).addDef(Dst).addReg(Tmp).addImm(0xFF);
+        }
+
+        I.eraseFromParent();
+        return true;
+      }
+    }
+
+    // 32-bit residual packs (<2 x s16>, <4 x s8>) live in ONE GPR32, so there
+    // is no cross-bank half to move: shift+mask each lane straight out of the
+    // source. The old fallback COPY'd the whole GPR into both/all defs, so
+    // lane 0 was accidentally right and every higher lane was wrong (see
+    // CodeGen/Haydn/legalize-v2i16-scalarize.ll, which only checked that the
+    // function compiled).
+    if (SrcTy.getSizeInBits() == 32 && (NumDefs == 2 || NumDefs == 4)) {
+      LLT DstTy = MRI.getType(I.getOperand(0).getReg());
+      const unsigned LaneBits = 32 / NumDefs;
+      if (DstTy.isValid() && DstTy.getSizeInBits() == LaneBits) {
+        MachineIRBuilder MIB(I);
+        if (Src.isVirtual()) {
+          if (!RBI.constrainGenericRegister(Src, Haydn::GPR32RegClass, MRI))
+            return false;
+        }
+        const unsigned Mask = (1u << LaneBits) - 1;
+        for (unsigned Idx = 0; Idx < NumDefs; ++Idx) {
+          Register Dst = I.getOperand(Idx).getReg();
+          if (!RBI.constrainGenericRegister(Dst, Haydn::GPR32RegClass, MRI))
+            return false;
+          Register Tmp = Src;
+          if (unsigned Shift = Idx * LaneBits) {
+            Tmp = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+            MIB.buildInstr(Haydn::SRLI32).addDef(Tmp).addReg(Src).addImm(Shift);
+          }
+          MIB.buildInstr(Haydn::ANDI32).addDef(Dst).addReg(Tmp).addImm(Mask);
+        }
+        I.eraseFromParent();
+        return true;
+      }
+    }
+
+    // Fail closed. The old fallback COPY'd the WHOLE source into every def,
+    // which is only correct for a degenerate same-width unmerge. For anything
+    // narrower it silently miscompiled: an unhandled s64 -> 8 x s8 became
+    // `MOVE32 <GPR>, $d0` (an illegal cross-bank move the machine verifier
+    // rejects) repeated per def, so every lane read lane 0's low byte. A
+    // missing unmerge shape must be a selection failure, not wrong code.
     MachineIRBuilder MIB(I);
+    for (unsigned Idx = 0; Idx < NumDefs; ++Idx) {
+      Register Dst = I.getOperand(Idx).getReg();
+      LLT DstTy = MRI.getType(Dst);
+      if (DstTy.isValid() && DstTy.getSizeInBits() != SrcTy.getSizeInBits()) {
+        LLVM_DEBUG(dbgs() << "Unhandled G_UNMERGE_VALUES shape: " << SrcTy
+                          << " -> " << NumDefs << " x " << DstTy << "\n");
+        return false;
+      }
+    }
     for (unsigned Idx = 0; Idx < NumDefs; ++Idx) {
       Register Dst = I.getOperand(Idx).getReg();
       if (Dst != Src) {
