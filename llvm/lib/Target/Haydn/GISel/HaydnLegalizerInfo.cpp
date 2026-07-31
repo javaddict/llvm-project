@@ -918,10 +918,15 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .customFor({{S32, V2I32}, {S16, V4I16}})
       .lowerFor({S32, S64});
 
-  // G_EXTRACT_VECTOR_ELT: custom for v2i32 and v4i16.
-  // Expanded in legalizeCustom to G_UNMERGE_VALUES + optional shift.
+  // G_EXTRACT_VECTOR_ELT: custom for every native 64-bit vector shape.
+  // Expanded in legalizeCustom to G_UNMERGE_VALUES s64->2xs32 + shift/trunc.
+  //
+  // v8i8 used to be missing here, so it fell to generic lower, which emits
+  // G_UNMERGE_VALUES on the VECTOR type — the shape the selector mishandles
+  // (it produced `MOVE32 <GPR>, $d0`, an illegal cross-bank move, and never
+  // read the high half, so EVERY lane returned lane 0's low byte).
   getActionDefinitionsBuilder(G_EXTRACT_VECTOR_ELT)
-      .customFor({{S32, V2I32}, {S16, V4I16}})
+      .customFor({{S32, V2I32}, {S16, V4I16}, {S8, V8I8}})
       // Residual SLP: fewer-elements on the source vector first so generic
       // lower does not unmerge a v16 and re-create extracts (legalizer hang).
       .clampMaxNumElements(1, S32, 2)
@@ -1964,9 +1969,17 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
   //===--------------------------------------------------------------------===
   // G_EXTRACT_VECTOR_ELT / G_INSERT_VECTOR_ELT
   //===--------------------------------------------------------------------===
-  // For v2i32/v4i16 types, the generic lowerExtractInsertVectorElt generates
-  // G_UNMERGE_VALUES on vector types which the selector mishandles. Instead
-  // we bitcast to s64 and use G_UNMERGE_VALUES s64->2xs32 (properly selected).
+  // The generic lowerExtractInsertVectorElt generates G_UNMERGE_VALUES on the
+  // VECTOR type, which the selector mishandles: it emitted
+  // `MOVE32 <GPR>, $d0` — an illegal cross-bank move that the machine verifier
+  // rejects — and never touched the high half, so every lane read lane 0.
+  //
+  // The ONLY unmerge shape the selector handles is s64 -> 2 x s32
+  // (MOVE32_DR_L / MOVE32_DR_H, ISA "rt = rsd[31:00]" / "rt = rsd[63:32]").
+  // So always bitcast to s64, unmerge to the two 32-bit halves, pick the half
+  // holding the lane, shift the lane down inside it, then truncate. Do NOT
+  // unmerge straight to NumElems x ElemTy: that is the mishandled shape for
+  // anything narrower than s32.
   if (MI.getOpcode() == G_EXTRACT_VECTOR_ELT) {
     Register DstReg = MI.getOperand(0).getReg();
     Register SrcVec = MI.getOperand(1).getReg();
@@ -1980,17 +1993,25 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
           IdxVal >= 0 &&
           static_cast<unsigned>(IdxVal) < SrcVecTy.getNumElements()) {
         const LLT S64 = LLT::scalar(64);
-        LLT ElemTy = SrcVecTy.getElementType();
-        unsigned NumElems = SrcVecTy.getNumElements();
+        const LLT S32 = LLT::scalar(32);
+        const LLT ElemTy = SrcVecTy.getElementType();
+        const unsigned EltBits = ElemTy.getSizeInBits();
+        const unsigned LanesPerHalf = 32 / EltBits;
+        const unsigned HalfIdx = IdxVal / LanesPerHalf;
+        const unsigned SubLane = IdxVal % LanesPerHalf;
 
-        // Bitcast vector to s64, then unmerge to scalars.
         Register VecS64 = MRI.createGenericVirtualRegister(S64);
         MIB.buildBitcast(VecS64, SrcVec);
-        SmallVector<Register, 4> Elems;
-        for (unsigned I = 0; I < NumElems; ++I)
-          Elems.push_back(MRI.createGenericVirtualRegister(ElemTy));
-        MIB.buildUnmerge(Elems, VecS64);
-        MIB.buildCopy(DstReg, Elems[IdxVal]);
+        auto Halves = MIB.buildUnmerge(S32, VecS64);
+        Register Lane = Halves.getReg(HalfIdx);
+        if (SubLane) {
+          auto Amt = MIB.buildConstant(S32, SubLane * EltBits);
+          Lane = MIB.buildLShr(S32, Lane, Amt).getReg(0);
+        }
+        if (ElemTy == S32)
+          MIB.buildCopy(DstReg, Lane);
+        else
+          MIB.buildTrunc(DstReg, Lane);
         MI.eraseFromParent();
         return true;
       }

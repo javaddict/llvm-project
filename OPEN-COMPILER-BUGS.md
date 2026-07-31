@@ -32,7 +32,6 @@
 >
 > | ID | Pri | Class | Tests / symptom |
 > |----|-----|-------|-----------------|
-> | **CB-138** | **P1** | vector cmp miscompile | aligned `<8 x i8>` store + vectorized byte compare returns a wrong result (host 0 vs guest 1). Repro `vpre.c` below. **Pre-existing** — reproduces identically before and after CB-137 |
 > | **CB-136** | P3 | header ergonomics | `haydn.h` DSP bodies are unguarded, so a bare `#include <haydn.h>` still emits `needs target feature simd / bit-reversed`. No longer blocks the product: `run_c` now passes `-mcpu=haydn` (consumer workaround, header unchanged) |
 > | **CB-130 residual** | P2 | GISel legalize | `unable to legalize … <2 x s32> = G_ABS` (`bundlesim_reg_cb44_o2_stale_cond_max_reduce`, the only remaining ctest failure) |
 > | **CB-126 residual** | P3 | GISel legalize | any remaining non-pow2 / width MMO edge cases outside torture green set |
@@ -41,6 +40,7 @@
 >
 > | Item | Evidence |
 > |------|----------|
+> | **CB-138 vector lane unmerge miscompile** | `G_UNMERGE_VALUES` had a fail-OPEN fallback that COPY'd the whole source into every def, so unhandled shapes silently read lane 0 for every lane (`s64 → 8 × s8` produced the illegal `MOVE32 <GPR>, $d0`). Added the s64 → 8 × s8 and GPR32 → 2×s16 / 4×s8 cases (`MOVE32_DR_L/H` + shift/mask) and made the fallback **fail closed**. Test: `CodeGen/Haydn/gisel/unmerge-v8i8-lanes.ll` |
 > | **CB-137 under-aligned vector mem** | 64-bit SIMD load/store was type-only legal, so an `align 1` `<8 x i8>` became two 4-byte `D_SW_L/D_SW_H` halves → `MEMORY_FAULT`. Now bitcast to s64 for align < 32. **gcc-c-torture -O3: 1388 PASS / 29 FAIL → 1417 PASS / 0 FAIL**; ctest 216/219 → 218/219; unmodified Dhrystone runs (`dhry_oracle` exit 7). Test: `CodeGen/Haydn/gisel/legalizer-underaligned-vector-mem.ll` |
 > | **CB-134 compile hang** | All 5 (`20001111-1`, `20170401-1`, `20180921-1`, `950809-1`, `960312-1`) compile in 38–66 ms and **PASS** end-to-end; removed from BundleSim `HAYDN_COMPILE_HANG_SKIP`. Two of them (`20170401-1`, `20180921-1`) carry `store i1` and are attributable to CB-134a; the other three were already fixed by earlier commits |
 > | **CB-134a sub-byte store hang** | `store i1` livelocked the GISel legalizer (unbounded memory, no diagnostic). `HaydnLegalizerInfo` value/mem-mismatch `customIf` now requires whole-byte mem (`>= 8`); sub-byte mem goes to `lowerIfMemSizeNotByteSizePow2()`. Test: `CodeGen/Haydn/gisel/legalizer-subbyte-store.ll`. Was blocking the BundleSim BSP (`bsp/plat/time_llvm_libc.c`) |
@@ -171,10 +171,46 @@ before the first line of output.
 The earlier "format-string alignment" description of this bug was a symptom,
 not the cause: `printf_main`'s format copy is one of the vectorized byte loops.
 
-### B2b. OPEN compiler — vector compare miscompile (CB-138)
+### B2b. ~~Vector lane unmerge miscompile (CB-138)~~ FIXED
 
-Wrong result (no fault) with **aligned** vector mem only, so it is independent
-of CB-137 and reproduces identically with and without that fix.
+Wrong result (no fault, no diagnostic) with **aligned** vector mem, so it was
+independent of CB-137 and reproduced identically with and without that fix.
+
+**Root cause.** `HaydnInstructionSelector`'s `G_UNMERGE_VALUES` case handled
+`s64 → 2 × s32` (`MOVE32_DR_L`/`MOVE32_DR_H`) and `s64 → 4 × s16`, then ended
+in a **fail-open** fallback:
+
+```cpp
+// Generic fallback: emit COPYs from source to each def.
+for (unsigned Idx = 0; Idx < NumDefs; ++Idx)
+  MIB.buildCopy(Dst, Src);          // whole source into EVERY def
+```
+
+So any shape without an explicit case became "every lane = lane 0". For
+`s64 → 8 × s8` it also emitted `MOVE32 <GPR>, $d0`, an illegal cross-bank move
+that `-verify-machineinstrs` rejects outright — invisible by default because
+the machine verifier is not in the pipeline.
+
+Two producers reach that shape: `extractelement <8 x i8>` (v8i8 was missing
+from the `G_EXTRACT_VECTOR_ELT` `customFor` list) and vector `icmp`
+scalarization, which builds the unmerge directly without any extract — that is
+how a `memcmp`-style byte compare returned "not equal" for identical buffers.
+
+**Fix.**
+* selector: added `s64 → 8 × s8` and `GPR32 → 2 × s16 / 4 × s8`
+  (32-bit residual packs live in one GPR, so shift+mask with no half move)
+* selector: fallback is now **fail closed** — a missing unmerge shape is a
+  selection error, not wrong code
+* legalizer: `{S8, V8I8}` added to `G_EXTRACT_VECTOR_ELT` `customFor`, and the
+  custom expansion always goes through `s64 → 2 × s32` + shift/trunc instead of
+  unmerging straight to `NumElems × ElemTy`
+
+Making the fallback fail closed immediately exposed a second silent
+miscompile: `legalize-v2i16-scalarize.ll` was passing while relying on it
+(`<2 x s16>` in one GPR32, lane 0 accidentally right, lane 1 wrong). That test
+only CHECKs `jalr_w`, so it never noticed.
+
+Repro that used to fail (`vpre.c`, host 0 / guest 1):
 
 ```c
 typedef unsigned char v8 __attribute__((vector_size(8)));
@@ -194,10 +230,14 @@ int main(void) {
 }
 ```
 
-Each store and each check passes in isolation; only the combined shape fails.
-`-O2` IR shows the checks vectorized to `icmp ne <8 x i8>` / `icmp eq <4 x i8>`
-plus an `or disjoint`, so the suspect is the vector compare / reduction path
-(v4i8 residual), not mem legality. Not covered by gcc-c-torture (0 FAIL there).
+Each store and each check passed in isolation; only the combined shape failed,
+because only there did the checks get vectorized into `icmp ne <8 x i8>` and
+reduced through the broken unmerge. Now host and guest both return 0.
+
+gcc-c-torture never covered this (0 FAIL before and after), which is worth
+noting: a silent lane miscompile can sit under a fully green torture suite.
+`-verify-machineinstrs` would have caught the illegal move — it is not part of
+the default pipeline.
 
 ### B3. OPEN compiler — `haydn.h` unguarded DSP bodies (CB-136)
 
