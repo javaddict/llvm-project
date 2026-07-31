@@ -415,9 +415,31 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   //
   // Extending/truncating rows (s32←s8/s16) cover lowerLoad high halves and
   // match AIE/RISCV ExtLoad MemDesc. s64 min-align stays 32 (ABI i64:32);
-  // ISel still splits LD64 when MMO align < 8 (D_LDW needs 8). Vectors keep
-  // type-only legality (unchanged). Selector keys opcode on MMO size.
+  // ISel still splits LD64 when MMO align < 8 (D_LDW needs 8).
+  // Selector keys opcode on MMO size.
+  //
+  // Vector mem is type-only legal (any alignment) ONLY because the rule below
+  // first bitcasts under-aligned 64-bit vectors to s64. ISel splits an
+  // under-8-aligned 64-bit access into D_SW_L/D_SW_H (or LD32) halves, which
+  // are 4-byte ops, so a byte-aligned <8 x i8> used to become two 4-byte
+  // accesses and fault on the guest. Not synthetic: llvm-libc has no Haydn
+  // memcpy/memset, so it uses generic/byte_per_byte.h, and the loop vectorizer
+  // turns those byte loops into honest `<8 x i8> … align 1` mem ops — which is
+  // how memcpy/memset/strcpy/printf_core all faulted.
+  //
+  // Bitcast to s64 (NOT .scalarize): the scalar under-aligned lower path is
+  // correct, while scalarizing a DR-resident vector store drops the per-lane
+  // extract and writes lane 0 to every byte.
   getActionDefinitionsBuilder({G_LOAD, G_STORE})
+      .bitcastIf(
+          [=](const LegalityQuery &Query) {
+            return Query.Types[0].isVector() &&
+                   Query.Types[0].getSizeInBits() == 64 &&
+                   !Query.MMODescrs.empty() &&
+                   Query.MMODescrs[0].MemoryTy == Query.Types[0] &&
+                   Query.MMODescrs[0].AlignInBits < 32;
+          },
+          changeTo(0, S64))
       .legalForTypesWithMemDesc({{S8, P0, S8, 8},
                                  {S16, P0, S16, 16},
                                  {S32, P0, S32, 32},
