@@ -6,16 +6,20 @@
 > link + BundleSim). Upstream clang disables = llvm-testsuite
 > `execute/CMakeLists.txt` `TestsToSkip` (**84**). Lit-enabled = **1430**.
 >
-> **gcc-c-torture/execute lit-enabled @ -O3** (2026-07-24 full lit retest):
+> **gcc-c-torture/execute lit-enabled @ -O3** — latest run, after CB-137
+> (`scripts/run_gcc_torture_lit.sh -O3 -- -j16`, upstream llvm-test-suite HEAD):
 >
 > | Result | Count | Note |
 > |--------|------:|------|
-> | **PASS** | **1408** | GUEST_EXIT 0 (incl. CB-133/135 + complex-5) |
-> | FAIL | 14 | freestanding link / target / harness only |
-> | TIMEOUT | 1 | `920501-6` default 120s budget |
-> | Haydn UNSUPPORTED | 7 | hang×5 + freestanding×1 + target×1 |
-> | Upstream TestsToSkip | 84 | not run (clang unsupported / known fail) |
-> | Total `.c` | 1514 | log: `/tmp/bundlesim-$UID/lit-residual.log` |
+> | **PASS** | **1417** | GUEST_EXIT 0 — **no FAIL, no TIMEOUT** |
+> | FAIL | **0** | was 29 before CB-137 (all "guest access is misaligned") |
+> | TIMEOUT | 0 | |
+> | UNSUPPORTED | 97 | upstream `TestsToSkip` only; Haydn hang-skip list is now empty |
+> | Total `.c` | 1514 | |
+>
+> Previous recorded run (2026-07-24, older test-suite checkout): PASS 1408 /
+> FAIL 14 / TIMEOUT 1 / UNSUPPORTED 91. Absolute counts are not directly
+> comparable — the upstream skip list grew (84 → 97).
 >
 > Earlier O2 ad-hoc runs (pre-lit) kept for history only:
 >
@@ -28,15 +32,17 @@
 >
 > | ID | Pri | Class | Tests / symptom |
 > |----|-----|-------|-----------------|
-> | **CB-137** | **P1** | misaligned widened load | libc `printf_main` copies the format string with `ld32`; a 1-byte-aligned literal (e.g. `.rodata` 0x5a002) → BundleSim `MEMORY_FAULT` "guest access is misaligned" |
-> | **CB-136** | **P2** | header / target features | `haydn.h` public DSP API bodies are unguarded — plain `#include <haydn.h>` errors under default features (`-simd`, `-bit-reversed`, `-circular-buffer`) |
-> | **CB-134** | **P1** | compile hang | `20001111-1`, `20170401-1`, `20180921-1`, `950809-1`, `960312-1` (lit UNSUPPORTED hang skip) — **partially reduced, see CB-134a** |
+> | **CB-138** | **P1** | vector cmp miscompile | aligned `<8 x i8>` store + vectorized byte compare returns a wrong result (host 0 vs guest 1). Repro `vpre.c` below. **Pre-existing** — reproduces identically before and after CB-137 |
+> | **CB-136** | P3 | header ergonomics | `haydn.h` DSP bodies are unguarded, so a bare `#include <haydn.h>` still emits `needs target feature simd / bit-reversed`. No longer blocks the product: `run_c` now passes `-mcpu=haydn` (consumer workaround, header unchanged) |
+> | **CB-130 residual** | P2 | GISel legalize | `unable to legalize … <2 x s32> = G_ABS` (`bundlesim_reg_cb44_o2_stale_cond_max_reduce`, the only remaining ctest failure) |
 > | **CB-126 residual** | P3 | GISel legalize | any remaining non-pow2 / width MMO edge cases outside torture green set |
 >
-> ### Closed / fixed on lit-enabled gate (2026-07-24 wave)
+> ### Closed / fixed
 >
 > | Item | Evidence |
 > |------|----------|
+> | **CB-137 under-aligned vector mem** | 64-bit SIMD load/store was type-only legal, so an `align 1` `<8 x i8>` became two 4-byte `D_SW_L/D_SW_H` halves → `MEMORY_FAULT`. Now bitcast to s64 for align < 32. **gcc-c-torture -O3: 1388 PASS / 29 FAIL → 1417 PASS / 0 FAIL**; ctest 216/219 → 218/219; unmodified Dhrystone runs (`dhry_oracle` exit 7). Test: `CodeGen/Haydn/gisel/legalizer-underaligned-vector-mem.ll` |
+> | **CB-134 compile hang** | All 5 (`20001111-1`, `20170401-1`, `20180921-1`, `950809-1`, `960312-1`) compile in 38–66 ms and **PASS** end-to-end; removed from BundleSim `HAYDN_COMPILE_HANG_SKIP`. Two of them (`20170401-1`, `20180921-1`) carry `store i1` and are attributable to CB-134a; the other three were already fixed by earlier commits |
 > | **CB-134a sub-byte store hang** | `store i1` livelocked the GISel legalizer (unbounded memory, no diagnostic). `HaydnLegalizerInfo` value/mem-mismatch `customIf` now requires whole-byte mem (`>= 8`); sub-byte mem goes to `lowerIfMemSizeNotByteSizePow2()`. Test: `CodeGen/Haydn/gisel/legalizer-subbyte-store.ll`. Was blocking the BundleSim BSP (`bsp/plat/time_llvm_libc.c`) |
 > | **CB-133** | `920501-8`, `930513-1` → **PASS** @ -O3 lit; baremetal `LIBC_CONF_PRINTF_DISABLE_FLOAT` overridden OFF in `libc/config/baremetal/haydn/config.json` (was writing raw `%f`/`%.0f` into buf) |
 > | **CB-131 residual** | `struct-ret-1`, `va-arg-22` → **PASS** @ -O3 lit (retest 2026-07-24); no longer open |
@@ -119,32 +125,79 @@ could not be built at all). Regression: `CodeGen/Haydn/gisel/legalizer-subbyte-s
 Byte-identical `libc.a` / `libm.a` before vs after a clean rebuild — the guard
 only affects shapes that previously hung.
 
-### B2. OPEN compiler — misaligned widened load (CB-137)
+### B2. ~~Under-aligned 64-bit vector mem (CB-137)~~ FIXED
 
-Guest dies with BundleSim `MEMORY_FAULT` / "guest access is misaligned",
-`opcode=S_LW_WITH_IMM`, inside llvm-libc `printf_core::printf_main`.
+Guest died with `MEMORY_FAULT` / "guest access is misaligned" inside
+llvm-libc: 27 of the 29 gcc-c-torture failures were in `memcpy` (11),
+`memset` (9), `printf_core` (4), `strcpy` (2) and `strncpy` (1).
+
+**Root cause.** `HaydnLegalizerInfo` gave 64-bit SIMD mem *type-only*
+legality:
+
+```cpp
+.legalFor({{V2I32, P0}, {V4I16, P0}, {V8I8, P0}})   // no MemDesc => any align
+```
+
+while every scalar row carried an explicit `AlignInBits`. ISel splits an
+under-8-aligned 64-bit access into `D_SW_L`/`D_SW_H` (or `LD32`) halves, which
+are 4-byte ops, so an `align 1` vector access became two 4-byte accesses:
+
+| declared align | before | after |
+|----------------|--------|-------|
+| 1 | `d_sw_l` + `d_sw_h` | `8 x st8` |
+| 2 | `d_sw_l` + `d_sw_h` | `4 x st16` |
+| 4 | `d_sw_l` + `d_sw_h` | unchanged (correct) |
+| 8 | `st64` | unchanged |
+
+**Why libc.** llvm-libc has no Haydn `memcpy`/`memset`, so
+`inline_memcpy.h` falls to the `#else` branch → `generic/byte_per_byte.h`, a
+byte-at-a-time loop. The loop vectorizer turns that into honest
+`<8 x i8> … align 1` mem ops; the backend then treated them as legal. An 8-line
+C byte-copy loop reproduces it without libc.
+
+**Fix.** `bitcastIf` under-aligned 64-bit vector mem to `s64` so it takes the
+scalar under-aligned lower path. Deliberately **not** `.scalarize`: scalarizing
+a DR-resident vector store drops the per-lane extract and writes lane 0 into
+every byte (verified — `vdr.c` returned `0xFF` with a scalarize-based first
+attempt, `0` with the bitcast).
+
+**Evidence.** gcc-c-torture `-O3`: **1388 PASS / 29 FAIL → 1417 PASS / 0 FAIL**
+(1514 discovered, 97 upstream-skipped). BundleSim ctest 216/219 → 218/219
+(`yarpgen_seed1` + `yarpgen_seed67` fixed). Unmodified Dhrystone now runs to
+completion (`dhry_oracle.c` exit 7; `dhry_1.c` prints `Int_Glob: 9`,
+`Ch_1_Glob: A`, `Ptr_Glob->Int_Comp: 5`) — it previously faulted in `strcpy`
+before the first line of output.
+
+The earlier "format-string alignment" description of this bug was a symptom,
+not the cause: `printf_main`'s format copy is one of the vectorized byte loops.
+
+### B2b. OPEN compiler — vector compare miscompile (CB-138)
+
+Wrong result (no fault) with **aligned** vector mem only, so it is independent
+of CB-137 and reproduces identically with and without that fix.
 
 ```c
-/* run_c: MEMORY_FAULT at bundle 892, before any output */
-int main(int argc, char **argv) {
-    printf("hello, argc=%d\n", argc);
-    for (int i = 1; i < argc; i++) printf("  argv[%d] = %s\n", i, argv[i]);
-    return 0;
+typedef unsigned char v8 __attribute__((vector_size(8)));
+static unsigned char buf[32] __attribute__((aligned(8)));
+__attribute__((noinline)) static void st_a(unsigned char *p, v8 v) { *(v8 *)p = v; }
+int main(void) {
+    v8 v = {1,2,3,4,5,6,7,8};
+    int fails = 0;
+    for (int i = 0; i < 32; i++) buf[i] = 0xEE;
+    st_a(buf, v);
+    for (int i = 0; i < 8; i++) if (buf[i] != (unsigned char)(i+1)) fails |= 1;
+    for (int i = 0; i < 32; i++) buf[i] = 0xEE;
+    st_a(buf + 8, v);
+    for (int i = 0; i < 8; i++) if (buf[8+i] != (unsigned char)(i+1)) fails |= 2;
+    if (buf[0] != 0xEE || buf[16] != 0xEE) fails |= 4;
+    return fails;                       /* host 0, guest 1 */
 }
 ```
 
-Depends only on the **format-string literal**, not on the code shape:
-`"hello, argc=%d\n"` faults, `"n=%d\n"` in the same program does not. The
-literal lands at `.rodata` `0x5a002` (1-byte aligned) and the format-string
-copy in `printf_main` reads it with 8-byte-per-iteration `ld32` pairs
-(`ld32 rN, base, 0` / `ld32 rM, base+4, 0` under a `set_hwloop_f2_w`), i.e. a
-byte-aligned `char *` copy was widened to 32-bit loads. Haydn only permits
-naturally aligned scalar mem ops, so odd-addressed literals fault.
-
-Independent of CB-134a: the repro has **zero** `store i1`, and `libc.a` is
-byte-identical across that fix. Also the likely cause of regression cases
-`yarpgen_seed1` / `yarpgen_seed67` reporting `MEMORY_FAULT` instead of
-`GUEST_EXIT`.
+Each store and each check passes in isolation; only the combined shape fails.
+`-O2` IR shows the checks vectorized to `icmp ne <8 x i8>` / `icmp eq <4 x i8>`
+plus an `or disjoint`, so the suspect is the vector compare / reduction path
+(v4i8 residual), not mem legality. Not covered by gcc-c-torture (0 FAIL there).
 
 ### B3. OPEN compiler — `haydn.h` unguarded DSP bodies (CB-136)
 
@@ -158,8 +211,14 @@ haydn.h:3487:10: error: '__builtin_haydn_x2abs32' needs target feature simd
 Default Haydn features are `+agu,+hwloop,-bit-reversed,-circular-buffer,-simd`,
 but the public API header defines every DSP wrapper body unconditionally, so the
 include fails before the user writes any code. Needs `#if`/`__attribute__((target))`
-guards (or feature-gated sections). Blocks BundleSim regression cases
-`intrin_*`, `mac_mul*64_all`, `ls_brev_addbrba`, `ls_move_dr`, `cbr_wrap_csr`.
+guards (or feature-gated sections).
+
+**No longer blocking:** BundleSim `run_c` now compiles with **`-mcpu=haydn`**,
+which turns the features on, so `intrin_*`, `mac_mul*64_all`,
+`ls_brev_addbrba`, `ls_move_dr` and `cbr_wrap_csr` pass. That is a consumer-side
+workaround — the header is unchanged and a bare
+`clang --target=haydn-unknown-elf -c` on a TU that includes `haydn.h` still
+emits `needs target feature`. Demoted to P3 (ergonomics).
 
 ### C. ~~Compiler-rt softfloat (CB-135)~~ FIXED
 
