@@ -33,8 +33,8 @@
 > | ID | Pri | Class | Tests / symptom |
 > |----|-----|-------|-----------------|
 > | **CB-136** | P3 | header ergonomics | `haydn.h` DSP bodies are unguarded, so a bare `#include <haydn.h>` still emits `needs target feature simd / bit-reversed`. No longer blocks the product: `run_c` now passes `-mcpu=haydn` (consumer workaround, header unchanged) |
-> | **CB-130 residual** | P2 | GISel legalize | `unable to legalize … <2 x s32> = G_ABS` (`bundlesim_reg_cb44_o2_stale_cond_max_reduce`, the only remaining ctest failure) |
-> | **CB-126 residual** | P3 | GISel legalize | any remaining non-pow2 / width MMO edge cases outside torture green set |
+> | **CB-130 residual** | P2 | GISel legalize | vector **predicate** legalization: `<2 x s1> = G_BUILD_VECTOR` asserts `fewerElementsVectorMerge` "Expected vector types". `.clampMaxNumElements(0, S1, 1)` is the trigger — LLT normalizes a 1-element vector to a scalar, so NarrowTy is not a vector. Sole remaining ctest failure (`bundlesim_reg_cb44_o2_stale_cond_max_reduce`). The `G_ABS <2 x s32>` half of this is now fixed |
+> | **CB-126 residual** | — | GISel legalize | **No observed failure.** Every case the ledger attributes to CB-126 (`pr79737-2`, `20040709-2/3`, `strct-pack-1`, `pr29006`, `pr53688`, `pr70903`, `pr57344-3`) PASSes at -O3 with 0 FAIL across all 1514 torture tests. Keep closed unless a new reproducer appears |
 >
 > ### Closed / fixed
 >
@@ -300,6 +300,36 @@ body ≥ 3 / setup ≥ 3 / END > BEGIN — only synthetic lit loops were short.
 
 Still unchecked from the spec's HW Loop section: nested-loop boundary overlap
 and the flow-control restrictions (no branch into or out of an active loop).
+
+### B2d. OPEN compiler — vector predicate legalization (CB-130 residual)
+
+`bundlesim_reg_cb44_o2_stale_cond_max_reduce` is the only remaining ctest
+failure. It had **two** layers.
+
+**Fixed:** `G_ABS` had no vector rule at all (only `legalFor({s32, s64})` plus
+min/maxScalar), so an SLP-formed `<2 x s32> = G_ABS` aborted with "unable to
+legalize instruction". The rule now ends in `.lower()` like RISCV's, and vector
+abs lowers to the branchless `x2sra32` / `x2add32` / `xor64` sequence. Test:
+`CodeGen/Haydn/gisel/legalize-vector-abs.ll`. Note `.scalarize(0)` is NOT usable
+here — it reaches `fewerElementsVectorMerge`, which asserts for a unary op.
+
+**Still open:** with the abs gap closed, the same test now stops one step later
+on a vector **predicate**:
+
+```
+Legalizing: %124:_(<2 x s1>) = G_BUILD_VECTOR %211:_(s1), %212:_(s1)
+LegalizerHelper.cpp:5246: Assertion `DstTy.isVector() && NarrowTy.isVector() &&
+  "Expected vector types"' failed.
+```
+
+The trigger is `G_BUILD_VECTOR`'s `.clampMaxNumElements(0, S1, 1)`: LLT
+normalizes a 1-element vector to a **scalar**, so `NarrowTy` is scalar `s1` and
+`fewerElementsVectorMerge` asserts. The `<2 x s1>` itself is an artifact — a
+vector `icmp` whose lanes were already scalarized, rebuilt only to feed
+`G_ZEXT <2 x s32>` (which does have `.scalarize(0)`). Ideally the artifact
+combiner folds `unmerge(build_vector)` and the build dies, but it is legalized
+first. Fixing this needs a real decision about how `<N x s1>` is represented on
+a target with no mask register — not a one-line clamp change.
 
 ### B3. OPEN compiler — `haydn.h` unguarded DSP bodies (CB-136)
 

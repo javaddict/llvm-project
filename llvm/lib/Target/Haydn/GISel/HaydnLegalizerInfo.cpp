@@ -734,10 +734,20 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // G_ABS — native ABS32 (GPR) / ABS64 (DR64). Non-saturating matches
   // llvm.abs (INT_MIN stays INT_MIN). ABS32S/ABS64S are sat-only intrinsics.
   // Pats in HaydnGISel.td; selectImpl owns selection (no C++ residual).
+  //
+  // Vectors had NO rule at all, so SLP-formed `<2 x s32> = G_ABS` aborted with
+  // "unable to legalize" (CB-130, bundlesim_reg_cb44_o2_stale_cond_max_reduce).
+  // Finish with .lower() like RISCV: the generic ABS lowering (smax(x, -x))
+  // then re-enters the legalizer for the vector sub/max. X2ABS32 exists as a
+  // format but has no pattern for generic `abs`, and SIMD is off in the default
+  // feature set anyway, so legalFor on V2I32 is not an option. Plain
+  // .scalarize(0) is not either — it reaches fewerElementsVectorMerge, which
+  // asserts "Expected vector types" for a unary op.
   getActionDefinitionsBuilder(G_ABS)
       .legalFor({S32, S64})
       .minScalar(0, S32)
-      .maxScalar(0, S64);
+      .maxScalar(0, S64)
+      .lower();
 
   // G_FSHL/G_FSHR: lower s8 directly (pr56866). minScalar(0,S16) alone is not
   // enough — funnel-shift widenScalar only rebuilds pow2 shapes reliably, and
