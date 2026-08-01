@@ -32,7 +32,8 @@
 >
 > | ID | Pri | Class | Tests / symptom |
 > |----|-----|-------|-----------------|
-> | **CB-136** | P3 | header ergonomics | `haydn.h` DSP bodies are unguarded, so a bare `#include <haydn.h>` still emits `needs target feature simd / bit-reversed`. No longer blocks the product: `run_c` now passes `-mcpu=haydn` (consumer workaround, header unchanged) |
+> | **CB-141** | **P1?** | slot model vs ISA | LLVM emits 32-bit GPR ALU and stores in Slot1/Slot2. The ISA database says Slot1 = Load + D-ALU + D-MAC and Slot2 = D-ALU + D-MAC only (**no memory unit**), and `ADD32`/`ADDI32`/`XOR32`/`MOVE32` are `Slot0-S-ALU`. In a linked Dhrystone ELF that is 6483/19327 bundles (34%) with ALU32 outside S0 and 989 (5%) with a store outside S0, plus 22 bundles holding two stores. **Needs an ISA owner's ruling** — see B4 |
+> | **CB-136** | P3 | header ergonomics | `haydn.h` DSP bodies are unguarded, so a bare `#include <haydn.h>` still emits `needs target feature simd / bit-reversed`. No longer blocks the product: `run_c` now passes `-mcpu=haydn` (consumer workaround, header unchanged). Fix plan in B3 |
 > | **CB-130 residual** | P2 | GISel legalize | vector **predicate** legalization: `<2 x s1> = G_BUILD_VECTOR` asserts `fewerElementsVectorMerge` "Expected vector types". `.clampMaxNumElements(0, S1, 1)` is the trigger — LLT normalizes a 1-element vector to a scalar, so NarrowTy is not a vector. Sole remaining ctest failure (`bundlesim_reg_cb44_o2_stale_cond_max_reduce`). The `G_ABS <2 x s32>` half of this is now fixed |
 > | **CB-126 residual** | — | GISel legalize | **No observed failure.** Every case the ledger attributes to CB-126 (`pr79737-2`, `20040709-2/3`, `strct-pack-1`, `pr29006`, `pr53688`, `pr70903`, `pr57344-3`) PASSes at -O3 with 0 FAIL across all 1514 torture tests. Keep closed unless a new reproducer appears |
 >
@@ -328,8 +329,21 @@ normalizes a 1-element vector to a **scalar**, so `NarrowTy` is scalar `s1` and
 vector `icmp` whose lanes were already scalarized, rebuilt only to feed
 `G_ZEXT <2 x s32>` (which does have `.scalarize(0)`). Ideally the artifact
 combiner folds `unmerge(build_vector)` and the build dies, but it is legalized
-first. Fixing this needs a real decision about how `<N x s1>` is represented on
-a target with no mask register — not a one-line clamp change.
+first.
+
+**Next step — pick a representation for `<N x s1>` first.** Haydn has no mask
+register, so one of:
+
+| Option | Cost |
+|--------|------|
+| Widen every `<N x s1>` to `<N x s32>` (one GPR per lane) | simple and uniform; burns GPRs, and GPR has only 2 write ports per bundle |
+| Pack lanes into one GPR bitmask | compact; every extract/insert becomes shift+mask, and vector `select` gets ugly |
+| Never form `<N x s1>` — force the vector `icmp`/`select`/`zext` chain to scalarize together | no new representation, but needs the whole chain gated consistently or artifacts reappear |
+
+Reproduce with:
+`benchmarks/compiler_bugs/cb44_o2_stale_cond_max_reduce.c` at `-O2`, or
+`llc -O2 -mtriple=haydn-unknown-elf -mcpu=haydn -debug-only=legalizer` on its
+IR and read the last `Legalizing:` line before the assertion.
 
 ### B3. OPEN compiler — `haydn.h` unguarded DSP bodies (CB-136)
 
@@ -351,6 +365,83 @@ which turns the features on, so `intrin_*`, `mac_mul*64_all`,
 workaround — the header is unchanged and a bare
 `clang --target=haydn-unknown-elf -c` on a TU that includes `haydn.h` still
 emits `needs target feature`. Demoted to P3 (ergonomics).
+
+**Fix plan.** `haydn.h` is generated — do not edit it. The generator is
+`clang/utils/TableGen/HaydnIntrinEmitter.cpp` (`-gen-haydn-intrin-header` from
+`clang/include/clang/Basic/BuiltinsHaydn.td`). The per-op feature expression is
+**already parsed** into `Entry::Features` (member at ~line 88, filled at
+~line 356) and simply not used when emitting the wrapper. Emit
+`__attribute__((target("<features>")))` on each wrapper, the way x86's
+`immintrin.h` does with `__DEFAULT_FN_ATTRS`, converting the TableGen
+comma=AND / pipe=OR expression to a target-attribute string.
+
+The mechanical part is the reason this was not rushed: `emitFn` has **34 call
+sites** and its last parameter (`Doc`) is defaulted, so adding a `Features`
+parameter touches every positional call. Add it *before* `Doc` and update all
+34, or thread an `Entry &` through instead of loose strings. Verify with
+
+```console
+$ printf '#include <haydn.h>\nint main(void){return 0;}\n' > t.c
+$ clang --target=haydn-unknown-elf -O2 -ffreestanding -c t.c -o /dev/null
+```
+
+which must produce no `needs target feature` diagnostics with **no** `-mcpu`.
+
+### B4. OPEN question — LLVM slot model vs ISA database (CB-141)
+
+Not a crash and not caught by any suite: LLVM's scheduling model and its
+instruction tables place operations in slots that the ISA database says have no
+such unit.
+
+| Source | Says |
+|--------|------|
+| ISA database `VLIW_Engine_Compiler_Constraints.md` | Slot0 = S-ALU + Load&Store; Slot1 = Load + D-ALU + D-MAC; **Slot2 = D-ALU + D-MAC only** (no memory unit). "Store instructions are available only in Slot0-Load&Store." `ADD32`/`ADDI32`/`XOR32`/`MOVE32` are `Available: Slot0-S-ALU` |
+| `HaydnSchedule.td` | `Slot0_LS // Slot 0 only` — **agrees** on stores |
+| `HaydnSchedule.td` | `Slot012_ALU // Any slot (ALU32 — full ALU in all 3 slots)` — **disagrees** |
+| `HaydnGenInstrInfo.inc` (generated) | 176 `_S1` + 168 `_S2` **store** opcodes exist — **disagrees** |
+| BundleSim | Abstains: `--enforce-slots` is debug-only by product policy |
+
+Scale in a linked Dhrystone ELF (19327 bundles): **6483 (34%)** with ALU32
+outside S0, **989 (5%)** with a store outside S0, and **22** bundles holding
+two stores. If the database is authoritative, most of the ILP the packer
+achieves is invalid, and measured density would drop from 1.15 to ~1.00
+ops/bundle.
+
+Do not "fix" this from the database alone — the wording leaves room (DR can be
+treated as two 32-bit halves, so a "D-ALU" may cover some 32-bit work), and
+LLVM's own tables were presumably built against the hardware manual. **This
+needs an ISA owner's ruling** on: (1) may a 32-bit GPR ALU op issue in
+Slot1/Slot2, and (2) may any store issue outside Slot0.
+
+Related, also unverified against the spec's HW Loop section: nested-loop
+boundary overlap, and the flow-control rule that no branch/jump/call may enter
+or leave an active hardware loop.
+
+### B5. Why these stayed hidden — two observability gaps
+
+Worth fixing before hunting more Haydn bugs, because both let wrong code pass a
+fully green suite.
+
+**1. `-verify-machineinstrs` is not in any gate.** CB-138 emitted
+`MOVE32 <GPR>, $d0`, an illegal cross-bank move. The machine verifier rejects it
+on sight, but it is opt-in, so 1514 green torture tests and 219 green ctest
+cases said nothing. Cheapest improvement available: run the Haydn lit subset
+with `-verify-machineinstrs` in CI. It would have caught CB-138 immediately, and
+it is how the second silent miscompile (`legalize-v2i16-scalarize.ll`) surfaced.
+
+**2. BundleSim has no timing model, by design.** Its own staff-readiness review
+records as P0: *"'Cycles' are committed bundles; no timing or memory-performance
+model exists"* and *"the instruction catalog has no latency, initiation
+interval, bypass..."*. Haydn's pipeline is **exposed** (no interlock), so every
+`Data_Latency` violation (CB-139: 90 sites in Dhrystone -O0) produced the right
+answer in simulation and would read stale registers on hardware. Nothing in the
+BundleSim gate can detect this class; it has to be checked structurally on the
+generated code. The scanner used for CB-139 walks bundles in order, tracks
+`Data_Latency` from the itinerary, and flags a read inside a producer's window —
+worth keeping as a real tool rather than a throwaway script.
+
+Same shape applies to slot legality (B4): BundleSim deliberately abstains
+(`--enforce-slots` is debug-only), so nothing checks it either.
 
 ### C. ~~Compiler-rt softfloat (CB-135)~~ FIXED
 
