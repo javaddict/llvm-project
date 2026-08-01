@@ -48,7 +48,9 @@ define void @ii_scheduler_reorder(ptr %a, ptr %b, ptr %c, i32 %n) {
 ; CHECK-NEXT:    .p2align 4
 ; CHECK-NEXT:  .LLhwloop_start0:
 ; CHECK-NEXT:    { ld32 r5, r2, 0; ld32 r4, r1, 0; nop }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r6, r3, 0; add32 r7, r4, r5 }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { st32 r7, r1, 0; nop; add32 r5, r5, r6 }
 ; CHECK-NEXT:    { st32 r5, r2, 0; nop; add32 r4, r4, r6 }
 ; CHECK-NEXT:    { nop; st32_post r4, r3, 1; addi32 r2, r2, 4 }

@@ -164,6 +164,11 @@ public:
 private:
   bool fixupOne(MachineInstr &SetMI, const HaydnInstrInfo &TII);
   MachineBasicBlock *resolveBodyMBB(MachineInstr &SetMI) const;
+  // Bundles in the ZOL body: Header's first real MI through Latch's last real
+  // MI (inclusive END), in layout order. 0 when the range is not resolvable.
+  unsigned countBodyBundles(const MachineBasicBlock *Header,
+                            const MachineBasicBlock *Latch,
+                            const HaydnInstrInfo &TII) const;
   unsigned countFollowingBundles(MachineInstr &SetMI,
                                  const HaydnInstrInfo &TII) const;
   int64_t estimateMBBDistance(const MachineFunction &MF,
@@ -297,6 +302,39 @@ unsigned HaydnFixupHwLoops::countFollowingBundles(
       continue;
     // B4.4: parcel count via product EncodedBytes (ProductFormatDesc.Bytes).
     Bundles += haydn::bundle::ceilProductParcels(Bytes);
+  }
+  return Bundles;
+}
+
+unsigned HaydnFixupHwLoops::countBodyBundles(
+    const MachineBasicBlock *Header, const MachineBasicBlock *Latch,
+    const HaydnInstrInfo &TII) const {
+  if (!Header || !Latch)
+    return 0;
+  const MachineFunction *MF = Header->getParent();
+  unsigned Bundles = 0;
+  bool InBody = false;
+  for (const MachineBasicBlock &MBB : *MF) {
+    if (&MBB == Header)
+      InBody = true;
+    if (InBody) {
+      for (const MachineInstr &MI : MBB) {
+        if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isImplicitDef())
+          continue;
+        if (MI.isKill())
+          continue;
+        // Inclusive END is the last real body MI, so a latch terminator is not
+        // part of the body itself.
+        if (MI.isTerminator() && !MI.isCall())
+          continue;
+        unsigned Bytes = TII.getInstSizeInBytes(MI);
+        if (Bytes == 0)
+          continue;
+        Bundles += haydn::bundle::ceilProductParcels(Bytes);
+      }
+    }
+    if (&MBB == Latch && InBody)
+      break;
   }
   return Bundles;
 }
@@ -1357,6 +1395,36 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
                              "— erase setup\n");
         return eraseHardwareSetup(SetMI);
       }
+    }
+  }
+
+  // Loop body >= MinBodyBundles (spec § HW Loop: "It must contain at least 3
+  // instruction bundles"). Pad at the END of the latch: the inclusive-END label
+  // is placed before the latch's LAST real MI, so appended NOPs become body
+  // bundles and carry END with them. They execute every iteration, which is
+  // exactly what the rule asks for — a body shorter than the pipeline depth has
+  // nowhere to put the wrap.
+  if (isHwloopSetup(SetMI.getOpcode()) && SetMI.getNumOperands() >= 3 &&
+      SetMI.getOperand(1).isMBB() && SetMI.getOperand(2).isMBB()) {
+    MachineBasicBlock *Header = SetMI.getOperand(1).getMBB();
+    MachineBasicBlock *Latch = SetMI.getOperand(2).getMBB();
+    unsigned Body = countBodyBundles(Header, Latch, TII);
+    if (Body && Body < haydn::hwloop::MinBodyBundles) {
+      unsigned Deficit = haydn::hwloop::MinBodyBundles - Body;
+      LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: body " << Body << " < "
+                        << haydn::hwloop::MinBodyBundles << " — pad "
+                        << Deficit << " NOP bundle(s) at end of latch bb."
+                        << Latch->getNumber() << "\n");
+      MachineBasicBlock::iterator InsertPt = Latch->getFirstTerminator();
+      if (InsertPt != Latch->end()) {
+        MachineBasicBlock::instr_iterator II = InsertPt.getInstrIterator();
+        while (II != Latch->instr_begin() && II->isBundledWithPred())
+          --II;
+        InsertPt = MachineBasicBlock::iterator(II);
+      }
+      for (unsigned I = 0; I < Deficit; ++I)
+        BuildMI(*Latch, InsertPt, DL, TII.get(Haydn::NOP));
+      Changed = true;
     }
   }
 

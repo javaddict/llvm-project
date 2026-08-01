@@ -42,6 +42,7 @@ FunctionPass *createHaydnBitSimplifyPass();
 FunctionPass *createHaydnFinalizeBundlePass();
 // B1.4 fail-closed committed-bundle verifier (after FinalizeBundle).
 FunctionPass *createHaydnVerifyBundlesPass();
+FunctionPass *createHaydnLatencyStallsPass();
 
 // Pass initialization declarations
 void initializeHaydnPostLegalizerCombinerPass(PassRegistry &);
@@ -58,6 +59,7 @@ void initializeHaydnEnsureTerminatorsPass(PassRegistry &);
 void initializeHaydnBitSimplifyPass(PassRegistry &);
 void initializeHaydnFinalizeBundlePass(PassRegistry &);
 void initializeHaydnVerifyBundlesPass(PassRegistry &);
+void initializeHaydnLatencyStallsPass(PassRegistry &);
 
 } // namespace llvm
 

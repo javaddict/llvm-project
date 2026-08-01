@@ -23,6 +23,7 @@
 #include "HaydnExpandPostIncEarly.h"
 #include "HaydnEnsureTerminators.h"
 #include "HaydnFinalizeBundle.h"
+#include "HaydnLatencyStalls.h"
 #include "HaydnVerifyBundles.h"
 #include "HaydnPEIPeephole.h"
 #include "HaydnMachineFunctionInfo.h"
@@ -128,6 +129,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnTarget() {
   initializeHaydnBitSimplifyPass(PR);
   initializeHaydnFinalizeBundlePass(PR);
   initializeHaydnVerifyBundlesPass(PR);
+  initializeHaydnLatencyStallsPass(PR);
   initializeHaydnHardwareLoopsPass(PR);
   initializeHaydnFixupHwLoopsPass(PR);
   initializeBranchRelaxationLegacyPass(PR);
@@ -482,6 +484,15 @@ void HaydnPassConfig::addPreEmitPass() {
   //      fail-closed verifyCommittedBundle
   //        (AIEBaseInstrInfo.cpp:1440-1459; haydn-verify-bundles)
   // Do not move BR before pack (sizes wrong). No PostMachineScheduler here.
+  //
+  // 0. HaydnLatencyStalls — exposed-pipeline correctness net. Haydn has no
+  //    interlock: a Data_Latency=2 def (loads, CSRR, MAC) must not be read in
+  //    the next bundle. This must run at EVERY opt level, because at -O0 the
+  //    functions are optnone so PostMachineScheduler and FinalizeBundle both
+  //    skipFunction and nothing schedules at all. It runs FIRST so the two
+  //    BranchRelaxation runs and HaydnFixupHwLoops below absorb the size
+  //    growth and recompute hwloop begin/end offsets.
+  addPass(createHaydnLatencyStallsPass());
   addPass(&BranchRelaxationPassID);
   if (getOptLevel() != CodeGenOptLevel::None && EnableHaydnHardwareLoops) {
     addPass(createHaydnFixupHwLoopsPass());

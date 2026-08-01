@@ -117,24 +117,28 @@ define i64 @test_dr64_many_copies(i64 %a, i64 %b, i64 %c, i64 %d) nounwind {
 ; CHECK-NEXT:    { addi32_w r1, r0, 0; nop; nop }
 ; CHECK-NEXT:    { st32 r1, sp, 4; nop; nop }
 ; CHECK-NEXT:    { addi32_w sp, sp, 8; ld64 d4, sp, 0; nop }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { addi32_w r1, r0, 2; add64 d8, d0, d4; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { st32 r1, sp, 0; nop; or64 d0, d8, d8 }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { addi32_w r1, r0, 0; nop; nop }
 ; CHECK-NEXT:    { st32 r1, sp, 4; nop; nop }
 ; CHECK-NEXT:    { addi32_w sp, sp, 8; ld64 d5, sp, 0; nop }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { addi32_w r1, r0, 3; add64 d9, d1, d5; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { st32 r1, sp, 0; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { addi32_w r1, r0, 0; nop; nop }
 ; CHECK-NEXT:    { st32 r1, sp, 4; nop; nop }
 ; CHECK-NEXT:    { addi32_w sp, sp, 8; ld64 d6, sp, 0; nop }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { addi32_w r1, r0, 4; add64 d10, d2, d6; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { st32 r1, sp, 0; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { addi32_w r1, r0, 0; nop; nop }
 ; CHECK-NEXT:    { st32 r1, sp, 4; nop; nop }
 ; CHECK-NEXT:    { addi32_w sp, sp, 8; ld64 d7, sp, 0; nop }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; add64 d11, d3, d7 }
 ; CHECK-NEXT:    { jal_w lr, use_i64; nop; nop }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0; or64 d0, d9, d9 }

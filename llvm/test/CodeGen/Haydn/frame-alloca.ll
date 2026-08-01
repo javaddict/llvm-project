@@ -213,9 +213,11 @@ define i32 @vla_indexed(i32 %n, i32 %idx) {
 ; CHECK-NEXT:    .p2align 4
 ; CHECK-NEXT:  .LLhwloop_start0:
 ; CHECK-NEXT:    { nop; mull r5, r5, r5; add32 r7, r5, r4 }
+; CHECK-NEXT:    { nop; nop; nop }
+; CHECK-NEXT:    { nop; st32_post r5, r6, 1; move32 r5, r7 }
 ; CHECK-NEXT:    .p2align 4
 ; CHECK-NEXT:  .LLhwloop_end0:
-; CHECK-NEXT:    { nop; st32_post r5, r6, 1; move32 r5, r7 }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { addi32_w r4, r0, -1; nop; nop }
 ; CHECK-NEXT:    { nop; nop; add32 r1, r1, r4 }
