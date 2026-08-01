@@ -87,9 +87,15 @@ inline constexpr unsigned MinSetupBundles = 3;
 inline constexpr int64_t MinSetupBytes =
     bundle::productBundlesToBytes(MinSetupBundles);
 
-// Deprecated as a *legality* floor (kept only if a caller still needs a
-// soft heuristic). Product law is MinSetupBundles + END >= BEGIN.
-inline constexpr unsigned MinBodyBundles = 0;
+// Spec, VLIW_Engine_Compiler_Constraints.md § HW Loop:
+//   "Loop Body: It must contain at least 3 instruction bundles."
+//
+// This was 0 with a note calling it "deprecated as a legality floor" and
+// claiming the product law was only MinSetupBundles + END >= BEGIN. It is not
+// deprecated — it is a documented hard rule, and dropping it let tiny ZOL
+// bodies (1-2 bundles) reach the assembler. HaydnFixupHwLoops now pads short
+// bodies with NOPs before the inclusive END.
+inline constexpr unsigned MinBodyBundles = 3;
 
 } // namespace hwloop
 } // namespace haydn

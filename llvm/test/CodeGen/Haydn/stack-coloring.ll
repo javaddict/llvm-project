@@ -37,6 +37,7 @@ define void @two_allocas() nounwind {
 ; CHECK-NEXT:    { st32 r1, r3, 0; nop; nop }
 ; CHECK-NEXT:    { st32 r2, r4, 0; ld32 r1, r3, 0; nop }
 ; CHECK-NEXT:    { nop; ld32 r2, r4, 0; nop }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { jal_w lr, use_pair; nop; nop }
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 20; nop }
@@ -69,8 +70,10 @@ define void @three_allocas() nounwind {
 ; CHECK-NEXT:    { addi32_w r6, sp, 8; nop; nop }
 ; CHECK-NEXT:    { st32 r2, r5, 0; nop; nop }
 ; CHECK-NEXT:    { addi32_w r3, r0, 30; ld32 r2, r5, 0; nop }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { st32 r3, r6, 0; nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; ld32 r3, r6, 0; nop }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; add32 r1, r1, r3 }
 ; CHECK-NEXT:    { jal_w lr, use_i32; nop; nop }
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
@@ -156,6 +159,7 @@ define void @nested_alloca() nounwind {
 ; CHECK-NEXT:    { addi32_w r2, r0, 200; ld32 r1, r3, 0; nop }
 ; CHECK-NEXT:    { st32 r2, r4, 0; nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r2, r4, 0; nop }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { jal_w lr, use_i32; nop; nop }
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
@@ -261,6 +265,7 @@ define i64 @alloca_i64() nounwind {
 ; CHECK-NEXT:    { addi32_w r2, r1, 4; nop; d_sw_l_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; nop; d_sw_h_with_imm d0, r2, 0 }
 ; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0; nop }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { st32 r1, sp, 0; nop; nop }
 ; CHECK-NEXT:    { st32 r2, sp, 4; nop; nop }
 ; CHECK-NEXT:    { addi32_w sp, sp, 8; ld64 d0, sp, 0; nop }

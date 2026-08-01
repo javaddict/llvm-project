@@ -160,6 +160,18 @@ void HaydnSubtarget::adjustSchedDependency(
   // under ResMII≈II. Keep latency 2 when the use is an accumulator-MAC
   // (tied-def) so dual-load reductions (vec_dot) retain enough schedule
   // span for MaxStageCount≥1.
+  // SAFETY: this soften is a *scheduling heuristic only*. Haydn has no
+  // interlock, so on its own it produced hardware-illegal code — a read in the
+  // bundle right after the load (Dhrystone -O0 had 90 such sites, -O2 had 3),
+  // which BundleSim can never catch because it has no timing model. It is safe
+  // ONLY because HaydnLatencyStalls now runs in addPreEmitPass and inserts the
+  // architectural stall bundles afterwards. Do not remove that pass while this
+  // soften stays.
+  //
+  // Kept rather than reverted because feeding the true latency to the scheduler
+  // shifts 12 golden schedules (hwloop / SMS / II contracts) whose intent is
+  // not recoverable from the CHECK lines; the backstop costs ~1% more bundles
+  // at -O2. Revisit together with those goldens.
   if (DefMI->mayLoad() && Dep.getLatency() > 1) {
     bool UseIsAccMAC = false;
     for (const MachineOperand &MO : UseMI->operands()) {

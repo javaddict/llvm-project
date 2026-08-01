@@ -75,6 +75,14 @@ def Slot12_ALU_AccLat : InstrItinClass;  // SIMD accumulator-MAC with
                                         // stage schedules.
 def Slot012_ALU  : InstrItinClass;  // Any slot (ALU32 — full ALU in all 3 slots)
 def Slot1_LD     : InstrItinClass;  // Slot 1 only (LD32_S1, LD64_S1)
+def Slot2_LS     : InstrItinClass;  // Slot 2 only, MEMORY op — Data_Latency 2.
+                                    // The S2 forms of the LS formats are still
+                                    // loads/stores: they must NOT borrow
+                                    // Slot2_ALU, whose latency is 1. Haydn has
+                                    // no interlock, so a latency-1 claim on a
+                                    // load makes the scheduler (and the
+                                    // HaydnLatencyStalls net) allow a read in
+                                    // the very next bundle.
 def Slot01_LD    : InstrItinClass;  // Slot 0 or 1 (plain LD64 — : the spec
                                    // D_LDW_WITH_IMM allows a 64-bit load in slot 0
                                    // (Load/Store unit) OR slot 1 (Load unit). A
@@ -215,6 +223,7 @@ def HaydnItineraries : ProcessorItineraries<
     // SLOT2 instead of SLOT1. These are the itineraries the FLEX `_S2`
     // classes attach to.
     InstrItinData<Slot2_ALU, [InstrStage<1, [SLOT2]>], [1]>,
+    InstrItinData<Slot2_LS,  [InstrStage<1, [SLOT2]>], [2]>,
     InstrItinData<Slot2_ALU_AccLat, [InstrStage<1, [SLOT2]>], [5, 1, 1, 5]>,
     InstrItinData<Slot2_MAC, [InstrStage<1, [SLOT2]>], [2, 1, 1, 2]>
   ]>;

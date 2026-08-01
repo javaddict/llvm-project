@@ -9,7 +9,8 @@
 ; float fneg — XOR32 with 0x80000000
 define float @negf(float noundef %a) {
 ; CHECK-LABEL: negf:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @negf spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -26,7 +27,8 @@ define float @negf(float noundef %a) {
 ; float fabs — AND32 with 0x7FFFFFFF
 define float @fabsf_test(float noundef %a) {
 ; CHECK-LABEL: fabsf_test:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @fabsf_test spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -45,7 +47,8 @@ declare float @llvm.fabs.f32(float)
 ; double fneg — XOR64 with sign mask on DR64
 define double @negd(double noundef %a) {
 ; CHECK-LABEL: negd:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @negd spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -56,6 +59,7 @@ define double @negd(double noundef %a) {
 ; CHECK-NEXT:    { addi32_w r1, r1, 0; nop; nop }
 ; CHECK-NEXT:    { st32 r1, sp, 4; nop; nop }
 ; CHECK-NEXT:    { addi32_w sp, sp, 8; ld64 d1, sp, 0; nop }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; xor64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { addi32_w sp, sp, 8; nop; nop }
@@ -67,7 +71,8 @@ define double @negd(double noundef %a) {
 ; double fabs — AND64 with magnitude mask on DR64
 define double @fabsd_test(double noundef %a) {
 ; CHECK-LABEL: fabsd_test:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @fabsd_test spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -78,6 +83,7 @@ define double @fabsd_test(double noundef %a) {
 ; CHECK-NEXT:    { addi32_w r1, r1, -1; nop; nop }
 ; CHECK-NEXT:    { st32 r1, sp, 4; nop; nop }
 ; CHECK-NEXT:    { addi32_w sp, sp, 8; ld64 d1, sp, 0; nop }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; and64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { addi32_w sp, sp, 8; nop; nop }
@@ -91,7 +97,8 @@ declare double @llvm.fabs.f64(double)
 ; fneg + fadd may fold to __subsf3
 define float @neg_then_add(float noundef %a, float noundef %b) {
 ; CHECK-LABEL: neg_then_add:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @neg_then_add spills=1 spill-bytes=4 reloads=1 reload-bytes=4
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { st32 lr, sp, 12; nop; nop }

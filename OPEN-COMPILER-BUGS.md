@@ -40,6 +40,8 @@
 >
 > | Item | Evidence |
 > |------|----------|
+> | **CB-139 exposed-pipeline latency** | Haydn has no interlock but nothing enforced `Data_Latency = 2`: `adjustSchedDependency` deliberately softened load→use to 1, and the 14 `_S2` LS formats claimed `Slot2_ALU` (latency 1). Dhrystone -O0 had 90 violating sites, -O2 had 3. New `HaydnLatencyStalls` pass (all opt levels) + new `Slot2_LS` itinerary → **0 violations across a 50-file corpus**. Cost +13% bundles at -O0, +1% at -O2 |
+> | **CB-140 hwloop body < 3 bundles** | `MinBodyBundles` was hard-coded to 0 and annotated "deprecated as a legality floor", but the spec says "Loop Body: It must contain at least 3 instruction bundles". Tiny ZOL bodies (1–2 bundles) reached the assembler. Now 3, padded in `HaydnFixupHwLoops` before the inclusive END |
 > | **CB-138 vector lane unmerge miscompile** | `G_UNMERGE_VALUES` had a fail-OPEN fallback that COPY'd the whole source into every def, so unhandled shapes silently read lane 0 for every lane (`s64 → 8 × s8` produced the illegal `MOVE32 <GPR>, $d0`). Added the s64 → 8 × s8 and GPR32 → 2×s16 / 4×s8 cases (`MOVE32_DR_L/H` + shift/mask) and made the fallback **fail closed**. Test: `CodeGen/Haydn/gisel/unmerge-v8i8-lanes.ll` |
 > | **CB-137 under-aligned vector mem** | 64-bit SIMD load/store was type-only legal, so an `align 1` `<8 x i8>` became two 4-byte `D_SW_L/D_SW_H` halves → `MEMORY_FAULT`. Now bitcast to s64 for align < 32. **gcc-c-torture -O3: 1388 PASS / 29 FAIL → 1417 PASS / 0 FAIL**; ctest 216/219 → 218/219; unmodified Dhrystone runs (`dhry_oracle` exit 7). Test: `CodeGen/Haydn/gisel/legalizer-underaligned-vector-mem.ll` |
 > | **CB-134 compile hang** | All 5 (`20001111-1`, `20170401-1`, `20180921-1`, `950809-1`, `960312-1`) compile in 38–66 ms and **PASS** end-to-end; removed from BundleSim `HAYDN_COMPILE_HANG_SKIP`. Two of them (`20170401-1`, `20180921-1`) carry `store i1` and are attributable to CB-134a; the other three were already fixed by earlier commits |
@@ -238,6 +240,66 @@ gcc-c-torture never covered this (0 FAIL before and after), which is worth
 noting: a silent lane miscompile can sit under a fully green torture suite.
 `-verify-machineinstrs` would have caught the illegal move — it is not part of
 the default pipeline.
+
+### B2c. ~~Exposed-pipeline latency + hwloop body (CB-139 / CB-140)~~ FIXED
+
+Haydn has **no interlock**. The spec rule is
+
+> "If instruction A at bundle t has Data_Latency = N, no instruction in bundles
+>  t+1 through t+N-1 may read A's destination register."
+
+Loads, `CSRR` and the MAC family are `Data_Latency = 2`. Nothing enforced it:
+
+1. `HaydnSubtarget::adjustSchedDependency` **deliberately** softened load→use
+   to latency 1 for non-accumulator consumers, to help SMS reach a lower II.
+2. The 14 `_S2` forms of the LS formats declared `Itinerary = Slot2_ALU`
+   (latency **1**) — the comment "single-slot, mirrors encoder commit" was
+   about slot resources, but it set the latency too. S0 used `Slot0_LS` and S1
+   `Slot1_LD`, both latency 2; only S2 was wrong.
+3. At `-O0` functions are `optnone`, so `PostMachineScheduler` **and**
+   `HaydnFinalizeBundle` both `skipFunction` — nothing schedules at all.
+
+BundleSim can never catch this: it is a functional bundle simulator with no
+timing model (its own staff-readiness review records "no timing or
+memory-performance model exists" as P0), so a violating program returns the
+right answer in simulation and the wrong one on hardware.
+
+| | before | after |
+|---|---|---|
+| Dhrystone -O0 / -O1 / -O2 / -O3 | 90 / — / 3 / — | **0 / 0 / 0 / 0** |
+| 50-file corpus (BSP + yarpgen + Dhrystone) | 90+ | **0** |
+
+**Fix:** new `Slot2_LS` itinerary (SLOT2 resource, latency 2) plus a new
+`HaydnLatencyStalls` pass at the head of `addPreEmitPass`, so the two
+`BranchRelaxation` runs and `HaydnFixupHwLoops` absorb the size growth. It runs
+at every optimization level.
+
+The soften in (1) is **kept** — it is now safe because the pass is the backstop,
+and feeding the true latency to the scheduler shifts 12 golden schedules
+(hwloop / SMS / II contracts) whose intent is not recoverable from CHECK lines.
+Do not remove the pass while the soften stays; the comment says so at the site.
+
+Cost: +13% bundles at -O0, +1% at -O2 (Dhrystone 872967 → 976058).
+
+Subtlety worth keeping: a **post/pre-increment load writes two destinations**,
+the loaded value and the base writeback. `s_lbu_post_imm r5, r1, 1` followed by
+a read of `r1` is a violation. The itinerary's `OperandCycles` has one entry
+(operand 0), so the writeback fell back to latency 1. The spec gives ONE
+`Data_Latency` per instruction and lists both `rt` and `rs` as write ports, so
+the pass takes the class maximum for any def without an explicit cycle. If
+hardware forwards the address writeback earlier, encode that as a real
+per-operand cycle rather than assuming it.
+
+**CB-140**, found while validating the above: `MinBodyBundles` was 0 with the
+note "deprecated as a legality floor", but the spec says "Loop Body: It must
+contain at least 3 instruction bundles". Tiny ZOL bodies (1–2 bundles) were
+reaching the assembler. `HaydnFixupHwLoops` now pads short bodies with NOPs
+before the inclusive END, next to the existing t-3 setup-gap padding. A survey
+of the 50-file corpus found 20 hardware loops, all already compliant on
+body ≥ 3 / setup ≥ 3 / END > BEGIN — only synthetic lit loops were short.
+
+Still unchecked from the spec's HW Loop section: nested-loop boundary overlap
+and the flow-control restrictions (no branch into or out of an active loop).
 
 ### B3. OPEN compiler — `haydn.h` unguarded DSP bodies (CB-136)
 
