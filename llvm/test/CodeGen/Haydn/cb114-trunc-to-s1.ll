@@ -6,7 +6,7 @@
 ;
 ; Closed rule:
 ; legalFor: {S1, S8/S16/S32/S64} (s1-result column complete)
-; selector: any trunc-to-s1 → AND with 1 (s64 also MOVE32_DR_L first)
+; selector: any trunc-to-s1 → ANDI32 with 1 (s64 also MOVE32_DR_L first)
 ;
 ; Bare replaceRegWith is wrong for G_BRCOND (nonzero) / MOVT32 (bit0) on
 ; e.g. trunc i16 2 to i1. CHECKs force a *use* of the s1 so the AND is
@@ -14,7 +14,7 @@
 
 ; s16 → s1 (the gap) used as select predicate
 ; CHECK-LABEL: select_trunc_s16:
-; CHECK: and32
+; CHECK: andi32 {{r[0-9]+}}, {{r[0-9]+}}, 1
 ; CHECK: movt32
 define i32 @select_trunc_s16(i16 %x, i32 %a, i32 %b) nounwind {
   %c = trunc i16 %x to i1
@@ -24,7 +24,7 @@ define i32 @select_trunc_s16(i16 %x, i32 %a, i32 %b) nounwind {
 
 ; s8 → s1
 ; CHECK-LABEL: select_trunc_s8:
-; CHECK: and32
+; CHECK: andi32 {{r[0-9]+}}, {{r[0-9]+}}, 1
 ; CHECK: movt32
 define i32 @select_trunc_s8(i8 %x, i32 %a, i32 %b) nounwind {
   %c = trunc i8 %x to i1
@@ -34,7 +34,7 @@ define i32 @select_trunc_s8(i8 %x, i32 %a, i32 %b) nounwind {
 
 ; s32 → s1
 ; CHECK-LABEL: select_trunc_s32:
-; CHECK: and32
+; CHECK: andi32 {{r[0-9]+}}, {{r[0-9]+}}, 1
 ; CHECK: movt32
 define i32 @select_trunc_s32(i32 %x, i32 %a, i32 %b) nounwind {
   %c = trunc i32 %x to i1
@@ -45,7 +45,7 @@ define i32 @select_trunc_s32(i32 %x, i32 %a, i32 %b) nounwind {
 ; s64 → s1
 ; CHECK-LABEL: select_trunc_s64:
 ; CHECK-DAG: move32_dr_l
-; CHECK-DAG: and32
+; CHECK-DAG: andi32 {{r[0-9]+}}, {{r[0-9]+}}, 1
 ; CHECK: movt32
 define i32 @select_trunc_s64(i64 %x, i32 %a, i32 %b) nounwind {
   %c = trunc i64 %x to i1

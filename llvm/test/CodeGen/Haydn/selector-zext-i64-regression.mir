@@ -27,9 +27,9 @@
 ---
 # G_ZEXT i8 -> i64: zero-extend byte to 64-bit
 # The input is s8 in GPR32. G_ZEXT to s64 should produce a DR64 value.
-# The selector will AND with 0xFF to clear upper bits, then MOV_GPR_TO_DR64.
+# The selector will ANDI32 with 0xFF to clear upper bits, then MOV_GPR_TO_DR64.
 # CHECK-LABEL: name: test_zext_i8_to_i64
-# CHECK: AND32
+# CHECK: ANDI32 %{{[0-9]+}}, 255
 # CHECK: MOV_GPR_TO_DR64
 name:            test_zext_i8_to_i64
 legalized:       true
@@ -49,9 +49,9 @@ body:             |
 ---
 # G_ZEXT i16 -> i64: zero-extend short to 64-bit
 # The input is s16 in GPR32. G_ZEXT to s64 should produce a DR64 value.
-# The selector will AND with 0xFFFF to clear upper bits, then MOV_GPR_TO_DR64.
+# The selector will ANDI32 with 0xFFFF to clear upper bits, then MOV_GPR_TO_DR64.
 # CHECK-LABEL: name: test_zext_i16_to_i64
-# CHECK: AND32
+# CHECK: ANDI32 %{{[0-9]+}}, 65535
 # CHECK: MOV_GPR_TO_DR64
 name:            test_zext_i16_to_i64
 legalized:       true

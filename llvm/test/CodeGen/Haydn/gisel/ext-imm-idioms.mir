@@ -1,0 +1,201 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select %s -o - | FileCheck %s
+
+# TODO.md T1b: the zext / sext / trunc idioms that HaydnInstructionSelector
+# builds by hand must carry their mask or shift amount in the RI20/RI5 immediate
+# field. These paths never enter selectImpl, so the HaydnGISel.td immediate Pats
+# (T1) cannot reach them — each one used to materialize the constant with
+# LOADI32 and then consume it with the register-register AND32 / SLL32 / SRL32 /
+# SRA32, wasting an instruction and (at -O2, e.g. Dhrystone Proc_4) a bundle.
+#
+# ANDI32 is uimm20, so a zero-extend mask folds for sources up to 20 bits;
+# s21..s31 keep the shift pair, whose amount (32-SrcBits) is always a uimm5.
+
+---
+name:            zext_s8_to_s32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: zext_s8_to_s32
+# CHECK: ANDI32 %{{[0-9]+}}, 255
+# CHECK-NOT: LOADI32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s8) = G_TRUNC %0(s32)
+    %2:_(s32) = G_ZEXT %1(s8)
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+# Widest mask ANDI32 can hold (uimm20 = 0xFFFFF).
+name:            zext_s20_to_s32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: zext_s20_to_s32
+# CHECK: ANDI32 %{{[0-9]+}}, 1048575
+# CHECK-NOT: LOADI32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s20) = G_TRUNC %0(s32)
+    %2:_(s32) = G_ZEXT %1(s20)
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+# 0xFFFFFF does not fit uimm20 — keep the shift pair, both with uimm5 amounts.
+name:            zext_s24_to_s32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: zext_s24_to_s32
+# CHECK: SLLI32 %{{[0-9]+}}, 8
+# CHECK: SRLI32 %{{[0-9]+}}, 8
+# CHECK-NOT: LOADI32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s24) = G_TRUNC %0(s32)
+    %2:_(s32) = G_ZEXT %1(s24)
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            zext_s16_to_s64
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: zext_s16_to_s64
+# CHECK: ANDI32 %{{[0-9]+}}, 65535
+# CHECK: MOV_GPR_TO_DR64
+# CHECK-NOT: LOADI32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s16) = G_TRUNC %0(s32)
+    %2:_(s64) = G_ZEXT %1(s16)
+    $d0 = COPY %2(s64)
+    RET implicit $d0, implicit $r15
+...
+
+---
+name:            zext_s1_to_s8
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: zext_s1_to_s8
+# CHECK: SEQ32
+# CHECK: ANDI32 %{{[0-9]+}}, 1
+# CHECK-NOT: LOADI32
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(eq), %0(s32), %1
+    %3:_(s8) = G_ZEXT %2(s1)
+    %4:_(s32) = G_ANYEXT %3(s8)
+    $r0 = COPY %4(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            sext_s16_to_s32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: sext_s16_to_s32
+# CHECK: SLLI32 %{{[0-9]+}}, 16
+# CHECK: SRAI32 %{{[0-9]+}}, 16
+# CHECK-NOT: LOADI32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s16) = G_TRUNC %0(s32)
+    %2:_(s32) = G_SEXT %1(s16)
+    $r0 = COPY %2(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+# s1 → s32 is the 0/-1 broadcast: shift 31 both ways, immediates not registers.
+name:            sext_s1_to_s32
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: sext_s1_to_s32
+# CHECK: SEQ32
+# CHECK: SLLI32 %{{[0-9]+}}, 31
+# CHECK: SRAI32 %{{[0-9]+}}, 31
+# CHECK-NOT: LOADI32
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s1) = G_ICMP intpred(eq), %0(s32), %1
+    %3:_(s32) = G_SEXT %2(s1)
+    $r0 = COPY %3(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            sext_s24_to_s64
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: sext_s24_to_s64
+# CHECK: SLLI32 %{{[0-9]+}}, 8
+# CHECK: SRAI32 %{{[0-9]+}}, 8
+# CHECK: SEXT_GPR32_TO_DR64
+# CHECK-NOT: LOADI32
+body:             |
+  bb.0.entry:
+    liveins: $r0
+    %0:_(s32) = COPY $r0
+    %1:_(s24) = G_TRUNC %0(s32)
+    %2:_(s64) = G_SEXT %1(s24)
+    $d0 = COPY %2(s64)
+    RET implicit $d0, implicit $r15
+...
+
+---
+# Trunc to s1 must isolate bit 0 as a genuine 0/1 (cb114) — now one ANDI32.
+name:            trunc_s32_to_s1
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: trunc_s32_to_s1
+# CHECK: ANDI32 %{{[0-9]+}}, 1
+# CHECK-NOT: LOADI32
+body:             |
+  bb.0.entry:
+    liveins: $r0, $r1, $r2
+    %0:_(s32) = COPY $r0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = COPY $r2
+    %3:_(s1) = G_TRUNC %0(s32)
+    %4:_(s32) = G_SELECT %3(s1), %1, %2
+    $r0 = COPY %4(s32)
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            trunc_s64_to_s1
+legalized:       true
+regBankSelected: false
+# CHECK-LABEL: name: trunc_s64_to_s1
+# CHECK: MOVE32_DR_L
+# CHECK: ANDI32 %{{[0-9]+}}, 1
+# CHECK-NOT: LOADI32
+body:             |
+  bb.0.entry:
+    liveins: $d0, $r1, $r2
+    %0:_(s64) = COPY $d0
+    %1:_(s32) = COPY $r1
+    %2:_(s32) = COPY $r2
+    %3:_(s1) = G_TRUNC %0(s64)
+    %4:_(s32) = G_SELECT %3(s1), %1, %2
+    $r0 = COPY %4(s32)
+    RET implicit $r0, implicit $r15
+...

@@ -67,6 +67,23 @@ static Register emitInvert01(MachineIRBuilder &MIB, Register Pred01,
   return Out;
 }
 
+// `rd = rs OP imm` for an RI20/RI5 immediate ALU form — ANDI32 (uimm20),
+// SLLI32/SRLI32/SRAI32 (uimm5). Companion to emitInvert01 for the ext/trunc
+// idioms this selector builds by hand: they never enter selectImpl, so the
+// HaydnGISel.td immediate Pats cannot reach them and the constant would be
+// materialized with LOADI32 and then consumed by the RR form (TODO.md T1b).
+// The caller owns the range check; post-RA setDesc picks the _S* slot member.
+static void emitALUImm(MachineIRBuilder &MIB, unsigned Opc, Register Dst,
+                       Register Src, int64_t Imm, const TargetInstrInfo &TII,
+                       const TargetRegisterInfo &TRI,
+                       const RegisterBankInfo &RBI,
+                       MachineRegisterInfo &MRI) {
+  if (Src.isVirtual())
+    RBI.constrainGenericRegister(Src, Haydn::GPR32RegClass, MRI);
+  MachineInstr *MI = MIB.buildInstr(Opc).addDef(Dst).addReg(Src).addImm(Imm);
+  constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+}
+
 // Memory access size in bytes from MMO (peer: AIEBaseInstructionSelector
 // getMemSizeInBits). Prefer MMO over SSA width so anyext/trunc loads after
 // legalizer splits of unaligned/i24 mem select LDU8/LDU16/ST8/ST16, never
@@ -1917,46 +1934,24 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
       constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     } else if (DstBits == 8 && SrcBits == 1) {
       // i1 to i8: AND with 1 (both live in GPR32)
-      Register One = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *LoadOne = MIB.buildInstr(Haydn::LOADI32).addDef(One).addImm(1);
-      constrainSelectedInstRegOperands(*LoadOne, TII, TRI, RBI);
-      MachineInstr *MI = MIB.buildInstr(Haydn::AND32).addDef(Dst).addReg(Src).addReg(One);
-      constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+      emitALUImm(MIB, Haydn::ANDI32, Dst, Src, 1, TII, TRI, RBI, MRI);
     } else if (DstBits == 32 && SrcBits >= 1 && SrcBits < 32) {
       // Any sub-32 → i32 zero-extend.
-      // Prefer AND with a small mask when it fits LOADI32 (≤16 bits):
-      // s1/s8/s16. For larger/non-pow2 widths (s17..s31, s24 bitfields
-      // residual) use SLL+SRL by (32-SrcBits) so we never need a
-      // wide immediate (LUI+ORI would work but shifts are uniform).
+      // One ANDI32 whenever the mask fits the RI20 field (SrcBits ≤ 20):
+      // s1/s8/s16 plus the s17..s20 bitfield widths. Wider sources (s24
+      // bitfields, s31) need a mask ANDI32 cannot hold, so they keep the
+      // shift pair by (32-SrcBits) — that amount is 1..31, always a uimm5.
       if (Src.isVirtual())
         RBI.constrainGenericRegister(Src, Haydn::GPR32RegClass, MRI);
       RBI.constrainGenericRegister(Dst, Haydn::GPR32RegClass, MRI);
-      if (SrcBits <= 16) {
+      if (SrcBits <= 20) {
         const unsigned MaskVal = (1u << SrcBits) - 1;
-        Register Mask = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-        MachineInstr *LoadMask =
-            MIB.buildInstr(Haydn::LOADI32).addDef(Mask).addImm(MaskVal);
-        constrainSelectedInstRegOperands(*LoadMask, TII, TRI, RBI);
-        MachineInstr *MI =
-            MIB.buildInstr(Haydn::AND32).addDef(Dst).addReg(Src).addReg(Mask);
-        constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+        emitALUImm(MIB, Haydn::ANDI32, Dst, Src, MaskVal, TII, TRI, RBI, MRI);
       } else {
         const unsigned ShAmt = 32 - SrcBits;
-        Register ShiftReg = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
         Register Tmp = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-        MachineInstr *LoadSh =
-            MIB.buildInstr(Haydn::LOADI32).addDef(ShiftReg).addImm(ShAmt);
-        constrainSelectedInstRegOperands(*LoadSh, TII, TRI, RBI);
-        MachineInstr *Shl = MIB.buildInstr(Haydn::SLL32)
-                                .addDef(Tmp)
-                                .addReg(Src)
-                                .addReg(ShiftReg);
-        constrainSelectedInstRegOperands(*Shl, TII, TRI, RBI);
-        MachineInstr *Srl = MIB.buildInstr(Haydn::SRL32)
-                                .addDef(Dst)
-                                .addReg(Tmp)
-                                .addReg(ShiftReg);
-        constrainSelectedInstRegOperands(*Srl, TII, TRI, RBI);
+        emitALUImm(MIB, Haydn::SLLI32, Tmp, Src, ShAmt, TII, TRI, RBI, MRI);
+        emitALUImm(MIB, Haydn::SRLI32, Dst, Tmp, ShAmt, TII, TRI, RBI, MRI);
       }
     } else if (DstBits == 64 && SrcBits >= 1 && SrcBits < 32) {
       // Sub-32 → i64 zero-extend: zext to i32, then MOV_GPR_TO_DR64 R0.
@@ -1964,34 +1959,14 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
       Register Ext32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
       if (Src.isVirtual())
         RBI.constrainGenericRegister(Src, Haydn::GPR32RegClass, MRI);
-      if (SrcBits <= 16) {
+      if (SrcBits <= 20) {
         const unsigned MaskVal = (1u << SrcBits) - 1;
-        Register Mask = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-        MachineInstr *LoadMask =
-            MIB.buildInstr(Haydn::LOADI32).addDef(Mask).addImm(MaskVal);
-        constrainSelectedInstRegOperands(*LoadMask, TII, TRI, RBI);
-        MachineInstr *AndMI = MIB.buildInstr(Haydn::AND32)
-                                  .addDef(Ext32)
-                                  .addReg(Src)
-                                  .addReg(Mask);
-        constrainSelectedInstRegOperands(*AndMI, TII, TRI, RBI);
+        emitALUImm(MIB, Haydn::ANDI32, Ext32, Src, MaskVal, TII, TRI, RBI, MRI);
       } else {
         const unsigned ShAmt = 32 - SrcBits;
-        Register ShiftReg = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
         Register Tmp = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-        MachineInstr *LoadSh =
-            MIB.buildInstr(Haydn::LOADI32).addDef(ShiftReg).addImm(ShAmt);
-        constrainSelectedInstRegOperands(*LoadSh, TII, TRI, RBI);
-        MachineInstr *Shl = MIB.buildInstr(Haydn::SLL32)
-                                .addDef(Tmp)
-                                .addReg(Src)
-                                .addReg(ShiftReg);
-        constrainSelectedInstRegOperands(*Shl, TII, TRI, RBI);
-        MachineInstr *Srl = MIB.buildInstr(Haydn::SRL32)
-                                .addDef(Ext32)
-                                .addReg(Tmp)
-                                .addReg(ShiftReg);
-        constrainSelectedInstRegOperands(*Srl, TII, TRI, RBI);
+        emitALUImm(MIB, Haydn::SLLI32, Tmp, Src, ShAmt, TII, TRI, RBI, MRI);
+        emitALUImm(MIB, Haydn::SRLI32, Ext32, Tmp, ShAmt, TII, TRI, RBI, MRI);
       }
       if (Dst.isVirtual())
         RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
@@ -2087,18 +2062,8 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
       // For input 0: (0 << 31) >> 31 = 0.
       // For input 1: (1 << 31) >> 31 = 0xFFFFFFFF (-1).
       Register Tmp = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      Register ShiftReg = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *LoadShift = MIB.buildInstr(Haydn::LOADI32)
-                                    .addDef(ShiftReg).addImm(31);
-      constrainSelectedInstRegOperands(*LoadShift, TII, TRI, RBI);
-      if (Src.isVirtual())
-        RBI.constrainGenericRegister(Src, Haydn::GPR32RegClass, MRI);
-      MachineInstr *Shl = MIB.buildInstr(Haydn::SLL32)
-                              .addDef(Tmp).addReg(Src).addReg(ShiftReg);
-      constrainSelectedInstRegOperands(*Shl, TII, TRI, RBI);
-      MachineInstr *Asr = MIB.buildInstr(Haydn::SRA32)
-                              .addDef(Dst).addReg(Tmp).addReg(ShiftReg);
-      constrainSelectedInstRegOperands(*Asr, TII, TRI, RBI);
+      emitALUImm(MIB, Haydn::SLLI32, Tmp, Src, 31, TII, TRI, RBI, MRI);
+      emitALUImm(MIB, Haydn::SRAI32, Dst, Tmp, 31, TII, TRI, RBI, MRI);
     } else if (DstBits == 32 && SrcBits >= 1 && SrcBits < 32) {
       // Any sub-32 → i32 sign-extend: SHL then ASR by (32-SrcBits).
       // Covers legal {1,8,16} and non-pow2 bitfield widths (s12/s24/s31
@@ -2106,37 +2071,17 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
       // separate branch only for the comment about 0/-1.
       unsigned ShiftAmt = 32 - SrcBits;
       Register Tmp = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      Register ShiftReg = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *LoadShift = MIB.buildInstr(Haydn::LOADI32)
-                                    .addDef(ShiftReg).addImm(ShiftAmt);
-      constrainSelectedInstRegOperands(*LoadShift, TII, TRI, RBI);
-      if (Src.isVirtual())
-        RBI.constrainGenericRegister(Src, Haydn::GPR32RegClass, MRI);
       RBI.constrainGenericRegister(Dst, Haydn::GPR32RegClass, MRI);
-      MachineInstr *Shl = MIB.buildInstr(Haydn::SLL32)
-                              .addDef(Tmp).addReg(Src).addReg(ShiftReg);
-      constrainSelectedInstRegOperands(*Shl, TII, TRI, RBI);
-      MachineInstr *Asr = MIB.buildInstr(Haydn::SRA32)
-                              .addDef(Dst).addReg(Tmp).addReg(ShiftReg);
-      constrainSelectedInstRegOperands(*Asr, TII, TRI, RBI);
+      emitALUImm(MIB, Haydn::SLLI32, Tmp, Src, ShiftAmt, TII, TRI, RBI, MRI);
+      emitALUImm(MIB, Haydn::SRAI32, Dst, Tmp, ShiftAmt, TII, TRI, RBI, MRI);
     } else if (DstBits == 64 && SrcBits >= 1 && SrcBits < 32) {
       // Sub-32 → i64 sign-extend: SHL/ASR to i32, then SEXT_GPR32_TO_DR64.
       // Generalizes {1,8,16} and non-pow2 bitfield widths (residual).
       Register Ext32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
       Register Tmp = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      Register ShiftReg = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
       unsigned ShiftAmt = 32 - SrcBits;
-      MachineInstr *LoadShift = MIB.buildInstr(Haydn::LOADI32)
-                                    .addDef(ShiftReg).addImm(ShiftAmt);
-      constrainSelectedInstRegOperands(*LoadShift, TII, TRI, RBI);
-      if (Src.isVirtual())
-        RBI.constrainGenericRegister(Src, Haydn::GPR32RegClass, MRI);
-      MachineInstr *Shl = MIB.buildInstr(Haydn::SLL32)
-                              .addDef(Tmp).addReg(Src).addReg(ShiftReg);
-      constrainSelectedInstRegOperands(*Shl, TII, TRI, RBI);
-      MachineInstr *Asr = MIB.buildInstr(Haydn::SRA32)
-                              .addDef(Ext32).addReg(Tmp).addReg(ShiftReg);
-      constrainSelectedInstRegOperands(*Asr, TII, TRI, RBI);
+      emitALUImm(MIB, Haydn::SLLI32, Tmp, Src, ShiftAmt, TII, TRI, RBI, MRI);
+      emitALUImm(MIB, Haydn::SRAI32, Ext32, Tmp, ShiftAmt, TII, TRI, RBI, MRI);
       if (Dst.isVirtual())
         RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
       MachineInstr *SextMI = MIB.buildInstr(Haydn::SEXT_GPR32_TO_DR64)
@@ -2193,14 +2138,8 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
           RBI.constrainGenericRegister(Src, Haydn::GPR32RegClass, MRI);
         BitSrc = Src;
       }
-      Register One = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
       Register Bit0 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      MachineInstr *LoadOne =
-          MIB.buildInstr(Haydn::LOADI32).addDef(One).addImm(1);
-      constrainSelectedInstRegOperands(*LoadOne, TII, TRI, RBI);
-      MachineInstr *AndMI =
-          MIB.buildInstr(Haydn::AND32).addDef(Bit0).addReg(BitSrc).addReg(One);
-      constrainSelectedInstRegOperands(*AndMI, TII, TRI, RBI);
+      emitALUImm(MIB, Haydn::ANDI32, Bit0, BitSrc, 1, TII, TRI, RBI, MRI);
       RBI.constrainGenericRegister(Dst, Haydn::GPR32RegClass, MRI);
       MRI.replaceRegWith(Dst, Bit0);
     } else if (SrcTy.getSizeInBits() == 64) {

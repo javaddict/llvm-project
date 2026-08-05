@@ -53,9 +53,9 @@
 ; CHECK: 	{ 		nop; 	sltu32	r1, r1, r4; 	seq32	r2, r1, r2 }
 ; CHECK: 	{ 		nop; 	xori32	r1, r1, 1; 	slt32	r3, r4, r3 }
 ; CHECK: 	{ 		nop; 	xori32	r2, r2, 1; 	xori32	r3, r3, 1 }
-; CHECK: 	{ 		addi32_w	r2, r0, 1; 	nop; 	movt32	r3, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	movt32	r3, r1, r2 }
 ; CHECK: 	{ 		nop; 	nop; 	not32	r1, r3 }
-; CHECK: 	{ 		nop; 	nop; 	and32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	andi32	r1, r1, 1 }
 ; CHECK: 	{ 		bnez_w	r1, .LBB0_2; 	nop; 	nop }
 ; CHECK: // %bb.1:                               // %yes
 ; CHECK: 	{ 		addi32_w	r1, r0, 42; 	nop; 	nop }

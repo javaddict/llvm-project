@@ -217,16 +217,16 @@ define i32 @cond_alloca(i1 %flag) nounwind {
 ; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { addi32_w r3, r0, 1; nop; not32 r1, r1 }
-; CHECK-NEXT:    { addi32_w r2, sp, 12; nop; and32 r1, r1, r3 }
+; CHECK-NEXT:    { addi32_w r2, sp, 12; nop; not32 r1, r1 }
+; CHECK-NEXT:    { nop; nop; andi32 r1, r1, 1 }
 ; CHECK-NEXT:    { bnez_w r1, .LBB5_2; nop; nop }
 ; CHECK-NEXT:  // %bb.1: // %t
-; CHECK-NEXT:    { st32 r3, r2, 0; nop; nop }
+; CHECK-NEXT:    { addi32_w r1, r0, 1; nop; nop }
 ; CHECK-NEXT:    { beqz_w r0, .LBB5_3; nop; nop }
 ; CHECK-NEXT:  .LBB5_2: // %f
 ; CHECK-NEXT:    { addi32_w r1, r0, 2; nop; nop }
-; CHECK-NEXT:    { st32 r1, r2, 0; nop; nop }
 ; CHECK-NEXT:  .LBB5_3: // %join
+; CHECK-NEXT:    { st32 r1, r2, 0; nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0; nop }
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { addi32_w sp, sp, 16; nop; nop }

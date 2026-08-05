@@ -20,21 +20,22 @@
 ; but harmless for already-clean booleans (icmp/zext/select).
 ;
 ; Test design: a minimal `icmp -> xor i1,true -> zext` forces the combine. The
-; CHECKs pin the masked logical-NOT shape: an `and32` (the mask) feeding an
-; `xor32` whose constant operand is `1`, not `-1`. If the combine regresses
-; the `and32` mask disappears and the `xor32` is fed by `addi32.., -1`.
+; CHECKs pin the masked logical-NOT shape: an `xori32` with constant `1`, not a
+; bitwise `not32` (or an `xor32` fed by a materialized `-1`), plus the `andi32 1`
+; that cleans the anyext upper bits when the result is zero-extended.
 
 define i32 @xor_i1_bool_not(i32 %x) {
 ; O1-LABEL: xor_i1_bool_not:
 ; O2-LABEL: xor_i1_bool_not:
-; The constant `1` for the logical NOT (buggy form used -1).
-; O1: addi32{{(_w)?}} {{r[0-9]+}}, r0, 1
-; O2: addi32{{(_w)?}} {{r[0-9]+}}, r0, 1
-; The mask that cleans anyext upper bits, feeding the XOR.
-; O1: and32
-; O1: xor32
-; O2: and32
-; O2: xor32
+; A bitwise NOT of the 0/1 predicate is the regression this test guards.
+; O1-NOT: not32
+; O2-NOT: not32
+; The logical NOT: XOR with the constant 1 (buggy form used -1).
+; O1: xori32 {{r[0-9]+}}, {{r[0-9]+}}, 1
+; O2: xori32 {{r[0-9]+}}, {{r[0-9]+}}, 1
+; The mask that cleans anyext upper bits for the zext of the result.
+; O1: andi32 {{r[0-9]+}}, {{r[0-9]+}}, 1
+; O2: andi32 {{r[0-9]+}}, {{r[0-9]+}}, 1
 entry:
   %c = icmp eq i32 %x, 0
   %n = xor i1 %c, true
