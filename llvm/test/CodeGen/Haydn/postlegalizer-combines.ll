@@ -4,8 +4,8 @@
 ; CHECK: 	.type	add_zero,@function
 ; CHECK-LABEL: add_zero:                               // @add_zero
 ; CHECK: // %bb.0:
-; CHECK: 	{ nop; nop; xor32	r0, r0, r0 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; jalr_w{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	add_zero, .Lfunc_end0-add_zero
 ; CHECK:                                         // -- End function

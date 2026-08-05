@@ -49,9 +49,11 @@ void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
       printAnnotation(O, Annot);
       return;
     }
+    // High slot first (`{ s2; s1; s0 }`), matching the BUNDLE128_FULL
+    // AsmString and the ISA bundle spelling.
     O << "\t{ ";
-    for (unsigned I = 0, E = Children.size(); I != E; ++I) {
-      if (I > 0)
+    for (unsigned I = Children.size(); I-- > 0;) {
+      if (I + 1 != Children.size())
         O << "; ";
       printSingleInst(Children[I], Address, STI, O);
     }

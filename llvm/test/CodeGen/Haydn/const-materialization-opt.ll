@@ -26,13 +26,13 @@
 ; CHECK: const_pow2_2:                           // @const_pow2_2
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r1, r0, 2; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r1, r0, 2 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	const_pow2_2, .Lfunc_end0-const_pow2_2
 ; CHECK: 	.cfi_endproc
@@ -42,14 +42,14 @@
 ; CHECK: const_pow2_0x100000:                    // @const_pow2_0x100000
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		lui	r1, 1; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r1, 0; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; lui	r1, 1 }
+; CHECK: 	{ nop; nop; addi32_w	r1, r1, 0 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	const_pow2_0x100000, .Lfunc_end1-const_pow2_0x100000
 ; CHECK: 	.cfi_endproc
@@ -59,14 +59,14 @@
 ; CHECK: const_0x80000000:                       // @const_0x80000000
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		lui	r1, 2048; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r1, 0; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; lui	r1, 2048 }
+; CHECK: 	{ nop; nop; addi32_w	r1, r1, 0 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	const_0x80000000, .Lfunc_end2-const_0x80000000
 ; CHECK: 	.cfi_endproc
@@ -76,14 +76,14 @@
 ; CHECK: const_0xF0000000:                       // @const_0xF0000000
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		lui	r1, 3840; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r1, 0; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; lui	r1, 3840 }
+; CHECK: 	{ nop; nop; addi32_w	r1, r1, 0 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	const_0xF0000000, .Lfunc_end3-const_0xF0000000
 ; CHECK: 	.cfi_endproc
@@ -93,13 +93,13 @@
 ; CHECK: const_upper_0xFFFF0000:                 // @const_upper_0xFFFF0000
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r1, r0, -65536; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r1, r0, -65536 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	const_upper_0xFFFF0000, .Lfunc_end4-const_upper_0xFFFF0000
 ; CHECK: 	.cfi_endproc
@@ -109,13 +109,13 @@
 ; CHECK: const_upper_0x00010000:                 // @const_upper_0x00010000
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r1, r0, 65536; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r1, r0, 65536 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end5:
 ; CHECK: 	.size	const_upper_0x00010000, .Lfunc_end5-const_upper_0x00010000
 ; CHECK: 	.cfi_endproc
@@ -125,13 +125,13 @@
 ; CHECK: const_simm16_max:                       // @const_simm16_max
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r1, r0, 32767; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r1, r0, 32767 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end6:
 ; CHECK: 	.size	const_simm16_max, .Lfunc_end6-const_simm16_max
 ; CHECK: 	.cfi_endproc
@@ -141,13 +141,13 @@
 ; CHECK: const_simm16_min:                       // @const_simm16_min
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r1, r0, -32768; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r1, r0, -32768 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end7:
 ; CHECK: 	.size	const_simm16_min, .Lfunc_end7-const_simm16_min
 ; CHECK: 	.cfi_endproc
@@ -157,13 +157,13 @@
 ; CHECK: const_0x8000:                           // @const_0x8000
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r1, r0, 32768; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r1, r0, 32768 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end8:
 ; CHECK: 	.size	const_0x8000, .Lfunc_end8-const_0x8000
 ; CHECK: 	.cfi_endproc
@@ -173,13 +173,13 @@
 ; CHECK: const_0xFFFF:                           // @const_0xFFFF
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r1, r0, 65535; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r1, r0, 65535 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end9:
 ; CHECK: 	.size	const_0xFFFF, .Lfunc_end9-const_0xFFFF
 ; CHECK: 	.cfi_endproc
@@ -189,14 +189,14 @@
 ; CHECK: const_0x12345678:                       // @const_0x12345678
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		lui	r1, 291; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r1, 284280; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; lui	r1, 291 }
+; CHECK: 	{ nop; nop; addi32_w	r1, r1, 284280 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end10:
 ; CHECK: 	.size	const_0x12345678, .Lfunc_end10-const_0x12345678
 ; CHECK: 	.cfi_endproc
@@ -206,14 +206,14 @@
 ; CHECK: const_0xDEADBEEF:                       // @const_0xDEADBEEF
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		lui	r1, 3563; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r1, -147729; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; lui	r1, 3563 }
+; CHECK: 	{ nop; nop; addi32_w	r1, r1, -147729 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end11:
 ; CHECK: 	.size	const_0xDEADBEEF, .Lfunc_end11-const_0xDEADBEEF
 ; CHECK: 	.cfi_endproc
@@ -223,13 +223,13 @@
 ; CHECK: const_0x10001:                          // @const_0x10001
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r1, r0, 65537; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r1, r0, 65537 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end12:
 ; CHECK: 	.size	const_0x10001, .Lfunc_end12-const_0x10001
 ; CHECK: 	.cfi_endproc
@@ -239,13 +239,13 @@
 ; CHECK: add_pow2_small:                         // @add_pow2_small
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	addi32	r1, r1, 4 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ addi32	r1, r1, 4; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end13:
 ; CHECK: 	.size	add_pow2_small, .Lfunc_end13-add_pow2_small
 ; CHECK: 	.cfi_endproc
@@ -255,14 +255,14 @@
 ; CHECK: add_pow2_large:                         // @add_pow2_large
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r2, r0, 65536; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	add32	r1, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r2, r0, 65536 }
+; CHECK: 	{ add32	r1, r1, r2; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end14:
 ; CHECK: 	.size	add_pow2_large, .Lfunc_end14-add_pow2_large
 ; CHECK: 	.cfi_endproc
@@ -272,13 +272,13 @@
 ; CHECK: or_large_const:                         // @or_large_const
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	ori32	r1, r1, 65536 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ ori32	r1, r1, 65536; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end15:
 ; CHECK: 	.size	or_large_const, .Lfunc_end15-or_large_const
 ; CHECK: 	.cfi_endproc

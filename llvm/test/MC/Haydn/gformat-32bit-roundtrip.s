@@ -35,5 +35,5 @@ _start:
     sub32 r1, r2, r3     // rd!=rs1 -> Mode-0 (NOT G-eligible)
     or32  r0, r1, r2     // rd!=rs1 -> Mode-0 (NOT G-eligible)
 
-# CHECK:      0: 32 01 00 00 c0 01 00 00 00 00 00 00 00 00 00 00       { sub32 r1, r2, r3
-# CHECK:      10: 21 00 00 00 80 03 00 00 00 00 00 00 00 00 00 00       { or32 r0, r1, r2
+# CHECK:      0: 32 01 00 00 c0 01 00 00 00 00 00 00 00 00 00 00       { nop; nop; sub32 r1, r2, r3
+# CHECK:      10: 21 00 00 00 80 03 00 00 00 00 00 00 00 00 00 00       { nop; nop; or32 r0, r1, r2

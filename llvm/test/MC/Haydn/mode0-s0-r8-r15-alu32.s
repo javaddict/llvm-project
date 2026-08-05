@@ -25,15 +25,15 @@ _start:
 
 // sub32 r8, r9, r10 — all outside r0-r7, still Bundle128 s0.
 // CHECK: 0: a9 08 00 00 c0 01 00 00 00 00 00 00 00 00 00 00
-// CHECK-SAME: { sub32{{.*}}r8, r9, r10
+// CHECK-SAME: { nop; nop; sub32{{.*}}r8, r9, r10
 sub32 r8, r9, r10
 
 // add32 r11, r10, r9 — r11 dest, high GPRs.
 // CHECK: 10: 9a 0b 00 00 40 01 00 00 00 00 00 00 00 00 00 00
-// CHECK-SAME: { add32{{.*}}r11, r10, r9
+// CHECK-SAME: { nop; nop; add32{{.*}}r11, r10, r9
 add32 r11, r10, r9
 
 // add32 r8, r9, r10 — symmetric high-bank triple.
 // CHECK: 20: a9 08 00 00 40 01 00 00 00 00 00 00 00 00 00 00
-// CHECK-SAME: { add32{{.*}}r8, r9, r10
+// CHECK-SAME: { nop; nop; add32{{.*}}r8, r9, r10
 add32 r8, r9, r10

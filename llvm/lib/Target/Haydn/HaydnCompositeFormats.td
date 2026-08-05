@@ -28,8 +28,14 @@
 // Bundle128 composite base: 3 positional slot windows concatenated s2||s1||s0.
 // isComposite=true tells -gen-instr-format to read the slot set from the
 // operand dag (the InstSlot defs), not from a Slot field.
+//
+// Bundle TEXT is written HIGH slot first — `{ s2; s1; s0 }`. That is the ISA
+// convention (VLIW_Engine_Compiler_Constraints.md "Bundle format:
+// G:{`slot2`, `slot1`, `slot0`}") and it matches the `Inst = {s2, s1, s0}`
+// concatenation below. Only the AsmString order is reversed; the operand dag
+// stays $s0/$s1/$s2 so encoding and decoding are unaffected.
 class HaydnBundle128Composite<dag slot_ins>
-    : HaydnFormatInst<(outs), slot_ins, "$s0; $s1; $s2", []> {
+    : HaydnFormatInst<(outs), slot_ins, "$s2; $s1; $s0", []> {
   let isComposite = true;
   let Size = 16;                         // 128-bit parcel
   let DecoderNamespace = "Bundle128";

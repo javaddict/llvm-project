@@ -34,14 +34,14 @@
 ; CHECK: const_0x12345678:                       // @const_0x12345678
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		lui	r1, 291; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r1, 284280; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; lui	r1, 291 }
+; CHECK: 	{ nop; nop; addi32_w	r1, r1, 284280 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	const_0x12345678, .Lfunc_end0-const_0x12345678
 ; CHECK: 	.cfi_endproc
@@ -51,14 +51,14 @@
 ; CHECK: const_0x12348000:                       // @const_0x12348000
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		lui	r1, 291; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r1, 294912; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; lui	r1, 291 }
+; CHECK: 	{ nop; nop; addi32_w	r1, r1, 294912 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	const_0x12348000, .Lfunc_end1-const_0x12348000
 ; CHECK: 	.cfi_endproc
@@ -68,14 +68,14 @@
 ; CHECK: const_0x123B8000:                       // @const_0x123B8000
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		lui	r1, 292; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r1, -294912; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; lui	r1, 292 }
+; CHECK: 	{ nop; nop; addi32_w	r1, r1, -294912 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	const_0x123B8000, .Lfunc_end2-const_0x123B8000
 ; CHECK: 	.cfi_endproc
@@ -85,14 +85,14 @@
 ; CHECK: const_0xDEADBEEF:                       // @const_0xDEADBEEF
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		lui	r1, 3563; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r1, -147729; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; lui	r1, 3563 }
+; CHECK: 	{ nop; nop; addi32_w	r1, r1, -147729 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	const_0xDEADBEEF, .Lfunc_end3-const_0xDEADBEEF
 ; CHECK: 	.cfi_endproc
@@ -102,13 +102,13 @@
 ; CHECK: regression_simm16:                      // @regression_simm16
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r1, r0, 32767; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r1, r0, 32767 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	regression_simm16, .Lfunc_end4-regression_simm16
 ; CHECK: 	.cfi_endproc
@@ -118,13 +118,13 @@
 ; CHECK: regression_uimm16:                      // @regression_uimm16
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r1, r0, 65535; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r1, r0, 65535 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end5:
 ; CHECK: 	.size	regression_uimm16, .Lfunc_end5-regression_uimm16
 ; CHECK: 	.cfi_endproc
@@ -134,14 +134,14 @@
 ; CHECK: regression_lui_only:                    // @regression_lui_only
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		lui	r1, 2048; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r1, 0; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; lui	r1, 2048 }
+; CHECK: 	{ nop; nop; addi32_w	r1, r1, 0 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end6:
 ; CHECK: 	.size	regression_lui_only, .Lfunc_end6-regression_lui_only
 ; CHECK: 	.cfi_endproc
@@ -151,15 +151,15 @@
 ; CHECK: add_with_hole_const:                    // @add_with_hole_const
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		lui	r2, 291; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r2, r2, 284280; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	add32	r1, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; lui	r2, 291 }
+; CHECK: 	{ nop; nop; addi32_w	r2, r2, 284280 }
+; CHECK: 	{ add32	r1, r1, r2; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end7:
 ; CHECK: 	.size	add_with_hole_const, .Lfunc_end7-add_with_hole_const
 ; CHECK: 	.cfi_endproc

@@ -33,7 +33,7 @@ define i32 @while_i64_ne_loop(i64 %x) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { subi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    { st64 d0, sp, 8; subi32 sp, sp, 8; nop } // 8-byte Folded Spill
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8; st64 d0, sp, 8 } // 8-byte Folded Spill
 ; CHECK-NEXT:    { addi32_w r1, r0, 0 }
 ; CHECK-NEXT:    { st32 r1, sp, 0 }
 ; CHECK-NEXT:    { addi32_w r1, r0, 0 }
@@ -47,10 +47,10 @@ define i32 @while_i64_ne_loop(i64 %x) {
 ; CHECK-NEXT:    { beqz_w r0, .LBB0_1 }
 ; CHECK-NEXT:  .LBB0_1: // %while.cond
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld64 d1, sp, 8; ld64 d0, sp, 16; nop } // 16-byte Folded Reload
-; CHECK-NEXT:    { move32_dr_h r1, d1; move32_dr_l r2, d1; nop }
-; CHECK-NEXT:    { move32_dr_h r4, d0; move32_dr_l r3, d0; nop }
-; CHECK-NEXT:    { slt32 r5, r1, r4; seq32 r1, r1, r4; nop }
+; CHECK-NEXT:    { nop; ld64 d0, sp, 16; ld64 d1, sp, 8 } // 16-byte Folded Reload
+; CHECK-NEXT:    { nop; move32_dr_l r2, d1; move32_dr_h r1, d1 }
+; CHECK-NEXT:    { nop; move32_dr_l r3, d0; move32_dr_h r4, d0 }
+; CHECK-NEXT:    { nop; seq32 r1, r1, r4; slt32 r5, r1, r4 }
 ; CHECK-NEXT:    { seq32 r2, r2, r3 }
 ; CHECK-NEXT:    { and32 r1, r1, r2 }
 ; CHECK-NEXT:    { bnez_w r1, .LBB0_3 }
@@ -89,7 +89,7 @@ define i32 @while_i64_sge_loop(i64 %x) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { subi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    { st64 d0, sp, 8; subi32 sp, sp, 8; nop } // 8-byte Folded Spill
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8; st64 d0, sp, 8 } // 8-byte Folded Spill
 ; CHECK-NEXT:    { addi32_w r1, r0, 0 }
 ; CHECK-NEXT:    { st32 r1, sp, 0 }
 ; CHECK-NEXT:    { addi32_w r1, r0, 0 }
@@ -103,10 +103,10 @@ define i32 @while_i64_sge_loop(i64 %x) {
 ; CHECK-NEXT:    { beqz_w r0, .LBB1_1 }
 ; CHECK-NEXT:  .LBB1_1: // %while.cond
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld64 d1, sp, 8; ld64 d0, sp, 16; nop } // 16-byte Folded Reload
-; CHECK-NEXT:    { move32_dr_l r2, d1; move32_dr_h r3, d1; nop }
-; CHECK-NEXT:    { move32_dr_l r4, d0; move32_dr_h r5, d0; nop }
-; CHECK-NEXT:    { slt32 r1, r3, r5; sltu32 r2, r2, r4; nop }
+; CHECK-NEXT:    { nop; ld64 d0, sp, 16; ld64 d1, sp, 8 } // 16-byte Folded Reload
+; CHECK-NEXT:    { nop; move32_dr_h r3, d1; move32_dr_l r2, d1 }
+; CHECK-NEXT:    { nop; move32_dr_h r5, d0; move32_dr_l r4, d0 }
+; CHECK-NEXT:    { nop; sltu32 r2, r2, r4; slt32 r1, r3, r5 }
 ; CHECK-NEXT:    { seq32 r3, r3, r5 }
 ; CHECK-NEXT:    { and32 r2, r2, r3 }
 ; CHECK-NEXT:    { or32 r1, r1, r2 }
@@ -144,7 +144,7 @@ define i32 @while_i64_sle_loop(i64 %x) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { subi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    { st64 d0, sp, 8; subi32 sp, sp, 8; nop } // 8-byte Folded Spill
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8; st64 d0, sp, 8 } // 8-byte Folded Spill
 ; CHECK-NEXT:    { addi32_w r1, r0, 0 }
 ; CHECK-NEXT:    { st32 r1, sp, 0 }
 ; CHECK-NEXT:    { addi32_w r1, r0, 0 }
@@ -158,11 +158,11 @@ define i32 @while_i64_sle_loop(i64 %x) {
 ; CHECK-NEXT:    { beqz_w r0, .LBB2_1 }
 ; CHECK-NEXT:  .LBB2_1: // %while.cond
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld64 d0, sp, 16; ld64 d1, sp, 8; nop } // 16-byte Folded Reload
-; CHECK-NEXT:    { move32_dr_h r5, d1; move32_dr_l r2, d0; nop }
-; CHECK-NEXT:    { move32_dr_h r1, d0; move32_dr_l r4, d1; nop }
-; CHECK-NEXT:    { slt32 r3, r5, r1; sltu32 r2, r2, r4; nop }
-; CHECK-NEXT:    { seq32 r3, r5, r1; slt32 r1, r1, r5; nop }
+; CHECK-NEXT:    { nop; ld64 d1, sp, 8; ld64 d0, sp, 16 } // 16-byte Folded Reload
+; CHECK-NEXT:    { nop; move32_dr_l r2, d0; move32_dr_h r5, d1 }
+; CHECK-NEXT:    { nop; move32_dr_l r4, d1; move32_dr_h r1, d0 }
+; CHECK-NEXT:    { nop; sltu32 r2, r2, r4; slt32 r3, r5, r1 }
+; CHECK-NEXT:    { nop; slt32 r1, r1, r5; seq32 r3, r5, r1 }
 ; CHECK-NEXT:    { and32 r2, r2, r3 }
 ; CHECK-NEXT:    { or32 r1, r1, r2 }
 ; CHECK-NEXT:    { bnez_w r1, .LBB2_3 }

@@ -1129,22 +1129,26 @@ defm D_SDW_PRE_REG : LS3_D_ST_RR_PostPre<0b0110110, "d_sdw_pre_reg">;
 defm S_SW_POST_IMM : LS3_S_ST_RI6_PostPre<0b0110111, "s_sw_post_imm">;
 // ST32_POST (legacy codegen name for S_SW_POST_IMM). AlternateInsts /
 // leaveRegion setDesc needs a matching _S1 member for the legacy name.
-// Same format class + codepoint as S_SW_POST_IMM_S1; isCodeGenOnly
-// excludes it from the decoder trie. ST32_POST is S1 per DClass (FU_LD, S1).
-let isCodeGenOnly = 1 in
+// Same format class + codepoint as S_SW_POST_IMM_S1, so it must stay out of
+// the decoder trie — but via DecoderNamespace, NOT isCodeGenOnly (d463): the
+// latter also drops the mnemonic from the asm matcher, so `clang -S` printed
+// `st32_post` that no assembler could read back. ST32_POST is S1 per DClass
+// (FU_LD, S1).
 def ST32_POST_S1 : HaydnFU_LS_S1_S_ST_RI6<0b0110111, (outs GPR32:$rs_wb), (ins GPR32:$rt, GPR32:$rs, simm6:$imm6), "st32_post\t$rt, $rs, $imm6", []> {
   let Constraints = "$rs = $rs_wb";
+  let DecoderNamespace = "FlexEmitterOnly";
 }
 
 // ST64_POST (legacy codegen name for D_SDW_POST_IMM, FmtLSPostInc<0x49>).
 // Same rationale as ST32_POST above — the fused post-inc store produced by
 // HaydnExpandPostIncEarly carries the legacy name, so AlternateInsts /
 // setDesc needs a matching _S1 member. Same format class (D_ST_RI6 — DR64
-// source) + codepoint as D_SDW_POST_IMM_S1; isCodeGenOnly excludes it from
-// the decoder trie. ST64_POST is S1 per DClass (FU_LD, S1, opcode 0x4).
-let isCodeGenOnly = 1 in
+// source) + codepoint as D_SDW_POST_IMM_S1; DecoderNamespace (not
+// isCodeGenOnly — d463) keeps it out of the decoder trie while leaving the
+// mnemonic matchable. ST64_POST is S1 per DClass (FU_LD, S1, opcode 0x4).
 def ST64_POST_S1 : HaydnFU_LS_S1_D_ST_RI6<0b0110001, (outs GPR32:$rs_wb), (ins DR64:$rtd, GPR32:$rs, simm6:$imm6), "st64_post\t$rtd, $rs, $imm6", []> {
   let Constraints = "$rs = $rs_wb";
+  let DecoderNamespace = "FlexEmitterOnly";
 }
 
 // #56 S_SW_WITH_IMM (RI6)

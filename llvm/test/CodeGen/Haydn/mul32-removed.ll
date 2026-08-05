@@ -10,14 +10,14 @@
 ; CHECK: scalar_mul:                             // @scalar_mul
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	mull	r2, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	move32	r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ mull	r2, r1, r2; nop; nop }
+; CHECK: 	{ move32	r1, r2; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	scalar_mul, .Lfunc_end0-scalar_mul
 ; CHECK: 	.cfi_endproc
@@ -27,17 +27,17 @@
 ; CHECK: cond_mul:                               // @cond_mul
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r4, r0, 0; 	nop; 	andi32	r1, r1, 1 }
-; CHECK: 	{ 		nop; 	seq32	r1, r1, r4; 	mull	r3, r2, r3 }
-; CHECK: 	{ 		nop; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	movt32	r3, r2, r1 }
-; CHECK: 	{ 		nop; 	nop; 	move32	r1, r3 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ andi32	r1, r1, 1; nop; addi32_w	r4, r0, 0 }
+; CHECK: 	{ mull	r3, r2, r3; seq32	r1, r1, r4; nop }
+; CHECK: 	{ nop; nop; nop }
+; CHECK: 	{ movt32	r3, r2, r1; nop; nop }
+; CHECK: 	{ move32	r1, r3; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	cond_mul, .Lfunc_end1-cond_mul
 ; CHECK: 	.cfi_endproc

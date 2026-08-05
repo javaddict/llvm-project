@@ -9,25 +9,25 @@
 ; CHECK: 	.type	dual_load_i64_slot_poly,@function
 ; CHECK: dual_load_i64_slot_poly:                // @dual_load_i64_slot_poly
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		addi32_w	r3, r1, 4; 	ld32	r4, r1, 0; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r1, 8; 	ld32	r3, r3, 0; 	nop }
-; CHECK: 	{ 		addi32_w	r5, r1, 4; 	ld32	r1, r1, 0; 	nop }
-; CHECK: 	{ 		nop; 	ld32	r5, r5, 0; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		st32	r4, sp, 0; 	nop; 	nop }
-; CHECK: 	{ 		st32	r3, sp, 4; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	ld64	d0, sp, 0; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		st32	r1, sp, 0; 	nop; 	nop }
-; CHECK: 	{ 		st32	r5, sp, 4; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r2, 4; 	ld64	d1, sp, 0; 	nop }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	add64	d0, d0, d1 }
-; CHECK: 	{ 		nop; 	nop; 	d_sw_l_with_imm	d0, r2, 0 }
-; CHECK: 	{ 		nop; 	nop; 	d_sw_h_with_imm	d0, r1, 0 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
+; CHECK: 	{ nop; ld32	r4, r1, 0; addi32_w	r3, r1, 4 }
+; CHECK: 	{ nop; ld32	r3, r3, 0; addi32_w	r1, r1, 8 }
+; CHECK: 	{ nop; ld32	r1, r1, 0; addi32_w	r5, r1, 4 }
+; CHECK: 	{ subi32	sp, sp, 8; ld32	r5, r5, 0; nop }
+; CHECK: 	{ nop; nop; st32	r4, sp, 0 }
+; CHECK: 	{ nop; nop; st32	r3, sp, 4 }
+; CHECK: 	{ nop; ld64	d0, sp, 0; addi32_w	sp, sp, 8 }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
+; CHECK: 	{ nop; nop; st32	r1, sp, 0 }
+; CHECK: 	{ nop; nop; st32	r5, sp, 4 }
+; CHECK: 	{ nop; ld64	d1, sp, 0; addi32_w	r1, r2, 4 }
+; CHECK: 	{ add64	d0, d0, d1; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ d_sw_l_with_imm	d0, r2, 0; nop; nop }
+; CHECK: 	{ d_sw_h_with_imm	d0, r1, 0; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	dual_load_i64_slot_poly, .Lfunc_end0-dual_load_i64_slot_poly
 ; CHECK:                                         // -- End function
@@ -35,31 +35,31 @@
 ; CHECK: 	.type	triple_load_i64_slot_poly,@function
 ; CHECK: triple_load_i64_slot_poly:              // @triple_load_i64_slot_poly
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		addi32_w	r3, r1, 4; 	ld32	r4, r1, 0; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r1, 16; 	nop; 	addi32	r5, r1, 8 }
-; CHECK: 	{ 		addi32_w	r7, r1, 4; 	ld32	r3, r3, 0; 	nop }
-; CHECK: 	{ 		addi32_w	r6, r5, 4; 	ld32	r5, r5, 0; 	nop }
-; CHECK: 	{ 		ld32	r1, r1, 0; 	ld32	r6, r6, 0; 	nop }
-; CHECK: 	{ 		nop; 	ld32	r7, r7, 0; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		st32	r4, sp, 0; 	nop; 	nop }
-; CHECK: 	{ 		st32	r3, sp, 4; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	ld64	d0, sp, 0; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		st32	r5, sp, 0; 	nop; 	nop }
-; CHECK: 	{ 		st32	r6, sp, 4; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	ld64	d1, sp, 0; 	nop }
-; CHECK: 	{ 		nop; 	add64	d0, d0, d1; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		st32	r1, sp, 0; 	nop; 	nop }
-; CHECK: 	{ 		st32	r7, sp, 4; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r2, 4; 	ld64	d2, sp, 0; 	nop }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	add64	d0, d0, d2 }
-; CHECK: 	{ 		nop; 	nop; 	d_sw_l_with_imm	d0, r2, 0 }
-; CHECK: 	{ 		nop; 	nop; 	d_sw_h_with_imm	d0, r1, 0 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
+; CHECK: 	{ nop; ld32	r4, r1, 0; addi32_w	r3, r1, 4 }
+; CHECK: 	{ addi32	r5, r1, 8; nop; addi32_w	r1, r1, 16 }
+; CHECK: 	{ nop; ld32	r3, r3, 0; addi32_w	r7, r1, 4 }
+; CHECK: 	{ nop; ld32	r5, r5, 0; addi32_w	r6, r5, 4 }
+; CHECK: 	{ nop; ld32	r6, r6, 0; ld32	r1, r1, 0 }
+; CHECK: 	{ subi32	sp, sp, 8; ld32	r7, r7, 0; nop }
+; CHECK: 	{ nop; nop; st32	r4, sp, 0 }
+; CHECK: 	{ nop; nop; st32	r3, sp, 4 }
+; CHECK: 	{ nop; ld64	d0, sp, 0; addi32_w	sp, sp, 8 }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
+; CHECK: 	{ nop; nop; st32	r5, sp, 0 }
+; CHECK: 	{ nop; nop; st32	r6, sp, 4 }
+; CHECK: 	{ nop; ld64	d1, sp, 0; addi32_w	sp, sp, 8 }
+; CHECK: 	{ subi32	sp, sp, 8; add64	d0, d0, d1; nop }
+; CHECK: 	{ nop; nop; st32	r1, sp, 0 }
+; CHECK: 	{ nop; nop; st32	r7, sp, 4 }
+; CHECK: 	{ nop; ld64	d2, sp, 0; addi32_w	r1, r2, 4 }
+; CHECK: 	{ add64	d0, d0, d2; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ d_sw_l_with_imm	d0, r2, 0; nop; nop }
+; CHECK: 	{ d_sw_h_with_imm	d0, r1, 0; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	triple_load_i64_slot_poly, .Lfunc_end1-triple_load_i64_slot_poly
 ; CHECK:                                         // -- End function

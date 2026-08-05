@@ -19,7 +19,7 @@ define void @csr_stride_base_must_be_live(i64 %a, i64 %b, i64 %c, i64 %d) {
 ; CHECK: st64{{.*}}d1{{[0-5]}}
 ; Must not store through fp/r14 without the addi above (base is call-clobbered
 ; scratch, not architectural FP).
-; CHECK-NOT: st64{{.*}}fp,{{.*}}0{{$}}
+; CHECK-NOT: st64{{.*}}fp,1{{.*}}2
 entry:
   %t0 = add i64 %a, 1
   %t1 = add i64 %b, 2

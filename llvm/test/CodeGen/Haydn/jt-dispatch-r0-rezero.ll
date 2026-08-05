@@ -52,7 +52,7 @@
 ; CHECK:  { sltu32 r2, r2, r1 }
 ; CHECK:  { bnez_w r2, .LBB0_10 }
 ; CHECK: // %bb.1: // %entry
-; CHECK:  { lui r2, .LJTI0_0; slli32 r1, r1, 2; nop }
+; CHECK:  { nop; slli32 r1, r1, 2; lui r2, .LJTI0_0 }
 ; CHECK:  { addi32{{(_w)?}} r2, r2, .LJTI0_0 }
 ; Fused s_lw_pre_reg or split add32+ld32, then indirect jalr.
 ; CHECK:  {{s_lw_pre_reg|add32}}

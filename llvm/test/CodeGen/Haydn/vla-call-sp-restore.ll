@@ -26,27 +26,27 @@
 ; CHECK: 	.type	vla_call_sp_restore,@function
 ; CHECK: vla_call_sp_restore:                    // @vla_call_sp_restore
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 24 }
-; CHECK: 	{ 		addi32_w	r2, sp, 12; 	nop; 	nop }
-; CHECK: 	{ 		st32	lr, r2, 0; 	nop; 	nop }
-; CHECK: 	{ 		st32	fp, r2, 4; 	nop; 	nop }
-; CHECK: 	{ 		st32	r8, r2, 8; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	fp, sp, 24; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r2, r0, -8; 	nop; 	slli32	r1, r1, 2 }
-; CHECK: 	{ 		nop; 	nop; 	addi32	r1, r1, 7 }
-; CHECK: 	{ 		nop; 	nop; 	and32	r1, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	sub32	r8, sp, r1 }
-; CHECK: 	{ 		nop; 	nop; 	move32	r1, r8 }
-; CHECK: 	{ 		jal_w	lr, use; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	ld32	r1, r8, 0; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, fp, -24; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	ld32	lr, sp, 12; 	nop }
-; CHECK: 	{ 		nop; 	ld32	fp, sp, 16; 	nop }
-; CHECK: 	{ 		nop; 	ld32	r8, sp, 20; 	nop }
-; CHECK: 	{ 		addi32_w	sp, sp, 24; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 24; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	r2, sp, 12 }
+; CHECK: 	{ nop; nop; st32	lr, r2, 0 }
+; CHECK: 	{ nop; nop; st32	fp, r2, 4 }
+; CHECK: 	{ nop; nop; st32	r8, r2, 8 }
+; CHECK: 	{ nop; nop; addi32_w	fp, sp, 24 }
+; CHECK: 	{ slli32	r1, r1, 2; nop; addi32_w	r2, r0, -8 }
+; CHECK: 	{ addi32	r1, r1, 7; nop; nop }
+; CHECK: 	{ and32	r1, r1, r2; nop; nop }
+; CHECK: 	{ sub32	r8, sp, r1; nop; nop }
+; CHECK: 	{ move32	r1, r8; nop; nop }
+; CHECK: 	{ nop; nop; jal_w	lr, use }
+; CHECK: 	{ xor32	r0, r0, r0; ld32	r1, r8, 0; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, fp, -24 }
+; CHECK: 	{ nop; ld32	lr, sp, 12; nop }
+; CHECK: 	{ nop; ld32	fp, sp, 16; nop }
+; CHECK: 	{ nop; ld32	r8, sp, 20; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 24 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	vla_call_sp_restore, .Lfunc_end0-vla_call_sp_restore
 ; CHECK:                                         // -- End function

@@ -11,6 +11,7 @@
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "TargetInfo/HaydnTargetInfo.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -443,6 +444,14 @@ class HaydnAsmParser : public MCTargetAsmParser {
   bool parseInstruction(ParseInstructionInfo &Info, StringRef Name,
                         SMLoc NameLoc, OperandVector &Operands) override;
 
+  // \returns the logical base opcode for a `_S<k>` format-member \p Opc, or
+  // \p Opc itself when it is not a member. The `_S0`/`_S1`/`_S2` members of a
+  // multi-slot logical all share one AsmString, so the matcher always resolves
+  // a bundle mnemonic to the FIRST member (`_S0`). De-materializing back to the
+  // logical lets the textual slot position choose the member instead — see the
+  // positional pack in parseInstruction.
+  unsigned getLogicalBaseOpcode(unsigned Opc);
+
   // Parse directive
   ParseStatus parseDirective(AsmToken ID) override;
 
@@ -482,10 +491,30 @@ public:
   }
 
 private:
+  // Format-member opcode -> logical base, inverted from the generated
+  // PlacementAlternative table on first use (getLogicalBaseOpcode).
+  DenseMap<unsigned, unsigned> MemberToLogical;
+  bool MemberToLogicalBuilt = false;
+
   // Auto-generated instruction matching functions
 #define GET_ASSEMBLER_HEADER
 #include "HaydnGenAsmMatcher.inc"
 };
+
+unsigned HaydnAsmParser::getLogicalBaseOpcode(unsigned Opc) {
+  if (!MemberToLogicalBuilt) {
+    MemberToLogicalBuilt = true;
+    HaydnMCFormats Fmts;
+    for (unsigned Logical = 0, E = MII.getNumOpcodes(); Logical != E; ++Logical)
+      if (const std::vector<unsigned> *Alts =
+              Fmts.getAlternateInstsOpcode(Logical))
+        for (unsigned Member : *Alts)
+          if (Member != 0 && Member != Logical)
+            MemberToLogical.try_emplace(Member, Logical);
+  }
+  auto It = MemberToLogical.find(Opc);
+  return It == MemberToLogical.end() ? Opc : It->second;
+}
 
 // Include the implementation of the auto-generated functions
 #define GET_MATCHER_IMPLEMENTATION
@@ -676,17 +705,27 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     // Product sole live Format->Opcode is BUNDLE128_FULL. Placement is Bundle
     // SlotMap (fixed getSlotKind / tryAdd alts); no Flags placement writers.
     //
-    // Explicit `nop` in `{ op; nop; nop }` is a slot filler (residual
+    // Explicit `nop` in `{ nop; nop; op }` is a slot filler (residual
     // encodeBundle filtered NOP before pack). emitBundle pads empty slots —
-    // do not canAdd/add NOP as a co-issue resource (NOP is S0-only alt).
+    // do not canAdd/add NOP as a co-issue resource (NOP is S0-only alt). A
+    // filler still HOLDS a textual slot position for the entries around it.
     //
-    // Solitary real op: prefer S0 when legal (encodeBundle128 residual peer —
-    // fixup window / -c≡mc). Multi-op: sequential canAdd/add (S2→S1→S0 tryAdd).
-    // Encode operand order is S0-S1-S2 (BUNDLE128_FULL dag), matching
-    // HaydnAsmPrinter.cpp:481-527.
+    // Bundle text is written HIGH slot first and right-aligned on s0 — the ISA
+    // spelling (VLIW_Engine_Compiler_Constraints.md "Bundle format:
+    // G:{`slot2`, `slot1`, `slot0`}"). For N entries, entry i names slot
+    // N-1-i: `{ a; b; c }` is s2,s1,s0; `{ a; b }` is s1,s0; `{ a }` is s0.
+    //
+    // That position is the slot HINT (Bundle::add(I*, MCSlotKind)), which is
+    // what makes `clang -S` + reassemble reproduce the bytes of a direct
+    // `clang -c` — the printer emits the same layout (BUNDLE128_FULL
+    // AsmString "$s2; $s1; $s0"). An illegal hint falls back to solver
+    // pickSlot, keeping short hand-written forms working.
     HaydnMCFormats Fmts;
-    // Matched real children (NOP fillers excluded) before Bundle pack.
-    SmallVector<MCInst *, Haydn::ISSUE_SLOT_COUNT> RealChildren;
+    // Matched real children (NOP fillers excluded) with the textual slot index
+    // they appeared at, before Bundle pack.
+    SmallVector<std::pair<MCInst *, unsigned>, Haydn::ISSUE_SLOT_COUNT>
+        RealChildren;
+    unsigned TextSlot = 0;
 
     while (true) {
       // The next token should be the instruction mnemonic
@@ -734,9 +773,11 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
       }
       Child->setLoc(MnemonicLoc);
 
-      // NOP is emit-time slot padding, not a co-issue resource.
+      // NOP is emit-time slot padding, not a co-issue resource — but it does
+      // hold a textual slot position for the children that follow it.
       if (Child->getOpcode() != Haydn::NOP)
-        RealChildren.push_back(Child);
+        RealChildren.push_back({Child, TextSlot});
+      ++TextSlot;
 
       Operands.clear();
 
@@ -770,26 +811,42 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     if (Parser.getTok().is(AsmToken::EndOfStatement))
       Parser.Lex();
 
+    // A bundle written as a SINGLE entry carries no positional information:
+    // `{ op }` is what the printer emits for an instruction that was never
+    // bundled, whose slot the encoder picks. Keep the matched opcode there so
+    // it re-encodes exactly as the `-c` path does (its right-aligned slot is
+    // s0 either way). Two or three entries (the printer/objdump
+    // `{ s2; s1; s0 }` layout, nop fillers included) DO name slots
+    // positionally. An over-full bundle has no valid layout — leave every
+    // child to the solver so canAdd reports the real conflict.
+    const unsigned NumEntries = TextSlot;
+    const bool Positional =
+        NumEntries > 1 && NumEntries <= Haydn::ISSUE_SLOT_COUNT;
+
     // AIEBaseAsmParser.h:192-201 — Bundle.canAdd/add fail-closed.
-    // Placement authority is Bundle SlotMap (fixed getSlotKind / tryAdd alts).
+    // Placement authority is Bundle SlotMap (textual hint, else tryAdd alts).
+    //
+    // For the positional layout, de-materialize a matched `_S<k>` member back
+    // to its logical base first. All members of a multi-slot logical share one
+    // AsmString, so the matcher pins the mnemonic to the FIRST member; that
+    // member's fixed getSlotKind would reject any other hint (HaydnBundle.h
+    // isHintSlotLegal) and force e.g. a slot-2 store back into slot 0. The
+    // logical carries the full PlacementAlternative set, and encodeSlotSubInst
+    // re-materializes Alts[SlotIdx] from the composite operand index — so the
+    // slot the text names is the slot that gets encoded.
     Haydn::MCBundle Bundle(&Fmts);
-    if (RealChildren.size() == 1) {
-      MCInst *Only = RealChildren[0];
-      unsigned Opc = Only->getOpcode();
-      if (!Bundle.canAdd(Opc))
-        return Error(Only->getLoc(), "incorrect bundle");
-      // Solitary residual hand-asm: prefer S0 when legal (encodeBundle128 peer).
-      SlotBits Legal = Fmts.getLegalSlots(Opc);
-      if (Legal & Haydn::SLOT0)
-        Bundle.add(Only, MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
+    for (auto [Child, Index] : RealChildren) {
+      if (Positional)
+        Child->setOpcode(getLogicalBaseOpcode(Child->getOpcode()));
+      if (!Bundle.canAdd(Child))
+        return Error(Child->getLoc(), "incorrect bundle");
+      if (Positional)
+        Bundle.add(Child, MCSlotKind(MCSlotKind::Haydn_SLOT_S0 +
+                                     static_cast<int>(NumEntries - 1 - Index)));
+      else if (NumEntries == 1)
+        Bundle.add(Child, MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
       else
-        Bundle.add(Only);
-    } else {
-      for (MCInst *Child : RealChildren) {
-        if (!Bundle.canAdd(Child))
-          return Error(Child->getLoc(), "incorrect bundle");
         Bundle.add(Child);
-      }
     }
 
     // emitBundle peer (AIEBaseAsmParser.h:164-181; HaydnAsmPrinter.cpp:481-527).

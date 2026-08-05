@@ -33,8 +33,10 @@ default: ret i32 0
 }
 
 ; CHECK-LABEL: switch_jt_pic:
-; CHECK:       .LJTI0_0
+; The jump-table base and the scaled index share one bundle; print is
+; s2-s1-s0, so slli32 (s2) comes out before the lui's .LJTI0_0 operand (s0).
 ; CHECK:       slli32
+; CHECK:       .LJTI0_0
 ; CHECK:       {{s_lw_pre_reg|ld32}}
 ; After load of a LabelDifference32 entry, ADD base back before jalr:
 ; CHECK:       add32

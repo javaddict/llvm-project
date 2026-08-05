@@ -24,12 +24,12 @@
 ; CHECK: 	.type	xor_xor_const_fold,@function
 ; CHECK: xor_xor_const_fold:                     // @xor_xor_const_fold
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		nop; 	nop; 	xori32	r1, r1, 255 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
+; CHECK: 	{ xori32	r1, r1, 255; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	xor_xor_const_fold, .Lfunc_end0-xor_xor_const_fold
 ; CHECK:                                         // -- End function
@@ -37,11 +37,11 @@
 ; CHECK: 	.type	xor_xor_cancel,@function
 ; CHECK: xor_xor_cancel:                         // @xor_xor_cancel
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	xor_xor_cancel, .Lfunc_end1-xor_xor_cancel
 ; CHECK:                                         // -- End function
@@ -49,11 +49,11 @@
 ; CHECK: 	.type	double_not,@function
 ; CHECK: double_not:                             // @double_not
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	double_not, .Lfunc_end2-double_not
 ; CHECK:                                         // -- End function
@@ -61,13 +61,13 @@
 ; CHECK: 	.type	and_or_disjoint_not_full,@function
 ; CHECK: and_or_disjoint_not_full:               // @and_or_disjoint_not_full
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		nop; 	nop; 	andi32	r1, r1, 255 }
-; CHECK: 	{ 		nop; 	nop; 	ori32	r1, r1, 65280 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
+; CHECK: 	{ andi32	r1, r1, 255; nop; nop }
+; CHECK: 	{ ori32	r1, r1, 65280; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	and_or_disjoint_not_full, .Lfunc_end3-and_or_disjoint_not_full
 ; CHECK:                                         // -- End function
@@ -75,14 +75,14 @@
 ; CHECK: 	.type	and_or_disjoint_full,@function
 ; CHECK: and_or_disjoint_full:                   // @and_or_disjoint_full
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		lui	r2, 4080; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r2, r2, 65280; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	or32	r1, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
+; CHECK: 	{ nop; nop; lui	r2, 4080 }
+; CHECK: 	{ nop; nop; addi32_w	r2, r2, 65280 }
+; CHECK: 	{ or32	r1, r1, r2; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	and_or_disjoint_full, .Lfunc_end4-and_or_disjoint_full
 ; CHECK:                                         // -- End function
@@ -90,12 +90,12 @@
 ; CHECK: 	.type	shift_mask_redundant_lshr,@function
 ; CHECK: shift_mask_redundant_lshr:              // @shift_mask_redundant_lshr
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		nop; 	nop; 	srli32	r1, r1, 8 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
+; CHECK: 	{ srli32	r1, r1, 8; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end5:
 ; CHECK: 	.size	shift_mask_redundant_lshr, .Lfunc_end5-shift_mask_redundant_lshr
 ; CHECK:                                         // -- End function
@@ -103,13 +103,13 @@
 ; CHECK: 	.type	shift_mask_not_redundant,@function
 ; CHECK: shift_mask_not_redundant:               // @shift_mask_not_redundant
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		nop; 	nop; 	srli32	r1, r1, 8 }
-; CHECK: 	{ 		nop; 	nop; 	andi32	r1, r1, 255 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
+; CHECK: 	{ srli32	r1, r1, 8; nop; nop }
+; CHECK: 	{ andi32	r1, r1, 255; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end6:
 ; CHECK: 	.size	shift_mask_not_redundant, .Lfunc_end6-shift_mask_not_redundant
 ; CHECK:                                         // -- End function
@@ -117,11 +117,11 @@
 ; CHECK: 	.type	xor_zero_identity,@function
 ; CHECK: xor_zero_identity:                      // @xor_zero_identity
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end7:
 ; CHECK: 	.size	xor_zero_identity, .Lfunc_end7-xor_zero_identity
 ; CHECK:                                         // -- End function

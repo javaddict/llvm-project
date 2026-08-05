@@ -11,16 +11,16 @@
 ; CHECK: dual_load_i64:                          // @dual_load_i64
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	d_ldw_post_imm	d0, r1, 1 }
-; CHECK: 	{ 		nop; 	ld64	d1, r1, 0; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	add64	d0, d0, d1 }
-; CHECK: 	{ 		st64	d0, r2, 0; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ d_ldw_post_imm	d0, r1, 1; nop; nop }
+; CHECK: 	{ nop; ld64	d1, r1, 0; nop }
+; CHECK: 	{ add64	d0, d0, d1; nop; nop }
+; CHECK: 	{ nop; nop; st64	d0, r2, 0 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	dual_load_i64, .Lfunc_end0-dual_load_i64
 ; CHECK: 	.cfi_endproc

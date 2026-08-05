@@ -22,13 +22,13 @@
 ; CHECK: pure_leaf:                              // @pure_leaf
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	addi32	r1, r1, 1 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ addi32	r1, r1, 1; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	pure_leaf, .Lfunc_end0-pure_leaf
 ; CHECK: 	.cfi_endproc
@@ -38,15 +38,15 @@
 ; CHECK: leaf_arith:                             // @leaf_arith
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	add32	r2, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	mull	r3, r2, r3 }
-; CHECK: 	{ 		nop; 	nop; 	sub32	r1, r3, r1 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ add32	r2, r1, r2; nop; nop }
+; CHECK: 	{ mull	r3, r2, r3; nop; nop }
+; CHECK: 	{ sub32	r1, r3, r1; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	leaf_arith, .Lfunc_end1-leaf_arith
 ; CHECK: 	.cfi_endproc
@@ -56,13 +56,13 @@
 ; CHECK: leaf_i64:                               // @leaf_i64
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	add64	d0, d0, d1 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ add64	d0, d0, d1; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	leaf_i64, .Lfunc_end2-leaf_i64
 ; CHECK: 	.cfi_endproc
@@ -72,13 +72,13 @@
 ; CHECK: leaf_cmp:                               // @leaf_cmp
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	max32	r1, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ max32	r1, r1, r2; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	leaf_cmp, .Lfunc_end3-leaf_cmp
 ; CHECK: 	.cfi_endproc
@@ -88,17 +88,17 @@
 ; CHECK: non_leaf:                               // @non_leaf
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 16 }
-; CHECK: 	{ 		st32	lr, sp, 12; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 16; nop; nop }
+; CHECK: 	{ nop; nop; st32	lr, sp, 12 }
 ; CHECK: 	.cfi_def_cfa_offset 16
 ; CHECK: 	.cfi_offset lr, 12
-; CHECK: 	{ 		jal_w	lr, extern; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	addi32	r1, r1, 1; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	ld32	lr, sp, 12; 	nop }
-; CHECK: 	{ 		addi32_w	sp, sp, 16; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; jal_w	lr, extern }
+; CHECK: 	{ xor32	r0, r0, r0; addi32	r1, r1, 1; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; ld32	lr, sp, 12; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 16 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	non_leaf, .Lfunc_end4-non_leaf
 ; CHECK: 	.cfi_endproc
@@ -108,17 +108,17 @@
 ; CHECK: leaf_with_alloca:                       // @leaf_with_alloca
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 16 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 16; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 16
-; CHECK: 	{ 		addi32_w	r2, sp, 12; 	nop; 	nop }
-; CHECK: 	{ 		st32	r1, r2, 0; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	ld32	r1, r2, 0; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	addi32	r1, r1, 1 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 16; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r2, sp, 12 }
+; CHECK: 	{ nop; nop; st32	r1, r2, 0 }
+; CHECK: 	{ nop; ld32	r1, r2, 0; nop }
+; CHECK: 	{ nop; nop; nop }
+; CHECK: 	{ addi32	r1, r1, 1; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 16 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end5:
 ; CHECK: 	.size	leaf_with_alloca, .Lfunc_end5-leaf_with_alloca
 ; CHECK: 	.cfi_endproc
@@ -128,18 +128,18 @@
 ; CHECK: leaf_multi_alloca:                      // @leaf_multi_alloca
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 16 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 16; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 16
-; CHECK: 	{ 		addi32_w	r2, sp, 12; 	nop; 	nop }
-; CHECK: 	{ 		st32	r1, r2, 0; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	ld32	r2, r2, 0; 	nop }
-; CHECK: 	{ 		addi32_w	r1, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		st32	r2, r1, 0; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	ld32	r1, r1, 0; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 16; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r2, sp, 12 }
+; CHECK: 	{ nop; nop; st32	r1, r2, 0 }
+; CHECK: 	{ nop; ld32	r2, r2, 0; nop }
+; CHECK: 	{ nop; nop; addi32_w	r1, sp, 8 }
+; CHECK: 	{ nop; nop; st32	r2, r1, 0 }
+; CHECK: 	{ nop; ld32	r1, r1, 0; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 16 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end6:
 ; CHECK: 	.size	leaf_multi_alloca, .Lfunc_end6-leaf_multi_alloca
 ; CHECK: 	.cfi_endproc
@@ -149,12 +149,12 @@
 ; CHECK: void_leaf:                              // @void_leaf
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end7:
 ; CHECK: 	.size	void_leaf, .Lfunc_end7-void_leaf
 ; CHECK: 	.cfi_endproc
@@ -164,22 +164,22 @@
 ; CHECK: leaf_branch:                            // @leaf_branch
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r3, r0, 0; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	slt32	r3, r3, r1 }
-; CHECK: 	{ 		nop; 	nop; 	xori32	r3, r3, 1 }
-; CHECK: 	{ 		bnez_w	r3, .LBB8_2; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r3, r0, 0 }
+; CHECK: 	{ slt32	r3, r3, r1; nop; nop }
+; CHECK: 	{ xori32	r3, r3, 1; nop; nop }
+; CHECK: 	{ nop; nop; bnez_w	r3, .LBB8_2 }
 ; CHECK: // %bb.1:                               // %pos
-; CHECK: 	{ 		nop; 	nop; 	add32	r1, r1, r2 }
-; CHECK: 	{ 		beqz_w	r0, .LBB8_3; 	nop; 	nop }
+; CHECK: 	{ add32	r1, r1, r2; nop; nop }
+; CHECK: 	{ nop; nop; beqz_w	r0, .LBB8_3 }
 ; CHECK: .LBB8_2:                                // %neg
-; CHECK: 	{ 		nop; 	nop; 	sub32	r1, r1, r2 }
+; CHECK: 	{ sub32	r1, r1, r2; nop; nop }
 ; CHECK: .LBB8_3:                                // %pos
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end8:
 ; CHECK: 	.size	leaf_branch, .Lfunc_end8-leaf_branch
 ; CHECK: 	.cfi_endproc

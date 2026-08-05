@@ -24,14 +24,16 @@
 # CHECK-LABEL: <.text>:
 
 # Single-op brace bundle: canAdd/add → SlotMap; emit BUNDLE128_FULL with NOPs.
-# Lone ALU64 prefers S2 → `{ nop; nop; add64... }`.
-# CHECK: { nop; nop; add64 d0, d1, d2 }
+# Lone ALU64 prefers S2; print is s2-s1-s0 → `{ add64...; nop; nop }`.
+# CHECK: { add64 d0, d1, d2; nop; nop }
 { add64 d0, d1, d2 }
 
-# Two-op: add64→S2, add32→S1 → print S0-S1-S2 order.
-# CHECK-NEXT: { nop; add32 r0, r1, r2; add64 d0, d1, d2 }
+# Two-op right-aligned text: add64 names s1 and add32 names s0, both legal
+# where written. (Under the old S0-first spelling this same line packed
+# add64->S2 / add32->S1; the ops are simply written in ISA slot order now.)
+# CHECK-NEXT: { nop; add64 d0, d1, d2; add32 r0, r1, r2 }
 { add64 d0, d1, d2; add32 r0, r1, r2 }
 
-# Three-op: add64→S2, add64→S1, add32→S0.
-# CHECK-NEXT: { add32 r0, r1, r2; add64 d3, d4, d5; add64 d0, d1, d2 }
+# Three-op: text is s2-s1-s0, and every op is legal where it is written.
+# CHECK-NEXT: { add64 d0, d1, d2; add64 d3, d4, d5; add32 r0, r1, r2 }
 { add64 d0, d1, d2; add64 d3, d4, d5; add32 r0, r1, r2 }

@@ -40,7 +40,7 @@ declare <2 x i32> @llvm.haydn.x2fcmula32rs(<2 x i32>, <2 x i32>, <2 x i32>)
 ; CHECK: // %bb.0:
 ; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
 ; CHECK: 	{ {{.*}}mula64.ll	d0, d1, d2{{.*}} }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
+; CHECK: 	{ nop; nop; jalr_w{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	test_mula64_ss_ll, .Lfunc_end0-test_mula64_ss_ll
 ; CHECK: 	.cfi_endproc
@@ -59,7 +59,7 @@ define i64 @test_mula64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK: // %bb.0:
 ; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
 ; CHECK: 	{ {{.*}}muls64.ll	d0, d1, d2{{.*}} }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
+; CHECK: 	{ nop; nop; jalr_w{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	test_muls64_ss_ll, .Lfunc_end1-test_muls64_ss_ll
 ; CHECK: 	.cfi_endproc
@@ -78,7 +78,7 @@ define i64 @test_muls64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK: // %bb.0:
 ; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
 ; CHECK: 	{ {{.*}}mulas64.ll	d0, d1, d2{{.*}} }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
+; CHECK: 	{ nop; nop; jalr_w{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	test_mulas64_ss_ll, .Lfunc_end2-test_mulas64_ss_ll
 ; CHECK: 	.cfi_endproc
@@ -95,7 +95,7 @@ define i64 @test_mulas64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK: // %bb.0:
 ; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
 ; CHECK: 	{ {{.*}}mulss64.ll	d0, d1, d2{{.*}} }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
+; CHECK: 	{ nop; nop; jalr_w{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	test_mulss64_ss_ll, .Lfunc_end3-test_mulss64_ss_ll
 ; CHECK: 	.cfi_endproc
@@ -112,7 +112,7 @@ define i64 @test_mulss64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK: // %bb.0:
 ; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
 ; CHECK: 	{ {{.*}}fmula32s.ll	d0, d1, d2{{.*}} }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
+; CHECK: 	{ nop; nop; jalr_w{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	test_fmula32s_ll, .Lfunc_end4-test_fmula32s_ll
 ; CHECK: 	.cfi_endproc
@@ -131,7 +131,7 @@ define i64 @test_fmula32s_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK: // %bb.0:
 ; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
 ; CHECK: 	{ {{.*}}ff2mula32rs.ll	d0, d1, d2{{.*}} }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
+; CHECK: 	{ nop; nop; jalr_w{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end5:
 ; CHECK: 	.size	test_ff2mula32rs_ll, .Lfunc_end5-test_ff2mula32rs_ll
 ; CHECK: 	.cfi_endproc
@@ -150,7 +150,7 @@ define i64 @test_ff2mula32rs_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK: // %bb.0:
 ; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
 ; CHECK: 	{ {{.*}}f2mulaa32rs.hhll	d0, d1, d2{{.*}} }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
+; CHECK: 	{ nop; nop; jalr_w{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end6:
 ; CHECK: 	.size	test_f2mulaa32rs_hhll, .Lfunc_end6-test_f2mulaa32rs_hhll
 ; CHECK: 	.cfi_endproc
@@ -169,7 +169,7 @@ define i64 @test_f2mulaa32rs_hhll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK: // %bb.0:
 ; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
 ; CHECK: 	{ {{.*}}x2fcmula32rs	d0, d1, d2{{.*}} }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0; nop; nop }
+; CHECK: 	{ nop; nop; jalr_w{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end7:
 ; CHECK: 	.size	test_x2fcmula32rs, .Lfunc_end7-test_x2fcmula32rs
 ; CHECK: 	.cfi_endproc

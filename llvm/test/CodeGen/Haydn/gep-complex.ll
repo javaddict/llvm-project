@@ -20,15 +20,15 @@
 ; CHECK: gep_array:                              // @gep_array
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	slli32	r2, r2, 2 }
-; CHECK: 	{ 		nop; 	nop; 	s_lw_pre_reg	r2, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	move32	r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ slli32	r2, r2, 2; nop; nop }
+; CHECK: 	{ s_lw_pre_reg	r2, r1, r2; nop; nop }
+; CHECK: 	{ move32	r1, r2; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	gep_array, .Lfunc_end0-gep_array
 ; CHECK: 	.cfi_endproc
@@ -38,13 +38,13 @@
 ; CHECK: gep_struct_field:                       // @gep_struct_field
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	ld32	r1, r1, 0; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; ld32	r1, r1, 0; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	gep_struct_field, .Lfunc_end1-gep_struct_field
 ; CHECK: 	.cfi_endproc
@@ -54,14 +54,14 @@
 ; CHECK: gep_struct_field1:                      // @gep_struct_field1
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	s_lw_pre_imm	r2, r1, 1 }
-; CHECK: 	{ 		nop; 	nop; 	move32	r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ s_lw_pre_imm	r2, r1, 1; nop; nop }
+; CHECK: 	{ move32	r1, r2; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	gep_struct_field1, .Lfunc_end2-gep_struct_field1
 ; CHECK: 	.cfi_endproc
@@ -71,16 +71,16 @@
 ; CHECK: gep_array_of_struct:                    // @gep_array_of_struct
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r3, r0, 12; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	mull	r3, r2, r3 }
-; CHECK: 	{ 		nop; 	nop; 	add32	r2, r1, r3 }
-; CHECK: 	{ 		nop; 	nop; 	s_lw_pre_imm	r1, r2, 1 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r3, r0, 12 }
+; CHECK: 	{ mull	r3, r2, r3; nop; nop }
+; CHECK: 	{ add32	r2, r1, r3; nop; nop }
+; CHECK: 	{ s_lw_pre_imm	r1, r2, 1; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	gep_array_of_struct, .Lfunc_end3-gep_array_of_struct
 ; CHECK: 	.cfi_endproc
@@ -90,15 +90,15 @@
 ; CHECK: gep_2d_array:                           // @gep_2d_array
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	slli32	r2, r2, 4 }
-; CHECK: 	{ 		nop; 	slli32	r1, r3, 2; 	add32	r2, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	s_lw_pre_reg	r1, r2, r1 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ slli32	r2, r2, 4; nop; nop }
+; CHECK: 	{ add32	r2, r1, r2; slli32	r1, r3, 2; nop }
+; CHECK: 	{ s_lw_pre_reg	r1, r2, r1; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	gep_2d_array, .Lfunc_end4-gep_2d_array
 ; CHECK: 	.cfi_endproc
@@ -108,14 +108,14 @@
 ; CHECK: gep_nested_struct:                      // @gep_nested_struct
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	s_lw_pre_imm	r2, r1, 2 }
-; CHECK: 	{ 		nop; 	nop; 	move32	r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ s_lw_pre_imm	r2, r1, 2; nop; nop }
+; CHECK: 	{ move32	r1, r2; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end5:
 ; CHECK: 	.size	gep_nested_struct, .Lfunc_end5-gep_nested_struct
 ; CHECK: 	.cfi_endproc
@@ -125,14 +125,14 @@
 ; CHECK: gep_const_offset:                       // @gep_const_offset
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	s_lw_pre_imm	r2, r1, 5 }
-; CHECK: 	{ 		nop; 	nop; 	move32	r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ s_lw_pre_imm	r2, r1, 5; nop; nop }
+; CHECK: 	{ move32	r1, r2; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end6:
 ; CHECK: 	.size	gep_const_offset, .Lfunc_end6-gep_const_offset
 ; CHECK: 	.cfi_endproc
@@ -142,23 +142,23 @@
 ; CHECK: gep_in_loop:                            // @gep_in_loop
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r3, r0, 0; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	move32	r4, r3 }
+; CHECK: 	{ nop; nop; addi32_w	r3, r0, 0 }
+; CHECK: 	{ move32	r4, r3; nop; nop }
 ; CHECK: .LBB7_1:                                // %loop
 ; CHECK:                                         // =>This Inner Loop Header: Depth=1
-; CHECK: 	{ 		nop; 	nop; 	s_lw_post_imm	r5, r1, 1 }
-; CHECK: 	{ 		nop; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	addi32	r4, r4, 1; 	add32	r3, r3, r5 }
-; CHECK: 	{ 		nop; 	nop; 	slt32	r5, r4, r2 }
-; CHECK: 	{ 		bnez_w	r5, .LBB7_1; 	nop; 	nop }
+; CHECK: 	{ s_lw_post_imm	r5, r1, 1; nop; nop }
+; CHECK: 	{ nop; nop; nop }
+; CHECK: 	{ add32	r3, r3, r5; addi32	r4, r4, 1; nop }
+; CHECK: 	{ slt32	r5, r4, r2; nop; nop }
+; CHECK: 	{ nop; nop; bnez_w	r5, .LBB7_1 }
 ; CHECK: // %bb.2:                               // %exit
-; CHECK: 	{ 		nop; 	nop; 	move32	r1, r3 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ move32	r1, r3; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end7:
 ; CHECK: 	.size	gep_in_loop, .Lfunc_end7-gep_in_loop
 ; CHECK: 	.cfi_endproc
@@ -168,16 +168,16 @@
 ; CHECK: gep_64bit_index:                        // @gep_64bit_index
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	move32_dr_l	r2, d0 }
-; CHECK: 	{ 		nop; 	nop; 	slli32	r2, r2, 2 }
-; CHECK: 	{ 		nop; 	nop; 	s_lw_pre_reg	r2, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	move32	r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ move32_dr_l	r2, d0; nop; nop }
+; CHECK: 	{ slli32	r2, r2, 2; nop; nop }
+; CHECK: 	{ s_lw_pre_reg	r2, r1, r2; nop; nop }
+; CHECK: 	{ move32	r1, r2; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end8:
 ; CHECK: 	.size	gep_64bit_index, .Lfunc_end8-gep_64bit_index
 ; CHECK: 	.cfi_endproc
@@ -187,14 +187,14 @@
 ; CHECK: gep_store:                              // @gep_store
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	slli32	r2, r2, 2 }
-; CHECK: 	{ 		nop; 	nop; 	s_sw_pre_reg	r3, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ slli32	r2, r2, 2; nop; nop }
+; CHECK: 	{ s_sw_pre_reg	r3, r1, r2; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end9:
 ; CHECK: 	.size	gep_store, .Lfunc_end9-gep_store
 ; CHECK: 	.cfi_endproc

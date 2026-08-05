@@ -42,7 +42,7 @@
 ; CHECK: 	{ 	sltu32	r2, r2, r1 }
 ; CHECK: 	{ 	bnez_w{{(\.s[012])?}}	r2, .LBB0_10 }
 ; CHECK: // %bb.1:                               // %entry
-; CHECK: 	{ 	lui	r2, .LJTI0_0; 	slli32	r1, r1, 2; 	nop }
+; CHECK: 	{ nop; slli32	r1, r1, 2; lui	r2, .LJTI0_0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r2, r2, .LJTI0_0 }
 ; CHECK: 	{ 	add32	r1, r2, r1 }
 ; CHECK: 	{ 	ld32	r1, r1, 0 }
@@ -149,7 +149,7 @@
 ; CHECK: 	{ 	sltu32	r3, r1, r2 }
 ; CHECK: 	{ 	bnez_w{{(\.s[012])?}}	r3, .LBB2_5 }
 ; CHECK: // %bb.1:                               // %entry
-; CHECK: 	{ 	lui	r3, .LJTI2_0; 	slli32	r2, r2, 2; 	nop }
+; CHECK: 	{ nop; slli32	r2, r2, 2; lui	r3, .LJTI2_0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r3, r3, .LJTI2_0 }
 ; CHECK: 	{ 	add32	r2, r3, r2 }
 ; CHECK: 	{ 	ld32	r2, r2, 0 }
@@ -193,7 +193,7 @@
 ; CHECK: 	{ 	sltu32	r2, r2, r1 }
 ; CHECK: 	{ 	bnez_w{{(\.s[012])?}}	r2, .LBB3_6 }
 ; CHECK: // %bb.1:                               // %entry
-; CHECK: 	{ 	lui	r2, .LJTI3_0; 	slli32	r1, r1, 2; 	nop }
+; CHECK: 	{ nop; slli32	r1, r1, 2; lui	r2, .LJTI3_0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r2, r2, .LJTI3_0 }
 ; CHECK: 	{ 	add32	r1, r2, r1 }
 ; CHECK: 	{ 	ld32	r1, r1, 0 }

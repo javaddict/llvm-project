@@ -47,25 +47,25 @@
 ; CHECK: test_trunc_s32_to_s1:                   // @test_trunc_s32_to_s1
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	sltu32	r1, r1, r4; 	seq32	r2, r1, r2 }
-; CHECK: 	{ 		nop; 	xori32	r1, r1, 1; 	slt32	r3, r4, r3 }
-; CHECK: 	{ 		nop; 	xori32	r2, r2, 1; 	xori32	r3, r3, 1 }
-; CHECK: 	{ 		nop; 	nop; 	movt32	r3, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	not32	r1, r3 }
-; CHECK: 	{ 		nop; 	nop; 	andi32	r1, r1, 1 }
-; CHECK: 	{ 		bnez_w	r1, .LBB0_2; 	nop; 	nop }
+; CHECK: 	{ seq32	r2, r1, r2; sltu32	r1, r1, r4; nop }
+; CHECK: 	{ slt32	r3, r4, r3; xori32	r1, r1, 1; nop }
+; CHECK: 	{ xori32	r3, r3, 1; xori32	r2, r2, 1; nop }
+; CHECK: 	{ movt32	r3, r1, r2; nop; nop }
+; CHECK: 	{ not32	r1, r3; nop; nop }
+; CHECK: 	{ andi32	r1, r1, 1; nop; nop }
+; CHECK: 	{ nop; nop; bnez_w	r1, .LBB0_2 }
 ; CHECK: // %bb.1:                               // %yes
-; CHECK: 	{ 		addi32_w	r1, r0, 42; 	nop; 	nop }
-; CHECK: 	{ 		beqz_w	r0, .LBB0_3; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r1, r0, 42 }
+; CHECK: 	{ nop; nop; beqz_w	r0, .LBB0_3 }
 ; CHECK: .LBB0_2:                                // %no
-; CHECK: 	{ 		addi32_w	r1, r0, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; addi32_w	r1, r0, 0 }
 ; CHECK: .LBB0_3:                                // %yes
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	test_trunc_s32_to_s1, .Lfunc_end0-test_trunc_s32_to_s1
 ; CHECK: 	.cfi_endproc
@@ -75,15 +75,15 @@
 ; CHECK: test_anyext_i1_to_i32:                  // @test_anyext_i1_to_i32
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	slt32	r1, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	movt32	r4, r3, r1 }
-; CHECK: 	{ 		nop; 	nop; 	move32	r1, r4 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ slt32	r1, r1, r2; nop; nop }
+; CHECK: 	{ movt32	r4, r3, r1; nop; nop }
+; CHECK: 	{ move32	r1, r4; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	test_anyext_i1_to_i32, .Lfunc_end1-test_anyext_i1_to_i32
 ; CHECK: 	.cfi_endproc
@@ -93,15 +93,15 @@
 ; CHECK: test_trunc_s32_to_s16:                  // @test_trunc_s32_to_s16
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	add32	r1, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	slli32	r1, r1, 16 }
-; CHECK: 	{ 		nop; 	nop; 	srai32	r1, r1, 16 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ add32	r1, r1, r2; nop; nop }
+; CHECK: 	{ slli32	r1, r1, 16; nop; nop }
+; CHECK: 	{ srai32	r1, r1, 16; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	test_trunc_s32_to_s16, .Lfunc_end2-test_trunc_s32_to_s16
 ; CHECK: 	.cfi_endproc
@@ -111,13 +111,13 @@
 ; CHECK: test_anyext_i16_to_i32:                 // @test_anyext_i16_to_i32
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	nop; 	add32	r1, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ add32	r1, r1, r2; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	test_anyext_i16_to_i32, .Lfunc_end3-test_anyext_i16_to_i32
 ; CHECK: 	.cfi_endproc
@@ -127,20 +127,20 @@
 ; CHECK: test_anyext_i1_condition_i64_select:    // @test_anyext_i1_condition_i64_select
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		nop; 	subi32	sp, sp, 8; 	move32_dr_l	r3, d1 }
-; CHECK: 	{ 		nop; 	seq32	r1, r1, r2; 	move32_dr_h	r4, d1 }
-; CHECK: 	{ 		nop; 	move32_dr_h	r5, d0; 	move32_dr_l	r2, d0 }
-; CHECK: 	{ 		nop; 	nop; 	movt32	r3, r2, r1 }
-; CHECK: 	{ 		st32	r3, sp, 0; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	movt32	r4, r5, r1 }
-; CHECK: 	{ 		st32	r4, sp, 4; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	ld64	d0, sp, 0; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ move32_dr_l	r3, d1; subi32	sp, sp, 8; nop }
+; CHECK: 	{ move32_dr_h	r4, d1; seq32	r1, r1, r2; nop }
+; CHECK: 	{ move32_dr_l	r2, d0; move32_dr_h	r5, d0; nop }
+; CHECK: 	{ movt32	r3, r2, r1; nop; nop }
+; CHECK: 	{ nop; nop; st32	r3, sp, 0 }
+; CHECK: 	{ movt32	r4, r5, r1; nop; nop }
+; CHECK: 	{ nop; nop; st32	r4, sp, 4 }
+; CHECK: 	{ nop; ld64	d0, sp, 0; addi32_w	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	test_anyext_i1_condition_i64_select, .Lfunc_end4-test_anyext_i1_condition_i64_select
 ; CHECK: 	.cfi_endproc

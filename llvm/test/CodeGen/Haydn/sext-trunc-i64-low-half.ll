@@ -25,20 +25,20 @@
 ; CHECK: sext_trunc_low_half:                    // @sext_trunc_low_half
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		lui	r1, v20; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r1, v20; 	nop; 	nop }
-; CHECK: 	{ 		lui	r2, v4; 	ld64	d0, r1, 0; 	nop }
-; CHECK: 	{ 		addi32_w	r2, r2, v4; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r1, r0, 32; 	ld64	d1, r2, 0; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	sll64	d0, d0, r1 }
-; CHECK: 	{ 		nop; 	nop; 	sra64	d0, d0, r1 }
-; CHECK: 	{ 		nop; 	nop; 	or64	d0, d0, d1 }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
-; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
-; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
+; CHECK: 	{ nop; nop; lui	r1, v20 }
+; CHECK: 	{ nop; nop; addi32_w	r1, r1, v20 }
+; CHECK: 	{ nop; ld64	d0, r1, 0; lui	r2, v4 }
+; CHECK: 	{ nop; nop; addi32_w	r2, r2, v4 }
+; CHECK: 	{ nop; ld64	d1, r2, 0; addi32_w	r1, r0, 32 }
+; CHECK: 	{ sll64	d0, d0, r1; nop; nop }
+; CHECK: 	{ sra64	d0, d0, r1; nop; nop }
+; CHECK: 	{ or64	d0, d0, d1; nop; nop }
+; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
+; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
+; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	sext_trunc_low_half, .Lfunc_end0-sext_trunc_low_half
 ; CHECK: 	.cfi_endproc

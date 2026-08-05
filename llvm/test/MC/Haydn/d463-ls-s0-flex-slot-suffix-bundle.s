@@ -29,31 +29,31 @@
 # accidental breakage of the non-suffixed path.
 
 # CHECK-LABEL: <f_st32_s0>:
-# CHECK: { st32 lr, sp, 12; nop; nop }
+# CHECK: { nop; nop; st32 lr, sp, 12 }
 f_st32_s0:
   { st32 lr, sp, 12 }
 
 # CHECK-LABEL: <f_st32_legacy>:
-# CHECK: { st32 lr, sp, 12; nop; nop }
+# CHECK: { nop; nop; st32 lr, sp, 12 }
 f_st32_legacy:
   { st32 lr, sp, 12 }
 
 # CHECK-LABEL: <f_ld32_s0>:
-# CHECK: { ld32 r1, sp, 8; nop; nop }
+# CHECK: { nop; nop; ld32 r1, sp, 8 }
 f_ld32_s0:
   { ld32 r1, sp, 8 }
 
 # CHECK-LABEL: <f_ld32_legacy>:
-# CHECK: { ld32 r1, sp, 8; nop; nop }
+# CHECK: { nop; nop; ld32 r1, sp, 8 }
 f_ld32_legacy:
   { ld32 r1, sp, 8 }
 
 # CHECK-LABEL: <f_ld64_s0>:
-# CHECK: { ld64 d0, sp, 16; nop; nop }
+# CHECK: { nop; nop; ld64 d0, sp, 16 }
 f_ld64_s0:
   { ld64 d0, sp, 16 }
 
 # CHECK-LABEL: <f_st64_s0>:
-# CHECK: { st64 d0, sp, 16; nop; nop }
+# CHECK: { nop; nop; st64 d0, sp, 16 }
 f_st64_s0:
   { st64 d0, sp, 16 }

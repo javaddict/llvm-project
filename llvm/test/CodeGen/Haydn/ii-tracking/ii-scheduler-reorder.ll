@@ -33,12 +33,12 @@ define void @ii_scheduler_reorder(ptr %a, ptr %b, ptr %c, i32 %n) {
 ; CHECK-LABEL: ii_scheduler_reorder:
 ; CHECK:       // #<spill-kpi> @ii_scheduler_reorder spills=0 spill-bytes=0 reloads=0 reload-bytes=0
 ; CHECK-NEXT:  // %bb.0: // %entry
-; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { subi32 sp, sp, 8; nop; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { addi32_w r5, r0, 1; nop; nop }
-; CHECK-NEXT:    { nop; nop; max32 r4, r4, r5 }
-; CHECK-NEXT:    { set_hwloop_f2_w 1, .LLhwloop_start0, .LLhwloop_end0, r4; nop; nop }
+; CHECK-NEXT:    { nop; nop; addi32_w r5, r0, 1 }
+; CHECK-NEXT:    { max32 r4, r4, r5; nop; nop }
+; CHECK-NEXT:    { nop; nop; set_hwloop_f2_w 1, .LLhwloop_start0, .LLhwloop_end0, r4 }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
@@ -47,20 +47,20 @@ define void @ii_scheduler_reorder(ptr %a, ptr %b, ptr %c, i32 %n) {
 ; CHECK-NEXT:    // Label of block must be emitted
 ; CHECK-NEXT:    .p2align 4
 ; CHECK-NEXT:  .LLhwloop_start0:
-; CHECK-NEXT:    { ld32 r5, r2, 0; ld32 r4, r1, 0; nop }
+; CHECK-NEXT:    { nop; ld32 r4, r1, 0; ld32 r5, r2, 0 }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { nop; ld32 r6, r3, 0; add32 r7, r4, r5 }
+; CHECK-NEXT:    { add32 r7, r4, r5; ld32 r6, r3, 0; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { st32 r7, r1, 0; nop; add32 r5, r5, r6 }
-; CHECK-NEXT:    { st32 r5, r2, 0; nop; add32 r4, r4, r6 }
-; CHECK-NEXT:    { nop; st32_post r4, r3, 1; addi32 r2, r2, 4 }
+; CHECK-NEXT:    { add32 r5, r5, r6; nop; st32 r7, r1, 0 }
+; CHECK-NEXT:    { add32 r4, r4, r6; nop; st32 r5, r2, 0 }
+; CHECK-NEXT:    { addi32 r2, r2, 4; st32_post r4, r3, 1; nop }
 ; CHECK-NEXT:    .p2align 4
 ; CHECK-NEXT:  .LLhwloop_end0:
-; CHECK-NEXT:    { nop; nop; addi32 r1, r1, 4 }
+; CHECK-NEXT:    { addi32 r1, r1, 4; nop; nop }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { nop; nop; addi32_w sp, sp, 8 }
+; CHECK-NEXT:    { nop; nop; jalr_w r0, lr, 0 }
 entry:
   br label %loop
 

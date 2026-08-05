@@ -55,11 +55,11 @@ test_d333_assign_slots_bitset:
 # Order/counts are NOT asserted — the MC `{ a; b }` syntax emits each child
 # as its own single-op bundle (multi-op packing is a CodeGen-time concern), so
 # only per-op round-trip validity is pinned here.
-# B3.5 source-order pack: first-appearance order in disasm (S2-first tryAdd).
+# Print is s2-s1-s0, so first-appearance order follows the high slots first.
 # CHECK: add64
 # CHECK: add32
-# CHECK: not32
 # CHECK: neg32
+# CHECK: not32
 # CHECK: x2mula32
 # Hard bar: zero placeholders (the load-bearing no-misencode contract).
 # CHECK-NOT: <?>
