@@ -105,9 +105,9 @@
 ; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
 ; CHECK: 	{ 		lui	r1, g_int; 	nop; 	nop }
 ; CHECK: 	{ 		addi32_w	r1, r1, g_int; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r3, r0, 1; 	ld32	r2, r1, 0; 	nop }
+; CHECK: 	{ 		nop; 	ld32	r2, r1, 0; 	nop }
 ; CHECK: 	{ 		nop; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	add32	r2, r2, r3 }
+; CHECK: 	{ 		nop; 	nop; 	addi32	r2, r2, 1 }
 ; CHECK: 	{ 		st32	r2, r1, 0; 	nop; 	nop }
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
@@ -154,10 +154,8 @@
 ; CHECK: // %bb.0:
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		lui	r2, g_array; 	nop; 	nop }
+; CHECK: 	{ 		lui	r2, g_array; 	nop; 	slli32	r1, r1, 2 }
 ; CHECK: 	{ 		addi32_w	r2, r2, g_array; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r3, r0, 2; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	sll32	r1, r1, r3 }
 ; CHECK: 	{ 		nop; 	nop; 	s_lw_pre_reg	r1, r2, r1 }
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }

@@ -42,9 +42,11 @@ define i64 @mul_by_one_64(i64 %x) nounwind {
 
 define i32 @add_chain_i32(i32 %x) nounwind {
 ; CHECK-LABEL: add_chain_i32:
-; The two constant adds should be folded: addi32{{(_w)?}} r2, r0, 30 then add32 r1, r1, r2.
-; There should be exactly one add-immediate materializing 30.
-; CHECK: addi32{{(_w)?}} {{r[0-9]+}}, r0, 30
+; The two constant adds fold into a single `addi32 r1, r1, 30`. This used to be
+; a materialize + register-register pair (addi32_w r2, r0, 30 then add32
+; r1, r1, r2) because the RI20 immediate forms had no selection path.
+; CHECK: addi32 {{r[0-9]+}}, {{r[0-9]+}}, 30
+; CHECK-NOT: add32
 ; CHECK: jalr_w{{(\.s[012])?}}
   %t1 = add i32 %x, 10
   %r = add i32 %t1, 20
@@ -65,8 +67,8 @@ define i64 @add_chain_i64(i64 %x) nounwind {
 
 define i32 @add_chain_neg(i32 %x) nounwind {
 ; CHECK-LABEL: add_chain_neg:
-; Should fold to addi32{{(_w)?}} with -2.
-; CHECK: addi32{{(_w)?}} {{r[0-9]+}}, r0, -2
+; Should fold to a single addi32 with -2 (no separate materialization).
+; CHECK: addi32 {{r[0-9]+}}, {{r[0-9]+}}, -2
 ; CHECK: jalr_w{{(\.s[012])?}}
   %t1 = add i32 %x, -5
   %r = add i32 %t1, 3

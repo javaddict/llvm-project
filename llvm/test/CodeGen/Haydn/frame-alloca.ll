@@ -57,10 +57,9 @@ define i32 @vla_basic(i32 %n) {
 ; CHECK-NEXT:    { addi32_w fp, sp, 16; nop; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_register fp
 ; CHECK-NEXT:    .cfi_offset fp, -4
-; CHECK-NEXT:    { addi32_w r3, r0, 2; nop; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 7; nop; sll32 r1, r1, r3 }
-; CHECK-NEXT:    { addi32_w r3, r0, -8; nop; add32 r1, r1, r3 }
-; CHECK-NEXT:    { addi32_w r2, r0, 42; nop; and32 r1, r1, r3 }
+; CHECK-NEXT:    { addi32_w r3, r0, -8; nop; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { addi32_w r2, r0, 42; nop; addi32 r1, r1, 7 }
+; CHECK-NEXT:    { nop; nop; and32 r1, r1, r3 }
 ; CHECK-NEXT:    { nop; nop; sub32 r3, sp, r1 }
 ; CHECK-NEXT:    { st32 r2, r3, 0; nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r3, 0; nop }
@@ -96,9 +95,8 @@ define ptr @dynamic_alloca_with_call(i32 %size) {
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset fp, -8
 ; CHECK-NEXT:    .cfi_offset lr, -12
-; CHECK-NEXT:    { addi32_w r2, r0, 2; nop; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 7; nop; sll32 r1, r1, r2 }
-; CHECK-NEXT:    { addi32_w r2, r0, -8; nop; add32 r1, r1, r2 }
+; CHECK-NEXT:    { addi32_w r2, r0, -8; nop; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { nop; nop; addi32 r1, r1, 7 }
 ; CHECK-NEXT:    { nop; nop; and32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; nop; sub32 r8, sp, r1 }
 ; CHECK-NEXT:    { nop; nop; move32 r1, r8 }
@@ -197,32 +195,30 @@ define i32 @vla_indexed(i32 %n, i32 %idx) {
 ; CHECK-NEXT:    { addi32_w fp, sp, 16; nop; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_register fp
 ; CHECK-NEXT:    .cfi_offset fp, -4
-; CHECK-NEXT:    { addi32_w r2, r0, 2; nop; nop }
-; CHECK-NEXT:    { addi32_w r4, r0, 7; nop; sll32 r3, r1, r2 }
-; CHECK-NEXT:    { addi32_w r4, r0, -8; nop; add32 r3, r3, r4 }
-; CHECK-NEXT:    { addi32_w r4, r0, 1; nop; and32 r3, r3, r4 }
-; CHECK-NEXT:    { addi32_w r5, r0, 0; nop; sub32 r3, sp, r3 }
-; CHECK-NEXT:    { nop; move32 sp, r3; max32 r6, r1, r4 }
-; CHECK-NEXT:    { set_hwloop_f2_w 1, .LLhwloop_start0, .LLhwloop_end0, r6; nop; nop }
+; CHECK-NEXT:    { addi32_w r3, r0, -8; nop; slli32 r2, r1, 2 }
+; CHECK-NEXT:    { addi32_w r4, r0, 1; nop; addi32 r2, r2, 7 }
+; CHECK-NEXT:    { addi32_w r3, r0, 0; nop; and32 r2, r2, r3 }
+; CHECK-NEXT:    { nop; max32 r4, r1, r4; sub32 r2, sp, r2 }
+; CHECK-NEXT:    { nop; nop; move32 sp, r2 }
+; CHECK-NEXT:    { set_hwloop_f2_w 1, .LLhwloop_start0, .LLhwloop_end0, r4; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { nop; nop; move32 r6, r3 }
+; CHECK-NEXT:    { nop; nop; move32 r4, r2 }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:  .LBB6_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    // Label of block must be emitted
 ; CHECK-NEXT:    .p2align 4
 ; CHECK-NEXT:  .LLhwloop_start0:
-; CHECK-NEXT:    { nop; mull r5, r5, r5; add32 r7, r5, r4 }
+; CHECK-NEXT:    { nop; mull r3, r3, r3; addi32 r5, r3, 1 }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { nop; st32_post r5, r6, 1; move32 r5, r7 }
+; CHECK-NEXT:    { nop; st32_post r3, r4, 1; move32 r3, r5 }
 ; CHECK-NEXT:    .p2align 4
 ; CHECK-NEXT:  .LLhwloop_end0:
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { addi32_w r4, r0, -1; nop; nop }
-; CHECK-NEXT:    { nop; nop; add32 r1, r1, r4 }
-; CHECK-NEXT:    { nop; nop; sll32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; nop; s_lw_pre_reg r1, r3, r1 }
+; CHECK-NEXT:    { nop; nop; addi32 r1, r1, -1 }
+; CHECK-NEXT:    { nop; nop; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { nop; nop; s_lw_pre_reg r1, r2, r1 }
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { addi32_w sp, fp, -16; nop; nop }
 ; CHECK-NEXT:    { nop; ld32 fp, sp, 12; nop }

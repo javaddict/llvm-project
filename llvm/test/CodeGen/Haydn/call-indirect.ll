@@ -101,9 +101,8 @@
 ; CHECK: 	{ 		st32	lr, sp, 12; 	nop; 	nop }
 ; CHECK: 	.cfi_def_cfa_offset 16
 ; CHECK: 	.cfi_offset lr, 12
-; CHECK: 	{ 		lui	r2, funcs; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r3, r0, 2; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r2, r2, funcs; 	nop; 	sll32	r3, r1, r3 }
+; CHECK: 	{ 		lui	r2, funcs; 	nop; 	slli32	r3, r1, 2 }
+; CHECK: 	{ 		addi32_w	r2, r2, funcs; 	nop; 	nop }
 ; CHECK: 	{ 		nop; 	nop; 	s_lw_pre_reg	r3, r2, r3 }
 ; CHECK: 	{ 		jalr_w	lr, r3, 0; 	nop; 	nop }
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }

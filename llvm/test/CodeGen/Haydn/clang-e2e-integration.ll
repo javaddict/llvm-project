@@ -54,7 +54,7 @@ define i32 @call_many(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; int local_caller(int a) { return local_callee(a); }
 define i32 @local_callee(i32 %x) {
 ; CHECK-LABEL: local_callee:
-; CHECK-DAG: add32
+; CHECK-DAG: addi32
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %r = add i32 %x, 1
   ret i32 %r
@@ -74,8 +74,9 @@ define i32 @fib(i32 %n) {
 ; CHECK-LABEL: fib:
 ; CondOpt may absorb slt+invert into fused bge_w (AIE xor(setcc,1) style).
 ; CHECK-DAG: {{slt32|bge_w}}
-; n-1/n-2 may be sub32 or addi -1/-2 + add32
-; CHECK-DAG: {{sub32|add32}}
+; n-1/n-2 are addi32 -1/-2 now that constants fold into the immediate form
+; (previously materialize + sub32/add32).
+; CHECK-DAG: {{sub32|addi32}}
 ; CHECK-DAG: jal_w{{.*}}{{.*}}fib
 ; CHECK-DAG: add32
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
@@ -150,7 +151,7 @@ define i32 @stack_idx(i32 %i) {
 ; CHECK-LABEL: stack_idx:
 ; CHECK-DAG: subi32{{.*}}sp, sp,
 ; CHECK-DAG: st32
-; CHECK-DAG: sll32
+; CHECK-DAG: slli32
 ; Indexed load may be ld32 or folded s_lw_pre_reg
 ; CHECK-DAG: {{ld32|s_lw}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
@@ -541,7 +542,7 @@ define void @inc_global() {
 ; CHECK-LABEL: inc_global:
 ; CHECK-DAG: lui{{.*}}{{.*}}g_counter
 ; CHECK-DAG: ld32
-; CHECK-DAG: add32
+; CHECK-DAG: addi32
 ; CHECK-DAG: st32
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %old = load i32, ptr @g_counter
@@ -555,7 +556,7 @@ define void @inc_global() {
 define i32 @global_array(i32 %i) {
 ; CHECK-LABEL: global_array:
 ; CHECK-DAG: lui{{.*}}{{.*}}g_data
-; CHECK-DAG: sll32
+; CHECK-DAG: slli32
 ; Base+index may be add32+ld32 or folded s_lw_pre_reg
 ; CHECK-DAG: {{add32|s_lw|ld32}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0

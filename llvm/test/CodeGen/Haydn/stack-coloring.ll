@@ -118,7 +118,7 @@ define i32 @alloca_loop(i32 %n) nounwind {
 ; CHECK-NEXT:  .LLhwloop_start0:
 ; CHECK-NEXT:    { nop; ld32 r1, r3, 0; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { nop; add32 r2, r2, r4; add32 r1, r2, r1 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, 1; add32 r1, r2, r1 }
 ; CHECK-NEXT:    .p2align 4
 ; CHECK-NEXT:  .LLhwloop_end0:
 ; CHECK-NEXT:    { st32 r1, r3, 0; nop; nop }

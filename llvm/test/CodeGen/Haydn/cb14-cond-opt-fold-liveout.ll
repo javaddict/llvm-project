@@ -43,7 +43,8 @@ define i32 @cb14_fold_liveout_seq() {
 ; CHECK: // %bb.2:                               // %step2
 ; CHECK: seq32
 ; CHECK: // %found
-; CHECK: and32
+; The bool normalisation mask folds into the immediate form.
+; CHECK: andi32
 entry:
   %a0addr = getelementptr [4 x i32], ptr @arr, i32 0, i32 0
   %a0 = load i32, ptr %a0addr

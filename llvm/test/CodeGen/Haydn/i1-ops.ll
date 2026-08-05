@@ -48,7 +48,7 @@ define i1 @i1_not(i1 %a) nounwind {
 ;i1 equality comparison
 define i1 @i1_cmp_eq(i1 %a, i1 %b) nounwind {
 ; CHECK-LABEL: i1_cmp_eq:
-; CHECK: and32
+; CHECK: andi32
 ; CHECK: seq32
   %r = icmp eq i1 %a, %b
   ret i1 %r
@@ -57,7 +57,7 @@ define i1 @i1_cmp_eq(i1 %a, i1 %b) nounwind {
 ;i1 not-equal comparison
 define i1 @i1_cmp_ne(i1 %a, i1 %b) nounwind {
 ; CHECK-LABEL: i1_cmp_ne:
-; CHECK: and32
+; CHECK: andi32
 ; CHECK: seq32
 ; CHECK: xor32
   %r = icmp ne i1 %a, %b
@@ -67,7 +67,7 @@ define i1 @i1_cmp_ne(i1 %a, i1 %b) nounwind {
 ;i1 zero-extend to i32
 define i32 @i1_zext(i1 %a) nounwind {
 ; CHECK-LABEL: i1_zext:
-; CHECK: and32
+; CHECK: andi32
   %r = zext i1 %a to i32
   ret i32 %r
 }
@@ -75,8 +75,8 @@ define i32 @i1_zext(i1 %a) nounwind {
 ;i1 sign-extend to i32
 define i32 @i1_sext(i1 %a) nounwind {
 ; CHECK-LABEL: i1_sext:
-; CHECK: sll32
-; CHECK: sra32
+; CHECK: slli32
+; CHECK: srai32
   %r = sext i1 %a to i32
   ret i32 %r
 }

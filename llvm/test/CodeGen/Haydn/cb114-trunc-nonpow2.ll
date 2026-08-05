@@ -21,8 +21,8 @@ define i32 @zext_trunc_s24(i32 %x) nounwind {
 
 ; s32 -> s24 trunc used via sext
 ; CHECK-LABEL: sext_trunc_s24:
-; CHECK-DAG: sll32
-; CHECK-DAG: sra32
+; CHECK-DAG: slli32
+; CHECK-DAG: srai32
 define i32 @sext_trunc_s24(i32 %x) nounwind {
   %t = trunc i32 %x to i24
   %s = sext i24 %t to i32

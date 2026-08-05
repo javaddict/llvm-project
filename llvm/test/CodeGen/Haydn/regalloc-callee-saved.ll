@@ -48,7 +48,8 @@ declare i64 @use_i64(i64)
 
 define i32 @test_minimal_callee_save(i32 %x) nounwind {
 ; CHECK-LABEL: test_minimal_callee_save:
-; CHECK:       // %bb.0: // %entry
+; CHECK:       // #<spill-kpi> @test_minimal_callee_save spills=2 spill-bytes=8 reloads=2 reload-bytes=8
+; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { addi32_w r2, sp, 8; nop; nop }
@@ -77,7 +78,8 @@ entry:
 
 define i32 @test_all_gpr_callee_saved(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) nounwind {
 ; CHECK-LABEL: test_all_gpr_callee_saved:
-; CHECK:       // %bb.0: // %entry
+; CHECK:       // #<spill-kpi> @test_all_gpr_callee_saved spills=6 spill-bytes=24 reloads=6 reload-bytes=24
+; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 32 }
 ; CHECK-NEXT:    { addi32_w r6, sp, 8; nop; nop }
@@ -136,7 +138,8 @@ entry:
 
 define i64 @test_all_dr64_callee_saved(i64 %a, i64 %b, i64 %c, i64 %d) nounwind {
 ; CHECK-LABEL: test_all_dr64_callee_saved:
-; CHECK:       // %bb.0: // %entry
+; CHECK:       // #<spill-kpi> @test_all_dr64_callee_saved spills=8 spill-bytes=60 reloads=8 reload-bytes=60
+; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 72 }
 ; CHECK-NEXT:    { addi32_w r0, r0, 68; nop; nop }
@@ -212,7 +215,8 @@ entry:
 
 define i64 @test_mixed_callee_saves(i32 %a, i32 %b, i32 %c, i32 %d,
 ; CHECK-LABEL: test_mixed_callee_saves:
-; CHECK:       // %bb.0: // %entry
+; CHECK:       // #<spill-kpi> @test_mixed_callee_saves spills=7 spill-bytes=36 reloads=7 reload-bytes=36
+; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 48 }
 ; CHECK-NEXT:    { addi32_w r5, sp, 28; nop; nop }
@@ -282,11 +286,11 @@ entry:
 
 define i32 @test_leaf_no_saves(i32 %x) nounwind {
 ; CHECK-LABEL: test_leaf_no_saves:
-; CHECK:       // %bb.0: // %entry
+; CHECK:       // #<spill-kpi> @test_leaf_no_saves spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { addi32_w r2, r0, 42; nop; nop }
-; CHECK-NEXT:    { nop; nop; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; nop; addi32 r1, r1, 42 }
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { addi32_w sp, sp, 8; nop; nop }
 ; CHECK-NEXT:    { jalr_w r0, lr, 0; nop; nop }

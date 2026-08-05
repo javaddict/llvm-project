@@ -47,14 +47,14 @@ define i32 @const_0x10ffff() {
 
 define i32 @and_mask_u16(i32 %x) {
 ; CHECK-LABEL: and_mask_u16:
-; Zext-style mask 0xFFFF must not become 0x10FFFF.
-; CHECK: addi32{{(_w)?}}{{.*}}65535
-; CHECK: and32
+; Zext-style mask 0xFFFF must not become 0x10FFFF. The mask now rides directly
+; in ANDI32's uimm20 field instead of being materialized into a register first,
+; which keeps the same guarantee: the 65535 is encoded as-is, no LUI pair.
+; CHECK: andi32 {{r[0-9]+}}, {{r[0-9]+}}, 65535
 ; CHECK-NOT: lui{{.*}}, 1
 ;
 ; CHECK-O0-LABEL: and_mask_u16:
-; CHECK-O0: addi32{{(_w)?}}{{.*}}65535
-; CHECK-O0: and32
+; CHECK-O0: andi32 {{r[0-9]+}}, {{r[0-9]+}}, 65535
 ; CHECK-O0-NOT: lui{{.*}}, 1
   %a = and i32 %x, 65535
   ret i32 %a

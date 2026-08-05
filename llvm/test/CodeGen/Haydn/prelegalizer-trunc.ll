@@ -19,9 +19,8 @@
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r2, r0, 16; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	sll32	r1, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	sra32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	slli32	r1, r1, 16 }
+; CHECK: 	{ 		nop; 	nop; 	srai32	r1, r1, 16 }
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
 ; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }

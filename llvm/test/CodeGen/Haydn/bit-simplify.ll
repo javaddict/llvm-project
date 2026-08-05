@@ -26,8 +26,7 @@
 ; CHECK: // %bb.0:
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		addi32_w	r2, r0, 255; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	xor32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	xori32	r1, r1, 255 }
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
 ; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
@@ -64,9 +63,8 @@
 ; CHECK: // %bb.0:
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		addi32_w	r2, r0, 255; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r3, r0, 65280; 	nop; 	and32	r1, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	or32	r1, r1, r3 }
+; CHECK: 	{ 		nop; 	nop; 	andi32	r1, r1, 255 }
+; CHECK: 	{ 		nop; 	nop; 	ori32	r1, r1, 65280 }
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
 ; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
@@ -94,8 +92,7 @@
 ; CHECK: // %bb.0:
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		addi32_w	r2, r0, 8; 	nop; 	nop }
-; CHECK: 	{ 		nop; 	nop; 	srl32	r1, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	srli32	r1, r1, 8 }
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
 ; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }
@@ -108,9 +105,8 @@
 ; CHECK: // %bb.0:
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		addi32_w	r2, r0, 8; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r3, r0, 255; 	nop; 	srl32	r1, r1, r2 }
-; CHECK: 	{ 		nop; 	nop; 	and32	r1, r1, r3 }
+; CHECK: 	{ 		nop; 	nop; 	srli32	r1, r1, 8 }
+; CHECK: 	{ 		nop; 	nop; 	andi32	r1, r1, 255 }
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		addi32_w	sp, sp, 8; 	nop; 	nop }
 ; CHECK: 	{ 		jalr_w	r0, lr, 0; 	nop; 	nop }

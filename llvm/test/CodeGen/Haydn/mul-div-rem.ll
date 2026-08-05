@@ -155,12 +155,10 @@
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r3, r0, 29; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r4, r0, 31; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r2, r0, 3; 	nop; 	sra32	r4, r1, r4 }
-; CHECK: 	{ 		nop; 	nop; 	srl32	r3, r4, r3 }
-; CHECK: 	{ 		nop; 	nop; 	add32	r3, r1, r3 }
-; CHECK: 	{ 		addi32_w	r3, r0, 0; 	nop; 	sra32	r2, r3, r2 }
+; CHECK: 	{ 		addi32_w	r3, r0, 0; 	nop; 	srai32	r2, r1, 31 }
+; CHECK: 	{ 		nop; 	nop; 	srli32	r2, r2, 29 }
+; CHECK: 	{ 		nop; 	nop; 	add32	r2, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	srai32	r2, r2, 3 }
 ; CHECK: 	{ 		nop; 	nop; 	movt32	r2, r1, r3 }
 ; CHECK: 	{ 		nop; 	nop; 	sub32	r1, r3, r2 }
 ; CHECK: 	{ 		nop; 	nop; 	movt32	r2, r1, r3 }
@@ -182,8 +180,9 @@
 ; CHECK: 	.cfi_def_cfa_offset 8
 ; CHECK: 	{ 		lui	r2, 3277; 	nop; 	nop }
 ; CHECK: 	{ 		addi32_w	r2, r2, -209715; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r3, r0, 3; 	nop; 	muluuh	r2, r1, r2 }
-; CHECK: 	{ 		addi32_w	r3, r0, 0; 	nop; 	srl32	r2, r2, r3 }
+; CHECK: 	{ 		addi32_w	r3, r0, 0; 	nop; 	muluuh	r2, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	nop }
+; CHECK: 	{ 		nop; 	nop; 	srli32	r2, r2, 3 }
 ; CHECK: 	{ 		nop; 	nop; 	movt32	r2, r1, r3 }
 ; CHECK: 	{ 		nop; 	nop; 	move32	r1, r2 }
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
@@ -203,12 +202,13 @@
 ; CHECK: 	.cfi_def_cfa_offset 8
 ; CHECK: 	{ 		lui	r2, 2341; 	nop; 	nop }
 ; CHECK: 	{ 		addi32_w	r2, r2, -449389; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r3, r0, 2; 	nop; 	mulssh	r2, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	mulssh	r2, r1, r2 }
+; CHECK: 	{ 		nop; 	nop; 	nop }
 ; CHECK: 	{ 		nop; 	nop; 	add32	r2, r2, r1 }
-; CHECK: 	{ 		addi32_w	r3, r0, 31; 	nop; 	sra32	r2, r2, r3 }
-; CHECK: 	{ 		nop; 	nop; 	srl32	r3, r2, r3 }
-; CHECK: 	{ 		addi32_w	r3, r0, 3; 	nop; 	add32	r2, r2, r3 }
-; CHECK: 	{ 		nop; 	nop; 	sll32	r3, r2, r3 }
+; CHECK: 	{ 		nop; 	nop; 	srai32	r2, r2, 2 }
+; CHECK: 	{ 		nop; 	nop; 	srli32	r3, r2, 31 }
+; CHECK: 	{ 		nop; 	nop; 	add32	r2, r2, r3 }
+; CHECK: 	{ 		nop; 	nop; 	slli32	r3, r2, 3 }
 ; CHECK: 	{ 		nop; 	nop; 	sub32	r2, r3, r2 }
 ; CHECK: 	{ 		nop; 	nop; 	sub32	r1, r1, r2 }
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }

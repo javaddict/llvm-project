@@ -78,8 +78,8 @@ define i32 @divmod_i32(i32 %a, i32 %b) {
 define i32 @div_pow2(i32 %a) {
 ; CHECK-LABEL: div_pow2:
 ; CHECK-NOT: __divsi3
-; CHECK: sra32
-; CHECK: sra32
+; CHECK: srai32
+; CHECK: srai32
   %r = sdiv i32 %a, 8
   ret i32 %r
 }

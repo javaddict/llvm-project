@@ -29,7 +29,7 @@ define void @tiny_body(ptr nocapture %p, i32 %n) {
 ; CHECK: { nop; nop; nop }
 ; CHECK: [[START]]:
 ; Body bundle 1: the work.
-; CHECK: add32
+; CHECK: addi32
 ; Body bundle 2: latency stall for the st32_post base writeback.
 ; CHECK: { nop; nop; nop }
 ; Body bundle 3 carries the inclusive END.

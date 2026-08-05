@@ -10,7 +10,8 @@
 
 define i32 @const_zero() {
 ; CHECK-LABEL: const_zero:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_zero spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -23,7 +24,8 @@ define i32 @const_zero() {
 
 define i32 @const_one() {
 ; CHECK-LABEL: const_one:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_one spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -36,7 +38,8 @@ define i32 @const_one() {
 
 define i32 @const_neg_one() {
 ; CHECK-LABEL: const_neg_one:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_neg_one spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -51,7 +54,8 @@ define i32 @const_neg_one() {
 
 define i32 @const_small_pos() {
 ; CHECK-LABEL: const_small_pos:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_small_pos spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -64,7 +68,8 @@ define i32 @const_small_pos() {
 
 define i32 @const_255() {
 ; CHECK-LABEL: const_255:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_255 spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -77,7 +82,8 @@ define i32 @const_255() {
 
 define i32 @const_max_simm16() {
 ; CHECK-LABEL: const_max_simm16:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_max_simm16 spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -92,7 +98,8 @@ define i32 @const_max_simm16() {
 
 define i32 @const_small_neg() {
 ; CHECK-LABEL: const_small_neg:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_small_neg spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -105,7 +112,8 @@ define i32 @const_small_neg() {
 
 define i32 @const_min_simm16() {
 ; CHECK-LABEL: const_min_simm16:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_min_simm16 spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -121,7 +129,8 @@ define i32 @const_min_simm16() {
 ; 0xFFFF = 65535: fits in simm20 (single-instruction MatInt form)
 define i32 @const_0xFFFF() {
 ; CHECK-LABEL: const_0xFFFF:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_0xFFFF spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -135,7 +144,8 @@ define i32 @const_0xFFFF() {
 ; 0xFFFFFFFF = -1 = UINT_MAX: single ADDI32_W -1
 define i32 @const_all_ones() {
 ; CHECK-LABEL: const_all_ones:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_all_ones spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -149,7 +159,8 @@ define i32 @const_all_ones() {
 ; 0x80000000 = INT_MIN: LUI 0x800 + addi32{{(_w)?}} 0 (12-bit LUI sets bits[31:20]). ISA-43 #1.
 define i32 @const_int_min() {
 ; CHECK-LABEL: const_int_min:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_int_min spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -164,7 +175,8 @@ define i32 @const_int_min() {
 ; 0x7FFFFFFF = INT_MAX: LUI 0x800 + ADDI32_W -1 (12-bit LUI; addi closes the gap)
 define i32 @const_int_max() {
 ; CHECK-LABEL: const_int_max:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_int_max spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -179,7 +191,8 @@ define i32 @const_int_max() {
 ; 0xDEADBEEF: round-trips -> LUI 0xDDB + addi32{{(_w)?}} (2-instruction pair)
 define i32 @const_deadbeef() {
 ; CHECK-LABEL: const_deadbeef:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_deadbeef spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -194,7 +207,8 @@ define i32 @const_deadbeef() {
 ; 0x12345678: round-trips -> LUI 0x123 + addi32{{(_w)?}} (2-instruction pair)
 define i32 @const_12345678() {
 ; CHECK-LABEL: const_12345678:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_12345678 spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -209,7 +223,8 @@ define i32 @const_12345678() {
 ; 0x10000: fits in simm20 (single ADDI32_W from R0; 12+20 split no longer needed)
 define i32 @const_0x10000() {
 ; CHECK-LABEL: const_0x10000:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @const_0x10000 spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -225,12 +240,12 @@ define i32 @const_0x10000() {
 ; x + 1 should use ADDI32_W immediate form
 define i32 @add_one(i32 %x) {
 ; CHECK-LABEL: add_one:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @add_one spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { addi32_w r2, r0, 1; nop; nop }
-; CHECK-NEXT:    { nop; nop; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; nop; addi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { addi32_w sp, sp, 8; nop; nop }
 ; CHECK-NEXT:    { jalr_w r0, lr, 0; nop; nop }
@@ -241,12 +256,12 @@ define i32 @add_one(i32 %x) {
 ; x - 1 via sub
 define i32 @sub_one(i32 %x) {
 ; CHECK-LABEL: sub_one:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @sub_one spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { addi32_w r2, r0, -1; nop; nop }
-; CHECK-NEXT:    { nop; nop; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; nop; addi32 r1, r1, -1 }
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { addi32_w sp, sp, 8; nop; nop }
 ; CHECK-NEXT:    { jalr_w r0, lr, 0; nop; nop }
@@ -257,7 +272,8 @@ define i32 @sub_one(i32 %x) {
 ; x | -1 is simplified to -1 by the combiner (all bits set)
 define i32 @or_all_ones(i32 %x) {
 ; CHECK-LABEL: or_all_ones:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @or_all_ones spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -272,7 +288,8 @@ define i32 @or_all_ones(i32 %x) {
 ; x ^ -1 (bitwise NOT) → NOT32 (GISel Pat: not / xor-all-ones)
 define i32 @xor_all_ones(i32 %x) {
 ; CHECK-LABEL: xor_all_ones:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @xor_all_ones spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -287,7 +304,8 @@ define i32 @xor_all_ones(i32 %x) {
 ; x & -1 is simplified to x by the combiner (identity)
 define i32 @and_all_ones(i32 %x) {
 ; CHECK-LABEL: and_all_ones:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @and_all_ones spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
@@ -301,7 +319,8 @@ define i32 @and_all_ones(i32 %x) {
 ; x * 0 (constant folded to 0, no mul32 emitted)
 define i32 @mul_zero(i32 %x) {
 ; CHECK-LABEL: mul_zero:
-; CHECK:       // %bb.0:
+; CHECK:       // #<spill-kpi> @mul_zero spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { nop; nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8

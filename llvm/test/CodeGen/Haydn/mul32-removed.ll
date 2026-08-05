@@ -30,9 +30,9 @@
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r4, r0, 1; 	nop; 	mull	r3, r2, r3 }
-; CHECK: 	{ 		addi32_w	r5, r0, 0; 	nop; 	and32	r1, r1, r4 }
-; CHECK: 	{ 		nop; 	nop; 	seq32	r1, r1, r5 }
+; CHECK: 	{ 		addi32_w	r4, r0, 0; 	nop; 	andi32	r1, r1, 1 }
+; CHECK: 	{ 		nop; 	seq32	r1, r1, r4; 	mull	r3, r2, r3 }
+; CHECK: 	{ 		nop; 	nop; 	nop }
 ; CHECK: 	{ 		nop; 	nop; 	movt32	r3, r2, r1 }
 ; CHECK: 	{ 		nop; 	nop; 	move32	r1, r3 }
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }

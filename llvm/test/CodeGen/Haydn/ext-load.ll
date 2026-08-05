@@ -128,7 +128,7 @@ define i32 @unaligned_sextload(ptr %ptr) {
 ; CHECK-NOT: ldu16
 ; CHECK-NOT: {{[^0-9]}}ld16
 ; CHECK-DAG: {{s_lbu_|ldu8|ld8}}
-; CHECK-DAG: sll32
+; CHECK-DAG: slli32
 ; CHECK-DAG: or32
   %v = load i16, ptr %ptr, align 1
   %r = sext i16 %v to i32

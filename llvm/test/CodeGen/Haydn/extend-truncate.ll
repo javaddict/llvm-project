@@ -19,8 +19,8 @@
 ;Sign-extend i8 to i32
 define i32 @sext_i8_i32(i8 %a) nounwind {
 ; CHECK-LABEL: sext_i8_i32:
-; CHECK: sll32
-; CHECK: sra32
+; CHECK: slli32
+; CHECK: srai32
   %r = sext i8 %a to i32
   ret i32 %r
 }
@@ -28,7 +28,7 @@ define i32 @sext_i8_i32(i8 %a) nounwind {
 ;Zero-extend i8 to i32
 define i32 @zext_i8_i32(i8 %a) nounwind {
 ; CHECK-LABEL: zext_i8_i32:
-; CHECK: and32
+; CHECK: andi32
   %r = zext i8 %a to i32
   ret i32 %r
 }
@@ -36,8 +36,8 @@ define i32 @zext_i8_i32(i8 %a) nounwind {
 ;Sign-extend i16 to i32
 define i32 @sext_i16_i32(i16 %a) nounwind {
 ; CHECK-LABEL: sext_i16_i32:
-; CHECK: sll32
-; CHECK: sra32
+; CHECK: slli32
+; CHECK: srai32
   %r = sext i16 %a to i32
   ret i32 %r
 }
@@ -45,7 +45,7 @@ define i32 @sext_i16_i32(i16 %a) nounwind {
 ;Zero-extend i16 to i32
 define i32 @zext_i16_i32(i16 %a) nounwind {
 ; CHECK-LABEL: zext_i16_i32:
-; CHECK: and32
+; CHECK: andi32
   %r = zext i16 %a to i32
   ret i32 %r
 }
@@ -106,7 +106,7 @@ define i32 @sext_cmp(i32 %a, i32 %b) nounwind {
 ;i1 zero-extend to i32
 define i32 @zext_i1_i32(i1 %a) nounwind {
 ; CHECK-LABEL: zext_i1_i32:
-; CHECK: and32
+; CHECK: andi32
   %r = zext i1 %a to i32
   ret i32 %r
 }
@@ -114,8 +114,8 @@ define i32 @zext_i1_i32(i1 %a) nounwind {
 ;i1 sign-extend to i32
 define i32 @sext_i1_i32(i1 %a) nounwind {
 ; CHECK-LABEL: sext_i1_i32:
-; CHECK: sll32
-; CHECK: sra32
+; CHECK: slli32
+; CHECK: srai32
   %r = sext i1 %a to i32
   ret i32 %r
 }

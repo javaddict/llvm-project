@@ -7,10 +7,11 @@
 
 define i32 @ilp_independent_ops(i32 %a, i32 %b, i32 %c) {
 ; CHECK-LABEL: ilp_independent_ops:
+; The three constant adds fold into one addi32 (+1+2+3 = 6); the two remaining
+; adds are register-register.
 ; CHECK-DAG: add32
 ; CHECK-DAG: add32
 ; CHECK-DAG: addi32{{(_w)?}} {{.*}}, 6
-; CHECK-DAG: add32
   %r1 = add i32 %a, 1
   %r2 = add i32 %b, 2
   %r3 = add i32 %c, 3

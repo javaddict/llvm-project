@@ -23,6 +23,6 @@ define i32 @test_array(ptr %p, i32 %idx) {
 }
 ; CHECK-LABEL: test_array:
 ; GEP+load may lower as sll + add + ld32, or fuse to s_lw_pre_reg (postinc AGU).
-; CHECK: sll32
+; CHECK: slli32
 ; CHECK: {{s_lw_pre_reg|add32}}
 ; CHECK: {{s_lw_pre_reg|ld32|move32}}

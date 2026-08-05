@@ -38,7 +38,7 @@ define i32 @not_i32(i32 %a) {
 define i32 @and_imm(i32 %a) {
 ; CHECK-LABEL: and_imm:
 ; CHECK-DAG: addi32
-; CHECK-DAG: and32
+; CHECK-DAG: andi32
   %r = and i32 %a, 255
   ret i32 %r
 }
@@ -91,8 +91,8 @@ define i32 @bit_toggle(i32 %a, i32 %mask) {
 define i32 @extract_bits(i32 %a) {
 ; CHECK-LABEL: extract_bits:
 ; Extract bits 8-15: (a >> 8) & 0xFF
-; CHECK-DAG: srl32
-; CHECK-DAG: and32
+; CHECK-DAG: srli32
+; CHECK-DAG: andi32
   %shifted = lshr i32 %a, 8
   %masked = and i32 %shifted, 255
   ret i32 %masked
@@ -103,7 +103,7 @@ define i32 @insert_bits(i32 %a, i32 %val) {
 ; CHECK-LABEL: insert_bits:
 ; Insert val into bits 8-15: (a & ~0xFF00) | ((val << 8) & 0xFF00)
 ; CHECK-DAG: and32
-; CHECK-DAG: sll32
+; CHECK-DAG: slli32
 ; CHECK-DAG: or32
   %mask = xor i32 -1, 65280
   %cleared = and i32 %a, %mask
@@ -132,8 +132,8 @@ calc:
 define i32 @extract_sign_bit(i32 %x) {
 ; CHECK-LABEL: extract_sign_bit:
 ; Extract sign bit (bit 31): (x >> 31) & 1
-; CHECK-DAG: sra32
-; CHECK-DAG: and32
+; CHECK-DAG: srai32
+; CHECK-DAG: andi32
   %shifted = ashr i32 %x, 31
   %masked = and i32 %shifted, 1
   ret i32 %masked

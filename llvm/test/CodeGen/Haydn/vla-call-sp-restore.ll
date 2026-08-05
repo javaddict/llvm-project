@@ -33,9 +33,8 @@
 ; CHECK: 	{ 		st32	fp, r2, 4; 	nop; 	nop }
 ; CHECK: 	{ 		st32	r8, r2, 8; 	nop; 	nop }
 ; CHECK: 	{ 		addi32_w	fp, sp, 24; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r2, r0, 2; 	nop; 	nop }
-; CHECK: 	{ 		addi32_w	r2, r0, 7; 	nop; 	sll32	r1, r1, r2 }
-; CHECK: 	{ 		addi32_w	r2, r0, -8; 	nop; 	add32	r1, r1, r2 }
+; CHECK: 	{ 		addi32_w	r2, r0, -8; 	nop; 	slli32	r1, r1, 2 }
+; CHECK: 	{ 		nop; 	nop; 	addi32	r1, r1, 7 }
 ; CHECK: 	{ 		nop; 	nop; 	and32	r1, r1, r2 }
 ; CHECK: 	{ 		nop; 	nop; 	sub32	r8, sp, r1 }
 ; CHECK: 	{ 		nop; 	nop; 	move32	r1, r8 }

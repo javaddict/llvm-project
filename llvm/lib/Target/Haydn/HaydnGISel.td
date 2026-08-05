@@ -34,6 +34,32 @@ def : Pat<(i32 (xor GPR32:$rs1, GPR32:$rs2)), (XOR32 GPR32:$rs1, GPR32:$rs2)>;
 def : Pat<(i32 (not GPR32:$rs)), (NOT32 GPR32:$rs)>;
 
 //===----------------------------------------------------------------------===//
+// Scalar binary with immediate — s32. Folds a G_CONSTANT operand into the
+// RI20 immediate form instead of materializing it with `addi32_w rX, r0, imm`
+// and then using the RR form. Without these the immediate ALU opcodes have no
+// selection path at all: every RI20 def carries an empty pattern list, the C++
+// selector has no G_ADD/G_AND/G_OR/G_XOR case, and the only *I32 forms ever
+// emitted came from hand-written idioms (XORI32 for logical-not, ADDI32_W for
+// address materialization, SUBI32 for frame setup).
+//
+// Immediate class per opcode is NOT uniform — use each logical def's declared
+// operand type so the value is guaranteed to fit both the logical def's field
+// and its _S* slot peer:
+//   ADDI32 / SUBI32           simm16 (HaydnInstrInfo.td; _S* peers take simm20)
+//   ANDI32 / ORI32 / XORI32   uimm20 — ISA zero-extends, so no negative imm
+//   SLLI32 / SRLI32 / SRAI32  uimm5  (RI5 shift-amount form)
+//
+// `not` (xor x, -1) is unaffected: -1 fails the uimm20 ImmLeaf, so XORI32 can
+// never steal the NOT32 pattern above.
+//===----------------------------------------------------------------------===//
+
+def : Pat<(i32 (add GPR32:$rs, simm16:$imm)), (ADDI32 GPR32:$rs, simm16:$imm)>;
+def : Pat<(i32 (sub GPR32:$rs, simm16:$imm)), (SUBI32 GPR32:$rs, simm16:$imm)>;
+def : Pat<(i32 (and GPR32:$rs, uimm20:$imm)), (ANDI32 GPR32:$rs, uimm20:$imm)>;
+def : Pat<(i32 (or  GPR32:$rs, uimm20:$imm)), (ORI32  GPR32:$rs, uimm20:$imm)>;
+def : Pat<(i32 (xor GPR32:$rs, uimm20:$imm)), (XORI32 GPR32:$rs, uimm20:$imm)>;
+
+//===----------------------------------------------------------------------===//
 // Scalar binary — s64 (DR64)
 //===----------------------------------------------------------------------===//
 
@@ -79,6 +105,13 @@ def : Pat<(i64 (smin DR64:$rs1, DR64:$rs2)), (MIN64 DR64:$rs1, DR64:$rs2)>;
 def : Pat<(i32 (shl GPR32:$rs1, GPR32:$rs2)), (SLL32 GPR32:$rs1, GPR32:$rs2)>;
 def : Pat<(i32 (srl GPR32:$rs1, GPR32:$rs2)), (SRL32 GPR32:$rs1, GPR32:$rs2)>;
 def : Pat<(i32 (sra GPR32:$rs1, GPR32:$rs2)), (SRA32 GPR32:$rs1, GPR32:$rs2)>;
+
+// Shift-by-constant → RI5 form (uimm5), avoiding a materialized shift amount.
+// uimm5 also enforces the ISA's 0..31 shift-amount range; out-of-range amounts
+// stay on the RR path above.
+def : Pat<(i32 (shl GPR32:$rs, uimm5:$imm)), (SLLI32 GPR32:$rs, uimm5:$imm)>;
+def : Pat<(i32 (srl GPR32:$rs, uimm5:$imm)), (SRLI32 GPR32:$rs, uimm5:$imm)>;
+def : Pat<(i32 (sra GPR32:$rs, uimm5:$imm)), (SRAI32 GPR32:$rs, uimm5:$imm)>;
 
 // s64 shifts — data DR64, amount GPR32 (legalizer {S64,S32}). Logical ops
 // only (SLL64/SRL64/SRA64); post-RA setDesc → *_S1/*_S2 members. SIMD

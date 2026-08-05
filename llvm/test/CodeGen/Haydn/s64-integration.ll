@@ -134,8 +134,7 @@
 ; CHECK: 	{ 		nop; 	nop; 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 		nop; 	nop; 	subi32	sp, sp, 8 }
 ; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ 		addi32_w	r3, r0, 3; 	nop; 	subi32	sp, sp, 8 }
-; CHECK: 	{ 		nop; 	nop; 	sll32	r2, r2, r3 }
+; CHECK: 	{ 		nop; 	subi32	sp, sp, 8; 	slli32	r2, r2, 3 }
 ; CHECK: 	{ 		nop; 	nop; 	add32	r1, r1, r2 }
 ; CHECK: 	{ 		addi32_w	r2, r1, 4; 	ld32	r1, r1, 0; 	nop }
 ; CHECK: 	{ 		nop; 	ld32	r2, r2, 0; 	nop }
