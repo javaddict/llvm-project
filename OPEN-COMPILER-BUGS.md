@@ -32,7 +32,7 @@
 >
 > | ID | Pri | Class | Tests / symptom |
 > |----|-----|-------|-----------------|
-> | **CB-141** | **P1?** | slot model vs ISA | LLVM emits 32-bit GPR ALU and stores in Slot1/Slot2. The ISA database says Slot1 = Load + D-ALU + D-MAC and Slot2 = D-ALU + D-MAC only (**no memory unit**), and `ADD32`/`ADDI32`/`XOR32`/`MOVE32` are `Slot0-S-ALU`. In a linked Dhrystone ELF that is 6483/19327 bundles (34%) with ALU32 outside S0 and 989 (5%) with a store outside S0, plus 22 bundles holding two stores. **Needs an ISA owner's ruling** — see B4 |
+> | **CB-143** | **P1** | unit model migration | The ISA moved from per-slot capability to a **unit model**: slots carry no capability, each entry maps to exactly one of 7 named units, and no two entries in a bundle may share a unit. Bundles are **96-bit format E**, not 128-bit, with an explicit per-entry unit mapping field. LLVM still models `SLOT0/SLOT1/SLOT2` FuncUnits (51 files). Supersedes CB-141 — see B4 |
 > | **CB-136** | P3 | header ergonomics | `haydn.h` DSP bodies are unguarded, so a bare `#include <haydn.h>` still emits `needs target feature simd / bit-reversed`. No longer blocks the product: `run_c` now passes `-mcpu=haydn` (consumer workaround, header unchanged). Fix plan in B3 |
 > | **CB-130 residual** | P2 | GISel legalize | vector **predicate** legalization: `<2 x s1> = G_BUILD_VECTOR` asserts `fewerElementsVectorMerge` "Expected vector types". `.clampMaxNumElements(0, S1, 1)` is the trigger — LLT normalizes a 1-element vector to a scalar, so NarrowTy is not a vector. Sole remaining ctest failure (`bundlesim_reg_cb44_o2_stale_cond_max_reduce`). The `G_ABS <2 x s32>` half of this is now fixed |
 > | **CB-126 residual** | — | GISel legalize | **No observed failure.** Every case the ledger attributes to CB-126 (`pr79737-2`, `20040709-2/3`, `strct-pack-1`, `pr29006`, `pr53688`, `pr70903`, `pr57344-3`) PASSes at -O3 with 0 FAIL across all 1514 torture tests. Keep closed unless a new reproducer appears |
@@ -41,6 +41,7 @@
 >
 > | Item | Evidence |
 > |------|----------|
+> | **CB-141 slot model vs ISA database** — **premise superseded, not a bug** | CB-141 asked an ISA owner to rule on (1) may a 32-bit GPR ALU op issue outside Slot0 and (2) may a store issue outside Slot0. Both questions were built on a **retired** revision of `VLIW_Engine_Compiler_Constraints.md` (the `VLIW_Engine_Database_20260701/` copy, since removed). The current document describes a **unit model**, not per-slot capability, and `instruction_type_index.json` answers both directly: `ADD32`/`ADDI32`/`XOR32`/`MOVE32` are `Available: [ALU0, ALU1, ALU2]`, so `Slot012_ALU` was **correct**; all 34 stores are `Available: LOADSTORE0` and the machine has exactly **one** such unit, so the real rule is "at most one store per bundle", independent of position. The measured "6483/19327 (34%) ALU32 outside S0" and "989 (5%) store outside S0" are therefore **not violations**, and the projected density drop from 1.15 to ~1.00 ops/bundle does not follow. **One finding survives**: the 22 bundles holding two stores are genuine — two entries cannot both map to LOADSTORE0. Migration tracked as CB-143 |
 > | **CB-142 bundle text did not name the slot** | `clang -S x.c && clang -c x.s` did not reproduce `clang -c x.c`: hard `error: incorrect bundle` at -O2/-O3/-Os on dhry_1.c, silent slot migration at -O1 (112 bundles). Two causes. (1) The AsmParser ignored the textual position entirely, and the `_S0/_S1/_S2` members of a multi-slot logical share one AsmString, so the matcher pinned every bundle mnemonic to the FIRST member and its fixed `getSlotKind` forced it into that member's slot. (2) `ST32_POST_S1`/`ST64_POST_S1` were `isCodeGenOnly`, which drops a mnemonic from the asm matcher as well as the decoder trie (d463 class), so `st32_post` printed but would not parse. Fix: bundle text is now slot-positional in ISA order — **`{ slot2; slot1; slot0 }`, right-aligned on s0** (`VLIW_Engine_Compiler_Constraints.md` "Bundle format: ``G:{`slot2`, `slot1`, `slot0`}``"). `BUNDLE128_FULL`'s AsmString became `"$s2; $s1; $s0"` (printer + objdump), the parser hints `Bundle::add` with slot `N-1-i` and de-materializes the matched member to its logical base so `encodeSlotSubInst` materializes `Alts[SlotIdx]`, and the post-inc aliases moved to `DecoderNamespace = "FlexEmitterOnly"`. An illegal hint still falls back to the solver; a single-entry `{ op }` keeps encoder-chosen placement. Encoding is untouched (`Inst = {s2, s1, s0}` and the operand dag are unchanged). BundleSim's `haydn_dump_parser.c` walks the same order. **294 (file, -O0/-O1/-O2/-O3/-Os) pairs across dhrystone + BSP + regression cases are byte-identical**; dhry_1 direct vs two-step ELFs are byte-identical; `c-e2e-bundle-dump.ll` lost its `XFAIL`. Test: `MC/Haydn/cb142-bundle-slot-position-roundtrip.s` |
 > | **CB-139 exposed-pipeline latency** | Haydn has no interlock but nothing enforced `Data_Latency = 2`: `adjustSchedDependency` deliberately softened load→use to 1, and the 14 `_S2` LS formats claimed `Slot2_ALU` (latency 1). Dhrystone -O0 had 90 violating sites, -O2 had 3. New `HaydnLatencyStalls` pass (all opt levels) + new `Slot2_LS` itinerary → **0 violations across a 50-file corpus**. Cost +13% bundles at -O0, +1% at -O2 |
 > | **CB-140 hwloop body < 3 bundles** | `MinBodyBundles` was hard-coded to 0 and annotated "deprecated as a legality floor", but the spec says "Loop Body: It must contain at least 3 instruction bundles". Tiny ZOL bodies (1–2 bundles) reached the assembler. Now 3, padded in `HaydnFixupHwLoops` before the inclusive END |
@@ -388,31 +389,85 @@ $ clang --target=haydn-unknown-elf -O2 -ffreestanding -c t.c -o /dev/null
 
 which must produce no `needs target feature` diagnostics with **no** `-mcpu`.
 
-### B4. OPEN question — LLVM slot model vs ISA database (CB-141)
+### B4. OPEN — unit model migration (CB-143, supersedes CB-141)
 
-Not a crash and not caught by any suite: LLVM's scheduling model and its
-instruction tables place operations in slots that the ISA database says have no
-such unit.
+CB-141 recorded a disagreement between LLVM's slot model and the ISA database
+and asked for an owner's ruling. No ruling is needed: the database it quoted has
+been **retired**. `VLIW_Engine_Database_20260701/` is gone, and the current
+`VLIW_Engine_Compiler_Constraints.md` describes a different machine.
 
-| Source | Says |
-|--------|------|
-| ISA database `VLIW_Engine_Compiler_Constraints.md` | Slot0 = S-ALU + Load&Store; Slot1 = Load + D-ALU + D-MAC; **Slot2 = D-ALU + D-MAC only** (no memory unit). "Store instructions are available only in Slot0-Load&Store." `ADD32`/`ADDI32`/`XOR32`/`MOVE32` are `Available: Slot0-S-ALU` |
-| `HaydnSchedule.td` | `Slot0_LS // Slot 0 only` — **agrees** on stores |
-| `HaydnSchedule.td` | `Slot012_ALU // Any slot (ALU32 — full ALU in all 3 slots)` — **disagrees** |
-| `HaydnGenInstrInfo.inc` (generated) | 176 `_S1` + 168 `_S2` **store** opcodes exist — **disagrees** |
-| BundleSim | Abstains: `--enforce-slots` is debug-only by product policy |
+**Old model** — each slot has a fixed set of instructions it can execute.
+**New model** — slots carry no capability. Every instruction declares the
+hardware **units** it can issue on; an entry may join a bundle whenever a unit
+it needs is still free, and it records which unit it took.
 
-Scale in a linked Dhrystone ELF (19327 bundles): **6483 (34%)** with ALU32
-outside S0, **989 (5%)** with a store outside S0, and **22** bundles holding
-two stores. If the database is authoritative, most of the ILP the packer
-achieves is invalid, and measured density would drop from 1.15 to ~1.00
-ops/bundle.
+> § Constraints: "Each entry in a bundle may be assigned to any available unit;
+> unit assignment is not bound to a fixed slot." … "Each entry in a bundle maps
+> to exactly one unit. Multiple entries in the same bundle must not map to the
+> same unit."
 
-Do not "fix" this from the database alone — the wording leaves room (DR can be
-treated as two 32-bit halves, so a "D-ALU" may cover some 32-bit work), and
-LLVM's own tables were presumably built against the hardware manual. **This
-needs an ISA owner's ruling** on: (1) may a 32-bit GPR ALU op issue in
-Slot1/Slot2, and (2) may any store issue outside Slot0.
+Seven shared units: `LOADSTORE0`, `LOAD1`, `ALU0`, `ALU1`, `ALU2`, `MAC0`,
+`MAC1`. `Available` per instruction (`instruction_type_index.json`, 683 entries):
+
+| Count | Available |
+|------:|-----------|
+| 357 | `[MAC0, MAC1]` |
+| 195 | `[ALU0, ALU1, ALU2]` |
+| 56 | `[LOADSTORE0, LOAD1]` |
+| 53 | `[LOADSTORE0]` |
+| 16 | `[ALU0]` — all control flow + `SET_HWLOOP*` + `WFI` |
+| 6 | `[ALU1, ALU2]` — `LOG2`/`EXP2`/`RECIP`/`SQRT`/`SIN_COS`/`ARCTAN` |
+
+CB-141's two questions are answered by that table: `ADD32`/`ADDI32`/`XOR32`/
+`MOVE32` are `[ALU0, ALU1, ALU2]`, so `Slot012_ALU` was right; stores are
+`LOADSTORE0` and there is one of them, so the rule is **at most one store per
+bundle**, not "stores live in Slot0". Of the three measurements CB-141 cited,
+only the **22 bundles holding two stores** remain violations.
+
+#### Encoding: 96-bit format E
+
+`format_e_bit_layout_v2.json` carries the unit model in the encoding —
+`bundle_bits = 96` (not 128), payload `bit[95:6]`, budget 90b, header
+`bit[2:0] = 0b111` + `bit[3]` entry_num (0 → 2 entries, 1 → 3). Each entry has a
+2-bit `mapping` field naming its unit:
+
+| Form | entry0 | entry1 | entry2 |
+|------|--------|--------|--------|
+| 2-entry | 45b · ALU0/MAC0/**LOADSTORE0** | 41b · ALU1/MAC1/**LOAD1** | — |
+| 3-entry | 31b · MAC0/ALU2/ALU0/**LOADSTORE0** | 31b · MAC0/ALU1/ALU0/**LOAD1** | 27b · MAC1/ALU2/ALU0/**LOAD1** |
+
+Two consequences the slot model never had. `LOADSTORE0` is encodable **only in
+entry0**, so store placement is still positional — but as an encoding property,
+not a capability one. And **entry widths differ**: an `ALU0/I32` form needs 45b,
+which only the 2-entry entry0 provides, so a wide immediate forces the bundle
+down to two entries.
+
+#### What LLVM does not model yet
+
+`HaydnSchedule.td` still defines `SLOT0`/`SLOT1`/`SLOT2` FuncUnits with
+`Slot0_ALU`/`Slot1_LD`/`Slot2_LS`-style itinerary classes; 51 files under
+`lib/Target/Haydn` mention `Bundle128`/16-byte/128-bit-only. Beyond renaming,
+the packer gains constraints it has never had:
+
+1. bundle legality is a **matching** problem — instruction `Available` × entry
+   encodable set × all-distinct units
+2. at most one branch per bundle, and it consumes `ALU0`
+3. per-entry immediate width limits which entry an instruction may occupy
+4. per-bundle register port budget — GPR 4r/2w, DR 7r/3w, AR 2r/2w, SFR 2r/1w
+5. a store and a load in one bundle must be provably non-overlapping, else the
+   hardware raises an exception
+
+**Stage 0 landed** (BundleSim side): `isa/database/generate_unit_model.py` reads
+both JSONs into `generated/unit_model_generated.inc`, exposed by
+`include/bundlesim/unit_model.h`, with `bundlesim_new_unit_model` pinning the
+invariants above and `bundlesim_new_unit_model_generated` gating freshness.
+Nothing consumes it on the execute path yet — the live path is still the
+slot-shaped catalog.
+
+**Open gap**: the document lists five bundle sizes (96/64/48/32/16-bit) but only
+format E's layout exists on this host, and format E encodes 2 or 3 entries only.
+A single-op bundle must be a 2-entry form with a NOP; NOP is encodable in every
+entry position and unit, so padding never blocks.
 
 Related, also unverified against the spec's HW Loop section: nested-loop
 boundary overlap, and the flow-control rule that no branch/jump/call may enter
