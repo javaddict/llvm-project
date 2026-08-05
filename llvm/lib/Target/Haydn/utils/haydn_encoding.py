@@ -63,6 +63,32 @@ def parse_int(text: str, base: int, context: str) -> int:
         raise SystemExit(f"{context}: cannot read {text!r} as base-{base}")
 
 
+def header_fields(header: dict) -> dict:
+    """The bundle header: which bits select the format and the entry count.
+
+    Values are given inline ("bit[2:0] = 0b111"); entry_num carries its meaning
+    in prose instead, so only its position is taken from here.
+    """
+    parsed: dict[str, dict] = {}
+    for name in ("format_indicator", "entry_num", "reserved"):
+        text = str(header.get(name, ""))
+        if not text:
+            raise SystemExit(f"bundle header is missing {name}")
+        msb, lsb = one_span(text, f"header/{name}")
+        field = {"msb": msb, "lsb": lsb}
+        if name != "entry_num":
+            # "bit[2:0] = 0b111" — the value follows the span it belongs to.
+            literal = re.search(r"bit\[[^\]]*\]\s*=\s*(0b[01]+|0x[0-9a-fA-F]+|\d+)",
+                                text)
+            if literal is None:
+                raise SystemExit(f"header/{name}: no value given")
+            field["value"] = int(literal.group(1), 0)
+            if field["value"] >= 1 << (msb - lsb + 1):
+                raise SystemExit(f"header/{name}: value does not fit its field")
+        parsed[name] = field
+    return parsed
+
+
 def load_placements(database: Path) -> tuple[dict, list[dict]]:
     """Flatten the layout into one record per (instruction, entry, unit, type)."""
     data = json.loads((database / FORMAT_E_LAYOUT).read_text(encoding="utf-8"))
@@ -72,6 +98,7 @@ def load_placements(database: Path) -> tuple[dict, list[dict]]:
         "bundle_bits": int(data["bundle_bits"]),
         "payload_lsb": int(data["payload_lsb"]),
         "payload_budget_bits": int(data["payload_budget_bits"]),
+        "header": header_fields(data.get("header") or {}),
     }
 
     placements: list[dict] = []
@@ -299,15 +326,84 @@ def emit_tablegen(geometry: dict, placements: list[dict]) -> str:
         "",
     ]
 
+    out += ["// Entry windows are operand types, one per position: an entry is only",
+            "// substitutable for another at the same position, because the positions",
+            "// differ in width and in which units they can name.",
+            "let Namespace = \"Haydn\" in {"]
     for (count, index) in sorted(positions):
         msb, lsb = positions[(count, index)]
+        name = f"p{count}{index}_entry"
+        out.append(f"  def {name} : InstSlot<\"P{count}{index}\","
+                   f" {msb - lsb + 1}> {{ let FieldToFind = \"e{index}\"; }}")
+    out += ["}", ""]
+
+    for (count, index) in sorted(positions):
+        msb, lsb = positions[(count, index)]
+        width = msb - lsb + 1
         out += [
+            f"// {count}-entry bundle, entry{index}: bundle bit[{msb}:{lsb}].",
             f"class HaydnEntryP{count}{index}<dag outs, dag ins, string asm>",
             f"    : HaydnFormatInst<outs, ins, asm, []> {{",
-            f"  bits<{msb - lsb + 1}> Inst;",
+            f"  let Slot = p{count}{index}_entry;",
+            f"  let DecoderNamespace = \"P{count}{index}\";",
+            f"  let Size = {(width + 7) // 8};",
+            f"  bits<{width}> Inst;",
             "}",
             "",
         ]
+
+    # The bundle composites. Each names its entries low position first so the
+    # concatenation below reads MSB-first, matching how Inst is written.
+    header = geometry["header"]
+    bundle_bits = geometry["bundle_bits"]
+    for count in sorted({c for (c, _) in positions}):
+        entries = sorted(i for (c, i) in positions if c == count)
+        spans_used = [positions[(count, i)] for i in entries]
+        top = max(msb for msb, _ in spans_used)
+        operands = ", ".join(f"p{count}{i}_entry:$e{i}" for i in entries)
+        # Bundle text names the high entry first and is right-aligned on entry0,
+        # each entry delimited by backticks so the comma separator cannot be
+        # confused with the commas between an instruction's own operands. The
+        # braces come from the printer, as they did for Bundle128.
+        asm = ", ".join(f"`$e{i}`" for i in reversed(entries))
+        out += [
+            f"// {count}-entry format E bundle. Header selects the format and the",
+            f"// entry count; entries fill the payload from bit"
+            f"[{geometry['payload_lsb']}] up.",
+            f"def BUNDLE_E{count} : HaydnFormatInst<(outs), ({operands}),",
+            f"    \"{asm}\", []> {{",
+            "  let isComposite = true;",
+            f"  let Size = {bundle_bits // 8};",
+            f"  let DecoderNamespace = \"FormatE{count}\";",
+        ]
+        for i in entries:
+            msb, lsb = positions[(count, i)]
+            out.append(f"  bits<{msb - lsb + 1}> e{i};")
+        out.append(f"  bits<{bundle_bits}> Inst;")
+        rows: list[tuple[int, int, str, str]] = []
+        if top + 1 < bundle_bits:
+            rows.append((bundle_bits - 1, top + 1,
+                         td_bits(0, bundle_bits - 1 - top, "bundle/unused"),
+                         "unused"))
+        for i in entries:
+            msb, lsb = positions[(count, i)]
+            rows.append((msb, lsb, f"e{i}", f"entry{i}"))
+        entry_num = header["entry_num"]
+        rows.append((entry_num["msb"], entry_num["lsb"],
+                     td_bits(1 if count == 3 else 0,
+                             entry_num["msb"] - entry_num["lsb"] + 1,
+                             "header/entry_num"),
+                     f"{count} entries"))
+        for name in ("reserved", "format_indicator"):
+            field = header[name]
+            rows.append((field["msb"], field["lsb"],
+                         td_bits(field["value"],
+                                 field["msb"] - field["lsb"] + 1, name),
+                         name))
+        for msb, lsb, value, label in sorted(rows, key=lambda r: -r[0]):
+            span = f"{msb}-{lsb}" if msb != lsb else f"{msb}"
+            out.append(f"  let Inst{{{span}}} = {value};  // {label}")
+        out += ["}", ""]
 
     for p in sorted(placements, key=lambda x: (x["instruction"], x["entry_count"],
                                                x["entry_index"], x["unit"])):
