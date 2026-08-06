@@ -2363,7 +2363,7 @@ def X2CMUL32 : FmtMAC2Dest<0x68, 0x00,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$rs1, DR64:$rs2),
     "x2cmul32	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_ALU;
+  let Itinerary = Unit_MAC0MAC1_L2;
   let TSFlags{2-0} = 0b010;
 }
 
@@ -2371,7 +2371,7 @@ def X2CMUL32S : FmtMAC2Dest<0x68, 0x01,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$rs1, DR64:$rs2),
     "x2cmul32s	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_ALU;
+  let Itinerary = Unit_MAC0MAC1_L2;
   let TSFlags{2-0} = 0b010;
 }
 
@@ -2379,7 +2379,7 @@ def X2CMUL32S_F2 : FmtMAC2Dest<0x68, 0x02,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$rs1, DR64:$rs2),
     "x2cmul32s_f2	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_ALU;
+  let Itinerary = Unit_MAC0MAC1_L2;
   let TSFlags{2-0} = 0b010;
 }
 
@@ -2387,7 +2387,7 @@ def X2CMUL32_F2 : FmtMAC2Dest<0x68, 0x03,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$rs1, DR64:$rs2),
     "x2cmul32_f2	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_ALU;
+  let Itinerary = Unit_MAC0MAC1_L2;
   let TSFlags{2-0} = 0b010;
 }
 
@@ -2403,7 +2403,7 @@ def X2MULA32 : FmtMAC2Dest<0x68, 0x04,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
     "x2mula32	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_MAC;
+  let Itinerary = Unit_MAC0MAC1_L2;
   let TSFlags{2-0} = 0b010;
 }
 
@@ -2411,7 +2411,7 @@ def X2MULS32 : FmtMAC2Dest<0x68, 0x05,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
     "x2muls32	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_MAC;
+  let Itinerary = Unit_MAC0MAC1_L2;
   let TSFlags{2-0} = 0b010;
 }
 }  // Constraints = "$rd = $ra, $rtd2 = $ra2"
@@ -2422,7 +2422,7 @@ def X4FF2MUL16S : FmtMAC2Dest<0x68, 0x06,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$rs1, DR64:$rs2),
     "x4ff2mul16s	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_ALU;
+  let Itinerary = Unit_MAC0MAC1_L2;
   let TSFlags{2-0} = 0b010;
 }
 
@@ -2431,7 +2431,7 @@ def X4FF2MULA16S : FmtMAC2Dest<0x68, 0x07,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
     "x4ff2mula16s	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_MAC;
+  let Itinerary = Unit_MAC0MAC1_L2;
   let TSFlags{2-0} = 0b010;
 }
 
@@ -2439,7 +2439,7 @@ def X4FF2MULS16S : FmtMAC2Dest<0x68, 0x08,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
     "x4ff2muls16s	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_MAC;
+  let Itinerary = Unit_MAC0MAC1_L2;
   let TSFlags{2-0} = 0b010;
 }
 
@@ -2447,7 +2447,7 @@ def X4MULA16 : FmtMAC2Dest<0x68, 0x09,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
     "x4mula16	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_MAC;
+  let Itinerary = Unit_MAC0MAC1_L2;
   let TSFlags{2-0} = 0b010;
 }
 
@@ -2455,7 +2455,7 @@ def X4MULA16S : FmtMAC2Dest<0x68, 0x0A,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
     "x4mula16s	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_MAC;
+  let Itinerary = Unit_MAC0MAC1_L2;
   let TSFlags{2-0} = 0b010;
 }
 
@@ -2463,7 +2463,7 @@ def X4MULS16 : FmtMAC2Dest<0x68, 0x0B,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
     "x4muls16	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_MAC;
+  let Itinerary = Unit_MAC0MAC1_L2;
   let TSFlags{2-0} = 0b010;
 }
 
@@ -2471,7 +2471,7 @@ def X4MULS16S : FmtMAC2Dest<0x68, 0x0C,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
     "x4muls16s	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_MAC;
+  let Itinerary = Unit_MAC0MAC1_L2;
   let TSFlags{2-0} = 0b010;
 }
 }  // Constraints = "$rd = $ra, $rtd2 = $ra2"

@@ -1086,7 +1086,7 @@ def X2SUB32 : FmtALU64<0x59, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
 def X2MUL32 : FmtALU64_2Dest<0x5A, 0x00,
                              (outs DR64:$rd, DR64:$rtd2), (ins DR64:$rs1, DR64:$rs2),
                              "x2mul32\t$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_ALU;
+  let Itinerary = Unit_MAC0MAC1_L1;
   let TSFlags{2-0} = 0b010;
 }
 
@@ -1106,7 +1106,7 @@ def X4ADD16 : FmtALU64<0x5B, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
 def X4MUL16 : FmtALU64_2Dest<0x5C, 0x00,
                              (outs DR64:$rd, DR64:$rtd2), (ins DR64:$rs1, DR64:$rs2),
                              "x4mul16\t$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot12_ALU;
+  let Itinerary = Unit_MAC0MAC1_L2;
   let TSFlags{2-0} = 0b110; // slots 1+2 (was 0b010 slot1-only; golden has both)
 }
 
