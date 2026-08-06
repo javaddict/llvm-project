@@ -21,10 +21,12 @@ Companion documents:
 
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
-| `llvm-project` | `haydn` | `318248c8d1aa` | **yes, fully green** |
+| `llvm-project` | `haydn` | `c290615e3cb0` | **yes, fully green** |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
-Nothing is pushed. `fork/haydn` is still at `837f8e079dce`, four commits behind.
+Nothing is pushed. `fork/haydn` is still at `837f8e079dce`, seven commits behind.
+The § 5.2 include switch has been dry-run and measured (see § 5.2); the edits
+were not kept, because they are six lines and the measurement is what mattered.
 
 `haydn` is the trunk. Everything on it is green and committed; work from it.
 
@@ -358,6 +360,28 @@ Reproduce by switching both roots (this is what the WIP branch holds):
   (`CMakeLists.txt` sets `LLVM_TARGET_DEFINITIONS` for `-gen-asm-matcher`
   only). Missing it is what produced 1739 errors instead of 30.
 
+**The switch has been dry-run. TableGen parses it cleanly** — no tblgen
+errors at all, so all 3578 members and the two composites are includable in
+both roots, property flags included. The C++ fallout was then measured with
+`cmake --build build -- -k 0` (plain `--build` stops early and shows only 7):
+
+| n | Category | Status |
+|---:|---|---|
+| 5 | `BUNDLE128_FULL` | open — the real design work |
+| 4 | Decoder tables | open |
+| 6 | GISel selects members directly | open |
+| ~~6~~ | ~~hwloop `_S0` predicates~~ | **done on trunk, `c290615e3cb0`** |
+| ~~2~~ | `CSRW_S0` normalization → 1 left | halved by the `CSRW_W` fold |
+| 7 | The AR logicals in `HaydnFormatsLS.td` | open — § 7, what the lost WIP branch held |
+
+That was **29** before the hwloop fold, **23** after. The category counts
+match this section's original table exactly; the 7 AR ones are extra because
+they were already relocated on the WIP branch.
+
+Note the two root edits do not survive a branch switch on their own — they
+are uncommitted working-tree changes and `git checkout` carries them along.
+Commit them before switching branches, or redo them; they are six lines.
+
 Then, by category:
 
 | n | What | Notes |
@@ -365,8 +389,9 @@ Then, by category:
 | 5 | `BUNDLE128_FULL` → `BUNDLE_E2` / `BUNDLE_E3` | `HaydnAsmParser.cpp:878`, `HaydnAsmPrinter.cpp:696`, `HaydnMCCodeEmitter.cpp:316,501`, `HaydnMCFormats.cpp:333`. **The real design work**: the encoder must now *choose* a composite by entry count, and `HaydnAsmPrinter` fills the composite operand dag by slot index. |
 | 4 | Decoder tables | `DecoderTableS048/S140/S240` → `DecoderTableP2048/P2148/P30../P31../P32..`; `DecoderTableBundle128128` → the two `FormatE2`/`FormatE3` tables. Pick the composite from the header: `Inst{3}`. `HaydnDisassembler.cpp:252,267,282,477`. Its `SlotGeo Slots[3]` must become 2-or-3. |
 | 6 | GISel selects members directly | `MOVEI_H_S0`/`MOVEI_L_S0` at `HaydnInstructionSelector.cpp:3826`; `X4CMUL16{,S,_F2,S_F2}_S1` at 4808-4811. The comment says the Auto.td logicals are `HaydnInst` stubs that AsmPrinter drops as `MCID::Pseudo`. Format E has members for all of them (`MOVEI_H` 2, `X4CMUL16` 5), so the clean fix is to make the logicals real and let the alternates auction place them. |
-| 6 | hwloop predicates naming `_S0` | `HaydnFixupHwLoops.cpp:125,129,133` and `HaydnMCInstLower.cpp:31`. Fold through `getHaydnLogicalBaseOpcode` — `HaydnFixupHwLoops` already has `const HaydnInstrInfo &TII`; `HaydnMCInstLower::Lower` can reach MII via the `MachineInstr`. |
-| 2 | `CSRW_S0` normalization | `HaydnMCCodeEmitter.cpp:556-560`. Should disappear with § 5.1's `CSRW_W` work. |
+| ~~6~~ | ~~hwloop predicates naming `_S0`~~ | **Done on the trunk in `c290615e3cb0`**, before the switch. Folded through `getHaydnLogicalBaseOpcode`, which resolves the base by name search rather than a table, so it works for either spelling. |
+| 1 | `CSRW_S0` normalization | `HaydnMCCodeEmitter.cpp`. Was 2; the `CSRW_W` fold (`6e35b4124346`) removed the operand surgery, leaving only the opcode retarget. |
+| 7 | The seven AR logicals | `PLDWWUA`, `FLAR`, `WBARWUA` and the four `D_*UA_POST` live in `HaydnFormatsLS.td` and vanish with it, so GISel loses them (`HaydnInstructionSelector.cpp:6031-6130`). This is § 7's reshape, which the lost WIP branch had already done. Database shapes confirmed: `PLDWWUA_POST ar_sel, rs`; `WBARWUA ar_sel, rs`; `FLAR ar_sel`; the four `D_*UA_POST rtd, ar_sel, rs`. Format E has members for all seven. |
 
 **Two generator gaps block this step, and neither shows up as a C++ error.**
 Both were found the hard way during the `_W` fold, on Bundle128's narrow members
