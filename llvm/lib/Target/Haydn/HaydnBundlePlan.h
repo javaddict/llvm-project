@@ -150,27 +150,20 @@ inline constexpr EncodedBits slotInfoSizeAsBits(unsigned TableSize) {
   return EncodedBits{TableSize};
 }
 
-/// EncodedBytes for a FormatID. Product Bundle128Full → 16. Unknown → nullopt.
-/// N-format-ready: extend the switch when BF0/BF5 add rows (do not hard-code
-/// a second magic constant outside this table).
-inline std::optional<EncodedBytes> encodedBytesFor(FormatID ID) {
-  switch (ID) {
-  case FormatID::Bundle128Full:
-    return Bundle128EncodedBytes;
-  }
-  return std::nullopt;
-}
+/// EncodedBytes for a FormatID, or nullopt if it is not a live product row.
+///
+/// Reads the format table rather than switching on the ID. The switch was
+/// equivalent while there was one row, but format E has two (BUNDLE_E2 and
+/// BUNDLE_E3) and a switch is the shape that has to be edited every time the
+/// row set changes — which is precisely what this migration does. Defined
+/// below the table; declared here because encodedBytesOrProduct wants it.
+inline std::optional<EncodedBytes> encodedBytesFor(FormatID ID);
 
-/// EncodedBytes for a known FormatID, else product parcel size.
-inline EncodedBytes encodedBytesOrProduct(FormatID ID) {
-  if (auto B = encodedBytesFor(ID))
-    return *B;
-  return Bundle128EncodedBytes;
-}
+/// EncodedBytes for a known FormatID, else the default parcel size.
+inline EncodedBytes encodedBytesOrProduct(FormatID ID);
 
-inline bool isProductFormat(FormatID ID) {
-  return ID == FormatID::Bundle128Full;
-}
+/// Whether \p ID names a live product format row.
+inline bool isProductFormat(FormatID ID);
 
 //===----------------------------------------------------------------------===//
 // FormatDesc — solver-facing format row (plan §6.1)
@@ -209,21 +202,81 @@ struct FormatDesc {
     return !(Slots & ~SlotSet);
   }
 
-  constexpr bool isProduct() const {
-    return FID == FormatID::Bundle128Full;
-  }
+  constexpr bool isProduct() const { return FID == ProductFormatID; }
 };
 
-/// Sole live product FormatDesc row (BUNDLE128_FULL / Priority 0 / 16 B / all slots).
-inline constexpr FormatDesc ProductFormatDesc{
-    FormatID::Bundle128Full, /*Priority=*/0, Bundle128EncodedBytes,
-    /*SlotSet=*/static_cast<SlotBits>(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2)};
+//===----------------------------------------------------------------------===//
+// The product format table
+//===----------------------------------------------------------------------===//
+//
+// ONE ROW TODAY, and the code below must not assume that. Format E replaces
+// this table with two rows — BUNDLE_E2 (entries P20,P21) and BUNDLE_E3
+// (P30,P31,P32), both 12 bytes — and everything here is written so that the
+// switch is a change of DATA, not of shape. What changes at the switch:
+//
+//   * the rows: one becomes two, 16 bytes becomes 12
+//   * FormatID's enumerators
+//   * the slot-window widths and their static_assert
+//
+// What does NOT change: every lookup below, because they all scan the table.
+//
+// Note the two format E rows have the same Bytes, so productParcelBytes()
+// stays single-valued across the switch. It is asserted, not assumed — a
+// future mixed-size table would fire the assert rather than silently hand
+// BranchRelaxation the wrong parcel size (§ 6.x: a wrong stride does not fail
+// cleanly).
+inline constexpr FormatDesc ProductFormatRows[] = {
+    {FormatID::Bundle128Full, /*Priority=*/0, Bundle128EncodedBytes,
+     /*SlotSet=*/static_cast<SlotBits>(Haydn::SLOT0 | Haydn::SLOT1 |
+                                       Haydn::SLOT2)},
+};
 
-/// Product parcel EncodedBytes — sole size unit for BR / hwloop / bare MIs.
-/// Prefer this over a free-floating "16" or a parallel Bundle128Bytes magic.
-inline constexpr EncodedBytes productParcelBytes() {
-  return ProductFormatDesc.Bytes;
+inline constexpr unsigned ProductFormatRowCount =
+    sizeof(ProductFormatRows) / sizeof(ProductFormatRows[0]);
+
+/// Back-compat alias for the first row. Prefer the table; this exists for the
+/// callers that genuinely want "the default format" rather than "some format".
+inline constexpr const FormatDesc &ProductFormatDesc = ProductFormatRows[0];
+
+inline std::optional<EncodedBytes> encodedBytesFor(FormatID ID) {
+  for (const FormatDesc &F : ProductFormatRows)
+    if (F.FID == ID)
+      return F.Bytes;
+  return std::nullopt;
 }
+
+inline EncodedBytes encodedBytesOrProduct(FormatID ID) {
+  if (auto B = encodedBytesFor(ID))
+    return *B;
+  return ProductFormatRows[0].Bytes;
+}
+
+inline bool isProductFormat(FormatID ID) {
+  return encodedBytesFor(ID).has_value();
+}
+
+/// Product parcel EncodedBytes — the size unit for BR / hwloop / bare MIs.
+/// Prefer this over a free-floating "16" or a parallel Bundle128Bytes magic.
+///
+/// Meaningful only while every row is the same size, which holds for Bundle128
+/// (one row) and for format E (two rows, both 12 bytes). The assert is the
+/// gate: if a row set ever mixes sizes, callers that want "the" parcel size
+/// have to be revisited rather than silently given the first row's.
+inline constexpr EncodedBytes productParcelBytes() {
+  return ProductFormatRows[0].Bytes;
+}
+
+namespace detail {
+inline constexpr bool allRowsSameSize() {
+  for (const FormatDesc &F : ProductFormatRows)
+    if (F.Bytes.Value != ProductFormatRows[0].Bytes.Value)
+      return false;
+  return true;
+}
+} // namespace detail
+static_assert(detail::allRowsSameSize(),
+              "productParcelBytes() assumes every product format row encodes "
+              "to the same number of bytes; add a per-format query instead");
 
 /// Ceil-divide a byte length by a format's EncodedBytes (parcel count).
 /// AIE ZOL setup distances sum Format->getSize() then compare in bytes
@@ -251,13 +304,20 @@ inline constexpr uint64_t formatIDBit(FormatID ID) {
   return uint64_t(1) << static_cast<unsigned>(ID);
 }
 
-/// Product CompatibleFormatMask: only Bundle128Full.
-inline constexpr uint64_t ProductFormatMask =
-    formatIDBit(FormatID::Bundle128Full);
+/// Product CompatibleFormatMask: every live row, ORed from the table.
+/// Was a single formatIDBit(Bundle128Full); format E makes it two bits, and a
+/// member compatible with only one composite becomes expressible.
+inline constexpr uint64_t computeProductFormatMask() {
+  uint64_t M = 0;
+  for (const FormatDesc &F : ProductFormatRows)
+    M |= formatIDBit(F.FID);
+  return M;
+}
+inline constexpr uint64_t ProductFormatMask = computeProductFormatMask();
 
-/// Product FormatDesc table (size 1). N-format-ready API; only Full is live.
+/// Product FormatDesc table. Scan it; do not assume its length.
 inline ArrayRef<FormatDesc> productFormatTable() {
-  return ArrayRef<FormatDesc>(&ProductFormatDesc, 1);
+  return ArrayRef<FormatDesc>(ProductFormatRows, ProductFormatRowCount);
 }
 
 /// First covering format with best (lowest) Priority.
@@ -433,20 +493,25 @@ planFromFormatTable(ArrayRef<FormatDesc> Table, SlotBits Occupied,
   return makePlanFromFormatDesc(*F, Occupied, Members);
 }
 
-/// Query the generated PacketFormats table for BUNDLE128_FULL coverage / size.
-/// Returns nullopt if the table is missing the full slot set (should never
-/// happen on a product build). Empty occupancy still uses FULL (NOP fill).
+/// Query the generated PacketFormats table for the row covering \p Occupied.
+/// Returns nullopt if no row covers it, or if the row's size disagrees with
+/// the plan model. Empty occupancy takes the first row (NOP fill).
+///
+/// The query used to be `getFormat(SLOT0|SLOT1|SLOT2)` — "give me the full
+/// format" — and then checked coverage separately. That is the same answer
+/// while one row covers every slot, and it is WRONG the moment there are two
+/// disjoint ones: no format E row covers all five entry slots, so the lookup
+/// would return nullptr for every bundle. Ask for what is actually occupied
+/// and let the table pick; that is also how the composite gets chosen at
+/// encode time (HaydnMCCodeEmitter), so the two agree by construction.
 inline std::optional<BundlePlan>
 planFromPacketFormats(const PacketFormats &Packets, SlotBits Occupied) {
-  const VLIWFormat *F =
-      Packets.getFormat(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2);
+  const VLIWFormat *F = Packets.getFormat(Occupied);
   if (!F)
-    return std::nullopt;
-  if (Occupied != 0 && !F->covers(Occupied))
     return std::nullopt;
   // Product table Size is EncodedBytes.
   EncodedBytes B = vliwFormatSizeAsBytes(F->getSize());
-  if (B != Bundle128EncodedBytes)
+  if (B != productParcelBytes())
     return std::nullopt;
   return makeBundle128Plan(Occupied);
 }
