@@ -352,25 +352,17 @@ bool HaydnConditionOptimizer::reuseInverseComparisons(MachineFunction &MF) {
 // SEQ32 + Inverted (BEQZ) -> BNE (branch when rA != rB)
 // SLT32 + !Inverted (BNEZ) → BLT (branch when rA < rB)
 // SLT32 + Inverted (BEQZ) → BGE (branch when rA >= rB)
-// When \p IsWide is true, the WIDE (`_W`) two-register branch form is
-// returned (BEQ_W/BNE_W/...) — mirrors the legacy form so that a folded
-// branch stays in the same width class as the zero-test branch it replaces
-// (CodeGen selects the `_W` forms). See Phase 1b follow-up.
-static unsigned getFoldedBranchOpcode(unsigned CmpOpc, bool Inverted,
-                                     bool IsWide = false) {
+static unsigned getFoldedBranchOpcode(unsigned CmpOpc, bool Inverted) {
   switch (CmpOpc) {
   case Haydn::SEQ32:
     // SEQ32 rd = (rs == rt). BNEZ (fire on true == equal) -> BEQ;
     // BEQZ (fire on false == not-equal) -> BNE. The previous mapping
     // (BNE/BEQ) was polarity-swapped, inverting every == / != branch.
-    return Inverted ? (IsWide ? Haydn::BNE_W : Haydn::BNE)
-                    : (IsWide ? Haydn::BEQ_W : Haydn::BEQ);
+    return Inverted ? Haydn::BNE : Haydn::BEQ;
   case Haydn::SLT32:
-    return Inverted ? (IsWide ? Haydn::BGE_W : Haydn::BGE)
-                    : (IsWide ? Haydn::BLT_W : Haydn::BLT);
+    return Inverted ? Haydn::BGE : Haydn::BLT;
   case Haydn::SLTU32:
-    return Inverted ? (IsWide ? Haydn::BGEU_W : Haydn::BGEU)
-                    : (IsWide ? Haydn::BLTU_W : Haydn::BLTU);
+    return Inverted ? Haydn::BGEU : Haydn::BLTU;
   default:
     return 0;
   }
@@ -620,11 +612,9 @@ bool HaydnConditionOptimizer::foldCmpBranch(MachineFunction &MF) {
         continue;
       }
 
-      // Now NextMI should be a BNEZ/BEQZ testing BranchReg. Accept both the
-      // legacy 32-bit forms and the WIDE `_W` forms (CodeGen selects `_W`).
+      // Now NextMI should be a BNEZ/BEQZ testing BranchReg.
       unsigned BrOpc = NextMI->getOpcode();
-      if (BrOpc != Haydn::BNEZ && BrOpc != Haydn::BEQZ &&
-          BrOpc != Haydn::BNEZ_W && BrOpc != Haydn::BEQZ_W)
+      if (BrOpc != Haydn::BNEZ && BrOpc != Haydn::BEQZ)
         continue;
 
       if (NextMI->getOperand(0).getReg() != BranchReg)
@@ -641,15 +631,13 @@ bool HaydnConditionOptimizer::foldCmpBranch(MachineFunction &MF) {
         // XOR inverts once; the branch inverts again.
         // BEQZ after XOR = original true → not inverted relative to CMP
         // BNEZ after XOR = original false → inverted relative to CMP
-        EffectiveInverted = (BrOpc == Haydn::BNEZ || BrOpc == Haydn::BNEZ_W);
+        EffectiveInverted = (BrOpc == Haydn::BNEZ);
       } else {
         // Direct: BEQZ = inverted, BNEZ = not inverted
-        EffectiveInverted = (BrOpc == Haydn::BEQZ || BrOpc == Haydn::BEQZ_W);
+        EffectiveInverted = (BrOpc == Haydn::BEQZ);
       }
 
-      // Stay in the same width class as the input zero-test branch.
-      bool IsWide = (BrOpc == Haydn::BNEZ_W || BrOpc == Haydn::BEQZ_W);
-      unsigned FoldedOpc = getFoldedBranchOpcode(Opc, EffectiveInverted, IsWide);
+      unsigned FoldedOpc = getFoldedBranchOpcode(Opc, EffectiveInverted);
       if (!FoldedOpc)
         continue;
 
@@ -746,11 +734,6 @@ bool HaydnConditionOptimizer::foldCmpBranch(MachineFunction &MF) {
 // the observable behavior for the sign bit (irrelevant in practice since
 // both produce the same result against zero, but we stay conservative to
 // keep the rewrite semantics pure).
-// The returned zero-test form stays in the same width class as the input
-// two-register branch: legacy `BEQ`/`BNE`/... yield `BEQZ`/`BNEZ`/..., while
-// the WIDE `_W` forms (`BEQ_W`/`BNE_W`/...) yield `BEQZ_W`/`BNEZ_W`/...
-// (Phase 1b follow-up: CodeGen selects `_W`, so the narrowed output must
-// match to avoid regressing the fold).
 static unsigned getZeroBranchOpcode(unsigned BrOpc) {
   switch (BrOpc) {
   case Haydn::BEQ:
@@ -761,14 +744,6 @@ static unsigned getZeroBranchOpcode(unsigned BrOpc) {
     return Haydn::BGEZ;
   case Haydn::BLT:
     return Haydn::BLTZ;
-  case Haydn::BEQ_W:
-    return Haydn::BEQZ_W;
-  case Haydn::BNE_W:
-    return Haydn::BNEZ_W;
-  case Haydn::BGE_W:
-    return Haydn::BGEZ_W;
-  case Haydn::BLT_W:
-    return Haydn::BLTZ_W;
   default:
     return 0;
   }
@@ -784,11 +759,9 @@ bool HaydnConditionOptimizer::narrowBranchToZero(MachineFunction &MF) {
     for (MachineInstr &MI : MBB) {
       unsigned Opc = MI.getOpcode();
 
-      // Only two-register conditional branches with a zero-test form. Accept
-      // both legacy 32-bit and WIDE `_W` forms (CodeGen selects `_W`).
+      // Only two-register conditional branches with a zero-test form.
       if (Opc != Haydn::BEQ && Opc != Haydn::BNE && Opc != Haydn::BGE &&
-          Opc != Haydn::BLT && Opc != Haydn::BEQ_W && Opc != Haydn::BNE_W &&
-          Opc != Haydn::BGE_W && Opc != Haydn::BLT_W)
+          Opc != Haydn::BLT)
         continue;
 
       // Operands: rs1, rs2, brtarget.
@@ -814,8 +787,7 @@ bool HaydnConditionOptimizer::narrowBranchToZero(MachineFunction &MF) {
       // operand is R0 would require a different mnemonic (BGTZ/BLEZ), which
       // the ISA does not provide, so skip.
       Register NonZeroReg;
-      if (Opc == Haydn::BEQ || Opc == Haydn::BNE || Opc == Haydn::BEQ_W ||
-          Opc == Haydn::BNE_W) {
+      if (Opc == Haydn::BEQ || Opc == Haydn::BNE) {
         if (Rs2 == Haydn::R0 && Rs1 != Haydn::R0)
           NonZeroReg = Rs1;
         else if (Rs1 == Haydn::R0 && Rs2 != Haydn::R0)

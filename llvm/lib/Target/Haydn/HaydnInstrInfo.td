@@ -606,8 +606,13 @@ def SEXT_GPR32_TO_DR64
 // Branch Instructions
 //===----------------------------------------------------------------------===//
 
-let isBranch = 1, isTerminator = 1, hasSideEffects = 1 in {
-let Defs = [SFR] in {
+// isBranch + isTerminator only. The `hasSideEffects = 1` / `Defs = [SFR]` this
+// block used to carry was a CSR-hazard leftover that does not apply to
+// branches: a branch reads the two GPRs and transfers control, it does not
+// write the status register. The retired `_W` peers had already been corrected
+// this way, so leaving it here would have made the `_W` fold change scheduling
+// — it cost 2 extra callee-saved DR spills in swpipeline-bkfir-mac.
+let isBranch = 1, isTerminator = 1 in {
 def BEQ : FmtBRCond<0x2D, (outs), (ins GPR32:$rs1, GPR32:$rs2, brtarget:$offset),
               "beq\t$rs1, $rs2, $offset",
               []> {
@@ -642,7 +647,6 @@ def BLTU : FmtBRCond<0x32, (outs), (ins GPR32:$rs1, GPR32:$rs2, brtarget:$offset
                "bltu\t$rs1, $rs2, $offset",
                []> {
   let TSFlags{2-0} = 0b001;
-}
 }
 
 def BEQZ : FmtBR<0x33, (outs), (ins GPR32:$rs, brtarget:$offset),

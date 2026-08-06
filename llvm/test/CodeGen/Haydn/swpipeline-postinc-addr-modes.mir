@@ -164,7 +164,7 @@ body:             |
     %s_n:gpr32 = ADD32 %s, %ld
     %i_n:gpr32 = ADD32 %i, %one
     %cmp:gpr32 = SLTU32 %i_n, %n
-    BNEZ_W %cmp, %bb.1
+    BNEZ %cmp, %bb.1
     B %bb.2
 
   bb.2.exit:
@@ -196,7 +196,7 @@ body:             |
     %s_n:gpr32 = ADD32 %s, %ld
     %i_n:gpr32 = ADD32 %i, %one
     %cmp:gpr32 = SLTU32 %i_n, %n
-    BNEZ_W %cmp, %bb.1
+    BNEZ %cmp, %bb.1
     B %bb.2
 
   bb.2.exit:
@@ -228,7 +228,7 @@ body:             |
     %s_n:gpr32 = ADD32 %s, %ld
     %i_n:gpr32 = ADD32 %i, %one
     %cmp:gpr32 = SLTU32 %i_n, %n
-    BNEZ_W %cmp, %bb.1
+    BNEZ %cmp, %bb.1
     B %bb.2
 
   bb.2.exit:
@@ -259,7 +259,7 @@ body:             |
     %s_n:gpr32 = ADD32 %s, %ld
     %i_n:gpr32 = ADD32 %i, %one
     %cmp:gpr32 = SLTU32 %i_n, %n
-    BNEZ_W %cmp, %bb.1
+    BNEZ %cmp, %bb.1
     B %bb.2
 
   bb.2.exit:
@@ -291,7 +291,7 @@ body:             |
     %s_n:dr64 = ADD64 %s, %ld
     %i_n:gpr32 = ADD32 %i, %one
     %cmp:gpr32 = SLTU32 %i_n, %n
-    BNEZ_W %cmp, %bb.1
+    BNEZ %cmp, %bb.1
     B %bb.2
 
   bb.2.exit:
@@ -321,7 +321,7 @@ body:             |
     %bp_n:gpr32 = ST32_POST %v, %bp, 1 :: (store (s32))
     %i_n:gpr32 = ADD32 %i, %one
     %cmp:gpr32 = SLTU32 %i_n, %n
-    BNEZ_W %cmp, %bb.1
+    BNEZ %cmp, %bb.1
     B %bb.2
 
   bb.2.exit:
@@ -350,7 +350,7 @@ body:             |
     %bp_n:gpr32 = S_SW_PRE_IMM %v, %bp, 1 :: (store (s32))
     %i_n:gpr32 = ADD32 %i, %one
     %cmp:gpr32 = SLTU32 %i_n, %n
-    BNEZ_W %cmp, %bb.1
+    BNEZ %cmp, %bb.1
     B %bb.2
 
   bb.2.exit:

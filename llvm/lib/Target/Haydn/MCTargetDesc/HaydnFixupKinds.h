@@ -103,10 +103,10 @@ enum Fixups {
   // byte-OR loop (via Info.TargetOffset) to the correct high-bit field, so
   // the rt/rs/opcode/spare bytes below are not clobbered.
   FIXUP_HAYDN_WIDE_BranchSImm12,
-  // Bundle128 two-register WIDE cond branch (BEQ_W/BNE_W/… RI12).
+  // Bundle128 two-register WIDE cond branch (BEQ/BNE/… RI12).
   // Imm12 sits at s0 bits[19:8] (FieldLsb=8). Distinct from
   // FIXUP_HAYDN_WIDE_BranchSImm12 which patches the 1-reg I12 form
-  // (BEQZ_W/BNEZ_W/…) at s0 bits[15:4] (FieldLsb=4). Sharing one
+  // (BEQZ/BNEZ/…) at s0 bits[15:4] (FieldLsb=4). Sharing one
   // FieldLsb for both forms made RI12 fixups clobber rt/rs (e.g.
   // `bne_w r1, r2, L` → `bne_w r1, r8, 2`). MC-only until an ELF
   // reloc is allocated; local labels resolve at assemble time.

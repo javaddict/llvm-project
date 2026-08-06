@@ -27,7 +27,7 @@ define void @vector_add(ptr %a, ptr %b, ptr %c, i32 %n) {
 ; CHECK-LABEL: vector_add:
 ; (SFR-strip) changed bundle layout — rebaselined.
 ; The countable loop now converts to a hardware loop (set_hwloop_f2), so the
-; back-edge branch (blt_w) is gone — replaced by the hwloop boundary. The compute
+; back-edge branch (blt) is gone — replaced by the hwloop boundary. The compute
 ; (add32), the pre-loop guard (slt32), and the return (jalr_w) all survive.
 ; CHECK:       // %bb.0:
 ; CHECK:         slt32

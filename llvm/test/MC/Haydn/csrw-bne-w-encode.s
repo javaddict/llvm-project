@@ -7,12 +7,12 @@
 # CHECK: csrw{{.*}}18{{.*}}r1
 
 # Two-register WIDE cond branch: fixup FieldLsb must be 8 (imm12 @ bits[19:8])
-# not 4 (I12 form). Pre-fix clobbered rt/rs → e.g. bne_w r1, r8, 2.
-# CHECK: bne_w{{.*}}r1{{.*}}r2
-# CHECK: beq_w{{.*}}r3{{.*}}r4
+# not 4 (I12 form). Pre-fix clobbered rt/rs → e.g. bne r1, r8, 2.
+# CHECK: bne{{.*}}r1{{.*}}r2
+# CHECK: beq{{.*}}r3{{.*}}r4
 
 .text
   { csrw 17, r1; nop; nop }
   { csrw 18, r1; nop; nop }
-  { bne_w r1, r2, 64; nop; nop }
-  { beq_w r3, r4, 64; nop; nop }
+  { bne r1, r2, 64; nop; nop }
+  { beq r3, r4, 64; nop; nop }

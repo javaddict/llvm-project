@@ -58,7 +58,7 @@ enum class RelocKind : uint16_t {
   HWLoopOff2 = 17,
   WIDE_BranchSImm12 = 18,
   WIDE_CallSImm20 = 19,
-  // Bundle128 RI12 two-reg cond (BEQ_W/BNE_W/…): imm12 @ s0 bits[19:8].
+  // Bundle128 RI12 two-reg cond (BEQ/BNE/…): imm12 @ s0 bits[19:8].
   // I12 form keeps WIDE_BranchSImm12 (ELF 18) @ bits[15:4]. : promoted
   // from MC-only so unresolved external targets emit a real ELF reloc.
   WIDE_BranchSImm12_RI = 20,

@@ -49,8 +49,8 @@ define void @fir_16tap(ptr %out, ptr %in, ptr %coeffs, i32 %n) {
 ; corrupted SET_HWLOOP_REG MBB operands pre-RA). SMS runs pre-RA on the naive
 ; loop; the post-RA HaydnHardwareLoops pass does not convert this nested inner
 ; loop (guarded preheader + multi-BB epilogue defeat the recognizer). The
-; inner 16-tap loop stays a bnez_w back-edge; mac32 in the body is the invariant.
-; The outer loop stays a regular slt32+beqz_w loop (multi-BB).
+; inner 16-tap loop stays a bnez back-edge; mac32 in the body is the invariant.
+; The outer loop stays a regular slt32+beqz loop (multi-BB).
 ;
 ; Output store lands in the outer latch before the inner loop, then the inner
 ; loop body (mul64.ll per tap) runs as a hardware loop.

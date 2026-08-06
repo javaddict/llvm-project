@@ -17,7 +17,7 @@ join:
 ; CHECK-LABEL: test_if:
 ; EarlyIfConversion may select if/else as slt+movt instead of beqz.
 ; CHECK: slt32
-; CHECK: {{beqz_w|movt32}}
+; CHECK: {{beqz|movt32}}
 
 ; Loop
 define i32 @test_loop(i32 %n) {
@@ -32,5 +32,5 @@ exit:
   ret i32 %next
 }
 ; CHECK-LABEL: test_loop:
-; mattr=-hwloop keeps a software back-edge (blt_w or slt+branch; foldCmpBranch off).
-; CHECK: {{blt_w|slt32}}
+; mattr=-hwloop keeps a software back-edge (blt or slt+branch; foldCmpBranch off).
+; CHECK: {{blt|slt32}}

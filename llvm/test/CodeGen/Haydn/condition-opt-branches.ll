@@ -109,7 +109,7 @@ entry:
 define void @branch_eq(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_eq:
 ; CHECK: seq32
-; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z{{(\.s[012])?}}
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -125,7 +125,7 @@ else:
 define void @branch_ne(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_ne:
 ; CHECK: seq32
-; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z{{(\.s[012])?}}
 entry:
   %cmp = icmp ne i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -141,7 +141,7 @@ else:
 define void @branch_slt(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_slt:
 ; CHECK: slt32
-; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z{{(\.s[012])?}}
 entry:
   %cmp = icmp slt i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -157,7 +157,7 @@ else:
 define void @branch_sge(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_sge:
 ; CHECK: slt32
-; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z{{(\.s[012])?}}
 entry:
   %cmp = icmp sge i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -173,7 +173,7 @@ else:
 define void @branch_ult(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_ult:
 ; CHECK: sltu32
-; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z{{(\.s[012])?}}
 entry:
   %cmp = icmp ult i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -189,7 +189,7 @@ else:
 define void @branch_uge(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_uge:
 ; CHECK: sltu32
-; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z{{(\.s[012])?}}
 entry:
   %cmp = icmp uge i32 %a, %b
   br i1 %cmp, label %then, label %else

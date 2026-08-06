@@ -577,7 +577,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       // Skip debug / pure meta. B1.2 wraps *all* real and byte-emitting
       // pseudos as BUNDLE children (HaydnFinalizeBundle / AIE FinalizeBundle).
       // AsmPrinter must expand the same pseudos the standalone path expands
-      // (B→BEQZ_W R0, RET→JALR_W, SETCBR→CSRW_W). Skipping Haydn::B as a
+      // (B→BEQZ R0, RET→JALR_W, SETCBR→CSRW_W). Skipping Haydn::B as a
       // generic isPseudo() turned singleton BUNDLEs into all-NOP parcels —
       // branch to fallthrough deleted in the binary → MEMORY_FAULT.
       if (I->isDebugInstr() || I->isImplicitDef() || I->isKill() ||
@@ -602,10 +602,10 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         ChildInst->addOperand(MCOperand::createImm(CsrAddr));
         ChildInst->addOperand(MCOperand::createReg(ValReg));
       } else if (ChildOpc == Haydn::B) {
-        // Unconditional branch pseudo → BEQZ_W R0, target (same as
+        // Unconditional branch pseudo → BEQZ R0, target (same as
         // emitInstruction case Haydn::B). Silent skip left all-NOP parcels
         // (MEMORY_FAULT / wrong control flow vs pre-B1.2 codegen).
-        ChildInst->setOpcode(Haydn::BEQZ_W);
+        ChildInst->setOpcode(Haydn::BEQZ);
         ChildInst->addOperand(MCOperand::createReg(Haydn::R0));
         bool GotTarget = false;
         for (const MachineOperand &MO : I->operands()) {
@@ -741,12 +741,11 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
   default:
     break;
   case Haydn::B: {
-    // Expand B pseudo to BEQZ_W R0, target (R0 is always zero, so this
-    // always branches). Phase 1b : the WIDE 48-bit form per
-    // encoding_manual.md §5.5 (opcode 0x2C) replaces the legacy Haydn32 BEQZ.
+    // Expand B pseudo to BEQZ R0, target (R0 is always zero, so this
+    // always branches).
     MCInst Tmp;
-    Tmp.setOpcode(Haydn::BEQZ_W);
-    // BEQZ_W: operand 0 = rs (GPR32), operand 1 = offset (brtarget_wide_i12)
+    Tmp.setOpcode(Haydn::BEQZ);
+    // BEQZ: operand 0 = rs (GPR32), operand 1 = offset (brtarget_wide_i12)
     Tmp.addOperand(MCOperand::createReg(Haydn::R0));
     // Get the MBB target
     for (unsigned Idx = 0; Idx < MI->getNumOperands(); ++Idx) {
@@ -1125,15 +1124,13 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
                        .addImm(1));
     return;
   case Haydn::LoopJNZ: {
-    // JNZD LoopJNZ is lowered to BNEZ_W (branch if counter != 0).
-    // Phase 1b : the WIDE 48-bit form per encoding_manual.md §5.5
-    // (opcode 0x2D) replaces the legacy Haydn32 BNEZ.
+    // JNZD LoopJNZ is lowered to BNEZ (branch if counter != 0).
     assert(MI->getOperand(0).isReg() && MI->getOperand(1).isMBB());
     const MCExpr *BranchTarget =
         MCSymbolRefExpr::create(MI->getOperand(1).getMBB()->getSymbol(),
                                 OutContext);
     MCInst Tmp;
-    Tmp.setOpcode(Haydn::BNEZ_W);
+    Tmp.setOpcode(Haydn::BNEZ);
     Tmp.addOperand(MCOperand::createReg(MI->getOperand(0).getReg()));
     Tmp.addOperand(MCOperand::createExpr(BranchTarget));
     EmitToStreamer(*OutStreamer, Tmp);

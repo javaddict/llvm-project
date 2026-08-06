@@ -19,13 +19,13 @@ define void @iir_biquad(ptr %out, ptr %in, ptr %coeffs, ptr %state, i32 %n) {
 ; preheader and the.LBB0_2 prologue peel, then re-emitted in the main loop
 ; (.LBB0_3) and the post-loop tail (.LBB0_6), so these are matched with
 ;
-; Loop body: output store (st32 to r8 = out ptr) followed by the slt32+bnez_w
-; back-edge. The icmp slt back-edge comparison materializes as slt32+bnez_w
+; Loop body: output store (st32 to r8 = out ptr) followed by the slt32+bnez
+; back-edge. The icmp slt back-edge comparison materializes as slt32+bnez
 ; (unfused) under the SFR-strip scheduling model.
 ; (SFR-strip) changed bundle layout — rebaselined /17.
 ; (mul path: mull) shifted schedule: loop header is.LBB0_3 (was.LBB0_2)
-; and the back-edge bnez_w targets.LBB0_3. Rebaselined so the
-; back-edge bnez_w is matched relative to the loop-body st32, not the post-loop
+; and the back-edge bnez targets.LBB0_3. Rebaselined so the
+; back-edge bnez is matched relative to the loop-body st32, not the post-loop
 ; state stores.
 ;
 ; State variable stores (update delay line) after the loop

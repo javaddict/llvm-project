@@ -217,11 +217,13 @@ unsigned HaydnMCCodeEmitter::getExprFixupKind(const MCInst &MI) const {
     return Haydn::FIXUP_HAYDN_CallSImm20;
   case Haydn::JALR:
     return Haydn::FIXUP_HAYDN_BranchSImm16;
-  // Bundle128 branch `_S0` forms use the same s0 windows as the `_W_S0`
-  // peers (cutover). FIXUP_HAYDN_BranchSImm16 still has legacy-parcel
+  // Conditional branches. FIXUP_HAYDN_BranchSImm16 still has legacy-parcel
   // geometry (FieldLsb=0, FieldSize=16) and does not patch Bundle128
   // imm12 — linked BEQ/BNE kept offset 0. Map to the WIDE fixup kinds that
   // already carry correct FieldLsb (RI12 → bits[19:8]/8; I12 → bits[15:4]/4).
+  // Without this, the default FIXUP_HAYDN_32 writes a 32-bit value into the
+  // LoWord, clobbering the opcode/FU bits and producing <unknown> on
+  // disassembly.
   case Haydn::BEQ:
   case Haydn::BNE:
   case Haydn::BGE:
@@ -234,28 +236,6 @@ unsigned HaydnMCCodeEmitter::getExprFixupKind(const MCInst &MI) const {
   case Haydn::BLTZ:
   case Haydn::BGEZ:
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12;
-  // legacy BEQZ_W/BNEZ_W/BGEZ_W/BLTZ_W — CodeGen emits these opcodes
-  // (HaydnConditionOptimizer, HaydnAsmPrinter B/RET expansion, ISel
-  // G_BRINDIRECT). The encoder routes them through encodeBundle128 which
-  // pairs them to the _S0 variant (HaydnFU_ALU32_S0_I12_ONE, imm12 at
-  // LoWord bits[15:4]). The symbolic branch target MUST map to
-  // FIXUP_HAYDN_WIDE_BranchSImm12 (geometry FieldLsb=4, matching the
-  // Bundle128 imm12 position). Without this, the default FIXUP_HAYDN_32
-  // writes a 32-bit value into the LoWord, clobbering the opcode/FU bits and
-  // producing <unknown> on disassembly.
-  case Haydn::BEQZ_W:
-  case Haydn::BNEZ_W:
-  case Haydn::BGEZ_W:
-  case Haydn::BLTZ_W:
-    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12;
-  // Two-register WIDE cond (RI12): imm12 at s0 bits[19:8] → FieldLsb=8.
-  case Haydn::BEQ_W:
-  case Haydn::BNE_W:
-  case Haydn::BGE_W:
-  case Haydn::BGEU_W:
-  case Haydn::BLT_W:
-  case Haydn::BLTU_W:
-    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI;
   // ADDI32_W carries the wide-reloc operand (simm20_wide_abs) — the symbolic
   // operand MUST map to FIXUP_HAYDN_LO20 (the 20-bit absolute LO20 reloc,
   // paired with LUI's HI12). Without this, the default FIXUP_HAYDN_32 clobbers
@@ -641,21 +621,11 @@ unsigned HaydnMCCodeEmitter::getBranchFixupKind(const MCInst &MI) const {
   case Haydn::BGEU:
   case Haydn::BLT:
   case Haydn::BLTU:
-  case Haydn::BEQ_W:
-  case Haydn::BNE_W:
-  case Haydn::BGE_W:
-  case Haydn::BGEU_W:
-  case Haydn::BLT_W:
-  case Haydn::BLTU_W:
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI;
   case Haydn::BEQZ:
   case Haydn::BNEZ:
   case Haydn::BLTZ:
   case Haydn::BGEZ:
-  case Haydn::BEQZ_W:
-  case Haydn::BNEZ_W:
-  case Haydn::BGEZ_W:
-  case Haydn::BLTZ_W:
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12;
   default:
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI;

@@ -2064,24 +2064,15 @@ static MachineInstr *findIVBumpInLoop(const MachineLoop *L, Register Reg,
 // Returns true if the branch tests "lhs < rhs" (LT sense)
 // false if it tests "lhs >= rhs" (GE sense).
 // For equality branches, returns true for NE and false for EQ.
-// Both legacy 32-bit and WIDE `_W` forms are recognized — the comparison
-// sense is identical for a given mnemonic regardless of width (Phase 1b
-// follow-up: CodeGen selects `_W`).
 static bool isBranchLT(unsigned BrOpc) {
   switch (BrOpc) {
   case Haydn::BLT:
-  case Haydn::BLT_W:
   case Haydn::BLTU:
-  case Haydn::BLTU_W:
   case Haydn::BNE:
-  case Haydn::BNE_W:
     return true;
   case Haydn::BGE:
-  case Haydn::BGE_W:
   case Haydn::BGEU:
-  case Haydn::BGEU_W:
   case Haydn::BEQ:
-  case Haydn::BEQ_W:
     return false;
   default:
     return true; // Default assumption
@@ -2096,9 +2087,7 @@ static bool isBranchLT(unsigned BrOpc) {
 static bool isBranchEQ(unsigned BrOpc) {
   switch (BrOpc) {
   case Haydn::BEQ:
-  case Haydn::BEQ_W:
   case Haydn::BNE:
-  case Haydn::BNE_W:
     return true;
   default:
     return false;
@@ -2110,17 +2099,11 @@ static bool isBranchEQ(unsigned BrOpc) {
 static bool isFusedTwoRegBranch(unsigned BrOpc) {
   switch (BrOpc) {
   case Haydn::BLT:
-  case Haydn::BLT_W:
   case Haydn::BLTU:
-  case Haydn::BLTU_W:
   case Haydn::BGE:
-  case Haydn::BGE_W:
   case Haydn::BGEU:
-  case Haydn::BGEU_W:
   case Haydn::BEQ:
-  case Haydn::BEQ_W:
   case Haydn::BNE:
-  case Haydn::BNE_W:
     return true;
   default:
     return false;
@@ -2132,13 +2115,9 @@ static bool isFusedTwoRegBranch(unsigned BrOpc) {
 static bool isSingleRegBranch(unsigned BrOpc) {
   switch (BrOpc) {
   case Haydn::BEQZ:
-  case Haydn::BEQZ_W:
   case Haydn::BNEZ:
-  case Haydn::BNEZ_W:
   case Haydn::BGEZ:
-  case Haydn::BGEZ_W:
   case Haydn::BLTZ:
-  case Haydn::BLTZ_W:
     return true;
   default:
     return false;
@@ -2664,8 +2643,7 @@ bool HaydnHardwareLoops::findTripCount(MachineLoop *L, int64_t &TripCount,
     // SLT/SLTU/SLE feeding BEQZ/BNEZ: cond true means "less-than" family.
     // BNEZ → continue when cond true (LT); BEQZ → continue when false (GE).
     bool BranchOnCondTrue =
-        BrOpc == Haydn::BNEZ || BrOpc == Haydn::BNEZ_W ||
-        BrOpc == Haydn::BLTZ || BrOpc == Haydn::BLTZ_W;
+        BrOpc == Haydn::BNEZ || BrOpc == Haydn::BLTZ;
     CountUp = BranchOnCondTrue;
     if (!BranchToHeaderIsTrue)
       CountUp = !CountUp;

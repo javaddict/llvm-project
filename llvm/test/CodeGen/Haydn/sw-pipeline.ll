@@ -37,10 +37,10 @@
 define i32 @simple_acc_loop(ptr nocapture readonly %p, i32 %n) {
 ; CHECK-LABEL: simple_acc_loop:
 ; CHECK:        // =>This Inner Loop Header: Depth=1
-; Loop-carried add32 survives. Compare may be SMS-rewritten slt32/bnez_w or
-; the original blt_w when the Found schedule is single-stage (discarded).
+; Loop-carried add32 survives. Compare may be SMS-rewritten slt32/bnez or
+; the original blt when the Found schedule is single-stage (discarded).
 ; CHECK:        add32
-; CHECK-DAG:    {{(slt32|blt_w)}}
+; CHECK-DAG:    {{(slt32|blt)}}
 ; SMS finds a schedule at MII (may be single-stage / discarded post-gate).
 ; SWP:          Schedule Found? 1 (II={{[0-9]+}})
 entry:
@@ -68,7 +68,7 @@ define i32 @mac_loop(ptr nocapture readonly %x, ptr nocapture readonly %h, i32 %
 ; Multi-stage SMS may emit a second epilogue mul64; single-stage keeps one.
 ; CHECK:        // =>This Inner Loop Header: Depth=1
 ; CHECK:        mull
-; CHECK-DAG:    {{(slt32|blt_w|bnez_w)}}
+; CHECK-DAG:    {{(slt32|blt|bnez)}}
 ; SMS finds a schedule for this MAC (mul-acc) kernel.
 ; SWP:          Schedule Found? 1 (II={{[0-9]+}})
 entry:
@@ -114,10 +114,10 @@ define i32 @const_tc_loop(ptr nocapture readonly %p) {
 ; CHECK-LABEL: const_tc_loop:
 ; CHECK:        // =>This Inner Loop Header: Depth=1
 ; Kernel survives SMS (add32 + runtime compare vs limit 10). gate: the
-; static-TC shortcut that disposed the kernel must NOT return — blt_w/slt32
+; static-TC shortcut that disposed the kernel must NOT return — blt/slt32
 ; against the constant are both runtime compares.
 ; CHECK:        add32
-; CHECK-DAG:    {{(slt32|blt_w)}}
+; CHECK-DAG:    {{(slt32|blt)}}
 ; SMS finds a schedule (II=MII=2) while still emitting the runtime
 ; trip-count compare (the static-TC regression must NOT return).
 ; SWP:          Schedule Found? 1 (II={{[0-9]+}})
@@ -144,9 +144,9 @@ exit:
 define i32 @runtime_tc_loop(ptr nocapture readonly %p, i32 %n) {
 ; CHECK-LABEL: runtime_tc_loop:
 ; CHECK:        // =>This Inner Loop Header: Depth=1
-; add32 survives; runtime compare against %n (blt_w or SMS slt32/bnez_w).
+; add32 survives; runtime compare against %n (blt or SMS slt32/bnez).
 ; CHECK:        add32
-; CHECK-DAG:    {{(slt32|blt_w)}}
+; CHECK-DAG:    {{(slt32|blt)}}
 ; SMS finds a schedule for the runtime-trip-count loop.
 ; SWP:          Schedule Found? 1 (II={{[0-9]+}})
 entry:

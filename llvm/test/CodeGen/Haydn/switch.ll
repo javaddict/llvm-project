@@ -49,8 +49,8 @@ default:
 ;Switch with consecutive values (4 cases → jump table)
 define i32 @switch_consecutive(i32 %x) {
 ; switch_consecutive:
-; Range check: post- the sltu+bltu_w fusion no longer fires; the range
-; check is emitted as a sltu32 + bnez_w pair (semantically equivalent).
+; Range check: post- the sltu+bltu fusion no longer fires; the range
+; check is emitted as a sltu32 + bnez pair (semantically equivalent).
 switch i32 %x, label %default [
   i32 0, label %case0
   i32 1, label %case1
@@ -98,7 +98,7 @@ default:
 ;Switch with negative values
 define i32 @switch_negative(i32 %x) {
 ; switch_negative:
-; Cmp+branch fusion no longer fires; eq+branch lowered as seq32+bnez_w.
+; Cmp+branch fusion no longer fires; eq+branch lowered as seq32+bnez.
 switch i32 %x, label %default [
   i32 -1, label %case_neg1
   i32 0, label %case0

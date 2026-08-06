@@ -153,7 +153,7 @@
 ; CHECK: 	{ nop; nop; nop }
 ; CHECK: 	{ add32	r3, r3, r5; addi32	r4, r4, 1; nop }
 ; CHECK: 	{ slt32	r5, r4, r2; nop; nop }
-; CHECK: 	{ nop; nop; bnez_w	r5, .LBB7_1 }
+; CHECK: 	{ nop; nop; bnez	r5, .LBB7_1 }
 ; CHECK: // %bb.2:                               // %exit
 ; CHECK: 	{ move32	r1, r3; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
@@ -274,10 +274,10 @@ exit:
   ret i32 %sum_next
 }
 ; Note: The array load in the loop is optimized away by the compiler.
-; The loop back-edge lowers to slt32 + bnez_w (not blt_w) under.
+; The loop back-edge lowers to slt32 + bnez (not blt) under.
 ; (SFR-strip) changed bundle layout — rebaselined.
 ; (No ld32 here: the array load in the loop is DCE'd — %val is dead, see
-; comment above. Only the back-edge bnez_w is CHECKed.)
+; comment above. Only the back-edge bnez is CHECKed.)
 
 ;GEP with 64-bit index
 define i32 @gep_64bit_index(ptr %arr, i64 %idx) {

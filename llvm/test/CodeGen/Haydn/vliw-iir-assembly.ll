@@ -37,7 +37,7 @@
 ;
 ; The biquad_block function processes N samples through a 2-tap FIR kernel:
 ; out[i] = b0 * in[i] + b1 * in[i]
-; This exercises: GEP, load, mul32, mac32, add32, st32, slt32, bnez_w, phi.
+; This exercises: GEP, load, mul32, mac32, add32, st32, slt32, bnez, phi.
 ;=============================================================================;
 
 define void @biquad_block(ptr %in, ptr %out, ptr %coeffs, i32 %N) nounwind {
@@ -75,7 +75,7 @@ exit:
 ; ASM-DAG: st32
 ; ASM-DAG: add32
 ; (SFR-strip) changed bundle layout — rebaselined.
-; The icmp slt back-edge materializes as slt32+bnez_w (unfused) because the
+; The icmp slt back-edge materializes as slt32+bnez (unfused) because the
 ; SFR-strip lets the scheduler pack slt32 with the preceding st32.
-; ASM-DAG: bnez_w
+; ASM-DAG: bnez
 ; ASM: jalr_w{{(\.s[012])?}} r0, lr, 0

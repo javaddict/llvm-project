@@ -108,9 +108,9 @@ neg:
   ret i32 %result
 }
 ; CHECK-LABEL: <abs_val>:
-; sge may be fused to bge_w (CondOpt / AIE-style xor(setcc,1) absorb) or
+; sge may be fused to bge (CondOpt / AIE-style xor(setcc,1) absorb) or
 ; remain as zero-test after invert. Accept either form.
-; CHECK-DAG: {{bnez_w|beqz_w|bge_w}}{{(\.s[012])?}}
+; CHECK-DAG: {{bnez|beqz|bge}}{{(\.s[012])?}}
 
 ; Division — should emit libcall to __divsi3
 define i32 @test_div(i32 %a, i32 %b) {

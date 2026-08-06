@@ -13,7 +13,7 @@
 # CHECK: SET_HWLOOP_F2_W 1
 # CHECK-NOT: SET_HWLOOP_F2_W 0
 # Soft outer back-edge retained:
-# CHECK: BEQZ_W {{.*}}%bb.1
+# CHECK: BEQZ {{.*}}%bb.1
 
 --- |
   define dso_local void @multibb_nested_decline(i32 %n, ptr %p) {
@@ -48,7 +48,7 @@ body:             |
     $r0 = frame-setup XOR32 $r0, $r0
     $r4 = ADDI32_W $r0, 0
     $r5 = SEQ32 $r1, $r4
-    BNEZ_W killed $r5, %bb.4
+    BNEZ killed $r5, %bb.4
 
   bb.1.outer:
     successors: %bb.2
@@ -80,7 +80,7 @@ body:             |
     $r4 = ADD32 $r4, $r7
     $r5 = SEQ32 $r4, $r1
     ; Soft outer back-edge — must remain after Role B declines multi-BB+nested.
-    BEQZ_W killed $r5, %bb.1
+    BEQZ killed $r5, %bb.1
     B %bb.4
 
   bb.4.exit:

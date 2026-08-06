@@ -86,8 +86,8 @@ exit:
 ; Note: The store is eliminated as dead code, so the loop body only has
 ; the induction variable update and branch.
 ; ISA-27 (32-bit compare SFR-decouple): the loop back-edge test is now
-; slt32 (induction var, size) + bnez_w instead of the fused branch-compare
-; blt_w. Same comparison and branch semantics, just expressed via the
+; slt32 (induction var, size) + bnez instead of the fused branch-compare
+; blt. Same comparison and branch semantics, just expressed via the
 ; decoupled compare op. Rebaselined.
 define void @init_array(ptr %arr, i32 %size, i32 %value) {
 entry:

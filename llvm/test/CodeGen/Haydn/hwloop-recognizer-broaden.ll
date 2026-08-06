@@ -155,7 +155,7 @@ define void @gap4_multibb(ptr %dst, ptr readonly %src, i32 %n) nounwind {
 ; CHECK-LABEL: name: gap4_multibb
 ; This shape gets if-converted to a conditional move before hwloops, so MLI
 ; does not see a multibb loop here. The back-edge stays on a branch (BNEZ
-; unfused slt32+bnez_w under SFR-strip). This is the expected behavior
+; unfused slt32+bnez under SFR-strip). This is the expected behavior
 ; post- Fix A — not a recognizer regression.
 ; (SFR-strip) changed bundle layout — rebaselined.
 ; CHECK-NOT: LoopStart

@@ -30,13 +30,13 @@
 ; We cannot assert the numeric result at the.s level (the array contents are
 ; computed at runtime), so we instead assert the structural property: the
 ; prologue guard must branch on the "skip when trip is small" condition. The
-; pre-fix bug emitted `beqz_w` immediately after the slt32 guard; the fix emits
-; `bnez_w`. We also confirm the loop body is reached (not dead-stripped) by
+; pre-fix bug emitted `beqz` immediately after the slt32 guard; the fix emits
+; `bnez`. We also confirm the loop body is reached (not dead-stripped) by
 ; checking for the max32 reduction instruction inside the loop.
 ;
 ; STALE-FAILMARKER REMOVED (, post- cutover): the 2026-07
 ; regression cleared — SMS now fires on this loop again (Schedule Found? 1
-; II=1) and the slt32 + bnez_w prologue guard is present in the output. The
+; II=1) and the slt32 + bnez prologue guard is present in the output. The
 ; BNEZ polarity fix in HaydnInstrInfo.cpp is once again covered.
 
 ; Reduction: max over 16 ints. The pipeliner prologue guard must keep the

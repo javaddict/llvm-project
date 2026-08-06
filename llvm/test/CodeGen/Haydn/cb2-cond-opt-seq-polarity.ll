@@ -9,10 +9,10 @@
 ; the key (cb2_binsearch.c: expected 9, got 7). Fix : SEQ32+BNEZ -> BEQ
 ; SEQ32+BEQZ -> BNE.
 ;
-; The `==` test below must fold to a branch that fires on EQUAL (`beq_w`), never
-; `bne_w`. If this regresses, binsearch-style code returns the wrong index.
+; The `==` test below must fold to a branch that fires on EQUAL (`beq`), never
+; `bne`. If this regresses, binsearch-style code returns the wrong index.
 ;
-; Flex cutover — `seq32 r8, fp, r2; bnez_w r8,.LBB0_4` is back. Likely
+; Flex cutover — `seq32 r8, fp, r2; bnez r8,.LBB0_4` is back. Likely
 ; getFoldedBranchOpcode logic gap exposed by the new SEQ32_S0 routing.
 ; This is a REAL correctness bug (binsearch returns wrong index), not byte
 
@@ -30,10 +30,10 @@ while.body:
   %am = load i32, ptr %p
   %cmp.eq = icmp eq i32 %am, %key
   ; Equality must take the true edge to cleanup. With foldCmpBranch off
-  ; (Track A): seq32 + bnez_w (branch if SEQ==1). With fold on: beq_w.
+  ; (Track A): seq32 + bnez (branch if SEQ==1). With fold on: beq.
   ; Never invert equality to take the false edge first.
   ; CHECK-DAG: seq32
-  ; CHECK-DAG: {{beq_w|bnez_w}}{{(\.s[012])?}}
+  ; CHECK-DAG: {{beq|bnez}}{{(\.s[012])?}}
   br i1 %cmp.eq, label %cleanup, label %if.else
 
 if.else:

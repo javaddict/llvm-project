@@ -55,7 +55,7 @@ define void @matmul_4x4(ptr %C, ptr %A, ptr %B) {
 ; SET_HWLOOP_REG MBB operands pre-RA). SMS runs pre-RA on the naive loop; the
 ; post-RA HaydnHardwareLoops pass does not form a hardware loop for this nested
 ; shape (the SMS kernel's guarded preheader + multi-BB epilogue defeat the
-; single-exit/recognizer checks). The inner k-loop stays a regular bnez_w
+; single-exit/recognizer checks). The inner k-loop stays a regular bnez
 ; back-edge. mul64.ll in the body remains the invariant this test locks in.
 ;
 ; Store computed C[i][j] after each inner loop completes.

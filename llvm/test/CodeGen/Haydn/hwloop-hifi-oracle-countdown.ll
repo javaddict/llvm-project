@@ -21,7 +21,7 @@
 ; Count-down-to-zero (dominant FIR / peel residual). HiFi: loopnez with N.
 ; CHECK-LABEL: countdown_to_zero:
 ; CHECK: set_hwloop_f2_w
-; CHECK-NOT: beqz_w
+; CHECK-NOT: beqz
 define i32 @countdown_to_zero(ptr %p, i32 %n) nounwind {
 entry:
   %cmp0 = icmp sgt i32 %n, 0

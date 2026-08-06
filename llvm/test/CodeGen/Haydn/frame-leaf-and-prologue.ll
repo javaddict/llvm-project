@@ -170,10 +170,10 @@
 ; CHECK: 	{ nop; nop; addi32_w	r3, r0, 0 }
 ; CHECK: 	{ slt32	r3, r3, r1; nop; nop }
 ; CHECK: 	{ xori32	r3, r3, 1; nop; nop }
-; CHECK: 	{ nop; nop; bnez_w	r3, .LBB8_2 }
+; CHECK: 	{ nop; nop; bnez	r3, .LBB8_2 }
 ; CHECK: // %bb.1:                               // %pos
 ; CHECK: 	{ add32	r1, r1, r2; nop; nop }
-; CHECK: 	{ nop; nop; beqz_w	r0, .LBB8_3 }
+; CHECK: 	{ nop; nop; beqz	r0, .LBB8_3 }
 ; CHECK: .LBB8_2:                                // %neg
 ; CHECK: 	{ sub32	r1, r1, r2; nop; nop }
 ; CHECK: .LBB8_3:                                // %pos

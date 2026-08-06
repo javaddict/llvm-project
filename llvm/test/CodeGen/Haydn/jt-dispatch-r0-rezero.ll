@@ -17,16 +17,16 @@
 ; immediate materialization is `addi32 rd, r0, imm` (LUI also reads R0);
 ; libcall result moves use `add32 dst, r1, r0`.
 ; After a JT dispatch R0 holds the return-PC and is NONZERO, so the first
-; `beqz_w r0` idiom in a switch-case target silently falls through instead of
+; `beqz r0` idiom in a switch-case target silently falls through instead of
 ; branching. ISS repro (cb22_switch_jt_bare_imm_base.c, exp 35): the JT
 ; dispatch `jalr_w r0, r1, 0` wrote the return-PC into r0; the PUSH-case target
-; began with `beqz_w r0,.LBB0_11` which then did NOT branch, so the wrong
+; began with `beqz r0,.LBB0_11` which then did NOT branch, so the wrong
 ; case body ran and the program returned 0 instead of 35.
 ;
 ; Fix : HaydnAsmPrinter collects every MBB that is a direct successor
 ; of a BR_JT in runOnMachineFunction, and emitInstruction emits a leading
 ; `xor32 r0, r0, r0` bundle at the FIRST real instruction of each such target
-; block — restoring the R0 == 0 invariant before any `beqz_w r0` idiom runs.
+; block — restoring the R0 == 0 invariant before any `beqz r0` idiom runs.
 ;
 ; Test design: a dense switch (8 consecutive cases) lowers to a jump table
 ; (G_BRJT → BR_JT → JALR r0, $addr, 0). The JT dispatch clobbers R0, so
@@ -35,7 +35,7 @@
 ; times (once per case target) in the function body. A ret-only case body
 ; (`ret i32 N`) would normally have no `xor32 r0, r0, r0`; the re-zero injects
 ; one, so counting `xor32 r0, r0, r0` between the jalr_w and the first ret is a
-; clean signal. If the re-zero regresses, the count drops and the `beqz_w r0`
+; clean signal. If the re-zero regresses, the count drops and the `beqz r0`
 ; idiom in real switch bodies breaks (silently wrong control flow on the ISS).
 
 ;Dense switch with 8 consecutive cases → jump table; each case target
@@ -50,7 +50,7 @@
 ; CHECK:  { subi32 sp, sp, 8 }
 ; CHECK:  { addi32{{(_w)?}} r2, r0, 7 }
 ; CHECK:  { sltu32 r2, r2, r1 }
-; CHECK:  { bnez_w r2, .LBB0_10 }
+; CHECK:  { bnez r2, .LBB0_10 }
 ; CHECK: // %bb.1: // %entry
 ; CHECK:  { nop; slli32 r1, r1, 2; lui r2, .LJTI0_0 }
 ; CHECK:  { addi32{{(_w)?}} r2, r2, .LJTI0_0 }
@@ -60,35 +60,35 @@
 ; CHECK: .LBB0_2: // %bb0
 ; CHECK:  { xor32 r0, r0, r0 }
 ; CHECK:  { addi32{{(_w)?}} r1, r0, 10 }
-; CHECK:  { beqz_w r0, .LBB0_11 }
+; CHECK:  { beqz r0, .LBB0_11 }
 ; CHECK: .LBB0_3: // %bb4
 ; CHECK:  { xor32 r0, r0, r0 }
 ; CHECK:  { addi32{{(_w)?}} r1, r0, 54 }
-; CHECK:  { beqz_w r0, .LBB0_11 }
+; CHECK:  { beqz r0, .LBB0_11 }
 ; CHECK: .LBB0_4: // %bb2
 ; CHECK:  { xor32 r0, r0, r0 }
 ; CHECK:  { addi32{{(_w)?}} r1, r0, 32 }
-; CHECK:  { beqz_w r0, .LBB0_11 }
+; CHECK:  { beqz r0, .LBB0_11 }
 ; CHECK: .LBB0_5: // %bb3
 ; CHECK:  { xor32 r0, r0, r0 }
 ; CHECK:  { addi32{{(_w)?}} r1, r0, 43 }
-; CHECK:  { beqz_w r0, .LBB0_11 }
+; CHECK:  { beqz r0, .LBB0_11 }
 ; CHECK: .LBB0_6: // %bb7
 ; CHECK:  { xor32 r0, r0, r0 }
 ; CHECK:  { addi32{{(_w)?}} r1, r0, 87 }
-; CHECK:  { beqz_w r0, .LBB0_11 }
+; CHECK:  { beqz r0, .LBB0_11 }
 ; CHECK: .LBB0_7: // %bb1
 ; CHECK:  { xor32 r0, r0, r0 }
 ; CHECK:  { addi32{{(_w)?}} r1, r0, 21 }
-; CHECK:  { beqz_w r0, .LBB0_11 }
+; CHECK:  { beqz r0, .LBB0_11 }
 ; CHECK: .LBB0_8: // %bb5
 ; CHECK:  { xor32 r0, r0, r0 }
 ; CHECK:  { addi32{{(_w)?}} r1, r0, 65 }
-; CHECK:  { beqz_w r0, .LBB0_11 }
+; CHECK:  { beqz r0, .LBB0_11 }
 ; CHECK: .LBB0_9: // %bb6
 ; CHECK:  { xor32 r0, r0, r0 }
 ; CHECK:  { addi32{{(_w)?}} r1, r0, 76 }
-; CHECK:  { beqz_w r0, .LBB0_11 }
+; CHECK:  { beqz r0, .LBB0_11 }
 ; CHECK: .LBB0_10: // %def
 ; CHECK:  { addi32{{(_w)?}} r1, r0, 99 }
 ; CHECK: .LBB0_11: // %bb0

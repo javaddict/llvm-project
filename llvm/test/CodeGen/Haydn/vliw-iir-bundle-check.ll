@@ -118,7 +118,7 @@ exit:
 
 ; ASM-LABEL: biquad_process_block:
 ; ASM-DAG: mull
-; ASM-DAG: {{bnez_w|blt_w|beqz_w}}
+; ASM-DAG: {{bnez|blt|beqz}}
 ; ASM-DAG: mull
 ; ASM-DAG: sub32
 ; ASM-DAG: ld32

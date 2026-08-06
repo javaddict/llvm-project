@@ -936,7 +936,7 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
   MI.eraseFromParent();
 
   // MBB ends with: BNEZ UseStack → Stack; B → Reg.
-  BuildMI(MBB, MBB.end(), DL, TII->get(Haydn::BNEZ_W))
+  BuildMI(MBB, MBB.end(), DL, TII->get(Haydn::BNEZ))
       .addReg(S2)
       .addMBB(StackMBB);
   BuildMI(MBB, MBB.end(), DL, TII->get(Haydn::B)).addMBB(RegMBB);

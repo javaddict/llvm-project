@@ -9,7 +9,7 @@
 ; REGRESSION FILED : the SWP profitability of this loop has
 ; regressed. -debug-only=pipeliner now reports "Unable to analyzeLoop, can NOT
 ; pipeline Loop" — the vadd-streaming loop that + ISA-27 originally let
-; SMS find (II=4) is no longer analyzed. The non-SWP CHECKs ({ st32 r7, r1, 0; addi32 r1, r1, 4; nop }/bnez_w
+; SMS find (II=4) is no longer analyzed. The non-SWP CHECKs ({ st32 r7, r1, 0; addi32 r1, r1, 4; nop }/bnez
 ; kernel signature) still pass because they verify the LOOP BODY codegen
 ; which is independent of whether SMS fires. The SWP-NOT catches the
 ; regression correctly. Suspected cause: TTI unrolling changes (
@@ -54,16 +54,16 @@
 ;
 ; The SWP checks pin the schedule result (II=4) so a profitability regression
 ; (e.g. an SFR-strip revert that re-inflates MII) is detected. The non-SWP
-; instructions) and the trip-count compare is rewritten to slt32/bnez_w (the SMS
-; signature -- a non-pipelined loop would keep a plain blt_w).
+; instructions) and the trip-count compare is rewritten to slt32/bnez (the SMS
+; signature -- a non-pipelined loop would keep a plain blt).
 
 define void @vadd_streaming(ptr nocapture %a, ptr nocapture readonly %b, ptr nocapture readonly %c, i32 %n) {
 ; Pipelined kernel: the loop-carried add32 and the st32 both survive (SMS
 ; never drops instructions), and SMS rewrites the trip-count compare from a
-; blt_w into slt32 + bnez_w. slt32 and st32 pack into the same VLIW bundle line
+; blt into slt32 + bnez. slt32 and st32 pack into the same VLIW bundle line
 ; so we use CHECK-DAG (order-independent) for the body + compare, then the
-; back-edge bnez_w. If SMS stops firing, the kernel reverts to a plain blt_w and
-; slt32/bnez_w disappear.
+; back-edge bnez. If SMS stops firing, the kernel reverts to a plain blt and
+; slt32/bnez disappear.
 ; SMS finds a profitable >=2-stage schedule for this loop. If the SFR-strip
 ; is reverted, MII re-inflates to 5 and this drops to "Schedule Found? 0".
 ; TTI unrolling changed scheduling

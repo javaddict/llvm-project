@@ -16,7 +16,7 @@
 ; Test design: Each function lowers an `icmp` against a constant 0 followed
 ; by a conditional branch. The CHECK lines assert that the emitted assembly
 ; uses the zero-test mnemonic. If the narrowing rule regresses, the output
-; will contain `beq_w rX, r0` / `bne_w rX, r0` instead and the CHECK-NOT lines
+; will contain `beq rX, r0` / `bne rX, r0` instead and the CHECK-NOT lines
 ; will fire.
 
 ;===--- icmp eq against zero should reach a single-register zero test ---===
@@ -27,11 +27,11 @@
 ; then branches on that result with BNEZ — the test asserts that the final
 ; branch is a single-register zero-test form, not a 2-register BEQ/BNE.
 ; CHECK-LABEL: fold_eq_zero:
-; CHECK-NOT: beq_w{{(\.s[012])?}} r{{[0-9]+}}, r{{[0-9]+}}
+; CHECK-NOT: beq{{(\.s[012])?}} r{{[0-9]+}}, r{{[0-9]+}}
 ; SEQ32 + XORI invert + BEQZ (T7.5 exact polarity).
 ; CHECK: seq32
 ; CHECK: xori32
-; CHECK: beqz_w{{(\.s[012])?}}
+; CHECK: beqz{{(\.s[012])?}}
 ; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
 define void @fold_eq_zero(i32 %a, ptr %p) nounwind {
 entry:
@@ -52,10 +52,10 @@ else:
 ; test asserts that the final branch is a single-register zero-test form
 ; not a 2-register BNE.
 ; CHECK-LABEL: fold_ne_zero:
-; CHECK-NOT: bne_w{{(\.s[012])?}} r{{[0-9]+}}, r{{[0-9]+}}
+; CHECK-NOT: bne{{(\.s[012])?}} r{{[0-9]+}}, r{{[0-9]+}}
 ; SEQ32 + BNEZ to else (eq → else; fallthrough = then). Not BEQZ-primary.
 ; CHECK: seq32
-; CHECK: bnez_w{{(\.s[012])?}}
+; CHECK: bnez{{(\.s[012])?}}
 ; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
 define void @fold_ne_zero(i32 %a, ptr %p) nounwind {
 entry:
@@ -74,10 +74,10 @@ else:
 ;===--- icmp slt against zero (signed: %a < 0) ---===
 ; CHECK-LABEL: fold_slt_zero:
 ; Current form: SLT32 + XORI invert + BEQZ (T7.5 exact). Not 2-reg BLT.
-; CHECK-NOT: blt_w r{{[0-9]+}}, r{{[0-9]+}}
+; CHECK-NOT: blt r{{[0-9]+}}, r{{[0-9]+}}
 ; CHECK: slt32
 ; CHECK: xori32
-; CHECK: beqz_w{{(\.s[012])?}}
+; CHECK: beqz{{(\.s[012])?}}
 ; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
 define void @fold_slt_zero(i32 %a, ptr %p) nounwind {
 entry:

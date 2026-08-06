@@ -197,11 +197,11 @@ static unsigned getHaydnFlexBaseOpcode(unsigned Opc, const MCInstrInfo &MII) {
       {"SEQ32", Haydn::SEQ32},         {"SLT32", Haydn::SLT32},
       {"SLTU32", Haydn::SLTU32},       {"XORI32", Haydn::XORI32},
       {"JAL_W", Haydn::JAL_W},         {"JALR_W", Haydn::JALR_W},
-      {"BEQ_W", Haydn::BEQ_W},         {"BNE_W", Haydn::BNE_W},
-      {"BGE_W", Haydn::BGE_W},         {"BLT_W", Haydn::BLT_W},
-      {"BGEU_W", Haydn::BGEU_W},       {"BLTU_W", Haydn::BLTU_W},
-      {"BEQZ_W", Haydn::BEQZ_W},       {"BNEZ_W", Haydn::BNEZ_W},
-      {"BGEZ_W", Haydn::BGEZ_W},       {"BLTZ_W", Haydn::BLTZ_W},
+      {"BEQ", Haydn::BEQ},         {"BNE", Haydn::BNE},
+      {"BGE", Haydn::BGE},         {"BLT", Haydn::BLT},
+      {"BGEU", Haydn::BGEU},       {"BLTU", Haydn::BLTU},
+      {"BEQZ", Haydn::BEQZ},       {"BNEZ", Haydn::BNEZ},
+      {"BGEZ", Haydn::BGEZ},       {"BLTZ", Haydn::BLTZ},
       {"CSRW_W", Haydn::CSRW_W},       {"ORI32", Haydn::ORI32}};
   for (auto [BaseName, Enum] : KnownBases)
     if (Base == BaseName)
@@ -524,12 +524,12 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
       // asm parser / decoder. Both have the same (rd, target) operand shape.
       IsUnconditional = true;
       Target = CF.getOperand(1).getMBB();
-    } else if (Opc == Haydn::BEQZ_W && CF.getNumOperands() > 1 &&
+    } else if (Opc == Haydn::BEQZ && CF.getNumOperands() > 1 &&
                CF.getOperand(0).isReg() &&
                CF.getOperand(0).getReg() == Haydn::R0 &&
                CF.getOperand(1).isMBB() &&
                !MBB.getParent()->getRegInfo().isLiveIn(Haydn::R0)) {
-      // BEQZ_W R0 is only unconditional when R0 is not a function argument
+      // BEQZ R0 is only unconditional when R0 is not a function argument
       // (i1 values passed in R0 make this a genuine conditional branch).
       IsUnconditional = true;
       Target = CF.getOperand(1).getMBB();
@@ -562,7 +562,7 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
     // JAL / JAL_W with non-MBB target (external symbol / libcall):
     // As the terminator → unanalyzable (tail-call / bare call end).
     // After a trailing conditional/unconditional branch → mid-block call
-    // (yarpgen soft-div pattern: `JAL_W &__divsi3; BNE_W...`). Stop
+    // (yarpgen soft-div pattern: `JAL_W &__divsi3; BNE...`). Stop
     // scanning and keep the branch analysis. Without this, BranchRelaxation
     // asserts "branches to be relaxed must be analyzable" whenever
     // a far cond-branch sits after a call in the same MBB.
@@ -587,11 +587,8 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
     }
 
     // Conditional branches (1 register)
-    // Phase 1b : all conditional branches use the WIDE 48-bit
-    // form (encoding_manual.md §5.5). The legacy Haydn32 BEQZ/BNEZ/BGEZ
-    // BLTZ/BEQ/BNE/... defs remain for the asm parser only.
-    if (Opc == Haydn::BNEZ_W || Opc == Haydn::BEQZ_W ||
-        Opc == Haydn::BGEZ_W || Opc == Haydn::BLTZ_W) {
+    if (Opc == Haydn::BNEZ || Opc == Haydn::BEQZ ||
+        Opc == Haydn::BGEZ || Opc == Haydn::BLTZ) {
       if (Cond.empty()) {
         if (CF.getNumOperands() < 2 || !CF.getOperand(1).isMBB())
           return true;
@@ -610,8 +607,8 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
       }
     }
     // Conditional branches (2 registers)
-    else if (Opc == Haydn::BEQ_W || Opc == Haydn::BNE_W || Opc == Haydn::BGE_W ||
-             Opc == Haydn::BGEU_W || Opc == Haydn::BLT_W || Opc == Haydn::BLTU_W) {
+    else if (Opc == Haydn::BEQ || Opc == Haydn::BNE || Opc == Haydn::BGE ||
+             Opc == Haydn::BGEU || Opc == Haydn::BLT || Opc == Haydn::BLTU) {
       if (Cond.empty()) {
         if (CF.getNumOperands() < 3 || !CF.getOperand(2).isMBB())
           return true;
@@ -684,7 +681,7 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
 // Generic EarlyIfConverter (llvm/lib/CodeGen/EarlyIfConversion.cpp) rewrites
 // SSA triangles/diamonds by speculating side blocks and inserting a select for
 // each PHI at the join. Cond comes from analyzeBranch:
-// Cond = [ Imm(BEQZ_W|BNEZ_W|...), CondReg ]
+// Cond = [ Imm(BEQZ|BNEZ|...), CondReg ]
 //
 // Haydn MOVT32/MOVF32 test only bit0 of the condition GPR (same as G_SELECT
 // isel). We therefore accept only single-register zero-tests (BEQZ/BNEZ)
@@ -706,13 +703,12 @@ bool HaydnInstrInfo::canInsertSelect(const MachineBasicBlock &MBB,
                                      Register FalseReg, int &CondCycles,
                                      int &TrueCycles,
                                      int &FalseCycles) const {
-  // Cond from analyzeBranch: [Imm(opc), Reg] for BEQZ_W / BNEZ_W.
+  // Cond from analyzeBranch: [Imm(opc), Reg] for BEQZ / BNEZ.
   if (Cond.size() != 2 || !Cond[0].isImm() || !Cond[1].isReg())
     return false;
 
   unsigned Opc = getHaydnFlexBaseOpcode(Cond[0].getImm(), *this);
-  if (Opc != Haydn::BEQZ_W && Opc != Haydn::BNEZ_W &&
-      Opc != Haydn::BEQZ && Opc != Haydn::BNEZ)
+  if (Opc != Haydn::BEQZ && Opc != Haydn::BNEZ)
     return false;
 
   const MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
@@ -748,11 +744,9 @@ void HaydnInstrInfo::insertSelect(MachineBasicBlock &MBB,
   // BEQZ: taken when CondReg == 0 → MOVF (bit0==0 takes True)
   unsigned MovOpc;
   switch (Opc) {
-  case Haydn::BNEZ_W:
   case Haydn::BNEZ:
     MovOpc = Haydn::MOVT32;
     break;
-  case Haydn::BEQZ_W:
   case Haydn::BEQZ:
     MovOpc = Haydn::MOVF32;
     break;
@@ -786,10 +780,9 @@ unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
   if (Cond.empty()) {
     // Unconditional branch — emit the B pseudo (has isBarrier=1).
     // The B pseudo survives through BranchRelaxation (where it is properly
-    // recognized by analyzeBranch). It is expanded to BEQZ_W R0 either by
+    // recognized by analyzeBranch). It is expanded to BEQZ R0 either by
     // expandPostRAPseudo (for pre-existing B pseudos) or by AsmPrinter
     // (for B pseudos inserted by BranchRelaxation via insertBranch).
-    // Phase 1b : WIDE 48-bit form (6 bytes per §5.5).
     MachineInstr &MI = *BuildMI(MBB, MBB.end(), DL, get(Haydn::B)).addMBB(TBB);
     if (BytesAdded)
       *BytesAdded += getInstSizeInBytes(MI);
@@ -838,10 +831,9 @@ unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
 
   if (FBB == nullptr) {
     // One-way conditional branch: if Cond, goto TBB; else fall through
-    // Phase 1b: all conditionals are WIDE 48-bit (6 bytes).
     MachineInstrBuilder MIB = BuildMI(MBB, MBB.end(), DL, get(Opc));
-    if (Opc == Haydn::BNEZ_W || Opc == Haydn::BEQZ_W ||
-        Opc == Haydn::BGEZ_W || Opc == Haydn::BLTZ_W) {
+    if (Opc == Haydn::BNEZ || Opc == Haydn::BEQZ ||
+        Opc == Haydn::BGEZ || Opc == Haydn::BLTZ) {
       MIB.addReg(Cond[1].getReg());
     } else {
       MIB.addReg(Cond[1].getReg()).addReg(Cond[2].getReg());
@@ -854,8 +846,8 @@ unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
 
   // Two-way conditional branch: if Cond, goto TBB; else goto FBB
   MachineInstrBuilder MIB = BuildMI(MBB, MBB.end(), DL, get(Opc));
-  if (Opc == Haydn::BNEZ_W || Opc == Haydn::BEQZ_W ||
-      Opc == Haydn::BGEZ_W || Opc == Haydn::BLTZ_W) {
+  if (Opc == Haydn::BNEZ || Opc == Haydn::BEQZ ||
+      Opc == Haydn::BGEZ || Opc == Haydn::BLTZ) {
     MIB.addReg(Cond[1].getReg());
   } else {
     MIB.addReg(Cond[1].getReg()).addReg(Cond[2].getReg());
@@ -919,16 +911,16 @@ bool HaydnInstrInfo::reverseBranchCondition(
  // Invert conditional branches. Emit inverted opcode as s0 FLEX.
   unsigned Inv = 0;
   switch (Opc) {
-  case Haydn::BEQZ_W:  Inv = Haydn::BNEZ_W; break;
-  case Haydn::BNEZ_W:  Inv = Haydn::BEQZ_W; break;
-  case Haydn::BGEZ_W:  Inv = Haydn::BLTZ_W; break;
-  case Haydn::BLTZ_W:  Inv = Haydn::BGEZ_W; break;
-  case Haydn::BEQ_W:   Inv = Haydn::BNE_W;  break;
-  case Haydn::BNE_W:   Inv = Haydn::BEQ_W;  break;
-  case Haydn::BGE_W:   Inv = Haydn::BLT_W;  break;
-  case Haydn::BLT_W:   Inv = Haydn::BGE_W;  break;
-  case Haydn::BGEU_W:  Inv = Haydn::BLTU_W; break;
-  case Haydn::BLTU_W:  Inv = Haydn::BGEU_W; break;
+  case Haydn::BEQZ:  Inv = Haydn::BNEZ; break;
+  case Haydn::BNEZ:  Inv = Haydn::BEQZ; break;
+  case Haydn::BGEZ:  Inv = Haydn::BLTZ; break;
+  case Haydn::BLTZ:  Inv = Haydn::BGEZ; break;
+  case Haydn::BEQ:   Inv = Haydn::BNE;  break;
+  case Haydn::BNE:   Inv = Haydn::BEQ;  break;
+  case Haydn::BGE:   Inv = Haydn::BLT;  break;
+  case Haydn::BLT:   Inv = Haydn::BGE;  break;
+  case Haydn::BGEU:  Inv = Haydn::BLTU; break;
+  case Haydn::BLTU:  Inv = Haydn::BGEU; break;
   default:
     return true; // Cannot reverse
   }
@@ -1353,7 +1345,7 @@ bool HaydnInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
 
   // Pseudo-call and jump-table pseudo reach ±512KB (JAL_W) / unlimited
   // (JALR_W via BR_JT) — always in range for any single fn.
-  // NOTE : B is deliberately NOT here. B lowers to BEQZ_W R0, which
+  // NOTE : B is deliberately NOT here. B lowers to BEQZ R0, which
   // shares the conditional branch's ±4 KB WIDE_BranchSImm12 reach — it is
   // NOT a long-reach unconditional jump. Modeling B as always-in-range hid
   // out-of-range unconditional branches from BranchRelaxation: when
@@ -1365,9 +1357,8 @@ bool HaydnInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
   if (BranchOpc == Haydn::PseudoCALL || BranchOpc == Haydn::BR_JT)
     return true;
 
-  // Phase 1b : all conditional branches (BEQ_W..BLTU_W
-  // BEQZ_W..BLTZ_W) use the 48-bit WIDE format (encoding_manual.md §5.5)
-  // with a 12-bit signed offset field stored in 2-byte units (§5.14 D1):
+  // All conditional branches (BEQ..BLTU, BEQZ..BLTZ) carry a 12-bit signed
+  // offset field stored in 2-byte units (encoding_manual.md §5.5, §5.14 D1):
   // range = sext(off12) << 1 = ±(2^11) << 1 = ±4096 bytes (±4KB).
   // The offset is measured in bytes.
   //
@@ -1396,17 +1387,17 @@ HaydnInstrInfo::getBranchDestBlock(const MachineInstr &MI) const {
   // share the legacy `_W` operand layout — only the encoding/reloc differ).
   Opc = getHaydnFlexBaseOpcode(Opc, *this);
 
-  // Two-register conditional branches (Phase 1b: _W forms): BEQ_W..BLTU_W.
+  // Two-register conditional branches: BEQ..BLTU.
   // Operands: rs1, rs2, brtarget
-  if (Opc == Haydn::BEQ_W || Opc == Haydn::BNE_W || Opc == Haydn::BGE_W ||
-      Opc == Haydn::BGEU_W || Opc == Haydn::BLT_W || Opc == Haydn::BLTU_W) {
+  if (Opc == Haydn::BEQ || Opc == Haydn::BNE || Opc == Haydn::BGE ||
+      Opc == Haydn::BGEU || Opc == Haydn::BLT || Opc == Haydn::BLTU) {
     return Br.getOperand(2).getMBB();
   }
 
-  // Single-register conditional branches (Phase 1b: _W forms): BEQZ_W..BLTZ_W.
+  // Single-register conditional branches: BEQZ..BLTZ.
   // Operands: rs, brtarget
-  if (Opc == Haydn::BEQZ_W || Opc == Haydn::BNEZ_W || Opc == Haydn::BGEZ_W ||
-      Opc == Haydn::BLTZ_W) {
+  if (Opc == Haydn::BEQZ || Opc == Haydn::BNEZ || Opc == Haydn::BGEZ ||
+      Opc == Haydn::BLTZ) {
     return Br.getOperand(1).getMBB();
   }
 
@@ -2077,11 +2068,11 @@ std::optional<bool> HaydnPipelinerLoopInfo::createTripCountGreaterCondition(
   // (branch-taken) when the trip count is NOT greater than TC, i.e. when the
   // prologue should be SKIPPED. CmpResult = (TripCountReg < TC+1) is true when
   // trip <= TC. To branch on that "skip" condition we must fire when CmpResult
-  // != 0, hence BNEZ_W. The previous BEQZ fired when trip > TC (CmpResult ==
+  // != 0, hence BNEZ. The previous BEQZ fired when trip > TC (CmpResult ==
   // 0), reversing the guard and dead-stripping every pipelined loop with trip
   // > stage count (counting-sort, vec-max). Phase 1b: emit the
   // WIDE 48-bit form so insertBranch / AsmPrinter produce a WIDE parcel.
-  Cond.push_back(MachineOperand::CreateImm(Haydn::BNEZ_W));
+  Cond.push_back(MachineOperand::CreateImm(Haydn::BNEZ));
   Cond.push_back(MachineOperand::CreateReg(CmpResult, false));
   return {};
 }
@@ -2315,20 +2306,18 @@ static Register findInductionVar(MachineRegisterInfo &MRI,
 }
 
 // True if \p Opc is a Haydn conditional branch (single or two-register).
-// Phase 1b : only the WIDE 48-bit forms are emitted by CodeGen;
-// the legacy Haydn32 BEQ/BNE/.../BLTZ remain in the.td for the asm parser.
 static bool isHaydnCondBranch(unsigned Opc) {
   switch (Opc) {
-  case Haydn::BEQZ_W:
-  case Haydn::BNEZ_W:
-  case Haydn::BGEZ_W:
-  case Haydn::BLTZ_W:
-  case Haydn::BEQ_W:
-  case Haydn::BNE_W:
-  case Haydn::BGE_W:
-  case Haydn::BGEU_W:
-  case Haydn::BLT_W:
-  case Haydn::BLTU_W:
+  case Haydn::BEQZ:
+  case Haydn::BNEZ:
+  case Haydn::BGEZ:
+  case Haydn::BLTZ:
+  case Haydn::BEQ:
+  case Haydn::BNE:
+  case Haydn::BGE:
+  case Haydn::BGEU:
+  case Haydn::BLT:
+  case Haydn::BLTU:
     return true;
   default:
     return false;

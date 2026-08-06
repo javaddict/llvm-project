@@ -440,14 +440,12 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
   }
 
   case TargetOpcode::G_BR: {
-    // Unconditional branch → BEQZ_W R0, target (R0 is always zero, always
-    // branches). Phase 1b : the WIDE 48-bit form (BEQZ_W per
-    // encoding_manual.md §5.5, opcode 0x2C) replaces the legacy Haydn32 BEQZ
-    // so all conditional branches route through the §5.5 BR class.
+    // Unconditional branch → BEQZ R0, target (R0 is always zero, always
+    // branches).
     MachineBasicBlock *TargetBB = I.getOperand(0).getMBB();
 
     MachineIRBuilder MIB(I);
-    MachineInstrBuilder Br = MIB.buildInstr(Haydn::BEQZ_W)
+    MachineInstrBuilder Br = MIB.buildInstr(Haydn::BEQZ)
                                    .addReg(Haydn::R0)
                                    .addMBB(TargetBB);
     constrainSelectedInstRegOperands(*Br, TII, TRI, RBI);
@@ -456,10 +454,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
   }
 
   case TargetOpcode::G_BRCOND: {
-    // Conditional branch → BNEZ_W (branch if not zero). Phase 1b :
-    // the WIDE 48-bit form (BNEZ_W per encoding_manual.md §5.5, opcode 0x2D)
-    // replaces the legacy Haydn32 BNEZ so all conditional branches route
-    // through the §5.5 BR class.
+    // Conditional branch → BNEZ (branch if not zero).
     Register Cond = I.getOperand(0).getReg();
     MachineBasicBlock *TrueBB = I.getOperand(1).getMBB();
 
@@ -523,7 +518,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
 
     MachineIRBuilder MIB(I);
     MachineInstr *Branch =
-        MIB.buildInstr(Haydn::BNEZ_W).addReg(Cond).addMBB(TrueBB);
+        MIB.buildInstr(Haydn::BNEZ).addReg(Cond).addMBB(TrueBB);
     constrainSelectedInstRegOperands(*Branch, TII, TRI, RBI);
     I.eraseFromParent();
     return true;

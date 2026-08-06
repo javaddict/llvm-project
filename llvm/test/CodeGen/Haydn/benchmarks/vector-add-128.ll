@@ -29,7 +29,7 @@
 ; Bundle 1: { ld32 a[i]; nop; nop }
 ; Bundle 2: { ld32 b[i]; nop; nop }
 ; Bundle 3: { add32 c=a+b; add32 i++; slt32 }
-; Bundle 4: { st32 c[i]; bnez_w loop; nop }
+; Bundle 4: { st32 c[i]; bnez loop; nop }
 ; Expected fill rate: ~1.5-2 instructions per bundle average
 ; Bottleneck: Slot0_LS for all memory ops (LD32, ST32)
 ;

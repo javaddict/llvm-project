@@ -27,7 +27,7 @@
 ; 64-bit accumulation (add64, sub64) — IIR accumulator
 ; 64-bit right-shift for Q-format extraction (sra32, srl32, sll32)
 ; Struct field access (ld32/st32 with offset) — coefficient and state access
-; Array processing loop (beqz_w/bnez_w branch) — per-sample iteration
+; Array processing loop (beqz/bnez branch) — per-sample iteration
 ; Cascaded sections (function calls with pointers) — multi-biquad
 ; DR64 register save/restore (st64/ld64) — callee-saved 64-bit regs
 ; GPR32 callee-saved save/restore — standard ABI compliance
@@ -137,7 +137,7 @@ for.end:
 ; BUNDLE: subi32 sp, sp
 ; BUNDLE-DAG: st64
 ; BUNDLE-DAG: ld32
-; Back-edge materialized as slt32 + beqz_w/bnez_w (not fused blt_w) — the IIR loop
+; Back-edge materialized as slt32 + beqz/bnez (not fused blt) — the IIR loop
 ; body has enough register pressure that the scheduler separates compare and
 ; branch (-blanket-SFR scheduling form).
 ; BUNDLE-DAG: {{slt32|set_hwloop}}
@@ -145,7 +145,7 @@ for.end:
 ; BUNDLE-DAG: sub64
 ; BUNDLE-DAG: sra64
 ; BUNDLE-DAG: st32
-; BUNDLE-DAG: {{beqz_w|set_hwloop}}
+; BUNDLE-DAG: {{beqz|set_hwloop}}
 ; BUNDLE: jalr_w{{.*}}r0, lr, 0
 ;
 ; Note: bqriir32x32_df1_process uses BEQZ (loop-entry guard) and BNEZ (loop

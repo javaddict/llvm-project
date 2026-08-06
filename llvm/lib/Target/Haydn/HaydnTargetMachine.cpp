@@ -473,7 +473,7 @@ void HaydnPassConfig::addPreEmitPass() {
   // 2. HaydnFixupHwLoops — SET_HWLOOP Off1/Off2 ÷4; product demote-first
   //    (LoopDec+LoopJNZ when free counter; fatal if live demote fails).
   //    demote OFF = debug erase-setup only — not product.
-  // 3. BranchRelaxation — re-close after Fixup growth (e.g. long BEQZ_W)
+  // 3. BranchRelaxation — re-close after Fixup growth (e.g. long BEQZ)
   // 4. B4.3 late layout firewall: re-apply AIE commit surfaces after allowed
   //    late growth (no 2nd packer / no silent reshape / no MCFlags):
   //      materialize bare MIs via empty-cycle tryAdd → setDesc

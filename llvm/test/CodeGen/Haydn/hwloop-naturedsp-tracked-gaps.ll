@@ -34,7 +34,7 @@
 ;
 ; This is the most common C for-loop shape. After LSR+post-RA it lowers to a
 ; fused `BLT iv, limit` back-edge. Before the recognizer converted the
-; UNFUSED equality form (`seq32 eq,iv,limit; beqz_w eq` — GAP-1, see
+; UNFUSED equality form (`seq32 eq,iv,limit; beqz eq` — GAP-1, see
 ; hwloop-naturedsp-patterns.ll) but NOT the fused BLT form, because the IV
 ; was initialized via a MOVE32 copy in the preheader and the init constant
 ; lived in the entry block — the cross-block copy-chain resolution gap (see

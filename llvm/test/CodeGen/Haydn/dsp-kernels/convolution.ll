@@ -30,12 +30,12 @@
 
 define i32 @convolve(ptr %signal, ptr %kernel, i32 %sig_len, i32 %kern_len) {
 ; This loop MUST be lowered to a proper iterating form: either set_hwloop_f2
-; (HWLoop conversion) or a back-edge branch (bnez_w/blt_w/beqz_w/etc.). If the
+; (HWLoop conversion) or a back-edge branch (bnez/blt/beqz/etc.). If the
 ; loop is dropped entirely (no iteration, body emitted once), neither a
 ; back-edge nor set_hwloop_f2 appears and these CHECKs fail.
 ; PRE-RA PASS UPDATE (Stream A,): the pre-RA HardwareLoops pass converts
 ; this single-BB countable loop to a hardware loop, so set_hwloop_f2 appears
-; and there is no bnez_w back-edge.
+; and there is no bnez back-edge.
 ; POST-RA HWLOOP UPDATE : the post-RA hwloop pass now also converts
 ; this loop. The program-point-aware IV/limit resolver correctly handles
 ; the case where the IV init and limit are defined in the function-entry block

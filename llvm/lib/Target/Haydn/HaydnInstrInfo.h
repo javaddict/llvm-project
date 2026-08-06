@@ -184,7 +184,7 @@ public:
                      bool AllowModify = false) const override;
 
   // SSA EarlyIfConversion support. Cond comes from
-  // analyzeBranch: [Imm(branch-opc), CondReg] for BEQZ_W/BNEZ_W. Emits
+  // analyzeBranch: [Imm(branch-opc), CondReg] for BEQZ/BNEZ. Emits
   // MOVT32/MOVF32 (tied False seed) — same contract as G_SELECT isel.
   bool canInsertSelect(const MachineBasicBlock &MBB,
                        ArrayRef<MachineOperand> Cond, Register DstReg,

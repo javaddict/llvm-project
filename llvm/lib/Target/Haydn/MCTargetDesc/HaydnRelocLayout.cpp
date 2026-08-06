@@ -90,7 +90,7 @@ constexpr Row Table[] = {
     // places fields at DIFFERENT bit positions within the 16-byte LoWord:
     // ADDI32_W_S0 (HaydnFU_ALU32_S0_RI20): imm20 at s0 bits[37:18]
     // > LoWord bits[37:18] -> FieldLsb=18.
-    // BEQZ_W_S0 (HaydnFU_ALU32_S0_I12_ONE): imm12 at s0 bits[15:4]
+    // BEQZ_S0 (HaydnFU_ALU32_S0_I12_ONE): imm12 at s0 bits[15:4]
     // > LoWord bits[15:4] -> FieldLsb=4.
     // JAL_S0 (HaydnFU_ALU32_S0_I20): imm20 at s0 bits[23:4]
     // > LoWord bits[23:4] -> FieldLsb=4.
@@ -115,12 +115,12 @@ constexpr Row Table[] = {
     // retained; only FieldLsb changes.
     {RelocKind::HWLoopOff1, {6, 6, 1, 2, 4, false, true, RelocTrans::None}},
     {RelocKind::HWLoopOff2, {6, 12, 7, 2, 4, false, true, RelocTrans::None}},
-    // I12 WIDE zero-compare branches (BEQZ_W/BNEZ_W/…):
+    // I12 WIDE zero-compare branches (BEQZ/BNEZ/…):
     // HaydnFU_ALU32_S0_I12_ONE packs s0={FU,opc,reserved22,imm12,rs}
     // → imm12 at s0 bits[15:4] → FieldLsb=4.
     {RelocKind::WIDE_BranchSImm12,
      {4, 12, 4, 1, 2, true, true, RelocTrans::None}},
-    // RI12 WIDE two-reg cond branches (BEQ_W/BNE_W/BGE_W/…):
+    // RI12 WIDE two-reg cond branches (BEQ/BNE/BGE/…):
     // HaydnFU_ALU32_S0_RI12 packs s0={FU,opc,reserved18,imm12,rt,rs}
     // → imm12 at s0 bits[19:8] → FieldLsb=8. Using FieldLsb=4 here
     // overwrote rt/rs (bits[7:0]) and produced invalid branch targets

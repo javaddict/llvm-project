@@ -142,11 +142,11 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_HAYDN_PC_LO20;
 
   case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12:
-    // Bundle128 I12 one-reg cond (BEQZ_W/…): imm12 @ s0 bits[15:4], PC-rel ÷2.
+    // Bundle128 I12 one-reg cond (BEQZ/…): imm12 @ s0 bits[15:4], PC-rel ÷2.
     return ELF::R_HAYDN_WIDE_BranchSImm12;
 
   case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI:
-    // Bundle128 RI12 two-reg cond (BEQ_W/BNE_W/…): imm12 @ s0 bits[19:8]
+    // Bundle128 RI12 two-reg cond (BEQ/BNE/…): imm12 @ s0 bits[19:8]
     // PC-rel ÷2. Distinct from I12 so the linker does not overwrite rt/rs.
     return ELF::R_HAYDN_WIDE_BranchSImm12_RI;
 

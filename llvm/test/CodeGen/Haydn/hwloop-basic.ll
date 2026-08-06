@@ -14,7 +14,7 @@
 ; CHECK: set_hwloop_f2_w
 ; CHECK: .LLhwloop_start{{[0-9]+}}:
 ; CHECK: .LLhwloop_end{{[0-9]+}}:
-; CHECK-NOT: beqz_w
+; CHECK-NOT: beqz
 define i32 @hwloop_basic(ptr %p) {
 entry:
   br label %loop

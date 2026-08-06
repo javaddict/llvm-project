@@ -219,10 +219,10 @@ define i32 @cond_alloca(i1 %flag) nounwind {
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop; nop }
 ; CHECK-NEXT:    { not32 r1, r1; nop; addi32_w r2, sp, 12 }
 ; CHECK-NEXT:    { andi32 r1, r1, 1; nop; nop }
-; CHECK-NEXT:    { nop; nop; bnez_w r1, .LBB5_2 }
+; CHECK-NEXT:    { nop; nop; bnez r1, .LBB5_2 }
 ; CHECK-NEXT:  // %bb.1: // %t
 ; CHECK-NEXT:    { nop; nop; addi32_w r1, r0, 1 }
-; CHECK-NEXT:    { nop; nop; beqz_w r0, .LBB5_3 }
+; CHECK-NEXT:    { nop; nop; beqz r0, .LBB5_3 }
 ; CHECK-NEXT:  .LBB5_2: // %f
 ; CHECK-NEXT:    { nop; nop; addi32_w r1, r0, 2 }
 ; CHECK-NEXT:  .LBB5_3: // %join

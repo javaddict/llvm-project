@@ -15,7 +15,7 @@
 ;Switch with 16 consecutive cases (0..15) → jump table
 define i32 @switch_16_cases(i32 %x) nounwind {
 ; switch_16_cases:
-; Cmp+branch fusion no longer fires; range check lowered as sltu32+bnez_w.
+; Cmp+branch fusion no longer fires; range check lowered as sltu32+bnez.
 ; Bug 2 (BR_JT MO_JumpTableIndex fix): the jump table data is now emitted in
 ; rodata as.LJTI0_0 with 16.long entries (one per case). Previously the
 ; jump-table index was mis-printed and the table was not emitted. The 16
@@ -62,7 +62,7 @@ default: ret i32 -1
 define i32 @switch_sparse_large(i32 %x) nounwind {
 ; switch_sparse_large:
 ; Cmp+branch fusion no longer fires; sparse switch uses binary-search
-; lowering with slt32+beqz_w (not fused bge_w). Each pivot is a slt/beqz pair.
+; lowering with slt32+beqz (not fused bge). Each pivot is a slt/beqz pair.
 entry:
   switch i32 %x, label %default [
     i32 100, label %bb100

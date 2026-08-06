@@ -8,7 +8,7 @@
 ; Bug: HaydnInstructionSelector lowered i64 ICMP_NE as
 ; SEQ32 hi; SEQ32 lo; AND32; NOT32 (NOT32 = bitwise ~)
 ; producing `~(hi_eq && lo_eq)` = 0xFFFFFFFF (when ==) or 0xFFFFFFFE (when !=).
-; Both are nonzero, so a downstream `bnez_w` ALWAYS branches to the loop body.
+; Both are nonzero, so a downstream `bnez` ALWAYS branches to the loop body.
 ; A `while (x != 0)` loop therefore iterates forever once x reaches 0
 ; (observed: cycle-limit / NOEXIT on the simulator at -O0). The same defect
 ; affected ICMP_UGE/SGE (NOT(LT)) and ICMP_ULE/SLE (NOT(GT)).
@@ -44,7 +44,7 @@ define i32 @while_i64_ne_loop(i64 %x) {
 ; CHECK-NEXT:    { addi32_w r1, r0, 0 }
 ; CHECK-NEXT:    { st32 r1, sp, 28 } // 4-byte Folded Spill
 ; CHECK-NEXT:    { nop }
-; CHECK-NEXT:    { beqz_w r0, .LBB0_1 }
+; CHECK-NEXT:    { beqz r0, .LBB0_1 }
 ; CHECK-NEXT:  .LBB0_1: // %while.cond
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; ld64 d0, sp, 16; ld64 d1, sp, 8 } // 16-byte Folded Reload
@@ -53,11 +53,11 @@ define i32 @while_i64_ne_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; seq32 r1, r1, r4; slt32 r5, r1, r4 }
 ; CHECK-NEXT:    { seq32 r2, r2, r3 }
 ; CHECK-NEXT:    { and32 r1, r1, r2 }
-; CHECK-NEXT:    { bnez_w r1, .LBB0_3 }
-; CHECK-NEXT:    { beqz_w r0, .LBB0_2 }
+; CHECK-NEXT:    { bnez r1, .LBB0_3 }
+; CHECK-NEXT:    { beqz r0, .LBB0_2 }
 ; CHECK-NEXT:  .LBB0_2: // %while.body
 ; CHECK-NEXT:    // in Loop: Header=BB0_1 Depth=1
-; CHECK-NEXT:    { beqz_w r0, .LBB0_1 }
+; CHECK-NEXT:    { beqz r0, .LBB0_1 }
 ; CHECK-NEXT:  .LBB0_3: // %while.end
 ; CHECK-NEXT:    { ld32 r1, sp, 28 } // 4-byte Folded Reload
 ; CHECK-NEXT:    { xor32 r0, r0, r0 }
@@ -100,7 +100,7 @@ define i32 @while_i64_sge_loop(i64 %x) {
 ; CHECK-NEXT:    { addi32_w r1, r0, 0 }
 ; CHECK-NEXT:    { st32 r1, sp, 28 } // 4-byte Folded Spill
 ; CHECK-NEXT:    { nop }
-; CHECK-NEXT:    { beqz_w r0, .LBB1_1 }
+; CHECK-NEXT:    { beqz r0, .LBB1_1 }
 ; CHECK-NEXT:  .LBB1_1: // %while.cond
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; ld64 d0, sp, 16; ld64 d1, sp, 8 } // 16-byte Folded Reload
@@ -110,11 +110,11 @@ define i32 @while_i64_sge_loop(i64 %x) {
 ; CHECK-NEXT:    { seq32 r3, r3, r5 }
 ; CHECK-NEXT:    { and32 r2, r2, r3 }
 ; CHECK-NEXT:    { or32 r1, r1, r2 }
-; CHECK-NEXT:    { bnez_w r1, .LBB1_3 }
-; CHECK-NEXT:    { beqz_w r0, .LBB1_2 }
+; CHECK-NEXT:    { bnez r1, .LBB1_3 }
+; CHECK-NEXT:    { beqz r0, .LBB1_2 }
 ; CHECK-NEXT:  .LBB1_2: // %while.body
 ; CHECK-NEXT:    // in Loop: Header=BB1_1 Depth=1
-; CHECK-NEXT:    { beqz_w r0, .LBB1_1 }
+; CHECK-NEXT:    { beqz r0, .LBB1_1 }
 ; CHECK-NEXT:  .LBB1_3: // %while.end
 ; CHECK-NEXT:    { ld32 r1, sp, 28 } // 4-byte Folded Reload
 ; CHECK-NEXT:    { xor32 r0, r0, r0 }
@@ -155,7 +155,7 @@ define i32 @while_i64_sle_loop(i64 %x) {
 ; CHECK-NEXT:    { addi32_w r1, r0, 0 }
 ; CHECK-NEXT:    { st32 r1, sp, 28 } // 4-byte Folded Spill
 ; CHECK-NEXT:    { nop }
-; CHECK-NEXT:    { beqz_w r0, .LBB2_1 }
+; CHECK-NEXT:    { beqz r0, .LBB2_1 }
 ; CHECK-NEXT:  .LBB2_1: // %while.cond
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; ld64 d1, sp, 8; ld64 d0, sp, 16 } // 16-byte Folded Reload
@@ -165,11 +165,11 @@ define i32 @while_i64_sle_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; slt32 r1, r1, r5; seq32 r3, r5, r1 }
 ; CHECK-NEXT:    { and32 r2, r2, r3 }
 ; CHECK-NEXT:    { or32 r1, r1, r2 }
-; CHECK-NEXT:    { bnez_w r1, .LBB2_3 }
-; CHECK-NEXT:    { beqz_w r0, .LBB2_2 }
+; CHECK-NEXT:    { bnez r1, .LBB2_3 }
+; CHECK-NEXT:    { beqz r0, .LBB2_2 }
 ; CHECK-NEXT:  .LBB2_2: // %while.body
 ; CHECK-NEXT:    // in Loop: Header=BB2_1 Depth=1
-; CHECK-NEXT:    { beqz_w r0, .LBB2_1 }
+; CHECK-NEXT:    { beqz r0, .LBB2_1 }
 ; CHECK-NEXT:  .LBB2_3: // %while.end
 ; CHECK-NEXT:    { ld32 r1, sp, 28 } // 4-byte Folded Reload
 ; CHECK-NEXT:    { xor32 r0, r0, r0 }

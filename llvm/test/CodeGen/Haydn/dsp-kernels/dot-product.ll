@@ -14,7 +14,7 @@
 
 define i32 @dot_product(ptr %a, ptr %b, i32 %n) {
 ; NOTE: post-/ HWLoop broaden may convert countable loops to
-; set_hwloop_f2; the.LBB0_1: loop-body label and blt_w back-edge may not
+; set_hwloop_f2; the.LBB0_1: loop-body label and blt back-edge may not
 ; appear. We assert the key arithmetic (mac32) survives;
 ; verify-machineinstrs is the correctness gate.
 entry:
@@ -54,7 +54,7 @@ exit:
 ; a regression that disposes the kernel fails here. Must PASS on both the
 ; reverted tree (SMS inert) and a -re-applied tree (SMS fires).
 define i32 @dot_product_16(ptr %a, ptr %b) {
-; NOTE: the conditional back-edge terminator may render as bnez_w/blt_w/beqz_w
+; NOTE: the conditional back-edge terminator may render as bnez/blt/beqz
 ; depending on LSR shape and HWLoop firing; the load-bearing assertion is
 ; that a mac32 body instruction survives (kernel not disposed).
 entry:

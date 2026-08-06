@@ -24,7 +24,7 @@
 ; Test design: the condition comes from an ICMP (a real GPR bool, not a
 ; constant), and both arms are live scalars. We CHECK for a compare
 ; (slt32/seq32) writing a GPR, then movt32 consuming it, and assert there is
-; NO branch (bnez_w/beqz_w/bne_w/beq_w/br) in the hot path -- proving the select is
+; NO branch (bnez/beqz/bne/beq/br) in the hot path -- proving the select is
 ; predicated, not control-flow. The CHECKs are conservative (operand-agnostic);
 ; the coordinator MUST confirm at build time.
 
@@ -32,8 +32,8 @@
 define i32 @select_icmp_slt(i32 %a, i32 %b, i32 %x, i32 %y) nounwind {
 ; CHECK-LABEL: select_icmp_slt:
 ; CHECK:       slt32
-; CHECK-NOT:   bnez_w{{(\.s[012])?}}
-; CHECK-NOT:   beqz_w{{(\.s[012])?}}
+; CHECK-NOT:   bnez{{(\.s[012])?}}
+; CHECK-NOT:   beqz{{(\.s[012])?}}
 ; CHECK-NOT:   neg32
 ; CHECK-NOT:   not32
 ; CHECK:       movt32
@@ -48,8 +48,8 @@ entry:
 define i32 @select_icmp_eq(i32 %a, i32 %b, i32 %x, i32 %y) nounwind {
 ; CHECK-LABEL: select_icmp_eq:
 ; CHECK:       seq32
-; CHECK-NOT:   bnez_w{{(\.s[012])?}}
-; CHECK-NOT:   beqz_w{{(\.s[012])?}}
+; CHECK-NOT:   bnez{{(\.s[012])?}}
+; CHECK-NOT:   beqz{{(\.s[012])?}}
 ; CHECK-NOT:   neg32
 ; CHECK-NOT:   not32
 ; CHECK:       movt32
@@ -66,8 +66,8 @@ define i32 @select_icmp_sge(i32 %a, i32 %b, i32 %x, i32 %y) nounwind {
 ; CHECK-LABEL: select_icmp_sge:
 ; CHECK:       slt32
 ; CHECK:       xori32
-; CHECK-NOT:   bnez_w{{(\.s[012])?}}
-; CHECK-NOT:   beqz_w{{(\.s[012])?}}
+; CHECK-NOT:   bnez{{(\.s[012])?}}
+; CHECK-NOT:   beqz{{(\.s[012])?}}
 ; CHECK-NOT:   neg32
 ; CHECK-NOT:   not32
 ; CHECK:       movt32

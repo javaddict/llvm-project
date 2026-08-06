@@ -7,7 +7,7 @@
 ; assembly for representative C patterns. Each function corresponds to a common
 ; C construct (function calls, stack ops, arithmetic, control flow, loops, i64
 ; globals, structs). The CHECK lines validate:
-; Correct instruction selection (add32, sub32, mull (s32 mul,), jal_w, beqz_w, bnez_w, etc.)
+; Correct instruction selection (add32, sub32, mull (s32 mul,), jal_w, beqz, bnez, etc.)
 ; Reasonable register allocation (no obviously wrong register usage)
 ; Prologue/epilogue presence (stack adjustment, callee-save, return via jalr_w)
 ;
@@ -72,8 +72,8 @@ define i32 @local_caller(i32 %a) {
 ; C: int fib(int n) { if (n <= 1) return n; return fib(n-1) + fib(n-2); }
 define i32 @fib(i32 %n) {
 ; CHECK-LABEL: fib:
-; CondOpt may absorb slt+invert into fused bge_w (AIE xor(setcc,1) style).
-; CHECK-DAG: {{slt32|bge_w}}
+; CondOpt may absorb slt+invert into fused bge (AIE xor(setcc,1) style).
+; CHECK-DAG: {{slt32|bge}}
 ; n-1/n-2 are addi32 -1/-2 now that constants fold into the immediate form
 ; (previously materialize + sub32/add32).
 ; CHECK-DAG: {{sub32|addi32}}
@@ -278,9 +278,9 @@ join:
 ; }
 define i32 @nested_if(i32 %a, i32 %b, i32 %c) {
 ; CHECK-LABEL: nested_if:
-; CHECK-DAG: {{bge_w|slt32|bgeu_w}}
+; CHECK-DAG: {{bge|slt32|bgeu}}
 ; CHECK-DAG: slt32
-; CHECK-DAG: bnez_w{{(\.s[012])?}}
+; CHECK-DAG: bnez{{(\.s[012])?}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
 entry:
   %cmp1 = icmp sgt i32 %a, %b
@@ -309,7 +309,7 @@ ret_0:
 define i32 @switch4(i32 %x) {
 ; CHECK-LABEL: switch4:
 ; CHECK-DAG: sltu32
-; CHECK-DAG: bnez_w{{(\.s[012])?}}
+; CHECK-DAG: bnez{{(\.s[012])?}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
 entry:
   switch i32 %x, label %default [
@@ -337,7 +337,7 @@ default:
 define i32 @switch_sparse(i32 %x) {
 ; CHECK-LABEL: switch_sparse:
 ; CHECK-DAG: seq32
-; CHECK-DAG: bnez_w{{(\.s[012])?}}
+; CHECK-DAG: bnez{{(\.s[012])?}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
 entry:
   switch i32 %x, label %default [
@@ -363,7 +363,7 @@ default:
 ; C: int sum_loop(int n) { int s = 0; for (int i = 0; i < n; i++) s += i; return s; }
 define i32 @sum_loop(i32 %n) {
 ; CHECK-LABEL: sum_loop:
-; CHECK-DAG: {{blt_w|slt32|bltu_w}}
+; CHECK-DAG: {{blt|slt32|bltu}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
 entry:
   br label %loop
@@ -389,7 +389,7 @@ exit:
 define i32 @nested_loop(i32 %n) {
 ; CHECK-LABEL: nested_loop:
 ; CHECK-DAG: add32
-; CHECK-DAG: {{blt_w|slt32|bltu_w}}
+; CHECK-DAG: {{blt|slt32|bltu}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
 entry:
   br label %outer
@@ -421,9 +421,9 @@ exit:
 ; }
 define i32 @loop_break(i32 %n, i32 %limit) {
 ;CHECK-LABEL: loop_break:
-; Break: fused bge_w (CondOpt xor(setcc,1) absorb) or slt+xori+bnez; latch blt_w.
-; CHECK-DAG: {{bge_w|xori32|slt32}}
-; CHECK-DAG: {{blt_w|slt32|bltu_w}}
+; Break: fused bge (CondOpt xor(setcc,1) absorb) or slt+xori+bnez; latch blt.
+; CHECK-DAG: {{bge|xori32|slt32}}
+; CHECK-DAG: {{blt|slt32|bltu}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
 entry:
   br label %loop
@@ -739,7 +739,7 @@ exit:
 define i64 @checksum(ptr %arr, i32 %n) {
 ; CHECK-LABEL: checksum:
 ; (SFR-strip) changed bundle layout — rebaselined.
-; The latch materializes as slt32+bnez_w (unfused), not blt_w.
+; The latch materializes as slt32+bnez (unfused), not blt.
 ; CHECK-DAG: slt32
 ; CHECK-DAG: sub64
 ; CHECK-DAG: add64
@@ -773,7 +773,7 @@ exit:
 define i32 @struct_conditional(ptr %arr, i32 %n, i32 %threshold) {
 ; CHECK-LABEL: struct_conditional:
 ; (SFR-strip) changed bundle layout — rebaselined.
-; The latch materializes as slt32+bnez_w (unfused), not blt_w.
+; The latch materializes as slt32+bnez (unfused), not blt.
 ; The loop-carried s32 select lowers to MOVT32 (prior revision).
 ; CHECK-DAG: ld32
 ; CHECK-DAG: slt32

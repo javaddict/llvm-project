@@ -16,7 +16,7 @@ define void @dot_product_64(ptr %a, ptr %b, ptr %out) {
 ; The loop body must contain a scalar s32 multiply-accumulate.
 ; With 64 iterations, we expect at least 64 mul64.ll sequences.
 ; Post-inc fusion : streaming loads fuse to s_lw_post_imm and the loop
-; lowers as a zero-overhead hardware loop — no add32/bnez_w back-edge.
+; lowers as a zero-overhead hardware loop — no add32/bnez back-edge.
 ;
 ; Store result
 ;

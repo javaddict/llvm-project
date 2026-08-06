@@ -22,7 +22,7 @@
 #
 # CHECK-LABEL: name: guard_test
 # CHECK: %13:gpr32 = SLTU32 %8, %1
-# CHECK-NEXT: BNEZ_W{{(_S[012]_FLEX)?}} %{{[0-9]+}}
+# CHECK-NEXT: BNEZ{{(_S[012]_FLEX)?}} %{{[0-9]+}}
 
 --- |
   define i32 @guard_test(ptr captures(none) %p, i32 %n) #0 {
@@ -95,7 +95,7 @@ body:             |
     %8:gpr32 = ADD32 %3, %7
     %10:gpr32 = ADDI32 %2, 4
     %13:gpr32 = SLTU32 %8, %1
-    BNEZ_W %13, %bb.2
+    BNEZ %13, %bb.2
     B %bb.3
 
   bb.3.exit:

@@ -22,7 +22,7 @@
 ;
 ; * GAP-1 — unfused-equality trip-count (fir_xcorr / fir_convol / vec_dot).
 ; The recognizer now derives trip = (limit - init) for the
-; `seq32 eq,iv,limit; beqz_w eq` latch that LSR+post-RA actually emits, not
+; `seq32 eq,iv,limit; beqz eq` latch that LSR+post-RA actually emits, not
 ; just the fused `BLT` form. Without GAP-1 the dominant DSP kernels
 ; (fir_xcorr32x32, fir_convol32x32, vec_dot64x64) log
 ; "Unfused pattern... Cannot determine trip count" and stay on a BEQ
@@ -53,7 +53,7 @@
 ;
 ; HiFi3 source shape (vec_dot64x64i_hifi3.c):
 ; for (n=0; n<N; n++) { AE_L64_IP(xw0,px,8);...; AE_MULA32U_LL(ACC,...); }
-; After LSR+post-RA on Haydn the latch is `seq32 eq,iv,limit; beqz_w eq`
+; After LSR+post-RA on Haydn the latch is `seq32 eq,iv,limit; beqz eq`
 ; (NOT a fused BLT). Before GAP-1 the recognizer found the IV+limit but
 ; logged "Cannot determine trip count" for this equality form and emitted
 ; no hardware loop. GAP-1 routes the unfused-equality latch through the

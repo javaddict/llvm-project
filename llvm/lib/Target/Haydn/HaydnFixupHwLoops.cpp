@@ -997,7 +997,7 @@ bool HaydnFixupHwLoops::eraseHardwareSetup(MachineInstr &SetMI) {
 // Demote SET_HWLOOP{,_REG} / LoopStart to a countable software loop:
 // materialise the trip counter at the former SET site, erase SET (and
 // PseudoLoopEnd for ZOL), restore latch Header+Exit edges with
-// LoopDec+LoopJNZ (AsmPrinter → SUBI32 + BNEZ_W).
+// LoopDec+LoopJNZ (AsmPrinter → SUBI32 + BNEZ).
 // Return value :
 // true — handled: soft edge installed, OR L1 erase-only because
 // Header/Latch/body is dead (body gone / peeled).

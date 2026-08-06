@@ -56,10 +56,10 @@
 ; CHECK: 	{ movt32	r3, r1, r2; nop; nop }
 ; CHECK: 	{ not32	r1, r3; nop; nop }
 ; CHECK: 	{ andi32	r1, r1, 1; nop; nop }
-; CHECK: 	{ nop; nop; bnez_w	r1, .LBB0_2 }
+; CHECK: 	{ nop; nop; bnez	r1, .LBB0_2 }
 ; CHECK: // %bb.1:                               // %yes
 ; CHECK: 	{ nop; nop; addi32_w	r1, r0, 42 }
-; CHECK: 	{ nop; nop; beqz_w	r0, .LBB0_3 }
+; CHECK: 	{ nop; nop; beqz	r0, .LBB0_3 }
 ; CHECK: .LBB0_2:                                // %no
 ; CHECK: 	{ nop; nop; addi32_w	r1, r0, 0 }
 ; CHECK: .LBB0_3:                                // %yes

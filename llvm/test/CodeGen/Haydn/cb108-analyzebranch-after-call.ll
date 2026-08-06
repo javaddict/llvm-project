@@ -5,7 +5,7 @@
 ; treat the mid-block JAL_W as "unanalyzable" after already parsing the
 ; trailing cond-branch, so fixupConditionalBranch asserted
 ; "branches to be relaxed must be analyzable" (yarpgen seed 2289: __divsi3
-; then BNE_W).
+; then BNE).
 ;
 ; Shape: far forward conditional after a soft-div call. The padding stores
 ; push the branch past ±4KB WIDE_BranchSImm12 so BranchRelaxation rewrites it.

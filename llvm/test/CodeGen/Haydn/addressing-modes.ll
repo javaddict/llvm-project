@@ -53,7 +53,7 @@ exit:
   ret i32 %result
 ; Regenerated post-G1: the count-up loop is now converted to a hardware
 ; loop by the broadened HWLoop recognizer, so the back-edge is no longer
-; a `blt_w` — it is a `// %bb.1: // %loop.preheader`. Do NOT revert to a blt_w CHECK without
+; a `blt` — it is a `// %bb.1: // %loop.preheader`. Do NOT revert to a blt CHECK without
 ; re-confirming the recognizer still converts this shape.
 ; CHECK-DAG: // %bb.1: // %loop.preheader
 }
@@ -84,7 +84,7 @@ loop:
 exit:
   ret void
 ; This store-only loop now DOES trigger the HWLoop recognizer under
-; (the back-edge is `set_hwloop_f2`, not a plain `blt_w`). Previously this
+; (the back-edge is `set_hwloop_f2`, not a plain `blt`). Previously this
 ; loop did not fire the recognizer (G1 HWLoop breadth gap); widened it.
 ; (SFR-strip) changed bundle layout — rebaselined.
 ; CHECK-DAG: // %bb.1: // %loop.preheader

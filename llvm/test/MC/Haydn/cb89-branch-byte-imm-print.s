@@ -13,8 +13,8 @@
 .balign 16
 # CHECK-LABEL: <fwd_branch>:
 fwd_branch:
-  # CHECK: bnez_w{{.*}}, 32
-  { bnez_w r1, .Ltarget; nop; nop }
+  # CHECK: bnez{{.*}}, 32
+  { bnez r1, .Ltarget; nop; nop }
   { xor32 r0, r0, r0; nop; nop }
 .Ltarget:
   { xor32 r0, r0, r0; nop; nop }

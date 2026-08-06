@@ -1038,55 +1038,66 @@ def MOVE32_DR_H_S2 : HaydnFU_ALU32_S2_R_DR<0b0010110,
 // Per spec §1.3 these issue in s0 ONLY — NOT authored for s1/s2.
 //===----------------------------------------------------------------------===//
 
+// The conditional-branch members carry isBranch/isTerminator for the same
+// reason their `_W_S0` peers do: once CodeGen commits a logical to its member
+// (materializeMultiOpcodeInstrs setDesc), the member's MCInstrDesc is the only
+// one AsmPrinter sees. Without the flags MachineBasicBlock::terminators() comes
+// back empty, isBlockOnlyReachableByFallthrough answers true for a block that
+// is in fact a branch target, and the label is emitted as a `// %bb.N` comment
+// while the branch still references `.LBB0_N` — output that does not assemble.
+let isBranch = 1, isTerminator = 1 in {
+
 // #48 BEQ (RI12: rs1,rs2,imm12)
 def BEQ_S0 : HaydnFU_ALU32_S0_RI12<0b0110000,
-    (outs), (ins GPR32:$rs, GPR32:$rt, simm12:$imm12),
+    (outs), (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$imm12),
     "beq\t$rs, $rt, $imm12", []>;
 
 // #49 BEQZ (I12: rs,imm12)
 def BEQZ_S0 : HaydnFU_ALU32_S0_I12_ONE<0b0110001,
-    (outs), (ins GPR32:$rs, simm12:$imm12),
+    (outs), (ins GPR32:$rs, brtarget_wide_i12:$imm12),
     "beqz\t$rs, $imm12", []>;
 
 // #50 BNE (RI12: rs1,rs2,imm12)
 def BNE_S0 : HaydnFU_ALU32_S0_RI12<0b0110010,
-    (outs), (ins GPR32:$rs, GPR32:$rt, simm12:$imm12),
+    (outs), (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$imm12),
     "bne\t$rs, $rt, $imm12", []>;
 
 // #51 BNEZ (I12: rs,imm12)
 def BNEZ_S0 : HaydnFU_ALU32_S0_I12_ONE<0b0110011,
-    (outs), (ins GPR32:$rs, simm12:$imm12),
+    (outs), (ins GPR32:$rs, brtarget_wide_i12:$imm12),
     "bnez\t$rs, $imm12", []>;
 
 // #52 BGE (RI12)
 def BGE_S0 : HaydnFU_ALU32_S0_RI12<0b0110100,
-    (outs), (ins GPR32:$rs, GPR32:$rt, simm12:$imm12),
+    (outs), (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$imm12),
     "bge\t$rs, $rt, $imm12", []>;
 
 // #53 BGEZ (I12)
 def BGEZ_S0 : HaydnFU_ALU32_S0_I12_ONE<0b0110101,
-    (outs), (ins GPR32:$rs, simm12:$imm12),
+    (outs), (ins GPR32:$rs, brtarget_wide_i12:$imm12),
     "bgez\t$rs, $imm12", []>;
 
 // #54 BGEU (RI12)
 def BGEU_S0 : HaydnFU_ALU32_S0_RI12<0b0110110,
-    (outs), (ins GPR32:$rs, GPR32:$rt, simm12:$imm12),
+    (outs), (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$imm12),
     "bgeu\t$rs, $rt, $imm12", []>;
 
 // #55 BLT (RI12)
 def BLT_S0 : HaydnFU_ALU32_S0_RI12<0b0110111,
-    (outs), (ins GPR32:$rs, GPR32:$rt, simm12:$imm12),
+    (outs), (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$imm12),
     "blt\t$rs, $rt, $imm12", []>;
 
 // #56 BLTZ (I12)
 def BLTZ_S0 : HaydnFU_ALU32_S0_I12_ONE<0b0111000,
-    (outs), (ins GPR32:$rs, simm12:$imm12),
+    (outs), (ins GPR32:$rs, brtarget_wide_i12:$imm12),
     "bltz\t$rs, $imm12", []>;
 
 // #57 BLTU (RI12)
 def BLTU_S0 : HaydnFU_ALU32_S0_RI12<0b0111001,
-    (outs), (ins GPR32:$rs, GPR32:$rt, simm12:$imm12),
+    (outs), (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$imm12),
     "bltu\t$rs, $rt, $imm12", []>;
+
+} // isBranch, isTerminator
 
 // #58 JAL (I20: rt,imm20). : the imm20 field stores the signed 20-bit
 // PC-relative byte offset directly (no ÷2 scaling on this slot format, unlike

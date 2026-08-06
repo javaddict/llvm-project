@@ -85,10 +85,10 @@
 ; CHECK: 	{ and32	r1, r1, r2; nop; nop }
 ; CHECK: 	{ or32	r1, r5, r1; nop; nop }
 ; CHECK: 	{ xori32	r1, r1, 1; nop; nop }
-; CHECK: 	{ nop; nop; bnez_w	r1, .LBB3_2 }
+; CHECK: 	{ nop; nop; bnez	r1, .LBB3_2 }
 ; CHECK: // %bb.1:                               // %then
 ; CHECK: 	{ nop; nop; addi32_w	r1, r0, 200 }
-; CHECK: 	{ nop; nop; beqz_w	r0, .LBB3_3 }
+; CHECK: 	{ nop; nop; beqz	r0, .LBB3_3 }
 ; CHECK: .LBB3_2:                                // %else
 ; CHECK: 	{ nop; nop; addi32_w	r1, r0, 30 }
 ; CHECK: .LBB3_3:                                // %then

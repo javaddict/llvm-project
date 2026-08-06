@@ -61,9 +61,9 @@ exit:
 }
 
 ; Do-while loop (converted to while by LLVM)
-; Back-edge is fused blt_w (icmp slt %i,%n). 560038acd774 briefly changed this to
-; bnez_w in its rebaseline, but test_do_while's back-edge was never SFR-stripped
-; the fused form survived, so bnez_w was unsatisfiable. Reverted to blt_w.
+; Back-edge is fused blt (icmp slt %i,%n). 560038acd774 briefly changed this to
+; bnez in its rebaseline, but test_do_while's back-edge was never SFR-stripped
+; the fused form survived, so bnez was unsatisfiable. Reverted to blt.
 define i32 @test_do_while(i32 %n) {
 ; CHECK-LABEL: test_do_while:
 entry:
@@ -99,7 +99,7 @@ exit:
 define i32 @test_loop_break(i32 %n, i32 %limit) {
 ; CHECK-LABEL: test_loop_break:
 ; Cmp+branch fusion no longer fires. sge (break test) lowered as
-; slt32 + xor32-with-1 + bnez_w; slt (continue test) as slt32 + bnez_w.
+; slt32 + xor32-with-1 + bnez; slt (continue test) as slt32 + bnez.
 ; CHECK-DAG: xor32
 entry:
   br label %loop
