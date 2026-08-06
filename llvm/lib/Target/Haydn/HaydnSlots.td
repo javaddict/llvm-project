@@ -25,11 +25,14 @@
 // up; legacy HaydnInst defs are skipped during the incremental migration).
 //===----------------------------------------------------------------------===//
 
-let Namespace = "Haydn" in {
-  def s0_slot : InstSlot<"S0", 48> { let FieldToFind = "s0"; }
-  def s1_slot : InstSlot<"S1", 40> { let FieldToFind = "s1"; }
-  def s2_slot : InstSlot<"S2", 40> { let FieldToFind = "s2"; }
-}
+// The three Bundle128 InstSlots (s0_slot/s1_slot/s2_slot) are GONE. Format E
+// declares its own five entry slots in HaydnFormatEEncoding.td (p20/p21 for the
+// 2-entry form, p30/p31/p32 for the 3-entry form). Leaving the Bundle128 three
+// declared would not merely be dead weight: every InstSlot becomes an
+// MCSlotKind enumerator and a row in the generated HaydnSlots table, so they
+// would push the format E kinds off 0..4, and each would carry a ConflictBits
+// of "everything" (they appear in no live composite) for the packer to trip
+// over.
 
 // Flex-format base. Derives InstFormat so the CodeGenFormat backend tracks it
 // (Slot/isComposite/isSlotNOP fields). Does NOT declare Inst -- the slot and
@@ -61,51 +64,13 @@ class HaydnFormatInst<dag outs, dag ins, string asmstr, list<dag> pattern>
   let DecoderNamespace = "HaydnFlex";
 }
 
-// Slot-window sub-instruction bases. A per-FU format (P1b/P2) inherits the
-// slot base matching its issue slot and packs FU(3b MSB) + opcode + operands
-// into the <slot> field. These are sub-instructions: the Bundle128 composite
-// (HaydnCompositeFormats.td, P4) holds them as MCOperand::isInst operands.
-// Phase 3 (I4): AsmStrings are slot-free (no `.s0`/`.s1`/`.s2`). All three
-// slot classes therefore share identical bare mnemonics for multi-slot ops
-// (e.g. "add32\t$rt, $rs1, $rs2"). Matcher strategy deliberately does NOT set
-// isCodeGenOnly on S1/S2: that bit also drops defs from the decoder trie in
-// this tree (see notes on ADDI32_W), which would break Bundle128 decode.
-// Ambiguous matchables are accepted (tblgen may warn); standalone first-match
-// wins (S0). InstPrinter prints the same bare AsmString for every slot;
-// post-commit slot authority is member Desc getSlotKind / Bundle SlotMap
-// (AIEBaseMCFormats.cpp:66-75; AIEBundle.h:92-104).
-class HaydnSlotS0<dag outs, dag ins, string asmstr, list<dag> pattern>
-    : HaydnFormatInst<outs, ins, asmstr, pattern> {
-  let Slot = s0_slot;
-  let DecoderNamespace = "S0";
-  let Size = 6;  // 48-bit slot window
-  bits<48> s0;
-  bits<48> Inst = s0;
-}
-
-class HaydnSlotS1<dag outs, dag ins, string asmstr, list<dag> pattern>
-    : HaydnFormatInst<outs, ins, asmstr, pattern> {
-  let Slot = s1_slot;
-  let DecoderNamespace = "S1";
-  let Size = 5;  // 40-bit slot window
-  bits<40> s1;
-  bits<40> Inst = s1;
-}
-
-class HaydnSlotS2<dag outs, dag ins, string asmstr, list<dag> pattern>
-    : HaydnFormatInst<outs, ins, asmstr, pattern> {
-  let Slot = s2_slot;
-  let DecoderNamespace = "S2";
-  let Size = 5;  // 40-bit slot window
-  bits<40> s2;
-  bits<40> Inst = s2;
-}
-
-// The per-FU slot-format classes + per-op defs live in HaydnFormats<FU>.td
-// (HaydnFormatsALU32.td, HaydnFormatsALU64.td, HaydnFormatsLS.td
-// HaydnFormatsLD.td, HaydnFormatsMAC.td) — fresh per-slot ports from the spec
-// (encoding_manual_flex.md + golden). This file holds only the
-// slot infrastructure (InstSlots + HaydnFormatInst + slot-window bases).
+// The Bundle128 slot-window bases (HaydnSlotS0/S1/S2) are GONE with the five
+// HaydnFormats<FU>.td files that derived from them. Format E's entry-window
+// bases (HaydnEntryP20/P21/P30/P31/P32) are generated into
+// HaydnFormatEEncoding.td alongside the members, because their widths and
+// their `let Slot =` come from the same bit layout the members do.
+//
+// This file now holds only HaydnFormatInst, the base both encodings share.
 //
 // B2.1 multi-slot logicals (MultiSlot_Pseudo / materializableInto) live in
 // HaydnMultiSlotPseudo.td (AIE2InstrFormats.td:21-31 peer). They reference

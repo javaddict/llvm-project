@@ -26,18 +26,14 @@ include "HaydnGeneric.td"
 // match wins for standalone; decoder keeps all three slots (no isCodeGenOnly
 // on S1/S2).
 //
-// Mirrors the slot block in Haydn.td EXCEPT HaydnCompositeFormats.td is
-// intentionally omitted: the 128-bit Bundle128 composite forces the matcher
-// into the APInt getBinaryCodeForInstr path (max Inst width 128 > 64), which
-// is unnecessary for asm parsing and not wired into the matcher generator.
-// Without the composite, the matcher stays on the uint64 path and recognizes
-// every per-slot slot instruction.
+// Mirrors the member block in Haydn.td EXCEPT HaydnFormatEComposites.td is
+// intentionally omitted: the composites force the matcher into the APInt
+// getBinaryCodeForInstr path (max Inst width 96 > 64), which is unnecessary
+// for asm parsing and not wired into the matcher generator, and -gen-asm-matcher
+// rejects their operand-leading AsmStrings outright. Without them the matcher
+// stays on the uint64 path and recognizes every member.
 //===----------------------------------------------------------------------===//
 include "llvm/Target/CodeGenFormat.td"
 include "HaydnSlots.td"
-include "HaydnFormatsALU32.td"  // ADD32_S1 (ALU32 s1)
-include "HaydnFormatsALU64.td"  // ADD64_S1 (ALU64 s1, DR64)
-include "HaydnFormatsLS.td"     // LD32_S0 (LS s0, imm6)
-include "HaydnFormatsLD.td"     // LD64_S1 (LD s1, DR64+GPR32 base)
-include "HaydnFormatsMAC.td"    // X2MULA32_S2 (MAC s2, RRRR accum)
+include "HaydnFormatEEncoding.td"  // <LOGICAL>_P<form><pos>_<UNIT> members
 def HaydnCodeGenFormat : CodeGenFormat {}

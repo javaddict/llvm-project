@@ -847,17 +847,28 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     // logical carries the full PlacementAlternative set, and encodeSlotSubInst
     // re-materializes Alts[SlotIdx] from the composite operand index — so the
     // slot the text names is the slot that gets encoded.
+    // The text position names a slot only once the entry count is known: two
+    // entries are P21;P20 and three are P32;P31;P30. Rather than encode that,
+    // ask the packet-format table for the row with this many entries — its
+    // getSlots() is in AsmString order, so the text index indexes it directly.
+    const VLIWFormat *TextFormat =
+        Positional ? Fmts.getFormatByEntryCount(NumEntries) : nullptr;
+
+    // A single-entry `{ op }` gets NO hint. Bundle128 hinted slot 0 because
+    // every instruction had an s0 member; format E's 2-entry entry0 admits
+    // only ALU0/LOADSTORE0/MAC0, so an ALU2-only op (ARCTAN, RECIP, …) has no
+    // placement there at all and must land in a 3-entry bundle. Let the solver
+    // pick and let getFormatOrNull follow it to the right composite. This is
+    // hand-written asm only: the printer always emits NOP-padded bundles, so
+    // its output reparses through the positional path above.
     Haydn::MCBundle Bundle(&Fmts);
     for (auto [Child, Index] : RealChildren) {
       if (Positional)
         Child->setOpcode(getLogicalBaseOpcode(Child->getOpcode()));
       if (!Bundle.canAdd(Child))
         return Error(Child->getLoc(), "incorrect bundle");
-      if (Positional)
-        Bundle.add(Child, MCSlotKind(MCSlotKind::Haydn_SLOT_S0 +
-                                     static_cast<int>(NumEntries - 1 - Index)));
-      else if (NumEntries == 1)
-        Bundle.add(Child, MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
+      if (TextFormat)
+        Bundle.add(Child, TextFormat->getSlots().begin()[Index]);
       else
         Bundle.add(Child);
     }
@@ -875,14 +886,15 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
       Bundle.clear();
       return Error(NameLoc, "incorrect bundle");
     }
-    assert(Format->Opcode == Haydn::BUNDLE128_FULL &&
-           "product live format must be BUNDLE128_FULL");
-
+    // Which composite applies follows from the occupied slots — see the same
+    // spot in HaydnAsmPrinter::emitInstruction.
     MCInst MCB;
     MCB.setOpcode(Format->Opcode);
-    for (unsigned K = 0; K < Haydn::ISSUE_SLOT_COUNT; ++K) {
-      MCSlotKind Slot =
-          MCSlotKind(MCSlotKind::Haydn_SLOT_S0 + static_cast<int>(K));
+    // Operand-dag order, i.e. the reverse of the AsmString order getSlots()
+    // reports. See HaydnAsmPrinter for the full note.
+    const auto &Slots = Format->getSlots();
+    for (const MCSlotKind *It = Slots.end(); It != Slots.begin();) {
+      MCSlotKind Slot = *--It;
       MCInst *Instr = Bundle.at(Slot);
       if (!Instr) {
         Instr = Parser.getContext().createMCInst();

@@ -86,7 +86,7 @@ constexpr Row Table[] = {
     {RelocKind::HI12, {4, 12, 4, 0, 1, false, false, RelocTrans::Hi12}},
     // Bundle128 cutover geometry. Legacy 48-bit parcel layouts (imm20 at
     // bits[47:28], imm12 at bits[47:36]) are NEVER emitted (cutover routes
-    // ALL emission through encodeBundle128). The Bundle128 s0 slot window
+    // ALL emission through encodeBundleE). The Bundle128 s0 slot window
     // places fields at DIFFERENT bit positions within the 16-byte LoWord:
     // ADDI32_W_S0 (HaydnFU_ALU32_S0_RI20): imm20 at s0 bits[37:18]
     // > LoWord bits[37:18] -> FieldLsb=18.

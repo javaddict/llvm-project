@@ -12,6 +12,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnFormat.h"
+// getFormatByEntryCount measures a format's SlotKindRange, so MCSlotKind has to
+// be complete here; HaydnFormat.h only forward-declares it.
+#include "HaydnMCFormats.h"
 
 using namespace llvm;
 
@@ -22,6 +25,17 @@ const VLIWFormat *PacketFormats::getFormat(SlotBits Slots) const {
     if (Fmt->covers(Slots)) {
       return Fmt;
     }
+  }
+  return nullptr;
+}
+
+const VLIWFormat *PacketFormats::getFormatByEntryCount(unsigned N) const {
+  // The row's own slot range says how many entries it holds; do not map
+  // 2 -> BUNDLE_E2 by hand.
+  for (const VLIWFormat *Fmt = FormatsTable; Fmt->getSize(); Fmt++) {
+    const auto &Slots = Fmt->getSlots();
+    if (static_cast<unsigned>(Slots.end() - Slots.begin()) == N)
+      return Fmt;
   }
   return nullptr;
 }
