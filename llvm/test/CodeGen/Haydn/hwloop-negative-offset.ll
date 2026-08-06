@@ -1,6 +1,8 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop < %s | FileCheck %s
-;
+
+; Role: semantic — HWLoop fixup offsets are ALWAYS positive (never negative).
+
 ; REGRESSION TEST: HWLoop fixup offsets are ALWAYS positive (never negative).
 ;
 ; Bug class (CLAUDE.md M7 forward-focus): "fix the.LBB0_-1 negative-offset

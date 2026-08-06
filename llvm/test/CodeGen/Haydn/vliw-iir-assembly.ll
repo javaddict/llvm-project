@@ -1,35 +1,17 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:   -verify-machineinstrs < %s | FileCheck %s --check-prefix=ASM
 ; REQUIRES: haydn-registered-target
+
+; Role: semantic — IIR biquad assembly must emit expected DSP mnemonics
+; through the post-RA packer without pseudo-resource DFA aborts.
+
+; REGRESSION: the packer must tolerate post-inc load/store pseudos
+; (NoItinerary) via isPseudo skip until ExpandPseudos; do not reserve
+; resources on those MIs. Object-level opcode presence is covered by
+; c-e2e-bundle-dump.ll (live object contract, not expected-fail).
 ;
-; This test was XFAIL'd from until reverted the
-; GPR-port-FuncUnits change to HaydnSchedule.td that triggered a SIGSEGV in
-; the post-RA VLIW scheduler. XFAIL removed now that the single-stage
-; slot-only itinerary model is restored. See decision and lesson.
-;
-; REGRESSION TEST: VLIW packetizer must handle pseudo instructions.
-;
-; Bug: The VLIW packetizer's ignorePseudoInstruction did not handle
-; pseudo instructions like LD32_POST_INC / ST32_POST_INC (created by the
-; load/store optimizer). These pseudos have NoItinerary, so the DFA cannot
-; reserve resources for them. When addToPacket was called for such an
-; instruction, the assertion `canReserveResources(MI)` fired.
-; Fix: ignorePseudoInstruction now checks MI.isPseudo to skip all
-; pseudo instructions. They are expanded later by ExpandPseudos.
-;
-; A separate OBJ (objdump) round-trip test is still XFAIL'd due to
-; disassembler limitations with D-class bundles — see iir-e2e-bundle-dump.ll.
-;
-; VLIW bundle verification test for IIR biquad kernel.
-;
-; This test verifies the assembly and object output for a realistic DSP
-; workload. Two levels of verification:
-;
-; (a) ASM prefix checks the assembly text output for expected instruction
-; mnemonics and correct program structure.
-;
-; (b) OBJ prefix checks the ELF object file disassembles correctly, verifying
-; the MC encoder/decoder round-trips faithfully through the full pipeline.
+; ASM checks expected instruction mnemonics and program structure for a
+; realistic DSP IIR biquad workload.
 ;
 ; NOTE: The VLIW packetizer is currently disabled (see HaydnTargetMachine.cpp
 ; line 260). When re-enabled, add back -print-after=haydn-vliw-packetizer MIR

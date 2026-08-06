@@ -1,4 +1,4 @@
-//===- HaydnBundleMaterialize.h - BF1/B4.3 cycle materialize -*- C++ -*-===//
+//===- HaydnBundleMaterialize.h — exact commit -*- C++ -*-===
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,26 +6,34 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Pure helpers for post-RA / late cycle materialization (G-BUNDLE-FORMAT):
+// Pure helpers for post-RA / late cycle materialization (exact no-split commit):
 //
-//   * greedySplitLegalOpcodeCycles — when a scheduled multi-MI cycle cannot
-//     form one legal Bundle128, split into an ordered sequence of legal
-//     sub-cycles (explicit multi-cycle; never a silent "leave all standalone"
-//     without a documented split).
-//   * commitLateProductCycle — B4.3 late layout firewall: empty-cycle
-//     tryAddProduct → format-member opcode for setDesc of a bare late MI
-//     (Fixup NOP pad, BR insertBranch, demote LoopDec/LoopJNZ edges).
-//   * Each sub-cycle is product FormatID::Bundle128Full (HaydnBundlePlan.h).
+//   * exactSolveProductOpcodes — production exact no-split multi-MI (or
+//     singleton) product cycle solve: exactTryAddProduct on the full
+//     same-cycle opcode list; returns preferred members + BundlePlan or
+//     nullopt when the list is not one legal product cycle. Never splits.
+//   * exactPackOneOpcodeCycle — encode-oracle one-cycle check via Bundle
+//     canAdd/add (post-setDesc members and logicals). nullopt ⇒ not one cycle.
+//   * opcodesFormOneLegalCycle / instrsFormOneLegalCycle — shared one-cycle
+//     legality (opcode-list and MI-list views; no PostRA dual walk).
+//     MI-list view also enforces Haydn's no-forwarding law: a live def of R
+//     and a use of R by different members of one product cycle is never legal
+//     (any emission order; snapshot reads). Dead-def cohabitation stays legal.
+//   * auctionReadySubsetCycle — bounded ready-subset cycle auction.
+//   * commitExactMultiMIProductCycle — production multi-MI MIR commit:
+//     exactSolve setDesc → MachineBundle SlotMap → applyFormatOrdering →
+//     stamp row+completion. Never leaves alts-bearing logicals (no residual
+//     logical pack after FE8).
+//   * commitExactHardRootProductCycle — transactional recommit of a
+//     multi-member hard BUNDLE root (same children, member setDesc, field
+//     order, Format E row+completion); dissolves the old root shell and
+//     refinalizes so consolidated root operands/kills/InternalRead rebuild.
+//   * commitLateProductCycle / finalizeExactLateSingleton — late layout
+//     firewall: empty-cycle tryAdd → setDesc + stamp Format E commit.
+//   * greedySplitLegalOpcodeCycles — DIAGNOSTIC ONLY (ResMII / unit tests).
 //
-// Encode-side oracle: Haydn::Bundle + HaydnMCFormats (same as G-PACK-LEGAL).
-// Schedule-side MI+AltDesc oracle stays in HaydnPostRASchedStrategy.cpp.
-//
-// AIE peers:
-//   AIEMachineScheduler.cpp:1121-1139 materializeMultiOpcodeInstrs setDesc
-//   AIEHazardRecognizer.cpp:174-214 ResourceCycle alt try (empty cycle shape)
-//   AIEFinalizeBundle.cpp:40-59 wrap standalone → BUNDLE (Haydn also stamps
-//     FormatID; late re-run after PreEmit growth is the Haydn delta — AIE
-//     PreEmit is empty: AIE2TargetMachine.cpp:88 / AIEBaseTargetMachine:388)
+// Each committed cycle stamps Format E BundleFormatRowID + CompletionStateID
+// (HaydnBundlePlan). EncodedBytes come from the registry product rows.
 //
 //===----------------------------------------------------------------------===//
 
@@ -37,23 +45,679 @@
 #include "HaydnBundlePlan.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/bit.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstrBundle.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCInstrInfo.h"
+#include <algorithm>
 #include <optional>
 
 namespace llvm {
+
+// Defined in HaydnHazardRecognizer.cpp (AIE applyFormatOrdering peer).
+// Forward-declared so the shared MIR commit surface does not pull the HR.
+void applyFormatOrdering(Haydn::MachineBundle &Bundle, const VLIWFormat &Format,
+                         MachineBasicBlock::iterator InsertPoint);
+
+/// Field-ordered (emit-order) member list that applyFormatOrdering produces
+/// for \p Bundle under \p Format. Single source of truth for the order the
+/// encoder / AsmPrinter / hardware observe, so the no-forwarding intra-bundle
+/// RAW law can be validated on the SAME order the bundle is emitted in.
+SmallVector<MachineInstr *, 3>
+getFieldOrderedMembers(const Haydn::MachineBundle &Bundle,
+                       const VLIWFormat &Format);
+
 namespace haydn {
 namespace bundle {
 
-/// One explicit architectural sub-cycle after a greedy split (logical opcodes).
+/// One explicit architectural sub-cycle after a diagnostic greedy split
+/// (logical opcodes). Production uses ExactProductCycle instead.
 struct OpcodeCycle {
   SmallVector<unsigned, 3> Opcodes;
   BundlePlan Plan;
 };
 
+//===----------------------------------------------------------------------===//
+// exact no-split product cycle (production commit surface)
+//===----------------------------------------------------------------------===//
+
+/// Result of solving one same-cycle opcode list as a single product cycle.
+/// MemberOpcodes are the setDesc targets (AIE materializeMultiOpcodeInstrs).
+/// Plan carries Format E row + completion + registry EncodedBytes.
+struct ExactProductCycle {
+  /// Input logical (or already-member) opcode identity, in schedule order.
+  SmallVector<unsigned, 3> LogicalOpcodes;
+  /// Format-member opcodes for MI.setDesc (equal to logical when fixed-slot /
+  /// already-member / no PlacementAlternatives).
+  SmallVector<unsigned, 3> MemberOpcodes;
+  /// Product cycle plan (E2/E3 row, completion, registry EncodedBytes).
+  BundlePlan Plan;
+  /// Preferred CycleState after exact expand (OccupiedSlots + members).
+  CycleState State;
+};
+
+/// Exact no-split product solve for a same-cycle opcode sequence.
+///
+/// Uses exactTryAddProduct on a private nondominated candidate set,
+/// then selectPreferredCandidate + commitProduct. Order is preserved.
+///
+/// Contract:
+///   * Empty input → nullopt.
+///   * size > ISSUE_SLOT_COUNT → nullopt.
+///   * Every input opcode is accepted into ONE cycle, or nullopt (no split).
+///   * On success, MemberOpcodes.size() == LogicalOpcodes.size() and Plan is
+///     product-legal.
+///
+/// Callers that already ran materializeMultiOpcodeInstrs may pass post-setDesc
+/// member opcodes; exactTryAdd only accepts alts-bearing logicals, so use
+/// exactPackOneOpcodeCycle for the encode-oracle path on fixed members.
+inline std::optional<ExactProductCycle>
+exactSolveProductOpcodes(ArrayRef<unsigned> Opcodes, HaydnMCFormats &Fmts) {
+  if (Opcodes.empty() || Opcodes.size() > Haydn::ISSUE_SLOT_COUNT)
+    return std::nullopt;
+
+  CycleCandidateSet Cands =
+      makeProductCandidateSet(Fmts.getPacketFormats());
+  for (unsigned Opc : Opcodes) {
+    if (!exactTryAddProduct(Cands, Fmts, Opc))
+      return std::nullopt;
+  }
+
+  const CycleState &S = selectPreferredCandidate(Cands);
+  if (S.Members.size() != Opcodes.size())
+    return std::nullopt;
+
+  auto Plan = commitProduct(S, Fmts.getPacketFormats());
+  if (!Plan || !Plan->isProductLegal())
+    return std::nullopt;
+
+  ExactProductCycle Out;
+  Out.LogicalOpcodes.assign(Opcodes.begin(), Opcodes.end());
+  Out.MemberOpcodes.reserve(S.Members.size());
+  for (const CycleMember &M : S.Members)
+    Out.MemberOpcodes.push_back(M.MemberOpcode);
+  Out.Plan = *Plan;
+  Out.State = S;
+  return Out;
+}
+
+/// Encode-oracle: true one-cycle pack of \p Opcodes via Bundle canAdd/add.
+/// Accepts post-setDesc fixed-slot members and alts-bearing logicals.
+/// Never splits — full list packs or nullopt.
+inline std::optional<OpcodeCycle>
+exactPackOneOpcodeCycle(ArrayRef<unsigned> Opcodes,
+                        HaydnBaseMCFormats &Fmts) {
+  if (Opcodes.empty() || Opcodes.size() > Haydn::ISSUE_SLOT_COUNT)
+    return std::nullopt;
+
+  SmallVector<MCInst, 3> Storage;
+  Storage.reserve(Opcodes.size());
+  for (unsigned Opc : Opcodes) {
+    Storage.emplace_back();
+    Storage.back().setOpcode(Opc);
+  }
+
+  Haydn::Bundle<MCInst> B(&Fmts);
+  for (unsigned I = 0, E = Opcodes.size(); I != E; ++I) {
+    MCInst *MI = &Storage[I];
+    if (!B.canAdd(MI->getOpcode()))
+      return std::nullopt;
+    B.add(MI);
+  }
+
+  // Multi-opcode: require a covering packet format (not a silent standalone).
+  if (Opcodes.size() > 1 &&
+      (B.isStandalone() || B.getFormatOrNull() == nullptr))
+    return std::nullopt;
+
+  OpcodeCycle C;
+  C.Opcodes.assign(Opcodes.begin(), Opcodes.end());
+  // BundlePlan EncodedBytes from generated VLIWFormat::Size only.
+  auto Plan = planFromPacketFormats(Fmts.getPacketFormats(),
+                                    B.getOccupiedSlots(), C.Opcodes);
+  if (!Plan)
+    return std::nullopt;
+  C.Plan = *Plan;
+  return C;
+}
+
+/// True iff the full opcode list packs into a single product Format E cycle.
+/// Prefers exactTryAddProduct for logicals; falls back to Bundle encode oracle
+/// for post-setDesc members (exactPackOneOpcodeCycle).
+///
+/// Opcode-only: cannot see register RAW. Prefer \p instrsFormOneLegalCycle
+/// for production multi-MI commit (format + no-forwarding RAW).
+inline bool opcodesFormOneLegalCycle(ArrayRef<unsigned> Opcodes,
+                                     HaydnBaseMCFormats &Fmts) {
+  if (Opcodes.empty() || Opcodes.size() > Haydn::ISSUE_SLOT_COUNT)
+    return false;
+
+  // Product formats/alts are generated global — use exact solve first.
+  HaydnMCFormats ProductFmts;
+  if (exactSolveProductOpcodes(Opcodes, ProductFmts).has_value())
+    return true;
+  // Already-member / fixed-slot path (post leaveRegion setDesc).
+  return exactPackOneOpcodeCycle(Opcodes, Fmts).has_value();
+}
+
+/// True iff \p Instrs (in schedule/issue order) contain a same-cycle **true
+/// register dependence** hazard under Haydn's no-forwarding law: a **live**
+/// def of R by an EARLIER member and a use of R by a LATER member. The later
+/// reader wants the producer's new value, which intra-bundle forwarding cannot
+/// supply, so the cycle is illegal and must split.
+///
+/// Order-sensitive, matching HaydnHazardRecognizer::hasSameBundleRAW (which
+/// tracks CurrentCycleLiveDefs incrementally as members append in issue
+/// order). The scheduler issues a producer before its RAW consumer
+/// (topological order), and adjustSchedDependency keeps data-edge latency
+/// ≥1 so a producer and consumer never share a ReadyCycle; a same-cycle
+/// earlier-live-def/later-use is therefore exactly the true-RAW class.
+///
+/// A LATER member's live def read by an EARLIER member is WAR/snapshot: the
+/// earlier reader correctly observes the pre-cycle (OLD) value — legal. The
+/// prior order-independent form conflated WAR with true-RAW and rejected
+/// legal snapshot packs (e.g. {add32 r1,r1,r2; add32 r2,r3,r4}). It was a
+/// belt over a since-removed ALU→ALU latency-0 collapse that could mis-order
+/// a true-RAW into WAR text order; with latency≥1 restored, schedule order is
+/// authoritative and WAR is legal.
+///
+///   * **Read vs dead def** of the same physreg: legal — a dead write has no
+///     consumer of the new value (dead defs are not live defs).
+///   * Same-MI use+def (tied / normal overwrite): legal (not cross-member).
+///
+/// Uses are detected via isUse() / partial-def subreg reads, not only
+/// MachineOperand::readsReg() (InternalRead would hide a true dep).
+inline bool cycleMembersHaveTrueRAW(ArrayRef<MachineInstr *> Instrs,
+                                    const TargetRegisterInfo *TRI) {
+  if (Instrs.size() < 2)
+    return false;
+
+  auto overlaps = [&](Register A, Register B) -> bool {
+    if (A == B)
+      return true;
+    if (!TRI || !A.isPhysical() || !B.isPhysical())
+      return false;
+    return TRI->regsOverlap(A, B);
+  };
+
+  // Walk members in schedule order, accumulating earlier members' live defs.
+  // A later member's read overlapping any earlier live def is a true-RAW
+  // hazard (no intra-bundle forwarding). Mirrors HR's CurrentCycleLiveDefs.
+  SmallVector<Register, 4> PriorLiveDefs;
+  for (unsigned J = 0, E = Instrs.size(); J != E; ++J) {
+    MachineInstr *MI = Instrs[J];
+    if (!MI)
+      continue;
+    for (const MachineOperand &MO : MI->operands()) {
+      if (!MO.isReg() || MO.isUndef() || !MO.getReg())
+        continue;
+      // Source use, or partial redef that reads the old full register.
+      bool IsRead = MO.isUse() || (MO.isDef() && MO.getSubReg());
+      if (!IsRead)
+        continue;
+      Register Reg = MO.getReg();
+      if (!(Reg.isPhysical() || Reg.isVirtual()))
+        continue;
+      for (Register D : PriorLiveDefs)
+        if (overlaps(Reg, D))
+          return true;
+    }
+    for (const MachineOperand &MO : MI->operands()) {
+      if (!MO.isReg() || !MO.getReg() || !MO.isDef() || MO.isDead())
+        continue;
+      Register Reg = MO.getReg();
+      if (Reg.isPhysical() || Reg.isVirtual())
+        PriorLiveDefs.push_back(Reg);
+    }
+  }
+  return false;
+}
+
+/// MI-list view of product one-cycle legality. Production PostRA commit
+/// authority — strategy must not dual-walk MachineBundle.
+///
+/// Rejects:
+///   * INLINEASM (opaque layout boundary; multi-MI must not cross it)
+///   * same-cycle true RAW (no-forwarding law; see cycleMembersHaveTrueRAW)
+///   * opcode lists that do not pack into one Format E product cycle
+inline bool instrsFormOneLegalCycle(ArrayRef<MachineInstr *> Instrs,
+                                    HaydnBaseMCFormats &Fmts) {
+  if (Instrs.empty() || Instrs.size() > Haydn::ISSUE_SLOT_COUNT)
+    return false;
+  SmallVector<unsigned, 3> Opcodes;
+  Opcodes.reserve(Instrs.size());
+  for (MachineInstr *MI : Instrs) {
+    if (MI->isInlineAsm())
+      return false;
+    Opcodes.push_back(MI->getOpcode());
+  }
+
+  if (Instrs.size() >= 2) {
+    const MachineFunction *MF = Instrs.front()->getMF();
+    const TargetRegisterInfo *TRI =
+        MF ? MF->getSubtarget().getRegisterInfo() : nullptr;
+    if (cycleMembersHaveTrueRAW(Instrs, TRI))
+      return false;
+  }
+
+  return opcodesFormOneLegalCycle(Opcodes, Fmts);
+}
+
+//===----------------------------------------------------------------------===//
+// bounded ready-subset cycle auction (post-RA list ranking)
+//===----------------------------------------------------------------------===//
+
+/// Cap on ready ops examined per auction. With issue width 3, enumerating
+/// subsets/perms of the first 8 ready entries is bounded (≤ 2^8 · 3!).
+constexpr unsigned MaxReadySubsetAuctionReady = 8;
+
+/// One auction result: densest legal fill of the open issue cycle.
+struct ReadySubsetAuction {
+  /// Indices into the caller's ReadyOpcodes (acceptance order).
+  SmallVector<unsigned, 3> ReadyIndices;
+  /// BaseOpcodes + selected ready opcodes in the packing order tried.
+  SmallVector<unsigned, 3> CycleOpcodes;
+  /// Preferred exact product solve when available (alts-bearing path).
+  std::optional<ExactProductCycle> Exact;
+  /// |CycleOpcodes| — primary ranking key (maximize issued ops / density).
+  unsigned IssuedCount = 0;
+};
+
+/// Bounded ready-subset auction for one architectural issue cycle.
+///
+/// Given already-placed \p BaseOpcodes (current cycle members, schedule order)
+/// and a list of ready opcodes, enumerate subsets of ready ops of size at most
+/// `ISSUE_SLOT_COUNT - Base.size()`, examining only the first
+/// MaxReadySubsetAuctionReady ready entries. Among subsets that form one legal
+/// product cycle with Base (opcodesFormOneLegalCycle / exact rematch),
+/// rank lexicographically:
+///   1. maximize IssuedCount (Base + selected ready);
+///   2. among ties, prefer a subset that exactSolveProductOpcodes accepts;
+///   3. among ties, minimize sum of ready indices (deterministic);
+///   4. among ties, lexicographically smaller ReadyIndices sequence.
+///
+/// When \p MustIncludeReadyIdx is set, only subsets containing that ready index
+/// are considered (post-RA tryCandidate ranking for one focus SU).
+///
+/// Contract:
+///   * Empty Base and empty Ready → nullopt (idle cycle is not an auction).
+///   * Overwidth Base → nullopt.
+///   * Never splits a multi-cycle repair; nullopt when nothing legal fits.
+///   * Pure: no MI / AltDesc / FormatID mutation.
+inline std::optional<ReadySubsetAuction>
+auctionReadySubsetCycle(ArrayRef<unsigned> BaseOpcodes,
+                        ArrayRef<unsigned> ReadyOpcodes, HaydnMCFormats &Fmts,
+                        std::optional<unsigned> MustIncludeReadyIdx =
+                            std::nullopt) {
+  const unsigned BaseN = BaseOpcodes.size();
+  if (BaseN > Haydn::ISSUE_SLOT_COUNT)
+    return std::nullopt;
+  if (BaseN == 0 && ReadyOpcodes.empty())
+    return std::nullopt;
+
+  const unsigned Cap = Haydn::ISSUE_SLOT_COUNT - BaseN;
+  const unsigned ReadyN = std::min<unsigned>(ReadyOpcodes.size(),
+                                             MaxReadySubsetAuctionReady);
+  if (MustIncludeReadyIdx && *MustIncludeReadyIdx >= ReadyN)
+    return std::nullopt;
+
+  std::optional<ReadySubsetAuction> Best;
+
+  auto considerOrder = [&](ArrayRef<unsigned> Idxs) {
+    if (MustIncludeReadyIdx) {
+      bool Has = false;
+      for (unsigned I : Idxs)
+        if (I == *MustIncludeReadyIdx) {
+          Has = true;
+          break;
+        }
+      if (!Has)
+        return;
+    }
+
+    SmallVector<unsigned, 3> CycleOps;
+    CycleOps.reserve(BaseN + Idxs.size());
+    CycleOps.append(BaseOpcodes.begin(), BaseOpcodes.end());
+    for (unsigned I : Idxs)
+      CycleOps.push_back(ReadyOpcodes[I]);
+
+    if (CycleOps.empty() || CycleOps.size() > Haydn::ISSUE_SLOT_COUNT)
+      return;
+    if (!opcodesFormOneLegalCycle(CycleOps, Fmts))
+      return;
+
+    ReadySubsetAuction Cand;
+    Cand.ReadyIndices.assign(Idxs.begin(), Idxs.end());
+    Cand.CycleOpcodes = CycleOps;
+    Cand.IssuedCount = CycleOps.size();
+    Cand.Exact = exactSolveProductOpcodes(CycleOps, Fmts);
+
+    auto better = [&](const ReadySubsetAuction &A,
+                      const ReadySubsetAuction &B) {
+      if (A.IssuedCount != B.IssuedCount)
+        return A.IssuedCount > B.IssuedCount;
+      if (A.Exact.has_value() != B.Exact.has_value())
+        return A.Exact.has_value();
+      unsigned SumA = 0, SumB = 0;
+      for (unsigned I : A.ReadyIndices)
+        SumA += I;
+      for (unsigned I : B.ReadyIndices)
+        SumB += I;
+      if (SumA != SumB)
+        return SumA < SumB;
+      return std::lexicographical_compare(A.ReadyIndices.begin(),
+                                          A.ReadyIndices.end(),
+                                          B.ReadyIndices.begin(),
+                                          B.ReadyIndices.end());
+    };
+
+    if (!Best || better(Cand, *Best))
+      Best = std::move(Cand);
+  };
+
+  // Cap == 0: only the base cycle (must already be legal).
+  if (Cap == 0) {
+    considerOrder({});
+    return Best;
+  }
+
+  // Enumerate subsets of Ready[0..ReadyN) with size ≤ Cap (bitmask).
+  const unsigned Full = 1u << ReadyN;
+  for (unsigned Mask = 0; Mask < Full; ++Mask) {
+    const unsigned Bits = llvm::popcount(Mask);
+    if (Bits > Cap)
+      continue;
+    if (MustIncludeReadyIdx && !(Mask & (1u << *MustIncludeReadyIdx)))
+      continue;
+
+    SmallVector<unsigned, 3> Idxs;
+    Idxs.reserve(Bits);
+    for (unsigned I = 0; I < ReadyN; ++I)
+      if (Mask & (1u << I))
+        Idxs.push_back(I);
+
+    if (Idxs.empty()) {
+      considerOrder(Idxs);
+      continue;
+    }
+
+    // Try all acceptance orders (Bits ≤ 3). Exact rematch can depend on order
+    // even though the set oracle is order-insensitive for legality.
+    SmallVector<unsigned, 3> P = Idxs;
+    considerOrder(P);
+    SmallVector<unsigned, 3> C(Bits, 0);
+    unsigned I = 0;
+    while (I < Bits) {
+      if (C[I] < I) {
+        if ((I & 1) == 0)
+          std::swap(P[0], P[I]);
+        else
+          std::swap(P[C[I]], P[I]);
+        considerOrder(P);
+        ++C[I];
+        I = 0;
+      } else {
+        C[I] = 0;
+        ++I;
+      }
+    }
+  }
+
+  return Best;
+}
+
+/// Auction score for ranking one focus ready opcode against a base cycle and
+/// the remaining ready list. Higher is denser co-issue (IssuedCount of the
+/// best subset that includes the focus at Ready index 0).
+/// ReadyOpcodes must place the focus opcode at index 0; other ready ops follow.
+inline unsigned auctionFocusFillScore(ArrayRef<unsigned> BaseOpcodes,
+                                      ArrayRef<unsigned> ReadyOpcodes,
+                                      HaydnMCFormats &Fmts) {
+  if (ReadyOpcodes.empty())
+    return BaseOpcodes.size();
+  auto A = auctionReadySubsetCycle(BaseOpcodes, ReadyOpcodes, Fmts,
+                                   /*MustIncludeReadyIdx=*/0u);
+  if (!A)
+    return BaseOpcodes.size();
+  return A->IssuedCount;
+}
+
+//===----------------------------------------------------------------------===//
+// exact multi-MI MIR commit (shared production surface)
+//===----------------------------------------------------------------------===//
+
+/// Exact no-split multi-MI MIR commit (AIE applyBundles size()>1 peer):
+///   1. exactSolveProductOpcodes → MI.setDesc(member) for alts-bearing
+///      logicals (sole surface that may still see residual logicals after
+///      leaveRegion materializeMultiOpcodeInstrs; hard-root recommit also
+///      lands here). Fail closed if an alts-bearing logical cannot solve —
+///      never pack residual logicals into a product BUNDLE.
+///   2. Clear stale IsInternalRead on members (finalizeBundle only sets).
+///   3. Build MachineBundle SlotMap from post-setDesc getSlotKind (fixed-slot
+///      members; alts tryAdd only if a no-alt residual remains legal).
+///   4. applyFormatOrdering → field order + finalizeBundle (rebuilds
+///      consolidated BUNDLE-root operands, kill/dead flags, InternalRead).
+///   5. stampBundleCommit(row, completion) on the BUNDLE root.
+///
+/// Precondition: \p Instrs are contiguous schedule-order members, size >= 2,
+/// and form one legal product cycle (instrsFormOneLegalCycle). Never splits.
+/// Children must live in a MachineFunction (setDesc needs TargetInstrInfo).
+///
+/// \returns true on successful BUNDLE + Format E commit with real member
+/// descriptors; false if the live Bundle cannot pack, has no covering packet
+/// format, or would leave residual logicals (caller fail-closed).
+inline bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
+  if (Instrs.size() < 2)
+    return false;
+
+  // Opaque INLINEASM must stay standalone — never a multi-MI BUNDLE child.
+  for (MachineInstr *MI : Instrs) {
+    if (MI->isInlineAsm())
+      return false;
+  }
+
+  MachineBasicBlock *MBB = Instrs.front()->getParent();
+  if (!MBB || !MBB->getParent())
+    return false;
+  MachineFunction &MF = *MBB->getParent();
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+
+  // Fail closed on same-cycle true RAW before setDesc / finalizeBundle can
+  // invent InternalRead markers for an illegal no-forwarding pack.
+  if (cycleMembersHaveTrueRAW(Instrs, TRI))
+    return false;
+
+  // Bake format-member descriptors before SlotMap / encode. leaveRegion
+  // materializeMultiOpcodeInstrs is the primary AltDescs path; this is the
+  // fail-closed second line so multi-MI commit never emits residual logicals.
+  {
+    SmallVector<unsigned, 3> Ops;
+    Ops.reserve(Instrs.size());
+    for (MachineInstr *MI : Instrs)
+      Ops.push_back(MI->getOpcode());
+
+    HaydnMCFormats SolveFmts;
+    if (auto Exact = exactSolveProductOpcodes(Ops, SolveFmts)) {
+      for (unsigned I = 0, E = Instrs.size(); I != E; ++I) {
+        const unsigned Member = Exact->MemberOpcodes[I];
+        if (Member != Instrs[I]->getOpcode())
+          Instrs[I]->setDesc(TII.get(Member));
+      }
+    } else {
+      // Already-member / no-alt path: encode oracle only. Refuse any residual
+      // alts-bearing logical that failed exactSolve (would be residual pack).
+      for (MachineInstr *MI : Instrs) {
+        if (hasPlacementAlternatives(SolveFmts, MI->getOpcode()))
+          return false;
+      }
+      if (!opcodesFormOneLegalCycle(Ops, SolveFmts))
+        return false;
+    }
+  }
+
+  // finalizeBundle only sets IsInternalRead; it never clears. Members that
+  // were previously bundled (hard-root recommit, re-order) may carry stale
+  // markers that would survive a field-order change. Drop them so the
+  // subsequent finalize rebuild is authoritative.
+  for (MachineInstr *MI : Instrs) {
+    for (MachineOperand &MO : MI->operands()) {
+      if (MO.isReg() && MO.isInternalRead())
+        MO.setIsInternalRead(false);
+    }
+  }
+
+  HaydnMCFormats Fmts;
+  Haydn::MachineBundle Bundle(&Fmts);
+  for (MachineInstr *MI : Instrs) {
+    if (!Bundle.canAdd(MI))
+      return false;
+    Bundle.add(MI);
+  }
+
+  if (Bundle.size() <= 1 || Bundle.isStandalone())
+    return false;
+  const VLIWFormat *Fmt = Bundle.getFormatOrNull();
+  if (!Fmt)
+    return false;
+
+  // The schedule-order RAW check above is necessary but NOT sufficient.
+  // applyFormatOrdering permutes members into Format.getSlots() field order —
+  // the order the encoder / AsmPrinter / hardware observe. A legal same-cycle
+  // WAR in schedule order (reader before writer) can be flipped by the field
+  // order into writer-before-reader; finalizeBundle would then mark the
+  // reader's operand IsInternalRead, modeling a same-cycle read of a
+  // same-cycle def — the no-forwarding hazard (the reader observes the new,
+  // not the pre-cycle, value). Re-validate the no-forwarding RAW law on the
+  // EXACT field-ordered sequence that will be emitted. If it has a true RAW,
+  // this cycle cannot be one product parcel: fail closed to sequential parcels
+  // (schedule order is reader-before-writer, a legal WAR when split across
+  // cycles — the reader observes the pre-cycle value, the writer takes effect
+  // next cycle).
+  SmallVector<MachineInstr *, 3> FieldOrdered =
+      getFieldOrderedMembers(Bundle, *Fmt);
+  if (cycleMembersHaveTrueRAW(FieldOrdered, TRI))
+    return false;
+
+  // Iterator AFTER the last schedule-order member — re-insert point
+  // (AIEHazardRecognizer.cpp:338-339 getBundleEnd of last instr).
+  MachineBasicBlock::iterator BundleEnd =
+      getBundleEnd(Instrs.back()->getIterator());
+  applyFormatOrdering(Bundle, *Fmt, BundleEnd);
+
+  MachineInstr &Root =
+      *getBundleStart(Bundle.getInstrs().front()->getIterator());
+  if (!Root.isBundle())
+    return false;
+
+  // Durable Format E row + completion from real post-setDesc member count.
+  SmallVector<unsigned, 3> MemberOps;
+  MemberOps.reserve(Instrs.size());
+  for (MachineInstr *MI : Instrs)
+    MemberOps.push_back(MI->getOpcode());
+  BundlePlan Plan = makeProductPlan(Bundle.getOccupiedSlots(), MemberOps);
+  stampBundleCommit(Root, Plan);
+  return true;
+}
+
+/// Transactional exact-commit of a multi-member hard BUNDLE root.
+/// Same children, selected member descriptors, canonical field order,
+/// Format E row+completion stamp. Dissolves the old logical root inside one
+/// helper so no other pass observes an unbundled state. Hard groups survive.
+///
+/// The dissolve erases the prior BUNDLE header (stale consolidated
+/// operands/kills). Refinalize via commitExactMultiMIProductCycle rebuilds
+/// root implicit-def/use + kill/dead flags and child InternalRead markers
+/// from the live post-setDesc members.
+///
+/// \p BundleRoot must be TargetOpcode::BUNDLE with ≥2 real children.
+/// \p MII provides MCInstrDesc for member setDesc (TargetInstrInfo ok).
+/// Member setDesc here is the hard-root path (exactSolveProductOpcodes);
+/// scheduled-region alts still flow through HaydnAlternateDescriptors.
+///
+/// \returns true on successful recommit; false if membership is not one
+/// legal product cycle (caller fail-closed — never split a hard root).
+inline bool commitExactHardRootProductCycle(MachineInstr &BundleRoot,
+                                            const MCInstrInfo &MII) {
+  if (!BundleRoot.isBundle() || !BundleRoot.getParent())
+    return false;
+
+  MachineBasicBlock &MBB = *BundleRoot.getParent();
+  SmallVector<MachineInstr *, 3> Kids;
+  for (MachineBasicBlock::instr_iterator I =
+           std::next(BundleRoot.getIterator());
+       I != MBB.instr_end() && I->isBundledWithPred(); ++I)
+    Kids.push_back(&*I);
+
+  if (Kids.size() < 2 || Kids.size() > Haydn::ISSUE_SLOT_COUNT)
+    return false;
+
+  // Exact solve on the live child opcodes (logical or already-member).
+  // INLINEASM is never a legal hard-root member.
+  SmallVector<unsigned, 3> Ops;
+  Ops.reserve(Kids.size());
+  for (MachineInstr *K : Kids) {
+    if (K->isInlineAsm())
+      return false;
+    Ops.push_back(K->getOpcode());
+  }
+
+  HaydnMCFormats Fmts;
+  std::optional<ExactProductCycle> Exact = exactSolveProductOpcodes(Ops, Fmts);
+  if (!Exact) {
+    // Already-member path: encode oracle only (no setDesc rewrite).
+    if (!opcodesFormOneLegalCycle(Ops, Fmts))
+      return false;
+  } else {
+    // Bake format-member opcodes before dissolve/re-finalize.
+    // setDesc does not rebuild child operands/ties/implicits — logical→member
+    // shape compatibility is the gate; consolidated root ops are rebuilt below.
+    for (unsigned I = 0, E = Kids.size(); I != E; ++I) {
+      const unsigned Member = Exact->MemberOpcodes[I];
+      if (Member != Kids[I]->getOpcode())
+        Kids[I]->setDesc(MII.get(Member));
+    }
+  }
+
+  // Dissolve the old root shell (AIE eraseRootFromBlock peer): clear stale
+  // InternalRead markers (UnpackMachineBundles peer), detach each child,
+  // then erase the BUNDLE header with its stale consolidated operands.
+  // Children stay contiguous in MBB order; commitExactMultiMIProductCycle
+  // applies field order + finalizeBundle (rebuild root ops/kills/reads) +
+  // Format E row+completion stamp.
+  for (MachineInstr *K : Kids) {
+    for (MachineOperand &MO : K->operands()) {
+      if (MO.isReg() && MO.isInternalRead())
+        MO.setIsInternalRead(false);
+    }
+    if (K->isBundledWithPred())
+      K->unbundleFromPred();
+    if (K->isBundledWithSucc())
+      K->unbundleFromSucc();
+  }
+  BundleRoot.eraseFromParent();
+
+  return commitExactMultiMIProductCycle(Kids);
+}
+
+//===----------------------------------------------------------------------===//
+// Diagnostic greedy split (NOT production post-RA commit)
+//===----------------------------------------------------------------------===//
+
 /// Greedy left-to-right split of a same-cycle opcode list into legal
-/// Bundle128 cycles. Order is preserved. Each output cycle has ≤3 members
+/// product cycles. Order is preserved. Each output cycle has ≤3 members
 /// and passes Haydn::Bundle canAdd/add (encode oracle).
+///
+/// **Diagnostic / ResMII / unit-test only.** Production post-RA must fail
+/// closed when a scheduled multi-MI cycle is not one legal product cycle
+/// (`NumScheduledCyclesSplit == 0` qualification). Do not call this to repair
+/// a scheduled cycle in HaydnPostRASchedStrategy.
 ///
 /// Contract:
 ///   * Empty input → empty output.
@@ -81,7 +745,16 @@ greedySplitLegalOpcodeCycles(ArrayRef<unsigned> Opcodes,
     OpcodeCycle C;
     for (unsigned I = Begin; I < End; ++I)
       C.Opcodes.push_back(Opcodes[I]);
-    C.Plan = makeBundle128Plan(Occ, C.Opcodes);
+    // Diagnostic path: EncodedBytes from registry via planFromPacketFormats.
+    // Standalone escape (Occ==0 with no covering slots) still builds a
+    // product-sized plan from empty occupancy.
+    auto P = planFromPacketFormats(Fmts.getPacketFormats(), Occ, C.Opcodes);
+    if (!P && Occ == 0)
+      P = planFromPacketFormats(Fmts.getPacketFormats(), /*Occupied=*/0,
+                                C.Opcodes);
+    if (!P)
+      P = makeProductPlan(Occ, C.Opcodes);
+    C.Plan = *P;
     Out.push_back(std::move(C));
   };
 
@@ -109,17 +782,8 @@ greedySplitLegalOpcodeCycles(ArrayRef<unsigned> Opcodes,
   return Out;
 }
 
-/// True iff the full opcode list packs into a single product Bundle128 cycle.
-inline bool opcodesFormOneLegalCycle(ArrayRef<unsigned> Opcodes,
-                                     HaydnBaseMCFormats &Fmts) {
-  if (Opcodes.empty() || Opcodes.size() > Haydn::ISSUE_SLOT_COUNT)
-    return false;
-  auto Cycles = greedySplitLegalOpcodeCycles(Opcodes, Fmts);
-  return Cycles.size() == 1 && Cycles[0].Opcodes.size() == Opcodes.size();
-}
-
 //===----------------------------------------------------------------------===//
-// B4.3 late layout firewall — empty-cycle tryAdd → setDesc member
+// late layout firewall — empty-cycle tryAdd → setDesc member
 //===----------------------------------------------------------------------===//
 
 /// Result of committing one late bare MI as a product singleton cycle.
@@ -127,7 +791,7 @@ inline bool opcodesFormOneLegalCycle(ArrayRef<unsigned> Opcodes,
 /// AIE has no PreEmit growth, so setDesc+finalize never re-runs
 /// (AIE2TargetMachine.cpp:88). Haydn BR / FixupHwLoops may insert bare
 /// NOPs, branches, demote LoopDec+LoopJNZ — each becomes one explicit
-/// ProductFormatID cycle (no silent reshape, no 2nd format, no MCFlags).
+/// Format E cycle (row+completion; no silent reshape, no MCFlags).
 struct LateProductCycle {
   /// Pre-commit public opcode (input logical identity).
   unsigned LogicalOpcode = 0;
@@ -136,7 +800,7 @@ struct LateProductCycle {
   /// opcode has no PlacementAlternatives (fixed-slot / already-member /
   /// branch pseudo without alts).
   unsigned MemberOpcode = 0;
-  /// Product cycle plan (Bundle128Full, 16 B, 1 cycle).
+  /// Product cycle plan (E2/E3 row, completion, registry EncodedBytes).
   BundlePlan Plan;
   /// True when MemberOpcode != LogicalOpcode (setDesc required).
   bool NeedsSetDesc = false;
@@ -146,14 +810,12 @@ struct LateProductCycle {
 ///
 /// Port of AIE alt try on an empty ResourceCycle/Bundle
 /// (AIEHazardRecognizer.cpp:174-214) + setDesc target selection
-/// (AIEMachineScheduler.cpp:1121-1139). Product FormatID only.
+/// (AIEMachineScheduler.cpp:1121-1139). Format E product only.
 ///
-/// \returns nullopt only when tryAdd fails *and* the opcode has no fixed
-/// encode identity suitable for a singleton parcel (should not happen for
-/// real late inserts; callers fail-closed via verifier after finalize).
-/// When alts exist: MemberOpcode = tryAddProduct empty-cycle choice.
-/// When no alts: MemberOpcode = LogicalOpcode (wrap-only; already member
-/// or single-slot public opcode / pseudo expanded at emit).
+/// \returns nullopt when no product plan can be derived for the opcode
+/// (fail-closed). Callers fail-closed via verifier after finalize when late
+/// insert cannot commit. When alts exist: MemberOpcode = tryAddProduct
+/// empty-cycle choice. When no alts: MemberOpcode = LogicalOpcode.
 inline std::optional<LateProductCycle>
 commitLateProductCycle(unsigned LogicalOpc, HaydnMCFormats &Fmts) {
   LateProductCycle Out;
@@ -161,34 +823,52 @@ commitLateProductCycle(unsigned LogicalOpc, HaydnMCFormats &Fmts) {
   Out.MemberOpcode = LogicalOpc;
   Out.NeedsSetDesc = false;
 
-  CycleState S = makeProductCycleState();
+  // Prefer exact singleton solve (shared surface).
+  if (auto Exact = exactSolveProductOpcodes(ArrayRef<unsigned>{LogicalOpc},
+                                            Fmts)) {
+    Out.MemberOpcode = Exact->MemberOpcodes.front();
+    Out.NeedsSetDesc = (Out.MemberOpcode != LogicalOpc);
+    Out.Plan = Exact->Plan;
+    return Out;
+  }
+
+  CycleState S = makeProductCycleState(Fmts.getPacketFormats());
   if (tryAddProduct(S, Fmts, LogicalOpc)) {
     assert(S.Members.size() == 1 && "empty-cycle tryAdd is a singleton");
     Out.MemberOpcode = S.Members[0].MemberOpcode;
     Out.NeedsSetDesc = (Out.MemberOpcode != LogicalOpc);
-    if (auto P = commitProduct(S)) {
+    if (auto P = commitProduct(S, Fmts.getPacketFormats())) {
       Out.Plan = *P;
-    } else {
-      // tryAdd accepted but commit failed — still product singleton plan.
-      Out.Plan = makeBundle128Plan(S.OccupiedSlots, {LogicalOpc});
+      return Out;
     }
-    return Out;
+    // tryAdd accepted but FeasibleFormatMask blocked commit — still only
+    // accept a plan derived from the generated Full row.
+    if (auto Derived = planFromPacketFormats(
+            Fmts.getPacketFormats(), S.OccupiedSlots, {LogicalOpc})) {
+      Out.Plan = *Derived;
+      return Out;
+    }
+    return std::nullopt;
   }
 
   // No PlacementAlternatives (B, RET, LoopDec, LoopJNZ, already _S* member).
-  // Explicit ProductFormatID singleton — still a legal late cycle.
-  // Encode-oracle: lone opcode forms one cycle via greedy split / canAdd.
+  // Explicit Format E singleton — still a legal late cycle plan (stub
+  // completion until idle/singleton law closes).
+  // Encode-oracle: lone opcode forms one cycle via exact pack / canAdd.
   SmallVector<unsigned, 1> One = {LogicalOpc};
-  if (!opcodesFormOneLegalCycle(One, Fmts)) {
-    // Standalone escape still counts as one product parcel for size model
-    // (getInstSizeInBytes returns ProductFormatDesc.Bytes for real bare MIs).
-    Out.Plan = makeBundle128Plan(/*Occupied=*/0, One);
+  if (auto Packed = exactPackOneOpcodeCycle(One, Fmts)) {
+    Out.Plan = Packed->Plan;
     return Out;
   }
-  auto Cycles = greedySplitLegalOpcodeCycles(One, Fmts);
-  assert(Cycles.size() == 1);
-  Out.Plan = Cycles[0].Plan;
-  return Out;
+  // Standalone escape still counts as one product parcel for size model
+  // (getInstSizeInBytes returns productParcelBytes for real bare MIs).
+  // Fail-closed: no plan when transitional composite coverage is absent.
+  if (auto Escape =
+          planFromPacketFormats(Fmts.getPacketFormats(), /*Occupied=*/0, One)) {
+    Out.Plan = *Escape;
+    return Out;
+  }
+  return std::nullopt;
 }
 
 /// Pure setDesc target for a late bare MI (nullopt = leave opcode unchanged).
@@ -199,6 +879,58 @@ lateSingletonSetDescOpcode(unsigned LogicalOpc, HaydnMCFormats &Fmts) {
   if (!C || !C->NeedsSetDesc)
     return std::nullopt;
   return C->MemberOpcode;
+}
+
+/// Member opcode for one late singleton (empty-cycle tryAdd / wrap-only).
+/// Shared by Fixup pads/demotion and BranchRelaxation insertBranch hooks so
+/// every late creator builds the same product member form.
+inline unsigned lateProductMemberOpcode(unsigned LogicalOpc) {
+  HaydnMCFormats Fmts;
+  if (auto C = commitLateProductCycle(LogicalOpc, Fmts))
+    return C->MemberOpcode;
+  return LogicalOpc;
+}
+
+/// Wrap a bare real MI as a Format E singleton BUNDLE root (row+completion).
+/// Idempotent when already bundled. After return, \p MI is a bundle child;
+/// layout size lives on the BUNDLE root (committed EncodedBytes).
+inline void finalizeExactLateSingleton(MachineInstr &MI) {
+  if (!MI.getParent() || MI.isBundled())
+    return;
+  // INLINEASM is an opaque byte-emitting boundary, not a product MIR cycle.
+  // Wrapping it as a BUNDLE child would drop the APP/NO_APP emission path.
+  if (MI.isInlineAsm())
+    return;
+  MachineBasicBlock &MBB = *MI.getParent();
+  MachineBasicBlock::instr_iterator MII = MI.getIterator();
+  finalizeBundle(MBB, MII, std::next(MII));
+  MachineInstr &Root = *getBundleStart(MI.getIterator());
+  assert(Root.isBundle() && "exact late singleton must produce a BUNDLE root");
+  // Singleton → E2 + stub completion (fail-closed for product emit until
+  // idle/singleton law closes). setDesc may have already run via late path.
+  BundlePlan Plan = makeProductPlan(/*Occupied=*/0, {MI.getOpcode()});
+  stampBundleCommit(Root, Plan);
+}
+
+/// Layout bytes for an inserted or removed late MI.
+/// Bundle children charge the committed root; bare reals charge one product
+/// parcel. Call after finalizeExactLateSingleton so insert hooks report the
+/// same EncodedBytes the second BranchRelaxation / computeBlockSize sees.
+/// INLINEASM / INLINEASM_BR are the sole opaque non-product-cycle exception:
+/// charge conservative Full-row length via getInstSizeInBytes (MaxInstLength
+/// quanta); never invent a BUNDLE root or product FormatID for them.
+inline unsigned lateLayoutBytes(const MachineInstr &MI) {
+  if (MI.isInsideBundle() || MI.isBundledWithPred() || MI.isBundledWithSucc())
+    return committedEncodedBytes(*getBundleStart(MI.getIterator())).Value;
+  if (MI.isBundle())
+    return committedEncodedBytes(MI).Value;
+  if (MI.isInlineAsm()) {
+    const MachineFunction *MF = MI.getMF();
+    if (!MF)
+      return 0;
+    return MF->getSubtarget().getInstrInfo()->getInstSizeInBytes(MI);
+  }
+  return productParcelBytes().Value;
 }
 
 } // namespace bundle

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — DR64 register copy must use OR64, not ADD64 with GPR32 zero reg.
+
 ; REGRESSION TEST: DR64 register copy must use OR64, not ADD64 with GPR32 zero reg.
 ;
 ; Bug : copyPhysReg for DR64→DR64 used ADD64 rd, rs, R0, but ADD64 requires

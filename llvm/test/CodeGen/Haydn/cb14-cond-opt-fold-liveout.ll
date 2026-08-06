@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
-;
+
+; Role: semantic — — HaydnConditionOptimizer::foldCmpBranch must NOT fold a CMP+branch when the CMP destination register is live-out of the.
+
 ; REGRESSION TEST: — HaydnConditionOptimizer::foldCmpBranch must NOT
 ; fold a CMP+branch when the CMP destination register is live-out of the
 ; basic block (read by a successor block).

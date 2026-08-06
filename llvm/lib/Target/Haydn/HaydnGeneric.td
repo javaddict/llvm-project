@@ -1,12 +1,11 @@
 //===-- HaydnGeneric.td - Generic Haydn defs (no decode variants) --------===//
 //
 // Shared generic content included by BOTH:
-// Haydn.td (generic + FLEX formats / Bundle128;)
+// Haydn.td (generic + Format E product composites + residual `_S*` FU members)
 // HaydnAsmMatcher.td (same generic + FLEX; no composite for matcher)
 //
-// Mode-0/3 decode-variant islands (HaydnInstrInfoM0/MACM0/M3/S*M0.td) were
-// retired by /R4 and archived under legacy-retired/ by. Live slot
-// encoding is exclusively `_S<k>` + BUNDLE128_FULL.
+// Mode-0/3 decode-variant islands (HaydnInstrInfoM0/MACM0/M3/S*M0.td) and
+// Bundle128 composites are deleted. Product composites are Format E only.
 //
 //===----------------------------------------------------------------------===//
 
@@ -34,9 +33,8 @@ include "HaydnSchedule.td"
 //===----------------------------------------------------------------------===//
 include "HaydnInstrFormats.td"
 include "HaydnInstrFormatsC.td"
-// HaydnInstrFormatsD.td (FmtM0_*/FmtM2_*/FmtM3_*) un-included — Mode-0/2/3
-// format classes had zero live instruction defs after shell retirement. File
-// remains on disk for history; island instruction files are under legacy-retired/.
+// FE8: Mode-0/2/3 D-class format classes (HaydnInstrFormatsD.td) deleted —
+// zero product consumers.
 
 //===----------------------------------------------------------------------===//
 // Calling conventions

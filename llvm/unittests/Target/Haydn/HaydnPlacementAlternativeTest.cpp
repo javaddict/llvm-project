@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // Unit tests for getAlternateInstsOpcode / PlacementAlternative over
-// BUNDLE128_FULL members + CompatibleFormatMask + sparse size-3
+// Format E placement members + CompatibleFormatMask + sparse size-3
 // FieldSlots-by-index (alts-derived; index == field).
 // Mirrors AIE BundleTest / HazardRecognizerTest alternate-opcode coverage.
 //
@@ -53,10 +53,11 @@ TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_ADD32_AllThreeSlots)
   EXPECT_EQ(Enumerated[1].FieldSlots, SlotBits(Haydn::SLOT1));
   EXPECT_EQ(Enumerated[2].MemberOpcode, Haydn::ADD32_S2);
   EXPECT_EQ(Enumerated[2].FieldSlots, SlotBits(Haydn::SLOT2));
-  // Product alts stamp Full CompatibleFormatMask.
+  // Product alts stamp E2|E3 CompatibleFormatMask.
   for (const PlacementAlternative &A : Enumerated) {
     EXPECT_EQ(A.CompatibleFormatMask, ProductFormatMask);
-    EXPECT_TRUE(A.isCompatibleWith(FormatID::Bundle128Full));
+    EXPECT_TRUE(A.isCompatibleWith(BundleFormatRowID::E96TwoEntry));
+    EXPECT_TRUE(A.isCompatibleWith(BundleFormatRowID::E96ThreeEntry));
   }
 }
 
@@ -107,6 +108,46 @@ TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_ST32_SparseS0Only) {
   EXPECT_EQ((*Alts)[0], Haydn::ST32_S0);
   EXPECT_EQ((*Alts)[1], 0u);
   EXPECT_EQ((*Alts)[2], 0u);
+}
+
+TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_X4CMUL16_SparseS1S2) {
+  HaydnMCFormats Fmts;
+  const std::vector<unsigned> *Alts =
+      Fmts.getAlternateInstsOpcode(Haydn::X4CMUL16);
+  ASSERT_NE(Alts, nullptr);
+  // Sparse: {0, X4CMUL16_S1, X4CMUL16_S2} — MAC D_R is s1|s2 only.
+  ASSERT_EQ(Alts->size(), 3u);
+  EXPECT_EQ((*Alts)[0], 0u);
+  EXPECT_EQ((*Alts)[1], Haydn::X4CMUL16_S1);
+  EXPECT_EQ((*Alts)[2], Haydn::X4CMUL16_S2);
+
+  SmallVector<PlacementAlternative, 4> Enumerated;
+  ASSERT_TRUE(
+      enumeratePlacementAlternatives(Fmts, Haydn::X4CMUL16, Enumerated));
+  ASSERT_EQ(Enumerated.size(), 2u);
+  EXPECT_EQ(Enumerated[0].MemberOpcode, Haydn::X4CMUL16_S1);
+  EXPECT_EQ(Enumerated[0].FieldSlots, SlotBits(Haydn::SLOT1));
+  EXPECT_EQ(Enumerated[1].MemberOpcode, Haydn::X4CMUL16_S2);
+  EXPECT_EQ(Enumerated[1].FieldSlots, SlotBits(Haydn::SLOT2));
+}
+
+TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_MOVEI_H_SparseS0Only) {
+  HaydnMCFormats Fmts;
+  const std::vector<unsigned> *Alts =
+      Fmts.getAlternateInstsOpcode(Haydn::MOVEI_H);
+  ASSERT_NE(Alts, nullptr);
+  // Sparse: {MOVEI_H_S0, 0, 0} — ALU64 I32 is s0 only.
+  ASSERT_EQ(Alts->size(), 3u);
+  EXPECT_EQ((*Alts)[0], Haydn::MOVEI_H_S0);
+  EXPECT_EQ((*Alts)[1], 0u);
+  EXPECT_EQ((*Alts)[2], 0u);
+
+  SmallVector<PlacementAlternative, 4> Enumerated;
+  ASSERT_TRUE(
+      enumeratePlacementAlternatives(Fmts, Haydn::MOVEI_H, Enumerated));
+  ASSERT_EQ(Enumerated.size(), 1u);
+  EXPECT_EQ(Enumerated[0].MemberOpcode, Haydn::MOVEI_H_S0);
+  EXPECT_EQ(Enumerated[0].FieldSlots, SlotBits(Haydn::SLOT0));
 }
 
 TEST(HaydnPlacementAlternativeTest, FieldSlotsFromSparseIndexNotFlexReverse) {
@@ -177,9 +218,11 @@ TEST(HaydnPlacementAlternativeTest, UnknownOpcodeReturnsNull) {
 // CompatibleFormatMask (plan §6.1)
 //===----------------------------------------------------------------------===//
 
-TEST(HaydnPlacementAlternativeTest, CompatibleFormatMask_ProductFullOnly) {
-  EXPECT_EQ(ProductFormatMask, 1ull << 0);
-  EXPECT_EQ(formatIDBit(FormatID::Bundle128Full), ProductFormatMask);
+TEST(HaydnPlacementAlternativeTest, CompatibleFormatMask_ProductE96Rows) {
+  // Product mask is E96TwoEntry | E96ThreeEntry.
+  EXPECT_EQ(ProductFormatMask,
+            formatRowBit(BundleFormatRowID::E96TwoEntry) |
+                formatRowBit(BundleFormatRowID::E96ThreeEntry));
 
   HaydnMCFormats Fmts;
   SmallVector<PlacementAlternative, 4> Alts;
@@ -187,41 +230,35 @@ TEST(HaydnPlacementAlternativeTest, CompatibleFormatMask_ProductFullOnly) {
   ASSERT_FALSE(Alts.empty());
   for (const PlacementAlternative &A : Alts) {
     EXPECT_EQ(A.CompatibleFormatMask, ProductFormatMask);
-    EXPECT_TRUE(A.isCompatibleWith(ProductFormatID));
-    EXPECT_TRUE(A.isCompatibleWith(FormatID::Bundle128Full));
-    constexpr FormatID Synth = static_cast<FormatID>(1);
-    EXPECT_FALSE(A.isCompatibleWith(Synth));
+    EXPECT_TRUE(A.isCompatibleWith(BundleFormatRowID::E96TwoEntry));
+    EXPECT_TRUE(A.isCompatibleWith(BundleFormatRowID::E96ThreeEntry));
   }
 }
 
-TEST(HaydnPlacementAlternativeTest, FilterAlternativesForFormat_Synthetic) {
-  constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
-  const uint64_t SynthMask = formatIDBit(SynthNarrow);
-  const uint64_t BothMask = ProductFormatMask | SynthMask;
-
+TEST(HaydnPlacementAlternativeTest, FilterAlternativesForFormat_ProductRows) {
+  // FE8: synthetic FormatID filter overloads are deleted; only the
+  // BundleFormatRowID filter remains. Exercise both product rows.
   SmallVector<PlacementAlternative, 4> Alts;
   Alts.emplace_back(/*MemberOpc=*/Haydn::ADD32_S0, ProductFormatMask);
-  Alts.emplace_back(/*MemberOpc=*/Haydn::ADD32_S1, BothMask);
-  Alts.emplace_back(/*MemberOpc=*/Haydn::ADD32_S2, SynthMask);
+  Alts.emplace_back(/*MemberOpc=*/Haydn::ADD32_S1, ProductFormatMask);
 
-  SmallVector<PlacementAlternative, 4> ForFull = Alts;
-  filterAlternativesForFormat(ForFull, FormatID::Bundle128Full);
-  ASSERT_EQ(ForFull.size(), 2u);
-  EXPECT_EQ(ForFull[0].MemberOpcode, Haydn::ADD32_S0);
-  EXPECT_EQ(ForFull[1].MemberOpcode, Haydn::ADD32_S1);
+  SmallVector<PlacementAlternative, 4> ForE2 = Alts;
+  filterAlternativesForFormat(ForE2, BundleFormatRowID::E96TwoEntry);
+  ASSERT_EQ(ForE2.size(), 2u);
+  EXPECT_EQ(ForE2[0].MemberOpcode, Haydn::ADD32_S0);
+  EXPECT_EQ(ForE2[1].MemberOpcode, Haydn::ADD32_S1);
 
-  SmallVector<PlacementAlternative, 4> ForSynth = Alts;
-  filterAlternativesForFormat(ForSynth, SynthNarrow);
-  ASSERT_EQ(ForSynth.size(), 2u);
-  EXPECT_EQ(ForSynth[0].MemberOpcode, Haydn::ADD32_S1);
-  EXPECT_EQ(ForSynth[1].MemberOpcode, Haydn::ADD32_S2);
+  SmallVector<PlacementAlternative, 4> ForE3 = Alts;
+  filterAlternativesForFormat(ForE3, BundleFormatRowID::E96ThreeEntry);
+  ASSERT_EQ(ForE3.size(), 2u);
 }
 
 TEST(HaydnPlacementAlternativeTest, DefaultCtorStampsProductMask) {
   PlacementAlternative A(Haydn::ADD32_S0);
   EXPECT_EQ(A.MemberOpcode, Haydn::ADD32_S0);
   EXPECT_EQ(A.CompatibleFormatMask, ProductFormatMask);
-  EXPECT_TRUE(A.isCompatibleWith(FormatID::Bundle128Full));
+  EXPECT_TRUE(A.isCompatibleWith(BundleFormatRowID::E96TwoEntry));
+  EXPECT_TRUE(A.isCompatibleWith(BundleFormatRowID::E96ThreeEntry));
 }
 
 } // namespace

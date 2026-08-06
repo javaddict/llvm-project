@@ -13,7 +13,6 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/CodeGen/AsmPrinter.h"
-#include <optional>
 
 namespace llvm {
 
@@ -23,7 +22,7 @@ class LLVM_LIBRARY_VISIBILITY HaydnAsmPrinter : public AsmPrinter {
   /// Emit HiFi-like `#<swps>` SMS bounds when this MBB is a recorded kernel.
   void emitSMSSWPSComments(const MachineBasicBlock &MBB);
 
-  /// Emit function-level `#<spill-kpi>` spill/reload observe summary (B4.5).
+ /// Emit function-level `#<spill-kpi>` spill/reload observe summary.
   /// Counts MachineInstr::getSpillSize/getRestoreSize (and folded peers) over
   /// all real MIs including BUNDLE children. Observe-only; default ON.
   void emitSpillKPIComments();
@@ -46,19 +45,22 @@ class LLVM_LIBRARY_VISIBILITY HaydnAsmPrinter : public AsmPrinter {
       PendingHwloopEndLabels;
 
   // Pending HWLOOP START labels, keyed by the loop-body MBB. Mirrors END:
-  // flush on first real body MI after emitCodeAlignment(4) so HWLR_BEGIN is
-  // ÷4-representable. MBB setAlignment is NOT used.
+  // flush labels only at the first real body MI — no streamer
+  // emitCodeAlignment pad. Product Format E parcels are already
+  // productParcelBytes() (12 B; HWLoopOff uses registry ValueShift);
+  // Fixup/exact-commit owns any MIR pad cycles. MBB setAlignment is NOT used.
   DenseMap<const MachineBasicBlock *, SmallVector<MCSymbol *, 2>>
       PendingHwloopStartLabels;
 
   // JT/call soft-zero R0 is MIR (HaydnExpandPseudos), not printer state.
 
-  // Emit a single MCInst wrapped in a 3-slot VLIW bundle with NOP padding.
-  // Every Haydn instruction must be in a 64-bit D-class bundle — standalone
-  // instructions are not supported by the hardware.
+  // Stream a single MCInst. Product encode is Format E only (BUNDLE_E96_*);
+  // CodeGen emits Format->Opcode composites, and the MC emitter may wrap
+  // residual standalone/hand-asm singles as BUNDLE_E96_TWO_ENTRY. No
+  // printer re-slot / multi-width pad path.
   void emitWrappedInst(const MCInst &Inst);
 
-  // W1.2: print-time fixed-R12 AT spill removed. VASTART/VACOPY expand via
+ // : print-time fixed-R12 AT spill removed. VASTART/VACOPY expand via
   // withPostRAScratch in ExpandPseudos (free GPR first; spill only if
   // needed). Printer is representation-only for that class.
 
@@ -76,23 +78,10 @@ class LLVM_LIBRARY_VISIBILITY HaydnAsmPrinter : public AsmPrinter {
   // link/runtime. See.
   void registerSymbolicOperands(const MCInst &Inst) const;
 
-  // Emit a single 48-bit WIDE hwloop setup instruction.
-  // \param Sel HWLOOP selector (0=outer, 1=inner).
-  // \param StartSym Symbol for the loop body start (HWLR_BEGIN target).
-  // \param EndSym Symbol for the loop body end (HWLR_END target).
-  // \param CntImm If present, emit SET_HWLOOP_W with this constant trip
-  // count (§5.11 all-imm form). If absent, emit
-  // SET_HWLOOP_F2_W with the count in \p RsReg (§5.12).
-  // \param RsReg GPR32 holding the trip count (used only when CntImm
-  // is absent).
-  void emitHWLoopWideInst(unsigned Sel, const MCSymbol *StartSym,
-                          const MCSymbol *EndSym,
-                          std::optional<int64_t> CntImm, unsigned RsReg = 0);
-
 public:
   // Inclusive START/END temp labels for SET_HWLOOP_{W,F2_W} (used by
   // HaydnMCInstLower for Desc-only BUNDLE/standalone Lower — not printer
-  // expand). Pending flush on first/last real MI after Bundle128 pad.
+ // expand). : flush on first/last real MI; no streamer alignment pad.
   MCSymbol *getOrCreateHwloopEndSym(MachineBasicBlock *Latch);
   MCSymbol *getOrCreateHwloopStartSym(MachineBasicBlock *LoopBody);
 
@@ -106,6 +95,9 @@ public:
   void emitBasicBlockStart(const MachineBasicBlock &MBB) override;
 
   void emitFunctionBodyStart() override;
+
+  // Emit product-legal function alignment (see HasFunctionAlignment=false).
+  void emitFunctionEntryLabel() override;
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 

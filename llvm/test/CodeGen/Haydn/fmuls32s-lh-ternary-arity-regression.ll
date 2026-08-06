@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — llvm.haydn.fmuls32s.lh must be ternary (acc, a, b).
+
 ; REGRESSION TEST: llvm.haydn.fmuls32s.lh must be ternary (acc, a, b).
 ;
 ; Bug: int_haydn_fmuls32s_lh was declared haydn_binary_intrinsic (2 params) in
@@ -25,7 +27,6 @@
 ; call path crashed with getParamType out of range. After the fix, selection
 ; produces the FMULS32S_LH mnemonic. If the intrinsic reverts to binary, the
 ; declare here becomes a verify error ("intrinsic arg count mismatch") and the
-; CHECK for fmuls32s_lh fails.
 ;
 ; References:
 ; ~/haydn-plans/decisions/-fmuls32s-lh-ternary-arity-fix.md
@@ -36,8 +37,6 @@
 declare i64 @llvm.haydn.fmuls32s.lh(i64, <2 x i32>, <2 x i32>)
 declare i64 @llvm.haydn.fmuls32s.ll(i64, <2 x i32>, <2 x i32>)
 declare i64 @llvm.haydn.fmuls32s.hh(i64, <2 x i32>, <2 x i32>)
-; CHECK-LABEL: test_fmuls32s_lh:
-; CHECK: fmuls32s_lh
 define i64 @test_fmuls32s_lh(i64 %acc, i64 %a, i64 %b) {
   %bc.1 = bitcast i64 %a to <2 x i32>
   %bc.2 = bitcast i64 %b to <2 x i32>

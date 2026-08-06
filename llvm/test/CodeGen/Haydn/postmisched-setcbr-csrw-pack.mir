@@ -1,0 +1,180 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=EXPAND
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-expand-pseudos,postmisched -verify-machineinstrs %s -o - | \
+# RUN:   FileCheck %s --check-prefix=PACK
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=DIRECT
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-expand-pseudos,postmisched -stats \
+# RUN:   -verify-machineinstrs %s -o /dev/null 2>&1 | \
+# RUN:   FileCheck %s --check-prefix=STATS
+
+# Role: MIR — Pre-pack SETCBR_* expand to final CSRW_W, then post-RA exact
+# pack/hazard of that form (AltDesc setDesc CSRW_W→CSRW_W_S0 + CBR edges).
+#
+# Product law (encoding TOPIC; ExpandPseudos before postmisched):
+#   * SETCBR_BEGIN/END are cycle-forming pseudos: ExpandPseudos emits one
+#     CSRW_W issue op per pseudo with CSR 0x2C..0x2F and implicit-def CBR0/1.
+#   * Residual SETCBR at late Finalize/AsmPrinter is fatal (negative peer lits).
+#   * Post-RA HR/DAG must see the real CSRW so AlternateInsts → member setDesc
+#     (CSRW_W_S0) and exact BundleMaterialize commit apply.
+#   * CBR implicit-def/use serializes CB mem after the boundary write (no
+#     same-cycle RAW; no reorder past the programmed set).
+#
+# Ownership: postmisched exact-commit (PostRASchedStrategy + BundleMaterialize
+# + AlternateDescriptors) on the expanded CSRW form. ExpandPseudos is the
+# pre-pack producer of that form; residual printer bans are sibling late-MC.
+#
+# Cases:
+#   1. expand_addrs — all four SETCBR variants → CSR 44..47 + CBR0/1.
+#   2. pack_csrw_with_alu — expand then setDesc members (CSRW_W_S0 + ADD32_S*).
+#   3. cbr_raw_order — CSRW def CBR before D_SDW_CB_IMM use CBR; ordered.
+#   4. expand_then_cb — begin+end setup dominate CB store; no residual SETCBR.
+#   5. direct_csrw_multi_mi — pre-expanded CSRW_W co-issues with independent
+#      ADD under exact multi-MI commit (BUNDLE + CSRW_W_S0). DIRECT-only:
+#      expand pass would not rewrite CSRW_W, but the function is skipped by
+#      EXPAND/PACK prefixes that key on other labels.
+
+--- |
+  define void @expand_addrs() { ret void }
+  define void @pack_csrw_with_alu() { ret void }
+  define void @cbr_raw_order() { ret void }
+  define void @expand_then_cb() { ret void }
+  define void @direct_csrw_multi_mi() { ret void }
+...
+---
+name:            expand_addrs
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+
+    ; EXPAND-LABEL: name: expand_addrs
+    ; EXPAND: CSRW_W 44, $r1, implicit-def $sfr, implicit-def $cbr0
+    ; EXPAND-NEXT: CSRW_W 45, $r1, implicit-def $sfr, implicit-def $cbr0
+    ; EXPAND-NEXT: CSRW_W 46, $r1, implicit-def $sfr, implicit-def $cbr1
+    ; EXPAND-NEXT: CSRW_W 47, $r1, implicit-def $sfr, implicit-def $cbr1
+    ; EXPAND-NOT: SETCBR
+    ; EXPAND: RET
+    ;
+    ; PACK-LABEL: name: expand_addrs
+    ; Member setDesc after postmisched leaveRegion (s0-only CSRW).
+    ; PACK: CSRW_W_S0 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; PACK: CSRW_W_S0 45, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; PACK: CSRW_W_S0 46, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr1
+    ; PACK: CSRW_W_S0 47, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr1
+    ; PACK-NOT: SETCBR
+    ; PACK-NOT: {{^    CSRW_W }}
+    SETCBR_BEGIN 0, $r1
+    SETCBR_END 0, $r1
+    SETCBR_BEGIN 1, $r1
+    SETCBR_END 1, $r1
+    RET implicit $r15
+
+...
+---
+name:            pack_csrw_with_alu
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r15
+
+    ; Expand SETCBR then postmisched setDesc: CSRW_W_S0 + ADD32_S*.
+    ; Product may leave them as sequential singletons or co-issue; pin
+    ; member identity and no residual SETCBR/logical CSRW_W.
+    ; EXPAND-LABEL: name: pack_csrw_with_alu
+    ; EXPAND: CSRW_W 44, $r1, implicit-def $sfr, implicit-def $cbr0
+    ; EXPAND: $r4 = ADD32 $r2, $r3, implicit-def dead $sfr
+    ; EXPAND-NOT: SETCBR
+    ;
+    ; PACK-LABEL: name: pack_csrw_with_alu
+    ; PACK-DAG: CSRW_W_S0 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; PACK-DAG: $r4 = ADD32_S{{[012]}} {{.*}}$r2, {{.*}}$r3, implicit-def dead $sfr
+    ; PACK-NOT: SETCBR
+    ; PACK-NOT: {{^    CSRW_W }}
+    ; PACK-NOT: {{^    ADD32 }}
+    SETCBR_BEGIN 0, $r1
+    $r4 = ADD32 $r2, $r3, implicit-def dead $sfr
+    RET implicit $r15
+
+...
+---
+name:            cbr_raw_order
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $d0, $r15
+
+    ; CBR RAW: CSRW implicit-def $cbr0; CB store implicit-use $cbr0.
+    ; Must stay ordered setup-before-store (wrong CBR state if SDW first).
+    ; EXPAND-LABEL: name: cbr_raw_order
+    ; EXPAND: CSRW_W 44, $r1, implicit-def $sfr, implicit-def $cbr0
+    ; EXPAND-NEXT: $r2 = D_SDW_CB_IMM $d0, $r2, 0, 1, implicit $cbr0, implicit-def dead $sfr
+    ;
+    ; PACK-LABEL: name: cbr_raw_order
+    ; PACK: CSRW_W_S0 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; PACK-NEXT: $r2 = D_SDW_CB_IMM_S{{[012]}} {{.*}}$d0, {{.*}}$r2, 0, 1, implicit $cbr0, implicit-def dead $sfr
+    ; PACK-NOT: SETCBR
+    SETCBR_BEGIN 0, $r1
+    $r2 = D_SDW_CB_IMM $d0, $r2, 0, 1, implicit $cbr0, implicit-def dead $sfr
+    RET implicit $r15
+
+...
+---
+name:            expand_then_cb
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $d0, $r15
+
+    ; Full product path: begin+end setup then CB store + independent ALU.
+    ; Both CSRWs program set 0 before the store; ADD may co-issue with SDW
+    ; after CBR is live.
+    ; EXPAND-LABEL: name: expand_then_cb
+    ; EXPAND: CSRW_W 44, $r1, implicit-def $sfr, implicit-def $cbr0
+    ; EXPAND-NEXT: CSRW_W 45, $r2, implicit-def $sfr, implicit-def $cbr0
+    ; EXPAND: D_SDW_CB_IMM
+    ; EXPAND: ADD32
+    ; EXPAND-NOT: SETCBR
+    ;
+    ; PACK-LABEL: name: expand_then_cb
+    ; PACK: CSRW_W_S0 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; PACK: CSRW_W_S0 45, {{.*}}$r2, implicit-def $sfr, implicit-def $cbr0
+    ; PACK: D_SDW_CB_IMM
+    ; PACK-NOT: SETCBR
+    ; PACK-NOT: {{^    CSRW_W }}
+    SETCBR_BEGIN 0, $r1
+    SETCBR_END 0, $r2
+    $r3 = D_SDW_CB_IMM $d0, $r3, 0, 1, implicit $cbr0, implicit-def dead $sfr
+    $r4 = ADD32 $r1, $r2, implicit-def dead $sfr
+    RET implicit $r15
+
+...
+---
+# Pre-expanded product CSRW_W (ExpandPseudos form). Direct postmisched pin
+# for multi-MI exact commit: CSRW s0 + ADD on S1/S2 in one BUNDLE 0.
+# EXPAND/PACK FileCheck prefixes ignore this function (no matching labels).
+name:            direct_csrw_multi_mi
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r15
+
+    ; DIRECT-LABEL: name: direct_csrw_multi_mi
+    ; DIRECT: BUNDLE 0
+    ; DIRECT-DAG: CSRW_W_S0 44, {{.*}}$r1, implicit-def {{(dead )?}}$sfr, implicit-def $cbr0
+    ; DIRECT-DAG: $r4 = ADD32_S{{[012]}} {{.*}}$r2, {{.*}}$r3, implicit-def dead $sfr
+    ; DIRECT-NOT: SETCBR
+    ; DIRECT-NOT: {{^    CSRW_W }}
+    CSRW_W 44, $r1, implicit-def dead $sfr, implicit-def $cbr0
+    $r4 = ADD32 $r2, $r3, implicit-def dead $sfr
+    RET implicit $r15
+
+# Exact multi-MI finalize must not fail-close on CSRW product cycles.
+# STATS-NOT: failed exact no-split

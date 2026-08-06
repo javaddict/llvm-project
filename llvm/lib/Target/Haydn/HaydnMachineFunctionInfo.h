@@ -14,12 +14,18 @@
 #define LLVM_LIB_TARGET_HAYDN_HAYDNMACHINEFUNCTIONINFO_H
 
 #include "HaydnAlternateDescriptors.h"
+#include "MCTargetDesc/HaydnFormat.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/CodeGen/MachineFunction.h"
 
 namespace llvm {
 
 class HaydnMachineFunctionInfo : public MachineFunctionInfo {
+  // Object-encoding profile for this function (copied from Subtarget at
+  // construction). Module lowering rejects function-level disagreement.
+  haydn::format::ObjectEncodingProfileID EncodingProfile =
+      haydn::format::ObjectEncodingProfileID::E96;
+
   bool UsesAGU = false;
   bool HasFP = false;
   int VarArgsStackOffset = 0;
@@ -61,6 +67,27 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   // -1 when not yet reserved.
   int PostRAScratchFI = -1;
 
+  // Permanent 8-byte in-frame pack slot for DR64 construction from two GPR32
+  // halves (LOADI64 both-halves-nonzero constants; MOV_GPR_TO_DR64 two-live-
+  // GPR general case). Reserved by determineCalleeSaves ONLY when such a pack
+  // is present (leaf functions pay no frame growth); addressed via
+  // getFrameIndexReference (stable FP/SP base). This replaces the old dynamic
+  // SUBI32 $r13,8 / ST32 / ST32 / LD64 / ADDI32_W $r13,8 transient, which
+  // shifted SP mid-function and corrupted sibling SP-relative fixed objects
+  // (CB mac_mula64_all: the hoisted i64 compare-constant 979 was stored at
+  // sp=BASE-16 but loaded at sp=BASE-8 → wrong value → guest exit 11).
+  // -1 when not reserved.
+  int DR64PackFI = -1;
+
+  // Permanent 4-byte in-frame spill *home* for the DR64 pack base scavenger
+  // (the large-frame fallback of withDR64PackBase). Reserved by
+  // determineCalleeSaves alongside DR64PackFI. The fallback nests an inner
+  // withPostRAScratch for the MatInt scratch (LOADI64) that may itself spill
+  // to PostRAScratchFI; this dedicated FI keeps the two spills disjoint so
+  // they never overwrite each other's saved value. Lives ABOVE SP (no red
+  // zone / transient subi). -1 when not reserved.
+  int DR64PackBaseSpillFI = -1;
+
   // Frame index for BranchRelaxation insertIndirectBranch when all GPRs are
   // live (seed 3148 / large yarpgen). BranchRelaxation builds a fresh
   // RegScavenger without PEI's scavenger FIs, so this dedicated spill is
@@ -77,8 +104,10 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   HaydnAlternateDescriptors AltDescs;
 
 public:
-  /// SMS result for release `#<swps>` asm comments (HiFi-like). Keyed by
-  /// kernel / loop-header MBB number (stable across ModuloSchedule expand).
+  /// SMS scalar SWPS freeze for release `#<swps>` asm comments (HiFi-like).
+  /// Keyed by kernel / loop-header MBB. Does not encode cycle membership,
+  /// FormatID, or BUNDLE roots — same-cycle logical groups come from the
+  /// expander clone→cycle hook when -haydn-sms-handoff is enabled.
   struct SMSSWPSInfo {
     unsigned ResMII = 0;
     unsigned RecMII = 0;
@@ -100,6 +129,19 @@ public:
         const DenseMap<MachineBasicBlock *, MachineBasicBlock *> &Src2DstMBB)
       const override {
     return DestMF.cloneInfo<HaydnMachineFunctionInfo>(*this);
+  }
+
+  /// Object-encoding profile for this MachineFunction (production E96).
+  haydn::format::ObjectEncodingProfileID getObjectEncodingProfileID() const {
+    return EncodingProfile;
+  }
+
+  const haydn::format::ObjectEncodingProfileDesc &
+  getObjectEncodingProfile() const {
+    const haydn::format::ObjectEncodingProfileDesc *P =
+        haydn::format::getObjectEncodingProfile(EncodingProfile);
+    assert(P && "function encoding profile missing from registry");
+    return *P;
   }
 
   bool usesAGU() const { return UsesAGU; }
@@ -132,6 +174,18 @@ public:
   //@{
   int getPostRAScratchFI() const { return PostRAScratchFI; }
   void setPostRAScratchFI(int FI) { PostRAScratchFI = FI; }
+  //@}
+
+  // \name DR64-from-GPR32-halves pack slot (no dynamic SP adjust).
+  //@{
+  int getDR64PackFI() const { return DR64PackFI; }
+  void setDR64PackFI(int FI) { DR64PackFI = FI; }
+  //@}
+
+  // \name DR64 pack base scavenger spill home (large-frame fallback).
+  //@{
+  int getDR64PackBaseSpillFI() const { return DR64PackBaseSpillFI; }
+  void setDR64PackBaseSpillFI(int FI) { DR64PackBaseSpillFI = FI; }
   //@}
 
   // \name Branch-relaxation scratch spill.

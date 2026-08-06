@@ -1,11 +1,14 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
 
+# Role: object — branch target relocations.
+
 #===----------------------------------------------------------------------===
 # Test branch target relocations
 #===----------------------------------------------------------------------===
 
 # Forward branch reference
 # CHECK: beq r0, r1, forward_label
+
 BEQ R0, R1, forward_label
 
 forward_label:

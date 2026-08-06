@@ -102,6 +102,8 @@ private:
   /// priority). Haydn B2.5 also synthesizes sparse size-3 AlternateInsts
   /// (index==field, 0=hole) from Full-format `_S0`/`_S1`/`_S2` members for
   /// non-InstFormat logicals (see emitAlternateInstsOpcodeFunc).
+  /// VF1.3: every emitted member is setDesc-safe vs its logical (full contract
+  /// for MultiSlot_Pseudo; structural operand filter for sparse discovery).
   std::vector<std::string> AlternateInsts;
   /// Is it the NOP instruction of a particular slot?
   bool IsSlotNOP;

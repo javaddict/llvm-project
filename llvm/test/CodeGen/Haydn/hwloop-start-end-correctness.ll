@@ -1,11 +1,14 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s --check-prefix=MIR
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop < %s | FileCheck %s --check-prefix=ASM
+
+; Role: MIR — so LoopStart's $adj (trip-count adjustment) is -2 instead of 0.
+
 ; REBASELINED : scheduling changed (//) — SWPS now fires
 ; so LoopStart's $adj (trip-count adjustment) is -2 instead of 0. The
 ; start!=end correctness (guarded by the distinct PseudoLoopEnd MBB operand)
 ; is unchanged.
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop < %s | FileCheck %s --check-prefix=ASM
 ;
 ; REGRESSION TEST : Hardware-loop START and END offsets must be CORRECT.
 ;
@@ -54,6 +57,7 @@
 ; assembler errors.
 
 ; Test 1: single-BB count-up loop (the degenerate start==end case)
+
 define i32 @single_bb_loop(ptr %p, i32 %n) {
 ; MIR-LABEL: name: single_bb_loop
 ; MIR: SET_HWLOOP

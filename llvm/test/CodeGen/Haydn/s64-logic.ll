@@ -1,6 +1,9 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 
+; Role: semantic — 64-bit bitwise AND.
+
 ; Test 64-bit bitwise AND
+
 define i64 @and64(i64 %a, i64 %b) {
 ; CHECK-LABEL: and64:
 ; CHECK: and64

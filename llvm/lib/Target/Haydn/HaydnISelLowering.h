@@ -39,6 +39,14 @@ public:
   unsigned getMinimumJumpTableEntries() const override;
   bool areJTsAllowed(const Function *Fn) const override;
 
+  // BundleSim golden faults under-aligned S_LW / S_LHW / D_LDW / LD64.
+  // Only report allowed when Alignment covers the access width (with ABI
+  // i64:32 exception: 4-byte-aligned s64 is split by ISel).
+  bool allowsMisalignedMemoryAccesses(EVT VT, unsigned AddrSpace,
+                                      Align Alignment,
+                                      MachineMemOperand::Flags Flags,
+                                      unsigned *Fast) const override;
+
   // Defer atomic load/store/RMW expansion to the default IR libcall lowering
   // (__atomic_load_*, __atomic_store_*, __atomic_*_fetch_*). Haydn has no
   // hardware atomics; per CLAUDE.md atomics are libcalls, not silently
@@ -55,7 +63,7 @@ public:
   getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                StringRef Constraint, MVT VT) const override;
 
-  // C2.2–C2.3 / G-MEM-INTRIN: mark public CB/BREV/Golden WITH/POST/PRE + UA
+ // – / : mark public CB/BREV/Golden WITH/POST/PRE + UA
   // mem intrinsics so IRTranslator attaches MachineMemOperands (object, size,
   // align, flags). GISel select clones those MMOs onto the selected MI.
   // Ordinary (Golden LS + BREV): MOLoad/MOStore. Stateful (CB + UA): MO* |

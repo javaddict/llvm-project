@@ -1,6 +1,8 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
-;
+
+; Role: MIR — nested-loop conversion — inner-loop latch explicit branch.
+
 ; REGRESSION TEST: nested-loop conversion — inner-loop latch explicit branch.
 ;
 ; Bug (before): when the inner loop of a nested pair converted to a
@@ -30,7 +32,6 @@
 ; j++)... }`, and it triggers the layout where the inner body is last. The
 ; inner loop converts to LoopStart/SET (sel=1). Outer may also convert when
 ; dual nesting is ON (default) if free-list + structure checks pass; the
-; CHECK requires the inner conversion and verifier pass (explicit B).
 ;
 ; If this test regresses (the explicit B disappears), llc crashes with the
 ; MachineVerifier error above when -verify-machineinstrs is on.

@@ -1,3 +1,8 @@
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
+
+; Role: MIR — This test exercises the pre-RA HardwareLoops pass (Stream A,), which runs BEFORE SMS on VIRTUAL registers and converts countable loops to.
+
 ; This test exercises the pre-RA HardwareLoops pass (Stream A,), which
 ; runs BEFORE SMS on VIRTUAL registers and converts countable loops to
 ; SET_HWLOOP_REG + HWLOOP_END pseudos via IV-PHI analysis. Because the
@@ -9,8 +14,6 @@
 ; convert correctly through the pre-RA IV-PHI analysis. The /P2a/P2b notes
 ; below document WHY the shapes exist and remain the failure mode of interest.
 ; Pre-RA MIR uses virtual registers, so CHECKs do not pin specific vreg numbers.
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
 ; REBASELINED : scheduling changed (//) — SWPS now fires
 ; so LoopStart's $adj (trip-count adjustment) is -2 instead of 0 on iv_via_copy_chain.
 ;
@@ -72,6 +75,7 @@
 ; which logged "Cannot compute trip count" / "Cannot determine trip count"
 ; for both loops because the IV/Limit were derived from LSR-rewritten pointer
 ; IV phis. The pre-RA pass operates on the IR-shape IV PHIs and converts both.
+
 define void @sibling_loops_shared_reg(ptr noalias %a, ptr noalias %b, i32 %n,
                                       i32 %m) nounwind {
 ; CHECK-LABEL: name: sibling_loops_shared_reg

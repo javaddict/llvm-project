@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs -stop-after=instruction-select < %s | FileCheck --check-prefix=MIR %s
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: MIR — AE_PKSR-style dual pack is a *composite* (not a golden PACKSR* encoding).
+
 ; AE_PKSR-style dual pack is a *composite* (not a golden PACKSR* encoding).
 ; haydn_dsp.h expands it as:
 ;   tmp_a = X2SRA32R a, sh

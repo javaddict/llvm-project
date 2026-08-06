@@ -63,23 +63,16 @@ enum EncodedWidth : unsigned {
 };
 
 //===----------------------------------------------------------------------===//
-// Flex 128-bit encoding — FU field (encoding_manual_flex.md §1.1/§1.2, R1)
+// Residual FU codes (placement / `_S*` member scaffolding)
 //===----------------------------------------------------------------------===//
 //
-// The 128-bit Flex bundle places a 3-bit FU field at the MSB of each slot
-// window (s0 bundle[47:45], s1 bundle[87:85], s2 bundle[127:125]); FU selects
-// the per-slot decode table; the opcode sits at the payload MSB just below FU.
-// 5 FU types; codes 5..7 are RESERVED (illegal-instruction trap). NOP = an
-// all-zero slot window (§4).
+// Product encode is Format E only (96-bit / 12-byte parcels; FE8). Residual
+// FU codes below label `_S0`/`_S1`/`_S2` member families for placement tables
+// and setDesc alternatives mapped onto E2/E3 entry windows — they are not a
+// 128-bit product composite wire format.
 //
-// These are the ENCODING FU codes (0..4) — the spec's wire format.
-// The former parallel "RESOURCE model" enum HaydnDClass::FUType
-// (FU_ALU32=1..FU_MAC=5) was deleted alongside HaydnDClassInfo.h — alts-derived
-// `HaydnMCFormats::getLegalSlots` covers slot legality (slot k is legal iff a
-// `_S<k>` variant exists, and the .td FU/slot assignment produces that
-// variant), so there is no longer a separate resource-model FU namespace to keep
-// in sync. FU_MAC0=7 / FU_MAC1=8 were resource-only instances of MAC and are
-// NOT encoded (they collapse to MAC=4 at the encode boundary).
+// 5 FU types; codes 5..7 are RESERVED. `HaydnMCFormats::getLegalSlots` covers
+// slot legality (slot k is legal iff a `_S<k>` variant exists).
 namespace FlexFU {
 constexpr unsigned ALU32 = 0;          //< 000 — 32-bit scalar ALU (GPR). opcode 6b.
 constexpr unsigned LS   = 1;           //< 001 — Load/Store. opcode 7b.

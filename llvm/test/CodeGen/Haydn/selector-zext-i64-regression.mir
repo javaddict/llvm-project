@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select -verify-machineinstrs %s -o - | FileCheck %s
-#
+
+# Role: MIR — G_ZEXT i8/i16 -> i64 must select without "cannot select" error.
+
 # REGRESSION TEST: G_ZEXT i8/i16 -> i64 must select without "cannot select" error.
 # (prior revision)
 #

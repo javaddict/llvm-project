@@ -1250,7 +1250,9 @@ def int_haydn_setcbr_end : Haydn_Intrinsic<"haydn_setcbr_end",
 //===----------------------------------------------------------------------===//
 // AR (Aligned Register) unaligned load/store stream (golden LS #103-#109)
 //
-// Hardware funnel-shift unaligned access via AR0-AR3 (ar_sel = 0..3):
+// Hardware funnel-shift unaligned access via AR0–AR1 (ar_sel legal domain
+// {0,1}; wire field remains 2 bits — selectors 2/3 fail-closed at product
+// surfaces until golden classifies unused codes):
 //   PLDWWUA       — seed AR from mem64[rs & ~7]
 //   D_LQHWUA_POST — load 4×i16 unaligned + post-inc rs1 by ±rs2
 //   D_LTWUA_POST  — load 2×i32 unaligned + post-inc
@@ -1278,7 +1280,7 @@ def int_haydn_setcbr_end : Haydn_Intrinsic<"haydn_setcbr_end",
 // PLDW writes AR (side effect); model as HasSideEffects (not pure read).
 //
 // void pldwwua(i32 ar_sel, i32 ptr) — seed AR from mem (must not DCE)
-// ar_sel is encoding ImmArg (uimm2 0..3).
+// ar_sel is encoding ImmArg; product legal domain {0,1}.
 def int_haydn_pldwwua : Haydn_Intrinsic<"haydn_pldwwua",
     [], [llvm_i32_ty, llvm_ptr_ty],
     [ImmArg<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;

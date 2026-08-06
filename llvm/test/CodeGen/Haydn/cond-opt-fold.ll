@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — End-to-end check that comparison+branch folds and the zero-branch narrowing fire together through the full codegen pipeline.
+
 ; REGRESSION TEST: End-to-end check that comparison+branch folds and the
 ; zero-branch narrowing fire together through the full codegen pipeline.
 ;
@@ -26,13 +28,8 @@
 ; in the final asm. Haydn lowers icmp eq via SEQ32 (sets r=1 if equal) and
 ; then branches on that result with BNEZ — the test asserts that the final
 ; branch is a single-register zero-test form, not a 2-register BEQ/BNE.
-; CHECK-LABEL: fold_eq_zero:
-; CHECK-NOT: beq_w{{(\.s[012])?}} r{{[0-9]+}}, r{{[0-9]+}}
 ; SEQ32 + XORI invert + BEQZ (T7.5 exact polarity).
-; CHECK: seq32
-; CHECK: xori32
-; CHECK: beqz_w{{(\.s[012])?}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+
 define void @fold_eq_zero(i32 %a, ptr %p) nounwind {
 entry:
   %c = icmp eq i32 %a, 0

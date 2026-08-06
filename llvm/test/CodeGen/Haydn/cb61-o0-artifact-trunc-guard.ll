@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 < %s 2>&1 | FileCheck %s
-;
+
+; Role: verifier — nested trunc/ext cast chains at -O0 must not crash LegalizationArtifactCombiner::tryCombineTrunc.
+
 ; wave-1 (Legalizer): nested trunc/ext cast chains at -O0 must not
 ; crash in LegalizationArtifactCombiner::tryCombineTrunc via
 ; MachineIRBuilder::validateTruncExt ("invalid widening trunc").
@@ -15,7 +17,7 @@
 ;
 ; If this regresses, llc exits 134 before CHECK-LABEL.
 
-; CHECK-LABEL: yarpgen_style_nested_casts:
+
 define i64 @yarpgen_style_nested_casts(i64 %x, i1 zeroext %y) nounwind {
 entry:
   ; (long long)X >> (long long)(int)(bool)Y

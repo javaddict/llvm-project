@@ -1,9 +1,12 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — PHI node shapes — intent CHECKs only (not full-UTC re-golden).
+
 ; PHI node shapes — intent CHECKs only (not full-UTC re-golden).
 ; Codegen is correct; previous XFAIL was FileCheck golden drift.
 
 ;PHI node with s32 in simple if-then-else → cmov (movt32)
+
 define i32 @phi_s32_if(i32 %a, i32 %b, i32 %c) {
 ; CHECK-LABEL: phi_s32_if:
 ; CHECK-DAG: add32

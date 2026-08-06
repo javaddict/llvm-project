@@ -1,3 +1,8 @@
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
+
+; Role: MIR — This test exercises the pre-RA HardwareLoops pass (Stream A,), which runs BEFORE SMS on VIRTUAL registers and converts countable loops to.
+
 ; This test exercises the pre-RA HardwareLoops pass (Stream A,), which
 ; runs BEFORE SMS on VIRTUAL registers and converts countable loops to
 ; SET_HWLOOP_REG + HWLOOP_END pseudos. Because the pre-RA pass operates on
@@ -8,8 +13,6 @@
 ; via an arg copy, plus a loop-entry guard that defeats LD32_POST fusion) still
 ; converts correctly through the pre-RA path. Pre-RA MIR uses vregs, so CHECKs
 ; do not pin specific vreg numbers.
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
 ;
 ; REGRESSION TEST: HWLoop IV-init copy-source-clobber WRONG-CODE (/).
 ;

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — This test was XFAIL'd from until reverted the GPR-port-FuncUnits change to HaydnSchedule.td that triggered a SIGSEGV in.
+
 ; This test was XFAIL'd from until reverted the
 ; GPR-port-FuncUnits change to HaydnSchedule.td that triggered a SIGSEGV in
 ; the post-RA VLIW scheduler. XFAIL removed now that the single-stage

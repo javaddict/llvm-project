@@ -1,0 +1,121 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -run-pass=pipeliner \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=HANDOFF
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -run-pass=pipeliner \
+# RUN:   -debug-only=pipeliner -verify-machineinstrs %s -o /dev/null 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=SMS
+# REQUIRES: asserts
+
+# Role: MIR — Three-ready rematch product MIR for SMS ResourceCycle / analyzeLoop gates (vliw-format-aware-scheduling-pipeline.md §5.1 three-ready exit + §5.2 SMS).
+
+# Three-ready rematch product MIR for SMS ResourceCycle / analyzeLoop gates
+# (vliw-format-aware-scheduling-pipeline.md §5.1 three-ready exit + §5.2 SMS).
+#
+# Loop body carries the classic rematch triple ADD32 + 2×ADD64:
+#   * Preferred first-fit freezes ADD32 on high slot (S2) then ADD64 on S1
+#     and loses the second ADD64.
+#   * HaydnResourceCycle live CycleCandidateSet + exactTryAddProduct rematches
+#     ADD32 onto S0 so both ADD64 fit — one modulo issue cycle for the triple.
+#   * SMS-RESMII: greedy (exact/DFA peer) ≡ exhaustive ≤3 oracle (overestimate=0).
+#     Positive overestimate fail-closes analyzeLoop (see
+#     sms-format-resmii-overestimate-reject.mir). Preferred-collapse
+#     overestimate is unit-only (SMS_ThreeReadyRematch_ADD32_2xADD64).
+#   * SMS-HOOK silent on single-cycle itineraries; no force-reject here
+#     (positive reject: sms-format-hook-reject.mir).
+#   * SMS-HANDOFF metrics-only freeze: qual-kernel exact_packable=1 for the
+#     rematch triple body. Default OFF keeps logical opcodes only (no durable
+#     pre-RA BUNDLE). Clone→cycle materialize is opt-in (-haydn-sms-handoff);
+#     positive ON pin: sms-handoff-bundle-through-ra.mir.
+#
+# Sibling pre-RA list HR owns prera-format-feasibility.mir
+# (vreg_three_ready_rematch_add32_2xadd64). This file owns SMS ResourceCycle /
+# analyzeLoopForPipelining only.
+#
+# SMS-NOT: SMS-HOOK: reject
+# SMS-NOT: unsupported SMS-HOOK resource class
+# SMS-NOT: Unable to analyzeLoop
+# SMS-NOT: SMS-RESMII: reject
+# SMS-NOT: SMS-HANDOFF: reject
+# SMS-DAG: SMS-RESMII: body_ops={{[0-9]+}} greedy={{[0-9]+}} exhaustive={{[0-9]+}} overestimate=0
+# SMS-DAG: SMS-FORMAT: rc_hr_diff match=1 {{.*}} pins=1
+# SMS-DAG: SMS-HANDOFF: metrics-only freeze
+# SMS-DAG: SMS-HANDOFF: qual-kernel body_ops={{[0-9]+}} coissue_packable={{[01]}} exact_packable=1 exhaustive={{[0-9]+}}
+# SMS-DAG: Return Res MII:{{[1-9][0-9]*}}
+# SMS-DAG: Schedule Found? 1 (II={{[0-9]+}})
+
+--- |
+  define i32 @sms_three_ready_rematch(i32 %a, i32 %b, i64 %x0, i64 %y0,
+                                      i64 %x1, i64 %y1, i32 %n) #0 {
+  entry:
+    br label %loop
+  loop:
+    br i1 undef, label %loop, label %exit
+  exit:
+    ret i32 undef
+  }
+  attributes #0 = { "target-features"="-hwloop" }
+...
+---
+name:            sms_three_ready_rematch
+alignment:       16
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          false
+isSSA:           true
+noVRegs:         false
+liveins:
+  - { reg: '$r1' }
+  - { reg: '$r2' }
+  - { reg: '$d0' }
+  - { reg: '$d1' }
+  - { reg: '$d2' }
+  - { reg: '$d3' }
+  - { reg: '$r3' }
+frameInfo:
+  maxAlignment:    1
+machineFunctionInfo: {}
+body:             |
+  bb.1.entry:
+    liveins: $r1, $r2, $d0, $d1, $d2, $d3, $r3
+
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:dr64 = COPY $d0
+    %3:dr64 = COPY $d1
+    %4:dr64 = COPY $d2
+    %5:dr64 = COPY $d3
+    %6:gpr32 = COPY $r3
+    %7:gpr32 = LOADI32 0
+    %8:gpr32 = LOADI32 1
+
+  bb.2.loop:
+    successors: %bb.2(0x7c000000), %bb.3(0x04000000)
+
+    %10:gpr32 = PHI %7, %bb.1, %20, %bb.2
+    %11:gpr32 = PHI %0, %bb.1, %13, %bb.2
+    %12:dr64 = PHI %2, %bb.1, %14, %bb.2
+    %15:dr64 = PHI %4, %bb.1, %16, %bb.2
+    ; Three independent ready ops — rematch triple (ADD32 + 2×ADD64).
+    ; Preferred first-fit dead-ends; exact ResourceCycle rematch packs all
+    ; three in one issue cycle. IV / compare stay separate for analyzability.
+    %13:gpr32 = ADD32 %11, %1, implicit-def dead $sfr
+    %14:dr64 = ADD64 %12, %3, implicit-def dead $sfr
+    %16:dr64 = ADD64 %15, %5, implicit-def dead $sfr
+    %20:gpr32 = ADD32 %10, %8, implicit-def dead $sfr
+    %21:gpr32 = SLT32 %20, %6
+    BNEZ_W %21, %bb.2
+    B %bb.3
+
+  bb.3.exit:
+    $r1 = COPY %13
+    RET implicit $r15, implicit $r1
+
+  ; HANDOFF-LABEL: name: sms_three_ready_rematch
+  ; Logical rematch triple only — no durable pre-RA BUNDLE / member setDesc.
+  ; HANDOFF-NOT: BUNDLE
+  ; HANDOFF-DAG: ADD32
+  ; HANDOFF-DAG: ADD64
+  ; HANDOFF-NOT: ADD32_S
+  ; HANDOFF-NOT: ADD64_S
+...

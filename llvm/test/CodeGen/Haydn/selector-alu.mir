@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select %s -o - | FileCheck %s
 
+# Role: MIR — that G_* arithmetic operations are selected to ADD32/SUB32/MULL/etc.
+
 # Test that G_* arithmetic operations are selected to ADD32/SUB32/MULL/etc.
 
 ---

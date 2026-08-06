@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — scalar `select i1 %c, i32 %a, i32 %b` must lower to MOVT32 (GPR-as-bool: condition is a GPR32 whose low bit is the boolean, NOT a.
+
 ; REGRESSION TEST: scalar `select i1 %c, i32 %a, i32 %b` must lower to MOVT32
 ; (GPR-as-bool: condition is a GPR32 whose low bit is the boolean, NOT a
 ; flag/predicate register).
@@ -29,6 +31,7 @@
 ; the coordinator MUST confirm at build time.
 
 ;select i1 (icmp slt), i32, i32 -> SLT32 + MOVT32.
+
 define i32 @select_icmp_slt(i32 %a, i32 %b, i32 %x, i32 %y) nounwind {
 ; CHECK-LABEL: select_icmp_slt:
 ; CHECK:       slt32

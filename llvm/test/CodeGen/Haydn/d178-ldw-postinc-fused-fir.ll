@@ -3,6 +3,9 @@
 ; RUN:     | FileCheck %s --check-prefix=MIR
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     < %s | FileCheck %s --check-prefix=ASM
+
+; Role: MIR — FIXME: -verify-machineinstrs disabled — HWLoop/VLA path can emit LoopStart on undef physreg (pre-existing).
+
 ; FIXME: -verify-machineinstrs disabled — HWLoop/VLA path can emit LoopStart on undef physreg (pre-existing).
 ;
 ; REBASELINE : load fusion + store fusion both work.

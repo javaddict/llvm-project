@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs -stop-after=instruction-select < %s | FileCheck --check-prefix=MIR %s
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: MIR — Un-XFAIL'd : X2ABS32S now has a real FmtALU64Unary encoding (0x67/0x18C) in HaydnInstrInfo.td, so AsmPrinter emits it.
+
 ; Un-XFAIL'd : X2ABS32S now has a real FmtALU64Unary
 ; encoding (0x67/0x18C) in HaydnInstrInfo.td, so AsmPrinter emits it.
 ;

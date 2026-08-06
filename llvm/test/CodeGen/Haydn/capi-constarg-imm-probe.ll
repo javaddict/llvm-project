@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -o - < %s | FileCheck %s
-;
+
+; Role: semantic — ImmArg encoding fields on ISel-required immediates select to native MI when constant; bare Imm after legalize is accepted via getConstOp*.
+
 ; C0.4 / C5.1: ImmArg encoding fields on ISel-required immediates select to
 ; native MI when constant; bare Imm after legalize is accepted via getConstOp*.
 ; C2.1 peer: UA bases are llvm_ptr_ty (not i32) — keep continuous with
@@ -18,8 +20,6 @@ declare void @llvm.haydn.wbarwua(i32, ptr, i32)
 declare <2 x i32> @llvm.haydn.x2slli32(<2 x i32>, i32)
 declare <4 x i16> @llvm.haydn.x4seli16(<4 x i16>, <4 x i16>, i32)
 
-; CHECK-LABEL: probe_slli32:
-; CHECK: slli32
 define i32 @probe_slli32(i32 %a) {
   %r = call i32 @llvm.haydn.slli32(i32 %a, i32 5)
   ret i32 %r

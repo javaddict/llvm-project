@@ -1,0 +1,12 @@
+# REQUIRES: haydn
+# RUN: yaml2obj %S/Inputs/text16-e96.yaml -o %t.o
+# RUN: ld.lld -T %S/haydn.ld %t.o -o %t
+# RUN: llvm-readobj -S %t | FileCheck %s
+#
+# Product script pads .text to a multiple of HAYDN_PRODUCT_PARCEL_BYTES
+# (production EncodedBytes; currently 12) so BundleSim ASSERT % record-size
+# is satisfied. Object has 16 bytes of .text → pad to 24.
+
+# CHECK: Name: .text
+# CHECK: Address: 0x10000
+# CHECK: Size: 24

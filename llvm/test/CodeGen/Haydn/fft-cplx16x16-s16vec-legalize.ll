@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 %s -o - | FileCheck %s
-;
+
+; Role: semantic — <4 x s16> bitwise ops (G_OR/G_AND/G_XOR) must legalize.
+
 ; REGRESSION TEST: <4 x s16> bitwise ops (G_OR/G_AND/G_XOR) must legalize.
 ;
 ; Bug: HaydnLegalizerInfo.cpp's bitwise rule declared
@@ -26,6 +28,7 @@
 ;===----------------------------------------------------------------------===
 ; <4 x s16> bitwise OR -> OR64 (DR64)
 ;===----------------------------------------------------------------------===
+
 define <4 x i16> @s16vec_or(<4 x i16> %a, <4 x i16> %b) nounwind {
 ; CHECK-LABEL: s16vec_or:
 ; CHECK: or64

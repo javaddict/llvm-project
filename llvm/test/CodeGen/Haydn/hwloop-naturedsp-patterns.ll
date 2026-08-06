@@ -1,3 +1,8 @@
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
+
+; Role: MIR — pre-RA HardwareLoops converts NatureDSP trip/equality/pointer-IV patterns; pin SET_HWLOOP_REG/HWLOOP_END without hardcoding vregs.
+
 ; This test exercises the pre-RA HardwareLoops pass (Stream A,), which
 ; runs BEFORE SMS and converts countable loops to SET_HWLOOP_REG + HWLOOP_END
 ; pseudos using IV-PHI analysis. Pre-RA MIR uses virtual registers, so
@@ -11,8 +16,6 @@
 ; recovers the induction on the pointer PHI and now converts it. All
 ; four NatureDSP-pattern functions below emit SET_HWLOOP_REG + HWLOOP_END
 ; pseudos.
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
 ;
 ; REGRESSION TEST: NatureDSP loop patterns that the HWLoop recognizer must
 ; convert. Each function below is the minimal IR shape of one distinct
@@ -60,6 +63,7 @@
 ; cause-B trip formula (trip = limit - init, one SUB32 in preheader)
 ; and emits SET_HWLOOP_REG.
 ; ===========================================================================
+
 define i32 @vec_dot_unfused_equality(ptr readonly %x, ptr readonly %y, i32 %N) nounwind {
 ; CHECK-LABEL: name: vec_dot_unfused_equality
 ; CHECK: SET_HWLOOP

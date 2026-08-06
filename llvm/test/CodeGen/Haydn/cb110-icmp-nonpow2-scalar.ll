@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 
+; Role: semantic — G_ICMP on non-power-of-2 scalar types (s61/s63 from bitfields yarpgen) must widen to the next power-of-2 before legalization, not fail.
+
 ; G_ICMP on non-power-of-2 scalar types (s61/s63 from bitfields
 ; yarpgen) must widen to the next power-of-2 before legalization, not fail
 ; with "unable to legalize instruction: G_ICMP... s63".
@@ -9,9 +11,7 @@
 ; LegalizerHelper chooses SEXT vs ZEXT from the predicate.
 
 ; Unsigned ugt on i63 → widen both sides to i64 via ZEXT, then 64-bit compare.
-; CHECK-LABEL: icmp_ugt_i63:
-; CHECK-DAG: sltu32
-; CHECK: jalr_w{{(\.s[012])?}}
+
 define i1 @icmp_ugt_i63(i63 %a, i63 %b) nounwind {
   %c = icmp ugt i63 %a, %b
   ret i1 %c

@@ -6,30 +6,28 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the HaydnDisassembler class.
+// Product decode is Format E only (FE8). Cursor size is the production registry
+// EncodedBytes for FormatE96 rows (via haydn::format typed APIs).
 //
-// Bundle128-only decode (16-byte parcels; variable-width realized as fixed
-// Bundle128 geometry). Size=16 on every Success/Fail from the composite path.
+// Path:
+//   1. tryDecodeFormatE — require a full product parcel; validate header
+//      indicator/reserved/entry_num (fail-closed on true malformed); inverse-
+//      resolve each entry via FormatEInverse + FormatEMembers; emit
+//      BUNDLE_E96_TWO_ENTRY / BUNDLE_E96_THREE_ENTRY of logical children.
+//   2. Soft-NOP individual entries only for reserved E2 map=11 / zero or
+//      non-matching residual underfill — never invents logicals; never fails
+//      the whole parcel for residual pad (objdump `<unknown>` rejects sim).
+//   3. Short residual (< product EncodedBytes) → Fail with Size = remaining
+//      (no 2-byte NOP product path; all-zero is not Format E).
 //
-// 1. tryDecodeBundle128Composite — primary path when >= 16 bytes remain.
-//    Content gate: each non-zero slot window must pass isValidFlexSlotWindow
-//    (strict FU + opcode range). Geometry via getBundle128FormatDesc peer
-//    offsets (same authority as encodeSlotInBundle128). Generated composite
-//    trie (DecoderTableBundle128128 → case 164 = BUNDLE128_FULL) dispatches
-//    per-slot sub-tries via decodeS0Slot/S1Slot/S2Slot. All-zero Bundle128
-//    (spec §10 NOP) is 3 empty NOP slots. Bundle128 is probed before any
-//    2-byte NOP check so s0-NOP parcels (leading zero bytes) are not stolen.
-// 2. < 16 bytes remaining — trailing 16-bit NOP fallback: leading 0x0000
-//    decodes as Haydn::NOP (Size = 2); other trailing bytes → <unknown>
-//    with Size = Bytes.size (forward progress).
-//
-// CLAUDE.md hard bar: `llvm-objdump -d` MUST NEVER abort on hostile.text.
-// The bounds-safe `<?>` printOperand defense (HaydnInstPrinter) remains the
-// primary anti-crash mechanism; slot decoders degrade sub-trie misses to
-// empty NOP slots (always return Success) rather than asserting.
+// Size contract: every Success/Fail that consumes a product parcel sets
+// Size = product EncodedBytes so objdump lines are BundleSim-legal tokens.
+// Malformed header/framing cases Fail with the same Size (forward progress).
+// Bounds-safe InstPrinter `<?>` remains the anti-crash backstop.
 //
 //===----------------------------------------------------------------------===//
 
+#include "HaydnFormatERecords.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnFormat.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
@@ -37,15 +35,21 @@
 #include "TargetInfo/HaydnTargetInfo.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCDecoder.h"
 #include "llvm/MC/MCDecoderOps.h"
 #include "llvm/MC/MCDisassembler/MCDisassembler.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCInstrInfo.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/MathExtras.h"
+#include <memory>
 
 using namespace llvm;
 using namespace llvm::MCD;
@@ -122,8 +126,8 @@ static DecodeStatus decodeSImmOperandXStepWide(MCInst &Inst, uint32_t Imm,
   // disassembler must NEVER abort on hostile.text (CLAUDE.md
   // "bounds-safe printOperand" philosophy: decode-or-degrade, never assert).
   // The generated decoder can call this DecoderMethod with an `Imm` whose
-  // tablegen-aggregated field slice is WIDER than N bits — e.g. the Bundle128
-  // LD slot sub-trie reads an 8-bit slice for a `simm6` operand
+  // tablegen-aggregated field slice is WIDER than N bits — e.g. the LD slot
+  // sub-trie reads an 8-bit slice for a `simm6` operand
   // (fieldFromInstruction(insn, 28, 8) → decodeSImmOperandXStepWide<6,0,1> on
   // cases 147/148/149/150 in HaydnGenDisassemblerTables.inc) because tblgen
   // merges the adjacent `reserved` field into the same decoded region. Bits
@@ -150,16 +154,37 @@ static uint32_t extractBits(uint64_t Word, unsigned Lo, unsigned Width) {
   return static_cast<uint32_t>((Word >> Lo) & ((1ULL << Width) - 1));
 }
 
-// Bundle128 slot decode uses the generated S0/S1/S2 sub-tries plus
-// decodeSImmOperandXStepWide / register class helpers only.
+// Format E composite InstSlot decoders (BUNDLE_E96_* DecoderMethods).
+// Defined after tables are included (need decodeInstruction). Declared here so
+// decodeToMCInst template can see them at parse time.
+static DecodeStatus decodeE2_0Slot(MCInst &MI, uint64_t Insn, uint64_t Address,
+                                   const MCDisassembler *Decoder);
+static DecodeStatus decodeE2_1Slot(MCInst &MI, uint64_t Insn, uint64_t Address,
+                                   const MCDisassembler *Decoder);
+static DecodeStatus decodeE3_0Slot(MCInst &MI, uint64_t Insn, uint64_t Address,
+                                   const MCDisassembler *Decoder);
+static DecodeStatus decodeE3_1Slot(MCInst &MI, uint64_t Insn, uint64_t Address,
+                                   const MCDisassembler *Decoder);
+static DecodeStatus decodeE3_2Slot(MCInst &MI, uint64_t Insn, uint64_t Address,
+                                   const MCDisassembler *Decoder);
+
+template <typename InsnType>
+static DecodeStatus decodeInstruction(const uint8_t DecodeTable[], MCInst &MI,
+                                      InsnType insn, uint64_t Address,
+                                      const MCDisassembler *DisAsm,
+                                      const MCSubtargetInfo &STI);
 
 //===----------------------------------------------------------------------===//
 // Main disassembler class
 //===----------------------------------------------------------------------===//
 
 class HaydnDisassembler : public MCDisassembler {
+  std::unique_ptr<const MCInstrInfo> MCII;
+
 public:
-  HaydnDisassembler(const MCSubtargetInfo &STI, MCContext &Ctx);
+  HaydnDisassembler(const MCSubtargetInfo &STI, MCContext &Ctx,
+                    MCInstrInfo const *MII)
+      : MCDisassembler(STI, Ctx), MCII(MII) {}
 
   DecodeStatus getInstruction(MCInst &Instr, uint64_t &Size,
                               ArrayRef<uint8_t> Bytes, uint64_t Address,
@@ -170,121 +195,104 @@ public:
   Expected<bool> onSymbolStart(SymbolInfoTy &Symbol, uint64_t &Size,
                                ArrayRef<uint8_t> Bytes,
                                uint64_t Address) const override;
+
+  const MCInstrInfo &getMCII() const { return *MCII; }
 };
 
 } // end anonymous namespace
 
-HaydnDisassembler::HaydnDisassembler(const MCSubtargetInfo &STI, MCContext &Ctx)
-    : MCDisassembler(STI, Ctx) {}
-
-// Bundle128 composite per-slot decoders (forward declarations).
-//
-// The generated HaydnGenDisassemblerTables.inc defines a template
-// `decodeToMCInst` whose case 164 (the BUNDLE128_FULL decoder) emits:
-// tmp = fieldFromInstruction(insn, 0, 48); / s0 window bits
-// decodeS0Slot(MI, tmp, Address, Decoder);
-// tmp = fieldFromInstruction(insn, 48, 40); / s1 window bits
-// decodeS1Slot(MI, tmp, Address, Decoder);
-// tmp = fieldFromInstruction(insn, 88, 40); / s2 window bits
-// decodeS2Slot(MI, tmp, Address, Decoder);
-// Because `decodeToMCInst` is a template and `tmp` is a dependent type, the
-// slot decoders must be visible by name BEFORE the.inc include for two-phase
-// lookup to find them. This mirrors AIE's `SLOTDECODERDecl(...)` macro pattern
-// (AIEDisassemblerPP.h:42) — forward-declare here, define after the include.
-//
-// Each slot decoder takes the already-extracted slot-window bits (the
-// composite trie did the fieldFromInstruction extraction), runs the per-slot
-// tablegen trie on them (DecoderTableS048 / DecoderTableS140 / DecoderTableS240
-// namespaces "S0"/"S1"/"S2" generated from HaydnSlotS0/S1/S2 in HaydnSlots.td)
-// and adds the result as an MCOperand::createInst sub-instruction operand to
-// the composite MI (mirrors AIE's decodeAIE2PSSlot). On a sub-trie miss the
-// sub-MCInst is cleared (an empty NOP slot, §4). Each decoder ALWAYS returns
-// Success — a NOP/failed slot is a valid Bundle128 slot occupancy, not a hard
-// Fail.
-//
-// CLAUDE.md hard bar: `llvm-objdump -d` MUST NEVER abort on hostile.text.
-// The bounds-safe `<?>` printOperand defense remains the primary anti-crash
-// bar regardless.
-namespace {
-template <typename InsnType>
-static DecodeStatus decodeS0Slot(MCInst &MI, InsnType &Insn, uint64_t Address,
-                                 const MCDisassembler *Decoder);
-template <typename InsnType>
-static DecodeStatus decodeS1Slot(MCInst &MI, InsnType &Insn, uint64_t Address,
-                                 const MCDisassembler *Decoder);
-template <typename InsnType>
-static DecodeStatus decodeS2Slot(MCInst &MI, InsnType &Insn, uint64_t Address,
-                                 const MCDisassembler *Decoder);
-} // namespace
-
-// Include the auto-generated decoder tables (the Bundle128 composite trie +
-// the per-slot sub-tries; the legacy Haydn16/32/48/64 tables remain generated
-// from the.td but are no longer consulted by this disassembler subsequent).
+// Include auto-generated decoder tables (Format E entry namespaces + residual).
+// Product decode uses DecoderTableE2E0* / E3E* on entry windows.
 #define LLVM_DISASSEMBLER_HAYDN_DECODER_TABLES
 #include "HaydnGenDisassemblerTables.inc"
 
-// Bundle128 composite per-slot decoders (definitions).
-//
-// Mirrors AIE's decodeAIE2PSSlot (AIE2PSDisassembler.cpp:75-87): allocate a
-// heap MCInst via MCContext (persists beyond this call), run the per-slot
-// tablegen trie on the window bits, and add the sub-instruction as an
-// MCOperand::createInst operand to the composite MI. The composite trie's
-// case 164 (BUNDLE128_FULL) extracted the windows already via
-// fieldFromInstruction; here we just run the slot sub-trie.
-//
-// Slot DecoderTable names (generated from the namespaces "S0"/"S1"/"S2" set
-// by HaydnSlotS0/S1/S2 in HaydnSlots.td):
-// s0: DecoderTableS048 — 48-bit s0 window (bits[47:0])
-// s1: DecoderTableS140 — 40-bit s1 window (bits[39:0])
-// s2: DecoderTableS240 — 40-bit s2 window (bits[39:0])
-//
-// On a sub-trie miss the sub-MCInst is cleared (per AIE). An empty sub-MCInst
-// is the per-slot NOP. The decoder ALWAYS returns Success — a NOP/failed slot
-// is a valid Bundle128 occupancy, not a hard Fail.
+// InsnBitWidth specializations for decodeInstruction Instantiation
+// (same anonymous-namespace TU as the generated tables).
 namespace {
-// Decode the s0 slot of a Bundle128 parcel. \p Insn is the s0 window bits
-// (48-bit, extracted by the composite trie via fieldFromInstruction).
-template <typename InsnType>
-static DecodeStatus decodeS0Slot(MCInst &MI, InsnType &Insn, uint64_t Address,
-                                 const MCDisassembler *Decoder) {
-  MCInst *SlotInst = Decoder->getContext().createMCInst();
-  DecodeStatus Result =
-      decodeInstruction(DecoderTableS048, *SlotInst, Insn, Address, Decoder,
-                        Decoder->getSubtargetInfo());
-  if (Result != MCDisassembler::Success)
-    SlotInst->clear();
-  MI.addOperand(MCOperand::createInst(SlotInst));
-  return MCDisassembler::Success;
+template <> constexpr uint32_t InsnBitWidth<uint32_t> = 32;
+// uint64_t carries 48-bit E2 entry containers (Size=6).
+template <> constexpr uint32_t InsnBitWidth<uint64_t> = 48;
+} // namespace
+
+// Nested entry decode for BUNDLE_E96_* InstSlot operands (same anon NS).
+namespace {
+/// E96 cond-branch members decode the trailing target immediate as the raw
+/// halfword field (simm12, Shift=0), but the encoder stores offset>>1
+/// (WIDE_BranchSImm12 ValueShift=1) and the dump/BundleSim contract is byte
+/// displacements (validate_target uses the printed imm as bytes). Shift the
+/// cond-branch target <<1 so disassembly prints bytes — matching JAL (which
+/// encodes bytes directly, WIDE_CallSImm20 ValueShift=0) and the contract.
+/// No-op for JAL/JALR/ALU/load/etc. members (only BEQ*/BNE*/BLT*/BGE* match).
+static void recoverFormatECondBranchBytes(MCInst &Nested,
+                                          const MCDisassembler &Decoder) {
+  if (Nested.getNumOperands() == 0)
+    return;
+  // The product Decoder is always a HaydnDisassembler; its MCII names members.
+  StringRef N = static_cast<const HaydnDisassembler &>(Decoder)
+                    .getMCII()
+                    .getName(Nested.getOpcode());
+  if (!N.starts_with("BEQ") && !N.starts_with("BNE") && !N.starts_with("BLT") &&
+      !N.starts_with("BGE"))
+    return;
+  // Cond-branch target displacement is the trailing operand.
+  MCOperand &Target = Nested.getOperand(Nested.getNumOperands() - 1);
+  if (Target.isImm())
+    Target.setImm(Target.getImm() << 1);
 }
 
-// Decode the s1 slot of a Bundle128 parcel. \p Insn is the s1 window bits
-// (40-bit, extracted by the composite trie via fieldFromInstruction).
-template <typename InsnType>
-static DecodeStatus decodeS1Slot(MCInst &MI, InsnType &Insn, uint64_t Address,
-                                 const MCDisassembler *Decoder) {
-  MCInst *SlotInst = Decoder->getContext().createMCInst();
-  DecodeStatus Result =
-      decodeInstruction(DecoderTableS140, *SlotInst, Insn, Address, Decoder,
-                        Decoder->getSubtargetInfo());
-  if (Result != MCDisassembler::Success)
-    SlotInst->clear();
-  MI.addOperand(MCOperand::createInst(SlotInst));
-  return MCDisassembler::Success;
+static DecodeStatus decodeFormatEEntrySlot(MCInst &MI, uint64_t EntryBits,
+                                           uint64_t Address,
+                                           const MCDisassembler *Decoder,
+                                           const uint8_t *Table, bool Use64) {
+  MCContext &Ctx = Decoder->getContext();
+  MCInst *Nested = Ctx.createMCInst();
+  DecodeStatus S = MCDisassembler::Fail;
+  if (Use64) {
+    uint64_t Insn = EntryBits;
+    S = decodeInstruction(Table, *Nested, Insn, Address, Decoder,
+                          Decoder->getSubtargetInfo());
+  } else {
+    uint32_t Insn = static_cast<uint32_t>(EntryBits);
+    S = decodeInstruction(Table, *Nested, Insn, Address, Decoder,
+                          Decoder->getSubtargetInfo());
+  }
+  if (S == MCDisassembler::Fail) {
+    Nested->clear();
+    Nested->setOpcode(Haydn::NOP);
+    S = MCDisassembler::Success;
+  } else {
+    // Recover byte displacements for cond-branch targets (dump/BundleSim
+    // contract is bytes; members decode the raw halfword field).
+    recoverFormatECondBranchBytes(*Nested, *Decoder);
+  }
+  MI.addOperand(MCOperand::createInst(Nested));
+  return S;
 }
 
-// Decode the s2 slot of a Bundle128 parcel. \p Insn is the s2 window bits
-// (40-bit, extracted by the composite trie via fieldFromInstruction).
-template <typename InsnType>
-static DecodeStatus decodeS2Slot(MCInst &MI, InsnType &Insn, uint64_t Address,
-                                 const MCDisassembler *Decoder) {
-  MCInst *SlotInst = Decoder->getContext().createMCInst();
-  DecodeStatus Result =
-      decodeInstruction(DecoderTableS240, *SlotInst, Insn, Address, Decoder,
-                        Decoder->getSubtargetInfo());
-  if (Result != MCDisassembler::Success)
-    SlotInst->clear();
-  MI.addOperand(MCOperand::createInst(SlotInst));
-  return MCDisassembler::Success;
+static DecodeStatus decodeE2_0Slot(MCInst &MI, uint64_t Insn, uint64_t Address,
+                                   const MCDisassembler *Decoder) {
+  return decodeFormatEEntrySlot(MI, Insn, Address, Decoder, DecoderTableE2E048,
+                                /*Use64=*/true);
+}
+static DecodeStatus decodeE2_1Slot(MCInst &MI, uint64_t Insn, uint64_t Address,
+                                   const MCDisassembler *Decoder) {
+  return decodeFormatEEntrySlot(MI, Insn, Address, Decoder, DecoderTableE2E148,
+                                /*Use64=*/true);
+}
+static DecodeStatus decodeE3_0Slot(MCInst &MI, uint64_t Insn, uint64_t Address,
+                                   const MCDisassembler *Decoder) {
+  return decodeFormatEEntrySlot(MI, Insn, Address, Decoder, DecoderTableE3E032,
+                                /*Use64=*/false);
+}
+static DecodeStatus decodeE3_1Slot(MCInst &MI, uint64_t Insn, uint64_t Address,
+                                   const MCDisassembler *Decoder) {
+  return decodeFormatEEntrySlot(MI, Insn, Address, Decoder, DecoderTableE3E132,
+                                /*Use64=*/false);
+}
+static DecodeStatus decodeE3_2Slot(MCInst &MI, uint64_t Insn, uint64_t Address,
+                                   const MCDisassembler *Decoder) {
+  return decodeFormatEEntrySlot(MI, Insn, Address, Decoder, DecoderTableE3E232,
+                                /*Use64=*/false);
 }
 } // namespace
 
@@ -300,248 +308,385 @@ Expected<bool> HaydnDisassembler::onSymbolStart(SymbolInfoTy &Symbol,
 }
 
 //===----------------------------------------------------------------------===//
-// Bundle128 content-gate: strict FU + opcode validation.
+// Format E product decode (registry EncodedBytes cursor)
 //===----------------------------------------------------------------------===//
-//
-// isValidFlexSlotWindow validates a Bundle128 slot window's FU and opcode
-// fields against the encoding_manual_flex.md contract. The generated
-// DecoderTableS048/S140/S240 have DEFAULT catch-all branches that accept any
-// non-zero window, so the gate rejects reserved FU (5..7) and out-of-range
-// opcodes before the composite trie runs.
-//
-// Slot geometry is single-authority: windows are extracted from the 128-bit
-// Bundle128 word using offsets from the Bundle128 format-desc
-// (HaydnMCFormats::getBundle128FormatDesc.getSlotOffsetsHiBit) — the same
-// geometric authority the encoder consults (HaydnMCCodeEmitter
-// encodeSlotInBundle128). \p Window is that extracted value viewed as a
-// standalone Width-bit integer (MSB at bit Width-1). FU sits at the top 3
-// bits of the window (LSB [WindowTopBit-2, WindowTopBit]); the opcode starts
-// just below it (top at WindowTopBit-3). s0/s1/s2 differ only in window
-// width, not in FU/opcode placement (encoding_manual_flex.md §1.2 + §2).
-//
-// Opcode widths and valid max (from the.td FLEX defs):
-// ALU32 (FU=0): 7b, max 0x71 (113 ops — ADDI32_W=0x70, ORI32_W=0x71)
-// LS (FU=1): 7b, max 0x7B (LD16=0x7A, LD8=0x7B — signed half/byte after LDU16)
-// ALU64 (FU=2): 8b, max 0x9B (155 ops, dense from 0x01)
-// LD (FU=3): 6b, max 0x3F (64 ops)
-// MAC (FU=4): 9b, max 0x165 (357 ops, dense from 0x01)
-//
-// \p WindowTopBit is the LSB index of the window's most-significant bit
-// within \p Window (i.e. Width-1; the FU top bit). \returns true if the
-// window is a plausible Bundle128 slot (valid FU + opcode in range); false
-// if it should be rejected.
-static bool isValidFlexSlotWindow(uint64_t Window, unsigned WindowTopBit) {
-  // FU occupies the top 3 bits of the window: LSB [WindowTopBit-2, WindowTopBit].
-  unsigned Fu = extractBits(Window, WindowTopBit - 2, 3);
-  // Reserved FU (5..7) → illegal-instruction per §1.2.
-  if (Fu >= Haydn::FlexFU::FIRST_RESERVED)
-    return false;
 
-  // Opcode width per FU (encoding_manual_flex.md §1.2).
-  unsigned OpBits;
-  unsigned MaxOpcode;
-  switch (Fu) {
-  case Haydn::FlexFU::ALU32: OpBits = 7; MaxOpcode = 0x71;  break;
-  case Haydn::FlexFU::LS:    OpBits = 7; MaxOpcode = 0x7B;  break;
-  case Haydn::FlexFU::ALU64: OpBits = 8; MaxOpcode = 0x9B;  break;
-  case Haydn::FlexFU::LD:    OpBits = 6; MaxOpcode = 0x3F;  break;
-  case Haydn::FlexFU::MAC:   OpBits = 9; MaxOpcode = 0x165; break;
-  default:                   return false; // unreachable (FIRST_RESERVED guard)
-  }
+namespace {
 
-  // Opcode sits just below FU: its top bit is at WindowTopBit-3, occupying
-  // LSB [WindowTopBit-3-OpBits+1, WindowTopBit-3].
-  unsigned OpcodeStartBit = WindowTopBit - 3;
-  unsigned Opcode = extractBits(Window, OpcodeStartBit - OpBits + 1, OpBits);
-  // Dense codepoints from 0x01 (§1.2: "no legacy opcodes borrowed"; opcode 0
-  // is a real instruction or per-FU trap, but the FLEX defs start at 0x01).
-  // Out-of-range opcode → not a valid Bundle128 slot.
-  return Opcode >= 1 && Opcode <= MaxOpcode;
+/// Production parcel size for Format E (typed registry; both E2/E3 rows match).
+/// FE8: non-12 sizes are not product — fail closed.
+static unsigned productFormatEEncodedBytes() {
+  using namespace haydn::format;
+  EncodedBytes B = maxEncodedBytesInProfile(ObjectEncodingProfileID::E96);
+  assert(B.Value == 12u && "product EncodedBytes must be Format E 12");
+  assert(encodedBytesOrDie(BundleFormatRowID::E96TwoEntry) == B &&
+         encodedBytesOrDie(BundleFormatRowID::E96ThreeEntry) == B &&
+         "E2/E3 product EncodedBytes must agree");
+  return B.Value;
 }
 
-//===----------------------------------------------------------------------===//
-// Bundle128 composite decode (AIE two-step model).
-//===----------------------------------------------------------------------===//
-//
-// tryDecodeBundle128Composite is the decoder's symmetric inverse of the
-// encoder's encodeBundle128 (HaydnMCCodeEmitter.cpp): it reads a 16-byte
-// (128-bit) parcel, then runs the generated composite trie
-// DecoderTableBundle128128 on it. The composite trie matches unconditionally
-// (case 164 = BUNDLE128_FULL, no fixed bits to match — FU is the slot-level
-// discriminator) and calls decodeS0Slot/decodeS1Slot/decodeS2Slot on each
-// already-extracted slot window. The result is a BUNDLE128_FULL MCInst whose
-// 3 operands are MCOperand::createInst sub-instructions (mirrors AIE's
-// AIEBaseMCCodeEmitter/decodeXxxSlot).
-//
-// The slot sub-instructions are MCContext-allocated and persist beyond this
-// call. Per-slot NOP / trie-miss handling lives in the slot decoders (each
-// always returns Success; a NOP/failed slot becomes an empty sub-MCInst). The
-// top-level composite MCInst is always 3 operands wide (one per slot).
-//
-// Content gate (strict FU+opcode via isValidFlexSlotWindow): the composite
-// trie alone accepts every 16-byte window; the gate validates each non-zero
-// slot window's FU and opcode (generated sub-tries have catch-all defaults).
-// A non-zero window with reserved FU or out-of-range opcode is not a
-// Bundle128 slot — return Fail. The all-zero word (real §4 Bundle128 NOP)
-// has no non-zero window to validate and passes unconditionally.
-//
-// Post-trie sub-MCInst validation (second tier): a non-zero source window
-// whose sub-MCInst came back empty (sub-trie miss → cleared by the slot
-// decoders) is not a real Bundle128 slot — return Fail. An all-zero source
-// window is a valid §4 NOP slot and is exempt.
-//
-// Size contract: every Bundle128 parcel is exactly 16 bytes. On Success or
-// Fail from this path, Size = 16 (forward progress; never leave Size unset).
-static DecodeStatus tryDecodeBundle128Composite(MCInst &Instr, uint64_t &Size,
-                                                ArrayRef<uint8_t> Bytes,
-                                                uint64_t Address,
-                                                const MCDisassembler *DisAsm) {
-  // Every Bundle128 parcel is exactly 16 bytes.
-  if (Bytes.size() < 16) {
+/// Absolute bit extract from a little-endian Format E word (bit 0 = LSB).
+static uint64_t extractFormatEBits(const APInt &Word, unsigned Lo,
+                                   unsigned HiInclusive) {
+  assert(HiInclusive >= Lo && "empty Format E field");
+  unsigned Width = HiInclusive - Lo + 1;
+  return Word.extractBitsAsZExtValue(Width, Lo);
+}
+
+/// Map a Format E logical catalog name to a live MC opcode when present.
+static unsigned lookupLogicalOpcode(const MCInstrInfo &MII, StringRef Logical) {
+  if (Logical.empty() || Logical.equals_insensitive("NOP"))
+    return Haydn::NOP;
+  // Golden catalog logicals that only exist as residual wide/S0 public names.
+  if (Logical.equals_insensitive("SET_HWLOOP_F2"))
+    return Haydn::SET_HWLOOP_F2_W;
+  if (Logical.equals_insensitive("SET_HWLOOP_REG"))
+    return Haydn::SET_HWLOOP_REG_W;
+  if (Logical.equals_insensitive("SET_HWLOOP"))
+    return Haydn::SET_HWLOOP_W;
+  for (unsigned Opc = 0, E = MII.getNumOpcodes(); Opc != E; ++Opc) {
+    if (MII.getName(Opc).equals_insensitive(Logical))
+      return Opc;
+  }
+  // Prefer wide public forms when bare name is a pseudo without encode path.
+  std::string Wide = Logical.str() + "_W";
+  for (unsigned Opc = 0, E = MII.getNumOpcodes(); Opc != E; ++Opc) {
+    if (MII.getName(Opc).equals_insensitive(Wide))
+      return Opc;
+  }
+  return 0;
+}
+
+/// PC-relative control immediates encode halfword units (field = bytes >> 1);
+/// decoder must recover **byte** displacements for BundleSim dump parse
+/// (branch_scale=2: validate_target uses dump imm as bytes). Mirrors
+/// decodeSImmOperandXStepWide<N,1,1> used by brtarget_wide_* operands.
+/// JALR is rs-relative with Shift=0 (catalog branch_scale=1).
+static unsigned formatEControlImmByteShift(StringRef Logical) {
+  StringRef Name = Logical;
+  // Strip slot / width / mode suffixes the inverse table may carry.
+  while (Name.ends_with_insensitive("_S0") ||
+         Name.ends_with_insensitive("_S1") ||
+         Name.ends_with_insensitive("_S2") ||
+         Name.ends_with_insensitive("_W") ||
+         Name.ends_with_insensitive("_WL") ||
+         Name.ends_with_insensitive("_M0") ||
+         Name.ends_with_insensitive("_M1")) {
+    size_t Under = Name.rfind('_');
+    if (Under == StringRef::npos)
+      break;
+    Name = Name.take_front(Under);
+  }
+
+  // PC-rel cond-branches encode halfword units (field = bytes >> 1) via
+  // WIDE_BranchSImm12 ValueShift=1; recover bytes (<<1). JAL is excluded: it
+  // encodes bytes directly (WIDE_CallSImm20 ValueShift=0) and already prints
+  // bytes, so shifting it would double the displacement.
+  if (Name.equals_insensitive("BEQ") || Name.equals_insensitive("BEQZ") ||
+      Name.equals_insensitive("BNE") || Name.equals_insensitive("BNEZ") ||
+      Name.equals_insensitive("BLT") || Name.equals_insensitive("BLTU") ||
+      Name.equals_insensitive("BLTZ") || Name.equals_insensitive("BGE") ||
+      Name.equals_insensitive("BGEU") || Name.equals_insensitive("BGEZ"))
+    return 1u;
+
+  // SET_HWLOOP begin/end offsets: word scale (<<2). BundleSim dump contract
+  // is byte distances (frontend.md); normalize then divides by hwloop_scale.
+  if (Name.equals_insensitive("SET_HWLOOP") ||
+      Name.equals_insensitive("SET_HWLOOP_F2"))
+    return 2u;
+
+  // JALR and all other imms: field units == dump units (bytes / counts).
+  return 0u;
+}
+
+/// One resolved Format E entry (inverse hit or soft-NOP underfill).
+struct FormatEResolvedEntry {
+  StringRef Logical;
+  bool IsNop = true;
+  int MemberId = -1; // >=0 only on inverse hit
+  // Authoritative type layout from FormatEMembers[MemberId].LayoutId.
+  const haydn::format_e::FormatETypeLayoutRec *Layout = nullptr;
+};
+
+/// Resolve one entry via generated type layouts + FormatEInverse.
+///
+/// Fail-closed only on missing entry window (no MapLayout for Mode/EntryIdx).
+/// Legal golden encodings inverse-hit and return MemberId + authoritative
+/// LayoutId so operand recovery never zero-fills on a real member.
+/// Soft-NOP (Logical=NOP, MemberId=-1) for: E2 reserved map=11, zero entry
+/// underfill, and non-zero residual that does not inverse-match — never
+/// invents a fake logical and never fails the whole parcel (objdump
+/// `<unknown>` → BundleSim reject).
+static bool resolveFormatEEntry(const APInt &Word, uint8_t Mode,
+                                uint8_t EntryIdx, FormatEResolvedEntry &Out) {
+  using namespace haydn::format_e;
+
+  Out = FormatEResolvedEntry{};
+
+  const FormatETypeLayoutRec *MapLayout = nullptr;
+  for (unsigned I = 0; I < FormatETypeLayoutCount; ++I) {
+    const FormatETypeLayoutRec &L = FormatETypeLayouts[I];
+    if (L.Mode == Mode && L.EntryIdx == EntryIdx) {
+      MapLayout = &L;
+      break;
+    }
+  }
+  if (!MapLayout)
+    return false;
+
+  uint64_t UnitMap =
+      extractFormatEBits(Word, MapLayout->MapLo, MapLayout->MapHi);
+
+  // E2 map=11 is reserved (not a unit). Soft-NOP residual; do not Fail the
+  // parcel (legal product objects must never land here after encode fix).
+  if (Mode == 0 && UnitMap == 3u) {
+    Out.Logical = "NOP";
+    Out.IsNop = true;
+    return true;
+  }
+
+  for (unsigned I = 0; I < FormatETypeLayoutCount; ++I) {
+    const FormatETypeLayoutRec &L = FormatETypeLayouts[I];
+    if (L.Mode != Mode || L.EntryIdx != EntryIdx || L.UnitMap != UnitMap)
+      continue;
+
+    // Type code sits immediately above the map field (golden placement).
+    unsigned TypeLo = static_cast<unsigned>(L.MapHi) + 1u;
+    unsigned TypeHi = TypeLo + L.TypeCodeWidth - 1u;
+    if (TypeHi > L.EntryHi)
+      continue;
+    uint64_t TypeCode = extractFormatEBits(Word, TypeLo, TypeHi);
+    if (TypeCode != L.TypeCode)
+      continue;
+
+    if (L.OpcodeHi < L.OpcodeLo)
+      continue;
+    uint64_t Opcode = extractFormatEBits(Word, L.OpcodeLo, L.OpcodeHi);
+    // Mask to the layout opcode field width so sparse high bits cannot
+    // poison inverse identity (legal encode zeroes them; hostile streams
+    // still resolve the low field).
+    unsigned OpcodeBits = static_cast<unsigned>(L.OpcodeHi - L.OpcodeLo + 1u);
+    if (OpcodeBits < 64u)
+      Opcode &= (uint64_t(1) << OpcodeBits) - 1u;
+
+    int MemberId = findInverseMemberId(Mode, EntryIdx, L.Unit,
+                                       static_cast<uint8_t>(TypeCode),
+                                       static_cast<uint16_t>(Opcode));
+    if (MemberId < 0)
+      continue;
+
+    const FormatEMemberRec &M = FormatEMembers[MemberId];
+    Out.Logical = M.Logical;
+    Out.IsNop = M.IsNop != 0;
+    Out.MemberId = MemberId;
+    // Authoritative layout from the inverse-hit member — never re-scan.
+    if (M.LayoutId < FormatETypeLayoutCount)
+      Out.Layout = &FormatETypeLayouts[M.LayoutId];
+    else
+      Out.Layout = &L;
+    return true;
+  }
+
+  // Entire entry payload zero with no inverse hit → empty/NOP entry.
+  uint64_t EntryBits =
+      extractFormatEBits(Word, MapLayout->EntryLo, MapLayout->EntryHi);
+  if (EntryBits == 0) {
+    Out.Logical = "NOP";
+    Out.IsNop = true;
+    return true;
+  }
+  // Non-zero payload with no inverse hit: soft-NOP underfill rather than
+  // failing the whole parcel. BundleSim rejects any `<unknown>` line from
+  // llvm-objdump; residual pads / map=11-adjacent junk must still advance.
+  // Real ops that inverse-match still resolve above.
+  (void)UnitMap;
+  Out.Logical = "NOP";
+  Out.IsNop = true;
+  return true;
+}
+
+/// Product Format E decode. Full-parcel paths always set Size = EncodedBytes.
+static DecodeStatus tryDecodeFormatE(MCInst &Instr, uint64_t &Size,
+                                     ArrayRef<uint8_t> Bytes, uint64_t Address,
+                                     const HaydnDisassembler &DisAsm) {
+  using namespace haydn::format;
+  using namespace haydn::format_e;
+
+  const unsigned ParcelBytes = productFormatEEncodedBytes();
+  Size = ParcelBytes;
+
+  if (Bytes.size() < ParcelBytes)
+    return MCDisassembler::Fail;
+
+  APInt Word(static_cast<unsigned>(
+                 encodedBitsOrDie(BundleFormatRowID::E96TwoEntry).Value),
+             0);
+  for (unsigned I = 0; I < ParcelBytes; ++I)
+    Word.insertBits(Bytes[I], I * 8, 8);
+
+  uint64_t Indicator = extractFormatEBits(Word, 0, 2);
+  uint64_t EntryNum = extractFormatEBits(Word, 3, 3);
+  uint64_t Reserved = extractFormatEBits(Word, 4, 5);
+
+  if (Indicator != FormatEIndicatorBits || Indicator != FormatEIndicator ||
+      Reserved != FormatEHeaderReserved) {
+    Instr = MCInst();
     return MCDisassembler::Fail;
   }
 
-  // Read the 128-bit word little-endian (low 64 bits first, high 64 bits
-  // second). APInt::insertBits places each 64-bit lane at its LSB offset.
-  uint64_t Lo = support::endian::read64le(Bytes.data());
-  uint64_t Hi = support::endian::read64le(Bytes.data() + 8);
-  APInt Word(128, 0);
-  Word.insertBits(Lo, 0, 64);
-  Word.insertBits(Hi, 64, 64);
-
-  // single-authority slot geometry. The slot windows are derived from
-  // the Bundle128 format-desc (the SAME geometric authority the encoder
-  // consults via HaydnMCCodeEmitter::encodeSlotInBundle128). No hand-coded
-  // bit offsets: each slot's MSB-indexed {LeftOffset, RightOffset} comes from
-  // getSlotOffsetsHiBit, converted to LSB-indexed once
-  // (LoBit = 127 - RightOffset, Width = Right - Left + 1). The window is
-  // extracted as an isolated Width-bit value, so within it the FU top bit is
-  // at position Width-1. If the geometry ever changes in HaydnMCFormats.cpp
-  // (B128S0Field/B128S1Field/B128S2Field), this decode path tracks it
-  // automatically — no second source of truth to drift.
-  HaydnMCFormats Formats;
-  const MCFormatDesc &B128 = Formats.getBundle128FormatDesc();
-  constexpr unsigned BundleBits =
-      128; // == B128.getFormatSize (the base field is [0,127]).
-  struct SlotGeo {
-    MCSlotKind Kind;
-    uint64_t Window;
-    unsigned WindowTopBit; // LSB index of the window's MSB within Window.
-  };
-  auto BuildGeo = [&](MCSlotKind Kind) -> SlotGeo {
-    MCFormatField::GlobalOffsets Off = B128.getSlotOffsetsHiBit(Kind);
-    unsigned Width = Off.RightOffset - Off.LeftOffset + 1;
-    unsigned LoBit = (BundleBits - 1) - Off.RightOffset;
-    uint64_t Window = Word.extractBitsAsZExtValue(Width, LoBit);
-    return {Kind, Window, Width - 1};
-  };
-  SlotGeo Slots[3] = {
-      BuildGeo(MCSlotKind::Haydn_SLOT_S0),
-      BuildGeo(MCSlotKind::Haydn_SLOT_S1),
-      BuildGeo(MCSlotKind::Haydn_SLOT_S2),
-  };
-
-  // Content gate (strict FU + opcode via isValidFlexSlotWindow).
-  //
-  // The composite trie (DecoderTableBundle128128) has no fixed bits and
-  // matches any 16-byte input (single unconditional OPC_Decode). The gate
-  // validates each non-zero slot window by checking (a) FU ∈ {0..4} (reject
-  // reserved 5..7 per encoding_manual_flex.md §1.2) and (b) the raw opcode
-  // is within the valid dense range for that FU (per the.td FLEX defs).
-  // A non-zero window that fails either check is not a Bundle128 slot →
-  // return Fail. An all-zero window is a §4 NOP slot and skips the gate.
-  //
-  // Every Fail path MUST set Size=16. Leaving Size unset (or 0) makes
-  // llvm-objdump advance by an undefined/tiny amount, desyncing the 16-byte
-  // parcel stream and cascading misaligned <unknown>s.
-  for (const SlotGeo &S : Slots) {
-    if (S.Window != 0 && !isValidFlexSlotWindow(S.Window, S.WindowTopBit)) {
-      Size = 16;
-      return MCDisassembler::Fail;
-    }
+  const BundleFormatRowID Row =
+      EntryNum == FormatEEntryNumThree ? BundleFormatRowID::E96ThreeEntry
+                                       : BundleFormatRowID::E96TwoEntry;
+  if (!productionProfilePermitsRow(Row)) {
+    Instr = MCInst();
+    return MCDisassembler::Fail;
   }
-
-  // Run the generated composite trie. DecoderTableBundle128128 has one entry
-  // (case 164 = BUNDLE128_FULL, no fixed bits) so it always matches; the slot
-  // decoders do the per-FU sub-trie dispatch. The result MCInst is
-  // BUNDLE128_FULL with 3 MCOperand::createInst operands.
-  DecodeStatus S = decodeInstruction(DecoderTableBundle128128, Instr, Word,
-                                     Address, DisAsm, DisAsm->getSubtargetInfo());
-  if (S == MCDisassembler::Fail) {
-    // The composite trie only fails on an internal decoder error (it has no
-    // fixed bits to match). Commit Size=16 for forward progress and let the
-    // caller render <unknown>.
-    Size = 16;
+  const BundleFormatRowDesc *RowDesc = getBundleFormatRow(Row);
+  if (!RowDesc) {
+    Instr = MCInst();
     return MCDisassembler::Fail;
   }
 
-  // Post-trie sub-MCInst validation (second content-gate tier). A non-zero
-  // source window whose sub-MCInst came back empty (sub-trie miss → cleared
-  // by decodeS0Slot/S1Slot/S2Slot) is not a real Bundle128 slot. Return Fail
-  // so the caller renders <unknown> with forward-progress Size.
-  //
-  // An all-zero source window is a valid §4 NOP slot: empty sub-MCInst is
-  // the intended NOP rendering, so it is exempt.
-  //
-  // An empty sub-MCInst has getOpcode==0 and getNumOperands==0 (the slot
-  // decoder's `SlotInst->clear` resets it to a default-constructed state).
-  // A successfully-decoded real instruction always has a non-zero opcode.
-  assert(Instr.getNumOperands() == 3 && "Bundle128 composite must have 3 slots");
-  for (unsigned SlotIdx = 0; SlotIdx < 3; ++SlotIdx) {
-    if (Slots[SlotIdx].Window == 0)
-      continue; // all-zero window = valid §4 NOP slot, exempt.
-    const MCOperand &Op = Instr.getOperand(SlotIdx);
-    if (!Op.isInst() || Op.getInst()->getOpcode() == 0) {
-      // Non-zero window but the sub-trie missed (sub-MCInst empty/cleared).
-      Instr = MCInst(); // clear the partial composite
-      Size = 16;        // must advance one full Bundle128 parcel
-      return MCDisassembler::Fail;
-    }
+  const uint8_t Mode = EntryNum == FormatEEntryNumThree ? 1 : 0;
+  const unsigned EntryCount = RowDesc->EntryCount;
+
+  // Fail-closed: only entry_num ∈ {0=E2, 1=E3} is product-legal. The header
+  // field is 1 bit so other values cannot appear; keep the check explicit.
+  if (EntryNum != FormatEEntryNumTwo && EntryNum != FormatEEntryNumThree) {
+    Instr = MCInst();
+    return MCDisassembler::Fail;
   }
 
-  Size = 16;
+  SmallVector<MCInst *, 3> Children;
+  Children.reserve(EntryCount);
+  bool AnyReal = false;
+
+  for (unsigned E = 0; E < EntryCount; ++E) {
+    FormatEResolvedEntry Resolved;
+    if (!resolveFormatEEntry(Word, Mode, static_cast<uint8_t>(E), Resolved)) {
+      Instr = MCInst();
+      return MCDisassembler::Fail;
+    }
+    const StringRef Logical = Resolved.Logical;
+    const bool IsNop = Resolved.IsNop;
+    const FormatETypeLayoutRec *Lay = Resolved.Layout;
+
+    MCInst *Child = DisAsm.getContext().createMCInst();
+    if (IsNop || Logical.equals_insensitive("NOP") || !Lay) {
+      Child->setOpcode(Haydn::NOP);
+      Children.push_back(Child);
+      continue;
+    }
+
+    // Entry-relative bits [EntryLo, EntryHi] → tblgen Inst low bits
+    // (high pad zeros in Size*8 container).
+    const uint64_t EntryBits =
+        extractFormatEBits(Word, Lay->EntryLo, Lay->EntryHi);
+
+    const uint8_t *Table = nullptr;
+    bool Use64 = false;
+    if (Mode == 0) {
+      if (E == 0) {
+        Table = DecoderTableE2E048;
+        Use64 = true;
+      } else if (E == 1) {
+        Table = DecoderTableE2E148;
+        Use64 = true;
+      }
+    } else {
+      if (E == 0)
+        Table = DecoderTableE3E032;
+      else if (E == 1)
+        Table = DecoderTableE3E132;
+      else if (E == 2)
+        Table = DecoderTableE3E232;
+    }
+
+    DecodeStatus DS = MCDisassembler::Fail;
+    if (Table) {
+      MCInst Decoded;
+      if (Use64) {
+        uint64_t Insn = EntryBits;
+        DS = decodeInstruction(Table, Decoded, Insn, Address, &DisAsm,
+                               DisAsm.getSubtargetInfo());
+      } else {
+        uint32_t Insn = static_cast<uint32_t>(EntryBits);
+        DS = decodeInstruction(Table, Decoded, Insn, Address, &DisAsm,
+                               DisAsm.getSubtargetInfo());
+      }
+      if (DS != MCDisassembler::Fail) {
+        // Cond-branch targets decode as the raw halfword field (simm12,
+        // Shift=0), but the encoder stores offset>>1 (WIDE_BranchSImm12
+        // ValueShift=1) and the dump/BundleSim contract is byte displacements
+        // (validate_target uses the printed imm as bytes). JAL already encodes
+        // bytes (ValueShift=0 -> formatEControlImmByteShift==0); hwloop is off.
+        // Shift the trailing cond-branch target imm <<1 to print bytes.
+        if (formatEControlImmByteShift(Logical) == 1 &&
+            Decoded.getNumOperands() > 0) {
+          MCOperand &T = Decoded.getOperand(Decoded.getNumOperands() - 1);
+          if (T.isImm())
+            T.setImm(T.getImm() << 1);
+        }
+        *Child = Decoded;
+        AnyReal = true;
+        Children.push_back(Child);
+        continue;
+      }
+    }
+
+    // Soft underfill: unknown entry → NOP (do not Fail the parcel).
+    Child->setOpcode(Haydn::NOP);
+    Children.push_back(Child);
+  }
+
+  // All-NOP / zero-entry envelope is the provisional product idle parcel
+  // (header 111 + zero entries). Emit a single NOP for compact objdump lines;
+  // real composites keep BUNDLE_E96_* with children.
+  Instr = MCInst();
+  if (!AnyReal) {
+    Instr.setOpcode(Haydn::NOP);
+    (void)Address;
+    return MCDisassembler::Success;
+  }
+
+  // Prefer product Format E composite when entry count matches; otherwise
+  // fall back to generic BUNDLE of logical children for printing.
+  if (EntryCount == 2)
+    Instr.setOpcode(Haydn::BUNDLE_E96_TWO_ENTRY);
+  else if (EntryCount == 3)
+    Instr.setOpcode(Haydn::BUNDLE_E96_THREE_ENTRY);
+  else
+    Instr.setOpcode(Haydn::BUNDLE);
+  for (MCInst *C : Children)
+    Instr.addOperand(MCOperand::createInst(C));
+
+  (void)Address;
   return MCDisassembler::Success;
 }
 
 MCDisassembler::DecodeStatus HaydnDisassembler::getInstruction(
     MCInst &Instr, uint64_t &Size, ArrayRef<uint8_t> Bytes, uint64_t Address,
     raw_ostream &CStream) const {
-
-  // Bundle128-only decoder. Primary path is tryDecodeBundle128Composite
-  // (content gate + composite trie; Size=16 on Success/Fail). Bundle128 is
-  // probed before any 2-byte NOP check so parcels whose s0 window is a §4
-  // NOP (leading zero bytes) are not stolen as standalone 0x0000.
-  //
-  // Size / forward-progress contract:
-  // * >= 16 bytes + composite Success → Size = 16, Success.
-  // * >= 16 bytes + composite Fail (content-gate / trie / post-trie miss)
-  //   → Size = 16, Fail (caller renders <unknown>).
-  // * < 16 bytes + leading 0x0000 → Size = 2, NOP, Success (trailing only).
-  // * < 16 bytes (other) → Size = Bytes.size, Fail (EOF / trailing junk).
-  //
-  // All-zero Bundle128 (spec §10 NOP) decodes as 3 empty NOP slots via the
-  // composite path; encodeBundle emits 16-byte all-zero for all-NOP, so a
-  // bare 2-byte 0x0000 parcel only appears as hand-crafted trailing bytes.
-  // CLAUDE.md hard bar: `llvm-objdump -d` MUST NEVER abort.
-  if (Bytes.size() < 16) {
-    // Trailing standalone 16-bit NOP (0x0000) when Bundle128 cannot run.
-    if (Bytes.size() >= 2 && Bytes[0] == 0x00 && Bytes[1] == 0x00) {
-      Instr.setOpcode(Haydn::NOP);
-      Size = 2;
-      return MCDisassembler::Success;
-    }
+  // Product Format E decoder. Size is the registry EncodedBytes for a full
+  // parcel so llvm-objdump hex tokens match BundleSim's product parser.
+  (void)CStream;
+  using namespace haydn::format;
+  const unsigned ParcelBytes =
+      maxEncodedBytesInProfile(ObjectEncodingProfileID::E96).Value;
+  if (Bytes.size() < ParcelBytes) {
+    Instr = MCInst();
     Size = Bytes.size();
     return MCDisassembler::Fail;
   }
-
-  return tryDecodeBundle128Composite(Instr, Size, Bytes, Address, this);
+  return tryDecodeFormatE(Instr, Size, Bytes, Address, *this);
 }
 
+} // end anonymous namespace
 
 static MCDisassembler *createHaydnDisassembler(const Target &T,
-                                                const MCSubtargetInfo &STI,
-                                                MCContext &Ctx) {
-  return new HaydnDisassembler(STI, Ctx);
+                                               const MCSubtargetInfo &STI,
+                                               MCContext &Ctx) {
+  return new HaydnDisassembler(STI, Ctx, T.createMCInstrInfo());
 }
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnDisassembler() {

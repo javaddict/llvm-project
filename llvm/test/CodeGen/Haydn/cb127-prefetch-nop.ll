@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — CB-127: G_PREFETCH has no Haydn ISA form — select as nop (erase), no ICE.
+
 ; CB-127: G_PREFETCH has no Haydn ISA form — select as nop (erase), no ICE.
 
 define void @prefetch_read(ptr %p) {

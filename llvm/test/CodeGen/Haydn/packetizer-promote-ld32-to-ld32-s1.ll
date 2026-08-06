@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -stop-after=postmisched < %s | FileCheck %s
-;
+
+; Role: MIR — .3/4: dual independent LD32 pack via HR tryAddProduct → setDesc (AIEMachineScheduler.cpp:1121-1132 materializeMultiOpcodeInstrs.
+
 ; B3.exit.3/4: dual independent LD32 pack via HR tryAddProduct → setDesc
 ; (AIEMachineScheduler.cpp:1121-1132 materializeMultiOpcodeInstrs;
 ; AIEHazardRecognizer.cpp:389 setAlternateDescriptor). Post-pack MIR shows

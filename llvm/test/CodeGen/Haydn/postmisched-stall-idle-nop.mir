@@ -1,6 +1,8 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,POST
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched,haydn-finalize-mi-bundles -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,FIN
-#
+
+# Role: MIR — — Stall MIR: producer / rolling idle-NOP / consumer order.
+
 # B1.3 — Stall MIR: producer / rolling idle-NOP / consumer order.
 #
 # AIE peers (empty cycle → NOP at rolling position, not terminator dump):
@@ -64,7 +66,7 @@ body:             |
     ; POST-NEXT: {{.*}}F2MULAA32R_HHLL
     ; POST: JALR
     ;
-    ; finalize — each cycle is BUNDLE 0 (FormatID Bundle128Full); NOP mid-stream.
+    ; finalize — each cycle is BUNDLE 0 (FormatID FormatE96); NOP mid-stream.
     ; FIN: BUNDLE 0
     ; FIN: F2MULAA32R_HHLL
     ; FIN: BUNDLE 0

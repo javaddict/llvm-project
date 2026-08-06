@@ -24,8 +24,8 @@ using namespace lldb_private;
 LLDB_PLUGIN_DEFINE_ADV(ABISysV_haydn, ABIHaydn)
 
 // DWARF register numbers match llvm/lib/Target/Haydn/HaydnRegisterInfo.td.
-// BundleSim GDB RSP uses a different layout for remote (PC=16, AR, DR, …);
-// remote discovery is via qRegisterInfo. This table is for local ABI/unwind.
+// Remote GDB RSP may use a different layout (PC/AR/DR/…); remote discovery is
+// via qRegisterInfo / target.xml. This table is for local ABI/unwind.
 enum dwarf_regnums {
   dwarf_r0 = 0,
   dwarf_r1,
@@ -43,6 +43,9 @@ enum dwarf_regnums {
   dwarf_sp = 13, // R13
   dwarf_fp = 14, // R14
   dwarf_lr = 15, // R15
+  // Architectural AR file: AR0/AR1 only (64-bit). DWARF 34–35 retired.
+  dwarf_ar0 = 32,
+  dwarf_ar1 = 33,
 };
 
 // DEFINE_REG(name, alt, size, dwarf, generic)
@@ -50,6 +53,14 @@ enum dwarf_regnums {
   {                                                                            \
     name, alt, 4, 0, eEncodingUint, eFormatHex,                                \
         {dwarf_num, dwarf_num, generic, LLDB_INVALID_REGNUM,                   \
+         LLDB_INVALID_REGNUM},                                                 \
+        nullptr, nullptr, nullptr,                                             \
+  }
+
+#define DEFINE_AR(name, dwarf_num)                                             \
+  {                                                                            \
+    name, nullptr, 8, 0, eEncodingUint, eFormatHex,                            \
+        {dwarf_num, dwarf_num, LLDB_INVALID_REGNUM, LLDB_INVALID_REGNUM,       \
          LLDB_INVALID_REGNUM},                                                 \
         nullptr, nullptr, nullptr,                                             \
   }
@@ -84,6 +95,8 @@ static RegisterInfo g_register_infos[] = {
      nullptr,
      nullptr,
      nullptr},
+    DEFINE_AR("ar0", dwarf_ar0),
+    DEFINE_AR("ar1", dwarf_ar1),
 };
 
 static const uint32_t k_num_register_infos =

@@ -1,6 +1,8 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-prelegalizer-combiner \
 # RUN:     -verify-machineinstrs %s -o - | FileCheck %s
-#
+
+# Role: MIR — T5.1b / T7.3: G_MULA64 fuse must peel a single-use COPY between G_MUL and G_ADD, erase the COPY + G_MUL, and leave no assertion path.
+
 # T5.1b / T7.3: G_MULA64 fuse must peel a single-use COPY between G_MUL and
 # G_ADD, erase the COPY + G_MUL, and leave no assertion path. Multi-use COPY
 # must not fuse.

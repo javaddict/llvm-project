@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — atomics must lower to __atomic_* libcalls, NOT plain ld/st.
+
 ; REGRESSION TEST: atomics must lower to __atomic_* libcalls, NOT plain ld/st.
 ;
 ; Bug history:

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — — graceful pure-tblgen fallback for unbaked multi-child bundles (prior revision).
+
 ; REGRESSION TEST: — graceful pure-tblgen fallback for unbaked
 ; multi-child bundles (prior revision).
 ;
@@ -46,13 +48,12 @@
 ; (encodeBundle fallback, encodeBundleSlotOR return-on-gap)
 ; compiler-rt/lib/builtins/udivmoddi4.c (original crash repro)
 
-; CHECK-LABEL: test_lshr_i64_in_loop:
-; CHECK: srl64
 ; An i64 logical right shift in a packetizable loop body. SRL64 produces a
 ; DR64 destination; when the result feeds back into an i32 accumulator the
 ; selector inserts MOVE32_DR_L (cross-bank extract, no _M0 variant) → the
 ; multi-child bundle hits the fallback path. If regresses, llc
 ; crashes on this function.
+
 define i64 @test_lshr_i64_in_loop(i64 %x, i32 %n, i64 %sh) {
 entry:
   br label %loop

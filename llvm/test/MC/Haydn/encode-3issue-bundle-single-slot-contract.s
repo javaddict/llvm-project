@@ -1,6 +1,9 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s | \
 # RUN:     llvm-objdump -d --triple=haydn-unknown-elf - | FileCheck %s
 # REQUIRES: haydn-registered-target
+
+# Role: object — Phase-2 decoder purge (prior revision) + WIDE LS migration: the s0 0x3F-escape sub-row SURVIVES (`{ move32_dr_l }` decodes), and the s1 ALU64.
+
 # Phase-2 decoder purge (prior revision) + WIDE LS migration: the s0
 # 0x3F-escape sub-row SURVIVES (`{ move32_dr_l }` decodes), and the s1 ALU64
 # sub-row (`{ add64 }`) decodes via Mode-0 s1. The s0 LS sub-row (`{ ld32 }`)
@@ -35,12 +38,13 @@
 
 # CHECK-LABEL: <.text>:
 
-# CHECK: ld32
+# CHECK: {{.*}}0: 87 43 13 41 00 00 00 00 00 00 00 00 { s_lw_with_imm r1, r1, 4; nop }
 # CHECK-NOT: c.ld
-# CHECK: add64
+# CHECK: c: 07 0b 04 21 00 00 00 00 00 00 00 00 { add64 d0, d1, d2; nop }
 # CHECK-NOT: c.add
-# CHECK: add32
+# CHECK: {{.*}}18: 07 8b 10 32 00 00 00 00 00 00 00 00 { add32 r1, r2, r3; nop }
 # CHECK-NOT: c.add
+
 { ld32 r1, r1, 4 }
 
 { add64 d0, d1, d2 }

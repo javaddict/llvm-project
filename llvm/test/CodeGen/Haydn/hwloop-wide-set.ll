@@ -1,6 +1,8 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop < %s | FileCheck %s
-;
+
+; Role: semantic — WIDE SET_HWLOOP_F2_W emission.
+
 ; REGRESSION TEST : WIDE SET_HWLOOP_F2_W emission.
 ;
 ; Bug being prevented: hardware-loop setup was ALWAYS expanded to a

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -o - < %s | FileCheck %s
-;
+
+; Role: semantic — G_STACKRESTORE and G_STACKSAVE must be selected correctly to enable VLA (variable-length array) support.
+
 ; REGRESSION TEST: G_STACKRESTORE and G_STACKSAVE must be selected correctly
 ; to enable VLA (variable-length array) support.
 ;

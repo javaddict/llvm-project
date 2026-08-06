@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:     -O2 -debug-only=pipeliner < %s 2>&1 | FileCheck %s --check-prefix=SWP
-;
+
+; Role: semantic — SMS must ANALYZE a canonical countable loop compiled at DEFAULT -O2 (no -mattr=-hwloop).
+
 ; REGRESSION TEST : SMS must ANALYZE a canonical countable loop compiled
 ; at DEFAULT -O2 (no -mattr=-hwloop). The IR-level HardwareLoops pass runs
 ; before IRTranslator, so every countable single-BB loop arrives at the pre-RA

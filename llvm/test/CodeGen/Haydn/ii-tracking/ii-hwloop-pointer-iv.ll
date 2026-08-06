@@ -1,5 +1,7 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 < %s | FileCheck %s
+
+; Role: semantic — (GAP-3, closed by): HWLoop recognizer converts pointer-IV loops whose only induction is a LD32_POST post-increment load.
+
 ; REGRESSION TEST (GAP-3, closed by): HWLoop recognizer converts
 ; pointer-IV loops whose only induction is a LD32_POST post-increment load.
 ;

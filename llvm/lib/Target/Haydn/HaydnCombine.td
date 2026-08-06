@@ -8,7 +8,7 @@
 //
 // GISel combiner patterns for Haydn (Pre- and Post-legalizer).
 //
-// North star (G-GISEL-TBLGEN / Wave T2–T7): TableGen-primary algebraic combines
+// North star (Wave T2–T7): TableGen-primary algebraic combines
 // and target fuse *registry*. Import generic Combine.td groups before inventing
 // Haydn rules. C++ residual is match/apply helpers only for target fuses that
 // GICombineRule cannot express pure-TD (AGU MMO rewrite, G_MULA64 multi-def).

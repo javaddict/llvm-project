@@ -1,4 +1,3 @@
-; Requires llvm-dwarfdump
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -filetype=asm -o - < %s \
 ; RUN:   | FileCheck %s --check-prefix=ASM
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -filetype=obj \
@@ -9,6 +8,10 @@
 ; RUN:   --force-dwarf-frame-section -o - < %s \
 ; RUN:   | llvm-readobj -S - 2>/dev/null \
 ; RUN:   | FileCheck %s --check-prefix=SECTIONS
+
+; Role: object — Requires llvm-dwarfdump.
+
+; Requires llvm-dwarfdump
 
 ;REGRESSION TEST: DWARF debug info generation for the Haydn target.
 ;Bug: The CIE in.debug_frame had no initial CFA definition (just DW_CFA_nop)

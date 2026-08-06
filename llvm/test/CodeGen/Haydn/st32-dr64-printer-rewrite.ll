@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — AsmPrinter must emit `st64` (not `st32`) when the store's data operand is a DR64 register (D0-D15).
+
 ; REGRESSION TEST: AsmPrinter must emit `st64` (not `st32`) when the store's
 ; data operand is a DR64 register (D0-D15).
 ;
@@ -20,7 +22,6 @@
 ;
 ; Test design: a simple i64 store produces a clean `st64` (the selector
 ; correctly picks ST64 for a 64-bit scalar store). The regression check is
-; CHECK-NOT for `st32 dN` patterns — if the AsmPrinter rewrites stop working
 ; any DR64 store via the buggy selector path would emit `st32 dN`.
 
 define void @store_i64(ptr %p, i64 %v) #0 {

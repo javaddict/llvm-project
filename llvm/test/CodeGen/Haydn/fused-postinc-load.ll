@@ -3,7 +3,9 @@
 ; RUN:     | FileCheck %s --check-prefix=MIR
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefix=ASM
-;
+
+; Role: MIR — streaming i64/i32 loads must lower to a SINGLE fused post-increment load instruction (LD64_POST / LD32_POST) when the stride is.
+
 ; REGRESSION TEST : streaming i64/i32 loads must lower to a SINGLE fused
 ; post-increment load instruction (LD64_POST / LD32_POST) when the stride is
 ; encodable as imm6<<3 / imm6<<2, NOT the 2-instruction LD + ADDI32 split.
@@ -43,7 +45,6 @@
 ; If MIR shows LD64_S1+ADDI32 where LD64_POST was expected: the fuse-when
 ; encodable logic in HaydnExpandPostIncEarly is broken or the LD64_POST
 ; td def is malformed. Investigate the expansion, do NOT just update
-; CHECK lines.
 ; If ASM no longer shows ld64.post / ld32.post: same root cause.
 ;
 ; References:

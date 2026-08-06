@@ -1,5 +1,7 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
-#
+
+# Role: object — Round-trip test for ALU instructions: asm → parse → print.
+
 # Round-trip test for ALU instructions: asm → parse → print.
 # NOTE: The full encode→decode roundtrip (llvm-mc -filetype=obj | llvm-objdump)
 # is not yet tested because the Haydn disassembler is not fully implemented
@@ -8,6 +10,7 @@
 
 # Arithmetic instructions
 # CHECK: add32 r0, r1, r2
+
 add32 r0, r1, r2
 
 # CHECK: addi32 r3, r4, 42

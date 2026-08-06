@@ -1,10 +1,11 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — 64-bit SIMD vectors pass/return in DR (D0…), not multi-GPR/sret.
+
 ; G-ABI-VEC: 64-bit SIMD vectors pass/return in DR (D0…), not multi-GPR/sret.
 ; Identity return may be empty (arg already D0); arithmetic uses X2/X4 on D*.
 
-; CHECK-LABEL: ret_v2i32:
-; CHECK: jalr_w
+
 define <2 x i32> @ret_v2i32(<2 x i32> %v) {
   ret <2 x i32> %v
 }

@@ -1,7 +1,9 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -o - < %s | FileCheck %s
-;
+
+; Role: semantic — E2E: AR unaligned stream intrinsics (golden LS #103-#109) must select to native Format E mnemonics (pldwwua / d_lqhwua_post / d_ltwua_post / flar.
+
 ; E2E: AR unaligned stream intrinsics (golden LS #103-#109) must select to
-; native Bundle128 mnemonics (pldwwua / d_lqhwua_post / d_ltwua_post / flar
+; native Format E mnemonics (pldwwua / d_lqhwua_post / d_ltwua_post / flar
 ; wbarwua / d_sqhwua_post / d_stwua_post), not drop as pseudos or libcalls.
 ;
 ; Typical stream order exercised in @ar_stream_load / @ar_stream_store.
@@ -45,7 +47,7 @@ define i64 @test_d_lqhwua_post(ptr %ptr, i32 %stride) {
 define i64 @test_d_ltwua_post(ptr %ptr, i32 %stride) {
 ; CHECK-LABEL: test_d_ltwua_post:
 ; CHECK: d_ltwua_post
-  %r = call i64 @llvm.haydn.d.ltwua.post(ptr %ptr, i32 2, i32 %stride, i32 1)
+  %r = call i64 @llvm.haydn.d.ltwua.post(ptr %ptr, i32 1, i32 %stride, i32 1)
   ret i64 %r
 }
 

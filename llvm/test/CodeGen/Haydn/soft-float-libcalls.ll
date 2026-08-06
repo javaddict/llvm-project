@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Soft-float surface for Haydn (no FPU): * arith/cmp/convert → compiler-rt (__addsf3, __eqsf2, …).
+
 ; Soft-float surface for Haydn (no FPU):
 ;   * arith/cmp/convert → compiler-rt (__addsf3, __eqsf2, …)
 ;   * floor/minnum      → libm (floorf/fminf); compile ok, link needs libm
@@ -8,6 +10,7 @@
 ;   * is.fpclass        → generic .lower (integer bit tests), no libcall
 
 ; float add -> __addsf3
+
 define float @fadd(float %a, float %b) {
 ; CHECK-LABEL: fadd:
 ; CHECK: jal_w{{(\.s[012])?}}	lr, __addsf3

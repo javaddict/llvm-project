@@ -1,6 +1,8 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
-;
+
+; Role: MIR — Previously expected-fail (XFAIL marker removed): the kept ISA-27 compare/branch codegen (denser bundles; CHECK at line 84 no longer matches).
+
 ; Previously expected-fail (XFAIL marker removed): the kept ISA-27
 ; compare/branch codegen (denser bundles; CHECK at line 84 no longer matches).
 ; Denser-but-correct; needed a denser-bundle rebaseline (like
@@ -52,6 +54,7 @@
 ; the loop still converts; the SET_HWLOOP_REG/HWLOOP_END pseudos are emitted
 ; on virtual registers (pre-RA), so no vreg numbers are pinned here.
 ; ===========================================================================
+
 define i32 @countup_runtime_blt(ptr readonly %a, i32 %n) nounwind {
 ; CHECK-LABEL: name: countup_runtime_blt
 ; CHECK: SET_HWLOOP

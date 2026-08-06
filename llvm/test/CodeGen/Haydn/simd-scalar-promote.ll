@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 %s -o - | FileCheck %s
 
+; Role: semantic — SIMD Scalar-to-SIMD Pair Promotion Tests Tests for the Haydn SIMD promotion optimization that recognizes pairs of.
+
 ;===----------------------------------------------------------------------===
 ; SIMD Scalar-to-SIMD Pair Promotion Tests
 ;===----------------------------------------------------------------------===
@@ -25,6 +27,7 @@
 ; TEST 1: Scalar addition pair from vector extract-then-repack
 ; Extract two i32 elements from each of two <2 x i32>, add them element-wise
 ; pack back into <2 x i32>. This should be promoted to X2ADD32.
+
 define <2 x i32> @test_promote_add(i64 %a, i64 %b) nounwind {
 ; CHECK-LABEL: test_promote_add:
 ; CHECK: x2add32

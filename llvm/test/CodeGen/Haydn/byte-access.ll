@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 
+; Role: semantic — byte/half load/store selection (ISA-43 bug 2).
+
 ; REGRESSION TEST: byte/half load/store selection (ISA-43 bug 2).
 ;
 ; Bug: the selector collapsed every load/store to LD32/ST32, so a char*/short*
@@ -11,6 +13,7 @@
 ; offsets. If this regresses, char access emits `ld32`/`st32` again.
 
 ; byte load -> ldu8 / s_lbu_* (NOT ld32 / s_lw)
+
 define i32 @load_char(ptr %p) {
 ; CHECK-LABEL: load_char:
 ; CHECK-NOT: {{(^|[^_])ld32|s_lw}}

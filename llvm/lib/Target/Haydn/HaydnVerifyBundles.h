@@ -6,16 +6,16 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// G-BUNDLE-FORMAT B1.4 — analysis-only MachineFunction pass that fail-closes
+// — analysis-only MachineFunction pass that fail-closes
 // on committed-cycle invariant violations (haydn::bundle::verifyCommittedBundle).
 //
 // Pipeline peer: immediately after HaydnFinalizeBundle in addPreSched2 and
-// again after PreEmit late re-commit (B4.3; AIEFinalizeBundle.cpp:40-59 peer
+// again after PreEmit late re-commit (; AIEFinalizeBundle.cpp:40-59 peer
 // order; AIEBaseInstrInfo.cpp:1440-1459 verifyInstruction fail-closed).
 // AIE PreEmit is empty so AIE never re-verifies late; Haydn must.
 //
 // Does not mutate MIR. report_fatal_error on violation (no silent skip).
-// No MCFlags writers. setDesc is owned by Finalize/materialize (B3.1/B4.3).
+// No MCFlags writers. setDesc is owned by Finalize/materialize ().
 //
 //===----------------------------------------------------------------------===//
 

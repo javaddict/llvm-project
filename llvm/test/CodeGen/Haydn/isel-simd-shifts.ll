@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -o - < %s | FileCheck %s
-;
+
+; Role: semantic — SIMD v4i16 and v2i32 shift selection.
+
 ; REGRESSION TEST: SIMD v4i16 and v2i32 shift selection
 ;
 ; FIXED : v4i16 path used G_EXTRACT_VECTOR_ELT into s32 (element type
@@ -9,6 +11,7 @@
 ; Expect mnemonics: x4sll16/x4sra16/x4srl16 and x2sll32/x2sra32/x2srl32.
 
 ; v4i16 left shift
+
 define <4 x i16> @test_v4i16_shl(<4 x i16> %a, <4 x i16> %b) {
 ; CHECK: x4sll16
   %r = shl <4 x i16> %a, %b

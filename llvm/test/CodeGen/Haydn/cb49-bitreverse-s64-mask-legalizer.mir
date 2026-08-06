@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=legalizer %s -o - | FileCheck %s
-#
+
+# Role: MIR — , MIR level -- the DECISIVE guard for the s64 bitreverse byte-mask sign-extension bug.
+
 # REGRESSION TEST, MIR level -- the DECISIVE guard for the s64
 # bitreverse byte-mask sign-extension bug. The companion asm test
 # cb49-bitreverse-s64-mask-regression.ll covers the same bug end-to-end but

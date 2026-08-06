@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 
+; Role: semantic — BundleSim ALIGNMENT fault on S_LW_WITH_REG / S_LHWU_WITH_IMM when EA%4==1.
+
 ; BundleSim ALIGNMENT fault on S_LW_WITH_REG / S_LHWU_WITH_IMM when EA%4==1.
 ;
 ; Root: Haydn GISel treated G_LOAD/G_STORE as legal by SSA type only. Clang
@@ -15,6 +17,7 @@
 ; If this regresses: bf_rmw_i24 emits ld32/st32 again → BundleSim ALIGNMENT.
 
 ; i24 bitfield RMW must use byte loads/stores, never word
+
 define void @bf_rmw_i24(ptr %p) {
 ; CHECK-LABEL: bf_rmw_i24:
 ; CHECK-NOT: ld32

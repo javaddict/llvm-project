@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=machine-latecleanup %s -o - | FileCheck %s
-#
+
+# Role: MIR — MachineLateInstrsCleanup must NOT delete a post-call LOADI32 of the reserved AT scratch R12 when an identical pre-call materialization exists.
+
 # MachineLateInstrsCleanup must NOT delete a post-call LOADI32 of the
 # reserved AT scratch R12 when an identical pre-call materialization exists.
 #

@@ -1,8 +1,11 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 
+; Role: semantic — all comparison predicates with branches.
+
 ; Test all comparison predicates with branches
 
 ;ICMP_EQ (equal)
+
 define i32 @icmp_eq(i32 %a, i32 %b) {
 ; CHECK-LABEL: icmp_eq:
 ; CHECK: seq32

@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 < %s 2>&1 | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s 2>&1 | FileCheck %s
-;
+
+; Role: verifier — post-legalizer constant look-through must normalize APInt widths (no equal-width assert).
+
 ; (PostLegalizer residual,):
 ; After the LegalizationArtifactCombiner trunc(trunc) guard landed, the yarpgen
 ; seed still crashed in HaydnPostLegalizerCombiner with
@@ -16,7 +18,7 @@
 ; and/or disjoint, shift-mask). If the width guards regress, llc aborts
 ; before emitting a function label.
 
-; CHECK-LABEL: const_icmp_and_or_mul:
+
 define i32 @const_icmp_and_or_mul(i32 %x) nounwind {
 entry:
   %c = icmp eq i32 0, 0

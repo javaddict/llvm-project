@@ -5,11 +5,10 @@
 // Every other backend (-gen-disassembler, -gen-asm-writer, -gen-instr-info
 // gen-emitter, etc.) uses Haydn.td.
 //
-// Historical note (earlier): Mode-0/3 decode-variant islands
+// Historical note: Mode-0/3 decode-variant islands
 // (HaydnInstrInfoM0/MACM0/M3/S*M0.td) used bare mnemonics that hijacked
-// the DEFAULT asm-match namespace; the matcher.td deliberately excluded
-// them. After /R4 + those islands are retired and live only under
-// legacy-retired/. Live encoding is `_S<k>` + Bundle128.
+// the DEFAULT asm-match namespace; those islands are deleted. Live encoding
+// is `_S<k>` placement + Format E composite.
 //
 // Pattern is the standard AMDGPU/X86 split (per-call
 // LLVM_TARGET_DEFINITIONS) — compliant (no custom -gen-haydn-*).
@@ -27,8 +26,8 @@ include "HaydnGeneric.td"
 // on S1/S2).
 //
 // Mirrors the slot block in Haydn.td EXCEPT HaydnCompositeFormats.td is
-// intentionally omitted: the 128-bit Bundle128 composite forces the matcher
-// into the APInt getBinaryCodeForInstr path (max Inst width 128 > 64), which
+// intentionally omitted: the Format E composite is wider than 64 bits and
+// would force the matcher into the APInt getBinaryCodeForInst path, which
 // is unnecessary for asm parsing and not wired into the matcher generator.
 // Without the composite, the matcher stays on the uint64 path and recognizes
 // every per-slot slot instruction.

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — large frame offsets must be scavenged, not truncated.
+
 ; REGRESSION TEST: large frame offsets must be scavenged, not truncated.
 ;
 ; Bug: eliminateFrameIndex assumed all offsets fit in simm16 and silently

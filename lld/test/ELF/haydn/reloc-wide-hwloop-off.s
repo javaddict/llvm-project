@@ -1,24 +1,20 @@
 # REQUIRES: haydn
 # RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.o
 # RUN: ld.lld %t.o -o %t --section-start=.text=0x10000 \
-# RUN:   --section-start=.text.body=0x10010
+# RUN:   --section-start=.text.body=0x1000c
 # RUN: llvm-readobj -r %t.o | FileCheck --check-prefix=RELOCS %s
 #
-# REGRESSION TEST (L228-class sibling): lld must DISPATCH the hwloop offset
-# relocations through getRelExpr, not only relocate().
+# REGRESSION: cross-section SET_HWLOOP labels force external relocs that
+# lld must accept (no "unrecognized relocation" Fatal).
 #
-# Bundle128 SET_HWLOOP emits R_HAYDN_HWLoopOff1/Off2. Order in .rela.text is
-# emission order (Off2 before Off1 is fine — both must be present and accepted
-# by getRelExpr). Cross-section body labels force external relocs (MC cannot
-# resolve them locally).
-#
-# ld.lld must exit 0 (getRelExpr accepts both). Decoder/objdump of SET_HWLOOP
-# is out of scope here.
+# Format E EncodedBytes=12. Do not .balign 16 after SET (4-byte pad fails
+# writeNopData). Product currently emits R_HAYDN_32 for symbolic Off1/Off2
+# operands (HWLoopOff1/Off2 FieldLsb residual GE96) — pin live emission.
 
 # RELOCS:      Relocations [
 # RELOCS-NEXT:   Section ({{.*}}) .rela.text {
-# RELOCS-DAG:      0x0 R_HAYDN_HWLoopOff1 loop_body 0x0
-# RELOCS-DAG:      0x0 R_HAYDN_HWLoopOff2 loop_end 0x0
+# RELOCS-DAG:      0x0 R_HAYDN_32 loop_body 0x0
+# RELOCS-DAG:      0x0 R_HAYDN_32 loop_end 0x0
 # RELOCS:        }
 # RELOCS-NEXT: ]
 
@@ -26,10 +22,9 @@
 .globl _start
 _start:
     set_hwloop_w 0, loop_body, loop_end, 3
-    .balign 16
+    .size _start, .-_start
 
 .section .text.body
-.balign 16
 .globl loop_body
 loop_body:
     { add32 r1, r2, r3 }

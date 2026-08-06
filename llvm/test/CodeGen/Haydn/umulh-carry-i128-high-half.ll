@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -O2 < %s | FileCheck %s
 
+; Role: semantic — G_UMULH s64 must propagate the carry out of the cross-partial (LH + HL + (LL>>32)) sum into the high-64 result.
+
 ; REGRESSION TEST: G_UMULH s64 must propagate the carry out of the
 ; cross-partial (LH + HL + (LL>>32)) sum into the high-64 result.
 ;

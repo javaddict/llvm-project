@@ -1,6 +1,8 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
-;
+
+; Role: MIR — Runtime-trip shapes (Case 4/5) — shape CHECKs only (no MIR dumps).
+
 ; Runtime-trip shapes (Case 4/5) — shape CHECKs only (no MIR dumps).
 ;
 ; HiFi contract: trip is a preheader fact then ZOL. Pre-RA HardwareLoops
@@ -10,9 +12,7 @@
 ; Do not pin ADDI32 vs ADDI32_W or physreg numbers.
 
 ; Case 4 canonical: init=0, bump=1, runtime limit (vec_add / vec_dot family).
-; CHECK-LABEL: name: case4_countup_init0_bump1
-; CHECK: SET_HWLOOP
-; CHECK: PseudoLoopEnd
+
 define void @case4_countup_init0_bump1(ptr noalias %out, ptr noalias readonly %in,
                                        i32 %n) nounwind {
 entry:

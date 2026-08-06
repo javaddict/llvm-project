@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Post-increment addressing mode optimization.
+
 ; REGRESSION TEST: Post-increment addressing mode optimization
 ;
 ; Tests that the HaydnLoadStoreOptimizer detects sequences of
@@ -31,6 +33,7 @@
 ; HWLoop recognizer still converts the count-up shape (set_hwloop_f2); the
 ; load CHECK was removed because it was fragile and not the point of this
 ; function. This is NOT a ripple (no DB-named post-inc here).
+
 define i32 @test_post_inc_load(ptr %p, i32 %n) {
 ; CHECK-LABEL: test_post_inc_load:
 entry:
@@ -89,7 +92,6 @@ exit:
 ; (SFR-strip) changed bundle layout — rebaselined.
 ; CHECK-DAG: // %bb.1: // %loop.preheader
 }
-
 
 ;Consecutive loads from adjacent addresses (stride = 4)
 ; Should produce multiple LD32 + ADDI32 pairs.

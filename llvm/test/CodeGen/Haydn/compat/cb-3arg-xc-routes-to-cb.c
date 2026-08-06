@@ -1,5 +1,17 @@
 // REQUIRES: haydn-registered-target
-//
+// RUN: clang -target haydn-unknown-elf -mcpu=haydn \
+// RUN: -mllvm -global-isel-abort=1 -O1 -ffreestanding \
+// RUN: -Wno-implicit-function-declaration \
+// RUN: -Wno-incompatible-pointer-types -Wno-int-conversion \
+// RUN: -include stdint.h \
+// RUN: -D__HAYDN_ALLOW_INEXACT_AE \
+// RUN: -include haydn_dsp.h \
+// RUN: -S %s -o %t.s
+// RUN: FileCheck --check-prefix=ASM %s < %t.s
+// RUN: FileCheck --check-prefix=TEXT %s < %t.s
+
+// Role: semantic — HiFi3 3-arg AE_*XC macros must lower to the CB load/store instruction, NOT to a plain linear load/store with pointer arithmetic.
+
 // REGRESSION TEST: HiFi3 3-arg AE_*XC macros must lower to the CB load/store
 // instruction, NOT to a plain linear load/store with pointer arithmetic.
 //
@@ -28,20 +40,11 @@
 //
 // Full model (-mcpu=haydn): simd + bit-reversed so haydn.h parses. Default
 // generic is agu+hwloop only. Use resource-dir haydn_dsp.h (not source -I).
-// RUN: clang -target haydn-unknown-elf -mcpu=haydn \
-// RUN: -mllvm -global-isel-abort=1 -O1 -ffreestanding \
-// RUN: -Wno-implicit-function-declaration \
-// RUN: -Wno-incompatible-pointer-types -Wno-int-conversion \
-// RUN: -include stdint.h \
-// RUN: -D__HAYDN_ALLOW_INEXACT_AE \
-// RUN: -include haydn_dsp.h \
-// RUN: -S %s -o %t.s
-// RUN: FileCheck --check-prefix=ASM %s < %t.s
-// RUN: FileCheck --check-prefix=TEXT %s < %t.s
 
 #include <stdint.h>
 
 // Volatile sinks so the loads/stores cannot be DCE'd.
+
 volatile ae_int32x2 g_sink32x2;
 volatile ae_int16x4 g_sink16x4;
 volatile ae_int32   g_sink32;

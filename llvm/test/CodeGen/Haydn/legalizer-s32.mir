@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=legalizer %s -o - | FileCheck %s
 
+# Role: MIR — that 32-bit integer arithmetic operations are legal These should pass through the legalizer unchanged.
+
 # Test that 32-bit integer arithmetic operations are legal
 # These should pass through the legalizer unchanged
 

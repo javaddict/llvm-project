@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s 2>&1 | FileCheck %s
-;
+
+; Role: semantic — G_CTPOP (and the G_CTTZ/G_CTLZ family) on an s8 operand must legalize without crashing.
+
 ; REGRESSION TEST: G_CTPOP (and the G_CTTZ/G_CTLZ family) on an s8 operand
 ; must legalize without crashing.
 ;

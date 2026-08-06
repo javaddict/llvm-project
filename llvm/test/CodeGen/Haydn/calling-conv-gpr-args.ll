@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Comprehensive tests for Haydn GPR argument passing (R1-R7).
+
 ; Comprehensive tests for Haydn GPR argument passing (R1-R7).
 ;
 ; Calling convention:

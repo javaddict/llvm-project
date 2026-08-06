@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // All C_* 16-bit compressed instruction shells deleted.
-// Bundle128-only path: no 16-bit C parcels on the live emit/decode path
+// No 16-bit C parcels on the live emit/decode path.
 // FLEX encode-only forms C_ADD32_S0 / C_ADDI32_S0 remain
 // in HaydnFormatsALU32.td. AsmBackend C_* relaxation stubs were removed with
 // these defs. This file is kept as an empty include so HaydnGeneric.td does

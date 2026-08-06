@@ -1,0 +1,200 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+
+# Role: MIR — Hard multi-member FormatID-stamped BUNDLE in SET→BEGIN Following.
+#
+# After exact-commit / multipass re-entry, a multi-member product cycle is a
+# top-level BUNDLE root with FormatID imm 0. That shape is also the durable
+# hard-cycle form once an approved pre-postRA producer (e.g. SMS handoff)
+# places multi-member groups. Fixup must:
+#   1. Count each hard cycle as one size-bearing Following parcel (not zero,
+#      not per-member).
+#   2. Never unbundle the hard root or a coissued SET cycle while residual-
+#      padding InterveningCycles.
+#   3. Insert deficit pads only after the SET cycle (next top-level boundary),
+#      never between hard-root members.
+#
+# Cases:
+#   hard_following_floor — hard root + two NOPs already meet InterveningCycles=2;
+#     Fixup inserts no deficit pads and keeps both multi-member roots intact.
+#   hard_following_deficit — only the hard root follows SET (Following=1);
+#     Fixup exact-commits one singleton NOP pad between SET and the hard root.
+#   coissue_set_then_hard — coissued SET+ADD cycle then hard root; coissue and
+#     hard membership both survive; deficit pads (if any) stay top-level.
+
+--- |
+  define dso_local void @hard_following_floor() {
+  entry:
+    ret void
+  }
+  define dso_local void @hard_following_deficit() {
+  entry:
+    ret void
+  }
+  define dso_local void @coissue_set_then_hard() {
+  entry:
+    ret void
+  }
+
+...
+---
+name:            hard_following_floor
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 4, implicit-def dead $sfr
+    ; Hard multi-member product cycle (FormatID 0) counts as Following=1.
+    BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r5 = ADD32 $r2, $r3, implicit-def dead $sfr
+    }
+    NOP
+    NOP
+
+  bb.1:
+    liveins: $r0, $r1, $r4, $r5, $r15
+    successors: %bb.2
+    ST32 $r4, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.2:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: hard_following_floor
+# SET survives; hard multi-member root stays two-member (never unbundled).
+# CHECK: SET_HWLOOP_W
+# CHECK: BUNDLE 0
+# CHECK: ADD32
+# CHECK: ADD32
+# CHECK: }
+# Floor already met: no Fixup deficit NOP BUNDLEs between SET and hard root.
+# Only the two input bare NOPs remain after the hard cycle before bb.1.
+# CHECK-NEXT: NOP
+# CHECK-NEXT: NOP
+# CHECK: bb.1
+# CHECK-NOT: SUBI32
+# CHECK-NOT: BNEZ
+
+...
+---
+name:            hard_following_deficit
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 4, implicit-def dead $sfr
+    ; Only one following parcel (hard root). Fixup must insert 1 pad *before*
+    ; the hard root (after SET cycle), never splice into the hard cycle.
+    BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r5 = ADD32 $r2, $r3, implicit-def dead $sfr
+    }
+
+  bb.1:
+    liveins: $r0, $r1, $r4, $r5, $r15
+    successors: %bb.2
+    ST32 $r4, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.2:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: hard_following_deficit
+# CHECK: SET_HWLOOP_W
+# One exact-commit deficit pad after SET (InterveningCycles=2, Following=1),
+# then the hard multi-member cycle.
+# CHECK: BUNDLE 0
+# CHECK: NOP
+# Hard root membership preserved (two ADD children).
+# CHECK: BUNDLE 0
+# CHECK: ADD32
+# CHECK: ADD32
+# CHECK: }
+# CHECK: bb.1
+# CHECK-NOT: SUBI32
+# CHECK-NOT: BNEZ
+
+...
+---
+name:            coissue_set_then_hard
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
+    ; Coissued SET cycle (post-exact-commit shape) then hard multi-member cycle.
+    BUNDLE 0, implicit-def $r6, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      SET_HWLOOP_W 0, %bb.1, %bb.1, 4, implicit-def dead $sfr
+      $r6 = ADD32 $r0, $r1, implicit-def dead $sfr
+    }
+    BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r5 = ADD32 $r2, $r3, implicit-def dead $sfr
+    }
+    ; Following = hard root only (1) → one deficit pad after SET cycle,
+    ; before the hard root (never spliced into either multi-member cycle).
+
+  bb.1:
+    liveins: $r0, $r1, $r4, $r5, $r6, $r15
+    successors: %bb.2
+    ST32 $r6, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.2:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: coissue_set_then_hard
+# Coissued SET cycle preserved (SET + ADD siblings).
+# CHECK: BUNDLE {{.*}} {
+# CHECK: SET_HWLOOP_W
+# CHECK: ADD32
+# CHECK: }
+# One top-level exact-commit deficit pad, then hard dual-ADD root.
+# CHECK: BUNDLE 0
+# CHECK: NOP
+# CHECK: BUNDLE 0
+# CHECK: ADD32
+# CHECK: ADD32
+# CHECK: }
+# CHECK: bb.1
+# CHECK-NOT: SUBI32
+# CHECK-NOT: BNEZ

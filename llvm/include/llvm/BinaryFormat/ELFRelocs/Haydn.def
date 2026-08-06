@@ -41,8 +41,9 @@ ELF_RELOC(R_HAYDN_PC_LO20,       15)
 // mapping clobbered whichever fixup ran second because both wrote to bits[15:0].
 ELF_RELOC(R_HAYDN_HWLoopOff1,     16)
 ELF_RELOC(R_HAYDN_HWLoopOff2,     17)
-// WIDE / Bundle128 branch/call (encoding_manual.md §5.5, ÷2 per §5.14 D1).
-// Geometry is Bundle128 s0 (D479+), not the legacy 48-bit high-end parcel:
+// WIDE branch/call fields under product Format E parcels (encoding_manual.md
+// §5.5, ÷2 per §5.14 D1). Geometry is Format E entry windows (12-byte parcels);
+// FE8 retired Bundle128 / 16-byte product packing:
 //   R_HAYDN_WIDE_BranchSImm12    -- I12  one-reg (BEQZ_W/…): imm12 @ bits[15:4]
 //   R_HAYDN_WIDE_CallSImm20      -- I20  call (JAL family): imm20 @ bits[23:4]
 //   R_HAYDN_WIDE_BranchSImm12_RI -- RI12 two-reg (BEQ_W/BNE_W/…): imm12 @

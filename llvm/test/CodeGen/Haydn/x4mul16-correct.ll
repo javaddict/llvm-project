@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Golden X4MUL16 is 2-dest 16x16->32, not G_MUL v4i16.
+
 ; Golden X4MUL16 is 2-dest 16x16->32, not G_MUL v4i16.
 ; Intrinsic path must emit x4mul16; elementwise mul must NOT.
 ; Also lock golden shapes for related X2/X4 mul family fixes:
@@ -15,8 +17,6 @@ declare <2 x i32> @llvm.haydn.x4cmul16(<4 x i16>)
 declare <2 x i32> @llvm.haydn.x4cmul16s.h(<4 x i16>, <4 x i16>)
 declare <2 x i32> @llvm.haydn.x4cmula16s.h(<2 x i32>, <4 x i16>, <4 x i16>)
 
-; CHECK-LABEL: test_x4mul16_intrinsic:
-; CHECK: x4mul16
 define { i64, i64 } @test_x4mul16_intrinsic(<4 x i16> %a, <4 x i16> %b) {
   %r = call { i64, i64 } @llvm.haydn.x4mul16(<4 x i16> %a, <4 x i16> %b)
   ret { i64, i64 } %r

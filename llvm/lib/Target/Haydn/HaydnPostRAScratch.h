@@ -86,6 +86,27 @@ void withPostRAScratch(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                        ArrayRef<Register> Exclude = {},
                        PostRASoftZero SoftZero = PostRASoftZero::AllowBorrow);
 
+// Emit a frame-relative LSU access (ST32 store or LD32 load) for a post-RA
+// in-frame spill slot. One closed rule, three monotone tiers tied to the
+// \p Off magnitude; SP is NEVER moved:
+//   tier 1 - short-form element-indexed ST32/LD32 FrameReg, elem
+//            (Off/4 fits isInt<6>)
+//   tier 2 - ADDI32_W R0, FrameReg, Off; ST32/LD32 R0, 0
+//            (Off fits simm20)
+//   tier 3 - LOADI32 R0, Off; ADD32 R0, FrameReg, R0; ST32/LD32 R0, 0
+//            (any remaining Off)
+// Tiers 2/3 borrow soft-zero R0 as a self-contained scratch (must be clean on
+// entry) and restore it via XOR32 R0,R0,R0 before return. The same closed
+// rule governs every in-frame spill slot - withPostRAScratch's ScratchFI and
+// HaydnInstrInfo's DR64PackBaseSpillFI - so neither call site fatals on a
+// large frame. \p StoreFlags is applied to the stored register (use 0 for
+// loads or non-killed stores).
+void emitFrameRelativeMemOp(MachineBasicBlock &MBB,
+                            MachineBasicBlock::iterator I, const DebugLoc &DL,
+                            const TargetInstrInfo &TII, Register Reg,
+                            Register FrameReg, int64_t Off, bool IsStore,
+                            unsigned StoreFlags = 0);
+
 // --- Layer 2: rematerialize (Src + Imm) into a use -------------------------
 
 // Rewrite UseMI's register operand \p UseOpIdx to hold rematerialized

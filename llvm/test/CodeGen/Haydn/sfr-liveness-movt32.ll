@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — (History: this was expected-fail while GenMux Pattern 1 did not fire post-ISA-27; now resolved -- MOVT32/MOVF32 form again.
+
 ; (History: this was expected-fail while GenMux Pattern 1 did not fire
 ; post-ISA-27; now resolved -- MOVT32/MOVF32 form again. NOTE: do not write
 ; the literal "XFAIL" token with a colon in a comment, lit scans comment
@@ -54,6 +56,7 @@
 ;select on signed less-than. GenMux Pattern 1 collapses the bitwise chain
 ;(neg32/and32/not32/and32/or32) into a single movt32/movf32 whose rs2 is
 ;the SLT32 result register.
+
 define i32 @select_slt(i32 %a, i32 %b, i32 %c, i32 %d) nounwind {
 ; CHECK-LABEL: select_slt:
 ; The compare result feeds the CMOV as a GPR (rs2), not via $sfr:

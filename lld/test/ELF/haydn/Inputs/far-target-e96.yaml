@@ -1,0 +1,20 @@
+# Far target object placed by linker script at a VA beyond CallSImm20 range.
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS32
+  Data:    ELFDATA2LSB
+  Type:    ET_REL
+  Machine: 0x103
+Sections:
+  - Name:    .text.far
+    Type:    SHT_PROGBITS
+    Flags:   [ SHF_ALLOC, SHF_EXECINSTR ]
+    AddressAlign: 4
+    Content: '01000000000000000000000000000000'
+Symbols:
+  - Name:    far_fn
+    Section: .text.far
+    Value:   0
+    Size:    16
+    Binding: STB_GLOBAL
+    Type:    STT_FUNC

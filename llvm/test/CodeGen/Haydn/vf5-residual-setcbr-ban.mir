@@ -1,0 +1,21 @@
+# RUN: not llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   %s -o - 2>&1 | FileCheck %s
+
+# Role: verifier — Late-MC residual SETCBR at late firewall is fatal (ExpandPseudos → CSRW_W).
+
+# Late-MC residual SETCBR at late firewall is fatal (ExpandPseudos → CSRW_W).
+
+--- |
+  define void @residual_setcbr() { ret void }
+...
+---
+name:            residual_setcbr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; CHECK: residual cycle-forming pseudo
+    SETCBR_BEGIN 0, $r1
+    RET implicit $r15

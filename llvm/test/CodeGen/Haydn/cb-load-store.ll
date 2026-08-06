@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -o - < %s | FileCheck %s
-;
+
+; Role: semantic — Circular buffer (CB) load intrinsics must emit native mnemonics (not be dropped as pseudos).
+
 ; REGRESSION TEST: Circular buffer (CB) load intrinsics must emit native
 ; mnemonics (not be dropped as pseudos).
 ;

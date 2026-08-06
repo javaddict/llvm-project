@@ -370,6 +370,9 @@ def scrub_asm_haydn(asm, args):
     asm = common.SCRUB_WHITESPACE_RE.sub(r" ", asm)
     # Expand the tabs used for indentation.
     asm = string.expandtabs(asm, 2)
+    # Drop backend spill-KPI annotation lines. They are RA metrics, not part of
+    # instruction/semantic contracts, and would force needless rebaselines.
+    asm = re.sub(r"^[ \t]*//[ \t]*#<spill-kpi>[^\n]*\n?", "", asm, flags=re.M)
     # Strip trailing whitespace.
     asm = common.SCRUB_TRAILING_WHITESPACE_RE.sub(r"", asm)
     return asm

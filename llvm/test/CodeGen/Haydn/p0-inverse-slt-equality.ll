@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — counterexample: when a == b, (a < b) = (b < a) = 0, so (b < a) != !(a < b).
+
 ; counterexample: when a == b, (a < b) = (b < a) = 0, so
 ; (b < a) != !(a < b). Inverse-reuse must not fire; both SLT remain.
 ; Value check: sum of the two bools at a==b must be 0 (not 1).

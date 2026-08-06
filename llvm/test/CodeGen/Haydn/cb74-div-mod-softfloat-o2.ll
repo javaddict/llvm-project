@@ -1,8 +1,10 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s 2>&1 | FileCheck %s
-;
+
+; Role: semantic — residual companion (compiler side,): Direct-ELF BundleSim hangs on softfloat/div-heavy programs (cb1_div.
+
 ; residual companion (compiler side,):
 ; Direct-ELF BundleSim hangs on softfloat/div-heavy programs (cb1_div
-; cb74_min) were primarily ISS/disasm-path issues (VMA-native Bundle128 PC
+; cb74_min) were primarily ISS/disasm-path issues (VMA-native Format E PC
 ; branch byte offsets, full -d helper). This locks the *compiler* contract
 ; those repros depend on:
 ; unsigned 32-bit div lowers (libcall or expansion) without abort

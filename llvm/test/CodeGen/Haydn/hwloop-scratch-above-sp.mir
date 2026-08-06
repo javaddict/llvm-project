@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=prologepilog -simplify-mir %s -o - | FileCheck %s
-#
+
+# Role: MIR — post-RA emergency spill *home* (PostRAScratchFI) must live ABOVE SP inside the allocated frame, NOT in a transient slot opened by `SUBI32 sp, 8`.
+
 # REGRESSION: post-RA emergency spill *home* (PostRAScratchFI) must live ABOVE SP
 # inside the allocated frame, NOT in a transient slot opened by `SUBI32 sp, 8`
 # below SP (no red zone on baremetal Haydn).
@@ -12,6 +14,7 @@
 # reserved under AIE no-free-AT product model for post-RA scavenge spill home).
 # Prologue SUBI32 covers the slot; never a below-SP dance.
 #
+
 --- |
   define dso_local void @imm_hwloop(ptr nocapture writeonly %out) {
   entry:

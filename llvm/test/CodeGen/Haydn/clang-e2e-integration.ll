@@ -1,5 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 < %s | FileCheck %s
-; Status : intent CHECKs re-goldened for Bundle128/cmov.
+
+; Role: semantic — Comprehensive Clang end-to-end integration test for the Haydn backend.
+
+; Status : intent CHECKs re-goldened for Format E/cmov.
 ;
 ; Comprehensive Clang end-to-end integration test for the Haydn backend.
 ;

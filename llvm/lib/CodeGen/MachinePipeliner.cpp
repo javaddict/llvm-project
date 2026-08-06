@@ -4084,8 +4084,15 @@ bool ResourceManager::canReserveResources(SUnit &SU, int Cycle) {
       dbgs() << "canReserveResources:\n";
   });
   if (UseDFA)
+    // D999: pass the MachineInstr (not just its MCInstrDesc) so a target's
+    // MI overload of ResourceCycle can observe operand-dependent same-cycle
+    // constraints — e.g. Haydn's no-forwarding intra-bundle RAW law (a reader
+    // may not issue in the same cycle as a register it reads that is defined
+    // earlier in that same cycle/bundle). The descriptor-only overload cannot
+    // see operands. Scoped #0 exception (AIE-peer-proven); re-evaluate at each
+    // upstream rebase. See llvm/lib/Target/Haydn/HaydnResourceCycle.h.
     return DFAResources[positiveModulo(Cycle, InitiationInterval)]
-        ->canReserveResources(&SU.getInstr()->getDesc());
+        ->canReserveResources(*SU.getInstr());
 
   const MCSchedClassDesc *SCDesc = DAG->getSchedClass(&SU);
   if (!SCDesc->isValid()) {
@@ -4110,8 +4117,10 @@ void ResourceManager::reserveResources(SUnit &SU, int Cycle) {
       dbgs() << "reserveResources:\n";
   });
   if (UseDFA)
+    // D999: MI overload (see canReserveResources above) — reserve honors the
+    // same operand-dependent same-cycle constraints on commit.
     return DFAResources[positiveModulo(Cycle, InitiationInterval)]
-        ->reserveResources(&SU.getInstr()->getDesc());
+        ->reserveResources(*SU.getInstr());
 
   const MCSchedClassDesc *SCDesc = DAG->getSchedClass(&SU);
   if (!SCDesc->isValid()) {

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — llvm.haydn.addbrba32 — bit-reversed add for FFT butterfly addressing (maps 1:1 to the BREV32 hardware instruction).
+
 ; REGRESSION TEST: llvm.haydn.addbrba32 — bit-reversed add for FFT butterfly
 ; addressing (maps 1:1 to the BREV32 hardware instruction).
 ;

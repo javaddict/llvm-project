@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — T1.1/T1.4: 1:1 Pats for G_MUL s32/v2i32 and s64 shifts.
+
 ; T1.1/T1.4: 1:1 Pats for G_MUL s32/v2i32 and s64 shifts.
 ; G_SMULH/UMULH covered by scalar-mulh-isel.mir (Pat → MULSSH/MULUUH).
 ; Logical opcodes only (mull / x2mulpl32 / sll64 / srl64 / sra64).

@@ -1,6 +1,8 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop < %s | FileCheck %s
-;
+
+; Role: semantic — (F34): Hardware-loop offset fields must be unsigned uimm6/uimm12.
+
 ; REGRESSION TEST (F34): Hardware-loop offset fields must be unsigned uimm6/uimm12.
 ;
 ; Bug: HaydnHardwareLoops modeled the SET_HWLOOP PC-relative offsets as a

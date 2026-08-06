@@ -1,0 +1,106 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=EXPAND
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-expand-pseudos,postmisched -verify-machineinstrs %s -o - | \
+# RUN:   FileCheck %s --check-prefix=PACK
+
+# Role: MIR — ExpandPseudos SETCBR_* → final CSRW_W before post-RA pack, then
+# multipass expand+postmisched with SET_HWLOOP setup (HWLOOP-SU ExitSU flush).
+#
+# Pins:
+#   * Rev2 CBR CSR map 0x2C..0x2F + implicit-def CBR0/1 (and SFR via Defs).
+#   * Kill on the value GPR is preserved through expand.
+#   * Zero residual SETCBR after expand.
+#   * Expanded CBR CSRW is a real pack member (setDesc CSRW_W_S0); it does
+#     *not* false-positive the HWLR 0x20..0x25 ↔ SET_HWLOOP same-bundle gate.
+#   * SET remains a region SU: InterveningCycles following flush after SET
+#     (InterveningCycles=2 size-bearing NOPs when the region is otherwise empty).
+
+--- |
+  define void @expand_cbr_map() { ret void }
+  define void @expand_cbr_then_set_hwloop() { ret void }
+  define void @hwlr_csrw_still_serializes() { ret void }
+...
+---
+name:            expand_cbr_map
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4, $r15
+
+    ; EXPAND-LABEL: name: expand_cbr_map
+    ; EXPAND: CSRW_W 44, killed $r1, implicit-def $sfr, implicit-def $cbr0
+    ; EXPAND-NEXT: CSRW_W 45, killed $r2, implicit-def $sfr, implicit-def $cbr0
+    ; EXPAND-NEXT: CSRW_W 46, killed $r3, implicit-def $sfr, implicit-def $cbr1
+    ; EXPAND-NEXT: CSRW_W 47, killed $r4, implicit-def $sfr, implicit-def $cbr1
+    ; EXPAND-NOT: SETCBR
+    ; EXPAND: RET
+    ;
+    ; PACK-LABEL: name: expand_cbr_map
+    ; PACK: CSRW_W{{(_S0)?}} 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; PACK: CSRW_W{{(_S0)?}} 45, {{.*}}$r2, implicit-def $sfr, implicit-def $cbr0
+    ; PACK: CSRW_W{{(_S0)?}} 46, {{.*}}$r3, implicit-def $sfr, implicit-def $cbr1
+    ; PACK: CSRW_W{{(_S0)?}} 47, {{.*}}$r4, implicit-def $sfr, implicit-def $cbr1
+    ; PACK-NOT: SETCBR
+    SETCBR_BEGIN 0, killed $r1
+    SETCBR_END 0, killed $r2
+    SETCBR_BEGIN 1, killed $r3
+    SETCBR_END 1, killed $r4
+    RET implicit $r15
+
+...
+---
+name:            expand_cbr_then_set_hwloop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+
+    ; CBR boundary write (CSR 0x2C) is *outside* HWLR 0x20..0x25, so the
+    ; CSRW↔SET_HWLOOP hazard must not reject it. Expand yields CSRW_W; pack
+    ; setDescs the member form; SET stays a setup SU with Following flush.
+    ; EXPAND-LABEL: name: expand_cbr_then_set_hwloop
+    ; EXPAND: CSRW_W 44, $r1, implicit-def $sfr, implicit-def $cbr0
+    ; EXPAND-NEXT: SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; EXPAND-NOT: SETCBR
+    ;
+    ; PACK-LABEL: name: expand_cbr_then_set_hwloop
+    ; PACK-DAG: CSRW_W{{(_S0)?}} 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; PACK-DAG: SET_HWLOOP_W{{(_S0)?}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; PACK-NOT: SETCBR
+    ; InterveningCycles=2 following flush after the SET SU (ExitSU latency).
+    ; PACK: NOP
+    ; PACK: NOP
+    ; PACK: $r0 = JALR
+    SETCBR_BEGIN 0, $r1
+    SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+name:            hwlr_csrw_still_serializes
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+
+    ; Control: CSR 0x20 (HWLR_BEGIN) must still refuse same-bundle coissue
+    ; with SET_HWLOOP (spec CSRW↔SET race). Direct CSRW_W — expand not needed.
+    ; EXPAND-LABEL: name: hwlr_csrw_still_serializes
+    ; EXPAND: CSRW_W 32, $r1, implicit-def $sfr
+    ; EXPAND-NEXT: SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ;
+    ; PACK-LABEL: name: hwlr_csrw_still_serializes
+    ; CSRW may co-issue with soft-zero XOR, but SET remains a separate
+    ; cycle (never a same-bundle CSRW(HWLR)+SET child pair).
+    ; PACK: CSRW_W{{(_S0)?}} 32, {{.*}}$r1, implicit-def $sfr
+    ; PACK: SET_HWLOOP_W{{(_S0)?}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; PACK: NOP
+    ; PACK: NOP
+    ; PACK: $r0 = JALR
+    CSRW_W 32, $r1, implicit-def $sfr
+    SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

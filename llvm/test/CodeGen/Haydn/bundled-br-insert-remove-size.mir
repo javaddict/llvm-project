@@ -1,0 +1,143 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=branch-relaxation -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,SHORT
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=branch-relaxation,haydn-finalize-mi-bundles,haydn-verify-bundles -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,LATE
+
+# Role: MIR — Bundle-aware branch insert/remove with exact one-cycle EncodedBytes: * solo committed BUNDLE branch cycle: BR may retarget/invert; survivors.
+
+# Bundle-aware branch insert/remove with exact one-cycle EncodedBytes:
+#   * solo committed BUNDLE branch cycle: BR may retarget/invert; survivors
+#     stay one ProductFormatID parcel (no bare multi-cycle residual)
+#   * coissued BUNDLE{ALU, branch}: remove/relax must not drop the ALU sibling
+#   * insertBranch stays bare (one product parcel); late Finalize wraps
+#   * late Finalize is idempotent on already-bundled roots
+# Shared size surface: lateLayoutBytes / getInstSizeInBytes (Full parcel).
+
+--- |
+  define void @bundled_short_b(i1 %c) {
+  entry:
+    br i1 %c, label %taken, label %exit
+  taken:
+    br label %exit
+  exit:
+    ret void
+  }
+  define void @coissue_branch_sibling_survives(i1 %c) {
+  entry:
+    br i1 %c, label %taken, label %exit
+  taken:
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            bundled_short_b
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r0, $r15
+    ; CHECK-LABEL: name: bundled_short_b
+    ; CHECK: bb.0.entry
+    ; In-range conditional cycle: BR may invert/retarget but must not leave
+    ; residual bare multi-cycle pseudos; survivors stay one-cycle shape.
+    ; CHECK: BUNDLE
+    BUNDLE 0 {
+      BEQZ_W $r0, %bb.1, implicit-def dead $sfr
+    }
+    BUNDLE 0 {
+      B %bb.2
+    }
+
+  bb.1.taken:
+    successors: %bb.2
+    liveins: $r15
+    ; CHECK: bb.1.taken
+    ; CHECK: BUNDLE
+    BUNDLE 0 {
+      B %bb.2
+    }
+
+  bb.2.exit:
+    liveins: $r15
+    ; CHECK: bb.2.exit
+    ; CHECK: BUNDLE
+    ; CHECK: RET
+    BUNDLE 0 {
+      RET implicit $r15
+    }
+
+...
+---
+# Coissued cycle: ADD32 + BEQZ_W share one Full root. BranchRelaxation must
+# not erase the ALU when it rewrites the terminator. After BR (and optional
+# late Finalize), ADD32 remains and there is no orphan interior.
+name:            coissue_branch_sibling_survives
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r0, $r1, $r2, $r15
+    ; CHECK-LABEL: name: coissue_branch_sibling_survives
+    ; CHECK: bb.0.entry
+    ; ALU sibling survives any BR rewrite of the coissued branch.
+    ; SHORT-DAG: ADD32
+    ; LATE-DAG: ADD32
+    ; SHORT-NOT: INTERNAL
+    ; LATE: BUNDLE
+    BUNDLE 0 {
+      $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+      BEQZ_W $r0, %bb.1, implicit-def dead $sfr
+    }
+    ; Separate unconditional cycle so CFG successors {bb.1, bb.2} match
+    ; analyzeBranch (cond + uncond), not a lone cond with two successors.
+    BUNDLE 0 {
+      B %bb.2
+    }
+
+  bb.1.taken:
+    successors: %bb.2
+    liveins: $r15
+    ; CHECK: bb.1.taken
+    BUNDLE 0 {
+      B %bb.2
+    }
+
+  bb.2.exit:
+    liveins: $r15
+    ; CHECK: bb.2.exit
+    ; CHECK: RET
+    BUNDLE 0 {
+      RET implicit $r15
+    }
+
+...

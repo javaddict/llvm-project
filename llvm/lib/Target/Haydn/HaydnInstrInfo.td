@@ -223,9 +223,8 @@ def ADD32 : FmtALU32<0x00, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
 }
 
 //===----------------------------------------------------------------------===//
-// Mode-0 shell islands retired (Bundle128-only).
-// Former ADD32_M0 / *_M0 / *_S1_M0 / FMULA16_LS00_M0S1 live shells deleted.
-// Island files remain under legacy-retired/ (not included).
+// Mode-0 shell islands deleted.
+// Former ADD32_M0 / *_M0 / *_S1_M0 / FMULA16_LS00_M0S1 shells removed.
 // public REG identity is logical LD32_REG_M0S0LS etc.; private encode
 // peers are *_S0 in HaydnFormatsLS.td. ALU public = ADD32 etc.; peers *_S*.
 //===----------------------------------------------------------------------===//
@@ -246,9 +245,9 @@ def SUB32S : FmtALU32<0x03, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
   let TSFlags{2-0} = 0b001;
 }
 //===----------------------------------------------------------------------===//
-// G-format (FmtG_S0_ALU32 / *_G) shells retired (Bundle128-only).
+// G-format (FmtG_S0_ALU32 / *_G) shells retired (legacy).
 // HaydnGFormatSelect was removed in /; zero live Haydn::*_G C++ refs.
-// Keep SUB32_G_S0 (HaydnFormatsALU32.td) as Bundle128 encode-only form.
+// Keep SUB32_G_S0 (HaydnFormatsALU32.td) as legacy encode-only form.
 //===----------------------------------------------------------------------===//
 
 def ADDI32 : FmtI<0x20, (outs GPR32:$rd), (ins GPR32:$rs, simm16:$imm),
@@ -305,7 +304,7 @@ def NOT32 : FmtALU32Unary<0x07, (outs GPR32:$rd), (ins GPR32:$rs1),
 // ANDI32_S* / ORI32_S* / XORI32_S* (HaydnFormatsALU32 RI20, uimm20).
 // ISA: rt = rs OP ZEXT(imm20). Keep FmtI field names ($rd/$rs/$imm) so
 // Inst binds; ImmLeaf is uimm20 (not uimm16) — the ISel contract that
-// matches peers' ZEXT imm20. FmtI Inst is dead on Bundle128 (post-RA
+// matches peers' ZEXT imm20. FmtI Inst is dead on the live path (post-RA
 // setDesc to member); bits<16> imm field only constrains the
 // legacy Inst path, not the slot-member encode.
 def ANDI32 : FmtI<0x24, (outs GPR32:$rd), (ins GPR32:$rs, uimm20:$imm),
@@ -861,7 +860,7 @@ def LoopStart : HaydnPseudo<(outs), (ins GPR32:$src, simm6:$adj),
 // preceding real MI. Haydn deliberately does NOT put the END MCSymbol on
 // PseudoLoopEnd (keeps analyzeBranch/SMS operand shape stable); instead
 // HaydnAsmPrinter::getOrCreateHwloopEndSym binds HWLR_END via
-// setPreInstrSymbol on the latch's last real body MI (+ pending multi-END).
+// setPreInstrSymbol on the latch's last real body MI ( pending multi-END).
 let isBranch = 1, isTerminator = 1, isMeta = 1,
     hasSideEffects = 1, isNotDuplicable = 1,
     mayLoad = 0, mayStore = 0 in
@@ -904,7 +903,7 @@ def CSRR : FmtCSR<0x39, (outs GPR32:$rd), (ins uimm8:$csr_addr, GPR32:$rs),
 // hand out a real register. hasSideEffects=1 is the load-bearing attribute:
 // it stops DCE from dropping a CBR boundary setup.
 //
-// Prefer the Bundle128 CSRW_S0 in the AsmMatcher (2-op, csr encodes
+// Prefer the CSRW_S0 in the AsmMatcher (2-op, csr encodes
 // correctly). Legacy CSRW stays for GISel/alts with the 3-op FmtCSR
 // shape; encodeSlotSubInst strips the dead $rd when pairing to CSRW_S0.
 let hasSideEffects = 1, isCodeGenOnly = 1 in
@@ -991,7 +990,7 @@ def ST8 : FmtLS<0x42, (outs), (ins GPR32:$rt, GPR32:$rs, simm16:$offset),
 // ISel/PEI/FrameLowering emit these logical names; never the private *_S0
 // encode peers (leaveRegion setDesc commits the member; Desc-as-is encode).
 // isCodeGenOnly: keep out of the asm matcher so `ld32_reg` still matches the
-// Bundle128 peer only (same CSRW / isCodeGenOnly logical-shell idiom).
+// s0 peer only (same CSRW / isCodeGenOnly logical-shell idiom).
 //===----------------------------------------------------------------------===//
 let isCodeGenOnly = 1 in {
 let mayLoad = 1 in {
@@ -1241,7 +1240,7 @@ def NOT64 : FmtALU64Unary<0x67, 0x1AB, (outs DR64:$rd), (ins DR64:$rs1),
 // X2 abs/neg unary family (golden slot1/2 ALU Index 81-86).
 // Base Form uses FmtALU64Unary so they are NOT MCID::Pseudo
 // GISel selects the base; leaveRegion setDesc commits X2*_S1/_S2 members
-// for Mode-0 Bundle128 emit. Slot opcodes (golden): 0b01010001..0b01010110
+// for Mode-0 emit. Slot opcodes (golden): 0b01010001..0b01010110
 // in HaydnFormatsALU64.td.
 // Backend-internal 0x67 funct 0x1A2..0x1A6 continue the allocation after
 // MOVE32_DR_* (0x1A0/0x1A1).
@@ -1423,7 +1422,7 @@ def X4SRAI16R : FmtALU64ShiftImm<0x70, (outs DR64:$rd),
 // Use HaydnInst with explicit Inst{...}=... so the operand fields encode
 // correctly even when the MIR operand list has no $rd / no $rs.
 //
-// C1.1 / G-PRED-SSA: explicit Uses/Defs=[SFR] so SSA pred expand
+// : explicit Uses/Defs=[SFR] so SSA pred expand
 // (SLT → MOVESFR2GPR; MOVEGPR2SFR → MOVT) cannot be reordered across
 // independent predicate epochs. hasSideEffects alone is not enough for
 // dataflow; D169 modeled the same Uses/Defs split.
@@ -1526,12 +1525,11 @@ def MOVE32_DR_H : HaydnInst<4, (outs GPR32:$rt), (ins DR64:$rsd),
 //
 // Haydn configures a CBR set by writing CBR_BEGIN[cbr_sel] / CBR_END[cbr_sel]
 // as CSRs (0x2C/0x2D for set 0, 0x2E/0x2F for set 1) via CSRW. There is no
-// dedicated SETCBR opcode — the setup IS a CSRW. Rather than force users to
-// hard-code CSR addresses, these pseudos take a (cbr_sel, value) pair and
-// the AsmPrinter lowers them to `csrw <addr>, $val` with the right CSR.
-// Mirrors Hexagon `m0=rN; cs0=rN` boundary setup (see
-// research/circular-buffer-cross-arch-study §1.2), but via the existing CSR
-// space instead of a new opcode. cbr_sel is an i32 immediate (0 or 1).
+// dedicated SETCBR opcode — the setup IS a CSRW. Pseudos take (cbr_sel, value);
+// ExpandPseudos emits final CSRW_W with that CSR map plus implicit-def
+// CBR0/CBR1 before post-RA pack. Residual SETCBR at late Verify/AsmPrinter is
+// fatal (one-to-one MC). Mirrors Hexagon `m0=rN; cs0=rN` boundary setup via
+// existing CSR space. cbr_sel is an i32 immediate (0 or 1).
 //===----------------------------------------------------------------------===//
 let hasSideEffects = 1 in {
 def SETCBR_BEGIN : HaydnPseudo<(outs), (ins i32imm:$cbr_sel, GPR32:$val),
@@ -1566,7 +1564,7 @@ def SETCBR_END : HaydnPseudo<(outs), (ins i32imm:$cbr_sel, GPR32:$val),
 // SIMD MAC instructions (X2MULA32, X2MULAPL32) are defined in HaydnInstrInfoAuto.td
 
 // no durable MIR opcodes LD32_S1/LD64_S1. Logical loads are LD32/LD64
-// only; S1 Bundle128 forms live in HaydnFormatsLD.td as encode-only
+// only; S1 encode forms live in HaydnFormatsLD.td as encode-only
 // peers (`LD32_S1` / `LD64_S1` under DecoderNamespace FlexEmitterOnly).
 
 //===----------------------------------------------------------------------===//
@@ -1673,7 +1671,7 @@ def D_SW_H_WITH_IMM : FmtLaneStore<0x4C,
 // 48-bit WIDE instruction definitions — encoding_manual.md §5 (Slice 1).
 //
 // STATUS : PARTIALLY RETIRED. subsequent the 48-bit MC
-// encoder/decoder paths are gutted (Bundle128-only). Of the original 54
+// encoder/decoder paths are gutted (legacy). Of the original 54
 // Fmt48_* defs, 33 with ZERO live C++ consumers were removed :
 // Class 000 GPRImm: ADDI32S_W, SUBI32_W, SUBI32S_W, ANDI32_W, XORI32_W
 // LUI_W (6) — KEPT: ADDI32_W, ORI32_W.
@@ -1708,7 +1706,7 @@ def D_SW_H_WITH_IMM : FmtLaneStore<0x4C,
 // EncoderMethod/DecoderMethod) so a tablegen-driven getBinaryCodeForInstr
 // reproduces the hand-rolled encode48Bit* bytes AND fixups byte-for-byte.
 // legacy 48-bit WIDE def retirement. subsequent the
-// encoder/decoder are Bundle128-only; the Fmt48_* defs that have ZERO live
+// encoder/decoder are legacy; the Fmt48_* defs that have ZERO live
 // C++ consumers (no hand-written `Haydn::<def>` enum ref in any.cpp/.h, no
 // td cross-ref) are DEAD and removed here. Defs KEPT below (ADDI32_W
 // ORI32_W) still have live C++ consumers: ADDI32_W is selected by
@@ -1717,8 +1715,8 @@ def D_SW_H_WITH_IMM : FmtLaneStore<0x4C,
 // The other 6 Class-000 GPRImm variants (ADDI32S_W, SUBI32_W, SUBI32S_W
 // ANDI32_W, XORI32_W, LUI_W) had zero C++ refs and are removed.
 //
-// ADDI32_W/ORI32_W are NOT re-based onto a Bundle128 s0
-// format class. Their Bundle128 s0 projections already exist as the
+// ADDI32_W/ORI32_W are NOT re-based onto an s0
+// format class. Their s0 projections already exist as the
 // DISTINCT-codepoint isCodeGenOnly=1 defs ADDI32_W_S0/ORI32_W_S0
 // (HaydnFormatsALU32.td:1185-1196, derived from HaydnFU_ALU32_S0_RI20).
 // Re-basing the legacy defs onto the SAME format would duplicate those defs
@@ -1727,7 +1725,7 @@ def D_SW_H_WITH_IMM : FmtLaneStore<0x4C,
 // operand shape and be committed to its _S0 member by post-RA
 // materializeMultiOpcodeInstrs setDesc. The Fmt48_WideGPRImm base class is
 // therefore RETAINED (it has live derived defs). Fmt48_* class retirement is
-// blocked until all 21 live Fmt48_* defs migrate to Bundle128 s0/s1/s2
+// blocked until all 21 live Fmt48_* defs migrate to s0/s1/s2
 // projections (see HaydnInstrFormatsC.td note).
 def ADDI32_W  : Fmt48_WideGPRImm<0x01, (outs GPR32:$rt),
                                  (ins GPR32:$rs, simm20_wide_abs:$imm),
@@ -1808,7 +1806,7 @@ def BLTZ_W  : Fmt48_WideBR_I12<0x2F, (outs), (ins GPR32:$rs, brtarget_wide_i12:$
 // (along with the Fmt48_WideDR_RI20 class). The 3 Fmt48_WideDR_RI6 shift
 // defs (SLLI64/SRLI64/SRAI64) are KEPT — HaydnDClassOpcodes.cpp maps them
 // to D-class encoding metadata ({EM_64BitM0, FU_ALU64, S1, 0x016/7/8} and
-// {DC_D1, 0, S1, 0/1/2}) consumed by the Bundle128 encoder/decoder.
+// {DC_D1, 0, S1, 0/1/2}) consumed by the encoder/decoder.
 //===----------------------------------------------------------------------===//
 
 // AsmString is the DB 3-operand form (rtd, rsd, imm6) even though
@@ -1888,5 +1886,5 @@ def SET_HWLOOP_REG_W : Fmt48_WideSET_HWLOOP_REG<0x8A, (outs),
 // emitWideLSParcel and the decoder's tryDecode48Bit were gutted by;
 // no Haydn::<def> enum ref survived in any.cpp/.h). Removed along with the
 // Fmt48_WideLS class (HaydnInstrFormatsC.td). Wide-offset LS is now reached
-// via the Bundle128 _S0 family-2 defs (HaydnFormatsLS.td).
+// via the _S0 family-2 defs (HaydnFormatsLS.td).
 //===----------------------------------------------------------------------===//

@@ -1,7 +1,9 @@
 # RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 # RUN:   -run-pass=early-machinelicm -verify-machineinstrs %s -o - \
 # RUN:   | FileCheck %s
-#
+
+# Role: MIR — (Path B) — 2-dest SIMD MAC must not abort in MachineLICM::calcRegisterCost.
+
 # REGRESSION TEST: (Path B) — 2-dest SIMD MAC must not abort in
 # MachineLICM::calcRegisterCost.
 #
@@ -23,6 +25,7 @@
 # all operands. Before the fix this aborts (exit 134); after the fix it runs
 # clean and CHECKs the instruction survives. Straight-line code is sufficient
 # the OOB is in per-MI operand iteration, independent of loop structure.
+
 ---
 name:            test_x4mula16s_flex_machinelicm
 selected:        true

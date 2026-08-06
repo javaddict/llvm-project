@@ -1,6 +1,8 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s
-#
+
+# Role: MIR — Role A shell strip (unified classifyZOLBody): PseudoLoopEnd is MCID::Meta — must match opcode, not isMetaInstruction.
+
 # Role A shell strip (unified classifyZOLBody):
 # PseudoLoopEnd is MCID::Meta — must match opcode, not isMetaInstruction.
 # Shell = PLE + ≤2 stores/copies/imms, no load/compute → strip LoopStart+PLE.

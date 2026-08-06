@@ -1,39 +1,39 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-; XFAIL: *
-; G-CAPI: intrinsic signature / ImmArg / return-type mismatch vs decls (not BF3 setDesc).
-; Status : x4seli16 selects X4SEL16 (variable mask) / X4SELI16 (uimm4).
-;
+
+; Role: semantic — Comprehensive DR64 special operations intrinsics test for Haydn backend.
+
 ; Comprehensive DR64 special operations intrinsics test for Haydn backend.
 ; Tests NSA variants, transcendental functions, pack/sat operations
 ; complex multiply, X4 CMUL F2 variants, and 32-bit saturating operations.
 ;
 ; Categories:
-; NSA normalization: nsa32, nsau32, nsa64, nsa16_l, nsa32_l, nsaz*, nsa16_l, nsaz32_l
+; NSA normalization: nsa32/nsau32 (i32); nsa64/nsa*_l/nsaz* (i64 source)
 ; Transcendental: log2, exp2, recip, sqrt
 ; X4 pack/sat: x4sat32t16
 ; X4 CMUL F2 (unary DR64): x4cmul16_f2, x4cmul16s_f2
-; X4 SELI16 (expected-fail: CANNOT SELECT — has its own expected-fail directive at the file header)
+; X4 SEL: x4sel16 (variable mask) / x4seli16 (const uimm4 ImmArg)
 ; 32-bit saturating: add32s, sub32s, abs32s, neg32s
 ; FMUL32S fractional multiply: ll, lh, hh
 ; FMULA32S fractional MAC: ll, lh, hh
 ; FMULS32S fractional MSU: ll, lh, hh
 ; FF2 fractional multiply (saturating + non-saturating, all lane variants)
 ; F2MUL fused dual MAC (IIR biquad)
-; F2MULAA/F2MULSS fused dual MAC (wave 2)
+; F2MULAA/F2MULSS fused dual MAC
 ; SRAI64R shift with rounding
 
 ;===----------------------------------------------------------------------===;
-; NSA normalization (GPR32 unary: i32 -> i32)
+; NSA normalization
+; nsa32/nsau32: i32 -> i32; nsa64 and *_l/nsaz*: i64 source -> i32
 ;===----------------------------------------------------------------------===;
 
 declare i32 @llvm.haydn.nsa32(i32)
 declare i32 @llvm.haydn.nsau32(i32)
-declare i32 @llvm.haydn.nsa64(i32)
-declare i32 @llvm.haydn.nsa16.l(i32)
-declare i32 @llvm.haydn.nsa32.l(i32)
-declare i32 @llvm.haydn.nsaz64(i32)
-declare i32 @llvm.haydn.nsaz16.l(i32)
-declare i32 @llvm.haydn.nsaz32.l(i32)
+declare i32 @llvm.haydn.nsa64(i64)
+declare i32 @llvm.haydn.nsa16.l(i64)
+declare i32 @llvm.haydn.nsa32.l(i64)
+declare i32 @llvm.haydn.nsaz64(i64)
+declare i32 @llvm.haydn.nsaz16.l(i64)
+declare i32 @llvm.haydn.nsaz32.l(i64)
 define dso_local i32 @test_nsa32(i32 %a) {
 ; CHECK-LABEL: test_nsa32:
 ; CHECK: nsa32
@@ -48,45 +48,45 @@ define dso_local i32 @test_nsau32(i32 %a) {
   ret i32 %r
 }
 
-define dso_local i32 @test_nsa64(i32 %a) {
+define dso_local i32 @test_nsa64(i64 %a) {
 ; CHECK-LABEL: test_nsa64:
 ; CHECK: nsa64
-  %r = call i32 @llvm.haydn.nsa64(i32 %a)
+  %r = call i32 @llvm.haydn.nsa64(i64 %a)
   ret i32 %r
 }
 
-define dso_local i32 @test_nsa16_l(i32 %a) {
+define dso_local i32 @test_nsa16_l(i64 %a) {
 ; CHECK-LABEL: test_nsa16_l:
 ; CHECK: nsa16_l
-  %r = call i32 @llvm.haydn.nsa16.l(i32 %a)
+  %r = call i32 @llvm.haydn.nsa16.l(i64 %a)
   ret i32 %r
 }
 
-define dso_local i32 @test_nsa32_l(i32 %a) {
+define dso_local i32 @test_nsa32_l(i64 %a) {
 ; CHECK-LABEL: test_nsa32_l:
 ; CHECK: nsa32_l
-  %r = call i32 @llvm.haydn.nsa32.l(i32 %a)
+  %r = call i32 @llvm.haydn.nsa32.l(i64 %a)
   ret i32 %r
 }
 
-define dso_local i32 @test_nsaz64(i32 %a) {
+define dso_local i32 @test_nsaz64(i64 %a) {
 ; CHECK-LABEL: test_nsaz64:
 ; CHECK: nsaz64
-  %r = call i32 @llvm.haydn.nsaz64(i32 %a)
+  %r = call i32 @llvm.haydn.nsaz64(i64 %a)
   ret i32 %r
 }
 
-define dso_local i32 @test_nsaz16_l(i32 %a) {
+define dso_local i32 @test_nsaz16_l(i64 %a) {
 ; CHECK-LABEL: test_nsaz16_l:
 ; CHECK: nsaz16_l
-  %r = call i32 @llvm.haydn.nsaz16.l(i32 %a)
+  %r = call i32 @llvm.haydn.nsaz16.l(i64 %a)
   ret i32 %r
 }
 
-define dso_local i32 @test_nsaz32_l(i32 %a) {
+define dso_local i32 @test_nsaz32_l(i64 %a) {
 ; CHECK-LABEL: test_nsaz32_l:
 ; CHECK: nsaz32_l
-  %r = call i32 @llvm.haydn.nsaz32.l(i32 %a)
+  %r = call i32 @llvm.haydn.nsaz32.l(i64 %a)
   ret i32 %r
 }
 
@@ -192,21 +192,26 @@ define dso_local i64 @test_x2cmul32s_f2(i64 %a, i64 %b) {
 }
 
 ;===----------------------------------------------------------------------===;
-; X4 SEL / SELI16 — variable mask → x4sel16; const uimm4 → x4seli16
+; X4 SEL / SELI16 — variable mask → x4sel16; const uimm4 ImmArg → x4seli16
 ;===----------------------------------------------------------------------===;
 
+declare <4 x i16> @llvm.haydn.x4sel16(<4 x i16>, <4 x i16>, i32)
 declare <4 x i16> @llvm.haydn.x4seli16(<4 x i16>, <4 x i16>, i32)
 
-define dso_local <4 x i16> @test_x4seli16(<4 x i16> %a, <4 x i16> %b, i32 %sel) {
-; CHECK-LABEL: test_x4seli16:
-; CHECK: x4sel16
-  %r = call <4 x i16> @llvm.haydn.x4seli16(<4 x i16> %a, <4 x i16> %b, i32 %sel)
+define dso_local <4 x i16> @test_x4sel16(<4 x i16> %a, <4 x i16> %b, i32 %sel) {
+; CHECK-LABEL: test_x4sel16:
+; Variable mask uses the reg twin; mask is a GPR (not an ImmArg).
+; CHECK: x4sel16{{.*}}, {{r[0-9]+}}
+; CHECK: .size test_x4sel16
+  %r = call <4 x i16> @llvm.haydn.x4sel16(<4 x i16> %a, <4 x i16> %b, i32 %sel)
   ret <4 x i16> %r
 }
 
 define dso_local <4 x i16> @test_x4seli16_imm(<4 x i16> %a, <4 x i16> %b) {
 ; CHECK-LABEL: test_x4seli16_imm:
-; CHECK: x4seli16
+; Const uimm4 ImmArg folds to a bare immediate (variable would fail verify).
+; CHECK: x4seli16{{.*}}, 5
+; CHECK: .size test_x4seli16_imm
   %r = call <4 x i16> @llvm.haydn.x4seli16(<4 x i16> %a, <4 x i16> %b, i32 5)
   ret <4 x i16> %r
 }

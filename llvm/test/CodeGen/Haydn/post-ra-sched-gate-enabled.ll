@@ -3,7 +3,9 @@
 ; RUN:     FileCheck %s --check-prefix=DBG --implicit-check-not='Subtarget disables post-MI-sched.'
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O1 < %s | \
 ; RUN:     FileCheck %s
-;
+
+; Role: verifier — post-RA VLIW scheduler gate must be OPEN.
+
 ; REGRESSION TEST: post-RA VLIW scheduler gate must be OPEN.
 ;
 ; Bug: Haydn installed a post-RA VLIW MachineScheduler in

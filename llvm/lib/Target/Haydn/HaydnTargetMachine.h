@@ -14,6 +14,7 @@
 #define LLVM_LIB_TARGET_HAYDN_HAYDNTARGETMACHINE_H
 
 #include "HaydnSubtarget.h"
+#include "MCTargetDesc/HaydnFormat.h"
 #include "llvm/CodeGen/CodeGenTargetMachineImpl.h"
 #include "llvm/IR/DataLayout.h"
 #include <optional>
@@ -27,12 +28,30 @@ class HaydnTargetMachine : public CodeGenTargetMachineImpl {
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
   mutable StringMap<std::unique_ptr<HaydnSubtarget>> SubtargetMap;
 
+  // Immutable production object-encoding profile for the whole target.
+  // Selected once; never inferred from parcel byte width or mnemonic.
+  haydn::format::ObjectEncodingProfileID EncodingProfile =
+      haydn::format::ObjectEncodingProfileID::E96;
+
 public:
   HaydnTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
                     StringRef FS, const TargetOptions &Options,
                     std::optional<Reloc::Model> RM,
                     std::optional<CodeModel::Model> CM, CodeGenOptLevel OL,
                     bool JIT);
+
+  /// Sole production ObjectEncodingProfile (E96). Not a runtime selector flip.
+  haydn::format::ObjectEncodingProfileID getObjectEncodingProfileID() const {
+    return EncodingProfile;
+  }
+
+  const haydn::format::ObjectEncodingProfileDesc &
+  getObjectEncodingProfile() const {
+    const haydn::format::ObjectEncodingProfileDesc *P =
+        haydn::format::getObjectEncodingProfile(EncodingProfile);
+    assert(P && "production encoding profile missing from registry");
+    return *P;
+  }
 
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
 

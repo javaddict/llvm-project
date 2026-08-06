@@ -3,7 +3,9 @@
 ; RUN:     | FileCheck %s --check-prefix=MIR
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefix=ASM
-;
+
+; Role: MIR — LD64_POST_INC + its ADDI32 base bump MUST packetize together into ONE bundle, not split across two bundles.
+
 ; REGRESSION TEST : LD64_POST_INC + its ADDI32 base bump MUST packetize
 ; together into ONE bundle, not split across two bundles.
 ;

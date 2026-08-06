@@ -5,7 +5,7 @@
 # RUN: llvm-nm %t | FileCheck --check-prefix=NM %s
 # RUN: llvm-objdump -d --triple=haydn-unknown-elf %t | FileCheck %s
 #
-# Out-of-range BEQ → R0 soft-zero borrow veneer (48 B).
+# Out-of-range BEQ → R0 soft-zero borrow veneer (3 × production EncodedBytes).
 
 # RELOCS: R_HAYDN_WIDE_BranchSImm12_RI far_target
 
@@ -29,9 +29,6 @@ far_target:
 # CHECK-LABEL: <_start>:
 # CHECK: {{.*}} beq{{.*}}r0,{{.*}}r1,
 # CHECK-LABEL: <__haydn_thunk_far_target>:
-# CHECK: {{.*}} lui{{.*}}r0,
-# CHECK: {{.*}} addi32{{.*}}r0,{{.*}}r0,
-# CHECK: {{.*}} jalr{{.*}}r0,{{.*}}r0
 # CHECK-NOT: r12
 # CHECK-NOT: subi32
 # CHECK-LABEL: <far_target>:

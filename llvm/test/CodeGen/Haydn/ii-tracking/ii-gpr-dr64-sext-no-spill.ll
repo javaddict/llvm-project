@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — GPR32 -> DR64 sign-extension feeding a DR64 op must NOT round-trip through the stack (Phase 2 of next-phase-fixes-plan-2026-06-14).
+
 ; REGRESSION TEST: GPR32 -> DR64 sign-extension feeding a DR64 op must NOT
 ; round-trip through the stack (Phase 2 of next-phase-fixes-plan-2026-06-14).
 ;

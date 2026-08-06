@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s \
 ; RUN:   --implicit-check-not=__muldi3 --implicit-check-not=__mulsi3
-;
+
+; Role: verifier — (G7): every shape of 64-bit multiply must lower to native MUL64_LL partial products, NEVER to a __muldi3 / __mulsi3 libcall.
+
 ; REGRESSION TEST (G7): every shape of 64-bit multiply must lower to native
 ; MUL64_LL partial products, NEVER to a __muldi3 / __mulsi3 libcall.
 ;
@@ -48,6 +50,7 @@
 
 ;Shape 1: signed full 64x64 (both operands are full i64 args).
 ; Schoolbook path: three MUL64_ULUL (unsigned x unsigned) partials (fix).
+
 define i64 @mul_s64_full(i64 %a, i64 %b) {
 ; CHECK-LABEL: mul_s64_full:
 ; CHECK-COUNT-3: mul64.ulul

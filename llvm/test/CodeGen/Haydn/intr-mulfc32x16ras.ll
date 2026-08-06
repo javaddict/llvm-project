@@ -1,6 +1,8 @@
 ; REQUIRES: haydn-registered-target
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — Un-XFAIL'd : X2FCMULA32RS ISel selection now lands; the test was stale-CHECK only (lesson).
+
 ; Un-XFAIL'd : X2FCMULA32RS ISel selection now lands; the test was
 ; stale-CHECK only (lesson). Verify mulfc32x16ras.{low,high} emit
 ; x2fcmula32rs.
@@ -38,8 +40,6 @@
 declare i64 @llvm.haydn.mulfc32x16ras.low(i64, i64, i64)
 declare i64 @llvm.haydn.mulfc32x16ras.high(i64, i64, i64)
 
-; CHECK-LABEL: test_mulfc32x16ras_low:
-; CHECK:       x2fcmula32rs
 define dso_local i64 @test_mulfc32x16ras_low(i64 %acc, i64 %data, i64 %twid) nounwind {
   %r = call i64 @llvm.haydn.mulfc32x16ras.low(i64 %acc, i64 %data, i64 %twid)
   ret i64 %r

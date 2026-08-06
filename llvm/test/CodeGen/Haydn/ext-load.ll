@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — extended loads: sextload, zextload, and extload patterns.
+
 ; Test extended loads: sextload, zextload, and extload patterns.
 ; These are common when loading smaller types into larger registers.
 ; NOTE: CHECKs reflect post- scheduled output (load + shift-amount materialization
@@ -10,6 +12,7 @@
 ; Indexed forms may fuse to s_lbs_*/s_lbu_* AGU ops.
 
 ;Sign-extending load i8 -> i32
+
 define i32 @sextload_i8_to_i32(ptr %ptr) {
 ; CHECK-LABEL: sextload_i8_to_i32:
 ; CHECK: ld8

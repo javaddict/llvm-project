@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Extensive AIE-parity unit tests for Haydn Bundle128 (G-BUNDLE-FORMAT).
+// Extensive AIE-parity unit tests for Haydn product packet formats.
 // Inspired by llvm-aie unittests/Target/AIE/BundleTest.cpp patterns:
 //   empty accept, multi-slot fill, format coverage, clear, meta no-slot,
 //   reserve vs add occupancy agreement.
 //
-// Product: one live format BUNDLE128_FULL. Infra must stay N-format-ready
+// Product: one live format row. Infra must stay N-format-ready
 // (FormatID / Plan / PacketFormats APIs — not hard-coded "always pack").
 //
 //===----------------------------------------------------------------------===//
@@ -20,8 +20,10 @@
 #include "HaydnBundleMaterialize.h"
 #include "HaydnBundlePlan.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
+#include "MCTargetDesc/HaydnFormat.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/MC/MCInst.h"
 #include "gtest/gtest.h"
@@ -70,23 +72,26 @@ TEST(HaydnAIEParityBundleTest, MetaDoesNotConsumeSlots) {
 }
 
 TEST(HaydnAIEParityBundleTest, FormatAvailableAllSubsetsLikeAIEPacket) {
-  // AIE PacketFormats: subsets covered by composite. Bundle128 = all 8.
+  // Format E PacketFormats: E2 (0x3) and E3 (0x1c) entry geometries.
+  // Residual issue-slot subsets are admitted via productCovers, not LUT.
   HaydnMCFormats Fmts;
-  for (SlotBits Combo = 0; Combo <= SLOT_ALL; ++Combo)
-    EXPECT_TRUE(Fmts.isFormatAvailable(Combo)) << "combo=" << Combo;
+  EXPECT_TRUE(Fmts.isFormatAvailable(0));
+  EXPECT_TRUE(Fmts.isFormatAvailable(0x3));
+  EXPECT_TRUE(Fmts.isFormatAvailable(0x1c));
+  EXPECT_TRUE(productCovers(Fmts.getPacketFormats(), SLOT_ALL));
 }
 
 TEST(HaydnAIEParityBundleTest, PacketFormatNameAndSizeAIEShape) {
   HaydnMCFormats Fmts;
-  const VLIWFormat *F =
-      Fmts.getPacketFormats().getFormat(SLOT0 | SLOT1 | SLOT2);
+  const VLIWFormat *F = productVLIWFormat(Fmts.getPacketFormats());
   ASSERT_NE(F, nullptr);
-  EXPECT_STREQ(F->Name, "BUNDLE128_FULL");
+  EXPECT_TRUE(StringRef(F->Name).starts_with("BUNDLE_E96_")) << F->Name;
   // Product table Size = EncodedBytes (AIE VLIWFormat::Size is packet size unit).
-  EXPECT_EQ(vliwFormatSizeAsBytes(F->getSize()), Bundle128EncodedBytes);
-  EXPECT_TRUE(F->covers(SLOT0));
-  EXPECT_TRUE(F->covers(SLOT1 | SLOT2));
-  EXPECT_TRUE(F->covers(SLOT_ALL));
+  EXPECT_EQ(vliwFormatSizeAsBytes(F->getSize()), productParcelBytes());
+  // Residual issue occupancy is product-covered (transitional packing).
+  EXPECT_TRUE(productCovers(Fmts.getPacketFormats(), SLOT0));
+  EXPECT_TRUE(productCovers(Fmts.getPacketFormats(), SLOT1 | SLOT2));
+  EXPECT_TRUE(productCovers(Fmts.getPacketFormats(), SLOT_ALL));
 }
 
 TEST(HaydnAIEParityBundleTest, ThreeIssueFillThenRejectLikeAIE) {
@@ -156,13 +161,12 @@ TEST(HaydnAIEParityBundleTest, EveryPackedCycleIsProductPlan) {
       Ops.push_back(Seq[I]);
     auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
     for (const OpcodeCycle &C : Cycles) {
-      EXPECT_EQ(C.Plan.FID, FormatID::Bundle128Full);
-      EXPECT_EQ(C.Plan.Bytes.Value, 16u);
+      EXPECT_EQ(C.Plan.Bytes.Value, productParcelBytes().Value);
       EXPECT_TRUE(C.Plan.isProductLegal());
-      // N-format-ready: encodedBytesFor(FormatID) works
-      auto B = encodedBytesFor(C.Plan.FID);
+      EXPECT_TRUE(isProductBundleRow(C.Plan.Row));
+      auto B = encodedBytesForRow(C.Plan.Row);
       ASSERT_TRUE(B.has_value());
-      EXPECT_EQ(*B, Bundle128EncodedBytes);
+      EXPECT_EQ(*B, productParcelBytes());
     }
   }
 }
@@ -174,8 +178,10 @@ TEST(HaydnAIEParityBundleTest, PlanFromPacketFormatsMatchesLiveRow) {
         SlotBits(SLOT_ALL)}) {
     auto P = planFromPacketFormats(Fmts.getPacketFormats(), Occ);
     ASSERT_TRUE(P.has_value()) << "occ=" << Occ;
-    EXPECT_EQ(P->FID, ProductFormatID);
-    EXPECT_EQ(P->Bytes.Value, 16u);
+    // FE8: ProductFormatID alias deleted; product identity is the stamped
+    // BundleFormatRowID (E96TwoEntry / E96ThreeEntry) via stampBundleCommit.
+    EXPECT_TRUE(isProductBundleRow(P->Row));
+    EXPECT_EQ(P->Bytes.Value, productParcelBytes().Value);
   }
 }
 
@@ -268,18 +274,21 @@ TEST(HaydnAIEParityBundleTest, ResplitFixedPointOnAllSubcycles) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnAIEParityBundleTest, ProductFormatIdIsSingletonEnum) {
-  // When multi-format lands, this test extends — today only Full is legal.
-  EXPECT_TRUE(isProductFormat(FormatID::Bundle128Full));
-  auto B = encodedBytesFor(FormatID::Bundle128Full);
-  ASSERT_TRUE(B.has_value());
-  EXPECT_EQ(B->Value, 16u);
+  // Product identity is BundleFormatRowID E96TwoEntry / E96ThreeEntry.
+  // FE8: the legacy full-width FormatID enum + isProductFormat(FormatID)
+  // helper were deleted; Format E rows are the sole product authority.
+  using haydn::format::BundleFormatRowID;
+  EXPECT_TRUE(isProductBundleRow(BundleFormatRowID::E96TwoEntry));
+  EXPECT_TRUE(isProductBundleRow(BundleFormatRowID::E96ThreeEntry));
+  EXPECT_EQ(haydn::format::encodedBytesOrDie(BundleFormatRowID::E96TwoEntry)
+                .Value,
+            productParcelBytes().Value);
 }
 
 TEST(HaydnAIEParityBundleTest, SlotWindowBitsSum128AIEComposite) {
-  // AIE composite size from field geometry; Haydn Full = 48+40+40.
-  EXPECT_EQ(Slot0EncodedBits.Value + Slot1EncodedBits.Value +
-                Slot2EncodedBits.Value,
-            Bundle128EncodedBitsValue);
+  // AIE composite size from residual slot field geometry (48+40+40 = 128).
+  // FE8: removed the named Slot0/1/2EncodedBits / full-width EncodedBits
+  // constants; the slot widths are queried from the registry slot info table.
   HaydnMCFormats Fmts;
   unsigned Sum = 0;
   for (auto K : {MCSlotKind::Haydn_SLOT_S0, MCSlotKind::Haydn_SLOT_S1,
@@ -289,13 +298,13 @@ TEST(HaydnAIEParityBundleTest, SlotWindowBitsSum128AIEComposite) {
 }
 
 //===----------------------------------------------------------------------===//
-// B3.5 MC serialize-only (AIEBaseAsmPrinter.cpp:161-164 /
+// MC serialize-only (AIEBaseAsmPrinter.cpp:161-164
 // AIEBaseMCCodeEmitter.cpp:45-68 peers)
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnAIEParityBundleTest, FormatOpcodeIsProductCompositeSerializeOnly) {
   // AIE: MCBundle.setOpcode(Format->Opcode); emitter getBinaryCode + emit.
-  // Haydn product: Format->Opcode == BUNDLE128_FULL for every covered set.
+  // Haydn product: Format->Opcode is BUNDLE_E96_* (not legacy full-width).
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst A, X, N;
@@ -316,9 +325,11 @@ TEST(HaydnAIEParityBundleTest, FormatOpcodeIsProductCompositeSerializeOnly) {
 
   const VLIWFormat *Fmt = B.getFormatOrNull();
   ASSERT_NE(Fmt, nullptr);
-  EXPECT_STREQ(Fmt->Name, "BUNDLE128_FULL");
-  EXPECT_EQ(Fmt->Opcode, Haydn::BUNDLE128_FULL)
-      << "AsmPrinter must emit Format->Opcode composite, not Haydn::BUNDLE";
+  EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96_")) << Fmt->Name;
+  EXPECT_TRUE(Fmt->Opcode == Haydn::BUNDLE_E96_TWO_ENTRY ||
+              Fmt->Opcode == Haydn::BUNDLE_E96_THREE_ENTRY)
+      << "AsmPrinter must emit Format E composite, not legacy full-width";
+  EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96"));
 
   // Committed members keep fixed getSlotKind — encode must not re-auction.
   EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_S0)->getOpcode()),
@@ -332,7 +343,7 @@ TEST(HaydnAIEParityBundleTest, FormatOpcodeIsProductCompositeSerializeOnly) {
 TEST(HaydnAIEParityBundleTest, SerializeSlotMapNoReAuctionOnMembers) {
   // Source order that would starve under wrong re-auction still packs by
   // Desc getSlotKind (members already placed). Second S0-only fails canAdd
-  // — no constrained-first re-auction escape (B3.5 delete).
+  // — no constrained-first re-auction escape.
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst St0, St1;
@@ -348,7 +359,8 @@ TEST(HaydnAIEParityBundleTest, SerializeSlotMapNoReAuctionOnMembers) {
       << "second fixed S0 member must fail (no encode re-auction)";
   const VLIWFormat *Fmt = B.getFormatOrNull();
   ASSERT_NE(Fmt, nullptr);
-  EXPECT_EQ(Fmt->Opcode, Haydn::BUNDLE128_FULL);
+  EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96_")) << Fmt->Name;
+  EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96"));
 }
 
 } // namespace

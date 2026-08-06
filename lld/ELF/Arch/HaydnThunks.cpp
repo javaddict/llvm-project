@@ -6,26 +6,43 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Haydn long-branch / long-call thunks (G-LLD-VENEER).
+// Haydn long-branch / long-call linker veneers.
 //
-// Bundle128 parcels are 16 bytes. HI12/LO20 materialize the target into a
-// borrowable soft-zero R0, then JALR jumps.
+// Product text parcels use the production ObjectEncodingProfile EncodedBytes
+// (Format E family; sole active row length today). HI12/LO20 materialize the
+// absolute target into soft-zero R0, then JALR transfers control. One shape
+// serves both far calls and far branches — three product parcels:
 //
-// Unified call + branch veneer — 3 parcels (48 B), no R12:
-//   LUI    R0, hi12(target+addend)
+//   LUI    R0, hi12(target + addend)
 //   ADDI32 R0, R0, lo20(...)
-//   JALR   R0, R0, 0          // PC=target; R0=link (never falls through)
+//   JALR   R0, R0, 0          // PC = target; R0 = link (never falls through)
+//
+// Parcel size and veneer length come only from the generated format registry
+// (HaydnFormat EncodedBytes / maxEncodedBytesInProfile). Call sites must not
+// spell parcel widths as bare literals.
 //
 // Why R0, not R12:
-//   * R0 is soft-zero and product law allows borrow (prologue re-zeros on
-//     entry; mid-fn far branch leaves R0=link — documented residual).
-//   * R12 is a normal caller-saved allocatable GPR — do not permanently
-//     reserve it as linker AT (no free AT).
-//   * Call sites already use JAL/JAL_W → LR (R15) holds the real return
-//     address; veneer must not clobber LR. JALR rd=R0 preserves LR.
-//   * Branch sites do not need a stack save of R12; R0 is free scratch.
+//   * R0 is reserved soft-zero; product law allows a temporary borrow.
+//   * R12 is a normal caller-saved allocatable GPR — never a free linker AT.
+//   * Call sites use JAL/JAL_W into LR (R15); veneer JALR rd=R0 preserves LR.
+//   * Branch sites need no R12 stack save; R0 is the only scratch.
 //
-// Relocation addend is honored. getThunkSectionSpacing() lives in Haydn.cpp.
+// Soft-zero residual (accepted ABI):
+//   JALR writes PC_next into R0, so the landing site sees R0 == link, not 0.
+//   * Far call into another function: callee prologue XOR32 r0,r0,r0 restores.
+//   * Compiler JT / pure JALR rd=R0: ExpandPseudos re-zeros successors.
+//   * Mid-function far branch through this veneer: R0 stays link until the
+//     next known re-zero (epilogue before CSR restore, or an explicit site).
+//     BranchRelaxation's insertIndirectBranch uses a scavenged scratch and
+//     never discards the link into R0; this residual is linker-veneer only.
+//
+// Relocation addend is honored via Thunk(ctx, dest, rel.addend).
+// Island spacing lives in Haydn::getThunkSectionSpacing() (Haydn.cpp).
+//
+// Wire bytes for the three singleton parcels are MC-verified Format E member
+// encodings (llvm-mc -show-encoding of { lui/addi32/jalr r0,...; nop; nop }),
+// not hand-transcribed. Geometry is sole product Format E (registry EncodedBytes
+// = 12, 3-parcel veneer, Align-4). Non-12 parcel sizes fail closed.
 //
 //===----------------------------------------------------------------------===//
 
@@ -37,10 +54,14 @@
 #include "SyntheticSections.h"
 #include "Target.h"
 #include "Thunks.h"
+#include "HaydnFormat.h"
 #include "lld/Common/CommonLinkerContext.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/MathExtras.h"
+
+#include <cassert>
+#include <cstring>
 
 using namespace llvm;
 using namespace llvm::object;
@@ -48,37 +69,65 @@ using namespace llvm::ELF;
 using namespace llvm::support;
 using namespace lld;
 using namespace lld::elf;
+using namespace llvm::haydn::format;
 
 namespace {
 
-/// Write a little-endian 128-bit word as 16 bytes.
-static void writeBundle128LE(uint8_t *Buf, uint64_t Lo, uint64_t Hi) {
-  endian::write64le(Buf, Lo);
-  endian::write64le(Buf + 8, Hi);
+/// Production parcel EncodedBytes from the object-encoding registry.
+static EncodedBytes productParcelEncodedBytes() {
+  return maxEncodedBytesInProfile(ObjectEncodingProfileID::E96);
+}
+
+static unsigned productParcelSize() {
+  unsigned N = productParcelEncodedBytes().Value;
+  // FE8: sole product is Format E 12-byte; reject residual 8/16 dual paths.
+  assert(N == 12u && "production EncodedBytes must be Format E 12");
+  return N;
+}
+
+/// Three product parcels: LUI + ADDI32 + JALR (offsets 0 / N / 2N).
+static unsigned longThunkBytes() { return 3u * productParcelSize(); }
+
+/// Write one product parcel (EncodedBytes) little-endian from a 96-bit image
+/// carried as low 64 + next 32. High bits beyond EncodedBits are ignored.
+static void writeProductParcelLE(uint8_t *Buf, uint64_t Bits0_63,
+                                 uint32_t Bits64_95) {
+  const unsigned N = productParcelSize();
+  uint8_t Tmp[16] = {};
+  endian::write64le(Tmp, Bits0_63);
+  endian::write32le(Tmp + 8, Bits64_95);
+  assert(N <= sizeof(Tmp) && "product EncodedBytes exceeds write scratch");
+  std::memcpy(Buf, Tmp, N);
 }
 
 static void writeLuiR0(uint8_t *Buf, uint32_t Imm12) {
-  // lui r0, Imm12 — base Lo 0x000005c000000000; HI12 in bits[15:4]
-  uint64_t Lo = 0x000005c000000000ull;
-  Lo &= ~0xFFF0ull;
-  Lo |= (static_cast<uint64_t>(Imm12 & 0xFFFu) << 4);
-  writeBundle128LE(Buf, Lo, 0);
+  // lui r0, Imm12 — Format E singleton parcel (MC-verified, not the legacy
+  // s0-window placeholder). HI12 field lives at parcel bits[43:32]:
+  //   { lui r0, 0xfff; nop; nop } -> 07 0a 02 00 ff 0f 00 ..
+  uint64_t Lo = 0x0000000000020a07ull;
+  Lo &= ~(0xFFFull << 32);
+  Lo |= (static_cast<uint64_t>(Imm12 & 0xFFFu) << 32);
+  writeProductParcelLE(Buf, Lo, 0);
 }
 
 static void writeAddi32R0R0(uint8_t *Buf, uint32_t Imm20) {
-  // addi32 r0, r0, Imm20 — base Lo 0x0000024000000000; LO20 in bits[37:18]
-  uint64_t Lo = 0x0000024000000000ull;
-  Lo &= ~(0xFFFFFull << 18);
-  Lo |= (static_cast<uint64_t>(Imm20 & 0xFFFFFu) << 18);
-  writeBundle128LE(Buf, Lo, 0);
+  // addi32 r0, r0, Imm20 — Format E singleton parcel (MC-verified). LO20
+  // field lives at parcel bits[50:31]:
+  //   { addi32 r0,r0,-1; nop; nop } -> 07 0f 02 80 ff ff 07 00 ..
+  uint64_t Lo = 0x0000000000020f07ull;
+  Lo &= ~(0xFFFFFull << 31);
+  Lo |= (static_cast<uint64_t>(Imm20 & 0xFFFFFu) << 31);
+  writeProductParcelLE(Buf, Lo, 0);
 }
 
 static void writeJalrR0R0(uint8_t *Buf) {
-  // jalr r0, r0, 0
-  writeBundle128LE(Buf, 0x00000ec000000000ull, 0);
+  // jalr r0, r0, 0 — Format E singleton parcel (MC-verified); link lands in
+  // R0 (soft-zero residual). { jalr r0,r0,0; nop; nop } -> 07 0d 02 00 ..
+  writeProductParcelLE(Buf, 0x0000000000020d07ull, 0);
 }
 
 static void splitHiLo(uint64_t TargetVA, uint32_t &Hi12, uint32_t &Lo20) {
+  // HI12/LO20 split matches MC HI12/LO20 (VA + 0x80000) >> 20.
   uint64_t Hi = (TargetVA + 0x80000ull) >> 20;
   int64_t Lo =
       static_cast<int64_t>(TargetVA) - static_cast<int64_t>(Hi << 20);
@@ -89,24 +138,26 @@ static void splitHiLo(uint64_t TargetVA, uint32_t &Hi12, uint32_t &Lo20) {
 }
 
 /// Far call / far branch veneer. Borrows soft-zero R0; never touches R12/LR.
-/// Size: 3 × 16 = 48 bytes.
+/// Size: 3 × product EncodedBytes. Alignment 4 (parcel phase / ABI floor).
 class HaydnLongThunk : public Thunk {
 public:
   HaydnLongThunk(Ctx &ctx, Relocation &rel, Symbol &dest)
       : Thunk(ctx, dest, rel.addend) {
-    alignment = 16;
+    // Align-4: architectural PC is 2-byte; product scripts pad to EncodedBytes.
+    alignment = 4;
   }
-  uint32_t size() override { return 48; }
+  uint32_t size() override { return longThunkBytes(); }
   void writeTo(uint8_t *buf) override;
   void addSymbols(ThunkSection &isec) override;
 };
 
 void HaydnLongThunk::writeTo(uint8_t *Buf) {
+  const unsigned Parcel = productParcelSize();
   uint32_t Hi12, Lo20;
   splitHiLo(destination.getVA(ctx, addend), Hi12, Lo20);
   writeLuiR0(Buf + 0, Hi12);
-  writeAddi32R0R0(Buf + 16, Lo20);
-  writeJalrR0R0(Buf + 32);
+  writeAddi32R0R0(Buf + Parcel, Lo20);
+  writeJalrR0R0(Buf + 2u * Parcel);
 }
 
 void HaydnLongThunk::addSymbols(ThunkSection &Isec) {

@@ -2,7 +2,9 @@
 ; RUN:   | FileCheck %s --check-prefix=ASM
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -filetype=obj -o %t.o < %s \
 ; RUN:   && llvm-readobj -r %t.o | FileCheck %s --check-prefix=RELOC
-;
+
+; Role: object — Soft-float libcall symbol preservation end-to-end.
+
 ; REGRESSION TEST: Soft-float libcall symbol preservation end-to-end.
 ;
 ; Bug (scope m6-softfloat-scope.md BUG B): `clang -target haydn-unknown-elf -c`
@@ -36,6 +38,7 @@
 ; m8-extern-call-null-reloc-needsRelocateWithSymbol.md
 
 ;fadd → __addsf3
+
 define float @fadd_f32(float %a, float %b) {
 ; ASM-LABEL: fadd_f32:
 ; ASM:       jal_w lr, __addsf3

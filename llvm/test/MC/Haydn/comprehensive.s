@@ -1,5 +1,7 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
-#
+
+# Role: object — Comprehensive instruction test for Haydn DSP.
+
 # Comprehensive instruction test for Haydn DSP. The WideImm immediate-form
 # shifts (slli64/srli64/srai64) and the 4-operand MAC32 are AsmParser gaps
 # (M5 + post- MAC cleanup) tracked separately.
@@ -10,6 +12,7 @@
 #===----------------------------------------------------------------------===
 
 # Arithmetic
+
 ADD32 R0, R1, R2
 ADDI32 R3, R4, 100
 SUB32 R5, R6, R7

@@ -1,14 +1,16 @@
 // REQUIRES: haydn-registered-target
-//
+// RUN: clang -target haydn-unknown-elf -mcpu=haydn \
+// RUN: -mllvm -global-isel-abort=1 -O2 -ffreestanding \
+// RUN: -S -o - %s | FileCheck %s
+
+// Role: semantic — E2E: NatureDSP AE_LA*/AE_SA* compat macros must lower to Haydn AR unaligned ops (PLDWWUA / D_L*UA_POST / D_S*UA_POST / WBARWUA / FLAR).
+
 // E2E: NatureDSP AE_LA*/AE_SA* compat macros must lower to Haydn AR
 // unaligned ops (PLDWWUA / D_L*UA_POST / D_S*UA_POST / WBARWUA / FLAR)
 // not plain loads/stores.
 //
 // Full model (-mcpu=haydn): simd + bit-reversed + CB gates so haydn.h parses.
 // Default CPU generic is agu+hwloop only and fails feature-gated builtins.
-// RUN: clang -target haydn-unknown-elf -mcpu=haydn \
-// RUN: -mllvm -global-isel-abort=1 -O2 -ffreestanding \
-// RUN: -S -o - %s | FileCheck %s
 
 #include <haydn_dsp.h>
 
@@ -16,6 +18,7 @@
 // CHECK: pldwwua
 // CHECK: d_ltwua_post
 // CHECK: d_ltwua_post
+
 void la32x2_stream(const ae_int32x2 *x, ae_int32x2 *out) {
   ae_valign a = AE_LA64_PP(x);
   ae_int32x2 v0, v1;
@@ -76,7 +79,47 @@ void scale_like(ae_int32x2 *restrict y, const ae_int32x2 *restrict x,
   AE_SA64POS_FP(ya, y);
 }
 
-// Dual load streams on distinct ARs (default LA=AR0, explicit AR2).
+// Dual-24 unaligned circular: POS_PC seeds AR (PLDWWUA); IC uses UA residual
+// + soft CBR wrap — never plain load/store and never aligned D_*_CB alone.
+// CHECK-LABEL: la32x2f24_ic_stream:
+// CHECK: pldwwua
+// CHECK: d_ltwua_post
+// CHECK-NOT: d_ldw_cb
+ae_f24x2 *la32x2f24_ic_stream(ae_f24x2 *p, ae_f24x2 *out) {
+  ae_valign a;
+  ae_f24x2 v0, v1;
+  AE_LA32X2F24POS_PC(a, p);
+  AE_LA32X2F24_IC(v0, a, p, 0);
+  AE_LA32X2F24_IC(v1, a, p, 0);
+  out[0] = v0;
+  out[1] = v1;
+  return p;
+}
+
+// CHECK-LABEL: sa32x2f24_ic_stream:
+// CHECK: flar
+// CHECK: d_stwua_post
+// CHECK: d_stwua_post
+// CHECK-NOT: d_sdw_cb
+ae_f24x2 *sa32x2f24_ic_stream(ae_f24x2 *p, ae_f24x2 v0, ae_f24x2 v1) {
+  ae_valign a = AE_ZALIGN64();
+  AE_SA32X2F24_IC(v0, a, p, 0);
+  AE_SA32X2F24_IC(v1, a, p, 0);
+  return p;
+}
+
+// CHECK-LABEL: la32x2f24_xc_stream:
+// CHECK: d_ltwua_post
+// CHECK-NOT: d_ldw_cb
+ae_f24x2 *la32x2f24_xc_stream(ae_f24x2 *p, ae_valign a, ae_f24x2 *out) {
+  ae_f24x2 v;
+  AE_LA32X2F24_XC(v, a, p, 8, 0);
+  *out = v;
+  return p;
+}
+
+// Dual load streams on distinct ARs (default LA=AR0, explicit AR1).
+// Architectural AR file is AR0/AR1 only; selectors 2/3 are not product-visible.
 // CHECK-LABEL: dual_load_streams:
 // CHECK: pldwwua
 // CHECK: pldwwua
@@ -85,7 +128,7 @@ void scale_like(ae_int32x2 *restrict y, const ae_int32x2 *restrict x,
 void dual_load_streams(const ae_int32x2 *a, const ae_int32x2 *b,
                        ae_int32x2 *out) {
   ae_valign xa = AE_LA64_PP(a);
-  ae_valign xb = AE_LA64_PP_AR(2, b);
+  ae_valign xb = AE_LA64_PP_AR(1, b);
   ae_int32x2 va, vb;
   AE_LA32X2_IP(va, xa, a);
   AE_LA32X2_IP(vb, xb, b);

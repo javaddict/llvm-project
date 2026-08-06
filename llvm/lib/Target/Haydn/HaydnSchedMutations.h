@@ -9,7 +9,7 @@
 // AIE dual-sched mutation factories.
 //
 // Pre-RA: PropagateIncomingLatencies, EnforceCopyEdges, FuncArgCopyEdges
-// (+ CopyConstrain in createHaydnPreRAScheduler)
+// ( CopyConstrain in createHaydnPreRAScheduler)
 // Post-RA: RegionEndEdges, MemoryEdges, MachineSchedWAWEdges
 //
 // Parked (no Haydn peer): LockDelays, BiasDepth, EmitFixedSUnits

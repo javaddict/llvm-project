@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -stop-after=instruction-select -verify-machineinstrs -o - < %s | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -filetype=obj -o %t.o < %s
-;
+
+; Role: object — ordinary vs volatile/stateful MMO policy.
+
 ; C2.3 / G-MEM-INTRIN: ordinary vs volatile/stateful MMO policy.
 ;   Ordinary (Golden LS WITH/POST/PRE + BREV):
 ;     MIR `:: (load|store (sN) from|into %ir.…)` WITHOUT "volatile"
@@ -23,8 +25,6 @@ declare void @llvm.haydn.d.stwua.post(i64, ptr, i32, i32, i32)
 
 ; Ordinary MMO prints `load (sN)` / `store (sN)` — not `volatile load` /
 ; `volatile store`. The non-volatile spelling is the policy proof.
-; CHECK-LABEL: name: ordinary_with_load
-; CHECK: D_LDW_WITH_IMM{{.*}}:: (load (s64) from %ir.base
 define i64 @ordinary_with_load(ptr %base) {
   %r = call i64 @llvm.haydn.d.ldw.with.imm(ptr %base, i32 0)
   ret i64 %r

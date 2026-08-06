@@ -1,0 +1,27 @@
+# RUN: not llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-verify-bundles \
+# RUN:   %s -o - 2>&1 | FileCheck %s
+
+# Role: verifier — Late-MC one-to-one: residual cycle-forming LOADI32 as BUNDLE child fails closed (finalize may wrap bare residuals; law is shared child path).
+
+# Late-MC one-to-one: residual cycle-forming LOADI32 as BUNDLE child
+# fails closed (finalize may wrap bare residuals; law is shared child path).
+
+--- |
+  define void @residual_bundled_loadi32() { ret void }
+...
+---
+name:            residual_bundled_loadi32
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    successors: %bb.1
+    ; CHECK: residual cycle-forming pseudo
+    BUNDLE 0, implicit-def $r1 {
+      $r1 = LOADI32 %bb.1
+    }
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15

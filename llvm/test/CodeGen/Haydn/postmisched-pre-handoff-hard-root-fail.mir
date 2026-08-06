@@ -1,0 +1,30 @@
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:   -verify-machineinstrs %s -o - 2>&1 | FileCheck %s
+
+# Role: verifier — Illegal hard-root membership still fail-closes at exact-commit.
+#
+# Historical name retained: pre-handoff product path has zero multi-member hard
+# roots (postmisched-exact-nosplit-pre-handoff.ll). When a multi-member root
+# does enter post-RA (approved producer), leaveMBB exact-commits legal ones
+# (postmisched-hard-root-exact-commit.mir) and fail-closes illegal membership
+# without splitting. This file pins the illegal path (4-wide ADD32).
+
+--- |
+  define void @unstamped_multi_member_hard_root() { ret void }
+...
+---
+name:            unstamped_multi_member_hard_root
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r15
+
+    ; CHECK: multi-member hard BUNDLE root is not one legal product cycle
+    BUNDLE implicit-def $r8, implicit-def $r9, implicit-def $r10, implicit-def $r11, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3, implicit $r4, implicit $r5, implicit $r6, implicit $r7 {
+      $r8 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r9 = ADD32 $r2, $r3, implicit-def dead $sfr
+      $r10 = ADD32 $r4, $r5, implicit-def dead $sfr
+      $r11 = ADD32 $r6, $r7, implicit-def dead $sfr
+    }
+    RET implicit $r15

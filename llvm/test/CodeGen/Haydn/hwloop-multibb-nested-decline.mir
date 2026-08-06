@@ -1,6 +1,8 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s
-#
+
+# Role: MIR — Role B declines all multi-BB convert (AIE refuses multi-BB ZOL at IR).
+
 # Role B declines all multi-BB convert (AIE refuses multi-BB ZOL at IR).
 # Nested outer SET around inner ZOL also broke CoreMark bitextract; multi-BB
 # DP residual (lc_dp_lis) wrong-answer under Role B multi-BB convert.

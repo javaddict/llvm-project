@@ -1,10 +1,13 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
 
+# Role: object — absolute value instructions.
+
 #===----------------------------------------------------------------------===
 # Test absolute value instructions
 #===----------------------------------------------------------------------===
 
 # CHECK: abs32s r0, r1
+
 ABS32S R0, R1
 
 # CHECK: abs32 r2, r3

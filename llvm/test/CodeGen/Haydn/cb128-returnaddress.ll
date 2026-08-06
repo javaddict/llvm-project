@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — CB-128: @llvm.returnaddress must select (depth 0 → lr; depth>0 → 0).
+
 ; CB-128: @llvm.returnaddress must select (depth 0 → lr; depth>0 → 0).
 
 define ptr @ra_depth0() {

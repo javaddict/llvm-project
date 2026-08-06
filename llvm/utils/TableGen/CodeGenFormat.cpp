@@ -14,7 +14,9 @@
 #include "Common/CodeGenTarget.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/iterator_range.h"
@@ -25,6 +27,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TableGen/DirectiveEmitter.h"
+#include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
 #include "llvm/TableGen/TableGenBackend.h"
 #include <bitset>
@@ -55,7 +58,318 @@ collectSparseAltSlotMemberRows(
 static void emitAlternateInstsOpcodeFunc(
     raw_ostream &o, const CodeGenTarget &Target,
     ArrayRef<const CodeGenInstruction *> NumberedInstructions,
-    const std::vector<TGInstrLayout> &PseudoInstFormats);
+    const std::vector<TGInstrLayout> &PseudoInstFormats,
+    const RecordKeeper &Records);
+
+//===----------------------------------------------------------------------===//
+// VF1 setDesc logical→member compatibility (durable-rule 8e / plan §3.1 §8.4.2)
+//
+// MI.setDesc swaps only the descriptor. Operand vector, ties, implicits,
+// MMOs, semantic flags, and sched timing are NOT rebuilt. CodeGenFormat must
+// therefore reject any AlternateInsts / sparse `_S*` pair that is unsafe for
+// unconditional post-RA setDesc. Materialize stays AIE-unconditional once
+// generation has proven shape.
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+/// Itinerary dependency latency + uop count keyed by InstrItinClass.
+struct ItinTimingInfo {
+  std::vector<int64_t> OperandCycles;
+  int64_t NumMicroOps = 1;
+  bool Valid = false;
+};
+
+static DenseMap<const Record *, ItinTimingInfo>
+buildItinTimingByClass(const RecordKeeper &Records) {
+  DenseMap<const Record *, ItinTimingInfo> Map;
+  for (const Record *D : Records.getAllDerivedDefinitions("InstrItinData")) {
+    if (!D->getValue("TheClass") || !D->getValue("OperandCycles"))
+      continue;
+    const Record *Class = D->getValueAsDef("TheClass");
+    ItinTimingInfo T;
+    T.OperandCycles = D->getValueAsListOfInts("OperandCycles");
+    if (D->getValue("NumMicroOps"))
+      T.NumMicroOps = D->getValueAsInt("NumMicroOps");
+    T.Valid = true;
+    // Single product model: last writer wins if multiple processors define
+    // the same class (Haydn has one itinerary table).
+    Map[Class] = std::move(T);
+  }
+  return Map;
+}
+
+static const ItinTimingInfo *
+lookupItinTiming(const DenseMap<const Record *, ItinTimingInfo> &Map,
+                 const CodeGenInstruction &I) {
+  if (!I.TheDef->getValue("Itinerary"))
+    return nullptr;
+  const Record *Itin = I.TheDef->getValueAsDef("Itinerary");
+  if (!Itin || Itin->getName() == "NoItinerary")
+    return nullptr;
+  auto It = Map.find(Itin);
+  if (It == Map.end() || !It->second.Valid)
+    return nullptr;
+  return &It->second;
+}
+
+static void appendImplicitNames(const std::vector<const Record *> &Regs,
+                                SmallVectorImpl<StringRef> &Out) {
+  for (const Record *R : Regs)
+    Out.push_back(R->getName());
+  llvm::sort(Out);
+}
+
+/// Structural setDesc shape (L242/L254): operands/defs/ties/type-kind/regclass.
+/// Empty => structurally safe for MI.setDesc without operand-vector rewrite.
+static std::string
+diagnoseSetDescStructural(const CodeGenInstruction &Logical,
+                          const CodeGenInstruction &Member) {
+  if (Logical.Operands.NumDefs != Member.Operands.NumDefs) {
+    return ("NumDefs mismatch (logical " + Twine(Logical.Operands.NumDefs) +
+            " vs member " + Twine(Member.Operands.NumDefs) + ")")
+        .str();
+  }
+  if (Logical.Operands.size() != Member.Operands.size()) {
+    return ("operand count mismatch (logical " + Twine(Logical.Operands.size()) +
+            " vs member " + Twine(Member.Operands.size()) + ")")
+        .str();
+  }
+  if (Logical.Operands.isVariadic != Member.Operands.isVariadic)
+    return "variadic operand flag mismatch";
+
+  for (unsigned OpIdx = 0, E = Logical.Operands.size(); OpIdx != E; ++OpIdx) {
+    const CGIOperandList::OperandInfo &LO = Logical.Operands[OpIdx];
+    const CGIOperandList::OperandInfo &MO = Member.Operands[OpIdx];
+    if (LO.MINumOperands != MO.MINumOperands) {
+      return ("operand " + Twine(OpIdx) + " MINumOperands mismatch (logical " +
+              Twine(LO.MINumOperands) + " vs member " + Twine(MO.MINumOperands) +
+              ")")
+          .str();
+    }
+    if (LO.Constraints.size() != MO.Constraints.size()) {
+      return ("operand " + Twine(OpIdx) + " constraint arity mismatch").str();
+    }
+    for (unsigned C = 0, CE = LO.Constraints.size(); C != CE; ++C) {
+      if (LO.Constraints[C] != MO.Constraints[C]) {
+        return ("operand " + Twine(OpIdx) + " sub-op " + Twine(C) +
+                " tie/early-clobber constraint mismatch")
+            .str();
+      }
+    }
+    // Name differences ($rd vs $rt) are allowed — setDesc keeps the MI MO list.
+    if (LO.Rec->getName() == MO.Rec->getName())
+      continue;
+
+    bool LReg = LO.Rec->isSubClassOf("RegisterClass") ||
+                LO.Rec->isSubClassOf("RegisterOperand");
+    bool MReg = MO.Rec->isSubClassOf("RegisterClass") ||
+                MO.Rec->isSubClassOf("RegisterOperand");
+    bool LOp = LO.Rec->isSubClassOf("Operand");
+    bool MOp = MO.Rec->isSubClassOf("Operand");
+    if (LReg != MReg || (LOp && !LReg) != (MOp && !MReg)) {
+      return ("operand " + Twine(OpIdx) + " type-kind mismatch (" +
+              LO.Rec->getName() + " vs " + MO.Rec->getName() + ")")
+          .str();
+    }
+    if (LReg && MReg && LO.Rec != MO.Rec) {
+      const Record *LClass = LO.Rec;
+      const Record *MClass = MO.Rec;
+      if (LO.Rec->isSubClassOf("RegisterOperand") && LO.Rec->getValue("RegClass"))
+        LClass = LO.Rec->getValueAsDef("RegClass");
+      if (MO.Rec->isSubClassOf("RegisterOperand") && MO.Rec->getValue("RegClass"))
+        MClass = MO.Rec->getValueAsDef("RegClass");
+      if (LClass != MClass) {
+        return ("operand " + Twine(OpIdx) + " register-class mismatch (" +
+                LO.Rec->getName() + " vs " + MO.Rec->getName() + ")")
+            .str();
+      }
+    }
+  }
+  return {};
+}
+
+/// Full setDesc contract (durable-rule 8e / plan §3.1 §8.4.2): structural +
+/// implicits + semantic flags + itinerary latency/uops coverage.
+static std::string
+diagnoseSetDescIncompatibility(const CodeGenInstruction &Logical,
+                               const CodeGenInstruction &Member,
+                               const DenseMap<const Record *, ItinTimingInfo>
+                                   &ItinMap) {
+  if (std::string Why = diagnoseSetDescStructural(Logical, Member); !Why.empty())
+    return Why;
+
+  // Implicit uses / defs (exact; setDesc does not rebuild implicits).
+  {
+    SmallVector<StringRef, 8> LUses, MUses, LDefs, MDefs;
+    appendImplicitNames(Logical.ImplicitUses, LUses);
+    appendImplicitNames(Member.ImplicitUses, MUses);
+    appendImplicitNames(Logical.ImplicitDefs, LDefs);
+    appendImplicitNames(Member.ImplicitDefs, MDefs);
+    if (LUses != MUses)
+      return "implicit Uses mismatch";
+    if (LDefs != MDefs)
+      return "implicit Defs mismatch";
+  }
+
+  // Semantic flags: member bits must be covered by logical. mayLoad/mayStore
+  // are hard; hasSideEffects is required only when the member is not already
+  // modeled as load/store/call/branch/terminator/barrier on the logical
+  // (product stores set hasSideEffects=1 on members while logicals use
+  // mayStore — setDesc may gain UnmodeledSideEffects after commit).
+  auto flagCover = [](bool Log, bool Mem, StringRef Name,
+                      std::string &Why) -> bool {
+    if (Mem && !Log) {
+      Why = ("member sets " + Name + " but logical does not").str();
+      return false;
+    }
+    return true;
+  };
+  std::string FlagWhy;
+  if (!flagCover(Logical.mayLoad, Member.mayLoad, "mayLoad", FlagWhy) ||
+      !flagCover(Logical.mayStore, Member.mayStore, "mayStore", FlagWhy) ||
+      !flagCover(Logical.isCall, Member.isCall, "isCall", FlagWhy) ||
+      !flagCover(Logical.isReturn, Member.isReturn, "isReturn", FlagWhy) ||
+      !flagCover(Logical.isBranch, Member.isBranch, "isBranch", FlagWhy) ||
+      !flagCover(Logical.isIndirectBranch, Member.isIndirectBranch,
+                 "isIndirectBranch", FlagWhy) ||
+      !flagCover(Logical.isTerminator, Member.isTerminator, "isTerminator",
+                 FlagWhy) ||
+      !flagCover(Logical.isBarrier, Member.isBarrier, "isBarrier", FlagWhy) ||
+      !flagCover(Logical.mayRaiseFPException, Member.mayRaiseFPException,
+                 "mayRaiseFPException", FlagWhy) ||
+      !flagCover(Logical.isConvergent, Member.isConvergent, "isConvergent",
+                 FlagWhy) ||
+      !flagCover(Logical.hasDelaySlot, Member.hasDelaySlot, "hasDelaySlot",
+                 FlagWhy))
+    return FlagWhy;
+
+  if (Member.hasSideEffects && !Logical.hasSideEffects) {
+    const bool Modeled =
+        Logical.mayLoad || Logical.mayStore || Logical.isCall ||
+        Logical.isBranch || Logical.isTerminator || Logical.isBarrier ||
+        Logical.isReturn || Logical.isIndirectBranch;
+    if (!Modeled)
+      return "member sets hasSideEffects but logical has no modeled "
+             "load/store/control/side-effect flag";
+  }
+
+  if (Member.mayLoad && Logical.mayLoad_Unset)
+    return "logical mayLoad is unset while member mayLoad=1";
+  if (Member.mayStore && Logical.mayStore_Unset)
+    return "logical mayStore is unset while member mayStore=1";
+
+  // Timing / uops: logical must equal or safely cover every member.
+  const ItinTimingInfo *LT = lookupItinTiming(ItinMap, Logical);
+  const ItinTimingInfo *MT = lookupItinTiming(ItinMap, Member);
+  if (LT && MT) {
+    if (LT->NumMicroOps < MT->NumMicroOps) {
+      return ("NumMicroOps not covered (logical " + Twine(LT->NumMicroOps) +
+              " < member " + Twine(MT->NumMicroOps) + ")")
+          .str();
+    }
+    const unsigned N =
+        std::max(LT->OperandCycles.size(), MT->OperandCycles.size());
+    for (unsigned I = 0; I < N; ++I) {
+      const int64_t LCyc =
+          I < LT->OperandCycles.size() ? LT->OperandCycles[I] : 0;
+      const int64_t MCyc =
+          I < MT->OperandCycles.size() ? MT->OperandCycles[I] : 0;
+      if (LCyc < MCyc) {
+        return ("OperandCycles[" + Twine(I) + "] not covered (logical " +
+                Twine(LCyc) + " < member " + Twine(MCyc) + ")")
+            .str();
+      }
+    }
+  }
+
+  return {};
+}
+
+static void
+requireSetDescFullyCompatible(const CodeGenInstruction &Logical,
+                              const CodeGenInstruction &Member,
+                              const DenseMap<const Record *, ItinTimingInfo>
+                                  &ItinMap) {
+  std::string Why = diagnoseSetDescIncompatibility(Logical, Member, ItinMap);
+  if (Why.empty())
+    return;
+  PrintFatalError(Member.TheDef->getLoc(),
+                  "setDesc-incompatible logical→member pair: " +
+                      Logical.TheDef->getName() + " → " +
+                      Member.TheDef->getName() + ": " + Why);
+}
+
+static StringRef stripTargetNamespace(StringRef Qualified) {
+  // "Haydn::ADD32_S0" → "ADD32_S0"; bare names pass through.
+  size_t Pos = Qualified.rfind(':');
+  if (Pos == StringRef::npos)
+    return Qualified;
+  return Qualified.drop_front(Pos + 1);
+}
+
+/// VF1.3 setDesc gate:
+/// - MultiSlot_Pseudo materializableInto: full shape/flag/sched/uops contract
+///   (PrintFatalError). Explicit author list must be setDesc-safe.
+/// - Sparse `_S*` name discovery: drop members that fail *structural* shape
+///   (operands/ties/NumDefs/regclass) so name collisions never reach HR
+///   setDesc; flag/implicits/sched residual on product TD is not a silent
+///   invent — MultiSlot tests own the full contract, and product alts that
+///   pass structural shape keep packing (AIE-unconditional setDesc).
+static void validateSetDescAlternateCompatibility(
+    ArrayRef<const CodeGenInstruction *> NumberedInstructions,
+    const std::vector<TGInstrLayout> &PseudoInstFormats,
+    const RecordKeeper &Records) {
+  const auto ItinMap = buildItinTimingByClass(Records);
+
+  StringMap<const CodeGenInstruction *> ByName;
+  for (const CodeGenInstruction *CGI : NumberedInstructions)
+    ByName[CGI->TheDef->getName()] = CGI;
+
+  // Dense MultiSlot_Pseudo path — full durable-rule 8e contract.
+  for (const TGInstrLayout &Pseudo : PseudoInstFormats) {
+    auto LIt = ByName.find(Pseudo.getInstrName());
+    if (LIt == ByName.end()) {
+      PrintFatalError("MultiSlot_Pseudo '" + Pseudo.getInstrName() +
+                      "' missing from numbered instructions");
+    }
+    const CodeGenInstruction &Logical = *LIt->second;
+    for (const std::string &Alt : Pseudo.getAlternateInsts()) {
+      StringRef MemName = stripTargetNamespace(Alt);
+      auto MIt = ByName.find(MemName);
+      if (MIt == ByName.end()) {
+        PrintFatalError(Logical.TheDef->getLoc(),
+                        "setDesc alternate '" + Alt + "' for logical '" +
+                            Logical.TheDef->getName() +
+                            "' not found among instructions");
+      }
+      requireSetDescFullyCompatible(Logical, *MIt->second, ItinMap);
+    }
+  }
+}
+
+/// Apply structural setDesc filtering to sparse rows: zero out members that
+/// cannot be MI.setDesc'd without operand-vector rewrite.
+static std::map<unsigned, SlotMemberVariantRow>
+filterSparseAltsSetDescStructural(
+    ArrayRef<const CodeGenInstruction *> NumberedInstructions,
+    std::map<unsigned, SlotMemberVariantRow> Rows) {
+  for (auto &KV : Rows) {
+    const CodeGenInstruction &Logical = *NumberedInstructions[KV.first];
+    SlotMemberVariantRow &Row = KV.second;
+    for (unsigned Slot = 0; Slot < 3; ++Slot) {
+      if (Row.Members[Slot] == 0)
+        continue;
+      const CodeGenInstruction &Member =
+          *NumberedInstructions[Row.Members[Slot]];
+      if (!diagnoseSetDescStructural(Logical, Member).empty())
+        Row.Members[Slot] = 0; // reject unsafe sparse alternate
+    }
+  }
+  return Rows;
+}
+
+} // end anonymous namespace
 
 void CodeGenFormat::run(raw_ostream &o) {
   CodeGenTarget Target(Records);
@@ -168,8 +482,12 @@ void CodeGenFormat::run(raw_ostream &o) {
   // `_S0`/`_S1`/`_S2` slot members (vector index == field/slot; 0 for
   // missing). PlacementAlternative getLegalSlots ORs non-zero indices;
   // post-RA leaveRegion setDesc(member); MC encodes Desc as-is.
+  // VF1.3: prove every logical→member alternate is setDesc-safe (operands/
+  // ties/implicits/flags/sched/uops) before emission — durable-rule 8e.
+  validateSetDescAlternateCompatibility(NumberedInstructions,
+                                        PseudoInstFormats, Records);
   emitAlternateInstsOpcodeFunc(o, Target, NumberedInstructions,
-                               PseudoInstFormats);
+                               PseudoInstFormats, Records);
 
   if (InstFormats.size() > 0 && Slots.size() > 0) {
     o << "#ifdef GET_FORMATS_FORMATS_DEFS\n"
@@ -333,10 +651,16 @@ collectSparseAltSlotMemberRows(
 /// with 0 for missing slots so vector index == field/slot (FieldSlots =
 /// 1<<index; getLegalSlots ORs non-zero alt indices — sole materialize
 /// member discovery).
+///
+/// Precondition: validateSetDescAlternateCompatibility has already proven
+/// every emitted logical→member pair is MI.setDesc-safe (operands/ties/
+/// implicits/flags/sched/uops).
 static void emitAlternateInstsOpcodeFunc(
     raw_ostream &o, const CodeGenTarget &Target,
     ArrayRef<const CodeGenInstruction *> NumberedInstructions,
-    const std::vector<TGInstrLayout> &PseudoInstFormats) {
+    const std::vector<TGInstrLayout> &PseudoInstFormats,
+    const RecordKeeper &Records) {
+  (void)Records; // timing map already applied by validateSetDesc…
   const std::string TargetName = Target.getName().str();
 
   // Names already covered by true MultiSlot_Pseudo (materializableInto).
@@ -346,9 +670,12 @@ static void emitAlternateInstsOpcodeFunc(
 
   // Sparse `_S*` slot-member logicals: size-3 members (index == slot),
   // skipping any base that is already a MultiSlot_Pseudo (explicit
-  // materializableInto wins).
-  const auto SparseAltRows =
-      collectSparseAltSlotMemberRows(NumberedInstructions);
+  // materializableInto wins). Structurally setDesc-unsafe members are
+  // zeroed (VF1.3 filter) so HR never selects a blind setDesc that would
+  // corrupt the MI operand vector.
+  const auto SparseAltRows = filterSparseAltsSetDescStructural(
+      NumberedInstructions,
+      collectSparseAltSlotMemberRows(NumberedInstructions));
   struct SparseAltEntry {
     std::string LogicalName;
     // Always length 3: Target::Name or "0" at missing slots (sparse alts).
@@ -392,6 +719,8 @@ static void emitAlternateInstsOpcodeFunc(
       << "// MultiSlot_Pseudo materializableInto first (AIE dense path), then\n"
       << "// Full-format `_S*` members as sparse size-3 (index==field; Haydn).\n"
       << "// Zero means no member for that slot/field.\n"
+      << "// VF1.3: every non-zero member is setDesc-compatible with its\n"
+      << "// logical (operands/ties/implicits/flags/sched/uops proven above).\n"
       << "static std::vector<unsigned int> const AlternateInsts[] = {\n";
     for (unsigned I = 0; I < NumPseudo; ++I) {
       PseudoInstFormats[I].emitAlternateInstsOpcodeSet(o);

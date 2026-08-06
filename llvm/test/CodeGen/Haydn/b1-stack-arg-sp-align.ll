@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — B1 (fir_blms* freestanding dual): 8th i32 is a stack arg.
+
 ; B1 (fir_blms* freestanding dual): 8th i32 is a stack arg. Call frame SP
 ; adjust must be a multiple of StackAlign(8) so SP stays 8-byte aligned
 ; across the call — callee DR CSR st64 then never sees ≡4 mod 8 addresses.

@@ -2,7 +2,9 @@
 ; RUN:   -O2 -debug-only=pipeliner < %s 2>&1 | FileCheck %s --check-prefix=SWP
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -O2 < %s | FileCheck %s
-;
+
+; Role: semantic — Software pipelining tests for the Haydn VLIW DSP backend.
+
 ; Software pipelining tests for the Haydn VLIW DSP backend.
 ;
 ; The Haydn backend integrates with LLVM's target-independent MachinePipeliner
@@ -34,6 +36,7 @@
 ; The pipeliner should analyze this loop and attempt to schedule it.
 ; For this simple loop (3 instructions in the body), the pipeliner may find
 ; that there is no overlap benefit and leave the loop unchanged.
+
 define i32 @simple_acc_loop(ptr nocapture readonly %p, i32 %n) {
 ; CHECK-LABEL: simple_acc_loop:
 ; CHECK:        // =>This Inner Loop Header: Depth=1

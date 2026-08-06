@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s \
 ; RUN:   | FileCheck %s --implicit-check-not=__muldi3
-;
+
+; Role: verifier — 64-bit unsigned multiply must lower to MUL64_ULUL (unsigned x unsigned) partial products, NOT MUL64_LL (signed x signed) and.
+
 ; REGRESSION TEST : 64-bit unsigned multiply must lower to MUL64_ULUL
 ; (unsigned x unsigned) partial products, NOT MUL64_LL (signed x signed) and
 ; NOT MUL64_ULL (unsigned x SIGNED -- rs2 sign-extended per the ISA).

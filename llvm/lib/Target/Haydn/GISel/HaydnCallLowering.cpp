@@ -138,7 +138,13 @@ static void saveVarArgRegisters(MachineIRBuilder &MIRBuilder,
     int64_t SaveAreaOffset = -VarArgsGprSize;
     GprFI = MFI.CreateFixedObject(VarArgsGprSize, SaveAreaOffset, true);
 
-    auto FIN = MIRBuilder.buildFrameIndex(PtrTy, GprFI);
+    // Address each slot as FI + constant offset from a *shared* base.
+    // Do NOT walk a G_PTR_ADD chain (base = base + step) across spills: the
+    // GISel pre/post-inc combiner may fuse one store into D_SDW_PRE /
+    // S_SW_PRE and the packetizer can then schedule a later sibling store
+    // after the writeback, so its imm is applied to the advanced base and
+    // lands in the wrong bank (GPR save / incoming stack args) → ABORT.
+    auto GprBase = MIRBuilder.buildFrameIndex(PtrTy, GprFI);
     for (unsigned I = FirstUnallocGPR; I < std::size(HaydnArgGPRs); ++I) {
       MCPhysReg PhysReg = HaydnArgGPRs[I];
       Register VReg = MRI.createGenericVirtualRegister(S32);
@@ -148,12 +154,13 @@ static void saveVarArgRegisters(MachineIRBuilder &MIRBuilder,
       MIRBuilder.buildCopy(VReg, Register(PhysMCReg));
 
       unsigned SlotOff = (I - FirstUnallocGPR) * HaydnGPRSaveSize;
-      auto MPO = MachinePointerInfo::getFixedStack(MF, GprFI, SlotOff);
-      MIRBuilder.buildStore(VReg, FIN, MPO, inferAlignFromPtrInfo(MF, MPO));
-      if (I + 1 < std::size(HaydnArgGPRs)) {
-        auto Step = MIRBuilder.buildConstant(S32, HaydnGPRSaveSize);
-        FIN = MIRBuilder.buildPtrAdd(PtrTy, FIN.getReg(0), Step);
+      Register Addr = GprBase.getReg(0);
+      if (SlotOff != 0) {
+        auto Off = MIRBuilder.buildConstant(S32, SlotOff);
+        Addr = MIRBuilder.buildPtrAdd(PtrTy, GprBase.getReg(0), Off).getReg(0);
       }
+      auto MPO = MachinePointerInfo::getFixedStack(MF, GprFI, SlotOff);
+      MIRBuilder.buildStore(VReg, Addr, MPO, inferAlignFromPtrInfo(MF, MPO));
     }
   }
 
@@ -180,7 +187,8 @@ static void saveVarArgRegisters(MachineIRBuilder &MIRBuilder,
     DrFI = MFI.CreateFixedObject(VarArgsDrSize, DrSaveAreaOffset, true);
     MFI.setObjectAlignment(DrFI, Align(HaydnDRSaveSize));
 
-    auto FIN = MIRBuilder.buildFrameIndex(PtrTy, DrFI);
+    // Independent FI+offset per DR slot (same reason as GPR: no pre-inc chain).
+    auto DrBase = MIRBuilder.buildFrameIndex(PtrTy, DrFI);
     for (unsigned I = FirstUnallocDR; I < std::size(HaydnArgDRs); ++I) {
       MCPhysReg PhysReg = HaydnArgDRs[I];
       Register VReg = MRI.createGenericVirtualRegister(S64);
@@ -190,12 +198,13 @@ static void saveVarArgRegisters(MachineIRBuilder &MIRBuilder,
       MIRBuilder.buildCopy(VReg, Register(PhysMCReg));
 
       unsigned SlotOff = (I - FirstUnallocDR) * HaydnDRSaveSize;
-      auto MPO = MachinePointerInfo::getFixedStack(MF, DrFI, SlotOff);
-      MIRBuilder.buildStore(VReg, FIN, MPO, inferAlignFromPtrInfo(MF, MPO));
-      if (I + 1 < std::size(HaydnArgDRs)) {
-        auto Step = MIRBuilder.buildConstant(S32, HaydnDRSaveSize);
-        FIN = MIRBuilder.buildPtrAdd(PtrTy, FIN.getReg(0), Step);
+      Register Addr = DrBase.getReg(0);
+      if (SlotOff != 0) {
+        auto Off = MIRBuilder.buildConstant(S32, SlotOff);
+        Addr = MIRBuilder.buildPtrAdd(PtrTy, DrBase.getReg(0), Off).getReg(0);
       }
+      auto MPO = MachinePointerInfo::getFixedStack(MF, DrFI, SlotOff);
+      MIRBuilder.buildStore(VReg, Addr, MPO, inferAlignFromPtrInfo(MF, MPO));
     }
   }
 
@@ -508,12 +517,11 @@ bool HaydnCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
   // eliminateCallFramePseudoInstr. Round StackSize up to the target stack
   // alignment so SP never becomes ≡4 mod 8 across a call (B1: single i32
   // stack arg with Size=4 left StackSize=4; callee DR st64 then faults).
-  // Bundle128 is 16-byte text only — SP ABI stays StackAlign(8) for DR.
+  // Text parcel size is orthogonal — SP ABI stays StackAlign(8) for DR.
   // Round StackSize up to StackAlign so SP never becomes ≡4 mod 8 across a
   // call (B1). Operand 1 of ADJCALLSTACK* is the FrameSetup/Destroy twin
   // amount for the verifier (must match op0, not "align") — keep 0 as
   // Haydn/RISC-V style second imm when unused, or pass the same amount.
-  // Bundle128 is 16-byte text only; SP ABI stays StackAlign(8) for DR st64.
   const Align StackAlign =
       MF.getSubtarget<HaydnSubtarget>().getFrameLowering()->getStackAlign();
   const uint64_t CallFrameBytes =

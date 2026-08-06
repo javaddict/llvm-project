@@ -1,10 +1,12 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -filetype=asm %s -o %t.s
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -filetype=obj %s -o %t_c.o
 ; RUN: llvm-objdump -d --triple=haydn-unknown-elf %t_c.o > %t_c.dis
-;
+; RUN: FileCheck %s --check-prefix=ASM --input-file=%t.s
+
+; Role: object — single authority: logical LD* only; slot from placement/bundle.
+
 ; single authority: logical LD* only; slot from placement/bundle.
 ; Public asm never prints the internal ld32_s1 / ld64_s1 mnemonics.
-; RUN: FileCheck %s --check-prefix=ASM --input-file=%t.s
 ; (Asm→obj round-trip via llvm-mc deferred: MULL tied-op encoder assert on
 ; asm-parse path; CodeGen -filetype=obj is the product encode authority.)
 ;

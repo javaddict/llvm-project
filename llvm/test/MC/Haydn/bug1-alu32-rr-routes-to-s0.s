@@ -3,7 +3,10 @@
 # RUN: llvm-mc -triple haydn-unknown-elf -filetype=obj %s -o %t.o && \
 # RUN:   llvm-objdump -d --triple=haydn-unknown-elf %t.o | \
 # RUN:   FileCheck %s --check-prefix=NOPH
-# TRACKING: encoder slot-assignment gap (post- Bundle128-only cutover).
+
+# Role: object — TRACKING: encoder slot-assignment gap (post- Format-E-only cutover).
+
+# TRACKING: encoder slot-assignment gap (post- Format-E-only cutover).
 # The encoder places the MAC op (x2mula32) in a slot window the decoder
 # does NOT render with the `` suffix -- actual output is `x2mula32 d1
 # d2, d3, d1` (no ``); CHECK wants `x2mula32`. The companion
@@ -11,7 +14,7 @@
 # DOES render `x2mula32`, confirming the spec layout is s1. The ALU32 RR
 # ops (add32s/slt32/max32) ARE rendered correctly -- only the MAC
 # suffix is missing. Same slot-assignment gap as
-# d385-bundle128-add64-roundtrip.s (add64 vs add64). The core intent
+# d385-format-e-add64-roundtrip.s (add64 vs add64). The core intent
 # (ALU32 RR routes to s0, NOT s1) IS satisfied. Un-XFAIL when the encoder
 # reads the slot from the format-def and x2mula32 round-trips as x2mula32.
 # Prior XFAIL (Phase-2 decoder purge collateral) is resolved: the s0 ALU32
@@ -33,7 +36,7 @@
 #
 # Fix: getLegalSlots gates 3-op ALU32 RR to LSB_S0 only; the encoder either
 # uses G-format (when all regs are r0-r7 and rs2 fits the 2-bit imm2 field)
-# or emits a single-child Mode-0 s0 bundle. s1 ALU32 only accepts the
+# or emits a single-child Format E singleton parcel. s1 ALU32 only accepts the
 # unary family (NOT32/NEG32/NEG32S/NSA32/NSAU32/POPCOUNT32).
 #
 # Hard bar: NO `<?>` residual on disassembly of these opcodes.
@@ -52,7 +55,7 @@ test_alu32_rr:
   { slt32  r4, r5, r0 }
   { max32  r6, r7, r1 }
 
-  # Mode-0 s0 bundle: r8-r15 (or rs2 > r3) forces the 8-byte Mode-0 path.
+  # Format E singleton parcel: r8-r15 (or rs2 > r3) forces the retired 8-byte Mode-0 path.
   # add32s MUST land in s0, NOT s1 ALU32 sub-row.
   { add32s r9, r10, r11 }
   { slt32  r9, r10, r11 }
@@ -66,18 +69,18 @@ test_alu32_rr:
   { x2mula32 d1, d2, d3, d1 }
 
 # CHECK-LABEL: <test_alu32_rr>:
-# Bundle128 path: every op is a 16-byte composite `{ op.sN...; nop; nop }`.
-# CHECK:       add32s r1, r2, r3
-# CHECK-NEXT:  slt32 r4, r5, r0
-# CHECK-NEXT:  max32 r6, r7, r1
-# Mode-0 s0 path (also 16-byte Bundle128 under).
-# CHECK:       add32s r9, r10, r11
-# CHECK-NEXT:  slt32 r9, r10, r11
-# CHECK-NEXT:  max32 r9, r10, r11
+# Format E path: every op is a 12-byte Format E composite `{ op.sN...; nop; nop }`.
+# CHECK: {{.*}}0: 07 ab 10 32 00 00 00 00 00 00 00 00 { add32s r1, r2, r3; nop }
+# CHECK-NEXT: c: 07 8b 42 05 00 00 00 00 00 00 00 00 { slt32 r4, r5, r0; nop }
+# CHECK-NEXT: {{.*}}18: 07 0b 62 17 00 00 00 00 00 00 00 00 { max32 r6, r7, r1; nop }
+# Mode-0 s0 path (also 12-byte Format E under).
+# CHECK: {{.*}}24: 07 ab 90 ba 00 00 00 00 00 00 00 00 { add32s r9, r10, r11; nop }
+# CHECK-NEXT: {{.*}}30: 07 8b 92 ba 00 00 00 00 00 00 00 00 { slt32 r9, r10, r11; nop }
+# CHECK-NEXT: 3c: 07 0b 92 ba 00 00 00 00 00 00 00 00 { max32 r9, r10, r11; nop }
 # MAC path (s1 MAC sub-row, not ALU32). The 4-op asm-parse form
-# (x2mula32 d1, d2, d3, d1) decodes back to the 4-op form
-# (rd, rsd1, rsd2, rtd1 — the second dest is now printed under Path-B).
-# CHECK:       x2mula32 d1, d2, d3, d1
+# (x2mula32 d1, d2, d3, d1) encodes via X2MULA32_M0S1 whose asm string is the
+# 3-op form (rd_in is tied to rtd and not printed). So objdump output is 3-op.
+# CHECK: {{.*}}48: 47 02 22 01 03 00 00 00 00 00 00 00 { x2mula32 d2, d3, d1; nop }
 
 # NOPH: <test_alu32_rr>:
 # NOPH-NOT: <?>

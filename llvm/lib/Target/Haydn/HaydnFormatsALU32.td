@@ -50,7 +50,7 @@ class HaydnFU_ALU32_S0_RR<bits<7> opc, dag outs, dag ins, string asmstr,
 // ALU32 R in S0: rt,rs (2 GPR32). Payload 3+7+30+4+4 = 48b.
 // Some legacy bases that select into this format (MOVE32/ABS32/ABS32S, all
 // FmtALU32) declare a vestigial 2nd source operand ($rs2) that the runtime MI
-// carries but the Bundle128 encoding does not use. `rs2` is an unencoded field
+// carries but the encoding does not use. `rs2` is an unencoded field
 // (always 0, NOT in the concat) so the operand binds without affecting bytes.
 // Unary legacy bases (FmtALU32Unary: NSA32/NOT32/NEG32/...) do not reference
 // $rs2 and are unaffected. See BUG 1.
@@ -98,7 +98,7 @@ class HaydnFU_ALU32_S0_RI5<bits<7> opc, dag outs, dag ins, string asmstr,
 // ALU32 I12 (LUI) in S0: rt,imm12 (GPR32 + uimm12).
 // Payload 3+7+22+12+4 = 48b.
 // LUI's legacy base (FmtI) declares a vestigial $rs operand (a leftover from
-// the I-type template) that the runtime MI carries but the Bundle128 encoding
+// the I-type template) that the runtime MI carries but the encoding
 // does not use. `rs` is an unencoded field (always 0, NOT in the concat) so the
 // operand binds without affecting the bytes. See BUG 1.
 class HaydnFU_ALU32_S0_I12<bits<7> opc, dag outs, dag ins, string asmstr,
@@ -1006,9 +1006,11 @@ def ZERO_GPR_S2 : HaydnFU_ALU32_S2_I8<0b1000000,
 
 //===----------------------------------------------------------------------===//
 // ALU32 MOVE32_DR_L / MOVE32_DR_H (#21/22) — s0, s1, s2 (3 defs each).
-// Cross-bank rt(GPR32) <-> rsd(DR64). Field layout note: the spec does not
-// distinguish L/H in the operand dag (both are R-type, rt + rsd); the L/H
-// distinction is opcode-implicit. Authoring one def per slot per variant.
+// Cross-bank rt(GPR32) <- rsd(DR64) lane extract. Explicit bank
+// crossing only — not a soft alias of a GPR pair for DR64. Prefer e2e DR64
+// ops; PostSelect elideCrossBankRoundTrips removes identity extract+repack.
+// Field layout: L/H share R-type (rt + rsd); distinction is opcode-implicit.
+// One def per slot per variant.
 //===----------------------------------------------------------------------===//
 
 // #21 MOVE32_DR_L
@@ -1142,7 +1144,7 @@ def CSRW_S0 : HaydnFU_ALU32_S0_CSR<0b1000010,
     (outs), (ins uimm8:$csr, GPR32:$r),
     "csrw\t$csr, $r", []>;
 
-// CSRW_W — Bundle128 s0 CSR write (AsmPrinter SETCBR / HWLR path).
+// CSRW_W — s0 CSR write (AsmPrinter SETCBR / HWLR path).
 let hasSideEffects = 1, Defs = [SFR] in
 def CSRW_W_S0 : HaydnFU_ALU32_S0_CSR<0b1010110,
     (outs), (ins uimm8:$csr, GPR32:$r),
@@ -1157,8 +1159,8 @@ def CSRW_W_S0 : HaydnFU_ALU32_S0_CSR<0b1010110,
 // (HaydnExpandPostIncEarly, HaydnExpandPseudos, HaydnAsmPrinter).
 // ORI32_W (uimm20_wide_abs) — exists as a def (paired here for completeness).
 // There is NO legacy SUBI32_W / ANDI32_W / XORI32_W / ADDI32S_W / SUBI32S_W
-// (verified: only ADDI32_W + ORI32_W derive from Fmt48_WideGPRImm). Bundle128
-// _S0 peers for non-existent legacy opcodes would be dead (no AlternateInsts row).
+// (verified: only ADDI32_W + ORI32_W derive from Fmt48_WideGPRImm). s0
+// peers for non-existent legacy opcodes would be dead (no AlternateInsts row).
 //
 // DISTINCT codepoints in the free s0-ALU32-FU range (112-113, above the golden
 // set ending at 66). Each `_W_S0` def reuses the EXISTING
@@ -1202,7 +1204,7 @@ def ORI32_W_S0 : HaydnFU_ALU32_S0_RI20<0b1110001,
 // operands. These reuse the EXISTING wide branch operand classes
 // (`brtarget_wide_i20` / `brtarget_wide_ri12` / `brtarget_wide_i12`
 // `calltarget_wide_ri12`) which already encode the correct N/Shift/IsSigned.
-// NO `isCodeGenOnly`: these are real round-trippable Bundle128 s0 instructions
+// NO `isCodeGenOnly`: these are real round-trippable s0 instructions
 // (each gets its own decoder trie entry with the correct Shift DecoderMethod).
 // The existing s0 format classes (`_S0_I20`/`_RI12`/`_I12_ONE`) carry the
 // identical field LAYOUT; only the operand SCALING (via the operand class)
@@ -1214,7 +1216,7 @@ def ORI32_W_S0 : HaydnFU_ALU32_S0_RI20<0b1110001,
 // opcodes as branches/terminators and skips them, causing far-branch overflow
 // (adddf3/divdf3 `-c` crashes). The selector emits the legacy `_W` forms; the
 // pre-RA scheduler's materializeMultiOpcodeInstrs setDesc commits them to
-// `_W_S0` so by BranchRelaxation time the live opcodes are the Bundle128 peers.
+// `_W_S0` so by BranchRelaxation time the live opcodes are the s0 peers.
 
 // Calls: caller-saved clobber Defs (same as legacy JAL_W). R12 call-clobbered;
 // R14 via regmask only (always CSR, not in Defs). JAL_W_S0: isCall only.
@@ -1249,7 +1251,7 @@ def BEQ_W_S0 : HaydnFU_ALU32_S0_RI12<0b1000101,
 // observed in the test sweep). DISTINCT codepoints 72-78 (free s0-ALU32-FU
 // range above the set 67-71). Same format classes (RI12 / I12_ONE) and
 // ÷2-scaled branch-target operands as the existing siblings. NO
-// isCodeGenOnly: real round-trippable Bundle128 s0 instructions (each gets
+// isCodeGenOnly: real round-trippable s0 instructions (each gets
 // its own decoder trie entry with the correct Shift DecoderMethod).
 
 // BNE_W (legacy Fmt48_WideBR_RI12<0x25>, brtarget_wide_ri12, Shift=1)
@@ -1302,11 +1304,10 @@ def BLTZ_W_S0 : HaydnFU_ALU32_S0_I12_ONE<0b1010101,
 // Family 6 (standalone-parcel migration) — DISTINCT-codepoint _S0 defs.
 //
 // 's aggressive cutover removed the legacy standalone-parcel emit paths
-// (C_*/G_*/16-bit NOP). These opcodes are NOT Bundle128 slot windows — they're
-// standalone parcels. They need `_S0` variants so the encoder routes
-// them through encodeBundle128 (single-op composite). Without these, standalone
-// emission via `llvm-mc` / AsmPrinter hits the forcing function
-// ("no Bundle128 form").
+// (C_*/G_*/16-bit NOP). These opcodes are NOT residual slot windows — they're
+// standalone parcels. They need `_S0` variants so the encoder routes them
+// through the single-op composite path. Without these, standalone emission
+// via `llvm-mc` / AsmPrinter hits the forcing function ("no Format E form").
 //
 // Codepoints 72-79 (0b1001000-0b1001111) — free s0-ALU32-FU range above the
 // golden set (ending 66) and the far-branch block (67-71). Each def
@@ -1320,7 +1321,7 @@ def BLTZ_W_S0 : HaydnFU_ALU32_S0_I12_ONE<0b1010101,
 // (Desc-as-is encode).
 //===----------------------------------------------------------------------===//
 
-// NOP (legacy HaydnInst16, 16-bit all-zero). A standalone NOP as a Bundle128
+// NOP (legacy HaydnInst16, 16-bit all-zero). A standalone NOP as a
 // slot-0: FU=0, opcode=0, all-zero payload (matches the all-zero composite).
 // isReMaterializable mirrors the legacy NOP def.
 def NOP_S0 : HaydnFU_ALU32_S0_HINT<0b0000000,
@@ -1331,7 +1332,7 @@ def NOP_S0 : HaydnFU_ALU32_S0_HINT<0b0000000,
 }
 
 // C_ADD32 (legacy FmtC_ALU32R<0x00>, destructive rt = rt + rs, GPR32Lo).
-// Legacy MI operands: [rt(out), rs(in)] — 2 operands. Bundle128 S0 ALU32 R
+// Legacy MI operands: [rt(out), rs(in)] — 2 operands. S0 ALU32 R
 // (rt, rs) — 2 operands matching the logical shape for setDesc.
 let isCodeGenOnly = 1 in
 def C_ADD32_S0 : HaydnFU_ALU32_S0_R<0b1001000,
@@ -1339,7 +1340,7 @@ def C_ADD32_S0 : HaydnFU_ALU32_S0_R<0b1001000,
     "c_add32\t$rt, $rs", []>;
 
 // C_ADDI32 (legacy FmtC_ALU32SI<0x0>, destructive rt = rt + imm5, GPR32Lo).
-// Legacy MI operands: [rt(out), rt_in(in,tied), imm(in)]. Bundle128 S0
+// Legacy MI operands: [rt(out), rt_in(in,tied), imm(in)]. S0
 // ALU32 RI5 (rt, rs, imm5): setDesc maps $rs <- legacy rt_in (=rt), so rs
 // carries the destructive source correctly.
 let isCodeGenOnly = 1 in
@@ -1348,29 +1349,29 @@ def C_ADDI32_S0 : HaydnFU_ALU32_S0_RI5<0b1001001,
     "c_addi32\t$rt, $rs, $imm5", []>;
 
 // SUB32_G (legacy FmtG_S0_ALU32<0x01>, destructive rd = rd - rs1, GPR32Lo).
-// Legacy MI operands: [rd(out), rs1(in)]. Bundle128 S0: use the R class
+// Legacy MI operands: [rd(out), rs1(in)]. S0: use the R class
 // (2 ops: rt, rs) so setDesc preserves operand count (RR would be 3 ops).
 let isCodeGenOnly = 1 in
 def SUB32_G_S0 : HaydnFU_ALU32_S0_R<0b1001010,
     (outs GPR32:$rt), (ins GPR32:$rs),
     "sub32_g\t$rt, $rs", []>;
 
-// SET_HWLOOP_W — Bundle128 s0 form (legacy wide 0x88 geometry mapped into
+// SET_HWLOOP_W — residual s0 form (legacy wide 0x88 geometry mapped into
 // ALU32 S0). Live path: real SET_HWLOOP_W before pack → leaveRegion setDesc
-// → SET_HWLOOP_W_S0 member → Desc-only encodeBundle128.
+// → SET_HWLOOP_W_S0 member → Desc-only MC encode.
 //
 // must NOT be isCodeGenOnly. That flag excludes the def from the
 // DecoderTableS048 trie, so llvm-objdump printed `<unknown>` for every
 // memset/memcpy SET_HWLOOP parcel on direct-ELF (ISS never armed HWLR).
 // Same class as ADDI32_W_S0: CodeGenOnly for "legacy alias" was wrong
-// once Bundle128 emission used these as the real slot instructions.
+// once emission used these as the real slot instructions.
 let hasSideEffects = 1, isNotDuplicable = 1 in
 def SET_HWLOOP_W_S0 : HaydnFU_ALU32_S0_HWLOOP_W<0b1001011,
     (outs), (ins uimm1:$sel, hwloop_off1:$offset1, hwloop_off2:$offset2,
                  uimm16_hwloop_cnt:$cnt),
     "set_hwloop_w\t$sel, $offset1, $offset2, $cnt", []>;
 
-// SET_HWLOOP_F2_W — Bundle128 s0 form (register trip count). Primary form
+// SET_HWLOOP_F2_W — s0 form (register trip count). Primary form
 // emitted for runtime-count ZOL (LoopStart / SET_HWLOOP_REG path).
 // isCodeGenOnly removed so DecoderTableS048 matches opcode 0b1001100.
 let hasSideEffects = 1, isNotDuplicable = 1 in

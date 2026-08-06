@@ -2,6 +2,9 @@
 ; RUN:   -verify-machineinstrs -O2 -debug-only=pipeliner < %s 2>&1 | FileCheck %s --check-prefix=SWP
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:   -verify-machineinstrs -O2 < %s | FileCheck %s --check-prefix=ASM
+
+; Role: semantic — XFAIL RESOLVED (, /): naive SMS recognizer body scan rejected every loop via Mi.hasUnmodeledSideEffects — every _S<k>_FLEX opcode.
+
 ; XFAIL RESOLVED (, /): naive SMS recognizer body scan
 ; rejected every loop via Mi.hasUnmodeledSideEffects — every _S<k>_FLEX opcode
 ; carries MCID::UnmodeledSideEffects as a TableGen artifact (HaydnFormatInst
@@ -55,6 +58,7 @@
 ; SWP-NOT: Instruction not found in maps
 ; SWP-NOT: Assertion
 ; SWP-NOT: Unable to analyzeLoop, can NOT pipeline Loop
+
 define void @two_decrementing_loops(i32 noundef %N, ptr nocapture %A, ptr nocapture %B) {
 ; ASM-LABEL: two_decrementing_loops:
 ; ASM:        jalr_w

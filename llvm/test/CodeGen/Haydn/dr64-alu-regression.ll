@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — DR64 ALU intrinsics end-to-end codegen.
+
 ; REGRESSION TEST: DR64 ALU intrinsics end-to-end codegen.
 ;
 ; Purpose: Verify that every DR64 ALU intrinsic (add/sub, saturating

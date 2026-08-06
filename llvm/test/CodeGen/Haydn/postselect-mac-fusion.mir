@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select -verify-machineinstrs %s -o - | FileCheck %s
-#
+
+# Role: MIR — Instruction-select: G_MUL s32 + G_ADD → MULL + ADD32.
+
 # Instruction-select: G_MUL s32 + G_ADD → MULL + ADD32.
 
 ---

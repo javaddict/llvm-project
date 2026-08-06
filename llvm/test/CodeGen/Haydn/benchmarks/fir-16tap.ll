@@ -1,16 +1,14 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
+; REQUIRES: haydn-registered-target
+
+; Role: smoke — Smoke: pre-existing CHECK drift — compile and emit a return.
+
 ; Smoke: pre-existing CHECK drift — compile and emit a return.
 ; CHECK: {{jalr|jalr_w}}
 ;
 ; REBASELINED : / cutover — native mul now carries slot suffix (mul64.ll/s2); bundles regrouped (mul+addi32 fused; move32 split out).
 ; REBASELINED : scheduling changed (//) — bundles regrouped, ops unchanged.
 
-
-
-
-
-
-; REQUIRES: haydn-registered-target
 ; DSP Kernel Benchmark: 16-Tap FIR Filter
 ;
 ; Algorithm:

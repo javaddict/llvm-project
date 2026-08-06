@@ -1,0 +1,33 @@
+# Minimal ET_REL with R_HAYDN_CallSImm20 to an undefined STT_FUNC.
+# Content is 16 zero bytes (assembler-independent; MC Format E encode blocked).
+# Reloc Type 0x4 == R_HAYDN_CallSImm20 (Haydn.def).
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS32
+  Data:    ELFDATA2LSB
+  Type:    ET_REL
+  Machine: 0x103
+Sections:
+  - Name:    .text
+    Type:    SHT_PROGBITS
+    Flags:   [ SHF_ALLOC, SHF_EXECINSTR ]
+    AddressAlign: 4
+    Content: '00000000000000000000000000000000'
+  - Name:    .rela.text
+    Type:    SHT_RELA
+    Link:    .symtab
+    Info:    .text
+    Relocations:
+      - Offset: 0
+        Symbol: far_fn
+        Type:   0x4
+Symbols:
+  - Name:    _start
+    Section: .text
+    Value:   0
+    Size:    16
+    Binding: STB_GLOBAL
+    Type:    STT_FUNC
+  - Name:    far_fn
+    Binding: STB_GLOBAL
+    Type:    STT_FUNC

@@ -6,12 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Pure CycleState tryAdd/commit solver + FormatID frontier:
+// Pure CycleState tryAdd/commit solver + Format E row-frontier mask:
 //
-//   CycleState  members + OccupiedSlots + FeasibleFormatMask
-//   tryAdd      transactional; mutates state only on accept
-//   commit      selectFormatByPriority → BundlePlan (no setDesc)
-//   productFeasibleFormatMask — Pre-RA / SMS occupancy → FormatID bitset
+//   CycleState          members + OccupiedSlots + FeasibleFormatMask
+//   CycleCandidateSet   private nondominated SmallVector<CycleState>
+//   exactTryAddProduct  expand all alts; prune dominated partial matchings
+//   tryAddProduct       single-state preferred collapse (S2→S1→S0 tie-break)
+//   commitProduct       Format E row + completion → BundlePlan (no setDesc)
+//   productFeasibleFormatMask — Pre-RA / SMS occupancy → row-bit mask
 //
 // AIE peers (port structure; do not invent a parallel packing theory):
 //
@@ -21,27 +23,42 @@
 //   * AIEHazardRecognizer.cpp:173-214 ResourceCycle —
 //       getAlternateInstsOpcode + any_of / first canAdd AltOpcode
 //   * AIEFormat.cpp:18-27 PacketFormats::getFormat first-covering
-//       → Haydn selectFormatByPriority (explicit Priority, plan §4.3)
 //
-// Product live row is still only BUNDLE128_FULL. Table + CompatibleFormatMask
-// are N-format-ready (unit tests may inject synthetic FormatDesc rows).
+// Product identity is Format E (E96TwoEntry | E96ThreeEntry row mask).
+// Product PacketFormats are Format E rows (BUNDLE_E96_*). EncodedBytes and
+// durable MIR identity come from the registry via commitProduct / BundlePlan.
 //
-// Bundle / HR / SMS wire through tryAdd (adapters). Placement authority is
-// PlacementAlternative + tryAdd. getLegalSlots is alts-derived (OR of non-zero
-// sparse indices) for encode helpers only; Bundle/HR no-alt path does not
-// consult it.
+// : first-fit freeze (single S2→S1→S0 alt commit) is incomplete — a legal
+// pack can dead-end when an early multi-slot op claims a scarce field. Bundle /
+// HR / SMS / asm / verifier wire through exactTryAddProduct on a private
+// nondominated CycleCandidateSet (plan §3.2). tryAddProduct remains the
+// single-state preferred-collapse helper (materialize). Product is E2/E3 only.
+// HR/ResourceCycle skip only true zero-resource meta (not blanket isPseudo).
+// Post-RA pack reconstruction uses MachineBundle::isBundlePackSkippableOpcode
+// (meta + alts; no-alt expand residuals remain skippable until residual
+// expansion is guaranteed).
 //
-// Pre-RA / SMS expose a feasible FormatID *frontier* (mask) without
-// freezing FormatID or setDesc (plan §7.1). Product size-1 → mask is always
-// ProductFormatMask when occupancy is Full-coverable.
-// productFeasibleFormatMask(OccupiedSlots) remains the occupancy-only rebuild
-// for Pre-RA / Bundle adapters.
+// Placement authority is PlacementAlternative + exact tryAdd. getLegalSlots is
+// alts-derived (OR of non-zero sparse indices) for encode helpers only;
+// Bundle/HR no-alt path does not consult it.
 //
-// SMS HaydnResourceCycle holds *live* CycleState (peer of post-RA HR
-// CurrentCycleState / commitPlacementForEmit tryAddProduct). FeasibleFormatMask
-// and member field choices accumulate via tryAddProduct — not OccupiedSlots-only
-// rebuild. computeProductResMII greedy bin-packs opcodes with the same pure
-// tryAddProduct depth (plan §7.1 Diff ResMII vs emit packing density).
+// Pre-RA / SMS expose a feasible Format E row *frontier* (bit mask) without
+// freezing a row or setDesc (plan §7.1). Product mask is always
+// ProductFormatMask when the generated row covers occupancy.
+// productFeasibleFormatMask(Packets, Occupied) is the occupancy-only rebuild
+// for Pre-RA adapters.
+//
+// SMS HaydnResourceCycle holds a *live* CycleCandidateSet (peer of post-RA HR
+// CurrentCycleCandidates / commitPlacementForEmit exactTryAddProduct).
+// FeasibleFormatMask and member field choices accumulate via exact expand —
+// not OccupiedSlots-only rebuild. computeProductResMII greedy bin-packs with
+// the same pure exactTryAddProduct depth (plan §7.1 Diff ResMII vs emit).
+//
+// SMS-RESMII: computeExhaustiveProductResMII is the bounded exact set
+// oracle (partition into ≤3-member packable cycles). Compare greedy/DFA
+// sequential ResMII against it; overestimate that worsens II blocks
+// format-dependent SMS qualification (plan §2.5 / §5.2). Cannot replace
+// ResourceManager::calculateResMIIDFA — this is a diagnostic/gate oracle.
 //
 // Still out of scope here:
 //   second product format
@@ -59,8 +76,11 @@
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/bit.h"
+#include <algorithm>
 #include <cstdint>
 #include <optional>
+#include <utility>
 
 namespace llvm {
 namespace haydn {
@@ -85,8 +105,8 @@ struct CycleMember {
 struct CycleState {
   SmallVector<CycleMember, 3> Members;
   SlotBits OccupiedSlots = 0;
-  /// Intersection of FormatIDs still covering OccupiedSlots and compatible
-  /// with every accepted member (bit = formatIDBit(FormatID)).
+  /// Intersection of Format E rows still covering OccupiedSlots and compatible
+  /// with every accepted member (bit = formatRowBit(BundleFormatRowID)).
   uint64_t FeasibleFormatMask = ProductFormatMask;
 
   bool empty() const { return Members.empty(); }
@@ -95,74 +115,76 @@ struct CycleState {
   }
 };
 
-/// Initial state whose FeasibleFormatMask is the union of all FormatIDs in
-/// \p Table (product: Full only; synthetic multi-row unit tables OK).
-inline CycleState makeInitialCycleState(ArrayRef<FormatDesc> Table) {
+/// Product CycleState seeded from PacketFormats coverage.
+/// FeasibleFormatMask = ProductFormatMask (E2|E3) when any row covers empty.
+inline CycleState makeProductCycleState(const PacketFormats &Packets) {
   CycleState S;
-  S.FeasibleFormatMask = 0;
-  for (const FormatDesc &F : Table)
-    S.FeasibleFormatMask |= formatIDBit(F.FID);
-  if (S.FeasibleFormatMask == 0)
-    S.FeasibleFormatMask = ProductFormatMask;
+  S.FeasibleFormatMask =
+      productCovers(Packets, /*Occupied=*/0) ? ProductFormatMask : 0;
+  assert(S.FeasibleFormatMask == ProductFormatMask &&
+         "PacketFormats missing product row coverage for empty occupancy");
   return S;
 }
 
-/// Product CycleState (BUNDLE128_FULL-only FeasibleFormatMask).
+/// Product CycleState via a temporary formats view (Bundle/SMS conveniences).
 inline CycleState makeProductCycleState() {
-  return makeInitialCycleState(productFormatTable());
+  HaydnMCFormats Fmts;
+  return makeProductCycleState(Fmts.getPacketFormats());
 }
 
 //===----------------------------------------------------------------------===//
-// tryAdd — transactional pure accept (AIE Bundle::canAdd + first alt)
+// tryAdd — transactional pure accept + exact candidate set
 //===----------------------------------------------------------------------===//
 
-/// Formats still feasible for \p NewOcc under \p AllowedMask ∩ table rows.
-/// AIE peer: PacketFormats::getFormat first-covering scan (AIEFormat.cpp:18-27)
-/// strengthened to a FormatID *mask* (plan §6.2 frontier).
-inline uint64_t
-coveringFormatMask(ArrayRef<FormatDesc> Table, SlotBits NewOcc,
-                   uint64_t AllowedMask) {
-  uint64_t Out = 0;
-  for (const FormatDesc &F : Table) {
-    const uint64_t Bit = formatIDBit(F.FID);
-    if (!(AllowedMask & Bit))
-      continue;
-    if (F.covers(NewOcc))
-      Out |= Bit;
-  }
-  return Out;
+/// Product covering mask from PacketFormats coverage (E2|E3 frontier).
+/// AIE peer: PacketFormats::getFormat first-covering (AIEFormat.cpp:18-27)
+/// strengthened to a row *mask* (plan §6.2 frontier). Any covering row keeps
+/// the full product E2|E3 frontier until commit freezes one row.
+inline uint64_t coveringFormatMaskFromPackets(const PacketFormats &Packets,
+                                              SlotBits NewOcc,
+                                              uint64_t AllowedMask) {
+  if (!(AllowedMask & ProductFormatMask))
+    return 0;
+  if (!productCovers(Packets, NewOcc))
+    return 0;
+  return AllowedMask & ProductFormatMask;
 }
 
-/// Feasible FormatID bitset for \p Occupied under \p Table ∩ \p SeedMask.
-/// Empty occupancy keeps every seeded FormatID that covers 0 (all do).
-/// Non-empty occupancy drops rows that no longer cover OccupiedSlots —
-/// N-format-ready shrink (unit synthetic tables; product size-1 Full).
-inline uint64_t feasibleFormatMask(ArrayRef<FormatDesc> Table,
-                                   SlotBits Occupied, uint64_t SeedMask) {
-  return coveringFormatMask(Table, Occupied, SeedMask);
-}
-
-/// Product (BUNDLE128_FULL-only) FormatID frontier for Pre-RA / SMS.
+/// Product Format E row frontier for Pre-RA / SMS from generated
+/// PacketFormats coverage (BUNDLE_E96_*).
 ///
 /// AIE returns a single VLIWFormat* from occupancy (AIEBundle.h:150-156
 /// getFormatOrNull → PacketFormats::getFormat). Haydn keeps a *mask* of still-
-/// feasible FormatIDs until post-RA freeze (plan §7.1): never setDesc / never
-/// commit FormatID on this path. Product table size 1 → empty and any Full-
-/// covering occupancy both yield ProductFormatMask.
+/// feasible Format E rows until post-RA freeze (plan §7.1): never setDesc /
+/// never freeze a row on this path. Empty and any row-covering occupancy
+/// both yield ProductFormatMask.
+inline uint64_t productFeasibleFormatMask(const PacketFormats &Packets,
+                                          SlotBits Occupied = 0) {
+  return coveringFormatMaskFromPackets(Packets, Occupied, ProductFormatMask);
+}
+
+/// Convenience: product frontier via temporary formats view.
 inline uint64_t productFeasibleFormatMask(SlotBits Occupied = 0) {
-  return feasibleFormatMask(productFormatTable(), Occupied, ProductFormatMask);
+  HaydnMCFormats Fmts;
+  return productFeasibleFormatMask(Fmts.getPacketFormats(), Occupied);
 }
 
 /// Rebuild a product CycleState from occupied slots only (no member history).
-/// Used by Bundle / HR adapters that retain OccupiedSlots as the durable
-/// occupancy bitset (SMS ResMII, scoreboard) while tryAdd is legality.
-/// FeasibleFormatMask tracks the product FormatID frontier from occupancy.
+/// Occupancy-only frontier rebuild (tests / scoreboard probes). Live Bundle /
+/// HR / SMS retain CycleCandidateSet member history so rematching is
+/// possible — do not rebuild-from-occupied on those paths.
 inline CycleState
-makeProductCycleStateFromOccupied(SlotBits Occupied) {
-  CycleState S = makeProductCycleState();
+makeProductCycleStateFromOccupied(const PacketFormats &Packets,
+                                  SlotBits Occupied) {
+  CycleState S = makeProductCycleState(Packets);
   S.OccupiedSlots = Occupied;
-  S.FeasibleFormatMask = productFeasibleFormatMask(Occupied);
+  S.FeasibleFormatMask = productFeasibleFormatMask(Packets, Occupied);
   return S;
+}
+
+inline CycleState makeProductCycleStateFromOccupied(SlotBits Occupied) {
+  HaydnMCFormats Fmts;
+  return makeProductCycleStateFromOccupied(Fmts.getPacketFormats(), Occupied);
 }
 
 /// Map a single Haydn::SLOT* FieldSlots bit to issue-slot index 0/1/2.
@@ -175,133 +197,329 @@ inline std::optional<unsigned> fieldSlotsToIndex(SlotBits Field) {
   return std::nullopt;
 }
 
-/// First free field assignment for \p LogicalOpc that keeps a covering format.
-/// Prefer higher slots first (S2 → S1 → S0) — AIE-shaped alt try order for
-/// Haydn multi-slot logicals (leaves S0 free for loads).
-///
-/// Port of AIE alt try (AIEHazardRecognizer.cpp:174-214): enumerate alts,
-/// accept first that canAdd; here "canAdd" = free FieldSlots +
-/// CompatibleFormatMask ∩ FeasibleFormatMask covers NewOcc via FormatDesc.
-///
-/// \returns true and mutates \p S on accept; false leaves \p S unchanged.
-inline bool tryAdd(CycleState &S, const HaydnMCFormats &Fmts,
-                   ArrayRef<FormatDesc> Table, unsigned LogicalOpc) {
+//===----------------------------------------------------------------------===//
+// — nondominated CycleCandidateSet (exact partial matchings)
+//===----------------------------------------------------------------------===//
+//
+// Plan §3.2: a Format E row mask is insufficient — two partial assignments
+// under the same row can leave different fields free. Retain nondominated
+// complete partial matchings as a private SmallVector of CycleState (no public
+// CycleFrontier class). Bound is rows × field alts (E2/E3 only: tiny).
+
+/// Private bounded set of nondominated packing states for one issue cycle.
+/// Bundle / HR / SMS hold this; not a durable MIR side-map.
+using CycleCandidateSet = SmallVector<CycleState, 8>;
+
+/// Architectural issue-slot universe for dominance (S0|S1|S2).
+inline constexpr SlotBits kIssueSlotUniverse =
+    static_cast<SlotBits>(Haydn::SLOT_ALL);
+
+/// True iff every future pure slot/format packing legal under \p B is also
+/// legal under \p A (A is at least as flexible as B).
+/// Occupied(A) ⊆ Occupied(B) and Feasible(A) ⊇ Feasible(B).
+inline bool packingDominates(const CycleState &A, const CycleState &B) {
+  if ((A.OccupiedSlots & ~B.OccupiedSlots) != 0)
+    return false;
+  if ((B.FeasibleFormatMask & ~A.FeasibleFormatMask) != 0)
+    return false;
+  return true;
+}
+
+inline bool packingEquivalent(const CycleState &A, const CycleState &B) {
+  return A.OccupiedSlots == B.OccupiedSlots &&
+         A.FeasibleFormatMask == B.FeasibleFormatMask;
+}
+
+/// Deterministic materialize preference among packing-equivalent states:
+/// lexicographic higher FieldSlots bit-index per member in order (S2→S1→S0
+/// first-fit shape when progressive choices remain free).
+/// \returns true if \p A is strictly preferred over \p B.
+inline bool isPreferredCandidate(const CycleState &A, const CycleState &B) {
+  const unsigned N = std::min(A.memberCount(), B.memberCount());
+  for (unsigned I = 0; I < N; ++I) {
+    const auto IA = fieldSlotsToIndex(A.Members[I].FieldSlots);
+    const auto IB = fieldSlotsToIndex(B.Members[I].FieldSlots);
+    const int SA = IA ? static_cast<int>(*IA) : -1;
+    const int SB = IB ? static_cast<int>(*IB) : -1;
+    if (SA != SB)
+      return SA > SB;
+    if (A.Members[I].MemberOpcode != B.Members[I].MemberOpcode)
+      return A.Members[I].MemberOpcode < B.Members[I].MemberOpcode;
+  }
+  if (A.memberCount() != B.memberCount())
+    return A.memberCount() > B.memberCount();
+  // Stable: prefer higher OccupiedSlots bit pattern as last resort.
+  return A.OccupiedSlots > B.OccupiedSlots;
+}
+
+/// Insert \p S into \p Cands, dropping packing-dominated states. Packing-
+/// equivalent states keep only the preferred materialize representative.
+inline void insertNondominatedCandidate(CycleCandidateSet &Cands,
+                                        CycleState S) {
+  for (const CycleState &E : Cands) {
+    if (!packingDominates(E, S))
+      continue;
+    if (packingEquivalent(E, S)) {
+      // Equivalent occupancy/frontier — keep preferred only.
+      if (!isPreferredCandidate(S, E))
+        return;
+      continue;
+    }
+    // E strictly dominates S.
+    return;
+  }
+
+  // Drop states dominated by S (and packing-equivalent that S prefers).
+  CycleCandidateSet Kept;
+  Kept.reserve(Cands.size() + 1);
+  for (CycleState &E : Cands) {
+    if (packingDominates(S, E)) {
+      if (packingEquivalent(S, E))
+        continue; // S preferred (or equal — we keep S)
+      if (!packingDominates(E, S))
+        continue; // S strictly dominates E
+    }
+    Kept.push_back(std::move(E));
+  }
+  Kept.push_back(std::move(S));
+  Cands = std::move(Kept);
+}
+
+/// Seed product candidate set: one empty Full-covering CycleState.
+inline CycleCandidateSet
+makeProductCandidateSet(const PacketFormats &Packets) {
+  CycleCandidateSet C;
+  C.push_back(makeProductCycleState(Packets));
+  return C;
+}
+
+inline CycleCandidateSet makeProductCandidateSet() {
+  HaydnMCFormats Fmts;
+  return makeProductCandidateSet(Fmts.getPacketFormats());
+}
+
+/// Preferred representative among \p Cands (non-empty). Deterministic
+/// S2→S1→S0 materialize / SlotMap / AltDesc selection.
+inline const CycleState &
+selectPreferredCandidate(const CycleCandidateSet &Cands) {
+  assert(!Cands.empty() && "empty CycleCandidateSet");
+  const CycleState *Best = &Cands.front();
+  for (unsigned I = 1, E = Cands.size(); I != E; ++I)
+    if (isPreferredCandidate(Cands[I], *Best))
+      Best = &Cands[I];
+  return *Best;
+}
+
+/// Apply one legal alt onto a copy of \p S; nullopt if conflict / no cover.
+template <typename CoverFn>
+inline std::optional<CycleState>
+tryApplyAlt(const CycleState &S, unsigned LogicalOpc,
+            const PlacementAlternative &Alt, CoverFn CoverMask) {
+  if (Alt.FieldSlots == 0)
+    return std::nullopt;
+  if (S.OccupiedSlots & Alt.FieldSlots)
+    return std::nullopt;
+  const uint64_t Allowed = S.FeasibleFormatMask & Alt.CompatibleFormatMask;
+  if (Allowed == 0)
+    return std::nullopt;
+  const SlotBits NewOcc = S.OccupiedSlots | Alt.FieldSlots;
+  const uint64_t NewMask = CoverMask(NewOcc, Allowed);
+  if (NewMask == 0)
+    return std::nullopt;
+
+  CycleState N = S;
+  CycleMember M;
+  M.LogicalOpcode = LogicalOpc;
+  M.MemberOpcode = Alt.MemberOpcode;
+  M.FieldSlots = Alt.FieldSlots;
+  N.Members.push_back(M);
+  N.OccupiedSlots = NewOcc;
+  N.FeasibleFormatMask = NewMask;
+  return N;
+}
+
+/// Exact expand: every candidate × every PlacementAlternative under \p CoverMask;
+/// replace \p Cands with the nondominated successor set.
+/// \returns true and mutates \p Cands on accept; false leaves \p Cands unchanged.
+template <typename CoverFn>
+inline bool exactTryAddWithCover(CycleCandidateSet &Cands,
+                                 const HaydnMCFormats &Fmts,
+                                 unsigned LogicalOpc, CoverFn CoverMask) {
+  if (Cands.empty())
+    return false;
+
   SmallVector<PlacementAlternative, 4> Alts;
   if (!enumeratePlacementAlternatives(Fmts, LogicalOpc, Alts))
     return false;
 
-  // Snapshot for pure transactional reject path.
-  const CycleState Snapshot = S;
-
-  // Prefer S2 → S1 → S0 (AIEHazardRecognizer.cpp:183-194 any_of / first canAdd;
-  // Haydn multi-slot prefers high slots so loads keep S0).
-  for (int SlotIdx = static_cast<int>(Haydn::ISSUE_SLOT_COUNT) - 1;
-       SlotIdx >= 0; --SlotIdx) {
-    const SlotBits Bit = SlotBits(1) << static_cast<unsigned>(SlotIdx);
+  CycleCandidateSet Next;
+  for (const CycleState &S : Cands) {
     for (const PlacementAlternative &Alt : Alts) {
-      if (Alt.FieldSlots != Bit)
-        continue;
-      if (Alt.FieldSlots == 0)
-        continue;
-      // Slot conflict (AIEBundle.h:98-100 OccupiedSlots & ConflictBits shape).
-      if (S.OccupiedSlots & Alt.FieldSlots)
-        continue;
-      // Member must share a feasible FormatID with the cycle frontier.
-      const uint64_t Allowed =
-          S.FeasibleFormatMask & Alt.CompatibleFormatMask;
-      if (Allowed == 0)
-        continue;
-
-      const SlotBits NewOcc = S.OccupiedSlots | Alt.FieldSlots;
-      const uint64_t NewMask = coveringFormatMask(Table, NewOcc, Allowed);
-      if (NewMask == 0)
-        continue; // no FormatDesc covers NewOcc under allowed formats
-
-      CycleMember M;
-      M.LogicalOpcode = LogicalOpc;
-      M.MemberOpcode = Alt.MemberOpcode;
-      M.FieldSlots = Alt.FieldSlots;
-      S.Members.push_back(M);
-      S.OccupiedSlots = NewOcc;
-      S.FeasibleFormatMask = NewMask;
-      (void)Snapshot; // accepted — Snapshot discarded
-      return true;
+      if (auto N = tryApplyAlt(S, LogicalOpc, Alt, CoverMask))
+        insertNondominatedCandidate(Next, std::move(*N));
     }
   }
+  if (Next.empty())
+    return false;
+  Cands = std::move(Next);
+  return true;
+}
 
-  // Also try alts with FieldSlots set but not a single S0/S1/S2 bit (future
-  // multi-bit fields) — none today; keep pure reject.
-  S = Snapshot;
+/// Probe-only exact expand: true iff some candidate accepts \p LogicalOpc.
+template <typename CoverFn>
+inline bool canExactTryAddWithCover(ArrayRef<CycleState> Cands,
+                                    const HaydnMCFormats &Fmts,
+                                    unsigned LogicalOpc, CoverFn CoverMask) {
+  if (Cands.empty())
+    return false;
+  SmallVector<PlacementAlternative, 4> Alts;
+  if (!enumeratePlacementAlternatives(Fmts, LogicalOpc, Alts))
+    return false;
+  for (const CycleState &S : Cands) {
+    for (const PlacementAlternative &Alt : Alts) {
+      if (tryApplyAlt(S, LogicalOpc, Alt, CoverMask))
+        return true;
+    }
+  }
   return false;
 }
 
-/// tryAdd against the product FormatDesc table (BUNDLE128_FULL only).
+/// Exact product expand (Format E PacketFormats authority). Production
+/// Bundle / HR / SMS / verifier path.
+inline bool exactTryAddProduct(CycleCandidateSet &Cands,
+                               const HaydnMCFormats &Fmts,
+                               unsigned LogicalOpc) {
+  const PacketFormats &Packets = Fmts.getPacketFormats();
+  return exactTryAddWithCover(
+      Cands, Fmts, LogicalOpc,
+      [&](SlotBits NewOcc, uint64_t Allowed) {
+        return coveringFormatMaskFromPackets(Packets, NewOcc, Allowed);
+      });
+}
+
+/// Probe-only exact product expand (does not mutate \p Cands).
+inline bool canExactTryAddProduct(ArrayRef<CycleState> Cands,
+                                  const HaydnMCFormats &Fmts,
+                                  unsigned LogicalOpc) {
+  const PacketFormats &Packets = Fmts.getPacketFormats();
+  return canExactTryAddWithCover(
+      Cands, Fmts, LogicalOpc,
+      [&](SlotBits NewOcc, uint64_t Allowed) {
+        return coveringFormatMaskFromPackets(Packets, NewOcc, Allowed);
+      });
+}
+
+/// True iff sequential exact product packing accepts every opcode in order.
+inline bool exactCanPackProductSequence(const HaydnMCFormats &Fmts,
+                                        ArrayRef<unsigned> Opcodes) {
+  CycleCandidateSet C =
+      makeProductCandidateSet(Fmts.getPacketFormats());
+  for (unsigned Opc : Opcodes) {
+    if (!exactTryAddProduct(C, Fmts, Opc))
+      return false;
+  }
+  return true;
+}
+
+/// Exhaustive <=3-member set oracle: true iff some permutation of \p Opcodes
+/// packs under exact product matching (exit criteria small-oracle).
+inline bool exactCanPackProductSet(const HaydnMCFormats &Fmts,
+                                   ArrayRef<unsigned> Opcodes) {
+  const unsigned N = Opcodes.size();
+  if (N == 0)
+    return true;
+  if (N > Haydn::ISSUE_SLOT_COUNT)
+    return false;
+  // Heap's algorithm over a mutable copy (N <= 3).
+  SmallVector<unsigned, 3> P(Opcodes.begin(), Opcodes.end());
+  if (exactCanPackProductSequence(Fmts, P))
+    return true;
+  // Generate remaining permutations.
+  SmallVector<unsigned, 3> C(N, 0);
+  unsigned I = 0;
+  while (I < N) {
+    if (C[I] < I) {
+      if ((I & 1) == 0)
+        std::swap(P[0], P[I]);
+      else
+        std::swap(P[C[I]], P[I]);
+      if (exactCanPackProductSequence(Fmts, P))
+        return true;
+      ++C[I];
+      I = 0;
+    } else {
+      C[I] = 0;
+      ++I;
+    }
+  }
+  return false;
+}
+
+/// First free field assignment for \p LogicalOpc that keeps a covering format.
+/// Prefer higher slots first (S2 → S1 → S0) — single-state preferred collapse.
+/// Production multi-step packing uses exactTryAddProduct.
+///
+/// Port of AIE alt try (AIEHazardRecognizer.cpp:174-214) strengthened: enumerate
+/// all legal alts on a singleton candidate set, keep nondominated successors,
+/// then collapse to selectPreferredCandidate (S2→S1→S0 materialize order).
+///
+/// \returns true and mutates \p S on accept; false leaves \p S unchanged.
+template <typename CoverFn>
+inline bool tryAddWithCover(CycleState &S, const HaydnMCFormats &Fmts,
+                            unsigned LogicalOpc, CoverFn CoverMask) {
+  CycleCandidateSet Cands;
+  Cands.push_back(S);
+  if (!exactTryAddWithCover(Cands, Fmts, LogicalOpc, CoverMask))
+    return false;
+  S = selectPreferredCandidate(Cands);
+  return true;
+}
+
+/// Single-state product tryAdd: exact one-step expand + preferred collapse.
+/// Sequential multi-add on one CycleState can still dead-end (preferred freezes
+/// the representative); Bundle/HR/SMS use exactTryAddProduct on a candidate set.
 inline bool tryAddProduct(CycleState &S, const HaydnMCFormats &Fmts,
                           unsigned LogicalOpc) {
-  return tryAdd(S, Fmts, productFormatTable(), LogicalOpc);
+  const PacketFormats &Packets = Fmts.getPacketFormats();
+  return tryAddWithCover(
+      S, Fmts, LogicalOpc,
+      [&](SlotBits NewOcc, uint64_t Allowed) {
+        return coveringFormatMaskFromPackets(Packets, NewOcc, Allowed);
+      });
 }
 
-/// Probe-only product tryAdd: true iff \p LogicalOpc can be accepted without
-/// mutating \p S (Bundle.canAdd / HR getHazardType shape).
+/// Probe-only single-state product tryAdd (preferred-collapse probe).
 inline bool canTryAddProduct(const CycleState &S, const HaydnMCFormats &Fmts,
                              unsigned LogicalOpc) {
-  CycleState Probe = S;
-  return tryAddProduct(Probe, Fmts, LogicalOpc);
+  CycleCandidateSet Cands;
+  Cands.push_back(S);
+  return canExactTryAddProduct(Cands, Fmts, LogicalOpc);
 }
 
 //===----------------------------------------------------------------------===//
-// commit — FormatID selection → BundlePlan (no setDesc)
+// commit — Format E row selection → BundlePlan (no setDesc)
 //===----------------------------------------------------------------------===//
 
-/// Select among rows that are still in \p FeasibleFormatMask and cover
-/// \p Occupied, using Priority ranking (selectFormatByPriority strengthen).
-inline const FormatDesc *
-selectFeasibleFormatByPriority(ArrayRef<FormatDesc> Table, SlotBits Occupied,
-                               uint64_t FeasibleFormatMask) {
-  const FormatDesc *Best = nullptr;
-  for (const FormatDesc &F : Table) {
-    if (!(FeasibleFormatMask & formatIDBit(F.FID)))
-      continue;
-    if (!F.covers(Occupied))
-      continue;
-    if (!Best || F.Priority < Best->Priority)
-      Best = &F;
-  }
-  return Best;
-}
-
-/// Commit \p S to a BundlePlan. Empty members + zero occupancy → stall plan
-/// (still a FormatID row: product Full NOP parcel / synthetic best Priority).
+/// Commit against product Format E: planFromPacketFormats supplies registry
+/// EncodedBytes and selects E2/E3 row + completion from member count.
 /// Does **not** setDesc or stamp MIR.
-inline std::optional<BundlePlan> commit(const CycleState &S,
-                                        ArrayRef<FormatDesc> Table) {
+inline std::optional<BundlePlan>
+commitProduct(const CycleState &S, const PacketFormats &Packets) {
   SmallVector<unsigned, 3> Logicals;
   Logicals.reserve(S.Members.size());
   for (const CycleMember &M : S.Members)
     Logicals.push_back(M.LogicalOpcode);
 
-  const FormatDesc *F = selectFeasibleFormatByPriority(
-      Table, S.OccupiedSlots, S.FeasibleFormatMask);
-  if (!F) {
-    // Empty stall on product: FeasibleFormatMask still Full and covers 0.
-    if (S.empty() && S.OccupiedSlots == 0) {
-      if (const FormatDesc *Any = selectFormatByPriority(Table, 0))
-        return makePlanFromFormatDesc(*Any, /*Occupied=*/0, Logicals);
-    }
+  if (!(S.FeasibleFormatMask & ProductFormatMask))
     return std::nullopt;
-  }
-  return makePlanFromFormatDesc(*F, S.OccupiedSlots, Logicals);
+  // Stall / non-empty: transitional composite must cover OccupiedSlots.
+  return planFromPacketFormats(Packets, S.OccupiedSlots, Logicals);
 }
 
-/// Commit against the product FormatDesc table.
+/// Convenience commit via temporary formats view.
 inline std::optional<BundlePlan> commitProduct(const CycleState &S) {
-  return commit(S, productFormatTable());
-}
-
-/// Convenience: tryAdd then return whether state advanced (unit sugar).
-inline bool tryAddOrFalse(CycleState &S, const HaydnMCFormats &Fmts,
-                          ArrayRef<FormatDesc> Table, unsigned LogicalOpc) {
-  return tryAdd(S, Fmts, Table, LogicalOpc);
+  HaydnMCFormats Fmts;
+  return commitProduct(S, Fmts.getPacketFormats());
 }
 
 //===----------------------------------------------------------------------===//
@@ -311,22 +529,105 @@ inline bool tryAddOrFalse(CycleState &S, const HaydnMCFormats &Fmts,
 // AIE peer: MachinePipeliner calculateResMIIDFA walks ResourceCycle
 // canReserve/reserve (AIE AIEResourceCycle → Bundle.canAdd/add;
 // AIEHazardRecognizer.cpp:173-214). Haydn strengthens the SMS model to the
-// same live CycleState tryAddProduct path as post-RA HR.
+// same live CycleCandidateSet exactTryAddProduct path as post-RA HR.
 //
-// Left-to-right greedy: open a cycle, tryAddProduct each opcode; on reject
-// close the cycle and retry on a fresh product CycleState. Unplaceable
-// opcodes (no PlacementAlternatives) each consume a standalone cycle.
-// Logical only — no setDesc / FormatID freeze.
+// Left-to-right greedy: open a cycle, exactTryAddProduct each opcode; on
+// reject close the cycle and retry on a fresh product candidate set.
+// Unplaceable opcodes (no PlacementAlternatives) each consume a standalone
+// cycle. Logical only — no setDesc / no row freeze.
 
-/// Greedy product ResMII for \p Opcodes under BUNDLE128_FULL tryAddProduct.
+/// Greedy product ResMII for \p Opcodes under generated Format E
+/// exactTryAddProduct (PacketFormats authority, nondominated set).
 /// \returns number of issue cycles needed (0 if \p Opcodes empty).
 inline unsigned computeProductResMII(ArrayRef<unsigned> Opcodes) {
   if (Opcodes.empty())
     return 0;
 
   HaydnMCFormats Fmts;
+  const PacketFormats &Packets = Fmts.getPacketFormats();
   unsigned Cycles = 0;
-  CycleState S = makeProductCycleState();
+  CycleCandidateSet Cands = makeProductCandidateSet(Packets);
+  bool CycleHasMember = false;
+
+  for (unsigned Opc : Opcodes) {
+    if (canExactTryAddProduct(Cands, Fmts, Opc)) {
+      (void)exactTryAddProduct(Cands, Fmts, Opc);
+      CycleHasMember = true;
+      continue;
+    }
+
+    // Current cycle cannot accept Opc — close it if non-empty and retry.
+    if (CycleHasMember) {
+      ++Cycles;
+      Cands = makeProductCandidateSet(Packets);
+      CycleHasMember = false;
+    }
+
+    if (exactTryAddProduct(Cands, Fmts, Opc)) {
+      CycleHasMember = true;
+      continue;
+    }
+
+    // No PlacementAlternatives / never placeable under product Full: one
+    // standalone cycle (Bundle empty-escape peer for SMS ResMII accounting).
+    ++Cycles;
+    Cands = makeProductCandidateSet(Packets);
+    CycleHasMember = false;
+  }
+
+  if (CycleHasMember)
+    ++Cycles;
+  return Cycles;
+}
+
+//===----------------------------------------------------------------------===//
+// SMS-RESMII — exhaustive ≤3 format ResMII oracle vs greedy / preferred
+//===----------------------------------------------------------------------===//
+//
+// Plan §2.5 / §5.2 / exit #9: compare left-to-right greedy ResMII (the same
+// exactTryAddProduct depth ResourceCycle / calculateResMIIDFA walks) against
+// an exact partition oracle over ≤3-member cycles. Preferred-collapse
+// sequential packing is retained as a *weaker* diagnostic baseline that
+// deliberately overestimates on first-fit dead-ends (ADD32+2×ADD64) so the
+// oracle can detect overestimate when the live SMS path regresses.
+//
+// Exhaustive bound: N ≤ MaxExhaustiveProductResMIIOps (12). Larger bodies
+// fall back to greedy (upper bound only — not a lower-bound proof).
+
+/// Max multiset size for exact subset-partition ResMII (2^12 DP + 3^N submasks).
+constexpr unsigned MaxExhaustiveProductResMIIOps = 12;
+
+/// True iff \p Opcodes (size ≤ ISSUE_SLOT_COUNT) form one legal product cycle
+/// under exact matching, counting no-alt singletons as standalone-legal
+/// (Bundle empty-escape peer — same ResMII accounting as computeProductResMII).
+inline bool exactCanFormOneProductCycle(const HaydnMCFormats &Fmts,
+                                        ArrayRef<unsigned> Opcodes) {
+  const unsigned N = Opcodes.size();
+  if (N == 0)
+    return true;
+  if (N > Haydn::ISSUE_SLOT_COUNT)
+    return false;
+  // Singleton always costs one standalone cycle (alts or empty-escape).
+  if (N == 1)
+    return true;
+  // Multi-member: every opcode needs PlacementAlternatives; then set-oracle.
+  for (unsigned Opc : Opcodes) {
+    if (!hasPlacementAlternatives(Fmts, Opc))
+      return false;
+  }
+  return exactCanPackProductSet(Fmts, Opcodes);
+}
+
+/// Left-to-right *preferred-collapse* product ResMII (tryAddProduct / single
+/// CycleState). Weaker than computeProductResMII (exact candidate set). Used
+/// only to prove SMS-RESMII can detect overestimate on first-fit dead-ends.
+inline unsigned computePreferredProductResMII(ArrayRef<unsigned> Opcodes) {
+  if (Opcodes.empty())
+    return 0;
+
+  HaydnMCFormats Fmts;
+  unsigned Cycles = 0;
+  CycleState S = makeProductCycleState(Fmts.getPacketFormats());
   bool CycleHasMember = false;
 
   for (unsigned Opc : Opcodes) {
@@ -335,29 +636,107 @@ inline unsigned computeProductResMII(ArrayRef<unsigned> Opcodes) {
       CycleHasMember = true;
       continue;
     }
-
-    // Current cycle cannot accept Opc — close it if non-empty and retry.
     if (CycleHasMember) {
       ++Cycles;
-      S = makeProductCycleState();
+      S = makeProductCycleState(Fmts.getPacketFormats());
       CycleHasMember = false;
     }
-
     if (tryAddProduct(S, Fmts, Opc)) {
       CycleHasMember = true;
       continue;
     }
-
-    // No PlacementAlternatives / never placeable under product Full: one
-    // standalone cycle (Bundle empty-escape peer for SMS ResMII accounting).
+    // No alts / unplaceable under preferred collapse: standalone cycle.
     ++Cycles;
-    S = makeProductCycleState();
+    S = makeProductCycleState(Fmts.getPacketFormats());
     CycleHasMember = false;
   }
-
   if (CycleHasMember)
     ++Cycles;
   return Cycles;
+}
+
+/// Exhaustive product ResMII: minimum issue cycles to pack \p Opcodes under
+/// generated Format E exact format matching, partitioning into cycles of
+/// at most ISSUE_SLOT_COUNT members (SMS-RESMII exact oracle).
+///
+/// For N ≤ MaxExhaustiveProductResMIIOps: exact subset DP.
+/// For larger N: returns computeProductResMII (greedy upper bound; not exact).
+///
+/// \returns 0 if empty; otherwise ≥ 1.
+inline unsigned computeExhaustiveProductResMII(ArrayRef<unsigned> Opcodes) {
+  const unsigned N = Opcodes.size();
+  if (N == 0)
+    return 0;
+  if (N == 1)
+    return 1;
+  if (N > MaxExhaustiveProductResMIIOps)
+    return computeProductResMII(Opcodes);
+
+  HaydnMCFormats Fmts;
+  const unsigned Full = 1u << N;
+
+  // Packable[Mask]: ops in Mask form one legal issue cycle (size ≤ 3).
+  SmallVector<uint8_t, 4096> Packable(Full, 0);
+  Packable[0] = 1;
+  for (unsigned Mask = 1; Mask < Full; ++Mask) {
+    const unsigned Bits = llvm::popcount(Mask);
+    if (Bits > Haydn::ISSUE_SLOT_COUNT)
+      continue;
+    SmallVector<unsigned, 3> Sub;
+    Sub.reserve(Bits);
+    for (unsigned I = 0; I < N; ++I)
+      if (Mask & (1u << I))
+        Sub.push_back(Opcodes[I]);
+    Packable[Mask] = exactCanFormOneProductCycle(Fmts, Sub) ? 1 : 0;
+  }
+
+  // dp[Mask] = min cycles to cover exactly the ops in Mask.
+  const unsigned Inf = N + 1;
+  SmallVector<unsigned, 4096> DP(Full, Inf);
+  DP[0] = 0;
+  for (unsigned Mask = 1; Mask < Full; ++Mask) {
+    // Enumerate nonempty submasks (standard SOS: O(3^N) total).
+    for (unsigned Sub = Mask; Sub; Sub = (Sub - 1) & Mask) {
+      if (!Packable[Sub])
+        continue;
+      const unsigned Prev = DP[Mask ^ Sub];
+      if (Prev >= Inf)
+        continue;
+      DP[Mask] = std::min(DP[Mask], Prev + 1);
+    }
+  }
+  assert(DP[Full - 1] < Inf && "every singleton is packable; cover exists");
+  return DP[Full - 1];
+}
+
+/// Greedy (exactTryAdd) ResMII minus exhaustive oracle. Positive → overestimate
+/// (SMS-RESMII fail for that multiset). Zero on product path when exact packing
+/// is order-optimal for the body. Negative should not occur (greedy ≥ exact).
+inline int productResMIIOverestimate(ArrayRef<unsigned> Opcodes) {
+  const unsigned Greedy = computeProductResMII(Opcodes);
+  const unsigned Exact = computeExhaustiveProductResMII(Opcodes);
+  return static_cast<int>(Greedy) - static_cast<int>(Exact);
+}
+
+/// Preferred-collapse overestimate vs exhaustive oracle (diagnostic; proves the
+/// gate detects first-fit dead-end inflation that exact matching fixes).
+inline int preferredProductResMIIOverestimate(ArrayRef<unsigned> Opcodes) {
+  const unsigned Pref = computePreferredProductResMII(Opcodes);
+  const unsigned Exact = computeExhaustiveProductResMII(Opcodes);
+  return static_cast<int>(Pref) - static_cast<int>(Exact);
+}
+
+/// True when format-dependent SMS product qualification must fail closed for
+/// this opcode multiset: greedy exactTryAdd overestimates the exhaustive ≤3
+/// format oracle on a body inside the exact bound (N ≤
+/// MaxExhaustiveProductResMIIOps). Empty and N>bound never fail here — larger
+/// bodies fall back to greedy so Over is always 0 (no false reject on an
+/// inexact oracle). Pure predicate; no MIR mutation. SMS analyzeLoop (sibling)
+/// may call this; pre-RA exposes the same surface via PreRASchedStrategy.
+inline bool productResMIIFailsQualification(ArrayRef<unsigned> Opcodes) {
+  if (Opcodes.empty() || Opcodes.size() > MaxExhaustiveProductResMIIOps)
+    return false;
+  return productResMIIOverestimate(Opcodes) > 0;
 }
 
 } // namespace bundle

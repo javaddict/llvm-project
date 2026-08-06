@@ -1,5 +1,8 @@
 ; REQUIRES: haydn-registered-target
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+
+; Role: semantic — FILED : MULSSH_S0 (and similar MAC-S0 instructions) have a tied-def operand-flag bug that aborts the.
+
 ; REGRESSION FILED : MULSSH_S0 (and similar
 ; MAC-S0 instructions) have a tied-def operand-flag bug that aborts the
 ; MachineVerifier ("Explicit def tied to explicit use without tie constraint"

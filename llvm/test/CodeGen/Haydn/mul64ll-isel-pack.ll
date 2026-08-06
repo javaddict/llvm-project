@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — i64 = sext(i32) * sext(i32) ISel-packs as sext32t64 x2 + mul64.ll (not loadi32/sra32 sign-mask chain, not __muldi3 libcall).
+
 ; REGRESSION: i64 = sext(i32) * sext(i32) ISel-packs as sext32t64 x2 + mul64.ll
 ; (not loadi32/sra32 sign-mask chain, not __muldi3 libcall).
 

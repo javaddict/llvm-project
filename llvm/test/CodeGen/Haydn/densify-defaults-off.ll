@@ -1,9 +1,10 @@
 ; RUN: llc -O2 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure < %s -o /dev/null 2>&1 \
 ; RUN:   | grep -v 'Verify generated machine code' \
 ; RUN:   | FileCheck %s --check-prefix=PIPE
-;
 ; REQUIRES: asserts
-;
+
+; Role: semantic — YOLO phase-out: densify / zombie passes deleted from pipeline (not merely default-OFF).
+
 ; YOLO phase-out: densify / zombie passes deleted from pipeline (not merely
 ; default-OFF). Structure must never list Load/Store, CircularBuffer,
 ; RedundantCopyElim. Product post-inc expand remains.
@@ -13,7 +14,7 @@
 
 ; PIPE-NOT:      Haydn Load/Store Optimizer
 ; PIPE:      Haydn early post-increment pseudo expansion
-; PIPE:      Haydn Hardware Loop Detection
+; PIPE-NOT:      Haydn Hardware Loop Detection
 ; PIPE:      PostRA Machine Instruction Scheduler
 ; PIPE-NOT:      Haydn Circular Buffer Detection
 ; PIPE-NOT:      Haydn Redundant Copy Elimination

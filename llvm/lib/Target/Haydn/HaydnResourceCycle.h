@@ -7,134 +7,876 @@
 //===----------------------------------------------------------------------===//
 //
 // Haydn SMS-facing resource model. A `ResourceCycle` subclass backed by a
-// *live* `haydn::bundle::CycleState` — the software pipeliner
-// (MachinePipeliner) queries `canReserveResources`/`reserveResources` to decide
-// whether an instruction can issue in the current cycle, so SMS ResMII uses the
-// same pure tryAddProduct depth as post-RA HR `CurrentCycleState` /
-// `commitPlacementForEmit` (not a weaker OccupiedSlots-only Bundle rebuild).
+// *live* nondominated `haydn::bundle::CycleCandidateSet` — the software
+// pipeliner (MachinePipeliner) queries `canReserveResources`/`reserveResources`
+// to decide whether an instruction can issue in the current cycle, so SMS
+// ResMII uses the same pure exactTryAddProduct depth as post-RA HR
+// `CurrentCycleCandidates` / `commitPlacementForEmit` (not a weaker
+// OccupiedSlots-only Bundle rebuild, not first-fit freeze of one slot/alt).
+//
+// Matching frontier (durable-rules 8a / plan §3.2): a FormatID mask alone is
+// not the frontier. Different partial field/member assignments under one
+// FormatID leave different future choices. With issue width three, retain and
+// transactionally prune complete partial matchings in `Candidates`; probes use
+// canExactTryAddProduct (expand all alts × all survivors) and commits use
+// exactTryAddProduct. Preferred materialize order (S2→S1→S0) is only a
+// representative view for OccupiedSlots / FeasibleFormatMask inspection — it
+// must not freeze the live set during canReserve. The three-ready rematch
+// triple (ADD32 + 2×ADD64) is the product pin: preferred freeze dead-ends on
+// the second ADD64; live expand rematches ADD32 onto S0 so all three pack.
+//
+// Same-issue-cycle capacity also includes descriptor-derived pooled port
+// demand (GPR 4R2W / DR 7R3W / AR 2R2W) and ARCTAN/SIN_COS issue-alone.
+// MachinePipeliner placement calls the MCInstrDesc overload (no MI operands);
+// ResMII packing (`calculateResMIIDFA`) calls the MachineInstr overload, which
+// uses MRI-correct `count*Ports` (vreg regclass → bank). Descriptor-only port
+// estimates do not dedupe repeated sources (MOVE32 rd,rs,rs → desc 2R1W vs MI
+// 1R1W; see HaydnMove32Class* helpers) — exact operand identity is MI-only.
+// Placement is intentionally conservative. SMS-HOOK fail-closes class-3 /
+// operand-dependent format cases that this adapter cannot represent (see
+// analyzeLoopForPipelining and HaydnResourceRestrictionClasses.h);
+// MOVE32-class overcount is SMS-PORT metrics only. Product class-3 inventory
+// is empty (ProductCrossCycleCapacityEnabled=false; InstrStage cycles==1).
+// II-wrap: independent per-phase ResourceCycle booking is issue-time-only and
+// would false-accept multi-cycle occupancy wrapping under II — SMS-HOOK
+// fail-closes those stages (issueTimeOnlyFalseAcceptsIIWrapAloneConflict).
+//
+// SMS-RESMII is a *qualification* gate outside this adapter's packing walk:
+// ResourceManager::calculateResMIIDFA still owns the SMS starting estimate and
+// cannot be replaced here. Compare left-to-right greedy (exactTryAddProduct
+// depth) with haydn::bundle::computeExhaustiveProductResMII (≤3 format set
+// oracle) via productResMIIOverestimate. analyzeLoopForPipelining fail-closes
+// when greedy overestimates the exhaustive bound on small bodies (inflated II
+// is not a format lower bound). Descriptor/MI port demand in this adapter can
+// force ResMII above format-only packing (e.g. 3×1W under GPR 2W → ≥2 cycles
+// while Full slots alone pack in one). Soft-exit QoR (format-SMS corpus):
+// softExitIIFloor = max(exhaustive format ResMII, haydnPortLowerBoundResMII)
+// so qualification pins II floors when ports bind above format-only packing;
+// RecMII remains DDG/itinerary ownership (acc→acc feedback) and is never
+// invented here. VF3-G2 Generic-pass freeze (§8.4 #11): Full-only product
+// ranking must match frozen ResMII/II/soft-exit dual-run baselines under
+// matching-frontier OFF and finer-rp OFF residual arms
+// (sms-format-generic-baseline.ll) — unexplained KPI deltas block the wave.
+// VF3-G3 ILP/critical dual-run residual attribution: the same PROD/GEN/RP
+// KPI parity holds on dedicated ILP multi-load / dual-acc and critical-path
+// chain SMS kernels (sms-format-ilp-crit-dual-run.ll) — ranking residual must
+// not invent ResMII/II/soft-exit deltas on those bodies either.
+// SMS-HANDOFF is a *metrics-only freeze* outside this packing walk:
+// recordSuccessfulSMS stores scalar Res/Rec/MII/stage/ops/II only; expansion
+// never invents durable BUNDLE cycle groups from ResourceCycle membership.
+// Qualification-kernel post-RA packability is proven via pure product oracles
+// (qualKernel* helpers below / analyzeLoop logs) so accepted bodies remain
+// exact-packable by post-RA no-split commit once regs are physical. Positive
+// clone→standard-BUNDLE handoff needs an approved expansion hook (plan §3.4 /
+// §5.2) — not this adapter. Until HOOK + RESMII + HANDOFF product activation,
+// format-dependent SMS stays qualification-only.
+//
+// Format-acceptance differential (plan §8.4 #7, SMS surface): descriptor-
+// derived per-cycle format legality is pure exactTryAddProduct depth. Live
+// canReserveByOpcode / reserveByOpcode walks the same matching frontier as
+// post-RA HR CurrentCycleCandidates / commitPlacementForEmit. Format is
+// opcode-keyed so MI and descriptor forms of the same logical multiset have
+// identical format accept/reject polarity; MOVE32-class port overcount is
+// orthogonal (SMS-PORT metrics). Sibling pre-RA owns list-sched pure-exact
+// polarity (PreRASchedStrategy productExact*); this adapter owns live
+// ResourceCycle packing differential + analyzeLoop SMS-FORMAT metrics.
 //
 // AIE peers (port structure; do not invent a parallel packing theory):
 //
 //   * AIEHazardRecognizer.h:315-328  AIEResourceCycle Bundle-backed
 //   * AIEHazardRecognizer.cpp:173-214 canReserve/reserve —
 //       getAlternateInstsOpcode + any_of / first canAdd AltOpcode
-//   * Haydn maps that alt-try to canTryAddProduct / tryAddProduct on live
-//     CycleState (B2.4 solver; B4.2 SMS same depth as post-RA).
+//   * Haydn maps that alt-try to canExactTryAddProduct / exactTryAddProduct on
+//     a live CycleCandidateSet (SMS = post-RA HR depth; multi-candidate, not
+//     AIE first-legal-alt freeze).
 //
-// Head-LLVM's SMS ResourceManager calls the MCInstrDesc overload, so the MID
-// overload is PRIMARY (opcode-keyed) and the MI overload delegates to it
-// (AIE inverted: MI primary; Haydn matches head-LLVM ResourceManager).
+// Head-LLVM's SMS ResourceManager calls the MCInstrDesc overload for placement,
+// so MID is the primary placement path; the MI overload is preferred for
+// ResMII (exact ports) and still falls back to MID shape for format tryAdd.
 //
-// B4.1: getFeasibleFormatMask exposes the product FormatID frontier.
-// B4.2: mask is the *live* CycleState.FeasibleFormatMask (member Compatible
-// intersections accumulate); productFeasibleFormatMask(Occupied) remains the
+// getFeasibleFormatMask exposes the preferred candidate's FeasibleFormatMask
+// (member Compatible intersections accumulate across the nondominated set
+// during exactTryAdd). productFeasibleFormatMask(Packets, Occupied) remains the
 // occupancy-only Pre-RA rebuild. Logical ops only — no FormatID freeze, no
-// setDesc (plan §7.1). Product size-1 Full keeps ProductFormatMask while slots
-// remain Full-coverable. N-format tables ready via CycleState.
+// setDesc. Product size-1 Full keeps ProductFormatMask while the generated
+// Full row covers slots.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNRESOURCECYCLE_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNRESOURCECYCLE_H
 
+#include "HaydnBundle.h" // MachineBundle::isNoHazardMetaInstruction
 #include "HaydnBundleFormatSolver.h"
+#include "HaydnIntraCycleRAW.h" // shared no-forwarding RAW law (hard #7)
 #include "HaydnPlacementAlternative.h"
+#include "HaydnPortModel.h" // PortModel → MCTargetDesc (opcode + regclass enums)
+#include "HaydnResourceRestrictionClasses.h" // II-wrap SMS-HOOK polarity
 #include "MCTargetDesc/HaydnMCFormats.h"
+#include "llvm/ADT/SetVector.h" // SmallSetVector for CurrentCycleLiveDefs
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/CodeGen/Register.h"
 #include "llvm/CodeGen/ResourceCycle.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/MC/MCInstrDesc.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h" // getSubtarget().getRegisterInfo()
 #include <cstdint>
 
 namespace llvm {
 
+/// Accumulated same-issue-cycle pooled port demand for one SMS ResourceCycle.
+struct HaydnCyclePortDemand {
+  unsigned GPRReads = 0;
+  unsigned GPRWrites = 0;
+  unsigned DRReads = 0;
+  unsigned DRWrites = 0;
+  unsigned ARReads = 0;
+  unsigned ARWrites = 0;
+
+  HaydnCyclePortDemand &operator+=(const HaydnCyclePortDemand &O) {
+    GPRReads += O.GPRReads;
+    GPRWrites += O.GPRWrites;
+    DRReads += O.DRReads;
+    DRWrites += O.DRWrites;
+    ARReads += O.ARReads;
+    ARWrites += O.ARWrites;
+    return *this;
+  }
+
+  bool fitsBudget() const {
+    return GPRReads <= HAYDN_GPR_READ_PORTS &&
+           GPRWrites <= HAYDN_GPR_WRITE_PORTS &&
+           DRReads <= HAYDN_DR_READ_PORTS &&
+           DRWrites <= HAYDN_DR_WRITE_PORTS &&
+           ARReads <= HAYDN_AR_READ_PORTS &&
+           ARWrites <= HAYDN_AR_WRITE_PORTS;
+  }
+
+  bool canAdd(const HaydnCyclePortDemand &O) const {
+    HaydnCyclePortDemand T = *this;
+    T += O;
+    return T.fitsBudget();
+  }
+};
+
+/// Classify a Haydn register-class ID into the GPR / DR / AR port bank.
+/// Subclasses of GPR32 (NoSPNoLR, Lo) charge the GPR pool.
+inline void haydnClassifyPortBankClassID(int RegClassID, bool IsDef,
+                                         HaydnCyclePortDemand &D) {
+  if (RegClassID < 0)
+    return;
+  switch (RegClassID) {
+  case Haydn::GPR32RegClassID:
+  case Haydn::GPR32NoSPNoLRRegClassID:
+  case Haydn::GPR32LoRegClassID:
+    if (IsDef)
+      ++D.GPRWrites;
+    else
+      ++D.GPRReads;
+    break;
+  case Haydn::DR64RegClassID:
+    if (IsDef)
+      ++D.DRWrites;
+    else
+      ++D.DRReads;
+    break;
+  case Haydn::ARRegClassID:
+    if (IsDef)
+      ++D.ARWrites;
+    else
+      ++D.ARReads;
+    break;
+  default:
+    break;
+  }
+}
+
+/// Descriptor-derived port demand (SMS placement path — no MI operands).
+/// Counts each explicit reg operand independently (no same-reg dedup across
+/// operand slots). Tied use/def appear as separate ops and correctly charge
+/// one read and one write. Unknown / non-reg operands are ignored.
+inline HaydnCyclePortDemand
+estimateHaydnPortsFromDesc(const MCInstrDesc &MID) {
+  HaydnCyclePortDemand D;
+  const unsigned NumDefs = MID.getNumDefs();
+  for (unsigned I = 0, E = MID.getNumOperands(); I != E; ++I) {
+    const MCOperandInfo &OI = MID.operands()[I];
+    if (OI.OperandType != MCOI::OPERAND_REGISTER)
+      continue;
+    // Optional defs beyond NumDefs still write.
+    const bool IsDef =
+        I < NumDefs || (MID.hasOptionalDef() && OI.isOptionalDef());
+    haydnClassifyPortBankClassID(OI.RegClass, IsDef, D);
+  }
+  return D;
+}
+
+/// Exact MI port demand via shared PortModel (MRI-correct for vregs).
+inline HaydnCyclePortDemand countHaydnPortsFromMI(const MachineInstr &MI) {
+  HaydnCyclePortDemand D;
+  auto [GR, GW] = countGPRPorts(MI);
+  auto [DR, DW] = countDRPorts(MI);
+  auto [AR, AW] = countARPorts(MI);
+  D.GPRReads = GR;
+  D.GPRWrites = GW;
+  D.DRReads = DR;
+  D.DRWrites = DW;
+  D.ARReads = AR;
+  D.ARWrites = AW;
+  return D;
+}
+
+//===----------------------------------------------------------------------===//
+// MOVE32-class MI-versus-descriptor port / placement shapes (SMS ownership)
+//===----------------------------------------------------------------------===//
+// MOVE32 is tablegen'd as (outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2) so the
+// MCInstrDesc always exposes one def + two use slots. copyPhysReg emits
+// `MOVE32 rd, rs, rs`. PortModel MI accounting (count*Ports / ResMII DFA)
+// dedupes same-reg sources → 1R1W. Descriptor-only placement
+// (estimateHaydnPortsFromDesc / ResourceCycle MID overload) has no operand
+// identity → always 2R1W and conservatively overcounts.
+//
+// This is intentional: placement never under-reserves relative to the MI
+// path. It is not an operand-dependent format predicate and does not
+// fail-close SMS-HOOK. Pre-RA list-sched uses only the MI PortModel path
+// (sibling surface). Constants live here so SMS packing tests do not depend
+// on PreRASchedStrategy ownership.
+
+/// MI PortModel demand for MOVE32 rd, rs, rs after same-reg read dedup.
+inline constexpr unsigned HaydnMove32ClassMiRepeatedSrcGprReads = 1;
+inline constexpr unsigned HaydnMove32ClassMiRepeatedSrcGprWrites = 1;
+/// Descriptor-only shape (1 def + 2 use slots) with no same-reg identity.
+inline constexpr unsigned HaydnMove32ClassDescShapeGprReads = 2;
+inline constexpr unsigned HaydnMove32ClassDescShapeGprWrites = 1;
+
+/// True when descriptor-shape reads strictly overcount the MI repeated-src
+/// form (canonical MOVE32-class differential).
+inline constexpr bool haydnMove32ClassDescOvercountsMiPorts() {
+  return HaydnMove32ClassDescShapeGprReads >
+             HaydnMove32ClassMiRepeatedSrcGprReads &&
+         HaydnMove32ClassDescShapeGprWrites ==
+             HaydnMove32ClassMiRepeatedSrcGprWrites;
+}
+
+/// Port demand for one MOVE32-class op under the MI repeated-source model.
+inline HaydnCyclePortDemand haydnMove32ClassMiRepeatedSrcDemand() {
+  HaydnCyclePortDemand D;
+  D.GPRReads = HaydnMove32ClassMiRepeatedSrcGprReads;
+  D.GPRWrites = HaydnMove32ClassMiRepeatedSrcGprWrites;
+  return D;
+}
+
+/// Port demand for one MOVE32-class op under the descriptor-shape model
+/// (SMS MID placement path).
+inline HaydnCyclePortDemand haydnMove32ClassDescShapeDemand() {
+  HaydnCyclePortDemand D;
+  D.GPRReads = HaydnMove32ClassDescShapeGprReads;
+  D.GPRWrites = HaydnMove32ClassDescShapeGprWrites;
+  return D;
+}
+
+/// True when N MI-shape MOVE32 fit the GPR read pool while N descriptor-shape
+/// MOVE32 do not (N=3 → MI 3R OK, desc 6R over under 4R).
+inline bool haydnMove32ClassDescSaturatesReadPoolEarlier(unsigned N) {
+  const unsigned MiR = N * HaydnMove32ClassMiRepeatedSrcGprReads;
+  const unsigned DescR = N * HaydnMove32ClassDescShapeGprReads;
+  return MiR <= HAYDN_GPR_READ_PORTS && DescR > HAYDN_GPR_READ_PORTS;
+}
+
+/// ARCTAN / SIN_COS issue alone in their cycle (PackLegality rule 4 / HR peer).
+/// Descriptor-derived (opcode only) — same-cycle class-1 capacity, not class-3
+/// (draft multi-cycle lock is not product-enabled; see restriction catalog).
+inline bool isHaydnSMSAloneOpcode(unsigned Opcode) {
+  return Opcode == Haydn::ARCTAN || Opcode == Haydn::SIN_COS;
+}
+
 class HaydnResourceCycle : public ResourceCycle {
   HaydnMCFormats Fmts;
-  /// Live cycle packing state — peer of HaydnHazardRecognizer::CurrentCycleState.
-  haydn::bundle::CycleState State;
+  /// Live nondominated packing states — peer of
+  /// HaydnHazardRecognizer::CurrentCycleCandidates (matching frontier).
+  haydn::bundle::CycleCandidateSet Candidates;
+  /// Accumulated pooled port demand for this modulo issue cycle.
+  HaydnCyclePortDemand Ports;
+  /// True once an ARCTAN/SIN_COS has been reserved in this cycle.
+  bool HasAloneOp = false;
 
+  /// LIVE destination registers written in this modulo issue cycle (peer of
+  /// HaydnHazardRecognizer::CurrentCycleLiveDefs). SMS placement now calls the
+  /// MI overload (D999 — operand-aware), so the no-forwarding intra-bundle RAW
+  /// law is enforceable here, identical to post-RA HR. Each DFAResources[phase]
+  /// object accumulates the live defs of every MI that will co-issue in that
+  /// modulo phase's runtime bundle; a consumer reading a live def already in
+  /// this set may NOT join the same cycle (no intra-bundle forwarding — Haydn
+  /// spec §Constraints) and is rejected, slipping to a later cycle. Uses
+  /// `Register` (not MCRegister) so pre-RA virtual defs are tracked by identity.
+  SmallSetVector<Register, 8> CurrentCycleLiveDefs;
+  /// Lazily cached register info (the adapter has no MachineFunction at
+  /// construction; resolved from the first MI seen — same pattern as HR).
+  const TargetRegisterInfo *TRI = nullptr;
+
+  // AIE Bundle twin (IMPLICIT_DEF/KILL) + BUNDLE root. Never treat
+  // MultiSlot_Pseudo (isPseudo=1) as no-hazard — it must tryAdd/book slots.
   static bool isNoHazardMetaOpcode(unsigned Opcode) {
-    switch (Opcode) {
-    case TargetOpcode::IMPLICIT_DEF:
-    case TargetOpcode::KILL:
-    case TargetOpcode::BUNDLE:
+    if (Opcode == TargetOpcode::BUNDLE)
       return true;
-    default:
+    return Haydn::MachineBundle::isNoHazardMetaInstruction(Opcode);
+  }
+
+  const haydn::bundle::CycleState &preferred() const {
+    return haydn::bundle::selectPreferredCandidate(Candidates);
+  }
+
+  /// True when no member has been reserved yet (ports + alone clear; every
+  /// surviving matching is still the empty seed). Preferred alone is not
+  /// enough — a mask/first-fit view can look empty while a sibling matching
+  /// already holds a member.
+  bool isPackingEmpty() const {
+    if (HasAloneOp)
       return false;
+    if (Ports.GPRReads || Ports.GPRWrites || Ports.DRReads || Ports.DRWrites ||
+        Ports.ARReads || Ports.ARWrites)
+      return false;
+    for (const haydn::bundle::CycleState &S : Candidates) {
+      if (!S.empty() || S.OccupiedSlots != 0)
+        return false;
     }
+    return true;
   }
 
-public:
-  HaydnResourceCycle() : State(haydn::bundle::makeProductCycleState()) {}
-
-  void clearResources() override {
-    // Reset ProductFormatMask + empty members (B4.1/B4.2).
-    State = haydn::bundle::makeProductCycleState();
+  /// Lazily cache and return the TargetRegisterInfo (the adapter has no
+  /// MachineFunction at construction; resolved from the first MI seen). Mirrors
+  /// HaydnHazardRecognizer::getTRI. May return null before the first MI and
+  /// between clearResources resets; the no-forwarding RAW predicate treats a
+  /// null TRI as "physreg alias checks disabled" (vreg identity checks still
+  /// work), exactly like the HR peer.
+  const TargetRegisterInfo *getTRI(const MachineInstr &MI) {
+    if (!TRI)
+      TRI = MI.getMF()->getSubtarget().getRegisterInfo();
+    return TRI;
   }
 
-  // head-LLVM's SMS ResourceManager calls the MCInstrDesc overload
-  // (MachinePipeliner.cpp `canReserveResources(&SU.getInstr->getDesc)`).
-  // B4.2: live CycleState tryAddProduct (AIE AIEHazardRecognizer.cpp:173-214
-  // Bundle canAdd/add alt try → Haydn pure solver depth = post-RA HR).
-  bool canReserveResources(const MCInstrDesc *MID) override {
-    return canReserveByOpcode(MID->getOpcode());
-  }
-  void reserveResources(const MCInstrDesc *MID) override {
-    reserveByOpcode(MID->getOpcode());
-  }
-
-  // MachineInstr overload: delegate to the MID overload (mirror DFAPacketizer
-  // DFAPacketizer.cpp:72-82). AIE's AIEResourceCycle made the MI overload
-  // primary because AIE's LLVM fork calls it directly; head-LLVM calls the MID
-  // overload, so we invert AIE's stub choice for portability.
-  bool canReserveResources(MachineInstr &MI) override {
-    return canReserveResources(&MI.getDesc());
-  }
-  void reserveResources(MachineInstr &MI) override {
-    reserveResources(&MI.getDesc());
-  }
-
-  // For debug/inspection: slots occupied in the current cycle (live State).
-  SlotBits getOccupiedSlots() const { return State.OccupiedSlots; }
-
-  // B4.1/B4.2: live FormatID frontier for SMS ResMII / cycle occupancy.
-  // AIE ResourceCycle is Bundle-backed without an explicit mask; Haydn exposes
-  // CycleState.FeasibleFormatMask so SMS matches post-RA HR (not
-  // productFeasibleFormatMask(Occupied) rebuild alone — member Compatible
-  // intersections can shrink the live mask under N-format alts).
-  uint64_t getFeasibleFormatMask() const { return State.FeasibleFormatMask; }
-
-  /// Live CycleState (unit tests / ResMII probes). No setDesc.
-  const haydn::bundle::CycleState &getCycleState() const { return State; }
-
-  unsigned getMemberCount() const { return State.memberCount(); }
-
-  // Opcode-keyed reserve without an MCInstrDesc (unit tests / local probes).
-  // Same contract as reserveResources(MID) for alts-bearing logicals.
-  bool canReserveByOpcode(unsigned Opcode) {
+  bool canReserveFormatAndAlone(unsigned Opcode) const {
     if (isNoHazardMetaOpcode(Opcode))
       return true;
-    // PlacementAlternative-bearing logicals: pure canTryAddProduct
-    // (AIEHazardRecognizer.cpp:183-194 any_of Bundle.canAdd AltOpcode).
+    // Alone ops refuse any non-empty cycle; nothing co-issues after them.
+    if (HasAloneOp)
+      return false;
+    if (isHaydnSMSAloneOpcode(Opcode) && !isPackingEmpty())
+      return false;
     if (hasPlacementAlternatives(Fmts, Opcode))
-      return haydn::bundle::canTryAddProduct(State, Fmts, Opcode);
+      // Probe expands every survivor × every alt — matching frontier, not
+      // preferred-only first-fit.
+      return haydn::bundle::canExactTryAddProduct(Candidates, Fmts, Opcode);
     // No-alt opcodes: Bundle empty standalone escape peer (AIEBundle.h:71-73)
     // — accept only on a truly empty cycle; do not consume slots.
-    return State.empty() && State.OccupiedSlots == 0;
+    return isPackingEmpty();
   }
 
-  void reserveByOpcode(unsigned Opcode) {
-    assert(canReserveByOpcode(Opcode) && "reserve without canReserve");
+  void reserveFormatAndAlone(unsigned Opcode) {
+    assert(canReserveFormatAndAlone(Opcode) && "reserve without canReserve");
     if (isNoHazardMetaOpcode(Opcode))
       return;
+    if (isHaydnSMSAloneOpcode(Opcode))
+      HasAloneOp = true;
     if (hasPlacementAlternatives(Fmts, Opcode)) {
-      // AIEHazardRecognizer.cpp:208-211 first canAdd AltOpcode → Bundle.add.
-      bool Ok = haydn::bundle::tryAddProduct(State, Fmts, Opcode);
-      assert(Ok && "canReserve true but tryAddProduct failed");
+      bool Ok = haydn::bundle::exactTryAddProduct(Candidates, Fmts, Opcode);
+      assert(Ok && "canReserve true but exactTryAddProduct failed");
       (void)Ok;
       return;
     }
-    // No-alt standalone escape: no OccupiedSlots / FeasibleFormatMask change.
-    assert(State.empty() && State.OccupiedSlots == 0);
+    assert(isPackingEmpty());
+  }
+
+  bool canReserveWithPorts(unsigned Opcode,
+                           const HaydnCyclePortDemand &Demand) const {
+    if (!Ports.canAdd(Demand))
+      return false;
+    return canReserveFormatAndAlone(Opcode);
+  }
+
+  void reserveWithPorts(unsigned Opcode, const HaydnCyclePortDemand &Demand) {
+    assert(canReserveWithPorts(Opcode, Demand) && "reserve without canReserve");
+    // Format / alone first, then ports. canReserveFormatAndAlone / isPackingEmpty
+    // read Ports: charging ports before reserve makes no-alt empty-escape and
+    // alone-on-empty checks fail the post-mutate re-assert (SMS crash class:
+    // hwloop-pointer-iv / swpipeline-*-schedule-found).
+    reserveFormatAndAlone(Opcode);
+    Ports += Demand;
+  }
+
+public:
+  HaydnResourceCycle()
+      : Candidates(haydn::bundle::makeProductCandidateSet(
+            Fmts.getPacketFormats())) {}
+
+  void clearResources() override {
+    // Reset ProductFormatMask + empty members from generated PacketFormats
+ // () and clear port / alone state.
+    Candidates =
+        haydn::bundle::makeProductCandidateSet(Fmts.getPacketFormats());
+    Ports = HaydnCyclePortDemand{};
+    HasAloneOp = false;
+    // No-forwarding RAW bookkeeping (D999): a fresh cycle/bundle has no live
+    // defs. TRI is lazily re-resolved from the next MI (see getTRI).
+    CurrentCycleLiveDefs.clear();
+    TRI = nullptr;
+  }
+
+  // head-LLVM's SMS ResourceManager calls the MCInstrDesc overload for
+  // placement (MachinePipeliner.cpp canReserveResources(&SU.getInstr->getDesc)).
+ // : descriptor-derived ports + format tryAdd + alone-op gate.
+  bool canReserveResources(const MCInstrDesc *MID) override {
+    assert(MID && "null MCInstrDesc");
+    return canReserveWithPorts(MID->getOpcode(),
+                               estimateHaydnPortsFromDesc(*MID));
+  }
+  void reserveResources(const MCInstrDesc *MID) override {
+    assert(MID && "null MCInstrDesc");
+    reserveWithPorts(MID->getOpcode(), estimateHaydnPortsFromDesc(*MID));
+  }
+
+  // MachineInstr overload: used by calculateResMIIDFA packing AND (after D999)
+  // by SMS placement, which now passes the MI instead of its descriptor so the
+  // operand-aware no-forwarding intra-bundle RAW law can be enforced here.
+  // Prefer exact MRI-correct port demand (vreg regclass → bank); format still
+  // opcode-keyed. The RAW check runs BEFORE accepting and uses the shared
+  // HaydnIntraCycleRAW predicate (same mechanism as post-RA HR — hard #7), so
+  // SMS refuses to place a consumer in the same cycle as its producer and the
+  // consumer slips to a later cycle. Live defs accumulate per modulo phase
+  // (DFAResources[phase] is one runtime bundle), so a later MI reading a live
+  // def already reserved in this phase is correctly rejected.
+  bool canReserveResources(MachineInstr &MI) override {
+    if (haydnHasIntraCycleRAW(MI, CurrentCycleLiveDefs, getTRI(MI)))
+      return false;
+    return canReserveWithPorts(MI.getOpcode(), countHaydnPortsFromMI(MI));
+  }
+  void reserveResources(MachineInstr &MI) override {
+    reserveWithPorts(MI.getOpcode(), countHaydnPortsFromMI(MI));
+    // Record live defs AFTER a successful commit so subsequent same-cycle
+    // consumers see them (dual of the canReserve RAW check above).
+    haydnAppendLiveDefs(MI, CurrentCycleLiveDefs);
+  }
+
+  // For debug/inspection: preferred occupied slots in the current cycle.
+  SlotBits getOccupiedSlots() const { return preferred().OccupiedSlots; }
+
+  // Preferred FormatID mask for SMS ResMII / cycle occ inspection.
+  // AIE ResourceCycle is Bundle-backed without an explicit mask; Haydn exposes
+  // FeasibleFormatMask so SMS matches post-RA HR (not
+  // productFeasibleFormatMask(Occupied) rebuild alone — member Compatible
+  // intersections can shrink the live mask under N-format alts).
+  // Not the full matching frontier: see getCandidates() / getMatchingFrontierSize().
+  uint64_t getFeasibleFormatMask() const {
+    return preferred().FeasibleFormatMask;
+  }
+
+  /// Union of FeasibleFormatMask over the live nondominated set. Under product
+  /// size-1 Full this equals preferred(); multi-row product can diverge.
+  uint64_t getMatchingFrontierFormatMask() const {
+    uint64_t M = 0;
+    for (const haydn::bundle::CycleState &S : Candidates)
+      M |= S.FeasibleFormatMask;
+    return M;
+  }
+
+  /// Preferred CycleState (unit tests / ResMII probes). No setDesc.
+  const haydn::bundle::CycleState &getCycleState() const { return preferred(); }
+
+  /// Live nondominated candidate set (exact matching frontier).
+  const haydn::bundle::CycleCandidateSet &getCandidates() const {
+    return Candidates;
+  }
+
+  /// Number of surviving nondominated partial matchings (frontier width).
+  unsigned getMatchingFrontierSize() const {
+    return static_cast<unsigned>(Candidates.size());
+  }
+
+  unsigned getMemberCount() const { return preferred().memberCount(); }
+
+  /// Accumulated port demand (unit tests / ResMII probes).
+  const HaydnCyclePortDemand &getPortDemand() const { return Ports; }
+
+  bool hasAloneOp() const { return HasAloneOp; }
+
+  // Opcode-keyed reserve without an MCInstrDesc (unit tests / local probes).
+  // Format + alone only — no port pressure (callers without operand shapes).
+  // Production SMS uses MID/MI overloads which always charge ports.
+  bool canReserveByOpcode(unsigned Opcode) {
+    return canReserveFormatAndAlone(Opcode);
+  }
+
+  void reserveByOpcode(unsigned Opcode) { reserveFormatAndAlone(Opcode); }
+
+  /// Unit-test helper: format + explicit port demand (no MI/MID required).
+  bool canReserveByOpcodeWithPorts(unsigned Opcode,
+                                   const HaydnCyclePortDemand &Demand) {
+    return canReserveWithPorts(Opcode, Demand);
+  }
+  void reserveByOpcodeWithPorts(unsigned Opcode,
+                                const HaydnCyclePortDemand &Demand) {
+    reserveWithPorts(Opcode, Demand);
+  }
+
+  //===--------------------------------------------------------------------===//
+  // SMS-HANDOFF — metrics-only qualification packability (no hard cycle groups)
+  //===--------------------------------------------------------------------===//
+  // Pure product oracles (shared BundleFormatSolver depth). SMS analyzeLoop
+  // logs these as qualification evidence that accepted kernels remain
+  // post-RA packable under exact no-split commit. Never freezes FormatID,
+  // never stamps setDesc/member opcodes, never materializes BUNDLE roots.
+  // Sibling pre-RA surface (HaydnPreRASchedStrategy) owns list-sched metrics;
+  // this adapter owns the SMS ResourceCycle / analyzeLoop side.
+
+  /// True iff \p Opcodes form one legal product cycle under exact matching
+  /// (alts + rematch). Empty is vacuously true. Pure; no MIR mutation.
+  static bool qualKernelFormsOneExactCycle(ArrayRef<unsigned> Opcodes) {
+    if (Opcodes.empty())
+      return true;
+    HaydnMCFormats LocalFmts;
+    return haydn::bundle::exactCanFormOneProductCycle(LocalFmts, Opcodes);
+  }
+
+  /// Qualification co-issue packability: size fits one issue cycle and exact
+  /// matching packs the full multiset (e.g. ADD32+XOR32+OR32, ADD32+2×ADD64
+  /// rematch). Metrics only — does not claim a durable handoff group.
+  static bool qualKernelCoissuePackable(ArrayRef<unsigned> Opcodes) {
+    if (Opcodes.empty())
+      return true;
+    if (Opcodes.size() > Haydn::ISSUE_SLOT_COUNT)
+      return false;
+    return qualKernelFormsOneExactCycle(Opcodes);
+  }
+
+  /// Body-level qualification packability under the exhaustive ≤3 format
+  /// oracle: no greedy overestimate (when N is inside the exact DP bound),
+  /// and a finite product cover exists. For N >
+  /// MaxExhaustiveProductResMIIOps the exhaustive oracle falls back to
+  /// greedy (same contract as SMS-RESMII): do **not** fail-close on the
+  /// inexact oracle — a finite greedy cover remains product-legal. Does
+  /// **not** create hard BUNDLE membership — metrics only.
+  /// Sibling of productQualKernelExactlyPackable on the pre-RA surface.
+  static bool qualKernelExactlyPackable(ArrayRef<unsigned> Opcodes) {
+    if (Opcodes.empty())
+      return true;
+    // productResMIIFailsQualification is false for N>bound (no false reject
+    // on the greedy-fallback oracle). Empty is handled above.
+    if (haydn::bundle::productResMIIFailsQualification(Opcodes))
+      return false;
+    return haydn::bundle::computeExhaustiveProductResMII(Opcodes) >= 1u;
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Soft-exit QoR — II floors (format × ports); RecMII stays DDG/SMS
+  //===--------------------------------------------------------------------===//
+  // Metrics-only soft-exit surface for the format-SMS qualification corpus.
+  // Sibling of HaydnPreRASchedStrategy::productSoftExitIIFloor (list-sched
+  // track). Dual-run freeze of product vs generic residual ranking is owned by
+  // sms-format-generic-baseline.ll (§8.4 #11 G2 MAC/acc) and
+  // sms-format-ilp-crit-dual-run.ll (G3 ILP/critical residual attribution);
+  // these helpers are pure floors. Never freezes FormatID, never stamps
+  // setDesc, never invents BUNDLE membership or RecMII numbers (acc→acc
+  // recurrence is itinerary/DDG).
+
+  /// Pure port-pressure lower bound on issue cycles (ceil demand / budget).
+  /// Three independent GPR writes → ≥2 under HAYDN_GPR_WRITE_PORTS=2.
+  static unsigned portLowerBoundResMII(unsigned GPRReads, unsigned GPRWrites,
+                                      unsigned DRReads = 0,
+                                      unsigned DRWrites = 0,
+                                      unsigned ARReads = 0,
+                                      unsigned ARWrites = 0) {
+    return haydnPortLowerBoundResMII(GPRReads, GPRWrites, DRReads, DRWrites,
+                                    ARReads, ARWrites);
+  }
+
+  /// Soft-exit II lower bound for a qualification multiset: max of exhaustive
+  /// product format ResMII and pure port-pressure ResMII.
+  ///
+  /// Ports bind when format-only packing still reports 1 (classic 3×1W GPR
+  /// write body under HAYDN_GPR_WRITE_PORTS=2). Metrics-only — never freezes
+  /// FormatID, never stamps setDesc, never invents BUNDLE or RecMII.
+  static unsigned softExitIIFloor(ArrayRef<unsigned> Opcodes,
+                                  unsigned GPRReads, unsigned GPRWrites,
+                                  unsigned DRReads = 0,
+                                  unsigned DRWrites = 0,
+                                  unsigned ARReads = 0,
+                                  unsigned ARWrites = 0) {
+    if (Opcodes.empty())
+      return portLowerBoundResMII(GPRReads, GPRWrites, DRReads, DRWrites,
+                                 ARReads, ARWrites);
+    const unsigned FormatII =
+        haydn::bundle::computeExhaustiveProductResMII(Opcodes);
+    const unsigned PortII = portLowerBoundResMII(
+        GPRReads, GPRWrites, DRReads, DRWrites, ARReads, ARWrites);
+    return FormatII > PortII ? FormatII : PortII;
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Format-acceptance differential — live ResourceCycle ≡ pure exact ≡ HR
+  //===--------------------------------------------------------------------===//
+  // Plan §8.4 #7 SMS surface. Descriptor-derived format legality is pure
+  // exactTryAddProduct — the same depth post-RA HR commitPlacementForEmit and
+  // pre-RA scoreMatchingFrontier use. Live canReserveByOpcode/reserveByOpcode
+  // must agree with pure exactCanPackProductSequence on every qualification
+  // multiset; preferred OccupiedSlots / member LogicalOpcode+FieldSlots must
+  // match selectPreferredCandidate after the same sequential reserves.
+  // Format is opcode-keyed → MI and descriptor opcode sequences agree.
+  // Ports (including MOVE32-class MI-vs-desc) are orthogonal and must not be
+  // misread as a format differential. Metrics-only; no setDesc / BUNDLE invent.
+
+  /// Sequential live ResourceCycle format packing: true iff every opcode in
+  /// order joins one product cycle under canReserveByOpcode/reserveByOpcode
+  /// (format + alone only — no port pressure).
+  static bool formatCanPackSequence(ArrayRef<unsigned> Opcodes) {
+    if (Opcodes.empty())
+      return true;
+    HaydnResourceCycle RC;
+    for (unsigned Opc : Opcodes) {
+      if (!RC.canReserveByOpcode(Opc))
+        return false;
+      RC.reserveByOpcode(Opc);
+    }
+    return true;
+  }
+
+  /// Pure exactTryAddProduct peer of formatCanPackSequence (post-RA HR
+  /// CurrentCycleCandidates / commitPlacement depth).
+  static bool formatPureExactCanPackSequence(ArrayRef<unsigned> Opcodes) {
+    if (Opcodes.empty())
+      return true;
+    HaydnMCFormats LocalFmts;
+    return haydn::bundle::exactCanPackProductSequence(LocalFmts, Opcodes);
+  }
+
+  /// Set oracle (N ≤ issue width): some permutation packs under exact matching.
+  static bool formatPureExactCanPackSet(ArrayRef<unsigned> Opcodes) {
+    if (Opcodes.empty())
+      return true;
+    if (Opcodes.size() > Haydn::ISSUE_SLOT_COUNT)
+      return false;
+    HaydnMCFormats LocalFmts;
+    return haydn::bundle::exactCanPackProductSet(LocalFmts, Opcodes);
+  }
+
+  /// Live ResourceCycle open-new-cycle greedy count (format-only, no ports).
+  /// Mirrors calculateResMIIDFA open-on-canReserve-false for format depth.
+  static unsigned formatSequentialCycleCount(ArrayRef<unsigned> Opcodes) {
+    if (Opcodes.empty())
+      return 0;
+    unsigned Cycles = 0;
+    HaydnResourceCycle RC;
+    bool CycleOpen = false;
+    for (unsigned Opc : Opcodes) {
+      if (!RC.canReserveByOpcode(Opc)) {
+        RC.clearResources();
+        ++Cycles;
+        CycleOpen = false;
+        if (!RC.canReserveByOpcode(Opc))
+          return ~0u;
+      }
+      RC.reserveByOpcode(Opc);
+      CycleOpen = true;
+    }
+    if (CycleOpen)
+      ++Cycles;
+    return Cycles;
+  }
+
+  /// Live RC sequence acceptance ≡ pure exactTryAddProduct (HR peer polarity).
+  static bool formatAcceptanceMatchesPureExact(ArrayRef<unsigned> Opcodes) {
+    return formatCanPackSequence(Opcodes) ==
+           formatPureExactCanPackSequence(Opcodes);
+  }
+
+  /// After packing \p Opcodes in one cycle, live preferred CycleState agrees
+  /// with pure exactTryAddProduct preferred candidate (member count, slots,
+  /// LogicalOpcode + FieldSlots order). Requires both paths accept the seq.
+  static bool
+  formatPreferredStateAgreesWithPureExact(ArrayRef<unsigned> Opcodes) {
+    if (Opcodes.empty())
+      return true;
+    if (!formatCanPackSequence(Opcodes) ||
+        !formatPureExactCanPackSequence(Opcodes))
+      return false;
+    HaydnResourceCycle RC;
+    HaydnMCFormats LocalFmts;
+    haydn::bundle::CycleCandidateSet Pure =
+        haydn::bundle::makeProductCandidateSet(LocalFmts.getPacketFormats());
+    for (unsigned Opc : Opcodes) {
+      RC.reserveByOpcode(Opc);
+      bool Ok = haydn::bundle::exactTryAddProduct(Pure, LocalFmts, Opc);
+      assert(Ok && "pure exact failed after formatPureExactCanPackSequence");
+      (void)Ok;
+    }
+    const haydn::bundle::CycleState &PrefRC = RC.getCycleState();
+    const haydn::bundle::CycleState &PrefPure =
+        haydn::bundle::selectPreferredCandidate(Pure);
+    if (PrefRC.memberCount() != PrefPure.memberCount() ||
+        PrefRC.OccupiedSlots != PrefPure.OccupiedSlots ||
+        PrefRC.FeasibleFormatMask != PrefPure.FeasibleFormatMask)
+      return false;
+    for (unsigned I = 0, E = PrefRC.memberCount(); I != E; ++I) {
+      if (PrefRC.Members[I].LogicalOpcode != PrefPure.Members[I].LogicalOpcode ||
+          PrefRC.Members[I].FieldSlots != PrefPure.Members[I].FieldSlots)
+        return false;
+    }
+    return true;
+  }
+
+  /// Format accept/reject polarity for two opcode sequences (MI vs desc
+  /// multisets). Format is opcode-keyed: equal opcodes always agree.
+  static bool formatAcceptanceAgrees(ArrayRef<unsigned> A,
+                                     ArrayRef<unsigned> B) {
+    return formatCanPackSequence(A) == formatCanPackSequence(B);
+  }
+
+  /// Product pin for §8.4 #7 SMS format-acceptance shapes: live RC ≡ pure
+  /// exact ≡ preferred-state HR peer; three ADD32 pack; two ST32 need 2
+  /// cycles; rematch triple packs; co-issue packs; MI ≡ desc for same ops.
+  /// Alone-op capacity (ARCTAN/SIN_COS) is descriptor-derived class-1 and is
+  /// modeled on live RC/HR but not by pure field tryAdd — pinned separately.
+  static bool formatAcceptanceDifferentialPins() {
+    unsigned ThreeADD[] = {Haydn::ADD32, Haydn::ADD32, Haydn::ADD32};
+    unsigned TwoST[] = {Haydn::ST32, Haydn::ST32};
+    unsigned Rematch[] = {Haydn::ADD32, Haydn::ADD64, Haydn::ADD64};
+    unsigned Coissue[] = {Haydn::ADD32, Haydn::XOR32, Haydn::OR32};
+    unsigned DualLoadMac[] = {Haydn::LD32, Haydn::LD32, Haydn::X2MULA32};
+    unsigned AloneThenALU[] = {Haydn::ARCTAN, Haydn::ADD32};
+
+    // Field-format sequences: live RC canReserveByOpcode ≡ pure exactTryAdd.
+    auto checkFieldSeq = [](ArrayRef<unsigned> Ops, bool ExpectPack,
+                            unsigned ExpectCycles) {
+      if (formatCanPackSequence(Ops) != ExpectPack)
+        return false;
+      if (formatPureExactCanPackSequence(Ops) != ExpectPack)
+        return false;
+      if (!formatAcceptanceMatchesPureExact(Ops))
+        return false;
+      if (ExpectPack && !formatPreferredStateAgreesWithPureExact(Ops))
+        return false;
+      if (formatSequentialCycleCount(Ops) != ExpectCycles)
+        return false;
+      return true;
+    };
+
+    if (!checkFieldSeq(ThreeADD, /*ExpectPack=*/true, /*ExpectCycles=*/1))
+      return false;
+    if (!checkFieldSeq(TwoST, /*ExpectPack=*/false, /*ExpectCycles=*/2))
+      return false;
+    if (!checkFieldSeq(Rematch, true, 1))
+      return false;
+    if (!checkFieldSeq(Coissue, true, 1))
+      return false;
+    if (!checkFieldSeq(DualLoadMac, true, 1))
+      return false;
+
+    // Alone-op class-1 capacity (RC/HR peer, not pure field tryAdd): co-issue
+    // after ARCTAN rejects; sequential needs two cycles. Pure exact may still
+    // field-pack ARCTAN+ADD32 — that is not a format-acceptance disagreement.
+    {
+      if (formatCanPackSequence(AloneThenALU))
+        return false;
+      if (formatSequentialCycleCount(AloneThenALU) != 2u)
+        return false;
+      HaydnResourceCycle RC;
+      if (!RC.canReserveByOpcode(Haydn::ARCTAN))
+        return false;
+      RC.reserveByOpcode(Haydn::ARCTAN);
+      if (!RC.hasAloneOp() || RC.canReserveByOpcode(Haydn::ADD32))
+        return false;
+    }
+
+    if (!formatPureExactCanPackSet(ThreeADD) ||
+        formatPureExactCanPackSet(TwoST) ||
+        !formatPureExactCanPackSet(Rematch))
+      return false;
+
+    // MI ≡ desc for same opcodes (format opcode-keyed, not port-shaped).
+    if (!formatAcceptanceAgrees(Rematch, Rematch) ||
+        !formatAcceptanceAgrees(TwoST, TwoST) ||
+        !formatAcceptanceAgrees(ThreeADD, ThreeADD))
+      return false;
+
+    // MID placement path (SMS ResourceManager primary) ≡ opcode format path
+    // on the rematch triple (descriptor ports do not bind this shape).
+    {
+      HaydnResourceCycle RCmid;
+      MCInstrDesc D32{}, D64{};
+      D32.Opcode = Haydn::ADD32;
+      D64.Opcode = Haydn::ADD64;
+      if (!RCmid.canReserveResources(&D32))
+        return false;
+      RCmid.reserveResources(&D32);
+      if (!RCmid.canReserveResources(&D64))
+        return false;
+      RCmid.reserveResources(&D64);
+      if (!RCmid.canReserveResources(&D64))
+        return false;
+      RCmid.reserveResources(&D64);
+      if (RCmid.getMemberCount() != 3u ||
+          RCmid.getOccupiedSlots() != SlotBits(Haydn::SLOT_ALL))
+        return false;
+      // Preferred rematch: ADD32 on S0 so both ADD64 take S1|S2.
+      if (RCmid.getCycleState().Members[0].FieldSlots !=
+          SlotBits(Haydn::SLOT0))
+        return false;
+    }
+
+    // Fourth ADD32 after a full cycle must reject on live RC (format fill).
+    {
+      HaydnResourceCycle RC;
+      for (unsigned I = 0; I < 3; ++I) {
+        if (!RC.canReserveByOpcode(Haydn::ADD32))
+          return false;
+        RC.reserveByOpcode(Haydn::ADD32);
+      }
+      if (RC.canReserveByOpcode(Haydn::ADD32))
+        return false;
+      if (RC.getOccupiedSlots() != SlotBits(Haydn::SLOT_ALL) ||
+          RC.getMemberCount() != 3u)
+        return false;
+    }
+    return true;
+  }
+
+  //===--------------------------------------------------------------------===//
+  // II-wrap false-accept differential (issue-time-only ResourceCycle pin)
+  //===--------------------------------------------------------------------===//
+  // ResourceManager keeps one independent ResourceCycle per modulo phase and
+  // only books the issue phase. Multi-cycle occupancy that wraps under II is
+  // invisible here: two alone-ops reserved on two independent cycles both
+  // succeed, even though a 2-cycle FU lock from phase 0 under II=2 would also
+  // claim phase 1 and make the second alone-op illegal. This helper *proves*
+  // that issue-time-only false acceptance; it does not implement multi-cycle
+  // booking. SMS-HOOK fail-closes multi-cycle stages (catalog pin
+  // smsHookRejectsIIWrapFalseAccept) so product SMS never relies on this gap.
+
+  /// Differential pin: two independent ResourceCycles (SMS per-phase model)
+  /// both accept an issue-alone op. Combined with the catalog II-wrap
+  /// predicate for StageCycles=2 / II=2, this is the issue-time-only
+  /// false-accept hazard SMS-HOOK must reject. Pure; no MIR mutation.
+  static bool issueTimeOnlyFalseAcceptsIIWrapAloneConflict() {
+    using namespace haydn::restriction;
+    // Alone-op capacity is class-1 same-cycle (one per ResourceCycle). Two
+    // independent cycles model phases 0 and 1 under II=2.
+    HaydnResourceCycle C0;
+    HaydnResourceCycle C1;
+    if (!C0.canReserveByOpcode(Haydn::ARCTAN) ||
+        !C1.canReserveByOpcode(Haydn::ARCTAN))
+      return false;
+    C0.reserveByOpcode(Haydn::ARCTAN);
+    C1.reserveByOpcode(Haydn::ARCTAN);
+    // Both cycles hold an alone-op → issue-time-only accepts the concurrent
+    // use that a 2-cycle alone lock wrapping under II=2 would forbid.
+    if (!C0.hasAloneOp() || !C1.hasAloneOp())
+      return false;
+    // Catalog: multi-cycle stage under II=2 is an SMS-HOOK reject so product
+    // never ships this false-accept as acceptance.
+    return smsHookRejectsIIWrapFalseAccept(/*StageCycles=*/2, /*II=*/2) &&
+           smsIIWrapOccupiesPhase(/*Issue=*/0, /*Stage=*/2, /*II=*/2,
+                                  /*Query=*/1);
   }
 };
 

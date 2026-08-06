@@ -1,0 +1,33 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+
+# Role: MIR — ExpandPseudos lowers SETCBR_BEGIN/END to final CSRW_W before
+# post-RA pack (one CSR issue op; residual SETCBR is fatal at late
+# Verify/AsmPrinter). Pins the Rev2 CBR CSR map and CBR implicit-def edges:
+#   BEGIN set0 → CSR 0x2C=44 + implicit-def $cbr0
+#   END   set0 → CSR 0x2D=45 + implicit-def $cbr0
+#   BEGIN set1 → CSR 0x2E=46 + implicit-def $cbr1
+#   END   set1 → CSR 0x2F=47 + implicit-def $cbr1
+# CSRW_W TD also Defs=[SFR]. Kill on the value GPR is preserved. No FlexMap.
+
+--- |
+  define void @setcbr_expand_map() { ret void }
+...
+---
+name:            setcbr_expand_map
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4, $r15
+    ; CHECK-LABEL: name: setcbr_expand_map
+    ; CHECK: CSRW_W 44, killed $r1, implicit-def $sfr, implicit-def $cbr0
+    ; CHECK: CSRW_W 45, killed $r2, implicit-def $sfr, implicit-def $cbr0
+    ; CHECK: CSRW_W 46, killed $r3, implicit-def $sfr, implicit-def $cbr1
+    ; CHECK: CSRW_W 47, killed $r4, implicit-def $sfr, implicit-def $cbr1
+    ; CHECK-NOT: SETCBR
+    SETCBR_BEGIN 0, killed $r1
+    SETCBR_END 0, killed $r2
+    SETCBR_BEGIN 1, killed $r3
+    SETCBR_END 1, killed $r4
+    RET implicit $r15

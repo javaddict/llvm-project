@@ -1,10 +1,13 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — struct argument passing and return values.
+
 ; Test struct argument passing and return values.
 ; Small structs ({i32,i32}, {i32,i32,i32}) are passed in GPR registers.
 ; Large structs are passed via sret (pointer to caller-allocated memory).
 
 ;Return {i32, i32} struct (fits in 2 GPRs)
+
 %struct.pair = type { i32, i32 }
 
 define %struct.pair @return_pair(i32 %a, i32 %b) nounwind {

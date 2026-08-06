@@ -1,9 +1,8 @@
 ; UNSUPPORTED: true
-; CircularBuffer stats pass deleted (YOLO phase-out)
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -stop-after=haydn-circular-buffer < %s \
-; RUN:   | FileCheck %s
-;
+; Role: retired — CircularBuffer analysis pass deleted; not product coverage.
+; Do not count as product green. RUN is deliberately false so a dropped
+; RUN: false
+
 ; Circular buffer detection tests for the Haydn backend.
 ;
 ; The HaydnCircularBuffer pass detects AND-with-mask patterns where the mask
@@ -24,6 +23,7 @@
 ; LD32 rAddr, 0; load from computed address
 
 ;Test 1: Circular buffer with mask 15 (buffer size 16).
+
 @buf_16 = global [16 x i32] zeroinitializer
 @idx_16 = global i32 0
 

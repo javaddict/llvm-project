@@ -1,6 +1,8 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj < %s | \
 # RUN:   llvm-objdump -d - | FileCheck %s
-#
+
+# Role: object — — funct(10) routing for DR/SIMD ALU64 ops (Mode-0 s1/s2).
+
 # REGRESSION TEST: — funct(10) routing for DR/SIMD ALU64 ops (Mode-0 s1/s2).
 #
 # Bug: the 346 DR/SIMD ALU64 ops (FmtALU64/FmtALU64Acc) have no flat opcode
@@ -24,6 +26,7 @@
 # follow-up (the funct table includes them so the encoder marker is correct).
 
 # CHECK: max64
+
 max64 d0, d1, d2
 
 # CHECK: min64

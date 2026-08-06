@@ -1,9 +1,12 @@
-; Packing contract (LD64+ADDI32) independent of Role B (deleted).
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:   -stop-after=postmisched -verify-machineinstrs < %s \
 ; RUN:   | FileCheck %s --check-prefix=MIR
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:   -verify-machineinstrs < %s | FileCheck %s --check-prefix=ASM
+
+; Role: MIR — Packing contract (LD64+ADDI32) independent of Role B (deleted).
+
+; Packing contract (LD64+ADDI32) independent of Role B (deleted).
 ;
 ; REGRESSION TEST: Load-streaming NatureDSP hot loop (vec_dot64x64i
 ; fir_xcorr32x32 shape) — the post-increment load + its ADDI32 base bump
@@ -51,7 +54,6 @@
 ; OR the fuse-when-encodable logic regressed (stride 8 must fuse).
 ; OR isPacketizeRegionBoundary was relaxed in a way that reintroduces
 ; the / COPY-drop wrong-code — investigate, do NOT just update
-; CHECK lines.
 ;
 ; References:
 ; ~/haydn-plans/decisions/-postinc-pseudo-packetize-fix-design.md

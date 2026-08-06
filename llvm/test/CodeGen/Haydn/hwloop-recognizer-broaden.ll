@@ -1,8 +1,11 @@
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
+
+; Role: MIR — This test exercises the IR-level HardwareLoops pass, which runs BEFORE SMS and converts countable loops to LoopStart + PseudoLoopEnd pseudos (renamed.
+
 ; This test exercises the IR-level HardwareLoops pass, which runs BEFORE SMS
 ; and converts countable loops to LoopStart + PseudoLoopEnd pseudos (renamed
 ; from SET_HWLOOP_REG by the IR-level rearchitecture, prior revision).
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
 ;
 ; REGRESSION TEST: HWLoop recognizer broadening (G1, post-).
 ;
@@ -29,7 +32,6 @@
 ;
 ; If any of the GAP-2 CHECKs regress, the SET_HWLOOP_REG disappears and a
 ; BLT back-edge appears instead — investigate, do NOT just update the
-; CHECK line.
 ;
 ; Decision reference: ~/haydn-plans/decisions/-hwloop-recognizer-broaden-g2-g3-g4.md
 ; Prior work: (HWLoop emission), (broaden round 1)
@@ -66,6 +68,7 @@
 ; preheader/entry chain, which is exactly the shape that triggers the
 ; cross-block copy bug. If GAP-2 regresses, this stays on a BLT back-edge.
 ; ===========================================================================
+
 define i32 @gap2_countup_blt(ptr readonly %a, i32 %n) nounwind {
 ; CHECK-LABEL: name: gap2_countup_blt
 ; CHECK: SET_HWLOOP

@@ -1,6 +1,8 @@
 # RUN: llvm-mc -triple haydn-unknown-elf -filetype=obj %s -o %t.o && \
 # RUN:   llvm-objdump -d --triple=haydn-unknown-elf %t.o | FileCheck %s
 
+# Role: object — All ALU32 RR ops route to Mode-0 regardless of register bank (encoding_manual.md §3.6 + §6).
+
 // All ALU32 RR ops route to Mode-0 regardless of register bank
 // (encoding_manual.md §3.6 + §6).
 //
@@ -34,5 +36,5 @@ _start:
     sub32 r1, r2, r3      // r0-r7 -> Mode-0
     sub32 r8, r9, r10     // r8-r15 -> Mode-0 (same routing)
 
-// CHECK: 0: 32 01 00 00 c0 01 00 00 00 00 00 00 00 00 00 00 { sub32 r1, r2, r3
-// CHECK: 10: a9 08 00 00 c0 01 00 00 00 00 00 00 00 00 00 00 { sub32 r8, r9, r10
+// CHECK: {{.*}}0: 07 cb 10 32 00 00 00 00 00 00 00 00  	{ 		sub32	r1, r2, r3; 	nop }
+// CHECK: c: 07 cb 80 a9 00 00 00 00 00 00 00 00  	{ 		sub32	r8, r9, r10; 	nop }

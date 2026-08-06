@@ -1,11 +1,12 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — byval parameter passing.
+
 ; Test byval parameter passing.
 ; byval arguments are passed as pointers to the stack location where the
 ; argument data resides. The callee loads from the pointer to access fields.
 ;
 ; REBASELINE : byval lowering is correct. Prior XFAIL was a stale
-; CHECK expecting `ld64` for i64; the backend splits i64 loads to dual `ld32`
 ; + DR pack (d_ldw_post_imm), which is a valid (if not ideal) lowering.
 
 %struct.big = type { i32, i32, i32, i32, i32 }

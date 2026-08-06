@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles,haydn-verify-bundles -verify-machineinstrs %s -o - | FileCheck %s
-#
+
+# Role: MIR — late layout firewall — bare MIs after PreEmit growth re-commit as ProductFormatID singleton BUNDLEs with empty-cycle tryAdd setDesc.
+
 # B4.3 late layout firewall — bare MIs after PreEmit growth re-commit as
 # ProductFormatID singleton BUNDLEs with empty-cycle tryAdd setDesc.
 #
@@ -11,7 +13,7 @@
 #   AIE2TargetMachine.cpp:88 / AIEBaseTargetMachine.cpp:388 — AIE PreEmit empty
 #
 # Simulates FixupHwLoops deficit NOP + BR insertBranch bare B/BEQZ + residual
-# ALU after pack. No second packer; no MCFlags; product BUNDLE128_FULL only.
+# ALU after pack. No second packer; no MCFlags; product BUNDLE_E96 only.
 
 --- |
   define void @late_bare_recommit() { ret void }

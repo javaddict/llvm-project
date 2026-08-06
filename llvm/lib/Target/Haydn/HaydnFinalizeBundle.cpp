@@ -9,15 +9,15 @@
 // Port of AIEFinalizeBundle (AIEFinalizeBundle.cpp:22-54 isBundleCandidate +
 // runOnMachineFunction loop). Haydn delta vs AIE:
 //
-//   * After finalizeBundle, stamp FormatID::Bundle128Full as the BUNDLE-root
-//     imm (B1.1 / plan §6.3; AIEHazardRecognizer.cpp:278-312 peer for multi-MI;
-//     this pass covers singletons).
-//   * B4.3 late layout firewall: before wrap, materialize bare multi-slot
+//   * After finalizeBundle, stamp Format E BundleFormatRowID +
+//     CompletionStateID as the BUNDLE-root imms (sole product identity).
+//   * late layout firewall: before wrap, materialize bare multi-slot
 //     logicals via empty-cycle tryAdd → setDesc(member)
 //     (AIEMachineScheduler.cpp:1121-1139 materializeMultiOpcodeInstrs;
 //     AIEHazardRecognizer.cpp:174-214 alt try; HaydnBundleMaterialize
 //     commitLateProductCycle). Idempotent on already-bundled / already-
-//     setDesc members. Product encode remains BUNDLE128_FULL only.
+//     setDesc members. Ensures encode sees real placement members — no
+//     residual logical pack after FE8.
 //
 // Pipeline:
 //   * addPreSched2 after PostMachineScheduler (AIE2TargetMachine.cpp:242-244)
@@ -59,7 +59,7 @@ bool isBundleCandidate(MachineBasicBlock::instr_iterator MII) {
   return true;
 }
 
-/// B4.3: setDesc bare multi-slot logical to empty-cycle tryAdd member before
+/// setDesc bare multi-slot logical to empty-cycle tryAdd member before
 /// finalizeBundle. Port of AIE materializeMultiOpcodeInstrs setDesc
 /// (AIEMachineScheduler.cpp:1126-1132) on a late singleton cycle
 /// (HaydnBundleMaterialize.h commitLateProductCycle).
@@ -94,7 +94,7 @@ bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
     assert(!MII->isInsideBundle() && "First instr cannot be inside bundle!");
 
     // Port of AIEFinalizeBundle.cpp:49-56: wrap each standalone candidate.
-    // B4.3: setDesc first when empty-cycle tryAdd selects a format member
+    // setDesc first when empty-cycle tryAdd selects a format member
     // (late bare NOP/BR/demote inserts after PreEmit growth).
     while (MII != MIE) {
       if (!MII->isInsideBundle() && isBundleCandidate(MII)) {
@@ -104,10 +104,17 @@ bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
         // MII still points at the original MI (now a BUNDLE child).
         MachineInstr &Root = *getBundleStart(MII);
         assert(Root.isBundle() && "finalizeBundle must produce a BUNDLE root");
-        // Durable FormatID (HaydnBundlePlan.h stampBundleFormatID; multi-MI
-        // path: HaydnPostRASchedStrategy.cpp:266-280).
-        haydn::bundle::stampBundleFormatID(Root,
-                                           haydn::bundle::ProductFormatID);
+        // Durable Format E row + completion (multi-MI path:
+        // HaydnBundleMaterialize commitExactMultiMIProductCycle).
+        // Prefer plan from late solve when available; else singleton product.
+        if (auto Late =
+                haydn::bundle::commitLateProductCycle(MII->getOpcode(), Fmts)) {
+          haydn::bundle::stampBundleCommit(Root, Late->Plan);
+        } else {
+          haydn::bundle::BundlePlan Plan = haydn::bundle::makeProductPlan(
+              /*Occupied=*/0, {MII->getOpcode()});
+          haydn::bundle::stampBundleCommit(Root, Plan);
+        }
         Changed = true;
       }
       ++MII;

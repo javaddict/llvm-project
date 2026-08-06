@@ -1,8 +1,10 @@
 # REQUIRES: haydn-registered-target
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o
 # RUN: llvm-objdump -d --triple=haydn-unknown-elf %t.o | FileCheck %s
-#
-# Bundle128 conditional branches: imm12 (÷2) range is ±4 KiB. Longer gaps
+
+# Role: object — Format E conditional branches: imm12 (÷2) range is ±4 KiB.
+
+# Format E conditional branches: imm12 (÷2) range is ±4 KiB. Longer gaps
 # must go through LLD thunks (lld/test/ELF/haydn/reloc-long-branch-thunk.s)
 # not MC applyFixup. Keep a mid-range gap that still assembles+disassembles.
 

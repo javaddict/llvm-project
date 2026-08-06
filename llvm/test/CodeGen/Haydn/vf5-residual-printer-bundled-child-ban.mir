@@ -1,0 +1,28 @@
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %s -o - 2>&1 | FileCheck %s --check-prefix=PRINTER
+
+# Role: verifier — Late-MC one-to-one: residual cycle-forming child inside a BUNDLE root fails closed in AsmPrinter (shared isResidualCycleFormingPseudo with VerifyBundles).
+
+# Late-MC one-to-one: residual cycle-forming child inside a BUNDLE root fails
+# closed in AsmPrinter (shared isResidualCycleFormingPseudo with VerifyBundles).
+# start-after livedebugvalues hits the printer path directly.
+
+--- |
+  define void @printer_bundled_loadi32() { ret void }
+...
+---
+name:            printer_bundled_loadi32
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    successors: %bb.1
+    ; PRINTER: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; PRINTER: must be exact-committed real MIs before AsmPrinter
+    BUNDLE 0, implicit-def $r1 {
+      $r1 = LOADI32 %bb.1
+    }
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15

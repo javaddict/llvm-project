@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=legalizer %s -o - | FileCheck %s
-#
+
+# Role: MIR — control flow legalization (branches, G_BRCOND, G_BR, G_PHI, G_SELECT).
+
 # Test control flow legalization (branches, G_BRCOND, G_BR, G_PHI, G_SELECT).
 # These should be legal for Haydn (pass through unchanged by the legalizer).
 

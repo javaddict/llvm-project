@@ -1,0 +1,22 @@
+# RUN: not llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   %s -o - 2>&1 | FileCheck %s
+
+# Role: verifier — Late-MC residual LoopStart at late firewall is fatal (must be final SET_HWLOOP_{W,F2_W} before layout).
+
+# Late-MC residual LoopStart at late firewall is fatal
+# (must be final SET_HWLOOP_{W,F2_W} before layout).
+
+--- |
+  define void @residual_loop_start() { ret void }
+...
+---
+name:            residual_loop_start
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; CHECK: residual cycle-forming pseudo
+    LoopStart $r1, 0
+    RET implicit $r15

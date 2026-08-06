@@ -18,12 +18,16 @@
 #include "HaydnResourceCycle.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "gtest/gtest.h"
+#include <utility>
 
-#define GET_INSTRINFO_ENUM
-#include "HaydnGenInstrInfo.inc"
+// Opcode / regclass enums come via HaydnResourceCycle → HaydnPortModel →
+// HaydnMCTargetDesc (GET_INSTRINFO_ENUM / GET_REGINFO_ENUM). Do not re-include
+// HaydnGenInstrInfo.inc here — double GET_*_ENUM is a hard error.
 
 using namespace llvm;
 using namespace llvm::Haydn;
@@ -77,7 +81,7 @@ TEST(HaydnBundleTest, SameSlotConflicts) {
 }
 
 // Encode-time pack: four multi-slot ALU ops cannot all fit (issue/slot
-// saturation). Three can fill Bundle128.
+// saturation). Three can fill one product cycle.
 TEST(HaydnBundleTest, ExhaustiveThreeSlotFillRejectsFourth) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
@@ -522,22 +526,45 @@ TEST(HaydnBundleTest, B24_AltsBearingUsesTryAddOrder) {
 }
 
 TEST(HaydnBundleTest, B24_BundleOccupancyMatchesSolver) {
-  // Adapter contract: sequential Bundle.add occupancy == pure tryAddProduct.
+  // Adapter contract: sequential Bundle.add occupancy == pure exactTryAdd
+ // preferred candidate.
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
-  haydn::bundle::CycleState S = haydn::bundle::makeProductCycleState();
+  haydn::bundle::CycleCandidateSet Cands =
+      haydn::bundle::makeProductCandidateSet();
   MCInst Ops[3];
   const unsigned Seq[] = {Haydn::ST32, Haydn::ADD64, Haydn::ADD32};
   for (unsigned I = 0; I < 3; ++I) {
     Ops[I].setOpcode(Seq[I]);
     ASSERT_TRUE(B.canAdd(Seq[I]));
-    ASSERT_TRUE(haydn::bundle::canTryAddProduct(S, Fmts, Seq[I]));
+    ASSERT_TRUE(haydn::bundle::canExactTryAddProduct(Cands, Fmts, Seq[I]));
     B.add(&Ops[I]);
-    ASSERT_TRUE(haydn::bundle::tryAddProduct(S, Fmts, Seq[I]));
-    EXPECT_EQ(B.getOccupiedSlots(), S.OccupiedSlots) << "idx " << I;
+    ASSERT_TRUE(haydn::bundle::exactTryAddProduct(Cands, Fmts, Seq[I]));
+    EXPECT_EQ(B.getOccupiedSlots(),
+              haydn::bundle::selectPreferredCandidate(Cands).OccupiedSlots)
+        << "idx " << I;
   }
   EXPECT_EQ(B.getOccupiedSlots(),
             SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+}
+
+TEST(HaydnBundleTest, VF21_ExactRematchPacksADD32_2xADD64) {
+  // Bundle must accept ADD32 + 2×ADD64 via exact rematch (first-fit dead-end).
+  HaydnMCFormats Fmts;
+  Bundle<MCInst> B(&Fmts);
+  MCInst A, B1, B2;
+  A.setOpcode(Haydn::ADD32);
+  B1.setOpcode(Haydn::ADD64);
+  B2.setOpcode(Haydn::ADD64);
+  ASSERT_TRUE(B.canAdd(Haydn::ADD32));
+  B.add(&A);
+  ASSERT_TRUE(B.canAdd(Haydn::ADD64));
+  B.add(&B1);
+  ASSERT_TRUE(B.canAdd(Haydn::ADD64))
+      << "Bundle exact matching must not first-fit dead-end";
+  B.add(&B2);
+  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT_ALL));
+  EXPECT_EQ(B.size(), 3u);
 }
 
 TEST(HaydnBundleTest, B24_EmptyStandaloneEscapeRetained) {
@@ -672,12 +699,12 @@ TEST(HaydnBundleTest, B41_PreRAProductFeasibleFormatMaskMatchesSolver) {
 }
 
 //===----------------------------------------------------------------------===//
-// SMS ResourceCycle live CycleState = post-RA tryAdd depth
+// SMS ResourceCycle live CycleCandidateSet = post-RA exact tryAdd depth
 //===----------------------------------------------------------------------===//
 //
 // AIE peers: AIEHazardRecognizer.cpp:173-214 ResourceCycle canReserve/reserve;
 // AIEHazardRecognizer.h:315-328 Bundle-backed ResourceCycle.
-// Haydn: live CycleState + tryAddProduct (HR CurrentCycleState peer).
+// Haydn: live CycleCandidateSet + exactTryAddProduct (HR peer).
 
 /// Sequential ResourceCycle packing cycle count — mirrors calculateResMIIDFA
 /// open-new-cycle-on-canReserve-false (MachinePipeliner ResourceManager).
@@ -757,6 +784,140 @@ TEST(HaydnBundleTest, B42_ResourceCycleCountEqualsComputeProductResMII) {
     EXPECT_EQ(sequentialResourceCycleCount(Ops), 2u);
     EXPECT_EQ(computeProductResMII(Ops), 2u);
   }
+  {
+ // : ADD32+2×ADD64 packs in one cycle via exact rematch.
+    unsigned Ops[] = {Haydn::ADD32, Haydn::ADD64, Haydn::ADD64};
+    EXPECT_EQ(sequentialResourceCycleCount(Ops), 1u);
+    EXPECT_EQ(computeProductResMII(Ops), 1u);
+  }
+}
+
+// Three-ready rematch through SMS ResourceCycle (list-sched product peer):
+// preferred first-fit freezes ADD32 on S2 then ADD64 on S1 and loses the
+// second ADD64; live CycleCandidateSet rematches so all three pack in one
+// modulo cycle (ADD32 → S0). SMS-RESMII: exact/DFA ResMII = 1; preferred
+// collapse overestimate is positive (qualification contrast only).
+TEST(HaydnBundleTest, SMS_ThreeReadyRematch_ADD32_2xADD64) {
+  HaydnMCFormats Fmts;
+
+  // Preferred freeze dead-end — baseline exact matching must defeat.
+  {
+    CycleState FirstFit = makeProductCycleState();
+    ASSERT_TRUE(tryAddProduct(FirstFit, Fmts, Haydn::ADD32));
+    EXPECT_EQ(FirstFit.Members.back().FieldSlots, SlotBits(Haydn::SLOT2));
+    ASSERT_TRUE(tryAddProduct(FirstFit, Fmts, Haydn::ADD64));
+    EXPECT_EQ(FirstFit.Members.back().FieldSlots, SlotBits(Haydn::SLOT1));
+    EXPECT_FALSE(tryAddProduct(FirstFit, Fmts, Haydn::ADD64))
+        << "preferred freeze must dead-end the scarce S1|S2 pair";
+  }
+
+  // ResourceCycle exact path: three canReserve/reserve succeed via rematch.
+  HaydnResourceCycle RC;
+  ASSERT_TRUE(RC.canReserveByOpcode(Haydn::ADD32));
+  RC.reserveByOpcode(Haydn::ADD32);
+  EXPECT_EQ(RC.getMatchingFrontierSize(), 3u)
+      << "frontier retains S0|S1|S2 matchings after one ADD32";
+  ASSERT_TRUE(RC.canReserveByOpcode(Haydn::ADD64));
+  RC.reserveByOpcode(Haydn::ADD64);
+  ASSERT_TRUE(RC.canReserveByOpcode(Haydn::ADD64))
+      << "SMS ResourceCycle must rematch, not first-fit freeze";
+  RC.reserveByOpcode(Haydn::ADD64);
+  EXPECT_EQ(RC.getMemberCount(), 3u);
+  EXPECT_EQ(RC.getOccupiedSlots(), SlotBits(Haydn::SLOT_ALL));
+  EXPECT_GE(RC.getCandidates().size(), 1u);
+  // Preferred survivor after rematch: ADD32 on S0 so both ADD64 take S1|S2.
+  EXPECT_EQ(RC.getCycleState().Members[0].LogicalOpcode, Haydn::ADD32);
+  EXPECT_EQ(RC.getCycleState().Members[0].FieldSlots, SlotBits(Haydn::SLOT0));
+
+  // MID overload (SMS ResourceManager placement) agrees — descriptor ports
+  // only; format rematch is opcode-keyed.
+  HaydnResourceCycle RCmid;
+  MCInstrDesc D32{}, D64{};
+  D32.Opcode = Haydn::ADD32;
+  D64.Opcode = Haydn::ADD64;
+  ASSERT_TRUE(RCmid.canReserveResources(&D32));
+  RCmid.reserveResources(&D32);
+  ASSERT_TRUE(RCmid.canReserveResources(&D64));
+  RCmid.reserveResources(&D64);
+  ASSERT_TRUE(RCmid.canReserveResources(&D64))
+      << "MID placement path must rematch the three-ready triple";
+  RCmid.reserveResources(&D64);
+  EXPECT_EQ(RCmid.getMemberCount(), 3u);
+  EXPECT_EQ(RCmid.getCycleState().Members[0].FieldSlots,
+            SlotBits(Haydn::SLOT0));
+
+  // SMS-RESMII: DFA/RC walk == exhaustive; preferred overestimates.
+  unsigned Ops[] = {Haydn::ADD32, Haydn::ADD64, Haydn::ADD64};
+  EXPECT_EQ(sequentialResourceCycleCount(Ops), 1u);
+  EXPECT_EQ(computeProductResMII(Ops), 1u);
+  EXPECT_EQ(computeExhaustiveProductResMII(Ops), 1u);
+  EXPECT_EQ(productResMIIOverestimate(Ops), 0);
+  EXPECT_GE(computePreferredProductResMII(Ops), 2u);
+  EXPECT_GE(preferredProductResMIIOverestimate(Ops), 1);
+}
+
+// Matching frontier (durable-rules 8a): after one multi-slot logical, retain
+// every nondominated partial matching (S0 / S1 / S2 for ADD32), not a single
+// first-fit freeze. canReserve probes expand the whole set.
+TEST(HaydnBundleTest, SMS_MatchingFrontier_MultiCandidateAfterOneADD32) {
+  HaydnResourceCycle RC;
+  EXPECT_EQ(RC.getMatchingFrontierSize(), 1u) << "empty seed is one candidate";
+  EXPECT_EQ(RC.getMatchingFrontierFormatMask(), ProductFormatMask);
+  EXPECT_EQ(RC.getMatchingFrontierFormatMask(), RC.getFeasibleFormatMask());
+
+  ASSERT_TRUE(RC.canReserveByOpcode(Haydn::ADD32));
+  RC.reserveByOpcode(Haydn::ADD32);
+
+  // Three disjoint single-slot placements under Full — none packing-dominates
+  // another (Occupied bits differ; FeasibleFormatMask stays ProductFormatMask).
+  EXPECT_EQ(RC.getMatchingFrontierSize(), 3u)
+      << "frontier must retain S0|S1|S2 matchings after one ADD32; first-fit "
+         "would freeze size 1";
+  EXPECT_EQ(RC.getMemberCount(), 1u);
+  EXPECT_EQ(RC.getMatchingFrontierFormatMask(), ProductFormatMask);
+
+  // Count distinct OccupiedSlots among survivors — must cover all three slots.
+  SlotBits Seen = 0;
+  for (const CycleState &S : RC.getCandidates()) {
+    EXPECT_EQ(S.memberCount(), 1u);
+    EXPECT_EQ(S.FeasibleFormatMask, ProductFormatMask);
+    Seen |= S.OccupiedSlots;
+  }
+  EXPECT_EQ(Seen, SlotBits(Haydn::SLOT_ALL));
+
+  // Second ADD32 still expands the full frontier (not preferred-only).
+  ASSERT_TRUE(RC.canReserveByOpcode(Haydn::ADD32));
+  RC.reserveByOpcode(Haydn::ADD32);
+  EXPECT_EQ(RC.getMemberCount(), 2u);
+  EXPECT_GE(RC.getMatchingFrontierSize(), 1u);
+  EXPECT_EQ(RC.getMatchingFrontierFormatMask(), ProductFormatMask);
+}
+
+// SMS ResourceCycle frontier ≡ pure exactTryAddProduct candidate set (HR peer).
+TEST(HaydnBundleTest, SMS_MatchingFrontier_ParityWithExactTryAddProduct) {
+  HaydnMCFormats Fmts;
+  CycleCandidateSet Pure = makeProductCandidateSet(Fmts.getPacketFormats());
+  HaydnResourceCycle RC;
+
+  const unsigned Seq[] = {Haydn::ADD32, Haydn::ADD64, Haydn::ST32};
+  for (unsigned Opc : Seq) {
+    ASSERT_TRUE(canExactTryAddProduct(Pure, Fmts, Opc)) << "pure " << Opc;
+    ASSERT_TRUE(exactTryAddProduct(Pure, Fmts, Opc));
+    ASSERT_TRUE(RC.canReserveByOpcode(Opc)) << "RC " << Opc;
+    RC.reserveByOpcode(Opc);
+
+    uint64_t PureUnion = 0;
+    for (const CycleState &S : Pure)
+      PureUnion |= S.FeasibleFormatMask;
+
+    EXPECT_EQ(RC.getMatchingFrontierSize(), Pure.size()) << "after " << Opc;
+    EXPECT_EQ(RC.getOccupiedSlots(),
+              selectPreferredCandidate(Pure).OccupiedSlots)
+        << "after " << Opc;
+    EXPECT_EQ(RC.getMatchingFrontierFormatMask(), PureUnion) << "after " << Opc;
+    EXPECT_EQ(RC.getMemberCount(), selectPreferredCandidate(Pure).memberCount())
+        << "after " << Opc;
+  }
 }
 
 TEST(HaydnBundleTest, B42_MIDPathAgreesWithOpcodeAndClearResetsMask) {
@@ -800,6 +961,1021 @@ TEST(HaydnBundleTest, B42_ResourceCycleLDLDMACPacksOneCycle) {
   EXPECT_EQ(RC.getMemberCount(), 3u);
   EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask);
   EXPECT_EQ(RC.getFeasibleFormatMask(), RC.getCycleState().FeasibleFormatMask);
+}
+
+//===----------------------------------------------------------------------===//
+// : SMS ResourceCycle port demand + alone-ops (descriptor-derived capacity)
+//===----------------------------------------------------------------------===//
+//
+// Format-only canReserveByOpcode still packs 3×ADD32 (slot cap). Port-aware
+// path enforces GPR 4R2W / DR 7R3W / AR 2R2W. SMS placement uses MID ports;
+// ResMII packing uses MI count*Ports (MRI-correct for vregs).
+
+TEST(HaydnBundleTest, VF3_ResourceCycleGPRWriteBudgetTwo) {
+  // Two independent 2R1W ALU ops fill the 2W budget; a third write must fail
+  // even though a Free slot remains under Full (3-issue).
+  HaydnResourceCycle RC;
+  HaydnCyclePortDemand ALU; // ADD32-shaped: 2R1W GPR
+  ALU.GPRReads = 2;
+  ALU.GPRWrites = 1;
+
+  ASSERT_TRUE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, ALU));
+  RC.reserveByOpcodeWithPorts(Haydn::ADD32, ALU);
+  ASSERT_TRUE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, ALU));
+  RC.reserveByOpcodeWithPorts(Haydn::ADD32, ALU);
+  EXPECT_EQ(RC.getPortDemand().GPRWrites, 2u);
+  EXPECT_EQ(RC.getPortDemand().GPRReads, 4u);
+  EXPECT_FALSE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, ALU))
+      << "third 1W must exceed HAYDN_GPR_WRITE_PORTS=2; occ slots still free="
+      << (RC.getOccupiedSlots() != SlotBits(Haydn::SLOT_ALL));
+  // Format-only path still accepts a third (no ports) — documents MID vs opcode.
+  EXPECT_TRUE(RC.canReserveByOpcode(Haydn::ADD32));
+}
+
+TEST(HaydnBundleTest, VF3_ResourceCycleGPRReadBudgetFour) {
+  HaydnResourceCycle RC;
+  HaydnCyclePortDemand Heavy; // 3R0W — two fill 6R > 4R
+  Heavy.GPRReads = 3;
+  ASSERT_TRUE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, Heavy));
+  RC.reserveByOpcodeWithPorts(Haydn::ADD32, Heavy);
+  EXPECT_FALSE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, Heavy))
+      << "3R+3R exceeds HAYDN_GPR_READ_PORTS=4";
+}
+
+TEST(HaydnBundleTest, VF3_ResourceCycleDRWriteBudgetThree) {
+  // ADD64 is only S1|S2 (2 slots), so charge DR writes via ADD32 format
+  // path to isolate the DR 3W pool from slot occupancy.
+  HaydnResourceCycle RC;
+  HaydnCyclePortDemand DRW;
+  DRW.DRWrites = 1;
+  for (unsigned I = 0; I < HAYDN_DR_WRITE_PORTS; ++I) {
+    ASSERT_TRUE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, DRW)) << I;
+    RC.reserveByOpcodeWithPorts(Haydn::ADD32, DRW);
+  }
+  EXPECT_EQ(RC.getPortDemand().DRWrites, HAYDN_DR_WRITE_PORTS);
+  EXPECT_FALSE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, DRW))
+      << "fourth DR write must exceed HAYDN_DR_WRITE_PORTS=3";
+}
+
+TEST(HaydnBundleTest, VF3_ResourceCycleARBudgetTwo) {
+  HaydnResourceCycle RC;
+  HaydnCyclePortDemand AR;
+  AR.ARReads = 1;
+  AR.ARWrites = 1;
+  ASSERT_TRUE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, AR));
+  RC.reserveByOpcodeWithPorts(Haydn::ADD32, AR);
+  // Second 1R1W → 2R2W at cap.
+  ASSERT_TRUE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, AR));
+  RC.reserveByOpcodeWithPorts(Haydn::ADD32, AR);
+  EXPECT_FALSE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, AR));
+}
+
+TEST(HaydnBundleTest, VF3_ResourceCycleClearResetsPortsAndAlone) {
+  HaydnResourceCycle RC;
+  HaydnCyclePortDemand ALU;
+  ALU.GPRReads = 2;
+  ALU.GPRWrites = 1;
+  RC.reserveByOpcodeWithPorts(Haydn::ADD32, ALU);
+  EXPECT_NE(RC.getPortDemand().GPRReads, 0u);
+  RC.clearResources();
+  EXPECT_EQ(RC.getPortDemand().GPRReads, 0u);
+  EXPECT_EQ(RC.getPortDemand().GPRWrites, 0u);
+  EXPECT_FALSE(RC.hasAloneOp());
+  EXPECT_TRUE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, ALU));
+}
+
+TEST(HaydnBundleTest, VF3_ResourceCycleArctanIssueAlone) {
+  // ARCTAN/SIN_COS must issue alone (PackLegality / HR peer). Opcode-keyed.
+  HaydnResourceCycle RC;
+  ASSERT_TRUE(RC.canReserveByOpcode(Haydn::ARCTAN));
+  RC.reserveByOpcode(Haydn::ARCTAN);
+  EXPECT_TRUE(RC.hasAloneOp());
+  EXPECT_FALSE(RC.canReserveByOpcode(Haydn::ADD32))
+      << "nothing co-issues with ARCTAN";
+  EXPECT_FALSE(RC.canReserveByOpcode(Haydn::SIN_COS));
+
+  RC.clearResources();
+  ASSERT_TRUE(RC.canReserveByOpcode(Haydn::ADD32));
+  RC.reserveByOpcode(Haydn::ADD32);
+  EXPECT_FALSE(RC.canReserveByOpcode(Haydn::ARCTAN))
+      << "ARCTAN refuses a non-empty cycle";
+}
+
+// Regression: reserveWithPorts must charge format/alone BEFORE Ports += Demand.
+// isPackingEmpty/canReserveFormatAndAlone read Ports; charging first made
+// alone-with-ports and no-alt empty-escape re-assert fail (SMS crash class).
+TEST(HaydnBundleTest, ResourceCycleReservePortsAfterFormatAlone) {
+  HaydnCyclePortDemand SomePorts;
+  SomePorts.GPRReads = 1;
+  SomePorts.GPRWrites = 1;
+
+  // Alone + non-zero ports on an empty cycle must not assert / must stick.
+  {
+    HaydnResourceCycle RC;
+    ASSERT_TRUE(RC.canReserveByOpcodeWithPorts(Haydn::ARCTAN, SomePorts));
+    RC.reserveByOpcodeWithPorts(Haydn::ARCTAN, SomePorts);
+    EXPECT_TRUE(RC.hasAloneOp());
+    EXPECT_EQ(RC.getPortDemand().GPRWrites, 1u);
+    EXPECT_FALSE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, SomePorts));
+  }
+
+  // No-alt empty-escape (RET has no PlacementAlternatives) with ports.
+  {
+    HaydnResourceCycle RC;
+    ASSERT_TRUE(RC.canReserveByOpcodeWithPorts(Haydn::RET, SomePorts));
+    RC.reserveByOpcodeWithPorts(Haydn::RET, SomePorts);
+    EXPECT_EQ(RC.getPortDemand().GPRWrites, 1u);
+    // Escape does not consume slots; cycle is no longer empty for another no-alt.
+    EXPECT_FALSE(RC.canReserveByOpcodeWithPorts(Haydn::RET, SomePorts));
+  }
+}
+
+// SMS-HOOK II-wrap false-accept differential (plan §8.4 #8): two independent
+// ResourceCycles (ResourceManager per-modulo-phase model) both accept an
+// issue-alone op. Catalog multi-cycle StageCycles=2 under II=2 spans phase 1
+// from issue 0, so issue-time-only acceptance is a false accept relative to
+// multi-cycle wrap — SMS-HOOK fail-closes multi-cycle stages (product class-3
+// disabled). Does not implement multi-cycle booking; pure demonstration.
+// Lit peer: sms-format-hook-iiwrap-reject.mir.
+TEST(HaydnBundleTest, SMSHookIIWrapIssueTimeOnlyFalseAccept) {
+  using namespace llvm::haydn::restriction;
+  EXPECT_TRUE(HaydnResourceCycle::issueTimeOnlyFalseAcceptsIIWrapAloneConflict());
+  // Explicit dual-cycle accept (same model as the helper).
+  HaydnResourceCycle C0, C1;
+  ASSERT_TRUE(C0.canReserveByOpcode(Haydn::ARCTAN));
+  ASSERT_TRUE(C1.canReserveByOpcode(Haydn::ARCTAN));
+  C0.reserveByOpcode(Haydn::ARCTAN);
+  C1.reserveByOpcode(Haydn::ARCTAN);
+  EXPECT_TRUE(C0.hasAloneOp());
+  EXPECT_TRUE(C1.hasAloneOp());
+  // II-wrap phase math: 2-cycle occupancy from phase 0 under II=2 claims 1.
+  EXPECT_TRUE(smsIIWrapOccupiesPhase(0, 2, 2, 1));
+  EXPECT_TRUE(smsHookRejectsIIWrapFalseAccept(2, 2));
+  // Single-cycle alone is class-1 and does not trip II-wrap reject polarity.
+  EXPECT_FALSE(smsHookRejectsIIWrapFalseAccept(1, 2));
+}
+
+// Soft-exit format-SMS QoR (SMS slice): II floors + post-RA exact-pack
+// metrics; no HANDOFF invent. Pins HaydnResourceCycle::softExitIIFloor =
+// max(format exhaustive ResMII, port ResMII). RecMII remains DDG/itinerary
+// (macc-acc-feedback lit); ResourceCycle never fabricates recurrence numbers
+// or durable BUNDLE roots. Dual-run Full-only product vs generic residual
+// ranking freeze lives in sms-format-generic-baseline.ll (PROD/GEN/RP
+// ResMII/II parity, VF3-G2) and sms-format-ilp-crit-dual-run.ll (ILP multi-
+// load / dual-acc + critical-path chain residual attribution, VF3-G3).
+// Sibling pre-RA: HaydnPortModelTest.PreRASoftExitQoRFloorsAndExactPack.
+TEST(HaydnBundleTest, SMSSoftExitQoRFloorsAndExactPack) {
+  using RC = HaydnResourceCycle;
+  using namespace llvm::haydn::bundle;
+
+  // Classic port-binds-II body: three independent 1W GPR ops.
+  // Format-only exhaustive ResMII = 1 (Full three slots); port floor = 2.
+  {
+    unsigned Ops[] = {Haydn::ADD32, Haydn::ADD32, Haydn::ADD32};
+    EXPECT_EQ(computeExhaustiveProductResMII(Ops), 1u);
+    EXPECT_EQ(RC::portLowerBoundResMII(/*GPRR=*/0, /*GPRW=*/3), 2u);
+    EXPECT_EQ(RC::softExitIIFloor(Ops, /*GPRR=*/0, /*GPRW=*/3), 2u);
+    EXPECT_GT(RC::softExitIIFloor(Ops, 0, 3),
+              computeExhaustiveProductResMII(Ops));
+    EXPECT_TRUE(RC::qualKernelExactlyPackable(Ops));
+    EXPECT_EQ(productResMIIOverestimate(Ops), 0);
+    EXPECT_TRUE(RC::qualKernelFormsOneExactCycle(Ops));
+    // Port-aware sequential packing peer: VF3_PortAwareResMIITwoWritesNeedTwoCycles.
+  }
+
+  // Qualification ALU coissue: format packs one cycle; full 3×(2R1W) ports
+  // bind soft-exit II ≥ 2. Exact-pack remains true (multi-cycle cover OK).
+  {
+    unsigned Ops[] = {Haydn::ADD32, Haydn::XOR32, Haydn::OR32};
+    EXPECT_TRUE(RC::qualKernelFormsOneExactCycle(Ops));
+    EXPECT_TRUE(RC::qualKernelCoissuePackable(Ops));
+    EXPECT_TRUE(RC::qualKernelExactlyPackable(Ops));
+    EXPECT_EQ(computeExhaustiveProductResMII(Ops), 1u);
+    EXPECT_EQ(RC::portLowerBoundResMII(/*GPRR=*/6, /*GPRW=*/3), 2u);
+    EXPECT_EQ(RC::softExitIIFloor(Ops, 6, 3), 2u);
+    EXPECT_EQ(RC::portLowerBoundResMII(4, 2), 1u);
+    EXPECT_EQ(RC::softExitIIFloor(Ops, 4, 2), 1u);
+  }
+
+  // Three-ready rematch: format ResMII 1; soft-exit with light ports stays 1.
+  {
+    unsigned Ops[] = {Haydn::ADD32, Haydn::ADD64, Haydn::ADD64};
+    EXPECT_TRUE(RC::qualKernelFormsOneExactCycle(Ops));
+    EXPECT_EQ(computeExhaustiveProductResMII(Ops), 1u);
+    EXPECT_EQ(RC::softExitIIFloor(Ops, /*GPRR=*/2, /*GPRW=*/1, /*DRR=*/4,
+                                  /*DRW=*/2),
+              1u);
+    EXPECT_TRUE(RC::qualKernelExactlyPackable(Ops));
+    EXPECT_FALSE(productResMIIFailsQualification(Ops));
+  }
+
+  // Empty body: floors 0.
+  EXPECT_EQ(RC::softExitIIFloor(ArrayRef<unsigned>(), 0, 0), 0u);
+
+  // Greedy order-trap: fail-close qualification; soft-exit still reports the
+  // exact format bound — never invents a HANDOFF escape hatch.
+  {
+    unsigned Ops[] = {Haydn::ST32, Haydn::ST32, Haydn::ADD32, Haydn::ADD32,
+                      Haydn::ADD32};
+    EXPECT_TRUE(productResMIIFailsQualification(Ops));
+    EXPECT_FALSE(RC::qualKernelExactlyPackable(Ops));
+    EXPECT_EQ(computeExhaustiveProductResMII(Ops), 2u);
+    EXPECT_EQ(RC::softExitIIFloor(Ops, 0, 0), 2u);
+  }
+
+  // MOVE32-class MI path: 3×1R1W → port floor 2; format-only still 1.
+  {
+    unsigned Ops[] = {Haydn::MOVE32, Haydn::MOVE32, Haydn::MOVE32};
+    EXPECT_EQ(computeExhaustiveProductResMII(Ops), 1u);
+    EXPECT_EQ(RC::portLowerBoundResMII(
+                  3 * HaydnMove32ClassMiRepeatedSrcGprReads,
+                  3 * HaydnMove32ClassMiRepeatedSrcGprWrites),
+              2u);
+    EXPECT_EQ(RC::softExitIIFloor(
+                  Ops, 3 * HaydnMove32ClassMiRepeatedSrcGprReads,
+                  3 * HaydnMove32ClassMiRepeatedSrcGprWrites),
+              2u);
+  }
+}
+
+// SMS-HANDOFF ResourceCycle surface — metrics-only packability of
+// qualification co-issue sets (no setDesc / BUNDLE invent / analyzeLoop).
+// Peer: HaydnPortModelTest.PreRASMSHandoffPackabilityOracleSurface (pre-RA).
+TEST(HaydnBundleTest, SMSHandoff_QualKernelPackabilityOracleSurface) {
+  using namespace llvm::haydn::bundle;
+
+  // Vacuous empty body.
+  EXPECT_TRUE(
+      HaydnResourceCycle::qualKernelFormsOneExactCycle(ArrayRef<unsigned>()));
+  EXPECT_TRUE(
+      HaydnResourceCycle::qualKernelCoissuePackable(ArrayRef<unsigned>()));
+  EXPECT_TRUE(
+      HaydnResourceCycle::qualKernelExactlyPackable(ArrayRef<unsigned>()));
+
+  // Independent ALU triple from postmisched-exact-nosplit qualification —
+  // one Full cycle under exact matching; zero greedy overestimate.
+  {
+    unsigned Ops[] = {Haydn::ADD32, Haydn::XOR32, Haydn::OR32};
+    EXPECT_TRUE(HaydnResourceCycle::qualKernelFormsOneExactCycle(Ops));
+    EXPECT_TRUE(HaydnResourceCycle::qualKernelCoissuePackable(Ops));
+    EXPECT_TRUE(HaydnResourceCycle::qualKernelExactlyPackable(Ops));
+    EXPECT_EQ(computeExhaustiveProductResMII(Ops), 1u);
+    EXPECT_EQ(productResMIIOverestimate(Ops), 0);
+    EXPECT_FALSE(productResMIIFailsQualification(Ops));
+  }
+
+  // Three-ready rematch triple (ADD32 + 2×ADD64) — preferred first-fit can
+  // dead-end; exact cycle still packs. Metrics only: no setDesc claim.
+  {
+    unsigned Ops[] = {Haydn::ADD32, Haydn::ADD64, Haydn::ADD64};
+    EXPECT_TRUE(HaydnResourceCycle::qualKernelFormsOneExactCycle(Ops));
+    EXPECT_TRUE(HaydnResourceCycle::qualKernelCoissuePackable(Ops));
+    EXPECT_TRUE(HaydnResourceCycle::qualKernelExactlyPackable(Ops));
+    EXPECT_EQ(computeExhaustiveProductResMII(Ops), 1u);
+    EXPECT_EQ(productResMIIOverestimate(Ops), 0);
+  }
+
+  // Two ST32: format-incompatible same cycle (both Slot0) → not one cycle;
+  // body still exactly packable across two cycles with zero overestimate.
+  {
+    unsigned Ops[] = {Haydn::ST32, Haydn::ST32};
+    EXPECT_FALSE(HaydnResourceCycle::qualKernelFormsOneExactCycle(Ops));
+    EXPECT_FALSE(HaydnResourceCycle::qualKernelCoissuePackable(Ops));
+    EXPECT_TRUE(HaydnResourceCycle::qualKernelExactlyPackable(Ops));
+    EXPECT_EQ(computeExhaustiveProductResMII(Ops), 2u);
+    EXPECT_EQ(productResMIIOverestimate(Ops), 0);
+  }
+
+  // Over-width coissue (4 ops) cannot form one cycle.
+  {
+    unsigned Ops[] = {Haydn::ADD32, Haydn::XOR32, Haydn::OR32, Haydn::AND32};
+    EXPECT_FALSE(HaydnResourceCycle::qualKernelFormsOneExactCycle(Ops));
+    EXPECT_FALSE(HaydnResourceCycle::qualKernelCoissuePackable(Ops));
+    EXPECT_TRUE(HaydnResourceCycle::qualKernelExactlyPackable(Ops));
+    EXPECT_GE(computeExhaustiveProductResMII(Ops), 2u);
+  }
+
+  // Greedy order-trap body fails qualification packability (overestimate).
+  {
+    unsigned Ops[] = {Haydn::ST32, Haydn::ST32, Haydn::ADD32, Haydn::ADD32,
+                      Haydn::ADD32};
+    EXPECT_TRUE(productResMIIFailsQualification(Ops));
+    EXPECT_FALSE(HaydnResourceCycle::qualKernelExactlyPackable(Ops));
+  }
+
+  // N > MaxExhaustiveProductResMIIOps: exhaustive falls back to greedy.
+  // Streaming SMS bodies (bkfir / dual-load MAC) land here — must remain
+  // exactly packable (no false reject on the inexact oracle).
+  {
+    unsigned Big[MaxExhaustiveProductResMIIOps + 2];
+    for (unsigned &O : Big)
+      O = Haydn::ADD32;
+    EXPECT_FALSE(productResMIIFailsQualification(Big));
+    EXPECT_TRUE(HaydnResourceCycle::qualKernelExactlyPackable(Big));
+    EXPECT_GE(computeExhaustiveProductResMII(Big), 1u);
+    // Co-issue requires size ≤ ISSUE_SLOT_COUNT; large bodies never coissue.
+    EXPECT_FALSE(HaydnResourceCycle::qualKernelCoissuePackable(Big));
+  }
+}
+
+TEST(HaydnBundleTest, VF3_DescPortEstimateADD32Shape) {
+  // Synthetic: three GPR register operands, one def → 2R1W (no dedup needed).
+  // Real SMS MID path uses table-backed MCInstrDesc; this pins the classifier.
+  HaydnCyclePortDemand D;
+  haydnClassifyPortBankClassID(Haydn::GPR32RegClassID, /*IsDef=*/true, D);
+  haydnClassifyPortBankClassID(Haydn::GPR32RegClassID, /*IsDef=*/false, D);
+  haydnClassifyPortBankClassID(Haydn::GPR32RegClassID, /*IsDef=*/false, D);
+  EXPECT_EQ(D.GPRReads, 2u);
+  EXPECT_EQ(D.GPRWrites, 1u);
+  EXPECT_EQ(D.DRReads, 0u);
+  EXPECT_TRUE(D.fitsBudget());
+
+  HaydnCyclePortDemand DR;
+  haydnClassifyPortBankClassID(Haydn::DR64RegClassID, true, DR);
+  haydnClassifyPortBankClassID(Haydn::DR64RegClassID, false, DR);
+  EXPECT_EQ(DR.DRWrites, 1u);
+  EXPECT_EQ(DR.DRReads, 1u);
+}
+
+TEST(HaydnBundleTest, VF3_DescPortEstimateEmptyMIDNoPorts) {
+  // Unit-test style MID with only Opcode set (NumOperands=0) → zero ports.
+  // Existing format-only MID tests remain valid.
+  MCInstrDesc Desc{};
+  Desc.Opcode = Haydn::ADD32;
+  Desc.NumOperands = 0;
+  Desc.NumDefs = 0;
+  HaydnCyclePortDemand D = estimateHaydnPortsFromDesc(Desc);
+  EXPECT_EQ(D.GPRReads, 0u);
+  EXPECT_EQ(D.GPRWrites, 0u);
+
+  HaydnResourceCycle RC;
+  // Placement MID path with empty operands ≡ format-only (3×ADD32 pack).
+  ASSERT_TRUE(RC.canReserveResources(&Desc));
+  RC.reserveResources(&Desc);
+  ASSERT_TRUE(RC.canReserveResources(&Desc));
+  RC.reserveResources(&Desc);
+  ASSERT_TRUE(RC.canReserveResources(&Desc));
+  RC.reserveResources(&Desc);
+  EXPECT_FALSE(RC.canReserveResources(&Desc));
+  EXPECT_EQ(RC.getPortDemand().GPRWrites, 0u)
+      << "empty MID must not invent port demand";
+}
+
+/// Sequential packing with explicit port demand — mirrors calculateResMIIDFA
+/// MI path (count*Ports) where each open-cycle rejection bumps the cycle count.
+static unsigned
+sequentialPortAwareCycleCount(ArrayRef<std::pair<unsigned, HaydnCyclePortDemand>> Ops) {
+  if (Ops.empty())
+    return 0;
+  unsigned Cycles = 0;
+  HaydnResourceCycle RC;
+  bool CycleOpen = false;
+  for (const auto &Op : Ops) {
+    if (!RC.canReserveByOpcodeWithPorts(Op.first, Op.second)) {
+      RC.clearResources();
+      ++Cycles;
+      CycleOpen = false;
+      if (!RC.canReserveByOpcodeWithPorts(Op.first, Op.second))
+        return ~0u;
+    }
+    RC.reserveByOpcodeWithPorts(Op.first, Op.second);
+    CycleOpen = true;
+  }
+  if (CycleOpen)
+    ++Cycles;
+  return Cycles;
+}
+
+TEST(HaydnBundleTest, VF3_PortAwareResMIITwoWritesNeedTwoCycles) {
+  // Format-only packs three ADD32 in one cycle (slot cap). Port-aware packing
+  // (SMS ResMII MI path / placement MID path) binds at GPR 2W: three 1W ops
+  // need two modulo cycles — port-forced ResMII ≥ 2 while format oracle stays
+  // at 1 (lit: sms-format-resmii-port-forced.mir). ResourceCycle must not
+  // silently ignore pooled ports under Full.
+  HaydnCyclePortDemand ALU1W; // one write, zero reads (isolates 2W pool)
+  ALU1W.GPRWrites = 1;
+
+  std::pair<unsigned, HaydnCyclePortDemand> ThreeWrites[] = {
+      {Haydn::ADD32, ALU1W},
+      {Haydn::ADD32, ALU1W},
+      {Haydn::ADD32, ALU1W},
+  };
+  EXPECT_EQ(sequentialPortAwareCycleCount(ThreeWrites), 2u)
+      << "3×1W must open a second cycle under HAYDN_GPR_WRITE_PORTS=2";
+
+  // Format-only baseline still reports 1 cycle (slot-only, no ports).
+  unsigned FormatOnly[] = {Haydn::ADD32, Haydn::ADD32, Haydn::ADD32};
+  EXPECT_EQ(sequentialResourceCycleCount(FormatOnly), 1u);
+
+  // Two writes fit one cycle; a third 1W+1R still needs cycle 2.
+  HaydnCyclePortDemand ALU2R1W;
+  ALU2R1W.GPRReads = 2;
+  ALU2R1W.GPRWrites = 1;
+  std::pair<unsigned, HaydnCyclePortDemand> TwoThenThird[] = {
+      {Haydn::ADD32, ALU2R1W},
+      {Haydn::ADD32, ALU2R1W},
+      {Haydn::ADD32, ALU2R1W},
+  };
+  EXPECT_EQ(sequentialPortAwareCycleCount(TwoThenThird), 2u);
+}
+
+TEST(HaydnBundleTest, VF3_PortAwareResMIIReadCapAndAlone) {
+  // 3R + 3R exceeds 4R → two cycles (read pool).
+  HaydnCyclePortDemand R3;
+  R3.GPRReads = 3;
+  std::pair<unsigned, HaydnCyclePortDemand> TwoHeavyReads[] = {
+      {Haydn::ADD32, R3},
+      {Haydn::ADD32, R3},
+  };
+  EXPECT_EQ(sequentialPortAwareCycleCount(TwoHeavyReads), 2u);
+
+  // ARCTAN alone: co-issue with ADD32 is illegal → two cycles.
+  HaydnCyclePortDemand Zero;
+  std::pair<unsigned, HaydnCyclePortDemand> AloneThenALU[] = {
+      {Haydn::ARCTAN, Zero},
+      {Haydn::ADD32, Zero},
+  };
+  EXPECT_EQ(sequentialPortAwareCycleCount(AloneThenALU), 2u);
+
+  HaydnResourceCycle RC;
+  ASSERT_TRUE(RC.canReserveByOpcode(Haydn::SIN_COS));
+  RC.reserveByOpcode(Haydn::SIN_COS);
+  EXPECT_TRUE(RC.hasAloneOp());
+  EXPECT_FALSE(RC.canReserveByOpcode(Haydn::ADD32));
+}
+
+//===----------------------------------------------------------------------===//
+// MOVE32-class MI-versus-descriptor SMS port / placement differential
+//===----------------------------------------------------------------------===//
+//
+// SMS MID placement (estimateHaydnPortsFromDesc) always sees 1-def + 2-use
+// → 2R1W. ResMII MI packing (count*Ports) dedupes MOVE32 rd,rs,rs → 1R1W.
+// ResourceCycle must enforce both models; placement is the conservative one.
+
+TEST(HaydnBundleTest, SMS_Move32ClassMiVsDescPortShapes) {
+  EXPECT_TRUE(haydnMove32ClassDescOvercountsMiPorts());
+  EXPECT_EQ(HaydnMove32ClassMiRepeatedSrcGprReads, 1u);
+  EXPECT_EQ(HaydnMove32ClassMiRepeatedSrcGprWrites, 1u);
+  EXPECT_EQ(HaydnMove32ClassDescShapeGprReads, 2u);
+  EXPECT_EQ(HaydnMove32ClassDescShapeGprWrites, 1u);
+
+  // Synthetic descriptor shape via classifier (1 def + 2 uses) ≡ constants.
+  // (Table-backed estimateHaydnPortsFromDesc needs a real MCInstrDesc table
+  // entry; the MF peer lives on HaydnBundleBoundaryTest. Live packing below
+  // uses the same demand helpers ResourceCycle MID/MI overloads charge.)
+  HaydnCyclePortDemand D;
+  haydnClassifyPortBankClassID(Haydn::GPR32RegClassID, /*IsDef=*/true, D);
+  haydnClassifyPortBankClassID(Haydn::GPR32RegClassID, /*IsDef=*/false, D);
+  haydnClassifyPortBankClassID(Haydn::GPR32RegClassID, /*IsDef=*/false, D);
+  EXPECT_EQ(D.GPRReads, HaydnMove32ClassDescShapeGprReads);
+  EXPECT_EQ(D.GPRWrites, HaydnMove32ClassDescShapeGprWrites);
+  EXPECT_EQ(D.GPRReads, haydnMove32ClassDescShapeDemand().GPRReads);
+  EXPECT_EQ(D.GPRWrites, haydnMove32ClassDescShapeDemand().GPRWrites);
+
+  // MI repeated-src helpers match constants (1R1W).
+  EXPECT_EQ(haydnMove32ClassMiRepeatedSrcDemand().GPRReads,
+            HaydnMove32ClassMiRepeatedSrcGprReads);
+  EXPECT_EQ(haydnMove32ClassMiRepeatedSrcDemand().GPRWrites,
+            HaydnMove32ClassMiRepeatedSrcGprWrites);
+  EXPECT_GT(haydnMove32ClassDescShapeDemand().GPRReads,
+            haydnMove32ClassMiRepeatedSrcDemand().GPRReads);
+}
+
+TEST(HaydnBundleTest, SMS_Move32ClassPlacementDescMoreConservativeThanMI) {
+  // Same-cycle residual capacity after one MOVE32-class reserve:
+  //   MI shape (1R1W): remaining 3R1W — a 3R0W probe still fits.
+  //   Desc shape (2R1W): remaining 2R1W — a 3R0W probe is rejected.
+  // Placement (MID) is strictly more conservative on the read pool.
+  HaydnCyclePortDemand HeavyRead;
+  HeavyRead.GPRReads = 3;
+
+  {
+    HaydnResourceCycle RC;
+    ASSERT_TRUE(RC.canReserveByOpcodeWithPorts(
+        Haydn::MOVE32, haydnMove32ClassMiRepeatedSrcDemand()));
+    RC.reserveByOpcodeWithPorts(Haydn::MOVE32,
+                                haydnMove32ClassMiRepeatedSrcDemand());
+    EXPECT_EQ(RC.getPortDemand().GPRReads,
+              HaydnMove32ClassMiRepeatedSrcGprReads);
+    EXPECT_TRUE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, HeavyRead))
+        << "MI-shape MOVE32 leaves 3R headroom under HAYDN_GPR_READ_PORTS=4";
+  }
+  {
+    HaydnResourceCycle RC;
+    ASSERT_TRUE(RC.canReserveByOpcodeWithPorts(
+        Haydn::MOVE32, haydnMove32ClassDescShapeDemand()));
+    RC.reserveByOpcodeWithPorts(Haydn::MOVE32,
+                                haydnMove32ClassDescShapeDemand());
+    EXPECT_EQ(RC.getPortDemand().GPRReads, HaydnMove32ClassDescShapeGprReads);
+    EXPECT_FALSE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, HeavyRead))
+        << "Desc-shape MOVE32 leaves only 2R; 3R probe must fail placement";
+  }
+}
+
+TEST(HaydnBundleTest, SMS_Move32ClassSequentialPackingDescVsMI) {
+  // N=2: both models fit one cycle (MI 2R2W, desc 4R2W under 4R2W).
+  const HaydnCyclePortDemand Mi = haydnMove32ClassMiRepeatedSrcDemand();
+  const HaydnCyclePortDemand Desc = haydnMove32ClassDescShapeDemand();
+  std::pair<unsigned, HaydnCyclePortDemand> TwoMi[] = {
+      {Haydn::MOVE32, Mi},
+      {Haydn::MOVE32, Mi},
+  };
+  std::pair<unsigned, HaydnCyclePortDemand> TwoDesc[] = {
+      {Haydn::MOVE32, Desc},
+      {Haydn::MOVE32, Desc},
+  };
+  EXPECT_EQ(sequentialPortAwareCycleCount(TwoMi), 1u);
+  EXPECT_EQ(sequentialPortAwareCycleCount(TwoDesc), 1u);
+
+  // N=3: write pool forces 2 cycles for both; desc also blows the 4R pool
+  // (haydnMove32ClassDescSaturatesReadPoolEarlier(3)).
+  std::pair<unsigned, HaydnCyclePortDemand> ThreeMi[] = {
+      {Haydn::MOVE32, Mi},
+      {Haydn::MOVE32, Mi},
+      {Haydn::MOVE32, Mi},
+  };
+  std::pair<unsigned, HaydnCyclePortDemand> ThreeDesc[] = {
+      {Haydn::MOVE32, Desc},
+      {Haydn::MOVE32, Desc},
+      {Haydn::MOVE32, Desc},
+  };
+  EXPECT_EQ(sequentialPortAwareCycleCount(ThreeMi), 2u);
+  EXPECT_EQ(sequentialPortAwareCycleCount(ThreeDesc), 2u);
+  EXPECT_TRUE(haydnMove32ClassDescSaturatesReadPoolEarlier(3));
+  EXPECT_FALSE(haydnMove32ClassDescSaturatesReadPoolEarlier(2));
+
+  // Format-only three MOVE32 still pack in one Full cycle (slots, no ports).
+  unsigned FormatOnly[] = {Haydn::MOVE32, Haydn::MOVE32, Haydn::MOVE32};
+  EXPECT_EQ(sequentialResourceCycleCount(FormatOnly), 1u);
+  EXPECT_TRUE(HaydnResourceCycle::qualKernelFormsOneExactCycle(FormatOnly));
+  EXPECT_TRUE(HaydnResourceCycle::qualKernelExactlyPackable(FormatOnly));
+}
+
+TEST(HaydnBundleTest, VF3_DescClassifierSubclassIDs) {
+  // Descriptor path must charge GPR subclasses the same as GPR32 (parity with
+  // PortModel hasSubClassEq for vreg regclasses used pre-RA).
+  HaydnCyclePortDemand D;
+  haydnClassifyPortBankClassID(Haydn::GPR32LoRegClassID, /*IsDef=*/true, D);
+  haydnClassifyPortBankClassID(Haydn::GPR32NoSPNoLRRegClassID, /*IsDef=*/false,
+                               D);
+  EXPECT_EQ(D.GPRWrites, 1u);
+  EXPECT_EQ(D.GPRReads, 1u);
+  EXPECT_TRUE(D.fitsBudget());
+
+  // Unknown class IDs stay existential (no invented bank demand).
+  HaydnCyclePortDemand U;
+  haydnClassifyPortBankClassID(/*RegClassID=*/-1, true, U);
+  haydnClassifyPortBankClassID(/*RegClassID=*/9999, false, U);
+  EXPECT_EQ(U.GPRReads, 0u);
+  EXPECT_EQ(U.GPRWrites, 0u);
+}
+
+//===----------------------------------------------------------------------===//
+// SMS-RESMII — ResourceCycle DFA walk vs exhaustive format oracle
+//===----------------------------------------------------------------------===//
+
+TEST(HaydnBundleTest, VF3_SMSResMII_ResourceCycleEqualsExhaustiveOracle) {
+  // sequentialResourceCycleCount mirrors calculateResMIIDFA packing through
+  // HaydnResourceCycle (exact candidate set). Must match exhaustive oracle on
+  // qualification multisets — zero SMS-RESMII overestimate.
+  using namespace haydn::bundle;
+  const unsigned Cases[][4] = {
+      {Haydn::ADD32, Haydn::ADD32, Haydn::ADD32, Haydn::ADD32},
+      {Haydn::ADD32, Haydn::ADD64, Haydn::ADD64, 0},
+      {Haydn::LD32, Haydn::LD32, Haydn::X2MULA32, 0},
+      {Haydn::ST32, Haydn::ST32, 0, 0},
+  };
+  const unsigned Lens[] = {4, 3, 3, 2};
+  for (unsigned C = 0; C < 4; ++C) {
+    ArrayRef<unsigned> Ops(Cases[C], Lens[C]);
+    const unsigned DFA = sequentialResourceCycleCount(Ops);
+    const unsigned Greedy = computeProductResMII(Ops);
+    const unsigned Exact = computeExhaustiveProductResMII(Ops);
+    EXPECT_EQ(DFA, Greedy) << "DFA≡greedy case " << C;
+    EXPECT_EQ(DFA, Exact) << "DFA≡exhaustive case " << C;
+    EXPECT_EQ(productResMIIOverestimate(Ops), 0) << "case " << C;
+  }
+}
+
+TEST(HaydnBundleTest, VF3_SMSResMII_PreferredCollapseOverestimateVsRC) {
+  // ResourceCycle uses exact expand (not preferred freeze). Preferred
+  // sequential overestimates on ADD32+2×ADD64; RC/DFA/exhaustive stay at 1.
+  using namespace haydn::bundle;
+  unsigned Ops[] = {Haydn::ADD32, Haydn::ADD64, Haydn::ADD64};
+  EXPECT_EQ(sequentialResourceCycleCount(Ops), 1u);
+  EXPECT_EQ(computeExhaustiveProductResMII(Ops), 1u);
+  EXPECT_GE(computePreferredProductResMII(Ops), 2u);
+  EXPECT_GE(preferredProductResMIIOverestimate(Ops), 1);
+  EXPECT_EQ(productResMIIOverestimate(Ops), 0);
+}
+
+//===----------------------------------------------------------------------===//
+// — MultiSlot_Pseudo books issue/slots; true meta does not
+//===----------------------------------------------------------------------===//
+
+TEST(HaydnBundleTest, VF23_IsNoHazardMetaOnlyIMPLICIT_DEFAndKILL) {
+  // AIE twin: only IMPLICIT_DEF/KILL. MultiSlot_Pseudo (ADD32_MSP) is NOT
+  // meta — old HR isPseudo() would have exempted it (miscompile risk).
+  EXPECT_TRUE(MachineBundle::isNoHazardMetaInstruction(
+      TargetOpcode::IMPLICIT_DEF));
+  EXPECT_TRUE(
+      MachineBundle::isNoHazardMetaInstruction(TargetOpcode::KILL));
+  EXPECT_FALSE(
+      MachineBundle::isNoHazardMetaInstruction(TargetOpcode::BUNDLE));
+  EXPECT_FALSE(MachineBundle::isNoHazardMetaInstruction(Haydn::ADD32_MSP));
+  EXPECT_FALSE(MachineBundle::isNoHazardMetaInstruction(Haydn::ADD32));
+  EXPECT_FALSE(MachineBundle::isNoHazardMetaInstruction(Haydn::ST32));
+}
+
+TEST(HaydnBundleTest, VF23_MultiSlotPseudoBooksSlotsTrueMetaDoesNot) {
+  // ADD32_MSP is MultiSlot_Pseudo materializableInto ADD32_S0/S1/S2 — same
+  // placement surface as sparse ADD32. Three fill the cycle; fourth rejects.
+  // IMPLICIT_DEF/KILL never consume OccupiedSlots.
+  HaydnMCFormats Fmts;
+  ASSERT_TRUE(hasPlacementAlternatives(Fmts, Haydn::ADD32_MSP));
+  const std::vector<unsigned> *Alts =
+      Fmts.getAlternateInstsOpcode(Haydn::ADD32_MSP);
+  ASSERT_NE(Alts, nullptr);
+  ASSERT_EQ(Alts->size(), 3u);
+  EXPECT_EQ((*Alts)[0], Haydn::ADD32_S0);
+  EXPECT_EQ((*Alts)[1], Haydn::ADD32_S1);
+  EXPECT_EQ((*Alts)[2], Haydn::ADD32_S2);
+
+  Bundle<MCInst> B(&Fmts);
+  MCInst Msp[4];
+  for (int I = 0; I < 3; ++I) {
+    Msp[I].setOpcode(Haydn::ADD32_MSP);
+    ASSERT_TRUE(B.canAdd(Msp[I].getOpcode())) << "ADD32_MSP #" << I;
+    B.add(&Msp[I]);
+  }
+  EXPECT_EQ(B.getOccupiedSlots(),
+            SlotBits(Haydn::SLOT0) | Haydn::SLOT1 | Haydn::SLOT2);
+  EXPECT_EQ(B.size(), 3u);
+  Msp[3].setOpcode(Haydn::ADD32_MSP);
+  EXPECT_FALSE(B.canAdd(Msp[3].getOpcode()))
+      << "fourth MultiSlot_Pseudo must conflict once slots full";
+
+  // True meta always canAdd and does not grow occupancy / Instrs.
+  Bundle<MCInst> MetaB(&Fmts);
+  MCInst Def, Kill;
+  Def.setOpcode(TargetOpcode::IMPLICIT_DEF);
+  Kill.setOpcode(TargetOpcode::KILL);
+  ASSERT_TRUE(MetaB.canAdd(Def.getOpcode()));
+  MetaB.add(&Def);
+  ASSERT_TRUE(MetaB.canAdd(Kill.getOpcode()));
+  MetaB.add(&Kill);
+  EXPECT_EQ(MetaB.getOccupiedSlots(), 0u);
+  EXPECT_EQ(MetaB.size(), 0u) << "meta goes to MetaInstrs, not Instrs";
+
+  // ResourceCycle: MultiSlot books like ADD32; meta is no-op.
+  HaydnResourceCycle RC;
+  for (unsigned I = 0; I < 3; ++I) {
+    ASSERT_TRUE(RC.canReserveByOpcode(Haydn::ADD32_MSP)) << "MSP #" << I;
+    RC.reserveByOpcode(Haydn::ADD32_MSP);
+  }
+  EXPECT_EQ(RC.getOccupiedSlots(), SlotBits(Haydn::SLOT_ALL));
+  EXPECT_FALSE(RC.canReserveByOpcode(Haydn::ADD32_MSP));
+  EXPECT_TRUE(RC.canReserveByOpcode(TargetOpcode::IMPLICIT_DEF));
+  RC.reserveByOpcode(TargetOpcode::IMPLICIT_DEF);
+  EXPECT_EQ(RC.getOccupiedSlots(), SlotBits(Haydn::SLOT_ALL))
+      << "IMPLICIT_DEF must not free or consume slots";
+  EXPECT_TRUE(RC.canReserveByOpcode(TargetOpcode::KILL));
+  RC.reserveByOpcode(TargetOpcode::KILL);
+  EXPECT_EQ(RC.getOccupiedSlots(), SlotBits(Haydn::SLOT_ALL));
+}
+
+TEST(HaydnBundleTest, VF23_MultiSlotPseudoExactTryAddS2First) {
+  // HR commitPlacement / Bundle exact path: ADD32_MSP prefers S2→S1→S0.
+  HaydnMCFormats Fmts;
+  CycleCandidateSet C = makeProductCandidateSet();
+  ASSERT_TRUE(exactTryAddProduct(C, Fmts, Haydn::ADD32_MSP));
+  EXPECT_EQ(selectPreferredCandidate(C).OccupiedSlots, SlotBits(Haydn::SLOT2));
+  ASSERT_TRUE(exactTryAddProduct(C, Fmts, Haydn::ADD32_MSP));
+  ASSERT_TRUE(exactTryAddProduct(C, Fmts, Haydn::ADD32_MSP));
+  EXPECT_EQ(selectPreferredCandidate(C).OccupiedSlots,
+            SlotBits(Haydn::SLOT_ALL));
+  EXPECT_FALSE(canExactTryAddProduct(C, Fmts, Haydn::ADD32_MSP));
+  // True meta is not an alts-bearing logical — no placement tryAdd surface.
+  EXPECT_FALSE(hasPlacementAlternatives(Fmts, TargetOpcode::IMPLICIT_DEF));
+  EXPECT_FALSE(hasPlacementAlternatives(Fmts, TargetOpcode::KILL));
+}
+
+//===----------------------------------------------------------------------===//
+// — PostRA pack-skip: meta/alts, not blanket isPseudo
+//===----------------------------------------------------------------------===//
+//
+// leaveRegion reconstruction used MI.isPseudo() as a cycle-member skip, so
+// MultiSlot_Pseudo vanished from cycle lists despite HR booking. Opcode-level
+// twin of HaydnPostRASchedStrategy::isBundleSkippable (no MachineFunction).
+
+TEST(HaydnBundleTest, VF23b_PackSkipMetaAndAltsNotBlanketPseudo) {
+  HaydnMCFormats Fmts;
+  // True meta always skippable.
+  EXPECT_TRUE(MachineBundle::isBundlePackSkippableOpcode(
+      TargetOpcode::IMPLICIT_DEF, /*IsPseudo=*/true, Fmts));
+  EXPECT_TRUE(MachineBundle::isBundlePackSkippableOpcode(
+      TargetOpcode::KILL, /*IsPseudo=*/true, Fmts));
+  // MultiSlot_Pseudo is isPseudo=1 but alts-bearing — never skip.
+  ASSERT_TRUE(hasPlacementAlternatives(Fmts, Haydn::ADD32_MSP));
+  EXPECT_FALSE(MachineBundle::isBundlePackSkippableOpcode(
+      Haydn::ADD32_MSP, /*IsPseudo=*/true, Fmts))
+      << "ADD32_MSP must remain a cycle member for reconstruction/splice";
+  // Sparse non-pseudo control also not skippable.
+  ASSERT_TRUE(hasPlacementAlternatives(Fmts, Haydn::ADD32));
+  EXPECT_FALSE(MachineBundle::isBundlePackSkippableOpcode(
+      Haydn::ADD32, /*IsPseudo=*/false, Fmts));
+  // No-alt expand residual stays skippable until residual expansion is
+  // guaranteed before pack (LOADI32 has no PlacementAlternatives).
+  EXPECT_FALSE(hasPlacementAlternatives(Fmts, Haydn::LOADI32));
+  EXPECT_TRUE(MachineBundle::isBundlePackSkippableOpcode(
+      Haydn::LOADI32, /*IsPseudo=*/true, Fmts))
+      << "no-alt expand pseudo must stay skippable until residual expand";
+}
+
+//===----------------------------------------------------------------------===//
+// Exhaustive ≤3 all-subset / all-perm: Bundle + ResourceCycle vs exact oracle
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+static constexpr unsigned kBundleOracleAlpha[] = {
+    Haydn::ADD32, Haydn::ADD64, Haydn::ST32, Haydn::LD32, Haydn::X2MULA32,
+};
+static constexpr unsigned kBundleOracleAlphaN =
+    sizeof(kBundleOracleAlpha) / sizeof(kBundleOracleAlpha[0]);
+
+/// Sequential Bundle canAdd/add packs the full list into one cycle.
+static bool bundlePacksSequence(HaydnMCFormats &Fmts, ArrayRef<unsigned> Seq) {
+  Bundle<MCInst> B(&Fmts);
+  SmallVector<MCInst, 3> Storage;
+  Storage.resize(Seq.size());
+  for (unsigned I = 0, E = Seq.size(); I != E; ++I) {
+    Storage[I].setOpcode(Seq[I]);
+    if (!B.canAdd(Storage[I].getOpcode()))
+      return false;
+    B.add(&Storage[I]);
+  }
+  return true;
+}
+
+/// ResourceCycle reserves the full list without opening a second cycle.
+static bool resourceCyclePacksOne(ArrayRef<unsigned> Seq) {
+  HaydnResourceCycle RC;
+  for (unsigned Opc : Seq) {
+    if (!RC.canReserveByOpcode(Opc))
+      return false;
+    RC.reserveByOpcode(Opc);
+  }
+  return true;
+}
+
+} // namespace
+
+TEST(HaydnBundleTest, VF24_ExhaustiveLe3BundleAndResourceCycleOracle) {
+  // Bundle encode path and SMS ResourceCycle must agree with the pure exact
+  // sequence oracle on every ordered ≤3 tuple from the alphabet. Occupancy
+  // after a successful pack matches selectPreferredCandidate.
+  HaydnMCFormats Fmts;
+  unsigned Checked = 0;
+
+  auto CheckSeq = [&](ArrayRef<unsigned> Seq) {
+    ++Checked;
+    const bool Exact = exactCanPackProductSequence(Fmts, Seq);
+    const bool BundleOk = bundlePacksSequence(Fmts, Seq);
+    const bool RCOk = resourceCyclePacksOne(Seq);
+    EXPECT_EQ(BundleOk, Exact) << "Bundle canAdd drift";
+    EXPECT_EQ(RCOk, Exact) << "ResourceCycle reserve drift";
+
+    if (Exact) {
+      // Bundle occupancy ≡ preferred exact candidate.
+      Bundle<MCInst> B(&Fmts);
+      SmallVector<MCInst, 3> Storage(Seq.size());
+      CycleCandidateSet C = makeProductCandidateSet();
+      for (unsigned I = 0, E = Seq.size(); I != E; ++I) {
+        Storage[I].setOpcode(Seq[I]);
+        ASSERT_TRUE(B.canAdd(Storage[I].getOpcode()));
+        B.add(&Storage[I]);
+        ASSERT_TRUE(exactTryAddProduct(C, Fmts, Seq[I]));
+      }
+      EXPECT_EQ(B.getOccupiedSlots(),
+                selectPreferredCandidate(C).OccupiedSlots);
+      EXPECT_EQ(B.size(), Seq.size());
+      // One-cycle sequential ResourceCycle count is 1.
+      EXPECT_EQ(sequentialResourceCycleCount(Seq), 1u);
+      EXPECT_EQ(computeExhaustiveProductResMII(Seq), 1u);
+    } else if (!Seq.empty()) {
+      // Full list does not co-issue: sequential ResourceCycle needs ≥2 when
+      // each singleton is placeable.
+      EXPECT_GE(sequentialResourceCycleCount(Seq), 2u);
+    }
+  };
+
+  for (unsigned A : kBundleOracleAlpha)
+    CheckSeq(ArrayRef<unsigned>(&A, 1));
+  for (unsigned A : kBundleOracleAlpha)
+    for (unsigned B : kBundleOracleAlpha) {
+      unsigned Seq[2] = {A, B};
+      CheckSeq(Seq);
+    }
+  for (unsigned A : kBundleOracleAlpha)
+    for (unsigned B : kBundleOracleAlpha)
+      for (unsigned C : kBundleOracleAlpha) {
+        unsigned Seq[3] = {A, B, C};
+        CheckSeq(Seq);
+      }
+
+  EXPECT_EQ(Checked, kBundleOracleAlphaN +
+                         kBundleOracleAlphaN * kBundleOracleAlphaN +
+                         kBundleOracleAlphaN * kBundleOracleAlphaN *
+                             kBundleOracleAlphaN);
+}
+
+TEST(HaydnBundleTest, VF24_ClosestLegalIllegalBundlePins) {
+  HaydnMCFormats Fmts;
+
+  // Closest pair around S0 exclusivity.
+  {
+    unsigned Legal[] = {Haydn::ST32, Haydn::ADD64};
+    unsigned Illegal[] = {Haydn::ST32, Haydn::ST32};
+    EXPECT_TRUE(bundlePacksSequence(Fmts, Legal));
+    EXPECT_FALSE(bundlePacksSequence(Fmts, Illegal));
+    EXPECT_TRUE(resourceCyclePacksOne(Legal));
+    EXPECT_FALSE(resourceCyclePacksOne(Illegal));
+  }
+
+  // Issue-width: three pack, fourth rejected on both Bundle and ResourceCycle.
+  {
+    unsigned Three[] = {Haydn::ADD32, Haydn::ADD32, Haydn::ADD32};
+    EXPECT_TRUE(bundlePacksSequence(Fmts, Three));
+    EXPECT_TRUE(resourceCyclePacksOne(Three));
+    Bundle<MCInst> B(&Fmts);
+    MCInst Ops[4];
+    for (int I = 0; I < 3; ++I) {
+      Ops[I].setOpcode(Haydn::ADD32);
+      ASSERT_TRUE(B.canAdd(Ops[I].getOpcode()));
+      B.add(&Ops[I]);
+    }
+    Ops[3].setOpcode(Haydn::ADD32);
+    EXPECT_FALSE(B.canAdd(Ops[3].getOpcode()));
+    HaydnResourceCycle RC;
+    for (unsigned I = 0; I < 3; ++I) {
+      ASSERT_TRUE(RC.canReserveByOpcode(Haydn::ADD32));
+      RC.reserveByOpcode(Haydn::ADD32);
+    }
+    EXPECT_FALSE(RC.canReserveByOpcode(Haydn::ADD32));
+  }
+
+  // Rematch: Bundle sequential accepts ADD32+2×ADD64 (exact path).
+  {
+    unsigned Ops[] = {Haydn::ADD32, Haydn::ADD64, Haydn::ADD64};
+    EXPECT_TRUE(bundlePacksSequence(Fmts, Ops));
+    EXPECT_TRUE(resourceCyclePacksOne(Ops));
+    Bundle<MCInst> B(&Fmts);
+    SmallVector<MCInst, 3> Storage(3);
+    for (unsigned I = 0; I < 3; ++I) {
+      Storage[I].setOpcode(Ops[I]);
+      ASSERT_TRUE(B.canAdd(Storage[I].getOpcode()));
+      B.add(&Storage[I]);
+    }
+    EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT_ALL));
+  }
+
+  // MultiSlot_Pseudo fills like ADD32; true meta does not consume slots.
+  {
+    unsigned Msp[] = {Haydn::ADD32_MSP, Haydn::ADD32_MSP, Haydn::ADD32_MSP};
+    EXPECT_TRUE(bundlePacksSequence(Fmts, Msp));
+    EXPECT_TRUE(resourceCyclePacksOne(Msp));
+    EXPECT_FALSE(MachineBundle::isNoHazardMetaInstruction(Haydn::ADD32_MSP));
+  }
+
+  // Preferred order pin on Bundle: first multi-slot lands S2.
+  {
+    Bundle<MCInst> B(&Fmts);
+    MCInst A;
+    A.setOpcode(Haydn::ADD32);
+    ASSERT_TRUE(B.canAdd(A.getOpcode()));
+    B.add(&A);
+    EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT2));
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// Format-acceptance differential — live ResourceCycle ≡ pure exact ≡ HR peer
+// (plan §8.4 #7 SMS surface)
+//===----------------------------------------------------------------------===//
+//
+// Descriptor-derived per-cycle format legality is pure exactTryAddProduct.
+// Live canReserveByOpcode/reserveByOpcode must agree with pure exact packing
+// and preferred OccupiedSlots / FieldSlots order. Format is opcode-keyed
+// (MI ≡ desc); MOVE32-class port overcount is orthogonal (SMS-PORT). Sibling
+// pre-RA owns list-sched pure-exact polarity; live post-RA HR Emit peer is
+// HaydnHazardRecognizerTest.SMS_FormatAcceptance_LiveHRMatchesResourceCycle.
+// Metrics-only — no setDesc / no durable BUNDLE invent.
+
+TEST(HaydnBundleTest, SMS_FormatAcceptanceDifferentialPins) {
+  EXPECT_TRUE(HaydnResourceCycle::formatAcceptanceDifferentialPins());
+}
+
+TEST(HaydnBundleTest, SMS_FormatAcceptance_LiveRCMatchesPureExact) {
+  using RC = HaydnResourceCycle;
+  unsigned ThreeADD[] = {Haydn::ADD32, Haydn::ADD32, Haydn::ADD32};
+  unsigned TwoST[] = {Haydn::ST32, Haydn::ST32};
+  unsigned Rematch[] = {Haydn::ADD32, Haydn::ADD64, Haydn::ADD64};
+  unsigned Coissue[] = {Haydn::ADD32, Haydn::XOR32, Haydn::OR32};
+  unsigned DualLoadMac[] = {Haydn::LD32, Haydn::LD32, Haydn::X2MULA32};
+  unsigned AloneThenALU[] = {Haydn::ARCTAN, Haydn::ADD32};
+  unsigned FullPlusOne[] = {Haydn::ADD32, Haydn::ADD32, Haydn::ADD32,
+                            Haydn::ADD32};
+
+  // Field-format sequences: live RC ≡ pure exact (alone-op is separate class-1).
+  auto expectMatch = [](ArrayRef<unsigned> Ops) {
+    EXPECT_TRUE(RC::formatAcceptanceMatchesPureExact(Ops))
+        << "live RC must match pure exact polarity";
+  };
+  expectMatch(ThreeADD);
+  expectMatch(TwoST);
+  expectMatch(Rematch);
+  expectMatch(Coissue);
+  expectMatch(DualLoadMac);
+  expectMatch(FullPlusOne);
+
+  EXPECT_TRUE(RC::formatCanPackSequence(ThreeADD));
+  EXPECT_TRUE(RC::formatPureExactCanPackSequence(ThreeADD));
+  EXPECT_TRUE(RC::formatPreferredStateAgreesWithPureExact(ThreeADD));
+  EXPECT_EQ(RC::formatSequentialCycleCount(ThreeADD), 1u);
+  EXPECT_EQ(RC::formatSequentialCycleCount(ThreeADD),
+            sequentialResourceCycleCount(ThreeADD));
+
+  EXPECT_FALSE(RC::formatCanPackSequence(TwoST));
+  EXPECT_FALSE(RC::formatPureExactCanPackSequence(TwoST));
+  EXPECT_EQ(RC::formatSequentialCycleCount(TwoST), 2u);
+
+  EXPECT_TRUE(RC::formatCanPackSequence(Rematch));
+  EXPECT_TRUE(RC::formatPreferredStateAgreesWithPureExact(Rematch));
+  // Preferred rematch: ADD32 on S0 after both ADD64 join.
+  {
+    HaydnResourceCycle Live;
+    for (unsigned Opc : Rematch) {
+      ASSERT_TRUE(Live.canReserveByOpcode(Opc));
+      Live.reserveByOpcode(Opc);
+    }
+    EXPECT_EQ(Live.getMemberCount(), 3u);
+    EXPECT_EQ(Live.getOccupiedSlots(), SlotBits(Haydn::SLOT_ALL));
+    EXPECT_EQ(Live.getCycleState().Members[0].LogicalOpcode, Haydn::ADD32);
+    EXPECT_EQ(Live.getCycleState().Members[0].FieldSlots,
+              SlotBits(Haydn::SLOT0));
+  }
+
+  EXPECT_TRUE(RC::formatCanPackSequence(Coissue));
+  EXPECT_TRUE(RC::formatCanPackSequence(DualLoadMac));
+
+  // Alone-op class-1 (RC/HR): co-issue reject; pure field tryAdd may still
+  // accept ARCTAN+ADD32 — not a field-format differential failure.
+  EXPECT_FALSE(RC::formatCanPackSequence(AloneThenALU));
+  EXPECT_EQ(RC::formatSequentialCycleCount(AloneThenALU), 2u);
+  EXPECT_FALSE(RC::formatAcceptanceMatchesPureExact(AloneThenALU))
+      << "alone capacity is RC/HR, not pure field exactTryAdd";
+
+  // Full cycle + one more: sequential count 2; one-cycle pack fails.
+  EXPECT_FALSE(RC::formatCanPackSequence(FullPlusOne));
+  EXPECT_EQ(RC::formatSequentialCycleCount(FullPlusOne), 2u);
+  EXPECT_EQ(RC::formatSequentialCycleCount(FullPlusOne),
+            sequentialResourceCycleCount(FullPlusOne));
+
+  // MI ≡ desc for same opcodes (format opcode-keyed).
+  EXPECT_TRUE(RC::formatAcceptanceAgrees(Rematch, Rematch));
+  EXPECT_TRUE(RC::formatAcceptanceAgrees(TwoST, TwoST));
+  // Different multisets may disagree.
+  EXPECT_FALSE(RC::formatAcceptanceAgrees(ThreeADD, TwoST));
+}
+
+TEST(HaydnBundleTest, SMS_FormatAcceptance_MIDPathAgreesWithOpcode) {
+  // SMS ResourceManager primary is MCInstrDesc: rematch triple under MID
+  // ports must still rematch (descriptor ports do not bind this shape).
+  HaydnResourceCycle RCmid;
+  MCInstrDesc D32{}, D64{}, Dst{};
+  D32.Opcode = Haydn::ADD32;
+  D64.Opcode = Haydn::ADD64;
+  Dst.Opcode = Haydn::ST32;
+
+  ASSERT_TRUE(RCmid.canReserveResources(&D32));
+  RCmid.reserveResources(&D32);
+  ASSERT_TRUE(RCmid.canReserveResources(&D64));
+  RCmid.reserveResources(&D64);
+  ASSERT_TRUE(RCmid.canReserveResources(&D64))
+      << "MID path must rematch like canReserveByOpcode";
+  RCmid.reserveResources(&D64);
+  EXPECT_EQ(RCmid.getMemberCount(), 3u);
+  EXPECT_EQ(RCmid.getCycleState().Members[0].FieldSlots,
+            SlotBits(Haydn::SLOT0));
+
+  // Two ST32: second rejects after first MID reserve (Slot0 exclusivity).
+  HaydnResourceCycle RCst;
+  ASSERT_TRUE(RCst.canReserveResources(&Dst));
+  RCst.reserveResources(&Dst);
+  EXPECT_FALSE(RCst.canReserveResources(&Dst));
+  EXPECT_FALSE(HaydnResourceCycle::formatCanPackSequence(
+      ArrayRef<unsigned>({Haydn::ST32, Haydn::ST32})));
 }
 
 } // namespace

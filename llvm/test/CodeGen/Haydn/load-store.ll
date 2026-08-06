@@ -1,6 +1,9 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 
+; Role: semantic — Simple load/store.
+
 ; Simple load/store
+
 define void @test_store(ptr %p, i32 %v) {
   store i32 %v, ptr %p
   ret void

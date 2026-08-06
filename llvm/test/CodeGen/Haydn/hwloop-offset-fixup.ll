@@ -1,6 +1,8 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
-;
+
+; Role: MIR — HWLoop offset range fixup.
+
 ; REGRESSION TEST: HWLoop offset range fixup.
 ;
 ; Purpose: Verify that the HWLoops pass range-checks the loop body against the

@@ -1,6 +1,8 @@
 # RUN: llvm-mc -triple haydn-unknown-elf -filetype=obj -o %t %s 2>&1 && \
 # RUN:   llvm-objdump -d %t 2>&1 | FileCheck %s
-#
+
+# Role: object — 64-bit Mode 1 (bits[3:0]=0111) is RESERVED per encoding_manual.md section 7 — the disassembler must raise the.
+
 # REGRESSION TEST: 64-bit Mode 1 (bits[3:0]=0111) is RESERVED per
 # encoding_manual.md section 7 — the disassembler must raise the
 # illegal_bundle trap (decode fails), NOT silently decode it as a valid
@@ -29,6 +31,7 @@
 
 # Hand-construct a 64-bit bundle with low nibble 0x7 (Mode 1 RESERVED).
 # We use.quad to emit raw bytes. The disassembler must reject this.
+
         .quad 0x0000000000000007
 
 # CHECK-LABEL: <.text>:

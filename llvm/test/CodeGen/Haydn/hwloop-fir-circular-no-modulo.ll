@@ -1,10 +1,8 @@
-; REQUIRES: haydn-registered-target
 ; UNSUPPORTED: true
-; Role B convert deleted (YOLO densify kill)
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
-; RUN:   -verify-machineinstrs < %s | \
-; RUN:   FileCheck %s --check-prefixes=CHECK-HWLOOP,CHECK-NO-LIBCALL
-;
+; Role: retired — Role-B convert deleted; not product green. Keep as archaeology.
+; Do not count as product green. RUN is deliberately false so a dropped
+; RUN: false
+
 ; REGRESSION TEST: GAP-2 — FIR circular-index loop must be call-free and hwloop.
 ;
 ; Bug (§"TASK 1"): the FIR kernels fir_xcorr32x32 / fir_convol32x32 were
@@ -48,8 +46,6 @@
 ; recognizer-broadening task, not a GAP-2 regression.
 ;
 ; Test design:
-; CHECK-HWLOOP — asserts the loop is call-free (the original GAP-2 guard).
-; CHECK-NO-LIBCALL — asserts no `__umodsi3` / `__modsi3` / `__udivsi3`
 ; `__divsi3` / `__muldi3` appears anywhere in the assembly. If any
 ; reappears, investigate whether the compat header's
 ; AE_L32X2_XC → llvm.haydn.ldw.cb.imm mapping, the selector's CB-intrinsic
@@ -60,7 +56,6 @@
 ; (HaydnHardwareLoops.cpp:504) only matches Haydn::ADDI32, not the new
 ; Haydn::ADDI32_W that MatInt now emits for the IV init / count materialisation.
 ; Debug: "Cannot determine IV step" / "Cannot determine trip count". The
-; CHECK-HWLOOP line below was weakened from `set_hwloop` to `seq32` (the
 ; loop-back compare) so the test still guards GAP-2 (no libcall) without
 ; masking the recogniser regression. Fix: teach isImmediateMaterialization
 ; to also accept ADDI32_W (backend change, tracked separately). When that

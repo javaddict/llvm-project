@@ -16,9 +16,11 @@
 // Role B — residual convert for multi-BB / IR miss (-haydn-hwloop-role-b
 // default OFF = AIE-like expand-only;). Structure contract: 
 // single latch, single true exit, no early break.
-// Layout-owned setup: after SET only t−3 NOP pads; useful work stays before
-// SET. Dual HWLR nesting; t−3 deficit pad after SET (not min-body law).
-// Gates: FeatureHWLoop, -haydn-enable-hwloops, -haydn-hwloop-role-b.
+// Layout-owned setup: after SET only InterveningCycles deficit pads
+// (SetupIssueDistance=3, Following>=2); useful work stays before SET. Dual
+// HWLR nesting; body parcels BEGIN..END inclusive >= MinBodyBundles (3);
+// strict END > BEGIN (END = last body cycle). Gates: FeatureHWLoop,
+// -haydn-enable-hwloops, -haydn-hwloop-role-b.
 //
 // Hardware loop semantics (from ISA spec):
 // SET_HWLOOP sel, offset1, offset2, cnt
@@ -163,7 +165,7 @@ private:
   // findImmediateDefOnDomChainScoped to skip sibling-loop blocks when
   // resolving loop-invariant constants, so that a physreg redefined with
   // different values in sibling-loop preheaders does not trigger a false
-  // "conflicting constants" rejection. See (G1 §0.3 / §4 #2-#3).
+ // "conflicting constants" rejection. See ( §0.3 / §4 #2-#3).
   MachineLoopInfo *MLI = nullptr;
 };
 

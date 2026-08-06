@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=legalizer %s -o - | FileCheck %s
 
+# Role: MIR — that 64-bit integer operations are legalized via DR64 instructions s64 add/sub should remain legal (handled by DR64).
+
 # Test that 64-bit integer operations are legalized via DR64 instructions
 # s64 add/sub should remain legal (handled by DR64)
 # s64 mul is custom-lowered to a native schoolbook sequence of MUL64_LL

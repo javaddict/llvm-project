@@ -135,6 +135,7 @@ void ModuloScheduleExpander::generatePipelinedLoop() {
 
   // Rearrange the instructions to generate the new, pipelined loop,
   // and update register names as needed.
+  KernelCloneCycleMap.clear();
   for (MachineInstr *CI : Schedule.getInstructions()) {
     if (CI->isPHI())
       continue;
@@ -144,6 +145,11 @@ void ModuloScheduleExpander::generatePipelinedLoop() {
     KernelBB->push_back(NewMI);
     LIS.InsertMachineInstrInMaps(*NewMI);
     InstrMap[NewMI] = CI;
+    // Capture schedule cycle at clone time (original MI), not by later
+    // adjacency reconstruction. Negative cycles are not recorded.
+    int Cycle = Schedule.getCycle(CI);
+    if (Cycle >= 0)
+      KernelCloneCycleMap[NewMI] = static_cast<unsigned>(Cycle);
   }
 
   // Copy any terminator instructions to the new kernel, and update
@@ -181,6 +187,21 @@ void ModuloScheduleExpander::generatePipelinedLoop() {
 
   // Add branches between prolog and epilog blocks.
   addBranches(*Preheader, PrologBBs, KernelBB, EpilogBBs, VRMap);
+
+  // After kernel rewrite cleanup, hand the target an ordered list of live
+  // (kernel-clone MI, schedule-cycle) pairs for optional same-cycle grouping.
+  // Walk the live kernel so erased clones are never dereferenced; cycle
+  // values come from the clone-time map above.
+  if (NewKernel && LoopInfo && !KernelCloneCycleMap.empty()) {
+    SmallVector<std::pair<MachineInstr *, unsigned>, 16> LiveCloneCycles;
+    for (MachineInstr &MI : *KernelBB) {
+      auto It = KernelCloneCycleMap.find(&MI);
+      if (It == KernelCloneCycleMap.end())
+        continue;
+      LiveCloneCycles.emplace_back(&MI, It->second);
+    }
+    LoopInfo->materializeSMSKernelCycleGroups(LiveCloneCycles);
+  }
 
   delete[] VRMap;
   delete[] VRMapPhi;

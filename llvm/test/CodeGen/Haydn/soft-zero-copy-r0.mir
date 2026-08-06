@@ -1,12 +1,17 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-copy-elim \
 # RUN:     -verify-machineinstrs -o - %s | FileCheck %s
-#
-# W0.3 / durable rule 31 — soft-zero R0:
+
+# Role: MIR — durable rule 31 — soft-zero R0: Silicon does not hardwire R0=0.
+
+# Durable soft-zero R0 rule:
 # Silicon does not hardwire R0=0. HaydnCopyElim must NEVER delete non-identity
 # COPY / MOVE32 / OR32 bank-copies *into* R0 as "dead", even when a later def
 # of R0 makes local deadness analysis true.
 #
-# Also: true identity forms (src == dst) remain removable.
+# Linker far veneers and JALR rd=R0 write a real link value into R0; keeping
+# those writes (and any explicit re-zero COPY/MOVE into R0) is load-bearing
+# for the soft-zero invariant across mid-fn far branches and epilogue CSR
+# restore. True identity forms (src == dst) remain removable.
 
 --- |
   define void @soft_zero_copy_r0() nounwind { ret void }

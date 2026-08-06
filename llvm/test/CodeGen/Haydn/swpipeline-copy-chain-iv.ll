@@ -2,7 +2,9 @@
 ; RUN:     -verify-machineinstrs -O2 -debug-only=pipeliner < %s 2>&1 | FileCheck %s --check-prefix=SWP
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs -O2 < %s | FileCheck %s
-;
+
+; Role: semantic — (-rework, G4 SW-pipeliner recognizer): the MachinePipeliner must ACCEPT this countable single-BB MAC loop.
+
 ; REGRESSION TEST (-rework, G4 SW-pipeliner recognizer): the
 ; MachinePipeliner must ACCEPT this countable single-BB MAC loop
 ; analyzeLoopForPipelining must NOT return nullptr. STATUS (re-verified

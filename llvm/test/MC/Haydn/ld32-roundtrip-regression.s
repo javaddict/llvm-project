@@ -1,5 +1,7 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
-#
+
+# Role: object — LD32 must print as "ld32", not "jal".
+
 # REGRESSION TEST: LD32 must print as "ld32", not "jal".
 #
 # Bug : HaydnInstPrinter::printInst had a hardcoded opcode check
@@ -18,6 +20,7 @@
 # to something other than "ld32", there is a bug in the instruction printer.
 
 # CHECK: ld32	r0, r1, 0
+
 ld32 r0, r1, 0
 
 # CHECK: ld32	r2, r3, 16

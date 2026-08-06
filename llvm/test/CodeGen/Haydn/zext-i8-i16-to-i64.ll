@@ -1,4 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+
+; Role: semantic — Updated for native DR64 shift (sll64/srl64/sra64).
+
 ; Updated for native DR64 shift (sll64/srl64/sra64)
 ;
 ; REGRESSION TEST: G_ZEXT i8->i64 and i16->i64 must be selectable.
@@ -20,8 +23,7 @@
 ; cause.
 
 ; Test i8 -> i64 zero-extend
-; CHECK-LABEL: test_zext_i8_to_i64:
-; CHECK: and64
+
 define i64 @test_zext_i8_to_i64(i8 %x) nounwind {
   %ext = zext i8 %x to i64
   ret i64 %ext

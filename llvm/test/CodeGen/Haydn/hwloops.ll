@@ -1,10 +1,16 @@
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=-hwloop -stop-after=haydn-hwloops < %s | FileCheck --check-prefix=NOHW %s
+
+; Role: MIR — STALE-FAILMARKER REMOVED (, post- cutover): the IR-level hardware-loop rearchitecture (prior revision) renamed the conversion.
+
 ; STALE-FAILMARKER REMOVED (, post- cutover): the IR-level
 ; hardware-loop rearchitecture (prior revision) renamed the conversion
 ; pseudos from SET_HWLOOP_REG to LoopStart + PseudoLoopEnd. All single-BB
 ; countable loops below now convert and the CHECKs were rebaselined to match.
 ; The `multi_bb_loop` subtest (test 6) is converted (GAP-4 multi-BB ZOL).
 ; not convert multi-BB if/else bodies — this is now documented as a
-; CHECK-NOT: LoopStart negative assertion rather than an XFAIL.
 ;
 ; *** G1 gap documented inline: HWLoop recognizer does not handle multi-BB loops ***
 ;
@@ -17,10 +23,6 @@
 ;
 ; NOTE: this test uses `-stop-after=haydn-hwloops` so it is unaffected by the
 ; SMS pipeliner. The previous "SMS BUG" comment was stale.
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=-hwloop -stop-after=haydn-hwloops < %s | FileCheck --check-prefix=NOHW %s
 ;
 ; Hardware loop detection tests for the Haydn backend.
 ;
@@ -41,6 +43,7 @@
 ; After ConditionOptimizer, the latch ends with BLT (fused SLT32+BNEZ).
 ; The HWLoop pass should detect this and emit SET_HWLOOP with count=10.
 ; Standalone (innermost) loops use sel=1.
+
 define i32 @simple_loop(ptr %p) {
 ; CHECK-LABEL: name: simple_loop
 ; CHECK: SET_HWLOOP

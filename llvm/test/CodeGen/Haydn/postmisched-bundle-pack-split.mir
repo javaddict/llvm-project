@@ -1,9 +1,14 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+
+# Role: MIR — exact no-split post-RA pack regression.
+
+# G-BUNDLE-FORMAT / VF5 exact no-split post-RA pack regression.
+# Production materialize commits one legal Format E or fails closed —
+# no greedy multi-MI split repair (NumScheduledCyclesSplit == 0).
 #
-# G-BUNDLE-FORMAT / AIE-parity post-RA pack + split regression.
-#
-# 1. Independent ALU ops may BUNDLE (control — pack works).
-# 2. Dual S0-only stores must NOT share one BUNDLE (HR serializes).
+# 1. Independent ALU ops may BUNDLE (control — exact multi-MI commit).
+# 2. Dual S0-only stores must NOT share one BUNDLE (HR serializes to
+#    separate cycles; materialize never invents a multi-MI split bundle).
 # 3. Dual LD32 may BUNDLE (dual-load product).
 # 4. ST32 + independent ADD32: both present; co-issue optional.
 # 5. ARCTAN stays alone vs independent ALU (issue-alone schedule rule).
@@ -46,7 +51,7 @@ body:             |
     liveins: $r0, $r3, $r4
 
     ; CHECK-LABEL: name: pack_two_alu
-    ; B1.1: multi-MI BUNDLE root carries durable FormatID imm (Bundle128Full=0).
+    ; B1.1: multi-MI BUNDLE root carries durable FormatID imm (FormatE96=0).
     ; CHECK: BUNDLE 0
     ; CHECK: ADDI32
     ; CHECK: ADD32

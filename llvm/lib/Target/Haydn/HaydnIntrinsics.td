@@ -422,13 +422,11 @@ def : Pat<(int_haydn_x4mjswap16s DR64:$a), (X4MJSWAP16S DR64:$a)>;
 def : Pat<(int_haydn_x4conj16  DR64:$a), (X4CONJ16  DR64:$a)>;
 def : Pat<(int_haydn_x4conj16s DR64:$a), (X4CONJ16S DR64:$a)>;
 def : Pat<(int_haydn_x4energy16 DR64:$a), (X4ENERGY16 DR64:$a)>;
-// X4CMUL16* Auto.td stubs are MCID::Pseudo (AsmPrinter drops them). Do NOT
-// Pat to those stubs — custom GISel selectIntrinsic uses FormatsMAC
-// X4CMUL16{,S,_F2}_S1 encodings instead (see HaydnInstructionSelector.cpp).
-//def : Pat<(int_haydn_x4cmul16   DR64:$a), (X4CMUL16   DR64:$a)>;
-//def : Pat<(int_haydn_x4cmul16s  DR64:$a), (X4CMUL16S  DR64:$a)>;
-//def : Pat<(int_haydn_x4cmul16s_f2 DR64:$a), (X4CMUL16S_F2 DR64:$a)>;
-//def : Pat<(int_haydn_x4cmul16_f2  DR64:$a), (X4CMUL16_F2  DR64:$a)>;
+// Unary X4CMUL16* — logical bases; post-RA setDesc → S1/S2 members.
+def : Pat<(int_haydn_x4cmul16   DR64:$a), (X4CMUL16   DR64:$a)>;
+def : Pat<(int_haydn_x4cmul16s  DR64:$a), (X4CMUL16S  DR64:$a)>;
+def : Pat<(int_haydn_x4cmul16s_f2 DR64:$a), (X4CMUL16S_F2 DR64:$a)>;
+def : Pat<(int_haydn_x4cmul16_f2  DR64:$a), (X4CMUL16_F2  DR64:$a)>;
 
 // X2/X4 binary (DR64 binary)
 def : Pat<(int_haydn_x2max32   DR64:$a, DR64:$b), (X2MAX32   DR64:$a, DR64:$b)>;

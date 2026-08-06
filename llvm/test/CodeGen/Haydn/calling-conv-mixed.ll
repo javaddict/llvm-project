@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — s for mixed GPR+DR64 argument passing.
+
 ; Tests for mixed GPR+DR64 argument passing.
 ;
 ; Calling convention uses INDEPENDENT cursors for GPR (R1-R7) and DR64 (D0-D3).

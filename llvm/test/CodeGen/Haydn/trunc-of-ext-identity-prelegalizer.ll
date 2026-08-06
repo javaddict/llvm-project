@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s 2>&1 | FileCheck %s
 
+; Role: semantic — trunc of sext/zext where dest type == ext input type is an IDENTITY and must be folded to a COPY in the HaydnPreLegalizerCombiner.
+
 ; REGRESSION TEST: trunc of sext/zext where dest type == ext input type is
 ; an IDENTITY and must be folded to a COPY in the HaydnPreLegalizerCombiner.
 ;

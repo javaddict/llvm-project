@@ -150,8 +150,8 @@ bool HaydnCopyElim::runOnMachineFunction(MachineFunction &MF) {
       Register Src0Reg = Src0Op.getReg();
       Register Src1Reg = Src1Op.getReg();
 
-      // OR{32,64} rd, rs, rs is a bank copy (not bare COPY — Bundle128 needs
-      // the real opcode). Safe deletes only:
+      // OR{32,64} rd, rs, rs is a bank copy (not bare COPY — product encode
+      // needs the real opcode). Safe deletes only:
       // (a) identity: rd == rs → no-op
       // (b) dead: rd redefined before use in this MBB
       // Do NOT rewrite to bare COPY (post-RA COPY is dropped by AsmPrinter).
@@ -173,8 +173,8 @@ bool HaydnCopyElim::runOnMachineFunction(MachineFunction &MF) {
       }
 
       // Soft-zero R0: never delete non-identity bank-copies into R0 as dead.
-      // Silicon does not force R0=0.
-      if (DstReg == Haydn::R0)
+      // Silicon does not force R0=0. Compare by phys id (Register/MCRegister).
+      if (DstReg.id() == static_cast<unsigned>(Haydn::R0))
         continue;
 
       if (isDeadCopy(MI, DstReg, MBB)) {
@@ -228,8 +228,8 @@ bool HaydnCopyElim::runOnMachineFunction(MachineFunction &MF) {
       // Case 2: Soft-zero R0 — never eliminate non-identity COPY/MOVE32 into
       // R0. Silicon does not hardwire R0=0; treating writes as free "dead"
       // hardwired sinks is incorrect. True identity COPY r0,r0 is already
-      // handled above.
-      if (DstReg == Haydn::R0) {
+      // handled above. Compare by phys id (Register/MCRegister interop).
+      if (DstReg.id() == static_cast<unsigned>(Haydn::R0)) {
         LLVM_DEBUG(dbgs() << "  Keeping write to soft-zero R0: " << MI);
         continue;
       }

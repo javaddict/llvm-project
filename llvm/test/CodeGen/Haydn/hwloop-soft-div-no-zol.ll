@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -mattr=+hwloop \
 ; RUN:   < %s | FileCheck %s
-;
+
+; Role: semantic — Soft-div / rem must NOT form hardware loops (TTI H1 /).
+
 ; Soft-div / rem must NOT form hardware loops (TTI H1 /).
 ;
 ; Haydn has no hardware divider: udiv/urem/sdiv/srem lower to libcalls

@@ -1,5 +1,7 @@
 ; RUN: opt -passes=verify -disable-output < %s
-;
+
+; Role: verifier — intrinsic-gap closure — IR arity must match DB semantics.
+
 ; REGRESSION TEST: intrinsic-gap closure — IR arity must match DB semantics.
 ;
 ; Bug (found while verifying the intrinsic audit closure): the
@@ -37,6 +39,7 @@
 ; Z-prefix families zero the accumulator)
 
 ; TERNARY (acc-read) families: (acc, a, b). DB: rtd = rtd +...
+
 declare i64 @llvm.haydn.fmula16.hs00(i64, <4 x i16>, <4 x i16>)    ; FMULA16_HS00: rtd[63:32]+=...
 declare i64 @llvm.haydn.fmula16.ls33(i64, <4 x i16>, <4 x i16>)    ; FMULA16_LS33: rtd[31:00]+=...
 declare i64 @llvm.haydn.f2mulaa32r.hhll(i64, <2 x i32>, <2 x i32>) ; F2MULAA32R_HHLL: rtd+=round(hh+ll)

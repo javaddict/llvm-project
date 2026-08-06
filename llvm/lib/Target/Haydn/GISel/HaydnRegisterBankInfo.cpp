@@ -39,8 +39,8 @@ const RegisterBankInfo::PartialMapping HaydnGenRegisterBankInfo::PartMappings[] 
     {0, 32, Haydn::GPR32RegBank},
     // DR64 (64-bit)
     {0, 64, Haydn::DR64RegBank},
-    // AR (32-bit address)
-    {0, 32, Haydn::ARRegBank},
+    // AR (64-bit aligned residual)
+    {0, 64, Haydn::ARRegBank},
 };
 
 // Value mappings for Haydn
@@ -55,7 +55,7 @@ const RegisterBankInfo::ValueMapping HaydnGenRegisterBankInfo::ValMappings[] = {
     {&PartMappings[3], 1},
     // 64-bit DR operations
     {&PartMappings[4], 1},
-    // 32-bit AR operations
+    // 64-bit AR operations
     {&PartMappings[5], 1},
 };
 

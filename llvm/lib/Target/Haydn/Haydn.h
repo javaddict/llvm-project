@@ -32,7 +32,6 @@ FunctionPass *createHaydnExpandPseudosPass();
 FunctionPass *createHaydnExpandPostIncEarlyPass();
 FunctionPass *createHaydnHardwareLoopsPass();
 FunctionPass *createHaydnFixupHwLoopsPass();
-FunctionPass *createHaydnCFGOptimizerPass();
 FunctionPass *createHaydnConditionOptimizerPass();
 FunctionPass *createHaydnCopyElimPass();
 FunctionPass *createHaydnPEIPeepholePass();
@@ -40,7 +39,7 @@ FunctionPass *createHaydnEnsureTerminatorsPass();
 FunctionPass *createHaydnBitSimplifyPass();
 // AIE createAIEFinalizeBundle peer (AIEFinalizeBundle.h / AIE2TargetMachine:244).
 FunctionPass *createHaydnFinalizeBundlePass();
-// B1.4 fail-closed committed-bundle verifier (after FinalizeBundle).
+// fail-closed committed-bundle verifier (after FinalizeBundle).
 FunctionPass *createHaydnVerifyBundlesPass();
 
 // Pass initialization declarations
@@ -50,7 +49,6 @@ void initializeHaydnExpandPseudosPass(PassRegistry &);
 void initializeHaydnExpandPostIncEarlyPass(PassRegistry &);
 void initializeHaydnHardwareLoopsPass(PassRegistry &);
 void initializeHaydnFixupHwLoopsPass(PassRegistry &);
-void initializeHaydnCFGOptimizerPass(PassRegistry &);
 void initializeHaydnConditionOptimizerPass(PassRegistry &);
 void initializeHaydnCopyElimPass(PassRegistry &);
 void initializeHaydnPEIPeepholePass(PassRegistry &);
@@ -58,6 +56,12 @@ void initializeHaydnEnsureTerminatorsPass(PassRegistry &);
 void initializeHaydnBitSimplifyPass(PassRegistry &);
 void initializeHaydnFinalizeBundlePass(PassRegistry &);
 void initializeHaydnVerifyBundlesPass(PassRegistry &);
+void initializeHaydnHandoffBundleRootDefsPass(PassRegistry &);
+
+/// After TwoAddressInstruction: re-attach child vreg defs on multi-member
+/// BUNDLE roots produced by SMS handoff (pre-PHI materialize is child-only
+/// for IsSSA legality).
+extern char &HaydnHandoffBundleRootDefsID;
 
 } // namespace llvm
 

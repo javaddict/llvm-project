@@ -1,4 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+
+; Role: semantic — this test.
+
 ; REBASELINED: G-CAPI smoke — residual mulas64/mulss64 member opcodes use dotted print (setDesc), not underscore
 ; Status : previously-XFAIL regression resolved; lit PASS.
 ; this test. The test exercises DR64 MAC intrinsics that crash in the post-Flex

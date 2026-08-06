@@ -70,6 +70,14 @@ HaydnSubtarget::HaydnSubtarget(const Triple &TT, StringRef CPU, StringRef TuneCP
       FrameLowering(initializeSubtargetDependencies(TT, CPU, TuneCPU, FS)),
       InstrInfo(*this), TLInfo(TM, *this) {
 
+  // Immutable production ObjectEncodingProfile (E96). The target machine
+  // resolves the same production identity; synthetic profiles are never
+  // selected for a real subtarget. (void)TM keeps the ctor signature stable.
+  (void)TM;
+  EncodingProfile = haydn::format::ObjectEncodingProfileID::E96;
+  assert(haydn::format::isProductionProfile(EncodingProfile) &&
+         "Haydn subtarget must use the production object-encoding profile");
+
   // Construct ItinData from the itinerary arrays (extern-declared by the CTOR
   // section above) and the sched model from the base MCSubtargetInfo.
   ItinData = InstrItineraryData(
@@ -172,22 +180,16 @@ void HaydnSubtarget::adjustSchedDependency(
       Dep.setLatency(1);
   }
 
-  // ALU→ALU residual latency 1 → 0 (same-cycle VLIW forwarding). Unblocks
-  // dct butterfly sandwiches (X2FCMUL→X2SRAI under invalid node order).
-  // Leave load edges and latency≥2 (MAC writeback) alone.
+  // Haydn has **no** intra-bundle / same-cycle register forwarding: every
+  // slot in a product cycle reads the pre-cycle register snapshot
+  // (BundleSim execution model; durable-rules §Schedule). Data edges must
+  // keep latency ≥1 so a producer and its consumer never share ReadyCycle.
   //
-  // Do NOT collapse accumulator-MAC feedback (tied use of ra/acc). That edge
-  // is intentionally OperandCycles acc→acc = 1 (RecMII honesty). Zeroing it
-  // packs long FF2MULA chains into negative cycles before the pointer PHI
-  // LD64_S1 producers, so SMS hits es>ls on the coef load (bkfir32x32 MAC
-  // loop Found=0).
-  if (Dep.getLatency() == 1 && !DefMI->mayLoad() && !UseMI->mayLoad() &&
-      !DefMI->mayStore() && !UseMI->mayStore()) {
-    const MachineOperand &UMO = UseMI->getOperand(UseOpIdx);
-    const bool UseIsAccFeedback = UMO.isReg() && UMO.isUse() && UMO.isTied();
-    if (!UseIsAccFeedback)
-      Dep.setLatency(0);
-  }
+  // A prior ALU→ALU latency 1→0 collapse ("same-cycle VLIW forwarding") was
+  // architecturally false and densified MOVE32_DR_*→SEXT (soft-float half
+  // extract) into one multi-MI product cycle — muldf3 O1/O2 miscompile
+  // (1.5*2.5). Do not reintroduce forwarding via latency collapse.
+  // Post-RA hasSameBundleRAW + cycleMembersHaveTrueRAW are belts only.
 }
 
 void HaydnSubtarget::initLibcallLoweringInfo(

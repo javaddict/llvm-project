@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — PEI must not use entry live-ins (formal args R1..) as the CSR-stride scratch.
+
 ; PEI must not use entry live-ins (formal args R1..) as the CSR-stride scratch.
 ; Without this, exit-style prologues rewrote status into SP+N and GUEST_EXIT
 ; reported a constant stack address (~0x7fffff64) for every main return value.

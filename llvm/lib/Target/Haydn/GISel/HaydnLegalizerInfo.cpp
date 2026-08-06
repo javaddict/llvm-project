@@ -66,7 +66,7 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .legalFor({S32, S64, V2I32, V4I16})
       .scalarizeIf(ScalarizeWideVec(0), 0)
       // Residual non-native vectors (e.g. v2i16 from SLP/CoreMark after
-      // G-ABI-VEC registers v4i16/v2i32) — scalarize, do not leave illegal.
+ // registers v4i16/v2i32) — scalarize, do not leave illegal.
       .scalarize(0)
       .minScalar(0, S32)
       .maxScalar(0, S64)
@@ -184,7 +184,7 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .legalFor({{S1, S32}, {S1, S64}, {S1, P0}, {S32, S32}, {S32, P0}})
       // CB-130: compare of wide vectors → scalarize element type (idx 1).
       .scalarizeIf(ScalarizeWideVec(1), 1)
-      // Residual SLP vectors (v2i16/v4i8/…) after G-ABI-VEC — not native SIMD.
+ // Residual SLP vectors (v2i16/v4i8/…) after — not native SIMD.
       .scalarize(1)
       .widenScalarToNextPow2(1)
       .clampScalar(1, S32, S64);
@@ -210,7 +210,7 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   getActionDefinitionsBuilder(G_PHI)
       .legalFor({S32, S64, P0, V2I32, V4I16, V8I8, V4I8, V2I16})
       .scalarizeIf(ScalarizeWideVec(0), 0)
-      .scalarize(0) // residual e.g. odd vectors (G-ABI-VEC + SLP)
+ .scalarize(0) // residual e.g. odd vectors ( SLP)
       .clampScalar(0, S32, S64)
       .widenScalarToNextPow2(0);
 
@@ -263,7 +263,7 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
                DstTy.getSizeInBits() == 128 && SrcTy.getSizeInBits() < 128 &&
                SrcTy.getSizeInBits() != 64;
       })
-      // Residual vector extends (v2i16→v2i32 etc. from SLP after G-ABI-VEC).
+ // Residual vector extends (v2i16→v2i32 etc. from SLP after ).
       .scalarize(0)
       .legalIf([](const LegalityQuery &Query) {
         const LLT DstTy = Query.Types[0];
@@ -415,8 +415,8 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   //
   // Extending/truncating rows (s32←s8/s16) cover lowerLoad high halves and
   // match AIE/RISCV ExtLoad MemDesc. s64 min-align stays 32 (ABI i64:32);
-  // ISel still splits LD64 when MMO align < 8 (D_LDW needs 8). Vectors keep
-  // type-only legality (unchanged). Selector keys opcode on MMO size.
+  // ISel still splits LD64 when MMO align < 8 (D_LDW needs 8). DR SIMD mem
+  // is MemDesc-legal only at align 64 (see vector rows below).
   getActionDefinitionsBuilder({G_LOAD, G_STORE})
       .legalForTypesWithMemDesc({{S8, P0, S8, 8},
                                  {S16, P0, S16, 16},
@@ -426,12 +426,25 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
                                  // Anyext load / trunc store after splits.
                                  {S16, P0, S8, 8},
                                  {S32, P0, S8, 8},
-                                 {S32, P0, S16, 16}})
-      .legalFor({{V2I32, P0}, {V4I16, P0}, {V8I8, P0}})
+                                 {S32, P0, S16, 16},
+                                 // DR SIMD mem (v2i32/v4i16/v8i8): ABI is
+                                 // v64:32 so natural IR align is 4. ISel splits
+                                 // LD64→LD32×2 when MMO align < 8 (LD32 needs
+                                 // align 4). Min AlignInBits=32 keeps align-4
+                                 // vectors legal; align-2 residual SLP/LV
+                                 // (coremark matrix_add_const, yarpgen seed1
+                                 // store <4 x i16> into align-2 struct) must
+                                 // scalarize — type-only legality used to
+                                 // select ST32/LD32 and MEMORY_FAULT.
+                                 {V2I32, P0, V2I32, 32},
+                                 {V4I16, P0, V4I16, 32},
+                                 {V8I8, P0, V8I8, 32}})
       // CB-130: <4 x s32> (128-bit) mem — scalarize to s32 loads/stores.
       .scalarizeIf(ScalarizeWideVec(0), 0)
       // pr60960: v4s8 stack spill/reload is 32-bit, under the wide-vector
       // gate, and not a legal SIMD mem shape — scalarize residual vectors.
+      // Also underaligned (<4) v2i32/v4i16/v8i8 mem from SLP/LV — scalarize
+      // to element ops that respect MMO align.
       .scalarize(0)
       .minScalar(0, S8)
       // CB-126 / pr79737-2: clamp extending load / trunc store results when
@@ -703,10 +716,15 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // G_ABS — native ABS32 (GPR) / ABS64 (DR64). Non-saturating matches
   // llvm.abs (INT_MIN stays INT_MIN). ABS32S/ABS64S are sat-only intrinsics.
   // Pats in HaydnGISel.td; selectImpl owns selection (no C++ residual).
+  // Residual SLP vectors (cb44 v2i32 llvm.abs): .lower() expands via
+  // lowerAbsToAddXor to vector ASHR/ADD/XOR (legal for v2i32). Avoid bare
+  // .scalarize(0) on G_ABS — fewerElements→G_BUILD_VECTOR rebuild can assert
+  // in fewerElementsVectorMerge when NarrowTy is scalar.
   getActionDefinitionsBuilder(G_ABS)
       .legalFor({S32, S64})
       .minScalar(0, S32)
-      .maxScalar(0, S64);
+      .maxScalar(0, S64)
+      .lower();
 
   // G_FSHL/G_FSHR: lower s8 directly (pr56866). minScalar(0,S16) alone is not
   // enough — funnel-shift widenScalar only rebuilds pow2 shapes reliably, and
@@ -718,8 +736,21 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .scalarize(0)
       .maxScalar(0, S64);
 
+  // G_SMULO / G_UMULO: lower to G_MUL + G_SMULH/G_UMULH + overflow icmp.
+  // Clang emits non-pow2 widths for mixed-sign __builtin_*_mul_overflow
+  // (e.g. gcc-torture pr89434 at -O0: llvm.smul.with.overflow.i33 for an
+  // unsigned i32 store of a signed multiply). lowerFor({S16,S32,S64}) alone
+  // left s33 with no action → "unable to legalize G_SMULO". Mirror AArch64:
+  // widen odd widths to the next power of two (min s32), clamp to {s32,s64},
+  // then lower. s32 SMULH is native (MULSSH/MULUUH); s64 SMULH/UMULH already
+  // have legalizer paths (lowerFor / custom schoolbook).
+  getActionDefinitionsBuilder({G_SMULO, G_UMULO})
+      .widenScalarToNextPow2(0, /*Min=*/32)
+      .clampScalar(0, S32, S64)
+      .lower();
+
   getActionDefinitionsBuilder({
-      G_UADDO, G_USUBO, G_SMULO, G_UMULO,
+      G_UADDO, G_USUBO,
       G_SADDO, G_SSUBO, G_UADDE, G_USUBE, G_SADDE, G_SSUBE,
       G_UADDSAT, G_SADDSAT, G_USUBSAT, G_SSUBSAT,
       G_USHLSAT, G_SSHLSAT,
@@ -868,13 +899,21 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   getActionDefinitionsBuilder(G_BUILD_VECTOR)
       .legalFor({{V2I32, S32}})
       .customFor({{V4I16, S16}, {V8I8, S8}, {V4I8, S8}, {V2I16, S16}})
-      // Residual SLP builds (v4s32/v16s32/v16s1/…): fewer-elements down to a
+      // Residual SLP s1 builds (G_ICMP vector scalarize rebuilds v2s1 from
+      // scalar s1 lanes; cb44 abs+select SLP). Do NOT clampMaxNumElements(S1,1)
+      // — fewerElementsVectorMerge asserts when NarrowTy is scalar. Custom
+      // rewrites remaining G_UNMERGE uses to the element regs and drops the
+      // build (artifact-combine may not run before legalize re-visits).
+      .customIf([](const LegalityQuery &Q) {
+        return Q.Types[0].isVector() &&
+               Q.Types[0].getElementType().getSizeInBits() == 1;
+      })
+      // Residual SLP builds (v4s32/v16s32/…): fewer-elements down to a
       // legal native shape. Bare .lower() is UnableToLegalize for BUILD_VECTOR
       // and the artifact-retry loop hangs the legalizer (pr28982a @ -O2).
       .clampMaxNumElements(0, S32, 2)
       .clampMaxNumElements(0, S16, 4)
       .clampMaxNumElements(0, S8, 8)
-      .clampMaxNumElements(0, S1, 1)
       .lower();
 
   //===--------------------------------------------------------------------===
@@ -1698,6 +1737,47 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
     LLT DstTy = MRI.getType(Dst);
     const LLT S32 = LLT::scalar(32);
     const LLT V2S32 = LLT::fixed_vector(2, 32);
+
+    // Residual <N x s1> builds from G_ICMP vector scalarize. Every remaining
+    // use must be G_UNMERGE_VALUES of the same width; forward element regs and
+    // drop the build. Avoids clampMaxNumElements(S1,1) → fewerElements assert.
+    // Use Observer when rewriting so CSE maps stay consistent for the
+    // post-legalizer combiner.
+    if (DstTy.isVector() && DstTy.getElementType().getSizeInBits() == 1) {
+      const unsigned NumElts = DstTy.getNumElements();
+      if (MI.getNumOperands() != NumElts + 1)
+        return false;
+      SmallVector<Register, 8> Elts;
+      Elts.reserve(NumElts);
+      for (unsigned I = 0; I < NumElts; ++I)
+        Elts.push_back(MI.getOperand(I + 1).getReg());
+
+      SmallVector<MachineInstr *, 4> Unmerges;
+      for (MachineInstr &Use : MRI.use_instructions(Dst)) {
+        if (Use.getOpcode() != TargetOpcode::G_UNMERGE_VALUES ||
+            Use.getNumOperands() != NumElts + 1)
+          return false;
+        Unmerges.push_back(&Use);
+      }
+      GISelChangeObserver &Observer = Helper.Observer;
+      for (MachineInstr *U : Unmerges) {
+        for (unsigned I = 0; I < NumElts; ++I) {
+          Register From = U->getOperand(I).getReg();
+          Register To = Elts[I];
+          Observer.changingAllUsesOfReg(MRI, From);
+          if (MRI.constrainRegAttrs(To, From))
+            MRI.replaceRegWith(From, To);
+          else
+            MIB.buildCopy(From, To);
+          Observer.finishedChangingAllUsesOfReg();
+        }
+        Observer.erasingInstr(*U);
+        U->eraseFromParent();
+      }
+      Observer.erasingInstr(MI);
+      MI.eraseFromParent();
+      return true;
+    }
 
     auto packTwo16 = [&](Register Lo16, Register Hi16) -> Register {
       Register LoW = MRI.createGenericVirtualRegister(S32);

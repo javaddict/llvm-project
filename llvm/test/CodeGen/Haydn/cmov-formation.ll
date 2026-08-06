@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
-;
+
+; Role: semantic — CMOV Formation / Select-lowering tests.
+
 ; CMOV Formation / Select-lowering tests.
 ;
 ; STATUS (,): un-XFAIL'd. The previous XFAIL blamed

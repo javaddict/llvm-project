@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O0 -global-isel -global-isel-abort=1 %s -o - | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel -global-isel-abort=1 %s -o - | FileCheck %s
-;
+
+; Role: semantic — Empty side-effecting inline asm must not crash IRTranslator.
+
 ; Empty side-effecting inline asm must not crash IRTranslator.
 ; Pre-fix: "Inline asm lowering is not supported for this target yet"
 ; → fatal "unable to translate instruction: call".

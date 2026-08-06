@@ -10,13 +10,13 @@
 //
 // This pass provides the same functionality as the generic Bundle Finalization
 // in MachineInstrBundle, except that it also bundles standalone instructions.
-// After PostMachineScheduler multi-MI materialize (B1.1 FormatID stamp), every
-// remaining non-meta, non-bundled real MI becomes a singleton BUNDLE with
-// durable FormatID::Bundle128Full imm (product encode only).
+// After PostMachineScheduler multi-MI materialize (Format E row/completion
+// stamp), every remaining non-meta, non-bundled real MI becomes a singleton
+// BUNDLE with durable Format E BundleFormatRowID + CompletionStateID.
 //
-// B4.3: also empty-cycle tryAdd → setDesc on bare multi-slot logicals before
-// wrap (AIEMachineScheduler.cpp:1121-1139 peer). Idempotent on already-
-// setDesc members / ops without PlacementAlternatives.
+// Also empty-cycle tryAdd → setDesc on bare multi-slot logicals before wrap
+// (AIEMachineScheduler.cpp:1121-1139 peer). Idempotent on already-setDesc
+// members / ops without PlacementAlternatives.
 //
 // Pipeline:
 //   * addPreSched2 after PostMachineScheduler (AIE2TargetMachine.cpp:242-244)

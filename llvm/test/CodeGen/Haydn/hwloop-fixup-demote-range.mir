@@ -4,21 +4,26 @@
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,PRODUCT
 # RUN: llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,DEBUGOFF
-#
-# W0.2 / G-RISK-DEMOTE product lock:
-# - Product default (demote ON): out-of-range SET demotes to LoopDec+LoopJNZ.
+
+# Role: MIR — Product demote lock: - Product default (demote ON): out-of-range SET demotes to SUBI32+BNEZ_W.
+
+# Product demote lock:
+# - Product default (demote ON): out-of-range SET demotes to SUBI32+BNEZ_W.
+# - Soft edge is exact-committed (BUNDLE + member setDesc via
+#   commitLateProductCycle) before second BR — no residual bare MI.
 # - demote=true explicit: same as product (not an experimental opt-in).
 # - demote=false: debug-only force erase-setup — SET gone, NO soft edge
 #   (once-through body risk). NOT a product setting.
 #
 # demote_uimm6: spacer MBB between preheader and header makes StartOff > 252
-# even with only t−3 NOPs after SET. Shorten cannot pull spacer MIs into the
-# preheader, so the product path demotes: SET_HWLOOP is erased and the latch
-# gets a countable back-edge (loop_dec + loop_jnz).
+# even with only InterveningCycles (=3) NOPs after SET. Shorten cannot pull
+# spacer MIs into the preheader, so the product path demotes: SET_HWLOOP is
+# erased and the latch gets a countable back-edge (subi32 + bnez_w).
 #
 # shorten_uimm6: many NOPs after SET in the *same* preheader — StartOff would
-# exceed uimm6, but shorten moves them before SET while keeping ≥3 after SET.
-# SET_HWLOOP is retained (both product and debug-off).
+# exceed uimm6, but shorten moves them before SET while keeping Following >=
+# InterveningCycles (3; SetupIssueDistance=4). SET_HWLOOP is retained
+# (both product and debug-off).
 
 --- |
   define dso_local void @demote_uimm6(ptr nocapture writeonly %out) {
@@ -54,7 +59,8 @@ body:             |
     successors: %bb.1
 
     $r0 = frame-setup XOR32 $r0, $r0
-    ; Immediate trip count 8; header==latch is %bb.2. Three NOPs for t−3.
+    ; Immediate trip count 8; header==latch is %bb.2. Three NOPs =
+    ; InterveningCycles (VF0 SetupIssueDistance=4).
     SET_HWLOOP 0, %bb.2, %bb.2, 8
     NOP
     NOP
@@ -98,14 +104,21 @@ body:             |
     RET implicit killed $r15
 
 # CHECK-LABEL: name: demote_uimm6
-# Product demote-first: soft countable edge (not erase-only once-through).
+# Product demote-first: final-real soft countable edge (not erase-only).
 # PRODUCT-NOT: SET_HWLOOP
-# PRODUCT: LoopDec
-# PRODUCT: LoopJNZ
+# PRODUCT-NOT: LoopDec
+# PRODUCT-NOT: LoopJNZ
+# Each soft-edge MI is an exact-committed ProductFormatID singleton.
+# PRODUCT: BUNDLE 0
+# PRODUCT: SUBI32
+# PRODUCT: BUNDLE 0
+# PRODUCT: BNEZ_W
 # Debug demote OFF: erase-setup only — no soft edge (once-through risk).
 # DEBUGOFF-NOT: SET_HWLOOP
 # DEBUGOFF-NOT: LoopDec
 # DEBUGOFF-NOT: LoopJNZ
+# DEBUGOFF-NOT: SUBI32
+# DEBUGOFF-NOT: BNEZ_W
 # CHECK: bb.3.exit
 
 ...
@@ -156,6 +169,9 @@ body:             |
     RET implicit killed $r15
 
 # CHECK-LABEL: name: shorten_uimm6
-# CHECK: SET_HWLOOP
+# Residual generic SET_HWLOOP is rewritten to final wide form when kept.
+# CHECK: SET_HWLOOP_W
 # CHECK-NOT: LoopDec
+# CHECK-NOT: LoopJNZ
+# CHECK-NOT: SUBI32
 # CHECK: bb.1.body

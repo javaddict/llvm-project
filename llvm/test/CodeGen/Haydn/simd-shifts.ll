@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 %s -o - | FileCheck %s
-;
+
+; Role: semantic — (F18): DR64 shift-amount operand must NOT use MOVE32.
+
 ; REGRESSION TEST (F18): DR64 shift-amount operand must NOT use MOVE32.
 ;
 ; Bug: HaydnInstructionSelector::selectDR64ShiftGPR32 emitted

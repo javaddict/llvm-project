@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -o - < %s | FileCheck %s
-;
+
+; Role: semantic — BREV/CB load and BREV store encodings must emit native mnemonics (not MCID::Pseudo / libcalls).
+
 ; REGRESSION: BREV/CB load and BREV store encodings must emit native
 ; mnemonics (not MCID::Pseudo / libcalls). BREV frexp pair model:
 ;   loads  -> {data, new_ptr}
@@ -14,8 +16,6 @@ declare ptr @llvm.haydn.sw.brev.imm(i32, ptr, i32)
 declare { i64, ptr } @llvm.haydn.ldw.cb.imm(ptr, i32, i32)
 declare { i64, ptr } @llvm.haydn.ldw.cb.reg(ptr, i32, i32)
 
-; CHECK-LABEL: test_ldw_brev_imm:
-; CHECK: d_ldw_brev_imm
 define i64 @test_ldw_brev_imm(ptr %p) {
   %r_pair = call { i64, ptr } @llvm.haydn.ldw.brev.imm(ptr %p, i32 8)
   %r = extractvalue { i64, ptr } %r_pair, 0

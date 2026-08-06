@@ -2,13 +2,14 @@
 // RUN: FileCheck %s --input-file=%t.gen.c --check-prefix=GEN
 // RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -fsyntax-only -verify %t.gen.c
 //
-// C5.1 / G-SEMA-INTRIN continuous Imm contract:
+// CAPI-5 EXIT MET (2026-07-27) / G-SEMA-INTRIN continuous Imm contract:
 //   Generate exhaustive ImmCheck non-ICE + range-negative Sema audits from
 //   BuiltinsHaydn.td ImmChecks (NEON ImmCheck / OpenCL exhaustive-test peer).
 //   Every PublicEnabled ImmChecked op is called as __builtin_haydn_* (Sema
 //   ImmCheck home) — not UA public switch wrappers / haydn_dsp.h.
 //   Fail closed: missing ImmCheck Sema case fails -verify.
 //   No FormatID / slot / AltDesc in the public surface.
+//   Residual product stress = BundleSim/ISS only (not a CAPI wave reopen).
 //
 // Companion: haydn-immarg-const.c (hand sample) +
 //            capi-op-closure-matrix.c (in-range C→object) +

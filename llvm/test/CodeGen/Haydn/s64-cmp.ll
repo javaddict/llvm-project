@@ -1,6 +1,9 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 
+; Role: semantic — 64-bit equality comparison (low-half compare for MVB).
+
 ; Test 64-bit equality comparison (low-half compare for MVB)
+
 define i32 @cmp_eq_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: cmp_eq_i64:
 ; CHECK: seq32

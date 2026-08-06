@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select %s -o - | FileCheck %s
-#
+
+# Role: MIR — that G_ICMP is selected to compare instructions and G_BRCOND to branches.
+
 # Test that G_ICMP is selected to compare instructions and G_BRCOND to branches.
 # Haydn uses SLT32/SLTU32/SEQ32 with operand swapping for comparison lowering.
 

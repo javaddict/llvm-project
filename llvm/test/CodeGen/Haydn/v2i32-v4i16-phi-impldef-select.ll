@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — G_PHI / G_IMPLICIT_DEF / G_SELECT for v2i32 and v4i16 must legalize.
+
 ; REGRESSION TEST: G_PHI / G_IMPLICIT_DEF / G_SELECT for v2i32 and v4i16 must
 ; legalize. These ops appear in NatureDSP FFT/vector kernels that loop over
 ; <2 x i32> / <4 x i16> accumulators. Before the fix, the legalizer

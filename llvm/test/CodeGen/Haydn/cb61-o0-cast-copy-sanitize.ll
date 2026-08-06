@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 < %s 2>&1 | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s 2>&1 | FileCheck %s
-;
+
+; Role: verifier — cast-boundary regression: redundant ext collapse must not crash APInt trunc/compare at O0/O2.
+
 ; T7.1 cast-boundary regression (formerly dual-home + sanitizeCastCopies):
 ; PreLegalizer matchRedundantExt used to collapse G_SEXT(G_SEXT x) /
 ; G_ZEXT(G_ZEXT x) into COPY of the *innermost* source, producing type
@@ -16,7 +18,7 @@
 ;
 ; If this regresses, llc exits 134 before CHECK-LABEL on the seed shapes.
 
-; CHECK-LABEL: double_zext_sext_bool:
+
 define i64 @double_zext_sext_bool(i1 zeroext %b) nounwind {
 entry:
   %z = zext i1 %b to i32

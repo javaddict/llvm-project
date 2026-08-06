@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — s for mul-to-shift strength reduction combiner rules in HaydnPostLegalizerCombiner.
+
 ; Tests for mul-to-shift strength reduction combiner rules in
 ; HaydnPostLegalizerCombiner. These combines convert multiplication by
 ; special constants into cheaper shift/shift-add/shift-sub sequences:

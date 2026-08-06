@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 %s -o - | FileCheck %s
 
+; Role: semantic — SIMD Horizontal Add Optimization Tests Tests for the Haydn SIMD reduction codegen.
+
 ;===----------------------------------------------------------------------===
 ; SIMD Horizontal Add Optimization Tests
 ;===----------------------------------------------------------------------===
@@ -24,6 +26,7 @@
 ; TEST 1: Simple vector reduction (sum of <2 x i32>)
 ; The expand-reductions pass turns this into shuffle + add + extractelement.
 ; The vector add becomes X2ADD32, and element extraction uses MOV_DR64_TO_GPR.
+
 define i32 @test_vecreduce_add_v2i32(<2 x i32> %v) nounwind {
 ; CHECK-LABEL: test_vecreduce_add_v2i32:
 ; CHECK: x2add32

@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select -verify-machineinstrs %s -o - | FileCheck %s
-#
+
+# Role: MIR — that G_INTRINSIC for Haydn DSP intrinsics is correctly selected to target instructions by the instruction selector.
+
 # Test that G_INTRINSIC for Haydn DSP intrinsics is correctly selected
 # to target instructions by the instruction selector.
 

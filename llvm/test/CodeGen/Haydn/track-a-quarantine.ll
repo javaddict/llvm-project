@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Track A: inverse SLT stays two comparisons (not xor-not); basic smoke after formMACs/foldCmpBranch/LoadStoreOpt quarantine.
+
 ; Track A: inverse SLT stays two comparisons (not xor-not); basic smoke after
 ; formMACs/foldCmpBranch/LoadStoreOpt quarantine.
 

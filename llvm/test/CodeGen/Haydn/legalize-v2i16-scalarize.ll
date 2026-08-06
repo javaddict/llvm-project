@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — Residual non-native vectors (v2i16) must scalarize after registers only v2i32/v4i16/v8i8/v2f32 for DR ABI.
+
 ; Residual non-native vectors (v2i16) must scalarize after G-ABI-VEC registers
 ; only v2i32/v4i16/v8i8/v2f32 for DR ABI. CoreMark SLP can produce <2 x i16>
 ; G_ADD. 32-bit residual packs pass in one GPR (CC_Haydn v2i16/v4i8).

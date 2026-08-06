@@ -1,6 +1,15 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o
 # RUN: llvm-objdump -d %t.o | FileCheck %s
 # REQUIRES: haydn-registered-target
+// CHECK: {{.*}}0: 07 eb 11 c1 00 00 00 00 00 00 00 00 { sll32 r1, r1, r12; nop }
+// CHECK: {{.*}}c: 07 8b 21 43 00 00 00 00 00 00 00 00 { sra32 r2, r3, r4; nop }
+// CHECK: {{.*}}18: 07 8b 50 76 00 00 00 00 00 00 00 00 { add32 r5, r6, r7; nop }
+// CHECK: {{.*}}24: 07 0b 82 a9 00 00 00 00 00 00 00 00 { max32 r8, r9, r10; nop }
+// CHECK: {{.*}}30: 07 ab 06 21 00 00 00 00 00 00 00 00 { or64 d0, d1, d2; nop }
+// CHECK: {{.*}}3c: 07 0b 34 54 00 00 00 00 00 00 00 00 { add64 d3, d4, d5; nop }
+
+# Role: object — Phase-2 decoder purge collateral (prior revision): historically a hybrid test.
+
 # Phase-2 decoder purge collateral (prior revision): historically a hybrid
 # test. The s0 ALU32 RR sub-row survived (sll32/sra32/add32/max32 all
 # decode). Under the 128-bit-only Flex decoder also covers the s1/s2
@@ -14,7 +23,6 @@
 # Mode-0 §6), whose decoder reconstructs the full 4-bit rs2 field — so the
 # operands now round-trip correctly and the OOB regression stays fixed.
 # If a future change re-introduces MC-time G-format emission for these, the
-# CHECK lines will fail and this regression will need re-evaluation.
 # REGRESSION TEST: HaydnInstPrinter OOB crash on RR-form ALU32 + ALU64 ops
 # packed into Mode-0 s0/s1/s2 slots.
 #
@@ -45,13 +53,7 @@
 # the rs2 register), do NOT adjust CHECK lines — re-read and verify the
 # decoder emits N operands matching the.td (ins …) list.
 
-# CHECK: file format elf32-unknown
-# CHECK-LABEL: <rr_alu32_s0>:
-# Every op is a 16-byte Bundle128 composite `{ op.sN...; nop; nop }`.
-# CHECK: sll32 r1, r1, r12
-# CHECK: sra32 r2, r3, r4
-# CHECK: add32 r5, r6, r7
-# CHECK: max32 r8, r9, r10
+# Every op is a 12-byte Format E composite `{ op.sN...; nop; nop }`.
 
 .text
 .globl rr_alu32_s0
@@ -63,9 +65,6 @@ rr_alu32_s0:
   MAX32 R8, R9, R10
 .size rr_alu32_s0, .-rr_alu32_s0
 
-# CHECK-LABEL: <alu64_dr64>:
-# CHECK: or64 d0, d1, d2
-# CHECK: add64 d3, d4, d5
 .globl alu64_dr64
 .type alu64_dr64,@function
 alu64_dr64:

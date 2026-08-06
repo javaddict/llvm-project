@@ -1,7 +1,11 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+
+; Role: semantic — Updated for native DR64 shift (sll64/srl64/sra64).
+
 ; Updated for native DR64 shift (sll64/srl64/sra64)
 
 ; Test 64-bit logical left shift
+
 define i64 @shl64(i64 %a, i64 %amt) {
 ; CHECK-LABEL: shl64:
 ; CHECK: sll64

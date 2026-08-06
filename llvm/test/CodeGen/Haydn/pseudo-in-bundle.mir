@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos -verify-machineinstrs %s -o - | FileCheck %s
-#
+
+# Role: MIR — LD32_POST_INC / ST32_POST_INC pseudos inside VLIW bundles must be expanded to real instructions, not silently dropped.
+
 # REGRESSION TEST: LD32_POST_INC / ST32_POST_INC pseudos inside VLIW bundles
 # must be expanded to real instructions, not silently dropped.
 #

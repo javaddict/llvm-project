@@ -1,8 +1,11 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — various cast operations: trunc, sext, zext, fptoui, fptosi, uitofp, sitofp, bitcast, ptrtoint, inttoptr.
+
 ; Test various cast operations: trunc, sext, zext, fptoui, fptosi, uitofp, sitofp, bitcast, ptrtoint, inttoptr.
 
 ;Truncate i64 to i32
+
 define i32 @trunc_i64_to_i32(i64 %val) {
 ; CHECK-LABEL: trunc_i64_to_i32:
   %r = trunc i64 %val to i32

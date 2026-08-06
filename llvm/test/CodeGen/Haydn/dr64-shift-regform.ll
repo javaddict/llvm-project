@@ -1,19 +1,12 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-; RE-XFAIL note: this was XFAIL'd (lanewise retype) because the
-; vector-scalar shift selector fed a GPR32 shift amount to MOV_DR64_TO_GPR
-; which expects a DR64 source (verifier abort "Expected a DR64 register, but
-; got a GPR32 register"). Fixed in HaydnInstructionSelector's
-; selectDR64ShiftGPR32: bank is now inferred from the operand *type*, not from
-; MRI.getRegBankOrNull (which returns null for bank-only vregs at this point).
-; See lesson.
-;
-; Carved out of dr64-shift-intrinsics.ll, which is still XFAIL for the
-; hadd/hmax/hmin/dot/mul/mula/fcmul/ff2 families — those still drop as pseudos
-; at MC layer; see ~/haydn-plans/m6-gap-scope.md G07).
-;
-; This file covers ONLY the X2/X4 register-form shift intrinsics, all of which
-; select AND emit to assembly today. Cross-check: lesson (stale-CHECK
-; refresh).
+
+; Role: semantic — X2/X4 register-form DR64 shifts (data DR64, shift GPR32)
+; must select and emit real mnemonics (not dropped pseudos).
+
+; Cross-bank shift amount: the selector must type-infer the GPR32 shift
+; operand (not MRI.getRegBankOrNull, which is null for bank-only vregs) so
+; MOV_DR64_TO_GPR is not fed a GPR32 source. Sibling dr64-shift-intrinsics.ll
+; covers the broader shift family; both are live PASS contracts.
 ;
 ; REGRESSION TEST: DR64 register-form shift intrinsics must round-trip through
 ; the full CodeGen pipeline to real instructions in the assembly output.

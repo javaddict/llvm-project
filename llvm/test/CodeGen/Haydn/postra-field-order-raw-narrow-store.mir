@@ -1,0 +1,121 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+#
+# REGRESSION TEST: post-RA field-order intra-bundle true RAW on a narrow store
+# (no-forwarding law; CLAUDE.md hard constraint #3 / no-forwarding).
+#
+# Bug: commitExactMultiMIProductCycle validated the no-forwarding RAW law only
+# on SCHEDULE order. The Haydn post-RA list scheduler legally packs a same-cycle
+# WAR {ST8 reads $r3; ADDI32 writes $r3} (reader before writer — the reader
+# observes the pre-cycle value). applyFormatOrdering then permutes the members
+# into Format.getSlots() field order to satisfy the encoding row; for a
+# {ALU, LOAD/STORE} pack the field order is writer-before-reader. finalizeBundle
+# then marks the ST8 address operand `internal killed $r3`, modeling a
+# same-cycle read of a same-cycle def — exactly the no-forwarding hazard.
+# Effect: every narrow store landed at the NEXT adjacent offset. For the 4
+# consecutive i8 stores at offsets 44/45/46/47, offset 44 was never written
+# (left zero), -82 was written to offset 46 (member_3_3) instead of 45
+# (member_3_2), etc. BundleSim yarpgen_seed39 (and ~18 functional seeds that
+# store narrow values to adjacent global-struct members) computed a wrong
+# oracle; correct at -O0, wrong at -O1/-O2/-Os/-Oz.
+#
+# Test design: the input MIR is the exact post-RA, pre-postmisched state for
+# four adjacent i8 stores whose offsets (44..47) do not fit the ST8 immediate
+# field, forcing address materialization via ADDI32 base+offset into a GPR
+# that is reused across all four stores. The post-RA scheduler forms same-cycle
+# WAR pairs {ST8 reader, ADDI32 writer} on that GPR; the field-order permutation
+# is what converts them into an illegal same-cycle RAW. We run postmisched in
+# isolation and assert the emitted code never lets a store read an intra-bundle
+# (internal) operand — i.e. no committed product cycle has an intra-bundle true
+# RAW on either the store address OR value register.
+#
+# What breaks if this regresses: the CHECK-NOT matches again (an ST8 reads an
+# `internal` operand), meaning a same-cycle def is being consumed same-cycle
+# (no forwarding) — a silent miscompilation where adjacent narrow stores shift
+# their offsets by one.
+
+--- |
+  ; ModuleID = 'narrow-store-field-order-raw.mir'
+  target datalayout = "e-m:e-p:32:32-i64:32-f64:32-v64:32-v128:64-a:0:32-n32-S64"
+  target triple = "haydn-unknown-unknown-elf"
+
+  %struct.S = type { [11 x i32], i8, i8, i8, i8 }
+
+  @g = dso_local local_unnamed_addr global %struct.S zeroinitializer, align 4
+
+  define dso_local void @store_adjacent() local_unnamed_addr #0 {
+  entry:
+    store i8 -31, ptr getelementptr inbounds nuw (i8, ptr @g, i32 44), align 4, !tbaa !6
+    store i8 -82, ptr getelementptr inbounds nuw (i8, ptr @g, i32 45), align 1, !tbaa !8
+    store i8 -13, ptr getelementptr inbounds nuw (i8, ptr @g, i32 46), align 2, !tbaa !9
+    store i8 -49, ptr getelementptr inbounds nuw (i8, ptr @g, i32 47), align 1, !tbaa !10
+    ret void
+  }
+
+  attributes #0 = { nounwind "target-cpu"="generic" "target-features"="+agu,+hwloop,-bit-reversed,-circular-buffer,-simd" }
+
+  !llvm.module.flags = !{!0}
+  !0 = !{i32 1, !"wchar_size", i32 4}
+  !3 = !{!"int", !4, i64 0}
+  !4 = !{!"omnipotent char", !5, i64 0}
+  !5 = !{!"Simple C/C++ TBAA"}
+  !6 = !{!7, !4, i64 44}
+  !7 = !{!"", !4, i64 0, !4, i64 44, !4, i64 45, !4, i64 46, !4, i64 47}
+  !8 = !{!7, !4, i64 45}
+  !9 = !{!7, !4, i64 46}
+  !10 = !{!7, !4, i64 47}
+...
+---
+name:            store_adjacent
+tracksRegLiveness: true
+noVRegs:         true
+selected:        true
+legalized:       true
+regBankSelected: true
+frameInfo:
+  stackSize:       8
+  maxAlignment:    4
+  isCalleeSavedInfoValid: true
+stack:
+  - { id: 0, type: spill-slot, offset: -4, size: 4, alignment: 4 }
+  - { id: 1, type: spill-slot, offset: -8, size: 4, alignment: 4 }
+machineFunctionInfo: {}
+body:             |
+  bb.0.entry:
+    liveins: $r0
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r13 = frame-setup SUBI32 $r13, 8
+    frame-setup CFI_INSTRUCTION def_cfa_offset 8
+    $r1 = LUI $r0, @g
+    $r1 = ADDI32_W $r1, @g
+    $r2 = ADDI32_W $r0, -31
+    $r3 = ADDI32 $r1, 44
+    ST8 killed $r2, killed $r3, 0 :: (store (s8) into `ptr getelementptr inbounds nuw (i8, ptr @g, i32 44)`, align 4, !tbaa !6)
+    $r2 = ADDI32_W $r0, -82
+    $r3 = ADDI32 $r1, 45
+    ST8 killed $r2, killed $r3, 0 :: (store (s8) into `ptr getelementptr inbounds nuw (i8, ptr @g, i32 45)`, !tbaa !8)
+    $r2 = ADDI32_W $r0, -13
+    $r3 = ADDI32 $r1, 46
+    ST8 killed $r2, killed $r3, 0 :: (store (s8) into `ptr getelementptr inbounds nuw (i8, ptr @g, i32 46)`, align 2, !tbaa !9)
+    $r2 = ADDI32_W $r0, -49
+    $r1 = ADDI32 killed $r1, 47
+    ST8 killed $r2, killed $r1, 0 :: (store (s8) into `ptr getelementptr inbounds nuw (i8, ptr @g, i32 47)`, !tbaa !10)
+    $r0 = frame-destroy XOR32 $r0, $r0
+    $r13 = frame-destroy ADDI32_W $r13, 8
+    $r0 = JALR_W $r15, 0, implicit $r15, implicit $r15
+...
+
+# CHECK-LABEL: name: store_adjacent
+#
+# Invariant: no committed Format E product cycle may contain an intra-bundle
+# true RAW on a store operand (no-forwarding). After the fix, every ST8 reads
+# its address and value registers from PRIOR cycles (non-internal operands).
+# Before the fix, the store read an `internal killed` address register defined
+# by a same-bundle ADDI32 — storing to the wrong (next) offset.
+#
+# With no later positive anchor in this label scope, this CHECK-NOT scans the
+# entire scheduled body to EOF: no ST8 may read an intra-bundle (internal)
+# operand. (Positive coverage of the four stores survives in the full Haydn
+# lit + BundleSim regression; this test isolates the field-order RAW guard.)
+# CHECK-NOT: ST8{{.*}}internal

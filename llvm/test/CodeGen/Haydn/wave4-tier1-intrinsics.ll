@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — Wave 4 Tier 1 intrinsics: X2/X4 fractional multiply, shift-with-rounding FMUL16 HS/LS parameterized, F2MUL zero-accumulator variants.
+
 ; Wave 4 Tier 1 intrinsics: X2/X4 fractional multiply, shift-with-rounding
 ; FMUL16 HS/LS parameterized, F2MUL zero-accumulator variants.
 ;

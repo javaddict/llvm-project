@@ -1,9 +1,10 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-copy-elim \
 # RUN:     -verify-machineinstrs -debug-only=haydn-copy-elim -o - %s 2>&1 \
 # RUN:     | FileCheck %s
-#
 # REQUIRES: asserts
-#
+
+# Role: MIR — OR32 identity fold in HaydnCopyElim.
+
 # REGRESSION TEST: OR32 identity fold in HaydnCopyElim.
 #
 # Fixed (XFAIL hygiene): MIR OR32 arity is (rd, rs1, rs2) so the

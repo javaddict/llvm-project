@@ -1,0 +1,16 @@
+# REQUIRES: haydn
+# RUN: yaml2obj %S/Inputs/far-call-e96.yaml -o %t.call.o
+# RUN: yaml2obj %S/Inputs/far-target-e96.yaml -o %t.far.o
+# RUN: ld.lld %t.call.o %t.far.o -o %t -T %S/thunk-e96-geometry.ld
+# RUN: llvm-nm %t | FileCheck --check-prefix=NM %s
+# RUN: llvm-readobj --symbols %t | FileCheck --check-prefix=SYM %s
+#
+# Assembler-independent geometry proof for Format E product hard cut:
+#   * Out-of-range R_HAYDN_CallSImm20 produces a long-call veneer
+#   * Veneer Defined::size == 3 × production EncodedBytes (registry → 36)
+#   * No writeFormatELE / 48-byte Format E product path
+
+# NM: __haydn_thunk_far_fn
+
+# SYM: Name: __haydn_thunk_far_fn
+# SYM: Size: 36

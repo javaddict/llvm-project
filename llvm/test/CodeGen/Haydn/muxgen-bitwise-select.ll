@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — GenMux fully retired; s32+s64 select use MOVT at isel.
+
 ; GenMux fully retired; s32+s64 select use MOVT at isel.
 ; STATUS (,): un-XFAIL'd. The previous XFAIL blamed
 ; "GenMux Pattern 1 (tryConvertBitwiseSelect) does not fire post-ISA-27" because

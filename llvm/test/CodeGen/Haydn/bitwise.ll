@@ -1,8 +1,11 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 
+; Role: semantic — comprehensive bitwise operations (AND, OR, XOR, NOT).
+
 ; Test comprehensive bitwise operations (AND, OR, XOR, NOT)
 
 ;s32 bitwise AND
+
 define i32 @and_i32(i32 %a, i32 %b) {
 ; CHECK-LABEL: and_i32:
 ; CHECK-DAG: and32

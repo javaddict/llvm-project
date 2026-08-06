@@ -1,4 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+
+; Role: semantic — FILED : DR64 R_CMP instructions (SLT64_S1 SEQ64_S1, SLE64_S1 and _S0/_S2 variants) have an operand-flag.
+
 ; REGRESSION FILED : DR64 R_CMP instructions (SLT64_S1
 ; SEQ64_S1, SLE64_S1 and _S0/_S2 variants) have an operand-flag
 ; bug in HaydnFormatsALU64.td that aborts the MachineVerifier ("Explicit

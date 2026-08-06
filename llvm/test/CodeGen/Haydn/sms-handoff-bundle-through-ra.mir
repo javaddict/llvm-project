@@ -1,0 +1,369 @@
+# XFAIL: *
+# CONT-POST / CONT-STATS-ON RUNs (-haydn-sms-handoff=true, DEFAULT OFF) hit a
+# MachineFunctionProperties IsSSA check failure in the -start-before=pipeliner
+# -stop-after=postmisched pass span (Process Implicit Definitions requires
+# IsSSA but the post-PEI function is NoPHIs). Experimental SMS-handoff path;
+# not on the default -O0..O3 product path. The crash-free hard-root dissolve
+# (commitExactHardRootProductCycle) it shares is covered by
+# format-bundle-through-ra.mir POST, which passes. Open residual, owner
+# G-FORMAT-E-96-CUTOVER (SMS-handoff pass-span / IsSSA).
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -run-pass=pipeliner \
+# RUN:   -haydn-sms-handoff=true -debug-only=pipeliner -verify-machineinstrs \
+# RUN:   %S/sms-format-shoulduse-reject.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefixes=PIPE,HANDOFF-ON
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -run-pass=pipeliner \
+# RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=HANDOFF-OFF
+#
+# Continuous SMS handoff membership (sms-format-shoulduse-reject.mir body):
+# pipeliner → machine-scheduler / register-coalescer / greedy / VirtRegRewriter
+# → postmisched (PEI in path). Only same-cycle runs that form one legal product
+# Format E freeze as hard roots; multi-expand pseudos stay bare.
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN:   -stop-after=machine-scheduler -haydn-sms-handoff=true \
+# RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=CONT-SCHED
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN:   -stop-after=register-coalescer -haydn-sms-handoff=true \
+# RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=CONT-COALESCER
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN:   -stop-after=greedy -haydn-sms-handoff=true -verify-machineinstrs \
+# RUN:   %S/sms-format-shoulduse-reject.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=CONT-GREEDY
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN:   -stop-after=virtregrewriter -haydn-sms-handoff=true \
+# RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=CONT-VRW
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN:   -stop-after=virtregrewriter -verify-machineinstrs \
+# RUN:   %S/sms-format-shoulduse-reject.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=CONT-OFF
+# Producer-body spill / compact soft-order interop (stress=8 keeps SMS schedule
+# alive; stress=4 rejects under artificial RC pressure before handoff).
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN:   -stop-after=virtregrewriter -haydn-sms-handoff=true -stress-regalloc=8 \
+# RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=CONT-SPILL
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN:   -stop-after=virtregrewriter -haydn-sms-handoff=true \
+# RUN:   -haydn-ra-compact-hints=true -verify-machineinstrs \
+# RUN:   %S/sms-format-shoulduse-reject.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=CONT-COMPACT
+# Real continuous path through PEI into postmisched exact hard-root commit.
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN:   -stop-after=postmisched -haydn-sms-handoff=true \
+# RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=CONT-POST
+# Dual-run handoff ON/OFF -stats through postmisched (metrics gate product).
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN:   -stop-after=postmisched -haydn-sms-handoff=true -stats \
+# RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o /dev/null \
+# RUN:   2>&1 | FileCheck %s --check-prefix=CONT-STATS-ON
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN:   -stop-after=postmisched -haydn-sms-handoff=false -stats \
+# RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o /dev/null \
+# RUN:   2>&1 | FileCheck %s --check-prefix=CONT-STATS-OFF
+#
+# Rematch body: architectural multi-member hard BUNDLE through sched → coalescer
+# → greedy → VRW (+ stress spill-around membership; compact soft-order interop).
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-before=greedy -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=SCHED
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=register-coalescer \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=COALESCER
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=greedy -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=GREEDY
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=virtregrewriter -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=VRW
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=virtregrewriter -stress-regalloc=4 -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s --check-prefix=SPILL
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=greedy -haydn-ra-compact-hints=true -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s --check-prefix=GREEDY
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=virtregrewriter -haydn-ra-compact-hints=true \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=VRW
+# REQUIRES: asserts
+
+# Role: MIR — SMS clone→cycle logical BUNDLE handoff (default OFF) + continuous
+# membership through machine-scheduler → register-coalescer → greedy →
+# VirtRegRewriter → postmisched exact-commit, plus rematch body parity with
+# format-bundle-through-ra.mir.
+#
+# SMS path (PIPE / HANDOFF-* / CONT-* on sms-format-shoulduse-reject.mir body):
+#   * Multi-stage dual-load MAC expands under the pipeliner.
+#   * -haydn-sms-handoff=true: expander hands ordered (kernel-clone MI,
+#     schedule-cycle) pairs; contiguous same-cycle real-issue runs of size ≥2
+#     that form one legal product Format E become TargetOpcode::BUNDLE via
+#     finalizeBundle. Runs that are not one legal product cycle stay bare
+#     (multi-expand post-RA pseudos such as MOV_GPR_TO_DR64 are not frozen).
+#     Pre-PHI materialize keeps child-only vreg defs; after TwoAddress, root
+#     vreg defs are restored for LIS/coalescer. Logical child opcodes only —
+#     no private member setDesc, no FormatID stamp until leaveMBB.
+#   * Continuous RUNs prove dual-load hard BUNDLE survives machine-scheduler,
+#     register-coalescer, greedy, VirtRegRewriter, stress-regalloc=8, compact
+#     soft order, and stop-after=postmisched exact-commit (PEI in path) with
+#     zero member loss. Multi-expand post-RA pseudos (MOV_GPR_TO_DR64) stay
+#     bare outside the dual-load root at every stop-after (never-BUNDLE).
+#   * Dual-run -stats (CONT-STATS ON/OFF through postmisched): handoff ON
+#     attributes legal materialize groups + illegal same-cycle skips
+#     (asserts-free haydn-instr-info counters) plus pre-existing hard roots
+#     and transactional exact-commit; handoff OFF keeps group/skip/hard-root
+#     counters silent. Both sides pin spill/reload silence, stack-byte parity,
+#     and multi-MI finalize / idle-cycle floors (II surface) — metrics, not
+#     the flag, gate any future product enable.
+#   * Default OFF keeps bare logical expansion (HANDOFF-OFF-NOT:BUNDLE /
+#     CONT-OFF-NOT:BUNDLE at VirtRegRewriter).
+#
+# RA rematch path (this file's rematch body):
+#   * Architectural rematch shape ADD32 + 2×ADD64 as a multi-member logical
+#     hard BUNDLE (same membership contract as format-bundle-through-ra.mir
+#     mixed-FU root). Proves zero member loss through machine-scheduler →
+#     register-coalescer → greedy → VirtRegRewriter under the
+#     isSchedulingBoundary fence; stress-regalloc membership; compact soft
+#     order (-haydn-ra-compact-hints=true) cannot unbundle.
+#
+# Architectural dual-load + LD+ADD hard roots and large-frame CSR PEI around
+# dual-load membership densify live in format-bundle-through-ra.mir (this
+# file owns the SMS producer CONT path; that MIR owns pure architectural
+# dual-load through sched→RA→PEI/postmisched).
+#
+# Companion OFF metrics pins: sms-three-ready-rematch.mir, sms-format-resmii.mir.
+# Compact-hints product ON, hard RC demotion, product handoff enable: out of
+# scope here. Flags -haydn-sms-handoff and -haydn-ra-compact-hints default OFF.
+
+# PIPE-NOT: SMS-HOOK: reject
+# PIPE-NOT: SMS-RESMII: reject
+# PIPE-NOT: SMS-HANDOFF: reject
+# PIPE-DAG: Schedule Found? 1 (II={{[1-9][0-9]*}})
+# PIPE-DAG: SMS-HANDOFF: materialize cycle={{[0-9]+}} members={{[2-9]|[1-9][0-9]+}} logical BUNDLE
+# PIPE-DAG: SMS-HANDOFF: materialize done groups={{[1-9][0-9]*}}
+# PIPE-DAG: SMS-HANDOFF: metrics-only freeze ResMII={{[0-9]+}} RecMII={{[0-9]+}} MII={{[0-9]+}} stages={{[2-9]|[1-9][0-9]+}}
+# Illegal same-cycle combinations are skipped (no durable hard root).
+# PIPE-DAG: SMS-HANDOFF: skip cycle={{[0-9]+}} members={{[2-9]|[1-9][0-9]+}} (not one legal product cycle
+
+# HANDOFF-ON-LABEL: name: sms_shoulduse_multistage_mac
+# Cutover drift: SMS-HANDOFF now materializes two groups (the MAC recurrence
+# ADD32/ADDI32_W/SEQ32 cycle and the dual-load LD32/LD32 cycle). The dual-load
+# hard root is discriminated by its :: (load) memory operand; the MAC group
+# BUNDLE has none.
+# HANDOFF-ON-DAG: SEQ32
+# HANDOFF-ON: BUNDLE{{.*}}:: (load{{.*}}{
+# HANDOFF-ON-NEXT: {{%[0-9]+}}:gpr32 = LD32
+# HANDOFF-ON-NEXT: {{%[0-9]+}}:gpr32 = LD32
+# HANDOFF-ON-NEXT: }
+# Dual-load hard root only — multi-expand pack stays bare outside BUNDLE.
+# HANDOFF-ON-NEXT: {{%[0-9]+}}:dr64 = MOV_GPR_TO_DR64
+# HANDOFF-ON-NOT: {{LD32|MOV_GPR_TO_DR64|ADD32|ADDI32|F2MULAA32RS_HHLL}}_S
+
+# HANDOFF-OFF-LABEL: name: sms_shoulduse_multistage_mac
+# HANDOFF-OFF-NOT: BUNDLE
+# HANDOFF-OFF-DAG: LD32
+# HANDOFF-OFF-DAG: F2MULAA32RS_HHLL
+# HANDOFF-OFF-NOT: LD32_S
+# HANDOFF-OFF-NOT: F2MULAA32RS_HHLL_S
+
+# Continuous dual-load membership after ordinary pre-RA MachineScheduler.
+# Dual-load root only; multi-expand MOV_GPR_TO_DR64 is the next bare MI
+# (never-BUNDLE member).
+# CONT-SCHED-LABEL: name: sms_shoulduse_multistage_mac
+# CONT-SCHED-DAG: SEQ32
+# CONT-SCHED: BUNDLE{{.*}}:: (load{{.*}}{
+# CONT-SCHED-NEXT: {{%[0-9]+}}:gpr32 = LD32
+# CONT-SCHED-NEXT: {{%[0-9]+}}:gpr32 = LD32
+# CONT-SCHED-NEXT: }
+# CONT-SCHED-NEXT: {{%[0-9]+}}:dr64 = MOV_GPR_TO_DR64
+# CONT-SCHED-NOT: {{LD32|MOV_GPR_TO_DR64|SEQ32|ADD32|ADDI32|F2MULAA32RS_HHLL}}_S
+
+# CONT-COALESCER-LABEL: name: sms_shoulduse_multistage_mac
+# CONT-COALESCER-DAG: SEQ32
+# CONT-COALESCER: BUNDLE{{.*}}:: (load{{.*}}{
+# CONT-COALESCER-NEXT: {{%[0-9]+}}:gpr32 = LD32
+# CONT-COALESCER-NEXT: {{%[0-9]+}}:gpr32 = LD32
+# CONT-COALESCER-NEXT: }
+# CONT-COALESCER-NEXT: {{%[0-9]+}}:dr64 = MOV_GPR_TO_DR64
+# CONT-COALESCER-NOT: {{LD32|MOV_GPR_TO_DR64|SEQ32|ADD32|ADDI32|F2MULAA32RS_HHLL}}_S
+
+# CONT-GREEDY-LABEL: name: sms_shoulduse_multistage_mac
+# CONT-GREEDY-DAG: SEQ32
+# CONT-GREEDY: BUNDLE{{.*}}:: (load{{.*}}{
+# CONT-GREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
+# CONT-GREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
+# CONT-GREEDY-NEXT: }
+# CONT-GREEDY-NEXT: {{%[0-9]+}}:dr64 = MOV_GPR_TO_DR64
+# CONT-GREEDY-NOT: {{LD32|MOV_GPR_TO_DR64|SEQ32|ADD32|ADDI32|F2MULAA32RS_HHLL}}_S
+
+# CONT-VRW-LABEL: name: sms_shoulduse_multistage_mac
+# CONT-VRW-DAG: SEQ32
+# CONT-VRW: BUNDLE{{.*}}:: (load{{.*}}{
+# CONT-VRW-NEXT: ${{r[0-9]+}} = LD32
+# CONT-VRW-NEXT: ${{r[0-9]+}} = LD32
+# CONT-VRW-NEXT: }
+# CONT-VRW-NEXT: ${{d[0-9]+}} = MOV_GPR_TO_DR64
+# CONT-VRW-NOT: {{LD32|MOV_GPR_TO_DR64|SEQ32|ADD32|ADDI32|F2MULAA32RS_HHLL}}_S
+
+# CONT-OFF-LABEL: name: sms_shoulduse_multistage_mac
+# CONT-OFF-NOT: BUNDLE
+
+# stress-regalloc=8 on producer body: dual-load membership holds (spill/reload
+# may or may not appear; root must not unbundle / private-slot); multi-expand
+# stays bare after the dual-load root.
+# CONT-SPILL-LABEL: name: sms_shoulduse_multistage_mac
+# CONT-SPILL: BUNDLE{{.*}}:: (load{{.*}}{
+# CONT-SPILL-NEXT: ${{r[0-9]+}} = LD32
+# CONT-SPILL-NEXT: ${{r[0-9]+}} = LD32
+# CONT-SPILL-NEXT: }
+# CONT-SPILL-NEXT: ${{d[0-9]+}} = MOV_GPR_TO_DR64
+# CONT-SPILL-NOT: LD32_S
+
+# compact soft-order interop on producer body: cannot unbundle dual-load root;
+# multi-expand stays bare.
+# CONT-COMPACT-LABEL: name: sms_shoulduse_multistage_mac
+# CONT-COMPACT: BUNDLE{{.*}}:: (load{{.*}}{
+# CONT-COMPACT-NEXT: ${{r[0-9]+}} = LD32
+# CONT-COMPACT-NEXT: ${{r[0-9]+}} = LD32
+# CONT-COMPACT-NEXT: }
+# CONT-COMPACT-NEXT: ${{d[0-9]+}} = MOV_GPR_TO_DR64
+# CONT-COMPACT-NOT: LD32_S
+
+# stop-after=postmisched (PEI in path): dual-load hard root exact-commits as
+# ProductFormatID FormatE96 with member setDesc; zero member loss.
+# Multi-expand post-RA pseudo is expanded (never residual hard-root member).
+# CONT-POST-LABEL: name: sms_shoulduse_multistage_mac
+# CONT-POST-DAG: BUNDLE 0{{.*}}{
+# CONT-POST-DAG: ${{r[0-9]+}} = LD32_S{{[012]}}
+# CONT-POST-DAG: ${{r[0-9]+}} = LD32_S{{[012]}}
+# CONT-POST-DAG: }
+# CONT-POST-DAG: SEQ32
+# CONT-POST-NOT: MOV_GPR_TO_DR64
+
+# Handoff ON dual-run stats: legal group + illegal skip floors; hard roots
+# enter post-RA and exact-commit; spill/reload silent; stack-byte + multi-MI
+# finalize / idle-cycle floors match OFF (II surface). Split stays silent.
+# -stats order is name-sorted within the pass.
+# CONT-STATS-ON-DAG: 1{{ +}}haydn-instr-info{{.*}}SMS kernel same-cycle groups materialized as logical BUNDLE
+# CONT-STATS-ON-DAG: 1{{ +}}haydn-instr-info{{.*}}SMS kernel same-cycle runs skipped
+# CONT-STATS-ON-DAG: 1{{ +}}haydn-post-ra-sched{{.*}}Number of multi-member hard BUNDLE roots transactionally
+# CONT-STATS-ON-DAG: 1{{ +}}haydn-post-ra-sched{{.*}}Number of multi-member hard BUNDLE roots at post-RA
+# CONT-STATS-ON-DAG: 1{{ +}}haydn-post-ra-sched{{.*}}Number of post-RA idle
+# CONT-STATS-ON-DAG: 10{{ +}}haydn-post-ra-sched{{.*}}multi-MI cycles finalized as BUNDLE
+# CONT-STATS-ON-DAG: 12{{ +}}prologepilog{{.*}}Number of bytes used for stack
+# CONT-STATS-ON-DAG: 1{{ +}}pipeliner{{.*}}Number of loops software pipelined
+# CONT-STATS-ON-NOT: failed exact no-split
+# CONT-STATS-ON-NOT: Number of spills inserted
+# CONT-STATS-ON-NOT: Number of reloads inserted
+
+# Handoff OFF: group/skip/hard-root counters silent; multi-MI finalize + stack
+# + idle floors match ON; spill/reload silent (parity of zero).
+# CONT-STATS-OFF-DAG: 1{{ +}}haydn-post-ra-sched{{.*}}Number of post-RA idle
+# CONT-STATS-OFF-DAG: 13{{ +}}haydn-post-ra-sched{{.*}}multi-MI cycles finalized as BUNDLE
+# CONT-STATS-OFF-DAG: 16{{ +}}prologepilog{{.*}}Number of bytes used for stack
+# CONT-STATS-OFF-DAG: 1{{ +}}pipeliner{{.*}}Number of loops software pipelined
+# CONT-STATS-OFF-NOT: haydn-instr-info{{.*}}SMS kernel same-cycle groups materialized
+# CONT-STATS-OFF-NOT: haydn-instr-info{{.*}}SMS kernel same-cycle runs skipped
+# CONT-STATS-OFF-NOT: multi-member hard BUNDLE roots at post-RA
+# CONT-STATS-OFF-NOT: multi-member hard BUNDLE roots transactionally
+# CONT-STATS-OFF-NOT: failed exact no-split
+# CONT-STATS-OFF-NOT: Number of spills inserted
+# CONT-STATS-OFF-NOT: Number of reloads inserted
+--- |
+  define i32 @sms_handoff_rematch_members(i32 %a, i32 %b, i64 %x0, i64 %y0,
+                                         i64 %x1, i64 %y1) #0 {
+  entry:
+    ret i32 undef
+  }
+  attributes #0 = { "target-features"="-hwloop" }
+...
+---
+# ============================================================================
+# Rematch ADD32 + 2×ADD64 multi-member logical hard BUNDLE (Full product
+# shape). Membership survives machine-scheduler → register-coalescer →
+# greedy → VirtRegRewriter with zero member loss / no private slot form.
+# Mirrors the SMS handoff architectural root form (finalizeBundle children
+# stay logical opcodes through RA; leaveMBB exact-commits legal roots).
+# Compact soft-order interop RUNs reuse GREEDY/VRW.
+# ============================================================================
+name:            sms_handoff_rematch_members
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $d0, $d1, $d2, $d3
+
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:dr64 = COPY $d0
+    %3:dr64 = COPY $d1
+    %4:dr64 = COPY $d2
+    %5:dr64 = COPY $d3
+    ; Independent neighbor before the hard root.
+    %ind_pre:gpr32 = ADDI32 %0:gpr32, 7, implicit-def dead $sfr
+    ; Architectural rematch triple: ADD32 + 2×ADD64 as one hard BUNDLE.
+    BUNDLE implicit-def %6:gpr32, implicit-def %7:dr64, implicit-def %8:dr64, implicit-def dead $sfr, implicit %0, implicit %1, implicit %2, implicit %3, implicit %4, implicit %5 {
+      %6:gpr32 = ADD32 %0:gpr32, %1:gpr32, implicit-def dead $sfr
+      %7:dr64 = ADD64 %2:dr64, %3:dr64, implicit-def dead $sfr
+      %8:dr64 = ADD64 %4:dr64, %5:dr64, implicit-def dead $sfr
+    }
+    ; Dependent on a bundle member — must stay outside the group.
+    %dep:gpr32 = ADDI32 %6:gpr32, 1, implicit-def dead $sfr
+    %ind_post:gpr32 = ADDI32 %0:gpr32, 11, implicit-def dead $sfr
+    %t0:gpr32 = ADD32 %dep:gpr32, %ind_pre:gpr32, implicit-def dead $sfr
+    %t1:gpr32 = ADD32 %t0:gpr32, %ind_post:gpr32, implicit-def dead $sfr
+    $r0 = COPY %t1:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; SCHED-LABEL: name: sms_handoff_rematch_members
+  ; SCHED: ADDI32
+  ; SCHED: BUNDLE{{.*}}{
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; SCHED-NEXT: {{%[0-9]+}}:dr64 = ADD64
+  ; SCHED-NEXT: {{%[0-9]+}}:dr64 = ADD64
+  ; SCHED-NEXT: }
+  ; SCHED: ADDI32
+  ; SCHED-NOT: ADD32_S
+  ; SCHED-NOT: ADD64_S
+
+  ; Isolated register-coalescer: hard root membership holds.
+  ; COALESCER-LABEL: name: sms_handoff_rematch_members
+  ; COALESCER: BUNDLE{{.*}}{
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; COALESCER-NEXT: {{%[0-9]+}}:dr64 = ADD64
+  ; COALESCER-NEXT: {{%[0-9]+}}:dr64 = ADD64
+  ; COALESCER-NEXT: }
+  ; COALESCER-NOT: ADD32_S
+  ; COALESCER-NOT: ADD64_S
+
+  ; GREEDY-LABEL: name: sms_handoff_rematch_members
+  ; GREEDY: BUNDLE{{.*}}{
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; GREEDY-NEXT: {{%[0-9]+}}:dr64 = ADD64
+  ; GREEDY-NEXT: {{%[0-9]+}}:dr64 = ADD64
+  ; GREEDY-NEXT: }
+  ; GREEDY-NOT: ADD32_S
+  ; GREEDY-NOT: ADD64_S
+
+  ; VRW-LABEL: name: sms_handoff_rematch_members
+  ; VRW: BUNDLE{{.*}}{
+  ; VRW-NEXT: ${{r[0-9]+}} = ADD32
+  ; VRW-NEXT: ${{d[0-9]+}} = ADD64
+  ; VRW-NEXT: ${{d[0-9]+}} = ADD64
+  ; VRW-NEXT: }
+  ; VRW-NOT: ADD32_S
+  ; VRW-NOT: ADD64_S
+
+  ; stress-regalloc=4: membership holds (spill/reload may or may not appear
+  ; for this compact rematch shape; root must not unbundle / private-slot).
+  ; SPILL-LABEL: name: sms_handoff_rematch_members
+  ; SPILL: BUNDLE{{.*}}{
+  ; SPILL-NEXT: ${{r[0-9]+}} = ADD32
+  ; SPILL-NEXT: ${{d[0-9]+}} = ADD64
+  ; SPILL-NEXT: ${{d[0-9]+}} = ADD64
+  ; SPILL-NEXT: }
+  ; SPILL-NOT: ADD32_S
+  ; SPILL-NOT: ADD64_S
+
+...

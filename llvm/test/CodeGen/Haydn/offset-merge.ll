@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — GEP constant offsets fold into word load/store (ld32/s_lw or st32/s_sw), not a separate address materialize + zero-offset load.
+
 ; GEP constant offsets fold into word load/store (ld32/s_lw or st32/s_sw),
 ; not a separate address materialize + zero-offset load.
 

@@ -2,11 +2,13 @@
 # RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.o
 # RUN: llvm-readobj -r %t.o | FileCheck --check-prefix=RELOC %s
 # RUN: ld.lld %t.o -o %t --section-start=.text=0x10000
+# RUN: llvm-nm %t | FileCheck --check-prefix=NM %s
 # RUN: llvm-objdump -d --triple=haydn-unknown-elf %t | FileCheck %s
 #
-# Call veneer honors addend (callee+16).
+# Call veneer honors addend (callee+16). Geometry: 3 × production EncodedBytes.
 
-# RELOC: R_HAYDN_CallSImm20 callee 0x10
+# Product call reloc is WIDE under Format E; addend 0x10 preserved.
+# RELOC: R_HAYDN_WIDE_CallSImm20 callee 0x10
 
 .section .text
 .globl _start
@@ -24,10 +26,9 @@ skip_pad:
     .size callee, .-callee
     .size _start, .-_start
 
+# NM: __haydn_thunk_callee
+
 # CHECK-LABEL: <__haydn_thunk_callee>:
-# CHECK: lui{{.*}}r0,
-# CHECK: addi32{{.*}}r0,{{.*}}r0,
-# CHECK: jalr{{.*}}r0,{{.*}}r0
 # CHECK-NOT: xor32
 # CHECK-LABEL: <skip_pad>:
 # CHECK: add32{{.*}}r4

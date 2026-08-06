@@ -1,0 +1,241 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -run-pass=pipeliner \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=HANDOFF
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -run-pass=pipeliner \
+# RUN:   -debug-only=pipeliner -verify-machineinstrs %s -o /dev/null 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=SMS
+# REQUIRES: asserts
+
+# Role: MIR — SMS slice exit lit (vliw-format-aware-scheduling-pipeline.md §5.2 / §8.3): * Pre-RA vreg loop body (no private member opcodes) reaches SMS.
+
+# SMS slice exit lit (vliw-format-aware-scheduling-pipeline.md §5.2 / §8.3):
+#   * Pre-RA vreg loop body (no private member opcodes) reaches SMS.
+#   * HaydnResourceCycle same-cycle format matching frontier (live
+#     CycleCandidateSet + exactTryAddProduct) + descriptor/MI port demand
+#     drives ResMII (MII uses res component > 0 on these bodies).
+#   * SMS-HOOK fail-closed is silent on ordinary single-cycle itineraries
+#     (no multi-cycle stage / operand-dependent format predicate).
+#   * SMS-RESMII: greedy (exactTryAdd / DFA peer) ≡ exhaustive ≤3 format oracle
+#     (overestimate=0) — positive overestimate fail-closes analyzeLoop (see
+#     sms-format-resmii-overestimate-reject.mir). Preferred-collapse
+#     overestimate is unit-only.
+#   * SMS-FORMAT: ResourceCycle ≡ pure exact ≡ post-RA HR format-acceptance
+#     differential (plan §8.4 #7). match=1 / pins=1 on accepted bodies; ports
+#     orthogonal (SMS-PORT). Unit: SMS_FormatAcceptanceDifferentialPins +
+#     SMS_FormatAcceptance_LiveHRMatchesResourceCycle.
+#   * Port-forced ResMII ≥ 2: sms-format-resmii-port-forced.mir (format=1,
+#     DFA/ports open a second cycle under GPR 2W).
+#   * MOVE32-class MI-vs-desc port differential: sms-format-resmii-move32-port.mir
+#     (SMS-PORT metrics; placement 2R1W vs MI 1R1W; not SMS-HOOK reject).
+#   * SMS-HANDOFF metrics-only freeze: analyzeLoop logs qual-kernel post-RA
+#     packability (exact_packable=1); recordSuccessfulSMS scalar only.
+#     Default OFF: expansion keeps logical opcodes (HANDOFF-NOT:BUNDLE).
+#     Opt-in clone→cycle materialize: -haydn-sms-handoff
+#     (sms-handoff-bundle-through-ra.mir).
+#
+# Companion: sms-format-resmii.ll (end-to-end IR). Positive HOOK reject:
+# sms-format-hook-reject.mir. Sibling pre-RA list HR is
+# prera-format-feasibility.mir — this file owns SMS ResourceCycle / analyze only.
+#
+# SMS-NOT: SMS-HOOK: reject
+# SMS-NOT: unsupported SMS-HOOK resource class
+# SMS-NOT: Unable to analyzeLoop
+# SMS-NOT: SMS-RESMII: reject
+# SMS-NOT: SMS-HANDOFF: reject
+# (Positive HOOK reject: sms-format-hook-reject.mir + -haydn-sms-hook-force-reject)
+# (Positive RESMII reject: sms-format-resmii-overestimate-reject.mir)
+# ResMII ≥ 2 on these bodies (port/format capacity binds, not a trivial 1-only).
+# SMS-DAG: SMS-RESMII: body_ops={{[0-9]+}} greedy={{[0-9]+}} exhaustive={{[0-9]+}} overestimate=0
+# SMS-DAG: SMS-FORMAT: rc_hr_diff match=1 {{.*}} pins=1
+# SMS-DAG: SMS-HANDOFF: metrics-only freeze
+# SMS-DAG: SMS-HANDOFF: qual-kernel body_ops={{[0-9]+}} coissue_packable={{[01]}} exact_packable=1 exhaustive={{[0-9]+}}
+# SMS-DAG: Return Res MII:{{[2-9]|[1-9][0-9]+}}
+# SMS-DAG: Schedule Found? 1 (II={{[0-9]+}})
+# SMS-DAG: SMS-RESMII: body_ops={{[0-9]+}} greedy={{[0-9]+}} exhaustive={{[0-9]+}} overestimate=0
+# SMS-DAG: SMS-FORMAT: rc_hr_diff match=1 {{.*}} pins=1
+# SMS-DAG: SMS-HANDOFF: metrics-only freeze
+# SMS-DAG: SMS-HANDOFF: qual-kernel body_ops={{[0-9]+}} coissue_packable={{[01]}} exact_packable=1 exhaustive={{[0-9]+}}
+# SMS-DAG: Return Res MII:{{[2-9]|[1-9][0-9]+}}
+# SMS-DAG: Schedule Found? 1 (II={{[0-9]+}})
+
+--- |
+  define i32 @sms_acc_port_shape(ptr nocapture readonly %p, i32 %n) #0 {
+  entry:
+    br label %loop
+  loop:
+    %lsr.iv = phi ptr [ %scevgep, %loop ], [ %p, %entry ]
+    %i = phi i32 [ 0, %entry ], [ %i.next, %loop ]
+    %sum = phi i32 [ 0, %entry ], [ %sum.next, %loop ]
+    %val = load i32, ptr %lsr.iv, align 4
+    %sum.next = add i32 %sum, %val
+    %i.next = add i32 %i, 1
+    %scevgep = getelementptr i8, ptr %lsr.iv, i32 4
+    %cmp = icmp slt i32 %i.next, %n
+    br i1 %cmp, label %loop, label %exit
+  exit:
+    ret i32 %sum.next
+  }
+
+  define i32 @sms_dual_load_mac_shape(ptr nocapture readonly %x,
+                                      ptr nocapture readonly %h, i32 %n) #0 {
+  entry:
+    br label %loop
+  loop:
+    %lsr.iv1 = phi ptr [ %scevgep2, %loop ], [ %x, %entry ]
+    %lsr.iv = phi ptr [ %scevgep, %loop ], [ %h, %entry ]
+    %i = phi i32 [ 0, %entry ], [ %i.next, %loop ]
+    %acc = phi i32 [ 0, %entry ], [ %acc.next, %loop ]
+    %xv = load i32, ptr %lsr.iv1, align 4
+    %hv = load i32, ptr %lsr.iv, align 4
+    %prod = mul i32 %xv, %hv
+    %acc.next = add i32 %acc, %prod
+    %i.next = add i32 %i, 1
+    %scevgep = getelementptr i8, ptr %lsr.iv, i32 4
+    %scevgep2 = getelementptr i8, ptr %lsr.iv1, i32 4
+    %cmp = icmp slt i32 %i.next, %n
+    br i1 %cmp, label %loop, label %exit
+  exit:
+    ret i32 %acc.next
+  }
+
+  attributes #0 = { "target-features"="-hwloop" }
+...
+---
+name:            sms_acc_port_shape
+alignment:       16
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          false
+isSSA:           true
+noVRegs:         false
+registers:
+  - { id: 0, class: gpr32 }
+  - { id: 1, class: gpr32 }
+  - { id: 2, class: gpr32 }
+  - { id: 3, class: gpr32 }
+  - { id: 4, class: gpr32 }
+  - { id: 5, class: gpr32 }
+  - { id: 6, class: gpr32 }
+  - { id: 7, class: gpr32 }
+  - { id: 8, class: gpr32 }
+  - { id: 9, class: gpr32 }
+  - { id: 10, class: gpr32 }
+  - { id: 11, class: gpr32 }
+  - { id: 12, class: gpr32 }
+  - { id: 13, class: gpr32 }
+liveins:
+  - { reg: '$r1' }
+  - { reg: '$r2' }
+frameInfo:
+  maxAlignment:    1
+machineFunctionInfo: {}
+body:             |
+  bb.1.entry:
+    liveins: $r1, $r2
+
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %7:gpr32 = LOADI32 1
+    %12:gpr32 = LOADI32 0
+
+  bb.2.loop:
+    successors: %bb.2(0x7c000000), %bb.3(0x04000000)
+
+    %2:gpr32 = PHI %10, %bb.2, %0, %bb.1
+    %3:gpr32 = PHI %12, %bb.1, %8, %bb.2
+    %4:gpr32 = PHI %12, %bb.1, %6, %bb.2
+    %5:gpr32, %10:gpr32 = S_LW_POST_IMM %2, 1 :: (load (s32) from %ir.lsr.iv)
+    %6:gpr32 = ADD32 %4, %5
+    %8:gpr32 = ADD32 %3, %7
+    %13:gpr32 = SLT32 %8, %1
+    BNEZ_W %13, %bb.2
+    B %bb.3
+
+  bb.3.exit:
+    $r1 = COPY %6
+    RET implicit $r15, implicit $r1, implicit $r15
+
+  ; HANDOFF-LABEL: name: sms_acc_port_shape
+  ; Logical opcodes only — SMS does not emit durable pre-RA BUNDLE groups.
+  ; HANDOFF-NOT: BUNDLE
+  ; HANDOFF: ADD32
+  ; HANDOFF-NOT: ADD32_S
+  ; HANDOFF-NOT: S_LW_POST_IMM_S
+...
+---
+name:            sms_dual_load_mac_shape
+alignment:       16
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          false
+isSSA:           true
+noVRegs:         false
+registers:
+  - { id: 0, class: gpr32 }
+  - { id: 1, class: gpr32 }
+  - { id: 2, class: gpr32 }
+  - { id: 3, class: gpr32 }
+  - { id: 4, class: gpr32 }
+  - { id: 5, class: gpr32 }
+  - { id: 6, class: gpr32 }
+  - { id: 7, class: gpr32 }
+  - { id: 8, class: gpr32 }
+  - { id: 9, class: gpr32 }
+  - { id: 10, class: gpr32 }
+  - { id: 11, class: gpr32 }
+  - { id: 12, class: gpr32 }
+  - { id: 13, class: gpr32 }
+  - { id: 14, class: gpr32 }
+  - { id: 15, class: gpr32 }
+  - { id: 16, class: gpr32 }
+  - { id: 17, class: gpr32 }
+  - { id: 18, class: gpr32 }
+liveins:
+  - { reg: '$r1' }
+  - { reg: '$r2' }
+  - { reg: '$r3' }
+frameInfo:
+  maxAlignment:    1
+machineFunctionInfo: {}
+body:             |
+  bb.1.entry:
+    liveins: $r1, $r2, $r3
+
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:gpr32 = COPY $r3
+    %11:gpr32 = LOADI32 1
+    %17:gpr32 = LOADI32 0
+
+  bb.2.loop:
+    successors: %bb.2(0x7c000000), %bb.3(0x04000000)
+
+    %3:gpr32 = PHI %15, %bb.2, %0, %bb.1
+    %4:gpr32 = PHI %14, %bb.2, %1, %bb.1
+    %5:gpr32 = PHI %17, %bb.1, %12, %bb.2
+    %6:gpr32 = PHI %17, %bb.1, %10, %bb.2
+    %7:gpr32 = LD32 %3, 0 :: (load (s32) from %ir.lsr.iv1)
+    %8:gpr32, %14:gpr32 = S_LW_POST_IMM %4, 1 :: (load (s32) from %ir.lsr.iv)
+    %9:gpr32 = MULL %7, %8
+    %10:gpr32 = ADD32 %6, %9
+    %12:gpr32 = ADD32 %5, %11
+    %15:gpr32 = ADDI32 %3, 4
+    %18:gpr32 = SLT32 %12, %2
+    BNEZ_W %18, %bb.2
+    B %bb.3
+
+  bb.3.exit:
+    $r1 = COPY %10
+    RET implicit $r15, implicit $r1, implicit $r15
+
+  ; HANDOFF-LABEL: name: sms_dual_load_mac_shape
+  ; HANDOFF-NOT: BUNDLE
+  ; HANDOFF-DAG: LD32
+  ; HANDOFF-DAG: MULL
+  ; HANDOFF-DAG: ADD32
+  ; HANDOFF-NOT: LD32_S
+  ; HANDOFF-NOT: MULL_S
+...

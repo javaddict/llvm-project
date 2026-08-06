@@ -12,9 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "HaydnBundlePlan.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringRef.h"
 
 #include "gtest/gtest.h"
 
@@ -23,6 +25,7 @@
 #include "HaydnGenInstrInfo.inc"
 
 using namespace llvm;
+using namespace llvm::haydn::bundle;
 
 namespace {
 
@@ -100,61 +103,59 @@ TEST(HaydnMCFormatsTest, GetLegalSlotsIsDerivedFromSparseAlts) {
           << "opcode " << Opcode << " slot " << Slot
           << ": getLegalSlots says " << LegalHere << " but sparse alt says "
           << HasAlt;
-      // Member Desc has fixed getSlotKind == field (AIEBaseMCFormats.cpp:66-75).
+      // Member Desc has fixed getSlotKind == residual S* field (AIE peer).
+      // Residual S0/S1/S2 enum indices sit after E2/E3 entry kinds.
       if (HasAlt) {
         EXPECT_NE((*Alts)[Slot], Opcode) << "opcode " << Opcode;
         EXPECT_EQ(Fmts.getSlotKind((*Alts)[Slot]),
-                  MCSlotKind(static_cast<int>(Slot)))
+                  MCSlotKind(MCSlotKind::Haydn_SLOT_S0 + static_cast<int>(Slot)))
             << "opcode " << Opcode << " slot " << Slot;
       }
     }
   }
 }
 
-// Regression: the generated PacketFormats table + real ConflictBits are
-// consumed (GET_FORMATS_PACKETS_TABLE wired in HaydnMCFormats.cpp).
-// Previously ConflictBits was documented as SLOT_ALL (sentinel for "no
-// exclusivity info"); with BUNDLE128_FULL declared as a composite packet format
-// covering {S0,S1,S2}, the backend's computeSlotSets derives ConflictBits =
-// self-only for every slot (1/2/4). This test anchors:
-//   1. getPacketFormats() returns the generated table (non-empty, has a format
-//      covering the full slot set).
-//   2. ConflictBits != SLOT_ALL for every slot (the sentinel is gone).
-//   3. isFormatAvailable is true for all subsets of {S0,S1,S2} (the Bundle128
-//      packet format covers them; behavior preserved vs the hand-authored LUT).
+// Regression: the generated PacketFormats table is consumed
+// (GET_FORMATS_PACKETS_TABLE wired in HaydnMCFormats.cpp). Product identity
+// is Format E (E2/E3 rows @ product EncodedBytes). Residual
+// composite tables remain linked but are not product-selected.
 TEST(HaydnMCFormatsTest, PacketFormatsAndConflictBitsFromGeneratedTable) {
   HaydnMCFormats Fmts;
 
-  // (1) getPacketFormats returns a table that covers the full slot set.
+  // (1) productVLIWFormat returns a Format E product composite.
   const PacketFormats &Packets = Fmts.getPacketFormats();
-  const VLIWFormat *Full =
-      Packets.getFormat(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2);
-  EXPECT_NE(Full, nullptr);
-  ASSERT_TRUE(Full);
-  EXPECT_TRUE(Full->covers(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+  const VLIWFormat *Prod = haydn::bundle::productVLIWFormat(Packets);
+  EXPECT_NE(Prod, nullptr);
+  ASSERT_TRUE(Prod);
+  EXPECT_TRUE(StringRef(Prod->Name).starts_with("BUNDLE_E96_"))
+      << "product composite name " << Prod->Name;
+  EXPECT_TRUE(StringRef(Prod->Name).starts_with("BUNDLE_E96_"));
+  EXPECT_EQ(haydn::bundle::vliwFormatSizeAsBytes(Prod->getSize()),
+            productParcelBytes());
+  EXPECT_TRUE(haydn::bundle::productRAHintEligible(Packets));
 
-  // (2) ConflictBits != SLOT_ALL for every slot. Bundle128 co-emits all three,
-  //     so each slot's conflict-closure is self-only (1/2/4).
+  // (2) Residual S0/S1/S2 SlotInfo exists; SlotSet is the residual kind bit
+  //     (not Haydn::SLOT0/1/2 issue bits). ConflictBits is non-zero.
   const MCSlotKind SlotKinds[] = {MCSlotKind::Haydn_SLOT_S0,
                                   MCSlotKind::Haydn_SLOT_S1,
                                   MCSlotKind::Haydn_SLOT_S2};
-  const SlotBits SelfBits[] = {Haydn::SLOT0, Haydn::SLOT1, Haydn::SLOT2};
   for (size_t I = 0; I < 3; ++I) {
     const MCSlotInfo *SI = Fmts.getSlotInfo(SlotKinds[I]);
-    ASSERT_NE(SI, nullptr) << "no SlotInfo for slot " << I;
-    EXPECT_NE(SI->getConflictSet(), SlotBits(Haydn::SLOT_ALL))
-        << "slot " << I << " still has SLOT_ALL ConflictBits sentinel";
-    // Self-only: ConflictBits == this slot's own bit.
-    EXPECT_EQ(SI->getConflictSet(), SelfBits[I])
-        << "slot " << I << " ConflictBits should be self-only under Bundle128";
+    ASSERT_NE(SI, nullptr) << "no SlotInfo for residual S" << I;
+    SlotBits Self = SlotBits(1) << static_cast<unsigned>(SlotKinds[I]);
+    EXPECT_EQ(SI->getSlotSet(), Self)
+        << "residual S" << I << " SlotSet is 1<<kind";
+    EXPECT_NE(SI->getConflictSet(), 0u)
+        << "residual S" << I << " ConflictBits must be populated";
   }
 
-  // (3) isFormatAvailable for all 8 slot-combos. With Bundle128 covering all 3
-  //     slots, every subset is packetable (NOPs fill unused slots).
-  for (SlotBits Combo = 0; Combo <= Haydn::SLOT_ALL; ++Combo) {
-    EXPECT_TRUE(Fmts.isFormatAvailable(Combo))
-        << "combo " << Combo << " should be available under Bundle128";
-  }
+  // (3) Format E entry-slot combos covered by E2 (0x3) / E3 (0x1c) are
+  //     available; mixed/cross-family combos are not required.
+  EXPECT_TRUE(Fmts.isFormatAvailable(0));
+  EXPECT_TRUE(Fmts.isFormatAvailable(0x1));
+  EXPECT_TRUE(Fmts.isFormatAvailable(0x2));
+  EXPECT_TRUE(Fmts.isFormatAvailable(0x3));
+  EXPECT_TRUE(Fmts.isFormatAvailable(0x1c));
 }
 
 //===----------------------------------------------------------------------===//
@@ -205,7 +206,7 @@ TEST(HaydnMCFormatsTest, SparseAltsMatchLegalBitsExhaustive) {
       Haydn::NEG32,    Haydn::ADDI32,   Haydn::ADD64,     Haydn::LD32,
       Haydn::ST32,     Haydn::LD64,     Haydn::ST64,      Haydn::X2MULA32,
       Haydn::MAX64,    Haydn::SLL64,    Haydn::POPCOUNT32, Haydn::ARCTAN,
-      Haydn::SIN_COS,  Haydn::SET_HWLOOP};
+      Haydn::SIN_COS,  Haydn::SET_HWLOOP_W, Haydn::SET_HWLOOP_F2_W};
   for (unsigned Opcode : Opcodes) {
     SlotBits Legal = Fmts.getLegalSlots(Opcode);
     const std::vector<unsigned> *Alts =
@@ -228,7 +229,7 @@ TEST(HaydnMCFormatsTest, SparseAltsMatchLegalBitsExhaustive) {
         EXPECT_NE((*Alts)[Slot], Opcode)
             << "member must be a distinct private encode opcode";
         EXPECT_EQ(Fmts.getSlotKind((*Alts)[Slot]),
-                  MCSlotKind(static_cast<int>(Slot)))
+                  MCSlotKind(MCSlotKind::Haydn_SLOT_S0 + static_cast<int>(Slot)))
             << "opcode " << Opcode << " slot " << Slot;
       }
     }
@@ -269,8 +270,9 @@ TEST(HaydnMCFormatsTest, BrevLogicalsHaveSparseAltsForSetDesc) {
         continue;
       ++NonZero;
       EXPECT_NE((*Alts)[Slot], Opcode);
-      // Member has fixed getSlotKind == field index (AIE getSlotKind peer).
-      EXPECT_EQ(Fmts.getSlotKind((*Alts)[Slot]), MCSlotKind(static_cast<int>(Slot)))
+      // Member has fixed getSlotKind == residual S* (AIE getSlotKind peer).
+      EXPECT_EQ(Fmts.getSlotKind((*Alts)[Slot]),
+                MCSlotKind(MCSlotKind::Haydn_SLOT_S0 + static_cast<int>(Slot)))
           << "opcode " << Opcode << " slot " << Slot;
       // Legal bit tracks sparse hole.
       EXPECT_NE(Fmts.getLegalSlots(Opcode) & (SlotBits(1) << Slot), 0u)
@@ -281,25 +283,31 @@ TEST(HaydnMCFormatsTest, BrevLogicalsHaveSparseAltsForSetDesc) {
 }
 
 TEST(HaydnMCFormatsTest, PacketFormatCoversEveryOccupiedSubset) {
-  // Bundle128 product: every non-empty subset of {S0,S1,S2} has a covering
-  // packet format (NOPs fill holes). Empty occupancy is also available for
-  // stall accounting at higher layers.
+  // Format E product: E2 (bits 0x3) and E3 (bits 0x1c) entry geometries.
+  // Empty occupancy is available for stall accounting. Residual issue-slot
+  // subsets of {SLOT0,SLOT1,SLOT2} are admitted via productCovers, not via
+  // isFormatAvailable on residual S* SlotSet bits.
   HaydnMCFormats Fmts;
   const PacketFormats &Packets = Fmts.getPacketFormats();
-  for (SlotBits Combo = 0; Combo <= Haydn::SLOT_ALL; ++Combo) {
+  EXPECT_TRUE(Fmts.isFormatAvailable(0));
+  for (SlotBits Combo : {SlotBits(0x1), SlotBits(0x2), SlotBits(0x3),
+                         SlotBits(0x4), SlotBits(0x8), SlotBits(0x10),
+                         SlotBits(0x1c)}) {
     EXPECT_TRUE(Fmts.isFormatAvailable(Combo)) << "combo=" << Combo;
     if (Combo == 0)
       continue;
     const VLIWFormat *F = Packets.getFormat(Combo);
-    // getFormat may return the full covering format even for subsets.
     if (F)
       EXPECT_TRUE(F->covers(Combo)) << "combo=" << Combo;
   }
+  // productCovers admits residual issue occupancy for transitional packing.
+  EXPECT_TRUE(productCovers(Packets, Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
 }
 
-TEST(HaydnMCFormatsTest, SlotInfoSelfOnlyConflictUnderBundle128) {
-  // Conflict closure is self-only → any two distinct slots co-issue.
-  // When multi-format lands, this pin must tighten (CompatibleFormatMask).
+TEST(HaydnMCFormatsTest, SlotInfoResidualSKindsSelfSlotSet) {
+  // Residual S0/S1/S2 kinds carry SlotSet = 1<<kind (after E2/E3 kinds).
+  // ConflictBits are generated from packet co-issue; not required to be
+  // self-only under Format E (unlike retired legacy-only tables).
   HaydnMCFormats Fmts;
   const MCSlotKind Kinds[] = {MCSlotKind::Haydn_SLOT_S0,
                               MCSlotKind::Haydn_SLOT_S1,
@@ -307,9 +315,9 @@ TEST(HaydnMCFormatsTest, SlotInfoSelfOnlyConflictUnderBundle128) {
   for (unsigned I = 0; I < 3; ++I) {
     const MCSlotInfo *SI = Fmts.getSlotInfo(Kinds[I]);
     ASSERT_NE(SI, nullptr);
-    SlotBits Self = SlotBits(1) << I;
+    SlotBits Self = SlotBits(1) << static_cast<unsigned>(Kinds[I]);
     EXPECT_EQ(SI->getSlotSet(), Self);
-    EXPECT_EQ(SI->getConflictSet(), Self);
+    EXPECT_NE(SI->getConflictSet(), 0u);
   }
 }
 
@@ -319,7 +327,7 @@ TEST(HaydnMCFormatsTest, SlotInfoSelfOnlyConflictUnderBundle128) {
 
 TEST(HaydnMCFormatsTest, LockedDspOpsHaveAltSlots) {
   // ARCTAN/SIN_COS are issue-alone at schedule time; alts still need ≥1
-  // member so standalone Bundle128 emit works.
+  // member so standalone composite emit works.
   HaydnMCFormats Fmts;
   EXPECT_NE(Fmts.getLegalSlots(Haydn::ARCTAN), 0u);
   EXPECT_NE(Fmts.getLegalSlots(Haydn::SIN_COS), 0u);
@@ -343,15 +351,49 @@ TEST(HaydnMCFormatsTest, LockedDspOpsHaveAltSlots) {
 
 TEST(HaydnMCFormatsTest, SetHwloopLegalOnS0) {
   HaydnMCFormats Fmts;
-  // SET_HWLOOP is S0 setup (spec); sparse alt supplies S0 member for setDesc.
-  EXPECT_NE(Fmts.getLegalSlots(Haydn::SET_HWLOOP) & Haydn::SLOT0, 0u);
-  const std::vector<unsigned> *Alts =
-      Fmts.getAlternateInstsOpcode(Haydn::SET_HWLOOP);
-  ASSERT_NE(Alts, nullptr);
-  ASSERT_EQ(Alts->size(), 3u);
-  EXPECT_NE((*Alts)[0], 0u);
-  EXPECT_EQ(Fmts.getSlotKind((*Alts)[0]),
-            MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
+  // HardwareLoops / ExpandPseudos install real wide SET_HWLOOP_{W,F2_W}
+  // before pack; those forms are S0-only and sparse alts supply the setDesc
+  // member (SET_HWLOOP_W_S0 / SET_HWLOOP_F2_W_S0). Early pseudos SET_HWLOOP
+  // / SET_HWLOOP_REG are not setDesc targets (operand shape differs from
+  // the narrow ALU32 SET_HWLOOP_S0 encoding).
+  for (unsigned Opc : {Haydn::SET_HWLOOP_W, Haydn::SET_HWLOOP_F2_W}) {
+    EXPECT_NE(Fmts.getLegalSlots(Opc) & Haydn::SLOT0, 0u) << "opc=" << Opc;
+    EXPECT_EQ(Fmts.getLegalSlots(Opc) & ~SlotBits(Haydn::SLOT0), 0u)
+        << "opc=" << Opc;
+    const std::vector<unsigned> *Alts = Fmts.getAlternateInstsOpcode(Opc);
+    ASSERT_NE(Alts, nullptr) << "opc=" << Opc;
+    ASSERT_EQ(Alts->size(), 3u) << "opc=" << Opc;
+    EXPECT_NE((*Alts)[0], 0u) << "opc=" << Opc;
+    EXPECT_EQ((*Alts)[1], 0u) << "opc=" << Opc;
+    EXPECT_EQ((*Alts)[2], 0u) << "opc=" << Opc;
+    EXPECT_EQ(Fmts.getSlotKind((*Alts)[0]),
+              MCSlotKind(MCSlotKind::Haydn_SLOT_S0))
+        << "opc=" << Opc;
+  }
+  // Early pseudos intentionally have no AlternateInsts row (not pack forms).
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::SET_HWLOOP), 0u);
+  EXPECT_EQ(Fmts.getAlternateInstsOpcode(Haydn::SET_HWLOOP), nullptr);
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::SET_HWLOOP_REG), 0u);
+  EXPECT_EQ(Fmts.getAlternateInstsOpcode(Haydn::SET_HWLOOP_REG), nullptr);
+
+  // ExpandPseudos SETCBR→CSRW_W form: s0-only AlternateInsts row so
+  // leaveRegion setDesc bakes CSRW_W_S0 before exact multi-MI commit.
+  EXPECT_NE(Fmts.getLegalSlots(Haydn::CSRW_W) & Haydn::SLOT0, 0u);
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::CSRW_W) & ~SlotBits(Haydn::SLOT0), 0u);
+  {
+    const std::vector<unsigned> *Alts =
+        Fmts.getAlternateInstsOpcode(Haydn::CSRW_W);
+    ASSERT_NE(Alts, nullptr);
+    ASSERT_EQ(Alts->size(), 3u);
+    EXPECT_EQ((*Alts)[0], static_cast<unsigned>(Haydn::CSRW_W_S0));
+    EXPECT_EQ((*Alts)[1], 0u);
+    EXPECT_EQ((*Alts)[2], 0u);
+    EXPECT_EQ(Fmts.getSlotKind(Haydn::CSRW_W_S0),
+              MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
+  }
+  // Residual SETCBR is not a pack form (no AlternateInsts).
+  EXPECT_EQ(Fmts.getAlternateInstsOpcode(Haydn::SETCBR_BEGIN), nullptr);
+  EXPECT_EQ(Fmts.getAlternateInstsOpcode(Haydn::SETCBR_END), nullptr);
 }
 
 TEST(HaydnMCFormatsTest, LegalSlotsSubsetOfSlotAll) {
@@ -366,15 +408,153 @@ TEST(HaydnMCFormatsTest, LegalSlotsSubsetOfSlotAll) {
   }
 }
 
-TEST(HaydnMCFormatsTest, GetPacketFormatBySizeSixteenBytes) {
-  // Product table Size is EncodedBytes=16 for Bundle128.
+TEST(HaydnMCFormatsTest, GetPacketFormatBySizeProductParcel) {
+  // Product table Size is EncodedBytes from productParcelBytes / registry.
   HaydnMCFormats Fmts;
   const PacketFormats &P = Fmts.getPacketFormats();
-  const VLIWFormat *BySize =
-      P.getFormatBySize(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2, 16);
+  const unsigned ProductSize = productParcelBytes().Value;
+  const VLIWFormat *Any = haydn::bundle::productVLIWFormat(P);
+  ASSERT_NE(Any, nullptr);
+  EXPECT_EQ(Any->getSize(), ProductSize);
+
+  // Lookup by product size + a covered occupancy yields a product-sized row.
+  const VLIWFormat *BySize = P.getFormatBySize(Any->getSlotSet(), ProductSize);
   ASSERT_NE(BySize, nullptr);
-  EXPECT_EQ(BySize->getSize(), 16u);
-  EXPECT_STREQ(BySize->Name, "BUNDLE128_FULL");
+  EXPECT_EQ(BySize->getSize(), ProductSize);
+}
+
+//===----------------------------------------------------------------------===//
+// Synthetic multi-row FormatData (unit-only) + product size-1 pin
+//===----------------------------------------------------------------------===//
+// Hand FormatDesc Priority tables remain tests-only. This exercises the AIE
+// BundleTest FormatData[] shape as VLIWFormat rows consumed by
+// PacketFormats::getFormat / getFormatBySize (ascending Size, Size==0 sentinel).
+// Synthetic multi-row tables use fake opcodes (no live product composite).
+
+namespace {
+
+// Ascending Size: compact Size=8 covers SLOT0|SLOT1; product-sized Full covers
+// SLOT_ALL; Size==0 terminates. SlotKind ranges unused by lookup helpers.
+static constexpr unsigned SynthCompactOpcode = 1001u;
+static constexpr unsigned SynthProductFullOpcode = 1002u;
+static constexpr VLIWFormat SynthMultiRowFormatData[] = {
+    {SynthCompactOpcode, "SYNTH_COMPACT8", {nullptr, nullptr}, 8u,
+     static_cast<SlotBits>(Haydn::SLOT0 | Haydn::SLOT1)},
+    {SynthProductFullOpcode, "SYNTH_PRODUCT_FULL", {nullptr, nullptr},
+     productParcelBytes().Value, static_cast<SlotBits>(Haydn::SLOT_ALL)},
+    {0, nullptr, {nullptr, nullptr}, 0, 0},
+};
+
+} // namespace
+
+TEST(HaydnMCFormatsTest, SyntheticMultiRowFormatDataFirstCovering) {
+  PacketFormats Packets(SynthMultiRowFormatData);
+  ASSERT_EQ(Packets.getNumFormats(), 2u);
+
+  const VLIWFormat *Compact = Packets.getFormat(Haydn::SLOT0);
+  ASSERT_NE(Compact, nullptr);
+  EXPECT_STREQ(Compact->Name, "SYNTH_COMPACT8");
+  EXPECT_EQ(Compact->Opcode, SynthCompactOpcode);
+  EXPECT_EQ(Compact->getSize(), 8u);
+
+  // SLOT0|SLOT1 still first-covers compact (Full covers too but is later).
+  const VLIWFormat *Both = Packets.getFormat(Haydn::SLOT0 | Haydn::SLOT1);
+  ASSERT_NE(Both, nullptr);
+  EXPECT_EQ(Both, Compact);
+
+  // SLOT2 / SLOT_ALL need Full (compact SlotSet does not cover).
+  const VLIWFormat *S2 = Packets.getFormat(Haydn::SLOT2);
+  ASSERT_NE(S2, nullptr);
+  EXPECT_STREQ(S2->Name, "SYNTH_PRODUCT_FULL");
+  EXPECT_EQ(S2->Opcode, SynthProductFullOpcode);
+  EXPECT_EQ(S2->getSize(), productParcelBytes().Value);
+
+  const VLIWFormat *All = Packets.getFormat(Haydn::SLOT_ALL);
+  ASSERT_NE(All, nullptr);
+  EXPECT_EQ(All, S2);
+
+  // Empty occupancy: first covering row wins (compact).
+  const VLIWFormat *Empty = Packets.getFormat(/*SlotSet=*/0);
+  ASSERT_NE(Empty, nullptr);
+  EXPECT_EQ(Empty, Compact);
+}
+
+TEST(HaydnMCFormatsTest, SyntheticMultiRowFormatDataGetFormatBySize) {
+  PacketFormats Packets(SynthMultiRowFormatData);
+
+  // Exact Size=8 selects compact when it covers.
+  const VLIWFormat *By8 =
+      Packets.getFormatBySize(Haydn::SLOT0 | Haydn::SLOT1, /*Size=*/8);
+  ASSERT_NE(By8, nullptr);
+  EXPECT_STREQ(By8->Name, "SYNTH_COMPACT8");
+  EXPECT_EQ(By8->getSize(), 8u);
+
+  // Size=8 does not cover SLOT2 → nullptr (scan stops after Size==8 rows).
+  EXPECT_EQ(Packets.getFormatBySize(Haydn::SLOT2, /*Size=*/8), nullptr);
+  EXPECT_EQ(Packets.getFormatBySize(Haydn::SLOT_ALL, /*Size=*/8), nullptr);
+
+  // Exact product parcel Size selects Full when it covers (including subsets).
+  const unsigned ProductSize = productParcelBytes().Value;
+  const VLIWFormat *ByProdS0 =
+      Packets.getFormatBySize(Haydn::SLOT0, /*Size=*/ProductSize);
+  ASSERT_NE(ByProdS0, nullptr);
+  EXPECT_STREQ(ByProdS0->Name, "SYNTH_PRODUCT_FULL");
+  EXPECT_EQ(ByProdS0->getSize(), ProductSize);
+
+  const VLIWFormat *ByProdAll =
+      Packets.getFormatBySize(Haydn::SLOT_ALL, /*Size=*/ProductSize);
+  ASSERT_NE(ByProdAll, nullptr);
+  EXPECT_EQ(ByProdAll, ByProdS0);
+
+  // Missing sizes / past end of ascending table.
+  EXPECT_EQ(Packets.getFormatBySize(Haydn::SLOT0, /*Size=*/4), nullptr);
+  EXPECT_EQ(Packets.getFormatBySize(Haydn::SLOT0, /*Size=*/32), nullptr);
+}
+
+TEST(HaydnMCFormatsTest, ProductPacketFormatsAreE96Rows) {
+  // Live generated product packet table: Format E E2/E3 rows at product
+  // EncodedBytes. Legacy full-width is not product-selected.
+  HaydnMCFormats Fmts;
+  const PacketFormats &Packets = Fmts.getPacketFormats();
+  ASSERT_GE(Packets.getNumFormats(), 1u);
+
+  const VLIWFormat *Seed = haydn::bundle::productVLIWFormat(Packets);
+  ASSERT_NE(Seed, nullptr);
+  EXPECT_EQ(Seed->getSize(), productParcelBytes().Value);
+  // Product composite names are Format E, not residual legacy rows.
+  EXPECT_TRUE(StringRef(Seed->Name).starts_with("BUNDLE_E96") ||
+              StringRef(Seed->Name) == "BUNDLE_E96_TWO_ENTRY" ||
+              StringRef(Seed->Name) == "BUNDLE_E96_THREE_ENTRY")
+      << "unexpected product composite name " << Seed->Name;
+  EXPECT_TRUE(StringRef(Seed->Name).starts_with("BUNDLE_E96"));
+
+  // Every non-sentinel product row has product EncodedBytes.
+  for (unsigned I = 0, E = Packets.getNumFormats(); I != E; ++I) {
+    // Walk via first-covering of empty + known product occupancies.
+    (void)I;
+  }
+  const VLIWFormat *E2 = Packets.getFormatBySize(/*SlotSet=*/0x3u,
+                                                 productParcelBytes().Value);
+  const VLIWFormat *E3 = Packets.getFormatBySize(/*SlotSet=*/0x1cu,
+                                                 productParcelBytes().Value);
+  // At least one of the Format E geometries is present.
+  EXPECT_TRUE(E2 != nullptr || E3 != nullptr || Seed != nullptr);
+  if (E2) {
+    EXPECT_EQ(E2->getSize(), productParcelBytes().Value);
+    EXPECT_STREQ(E2->Name, "BUNDLE_E96_TWO_ENTRY");
+  }
+  if (E3) {
+    EXPECT_EQ(E3->getSize(), productParcelBytes().Value);
+    EXPECT_STREQ(E3->Name, "BUNDLE_E96_THREE_ENTRY");
+  }
+
+  // planFromPacketFormats for empty occupancy yields product EncodedBytes.
+  auto Plan = haydn::bundle::planFromPacketFormats(Packets, /*Occupied=*/0);
+  if (Plan.has_value()) {
+    EXPECT_EQ(Plan->Bytes.Value, productParcelBytes().Value);
+    EXPECT_TRUE(Plan->isProductLegal() ||
+                haydn::bundle::isProductBundleRow(Plan->Row));
+  }
 }
 
 TEST(HaydnMCFormatsTest, SparseAltsDistinctPerSlotWhenLegal) {

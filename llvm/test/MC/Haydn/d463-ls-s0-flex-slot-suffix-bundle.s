@@ -2,6 +2,8 @@
 # RUN:     llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
 # REQUIRES: haydn-registered-target
 
+# Role: object — `{ st32 lr, sp, 12 }` and the LD32/ST32/LD64/ST64 `_S0_FLEX` family MUST parse inside a bundle.
+
 # REGRESSION TEST : `{ st32 lr, sp, 12 }` and the LD32/ST32/LD64/ST64
 # `_S0_FLEX` family MUST parse inside a bundle.
 #
@@ -29,31 +31,32 @@
 # accidental breakage of the non-suffixed path.
 
 # CHECK-LABEL: <f_st32_s0>:
-# CHECK: { st32 lr, sp, 12; nop; nop }
+# CHECK: {{.*}}0: 87 43 fb cd 00 00 00 00 00 00 00 00 { s_sw_with_imm lr, sp, 12; nop }
+
 f_st32_s0:
   { st32 lr, sp, 12 }
 
 # CHECK-LABEL: <f_st32_legacy>:
-# CHECK: { st32 lr, sp, 12; nop; nop }
+# CHECK: c: 87 43 fb cd 00 00 00 00 00 00 00 00 { s_sw_with_imm lr, sp, 12; nop }
 f_st32_legacy:
   { st32 lr, sp, 12 }
 
 # CHECK-LABEL: <f_ld32_s0>:
-# CHECK: { ld32 r1, sp, 8; nop; nop }
+# CHECK: {{.*}}18: 87 43 13 8d 00 00 00 00 00 00 00 00 { s_lw_with_imm r1, sp, 8; nop }
 f_ld32_s0:
   { ld32 r1, sp, 8 }
 
 # CHECK-LABEL: <f_ld32_legacy>:
-# CHECK: { ld32 r1, sp, 8; nop; nop }
+# CHECK: {{.*}}24: 87 43 13 8d 00 00 00 00 00 00 00 00 { s_lw_with_imm r1, sp, 8; nop }
 f_ld32_legacy:
   { ld32 r1, sp, 8 }
 
 # CHECK-LABEL: <f_ld64_s0>:
-# CHECK: { ld64 d0, sp, 16; nop; nop }
+# CHECK: {{.*}}30: 87 43 02 0d 01 00 00 00 00 00 00 00 { d_ldw_with_imm d0, sp, 16; nop }
 f_ld64_s0:
   { ld64 d0, sp, 16 }
 
 # CHECK-LABEL: <f_st64_s0>:
-# CHECK: { st64 d0, sp, 16; nop; nop }
+# CHECK: 3c: 87 43 0a 0d 01 00 00 00 00 00 00 00 { d_sdw_with_imm d0, sp, 16; nop }
 f_st64_s0:
   { st64 d0, sp, 16 }

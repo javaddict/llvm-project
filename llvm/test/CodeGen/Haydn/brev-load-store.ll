@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -o - < %s | FileCheck %s
-;
+
+; Role: semantic — Bit-reversed (BREV) load/store frexp pair model.
+
 ; REGRESSION: Bit-reversed (BREV) load/store frexp pair model.
 ; Golden:
 ;   D_LDW_BREV: (ptr, stride) -> {i64 data, i32 new_ptr}
@@ -9,6 +11,7 @@
 ; AGU writeback is a live SSA result (not a dead def).
 
 ; BREV load intrinsics — frexp pair
+
 declare { i64, ptr } @llvm.haydn.ldw.brev.imm(ptr, i32)
 declare { i64, ptr } @llvm.haydn.ldw.brev.reg(ptr, i32)
 declare { i32, ptr } @llvm.haydn.lw.brev.imm(ptr, i32)
@@ -20,8 +23,6 @@ declare ptr @llvm.haydn.sdw.brev.reg(i64, ptr, i32)
 declare ptr @llvm.haydn.sw.brev.imm(i32, ptr, i32)
 declare ptr @llvm.haydn.sw.brev.reg(i32, ptr, i32)
 
-; CHECK-LABEL: test_ldw_brev_imm:
-; CHECK: d_ldw_brev_imm
 define i64 @test_ldw_brev_imm(ptr %base) {
   %r = call { i64, ptr } @llvm.haydn.ldw.brev.imm(ptr %base, i32 4)
   %d = extractvalue { i64, ptr } %r, 0

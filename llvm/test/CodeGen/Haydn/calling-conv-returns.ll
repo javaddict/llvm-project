@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — s for return value conventions.
+
 ; Tests for return value conventions.
 ;
 ; GPR returns: R1 (first i32/ptr), R2 (second i32)

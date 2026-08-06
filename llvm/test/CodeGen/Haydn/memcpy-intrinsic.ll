@@ -1,11 +1,14 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 
+; Role: semantic — memcpy, memset, memmove intrinsics (lowered to libcalls for baremetal).
+
 ; Test memcpy, memset, memmove intrinsics (lowered to libcalls for baremetal)
 
 ; Note: For baremetal MVB, these intrinsics are lowered to libcalls.
 ; The actual libcall names depend on the AsmPrinter implementation.
 
 ;Simple memcpy (lowered to libcall)
+
 define void @test_memcpy(ptr %dst, ptr %src) {
 ; CHECK-LABEL: test_memcpy:
 ; CHECK: jal_w{{(\.s[012])?}} lr, memcpy

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — PEI epilogue DR64 CSR restore must not emit out-of-range ld64 dN, sp, imm (e.g.
+
 ; PEI epilogue DR64 CSR restore must not emit out-of-range
 ; ld64 dN, sp, imm (e.g. 480). Use ld64_reg + R12 materialize instead.
 ; BundleSim golden scaled simm6 only allows -32..+31 for the scaled field.

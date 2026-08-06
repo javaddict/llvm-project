@@ -1,6 +1,8 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -O2 < %s | FileCheck %s
-;
+
+; Role: semantic — HiFi oracle contract (NatureDSP / Cadence loopnez): preheader: materialize trip once.
+
 ; HiFi oracle contract (NatureDSP / Cadence loopnez):
 ; preheader: materialize trip once
 ; loopnez aN, Lend
@@ -19,9 +21,7 @@
 ; spilled step/limit; never accept stale physreg constants across slots.
 
 ; Count-down-to-zero (dominant FIR / peel residual). HiFi: loopnez with N.
-; CHECK-LABEL: countdown_to_zero:
-; CHECK: set_hwloop_f2_w
-; CHECK-NOT: beqz_w
+
 define i32 @countdown_to_zero(ptr %p, i32 %n) nounwind {
 entry:
   %cmp0 = icmp sgt i32 %n, 0

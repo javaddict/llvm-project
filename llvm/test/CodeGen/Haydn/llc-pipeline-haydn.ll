@@ -6,9 +6,10 @@
 ; RUN:   | grep -v 'Verify generated machine code' | FileCheck -match-full-lines -strict-whitespace -check-prefixes=O23,O123,O0123 %s
 ; RUN: llc -O3 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure < %s -o /dev/null 2>&1 \
 ; RUN:   | grep -v 'Verify generated machine code' | FileCheck -match-full-lines -strict-whitespace -check-prefixes=O23,O123,O0123 %s
-;
 ; REQUIRES: asserts
-;
+
+; Role: semantic — Haydn codegen pipeline oracle (AIE2-style full-line strict match on the load-bearing custom sequence).
+
 ; Haydn codegen pipeline oracle (AIE2-style full-line strict match on the
 ; load-bearing custom sequence). Locks dual-sched + AIE2 pack order:
 ;
@@ -68,7 +69,6 @@ define i32 @f(i32 %a, i32 %b) {
 ; O0:      Haydn Ensure Dead-End Terminators
 ; O0:      Haydn early post-increment pseudo expansion
 ; O0-NEXT:      Haydn pseudo instruction expansion pass
-; O0-NOT:      Haydn CFG Optimizer
 ; O0-NOT:      Haydn Condition Optimizer
 ; O0-NOT:      Haydn Copy Elimination
 ; O0-NOT:      Branch Probability Basic Block Placement
@@ -90,9 +90,9 @@ define i32 @f(i32 %a, i32 %b) {
 ; O0-NOT:      Modulo Software Pipelining
 
 ; =============================================================================
-; Opt1+ - IR HardwareLoops; PostLegalizer + PostSelect; PreRA MIS; dual-sched pack
+; Opt1+ - IR HardwareLoops default-OFF (haydn-enable-hwloops); PostLegalizer + PostSelect; PreRA MIS; dual-sched pack
 ; =============================================================================
-; O123:      Hardware Loop Insertion
+; O123-NOT:      Hardware Loop Insertion
 ; O123:      HaydnPreLegalizerCombiner
 ; O123:      Legalizer
 ; O123:      HaydnPostLegalizerCombiner
@@ -116,12 +116,11 @@ define i32 @f(i32 %a, i32 %b) {
 ; Analysis (MDT/MLI) may appear between CopyElim and MBP / after MBP.
 ; O123:      Haydn Ensure Dead-End Terminators
 ; O123:      Haydn early post-increment pseudo expansion
-; O123-NEXT:      Haydn CFG Optimizer
 ; O123-NEXT:      Haydn Condition Optimizer
 ; O123-NEXT:      Haydn Copy Elimination
 ; O123:      Branch Probability Basic Block Placement
-; O123:      Haydn Hardware Loop Detection
-; O123-NEXT:      Haydn pseudo instruction expansion pass
+; O123-NOT:      Haydn Hardware Loop Detection
+; O123:      Haydn pseudo instruction expansion pass
 ; O123-NEXT:      Haydn Bit Simplification
 ; O123-NEXT:      Haydn PEI Peephole Optimizer
 ; O123:      PostRA Machine Instruction Scheduler
@@ -130,8 +129,7 @@ define i32 @f(i32 %a, i32 %b) {
 ; PreEmit - BR / FixupHwLoops / BR / B4.3 late Finalize+Verify
 ; (AIE PreEmit empty AIE2TargetMachine.cpp:88; Haydn re-commit after growth)
 ; O123:      Branch relaxation pass
-; O123-NEXT:      Haydn Hardware Loop Fixup
-; O123-NEXT:      Branch relaxation pass
+; O123-NOT:      Haydn Hardware Loop Fixup
 ; O123-NEXT:      Haydn Bundle Finalization
 ; O123-NEXT:      Haydn Bundle Invariant Verifier
 ; Densify/quarantine absent at product defaults (W0.1):

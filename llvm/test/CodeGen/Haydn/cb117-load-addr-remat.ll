@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
-;
+
+; Role: semantic — LOAD_ADDR (global address) must be rematerializable so RA re-emits it on every use path rather than spilling across a diamond.
+
 ; LOAD_ADDR (global address) must be rematerializable so RA re-emits
 ; it on every use path rather than spilling across a diamond. Without remat
 ; one arm stores the address to a stack slot and the join reloads it even when

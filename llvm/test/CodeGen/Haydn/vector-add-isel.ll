@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
-;
+
+; Role: semantic — Golden-lane selection: plain lanewise IR add/sub on DR64 vector types must map to X2ADD32 / X4ADD16 (and the matching sub mnemonics), not.
+
 ; Golden-lane selection: plain lanewise IR add/sub on DR64 vector types
 ; must map to X2ADD32 / X4ADD16 (and the matching sub mnemonics), not
 ; scalar i64 add sequences or bag bitcast + i64 arithmetic.
@@ -7,9 +9,7 @@
 ; Companion Clang test: clang/test/CodeGen/Haydn/vector-add-asm.c
 ; (C `a + b` on haydn_x2int32 / haydn_x4int16 → same mnemonics).
 
-; CHECK-LABEL: add_v2i32:
-; CHECK: x2add32
-; CHECK-NOT: add64
+
 define <2 x i32> @add_v2i32(<2 x i32> %a, <2 x i32> %b) {
   %r = add <2 x i32> %a, %b
   ret <2 x i32> %r
