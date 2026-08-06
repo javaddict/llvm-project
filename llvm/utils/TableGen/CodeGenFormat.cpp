@@ -46,8 +46,21 @@ using namespace llvm;
 // Sparse `_S{0,1,2}` slot-member discovery feeds
 // GET_ALTERNATE_INST_OPCODE_FUNC (AIE MultiSlot_Pseudo / materializableInto
 // peer for targets that still use suffix-discovered Full members).
+// Members are indexed by the position a member occupies, because the index is
+// load-bearing: FieldSlots is 1<<index and getLegalSlots ORs the non-zero ones.
+// For Bundle128 that position is the slot, so a row is three long. Format E has
+// no slots -- an entry is placed by (entry position, unit) -- so a member there
+// declares its own PlacementIndex and the row is as long as the target's
+// placement enumeration. Both emit as std::vector<unsigned>, which never had a
+// fixed length on the consumer side.
 struct SlotMemberVariantRow {
-  unsigned Members[3] = {0, 0, 0};
+  std::vector<unsigned> Members;
+
+  void set(unsigned Index, unsigned Opc) {
+    if (Members.size() <= Index)
+      Members.resize(Index + 1, 0);
+    Members[Index] = Opc;
+  }
 };
 static std::map<unsigned, SlotMemberVariantRow>
 collectSparseAltSlotMemberRows(
@@ -311,7 +324,28 @@ collectSparseAltSlotMemberRows(
 
   std::map<unsigned, SlotMemberVariantRow> RowsByName;
   for (unsigned Opc = 0, E = NumberedInstructions.size(); Opc < E; ++Opc) {
-    StringRef Name = NumberedInstructions[Opc]->TheDef->getName();
+    const Record *Def = NumberedInstructions[Opc]->TheDef;
+    StringRef Name = Def->getName();
+
+    // A member that declares where it goes is believed over its name. The
+    // suffix says which unit and position it is for, but the index those map
+    // to belongs to the target's placement enumeration, not to this backend.
+    if (const RecordVal *Declared = Def->getValue("PlacementIndex")) {
+      if (const auto *Index = dyn_cast_or_null<IntInit>(Declared->getValue())) {
+        if (Index->getValue() >= 0) {
+          size_t Cut = Name.rfind("_P");
+          if (Cut != StringRef::npos) {
+            auto It = NameToEnum.find(Name.take_front(Cut));
+            if (It != NameToEnum.end())
+              RowsByName[It->second].set(
+                  static_cast<unsigned>(Index->getValue()), Opc);
+          }
+          continue;
+        }
+      }
+    }
+
+    // Otherwise the slot the suffix names is the index, as it is for Bundle128.
     for (unsigned Slot = 0; Slot < 3; ++Slot) {
       StringRef Suffix = SlotMemberSuffix[Slot];
       if (!Name.ends_with(Suffix))
@@ -320,9 +354,15 @@ collectSparseAltSlotMemberRows(
       auto It = NameToEnum.find(Base);
       if (It == NameToEnum.end())
         continue; // Unmapped member (no logical base) — decoder-only.
-      RowsByName[It->second].Members[Slot] = Opc;
+      RowsByName[It->second].set(Slot, Opc);
     }
   }
+
+  // A row must be as long as its highest index so the vector index keeps
+  // meaning the position; sparse gaps read as zero.
+  for (auto &KV : RowsByName)
+    if (KV.second.Members.size() < 3)
+      KV.second.Members.resize(3, 0);
   return RowsByName;
 }
 
@@ -351,8 +391,10 @@ static void emitAlternateInstsOpcodeFunc(
       collectSparseAltSlotMemberRows(NumberedInstructions);
   struct SparseAltEntry {
     std::string LogicalName;
-    // Always length 3: Target::Name or "0" at missing slots (sparse alts).
-    std::string Members[3];
+    // One string per position: Target::Name, or "0" where the instruction has
+    // no member there. Three long for slot-indexed rows, as long as the target's
+    // placement enumeration for rows that declare their own index.
+    std::vector<std::string> Members;
   };
   std::vector<SparseAltEntry> SparseAlts;
   SparseAlts.reserve(SparseAltRows.size());
@@ -365,16 +407,16 @@ static void emitAlternateInstsOpcodeFunc(
       continue;
     SparseAltEntry Entry;
     Entry.LogicalName = LogicalName.str();
+    Entry.Members.reserve(Row.Members.size());
     bool Any = false;
-    for (unsigned Slot = 0; Slot < 3; ++Slot) {
-      if (Row.Members[Slot] == 0) {
-        Entry.Members[Slot] = "0";
+    for (unsigned Member : Row.Members) {
+      if (Member == 0) {
+        Entry.Members.emplace_back("0");
         continue;
       }
       Any = true;
-      StringRef MemName =
-          NumberedInstructions[Row.Members[Slot]]->TheDef->getName();
-      Entry.Members[Slot] = TargetName + "::" + MemName.str();
+      StringRef MemName = NumberedInstructions[Member]->TheDef->getName();
+      Entry.Members.emplace_back(TargetName + "::" + MemName.str());
     }
     if (Any)
       SparseAlts.push_back(std::move(Entry));
@@ -401,9 +443,11 @@ static void emitAlternateInstsOpcodeFunc(
     for (unsigned I = 0; I < NumSparseAlt; ++I) {
       const SparseAltEntry &E = SparseAlts[I];
       o << "    // " << TargetName << "::" << E.LogicalName
-        << " (Full members, sparse S0/S1/S2)\n";
-      o << "    { " << E.Members[0] << ", " << E.Members[1] << ", "
-        << E.Members[2] << " }";
+        << " (Full members, sparse; index == position)\n";
+      o << "    { ";
+      for (unsigned M = 0, ME = E.Members.size(); M != ME; ++M)
+        o << (M ? ", " : "") << E.Members[M];
+      o << " }";
       if (NumPseudo + I + 1 != NumTotal)
         o << ", \n";
     }
