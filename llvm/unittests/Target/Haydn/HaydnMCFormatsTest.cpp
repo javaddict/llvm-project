@@ -399,4 +399,52 @@ TEST(HaydnMCFormatsTest, SparseAltsDistinctPerSlotWhenLegal) {
   EXPECT_EQ(Fmts.getSlotKind(V2), MCSlotKind(MCSlotKind::Haydn_SLOT_S2));
 }
 
+// stripHaydnMemberSuffix is the one place that knows how a placed member is
+// spelled. Bundle128 is live; format E is generated but not yet included, so
+// its spelling can only be covered here until the encoding switches.
+
+TEST(HaydnMemberSuffix, LogicalIsNotAMember) {
+  EXPECT_FALSE(stripHaydnMemberSuffix("ADD32").has_value());
+  EXPECT_FALSE(stripHaydnMemberSuffix("JAL").has_value());
+  // Logicals whose own name ends in a word must not look placed.
+  EXPECT_FALSE(stripHaydnMemberSuffix("ADD32_W").has_value());
+  EXPECT_FALSE(stripHaydnMemberSuffix("D_LDW_POST_IMM").has_value());
+  EXPECT_FALSE(stripHaydnMemberSuffix("SET_HWLOOP_F2_W").has_value());
+}
+
+TEST(HaydnMemberSuffix, Bundle128Slots) {
+  EXPECT_EQ(stripHaydnMemberSuffix("ADD32_S0"), StringRef("ADD32"));
+  EXPECT_EQ(stripHaydnMemberSuffix("ADD32_S1"), StringRef("ADD32"));
+  EXPECT_EQ(stripHaydnMemberSuffix("ADD32_S2"), StringRef("ADD32"));
+  EXPECT_EQ(stripHaydnMemberSuffix("JAL_S0"), StringRef("JAL"));
+  EXPECT_EQ(stripHaydnMemberSuffix("ADDI32_W_S0"), StringRef("ADDI32_W"));
+  // `_S3` is not a slot.
+  EXPECT_FALSE(stripHaydnMemberSuffix("ADD32_S3").has_value());
+}
+
+TEST(HaydnMemberSuffix, FormatEPlacements) {
+  EXPECT_EQ(stripHaydnMemberSuffix("JAL_P20_ALU0"), StringRef("JAL"));
+  EXPECT_EQ(stripHaydnMemberSuffix("BEQ_P31_ALU0"), StringRef("BEQ"));
+  EXPECT_EQ(stripHaydnMemberSuffix("ADD32_P32_ALU2"), StringRef("ADD32"));
+  EXPECT_EQ(stripHaydnMemberSuffix("X2MULA32_P30_MAC0"), StringRef("X2MULA32"));
+  EXPECT_EQ(stripHaydnMemberSuffix("LD32_P21_LOAD1"), StringRef("LD32"));
+  // The unit infix that defeats a plain `_S<k>` strip is not special here:
+  // the logical is exactly the part before `_P<form><pos>`.
+  EXPECT_EQ(stripHaydnMemberSuffix("D_LDW_BREV_IMM_P20_LOADSTORE0"),
+            StringRef("D_LDW_BREV_IMM"));
+  EXPECT_EQ(stripHaydnMemberSuffix("D_LDW_POST_IMM_P31_LOAD1"),
+            StringRef("D_LDW_POST_IMM"));
+}
+
+TEST(HaydnMemberSuffix, FormatENearMissesAreNotMembers) {
+  // A real unit name, but no placement token in front of it.
+  EXPECT_FALSE(stripHaydnMemberSuffix("SOMETHING_ALU0").has_value());
+  // Placement token present, unit name not one of the seven.
+  EXPECT_FALSE(stripHaydnMemberSuffix("ADD32_P20_ALU9").has_value());
+  // Form/position must be exactly two digits.
+  EXPECT_FALSE(stripHaydnMemberSuffix("ADD32_P2_ALU0").has_value());
+  EXPECT_FALSE(stripHaydnMemberSuffix("ADD32_P200_ALU0").has_value());
+  EXPECT_FALSE(stripHaydnMemberSuffix("ADD32_PXY_ALU0").has_value());
+}
+
 } // end anonymous namespace

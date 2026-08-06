@@ -40,6 +40,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include <cstddef>
 #include <map>
+#include <optional>
 #include <unordered_map>
 
 namespace llvm {
@@ -496,6 +497,18 @@ int getHaydnFlexSlotFromName(unsigned Opc, const MCInstrInfo &MII);
 // kind rather than its placement should fold through this so they name
 // logicals only and stay independent of how members happen to be spelled.
 unsigned getHaydnLogicalBaseOpcode(unsigned Opc, const MCInstrInfo &MII);
+
+// Drop the placement suffix from a format-member instruction name, leaving the
+// logical it was placed from. Two spellings are recognized:
+//
+//   Bundle128  `<logical>_S<k>`                 k = slot 0..2
+//   format E   `<logical>_P<form><pos>_<unit>`  unit = the seven hardware units
+//
+// \returns the logical part, or std::nullopt when \p Name carries neither
+// suffix and is therefore already a logical. Kept as a pure string operation
+// so both spellings can be covered by unit tests while only one of them is
+// live.
+std::optional<StringRef> stripHaydnMemberSuffix(StringRef Name);
 
 // `HaydnMCFormats` subclass that normalizes member opcodes before consulting
 // alts-derived getLegalSlots. Constructed by the MC encoder (holds MCInstrInfo).

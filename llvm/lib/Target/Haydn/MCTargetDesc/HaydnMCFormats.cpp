@@ -41,6 +41,7 @@
 
 #include "HaydnFormat.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -187,21 +188,13 @@ int getMemberSlotFromNameLocal(unsigned Opc, const MCInstrInfo &MII) {
   return -1;
 }
 
-// \returns the logical base opcode for \p Opc by stripping any `_S<k>`
-// suffix, or \p Opc itself if it has no suffix. Base found by NAME lookup.
+// \returns the logical base opcode for \p Opc by stripping any placement
+// suffix, or \p Opc itself if it has none. Base found by NAME lookup.
 unsigned getLogicalBaseOpcode(unsigned Opc, const MCInstrInfo &MII) {
-  StringRef Name = MII.getName(Opc);
-  StringRef Base = Name;
-  bool Stripped = false;
-  for (StringRef Suf : HaydnMemberSlotSuffix) {
-    if (Base.ends_with(Suf)) {
-      Base = Base.drop_back(Suf.size());
-      Stripped = true;
-      break;
-    }
-  }
+  std::optional<StringRef> Stripped = stripHaydnMemberSuffix(MII.getName(Opc));
   if (!Stripped)
     return Opc; // already logical
+  StringRef Base = *Stripped;
   if (Base.empty())
     return 0;
   unsigned Num = MII.getNumOpcodes();
@@ -212,6 +205,38 @@ unsigned getLogicalBaseOpcode(unsigned Opc, const MCInstrInfo &MII) {
 }
 
 } // end anonymous namespace
+
+std::optional<StringRef> stripHaydnMemberSuffix(StringRef Name) {
+  // Bundle128: `<logical>_S<k>`.
+  for (StringRef Suf : HaydnMemberSlotSuffix)
+    if (Name.ends_with(Suf))
+      return Name.drop_back(Suf.size());
+
+  // format E: `<logical>_P<form><pos>_<unit>`. The unit set is closed, so
+  // matching it explicitly stops a logical that merely ends in `_<word>`
+  // (ADD32_W, D_LDW_POST_IMM) from being mistaken for a placed member.
+  static constexpr StringRef Units[] = {"LOADSTORE0", "LOAD1", "ALU0", "ALU1",
+                                        "ALU2",       "MAC0",  "MAC1"};
+  for (StringRef Unit : Units) {
+    if (!Name.ends_with(Unit))
+      continue;
+    StringRef Head = Name.drop_back(Unit.size());
+    if (!Head.ends_with("_"))
+      continue;
+    Head = Head.drop_back(1);
+    // The placement token is `_P` followed by the form and the position.
+    size_t Sep = Head.rfind("_P");
+    if (Sep == StringRef::npos)
+      continue;
+    StringRef Digits = Head.substr(Sep + 2);
+    if (Digits.size() != 2 ||
+        !llvm::all_of(Digits, [](char C) { return C >= '0' && C <= '9'; }))
+      continue;
+    return Head.substr(0, Sep);
+  }
+
+  return std::nullopt; // already logical
+}
 
 int getHaydnFlexSlotFromName(unsigned Opc, const MCInstrInfo &MII) {
   return getMemberSlotFromNameLocal(Opc, MII);
