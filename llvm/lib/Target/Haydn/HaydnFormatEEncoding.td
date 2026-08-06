@@ -69,7 +69,7 @@ class HaydnEntryP20<dag outs, dag ins, string asm>
   let Size = 6;
   int PlacementIndex = -1;  // set per unit by each member below
   bits<45> e0;   // the window p20_entry finds
-  bits<45> Inst = e0;
+  bits<48> Inst = {0, 0, 0, e0};
 }
 
 // 2-entry bundle, entry1: bundle bit[91:51].
@@ -80,7 +80,7 @@ class HaydnEntryP21<dag outs, dag ins, string asm>
   let Size = 6;
   int PlacementIndex = -1;  // set per unit by each member below
   bits<41> e1;   // the window p21_entry finds
-  bits<41> Inst = e1;
+  bits<48> Inst = {0, 0, 0, 0, 0, 0, 0, e1};
 }
 
 // 3-entry bundle, entry0: bundle bit[36:6].
@@ -91,7 +91,7 @@ class HaydnEntryP30<dag outs, dag ins, string asm>
   let Size = 4;
   int PlacementIndex = -1;  // set per unit by each member below
   bits<31> e0;   // the window p30_entry finds
-  bits<31> Inst = e0;
+  bits<32> Inst = {0, e0};
 }
 
 // 3-entry bundle, entry1: bundle bit[67:37].
@@ -102,7 +102,7 @@ class HaydnEntryP31<dag outs, dag ins, string asm>
   let Size = 4;
   int PlacementIndex = -1;  // set per unit by each member below
   bits<31> e1;   // the window p31_entry finds
-  bits<31> Inst = e1;
+  bits<32> Inst = {0, e1};
 }
 
 // 3-entry bundle, entry2: bundle bit[94:68].
@@ -113,45 +113,7 @@ class HaydnEntryP32<dag outs, dag ins, string asm>
   let Size = 4;
   int PlacementIndex = -1;  // set per unit by each member below
   bits<27> e2;   // the window p32_entry finds
-  bits<27> Inst = e2;
-}
-
-// 2-entry format E bundle. Header selects the format and the
-// entry count; entries fill the payload from bit[6] up.
-def BUNDLE_E2 : HaydnFormatInst<(outs), (ins p20_entry:$e0, p21_entry:$e1),
-    "`$e1`, `$e0`", []> {
-  let isComposite = true;
-  let Size = 12;
-  let DecoderNamespace = "FormatE2";
-  bits<45> e0;
-  bits<41> e1;
-  bits<96> Inst;
-  let Inst{95-92} = 0b0000;  // unused
-  let Inst{91-51} = e1;  // entry1
-  let Inst{50-6} = e0;  // entry0
-  let Inst{5-4} = 0b00;  // reserved
-  let Inst{3} = 0b0;  // 2 entries
-  let Inst{2-0} = 0b111;  // format_indicator
-}
-
-// 3-entry format E bundle. Header selects the format and the
-// entry count; entries fill the payload from bit[6] up.
-def BUNDLE_E3 : HaydnFormatInst<(outs), (ins p30_entry:$e0, p31_entry:$e1, p32_entry:$e2),
-    "`$e2`, `$e1`, `$e0`", []> {
-  let isComposite = true;
-  let Size = 12;
-  let DecoderNamespace = "FormatE3";
-  bits<31> e0;
-  bits<31> e1;
-  bits<27> e2;
-  bits<96> Inst;
-  let Inst{95} = 0b0;  // unused
-  let Inst{94-68} = e2;  // entry2
-  let Inst{67-37} = e1;  // entry1
-  let Inst{36-6} = e0;  // entry0
-  let Inst{5-4} = 0b00;  // reserved
-  let Inst{3} = 0b1;  // 3 entries
-  let Inst{2-0} = 0b111;  // format_indicator
+  bits<32> Inst = {0, 0, 0, 0, 0, e2};
 }
 
 def ABS32_P20_ALU0 : HaydnEntryP20<
