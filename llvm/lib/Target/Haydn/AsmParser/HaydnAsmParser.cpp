@@ -197,6 +197,18 @@ public:
     return true; // Non-constant expressions are assumed valid
   }
 
+  // Format E I32 takes a full-width signed immediate, so every 32-bit value is
+  // in range and only the width itself is checked.
+  bool isSImm32() const {
+    if (!isImm())
+      return false;
+    if (const auto *CE = dyn_cast<MCConstantExpr>(getImm())) {
+      int64_t Value = CE->getValue();
+      return Value >= -(1LL << 31) && Value < (1LL << 31);
+    }
+    return true; // Non-constant expressions are assumed valid
+  }
+
   // fused post/pre-increment load scaled immediate (signed 6-bit element
   // index, range -32..+31). Mirrors isSImm16; the byte stride is recovered at
   // encode/decode time via << ScaleShift (3 for D_LDW*, 2 for S_LW*).
@@ -465,6 +477,7 @@ public:
   enum HaydnMatchResultTy {
     Match_InvalidSImm16 = FIRST_TARGET_MATCH_RESULT_TY,
     Match_InvalidSImm20,
+    Match_InvalidSImm32,
     Match_InvalidSImm6,
     Match_InvalidSImm8,
     Match_InvalidSImm12,

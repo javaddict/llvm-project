@@ -25,6 +25,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TableGen/DirectiveEmitter.h"
+#include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
 #include "llvm/TableGen/TableGenBackend.h"
 #include <bitset>
@@ -56,9 +57,19 @@ using namespace llvm;
 struct SlotMemberVariantRow {
   std::vector<unsigned> Members;
 
-  void set(unsigned Index, unsigned Opc) {
+  // Two members at one index would mean one silently replacing the other, and
+  // the loser would simply never be materialized. Refuse instead: an index
+  // space shared by two encodings is a mistake in how the members were indexed,
+  // not something to resolve by order of appearance.
+  void set(unsigned Index, unsigned Opc, StringRef Logical, StringRef Member,
+           ArrayRef<const CodeGenInstruction *> Instrs) {
     if (Members.size() <= Index)
       Members.resize(Index + 1, 0);
+    if (Members[Index] != 0 && Members[Index] != Opc)
+      PrintFatalError("alternates for '" + Logical + "' place both '" +
+                      Instrs[Members[Index]]->TheDef->getName() + "' and '" +
+                      Member + "' at index " + Twine(Index) +
+                      "; a member index must name one position");
     Members[Index] = Opc;
   }
 };
@@ -338,7 +349,8 @@ collectSparseAltSlotMemberRows(
             auto It = NameToEnum.find(Name.take_front(Cut));
             if (It != NameToEnum.end())
               RowsByName[It->second].set(
-                  static_cast<unsigned>(Index->getValue()), Opc);
+                  static_cast<unsigned>(Index->getValue()), Opc,
+                  Name.take_front(Cut), Name, NumberedInstructions);
           }
           continue;
         }
@@ -354,7 +366,7 @@ collectSparseAltSlotMemberRows(
       auto It = NameToEnum.find(Base);
       if (It == NameToEnum.end())
         continue; // Unmapped member (no logical base) — decoder-only.
-      RowsByName[It->second].set(Slot, Opc);
+      RowsByName[It->second].set(Slot, Opc, Base, Name, NumberedInstructions);
     }
   }
 

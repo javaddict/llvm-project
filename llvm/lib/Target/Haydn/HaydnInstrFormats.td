@@ -102,6 +102,10 @@ def simm10 : HaydnSImm<10>;  // 16-bit branch residual
 def simm12 : HaydnSImm<12>;  // Bundle128 RI12-class abs imms
 def simm16 : HaydnSImm<16>;  // LD/ST offsets, legacy ADDI-class
 def simm20 : HaydnSImm<20>;  // Bundle128 ALU RI20 (ADDI32/SUBI32/SET_HWLOOP)
+// Format E I32: a full-width immediate with no step or context attached. The
+// simm32_movei / simm32_drx variants above carry MOVEI- and DR-specific
+// parsing; this is the plain one the generated format E members ask for.
+def simm32 : HaydnSImm<32>;
 // ADDI32_W uses simm20_wide_abs (EncoderMethod+signed decode) below.
 
 def brtarget : Operand<OtherVT> {

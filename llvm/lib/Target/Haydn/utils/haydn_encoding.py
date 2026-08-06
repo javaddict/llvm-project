@@ -323,9 +323,45 @@ def placement_index(placements: list[dict]) -> dict[tuple[int, int, str], int]:
     return {pair: index for index, pair in enumerate(pairs)}
 
 
+def canonical_members(placements: list[dict]) -> list[dict]:
+    """One member per (instruction, entry position, unit).
+
+    Only NOP needs this. It exists under every instruction type as the encoding
+    of an empty entry -- opcode zero, no operands, differing from its siblings
+    only in the type code -- so the database lists it once per type. The form
+    with type code zero is the canonical one: the entry payload is then all
+    zeros above the unit mapping, which is what an unoccupied entry is. Emitting
+    the others would only produce duplicate record names for one slot.
+    """
+    kept: dict[tuple, dict] = {}
+    for p in placements:
+        key = (p["instruction"], p["entry_count"], p["entry_index"], p["unit"])
+        previous = kept.get(key)
+        if previous is None:
+            kept[key] = p
+            continue
+        if p["instruction"] != "NOP":
+            raise SystemExit(
+                f"{p['instruction']} has two placements at the same position and"
+                f" unit ({previous['type']} and {p['type']}); only NOP may")
+        if p["opcode"] != 0 or any(p["operand_use"].values()):
+            raise SystemExit(
+                f"NOP under {p['type']} is not the empty encoding"
+                f" (opcode {p['opcode']:#x})")
+        if p["type_code"]["value"] < previous["type_code"]["value"]:
+            kept[key] = p
+    for key, chosen in kept.items():
+        if key[0] == "NOP" and chosen["type_code"]["value"] != 0:
+            raise SystemExit(
+                f"NOP at {key[1]}-entry entry{key[2]}/{key[3]} has no type-code"
+                " zero form, so it has no canonical empty encoding")
+    return list(kept.values())
+
+
 def emit_tablegen(geometry: dict, placements: list[dict]) -> str:
     verify_decodable(placements)
     indices = placement_index(placements)
+    placements = canonical_members(placements)
     positions: dict[tuple[int, int], tuple[int, int]] = {}
     for p in placements:
         positions[(p["entry_count"], p["entry_index"])] = \
@@ -395,7 +431,8 @@ def emit_tablegen(geometry: dict, placements: list[dict]) -> str:
             f"  let DecoderNamespace = \"P{count}{index}\";",
             f"  let Size = {(width + 7) // 8};",
             "  int PlacementIndex = -1;  // set per unit by each member below",
-            f"  bits<{width}> Inst;",
+            f"  bits<{width}> e{index};   // the window p{count}{index}_entry finds",
+            f"  bits<{width}> Inst = e{index};",
             "}",
             "",
         ]
@@ -418,7 +455,7 @@ def emit_tablegen(geometry: dict, placements: list[dict]) -> str:
             f"// {count}-entry format E bundle. Header selects the format and the",
             f"// entry count; entries fill the payload from bit"
             f"[{geometry['payload_lsb']}] up.",
-            f"def BUNDLE_E{count} : HaydnFormatInst<(outs), ({operands}),",
+            f"def BUNDLE_E{count} : HaydnFormatInst<(outs), (ins {operands}),",
             f"    \"{asm}\", []> {{",
             "  let isComposite = true;",
             f"  let Size = {bundle_bits // 8};",
@@ -483,6 +520,7 @@ def emit_tablegen(geometry: dict, placements: list[dict]) -> str:
 
         out.append(f"def {name} : HaydnEntryP{p['entry_count']}{p['entry_index']}<")
         out.append(f"    (outs {', '.join(outs)}), (ins {', '.join(ins)}),")
+
         out.append(f"    \"{asm}\"> {{")
         index = indices[(p["entry_count"], p["entry_index"], p["unit"])]
         out.append(f"  let PlacementIndex = {index};  // {p['unit']}"
@@ -508,9 +546,10 @@ def emit_tablegen(geometry: dict, placements: list[dict]) -> str:
                          value if value != "0"
                          else td_bits(0, msb - lsb + 1, f"{context}/{field}"),
                          field))
+        window = f"e{p['entry_index']}"
         for msb, lsb, value, field in sorted(rows, key=lambda t: -t[0]):
             span = f"{msb}-{lsb}" if msb != lsb else f"{msb}"
-            out.append(f"  let Inst{{{span}}} = {value};  // {field}")
+            out.append(f"  let {window}{{{span}}} = {value};  // {field}")
         out.append("}")
         out.append("")
 
