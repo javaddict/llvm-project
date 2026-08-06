@@ -101,16 +101,19 @@ getPlacementMemberOpcodes(const HaydnBaseMCFormats &Fmts,
   return Fmts.getAlternateInstsOpcode(LogicalOpc);
 }
 
-/// FieldSlots for a sparse-alt entry at \p AltIndex is 1<<AltIndex
-/// (vector index == field/slot).
+/// FieldSlots for a member is the bit of the slot its own format-desc names.
 ///
-/// TRUE ONLY FOR BUNDLE128, whose alternates vector is indexed by slot. Format
-/// E indexes it by placement — the (entry position, unit) pair — so the index
-/// is not the slot and several entries can share one. At the switch this must
-/// become "ask the member for its own slot kind"
-/// (HaydnMCFormats::getSlotKind); see FORMAT-E-SWITCH-PLAN.md § 5.2.
-inline SlotBits fieldSlotsForAltIndex(unsigned AltIndex) {
-  return SlotBits(1) << AltIndex;
+/// This used to be `1 << AltIndex`, valid only while the alternates vector was
+/// indexed by slot. Format E indexes it by PLACEMENT — the (entry position,
+/// unit) pair — so index 6 and index 10 are both "ALU0", in entries P30 and
+/// P31 respectively, and index 6 and index 9 are both entry P30, on ALU0 and
+/// MAC0. Neither the index nor its low bits are the slot. Ask the member.
+inline SlotBits fieldSlotsForMember(const HaydnMCFormats &Fmts,
+                                    unsigned MemberOpc) {
+  MCSlotKind Kind = Fmts.getSlotKind(MemberOpc);
+  if (Kind == MCSlotKind())
+    return 0;
+  return SlotBits(1) << static_cast<unsigned>(Kind);
 }
 
 /// The unit bit for \p MemberOpc, or 0 when units are not modelled.
@@ -133,9 +136,17 @@ inline Haydn::UnitBits unitBitsForMember(const MCInstrInfo *MII,
 
 /// Fill \p Out with PlacementAlternative rows for \p LogicalOpc (non-zero
 /// sparse members only). Each row stamps CompatibleFormatMask =
-/// ProductFormatMask, FieldSlots = 1<<index, and — when \p MII is given — the
-/// member's unit.
+/// ProductFormatMask, FieldSlots = the member's own slot bit, and — when \p MII
+/// is given — the member's unit.
 /// Returns false if there are no non-zero alternatives.
+///
+/// NOTE two alternatives can carry the SAME FieldSlots and differ only in unit
+/// — a bundle entry is one slot, but several units can fill it. That is why
+/// the row carries Units as well: the slot bit alone cannot tell the two
+/// apart, and format E's rule that no two entries of a bundle may name the
+/// same unit is enforced on that second axis, not this one. `tryAdd` rejects
+/// an alternative whose unit is taken and tries the next, so which unit serves
+/// a logical is a choice the solver makes, not one this enumeration fixes.
 inline bool
 enumeratePlacementAlternatives(const HaydnMCFormats &Fmts,
                                unsigned LogicalOpc,
@@ -153,13 +164,28 @@ enumeratePlacementAlternatives(const HaydnMCFormats &Fmts,
     const unsigned MemberOpc = (*Alts)[Index];
     if (MemberOpc == 0)
       continue; // sparse hole — not a placement choice
-    // Sparse size-3: index == field.
-    Out.emplace_back(MemberOpc, haydn::bundle::ProductFormatMask,
-                     fieldSlotsForAltIndex(Index));
+    SlotBits Field = fieldSlotsForMember(Fmts, MemberOpc);
+    if (!Field)
+      continue; // member with no single slot — not placeable
+    Out.emplace_back(MemberOpc, haydn::bundle::ProductFormatMask, Field);
     Out.back().Units = unitBitsForMember(MII, MemberOpc);
     Any = true;
   }
   return Any;
+}
+
+/// \returns the member of \p LogicalOpc that sits in slot \p Kind, or 0.
+/// When several members share the entry and differ only in unit, the first
+/// wins — see the note on enumeratePlacementAlternatives.
+inline unsigned findMemberForSlot(const HaydnMCFormats &Fmts,
+                                  unsigned LogicalOpc, MCSlotKind Kind) {
+  const std::vector<unsigned> *Alts = Fmts.getAlternateInstsOpcode(LogicalOpc);
+  if (!Alts)
+    return 0;
+  for (unsigned MemberOpc : *Alts)
+    if (MemberOpc && Fmts.getSlotKind(MemberOpc) == Kind)
+      return MemberOpc;
+  return 0;
 }
 
 /// Keep only alternatives compatible with \p ID (solver filter).

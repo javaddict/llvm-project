@@ -18,11 +18,11 @@
 //   AIEBaseAsmPrinter.cpp:161-164    Format->Opcode composite
 //
 // `encodeInstruction` routing:
-//   BUNDLE128_FULL (preformed) -> getBinaryCodeForInstr + emitBundle128Word
+//   BUNDLE128_FULL (preformed) -> getBinaryCodeForInstr + emitBundleWord
 //                                 (no re-slot / no re-auction)
-//   Haydn::BUNDLE (asm residual) -> encodeBundle -> encodeBundle128
+//   Haydn::BUNDLE (asm residual) -> encodeBundle -> encodeBundleE
 //   PseudoLongB* -> expandLongBranch (recurse encodeInstruction)
-//   standalone single-op -> encodeBundle128 (transient composite; residual
+//   standalone single-op -> encodeBundleE (transient composite; residual
 //                           logical/hand-asm only — not a CodeGen writer)
 //   else -> report_fatal_error (uncovered opcode)
 //
@@ -55,10 +55,10 @@ using namespace llvm;
 namespace {
 
 // (Flex encoder) — gate predicate for the Bundle128 path. Delegates
-// to the shared `isHaydnBundle128TargetOpcode` in HaydnMCFormats so the size
+// to the shared `isHaydnBundleTargetOpcode` in HaydnMCFormats so the size
 // model and the encoder use the IDENTICAL predicate.
-static bool isBundle128TargetOpcode(unsigned Opc, const MCInstrInfo &MII) {
-  return isHaydnBundle128TargetOpcode(Opc, MII);
+static bool isBundleTargetOpcode(unsigned Opc, const MCInstrInfo &MII) {
+  return isHaydnBundleTargetOpcode(Opc, MII);
 }
 
 // Hexagon parity: PC-rel is a property of the *fixup kind*, set at
@@ -152,7 +152,7 @@ private:
                          APInt &Op, SmallVectorImpl<MCFixup> &Fixups,
                          const MCSubtargetInfo &STI) const;
 
-  // Assembler residual: collect children from Haydn::BUNDLE → encodeBundle128.
+  // Assembler residual: collect children from Haydn::BUNDLE → encodeBundleE.
   // CodeGen emits preformed BUNDLE128_FULL (Format->Opcode) and skips this.
   void encodeBundle(const MCInst &MBI, SmallVectorImpl<char> &CB,
                     SmallVectorImpl<MCFixup> &Fixups,
@@ -161,14 +161,14 @@ private:
   // Build a transient BUNDLE128_FULL for residual children (standalone /
   // hand-asm). Placement is Bundle.add by member getSlotKind / alts — no
   // Flags, no constrained-first re-auction, no encode-local setOpcode Flex.
-  bool encodeBundle128(ArrayRef<const MCInst *> Children,
+  bool encodeBundleE(ArrayRef<const MCInst *> Children,
                        SmallVectorImpl<char> &CB,
                        SmallVectorImpl<MCFixup> &Fixups,
                        const MCSubtargetInfo &STI) const;
 
   // emit a Bundle128 128-bit (16-byte) composite parcel
   // little-endian.
-  void emitBundle128Word(const APInt &Word, SmallVectorImpl<char> &CB) const;
+  void emitBundleWord(const APInt &Word, SmallVectorImpl<char> &CB) const;
 
   unsigned getBranchFixupKind(const MCInst &MI) const;
   unsigned getCallFixupKind(const MCInst &MI) const;
@@ -272,17 +272,18 @@ unsigned HaydnMCCodeEmitter::getExprFixupKind(const MCInst &MI) const {
 // Bundle128 word emit (little-endian 16-byte parcel)
 //===----------------------------------------------------------------------===//
 
-void HaydnMCCodeEmitter::emitBundle128Word(const APInt &Word,
-                                           SmallVectorImpl<char> &CB) const {
-  assert(Word.getBitWidth() == 128 &&
-         "Bundle128 word must be exactly 128 bits");
-  // Little-endian byte emit. APInt::getRawData exposes the limbs; for a
-  // 128-bit value that is two 64-bit limbs with limb 0 holding the low bits.
+void HaydnMCCodeEmitter::emitBundleWord(const APInt &Word,
+                                        SmallVectorImpl<char> &CB) const {
+  assert(Word.getBitWidth() == Haydn::BUNDLE_E_BITS &&
+         "format E bundle word must be exactly 96 bits");
+  // Little-endian byte emit. 96 bits is 12 bytes and does NOT divide into
+  // whole 64-bit limbs, which is why this cannot stay the two-uint64 write
+  // Bundle128 used: limb 1 holds only 32 live bits and writing all 8 bytes of
+  // it would run 4 bytes past the parcel and into the next bundle.
   const uint64_t *Data = Word.getRawData();
-  uint64_t Lo = Data[0];
-  uint64_t Hi = (Word.getBitWidth() > 64) ? Data[1] : 0;
-  support::endian::write<uint64_t>(CB, Lo, llvm::endianness::little);
-  support::endian::write<uint64_t>(CB, Hi, llvm::endianness::little);
+  support::endian::write<uint64_t>(CB, Data[0], llvm::endianness::little);
+  support::endian::write<uint32_t>(CB, static_cast<uint32_t>(Data[1]),
+                                   llvm::endianness::little);
 }
 
 //===----------------------------------------------------------------------===//
@@ -293,14 +294,15 @@ void HaydnMCCodeEmitter::encodeInstruction(const MCInst &MI,
                                            SmallVectorImpl<char> &CB,
                                            SmallVectorImpl<MCFixup> &Fixups,
                                            const MCSubtargetInfo &STI) const {
-  // 1. Preformed BUNDLE128_FULL composite (CodeGen AsmPrinter Format->Opcode;
+  // 1. Preformed composite (CodeGen AsmPrinter Format->Opcode;
   // AIEBaseAsmPrinter.cpp:161-164 + AIEBaseMCCodeEmitter.cpp:45-68). Serialize
-  // only — no re-slot, no re-auction. Product sole live packet row is
-  // BUNDLE128_FULL.
-  if (MI.getOpcode() == Haydn::BUNDLE128_FULL) {
+  // only — no re-slot, no re-auction. There are two packet rows now, and which
+  // one arrived was decided upstream by the occupied slots; both serialize
+  // identically because both are 96-bit.
+  if (MI.getOpcode() == Haydn::BUNDLE_E2 || MI.getOpcode() == Haydn::BUNDLE_E3) {
     APInt Binary, Scratch;
     getBinaryCodeForInstr(MI, Fixups, Binary, Scratch, STI);
-    emitBundle128Word(Binary, CB);
+    emitBundleWord(Binary, CB);
     return;
   }
 
@@ -335,7 +337,7 @@ void HaydnMCCodeEmitter::encodeInstruction(const MCInst &MI,
   // CodeGen bundles already arrived as BUNDLE128_FULL above; this is for
   // emitWrappedInst / hand-asm singles, not a third CodeGen placement writer.
   const MCInst *Child = &MI;
-  if (encodeBundle128({Child}, CB, Fixups, STI))
+  if (encodeBundleE({Child}, CB, Fixups, STI))
     return;
 
   // 5. Forcing function: opcode has no Bundle128 form.
@@ -349,7 +351,7 @@ void HaydnMCCodeEmitter::encodeInstruction(const MCInst &MI,
 }
 
 //===----------------------------------------------------------------------===//
-// Bundle encoding — collect children, route through encodeBundle128
+// Bundle encoding — collect children, route through encodeBundleE
 //===----------------------------------------------------------------------===//
 
 void HaydnMCCodeEmitter::encodeBundle(const MCInst &MBI,
@@ -367,22 +369,29 @@ void HaydnMCCodeEmitter::encodeBundle(const MCInst &MBI,
     }
   }
 
-  // An all-NOP bundle emits a 16-byte Bundle128 NOP (all-zero composite). The
-  // Bundle128 composite of three NOP slot windows is the spec §10 NOP.
+  // An all-NOP bundle still has to be a real bundle. Under Bundle128 this
+  // emitted an all-zero 16-byte word, because Bundle128 had no header and a
+  // zero slot window WAS the NOP. Format E does have a header — bits[2:0] are
+  // the 0b111 format indicator and bit 3 the entry count — so an all-zero
+  // 12-byte word is not a NOP bundle, it is a different format's bundle.
+  // Build it through the normal path instead, which picks a composite for the
+  // empty occupancy and NOP-pads every entry.
   if (Children.empty()) {
-    emitBundle128Word(APInt(128, 0), CB);
-    return;
+    if (encodeBundleE({}, CB, Fixups, STI))
+      return;
+    report_fatal_error("Haydn MC: no packet format covers an empty bundle",
+                       /*GenCrashDiag=*/false);
   }
 
   // The single Bundle128 emit path. If every child is a Bundle128-target
   // opcode, emit the 128-bit composite.
-  if (encodeBundle128(Children, CB, Fixups, STI))
+  if (encodeBundleE(Children, CB, Fixups, STI))
     return;
 
   // FORCING FUNCTION: a child lacks a Bundle128 form. Report the first
   // offending child so the missing member family is actionable.
   for (const MCInst *Child : Children) {
-    if (!isBundle128TargetOpcode(Child->getOpcode(), MII)) {
+    if (!isBundleTargetOpcode(Child->getOpcode(), MII)) {
       StringRef Name = MII.getName(Child->getOpcode());
       report_fatal_error("Haydn MC: bundle child opcode '" + Name + "' (op" +
                              Twine(static_cast<unsigned>(Child->getOpcode())) +
@@ -392,10 +401,10 @@ void HaydnMCCodeEmitter::encodeBundle(const MCInst &MBI,
                          /*GenCrashDiag=*/false);
     }
   }
-  // If every child IS a Bundle128-target opcode but encodeBundle128 still
+  // If every child IS a Bundle128-target opcode but encodeBundleE still
   // declined (e.g. two children routed to the same slot — a Stage-1 coverage
   // gap), report it.
-  report_fatal_error("Haydn MC: encodeBundle128 declined a bundle of " +
+  report_fatal_error("Haydn MC: encodeBundleE declined a bundle of " +
                          Twine(static_cast<unsigned>(Children.size())) +
                          " Bundle128-target child(ren) — slot-assignment gap",
                      /*GenCrashDiag=*/false);
@@ -413,78 +422,74 @@ void HaydnMCCodeEmitter::encodeBundle(const MCInst &MBI,
 // PlacementAlternative tryAdd (logical) — AIEBundle.h:92-145 peer.
 // encodeSlotSubInst serializes member Desc as-is (AIEBaseMCCodeEmitter.cpp:
 // 134-162); residual logicals must already be setDesc'd or asm format members.
-bool HaydnMCCodeEmitter::encodeBundle128(
+bool HaydnMCCodeEmitter::encodeBundleE(
     ArrayRef<const MCInst *> Children, SmallVectorImpl<char> &CB,
     SmallVectorImpl<MCFixup> &Fixups, const MCSubtargetInfo &STI) const {
   // Gate: every real child must be a Bundle128-target opcode.
   for (const MCInst *Child : Children)
-    if (!isBundle128TargetOpcode(Child->getOpcode(), MII))
+    if (!isBundleTargetOpcode(Child->getOpcode(), MII))
       return false;
 
   // Single-pass Bundle.add (no Flags, no constrained-first re-auction).
   // Fixed getSlotKind members land in their Desc slot; multi-slot logicals
   // use Bundle pickSlot tryAdd (same canAdd authority).
   //
-  // Residual solitary (non-brace / non-BUNDLE128_FULL) hand-asm: prefer S0
-  // when legal (fixup window / -c≡mc stability). Bundle.add Hint — not Flags.
-  // Multi-child residual BUNDLE packs source-order Bundle.add (no re-auction);
-  // brace asm never reaches here (preformed BUNDLE128_FULL fast path).
+  // Residual hand-asm packs in source order via Bundle.add (no re-auction);
+  // brace asm never reaches here (the preformed-composite fast path takes it).
+  //
+  // A solitary child gets NO slot hint. Bundle128 hinted slot 0 because every
+  // instruction had an s0 member; format E's 2-entry entry0 admits only
+  // ALU0/LOADSTORE0/MAC0, so an ALU2-only op has no placement there and must
+  // go to a 3-entry bundle. Let the solver pick — see the same note in
+  // HaydnAsmParser.
   HaydnMCFormatsWithMII Formats(MII);
   Haydn::MCBundle Bundle(&Formats);
-  if (Children.size() == 1) {
-    MCInst *Only = const_cast<MCInst *>(Children[0]);
-    unsigned Opc = Only->getOpcode();
-    if (!Bundle.canAdd(Opc))
+  for (const MCInst *Child : Children) {
+    unsigned Opc = Child->getOpcode();
+    if (!Bundle.canAdd(Opc)) {
+      LLVM_DEBUG(dbgs() << "Haydn MC: encodeBundleE canAdd failed for "
+                        << MII.getName(Opc) << " (source-order pack; no "
+                           "re-auction)\n");
       return false;
-    SlotBits Legal = Formats.getLegalSlots(Opc);
-    if (Legal & Haydn::SLOT0)
-      Bundle.add(Only, MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
-    else
-      Bundle.add(Only);
-  } else {
-    for (const MCInst *Child : Children) {
-      unsigned Opc = Child->getOpcode();
-      if (!Bundle.canAdd(Opc)) {
-        LLVM_DEBUG(dbgs() << "Haydn MC: encodeBundle128 canAdd failed for "
-                          << MII.getName(Opc) << " (source-order pack; no "
-                             "re-auction)\n");
-        return false;
-      }
-      Bundle.add(const_cast<MCInst *>(Child));
     }
+    Bundle.add(const_cast<MCInst *>(Child));
   }
 
-  // SlotMap → s0/s1/s2; encodeSlotSubInst slices member Desc as-is
-  // (AIE getBinaryCodeForInstr).
-  SmallVector<const MCInst *, 3> Slots(3, nullptr);
-  for (const auto &KV : Bundle.getSlotMap()) {
-    MCSlotKind Slot = KV.first;
-    MCInst *Child = KV.second;
-    unsigned SlotIdx = static_cast<unsigned>(Slot) - MCSlotKind::Haydn_SLOT_S0;
-    assert(SlotIdx < 3 && "Bundle committed an out-of-range slot");
-    Slots[SlotIdx] = Child;
+  // Which composite covers what got placed. This is the entry-count decision,
+  // and it is the packet-format table's, not ours: an occupancy of P20/P21 is
+  // only covered by BUNDLE_E2 and one of P30/P31/P32 only by BUNDLE_E3. An
+  // empty bundle is covered by the first row, giving the all-NOP bundle a
+  // real header instead of a zero word.
+  if (Bundle.isStandalone()) {
+    LLVM_DEBUG(dbgs() << "Haydn MC: encodeBundleE standalone escape for "
+                      << Children.size() << " child(ren) — declining\n");
+    return false;
   }
-
-  // Safety net: Bundle::add can leave SlotMap empty while still holding real
-  // children (standalone escape when no legal slot). Decline vs silent 16x0.
-  bool AnySlot = false;
-  for (const MCInst *S : Slots)
-    if (S) {
-      AnySlot = true;
-      break;
-    }
-  if (!AnySlot) {
-    LLVM_DEBUG(dbgs() << "Haydn MC: encodeBundle128 empty SlotMap for "
+  const VLIWFormat *Format = Bundle.getFormatOrNull();
+  if (!Format) {
+    LLVM_DEBUG(dbgs() << "Haydn MC: encodeBundleE no covering format for "
                       << Children.size() << " child(ren) — declining\n");
     return false;
   }
 
-  // Build composite. BUNDLE128_FULL dag: (ins s0_slot, s1_slot, s2_slot).
-  // Missing slots get NOP placeholders (AIE SlotInfo NOP peer).
+  // Safety net: Bundle::add can leave SlotMap empty while still holding real
+  // children (standalone escape when no legal slot). Decline rather than emit
+  // a bundle of nothing but NOPs where an instruction was asked for.
+  if (!Children.empty() && Bundle.getSlotMap().empty()) {
+    LLVM_DEBUG(dbgs() << "Haydn MC: encodeBundleE empty SlotMap for "
+                      << Children.size() << " child(ren) — declining\n");
+    return false;
+  }
+
+  // Build the composite in operand-dag order, which is the reverse of
+  // getSlots() (AsmString order, high entry first). Entries with no
+  // instruction get NOP placeholders (AIE SlotInfo NOP peer).
   MCInst Composite;
-  Composite.setOpcode(Haydn::BUNDLE128_FULL);
-  for (unsigned I = 0; I < 3; ++I) {
-    const MCInst *Child = Slots[I];
+  Composite.setOpcode(Format->Opcode);
+  const auto &Slots = Format->getSlots();
+  for (const MCSlotKind *It = Slots.end(); It != Slots.begin();) {
+    MCSlotKind Slot = *--It;
+    const MCInst *Child = Bundle.at(Slot);
     if (!Child) {
       MCInst *Nop = Ctx.createMCInst();
       Nop->setOpcode(Haydn::NOP);
@@ -502,7 +507,7 @@ bool HaydnMCCodeEmitter::encodeBundle128(
   for (MCFixup &F : CompositeFixups)
     Fixups.push_back(std::move(F));
 
-  emitBundle128Word(Binary, CB);
+  emitBundleWord(Binary, CB);
   return true;
 }
 
@@ -536,73 +541,87 @@ void HaydnMCCodeEmitter::encodeSlotSubInst(
       break;
     }
   }
-  MCSlotKind Kind;
-  switch (SlotIdx) {
-  default:
-    llvm_unreachable("Bundle128 operand index must be 0, 1, or 2");
-  case 0: Kind = MCSlotKind::Haydn_SLOT_S0; break;
-  case 1: Kind = MCSlotKind::Haydn_SLOT_S1; break;
-  case 2: Kind = MCSlotKind::Haydn_SLOT_S2; break;
-  }
 
   APInt SubBinary, SubScratch;
   SmallVector<MCFixup, 4> BaseFixups;
   HaydnMCFormats Formats;
 
+  // The operand index names an entry of THIS composite, so read the slot off
+  // the composite's own format rather than mapping index->kind. Under
+  // Bundle128 that mapping was the identity (operand k was slot Sk); under
+  // format E operand 0 is P20 or P30 depending on which composite this is.
+  // Operand-dag order is the reverse of getSlots() — see encodeBundleE.
+  const VLIWFormat *Format =
+      Formats.getPacketFormats().getFormatByEntryCount(
+          Composite.getNumOperands());
+  assert(Format && Format->Opcode == Composite.getOpcode() &&
+         "composite operand count does not match any packet format");
+  const auto &FmtSlots = Format->getSlots();
+  assert(SlotIdx < static_cast<unsigned>(FmtSlots.end() - FmtSlots.begin()) &&
+         "composite operand index outside the format's entries");
+  MCSlotKind Kind = FmtSlots.end()[-1 - static_cast<int>(SlotIdx)];
+
+  // The CSRW special case is gone. It retargeted the logical to the hardcoded
+  // member CSRW_S0 because CSRW is isCodeGenOnly and has no slot of its own —
+  // exactly the "residual logical, find its member for this entry" case the
+  // findMemberForSlot path below now handles for every opcode. Naming one
+  // member by hand also cannot survive format E, where CSRW has seven.
   auto encodeOne = [&](const MCInst &Inst) {
-    // CSRW (FmtCSR) and CSRW_S0 now share the two-operand ($csr, $r) shape,
-    // so the leading-dead-def surgery this used to do is gone. The logical is
-    // codegen-only and has no slot of its own, so encode it as the member the
-    // packer would have committed it to.
-    if (Inst.getOpcode() == Haydn::CSRW) {
-      MCInst Fixed(Inst);
-      Fixed.setOpcode(Haydn::CSRW_S0);
-      getBinaryCodeForInstr(Fixed, BaseFixups, SubBinary, SubScratch, STI);
-      return;
-    }
     getBinaryCodeForInstr(Inst, BaseFixups, SubBinary, SubScratch, STI);
   };
 
   // AIE path: member Desc has fixed getSlotKind → encode as-is
   // (AIEBaseMCFormats.cpp:66-75 + AIEBaseMCCodeEmitter.cpp:136/161-162).
-  // Residual logical (no fixed slot): AlternateInsts member for this composite
-  // operand index — same table post-RA setDesc uses.
+  // Residual logical (no fixed slot): pick the AlternateInsts member that sits
+  // in THIS entry.
+  //
+  // Under Bundle128 that was `Alts[SlotIdx]`, because the alternates vector was
+  // indexed by slot and the composite operand index was the slot. Format E
+  // indexes alternates by PLACEMENT — the (entry position, unit) pair — so
+  // several entries of the vector can share one slot, differing only in unit,
+  // and the index is not the operand number. Search by the member's own slot
+  // kind instead, which is the fact we actually want and is spelling-agnostic.
   MCSlotKind SubKind = Formats.getSlotKind(SubInst.getOpcode());
   if (SubKind != MCSlotKind()) {
     encodeOne(SubInst);
-  } else if (const std::vector<unsigned> *Alts =
-                 Formats.getAlternateInstsOpcode(SubInst.getOpcode());
-             Alts && SlotIdx < Alts->size() && (*Alts)[SlotIdx] != 0) {
-    MCInst Member(SubInst);
-    Member.setOpcode((*Alts)[SlotIdx]);
-    encodeOne(Member);
+  } else if (unsigned Member = findMemberForSlot(Formats, SubInst.getOpcode(),
+                                                 Kind)) {
+    MCInst MemberInst(SubInst);
+    MemberInst.setOpcode(Member);
+    encodeOne(MemberInst);
   } else {
     encodeOne(SubInst);
   }
 
-  // Look up the slot window in the Bundle128 format-desc.
-  const MCFormatDesc &B128 = Formats.getBundle128FormatDesc();
-  auto Offsets = B128.getSlotOffsetsHiBit(Kind);
+  // Look up the entry window in THIS composite's format-desc.
+  const MCFormatDesc &Bundle =
+      Formats.getCompositeFormatDesc(Composite.getOpcode());
+  auto Offsets = Bundle.getSlotOffsetsHiBit(Kind);
   unsigned WindowWidth = Offsets.RightOffset - Offsets.LeftOffset + 1;
   assert(SubBinary.getBitWidth() >= WindowWidth &&
          "sub-inst encoding narrower than slot window");
   Op = APInt(WindowWidth, SubBinary.extractBitsAsZExtValue(WindowWidth, 0));
 
-  // Translate fixups slot-relative → composite-relative.
+  // Translate fixups entry-relative → composite-relative.
   //
-  // The Bundle128 composite is 128 bits, MSB-indexed (offset 0 = MSB = bit 127
-  // offset 127 = LSB = bit 0). A slot window spans MSB-offsets
-  // [LeftOffset, RightOffset]; its LSB position in the composite is
-  // (127 - RightOffset). The sub-inst is encoded with bit 0 = its own LSB, so
-  // when sliced into the window, sub-inst bit 0 lands at composite bit
-  // (127 - RightOffset). A fixup at sub-inst byte X therefore lands at composite
-  // byte ((127 - RightOffset) / 8) + X. For Bundle128:
-  // S0: RightOffset=127 → base 0; S1: RightOffset=79 → base 6;
-  // S2: RightOffset=39 → base 11.
+  // The composite is 96 bits, MSB-indexed (offset 0 = MSB = bit 95, offset 95 =
+  // LSB = bit 0). An entry window spans MSB-offsets [LeftOffset, RightOffset];
+  // its LSB position in the composite is (95 - RightOffset). The sub-inst is
+  // encoded with bit 0 = its own LSB, so when sliced into the window, sub-inst
+  // bit 0 lands at composite bit (95 - RightOffset). A fixup at sub-inst byte X
+  // therefore lands at composite byte ((95 - RightOffset) / 8) + X.
+  //
+  // NOTE format E entry windows are NOT byte-aligned (45/41 and 31/31/27 bits,
+  // payload starting at bit 6), so this division truncates and a fixup can
+  // start mid-byte. Bundle128's windows were 48/40/40 from bit 0 and divided
+  // exactly. The byte base is still the right anchor for the relocation — the
+  // sub-byte position lives in the fixup kind's field geometry
+  // (HaydnRelocLayout) — but that geometry is still Bundle128's and has to be
+  // re-derived for format E. See § 5.2 / § 6.10 in FORMAT-E-SWITCH-PLAN.md.
   // Mirrors AIE's `translateFixupsInComposite` (AIEBaseMCCodeEmitter.cpp:189).
-  // AIE translateFixupsInComposite: remap standalone → composite. We only
-  // adjust byte offset (same kind); PCRel must survive (Hexagon addFixup).
-  unsigned SlotWindowLSBByteBase = (127 - Offsets.RightOffset) / 8;
+  // We only adjust byte offset (same kind); PCRel must survive.
+  unsigned SlotWindowLSBByteBase =
+      (Haydn::BUNDLE_E_BITS - 1 - Offsets.RightOffset) / 8;
   for (const MCFixup &F : BaseFixups) {
     addHaydnFixup(Fixups, F.getOffset() + SlotWindowLSBByteBase, F.getValue(),
                   F.getKind());
@@ -811,7 +830,7 @@ MCCodeEmitter *llvm::createHaydnMCCodeEmitter(const MCInstrInfo &MCII,
 //
 // Expands a long-branch pseudo to: inverted-conditional-branch + JAL. Each
 // emitted real instruction recurses through `encodeInstruction`, which routes
-// to `encodeBundle128` (the single Bundle128 emit path). The inverted branch's
+// to `encodeBundleE` (the single Bundle128 emit path). The inverted branch's
 // literal skip-offset (8 bytes) emits no fixup; the JAL's symbolic target
 // carries the long-branch fixup at byte offset 16 (the JAL's position within
 // the 32-byte composite sequence — each real instruction is now a 16-byte
@@ -868,7 +887,7 @@ void HaydnMCCodeEmitter::expandLongBranch(
     }
 
     // route the inverted branch through encodeInstruction, which emits
-    // it as a 16-byte Bundle128 parcel via encodeBundle128. Any fixup it
+    // it as a 16-byte Bundle128 parcel via encodeBundleE. Any fixup it
     // produces is spurious (literal offset) — drop it.
     encodeInstruction(InvBr, CB, Fixups, STI);
     Fixups.resize(FixupBeforeInv);

@@ -25,8 +25,15 @@ namespace llvm::Haydn {
 // VLIW bundle constants
 //===----------------------------------------------------------------------===//
 
-// Number of issue slots in a VLIW bundle.
+// Largest number of entries a bundle can hold. Format E has a 2-entry form
+// and a 3-entry form; this is the maximum, NOT the number of slot kinds
+// (that is SLOT_KIND_COUNT below) and NOT a count you may loop over to
+// enumerate slots — the entry count is a property of the chosen composite.
 constexpr unsigned ISSUE_SLOT_COUNT = 3;
+
+// A format E bundle is 96 bits / 12 bytes, payload from bit 6.
+constexpr unsigned BUNDLE_E_BITS = 96;
+constexpr unsigned BUNDLE_E_BYTES = BUNDLE_E_BITS / 8;
 
 // Bundle width tag occupies bits [15:14] of the lead parcel.
 constexpr unsigned BUNDLE_WIDTH_TAG_BITS = 2;
@@ -38,17 +45,38 @@ constexpr unsigned BUNDLE_48BIT_TAG = 0b10;
 constexpr unsigned BUNDLE_64BIT_TAG = 0b11;
 
 //===----------------------------------------------------------------------===//
-// VLIW slot masks (TSFlags bits [2:0])
+// Format E entry-slot masks
 //===----------------------------------------------------------------------===//
+//
+// One bit per MCSlotKind, and the bit position IS the kind: the generated
+// HaydnSlots table stamps each slot's SlotOccupancy as 1 << its enumerator, so
+// these constants and MCSlotKind::Haydn_SLOT_* are two spellings of one thing.
+// haydnSlotMaskToKind bridges them without a table.
+//
+// A format E bundle is 2 entries (P20,P21) or 3 entries (P30,P31,P32); the two
+// sets are mutually exclusive and the generated ConflictBits say so. There is
+// deliberately NO all-slots constant: Bundle128's SLOT_ALL meant "a full
+// bundle", and under format E that is two different masks depending on which
+// composite was chosen. Ask the packet format (VLIWFormat::getSlotSet), which
+// is what actually knows.
+constexpr unsigned SLOT_P20 = 1u << 0;
+constexpr unsigned SLOT_P21 = 1u << 1;
+constexpr unsigned SLOT_P30 = 1u << 2;
+constexpr unsigned SLOT_P31 = 1u << 3;
+constexpr unsigned SLOT_P32 = 1u << 4;
 
-// Slot 0 — ALU / Load-Store unit.
-constexpr unsigned SLOT0 = 0b001;
-// Slot 1 — ALU64/SIMD / Load / MAC.
-constexpr unsigned SLOT1 = 0b010;
-// Slot 2 — ALU64/SIMD / MAC (shares instruction set with slot 1).
-constexpr unsigned SLOT2 = 0b100;
-// Mask combining all three slots.
-constexpr unsigned SLOT_ALL = SLOT0 | SLOT1 | SLOT2;
+// Number of distinct slot kinds. Matches the MCSlotKind enum emitted into
+// HaydnGenFormats.inc; a static_assert in HaydnMCFormats.cpp keeps them tied.
+constexpr unsigned SLOT_KIND_COUNT = 5;
+
+// The two composites' occupancy sets, for callers that need to name a whole
+// bundle shape. These mirror the generated VLIWFormat SlotSet values (0x3 and
+// 0x1c) and are asserted equal to them in HaydnMCFormats.cpp.
+constexpr unsigned SLOT_SET_E2 = SLOT_P20 | SLOT_P21;
+constexpr unsigned SLOT_SET_E3 = SLOT_P30 | SLOT_P31 | SLOT_P32;
+// Every slot bit, for range checks and loop bounds only — NOT a legal
+// occupancy, since no bundle holds all five.
+constexpr unsigned SLOT_MASK_ANY = SLOT_SET_E2 | SLOT_SET_E3;
 
 //===----------------------------------------------------------------------===//
 // Hardware units

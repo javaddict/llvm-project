@@ -364,7 +364,7 @@ static bool isValidFlexSlotWindow(uint64_t Window, unsigned WindowTopBit) {
 //===----------------------------------------------------------------------===//
 //
 // tryDecodeBundle128Composite is the decoder's symmetric inverse of the
-// encoder's encodeBundle128 (HaydnMCCodeEmitter.cpp): it reads a 16-byte
+// encoder's encodeBundleE (HaydnMCCodeEmitter.cpp): it reads a 16-byte
 // (128-bit) parcel, then runs the generated composite trie
 // DecoderTableBundle128128 on it. The composite trie matches unconditionally
 // (case 164 = BUNDLE128_FULL, no fixed bits to match — FU is the slot-level
