@@ -36,6 +36,7 @@ def Unit_ALU2_L2 : InstrItinClass;
 def Unit_ALU2_Lvar : InstrItinClass;
 def Unit_LOAD1_L1 : InstrItinClass;
 def Unit_LOAD1_L2 : InstrItinClass;
+def Unit_LS0LOAD1ALU0ALU1ALU2MAC0MAC1_L1 : InstrItinClass;
 def Unit_LS0LOAD1_L1 : InstrItinClass;
 def Unit_LS0LOAD1_L2 : InstrItinClass;
 def Unit_LS0_L1 : InstrItinClass;
@@ -64,6 +65,7 @@ defvar HaydnFormatEItinData = [
     InstrItinData<Unit_ALU2_Lvar, [InstrStage<1, [U_ALU2]>], []>,
     InstrItinData<Unit_LOAD1_L1, [InstrStage<1, [U_LOAD1]>], [1]>,
     InstrItinData<Unit_LOAD1_L2, [InstrStage<1, [U_LOAD1]>], [2]>,
+    InstrItinData<Unit_LS0LOAD1ALU0ALU1ALU2MAC0MAC1_L1, [InstrStage<1, [U_LOADSTORE0, U_LOAD1, U_ALU0, U_ALU1, U_ALU2, U_MAC0, U_MAC1]>], [1]>,
     InstrItinData<Unit_LS0LOAD1_L1, [InstrStage<1, [U_LOADSTORE0, U_LOAD1]>], [1]>,
     InstrItinData<Unit_LS0LOAD1_L2, [InstrStage<1, [U_LOADSTORE0, U_LOAD1]>], [2]>,
     InstrItinData<Unit_LS0_L1, [InstrStage<1, [U_LOADSTORE0]>], [1]>,

@@ -349,7 +349,7 @@ def MOVE32 : FmtALU32<0x08, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
 let hasSideEffects = 0, isReMaterializable = 1, isCodeGenOnly = 0 in
 def NOP : HaydnInst16<(outs), (ins), "nop", []> {
   let TSFlags{2-0} = 0b111;  // Any slot
-  let Itinerary = Slot012_ALU;
+  let Itinerary = Unit_LS0LOAD1ALU0ALU1ALU2MAC0MAC1_L1;
 
   // §2.4 / §10.5: canonical NOP = 16-bit all-zero word.
   let Inst{15 - 0} = 0x0000;
@@ -927,7 +927,7 @@ let mayLoad = 1 in {
 def LD32 : FmtLS<0x3B, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
                  "ld32\t$rt, $rs, $offset",
                  []> {
-  let Itinerary = Slot01_LD;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 def LD16 : FmtLS<0x3C, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
@@ -956,7 +956,7 @@ def LDU8 : FmtLS<0x3F, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
 // LD64_S0/S1 (no promoteLoads residual).
 def LD64 : FmtLS<0x45, (outs DR64:$rt), (ins GPR32:$rs, simm16:$offset),
                 "ld64\t$rt, $rs, $offset", []> {
-  let Itinerary = Slot01_LD;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let mayStore = 1 in {
@@ -997,24 +997,24 @@ let isCodeGenOnly = 1 in {
 let mayLoad = 1 in {
 def LD32_REG_M0S0LS : HaydnInst<4, (outs GPR32:$rt), (ins GPR32:$rs, GPR32:$off),
     "ld32_reg\t$rt, $rs, $off", []> {
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
   let TSFlags{2-0} = 0b001;
 }
 def LD64_REG_M0S0LS : HaydnInst<4, (outs DR64:$rt), (ins GPR32:$rs, GPR32:$off),
     "ld64_reg\t$rt, $rs, $off", []> {
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
   let TSFlags{2-0} = 0b001;
 }
 } // mayLoad
 let mayStore = 1 in {
 def ST32_REG_M0S0LS : HaydnInst<4, (outs), (ins GPR32:$rt, GPR32:$rs, GPR32:$off),
     "st32_reg\t$rt, $rs, $off", []> {
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
   let TSFlags{2-0} = 0b001;
 }
 def ST64_REG_M0S0LS : HaydnInst<4, (outs), (ins DR64:$rt, GPR32:$rs, GPR32:$off),
     "st64_reg\t$rt, $rs, $off", []> {
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
   let TSFlags{2-0} = 0b001;
 }
 } // mayStore

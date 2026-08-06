@@ -425,7 +425,13 @@ def emit_schedule(pipeline: dict, placements: list[dict]) -> list[str]:
         out.append(f"def U_{unit} : FuncUnit;")
     out.append("")
 
-    classes: dict[str, tuple[tuple[str, ...], object]] = {}
+    # NOP is not an ISA instruction -- it is the encoding of an empty entry, so
+    # instruction_type_index.json does not carry it -- but the entry it sits in
+    # still belongs to some unit, and it can sit in any of them. Without a class
+    # of its own it would be the one logical left holding a slot class.
+    classes: dict[str, tuple[tuple[str, ...], object]] = {
+        itinerary_name(UNITS, 1): (UNITS, 1),
+    }
     for name, (units, latency) in pipeline.items():
         classes[itinerary_name(units, latency)] = (units, latency)
     for p in placements:
