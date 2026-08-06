@@ -1890,3 +1890,80 @@ def SET_HWLOOP_REG_W : Fmt48_WideSET_HWLOOP_REG<0x8A, (outs),
 // Fmt48_WideLS class (HaydnInstrFormatsC.td). Wide-offset LS is now reached
 // via the Bundle128 _S0 family-2 defs (HaydnFormatsLS.td).
 //===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// AR (hardware unaligned access) logicals.
+//
+// These lived in HaydnFormatsLS.td beside their Bundle128 members. They are
+// logicals, not members, so they outlive that file: ISel and the post-RA
+// hazard recognizer name them, and placement is the alternates auction.
+//
+// Shapes follow `instruction_type_index.json` group AR. The re-delivered
+// database dropped the second base register and the direction select, and the
+// post-increment is a fixed +8 rather than a runtime stride:
+//
+//   PLDWWUA_POST ar_sel, rs        ar[ar_sel] = mem64[rs & ~7];  rs += 8
+//   FLAR         ar_sel            ar[ar_sel] = 0
+//   WBARWUA      ar_sel, rs        residual -> mem64[rs & ~7];   ar = 0
+//   D_LTWUA_POST  rtd, ar_sel, rs  two-word unaligned load,      rs += 8
+//   D_LQHWUA_POST rtd, ar_sel, rs  quad-half unaligned load,     rs += 8
+//   D_STWUA_POST  rtd, ar_sel, rs  two-word unaligned store,     rs += 8
+//   D_SQHWUA_POST rtd, ar_sel, rs  quad-half unaligned store,    rs += 8
+//
+// rs is tied because the hardware writes it back. ISel marks that def Dead:
+// the C-level cursor is ordinary pointer arithmetic, not a readback of the
+// hardware writeback, so the tie exists to model the register write for
+// packing and register allocation, not to carry a value.
+//
+// WBARWUA reads rs and does not write it (database GPR_Write_Port is null),
+// so it alone has no tied writeback.
+//===----------------------------------------------------------------------===//
+
+let mayLoad = 1, hasSideEffects = 1 in
+def PLDWWUA_POST : HaydnInst<4, (outs GPR32:$rs_wb),
+                             (ins GPR32:$rs, uimm2:$ar_sel),
+                             "pldwwua_post\t$ar_sel, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
+  let Itinerary = Slot012_ALU;
+}
+
+let hasSideEffects = 1 in
+def FLAR : HaydnInst<4, (outs), (ins uimm2:$ar_sel), "flar\t$ar_sel", []> {
+  let Itinerary = Slot012_ALU;
+}
+
+let mayStore = 1, hasSideEffects = 1 in
+def WBARWUA : HaydnInst<4, (outs), (ins GPR32:$rs, uimm2:$ar_sel),
+                        "wbarwua\t$ar_sel, $rs", []> {
+  let Itinerary = Slot012_ALU;
+}
+
+let mayLoad = 1, hasSideEffects = 1 in {
+def D_LTWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
+                             (ins GPR32:$rs, uimm2:$ar_sel),
+                             "d_ltwua_post\t$rtd, $ar_sel, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
+  let Itinerary = Slot012_ALU;
+}
+def D_LQHWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
+                              (ins GPR32:$rs, uimm2:$ar_sel),
+                              "d_lqhwua_post\t$rtd, $ar_sel, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
+  let Itinerary = Slot012_ALU;
+}
+}
+
+let mayStore = 1, hasSideEffects = 1 in {
+def D_STWUA_POST : HaydnInst<4, (outs GPR32:$rs_wb),
+                             (ins DR64:$rtd, GPR32:$rs, uimm2:$ar_sel),
+                             "d_stwua_post\t$rtd, $ar_sel, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
+  let Itinerary = Slot012_ALU;
+}
+def D_SQHWUA_POST : HaydnInst<4, (outs GPR32:$rs_wb),
+                              (ins DR64:$rtd, GPR32:$rs, uimm2:$ar_sel),
+                              "d_sqhwua_post\t$rtd, $ar_sel, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
+  let Itinerary = Slot012_ALU;
+}
+}
