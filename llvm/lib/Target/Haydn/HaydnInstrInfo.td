@@ -1432,7 +1432,7 @@ def MOVESFR2GPR : HaydnInst<4, (outs GPR32:$rd), (ins),
                             "movesfr2gpr\t$rd", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
   bits<4> rd;
   let Inst{31, 30} = 0b01;
   let Inst{29 - 22} = 0x67;
@@ -1447,7 +1447,7 @@ def MOVEGPR2SFR : HaydnInst<4, (outs), (ins GPR32:$rs),
                             "movegpr2sfr\t$rs", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
   bits<4> rs;
   let Inst{31, 30} = 0b01;
   let Inst{29 - 22} = 0x67;
@@ -1460,7 +1460,7 @@ def ZERO_SFR : HaydnInst<4, (outs), (ins),
                          "zero_sfr", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
   let Inst{31, 30} = 0b01;
   let Inst{29 - 22} = 0x67;
   let Inst{21 - 18} = 0;
@@ -1494,7 +1494,7 @@ def MOVE32_DR_L : HaydnInst<4, (outs GPR32:$rt), (ins DR64:$rsd),
     "move32_dr_l\t$rt, $rsd", []> {
   let TSFlags{2-0} = 0b001;   // Slot 0 ALU
   let TSFlags{4-3} = 0b01;    // 32-bit width
-  let Itinerary = Slot0_ALU;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
   bits<4> rt;
   bits<4> rsd;
   let Inst{31, 30} = 0b01;
@@ -1509,7 +1509,7 @@ def MOVE32_DR_H : HaydnInst<4, (outs GPR32:$rt), (ins DR64:$rsd),
     "move32_dr_h\t$rt, $rsd", []> {
   let TSFlags{2-0} = 0b001;   // Slot 0 ALU
   let TSFlags{4-3} = 0b01;    // 32-bit width
-  let Itinerary = Slot0_ALU;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
   bits<4> rt;
   bits<4> rsd;
   let Inst{31, 30} = 0b01;

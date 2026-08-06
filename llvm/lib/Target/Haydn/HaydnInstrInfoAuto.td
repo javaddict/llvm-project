@@ -2486,7 +2486,7 @@ def X4SEL16 : FmtMAC<0x68, 0x0D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2, GPR32:$ra),
     "x4sel16	$rd, $rs1, $rs2, $ra", []> {
-  let Itinerary = Slot1_ALU;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
   let TSFlags{2-0} = 0b010;
 }
 
