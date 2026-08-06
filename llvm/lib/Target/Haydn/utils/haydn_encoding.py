@@ -839,7 +839,6 @@ def report(geometry: dict, placements: list[dict], target_dir: Path | None) -> s
     instructions = sorted({p["instruction"] for p in placements})
     by_shape: dict[tuple, int] = {}
     for p in placements:
-        failures += [f"{where}: {n}" for n in note]
         key = (p["entry_count"], p["entry_index"], p["unit"], p["type"])
         by_shape[key] = by_shape.get(key, 0) + 1
 
