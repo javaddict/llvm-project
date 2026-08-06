@@ -690,21 +690,25 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       report_fatal_error(Twine(OS.str()));
     }
     // AIEBaseAsmPrinter.cpp:161-164 — MCBundle.setOpcode(Format->Opcode).
-    // Product sole live row is BUNDLE128_FULL (N-format-ready: when more
-    // packet rows land, Format table selects Opcode; no hard-coded second
-    // product path here).
-    assert(Format->Opcode == Haydn::BUNDLE128_FULL &&
-           "product live format must be BUNDLE128_FULL (table-ready for N)");
-
+    // The "N-format-ready" note this used to carry is now cashed in: there are
+    // two packet rows, BUNDLE_E2 and BUNDLE_E3, and getFormatOrNull picked
+    // between them by asking which one covers the occupied slots. That IS the
+    // entry-count choice — a bundle holding P20/P21 can only be covered by
+    // BUNDLE_E2 and one holding P30/P31/P32 only by BUNDLE_E3, because the
+    // generated ConflictBits make the two sets mutually exclusive. Nothing
+    // here needs to know which is which.
     MCInst MCB;
     MCB.setOpcode(Format->Opcode);
 
-    // Emit in S0-S1-S2 encode order (BUNDLE128_FULL operand dag), not
-    // Format.getSlots() S2→S1→S0 MIR field order. Empty slots → NOP
-    // (AIE SlotInfo NOP peer; HaydnSlots NopOpc is 0 → Haydn::NOP).
-    for (unsigned K = 0; K < llvm::Haydn::ISSUE_SLOT_COUNT; ++K) {
-      MCSlotKind Slot = MCSlotKind(MCSlotKind::Haydn_SLOT_S0 +
-                                   static_cast<int>(K));
+    // Emit in operand-dag order. Format.getSlots() is in AsmString order,
+    // which is written high entry first ("$e1; $e0"), while the dag is
+    // (ins p20_entry:$e0, p21_entry:$e1) — low entry first. So walk the slot
+    // range backwards. Empty entries → NOP (AIE SlotInfo NOP peer). Note a
+    // 1-entry bundle cannot exist: format E has no one-entry form, so a lone
+    // instruction lands in BUNDLE_E2 and the other entry is NOP-padded here.
+    const auto &Slots = Format->getSlots();
+    for (const MCSlotKind *It = Slots.end(); It != Slots.begin();) {
+      MCSlotKind Slot = *--It;
       MCInst *Instr = Bundle.at(Slot);
       if (!Instr) {
         Instr = OutContext.createMCInst();

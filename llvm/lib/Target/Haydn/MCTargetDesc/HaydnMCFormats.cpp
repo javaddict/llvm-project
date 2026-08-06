@@ -96,11 +96,19 @@ SlotBits HaydnMCFormats::getLegalSlots(unsigned Opc) const {
   const std::vector<unsigned> *Alts = getAlternateInstsOpcode(Opc);
   if (!Alts)
     return 0;
+  // OR each member's OWN slot bit. This used to be `1 << Index`, which held
+  // only while the alternates vector was indexed by slot. Format E indexes it
+  // by placement — (entry position, unit) — so the index is not the slot and
+  // several members can share one. Same correction as
+  // fieldSlotsForMember in HaydnPlacementAlternative.h.
   SlotBits Bits = 0;
-  for (unsigned Index = 0, E = static_cast<unsigned>(Alts->size()); Index < E;
-       ++Index)
-    if ((*Alts)[Index] != 0)
-      Bits |= (SlotBits(1) << Index);
+  for (unsigned MemberOpc : *Alts) {
+    if (MemberOpc == 0)
+      continue; // sparse hole
+    MCSlotKind Kind = getSlotKind(MemberOpc);
+    if (Kind != MCSlotKind())
+      Bits |= SlotBits(1) << static_cast<unsigned>(Kind);
+  }
   return Bits;
 }
 
@@ -130,16 +138,16 @@ SlotBits HaydnMCFormats::getLegalSlots(unsigned Opc) const {
 //===----------------------------------------------------------------------===//
 
 MCSlotKind haydnSlotMaskToKind(SlotBits Mask) {
-  switch (Mask) {
-  case Haydn::SLOT0:
-    return MCSlotKind::Haydn_SLOT_S0;
-  case Haydn::SLOT1:
-    return MCSlotKind::Haydn_SLOT_S1;
-  case Haydn::SLOT2:
-    return MCSlotKind::Haydn_SLOT_S2;
-  default:
+  // A slot's occupancy mask is 1 << its MCSlotKind, by construction: the
+  // generated HaydnSlots table stamps SlotOccupancy from the enumerator's
+  // position. So the bridge is just "which bit", and it does not have to be
+  // respelled when the slot set changes — this used to be a three-case switch
+  // over Haydn::SLOT0/1/2 and would have needed five cases for format E.
+  //
+  // Only a single-slot mask names a kind; 0 and multi-bit sets do not.
+  if (Mask == 0 || !isPowerOf2_64(Mask))
     return MCSlotKind(MCSlotKind::SLOT_UNKNOWN);
-  }
+  return MCSlotKind(static_cast<int>(Log2_64(Mask)));
 }
 
 //===----------------------------------------------------------------------===//
@@ -151,7 +159,7 @@ MCSlotKind haydnSlotMaskToKind(SlotBits Mask) {
 // widths. `getHaydnFlexSlotFromName` also backs member-aware
 // `HaydnMCFormatsWithMII::getLegalSlots`.
 
-bool isHaydnBundle128TargetOpcode(unsigned Opc, const MCInstrInfo &MII) {
+bool isHaydnBundleTargetOpcode(unsigned Opc, const MCInstrInfo &MII) {
   // Format-member opcodes (self-describing via _S<k> name suffix) pass directly.
   if (getHaydnFlexSlotFromName(Opc, MII) >= 0)
     return true;
@@ -166,7 +174,7 @@ bool isHaydnBundle128TargetOpcode(unsigned Opc, const MCInstrInfo &MII) {
 // member-opcode-aware helpers
 //===----------------------------------------------------------------------===//
 //
-// The MC encoder's `Haydn::Bundle<MCInst>` shuffler (encodeBundle128) calls
+// The MC encoder's `Haydn::Bundle<MCInst>` shuffler (encodeBundleE) calls
 // `getLegalSlots(Opc)` on children that may already be format members
 // (AsmParser `.sN` or post-setDesc). Base getLegalSlots only has rows for
 // logicals; strip `_S<k>` to recover the logical base before the alts query.
@@ -328,14 +336,32 @@ HaydnBaseMCFormats::getMode0FormatDesc() const {
 }
 
 const MCFormatDesc &
-HaydnBaseMCFormats::getBundle128FormatDesc() const {
+HaydnBaseMCFormats::getCompositeFormatDesc(unsigned CompositeOpcode) const {
+  assert((CompositeOpcode == Haydn::BUNDLE_E2 ||
+          CompositeOpcode == Haydn::BUNDLE_E3) &&
+         "not a format E composite");
   // Sole packet-format authority: generated CodeGenFormat table.
-  return getFormatDesc(Haydn::BUNDLE128_FULL);
+  return getFormatDesc(CompositeOpcode);
 }
+
+// The generated slot enum and the hand-written masks in HaydnBaseInfo.h are two
+// spellings of the same thing (see haydnSlotMaskToKind). Tie them here so a
+// regenerated encoding that adds, drops or reorders a slot fails the build
+// rather than silently shifting every occupancy mask underneath the packer.
+static_assert(MCSlotKind::Haydn_SLOT_P20 == 0, "slot enum order changed");
+static_assert(MCSlotKind::Haydn_SLOT_P21 == 1, "slot enum order changed");
+static_assert(MCSlotKind::Haydn_SLOT_P30 == 2, "slot enum order changed");
+static_assert(MCSlotKind::Haydn_SLOT_P31 == 3, "slot enum order changed");
+static_assert(MCSlotKind::Haydn_SLOT_P32 == 4, "slot enum order changed");
 
 bool HaydnBaseMCFormats::isFormatAvailable(uint64_t SlotSet) const {
   ArrayRef<bool> Avail = getIsFormatAvailable();
   return SlotSet < Avail.size() && Avail[SlotSet];
+}
+
+const VLIWFormat *
+HaydnBaseMCFormats::getFormatByEntryCount(unsigned NumEntries) const {
+  return getPacketFormats().getFormatByEntryCount(NumEntries);
 }
 
 //===----------------------------------------------------------------------===//

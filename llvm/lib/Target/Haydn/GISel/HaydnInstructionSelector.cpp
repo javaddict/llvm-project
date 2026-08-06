@@ -13,7 +13,7 @@
 // not a correctness requirement. The selector does not bias regalloc toward
 // r0-r7: every 32-bit ALU32 op is constrained to the full GPR32RegClass
 // (r0-r15) uniformly. Emit logical opcodes; post-RA HR setDesc picks member
-// `_S*` / AltDesc forms. Encode is Desc-as-is via encodeBundle128. G-format
+// `_S*` / AltDesc forms. Encode is Desc-as-is via encodeBundleE. G-format
 // size optimization is not on the live path.
 //===----------------------------------------------------------------------===//
 
