@@ -16,7 +16,7 @@
 # (often r0) instead of lr.
 
 # CHECK: jal{{.*}}lr, forward_target
-# CHECK: FIXUP_HAYDN_CallSImm20
+# CHECK: FIXUP_HAYDN_WIDE_CallSImm20
 # ROUNDTRIP: jal{{.*}}lr,
 jal lr, forward_target
 

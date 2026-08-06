@@ -4,14 +4,14 @@
 # RUN: ld.lld %t.o -o %t --section-start=.text=0x10000
 # RUN: llvm-objdump -d --triple=haydn-unknown-elf %t | FileCheck %s
 #
-# REGRESSION: R_HAYDN_CallSImm20 must preserve JAL opcode under Bundle128
+# REGRESSION: R_HAYDN_WIDE_CallSImm20 must preserve JAL opcode under Bundle128
 # (linear imm20 at s0 bits[23:4], FieldLsb=4 / CB-82). Corrupted patches
 # disassemble as <unknown> or LUI.
 
 # RELOCS:      Relocations [
 # RELOCS-NEXT:   Section ({{.*}}) .rela.text {
-# RELOCS-DAG:      0x0 R_HAYDN_CallSImm20 callee 0x0
-# RELOCS-DAG:      0x10 R_HAYDN_CallSImm20 callee 0x0
+# RELOCS-DAG:      0x0 R_HAYDN_WIDE_CallSImm20 callee 0x0
+# RELOCS-DAG:      0x10 R_HAYDN_WIDE_CallSImm20 callee 0x0
 # RELOCS:        }
 # RELOCS-NEXT: ]
 

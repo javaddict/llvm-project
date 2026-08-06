@@ -19,7 +19,7 @@
 # `Opcode == 0x38` -> `Opcode == Haydn::JALR`
 # Range checks `0x20-0x2C` and `0x3B-0x42` replaced with explicit enum lists.
 #
-# This test verifies that JAL produces the correct R_HAYDN_CallSImm20 fixup
+# This test verifies that JAL produces the correct R_HAYDN_WIDE_CallSImm20 fixup
 # (not R_HAYDN_BranchSImm16, which was the JALR path, and not some wrong type
 # from the default path).
 #
@@ -39,21 +39,21 @@
 # Do NOT update CHECK lines without understanding the root cause.
 
 #===----------------------------------------------------------------------===#
-# JAL must produce R_HAYDN_CallSImm20 (20-bit call fixup)
+# JAL must produce R_HAYDN_WIDE_CallSImm20 (20-bit call fixup)
 # Before the fix, the comparison Opcode == 0x37 never matched Opcode == 975
 # so JAL fell through to the default which happened to be CallSImm20 too
 # but only by coincidence. The fix makes the intent explicit and correct.
 #===----------------------------------------------------------------------===#
 
 jal r0, external_func
-# CHECK:      {{.*}}: R_HAYDN_CallSImm20 external_func
+# CHECK:      {{.*}}: R_HAYDN_WIDE_CallSImm20 external_func
 
 #===----------------------------------------------------------------------===#
 # Second JAL to verify consistency
 #===----------------------------------------------------------------------===#
 
 jal r0, another_func
-# CHECK:      {{.*}}: R_HAYDN_CallSImm20 another_func
+# CHECK:      {{.*}}: R_HAYDN_WIDE_CallSImm20 another_func
 
 #===----------------------------------------------------------------------===#
 # LD32 with symbolic offset. routes asm-parse LD/ST to the 48-bit WIDE

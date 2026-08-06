@@ -85,4 +85,4 @@ body:             |
 
   bb.4.exit:
     liveins: $r15
-    $r0 = JALR_W $r15, 0, implicit $r15
+    $r0 = JALR $r15, 0, implicit $r15

@@ -6,7 +6,7 @@
 # PEI inserts `$r12 = LOADI32 <off>` immediately before each WITH_REG frame
 # access whose offset is outside the golden scaled-simm6 field. Callees may
 # clobber R12 (AT is not callee-saved). LateCleanup used to treat the pre-call
-# LOADI32 as still live after JAL_W (call Defs omitted R12 and CallLowering
+# LOADI32 as still live after JAL (call Defs omitted R12 and CallLowering
 # omitted the call-preserved regmask), delete the post-call remat, and leave
 # `ld32_reg..., sp, r12` reading a stale value (CoreMark core_init_matrix).
 #
@@ -53,7 +53,7 @@ body:             |
 
     ; Call clobbers R12 (implicit-def from Defs) and non-CSR regs (regmask).
     ; CSR_Haydn preserves $r8-$r11, $r15, $d8-$d15 — R12 is NOT preserved.
-    $r15 = JAL_W &__modsi3, csr_haydn, implicit-def $r1, implicit-def dead $r2, implicit-def dead $r3, implicit-def dead $r4, implicit-def dead $r5, implicit-def dead $r6, implicit-def dead $r7, implicit-def $r12, implicit-def dead $r14, implicit-def dead $d0, implicit-def dead $d1, implicit-def dead $d2, implicit-def dead $d3, implicit-def dead $d4, implicit-def dead $d5, implicit-def dead $d6, implicit-def dead $d7, implicit $r1, implicit $r2, implicit-def $r1
+    $r15 = JAL &__modsi3, csr_haydn, implicit-def $r1, implicit-def dead $r2, implicit-def dead $r3, implicit-def dead $r4, implicit-def dead $r5, implicit-def dead $r6, implicit-def dead $r7, implicit-def $r12, implicit-def dead $r14, implicit-def dead $d0, implicit-def dead $d1, implicit-def dead $d2, implicit-def dead $d3, implicit-def dead $d4, implicit-def dead $d5, implicit-def dead $d6, implicit-def dead $d7, implicit $r1, implicit $r2, implicit-def $r1
 
     ; Post-call PEI remat — LateCleanup must KEEP this.
     ; CHECK: $r12 = LOADI32 128

@@ -28,7 +28,7 @@
 ; CHECK: 	{ nop; ld32	r1, r1, 0; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	load_global, .Lfunc_end0-load_global
 ; CHECK:                                         // -- End function
@@ -43,7 +43,7 @@
 ; CHECK: 	{ nop; nop; st32	r1, r2, 0 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	store_global, .Lfunc_end1-store_global
 ; CHECK:                                         // -- End function
@@ -58,7 +58,7 @@
 ; CHECK: 	{ addi32	r1, r1, 20; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	gep_global, .Lfunc_end2-gep_global
 ; CHECK:                                         // -- End function
@@ -77,7 +77,7 @@
 ; CHECK: 	{ nop; ld64	d0, sp, 0; addi32_w	sp, sp, 8 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	load_global_i64, .Lfunc_end3-load_global_i64
 ; CHECK:                                         // -- End function
@@ -93,7 +93,7 @@
 ; CHECK: 	{ d_sw_h_with_imm	d0, r2, 0; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	store_global_i64, .Lfunc_end4-store_global_i64
 ; CHECK:                                         // -- End function
@@ -111,7 +111,7 @@
 ; CHECK: 	{ nop; nop; st32	r2, r1, 0 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end5:
 ; CHECK: 	.size	rmw_global, .Lfunc_end5-rmw_global
 ; CHECK:                                         // -- End function
@@ -129,7 +129,7 @@
 ; CHECK: 	{ add32	r1, r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end6:
 ; CHECK: 	.size	two_globals, .Lfunc_end6-two_globals
 ; CHECK:                                         // -- End function
@@ -144,7 +144,7 @@
 ; CHECK: 	{ nop; ld32	r1, r1, 0; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end7:
 ; CHECK: 	.size	load_local_const, .Lfunc_end7-load_local_const
 ; CHECK:                                         // -- End function
@@ -159,7 +159,7 @@
 ; CHECK: 	{ s_lw_pre_reg	r1, r2, r1; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end8:
 ; CHECK: 	.size	load_global_array, .Lfunc_end8-load_global_array
 ; CHECK:                                         // -- End function

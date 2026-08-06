@@ -16,7 +16,7 @@
 #
 # Root cause: the JALR_S0_FLEX slot field stores the signed 12-bit rs-relative
 # byte offset DIRECTLY (no /2 word-offset scaling on this format — matching
-# the WIDE JALR_W `calltarget_wide_ri12` Shift=0 semantics; the encoder routes
+# the WIDE JALR `calltarget_wide_ri12` Shift=0 semantics; the encoder routes
 # via getMachineOpValue which stores the raw value). The field only needs
 # sign-extension from 12 bits to render correctly.
 #

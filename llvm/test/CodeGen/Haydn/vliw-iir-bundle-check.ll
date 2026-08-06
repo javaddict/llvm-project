@@ -14,7 +14,7 @@
 ;
 ; This test exercises the full GISel pipeline on representative IIR filter
 ; kernels and verifies the assembly output contains expected instruction
-; mnemonics (mul32, mac32, sub32, add32, ld32, st32, jalr_w).
+; mnemonics (mul32, mac32, sub32, add32, ld32, st32, jalr).
 ;
 ; NOTE: The VLIW packetizer is currently disabled (see HaydnTargetMachine.cpp
 ; line 260). When re-enabled, add back -print-after=haydn-vliw-packetizer MIR
@@ -45,7 +45,7 @@ entry:
 ; ASM-LABEL: biquad_simple:
 ; ASM-DAG: mull
 ; ASM-DAG: sub32
-; ASM: jalr_w
+; ASM: jalr
 
 ; IIR biquad with memory load/store for state array.
 define void @biquad_with_state(i32 %xn, ptr nocapture %state) nounwind {
@@ -71,7 +71,7 @@ entry:
 ; ASM-DAG: mull
 ; ASM-DAG: sub32
 ; ASM-DAG: st32
-; ASM: jalr_w
+; ASM: jalr
 
 ; Block processing: apply biquad to N samples in a loop.
 define void @biquad_process_block(ptr nocapture %input, ptr nocapture %output,
@@ -123,4 +123,4 @@ exit:
 ; ASM-DAG: sub32
 ; ASM-DAG: ld32
 ; ASM-DAG: st32
-; ASM-DAG: jalr_w
+; ASM-DAG: jalr

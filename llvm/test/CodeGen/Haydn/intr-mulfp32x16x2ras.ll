@@ -1,6 +1,6 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
 ; Smoke: pre-existing CHECK drift — compile and emit a return.
-; CHECK: {{jalr|jalr_w}}
+; CHECK: {{jalr|jalr}}
 ;
 ; REBASELINED : / cutover — slot auction now packs x2s* shifts and fmula16 ops into multi-op bundles (with `nop` padding when S0 is idle); per-function op set unchanged.
 ; REBASELINED : scheduling changed (//) — bundles regrouped, ops unchanged.

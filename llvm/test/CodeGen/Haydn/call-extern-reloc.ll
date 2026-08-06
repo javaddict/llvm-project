@@ -11,7 +11,7 @@
 ; returned false unconditionally. Fixed by returning true to mirror RISC-V.
 ; But re-verification showed was NECESSARY BUT NOT SUFFICIENT: the
 ; extern symbol was STILL missing from.symtab entirely and the
-; R_HAYDN_CallSImm20 reloc still referenced symbol index 0 ("-").
+; R_HAYDN_WIDE_CallSImm20 reloc still referenced symbol index 0 ("-").
 ; * / : root cause found in the AsmPrinter. The Haydn
 ; AsmPrinter wraps EVERY instruction in a BUNDLE MCInst whose children are
 ; MCOperand::createInst operands. MCStreamer::emitInstruction only calls

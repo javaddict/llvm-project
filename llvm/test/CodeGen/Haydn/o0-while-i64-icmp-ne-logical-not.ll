@@ -62,7 +62,7 @@ define i32 @while_i64_ne_loop(i64 %x) {
 ; CHECK-NEXT:    { ld32 r1, sp, 28 } // 4-byte Folded Reload
 ; CHECK-NEXT:    { xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { addi32_w sp, sp, 32 }
-; CHECK-NEXT:    { jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { jalr r0, lr, 0 }
 entry:
   br label %while.cond
 
@@ -119,7 +119,7 @@ define i32 @while_i64_sge_loop(i64 %x) {
 ; CHECK-NEXT:    { ld32 r1, sp, 28 } // 4-byte Folded Reload
 ; CHECK-NEXT:    { xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { addi32_w sp, sp, 32 }
-; CHECK-NEXT:    { jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { jalr r0, lr, 0 }
 entry:
   br label %while.cond
 
@@ -174,7 +174,7 @@ define i32 @while_i64_sle_loop(i64 %x) {
 ; CHECK-NEXT:    { ld32 r1, sp, 28 } // 4-byte Folded Reload
 ; CHECK-NEXT:    { xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { addi32_w sp, sp, 32 }
-; CHECK-NEXT:    { jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { jalr r0, lr, 0 }
 entry:
   br label %while.cond
 

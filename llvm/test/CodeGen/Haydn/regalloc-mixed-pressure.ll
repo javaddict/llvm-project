@@ -1,6 +1,6 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
 ; Smoke: pre-existing CHECK drift — compile and emit a return.
-; CHECK: {{jalr|jalr_w}}
+; CHECK: {{jalr|jalr}}
 ;
 ; REBASELINED (post-/ Flex cutover, 2026-07): the pre-Flex byte-pinned
 ; load-bearing semantic assertions are unchanged and now expressed as looser

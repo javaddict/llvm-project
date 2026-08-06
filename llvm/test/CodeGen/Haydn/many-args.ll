@@ -15,7 +15,7 @@ declare void @sink_i64(i64)
 define void @exactly_8_args(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
                             i32 %a4, i32 %a5, i32 %a6, i32 %a7) nounwind {
 ; CHECK-LABEL: exactly_8_args:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   ret void
 }
 
@@ -25,14 +25,14 @@ define void @too_many_i32(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
                           i32 %a8, i32 %a9, i32 %a10, i32 %a11,
                           i32 %a12, i32 %a13, i32 %a14, i32 %a15) nounwind {
 ; CHECK-LABEL: too_many_i32:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   ret void
 }
 
 ;Calling with many i32 arguments
 define void @call_many_i32() nounwind {
 ; CHECK-LABEL: call_many_i32:
-; CHECK: jal_w{{(\.s[012])?}}
+; CHECK: jal{{(\.s[012])?}}
 entry:
   call void @sink_i32(i32 1)
   call void @sink_i32(i32 2)
@@ -46,7 +46,7 @@ define i32 @sum_8_args(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
                        i32 %a4, i32 %a5, i32 %a6, i32 %a7) nounwind {
 ; CHECK-LABEL: sum_8_args:
 ; CHECK: add32
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %s1 = add i32 %a0, %a1
   %s2 = add i32 %s1, %a2
   %s3 = add i32 %s2, %a3
@@ -62,7 +62,7 @@ define void @too_many_i64(i64 %a0, i64 %a1, i64 %a2, i64 %a3,
                           i64 %a4, i64 %a5, i64 %a6, i64 %a7,
                           i64 %a8) nounwind {
 ; CHECK-LABEL: too_many_i64:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   ret void
 }
 
@@ -97,13 +97,13 @@ define i32 @no_args() nounwind {
 ;Single i32 argument
 define i32 @one_arg(i32 %a) nounwind {
 ; CHECK-LABEL: one_arg:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   ret i32 %a
 }
 
 ;Single i64 argument
 define i64 @one_i64_arg(i64 %a) nounwind {
 ; CHECK-LABEL: one_i64_arg:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   ret i64 %a
 }

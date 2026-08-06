@@ -15,7 +15,7 @@
 #   R_HAYDN_32_PCREL       - PC-relative 32-bit (in .data)
 #   R_HAYDN_HI12 / R_HAYDN_LO20 - address materialization pair (LUI+ADDI32)
 #   R_HAYDN_WIDE_BranchSImm12_RI - conditional branch (Bundle128, PC-rel)
-#   R_HAYDN_CallSImm20     - JAL call (20-bit, halfword-aligned, PC-rel)
+#   R_HAYDN_WIDE_CallSImm20     - JAL call (20-bit, halfword-aligned, PC-rel)
 #
 # Uses --section-start=.text=0x10000 for deterministic addresses.
 # .globl on branch/call targets forces the assembler to emit relocations
@@ -24,7 +24,7 @@
 # ---------------------------------------------------------------------------
 # Verify the assembler emits the expected relocation types.
 # ---------------------------------------------------------------------------
-# RELOCS-DAG: R_HAYDN_CallSImm20 callee
+# RELOCS-DAG: R_HAYDN_WIDE_CallSImm20 callee
 # RELOCS-DAG: R_HAYDN_WIDE_BranchSImm12_RI branch_target
 # RELOCS-DAG: R_HAYDN_HI12 target_data
 # RELOCS-DAG: R_HAYDN_LO20 target_data
@@ -32,7 +32,7 @@
 # RELOCS-DAG: R_HAYDN_32_PCREL _start
 
 # ---------------------------------------------------------------------------
-# Section 1: R_HAYDN_CallSImm20 — JAL call relocation
+# Section 1: R_HAYDN_WIDE_CallSImm20 — JAL call relocation
 # Linear 20-bit encoding: offset>>1 stored in Inst[19:0].
 # ---------------------------------------------------------------------------
 
@@ -91,7 +91,7 @@ branch_target:
     .size _start, .-_start
 
 # ---------------------------------------------------------------------------
-# Callee function — target for JAL (R_HAYDN_CallSImm20) test
+# Callee function — target for JAL (R_HAYDN_WIDE_CallSImm20) test
 # ---------------------------------------------------------------------------
 
     .globl callee

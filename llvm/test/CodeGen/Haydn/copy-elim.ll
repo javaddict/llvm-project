@@ -15,7 +15,7 @@
 
 define i32 @identity_copy_test(i32 %a) nounwind {
 ; CHECK-LABEL: identity_copy_test:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   ret i32 %a
 }
 
@@ -27,7 +27,7 @@ define i32 @dead_copy_test(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: dead_copy_test:
 ; The function body should not contain redundant copies; just the
 ; arithmetic and return.
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %r = add i32 %a, %b
   ret i32 %r
 }
@@ -41,7 +41,7 @@ define i32 @copy_to_r0_test() nounwind {
 ; CHECK-LABEL: copy_to_r0_test:
 ; Soft-zero entry + return via JALR discarding link into R0 (function exit).
 ; CHECK: xor32{{.*}}r0, r0, r0
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   ret i32 0
 }
 
@@ -49,7 +49,7 @@ define i32 @copy_to_r0_test() nounwind {
 
 define i32 @multi_return(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: multi_return:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %then, label %else
 
@@ -68,7 +68,7 @@ define i32 @csr_restore_test(i32 %a) nounwind {
 ; CHECK-LABEL: csr_restore_test:
 ; The function must preserve callee-saved registers, so COPYs restoring
 ; them from the stack should remain (they are not dead).
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %r = mul i32 %a, %a
   ret i32 %r
 }

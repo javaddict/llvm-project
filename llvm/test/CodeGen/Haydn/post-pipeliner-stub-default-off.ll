@@ -10,9 +10,9 @@
 ; (SMS disabled, longer chain).
 
 ; OFF-LABEL: add_loop:
-; OFF: jalr_w
+; OFF: jalr
 ; ON-LABEL: add_loop:
-; ON: jalr_w
+; ON: jalr
 
 define i32 @add_loop(i32* nocapture readonly %a, i32 %n) {
 entry:

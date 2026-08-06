@@ -29,4 +29,4 @@ callee:
 # CHECK-NOT: r12
 # CHECK-NOT: xor32
 # CHECK-NOT: lui_w
-# CHECK-NOT: jalr_w
+# CHECK-NOT: jalr

@@ -1,6 +1,6 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
 ; Smoke: pre-existing CHECK drift — compile and emit a return.
-; CHECK: {{jalr|jalr_w}}
+; CHECK: {{jalr|jalr}}
 ;
 ;
 ; NOTE: updated for VLIW slot-1 load promotion — independent loads now pack as ld32+ld32.

@@ -35,7 +35,7 @@ define void @tiny_body(ptr nocapture %p, i32 %n) {
 ; Body bundle 3 carries the inclusive END.
 ; CHECK: [[END]]:
 ; CHECK: { nop; nop; nop }
-; CHECK: jalr_w
+; CHECK: jalr
 entry:
   br label %loop
 loop:

@@ -620,21 +620,21 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         if (!GotTarget)
           llvm_unreachable("B pseudo in BUNDLE has no MBB operand");
       } else if (ChildOpc == Haydn::RET) {
-        ChildInst->setOpcode(Haydn::JALR_W);
+        ChildInst->setOpcode(Haydn::JALR);
         ChildInst->addOperand(MCOperand::createReg(Haydn::R0));
         ChildInst->addOperand(MCOperand::createReg(Haydn::R15));
         ChildInst->addOperand(MCOperand::createImm(0));
       } else if (ChildOpc == Haydn::BR_JT) {
         // Jump-table branch → JALR_W R0, addr, 0 (emitInstruction peer).
         Register AddrReg = I->getOperand(0).getReg();
-        ChildInst->setOpcode(Haydn::JALR_W);
+        ChildInst->setOpcode(Haydn::JALR);
         ChildInst->addOperand(MCOperand::createReg(Haydn::R0));
         ChildInst->addOperand(MCOperand::createReg(AddrReg));
         ChildInst->addOperand(MCOperand::createImm(0));
       } else if (ChildOpc == Haydn::PseudoCALLIndirect) {
         // Fnptr call → JALR_W R15, rs, 0 (emitInstruction peer).
         Register Rs = I->getOperand(1).getReg();
-        ChildInst->setOpcode(Haydn::JALR_W);
+        ChildInst->setOpcode(Haydn::JALR);
         ChildInst->addOperand(MCOperand::createReg(Haydn::R15));
         ChildInst->addOperand(MCOperand::createReg(Rs));
         ChildInst->addOperand(MCOperand::createImm(0));
@@ -767,7 +767,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     // encoding_manual.md §5.5 Class 001). The legacy Haydn32 FmtJR parcel is
     // being purged from CodeGen selection.
     MCInst Tmp;
-    Tmp.setOpcode(Haydn::JALR_W);
+    Tmp.setOpcode(Haydn::JALR);
     Tmp.addOperand(MCOperand::createReg(Haydn::R0));  // rd = R0 (discard)
     Tmp.addOperand(MCOperand::createReg(Haydn::R15)); // rs = R15 (LR)
     Tmp.addOperand(MCOperand::createImm(0));           // target = 0 (no offset)
@@ -782,7 +782,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     // register operand directly. / Phase 1a: 48-bit WIDE form.
     Register AddrReg = MI->getOperand(0).getReg();
     MCInst Tmp;
-    Tmp.setOpcode(Haydn::JALR_W);
+    Tmp.setOpcode(Haydn::JALR);
     Tmp.addOperand(MCOperand::createReg(Haydn::R0));     // rd = R0 (discard link)
     Tmp.addOperand(MCOperand::createReg(AddrReg));       // rs = target address
     Tmp.addOperand(MCOperand::createImm(0));             // offset = 0
@@ -804,7 +804,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     // Phase 1a: 48-bit WIDE form.
     Register Rs = MI->getOperand(1).getReg();
     MCInst Tmp;
-    Tmp.setOpcode(Haydn::JALR_W);
+    Tmp.setOpcode(Haydn::JALR);
     Tmp.addOperand(MCOperand::createReg(Haydn::R15)); // rd = R15 (link)
     Tmp.addOperand(MCOperand::createReg(Rs));         // rs = function pointer
     Tmp.addOperand(MCOperand::createImm(0));          // offset = 0

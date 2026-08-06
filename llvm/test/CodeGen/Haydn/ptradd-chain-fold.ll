@@ -7,7 +7,7 @@
 ; CHECK: // %bb.0:
 ; CHECK: 	{ xor32 r0, r0, r0; nop; nop }
 ; CHECK: { addi32{{(_w)?}} r1, r1, 20; nop; nop }
-; CHECK: 	{ nop; nop; jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	test_chain, .Lfunc_end0-test_chain
 ; CHECK: 	.cfi_endproc

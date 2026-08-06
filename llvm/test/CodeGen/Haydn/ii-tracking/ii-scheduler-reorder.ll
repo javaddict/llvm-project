@@ -60,7 +60,7 @@ define void @ii_scheduler_reorder(ptr %a, ptr %b, ptr %c, i32 %n) {
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { nop; nop; addi32_w sp, sp, 8 }
-; CHECK-NEXT:    { nop; nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; nop; jalr r0, lr, 0 }
 entry:
   br label %loop
 

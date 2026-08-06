@@ -6,9 +6,9 @@
 ; Bug #19: G_MUL <s64> from `(int64_t)(int32_t)a * (int32_t)b` was lowered to
 ; LIBCALL_MUL64 -> JAL __muldi3, but no runtime stub exists for __muldi3
 ; (llvm-libc / compiler-rt provides the 8 division stubs but no multiply
-; stub). The jal_w target therefore resolved to ELF symbol index 0 (null) and
+; stub). The jal target therefore resolved to ELF symbol index 0 (null) and
 ; every FIR/IIR/Q31 kernel using the C widening multiply crashed at runtime
-; (jal_w -> 0x0), plus the call cost 30-50 cycles. Fix : in
+; (jal -> 0x0), plus the call cost 30-50 cycles. Fix : in
 ; HaydnLegalizerInfo::legalizeCustom, when G_MUL <s64> operands both trace to
 ; a G_SEXT/G_ZEXT/G_ANYEXT of an s32 value, emit a native MUL64 widening op
 ; directly into DR64.
@@ -30,10 +30,10 @@
 ; 64-bit result equals the signed x signed 32x32 product, so MUL64_LL.
 define i64 @widen_mul_sext_i32_i64(i32 %a, i32 %b) {
 ; CHECK-LABEL: widen_mul_sext_i32_i64:
-; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3
-; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__mulsi3
+; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__mulsi3
 ; CHECK: mul64.ll{{.*}}
-; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
   %aa = sext i32 %a to i64
   %bb = sext i32 %b to i64
   %m = mul i64 %aa, %bb
@@ -49,8 +49,8 @@ define i64 @widen_mul_sext_i32_i64(i32 %a, i32 %b) {
 ; here; only ULUL is unsigned x unsigned.)
 define i64 @widen_mul_zext_i32_i64(i32 %a, i32 %b) {
 ; CHECK-LABEL: widen_mul_zext_i32_i64:
-; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3
-; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__mulsi3
+; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__mulsi3
 ; CHECK: mul64.ulul{{.*}}
   %aa = zext i32 %a to i64
   %bb = zext i32 %b to i64
@@ -65,7 +65,7 @@ define i64 @widen_mul_zext_i32_i64(i32 %a, i32 %b) {
 ; extension kind when all partials are unsigned.
 define i64 @widen_mul_mixed_ext_i32_i64(i32 %a, i32 %b) {
 ; CHECK-LABEL: widen_mul_mixed_ext_i32_i64:
-; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
 ; CHECK: mul64.ulul{{.*}}
   %aa = sext i32 %a to i64
   %bb = zext i32 %b to i64
@@ -78,7 +78,7 @@ define i64 @widen_mul_mixed_ext_i32_i64(i32 %a, i32 %b) {
 ; if fusion misses. Either way it must NOT be a libcall.
 define i64 @widen_mul_acc_i32_i64(i32 %a, i32 %b, i64 %acc) {
 ; CHECK-LABEL: widen_mul_acc_i32_i64:
-; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
 ; CHECK-DAG: mul{{64\.ll|a64\.ll}}
   %aa = sext i32 %a to i64
   %bb = sext i32 %b to i64
@@ -91,7 +91,7 @@ define i64 @widen_mul_acc_i32_i64(i32 %a, i32 %b, i64 %acc) {
 ; MULA64_ULUL (Wave T5.1). MULA64_ULL is u×s and must NOT be selected.
 define i64 @widen_mul_acc_zext_i32_i64(i32 %a, i32 %b, i64 %acc) {
 ; CHECK-LABEL: widen_mul_acc_zext_i32_i64:
-; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
 ; CHECK: mula64.ulul
   %aa = zext i32 %a to i64
   %bb = zext i32 %b to i64

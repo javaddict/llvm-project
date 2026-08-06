@@ -48,7 +48,7 @@
 ; CHECK: 	{ movt64	d0, d0; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	test_slt64_movt64, .Lfunc_end0-test_slt64_movt64
 ; CHECK: 	.cfi_endproc
@@ -65,7 +65,7 @@
 ; CHECK: 	{ movf64	d0, d0; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	test_sle64_movf64, .Lfunc_end1-test_sle64_movf64
 ; CHECK: 	.cfi_endproc
@@ -81,7 +81,7 @@
 ; CHECK: 	{ seq64	d0, d0; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	test_seq64, .Lfunc_end2-test_seq64
 ; CHECK: 	.cfi_endproc
@@ -97,7 +97,7 @@
 ; CHECK: 	{ movesfr2gpr	r1; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	test_movesfr2gpr, .Lfunc_end3-test_movesfr2gpr
 ; CHECK: 	.cfi_endproc
@@ -113,7 +113,7 @@
 ; CHECK: 	{ movegpr2sfr	r1; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	test_movegpr2sfr, .Lfunc_end4-test_movegpr2sfr
 ; CHECK: 	.cfi_endproc
@@ -129,7 +129,7 @@
 ; CHECK: 	{ zero_sfr; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end5:
 ; CHECK: 	.size	test_zero_sfr, .Lfunc_end5-test_zero_sfr
 ; CHECK: 	.cfi_endproc

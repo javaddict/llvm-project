@@ -1,6 +1,6 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
 ; Smoke: pre-existing CHECK drift — compile and emit a return.
-; CHECK: {{jalr|jalr_w}}
+; CHECK: {{jalr|jalr}}
 ;
 ; NOTE: -verify-machineinstrs is disabled due to known G_PHI selection issue
 

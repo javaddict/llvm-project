@@ -5,7 +5,7 @@
 ; CHECK-LABEL: test_direct_return:                     // @test_direct_return
 ; CHECK: // %bb.0:                               // %entry
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	test_direct_return, .Lfunc_end0-test_direct_return
 ; CHECK:                                         // -- End function

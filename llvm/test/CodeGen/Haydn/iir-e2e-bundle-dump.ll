@@ -113,8 +113,8 @@ entry:
 ; ASM-DAG: st32{{.*}}{{r[0-9]+|fp}}, r7,
 
 ; Return value: the final sub32 leaves the result directly in r1 (no separate
-; move needed). Epilogue returns via jalr_w.
-; ASM: jalr_w{{.*}}r0, lr, 0
+; move needed). Epilogue returns via jalr.
+; ASM: jalr{{.*}}r0, lr, 0
 
 ; === Objdump-level checks ===
 ; Verify the ELF object disassembles correctly, catching encoding/decoding bugs.
@@ -128,4 +128,4 @@ entry:
 ; OBJDUMP-DAG: mull
 ; OBJDUMP-DAG: mull
 ; OBJDUMP-DAG: sub32
-; OBJDUMP-DAG: jalr_w{{.*}}r0, lr, 0
+; OBJDUMP-DAG: jalr{{.*}}r0, lr, 0

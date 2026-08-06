@@ -20,7 +20,7 @@
 ; CHECK: 	{ nop; nop; st64	d0, r2, 0 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	dual_load_i64, .Lfunc_end0-dual_load_i64
 ; CHECK: 	.cfi_endproc

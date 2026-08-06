@@ -11,7 +11,7 @@ define i32 @critical_path_priority(i32 %a, i32 %b) {
 ; remains for the %x dependency.
 ; CHECK-DAG: add32
 ; CHECK-DAG: addi32{{(_w)?}} {{.*}}, 36
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 ; CHECK: .Lfunc_end0:
   %a1 = add i32 %a, 1
   %a2 = add i32 %a1, 2

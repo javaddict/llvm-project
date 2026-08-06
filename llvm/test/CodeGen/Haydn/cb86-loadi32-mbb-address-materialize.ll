@@ -7,7 +7,7 @@
 ; MO.isImm (constant materialization via HaydnMatInt). BranchRelaxation's
 ; insertIndirectBranch (HaydnInstrInfo.cpp) emits
 ; LOADI32 scratch, <dest_addr>.addMBB(&NewDestBB)
-; JALR_W R0, scratch, 0
+; JALR R0, scratch, 0
 ; to relax an out-of-range branch into an indirect jump. The isMBB operand
 ; fell through the isImm-only path and the address load emitted NOTHING
 ; scratch held a stale value (e.g. 0xFFFD0) and the jalr jumped to garbage.
@@ -28,7 +28,7 @@
 ; entry->exit distance (~4800 bytes) exceeds the FIXUP_HAYDN_WIDE_BranchSImm12
 ; reach (+/-4KB), so BranchRelaxation must rewrite it into an indirect-jump
 ; trampoline (LOADI32 + JALR via insertIndirectBranch). The KEY guard
-; is the CHECK-LUI / CHECK-ADDI32_W pair immediately preceding the jalr_w:
+; is the CHECK-LUI / CHECK-ADDI32_W pair immediately preceding the jalr:
 ; before the fix, the LOADI32 was dropped and NO lui/addi32{{(_w)?}} materialized
 ; the target (the jalr jumped to a stale register). After the fix, the
 ; block-address is materialized. The RUN line itself also guards the
@@ -47,7 +47,7 @@ define void @cb86_loadi32_mbb_address_materialize(i32 %a, i32 %b) nounwind {
 ; regression guard: before the fix, no lui/addi32{{(_w)?}} preceded the jalr.
 ; CHECK: lui
 ; CHECK: addi32{{(_w)?}}
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %exit, label %pad

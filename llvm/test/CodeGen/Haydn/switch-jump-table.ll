@@ -15,10 +15,10 @@
 ; Previously, jump tables were disabled entirely (getMinimumJumpTableEntries = max
 ; areJTsAllowed = false). This test verifies that:
 ; 1. Dense switches produce jump table sequences (lui+addi32{{(_w)?}} jt_base, slli32
-; scale, add32 addr, ld32 target, jalr_w indirect_branch). The JT base MUST use
+; scale, add32 addr, ld32 target, jalr indirect_branch). The JT base MUST use
 ; the full lui+addi32{{(_w)?}} pair (HI12+LO20 fixups); a lone `addi32 rN, r0,.LJTI`
 ; only carries LO16 and cannot reach.rodata (/ : the linker
-; resolved the base to 0xFFF80100 → OOB load → jalr_w 0 → NOEXIT).
+; resolved the base to 0xFFF80100 → OOB load → jalr 0 → NOEXIT).
 ; 2. Jump table data sections (.rodata with.long entries) are emitted
 ; 3. Sparse switches below the threshold still use comparison chains (seq32/slt32)
 ; 4. The machine verifier passes with -verify-machineinstrs (BR_JT successor list)
@@ -46,7 +46,7 @@
 ; CHECK: 	{ 	addi32{{(_w)?}}	r2, r2, .LJTI0_0 }
 ; CHECK: 	{ 	add32	r1, r2, r1 }
 ; CHECK: 	{ 	ld32	r1, r1, 0 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, r1, 0 }
+; CHECK: 	{ 	jalr{{(\.s[012])?}}	r0, r1, 0 }
 ; CHECK: .LBB0_2:                                // %bb0
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 10 }
@@ -84,7 +84,7 @@
 ; CHECK: .LBB0_11:                               // %bb0
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	sp, sp, 8 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ 	jalr{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	switch_jt_8, .Lfunc_end0-switch_jt_8
 ; CHECK: 	.section	.rodata,"a",@progbits
@@ -132,7 +132,7 @@
 ; CHECK: .LBB1_7:                                // %bb1
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	sp, sp, 8 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ 	jalr{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	switch_small_no_jt, .Lfunc_end1-switch_small_no_jt
 ; CHECK:                                         // -- End function
@@ -153,7 +153,7 @@
 ; CHECK: 	{ 	addi32{{(_w)?}}	r3, r3, .LJTI2_0 }
 ; CHECK: 	{ 	add32	r2, r3, r2 }
 ; CHECK: 	{ 	ld32	r2, r2, 0 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, r2, 0 }
+; CHECK: 	{ 	jalr{{(\.s[012])?}}	r0, r2, 0 }
 ; CHECK: .LBB2_2:                                // %bb10
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 1 }
@@ -171,7 +171,7 @@
 ; CHECK: .LBB2_6:                                // %bb12
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	sp, sp, 8 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ 	jalr{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	switch_jt_offset, .Lfunc_end2-switch_jt_offset
 ; CHECK: 	.section	.rodata,"a",@progbits
@@ -197,7 +197,7 @@
 ; CHECK: 	{ 	addi32{{(_w)?}}	r2, r2, .LJTI3_0 }
 ; CHECK: 	{ 	add32	r1, r2, r1 }
 ; CHECK: 	{ 	ld32	r1, r1, 0 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, r1, 0 }
+; CHECK: 	{ 	jalr{{(\.s[012])?}}	r0, r1, 0 }
 ; CHECK: .LBB3_2:                                // %bb0
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 100 }
@@ -219,7 +219,7 @@
 ; CHECK: .LBB3_7:                                // %bb0
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	sp, sp, 8 }
-; CHECK: 	{ 	jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ 	jalr{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	switch_jt_with_default, .Lfunc_end3-switch_jt_with_default
 ; CHECK: 	.section	.rodata,"a",@progbits

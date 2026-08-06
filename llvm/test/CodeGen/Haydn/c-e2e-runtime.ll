@@ -2,7 +2,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 -verify-machineinstrs -filetype=obj %s -o %t.o && \
 ; RUN:   llvm-objdump -d %t.o | FileCheck %s
 ; XFAIL RESOLVED (, binary `e01004df`): the Bundle128 standalone
-; parcel decoder-dispatch gap (re-filed 2026-07 post-, where add32/jal_w
+; parcel decoder-dispatch gap (re-filed 2026-07 post-, where add32/jal
 ; were rendered as nop chains) was CLOSED by the commit series
 ; specifically `e01004df994d` "fix multi-op Bundle128 decode — widen gate +
 ; map legacy→_FLEX" + `2c9c00ce8eaa` "cutover encoder/decoder to AIE two-step
@@ -13,7 +13,7 @@
 ; Phase-2 decoder purge collateral (prior revision): real decoder gap on
 ; CodeGen-emitted bytes. The test_div libcall setup emits legacy 4-byte
 ; parcels (ld32/st32/spill seq) whose Haydn32 decoder probes were deleted
-; so objdump renders `<unknown>` for those parcels. The add32/sub32/jal_w
+; so objdump renders `<unknown>` for those parcels. The add32/sub32/jal
 ; instructions SURVIVE. Real bug on a SURVIVING emit path; tracked here;
 ; do NOT weaken the CHECKs.
 ;
@@ -90,10 +90,10 @@ define i32 @test_call(i32 %x) {
   ret i32 %result
 }
 ; CHECK-LABEL: <test_call>:
-; Post-migration (R10): function calls emit `c.jal_w` (compressed) or `jal_w`
-; depending on reachability; the return is `jalr_w r0, lr, 0`. Accept either
+; Post-migration (R10): function calls emit `c.jal` (compressed) or `jal`
+; depending on reachability; the return is `jalr r0, lr, 0`. Accept either
 ; call form.
-; CHECK-DAG: jal_w{{(\.s[012])?}}
+; CHECK-DAG: jal{{(\.s[012])?}}
 
 ; Control flow — should emit branch instructions
 define i32 @abs_val(i32 %x) {
@@ -120,8 +120,8 @@ define i32 @test_div(i32 %a, i32 %b) {
 ; CHECK-LABEL: <test_div>:
 ; Post-R10 migration: the libcall stack save/restore produces some
 ; <unknown> objdump fragments (decoder gap on the new Mode-0 layout for
-; the call-setup sequence), but the call itself still emits a jal_w-family
+; the call-setup sequence), but the call itself still emits a jal-family
 ; instruction. The load-bearing assertion is that the div libcall is
 ; reached via a jump instruction; the byte-exact decode of the spill
 ; sequence is tracked separately.
-; CHECK-DAG: jal_w{{(\.s[012])?}}
+; CHECK-DAG: jal{{(\.s[012])?}}

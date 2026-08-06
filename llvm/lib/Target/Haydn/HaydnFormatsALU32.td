@@ -1099,25 +1099,37 @@ def BLTU_S0 : HaydnFU_ALU32_S0_RI12<0b0111001,
 
 } // isBranch, isTerminator
 
-// #58 JAL (I20: rt,imm20). : the imm20 field stores the signed 20-bit
-// PC-relative byte offset directly (no ÷2 scaling on this slot format, unlike
-// legacy JAL). calltarget_s0 sign-extends the field on decode so negative
-// call offsets render correctly (-5084, not 1043492). The encoder side is
-// unchanged (default getMachineOpValue raw encode = byte-identical).
+// JAL/JALR carry the caller-saved clobber set and the call flags for the same
+// reason their retired `_W_S0` peers did: the member's MCInstrDesc is the one
+// that survives to AsmPrinter. JALR needs isBarrier per CB-129 so
+// MachineBlockPlacement does not treat an unanalyzable indirect jump as
+// fallthrough. R15 (LR) is the explicit $rt output, not an implicit def; R14 is
+// clobbered via regmask only.
+let Defs = [R1, R2, R3, R4, R5, R6, R7, R12,
+            D0, D1, D2, D3, D4, D5, D6, D7] in {
+
+// #58 JAL (I20: rt,imm20). The imm20 field stores the PC-relative offset in
+// 2-byte units (§5.14 D1), so it reaches ±1MB — brtarget_wide_i20 is the class
+// that scales, and it is the shape the database keeps (JAL branch_scale 2).
+// The `calltarget_s0` this used to take stored the byte offset raw, which
+// round-tripped with itself but halved the reach and disagreed with the
+// database.
+let isCall = 1 in
 def JAL_S0 : HaydnFU_ALU32_S0_I20<0b0111010,
-    (outs GPR32:$rt), (ins calltarget_s0:$imm20),
+    (outs GPR32:$rt), (ins brtarget_wide_i20:$imm20),
     "jal\t$rt, $imm20", []>;
 
-// #59 JALR (RI12: rt,rs,imm12). residual: the imm12 field stores the
-// signed 12-bit rs-relative BYTE offset directly (no ÷2 scaling on this slot
-// format, matching the WIDE JALR_W `calltarget_wide_ri12` Shift=0). The prior
-// `simm12` operand has no DecoderMethod, so the tablegen default stored the
-// raw 12-bit field UNSIGNED (-100 -> 3996). calltarget_s0_ri12 sign-extends
-// the field on decode so negative offsets render correctly. The encoder side
-// is unchanged (default getMachineOpValue raw encode = byte-identical).
+// #59 JALR (RI12: rt,rs,imm12). The imm12 field stores the signed 12-bit
+// rs-relative BYTE offset directly — no ÷2 on this one, which is why the
+// database gives JALR branch_scale 1 while every other control transfer gets
+// 2. calltarget_wide_ri12 sign-extends on decode (the plain `simm12` default
+// stored the field UNSIGNED: -100 rendered as 3996).
+let isTerminator = 1, isBarrier = 1, isCall = 1, isIndirectBranch = 1 in
 def JALR_S0 : HaydnFU_ALU32_S0_RI12<0b0111011,
-    (outs GPR32:$rt), (ins GPR32:$rs, calltarget_s0_ri12:$imm12),
+    (outs GPR32:$rt), (ins GPR32:$rs, calltarget_wide_ri12:$imm12),
     "jalr\t$rt, $rs, $imm12", []>;
+
+} // Defs = caller-saved clobbers for calls
 
 // #60 SET_HWLOOP (HWLRIII: loop_id, count, target — TODO(spec) field split)
 def SET_HWLOOP_S0 : HaydnFU_ALU32_S0_HWLOOP<0b0111100,

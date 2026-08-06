@@ -28,6 +28,6 @@ far_target:
 # CHECK-NOT: subi32
 # CHECK-NOT: st32
 # CHECK-NOT: lui_w
-# CHECK-NOT: jalr_w
+# CHECK-NOT: jalr
 # CHECK-LABEL: <far_target>:
 # CHECK: {{.*}} add32

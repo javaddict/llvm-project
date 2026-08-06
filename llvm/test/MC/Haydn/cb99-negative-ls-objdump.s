@@ -13,7 +13,7 @@ cb99_negative_ls_objdump:
     { st32 r1, r10, -4; nop; nop }
     { ldu8 r1, r10, -1; nop; nop }
     { st8 r1, r10, -1; nop; nop }
-    { jalr_w r0, lr, 0; nop; nop }
+    { jalr r0, lr, 0; nop; nop }
     .size cb99_negative_ls_objdump, .-cb99_negative_ls_objdump
 
 # CHECK: ld32{{.*}}r1,{{.*}}r10,{{.*}}-4

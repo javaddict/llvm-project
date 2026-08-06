@@ -10,7 +10,7 @@
 ; CHECK: 	{ add32 r1, r1, r2; add64 d0, d0, d1; nop }
 ; CHECK: 	{ nop; nop; st32	r1, r3, 0 }
 ; CHECK: 	{ nop; nop; st64	d0, r4, 0 }
-; CHECK: 	{ nop; nop; jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	test_independent_alu_cross_slot, .Lfunc_end0-test_independent_alu_cross_slot
 ; CHECK: 	.cfi_endproc

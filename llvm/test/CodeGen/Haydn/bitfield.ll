@@ -30,7 +30,7 @@
 ; CHECK: 	{ srli32	r1, r1, 4; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	extract_bits, .Lfunc_end0-extract_bits
 ; CHECK: 	.cfi_endproc
@@ -46,7 +46,7 @@
 ; CHECK: 	{ andi32	r1, r1, 255; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	extract_low_bits, .Lfunc_end1-extract_low_bits
 ; CHECK: 	.cfi_endproc
@@ -62,7 +62,7 @@
 ; CHECK: 	{ srli32	r1, r1, 24; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	extract_high_bits, .Lfunc_end2-extract_high_bits
 ; CHECK: 	.cfi_endproc
@@ -80,7 +80,7 @@
 ; CHECK: 	{ or32	r1, r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	insert_bits, .Lfunc_end3-insert_bits
 ; CHECK: 	.cfi_endproc
@@ -98,7 +98,7 @@
 ; CHECK: 	{ or32	r1, r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	insert_low_bits, .Lfunc_end4-insert_low_bits
 ; CHECK: 	.cfi_endproc
@@ -117,7 +117,7 @@
 ; CHECK: 	{ srai32	r1, r1, 24; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end5:
 ; CHECK: 	.size	extract_sign_extended, .Lfunc_end5-extract_sign_extended
 ; CHECK: 	.cfi_endproc
@@ -136,7 +136,7 @@
 ; CHECK: 	{ add32	r1, r2, r1; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end6:
 ; CHECK: 	.size	read_multiple_fields, .Lfunc_end6-read_multiple_fields
 ; CHECK: 	.cfi_endproc
@@ -157,7 +157,7 @@
 ; CHECK: 	{ or32	r1, r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end7:
 ; CHECK: 	.size	modify_bit_field, .Lfunc_end7-modify_bit_field
 ; CHECK: 	.cfi_endproc
@@ -174,7 +174,7 @@
 ; CHECK: 	{ andi32	r1, r1, 1; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end8:
 ; CHECK: 	.size	extract_bit, .Lfunc_end8-extract_bit
 ; CHECK: 	.cfi_endproc
@@ -190,7 +190,7 @@
 ; CHECK: 	{ srl32	r1, r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end9:
 ; CHECK: 	.size	is_bit_set, .Lfunc_end9-is_bit_set
 ; CHECK: 	.cfi_endproc
@@ -208,7 +208,7 @@
 ; CHECK: 	{ or32	r1, r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end10:
 ; CHECK: 	.size	set_bit, .Lfunc_end10-set_bit
 ; CHECK: 	.cfi_endproc
@@ -227,7 +227,7 @@
 ; CHECK: 	{ and32	r1, r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end11:
 ; CHECK: 	.size	clear_bit, .Lfunc_end11-clear_bit
 ; CHECK: 	.cfi_endproc
@@ -245,7 +245,7 @@
 ; CHECK: 	{ xor32	r1, r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end12:
 ; CHECK: 	.size	toggle_bit, .Lfunc_end12-toggle_bit
 ; CHECK: 	.cfi_endproc
@@ -264,7 +264,7 @@
 ; CHECK: 	{ andi32	r1, r1, 65535; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end13:
 ; CHECK: 	.size	extract_bits_from_i64, .Lfunc_end13-extract_bits_from_i64
 ; CHECK: 	.cfi_endproc
@@ -293,7 +293,7 @@
 ; CHECK: 	{ or64	d0, d0, d1; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end14:
 ; CHECK: 	.size	insert_bits_into_i64, .Lfunc_end14-insert_bits_into_i64
 ; CHECK: 	.cfi_endproc
@@ -310,7 +310,7 @@
 ; CHECK: 	{ andi32	r1, r1, 511; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end15:
 ; CHECK: 	.size	extract_odd_offset, .Lfunc_end15-extract_odd_offset
 ; CHECK: 	.cfi_endproc
@@ -330,7 +330,7 @@
 ; CHECK: 	{ or32	r1, r2, r1; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end16:
 ; CHECK: 	.size	reverse_bytes, .Lfunc_end16-reverse_bytes
 ; CHECK: 	.cfi_endproc

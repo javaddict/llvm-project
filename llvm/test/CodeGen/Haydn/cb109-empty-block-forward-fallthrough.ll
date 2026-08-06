@@ -45,4 +45,4 @@ cold:
 
 ; CHECK-LABEL: cb109_forward_fallthrough:
 ; Must compile without updateTerminator assert and return.
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}

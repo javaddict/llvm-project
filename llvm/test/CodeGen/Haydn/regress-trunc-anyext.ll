@@ -65,7 +65,7 @@
 ; CHECK: .LBB0_3:                                // %yes
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	test_trunc_s32_to_s1, .Lfunc_end0-test_trunc_s32_to_s1
 ; CHECK: 	.cfi_endproc
@@ -83,7 +83,7 @@
 ; CHECK: 	{ move32	r1, r4; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	test_anyext_i1_to_i32, .Lfunc_end1-test_anyext_i1_to_i32
 ; CHECK: 	.cfi_endproc
@@ -101,7 +101,7 @@
 ; CHECK: 	{ srai32	r1, r1, 16; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	test_trunc_s32_to_s16, .Lfunc_end2-test_trunc_s32_to_s16
 ; CHECK: 	.cfi_endproc
@@ -117,7 +117,7 @@
 ; CHECK: 	{ add32	r1, r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	test_anyext_i16_to_i32, .Lfunc_end3-test_anyext_i16_to_i32
 ; CHECK: 	.cfi_endproc
@@ -140,7 +140,7 @@
 ; CHECK: 	{ nop; ld64	d0, sp, 0; addi32_w	sp, sp, 8 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	test_anyext_i1_condition_i64_select, .Lfunc_end4-test_anyext_i1_condition_i64_select
 ; CHECK: 	.cfi_endproc

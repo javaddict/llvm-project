@@ -29,11 +29,11 @@
 ; CHECK: 	{ nop; nop; st32	lr, sp, 12 }
 ; CHECK: 	.cfi_def_cfa_offset 16
 ; CHECK: 	.cfi_offset lr, 12
-; CHECK: 	{ nop; nop; jal_w	lr, callee }
+; CHECK: 	{ nop; nop; jal	lr, callee }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; ld32	lr, sp, 12; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 16 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	caller, .Lfunc_end0-caller
 ; CHECK: 	.cfi_endproc
@@ -49,7 +49,7 @@
 ; CHECK: 	{ add32	r1, r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	leaf, .Lfunc_end1-leaf
 ; CHECK: 	.cfi_endproc

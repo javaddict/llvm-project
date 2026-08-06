@@ -49,7 +49,7 @@
 ; CHECK: 	{ addi32	r1, r1, 1; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	leaf_none, .Lfunc_end0-leaf_none
 ; CHECK: 	.cfi_endproc
@@ -68,13 +68,13 @@
 ; CHECK: 	.cfi_offset r8, 12
 ; CHECK: 	.cfi_offset lr, 8
 ; CHECK: 	{ move32	r8, r1; nop; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ xor32	r0, r0, r0; add32	r1, r1, r8; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; ld32	lr, sp, 8; nop }
 ; CHECK: 	{ nop; ld32	r8, sp, 12; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 16 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	save_across_call, .Lfunc_end1-save_across_call
 ; CHECK: 	.cfi_endproc
@@ -102,19 +102,19 @@
 ; CHECK: 	.cfi_offset lr, 8
 ; CHECK: 	{ move32	r8, r2; move32	r9, r3; nop }
 ; CHECK: 	{ move32	r10, r4; move32	r11, r5; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ move32	fp, r1; move32	r1, r8; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ move32	r8, r1; move32	r1, r9; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ move32	r9, r1; move32	r1, r10; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ move32	r10, r1; move32	r1, r11; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ add32	r2, fp, r8; xor32	r0, r0, r0; nop }
 ; CHECK: 	{ add32	r2, r2, r9; nop; nop }
 ; CHECK: 	{ add32	r2, r2, r10; nop; nop }
@@ -127,7 +127,7 @@
 ; CHECK: 	{ nop; ld32	r9, sp, 24; nop }
 ; CHECK: 	{ nop; ld32	r8, sp, 28; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 32 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	save_many_gpr, .Lfunc_end2-save_many_gpr
 ; CHECK: 	.cfi_endproc
@@ -150,11 +150,11 @@
 ; CHECK: 	.cfi_offset d9, 16
 ; CHECK: 	.cfi_offset d10, 8
 ; CHECK: 	{ or64	d8, d1, d1; or64	d9, d2, d2; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i64 }
+; CHECK: 	{ nop; nop; jal	lr, use_i64 }
 ; CHECK: 	{ or64	d10, d0, d0; or64	d0, d8, d8; xor32	r0, r0, r0 }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i64 }
+; CHECK: 	{ nop; nop; jal	lr, use_i64 }
 ; CHECK: 	{ or64	d8, d0, d0; or64	d0, d9, d9; xor32	r0, r0, r0 }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i64 }
+; CHECK: 	{ nop; nop; jal	lr, use_i64 }
 ; CHECK: 	{ xor32	r0, r0, r0; add64	d1, d10, d8; nop }
 ; CHECK: 	{ add64	d0, d1, d0; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
@@ -163,7 +163,7 @@
 ; CHECK: 	{ nop; ld64	d8, sp, 24; nop }
 ; CHECK: 	{ nop; ld32	lr, sp, 36; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 40 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	save_dr64, .Lfunc_end3-save_dr64
 ; CHECK: 	.cfi_endproc
@@ -181,13 +181,13 @@
 ; CHECK: 	.cfi_offset lr, 20
 ; CHECK: 	.cfi_offset d8, 8
 ; CHECK: 	{ nop; sext32t64	d8, r1; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i64 }
+; CHECK: 	{ nop; nop; jal	lr, use_i64 }
 ; CHECK: 	{ xor32	r0, r0, r0; add64	d0, d0, d8; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; ld64	d8, sp, 8; nop }
 ; CHECK: 	{ nop; ld32	lr, sp, 20; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 24 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	save_mixed_gpr_dr64, .Lfunc_end4-save_mixed_gpr_dr64
 ; CHECK: 	.cfi_endproc
@@ -208,14 +208,14 @@
 ; CHECK: 	.cfi_offset r9, 16
 ; CHECK: 	.cfi_offset lr, 12
 ; CHECK: 	{ move32	r8, r1; move32	r9, r2; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, clobber_all }
+; CHECK: 	{ nop; nop; jal	lr, clobber_all }
 ; CHECK: 	{ xor32	r0, r0, r0; add32	r1, r8, r9; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; ld32	lr, sp, 12; nop }
 ; CHECK: 	{ nop; ld32	r9, sp, 16; nop }
 ; CHECK: 	{ nop; ld32	r8, sp, 20; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 24 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end5:
 ; CHECK: 	.size	clobber_test, .Lfunc_end5-clobber_test
 ; CHECK: 	.cfi_endproc
@@ -233,15 +233,15 @@
 ; CHECK: 	.cfi_def_cfa_offset 16
 ; CHECK: 	.cfi_offset r8, 12
 ; CHECK: 	.cfi_offset lr, 8
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ xor32	r0, r0, r0; move32	r8, r1; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ xor32	r0, r0, r0; add32	r1, r8, r1; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; ld32	lr, sp, 8; nop }
 ; CHECK: 	{ nop; ld32	r8, sp, 12; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 16 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end6:
 ; CHECK: 	.size	nested_calls, .Lfunc_end6-nested_calls
 ; CHECK: 	.cfi_endproc
@@ -270,26 +270,26 @@
 ; CHECK: 	{ move32	r11, r2; move32	fp, r3; st32	r7, sp, 12 } // 4-byte Folded Spill
 ; CHECK: 	{ move32	r8, r4; move32	r9, r5; nop }
 ; CHECK: 	{ move32	r10, r6; nop; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; st32	r1, sp, 8 } // 4-byte Folded Spill
 ; CHECK: 	{ nop; nop; nop }
 ; CHECK: 	{ move32	r1, r11; nop; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ move32	r11, r1; move32	r1, fp; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ move32	fp, r1; move32	r1, r8; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ move32	r8, r1; move32	r1, r9; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ move32	r9, r1; move32	r1, r10; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ move32	r10, r1; ld32	r1, sp, 12; nop } // 4-byte Folded Reload
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i32 }
+; CHECK: 	{ nop; nop; jal	lr, use_i32 }
 ; CHECK: 	{ xor32	r0, r0, r0; ld32	r2, sp, 8; nop } // 4-byte Folded Reload
 ; CHECK: 	{ nop; nop; nop }
 ; CHECK: 	{ add32	r2, r2, r11; nop; nop }
@@ -306,7 +306,7 @@
 ; CHECK: 	{ nop; ld32	r9, sp, 32; nop }
 ; CHECK: 	{ nop; ld32	r8, sp, 36; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 40 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end7:
 ; CHECK: 	.size	deep_pressure, .Lfunc_end7-deep_pressure
 ; CHECK: 	.cfi_endproc
@@ -329,11 +329,11 @@
 ; CHECK: 	.cfi_offset d9, 16
 ; CHECK: 	.cfi_offset d10, 8
 ; CHECK: 	{ or64	d8, d1, d1; or64	d9, d2, d2; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i64 }
+; CHECK: 	{ nop; nop; jal	lr, use_i64 }
 ; CHECK: 	{ or64	d10, d0, d0; or64	d0, d8, d8; xor32	r0, r0, r0 }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i64 }
+; CHECK: 	{ nop; nop; jal	lr, use_i64 }
 ; CHECK: 	{ or64	d8, d0, d0; or64	d0, d9, d9; xor32	r0, r0, r0 }
-; CHECK: 	{ nop; nop; jal_w	lr, use_i64 }
+; CHECK: 	{ nop; nop; jal	lr, use_i64 }
 ; CHECK: 	{ xor32	r0, r0, r0; add64	d1, d10, d8; nop }
 ; CHECK: 	{ add64	d0, d1, d0; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
@@ -342,7 +342,7 @@
 ; CHECK: 	{ nop; ld64	d8, sp, 24; nop }
 ; CHECK: 	{ nop; ld32	lr, sp, 36; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 40 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end8:
 ; CHECK: 	.size	dr64_deep_pressure, .Lfunc_end8-dr64_deep_pressure
 ; CHECK: 	.cfi_endproc

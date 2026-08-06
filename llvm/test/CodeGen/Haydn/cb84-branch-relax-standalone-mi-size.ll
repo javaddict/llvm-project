@@ -34,9 +34,9 @@
 ; BranchRelaxation must rewrite it. The KEY regression guard is the RUN line
 ; itself: without the size-model fix, llc aborts with "relocation offset out
 ; of range" and a non-zero exit code, failing the test. The CHECK additionally
-; pins the relaxed trampoline's indirect jump (jalr_w in a non-return context)
+; pins the relaxed trampoline's indirect jump (jalr in a non-return context)
 ; without relaxation the encoder rejects the offset before asm emission
-; finishes, so no jalr_w would appear in the dump.
+; finishes, so no jalr would appear in the dump.
 
 @arr = global [1024 x i32] zeroinitializer
 
@@ -46,7 +46,7 @@
 ; (LOADI32 + JALR via HaydnInstrInfo::insertIndirectBranch).
 define void @cb84_long_cond_branch(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: cb84_long_cond_branch:
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %exit, label %pad

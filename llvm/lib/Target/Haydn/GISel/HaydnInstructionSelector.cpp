@@ -641,7 +641,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     Register Target = I.getOperand(0).getReg();
 
     MachineIRBuilder MIB(I);
-    MachineInstr *JmpMI = MIB.buildInstr(Haydn::JALR_W)
+    MachineInstr *JmpMI = MIB.buildInstr(Haydn::JALR)
                               .addReg(Haydn::R0, RegState::Define)
                               .addReg(Target)
                               .addImm(0);
@@ -3009,7 +3009,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     // Direct WIDE JAL to abort (same path as CallLowering external symbols).
     // If abort returns, call again (fail closed, no fallthrough RET).
     for (unsigned N = 0; N < 2; ++N) {
-      MachineInstr *Call = MIB.buildInstr(Haydn::JAL_W)
+      MachineInstr *Call = MIB.buildInstr(Haydn::JAL)
                                .addDef(Haydn::R15)
                                .addExternalSymbol("abort");
       constrainSelectedInstRegOperands(*Call, TII, TRI, RBI);

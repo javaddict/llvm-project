@@ -6,7 +6,7 @@
 #
 # Call veneer honors addend (callee+16).
 
-# RELOC: R_HAYDN_CallSImm20 callee 0x10
+# RELOC: R_HAYDN_WIDE_CallSImm20 callee 0x10
 
 .section .text
 .globl _start

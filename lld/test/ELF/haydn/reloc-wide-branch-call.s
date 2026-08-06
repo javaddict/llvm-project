@@ -7,7 +7,7 @@
 # REGRESSION TEST (L228): lld must DISPATCH WIDE branch/call relocations
 # through getRelExpr / getImplicitAddend / inBranchRange / needsThunk.
 #
-# Bundle128 (D456/D487): every parcel is 16 bytes. WIDE jal_w / beq still
+# Bundle128 (D456/D487): every parcel is 16 bytes. WIDE jal / beq still
 # emit R_HAYDN_WIDE_CallSImm20 / R_HAYDN_WIDE_BranchSImm12; reloc offsets are
 # 0x0 and 0x10 (not legacy 6-byte parcel spacing 0x0/0x6).
 
@@ -22,8 +22,8 @@
 .globl _start
 _start:
     # CHECK-LABEL: <_start>:
-    # CHECK: 10000: {{.*}} jal_w
-    jal_w lr, callee
+    # CHECK: 10000: {{.*}} jal
+    jal lr, callee
 
     # CHECK: 10010: {{.*}} beq
     beq r1, r2, callee

@@ -28,7 +28,7 @@
 ; CHECK: 	{ move32	r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	gep_array, .Lfunc_end0-gep_array
 ; CHECK: 	.cfi_endproc
@@ -44,7 +44,7 @@
 ; CHECK: 	{ nop; ld32	r1, r1, 0; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	gep_struct_field, .Lfunc_end1-gep_struct_field
 ; CHECK: 	.cfi_endproc
@@ -61,7 +61,7 @@
 ; CHECK: 	{ move32	r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	gep_struct_field1, .Lfunc_end2-gep_struct_field1
 ; CHECK: 	.cfi_endproc
@@ -80,7 +80,7 @@
 ; CHECK: 	{ s_lw_pre_imm	r1, r2, 1; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	gep_array_of_struct, .Lfunc_end3-gep_array_of_struct
 ; CHECK: 	.cfi_endproc
@@ -98,7 +98,7 @@
 ; CHECK: 	{ s_lw_pre_reg	r1, r2, r1; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	gep_2d_array, .Lfunc_end4-gep_2d_array
 ; CHECK: 	.cfi_endproc
@@ -115,7 +115,7 @@
 ; CHECK: 	{ move32	r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end5:
 ; CHECK: 	.size	gep_nested_struct, .Lfunc_end5-gep_nested_struct
 ; CHECK: 	.cfi_endproc
@@ -132,7 +132,7 @@
 ; CHECK: 	{ move32	r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end6:
 ; CHECK: 	.size	gep_const_offset, .Lfunc_end6-gep_const_offset
 ; CHECK: 	.cfi_endproc
@@ -158,7 +158,7 @@
 ; CHECK: 	{ move32	r1, r3; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end7:
 ; CHECK: 	.size	gep_in_loop, .Lfunc_end7-gep_in_loop
 ; CHECK: 	.cfi_endproc
@@ -177,7 +177,7 @@
 ; CHECK: 	{ move32	r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end8:
 ; CHECK: 	.size	gep_64bit_index, .Lfunc_end8-gep_64bit_index
 ; CHECK: 	.cfi_endproc
@@ -194,7 +194,7 @@
 ; CHECK: 	{ s_sw_pre_reg	r3, r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end9:
 ; CHECK: 	.size	gep_store, .Lfunc_end9-gep_store
 ; CHECK: 	.cfi_endproc

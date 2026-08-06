@@ -22,7 +22,7 @@
 ;
 ; IMPORTANT: The primary goal is that these functions compile without
 ; crashing. The CHECK lines verify that the function assembles (contains
-; st32 instructions for the volatile stores and jalr_w for return), not that
+; st32 instructions for the volatile stores and jalr for return), not that
 ; the exact branch relaxation strategy is used.
 
 @arr = global [3000 x i32] zeroinitializer
@@ -34,7 +34,7 @@ define void @test_long_beq(i32 %a, i32 %b) {
 ; CHECK: st32
 ; CHECK: st32
 ; The function must return.
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %far, label %pad
@@ -96,7 +96,7 @@ define void @test_long_bne_backward(i32 %a, i32 %b) {
 ; CHECK-LABEL: test_long_bne_backward:
 ; CHECK: st32
 ; CHECK: st32
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 entry:
   br label %loop
 
@@ -155,7 +155,7 @@ define void @test_long_uncond(i32 %a, i32 %b) {
 ; CHECK-LABEL: test_long_uncond:
 ; CHECK: st32
 ; CHECK: st32
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %pad, label %far

@@ -6,14 +6,14 @@
 ; REGRESSION TEST: Soft-float libcall symbol preservation end-to-end.
 ;
 ; Bug (scope m6-softfloat-scope.md BUG B): `clang -target haydn-unknown-elf -c`
-; was reported to emit `jal_w lr, 0` with relocation
-; `R_HAYDN_CallSImm20 *ABS*` (value 0, no symbol) for soft-float libcalls.
+; was reported to emit `jal lr, 0` with relocation
+; `R_HAYDN_WIDE_CallSImm20 *ABS*` (value 0, no symbol) for soft-float libcalls.
 ;
 ; Status as of this test's XFAIL : the defensive fix in
 ; (HaydnCallLowering::lowerCall adds the callee operand verbatim via
 ; `MIB.add(Info.Callee)`, mirroring RISCVCallLowering) only fixed the
 ; MachineInstr / asm-print stage. The ASM CHECKs below PASS; `llc` textual
-; asm correctly shows `jal_w lr, __addsf3`. The RELOC CHECKs FAILED because
+; asm correctly shows `jal lr, __addsf3`. The RELOC CHECKs FAILED because
 ; the callee MCSymbol was dropped during MCInst lowering / object emission:
 ; HaydnAsmPrinter wraps every instruction in a BUNDLE MCInst whose children
 ; are MCOperand::createInst operands, and the default streamer path does not
@@ -38,7 +38,7 @@
 ;fadd → __addsf3
 define float @fadd_f32(float %a, float %b) {
 ; ASM-LABEL: fadd_f32:
-; ASM:       jal_w lr, __addsf3
+; ASM:       jal lr, __addsf3
   %r = fadd float %a, %b
   ret float %r
 }
@@ -46,7 +46,7 @@ define float @fadd_f32(float %a, float %b) {
 ;fsub → __subsf3
 define float @fsub_f32(float %a, float %b) {
 ; ASM-LABEL: fsub_f32:
-; ASM:       jal_w lr, __subsf3
+; ASM:       jal lr, __subsf3
   %r = fsub float %a, %b
   ret float %r
 }
@@ -54,7 +54,7 @@ define float @fsub_f32(float %a, float %b) {
 ;fmul → __mulsf3
 define float @fmul_f32(float %a, float %b) {
 ; ASM-LABEL: fmul_f32:
-; ASM:       jal_w lr, __mulsf3
+; ASM:       jal lr, __mulsf3
   %r = fmul float %a, %b
   ret float %r
 }
@@ -62,7 +62,7 @@ define float @fmul_f32(float %a, float %b) {
 ;fdiv → __divsf3
 define float @fdiv_f32(float %a, float %b) {
 ; ASM-LABEL: fdiv_f32:
-; ASM:       jal_w lr, __divsf3
+; ASM:       jal lr, __divsf3
   %r = fdiv float %a, %b
   ret float %r
 }
@@ -70,7 +70,7 @@ define float @fdiv_f32(float %a, float %b) {
 ;fptosi → __fixsfsi
 define i32 @fptosi_f32_i32(float %a) {
 ; ASM-LABEL: fptosi_f32_i32:
-; ASM:       jal_w lr, __fixsfsi
+; ASM:       jal lr, __fixsfsi
   %r = fptosi float %a to i32
   ret i32 %r
 }
@@ -78,7 +78,7 @@ define i32 @fptosi_f32_i32(float %a) {
 ;sitofp → __floatsisf
 define float @sitofp_i32_f32(i32 %a) {
 ; ASM-LABEL: sitofp_i32_f32:
-; ASM:       jal_w lr, __floatsisf
+; ASM:       jal lr, __floatsisf
   %r = sitofp i32 %a to float
   ret float %r
 }
@@ -86,7 +86,7 @@ define float @sitofp_i32_f32(i32 %a) {
 ;fcmp olt → __ltsf2
 define i1 @fcmp_olt_f32(float %a, float %b) {
 ; ASM-LABEL: fcmp_olt_f32:
-; ASM:       jal_w lr, __ltsf2
+; ASM:       jal lr, __ltsf2
   %r = fcmp olt float %a, %b
   ret i1 %r
 }

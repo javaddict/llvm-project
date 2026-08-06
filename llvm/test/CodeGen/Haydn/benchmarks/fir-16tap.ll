@@ -1,6 +1,6 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
 ; Smoke: pre-existing CHECK drift — compile and emit a return.
-; CHECK: {{jalr|jalr_w}}
+; CHECK: {{jalr|jalr}}
 ;
 ; REBASELINED : / cutover — native mul now carries slot suffix (mul64.ll/s2); bundles regrouped (mul+addi32 fused; move32 split out).
 ; REBASELINED : scheduling changed (//) — bundles regrouped, ops unchanged.

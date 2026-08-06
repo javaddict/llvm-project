@@ -26,7 +26,7 @@ ret:
   ret i32 %x
 }
 ; CHECK-LABEL: test_empty_block_forward:
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 
 ;===----------------------------------------------------------------------===;
 ; Test 2: Identical successor merging
@@ -43,7 +43,7 @@ target:
   ret void
 }
 ; CHECK-LABEL: test_identical_succ:
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 
 ;===----------------------------------------------------------------------===;
 ; Test 3: Unreachable block elimination
@@ -62,7 +62,7 @@ live:
   ret i32 %result
 }
 ; CHECK-LABEL: test_unreachable_block:
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 
 ;===----------------------------------------------------------------------===;
 ; Test 4: Multiple empty blocks in a chain
@@ -83,7 +83,7 @@ target:
   ret i32 %x
 }
 ; CHECK-LABEL: test_chain_empty_blocks:
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 
 ;===----------------------------------------------------------------------===;
 ; Test 5: Simple function with no CFG optimization opportunity
@@ -108,4 +108,4 @@ merge:
 }
 ; CHECK-LABEL: test_no_opt:
 ; CHECK: slt32
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}

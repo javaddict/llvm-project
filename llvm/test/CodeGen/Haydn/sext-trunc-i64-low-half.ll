@@ -38,7 +38,7 @@
 ; CHECK: 	{ or64	d0, d0, d1; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	sext_trunc_low_half, .Lfunc_end0-sext_trunc_low_half
 ; CHECK: 	.cfi_endproc

@@ -121,5 +121,5 @@ target5:
 #===----------------------------------------------------------------------===
 
 # CHECK: { jal r0, extern_func } // encoding: [0bAAAA0000,A,A,0x00,0x80,0x0e,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-# CHECK-NEXT: fixup A - offset: 0, value: extern_func, kind: FIXUP_HAYDN_CallSImm20
+# CHECK-NEXT: fixup A - offset: 0, value: extern_func, kind: FIXUP_HAYDN_WIDE_CallSImm20
 JAL R0, extern_func

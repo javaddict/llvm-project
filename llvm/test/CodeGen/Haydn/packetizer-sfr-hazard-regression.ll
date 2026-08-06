@@ -1,6 +1,6 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
 ; Smoke: pre-existing CHECK drift — compile and emit a return.
-; CHECK: {{jalr|jalr_w}}
+; CHECK: {{jalr|jalr}}
 ;
 ; REBASELINED : scheduling changed (//) — bundles
 ; regrouped + regalloc reassigned (r1/r2/r3/r4 vs old r7/r1/r2/r3). The SFR

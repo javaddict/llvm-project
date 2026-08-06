@@ -19,7 +19,7 @@
 ; After a JT dispatch R0 holds the return-PC and is NONZERO, so the first
 ; `beqz r0` idiom in a switch-case target silently falls through instead of
 ; branching. ISS repro (cb22_switch_jt_bare_imm_base.c, exp 35): the JT
-; dispatch `jalr_w r0, r1, 0` wrote the return-PC into r0; the PUSH-case target
+; dispatch `jalr r0, r1, 0` wrote the return-PC into r0; the PUSH-case target
 ; began with `beqz r0,.LBB0_11` which then did NOT branch, so the wrong
 ; case body ran and the program returned 0 instead of 35.
 ;
@@ -31,10 +31,10 @@
 ; Test design: a dense switch (8 consecutive cases) lowers to a jump table
 ; (G_BRJT → BR_JT → JALR r0, $addr, 0). The JT dispatch clobbers R0, so
 ; every case target must begin with a `xor32 r0, r0, r0` bundle. We verify the
-; `jalr_w r0` dispatch is present and that `xor32 r0, r0, r0` appears at least 8
+; `jalr r0` dispatch is present and that `xor32 r0, r0, r0` appears at least 8
 ; times (once per case target) in the function body. A ret-only case body
 ; (`ret i32 N`) would normally have no `xor32 r0, r0, r0`; the re-zero injects
-; one, so counting `xor32 r0, r0, r0` between the jalr_w and the first ret is a
+; one, so counting `xor32 r0, r0, r0` between the jalr and the first ret is a
 ; clean signal. If the re-zero regresses, the count drops and the `beqz r0`
 ; idiom in real switch bodies breaks (silently wrong control flow on the ISS).
 
@@ -56,7 +56,7 @@
 ; CHECK:  { addi32{{(_w)?}} r2, r2, .LJTI0_0 }
 ; Fused s_lw_pre_reg or split add32+ld32, then indirect jalr.
 ; CHECK:  {{s_lw_pre_reg|add32}}
-; CHECK:  { jalr_w{{(\.s[012])?}} r0, r1, 0 }
+; CHECK:  { jalr{{(\.s[012])?}} r0, r1, 0 }
 ; CHECK: .LBB0_2: // %bb0
 ; CHECK:  { xor32 r0, r0, r0 }
 ; CHECK:  { addi32{{(_w)?}} r1, r0, 10 }
@@ -94,7 +94,7 @@
 ; CHECK: .LBB0_11: // %bb0
 ; CHECK:  { xor32 r0, r0, r0 }
 ; CHECK:  { addi32{{(_w)?}} sp, sp, 8 }
-; CHECK:  { jalr_w{{(\.s[012])?}} r0, lr, 0 }
+; CHECK:  { jalr{{(\.s[012])?}} r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK:  .size cb22_jt_r0_rezero, .Lfunc_end0-cb22_jt_r0_rezero
 ; CHECK:  .section .rodata,"a",@progbits

@@ -1,6 +1,6 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
 ; Smoke: pre-existing CHECK drift — compile and emit a return.
-; CHECK: {{jalr|jalr_w}}
+; CHECK: {{jalr|jalr}}
 ;
 ; REBASELINED : / pipeline reorder (ExpandPseudos/BitSimplify pre-scheduler + materialize at leaveRegion) — bundles regrouped, ops unchanged.
 ;
@@ -12,7 +12,7 @@
 ; directly. A bare ADDI32 operand carries only a LO16 fixup; when the linker
 ; resolves.LJTI to a.rodata address in high memory, the simm12 field cannot
 ; hold it and wraps (e.g. to 0xFFF80100). The subsequent `ld32 rN, rN, 0` then
-; loads from OOB (yielding 0), and `jalr_w r0, rN, 0` jumps to 0 -> NOEXIT.
+; loads from OOB (yielding 0), and `jalr r0, rN, 0` jumps to 0 -> NOEXIT.
 ;
 ; Root cause: the JT path bypassed the LOAD_ADDR pseudo that G_GLOBAL_VALUE and
 ; G_BLOCK_ADDR use (which HaydnExpandPseudos lowers to lui+addi32{{(_w)?}}); moreover

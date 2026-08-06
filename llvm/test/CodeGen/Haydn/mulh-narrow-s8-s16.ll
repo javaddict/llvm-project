@@ -20,7 +20,7 @@
 ; CHECK: 	{ srli32	r1, r1, 8; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	smulh_s8, .Lfunc_end0-smulh_s8
 ; CHECK:                                         // -- End function
@@ -36,7 +36,7 @@
 ; CHECK: 	{ srli32	r1, r2, 8; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	umulh_s8, .Lfunc_end1-umulh_s8
 ; CHECK:                                         // -- End function
@@ -53,7 +53,7 @@
 ; CHECK: 	{ srli32	r1, r2, 16; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	smulh_s16, .Lfunc_end2-smulh_s16
 ; CHECK:                                         // -- End function
@@ -69,7 +69,7 @@
 ; CHECK: 	{ srli32	r1, r2, 16; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	umulh_s16, .Lfunc_end3-umulh_s16
 ; CHECK:                                         // -- End function
@@ -87,7 +87,7 @@
 ; CHECK: 	{ srli32	r1, r1, 8; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	smulh_s8_neg, .Lfunc_end4-smulh_s8_neg
 ; CHECK:                                         // -- End function

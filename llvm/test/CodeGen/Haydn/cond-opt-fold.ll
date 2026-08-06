@@ -32,7 +32,7 @@
 ; CHECK: seq32
 ; CHECK: xori32
 ; CHECK: beqz{{(\.s[012])?}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 define void @fold_eq_zero(i32 %a, ptr %p) nounwind {
 entry:
   %c = icmp eq i32 %a, 0
@@ -56,7 +56,7 @@ else:
 ; SEQ32 + BNEZ to else (eq → else; fallthrough = then). Not BEQZ-primary.
 ; CHECK: seq32
 ; CHECK: bnez{{(\.s[012])?}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 define void @fold_ne_zero(i32 %a, ptr %p) nounwind {
 entry:
   %c = icmp ne i32 %a, 0
@@ -78,7 +78,7 @@ else:
 ; CHECK: slt32
 ; CHECK: xori32
 ; CHECK: beqz{{(\.s[012])?}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 define void @fold_slt_zero(i32 %a, ptr %p) nounwind {
 entry:
   %c = icmp slt i32 %a, 0

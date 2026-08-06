@@ -21,7 +21,7 @@ define i32 @self_comparison_slt(i32 %a) nounwind {
 ; CHECK-NOT: slt32
 ; CHECK-NOT: sltu32
 ; CHECK: sub32
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %cmp = icmp slt i32 %a, %a
   %r = zext i1 %cmp to i32
   ret i32 %r
@@ -35,7 +35,7 @@ define i32 @self_comparison_ult(i32 %a) nounwind {
 ; CHECK-NOT: slt32
 ; CHECK-NOT: sltu32
 ; CHECK: sub32
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %cmp = icmp ult i32 %a, %a
   %r = zext i1 %cmp to i32
   ret i32 %r
@@ -48,7 +48,7 @@ define i32 @inverse_comparison(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: inverse_comparison:
 ; CHECK: slt32
 ; CHECK: slt32
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %cmp1 = icmp slt i32 %a, %b
   %cmp2 = icmp slt i32 %b, %a
   %v1 = zext i1 %cmp1 to i32
@@ -65,7 +65,7 @@ define i32 @unrelated_comparisons(i32 %a, i32 %b, i32 %c, i32 %d) nounwind {
 ; Both comparisons should remain as slt32 (no inverse relationship).
 ; CHECK: slt32
 ; CHECK: slt32
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %cmp1 = icmp slt i32 %a, %b
   %cmp2 = icmp slt i32 %c, %d
   %v1 = zext i1 %cmp1 to i32
@@ -80,7 +80,7 @@ define i32 @inverse_comparison_select(i32 %a, i32 %b, i32 %c) nounwind {
 ; CHECK-LABEL: inverse_comparison_select:
 ; CHECK: slt32
 ; CHECK: slt32
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %cmp1 = icmp slt i32 %a, %b
   %cmp2 = icmp slt i32 %b, %a
   %v1 = zext i1 %cmp1 to i32

@@ -21,13 +21,13 @@ Companion documents:
 
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
-| `llvm-project` | `haydn` | `9cc0a9687653` | **yes, fully green** |
+| `llvm-project` | `haydn` | `9802930e5fde` | **yes, fully green** |
 | `llvm-project` | `haydn-formate-switch-wip` | `135c38e2f1bc` | **no — 23 C++ errors** |
-| `simulator` | `master` | `b8da0eb` | yes, green except CB-130 |
+| `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
 `haydn` is the trunk. Everything on it is green and committed; work from it.
 
-**`haydn-formate-switch-wip` is 4 commits behind `haydn` and must be rebased
+**`haydn-formate-switch-wip` is now 7 commits behind `haydn` and must be rebased
 before use.** It predates the database correction, so its
 `HaydnFormatEEncoding.td` still carries the wrong three-operand MAC encodings
 (§ 5.3). Rebase, then re-take the regenerated `.td` from `haydn`:
@@ -84,13 +84,19 @@ The ISA database is `~/haydn/` — `instruction_type_index.json`,
 `format_e_bit_layout_v2.json`, `VLIW_Engine_Compiler_Constraints.md` and
 friends. It is pinned by `simulator/bundlesim/isa/database/generated/GOLDEN_INPUTS.sha256`.
 
-After any clang rebuild, the baremetal libc must be rebuilt and the sysroot
-reinstalled before the simulator suite means anything:
+After any clang rebuild, the baremetal libc **and the BSP stage** must be
+rebuilt before the simulator suite means anything. Both are stale-prone for the
+same reason (§ 6.6), and a stale BSP is the more confusing of the two because it
+links fine and then faults deep inside libc:
 
 ```sh
 ninja -C "$BUILD_DIR" -t clean          # REQUIRED — see § 6.6
 simulator/scripts/build_haydn_llvm_libc.sh
 simulator/scripts/install_haydn_sysroot.sh
+
+cd simulator
+rm -rf build/bsp-stage                  # REQUIRED — see § 6.6
+cmake --build build --target haydn_bsp
 ```
 
 ---
@@ -147,9 +153,12 @@ All on `haydn`, each verified green before commit.
 | `d67473b945df` | **Cross-check the two database files** | Found 16 instructions silently losing an operand. See § 5.3 — this is the most consequential finding so far. |
 | `8c3a9a9d241c` | Regenerate after correcting 76 mapping rows | The correction is forced by the database's own alias declarations, not chosen. |
 | `9cc0a9687653` | `ORI32_W` retired, first of the `_W` fold | Establishes the template *and* records the trap that the wrong approach passes lit but breaks `HaydnTests` (§ 6.2). |
+| `961ccef2c648` | The ten branch `_W` forms retired | Found § 6.9 and § 6.10 — the narrow members were never wired for CodeGen and neither defect shows up in a lit run. Forced the BundleSim fix below. |
+| `9802930e5fde` | `JAL_W` / `JALR_W` retired | Same two gaps plus CB-129's `isBarrier`. `jal sym` now emits `R_HAYDN_WIDE_CallSImm20`; `FIXUP_HAYDN_CallSImm20` and `FIXUP_HAYDN_BranchSImm16` are no longer selected by anything. |
 
 On `simulator/master`: `4b65727` (LLDB port TOCTOU), `84d545d` + `29ac239`
-(docs), `786d7c4` (cb99 wired up as an executed case), `b8da0eb` (golden re-pin).
+(docs), `786d7c4` (cb99 wired up as an executed case), `b8da0eb` (golden re-pin),
+`bdf14d7` (branch range scale read from the catalog — § 6.11).
 
 ---
 
@@ -158,56 +167,133 @@ On `simulator/master`: `4b65727` (LLDB port TOCTOU), `84d545d` + `29ac239`
 Recommended order. A, B and D can each be done on the green trunk; C is the
 atomic step.
 
-### 5.1 `_W` family retirement — 17 left, do this first
+### 5.1 `_W` family retirement — 12 of 17 done, 5 left
 
 Format E has **no `_W` member for any of them**; the database has one
 instruction (`ADDI32 rt, rs, imm20`, `BEQ rs1, rs2, imm12`, …) whose member
 carries the wide shape. So the wide form survives under the base name and the
 narrow legacy declaration goes.
 
-**Template (from `9cc0a9687653`) — C++ only, never touch the `.td`:**
+Done: `ORI32_W` (`9cc0a9687653`); the ten branches `BEQ_W`…`BLTU_W`,
+`BEQZ_W`…`BLTZ_W` (`961ccef2c648`); `JAL_W` / `JALR_W` (`9802930e5fde`).
 
-1. `sed -i 's/Haydn::<X>_W\b/Haydn::<X>/g'` across the referencing `.cpp`/`.h`.
-2. Fix the name→opcode map in `HaydnInstrInfo.cpp` (~line 194, `KnownBases`).
-3. Collapse any now-duplicate `case` labels in
-   `HaydnMCCodeEmitter.cpp::getExprFixupKind` / `getBranchFixupKind`
-   (duplicate labels are a compile error, which is a useful signal).
-4. Verify with a real immediate at the wide range end, not by inspection.
-   For `ORI32`: `0xABCDE` materialized as `ori32 r1, r0, 703710`.
-5. Full baseline (§ 1) **including `HaydnTests`** — lit alone does not catch the
-   failure mode in § 6.2.
-
-Remaining, by C++ reference count — take the small ones first to build
-confidence, `ADDI32_W` last:
+Left, by C++ reference count:
 
 ```
 CSRW_W              4      SET_HWLOOP_REG_W    4
 SET_HWLOOP_W       10      SET_HWLOOP_F2_W    11
-BGEU_W             11      BLTU_W             11
-BGEZ_W             12      JAL_W              13
-BGE_W              13      BLT_W              13
-BLTZ_W             13      JALR_W             15
-BEQ_W              15      BNE_W              15
-BEQZ_W             21      BNEZ_W             22
 ADDI32_W           82
 ```
 
-Two that are not pure renames:
+`SLLI64` / `SRLI64` / `SRAI64` are `Fmt48_Wide*` but carry no `_W` suffix and
+match the database already. Leave them.
 
-* **`CSRW_W`** — narrow `CSRW` is `(outs GPR32:$rd), (ins uimm8, GPR32:$rs)`, a
-  three-operand shape with a dead `$rd`. The database and every member are
-  two-operand. `HaydnMCCodeEmitter.cpp:566-576` has a hack that strips the dead
-  def when pairing to `CSRW_S0`; retiring the narrow form should delete that
-  hack, which also clears 2 of the 23 errors in § 5.2.
+#### The template, corrected
+
+The original template said "C++ only, never touch the `.td`". **That was wrong,
+and believing it is how the branch fold shipped two silent defects before they
+were caught.** It held for `ORI32` only by luck: `ORI32`'s narrow declaration
+already carried `uimm20`, so nothing about it needed fixing. In general the
+narrow declaration and its `_S0` member were *never wired for CodeGen* — nothing
+selected them — so they are missing whatever the `_W` pair had to be given.
+§ 6.9 and § 6.10 are the two axes found so far.
+
+What § 6.2 actually forbids is **moving a logical to a different format class**.
+Editing flags or an operand class *within* the class a def already has is fine,
+and `HaydnTests` is the gate that proves it.
+
+1. `sed -i 's/Haydn::<X>_W\b/Haydn::<X>/g'` across the referencing `.cpp`/`.h`.
+2. Fix the name→opcode map in `HaydnInstrInfo.cpp` (~line 194, `KnownBases`):
+   the entry keys off the *member* name with its suffix stripped, so
+   `{"BEQ_W", Haydn::BEQ_W}` becomes `{"BEQ", Haydn::BEQ}` — it must name the
+   member that is now live, not the one that was.
+3. Build. Duplicate `case` labels are a compile error and a useful signal; the
+   degenerate `IsWide ? Haydn::X : Haydn::X` ternaries and `||`-chains that
+   compare the same enum twice are **not**, so grep for them.
+4. **Diff the retiring def against the one that survives, field by field.** For
+   each of `let` flags, `Defs`/`Uses`, and every operand class, on *both* the
+   logical and its `_S0` member. Any difference is either a defect in the narrow
+   def or a deliberate correction in the wide one, and either way you have to
+   decide which. Do not skip the member: after `materializeMultiOpcodeInstrs`
+   the member's `MCInstrDesc` is the only one AsmPrinter sees.
+5. Assemble the two spellings side by side and compare bytes:
+   ```sh
+   printf '.text\n{ beq r1, r2, 32; nop; nop }\n{ beq_w r1, r2, 32; nop; nop }\n' > /tmp/cmp.s
+   build/bin/llvm-mc -triple=haydn-unknown-elf -filetype=obj /tmp/cmp.s -o /tmp/cmp.o
+   build/bin/llvm-objdump -d -z --triple=haydn-unknown-elf /tmp/cmp.o
+   ```
+   They must differ **only in the opcode discriminator**. This is what caught
+   § 6.10: `beq` encoded 32 where `beq_w` encoded 16.
+6. Prove the fold is a rename rather than asserting it — see below.
+7. Full baseline (§ 1) **including `HaydnTests`** (§ 6.2), **`lld/test/ELF/haydn`**
+   (§ 6.1) and the simulator suite (§ 6.11 is why).
+
+#### Proving the fold is a rename
+
+Regenerating expectations only records what the new encoder did. The check that
+actually has teeth is to diff `llc` output across the change and require that
+every difference vanish when the `_w` suffix is put back:
+
+```sh
+# dump all 430 CodeGen tests into $1/ using one fixed llc invocation
+for src in $(find llvm/test/CodeGen/Haydn -name '*.ll' | sort); do
+  key=$(echo "${src#llvm/test/CodeGen/Haydn/}" | tr '/' '_')
+  timeout 60 build/bin/llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+      -o - "$src" > "$1/$key.txt" 2>/dev/null
+done
+```
+
+Run it before the change, `git stash` / rebuild / run it after, then for each
+pair apply `s/\b(jalr|jal)_w\b/\1/` to the *before* side and require equality.
+The JAL/JALR fold came back 423 files differing, **0 residual** — that is the
+result to insist on. The branch fold came back with 7 residuals, and every one
+of them was a real bug (§ 6.9, § 6.10, and the stale `Defs = [SFR]`).
+
+Two caveats: `.mir` tests that spell the opcodes literally will always show up as
+residuals (their *input* names `BNEZ_W`), and a residual that is a genuine
+improvement still has to be understood before it is accepted.
+
+#### The three that are not pure renames
+
+* **`CSRW_W` — analysis done, not yet implemented.** The shapes:
+
+  | Def | Where | Shape |
+  |---|---|---|
+  | `CSRW` (logical) | `HaydnInstrInfo.td:911`, `FmtCSR` | `(outs GPR32:$rd), (ins uimm8:$csr_addr, GPR32:$rs)` — 3 ops, `$rd` dead |
+  | `CSRW_W` (logical) | `HaydnInstrInfo.td:1866`, `Fmt48_WideCSR` | `(outs), (ins uimm8_csr:$uimm8, GPR32:$rt)` — 2 ops, `hasSideEffects = 0, Defs = [SFR]` |
+  | `CSRW_S0` | `HaydnFormatsALU32.td:1164` | `(outs), (ins uimm8:$csr, GPR32:$r)` — 2 ops |
+  | `CSRW_W_S0` | `HaydnFormatsALU32.td:1170` | identical 2 ops |
+
+  Both members and all 7 format E members are two-operand, so the target shape
+  is the two-operand one. The dead `$rd` exists "only for MC operand-count
+  parity with the shared `FmtCSR` decoder" — `FmtCSR` is shared with `CSRR`
+  (0x39, real `$rd`) and its decoder case 25 decodes `rd + csr_addr + rs` for
+  both. So dropping `$rd` from `CSRW` stays inside `FmtCSR` (§ 6.2-safe) but
+  **the shared decoder has to be checked**: `CSRW` is 0x3A and `CSRR` 0x39, so
+  they are distinguishable, but the generated table has not been inspected.
+
+  The four C++ references: `HaydnInstrInfo.cpp:205` (`KnownBases`);
+  `HaydnHazardRecognizer.cpp:118-120` (`getHwloopCsrAddr` already branches on
+  the shape to pick operand index 1 vs 0 — it collapses to index 0);
+  `HaydnAsmPrinter.cpp:601` and `:1034` (both *create* `CSRW_W`, so both already
+  build the two-operand shape). Retiring the narrow form deletes the
+  dead-def-stripping hack at `HaydnMCCodeEmitter.cpp:556-560`, which is 2 of the
+  23 errors in § 5.2.
+
 * **`SET_HWLOOP_W` / `_F2_W` / `_REG_W`** — the database names these
   `SET_HWLOOP`, `SET_HWLOOP_F2`, `SET_HWLOOP_REG`, and **`SET_HWLOOP` and
   `SET_HWLOOP_REG` already exist in the tree as `HaydnPseudo` defs** (the
   pre-expansion forms with `brtarget` MBB operands). The pseudos must be renamed
   before the real instructions can take those names. `SET_HWLOOP_F2` is free.
   Note `SET_HWLOOP` fits only the 45-bit `P20` entry (35 bits of operands).
+  Watch `HaydnRelocLayout`'s `HWLoopOff1`/`Off2` rows and § 6.8.
 
-`SLLI64` / `SRLI64` / `SRAI64` are `Fmt48_Wide*` but carry no `_W` suffix and
-match the database already. Leave them.
+* **`ADDI32_W`** — unlike `ORI32`, the narrow declaration is genuinely
+  narrower: `ADDI32` is `FmtI` with `simm16`, the wide one carries
+  `simm20_wide_abs`. The operand class has to be widened *within* `FmtI`
+  (§ 6.2 — do not re-declare `ADDI32` over `Fmt48_WideGPRImm`). 82 references,
+  most of them `HaydnAsmPrinter`'s block-address LO20 materialization. Do it
+  last.
 
 ### 5.2 The 23 C++ errors — the atomic step
 
@@ -228,7 +314,26 @@ Then, by category:
 | 4 | Decoder tables | `DecoderTableS048/S140/S240` → `DecoderTableP2048/P2148/P30../P31../P32..`; `DecoderTableBundle128128` → the two `FormatE2`/`FormatE3` tables. Pick the composite from the header: `Inst{3}`. `HaydnDisassembler.cpp:252,267,282,477`. Its `SlotGeo Slots[3]` must become 2-or-3. |
 | 6 | GISel selects members directly | `MOVEI_H_S0`/`MOVEI_L_S0` at `HaydnInstructionSelector.cpp:3826`; `X4CMUL16{,S,_F2,S_F2}_S1` at 4808-4811. The comment says the Auto.td logicals are `HaydnInst` stubs that AsmPrinter drops as `MCID::Pseudo`. Format E has members for all of them (`MOVEI_H` 2, `X4CMUL16` 5), so the clean fix is to make the logicals real and let the alternates auction place them. |
 | 6 | hwloop predicates naming `_S0` | `HaydnFixupHwLoops.cpp:125,129,133` and `HaydnMCInstLower.cpp:31`. Fold through `getHaydnLogicalBaseOpcode` — `HaydnFixupHwLoops` already has `const HaydnInstrInfo &TII`; `HaydnMCInstLower::Lower` can reach MII via the `MachineInstr`. |
-| 2 | `CSRW_S0` normalization | `HaydnMCCodeEmitter.cpp:572,576`. Should disappear with § 5.1's `CSRW_W` work. |
+| 2 | `CSRW_S0` normalization | `HaydnMCCodeEmitter.cpp:556-560`. Should disappear with § 5.1's `CSRW_W` work. |
+
+**Two generator gaps block this step, and neither shows up as a C++ error.**
+Both were found the hard way during the `_W` fold, on Bundle128's narrow members
+— the generated format E members have the same shape, so they will reproduce
+them across all 3578:
+
+* **No instruction-property flags** (§ 6.9). `haydn_encoding.py` emits no
+  `isBranch` / `isTerminator` / `isCall` / `isBarrier` / `isIndirectBranch` and
+  no caller-saved `Defs`. Without them AsmPrinter suppresses branch-target
+  labels and the compiler's own output stops assembling. The flags are a
+  property of the logical, so the generator can copy them from the logical it is
+  expanding rather than inventing a table.
+* **No immediate scaling** (§ 6.10). Members take plain `simm12` / `simm20`
+  where the offset is stored in 2-byte units. The database already distinguishes
+  the cases — `branch_scale` is 2 for the ten branches and JAL, 1 for
+  rs-relative JALR — so this is available, just not consumed.
+
+Both are silent: `--emit roundtrip` cannot see either, because it only checks
+that the encoder agrees with the decoder, and both defects are symmetric.
 
 Also delete, in the same commit: `HaydnFormats{ALU32,ALU64,LS,LD,MAC}.td`
 (7615 lines) and `HaydnCompositeFormats.td`. **`HaydnFormatsLS.td` is the only
@@ -269,6 +374,15 @@ Every encoding expectation changes at the switch. Regenerating from the new
 toolchain only records what the new encoder did, so use `--emit roundtrip` as
 the independent judgement: where a regenerated expectation and the round-trip
 disagree, **the encoder is wrong**.
+
+Be aware of what `--emit roundtrip` cannot see, though: it checks the encoder
+against the decoder, so any defect symmetric across the pair passes. That is how
+§ 5.3's blank MAC operand survived, and how § 6.10's missing ÷2 survived. For
+anything with an outside reference — a scale the database states, a field the
+linker patches, a flag the generic CodeGen layer reads — the round trip is not
+evidence. The before/after `llc` diff in § 5.1 and the byte-level A/B against
+the retiring spelling are, and at the switch itself `lld/test/ELF/haydn` and the
+simulator suite are the only things standing outside the encoder's own opinion.
 
 ### 5.5 BundleSim side
 
@@ -323,6 +437,15 @@ Changing which format a logical belongs to moves it in `CodeGenFormat`'s index
 space and the packing tables shift underneath everything else. **Always run
 `HaydnTests`, not just lit.**
 
+Note the scope: this forbids **re-parenting a def to a different format class**.
+It does not forbid editing the `.td` at all, and the stronger reading — "the
+fold has to leave the `.td` alone and rename in C++" — is what let § 6.9 and
+§ 6.10 through. Changing a `let` flag, a `Defs` list, or an operand class
+*within* the class a def already has does not move anything in `CodeGenFormat`'s
+index space; the branch and JAL folds did all three and `HaydnTests` stayed at
+248/248 throughout. Run it after every such edit and let it answer the question,
+rather than avoiding the edit.
+
 ### 6.3 Two TableGen roots
 
 `Haydn.td` for everything, `HaydnAsmMatcher.td` for `-gen-asm-matcher` alone.
@@ -342,13 +465,34 @@ Entry windows are 45/41/31/31/27 bits. `Size` is a byte count and cannot express
 that, and `InstructionEncoding` rejects an `Inst` narrower than `Size * 8`. The
 generator zero-pads above the window so every field keeps its layout position.
 
-### 6.6 `ninja` does not track the compiler binary
+### 6.6 `ninja` does not track the compiler binary — and this bites the BSP too
 
 After rebuilding clang, `simulator/scripts/build_haydn_llvm_libc.sh` prints
 `ninja: no work to do`, keeps the `libc.a` the **old** clang produced, then
 reports `OK:` and installs a stale sysroot. Following the documented change gate
 is not sufficient. Force it: `ninja -C "$BUILD_DIR" -t clean` first, then expect
 ~723 targets and ~1.5 min.
+
+**The same applies to `simulator/build/bsp-stage`, and it is worse there.** The
+BSP holds `crt0.o` and `libbundlesim_{crt,plat,sys}.a`; `cmake --build build`
+will not rebuild them just because the compiler changed. Nothing warns you. The
+stale objects link cleanly against freshly-compiled code — the two halves simply
+carry different instruction spellings — and the program then dies 18 bundles in
+with `MEMORY_FAULT / ALIGNMENT` at an address like `0x7fffff9d`, with the fault
+PC pointing deep inside libc and no hint that the BSP is involved. It looks
+exactly like a miscompile.
+
+The tell is in the disassembly: `llvm-objdump -d program.elf` shows
+`__bundlesim_start` and `__bundlesim_run_fini_array` using the old spellings
+(`jal_w`, `jalr_w`) while `main` and `abort` use the new ones. Fix:
+
+```sh
+rm -rf build/bsp-stage && cmake --build build --target haydn_bsp
+```
+
+This cost most of an hour during the JAL fold and mimicked a real regression
+convincingly enough to be worth checking *first* whenever the simulator suite
+goes from green to broadly red.
 
 ### 6.7 `lldb_feature_matrix` fails under load
 
@@ -371,6 +515,76 @@ the diff meaningful.
 
 ---
 
+### 6.9 The narrow `_S0` members carry no instruction-property flags
+
+Bundle128's `_W_S0` members were wrapped in `let isBranch = 1, isTerminator = 1`
+(and `isCall`/`isBarrier`/`isIndirectBranch` plus the caller-saved `Defs` for
+the call forms). **The narrow `_S0` members had none of it**, because nothing
+ever selected them.
+
+This matters because `materializeMultiOpcodeInstrs` commits the logical to its
+member before AsmPrinter runs, so the member's `MCInstrDesc` is the one the
+generic CodeGen layer reads. With no `isTerminator`,
+`MachineBasicBlock::terminators()` comes back empty,
+`AsmPrinter::isBlockOnlyReachableByFallthrough` concludes a block that is in
+fact a branch target is reachable only by fallthrough, and the label is emitted
+as a `// %bb.1:` comment while the branch still references `.LBB0_1`. The
+assembler then rejects its own compiler's output:
+
+```
+<unknown>:0: error: Undefined temporary symbol .LBB0_1
+```
+
+Only two of 589 lit tests caught it, and only because those functions happened
+to have a block with exactly one predecessor that was also its layout
+predecessor.
+
+**The format E generator emits no property flags at all** — grep
+`haydn_encoding.py` for `isBranch|isTerminator|isCall|isBarrier` and it returns
+nothing, and `BEQ_P20_ALU0` in the generated `.td` has none. All 3578 members
+need them before § 5.2, or every function with a conditional branch produces
+output that does not assemble. This is the single largest known gap in the
+generator.
+
+### 6.10 The narrow `_S0` members had the wrong immediate scaling
+
+§ 5.14 D1 puts branch offsets in 2-byte units. The `_W_S0` members took
+`brtarget_wide_{ri12,i12,i20}`, whose encoder/decoder pair does the ÷2. The
+narrow `_S0` members took plain `simm12` / `calltarget_s0`, which store the byte
+offset **raw**: `beq r1, r2, 32` encoded 32 where `beq_w r1, r2, 32` encoded 16,
+and `jal` had half the reach of `jal_w` (±512KB against ±1MB).
+
+Nothing caught it because the defect is symmetric. `simm12` decodes raw too, so
+the round trip agrees with itself, and symbolic targets were unaffected — the
+fixup carries `ValueShift = 1` regardless of the operand class, so only literal
+offsets in hand-written asm and the *disassembly* were wrong. The byte-level A/B
+in § 5.1 step 5 is the only thing that surfaces it.
+
+Format E's generated members take plain `simm12` / `simm20` as well, so the same
+question is open there: the database gives `BEQ` and `JAL` `branch_scale = 2`
+and `JALR` `branch_scale = 1`, and the generator does not currently express that
+distinction.
+
+### 6.11 BundleSim reads mnemonics, so retiring a spelling changes its behaviour
+
+BundleSim consumes `llvm-objdump` text, not bytes. Branch immediates reach it as
+**byte offsets**, and the halfword range check divides before comparing against
+the 12- or 20-bit field. That divisor used to be keyed off a hardcoded list of
+eleven `_W` mnemonics in `bs_instruction_normalize`.
+
+The moment the compiler stopped emitting `bnez_w`, the list stopped matching,
+every branch range-checked its byte offset against 12 bits, and anything past
+±2048 came back `ILLEGAL_INSTRUCTION`: **180 of 221 ctest cases**, mostly
+yarpgen, with a message that names the immediate and the field width and gives
+no clue that a spelling changed.
+
+Fixed in simulator `bdf14d7` by reading `desc->branch_scale` from the golden
+catalog instead. Note it was already correct there — 2 for the ten branches and
+JAL, 1 for rs-relative JALR — so this was one hardcoded list disagreeing with a
+generated table that already knew the answer. **Grep the simulator for other
+mnemonic literals before retiring the next spelling**; `dispatch_*.c` matching
+on literal mnemonics is called out in § 5.5 for exactly this reason.
+
 ## 7. Decided, do not relitigate
 
 * **The AR intrinsic prototypes change; the source break is accepted.** The
@@ -384,6 +598,19 @@ the diff meaningful.
 * **The BundleSim catalog stays frozen until § 5.2 lands.** It currently matches
   the compiler that exists; unfreezing early desyncs them.
 * **Slot placement is not a product gate.** Do not enable `--enforce-slots`.
+* **When a `_W` fold finds the narrow and wide defs disagreeing, the wide one
+  wins.** This is not a preference, it is what § 5.1's premise means: the
+  database keeps one instruction and it is the wide shape. Applied so far to the
+  branch offset scaling, JAL's reach, `hasSideEffects`/`Defs = [SFR]` on the
+  conditional branches, and JALR's `isBarrier`. The narrow defs were never
+  selected by CodeGen, so where they differ they are simply unmaintained.
+* **`jal` emits `R_HAYDN_WIDE_CallSImm20`, and the two narrow relocations are
+  retired.** `FIXUP_HAYDN_CallSImm20` and `FIXUP_HAYDN_BranchSImm16` are no
+  longer selected by anything as of `9802930e5fde`. The fixup kinds, their
+  geometry rows in `HaydnRelocLayout.cpp` and their `R_HAYDN_*` ELF mappings all
+  stay, so objects built by an older toolchain still link — but nothing produces
+  them any more, and `reloc-callsimm20.s` / `haydn-relocations.s` /
+  `thunk-addend.s` now assert the WIDE name.
 
 ---
 

@@ -3,21 +3,21 @@
 ;
 ; InsertIndirectBranch must not AllowSpill=true when scavenging a
 ; scratch for a far-branch trampoline. Under greedy RA + high live-out
-; pressure that path spilled a live-out GPR and reloaded it *after* JALR_W
+; pressure that path spilled a live-out GPR and reloaded it *after* JALR
 ; in the trampoline MBB (dead reload; dest saw clobbered live-in).
 ; verify-machineinstrs rejects "Non-terminator after the first terminator";
 ; yarpgen seed2 @ -O1/-O2 wrong oracle_u64 (host 0xfc460d2be25adb0b).
 ;
 ; Fix: AllowSpill=false; fall back to R11 + RestoreBB (RISC-V style; AIE
 ; model — no free AT). Primary gate is -verify-machineinstrs on this long
-; branch with many live GPRs into the far target (CHECK pins jalr_w so
+; branch with many live GPRs into the far target (CHECK pins jalr so
 ; BranchRelaxation still fires).
 
 @arr = global [2048 x i32] zeroinitializer
 
 define i32 @cb124_far_branch_liveouts(i32 %a0, i32 %a1, i32 %a2, i32 %a3, i32 %a4, i32 %a5, i32 %a6, i32 %a7, i32 %a8, i32 %a9, i32 %a10, i32 %a11) nounwind {
 ; CHECK-LABEL: cb124_far_branch_liveouts:
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 entry:
   %cmp = icmp eq i32 %a0, 0
   br i1 %cmp, label %far, label %pad

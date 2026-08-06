@@ -17,7 +17,7 @@
 ; CHECK: 	{ nop; nop; addi32_w	r1, r0, 0 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	const_zero, .Lfunc_end0-const_zero
 ; CHECK: 	.cfi_endproc
@@ -33,7 +33,7 @@
 ; CHECK: 	{ nop; nop; addi32_w	r1, r0, 42 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	const_small, .Lfunc_end1-const_small
 ; CHECK: 	.cfi_endproc
@@ -50,7 +50,7 @@
 ; CHECK: 	{ nop; nop; addi32_w	r1, r1, -237234 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	const_large, .Lfunc_end2-const_large
 ; CHECK: 	.cfi_endproc

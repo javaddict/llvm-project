@@ -98,7 +98,7 @@ bool HaydnExpandPseudos::insertSoftZeroR0Maintenance(MachineFunction &MF) {
       bool NeedsSuccRezero = false;
       if (Opc == Haydn::BR_JT) {
         NeedsSuccRezero = true;
-      } else if ((Opc == Haydn::JALR_W || Opc == Haydn::JALR) &&
+      } else if ((Opc == Haydn::JALR || Opc == Haydn::JALR) &&
                  MI.getNumExplicitOperands() >= 1 && MI.getOperand(0).isReg() &&
                  MI.getOperand(0).getReg() == Haydn::R0) {
         // Pure jump / discard-link form (rd = R0). Skip if this looks like a
@@ -137,7 +137,7 @@ bool HaydnExpandPseudos::insertSoftZeroR0Maintenance(MachineFunction &MF) {
       ++MII; // advance before possible insert after MI
       unsigned Opc = MI.getOpcode();
       bool NeedsPostCallZero =
-          Opc == Haydn::JAL || Opc == Haydn::JAL_W ||
+          Opc == Haydn::JAL || Opc == Haydn::JAL ||
           Opc == Haydn::PseudoCALLIndirect;
       if (!NeedsPostCallZero)
         continue;
@@ -435,7 +435,7 @@ bool HaydnExpandPseudos::expandPseudosInBundles(MachineBasicBlock &MBB) {
       }
       case Haydn::PseudoCALL: {
         // Phase 1a: route to the 48-bit WIDE form JAL_W.
-        BuildMI(MBB, BundleIter, DL, TII->get(Haydn::JAL_W), Haydn::R15)
+        BuildMI(MBB, BundleIter, DL, TII->get(Haydn::JAL), Haydn::R15)
             .add(*CallTarget);
         break;
       }
@@ -476,7 +476,7 @@ bool HaydnExpandPseudos::expandPseudosInBundles(MachineBasicBlock &MBB) {
                 .addReg(LibRs2, getKillRegState(true))
                 .addReg(LibRs2, getKillRegState(true));
           // Phase 1a: route to the 48-bit WIDE form JAL_W.
-          BuildMI(MBB, BundleIter, DL, TII->get(Haydn::JAL_W), Haydn::R15)
+          BuildMI(MBB, BundleIter, DL, TII->get(Haydn::JAL), Haydn::R15)
               .addExternalSymbol(Symbol);
           if (LibResultReg != Haydn::D0)
             BuildMI(MBB, BundleIter, DL, TII->get(Haydn::OR64), LibResultReg)
@@ -492,7 +492,7 @@ bool HaydnExpandPseudos::expandPseudosInBundles(MachineBasicBlock &MBB) {
                 .addReg(LibRs2, getKillRegState(true))
                 .addReg(Haydn::R0);
           // Phase 1a: route to the 48-bit WIDE form JAL_W.
-          BuildMI(MBB, BundleIter, DL, TII->get(Haydn::JAL_W), Haydn::R15)
+          BuildMI(MBB, BundleIter, DL, TII->get(Haydn::JAL), Haydn::R15)
               .addExternalSymbol(Symbol);
           if (LibResultReg != Haydn::R1)
             BuildMI(MBB, BundleIter, DL, TII->get(Haydn::ADD32), LibResultReg)
@@ -1237,7 +1237,7 @@ bool HaydnExpandPseudos::expandPseudoCALL(MachineBasicBlock &MBB,
   MachineFunction &MF = *MBB.getParent();
 
   // JAL_W R15, target — stores return address in R15 (LR) and jumps.
-  auto MIB = BuildMI(MBB, MI, DL, TII->get(Haydn::JAL_W), Haydn::R15).add(Target);
+  auto MIB = BuildMI(MBB, MI, DL, TII->get(Haydn::JAL), Haydn::R15).add(Target);
 
   // Transfer any implicit operands from the pseudo (e.g., callee-saved defs).
   bool HasRegMask = false;
@@ -1331,7 +1331,7 @@ bool HaydnExpandPseudos::expandLibcall(MachineBasicBlock &MBB, MachineInstr &MI,
     const uint32_t *Mask =
         TRI->getCallPreservedMask(MF, MF.getFunction().getCallingConv());
     assert(Mask && "Missing call preserved mask for calling convention");
-    BuildMI(MBB, MI, DL, TII->get(Haydn::JAL_W), Haydn::R15)
+    BuildMI(MBB, MI, DL, TII->get(Haydn::JAL), Haydn::R15)
         .addExternalSymbol(Symbol)
         .addRegMask(Mask);
   }

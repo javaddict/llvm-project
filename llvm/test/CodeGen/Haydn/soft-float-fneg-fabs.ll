@@ -19,7 +19,7 @@ define float @negf(float noundef %a) {
 ; CHECK-NEXT:    { xor32 r1, r1, r2; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { nop; nop; addi32_w sp, sp, 8 }
-; CHECK-NEXT:    { nop; nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; nop; jalr r0, lr, 0 }
   %r = fneg float %a
   ret float %r
 }
@@ -37,7 +37,7 @@ define float @fabsf_test(float noundef %a) {
 ; CHECK-NEXT:    { and32 r1, r1, r2; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { nop; nop; addi32_w sp, sp, 8 }
-; CHECK-NEXT:    { nop; nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; nop; jalr r0, lr, 0 }
   %r = call float @llvm.fabs.f32(float %a)
   ret float %r
 }
@@ -63,7 +63,7 @@ define double @negd(double noundef %a) {
 ; CHECK-NEXT:    { xor64 d0, d0, d1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { nop; nop; addi32_w sp, sp, 8 }
-; CHECK-NEXT:    { nop; nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; nop; jalr r0, lr, 0 }
   %r = fneg double %a
   ret double %r
 }
@@ -87,7 +87,7 @@ define double @fabsd_test(double noundef %a) {
 ; CHECK-NEXT:    { and64 d0, d0, d1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { nop; nop; addi32_w sp, sp, 8 }
-; CHECK-NEXT:    { nop; nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; nop; jalr r0, lr, 0 }
   %r = call double @llvm.fabs.f64(double %a)
   ret double %r
 }
@@ -106,11 +106,11 @@ define float @neg_then_add(float noundef %a, float noundef %b) {
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { move32 r3, r1; move32 r1, r2; nop }
 ; CHECK-NEXT:    { move32 r2, r3; nop; nop }
-; CHECK-NEXT:    { nop; nop; jal_w lr, __subsf3 }
+; CHECK-NEXT:    { nop; nop; jal lr, __subsf3 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 12; nop }
 ; CHECK-NEXT:    { nop; nop; addi32_w sp, sp, 16 }
-; CHECK-NEXT:    { nop; nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; nop; jalr r0, lr, 0 }
   %na = fneg float %a
   %r = fadd float %na, %b
   ret float %r

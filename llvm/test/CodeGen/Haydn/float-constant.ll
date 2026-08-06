@@ -60,7 +60,7 @@
 ; CHECK: 	{ nop; nop; addi32_w	r1, r1, 0 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	ret_float_2p5, .Lfunc_end0-ret_float_2p5
 ; CHECK: 	.cfi_endproc
@@ -77,7 +77,7 @@
 ; CHECK: 	{ nop; nop; addi32_w	r1, r1, 0 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	ret_float_1p0, .Lfunc_end1-ret_float_1p0
 ; CHECK: 	.cfi_endproc
@@ -93,7 +93,7 @@
 ; CHECK: 	{ nop; nop; addi32_w	r1, r0, 0 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	ret_float_0p0, .Lfunc_end2-ret_float_0p0
 ; CHECK: 	.cfi_endproc
@@ -110,7 +110,7 @@
 ; CHECK: 	{ nop; nop; addi32_w	r1, r1, 0 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	ret_float_neg2p0, .Lfunc_end3-ret_float_neg2p0
 ; CHECK: 	.cfi_endproc
@@ -133,7 +133,7 @@
 ; CHECK: 	{ nop; ld64	d0, sp, 0; addi32_w	sp, sp, 8 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	ret_double_3p14, .Lfunc_end4-ret_double_3p14
 ; CHECK: 	.cfi_endproc
@@ -155,7 +155,7 @@
 ; CHECK: 	{ nop; ld64	d0, sp, 0; addi32_w	sp, sp, 8 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end5:
 ; CHECK: 	.size	ret_double_1p0, .Lfunc_end5-ret_double_1p0
 ; CHECK: 	.cfi_endproc
@@ -172,11 +172,11 @@
 ; CHECK: 	.cfi_offset lr, 12
 ; CHECK: 	{ nop; nop; lui	r2, 1026 }
 ; CHECK: 	{ nop; nop; addi32_w	r2, r2, 0 }
-; CHECK: 	{ nop; nop; jal_w	lr, __addsf3 }
+; CHECK: 	{ nop; nop; jal	lr, __addsf3 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; ld32	lr, sp, 12; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 16 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end6:
 ; CHECK: 	.size	const_plus_arg, .Lfunc_end6-const_plus_arg
 ; CHECK: 	.cfi_endproc

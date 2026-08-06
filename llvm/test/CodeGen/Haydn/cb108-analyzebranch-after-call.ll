@@ -1,8 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 ;
 ; BranchRelaxation must be able to analyze a conditional branch that
-; sits in the same MBB as a preceding libcall (JAL_W). analyzeBranch used to
-; treat the mid-block JAL_W as "unanalyzable" after already parsing the
+; sits in the same MBB as a preceding libcall (JAL). analyzeBranch used to
+; treat the mid-block JAL as "unanalyzable" after already parsing the
 ; trailing cond-branch, so fixupConditionalBranch asserted
 ; "branches to be relaxed must be analyzable" (yarpgen seed 2289: __divsi3
 ; then BNE).
@@ -62,4 +62,4 @@ entry:
 ; Soft-div call must be present.
 ; CHECK: jal{{(_w)?}}
 ; Function must compile (no BranchRelaxation assert) and return.
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}

@@ -7,7 +7,7 @@
 ; CHECK: // %bb.0:
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ addi32{{(_w)?}}{{(\.s[012])?}}	r1, r1, 40; nop; nop }
-; CHECK: 	{ nop; nop; jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	test_ptradd_const_offset, .Lfunc_end0-test_ptradd_const_offset
 ; CHECK: 	.cfi_endproc

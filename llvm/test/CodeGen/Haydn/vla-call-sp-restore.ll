@@ -38,7 +38,7 @@
 ; CHECK: 	{ and32	r1, r1, r2; nop; nop }
 ; CHECK: 	{ sub32	r8, sp, r1; nop; nop }
 ; CHECK: 	{ move32	r1, r8; nop; nop }
-; CHECK: 	{ nop; nop; jal_w	lr, use }
+; CHECK: 	{ nop; nop; jal	lr, use }
 ; CHECK: 	{ xor32	r0, r0, r0; ld32	r1, r8, 0; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, fp, -24 }
@@ -46,7 +46,7 @@
 ; CHECK: 	{ nop; ld32	fp, sp, 16; nop }
 ; CHECK: 	{ nop; ld32	r8, sp, 20; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 24 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	vla_call_sp_restore, .Lfunc_end0-vla_call_sp_restore
 ; CHECK:                                         // -- End function

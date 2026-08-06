@@ -17,7 +17,7 @@
 ; CHECK: 	{ move32	r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	scalar_mul, .Lfunc_end0-scalar_mul
 ; CHECK: 	.cfi_endproc
@@ -37,7 +37,7 @@
 ; CHECK: 	{ move32	r1, r3; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	cond_mul, .Lfunc_end1-cond_mul
 ; CHECK: 	.cfi_endproc

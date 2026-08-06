@@ -26,7 +26,7 @@ cb119_addi32_simm20:
     { addi32 r2, r0, 524287; nop; nop }
     { addi32 r3, r0, -1; nop; nop }
     { addi32 r4, r0, 1; nop; nop }
-    { jalr_w r0, lr, 0; nop; nop }
+    { jalr r0, lr, 0; nop; nop }
     .size cb119_addi32_simm20, .-cb119_addi32_simm20
 
 # CHECK-LABEL: <cb119_addi32_simm20>:

@@ -20,7 +20,7 @@
 ; CHECK: 	{ or64	d0, d0, d1; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	complex_s64_expr, .Lfunc_end0-complex_s64_expr
 ; CHECK: 	.cfi_endproc
@@ -47,7 +47,7 @@
 ; CHECK: 	{ add64	d0, d0, d1; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	load_arith_s64, .Lfunc_end1-load_arith_s64
 ; CHECK: 	.cfi_endproc
@@ -65,7 +65,7 @@
 ; CHECK: 	{ d_sw_h_with_imm	d0, r2, 0; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	arith_store_s64, .Lfunc_end2-arith_store_s64
 ; CHECK: 	.cfi_endproc
@@ -94,7 +94,7 @@
 ; CHECK: .LBB3_3:                                // %then
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	cmp_branch_arith_s64, .Lfunc_end3-cmp_branch_arith_s64
 ; CHECK: 	.cfi_endproc
@@ -121,7 +121,7 @@
 ; CHECK: 	{ add64	d0, d1, d0; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	select_arith_s64, .Lfunc_end4-select_arith_s64
 ; CHECK: 	.cfi_endproc
@@ -143,7 +143,7 @@
 ; CHECK: 	{ nop; ld64	d0, sp, 0; addi32_w	sp, sp, 8 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end5:
 ; CHECK: 	.size	array_access_s64, .Lfunc_end5-array_access_s64
 ; CHECK: 	.cfi_endproc
@@ -163,7 +163,7 @@
 ; CHECK: 	{ add64	d0, d0, d1; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end6:
 ; CHECK: 	.size	extend_arith_s64, .Lfunc_end6-extend_arith_s64
 ; CHECK: 	.cfi_endproc

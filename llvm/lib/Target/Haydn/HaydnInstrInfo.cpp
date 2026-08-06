@@ -196,7 +196,7 @@ static unsigned getHaydnFlexBaseOpcode(unsigned Opc, const MCInstrInfo &MII) {
       {"ADDI32_W", Haydn::ADDI32_W},   {"SUB32", Haydn::SUB32},
       {"SEQ32", Haydn::SEQ32},         {"SLT32", Haydn::SLT32},
       {"SLTU32", Haydn::SLTU32},       {"XORI32", Haydn::XORI32},
-      {"JAL_W", Haydn::JAL_W},         {"JALR_W", Haydn::JALR_W},
+      {"JAL", Haydn::JAL},         {"JALR", Haydn::JALR},
       {"BEQ", Haydn::BEQ},         {"BNE", Haydn::BNE},
       {"BGE", Haydn::BGE},         {"BLT", Haydn::BLT},
       {"BGEU", Haydn::BGEU},       {"BLTU", Haydn::BLTU},
@@ -516,7 +516,7 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
         CF.getOperand(0).isMBB()) {
       IsUnconditional = true;
       Target = CF.getOperand(0).getMBB();
-    } else if ((Opc == Haydn::JAL || Opc == Haydn::JAL_W) &&
+    } else if ((Opc == Haydn::JAL || Opc == Haydn::JAL) &&
                CF.getNumOperands() > 1 && CF.getOperand(0).isReg() &&
                CF.getOperand(0).getReg() == Haydn::R0 &&
                CF.getOperand(1).isMBB()) {
@@ -546,7 +546,7 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
     // Phase 1a: CodeGen selects JALR_W; legacy JALR kept for asm.
     // If we already parsed a trailing branch sequence, this is mid-block
     // material (should not happen for JALR) — stop and keep the analysis.
-    if (Opc == Haydn::JALR || Opc == Haydn::JALR_W) {
+    if (Opc == Haydn::JALR || Opc == Haydn::JALR) {
       if (!Cond.empty() || UncondTarget)
         break;
       return true;
@@ -570,7 +570,7 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
     // stop and keep analysis. As sole terminator (noreturn abort): continue
     // so empty Cond means analyzable fallthrough for MBP (20000815-1).
     // Only for non-terminator calls — true terminators stay unanalyzable.
-    if (Opc == Haydn::JAL || Opc == Haydn::JAL_W) {
+    if (Opc == Haydn::JAL || Opc == Haydn::JAL) {
       if (!Cond.empty() || UncondTarget)
         break;
       if (!CF.isTerminator(MachineInstr::IgnoreBundle))
@@ -942,7 +942,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     // RET → JALR_W R0, R15, 0 (jump to LR, discard link address).
     // Phase 1a: route to the 48-bit WIDE form (legacy JALR kept in
     // the.td for asm parser / decoder until Phase 3).
-    MI.setDesc(get(Haydn::JALR_W));
+    MI.setDesc(get(Haydn::JALR));
     MI.addOperand(MachineOperand::CreateReg(Haydn::R0, /*isDef*/ true));
     MI.addOperand(MachineOperand::CreateReg(Haydn::R15, /*isDef*/ false));
     MI.addOperand(MachineOperand::CreateImm(0));
@@ -1339,8 +1339,8 @@ bool HaydnInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
   // JALR / JALR_W have no offset limitation (register-indirect).
   // Phase 1a: CodeGen selects the _W forms; legacy opcodes kept for
   // the asm parser / decoder.
-  if (BranchOpc == Haydn::JAL || BranchOpc == Haydn::JAL_W ||
-      BranchOpc == Haydn::JALR || BranchOpc == Haydn::JALR_W)
+  if (BranchOpc == Haydn::JAL || BranchOpc == Haydn::JAL ||
+      BranchOpc == Haydn::JALR || BranchOpc == Haydn::JALR)
     return true;
 
   // Pseudo-call and jump-table pseudo reach ±512KB (JAL_W) / unlimited
@@ -1410,7 +1410,7 @@ HaydnInstrInfo::getBranchDestBlock(const MachineInstr &MI) const {
   // JAL / JAL_W with MBB operand (call or far jump).
   // Operands: rd, calltarget/brtarget_wide_i20 (both shapes are (rd, target)).
   // Phase 1a: CodeGen selects JAL_W; legacy JAL kept for asm/parser.
-  if ((Opc == Haydn::JAL || Opc == Haydn::JAL_W) &&
+  if ((Opc == Haydn::JAL || Opc == Haydn::JAL) &&
       Br.getOperand(1).isMBB()) {
     return Br.getOperand(1).getMBB();
   }
@@ -1502,7 +1502,7 @@ void HaydnInstrInfo::insertIndirectBranch(
     MachineBasicBlock *JumpDest = JumpToRestore ? &RestoreBB : &NewDestBB;
     BuildMI(MBB, InsertPt, DL, get(Haydn::LOADI32), ScratchPhys)
         .addMBB(JumpDest);
-    BuildMI(MBB, InsertPt, DL, get(Haydn::JALR_W))
+    BuildMI(MBB, InsertPt, DL, get(Haydn::JALR))
         .addReg(ScratchPhys, RegState::Define)
         .addReg(ScratchPhys)
         .addImm(0);
@@ -1522,7 +1522,7 @@ void HaydnInstrInfo::insertIndirectBranch(
     Register ScratchV = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
     MachineInstr *LoadMI =
         BuildMI(MBB, II, DL, get(Haydn::LOADI32), ScratchV).addMBB(&NewDestBB);
-    BuildMI(MBB, II, DL, get(Haydn::JALR_W))
+    BuildMI(MBB, II, DL, get(Haydn::JALR))
         .addReg(ScratchV, RegState::Define)
         .addReg(ScratchV)
         .addImm(0);
@@ -1550,7 +1550,7 @@ void HaydnInstrInfo::insertIndirectBranch(
   if (ScratchPhys.isValid()) {
     RS->setRegUsed(ScratchPhys);
     BuildMI(MBB, II, DL, get(Haydn::LOADI32), ScratchPhys).addMBB(&NewDestBB);
-    BuildMI(MBB, II, DL, get(Haydn::JALR_W))
+    BuildMI(MBB, II, DL, get(Haydn::JALR))
         .addReg(ScratchPhys, RegState::Define)
         .addReg(ScratchPhys)
         .addImm(0);

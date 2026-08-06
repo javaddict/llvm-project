@@ -15,7 +15,7 @@
 # `{ jal lr, main; nop; nop }` embeds the JAL as an MCOperand::isInst
 # child of Haydn::BUNDLE. Base MCStreamer::emitInstruction only walks
 # top-level isExpr operands, so `main` was never registerSymbol'd →
-# R_HAYDN_CallSImm20 against symbol index 0 (ABS) → lld patched S=0 →
+# R_HAYDN_WIDE_CallSImm20 against symbol index 0 (ABS) → lld patched S=0 →
 # garbage offset / `jal r0, 65535` after FieldLsb clobber. HaydnMCELFStreamer
 # recursively visitUsedExpr's bundle children (Hexagon pattern).
 #
@@ -42,4 +42,4 @@ jal lr, 6068
 
 # Bundle form with external symbol (the crt0 / direct-ELF canary path).
 { jal lr, main; nop; nop }
-# RELOC: R_HAYDN_CallSImm20 main
+# RELOC: R_HAYDN_WIDE_CallSImm20 main

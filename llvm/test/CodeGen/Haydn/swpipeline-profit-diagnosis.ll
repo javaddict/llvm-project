@@ -1,6 +1,6 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
 ; Smoke: pre-existing CHECK drift — compile and emit a return.
-; CHECK: {{jalr|jalr_w}}
+; CHECK: {{jalr|jalr}}
 ;
 ; XFAIL RESOLVED (, /): naive SMS recognizer body scan
 ; rejected every loop via Mi.hasUnmodeledSideEffects — every _S<k>_FLEX opcode

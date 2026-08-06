@@ -45,7 +45,7 @@ define i32 @va_int(i32 %fixed, ...) {
 ; CHECK: st32
 ; 32-bit va_arg reads via the GPR cursor -> LD32 (not LD64_S1).
 ; CHECK: ld32
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)
   %v = va_arg ptr %ap, i32
@@ -62,7 +62,7 @@ define i64 @va_i64(i32 %fixed, ...) {
 ; CHECK: st32
 ; 64-bit va_arg via DR cursor: ld64 or dual ld32 pair.
 ; CHECK: {{ld64|ld32}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)
   %v = va_arg ptr %ap, i64
@@ -79,7 +79,7 @@ define double @va_f64(i32 %fixed, ...) {
 ; CHECK: st32
 ; f64 va_arg via DR cursor: ld64 or dual ld32 pair.
 ; CHECK: {{ld64|ld32}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)
   %v = va_arg ptr %ap, double
@@ -97,7 +97,7 @@ define i64 @va_mixed(i32 %fixed, ...) {
 ; CHECK: st32
 ; i32 / i64 / i32 via banked cursors (i64 may be dual ld32).
 ; CHECK: ld32
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)
   %a = va_arg ptr %ap, i32
@@ -156,7 +156,7 @@ define i64 @va_order_init_offsets(i32 %fixed, ...) {
 ; CHECK: add32
 ; The 64-bit read uses the DR cursor (ld64), the 32-bit read uses ld32.
 ; CHECK: {{ld64|ld32}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)
   %a = va_arg ptr %ap, i32
@@ -191,7 +191,7 @@ define i32 @va_overflow(i32 %fixed, ...) {
 ; CHECK: ld32
 ; CHECK: ld32
 ; CHECK: ld32
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)
   %a1 = va_arg ptr %ap, i32
@@ -222,7 +222,7 @@ define i64 @va_copy_independent(i32 %fixed, ...) {
 ; with the cursor reads, so we assert only on the two ld64 reads + the return.)
 ; CHECK: {{ld64|ld32}}
 ; CHECK: {{ld64|ld32}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %ap1 = alloca ptr
   %ap2 = alloca ptr
   call void @llvm.va_start(ptr %ap1)

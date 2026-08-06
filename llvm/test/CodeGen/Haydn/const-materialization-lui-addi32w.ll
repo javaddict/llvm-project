@@ -41,7 +41,7 @@
 ; CHECK: 	{ nop; nop; addi32_w	r1, r1, 284280 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	const_0x12345678, .Lfunc_end0-const_0x12345678
 ; CHECK: 	.cfi_endproc
@@ -58,7 +58,7 @@
 ; CHECK: 	{ nop; nop; addi32_w	r1, r1, 294912 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	const_0x12348000, .Lfunc_end1-const_0x12348000
 ; CHECK: 	.cfi_endproc
@@ -75,7 +75,7 @@
 ; CHECK: 	{ nop; nop; addi32_w	r1, r1, -294912 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	const_0x123B8000, .Lfunc_end2-const_0x123B8000
 ; CHECK: 	.cfi_endproc
@@ -92,7 +92,7 @@
 ; CHECK: 	{ nop; nop; addi32_w	r1, r1, -147729 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	const_0xDEADBEEF, .Lfunc_end3-const_0xDEADBEEF
 ; CHECK: 	.cfi_endproc
@@ -108,7 +108,7 @@
 ; CHECK: 	{ nop; nop; addi32_w	r1, r0, 32767 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	regression_simm16, .Lfunc_end4-regression_simm16
 ; CHECK: 	.cfi_endproc
@@ -124,7 +124,7 @@
 ; CHECK: 	{ nop; nop; addi32_w	r1, r0, 65535 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end5:
 ; CHECK: 	.size	regression_uimm16, .Lfunc_end5-regression_uimm16
 ; CHECK: 	.cfi_endproc
@@ -141,7 +141,7 @@
 ; CHECK: 	{ nop; nop; addi32_w	r1, r1, 0 }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end6:
 ; CHECK: 	.size	regression_lui_only, .Lfunc_end6-regression_lui_only
 ; CHECK: 	.cfi_endproc
@@ -159,7 +159,7 @@
 ; CHECK: 	{ add32	r1, r1, r2; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end7:
 ; CHECK: 	.size	add_with_hole_const, .Lfunc_end7-add_with_hole_const
 ; CHECK: 	.cfi_endproc

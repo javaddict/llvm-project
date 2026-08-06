@@ -20,7 +20,7 @@ define void @branch_eq(i32 %a, i32 %b) nounwind {
 ; CHECK: seq32
 ; CHECK: xori32
 ; CHECK: bnez{{(\.s[012])?}}
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, extern_fn
+; CHECK: jal{{(\.s[012])?}} {{.*}}, extern_fn
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %then, label %end

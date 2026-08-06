@@ -213,10 +213,17 @@ unsigned HaydnMCCodeEmitter::getExprFixupKind(const MCInst &MI) const {
   // Reachable only as a member: logical JAL/JALR carry `calltarget`, whose
   // EncoderMethod sends the target to getCallTargetOpValue instead. Members
   // drop that operand class, land here, and must match getCallFixupKind.
+  //
+  // Both WIDE kinds, because both members now carry the wide operand classes:
+  // the Bundle128 windows are imm20 @ s0 bits[23:4] and imm12 @ s0 bits[19:8],
+  // which is what WIDE_CallSImm20 / WIDE_BranchSImm12 describe. The narrow
+  // CallSImm20 (ValueShift=0) halved JAL's reach, and BranchSImm16 still has
+  // legacy 48-bit-parcel geometry (FieldLsb=0, FieldSize=16) that would write
+  // over the opcode bits.
   case Haydn::JAL:
-    return Haydn::FIXUP_HAYDN_CallSImm20;
+    return Haydn::FIXUP_HAYDN_WIDE_CallSImm20;
   case Haydn::JALR:
-    return Haydn::FIXUP_HAYDN_BranchSImm16;
+    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12;
   // Conditional branches. FIXUP_HAYDN_BranchSImm16 still has legacy-parcel
   // geometry (FieldLsb=0, FieldSize=16) and does not patch Bundle128
   // imm12 — linked BEQ/BNE kept offset 0. Map to the WIDE fixup kinds that
@@ -633,9 +640,10 @@ unsigned HaydnMCCodeEmitter::getBranchFixupKind(const MCInst &MI) const {
 }
 
 unsigned HaydnMCCodeEmitter::getCallFixupKind(const MCInst &MI) const {
+  // Must agree with getExprFixupKind for the same opcode — see there.
   if (getHaydnLogicalBaseOpcode(MI.getOpcode(), MII) == Haydn::JALR)
-    return Haydn::FIXUP_HAYDN_BranchSImm16;
-  return Haydn::FIXUP_HAYDN_CallSImm20;
+    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12;
+  return Haydn::FIXUP_HAYDN_WIDE_CallSImm20;
 }
 
 //===----------------------------------------------------------------------===//

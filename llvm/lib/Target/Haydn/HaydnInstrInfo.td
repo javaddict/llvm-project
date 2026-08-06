@@ -718,6 +718,11 @@ def JAL : FmtJ<0x37, (outs GPR32:$rd), (ins calltarget:$target),
 def JALR : FmtJR<0x38, (outs GPR32:$rd), (ins GPR32:$rs, calltarget:$target),
                "jalr\t$rd, $rs, $target", []> {
   let isTerminator = 1;
+  // CB-129: isBarrier so MachineBlockPlacement does not treat an unanalyzable
+  // indirect jump/RET as fallthrough (assert in buildCFGChains on
+  // computed-goto). The retired JALR_W carried this; JALR did not, because
+  // nothing selected it.
+  let isBarrier = 1;
   let isCall = 1;
   let isIndirectBranch = 1;
   let TSFlags{2-0} = 0b001;

@@ -27,7 +27,7 @@
 ; CHECK: 	{ d_sw_h_with_imm	d0, r1, 0; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	dual_load_i64_slot_poly, .Lfunc_end0-dual_load_i64_slot_poly
 ; CHECK:                                         // -- End function
@@ -59,7 +59,7 @@
 ; CHECK: 	{ d_sw_h_with_imm	d0, r1, 0; nop; nop }
 ; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
 ; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr_w	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	triple_load_i64_slot_poly, .Lfunc_end1-triple_load_i64_slot_poly
 ; CHECK:                                         // -- End function

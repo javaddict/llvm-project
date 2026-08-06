@@ -22,7 +22,7 @@ define { i32, i32 } @return_small_struct() {
 ;Call site consumes both return regs
 define i32 @call_small_struct() {
 ; CHECK-LABEL: call_small_struct:
-; CHECK:       jal_w{{(\.s[012])?}} lr, return_small_struct
+; CHECK:       jal{{(\.s[012])?}} lr, return_small_struct
 ; CHECK:       add32{{(\.s[012])?}} r1, r1, r2
   %s = call { i32, i32 } @return_small_struct()
   %v1 = extractvalue { i32, i32 } %s, 0
@@ -74,7 +74,7 @@ define void @return_large_struct(ptr %sret_output) {
 ;Call with explicit sret buffer
 define i32 @call_large_struct() {
 ; CHECK-LABEL: call_large_struct:
-; CHECK:       jal_w{{(\.s[012])?}} lr, return_large_struct
+; CHECK:       jal{{(\.s[012])?}} lr, return_large_struct
 ; CHECK:       ld32{{(\.s[012])?}} r1,
   %s = alloca { i32, i32, i32, i32, i32, i32 }
   call void @return_large_struct(ptr %s)

@@ -483,7 +483,7 @@ bool HaydnCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
     // the asm parser / decoder until Phase 3. The brtarget_wide_i20 operand
     // class emits FIXUP_HAYDN_WIDE_CallSImm20 via getSImmOpValueXStepWide — no
     // MCCodeEmitter call/branch fixup-kind routing needed for the _W opcodes.
-    MIB = MIRBuilder.buildInstrNoInsert(Haydn::JAL_W);
+    MIB = MIRBuilder.buildInstrNoInsert(Haydn::JAL);
     MIB.addReg(Haydn::R15, RegState::Define); // link register
     MIB.add(Info.Callee);
   }

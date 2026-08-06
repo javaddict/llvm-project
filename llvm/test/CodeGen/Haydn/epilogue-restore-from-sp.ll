@@ -16,10 +16,10 @@
 ;
 ; CHECK-LABEL: epilogue_restore_from_sp:
 ; CHECK: st32
-; CHECK: jal_w{{(\.s[012])?}}
+; CHECK: jal{{(\.s[012])?}}
 ; CHECK: ld32
 ; CHECK: sp,
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 ; CHECK-NOT: ld32 {{[^,]+}}, r12,
 define void @epilogue_restore_from_sp(i32 %a, i32 %b, i32 %c, i32 %d) nounwind {
 entry:

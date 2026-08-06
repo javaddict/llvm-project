@@ -78,4 +78,4 @@ exit:
 ; The icmp slt back-edge materializes as slt32+bnez (unfused) because the
 ; SFR-strip lets the scheduler pack slt32 with the preceding st32.
 ; ASM-DAG: bnez
-; ASM: jalr_w{{(\.s[012])?}} r0, lr, 0
+; ASM: jalr{{(\.s[012])?}} r0, lr, 0

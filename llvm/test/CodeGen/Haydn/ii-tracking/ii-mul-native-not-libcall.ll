@@ -6,7 +6,7 @@
 ; Bug: an `(int64_t)(int32_t)a * b` (sign-extended 32-bit mul producing a
 ; 64-bit result) lowered to a __mulsi3/__muldi3 libcall. The libcall target
 ; symbol was emitted as NULL (no runtime stub exists for __muldi3 in
-; llvm-libc / compiler-rt), so the `jal_w` resolved to address 0 at runtime
+; llvm-libc / compiler-rt), so the `jal` resolved to address 0 at runtime
 ; a correctness crash -- on top of costing 30-50 cycles per call. This
 ; dominated the hot loops of 10/14 firother, 11/12 firblk, both IIR kernels
 ; complex2mag32x32, and CoreMark.
@@ -30,7 +30,7 @@
 ;
 ; Test design: a single multiply of two sign-extended i32 values producing an
 ; i64, returned in a register. This is the minimal repro of the libcall shape.
-; The CHECK requires mul64.ll to appear and forbids any jal_w into __muldi3 or
+; The CHECK requires mul64.ll to appear and forbids any jal into __muldi3 or
 ; __mulsi3. If the LIBCALL_MUL64 regression returns, this test fails on the
 ; CHECK-NOT lines.
 
@@ -44,7 +44,7 @@ define i64 @ii_mul_native_not_libcall(i32 %a, i32 %b) {
 ; CHECK: 	{ {{.*}}sext32t64	d0, r1{{.*}} }
 ; CHECK: 	{ {{.*}}sext32t64	d1, r2{{.*}} }
 ; CHECK: 	{ {{.*}}mul64.ll	d0, d0, d1{{.*}} }
-; CHECK: 	{ nop; nop; jalr_w{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ nop; nop; jalr{{(\.s[012])?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	ii_mul_native_not_libcall, .Lfunc_end0-ii_mul_native_not_libcall
 ; CHECK: 	.cfi_endproc

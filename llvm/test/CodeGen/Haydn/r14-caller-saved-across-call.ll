@@ -19,14 +19,14 @@ declare i32 @extern_leaf(i32)
 
 ; CHECK-LABEL: r14_spill_across_call:
 ; CHECK: st32
-; CHECK: jal_w{{(\.s[012])?}}
+; CHECK: jal{{(\.s[012])?}}
 ; Post-call: the live-across-call value is reloaded (ld32) and the return
 ; value is computed (add32). Their relative order is not semantically
 ; significant — the post-RA scheduler may place the add32 before or after
 ; the epilogue reload depending on frame-instr barrier placement.
 ; CHECK-DAG: ld32
 ; CHECK-DAG: add32
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 define i32 @r14_spill_across_call(i32 %x) nounwind {
   %call = call i32 @extern_leaf(i32 %x)
   %r = add i32 %call, %x
@@ -37,8 +37,8 @@ define i32 @r14_spill_across_call(i32 %x) nounwind {
 ; pattern that originally surfaced the bug.
 ; CHECK-LABEL: r14_recursive_survives_call:
 ; CHECK: st32
-; CHECK: jal_w{{(\.s[012])?}}
-; CHECK: jal_w{{(\.s[012])?}}
+; CHECK: jal{{(\.s[012])?}}
+; CHECK: jal{{(\.s[012])?}}
 ; CHECK: ld32
 define i32 @r14_recursive_survives_call(i32 %n) nounwind {
 entry:

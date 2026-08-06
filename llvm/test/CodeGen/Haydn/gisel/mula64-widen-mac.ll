@@ -17,7 +17,7 @@
 
 ; CHECK-LABEL: widen_mac_ss:
 ; CHECK: mula64.ll
-; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
 define i64 @widen_mac_ss(i32 %a, i32 %b, i64 %acc) {
   %aa = sext i32 %a to i64
   %bb = sext i32 %b to i64
@@ -28,7 +28,7 @@ define i64 @widen_mac_ss(i32 %a, i32 %b, i64 %acc) {
 
 ; CHECK-LABEL: widen_mac_uu:
 ; CHECK: mula64.ulul
-; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
 define i64 @widen_mac_uu(i32 %a, i32 %b, i64 %acc) {
   %aa = zext i32 %a to i64
   %bb = zext i32 %b to i64
@@ -39,7 +39,7 @@ define i64 @widen_mac_uu(i32 %a, i32 %b, i64 %acc) {
 
 ; Mixed extension: no G_MULA64* fuse; still no libcall (schoolbook / ULUL).
 ; CHECK-LABEL: widen_mac_mixed:
-; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
 ; CHECK-NOT: mula64.ll
 ; CHECK-NOT: mula64.ulul
 define i64 @widen_mac_mixed(i32 %a, i32 %b, i64 %acc) {
@@ -66,7 +66,7 @@ define i64 @widen_mac_ss_multiuse(i32 %a, i32 %b, i64 %acc) {
 ; Second add order for unsigned (mul + acc) — both orders must fuse.
 ; CHECK-LABEL: widen_mac_uu_mul_first:
 ; CHECK: mula64.ulul
-; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
 define i64 @widen_mac_uu_mul_first(i32 %a, i32 %b, i64 %acc) {
   %aa = zext i32 %a to i64
   %bb = zext i32 %b to i64

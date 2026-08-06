@@ -17,7 +17,7 @@ cb22_d_sw_l_simm6:
     { d_sw_l_with_imm d3, r1, -1; nop; nop }
     { d_sw_h_with_imm d0, r2, -2; nop; nop }
     { d_sw_l_with_imm d0, r1, 1; nop; nop }
-    { jalr_w r0, lr, 0; nop; nop }
+    { jalr r0, lr, 0; nop; nop }
     .size cb22_d_sw_l_simm6, .-cb22_d_sw_l_simm6
 
 # CHECK: d_sw_l_with_imm{{.*}}d0,{{.*}}r1,{{.*}}-2

@@ -20,7 +20,7 @@
 # bits before sign/zero-extend (decodeSImmOperandXStepWide + the sibling
 # decodeLSPage1Imm5). This is the actual blocker.
 # (2) `jal lr, 0` is NOT garbage — the imm20 field IS 0 in the unlinked
-# o because the call target is a relocation (R_HAYDN_CallSImm20) filled
+# o because the call target is a relocation (R_HAYDN_WIDE_CallSImm20) filled
 # in at link time. `llvm-objdump -dr` shows the relocation. The decode is
 # correct. (User misdiagnosis.)
 # (3) `<unknown>` on trailing bytes (e.g. crt0's final `0f 78`) is correct:

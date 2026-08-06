@@ -15,7 +15,7 @@
 ; slot-only itinerary model is restored. See decision and lesson.
 ;
 ; NOTE: This test pipes through llc | llvm-mc | objdump. In the objdump output,
-; unrelocated JAL targets show as "jal_w lr, 0" (not the symbol name). The CHECK
+; unrelocated JAL targets show as "jal lr, 0" (not the symbol name). The CHECK
 ; lines below match the actual objdump mnemonics, not the assembly source.
 ;
 ; E2E test: BiQuad IIR filter (Direct Form 1), 32x32-bit fixed-point.
@@ -146,10 +146,10 @@ for.end:
 ; BUNDLE-DAG: sra64
 ; BUNDLE-DAG: st32
 ; BUNDLE-DAG: {{beqz|set_hwloop}}
-; BUNDLE: jalr_w{{.*}}r0, lr, 0
+; BUNDLE: jalr{{.*}}r0, lr, 0
 ;
 ; Note: bqriir32x32_df1_process uses BEQZ (loop-entry guard) and BNEZ (loop
-; back-edge) for control flow — NOT JAL. The original DAG-check for `jal_w` was
+; back-edge) for control flow — NOT JAL. The original DAG-check for `jal` was
 ; a stale CHECK from an earlier codegen shape; the IIR loop body contains no
 ; function calls, so there is no JAL inside this function (the only JALs are
 ; in main, calling this function). The function return is JALR (indirect via
@@ -161,9 +161,9 @@ define i32 @main() {
 ; BUNDLE-LABEL: <main>:
 ; BUNDLE-DAG: lui
 ; BUNDLE-DAG: addi32
-; BUNDLE: jal_w {{.*}}, 0
+; BUNDLE: jal {{.*}}, 0
 ; BUNDLE: ld32
-; BUNDLE: jalr_w{{.*}}r0, lr, 0
+; BUNDLE: jalr{{.*}}r0, lr, 0
 entry:
   ; Allocate 2 sections (36 bytes each) + input/output arrays (32 bytes each)
   ; on the stack. Simplified: use static globals.

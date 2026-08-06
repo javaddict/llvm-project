@@ -16,7 +16,7 @@
 
 define i64 @dr64_identity(i64 %a) nounwind {
 ; CHECK-LABEL: dr64_identity:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   ret i64 %a
 }
 
@@ -24,7 +24,7 @@ define i64 @dr64_identity(i64 %a) nounwind {
 
 define i64 @dr64_add(i64 %a, i64 %b) nounwind {
 ; CHECK-LABEL: dr64_add:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %r = add i64 %a, %b
   ret i64 %r
 }
@@ -33,7 +33,7 @@ define i64 @dr64_add(i64 %a, i64 %b) nounwind {
 
 define i64 @dr64_multi(i64 %a, i64 %b, i64 %c) nounwind {
 ; CHECK-LABEL: dr64_multi:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %ab = add i64 %a, %b
   %bc = add i64 %b, %c
   %r = add i64 %ab, %bc
@@ -46,7 +46,7 @@ declare i64 @ext_fn(i64)
 
 define i64 @dr64_call(i64 %a) nounwind {
 ; CHECK-LABEL: dr64_call:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %r = call i64 @ext_fn(i64 %a)
   ret i64 %r
 }
@@ -57,7 +57,7 @@ define i64 @dr64_call(i64 %a) nounwind {
 
 define i64 @dr64_dead_copy(i64 %a, i64 %b, i64 %c) nounwind {
 ; CHECK-LABEL: dr64_dead_copy:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %ab = add i64 %a, %b
   %ac = add i64 %a, %c
   %r = add i64 %ac, %b

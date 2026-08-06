@@ -14,7 +14,7 @@
 ; frame. A subsequent stack push (call-frame pseudo, a double-constant
 ; temporary, or alloca) then lands on top of the saved values. In the
 ; coremark-blocking case, a double-constant temporary overwrote the saved LR
-; and `jalr_w r0, lr, 0` jumped wild.
+; and `jalr r0, lr, 0` jumped wild.
 ;
 ; Fix : compute CSR save/restore offsets via getFrameIndexReference
 ; which performs the standard PEI-offset -> SP-relative-positive translation
