@@ -21,21 +21,25 @@ Companion documents:
 
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
-| `llvm-project` | `haydn` | `c290615e3cb0` | **yes, fully green** |
+| `llvm-project` | `haydn` | `9e950478333a` | **yes, fully green** |
+| `llvm-project` | `haydn-formate-switch-wip` | `f7e173347bb4` | **no — 27 errors, deliberately** |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
-Nothing is pushed. `fork/haydn` is still at `837f8e079dce`, seven commits behind.
-The § 5.2 include switch has been dry-run and measured (see § 5.2); the edits
-were not kept, because they are six lines and the measurement is what mattered.
+Nothing is pushed.
 
 `haydn` is the trunk. Everything on it is green and committed; work from it.
 
-**`haydn-formate-switch-wip` no longer exists** — not locally and not on the
-`fork` remote, so it was never pushed and is gone with the host that held it.
-It held only the two root `.td` include switches plus the AR reshape, and this
-document was written to make it re-derivable: the include switches are § 5.2's
-first two bullets and the AR reshape is § 7's first bullet. Re-derive rather
-than go looking for it.
+**`haydn-formate-switch-wip` exists again**, and this time it is a real branch
+rather than a working tree that evaporated. It carries the § 5.2 switch as far
+as it has been taken: both roots, the six deleted `.td` files, the slot-model
+correction, and the composite/emitter/printer/parser rework. It is **not
+green** — 27 errors, listed in § 5.2 — and is parked rather than merged so the
+trunk stays green. Its commit message is a summary of the design decisions;
+§ 5.2 is the full analysis. Do not re-derive this from scratch.
+
+The earlier branch of the same name was lost with the host that held it, which
+is why this one is committed to git rather than left in a working tree, and why
+§ 5.2 now records the reasoning instead of just the file list.
 
 Earlier revisions of this file named `haydn` heads `9802930e5fde` and
 `135c38e2f1bc`. Neither hash exists in the repo; the branch was rebased before
@@ -358,9 +362,14 @@ Reproduce by switching both roots (this is what the WIP branch holds):
 * `Haydn.td` — replace the five `HaydnFormats{ALU32,ALU64,LS,LD,MAC}.td`
   includes with `HaydnFormatEEncoding.td`; replace `HaydnCompositeFormats.td`
   with `HaydnFormatEComposites.td`.
-* `HaydnAsmMatcher.td` — **the same change**. This is a second TableGen root
+* `HaydnAsmMatcher.td` — **the same change**, except it must NOT gain the
+  composites: § 6.4's reason still holds, and the matcher root never included
+  `HaydnCompositeFormats.td` either. This is a second TableGen root
   (`CMakeLists.txt` sets `LLVM_TARGET_DEFINITIONS` for `-gen-asm-matcher`
   only). Missing it is what produced 1739 errors instead of 30.
+* `HaydnSlots.td` — **delete the three `InstSlot` defs and the three
+  `HaydnSlotS*` classes**, leaving only `HaydnFormatInst`. Not optional and not
+  cosmetic; see "The 23-error count was measuring the wrong thing" below.
 
 **The switch has been dry-run. TableGen parses it cleanly** — no tblgen
 errors at all, so all 3578 members and the two composites are includable in
@@ -388,12 +397,128 @@ Then, by category:
 
 | n | What | Notes |
 |---|---|---|
-| 5 | `BUNDLE128_FULL` → `BUNDLE_E2` / `BUNDLE_E3` | `HaydnAsmParser.cpp:878`, `HaydnAsmPrinter.cpp:696`, `HaydnMCCodeEmitter.cpp:316,501`, `HaydnMCFormats.cpp:333`. **The real design work**: the encoder must now *choose* a composite by entry count, and `HaydnAsmPrinter` fills the composite operand dag by slot index. |
+| ~~5~~ | ~~`BUNDLE128_FULL` → `BUNDLE_E2` / `BUNDLE_E3`~~ | **Done on `haydn-formate-switch-wip`.** It was billed as "the real design work" and turned out not to be — the generated packet-format table already makes the choice. See "What the composite choice actually is" below for what it really cost. |
 | 4 | Decoder tables | `DecoderTableS048/S140/S240` → `DecoderTableP2048/P2148/P30../P31../P32..`; `DecoderTableBundle128128` → the two `FormatE2`/`FormatE3` tables. Pick the composite from the header: `Inst{3}`. `HaydnDisassembler.cpp:252,267,282,477`. Its `SlotGeo Slots[3]` must become 2-or-3. |
 | ~~6~~ | ~~GISel selects members directly~~ | **Done on the trunk, before the switch** — see § 4. Not encoding-dependent: the promotion is verifiable while Bundle128 is still live, and the C++ then names only logicals. |
 | ~~6~~ | ~~hwloop predicates naming `_S0`~~ | **Done on the trunk in `c290615e3cb0`**, before the switch. Folded through `getHaydnLogicalBaseOpcode`, which resolves the base by name search rather than a table, so it works for either spelling. |
-| 1 | `CSRW_S0` normalization | `HaydnMCCodeEmitter.cpp`. Was 2; the `CSRW_W` fold (`6e35b4124346`) removed the operand surgery, leaving only the opcode retarget. |
+| ~~1~~ | ~~`CSRW_S0` normalization~~ | **Done on `haydn-formate-switch-wip`, by deletion.** The hardcoded retarget to `CSRW_S0` was exactly the "residual logical, find its member for this entry" case, so it is subsumed by the general `findMemberForSlot` path the alternates-index correction introduced. Naming one member by hand could not survive format E anyway — `CSRW` has seven. |
 | 7 | The seven AR logicals | `PLDWWUA`, `FLAR`, `WBARWUA` and the four `D_*UA_POST` live in `HaydnFormatsLS.td` and vanish with it, so GISel loses them (`HaydnInstructionSelector.cpp:6031-6130`). This is § 7's reshape, which the lost WIP branch had already done. Database shapes confirmed: `PLDWWUA_POST ar_sel, rs`; `WBARWUA ar_sel, rs`; `FLAR ar_sel`; the four `D_*UA_POST rtd, ar_sel, rs`. Format E has members for all seven. |
+
+#### The 23-error count was measuring the wrong thing
+
+**It counts C++ compile errors, and most of this step is not a compile error.**
+The switch has now been carried far enough to see the real shape; the work is
+parked on `haydn-formate-switch-wip` (`f7e173347bb4`), which builds down to 27
+errors and is where the numbers below come from. Read that commit message
+before re-deriving.
+
+Three things the count missed:
+
+1. **The dead Bundle128 InstSlots hid 15 errors.** `HaydnSlots.td` declares
+   `s0_slot`/`s1_slot`/`s2_slot`. Switching the roots leaves them declared, so
+   `MCSlotKind::Haydn_SLOT_S0` still *compiles* — while meaning something
+   different. Every `InstSlot` becomes an enumerator and a row in the generated
+   `HaydnSlots` table, so the three dead ones push format E's five kinds off
+   0..4 and each carries a `ConflictBits` of "everything" (they appear in no
+   live composite). **Delete them in the same commit.** Doing so takes the
+   count from 23 to 32 and makes the slot-model surface visible, which is the
+   honest number.
+
+2. **The alternates index is no longer the slot, and that is silent.**
+   Bundle128's `AlternateInsts` rows were sparse size-3 with index == slot, so
+   `1 << AltIndex` was the occupancy bit and `Alts[SlotIdx]` was the member for
+   a composite operand. Format E indexes the same rows by **placement** — the
+   (entry position, unit) pair, 0..17 — so index 6 and index 10 are both ALU0
+   in different entries, and index 6 and index 9 are both entry P30 on
+   different units. Neither the index nor its low bits are a slot. Three places
+   assumed otherwise and **none of them fails to compile**:
+   `HaydnMCFormats::getLegalSlots`, `fieldSlotsForAltIndex`
+   (`HaydnPlacementAlternative.h`), and the emitter's residual retarget
+   `Alts[SlotIdx]`. All three must ask the member for its own slot kind
+   (`getSlotKind(MemberOpc)`). This is the single most load-bearing correction
+   in the step.
+
+3. **The unit-exclusion rule is not modelled anywhere.** § 3 says no two
+   entries of a bundle may share a unit. The slot model cannot express it: the
+   generated `ConflictBits` correctly let P30/P31/P32 co-occur, and *which unit*
+   each entry uses is a property of the member chosen, not of the slot. So
+   nothing stops the packer putting ALU0 in P30 (placement 6) and ALU0 in P31
+   (placement 10). The itinerary/FuncUnit model is the plausible home for this
+   — `Unit_*` classes are already live per § 3 — but the two have not been
+   reconciled, and a logical carries one itinerary while its members span
+   several units. **Decide where this is enforced before trusting a packed
+   bundle**, and note `--emit roundtrip` cannot see it: it is symmetric across
+   encoder and decoder, the same blind spot as § 5.3 and § 6.10.
+
+#### What the composite choice actually is
+
+**It is not new code, and this was the wrong thing to worry about.** The
+generated packet-format table already carries both rows:
+
+| Row | SlotSet | Size | `getSlots()` (AsmString order) |
+|---|---|---|---|
+| `BUNDLE_E2` | `0x3` = {P20,P21} | 12 | P21, P20 |
+| `BUNDLE_E3` | `0x1c` = {P30,P31,P32} | 12 | P32, P31, P30 |
+
+`Bundle::getFormatOrNull()` → `PacketFormats::getFormat(OccupiedSlots)` returns
+the first row covering the occupancy, and because the generated `ConflictBits`
+make the two slot sets mutually exclusive, an occupancy can only ever be
+covered by one of them. **That lookup is the entry-count decision.** The only
+work is deleting `assert(Format->Opcode == BUNDLE128_FULL)` and replacing the
+`for K in 0..ISSUE_SLOT_COUNT { Haydn_SLOT_S0 + K }` loops with iteration over
+`Format->getSlots()` — **reversed**, because `getSlots()` is in AsmString order
+(high entry first, `"$e1; $e0"`) while the operand dag is
+`(ins p20_entry:$e0, p21_entry:$e1)`, low entry first. Both AsmPrinter and
+AsmParser already carried a comment saying the table would select the opcode
+when a second row landed; it does.
+
+Four consequences that are real behaviour changes, not renames:
+
+* **The all-NOP bundle is no longer an all-zero word.** Bundle128 had no header
+  and a zero slot window *was* the NOP. Format E's bits[2:0] are the `0b111`
+  format indicator and bit 3 the entry count, so a zero 12-byte word is a
+  different format's bundle. Build it through the normal path so it gets a
+  header and NOP-padded entries.
+* **12 bytes is not two whole limbs.** `emitBundle128Word` wrote two `uint64`s;
+  96 bits needs `uint64` + `uint32` or it runs 4 bytes into the next bundle.
+* **The "prefer slot 0 for a solitary instruction" hint has to go**, in both
+  `HaydnAsmParser` and the emitter. It was safe under Bundle128 because every
+  instruction had an `_S0`. Format E's 2-entry entry0 admits only
+  `ALU0`/`LOADSTORE0`/`MAC0`, so an ALU2-only op (`ARCTAN`, `RECIP`, …) has no
+  placement there at all and must land in a 3-entry bundle. Give no hint and
+  let the solver pick.
+* **Entry windows are not byte-aligned** (45/41 and 31/31/27, payload from bit
+  6), so the emitter's fixup translation `(95 - RightOffset) / 8` truncates and
+  a fixup can start mid-byte. Bundle128's 48/40/40-from-bit-0 windows divided
+  exactly. The byte base is still the right anchor; the sub-byte part lives in
+  the fixup kind's field geometry in `HaydnRelocLayout.cpp`, **which is still
+  Bundle128's and has to be re-derived** — this is the same work § 6.10 needs
+  for the immediate scaling, and it is why that item is not a pure generator
+  change.
+
+#### What is left after all that — measured, not estimated
+
+27 C++ errors on `haydn-formate-switch-wip`, in five files:
+
+| n | Where | What |
+|---:|---|---|
+| 12 | `HaydnBundlePlan.h` (8) + downstream `static_assert`s in `HaydnHWLoopContracts.h` (3) and `HaydnInstrInfo.cpp` (1) | **The product-format model is a singleton.** `FormatID::Bundle128Full`, `ProductFormatDesc` with `SlotSet = SLOT0\|SLOT1\|SLOT2`, `ProductFormatMask`, `Bundle128EncodedBytes = 16`, `planFromPacketFormats` querying by the full slot set. Format E needs two rows of 12 bytes, and `isProduct()` / `productFeasibleFormatMask` stop being one-valued. |
+| 8 | `HaydnDisassembler.cpp` | Decoder tables + `SlotGeo Slots[3]`. |
+| 7 | `HaydnInstructionSelector.cpp` | The AR logicals — § 7's reshape. |
+
+**And the compiler is the easy half.** Nothing below shows up as an error:
+
+* **12 unit-test files assert the three-slot geometry** — ~150 references to
+  `Haydn::SLOT0/1/2` and `SLOT_ALL`, nearly all of them in tests.
+  `getLegalSlots(ADD32)` becomes `0x1F` not `0x7`; `SLOT_ALL` stops having a
+  single meaning (a full bundle is `0x3` *or* `0x1c`); `makeBundle128Plan`,
+  `fieldSlotsToIndex`, and the `ExhaustiveThreeSlotFillRejectsFourth` /
+  `DualLoadPlanOccupancyIsS0S1` family all encode Bundle128's shape. This is a
+  port of the packing expectations to a different bundle geometry, and § 6.2
+  makes `HaydnTests` the gate that says whether the `.td` work was safe — so it
+  cannot be skipped or deferred.
+* § 5.4's 589 lit expectations.
+* § 5.5's BundleSim catalog.
 
 **Two generator gaps block this step, and neither shows up as a C++ error.**
 Both were found the hard way during the `_W` fold, on Bundle128's narrow members
@@ -733,6 +858,19 @@ in § 5.1 step 5 is the only thing that surfaces it.
 
 Format E's generated members take plain `simm12` / `simm20` as well, so the
 same question is open there — **still open; § 6.9 is done, this is not.**
+
+**It is wider than branches.** The same "generated members take the plain
+operand class" pattern costs an `EncoderMethod` wherever the Bundle128 member
+had one. `MOVEI_H`/`MOVEI_L` are the second instance found: the Bundle128
+member `MOVEI_H_S0` takes `simm32_movei`, which carries
+`getSImmOpValueXStepWide<32,0,…,FIXUP_HAYDN_32>`, while the generated
+`MOVEI_H_P20_ALU0` takes plain `simm32`, which has none. A symbolic operand
+therefore falls back to `getMachineOpValue` instead of emitting the fixup —
+§ 6.1's trap, in the other direction. **Audit every generated member whose
+Bundle128 peer had an `EncoderMethod` before trusting the switch**; grep the
+retired `HaydnFormats*.td` (they are in git history, deleted by the switch
+commit) for the operand classes that carry one, rather than assuming branches
+were the only family affected.
 
 **Correction: the database has no `branch_scale` field.** Earlier revisions of
 this file said it did and that the generator merely had to consume it. It does
