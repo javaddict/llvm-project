@@ -32,6 +32,11 @@ include "HaydnGeneric.td"
 // for asm parsing and not wired into the matcher generator, and -gen-asm-matcher
 // rejects their operand-leading AsmStrings outright. Without them the matcher
 // stays on the uint64 path and recognizes every member.
+//
+// This must name the same member set as Haydn.td. The matcher's MatchTable
+// records member opcodes by name, so a root that still knows the Bundle128
+// members while Haydn.td has moved to format E generates matches against
+// opcodes the instruction enum no longer defines.
 //===----------------------------------------------------------------------===//
 include "llvm/Target/CodeGenFormat.td"
 include "HaydnSlots.td"

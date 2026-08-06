@@ -2684,8 +2684,9 @@ def setcbr_end : HaydnBuiltin<"void(int, int)", "circular-buffer"> {
   let Mnemonic = "SETCBR_END";
   let ImmChecks = [ImmCheck<0, ImmCheck0_1>];
 }
-// UA AR family: ar_sel (uimm2) and dir_sel (uimm1) are encoding ImmArgs —
-// ISel requires compile-time constants. Stride stays runtime GPR.
+// UA AR family: ar_sel (uimm2) is an encoding ImmArg — ISel requires a
+// compile-time constant. The re-delivered ISA database dropped dir_sel and
+// the runtime stride; the post-increment is a fixed +8.
 // NatureDSP ar&=3 / dir&=1 is handled by switch-literal wrappers (haydn_dsp.h
 // + haydn.h specials), never by non-ICE builtin args.
 // Asm: pldwwua ar_sel, rs — Prototype void(ar_sel, rs).
@@ -2698,23 +2699,23 @@ def pldwwua : HaydnBuiltin<"void(int, void const*)", "agu"> {
   let ImmChecks = [ImmCheck<0, ImmCheck0_3>];
   let Semantics = "pre-load aligned double-word block into aligned register for subsequent unaligned access.";
 }
-def d_lqhwua_post : HaydnBuiltin<"int64_t(void const*, int, int, int)", "agu"> {
+def d_lqhwua_post : HaydnBuiltin<"int64_t(void const*, int)", "agu"> {
   let Attributes = [NoThrow];
   let Effect = "StateMem";
   let PublicName = "d_lqhwua_post";
-  let PublicPrototype = "int64_t(void const*, int, int, int)";
+  let PublicPrototype = "int64_t(void const*, int)";
   let Mnemonic = "D_LQHWUA_POST";
-  // ptr, ar_sel, stride, dir_sel
-  let ImmChecks = [ImmCheck<1, ImmCheck0_3>, ImmCheck<3, ImmCheck0_1>];
+  // ptr, ar_sel
+  let ImmChecks = [ImmCheck<1, ImmCheck0_3>];
   let Semantics = "load quad half words with hardware unaligned access mechanism. handles accesses where the data is 2-byte aligned but not necessarily 8-byte aligned.";
 }
-def d_ltwua_post : HaydnBuiltin<"int64_t(void const*, int, int, int)", "agu"> {
+def d_ltwua_post : HaydnBuiltin<"int64_t(void const*, int)", "agu"> {
   let Attributes = [NoThrow];
   let Effect = "StateMem";
   let PublicName = "d_ltwua_post";
-  let PublicPrototype = "int64_t(void const*, int, int, int)";
+  let PublicPrototype = "int64_t(void const*, int)";
   let Mnemonic = "D_LTWUA_POST";
-  let ImmChecks = [ImmCheck<1, ImmCheck0_3>, ImmCheck<3, ImmCheck0_1>];
+  let ImmChecks = [ImmCheck<1, ImmCheck0_3>];
   let Semantics = "load two words with hardware unaligned access mechanism. handles accesses where the data is 4-byte aligned but not necessarily 8-byte aligned.";
 }
 def flar : HaydnBuiltin<"void(int)", "agu"> {
@@ -2726,33 +2727,33 @@ def flar : HaydnBuiltin<"void(int)", "agu"> {
   let ImmChecks = [ImmCheck<0, ImmCheck0_3>];
   let Semantics = "flush the target aligned register.";
 }
-def wbarwua : HaydnBuiltin<"void(int, void*, int)", "agu"> {
+def wbarwua : HaydnBuiltin<"void(int, void*)", "agu"> {
   let Attributes = [NoThrow];
   let Effect = "State";
   let PublicName = "wbarwua";
-  let PublicPrototype = "void(int, void*, int)";
+  let PublicPrototype = "void(int, void*)";
   let Mnemonic = "WBARWUA";
-  // ar_sel, ptr, dir_sel
-  let ImmChecks = [ImmCheck<0, ImmCheck0_3>, ImmCheck<2, ImmCheck0_1>];
+  // ar_sel, ptr
+  let ImmChecks = [ImmCheck<0, ImmCheck0_3>];
   let Semantics = "write back the rest data of the aligned register with hardware unaligned access mechanism. and, flush the target aligned register. rs must be the post-incremented value from the last D_STWUA_POST /...";
 }
-def d_sqhwua_post : HaydnBuiltin<"void(int64_t, void*, int, int, int)", "agu"> {
+def d_sqhwua_post : HaydnBuiltin<"void(int64_t, void*, int)", "agu"> {
   let Attributes = [NoThrow];
   let Effect = "StateMem";
   let PublicName = "d_sqhwua_post";
-  let PublicPrototype = "void(int64_t, void*, int, int, int)";
+  let PublicPrototype = "void(int64_t, void*, int)";
   let Mnemonic = "D_SQHWUA_POST";
-  // data, ptr, ar_sel, stride, dir_sel
-  let ImmChecks = [ImmCheck<2, ImmCheck0_3>, ImmCheck<4, ImmCheck0_1>];
+  // data, ptr, ar_sel
+  let ImmChecks = [ImmCheck<2, ImmCheck0_3>];
   let Semantics = "store quad half words with hardware unaligned access mechanism, post-increment. handles accesses where the data is 2-byte aligned but not necessarily 8-byte aligned. bytes before the first data ele...";
 }
-def d_stwua_post : HaydnBuiltin<"void(int64_t, void*, int, int, int)", "agu"> {
+def d_stwua_post : HaydnBuiltin<"void(int64_t, void*, int)", "agu"> {
   let Attributes = [NoThrow];
   let Effect = "StateMem";
   let PublicName = "d_stwua_post";
-  let PublicPrototype = "void(int64_t, void*, int, int, int)";
+  let PublicPrototype = "void(int64_t, void*, int)";
   let Mnemonic = "D_STWUA_POST";
-  let ImmChecks = [ImmCheck<2, ImmCheck0_3>, ImmCheck<4, ImmCheck0_1>];
+  let ImmChecks = [ImmCheck<2, ImmCheck0_3>];
   let Semantics = "store two words hardware unaligned access mechanism, post-increment. handles accesses where the data is 4-byte aligned but not necessarily 8-byte aligned. bytes before the first data element within...";
 }
 // BREV loads: frexp pair {data, new_ptr} (same AGU model as CB loads).
@@ -4851,14 +4852,14 @@ def s_sb_pre_reg : HaydnBuiltin<"void*(int, void*, int)"> {
 }
 def s_sb_with_imm : HaydnBuiltin<"void(int, void*, int)"> {
   let PublicName = "s_sb_with_imm";
-  let PublicPrototype = "void(int, void*, int)";
+  let PublicPrototype = "void(int, void*)";
   let Mnemonic = "S_SB_WITH_IMM";
   let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SB_WITH_IMM.";
 }
 def s_sb_with_reg : HaydnBuiltin<"void(int, void*, int)"> {
   let PublicName = "s_sb_with_reg";
-  let PublicPrototype = "void(int, void*, int)";
+  let PublicPrototype = "void(int, void*)";
   let Mnemonic = "S_SB_WITH_REG";
   let Semantics = "Golden LS S_SB_WITH_REG.";
 }
@@ -4890,14 +4891,14 @@ def s_shw_pre_reg : HaydnBuiltin<"void*(int, void*, int)"> {
 }
 def s_shw_with_imm : HaydnBuiltin<"void(int, void*, int)"> {
   let PublicName = "s_shw_with_imm";
-  let PublicPrototype = "void(int, void*, int)";
+  let PublicPrototype = "void(int, void*)";
   let Mnemonic = "S_SHW_WITH_IMM";
   let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SHW_WITH_IMM.";
 }
 def s_shw_with_reg : HaydnBuiltin<"void(int, void*, int)"> {
   let PublicName = "s_shw_with_reg";
-  let PublicPrototype = "void(int, void*, int)";
+  let PublicPrototype = "void(int, void*)";
   let Mnemonic = "S_SHW_WITH_REG";
   let Semantics = "Golden LS S_SHW_WITH_REG.";
 }
@@ -4929,14 +4930,14 @@ def s_sw_pre_reg : HaydnBuiltin<"void*(int, void*, int)"> {
 }
 def s_sw_with_imm : HaydnBuiltin<"void(int, void*, int)"> {
   let PublicName = "s_sw_with_imm";
-  let PublicPrototype = "void(int, void*, int)";
+  let PublicPrototype = "void(int, void*)";
   let Mnemonic = "S_SW_WITH_IMM";
   let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SW_WITH_IMM.";
 }
 def s_sw_with_reg : HaydnBuiltin<"void(int, void*, int)"> {
   let PublicName = "s_sw_with_reg";
-  let PublicPrototype = "void(int, void*, int)";
+  let PublicPrototype = "void(int, void*)";
   let Mnemonic = "S_SW_WITH_REG";
   let Semantics = "Golden LS S_SW_WITH_REG.";
 }

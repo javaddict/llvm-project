@@ -50,7 +50,13 @@ include "HaydnMultiSlotPseudo.td"
 // Bundle128 there are two of them: BUNDLE_E2 and BUNDLE_E3, chosen by entry
 // count. Kept in their own file because -gen-asm-matcher rejects a def whose
 // AsmString opens with an operand, and a composite has no mnemonic.
+//
+// Bundle128's members and format E's could never be included together: one
+// indexes alternates by slot, the other by (entry position, unit), and the two
+// spaces overlap at 0/1/2. CodeGenFormat rejects that collision rather than
+// dropping a member, which is why the two had to change over atomically.
 include "HaydnFormatEComposites.td"  // BUNDLE_E2 / BUNDLE_E3
+
 
 def HaydnCodeGenFormat : CodeGenFormat {}
 
