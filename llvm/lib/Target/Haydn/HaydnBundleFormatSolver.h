@@ -58,7 +58,9 @@
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/bit.h"
 #include <cstdint>
 #include <optional>
 
@@ -165,14 +167,21 @@ makeProductCycleStateFromOccupied(SlotBits Occupied) {
   return S;
 }
 
-/// Map a single Haydn::SLOT* FieldSlots bit to issue-slot index 0/1/2.
-/// \returns nullopt if \p Field is not exactly one of SLOT0/1/2.
+/// Map a single-bit FieldSlots to the position index it names.
+///
+/// The alternates index space is not the number of entries a bundle holds.
+/// They are the same three for Bundle128 and diverge under format E, where a
+/// bundle still holds at most ISSUE_SLOT_COUNT entries but an instruction may
+/// be placeable at any of the (entry position, unit) pairs. Bound by MaxSlots,
+/// the width of SlotBits, rather than by the entry count.
+/// \returns nullopt when \p Field does not name exactly one position.
 inline std::optional<unsigned> fieldSlotsToIndex(SlotBits Field) {
-  for (unsigned S = 0; S < Haydn::ISSUE_SLOT_COUNT; ++S) {
-    if (Field == (SlotBits(1) << S))
-      return S;
-  }
-  return std::nullopt;
+  if (Field == 0 || (Field & (Field - 1)) != 0)
+    return std::nullopt;
+  const unsigned Index = llvm::countr_zero(Field);
+  if (Index >= static_cast<unsigned>(llvm::MaxSlots))
+    return std::nullopt;
+  return Index;
 }
 
 /// First free field assignment for \p LogicalOpc that keeps a covering format.
@@ -193,16 +202,24 @@ inline bool tryAdd(CycleState &S, const HaydnMCFormats &Fmts,
   // Snapshot for pure transactional reject path.
   const CycleState Snapshot = S;
 
-  // Prefer S2 → S1 → S0 (AIEHazardRecognizer.cpp:183-194 any_of / first canAdd;
-  // Haydn multi-slot prefers high slots so loads keep S0).
-  for (int SlotIdx = static_cast<int>(Haydn::ISSUE_SLOT_COUNT) - 1;
-       SlotIdx >= 0; --SlotIdx) {
-    const SlotBits Bit = SlotBits(1) << static_cast<unsigned>(SlotIdx);
-    for (const PlacementAlternative &Alt : Alts) {
-      if (Alt.FieldSlots != Bit)
-        continue;
-      if (Alt.FieldSlots == 0)
-        continue;
+  // Highest position first (AIEHazardRecognizer.cpp:183-194 any_of / first
+  // canAdd; Haydn multi-slot prefers high slots so loads keep S0). Stated over
+  // the alternatives rather than over a 0..ISSUE_SLOT_COUNT range: for
+  // Bundle128 the two are the same walk, S2 → S1 → S0, but the alternates index
+  // space is not the entry count and a fixed range would leave every position
+  // past the third unreachable.
+  SmallVector<const PlacementAlternative *, 8> ByPosition;
+  for (const PlacementAlternative &Alt : Alts)
+    if (Alt.FieldSlots != 0 && fieldSlotsToIndex(Alt.FieldSlots))
+      ByPosition.push_back(&Alt);
+  llvm::stable_sort(ByPosition, [](const PlacementAlternative *A,
+                                   const PlacementAlternative *B) {
+    return A->FieldSlots > B->FieldSlots;
+  });
+
+  {
+    for (const PlacementAlternative *AltP : ByPosition) {
+      const PlacementAlternative &Alt = *AltP;
       // Slot conflict (AIEBundle.h:98-100 OccupiedSlots & ConflictBits shape).
       if (S.OccupiedSlots & Alt.FieldSlots)
         continue;
@@ -229,8 +246,8 @@ inline bool tryAdd(CycleState &S, const HaydnMCFormats &Fmts,
     }
   }
 
-  // Also try alts with FieldSlots set but not a single S0/S1/S2 bit (future
-  // multi-bit fields) — none today; keep pure reject.
+  // Alternatives whose FieldSlots is not exactly one position are skipped
+  // above; there are none today. Pure reject.
   S = Snapshot;
   return false;
 }
