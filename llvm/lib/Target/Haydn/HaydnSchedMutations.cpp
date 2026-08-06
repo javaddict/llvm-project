@@ -10,7 +10,7 @@
 // Roles mirror AIEBaseSubtarget getPreRAMutationsImpl / getPostRAMutationsImpl.
 //
 // Pre-RA: PropagateIncomingLatencies, EnforceCopyEdges, FuncArgCopyEdges
-// (+ CopyConstrain in createHaydnPreRAScheduler)
+// ( CopyConstrain in createHaydnPreRAScheduler)
 // Post-RA: MemoryEdges (via HaydnInstrInfo::getMemoryLatency), RegionEndEdges
 // MachineSchedWAWEdges, SoftMemoryEdges fallback
 //
@@ -65,21 +65,20 @@ static cl::opt<bool> EnableHaydnCallReturnCopyEdges(
     "haydn-prera-call-return-copy-edges", cl::init(true), cl::Hidden,
     cl::desc("Pre-RA: pin live-in physreg COPYs (post-call return glue)"));
 
-// Default OFF until Haydn has AIE-peer getFirst/LastMemoryCycle tables.
-// AIE MemoryEdges (AIEBaseSubtarget.cpp) uses only TII->getMemoryLatency from
-// those cycles; with AccurateMemEdges=false it returns latency 1 with no
-// store→load floor. Haydn's prior default-ON class-agnostic path plus an
-// invented store→load=2 floor forced empty issue cycles (NatureDSP density
-// A/B : mdct 345→306, bkfir 254→235 when this mutation is off;
-// restores ~07-15 pre-dual-sched packing for same op counts).
-// AIE with AccurateMemEdges=false still runs MemoryEdges with latency 1
-// (AIEBaseInstrInfo). Haydn getMemoryLatency returns 1 class-agnostic — peer
-// safe to default ON. RegionEnd/WAW stay OFF (incomplete MaxLatencyFinder
-// sticky model).
+// Post-RA MemoryEdges ON (AIE peer with AccurateMemEdges=false): uses only
+// TII->getMemoryLatency; no invented store→load floor. Product
+// getMemoryLatency is class-agnostic latency 1 (-haydn-accurate-memory-latency
+// OFF). NatureDSP density A/B (mdct/bkfir/firinterp/cxfir/dct; 22 kernels)
+// showed accurate path +~12% bundles with zero wins — product stays latency-1.
+// Opt-in accurate path reads table-driven First/LastMemoryCycle for
+// Slot0_LS/Slot1_LD/Slot01_LD only. Densify invents remain FATED.
+// RegionEnd/WAW stay OFF (incomplete MaxLatencyFinder sticky model).
+// Product latency-1 packs st32→ld32 adjacent; unit pins cover all three
+// memory itineraries; densify-defaults-off + packing lit sample green.
 static cl::opt<bool> EnableHaydnPostRAMemoryEdges(
     "haydn-postra-memory-edges", cl::init(true), cl::Hidden,
     cl::desc("Post-RA: MemoryEdges via getMemoryLatency "
-             "(default ON; latency-1 until First/LastMemoryCycle tables)"));
+             "(default ON; product latency-1; accurate opt-in)"));
 
 // AIE RegionEndEdges rebuilds ExitSU with MaxLatencyFinder. Without that
 // stripping ExitSU preds and replacing with getMaxResultLatency-only edges is
@@ -362,8 +361,10 @@ class MemoryEdges : public ScheduleDAGMutation {
           continue;
 
         // Peer: AIEBaseSubtarget.cpp MemoryEdges — latency only from
-        // TII->getMemoryLatency; no store→load floor here. When Haydn gains
-        // First/LastMemoryCycle, getMemoryLatency becomes the accurate peer.
+        // TII->getMemoryLatency; no store→load floor here. Product path
+        // returns 1; -haydn-accurate-memory-latency uses table First/Last
+        // (Slot0_LS/Slot1_LD/Slot01_LD → Last-First+1, floored at 1;
+        // nullopt → keep local default 1).
         int Latency = 1;
         if (auto MemLat = HII->getMemoryLatency(SrcMI.getDesc().getSchedClass(),
                                                 MI.getDesc().getSchedClass())) {
@@ -380,24 +381,46 @@ class MemoryEdges : public ScheduleDAGMutation {
 //===----------------------------------------------------------------------===//
 
 // AIE (AIEBaseSubtarget PostRA mutator): setup instrs raise ExitSU latency so
-// the region end is far enough after writing LS/LE/LC. Haydn: SET_HWLOOP must
-// be at least MinSetupBundles cycles before the preheader exits into BEGIN.
-// FixupHwLoops still does residual deficit NOPs if layout is still short.
+// the region end is far enough after writing LS/LE/LC. Haydn freeze:
+//   SetupIssueDistance = 4  (= AIE LoopSetupDistance peer for SET→BEGIN)
+//   InterveningCycles  = 3  (= Following floor; SetupIssueDistance - 1)
+//
+// ExitSU forward latency must be SetupIssueDistance, not InterveningCycles:
+// SET at TopReadyCycle C and latency D yields ExitSU.TopReadyCycle = C+D
+// via the scheduled SU's Succs edge (top-down releaseSuccessors).
+// leaveRegion handleRegionConflicts ExitReady arm then pads Top so
+// TopCurr+BotCurr >= ExitReady, materializing D-1 = InterveningCycles
+// following cycles after a lone SET at C=0. Dual-zone: BotCurr after the
+// seam still counts toward the region end; inter-zone scoreboard pads only
+// lengthen Top (never shrink Following). Using InterveningCycles as the
+// forward edge would under-pad by one.
+//
+// Bot-up / bidirectional: the reverse ExitSU.Preds edge is MinGap-1 so SET
+// can share bot cycle 0 with ExitSU (AIE RegionEndEdges convention) while
+// still forcing BotCurr >= SetupIssueDistance when SET is the critical
+// reverse path — Following after SET still meets InterveningCycles.
+//
+// SET is a real region SU (not a scheduling boundary). Match every
+// logical/wide/member form via TII::isHardwareLoopSetupInstr. Single-MI
+// regions skipped by the list scheduler never see this flush; Fixup still
+// residual-pads (exact-commit NOPs) for those and for short useful-window
+// fill.
 class ZOLSetupExitLatency : public ScheduleDAGMutation {
-  static bool isHWLoopSetup(const MachineInstr &MI) {
-    unsigned Opc = MI.getOpcode();
-    return Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG ||
-           Opc == Haydn::LoopStart;
-  }
-
   void apply(ScheduleDAGInstrs *DAG) override {
+    const auto *HII = static_cast<const HaydnInstrInfo *>(DAG->TII);
     SUnit &ExitSU = DAG->ExitSU;
-    const unsigned MinGap = haydn::hwloop::MinSetupBundles;
+    // AIE LoopSetupDistance peer: Cycle(BEGIN) - Cycle(SET) lower bound.
+    const unsigned MinGap = haydn::hwloop::SetupIssueDistance;
+    static_assert(haydn::hwloop::SetupIssueDistance ==
+                      haydn::hwloop::InterveningCycles + 1,
+                  "ExitSU latency must be Following floor + 1");
     for (SUnit &SU : DAG->SUnits) {
       MachineInstr *MI = SU.getInstr();
-      if (!MI || !isHWLoopSetup(*MI))
+      if (!MI || !HII->isHardwareLoopSetupInstr(*MI))
         continue;
       // Raise latency on existing Artificial Exit edge, or create one.
+      // Forward edge: SU → ExitSU with latency MinGap (SetupIssueDistance).
+      // Succs (not Preds) drive ExitSU.TopReadyCycle on top-down release.
       bool Found = false;
       for (SDep &Succ : SU.Succs) {
         if (Succ.getSUnit() != &ExitSU || !Succ.isArtificial())
@@ -410,12 +433,23 @@ class ZOLSetupExitLatency : public ScheduleDAGMutation {
         ExitDep.setLatency(MinGap);
         ExitSU.addPred(ExitDep, /*Required=*/true);
       }
-      // Keep reverse edge consistent with RegionEndEdges / AIE bot-up.
+      // Reverse ExitSU.Preds edge is a distinct SDep (AIE RegionEndEdges note).
+      // Lift stale short Preds through MinGap then store MinGap-1 so bot-up
+      // region length covers SetupIssueDistance when SET is critical; never
+      // shorten a longer reverse edge (RaisedForward - 1).
       for (SDep &PredEdge : ExitSU.Preds) {
         if (PredEdge.getSUnit() != &SU || !PredEdge.isArtificial())
           continue;
         unsigned Lat = PredEdge.getLatency();
-        PredEdge.setLatency(Lat ? Lat - 1 : 0);
+        unsigned RaisedForward = std::max(Lat, MinGap);
+        PredEdge.setLatency(RaisedForward - 1);
+      }
+      // Re-stamp Succs to MinGap after reverse edits so top-down ExitReady
+      // cannot under-pad if a later pass mirrored Pred→Succ.
+      for (SDep &Succ : SU.Succs) {
+        if (Succ.getSUnit() != &ExitSU || !Succ.isArtificial())
+          continue;
+        Succ.setLatency(std::max(Succ.getLatency(), MinGap));
       }
       ExitSU.setDepthDirty();
       SU.setDepthDirty();
@@ -445,12 +479,11 @@ class RegionEndEdges : public ScheduleDAGMutation {
       if (DelaySlots)
         EdgeLatency = std::max(EdgeLatency, DelaySlots + 1);
       // AIE: ZOL setup raises ExitSU latency so region end is after the
-      // min setup→loop distance (Haydn: MinSetupBundles to BEGIN).
-      unsigned Opc = MI.getOpcode();
-      if (Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG ||
-          Opc == Haydn::LoopStart)
+      // min setup→BEGIN gap (Haydn: SetupIssueDistance; Following =
+      // InterveningCycles = distance-1). All logical/wide/member forms.
+      if (HII->isHardwareLoopSetupInstr(MI))
         EdgeLatency =
-            std::max(EdgeLatency, haydn::hwloop::MinSetupBundles);
+            std::max(EdgeLatency, haydn::hwloop::SetupIssueDistance);
 
       SDep ExitDep(&SU, SDep::Artificial);
       ExitDep.setLatency(EdgeLatency);

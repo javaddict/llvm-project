@@ -1,0 +1,24 @@
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %s -o - 2>&1 | FileCheck %s --check-prefix=PRINTER
+
+# Role: verifier — Late-MC one-to-one: residual cycle-forming SETCBR must fail closed in AsmPrinter (shared law with VerifyBundles via isResidualCycleFormingPseudo).
+
+# Late-MC one-to-one: residual cycle-forming SETCBR must fail closed in
+# AsmPrinter (shared law with VerifyBundles via isResidualCycleFormingPseudo).
+# start-after livedebugvalues skips late verify so the printer path is hit.
+# Product ExpandPseudos expands SETCBR→CSRW_W before pack.
+
+--- |
+  define void @printer_residual_setcbr() { ret void }
+...
+---
+name:            printer_residual_setcbr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; PRINTER: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; PRINTER: SETCBR residual
+    SETCBR_BEGIN 0, $r1
+    RET implicit $r15

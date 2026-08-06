@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — BiQuad IIR filter (Direct Form 1), 32x32-bit fixed-point (portable C version).
+
 ; BiQuad IIR filter (Direct Form 1), 32x32-bit fixed-point (portable C version).
 ; Pre-compiled from bqriir32x32_df1_simple.c with:
 ; clang -target haydn-unknown-elf -S -emit-llvm -O2

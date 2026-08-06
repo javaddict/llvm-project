@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-prelegalizer-combiner -global-isel-abort=1 %s -o - | FileCheck %s
-#
+
+# Role: MIR — Wave T5 / T5.1: PreLegalizer widening MAC fusion.
+
 # Wave T5 / T5.1: PreLegalizer widening MAC fusion.
 #   ss (SEXT x SEXT) -> G_MULA64  -> (select) MULA64_LL
 #   uu (ZEXT x ZEXT) -> G_MULA64U -> (select) MULA64_ULUL

@@ -1,0 +1,484 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=machine-scheduler \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=machine-scheduler \
+# RUN:   -debug-only=haydn-hazard-rec -verify-machineinstrs %s -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=DBG
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-before=greedy -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=PREGREEDY
+# REQUIRES: asserts
+
+# Role: MIR — Pre-RA list-sched format feasibility + MRI port parity + three-ready rematch + SMS-HANDOFF metrics-only packability pin (pre-RA list only; no SMS.
+
+# Pre-RA list-sched format feasibility + MRI port parity + three-ready rematch
+# + SMS-HANDOFF metrics-only packability pin (pre-RA list only; no SMS
+# ResourceCycle / pipeliner hooks).
+#
+# Contracts pinned here:
+# 1. machine-scheduler reorders logical opcodes only — no private member
+#    opcodes (_S0/_S1/_S2) and no FormatID stamp before RA (phase identity).
+# 2. MRI classifies vreg banks: GPR32/DR64 charge the same pooled demand as
+#    equivalent physregs (parity). Unknown regs (no class) stay existential.
+# 3. GPR 4R2W / DR 7R3W boundaries fire on vregs (one-below / at / one-above).
+#    Three independent GPR writes force multi-cycle packing (port ResMII ≥ 2
+#    under 2W) even though Full has three slots — CreateTargetMIHazardRecognizer
+#    IsPreRA charges PortModel; see vreg_three_writes_port_limit Hazard.
+# 4. Repeated sources (MOVE32) and tied use/def (MOVT32) dedupe by Register
+#    identity — same architectural rule as physregs. MOVE32 MI path is 1R1W;
+#    descriptor shape (SMS MID peer) would be 2R1W without identity — pre-RA
+#    HR uses only the MI path (MI-versus-descriptor differential pin).
+# 5. Flexible (ADD32 Slot012) vs constrained (ST32 Slot0) keep distinct
+#    FieldSlots footprints; tryAdd tracks occupancy without setDesc.
+# 6. Reverse constrained→flex (ST then ADD) and flex→constrained both stay
+#    logical-only; matching-frontier tryCandidate ranks without setDesc.
+# 7. Three independent ready ops (ADD32 + 2×ADD64): preferred first-fit high
+#    slot would lose the three-member pack, but exact matching-frontier rematch
+#    keeps the cycle legal; list-sched still emits only logical opcodes.
+# 8. -stop-before=greedy still has only logical opcodes.
+# 9. SMS-HANDOFF metrics-only: pre-RA never emits durable BUNDLE roots. The
+#    independent ADD32+XOR32+OR32 co-issue set stays logical through list-sched
+#    and stop-before=greedy; pure packability oracle is unit-pinned
+#    (PreRASMSHandoffPackabilityOracleSurface). Positive clone→BUNDLE handoff
+#    is sibling SMS + approved expansion hook — not invented here.
+#
+# Sibling SMS track owns ResourceCycle / analyzeLoop ResMII fail-close / HOOK /
+# HANDOFF metrics freeze / shouldUseSchedule SMSchedule wiring. Pre-RA
+# SMS-RESMII + HANDOFF packability surface (exhaustive ≤3, fail-close, port
+# floor, productFormsOneExactCycle) is unit-tested via HaydnPreRASchedStrategy
+# pure helpers — no setDesc. AR 2R2W capacity is unit-tested (no product AR
+# opcode). Three-member rematch scoreMatchingFrontier pin lives in
+# HaydnHazardRecognizerTest.
+# Soft-exit QoR peer: prera-format-qor-exit.ll + productSoftExitIIFloor unit
+# (port+format II floors; post-RA exact-pack correlation; no HANDOFF invent).
+# shouldUseSchedule stage/spill fail-close peer: pure helpers
+# smsStageCountExceedsMax / smsSpillPressureExceedsLimits /
+# smsShouldUseScheduleFailsClosed (unit PreRASMSShouldUseScheduleFailCloseSurface);
+# list-sched here stays logical-only — no setDesc from stage/pressure metrics.
+# SMS-HOOK II-wrap false-accept peer (plan §8.4 #8): product stages cycles==1;
+# PreRASchedStrategy::productIIWrapFalseAcceptFailsClosed +
+# smsHookRejectsIIWrapFalseAccept unit pin
+# (PreRASMSHookIIWrapFalseAcceptFailClosedSurface). CreateTargetMIHazardRecognizer
+# IsPreRA books linear stage-relative scoreboard, not modulo-II ResourceCycle;
+# sibling SMS owns issue-time-only differential + force-iiwrap-reject lit.
+# list-sched never enables multi-cycle product occupancy or setDesc from II-wrap.
+# SMS/post-RA format-acceptance differential peer (plan §8.4 #7): pure
+# exactTryAddProduct polarity is shared by ResourceCycle canReserve and
+# post-RA / pre-RA HR CurrentCycleCandidates. PreRASchedStrategy
+# productExactCanPackSequence / productFormatAcceptanceDifferentialPins +
+# scoreMatchingFrontier unit pin (PreRARCHrFormatAcceptanceDifferentialSurface;
+# live rematch: PreRARCHrLiveFormatAcceptanceAgreesWithPureExact). Format is
+# opcode-keyed (MI ≡ desc); MOVE32 port overcount is orthogonal. Sibling SMS
+# owns live ResourceCycle packing differential; list-sched never setDesc from
+# format-acceptance metrics.
+
+--- |
+  define void @vreg_gpr_addi_no_member() { ret void }
+  define void @vreg_move32_dedup() { ret void }
+  define void @vreg_three_writes_port_limit() { ret void }
+  define void @vreg_dr64_ports() { ret void }
+  define void @vreg_movt32_tied() { ret void }
+  define void @physreg_parity_add() { ret void }
+  define void @vreg_gpr_read_limit() { ret void }
+  define void @vreg_flex_add_constrained_st() { ret void }
+  define void @vreg_constrained_st_flex_add() { ret void }
+  define void @vreg_three_ready_rematch_add32_2xadd64() { ret void }
+  define void @vreg_qual_kernel_coissue_add_xor_or() { ret void }
+...
+---
+# ============================================================================
+# Test 1: logical ADDI32 only after pre-RA schedule (no member setDesc).
+# ============================================================================
+name:            vreg_gpr_addi_no_member
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = ADDI32 %0:gpr32, 1, implicit-def dead $sfr
+    %2:gpr32 = ADDI32 %0:gpr32, 2, implicit-def dead $sfr
+    %3:gpr32 = ADD32 %1:gpr32, %2:gpr32, implicit-def dead $sfr
+    $r0 = COPY %3:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; CHECK-LABEL: name: vreg_gpr_addi_no_member
+  ; Logical opcodes only — no private member descriptors before RA.
+  ; CHECK: ADDI32
+  ; CHECK: ADDI32
+  ; CHECK: ADD32
+  ; CHECK-NOT: ADDI32_S
+  ; CHECK-NOT: ADD32_S
+  ; CHECK-NOT: MOVE32_S
+  ; DBG: gpr:{{[1-4]}}R/{{[1-2]}}W
+  ; PREGREEDY-LABEL: name: vreg_gpr_addi_no_member
+  ; PREGREEDY: ADDI32
+  ; PREGREEDY: ADD32
+  ; PREGREEDY-NOT: ADDI32_S
+  ; PREGREEDY-NOT: ADD32_S
+
+...
+---
+# ============================================================================
+# Test 2: MOVE32 repeated-source MI port dedup (1R/1W, not descriptor 2R/1W).
+# Pre-RA HR uses PortModel MI accounting only. Descriptor-only shape (1 def +
+# 2 use slots, SMS MID placement peer) would charge 2R1W without identity —
+# intentional overcount, not a list-sched undercount. No member setDesc.
+# ============================================================================
+name:            vreg_move32_dedup
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    ; MOVE32 modeled as rd, rs, rs — PortModel MI path is 1R/1W after dedup.
+    %2:gpr32 = MOVE32 %0:gpr32, %0:gpr32, implicit-def dead $sfr
+    %3:gpr32 = MOVE32 %1:gpr32, %1:gpr32, implicit-def dead $sfr
+    %4:gpr32 = ADD32 %2:gpr32, %3:gpr32, implicit-def dead $sfr
+    $r0 = COPY %4:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; CHECK-LABEL: name: vreg_move32_dedup
+  ; CHECK: MOVE32
+  ; CHECK: MOVE32
+  ; CHECK-NOT: MOVE32_S
+  ; MI path (pre-RA HR): repeated-source MOVE32 is 1R/1W, not descriptor 2R/1W.
+  ; DBG: gpr:1R/1W
+  ; PREGREEDY-LABEL: name: vreg_move32_dedup
+  ; PREGREEDY: MOVE32
+  ; PREGREEDY-NOT: MOVE32_S
+
+...
+---
+# ============================================================================
+# Test 3: three 1W ADDI32 — write-port limit (2W) must fire a Hazard.
+# Independent vreg writers; HR reports Hazard when a third tries the same cycle.
+# one-above write capacity (at 2W → third is Hazard).
+# ============================================================================
+name:            vreg_three_writes_port_limit
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = ADDI32 %0:gpr32, 10, implicit-def dead $sfr
+    %2:gpr32 = ADDI32 %0:gpr32, 20, implicit-def dead $sfr
+    %3:gpr32 = ADDI32 %0:gpr32, 30, implicit-def dead $sfr
+    ; Keep all three live so none are DCE'd before scheduling.
+    %4:gpr32 = ADD32 %1:gpr32, %2:gpr32, implicit-def dead $sfr
+    %5:gpr32 = ADD32 %4:gpr32, %3:gpr32, implicit-def dead $sfr
+    $r0 = COPY %5:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; CHECK-LABEL: name: vreg_three_writes_port_limit
+  ; Still logical only — no member setDesc under three-write port pressure.
+  ; CHECK: ADDI32
+  ; CHECK: ADDI32
+  ; CHECK: ADDI32
+  ; CHECK-NOT: ADDI32_S
+  ; Port-forced multi-cycle: three independent 1W ops exceed GPR 2W in one
+  ; cycle (port ResMII lower bound ≥ 2). Pre-RA HR must Hazard rather than
+  ; pretend Full three-slot format makes them co-issue clean.
+  ; DBG-DAG: gpr:{{[0-4]}}R/{{[1-2]}}W
+  ; DBG-DAG: Hazard for
+
+...
+---
+# ============================================================================
+# Test 4: DR64 vreg port accounting (2R/1W for ADD64) — no undercount to 0.
+# ============================================================================
+name:            vreg_dr64_ports
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $d2, $d3
+    %0:dr64 = COPY $d0
+    %1:dr64 = COPY $d1
+    %2:dr64 = COPY $d2
+    %3:dr64 = COPY $d3
+    %4:dr64 = ADD64 %0:dr64, %1:dr64, implicit-def dead $sfr
+    %5:dr64 = ADD64 %2:dr64, %3:dr64, implicit-def dead $sfr
+    %6:dr64 = ADD64 %4:dr64, %5:dr64, implicit-def dead $sfr
+    $d0 = COPY %6:dr64
+    RET implicit $d0, implicit $r15
+
+  ; CHECK-LABEL: name: vreg_dr64_ports
+  ; CHECK: ADD64
+  ; CHECK-NOT: ADD64_S
+  ; DBG: dr:2R/1W
+  ; PREGREEDY-LABEL: name: vreg_dr64_ports
+  ; PREGREEDY: ADD64
+  ; PREGREEDY-NOT: ADD64_S
+
+...
+---
+# ============================================================================
+# Test 5: MOVT32 tied use/def — rd tied to rd_src is 3R/1W (not 4R).
+# Architectural: read old rd + rs1 + rs2, write rd once.
+# ============================================================================
+name:            vreg_movt32_tied
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:gpr32 = COPY $r3
+    %3:gpr32 = MOVT32 %0:gpr32, %1:gpr32, %2:gpr32, implicit-def dead $sfr
+    $r0 = COPY %3:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; CHECK-LABEL: name: vreg_movt32_tied
+  ; CHECK: MOVT32
+  ; CHECK-NOT: MOVT32_S
+  ; Tied rd/rd_src + two free sources → 3 distinct reads, 1 write.
+  ; DBG: gpr:3R/1W
+  ; PREGREEDY-LABEL: name: vreg_movt32_tied
+  ; PREGREEDY: MOVT32
+  ; PREGREEDY-NOT: MOVT32_S
+
+...
+---
+# ============================================================================
+# Test 6: physreg parity — same shapes as vreg ADD32 (2R/1W) / ADDI32 (1R/1W).
+# Proves MRI path does not invent demand beyond the physreg rule.
+# ============================================================================
+name:            physreg_parity_add
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r4
+    $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+    $r5 = ADDI32 $r4, 7, implicit-def dead $sfr
+    $r0 = ADD32 $r3, $r5, implicit-def dead $sfr
+    RET implicit $r0, implicit $r15
+
+  ; CHECK-LABEL: name: physreg_parity_add
+  ; CHECK: ADD32
+  ; CHECK: ADDI32
+  ; CHECK-NOT: ADD32_S
+  ; CHECK-NOT: ADDI32_S
+  ; Phys ADD32 footprint matches vreg ADD32 (2R/1W). ADDI32 vreg 1R/1W is
+  ; pinned in tests 1/2/3; here emit may co-issue so cycle totals accumulate.
+  ; DBG: gpr:2R/1W
+  ; PREGREEDY-LABEL: name: physreg_parity_add
+  ; PREGREEDY: ADD32
+  ; PREGREEDY-NOT: ADD32_S
+
+...
+---
+# ============================================================================
+# Test 7: three independent 2R1W ADD32 — at 4R2W with two, third is Hazard
+# (one-above for both read and write budgets).
+# ============================================================================
+name:            vreg_gpr_read_limit
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:gpr32 = COPY $r3
+    %3:gpr32 = COPY $r4
+    %4:gpr32 = COPY $r5
+    %5:gpr32 = COPY $r6
+    %6:gpr32 = ADD32 %0:gpr32, %1:gpr32, implicit-def dead $sfr
+    %7:gpr32 = ADD32 %2:gpr32, %3:gpr32, implicit-def dead $sfr
+    %8:gpr32 = ADD32 %4:gpr32, %5:gpr32, implicit-def dead $sfr
+    %9:gpr32 = ADD32 %6:gpr32, %7:gpr32, implicit-def dead $sfr
+    %10:gpr32 = ADD32 %9:gpr32, %8:gpr32, implicit-def dead $sfr
+    $r0 = COPY %10:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; CHECK-LABEL: name: vreg_gpr_read_limit
+  ; CHECK: ADD32
+  ; CHECK-NOT: ADD32_S
+  ; Two ADD32 = 4R2W (at budget); third is Hazard (one-above).
+  ; DBG-DAG: gpr:4R/2W
+  ; DBG-DAG: Hazard for
+  ; PREGREEDY-LABEL: name: vreg_gpr_read_limit
+  ; PREGREEDY: ADD32
+  ; PREGREEDY-NOT: ADD32_S
+
+...
+---
+# ============================================================================
+# Test 8: flexible ADD32 (Slot012) vs constrained ST32 (Slot0 only).
+# Feasibility tracks FieldSlots; no member/setDesc stamp pre-RA.
+# ============================================================================
+name:            vreg_flex_add_constrained_st
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:gpr32 = COPY $r3
+    %3:gpr32 = ADD32 %0:gpr32, %1:gpr32, implicit-def dead $sfr
+    ST32 %2:gpr32, %0:gpr32, 0
+    $r0 = COPY %3:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; CHECK-LABEL: name: vreg_flex_add_constrained_st
+  ; CHECK: ADD32
+  ; CHECK: ST32
+  ; CHECK-NOT: ADD32_S
+  ; CHECK-NOT: ST32_S
+  ; Constrained store books only Slot0 Required; flexible ADD books multi-slot.
+  ; DBG-DAG: ST32{{.*}}
+  ; DBG-DAG: req:0{{ }}
+  ; DBG-DAG: ADD32{{.*}}
+  ; DBG-DAG: gpr:2R/1W
+  ; PREGREEDY-LABEL: name: vreg_flex_add_constrained_st
+  ; PREGREEDY: ADD32
+  ; PREGREEDY: ST32
+  ; PREGREEDY-NOT: ADD32_S
+  ; PREGREEDY-NOT: ST32_S
+
+...
+---
+# ============================================================================
+# Test 9: reverse order — constrained ST32 first, flexible ADD32 second.
+# Matching frontier + exact tryAdd keep both legal without member setDesc.
+# Pins ST→ADD direction complementary to test 8 (ADD→ST).
+# ============================================================================
+name:            vreg_constrained_st_flex_add
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:gpr32 = COPY $r3
+    ; Program order: constrained store before flexible add (reverse of test 8).
+    ST32 %2:gpr32, %0:gpr32, 0
+    %3:gpr32 = ADD32 %0:gpr32, %1:gpr32, implicit-def dead $sfr
+    $r0 = COPY %3:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; CHECK-LABEL: name: vreg_constrained_st_flex_add
+  ; Matching-frontier may prefer flexible ADD over constrained ST; pin both
+  ; remain logical only (no private member setDesc either direction).
+  ; CHECK-DAG: ST32
+  ; CHECK-DAG: ADD32
+  ; CHECK-NOT: ST32_S
+  ; CHECK-NOT: ADD32_S
+  ; DBG-DAG: ST32{{.*}}
+  ; DBG-DAG: ADD32{{.*}}
+  ; DBG-DAG: gpr:2R/1W
+  ; PREGREEDY-LABEL: name: vreg_constrained_st_flex_add
+  ; PREGREEDY-DAG: ST32
+  ; PREGREEDY-DAG: ADD32
+  ; PREGREEDY-NOT: ST32_S
+  ; PREGREEDY-NOT: ADD32_S
+
+...
+---
+# ============================================================================
+# Test 10: three-ready rematch product MIR — ADD32 + 2×ADD64.
+#
+# Preferred first-fit freezes ADD32 on high slot (S2) then ADD64 on S1 and
+# loses the second ADD64. Exact matching-frontier rematch keeps all three
+# members in one cycle (ADD32 → S0). Pre-RA list-sched still emits only
+# logical opcodes (no setDesc / FormatID / member stamp). Unit pin:
+# MatchingFrontierThreeReadyRematchADD32_2xADD64.
+# ============================================================================
+name:            vreg_three_ready_rematch_add32_2xadd64
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $d0, $d1, $d2, $d3
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:dr64 = COPY $d0
+    %3:dr64 = COPY $d1
+    %4:dr64 = COPY $d2
+    %5:dr64 = COPY $d3
+    ; Three independent ready ops — no data edges between them.
+    %6:gpr32 = ADD32 %0:gpr32, %1:gpr32, implicit-def dead $sfr
+    %7:dr64 = ADD64 %2:dr64, %3:dr64, implicit-def dead $sfr
+    %8:dr64 = ADD64 %4:dr64, %5:dr64, implicit-def dead $sfr
+    ; Keep all three results live so none are DCE'd before scheduling.
+    %9:gpr32 = COPY %6:gpr32
+    %10:dr64 = ADD64 %7:dr64, %8:dr64, implicit-def dead $sfr
+    $r0 = COPY %9:gpr32
+    $d0 = COPY %10:dr64
+    RET implicit $r0, implicit $d0, implicit $r15
+
+  ; CHECK-LABEL: name: vreg_three_ready_rematch_add32_2xadd64
+  ; Logical rematch triple only — no private member descriptors before RA.
+  ; Metrics-only HANDOFF law: no durable BUNDLE from pre-RA list-sched.
+  ; CHECK-NOT: BUNDLE
+  ; CHECK-DAG: ADD32
+  ; CHECK-DAG: ADD64
+  ; CHECK-NOT: ADD32_S
+  ; CHECK-NOT: ADD64_S
+  ; Port footprints: ADD32 is gpr 2R/1W; each ADD64 is dr 2R/1W. Rematch
+  ; feasibility is unit-pinned; here pin MRI bank accounting still fires.
+  ; DBG-DAG: gpr:2R/1W
+  ; DBG-DAG: dr:2R/1W
+  ; PREGREEDY-LABEL: name: vreg_three_ready_rematch_add32_2xadd64
+  ; PREGREEDY-NOT: BUNDLE
+  ; PREGREEDY-DAG: ADD32
+  ; PREGREEDY-DAG: ADD64
+  ; PREGREEDY-NOT: ADD32_S
+  ; PREGREEDY-NOT: ADD64_S
+
+...
+---
+# ============================================================================
+# Test 11: qualification co-issue set ADD32 + XOR32 + OR32.
+#
+# Post-RA exact no-split packs this independent ALU triple as one Full cycle.
+# Pre-RA matching-frontier / packability oracles prove the same multiset is
+# one exact product cycle (unit: PreRASMSHandoffPackabilityOracleSurface) but
+# list-sched must still emit only logical opcodes and never invent a durable
+# BUNDLE root (SMS-HANDOFF metrics-only freeze on the pre-RA surface).
+# ============================================================================
+name:            vreg_qual_kernel_coissue_add_xor_or
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:gpr32 = COPY $r3
+    %3:gpr32 = COPY $r4
+    %4:gpr32 = COPY $r5
+    %5:gpr32 = COPY $r6
+    ; Three independent ready ALU ops — co-issue packable under Full.
+    %6:gpr32 = ADD32 %0:gpr32, %1:gpr32, implicit-def dead $sfr
+    %7:gpr32 = XOR32 %2:gpr32, %3:gpr32, implicit-def dead $sfr
+    %8:gpr32 = OR32 %4:gpr32, %5:gpr32, implicit-def dead $sfr
+    %9:gpr32 = ADD32 %6:gpr32, %7:gpr32, implicit-def dead $sfr
+    %10:gpr32 = ADD32 %9:gpr32, %8:gpr32, implicit-def dead $sfr
+    $r0 = COPY %10:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; CHECK-LABEL: name: vreg_qual_kernel_coissue_add_xor_or
+  ; CHECK-NOT: BUNDLE
+  ; CHECK-DAG: ADD32
+  ; CHECK-DAG: XOR32
+  ; CHECK-DAG: OR32
+  ; CHECK-NOT: ADD32_S
+  ; CHECK-NOT: XOR32_S
+  ; CHECK-NOT: OR32_S
+  ; DBG-DAG: gpr:2R/1W
+  ; PREGREEDY-LABEL: name: vreg_qual_kernel_coissue_add_xor_or
+  ; PREGREEDY-NOT: BUNDLE
+  ; PREGREEDY-DAG: ADD32
+  ; PREGREEDY-DAG: XOR32
+  ; PREGREEDY-DAG: OR32
+  ; PREGREEDY-NOT: ADD32_S
+  ; PREGREEDY-NOT: XOR32_S
+  ; PREGREEDY-NOT: OR32_S

@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-postlegalizer-combiner -verify-machineinstrs %s -o - | FileCheck %s
-#
+
+# Role: MIR — s for select-to-minmax combiner rule in HaydnPostLegalizerCombiner.
+
 # Tests for select-to-minmax combiner rule in HaydnPostLegalizerCombiner.
 #
 # Combiner rule tested:

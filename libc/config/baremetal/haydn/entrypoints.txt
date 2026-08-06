@@ -137,7 +137,10 @@ set(TARGET_LIBC_ENTRYPOINTS
     libc.src.stdio.fputc
     libc.src.stdio.fputs
     libc.src.stdio.fread
-    libc.src.stdio.fscanf
+    # fscanf: provided by BundleSim plat/stdio_extras.c (fgets+vsscanf).
+    # Baremetal StreamReader+raw_match(" ") mis-handles non-space lead-in on
+    # Haydn freestanding; plat override is the product path for torture.
+    # libc.src.stdio.fscanf
     libc.src.stdio.fwrite
     libc.src.stdio.getchar
     libc.src.stdio.printf

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s 2>&1 | FileCheck %s
-;
+
+; Role: semantic — — BranchRelaxation must relax WIDE conditional branches whose EMITTED distance exceeds the ±4KB FIXUP_HAYDN_WIDE_BranchSImm12.
+
 ; REGRESSION TEST: — BranchRelaxation must relax WIDE conditional
 ; branches whose EMITTED distance exceeds the ±4KB FIXUP_HAYDN_WIDE_BranchSImm12
 ; field (encoding_manual.md §5.5 / §5.14 D1).

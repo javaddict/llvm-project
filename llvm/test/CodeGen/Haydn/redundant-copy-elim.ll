@@ -1,7 +1,8 @@
 ; UNSUPPORTED: true
-; RedundantCopyElim deleted (YOLO phase-out)
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+; Role: retired — RedundantCopyElim pass deleted; not product coverage.
+; Do not count as product green. RUN is deliberately false so a dropped
+; RUN: false
+
 ; Tests for the HaydnRedundantCopyElim pass (post-RA condition-based elimination).
 ;
 ; This pass leverages dominating condition information to eliminate copies whose

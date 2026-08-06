@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — CB-126: G_LOAD s64 from sub-word mem must legalize (not ICE).
+
 ; CB-126: G_LOAD s64 from sub-word mem must legalize (not ICE).
 ; Expect anyext path: narrow load + widen, no backend crash.
 

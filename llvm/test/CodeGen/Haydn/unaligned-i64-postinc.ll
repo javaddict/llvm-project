@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
-;
+
+; Role: semantic — pr57344-3: post-legalizer combiner forms G_HAYDN_POSTINC_LOAD for s64+byte after i72 lower.
+
 ; pr57344-3: post-legalizer combiner forms G_HAYDN_POSTINC_LOAD for s64+byte
 ; after i72 lower. ABI allows align-4 i64, but D_LDW_POST_IMM needs EA%8==0.
 ; Must not emit d_ldw_post_imm / ld64 for align-4 s64 post-inc.

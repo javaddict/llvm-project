@@ -1,4 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs -stop-after=instruction-select < %s | FileCheck --check-prefix=MIR %s
+
+; Role: MIR — Updated for native DR64 shift (sll64/srl64/sra64) RE-FILED REGRESSION : the second RUN line (full ASM pipeline).
+
 ; Updated for native DR64 shift (sll64/srl64/sra64)
 ; RE-FILED REGRESSION : the second RUN line (full ASM pipeline)
 ; was removed because it hits the SEQ64_S1 MachineVerifier abort that

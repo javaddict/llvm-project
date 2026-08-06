@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefix=ASM
-;
+
+; Role: semantic — MOVE32_DR_L/H + ST32 (extract a DR64 lane to a GPR then store that GPR) must fold into the single lane-store instruction.
+
 ; REGRESSION TEST : MOVE32_DR_L/H + ST32 (extract a DR64 lane to a GPR
 ; then store that GPR) must fold into the single lane-store instruction
 ; D_SW_L_WITH_IMM / D_SW_H_WITH_IMM — store one 32-bit lane of a DR64 directly

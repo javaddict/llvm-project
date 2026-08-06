@@ -16,14 +16,13 @@
 // `HaydnBaseMCFormats::getLegalSlots` is alts-derived: OR of non-zero sparse
 // AlternateInsts indices. MC encodes member Desc as-is (AIE); residual hand-asm
 // materializes via getAlternateInstsOpcode.
-// HaydnBaseMCFormats::getMode0FormatDesc / getBundle128FormatDesc:
-// Haydn-only format lookups; getBundle128FormatDesc delegates to the generated
-// Formats table. The generated Formats (ADD32 today) is exposed via getMCFormats
-// per the AIE contract.
+// FE8: retired 128-bit format-desc / target-opcode helpers — product emit is
+// Format E only via getObjectEncodingProfile / getBundleFormatRow.
+// getMCFormats exposes the generated Formats per the AIE contract.
 //
-// Decision §9 (Option A): HaydnGenFormats.inc is the SCHEMA OWNER, not a
-// translation target. Renamed classes to the generic AIE names; field layouts
-// aligned. No wholesale AIEMCFormats port (deferred to post-P5).
+// Decision: HaydnGenFormats.inc is the SCHEMA OWNER for the live composite
+// slot/member tables. The neutral ObjectEncodingProfile registry in
+// HaydnFormat.h is the production profile/row/size authority.
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_HAYDN_MCTARGETDESC_HAYDNMCFORMATS_H
@@ -38,6 +37,7 @@
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/raw_ostream.h"
 #include <cstddef>
 #include <map>
 #include <unordered_map>
@@ -354,17 +354,9 @@ public:
 // Query interface over the Haydn slot/format tables. Haydn's analogue of AIE's
 // AIEBaseMCFormats. The single Haydn variant means there is one concrete
 // subclass (HaydnMCFormats) and no per-variant split.
-// Two coexisting format-desc tables back this interface:
-// the GENERATED Formats (HaydnGenFormats.inc GET_FORMATS_FORMATS_DEFS)
-// exposed via getMCFormats per the AIE contract. Today this carries the
-// migrating Flex opcodes (ADD32) AND the BUNDLE128_FULL composite
-// packet format, so it grows as opcodes/formats migrate onto
-// the CodeGenFormat framework.
-// the DORMANT hand-authored HaydnFormatDescs (HaydnMCFormats.cpp)
-// backing the Haydn-specific getMode0FormatDesc lookup for the legacy
-// 16/32/48/64-bit slot geometries. These stay until the generated table
-// fully covers them (M0_64 migration, post-P5). getBundle128FormatDesc
-// delegates to the generated table and no longer reads the dormant row.
+// Generated Formats (HaydnGenFormats.inc) remain the live composite/member
+// table. Production object-encoding identity is the neutral registry
+// (haydn::format::ObjectEncodingProfileDesc, E96 only).
 class HaydnBaseMCFormats {
 public:
   virtual ~HaydnBaseMCFormats() = default;
@@ -374,28 +366,24 @@ public:
   // isSupportedInstruction first.
   virtual const MCFormatDesc &getFormatDesc(unsigned Opcode) const;
 
-  // \returns the Mode-0 bundle format-desc (the 3-slot 64-bit composite)
-  // whose SlotsMap carries the s0/s1/s2 slot-window positions
-  // (M0S0Field/M0S1Field/M0S2Field). Convenience for the encoder/decoder
-  // which operate on Mode-0 bundles; use getSlotOffsetsHiBit(SLOT0/1/2) on
-  // the result to recover each slot's MSB-indexed window in the 64b word.
-  // First live consumer of the ported format-desc model (Gap 2).
-  // HAYDN EXTENSION (not in AIE): backed by the dormant hand-authored
-  // HaydnFormatDescs table. M0_64 is NOT yet a generated packet format
-  // (only BUNDLE128_FULL is), so this query cannot yet delegate to
-  // the generated table; retires when M0_64 migrates (post-P5).
-  const MCFormatDesc &getMode0FormatDesc() const;
+  // \returns the immutable production ObjectEncodingProfile (E96).
+  const haydn::format::ObjectEncodingProfileDesc &
+  getObjectEncodingProfile() const;
 
-  // \returns the Bundle128 format-desc (the 3-slot 128-bit single composite
-  // form). SlotsMap carries the s0/s1/s2 slot-window positions;
-  // use getSlotOffsetsHiBit(SLOT0/1/2) on the result to recover each slot's
-  // MSB-indexed window in the 128b word:
-  // s0 = [0,47] (48b window; FU(3b) at offset 0)
-  // s1 = [48,87] (40b window; FU(3b) at offset 48)
-  // s2 = [88,127] (40b window; FU(3b) at offset 88)
-  // Delegates to getFormatDesc(Haydn::BUNDLE128_FULL) reading the GENERATED
-  // Haydn::Formats table (single truth).
-  const MCFormatDesc &getBundle128FormatDesc() const;
+  // \returns the row descriptor for \p Row, or nullptr if unknown.
+  const haydn::format::BundleFormatRowDesc *
+  getBundleFormatRow(haydn::format::BundleFormatRowID Row) const;
+
+  // \returns EncodedBytes for a production/test row via the registry.
+  haydn::format::EncodedBytes
+  getEncodedBytes(haydn::format::BundleFormatRowID Row) const;
+
+  // \returns EncodedBits for a production/test row via the registry.
+  haydn::format::EncodedBits
+  getEncodedBits(haydn::format::BundleFormatRowID Row) const;
+
+  // \returns max EncodedBytes among rows permitted by the production profile.
+  haydn::format::EncodedBytes getProductionMaxEncodedBytes() const;
 
   // \returns whether \p Opcode has an entry in the format-desc table.
   virtual bool isSupportedInstruction(unsigned Opcode) const;
@@ -474,9 +462,8 @@ public:
 // member-opcode-aware formats subclass
 //===----------------------------------------------------------------------===//
 //
-// The MC encoder wires `Haydn::Bundle<MCInst>` into `encodeBundle128` as the
-// AIE-faithful shuffler. Bundle's `pickSlot` calls `getLegalSlots(Opc)` through
-// the `HaydnBaseMCFormats*` interface. The base `HaydnMCFormats::getLegalSlots`
+// Bundle's `pickSlot` calls `getLegalSlots(Opc)` through the
+// `HaydnBaseMCFormats*` interface. The base `HaydnMCFormats::getLegalSlots`
 // only recognizes logical opcodes (getAlternateInstsOpcode rows). For an
 // already-member child (AsmParser `.sN` / post-setDesc), `getLegalSlots`
 // would return 0 without suffix strip.
@@ -514,35 +501,45 @@ public:
 // SLOT_UNKNOWN if \p Mask is not a single-slot Haydn mask.
 MCSlotKind haydnSlotMaskToKind(SlotBits Mask);
 
-//===----------------------------------------------------------------------===//
-// shared Bundle128-target predicate (Bundle128 16-byte emit path).
-//===----------------------------------------------------------------------===//
-//
-// The MC encoder (`HaydnMCCodeEmitter::encodeInstruction` / `encodeBundle128`)
-// routes BOTH standalone Bundle128-target opcodes AND formed BUNDLEs whose
-// real children are all Bundle128-target through `encodeBundle128`, emitting a
-// 128-bit (16-byte) Bundle128 composite word via `emitBundle128Word`.
-//
-// A `_S<k>` opcode is SELF-DESCRIBING: its name suffix carries the slot
-// digit (0/1/2 = S0/S1/S2). A logical opcode with PlacementAlternative members
-// also routes through the Bundle128 path (encode materializes the member via
-// getAlternateInstsOpcode / setDesc). Both cases return true here.
-//
-// SHARED so that `HaydnInstrInfo::getInstSizeInBytes` (consulted by upstream
-// BranchRelaxation's `computeBlockSize`) mirrors the encoder's emit dispatch
-// exactly — the size model MUST predict the Bundle128 16-byte emit width, or
-// BranchRelaxation undercounts branch distances (~8x), deems every branch in
-// range, never relaxes, and the WIDE conditional branch overflows
-// `FIXUP_HAYDN_WIDE_BranchSImm12` (±4 KB) at MC-fixup time on fns > ~4 KB
-// (adddf3/divdf3). It also prevents the `BranchRelaxation::verify` BlockSize
-// assert (BlockInfo.Size vs post-relax recompute).
+/// Residual S0/S1/S2 MCSlotKind → Haydn::SLOT0/1/2 FieldSlots bit.
+/// PlacementAlternative FieldSlots use issue bits (1/2/4); residual S* kinds
+/// sit after E2/E3 entry kinds in the generated enum. Returns 0 if \p Kind is
+/// not a residual issue slot.
+SlotBits residualSlotKindToFieldSlots(MCSlotKind Kind);
 
-// \returns true iff \p Opc is emitted via the 128-bit Bundle128 path:
-// a `_S<k>` opcode (self-describing name suffix), OR
-// a logical opcode with PlacementAlternative members (encode materializes).
-// In both cases the emitted width is 16 bytes. This mirrors the MC encoder's
-// `isBundle128TargetOpcode` gate (`HaydnMCCodeEmitter.cpp`).
-bool isHaydnBundle128TargetOpcode(unsigned Opc, const MCInstrInfo &MII);
+//===----------------------------------------------------------------------===//
+// Format E product parcel helpers (MC encode / pad)
+//===----------------------------------------------------------------------===//
+//
+// Parcel length always comes from the production registry row EncodedBytes
+// (both E2 and E3 assert the same current golden size). Call sites must not
+// spell bare 12/16/96/128 widths. Canonical idle/completion wire bytes are
+// gated: when golden has not registered a product idle form, pad and empty
+// parcels fail closed rather than inventing indicator/payload/top-pad bits.
+
+/// Production max EncodedBytes for profile E96 (current rows share one size).
+haydn::format::EncodedBytes haydnProductionParcelBytes();
+
+/// True iff a product-approved canonical idle/completion wire form is
+/// registered for executable padding. False while idle remains undefined.
+bool haydnHasCanonicalIdleParcel();
+
+/// Header byte bits [5:0]: format_indicator=0b111, entry_num, reserved=0b00.
+/// \p EntryNum is 0 (two-entry) or 1 (three-entry). Other values assert.
+uint8_t haydnFormatEHeaderByte(unsigned EntryNum);
+
+/// Append one Format E parcel (production EncodedBytes) from a 96-bit APInt
+/// as little-endian host bytes (bit 0 in byte 0). Asserts width and size.
+void haydnEmitFormatEParcelLE(const APInt &Word96, SmallVectorImpl<char> &CB);
+
+/// If a product idle parcel exists, append one copy into \p Out and return
+/// true. Otherwise leave \p Out unchanged and return false (fail closed).
+bool haydnTryGetCanonicalIdleParcel(SmallVectorImpl<char> &Out);
+
+/// Write executable pad of \p CountBytes as whole production-size idle
+/// parcels. Returns false when CountBytes is not a multiple of the production
+/// EncodedBytes, or when no product-approved idle form is registered.
+bool haydnWriteCanonicalIdlePad(raw_ostream &OS, uint64_t CountBytes);
 
 } // namespace llvm
 

@@ -1,6 +1,8 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -O2 -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop < %s | FileCheck %s
-;
+
+; Role: semantic — PR6 / Phase C2b: nested loops — outer software / JNZD style, inner ZOL.
+
 ; PR6 / Phase C2b: nested loops — outer software / JNZD style, inner ZOL.
 ;
 ; TTI (HaydnTargetTransformInfo::isHardwareLoopProfitable):

@@ -61,7 +61,7 @@ static void emitMaterializeImm32(MachineBasicBlock &MBB,
 // PEI \c emitPrologue runs post-RA and often without a live scavenger at the
 // insert point, so we need a phys scratch up front. The **only** safe filter
 // is the **ABI call-preserved set**, not RA liveness:
-// \c TRI->getCalleeSavedRegs / CSR bank = R8–R11, R15, D8–D15 (+R14 if hasFP).
+// \c TRI->getCalleeSavedRegs / CSR bank = R8–R11, R15, D8–D15 (R14 if hasFP).
 // Call-clobbered GPRs (R1–R7, R12) may be used at entry if
 // they are not entry live-ins.
 // \c !MRI.isPhysRegUsed(R8) is **not** permission to clobber R8: RA not
@@ -183,10 +183,11 @@ static void emitCSRStore(MachineBasicBlock &MBB,
   bool InImm4Range = (Offset >= 0 && Offset <= MaxOff &&
                       (Offset & ((1 << Shift) - 1)) == 0);
   if (InImm4Range) {
+    // Golden scaled imm: field = byte_offset >> log2(width).
     BuildMI(MBB, MBBI, DL, TII->get(StoreOpc))
         .addReg(SrcReg)
         .addReg(BaseReg)
-        .addImm(Offset)
+        .addImm(Offset >> Shift)
         .setMIFlag(FrameFlag);
     return;
   }
@@ -239,9 +240,10 @@ static void emitCSRLoad(MachineBasicBlock &MBB,
   bool Aligned = (Offset & ((1 << Shift) - 1)) == 0;
   bool InSimm6Range = Aligned && isInt<6>(Offset >> Shift);
   if (InSimm6Range) {
+    // Golden scaled imm: field = byte_offset >> log2(width).
     BuildMI(MBB, MBBI, DL, TII->get(LoadOpc), DstReg)
         .addReg(BaseReg)
-        .addImm(Offset)
+        .addImm(Offset >> Shift)
         .setMIFlag(FrameFlag);
     return;
   }
@@ -518,12 +520,13 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
                               BaseOffset, MachineInstr::FrameSetup);
 
         // Store each register at its offset relative to the base.
+        // ST32 imm is word element index (EA = base + (imm << 2)).
         for (unsigned J = 0; J < RunLen; ++J) {
           int RelOffset = GPRCSRegs[J].Offset - BaseOffset;
           BuildMI(MBB, MBBI, DL, TII->get(Haydn::ST32))
               .addReg(GPRCSRegs[J].Reg)
               .addReg(BaseReg)
-              .addImm(RelOffset)
+              .addImm(RelOffset >> 2)
               .setMIFlag(MachineInstr::FrameSetup);
         }
 
@@ -591,12 +594,13 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
         emitMaterializeOffset(MBB, MBBI, DL, TII, BaseReg, FrameReg,
                               BaseOffset, MachineInstr::FrameSetup);
 
+        // ST64 imm is dword element index (EA = base + (imm << 3)).
         for (unsigned J = 0; J < RunLen; ++J) {
           int RelOffset = DRCSRegs[J].Offset - BaseOffset;
           BuildMI(MBB, MBBI, DL, TII->get(Haydn::ST64))
               .addReg(DRCSRegs[J].Reg)
               .addReg(BaseReg)
-              .addImm(RelOffset)
+              .addImm(RelOffset >> 3)
               .setMIFlag(MachineInstr::FrameSetup);
         }
 
@@ -619,8 +623,8 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
     }
   }
 
-  // AR0–AR3 are caller-saved (G-AR-MODEL freeze 2026-07-24): not in CSR_Haydn.
-  // No prologue save. Product UA residual uses AR as scratch for PLDWWUA/FLAR/…
+  // AR0–AR1 are caller-saved: not in CSR_Haydn. No prologue save.
+  // Product UA residual uses AR as scratch for PLDWWUA/FLAR/….
 
   // Emit CFI directives.
   // cfi_def_cfa_offset StackSize — only emit when there's an actual stack
@@ -797,7 +801,7 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
   // Restore callee-saved registers in reverse order of saving
   const std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
 
-  // AR0–AR3 caller-saved (G-AR-MODEL): nothing to restore.
+  // AR0–AR1 caller-saved: nothing to restore.
 
   // Restore callee-saved DR64 registers (D8-D15).
   // No stride base-pointer optimization in the epilogue: a PEI scratch
@@ -963,9 +967,9 @@ void HaydnFrameLowering::processFunctionBeforeFrameFinalized(
   // Nested phys scavenge is gone (vreg EFI).
   unsigned ScavSlotsNum = 1;
 
-  // Far branch relaxation: Bundle128 is 16 bytes. Large functions may need
-  // insertIndirectBranch; reserve a FI for full-pressure (BranchRelaxation's
-  // fresh RegScavenger).
+  // Far branch relaxation: product parcels are Format E (12 B via
+  // productParcelBytes). Large functions may need insertIndirectBranch;
+  // reserve a FI for full-pressure (BranchRelaxation's fresh RegScavenger).
   unsigned EstBytes = 0;
   for (const MachineBasicBlock &MBB : MF)
     for (const MachineInstr &MI : MBB)
@@ -1010,6 +1014,66 @@ void HaydnFrameLowering::determineCalleeSaves(MachineFunction &MF,
     int FI = MF.getFrameInfo().CreateStackObject(/*Size=*/4, /*Alignment=*/Align(4),
                                                  /*SpillSlot=*/true);
     FuncInfo->setPostRAScratchFI(FI);
+  }
+
+  // Permanent 8-byte in-frame pack slot for DR64 construction from two GPR32
+  // halves (LOADI64 both-halves-nonzero constants; MOV_GPR_TO_DR64 two-live-
+  // GPR general case). Reserved ONLY when such a pack is present so leaf
+  // functions pay no frame growth. The single fixed slot is reused by every
+  // pack in the function; each pack is a local store-store-load with no SP
+  // motion. This replaces the dynamic SUBI32/ADDI32_W $r13,8 transient that
+  // shifted SP mid-function and corrupted sibling SP-relative fixed objects.
+  // Align(8) places it first among locals (smallest offset → short-form LS).
+  if (FuncInfo->getDR64PackFI() < 0) {
+    bool NeedsPack = false;
+    for (const MachineBasicBlock &ScanBB : MF) {
+      for (const MachineInstr &ScanMI : ScanBB) {
+        if (ScanMI.getOpcode() == Haydn::LOADI64) {
+          // Register-only fast paths (Hi==0 zero-extend, Hi==-1&&Lo<0
+          // sign-extend) need no slot; only general both-halves-nonzero
+          // constants do. Non-immediate (relocatable) LOADI64 is rare but
+          // conservatively treated as a general pack.
+          if (!ScanMI.getOperand(1).isImm()) {
+            NeedsPack = true;
+          } else {
+            uint64_t V =
+                static_cast<uint64_t>(ScanMI.getOperand(1).getImm());
+            int32_t Lo = static_cast<int32_t>(V & 0xFFFFFFFFu);
+            int32_t Hi = static_cast<int32_t>((V >> 32) & 0xFFFFFFFFu);
+            if (Hi != 0 && !(Hi == -1 && Lo < 0))
+              NeedsPack = true;
+          }
+        } else if (ScanMI.getOpcode() == Haydn::MOV_GPR_TO_DR64) {
+          // R0-half packs take the stackless shift path; only the general
+          // two-live-GPR case (neither source is R0) needs the slot.
+          if (ScanMI.getNumOperands() > 2 && ScanMI.getOperand(1).isReg() &&
+              ScanMI.getOperand(2).isReg()) {
+            Register SrcLo = ScanMI.getOperand(1).getReg();
+            Register SrcHi = ScanMI.getOperand(2).getReg();
+            if (SrcLo != Haydn::R0 && SrcHi != Haydn::R0)
+              NeedsPack = true;
+          }
+        }
+        if (NeedsPack)
+          break;
+      }
+      if (NeedsPack)
+        break;
+    }
+    if (NeedsPack) {
+      int FI = MF.getFrameInfo().CreateStackObject(/*Size=*/8,
+                                                   /*Alignment=*/Align(8),
+                                                   /*SpillSlot=*/true);
+      FuncInfo->setDR64PackFI(FI);
+      // Dedicated 4-byte spill home for the large-frame pack-base scavenger
+      // (withDR64PackBase fallback). Kept disjoint from PostRAScratchFI so the
+      // outer pack-base spill and the nested MatInt-scratch spill (inside
+      // LOADI64's pack emission) never collide. Never indexed for SP motion.
+      int BaseSpillFI = MF.getFrameInfo().CreateStackObject(/*Size=*/4,
+                                                            /*Alignment=*/Align(4),
+                                                            /*SpillSlot=*/true);
+      FuncInfo->setDR64PackBaseSpillFI(BaseSpillFI);
+    }
   }
 }
 

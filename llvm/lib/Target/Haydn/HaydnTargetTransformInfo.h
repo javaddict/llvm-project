@@ -71,23 +71,27 @@ public:
                                 AssumptionCache &AC, TargetLibraryInfo *LibInfo,
                                 HardwareLoopInfo &HWLoopInfo) const override;
 
-  /// Native SIMD / DR bank is 64-bit (v2i32 / v4i16 / v8i8). Cap SLP and
-  /// LoopVectorize so residual wider vectors (v16s32 etc.) never enter GISel
-  /// and thrash the legalizer (pr28982a hang after G-ABI-VEC).
+  /// Cap auto-vectorization. Haydn DR is 64-bit and intentional SIMD (intrinsics
+  /// / builtins) still selects X2/X4 ops, but residual SLP/LV on under-aligned
+  /// halfword streams (coremark matrix_add_const align-2, yarpgen struct
+  /// stores) produced G_LOAD/STORE vectors that ISel lowered to LD32/ST32 and
+  /// MEMORY_FAULT or wrong CRC after scalarize+rebuild. Report no fixed vector
+  /// registers so LoopVectorize/SLP stay off for product C; legalizer still
+  /// accepts explicit v2i32/v4i16/v8i8 from IR/builtins.
   TypeSize
   getRegisterBitWidth(TargetTransformInfo::RegisterKind K) const override {
     switch (K) {
     case TargetTransformInfo::RGK_Scalar:
       return TypeSize::getFixed(32);
     case TargetTransformInfo::RGK_FixedWidthVector:
-      return TypeSize::getFixed(64);
+      return TypeSize::getZero();
     case TargetTransformInfo::RGK_ScalableVector:
       return TypeSize::getZero();
     }
     llvm_unreachable("unknown register kind");
   }
 
-  unsigned getMinVectorRegisterBitWidth() const override { return 32; }
+  unsigned getMinVectorRegisterBitWidth() const override { return 0; }
 
   unsigned getNumberOfRegisters(unsigned ClassID) const override {
     // ClassID 0 = scalar GPR, non-zero used as vector bank by some analyses.

@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O0 -frame-pointer=all < %s | FileCheck %s --check-prefix=FP
 ; RUN: llc -mtriple=haydn-unknown-elf -O0 < %s | FileCheck %s --check-prefix=OMIT
-;
+
+; Role: semantic — Large locals + va_start + frame pointer must compile (no hard-fatal on far FI).
+
 ; Large locals + va_start + frame pointer must compile (no hard-fatal on far FI).
 ; VASTART uses withPostRAScratch: free GPR first; spill only if none free
 ; (PostRAScratchFI is spill *home* only when scavenge finds no free GPR).
@@ -12,7 +14,7 @@ define i32 @sum_large_fp(i32 %n, ...) nounwind {
 ; FP-LABEL: sum_large_fp:
 ; Va_list field stores must appear (5-field init).
 ; FP: st32 {{r[0-9]+}}, {{r[0-9]+}}, 0
-; FP: st32 {{r[0-9]+}}, {{r[0-9]+}}, 16
+; FP: st32 {{r[0-9]+}}, {{r[0-9]+}}, 4
 ; FP: jalr
 ;
 ; OMIT-FP still compiles.

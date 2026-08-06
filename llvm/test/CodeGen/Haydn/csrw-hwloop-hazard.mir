@@ -1,5 +1,11 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
-#
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-expand-pseudos,postmisched -verify-machineinstrs %s -o - | \
+# RUN:   FileCheck %s --check-prefix=EXPANDPACK
+
+# Role: MIR — CSRW↔SET_HWLOOP same-bundle hazard (HWLR 0x20-0x25) plus
+# expanded SETCBR→CSRW CBR addresses that must *not* false-positive that gate.
+
 # REBASELINED : / FLEX cutover — CSRW_W and SET_HWLOOP_W now render as CSRW_W_S0 and SET_HWLOOP_W_S0 in postmisched output. hazard intent preserved: test1 (CSR 0x20) stays as two separate non-bundled instrs; test2 (CSR 0x10) is also left un-bundled here (the bundling assertion belongs to a -run-pass=haydn-packetizer test, per the comment below).
 #
 # MIR body refreshed : CSRW_W and SET_HWLOOP_W now carry the
@@ -86,6 +92,8 @@
 --- |
   define void @test1_csrw_hwlr_set_hwloop_no_bundle() { ret void }
   define void @test2_csrw_non_hwlr_set_hwloop_can_bundle() { ret void }
+  define void @test3_csrw_cbr_set_hwloop_no_false_hazard() { ret void }
+  define void @test4_setcbr_expand_then_set_hwloop() { ret void }
 ...
 ---
 # ============================================================================
@@ -119,9 +127,14 @@ body:             |
     ; CHECK-LABEL: name: test1_csrw_hwlr_set_hwloop_no_bundle
     ; CHECK: liveins: $r1, $r2
     ; CHECK-NEXT: {{^ +$}}
-    ; CHECK-NEXT: CSRW_W 32, $r1, implicit-def $sfr
-    ; CHECK-NEXT: SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; SET is a region SU; postmisched may setDesc to *_S0 member.
+    ; Hazard: CSR 0x20 must NOT share a BUNDLE with SET (standalone sequence).
+    ; CHECK-NEXT: CSRW_W{{(_S0)?}} 32, $r1, implicit-def $sfr
+    ; CHECK-NEXT: SET_HWLOOP_W{{(_S0)?}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; ExitSU SetupIssueDistance trailing flush may insert idle NOPs after SET
+    ; before the JALR boundary — hazard still forbids coissue of CSR+SET.
+    ; CHECK-NOT: BUNDLE
+    ; CHECK: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     CSRW_W 32, $r1, implicit-def $sfr
     SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
 
@@ -164,10 +177,77 @@ body:             |
     ; CHECK-LABEL: name: test2_csrw_non_hwlr_set_hwloop_can_bundle
     ; CHECK: liveins: $r1, $r2
     ; CHECK-NEXT: {{^ +$}}
-    ; CHECK-NEXT: CSRW_W 16, $r1, implicit-def $sfr
-    ; CHECK-NEXT: SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; Non-HWLR CSR 0x10 may coissue under HWLOOP-SU (legal) or stay sequential.
+    ; CHECK-DAG: CSRW_W{{(_S0)?}} 16, $r1, implicit-def $sfr
+    ; CHECK-DAG: SET_HWLOOP_W{{(_S0)?}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; CHECK: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     CSRW_W 16, $r1, implicit-def $sfr
+    SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
+
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+# ============================================================================
+# Test 3: CSRW_W 0x2C (CBR_BEGIN set0) + SET_HWLOOP_W. CBR addresses are
+# outside HWLR 0x20-0x25, so the CSRW↔SET gate must *not* false-positive.
+# Both ops remain real after postmisched (setDesc members OK); HWLOOP-SU
+# still materializes InterveningCycles following the SET SU.
+# ============================================================================
+name:            test3_csrw_cbr_set_hwloop_no_false_hazard
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+
+    ; CHECK-LABEL: name: test3_csrw_cbr_set_hwloop_no_false_hazard
+    ; CHECK-DAG: CSRW_W{{(_S0)?}} 44, $r1, implicit-def $sfr, implicit-def $cbr0
+    ; CHECK-DAG: SET_HWLOOP_W{{(_S0)?}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; CHECK: NOP
+    ; CHECK: NOP
+    ; CHECK: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    CSRW_W 44, $r1, implicit-def $sfr, implicit-def $cbr0
+    SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
+
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+# ============================================================================
+# Test 4: SETCBR_BEGIN expands to CSRW_W 0x2C before pack, then coexists
+# with SET_HWLOOP under multipass expand+postmisched. Pins the product
+# order: ExpandPseudos → postmisched sees real CSR issue ops; residual
+# SETCBR is gone; HWLOOP-SU following flush still applies.
+# Only the EXPANDPACK RUN exercises this function (CHECK prefix).
+# ============================================================================
+name:            test4_setcbr_expand_then_set_hwloop
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+
+    ; EXPANDPACK-LABEL: name: test4_setcbr_expand_then_set_hwloop
+    ; EXPANDPACK-DAG: CSRW_W{{(_S0)?}} 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; EXPANDPACK-DAG: SET_HWLOOP_W{{(_S0)?}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; EXPANDPACK-NOT: SETCBR
+    ; EXPANDPACK: NOP
+    ; EXPANDPACK: NOP
+    ; EXPANDPACK: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    SETCBR_BEGIN 0, $r1
     SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
 
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

@@ -1,45 +1,81 @@
-//===-- HaydnCompositeFormats.td - Bundle128 composite ( P4) -*- tablegen -*-===//
+//===-- HaydnCompositeFormats.td - Product Format E composites -*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// SPDX-License-Identifier: license information.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
-// P4 — the 128-bit Bundle128 composite (packet) format. Mirrors AIE's
-// AIE2CompositeFormats.td: a composite (isComposite=true) instruction whose
-// operands are the 3 positional slots (s0_slot/s1_slot/s2_slot); each slot
-// operand is a sub-instruction (MCOperand::isInst at encode time) whose encoded
-// bits fill the slot window. The encoder composes the bundle by OR-ing each
-// sub-instruction's encoding at its window offset; the decoder extracts each
-// window and re-enters the per-FU sub-trie.
+//===----------------------------------------------------------------------===//
 //
-// Layout (encoding_manual_flex.md §2): bundle[127:0] = {s2[39:0]
-// s1[39:0], s0[47:0]} (s2 HIGH, s0 LOW). 40+40+48 = 128. No format-tag bits
-// (§4: NOP = all-zero slot window; the FU field discriminates).
+// Bundle composite instruction records.
 //
-// P4-minimal: this defines the composite format so -gen-instr-format emits a
-// composite MCFormatDesc (isComposite=true). enabled the
-// GET_FORMATS_PACKETS_TABLE consumer include (HaydnMCFormats.cpp):
-// getPacketFormats/getIsFormatAvailable now return the generated tables
-// and the backend's computeSlotSets derives real ConflictBits (= self-only for
-// every slot, since Bundle128 co-emits all three). The hand-authored
-// HaydnFormats/HaydnPacketFormats/HaydnFormatAvailable (HaydnFormat.cpp)
-// are retained as dormant backup.
+// Product path: Format E 96-bit / 12-byte parcels only.
+//   BUNDLE_E96_TWO_ENTRY   — entry_num=0 (E96TwoEntry registry row)
+//   BUNDLE_E96_THREE_ENTRY — entry_num=1 (E96ThreeEntry registry row)
+// Both rows share EncodedBytes = (96+7)/8 = 12; they are internal geometries
+// of one family (FormatE96), not two product formats and not variable length.
+//
+// CodeGenFormat emits these as the live PacketFormats table (sorted by
+// Inst bit-width / 8). Selectors and the packetizer must use these rows;
+// the neutral ObjectEncodingProfile (E96) enumerates the same two rows.
+//
+// FE8: dual-inert 128-bit full composite retired — zero retired product emit
+// opcode. Residual `_S*` FU members remain for placement tables only.
+//
+// Member alternatives / inverse / setDesc ledger: HaydnGenFormatE*.inc
+// (FormatE/generate_format_e_records.py).
+//
 //===----------------------------------------------------------------------===//
 
-// Bundle128 composite base: 3 positional slot windows concatenated s2||s1||s0.
-// isComposite=true tells -gen-instr-format to read the slot set from the
-// operand dag (the InstSlot defs), not from a Slot field.
-class HaydnBundle128Composite<dag slot_ins>
-    : HaydnFormatInst<(outs), slot_ins, "$s0; $s1; $s2", []> {
+// ---------------------------------------------------------------------------
+// Product Format E composites (Size = EncodedBytes = 12).
+//
+// Bit layout (MSB-first TableGen concat, matches golden Overview):
+//   E2: pad[95:92] | entry1[91:51] | entry0[50:6] | reserved[5:4] |
+//       entry_num[3]=0 | format_indicator[2:0]=111
+//   E3: pad[95] | entry2[94:68] | entry1[67:37] | entry0[36:6] |
+//       reserved[5:4] | entry_num[3]=1 | format_indicator[2:0]=111
+//
+// Top-pad bits are fixed zero (fail-closed) until golden publishes pad policy.
+// ---------------------------------------------------------------------------
+
+// Two-entry Format E parcel (registry row E96TwoEntry).
+class HaydnFormatE2Composite<dag entry_ins>
+    : HaydnFormatInst<(outs), entry_ins, "$e0; $e1", []> {
   let isComposite = true;
-  let Size = 16;                         // 128-bit parcel
-  let DecoderNamespace = "Bundle128";
-  bits<48> s0;                           // slot 0 window [47:0]
-  bits<40> s1;                           // slot 1 window [87:48]
-  bits<40> s2;                           // slot 2 window [127:88]
-  bits<128> Inst = {s2, s1, s0};         // MSB-first: s2 HIGH, s0 LOW
+  let Size = 12;
+  let DecoderNamespace = "FormatE96";
+  bits<45> e0;
+  bits<41> e1;
+  bits<4> top_pad = 0;
+  bits<2> hdr_reserved = 0;
+  bits<1> entry_num = 0;
+  bits<3> format_indicator = 0b111;
+  bits<96> Inst =
+      {top_pad, e1, e0, hdr_reserved, entry_num, format_indicator};
 }
 
-// Full 3-slot Bundle128 (every slot occupied). The packetizer places per-FU
-// sub-instructions into the slots; unused slots carry the all-zero NOP encoding.
-def BUNDLE128_FULL : HaydnBundle128Composite<
-    (ins s0_slot:$s0, s1_slot:$s1, s2_slot:$s2)>;
+def BUNDLE_E96_TWO_ENTRY : HaydnFormatE2Composite<
+    (ins e2_0_slot:$e0, e2_1_slot:$e1)>;
+
+// Three-entry Format E parcel (registry row E96ThreeEntry).
+class HaydnFormatE3Composite<dag entry_ins>
+    : HaydnFormatInst<(outs), entry_ins, "$e0; $e1; $e2", []> {
+  let isComposite = true;
+  let Size = 12;
+  let DecoderNamespace = "FormatE96";
+  bits<31> e0;
+  bits<31> e1;
+  bits<27> e2;
+  bits<1> top_pad = 0;
+  bits<2> hdr_reserved = 0;
+  bits<1> entry_num = 1;
+  bits<3> format_indicator = 0b111;
+  bits<96> Inst =
+      {top_pad, e2, e1, e0, hdr_reserved, entry_num, format_indicator};
+}
+
+def BUNDLE_E96_THREE_ENTRY : HaydnFormatE3Composite<
+    (ins e3_0_slot:$e0, e3_1_slot:$e1, e3_2_slot:$e2)>;
+
+// FE8: dual-inert 128-bit full composite deleted. Product emit/select is
+// Format E only (BUNDLE_E96_* above).

@@ -3,6 +3,9 @@
 ; RUN:     | FileCheck %s --check-prefix=MIR
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     < %s | FileCheck %s --check-prefix=ASM
+
+; Role: MIR — FIXME: -verify-machineinstrs disabled — HWLoop/VLA path can emit LoopStart on undef physreg (pre-existing).
+
 ; FIXME: -verify-machineinstrs disabled — HWLoop/VLA path can emit LoopStart on undef physreg (pre-existing).
 ;
 ; REBASELINE : fusion works (ST32_POST / ST64_POST present). Prior
@@ -44,6 +47,7 @@
 ; @stream_store_i32: ST32_POST imm6=1 (stride 4).
 ; MIR-LABEL: name: stream_store_i32
 ; MIR: ST32_POST
+
 define void @stream_store_i32(ptr %out, i32 %n) nounwind {
 entry:
   %cmp0 = icmp sgt i32 %n, 0

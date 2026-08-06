@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — CFI for SP adjustment must co-locate with the SP decrement (emitPrologue).
+
 ; REGRESSION: CFI for SP adjustment must co-locate with the SP decrement
 ; (emitPrologue). Shrink-wrapping may still place the prologue in the entry
 ; block for this shape (M7 opt not required for correctness); the invariant

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — s for the HaydnCopyElim pass (post-RA).
+
 ; Tests for the HaydnCopyElim pass (post-RA).
 ; Each function exercises a specific redundant COPY elimination pattern.
 ;

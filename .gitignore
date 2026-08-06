@@ -92,3 +92,6 @@ cmake_install.cmake
 CPackConfig.cmake
 CPackSourceConfig.cmake
 /llvm/CLAUDE.md
+
+# Local agent/tooling (never product history)
+.grok/

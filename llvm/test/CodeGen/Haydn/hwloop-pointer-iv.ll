@@ -1,11 +1,14 @@
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
+
+; Role: MIR — pre-RA HardwareLoops converts pointer-IV streaming loops; pin SET_HWLOOP_REG/HWLOOP_END without hardcoding vregs.
+
 ; This test exercises the pre-RA HardwareLoops pass (Stream A,), which
 ; runs BEFORE SMS and converts countable loops to SET_HWLOOP_REG + HWLOOP_END
 ; pseudos on virtual registers (do not pin vreg numbers in CHECKs). The pre-RA
 ; pass derives the trip count directly from the IV init (logic) and hands
 ; the runtime loop bound straight to SET_HWLOOP_REG, so unlike the post-RA pass
 ; it does NOT emit a SUB32/SRLI32 trip-compute sequence in the preheader.
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
 ;
 ; REGRESSION TEST: GAP-3 pointer-IV hardware-loop conversion.
 ;

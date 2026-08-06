@@ -1,10 +1,13 @@
 # RUN: not llvm-mc -triple=haydn-unknown-elf %s 2>&1 | FileCheck %s
 
+# Role: verifier — invalid register names.
+
 #===----------------------------------------------------------------------===
 # Test invalid register names
 #===----------------------------------------------------------------------===
 
 # CHECK: error: invalid operand for instruction
+
 ADD32 R16, R0, R1
 
 # CHECK: error: invalid operand for instruction

@@ -1,5 +1,7 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
-#
+
+# Role: object — Comprehensive branch instruction test.
+
 # Comprehensive branch instruction test.
 # Only includes instructions actually defined in HaydnInstrInfo.td.
 # NOTE: BLE, BLEU, BGT, BGTU, BLEZ, BGTZ, J, JR, CALLNEQZ, CALLEQZ,

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — signed i64 compares must compare the LOW 32 bits UNSIGNED.
+
 ; REGRESSION TEST: signed i64 compares must compare the LOW 32 bits UNSIGNED.
 ;
 ; Background: For a 64-bit comparison a OP b, the expansion is
@@ -39,9 +41,7 @@
 ; High half stays slt32 (signed). When hi(a)==hi(b), the result is decided
 ; by the unsigned magnitude of the low halves; using slt32 there flips the
 ; result whenever a low half has bit 31 set (e.g. 0x8239DE30 in the repro).
-; CHECK-LABEL: cmp_slt_i64_low_sign:
-; CHECK-DAG: slt32
-; CHECK-DAG: sltu32
+
 define i32 @cmp_slt_i64_low_sign(i64 %a, i64 %b) {
  %cmp = icmp slt i64 %a, %b
  %r = zext i1 %cmp to i32

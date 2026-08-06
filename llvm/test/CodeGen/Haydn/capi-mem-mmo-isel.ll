@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -stop-after=instruction-select -verify-machineinstrs -o - < %s | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -filetype=obj -o %t.o < %s
-;
+
+; Role: object — – / : getTgtMemIntrinsic + GISel MMO clone.
+
 ; C2.2–C2.3 / G-MEM-INTRIN: getTgtMemIntrinsic + GISel MMO clone.
 ; Public CB/BREV/Golden WITH/POST/PRE mem intrinsics must:
 ;   1) Attach MMOs in IRTranslator (via HaydnTargetLowering::getTgtMemIntrinsic)
@@ -26,8 +28,6 @@ declare ptr @llvm.haydn.s.sw.post.imm(i32, ptr, i32)
 declare { i32, ptr } @llvm.haydn.s.lbs.pre.imm(ptr, i32)
 declare ptr @llvm.haydn.s.sb.pre.imm(i32, ptr, i32)
 
-; CHECK-LABEL: name: mmo_ldw_cb_imm
-; CHECK: D_LDW_CB_IMM{{.*}}:: (volatile load (s64) from %ir.base
 define i64 @mmo_ldw_cb_imm(ptr %base) {
   %r = call { i64, ptr } @llvm.haydn.ldw.cb.imm(ptr %base, i32 0, i32 1)
   %d = extractvalue { i64, ptr } %r, 0

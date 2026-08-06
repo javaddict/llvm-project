@@ -39,6 +39,11 @@ struct HaydnCountableLoop {
   // The SEQ32/SLT32/SLTU32 compare that defines EndLoop's condition register.
   // Removed by a hardware-loop pass once the branch is gone.
   MachineInstr *CmpMI = nullptr;
+  // Optional XORI32 %cmp, 1 between CmpMI and EndLoop (GISel emitInvert01 /
+  // CondOpt Pattern B). Null when the branch reads CmpMI's def directly.
+  // Must stay stage-0 with CmpMI/EndLoop — staging it alone delays the exit
+  // predicate by one iteration (20000605-1 overshoot → abort).
+  MachineInstr *InvertMI = nullptr;
   // The induction-variable PHI register (the loop-carried counter). Left
   // invalid by analyzeCountableLoop today; callers that need it re-derive it.
   Register IVReg;
@@ -75,6 +80,8 @@ class HaydnPipelinerLoopInfo : public TargetInstrInfo::PipelinerLoopInfo {
   const HaydnInstrInfo *HII;
   MachineInstr *EndLoop;
   MachineInstr *CmpMI;
+  // Optional XORI invert on the latch condition path (see HaydnCountableLoop).
+  MachineInstr *InvertMI = nullptr;
   Register TripCountReg;
   // Cached loop basic block — set in the constructor because setPreheader
   // may erase EndLoop (when the expander clones the kernel)
@@ -96,8 +103,9 @@ class HaydnPipelinerLoopInfo : public TargetInstrInfo::PipelinerLoopInfo {
 public:
   HaydnPipelinerLoopInfo(MachineFunction *MF, const HaydnInstrInfo *HII,
                          MachineInstr *EndLoop, MachineInstr *CmpMI,
-                         Register TripCountReg)
-      : MF(MF), HII(HII), EndLoop(EndLoop), CmpMI(CmpMI),
+                         Register TripCountReg,
+                         MachineInstr *InvertMI = nullptr)
+      : MF(MF), HII(HII), EndLoop(EndLoop), CmpMI(CmpMI), InvertMI(InvertMI),
         TripCountReg(TripCountReg), LoopBB(EndLoop->getParent()),
         DL(EndLoop->getDebugLoc()) {}
 
@@ -105,7 +113,7 @@ public:
   HaydnPipelinerLoopInfo(MachineFunction *MF, const HaydnInstrInfo *HII,
                          MachineInstr *EndLoop, MachineInstr *LoopStart,
                          int64_t MinTripCount)
-      : MF(MF), HII(HII), EndLoop(EndLoop), CmpMI(nullptr),
+      : MF(MF), HII(HII), EndLoop(EndLoop), CmpMI(nullptr), InvertMI(nullptr),
         TripCountReg(), LoopBB(EndLoop->getParent()),
         DL(EndLoop->getDebugLoc()), IsZOL(true), LoopStart(LoopStart),
         MinTripCount(MinTripCount) {}
@@ -121,6 +129,12 @@ public:
                            unsigned ResMII, unsigned RecMII, unsigned MII,
                            unsigned StageCount, unsigned NumOps,
                            unsigned ScheduledII) override;
+
+  /// Optional same-cycle logical BUNDLE materialize from clone→cycle pairs
+  /// (gated by -haydn-sms-handoff, default OFF). Contiguous real-issue ops
+  /// only; no private member setDesc, FormatID, or side-map.
+  void materializeSMSKernelCycleGroups(
+      ArrayRef<std::pair<MachineInstr *, unsigned>> KernelCloneCycles) override;
 
   std::optional<bool>
   createTripCountGreaterCondition(int TC, MachineBasicBlock &MBB,
@@ -148,7 +162,7 @@ public:
   // OR64/OR32 rd, rs, rs is the DR/GPR bank-copy idiom (rd = rs|rs = rs).
   // MOVE32 rd, rs, rs is the canonical GPR move. Recognize as copies so
   // CSE/peepholes can treat them without rewriting to bare COPY (post-RA
-  // bare COPY is not Bundle128-safe — bundler skips, AsmPrinter drops).
+  // bare COPY is not product-cycle-safe — bundler skips, AsmPrinter drops).
   std::optional<DestSourcePair>
   isCopyInstrImpl(const MachineInstr &MI) const override;
 
@@ -210,10 +224,31 @@ public:
   // Expand pseudo instructions after register allocation.
   bool expandPostRAPseudo(MachineInstr &MI) const override;
 
-  // Check if this is a scheduling boundary (e.g., call, branch, barrier).
+  // Scheduling boundary: call/branch/return, every standard BUNDLE root
+  // (hard-bundle atomic membership through RA, including mixed GPR32/DR64),
+  // frame-setup/destroy, CFI/debug, and unmodeled side effects. SET/LoopStart
+  // are *not* boundaries — they are real post-RA DAG SUs; setup distance is
+  // owned by ZOLSetupExitLatency (SetupIssueDistance), leaveRegion
+  // handleRegionConflicts (ExitReady + inter-zone pads), and residual Fixup
+  // pad (single-MI skip / short useful-window).
   bool isSchedulingBoundary(const MachineInstr &MI,
                            const MachineBasicBlock *MBB,
                            const MachineFunction &MF) const override;
+
+  //===------------------------------------------------------------------===
+  // Hardware-loop setup predicates (HWLOOP-SU)
+  //===------------------------------------------------------------------===
+  // One normalized predicate covering logical, wide, and selected-member
+  // forms so mutations / Fixup / formation never diverge on opcode lists.
+
+  /// True for any SET_HWLOOP form (logical/wide/member) or residual LoopStart.
+  bool isHardwareLoopSetupInstr(const MachineInstr &MI) const;
+  bool isHardwareLoopSetupOpcode(unsigned Opc) const;
+
+  /// Register-trip forms (count in GPR): SET_HWLOOP_REG / F2_W / members.
+  bool isHardwareLoopRegTripOpcode(unsigned Opc) const;
+  /// Immediate-trip forms: SET_HWLOOP / SET_HWLOOP_W / members.
+  bool isHardwareLoopImmTripOpcode(unsigned Opc) const;
 
   //===------------------------------------------------------------------===
   // Branch relaxation hooks (used by generic BranchRelaxation pass)
@@ -236,10 +271,13 @@ public:
                             int64_t BrOffset = 0,
                             RegScavenger *RS = nullptr) const override;
 
-  // Encoded size in bytes (B4.4): BUNDLE → encodedBytesFor(committed
-  // FormatID); bare real → ProductFormatDesc.Bytes. AIE peer:
-  // Format->getSize() (AIEBaseInstrInfo.cpp:546-555) / get(Opcode).getSize()
-  // (AIE1InstrInfo.cpp:646-651). Shared with Fixup + HardwareLoops + BR.
+  // Encoded size in bytes: BUNDLE → encodedBytesFor(committed FormatID stamp
+  // of product Format E row); bare real → productParcelBytes() matching
+  // generated VLIWFormat::Size for BUNDLE_E96_* (12 B); INLINEASM /
+  // INLINEASM_BR → conservative getInlineAsmLength (product MaxInstLength
+  // per statement). Shared with Fixup + HardwareLoops + BranchRelaxation.
+  // Opaque inline asm is not a compiler
+  // issue cycle (Finalize leaves it standalone; no bundle crosses it).
   unsigned getInstSizeInBytes(const MachineInstr &MI) const override;
 
   // Insert a standalone NOP at \p MI. Required for AIE-style cycle-level NOP
@@ -275,19 +313,25 @@ public:
   //===--------------------------------------------------------------------===
 
   // Memory→memory edge latency for post-RA MemoryEdges mutation (AIE peer).
-  // Uses getFirst/LastMemoryCycle when both known; else conservative 1.
-  // Mutation default is OFF (see haydn-postra-memory-edges) until IB/PP KPI.
+  // Product default: always 1 (AccurateMemEdges=false peer). NatureDSP density
+  // A/B kept product latency-1; -haydn-accurate-memory-latency stays opt-in
+  // (default OFF). Accurate path: max(1, LastSrc-FirstDst+1) from memory-only
+  // sched classes (Slot0_LS / Slot1_LD / Slot01_LD); nullopt when either cycle
+  // is unknown (MemoryEdges falls back to latency 1). Unit tables + lit packing
+  // pins (product adjacent st32→ld32; accurate full-NOP bubble).
   std::optional<int> getMemoryLatency(unsigned SrcSchedClass,
                                       unsigned DstSchedClass) const;
 
   // Memory access cycle relative to issue (AIE getFirst/LastMemoryCycle peer).
-  // LoadLatency=2 (HaydnSchedModel / ISA §55): first=0, last=1 for load-class
-  // itineraries; stores issue at cycle 0. nullopt = non-memory / unknown class.
+  // Table-driven (MemInstrItinData peer): first=0, last=1 for memory itineraries
+  // Slot0_LS / Slot1_LD / Slot01_LD only (OperandCycles [2], LoadLatency=2 /
+  // ISA §55). nullopt = non-memory / unknown class (ALU/MAC/PSEUDO never report
+  // a memory cycle). Product path ignores these; accurate flag is opt-in only.
   std::optional<int> getFirstMemoryCycle(unsigned SchedClass) const;
   std::optional<int> getLastMemoryCycle(unsigned SchedClass) const;
   int getMinFirstMemoryCycle() const { return 0; }
   int getMaxFirstMemoryCycle() const { return 0; }
-  int getMinLastMemoryCycle() const { return 0; }
+  int getMinLastMemoryCycle() const { return 1; } // memory classes only
   int getMaxLastMemoryCycle() const { return 1; } // LoadLatency - 1
 
   // Max result latency for MI from itinerary OperandCycles (for RegionEndEdges

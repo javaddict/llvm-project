@@ -26,39 +26,32 @@
 include "HaydnGeneric.td"
 
 //===----------------------------------------------------------------------===//
-// CodeGenFormat backend : 128-bit-only Bundle128 slot model.
+// CodeGenFormat backend : product Format E entry model only (FE8).
 // gen-instr-format emits HaydnGenFormats.inc (slot enum + MCFormatDesc
-// PacketFormats tables) consumed by the migrated emitter/decoder. The backend
-// filters to InstFormat-derived instructions (CodeGenFormat.cpp), so the legacy
-// HaydnInst defs below are skipped until each is migrated to HaydnFormatInst.
+// PacketFormats tables). Product PacketFormats rows are Format E Size=12
+// (BUNDLE_E96_TWO_ENTRY / BUNDLE_E96_THREE_ENTRY). Retired 128-bit composite
+// opcode deleted. Backend filters to InstFormat-derived instructions; legacy
+// HaydnInst defs are skipped.
 //===----------------------------------------------------------------------===//
 include "llvm/Target/CodeGenFormat.td"
 include "HaydnSlots.td"
-// P1b-scale : per-FU representative slot formats, byte-accurate vs
-// HaydnFlexLayout. Each establishes the FU x slot format-class template; the
-// full families follow these patterns. Additive alongside legacy defs.
-include "HaydnFormatsALU32.td"  // ADD32_S1 (ALU32 s1)
-include "HaydnFormatsALU64.td"  // ADD64_S1 (ALU64 s1, DR64)
-include "HaydnFormatsLS.td"     // LD32_S0 (LS s0, imm6)
-include "HaydnFormatsLD.td"     // LD64_S1 (LD s1, DR64+GPR32 base)
-include "HaydnFormatsMAC.td"    // X2MULA32_S2 (MAC s2, RRRR accum)
-// B2.1: MultiSlot_Pseudo / materializableInto class (AIE2InstrFormats.td:21-31).
-// After slot-format members so list<HaydnFormatInst> can name *_S0/*_S1/*_S2.
-// Explicit MultiSlot_Pseudo defs are optional; CodeGenFormat also synthesizes
-// GET_ALTERNATE_INST_OPCODE_FUNC from Full-format `_S*` members via
-// collectSparseAltSlotMemberRows (sparse AlternateInsts slot-member discovery).
+// Residual `_S*` FU member families (placement tables; not product composite).
+include "HaydnFormatsALU32.td"
+include "HaydnFormatsALU64.td"
+include "HaydnFormatsLS.td"
+include "HaydnFormatsLD.td"
+include "HaydnFormatsMAC.td"
+// Format E entry bases (product placement scaffolding).
+include "HaydnFormatsE96.td"
+// MultiSlot_Pseudo / materializableInto (sparse AlternateInsts for residual
+// `_S*` members; Format E alts come from generated records).
 include "HaydnMultiSlotPseudo.td"
-// P4: re-include the 128-bit Bundle128 composite. This forces
-// gen-emitter into the APInt getBinaryCodeForInstr signature (max Inst width
-// 128 > 64) and -gen-instr-format to emit the composite MCFormatDesc. The
-// HaydnMCCodeEmitter cutover (P2b) lands together with this re-include: the
-// encoder adopts the AIE two-step APInt model + 24-line encodeInstruction.
-include "HaydnCompositeFormats.td"  // BUNDLE128_FULL composite (P4)
+// Product Format E composites only (Size=12).
+include "HaydnCompositeFormats.td"
 def HaydnCodeGenFormat : CodeGenFormat {}
 
 //===----------------------------------------------------------------------===//
-// R4 + : Mode-0/3 decode-variant islands RETIRED (Bundle128-only).
-// Slot encoding is exclusively the `_S<k>` families in HaydnFormats*.td
-// + BUNDLE128_FULL. Former HaydnInstrInfoM0/MACM0/MACM1/M3/S*M0.td islands
-// live in legacy-retired/ (historical reference only; NOT included).
+// Mode-0/3 decode-variant islands and Bundle128 composites deleted (FE8).
+// Product composites are Format E 12-byte only (HaydnCompositeFormats.td).
+// Residual `_S<k>` families remain as Format E placement/setDesc members.
 //===----------------------------------------------------------------------===//

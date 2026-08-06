@@ -24,7 +24,12 @@
 //   5. full clear() after materialize drops opcodes (AIEAlternateDescriptors.h:74)
 //   6. post-commit Bundle canAdd via getSlotKind only (no slot side-map)
 //
-// Product: BUNDLE128_FULL only. Mirrors AIE BundleTest multi-option comments
+// : TableGen CodeGenFormat already proved logical→member setDesc shape
+// (operands/ties/implicits/flags/sched) for every AlternateInsts entry. Runtime
+// materialize therefore stays AIE-unconditional — no NumOperands/NumDefs gate
+// and no second shape table. See SetDescCompat.td / SetDescIncompatible.td.
+//
+// Product: sole live composite row is BUNDLE_E96_TWO_ENTRY / BUNDLE_E96_THREE_ENTRY.
 // and HazardRecognizerTest alt-try shape without inventing a second packer.
 //
 //===----------------------------------------------------------------------===//
@@ -225,10 +230,11 @@ TEST(HaydnMaterializeMultiOpcode, GetSlotKindIsPostCommitPlacement) {
             MCSlotKind(MCSlotKind::Haydn_SLOT_S2));
   // Multi-slot logical has no fixed slot (alts path until setDesc).
   EXPECT_EQ(Fmts.getSlotKind(Haydn::ADD32), MCSlotKind());
-  // Slot index adapter: Haydn_SLOT_S* are sequential 0/1/2.
-  EXPECT_EQ(static_cast<unsigned>(MCSlotKind::Haydn_SLOT_S0), 0u);
-  EXPECT_EQ(static_cast<unsigned>(MCSlotKind::Haydn_SLOT_S1), 1u);
-  EXPECT_EQ(static_cast<unsigned>(MCSlotKind::Haydn_SLOT_S2), 2u);
+  // Residual S* kinds remain distinct (absolute enum indices may include
+  // Format E entry slots ahead of S0/S1/S2).
+  EXPECT_NE(MCSlotKind::Haydn_SLOT_S0, MCSlotKind::Haydn_SLOT_S1);
+  EXPECT_NE(MCSlotKind::Haydn_SLOT_S1, MCSlotKind::Haydn_SLOT_S2);
+  EXPECT_NE(MCSlotKind::Haydn_SLOT_S0, MCSlotKind::Haydn_SLOT_S2);
 }
 
 // After setDesc, Bundle canAdd must accept committed members via getSlotKind
@@ -260,7 +266,7 @@ TEST(HaydnMaterializeMultiOpcode, BundleCanAddCommittedMembers) {
 }
 
 // cycleCanFormLegalBundle shape: Bundle.canAdd + getFormatOrNull only.
-TEST(HaydnMaterializeMultiOpcode, CycleCanFormLegalBundleGetSlotKindOnly) {
+TEST(HaydnMaterializeMultiOpcode, ExactCommitBundleShapeGetSlotKindOnly) {
   HaydnMCFormats Fmts;
   Haydn::Bundle<MCInst> B(&Fmts);
   MCInst A, X;
@@ -272,7 +278,10 @@ TEST(HaydnMaterializeMultiOpcode, CycleCanFormLegalBundleGetSlotKindOnly) {
   B.add(&X);
   ASSERT_FALSE(B.isStandalone());
   ASSERT_NE(B.getFormatOrNull(), nullptr);
-  EXPECT_STREQ(B.getFormatOrNull()->Name, "BUNDLE128_FULL");
+  EXPECT_TRUE(StringRef(B.getFormatOrNull()->Name).starts_with("BUNDLE_E96_"));
+  // Shared legality authority (opcode view of the same members).
+  unsigned Ops[] = {Haydn::ADD32_S2, Haydn::XOR32_S1};
+  EXPECT_TRUE(opcodesFormOneLegalCycle(Ops, Fmts));
 }
 
 //===----------------------------------------------------------------------===//
@@ -365,8 +374,11 @@ TEST(HaydnMaterializeMultiOpcode, BrevLoadMembersAreSetDescTargets) {
 //
 // AIE peers: AIEMachineScheduler.cpp:1121-1139 materializeMultiOpcodeInstrs;
 // AIEHazardRecognizer.cpp:174-214 empty Bundle alt try; AIE PreEmit empty
-// (AIE2TargetMachine.cpp:88) so AIE never re-runs this path. Haydn BR/Fixup
-// bare inserts become ProductFormatID singleton cycles via FinalizeBundle.
+// (AIE2TargetMachine.cpp:88) so AIE never re-runs this path. Haydn BR inserts
+// and FixupHwLoops deficit pads / demote trip-mat / stack LD-ST / soft edges /
+// exit B call commitLateProductCycle at creation
+// ; late Finalize remains the idempotent
+// firewall for any residual bare MI.
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleADD32) {
   // Empty-cycle tryAdd prefers S2 (same as post-RA HR).
@@ -376,8 +388,8 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleADD32) {
   EXPECT_EQ(C->LogicalOpcode, Haydn::ADD32);
   EXPECT_EQ(C->MemberOpcode, Haydn::ADD32_S2);
   EXPECT_TRUE(C->NeedsSetDesc);
-  EXPECT_EQ(C->Plan.FID, FormatID::Bundle128Full);
-  EXPECT_EQ(C->Plan.Bytes.Value, 16u);
+  EXPECT_TRUE(isProductBundleRow(C->Plan.Row));
+  EXPECT_EQ(C->Plan.Bytes.Value, productParcelBytes().Value);
   EXPECT_TRUE(C->Plan.isProductLegal());
 
   auto SetDesc = lateSingletonSetDescOpcode(Haydn::ADD32, Fmts);
@@ -386,18 +398,65 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleADD32) {
 }
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleNOP) {
-  // FixupHwLoops deficit pad inserts bare NOP — S0-only alt → NOP_S0.
+  // FixupHwLoops deficit pad exact-commits via commitLateProductCycle:
+  // S0-only alt → NOP_S0 (then finalizeBundle + FormatID in Fixup).
   HaydnMCFormats Fmts;
   auto C = commitLateProductCycle(Haydn::NOP, Fmts);
   ASSERT_TRUE(C.has_value());
   EXPECT_EQ(C->LogicalOpcode, Haydn::NOP);
   EXPECT_EQ(C->MemberOpcode, Haydn::NOP_S0);
   EXPECT_TRUE(C->NeedsSetDesc);
-  EXPECT_EQ(C->Plan.FID, FormatID::Bundle128Full);
+  EXPECT_TRUE(isProductBundleRow(C->Plan.Row));
 
   auto SetDesc = lateSingletonSetDescOpcode(Haydn::NOP, Fmts);
   ASSERT_TRUE(SetDesc.has_value());
   EXPECT_EQ(*SetDesc, Haydn::NOP_S0);
+}
+
+TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleDemoteSoftEdge) {
+  // Final-real demotion soft edge: SUBI32 + BNEZ_W (no residual LoopDec /
+  // LoopJNZ). Shared empty-cycle exact-commit must accept both as product
+  // singletons so late creators can setDesc + finalize before the second
+  // BranchRelaxation. Member choice is the same surface object encode sees
+  // (prefer high slots S2→S1→S0; BNEZ_W is S0-only).
+  HaydnMCFormats Fmts;
+  auto Dec = commitLateProductCycle(Haydn::SUBI32, Fmts);
+  ASSERT_TRUE(Dec.has_value());
+  EXPECT_EQ(Dec->LogicalOpcode, Haydn::SUBI32);
+  EXPECT_EQ(Dec->MemberOpcode, Haydn::SUBI32_S2);
+  EXPECT_TRUE(Dec->NeedsSetDesc);
+  // FE8: BundlePlan.FID residual field is removed; Format E row identity is
+  // the stamped BundleFormatRowID via stampBundleCommit.
+  EXPECT_TRUE(isProductBundleRow(Dec->Plan.Row));
+  EXPECT_TRUE(Dec->Plan.isProductLegal());
+  EXPECT_EQ(Dec->Plan.Bytes.Value, productParcelBytes().Value);
+
+  auto Br = commitLateProductCycle(Haydn::BNEZ_W, Fmts);
+  ASSERT_TRUE(Br.has_value());
+  EXPECT_EQ(Br->LogicalOpcode, Haydn::BNEZ_W);
+  EXPECT_EQ(Br->MemberOpcode, Haydn::BNEZ_W_S0);
+  EXPECT_TRUE(Br->NeedsSetDesc);
+  EXPECT_TRUE(isProductBundleRow(Br->Plan.Row));
+  EXPECT_TRUE(Br->Plan.isProductLegal());
+  EXPECT_EQ(Br->Plan.Bytes.Value, productParcelBytes().Value);
+
+  // lateProductMemberOpcode is the shared hook late creators call.
+  EXPECT_EQ(lateProductMemberOpcode(Haydn::SUBI32), Haydn::SUBI32_S2);
+  EXPECT_EQ(lateProductMemberOpcode(Haydn::BNEZ_W), Haydn::BNEZ_W_S0);
+}
+
+TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleDemoteTripMaterialize) {
+ // demote trip materialize + stack-counter glue must exact-commit:
+  // XOR32 / ADDI32_W / MOVE32 / ST32 / LD32 / B (exit).
+  HaydnMCFormats Fmts;
+  for (unsigned Opc : {Haydn::XOR32, Haydn::ADDI32_W, Haydn::MOVE32, Haydn::ST32,
+                       Haydn::LD32, Haydn::B}) {
+    auto C = commitLateProductCycle(Opc, Fmts);
+    ASSERT_TRUE(C.has_value()) << "opc " << Opc;
+    EXPECT_TRUE(isProductBundleRow(C->Plan.Row)) << "opc " << Opc;
+    EXPECT_TRUE(C->Plan.isProductLegal()) << "opc " << Opc;
+    EXPECT_NE(C->MemberOpcode, 0u) << "opc " << Opc;
+  }
 }
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleAlreadyMember) {
@@ -419,7 +478,7 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleNoAltWrapOnly) {
     ASSERT_TRUE(C.has_value()) << "opc " << Opc;
     EXPECT_EQ(C->MemberOpcode, Opc);
     EXPECT_FALSE(C->NeedsSetDesc) << "opc " << Opc;
-    EXPECT_EQ(C->Plan.FID, FormatID::Bundle128Full);
+    EXPECT_TRUE(isProductBundleRow(C->Plan.Row));
     EXPECT_FALSE(lateSingletonSetDescOpcode(Opc, Fmts).has_value());
   }
 }
@@ -446,6 +505,52 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleMatchesEmptyTryAdd) {
     EXPECT_EQ(C->MemberOpcode, S.Members[0].MemberOpcode)
         << "late empty-cycle member must match pure tryAdd for " << Logical;
   }
+}
+
+// Fixed BR → FixupHwLoops → BR → late Finalize/Verify multi-pass charges every
+// late residual as one Full parcel (EncodedBytes == productParcelBytes). The
+// committed row may not compact or shrink later; layout size and format row
+// stay locked to a Format E product row.
+TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleStableRowFullParcel) {
+  HaydnMCFormats Fmts;
+  const unsigned FullBytes = productParcelBytes().Value;
+  ASSERT_EQ(FullBytes, productParcelBytes().Value);
+  for (unsigned Opc : {Haydn::ADD32, Haydn::XOR32, Haydn::OR32, Haydn::NOP,
+                       Haydn::B, Haydn::BEQZ, Haydn::BNEZ_W, Haydn::SUBI32,
+                       Haydn::ST32, Haydn::LD32, Haydn::ADDI32_W, Haydn::MOVE32,
+                       Haydn::RET, Haydn::JALR, Haydn::XOR32_S1, Haydn::ADD32_S2,
+                       Haydn::NOP_S0, Haydn::BNEZ_W_S0, Haydn::SUBI32_S2}) {
+    auto C = commitLateProductCycle(Opc, Fmts);
+    ASSERT_TRUE(C.has_value()) << "opc " << Opc;
+    EXPECT_TRUE(isProductBundleRow(C->Plan.Row)) << "opc " << Opc;
+    EXPECT_EQ(C->Plan.Bytes.Value, FullBytes) << "opc " << Opc;
+    EXPECT_TRUE(C->Plan.isProductLegal()) << "opc " << Opc;
+    // Stable-row: EncodedBytes charged to layout equals registry product parcel.
+    auto EB = encodedBytesForRow(C->Plan.Row);
+    ASSERT_TRUE(EB.has_value()) << "opc " << Opc;
+    EXPECT_EQ(EB->Value, FullBytes) << "opc " << Opc;
+  }
+}
+
+// BranchRelaxation insert/remove hooks share lateProductMemberOpcode with
+// Fixup pads so every late creator charges one Full parcel (EncodedBytes).
+TEST(HaydnMaterializeMultiOpcode, LateProductMemberOpcodeBranchHooks) {
+  HaydnMCFormats Fmts;
+  const unsigned FullBytes = productParcelBytes().Value;
+  for (unsigned Opc : {Haydn::B, Haydn::BEQZ, Haydn::BEQZ_W, Haydn::BNEZ_W,
+                       Haydn::LUI, Haydn::ADDI32_W, Haydn::JALR_W}) {
+    unsigned Member = lateProductMemberOpcode(Opc);
+    auto C = commitLateProductCycle(Opc, Fmts);
+    ASSERT_TRUE(C.has_value()) << "opc " << Opc;
+    EXPECT_EQ(Member, C->MemberOpcode) << "opc " << Opc;
+    EXPECT_EQ(C->Plan.Bytes.Value, FullBytes) << "opc " << Opc;
+    // Bare real size model matches committed Full parcel before finalize;
+    // insert hooks charge the same number on the BUNDLE root after wrap.
+    EXPECT_EQ(C->Plan.Bytes.Value, productParcelBytes().Value) << "opc " << Opc;
+  }
+  // B / RET have no PlacementAlternatives → wrap-only member == logical.
+  EXPECT_EQ(lateProductMemberOpcode(Haydn::B), Haydn::B);
+  EXPECT_EQ(lateProductMemberOpcode(Haydn::RET), Haydn::RET);
 }
 
 } // namespace

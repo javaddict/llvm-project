@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 
+; Role: semantic — Coverage for shift.
+
 define i32 @shl(i32 %a, i32 %b) {
 ; CHECK-LABEL: shl:
 ; CHECK: sll32

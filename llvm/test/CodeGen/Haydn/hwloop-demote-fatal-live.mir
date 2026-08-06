@@ -1,7 +1,9 @@
 # RUN: not llc -haydn-enable-hwloop-demote=true -mtriple=haydn-unknown-elf \
 # RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
 # RUN:   %s -o - 2>&1 | FileCheck %s --check-prefix=FATAL
-#
+
+# Role: verifier — live body + demote cannot install soft edge must be fatal — never silent erase-only once-through.
+
 # W0.2 / G-RISK-DEMOTE: live body + demote cannot install soft edge must be
 # fatal — never silent erase-only once-through. Product demote stays ON.
 #

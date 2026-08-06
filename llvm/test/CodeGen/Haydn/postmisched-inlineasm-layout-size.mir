@@ -1,0 +1,109 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched,haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -stats \
+# RUN:   -verify-machineinstrs %s -o /dev/null 2>&1 | \
+# RUN:   FileCheck %s --check-prefix=STATS
+
+# Role: MIR — Opaque INLINEASM is a post-RA layout/scheduling boundary:
+#   * never a product-cycle BUNDLE member (no compiler BUNDLE crosses it)
+#   * Finalize leaves INLINEASM bare (APP/NO_APP emission path)
+#   * neighbors on either side still exact-commit as Full product cycles
+#   * multi-line INLINEASM stays one standalone MI (size model unit-tested:
+#     InlineAsmConservativeLayoutSize — Full parcel per textual instruction)
+#
+# Ownership: postmisched exact-commit (PostRASchedStrategy + BundleMaterialize
+# + AlternateDescriptors + Finalize). Sibling owns Fixup Following size pins.
+
+--- |
+  define void @inlineasm_between_alu() { ret void }
+  define void @multiline_inlineasm_standalone() { ret void }
+  define void @empty_inlineasm_barrier() { ret void }
+
+...
+---
+name:            inlineasm_between_alu
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+
+    ; Independent ALU ops on both sides of opaque INLINEASM. Postmisched must
+    ; not form a multi-MI BUNDLE that includes or crosses the INLINEASM.
+    $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+    $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
+    INLINEASM &"nop", 1 /* sideeffect attdialect */
+    $r6 = OR32 $r4, $r5, implicit-def dead $sfr
+    $r7 = AND32 $r4, $r5, implicit-def dead $sfr
+    RET implicit $r15
+
+...
+---
+name:            multiline_inlineasm_standalone
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+
+    $r2 = ADDI32 $r0, 1, implicit-def dead $sfr
+    ; Three textual instructions; layout size = 3×Full (unit-tested). Still
+    ; one opaque MI — never wrapped as BUNDLE children.
+    INLINEASM &"nop\nnop\nnop", 1 /* sideeffect attdialect */
+    $r3 = ADDI32 $r1, 2, implicit-def dead $sfr
+    RET implicit $r15
+
+...
+---
+name:            empty_inlineasm_barrier
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+
+    $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
+    ; Empty side-effect barrier (DSE fence): size 0, still a boundary.
+    INLINEASM &"", 1 /* sideeffect attdialect */
+    $r3 = XOR32 $r0, $r1, implicit-def dead $sfr
+    RET implicit $r15
+
+# CHECK-LABEL: name: inlineasm_between_alu
+#
+# Before INLINEASM: product multi-MI cycle (ADD32 + XOR32) as Full BUNDLE.
+# CHECK: BUNDLE 0
+# CHECK-DAG: ADD32
+# CHECK-DAG: XOR32
+# CHECK: }
+#
+# Opaque INLINEASM stays bare top-level (not a BUNDLE child). MIR prints the
+# asm string without quotes: INLINEASM &nop, ...
+# CHECK-NEXT: INLINEASM &nop
+#
+# After INLINEASM: another product multi-MI cycle (OR32 + AND32).
+# CHECK: BUNDLE 0
+# CHECK-DAG: OR32
+# CHECK-DAG: AND32
+# CHECK: }
+# CHECK: RET
+
+# CHECK-LABEL: name: multiline_inlineasm_standalone
+# CHECK: BUNDLE 0
+# CHECK: ADDI32
+# Multi-line text remains one opaque MI (newlines may print escaped).
+# CHECK: INLINEASM &
+# CHECK: BUNDLE 0
+# CHECK: ADDI32
+# CHECK: RET
+
+# CHECK-LABEL: name: empty_inlineasm_barrier
+# CHECK: BUNDLE 0
+# CHECK: ADD32
+# Empty barrier: INLINEASM &"" or INLINEASM & with empty string.
+# CHECK: INLINEASM &
+# CHECK: BUNDLE 0
+# CHECK: XOR32
+# CHECK: RET
+
+# INLINEASM is a region boundary, not a scheduled multi-MI pack failure.
+# STATS-NOT: Number of scheduled multi-MI cycles that failed exact no-split

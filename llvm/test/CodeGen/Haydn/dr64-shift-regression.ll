@@ -1,4 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+
+; Role: semantic — Updated for golden DR64 shifts (sll64/srl64/sra64/sra64r): i64,i32 -> i64.
+
 ; Updated for golden DR64 shifts (sll64/srl64/sra64/sra64r): i64,i32 -> i64
 ;
 ; REGRESSION TEST: DR64 reg-form shift intrinsics.

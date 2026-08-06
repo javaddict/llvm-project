@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-bit-simplify -verify-machineinstrs %s -o - | FileCheck %s
-#
+
+# Role: MIR — for the Haydn bit simplification peephole pass.
+
 # Test for the Haydn bit simplification peephole pass.
 # Verifies identity elimination, zero-result simplification, redundant AND+OR
 # pair removal, complement synthesis, and XOR constant folding.

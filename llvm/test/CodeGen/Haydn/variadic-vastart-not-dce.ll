@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 
+; Role: semantic — VASTART must survive dead-mi-elimination so the AsmPrinter can expand it; without hasSideEffects the pseudo is DCE'd at -O1/-O2 before.
+
 ; REGRESSION TEST: VASTART must survive dead-mi-elimination so the AsmPrinter
 ; can expand it; without hasSideEffects the pseudo is DCE'd at -O1/-O2 before
 ; AsmPrinter expansion and the va_list struct is never initialized, so va_arg
@@ -35,8 +37,8 @@ define dso_local i32 @vone(i32 noundef %n, ...) nounwind {
 ; survived dead-mi-elimination and reached AsmPrinter expansion. If the pseudo
 ; were DCE'd, none of these stores would exist.
 ; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 0
-; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 4
-; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 12
+; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 1
+; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 3
 entry:
   %ap = alloca i8, i32 32, align 8
   %ap.p0 = bitcast i8* %ap to i8*

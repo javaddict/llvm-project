@@ -1,4 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
+
+; Role: semantic — — HaydnConditionOptimizer must not invert == branches.
+
 ; Status : previously-XFAIL regression resolved; lit PASS.
 ;
 ; REGRESSION TEST: — HaydnConditionOptimizer must not invert == branches.

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 %s -o - | FileCheck %s
-;
+
+; Role: semantic — MOVE32 must count as a SINGLE GPR read port.
+
 ; REGRESSION TEST: MOVE32 must count as a SINGLE GPR read port.
 ;
 ; Bug (F14): MOVE32 is modeled in HaydnInstrInfo.td with two source operands

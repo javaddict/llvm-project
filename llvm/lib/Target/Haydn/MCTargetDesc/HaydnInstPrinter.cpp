@@ -31,14 +31,15 @@ using namespace llvm;
 void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
                                  StringRef Annot, const MCSubtargetInfo &STI,
                                  raw_ostream &O) {
-  // VLIW bundles: Hexagon-style { slot0; slot1; slot2 } format.
-  // CodeGen + AsmParser emit Format->Opcode BUNDLE128_FULL
-  // (AIEBaseAsmPrinter.cpp:161-164 / AIEBaseAsmParser.h:164-181). BUNDLE128_FULL
-  // is tblgen-printed via its AsmString + printOperand isInst recursion
-  // (falls through to the non-bundle { printSingleInst } path below).
-  // Residual TargetOpcode::BUNDLE (legacy / non-asm producers) still rendered
-  // here for defense-in-depth.
-  if (MI->getOpcode() == Haydn::BUNDLE) {
+  // VLIW / Format E parcels: Hexagon-style { entry0; entry1[; entry2] }.
+  // Product disasm emits BUNDLE_E96_TWO_ENTRY / BUNDLE_E96_THREE_ENTRY of
+  // logical children (public mnemonics, no private member suffix). Generic
+  // TargetOpcode::BUNDLE is a fallback for non-product composite roots.
+  // Print children via isInst operands — do not rely on generated AsmWriter
+  // for multi-entry composites (avoids empty / <unknown>-adjacent dumps).
+  const unsigned Opc = MI->getOpcode();
+  if (Opc == Haydn::BUNDLE || Opc == Haydn::BUNDLE_E96_TWO_ENTRY ||
+      Opc == Haydn::BUNDLE_E96_THREE_ENTRY) {
     SmallVector<const MCInst *, 3> Children;
     for (unsigned I = 0, E = MI->getNumOperands(); I != E; ++I) {
       const MCOperand &Op = MI->getOperand(I);
@@ -46,6 +47,9 @@ void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
         Children.push_back(Op.getInst());
     }
     if (Children.empty()) {
+      // Composite with no children: still emit a braced nop so the line is
+      // never `<unknown>` / empty for a successfully decoded parcel.
+      O << "\t{ nop }";
       printAnnotation(O, Annot);
       return;
     }
@@ -60,7 +64,7 @@ void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
     return;
   }
 
-  // Non-bundle: single-issue packet, still wrapped in.
+  // Non-bundle: single-issue packet, still wrapped in braces for dump parity.
   O << "\t{ ";
   printSingleInst(MI, Address, STI, O);
   O << " }";
@@ -155,14 +159,10 @@ void HaydnInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
   }
   const MCOperand &MO = MI->getOperand(OpNo);
 
-  // Composite/packet slot sub-instruction (BUNDLE128_FULL's $s0/$s1/$s2 are
-  // MCOperand::isInst): recurse into the sub-instruction's printer (AIE isInst
-  // model). tblgen generates the composite AsmString; this renders each slot.
-  // An empty sub-MCInst (opcode 0) is an all-zero slot window = NOP per §4
-  // (the per-slot trie doesn't match an all-zero window, so decodeS0/S1/S2Slot
-  // leaves the sub-MCInst cleared). Print "nop" rather than recursing into
-  // printInstruction (which would assert on Bits==0). Bounds-safe defense
-  // (CLAUDE.md): a genuinely malformed slot still renders benignly.
+  // Composite/packet entry sub-instruction (MCOperand::isInst): recurse into
+  // the child printer. Empty sub-MCInst (opcode 0) prints as "nop" rather than
+  // entering printInstruction (which would assert on Bits==0). Bounds-safe
+  // defense: a genuinely malformed entry still renders benignly.
   if (MO.isInst()) {
     const MCInst *SubInst = MO.getInst();
     if (SubInst && SubInst->getOpcode() != 0)

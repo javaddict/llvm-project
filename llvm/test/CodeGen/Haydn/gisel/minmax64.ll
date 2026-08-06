@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — T1.3: G_SMAX/G_SMIN s64 → native MAX64/MIN64 (not generic lower expansion).
+
 ; T1.3: G_SMAX/G_SMIN s64 → native MAX64/MIN64 (not generic lower expansion).
 ; G_UMAX/G_UMIN s64 stay lowered (no MAXU64/MINU64 in ISA) — smoke only that
 ; they still compile under -global-isel-abort=1 without selecting max64/min64.

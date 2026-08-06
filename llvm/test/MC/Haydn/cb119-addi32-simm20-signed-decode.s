@@ -3,7 +3,9 @@
 # RUN:   llvm-objdump -d --no-show-raw-insn --triple=haydn-unknown-elf %t.o | \
 # RUN:   FileCheck %s
 
-# REGRESSION TEST : Bundle128 ADDI32 imm20 must decode/print as signed.
+# Role: object — Format E ADDI32 imm20 must decode/print as signed.
+
+# REGRESSION TEST : Format E ADDI32 imm20 must decode/print as signed.
 #
 # LLD long-call thunks emit LUI+ADDI32 with the MIPS-style HI12/LO20 split:
 # HI12 = (VA + 0x80000) >> 20
@@ -30,11 +32,11 @@ cb119_addi32_simm20:
     .size cb119_addi32_simm20, .-cb119_addi32_simm20
 
 # CHECK-LABEL: <cb119_addi32_simm20>:
-# CHECK: addi32{{.*}}r12,{{.*}}r12,{{.*}}-132688
-# CHECK: addi32{{.*}}r1,{{.*}}r0,{{.*}}-524288
-# CHECK: addi32{{.*}}r2,{{.*}}r0,{{.*}}524287
-# CHECK: addi32{{.*}}r3,{{.*}}r0,{{.*}}-1
-# CHECK: addi32{{.*}}r4,{{.*}}r0,{{.*}}1
+# CHECK: {{.*}}0: { addi32 r12, r12, -132688; nop }
+# CHECK: c: { addi32 r1, r0, -524288; nop }
+# CHECK: {{.*}}18: { addi32 r2, r0, 524287; nop }
+# CHECK: {{.*}}24: { addi32 r3, r0, -1; nop }
+# CHECK: {{.*}}30: { addi32 r4, r0, 1; nop }
 # CHECK-NOT: 915888
 # CHECK-NOT: 524288
 # CHECK-NOT: 1048575

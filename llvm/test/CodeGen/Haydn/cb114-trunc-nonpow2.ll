@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 < %s | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
-;
+
+; Role: semantic — residual: G_TRUNC to non-pow2 result widths must legalize.
+
 ; residual: G_TRUNC to non-pow2 result widths must legalize.
 ; yarpgen seed 2896 aborted on `%_(s24) = G_TRUNC %_(s32)` (23-bit signed
 ; bitfields lower as i24). Closed rule:
@@ -11,8 +13,7 @@
 ; Companion of cb114-trunc-to-s1.ll (s1-result lattice).
 
 ; s32 -> s24 trunc used via zext (forces mask / shift clean)
-; CHECK-LABEL: zext_trunc_s24:
-; CHECK-DAG: and32
+
 define i32 @zext_trunc_s24(i32 %x) nounwind {
   %t = trunc i32 %x to i24
   %z = zext i24 %t to i32

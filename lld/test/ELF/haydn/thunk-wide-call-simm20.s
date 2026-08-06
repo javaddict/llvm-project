@@ -30,7 +30,7 @@ _start:
     # WIDE call (JAL_W) → R_HAYDN_WIDE_CallSImm20.
     jal_w lr, far_callee
 
-    # 1.25 MB gap — beyond WIDE_CallSImm20 ±1MB byte reach (isInt<21>).
+    # 1.25 MB gap — beyond WIDE_CallSImm20 halfword-scaled ±1 MiB byte window.
     .space 0x140000
 
 .globl far_callee
@@ -43,4 +43,5 @@ far_callee:
 # Call site must resolve to the nearby thunk (negative offset of a few
 # parcels), not attempt a multi-megabyte WIDE_Call field.
 # CHECK-LABEL: <_start>:
-# CHECK: jal_w {{.*}}lr,
+# Printer may render jal_w as jal; pin family + near-thunk resolve.
+# CHECK: jal{{(_w)?}} {{.*}}lr,

@@ -172,9 +172,9 @@ bool HaydnExpandPseudos::runOnMachineFunction(MachineFunction &MF) {
   // Bundle interior residual expand. Product post-inc home is
   // HaydnExpandPostIncEarly (pre-pack, default ON). LoadStoreOpt form is
   // opt-in and also pre-pack, so *_POST_INC should already be real LD/ST+ADDI
-  // before packetize. This pass still expands any residual POST_INC / CALL
-  // LOAD_ADDR that appear inside bundles so they are not silently dropped
-  // at MC (legacy dual-path safety net — not a second product home).
+  // before packetize. Expand any residual POST_INC / CALL LOAD_ADDR that
+  // still appear inside bundles so MC never silently drops them (same expand
+  // helpers as the free-MI path — not a second product home).
   for (auto &MBB : MF)
     Modified |= expandPseudosInBundles(MBB);
 
@@ -202,7 +202,7 @@ bool HaydnExpandPseudos::expandMBB(MachineBasicBlock &MBB) {
 // Pipeline (addPreSched2, AIE2-aligned pack order):
 // optional LoadStoreOpt (form *_POST_INC, default OFF)
 // ExpandPostIncEarly (product expand, default ON) ← sole post-inc home
-// … MBP (O1+) → HardwareLoops (O1+) → ExpandPseudos → PostRA pack …
+// … MBP (O1) → HardwareLoops (O1) → ExpandPseudos → PostRA pack …
 // For each pseudo found inside a bundle: unbundle, expand before the BUNDLE
 // leave remaining real children in the bundle; drop empty BUNDLEs.
 bool HaydnExpandPseudos::expandPseudosInBundles(MachineBasicBlock &MBB) {
@@ -350,19 +350,24 @@ bool HaydnExpandPseudos::expandPseudosInBundles(MachineBasicBlock &MBB) {
               .addImm(PI.Stride >> 2);
           break;
         }
+        // LD32 imm is word element index; PI.Offset is bytes.
+        assert(PI.Offset % 4 == 0 &&
+               "LD32_POST_INC displacement must be word-aligned");
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::LD32), PI.DstReg)
             .addReg(PI.BaseReg)
-            .addImm(PI.Offset);
+            .addImm(PI.Offset >> 2);
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::ADDI32_W), PI.BaseReg)
             .addReg(PI.BaseReg)
             .addImm(PI.Stride);
         break;
       }
       case Haydn::ST32_POST_INC: {
+        assert(PI.Offset % 4 == 0 &&
+               "ST32_POST_INC displacement must be word-aligned");
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::ST32))
             .addReg(PI.DstReg)
             .addReg(PI.BaseReg)
-            .addImm(PI.Offset);
+            .addImm(PI.Offset >> 2);
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::ADDI32_W), PI.BaseReg)
             .addReg(PI.BaseReg)
             .addImm(PI.Stride);
@@ -386,19 +391,23 @@ bool HaydnExpandPseudos::expandPseudosInBundles(MachineBasicBlock &MBB) {
           break;
         }
         // plain LD64 (slot 0/1) so the split post-inc load can pack.
+        assert(PI.Offset % 8 == 0 &&
+               "LD64_POST_INC displacement must be dword-aligned");
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::LD64), PI.DstReg)
             .addReg(PI.BaseReg)
-            .addImm(PI.Offset);
+            .addImm(PI.Offset >> 3);
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::ADDI32_W), PI.BaseReg)
             .addReg(PI.BaseReg)
             .addImm(PI.Stride);
         break;
       }
       case Haydn::ST64_POST_INC: {
+        assert(PI.Offset % 8 == 0 &&
+               "ST64_POST_INC displacement must be dword-aligned");
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::ST64))
             .addReg(PI.DstReg)
             .addReg(PI.BaseReg)
-            .addImm(PI.Offset);
+            .addImm(PI.Offset >> 3);
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::ADDI32_W), PI.BaseReg)
             .addReg(PI.BaseReg)
             .addImm(PI.Stride);
@@ -434,7 +443,7 @@ bool HaydnExpandPseudos::expandPseudosInBundles(MachineBasicBlock &MBB) {
         break;
       }
       case Haydn::PseudoCALL: {
-        // Phase 1a: route to the 48-bit WIDE form JAL_W.
+        // JAL_W form (encoding_manual.md §5.5).
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::JAL_W), Haydn::R15)
             .add(*CallTarget);
         break;
@@ -475,7 +484,7 @@ bool HaydnExpandPseudos::expandPseudosInBundles(MachineBasicBlock &MBB) {
             BuildMI(MBB, BundleIter, DL, TII->get(Haydn::OR64), Haydn::D1)
                 .addReg(LibRs2, getKillRegState(true))
                 .addReg(LibRs2, getKillRegState(true));
-          // Phase 1a: route to the 48-bit WIDE form JAL_W.
+          // JAL_W form (encoding_manual.md §5.5).
           BuildMI(MBB, BundleIter, DL, TII->get(Haydn::JAL_W), Haydn::R15)
               .addExternalSymbol(Symbol);
           if (LibResultReg != Haydn::D0)
@@ -491,7 +500,7 @@ bool HaydnExpandPseudos::expandPseudosInBundles(MachineBasicBlock &MBB) {
             BuildMI(MBB, BundleIter, DL, TII->get(Haydn::ADD32), Haydn::R2)
                 .addReg(LibRs2, getKillRegState(true))
                 .addReg(Haydn::R0);
-          // Phase 1a: route to the 48-bit WIDE form JAL_W.
+          // JAL_W form (encoding_manual.md §5.5).
           BuildMI(MBB, BundleIter, DL, TII->get(Haydn::JAL_W), Haydn::R15)
               .addExternalSymbol(Symbol);
           if (LibResultReg != Haydn::R1)
@@ -585,11 +594,10 @@ bool HaydnExpandPseudos::expandMI(MachineBasicBlock &MBB, MachineInstr &MI,
     return true;
 
   // HardwareLoops emits SET_HWLOOP{,_REG} (sel, MBB start/end, count/rs).
-  // Before PostRA pack they must be the real wide forms that materialize
-  // into SET_HWLOOP_{W,F2_W}_S0 (same operand structure: imm + 2×brtarget +
-  // cnt/rs). Flex wrongly pairs SET_HWLOOP_REG → REG_S0 (4 GPRs); packing
-  // that shape corrupts encoding. Convert here so the bundle printer is
-  // pure Desc-only Lower (AIE serialize path).
+  // Before PostRA pack they must be real SET_HWLOOP_{W,F2_W} (same operand
+  // structure: imm + 2×brtarget + cnt/rs). Do not leave SET_HWLOOP_REG for
+  // post-RA setDesc (REG_W / REG_S0 are 4-GPR shapes and would corrupt encode).
+  // Convert here so the printer is pure Desc-only Lower (AIE serialize path).
   case Haydn::SET_HWLOOP_REG:
     assert(MI.getNumOperands() >= 4 && MI.getOperand(0).isImm() &&
            MI.getOperand(1).isMBB() && MI.getOperand(2).isMBB() &&
@@ -604,11 +612,40 @@ bool HaydnExpandPseudos::expandMI(MachineBasicBlock &MBB, MachineInstr &MI,
            "SET_HWLOOP shape: sel, start, end, cnt");
     MI.setDesc(TII->get(Haydn::SET_HWLOOP_W));
     return true;
+
+  // Expand SETCBR → final CSRW_W before post-RA pack so HR/DAG sees real
+  // CSR issue conflicts. AsmPrinter residual SETCBR is fatal (one-to-one MC).
+  //
+  // Model the programmed CBR set as an implicit-def of CBR0/CBR1 so PostRA
+  // cannot reorder a CB load/store (implicit-use of the same CBR) before the
+  // boundary write. CSRW_W alone only Defs=[SFR]; without this edge early
+  // expand allowed d_sdw_cb_imm to issue before csrw_w (wrong CBR state).
+  case Haydn::SETCBR_BEGIN:
+  case Haydn::SETCBR_END: {
+    assert(MI.getOperand(0).isImm() && "SETCBR: cbr_sel must be immediate");
+    assert(MI.getOperand(1).isReg() && "SETCBR: val must be register");
+    unsigned CbrSel = MI.getOperand(0).getImm();
+    assert((CbrSel == 0 || CbrSel == 1) && "SETCBR: cbr_sel must be 0 or 1");
+    const MachineOperand &ValMO = MI.getOperand(1);
+    Register ValReg = ValMO.getReg();
+    // CSR: BEGIN base 0x2C, END base 0x2D; set 1 adds +2 (Rev2 CBR map).
+    unsigned CsrBase =
+        (MI.getOpcode() == Haydn::SETCBR_BEGIN) ? 0x2Cu : 0x2Du;
+    unsigned CsrAddr = CsrBase + (CbrSel << 1);
+    Register CbrReg = (CbrSel == 0) ? Haydn::CBR0 : Haydn::CBR1;
+    DebugLoc DL = MI.getDebugLoc();
+    BuildMI(MBB, MI, DL, TII->get(Haydn::CSRW_W))
+        .addImm(CsrAddr)
+        .addReg(ValReg, getKillRegState(ValMO.isKill()))
+        .addReg(CbrReg, RegState::ImplicitDefine);
+    MI.eraseFromParent();
+    return true;
+  }
   }
 }
 
 //===----------------------------------------------------------------------===//
-// VASTART / VACOPY — W1.2 pre-pack expand (was AsmPrinter-only)
+// VASTART / VACOPY — pre-pack expand (was AsmPrinter-only)
 //===----------------------------------------------------------------------===//
 
 bool HaydnExpandPseudos::expandVASTART(MachineBasicBlock &MBB,
@@ -645,7 +682,10 @@ bool HaydnExpandPseudos::expandVASTART(MachineBasicBlock &MBB,
       [&](Register Scr) {
         assert(Scr != Haydn::R0 &&
                "VASTART scratch must not be soft-zero R0");
-        auto StoreFIAddr = [&](int FI, int64_t Extra, int FieldOff) {
+        // ST32 imm is word element index (EA = base + (imm << 2)). Va_list
+        // layout is documented in bytes; convert at the store.
+        auto StoreFIAddr = [&](int FI, int64_t Extra, int FieldByteOff) {
+          assert(FieldByteOff % 4 == 0 && "va_list field must be word-aligned");
           Register FrameReg;
           int64_t Offset =
               TFL->getFrameIndexReference(MF, FI, FrameReg).getFixed() + Extra;
@@ -661,26 +701,27 @@ bool HaydnExpandPseudos::expandVASTART(MachineBasicBlock &MBB,
           BuildMI(MBB, InsertPt, DL, TII->get(Haydn::ST32))
               .addReg(Scr)
               .addReg(VaListPtr)
-              .addImm(FieldOff);
+              .addImm(FieldByteOff / 4);
         };
 
         // __stack @0, __gr_top @4, __vr_top @8
-        StoreFIAddr(StackFI, /*Extra=*/0, /*FieldOff=*/0);
-        StoreFIAddr(GprFI, /*Extra=*/GprSize, /*FieldOff=*/4);
-        StoreFIAddr(DrFI, /*Extra=*/DrSize, /*FieldOff=*/8);
+        StoreFIAddr(StackFI, /*Extra=*/0, /*FieldByteOff=*/0);
+        StoreFIAddr(GprFI, /*Extra=*/GprSize, /*FieldByteOff=*/4);
+        StoreFIAddr(DrFI, /*Extra=*/DrSize, /*FieldByteOff=*/8);
 
         // __gr_offs @12 = -GprSize; __vr_offs @16 = -DrSize (R0 soft-zero base)
-        auto StoreNegSizeOff = [&](int BankSize, int FieldOff) {
+        auto StoreNegSizeOff = [&](int BankSize, int FieldByteOff) {
+          assert(FieldByteOff % 4 == 0 && "va_list field must be word-aligned");
           BuildMI(MBB, InsertPt, DL, TII->get(Haydn::ADDI32_W), Scr)
               .addReg(Haydn::R0)
               .addImm(-BankSize);
           BuildMI(MBB, InsertPt, DL, TII->get(Haydn::ST32))
               .addReg(Scr)
               .addReg(VaListPtr)
-              .addImm(FieldOff);
+              .addImm(FieldByteOff / 4);
         };
-        StoreNegSizeOff(GprSize, /*FieldOff=*/12);
-        StoreNegSizeOff(DrSize, /*FieldOff=*/16);
+        StoreNegSizeOff(GprSize, /*FieldByteOff=*/12);
+        StoreNegSizeOff(DrSize, /*FieldByteOff=*/16);
       },
       Exclude, PostRASoftZero::NeedsZeroBase);
 
@@ -699,15 +740,15 @@ bool HaydnExpandPseudos::expandVACOPY(MachineBasicBlock &MBB,
   withPostRAScratch(
       MBB, InsertPt, DL, *TII, *STI, /*PreferNotR12=*/true,
       [&](Register Scr) {
+        // 5×i32 va_list words. LD32/ST32 imm is element index, not byte.
         for (unsigned W = 0; W < 5; ++W) {
-          int64_t Off = static_cast<int64_t>(W) * 4;
           BuildMI(MBB, InsertPt, DL, TII->get(Haydn::LD32), Scr)
               .addReg(SrcPtr)
-              .addImm(Off);
+              .addImm(static_cast<int64_t>(W));
           BuildMI(MBB, InsertPt, DL, TII->get(Haydn::ST32))
               .addReg(Scr)
               .addReg(DstPtr)
-              .addImm(Off);
+              .addImm(static_cast<int64_t>(W));
         }
       },
       Exclude);
@@ -763,15 +804,16 @@ static VAARGSpillHome vaargBeginSpill(MachineBasicBlock &MBB,
   if (UseAllowFI && SpillFI >= 0) {
     const HaydnFrameLowering *TFL = ST.getFrameLowering();
     Home.K = VAARGSpillHome::FrameIndex;
+    // Byte offset from FI; ST32/LD32 need word element index (>> 2).
     Home.Off =
         TFL->getFrameIndexReference(MF, SpillFI, Home.FrameReg).getFixed();
-    if (isInt<16>(Home.Off)) {
+    if (Home.Off % 4 == 0 && isInt<6>(Home.Off >> 2)) {
       BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
           .addReg(Scr)
           .addReg(Home.FrameReg)
-          .addImm(Home.Off);
+          .addImm(Home.Off >> 2);
     } else {
-      // Large frame: materialize via soft-zero R0 temp.
+      // Large / unaligned frame: materialize via soft-zero R0 temp.
       BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32_W), Haydn::R0)
           .addReg(Home.FrameReg)
           .addImm(Home.Off);
@@ -804,10 +846,11 @@ static void vaargEndSpill(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   if (Home.K == VAARGSpillHome::None)
     return;
   if (Home.K == VAARGSpillHome::FrameIndex) {
-    if (isInt<16>(Home.Off)) {
+    // Home.Off is still the byte offset (see vaargBeginSpill).
+    if (Home.Off % 4 == 0 && isInt<6>(Home.Off >> 2)) {
       BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Scr)
           .addReg(Home.FrameReg)
-          .addImm(Home.Off);
+          .addImm(Home.Off >> 2);
     } else {
       BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32_W), Haydn::R0)
           .addReg(Home.FrameReg)
@@ -841,17 +884,21 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
   Register Dst = MI.getOperand(0).getReg();
   Register VaList = MI.getOperand(1).getReg();
 
-  // va_list field offsets (must match VASTART / ISel comments).
-  constexpr int kStackField = 0;
-  constexpr int kGrTopField = 4;
-  constexpr int kVrTopField = 8;
-  constexpr int kGrOffsField = 12;
-  constexpr int kVrOffsField = 16;
-  // HaydnCallingConv.td CCAssignToStack<8, 8>.
+  // va_list field **byte** offsets (must match VASTART / ISel comments).
+  // LD32/ST32 take word element indices → divide by 4 at the MI.
+  constexpr int kStackFieldByte = 0;
+  constexpr int kGrTopFieldByte = 4;
+  constexpr int kVrTopFieldByte = 8;
+  constexpr int kGrOffsFieldByte = 12;
+  constexpr int kVrOffsFieldByte = 16;
+  // HaydnCallingConv.td CCAssignToStack<8, 8> — ADDI32_W uses raw bytes.
   constexpr int64_t kStackStep = 8;
 
-  const int TopField = IsI64 ? kVrTopField : kGrTopField;
-  const int OffsField = IsI64 ? kVrOffsField : kGrOffsField;
+  const int TopFieldImm =
+      (IsI64 ? kVrTopFieldByte : kGrTopFieldByte) / 4;
+  const int OffsFieldImm =
+      (IsI64 ? kVrOffsFieldByte : kGrOffsFieldByte) / 4;
+  const int StackFieldImm = kStackFieldByte / 4;
   const int64_t RegStep = IsI64 ? 8 : 4;
   const unsigned LoadOpc = IsI64 ? Haydn::LD64 : Haydn::LD32;
 
@@ -920,10 +967,10 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
   //   S0 = CurOff, S1 = Top, S2 = Tentative then UseStack.
   BuildMI(MBB, HeadPt, DL, TII->get(Haydn::LD32), S0)
       .addReg(VaList)
-      .addImm(OffsField);
+      .addImm(OffsFieldImm);
   BuildMI(MBB, HeadPt, DL, TII->get(Haydn::LD32), S1)
       .addReg(VaList)
-      .addImm(TopField);
+      .addImm(TopFieldImm);
   BuildMI(MBB, HeadPt, DL, TII->get(Haydn::ADDI32_W), S2)
       .addReg(S0)
       .addImm(RegStep);
@@ -961,7 +1008,7 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
     auto Ins = StackMBB->end();
     BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::LD32), S1)
         .addReg(VaList)
-        .addImm(kStackField);
+        .addImm(StackFieldImm);
     if (IsI64) {
       BuildMI(*StackMBB, Ins, DL, TII->get(LoadOpc), Dst)
           .addReg(S1)
@@ -972,7 +1019,7 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
       BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::ST32))
           .addReg(S0)
           .addReg(VaList)
-          .addImm(kStackField);
+          .addImm(StackFieldImm);
     } else {
       // Value in S2 first so VaList stays valid for the cursor store.
       BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::LD32), S2)
@@ -984,7 +1031,7 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
       BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::ST32))
           .addReg(S0)
           .addReg(VaList)
-          .addImm(kStackField);
+          .addImm(StackFieldImm);
       EmitI32Result(*StackMBB, Ins, S2);
     }
     BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::B)).addMBB(JoinMBB);
@@ -996,10 +1043,10 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
     auto Ins = RegMBB->end();
     BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::LD32), S0)
         .addReg(VaList)
-        .addImm(OffsField);
+        .addImm(OffsFieldImm);
     BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::LD32), S1)
         .addReg(VaList)
-        .addImm(TopField);
+        .addImm(TopFieldImm);
     BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::ADD32), S1)
         .addReg(S1)
         .addReg(S0);
@@ -1013,7 +1060,7 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
       BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::ST32))
           .addReg(S0)
           .addReg(VaList)
-          .addImm(OffsField);
+          .addImm(OffsFieldImm);
     } else {
       BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::LD32), S2)
           .addReg(S1)
@@ -1024,7 +1071,7 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
       BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::ST32))
           .addReg(S0)
           .addReg(VaList)
-          .addImm(OffsField);
+          .addImm(OffsFieldImm);
       EmitI32Result(*RegMBB, Ins, S2);
     }
     BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::B)).addMBB(JoinMBB);
@@ -1227,7 +1274,7 @@ bool HaydnExpandPseudos::expandADJCALLSTACKUP(MachineBasicBlock &MBB,
 }
 
 //===----------------------------------------------------------------------===//
-// PseudoCALL: expand to JAL_W R15, target (Phase 1a: 48-bit WIDE).
+// PseudoCALL: expand to JAL_W R15, target.
 //===----------------------------------------------------------------------===//
 
 bool HaydnExpandPseudos::expandPseudoCALL(MachineBasicBlock &MBB,
@@ -1321,7 +1368,7 @@ bool HaydnExpandPseudos::expandLibcall(MachineBasicBlock &MBB, MachineInstr &MI,
     }
   }
 
-  // Emit the call: JAL_W R15, symbol (Phase 1a: 48-bit WIDE).
+  // Emit the call: JAL_W R15, symbol.
   // Attach CSR_Haydn regmask so reserved AT (R12) and other non-CSR regs are
   // modeled as call-clobbered. TableGen Defs on LIBCALL_* cover the
   // pseudo itself; the expanded JAL_W must carry the mask for post-RA passes.
@@ -1380,10 +1427,11 @@ bool HaydnExpandPseudos::expandLD32PostInc(MachineBasicBlock &MBB,
   // formations pass 0 here; the cross-bank fold's offset-4 LD32 passes 4.
   int64_t Offset = MI.getOperand(3).getImm();
 
-  // LD32 rt, base, offset (load from base + offset, preserving displacement)
+  // LD32 rt, base, imm — imm is word element index; Offset is bytes.
+  assert(Offset % 4 == 0 && "LD32_POST_INC displacement must be word-aligned");
   BuildMI(MBB, MI, DL, TII->get(Haydn::LD32), DstReg)
       .addReg(BaseReg)
-      .addImm(Offset);
+      .addImm(Offset >> 2);
 
   // ADDI32 base, base, stride (update base by stride)
   BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32_W), BaseReg)
@@ -1402,11 +1450,12 @@ bool HaydnExpandPseudos::expandST32PostInc(MachineBasicBlock &MBB,
   int64_t Stride = MI.getOperand(2).getImm();
   int64_t Offset = MI.getOperand(3).getImm();
 
-  // ST32 rt, base, offset (store to base + offset, preserving displacement)
+  // ST32 rt, base, imm — imm is word element index; Offset is bytes.
+  assert(Offset % 4 == 0 && "ST32_POST_INC displacement must be word-aligned");
   BuildMI(MBB, MI, DL, TII->get(Haydn::ST32))
       .addReg(DataReg)
       .addReg(BaseReg)
-      .addImm(Offset);
+      .addImm(Offset >> 2);
 
   // ADDI32 base, base, stride (update base by stride)
   BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32_W), BaseReg)
@@ -1425,10 +1474,11 @@ bool HaydnExpandPseudos::expandLD64PostInc(MachineBasicBlock &MBB,
   int64_t Stride = MI.getOperand(2).getImm();
   int64_t Offset = MI.getOperand(3).getImm();
 
-  // plain LD64 (slot 0/1) so this load can pack with a sibling.
+  // LD64 imm is dword element index; Offset is bytes.
+  assert(Offset % 8 == 0 && "LD64_POST_INC displacement must be dword-aligned");
   BuildMI(MBB, MI, DL, TII->get(Haydn::LD64), DstReg)
       .addReg(BaseReg)
-      .addImm(Offset);
+      .addImm(Offset >> 3);
 
   // ADDI32 base, base, stride (update base by stride)
   BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32_W), BaseReg)
@@ -1447,11 +1497,12 @@ bool HaydnExpandPseudos::expandST64PostInc(MachineBasicBlock &MBB,
   int64_t Stride = MI.getOperand(2).getImm();
   int64_t Offset = MI.getOperand(3).getImm();
 
-  // ST64 rt, base, offset (store 64-bit to base + offset)
+  // ST64 imm is dword element index; Offset is bytes.
+  assert(Offset % 8 == 0 && "ST64_POST_INC displacement must be dword-aligned");
   BuildMI(MBB, MI, DL, TII->get(Haydn::ST64))
       .addReg(DataReg)
       .addReg(BaseReg)
-      .addImm(Offset);
+      .addImm(Offset >> 3);
 
   // ADDI32 base, base, stride (update base by stride)
   BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32_W), BaseReg)

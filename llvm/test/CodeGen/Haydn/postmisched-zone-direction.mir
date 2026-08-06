@@ -1,0 +1,122 @@
+# RUN: llc -mtriple=haydn-unknown-elf -misched-postra-direction=topdown \
+# RUN:   -run-pass=postmisched -verify-machineinstrs %s -o - | \
+# RUN:   FileCheck %s --check-prefixes=CHECK,TOP
+# RUN: llc -mtriple=haydn-unknown-elf -misched-postra-direction=bottomup \
+# RUN:   -run-pass=postmisched -verify-machineinstrs %s -o - | \
+# RUN:   FileCheck %s --check-prefixes=CHECK,BOT
+# RUN: llc -mtriple=haydn-unknown-elf -misched-postra-direction=bidirectional \
+# RUN:   -run-pass=postmisched -verify-machineinstrs %s -o - | \
+# RUN:   FileCheck %s --check-prefixes=CHECK,BI
+
+# Role: MIR — SchedBoundary Top/Bot reconstruction + final CurrCycle flush must honour the normal LLVM -misched-postra-direction modes.
+
+# SchedBoundary Top/Bot reconstruction + final CurrCycle flush must honour
+# the normal LLVM -misched-postra-direction modes. Zone-local ready cycles
+# (TopReadyCycle vs BotReadyCycle) drive commit; bottom-scheduled SUs must not
+# be reconstructed from TopReadyCycle. All three directions exact-commit the
+# cycles they scheduled without assert or lost members.
+#
+# AIE peers:
+#   computeAndFinalizeBundles(SchedBoundary&) — AIEMachineScheduler.cpp:152-228
+#   Top+Bot merge in leaveRegion — AIEMachineScheduler.cpp:1092-1110
+#   final CurrCycle flush — :203-216
+#
+# 1. Independent ALU pair: may BUNDLE (exact multi-MI) or stay sequential;
+#    both opcodes survive every direction.
+# 2. MAC writeback → rs1 use: mid-stream idle NOP (latency stall) in every
+#    direction — CurrCycle / ready-cycle gaps still materialize.
+
+--- |
+  define void @independent_alu_pair() { ret void }
+  define void @mac_wb_stall_idle() { ret void }
+...
+---
+name:            independent_alu_pair
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r0, $r3, $r4
+
+    ; CHECK-LABEL: name: independent_alu_pair
+    ; CHECK: liveins: $r0, $r3, $r4
+    ; Members survive topdown / bottomup / bidirectional reconstruction.
+    ; TOP: ADDI32
+    ; TOP: ADD32
+    ; TOP: JALR
+    ; BOT: ADDI32
+    ; BOT: ADD32
+    ; BOT: JALR
+    ; BI: ADDI32
+    ; BI: ADD32
+    ; BI: JALR
+    $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
+    $r7 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
+    $r0 = COPY $r2
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+name:            mac_wb_stall_idle
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$d1', virtual-reg: '' }
+  - { reg: '$d2', virtual-reg: '' }
+  - { reg: '$d3', virtual-reg: '' }
+  - { reg: '$d4', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $d2, $d3, $d4
+
+    ; CHECK-LABEL: name: mac_wb_stall_idle
+    ; CHECK: liveins: $d0, $d1, $d2, $d3, $d4
+    ; Latency gap becomes a rolling idle NOP under every direction.
+    ; TOP: F2MULAA32R_HHLL
+    ; TOP: NOP
+    ; TOP: {{.*}}F2MULAA32R_HHLL
+    ; TOP: JALR
+    ; BOT: F2MULAA32R_HHLL
+    ; BOT: NOP
+    ; BOT: {{.*}}F2MULAA32R_HHLL
+    ; BOT: JALR
+    ; BI: F2MULAA32R_HHLL
+    ; BI: NOP
+    ; BI: {{.*}}F2MULAA32R_HHLL
+    ; BI: JALR
+    $d0 = F2MULAA32R_HHLL $d0, $d1, $d2, implicit-def dead $sfr
+    $d3 = F2MULAA32R_HHLL $d3, $d0, $d4, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

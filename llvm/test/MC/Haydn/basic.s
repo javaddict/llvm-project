@@ -1,6 +1,9 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
 
+# Role: object — Basic arithmetic instructions.
+
 # Basic arithmetic instructions
+
 ADD32 R0, R1, R2
 # CHECK: add32 r0, r1, r2
 

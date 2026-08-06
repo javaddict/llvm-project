@@ -1260,7 +1260,7 @@ defm S_SB_PRE_REG : LS3_S_ST_RR_PostPre<0b1011010, "s_sb_pre_reg">;
 // WRITE_CONFLICT: three d_ldw_cb_imm same r5 in one bundle).
 //
 // Operand list MUST match public logical D_*_CB_* (HaydnInstrInfoAuto.td) and
-// GISel: encodeBundle128 after setDesc is Desc-as-is (no operand rewrite).
+// GISel: MC encode after setDesc is Desc-as-is (no operand rewrite).
 // Bit layout binds by name (cbr_sel, imm8, rtd, rs) — $rs is the encoded base.
 //
 //   LDW_IMM: (outs rtd, rs_wb), (ins rs, cbr_sel, imm8)  Constraints rs=rs_wb
@@ -1557,7 +1557,7 @@ def D_STWUA_POST_S2 : HaydnFU_LS_S2_AR_UA<0b1101101, (outs GPR32:$rs1_wb), (ins 
 }
 }
 
-// AR GISel selects the _S0 encode forms directly (real Bundle128 slot ops
+// AR GISel selects the _S0 encode forms directly (real slot ops
 // not isPseudo). Legal-slots come from the `_S0` name suffix (path).
 // Multi-slot packing re-maps to _S1/_S2 via name-peer _S* alts + post-RA setDesc.
 
@@ -1699,10 +1699,10 @@ def ST64_S0 : HaydnFU_LS_S0_D_ST_RI16<0b1110001,
 // The selector emits legacy ST8 (FmtLS<0x42>, byte store) and LDU8
 // (FmtLS<0x3F>, unsigned byte load) for i8 memory access (HaydnInstruction
 // Selector selectBase register-load/store cases 1 & 8). Without _S0
-// variants the forcing function fires ("opcode 'ST8' has no Bundle128
+// variants the forcing function fires ("opcode 'ST8' has no s0
 // form"). These reuse the EXISTING RI16 S_ST / S_LD format classes (same
 // operand shape as ST32/LD32: rt GPR32 + rs GPR32 + simm16); the access
-// WIDTH is a CodeGen/selector property, not encoded in the Bundle128 slot
+// WIDTH is a CodeGen/selector property, not encoded in the s0 slot
 // window (the EW_64Bit composite carries the same opcode-discriminated
 // byte/word semantics as the legacy 64-bit M0 form). DISTINCT codepoints
 // 118-119 in the free s0-LS-FU range above the golden set. DecoderNamespace
@@ -1736,7 +1736,7 @@ def LDU16_S0 : HaydnFU_LS_S0_S_LD_RI16<0b1111001,
 // LD16 / LD8 — signed halfword/byte loads.
 // public/codegen identity remains logical LD16/LD8 (FmtLS in
 // HaydnInstrInfo.td). These `_S0` records are **private encode peers only**
-// (Inst bits for Bundle128 s0 LS window). leaveRegion setDesc commits
+// (Inst bits for s0 LS window). leaveRegion setDesc commits
 // LD16→LD16_S0; selectors must never emit LD16_S0. Same pattern as
 // ST8/LDU8/ST16/LDU16. Codepoints 122-123 free s0-LS-FU range.
 def LD16_S0 : HaydnFU_LS_S0_S_LD_RI16<0b1111010,
@@ -1751,7 +1751,7 @@ def LD8_S0 : HaydnFU_LS_S0_S_LD_RI16<0b1111011,
 // Family 4 (reg-offset LS) — private encode-peer _S0 defs only.
 //
 // Public MIR identity (HaydnInstrInfo.td): LD32_REG_M0S0LS / LD64_REG_M0S0LS
-// ST32_REG_M0S0LS / ST64_REG_M0S0LS. These `_S0` records are Bundle128 Inst
+// ST32_REG_M0S0LS / ST64_REG_M0S0LS. These `_S0` records are s0 Inst
 // tables only — ISel/PEI must never emit them. AlternateInsts discover
 // name-peer _S* alts; leaveRegion setDesc commits the member.
 //
@@ -1829,7 +1829,7 @@ class HaydnFU_LS_S0_D_ST_RR_OFF<bits<7> opc, dag outs, dag ins, string asmstr,
 }
 
 // Private encode peers for logical LD32_REG_M0S0LS / LD64_… / ST32_… / ST64_…
-// (legacy FmtM0_S0_LS_REG codepoints 0x27/0x08/0x37/0x18 → Bundle128 s0).
+// (legacy FmtM0_S0_LS_REG codepoints 0x27/0x08/0x37/0x18 → s0).
 def LD32_REG_M0S0LS_S0 : HaydnFU_LS_S0_S_LD_RR_OFF<0b1110010,
     (outs GPR32:$rt), (ins GPR32:$rs, GPR32:$off),
     "ld32_reg\t$rt, $rs, $off", []>;

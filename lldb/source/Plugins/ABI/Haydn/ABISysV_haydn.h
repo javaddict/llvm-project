@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 //
 // Baremetal / freestanding Haydn ILP32 ABI for LLDB (BundleSim gdb-remote).
-// Register names/order for unwind follow DWARF (R0–R15). Remote RSP also
-// exposes PC/AR/DR/HWLR/CBR via BundleSim qRegisterInfo / target.xml.
+// Register names/order for unwind follow DWARF (R0–R15 + AR0/AR1). Remote
+// RSP may also expose PC/AR/DR/HWLR/CBR via qRegisterInfo / target.xml.
 //
 //===----------------------------------------------------------------------===//
 
@@ -54,7 +54,7 @@ public:
   }
 
   bool CodeAddressIsValid(lldb::addr_t pc) override {
-    // Bundle128 addresses are 2-byte aligned at minimum.
+    // Format E96 bundle addresses are 2-byte aligned at minimum.
     return (pc & 0x1) == 0;
   }
 

@@ -17,7 +17,9 @@
 #include "HaydnInstrInfo.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/LiveRegMatrix.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -27,11 +29,43 @@
 #include "llvm/CodeGen/VirtRegMap.h"
 #include "llvm/IR/Function.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/Support/CommandLine.h"
+
+#define DEBUG_TYPE "haydn-reginfo"
 
 #define GET_REGINFO_TARGET_DESC
 #include "HaydnGenRegisterInfo.inc"
 
 using namespace llvm;
+
+// Soft compact-subset physreg order only. Full-only product has no compact
+// byte win yet; default OFF so dual-run -stats (InlineSpiller spills/reloads,
+// these Hit/Miss counters, post-RA multi-MI finalize; split/hard-root silent)
+// — not the hook — gate any future enable. Never demotes RC; never overrides
+// base hints. Corpus pins: regalloc-compact-hints.ll + hard-bundle interop in
+// format-bundle-through-ra.mir under compact-hints=true.
+static cl::opt<bool> EnableHaydnRACompactHints(
+    "haydn-ra-compact-hints", cl::init(false), cl::Hidden,
+    cl::desc("Prefer GPR32Lo / low-DR physregs in Haydn getRegAllocationHints "
+             "(metrics-gated soft order; Full-only product has no compact "
+             "byte win until compact format activation)"));
+
+STATISTIC(NumHaydnCompactRAHintsHit,
+          "Haydn compact-subset RA hints applied (at least one physreg added)");
+STATISTIC(NumHaydnCompactRAHintsMiss,
+          "Haydn compact-subset RA hints enabled but no eligible physreg added");
+
+bool llvm::isHaydnCompactSubsetPhysReg(const TargetRegisterInfo &TRI,
+                                       MCPhysReg PhysReg) {
+  // GPR32Lo: R0–R7 (3-bit compact form encodings). R0 is reserved at use time.
+  if (Haydn::GPR32LoRegClass.contains(PhysReg))
+    return true;
+  // Low-DR encodings D0–D7: peer soft affinity of GPR32Lo for DR64 bank.
+  if (Haydn::DR64RegClass.contains(PhysReg) &&
+      TRI.getEncodingValue(PhysReg) <= 7)
+    return true;
+  return false;
+}
 
 HaydnRegisterInfo::HaydnRegisterInfo(unsigned HwMode)
     : HaydnGenRegisterInfo(Haydn::R15, 0, 0, 0, HwMode) {}
@@ -81,6 +115,11 @@ BitVector HaydnRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
 
   // SFR is a 4-bit status-flag register, never allocatable.
   markSuperRegs(Reserved, Haydn::SFR);
+
+  // CBR sets are sticky CSR state (programmed via CSRW / SETCBR), never
+  // allocatable GPRs. Modeled as physregs for SETCBR→CB scheduling edges.
+  markSuperRegs(Reserved, Haydn::CBR0);
+  markSuperRegs(Reserved, Haydn::CBR1);
 
   return Reserved;
 }
@@ -228,6 +267,18 @@ bool HaydnRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     return false;
   }
 
+  // Legal scaled short-form LS: MI immediate is the **element index**
+  // (EA = base + (imm << log2(width))), not the byte offset. Convert now so
+  // Format E encode and BundleSim dump agree with the golden model.
+  if (IsTrackedLS && Scale > 1) {
+    assert(OffsetVal % static_cast<int64_t>(Scale) == 0 &&
+           "scaled LS offset must be width-aligned");
+    int64_t Element = OffsetVal / static_cast<int64_t>(Scale);
+    if (MI.getNumOperands() > FIOperandNum + 1 &&
+        MI.getOperand(FIOperandNum + 1).isImm())
+      MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Element);
+  }
+
   return false;
 }
 
@@ -247,30 +298,59 @@ bool HaydnRegisterInfo::getRegAllocationHints(
   if (!Hints.empty())
     return BaseRetVal;
 
-  // For temporaries without a specific hint, add priority hints to prefer
-  // caller-saved registers over callee-saved ones. This reduces callee-save
-  // spill/restore overhead.
+  // Soft physreg ordering priority:
+  //   1. base copy/coalesce (already returned if non-empty)
+  //   2. compact-subset (GPR32Lo / low-DR) when -haydn-ra-compact-hints
+  //   3. caller-saved preference (existing)
+  // Soft order only — never demotes RC; never freezes format/member choice.
   //
   // All R* are GPRs. Soft roles: R0 soft-zero; R13 SP; R14 CSR (fp when
   // hasFP); R15 LR. CSR bank: R8–R11, R14. R12 caller-saved (not free AT).
   // D0–D7 caller-saved / D8–D15 CSR DR banks.
-  // Hint caller-saved first so short temps avoid CSR spill cost.
 
   SmallSet<MCPhysReg, 16> HintedRegs;
   for (MCPhysReg PhysReg : Hints)
     HintedRegs.insert(PhysReg);
 
-  // Check if this virtual register is in GPR32 or DR64.
   const TargetRegisterClass *RC = MRI.getRegClass(VirtReg);
 
-  // Caller-saved GPRs: R1–R7 + R12. R14 is CSR (not caller-saved).
+  auto tryAddHint = [&](MCPhysReg PhysReg) -> bool {
+    if (HintedRegs.count(PhysReg))
+      return false;
+    if (MRI.isReserved(PhysReg))
+      return false;
+    if (!RC->contains(PhysReg))
+      return false;
+    // Hints must be members of AllocationOrder (AllocationOrder.cpp assert).
+    if (!is_contained(Order, PhysReg))
+      return false;
+    Hints.push_back(PhysReg);
+    HintedRegs.insert(PhysReg);
+    return true;
+  };
+
+  // (2) Compact-subset soft order — metrics-gated, default OFF.
+  if (EnableHaydnRACompactHints) {
+    unsigned Added = 0;
+    for (MCPhysReg PhysReg : Order) {
+      if (!isHaydnCompactSubsetPhysReg(*this, PhysReg))
+        continue;
+      if (tryAddHint(PhysReg))
+        ++Added;
+    }
+    if (Added)
+      ++NumHaydnCompactRAHintsHit;
+    else
+      ++NumHaydnCompactRAHintsMiss;
+  }
+
+  // (3) Caller-saved preference: R1–R7 + R12; D0–D7. Reduces CSR spill cost
+  // for short temps. After compact subset when that path is enabled.
   auto isCallerSaved = [&](MCPhysReg Reg) -> bool {
-    // GPR32 caller-saved: R1-R7 and R12.
     if (Haydn::GPR32RegClass.contains(Reg)) {
       unsigned Enc = getEncodingValue(Reg);
       return (Enc >= 1 && Enc <= 7) || Enc == 12;
     }
-    // DR64 caller-saved: D0-D7
     if (Haydn::DR64RegClass.contains(Reg)) {
       unsigned Enc = getEncodingValue(Reg);
       return Enc <= 7;
@@ -278,16 +358,10 @@ bool HaydnRegisterInfo::getRegAllocationHints(
     return false;
   };
 
-  // Add caller-saved registers as hints first (higher priority).
   for (MCPhysReg PhysReg : Order) {
-    if (HintedRegs.count(PhysReg))
+    if (!isCallerSaved(PhysReg))
       continue;
-    if (MRI.isReserved(PhysReg))
-      continue;
-    if (RC->contains(PhysReg) && isCallerSaved(PhysReg)) {
-      Hints.push_back(PhysReg);
-      HintedRegs.insert(PhysReg);
-    }
+    tryAddHint(PhysReg);
   }
 
   return BaseRetVal;

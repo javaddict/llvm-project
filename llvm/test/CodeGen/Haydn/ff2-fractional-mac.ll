@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — FF2 Fractional MAC intrinsic test for Haydn backend.
+
 ; FF2 Fractional MAC intrinsic test for Haydn backend.
 ; Covers ALL 18 FF2 intrinsics (each in ll/lh/hh lane variants):
 ; ff2mul32r.{ll,lh,hh} (non-saturating single-product mul, FmtALU64 2-src)

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — PostLegalizerCombiner identity multiply and add-chain folding.
+
 ; REGRESSION TEST: PostLegalizerCombiner identity multiply and add-chain folding.
 ;
 ; Bug: The post-legalizer combiner was missing two common algebraic simplifications:

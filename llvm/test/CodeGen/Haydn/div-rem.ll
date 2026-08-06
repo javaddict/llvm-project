@@ -1,9 +1,12 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — division and remainder operations.
+
 ; Test division and remainder operations.
 ; These should lower to libcalls since Haydn has no hardware div/rem.
 
 ;i32 division
+
 define i32 @sdiv_i32(i32 %a, i32 %b) {
 ; CHECK-LABEL: sdiv_i32:
 ; CHECK: jal_w{{(\.s[012])?}} lr, __divsi3

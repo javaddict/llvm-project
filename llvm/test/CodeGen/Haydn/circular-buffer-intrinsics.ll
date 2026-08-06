@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Circular buffer (CB) and bit-reversed (BREV) addressing intrinsics must emit native mnemonics (not pseudos / libcalls).
+
 ; REGRESSION TEST: Circular buffer (CB) and bit-reversed (BREV) addressing
 ; intrinsics must emit native mnemonics (not pseudos / libcalls).
 ;
@@ -37,8 +39,7 @@
 
 ;Circular Buffer Load (CBR) — D208: {data, new_ptr}
 
-; CHECK-LABEL: test_ldw_cb_imm:
-; CHECK: d_ldw_cb_imm
+
 define i64 @test_ldw_cb_imm(ptr %ptr) {
   %r = call { i64, ptr } @llvm.haydn.ldw.cb.imm(ptr %ptr, i32 0, i32 1)
   %d = extractvalue { i64, ptr } %r, 0

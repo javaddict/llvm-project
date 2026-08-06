@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -O0 < %s | FileCheck %s
-;
+
+; Role: semantic — systematic: every succ-empty MBB must terminate (soft RET).
+
 ; systematic: every succ-empty MBB must terminate (soft RET).
 ; Whole-function `unreachable` used to emit empty.text and fall through.
 ; Mid-function `unreachable` was worse: PEI never visits non-return blocks

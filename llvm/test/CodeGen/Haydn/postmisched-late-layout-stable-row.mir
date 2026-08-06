@@ -1,0 +1,205 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=postmisched,haydn-finalize-mi-bundles,haydn-verify-bundles,branch-relaxation,haydn-fixup-hwloops,branch-relaxation,haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,POSTRA
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=branch-relaxation,haydn-fixup-hwloops,branch-relaxation,haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,LATE
+
+# Role: MIR — Fixed late multi-pass order (product PreEmit after postmisched pack): BranchRelaxation -> FixupHwLoops -> BranchRelaxation ->.
+
+# Fixed late multi-pass order (product PreEmit after postmisched pack):
+#   BranchRelaxation -> FixupHwLoops -> BranchRelaxation ->
+#   late FinalizeBundle -> VerifyBundles
+#
+# Late-layout stable-row rule (no outer fixpoint):
+#   * every compiler-created issue cycle is one BUNDLE with FormatID imm 0
+#     (FormatE96); EncodedBytes charged to layout is the Format E parcel (12 B)
+#   * postmisched multi-MI exact-commits survive BR/Fixup/BR/late-commit
+#     without reshape, split, or member loss
+#   * bare residual growth (NOP pad, branch, demote soft edge) re-commits as
+#     Full singleton cycles via empty-cycle tryAdd setDesc
+#     (commitLateProductCycle -> finalizeBundle + stamp FormatID)
+#   * residual LoopDec/LoopJNZ/LoopStart and uncommitted multi-slot logicals
+#     are forbidden after the late firewall
+#
+# AIE peers: AIE PreEmit is empty (AIE2TargetMachine.cpp:88); Haydn alone
+# re-runs the commit surfaces after allowed layout growth. No second packer,
+# no MCFlags, no compact/shrink of a committed Full row.
+
+--- |
+  define void @postmisched_through_late_multipass() { ret void }
+  define void @multi_mi_survives_late_growth() { ret void }
+  define void @demote_soft_edge_stable_row(ptr nocapture writeonly %out) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+# Independent ALU ops: postmisched exact-commits a multi-MI Full cycle, then
+# the fixed BR/Fixup/BR/late Finalize+Verify multi-pass leaves it unchanged
+# (stable row) and wraps remaining singletons as Full BUNDLE roots.
+name:            postmisched_through_late_multipass
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+
+    ; CHECK-LABEL: name: postmisched_through_late_multipass
+    ;
+    ; Full product multipass with postmisched: multi-MI exact-commit survives.
+    ; POSTRA: BUNDLE 0
+    ; POSTRA-DAG: ADD32_S2
+    ; POSTRA-DAG: XOR32_S1
+    ; POSTRA: BUNDLE 0
+    ; POSTRA: OR32
+    ; POSTRA: BUNDLE 0
+    ; POSTRA: JALR
+    ; POSTRA-NOT: LoopDec
+    ; POSTRA-NOT: LoopJNZ
+    ;
+    ; Late-only multipass (no postmisched auction): bare logicals re-commit as
+    ; Full singletons. Still stable Full rows only.
+    ; LATE: BUNDLE 0
+    ; LATE: ADD32
+    ; LATE: BUNDLE 0
+    ; LATE: XOR32
+    ; LATE: BUNDLE 0
+    ; LATE: OR32
+    ; LATE: BUNDLE 0
+    ; LATE: JALR
+    $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+    $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
+    $r6 = OR32 $r4, $r5, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+# Pre-committed multi-MI product cycle (postmisched exact-commit shape) plus
+# bare Fixup/BR growth residual. Multi-pass must not reshape the multi-MI root
+# and must commit each bare residual as product Full cycle(s).
+name:            multi_mi_survives_late_growth
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r15
+    successors: %bb.1
+
+    ; CHECK-LABEL: name: multi_mi_survives_late_growth
+    ;
+    ; Multi-MI root stays two-member Full under both pass chains.
+    ; CHECK: BUNDLE 0
+    ; CHECK: ADD32_S2
+    ; CHECK: XOR32_S1
+    ;
+    ; With postmisched, bare NOP+ADD may coissue into one Full cycle.
+    ; POSTRA: BUNDLE 0
+    ; POSTRA-DAG: ADD32_S2
+    ; POSTRA-DAG: NOP_S0
+    ;
+    ; Without postmisched, each bare residual is its own Full singleton.
+    ; LATE: BUNDLE 0
+    ; LATE: NOP_S0
+    ; LATE: BUNDLE 0
+    ; LATE: ADD32_S2
+    ;
+    ; CHECK: BUNDLE 0
+    ; CHECK: B %bb.1
+    ; CHECK: BUNDLE 0
+    ; CHECK: RET
+    ; CHECK-NOT: LoopDec
+    ; CHECK-NOT: LoopJNZ
+    BUNDLE 0 {
+      $r3 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      $r4 = XOR32_S1 $r1, $r2, implicit-def dead $sfr
+    }
+    NOP
+    $r5 = ADD32 $r0, $r2, implicit-def dead $sfr
+    B %bb.1
+
+  bb.1:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+---
+# Final SET form (SET_HWLOOP_W) with out-of-range setup demotes through the
+# fixed multi-pass order. Soft edge is final-real SUBI32 + BNEZ_W
+# exact-committed as Full singletons; late Finalize is idempotent. No residual
+# Loop* cycle pseudos and no SET root after demote acceptance.
+name:            demote_soft_edge_stable_row
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    ; Immediate trip 8; header==latch is %bb.2. Three following NOPs =
+    ; InterveningCycles (SetupIssueDistance=4). Final wide form so first
+    ; postmisched Finalize/Verify accept before Fixup demotes.
+    SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20x NOP = 320 B > uimm6 252 — StartOff overflow that shorten
+  ; cannot pull across MBB boundaries -> product demote-first.
+  bb.1.spacer:
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1, $r0
+    successors: %bb.3
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: demote_soft_edge_stable_row
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: LoopDec
+# CHECK-NOT: LoopJNZ
+# CHECK-NOT: LoopStart
+# Soft edge: Full singleton parcels (setDesc member where alts apply).
+# CHECK: BUNDLE 0
+# CHECK: SUBI32
+# CHECK: BUNDLE 0
+# CHECK: BNEZ_W
+# CHECK: bb.3.exit
+# CHECK: BUNDLE 0
+# CHECK: RET
+...

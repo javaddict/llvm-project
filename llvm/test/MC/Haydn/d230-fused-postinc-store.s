@@ -1,6 +1,18 @@
-# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o /dev/null
-#
-# Smoke: fused post-inc store assembles (public mnemonic st32.post).
+# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
+# RUN:     llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# REQUIRES: haydn-registered-target
+
+# Role: object — fused post-inc store public mnemonics assemble and disassemble.
+
+# Public asm aliases st32.post / st64.post must encode as Format E parcels and
+# round-trip through objdump to the architectural post-inc store forms. Assemble
+# success alone is not the contract.
+
+# CHECK-LABEL: <.text>:
+# CHECK: {{.*}}0: 87 83 3b 11 00 00 00 00 00 00 00 00 { s_sw_post_imm r3, r1, 1; nop }
+# CHECK: c: 87 83 0a 11 00 00 00 00 00 00 00 00 { d_sdw_post_imm d0, r1, 1; nop }
+# CHECK-NOT: <?>
+# CHECK-NOT: <unknown>
 
 .text
   { st32.post r3, r1, 1 }

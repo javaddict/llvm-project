@@ -1,6 +1,9 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 
+; Role: semantic — Simple call.
+
 ; Simple call
+
 declare i32 @extern_func(i32)
 define i32 @test_call(i32 %a) {
   %r = call i32 @extern_func(i32 %a)

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 %s -o - | FileCheck %s
-;
+
+; Role: semantic — Large SP adjust must materialize the size via HaydnMatInt into a PEI scratch (unused allocatable call-clobbered GPR) then sub32/add32.
+
 ; Large SP adjust must materialize the size via HaydnMatInt into a PEI scratch
 ; (unused allocatable call-clobbered GPR) then sub32/add32. Never the
 ; pre-ISA-43 LUI+(<<16) poison path. AIE model: R12 is a normal allocatable
@@ -9,6 +11,7 @@
 ; materialize + sub32/add32, not a fixed byte count.
 
 ; This function has a very large local array that requires more than 16 bits.
+
 define void @large_stack_frame() {
 ; CHECK-LABEL: large_stack_frame:
 ; CHECK:       xor32{{.*}}r0, r0, r0

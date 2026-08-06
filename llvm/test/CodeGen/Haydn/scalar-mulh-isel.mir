@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select -verify-machineinstrs -global-isel-abort=1 %s -o - | FileCheck %s
-#
+
+# Role: MIR — G_SMULH / G_UMULH s32 → MULSSH / MULUUH (not MULL).
+
 # G_SMULH / G_UMULH s32 → MULSSH / MULUUH (not MULL).
 
 ---

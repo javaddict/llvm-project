@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — G_FENCE must legalize (alwaysLegal) and select to MEMBARRIER.
+
 ; REGRESSION: G_FENCE must legalize (alwaysLegal) and select to MEMBARRIER.
 ; Previously G_FENCE shared legalFor({S32,P0}) with typed ops; zero type
 ; indices caused Legalizer ArrayRef index OOB (same class as old G_TRAP).

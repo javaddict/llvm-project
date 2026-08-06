@@ -1,6 +1,9 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 < %s | FileCheck %s
 
+; Role: semantic — Simple if.
+
 ; Simple if
+
 define i32 @test_if(i32 %a, i32 %b) {
   %cmp = icmp sgt i32 %a, 0
   br i1 %cmp, label %then, label %else

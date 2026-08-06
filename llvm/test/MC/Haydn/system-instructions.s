@@ -1,27 +1,29 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
 
+# Role: object — CSRR / CSRW parse and print across CSR address range.
+
 #===----------------------------------------------------------------------===
-# Test CSR read instructions
+# CSR read
 #===----------------------------------------------------------------------===
 
-# CHECK-LABEL: csrr r0, 0
 CSRR R0, 0
+# CHECK: csrr r0, 0
 
-# CHECK-LABEL: csrr r1, 1
 CSRR R1, 1
+# CHECK: csrr r1, 1
 
-# CHECK-LABEL: csrr r2, 255
 CSRR R2, 255
+# CHECK: csrr r2, 255
 
 #===----------------------------------------------------------------------===
-# Test CSR write instructions
+# CSR write
 #===----------------------------------------------------------------------===
 
-# CHECK-LABEL: csrw 0, r3
 CSRW 0, R3
+# CHECK: csrw 0, r3
 
-# CHECK-LABEL: csrw 10, r4
 CSRW 10, R4
+# CHECK: csrw 10, r4
 
-# CHECK-LABEL: csrw 128, r5
 CSRW 128, R5
+# CHECK: csrw 128, r5

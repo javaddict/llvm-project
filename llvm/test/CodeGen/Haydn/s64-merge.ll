@@ -1,7 +1,11 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+
+; Role: semantic — Updated for native DR64 shift (sll64/srl64/sra64).
+
 ; Updated for native DR64 shift (sll64/srl64/sra64)
 
 ; Test G_MERGE_VALUES: build i64 from two i32 values
+
 define i64 @merge_i32_to_i64(i32 %lo, i32 %hi) {
 ; CHECK-LABEL: merge_i32_to_i64:
 ; CHECK: or64

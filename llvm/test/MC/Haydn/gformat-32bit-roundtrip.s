@@ -1,6 +1,8 @@
 # RUN: llvm-mc -triple haydn-unknown-elf -filetype=obj %s -o %t.o && \
 # RUN:   llvm-objdump -d --triple=haydn-unknown-elf %t.o | FileCheck %s
 
+# Role: object — Plain ALU32 RR ops route to Mode-0 (encoding_manual.md §3.6 + §6).
+
 # Plain ALU32 RR ops route to Mode-0 (encoding_manual.md §3.6 + §6).
 #
 # WHY THIS TEST EXISTS (regression pin for the tryEncodeGFormat retirement):
@@ -20,7 +22,7 @@
 # which encodes the full 3-register, non-destructive form correctly.
 #
 # This test pins that routing: `sub32 r1, r2, r3` and `or32 r0, r1, r2`
-# (both rd != rs1 — NOT G-eligible) MUST emit a 16-byte Bundle128
+# (both rd != rs1 — NOT G-eligible) MUST emit a 12-byte Format E
 # parcel (s0 ALU32, `` slot suffix), never a 4-byte G-format parcel
 # (bits[3:0]=0001). If a future change revives MC-time G-format emission
 # for these, the CHECK bytes will diverge and fail loudly here.
@@ -35,5 +37,5 @@ _start:
     sub32 r1, r2, r3     // rd!=rs1 -> Mode-0 (NOT G-eligible)
     or32  r0, r1, r2     // rd!=rs1 -> Mode-0 (NOT G-eligible)
 
-# CHECK:      0: 32 01 00 00 c0 01 00 00 00 00 00 00 00 00 00 00       { sub32 r1, r2, r3
-# CHECK:      10: 21 00 00 00 80 03 00 00 00 00 00 00 00 00 00 00       { or32 r0, r1, r2
+# CHECK: {{.*}}0: 07 cb 10 32 00 00 00 00 00 00 00 00  	{ 		sub32	r1, r2, r3; 	nop }
+# CHECK: c: 07 2b 01 21 00 00 00 00 00 00 00 00  	{ 		or32	r0, r1, r2; 	nop }

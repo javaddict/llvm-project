@@ -1,11 +1,46 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding %s | FileCheck %s
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s | llvm-objdump -d -z --triple=haydn-unknown-elf - | FileCheck --check-prefix=ROUNDTRIP %s
-#
+
+// CHECK: { move32 r0, r1 } // encoding: [0x07,0x44,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { move32 r5, r6 } // encoding: [0x07,0x44,0x50,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { move32 r12, r0 } // encoding: [0x07,0x44,0xc0,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { nop } // encoding: [0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { lui r0, 0 } // encoding: [0x07,0x0a,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { lui r7, 42 } // encoding: [0x07,0x0a,0x72,0x00,0x2a,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { lui r8, 4095 } // encoding: [0x07,0x0a,0x82,0x00,0xff,0x0f,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { lui r12, 2048 } // encoding: [0x07,0x0a,0xc2,0x00,0x00,0x08,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { xor32 r0, r0, r0 } // encoding: [0x07,0x4b,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { xor32 r5, r5, r5 } // encoding: [0x07,0x4b,0x51,0x55,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { xor32 r12, r12, r12 } // encoding: [0x07,0x4b,0xc1,0xcc,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { addi32s r0, r1, 100 } // encoding: [0x07,0x0f,0x06,0x01,0x32,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { subi32s r2, r3, 50 } // encoding: [0x07,0x0f,0x2e,0x03,0x19,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { srai32r r0, r1, 1 } // encoding: [0x07,0x06,0x03,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { sra32r r2, r3, r4 } // encoding: [0x07,0xab,0x21,0x43,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { sra32 r5, r6, r7 } // encoding: [0x07,0x8b,0x51,0x76,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { sra64 d0, d0, r9 } // encoding: [0x07,0x0b,0x06,0x90,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// ROUNDTRIP: {{.*}}0: 07 44 00 01 00 00 00 00 00 00 00 00 { move32 r0, r1; nop }
+// ROUNDTRIP: {{.*}}c: 07 44 50 06 00 00 00 00 00 00 00 00 { move32 r5, r6; nop }
+// ROUNDTRIP: {{.*}}18: 07 44 c0 00 00 00 00 00 00 00 00 00 { move32 r12, r0; nop }
+// ROUNDTRIP: {{.*}}24: 07 00 00 00 00 00 00 00 00 00 00 00 { nop }
+// ROUNDTRIP: {{.*}}30: 07 0a 02 00 00 00 00 00 00 00 00 00 { lui r0, 0; nop }
+// ROUNDTRIP: {{.*}}3c: 07 0a 72 00 2a 00 00 00 00 00 00 00 { lui r7, 42; nop }
+// ROUNDTRIP: {{.*}}48: 07 0a 82 00 ff 0f 00 00 00 00 00 00 { lui r8, 4095; nop }
+// ROUNDTRIP: {{.*}}54: 07 0a c2 00 00 08 00 00 00 00 00 00 { lui r12, 2048; nop }
+// ROUNDTRIP: {{.*}}60: 07 4b 01 00 00 00 00 00 00 00 00 00 { xor32 r0, r0, r0; nop }
+// ROUNDTRIP: {{.*}}6c: 07 4b 51 55 00 00 00 00 00 00 00 00 { xor32 r5, r5, r5; nop }
+// ROUNDTRIP: {{.*}}78: 07 4b c1 cc 00 00 00 00 00 00 00 00 { xor32 r12, r12, r12; nop }
+// ROUNDTRIP: {{.*}}84: 07 0f 06 01 32 00 00 00 00 00 00 00 { addi32s r0, r1, 100; nop }
+// ROUNDTRIP: {{.*}}90: 07 0f 2e 03 19 00 00 00 00 00 00 00 { subi32s r2, r3, 50; nop }
+// ROUNDTRIP: {{.*}}9c: 07 06 03 01 01 00 00 00 00 00 00 00 { srai32r r0, r1, 1; nop }
+// ROUNDTRIP: {{.*}}a8: 07 ab 21 43 00 00 00 00 00 00 00 00 { sra32r r2, r3, r4; nop }
+// ROUNDTRIP: {{.*}}b4: 07 8b 51 76 00 00 00 00 00 00 00 00 { sra32 r5, r6, r7; nop }
+// ROUNDTRIP: {{.*}}c0: 07 0b 06 90 00 00 00 00 00 00 00 00 { sra64 d0, d0, r9; nop }
+# Role: object — Decoder bundle-boundary gap CLOSED: the 4-byte SRA64 parcel (encoding [0x35,0x25,0xc0,0x59]) now re-syncs correctly when it lands at an.
+
 # Decoder bundle-boundary gap CLOSED: the 4-byte SRA64 parcel (encoding
 # [0x35,0x25,0xc0,0x59]) now re-syncs correctly when it lands at an
 # 8-byte-window straddle right after the SRA32 window — objdump emits
 # `sra64 d0, d0, r9` instead of `<unknown>`. Both RUNs (SHOW-ENCODING and
-# ROUNDTRIP) pass; XFAIL removed.
 #
 # Move, immediate, and NOP instruction test.
 # Covers:
@@ -25,16 +60,11 @@
 # The assembler syntax is "move32 rd, rs1".
 #===----------------------------------------------------------------------===
 
-# CHECK: move32 r0, r1
-# ROUNDTRIP: move32	r0, r1
+
 move32 r0, r1
 
-# CHECK: move32 r5, r6
-# ROUNDTRIP: move32	r5, r6
 move32 r5, r6
 
-# CHECK: move32 r12, r0
-# ROUNDTRIP: move32	r12, r0
 move32 r12, r0
 
 #===----------------------------------------------------------------------===
@@ -42,8 +72,6 @@ move32 r12, r0
 # Encoded as all-zeros (ADD32 rd=R0, rs1=R0, rs2=R0).
 #===----------------------------------------------------------------------===
 
-# CHECK: nop
-# ROUNDTRIP: { nop; nop; nop }
 nop
 
 #===----------------------------------------------------------------------===
@@ -55,20 +83,12 @@ nop
 # it, so the ROUNDTRIP (decoded) immediate now renders the original uimm12.
 # The load-bearing assertions for THIS test are the mnemonic and the register
 # operands; the immediate is documented here.
-# CHECK: lui r0, 0
-# ROUNDTRIP: lui	r0, 0
 lui r0, 0
 
-# CHECK: lui r7, 42
-# ROUNDTRIP: lui	r7, 42
 lui r7, 42
 
-# CHECK: lui r8, 4095
-# ROUNDTRIP: lui	r8, 4095
 lui r8, 4095
 
-# CHECK: lui r12, 2048
-# ROUNDTRIP: lui	r12, 2048
 lui r12, 2048
 
 #===----------------------------------------------------------------------===
@@ -77,48 +97,30 @@ lui r12, 2048
 # canonical zero-register mechanism used by CodeGen prologues and selectors.)
 #===----------------------------------------------------------------------===
 
-# CHECK: xor32 r0, r0, r0
-# ROUNDTRIP: xor32	r0, r0, r0
 xor32 r0, r0, r0
 
-# CHECK: xor32 r5, r5, r5
-# ROUNDTRIP: xor32	r5, r5, r5
 xor32 r5, r5, r5
 
-# CHECK: xor32 r12, r12, r12
-# ROUNDTRIP: xor32	r12, r12, r12
 xor32 r12, r12, r12
 
 #===----------------------------------------------------------------------===
 # Saturating immediate add/sub (from HaydnInstrInfo.td)
 #===----------------------------------------------------------------------===
 
-# CHECK: addi32s r0, r1, 100
-# ROUNDTRIP: addi32s	r0, r1, 100
 addi32s r0, r1, 100
 
-# CHECK: subi32s r2, r3, 50
-# ROUNDTRIP: subi32s	r2, r3, 50
 subi32s r2, r3, 50
 
 #===----------------------------------------------------------------------===
 # Rounding shift (from HaydnInstrInfo.td)
 #===----------------------------------------------------------------------===
 
-# CHECK: srai32r r0, r1, 1
-# ROUNDTRIP: srai32r	r0, r1, 1
 srai32r r0, r1, 1
 
-# CHECK: sra32r r2, r3, r4
-# ROUNDTRIP: sra32r	r2, r3, r4
 sra32r r2, r3, r4
 
-# CHECK: sra32 r5, r6, r7
-# ROUNDTRIP: sra32	r5, r6, r7
 sra32 r5, r6, r7
 
-# CHECK: sra64 d0, d0, r9
-# ROUNDTRIP: sra64	d0, d0, r9
 sra64 d0, d0, r9
 
 #===----------------------------------------------------------------------===

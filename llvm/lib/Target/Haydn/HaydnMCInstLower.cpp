@@ -33,17 +33,16 @@ static bool isHwloopWideSetup(unsigned Opc) {
 
 void HaydnMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   // Desc-only lower (AIE serialize-only). Opcode is post-setDesc
-  // format-member when materialize succeeded (B3.1); logical residual
-  // otherwise (hand-asm / pseudo expand). Placement is member Desc
-  // getSlotKind / Format composite (AIEBaseMCFormats.cpp:66-75) — never
-  // MCInst Flags (API deleted B3.6).
+  // format-member when materialize succeeded; logical residual otherwise
+  // (hand-asm / pseudo expand). Placement is member Desc getSlotKind /
+  // Format composite (AIEBaseMCFormats.cpp:66-75) — no Flags re-slot.
   OutMI.setOpcode(MI->getOpcode());
 
-  // SET_HWLOOP_{W,F2_W}{_S0}: operands are (sel, start, end, cnt/rs).
-  // Start/end are MBB in MIR; emit uses inclusive temp labels (HWLR_BEGIN =
-  // first real of body, HWLR_END = last real of latch) — same contract as
-  // former emitHWLoopWideInst, but owned by Lower so the BUNDLE path stays
-  // pure MCInstLowering.Lower (no per-opcode expand in the printer).
+  // SET_HWLOOP_{W,F2_W} and setDesc members (*_S0): operands are
+  // (sel, start, end, cnt/rs). Start/end are MBB in MIR; emit uses inclusive
+  // temp labels (HWLR_BEGIN = first real of body, HWLR_END = last real of
+  // latch). Owned by Lower so BUNDLE/standalone stay pure Desc-as-is (no
+  // printer dual-path expand).
   const bool Hwloop = isHwloopWideSetup(MI->getOpcode());
 
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {

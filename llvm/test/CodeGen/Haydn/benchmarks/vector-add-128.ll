@@ -1,11 +1,13 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
+; REQUIRES: haydn-registered-target
+
+; Role: smoke — Smoke: pre-existing CHECK drift — compile and emit a return.
+
 ; Smoke: pre-existing CHECK drift — compile and emit a return.
 ; CHECK: {{jalr|jalr_w}}
 ;
 ; REBASELINED : scheduling changed (//) — bundles regrouped, ops unchanged.
 
-
-; REQUIRES: haydn-registered-target
 ;
 ; DSP Kernel Benchmark: 128-Element Vector Addition (Memory-Bound)
 ;

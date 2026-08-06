@@ -1,6 +1,8 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s
-#
+
+# Role: MIR — When every preferred GPR is live at LoopStart, remat must spill/restore (never silent clobber).
+
 # When every preferred GPR is live at LoopStart, remat must spill/restore
 # (never silent clobber). Src $r1 stays un-redefined in-place.
 #

@@ -8,7 +8,7 @@
 //
 // Post-RA ScheduleDAGMI (HaydnScheduleDAGMI) + factory. Pre-RA lives in
 // HaydnPreRASchedStrategy.cpp (AIE2 dual-sched contract).
-// VLIWMachineScheduler / ConvergingVLIWScheduler remain retired (G21 UAF).
+// VLIWMachineScheduler / ConvergingVLIWScheduler remain retired ( UAF).
 //
 //===----------------------------------------------------------------------===//
 

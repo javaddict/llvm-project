@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -o - %s | FileCheck %s
-;
+
+; Role: semantic — G_TRUNC from s8 to s1 must be legal for _Bool operations.
+
 ; REGRESSION TEST: G_TRUNC from s8 to s1 must be legal for _Bool operations.
 ;
 ; Bug: Compiling functions with _Bool parameters caused an "unable to legalize
@@ -15,6 +17,7 @@
 ; Do NOT update CHECK lines without understanding the root cause.
 
 ; Basic _Bool operations (and, or, not)
+
 define zeroext i1 @bool_and(i1 zeroext %a, i1 zeroext %b) {
 ; CHECK-LABEL: bool_and:
 ; CHECK: and32
@@ -24,13 +27,16 @@ define zeroext i1 @bool_and(i1 zeroext %a, i1 zeroext %b) {
 
 define zeroext i1 @bool_or(i1 zeroext %a, i1 zeroext %b) {
 ; CHECK-LABEL: bool_or:
+; CHECK: or32
   %result = or i1 %a, %b
   ret i1 %result
 }
 
 define zeroext i1 @bool_not(i1 zeroext %a) {
 ; CHECK-LABEL: bool_not:
-; CHECK: xor32
+; Soft-zero uses xor32 r0,r0,r0; pin the real ones-complement not32 + mask.
+; CHECK: not32
+; CHECK: and32
   %result = xor i1 %a, true
   ret i1 %result
 }
@@ -38,6 +44,10 @@ define zeroext i1 @bool_not(i1 zeroext %a) {
 ; Complex _Bool expression from the original bug report
 define zeroext i1 @bool_complex(i1 zeroext %a, i1 zeroext %b) {
 ; CHECK-LABEL: bool_complex:
+; i8 store/load + trunc s8->s1 path that used to legalize-fail.
+; CHECK-DAG: st8
+; CHECK-DAG: ldu8
+; CHECK-DAG: and32
 entry:
   %a.addr = alloca i8, align 1
   %b.addr = alloca i8, align 1
@@ -68,6 +78,7 @@ lor.end:
 ; _Bool select
 define zeroext i1 @bool_select(i1 zeroext %a, i1 zeroext %b, i1 zeroext %c) {
 ; CHECK-LABEL: bool_select:
+; CHECK: movt32
   %result = select i1 %a, i1 %b, i1 %c
   ret i1 %result
 }
@@ -75,6 +86,7 @@ define zeroext i1 @bool_select(i1 zeroext %a, i1 zeroext %b, i1 zeroext %c) {
 ; _Bool equality
 define zeroext i1 @bool_eq(i1 zeroext %a, i1 zeroext %b) {
 ; CHECK-LABEL: bool_eq:
+; CHECK: seq32
   %result = icmp eq i1 %a, %b
   ret i1 %result
 }

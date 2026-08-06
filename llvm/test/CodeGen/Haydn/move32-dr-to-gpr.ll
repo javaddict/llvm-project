@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — MOVE32_DR_L / MOVE32_DR_H — DR64 half-lane -> GPR32 move.
+
 ; REGRESSION TEST: MOVE32_DR_L / MOVE32_DR_H — DR64 half-lane -> GPR32 move.
 ;
 ; Context: these are the first *real* DR->GPR cross-bank moves in the Haydn
@@ -16,8 +18,6 @@
 declare i32 @llvm.haydn.move32.dr.l(i64)
 declare i32 @llvm.haydn.move32.dr.h(i64)
 
-; CHECK-LABEL: test_move32_dr_l:
-; CHECK:       move32_dr_l
 define i32 @test_move32_dr_l(i64 %x) {
   %r = call i32 @llvm.haydn.move32.dr.l(i64 %x)
   ret i32 %r

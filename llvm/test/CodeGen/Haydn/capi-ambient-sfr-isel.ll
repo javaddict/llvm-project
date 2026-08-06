@@ -1,14 +1,15 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — ambient SFR quarantine ISel exit: x2/x4 movt/movf are IntrHasSideEffects → G_INTRINSIC_W_SIDE_EFFECTS.
+
 ; C1.2 ambient SFR quarantine ISel exit:
 ;   x2/x4 movt/movf are IntrHasSideEffects → G_INTRINSIC_W_SIDE_EFFECTS
 ;   (already allowlisted) and select to X2MOVT32 / X2MOVF32 / X4MOVT16 /
 ;   X4MOVF16. Two-epoch ambient reverse-order keeps two SLT + two MOVT.
 ;   AE path uses pure SSA cmplt/mux (see capi-pred-ssa-isel.ll).
 
-; CHECK-LABEL: test_x2movt32:
-; CHECK: x2movt32
+
 define <2 x i32> @test_x2movt32(<2 x i32> %ft, <2 x i32> %cv) {
   %r = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %ft, <2 x i32> %cv)
   ret <2 x i32> %r

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Branch offset field must be correctly encoded.
+
 ; REGRESSION TEST: Branch offset field must be correctly encoded.
 ;
 ; This test covers conditional and unconditional branch offset handling.
@@ -15,6 +17,7 @@
 ; Do NOT update CHECK lines without understanding the root cause.
 
 ;Branch after equality comparison
+
 define void @branch_eq(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_eq:
 ; CHECK: seq32

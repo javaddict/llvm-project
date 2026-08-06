@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — T1.2: G_ABS maps to native ABS32 / ABS64 (not generic lower expansion).
+
 ; T1.2: G_ABS maps to native ABS32 / ABS64 (not generic lower expansion).
 ; Non-saturating ISA ops match llvm.abs (INT_MIN stays INT_MIN).
 

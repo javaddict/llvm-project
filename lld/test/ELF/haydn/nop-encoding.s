@@ -4,8 +4,10 @@
 # RUN: llvm-objdump -d --triple=haydn-unknown-elf %t | FileCheck %s
 # RUN: llvm-readobj -x .text %t | FileCheck --check-prefix=HEX %s
 #
-# REGRESSION: Bundle128 NOP is the all-zero 16-byte parcel (idle slot windows).
-# Explicit `nop` and linker alignment padding must decode as nop, not garbage.
+# Explicit `nop` still comes from the assembler (MC product path).
+# LLD executable fill is whole production EncodedBytes only; partial 2/4-byte
+# linker NOPs are retired. Product idle parcel is Format E header 0x07 +
+# zero entries (12 B), not an all-zero 16-byte Bundle128 word.
 
 .section .text
 .globl _start
@@ -14,13 +16,11 @@ _start:
     # CHECK: {{.*}} nop
     nop
 
-    # Force alignment to 32 bytes → one all-zero Bundle128 pad after 16-byte nop.
-    .p2align 5
     # CHECK: {{.*}} add32
     ADD32 R2, R2, R2
 
     .size _start, .-_start
 
-# First parcel all zeros (explicit nop or pad), second is ADD32.
+# Product Format E idle/NOP parcel (GE96-01 provisional header 0x07).
 # HEX: Hex dump of section '.text':
-# HEX: 00000000 00000000 00000000 00000000
+# HEX: 07000000 00000000 00000000

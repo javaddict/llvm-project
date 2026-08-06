@@ -1,5 +1,7 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+
+; Role: semantic — guard the Haydn hardware-loop setup emission path that the fix lives in.
+
 ; REGRESSION TEST: guard the Haydn hardware-loop setup emission
 ; path that the fix lives in.
 ;

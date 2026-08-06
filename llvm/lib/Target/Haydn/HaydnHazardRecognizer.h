@@ -7,26 +7,27 @@
 //===----------------------------------------------------------------------===//
 //
 // This file implements the Haydn scoreboard hazard recognizer — the AIE-style
-// resource model for the post-RA MachineScheduler (Stream B, ).
+// resource model for the MachineScheduler (post-RA commit + pre-RA 
+// feasibility with MRI-correct vreg port demand).
 //
 // Design
 //======//
-// The Haydn VLIW datapath has 3 slots (SLOT0/1/2), a 4R2W GPR register file
-// and a 7R3W DR64 register file, each shared across all slots (CLAUDE.md
-// "Slot architecture"; spec port-budget table). Up to 3 instructions may
-// issue per cycle, subject to:
-// * slot exclusivity (one instr per slot per cycle)
-// * the GPR 4R2W port budget
-// * the DR64 7R3W port budget (— forward-compat / spec-alignment:
-// under the current slot model max legal DR demand is 6R2W < 7R3W, but
-// the cap is correct-by-construction once fused-MAC / dual-write DR ops
-// land, and it matches the RTL SVA contract regardless)
+// Format E resources are seven execution units (LOADSTORE0, LOAD1, ALU0–2,
+// MAC0–1), plus pooled GPR/DR/AR/SFR register-file ports. Up to three
+// entries may issue per cycle, subject to:
+// * unit injectivity (no two entries map to the same unit)
+// * the GPR 4R2W, DR 7R3W, AR 2R2W port budgets (live SFR 2R1W vocabulary)
+// * dual dead implicit-def $sfr is product-legal (not a single-SFR-write gate)
 // * latency-bound data dependencies (carried by the scheduler DAG's SDep
 // edges, NOT by this recognizer — see note below).
 //
+// Encoded entry indices are not processor-resource bits; entry matching is
+// format legality. ALU0 and LOADSTORE0 are independent units and may
+// co-issue when assigned to different entries.
+//
 // This recognizer drives a ResourceScoreboard<HaydnFuncUnitWrapper> that
-// records, per cycle, which slots and how many GPR read/write ports are
-// occupied. The MachineScheduler consults it via SchedBoundary::checkHazard
+// records per-cycle unit occupancy and pooled port demand. The
+// MachineScheduler consults it via SchedBoundary::checkHazard
 // (MachineScheduler.cpp:2700), which calls getHazardType on every ready SUnit.
 //
 // Data dependencies (RAW/WAW/WAR with their latencies) are NOT modeled here.
@@ -58,6 +59,7 @@
 #include "HaydnStaticBitSet.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/Register.h"
 #include "llvm/CodeGen/ScheduleHazardRecognizer.h"
@@ -76,36 +78,56 @@ class TargetSubtargetInfo;
 
 // AIE peer: AIEHazardRecognizer.cpp:278-314 applyFormatOrdering —
 // walk Format.getSlots(), Bundle.at(Slot), removeFromBundle+insert+
-// bundleWithPred, then finalizeBundle. B3.2: free function in the same
+// bundleWithPred, then finalizeBundle. : free function in the same
 // namespace as AIE (llvm::), names match for the AIE clone path.
 void applyFormatOrdering(Haydn::MachineBundle &Bundle, const VLIWFormat &Format,
                          MachineBasicBlock::iterator InsertPoint);
 
-// Total number of distinct functional-unit resource bits tracked per cycle.
-// This covers the 3 slots (SLOT0/1/2 — the itinerary FuncUnits). GPR port
-// demand is tracked as scalar counts rather than FU bits because the 4R2W
-// budget is a counting constraint, not an exclusivity constraint. The value
-// must match the number of FuncUnits declared in HaydnSchedule.td
-// ([SLOT0, SLOT1, SLOT2] = 3).
-inline constexpr unsigned HAYDN_NUM_FU_BITS = 3;
+// Field-ordered (emit-order) member list that applyFormatOrdering produces.
+// Single source of truth for the member order the encoder / AsmPrinter /
+// hardware observe; the no-forwarding intra-bundle RAW law is validated on
+// THIS order (see HaydnBundleMaterialize.h commitExactMultiMIProductCycle).
+// Defined in HaydnHazardRecognizer.cpp; forward-declared in HaydnBundleMaterialize.h.
+SmallVector<MachineInstr *, 3>
+getFieldOrderedMembers(const Haydn::MachineBundle &Bundle,
+                       const VLIWFormat &Format);
+
+// Named Format E execution-unit indices. Must match HaydnSchedule.td
+// ProcessorItineraries FuncUnit order (bit N of InstrStage Units_).
+enum HaydnExecUnit : unsigned {
+  EU_LOADSTORE0 = 0,
+  EU_LOAD1 = 1,
+  EU_ALU0 = 2,
+  EU_ALU1 = 3,
+  EU_ALU2 = 4,
+  EU_MAC0 = 5,
+  EU_MAC1 = 6,
+  EU_COUNT = 7
+};
+
+// Distinct functional-unit resource bits tracked per cycle. Port demand is
+// scalar counts (pooled budgets), not exclusive FU bits. Must equal the
+// number of FuncUnits in HaydnSchedule.td (seven execution units).
+inline constexpr unsigned HAYDN_NUM_FU_BITS = EU_COUNT;
+static_assert(HAYDN_NUM_FU_BITS == 7, "seven Format E execution units");
 
 // Per-cycle resource container — the RC type parameter of
 // ResourceScoreboard<HaydnFuncUnitWrapper>.
 // Each instance records the resource occupancy of a single cycle:
-// * Required — the itinerary FuncUnits (slots) reserved this cycle. Two
-// instructions needing the same single-slot itinerary (e.g. two
-// Slot1-only loads) conflict.
-// * IssueCount — number of instructions issued this cycle. The 3-issue
-// cap is enforced on this count.
-// * GPRReads / GPRWrites — running GPR32 port demand this cycle, filled
-// by the recognizer from countGPRPorts. The 4R2W budget is enforced on
-// these sums.
-// * DRReads / DRWrites — running DR64 port demand this cycle, filled from
-// countDRPorts. The 7R3W budget is enforced on these sums.
+// * Required — itinerary execution units this cycle that are Required.
+//   Exclusive single-unit Required bits conflict (unit injectivity);
+//   multi-unit choice-sets (logical possible-unit menus) do not.
+// * Reserved — itinerary units this cycle that are Reserved (AIE
+//   FuncUnitWrapper Reserved). Req↔Res overlap conflicts; Res↔Res is legal.
+// * IssueCount — number of instructions issued this cycle (≤ 3 entries).
+// * GPR/DR/AR/SFR read/write running demand for pooled port budgets.
 class HaydnFuncUnitWrapper {
+public:
   using ResourceSet = StaticBitSet<HAYDN_NUM_FU_BITS>;
 
+private:
   ResourceSet Required;
+  ResourceSet Reserved;
   unsigned IssueCount = 0;
   unsigned GPRReads = 0;
   unsigned GPRWrites = 0;
@@ -113,32 +135,34 @@ class HaydnFuncUnitWrapper {
   unsigned DRWrites = 0;
   unsigned ARReads = 0;
   unsigned ARWrites = 0;
+  unsigned SFRReads = 0;
+  unsigned SFRWrites = 0;
 
 public:
   HaydnFuncUnitWrapper() = default;
 
-  // Build from an InstrStage — the stage's Units become Required bits
-  // (matching how AIE's FuncUnitWrapper consumes a stage). The reservation
-  // kind (Required vs Reserved) is honored: only Required units are
-  // conflict-causing, matching InstrStage::getReservationKind semantics.
-  // On Haydn all current stages are Required (single-stage slot-only
-  // itineraries), but the Reserved path is implemented for forward
-  // compatibility with Stream C multi-stage enrichments.
+  // Build from an InstrStage — Units land in Required or Reserved according
+  // to InstrStage::getReservationKind (AIE FuncUnitWrapper ctor peer).
   HaydnFuncUnitWrapper(const InstrStage &IS);
 
-  // Required-only constructor (used by the recognizer to build a candidate
-  // cycle from a pre-resolved slot set, without going through InstrStage).
+  // Required-only constructor (unit tests / explicit unit set synthesis).
   explicit HaydnFuncUnitWrapper(const ResourceSet &RequiredSet)
       : Required(RequiredSet) {}
 
+  // Required + Reserved constructor (unit tests / explicit stage synthesis).
+  HaydnFuncUnitWrapper(const ResourceSet &RequiredSet,
+                       const ResourceSet &ReservedSet)
+      : Required(RequiredSet), Reserved(ReservedSet) {}
+
   bool isEmpty() const {
-    return Required.empty() && IssueCount == 0 && GPRReads == 0 &&
-           GPRWrites == 0 && DRReads == 0 && DRWrites == 0 &&
-           ARReads == 0 && ARWrites == 0;
+    return Required.empty() && Reserved.empty() && IssueCount == 0 &&
+           GPRReads == 0 && GPRWrites == 0 && DRReads == 0 && DRWrites == 0 &&
+           ARReads == 0 && ARWrites == 0 && SFRReads == 0 && SFRWrites == 0;
   }
 
   void clearResources() {
     Required.clear();
+    Reserved.clear();
     IssueCount = 0;
     GPRReads = 0;
     GPRWrites = 0;
@@ -146,12 +170,15 @@ public:
     DRWrites = 0;
     ARReads = 0;
     ARWrites = 0;
+    SFRReads = 0;
+    SFRWrites = 0;
   }
 
   // Block all resources (used to mark a cycle as fully occupied so nothing
   // can issue). Mirrors AIE FuncUnitWrapper::blockResources.
   void blockResources() {
     Required = ~ResourceSet();
+    Reserved = ~ResourceSet();
     IssueCount = ~0u;
     GPRReads = ~0u;
     GPRWrites = ~0u;
@@ -159,6 +186,8 @@ public:
     DRWrites = ~0u;
     ARReads = ~0u;
     ARWrites = ~0u;
+    SFRReads = ~0u;
+    SFRWrites = ~0u;
   }
 
   unsigned getIssueCount() const { return IssueCount; }
@@ -168,7 +197,10 @@ public:
   unsigned getDRWrites() const { return DRWrites; }
   unsigned getARReads() const { return ARReads; }
   unsigned getARWrites() const { return ARWrites; }
+  unsigned getSFRReads() const { return SFRReads; }
+  unsigned getSFRWrites() const { return SFRWrites; }
   const ResourceSet &getRequired() const { return Required; }
+  const ResourceSet &getReserved() const { return Reserved; }
   void setGPRPorts(unsigned Reads, unsigned Writes) {
     GPRReads = Reads;
     GPRWrites = Writes;
@@ -181,23 +213,31 @@ public:
     ARReads = Reads;
     ARWrites = Writes;
   }
+  void setSFRPorts(unsigned Reads, unsigned Writes) {
+    SFRReads = Reads;
+    SFRWrites = Writes;
+  }
   // Mark this cycle as issuing one more instruction.
   void setIssueCountOne() { IssueCount = 1; }
-  // Union another Required slot set into this one (used when accumulating
-  // an instruction's itinerary stages).
-  void mergeRequired(const ResourceSet &Slots) { Required |= Slots; }
+  // Union another Required / Reserved unit set into this one (used when
+  // accumulating an instruction's itinerary stages).
+  void mergeRequired(const ResourceSet &Units) { Required |= Units; }
+  void mergeReserved(const ResourceSet &Units) { Reserved |= Units; }
 
   bool operator==(const HaydnFuncUnitWrapper &Other) const {
-    return Required == Other.Required && IssueCount == Other.IssueCount &&
-           GPRReads == Other.GPRReads && GPRWrites == Other.GPRWrites &&
-           DRReads == Other.DRReads && DRWrites == Other.DRWrites &&
-           ARReads == Other.ARReads && ARWrites == Other.ARWrites;
+    return Required == Other.Required && Reserved == Other.Reserved &&
+           IssueCount == Other.IssueCount && GPRReads == Other.GPRReads &&
+           GPRWrites == Other.GPRWrites && DRReads == Other.DRReads &&
+           DRWrites == Other.DRWrites && ARReads == Other.ARReads &&
+           ARWrites == Other.ARWrites && SFRReads == Other.SFRReads &&
+           SFRWrites == Other.SFRWrites;
   }
 
   // Union (accumulate another cycle's resources into this one). Used by the
   // recognizer's enterResources to record an issued instruction's footprint.
   HaydnFuncUnitWrapper &operator|=(const HaydnFuncUnitWrapper &Other) {
     Required |= Other.Required;
+    Reserved |= Other.Reserved;
     IssueCount += Other.IssueCount;
     GPRReads += Other.GPRReads;
     GPRWrites += Other.GPRWrites;
@@ -205,37 +245,58 @@ public:
     DRWrites += Other.DRWrites;
     ARReads += Other.ARReads;
     ARWrites += Other.ARWrites;
+    SFRReads += Other.SFRReads;
+    SFRWrites += Other.SFRWrites;
     return *this;
   }
 
   // True iff issuing Other's resources on top of this cycle would violate a
   // constraint. Rules:
-  // * slot exclusivity: any Required bit shared (two instrs need the same
-  // single-slot itinerary)
+  // * exclusive single-unit Required: both |Required|==1 and same bit
+  //   (unit injectivity — multi-unit choice-sets never Required-conflict alone)
+  // * AIE Req/Res law: Required overlaps Other.Reserved OR Reserved overlaps
+  //   Other.Required; Res/Res is legal
   // * issue cap: combined IssueCount exceeds 3
-  // * GPR 4R2W: combined reads exceed 4 OR combined writes exceed 2
-  // * DR64 7R3W: combined reads exceed 7 OR combined writes exceed 3
-  // * AR 2R2W : combined reads exceed 2 OR combined writes exceed 2.
+  // * GPR 4R2W / DR 7R3W / AR 2R2W / SFR 2R1W port budgets
   bool conflict(const HaydnFuncUnitWrapper &Other) const;
 
   void dump() const;
 };
 
-// Scoreboard hazard recognizer for the Haydn post-RA MachineScheduler.
+// Scoreboard hazard recognizer for the Haydn MachineScheduler.
 // It maintains a ResourceScoreboard of per-cycle resource occupancy and
 // answers getHazardType by checking whether the candidate instruction's
-// itinerary-stage slots and GPR port demand conflict with the current cycle.
-// EmitInstruction records the candidate's footprint; AdvanceCycle shifts the
-// scoreboard window.
+// itinerary-stage units and GPR/DR/AR/SFR port demand conflict with the
+// current cycle. EmitInstruction records the candidate's footprint;
+// AdvanceCycle shifts the scoreboard window.
+//
+// IsPreRA=true: feasibility-only — MRI-correct vreg port demand, format
+// tryAdd occupancy, same-cycle WAW/RAW including vregs; never stamps
+// AltDescs/member opcodes (phase identity: logical only through RA).
+// Format ResMII oracle (exhaustive ≤3 vs greedy) and SMS-HANDOFF packability
+// helpers are pure vocabulary on HaydnPreRASchedStrategy / BundleFormatSolver
+// — HR does not freeze FormatID and never materializes durable BUNDLE roots
+// from matching-frontier scores (metrics-only; positive handoff is sibling).
+// Matching-frontier probe (scoreMatchingFrontier) exposes nondominated
+// cardinality / free-slot scarcity for pre-RA tryCandidate only; pure copies,
+// no freeze. CurrentCycleCandidates / commitPlacementForEmit use the same
+// exactTryAddProduct depth as SMS ResourceCycle canReserve/reserve for
+// descriptor-derived format legality (plan §8.4 #7); PreRASchedStrategy pure
+// helpers pin the accept/reject polarity surface without freezing FormatID.
+// Multi-cycle itinerary stages book stage-relative scoreboard cycles
+// (DeltaCycles+StageCycle, linear window) — not modulo-II SMS ResourceCycle
+// phases. Product InstrStage cycles==1 and class-3 inventory is empty;
+// SMS-HOOK II-wrap false-accept fail-close polarity is pinned on
+// HaydnPreRASchedStrategy (catalog re-export) so list-sched never claims
+// multi-cycle product support. IsPreRA=false: post-RA path stamps
+// setAlternateDescriptor for leaveRegion setDesc materialize.
 // The recognizer is constructed once per scheduling region (the framework
 // resets it via Reset at each region boundary).
 class HaydnHazardRecognizer : public ScheduleHazardRecognizer {
 public:
-  // slice 2a: \p AltDescs is the function-lifetime alt-descriptor side
-  // map (owned by HaydnMachineFunctionInfo). May be null when constructed
-  // outside a MachineFunction context (tests). When non-null + the slot-select
-  // flag is on, the HR records each MI's chosen (slot, variant) here during
-  // scheduling for the finalizer to bake (E-4).
+  // \p AltDescs is the function-lifetime alt-descriptor side map (owned by
+  // HaydnMachineFunctionInfo). Null for pre-RA / tests — post-RA only stamps
+  // MemberOpcode for leaveRegion materialize.
   HaydnHazardRecognizer(const TargetInstrInfo *TII,
                         const InstrItineraryData *ItinData, bool IsPreRA,
                         HaydnAlternateDescriptors *AltDescs = nullptr);
@@ -260,37 +321,73 @@ public:
   void AdvanceCycle() override;
   void RecedeCycle() override;
 
-  // Issue limit for the current cycle (3 slots).
+  // Issue limit for the current cycle (max three Format E entries).
   bool atIssueLimit() const override;
 
   // Accessors used by HaydnPostRASchedStrategy and tests.
   int getMaxLatency() const { return MaxLatency; }
   int getPipelineDepth() const { return PipelineDepth; }
+  bool isPreRA() const { return IsPreRA; }
 
-  // PostPipeliner / external scoreboard helpers. Build the same per-cycle
-  // footprint used by getHazardType/EmitInstruction so modulo search and the
-  // list scheduler agree on slot + port pressure.
+  /// Pure matching-frontier score for pre-RA tryCandidate (plan §5.1).
+  /// Probe never mutates MI / AltDescs / FormatID; Full-only product keeps
+  /// FeasibleFormatMask at 0 or ProductFormatMask (compact bytes are a no-op).
+  struct MatchingFrontierScore {
+    /// True iff \p LogicalOpc can join the candidate set (no-alt → true when
+    /// the base set is non-empty; alts → canExactTryAddProduct).
+    bool Feasible = false;
+    /// Nondominated successor cardinality after a probe expand (base size for
+    /// no-alt ops; 0 when infeasible).
+    unsigned SuccessorMatchings = 0;
+    /// Free issue slots in the preferred successor (higher = less scarcity).
+    unsigned FreeSlotsPreferred = 0;
+    /// Preferred successor's FormatID mask (product: Full bit or 0).
+    uint64_t FeasibleFormatMask = 0;
+  };
+
+  /// Score adding \p LogicalOpc onto a *copy* of \p Base. Stateless; safe for
+  /// unit tests and for tryCandidate without touching live HR state.
+  static MatchingFrontierScore
+  scoreMatchingFrontier(ArrayRef<haydn::bundle::CycleState> Base,
+                        unsigned LogicalOpc);
+
+  /// Live current-cycle frontier probe (copies CurrentCycleCandidates).
+  MatchingFrontierScore probeMatchingFrontier(unsigned LogicalOpc) const {
+    return scoreMatchingFrontier(CurrentCycleCandidates, LogicalOpc);
+  }
+
+  /// Live nondominated set for the current issue cycle (tests / debug).
+  const haydn::bundle::CycleCandidateSet &getCurrentCycleCandidates() const {
+    return CurrentCycleCandidates;
+  }
+
+  // PostPipeliner / external scoreboard helpers. Issue-cycle footprint is
+  // ports + issue + stage-0 FUs; multi-cycle stages are booked via
+  // checkConflict/enterResources (AIE anyStage peer).
   HaydnFuncUnitWrapper getInstrFootprint(const MachineInstr &MI) const {
     return buildCandidate(MI);
   }
+
+  // Cross-zone scoreboard overlap (AIEHazardRecognizer::conflict peer,
+  // AIEHazardRecognizer.cpp:410-413). DeltaCycles is the displacement of
+  // Other relative to this; leaveRegion checkInterZoneConflicts uses -1 so
+  // Bot scoreboard[0] (empty receded cycle) lines up with Top scoreboard[-1].
+  bool conflict(const HaydnHazardRecognizer &Other, int DeltaCycles) const {
+    return Scoreboard.conflict(Other.Scoreboard, DeltaCycles);
+  }
+  // Stage-relative conflict: issue ports at \p Cycle plus each itinerary
+  // stage at Cycle+StageCycle (AIEHazardRecognizer::checkConflict peer).
+ // : MultiSlot_Pseudo is not exempt — only isNoHazardMeta / debug
+  // BUNDLE / LLVM meta skip hazard booking (never blanket isPseudo).
   bool checkConflict(const ResourceScoreboard<HaydnFuncUnitWrapper> &SB,
-                     const MachineInstr &MI, int Cycle) const {
-    if (MI.isPseudo() || MI.isDebugInstr() || MI.isBundle() ||
-        MI.isMetaInstruction())
-      return false;
-    if (!SB.isInRange(Cycle))
-      return false;
-    return SB[Cycle].conflict(buildCandidate(MI));
-  }
+                     const MachineInstr &MI, int Cycle) const;
+  // Stage-relative enter: book issue ports + each stage at relative ring
+  // cycle. Stages use selected AltDesc member schedclass when stamped
+  // (post-rematch), else the logical opcode schedclass.
   void emitInScoreboard(ResourceScoreboard<HaydnFuncUnitWrapper> &SB,
-                        const MachineInstr &MI, int Cycle) const {
-    if (MI.isPseudo() || MI.isDebugInstr() || MI.isBundle() ||
-        MI.isMetaInstruction())
-      return;
-    if (!SB.isInRange(Cycle))
-      return;
-    SB[Cycle] |= buildCandidate(MI);
-  }
+                        const MachineInstr &MI, int Cycle) const;
+  void enterResources(ResourceScoreboard<HaydnFuncUnitWrapper> &SB,
+                      const MachineInstr &MI, int DeltaCycles) const;
 
 private:
   const TargetInstrInfo *TII;
@@ -301,25 +398,23 @@ private:
   HaydnAlternateDescriptors *AltDescs = nullptr;
 
   ResourceScoreboard<HaydnFuncUnitWrapper> Scoreboard;
+  // Snapshot of Scoreboard at the start of the current issue cycle (after
+  // Reset/Advance/Recede). After each rematch at DeltaCycles==0, Scoreboard
+  // is restored from this snapshot and all CurrentCyclePlacedMIs re-enter
+  // with their selected member schedclasses so single-slot FU bits track the
+ // preferred matching.
+  ResourceScoreboard<HaydnFuncUnitWrapper> ScoreboardAtCycleStart;
   int PipelineDepth = -1;
   int MaxLatency = -1;
   unsigned IssueLimit = 3;
 
-  // same-bundle destination-register WAW. The spec (VLIW_Engine_
-  // Compiler_Constraints.md §Constraints) forbids two instructions in one
-  // bundle from writing the same register (per register file). The scheduler
-  // DAG's output-dependence edges serialize most same-physreg defs, but 's
-  // hasWAWHazard lived in the Phase-1 packetizer that retired — so the
-  // explicit gate was lost on the live scoreboard path. This set holds the
-  // destination registers of instructions already issued in the CURRENT cycle
-  // (cleared on AdvanceCycle/RecedeCycle/Reset); a candidate whose defs
-  // overlap it is reported as a Hazard so the scheduler delays it to the next
-  // cycle and places its consumers with correct latencies (a post-hoc un-bundle
-  // would instead violate those latencies). SFR (slot-ordered safe parallel
-  // writes — two ALU ops both implicit-def dead $sfr in one bundle is normal)
-  // is excluded. R0 is *not*: soft-zero restores (XOR R0,R0,R0) and R0-borrow
-  // loads are real write-port consumers; dual R0 defs in one bundle are
-  // WRITE_CONFLICT on silicon/BundleSim.
+  // same-bundle destination-register WAW. Constraints forbid two instructions
+  // in one bundle from writing the same register. This set holds destination
+  // registers of instructions already issued in the CURRENT cycle (cleared on
+  // Advance/Recede/Reset); a candidate whose defs overlap it is a Hazard.
+  // SFR is excluded: dual dead implicit-def $sfr is product-legal. R0 is
+  // included: soft-zero restores and R0-borrow loads are real write-port
+  // consumers.
   SmallSet<Register, 8> CurrentCycleDefs;
   // LIVE destination registers written this cycle (defs whose result is
   // consumed, i.e. NOT dead). Used by hasSameBundleRAW. A same-bundle read+write
@@ -333,20 +428,24 @@ private:
   // skip dead: the spec forbids two writes to one register regardless of
   // liveness (write-port/undefined), matching.
   SmallSet<Register, 8> CurrentCycleLiveDefs;
-  // ARCTAN/SIN_COS (G-PACK-LEGAL, current design): force alone in the issue
+ // ARCTAN/SIN_COS ( current design): force alone in the issue
   // bundle only. No multi-cycle slot lock / (uimm4+2) scoreboard reservation.
   bool CurrentCycleHasLockedSlotOp = false;
   const TargetRegisterInfo *TRI = nullptr;
 
-  // B2.4: product CycleState for the CURRENT cycle — placement authority
-  // via tryAddProduct (AIEHazardRecognizer.cpp:174-214 alt try +
-  // AIEBundle.h canAdd/add occupancy). Replaces the former getLegalSlots +
-  // S0-first CurrentCycleSlots hand auction. Cleared on Advance/Recede/Reset.
-  // OccupiedSlots bitset is CurrentCycleState.OccupiedSlots (SLOT* bits).
-  haydn::bundle::CycleState CurrentCycleState =
-      haydn::bundle::makeProductCycleState();
+ // : product CycleCandidateSet for the CURRENT cycle — placement
+  // authority via exactTryAddProduct (AIEHazardRecognizer.cpp:174-214 alt try
+  // + AIEBundle.h canAdd/add occupancy, strengthened with nondominated
+  // rematching). Replaces first-fit freeze of a single CycleState. Cleared on
+  // Advance/Recede/Reset. Preferred OccupiedSlots is
+  // selectPreferredCandidate(CurrentCycleCandidates).OccupiedSlots.
+  haydn::bundle::CycleCandidateSet CurrentCycleCandidates =
+      haydn::bundle::makeProductCandidateSet();
+  /// MIs issued this cycle (alts-bearing), parallel to preferred Members for
+  /// AltDesc re-stamp after each exact expand (rematch earlier fields).
+  SmallVector<MachineInstr *, 3> CurrentCyclePlacedMIs;
 
-  // HaydnMCFormats for PlacementAlternative / tryAdd (B2.5 alts-only).
+ // HaydnMCFormats for PlacementAlternative / exact tryAdd ( alts-only).
   // Stateless table lookup.
   HaydnMCFormats Fmts;
 
@@ -354,9 +453,25 @@ private:
   // maximum result latency (used to size the scoreboard window).
   void computeMaxLatency();
 
-  // Build the per-cycle resource footprint of one instruction (slots from
-  // its itinerary stages, GPR ports from countGPRPorts, IssueCount=1).
+  // Build the issue-cycle resource footprint of one instruction (ports +
+  // IssueCount=1 + stage-0 FU bits from selected/logical schedclass or
+  // PlacementAlternative FieldSlots). Multi-cycle stages are NOT folded in
+  // here — use checkConflict/enterResources for stage-relative booking.
   HaydnFuncUnitWrapper buildCandidate(const MachineInstr &MI) const;
+
+  // SchedClass for scoreboard stages: selected AltDesc member after rematch,
+  // else the logical opcode. No setDesc — descriptor side-map only.
+  unsigned resolveSchedClass(const MachineInstr &MI) const;
+
+  // Opcode whose itinerary/FieldSlots drive FU booking (selected member or
+  // logical).
+  unsigned resolveBookingOpcode(const MachineInstr &MI) const;
+
+  // Capture Scoreboard → ScoreboardAtCycleStart (Reset/Advance/Recede).
+  void captureCycleStartScoreboard();
+  // Restore Scoreboard from ScoreboardAtCycleStart and re-enter every MI
+  // issued this cycle with post-rematch selected member schedclasses.
+  void reenterCurrentCycleScoreboard();
 
   // Lazily cache the TargetRegisterInfo (the recognizer has no MachineFunction
   // at construction time; it is fetched from the first MI seen).
@@ -386,13 +501,19 @@ private:
   // the minimal single-instruction-bundle guard.
   bool isLockedSlotDspOp(const MachineInstr &MI) const;
 
-  // B2.4–B3.exit.3: commit MI's field into CurrentCycleState via tryAddProduct
-  // (alts-only). Stamps setAlternateDescriptor(MemberOpcode) for leaveRegion
-  // setDesc materialize (AIEHazardRecognizer.cpp:389;
-  // AIEAlternateDescriptors.h:39-44). Placement after materialize is
-  // getSlotKind. No setDesc here — that is materializeMultiOpcodeInstrs.
+ // –B3.exit.3 / : exact-expand CurrentCycleCandidates via
+  // exactTryAddProduct (alts-only). Post-RA re-stamps setAlternateDescriptor
+  // for every MI issued this cycle from the preferred surviving matching
+  // (rematch-safe) for leaveRegion setDesc materialize. Pre-RA tracks tryAdd
+ // occupancy only — no AltDesc/member stamp ( phase identity).
+  // No setDesc here — that is materializeMultiOpcodeInstrs.
   // No new MCFlags writers.
   void commitPlacementForEmit(MachineInstr *MI);
+
+  /// Preferred CycleState view of CurrentCycleCandidates (debug / tests).
+  const haydn::bundle::CycleState &currentCyclePreferred() const {
+    return haydn::bundle::selectPreferredCandidate(CurrentCycleCandidates);
+  }
 };
 
 } // end namespace llvm

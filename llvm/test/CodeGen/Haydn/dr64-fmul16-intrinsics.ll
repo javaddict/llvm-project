@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Comprehensive FMUL16 HS/LS lane variant intrinsics test for Haydn backend.
+
 ; Comprehensive FMUL16 HS/LS lane variant intrinsics test for Haydn backend.
 ; Tests all fractional 16-bit multiply, MAC, and MSU intrinsics with lane selection.
 ; These are critical for LC3/BASOP audio codec kernels.

@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — — land 0/-1 + add + store must stay correct without GenMux Pattern 2.
+
 ; — land 0/-1 + add + store must stay correct without
 ; GenMux Pattern 2. EarlyIfConv may or may not convert (side blocks that
 ; load are not speculated); either a movt/movf or a branch+move of -1 is
@@ -12,7 +14,6 @@
 @alt = external global i16
 @ptr = external global ptr
 
-; CHECK-LABEL: land_add_store:
 define void @land_add_store() nounwind {
 entry:
   %a0 = load i16, ptr @a

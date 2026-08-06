@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — Branch relaxation for out-of-range conditional branches.
+
 ; REGRESSION TEST: Branch relaxation for out-of-range conditional branches.
 ;
 ; Haydn conditional branches (BEQ, BNE, BGE, etc.) use a 16-bit signed offset

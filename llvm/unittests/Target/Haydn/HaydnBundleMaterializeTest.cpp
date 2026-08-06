@@ -1,4 +1,4 @@
-//===- HaydnBundleMaterializeTest.cpp - cycle split tests -*- C++ -*-===//
+//===- HaydnBundleMaterializeTest.cpp - exact commit + diagnostic split -*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,13 +6,22 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Extensive unit tests for haydn::bundle::greedySplitLegalOpcodeCycles —
-// encode-oracle half of post-RA explicit cycle split (pack-legality encode
-// authority).
+// Unit tests for haydn::bundle materialize surface:
 //
-// Invariants locked on every case:
+//   * exactSolveProductOpcodes / exactPackOneOpcodeCycle — production exact
+//     no-split one-cycle solve (never splits).
+//   * opcodesFormOneLegalCycle — sole one-cycle legality authority (PostRA
+//     instrsFormOneLegalCycle is the MI-list view; no strategy dual).
+//   * auctionReadySubsetCycle / auctionFocusFillScore — bounded ready-subset
+//     cycle auction (post-RA list ranking; max issued under exact product).
+//   * greedySplitLegalOpcodeCycles — DIAGNOSTIC only (ResMII / partition
+//     tests). Production post-RA must not use this to repair schedules.
+//   * BundlePlan.Bytes always from planFromPacketFormats (generated Full);
+//     the tests-only full-width plan is never a production fallback.
+//
+// Invariants locked on greedy diagnostic cases:
 //   1. Partition: flatten(cycles) == input opcodes (order + coverage).
-//   2. Product plan: every sub-cycle is FormatID Bundle128Full, 16 B, 1 cycle.
+//   2. Product plan: every sub-cycle is ProductFormatID, productParcelBytes, 1 cycle.
 //   3. Capacity: each sub-cycle has 1..3 members.
 //   4. Sub-cycle legal: re-pack via Haydn::Bundle succeeds without split.
 //   5. opcodesFormOneLegalCycle ⇔ greedy returns exactly one cycle.
@@ -23,6 +32,7 @@
 #include "HaydnBundleMaterialize.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
+#include "llvm/ADT/STLExtras.h"
 #include "gtest/gtest.h"
 
 #define GET_INSTRINFO_ENUM
@@ -69,8 +79,9 @@ static void expectValidSplit(ArrayRef<unsigned> Ops, HaydnMCFormats &Fmts,
     EXPECT_FALSE(C.Opcodes.empty()) << "empty sub-cycle " << Ci;
     EXPECT_LE(C.Opcodes.size(), 3u) << "overfull sub-cycle " << Ci;
     EXPECT_TRUE(C.Plan.isProductLegal()) << "illegal plan sub-cycle " << Ci;
-    EXPECT_EQ(C.Plan.FID, FormatID::Bundle128Full);
-    EXPECT_EQ(C.Plan.Bytes.Value, 16u);
+    EXPECT_TRUE(isProductBundleRow(C.Plan.Row));
+    EXPECT_EQ(C.Plan.Bytes, productParcelBytes());
+    EXPECT_EQ(C.Plan.Bytes.Value, productParcelBytes().Value);
     EXPECT_EQ(C.Plan.Cycles.Value, 1u);
     EXPECT_EQ(C.Plan.memberCount(), C.Opcodes.size());
   }
@@ -380,6 +391,250 @@ TEST(HaydnBundleMaterializeTest, IdempotentResplitOfSubcycles) {
     ASSERT_EQ(Again.size(), 1u);
     EXPECT_EQ(Again[0].Opcodes.size(), C.Opcodes.size());
   }
+}
+
+//===----------------------------------------------------------------------===//
+// exact no-split production surface
+//===----------------------------------------------------------------------===//
+
+TEST(HaydnBundleMaterializeTest, ExactSolveThreeAluOneCycle) {
+  HaydnMCFormats Fmts;
+  unsigned Ops[] = {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32};
+  auto Exact = exactSolveProductOpcodes(Ops, Fmts);
+  ASSERT_TRUE(Exact.has_value());
+  EXPECT_EQ(Exact->LogicalOpcodes.size(), 3u);
+  EXPECT_EQ(Exact->MemberOpcodes.size(), 3u);
+  EXPECT_TRUE(Exact->Plan.isProductLegal());
+  EXPECT_TRUE(isProductBundleRow(Exact->Plan.Row));
+  EXPECT_EQ(Exact->Plan.Bytes, productParcelBytes());
+  EXPECT_EQ(Exact->Plan.Bytes.Value, productParcelBytes().Value);
+  // Preferred members are distinct fields (S2/S1/S0).
+  EXPECT_EQ(Exact->State.Members.size(), 3u);
+  EXPECT_TRUE(opcodesFormOneLegalCycle(Ops, Fmts));
+}
+
+TEST(HaydnBundleMaterializeTest, ExactSolveDualLoadOneCycle) {
+  HaydnMCFormats Fmts;
+  unsigned Ops[] = {Haydn::LD32, Haydn::LD32};
+  auto Exact = exactSolveProductOpcodes(Ops, Fmts);
+  ASSERT_TRUE(Exact.has_value());
+  EXPECT_EQ(Exact->MemberOpcodes.size(), 2u);
+  EXPECT_EQ(Exact->State.OccupiedSlots,
+            SlotBits(Haydn::SLOT0 | Haydn::SLOT1));
+}
+
+TEST(HaydnBundleMaterializeTest, ExactSolveDualStoreFailsClosed) {
+  // Two S0-only stores cannot share one parcel — exact solve nullopt
+  // (no production split repair).
+  HaydnMCFormats Fmts;
+  unsigned Ops[] = {Haydn::ST32, Haydn::ST32};
+  EXPECT_FALSE(exactSolveProductOpcodes(Ops, Fmts).has_value());
+  EXPECT_FALSE(exactPackOneOpcodeCycle(Ops, Fmts).has_value());
+  EXPECT_FALSE(opcodesFormOneLegalCycle(Ops, Fmts));
+  // Diagnostic greedy still partitions for ResMII / unit analysis.
+  auto Split = greedySplitLegalOpcodeCycles(Ops, Fmts);
+  EXPECT_EQ(Split.size(), 2u);
+}
+
+TEST(HaydnBundleMaterializeTest, ExactSolveOverwidthFailsClosed) {
+  HaydnMCFormats Fmts;
+  unsigned Ops[] = {Haydn::ADD32, Haydn::ADD32, Haydn::ADD32, Haydn::ADD32};
+  EXPECT_FALSE(exactSolveProductOpcodes(Ops, Fmts).has_value());
+  EXPECT_FALSE(exactPackOneOpcodeCycle(Ops, Fmts).has_value());
+  EXPECT_FALSE(opcodesFormOneLegalCycle(Ops, Fmts));
+}
+
+TEST(HaydnBundleMaterializeTest, ExactPackOneMatchesGreedySingletonCycles) {
+  // Every greedy sub-cycle must exact-pack as one cycle (fixed point).
+  HaydnMCFormats Fmts;
+  unsigned Ops[] = {Haydn::ST32, Haydn::ADD32, Haydn::ST32, Haydn::XOR32};
+  auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
+  for (const OpcodeCycle &C : Cycles) {
+    auto Packed = exactPackOneOpcodeCycle(C.Opcodes, Fmts);
+    ASSERT_TRUE(Packed.has_value());
+    EXPECT_EQ(Packed->Opcodes.size(), C.Opcodes.size());
+    EXPECT_TRUE(Packed->Plan.isProductLegal());
+  }
+}
+
+TEST(HaydnBundleMaterializeTest, ExactSolveEmptyIsNullopt) {
+  HaydnMCFormats Fmts;
+  EXPECT_FALSE(exactSolveProductOpcodes({}, Fmts).has_value());
+  EXPECT_FALSE(exactPackOneOpcodeCycle({}, Fmts).has_value());
+  EXPECT_FALSE(opcodesFormOneLegalCycle({}, Fmts));
+  // MI-list view: empty / over-width reject (no fake MIs required).
+  EXPECT_FALSE(instrsFormOneLegalCycle({}, Fmts));
+  EXPECT_FALSE(instrsFormOneLegalCycle(ArrayRef<MachineInstr *>(), Fmts));
+}
+
+// Materialize BundlePlan.Bytes come from generated VLIWFormat::Size
+// (planFromPacketFormats), not a hard-coded test plan.
+TEST(HaydnBundleMaterializeTest, PlanBytesFromGeneratedFullSize) {
+  HaydnMCFormats Fmts;
+  const PacketFormats &Packets = Fmts.getPacketFormats();
+  const VLIWFormat *Full = productVLIWFormat(Packets);
+  ASSERT_NE(Full, nullptr);
+  EncodedBytes Size = vliwFormatSizeAsBytes(Full->getSize());
+  EXPECT_EQ(Size.Value, productParcelBytes().Value);
+
+  unsigned Ops[] = {Haydn::ADD32, Haydn::LD32};
+  auto Exact = exactSolveProductOpcodes(Ops, Fmts);
+  ASSERT_TRUE(Exact.has_value());
+  EXPECT_EQ(Exact->Plan.Bytes, Size);
+  EXPECT_TRUE(Exact->Plan.isProductLegal());
+
+  auto Packed = exactPackOneOpcodeCycle(Ops, Fmts);
+  ASSERT_TRUE(Packed.has_value());
+  EXPECT_EQ(Packed->Plan.Bytes, Size);
+
+  auto Late = commitLateProductCycle(Haydn::ADD32, Fmts);
+  ASSERT_TRUE(Late.has_value());
+  EXPECT_EQ(Late->Plan.Bytes, Size);
+}
+
+// Fail-closed production plan authority: every materialize surface that
+// yields a BundlePlan derives EncodedBytes from the same generated Full
+// row as planFromPacketFormats. No hard test-plan rebuild.
+TEST(HaydnBundleMaterializeTest, FailClosedPlanAuthorityFromGeneratedFull) {
+  HaydnMCFormats Fmts;
+  const PacketFormats &Packets = Fmts.getPacketFormats();
+  const VLIWFormat *Full = productVLIWFormat(Packets);
+  ASSERT_NE(Full, nullptr);
+  EXPECT_TRUE(StringRef(Full->Name).starts_with("BUNDLE_E96_"));
+  EncodedBytes Size = vliwFormatSizeAsBytes(Full->getSize());
+
+  unsigned Multi[] = {Haydn::ADD32, Haydn::LD32};
+  auto Exact = exactSolveProductOpcodes(Multi, Fmts);
+  ASSERT_TRUE(Exact.has_value());
+  auto FromTable = planFromPacketFormats(Packets, Exact->Plan.OccupiedSlots,
+                                         Exact->Plan.MemberOpcodes);
+  ASSERT_TRUE(FromTable.has_value());
+  EXPECT_EQ(Exact->Plan.Bytes, FromTable->Bytes);
+  EXPECT_EQ(Exact->Plan.Bytes, Size);
+  EXPECT_TRUE(isProductBundleRow(Exact->Plan.Row));
+  EXPECT_EQ(Exact->Plan.Bytes, productParcelBytes());
+
+  auto Packed = exactPackOneOpcodeCycle(Multi, Fmts);
+  ASSERT_TRUE(Packed.has_value());
+  EXPECT_EQ(Packed->Plan.Bytes, Size);
+  EXPECT_TRUE(isProductBundleRow(Packed->Plan.Row));
+  EXPECT_EQ(Packed->Plan.Bytes, productParcelBytes());
+
+  // Diagnostic greedy still pins Full Size (no hard rebuild).
+  unsigned SplitOps[] = {Haydn::ST32, Haydn::ADD32, Haydn::ST32, Haydn::XOR32};
+  auto Cycles = greedySplitLegalOpcodeCycles(SplitOps, Fmts);
+  ASSERT_FALSE(Cycles.empty());
+  for (const OpcodeCycle &C : Cycles) {
+    auto P = planFromPacketFormats(Packets, C.Plan.OccupiedSlots, C.Opcodes);
+    ASSERT_TRUE(P.has_value());
+    EXPECT_EQ(C.Plan.Bytes, P->Bytes);
+    EXPECT_TRUE(isProductBundleRow(C.Plan.Row));
+    EXPECT_EQ(C.Plan.Bytes, productParcelBytes());
+    EXPECT_TRUE(C.Plan.isProductLegal());
+  }
+
+  // Late bare MI: product singleton from generated Full only.
+  for (unsigned Opc : {Haydn::ADD32, Haydn::NOP, Haydn::BNEZ_W}) {
+    auto Late = commitLateProductCycle(Opc, Fmts);
+    ASSERT_TRUE(Late.has_value()) << "opc=" << Opc;
+    EXPECT_EQ(Late->Plan.Bytes, Size) << "opc=" << Opc;
+    EXPECT_TRUE(isProductBundleRow(Late->Plan.Row));
+    EXPECT_EQ(Late->Plan.Bytes, productParcelBytes());
+    EXPECT_TRUE(Late->Plan.isProductLegal());
+  }
+
+  // Tests-only convenience agrees under product row freeze but is not authority.
+  BundlePlan Hand = makeProductPlan(Haydn::SLOT0, {Haydn::ADD32});
+  EXPECT_EQ(Hand.Bytes, Size);
+}
+
+//===----------------------------------------------------------------------===//
+// bounded ready-subset cycle auction
+//===----------------------------------------------------------------------===//
+
+TEST(HaydnBundleMaterializeTest, AuctionEmptyIsNullopt) {
+  HaydnMCFormats Fmts;
+  EXPECT_FALSE(auctionReadySubsetCycle({}, {}, Fmts).has_value());
+}
+
+TEST(HaydnBundleMaterializeTest, AuctionThreeAluFillsOneCycle) {
+  HaydnMCFormats Fmts;
+  unsigned Ready[] = {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32};
+  auto A = auctionReadySubsetCycle({}, Ready, Fmts);
+  ASSERT_TRUE(A.has_value());
+  EXPECT_EQ(A->IssuedCount, 3u);
+  EXPECT_EQ(A->ReadyIndices.size(), 3u);
+  EXPECT_EQ(A->CycleOpcodes.size(), 3u);
+  EXPECT_TRUE(opcodesFormOneLegalCycle(A->CycleOpcodes, Fmts));
+  EXPECT_TRUE(A->Exact.has_value());
+}
+
+TEST(HaydnBundleMaterializeTest, AuctionDualStorePicksSingleton) {
+  // Two S0-only stores cannot co-issue — densest legal fill is size 1.
+  HaydnMCFormats Fmts;
+  unsigned Ready[] = {Haydn::ST32, Haydn::ST32};
+  auto A = auctionReadySubsetCycle({}, Ready, Fmts);
+  ASSERT_TRUE(A.has_value());
+  EXPECT_EQ(A->IssuedCount, 1u);
+  EXPECT_EQ(A->ReadyIndices.size(), 1u);
+  // MustInclude index 0: focus first store alone (cannot take both).
+  auto Focus = auctionReadySubsetCycle({}, Ready, Fmts, /*MustInclude=*/0u);
+  ASSERT_TRUE(Focus.has_value());
+  EXPECT_EQ(Focus->IssuedCount, 1u);
+  EXPECT_TRUE(llvm::is_contained(Focus->ReadyIndices, 0u));
+}
+
+TEST(HaydnBundleMaterializeTest, AuctionBasePlusReadyCompletesCycle) {
+  // Base already holds one store; ready has ALU + second store — pick ALU.
+  HaydnMCFormats Fmts;
+  unsigned Base[] = {Haydn::ST32};
+  unsigned Ready[] = {Haydn::ST32, Haydn::ADD32};
+  auto A = auctionReadySubsetCycle(Base, Ready, Fmts);
+  ASSERT_TRUE(A.has_value());
+  EXPECT_EQ(A->IssuedCount, 2u);
+  EXPECT_EQ(A->CycleOpcodes[0], Haydn::ST32);
+  EXPECT_TRUE(llvm::is_contained(A->CycleOpcodes, Haydn::ADD32));
+  EXPECT_FALSE(llvm::count(A->CycleOpcodes, Haydn::ST32) > 1)
+      << "must not co-issue dual store with base ST32";
+}
+
+TEST(HaydnBundleMaterializeTest, AuctionThreeReadyRematchAdd32_2xAdd64) {
+  // Preferred first-fit can starve the triple; exact rematch packs all three.
+  // Selected MemberOpcodes match exactSolveProductOpcodes (setDesc targets).
+  HaydnMCFormats Fmts;
+  unsigned Ready[] = {Haydn::ADD32, Haydn::ADD64, Haydn::ADD64};
+  auto A = auctionReadySubsetCycle({}, Ready, Fmts);
+  ASSERT_TRUE(A.has_value());
+  EXPECT_EQ(A->IssuedCount, 3u) << "exact rematch must fill one cycle";
+  EXPECT_TRUE(opcodesFormOneLegalCycle(A->CycleOpcodes, Fmts));
+  EXPECT_EQ(auctionFocusFillScore({}, Ready, Fmts), 3u);
+  auto Solved = exactSolveProductOpcodes(A->CycleOpcodes, Fmts);
+  ASSERT_TRUE(Solved.has_value());
+  ASSERT_EQ(Solved->MemberOpcodes.size(), 3u);
+  // Auction may reorder ready indices; the selected member multiset is fixed.
+  SmallVector<unsigned, 3> Mem = Solved->MemberOpcodes;
+  llvm::sort(Mem);
+  EXPECT_EQ(Mem[0], Haydn::ADD32_S0);
+  EXPECT_EQ(Mem[1], Haydn::ADD64_S1);
+  EXPECT_EQ(Mem[2], Haydn::ADD64_S2);
+}
+
+TEST(HaydnBundleMaterializeTest, AuctionFocusPrefersDenserPartner) {
+  // Focus ADD32 with ready ST32 + XOR32 + NOT32: densest includes focus + 2 ALU.
+  HaydnMCFormats Fmts;
+  unsigned Ready[] = {Haydn::ADD32, Haydn::ST32, Haydn::XOR32, Haydn::NOT32};
+  EXPECT_EQ(auctionFocusFillScore({}, Ready, Fmts), 3u);
+  auto A = auctionReadySubsetCycle({}, Ready, Fmts, /*MustInclude=*/0u);
+  ASSERT_TRUE(A.has_value());
+  EXPECT_EQ(A->IssuedCount, 3u);
+  EXPECT_TRUE(llvm::is_contained(A->ReadyIndices, 0u));
+}
+
+TEST(HaydnBundleMaterializeTest, AuctionOverwidthBaseNullopt) {
+  HaydnMCFormats Fmts;
+  unsigned Base[] = {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32, Haydn::SUB32};
+  unsigned Ready[] = {Haydn::ADD32};
+  EXPECT_FALSE(auctionReadySubsetCycle(Base, Ready, Fmts).has_value());
 }
 
 } // namespace

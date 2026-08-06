@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O1 -o - %s | FileCheck %s --check-prefix=O1
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -o - %s | FileCheck %s --check-prefix=O2
-;
+
+; Role: semantic — `xor i1 %x, true` on a boolean, widened to s32, must lower to a logical NOT (XOR with 1 after masking to 0/1), NOT a bitwise NOT (XOR with.
+
 ; REGRESSION TEST: `xor i1 %x, true` on a boolean, widened to s32, must lower to
 ; a logical NOT (XOR with 1 after masking to 0/1), NOT a bitwise NOT (XOR with
 ; 1) when the result is consumed by a non-zero branch test.
@@ -20,7 +22,6 @@
 ; but harmless for already-clean booleans (icmp/zext/select).
 ;
 ; Test design: a minimal `icmp -> xor i1,true -> zext` forces the combine. The
-; CHECKs pin the masked logical-NOT shape: an `and32` (the mask) feeding an
 ; `xor32` whose constant operand is `1`, not `-1`. If the combine regresses
 ; the `and32` mask disappears and the `xor32` is fed by `addi32.., -1`.
 

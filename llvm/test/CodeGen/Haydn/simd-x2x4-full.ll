@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — Comprehensive X2/X4 SIMD intrinsic coverage test.
+
 ; Comprehensive X2/X4 SIMD intrinsic coverage test.
 ; Covers all 56 previously-missing SIMD operations from the ISA spec.
 ;

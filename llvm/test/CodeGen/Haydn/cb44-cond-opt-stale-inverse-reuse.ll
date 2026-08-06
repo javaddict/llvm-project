@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
-;
+
+; Role: semantic — — HaydnConditionOptimizer::reuseInverseComparisons must NOT reuse an inverse SLT32 when one of its source operands has been.
+
 ; REGRESSION TEST: — HaydnConditionOptimizer::reuseInverseComparisons
 ; must NOT reuse an inverse SLT32 when one of its source operands has been
 ; redefined between the previous and current comparison.

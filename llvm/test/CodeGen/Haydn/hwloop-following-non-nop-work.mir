@@ -1,0 +1,117 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+
+# Role: MIR — setup-floor proof seal: Following (countFollowingBundles) counts
+# size-bearing parcels after SET, including real non-NOP work — not only
+# Fixup-inserted NOP pads.
+#
+# Cases (InterveningCycles=2, SetupIssueDistance=3):
+#   1. two ADD32 after SET  → Following already = InterveningCycles;
+#      Fixup must NOT insert deficit NOP pads; work stays.
+#   2. one ADD32 after SET  → Following = 1; Fixup inserts 1 NOP pad
+#      (deficit-only) while keeping the real ADD as counted work.
+#
+# Body has >= MinBodyBundles (3) size-bearing cycles so strict END>BEGIN holds.
+
+--- |
+  define dso_local void @two_work_following() {
+  entry:
+    ret void
+  }
+  define dso_local void @one_work_following() {
+  entry:
+    ret void
+  }
+
+...
+---
+name:            two_work_following
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r0, $r2, $r3, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 4, implicit-def dead $sfr
+    ; Two size-bearing non-NOP following parcels satisfy InterveningCycles.
+    $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
+    $r3 = ADD32 $r2, $r1, implicit-def dead $sfr
+
+  bb.1:
+    liveins: $r1, $r0, $r3
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.2:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+---
+name:            one_work_following
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 4, implicit-def dead $sfr
+    ; Only one following size-bearing parcel — real work still counts as 1.
+    $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
+
+  bb.1:
+    liveins: $r1, $r0, $r2
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.2:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+
+# ---------------------------------------------------------------------------
+# Case 1: two non-NOP following parcels — no deficit NOP pads.
+# ---------------------------------------------------------------------------
+# CHECK-LABEL: name: two_work_following
+# CHECK: SET_HWLOOP_W
+# CHECK-NEXT: $r2 = ADD32
+# CHECK-NEXT: $r3 = ADD32
+# No Fixup NOP between SET and body — Following already met by work.
+# CHECK-NOT: NOP
+# CHECK: bb.1:
+
+# ---------------------------------------------------------------------------
+# Case 2: one non-NOP following parcel — deficit pad + keep the ADD.
+# Following ends at 2 (InterveningCycles); real ADD is part of that count.
+# ---------------------------------------------------------------------------
+# CHECK-LABEL: name: one_work_following
+# CHECK: SET_HWLOOP_W
+# Deficit pads are exact-committed ProductFormatID singleton BUNDLEs
+# (member NOP_S0), not bare NOPs.
+# CHECK: BUNDLE 0
+# CHECK: NOP
+# CHECK: $r2 = ADD32
+# CHECK: bb.1:

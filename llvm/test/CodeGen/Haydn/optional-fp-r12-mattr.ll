@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s --check-prefix=DEFAULT
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -mattr=+frame-pointer < %s | FileCheck %s --check-prefix=FORCEFP
-;
+
+; Role: semantic — Optional register-policy features (ABI-like target options): mattr=+frame-pointer force dedicated FP (R14).
+
 ; Optional register-policy features (ABI-like target options):
 ; mattr=+frame-pointer force dedicated FP (R14)
 ; Default (AIE model): omit FP when ABI allows; R12 is a normal allocatable GPR

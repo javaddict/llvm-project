@@ -1,12 +1,14 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — GenMux retired.
+
 ; GenMux retired. Branchy PHI / select-like diamonds lower via
 ; SSA EarlyIfConversion + insertSelect (or IR select → MOVT at isel).
 ; Guard: final code uses movt/movf, not a live branch-over-move for simple
 ; min/max-shaped control flow.
 
-; CHECK-LABEL: cmov_sgt_simple:
+
 define i32 @cmov_sgt_simple(i32 %a, i32 %b) nounwind {
 entry:
   %cmp = icmp sgt i32 %a, %b

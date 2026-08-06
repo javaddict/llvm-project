@@ -5,10 +5,12 @@
 # RUN:   --section-start=.text=0x10000 --section-start=.rodata=0x18000
 # RUN: llvm-objdump -d --triple=haydn-unknown-elf %t | FileCheck --check-prefix=ELF %s
 # RUN: llvm-readobj -r %t.o | FileCheck --check-prefix=RELOCS %s
+
+# Role: object — (F07 Format E): HI12/LO20 MIPS-style paired materialization.
+
+# REGRESSION TEST (F07 Format E): HI12/LO20 MIPS-style paired materialization.
 #
-# REGRESSION TEST (F07 Bundle128): HI12/LO20 MIPS-style paired materialization.
-#
-# Bundle128 LUI is HI12 and ADDI32 RI20 is LO20 (not retired parcel HI20/LO16).
+# Format E LUI is HI12 and ADDI32 RI20 is LO20 (not retired parcel HI20/LO16).
 # Bare symbol operands on lui/addi32 emit FIXUP_HAYDN_HI12 / FIXUP_HAYDN_LO20
 # (asm %hi/%lo modifiers remain a deferred AsmParser nicety — same semantics).
 #

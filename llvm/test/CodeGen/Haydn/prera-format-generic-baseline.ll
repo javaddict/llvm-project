@@ -1,0 +1,245 @@
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
+; RUN:   -stop-before=greedy -verify-machineinstrs < %s -o - \
+; RUN:   | FileCheck %s --check-prefix=PREGREEDY
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
+; RUN:   -haydn-premisched-matching-frontier=false \
+; RUN:   -stop-before=greedy -verify-machineinstrs < %s -o - \
+; RUN:   | FileCheck %s --check-prefix=PREGREEDY
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
+; RUN:   -stop-before=postmisched -verify-machineinstrs < %s -o - \
+; RUN:   | FileCheck %s --check-prefix=PREPOST
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
+; RUN:   -haydn-premisched-matching-frontier=false \
+; RUN:   -stop-before=postmisched -verify-machineinstrs < %s -o - \
+; RUN:   | FileCheck %s --check-prefix=PREPOST
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
+; RUN:   -stop-after=postmisched -verify-machineinstrs < %s -o - \
+; RUN:   | FileCheck %s --check-prefix=POST
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
+; RUN:   -haydn-premisched-matching-frontier=false \
+; RUN:   -stop-after=postmisched -verify-machineinstrs < %s -o - \
+; RUN:   | FileCheck %s --check-prefix=POST
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
+; RUN:   -stats -o /dev/null < %s 2>&1 \
+; RUN:   | FileCheck %s --check-prefix=STATS-PROD
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
+; RUN:   -haydn-premisched-matching-frontier=false \
+; RUN:   -stats -o /dev/null < %s 2>&1 \
+; RUN:   | FileCheck %s --check-prefix=STATS-BASE
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
+; RUN:   -haydn-premisched-finer-rp-tracking=false \
+; RUN:   -stats -o /dev/null < %s 2>&1 \
+; RUN:   | FileCheck %s --check-prefix=STATS-FINER-OFF
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
+; RUN:   -haydn-premisched-finer-rp-tracking=false \
+; RUN:   -stop-before=greedy -verify-machineinstrs < %s -o - \
+; RUN:   | FileCheck %s --check-prefix=PREGREEDY
+; REQUIRES: asserts
+
+; Role: semantic — Full-only pre-RA generic-pass cycle/pressure dual-run
+; baseline (VF3-G2). Product ranking vs matching-frontier residual.
+
+; VF3-G2 GENERIC-BASELINE (pre-RA slice). Freezes plan §8.3 exit and §8.4 #11:
+; Full-only product list-sched ranking must match a frozen generic-pass
+; cycle/pressure baseline dual-run. Soft-exit peer prera-format-qor-exit.ll
+; pins product defaults only; this file owns the dual-run KPI freeze.
+;
+; Arms (existing product flags only — no new pass / side-map / HANDOFF flip):
+;   * PROD  — product defaults (matching-frontier ON, finer RP ON)
+;   * BASE  — -haydn-premisched-matching-frontier=false
+;             (pressure/critical still primary under finer RP; stock NodeOrder
+;              after pressure; target HR always installed)
+;   * FINER — optional residual -haydn-premisched-finer-rp-tracking=false
+;             (pure GenericScheduler tryCandidate pressure policy)
+; isavail-delay stays product OFF (seed1 residual); SMS-HANDOFF metrics-only
+; OFF. CreateTargetMIHazardRecognizer(IsPreRA) never stamps AltDesc/setDesc.
+;
+; KPI surface (mirror regalloc-compact-hints.ll dual-run pattern):
+;   * InlineSpiller spills/reloads silent both sides (zero counters omit)
+;   * haydn-post-ra-sched multi-MI exact finalize present both sides (≥1)
+;   * NumScheduledCyclesSplit / unstamped hard-root counters silent
+;   * product arm fires ResourceDemand (matching-frontier) pre-RA heuristic
+;   * BASE residual has no ResourceDemand ranking (NodeOrder after pressure)
+;   * -stop-before=greedy / postmisched: no BUNDLE, no _S* member setDesc
+;   * -stop-after=postmisched: multi-MI BUNDLE 0 legal both ranking modes
+;
+; Companion unit: HaydnPortModelTest.PreRAGenericPassDualRunBaseline
+; Soft-exit QoR peer: prera-format-qor-exit.ll
+; ILP/critical dual-run residual attribution peers:
+;   scheduler-ilp.ll / scheduler-critical-path.ll
+;   unit HaydnPortModelTest.PreRAIlpCriticalDualRunResidualAttribution
+; Sibling SMS track: sms-format-qor-exit / ResourceCycle / MachinePipeliner
+
+target datalayout = "e-m:e-p:32:32-i64:32-f64:32-v64:32-v128:64-a:0:32-n32-S64"
+target triple = "haydn-unknown-elf"
+
+; --- dual-run -stats (product vs matching-frontier residual vs finer-RP off) ---
+; FileCheck order follows -stats emission. Post-RA multi-MI exact finalize
+; present on every arm; the 'failed exact no-split' counter may be zero when SMS multi-stage is contained; when dense packs form it is still expected to
+; be non-zero on every arm: the post-RA field-order-RAW fix (companion
+; regression postra-field-order-raw-narrow-store.mir) correctly fails commit
+; for any multi-MI cycle whose field-order permutation would reverse a legal
+; same-cycle WAR into a no-forwarding RAW hazard (which previously corrupted
+; adjacent narrow stores). Such cycles correctly fall back to sequential
+; parcels; a non-zero count is correct product behavior, not a regression.
+; Split/hard-root/spill/reload stay silent; product alone records
+; ResourceDemand pre-RA picks (matching-frontier).
+; STATS-PROD: haydn-post-ra-sched{{.*}}multi-MI cycles finalized as BUNDLE
+; STATS-PROD: machine-scheduler{{.*}}ResourceDemand heuristic pre-RA
+; STATS-PROD-NOT: unstamped multi-member hard BUNDLE roots at post-RA
+; STATS-PROD-NOT: {{[1-9][0-9]*}}{{ +}}regalloc{{.*}}Number of spills inserted
+; STATS-PROD-NOT: {{[1-9][0-9]*}}{{ +}}regalloc{{.*}}Number of reloads inserted
+;
+; STATS-BASE: haydn-post-ra-sched{{.*}}multi-MI cycles finalized as BUNDLE
+; STATS-BASE-NOT: machine-scheduler{{.*}}ResourceDemand heuristic pre-RA
+; STATS-BASE-NOT: unstamped multi-member hard BUNDLE roots at post-RA
+; STATS-BASE-NOT: {{[1-9][0-9]*}}{{ +}}regalloc{{.*}}Number of spills inserted
+; STATS-BASE-NOT: {{[1-9][0-9]*}}{{ +}}regalloc{{.*}}Number of reloads inserted
+;
+; STATS-FINER-OFF: haydn-post-ra-sched{{.*}}multi-MI cycles finalized as BUNDLE
+; STATS-FINER-OFF-NOT: machine-scheduler{{.*}}ResourceDemand heuristic pre-RA
+; STATS-FINER-OFF-NOT: unstamped multi-member hard BUNDLE roots at post-RA
+; STATS-FINER-OFF-NOT: {{[1-9][0-9]*}}{{ +}}regalloc{{.*}}Number of spills inserted
+; STATS-FINER-OFF-NOT: {{[1-9][0-9]*}}{{ +}}regalloc{{.*}}Number of reloads inserted
+
+; Independent ALU triple — packable under Full; ranking residual must not
+; invent pre-handoff BUNDLE or member setDesc on either dual-run arm.
+define i32 @base_pack_three_alu(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f) {
+; PREGREEDY-LABEL: name: base_pack_three_alu
+; PREGREEDY-NOT: BUNDLE
+; PREGREEDY-DAG: ADD32
+; PREGREEDY-DAG: XOR32
+; PREGREEDY-DAG: OR32
+; PREGREEDY-NOT: ADD32_S
+; PREGREEDY-NOT: XOR32_S
+; PREGREEDY-NOT: OR32_S
+;
+; PREPOST-LABEL: name: base_pack_three_alu
+; PREPOST-NOT: BUNDLE
+; PREPOST-DAG: ADD32
+; PREPOST-DAG: XOR32
+; PREPOST-DAG: OR32
+; PREPOST-NOT: ADD32_S
+;
+; POST-LABEL: name: base_pack_three_alu
+; POST: BUNDLE 0
+; POST-DAG: ADD32
+; POST-DAG: XOR32
+entry:
+  %x = add i32 %a, %b
+  %y = xor i32 %c, %d
+  %z = or i32 %e, %f
+  %t0 = add i32 %x, %y
+  %t1 = add i32 %t0, %z
+  ret i32 %t1
+}
+
+; Port-binds-II body (3×1W via independent loads). Target HR books multi-cycle
+; under 2W regardless of matching-frontier ranking arm.
+define i32 @base_three_write_port_floor(ptr nocapture readonly %p,
+                                        ptr nocapture readonly %q,
+                                        ptr nocapture readonly %r) {
+; PREGREEDY-LABEL: name: base_three_write_port_floor
+; PREGREEDY-NOT: BUNDLE
+; PREGREEDY-DAG: LD32
+; PREGREEDY-DAG: ADD32
+; PREGREEDY-NOT: LD32_S
+; PREGREEDY-NOT: ADD32_S
+;
+; PREPOST-LABEL: name: base_three_write_port_floor
+; PREPOST-NOT: BUNDLE
+; PREPOST-NOT: LD32_S
+; PREPOST-NOT: ADD32_S
+;
+; POST-LABEL: name: base_three_write_port_floor
+; POST: BUNDLE 0
+entry:
+  %x = load i32, ptr %p, align 4
+  %y = load i32, ptr %q, align 4
+  %z = load i32, ptr %r, align 4
+  %t0 = add i32 %x, %y
+  %t1 = add i32 %t0, %z
+  ret i32 %t1
+}
+
+; Critical path + independent side work — pressure/critical stay primary under
+; both product matching-frontier and generic residual ranking.
+define i32 @base_critical_and_side(i32 %a, i32 %b, i32 %c) {
+; PREGREEDY-LABEL: name: base_critical_and_side
+; PREGREEDY-NOT: BUNDLE
+; PREGREEDY-DAG: ADD32
+; PREGREEDY-NOT: ADD32_S
+;
+; PREPOST-LABEL: name: base_critical_and_side
+; PREPOST-NOT: BUNDLE
+;
+; POST-LABEL: name: base_critical_and_side
+; POST: BUNDLE 0
+entry:
+  %a1 = add i32 %a, 1
+  %a2 = add i32 %a1, 2
+  %a3 = add i32 %a2, 3
+  %s = xor i32 %b, %c
+  %t = or i32 %b, %c
+  %u = add i32 %s, %t
+  %r = add i32 %a3, %u
+  ret i32 %r
+}
+
+; Streaming dual-load MAC-shaped loop — pre-RA through RA stays logical on
+; both dual-run arms (no HANDOFF invent from ranking residual).
+define i32 @base_dual_load_mac_stream(ptr nocapture readonly %x,
+                                      ptr nocapture readonly %h, i32 %n) {
+; PREGREEDY-LABEL: name: base_dual_load_mac_stream
+; PREGREEDY-NOT: BUNDLE
+; PREGREEDY-NOT: {{LD32|MUL|ADD32}}_S
+;
+; PREPOST-LABEL: name: base_dual_load_mac_stream
+; PREPOST-NOT: BUNDLE
+;
+; POST-LABEL: name: base_dual_load_mac_stream
+; POST: BUNDLE 0
+entry:
+  %cmp = icmp sgt i32 %n, 0
+  br i1 %cmp, label %loop, label %exit
+loop:
+  %i = phi i32 [ 0, %entry ], [ %i.next, %loop ]
+  %acc = phi i32 [ 0, %entry ], [ %acc.next, %loop ]
+  %xi = getelementptr i32, ptr %x, i32 %i
+  %hi = getelementptr i32, ptr %h, i32 %i
+  %xv = load i32, ptr %xi, align 4
+  %hv = load i32, ptr %hi, align 4
+  %prod = mul i32 %xv, %hv
+  %acc.next = add i32 %acc, %prod
+  %i.next = add i32 %i, 1
+  %c = icmp slt i32 %i.next, %n
+  br i1 %c, label %loop, label %exit
+exit:
+  %r = phi i32 [ 0, %entry ], [ %acc.next, %loop ]
+  ret i32 %r
+}
+
+; Mid-pressure live-across-call: dual-run spill/reload counters must stay
+; silent (zero) on this corpus — ranking residual must not invent spills.
+define i32 @base_mid_pressure_call(i32 %a, i32 %b, i32 %c) nounwind {
+; PREGREEDY-LABEL: name: base_mid_pressure_call
+; PREGREEDY-NOT: BUNDLE
+; PREGREEDY-NOT: {{ADD32|JAL}}_S
+;
+; PREPOST-LABEL: name: base_mid_pressure_call
+; PREPOST-NOT: BUNDLE
+;
+; POST-LABEL: name: base_mid_pressure_call
+; POST-DAG: ADD32
+entry:
+  %t0 = add i32 %a, %b
+  %t1 = add i32 %t0, %c
+  %call = call i32 @get_value()
+  %t2 = add i32 %t1, %call
+  %t3 = add i32 %t2, %a
+  %t4 = add i32 %t3, %b
+  %t5 = add i32 %t4, %c
+  ret i32 %t5
+}
+
+declare i32 @get_value()

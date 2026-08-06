@@ -1,10 +1,39 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Overflow intrinsics return { result, i1 flag }.
+
 ; Overflow intrinsics return { result, i1 flag }. After RetCC multi-field
 ; fix, both fields are live: result in R1, flag in R2.
 ; B3.exit.4: Desc-only glued mnemonics (add32r1 / sltu32r2).
 
-; NOTE: G_SMULO / G_UMULO still unsupported (default legalizer needs division).
+; G_SMULO / G_UMULO: lower via MUL + SMULH/UMULH. Non-pow2 widths (i33 from
+; clang mixed-sign __builtin_mul_overflow, gcc-torture pr89434 -O0) widen to
+; next pow2 then clamp to {s32,s64} before lower.
+
+define { i32, i1 } @smul_overflow(i32 %a, i32 %b) {
+; CHECK-LABEL: smul_overflow:
+; CHECK-DAG:       mull
+; CHECK-DAG:       mulssh
+  %result = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %a, i32 %b)
+  ret { i32, i1 } %result
+}
+
+define { i32, i1 } @umul_overflow(i32 %a, i32 %b) {
+; CHECK-LABEL: umul_overflow:
+; CHECK-DAG:       mull
+; CHECK-DAG:       muluuh
+  %result = call { i32, i1 } @llvm.umul.with.overflow.i32(i32 %a, i32 %b)
+  ret { i32, i1 } %result
+}
+
+; pr89434 -O0: clang emits smul.with.overflow.i33 for unsigned store of
+; signed multiply. Must legalize (widen s33→s64) without abort.
+define { i33, i1 } @smul_overflow_i33(i33 %a, i33 %b) {
+; CHECK-LABEL: smul_overflow_i33:
+; CHECK:       mul64
+  %result = call { i33, i1 } @llvm.smul.with.overflow.i33(i33 %a, i33 %b)
+  ret { i33, i1 } %result
+}
 
 define { i32, i1 } @sadd_overflow(i32 %a, i32 %b) {
 ; CHECK-LABEL: sadd_overflow:
@@ -70,3 +99,6 @@ declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32)
 declare { i32, i1 } @llvm.uadd.with.overflow.i32(i32, i32)
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32)
 declare { i32, i1 } @llvm.usub.with.overflow.i32(i32, i32)
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32)
+declare { i32, i1 } @llvm.umul.with.overflow.i32(i32, i32)
+declare { i33, i1 } @llvm.smul.with.overflow.i33(i33, i33)

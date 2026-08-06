@@ -3049,7 +3049,7 @@ def D_SDW_BREV_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 
 // POST_IMM — DR64 data. DB: mem64[rs] = rtd; rs += imm6<<3.
-// isPseudo=0 required: inside surrounding isPseudo=1 scope (C0.2 / C0.1
+// isPseudo=0 required: inside surrounding isPseudo=1 scope (
 // WITH_* precedent) so AsmPrinter does not drop MCInst as Pseudo.
 let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def D_SDW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
@@ -3098,7 +3098,7 @@ def D_SDW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-// isPseudo=0: inside isPseudo=1 scope — C0.2 emit path for public PRE stores.
+// isPseudo=0: inside isPseudo=1 scope — emit path for public PRE stores.
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def D_SHW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
@@ -3162,13 +3162,20 @@ def MOVE64 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "move64	$rd, $rs", []>;
 
-// MOVEI_H and MOVEI_L (48-bit S-format, §4) RETIRED
-// zero live C++ consumers subsequent (the 48-bit encoder/decoder paths were
-// gutted; no Haydn::MOVEI_H/MOVEI_L enum ref survived in any.cpp/.h).
-// Removed along with the Fmt48_MOVEI class (HaydnInstrFormatsC.td). The
-// surrounding `let isPseudo = 1 in {... }` scope (opened at line 2715) is
-// unaffected. The prior `let isPseudo = 0 in {... }` escape block is also
-// removed (it existed only to host these two defs).
+// MOVEI_H / MOVEI_L — isCodeGenOnly logical bases for S0 I32 members
+// MOVEI_H_S0 / MOVEI_L_S0 (HaydnFormatsALU64.td). Operand dag must match
+// members (DR64 def + simm32_movei) so sparse alt discovery wires S0-only
+// rows and post-RA setDesc can commit the encode member without rewriting
+// the MI. Not the retired 48-bit standalone parcel; members own encoding.
+let TSFlags = 14, isCodeGenOnly = 1 in
+def MOVEI_H : HaydnInst<4, (outs DR64:$rd),
+    (ins simm32_movei:$imm32),
+    "movei_h\t$rd, $imm32", []>;
+
+let TSFlags = 14, isCodeGenOnly = 1 in
+def MOVEI_L : HaydnInst<4, (outs DR64:$rd),
+    (ins simm32_movei:$imm32),
+    "movei_l\t$rd, $imm32", []>;
 
 
 // MOVF64 / MOVT64 moved to HaydnInstrInfo.td (— real FmtALU64Unary
@@ -3622,7 +3629,7 @@ def S_SHW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 
 // DB: mem32[rs] = rt; rs += imm6<<2.
-// isPseudo=0: inside isPseudo=1 scope — C0.2 emit path (S_SB/S_SHW peers).
+// isPseudo=0: inside isPseudo=1 scope — emit path (S_SB/S_SHW peers).
 let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
 def S_SW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
@@ -3957,7 +3964,10 @@ def ZERO_DR : HaydnInst<4, (outs DR64:$rd),
 let isAsmParserOnly = 1, isPseudo = 0, mayLoad = 1 in
 def D_LDW_CB_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, i32imm:$cbr_sel, simm16:$imm),
-    "d_ldw_cb_imm\t$rtd, $cbr_sel, $rs, $imm", []> {
+    // Print order must match golden catalog / BundleSim frontend:
+    // cbr_sel (IMM), rtd (DR), rs (GPR), imm (IMM). Wrong order makes
+    // objdump emit "d_ldw_cb_immd0, 0, r1, 0" → catalog kind mismatch.
+    "d_ldw_cb_imm\t$cbr_sel, $rtd, $rs, $imm", []> {
   let Constraints = "$rs = $rs_wb";
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
@@ -3985,7 +3995,7 @@ def D_LDW_CB_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 let isAsmParserOnly = 1, isPseudo = 0, mayLoad = 1 in
 def D_LDW_CB_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs1_wb),
     (ins GPR32:$rs1, i32imm:$cbr_sel, GPR32:$rs2),
-    "d_ldw_cb_reg\t$rtd, $cbr_sel, $rs1, $rs2", []> {
+    "d_ldw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
   let Constraints = "$rs1 = $rs1_wb";
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;

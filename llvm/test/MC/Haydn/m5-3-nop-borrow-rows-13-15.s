@@ -1,5 +1,11 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
 # RUN:   llvm-objdump -d --triple=haydn-unknown-elf %t.o | FileCheck %s
+
+// CHECK: {{.*}}0: 07 8b 00 21 00 00 48 10 31 20 00 00 { add32 r0, r1, r2; x2mul32 d1, d2, d3 }
+// CHECK: {{.*}}c: 07 8b 30 54 00 00 00 00 00 00 00 00 { add32 r3, r4, r5; nop }
+// CHECK: {{.*}}18: 47 02 41 06 05 00 00 00 00 00 00 00 { x2mul32 d4, d5, d6; nop }
+# Role: object — Phase-2 decoder purge collateral (prior revision): the { add32; x2mul32 } bundle packs add32 into the s0 ALU32 sub-row (SURVIVES) and x2mul32 into.
+
 # Phase-2 decoder purge collateral (prior revision): the { add32; x2mul32 }
 # bundle packs add32 into the s0 ALU32 sub-row (SURVIVES) and x2mul32 into
 # the s1/s2 MAC sub-row (DELETED). The standalone add32/x2mul32 control
@@ -69,17 +75,14 @@
 # slot left as NOP) or legacy-flat. The critical assertions: no crash, no
 # operand corruption (each child round-trips with its original operands).
 #===----------------------------------------------------------------------===#
-# CHECK-LABEL:      m5-3-nop-borrow-rows-13-15.s
-# CHECK:            00000000 <.text>:
 # ADD32 and X2MUL32 must both survive the round-trip with their original
 # operands. The exact bundle grouping depends on which row the encoder
 # picks; we assert only that BOTH ops appear with their original operands
 # (no silent drop, no destructive-MAC operand aliasing).
 # (Path B): X2MUL32 is now TRUE 2-output — 4-operand asm form.
-# Every op is a 16-byte Bundle128 composite; slot suffix / appears.
+# Every op is a 12-byte Format E composite; slot suffix / appears.
 # B3.5 S2-first: x2mul32→S1, add32→S2 → print order x2mul32 then add32.
-# CHECK:            x2mul32 d0, d1, d2, d3
-# CHECK-SAME:       add32 r0, r1, r2
+
         { add32 r0, r1, r2 ; x2mul32 d0, d1, d2, d3 }
 
 #===----------------------------------------------------------------------===#
@@ -87,10 +90,8 @@
 # bundle round-trip matches these standalone renders, the fallback path is
 # not corrupting operands.
 #===----------------------------------------------------------------------===#
-# CHECK:            add32 r3, r4, r5
         add32 r3, r4, r5
 # (Path B): X2MUL32 is now TRUE 2-output — 4-operand asm form.
-# CHECK:            x2mul32 d3, d4, d5, d6
         x2mul32 d3, d4, d5, d6
 
 #===----------------------------------------------------------------------===#

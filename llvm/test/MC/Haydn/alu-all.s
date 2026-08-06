@@ -1,5 +1,7 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
 
+# Role: object — Comprehensive ALU instruction test covering all major ALU operations Based on slot0_alu_instruction_list.json.
+
 # Comprehensive ALU instruction test covering all major ALU operations
 # Based on slot0_alu_instruction_list.json
 # NOTE: Instructions not in HaydnInstrInfo.td (SNE32, MUL32S, MULI32,
@@ -10,6 +12,7 @@
 #===----------------------------------------------------------------------===
 
 # CHECK: add32 r0, r1, r2
+
 ADD32 R0, R1, R2
 
 # CHECK: addi32 r3, r4, 100

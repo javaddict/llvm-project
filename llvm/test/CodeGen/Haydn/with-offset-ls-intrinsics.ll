@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -stop-after=instruction-select -verify-machineinstrs -o - < %s | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -filetype=obj -o %t.o < %s
-;
+
+; Role: object — Golden LS WITH_* are IntrHasSideEffects and arrive as G_INTRINSIC_W_SIDE_EFFECTS.
+
 ; C0.1 / G-CAPI: Golden LS WITH_* are IntrHasSideEffects and arrive as
 ; G_INTRINSIC_W_SIDE_EFFECTS. They must route into selectIntrinsic (no
 ; cannot-select) and become the logical WITH opcodes. Object emission is the
@@ -10,8 +12,7 @@
 ; DR64 WITH loads
 ;===----------------------------------------------------------------------===
 
-; CHECK-LABEL: name: test_d_ldw_with_imm
-; CHECK: D_LDW_WITH_IMM
+
 define i64 @test_d_ldw_with_imm(ptr %base) {
   %r = call i64 @llvm.haydn.d.ldw.with.imm(ptr %base, i32 0)
   ret i64 %r

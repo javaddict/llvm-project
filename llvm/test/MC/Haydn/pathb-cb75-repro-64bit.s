@@ -1,6 +1,8 @@
 # RUN: llvm-mc -triple haydn-unknown-elf -filetype=obj %s -o %t.o && \
 # RUN:   llvm-objdump -d --triple=haydn-unknown-elf %t.o | FileCheck %s
 
+# Role: object — PATH B PROTOTYPE — repro MUST decode as 64-bit Mode0, NOT 32-bit.
+
 # PATH B PROTOTYPE — repro MUST decode as 64-bit Mode0, NOT 32-bit.
 #
 # (encoding_manual.md §1.1): a 32-bit instruction whose low nibble
@@ -20,7 +22,7 @@
 _start:
     .byte 0x03, 0x00, 0x20, 0x60, 0x00, 0x00, 0x00, 0x00
 
-# CHECK:      0: 03 00 20 60 00 00 00 00
+# CHECK: {{.*}}0: 03 00 20 60 00 00 00 00
 # CHECK-NOT:  0: 03 00 20 60                addi32
 # The disassembly must show 8 bytes consumed at offset 0 and the next parcel
 # (if any) at offset 8, proving Size=8 (64-bit).

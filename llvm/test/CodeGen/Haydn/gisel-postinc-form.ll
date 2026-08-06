@@ -1,15 +1,18 @@
-; GISel form is the sole product AGU form home (default ON).
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
 ; RUN:     -stop-after=instruction-select -verify-machineinstrs < %s \
 ; RUN:     | FileCheck %s --check-prefix=ISEL
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefix=ASM
-;
-; Explicit GISel form off at ISel → plain LD + ADDI.
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
 ; RUN:     -haydn-enable-gisel-update-addr=0 \
 ; RUN:     -stop-after=instruction-select -verify-machineinstrs < %s \
 ; RUN:     | FileCheck %s --check-prefix=GISEL-OFF
+
+; Role: MIR — GISel form is the sole product AGU form home (default ON).
+
+; GISel form is the sole product AGU form home (default ON).
+;
+; Explicit GISel form off at ISel → plain LD + ADDI.
 ;
 ; Product GISel form: G_LOAD/ZEXTLOAD/SEXTLOAD/STORE + G_PTR_ADD → fused AGU.
 
@@ -20,6 +23,7 @@
 ; GISEL-OFF-DAG: ADDI32
 ; ASM-LABEL: postinc_stream_i32:
 ; ASM: s_lw_post_imm
+
 define i32 @postinc_stream_i32(ptr %p, i32 %n) {
 entry:
   %cmp = icmp sgt i32 %n, 0

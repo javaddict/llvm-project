@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -O0 < %s | FileCheck %s --check-prefix=CHECK-O0
-;
+
+; Role: semantic — LOADI32 / constant rematerialisation must use ISA LUI (imm12 → bits[31:20], i.e.
+
 ; LOADI32 / constant rematerialisation must use ISA LUI (imm12 →
 ; bits[31:20], i.e. << 20) via HaydnMatInt — never the pre-ISA-43
 ; (Val>>16) + LUI + ADDI split.

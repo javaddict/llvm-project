@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — VASTART must emit the 5-field va_list initialization.
+
 ; REGRESSION TEST: VASTART must emit the 5-field va_list initialization.
 ;
 ; Bug: HaydnAsmPrinter's VASTART case guarded the va_list init with
@@ -29,11 +31,11 @@ define dso_local i32 @vone(i32 %n,...) nounwind {
 ; Va_list init: store __stack (overflow base), __gr_top, __vr_top (3 pointer
 ; fields). The bug emitted ZERO of these.
 ; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 0
-; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 4
-; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 8
+; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 1
+; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 2
 ; Va_list init: store __gr_offs and __vr_offs (negated bank sizes) at @12/@16.
-; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 12
-; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 16
+; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 3
+; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 4
 entry:
  %ap = alloca i8, align 4
  call void @llvm.va_start(ptr %ap)

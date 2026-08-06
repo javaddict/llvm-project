@@ -2,6 +2,9 @@
 ; RUN:     -verify-machineinstrs -O2 -debug-only=pipeliner < %s 2>&1 | FileCheck %s --check-prefix=SWP
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs -O2 < %s | FileCheck %s
+
+; Role: semantic — STALE-FAILMARKER-REMOVED (, post- cutover): the SMS analyzability regression has cleared — analyzeLoopForPipelining now accepts.
+
 ; STALE-FAILMARKER-REMOVED (, post- cutover): the SMS
 ; analyzability regression has cleared — analyzeLoopForPipelining now accepts
 ; this canonical vec_dot_streaming loop and SMS profitably schedules it

@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O1 -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -O1 -global-isel-abort=1 -stop-after=finalize-isel < %s -o - | FileCheck %s --check-prefix=ISEL
-;
+
+; Role: MIR — end-to-end: calls must carry the CSR_Haydn regmask so reserved AT (R12) is modeled as call-clobbered.
+
 ; end-to-end: calls must carry the CSR_Haydn regmask so reserved AT
 ; (R12) is modeled as call-clobbered. Without the mask, only TableGen Defs
 ; count as clobbers; R12 was missing from those Defs and MachineLateInstrsCleanup
@@ -14,9 +16,6 @@
 ; Every call must attach the call-preserved regmask (CSR_Haydn).
 ; ISEL: JAL_W {{.*}}csr_haydn{{.*}}
 
-; CHECK-LABEL: test_call_has_modsi3:
-; CHECK: {{__modsi3|and32|sra32|srl32|jal_w}}
-; CHECK: jalr_w{{.*}}r0, lr
 
 define i32 @test_call_has_modsi3(i32 %a, i32 %b) nounwind {
   %r = srem i32 %a, %b

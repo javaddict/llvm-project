@@ -1,7 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:   -O2 -verify-machineinstrs < %s | FileCheck %s
-;
-;
+
+; Role: semantic — Software-pipeliner prologue guard polarity.
+
 ; REGRESSION TEST: Software-pipeliner prologue guard polarity
 ;
 ; Bug (,): HaydnPipelinerLoopInfo::createTripCountGreaterCondition
@@ -41,6 +42,7 @@
 
 ; Reduction: max over 16 ints. The pipeliner prologue guard must keep the
 ; loop body reachable. With the polarity bug, the whole body is skipped.
+
 define dso_local i32 @test_prologue_guard_polarity() local_unnamed_addr #0 {
 entry:
   %buf = alloca [16 x i32], align 4

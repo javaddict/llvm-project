@@ -4,27 +4,24 @@
 # RUN: ld.lld %t.o -o %t --section-start=.text=0x10000
 # RUN: llvm-objdump -d --triple=haydn-unknown-elf %t | FileCheck %s
 #
-# REGRESSION: Bundle128 BEQ/BNE/BEQZ/BLT patch PC-relative imm12 (÷2) at the
-# correct FieldLsb (RI12 bits[19:8] / I12 bits[15:4]), not legacy BranchSImm16
-# FieldLsb=0. Linked branches must disassemble with non-zero targets.
+# REGRESSION: Format E BEQ/BNE/BEQZ/BLT patch PC-relative imm12 (÷2) at the
+# product FieldLsb. Linked branches must disassemble with non-zero targets.
+# Parcel stride is EncodedBytes=12 (addresses advance 0xc).
 
-# Same-section labels are resolved by MC (no reloc) for near targets; keep one
-# external-style check via a forward label that remains local after link.
-# RELOCS may be empty when MC fully resolves — still require link+disasm.
-
+# Same-section labels are resolved by MC (no reloc) for near targets.
 # RELOCS: Relocations [
 
 .section .text
 .globl _start
 _start:
     # CHECK-LABEL: <_start>:
-    # Forward BEQ over two Bundle128 parcels (32 B) → field = 16.
+    # Forward BEQ over two Format E parcels (24 B).
     # CHECK: 10000: {{.*}} beq{{.*}}r0,{{.*}}r1,
     BEQ R0, R1, forward_target
 
-    # CHECK: 10010: {{.*}} add32
+    # CHECK: 1000c: {{.*}} add32
     ADD32 R2, R2, R2
-    # CHECK: 10020: {{.*}} add32
+    # CHECK: 10018: {{.*}} add32
     ADD32 R3, R3, R3
 
 forward_target:

@@ -8,11 +8,11 @@
 //
 // Haydn instruction formats for the 3-issue VLIW DSP.
 //
-// LIVE encode path : Bundle128 only — 16-byte parcel
+// LIVE encode path : Format E only — 12-byte parcel
 // {s2[39:0], s1[39:0], s0[47:0]} via HaydnFormats*.td + HaydnCompositeFormats.td.
 // These legacy format classes still back codegen *names* (selector MIR) and
 // residual `_W` / G / C defs until Phase-5 M0 island delete. EncodedWidth in
-// TSFlags is NOT consulted by getInstSizeInBytes — B4.4 sizes from committed
+// TSFlags is NOT consulted by getInstSizeInBytes — sizes from committed
 // FormatID → EncodedBytes / ProductFormatDesc.Bytes (AIE Format->getSize).
 //
 // TSFlags layout (historical; sizing ignores EncodedWidth subsequent):
@@ -85,16 +85,16 @@ def uimm8  : HaydnUImm<8>;
 def uimm10 : HaydnUImm<10>;
 def uimm12 : HaydnUImm<12>;
 def uimm16 : HaydnUImm<16>;
-def uimm20 : HaydnUImm<20>;  // ORI32/ANDI32/XORI32 Bundle128; LUI-style
+def uimm20 : HaydnUImm<20>;  // ORI32/ANDI32/XORI32; LUI-style
 
-// Bundle128 / LS signed immediates (natural signed decode via HaydnSImm)
+// ALU / LS signed immediates (natural signed decode via HaydnSImm)
 def simm6  : HaydnSImm<6>;   // RI6 element index / post-inc stride
 def simm7  : HaydnSImm<7>;   // 16-bit MOVI residual
 def simm8  : HaydnSImm<8>;   // LS CBRI imm8
 def simm10 : HaydnSImm<10>;  // 16-bit branch residual
-def simm12 : HaydnSImm<12>;  // Bundle128 RI12-class abs imms
+def simm12 : HaydnSImm<12>;  // RI12-class abs imms
 def simm16 : HaydnSImm<16>;  // LD/ST offsets, legacy ADDI-class
-def simm20 : HaydnSImm<20>;  // Bundle128 ALU RI20 (ADDI32/SUBI32/SET_HWLOOP)
+def simm20 : HaydnSImm<20>;  // ALU RI20 (ADDI32/SUBI32/SET_HWLOOP)
 // ADDI32_W uses simm20_wide_abs (EncoderMethod+signed decode) below.
 
 def brtarget : Operand<OtherVT> {
@@ -105,13 +105,13 @@ def calltarget : Operand<OtherVT> {
   let EncoderMethod = "getCallTargetOpValue";
 }
 
-// Bundle128 JAL_S0: signed 20-bit PC-relative BYTE offset (no ÷2 scale).
+// JAL_S0: signed 20-bit PC-relative BYTE offset (no ÷2 scale).
 // Same signed-decode invariant as HaydnSImm<20>; OtherVT so no ImmLeaf.
 def calltarget_s0 : Operand<OtherVT> {
   let DecoderMethod = "decodeSImmOperandXStepWide<20,0,/*IsSigned*/1>";
 }
 
-// Bundle128 JALR_S0 RI12: signed 12-bit rs-relative BYTE offset (no ÷2).
+// JALR_S0 RI12: signed 12-bit rs-relative BYTE offset (no ÷2).
 def calltarget_s0_ri12 : Operand<OtherVT> {
   let DecoderMethod = "decodeSImmOperandXStepWide<12,0,/*IsSigned*/1>";
 }
@@ -201,7 +201,7 @@ def brtarget_wide_i20 : Operand<OtherVT> {
   let DecoderMethod = "decodeSImmOperandXStepWide<20,1,/*IsSigned*/1>";
 }
 
-// Bundle128 WIDE Branch RI12 (BEQ_W..BLTU_W).
+// WIDE Branch RI12 (BEQ_W..BLTU_W).
 // HaydnFU_ALU32_S0_RI12: imm12 at s0 bits[19:8], ÷2 (§5.14 D1).
 // Uses FIXUP_HAYDN_WIDE_BranchSImm12_RI (FieldLsb=8) — NOT the I12 kind
 // (FieldLsb=4), which would clobber rt/rs on two-register branches.
@@ -1061,7 +1061,7 @@ class FmtCSR<bits<6> opcode, dag outs, dag ins, string asmstr,
 
 //===----------------------------------------------------------------------===//
 // FmtG_S0_ALU32 (32-bit G-format s0 sub-slot) RETIRED.
-// All *_G instruction shells deleted from HaydnInstrInfo.td. Bundle128
-// Bundle128 path uses SUB32_G_S0 (name only; not G-parcel encoding).
+// All *_G instruction shells deleted from HaydnInstrInfo.td.
+// The encode path uses SUB32_G_S0 (name only; not G-parcel encoding).
 //===----------------------------------------------------------------------===//
 

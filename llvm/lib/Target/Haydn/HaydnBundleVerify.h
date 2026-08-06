@@ -6,22 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// G-BUNDLE-FORMAT B1.4 / B4.3 — pure fail-closed invariant checker for a
-// committed architectural cycle (BUNDLE root + children after post-RA
-// materialize / HaydnFinalizeBundle, including late PreEmit re-commit).
+// Pure fail-closed invariant checker for a committed architectural cycle
+// (BUNDLE root + children after post-RA materialize / HaydnFinalizeBundle,
+// including late PreEmit re-commit).
 //
-// AIE peers (structure port; Haydn uses FormatID imm + BundlePlan, not only
-// re-inferred VLIWFormat*):
-//   * AIEBundle.h:150-156 getFormatOrNull — format coverage after slot pack
-//     (Haydn: Bundle::hasValidFormat + planFromPacketFormats)
-//   * AIEHazardRecognizer.cpp:278-312 applyFormatOrdering assert +
-//     finalizeBundle — commit surface under test
-//   * AIEBaseInstrInfo.cpp:1440-1459 verifyInstruction fail-closed
-//     MachineVerifier pattern
-//
-// Product: only FormatID::Bundle128Full (N-format-typed API). EncodedBytes=16.
-// B3.1/B4.3: members may already be format-member opcodes (post-setDesc);
-// Bundle canAdd uses getSlotKind for those (AIE shape). No MCFlags writers.
+// Product: Format E BundleFormatRowID + CompletionStateID on the BUNDLE root.
+// EncodedBytes from the registry product rows. Encode-oracle packing still
+// uses transitional SLOT* PacketFormats coverage until CodeGenFormat E96
+// rows replace it.
 //
 //===----------------------------------------------------------------------===//
 
@@ -45,6 +37,13 @@ namespace llvm {
 namespace haydn {
 namespace bundle {
 
+/// late-MC residual cycle-forming / multi-cycle / loop-control pseudos.
+/// Shared fail-closed law for VerifyBundles (late firewall) and AsmPrinter
+/// (one-to-one serialize-only). ExpandPseudos / BranchRelaxation hooks /
+/// FixupHwLoops must exact-commit final real MIs before layout.
+/// Defined in HaydnVerifyBundles.cpp (avoids dual GET_INSTRINFO_ENUM includes).
+bool isResidualCycleFormingPseudo(unsigned Opc);
+
 /// Collect non-meta child opcodes of a BUNDLE root (schedule / MIR order).
 inline SmallVector<unsigned, 3>
 collectBundleMemberOpcodes(const MachineInstr &BundleRoot) {
@@ -63,51 +62,49 @@ collectBundleMemberOpcodes(const MachineInstr &BundleRoot) {
   return Ops;
 }
 
-/// Pure fail-closed check for one committed cycle.
+/// Pure fail-closed check for one committed cycle by row + members.
 ///
 /// Requires:
-///   * known product FormatID (today only Bundle128Full; unknown imm fails)
+///   * known product BundleFormatRowID
 ///   * memberCount <= ISSUE_SLOT_COUNT
-///   * EncodedBytes == 16 for that FormatID
-///   * encode-oracle pack: Haydn::Bundle canAdd/add for members in order;
-///     hasValidFormat (AIE getFormatOrNull peer) when not standalone;
-///     planFromPacketFormats covers occupancy
+///   * registry product EncodedBytes agree with plan
+///   * encode-oracle pack: Haydn::Bundle canAdd/add for members in order
 ///
 /// \returns nullopt on success; human-readable reason on failure.
-/// On success, fills \p OutPlan when non-null.
 inline std::optional<std::string>
-verifyCommittedBundle(FormatID FID, ArrayRef<unsigned> MemberOpcodes,
+verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
                       HaydnBaseMCFormats &Fmts, BundlePlan *OutPlan = nullptr) {
-  // N-format-ready gate: only known product FormatID (imm-encoded identity).
-  if (!formatIDFromImm(formatIDToImm(FID)).has_value())
-    return std::string("unknown FormatID (not N-format table row)");
-  if (!isProductFormat(FID))
-    return std::string("non-product FormatID (only Bundle128Full live)");
+  if (!isProductBundleRow(Row))
+    return std::string("non-product BundleFormatRowID");
 
   if (MemberOpcodes.size() > Haydn::ISSUE_SLOT_COUNT)
     return std::string("memberCount > ISSUE_SLOT_COUNT (3)");
 
-  auto Bytes = encodedBytesFor(FID);
-  if (!Bytes.has_value() || *Bytes != Bundle128EncodedBytes)
-    return std::string("EncodedBytes != 16 for product FormatID");
+  auto GenBytes = productEncodedBytesFromPackets(Fmts.getPacketFormats());
+  if (!GenBytes.has_value() || *GenBytes != productParcelBytes())
+    return std::string(
+        "product EncodedBytes missing or disagree with registry parcel");
 
-  // Empty members: architectural stall / NOP-fill parcel still legal as
-  // Bundle128 (makeStallPlan). Encode oracle is vacuously true.
+  auto RowBytes = encodedBytesForRow(Row);
+  if (!RowBytes.has_value() || *RowBytes != *GenBytes)
+    return std::string(
+        "row EncodedBytes disagree with product registry parcel");
+
+  // Empty members: architectural idle — plan is legal as product geometry
+  // with stub completion (encode remains fail-closed until idle law closes).
   if (MemberOpcodes.empty()) {
-    BundlePlan Stall = makeStallPlan();
-    Stall.FID = FID;
-    if (!Stall.isProductLegal())
+    auto Stall = planFromPacketFormats(Fmts.getPacketFormats(), /*Occupied=*/0);
+    if (!Stall.has_value())
+      return std::string("PacketFormats missing product composite for stall");
+    Stall->Row = Row;
+    Stall->Completion = selectCompletionFor(Row, 0);
+    if (!Stall->isProductLegal())
       return std::string("empty cycle BundlePlan not product-legal");
-    auto Table = planFromPacketFormats(Fmts.getPacketFormats(), /*Occupied=*/0);
-    if (!Table.has_value())
-      return std::string("PacketFormats missing BUNDLE128_FULL for stall");
     if (OutPlan)
-      *OutPlan = Stall;
+      *OutPlan = *Stall;
     return std::nullopt;
   }
 
-  // Encode-oracle: same Haydn::Bundle canAdd/add path as materialize/pack
-  // (AIEBundle.h canAdd / getFormatOrNull structure).
   SmallVector<MCInst, 3> Storage;
   Storage.reserve(MemberOpcodes.size());
   for (unsigned Opc : MemberOpcodes) {
@@ -124,9 +121,6 @@ verifyCommittedBundle(FormatID FID, ArrayRef<unsigned> MemberOpcodes,
     B.add(MI);
   }
 
-  // AIE getFormatOrNull peer: hasValidFormat when slots were assigned.
-  // Standalone (unsupported single op) has no slot occupancy — still a
-  // product 16 B parcel via NOP-fill / escape (planFromPacketFormats occ 0).
   if (!B.isStandalone()) {
     if (!B.hasValidFormat())
       return std::string(
@@ -134,15 +128,21 @@ verifyCommittedBundle(FormatID FID, ArrayRef<unsigned> MemberOpcodes,
   }
 
   SlotBits Occ = B.getOccupiedSlots();
-  auto TablePlan = planFromPacketFormats(Fmts.getPacketFormats(), Occ);
-  if (!TablePlan.has_value())
-    return std::string("planFromPacketFormats rejected occupancy");
-
-  BundlePlan Plan = makeBundle128Plan(Occ, MemberOpcodes);
-  Plan.FID = FID;
-  auto FIDBytes = encodedBytesFor(FID);
-  if (FIDBytes)
-    Plan.Bytes = *FIDBytes;
+  // Prefer PacketFormats coverage plan; if transitional slot bits do not yet
+  // match Format E entry SlotSet, fall back to a registry-sized product plan
+  // so EncodedBytes authority is not blocked on residual SLOT mapping.
+  BundlePlan Plan;
+  if (auto TablePlan =
+          planFromPacketFormats(Fmts.getPacketFormats(), Occ, MemberOpcodes)) {
+    Plan = *TablePlan;
+  } else {
+    Plan = makeProductPlan(Occ, MemberOpcodes);
+  }
+  Plan.Row = Row;
+  Plan.Completion = selectCompletionFor(Row, MemberOpcodes.size());
+  Plan.Bytes = productParcelBytes();
+  if (Plan.Bytes != *GenBytes)
+    return std::string("rebuilt plan Bytes != product EncodedBytes");
   if (!Plan.isProductLegal())
     return std::string("rebuilt BundlePlan fails isProductLegal");
 
@@ -151,22 +151,35 @@ verifyCommittedBundle(FormatID FID, ArrayRef<unsigned> MemberOpcodes,
   return std::nullopt;
 }
 
-/// MIR entry: rebuild plan from BUNDLE root FormatID imm + children.
-/// Fail-closed: missing/unknown FormatID imm is an error (no silent product
-/// default — that is only for legacy getBundleFormatIDOrProduct readers).
+/// MIR entry: rebuild plan from BUNDLE root row imm + children.
+/// Fail-closed: missing/unknown row imm is an error.
 inline std::optional<std::string>
 verifyCommittedBundle(const MachineInstr &BundleRoot, HaydnBaseMCFormats &Fmts,
                       BundlePlan *OutPlan = nullptr) {
   if (!BundleRoot.isBundle())
     return std::string("not a BUNDLE root");
 
-  auto FID = getBundleFormatID(BundleRoot);
-  if (!FID.has_value())
+  auto Row = getBundleRowID(BundleRoot);
+  if (!Row.has_value())
     return std::string(
-        "BUNDLE root missing or unknown FormatID imm (B1.1/B1.2 required)");
+        "BUNDLE root missing or unknown BundleFormatRowID imm");
 
   SmallVector<unsigned, 3> Members = collectBundleMemberOpcodes(BundleRoot);
-  return verifyCommittedBundle(*FID, Members, Fmts, OutPlan);
+  auto Err = verifyCommittedBundle(*Row, Members, Fmts, OutPlan);
+  if (Err)
+    return Err;
+
+  // Completion imm, when present, must be a known ID and match member count.
+  if (auto Comp = getBundleCompletionID(BundleRoot)) {
+    CompletionStateID Expected =
+        selectCompletionFor(*Row, Members.size());
+    if (*Comp != Expected && !isStubCompletion(*Comp) &&
+        !isProductLegalCompletion(*Comp))
+      return std::string("BUNDLE root has unknown CompletionStateID");
+    if (OutPlan)
+      OutPlan->Completion = *Comp;
+  }
+  return std::nullopt;
 }
 
 } // namespace bundle

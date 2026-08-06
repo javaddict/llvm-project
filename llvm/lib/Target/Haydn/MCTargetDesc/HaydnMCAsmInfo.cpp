@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnMCAsmInfo.h"
+#include "HaydnFormat.h"
 #include "llvm/MC/MCStreamer.h"
 
 using namespace llvm;
@@ -27,7 +28,22 @@ HaydnMCAsmInfo::HaydnMCAsmInfo(const Triple &TargetTriple) {
 
   ExceptionsType = ExceptionHandling::DwarfCFI;
 
-  // A.6 / Bundle128: every instruction/parcel is 16 bytes. Code alignment and
-  // writeNopData only produce full Bundle128 NOP parcels (all-zero 16 B).
-  MinInstAlignment = 16;
+  // Product Format E: every parcel is registry EncodedBytes (12). Code
+  // alignment and writeNopData produce full product NOP parcels. MaxInstLength
+  // feeds TargetInstrInfo::getInlineAsmLength so INLINEASM / INLINEASM_BR
+  // layout sizes charge one product parcel per textual instruction
+  // (conservative; empty side-effect barriers remain 0).
+  const unsigned ProductBytes =
+      haydn::format::maxEncodedBytesInProfile(
+          haydn::format::ObjectEncodingProfileID::E96)
+          .Value;
+  MinInstAlignment = ProductBytes;
+  MaxInstLength = ProductBytes;
+
+  // Do not let AsmPrinter::emitAlignment(MF, &F) promote function alignment
+  // from IR/user attributes (e.g. aligned(256)). Those power-of-two values
+  // larger than the product max (largest 2^k | EncodedBytes) force non-parcel
+  // pads at LLD input-section boundaries. HaydnAsmPrinter emits the product
+  // max explicitly before the entry label instead.
+  HasFunctionAlignment = false;
 }

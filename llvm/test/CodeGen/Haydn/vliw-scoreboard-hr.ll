@@ -1,7 +1,9 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -debug-only=haydn-hazard-rec < %s 2>&1 | FileCheck %s
 ; REQUIRES: asserts
-;
+
+; Role: semantic — Haydn scoreboard hazard recognizer (Stream B Phase B1,).
+
 ; REGRESSION TEST: Haydn scoreboard hazard recognizer (Stream B Phase B1,).
 ;
 ; This test exercises the post-RA MachineScheduler's scoreboard hazard

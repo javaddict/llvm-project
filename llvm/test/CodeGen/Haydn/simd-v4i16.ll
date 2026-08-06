@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 %s -o - | FileCheck %s
-;
+
+; Role: semantic — SIMD v4i16 operations.
+
 ; SIMD v4i16 operations. The Haydn backend packs 4 x i16 elements into DR64
 ; by pairing elements into two s32 values, then loading into DR64.
 

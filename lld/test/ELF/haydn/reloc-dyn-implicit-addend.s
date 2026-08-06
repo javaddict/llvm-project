@@ -22,7 +22,8 @@ _start:
     LUI R1, my_data
     # CHECK: {{.*}} addi32
     ADDI32 R2, R1, my_data
-    # CHECK: {{.*}} ld32
+    # Printer may render ld32 as s_lw_with_imm under Format E.
+    # CHECK: {{.*}} {{(ld32|s_lw_with_imm)}}
     LD32 R3, R2, 0
     # Absolute 32-bit data reloc in .text (same class as reloc-32.s).
     .long my_data

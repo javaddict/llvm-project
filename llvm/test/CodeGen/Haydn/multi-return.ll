@@ -1,4 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
+
+; Role: semantic — multi-return / nested branches lower with compare+branch (and abs via sub32); verifier still off for MOVT32 $sfr liveness on other paths.
+
 ; NOTE: -verify-machineinstrs is disabled because the CMOV formation pass
 ; produces MOVT32 with implicit $sfr that is not always defined by a prior
 ; instruction when the MOVT32 follows a merge block from two different
@@ -12,8 +15,12 @@
 ; join blocks).
 
 ;Multiple return points via conditional
+
 define i32 @multi_ret_cond(i32 %x) nounwind {
 ; CHECK-LABEL: multi_ret_cond:
+; CHECK-DAG: slt32
+; CHECK-DAG: sub32
+; CHECK-DAG: {{beqz_w|bnez_w}}
 entry:
   %cmp = icmp sgt i32 %x, 0
   br i1 %cmp, label %pos, label %neg
@@ -27,6 +34,8 @@ neg:
 ;Four-way branch with returns
 define i32 @four_way_ret(i32 %x) nounwind {
 ; CHECK-LABEL: four_way_ret:
+; CHECK-DAG: slt32
+; CHECK-DAG: {{beqz_w|bnez_w}}
 entry:
   %cmp1 = icmp eq i32 %x, 0
   br i1 %cmp1, label %zero, label %check_pos

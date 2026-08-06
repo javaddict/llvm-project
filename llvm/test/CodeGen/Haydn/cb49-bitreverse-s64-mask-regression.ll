@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — 64-bit bitreverse must use UNSIGNED byte masks (0x00000000FF000000) for the bswap stage, not sign-extended masks.
+
 ; REGRESSION TEST : 64-bit bitreverse must use UNSIGNED byte masks
 ; (0x00000000FF000000) for the bswap stage, not sign-extended masks
 ; (0xFFFFFFFFFF000000).

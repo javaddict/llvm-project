@@ -4,12 +4,15 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
 ; RUN:     -stop-after=legalizer -verify-machineinstrs < %s -o - 2>&1 \
 ; RUN:   | FileCheck %s
-;
+
+; Role: MIR — T7.1: after legalizer, nested cast chains must pass -verify-machineinstrs with no abort.
+
 ; T7.1: after legalizer, nested cast chains must pass -verify-machineinstrs
 ; with no abort. PostLegalizer no longer runs sanitizeCastCopies; producers
 ; (cast_combines / legalizer artifacts) own the type boundary.
 
 ; CHECK-LABEL: name: nested_bool_long_roundtrip
+
 define i64 @nested_bool_long_roundtrip(i1 zeroext %b) nounwind {
 entry:
   %z = zext i1 %b to i32

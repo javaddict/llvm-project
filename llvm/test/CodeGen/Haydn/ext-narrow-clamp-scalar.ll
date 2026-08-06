@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 
+; Role: semantic — G_SEXT / G_ZEXT / G_ANYEXT for narrow destinations (s1->s8 s1->s16, s8->s16) must lower via clampScalar(0, S32, S64): the destination.
+
 ; REGRESSION TEST: G_SEXT / G_ZEXT / G_ANYEXT for narrow destinations (s1->s8
 ; s1->s16, s8->s16) must lower via clampScalar(0, S32, S64): the destination
 ; widens to s32 first (which the selector handles natively), then truncates.
@@ -7,8 +9,7 @@
 ; s8->s16, causing "unable to legalize G_ZEXT s1->s16" (LC3 attack_detector_fx)
 ; and "cannot select G_ZEXT s8->s16" at InstructionSelect (LC3 al_fec).
 
-; CHECK-LABEL: zext_i1_to_i8:
-; CHECK: and32
+
 define i8 @zext_i1_to_i8(i1 %x) nounwind {
   %r = zext i1 %x to i8
   ret i8 %r

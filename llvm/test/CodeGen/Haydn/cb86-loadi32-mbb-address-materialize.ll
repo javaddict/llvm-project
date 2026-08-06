@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s 2>&1 | FileCheck %s
-;
+
+; Role: semantic — — LOADI32 with an isMBB operand must materialize the destination block's address via LUI + ADDI32_W before the jalr.
+
 ; REGRESSION TEST: — LOADI32 with an isMBB operand must materialize
 ; the destination block's address via LUI + ADDI32_W before the jalr.
 ;

@@ -13,6 +13,8 @@
 
 #include "HaydnISelLowering.h"
 #include "HaydnSubtarget.h"
+#include "MCTargetDesc/HaydnFormat.h"
+#include "llvm/ADT/bit.h"
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -28,7 +30,7 @@ HaydnTargetLowering::HaydnTargetLowering(const TargetMachine &TM,
                                         const HaydnSubtarget &STI)
     : TargetLowering(TM, STI), Subtarget(STI) {
   // Set up the register classes. i32→GPR32; i64 and 64-bit SIMD→DR64.
-  // G-ABI-VEC: v2i32/v4i16/v8i8/v2f32 must be registered so CallLowering/CC.td
+ // : v2i32/v4i16/v8i8/v2f32 must be registered so CallLowering/CC.td
   // assign whole DRs (not multi-scalar split into GPRs).
   // Residual 32-bit SLP shapes (v4i8/v2i16) live in one GPR32; legalizer
   // scalarizes arithmetic and packs via BUILD_VECTOR custom.
@@ -78,14 +80,23 @@ HaydnTargetLowering::HaydnTargetLowering(const TargetMachine &TM,
   // the instruction selector. BR_JT is expanded to JALR by AsmPrinter.
   setMinimumJumpTableEntries(4);
 
-  // Bundle128 product: every instruction/parcel is 16 bytes (MCAsmInfo
-  // MinInstAlignment). Functions must be 16-byte aligned so call/JALR
-  // targets and LR return PCs are exact Bundle128 records — same contract
-  // as AIE (AIEBaseISelLowering Min/Pref FunctionAlignment Align(16)).
-  // Leaving the TargetLowering default Align(1) risks BAD_PC when a callee
-  // entry is not a multiple of 16 after link (next PC not an exact record).
-  setMinFunctionAlignment(Align(16));
-  setPrefFunctionAlignment(Align(16));
+  // Product Format E parcels use registry EncodedBytes (12). Function
+  // alignment must be a power of two that *divides* that size so any
+  // MCAssembler / LLD pad between pure parcel streams is a multiple of
+  // EncodedBytes (no residual 4/8-byte holes). Largest such power of two is
+  // 1 << countr_zero(EncodedBytes) = Align(4). Larger power-of-two requests
+  // (Align(8)/16/256, e.g. __attribute__((aligned(256)))) force pads with
+  // size ≡ 4 or 8 (mod 12) and break the parcel stream at link time.
+  // Min/Pref are both that product maximum; AsmPrinter also clamps IR/user
+  // function alignment to this value (see HaydnAsmPrinter).
+  const unsigned ParcelBytes =
+      haydn::format::maxEncodedBytesInProfile(
+          haydn::format::ObjectEncodingProfileID::E96)
+          .Value;
+  assert(ParcelBytes != 0 && "production EncodedBytes must be non-zero");
+  const Align ProductFnAlign(1u << llvm::countr_zero(ParcelBytes));
+  setMinFunctionAlignment(ProductFnAlign);
+  setPrefFunctionAlignment(ProductFnAlign);
 }
 
 EVT HaydnTargetLowering::getSetCCResultType(const DataLayout &DL,
@@ -102,6 +113,35 @@ MVT HaydnTargetLowering::getScalarShiftAmountTy(const DataLayout &DL,
 unsigned HaydnTargetLowering::getMinimumJumpTableEntries() const {
   // Use jump tables for switches with 4+ dense cases.
   return 4;
+}
+
+bool HaydnTargetLowering::allowsMisalignedMemoryAccesses(
+    EVT VT, unsigned /*AddrSpace*/, Align Alignment,
+    MachineMemOperand::Flags /*Flags*/, unsigned *Fast) const {
+  // BundleSim faults EA that is not naturally aligned for the access width
+  // (byte any, halfword %2, word %4, dword/LD64 %8). Mark Fast=0 always so
+  // even borderline cases are not preferred over scalar splits.
+  if (Fast)
+    *Fast = 0;
+
+  TypeSize TS = VT.getStoreSizeInBits();
+  if (TS.isScalable())
+    return false;
+  const uint64_t SizeBits = TS.getFixedValue();
+  if (SizeBits == 0)
+    return false;
+  if (SizeBits <= 8)
+    return true; // byte — any alignment
+
+  // ABI DataLayout i64:32 / v64:32: 4-byte-aligned 64-bit scalar or DR
+  // vector is representable; ISel splits LD64/ST64 into LD32 pairs when
+  // MMO align < 8 (LD32 needs align 4). Accept Align>=4 for those shapes.
+  if (SizeBits == 64 && (VT.isScalarInteger() || VT.isVector()))
+    return Alignment >= Align(4);
+
+  // Other widths: full-size natural alignment (halfword≥2, word≥4, …).
+  // Rejects LV/SLP `load <4 x i16> align 2` (coremark matrix_add_const).
+  return Alignment >= Align(SizeBits / 8);
 }
 
 bool HaydnTargetLowering::areJTsAllowed(const Function *Fn) const {
@@ -177,7 +217,7 @@ bool HaydnTargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
                                              const CallBase &I,
                                              MachineFunction &MF,
                                              unsigned IntrID) const {
-  // C2.3 / G-MEM-INTRIN MMO policy (peer Hexagon L2_load*_pbr vs V6_vgatherm*):
+ // MMO policy (peer Hexagon L2_load*_pbr vs V6_vgatherm*):
   //   Ordinary — Golden LS WITH/POST/PRE + BREV: MOLoad / MOStore only.
   //     Disjoint ordinary argmem may co-issue (AA-safe, non-volatile MMOs).
   //   Stateful — CB + UA StateMem: MO* | MOVolatile so MIR prints

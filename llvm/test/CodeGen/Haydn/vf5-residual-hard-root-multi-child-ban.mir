@@ -1,0 +1,409 @@
+# RUN: rm -rf %t && split-file %s %t
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/verify_loadi32.mir -o - 2>&1 | FileCheck %s --check-prefix=V-LOADI32
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/verify_load_addr.mir -o - 2>&1 | FileCheck %s --check-prefix=V-LOAD_ADDR
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/verify_loopdec.mir -o - 2>&1 | FileCheck %s --check-prefix=V-LOOPDEC
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/verify_loopjnz.mir -o - 2>&1 | FileCheck %s --check-prefix=V-LOOPJNZ
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/verify_loopstart.mir -o - 2>&1 | FileCheck %s --check-prefix=V-LOOPSTART
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/verify_setcbr_begin.mir -o - 2>&1 | FileCheck %s --check-prefix=V-SETCBR_B
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/verify_setcbr_end.mir -o - 2>&1 | FileCheck %s --check-prefix=V-SETCBR_E
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/verify_set_hwloop.mir -o - 2>&1 | FileCheck %s --check-prefix=V-SET_HWLOOP
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/verify_set_hwloop_reg.mir -o - 2>&1 | FileCheck %s --check-prefix=V-SET_HWLOOP_REG
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_loadi32.mir -o - 2>&1 | FileCheck %s --check-prefix=P-LOADI32
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_load_addr.mir -o - 2>&1 | FileCheck %s --check-prefix=P-LOAD_ADDR
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_loopdec.mir -o - 2>&1 | FileCheck %s --check-prefix=P-LOOPDEC
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_loopjnz.mir -o - 2>&1 | FileCheck %s --check-prefix=P-LOOPJNZ
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_loopstart.mir -o - 2>&1 | FileCheck %s --check-prefix=P-LOOPSTART
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_setcbr_begin.mir -o - 2>&1 | FileCheck %s --check-prefix=P-SETCBR_B
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_setcbr_end.mir -o - 2>&1 | FileCheck %s --check-prefix=P-SETCBR_E
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_set_hwloop.mir -o - 2>&1 | FileCheck %s --check-prefix=P-SET_HWLOOP
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_set_hwloop_reg.mir -o - 2>&1 | FileCheck %s --check-prefix=P-SET_HWLOOP_REG
+
+# Role: verifier — Late-MC one-to-one residual ban on multi-member hard roots.
+#
+# Hard-root exact-commit/replay (and post-recommit root operand rebuild) leaves
+# FormatID-stamped multi-member BUNDLEs for late layout and AsmPrinter. Every
+# residual cycle-forming child co-issued with a real member must fail closed on:
+#   * haydn-verify-bundles (late firewall; shared isResidualCycleFormingPseudo)
+#   * AsmPrinter (one-to-one serialize ban; no multi-cycle repair)
+#
+# Matrix covers the full residual set as hard-root children:
+# multi-cycle (LOADI32/LOAD_ADDR), CSR setup (SETCBR_*), software-loop demotion
+# (LoopDec/LoopJNZ), and hwloop setup residuals (LoopStart/SET_HWLOOP*).
+# Bare residual peers: late-mc-residual-printer-matrix.mir / vf5-residual-*.mir.
+# No FlexMap.
+
+#--- verify_loadi32.mir
+--- |
+  define void @verify_hard_root_loadi32() { ret void }
+...
+---
+name:            verify_hard_root_loadi32
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; V-LOADI32: residual cycle-forming pseudo child
+    ; V-LOADI32: one-to-one ban
+    BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      $r5 = LOADI32 42
+    }
+    RET implicit $r15
+
+#--- verify_load_addr.mir
+--- |
+  define void @verify_hard_root_load_addr() { ret void }
+...
+---
+name:            verify_hard_root_load_addr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; V-LOAD_ADDR: residual cycle-forming pseudo child
+    ; V-LOAD_ADDR: one-to-one ban
+    BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      $r5 = LOAD_ADDR 0
+    }
+    RET implicit $r15
+
+#--- verify_loopdec.mir
+--- |
+  define void @verify_hard_root_loopdec() { ret void }
+...
+---
+name:            verify_hard_root_loopdec
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r3, $r15
+    ; V-LOOPDEC: residual cycle-forming pseudo child
+    ; V-LOOPDEC: one-to-one ban
+    BUNDLE 0, implicit-def $r4, implicit-def $r3, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r3 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      $r3 = LoopDec $r3
+    }
+    RET implicit $r15
+
+#--- verify_loopjnz.mir
+--- |
+  define void @verify_hard_root_loopjnz() { ret void }
+...
+---
+name:            verify_hard_root_loopjnz
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    successors: %bb.0, %bb.1
+    ; V-LOOPJNZ: residual cycle-forming pseudo child
+    ; V-LOOPJNZ: one-to-one ban
+    BUNDLE 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      LoopJNZ $r1, %bb.0
+    }
+  bb.1:
+    RET implicit $r15
+
+#--- verify_loopstart.mir
+--- |
+  define void @verify_hard_root_loopstart() { ret void }
+...
+---
+name:            verify_hard_root_loopstart
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; V-LOOPSTART: residual cycle-forming pseudo child
+    ; V-LOOPSTART: one-to-one ban
+    BUNDLE 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      LoopStart $r1, 0
+    }
+    RET implicit $r15
+
+#--- verify_setcbr_begin.mir
+--- |
+  define void @verify_hard_root_setcbr_begin() { ret void }
+...
+---
+name:            verify_hard_root_setcbr_begin
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; V-SETCBR_B: residual cycle-forming pseudo child
+    ; V-SETCBR_B: one-to-one ban
+    BUNDLE 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      SETCBR_BEGIN 0, $r1
+    }
+    RET implicit $r15
+
+#--- verify_setcbr_end.mir
+--- |
+  define void @verify_hard_root_setcbr_end() { ret void }
+...
+---
+name:            verify_hard_root_setcbr_end
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; V-SETCBR_E: residual cycle-forming pseudo child
+    ; V-SETCBR_E: one-to-one ban
+    BUNDLE 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      SETCBR_END 0, $r1
+    }
+    RET implicit $r15
+
+#--- verify_set_hwloop.mir
+--- |
+  define void @verify_hard_root_set_hwloop() { ret void }
+...
+---
+name:            verify_hard_root_set_hwloop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    successors: %bb.1
+    ; V-SET_HWLOOP: residual cycle-forming pseudo child
+    ; V-SET_HWLOOP: one-to-one ban
+    BUNDLE 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      SET_HWLOOP 0, %bb.1, %bb.1, 8
+    }
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15
+
+#--- verify_set_hwloop_reg.mir
+--- |
+  define void @verify_hard_root_set_hwloop_reg() { ret void }
+...
+---
+name:            verify_hard_root_set_hwloop_reg
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r4, $r15
+    successors: %bb.1
+    ; V-SET_HWLOOP_REG: residual cycle-forming pseudo child
+    ; V-SET_HWLOOP_REG: one-to-one ban
+    BUNDLE 0, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r4 {
+      $r5 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      SET_HWLOOP_REG 0, %bb.1, %bb.1, $r4
+    }
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15
+
+#--- printer_loadi32.mir
+--- |
+  define void @printer_hard_root_loadi32() { ret void }
+...
+---
+name:            printer_hard_root_loadi32
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; P-LOADI32: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; P-LOADI32: must be exact-committed real MIs before AsmPrinter
+    BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      $r5 = LOADI32 42
+    }
+    RET implicit $r15
+
+#--- printer_load_addr.mir
+--- |
+  define void @printer_hard_root_load_addr() { ret void }
+...
+---
+name:            printer_hard_root_load_addr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; P-LOAD_ADDR: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; P-LOAD_ADDR: must be exact-committed real MIs before AsmPrinter
+    BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      $r5 = LOAD_ADDR 0
+    }
+    RET implicit $r15
+
+#--- printer_loopdec.mir
+--- |
+  define void @printer_hard_root_loopdec() { ret void }
+...
+---
+name:            printer_hard_root_loopdec
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r3, $r15
+    ; P-LOOPDEC: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; P-LOOPDEC: must be exact-committed real MIs before AsmPrinter
+    BUNDLE 0, implicit-def $r4, implicit-def $r3, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r3 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      $r3 = LoopDec $r3
+    }
+    RET implicit $r15
+
+#--- printer_loopjnz.mir
+--- |
+  define void @printer_hard_root_loopjnz() { ret void }
+...
+---
+name:            printer_hard_root_loopjnz
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    successors: %bb.0, %bb.1
+    ; P-LOOPJNZ: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; P-LOOPJNZ: must be exact-committed real MIs before AsmPrinter
+    BUNDLE 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      LoopJNZ $r1, %bb.0
+    }
+  bb.1:
+    RET implicit $r15
+
+#--- printer_loopstart.mir
+--- |
+  define void @printer_hard_root_loopstart() { ret void }
+...
+---
+name:            printer_hard_root_loopstart
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; P-LOOPSTART: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; P-LOOPSTART: must be exact-committed real MIs before AsmPrinter
+    BUNDLE 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      LoopStart $r1, 0
+    }
+    RET implicit $r15
+
+#--- printer_setcbr_begin.mir
+--- |
+  define void @printer_hard_root_setcbr_begin() { ret void }
+...
+---
+name:            printer_hard_root_setcbr_begin
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; P-SETCBR_B: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; P-SETCBR_B: must be exact-committed real MIs before AsmPrinter
+    BUNDLE 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      SETCBR_BEGIN 0, $r1
+    }
+    RET implicit $r15
+
+#--- printer_setcbr_end.mir
+--- |
+  define void @printer_hard_root_setcbr_end() { ret void }
+...
+---
+name:            printer_hard_root_setcbr_end
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; P-SETCBR_E: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; P-SETCBR_E: must be exact-committed real MIs before AsmPrinter
+    BUNDLE 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      SETCBR_END 0, $r1
+    }
+    RET implicit $r15
+
+#--- printer_set_hwloop.mir
+--- |
+  define void @printer_hard_root_set_hwloop() { ret void }
+...
+---
+name:            printer_hard_root_set_hwloop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    successors: %bb.1
+    ; P-SET_HWLOOP: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; P-SET_HWLOOP: must be exact-committed real MIs before AsmPrinter
+    BUNDLE 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      SET_HWLOOP 0, %bb.1, %bb.1, 8
+    }
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15
+
+#--- printer_set_hwloop_reg.mir
+--- |
+  define void @printer_hard_root_set_hwloop_reg() { ret void }
+...
+---
+name:            printer_hard_root_set_hwloop_reg
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r4, $r15
+    successors: %bb.1
+    ; P-SET_HWLOOP_REG: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; P-SET_HWLOOP_REG: must be exact-committed real MIs before AsmPrinter
+    BUNDLE 0, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r4 {
+      $r5 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
+      SET_HWLOOP_REG 0, %bb.1, %bb.1, $r4
+    }
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15

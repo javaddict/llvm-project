@@ -1,15 +1,9 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 -O2 \
 ; RUN:   < %s | FileCheck %s --check-prefix=ASM
-;
 ; REQUIRES: haydn-registered-target
-;
-; This test was XFAIL'd from until reverted the
-; GPR-port-FuncUnits change to HaydnSchedule.td that triggered a SIGSEGV in
-; the post-RA VLIW scheduler (ConvergingVLIWScheduler::SchedulingCost
-; use-after-free on a ready-queue SUnit). The XFAIL is removed now that the
-; single-stage slot-only itinerary model is restored; the scheduler runs
-; cleanly at -O1+. See decision and lesson.
-;
+
+; Role: semantic — IIR biquad kernels emit mull/add32/sub32/ld32/st32 through post-RA pack at -O2.
+
 ; IIR biquad filter kernel codegen test.
 ;
 ; This test exercises the full GISel pipeline on representative IIR filter
@@ -31,6 +25,7 @@
 
 ; Simple IIR biquad inner product: pure register-based ALU.
 ; Exercises mull + add32.
+
 define i32 @biquad_simple(i32 %b0, i32 %xn, i32 %b1, i32 %x_nm1,
                           i32 %a1, i32 %y_nm1) nounwind {
 entry:

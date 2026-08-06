@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Struct returns follow RetCC_Haydn: ≤2 × i32/ptr in R1–R2 (R0 is soft-zero).
+
 ; Struct returns follow RetCC_Haydn:
 ; ≤2 × i32/ptr in R1–R2 (R0 is soft-zero)
 ; i64/SIMD in D0
@@ -10,6 +12,7 @@
 ; drives sret demotion for oversized returns.
 
 ;Two i32 fields fit in R1–R2
+
 define { i32, i32 } @return_small_struct() {
 ; CHECK-LABEL: return_small_struct:
 ; CHECK:       addi32_w{{(\.s[012])?}} r1, r0, 42

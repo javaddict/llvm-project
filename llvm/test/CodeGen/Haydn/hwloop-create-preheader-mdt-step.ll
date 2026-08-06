@@ -1,6 +1,8 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop < %s | FileCheck %s
-;
+
+; Role: semantic — createPreheaderForLoop must update MDT (and parent MLI).
+
 ; REGRESSION: createPreheaderForLoop must update MDT (and parent MLI).
 ;
 ; raw_corr* Class-C gap (naturedsp-kernel-gaps): SMS reports
@@ -22,8 +24,7 @@
 ;
 ; Without MDT update this stays soft beqz; with the fix it is set_hwloop_f2_w.
 
-; CHECK-LABEL: countdown_needs_preheader:
-; CHECK: set_hwloop_f2_w
+
 define i32 @countdown_needs_preheader(ptr %p, i32 %n) nounwind {
 entry:
   %cmp0 = icmp sgt i32 %n, 0

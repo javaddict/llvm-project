@@ -1,6 +1,8 @@
 # UNSUPPORTED: true
-# LoadStoreOptimizer deleted (YOLO phase-out)
-# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-ldst-opt -haydn-ldst-opt-phase2=1 -verify-machineinstrs %s -o - | FileCheck %s
+# Role: retired — LoadStoreOptimizer pass deleted; not product coverage.
+# Do not count as product green. RUN is deliberately false so a dropped
+# RUN: false
+
 # Phase 2 (redundant-load-elim + store-to-load-forward) is default OFF;
 # this test exercises Phase 2's overlap-invalidation, so enable it explicitly.
 #

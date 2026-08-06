@@ -1,7 +1,9 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -debug-only=haydn-hazard-rec < %s 2>&1 | FileCheck %s
 ; REQUIRES: asserts
-;
+
+; Role: semantic — DR64 7R3W port accounting in the scoreboard hazard recognizer (Stream B Phase 2.3,).
+
 ; REGRESSION TEST: DR64 7R3W port accounting in the scoreboard hazard
 ; recognizer (Stream B Phase 2.3,).
 ;

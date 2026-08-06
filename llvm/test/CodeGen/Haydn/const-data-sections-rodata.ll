@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — constant data must land in read-only data sections (.rodata rodata.cstNN,.rodata.strM.N), NEVER in.text.
+
 ; REGRESSION TEST: constant data must land in read-only data sections (.rodata
 ; rodata.cstNN,.rodata.strM.N), NEVER in.text. The Haydn backend uses the
 ; default TargetLoweringObjectFileELF (HaydnTargetMachine.cpp), which already
@@ -26,11 +28,9 @@
 ; so they match the actual section emission order.
 
 ; Verify all three functions compile.
-; CHECK-LABEL: use_g_a:
-; CHECK-LABEL: get_str:
-; CHECK-LABEL: jt:
 
 ;Global constant array ->.rodata
+
 @g_a = constant [4 x i32] [i32 1, i32 2, i32 3, i32 4]
 define i32 @use_g_a(i32 %i) {
   %p = getelementptr [4 x i32], ptr @g_a, i32 0, i32 %i

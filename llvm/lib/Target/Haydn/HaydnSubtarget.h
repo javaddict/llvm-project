@@ -17,6 +17,7 @@
 #include "HaydnISelLowering.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnRegisterInfo.h"
+#include "MCTargetDesc/HaydnFormat.h"
 #include "llvm/CodeGen/GlobalISel/CallLowering.h"
 #include "llvm/CodeGen/GlobalISel/InlineAsmLowering.h"
 #include "llvm/CodeGen/GlobalISel/InstructionSelector.h"
@@ -55,6 +56,11 @@ class HaydnSubtarget : public HaydnGenSubtargetInfo {
   bool HasSIMD;
   // mattr=+frame-pointer — force R14 FP (default false; still ABI-required).
   bool UseFramePointer;
+
+  // Immutable object-encoding profile for this subtarget (production E96).
+  // Resolved once from the target machine; never inferred from byte width.
+  haydn::format::ObjectEncodingProfileID EncodingProfile =
+      haydn::format::ObjectEncodingProfileID::E96;
 
 public:
   HaydnSubtarget(const Triple &TT, StringRef CPU, StringRef TuneCPU,
@@ -95,6 +101,20 @@ public:
 
   // True when a dedicated FP is forced (-mattr=+frame-pointer).
   bool useFramePointer() const { return UseFramePointer; }
+
+  /// Production ObjectEncodingProfile for this subtarget (always E96 today).
+  haydn::format::ObjectEncodingProfileID getObjectEncodingProfileID() const {
+    return EncodingProfile;
+  }
+
+  /// Descriptor for the subtarget's object-encoding profile.
+  const haydn::format::ObjectEncodingProfileDesc &
+  getObjectEncodingProfile() const {
+    const haydn::format::ObjectEncodingProfileDesc *P =
+        haydn::format::getObjectEncodingProfile(EncodingProfile);
+    assert(P && "subtarget encoding profile missing from registry");
+    return *P;
+  }
 
   // AIE2 dual-scheduler gates.
   // Both pre-RA MachineScheduler and post-RA PostMachineScheduler are ON.

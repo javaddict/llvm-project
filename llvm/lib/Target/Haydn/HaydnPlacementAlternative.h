@@ -6,20 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Thin view over HaydnMCFormats::getAlternateInstsOpcode for BUNDLE128_FULL
-// format members (plan §6.1).
+// Thin view over HaydnMCFormats::getAlternateInstsOpcode for generated
+// format members (transitional PacketFormats alts; product identity is
+// Format E BundleFormatRowID after post-RA commit).
 //
 // PlacementAlternative is the AIE-shaped placement authority surface.
 // Legality is alts-derived only (sparse size-3 AlternateInsts;
 // FieldSlots = 1<<index for non-zero members). Bundle/HR placement does not
 // reverse-map through FlexMap; encode uses post-RA setDesc member Desc-as-is.
 //
-// AIE peer: getAlternateInstsOpcode (AIEMCFormats.h) — slot kind always
-// embeddable in any packet. Haydn strengthens with CompatibleFormatMask so
-// members may be restricted to a FormatID subset when multi-format lands.
-// Slot identity for multi-slot logicals lives on the alt vector index (AIE
-// peer shape: AIEBaseMCFormats.cpp:66-75 getSlotKind on member opcode; Haydn
-// stamps FieldSlots from sparse index == field).
+// CompatibleFormatMask is the product E2|E3 row frontier
+// (haydn::bundle::ProductFormatMask). Post-RA commit freezes one
+// BundleFormatRowID + CompletionStateID on the BUNDLE root.
 //
 // leaveRegion materializeMultiOpcodeInstrs does MI.setDesc(selected
 // MemberOpcode) from HaydnAlternateDescriptors
@@ -48,9 +46,9 @@ struct PlacementAlternative {
   /// Post-setDesc / format-member opcode (e.g. ADD32_S1).
   unsigned MemberOpcode = 0;
 
-  /// Bitmask of FormatIDs this member may occupy (plan §6.1 / G8).
-  /// Bit i = formatIDBit(FormatID with imm i). Product alts stamp
-  /// haydn::bundle::ProductFormatMask (BUNDLE128_FULL only).
+/// Bitmask of BundleFormatRowIDs this member may occupy.
+  /// Bit i = formatRowBit(row). Product alts stamp
+  /// haydn::bundle::ProductFormatMask (E96TwoEntry | E96ThreeEntry).
   uint64_t CompatibleFormatMask = 0;
 
   /// Single-slot Haydn::SLOT* occupancy this member claims (plan §6.1 field).
@@ -58,26 +56,26 @@ struct PlacementAlternative {
   SlotBits FieldSlots = 0;
 
   constexpr PlacementAlternative() = default;
-  /// Full ctor: member + FormatID mask + field occupancy bit.
+  /// Full ctor: member + row mask + field occupancy bit.
   /// Field last (no default) so (MemberOpc, FormatMask) is unambiguous vs
   /// SlotBits == uint64_t alias with the product-mask default ctor.
   constexpr PlacementAlternative(unsigned MemberOpc, uint64_t FormatMask,
                                  SlotBits Field)
       : MemberOpcode(MemberOpc), CompatibleFormatMask(FormatMask),
         FieldSlots(Field) {}
-  /// Member + FormatID mask; FieldSlots left 0 (set by enumerate or tests).
+  /// Member + row mask; FieldSlots left 0 (set by enumerate or tests).
   constexpr PlacementAlternative(unsigned MemberOpc, uint64_t FormatMask)
       : MemberOpcode(MemberOpc), CompatibleFormatMask(FormatMask),
         FieldSlots(0) {}
-  /// Default mask = product Full only (product stamp on generated members).
+  /// Default mask = product E2|E3 rows (product stamp on generated members).
   constexpr explicit PlacementAlternative(unsigned MemberOpc)
       : MemberOpcode(MemberOpc),
         CompatibleFormatMask(haydn::bundle::ProductFormatMask),
         FieldSlots(0) {}
 
-  /// True iff this member is legal under \p ID's format row.
-  constexpr bool isCompatibleWith(haydn::bundle::FormatID ID) const {
-    return (CompatibleFormatMask & haydn::bundle::formatIDBit(ID)) != 0;
+  /// True iff this member is legal under \p Row.
+  constexpr bool isCompatibleWith(haydn::bundle::BundleFormatRowID Row) const {
+    return (CompatibleFormatMask & haydn::bundle::formatRowBit(Row)) != 0;
   }
 };
 
@@ -126,13 +124,13 @@ enumeratePlacementAlternatives(const HaydnMCFormats &Fmts,
   return Any;
 }
 
-/// Keep only alternatives compatible with \p ID (solver filter).
+/// Keep only alternatives compatible with \p Row (solver filter).
 inline void
 filterAlternativesForFormat(SmallVectorImpl<PlacementAlternative> &Alts,
-                            haydn::bundle::FormatID ID) {
+                            haydn::bundle::BundleFormatRowID Row) {
   Alts.erase(std::remove_if(Alts.begin(), Alts.end(),
-                            [ID](const PlacementAlternative &A) {
-                              return !A.isCompatibleWith(ID);
+                            [Row](const PlacementAlternative &A) {
+                              return !A.isCompatibleWith(Row);
                             }),
              Alts.end());
 }

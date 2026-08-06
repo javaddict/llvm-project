@@ -6,9 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 // \file
-// Post-select peepholes (O1+). Product: lane-store + DR-constant CSE under
-// elideCrossBankRoundTrips. Pack-shape MOV is not folded to SEXT (see
-// tryFoldSextMovToDirect — pack ≠ sign-extend).
+// Post-select peepholes (O1). Product elideCrossBankRoundTrips (ON O1):
+// lane-store, DR-constant CSE, identity GPR↔DR pack recombine. Pack-shape
+// MOV is not folded to SEXT (tryFoldSextMovToDirect — pack ≠ sign-extend).
+// Prefer end-to-end DR64; no GPR-pair aliasing of DR64.
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_HAYDN_GISEL_HAYDNPOSTSELECTOPTIMIZE_H
@@ -37,7 +38,7 @@ public:
 
 private:
   // Live peeps: lane-store (MOVE32_DR + ST32 → D_SW_*), DR64 const CSE,
-  // and (stub) sext-shape MOV that intentionally does not fold pack→sext.
+  // identity pack recombine, and (stub) sext-shape MOV (pack≠sext).
   bool elideCrossBankRoundTrips(MachineFunction &MF);
 
   // Historically folded MOV_GPR_TO_DR64(x,x) → SEXT; wrong for dual-lane pack.
@@ -52,6 +53,13 @@ private:
   // Same-BB CSE of MOV_GPR_TO_DR64 whose GPR32 sources are constants.
   bool tryCSEConstantDR64(MachineInstr &MovInst, MachineRegisterInfo &MRI,
                           const HaydnInstrInfo &TII);
+
+  // Elide identity cross-bank round-trip:
+  //   lo = MOVE32_DR_L src; hi = MOVE32_DR_H src; dst = MOV_GPR_TO_DR64 lo,hi
+  //   or lo,hi = MOV_DR64_TO_GPR src; dst = MOV_GPR_TO_DR64 lo,hi
+  // → OR64 dst, src, src (DR64 copy). Avoids post-RA SP pack expansion.
+  bool tryElideIdentityPack(MachineInstr &MovInst, MachineRegisterInfo &MRI,
+                            const HaydnInstrInfo &TII);
 };
 
 // Create a Haydn Post-Selection Optimization pass.

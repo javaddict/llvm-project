@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
-;
+
+; Role: semantic — ABI DataLayout i64:32 allows 4-byte-aligned i64, but ISA ST64/LD64 need 8.
+
 ; ABI DataLayout i64:32 allows 4-byte-aligned i64, but ISA ST64/LD64 need 8.
 ; Unaligned s64 memops must not emit st64/ld64 (BundleSim e_struct ALIGN fault).
 ; Accept either: (1) MOVE32_DR_L/H + ST32/LD32, or (2) D_SW_L/H / dual LD32 pack.

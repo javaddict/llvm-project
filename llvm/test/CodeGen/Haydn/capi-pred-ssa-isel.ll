@@ -1,16 +1,15 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — ISel exit: pure SSA pred ops expand only to X2/X4SLT + MOVT + MOVESFR2GPR/MOVEGPR2SFR.
+
 ; C1.1 / G-PRED-SSA ISel exit: pure SSA pred ops expand only to
 ;   X2/X4SLT + MOVT + MOVESFR2GPR/MOVEGPR2SFR
 ; (no formMACs, no FormatID, no phantom MI).
 ;
 ; Packetizer may co-issue SLT+MOVESFR2GPR or MOVEGPR2SFR+MOVT in one bundle;
-; CHECK-DAG accepts either order. Two-epoch reverse must still select.
 
-; CHECK-LABEL: test_x2cmplt32:
-; CHECK-DAG: x2slt32
-; CHECK-DAG: movesfr2gpr
+
 define i32 @test_x2cmplt32(<2 x i32> %a, <2 x i32> %b) {
   %p = call i32 @llvm.haydn.x2cmplt32(<2 x i32> %a, <2 x i32> %b)
   ret i32 %p

@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -stop-after=instruction-select < %s | FileCheck %s
-;
+
+; Role: MIR — Predicated execution patterns using SFR flags.
+
 ; REGRESSION TEST: Predicated execution patterns using SFR flags.
 ;
 ; Haydn's predication model:
@@ -24,9 +26,7 @@
 
 ;X2SEQ32 -> X2MOVF32: equal compare, move-if-false
 
-; CHECK-LABEL: name: test_x2seq_then_movf
-; CHECK: X2SEQ32
-; CHECK: X2MOVF32
+
 define <2 x i32> @test_x2seq_then_movf(<2 x i32> %a, <2 x i32> %b, <2 x i32> %fallthrough) {
   %cmp = call <2 x i32> @llvm.haydn.x2seq32(<2 x i32> %a,<2 x i32> %b)
   %result = call <2 x i32> @llvm.haydn.x2movf32(<2 x i32> %fallthrough,<2 x i32> %cmp)

@@ -1,0 +1,26 @@
+# RUN: not llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   %s -o - 2>&1 | FileCheck %s
+
+# Role: verifier — Late-MC one-to-one: residual SET_HWLOOP fails closed at the late firewall (must be final SET_HWLOOP_{W,F2_W} before layout).
+
+# Late-MC one-to-one: residual SET_HWLOOP fails closed at the late firewall
+# (must be final SET_HWLOOP_{W,F2_W} before layout). Shared residual class
+# with AsmPrinter.
+
+--- |
+  define void @residual_set_hwloop_imm() { ret void }
+...
+---
+name:            residual_set_hwloop_imm
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    successors: %bb.1
+    ; CHECK: residual cycle-forming pseudo
+    SET_HWLOOP 0, %bb.1, %bb.1, 8
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15

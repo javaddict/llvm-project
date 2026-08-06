@@ -16,19 +16,26 @@
 // picks up automatically via TargetInstrInfo::CreateTargetMIHazardRecognizer
 // (MachineScheduler.cpp:4295-4300).
 //
-// Phase B2 (Stream B): bundle formation moves INTO this strategy.
-// enterMBB stashes CurrentMBB; leaveRegion groups same-cycle Top-zone SUs
-// into an in-memory bundle list (port of AIE's computeAndFinalizeBundles);
-// leaveMBB materializes the accumulated list into the MBB — a NOP per empty
-// cycle + bundleWithPred/finalizeBundle for non-empty bundles (port of AIE's
-// commitBlockSchedule). Dual-load packing is HR tryAddProduct → setDesc
-// members (no promoteLoads residual).
+// Bundle formation lives in this strategy. enterMBB stashes CurrentMBB and
+// counts multi-member hard BUNDLE roots (product path expects zero before an
+// approved producer). leaveRegion reconstructs Top and Bot SchedBoundary
+// zones into an in-memory cycle list (port of AIE computeAndFinalizeBundles),
+// runs handleRegionConflicts (ExitReadyCycle + inter-zone scoreboard /
+// TopReadyCycle hazard pads), then merges; leaveMBB materializes the
+// accumulated list — a NOP per empty cycle + exact no-split multi-MI
+// Format E commit via HaydnBundleMaterialize — then transactionally
+// exact-commits any multi-member hard roots and replays the full MBB cycle
+// stream for cross-boundary operand latency + stage-relative
+// Required/Reserved hazards (plan §5.5). Dual-load packing is HR
+// exactTryAddProduct → setDesc members (no promoteLoads residual).
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNPOSTRASCHEDSTRATEGY_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNPOSTRASCHEDSTRATEGY_H
 
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
@@ -38,11 +45,11 @@ namespace llvm {
 class HaydnInstrInfo;
 class MachineInstr;
 
-// Post-RA scheduler strategy that forms VLIW bundles in leaveRegion/leaveMBB
-// (Stream B Phase B2, ). Bundling is driven purely by the
-// already-scheduled SUs' TopReadyCycle values (set by the base list
-// scheduler) and the HaydnHazardRecognizer's resource model — AIE-pure, no
-// separate data-hazard gate (the scheduler DAG's SDep edges carry data deps).
+// Post-RA scheduler strategy that forms VLIW bundles in leaveRegion/leaveMBB.
+// Bundling is driven by the scheduled SUs' zone-local ready cycles
+// (TopReadyCycle for Top-scheduled, BotReadyCycle for Bot-scheduled) and the
+// HaydnHazardRecognizer resource model. Honours the normal LLVM
+// -misched-postra-direction modes (topdown / bottomup / bidirectional).
 class HaydnPostRASchedStrategy : public PostGenericScheduler {
 public:
   HaydnPostRASchedStrategy(const MachineSchedContext *C);
@@ -50,14 +57,16 @@ public:
   ~HaydnPostRASchedStrategy() override = default;
 
   // Stash CurrentMBB for leaveMBB materialize (DAG BB is not publicly
-  // accessible). Dual-load packing is HR alts tryAdd → setDesc members
+  // accessible). Count multi-member hard BUNDLE roots for metrics; leaveMBB
+  // exact-commits them. Dual-load packing is HR alts tryAdd → setDesc members
   // (AIEHazardRecognizer.cpp:389; no promoteLoads residual).
   void enterMBB(MachineBasicBlock *MBB) override;
 
-  // Override tryCandidate to prioritize memory ops as the cycle's first issue
-  // (ISA-34 Gap D: hide load latency) while still allowing a ready MAC/ALU to
-  // beat a second load once a load is already the best candidate — dual-load
-  // + MAC co-issue for hot-loop slot_fill.
+  // Override tryCandidate: (1) bounded ready-subset cycle auction ranks denser
+  // co-issue fills first (issue-width-3 exact product subsets of Available +
+  // current cycle base); (2) prefer memory as the cycle's first issue to hide
+  // load latency while still allowing a ready MAC/ALU to beat a second load
+  // once a load is already best — dual-load + MAC co-issue for hot-loop fill.
   bool tryCandidate(SchedCandidate &Cand, SchedCandidate &TryCand) override;
 
   // Mark that the current region was actually scheduled (the base drive loop
@@ -82,18 +91,18 @@ public:
   // AIEAlternateDescriptors.h:74).
   void materializeMultiOpcodeInstrs();
 
-  // Compute the bundle list for the region just scheduled: walk the Top
-  // zone's scheduled MIs, group SUs sharing the same TopReadyCycle into a
-  // bundle, pad idle cycles with empty bundles. The list is stashed on
-  // RegionBundles for leaveMBB to materialize. The MBB is NOT mutated here.
-  // (Invoked by HaydnScheduleDAGMI::exitRegion.)
+  // Reconstruct Top+Bot cycle lists for the region just scheduled, merge in
+  // MBB order, and pad through zone CurrCycle / ExitSU ready cycles. The MBB
+  // is NOT mutated here; leaveMBB materializes. Invoked by
+  // HaydnScheduleDAGMI::exitRegion.
   void leaveRegion(const SUnit &ExitSU);
 
 private:
   // A single cycle's worth of instructions, in MBB order. Empty Instrs means
   // an idle cycle (materialized as a rolling-position NOP). Product format is
-  // always Bundle128Full (HaydnBundlePlan). Multi-MI materialize stamps
-  // FormatID imm on the BUNDLE root. Singletons stay standalone MIR
+  // always Format E (E96TwoEntry / E96ThreeEntry from HaydnBundlePlan).
+  // Multi-MI materialize stamps BundleFormatRowID + CompletionStateID imms
+  // on the BUNDLE root via stampBundleCommit. Singletons stay standalone MIR
   // here and are wrapped by HaydnFinalizeBundle after PostMachineScheduler
   // (AIEFinalizeBundle peer). Post-commit placement is getSlotKind on
   // member Desc (AIEBaseMCFormats.cpp:66-75).
@@ -127,18 +136,53 @@ private:
                                   SmallVectorImpl<CycleBundle> &Bundles,
                                   CycleBundle &CurrBundle);
 
-  // Build the bundle list for the just-scheduled region from the Top zone.
-  // Port of AIE::computeAndFinalizeBundles (AIEMachineScheduler.cpp:158-234)
-  // Top-zone only (PostGenericScheduler schedules top-down). Returns the
-  // bundle list for the region.
-  SmallVector<CycleBundle> computeRegionBundles();
+  // Port of AIE::computeAndFinalizeBundles (AIEMachineScheduler.cpp:152-228):
+  // walk one SchedBoundary zone, group by zone-local ready cycle, flush the
+  // last non-empty cycle, sync the zone CurrCycle, and pad empty cycles to
+  // that final CurrCycle. Bot zone is reversed to MBB order on return.
+  SmallVector<CycleBundle> computeAndFinalizeBundles(SchedBoundary &Zone);
+
+  // AIE checkInterZoneConflicts peer (AIEMachineScheduler.cpp:1149-1174):
+  // true if Top/Bot scoreboards still overlap at the seam (DeltaCycles=-1)
+  // or a Bot-zone MI's TopReadyCycle is later than the cycle it would land on
+  // after Top's final CurrCycle.
+  bool checkInterZoneConflicts(ArrayRef<CycleBundle> BotBundles) const;
+
+  // AIE handleRegionConflicts peer (AIEMachineScheduler.cpp:1176-1201):
+  // ExitReadyCycle pad, then bump Top (and TopBundles) until inter-zone
+  // scoreboard + TopReadyCycle deps are clear.
+  void handleRegionConflicts(const SUnit &ExitSU,
+                             SmallVectorImpl<CycleBundle> &TopBundles,
+                             ArrayRef<CycleBundle> BotBundles);
 
   // Insert one NOP (via TII->insertNoop) per empty cycle in \p Bundles, and
-  // build a BUNDLE MI per non-empty cycle via bundleWithPred + finalizeBundle.
-  // Port of AIE materializeEmptyBundles + applyBundles
-  // (AIEMachineScheduler.cpp:806-863, AIEHazardRecognizer.cpp:317-351).
+  // exact-commit each legal multi-MI cycle via shared
+  // haydn::bundle::commitExactMultiMIProductCycle. Illegal scheduled
+  // multi-MI fails closed (no production greedy split; NumScheduledCyclesSplit
+  // diagnostic). Port of AIE materializeEmptyBundles + applyBundles
+  // (AIEMachineScheduler.cpp:806-863, AIEHazardRecognizer.cpp:317-351)
+  // under exact no-split law.
   void materializeBundles(MachineBasicBlock &MBB,
                           SmallVector<CycleBundle> &Bundles);
+
+  // Transactionally exact-commit multi-member hard BUNDLE roots whose members
+  // are in \p HardMembers (same children, member setDesc, field order,
+  // Format E row + completion stamp). Illegal membership fail-closes.
+  // \p HardMembers are the
+  // children of multi-member roots that existed before leaveMBB materialize
+  // (approved producer / multipass re-entry) — not packs created by this
+  // leaveMBB's scheduled exact commit.
+  void exactCommitHardRoots(MachineBasicBlock &MBB,
+                            const SmallPtrSetImpl<MachineInstr *> &HardMembers);
+
+  // Replay the ordered MBB cycle stream through stage-relative
+  // Required/Reserved scoreboard + target operand-latency facts. Inserts
+  // exact generated NOP cycles only at seams of hard roots identified by
+  // \p HardMembers; never moves/merges/splits a hard cycle. No-op when
+  // \p HardMembers is empty (ordinary scheduled multi-MI packs are not hard).
+  void replayCrossBoundaryHazards(
+      MachineBasicBlock &MBB,
+      const SmallPtrSetImpl<MachineInstr *> &HardMembers);
 };
 
 } // end namespace llvm

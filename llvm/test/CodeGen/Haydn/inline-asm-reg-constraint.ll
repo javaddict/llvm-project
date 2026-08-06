@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O0 -global-isel -global-isel-abort=1 %s -o - | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel -global-isel-abort=1 %s -o - | FileCheck %s
-;
+
+; Role: semantic — Empty side-effecting inline asm with "r" / "+r" register constraints must lower (not crash IRTranslator with "unable to translate instruction: call").
+
 ; Empty side-effecting inline asm with "r" / "+r" register constraints must
 ; lower (not crash IRTranslator with "unable to translate instruction: call").
 ; libc memset_explicit uses asm("" : : "r"(dst) : "memory") as a DSE barrier.

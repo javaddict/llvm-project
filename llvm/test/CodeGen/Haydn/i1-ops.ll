@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — triggers a "MBB has unexpected successors" verifier error in the Control Flow Optimizer pass (the branch on i1 produces an empty entry block with.
+
 ; NOTE: Does not use -verify-machineinstrs because the i1_branch function
 ; triggers a "MBB has unexpected successors" verifier error in the Control
 ; Flow Optimizer pass (the branch on i1 produces an empty entry block with
@@ -14,6 +16,7 @@
 ; i1 comparisons use seq32 after masking to bit 0.
 
 ;i1 AND
+
 define i1 @i1_and(i1 %a, i1 %b) nounwind {
 ; CHECK-LABEL: i1_and:
 ; CHECK: and32

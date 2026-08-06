@@ -1,10 +1,12 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles -verify-machineinstrs %s -o - | FileCheck %s
-#
+
+# Role: MIR — — singleton cycles → BUNDLE + FormatID (AIE FinalizeBundle port).
+
 # B1.2 — singleton cycles → BUNDLE + FormatID (AIE FinalizeBundle port).
 #
 # Port of AIEFinalizeBundle (AIEFinalizeBundle.cpp:22-54 / AIE2TargetMachine.cpp:
 # 242-244 after PostMachineScheduler). Bare real MIs become singleton BUNDLEs
-# with durable FormatID imm 0 (Bundle128Full). Meta/COPY/already-bundled stay
+# with durable FormatID imm 0 (FormatE96). Meta/COPY/already-bundled stay
 # correct; multi-MI BUNDLE from pack is left alone (already stamped in B1.1).
 # No setDesc / no HaydnMCFlags writers here (BF3 debt).
 

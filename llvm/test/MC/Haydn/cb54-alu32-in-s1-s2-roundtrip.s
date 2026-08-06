@@ -1,9 +1,11 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
 # RUN:   llvm-objdump -d --triple=haydn-unknown-elf %t.o | FileCheck %s
 # REQUIRES: haydn-registered-target
-#
+
+# Role: object — ALU32 is now sub-encodable in S1 and S2 of a Format E parcel (previously S0-only).
+
 # REGRESSION TEST : ALU32 is now sub-encodable in S1 and S2 of a
-# Bundle128 word (previously S0-only).
+# Format E word (previously S0-only).
 #
 # Bug: ALU32 was encodable only in S0. Bundles mixing ALU32 with ALU64 in
 # s1/s2 had no legal Mode-0 row (s1/s2 columns were ALU64-only), so the
@@ -14,10 +16,10 @@
 # Fix (encoding_manual.md §6): the s1/s2 ALU slots now accept ALU32 via
 # sub-mode markers (s1: FU=00 + opc_imm[11:10]=11; s2: FU=0 + opcode[8]=1).
 # This test pins the round-trip: ALU32 unary ops pack alongside ALU64 in a
-# single Bundle128 word and objdump decodes them back.
+# single Format E word and objdump decodes them back.
 #
 # Post cutover: 3-issue multi-op packing IS implemented. Each bundle is
-# 16 bytes (Bundle128); the decoder renders slots in s0/s1/s2 order with
+# 12 bytes (Format E); the decoder renders slots in s0/s1/s2 order with
 # `nop` for idle slots. The earlier "SUPERSeded by one-child-per-window"
 # XFAIL note is obsolete.
 #
@@ -35,7 +37,7 @@
 
 # ALU64 (S1) + ALU32 (S2): not32 packs in s2 alongside add64 in s1.
 # The encoder routes by FlexMap slot authority, so disasm slot order
-# may differ from textual order — both ops still land in one Bundle128 word.
+# may differ from textual order — both ops still land in one Format E parcel.
 { add64 d3, d4, d5; not32 r5, r6 }
 
 # Two ALU32 ops: not32 + popcount32.
@@ -48,12 +50,12 @@
 
 # CHECK-LABEL: .text
 
-# Each bundle is 16 bytes (cursor advances 0x10 per bundle), proving
-# Bundle128 packing with both slots populated on one objdump line.
+# Each bundle is 16 bytes (cursor advances 0xc per bundle), proving
+# Format E packing with both slots populated on one objdump line.
 # B3.5 source-order S2-first: print is S0-S1-S2 (high-prefer members last).
-# CHECK:      0: {{.*}} add64 {{.*}} neg32
-# CHECK:      10: {{.*}} not32 {{.*}} add64
-# CHECK:      20: {{.*}} popcount32 {{.*}} not32
-# CHECK:      30: {{.*}} add64 {{.*}} add64
+# CHECK: {{.*}}0: 4f c2 08 01 a0 04 41 08 00 00 00 00 { neg32 r1, r2; add64 d0, d1, d2; nop }
+# CHECK: c: 4f 09 1a 2a 20 21 94 01 00 00 00 00 { add64 d3, d4, d5; not32 r5, r6; nop }
+# CHECK: {{.*}}18: 4f 42 38 04 20 29 a4 02 00 00 00 00 { not32 r7, r8; popcount32 r9, r10; nop }
+# CHECK: {{.*}}24: 4f 09 82 10 a0 04 0d 15 00 00 00 00 { add64 d0, d1, d2; add64 d3, d4, d5; nop }
 # CHECK-NOT:  <unknown>
 # CHECK-NOT:  c.add

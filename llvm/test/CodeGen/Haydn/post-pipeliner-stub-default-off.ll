@@ -1,8 +1,8 @@
 ; UNSUPPORTED: true
-; Stage-0 PostPipeliner deleted (YOLO densify kill)
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:     -O2 < %s | FileCheck %s --check-prefix=OFF
-;
+; Role: retired — Stage-0 PostPipeliner deleted; not product coverage.
+; Do not count as product green. RUN is deliberately false so a dropped
+; RUN: false
+
 ; Stage-0 PostPipeliner default OFF. ON needs explicit flag.
 ; Both paths must remain verifier-clean.
 ;

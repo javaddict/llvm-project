@@ -1,9 +1,13 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 < %s | FileCheck %s
+
+; Role: smoke — control-flow constructs compile+emit; two focused max32/xor pins only. Not full semantic qualification.
+
 ; NOTE: -verify-machineinstrs is disabled due to known G_PHI selection issue
 
 ; Test control flow constructs compile correctly
 
 ; Simple if-then-else
+
 define i32 @test_if_else(i32 %a, i32 %b) {
 ; CHECK-LABEL: test_if_else:
 entry:

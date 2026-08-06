@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Wave T5.1 / T7.3: PreLegalizer G_MULA64 / G_MULA64U formation + select.
+
 ; Wave T5.1 / T7.3: PreLegalizer G_MULA64 / G_MULA64U formation + select.
 ;
 ;   acc += sext(a)*sext(b)  -> mula64.ll   (signed x signed low lane)
@@ -18,6 +20,7 @@
 ; CHECK-LABEL: widen_mac_ss:
 ; CHECK: mula64.ll
 ; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3
+
 define i64 @widen_mac_ss(i32 %a, i32 %b, i64 %acc) {
   %aa = sext i32 %a to i64
   %bb = sext i32 %b to i64

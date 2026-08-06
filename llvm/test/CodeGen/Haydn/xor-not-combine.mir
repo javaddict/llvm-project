@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-postlegalizer-combiner -global-isel-abort=1 %s -o - | FileCheck %s
-#
+
+# Role: MIR — s for XOR-zero and double-NOT combiner rules in HaydnPostLegalizerCombiner.
+
 # Tests for XOR-zero and double-NOT combiner rules in HaydnPostLegalizerCombiner.
 #
 # Combiner rules tested:

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — DR64 MUL/MAC intrinsics — sign combo coverage.
+
 ; REGRESSION TEST: DR64 MUL/MAC intrinsics — sign combo coverage.
 ;
 ; Purpose: Verify that the 64-bit multiply (MUL64), multiply-accumulate

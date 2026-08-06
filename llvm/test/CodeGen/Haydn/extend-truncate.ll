@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — function arguments triggers an "unknown operand type" crash in HaydnMCInstLower (the selector produces an operand type the printer.
+
 ; NOTE: Does not use -verify-machineinstrs because trunc i64 to i32 on
 ; function arguments triggers an "unknown operand type" crash in
 ; HaydnMCInstLower (the selector produces an operand type the printer
@@ -17,6 +19,7 @@
 ; conversion (e.g., extend_chain where the result is truncated back).
 
 ;Sign-extend i8 to i32
+
 define i32 @sext_i8_i32(i8 %a) nounwind {
 ; CHECK-LABEL: sext_i8_i32:
 ; CHECK: sll32

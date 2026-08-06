@@ -1,22 +1,21 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -O2 -global-isel-abort=1 \
 ; RUN:   -verify-machineinstrs < %s | FileCheck %s
-;
-; B4.5: spill/reload KPI observe on hot DSP kernels (fail-open).
-; Port of AIE stack-slot predicates (AIEBaseInstrInfo.cpp:1965-2028) +
-; AIEBaseAsmPrinter.cpp:97-126 emitComments + Haydn #<swps>-shaped
+
+; Role: semantic — spill/reload KPI observe on hot DSP kernels (fail-open).
+
+; Spill/reload KPI observe on hot DSP kernels (fail-open).
+; Port of AIE stack-slot predicates + AsmPrinter emitComments + Haydn
 ; function-level #<spill-kpi> summary (HaydnAsmPrinter).
 ;
-; Fail-open: BF4/G-BF close does not require zero spills — soft baseline
-; only checks metric presence and non-negative digit fields.
-; Bundle128 product only; no schedule change from this observe path.
+; Fail-open soft baseline: only checks metric presence and non-negative
+; digit fields. Format E product only; no schedule change from this path.
 
 ; CHECK-LABEL: fir_filter:
 ; CHECK: #<spill-kpi> @fir_filter spills={{[0-9]+}} spill-bytes={{[0-9]+}} reloads={{[0-9]+}} reload-bytes={{[0-9]+}}
 
 ; CHECK-LABEL: iir_biquad:
 ; High register pressure → CSR FrameSetup/Destroy traffic observed.
-; Soft baseline (non-zero spills); G-BF close still fail-open if other kernels
-; report zero.
+; Soft baseline expects non-zero spills on this kernel.
 ; CHECK: #<spill-kpi> @iir_biquad spills={{[1-9][0-9]*}} spill-bytes={{[1-9][0-9]*}} reloads={{[1-9][0-9]*}} reload-bytes={{[1-9][0-9]*}}
 
 ; CHECK-LABEL: dot_product:

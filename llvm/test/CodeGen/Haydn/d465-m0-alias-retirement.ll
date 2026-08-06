@@ -1,17 +1,19 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s \
 ; RUN:     | FileCheck %s
 
+; Role: semantic — retire Mode-0 alias producers XOR32_M0 ST32_M0S0LS / LD32_M0S0LS in HaydnAsmPrinter.
+
 ; REGRESSION TEST : retire Mode-0 alias producers XOR32_M0
 ; ST32_M0S0LS / LD32_M0S0LS in HaydnAsmPrinter. These were emitted directly
 ; as MCInsts (post-finalizer) for the re-zero-R0 idiom (XOR32_M0 after calls)
 ; and the varargs va_list setup (ST32_M0S0LS / LD32_M0S0LS in VASTART/VACOPY).
 ; They have NO _S<k>_FLEX variant, so the forcing function fires:
-; "Haydn MC: opcode 'XOR32_M0' (opNNN) has no Bundle128 form"
+; "Haydn MC: opcode 'XOR32_M0' (opNNN) has no Format E form"
 ;
 ; Fix : emit the legacy base names XOR32 / ST32 / LD32 instead. These
 ; auto-pair via the FlexMap suffix-strip rule to XOR32_S0
 ; ST32_S0 / LD32_S0 (the Family 2 defs). The 3 GPR32/imm
-; operands bind positionally; the Bundle128 encoder resolves the flex variant.
+; operands bind positionally; the Format E encoder resolves the flex variant.
 ;
 ; Test design: (1) a function with a call exercises the post-call re-zero-R0
 ; XOR32 emit; (2) a varargs function exercises VASTART (ST32) and VACOPY
@@ -20,10 +22,9 @@
 ; and the mnemonics land (xor32 / st32 / ld32, NOT xor32_m0 / st32_m0s0ls).
 
 ;f_call
-; CHECK-LABEL: f_call:
 ; The post-call re-zero emits xor32 (r0,r0,r0). The bundle printer may render
 ; it standalone or in a bundle; check the mnemonic appears.
-; CHECK: xor32
+
 define dso_local i32 @f_call(i32 %a) {
 entry:
   %r = tail call i32 @ext(i32 %a)

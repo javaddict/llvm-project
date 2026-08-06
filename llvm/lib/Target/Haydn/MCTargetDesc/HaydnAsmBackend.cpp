@@ -9,6 +9,7 @@
 #include "HaydnAsmBackend.h"
 #include "HaydnFixupKinds.h"
 #include "HaydnRelocLayout.h"
+#include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
@@ -16,11 +17,30 @@
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCValue.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <optional>
 
 using namespace llvm;
 
+// Format E PC is the 12-byte parcel base. Fixup byte offsets can sit mid-parcel
+// when a field lives in entry1/entry2 (EntryLSB/8 = 6+). Default MC P =
+// frag_off + fixup_off then fails Align=4 (hwloop) / Align=2 checks with a
+// spurious "mis-aligned relocation target". Seed Value with Abs % Parcel so
+// the default subtract lands on align_down(Abs, Parcel) (Xtensa l32r pattern).
+std::optional<bool> HaydnAsmBackend::evaluateFixup(const MCFragment &F,
+                                                   MCFixup &Fixup, MCValue &,
+                                                   uint64_t &Value) {
+  if (!Fixup.isPCRel() || !Asm)
+    return std::nullopt;
+  const unsigned Parcel = haydnProductionParcelBytes().Value;
+  if (Parcel <= 1)
+    return std::nullopt;
+  const uint64_t Abs = Asm->getFragmentOffset(F) + Fixup.getOffset();
+  Value = Abs % Parcel;
+  return std::nullopt;
+}
+
 // Map a compressed 16-bit opcode to its 32-bit equivalent.
-// C_* compressed shells deleted (Bundle128-only). No opcode relaxes.
+// C_* compressed shells deleted. No opcode relaxes.
 unsigned HaydnAsmBackend::getRelaxedOpcode(unsigned Opcode) const {
   return Opcode;
 }
@@ -73,13 +93,15 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
   }
 
   // === Single-source reloc table (HaydnRelocLayout). Both this MC writer and
-  // lld's Haydn::relocate / getImplicitAddend delegate to the same geometry +
-  // transform table, so reader and writer can never diverge (; the
-  // ÷2/÷4 reader-writer split + flat HI20/LO16 mask are now impossible).
+  // lld's Haydn::relocate / getImplicitAddend / inBranchRange delegate to the
+  // same geometry + transform table (branch halfword ÷2, hwloop word ÷4), so
+  // reader and writer cannot diverge and no consumer keeps a parallel isInt
+  // field-width table.
   //
   // Legacy exception: FIXUP_HAYDN_HWLoopOffset is the 8-byte *placeholder* form
-  // whose loop_start/loop_end tag-compensation the geometric table
-  // cannot express. Keep that logic verbatim; everything else is table-driven.
+  // whose loop_start/loop_end tag-compensation the geometric table cannot
+  // express. Tag compensation stays local; product SET_HWLOOP uses Off1/Off2
+  // rows only.
   if (Kind == Haydn::FIXUP_HAYDN_HWLoopOffset) {
     constexpr uint8_t HWLoopTagMask = 0x3;        // tag at bits[17:16] = byte2[1:0]
     constexpr uint64_t HWLoopEndWordCompensation = 4; // word1 sits at PC+4
@@ -194,19 +216,12 @@ HaydnAsmBackend::createObjectTargetWriter() const {
 
 bool HaydnAsmBackend::writeNopData(raw_ostream &OS, uint64_t Count,
                                    const MCSubtargetInfo *) const {
-  // A.6 / Bundle128: executable pad is full 16-byte parcels only (all-zero
-  // Bundle128 NOP). Reject non-multiples so MC/lld cannot leave 2/4/8-byte
-  // executable gaps that the ISS treats as truncated parcels.
-  constexpr uint64_t Bundle128Bytes = 16;
-  if (Count % Bundle128Bytes != 0)
-    return false;
-
-  // All-zero 16-byte little-endian composite (idle s2|s1|s0 windows).
-  static const char Zeros[Bundle128Bytes] = {};
-  for (uint64_t Idx = 0; Idx < Count; Idx += Bundle128Bytes)
-    OS.write(Zeros, Bundle128Bytes);
-
-  return true;
+  // Product padding is whole Format E parcels only. Parcel length comes from
+  // the production registry EncodedBytes (not a local 12/16 literal). When
+  // golden has not registered a canonical idle/completion wire form, refuse
+  // to invent all-zero or header-only pad bytes (all-zero is not Format E:
+  // indicator must be 111). Partial residuals (non-multiples) are rejected.
+  return haydnWriteCanonicalIdlePad(OS, Count);
 }
 
 // Create the Haydn assembly backend.

@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=prologepilog -simplify-mir %s -o - | FileCheck %s
-#
+
+# Role: MIR — MIR tests for frame lowering: prologue/epilogue emission.
+
 # MIR tests for frame lowering: prologue/epilogue emission.
 # These tests use fully selected MIR with physical registers (noVRegs: true)
 # which is the format expected by the prologepilog pass.
@@ -54,11 +56,13 @@ body:             |
 # Prologue: only the R0 zero (x^x=0 idiom), no SP adjustment, no CFI (leaf with
 # no frame; the initial CFA comes from the CIE, no per-function
 # cfi_def_cfa_offset needed).
-# slice Z: ZERO_GPR pseudo retired -> XOR32 $r0, $r0 (x^x=0), frame-setup.
+# ZERO_GPR pseudo retired -> XOR32 $r0, $r0 (x^x=0), frame-setup.
 # Flex cutover: XOR32 -> XOR32_S0 (slot-suffixed Flex form).
 # CHECK: frame-setup XOR32 $r0, $r0
 # PostRAScratchFI may force a small frame even for otherwise frameless
 # leaves when R12 is allocatable. Accept either no-SUBI32 or SUBI32 for that slot.
+# Epilogue always re-zeros soft-zero R0 (covers mid-fn far-veneer residual).
+# CHECK: frame-destroy XOR32 $r0, $r0
 # CHECK: RET
 
 ---
@@ -90,7 +94,9 @@ body:             |
 # CHECK: frame-setup XOR32 $r0, $r0
 # CHECK: $r13 = frame-setup SUBI32 $r13, {{8|16}}
 # CHECK: frame-setup CFI_INSTRUCTION def_cfa_offset {{8|16}}
-# Epilogue: SP increment
+# Epilogue: re-zero soft-zero R0 before CSR/SP restore (linker far veneer
+# and JALR-rd=R0 leave R0 = link; LOADI32 CSR offsets need R0 == 0).
+# CHECK: frame-destroy XOR32 $r0, $r0
 # CHECK: $r13 = frame-destroy ADDI32_W $r13, {{8|16}}
 # CHECK: RET
 
@@ -119,7 +125,8 @@ body:             |
 # CHECK: frame-setup XOR32 $r0, $r0
 # CHECK: $r13 = frame-setup SUBI32 $r13, {{64|72}}
 # CHECK: frame-setup CFI_INSTRUCTION def_cfa_offset {{64|72}}
-# Epilogue: SP increment by 64 (+ optional PostRAScratch)
+# Epilogue: R0 re-zero then SP increment by 64 (+ optional PostRAScratch)
+# CHECK: frame-destroy XOR32 $r0, $r0
 # CHECK: $r13 = frame-destroy ADDI32_W $r13, {{64|72}}
 # CHECK: RET
 
@@ -152,6 +159,7 @@ body:             |
 # CHECK: frame-setup XOR32 $r0, $r0
 # CHECK: $r13 = frame-setup SUBI32 $r13, {{8|16}}
 # CHECK: frame-setup CFI_INSTRUCTION def_cfa_offset {{8|16}}
-# Epilogue: SP increment
+# Epilogue: R0 re-zero then SP increment
+# CHECK: frame-destroy XOR32 $r0, $r0
 # CHECK: $r13 = frame-destroy ADDI32_W $r13, {{8|16}}
 # CHECK: RET

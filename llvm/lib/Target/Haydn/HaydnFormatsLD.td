@@ -967,7 +967,7 @@ def FLAR_LD_S2 : HaydnFU_LD_S2_AR_FLAR<0b111000, (outs), (ins uimm2:$ar_sel), "f
 // Family 7 — S1 encode peers for logical LD32 / LD64.
 //
 // Format-first single authority: MIR holds only LD32/LD64; AltDescs
-// record slot; leaveRegion setDesc commits these Bundle128 members
+// record slot; leaveRegion setDesc commits these Format E placement members
 // LD32 → { LD32_S0, LD32_S1, 0 }
 // LD64 → { LD64_S0, LD64_S1, 0 }
 // No intermediate "logical twin" opcode. Public mnemonic is always ld32/ld64

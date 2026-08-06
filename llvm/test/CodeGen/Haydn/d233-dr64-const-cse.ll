@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — MOV_GPR_TO_DR64 with identical constant sources (ADDI32 r0, C for both halves) must be CSE'd when built multiple times.
+
 ; REGRESSION TEST : MOV_GPR_TO_DR64 with identical constant sources
 ; (ADDI32 r0, C for both halves) must be CSE'd when built multiple times.
 ; The expansion of MOV_GPR_TO_DR64 is a 4-instruction stack round-trip

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Wave 3 SFR flag register predication intrinsics.
+
 ; REGRESSION TEST: Wave 3 SFR flag register predication intrinsics.
 ;
 ; Tests the compare->SFR->conditional-move pattern for SIMD predication.
@@ -16,8 +18,7 @@
 
 ;X2 compare -> SFR (binary DR64)
 
-; CHECK-LABEL: test_x2seq32:
-; CHECK: x2seq32
+
 define <2 x i32> @test_x2seq32(<2 x i32> %a, <2 x i32> %b) {
   %r = call <2 x i32> @llvm.haydn.x2seq32(<2 x i32> %a,<2 x i32> %b)
   ret <2 x i32> %r

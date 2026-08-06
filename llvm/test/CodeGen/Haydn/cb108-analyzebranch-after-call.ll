@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — BranchRelaxation must be able to analyze a conditional branch that sits in the same MBB as a preceding libcall (JAL_W).
+
 ; BranchRelaxation must be able to analyze a conditional branch that
 ; sits in the same MBB as a preceding libcall (JAL_W). analyzeBranch used to
 ; treat the mid-block JAL_W as "unanalyzable" after already parsing the

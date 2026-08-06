@@ -1,8 +1,11 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — memory operations: memcpy, memmove, memset.
+
 ; Test memory operations: memcpy, memmove, memset.
 
 ;memcpy (small, constant size)
+
 define void @test_memcpy_small(ptr %dst, ptr %src) {
 ; CHECK-LABEL: test_memcpy_small:
 ; CHECK: jal_w{{(\.s[012])?}} lr, memcpy

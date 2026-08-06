@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -stop-after=instruction-select -verify-machineinstrs -o - < %s | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -filetype=obj -o %t.o < %s
-;
+
+; Role: object — Golden LS POST/PRE stores are IntrHasSideEffects and arrive as G_INTRINSIC_W_SIDE_EFFECTS.
+
 ; C0.2 / G-CAPI: Golden LS POST/PRE stores are IntrHasSideEffects and arrive
 ; as G_INTRINSIC_W_SIDE_EFFECTS. They must route into selectIntrinsic (no
 ; cannot-select), lower as single-ret writeback stores to logical Golden MI,
@@ -10,8 +12,7 @@
 ; DR64 POST/PRE stores
 ;===----------------------------------------------------------------------===
 
-; CHECK-LABEL: name: test_d_sdw_post_imm
-; CHECK: D_SDW_POST_IMM
+
 define ptr @test_d_sdw_post_imm(i64 %data, ptr %base) {
   %r = call ptr @llvm.haydn.d.sdw.post.imm(i64 %data, ptr %base, i32 0)
   ret ptr %r

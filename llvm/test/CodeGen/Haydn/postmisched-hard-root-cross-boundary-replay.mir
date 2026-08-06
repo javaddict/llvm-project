@@ -1,0 +1,76 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=REPLAY
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -stats \
+# RUN:   -verify-machineinstrs %s -o /dev/null 2>&1 | \
+# RUN:   FileCheck %s --check-prefix=STATS
+
+# Role: MIR — Cross-boundary latency replay on both sides of a hard root.
+#
+# Case 1 (root→consumer): multi-member hard root co-issues a MAC that defs
+# $d0 with an independent ADD32. The next region consumes $d0 as non-tied
+# rs1 of another MAC (result→rs1 latency 2). isSchedulingBoundary fences the
+# root, so region-local scheduling cannot see the edge; leaveMBB seam replay
+# inserts an exact NOP between the root and the consumer.
+#
+# Case 2 (producer→root): MAC defs $d0, then a hard root whose consumer-side
+# neighbor still exact-commits. Pins that hard-root exact-commit survives
+# adjacent MAC traffic (no split / lost members).
+#
+# F2MULAA32R_HHLL Slot12_MAC OperandCycles [2,1,1,2]: result→rs1 latency 2.
+
+--- |
+  define void @root_to_consumer_raw() { ret void }
+  define void @producer_to_root_exact() { ret void }
+...
+---
+name:            root_to_consumer_raw
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $d2, $d3, $d4, $r0, $r1, $r15
+
+    ; Hard root: MAC writeback of $d0 co-issued with independent ADD32.
+    BUNDLE implicit-def $d0, implicit-def $r4, implicit-def dead $sfr, implicit $d1, implicit $d2, implicit $r0, implicit $r1 {
+      $d0 = F2MULAA32R_HHLL $d0, $d1, $d2, implicit-def dead $sfr
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+    }
+    ; Consumer in the next region: non-tied rs1 use of $d0 (latency 2).
+    $d3 = F2MULAA32R_HHLL $d3, $d0, $d4, implicit-def dead $sfr
+    RET implicit $r15
+
+...
+---
+name:            producer_to_root_exact
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $d2, $r0, $r1, $r2, $r3, $r15
+
+    ; Producer before the hard-root fence.
+    $d0 = F2MULAA32R_HHLL $d0, $d1, $d2, implicit-def dead $sfr
+    ; Hard root exact-commits (two ADD32); independent of $d0.
+    BUNDLE implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r5 = ADD32 $r2, $r3, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+# REPLAY-LABEL: name: root_to_consumer_raw
+# REPLAY: BUNDLE 0
+# REPLAY-DAG: F2MULAA32R_HHLL
+# REPLAY-DAG: ADD32
+# REPLAY: NOP
+# REPLAY: F2MULAA32R_HHLL
+# REPLAY: RET
+
+# REPLAY-LABEL: name: producer_to_root_exact
+# REPLAY: F2MULAA32R_HHLL
+# REPLAY: BUNDLE 0
+# REPLAY-DAG: ADD32
+# REPLAY-DAG: ADD32
+# REPLAY: RET
+
+# STATS-DAG: haydn-post-ra-sched{{.*}}Number of multi-member hard BUNDLE roots transactionally
+# STATS-DAG: haydn-post-ra-sched{{.*}}Number of idle NOP cycles inserted by post-RA cross-boundary

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
-;
+
+; Role: semantic — Shrink-wrapping must push prologue to the first block that actually uses callee-saved registers, not always the entry block.
+
 ; REGRESSION TEST: Shrink-wrapping must push prologue to the first block
 ; that actually uses callee-saved registers, not always the entry block.
 ;

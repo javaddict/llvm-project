@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Golden slot0 scalar-32 shifts: imm RI5 + reg RR.
+
 ; Golden slot0 scalar-32 shifts: imm RI5 + reg RR.
 
 declare i32 @llvm.haydn.slli32(i32, i32)

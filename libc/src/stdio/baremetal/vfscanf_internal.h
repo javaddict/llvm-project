@@ -28,25 +28,35 @@ namespace internal {
 // Baremetal FILE has no libc File::ungetc; scanf converters always
 // read one past and push back once (leading whitespace skip for %s/%d,
 // terminator for %s, etc.). A single-char pushback buffer is required.
+//
+// pushback is volatile: Haydn VLIW + LTO has been observed to dead-store
+// eliminate ungetc's write when the whitespace-skip while-loop is not
+// entered (raw_match(" ") on non-space input), so the subsequent
+// convert_string/int getc() never sees the restored character and %s/%d
+// match zero conversions (fscanf returns EOF). Leading-space inputs that
+// exercise the while body still worked. volatile forces the store/load.
 class StreamReader : public scanf_core::Reader<StreamReader> {
   ::FILE *stream;
   // -1 = empty; otherwise the pushed-back character (as unsigned char).
-  int pushback = -1;
+  volatile int pushback = -1;
+  // Member read buffer (not a getc stack temporary) so the hostcall write
+  // target is a stable object; pairs with volatile pushback for Haydn.
+  char read_buf = 0;
 
 public:
   LIBC_INLINE StreamReader(::FILE *stream) : stream(stream) {}
 
   LIBC_INLINE char getc() {
-    if (pushback >= 0) {
-      char c = static_cast<char>(pushback);
+    int pb = pushback;
+    if (pb >= 0) {
       pushback = -1;
-      return c;
+      return static_cast<char>(pb);
     }
-    char c;
-    auto result = __llvm_libc_stdio_read(stream, &c, 1);
+    read_buf = 0;
+    auto result = __llvm_libc_stdio_read(stream, &read_buf, 1);
     if (result != 1)
       return '\0';
-    return c;
+    return read_buf;
   }
   LIBC_INLINE void ungetc(int c) { pushback = c & 0xff; }
 };
@@ -57,10 +67,13 @@ LIBC_INLINE int vfscanf_internal(::FILE *__restrict stream,
                                  const char *__restrict format,
                                  internal::ArgList &args) {
   internal::StreamReader reader(stream);
-  // This is done to avoid including stdio.h in the internals. On most systems
-  // EOF is -1, so this will be transformed into just "return retval".
+  // scanf_main returns the conversion count. Only input failure before any
+  // conversion should yield EOF; matching failure after consuming input
+  // returns 0 (C standard). The old `retval == 0 → EOF` collapsed both.
   int retval = scanf_core::scanf_main(&reader, format, args);
-  return (retval == 0) ? EOF : retval;
+  if (retval == 0)
+    return reader.chars_read() == 0 ? EOF : 0;
+  return retval;
 }
 
 } // namespace LIBC_NAMESPACE_DECL

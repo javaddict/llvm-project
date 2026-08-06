@@ -1,6 +1,8 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles -verify-machineinstrs %s -o - | FileCheck %s
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles,haydn-verify-bundles -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=FIN
-#
+
+# Role: MIR — — Fail-closed committed-bundle invariant verifier (opt-in lit).
+
 # B1.4 — Fail-closed committed-bundle invariant verifier (opt-in lit).
 #
 # AIE peers:

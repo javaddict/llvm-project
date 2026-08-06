@@ -1,7 +1,9 @@
 # RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 # RUN:     -run-pass=instruction-select -verify-machineinstrs %s -o - \
 # RUN:     | FileCheck %s
-#
+
+# Role: MIR — (CB-131 systematic): G_VAARG thin-selects to VAARG_I32.
+
 # REGRESSION TEST (CB-131 systematic): G_VAARG thin-selects to VAARG_I32.
 #
 # Historical bug: saveVarArgRegisters spills variadic GPRs ASCENDING (R2 at

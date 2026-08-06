@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O1 < %s | FileCheck %s
-;
+
+; Role: semantic — post-RA VLIW scheduler must restore ILP order so the greedy program-order packetizer can bundle two independent ADD32 ops.
+
 ; REGRESSION TEST: post-RA VLIW scheduler must restore ILP order so the
 ; greedy program-order packetizer can bundle two independent ADD32 ops.
 ;

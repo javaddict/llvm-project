@@ -16,16 +16,59 @@
 // ports of AIEMachineScheduler.cpp helpers (same logic; VirtRegOrUnit for
 // stock RegisterPressure API).
 //
-// B4.1: productFeasibleFormatMask is the Pre-RA FormatID frontier (size-1
-// Full). No setDesc / no FormatID freeze before RA (plan §7.1). SMS shares
-// the same Bundle/ResourceCycle getFeasibleFormatMask adapters.
+// productFeasibleFormatMask is the Pre-RA FormatID frontier (size-1 Full).
+// No setDesc / no FormatID freeze before RA (plan §7.1). SMS shares the same
+// Bundle/ResourceCycle getFeasibleFormatMask adapters. tryCandidate also
+// consumes the live HR MatchingFrontierScore (nondominated cardinality /
+// free-slot scarcity) after pressure/critical and before NodeOrder.
+//
+// SMS-RESMII pre-RA slice: productExhaustiveResMII /
+// productResMIIOverestimate / productResMIIFailsQualification thin-wrap pure
+// BundleFormatSolver oracles; portLowerBoundResMII thin-wraps PortModel.
+// Soft-exit QoR: productSoftExitIIFloor = max(format ResMII, port ResMII).
+// SMS-HANDOFF pre-RA slice: productFormsOneExactCycle /
+// productQualKernelCoissuePackable / productQualKernelExactlyPackable are
+// metrics-only packability probes — never freeze FormatID or invent BUNDLE.
+// No MIR mutation / setDesc. Sibling SMS owns analyzeLoop / ResourceCycle /
+// recordSuccessfulSMS metrics freeze.
+//
+// Generic-pass dual-run baseline: product defaults (matching-frontier ON,
+// finer-RP ON, isavail-delay OFF) vs residual arms
+// (-matching-frontier=false; optional -finer-rp-tracking=false). KPI freeze
+// lives in prera-format-generic-baseline.ll — spill/reload parity, post-RA
+// multi-MI exact finalize, silent split/hard-root, logical-only through
+// greedy/pre-postmisched. CreateTargetMIHazardRecognizer always installs the
+// target HR; flags never drop to a null factory.
+//
+// ILP / critical ranking residual attribution: product tryCandidate fires
+// ResourceDemand (matching-frontier) only after pressure/critical. Residual
+// arm keeps pressure primary (RegMax on critical kernels) and drops
+// ResourceDemand. Dual-run -stats live in scheduler-ilp.ll /
+// scheduler-critical-path.ll; pure pins on productIlpCriticalDualRunResidualPins.
+//
+// SMS-HOOK II-wrap false-accept pre-RA slice: pure helpers on
+// HaydnPreRASchedStrategy re-export catalog polarity
+// (ProductCrossCycleCapacityEnabled=false; productMaxInstrStageCycles=1;
+// smsHookRejectsIIWrapFalseAccept). Linear stage-relative HR booking is not
+// modulo-II ResourceCycle; sibling owns the issue-time-only differential and
+// analyzeLoop force-iiwrap-reject. No setDesc / no multi-cycle product enable.
+//
+// SMS/post-RA format-acceptance differential pre-RA slice (plan §8.4 #7):
+// productExactCanPackSequence / productFormatAcceptanceDifferentialPins pin
+// pure exactTryAddProduct polarity shared with ResourceCycle and post-RA HR.
+// CreateTargetMIHazardRecognizer IsPreRA expands the same candidate set;
+// scoreMatchingFrontier is the list-sched probe. Format is opcode-keyed
+// (MI ≡ desc); MOVE32-class port overcount is orthogonal. Sibling SMS owns
+// live ResourceCycle packing differential. No setDesc / no ResourceCycle edit.
 //
 //===----------------------------------------------------------------------===//
 
 #include "HaydnPreRASchedStrategy.h"
+#include "HaydnHazardRecognizer.h"
 #include "HaydnSchedMutations.h"
 #include "llvm/CodeGen/RegisterClassInfo.h"
 #include "llvm/CodeGen/RegisterPressure.h"
+#include "llvm/CodeGen/ScheduleHazardRecognizer.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include <algorithm>
@@ -36,8 +79,12 @@ using namespace llvm;
 
 #define DEBUG_TYPE "haydn-prera-sched"
 
+// Product defaults pinned by HaydnPreRASchedStrategy::product*Default and
+// dual-run lits prera-format-generic-baseline.ll / scheduler-ilp.ll /
+// scheduler-critical-path.ll. Keep cl::init in lockstep with those constexprs.
 static cl::opt<bool> EnableHaydnFinerRPTracking(
-    "haydn-premisched-finer-rp-tracking", cl::init(true), cl::Hidden,
+    "haydn-premisched-finer-rp-tracking",
+    cl::init(HaydnPreRASchedStrategy::productFinerRPTrackingDefault), cl::Hidden,
     cl::desc("Pre-RA: AIE-style pressure-first tryCandidate "
              "(aie-premisched-finer-rp-tracking peer)"));
 
@@ -45,8 +92,11 @@ static cl::opt<bool> EnableHaydnFinerRPTracking(
 // currently regresses yarpgen seed1 to HOSTCALL_ERROR (guest abort) vs
 // sticky-oracle when off — keep the AIE hook wired but default-off until
 // MIR-validated. Force on: -haydn-premisched-isavail-delay.
+// Product default = productIsAvailPressureDelayDefault (false).
 static cl::opt<bool> EnableHaydnIsAvailPressureDelay(
-    "haydn-premisched-isavail-delay", cl::init(false), cl::Hidden,
+    "haydn-premisched-isavail-delay",
+    cl::init(HaydnPreRASchedStrategy::productIsAvailPressureDelayDefault),
+    cl::Hidden,
     cl::desc("Pre-RA: AIE isAvailableNode pressure delayer (default off; "
              "seed1 HOSTCALL residual under investigation)"));
 
@@ -57,6 +107,18 @@ static cl::opt<unsigned> HaydnNumCriticalFreeRegs(
 static cl::opt<bool> EnableHaydnPreRAForceBottomUp(
     "haydn-premisched-force-bottom-up", cl::init(true), cl::Hidden,
     cl::desc("Force OnlyBottomUp (AIE PreRA leaveRegion contract)"));
+
+// Matching-frontier ranking (plan §5.1): after pressure/critical, prefer the
+// ready SU that keeps more nondominated matchings / free slots. Full-only
+// product: compact-byte tie is a no-op (size-1). Pure HR probe — no setDesc.
+// Dual-run residual: -haydn-premisched-matching-frontier=false (generic
+// NodeOrder after pressure; target HR still installed).
+static cl::opt<bool> EnableHaydnPreRAMatchingFrontier(
+    "haydn-premisched-matching-frontier",
+    cl::init(HaydnPreRASchedStrategy::productMatchingFrontierDefault),
+    cl::Hidden,
+    cl::desc("Pre-RA: rank tryCandidate by matching-frontier cardinality and "
+             "free-slot scarcity before NodeOrder"));
 
 //===----------------------------------------------------------------------===//
 // AIE helpers (AIEMachineScheduler.cpp) — stock VirtRegOrUnit API
@@ -282,6 +344,32 @@ bool HaydnPreRASchedStrategy::tryCandidate(SchedCandidate &Cand,
 
     if (tryPressure(TryCand.RPDelta.CurrentMax, Cand.RPDelta.CurrentMax,
                     TryCand, Cand, RegMax, TRI, DAG->MF))
+      return TryCand.Reason != NoCand;
+  }
+
+  // Matching frontier (plan §5.1): after pressure / critical path, prefer the
+  // candidate that keeps more nondominated matchings or free scarce slots.
+  // Uses a pure copy of the zone HR's live CycleCandidateSet — no setDesc,
+  // no AltDesc, no FormatID freeze. ResourceDemand reuses the generic reason
+  // slot for "better packing demand / retained options."
+  if (EnableHaydnPreRAMatchingFrontier && Zone && Zone->HazardRec &&
+      Zone->HazardRec->isEnabled()) {
+    // CreateTargetMIHazardRecognizer always installs HaydnHazardRecognizer for
+    // Haydn (pre-RA and post-RA). Safe static cast — no RTTI on HR base.
+    auto *HR = static_cast<HaydnHazardRecognizer *>(Zone->HazardRec);
+    const unsigned TryOpc = TryCand.SU->getInstr()->getOpcode();
+    const unsigned CandOpc = Cand.SU->getInstr()->getOpcode();
+    const auto TryScore = HR->probeMatchingFrontier(TryOpc);
+    const auto CandScore = HR->probeMatchingFrontier(CandOpc);
+
+    if (tryGreater(TryScore.Feasible, CandScore.Feasible, TryCand, Cand,
+                   ResourceDemand))
+      return TryCand.Reason != NoCand;
+    if (tryGreater(TryScore.SuccessorMatchings, CandScore.SuccessorMatchings,
+                   TryCand, Cand, ResourceDemand))
+      return TryCand.Reason != NoCand;
+    if (tryGreater(TryScore.FreeSlotsPreferred, CandScore.FreeSlotsPreferred,
+                   TryCand, Cand, ResourceDemand))
       return TryCand.Reason != NoCand;
   }
 

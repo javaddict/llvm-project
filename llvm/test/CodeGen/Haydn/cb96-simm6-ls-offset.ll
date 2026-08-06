@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 
+; Role: semantic — Load/store short-form immediates must fit the golden *scaled* signed 6-bit field (EA = base + (simm6 << log2(width))).
+
 ; Load/store short-form immediates must fit the golden *scaled* signed
 ; 6-bit field (EA = base + (simm6 << log2(width))). Out-of-range offsets must
 ; rebase the address (ADDI/materialize) or use a register-offset form. Truncating

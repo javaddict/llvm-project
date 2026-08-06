@@ -12,6 +12,7 @@
 #include "HaydnFrameLowering.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnSubtarget.h"
+#include "MCTargetDesc/HaydnMatInt.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
@@ -142,39 +143,82 @@ struct ScratchSpillHome {
   int64_t Off = 0;
 };
 
-void emitScratchMemOp(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
-                      const DebugLoc &DL, const TargetInstrInfo &TII,
-                      Register Scr, Register FrameReg, int64_t Off,
-                      bool IsStore, unsigned StoreFlags) {
-  if (isInt<16>(Off)) {
+} // namespace
+
+void llvm::emitFrameRelativeMemOp(MachineBasicBlock &MBB,
+                                  MachineBasicBlock::iterator I,
+                                  const DebugLoc &DL,
+                                  const TargetInstrInfo &TII, Register Reg,
+                                  Register FrameReg, int64_t Off, bool IsStore,
+                                  unsigned StoreFlags) {
+  // Restatable rule: addressing of any in-frame spill slot uses three monotone
+  // tiers tied to offset magnitude. SP is NEVER moved.
+  //   tier 1 - short-form element-indexed ST32/LD32 FrameReg, elem
+  //            (Off/4 fits isInt<6>)
+  //   tier 2 - ADDI32_W R0, FrameReg, Off; ST32/LD32 R0, 0  (Off fits simm20)
+  //   tier 3 - MatInt(Off) real ops chained through R0; ADD32 R0, FrameReg, R0;
+  //            ST32/LD32 R0, 0  (any remaining Off; mirrors withDR64PackBase's
+  //            large-offset rebase in HaydnInstrInfo::eliminateFrameIndex).
+  // getFrameIndexReference returns a byte offset. ST32/LD32 immediates are
+  // word element indices (EA = base + imm<<2). Tiers 2/3 borrow soft-zero R0
+  // as a self-contained scratch (must be clean on entry) and restore it via
+  // XOR32 R0,R0,R0 before return.
+  if ((Off % 4) != 0)
+    report_fatal_error(
+        "Haydn: in-frame spill offset not word-aligned for ST32/LD32");
+  const int64_t Elem = Off / 4;
+  if (isInt<6>(Elem)) {
+    // Tier 1 - short-form element-indexed access (byte-identical fast path).
     if (IsStore)
       BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
-          .addReg(Scr, StoreFlags)
+          .addReg(Reg, StoreFlags)
           .addReg(FrameReg)
-          .addImm(Off);
+          .addImm(Elem);
     else
-      BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Scr)
+      BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Reg)
           .addReg(FrameReg)
-          .addImm(Off);
+          .addImm(Elem);
     return;
   }
 
+  // Tiers 2/3: materialise the addressed byte in R0 = FrameReg + Off, then
+  // access element 0 through it, then restore R0 to soft-zero.
   const Register Tmp = Haydn::R0;
-  if (!isInt<20>(Off))
-    report_fatal_error(
-        "Haydn: post-RA scratch spill FI offset exceeds simm20");
-  BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32_W), Tmp)
-      .addReg(FrameReg)
-      .addImm(Off);
+  if (isInt<20>(Off)) {
+    // Tier 2 - simm20 immediate add.
+    BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32_W), Tmp)
+        .addReg(FrameReg)
+        .addImm(Off);
+  } else {
+    // Tier 3 - large offset: materialise full width via real MatInt ops, then
+    // add FrameReg. NEVER emit the LOADI32 pseudo here: this helper runs INSIDE
+    // expandPostRAPseudo / PostRAScratch, so the pseudo would not be
+    // re-expanded and would fatal AsmPrinter's residual cycle-forming pseudo
+    // check. One mechanism — HaydnMatInt::generate — same as the LOADI32 case
+    // in expandPostRAPseudo and the emitConst32 lambda in HaydnInstrInfo.
+    HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(Off);
+    Register Cur = Haydn::R0;
+    for (const HaydnMatInt::Inst &MatInst : Seq) {
+      BuildMI(MBB, I, DL, TII.get(MatInst.Opc), Tmp)
+          .addReg(Cur)
+          .addImm(MatInst.Imm);
+      Cur = Tmp;
+    }
+    BuildMI(MBB, I, DL, TII.get(Haydn::ADD32), Tmp)
+        .addReg(FrameReg)
+        .addReg(Tmp);
+  }
   if (IsStore)
     BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
-        .addReg(Scr, StoreFlags)
+        .addReg(Reg, StoreFlags)
         .addReg(Tmp)
         .addImm(0);
   else
-    BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Scr).addReg(Tmp).addImm(0);
+    BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Reg).addReg(Tmp).addImm(0);
   BuildMI(MBB, I, DL, TII.get(Haydn::XOR32), Tmp).addReg(Tmp).addReg(Tmp);
 }
+
+namespace {
 
 ScratchSpillHome beginSpill(MachineBasicBlock &MBB,
                             MachineBasicBlock::iterator I, const DebugLoc &DL,
@@ -192,8 +236,8 @@ ScratchSpillHome beginSpill(MachineBasicBlock &MBB,
     Home.K = ScratchSpillHome::FrameIndex;
     Home.Off =
         TFL->getFrameIndexReference(MF, SpillFI, Home.FrameReg).getFixed();
-    emitScratchMemOp(MBB, I, DL, TII, Scr, Home.FrameReg, Home.Off,
-                     /*IsStore=*/true, /*StoreFlags=*/0);
+    emitFrameRelativeMemOp(MBB, I, DL, TII, Scr, Home.FrameReg, Home.Off,
+                           /*IsStore=*/true, /*StoreFlags=*/0);
     return Home;
   }
 
@@ -214,8 +258,8 @@ void endSpill(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   if (Home.K == ScratchSpillHome::None)
     return;
   if (Home.K == ScratchSpillHome::FrameIndex) {
-    emitScratchMemOp(MBB, I, DL, TII, Scr, Home.FrameReg, Home.Off,
-                     /*IsStore=*/false, /*StoreFlags=*/0);
+    emitFrameRelativeMemOp(MBB, I, DL, TII, Scr, Home.FrameReg, Home.Off,
+                           /*IsStore=*/false, /*StoreFlags=*/0);
     return;
   }
   BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Scr)
@@ -267,7 +311,7 @@ void glueDefToUse(MachineInstr &RematDef, MachineInstr &UseMI) {
   assert(AfterDef != MBB.end() && &*AfterDef == &UseMI &&
          "remat use not adjacent after splice");
 
-  // Only glue into one Bundle128 cycle when encode-oracle canAdd accepts both
+  // Only glue into one product cycle when encode-oracle canAdd accepts both
   // (AIE Bundle canAdd). ADDI remat for SET_HWLOOP_REG is S0-only + SET is
   // S0-only — co-issue is illegal; leave sequential standalones (two cycles).
   {
@@ -284,11 +328,14 @@ void glueDefToUse(MachineInstr &RematDef, MachineInstr &UseMI) {
 
   UseMI.bundleWithPred();
   finalizeBundle(MBB, RematDef.getIterator());
-  // B1.1 / B3.1: durable FormatID on multi-MI BUNDLE roots (same stamp as
-  // HaydnPostRASchedStrategy::finalizeLegalMultiMI).
+  // Durable Format E commit on multi-MI BUNDLE roots (same authority as
+  // HaydnPostRASchedStrategy::finalizeLegalMultiMI / HaydnBundleMaterialize).
+  // Two real members (remat def + use) → E96TwoEntry + AllEntriesReal.
   MachineInstr &Root = *getBundleStart(RematDef.getIterator());
   assert(Root.isBundle() && "finalizeBundle must produce a BUNDLE root");
-  haydn::bundle::stampBundleFormatID(Root, haydn::bundle::ProductFormatID);
+  haydn::bundle::stampBundleCommit(
+      Root, haydn::bundle::BundleFormatRowID::E96TwoEntry,
+      haydn::bundle::CompletionStateID::AllEntriesReal);
   LLVM_DEBUG(dbgs() << "HaydnPostRAScratch: glued remat def→use\n");
 }
 

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — SFR-writing instructions must not be eliminated as dead code.
+
 ; REGRESSION TEST: SFR-writing instructions must not be eliminated as dead code.
 ;
 ; Bug: HaydnInst base class sets hasSideEffects = 0. Instructions that write

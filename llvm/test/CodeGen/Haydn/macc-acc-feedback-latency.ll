@@ -3,7 +3,9 @@
 ; RUN:   | FileCheck %s --check-prefix=SWP
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:   -verify-machineinstrs -O2 < %s | FileCheck %s --check-prefix=ASM
-;
+
+; Role: semantic — STALE-FAILMARKER REMOVED (, post- cutover): SMS fires on this loop with rec=1 — the core acc-feedback latency-1 assertion this test guards.
+
 ; STALE-FAILMARKER REMOVED (, post- cutover): SMS fires on this
 ; loop with rec=1 — the core acc-feedback latency-1 assertion this test guards
 ; still holds. The s32 mul lowers via the DR64 MAC unit (mull, not mac32);

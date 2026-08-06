@@ -1,5 +1,7 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
-#
+
+# Role: object — Round-trip test for DR64 and System instructions: asm → parse → print.
+
 # Round-trip test for DR64 and System instructions: asm → parse → print.
 # The WideImm immediate-form shifts (slli64/srli64/srai64) and the
 # 4-operand MAC32 form are AsmParser gaps (M5 WideImm + post- MAC
@@ -7,6 +9,7 @@
 
 # DR64 arithmetic operations
 # CHECK: add64 d0, d1, d2
+
 add64 d0, d1, d2
 
 # CHECK: sub64 d3, d4, d5

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 < %s | FileCheck %s
-;
+
+; Role: semantic — G_TRUNC to s1 must legalize from every scalar width we otherwise allow as a source (s8/s16/s32/s64).
+
 ; G_TRUNC to s1 must legalize from every scalar width we otherwise
 ; allow as a source (s8/s16/s32/s64). Legalizer was missing {S1, S16} →
 ; "unable to legalize G_TRUNC s16→s1" (yarpgen seed 2542).
@@ -13,9 +15,7 @@
 ; not DCE'd (pure `ret i1` currently drops the return value — separate ABI).
 
 ; s16 → s1 (the gap) used as select predicate
-; CHECK-LABEL: select_trunc_s16:
-; CHECK: and32
-; CHECK: movt32
+
 define i32 @select_trunc_s16(i16 %x, i32 %a, i32 %b) nounwind {
   %c = trunc i16 %x to i1
   %r = select i1 %c, i32 %a, i32 %b

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Constant GEP offsets fold into simm field of word load/store (ld32/s_lw_* or st32/s_sw_*), not a free-standing ADDI + zero-offset LS.
+
 ; Constant GEP offsets fold into simm field of word load/store
 ; (ld32/s_lw_* or st32/s_sw_*), not a free-standing ADDI + zero-offset LS.
 

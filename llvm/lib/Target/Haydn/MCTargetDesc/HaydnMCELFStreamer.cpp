@@ -26,7 +26,7 @@ HaydnMCELFStreamer::HaydnMCELFStreamer(MCContext &Context,
 
 void HaydnMCELFStreamer::emitSymbolsInInst(const MCInst &Inst) {
   // HexagonMCELFStreamer::EmitSymbol: walk operands for isExpr. Haydn extends
-  // that with recursive isInst descent for Bundle128 BUNDLE children (AIE
+  // that with recursive isInst descent for Format E BUNDLE children (AIE
   // composite / Hexagon packet both nest real ops under a container MI).
   for (unsigned I = 0, E = Inst.getNumOperands(); I != E; ++I) {
     const MCOperand &Op = Inst.getOperand(I);

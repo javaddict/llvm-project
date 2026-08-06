@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 < %s | FileCheck %s
-;
+
+; Role: semantic — — at -O0 the prologue must save LR (R15) at a frame-INTERNAL offset, NOT below the just-decremented SP.
+
 ; REGRESSION TEST: — at -O0 the prologue must save LR (R15) at a
 ; frame-INTERNAL offset, NOT below the just-decremented SP.
 ;

@@ -4,12 +4,13 @@
 // RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -ffreestanding -emit-obj -O2 -o %t.o2.o %t.gen.c
 // REQUIRES: haydn-registered-target
 //
-// C5.1 / G-CAPI-CLOSURE continuous-closure exit gate:
+// CAPI-5 EXIT MET (2026-07-27) / G-CAPI-CLOSURE continuous-closure gate:
 //   Generate an exhaustive PublicEnabled C probe from BuiltinsHaydn.td
 //   (OpenCL exhaustive-test peer) and compile C → object at -O0 and -O2.
 //   Every public haydn_* is called with type-driven dummies + in-range ImmArg
 //   ICE. Fail closed: fix ISel or unpublish any miss (prefer implement).
 //   No FormatID / slot / AltDesc in the public surface.
+//   Residual product stress = BundleSim/ISS only (not a CAPI wave reopen).
 //
 // Companion: capi-public-closure-probe.c (family samples) +
 //            haydn-op-manifest-parity.td (schema contract).

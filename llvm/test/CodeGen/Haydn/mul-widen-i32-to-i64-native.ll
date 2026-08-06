@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — 32x32->64 widening multiply must lower to a native MUL64 widening op, NOT to a JAL __muldi3/__mulsi3 libcall.
+
 ; REGRESSION TEST: 32x32->64 widening multiply must lower to a native MUL64
 ; widening op, NOT to a JAL __muldi3/__mulsi3 libcall.
 ;
@@ -28,6 +30,7 @@
 ; Widening signed 32x32->64 multiply -- the primary bug-#19 shape.
 ; Operands are i32 -> sext to i64 -> mul i64. The signed widening multiply's
 ; 64-bit result equals the signed x signed 32x32 product, so MUL64_LL.
+
 define i64 @widen_mul_sext_i32_i64(i32 %a, i32 %b) {
 ; CHECK-LABEL: widen_mul_sext_i32_i64:
 ; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3

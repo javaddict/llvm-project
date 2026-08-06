@@ -1,5 +1,9 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding %s | FileCheck %s
 
+// CHECK: 	{ 	slli32	r1, r2, 5 }             // encoding: [0x07,0x06,0x14,0x02,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: 	{ 	addi32	r3, r4, 17 }            // encoding: [0x07,0x0f,0x32,0x84,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+# Role: object — F25 — ReadImm must not blanket-mask immediates to 16 bits.
+
 # REGRESSION TEST: F25 — ReadImm must not blanket-mask immediates to 16 bits.
 #
 # Bug: HaydnMCCodeEmitter::packInstructionIntoSlot's ReadImm helper applied
@@ -31,8 +35,7 @@
 # happens — the immediate is accepted as-is and the field-encoded value
 # reflects the low 5 bits.
 #===----------------------------------------------------------------------===#
-# CHECK: slli32	r1, r2,
+
 SLLI32 R1, R2, 5
 
-# CHECK: addi32	r3, r4,
 ADDI32 R3, R4, 17

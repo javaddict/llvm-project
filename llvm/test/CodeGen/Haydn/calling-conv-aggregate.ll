@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — residual: aggregates pass as Indirect pointers (no byval).
+
 ; G-ABI-VEC residual: aggregates pass as Indirect pointers (no byval).
 ; Clang emits ptr (dead_on_return / sret), never byval(%Big). Backend loads
 ; fields through the pointer in R1 and stores through the sret pointer.

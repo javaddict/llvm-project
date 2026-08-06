@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefix=ASM
-;
+
+; Role: semantic — FIXME : this IR does NOT trigger tryFoldMove32DrToSw (the optimizer lowers the offset into a register -> reg-offset ST32, not the const-offset.
+
 ; FIXME : this IR does NOT trigger tryFoldMove32DrToSw (the optimizer
 ; lowers the offset into a register -> reg-offset ST32, not the const-offset
 ; ST32 the fold matches), so the page-1 rewrite never fires and the ASM check

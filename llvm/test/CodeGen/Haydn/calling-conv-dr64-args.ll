@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Comprehensive tests for Haydn DR64 argument passing (D0-D3).
+
 ; Comprehensive tests for Haydn DR64 argument passing (D0-D3).
 ;
 ; Calling convention:

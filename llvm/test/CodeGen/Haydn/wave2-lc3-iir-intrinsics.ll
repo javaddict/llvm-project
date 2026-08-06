@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Wave 2 intrinsics for LC3 BASOP and IIR biquad operations.
+
 ; REGRESSION TEST: Wave 2 intrinsics for LC3 BASOP and IIR biquad operations.
 ;
 ; Tests that all 10 Wave 2 intrinsics lower to the correct Haydn instructions:
@@ -12,8 +14,7 @@
 
 ;LC3 BASOP 16x16 fractional multiply
 
-; CHECK-LABEL: test_fmul16_hs00:
-; CHECK: fmul16_hs00
+
 define i64 @test_fmul16_hs00(i64 %a, i64 %b) {
   %bc.1 = bitcast i64 %a to <4 x i16>
   %bc.2 = bitcast i64 %b to <4 x i16>

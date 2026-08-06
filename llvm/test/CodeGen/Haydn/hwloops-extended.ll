@@ -1,3 +1,8 @@
+; UNSUPPORTED: true
+; Role: retired — multi-BB/Role-B hwloop convert deleted; not product green.
+; Do not count as product green. RUN is deliberately false so a dropped
+; RUN: false
+
 ; STALE-FAILMARKER REMOVED (, post- cutover): the IR-level
 ; hardware-loop rearchitecture (prior revision) renamed the runtime-count
 ; conversion pseudo from SET_HWLOOP_REG to LoopStart + PseudoLoopEnd. Ten of
@@ -5,10 +10,9 @@
 ; `loop_zero_trip` correctly stays unconverted (zero iterations). The only
 ; remaining G1 gap is `multi_bb_reg_count` (multi-BB if/else body), now
 ; documented as a CHECK-NOT: LoopStart negative assertion.
-; UNSUPPORTED: true
 ; Role B convert deleted (YOLO densify kill; Role A expand only)
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
+; Archaeology (was): RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; Archaeology (was): RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
 ;
 ; Extended hardware loop detection tests for the Haydn backend.
 ;
@@ -20,6 +24,7 @@
 ; Edge cases: trip count = 1, large trip count, etc.
 
 ; Test 1: Loop with trip count = 1 (minimum meaningful hardware loop).
+
 define i32 @loop_trip1(ptr %p) {
 ; CHECK-LABEL: name: loop_trip1
 ; CHECK: SET_HWLOOP{{(_REG|_F2)?}}

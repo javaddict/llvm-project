@@ -188,6 +188,11 @@ private:
   /// Instructions to change when emitting the final schedule.
   InstrChangesTy InstrChanges;
 
+  /// Kernel-clone MI → schedule cycle captured at clone time from
+  /// ModuloSchedule::getCycle(original). Used to hand the target an ordered
+  /// live (clone, cycle) list after kernel rewrite cleanup.
+  DenseMap<MachineInstr *, unsigned> KernelCloneCycleMap;
+
   void generatePipelinedLoop();
   void generateProlog(unsigned LastStage, MachineBasicBlock *KernelBB,
                       ValueMapTy *VRMap, MBBVectorTy &PrologBBs);

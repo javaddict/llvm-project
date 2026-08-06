@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -o - < %s | FileCheck %s
-;
+
+; Role: semantic — G_BRINDIRECT (indirect branch / computed goto) must select to JALR, and G_BLOCK_ADDR (block address materialization) must select to.
+
 ; REGRESSION TEST: G_BRINDIRECT (indirect branch / computed goto) must select
 ; to JALR, and G_BLOCK_ADDR (block address materialization) must select to
 ; LOAD_ADDR (expanded to LUI + ADDI32 with HI20/LO16 fixups).

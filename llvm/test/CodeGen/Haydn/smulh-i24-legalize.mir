@@ -1,5 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=legalizer %s -o - 2>&1 | FileCheck %s
-#
+
+# Role: MIR — G_SMULH (and G_UMULH) on an s24 operand must legalize without crashing.
+
 # REGRESSION TEST: G_SMULH (and G_UMULH) on an s24 operand must legalize
 # without crashing.
 #

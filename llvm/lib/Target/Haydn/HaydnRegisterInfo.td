@@ -69,7 +69,11 @@ def D14 : HaydnReg<14, "d14">, DwarfRegNum<[30]>;
 def D15 : HaydnReg<15, "d15">, DwarfRegNum<[31]>;
 
 //===----------------------------------------------------------------------===//
-// AR: Address Registers (AR0-AR3) for AGU
+// AR: Aligned Registers (AR0–AR1) — 2×64-bit AGU residual streams
+// Architectural file is AR0/AR1 only. Encoding field ar_sel is still 2 bits on
+// the wire; product-visible selectors outside {0,1} stay fail-closed until
+// golden classifies unused codes (reserved / illegal / future).
+// DWARF 34–35 intentionally unused (retired compiler-visible AR2/AR3).
 //===----------------------------------------------------------------------===//
 
 class HaydnARReg<bits<2> Enc, string n> : Register<n> {
@@ -78,8 +82,6 @@ class HaydnARReg<bits<2> Enc, string n> : Register<n> {
 
 def AR0 : HaydnARReg<0, "ar0">, DwarfRegNum<[32]>;
 def AR1 : HaydnARReg<1, "ar1">, DwarfRegNum<[33]>;
-def AR2 : HaydnARReg<2, "ar2">, DwarfRegNum<[34]>;
-def AR3 : HaydnARReg<3, "ar3">, DwarfRegNum<[35]>;
 
 //===----------------------------------------------------------------------===//
 // Control/Special Registers
@@ -144,16 +146,21 @@ def DR64 : RegisterClass<"Haydn",
 }
 
 def AR : RegisterClass<"Haydn",
-  [i32], 32, (add AR0, AR1, AR2, AR3)
+  [i64], 64, (add AR0, AR1)
 > {
   let RegInfos = RegInfoByHwMode<
     [DefaultMode],
-    [RegInfo<32, 32, 32>]
+    [RegInfo<64, 64, 64>]
   >;
 }
 
 // Low GPR subset for compressed 16-bit instructions (3-bit register encoding).
 // Only R0-R7 are eligible for compressed forms.
+//
+// soft RA hints (-haydn-ra-compact-hints): getRegAllocationHints may prefer
+// physregs in this class (and low-DR encodings D0-D7) after stronger base
+// copy/coalesce hints. Soft order only — never demote a Full-bank virtreg RC
+// to a hard GPR32Lo constraint; wide AllocationOrder remains complete.
 def GPR32Lo : RegisterClass<"Haydn",
   [i32, f32], 32, (add
     (sequence "R%u", 0, 7)

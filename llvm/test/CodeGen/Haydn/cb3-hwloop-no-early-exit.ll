@@ -1,5 +1,7 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 < %s | FileCheck %s
+
+; Role: semantic — — a loop whose body branches OUT to the loop exit (an early `break` / mid-body exit) must NOT be lowered to a hardware.
+
 ; REGRESSION TEST: / — a loop whose body branches OUT to the loop
 ; exit (an early `break` / mid-body exit) must NOT be lowered to a hardware
 ; loop (ZOL). ISA rule : a ZOL body may branch internally, but branches
@@ -11,6 +13,7 @@
 
 ; early_break: a counted loop with a mid-body `if (x == k) break;`. The break
 ; exits the loop from a non-latch block -> must NOT form a hwloop.
+
 define i32 @early_break(ptr %a, i32 %n, i32 %k) {
 ; CHECK-LABEL: early_break:
 ; CHECK-NOT: set_hwloop

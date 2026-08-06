@@ -1,0 +1,762 @@
+# XFAIL: *
+# The POST run (-stop-after=postmisched) hits the hard-root exact-commit
+# fail-closed (commitExactHardRootProductCycle -> report_fatal_error) on one
+# of the synthetic hard BUNDLE roots: exactSolveProductOpcodes cannot prove the
+# members form one Format E cycle because a member (e.g. LD32, not yet carrying
+# a generated Format E row) has no exact product alternative. That is an
+# exactSolve/gap, not a real illegality — the fail-closed is the documented
+# design (see postmisched-hard-root-illegal-fail.mir) and must NOT be weakened
+# to a silent dissolve (that would hide illegal roots). The SCHED/COALESCER/
+# PREGREEDY/GREEDY/VRW/SPILL/PEI runs (hard-bundle through RA) pass
+# individually; only the postmisched exact-commit RUN is blocked. Open residual,
+# owner G-FORMAT-E-96-CUTOVER (hard-root exact-commit / LD32 Format E member
+# migration).
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=machine-scheduler \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=SCHED
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=register-coalescer \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=COALESCER
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-before=greedy -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=PREGREEDY
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=greedy -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=GREEDY
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=virtregrewriter -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=VRW
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=virtregrewriter -stress-regalloc=4 -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s --check-prefix=SPILL
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=greedy -haydn-ra-compact-hints=true -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s --check-prefix=GREEDY
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=virtregrewriter -haydn-ra-compact-hints=true \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=VRW
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=virtregrewriter -stress-regalloc=4 \
+# RUN:   -haydn-ra-compact-hints=true -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=SPILL
+# Large-frame CSR PEI around architectural dual-load hard roots (zero member
+# loss; CSR save/restore and spills only outside the root).
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=prologepilog -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=PEI
+# Optional postmisched exact-commit of dual-load hard roots after PEI.
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=postmisched -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=POST
+
+# Role: MIR — hard BUNDLE membership fence through sched→RA (+ PEI large-frame).
+
+# Hard-bundle resource fence: every standard TargetOpcode::BUNDLE root is an
+# atomic isSchedulingBoundary. Architectural multi-MI logical-opcode BUNDLEs
+# (pre-RA / through RA; no private member setDesc, no FormatID freeze) must:
+#
+#  1. Keep root/children membership identity under machine-scheduler
+#     (neighbors independent of, data-dependent on, or *resource-conflicting*
+#     with the group cannot enter or split the BUNDLE — HaydnHazardRecognizer
+#     returns NoHazard for isBundle roots without aggregating children, so the
+#     isSchedulingBoundary fence is load-bearing over HR NoHazard).
+#  2. Survive isolated register-coalescer, greedy, and VirtRegRewriter with
+#     zero member loss or unbundle (operand rewrites OK). Core pipeline is
+#     machine-scheduler → greedy → VirtRegRewriter plus a dedicated
+#     register-coalescer stop-after pin. Dual-load and LD+ADD architectural
+#     roots densify the production hard shapes beyond ADD-only rematch.
+#  3. Under spill pressure, allow spill/reload *around* the hard root but not
+#     unbundle membership.
+#  4. Mixed GPR32/DR64 Full rematch shape (ADD32 + 2xADD64) keeps the same
+#     three-member hard root through the stages above.
+#  5. Compact-subset soft TRI order (-haydn-ra-compact-hints=true) may reorder
+#     AllocationOrder preference but cannot unbundle hard membership under
+#     greedy / VirtRegRewriter / stress spill (soft preference only).
+#  6. Dual-load (2×LD32) and legal LD32+ADD32 architectural hard roots keep
+#     membership through the stages above (product dual-load freeze shape).
+#  7. Large-frame CSR PEI (stop-after=prologepilog) around a dual-load hard
+#     root must not unbundle; CSR save/restore and scavenger spills stay
+#     outside the root. Optional stop-after=postmisched exact-commits the
+#     dual-load root as private slot members (setDesc) with zero member loss.
+#
+# SMS clone→cycle logical BUNDLE materialize is opt-in (-haydn-sms-handoff,
+# default OFF; sms-handoff-bundle-through-ra.mir CONT through postmisched
+# exact-commit + dual-run -stats). Compact TRI hints dual-run spill/copy/cycle
+# metrics: regalloc-compact-hints.ll (-haydn-ra-compact-hints, default OFF).
+# regalloc-hints.ll CSR baseline stays distinct. Full-only product. No hard RC
+# demotion. Product flags stay OFF.
+
+--- |
+  define void @hard_bundle_membership() { ret void }
+  define void @hard_bundle_spill_around() { ret void }
+  define void @hard_bundle_resource_conflict() { ret void }
+  define void @hard_bundle_mixed_fu() { ret void }
+  define void @hard_bundle_dual_ld() { ret void }
+  define void @hard_bundle_ld_add() { ret void }
+  define i32 @hard_bundle_dual_ld_large_frame(ptr %p, ptr %q) {
+  entry:
+    %buf = alloca [480 x i8], align 8
+    ret i32 undef
+  }
+...
+---
+# ============================================================================
+# Test 1: multi-MI logical hard BUNDLE + independent / dependent neighbors.
+# machine-scheduler / pre-greedy / greedy / VRW all preserve membership.
+# ============================================================================
+name:            hard_bundle_membership
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4
+
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:gpr32 = COPY $r3
+    %3:gpr32 = COPY $r4
+    ; Independent of the hard group (uses only %0).
+    %ind_pre:gpr32 = ADDI32 %0:gpr32, 7, implicit-def dead $sfr
+    ; Architectural multi-MI logical-opcode hard BUNDLE (no _S* members).
+    BUNDLE implicit-def %4:gpr32, implicit-def %5:gpr32, implicit-def dead $sfr, implicit %0, implicit %1, implicit %2, implicit %3 {
+      %4:gpr32 = ADD32 %0:gpr32, %1:gpr32, implicit-def dead $sfr
+      %5:gpr32 = ADD32 %2:gpr32, %3:gpr32, implicit-def dead $sfr
+    }
+    ; Dependent on bundle member %4 — must stay outside the group.
+    %dep:gpr32 = ADDI32 %4:gpr32, 1, implicit-def dead $sfr
+    ; Independent of the hard group (uses only %0).
+    %ind_post:gpr32 = ADDI32 %0:gpr32, 11, implicit-def dead $sfr
+    %sum1:gpr32 = ADD32 %dep:gpr32, %5:gpr32, implicit-def dead $sfr
+    %sum2:gpr32 = ADD32 %sum1:gpr32, %ind_pre:gpr32, implicit-def dead $sfr
+    %sum3:gpr32 = ADD32 %sum2:gpr32, %ind_post:gpr32, implicit-def dead $sfr
+    $r0 = COPY %sum3:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; Membership + no neighbor motion into the group (vregs).
+  ; SCHED-LABEL: name: hard_bundle_membership
+  ; Independent neighbor before the hard root stays outside the BUNDLE.
+  ; SCHED: ADDI32
+  ; SCHED: BUNDLE{{.*}}{
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; SCHED-NEXT: }
+  ; Dependent + independent neighbors after the hard root stay outside.
+  ; SCHED: ADDI32
+  ; SCHED: ADDI32
+  ; Phase identity: logical opcodes only through pre-RA schedule.
+  ; SCHED-NOT: ADD32_S
+  ; SCHED-NOT: ADDI32_S
+  ; Isolated register-coalescer: hard root membership holds (operand rewrites
+  ; OK; no unbundle / private slot form).
+  ; COALESCER-LABEL: name: hard_bundle_membership
+  ; COALESCER: BUNDLE{{.*}}{
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; COALESCER-NEXT: }
+  ; COALESCER-NOT: ADD32_S
+
+  ; Still hard-bundled after machine-scheduler (pre-greedy).
+  ; PREGREEDY-LABEL: name: hard_bundle_membership
+  ; PREGREEDY: BUNDLE{{.*}}{
+  ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; PREGREEDY-NEXT: }
+  ; PREGREEDY-NOT: ADD32_S
+
+  ; Assignment may rewrite operands; zero member loss/split.
+  ; GREEDY-LABEL: name: hard_bundle_membership
+  ; GREEDY: BUNDLE{{.*}}{
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; GREEDY-NEXT: }
+
+  ; Physreg rewrite of members; hard root still wraps both ADD32.
+  ; VRW-LABEL: name: hard_bundle_membership
+  ; VRW: BUNDLE{{.*}}{
+  ; VRW-NEXT: ${{r[0-9]+}} = ADD32
+  ; VRW-NEXT: ${{r[0-9]+}} = ADD32
+  ; VRW-NEXT: }
+  ; VRW-NOT: ADD32_S
+...
+---
+# ============================================================================
+# Test 2: spill pressure around a hard BUNDLE root.
+# stress-regalloc may insert spill/reload around the root; membership holds.
+# ============================================================================
+name:            hard_bundle_spill_around
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4
+
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:gpr32 = COPY $r3
+    %3:gpr32 = COPY $r4
+    %a:gpr32 = ADDI32 %0:gpr32, 1, implicit-def dead $sfr
+    %b:gpr32 = ADDI32 %1:gpr32, 2, implicit-def dead $sfr
+    %c:gpr32 = ADDI32 %2:gpr32, 3, implicit-def dead $sfr
+    %d:gpr32 = ADDI32 %3:gpr32, 4, implicit-def dead $sfr
+    BUNDLE implicit-def %20:gpr32, implicit-def %21:gpr32, implicit-def dead $sfr, implicit %a, implicit %b, implicit %c, implicit %d {
+      %20:gpr32 = ADD32 %a:gpr32, %b:gpr32, implicit-def dead $sfr
+      %21:gpr32 = ADD32 %c:gpr32, %d:gpr32, implicit-def dead $sfr
+    }
+    %e:gpr32 = ADD32 %20:gpr32, %a:gpr32, implicit-def dead $sfr
+    %f:gpr32 = ADD32 %21:gpr32, %b:gpr32, implicit-def dead $sfr
+    %g:gpr32 = ADD32 %e:gpr32, %c:gpr32, implicit-def dead $sfr
+    %h:gpr32 = ADD32 %f:gpr32, %d:gpr32, implicit-def dead $sfr
+    %i:gpr32 = ADD32 %g:gpr32, %h:gpr32, implicit-def dead $sfr
+    $r0 = COPY %i:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; Hard root survives; spills/reloads may appear around it only.
+  ; SPILL-LABEL: name: hard_bundle_spill_around
+  ; SPILL-DAG: ST32
+  ; SPILL-DAG: LD32
+  ; SPILL: BUNDLE{{.*}}{
+  ; SPILL-NEXT: ${{r[0-9]+}} = ADD32
+  ; SPILL-NEXT: ${{r[0-9]+}} = ADD32
+  ; SPILL-NEXT: }
+  ; SPILL-NOT: ADD32_S
+
+  ; Default (non-stress) VRW path also preserves membership for this shape.
+  ; VRW-LABEL: name: hard_bundle_spill_around
+  ; VRW: BUNDLE{{.*}}{
+  ; VRW-NEXT: ${{r[0-9]+}} = ADD32
+  ; VRW-NEXT: ${{r[0-9]+}} = ADD32
+  ; VRW-NEXT: }
+
+  ; SCHED / COALESCER / PREGREEDY / GREEDY membership for the spill shape too.
+  ; SCHED-LABEL: name: hard_bundle_spill_around
+  ; SCHED: BUNDLE{{.*}}{
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; SCHED-NEXT: }
+  ; COALESCER-LABEL: name: hard_bundle_spill_around
+  ; COALESCER: BUNDLE{{.*}}{
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; COALESCER-NEXT: }
+  ; COALESCER-NOT: ADD32_S
+  ; PREGREEDY-LABEL: name: hard_bundle_spill_around
+  ; PREGREEDY: BUNDLE{{.*}}{
+  ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; PREGREEDY-NEXT: }
+  ; GREEDY-LABEL: name: hard_bundle_spill_around
+  ; GREEDY: BUNDLE{{.*}}{
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; GREEDY-NEXT: }
+...
+---
+# ============================================================================
+# Test 3: hard BUNDLE saturates Full 3-issue + resource-conflicting neighbors.
+#
+# Plan §5.1 / §8.3: dependent *and* resource-conflicting neighbors must not
+# enter or split the hard root. A three-member logical ADD32 BUNDLE fills
+# product issue width. Independent ADD32 neighbors share the same ALU/issue
+# footprint and would conflict as a 4th co-issue candidate if the HR could
+# see children — but the root is NoHazard, so isSchedulingBoundary is the
+# fence that keeps them outside membership through sched → greedy → VRW.
+# ============================================================================
+name:            hard_bundle_resource_conflict
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4
+
+    ; Four liveins + careful reuse so stress-regalloc=4 still completes with
+    ; spill/reload around the root (ST/LD + three-member membership CHECKs
+    ; below). Not six free temps.
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:gpr32 = COPY $r3
+    %3:gpr32 = COPY $r4
+    ; Resource-conflicting neighbor before the hard root: same-FU ADD32,
+    ; data-independent of the group (uses only %0/%1). Would be a 4th issue
+    ; if co-issued with the three-member BUNDLE.
+    %rc_pre:gpr32 = ADD32 %0:gpr32, %1:gpr32, implicit-def dead $sfr
+    ; Architectural 3-member logical-opcode hard BUNDLE (Full issue width).
+    ; Operands reuse the four liveins so membership is three ADD32 without
+    ; inventing extra simultaneous vregs.
+    BUNDLE implicit-def %6:gpr32, implicit-def %7:gpr32, implicit-def %8:gpr32, implicit-def dead $sfr, implicit %0, implicit %1, implicit %2, implicit %3 {
+      %6:gpr32 = ADD32 %0:gpr32, %2:gpr32, implicit-def dead $sfr
+      %7:gpr32 = ADD32 %1:gpr32, %3:gpr32, implicit-def dead $sfr
+      %8:gpr32 = ADD32 %0:gpr32, %3:gpr32, implicit-def dead $sfr
+    }
+    ; Resource-conflicting neighbor after the hard root (independent of group
+    ; defs; same ADD32 issue footprint).
+    %rc_post:gpr32 = ADD32 %1:gpr32, %2:gpr32, implicit-def dead $sfr
+    ; Data-dependent on a bundle member — must stay outside the group.
+    %dep:gpr32 = ADDI32 %6:gpr32, 1, implicit-def dead $sfr
+    %t0:gpr32 = ADD32 %rc_pre:gpr32, %7:gpr32, implicit-def dead $sfr
+    %t1:gpr32 = ADD32 %t0:gpr32, %8:gpr32, implicit-def dead $sfr
+    %t2:gpr32 = ADD32 %t1:gpr32, %rc_post:gpr32, implicit-def dead $sfr
+    %t3:gpr32 = ADD32 %t2:gpr32, %dep:gpr32, implicit-def dead $sfr
+    $r0 = COPY %t3:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; Membership: exactly three ADD32 children; RC neighbors stay outside.
+  ; SCHED-LABEL: name: hard_bundle_resource_conflict
+  ; Resource-conflicting pre neighbor remains a bare MI before the root.
+  ; SCHED: ADD32
+  ; SCHED: BUNDLE{{.*}}{
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; SCHED-NEXT: }
+  ; RC post + data-dependent neighbors stay outside (not inside BUNDLE).
+  ; SCHED: ADD32
+  ; SCHED: ADDI32
+  ; Phase identity: logical opcodes only through pre-RA schedule.
+  ; SCHED-NOT: ADD32_S
+  ; SCHED-NOT: ADDI32_S
+
+  ; COALESCER-LABEL: name: hard_bundle_resource_conflict
+  ; COALESCER: BUNDLE{{.*}}{
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; COALESCER-NEXT: }
+  ; COALESCER-NOT: ADD32_S
+
+  ; PREGREEDY-LABEL: name: hard_bundle_resource_conflict
+  ; PREGREEDY: BUNDLE{{.*}}{
+  ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; PREGREEDY-NEXT: }
+  ; PREGREEDY-NOT: ADD32_S
+
+  ; GREEDY-LABEL: name: hard_bundle_resource_conflict
+  ; GREEDY: BUNDLE{{.*}}{
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; GREEDY-NEXT: }
+
+  ; Physreg rewrite of members; hard root still wraps all three ADD32.
+  ; VRW-LABEL: name: hard_bundle_resource_conflict
+  ; VRW: BUNDLE{{.*}}{
+  ; VRW-NEXT: ${{r[0-9]+}} = ADD32
+  ; VRW-NEXT: ${{r[0-9]+}} = ADD32
+  ; VRW-NEXT: ${{r[0-9]+}} = ADD32
+  ; VRW-NEXT: }
+  ; VRW-NOT: ADD32_S
+
+  ; stress-regalloc=4: spill/reload around the hard root only — zero member
+  ; loss. Same three ADD32 children; no private slot form through RA.
+  ; SPILL-LABEL: name: hard_bundle_resource_conflict
+  ; SPILL-DAG: ST32
+  ; SPILL-DAG: LD32
+  ; SPILL: BUNDLE{{.*}}{
+  ; SPILL-NEXT: ${{r[0-9]+}} = ADD32
+  ; SPILL-NEXT: ${{r[0-9]+}} = ADD32
+  ; SPILL-NEXT: ${{r[0-9]+}} = ADD32
+  ; SPILL-NEXT: }
+  ; SPILL-NOT: ADD32_S
+...
+---
+# ============================================================================
+# Test 4: mixed GPR32/DR64 architectural hard BUNDLE (ADD32 + 2xADD64 Full).
+# Membership survives machine-scheduler, isolated register-coalescer,
+# pre-greedy, greedy, VirtRegRewriter, and stress spill-around. Mirrors the
+# exact rematch product shape (ADD32 rematched to S0 so both ADD64 fit).
+# ============================================================================
+name:            hard_bundle_mixed_fu
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $d0, $d1, $d2, $d3
+
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:dr64 = COPY $d0
+    %3:dr64 = COPY $d1
+    %4:dr64 = COPY $d2
+    %5:dr64 = COPY $d3
+    ; Concurrent live ranges force spill/reload under whole-file
+    ; stress-regalloc=4; membership of the hard root must still hold.
+    %a:gpr32 = ADDI32 %0:gpr32, 1, implicit-def dead $sfr
+    %b:gpr32 = ADDI32 %1:gpr32, 2, implicit-def dead $sfr
+    %c:dr64 = ADD64 %2:dr64, %3:dr64, implicit-def dead $sfr
+    %d:dr64 = ADD64 %4:dr64, %5:dr64, implicit-def dead $sfr
+    %e:dr64 = ADD64 %c:dr64, %d:dr64, implicit-def dead $sfr
+    %f:dr64 = ADD64 %2:dr64, %4:dr64, implicit-def dead $sfr
+    %g:dr64 = ADD64 %3:dr64, %5:dr64, implicit-def dead $sfr
+    %h:gpr32 = ADD32 %a:gpr32, %b:gpr32, implicit-def dead $sfr
+    ; Architectural multi-MI mixed-FU hard BUNDLE: ADD32 + 2xADD64.
+    BUNDLE implicit-def %x:gpr32, implicit-def %y:dr64, implicit-def %z:dr64, implicit-def dead $sfr, implicit %a, implicit %b, implicit %c, implicit %d {
+      %x:gpr32 = ADD32 %a:gpr32, %b:gpr32, implicit-def dead $sfr
+      %y:dr64 = ADD64 %c:dr64, %d:dr64, implicit-def dead $sfr
+      %z:dr64 = ADD64 %c:dr64, %d:dr64, implicit-def dead $sfr
+    }
+    %t0:gpr32 = ADD32 %x:gpr32, %a:gpr32, implicit-def dead $sfr
+    %t1:gpr32 = ADD32 %t0:gpr32, %b:gpr32, implicit-def dead $sfr
+    %t1b:gpr32 = ADD32 %t1:gpr32, %h:gpr32, implicit-def dead $sfr
+    %t2:dr64 = ADD64 %y:dr64, %c:dr64, implicit-def dead $sfr
+    %t3:dr64 = ADD64 %z:dr64, %d:dr64, implicit-def dead $sfr
+    %t4:dr64 = ADD64 %t2:dr64, %t3:dr64, implicit-def dead $sfr
+    %t5:dr64 = ADD64 %t4:dr64, %e:dr64, implicit-def dead $sfr
+    %t6:dr64 = ADD64 %t5:dr64, %f:dr64, implicit-def dead $sfr
+    %t7:dr64 = ADD64 %t6:dr64, %g:dr64, implicit-def dead $sfr
+    $r0 = COPY %t1b:gpr32
+    $d0 = COPY %t7:dr64
+    RET implicit $r0, implicit $d0, implicit $r15
+
+  ; Membership: one ADD32 + two ADD64 children; logical opcodes only.
+  ; Named or numbered vregs OK ({{%[^:]+}}).
+  ; SCHED-LABEL: name: hard_bundle_mixed_fu
+  ; SCHED: BUNDLE{{.*}}{
+  ; SCHED-NEXT: {{%[^:]+}}:gpr32 = ADD32
+  ; SCHED-NEXT: {{%[^:]+}}:dr64 = ADD64
+  ; SCHED-NEXT: {{%[^:]+}}:dr64 = ADD64
+  ; SCHED-NEXT: }
+  ; SCHED-NOT: ADD32_S
+  ; SCHED-NOT: ADD64_S
+
+  ; Isolated register-coalescer pin: zero member loss / unbundle.
+  ; COALESCER-LABEL: name: hard_bundle_mixed_fu
+  ; COALESCER: BUNDLE{{.*}}{
+  ; COALESCER-NEXT: {{%[^:]+}}:gpr32 = ADD32
+  ; COALESCER-NEXT: {{%[^:]+}}:dr64 = ADD64
+  ; COALESCER-NEXT: {{%[^:]+}}:dr64 = ADD64
+  ; COALESCER-NEXT: }
+  ; COALESCER-NOT: ADD32_S
+  ; COALESCER-NOT: ADD64_S
+
+  ; PREGREEDY-LABEL: name: hard_bundle_mixed_fu
+  ; PREGREEDY: BUNDLE{{.*}}{
+  ; PREGREEDY-NEXT: {{%[^:]+}}:gpr32 = ADD32
+  ; PREGREEDY-NEXT: {{%[^:]+}}:dr64 = ADD64
+  ; PREGREEDY-NEXT: {{%[^:]+}}:dr64 = ADD64
+  ; PREGREEDY-NEXT: }
+  ; PREGREEDY-NOT: ADD32_S
+  ; PREGREEDY-NOT: ADD64_S
+
+  ; GREEDY-LABEL: name: hard_bundle_mixed_fu
+  ; GREEDY: BUNDLE{{.*}}{
+  ; GREEDY-NEXT: {{%[^:]+}}:gpr32 = ADD32
+  ; GREEDY-NEXT: {{%[^:]+}}:dr64 = ADD64
+  ; GREEDY-NEXT: {{%[^:]+}}:dr64 = ADD64
+  ; GREEDY-NEXT: }
+
+  ; Physreg rewrite of mixed members; hard root still wraps all three.
+  ; VRW-LABEL: name: hard_bundle_mixed_fu
+  ; VRW: BUNDLE{{.*}}{
+  ; VRW-NEXT: ${{r[0-9]+}} = ADD32
+  ; VRW-NEXT: ${{d[0-9]+}} = ADD64
+  ; VRW-NEXT: ${{d[0-9]+}} = ADD64
+  ; VRW-NEXT: }
+  ; VRW-NOT: ADD32_S
+  ; VRW-NOT: ADD64_S
+
+  ; stress-regalloc=4: spill/reload around the hard root only — zero member
+  ; loss. Mixed ADD32 + 2xADD64 children; no private slot form through RA.
+  ; SPILL-LABEL: name: hard_bundle_mixed_fu
+  ; SPILL-DAG: ST{{(32|64)}}
+  ; SPILL-DAG: LD{{(32|64)}}
+  ; SPILL: BUNDLE{{.*}}{
+  ; SPILL-NEXT: ${{r[0-9]+}} = ADD32
+  ; SPILL-NEXT: ${{d[0-9]+}} = ADD64
+  ; SPILL-NEXT: ${{d[0-9]+}} = ADD64
+  ; SPILL-NEXT: }
+  ; SPILL-NOT: ADD32_S
+  ; SPILL-NOT: ADD64_S
+...
+---
+# ============================================================================
+# Test 5: architectural dual-load hard BUNDLE (2×LD32 product freeze shape).
+# Membership survives machine-scheduler, isolated register-coalescer,
+# pre-greedy, greedy, VirtRegRewriter, stress spill-around, and compact soft
+# order. Mirrors the production dual-load hard root frozen by SMS handoff
+# (sms-handoff-bundle-through-ra.mir CONT), but as pure architectural MIR.
+# ============================================================================
+name:            hard_bundle_dual_ld
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4
+
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:gpr32 = COPY $r3
+    %3:gpr32 = COPY $r4
+    ; Concurrent live ranges force spill/reload under whole-file
+    ; stress-regalloc=4; dual-load membership of the hard root must hold.
+    %a:gpr32 = ADDI32 %0:gpr32, 1, implicit-def dead $sfr
+    %b:gpr32 = ADDI32 %1:gpr32, 2, implicit-def dead $sfr
+    %c:gpr32 = ADDI32 %2:gpr32, 3, implicit-def dead $sfr
+    %d:gpr32 = ADDI32 %3:gpr32, 4, implicit-def dead $sfr
+    ; Architectural dual-load hard BUNDLE (logical LD32 only through RA).
+    BUNDLE implicit-def %20:gpr32, implicit-def %21:gpr32, implicit %0, implicit %1 {
+      %20:gpr32 = LD32 %0:gpr32, 0 :: (load (s32))
+      %21:gpr32 = LD32 %1:gpr32, 0 :: (load (s32))
+    }
+    %e:gpr32 = ADD32 %20:gpr32, %a:gpr32, implicit-def dead $sfr
+    %f:gpr32 = ADD32 %21:gpr32, %b:gpr32, implicit-def dead $sfr
+    %g:gpr32 = ADD32 %e:gpr32, %c:gpr32, implicit-def dead $sfr
+    %h:gpr32 = ADD32 %f:gpr32, %d:gpr32, implicit-def dead $sfr
+    %i:gpr32 = ADD32 %g:gpr32, %h:gpr32, implicit-def dead $sfr
+    $r0 = COPY %i:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; Membership: exactly two LD32 children; logical opcodes only.
+  ; SCHED-LABEL: name: hard_bundle_dual_ld
+  ; SCHED: BUNDLE{{.*}}{
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; SCHED-NEXT: }
+  ; SCHED-NOT: LD32_S
+
+  ; COALESCER-LABEL: name: hard_bundle_dual_ld
+  ; COALESCER: BUNDLE{{.*}}{
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; COALESCER-NEXT: }
+  ; COALESCER-NOT: LD32_S
+
+  ; PREGREEDY-LABEL: name: hard_bundle_dual_ld
+  ; PREGREEDY: BUNDLE{{.*}}{
+  ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; PREGREEDY-NEXT: }
+  ; PREGREEDY-NOT: LD32_S
+
+  ; GREEDY-LABEL: name: hard_bundle_dual_ld
+  ; GREEDY: BUNDLE{{.*}}{
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; GREEDY-NEXT: }
+
+  ; Physreg rewrite of dual-load members; hard root still wraps both LD32.
+  ; VRW-LABEL: name: hard_bundle_dual_ld
+  ; VRW: BUNDLE{{.*}}{
+  ; VRW-NEXT: ${{r[0-9]+}} = LD32
+  ; VRW-NEXT: ${{r[0-9]+}} = LD32
+  ; VRW-NEXT: }
+  ; VRW-NOT: LD32_S
+
+  ; stress-regalloc=4: spill/reload around the dual-load hard root only —
+  ; zero member loss; no private slot form through RA. ST32 of live ranges
+  ; proves spill-around (do not SPILL-DAG bare LD32 — members are LD32).
+  ; SPILL-LABEL: name: hard_bundle_dual_ld
+  ; SPILL-DAG: ST32{{.*}}%stack
+  ; SPILL: BUNDLE{{.*}}{
+  ; SPILL-NEXT: ${{r[0-9]+}} = LD32
+  ; SPILL-NEXT: ${{r[0-9]+}} = LD32
+  ; SPILL-NEXT: }
+  ; SPILL-NOT: LD32_S
+...
+---
+# ============================================================================
+# Test 6: legal LD32+ADD32 architectural hard BUNDLE (mixed LS+ALU cycle).
+# Same membership contract as dual-load: sched → coalescer → greedy → VRW /
+# stress / compact soft order cannot unbundle.
+# ============================================================================
+name:            hard_bundle_ld_add
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4
+
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:gpr32 = COPY $r3
+    %3:gpr32 = COPY $r4
+    %a:gpr32 = ADDI32 %0:gpr32, 1, implicit-def dead $sfr
+    %b:gpr32 = ADDI32 %1:gpr32, 2, implicit-def dead $sfr
+    %c:gpr32 = ADDI32 %2:gpr32, 3, implicit-def dead $sfr
+    %d:gpr32 = ADDI32 %3:gpr32, 4, implicit-def dead $sfr
+    ; Architectural LD + ADD hard BUNDLE (one legal product cycle).
+    BUNDLE implicit-def %20:gpr32, implicit-def %21:gpr32, implicit %0, implicit %1, implicit %2 {
+      %20:gpr32 = LD32 %0:gpr32, 0 :: (load (s32))
+      %21:gpr32 = ADD32 %1:gpr32, %2:gpr32, implicit-def dead $sfr
+    }
+    %e:gpr32 = ADD32 %20:gpr32, %a:gpr32, implicit-def dead $sfr
+    %f:gpr32 = ADD32 %21:gpr32, %b:gpr32, implicit-def dead $sfr
+    %g:gpr32 = ADD32 %e:gpr32, %c:gpr32, implicit-def dead $sfr
+    %h:gpr32 = ADD32 %f:gpr32, %d:gpr32, implicit-def dead $sfr
+    %i:gpr32 = ADD32 %g:gpr32, %h:gpr32, implicit-def dead $sfr
+    $r0 = COPY %i:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; Membership: one LD32 + one ADD32 child; logical opcodes only.
+  ; SCHED-LABEL: name: hard_bundle_ld_add
+  ; SCHED: BUNDLE{{.*}}{
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; SCHED-NEXT: }
+  ; SCHED-NOT: LD32_S
+  ; SCHED-NOT: ADD32_S
+
+  ; COALESCER-LABEL: name: hard_bundle_ld_add
+  ; COALESCER: BUNDLE{{.*}}{
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; COALESCER-NEXT: }
+  ; COALESCER-NOT: LD32_S
+  ; COALESCER-NOT: ADD32_S
+
+  ; PREGREEDY-LABEL: name: hard_bundle_ld_add
+  ; PREGREEDY: BUNDLE{{.*}}{
+  ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; PREGREEDY-NEXT: }
+  ; PREGREEDY-NOT: LD32_S
+  ; PREGREEDY-NOT: ADD32_S
+
+  ; GREEDY-LABEL: name: hard_bundle_ld_add
+  ; GREEDY: BUNDLE{{.*}}{
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; GREEDY-NEXT: }
+
+  ; VRW-LABEL: name: hard_bundle_ld_add
+  ; VRW: BUNDLE{{.*}}{
+  ; VRW-NEXT: ${{r[0-9]+}} = LD32
+  ; VRW-NEXT: ${{r[0-9]+}} = ADD32
+  ; VRW-NEXT: }
+  ; VRW-NOT: LD32_S
+  ; VRW-NOT: ADD32_S
+
+  ; stress-regalloc=4: spill/reload around the LD+ADD hard root only.
+  ; ST32 of live ranges proves spill-around (member LD32 is not a spill).
+  ; SPILL-LABEL: name: hard_bundle_ld_add
+  ; SPILL-DAG: ST32{{.*}}%stack
+  ; SPILL: BUNDLE{{.*}}{
+  ; SPILL-NEXT: ${{r[0-9]+}} = LD32
+  ; SPILL-NEXT: ${{r[0-9]+}} = ADD32
+  ; SPILL-NEXT: }
+  ; SPILL-NOT: LD32_S
+  ; SPILL-NOT: ADD32_S
+...
+---
+# ============================================================================
+# Test 7: dual-load hard BUNDLE + large-frame CSR PEI.
+# 480-byte stack + enough live GPR pressure to force CSR r8/r9 save/restore
+# in the prologue/epilogue. stop-after=prologepilog proves zero member loss
+# with CSR stores only around the root; stop-after=postmisched exact-commits
+# the dual-load root as LD32_S* members.
+# ============================================================================
+name:            hard_bundle_dual_ld_large_frame
+tracksRegLiveness: true
+selected:        true
+frameInfo:
+  maxAlignment:    8
+stack:
+  - { id: 0, name: buf, size: 480, alignment: 8 }
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11
+
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %a:gpr32 = COPY $r3
+    %b:gpr32 = COPY $r4
+    %c:gpr32 = COPY $r5
+    %d:gpr32 = COPY $r6
+    %e:gpr32 = COPY $r7
+    %f:gpr32 = COPY $r8
+    %g:gpr32 = COPY $r9
+    %h:gpr32 = COPY $r10
+    %i:gpr32 = COPY $r11
+    ; Architectural dual-load hard root before large-frame CSR activity.
+    BUNDLE implicit-def %20:gpr32, implicit-def %21:gpr32, implicit %0, implicit %1 {
+      %20:gpr32 = LD32 %0:gpr32, 0 :: (load (s32))
+      %21:gpr32 = LD32 %1:gpr32, 0 :: (load (s32))
+    }
+    %sum:gpr32 = ADD32 %20:gpr32, %21:gpr32, implicit-def dead $sfr
+    ST32 %sum:gpr32, %stack.0, 0
+    ST32 %a:gpr32, %stack.0, 4
+    ST32 %b:gpr32, %stack.0, 8
+    ST32 %c:gpr32, %stack.0, 12
+    ST32 %d:gpr32, %stack.0, 16
+    ST32 %e:gpr32, %stack.0, 20
+    ST32 %f:gpr32, %stack.0, 24
+    ST32 %g:gpr32, %stack.0, 28
+    ST32 %h:gpr32, %stack.0, 32
+    ST32 %i:gpr32, %stack.0, 36
+    %r0:gpr32 = LD32 %stack.0, 0 :: (load (s32))
+    %r1:gpr32 = LD32 %stack.0, 4 :: (load (s32))
+    %r2:gpr32 = LD32 %stack.0, 8 :: (load (s32))
+    %r3:gpr32 = LD32 %stack.0, 12 :: (load (s32))
+    %r4:gpr32 = LD32 %stack.0, 16 :: (load (s32))
+    %r5:gpr32 = LD32 %stack.0, 20 :: (load (s32))
+    %r6:gpr32 = LD32 %stack.0, 24 :: (load (s32))
+    %r7:gpr32 = LD32 %stack.0, 28 :: (load (s32))
+    %r8:gpr32 = LD32 %stack.0, 32 :: (load (s32))
+    %r9:gpr32 = LD32 %stack.0, 36 :: (load (s32))
+    %t0:gpr32 = ADD32 %r0:gpr32, %r1:gpr32, implicit-def dead $sfr
+    %t1:gpr32 = ADD32 %t0:gpr32, %r2:gpr32, implicit-def dead $sfr
+    %t2:gpr32 = ADD32 %t1:gpr32, %r3:gpr32, implicit-def dead $sfr
+    %t3:gpr32 = ADD32 %t2:gpr32, %r4:gpr32, implicit-def dead $sfr
+    %t4:gpr32 = ADD32 %t3:gpr32, %r5:gpr32, implicit-def dead $sfr
+    %t5:gpr32 = ADD32 %t4:gpr32, %r6:gpr32, implicit-def dead $sfr
+    %t6:gpr32 = ADD32 %t5:gpr32, %r7:gpr32, implicit-def dead $sfr
+    %t7:gpr32 = ADD32 %t6:gpr32, %r8:gpr32, implicit-def dead $sfr
+    %t8:gpr32 = ADD32 %t7:gpr32, %r9:gpr32, implicit-def dead $sfr
+    $r0 = COPY %t8:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; Sched / RA membership (logical dual-load) on the large-frame body too.
+  ; SCHED-LABEL: name: hard_bundle_dual_ld_large_frame
+  ; SCHED: BUNDLE{{.*}}{
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; SCHED-NEXT: }
+  ; SCHED-NOT: LD32_S
+
+  ; COALESCER-LABEL: name: hard_bundle_dual_ld_large_frame
+  ; COALESCER: BUNDLE{{.*}}{
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; COALESCER-NEXT: }
+  ; COALESCER-NOT: LD32_S
+
+  ; PREGREEDY-LABEL: name: hard_bundle_dual_ld_large_frame
+  ; PREGREEDY: BUNDLE{{.*}}{
+  ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; PREGREEDY-NEXT: }
+
+  ; GREEDY-LABEL: name: hard_bundle_dual_ld_large_frame
+  ; GREEDY: BUNDLE{{.*}}{
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
+  ; GREEDY-NEXT: }
+
+  ; VRW-LABEL: name: hard_bundle_dual_ld_large_frame
+  ; VRW: BUNDLE{{.*}}{
+  ; VRW-NEXT: ${{r[0-9]+}} = LD32
+  ; VRW-NEXT: ${{r[0-9]+}} = LD32
+  ; VRW-NEXT: }
+  ; VRW-NOT: LD32_S
+
+  ; stop-after=prologepilog: large stack + CSR r8/r9 save; dual-load root
+  ; still wraps two logical LD32; CSR frame-setup stores stay outside root.
+  ; PEI-LABEL: name: hard_bundle_dual_ld_large_frame
+  ; PEI-DAG: stackSize:{{ +}}{{[4-9][0-9][0-9]}}
+  ; PEI-DAG: frame-setup SUBI32
+  ; PEI: BUNDLE{{.*}}{
+  ; PEI-NEXT: ${{r[0-9]+}} = LD32
+  ; PEI-NEXT: ${{r[0-9]+}} = LD32
+  ; PEI-NEXT: }
+  ; PEI-DAG: ST32 killed ${{r[89]}}
+  ; PEI-DAG: ST32 killed ${{r[89]}}
+  ; PEI-NOT: LD32_S
+
+  ; stop-after=postmisched: dual-load hard root exact-commits (private slots);
+  ; large-frame CSR prologue still present; zero member loss.
+  ; POST-LABEL: name: hard_bundle_dual_ld_large_frame
+  ; POST-DAG: frame-setup SUBI32
+  ; POST-DAG: frame-setup ST32 ${{r[89]}}
+  ; POST: BUNDLE{{.*}}{
+  ; POST-NEXT: ${{r[0-9]+}} = LD32_S{{[01]}}
+  ; POST-NEXT: ${{r[0-9]+}} = LD32_S{{[01]}}
+  ; POST-NEXT: }
+...

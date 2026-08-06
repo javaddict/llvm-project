@@ -4,7 +4,7 @@
 // RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -fsyntax-only -verify=full %t.gen.c
 // RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -target-feature -agu -fsyntax-only -verify=noagu %t.gen.c
 //
-// C5.1 / G-CAPI-FEATURE continuous feature contract:
+// CAPI-5 EXIT MET (2026-07-27) / G-CAPI-FEATURE continuous feature contract:
 //   Generate exhaustive Features-gate Sema audits from BuiltinsHaydn.td
 //   (OpenCL/NEON exhaustive + C3.1 haydn-capi-feature-gates.c sample peer).
 //   Every PublicEnabled op with non-empty Features is called as
@@ -13,6 +13,7 @@
 //   Profiles: generic (agu+hwloop), full (haydn all five), noagu (haydn -agu).
 //   Fail closed: missing feature Sema case fails -verify.
 //   No FormatID / slot / AltDesc in the public surface.
+//   Residual product stress = BundleSim/ISS only (not a CAPI wave reopen).
 //
 // Companion: haydn-capi-feature-gates.c (hand sample) +
 //            capi-op-imm-audit.c + capi-op-closure-matrix.c +

@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — Golden scalar GPR32 multiply family (MAC GRR): G_MUL s32 → MULL (low 32 of product, wrap).
+
 ; Golden scalar GPR32 multiply family (MAC GRR):
 ;   G_MUL s32 → MULL (low 32 of product, wrap)
 

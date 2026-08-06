@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
-;
+
+; Role: semantic — (GAP-4 multibb): a multi-BB loop must NOT be lowered to a hardware loop (ZOL) via the IR-level pass.
+
 ; REGRESSION TEST (GAP-4 multibb): a multi-BB loop must NOT be lowered to a
 ; hardware loop (ZOL) via the IR-level pass.
 ;

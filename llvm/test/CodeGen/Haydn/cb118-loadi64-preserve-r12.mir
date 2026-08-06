@@ -1,10 +1,16 @@
 # RUN: llc -mtriple=haydn -run-pass=postrapseudos -verify-machineinstrs %s -o - \
 # RUN:   | FileCheck %s --check-prefix=ALLOC
 
-# LOADI64 MatInt uses a scavenged post-RA GPR (HaydnPostRAScratch)
-# not fixed free AT / not hardcoded R12. Live R12 must remain available for
-# the subsequent LDU16; expansion must not clobber R12 as MatInt dest.
+# Role: MIR — LOADI64 MatInt uses a scavenged post-RA GPR (HaydnPostRAScratch)
+# not fixed free AT / not hardcoded R12. Live R12 must remain available for the
+# subsequent LDU16; expansion must not clobber R12 as MatInt dest.
 # AIE model: R12 is a normal allocatable GPR (no free AT / no +reserve-r12-at).
+#
+# Updated for the DR64PackFI pack path: the general LOADI64 (both-halves-nonzero
+# constant 0x7FFFFFFFFFFFFFFF) now stores the two MatInt halves to a per-function
+# fixed frame slot (DR64PackFI) and LD64s the result. NO dynamic
+# SUBI32/ADDI32_W of SP — the previous transient shifted SP mid-function and
+# corrupted sibling SP-relative fixed objects (CB mac_mula64_all exit 11).
 
 ---
 name: loadi64_preserves_live_r12
@@ -12,11 +18,15 @@ tracksRegLiveness: true
 body: |
   bb.0:
     liveins: $r12, $r15
-    ; ALLOC-NOT: {{ST32|LD32}} $r12
-    ; ALLOC: $r13 = SUBI32 $r13, 8
+    ; No dynamic SP transient opens around the pack:
+    ; ALLOC-NOT: $r13 = SUBI32 $r13, 8
+    ; MatInt scratch is a scavenged non-R12 GPR (R12 stays live for LDU16):
+    ; ALLOC-NOT: {{ST32|LD32|LD64}} $r12
     ; ALLOC: ST32 $r{{[0-9]+}}, $r13, 0
+    ; ALLOC: ST32 killed $r{{[0-9]+}}, $r13, 1
     ; ALLOC: $d0 = LD64 $r13, 0
-    ; ALLOC: $r13 = ADDI32_W $r13, 8
+    ; No dynamic SP transient closes after the pack load:
+    ; ALLOC-NOT: $r13 = ADDI32_W $r13, 8
     ; ALLOC: $r1 = LDU16 $r12, 32
     $d0 = LOADI64 9223372036854743039
     $r1 = LDU16 $r12, 32

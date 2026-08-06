@@ -1,12 +1,14 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 
+; Role: smoke — function labels present; compile+emit smoke, not semantic qualification.
+
 ; REBASELINED : / cutover — native mul now carries slot suffix (mul64.ll/s2); slot auction reorganized the two mul+sext chains in loop body and epilogue.
 ; REBASELINED : / pipeline reorder (ExpandPseudos/BitSimplify pre-scheduler + materialize at leaveRegion) — bundles regrouped, ops unchanged.
 ; REBASELINED : scheduling changed (//) — bundles regrouped, ops unchanged.
-; Bundle128-only rebaseline (/R2-R5): CHECK-LABEL + key invariants.
-; Bundle128 rebaseline: labels + present opcodes.
+; Format-E-only rebaseline (/R2-R5): CHECK-LABEL + key invariants.
+; Format E rebaseline: labels + present opcodes.
 
-; Bundle128: function labels present (compile + emit smoke).
+; Format E: function labels present (compile + emit smoke).
 ; CHECK-LABEL: iir_biquad:
 ; CHECK: {{.}}
 

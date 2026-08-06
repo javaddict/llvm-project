@@ -7,21 +7,34 @@
 //===----------------------------------------------------------------------===//
 //
 // AIE-shaped opcode-alt map for post-RA multi-slot placement
-// (G-BUNDLE-FORMAT B3.exit.3; peer AIEAlternateDescriptors.h:27-75).
+// ( B3.exit.3; peer AIEAlternateDescriptors.h:27-75).
 //
 //   AlternateDescs  — MI → selected format-member MCInstrDesc*.
 //                     HR commitPlacementForEmit writes setAlternateDescriptor
-//                     (MemberOpcode from tryAddProduct; AIEHazardRecognizer.cpp:389).
+//                     (MemberOpcode from exactTryAddProduct preferred collapse;
+//                     AIEHazardRecognizer.cpp:389).
 //                     leaveRegion materializeMultiOpcodeInstrs reads
 //                     getSelectedOpcode and MI.setDesc
 //                     (AIEMachineScheduler.cpp:1121-1139), then clear()
 //                     (AIEMachineScheduler.cpp:1081-1082;
-//                     AIEAlternateDescriptors.h:74).
+//                     AIEAlternateDescriptors.h:74) BEFORE exact no-split
+//                     multi-MI MIR commit (HaydnBundleMaterialize
+//                     instrsFormOneLegalCycle + commitExactMultiMIProductCycle;
+// sole surface — no PostRA dual). Transient only —
+//                     never a durable side-map.
+//
+// Hard multi-member BUNDLE roots (SMS handoff / rematch) are not in the
+// scheduled-region alt map: leaveMBB exact-commits them via
+// commitExactHardRootProductCycle (exactSolve setDesc + dissolve +
+// finalizeBundle rebuild of consolidated root operands/kills/InternalRead).
+// AltDescs remains region-only; hard-root membership never records here.
 //
 // No slot side-map (AIE has none). Post-commit placement is opcode identity
 // via getSlotKind (AIEBaseMCFormats.cpp:66-75) + Bundle SlotMap
-// (AIEBundle.h:92-104). Product: BUNDLE128_FULL only. N-format-ready via
-// MemberOpcode / FormatID path.
+// (AIEBundle.h:92-104). Product: Format E composites only (FE8). Selected
+// MemberOpcode must be a real placement member (residual `_S*` peer today) —
+// never re-stamp a bare logical. Multi-MI commit re-solves setDesc as a
+// fail-closed second line so residual logical packs cannot reach encode.
 //
 //===----------------------------------------------------------------------===//
 
@@ -49,6 +62,9 @@ public:
   // opcode for multi-slot / format-member logicals. \p TII resolves opcode →
   // MCInstrDesc (AIE uses Subtarget TII; Haydn takes TII from the HR/caller
   // so unit tests can inject without a MachineFunction).
+  // Keys may be synthetic addresses in unit tests — do not dereference MI
+  // here. Production: HR never records INLINEASM; leaveRegion setDesc also
+  // skips isInlineAsm before applying SelectedOpcode.
   void setAlternateDescriptor(MachineInstr *MI, unsigned AltInstOpcode,
                               const MCInstrInfo &TII) {
     AlternateDescs[MI] = &TII.get(AltInstOpcode);

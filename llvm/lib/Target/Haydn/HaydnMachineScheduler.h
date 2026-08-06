@@ -15,7 +15,7 @@
 // Post-RA: HaydnScheduleDAGMI + HaydnPostRASchedStrategy + HazardRecognizer
 // (sole owner of final VLIW pack in leaveRegion/leaveMBB).
 //
-// Do NOT revive VLIWMachineScheduler / ConvergingVLIWScheduler (G21/ UAF).
+// Do NOT revive VLIWMachineScheduler / ConvergingVLIWScheduler (UAF).
 // Do NOT use bare GenericScheduler via nullptr factory fallback.
 //
 // Plan: /ssd2/mhyang/haydn-plans/topics/scheduling/TOPIC.md

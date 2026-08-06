@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -o - < %s | FileCheck %s
-;
+
+; Role: semantic — POST/PRE AGU writeback loads must return {data, new_ptr} and select to the 2-def golden mnemonics (data + rs_wb).
+
 ; POST/PRE AGU writeback loads must return {data, new_ptr} and select to the
 ; 2-def golden mnemonics (data + rs_wb). Mirrors cb-load-store.ll frexp model.
 

@@ -1,6 +1,8 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -O2 -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop < %s | FileCheck %s
-;
+
+; Role: semantic — Dual HWLR free-list is fixed policy (no -haydn-hwloop-nesting knob).
+
 ; Dual HWLR free-list is fixed policy (no -haydn-hwloop-nesting knob).
 ; Outer may convert when a free sel remains (prefer sel=1 inner, sel=0 outer).
 ; Outer multi-BB nests often still fail trip-count / structure checks; smoke

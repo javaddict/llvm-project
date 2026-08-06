@@ -1,0 +1,20 @@
+# 16-byte .text payload (not a multiple of product EncodedBytes=12).
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS32
+  Data:    ELFDATA2LSB
+  Type:    ET_REL
+  Machine: 0x103
+Sections:
+  - Name:    .text
+    Type:    SHT_PROGBITS
+    Flags:   [ SHF_ALLOC, SHF_EXECINSTR ]
+    AddressAlign: 4
+    Content: '00000000000000000000000000000000'
+Symbols:
+  - Name:    _start
+    Section: .text
+    Value:   0
+    Size:    16
+    Binding: STB_GLOBAL
+    Type:    STT_FUNC

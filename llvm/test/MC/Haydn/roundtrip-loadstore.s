@@ -1,10 +1,13 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
-#
+
+# Role: object — Round-trip test for Load/Store instructions: asm → parse → print.
+
 # Round-trip test for Load/Store instructions: asm → parse → print.
 # NOTE: Full encode→decode roundtrip deferred until disassembler is complete.
 
 # Basic load/store (32-bit)
 # CHECK: ld32 r0, r1, 0
+
 ld32 r0, r1, 0
 
 # CHECK: ld32 r2, r3, 16

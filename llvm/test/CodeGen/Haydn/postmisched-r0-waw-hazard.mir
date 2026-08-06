@@ -1,6 +1,8 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
-#
-# G-PACK-LEGAL rule 1: dual R0 defs in one Bundle128 cycle are WRITE_CONFLICT
+
+# Role: MIR — rule 1: dual R0 defs in one Format E cycle are WRITE_CONFLICT on BundleSim.
+
+# G-PACK-LEGAL rule 1: dual R0 defs in one Format E cycle are WRITE_CONFLICT
 # on BundleSim. R0 is soft-zero (not hardwired). XOR32 R0,R0,R0 and a second
 # def of R0 must NOT co-issue.
 #

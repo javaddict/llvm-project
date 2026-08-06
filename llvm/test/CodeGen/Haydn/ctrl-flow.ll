@@ -1,4 +1,6 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 < %s | FileCheck %s
+
+; Role: semantic — Coverage for ctrl flow.
 
 define i32 @cond_br(i32 %a, i32 %b) {
 ; CHECK-LABEL: cond_br:

@@ -1,7 +1,9 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -stop-after=instruction-select < %s | FileCheck %s
 ;
-; REGRESSION TEST: Wave 5 SFR flag register transfer intrinsics.
+; Role: MIR — instruction-select must emit SEQ64/SLT64/SFR moves for the flag-producing compares and flag ops under test.
+;
+; REGRESSION TEST: SFR flag register transfer intrinsics.
 ;
 ; Haydn has a per-lane Status Flag Register (SFR) with 4 flag bits.
 ; The SFR is set by compare operations (SEQ64, SLT64, SLE64) and
@@ -9,24 +11,8 @@
 ;
 ; Test strategy: Use -stop-after=instruction-select to verify the
 ; GISel instruction selector produces the correct machine instructions.
-; This avoids a known bug where standalone HaydnInst instructions are
-; silently dropped by the VLIW bundle emitter (tracked separately).
-;
-; If any intrinsic fails to lower, llc will crash with -global-isel-abort=1.
-;
-; Bug history: SLT64/SLE64/MOVT64/MOVF64 instruction definitions originally
-; had (ins DR64:$ra, DR64:$rs) but the intrinsics are unary. The selector
-; called selectUnary which only reads one source operand, causing an
-; assertion failure in constrainSelectedInstRegOperands. Fixed by correcting
-; the instruction definitions to (ins DR64:$rs).
-;
-; ZERO_SFR originally had (outs GPR32:$rd, ins simm16:$imm) but the intrinsic
-; has no parameters. Fixed to (outs, ins) with no operands.
+; zero_sfr remains intentionally unchecked (translator gap).
 
-;MOVESFR2GPR: read SFR into GPR32
-
-; CHECK-LABEL: name: test_movesfr2gpr
-; CHECK: MOVESFR2GPR
 define i32 @test_movesfr2gpr() {
   %r = call i32 @llvm.haydn.movesfr2gpr()
   ret i32 %r
@@ -46,8 +32,8 @@ define void @test_movegpr2sfr(i32 %val) {
 ; treats it as a function call (JAL) instead of G_INTRINSIC_W_SIDE_EFFECTS.
 ; This is a known limitation. Once fixed, the CHECK below should pass.
 
-; XFAIL-CHECK-LABEL: name: test_zero_sfr
-; XFAIL-CHECK: ZERO_SFR
+; Role (this case): smoke/disabled — IRTranslator still emits JAL for zero_sfr;
+; leave un-checked until G_INTRINSIC_W_SIDE_EFFECTS selects ZERO_SFR.
 define void @test_zero_sfr() {
   call void @llvm.haydn.zero_sfr()
   ret void

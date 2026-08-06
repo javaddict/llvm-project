@@ -7,9 +7,12 @@
 //===----------------------------------------------------------------------===//
 //
 // Implementation of the single-source Haydn relocation geometry table and the
-// generic geometric patcher. See HaydnRelocLayout.h. Field positions transcribe
-// encoding_manual.md (branch ÷2 §5.5/§5.14; hwloop ÷4 §5.11/§5.12; HI/LO LUI
-// pairs §5 Class 000). Both MC and lld delegate here.
+// generic geometric patcher. See HaydnRelocLayout.h. Product FieldLsb is Format
+// E E2 e0 absolute parcel bits (r_offset = parcel origin). Scales follow
+// encoding_manual (branch/call halfword ÷2; CallSImm20 byte; hwloop ÷4).
+// GE96-03 still open for golden formalization — product does not invent a
+// second scale. RelocTrans::Unresolved remains for unpublished kinds.
+// Both MC and lld delegate here.
 //
 //===----------------------------------------------------------------------===//
 
@@ -31,42 +34,32 @@ struct Row {
   RelocFieldInfo Info;
 };
 
-// Field LSB positions (within the N-byte LE image) per encoding_manual.md:
-// ALL emission now routes through Bundle128 (16-byte). Fields live
-// in the s0 slot window (bits[47:0] of the LoWord). Legacy 48-bit-parcel
-// positions (HWLoopOff1@bits[31:26], Off2@bits[25:14]) were transcribed from
-// the earlier geometry and are NEVER emitted. The.td HaydnFU_ALU32_S0_HWLOOP
-// _W/_F2_W classes (`s0 = {FU, opcode, reserved, rs/cnt, offset2, offset1
-// sel}`) place the hwloop fields at offset1=s0 bits[6:1] and offset2=s0
-// bits[18:7]; the.td HaydnFU_LS_S0_*_RI6 classes place the LS imm6 field at
-// s0 bits[13:8]. See (LO20 28->18, WIDE_Branch 36->4) for the same
-// Bundle128 cutover treatment.
-// 32-bit instr: imm16@bits[15:0], call20@bits[19:0]
-// LUI (Bundle128 s0 ALU32 FLEX, 16-byte parcel): full imm12 at
-// LoWord bits[15:4] (HaydnFU_ALU32_S0_I12)
-// Bundle128 s0 window:
-// HI12 @ bits[15:4] (LUI imm12 I12 — FieldSize 5→12)
-// HWLoopOff1 @ bits[6:1] (was [31:26] — stale legacy parcel pos)
-// HWLoopOff2 @ bits[18:7] (was [25:14] — stale legacy parcel pos)
-// LS_IMM @ bits[13:8] (dedicated kind — was conflated with LO20)
-// WIDE_Branch @ bits[15:4] (BEQZ imm12 I12_ONE)
-// WIDE_Call @ bits[23:4] (JAL imm20 I20)
-// LO20 @ bits[37:18] (ADDI32_W/ORI32_W imm20 RI20)
-// 16-bit compressed: imm4@bits[3:0], imm10@bits[13:4]
+// Field LSB positions within the N-byte LE image starting at r_offset.
+// Product Format E (E96, E2 e0 ALU0 primary freestanding placement):
+//   I12 branch imm12         @ absolute parcel bits[24:35]  → FieldLsb=24
+//   RI12 branch imm12        @ absolute parcel bits[28:39]  → FieldLsb=28
+//   WIDE_Call / I20 (JAL)    @ absolute parcel bits[31:50]  → FieldLsb=31
+//   LO20 / RI20 (ADDI32)     @ absolute parcel bits[31:50]  → FieldLsb=31
+//   HI12 / LUI I12 imm12     @ absolute parcel bits[32:43]  → FieldLsb=32
+//     Golden E2 e0 ALU0 I12: reg[23:20], reserved[31:24]=0, imm[43:32].
+//     LUI shares the I12 type code with BEQZ/BNEZ/… but branch I12 sits at
+//     [24:35]; LUI imm is after the reserved hole. FieldLsb=24 zeroed LUI
+//     after link while LO20 applied → 0xfff9c340 for BSS ≥ 0x80000.
+//     LO20 was FieldLsb=28 (bits[28:47]); golden ADDI32 RI20 is abs[50:31]
+//     → FieldLsb=31. Off-by-3 wrote ring@0x15130 as 0x2a26 (misaligned).
+// MC emits r_offset = parcel origin (byte 0) so P is the hardware PC and
+// Align=2 range checks see even places. Residual s0 FieldLsb
+// (bits[15:4]/bits[23:4]) is retired for these product kinds.
+// HWLoopOff1/Off2 retain historical geometry until Format E hwloop lands.
 constexpr Row Table[] = {
     {RelocKind::None, {0, 0, 0, 0, 1, false, false, RelocTrans::None}},
     {RelocKind::Data32, {4, 32, 0, 0, 1, true, false, RelocTrans::None}},
     {RelocKind::SImm16, {4, 16, 0, 0, 1, true, false, RelocTrans::None}},
+    // Branch/call product scales (encoding_manual halfword ÷2; CallSImm20 byte).
     {RelocKind::BranchSImm16, {4, 16, 0, 1, 2, true, true, RelocTrans::None}},
-    // Bundle128-only JAL_S0 (HaydnFU_ALU32_S0_I20) layout is
-    // s0 = {FU, opcode, reserved, imm20, rt} with rt at s0 bits[3:0] and
-    // imm20 at s0 bits[23:4] (LoWord). The prior FieldLsb=0 + ValueShift=1
-    // was legacy-parcel geometry: it wrote the 20-bit PC-rel value OVER rt
-    // (and treated the call offset as halfword-scaled). That produced the
-    // direct-ELF crt0 canary `jal r0, 65535` after R_HAYDN_CallSImm20 patch
-    // (rd clobbered to 0, imm saturated). Match WIDE_CallSImm20 field
-    // position (FieldLsb=4) but ValueShift=0 — calltarget_s0 stores the
-    // signed PC-relative BYTE offset with no ÷2 (encoding_manual).
+    // CallSImm20: signed PC-relative BYTE offset (ValueShift=0). Used by
+    // assembler-independent YAML thunk geometry tests; FieldLsb=4 is a
+    // placeholder write window (tests use zero content).
     {RelocKind::CallSImm20, {4, 20, 4, 0, 1, true, true, RelocTrans::None}},
     {RelocKind::HI20, {4, 16, 0, 0, 1, false, false, RelocTrans::HiMips}},
     {RelocKind::LO16, {4, 16, 0, 0, 1, true, false, RelocTrans::LoMips}},
@@ -76,86 +69,49 @@ constexpr Row Table[] = {
     {RelocKind::TPREL_LO16, {4, 16, 0, 0, 1, true, false, RelocTrans::LoMips}},
     {RelocKind::Data8, {1, 8, 0, 0, 1, true, false, RelocTrans::None}},
     {RelocKind::Data16, {2, 16, 0, 0, 1, true, false, RelocTrans::None}},
-    // LUI is always emitted as Bundle128 s0 ALU32 FLEX
-    // (LUI_S0 / HaydnFU_ALU32_S0_I12: s0={FU,opcode,reserved,imm12,rt}).
-    // imm12 lives at s0 bits[15:4] of the LoWord (FieldLsb=4, FieldSize=12).
-    // The prior FieldSize=5 was a Mode-0 residual from LUI_M0S0ALU's uimm5
-    // at bits[8:4]; it silently truncated HI12>31 (addresses ≳32MB). FieldLsb=4
-    // remains correct (rt still occupies bits[3:0] — same as WIDE_Branch
-    // imm12 geometry). NBytes=4 covers bits[15:0] of the LoWord.
-    {RelocKind::HI12, {4, 12, 4, 0, 1, false, false, RelocTrans::Hi12}},
-    // Bundle128 cutover geometry. Legacy 48-bit parcel layouts (imm20 at
-    // bits[47:28], imm12 at bits[47:36]) are NEVER emitted (cutover routes
-    // ALL emission through encodeBundle128). The Bundle128 s0 slot window
-    // places fields at DIFFERENT bit positions within the 16-byte LoWord:
-    // ADDI32_W_S0 (HaydnFU_ALU32_S0_RI20): imm20 at s0 bits[37:18]
-    // > LoWord bits[37:18] -> FieldLsb=18.
-    // BEQZ_W_S0 (HaydnFU_ALU32_S0_I12_ONE): imm12 at s0 bits[15:4]
-    // > LoWord bits[15:4] -> FieldLsb=4.
-    // JAL_S0 (HaydnFU_ALU32_S0_I20): imm20 at s0 bits[23:4]
-    // > LoWord bits[23:4] -> FieldLsb=4.
-    // The OLD FieldLsb=28/36 wrote into the opcode+FU bits (bits[38:47])
-    // clobbering the discriminators and producing <unknown> on disassembly.
-    {RelocKind::LO20, {6, 20, 18, 0, 1, false, false, RelocTrans::Lo20}},
-    {RelocKind::PC_LO20, {6, 20, 18, 0, 1, false, true, RelocTrans::Lo20}},
-    // RISK-6 (real root): the OLD FieldLsb values (26 for Off1
-    // 14 for Off2) were transcribed from the LEGACY 48-bit parcel geometry
-    // (HWLoopOff1@bits[31:26], Off2@bits[25:14]) and never updated when
-    // routed all emission through Bundle128. The.td HaydnFU_ALU32_S0_HWLOOP
-    // _W / _F2_W classes (`s0 = {FU, opcode, reserved, cnt/rs, offset2
-    // offset1, sel}`) place offset1 at s0 bits[6:1] (FieldLsb=1) and offset2
-    // at s0 bits[18:7] (FieldLsb=7). With the stale FieldLsb=26, the patcher
-    // wrote the 6-bit offset1 field into bits[31:26] of the LoWord — i.e. the
-    // opcode+FU discriminator bits — so `set_hwloop_f2_w` overflows the field
-    // for any offset > 0 (the encoding silently corrupts the opcode and
-    // disassembles as `<unknown>`). The agent's IsSigned=false fix alone
-    // was incomplete: the field RANGE was correct but the field POSITION was
-    // wrong. ValueShift=2 (÷4 per §5.11/5.12 + haydn_instruction_db.json) and
-    // IsSigned=false (uimm6/uimm12 per the.td UImmAsmOperand class) are both
-    // retained; only FieldLsb changes.
+    // Format E LUI I12: imm12 @ parcel bits[32:43] (golden E2 e0 ALU0).
+    // Distinct from WIDE_BranchSImm12 I12 @ bits[24:35].
+    // NBytes=8: field at bit 32 needs image width > 48 (old NBytes=6 truncated
+    // high bits of RI20/I20 when FieldLsb+FieldSize > 48).
+    {RelocKind::HI12, {8, 12, 32, 0, 1, false, false, RelocTrans::Hi12}},
+    // Format E ADDI32 RI20: imm20 @ parcel bits[31:50] (golden abs[50:31]).
+    {RelocKind::LO20, {8, 20, 31, 0, 1, false, false, RelocTrans::Lo20}},
+    {RelocKind::PC_LO20, {8, 20, 31, 0, 1, false, true, RelocTrans::Lo20}},
+    // SET_HWLOOP Off1/Off2: explicit displacement <<2 → ValueShift=2, Align=4.
     {RelocKind::HWLoopOff1, {6, 6, 1, 2, 4, false, true, RelocTrans::None}},
     {RelocKind::HWLoopOff2, {6, 12, 7, 2, 4, false, true, RelocTrans::None}},
-    // I12 WIDE zero-compare branches (BEQZ_W/BNEZ_W/…):
-    // HaydnFU_ALU32_S0_I12_ONE packs s0={FU,opc,reserved22,imm12,rs}
-    // → imm12 at s0 bits[15:4] → FieldLsb=4.
+    // Format E I12 one-reg branch (BEQZ/BNEZ): imm12 @ parcel bits[32:43]
+    // (ALU0 entry0 window; same I12 field position as HI12/RI12 below).
+    // FieldLsb was stale 24 (historical) — LLD wrote imm into golden-reserved
+    // bits[24:31], the decoder's c-reserved constraint failed, and objdump
+    // soft-NOP'd the entry. tblgen BEQZ_E2_E0_ALU0_I12 imm_1 @ entry[37:26]
+    // = parcel bits[32:43] is the authority.
     {RelocKind::WIDE_BranchSImm12,
-     {4, 12, 4, 1, 2, true, true, RelocTrans::None}},
-    // RI12 WIDE two-reg cond branches (BEQ_W/BNE_W/BGE_W/…):
-    // HaydnFU_ALU32_S0_RI12 packs s0={FU,opc,reserved18,imm12,rt,rs}
-    // → imm12 at s0 bits[19:8] → FieldLsb=8. Using FieldLsb=4 here
-    // overwrote rt/rs (bits[7:0]) and produced invalid branch targets
-    // (BundleSim reject / `bne_w r1, r8, 2` from `bne_w r1, r2, L`).
+     {6, 12, 32, 1, 2, true, true, RelocTrans::None}},
+    // Format E RI12 two-reg branch (BEQ/BNE): imm12 @ parcel bits[32:43]
+    // (was stale 28; same field-position bug as the one-reg row above).
     {RelocKind::WIDE_BranchSImm12_RI,
-     {4, 12, 8, 1, 2, true, true, RelocTrans::None}},
+     {6, 12, 32, 1, 2, true, true, RelocTrans::None}},
+    // Format E I20 call (JAL): imm20 @ parcel bits[31:50] (golden abs[50:31]).
+    // Byte PC-relative; NBytes=8 so bits[48:50] are not truncated (NBytes=6
+    // only images [47:0] — negative offsets became 0x1Fxxxx garbage).
     {RelocKind::WIDE_CallSImm20,
-     {6, 20, 4, 1, 2, true, true, RelocTrans::None}},
+     {8, 20, 31, 0, 1, true, true, RelocTrans::None}},
     {RelocKind::C_BranchSImm4, {2, 4, 0, 1, 2, true, true, RelocTrans::None}},
     {RelocKind::C_UImm4, {2, 4, 0, 0, 1, false, false, RelocTrans::None}},
     {RelocKind::C_BranchSImm10, {2, 10, 4, 1, 2, true, true, RelocTrans::None}},
     {RelocKind::HWLoopOffset, {4, 16, 0, 2, 4, true, true, RelocTrans::None}},
     {RelocKind::LongBranchSImm20,
      {4, 20, 0, 1, 2, true, true, RelocTrans::None}},
-    // reloc-aware slot-OR: s0 LS scaled-imm fields (FI/spill offsets).
-    // The LS _M0 variant's Inst bakes the off field at s0 ext bits[7:4] of
-    // the LoWord (FmtM0_S0_LS_IMM4 Inst{7-4}=off), so FieldLsb=4, NBytes=4
-    // (the LoWord of the Mode-0 bundle). ValueShift = data-width scaling (÷4
-    // for LD32/ST32 words). MC-only — FI spill offsets are resolved locally by
-    // the AsmBackend.
+    // LS scaled-imm fields (FI/spill offsets) — width scaling, not branch.
     {RelocKind::S0LSOff4_2, {4, 4, 4, 2, 4, false, false, RelocTrans::None}},
     {RelocKind::S0LSOff4_3, {4, 4, 4, 3, 8, false, false, RelocTrans::None}},
     {RelocKind::S0LSOff2_0, {4, 2, 4, 0, 1, false, false, RelocTrans::None}},
     {RelocKind::S0LSOff3_0, {4, 3, 4, 0, 1, false, false, RelocTrans::None}},
-    // RISK-5 (reloc-side): s0 LS D_LD/S_LD/D_ST/S_ST imm6 field at
-    // Bundle128 LoWord bits[13:8] (per HaydnFU_LS_S0_*_RI6: `s0 = {FU, opcode
-    // reserved[24], imm6, rtd/rt, rs}` — 3+7+24=34 high bits, imm6 next).
-    // Signed 6-bit byte offset (no scaling — the `simm6` operand stores the
-    // raw byte value). The encoder (HaydnMCCodeEmitter::getExprFixupKind)
-    // currently routes LD32/ST32/LD64/ST64 to FIXUP_HAYDN_LO20, which writes
-    // the 20-bit field at bits[37:18] — a SILENT miscompilation of LS
-    // relocatable addresses (the 6 LS bits of the LO20 patch land partly in
-    // the imm6 field, partly in the rs/rtd fields). MC-only until a7a4e481
-    // follow-up wires the encoder to FIXUP_HAYDN_LS_IMM.
-    {RelocKind::LS_IMM, {6, 6, 8, 0, 1, true, false, RelocTrans::None}},
+    // Format E LOADSTORE0 RI6: imm6 after rt/rs under dense packing @ bits[33:28]
+    // (FieldLsb=28). Element index on the wire (codegen already ÷ width); no
+    // additional ValueShift here. Residual LoWord bits[13:8] retired.
+    {RelocKind::LS_IMM, {6, 6, 28, 0, 1, true, false, RelocTrans::None}},
 };
 
 const Row &rowFor(RelocKind R) {
@@ -164,10 +120,19 @@ const Row &rowFor(RelocKind R) {
       return RowEntry;
   return Table[0]; // None fallback
 }
+
+// Shared diagnostic for kinds whose value transform is not product-closed.
+constexpr const char *kTransformNotReady =
+    "relocation transform not ready (branch/call wire scale unresolved)";
+
 } // namespace
 
 const RelocFieldInfo &getRelocFieldInfo(RelocKind R) {
   return rowFor(R).Info;
+}
+
+bool isRelocTransformReady(RelocKind R) {
+  return getRelocFieldInfo(R).Trans != RelocTrans::Unresolved;
 }
 
 uint64_t readImage(const uint8_t *Loc, unsigned NBytes) {
@@ -185,6 +150,9 @@ uint64_t readImage(const uint8_t *Loc, unsigned NBytes) {
     // bits[31:0] in bytes 0..3, bits[47:32] in bytes 4..5 (lld 6-byte
     // read32le + read16le-at-+4 convention).
     return readImage(Loc, 4) | (readImage(Loc + 4, 2) << 32);
+  case 8:
+    // Full low 64 bits of a Format E parcel (enough for imm20 @ [31:50]).
+    return readImage(Loc, 4) | (readImage(Loc + 4, 4) << 32);
   }
 }
 
@@ -209,6 +177,10 @@ void writeImage(uint8_t *Loc, unsigned NBytes, uint64_t Value) {
     writeImage(Loc, 4, Value & 0xFFFFFFFFULL);
     writeImage(Loc + 4, 2, (Value >> 32) & 0xFFFFULL);
     break;
+  case 8:
+    writeImage(Loc, 4, Value & 0xFFFFFFFFULL);
+    writeImage(Loc + 4, 4, (Value >> 32) & 0xFFFFFFFFULL);
+    break;
   }
 }
 
@@ -232,12 +204,26 @@ RelocCompute computeRelocValue(RelocKind R, uint64_t Value) {
   RelocCompute Out;
   int64_t Sv = static_cast<int64_t>(Value);
 
+  // Fail closed before any alignment or scale application when the transform
+  // is not product-ready. Prevents halfword ÷2 from remaining acceptance law.
+  if (I.Trans == RelocTrans::Unresolved) {
+    Out.Err = kTransformNotReady;
+    return Out;
+  }
+
+  // Align first so misaligned targets never look like range failures.
+  // Hwloop rows use Align=4 (word displacement); other product rows use Align
+  // from RelocFieldInfo.
   if (I.Align > 1 && (Sv & static_cast<int64_t>(I.Align - 1))) {
     Out.Err = "mis-aligned relocation target";
     return Out;
   }
 
   switch (I.Trans) {
+  case RelocTrans::Unresolved:
+    // Handled above; keep switch exhaustive.
+    Out.Err = kTransformNotReady;
+    return Out;
   case RelocTrans::HiMips: {
     uint64_t Hi = (Value + 0x8000) >> 16;
     if (Hi > 0xFFFF) {
@@ -258,12 +244,12 @@ RelocCompute computeRelocValue(RelocKind R, uint64_t Value) {
     break;
   }
   case RelocTrans::Hi12: {
-    // HI12 applies only to LUI (Bundle128 s0 ALU32 FLEX / LUI_S0).
-    // Full imm12 at LoWord bits[15:4] (FieldSize=12). Use the row's
-    // actual FieldSize for the range check so an out-of-reach address fails
-    // loudly rather than being silently truncated by patchField. The
-    // MIPS-style +0x80000 rounding is preserved (pairs with LO20's
-    // sign-extended reconstruction).
+    // HI12 applies only to LUI. Product Format E places imm12 at parcel
+    // bits[32:43] (golden E2 e0; see Table FieldLsb). Use the row's
+    // FieldSize for the range check so an out-of-reach address fails
+    // loudly rather than being silently truncated by patchField.
+    // MIPS-style +0x80000 rounding pairs with LO20's sign-extended
+    // reconstruction.
     unsigned FieldBits = I.FieldSize > 0 ? I.FieldSize : 12;
     uint64_t Hi = (Value + 0x80000) >> 20;
     if (Hi > ((1ULL << FieldBits) - 1)) {
@@ -286,6 +272,13 @@ RelocCompute computeRelocValue(RelocKind R, uint64_t Value) {
     break;
   }
   case RelocTrans::None: {
+    // Field bounds after ValueShift. Product-ready effective windows:
+    //   HWLoopOff1:             unsigned 6-bit after ÷4 → [0, 252]
+    //   HWLoopOff2:             unsigned 12-bit after ÷4 → [0, 16380]
+    //   HWLoopOffset (legacy):  signed 16-bit after ÷4 → [-131072, +131068]
+    // Product branch/call and hwloop rows use this path. Consumers must not
+    // keep a second isInt/isUInt width table — FieldSize + ValueShift + IsSigned
+    // here are the sole acceptance authority for product-ready kinds.
     int64_t Shifted = Sv >> I.ValueShift; // arithmetic (signed)
     if (I.IsSigned ? !isIntN(I.FieldSize, Shifted)
                    : !isUIntN(I.FieldSize, static_cast<uint64_t>(Shifted))) {
@@ -300,26 +293,54 @@ RelocCompute computeRelocValue(RelocKind R, uint64_t Value) {
   return Out;
 }
 
-int64_t readRelocAddend(RelocKind R, const uint8_t *Loc) {
+RelocAddend tryReadRelocAddend(RelocKind R, const uint8_t *Loc) {
   const RelocFieldInfo &I = getRelocFieldInfo(R);
+  RelocAddend Out;
+
+  if (I.Trans == RelocTrans::Unresolved) {
+    Out.Err = kTransformNotReady;
+    return Out;
+  }
+
   uint64_t Field = readField(Loc, I.NBytes, I.FieldSize, I.FieldLsb);
 
   switch (I.Trans) {
+  case RelocTrans::Unresolved:
+    Out.Err = kTransformNotReady;
+    return Out;
   case RelocTrans::HiMips:
   case RelocTrans::Hi12:
-    return static_cast<int64_t>(Field); // unsigned high halves
+    Out.Value = static_cast<int64_t>(Field); // unsigned high halves
+    Out.OK = true;
+    return Out;
   case RelocTrans::Lo20:
-    return SignExtend64<20>(Field); // signed low-20 (pairs with HI12 rounding)
+    Out.Value = SignExtend64<20>(Field); // signed low-20 (pairs with HI12)
+    Out.OK = true;
+    return Out;
   case RelocTrans::LoMips:
-    return SignExtend64<16>(Field);
+    Out.Value = SignExtend64<16>(Field);
+    Out.OK = true;
+    return Out;
   case RelocTrans::None:
     break;
   }
 
   uint64_t Shifted = Field << I.ValueShift;
   if (!I.IsSigned)
-    return static_cast<int64_t>(Shifted);
-  return SignExtend64(Shifted, I.FieldSize + I.ValueShift);
+    Out.Value = static_cast<int64_t>(Shifted);
+  else
+    Out.Value = SignExtend64(Shifted, I.FieldSize + I.ValueShift);
+  Out.OK = true;
+  return Out;
+}
+
+int64_t readRelocAddend(RelocKind R, const uint8_t *Loc) {
+  RelocAddend A = tryReadRelocAddend(R, Loc);
+  // Fail closed: do not invent a halfword or byte undo for Unresolved kinds.
+  // Callers that need diagnostics should use tryReadRelocAddend.
+  if (!A.OK)
+    return 0;
+  return A.Value;
 }
 
 // Map an MC target fixup kind (FIXUP_HAYDN_*, from HaydnFixupKinds.h enum

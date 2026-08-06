@@ -54,12 +54,23 @@ struct HaydnRegisterInfo : public HaydnGenRegisterInfo {
     return true;
   }
 
+  /// Soft physreg order via TRI hints only:
+  /// base copy/coalesce > optional compact-subset (-haydn-ra-compact-hints,
+  /// default OFF; dual-run spill/reload/Hit/post-RA multi-MI stats gate enable)
+  /// > caller-saved preference. Never demotes RC; wide Order remains complete.
   bool getRegAllocationHints(Register VirtReg, ArrayRef<MCPhysReg> Order,
                              SmallVectorImpl<MCPhysReg> &Hints,
                              const MachineFunction &MF,
                              const VirtRegMap *VRM,
                              const LiveRegMatrix *Matrix) const override;
 };
+
+/// Compact-subset membership for metrics-gated soft physreg ordering.
+/// True for GPR32Lo (R0–R7) and low-DR encodings D0–D7. Soft preference only —
+/// not a hard operand-class constraint / RC demotion. Enable remains default
+/// OFF under Full-only until dual-run corpus metrics accept a compact row.
+bool isHaydnCompactSubsetPhysReg(const TargetRegisterInfo &TRI,
+                                 MCPhysReg PhysReg);
 
 } // namespace llvm
 

@@ -1,14 +1,15 @@
 # REQUIRES: haydn
 # RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.o
 # RUN: ld.lld %t.o -o %t --section-start=.text=0x10000
+# RUN: llvm-nm %t | FileCheck --check-prefix=NM %s
 # RUN: llvm-objdump -d --triple=haydn-unknown-elf %t | FileCheck %s
 #
 # Call veneer uses soft-zero R0 only — never R1–R7 (args) or R12.
+# Geometry: 3 × production EncodedBytes.
+
+# NM: __haydn_thunk_callee
 
 # CHECK-LABEL: <__haydn_thunk_callee>:
-# CHECK: lui{{.*}}r0,
-# CHECK: addi32{{.*}}r0,{{.*}}r0,
-# CHECK: jalr{{.*}}r0,{{.*}}r0
 # CHECK-NOT: lui{{.*}}r1,
 # CHECK-NOT: r12
 

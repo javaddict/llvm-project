@@ -15,22 +15,75 @@
 //   HWLR_END[sel]   = PC + (off2 << 2)   // max 16380 B forward
 //   HWLR_COUNT[sel] = cnt
 //
-// Geometry (match BundleSim code_image + AIE ZOL setup-distance model):
-//   1. Inclusive END: HWLR_END >= HWLR_BEGIN is legal (start <= end).
-//   2. Primary hard rule: SET must issue at or before body bundle t−3
-//      → PC_SET + MinSetupBundles * productParcelBytes() <= PC_BEGIN
-//      (B4.4: EncodedBytes from ProductFormatDesc, not a dual magic 16).
-//   3. Body length is not a separate legality floor; short bodies are fine
-//      when (1)+(2) hold. Do not invent min-body sprays as product law.
+// Geometry (golden Format E product law; cycle-primary, byte-derived):
+//   1. Strict END: HWLR_END > HWLR_BEGIN (END is the last body cycle start).
+//      Body parcels from BEGIN through END inclusive >= MinBodyBundles (3).
+//      COUNT >= 1 when the selector is activated.
+//   2. Primary hard rule — setup arithmetic (issue cycles):
+//
+//        cycle C:       SET issues
+//        C+1 .. C+2:    InterveningCycles (= 2) complete following cycles
+//        cycle C+3:     earliest legal BEGIN
+//
+//      SetupIssueDistance = Cycle(BEGIN) - Cycle(SET) >= 3
+//      InterveningCycles  = SetupIssueDistance - 1     (= 2)
+//
+//      Formation / Fixup / lit count size-bearing parcels *after* SET:
+//        Following >= InterveningCycles
+//      Following counts any size-bearing parcel (real work or pad) — see
+//      hwloop-following-non-nop-work.mir (proof seal).
+//
+//      Byte coincidence of the cycle floor (not the timing definition):
+//        MinSetupBytes = InterveningCycles × productParcelBytes()
+//        → PC_after_SET + MinSetupBytes <= PC_BEGIN
+//      MinSetupIssueBytes = SetupIssueDistance × productParcelBytes()
+//        → PC_SET_start + MinSetupIssueBytes <= PC_BEGIN (distance-3 PC delta)
+//
+//      Do not re-hide this pair behind the phrase "t-3" alone: that name is
+//      ambiguous between distance-3 and three intervening cycles. Product law
+//      is distance 3 with two intervening cycles.
+//      Dedicated unit: unittests/Target/Haydn/HaydnHWLoopContractsTest.cpp.
+//   3. Immediate Off1/Off2 scale is <<2 (displacement % 4). Absolute target
+//      alignment is 2-byte bundle min, not absolute Align(4) label pads.
 //
 // AIE peer (AIEBaseInstrInfo::ZOLSupport + PostRA ExitSU latency + alignment):
 //   LoopSetupDistance is enforced first by the post-RA scheduler (edge latency
 //   from setup to region exit), then residual gaps are padded. Haydn:
-//   MinSetupBundles via PostRA mutation + Fixup deficit NOPs after SET.
+//   SetupIssueDistance ExitSU edge + leaveRegion handleRegionConflicts +
+//   Fixup deficit NOPs after SET (Following floor still InterveningCycles).
+//
+//   - SET is a real post-RA DAG SU (not a TII scheduling boundary).
+//   - TII::isHardwareLoopSetupInstr covers logical/wide/member forms.
+//   - ZOLSetupExitLatency raises the forward Artificial Exit edge by
+//     SetupIssueDistance (Succs; drives ExitSU.TopReadyCycle top-down) and
+//     the reverse Preds edge to SetupIssueDistance-1 (bot-up same-cycle-as-
+//     Exit convention; BotCurr still covers the Following floor).
+//   - leaveRegion handleRegionConflicts (AIE peer):
+//       TopFinal = TopCurr + BotCurr
+//       if ExitReady > TopFinal: Top.bumpCycle(ExitReady - BotCurr)
+//       then bump Top while inter-zone scoreboard / Bot TopReadyCycle deps
+//       still conflict; reflect growth as empty Top cycle-list pads.
+//     Dual-zone BotCurr and inter-zone pads only lengthen the region end —
+//     they never shrink Following after SET.
+//   - Single-MI regions skipped by the list scheduler never run the flush;
+//     Fixup residual deficit NOPs remain the safety net for those and for
+//     short useful-window fill.
+//   - Fixup is bundle-preserving (never unconditional SET unbundle).
+//   - Every Fixup-created real MI (deficit pads, demote trip materialize,
+//     stack-counter LD/ST glue, SUBI32+BNEZ_W, exit B) exact-commits via
+//     commitLateProductCycle (shared with late Finalize / pack).
+//   - Formation residual pads remain until useful-window fill + trailing-cycle
+//     materialization prove redundant together (pad-drop deferred).
+//   - Late-layout stable row (fixed BR → Fixup → BR → late Finalize/Verify):
+//     Fixup sums MaxSingleBranchGrowthBytes over still-relaxable short
+//     PC-relative sites in each SET→BEGIN and SET→END window and accepts
+//     hardware form only when residual Off1/Off2 margins cover both sums.
+//     The second BranchRelaxation must not invalidate that acceptance.
 //
 // Pipeline (no free AT invent; no multi-BB convert invent):
 //   Role A IR prefer; expand LoopStart→SET before post-RA pack; Role B residual
-//   opt-in; Fixup: t−3 pad → order-preserving shorten → demote-first.
+//   opt-in; Fixup: intervening pad → order-preserving shorten → demote-first
+//   final-real SUBI32/BNEZ_W.
 //
 //===----------------------------------------------------------------------===//
 
@@ -44,24 +97,32 @@ namespace llvm {
 namespace haydn {
 namespace hwloop {
 
-// Bundle128 parcel size (bytes). B4.4: alias of ProductFormatDesc.Bytes
-// (encodedBytesFor(Bundle128Full)), not an independent magic constant.
-// getInstSizeInBytes / Fixup / HardwareLoops share this EncodedBytes oracle.
-inline constexpr int64_t Bundle128Bytes =
+//===----------------------------------------------------------------------===//
+// Parcel size — generated product EncodedBytes only (no parallel magic)
+//===----------------------------------------------------------------------===//
+//
+// All byte helpers go through bundle::productParcelBytes() /
+// productBundlesToBytes(). Do not re-introduce free-standing 12/16 literals
+// or a second size oracle in this header.
+//===----------------------------------------------------------------------===//
+
+/// Typed product parcel size (bytes). Alias of productParcelBytes().Value
+/// (Format E registry/row EncodedBytes).
+inline constexpr int64_t ProductParcelBytes =
     static_cast<int64_t>(bundle::productParcelBytes().Value);
-static_assert(Bundle128Bytes == 16, "Bundle128 product parcel is 16 bytes");
-static_assert(Bundle128Bytes ==
-                  static_cast<int64_t>(bundle::Bundle128EncodedBytesValue),
-              "hwloop Bundle128Bytes must equal plan EncodedBytes");
-static_assert(Bundle128Bytes ==
-                  static_cast<int64_t>(bundle::ProductFormatDesc.Bytes.Value),
-              "hwloop Bundle128Bytes must equal ProductFormatDesc.Bytes");
+
+static_assert(ProductParcelBytes ==
+                  static_cast<int64_t>(bundle::productParcelBytes().Value),
+              "hwloop ProductParcelBytes must equal productParcelBytes()");
+static_assert(ProductParcelBytes > 0,
+              "product parcel EncodedBytes must be positive");
 
 // SET_HWLOOP offset field widths (ISA DB).
 inline constexpr unsigned Offset1Bits = 6;  // uimm6 → START
 inline constexpr unsigned Offset2Bits = 12; // uimm12 → END
 
-// Max forward PC-relative distances in bytes (field × 4).
+// Max forward PC-relative distances in bytes (field × 4). Displacement scale
+// is <<2 (byte distance must be divisible by 4); not absolute Align(4).
 inline constexpr int64_t MaxStartOffsetBytes =
     ((static_cast<int64_t>(1) << Offset1Bits) - 1) * 4; // 252
 inline constexpr int64_t MaxEndOffsetBytes =
@@ -69,27 +130,160 @@ inline constexpr int64_t MaxEndOffsetBytes =
 
 // Safety margin so Fixup's size estimate does not pass a value that AsmPrinter
 // later rejects (label placement, late bundles). Prefer demote over MC fail.
+// Margin is a parcel count × product EncodedBytes (no absolute byte freeze).
 inline constexpr int64_t Off1SafetyMarginBundles = 3;
 inline constexpr int64_t Off1SafetyMarginBytes =
     bundle::productBundlesToBytes(
-        static_cast<unsigned>(Off1SafetyMarginBundles)); // 48
+        static_cast<unsigned>(Off1SafetyMarginBundles));
 inline constexpr int64_t MaxStartOffsetBytesSafe =
-    MaxStartOffsetBytes - Off1SafetyMarginBytes; // 204
+    MaxStartOffsetBytes - Off1SafetyMarginBytes;
 
-// Spec / BundleSim: SET at or before body bundle t−3.
-// AIE peer of ZOLSupport::LoopSetupDistance (AIE2 uses 7 bundles to LEND;
-// Haydn measures setup → BEGIN with 3 bundles).
-inline constexpr unsigned MinSetupBundles = 3;
+static_assert(Off1SafetyMarginBytes ==
+                  static_cast<int64_t>(Off1SafetyMarginBundles) *
+                      ProductParcelBytes,
+              "Off1 margin bytes must be parcels × product EncodedBytes");
 
-// Min setup distance in bytes (MinSetupBundles × product EncodedBytes).
-// B4.4: single EncodedBytes path; AIE sums Format->getSize()
-// (AIEMachineAlignment.cpp:287+).
+//===----------------------------------------------------------------------===//
+// Late-layout second-BR growth budget (stable row)
+//===----------------------------------------------------------------------===//
+//
+// Fixed pass order: BranchRelaxation → FixupHwLoops → BranchRelaxation →
+// late Finalize/Verify. There is no outer layout fixpoint. During its sole
+// execution, Fixup charges a conservative absolute expansion budget for every
+// still-relaxable short PC-relative branch still present in SET→BEGIN and
+// SET→END (including nested windows). Hardware form is accepted only when
+// residual Off1/Off2 margins cover both sums.
+//
+// Worst case for one short B / cond → indirect path (TII
+// insertIndirectBranch): LUI + ADDI32_W + JALR_W + optional emergency
+// spill/pad parcel = 4 product parcels. Growth *bytes* follow product
+// EncodedBytes; do not hard-code a Full-only absolute.
+//
+// Charge absolute expanded size (not net delta). Current branch size is
+// already in Off; over-charging is fail-closed demote, never silent accept.
+// Not still-relaxable (zero further layout growth under second BR):
+// already-indirect JALR*, long-reach JAL*/calls, pure RET/BR_JT, ZOL metas.
+//===----------------------------------------------------------------------===//
+
+/// Product parcels for one still-relaxable short branch expanded to the
+/// indirect materialization path (see insertIndirectBranch).
+inline constexpr unsigned MaxSingleBranchGrowthParcels = 4;
+
+/// Byte budget charged per still-relaxable site against Off1/Off2 residual
+/// margin. Equals MaxSingleBranchGrowthParcels × productParcelBytes.
+inline constexpr int64_t MaxSingleBranchGrowthBytes =
+    bundle::productBundlesToBytes(MaxSingleBranchGrowthParcels);
+
+static_assert(MaxSingleBranchGrowthParcels == 4,
+              "second-BR growth: 4 parcels (LUI+ADDI+JALR+pad)");
+static_assert(MaxSingleBranchGrowthBytes ==
+                  static_cast<int64_t>(MaxSingleBranchGrowthParcels) *
+                      ProductParcelBytes,
+              "growth bytes must be parcels × product EncodedBytes");
+
+//===----------------------------------------------------------------------===//
+// Setup arithmetic (width-independent issue-cycle inequality)
+//===----------------------------------------------------------------------===//
+//
+// Spec / golden: earliest BEGIN is three issue cycles after SET (t-3).
+// AIE peer of ZOLSupport::LoopSetupDistance (AIE2 uses 7 bundles to LEND).
+//
+// Named pair — do not collapse back into a single ambiguous "3":
+//   SetupIssueDistance : Cycle(BEGIN) - Cycle(SET) lower bound (= 3)
+//   InterveningCycles  : complete following cycles between SET and BEGIN (= 2)
+//
+// Formation, Fixup, and lit enforce Following >= InterveningCycles.
+// MinSetupBytes is the EncodedBytes coincidence of that floor only.
+//===----------------------------------------------------------------------===//
+
+/// Minimum Cycle(BEGIN) - Cycle(SET). Earliest legal BEGIN is at SET+3.
+inline constexpr unsigned SetupIssueDistance = 3;
+
+/// Complete size-bearing cycles after SET before BEGIN.
+/// Equals SetupIssueDistance - 1. This is what Following/countFollowingBundles
+/// compares against (not SetupIssueDistance itself).
+inline constexpr unsigned InterveningCycles = SetupIssueDistance - 1; // 2
+
+static_assert(SetupIssueDistance == 3,
+              "Setup arithmetic: SetupIssueDistance is 3 issue cycles");
+static_assert(InterveningCycles == 2,
+              "Setup arithmetic: InterveningCycles is 2 following cycles");
+static_assert(InterveningCycles + 1 == SetupIssueDistance,
+              "Setup arithmetic: InterveningCycles = SetupIssueDistance - 1");
+
+/// Historical name for the Following floor. Alias of InterveningCycles — not
+/// SetupIssueDistance. New code should prefer InterveningCycles by name.
+inline constexpr unsigned MinSetupBundles = InterveningCycles;
+
+// Min setup distance in bytes (InterveningCycles × product EncodedBytes).
+// Single EncodedBytes path; AIE sums Format->getSize(). Timing law is the
+// cycle pair above, not this byte product under a mixed-width fantasy.
 inline constexpr int64_t MinSetupBytes =
-    bundle::productBundlesToBytes(MinSetupBundles);
+    bundle::productBundlesToBytes(InterveningCycles);
+static_assert(MinSetupBytes ==
+                  static_cast<int64_t>(InterveningCycles) * ProductParcelBytes,
+              "MinSetupBytes must be InterveningCycles × product parcel");
+static_assert(MinSetupBytes ==
+                  bundle::productBundlesToBytes(MinSetupBundles),
+              "MinSetupBytes must match MinSetupBundles × product parcel");
 
-// Deprecated as a *legality* floor (kept only if a caller still needs a
-// soft heuristic). Product law is MinSetupBundles + END >= BEGIN.
-inline constexpr unsigned MinBodyBundles = 0;
+/// PC delta from SET start to BEGIN start when distance == SetupIssueDistance.
+/// Equals SetupIssueDistance × productParcelBytes (distinct from MinSetupBytes,
+/// which measures the intervening span after SET's end).
+inline constexpr int64_t MinSetupIssueBytes =
+    bundle::productBundlesToBytes(SetupIssueDistance);
+static_assert(MinSetupIssueBytes ==
+                  static_cast<int64_t>(SetupIssueDistance) * ProductParcelBytes,
+              "MinSetupIssueBytes must be SetupIssueDistance × product parcel");
+static_assert(MinSetupIssueBytes == MinSetupBytes + ProductParcelBytes,
+              "issue PC delta = intervening span + one parcel (the SET cycle)");
+
+//===----------------------------------------------------------------------===//
+// Body / END / COUNT product law
+//===----------------------------------------------------------------------===//
+//
+// Body parcels from BEGIN through END inclusive >= MinBodyBundles.
+// END addresses the last body cycle (start), not the byte after the body.
+// Strict: EndOff > StartOff. For body=N parcels, EndOff - StartOff =
+// (N-1) × productParcelBytes. Min body span (N=3) = 2 × parcel.
+// COUNT >= MinCount when activated.
+//===----------------------------------------------------------------------===//
+
+/// Minimum size-bearing body parcels (BEGIN through END inclusive).
+inline constexpr unsigned MinBodyBundles = 3;
+
+/// Byte distance from BEGIN start to END start for a min-length body.
+/// (MinBodyBundles - 1) × productParcelBytes.
+inline constexpr int64_t MinBodySpanBytes =
+    bundle::productBundlesToBytes(MinBodyBundles - 1);
+
+/// Minimum HWLR_COUNT when a hardware loop is activated.
+inline constexpr unsigned MinCount = 1;
+
+static_assert(MinBodyBundles == 3, "body floor is 3 parcels");
+static_assert(MinBodySpanBytes ==
+                  static_cast<int64_t>(MinBodyBundles - 1) * ProductParcelBytes,
+              "MinBodySpanBytes = (MinBodyBundles-1) × product parcel");
+static_assert(MinCount == 1, "activated COUNT must be >= 1");
+
+/// Inclusive body parcel count from StartOff/EndOff (END = last cycle start).
+/// Returns 0 if offsets are unordered or unaligned to the product parcel.
+inline constexpr unsigned bodyParcelsFromOffsets(int64_t StartOff,
+                                                 int64_t EndOff) {
+  if (EndOff < StartOff || ProductParcelBytes <= 0)
+    return 0;
+  int64_t Delta = EndOff - StartOff;
+  if (Delta % ProductParcelBytes != 0)
+    return 0;
+  return static_cast<unsigned>(Delta / ProductParcelBytes) + 1u;
+}
+
+/// True iff END > BEGIN and body parcels meet MinBodyBundles.
+inline constexpr bool bodyMeetsMinLaw(int64_t StartOff, int64_t EndOff) {
+  if (EndOff <= StartOff)
+    return false;
+  return bodyParcelsFromOffsets(StartOff, EndOff) >= MinBodyBundles;
+}
 
 } // namespace hwloop
 } // namespace haydn

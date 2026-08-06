@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
-;
+
+; Role: MIR — multi-BB Role B residual is intentionally soft.
+
 ; REGRESSION TEST: multi-BB Role B residual is intentionally soft.
 ;
 ; History: GAP-4 taught the recognizer multi-BB trip resolution, and

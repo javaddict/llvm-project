@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — DR64 copy elimination via OR64 identity pattern.
+
 ; REGRESSION TEST: DR64 copy elimination via OR64 identity pattern.
 ;
 ; Bug: HaydnCopyElim only handled GPR32 COPY elimination. DR64 register copies

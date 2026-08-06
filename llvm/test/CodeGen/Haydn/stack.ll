@@ -1,6 +1,9 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 
+; Role: semantic — Fixed-size stack allocation.
+
 ; Fixed-size stack allocation
+
 define i32 @test_alloca() {
   %p = alloca i32
   store i32 42, ptr %p

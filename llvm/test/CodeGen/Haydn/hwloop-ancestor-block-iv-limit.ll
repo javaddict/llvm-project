@@ -1,6 +1,8 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 ; REQUIRES: haydn-registered-target
-;
+
+; Role: semantic — count-down EQ loop whose IV init comes from a runtime value (function argument) and whose limit (0) is materialized in the.
+
 ; REGRESSION TEST: count-down EQ loop whose IV init comes from a runtime
 ; value (function argument) and whose limit (0) is materialized in the
 ; function-entry block — an ancestor of the loop preheader. The preheader

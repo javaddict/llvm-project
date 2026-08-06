@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
-;
+
+; Role: semantic — InstCombine turns sext(trunc(i64)) into (ashr (shl x, 32), 32).
+
 ; InstCombine turns sext(trunc(i64)) into (ashr (shl x, 32), 32).
 ; The G_ASHR-by-32 fast path must be a single SRA64 (full DR64 result), NOT
 ; SRA64 + extract + pack {V,V} (that is not a 32→64 sext).

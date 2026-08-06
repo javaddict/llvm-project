@@ -27,8 +27,8 @@ class HaydnFrameLowering : public TargetFrameLowering {
 
 public:
   // Stack ABI alignment is 8 bytes: DR64 st64/ld64 require 8-byte addresses
-  // (BundleSim D_SDW_* MEMORY_FAULT otherwise). Bundle128 is a 16-byte *text*
-  // parcel only — do not confuse code alignment with SP ABI. Call-frame
+  // (BundleSim D_SDW_* MEMORY_FAULT otherwise). Product text parcel is 12
+  // bytes — do not confuse code alignment with SP ABI. Call-frame
   // adjustments always round up to this StackAlign (see
   // eliminateCallFramePseudoInstr + CallLowering).
   explicit HaydnFrameLowering(const HaydnSubtarget &STI)

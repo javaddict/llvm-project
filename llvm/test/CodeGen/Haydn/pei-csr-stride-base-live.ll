@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — PEI CSR-stride materialisation (ADDI scratch, SP, off) must survive HaydnPEIPeephole.
+
 ; PEI CSR-stride materialisation (ADDI scratch, SP, off) must survive
 ; HaydnPEIPeephole. That pass used to delete any FrameSetup ADDI R14,R13,*
 ; when !hasFP as "dead FP setup", even when R14 was the live base for CSR

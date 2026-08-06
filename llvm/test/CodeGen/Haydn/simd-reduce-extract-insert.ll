@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — SIMD vector extract/insert element legalization.
+
 ; REGRESSION TEST: SIMD vector extract/insert element legalization.
 ;
 ; Bug: G_EXTRACT_VECTOR_ELT and G_INSERT_VECTOR_ELT were declared as

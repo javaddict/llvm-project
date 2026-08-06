@@ -6,10 +6,10 @@ add_llvm_component_group(Haydn)
 # per backend.
 #
 # gen-asm-matcher uses HaydnAsmMatcher.td; every other backend uses Haydn.td.
-# Mode-0/3 decode-variant islands (HaydnInstrInfoM0/MACM0/M3/S*M0.td)
-# are archived under legacy-retired/ and are NOT included by either root.td.
-# Live encoding is `_S<k>_FLEX` + BUNDLE128_FULL (HaydnFormats*.td
-# HaydnCompositeFormats.td). Historical matcher-vs-variant split notes: L251.
+# Mode-0/3 decode-variant islands and Bundle128 composites are deleted —
+# not included by either root.td.
+# Live product encoding is Format E (BUNDLE_E96_* in HaydnCompositeFormats.td).
+# Residual `_S*` FU members remain in HaydnFormats*.td for placement tables.
 
 set(LLVM_TARGET_DEFINITIONS HaydnAsmMatcher.td)
 tablegen(LLVM HaydnGenAsmMatcher.inc -gen-asm-matcher)
@@ -62,7 +62,6 @@ add_llvm_target(HaydnCodeGen
   HaydnHazardRecognizer.cpp
   HaydnHardwareLoops.cpp
   HaydnFixupHwLoops.cpp
-  HaydnCFGOptimizer.cpp
   HaydnConditionOptimizer.cpp
   HaydnCopyElim.cpp
   HaydnPEIPeephole.cpp

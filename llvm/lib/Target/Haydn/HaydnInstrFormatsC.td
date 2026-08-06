@@ -30,7 +30,7 @@
 // 0010 HINT hint(8) | 0000(4 reserved).
 // 0100 ALU32 R opc(6) | rs(3) | rt(3). 64 ops, GPR32Lo (r0-r7).
 // 0110 MOVI opc(2) | rd(3) | imm7(7). MOVI rd, imm7 (-64..+63).
-// 1000 BRANCH opc(2) | imm10(10). PC-rel branch (+-512 words).
+// 1000 BRANCH opc(2) | imm10(10). PC-rel branch (-512 words).
 // 1010 ALU32 RI opc(4) | rs(3) | rt(3) | imm2(2). Tiny imm 0-3.
 // 1100 ALU32 SI opc(4) | rd(3) | imm5(5). Destructive rd=rd OP imm.
 // 1110 Reserved (future extension).
@@ -39,8 +39,8 @@
 // ZERO/CLR eliminated; ZERO_GPR = MOVI rd, 0.
 // ALU32 R opcode expanded 4b -> 6b (16 -> 64 ops).
 // HINT expanded 4b -> 8b.
-// MOVI immediate expanded imm5 -> imm7 (+-16 -> +-64).
-// BRANCH offset expanded imm8 -> imm10 (+-128 -> +-512 words).
+// MOVI immediate expanded imm5 -> imm7 (-16 -> +-64).
+// BRANCH offset expanded imm8 -> imm10 (-128 -> +-512 words).
 //
 // The legacy FmtC_ALU/FmtC_LS/FmtC_ALUImm4/FmtC_II classes (6b opcode at
 // [13:8] with rd at [7:4]) are RETIRED by this migration. Concrete C_*
@@ -55,7 +55,7 @@ class HaydnInst16<dag outs, dag ins, string asmstr, list<dag> pattern>
 }
 
 //===----------------------------------------------------------------------===//
-// FmtC_* 16-bit compressed format classes RETIRED (Bundle128-only).
+// FmtC_* 16-bit compressed format classes RETIRED.
 // HaydnInst16 kept — NOP still uses the 16-bit all-zero encoding.
 // C_* instruction shells deleted from HaydnInstrInfoC.td.
 //===----------------------------------------------------------------------===//
@@ -107,7 +107,7 @@ class HaydnInst48<dag outs, dag ins, string asmstr, list<dag> pattern>
 // Fmt48_WideSET_HWLOOP_REG— SET_HWLOOP_REG_W
 // (Verified: `grep -nE '^def [A-Z0-9_]+ +: Fmt48_' HaydnInstrInfo.td` — 21
 // live defs total.) 's "retire Fmt48_*" Cycle-B item cannot complete until
-// those 21 defs are migrated to Bundle128 s0/s1/s2 format classes owned by
+// those 21 defs are migrated to s0/s1/s2 format classes owned by
 // HaydnFormats*.td (the / _W_S0 defs are the s0 projections for
 // ADDI32_W/ORI32_W + far branches + CSR; s1/s2 projections for SLLI64 etc.
 // are forward work). The legacy defs persist as selector-emitted opcodes that
@@ -404,7 +404,7 @@ class Fmt48_WideSET_HWLOOP_REG<bits<8> opcode, dag outs, dag ins, string asmstr,
 //
 // Fmt48_WideLS and its 14 _WL defs had zero live C++ consumers subsequent
 // (the 48-bit encoder/decoder paths were gutted). Wide-offset LS is now
-// reached via the Bundle128 _S0 family-2 defs (HaydnFormatsLS.td).
+// reached via the _S0 family-2 defs (HaydnFormatsLS.td).
 // The §5.16 bit-layout documentation above is retained for historical
 // reference.
 //===----------------------------------------------------------------------===//

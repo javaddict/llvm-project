@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — tail call handling.
+
 ; Test tail call handling.
 ; The Haydn backend currently does not optimize tail calls into jumps
 ; they are emitted as regular calls followed by return. This test verifies

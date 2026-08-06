@@ -1,11 +1,8 @@
 # UNSUPPORTED: true
-# Stage-0 InterBlock deleted (YOLO densify kill)
-# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
-# RUN:     %s -o - | FileCheck %s --check-prefix=OFF
-# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
-# RUN:     -haydn-enable-interblock -debug-only=haydn-interblock %s -o - 2>&1 \
-# RUN:     | FileCheck %s --check-prefix=DBG
-#
+# Role: retired — Stage-0 inter-block scheduling deleted; not product coverage.
+# Do not count as product green. RUN is deliberately false so a dropped
+# RUN: false
+
 # Stage-0 Haydn inter-block scheduling (default OFF; ON needs explicit flag).
 #
 # Fixture: acyclic fallthrough Pred → Succ. Pred has a lone ADDI32; Succ has an

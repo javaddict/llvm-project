@@ -18,6 +18,14 @@
 //
 // BuiltinsHaydn.inc is still produced by -gen-clang-builtins (shared TD).
 //
+// CAPI-5 continuous-closure suite (EXIT MET 2026-07-27) — every PublicEnabled
+// op is covered for arity/Imm/feature/object without FormatID/slot/AltDesc:
+//   haydn-op-manifest-parity.td   (effect/features/arity/imm/proto schema)
+//   capi-op-closure-matrix.c      (C → object at -O0/-O2 for all public ops)
+//   capi-op-imm-audit.c           (Imm non-ICE + range-neg Sema)
+//   capi-op-feature-audit.c       (generic/full/noagu Features Sema)
+// Residual product stress is BundleSim/ISS only; do not reopen CAPI-0..4.
+//
 // PublicEnabled (HaydnPublicAPI): haydn.h emits only PublicEnabled=1 ops.
 // HaydnAeBuiltin defaults PublicEnabled=0. Publish checks are fail-closed.
 // Manifest columns cover effect, features, arity, ImmChecks, prototype so CI
@@ -1067,63 +1075,49 @@ static void emitSpecials(raw_ostream &OS) {
           "__haydn_v2_as_i64(acc), __haydn_v2_as_i64(data), "
           "__haydn_v2_as_i64(tw_widened)));"});
 
-  // UA ar_sel/dir_sel are ImmArg encoding fields. Public wrappers accept
-  // runtime ar/dir (NatureDSP ar&=3) but only pass literal 0..3 / 0..1 to
-  // builtins via switch so Sema ImmCheck sees ICE at the builtin call site.
-  OS << "/* ImmArg ar_sel/dir: switch-literal dispatch. */\n";
+  // UA ar_sel/dir_sel are ImmArg encoding fields. Architectural AR file is
+  // AR0/AR1 only; public wrappers accept runtime ar/dir but only pass literal
+  // 0..1 / 0..1 to builtins via switch so Sema ImmCheck sees ICE. Selectors
+  // outside {0,1} are masked to the architectural domain (fail-closed; no
+  // AR2/AR3 product exposure).
+  OS << "/* ImmArg ar_sel/dir: switch-literal dispatch (AR0/AR1 only). */\n";
   emitFn(OS, "haydn_x4int16", "d_lqhwua_post",
          "const void *ptr, int ar_sel, int stride, int dir_sel",
-         {"ar_sel &= 3; dir_sel &= 1;",
+         {"ar_sel &= 1; dir_sel &= 1;",
           "switch ((ar_sel << 1) | dir_sel) {",
           "case 0: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 0, stride, 0));",
           "case 1: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 0, stride, 1));",
           "case 2: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 1, stride, 0));",
-          "case 3: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 1, stride, 1));",
-          "case 4: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 2, stride, 0));",
-          "case 5: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 2, stride, 1));",
-          "case 6: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 3, stride, 0));",
-          "default: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 3, stride, 1));",
+          "default: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 1, stride, 1));",
           "}"});
   emitFn(OS, "haydn_x2int32", "d_ltwua_post",
          "const void *ptr, int ar_sel, int stride, int dir_sel",
-         {"ar_sel &= 3; dir_sel &= 1;",
+         {"ar_sel &= 1; dir_sel &= 1;",
           "switch ((ar_sel << 1) | dir_sel) {",
           "case 0: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 0, stride, 0));",
           "case 1: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 0, stride, 1));",
           "case 2: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 1, stride, 0));",
-          "case 3: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 1, stride, 1));",
-          "case 4: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 2, stride, 0));",
-          "case 5: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 2, stride, 1));",
-          "case 6: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 3, stride, 0));",
-          "default: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 3, stride, 1));",
+          "default: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 1, stride, 1));",
           "}"});
   emitFn(OS, "void", "d_sqhwua_post",
          "haydn_x4int16 data, void *ptr, int ar_sel, int stride, int dir_sel",
          {"int64_t d = __haydn_v4_as_i64(data);",
-          "ar_sel &= 3; dir_sel &= 1;",
+          "ar_sel &= 1; dir_sel &= 1;",
           "switch ((ar_sel << 1) | dir_sel) {",
           "case 0: __builtin_haydn_d_sqhwua_post(d, ptr, 0, stride, 0); break;",
           "case 1: __builtin_haydn_d_sqhwua_post(d, ptr, 0, stride, 1); break;",
           "case 2: __builtin_haydn_d_sqhwua_post(d, ptr, 1, stride, 0); break;",
-          "case 3: __builtin_haydn_d_sqhwua_post(d, ptr, 1, stride, 1); break;",
-          "case 4: __builtin_haydn_d_sqhwua_post(d, ptr, 2, stride, 0); break;",
-          "case 5: __builtin_haydn_d_sqhwua_post(d, ptr, 2, stride, 1); break;",
-          "case 6: __builtin_haydn_d_sqhwua_post(d, ptr, 3, stride, 0); break;",
-          "default: __builtin_haydn_d_sqhwua_post(d, ptr, 3, stride, 1); break;",
+          "default: __builtin_haydn_d_sqhwua_post(d, ptr, 1, stride, 1); break;",
           "}"});
   emitFn(OS, "void", "d_stwua_post",
          "haydn_x2int32 data, void *ptr, int ar_sel, int stride, int dir_sel",
          {"int64_t d = __haydn_v2_as_i64(data);",
-          "ar_sel &= 3; dir_sel &= 1;",
+          "ar_sel &= 1; dir_sel &= 1;",
           "switch ((ar_sel << 1) | dir_sel) {",
           "case 0: __builtin_haydn_d_stwua_post(d, ptr, 0, stride, 0); break;",
           "case 1: __builtin_haydn_d_stwua_post(d, ptr, 0, stride, 1); break;",
           "case 2: __builtin_haydn_d_stwua_post(d, ptr, 1, stride, 0); break;",
-          "case 3: __builtin_haydn_d_stwua_post(d, ptr, 1, stride, 1); break;",
-          "case 4: __builtin_haydn_d_stwua_post(d, ptr, 2, stride, 0); break;",
-          "case 5: __builtin_haydn_d_stwua_post(d, ptr, 2, stride, 1); break;",
-          "case 6: __builtin_haydn_d_stwua_post(d, ptr, 3, stride, 0); break;",
-          "default: __builtin_haydn_d_stwua_post(d, ptr, 3, stride, 1); break;",
+          "default: __builtin_haydn_d_stwua_post(d, ptr, 1, stride, 1); break;",
           "}"});
 
   emitFn(OS, "haydn_x4int16", "d_lqhwua_post_ip",

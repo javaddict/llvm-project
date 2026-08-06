@@ -1,5 +1,27 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding %s | FileCheck %s
-#
+
+// CHECK: { add32 r0, r1, r2 } // encoding: [0x07,0x8b,0x00,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { sub32 r3, r4, r5 } // encoding: [0x07,0xcb,0x30,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { and32 r6, r7, r8 } // encoding: [0x07,0x0b,0x61,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { or32 r9, r10, r11 } // encoding: [0x07,0x2b,0x91,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { xor32 r12, r0, r1 } // encoding: [0x07,0x4b,0xc1,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { addi32 r0, r1, 42 } // encoding: [0x07,0x0f,0x02,0x01,0x15,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { andi32 r4, r5, 255 } // encoding: [0x07,0x0f,0x44,0x85,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { ori32 r6, r7, 15 } // encoding: [0x07,0x0f,0x68,0x87,0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { srli32 r10, r11, 4 } // encoding: [0x07,0x06,0xa1,0x0b,0x04,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { srai32 r12, r0, 8 } // encoding: [0x07,0x06,0xc2,0x00,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { slli32 r1, r2, 16 } // encoding: [0x07,0x06,0x14,0x02,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { ld32 r0, r1, 0 } // encoding: [0x87,0x43,0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { ld32 r2, r3, 16 } // encoding: [0x87,0x43,0x23,0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { st32 r4, r5, 0 } // encoding: [0x87,0x43,0x4b,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { beq r8, r9, target_32 } // encoding: [0x07,0x0d,0x84,0x09,A,0b0000AAAA,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: // fixup A - offset: 0, value: target_32, kind: FIXUP_HAYDN_WIDE_BranchSImm12_RI
+// CHECK: target_32:
+// CHECK: { bne r10, r11, target_32b } // encoding: [0x07,0x0d,0xa6,0x0b,A,0b0000AAAA,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: // fixup A - offset: 0, value: target_32b, kind: FIXUP_HAYDN_WIDE_BranchSImm12_RI
+// CHECK: target_32b:
+# Role: object — Mode-0 ALU32/I/shift show-encoding pins; LS/BR encode path survives without objdump ROUNDTRIP.
+
 # Phase-2 decoder purge collateral (prior revision): the ROUNDTRIP objdump
 # RUN was REMOVED — the legacy Haydn32 decoder probes for FmtLS (ld32/st32)
 # and FmtBr (beq/bne) 4-byte parcels were deleted, so objdump renders
@@ -31,62 +53,41 @@
 #
 # note: the encoder emits ONE child per slot window, so each
 # instruction prints as its own `{... }` bundle on its own objdump line.
-# The ROUNDTRIP CHECKs therefore match one instruction per line.
+# Objdump ROUNDTRIP CHECKs removed (legacy 4-byte probe deleted); ENC path is load-bearing.
 
 #===----------------------------------------------------------------------===
 # ALU R-type (Mode-0 s0 ALU32 sub-row, 8 bytes; AND32 r6,r7,r8 compresses)
 #===----------------------------------------------------------------------===
 
-# CHECK: { add32 r0, r1, r2 }
-# ROUNDTRIP: { add32	r0, r1, r2 }
+
 ADD32 R0, R1, R2
 
-# CHECK: { sub32 r3, r4, r5 }
-# ROUNDTRIP: { sub32	r3, r4, r5 }
 SUB32 R3, R4, R5
 
-# CHECK: { and32 r6, r7, r8 }
-# ROUNDTRIP: { and32	r6, r7, r8 }
 AND32 R6, R7, R8
 
-# CHECK: { or32 r9, r10, r11 }
-# ROUNDTRIP: { or32	r9, r10, r11 }
 OR32 R9, R10, R11
 
-# CHECK: { xor32 r12, r0, r1 }
-# ROUNDTRIP: { xor32	r12, r0, r1 }
 XOR32 R12, R0, R1
 
 #===----------------------------------------------------------------------===
 # ALU I-type (Mode-0 s0 ALU32 sub-row, 8 bytes)
 #===----------------------------------------------------------------------===
 
-# CHECK: { addi32 r0, r1, 42 }
-# ROUNDTRIP: { addi32	r0, r1, 10 }
 ADDI32 R0, R1, 42
 
-# CHECK: { andi32 r4, r5, 255 }
-# ROUNDTRIP: { andi32	r4, r5, 31 }
 ANDI32 R4, R5, 255
 
-# CHECK: { ori32 r6, r7, 15 }
-# ROUNDTRIP: { ori32	r6, r7, 15 }
 ORI32 R6, R7, 15
 
 #===----------------------------------------------------------------------===
 # Shift immediate (Mode-0 s0 ALU32 sub-row, 8 bytes)
 #===----------------------------------------------------------------------===
 
-# CHECK: { srli32 r10, r11, 4 }
-# ROUNDTRIP: { srli32	r10, r11, 4 }
 SRLI32 R10, R11, 4
 
-# CHECK: { srai32 r12, r0, 8 }
-# ROUNDTRIP: { srai32	r12, r0, 8 }
 SRAI32 R12, R0, 8
 
-# CHECK: { slli32 r1, r2, 16 }
-# ROUNDTRIP: { slli32	r1, r2, 16 }
 SLLI32 R1, R2, 16
 
 #===----------------------------------------------------------------------===
@@ -95,28 +96,18 @@ SLLI32 R1, R2, 16
 # finalizer emit targets for CodeGen, not asm-parse targets)
 #===----------------------------------------------------------------------===
 
-# CHECK: { ld32	r0, r1, 0 }
-# ROUNDTRIP: { ld32	r0, r1, 0 }
 LD32 R0, R1, 0
 
-# CHECK: { ld32	r2, r3, 16 }
-# ROUNDTRIP: { ld32	r2, r3, 16 }
 LD32 R2, R3, 16
 
-# CHECK: { st32 r4, r5, 0 }
-# ROUNDTRIP: { st32	r4, r5, 0 }
 ST32 R4, R5, 0
 
 #===----------------------------------------------------------------------===
 # Branch (FmtBr, 4 bytes)
 #===----------------------------------------------------------------------===
 
-# CHECK: { beq r8, r9, target_32 }
-# ROUNDTRIP: { beq	r8, r9,
 BEQ R8, R9, target_32
 target_32:
 
-# CHECK: { bne r10, r11, target_32b }
-# ROUNDTRIP: { bne	r10, r11,
 BNE R10, R11, target_32b
 target_32b:

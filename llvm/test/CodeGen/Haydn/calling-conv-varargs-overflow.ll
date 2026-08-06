@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — B.2 varargs overflow: * Five fixed i64 args exhaust D0–D3; the 5th and further varargs spill to.
+
 ; B.2 varargs overflow:
 ;   * Five fixed i64 args exhaust D0–D3; the 5th and further varargs spill to
 ;     the stack (CCAssignToStack<8,8>).

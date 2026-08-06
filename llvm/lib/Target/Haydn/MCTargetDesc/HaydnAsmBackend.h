@@ -26,11 +26,17 @@ public:
 
   MCFixupKindInfo getFixupKindInfo(MCFixupKind Kind) const override;
 
+  // Format E: PC is the parcel base, not a mid-parcel field byte offset.
+  // Entry fields may sit at byte 6+; default MC P = frag+fixup_off mis-aligns
+  // hwloop ÷4 and halfword branch checks. Compensate like Xtensa l32r.
+  std::optional<bool> evaluateFixup(const MCFragment &, MCFixup &, MCValue &,
+                                    uint64_t &Value) override;
+
   // Check whether the given instruction may need relaxation.
   bool mayNeedRelaxation(unsigned Opcode, ArrayRef<MCOperand> Operands,
                          const MCSubtargetInfo &STI) const override;
 
-  // Bundle128-only: no MC-layer compression relaxation (G-MC-8).
+  // No MC-layer compression relaxation (retired C_* shells).
   bool fixupNeedsRelaxationAdvanced(const MCFragment &, const MCFixup &,
                                     const MCValue &, uint64_t Value,
                                     bool Resolved) const override;

@@ -10,12 +10,16 @@
 // Consumed by BOTH the MC backend (HaydnAsmBackend::applyFixup
 // getFixupKindInfo) and the linker (lld/ELF/Arch/Haydn.cpp ::relocate
 // getImplicitAddend). Reader and writer share the same rows, so they can
-// never diverge (: the lld writer ÷4 vs reader ÷2 split, and the flat
-// HI20/LO16 0xFFFF mask, are structurally impossible).
+// never diverge: a writer÷4 / reader÷2 scale split or a flat HI20/LO16
+// 0xFFFF mask is structurally impossible.
 //
-// The geometric patcher is ported from AIE/Peano (lld/ELF/Arch/AIE.cpp
-// patchNBytes / RelocationPatch). Per `encoding_manual.md`: branch offsets are
-// ÷2 (§5.5/§5.14), hwloop offsets are ÷4 (§5.11/§5.12).
+// Branch/call PC-relative kinds use product scales from encoding_manual
+// (halfword ÷2 for WIDE_* / BranchSImm16; CallSImm20 byte scale). FieldLsb
+// is Format E E2 e0 absolute parcel bits with r_offset = parcel origin.
+// GE96-03 golden formalization is still open; product keeps the documented
+// halfword scale (not silent ValueShift=0 invent). RelocTrans::Unresolved
+// remains for kinds without a published wire scale. Hwloop Off1/Off2 retain
+// ValueShift=2 from the explicit SET_HWLOOP displacement law.
 //
 // Lives in namespace llvm::HaydnReloc (distinct from the lld arch handler
 // `class Haydn` and from the target's llvm::Haydn register/fixup namespace, so
@@ -58,9 +62,9 @@ enum class RelocKind : uint16_t {
   HWLoopOff2 = 17,
   WIDE_BranchSImm12 = 18,
   WIDE_CallSImm20 = 19,
-  // Bundle128 RI12 two-reg cond (BEQ_W/BNE_W/…): imm12 @ s0 bits[19:8].
-  // I12 form keeps WIDE_BranchSImm12 (ELF 18) @ bits[15:4]. : promoted
-  // from MC-only so unresolved external targets emit a real ELF reloc.
+  // RI12 two-reg cond (BEQ_W/BNE_W/…): imm12 @ s0 bits[19:8].
+  // I12 form keeps WIDE_BranchSImm12 (ELF 18) @ bits[15:4]. Promoted from
+  // MC-only so unresolved external targets emit a real ELF reloc.
   WIDE_BranchSImm12_RI = 20,
   // MC-only fixups (never become ELF relocs)
   C_BranchSImm4 = 21,
@@ -73,11 +77,11 @@ enum class RelocKind : uint16_t {
   S0LSOff4_3 = 27, // LD64/ST64 doubleword offset (÷8)
   S0LSOff2_0 = 28, // LD16/LDU16/LD8/LDU8 (unscaled)
   S0LSOff3_0 = 29, // ST16/ST8 (unscaled)
-  // RISK-5 (reloc-side): s0 LS D_LD/S_LD/D_ST/S_ST imm6 field at
-  // bits[13:8] of the Bundle128 LoWord. Distinct from LO20 (ADDI32_W/ORI32_W
-  // imm20 @ bits[37:18]); the encoder currently conflates both under
-  // FIXUP_HAYDN_LO20 (silent miscompilation of LS relocatable addresses).
-  // MC-only until the encoder wires LD32/ST32/LD64/ST64 to this kind.
+  // s0 LS D_LD/S_LD/D_ST/S_ST imm6 field at bits[13:8]. Distinct from LO20
+  // (ADDI32_W/ORI32_W imm20 @ bits[37:18]); the
+  // encoder currently conflates both under FIXUP_HAYDN_LO20 (silent
+  // miscompilation of LS relocatable addresses). MC-only until the encoder
+  // wires LD32/ST32/LD64/ST64 to this kind.
   LS_IMM = 30,
   Invalid = 0xFFFF,
 };
@@ -88,9 +92,12 @@ enum class RelocTrans : uint8_t {
   None,   // field = (signed value >> ValueShift); range-checked, sign/zero-extended
   HiMips, // (value + 0x8000) >> 16, 16-bit unsigned high half (LUI/ADDI32 pair)
   LoMips, // value - (HiMips(value) << 16), 16-bit signed low half
-  Hi12,   // (value + 0x80000) >> 20, range-checked to FieldSize (12 bits
-          // LUI_S0 imm12 at LoWord bits[15:4]; see Table).
-  Lo20,   // value & 0xFFFFF, 20-bit low (ADDI32_W/ORI32_W imm20, §5.2)
+  Hi12,   // (value + 0x80000) >> 20, range-checked to FieldSize (12 bits;
+          // Format E LUI imm12 at parcel bits[36:47]; see Table).
+  Lo20,   // value & 0xFFFFF, 20-bit low (ADDI32_W/ORI32_W imm20)
+  // Reserved for kinds without a published wire scale (compute/read fail
+  // closed). Product branch/call rows use RelocTrans::None + ValueShift.
+  Unresolved,
 };
 
 // The complete bit-layout + semantics of one relocation. This struct is the
@@ -100,15 +107,19 @@ struct RelocFieldInfo {
   uint16_t NBytes;     // image width patched (1, 2, 4, or 6 bytes)
   uint8_t FieldSize;   // field bit width
   uint8_t FieldLsb;    // LSB position of the field within the N-byte LE image
-  uint8_t ValueShift;  // input value pre-shift: 0, 1 (÷2 branch), 2 (÷4 hwloop)
+  uint8_t ValueShift;  // input value pre-shift: 0, 1 (halfword), 2 (word/hwloop)
   uint8_t Align;       // required input alignment (1, 2, 4)
   bool IsSigned;       // writer: isInt<FieldSize>; reader: sign-extend
   bool IsPCRel;        // informational (PC-relativity is resolved upstream)
-  RelocTrans Trans;    // HI/LO transform (None for shifted-field kinds)
+  RelocTrans Trans;    // HI/LO transform, shifted-field, or Unresolved gate
 };
 
 // The geometry table. Indexed by RelocKind.
 const RelocFieldInfo &getRelocFieldInfo(RelocKind R);
+
+// True when computeRelocValue / readRelocAddend may apply a product transform.
+// False only for RelocTrans::Unresolved rows.
+bool isRelocTransformReady(RelocKind R);
 
 // Map an MC target fixup kind (FIXUP_HAYDN_*) to the neutral relocation.
 // Returns RelocKind::Invalid for non-target (generic FK_Data_*) kinds.
@@ -132,14 +143,28 @@ uint64_t readField(const uint8_t *Loc, unsigned NBytes, unsigned FieldSize,
 struct RelocCompute {
   uint64_t FieldVal = 0;
   bool OK = false;
-  const char *Err = nullptr; // diagnostic when !OK (alignment / range)
+  const char *Err = nullptr; // diagnostic when !OK (alignment / range / gate)
 };
 // Apply Trans + ValueShift, range/alignment-check. Returns the field value to
-// patch, or an error string.
+// patch, or an error string. This is the sole range/scale authority for MC
+// applyFixup and lld relocate / inBranchRange — consumers must not keep
+// parallel isInt field-width tables. Unresolved kinds fail closed; product
+// rows (branch halfword, call byte, hwloop ÷4, data) follow RelocFieldInfo.
 RelocCompute computeRelocValue(RelocKind R, uint64_t Value);
 
+// Result of reading an encoded addend (inverse of computeRelocValue).
+struct RelocAddend {
+  int64_t Value = 0;
+  bool OK = false;
+  const char *Err = nullptr;
+};
+
 // Read the encoded addend: extract field, undo ValueShift, sign/zero-extend
-// per IsSigned. Matches computeRelocValue inversely (reader/writer symmetry).
+// per IsSigned. Fails closed for Unresolved kinds.
+RelocAddend tryReadRelocAddend(RelocKind R, const uint8_t *Loc);
+
+// Convenience wrapper: returns tryReadRelocAddend().Value when OK, else 0.
+// Prefer tryReadRelocAddend when diagnostics matter.
 int64_t readRelocAddend(RelocKind R, const uint8_t *Loc);
 
 } // namespace llvm::HaydnReloc

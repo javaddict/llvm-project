@@ -1,0 +1,205 @@
+# RUN: rm -rf %t && split-file %s %t
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/loadi32.mir -o - 2>&1 | FileCheck %s --check-prefix=LOADI32
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/load_addr.mir -o - 2>&1 | FileCheck %s --check-prefix=LOAD_ADDR
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/setcbr_begin.mir -o - 2>&1 | FileCheck %s --check-prefix=SETCBR_B
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/setcbr_end.mir -o - 2>&1 | FileCheck %s --check-prefix=SETCBR
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/loopstart.mir -o - 2>&1 | FileCheck %s --check-prefix=LOOPSTART
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/loopdec.mir -o - 2>&1 | FileCheck %s --check-prefix=LOOPDEC
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/loopjnz.mir -o - 2>&1 | FileCheck %s --check-prefix=LOOPJNZ
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/set_hwloop.mir -o - 2>&1 | FileCheck %s --check-prefix=SET_HWLOOP
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/set_hwloop_reg.mir -o - 2>&1 | FileCheck %s --check-prefix=SET_HWLOOP_REG
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/bundled_setcbr.mir -o - 2>&1 | FileCheck %s --check-prefix=BUNDLED
+
+# Role: verifier — Late-MC one-to-one: residual cycle-forming / multi-cycle / loop-control pseudos must fail closed in AsmPrinter (shared law with VerifyBundles via.
+
+# Late-MC one-to-one: residual cycle-forming / multi-cycle / loop-control
+# pseudos must fail closed in AsmPrinter (shared law with VerifyBundles via
+# isResidualCycleFormingPseudo). start-after livedebugvalues skips the late
+# verify firewall so the printer path is hit directly.
+# Authority: durable-rules serialize-only; ExpandPseudos / BranchRelaxation /
+# FixupHwLoops must exact-commit final reals before layout. No FlexMap.
+#
+
+#--- loadi32.mir
+
+--- |
+  define void @printer_residual_loadi32() { ret void }
+...
+---
+name:            printer_residual_loadi32
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    successors: %bb.1
+    ; LOADI32: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; LOADI32: LOADI32 residual
+    $r1 = LOADI32 %bb.1
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15
+
+#--- load_addr.mir
+--- |
+  define void @printer_residual_load_addr() { ret void }
+...
+---
+name:            printer_residual_load_addr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; LOAD_ADDR: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; LOAD_ADDR: LOAD_ADDR residual
+    $r1 = LOAD_ADDR 0
+    RET implicit $r15
+
+#--- setcbr_begin.mir
+--- |
+  define void @printer_residual_setcbr_begin() { ret void }
+...
+---
+name:            printer_residual_setcbr_begin
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; SETCBR_B: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; SETCBR_B: SETCBR residual
+    SETCBR_BEGIN 0, $r1
+    RET implicit $r15
+
+#--- setcbr_end.mir
+--- |
+  define void @printer_residual_setcbr_end() { ret void }
+...
+---
+name:            printer_residual_setcbr_end
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; SETCBR: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; SETCBR: SETCBR residual
+    SETCBR_END 0, $r1
+    RET implicit $r15
+
+#--- loopstart.mir
+--- |
+  define void @printer_residual_loopstart() { ret void }
+...
+---
+name:            printer_residual_loopstart
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; LOOPSTART: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; LOOPSTART: LoopStart residual
+    LoopStart $r1, 0
+    RET implicit $r15
+
+#--- loopdec.mir
+--- |
+  define void @printer_residual_loopdec() { ret void }
+...
+---
+name:            printer_residual_loopdec
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; LOOPDEC: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; LOOPDEC: LoopDec residual
+    $r1 = LoopDec $r1
+    RET implicit $r15
+
+#--- loopjnz.mir
+--- |
+  define void @printer_residual_loopjnz() { ret void }
+...
+---
+name:            printer_residual_loopjnz
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    successors: %bb.0, %bb.1
+    ; LOOPJNZ: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; LOOPJNZ: LoopJNZ residual
+    LoopJNZ $r1, %bb.0
+  bb.1:
+    RET implicit $r15
+
+#--- set_hwloop.mir
+--- |
+  define void @printer_residual_set_hwloop() { ret void }
+...
+---
+name:            printer_residual_set_hwloop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    successors: %bb.1
+    ; SET_HWLOOP: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; SET_HWLOOP: SET_HWLOOP{,_REG} residual
+    SET_HWLOOP 0, %bb.1, %bb.1, 8
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15
+
+#--- set_hwloop_reg.mir
+--- |
+  define void @printer_residual_set_hwloop_reg() { ret void }
+...
+---
+name:            printer_residual_set_hwloop_reg
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r4, $r15
+    successors: %bb.1
+    ; SET_HWLOOP_REG: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; SET_HWLOOP_REG: SET_HWLOOP{,_REG} residual
+    SET_HWLOOP_REG 0, %bb.1, %bb.1, $r4
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15
+
+#--- bundled_setcbr.mir
+--- |
+  define void @printer_bundled_setcbr() { ret void }
+...
+---
+name:            printer_bundled_setcbr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; BUNDLED: HaydnAsmPrinter: residual cycle-forming pseudo
+    ; BUNDLED: must be exact-committed real MIs before AsmPrinter
+    BUNDLE 0 {
+      SETCBR_BEGIN 0, $r1
+    }
+    RET implicit $r15

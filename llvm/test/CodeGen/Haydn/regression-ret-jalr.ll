@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — RET pseudo must expand to JALR R0, LR, 0 (immediate offset).
+
 ; REGRESSION TEST: RET pseudo must expand to JALR R0, LR, 0 (immediate offset)
 ;
 ; Bug: RET was expanding to JALR R0, R15, R15 (register operand for offset)
@@ -13,6 +15,7 @@
 ; Do NOT update CHECK lines without understanding the root cause.
 
 ;Simple return with constant
+
 define i32 @simple_ret() nounwind {
 ; CHECK-LABEL: simple_ret:
 ; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0

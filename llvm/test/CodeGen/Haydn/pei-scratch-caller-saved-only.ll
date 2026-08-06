@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — PEI CSR-stride scratch must be caller-saved (R1–R7), never unsaved R8–R11.
+
 ; PEI CSR-stride scratch must be caller-saved (R1–R7), never unsaved R8–R11.
 ; Using R8 as stride base without saving it clobbers the caller's R8 (e.g. a
 ; live pointer kept across the call) → silent wrong loads after return.

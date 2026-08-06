@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — (/ / F2): two-bank structured va_list.
+
 ; REGRESSION TEST (/ / F2): two-bank structured va_list.
 ;
 ; Bug (F2): CC_Haydn assigns i64/f64 to DR D0-D3 for BOTH fixed and variadic

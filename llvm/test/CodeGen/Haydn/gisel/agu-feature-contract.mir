@@ -7,7 +7,9 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mcpu=haydn \
 # RUN:     -run-pass=haydn-postlegalizer-combiner -verify-machineinstrs %s -o - \
 # RUN:   | FileCheck %s --check-prefix=AGU
-#
+
+# Role: MIR — T7.3 AGU feature contract: - generic and haydn CPUs have FeatureAGU baseline → fuse.
+
 # T7.3 AGU feature contract:
 #   - generic and haydn CPUs have FeatureAGU baseline → fuse
 #   - -mattr=-agu disables form_agu_inc_mem

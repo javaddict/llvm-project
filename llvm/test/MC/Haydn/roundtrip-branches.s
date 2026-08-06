@@ -1,9 +1,12 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
-#
+
+# Role: object — Round-trip test for branch instructions: asm → parse → print.
+
 # Round-trip test for branch instructions: asm → parse → print.
 # NOTE: Full encode→decode roundtrip deferred until disassembler is complete.
 
 # Conditional branches (two-register)
+
 branch_target:
 # CHECK: beq r4, r5, branch_target
 beq r4, r5, branch_target

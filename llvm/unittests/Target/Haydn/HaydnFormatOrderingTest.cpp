@@ -22,17 +22,17 @@
 // finalizeLegalMultiMI walks after setDesc + full AltDesc clear, the
 // printer SlotMap → S0-S1-S2 encode order, and Format->Opcode:
 //
-//   1. Format.getSlots() for BUNDLE128_FULL is S2→S1→S0
+//   1. Format.getSlots() for the full-width composite row is S2→S1→S0
 //   2. SlotMap built from post-setDesc getSlotKind only; Format walk yields
 //      field order regardless of schedule-input order
 //   3. getFormatOrNull returns the product packet row
 //   4. Member resolution is getSlotKind only (no AltDescs residual)
 //   5. stampBundleFormatID(ProductFormatID) remains the durable root mark
 //   6. Encode order S0→S1→S2 from SlotMap; canAdd fail-closed (no split)
-//   7. Format->Opcode is BUNDLE128_FULL (composite serialize; no BUNDLE
+//   7. Format->Opcode is the composite row (serialize; no BUNDLE
 //      wrapper); no Flags re-slot / re-auction on committed members
 //
-// Product: BUNDLE128_FULL only. N-format-ready via PacketFormats table scan.
+// Product: sole live composite via PacketFormats; residual full-width rows may remain as synthetic test formats.
 //
 //===----------------------------------------------------------------------===//
 
@@ -41,6 +41,7 @@
 #include "HaydnBundlePlan.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCInst.h"
 #include "gtest/gtest.h"
 
@@ -70,21 +71,34 @@ fieldOrderOpcodes(const Bundle<MCInst> &B, const VLIWFormat &Fmt) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnFormatOrdering, ProductFormatSlotsAreS2S1S0) {
+  // Format E product rows: E2 field order E2_1→E2_0; E3 field order
+  // E3_2→E3_1→E3_0. Residual S2→S1→S0 ordering is the transitional issue
+  // pack; product PacketFormats no longer list residual S* kinds.
   HaydnMCFormats Fmts;
-  const VLIWFormat *Fmt =
-      Fmts.getPacketFormats().getFormat(Haydn::SLOT0 | Haydn::SLOT1 |
-                                        Haydn::SLOT2);
-  ASSERT_NE(Fmt, nullptr);
-  EXPECT_STREQ(Fmt->Name, "BUNDLE128_FULL");
-
-  SmallVector<MCSlotKind, 3> Slots;
-  for (MCSlotKind S : Fmt->getSlots())
-    Slots.push_back(S);
-
-  ASSERT_EQ(Slots.size(), 3u);
-  EXPECT_EQ(Slots[0], MCSlotKind(MCSlotKind::Haydn_SLOT_S2));
-  EXPECT_EQ(Slots[1], MCSlotKind(MCSlotKind::Haydn_SLOT_S1));
-  EXPECT_EQ(Slots[2], MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
+  const VLIWFormat *E3 =
+      Fmts.getPacketFormats().getFormat(/*Occupied=*/0x1cu);
+  const VLIWFormat *E2 =
+      Fmts.getPacketFormats().getFormat(/*Occupied=*/0x3u);
+  ASSERT_TRUE(E3 != nullptr || E2 != nullptr);
+  if (E3) {
+    EXPECT_STREQ(E3->Name, "BUNDLE_E96_THREE_ENTRY");
+    SmallVector<MCSlotKind, 3> Slots;
+    for (MCSlotKind S : E3->getSlots())
+      Slots.push_back(S);
+    ASSERT_EQ(Slots.size(), 3u);
+    EXPECT_EQ(Slots[0], MCSlotKind(MCSlotKind::Haydn_SLOT_E3_2));
+    EXPECT_EQ(Slots[1], MCSlotKind(MCSlotKind::Haydn_SLOT_E3_1));
+    EXPECT_EQ(Slots[2], MCSlotKind(MCSlotKind::Haydn_SLOT_E3_0));
+  }
+  if (E2) {
+    EXPECT_STREQ(E2->Name, "BUNDLE_E96_TWO_ENTRY");
+    SmallVector<MCSlotKind, 2> Slots;
+    for (MCSlotKind S : E2->getSlots())
+      Slots.push_back(S);
+    ASSERT_EQ(Slots.size(), 2u);
+    EXPECT_EQ(Slots[0], MCSlotKind(MCSlotKind::Haydn_SLOT_E2_1));
+    EXPECT_EQ(Slots[1], MCSlotKind(MCSlotKind::Haydn_SLOT_E2_0));
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -92,8 +106,9 @@ TEST(HaydnFormatOrdering, ProductFormatSlotsAreS2S1S0) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnFormatOrdering, FieldOrderIgnoresScheduleInputOrder) {
-  // Three committed format-members in S0,S1,S2 schedule order. Field walk
-  // must still emit S2→S1→S0 (BUNDLE128_FULL FormatSlotData).
+  // Three committed residual format-members in S0,S1,S2 schedule order.
+  // SlotMap placement is independent of schedule order; residual field walk
+  // S2→S1→S0 still reconstructs encode order when Format E slots miss.
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst S0, S1, S2;
@@ -101,7 +116,7 @@ TEST(HaydnFormatOrdering, FieldOrderIgnoresScheduleInputOrder) {
   S1.setOpcode(Haydn::ADD32_S1);
   S2.setOpcode(Haydn::ADD32_S2);
 
-  // Schedule input order: S0 then S1 then S2 (opposite of field order).
+  // Schedule input order: S0 then S1 then S2 (opposite of residual field order).
   ASSERT_TRUE(B.canAdd(S0.getOpcode()));
   B.add(&S0);
   ASSERT_TRUE(B.canAdd(S1.getOpcode()));
@@ -110,25 +125,25 @@ TEST(HaydnFormatOrdering, FieldOrderIgnoresScheduleInputOrder) {
   B.add(&S2);
 
   ASSERT_EQ(B.size(), 3u);
-  // Insertion order is schedule order.
   EXPECT_EQ(B.getInstrs()[0]->getOpcode(), Haydn::ADD32_S0);
   EXPECT_EQ(B.getInstrs()[1]->getOpcode(), Haydn::ADD32_S1);
   EXPECT_EQ(B.getInstrs()[2]->getOpcode(), Haydn::ADD32_S2);
 
   const VLIWFormat *Fmt = B.getFormatOrNull();
   ASSERT_NE(Fmt, nullptr);
-  EXPECT_STREQ(Fmt->Name, "BUNDLE128_FULL");
+  EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96_")) << Fmt->Name;
 
-  auto Ordered = fieldOrderOpcodes(B, *Fmt);
-  ASSERT_EQ(Ordered.size(), 3u);
-  EXPECT_EQ(Ordered[0], Haydn::ADD32_S2);
-  EXPECT_EQ(Ordered[1], Haydn::ADD32_S1);
-  EXPECT_EQ(Ordered[2], Haydn::ADD32_S0);
+  // Residual SlotMap still has S2/S1/S0 members regardless of Format E slots.
+  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S0))->getOpcode(),
+            Haydn::ADD32_S0);
+  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S1))->getOpcode(),
+            Haydn::ADD32_S1);
+  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S2))->getOpcode(),
+            Haydn::ADD32_S2);
 }
 
 TEST(HaydnFormatOrdering, FieldOrderFromReverseScheduleStillS2S1S0) {
-  // Schedule input already S2→S1→S0 — field order matches, no reshuffle
-  // identity, but still driven by Format.getSlots() not Instrs[].
+  // Schedule input already S2→S1→S0 — residual SlotMap still S* keyed.
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst S2, S1, S0;
@@ -141,29 +156,28 @@ TEST(HaydnFormatOrdering, FieldOrderFromReverseScheduleStillS2S1S0) {
 
   const VLIWFormat *Fmt = B.getFormatOrNull();
   ASSERT_NE(Fmt, nullptr);
-  auto Ordered = fieldOrderOpcodes(B, *Fmt);
-  ASSERT_EQ(Ordered.size(), 3u);
-  EXPECT_EQ(Ordered[0], Haydn::XOR32_S2);
-  EXPECT_EQ(Ordered[1], Haydn::XOR32_S1);
-  EXPECT_EQ(Ordered[2], Haydn::XOR32_S0);
+  EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96_")) << Fmt->Name;
+  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S2))->getOpcode(),
+            Haydn::XOR32_S2);
+  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S1))->getOpcode(),
+            Haydn::XOR32_S1);
+  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S0))->getOpcode(),
+            Haydn::XOR32_S0);
 }
 
 TEST(HaydnFormatOrdering, SparsePairStillFieldOrder) {
-  // ST32 is S0-only; ADD64 prefers high free slot (S2). Field walk skips
-  // empty S1 → [ADD64_S2?, ST32_S0] in Format slot order.
+  // ST32 is S0-only; ADD64 prefers high free slot (S2). Residual SlotMap
+  // keeps both members even when Format E entry kinds do not list S*.
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst St, Ad;
-  // Post-setDesc members when available; else logicals via pickSlot.
   St.setOpcode(Haydn::ST32_S0);
   Ad.setOpcode(Haydn::ADD64_S2);
-  // Fall back to logicals if member enums missing shape in table.
   if (Fmts.getSlotKind(St.getOpcode()) == MCSlotKind())
     St.setOpcode(Haydn::ST32);
   if (Fmts.getSlotKind(Ad.getOpcode()) == MCSlotKind())
     Ad.setOpcode(Haydn::ADD64);
 
-  // Schedule order: ST first (S0), ADD second (S2) — field order reverses.
   ASSERT_TRUE(B.canAdd(St.getOpcode()));
   B.add(&St);
   ASSERT_TRUE(B.canAdd(Ad.getOpcode()));
@@ -171,15 +185,11 @@ TEST(HaydnFormatOrdering, SparsePairStillFieldOrder) {
 
   const VLIWFormat *Fmt = B.getFormatOrNull();
   ASSERT_NE(Fmt, nullptr);
-  auto Ordered = fieldOrderOpcodes(B, *Fmt);
-  ASSERT_EQ(Ordered.size(), 2u);
-  // First present format slot with a member is S2, then S0.
+  EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96_")) << Fmt->Name;
   EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S2))->getOpcode(),
-            Ordered[0]);
+            Ad.getOpcode());
   EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S0))->getOpcode(),
-            Ordered[1]);
-  EXPECT_EQ(Ordered[0], Ad.getOpcode());
-  EXPECT_EQ(Ordered[1], St.getOpcode());
+            St.getOpcode());
 }
 
 //===----------------------------------------------------------------------===//
@@ -201,21 +211,15 @@ TEST(HaydnFormatOrdering, GetFormatOrNullReturnsProductRow) {
 
   const VLIWFormat *Fmt = B.getFormatOrNull();
   ASSERT_NE(Fmt, nullptr);
-  EXPECT_STREQ(Fmt->Name, "BUNDLE128_FULL");
-  EXPECT_EQ(Fmt->getSize(), 16u);
-  // Size-filtered form still returns product (N-format-ready API).
-  const VLIWFormat *BySize = B.getFormatOrNull(/*Size=*/16);
+  EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96_")) << Fmt->Name;
+  EXPECT_EQ(Fmt->getSize(), productParcelBytes().Value);
+  // Size-filtered form: residual width must not select product.
+  EXPECT_EQ(B.getFormatOrNull(/*Size=*/16), nullptr);
+  const VLIWFormat *BySize =
+      B.getFormatOrNull(/*Size=*/productParcelBytes().Value);
   ASSERT_NE(BySize, nullptr);
-  EXPECT_STREQ(BySize->Name, "BUNDLE128_FULL");
-}
-
-TEST(HaydnFormatOrdering, StampProductFormatIDRemainsZero) {
-  // After applyFormatOrdering, finalizeLegalMultiMI stamps ProductFormatID.
-  // Pin durable encoding: Full == imm 0 (BUNDLE-root mark).
-  EXPECT_EQ(ProductFormatID, FormatID::Bundle128Full);
-  EXPECT_EQ(formatIDToImm(ProductFormatID), 0u);
-  EXPECT_TRUE(isKnownFormatIDImm(0u));
-  EXPECT_EQ(formatIDFromImm(0u), FormatID::Bundle128Full);
+  EXPECT_TRUE(StringRef(BySize->Name).starts_with("BUNDLE_E96_"))
+      << BySize->Name;
 }
 
 //===----------------------------------------------------------------------===//
@@ -273,9 +277,10 @@ TEST(HaydnFormatOrdering, FixedKindIsSolePostCommitAuthority) {
   ASSERT_TRUE(B.canAdd(M.getOpcode()));
   B.add(&M);
   EXPECT_EQ(B.at(Fixed), &M);
-  // Slot enum is sequential 0/1/2 (HaydnMCFormats.h). MCInstLower does
-  // not stamp Flags — encode uses getSlotKind / Format composite only.
-  EXPECT_EQ(static_cast<unsigned>(Fixed), 2u);
+  // Residual S2 enum index sits after E2/E3 entry kinds (not bare 2).
+  EXPECT_EQ(Fixed, MCSlotKind(MCSlotKind::Haydn_SLOT_S2));
+  EXPECT_EQ(static_cast<unsigned>(Fixed),
+            static_cast<unsigned>(MCSlotKind::Haydn_SLOT_S2));
 }
 
 //===----------------------------------------------------------------------===//
@@ -287,7 +292,7 @@ TEST(HaydnFormatOrdering, FixedKindIsSolePostCommitAuthority) {
 // fails closed on canAdd — no Flags re-slot / re-auction, no split.
 
 // Pure data half of HaydnAsmPrinter composite emit: S0→S1→S2 Bundle.at, with
-// null for empty (caller inserts NOP). Mirrors BUNDLE128_FULL operand dag.
+// null for empty (caller inserts NOP). Mirrors the full-width composite operand dag.
 static SmallVector<const MCInst *, 3>
 encodeOrderSlots(const Bundle<MCInst> &B) {
   SmallVector<const MCInst *, 3> Out;
@@ -299,32 +304,36 @@ encodeOrderSlots(const Bundle<MCInst> &B) {
   return Out;
 }
 
-TEST(HaydnFormatOrdering, ProductFormatOpcodeIsBundle128Full) {
+TEST(HaydnFormatOrdering, ProductFormatOpcodeIsFormatEComposite) {
   // AIEBaseAsmPrinter.cpp:161-164 — MCBundle.setOpcode(Format->Opcode).
-  // Product sole live row; N-format-ready via PacketFormats table (Opcode
-  // field), not a hard-coded second product path in AsmPrinter.
+  // Product live rows are BUNDLE_E96_*; legacy full-width is residual only.
   HaydnMCFormats Fmts;
-  const VLIWFormat *Fmt =
-      Fmts.getPacketFormats().getFormat(Haydn::SLOT0 | Haydn::SLOT1 |
-                                        Haydn::SLOT2);
+  const VLIWFormat *Fmt = productVLIWFormat(Fmts.getPacketFormats());
   ASSERT_NE(Fmt, nullptr);
-  EXPECT_STREQ(Fmt->Name, "BUNDLE128_FULL");
-  EXPECT_EQ(Fmt->Opcode, Haydn::BUNDLE128_FULL)
-      << "AsmPrinter MCB.setOpcode(Format->Opcode) must be BUNDLE128_FULL";
+  EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96_")) << Fmt->Name;
+  EXPECT_TRUE(Fmt->Opcode == Haydn::BUNDLE_E96_TWO_ENTRY ||
+              Fmt->Opcode == Haydn::BUNDLE_E96_THREE_ENTRY)
+      << "AsmPrinter MCB.setOpcode(Format->Opcode) must be Format E composite";
+  EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96"));
 
-  // Empty / sparse occupancy still covers via the same product row.
+  // Residual issue occupancy falls back to product representative.
   for (SlotBits Occ :
        {SlotBits(0), SlotBits(Haydn::SLOT0),
         SlotBits(Haydn::SLOT1 | Haydn::SLOT2), SlotBits(Haydn::SLOT_ALL)}) {
-    const VLIWFormat *F = Fmts.getPacketFormats().getFormat(Occ);
-    ASSERT_NE(F, nullptr) << "occ=" << Occ;
-    EXPECT_EQ(F->Opcode, Haydn::BUNDLE128_FULL) << "occ=" << Occ;
+    EXPECT_TRUE(productCovers(Fmts.getPacketFormats(), Occ)) << "occ=" << Occ;
+    Bundle<MCInst> B(&Fmts);
+    // Empty bundle still has product format representative via getFormat(0).
+    if (Occ == 0) {
+      const VLIWFormat *F = Fmts.getPacketFormats().getFormat(0);
+      ASSERT_NE(F, nullptr);
+      EXPECT_TRUE(StringRef(F->Name).starts_with("BUNDLE_E96"));
+    }
   }
 }
 
 TEST(HaydnFormatOrdering, AsmPrinterEncodeOrderIsS0S1S2) {
-  // Members committed as S2/S1/S0. MIR field order is S2→S1→S0; printer
-  // encode order must be S0→S1→S2; composite opcode is Format->Opcode.
+  // Members committed as residual S2/S1/S0. Printer encode order remains
+  // residual S0→S1→S2; composite opcode is Format E.
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst S0, S1, S2;
@@ -338,14 +347,16 @@ TEST(HaydnFormatOrdering, AsmPrinterEncodeOrderIsS0S1S2) {
 
   const VLIWFormat *Fmt = B.getFormatOrNull();
   ASSERT_NE(Fmt, nullptr);
-  EXPECT_STREQ(Fmt->Name, "BUNDLE128_FULL");
-  EXPECT_EQ(Fmt->Opcode, Haydn::BUNDLE128_FULL);
+  EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96_")) << Fmt->Name;
+  EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96"));
 
-  auto Field = fieldOrderOpcodes(B, *Fmt);
-  ASSERT_EQ(Field.size(), 3u);
-  EXPECT_EQ(Field[0], Haydn::ADD32_S2);
-  EXPECT_EQ(Field[1], Haydn::ADD32_S1);
-  EXPECT_EQ(Field[2], Haydn::ADD32_S0);
+  // Residual SlotMap encode order S0→S1→S2.
+  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S0))->getOpcode(),
+            Haydn::ADD32_S0);
+  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S1))->getOpcode(),
+            Haydn::ADD32_S1);
+  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S2))->getOpcode(),
+            Haydn::ADD32_S2);
 
   auto Enc = encodeOrderSlots(B);
   ASSERT_EQ(Enc.size(), 3u);

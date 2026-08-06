@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — DR64 shift intrinsics (full family).
+
 ; REGRESSION TEST: DR64 shift intrinsics (full family).
 ;
 ; HISTORY (resolved): this file was XFAIL'd since due
@@ -10,7 +12,7 @@
 ; produced "Intrinsic called with incompatible signature" before any backend
 ; code ran, masking the real codegen behavior. (b) A presumed gap-scope G12
 ; "x2mul32 family verifier error" that is no longer reproducible post
-; (single Bundle128 FlexMap slot authority + ALU64/MAC _S0
+; (single Format E FlexMap slot authority + ALU64/MAC _S0
 ; variant retirement + ALU64 SIMD operand-modeling fixes). After fixing the
 ; IR signatures to match the td, the file compiles cleanly with
 ; verify-machineinstrs and every CHECK passes. XFAIL removed.

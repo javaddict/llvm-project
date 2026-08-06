@@ -1,4 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+
+; Role: semantic — DR64 masked scalar intrinsics and SFR register transfer.
+
 ; Status : R_CMP operand-flag XFAIL stale; CHECKs use DAG for bundle order.
 ; REGRESSION TEST: DR64 masked scalar intrinsics and SFR register transfer.
 ;

@@ -131,9 +131,11 @@ bool HaydnExpandPostIncEarly::expandMI(MachineBasicBlock &MBB,
     }
     // Logical LD32 (Slot01_LD); post-RA HR tryAddProduct picks LD32_S0/S1
     // and leaveRegion setDesc materializes the member (B3.exit.3).
+    // LD32 imm is word element index; Offset on the pseudo is bytes.
+    assert(Offset % 4 == 0 && "LD32_POST_INC displacement must be word-aligned");
     BuildMI(MBB, MI, DL, TII->get(Haydn::LD32), DstReg)
         .addReg(BaseReg)
-        .addImm(Offset);
+        .addImm(Offset >> 2);
     BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32_W), BaseReg)
         .addReg(BaseReg)
         .addImm(Stride);
@@ -163,10 +165,12 @@ bool HaydnExpandPostIncEarly::expandMI(MachineBasicBlock &MBB,
           .addImm(Stride >> 2);                     // $scaled_imm (imm6 index)
       break;
     }
+    // ST32 imm is word element index; Offset on the pseudo is bytes.
+    assert(Offset % 4 == 0 && "ST32_POST_INC displacement must be word-aligned");
     BuildMI(MBB, MI, DL, TII->get(Haydn::ST32))
         .addReg(DataReg)
         .addReg(BaseReg)
-        .addImm(Offset);
+        .addImm(Offset >> 2);
     BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32_W), BaseReg)
         .addReg(BaseReg)
         .addImm(Stride);
@@ -197,9 +201,11 @@ bool HaydnExpandPostIncEarly::expandMI(MachineBasicBlock &MBB,
     // fallback so it can pack with a sibling load. The fused D_LDW_POST_IMM
     // path above is preferred (single instruction); this split is the rare
     // fallback for non-multiple stride / out-of-range index.
+    // LD64 imm is dword element index; Offset on the pseudo is bytes.
+    assert(Offset % 8 == 0 && "LD64_POST_INC displacement must be dword-aligned");
     BuildMI(MBB, MI, DL, TII->get(Haydn::LD64), DstReg)
         .addReg(BaseReg)
-        .addImm(Offset);
+        .addImm(Offset >> 3);
     BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32_W), BaseReg)
         .addReg(BaseReg)
         .addImm(Stride);
@@ -226,10 +232,12 @@ bool HaydnExpandPostIncEarly::expandMI(MachineBasicBlock &MBB,
           .addImm(Stride >> 3);                     // $scaled_imm (imm6 index)
       break;
     }
+    // ST64 imm is dword element index; Offset on the pseudo is bytes.
+    assert(Offset % 8 == 0 && "ST64_POST_INC displacement must be dword-aligned");
     BuildMI(MBB, MI, DL, TII->get(Haydn::ST64))
         .addReg(DataReg)
         .addReg(BaseReg)
-        .addImm(Offset);
+        .addImm(Offset >> 3);
     BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32_W), BaseReg)
         .addReg(BaseReg)
         .addImm(Stride);

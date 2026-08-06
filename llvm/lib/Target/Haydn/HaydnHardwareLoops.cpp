@@ -48,7 +48,7 @@
 //
 // Algorithm:
 // 0. stripEmptyZeroOverheadLoops — remove empty/shell Role A ZOLs
-// 0b.expandRoleALoopStarts — AIE-style LoopStart → SET_HWLOOP_REG (+ t−3)
+// 0b.expandRoleALoopStarts — AIE-style LoopStart → SET_HWLOOP_REG ( intervening pad)
 // 1. Walk loops inside-out; skip Role A; validate latch/exit/no-call
 // 2. Identify IV + bump + limit at the latch (fused or unfused cmp/br)
 // 3. step = Val(step @ bump); limit = Val(limit @ cmp); init at preheader
@@ -56,7 +56,7 @@
 // Case 1/4 count-up trip = (limit-init)/step (reg or imm)
 // Case 2 count-down trip = IV @ entry when step=-1, limit=0
 // Case 3 pointer-IV trip = (end-start)>>log2(stride)
-// 5. Insert SET in preheader; erase soft back-edge (+ dead SEQ)
+// 5. Insert SET in preheader; erase soft back-edge ( dead SEQ)
 //
 //===----------------------------------------------------------------------===//
 
@@ -102,19 +102,30 @@ STATISTIC(NumRoleAExpanded,
           "Number of Role A LoopStart expanded to SET_HWLOOP_REG pre-sched");
 
 // Local aliases — sole numeric source is HaydnHWLoopContracts.h /
-// BundlePlan EncodedBytes (B4.4: productParcelBytes, not dual magic 16).
+// BundlePlan EncodedBytes (productParcelBytes; no dual size magic).
+using llvm::haydn::hwloop::InterveningCycles;
 using llvm::haydn::hwloop::MaxEndOffsetBytes;
 using llvm::haydn::hwloop::MaxStartOffsetBytes;
+using llvm::haydn::hwloop::MinBodyBundles;
+using llvm::haydn::hwloop::MinBodySpanBytes;
 using llvm::haydn::hwloop::MinSetupBundles;
 using llvm::haydn::hwloop::MinSetupBytes;
+using llvm::haydn::hwloop::SetupIssueDistance;
 using llvm::haydn::bundle::ceilProductParcels;
 using llvm::haydn::bundle::productBundlesToBytes;
 using llvm::haydn::bundle::productParcelBytes;
 
 // Compatibility names used throughout this file.
+// Pad floor is InterveningCycles (Following >= 2), not
+// SetupIssueDistance (3). MinSetupBundles is the historical alias.
 static constexpr int64_t MaxHWLoopStartOffsetBytes = MaxStartOffsetBytes;
 static constexpr int64_t MaxHWLoopEndOffsetBytes = MaxEndOffsetBytes;
-static constexpr unsigned HWLoopSetupPadBundles = MinSetupBundles;
+static constexpr unsigned HWLoopSetupPadBundles = InterveningCycles;
+static_assert(HWLoopSetupPadBundles == MinSetupBundles,
+              "formation pad floor must equal MinSetupBundles alias");
+static_assert(HWLoopSetupPadBundles + 1 == SetupIssueDistance,
+              "formation pad + 1 == SetupIssueDistance");
+static_assert(MinBodyBundles >= 1, "body floor must be positive");
 
 using namespace llvm;
 
@@ -122,7 +133,7 @@ using namespace llvm;
 // * Dual HWLR free-list always (sel=1 prefer innermost, sel=0 outer).
 // * Role A (IR HardwareLoops + expand) is authority for single-BB ZOL
 // same split as AIE (TTI decides, MIR expands). Role B is residual only.
-// * Always pad short bodies / t−3 with NOPs (spec).
+// * Always pad short setup windows to InterveningCycles with NOPs.
 // * Layout-owned setup: useful preheader work stays *before* SET; only
 // deficit NOPs after SET (no "smart-setup" after-SET fill).
 
@@ -332,7 +343,7 @@ static bool isShellZOLBody(const MachineBasicBlock &Body) {
 }
 
 // Strip empty IR-form zero-overhead loops (AIE-style): LoopStart in a
-// preheader paired with a body that is only PseudoLoopEnd (+ maybe B + meta).
+// preheader paired with a body that is only PseudoLoopEnd ( maybe B + meta).
 // SMS may peel all real work; Role A then freezes a useless ZOL. Remove
 // LoopStart and PseudoLoopEnd and restore a normal exit edge.
 //
@@ -458,7 +469,7 @@ static bool stripEmptyZeroOverheadLoops(MachineFunction &MF) {
 // scheduler must respect (see isSchedulingBoundary).
 // Contract (matches Role B formation):
 // Useful preheader work stays *before* SET.
-// After SET: only t−3 deficit NOPs (layout-owned setup window).
+// After SET: only InterveningCycles deficit NOPs (layout-owned setup window).
 // PseudoLoopEnd stays in the body (END label / analyzeBranch).
 // Empty bodies are already stripped. Store-only Shell (memset-style post-inc
 // store + PLE) is expanded here — it is real trip-counted work, not SMS peel
@@ -537,8 +548,8 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
             .addMBB(Latch)
             .addReg(TripReg);
 
-    // t−3 pads while SET is still top-level (safe MBB::iterator). Remat
-    // below inserts ADDI before SET and glues the pair; pads stay after.
+    // InterveningCycles pads while SET is still top-level (safe MBB::iterator).
+    // Remat below inserts ADDI before SET and glues the pair; pads stay after.
     {
       unsigned FollowingBundles = 0;
       for (MachineBasicBlock::iterator I = std::next(SetMI->getIterator()),
@@ -552,7 +563,7 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
         unsigned Bytes = TII->getInstSizeInBytes(*I);
         if (Bytes == 0)
           continue;
-        // B4.4: ceil by ProductFormatDesc.Bytes (EncodedBytes oracle).
+        // Ceil by productParcelBytes (generated product EncodedBytes).
         FollowingBundles += ceilProductParcels(Bytes);
       }
       if (FollowingBundles < HWLoopSetupPadBundles) {
@@ -561,8 +572,10 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
             std::next(SetMI->getIterator());
         for (unsigned I = 0; I < Deficit; ++I)
           BuildMI(*Preheader, AfterSet, DL, TII->get(Haydn::NOP));
-        LLVM_DEBUG(dbgs() << "HaydnHWLoops: Role A expand t−3 pad " << Deficit
-                          << " NOP bundle(s)\n");
+        LLVM_DEBUG(dbgs() << "HaydnHWLoops: Role A expand intervening pad "
+                          << Deficit << " NOP bundle(s) (InterveningCycles="
+                          << InterveningCycles << " SetupIssueDistance="
+                          << SetupIssueDistance << ")\n");
       }
     }
 
@@ -574,8 +587,8 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
                         << " dest=" << printReg(Count) << "\n");
     }
 
-    // Body length is not a legality floor (BEGIN <= END is valid; t−3 is
-    // the hard rule, enforced by deficit NOPs above + Fixup).
+    // Body >= MinBodyBundles and strict END>BEGIN are enforced by
+    // loopBodyFitsRange / Fixup (END = last body cycle).
 
     LS->eraseFromParent();
     ++NumRoleAExpanded;
@@ -722,7 +735,7 @@ bool HaydnHardwareLoops::hasValidMultiBBStructure(
 bool HaydnHardwareLoops::loopBodyFitsRange(const MachineLoop *L) const {
   // Sum estimated byte sizes of all non-pseudo instructions in the loop body.
   // Pseudos are skipped (expand later or emit nothing). Bundle children are
-  // size 0; the BUNDLE root is 16 (Bundle128-only size model).
+  // size 0; the BUNDLE root carries product EncodedBytes.
   const auto *TII =
       L->getHeader()->getParent()->getSubtarget<HaydnSubtarget>().getInstrInfo();
 
@@ -735,15 +748,26 @@ bool HaydnHardwareLoops::loopBodyFitsRange(const MachineLoop *L) const {
     }
   }
 
-  // START offset is measured from *after* SET. Smart t−3 may move independent
-  // preheader precompute after SET, but convert caps that payload so Start
-  // stays under MaxHWLoopStartOffsetBytes (see convert). Estimate uses the
-  // capped preheader contribution (or the min t−3 pad if preheader is tiny).
+  // Body floor: >= MinBodyBundles size-bearing parcels (product EncodedBytes).
+  const unsigned BodyParcels = ceilProductParcels(
+      static_cast<unsigned>(std::max<int64_t>(BodyBytes, 0)));
+  if (BodyParcels < MinBodyBundles) {
+    ++NumHWLoopRangeOverflow;
+    LLVM_DEBUG(dbgs() << "HaydnHWLoops: body parcels " << BodyParcels
+                      << " < MinBodyBundles=" << MinBodyBundles
+                      << " — declining conversion\n");
+    return false;
+  }
+
+  // START offset is measured from *after* SET. Smart intervening fill may move
+  // independent preheader precompute after SET, but convert caps that payload
+  // so Start stays under MaxHWLoopStartOffsetBytes (see convert). Estimate uses
+  // the capped preheader contribution (or MinSetupBytes if preheader is tiny).
   //
   // uimm6_offset1 (START): max 252 B — tight.
   // uimm12_offset2 (END): max 16380 B — loose for normal bodies.
-  // B4.4: MinSetupBytes / productParcelBytes from EncodedBytes oracle
-  // (HaydnHWLoopContracts / ProductFormatDesc), not a free-standing * 16.
+  // MinSetupBytes = InterveningCycles × productParcelBytes
+  // (HaydnHWLoopContracts / generated product Size).
   const int64_t LocalMinSetupBytes =
       productBundlesToBytes(HWLoopSetupPadBundles);
   assert(LocalMinSetupBytes == MinSetupBytes &&
@@ -751,7 +775,7 @@ bool HaydnHardwareLoops::loopBodyFitsRange(const MachineLoop *L) const {
   // Leave one parcel margin for later layout drift (Fixup pads, relax).
   const int64_t MaxAfterSetBytes =
       MaxHWLoopStartOffsetBytes -
-      static_cast<int64_t>(productParcelBytes()); // 236
+      static_cast<int64_t>(productParcelBytes());
   int64_t AfterSetEstimate = LocalMinSetupBytes;
   if (const MachineBasicBlock *PH = L->getLoopPreheader()) {
     int64_t PHBytes = 0;
@@ -763,20 +787,32 @@ bool HaydnHardwareLoops::loopBodyFitsRange(const MachineLoop *L) const {
       // Pseudos may still expand to parcels; count non-zero sizes only.
       PHBytes += TII->getInstSizeInBytes(MI);
     }
-    // Worst case after-SET payload under the smart t−3 move cap.
+    // Worst case after-SET payload under the smart intervening move cap.
     AfterSetEstimate =
         std::max(LocalMinSetupBytes, std::min(PHBytes, MaxAfterSetBytes));
   }
   const int64_t StartOffsetEstimate = AfterSetEstimate;
-  // Inclusive END: body size may be small; t−3 is enforced separately.
-  const int64_t EndOffsetEstimate = StartOffsetEstimate + BodyBytes;
+  // END = last body cycle start: span from BEGIN is BodyBytes minus one parcel
+  // (or MinBodySpanBytes floor). Strict END > BEGIN.
+  const int64_t Parcel = static_cast<int64_t>(productParcelBytes());
+  const int64_t BodySpan =
+      std::max(MinBodySpanBytes, BodyBytes - Parcel);
+  const int64_t EndOffsetEstimate = StartOffsetEstimate + BodySpan;
 
   LLVM_DEBUG({
     dbgs() << "HaydnHWLoops: Estimated start offset " << StartOffsetEstimate
            << " bytes (max uimm6 = " << MaxHWLoopStartOffsetBytes << "), "
            << "end offset " << EndOffsetEstimate << " bytes (max uimm12 = "
-           << MaxHWLoopEndOffsetBytes << ")\n";
+           << MaxHWLoopEndOffsetBytes << "), body parcels=" << BodyParcels
+           << "\n";
   });
+
+  if (EndOffsetEstimate <= StartOffsetEstimate) {
+    ++NumHWLoopRangeOverflow;
+    LLVM_DEBUG(dbgs() << "HaydnHWLoops: END not strictly after BEGIN — "
+                         "declining conversion\n");
+    return false;
+  }
 
   if (StartOffsetEstimate > MaxHWLoopStartOffsetBytes ||
       EndOffsetEstimate > MaxHWLoopEndOffsetBytes) {
@@ -1689,7 +1725,7 @@ static bool findImmediateDefOnDomChain(MachineBasicBlock *Start, Register Reg,
 // MLI-scoped variant of findImmediateDefOnDomChain. Identical walk, but skips
 // any dominating block that belongs to a SIBLING loop — i.e. a loop that is
 // not \p ThisLoop itself and not an ancestor of \p ThisLoop. This fixes the
-// dominant multi-loop resolver defeat (G1 §0.3, §4 #2/#3): in real
+// dominant multi-loop resolver defeat ( §0.3, §4 #2/#3): in real
 // NatureDSP kernels several loops share the same physical register for their
 // step/init/limit constants, and each sibling loop's preheader redefines that
 // register (often with a DIFFERENT value, e.g. loop A sets r8=0, loop B sets
@@ -2817,7 +2853,7 @@ bool HaydnHardwareLoops::findTripCount(MachineLoop *L, int64_t &TripCount,
   // ceil((limit-init)/bump). For the canonical post-IndVarSimplify/LSR form
   // emitted for these kernels, the limit is an exact boundary — the loop
   // processes whole stride-sized elements — so (limit-init) is a multiple of
-  // bump and floor == ceil == exact. The standalone repros in the G1 diagnosis
+ // bump and floor == ceil == exact. The standalone repros in the diagnosis
   // (vec_add32x32, latr*) all hit this exact form. We reuse the floor shift
   // (matching Case 3's precedent); a non-multiple limit would be a pessimization
   // (one too few iterations), never wrong-code on the canonical form. The HW
@@ -3275,8 +3311,9 @@ bool HaydnHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   }
   }
 
-  // pass Latch (not ExitBB) as the loop_end MBB. HWLR_END is inclusive;
-  // AsmPrinter emits the END label at the latch's last real body instruction.
+  // pass Latch (not ExitBB) as the loop_end MBB. HWLR_END addresses the last
+  // body cycle (strict END > BEGIN); AsmPrinter places the END label on that
+  // last real body instruction.
   MachineInstr *SetMI = nullptr;
   if (TripCountReg.isValid()) {
     SetMI = BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP_F2_W))
@@ -3292,10 +3329,10 @@ bool HaydnHardwareLoops::convertToHardwareLoop(MachineLoop *L,
                 .addImm(TripCountImm);
   }
 
-  // Setup window (layout-owned)
-  // Spec needs ≥3 bundles between SET and body. Only deficit NOP pads after
-  // SET. Trip-count math and useful preheader work stay *before* SET so Off1
-  // is small by construction (no after-SET fill / Fixup reverse-order risk).
+  // Setup window (layout-owned). Following >= InterveningCycles
+  // (SetupIssueDistance=3). Only deficit NOP pads after SET. Trip-count math
+  // and useful preheader work stay *before* SET so Off1 is small by
+  // construction (no after-SET fill / Fixup reverse-order risk).
   {
     unsigned FollowingBundles = 0;
     for (MachineBasicBlock::iterator I = std::next(SetMI->getIterator()),
@@ -3309,7 +3346,7 @@ bool HaydnHardwareLoops::convertToHardwareLoop(MachineLoop *L,
       unsigned Bytes = TII->getInstSizeInBytes(*I);
       if (Bytes == 0)
         continue;
-      // B4.4: ceil by ProductFormatDesc.Bytes (EncodedBytes oracle).
+      // Ceil by productParcelBytes (generated product EncodedBytes).
       FollowingBundles += ceilProductParcels(Bytes);
     }
     if (FollowingBundles < HWLoopSetupPadBundles) {
@@ -3317,13 +3354,14 @@ bool HaydnHardwareLoops::convertToHardwareLoop(MachineLoop *L,
       MachineBasicBlock::iterator AfterSet = std::next(SetMI->getIterator());
       for (unsigned I = 0; I < Deficit; ++I)
         BuildMI(*Preheader, AfterSet, DL, TII->get(Haydn::NOP));
-      LLVM_DEBUG(dbgs() << "HaydnHWLoops: formation t−3 pad " << Deficit
-                        << " NOP bundle(s) after SET\n");
+      LLVM_DEBUG(dbgs() << "HaydnHWLoops: formation intervening pad " << Deficit
+                        << " NOP bundle(s) after SET (InterveningCycles="
+                        << InterveningCycles << ")\n");
     }
   }
 
-  // Body length is not a product legality floor. Inclusive END (BEGIN <= END)
-  // is legal; SET t−3 is enforced by the deficit pad above + FixupHwLoops.
+  // Body >= MinBodyBundles and strict END>BEGIN are product law; Fixup
+  // re-validates with END = last body cycle under the final size model.
 
   // Remove the conditional branch at the end of the latch and fix successors.
   // The hardware loop handles the back-edge automatically. The latch block

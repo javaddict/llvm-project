@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 %s -o - | FileCheck %s
 
+; Role: semantic — SIMD v2i32 Addition (X2ADD32).
+
 ;===----------------------------------------------------------------------===
 ; SIMD v2i32 Addition (X2ADD32)
 ;===----------------------------------------------------------------------===

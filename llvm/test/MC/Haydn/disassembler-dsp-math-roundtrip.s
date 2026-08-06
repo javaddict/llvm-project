@@ -1,22 +1,18 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
-#
+
+# Role: object — encodable DSP math instruction round-trip (asm -> parse -> print).
+
 # REGRESSION TEST: encodable DSP math instruction round-trip (asm -> parse -> print).
 #
 # This test covers the subset of the D-class DSP-math instructions that currently
-# HAVE an encoder and therefore can round-trip through the assembler. The
-# LUT-based fixed-point math instructions EXP2, LOG2, RECIP, SQRT are real DB
-# instructions (syntax "EXP2 rt, rs", GPR operands, ~/haydn-plans/Database
-# haydn_instruction_db.json) but have NO encoder yet (M5 encoding work) and are
-# shielded from the assembler via isCodeGenOnly=1 so the MC emitter does not
-# crash ("LLVM ERROR: Unsupported instruction"). They are tracked in the
-# companion XFAIL test dsp-math-encoder-pending.s and will be moved back here
-# once the M5 encoders land.
+# HAVE an encoder and therefore can round-trip through the assembler.
 #
 # Instructions tested here (encodable):
 # SFR moves: MOVEGPR2SFR, MOVESFR2GPR (GPR-only operands)
 #
-# Instructions NOT tested here (encoder pending M5, see companion test):
-# LUT-based fixed-point math: EXP2, LOG2, RECIP, SQRT
+# LUT fixed-point math EXP2/LOG2/RECIP/SQRT now encode; asm→print coverage is
+# in companion dsp-math-encoder-pending.s (can fold here once objdump checks
+# are unified).
 #
 # Instructions NOT tested here (parser gap — mixed GPR/DR operands):
 # CORDIC-based math: ARCTAN, SIN_COS
@@ -34,6 +30,7 @@
 #===----------------------------------------------------------------------===
 
 # CHECK: movegpr2sfr	r0
+
 movegpr2sfr	r0
 
 # CHECK: movesfr2gpr	r1

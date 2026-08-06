@@ -1,4 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+
+; Role: semantic — s for the HaydnConditionOptimizer pass (post-RA).
+
 ; Status : previously-XFAIL regression resolved; lit PASS.
 ;
 ; Tests for the HaydnConditionOptimizer pass (post-RA).

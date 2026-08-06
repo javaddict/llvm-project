@@ -1,6 +1,8 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o
 # RUN: llvm-readobj -S %t.o | FileCheck %s
-#
+
+# Role: object — Fix double-offset bug in applyFixup that crashes with 3+ branch fixups and a second section.
+
 # REGRESSION TEST: Fix double-offset bug in applyFixup that crashes with 3+
 # branch fixups and a second section.
 #

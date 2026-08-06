@@ -1,5 +1,7 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
-#
+
+# Role: object — Comprehensive load/store instruction test.
+
 # Comprehensive load/store instruction test.
 # Only includes instructions actually defined in HaydnInstrInfo.td.
 # NOTE: LDM, STM, LD32.P, LD32.M, ST32.P, ST32.M, LD64, LL32, SC32,
@@ -10,6 +12,7 @@
 #===----------------------------------------------------------------------===
 
 # CHECK: ld32 r0, r1, 0
+
 LD32 R0, R1, 0
 
 # CHECK: ld32 r2, r3, 4

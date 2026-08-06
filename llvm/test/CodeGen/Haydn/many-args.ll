@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — calling conventions with many arguments.
+
 ; Test calling conventions with many arguments.
 ; Haydn has 16 GPR32 registers (R0-R15, with R13=SP, R14=FP, R15=LR).
 ; Argument registers: R0-R7 for i32, D0-D3 for i64.

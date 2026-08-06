@@ -1,6 +1,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefix=ASM
-;
+
+; Role: semantic — FIXME (,): this IR is engineered to produce a DR64-lane store to [%out + 64] — word index 16, the page-1 IMM corner offset.
+
 ; FIXME (,): this IR is engineered to produce a DR64-lane store to
 ; [%out + 64] — word index 16, the page-1 IMM corner offset. The fold
 ; (tryFoldMove32DrToSw) requires MOVE32_DR_L/H feeding a single-use ST32 whose

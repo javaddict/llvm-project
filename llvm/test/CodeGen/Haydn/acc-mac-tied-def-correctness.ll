@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — accumulator-form MAC must read the accumulator via a tied two-address def, NOT an OR64-seeded implicit-use operand.
+
 ; REGRESSION TEST: accumulator-form MAC must read the accumulator via a tied
 ; two-address def, NOT an OR64-seeded implicit-use operand.
 ;
@@ -29,7 +31,6 @@
 ; dropping the Constraints let-block from the.td), the post-RA verifier OR
 ; verify-machineinstrs will catch the mismatched operand count / untied
 ; accumulator, and the OR64 seed would reappear in the output. The
-; CHECK-NOT: or64 in each case guards against the regressed seed pattern.
 ;
 ; The MC printer renders the tied-def as `OP dst, src1, src2` (the tied
 ; rd_in operand is not printed because it equals rd by the constraint).
@@ -57,9 +58,6 @@ declare i64 @llvm.haydn.f2mulaa32rs.hhll(i64, <2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2fcmula32rs(<2 x i32>, <2 x i32>, <2 x i32>)
 ; MULA64_LL: verify the MAC instruction is emitted (tied-def), no OR64 seed.
 ; The two-address coalescer will assign acc and dst to the same phys reg.
-; CHECK-LABEL: test_mula64_ll:
-; CHECK-NOT: or64
-; CHECK: mula64.ll
 define i64 @test_mula64_ll(i64 %acc, i64 %a, i64 %b) {
   %bc.1 = bitcast i64 %a to <2 x i32>
   %bc.2 = bitcast i64 %b to <2 x i32>

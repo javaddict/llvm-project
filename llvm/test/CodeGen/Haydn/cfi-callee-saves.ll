@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-;
+
+; Role: semantic — .cfi_offset must be CFA-relative (add StackSize for SP-CFA).
+
 ; REGRESSION TEST:.cfi_offset must be CFA-relative (add StackSize for SP-CFA).
 ;
 ; Bug: emitPrologue computed.cfi_offset from MFI.getObjectOffset(FrameIdx)

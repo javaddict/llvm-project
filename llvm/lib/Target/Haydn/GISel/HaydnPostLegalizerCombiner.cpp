@@ -794,6 +794,28 @@ static bool checkRegUsesDominate(Register Reg, MachineInstr &Instr,
   return true;
 }
 
+// Haydn PRE/POST LS forms are hardware-tied `$rs = $rs_wb` (destructive AGU
+// update). If Base has any other use besides the folded G_PTR_ADD (and the
+// mem op for POST), regalloc assigns one physreg for the tied pair while
+// sibling `ST base, immN` ops still need the *pre-update* value. Post-RA
+// scheduling can then place a sibling store after the PRE/POST and apply
+// its imm to the advanced base — e.g. varargs DR spill `d_sdw_pre d3, r, 3`
+// then `d_sdw d2, r, 2` lands at base+40 instead of base+16 and stomps the
+// GPR save area / incoming stack args (va-arg-2 f1/f7 ABORT).
+// Only fuse when Base is exclusive to this mem+ptradd pair.
+static bool baseExclusiveForTiedInc(Register Base, MachineInstr &MemI,
+                                    MachineInstr &PtrAdd,
+                                    MachineRegisterInfo &MRI, bool IsPost) {
+  for (MachineInstr &Use : MRI.use_nodbg_instructions(Base)) {
+    if (&Use == &PtrAdd)
+      continue;
+    if (IsPost && &Use == &MemI)
+      continue;
+    return false;
+  }
+  return true;
+}
+
 static bool matchPostIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
                             const CombinerHelper &Helper,
                             HaydnIncMemInfo &Info) {
@@ -866,6 +888,10 @@ static bool matchPostIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
     // (all uses dominate insert; ignore the folded ptradd). Greedy opt-in.
     if (!EnableHaydnGISelGreedyAddr &&
         !checkRegUsesDominate(Base, MemI, /*IgnoreUser=*/U, MRI, Helper))
+      continue;
+
+    // Tied rs=rs_wb: refuse if Base is shared with other addressing.
+    if (!baseExclusiveForTiedInc(Base, MemI, U, MRI, /*IsPost=*/true))
       continue;
 
     // Updated pointer must be used (otherwise fold is dead).
@@ -959,6 +985,10 @@ static bool matchPreIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
   // AIE-style base liveness at insert point (Mem). Ignore folded PtrAdd.
   if (!EnableHaydnGISelGreedyAddr &&
       !checkRegUsesDominate(Base, MemI, /*IgnoreUser=*/*PtrAdd, MRI, Helper))
+    return false;
+
+  // Tied rs=rs_wb: refuse if Base is shared with other addressing.
+  if (!baseExclusiveForTiedInc(Base, MemI, *PtrAdd, MRI, /*IsPost=*/false))
     return false;
 
   Info.MemI = &MemI;
