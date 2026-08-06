@@ -2703,12 +2703,12 @@ def CSRR_P32_ALU2 : HaydnEntryP32<
 }
 
 def CSRW_P20_ALU0 : HaydnEntryP20<
-    (outs ), (ins GPR32:$rs, uimm8:$uimm8),
-    "csrw	$rs, $uimm8"> {
+    (outs ), (ins uimm8:$uimm8, GPR32:$rs),
+    "csrw	$uimm8, $rs"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L2;
-  bits<4> rs;
   bits<8> uimm8;
+  bits<4> rs;
   let e0{44-34} = 0b00000000000;  // reserved
   let e0{33-26} = uimm8;  // imm
   let e0{25-18} = 0b00000000;  // reserved
@@ -2720,12 +2720,12 @@ def CSRW_P20_ALU0 : HaydnEntryP20<
 }
 
 def CSRW_P30_ALU0 : HaydnEntryP30<
-    (outs ), (ins GPR32:$rs, uimm8:$uimm8),
-    "csrw	$rs, $uimm8"> {
+    (outs ), (ins uimm8:$uimm8, GPR32:$rs),
+    "csrw	$uimm8, $rs"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L2;
-  bits<4> rs;
   bits<8> uimm8;
+  bits<4> rs;
   let e0{30-25} = 0b000000;  // reserved
   let e0{24-17} = uimm8;  // imm
   let e0{16-13} = rs;  // reg
@@ -2753,12 +2753,12 @@ def CSRW_P30_ALU2 : HaydnEntryP30<
 }
 
 def CSRW_P31_ALU0 : HaydnEntryP31<
-    (outs ), (ins GPR32:$rs, uimm8:$uimm8),
-    "csrw	$rs, $uimm8"> {
+    (outs ), (ins uimm8:$uimm8, GPR32:$rs),
+    "csrw	$uimm8, $rs"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L2;
-  bits<4> rs;
   bits<8> uimm8;
+  bits<4> rs;
   let e1{30-25} = 0b000000;  // reserved
   let e1{24-17} = uimm8;  // imm
   let e1{16-13} = rs;  // reg
@@ -2769,12 +2769,12 @@ def CSRW_P31_ALU0 : HaydnEntryP31<
 }
 
 def CSRW_P31_ALU1 : HaydnEntryP31<
-    (outs ), (ins GPR32:$rs, uimm8:$uimm8),
-    "csrw	$rs, $uimm8"> {
+    (outs ), (ins uimm8:$uimm8, GPR32:$rs),
+    "csrw	$uimm8, $rs"> {
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L2;
-  bits<4> rs;
   bits<8> uimm8;
+  bits<4> rs;
   let e1{30-25} = 0b000000;  // reserved
   let e1{24-17} = uimm8;  // imm
   let e1{16-13} = rs;  // reg
@@ -2785,12 +2785,12 @@ def CSRW_P31_ALU1 : HaydnEntryP31<
 }
 
 def CSRW_P32_ALU0 : HaydnEntryP32<
-    (outs ), (ins GPR32:$rs, uimm8:$uimm8),
-    "csrw	$rs, $uimm8"> {
+    (outs ), (ins uimm8:$uimm8, GPR32:$rs),
+    "csrw	$uimm8, $rs"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L2;
-  bits<4> rs;
   bits<8> uimm8;
+  bits<4> rs;
   let e2{26-25} = 0b00;  // reserved
   let e2{24-17} = uimm8;  // imm
   let e2{16-13} = rs;  // reg
@@ -4117,11 +4117,11 @@ def D_LHW_WITH_REG_P32_LOAD1 : HaydnEntryP32<
 
 def D_LQHWUA_POST_P20_LOADSTORE0 : HaydnEntryP20<
     (outs DR64:$rtd, GPR32:$rs), (ins uimm2:$ar_sel),
-    "d_lqhwua_post	$ar_sel, $rtd, $rs"> {
+    "d_lqhwua_post	$rtd, $ar_sel, $rs"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
-  bits<2> ar_sel;
   bits<4> rtd;
+  bits<2> ar_sel;
   bits<4> rs;
   let e0{44-32} = 0b0000000000000;  // reserved
   let e0{31-30} = ar_sel;  // ar_sel
@@ -4136,11 +4136,11 @@ def D_LQHWUA_POST_P20_LOADSTORE0 : HaydnEntryP20<
 
 def D_LQHWUA_POST_P21_LOAD1 : HaydnEntryP21<
     (outs DR64:$rtd, GPR32:$rs), (ins uimm2:$ar_sel),
-    "d_lqhwua_post	$ar_sel, $rtd, $rs"> {
+    "d_lqhwua_post	$rtd, $ar_sel, $rs"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
-  bits<2> ar_sel;
   bits<4> rtd;
+  bits<2> ar_sel;
   bits<4> rs;
   let e1{40-31} = 0b0000000000;  // reserved
   let e1{30-29} = ar_sel;  // ar_sel
@@ -4155,11 +4155,11 @@ def D_LQHWUA_POST_P21_LOAD1 : HaydnEntryP21<
 
 def D_LQHWUA_POST_P30_LOADSTORE0 : HaydnEntryP30<
     (outs DR64:$rtd, GPR32:$rs), (ins uimm2:$ar_sel),
-    "d_lqhwua_post	$ar_sel, $rtd, $rs"> {
+    "d_lqhwua_post	$rtd, $ar_sel, $rs"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
-  bits<2> ar_sel;
   bits<4> rtd;
+  bits<2> ar_sel;
   bits<4> rs;
   let e0{30-29} = ar_sel;  // ar_sel
   let e0{28-19} = 0b0000000000;  // reserved
@@ -4173,11 +4173,11 @@ def D_LQHWUA_POST_P30_LOADSTORE0 : HaydnEntryP30<
 
 def D_LQHWUA_POST_P31_LOAD1 : HaydnEntryP31<
     (outs DR64:$rtd, GPR32:$rs), (ins uimm2:$ar_sel),
-    "d_lqhwua_post	$ar_sel, $rtd, $rs"> {
+    "d_lqhwua_post	$rtd, $ar_sel, $rs"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
-  bits<2> ar_sel;
   bits<4> rtd;
+  bits<2> ar_sel;
   bits<4> rs;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-27} = ar_sel;  // ar_sel
@@ -4193,11 +4193,11 @@ def D_LQHWUA_POST_P31_LOAD1 : HaydnEntryP31<
 
 def D_LQHWUA_POST_P32_LOAD1 : HaydnEntryP32<
     (outs DR64:$rtd, GPR32:$rs), (ins uimm2:$ar_sel),
-    "d_lqhwua_post	$ar_sel, $rtd, $rs"> {
+    "d_lqhwua_post	$rtd, $ar_sel, $rs"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
-  bits<2> ar_sel;
   bits<4> rtd;
+  bits<2> ar_sel;
   bits<4> rs;
   let e2{26-19} = 0b00000000;  // reserved
   let e2{18-17} = ar_sel;  // ar_sel
@@ -4211,11 +4211,11 @@ def D_LQHWUA_POST_P32_LOAD1 : HaydnEntryP32<
 
 def D_LTWUA_POST_P20_LOADSTORE0 : HaydnEntryP20<
     (outs DR64:$rtd, GPR32:$rs), (ins uimm2:$ar_sel),
-    "d_ltwua_post	$ar_sel, $rtd, $rs"> {
+    "d_ltwua_post	$rtd, $ar_sel, $rs"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
-  bits<2> ar_sel;
   bits<4> rtd;
+  bits<2> ar_sel;
   bits<4> rs;
   let e0{44-32} = 0b0000000000000;  // reserved
   let e0{31-30} = ar_sel;  // ar_sel
@@ -4230,11 +4230,11 @@ def D_LTWUA_POST_P20_LOADSTORE0 : HaydnEntryP20<
 
 def D_LTWUA_POST_P21_LOAD1 : HaydnEntryP21<
     (outs DR64:$rtd, GPR32:$rs), (ins uimm2:$ar_sel),
-    "d_ltwua_post	$ar_sel, $rtd, $rs"> {
+    "d_ltwua_post	$rtd, $ar_sel, $rs"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
-  bits<2> ar_sel;
   bits<4> rtd;
+  bits<2> ar_sel;
   bits<4> rs;
   let e1{40-31} = 0b0000000000;  // reserved
   let e1{30-29} = ar_sel;  // ar_sel
@@ -4249,11 +4249,11 @@ def D_LTWUA_POST_P21_LOAD1 : HaydnEntryP21<
 
 def D_LTWUA_POST_P30_LOADSTORE0 : HaydnEntryP30<
     (outs DR64:$rtd, GPR32:$rs), (ins uimm2:$ar_sel),
-    "d_ltwua_post	$ar_sel, $rtd, $rs"> {
+    "d_ltwua_post	$rtd, $ar_sel, $rs"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
-  bits<2> ar_sel;
   bits<4> rtd;
+  bits<2> ar_sel;
   bits<4> rs;
   let e0{30-29} = ar_sel;  // ar_sel
   let e0{28-19} = 0b0000000000;  // reserved
@@ -4267,11 +4267,11 @@ def D_LTWUA_POST_P30_LOADSTORE0 : HaydnEntryP30<
 
 def D_LTWUA_POST_P31_LOAD1 : HaydnEntryP31<
     (outs DR64:$rtd, GPR32:$rs), (ins uimm2:$ar_sel),
-    "d_ltwua_post	$ar_sel, $rtd, $rs"> {
+    "d_ltwua_post	$rtd, $ar_sel, $rs"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
-  bits<2> ar_sel;
   bits<4> rtd;
+  bits<2> ar_sel;
   bits<4> rs;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-27} = ar_sel;  // ar_sel
@@ -4287,11 +4287,11 @@ def D_LTWUA_POST_P31_LOAD1 : HaydnEntryP31<
 
 def D_LTWUA_POST_P32_LOAD1 : HaydnEntryP32<
     (outs DR64:$rtd, GPR32:$rs), (ins uimm2:$ar_sel),
-    "d_ltwua_post	$ar_sel, $rtd, $rs"> {
+    "d_ltwua_post	$rtd, $ar_sel, $rs"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
-  bits<2> ar_sel;
   bits<4> rtd;
+  bits<2> ar_sel;
   bits<4> rs;
   let e2{26-19} = 0b00000000;  // reserved
   let e2{18-17} = ar_sel;  // ar_sel
@@ -5407,11 +5407,11 @@ def D_SHW_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
 
 def D_SQHWUA_POST_P20_LOADSTORE0 : HaydnEntryP20<
     (outs DR64:$rtd, GPR32:$rs), (ins uimm2:$ar_sel),
-    "d_sqhwua_post	$ar_sel, $rtd, $rs"> {
+    "d_sqhwua_post	$rtd, $ar_sel, $rs"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
-  bits<2> ar_sel;
   bits<4> rtd;
+  bits<2> ar_sel;
   bits<4> rs;
   let e0{44-32} = 0b0000000000000;  // reserved
   let e0{31-30} = ar_sel;  // ar_sel
@@ -5426,11 +5426,11 @@ def D_SQHWUA_POST_P20_LOADSTORE0 : HaydnEntryP20<
 
 def D_SQHWUA_POST_P30_LOADSTORE0 : HaydnEntryP30<
     (outs DR64:$rtd, GPR32:$rs), (ins uimm2:$ar_sel),
-    "d_sqhwua_post	$ar_sel, $rtd, $rs"> {
+    "d_sqhwua_post	$rtd, $ar_sel, $rs"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
-  bits<2> ar_sel;
   bits<4> rtd;
+  bits<2> ar_sel;
   bits<4> rs;
   let e0{30-29} = ar_sel;  // ar_sel
   let e0{28-19} = 0b0000000000;  // reserved
@@ -5444,11 +5444,11 @@ def D_SQHWUA_POST_P30_LOADSTORE0 : HaydnEntryP30<
 
 def D_STWUA_POST_P20_LOADSTORE0 : HaydnEntryP20<
     (outs DR64:$rtd, GPR32:$rs), (ins uimm2:$ar_sel),
-    "d_stwua_post	$ar_sel, $rtd, $rs"> {
+    "d_stwua_post	$rtd, $ar_sel, $rs"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
-  bits<2> ar_sel;
   bits<4> rtd;
+  bits<2> ar_sel;
   bits<4> rs;
   let e0{44-32} = 0b0000000000000;  // reserved
   let e0{31-30} = ar_sel;  // ar_sel
@@ -5463,11 +5463,11 @@ def D_STWUA_POST_P20_LOADSTORE0 : HaydnEntryP20<
 
 def D_STWUA_POST_P30_LOADSTORE0 : HaydnEntryP30<
     (outs DR64:$rtd, GPR32:$rs), (ins uimm2:$ar_sel),
-    "d_stwua_post	$ar_sel, $rtd, $rs"> {
+    "d_stwua_post	$rtd, $ar_sel, $rs"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
-  bits<2> ar_sel;
   bits<4> rtd;
+  bits<2> ar_sel;
   bits<4> rs;
   let e0{30-29} = ar_sel;  // ar_sel
   let e0{28-19} = 0b0000000000;  // reserved
@@ -45854,16 +45854,17 @@ def X2CLAMP32_P32_ALU2 : HaydnEntryP32<
 }
 
 def X2CMUL32_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b0100;  // opcode
@@ -45873,16 +45874,17 @@ def X2CMUL32_P20_MAC0 : HaydnEntryP20<
 }
 
 def X2CMUL32_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b0100;  // opcode
@@ -45892,16 +45894,17 @@ def X2CMUL32_P21_MAC1 : HaydnEntryP21<
 }
 
 def X2CMUL32_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b0100;  // opcode
@@ -45911,16 +45914,17 @@ def X2CMUL32_P30_MAC0 : HaydnEntryP30<
 }
 
 def X2CMUL32_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b0100;  // opcode
@@ -45930,16 +45934,17 @@ def X2CMUL32_P31_MAC0 : HaydnEntryP31<
 }
 
 def X2CMUL32_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b0100;  // opcode
@@ -45948,16 +45953,17 @@ def X2CMUL32_P32_MAC1 : HaydnEntryP32<
 }
 
 def X2CMUL32S_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b0110;  // opcode
@@ -45967,16 +45973,17 @@ def X2CMUL32S_P20_MAC0 : HaydnEntryP20<
 }
 
 def X2CMUL32S_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b0110;  // opcode
@@ -45986,16 +45993,17 @@ def X2CMUL32S_P21_MAC1 : HaydnEntryP21<
 }
 
 def X2CMUL32S_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b0110;  // opcode
@@ -46005,16 +46013,17 @@ def X2CMUL32S_P30_MAC0 : HaydnEntryP30<
 }
 
 def X2CMUL32S_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b0110;  // opcode
@@ -46024,16 +46033,17 @@ def X2CMUL32S_P31_MAC0 : HaydnEntryP31<
 }
 
 def X2CMUL32S_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b0110;  // opcode
@@ -46042,16 +46052,17 @@ def X2CMUL32S_P32_MAC1 : HaydnEntryP32<
 }
 
 def X2CMUL32S_F2_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32s_f2	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32s_f2	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b0111;  // opcode
@@ -46061,16 +46072,17 @@ def X2CMUL32S_F2_P20_MAC0 : HaydnEntryP20<
 }
 
 def X2CMUL32S_F2_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32s_f2	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32s_f2	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b0111;  // opcode
@@ -46080,16 +46092,17 @@ def X2CMUL32S_F2_P21_MAC1 : HaydnEntryP21<
 }
 
 def X2CMUL32S_F2_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32s_f2	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32s_f2	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b0111;  // opcode
@@ -46099,16 +46112,17 @@ def X2CMUL32S_F2_P30_MAC0 : HaydnEntryP30<
 }
 
 def X2CMUL32S_F2_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32s_f2	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32s_f2	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b0111;  // opcode
@@ -46118,16 +46132,17 @@ def X2CMUL32S_F2_P31_MAC0 : HaydnEntryP31<
 }
 
 def X2CMUL32S_F2_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32s_f2	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32s_f2	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b0111;  // opcode
@@ -46136,16 +46151,17 @@ def X2CMUL32S_F2_P32_MAC1 : HaydnEntryP32<
 }
 
 def X2CMUL32_F2_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32_f2	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32_f2	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b0101;  // opcode
@@ -46155,16 +46171,17 @@ def X2CMUL32_F2_P20_MAC0 : HaydnEntryP20<
 }
 
 def X2CMUL32_F2_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32_f2	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32_f2	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b0101;  // opcode
@@ -46174,16 +46191,17 @@ def X2CMUL32_F2_P21_MAC1 : HaydnEntryP21<
 }
 
 def X2CMUL32_F2_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32_f2	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32_f2	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b0101;  // opcode
@@ -46193,16 +46211,17 @@ def X2CMUL32_F2_P30_MAC0 : HaydnEntryP30<
 }
 
 def X2CMUL32_F2_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32_f2	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32_f2	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b0101;  // opcode
@@ -46212,16 +46231,17 @@ def X2CMUL32_F2_P31_MAC0 : HaydnEntryP31<
 }
 
 def X2CMUL32_F2_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2cmul32_f2	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2cmul32_f2	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b0101;  // opcode
@@ -49218,16 +49238,17 @@ def X2MOVT32_P32_ALU2 : HaydnEntryP32<
 }
 
 def X2MUL32_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2mul32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2mul32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L1;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b0001;  // opcode
@@ -49237,16 +49258,17 @@ def X2MUL32_P20_MAC0 : HaydnEntryP20<
 }
 
 def X2MUL32_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2mul32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2mul32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L1;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b0001;  // opcode
@@ -49256,16 +49278,17 @@ def X2MUL32_P21_MAC1 : HaydnEntryP21<
 }
 
 def X2MUL32_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2mul32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2mul32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L1;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b0001;  // opcode
@@ -49275,16 +49298,17 @@ def X2MUL32_P30_MAC0 : HaydnEntryP30<
 }
 
 def X2MUL32_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2mul32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2mul32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L1;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b0001;  // opcode
@@ -49294,16 +49318,17 @@ def X2MUL32_P31_MAC0 : HaydnEntryP31<
 }
 
 def X2MUL32_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2mul32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2mul32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L1;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b0001;  // opcode
@@ -49312,16 +49337,17 @@ def X2MUL32_P32_MAC1 : HaydnEntryP32<
 }
 
 def X2MULA32_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2mula32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2mula32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b0010;  // opcode
@@ -49331,16 +49357,17 @@ def X2MULA32_P20_MAC0 : HaydnEntryP20<
 }
 
 def X2MULA32_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2mula32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2mula32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b0010;  // opcode
@@ -49350,16 +49377,17 @@ def X2MULA32_P21_MAC1 : HaydnEntryP21<
 }
 
 def X2MULA32_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2mula32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2mula32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b0010;  // opcode
@@ -49369,16 +49397,17 @@ def X2MULA32_P30_MAC0 : HaydnEntryP30<
 }
 
 def X2MULA32_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2mula32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2mula32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b0010;  // opcode
@@ -49388,16 +49417,17 @@ def X2MULA32_P31_MAC0 : HaydnEntryP31<
 }
 
 def X2MULA32_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2mula32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2mula32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b0010;  // opcode
@@ -49750,16 +49780,17 @@ def X2MULPL32_P32_MAC1 : HaydnEntryP32<
 }
 
 def X2MULS32_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2muls32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2muls32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b0011;  // opcode
@@ -49769,16 +49800,17 @@ def X2MULS32_P20_MAC0 : HaydnEntryP20<
 }
 
 def X2MULS32_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2muls32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2muls32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b0011;  // opcode
@@ -49788,16 +49820,17 @@ def X2MULS32_P21_MAC1 : HaydnEntryP21<
 }
 
 def X2MULS32_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2muls32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2muls32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b0011;  // opcode
@@ -49807,16 +49840,17 @@ def X2MULS32_P30_MAC0 : HaydnEntryP30<
 }
 
 def X2MULS32_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2muls32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2muls32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b0011;  // opcode
@@ -49826,16 +49860,17 @@ def X2MULS32_P31_MAC0 : HaydnEntryP31<
 }
 
 def X2MULS32_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x2muls32	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x2muls32	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b0011;  // opcode
@@ -55603,16 +55638,17 @@ def X4FCMULA16RSS_P32_MAC1 : HaydnEntryP32<
 }
 
 def X4FF2MUL16S_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2mul16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2mul16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b1101;  // opcode
@@ -55622,16 +55658,17 @@ def X4FF2MUL16S_P20_MAC0 : HaydnEntryP20<
 }
 
 def X4FF2MUL16S_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2mul16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2mul16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1101;  // opcode
@@ -55641,16 +55678,17 @@ def X4FF2MUL16S_P21_MAC1 : HaydnEntryP21<
 }
 
 def X4FF2MUL16S_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2mul16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2mul16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b1101;  // opcode
@@ -55660,16 +55698,17 @@ def X4FF2MUL16S_P30_MAC0 : HaydnEntryP30<
 }
 
 def X4FF2MUL16S_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2mul16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2mul16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1101;  // opcode
@@ -55679,16 +55718,17 @@ def X4FF2MUL16S_P31_MAC0 : HaydnEntryP31<
 }
 
 def X4FF2MUL16S_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2mul16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2mul16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b1101;  // opcode
@@ -55697,16 +55737,17 @@ def X4FF2MUL16S_P32_MAC1 : HaydnEntryP32<
 }
 
 def X4FF2MULA16S_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2mula16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2mula16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b1110;  // opcode
@@ -55716,16 +55757,17 @@ def X4FF2MULA16S_P20_MAC0 : HaydnEntryP20<
 }
 
 def X4FF2MULA16S_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2mula16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2mula16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1110;  // opcode
@@ -55735,16 +55777,17 @@ def X4FF2MULA16S_P21_MAC1 : HaydnEntryP21<
 }
 
 def X4FF2MULA16S_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2mula16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2mula16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b1110;  // opcode
@@ -55754,16 +55797,17 @@ def X4FF2MULA16S_P30_MAC0 : HaydnEntryP30<
 }
 
 def X4FF2MULA16S_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2mula16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2mula16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1110;  // opcode
@@ -55773,16 +55817,17 @@ def X4FF2MULA16S_P31_MAC0 : HaydnEntryP31<
 }
 
 def X4FF2MULA16S_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2mula16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2mula16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b1110;  // opcode
@@ -55791,16 +55836,17 @@ def X4FF2MULA16S_P32_MAC1 : HaydnEntryP32<
 }
 
 def X4FF2MULS16S_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2muls16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2muls16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b1111;  // opcode
@@ -55810,16 +55856,17 @@ def X4FF2MULS16S_P20_MAC0 : HaydnEntryP20<
 }
 
 def X4FF2MULS16S_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2muls16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2muls16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1111;  // opcode
@@ -55829,16 +55876,17 @@ def X4FF2MULS16S_P21_MAC1 : HaydnEntryP21<
 }
 
 def X4FF2MULS16S_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2muls16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2muls16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b1111;  // opcode
@@ -55848,16 +55896,17 @@ def X4FF2MULS16S_P30_MAC0 : HaydnEntryP30<
 }
 
 def X4FF2MULS16S_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2muls16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2muls16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1111;  // opcode
@@ -55867,16 +55916,17 @@ def X4FF2MULS16S_P31_MAC0 : HaydnEntryP31<
 }
 
 def X4FF2MULS16S_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4ff2muls16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4ff2muls16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b1111;  // opcode
@@ -57475,16 +57525,17 @@ def X4MOVT16_P32_ALU2 : HaydnEntryP32<
 }
 
 def X4MUL16_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mul16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mul16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b1100;  // opcode
@@ -57494,16 +57545,17 @@ def X4MUL16_P20_MAC0 : HaydnEntryP20<
 }
 
 def X4MUL16_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mul16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mul16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1100;  // opcode
@@ -57513,16 +57565,17 @@ def X4MUL16_P21_MAC1 : HaydnEntryP21<
 }
 
 def X4MUL16_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mul16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mul16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b1100;  // opcode
@@ -57532,16 +57585,17 @@ def X4MUL16_P30_MAC0 : HaydnEntryP30<
 }
 
 def X4MUL16_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mul16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mul16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1100;  // opcode
@@ -57551,16 +57605,17 @@ def X4MUL16_P31_MAC0 : HaydnEntryP31<
 }
 
 def X4MUL16_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mul16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mul16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b1100;  // opcode
@@ -57569,16 +57624,17 @@ def X4MUL16_P32_MAC1 : HaydnEntryP32<
 }
 
 def X4MULA16_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mula16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mula16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b1000;  // opcode
@@ -57588,16 +57644,17 @@ def X4MULA16_P20_MAC0 : HaydnEntryP20<
 }
 
 def X4MULA16_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mula16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mula16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1000;  // opcode
@@ -57607,16 +57664,17 @@ def X4MULA16_P21_MAC1 : HaydnEntryP21<
 }
 
 def X4MULA16_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mula16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mula16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b1000;  // opcode
@@ -57626,16 +57684,17 @@ def X4MULA16_P30_MAC0 : HaydnEntryP30<
 }
 
 def X4MULA16_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mula16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mula16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1000;  // opcode
@@ -57645,16 +57704,17 @@ def X4MULA16_P31_MAC0 : HaydnEntryP31<
 }
 
 def X4MULA16_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mula16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mula16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b1000;  // opcode
@@ -57663,16 +57723,17 @@ def X4MULA16_P32_MAC1 : HaydnEntryP32<
 }
 
 def X4MULA16S_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mula16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mula16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b1010;  // opcode
@@ -57682,16 +57743,17 @@ def X4MULA16S_P20_MAC0 : HaydnEntryP20<
 }
 
 def X4MULA16S_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mula16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mula16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1010;  // opcode
@@ -57701,16 +57763,17 @@ def X4MULA16S_P21_MAC1 : HaydnEntryP21<
 }
 
 def X4MULA16S_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mula16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mula16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b1010;  // opcode
@@ -57720,16 +57783,17 @@ def X4MULA16S_P30_MAC0 : HaydnEntryP30<
 }
 
 def X4MULA16S_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mula16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mula16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1010;  // opcode
@@ -57739,16 +57803,17 @@ def X4MULA16S_P31_MAC0 : HaydnEntryP31<
 }
 
 def X4MULA16S_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4mula16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4mula16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b1010;  // opcode
@@ -57757,16 +57822,17 @@ def X4MULA16S_P32_MAC1 : HaydnEntryP32<
 }
 
 def X4MULS16_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4muls16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4muls16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b1001;  // opcode
@@ -57776,16 +57842,17 @@ def X4MULS16_P20_MAC0 : HaydnEntryP20<
 }
 
 def X4MULS16_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4muls16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4muls16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1001;  // opcode
@@ -57795,16 +57862,17 @@ def X4MULS16_P21_MAC1 : HaydnEntryP21<
 }
 
 def X4MULS16_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4muls16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4muls16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b1001;  // opcode
@@ -57814,16 +57882,17 @@ def X4MULS16_P30_MAC0 : HaydnEntryP30<
 }
 
 def X4MULS16_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4muls16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4muls16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1001;  // opcode
@@ -57833,16 +57902,17 @@ def X4MULS16_P31_MAC0 : HaydnEntryP31<
 }
 
 def X4MULS16_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4muls16	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4muls16	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b1001;  // opcode
@@ -57851,16 +57921,17 @@ def X4MULS16_P32_MAC1 : HaydnEntryP32<
 }
 
 def X4MULS16S_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4muls16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4muls16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{44-30} = 0b000000000000000;  // reserved
   let e0{29-26} = rsd2;  // src2
-  let e0{25-22} = 0b0000;  // src1
+  let e0{25-22} = rsd1;  // src1
   let e0{21-18} = rtd2;  // dest2
   let e0{17-14} = rtd1;  // dest1
   let e0{13-10} = 0b1011;  // opcode
@@ -57870,16 +57941,17 @@ def X4MULS16S_P20_MAC0 : HaydnEntryP20<
 }
 
 def X4MULS16S_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4muls16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4muls16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{40-29} = 0b000000000000;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1011;  // opcode
@@ -57889,16 +57961,17 @@ def X4MULS16S_P21_MAC1 : HaydnEntryP21<
 }
 
 def X4MULS16S_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4muls16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4muls16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e0{30-29} = 0b00;  // reserved
   let e0{28-25} = rsd2;  // src2
-  let e0{24-21} = 0b0000;  // src1
+  let e0{24-21} = rsd1;  // src1
   let e0{20-17} = rtd2;  // dest2
   let e0{16-13} = rtd1;  // dest1
   let e0{12-9} = 0b1011;  // opcode
@@ -57908,16 +57981,17 @@ def X4MULS16S_P30_MAC0 : HaydnEntryP30<
 }
 
 def X4MULS16S_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4muls16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4muls16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e1{30-29} = 0b00;  // reserved
   let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{24-21} = rsd1;  // src1
   let e1{20-17} = rtd2;  // dest2
   let e1{16-13} = rtd1;  // dest1
   let e1{12-9} = 0b1011;  // opcode
@@ -57927,16 +58001,17 @@ def X4MULS16S_P31_MAC0 : HaydnEntryP31<
 }
 
 def X4MULS16S_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd2),
-    "x4muls16s	$rtd1, $rsd2, $rtd2"> {
+    (outs DR64:$rtd1, DR64:$rtd2), (ins DR64:$rsd1, DR64:$rsd2),
+    "x4muls16s	$rtd1, $rtd2, $rsd1, $rsd2"> {
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd1;
-  bits<4> rsd2;
   bits<4> rtd2;
+  bits<4> rsd1;
+  bits<4> rsd2;
   let e2{26-24} = 0b000;  // reserved
   let e2{23-20} = rsd2;  // src2
-  let e2{19-16} = 0b0000;  // src1
+  let e2{19-16} = rsd1;  // src1
   let e2{15-12} = rtd2;  // dest2
   let e2{11-8} = rtd1;  // dest1
   let e2{7-4} = 0b1011;  // opcode
@@ -58358,16 +58433,17 @@ def X4SEL16_P31_ALU0 : HaydnEntryP31<
 }
 
 def X4SEL16_P31_ALU1 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd2, DR64:$rsd1),
-    "x4sel16	$rtd, $rsd2, $rsd1"> {
+    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2, GPR32:$rs),
+    "x4sel16	$rtd, $rsd1, $rsd2, $rs"> {
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
   bits<4> rtd;
-  bits<4> rsd2;
   bits<4> rsd1;
+  bits<4> rsd2;
+  bits<4> rs;
   let e1{30-29} = 0b00;  // reserved
-  let e1{28-25} = rsd2;  // src2
-  let e1{24-21} = 0b0000;  // src1
+  let e1{28-25} = rs;  // src2
+  let e1{24-21} = rsd2;  // src1
   let e1{20-17} = rsd1;  // src3
   let e1{16-13} = rtd;  // dest
   let e1{12} = 0b1;  // opcode
