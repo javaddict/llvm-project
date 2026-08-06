@@ -1900,6 +1900,8 @@ def BEQ_P20_ALU0 : HaydnEntryP20<
     "beq	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -1919,6 +1921,8 @@ def BEQ_P30_ALU0 : HaydnEntryP30<
     "beq	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -1936,6 +1940,8 @@ def BEQ_P31_ALU0 : HaydnEntryP31<
     "beq	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -1953,6 +1959,8 @@ def BEQZ_P20_ALU0 : HaydnEntryP20<
     "beqz	$rs, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e0{44-38} = 0b0000000;  // reserved
@@ -1970,6 +1978,8 @@ def BEQZ_P30_ALU0 : HaydnEntryP30<
     "beqz	$rs, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e0{30-29} = 0b00;  // reserved
@@ -1986,6 +1996,8 @@ def BEQZ_P31_ALU0 : HaydnEntryP31<
     "beqz	$rs, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e1{30-29} = 0b00;  // reserved
@@ -2002,6 +2014,8 @@ def BEQZ_P32_ALU0 : HaydnEntryP32<
     "beqz	$rs, $imm12"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e2{26-25} = 0b00;  // reserved
@@ -2017,6 +2031,8 @@ def BGE_P20_ALU0 : HaydnEntryP20<
     "bge	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2036,6 +2052,8 @@ def BGE_P30_ALU0 : HaydnEntryP30<
     "bge	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2053,6 +2071,8 @@ def BGE_P31_ALU0 : HaydnEntryP31<
     "bge	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2070,6 +2090,8 @@ def BGEU_P20_ALU0 : HaydnEntryP20<
     "bgeu	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2089,6 +2111,8 @@ def BGEU_P30_ALU0 : HaydnEntryP30<
     "bgeu	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2106,6 +2130,8 @@ def BGEU_P31_ALU0 : HaydnEntryP31<
     "bgeu	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2123,6 +2149,8 @@ def BGEZ_P20_ALU0 : HaydnEntryP20<
     "bgez	$rs, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e0{44-38} = 0b0000000;  // reserved
@@ -2140,6 +2168,8 @@ def BGEZ_P30_ALU0 : HaydnEntryP30<
     "bgez	$rs, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e0{30-29} = 0b00;  // reserved
@@ -2156,6 +2186,8 @@ def BGEZ_P31_ALU0 : HaydnEntryP31<
     "bgez	$rs, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e1{30-29} = 0b00;  // reserved
@@ -2172,6 +2204,8 @@ def BGEZ_P32_ALU0 : HaydnEntryP32<
     "bgez	$rs, $imm12"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e2{26-25} = 0b00;  // reserved
@@ -2187,6 +2221,8 @@ def BLT_P20_ALU0 : HaydnEntryP20<
     "blt	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2206,6 +2242,8 @@ def BLT_P30_ALU0 : HaydnEntryP30<
     "blt	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2223,6 +2261,8 @@ def BLT_P31_ALU0 : HaydnEntryP31<
     "blt	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2240,6 +2280,8 @@ def BLTU_P20_ALU0 : HaydnEntryP20<
     "bltu	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2259,6 +2301,8 @@ def BLTU_P30_ALU0 : HaydnEntryP30<
     "bltu	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2276,6 +2320,8 @@ def BLTU_P31_ALU0 : HaydnEntryP31<
     "bltu	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2293,6 +2339,8 @@ def BLTZ_P20_ALU0 : HaydnEntryP20<
     "bltz	$rs, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e0{44-38} = 0b0000000;  // reserved
@@ -2310,6 +2358,8 @@ def BLTZ_P30_ALU0 : HaydnEntryP30<
     "bltz	$rs, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e0{30-29} = 0b00;  // reserved
@@ -2326,6 +2376,8 @@ def BLTZ_P31_ALU0 : HaydnEntryP31<
     "bltz	$rs, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e1{30-29} = 0b00;  // reserved
@@ -2342,6 +2394,8 @@ def BLTZ_P32_ALU0 : HaydnEntryP32<
     "bltz	$rs, $imm12"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e2{26-25} = 0b00;  // reserved
@@ -2357,6 +2411,8 @@ def BNE_P20_ALU0 : HaydnEntryP20<
     "bne	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2376,6 +2432,8 @@ def BNE_P30_ALU0 : HaydnEntryP30<
     "bne	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2393,6 +2451,8 @@ def BNE_P31_ALU0 : HaydnEntryP31<
     "bne	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs1;
   bits<4> rs2;
   bits<12> imm12;
@@ -2410,6 +2470,8 @@ def BNEZ_P20_ALU0 : HaydnEntryP20<
     "bnez	$rs, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e0{44-38} = 0b0000000;  // reserved
@@ -2427,6 +2489,8 @@ def BNEZ_P30_ALU0 : HaydnEntryP30<
     "bnez	$rs, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e0{30-29} = 0b00;  // reserved
@@ -2443,6 +2507,8 @@ def BNEZ_P31_ALU0 : HaydnEntryP31<
     "bnez	$rs, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e1{30-29} = 0b00;  // reserved
@@ -2459,6 +2525,8 @@ def BNEZ_P32_ALU0 : HaydnEntryP32<
     "bnez	$rs, $imm12"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let isBranch = 1;
+  let isTerminator = 1;
   bits<4> rs;
   bits<12> imm12;
   let e2{26-25} = 0b00;  // reserved
@@ -2707,6 +2775,7 @@ def CSRW_P20_ALU0 : HaydnEntryP20<
     "csrw	$uimm8, $rs"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L2;
+  let Defs = [SFR];
   bits<8> uimm8;
   bits<4> rs;
   let e0{44-34} = 0b00000000000;  // reserved
@@ -2724,6 +2793,7 @@ def CSRW_P30_ALU0 : HaydnEntryP30<
     "csrw	$uimm8, $rs"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L2;
+  let Defs = [SFR];
   bits<8> uimm8;
   bits<4> rs;
   let e0{30-25} = 0b000000;  // reserved
@@ -2740,6 +2810,7 @@ def CSRW_P30_ALU2 : HaydnEntryP30<
     "csrw	$uimm8, $rs"> {
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L2;
+  let Defs = [SFR];
   bits<8> uimm8;
   bits<4> rs;
   let e0{30-29} = 0b00;  // reserved
@@ -2757,6 +2828,7 @@ def CSRW_P31_ALU0 : HaydnEntryP31<
     "csrw	$uimm8, $rs"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L2;
+  let Defs = [SFR];
   bits<8> uimm8;
   bits<4> rs;
   let e1{30-25} = 0b000000;  // reserved
@@ -2773,6 +2845,7 @@ def CSRW_P31_ALU1 : HaydnEntryP31<
     "csrw	$uimm8, $rs"> {
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L2;
+  let Defs = [SFR];
   bits<8> uimm8;
   bits<4> rs;
   let e1{30-25} = 0b000000;  // reserved
@@ -2789,6 +2862,7 @@ def CSRW_P32_ALU0 : HaydnEntryP32<
     "csrw	$uimm8, $rs"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L2;
+  let Defs = [SFR];
   bits<8> uimm8;
   bits<4> rs;
   let e2{26-25} = 0b00;  // reserved
@@ -2805,6 +2879,7 @@ def CSRW_P32_ALU2 : HaydnEntryP32<
     "csrw	$uimm8, $rs"> {
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L2;
+  let Defs = [SFR];
   bits<8> uimm8;
   bits<4> rs;
   let e2{26-25} = 0b00;  // reserved
@@ -19709,6 +19784,8 @@ def JAL_P20_ALU0 : HaydnEntryP20<
     "jal	$rt, $imm20"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isCall = 1;
+  let Defs = [R1, R2, R3, R4, R5, R6, R7, R12, D0, D1, D2, D3, D4, D5, D6, D7, R15];
   bits<4> rt;
   bits<20> imm20;
   let e0{44-25} = imm20;  // imm
@@ -19725,6 +19802,8 @@ def JAL_P30_ALU0 : HaydnEntryP30<
     "jal	$rt, $imm20"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isCall = 1;
+  let Defs = [R1, R2, R3, R4, R5, R6, R7, R12, D0, D1, D2, D3, D4, D5, D6, D7, R15];
   bits<4> rt;
   bits<20> imm20;
   let e0{30-11} = imm20;  // imm
@@ -19739,6 +19818,8 @@ def JAL_P31_ALU0 : HaydnEntryP31<
     "jal	$rt, $imm20"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let isCall = 1;
+  let Defs = [R1, R2, R3, R4, R5, R6, R7, R12, D0, D1, D2, D3, D4, D5, D6, D7, R15];
   bits<4> rt;
   bits<20> imm20;
   let e1{30-11} = imm20;  // imm
@@ -19753,6 +19834,11 @@ def JALR_P20_ALU0 : HaydnEntryP20<
     "jalr	$rt, $rs, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isTerminator = 1;
+  let isCall = 1;
+  let isBarrier = 1;
+  let isIndirectBranch = 1;
+  let Defs = [R1, R2, R3, R4, R5, R6, R7, R12, D0, D1, D2, D3, D4, D5, D6, D7, R15];
   bits<4> rt;
   bits<4> rs;
   bits<12> imm12;
@@ -19772,6 +19858,11 @@ def JALR_P30_ALU0 : HaydnEntryP30<
     "jalr	$rt, $rs, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isTerminator = 1;
+  let isCall = 1;
+  let isBarrier = 1;
+  let isIndirectBranch = 1;
+  let Defs = [R1, R2, R3, R4, R5, R6, R7, R12, D0, D1, D2, D3, D4, D5, D6, D7, R15];
   bits<4> rt;
   bits<4> rs;
   bits<12> imm12;
@@ -19789,6 +19880,11 @@ def JALR_P31_ALU0 : HaydnEntryP31<
     "jalr	$rt, $rs, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let isTerminator = 1;
+  let isCall = 1;
+  let isBarrier = 1;
+  let isIndirectBranch = 1;
+  let Defs = [R1, R2, R3, R4, R5, R6, R7, R12, D0, D1, D2, D3, D4, D5, D6, D7, R15];
   bits<4> rt;
   bits<4> rs;
   bits<12> imm12;
@@ -21106,6 +21202,7 @@ def MOVEGPR2SFR_P20_ALU0 : HaydnEntryP20<
     "movegpr2sfr	$rs"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rs;
   let e0{44-18} = 0b000000000000000000000000000;  // reserved
   let e0{17-14} = rs;  // reg
@@ -21120,6 +21217,7 @@ def MOVEGPR2SFR_P30_ALU0 : HaydnEntryP30<
     "movegpr2sfr	$rs"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rs;
   let e0{30-17} = 0b00000000000000;  // reserved
   let e0{16-13} = rs;  // reg
@@ -21134,6 +21232,7 @@ def MOVEGPR2SFR_P30_ALU2 : HaydnEntryP30<
     "movegpr2sfr	$rs"> {
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rs;
   let e0{30-21} = 0b0000000000;  // reserved
   let e0{20-17} = rs;  // src
@@ -21149,6 +21248,7 @@ def MOVEGPR2SFR_P31_ALU0 : HaydnEntryP31<
     "movegpr2sfr	$rs"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rs;
   let e1{30-17} = 0b00000000000000;  // reserved
   let e1{16-13} = rs;  // reg
@@ -21163,6 +21263,7 @@ def MOVEGPR2SFR_P31_ALU1 : HaydnEntryP31<
     "movegpr2sfr	$rs"> {
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
+  let Defs = [SFR];
   bits<4> rs;
   let e1{30-17} = 0b00000000000000;  // reserved
   let e1{16-13} = rs;  // reg
@@ -21177,6 +21278,7 @@ def MOVEGPR2SFR_P32_ALU0 : HaydnEntryP32<
     "movegpr2sfr	$rs"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rs;
   let e2{26-17} = 0b0000000000;  // reserved
   let e2{16-13} = rs;  // reg
@@ -21191,6 +21293,7 @@ def MOVEGPR2SFR_P32_ALU2 : HaydnEntryP32<
     "movegpr2sfr	$rs"> {
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rs;
   let e2{26-21} = 0b000000;  // reserved
   let e2{20-17} = rs;  // src
@@ -33064,6 +33167,7 @@ def SEQ64_P20_ALU0 : HaydnEntryP20<
     "seq64	$rsd1, $rsd2"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{44-22} = 0b00000000000000000000000;  // reserved
@@ -33079,6 +33183,7 @@ def SEQ64_P30_ALU0 : HaydnEntryP30<
     "seq64	$rsd1, $rsd2"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-21} = 0b0000000000;  // reserved
@@ -33094,6 +33199,7 @@ def SEQ64_P30_ALU2 : HaydnEntryP30<
     "seq64	$rsd1, $rsd2"> {
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-25} = 0b000000;  // reserved
@@ -33110,6 +33216,7 @@ def SEQ64_P31_ALU0 : HaydnEntryP31<
     "seq64	$rsd1, $rsd2"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -33125,6 +33232,7 @@ def SEQ64_P31_ALU1 : HaydnEntryP31<
     "seq64	$rsd1, $rsd2"> {
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -33140,6 +33248,7 @@ def SEQ64_P32_ALU0 : HaydnEntryP32<
     "seq64	$rsd1, $rsd2"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-21} = 0b000000;  // reserved
@@ -33155,6 +33264,7 @@ def SEQ64_P32_ALU2 : HaydnEntryP32<
     "seq64	$rsd1, $rsd2"> {
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-25} = 0b00;  // reserved
@@ -33171,6 +33281,8 @@ def SET_HWLOOP_P20_ALU0 : HaydnEntryP20<
     "set_hwloop	$hwlr_sel, $uimm6_offset1, $uimm12_offset2, $uimm16_cnt"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isNotDuplicable = 1;
+  let Defs = [SFR];
   bits<1> hwlr_sel;
   bits<6> uimm6_offset1;
   bits<12> uimm12_offset2;
@@ -33190,6 +33302,8 @@ def SET_HWLOOP_F2_P20_ALU0 : HaydnEntryP20<
     "set_hwloop_f2	$hwlr_sel, $uimm6_offset1, $uimm12_offset2, $rs"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isNotDuplicable = 1;
+  let Defs = [SFR];
   bits<1> hwlr_sel;
   bits<6> uimm6_offset1;
   bits<12> uimm12_offset2;
@@ -33211,6 +33325,8 @@ def SET_HWLOOP_F2_P30_ALU0 : HaydnEntryP30<
     "set_hwloop_f2	$hwlr_sel, $uimm6_offset1, $uimm12_offset2, $rs"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isNotDuplicable = 1;
+  let Defs = [SFR];
   bits<1> hwlr_sel;
   bits<6> uimm6_offset1;
   bits<12> uimm12_offset2;
@@ -33230,6 +33346,8 @@ def SET_HWLOOP_F2_P31_ALU0 : HaydnEntryP31<
     "set_hwloop_f2	$hwlr_sel, $uimm6_offset1, $uimm12_offset2, $rs"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let isNotDuplicable = 1;
+  let Defs = [SFR];
   bits<1> hwlr_sel;
   bits<6> uimm6_offset1;
   bits<12> uimm12_offset2;
@@ -33249,6 +33367,8 @@ def SET_HWLOOP_REG_P20_ALU0 : HaydnEntryP20<
     "set_hwloop_reg	$hwlr_sel, $rs1, $rs2, $rs3"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isNotDuplicable = 1;
+  let Defs = [SFR];
   bits<1> hwlr_sel;
   bits<4> rs1;
   bits<4> rs2;
@@ -33270,6 +33390,8 @@ def SET_HWLOOP_REG_P30_ALU0 : HaydnEntryP30<
     "set_hwloop_reg	$hwlr_sel, $rs1, $rs2, $rs3"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let isNotDuplicable = 1;
+  let Defs = [SFR];
   bits<1> hwlr_sel;
   bits<4> rs1;
   bits<4> rs2;
@@ -33291,6 +33413,8 @@ def SET_HWLOOP_REG_P31_ALU0 : HaydnEntryP31<
     "set_hwloop_reg	$hwlr_sel, $rs1, $rs2, $rs3"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let isNotDuplicable = 1;
+  let Defs = [SFR];
   bits<1> hwlr_sel;
   bits<4> rs1;
   bits<4> rs2;
@@ -33312,6 +33436,8 @@ def SET_HWLOOP_REG_P32_ALU0 : HaydnEntryP32<
     "set_hwloop_reg	$hwlr_sel, $rs1, $rs2, $rs3"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let isNotDuplicable = 1;
+  let Defs = [SFR];
   bits<1> hwlr_sel;
   bits<4> rs1;
   bits<4> rs2;
@@ -33613,6 +33739,7 @@ def SLE64_P20_ALU0 : HaydnEntryP20<
     "sle64	$rsd1, $rsd2"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{44-22} = 0b00000000000000000000000;  // reserved
@@ -33628,6 +33755,7 @@ def SLE64_P30_ALU0 : HaydnEntryP30<
     "sle64	$rsd1, $rsd2"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-21} = 0b0000000000;  // reserved
@@ -33643,6 +33771,7 @@ def SLE64_P30_ALU2 : HaydnEntryP30<
     "sle64	$rsd1, $rsd2"> {
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-25} = 0b000000;  // reserved
@@ -33659,6 +33788,7 @@ def SLE64_P31_ALU0 : HaydnEntryP31<
     "sle64	$rsd1, $rsd2"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -33674,6 +33804,7 @@ def SLE64_P31_ALU1 : HaydnEntryP31<
     "sle64	$rsd1, $rsd2"> {
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -33689,6 +33820,7 @@ def SLE64_P32_ALU0 : HaydnEntryP32<
     "sle64	$rsd1, $rsd2"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-21} = 0b000000;  // reserved
@@ -33704,6 +33836,7 @@ def SLE64_P32_ALU2 : HaydnEntryP32<
     "sle64	$rsd1, $rsd2"> {
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-25} = 0b00;  // reserved
@@ -34333,6 +34466,7 @@ def SLT64_P20_ALU0 : HaydnEntryP20<
     "slt64	$rsd1, $rsd2"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{44-22} = 0b00000000000000000000000;  // reserved
@@ -34348,6 +34482,7 @@ def SLT64_P30_ALU0 : HaydnEntryP30<
     "slt64	$rsd1, $rsd2"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-21} = 0b0000000000;  // reserved
@@ -34363,6 +34498,7 @@ def SLT64_P30_ALU2 : HaydnEntryP30<
     "slt64	$rsd1, $rsd2"> {
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-25} = 0b000000;  // reserved
@@ -34379,6 +34515,7 @@ def SLT64_P31_ALU0 : HaydnEntryP31<
     "slt64	$rsd1, $rsd2"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -34394,6 +34531,7 @@ def SLT64_P31_ALU1 : HaydnEntryP31<
     "slt64	$rsd1, $rsd2"> {
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -34409,6 +34547,7 @@ def SLT64_P32_ALU0 : HaydnEntryP32<
     "slt64	$rsd1, $rsd2"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-21} = 0b000000;  // reserved
@@ -34424,6 +34563,7 @@ def SLT64_P32_ALU2 : HaydnEntryP32<
     "slt64	$rsd1, $rsd2"> {
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-25} = 0b00;  // reserved
@@ -50959,6 +51099,7 @@ def X2SEQ32_P20_ALU0 : HaydnEntryP20<
     "x2seq32	$rsd1, $rsd2"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{44-22} = 0b00000000000000000000000;  // reserved
@@ -50974,6 +51115,7 @@ def X2SEQ32_P30_ALU0 : HaydnEntryP30<
     "x2seq32	$rsd1, $rsd2"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-21} = 0b0000000000;  // reserved
@@ -50989,6 +51131,7 @@ def X2SEQ32_P30_ALU2 : HaydnEntryP30<
     "x2seq32	$rsd1, $rsd2"> {
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-25} = 0b000000;  // reserved
@@ -51005,6 +51148,7 @@ def X2SEQ32_P31_ALU0 : HaydnEntryP31<
     "x2seq32	$rsd1, $rsd2"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -51020,6 +51164,7 @@ def X2SEQ32_P31_ALU1 : HaydnEntryP31<
     "x2seq32	$rsd1, $rsd2"> {
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -51035,6 +51180,7 @@ def X2SEQ32_P32_ALU0 : HaydnEntryP32<
     "x2seq32	$rsd1, $rsd2"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-21} = 0b000000;  // reserved
@@ -51050,6 +51196,7 @@ def X2SEQ32_P32_ALU2 : HaydnEntryP32<
     "x2seq32	$rsd1, $rsd2"> {
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-25} = 0b00;  // reserved
@@ -51066,6 +51213,7 @@ def X2SLE32_P20_ALU0 : HaydnEntryP20<
     "x2sle32	$rsd1, $rsd2"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{44-22} = 0b00000000000000000000000;  // reserved
@@ -51081,6 +51229,7 @@ def X2SLE32_P30_ALU0 : HaydnEntryP30<
     "x2sle32	$rsd1, $rsd2"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-21} = 0b0000000000;  // reserved
@@ -51096,6 +51245,7 @@ def X2SLE32_P30_ALU2 : HaydnEntryP30<
     "x2sle32	$rsd1, $rsd2"> {
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-25} = 0b000000;  // reserved
@@ -51112,6 +51262,7 @@ def X2SLE32_P31_ALU0 : HaydnEntryP31<
     "x2sle32	$rsd1, $rsd2"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -51127,6 +51278,7 @@ def X2SLE32_P31_ALU1 : HaydnEntryP31<
     "x2sle32	$rsd1, $rsd2"> {
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -51142,6 +51294,7 @@ def X2SLE32_P32_ALU0 : HaydnEntryP32<
     "x2sle32	$rsd1, $rsd2"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-21} = 0b000000;  // reserved
@@ -51157,6 +51310,7 @@ def X2SLE32_P32_ALU2 : HaydnEntryP32<
     "x2sle32	$rsd1, $rsd2"> {
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-25} = 0b00;  // reserved
@@ -51423,6 +51577,7 @@ def X2SLT32_P20_ALU0 : HaydnEntryP20<
     "x2slt32	$rsd1, $rsd2"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{44-22} = 0b00000000000000000000000;  // reserved
@@ -51438,6 +51593,7 @@ def X2SLT32_P30_ALU0 : HaydnEntryP30<
     "x2slt32	$rsd1, $rsd2"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-21} = 0b0000000000;  // reserved
@@ -51453,6 +51609,7 @@ def X2SLT32_P30_ALU2 : HaydnEntryP30<
     "x2slt32	$rsd1, $rsd2"> {
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-25} = 0b000000;  // reserved
@@ -51469,6 +51626,7 @@ def X2SLT32_P31_ALU0 : HaydnEntryP31<
     "x2slt32	$rsd1, $rsd2"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -51484,6 +51642,7 @@ def X2SLT32_P31_ALU1 : HaydnEntryP31<
     "x2slt32	$rsd1, $rsd2"> {
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -51499,6 +51658,7 @@ def X2SLT32_P32_ALU0 : HaydnEntryP32<
     "x2slt32	$rsd1, $rsd2"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-21} = 0b000000;  // reserved
@@ -51514,6 +51674,7 @@ def X2SLT32_P32_ALU2 : HaydnEntryP32<
     "x2slt32	$rsd1, $rsd2"> {
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-25} = 0b00;  // reserved
@@ -58633,6 +58794,7 @@ def X4SEQ16_P20_ALU0 : HaydnEntryP20<
     "x4seq16	$rsd1, $rsd2"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{44-22} = 0b00000000000000000000000;  // reserved
@@ -58648,6 +58810,7 @@ def X4SEQ16_P30_ALU0 : HaydnEntryP30<
     "x4seq16	$rsd1, $rsd2"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-21} = 0b0000000000;  // reserved
@@ -58663,6 +58826,7 @@ def X4SEQ16_P30_ALU2 : HaydnEntryP30<
     "x4seq16	$rsd1, $rsd2"> {
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-25} = 0b000000;  // reserved
@@ -58679,6 +58843,7 @@ def X4SEQ16_P31_ALU0 : HaydnEntryP31<
     "x4seq16	$rsd1, $rsd2"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -58694,6 +58859,7 @@ def X4SEQ16_P31_ALU1 : HaydnEntryP31<
     "x4seq16	$rsd1, $rsd2"> {
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -58709,6 +58875,7 @@ def X4SEQ16_P32_ALU0 : HaydnEntryP32<
     "x4seq16	$rsd1, $rsd2"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-21} = 0b000000;  // reserved
@@ -58724,6 +58891,7 @@ def X4SEQ16_P32_ALU2 : HaydnEntryP32<
     "x4seq16	$rsd1, $rsd2"> {
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-25} = 0b00;  // reserved
@@ -58740,6 +58908,7 @@ def X4SLE16_P20_ALU0 : HaydnEntryP20<
     "x4sle16	$rsd1, $rsd2"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{44-22} = 0b00000000000000000000000;  // reserved
@@ -58755,6 +58924,7 @@ def X4SLE16_P30_ALU0 : HaydnEntryP30<
     "x4sle16	$rsd1, $rsd2"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-21} = 0b0000000000;  // reserved
@@ -58770,6 +58940,7 @@ def X4SLE16_P30_ALU2 : HaydnEntryP30<
     "x4sle16	$rsd1, $rsd2"> {
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-25} = 0b000000;  // reserved
@@ -58786,6 +58957,7 @@ def X4SLE16_P31_ALU0 : HaydnEntryP31<
     "x4sle16	$rsd1, $rsd2"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -58801,6 +58973,7 @@ def X4SLE16_P31_ALU1 : HaydnEntryP31<
     "x4sle16	$rsd1, $rsd2"> {
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -58816,6 +58989,7 @@ def X4SLE16_P32_ALU0 : HaydnEntryP32<
     "x4sle16	$rsd1, $rsd2"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-21} = 0b000000;  // reserved
@@ -58831,6 +59005,7 @@ def X4SLE16_P32_ALU2 : HaydnEntryP32<
     "x4sle16	$rsd1, $rsd2"> {
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-25} = 0b00;  // reserved
@@ -59097,6 +59272,7 @@ def X4SLT16_P20_ALU0 : HaydnEntryP20<
     "x4slt16	$rsd1, $rsd2"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{44-22} = 0b00000000000000000000000;  // reserved
@@ -59112,6 +59288,7 @@ def X4SLT16_P30_ALU0 : HaydnEntryP30<
     "x4slt16	$rsd1, $rsd2"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-21} = 0b0000000000;  // reserved
@@ -59127,6 +59304,7 @@ def X4SLT16_P30_ALU2 : HaydnEntryP30<
     "x4slt16	$rsd1, $rsd2"> {
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e0{30-25} = 0b000000;  // reserved
@@ -59143,6 +59321,7 @@ def X4SLT16_P31_ALU0 : HaydnEntryP31<
     "x4slt16	$rsd1, $rsd2"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -59158,6 +59337,7 @@ def X4SLT16_P31_ALU1 : HaydnEntryP31<
     "x4slt16	$rsd1, $rsd2"> {
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e1{30-21} = 0b0000000000;  // reserved
@@ -59173,6 +59353,7 @@ def X4SLT16_P32_ALU0 : HaydnEntryP32<
     "x4slt16	$rsd1, $rsd2"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-21} = 0b000000;  // reserved
@@ -59188,6 +59369,7 @@ def X4SLT16_P32_ALU2 : HaydnEntryP32<
     "x4slt16	$rsd1, $rsd2"> {
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   bits<4> rsd1;
   bits<4> rsd2;
   let e2{26-25} = 0b00;  // reserved
@@ -60786,6 +60968,7 @@ def ZERO_SFR_P20_ALU0 : HaydnEntryP20<
     "zero_sfr"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   let e0{44-34} = 0b00000000000;  // reserved
   let e0{33-26} = 0b00000000;  // imm
   let e0{25-18} = 0b00000000;  // reserved
@@ -60801,6 +60984,7 @@ def ZERO_SFR_P30_ALU0 : HaydnEntryP30<
     "zero_sfr"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   let e0{30-25} = 0b000000;  // reserved
   let e0{24-17} = 0b00000000;  // imm
   let e0{16-13} = 0b0000;  // reg
@@ -60815,6 +60999,7 @@ def ZERO_SFR_P30_ALU2 : HaydnEntryP30<
     "zero_sfr"> {
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   let e0{30-29} = 0b00;  // reserved
   let e0{28-21} = 0b00000000;  // imm
   let e0{20-17} = 0b0000;  // src
@@ -60830,6 +61015,7 @@ def ZERO_SFR_P31_ALU0 : HaydnEntryP31<
     "zero_sfr"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   let e1{30-25} = 0b000000;  // reserved
   let e1{24-17} = 0b00000000;  // imm
   let e1{16-13} = 0b0000;  // reg
@@ -60844,6 +61030,7 @@ def ZERO_SFR_P31_ALU1 : HaydnEntryP31<
     "zero_sfr"> {
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
+  let Defs = [SFR];
   let e1{30-25} = 0b000000;  // reserved
   let e1{24-17} = 0b00000000;  // imm
   let e1{16-13} = 0b0000;  // reg
@@ -60858,6 +61045,7 @@ def ZERO_SFR_P32_ALU0 : HaydnEntryP32<
     "zero_sfr"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
+  let Defs = [SFR];
   let e2{26-25} = 0b00;  // reserved
   let e2{24-17} = 0b00000000;  // imm
   let e2{16-13} = 0b0000;  // reg
@@ -60872,6 +61060,7 @@ def ZERO_SFR_P32_ALU2 : HaydnEntryP32<
     "zero_sfr"> {
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
+  let Defs = [SFR];
   let e2{26-25} = 0b00;  // reserved
   let e2{24-17} = 0b00000000;  // imm
   let e2{16-13} = 0b0000;  // src

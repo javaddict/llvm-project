@@ -282,6 +282,61 @@ GPR_ALIASES = {"rt", "rs", "rs1", "rs2", "rs3"}
 DR_ALIASES = {"rtd", "rsd", "rsd1", "rsd2", "rtd1", "rtd2"}
 
 
+# Instruction properties the generic CodeGen layer reads off the MCInstrDesc.
+# materializeMultiOpcodeInstrs commits a logical to its member before AsmPrinter
+# runs, so it is the *member's* Desc that answers, and a member without these
+# is not merely imprecise -- see load_instruction_flags.
+#
+# hasSideEffects is deliberately NOT copied: TableGen infers it when a def
+# leaves it unset, and writing the resolved value onto every member would
+# freeze that inference rather than reproduce it.
+PROPERTY_FLAGS = ("isBranch", "isTerminator", "isCall", "isBarrier",
+                  "isIndirectBranch", "isReturn", "isNotDuplicable")
+
+
+def load_instruction_flags(path: Path) -> dict[str, dict]:
+    """Per-logical instruction properties, read from TableGen's own output.
+
+    Format E turns one logical into up to seven members, and each member needs
+    the properties of the logical it expands. Getting them wrong is silent:
+    with no isTerminator, MachineBasicBlock::terminators() comes back empty,
+    AsmPrinter::isBlockOnlyReachableByFallthrough decides a real branch target
+    is fallthrough-only, the label is emitted as a `// %bb.1:` comment while
+    the branch still references .LBB0_1, and the assembler then rejects its own
+    compiler's output with "Undefined temporary symbol".
+
+    These are LLVM-side facts, not database facts, and they are not derivable
+    from the database's Behavior text. Behavior would give the ten branches and
+    JAL/JALR, but it says nothing about the twelve comparison instructions that
+    carry Defs = [SFR] (SEQ64, X2SEQ32, X4SLE16, ...), nor about the caller
+    clobber list on the call forms. So read them from the logical, which is
+    what TableGen has already resolved -- including through `let ... in` blocks
+    that a text scan of the .td would have to re-implement:
+
+        llvm-tblgen --dump-json -I llvm/lib/Target/Haydn -I llvm/include \\
+            llvm/lib/Target/Haydn/Haydn.td -o haydn-records.json
+    """
+    records = json.loads(path.read_text(encoding="utf-8"))
+    flags: dict[str, dict] = {}
+    for name, record in records.items():
+        if not isinstance(record, dict) or "Namespace" not in record:
+            continue
+        entry: dict = {}
+        for flag in PROPERTY_FLAGS:
+            if record.get(flag):
+                entry[flag] = 1
+        registers = [r["def"] if isinstance(r, dict) else str(r)
+                     for r in (record.get("Defs") or [])]
+        if registers:
+            entry["Defs"] = registers
+        if entry:
+            flags[name] = entry
+    if not flags:
+        raise SystemExit(f"{path}: no instruction records carried properties;"
+                         " is this the output of llvm-tblgen --dump-json?")
+    return flags
+
+
 def operand_type(alias: str, width: int, context: str) -> str:
     if alias in GPR_ALIASES:
         expect, kind = 4, "GPR32"
@@ -649,7 +704,7 @@ def verify_operand_sets(placements: list[dict],
 
 def emit_tablegen(geometry: dict, placements: list[dict],
                   pipeline: dict, syntax: dict[str, list[str]],
-                  part: str = "members") -> str:
+                  flags: dict[str, dict], part: str = "members") -> str:
     """The encoding half. The scheduling half is its own file: it can be
     included while Bundle128 is live and this cannot, so emitting both here
     would define the itinerary classes twice once the switch happens.
@@ -868,6 +923,13 @@ def emit_tablegen(geometry: dict, placements: list[dict],
         if info is not None:
             out.append("  let Itinerary = "
                        f"{itinerary_name((p['unit'],), info[1])};")
+        # Properties of the logical this member expands. The member's Desc is
+        # the one the generic CodeGen layer reads, so they have to be here.
+        for flag, value in (flags.get(p["instruction"]) or {}).items():
+            if flag == "Defs":
+                out.append(f"  let Defs = [{', '.join(value)}];")
+            else:
+                out.append(f"  let {flag} = {value};")
         out += decls
         def constant(msb: int, lsb: int, value: int, label: str):
             width = msb - lsb + 1
@@ -1116,6 +1178,10 @@ def main() -> None:
     parser.add_argument("--output", "-o", type=Path)
     parser.add_argument("--target-dir", type=Path,
                         help="Haydn target directory, for the .td comparison")
+    parser.add_argument("--flags-from", type=Path,
+                        help="llvm-tblgen --dump-json output, for the"
+                             " instruction properties members inherit from"
+                             " their logical (required by --emit td)")
     parser.add_argument("--check", action="store_true",
                         help="validate the database and emit nothing")
     parser.add_argument("--fix-operand-mapping", action="store_true",
@@ -1145,9 +1211,23 @@ def main() -> None:
         text = emit_schedule_file(load_pipeline(args.database),
                                   canonical_members(placements))
     elif args.emit in ("td", "composites"):
+        # Composites carry no instruction properties; members must (§ 6.9).
+        if args.emit == "td" and args.flags_from is None:
+            raise SystemExit(
+                "--emit td needs --flags-from: every member has to carry the\n"
+                "properties of the logical it expands, and emitting them as\n"
+                "plain defs is silently wrong rather than merely incomplete —\n"
+                "a branch member without isTerminator makes AsmPrinter drop\n"
+                "the target label and the compiler's own output stops\n"
+                "assembling. Produce the input with:\n"
+                "  llvm-tblgen --dump-json -I llvm/lib/Target/Haydn"
+                " -I llvm/include \\\n"
+                "      llvm/lib/Target/Haydn/Haydn.td -o haydn-records.json")
         text = emit_tablegen(geometry, placements,
                              load_pipeline(args.database),
                              load_syntax_order(args.database),
+                             load_instruction_flags(args.flags_from)
+                             if args.flags_from else {},
                              part="composites" if args.emit == "composites"
                              else "members")
     elif args.emit == "table":
