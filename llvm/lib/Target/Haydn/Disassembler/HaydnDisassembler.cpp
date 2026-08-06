@@ -390,39 +390,48 @@ static bool isValidFlexSlotWindow(uint64_t Window, unsigned WindowTopBit) {
 // decoders) is not a real Bundle128 slot — return Fail. An all-zero source
 // window is a valid §4 NOP slot and is exempt.
 //
-// Size contract: every Bundle128 parcel is exactly 16 bytes. On Success or
-// Fail from this path, Size = 16 (forward progress; never leave Size unset).
+// Size contract: a parcel is one whole composite — 16 bytes for Bundle128.
+// On Success or Fail from this path, Size is that width (forward progress;
+// never leave Size unset).
 static DecodeStatus tryDecodeBundle128Composite(MCInst &Instr, uint64_t &Size,
                                                 ArrayRef<uint8_t> Bytes,
                                                 uint64_t Address,
                                                 const MCDisassembler *DisAsm) {
-  // Every Bundle128 parcel is exactly 16 bytes.
-  if (Bytes.size() < 16) {
-    return MCDisassembler::Fail;
-  }
-
-  // Read the 128-bit word little-endian (low 64 bits first, high 64 bits
-  // second). APInt::insertBits places each 64-bit lane at its LSB offset.
-  uint64_t Lo = support::endian::read64le(Bytes.data());
-  uint64_t Hi = support::endian::read64le(Bytes.data() + 8);
-  APInt Word(128, 0);
-  Word.insertBits(Lo, 0, 64);
-  Word.insertBits(Hi, 64, 64);
-
-  // single-authority slot geometry. The slot windows are derived from
-  // the Bundle128 format-desc (the SAME geometric authority the encoder
-  // consults via HaydnMCCodeEmitter::encodeSlotInBundle128). No hand-coded
-  // bit offsets: each slot's MSB-indexed {LeftOffset, RightOffset} comes from
+  // single-authority slot geometry. The bundle width and the slot windows are
+  // both derived from the composite's format-desc (the SAME geometric
+  // authority the encoder consults via
+  // HaydnMCCodeEmitter::encodeSlotInBundle128). No hand-coded bit offsets:
+  // each slot's MSB-indexed {LeftOffset, RightOffset} comes from
   // getSlotOffsetsHiBit, converted to LSB-indexed once
-  // (LoBit = 127 - RightOffset, Width = Right - Left + 1). The window is
-  // extracted as an isolated Width-bit value, so within it the FU top bit is
-  // at position Width-1. If the geometry ever changes in HaydnMCFormats.cpp
+  // (LoBit = BundleBits-1 - RightOffset, Width = Right - Left + 1). The window
+  // is extracted as an isolated Width-bit value, so within it the FU top bit
+  // is at position Width-1. If the geometry ever changes in HaydnMCFormats.cpp
   // (B128S0Field/B128S1Field/B128S2Field), this decode path tracks it
   // automatically — no second source of truth to drift.
+  //
+  // Width comes from the table rather than a literal so the parcel stride
+  // follows the format: 128 bits / 16 bytes for Bundle128, 96 / 12 for
+  // format E.
   HaydnMCFormats Formats;
   const MCFormatDesc &B128 = Formats.getBundle128FormatDesc();
-  constexpr unsigned BundleBits =
-      128; // == B128.getFormatSize (the base field is [0,127]).
+  const unsigned BundleBits = B128.getFormatSize();
+  const unsigned BundleBytes = BundleBits / 8;
+  assert(BundleBits % 8 == 0 && BundleBits <= 128 &&
+         "composite must be a whole number of bytes and fit one APInt read");
+
+  if (Bytes.size() < BundleBytes)
+    return MCDisassembler::Fail;
+
+  // Read the parcel little-endian, low 64-bit lane first. APInt::insertBits
+  // places each lane at its LSB offset.
+  APInt Word(BundleBits, 0);
+  for (unsigned Off = 0; Off < BundleBytes; Off += 8) {
+    unsigned Lane = std::min(8u, BundleBytes - Off);
+    uint64_t Bits = 0;
+    for (unsigned I = 0; I < Lane; ++I)
+      Bits |= static_cast<uint64_t>(Bytes[Off + I]) << (8 * I);
+    Word.insertBits(Bits, 8 * Off, 8 * Lane);
+  }
   struct SlotGeo {
     MCSlotKind Kind;
     uint64_t Window;
@@ -456,7 +465,7 @@ static DecodeStatus tryDecodeBundle128Composite(MCInst &Instr, uint64_t &Size,
   // parcel stream and cascading misaligned <unknown>s.
   for (const SlotGeo &S : Slots) {
     if (S.Window != 0 && !isValidFlexSlotWindow(S.Window, S.WindowTopBit)) {
-      Size = 16;
+      Size = BundleBytes;
       return MCDisassembler::Fail;
     }
   }
@@ -471,7 +480,7 @@ static DecodeStatus tryDecodeBundle128Composite(MCInst &Instr, uint64_t &Size,
     // The composite trie only fails on an internal decoder error (it has no
     // fixed bits to match). Commit Size=16 for forward progress and let the
     // caller render <unknown>.
-    Size = 16;
+    Size = BundleBytes;
     return MCDisassembler::Fail;
   }
 
@@ -494,12 +503,12 @@ static DecodeStatus tryDecodeBundle128Composite(MCInst &Instr, uint64_t &Size,
     if (!Op.isInst() || Op.getInst()->getOpcode() == 0) {
       // Non-zero window but the sub-trie missed (sub-MCInst empty/cleared).
       Instr = MCInst(); // clear the partial composite
-      Size = 16;        // must advance one full Bundle128 parcel
+      Size = BundleBytes; // must advance one full composite parcel
       return MCDisassembler::Fail;
     }
   }
 
-  Size = 16;
+  Size = BundleBytes;
   return MCDisassembler::Success;
 }
 
