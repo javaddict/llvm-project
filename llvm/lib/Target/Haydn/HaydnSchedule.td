@@ -145,10 +145,13 @@ def Slot1_MAC    : InstrItinClass;  // SIMD acc-MAC (X*MULA*/X*MULS*) — slot 1
 // only) and no Bypass — see Slot12_MAC / Slot1_MAC below.
 //===----------------------------------------------------------------------===//
 
+// The unit resources and their itinerary classes are concatenated in so a
+// logical can be retargeted from its Slot* class one family at a time. Until
+// one is, nothing references them and the model is unchanged.
 def HaydnItineraries : ProcessorItineraries<
-  [SLOT0, SLOT1, SLOT2],
+  !listconcat([SLOT0, SLOT1, SLOT2], HaydnFormatEUnits),
   [],
-  [
+  !listconcat(HaydnFormatEItinData, [
     InstrItinData<PSEUDO, []>,
 
     // Slot 0 only — ALU or LS share the same encoding space. Latency 1.
@@ -226,7 +229,7 @@ def HaydnItineraries : ProcessorItineraries<
     InstrItinData<Slot2_LS,  [InstrStage<1, [SLOT2]>], [2]>,
     InstrItinData<Slot2_ALU_AccLat, [InstrStage<1, [SLOT2]>], [5, 1, 1, 5]>,
     InstrItinData<Slot2_MAC, [InstrStage<1, [SLOT2]>], [2, 1, 1, 2]>
-  ]>;
+  ])>;
 
 //===----------------------------------------------------------------------===//
 // Scheduling Machine Model

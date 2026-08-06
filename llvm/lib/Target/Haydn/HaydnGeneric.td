@@ -27,6 +27,10 @@ include "HaydnRegisterBanks.td"
 // Scheduling itineraries (must precede instruction formats so itinerary
 // class names like Slot0_ALU are available for format class assignments)
 //===----------------------------------------------------------------------===//
+// Unit scheduling model (generated), before the itineraries that
+// concatenate it: it defines FuncUnits and itinerary classes only and
+// claims no alternates index, so it can land while Bundle128 is live.
+include "HaydnFormatESchedule.td"
 include "HaydnSchedule.td"
 
 //===----------------------------------------------------------------------===//
