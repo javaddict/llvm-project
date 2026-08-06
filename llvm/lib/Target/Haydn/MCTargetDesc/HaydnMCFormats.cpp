@@ -217,6 +217,10 @@ int getHaydnFlexSlotFromName(unsigned Opc, const MCInstrInfo &MII) {
   return getMemberSlotFromNameLocal(Opc, MII);
 }
 
+unsigned getHaydnLogicalBaseOpcode(unsigned Opc, const MCInstrInfo &MII) {
+  return getLogicalBaseOpcode(Opc, MII);
+}
+
 SlotBits HaydnMCFormatsWithMII::getLegalSlots(unsigned Opc) const {
   // Normalize a member opcode to its logical base, then consult alts-derived
   // getLegalSlots. For a logical Opc this is a passthrough.

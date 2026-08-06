@@ -172,6 +172,7 @@ private:
 
   unsigned getBranchFixupKind(const MCInst &MI) const;
   unsigned getCallFixupKind(const MCInst &MI) const;
+  unsigned getExprFixupKind(const MCInst &MI) const;
 };
 
 } // end anonymous namespace
@@ -180,84 +181,58 @@ private:
 // the parent instruction opcode. Geometry per HaydnRelocLayout.
 // Slot-variant opcodes (post-setDesc members / residual flex) route symbolic
 // operands through getMachineOpValue — this is the single fixup-kind point.
-static unsigned getExprFixupKind(const MCInst &MI) {
-  switch (MI.getOpcode()) {
+//
+// The switch names logicals only. A member reaches here because its operand
+// class carries no EncoderMethod, so it falls back to getMachineOpValue while
+// the logical routes through getCallTargetOpValue / getBranchTargetOpValue;
+// the fixup kind is a property of the instruction, not of where it was placed.
+// Folding through the logical base keeps this table independent of how members
+// are spelled — Bundle128's `_S<k>` today, format E's `_P<f><p>_<unit>` next.
+unsigned HaydnMCCodeEmitter::getExprFixupKind(const MCInst &MI) const {
+  switch (getHaydnLogicalBaseOpcode(MI.getOpcode(), MII)) {
   default:
     break;
   case Haydn::LUI:
-  case Haydn::LUI_S0:
     // Bundle128 LUI_S0 carries a 12-bit high field (HaydnFU_ALU32_S0_I12).
     // HI12 pairs with LO20 on ADDI32 (not the retired 32-bit-parcel HI20/LO16).
     return Haydn::FIXUP_HAYDN_HI12;
   // ADDI32 Bundle128 RI20: imm20 at s0 bits[37:18] → LO20 (not legacy LO16).
   // ADDI32_W / ADDI32_W_S0 handled below with ORI32_W (block).
   case Haydn::ADDI32:
-  case Haydn::ADDI32_S0:
-  case Haydn::ADDI32_S1:
-  case Haydn::ADDI32_S2:
     return Haydn::FIXUP_HAYDN_LO20;
   // ADDI32S/SUBI* still use signed imm fields; ANDI/ORI/XORI are RI20 ZEXT
   // (ISA: uimm20) — same LO20 window as ADDI32 Bundle128 peers (not LO16).
   case Haydn::ADDI32S:
   case Haydn::SUBI32:
   case Haydn::SUBI32S:
-  case Haydn::ADDI32S_S0:
-  case Haydn::ADDI32S_S1:
-  case Haydn::ADDI32S_S2:
-  case Haydn::SUBI32_S0:
-  case Haydn::SUBI32_S1:
-  case Haydn::SUBI32_S2:
-  case Haydn::SUBI32S_S0:
-  case Haydn::SUBI32S_S1:
-  case Haydn::SUBI32S_S2:
     return Haydn::FIXUP_HAYDN_LO16;
   case Haydn::ANDI32:
   case Haydn::ORI32:
   case Haydn::XORI32:
-  case Haydn::ANDI32_S0:
-  case Haydn::ANDI32_S1:
-  case Haydn::ANDI32_S2:
-  case Haydn::ORI32_S0:
-  case Haydn::ORI32_S1:
-  case Haydn::ORI32_S2:
-  case Haydn::XORI32_S0:
-  case Haydn::XORI32_S1:
-  case Haydn::XORI32_S2:
     return Haydn::FIXUP_HAYDN_LO20;
-  // JAL/JALR `_S0` route symbolic call targets through
-  // `getMachineOpValue` (not `getCallTargetOpValue`), so this switch decides
-  // their kind. Match `getCallFixupKind`'s legacy mapping.
-  case Haydn::JAL_S0:
+  // Reachable only as a member: logical JAL/JALR carry `calltarget`, whose
+  // EncoderMethod sends the target to getCallTargetOpValue instead. Members
+  // drop that operand class, land here, and must match getCallFixupKind.
+  case Haydn::JAL:
     return Haydn::FIXUP_HAYDN_CallSImm20;
-  case Haydn::JALR_S0:
+  case Haydn::JALR:
     return Haydn::FIXUP_HAYDN_BranchSImm16;
   // Bundle128 branch `_S0` forms use the same s0 windows as the `_W_S0`
   // peers (cutover). FIXUP_HAYDN_BranchSImm16 still has legacy-parcel
   // geometry (FieldLsb=0, FieldSize=16) and does not patch Bundle128
   // imm12 — linked BEQ/BNE kept offset 0. Map to the WIDE fixup kinds that
   // already carry correct FieldLsb (RI12 → bits[19:8]/8; I12 → bits[15:4]/4).
-  // Bare logical opcodes (asm) + private _S0 encode peers.
   case Haydn::BEQ:
   case Haydn::BNE:
   case Haydn::BGE:
   case Haydn::BGEU:
   case Haydn::BLT:
   case Haydn::BLTU:
-  case Haydn::BEQ_S0:
-  case Haydn::BNE_S0:
-  case Haydn::BGE_S0:
-  case Haydn::BGEU_S0:
-  case Haydn::BLT_S0:
-  case Haydn::BLTU_S0:
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI;
   case Haydn::BEQZ:
   case Haydn::BNEZ:
   case Haydn::BLTZ:
   case Haydn::BGEZ:
-  case Haydn::BEQZ_S0:
-  case Haydn::BNEZ_S0:
-  case Haydn::BLTZ_S0:
-  case Haydn::BGEZ_S0:
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12;
   // legacy BEQZ_W/BNEZ_W/BGEZ_W/BLTZ_W — CodeGen emits these opcodes
   // (HaydnConditionOptimizer, HaydnAsmPrinter B/RET expansion, ISel
@@ -272,10 +247,6 @@ static unsigned getExprFixupKind(const MCInst &MI) {
   case Haydn::BNEZ_W:
   case Haydn::BGEZ_W:
   case Haydn::BLTZ_W:
-  case Haydn::BEQZ_W_S0:
-  case Haydn::BNEZ_W_S0:
-  case Haydn::BGEZ_W_S0:
-  case Haydn::BLTZ_W_S0:
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12;
   // Two-register WIDE cond (RI12): imm12 at s0 bits[19:8] → FieldLsb=8.
   case Haydn::BEQ_W:
@@ -284,12 +255,6 @@ static unsigned getExprFixupKind(const MCInst &MI) {
   case Haydn::BGEU_W:
   case Haydn::BLT_W:
   case Haydn::BLTU_W:
-  case Haydn::BEQ_W_S0:
-  case Haydn::BNE_W_S0:
-  case Haydn::BGE_W_S0:
-  case Haydn::BGEU_W_S0:
-  case Haydn::BLT_W_S0:
-  case Haydn::BLTU_W_S0:
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI;
   // ADDI32_W/ORI32_W `_S0` carry the wide-reloc operand
   // (simm20_wide_abs / uimm20_wide_abs) — the symbolic operand MUST map to
@@ -300,8 +265,6 @@ static unsigned getExprFixupKind(const MCInst &MI) {
   // _S0 member via alts — but getExprFixupKind sees the original opcode).
   case Haydn::ADDI32_W:
   case Haydn::ORI32_W:
-  case Haydn::ADDI32_W_S0:
-  case Haydn::ORI32_W_S0:
     return Haydn::FIXUP_HAYDN_LO20;
   // (DEFERRED): LD32/ST32/LD64/ST64 still map to FIXUP_HAYDN_LO20.
   // The RISK-5 encoder-side change (all LS -> FIXUP_HAYDN_LS_IMM) was OVER-BROAD
@@ -316,10 +279,6 @@ static unsigned getExprFixupKind(const MCInst &MI) {
   case Haydn::ST32:
   case Haydn::LD64:
   case Haydn::ST64:
-  case Haydn::LD32_S0:
-  case Haydn::ST32_S0:
-  case Haydn::LD64_S0:
-  case Haydn::ST64_S0:
     return Haydn::FIXUP_HAYDN_LO20;
   }
   return Haydn::FIXUP_HAYDN_32;
@@ -677,48 +636,29 @@ unsigned HaydnMCCodeEmitter::getBranchFixupKind(const MCInst &MI) const {
   // Bundle128: match getExprFixupKind for the same opcode classes so both
   // getBranchTargetOpValue and getMachineOpValue attach the correct field
   // geometry (imm12 at FieldLsb 4 or 8, not legacy BranchSImm16).
-  switch (MI.getOpcode()) {
+  // Logical-only, for the reason given on getExprFixupKind.
+  switch (getHaydnLogicalBaseOpcode(MI.getOpcode(), MII)) {
   case Haydn::BEQ:
   case Haydn::BNE:
   case Haydn::BGE:
   case Haydn::BGEU:
   case Haydn::BLT:
   case Haydn::BLTU:
-  case Haydn::BEQ_S0:
-  case Haydn::BNE_S0:
-  case Haydn::BGE_S0:
-  case Haydn::BGEU_S0:
-  case Haydn::BLT_S0:
-  case Haydn::BLTU_S0:
   case Haydn::BEQ_W:
   case Haydn::BNE_W:
   case Haydn::BGE_W:
   case Haydn::BGEU_W:
   case Haydn::BLT_W:
   case Haydn::BLTU_W:
-  case Haydn::BEQ_W_S0:
-  case Haydn::BNE_W_S0:
-  case Haydn::BGE_W_S0:
-  case Haydn::BGEU_W_S0:
-  case Haydn::BLT_W_S0:
-  case Haydn::BLTU_W_S0:
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI;
   case Haydn::BEQZ:
   case Haydn::BNEZ:
   case Haydn::BLTZ:
   case Haydn::BGEZ:
-  case Haydn::BEQZ_S0:
-  case Haydn::BNEZ_S0:
-  case Haydn::BLTZ_S0:
-  case Haydn::BGEZ_S0:
   case Haydn::BEQZ_W:
   case Haydn::BNEZ_W:
   case Haydn::BGEZ_W:
   case Haydn::BLTZ_W:
-  case Haydn::BEQZ_W_S0:
-  case Haydn::BNEZ_W_S0:
-  case Haydn::BGEZ_W_S0:
-  case Haydn::BLTZ_W_S0:
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12;
   default:
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI;
@@ -726,10 +666,7 @@ unsigned HaydnMCCodeEmitter::getBranchFixupKind(const MCInst &MI) const {
 }
 
 unsigned HaydnMCCodeEmitter::getCallFixupKind(const MCInst &MI) const {
-  unsigned Opcode = MI.getOpcode();
-  if (Opcode == Haydn::JAL)
-    return Haydn::FIXUP_HAYDN_CallSImm20;
-  if (Opcode == Haydn::JALR)
+  if (getHaydnLogicalBaseOpcode(MI.getOpcode(), MII) == Haydn::JALR)
     return Haydn::FIXUP_HAYDN_BranchSImm16;
   return Haydn::FIXUP_HAYDN_CallSImm20;
 }

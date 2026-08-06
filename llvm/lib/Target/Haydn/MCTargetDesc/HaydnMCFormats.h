@@ -491,6 +491,12 @@ public:
 // suffix, or -1 if \p Opc is not a format-member opcode.
 int getHaydnFlexSlotFromName(unsigned Opc, const MCInstrInfo &MII);
 
+// \returns the logical base opcode \p Opc was placed from, or \p Opc itself
+// when it is already a logical. Callers that reason about an instruction's
+// kind rather than its placement should fold through this so they name
+// logicals only and stay independent of how members happen to be spelled.
+unsigned getHaydnLogicalBaseOpcode(unsigned Opc, const MCInstrInfo &MII);
+
 // `HaydnMCFormats` subclass that normalizes member opcodes before consulting
 // alts-derived getLegalSlots. Constructed by the MC encoder (holds MCInstrInfo).
 // The HR/scheduler path keeps using the base `HaydnMCFormats` (logical-only).
