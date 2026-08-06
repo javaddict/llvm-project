@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from itertools import permutations
 from pathlib import Path
 
 FORMAT_E_LAYOUT = "format_e_bit_layout_v2.json"
@@ -979,6 +980,132 @@ def report(geometry: dict, placements: list[dict], target_dir: Path | None) -> s
     return "\n".join(lines) + "\n"
 
 
+def fix_operand_mapping(database: Path, write: bool) -> str:
+    """Repair mapping rows that name fewer operands than the Syntax does.
+
+    `verify_operand_sets` reports this class of defect but cannot fix it, and
+    the bit layout is **not** version-controlled by either repo -- it is a
+    delivered artefact living beside them. So a correction made on one host does
+    not travel, and a fresh checkout pairs a corrected `.td` with an
+    uncorrected database. See the `--check` failure that names the affected
+    instructions.
+
+    The repair is forced rather than chosen. Every field declares the operand
+    aliases it may hold, so assigning each operand the Syntax names to a
+    distinct admissible field is a bipartite matching, and where that matching
+    is unique there is exactly one legal row. Rows whose matching is not unique
+    are reported and nothing is written -- guessing here would pin an operand
+    to the wrong register field, which is precisely the failure being repaired.
+
+    Note the alias lists differ **per (entry, unit, type)**: the same
+    instruction can need a different assignment at different placements, so
+    this cannot be done as a global search and replace.
+    """
+    path = database / FORMAT_E_LAYOUT
+    raw = path.read_bytes()
+    data = json.loads(raw.decode("utf-8"))
+    syntax = load_syntax_order(database)
+
+    # One record per mapping row, in the order the rows appear in the file.
+    records: list[dict] = []
+    for group_key in ("entry_num_0", "entry_num_1"):
+        for entry_key, entry in data[group_key].items():
+            if not entry_key.startswith("entry"):
+                continue
+            for unit, body in entry.items():
+                if not isinstance(body, dict) or "mapping_value" not in body:
+                    continue
+                for type_name, type_body in (body.get("types") or {}).items():
+                    fields = []
+                    for text in (type_body.get("operand_fields") or []):
+                        match = OPERAND_FIELD.match(text)
+                        if match is None:
+                            raise SystemExit(f"cannot name field {text!r}")
+                        fields.append((match.group(1),
+                                       [a.strip() for a in
+                                        match.group(2).split(",") if a.strip()]))
+                    for row in (type_body.get("mapping") or []):
+                        records.append({
+                            "context": f"{group_key}/{entry_key}/{unit}/{type_name}",
+                            "name": str(row.get("instruction", "")).strip(),
+                            "fields": fields,
+                            "row": row,
+                        })
+
+    # Each row occupies one line, so the edit can be made at byte level and
+    # leave every other byte -- including the CRLF endings -- untouched.
+    lines = raw.split(b"\n")
+    numbered = [i for i, line in enumerate(lines) if b'"instruction"' in line]
+    if len(numbered) != len(records):
+        raise SystemExit(f"{len(records)} mapping rows but {len(numbered)} lines"
+                         " naming an instruction; cannot place the edits")
+    for record, index in zip(records, numbered):
+        spelled = lines[index].split(b'"instruction": "')[1].split(b'"')[0]
+        if spelled.strip().decode() != record["name"]:
+            raise SystemExit(f"line {index + 1} is {spelled!r}, expected"
+                             f" {record['name']!r}; row order does not match")
+        record["line"] = index
+
+    repairs: list[tuple[dict, dict[str, str]]] = []
+    ambiguous: list[str] = []
+    for record in records:
+        written = syntax.get(record["name"])
+        if written is None:
+            continue
+        present = sorted(v for v in (str(record["row"].get(f, "")).strip()
+                                     for f, _ in record["fields"]) if v)
+        if sorted(written) == present:
+            continue
+
+        solutions = []
+        for combo in permutations(range(len(record["fields"])), len(written)):
+            if all(written[k] in record["fields"][combo[k]][1]
+                   for k in range(len(written))):
+                solutions.append(combo)
+                if len(solutions) > 1:
+                    break
+        if len(solutions) != 1:
+            ambiguous.append(
+                f"  {record['context']}/{record['name']}:"
+                f" {len(solutions)} matchings for {','.join(written)} over "
+                + " ".join(f"{f}({'|'.join(a)})" for f, a in record["fields"]))
+            continue
+        repairs.append((record, {record["fields"][field][0]: written[k]
+                                 for k, field in enumerate(solutions[0])}))
+
+    if ambiguous:
+        raise SystemExit("\n".join(
+            [f"{len(ambiguous)} row(s) have no unique operand assignment:"]
+            + ambiguous
+            + ["", "Refusing to write: the layout has to be corrected by hand."]))
+    if not repairs:
+        return "every mapping row already names the operands its Syntax does"
+
+    edits = 0
+    for record, assignment in repairs:
+        line = lines[record["line"]]
+        for field, _ in record["fields"]:
+            old = str(record["row"].get(field, ""))
+            new = assignment.get(field, "")
+            if old == new:
+                continue
+            was = f'"{field}": "{old}"'.encode()
+            now = f'"{field}": "{new}"'.encode()
+            if line.count(was) != 1:
+                raise SystemExit(f"{record['context']}/{record['name']}:"
+                                 f" {was!r} is not unique on its line")
+            line = line.replace(was, now)
+            edits += 1
+        lines[record["line"]] = line
+
+    summary = (f"{len(repairs)} mapping row(s) repaired, {edits} field(s)"
+               f" rewritten, each assignment forced by the alias declarations")
+    if not write:
+        return summary + "\n(dry run: pass --write to apply)"
+    path.write_bytes(b"\n".join(lines))
+    return summary + f"\nwrote {path}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database", type=Path, required=True,
@@ -991,7 +1118,17 @@ def main() -> None:
                         help="Haydn target directory, for the .td comparison")
     parser.add_argument("--check", action="store_true",
                         help="validate the database and emit nothing")
+    parser.add_argument("--fix-operand-mapping", action="store_true",
+                        help="repair mapping rows the Syntax cross-check"
+                             " rejects, where the assignment is forced")
+    parser.add_argument("--write", action="store_true",
+                        help="with --fix-operand-mapping, edit the database"
+                             " in place instead of reporting")
     args = parser.parse_args()
+
+    if args.fix_operand_mapping:
+        print(fix_operand_mapping(args.database, args.write))
+        return
 
     geometry, placements = load_placements(args.database)
     verify_decodable(placements)

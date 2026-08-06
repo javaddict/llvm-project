@@ -21,27 +21,22 @@ Companion documents:
 
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
-| `llvm-project` | `haydn` | `9802930e5fde` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-wip` | `135c38e2f1bc` | **no — 23 C++ errors** |
+| `llvm-project` | `haydn` | `837f8e079dce` | **yes, fully green** |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
 `haydn` is the trunk. Everything on it is green and committed; work from it.
 
-**`haydn-formate-switch-wip` is now 7 commits behind `haydn` and must be rebased
-before use.** It predates the database correction, so its
-`HaydnFormatEEncoding.td` still carries the wrong three-operand MAC encodings
-(§ 5.3). Rebase, then re-take the regenerated `.td` from `haydn`:
+**`haydn-formate-switch-wip` no longer exists** — not locally and not on the
+`fork` remote, so it was never pushed and is gone with the host that held it.
+It held only the two root `.td` include switches plus the AR reshape, and this
+document was written to make it re-derivable: the include switches are § 5.2's
+first two bullets and the AR reshape is § 7's first bullet. Re-derive rather
+than go looking for it.
 
-```sh
-git rebase haydn haydn-formate-switch-wip     # expect conflicts in the .td
-git checkout haydn -- llvm/lib/Target/Haydn/HaydnFormatEEncoding.td \
-                      llvm/lib/Target/Haydn/HaydnFormatEComposites.td \
-                      llvm/lib/Target/Haydn/utils/haydn_encoding.py
-```
-
-The WIP branch holds only the two root `.td` include switches plus the AR
-reshape. Nothing on it is precious; re-deriving it from this document is
-reasonable if the rebase is messy.
+Earlier revisions of this file named `haydn` heads `9802930e5fde` and
+`135c38e2f1bc`. Neither hash exists in the repo; the branch was rebased before
+it was pushed. The commit *subjects* in § 4 are the durable reference, and the
+hashes there are the ones on the pushed branch.
 
 ### Green baselines — verify these before and after every step
 
@@ -154,7 +149,7 @@ All on `haydn`, each verified green before commit.
 | `8c3a9a9d241c` | Regenerate after correcting 76 mapping rows | The correction is forced by the database's own alias declarations, not chosen. |
 | `9cc0a9687653` | `ORI32_W` retired, first of the `_W` fold | Establishes the template *and* records the trap that the wrong approach passes lit but breaks `HaydnTests` (§ 6.2). |
 | `961ccef2c648` | The ten branch `_W` forms retired | Found § 6.9 and § 6.10 — the narrow members were never wired for CodeGen and neither defect shows up in a lit run. Forced the BundleSim fix below. |
-| `9802930e5fde` | `JAL_W` / `JALR_W` retired | Same two gaps plus CB-129's `isBarrier`. `jal sym` now emits `R_HAYDN_WIDE_CallSImm20`; `FIXUP_HAYDN_CallSImm20` and `FIXUP_HAYDN_BranchSImm16` are no longer selected by anything. |
+| `837f8e079dce` | `JAL_W` / `JALR_W` retired | Same two gaps plus CB-129's `isBarrier`. `jal sym` now emits `R_HAYDN_WIDE_CallSImm20`; `FIXUP_HAYDN_CallSImm20` and `FIXUP_HAYDN_BranchSImm16` are no longer selected by anything. |
 
 On `simulator/master`: `4b65727` (LLDB port TOCTOU), `84d545d` + `29ac239`
 (docs), `786d7c4` (cb99 wired up as an executed case), `b8da0eb` (golden re-pin),
@@ -175,7 +170,7 @@ carries the wide shape. So the wide form survives under the base name and the
 narrow legacy declaration goes.
 
 Done: `ORI32_W` (`9cc0a9687653`); the ten branches `BEQ_W`…`BLTU_W`,
-`BEQZ_W`…`BLTZ_W` (`961ccef2c648`); `JAL_W` / `JALR_W` (`9802930e5fde`).
+`BEQZ_W`…`BLTZ_W` (`961ccef2c648`); `JAL_W` / `JALR_W` (`837f8e079dce`).
 
 Left, by C++ reference count:
 
@@ -367,6 +362,42 @@ emit on mismatch.
 **Outstanding:** `format_e_bit_layout_v2.xlsx` was not touched and now disagrees
 with the JSON on those 76 rows. If the spreadsheet generates the JSON, the fix
 must be made there and redelivered, or the next delivery silently reverts it.
+
+#### The correction does not travel — check the pin first on any new host
+
+The database lives *beside* the two repos and is version-controlled by neither,
+so cloning both repos onto a fresh host gets you the corrected `.td` and the
+re-pinned `GOLDEN_INPUTS.sha256` **paired with an uncorrected database**. This
+happened: on this host `--check` refused to emit and named 16 instructions,
+while `HaydnFormatEEncoding.td` in the tree was already the corrected one.
+
+Diagnose it in one command — every other database file will match and only the
+bit layout will not:
+
+```sh
+cd ~/haydn && sha256sum -c --ignore-missing \
+    simulator/bundlesim/isa/database/generated/GOLDEN_INPUTS.sha256
+```
+
+Repair is now mechanical, and the assignment is forced rather than guessed:
+
+```sh
+python3 llvm/lib/Target/Haydn/utils/haydn_encoding.py \
+    --database ~/haydn --fix-operand-mapping --write
+#   "76 mapping row(s) repaired, 77 field(s) rewritten"
+```
+
+It solves, per row, the matching between the operands the Syntax names and the
+fields whose alias list admits them, and refuses to write unless every row's
+matching is unique. Verified: run against the uncorrected layout it reproduces
+the pinned `8465132c…` **byte for byte**, and the three generated `.td` files
+then come back identical to the committed ones. Re-running it is a no-op.
+
+Note the alias lists differ **per (entry, unit, type)**. `X4SEL16` is the
+example — six of its seven placements declare `src3(rs, rtd2)` and the seventh
+declares `src3(rsd1, rtd2)`, so the seventh needs a *different* assignment
+(`src1=rsd2, src2=rs, src3=rsd1`) than the other six. Correcting these rows by
+copying a good row over a bad one produces a layout that `--check` rejects.
 
 ### 5.4 Regenerate the 589 lit expectations
 
@@ -606,7 +637,7 @@ on literal mnemonics is called out in § 5.5 for exactly this reason.
   selected by CodeGen, so where they differ they are simply unmaintained.
 * **`jal` emits `R_HAYDN_WIDE_CallSImm20`, and the two narrow relocations are
   retired.** `FIXUP_HAYDN_CallSImm20` and `FIXUP_HAYDN_BranchSImm16` are no
-  longer selected by anything as of `9802930e5fde`. The fixup kinds, their
+  longer selected by anything as of `837f8e079dce`. The fixup kinds, their
   geometry rows in `HaydnRelocLayout.cpp` and their `R_HAYDN_*` ELF mappings all
   stay, so objects built by an older toolchain still link — but nothing produces
   them any more, and `reloc-callsimm20.s` / `haydn-relocations.s` /
@@ -622,13 +653,40 @@ on literal mnemonics is called out in § 5.5 for exactly this reason.
    dir)`). It will not compile until this is done, and how to do it depends on
    question 2.
 2. **Ten public `AE_*` macros have no format E equivalent.** They pass either
-   `dir = 1` or a runtime stride, neither of which the new hardware has:
-   `AE_LA16X4_RIP/_RIC`, `AE_LA32X2_RIP/_RIC`, `AE_SA16X4_RIP`,
-   `AE_SA32X2_RIP`, `AE_SA32X2F24_RIP`, `AE_SA64NEG_FP`, `AE_SA16X4_IP_X`,
-   `AE_SA32X2_IP_X`. Every other `AE_*` already passes `stride = 8, dir = 0` and
-   is unaffected. Emulate in software with ordinary loads and pointer
-   arithmetic, or drop them? The handout at
-   `~/haydn/haydn-ar-intrinsics-change.html` asks users which they depend on.
+   `dir = 1` or a runtime stride, neither of which the new hardware has. Every
+   other `AE_*` already passes `stride = 8, dir = 0` and is unaffected. Emulate
+   in software with ordinary loads and pointer arithmetic, or drop them? The
+   handout at `~/haydn/haydn-ar-intrinsics-change.html` asks users which they
+   depend on. **Awaiting a decision — nothing here has been changed.**
+
+   Audited against the header as it stands (the *last* `#define` wins, and
+   several of these are redefined two or three times, so the early definitions
+   are misleading — `AE_SA32X2_RIP` is plain C at line 5245 and then goes back
+   onto the AR helper at 7089):
+
+   | Macro | Needs | Final `#define` |
+   |---|---|---|
+   | `AE_LA16X4_RIC` | `dir = 1` | 3718 |
+   | `AE_LA32X2_RIC` | `dir = 1` | 3734 |
+   | `AE_SA32X2F24_RIP` | `dir = 1` | 7081 |
+   | `AE_SA32X2_RIP` | `dir = 1` | 7089 |
+   | `AE_SA64NEG_FP` | `dir = 1` | 683 |
+   | `AE_SA16X4_IP_X` | runtime stride | 735 |
+   | `AE_SA32X2_IP_X` | runtime stride | 743 |
+   | `AE_LA16X4_RIP` | `dir = 1` **and** runtime stride | 3752 |
+   | `AE_LA32X2_RIP` | `dir = 1` **and** runtime stride | 3775 |
+   | `AE_SA16X4_RIP` | `dir = 1` **and** runtime stride | 4507 |
+
+   Note the split inside the last three: their **3-arg** overload passes
+   `stride = 8, dir = 1`, so only the **4-arg** spelling needs a runtime
+   stride. If the answer is "emulate", the 3-arg forms collapse into the same
+   shape as the five `dir = 1` ones and only five macros need a real software
+   loop. Re-run the audit after any edit — it resolves the overload chains and
+   reads the final definition, which grepping does not:
+
+   ```sh
+   python3 llvm/lib/Target/Haydn/utils/haydn_ae_audit.py
+   ```
 3. **The `.xlsx` twin of the bit layout** — see § 5.3.
 4. **CB-130** (`bundlesim_reg_cb44_o2_stale_cond_max_reduce`) is the sole
    simulator ctest failure, a GISel legalizer assert on
@@ -651,7 +709,8 @@ on literal mnemonics is called out in § 5.5 for exactly this reason.
 | `llvm/lib/Target/Haydn/HaydnFormatESchedule.td` | Generated unit itineraries — **already live** |
 | `llvm/lib/Target/Haydn/HaydnFormats{ALU32,ALU64,LS,LD,MAC}.td` | Bundle128 members, to delete (7615 lines) |
 | `llvm/lib/Target/Haydn/HaydnCompositeFormats.td` | `BUNDLE128_FULL`, to delete |
-| `llvm/lib/Target/Haydn/utils/haydn_encoding.py` | The generator and its gates |
+| `llvm/lib/Target/Haydn/utils/haydn_encoding.py` | The generator, its gates, and `--fix-operand-mapping` |
+| `llvm/lib/Target/Haydn/utils/haydn_ae_audit.py` | Which `AE_*` macros still need the AR args format E drops (§ 8 Q2) |
 | `llvm/lib/Target/Haydn/MCTargetDesc/HaydnMCFormats.{h,cpp}` | `stripHaydnMemberSuffix`, `getHaydnLogicalBaseOpcode`, slot geometry |
 | `llvm/lib/Target/Haydn/MCTargetDesc/HaydnMCCodeEmitter.cpp` | Fixup kinds, composite encode |
 | `llvm/lib/Target/Haydn/Disassembler/HaydnDisassembler.cpp` | Parcel decode, `SlotGeo` |
