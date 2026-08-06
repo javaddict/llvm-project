@@ -21,8 +21,10 @@ Companion documents:
 
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
-| `llvm-project` | `haydn` | `837f8e079dce` | **yes, fully green** |
+| `llvm-project` | `haydn` | `318248c8d1aa` | **yes, fully green** |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
+
+Nothing is pushed. `fork/haydn` is still at `837f8e079dce`, four commits behind.
 
 `haydn` is the trunk. Everything on it is green and committed; work from it.
 
@@ -150,6 +152,9 @@ All on `haydn`, each verified green before commit.
 | `9cc0a9687653` | `ORI32_W` retired, first of the `_W` fold | Establishes the template *and* records the trap that the wrong approach passes lit but breaks `HaydnTests` (§ 6.2). |
 | `961ccef2c648` | The ten branch `_W` forms retired | Found § 6.9 and § 6.10 — the narrow members were never wired for CodeGen and neither defect shows up in a lit run. Forced the BundleSim fix below. |
 | `837f8e079dce` | `JAL_W` / `JALR_W` retired | Same two gaps plus CB-129's `isBarrier`. `jal sym` now emits `R_HAYDN_WIDE_CallSImm20`; `FIXUP_HAYDN_CallSImm20` and `FIXUP_HAYDN_BranchSImm16` are no longer selected by anything. |
+| `74aa4d24f9eb` | `--fix-operand-mapping`, and the plan's own corrections | The 76-row correction did not travel with the repos and this host had the corrected `.td` against an uncorrected database. Repair is now reproducible and forced, not remembered. See § 5.3. |
+| `6e35b4124346` | `CSRW_W` retired | First fold that was not a rename in shape: dropped the dead `$rd` after showing the decoder-parity reason for it was false (`CSRW` is `isCodeGenOnly`, so it was never in the decoder table), and took the wide def's `hasSideEffects = 0, Defs = [SFR]`, which `csrw-hwloop-hazard.mir` exercises through postmisched. |
+| `318248c8d1aa` | The three `SET_HWLOOP` `_W` forms retired | The only fold where the base names were occupied — by pseudos, which move to `_PSEUDO`. Forced deleting the three narrow members: pairing is by name, so the renamed logical would otherwise have picked up a member whose shape the database contradicts. |
 
 On `simulator/master`: `4b65727` (LLDB port TOCTOU), `84d545d` + `29ac239`
 (docs), `786d7c4` (cb99 wired up as an executed case), `b8da0eb` (golden re-pin),
@@ -162,7 +167,7 @@ On `simulator/master`: `4b65727` (LLDB port TOCTOU), `84d545d` + `29ac239`
 Recommended order. A, B and D can each be done on the green trunk; C is the
 atomic step.
 
-### 5.1 `_W` family retirement — 12 of 17 done, 5 left
+### 5.1 `_W` family retirement — 16 of 17 done, 1 left
 
 Format E has **no `_W` member for any of them**; the database has one
 instruction (`ADDI32 rt, rs, imm20`, `BEQ rs1, rs2, imm12`, …) whose member
@@ -170,15 +175,13 @@ carries the wide shape. So the wide form survives under the base name and the
 narrow legacy declaration goes.
 
 Done: `ORI32_W` (`9cc0a9687653`); the ten branches `BEQ_W`…`BLTU_W`,
-`BEQZ_W`…`BLTZ_W` (`961ccef2c648`); `JAL_W` / `JALR_W` (`837f8e079dce`).
+`BEQZ_W`…`BLTZ_W` (`961ccef2c648`); `JAL_W` / `JALR_W` (`837f8e079dce`);
+`CSRW_W` (`6e35b4124346`); `SET_HWLOOP_W` / `_F2_W` / `_REG_W`
+(`318248c8d1aa`).
 
-Left, by C++ reference count:
-
-```
-CSRW_W              4      SET_HWLOOP_REG_W    4
-SET_HWLOOP_W       10      SET_HWLOOP_F2_W    11
-ADDI32_W           82
-```
+**Left: `ADDI32_W` only** (82 C++ references). It is the one the plan always
+said to do last, and it is not a rename — see below, where the attempt is
+written up.
 
 `SLLI64` / `SRLI64` / `SRAI64` are `Fmt48_Wide*` but carry no `_W` suffix and
 match the database already. Leave them.
@@ -283,12 +286,61 @@ improvement still has to be understood before it is accepted.
   Note `SET_HWLOOP` fits only the 45-bit `P20` entry (35 bits of operands).
   Watch `HaydnRelocLayout`'s `HWLoopOff1`/`Off2` rows and § 6.8.
 
-* **`ADDI32_W`** — unlike `ORI32`, the narrow declaration is genuinely
-  narrower: `ADDI32` is `FmtI` with `simm16`, the wide one carries
-  `simm20_wide_abs`. The operand class has to be widened *within* `FmtI`
-  (§ 6.2 — do not re-declare `ADDI32` over `Fmt48_WideGPRImm`). 82 references,
-  most of them `HaydnAsmPrinter`'s block-address LO20 materialization. Do it
-  last.
+* **`ADDI32_W` — attempted, analysed, and reverted deliberately. Read this
+  before trying again; the mechanical part is easy and is not the problem.**
+
+  The shapes. `ADDI32` is `FmtI<0x20>` with `simm16`; `ADDI32_W` is
+  `Fmt48_WideGPRImm<0x01>` with `simm20_wide_abs`. The members
+  `ADDI32_S0/_S1/_S2` (`0b0001001`) **already carry `simm20`** and already
+  match the database (`ADDI32 rt, rs, imm20`, `Available: ALU0, ALU1, ALU2`).
+  So only the logical is narrow.
+
+  Three findings, all of which hold up and are worth keeping:
+
+  1. **`FmtI` cannot hold the immediate.** It is a 32-bit format whose imm
+     field is `Inst{15-0}`, with `Inst{31,30}=0b01`, opcode at `29-24`, rd at
+     `23-20`, rs at `19-16`. There is no room for 20 bits, and § 6.2 forbids
+     re-parenting to `Fmt48_WideGPRImm`. The way out is that the logical's own
+     encoding is vestigial — every `ADDI32` is bundled and committed to a
+     member by `materializeMultiOpcodeInstrs` before it is encoded — so widen
+     the operand to `simm20` and add `isCodeGenOnly = 1`, which keeps the
+     unencodable 32-bit form out of the AsmMatcher and the decoder tables
+     where a 20-bit operand over a 16-bit field would silently truncate.
+     `addi32` still parses and decodes through the members. This is the same
+     shape the `CSRW` fold ended up in.
+  2. **The fixup path already works.** `simm20` carries no `EncoderMethod`, so
+     symbolic operands fall back to `getMachineOpValue` and land in
+     `getExprFixupKind` — which already answers `FIXUP_HAYDN_LO20` for
+     `ADDI32` and folds members through `getHaydnLogicalBaseOpcode`. That is
+     the same fixup `simm20_wide_abs`'s `EncoderMethod` emitted directly, so
+     § 6.1's trap does not bite here. Confirmation: folding the C++ produces a
+     **duplicate `case Haydn::ADDI32:`** in `getExprFixupKind`, because the
+     retired `ADDI32_W` case a few lines down returned `LO20` too. Merge them.
+  3. **It is not a rename, and that is the whole problem.** `ADDI32_W` had one
+     member, `ADDI32_W_S0`, so every wide add was pinned to slot 0. `ADDI32`
+     has three. Placement opens up, bundles pack denser, live ranges move and
+     regalloc follows. Widening `simm16` → `simm20` separately changes
+     *selection*: 17–20-bit constants that used to force a wide form or
+     LUI+ADDI32 now fit the base form.
+
+  Measured over the 430-test CodeGen corpus, with `s/addi32_w/addi32/` applied
+  to the before side: **423 files differ, 0 of them a pure rename** — 242 are
+  the same instruction stream repacked, 177 are the same multiset reordered,
+  and 4 have a genuinely different stream (`c-e2e-bundle-dump`,
+  `dsp-intrinsic-e2e`, `post-inc-offset-preserve`,
+  `swpipeline-load-mac-schedule-found`), differing in allocated registers and
+  in frame adjustments. 53 lit tests fail, on spelling *and* slot position.
+
+  So § 5.1's "prove the fold is a rename" gate cannot apply, and regenerating
+  53 expectations would only record what the new encoder did — precisely what
+  § 5.4 warns against. **The gate for this one is execution: the simulator
+  suite, after the full § 2 libc + BSP rebuild (§ 6.6).** Do it as its own
+  session: fold the C++, merge the duplicate fixup case, run ctest first, and
+  only then regenerate the lit expectations. Budget for the 4 changed-stream
+  files needing individual review — denser packing is the *expected* win here
+  (the database says three ALUs), but § 5.1's rule stands that a residual
+  which is a genuine improvement still has to be understood before it is
+  accepted.
 
 ### 5.2 The 23 C++ errors — the atomic step
 
