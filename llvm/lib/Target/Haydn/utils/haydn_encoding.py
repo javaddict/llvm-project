@@ -584,8 +584,71 @@ def emit_schedule_file(pipeline: dict, placements: list[dict]) -> str:
     return "\n".join(header + emit_schedule(pipeline, placements))
 
 
+def load_syntax_order(database: Path) -> dict[str, list[str]]:
+    """Operand names in the order each instruction is written.
+
+    `format_e_bit_layout_v2.json` lists an entry's fields in bit order, which
+    says nothing about how the instruction reads. The Syntax in
+    `instruction_type_index.json` does, and it is what the assembler and the
+    printer have to agree with, so the emitted operand list follows it.
+    """
+    data = json.loads((database / INSTRUCTION_INDEX).read_text(encoding="utf-8"))
+    order: dict[str, list[str]] = {}
+    for entries in data.values():
+        for entry in entries:
+            name = str(entry.get("Instruction", "")).strip()
+            if not name or name == "WFI<TBD>":
+                continue
+            syntax = str(entry.get("Syntax", "")).strip().strip("`").strip()
+            head, _, tail = syntax.partition(" ")
+            operands = [o.strip() for o in tail.split(",") if o.strip()]
+            previous = order.get(name)
+            if previous is not None and previous != operands:
+                raise SystemExit(f"{name}: conflicting Syntax across type groups")
+            order[name] = operands
+    return order
+
+
+def verify_operand_sets(placements: list[dict],
+                        syntax: dict[str, list[str]]) -> None:
+    """Every operand the Syntax names must have a field in the bit layout.
+
+    The two database files can disagree without any other check noticing. Every
+    bit of an entry window is still claimed, because a mapping row that leaves a
+    field blank simply encodes it as zero, and the encode/decode round-trip only
+    ever sees what the encoder already believed. So an instruction whose Syntax
+    takes four registers can be emitted with three, the fourth silently pinned
+    to zero, and nothing downstream objects.
+    """
+    missing: dict[str, tuple[list[str], list[str]]] = {}
+    for p in placements:
+        written = syntax.get(p["instruction"])
+        if written is None:
+            continue
+        spelled = sorted(p["operand_use"][o["field"]] for o in p["operands"]
+                         if p["operand_use"].get(o["field"]))
+        if sorted(written) != spelled:
+            missing.setdefault(p["instruction"], (sorted(written), spelled))
+    if not missing:
+        return
+    lines = [f"{len(missing)} instruction(s) whose Syntax and bit layout name"
+             " different operands:"]
+    for name, (written, spelled) in sorted(missing.items()):
+        absent = sorted(set(written) - set(spelled))
+        lines.append(f"  {name:16} Syntax {','.join(written):28}"
+                     f" layout {','.join(spelled):22}"
+                     f" missing {','.join(absent) or '-'}")
+    lines.append("")
+    lines.append("Refusing to emit: the encoding would pin the missing operand")
+    lines.append("to zero, which compiles and is wrong. Fix the mapping rows in")
+    lines.append("format_e_bit_layout_v2.json, or correct the Syntax if the")
+    lines.append("operand really is not encoded.")
+    raise SystemExit("\n".join(lines))
+
+
 def emit_tablegen(geometry: dict, placements: list[dict],
-                  pipeline: dict, part: str = "members") -> str:
+                  pipeline: dict, syntax: dict[str, list[str]],
+                  part: str = "members") -> str:
     """The encoding half. The scheduling half is its own file: it can be
     included while Bundle128 is live and this cannot, so emitting both here
     would define the itinerary classes twice once the switch happens.
@@ -596,6 +659,7 @@ def emit_tablegen(geometry: dict, placements: list[dict],
     its own. Haydn.td includes both files; HaydnAsmMatcher.td includes only
     the members."""
     verify_decodable(placements)
+    verify_operand_sets(placements, syntax)
     indices = placement_index(placements)
     placements = canonical_members(placements)
     positions: dict[tuple[int, int], tuple[int, int]] = {}
@@ -759,8 +823,22 @@ def emit_tablegen(geometry: dict, placements: list[dict],
         base = p["entry_lsb"]
         context = f"{p['instruction']}@{p['entry_count']}e{p['entry_index']}/{p['unit']}"
 
+        # `operand_fields` lists the entry's fields in bit order, which is not
+        # the order the instruction is written in. Bits stay keyed by field, so
+        # only the operand list and the asm string follow the Syntax; encoding
+        # is unaffected. syntax_order cross-checks that the two database files
+        # name the same operand set for this instruction.
+        used = [o for o in p["operands"] if p["operand_use"].get(o["field"])]
+        spelling = {o["field"]: p["operand_use"][o["field"]] for o in used}
+        written = syntax.get(p["instruction"])
+        if written is not None:
+            rank = {name: i for i, name in enumerate(written)}
+            used.sort(key=lambda o: rank[spelling[o["field"]]])
+
+        unused = [o for o in p["operands"]
+                  if not p["operand_use"].get(o["field"])]
         outs, ins, bit_lines, decls = [], [], [], []
-        for operand in p["operands"]:
+        for operand in used + unused:
             alias = p["operand_use"].get(operand["field"])
             width = operand["msb"] - operand["lsb"] + 1
             if alias is None:
@@ -775,9 +853,7 @@ def emit_tablegen(geometry: dict, placements: list[dict],
             bit_lines.append(
                 (operand["msb"] - base, operand["lsb"] - base, alias, operand["field"]))
 
-        asm_operands = ", ".join(
-            f"${p['operand_use'][o['field']]}" for o in p["operands"]
-            if p["operand_use"].get(o["field"]))
+        asm_operands = ", ".join(f"${spelling[o['field']]}" for o in used)
         asm = p["instruction"].lower() + (f"\t{asm_operands}" if asm_operands else "")
 
         out.append(f"def {name} : HaydnEntryP{p['entry_count']}{p['entry_index']}<")
@@ -919,6 +995,7 @@ def main() -> None:
 
     geometry, placements = load_placements(args.database)
     verify_decodable(placements)
+    verify_operand_sets(placements, load_syntax_order(args.database))
     if args.check or args.emit is None:
         print(f"format E: {len(placements)} placements over "
               f"{len({(p['entry_count'], p['entry_index'], p['unit'], p['type']) for p in placements})}"
@@ -933,6 +1010,7 @@ def main() -> None:
     elif args.emit in ("td", "composites"):
         text = emit_tablegen(geometry, placements,
                              load_pipeline(args.database),
+                             load_syntax_order(args.database),
                              part="composites" if args.emit == "composites"
                              else "members")
     elif args.emit == "table":
