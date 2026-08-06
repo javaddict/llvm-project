@@ -461,6 +461,106 @@ def emit_schedule(pipeline: dict, placements: list[dict]) -> list[str]:
     return out
 
 
+def roundtrip(geometry: dict, placements: list[dict]) -> str:
+    """Encode every placement and decode it back, independently of LLVM.
+
+    The point is an oracle that does not come from the thing being tested. Once
+    the toolchain emits format E its test expectations have to be regenerated
+    from its own output, which proves nothing on its own; this says whether the
+    database can encode and decode each placement unambiguously, so a
+    disagreement afterwards is attributable.
+
+    Encoding a placement means writing the unit mapping, the type code, the
+    opcode and a value per operand field into the entry window. Decoding means
+    reading the three selectors back, finding the one placement they name, and
+    recovering the operand values. Both directions use nothing but the table.
+    """
+    # Decode index: (entry_count, entry_index) -> (mapping, type_code, opcode).
+    by_key: dict[tuple, list[dict]] = {}
+    for p in placements:
+        key = (p["entry_count"], p["entry_index"], p["mapping"]["value"],
+               p["type_code"]["value"], p["opcode"])
+        by_key.setdefault(key, []).append(p)
+
+    # A malformed table is reported, not raised: a verifier that stops at the
+    # first anomaly cannot say how widespread one is.
+    def put(word: int, msb: int, lsb: int, value: int, base: int,
+            note: list[str], what: str) -> int:
+        width = msb - lsb + 1
+        if value >= 1 << width:
+            note.append(f"{what} value {value} does not fit {width} bits")
+            return word
+        return word | (value << (lsb - base))
+
+    def get(word: int, msb: int, lsb: int, base: int) -> int:
+        return (word >> (lsb - base)) & ((1 << (msb - lsb + 1)) - 1)
+
+    checked = 0
+    failures: list[str] = []
+    for p in placements:
+        base = p["entry_lsb"]
+        where = (f"{p['instruction']} @ {p['entry_count']}e{p['entry_index']}"
+                 f"/{p['unit']}/{p['type']}")
+        note: list[str] = []
+        word = 0
+        word = put(word, p["mapping"]["msb"], p["mapping"]["lsb"],
+                   p["mapping"]["value"], base, note, "mapping")
+        word = put(word, p["type_code"]["msb"], p["type_code"]["lsb"],
+                   p["type_code"]["value"], base, note, "type_code")
+        word = put(word, p["opcode_field"]["msb"], p["opcode_field"]["lsb"],
+                   p["opcode"], base, note, "opcode")
+        # A distinct value per field, wide enough to catch a swapped pair and
+        # small enough to fit the narrowest field.
+        expect: dict[str, int] = {}
+        for index, operand in enumerate(p["operands"]):
+            if p["operand_use"].get(operand["field"]) is None:
+                continue
+            width = operand["msb"] - operand["lsb"] + 1
+            if width <= 0:
+                note.append(f"{operand['field']} spans no bits"
+                            f" ([{operand['msb']}:{operand['lsb']}])")
+                continue
+            value = (index * 5 + 3) % (1 << width)
+            expect[operand["field"]] = value
+            word = put(word, operand["msb"], operand["lsb"], value, base, note,
+                       operand["field"])
+
+        failures += [f"{where}: {n}" for n in note]
+        failures += [f"{where}: {n}" for n in note]
+        key = (p["entry_count"], p["entry_index"],
+               get(word, p["mapping"]["msb"], p["mapping"]["lsb"], base),
+               get(word, p["type_code"]["msb"], p["type_code"]["lsb"], base),
+               get(word, p["opcode_field"]["msb"], p["opcode_field"]["lsb"], base))
+        found = by_key.get(key, [])
+        names = {q["instruction"] for q in found}
+        if names != {p["instruction"]}:
+            failures.append(
+                f"{p['instruction']} @ {p['entry_count']}e{p['entry_index']}"
+                f"/{p['unit']}/{p['type']} decodes to {sorted(names) or 'nothing'}")
+            continue
+        for operand in p["operands"]:
+            field = operand["field"]
+            if field not in expect:
+                continue
+            got = get(word, operand["msb"], operand["lsb"], base)
+            if got != expect[field]:
+                failures.append(
+                    f"{p['instruction']}: {field} encoded {expect[field]},"
+                    f" decoded {got}")
+        if word >= 1 << (p["entry_msb"] - base + 1):
+            failures.append(f"{p['instruction']}: entry word overflows its window")
+        checked += 1
+
+    lines = [f"round-trip over {checked} placements"]
+    if failures:
+        lines.append(f"  FAILURES: {len(failures)}")
+        lines += [f"    {f}" for f in failures[:20]]
+    else:
+        lines.append("  every placement encodes and decodes back to itself,"
+                     " operands included")
+    return "\n".join(lines) + "\n"
+
+
 def emit_schedule_file(pipeline: dict, placements: list[dict]) -> str:
     """The unit scheduling model on its own.
 
@@ -486,10 +586,12 @@ def emit_schedule_file(pipeline: dict, placements: list[dict]) -> str:
 
 def emit_tablegen(geometry: dict, placements: list[dict],
                   pipeline: dict) -> str:
+    """The encoding half. The scheduling half is its own file: it can be
+    included while Bundle128 is live and this cannot, so emitting both here
+    would define the itinerary classes twice once the switch happens."""
     verify_decodable(placements)
     indices = placement_index(placements)
     placements = canonical_members(placements)
-    schedule = emit_schedule(pipeline, placements)
     positions: dict[tuple[int, int], tuple[int, int]] = {}
     for p in placements:
         positions[(p["entry_count"], p["entry_index"])] = \
@@ -515,6 +617,9 @@ def emit_tablegen(geometry: dict, placements: list[dict],
         f"[{geometry['payload_lsb'] - 1}:0], payload bit"
         f"[{geometry['bundle_bits'] - 1}:{geometry['payload_lsb']}].",
         "//",
+        "// Itinerary classes come from HaydnFormatESchedule.td, which is already",
+        "// included; this file carries the encoding only.",
+        "//",
         "// NOT included in the build. The MC layer still encodes Bundle128, whose",
         "// slot windows are wider than any entry window here, so these records",
         "// cannot coexist with it. They are emitted so the encoding can be reviewed",
@@ -523,7 +628,6 @@ def emit_tablegen(geometry: dict, placements: list[dict],
         "",
     ]
 
-    out += schedule
     out += [
         "// Placement index: a dense enumeration of the (entry position, unit)",
         "// pairs the encoding admits. This is the member index in an",
@@ -706,6 +810,7 @@ def report(geometry: dict, placements: list[dict], target_dir: Path | None) -> s
     instructions = sorted({p["instruction"] for p in placements})
     by_shape: dict[tuple, int] = {}
     for p in placements:
+        failures += [f"{where}: {n}" for n in note]
         key = (p["entry_count"], p["entry_index"], p["unit"], p["type"])
         by_shape[key] = by_shape.get(key, 0) + 1
 
@@ -775,7 +880,7 @@ def main() -> None:
     parser.add_argument("--database", type=Path, required=True,
                         help="directory holding the read-only ISA database JSON")
     parser.add_argument("--emit",
-                        choices=("table", "report", "td", "schedule"))
+                        choices=("table", "report", "td", "schedule", "roundtrip"))
     parser.add_argument("--output", "-o", type=Path)
     parser.add_argument("--target-dir", type=Path,
                         help="Haydn target directory, for the .td comparison")
@@ -791,7 +896,9 @@ def main() -> None:
               f" (entry, unit, type) shapes — layout is self-consistent")
         return
 
-    if args.emit == "schedule":
+    if args.emit == "roundtrip":
+        text = roundtrip(geometry, placements)
+    elif args.emit == "schedule":
         text = emit_schedule_file(load_pipeline(args.database),
                                   canonical_members(placements))
     elif args.emit == "td":

@@ -14,79 +14,14 @@
 //
 // Bundle is 96 bits: header bit[5:0], payload bit[95:6].
 //
+// Itinerary classes come from HaydnFormatESchedule.td, which is already
+// included; this file carries the encoding only.
+//
 // NOT included in the build. The MC layer still encodes Bundle128, whose
 // slot windows are wider than any entry window here, so these records
 // cannot coexist with it. They are emitted so the encoding can be reviewed
 // and diffed before the MC layer moves.
 //===----------------------------------------------------------------------===//
-
-//===--- Units and itineraries --------------------------------------------===//
-// Each unit is a FuncUnit and each itinerary class names the units that
-// can serve it, with the data latency the ISA gives. Latencies of 'var'
-// are SIN_COS and ARCTAN, whose latency is uimm4 + 2 and cannot be a
-// static class; they are given the stage but no latency so the value has
-// to come from the operand.
-
-def U_LOADSTORE0 : FuncUnit;
-def U_LOAD1 : FuncUnit;
-def U_ALU0 : FuncUnit;
-def U_ALU1 : FuncUnit;
-def U_ALU2 : FuncUnit;
-def U_MAC0 : FuncUnit;
-def U_MAC1 : FuncUnit;
-
-def Unit_ALU0ALU1ALU2_L1 : InstrItinClass;
-def Unit_ALU0ALU1ALU2_L2 : InstrItinClass;
-def Unit_ALU0_L1 : InstrItinClass;
-def Unit_ALU0_L2 : InstrItinClass;
-def Unit_ALU1ALU2_L2 : InstrItinClass;
-def Unit_ALU1ALU2_Lvar : InstrItinClass;
-def Unit_ALU1_L1 : InstrItinClass;
-def Unit_ALU1_L2 : InstrItinClass;
-def Unit_ALU1_Lvar : InstrItinClass;
-def Unit_ALU2_L1 : InstrItinClass;
-def Unit_ALU2_L2 : InstrItinClass;
-def Unit_ALU2_Lvar : InstrItinClass;
-def Unit_LOAD1_L1 : InstrItinClass;
-def Unit_LOAD1_L2 : InstrItinClass;
-def Unit_LS0LOAD1_L1 : InstrItinClass;
-def Unit_LS0LOAD1_L2 : InstrItinClass;
-def Unit_LS0_L1 : InstrItinClass;
-def Unit_LS0_L2 : InstrItinClass;
-def Unit_MAC0MAC1_L1 : InstrItinClass;
-def Unit_MAC0MAC1_L2 : InstrItinClass;
-def Unit_MAC0_L1 : InstrItinClass;
-def Unit_MAC0_L2 : InstrItinClass;
-def Unit_MAC1_L1 : InstrItinClass;
-def Unit_MAC1_L2 : InstrItinClass;
-
-def HaydnFormatEItineraries : ProcessorItineraries<
-    [U_LOADSTORE0, U_LOAD1, U_ALU0, U_ALU1, U_ALU2, U_MAC0, U_MAC1], [], [
-    InstrItinData<Unit_ALU0ALU1ALU2_L1, [InstrStage<1, [U_ALU0, U_ALU1, U_ALU2]>], [1]>,
-    InstrItinData<Unit_ALU0ALU1ALU2_L2, [InstrStage<1, [U_ALU0, U_ALU1, U_ALU2]>], [2]>,
-    InstrItinData<Unit_ALU0_L1, [InstrStage<1, [U_ALU0]>], [1]>,
-    InstrItinData<Unit_ALU0_L2, [InstrStage<1, [U_ALU0]>], [2]>,
-    InstrItinData<Unit_ALU1ALU2_L2, [InstrStage<1, [U_ALU1, U_ALU2]>], [2]>,
-    InstrItinData<Unit_ALU1ALU2_Lvar, [InstrStage<1, [U_ALU1, U_ALU2]>], []>,
-    InstrItinData<Unit_ALU1_L1, [InstrStage<1, [U_ALU1]>], [1]>,
-    InstrItinData<Unit_ALU1_L2, [InstrStage<1, [U_ALU1]>], [2]>,
-    InstrItinData<Unit_ALU1_Lvar, [InstrStage<1, [U_ALU1]>], []>,
-    InstrItinData<Unit_ALU2_L1, [InstrStage<1, [U_ALU2]>], [1]>,
-    InstrItinData<Unit_ALU2_L2, [InstrStage<1, [U_ALU2]>], [2]>,
-    InstrItinData<Unit_ALU2_Lvar, [InstrStage<1, [U_ALU2]>], []>,
-    InstrItinData<Unit_LOAD1_L1, [InstrStage<1, [U_LOAD1]>], [1]>,
-    InstrItinData<Unit_LOAD1_L2, [InstrStage<1, [U_LOAD1]>], [2]>,
-    InstrItinData<Unit_LS0LOAD1_L1, [InstrStage<1, [U_LOADSTORE0, U_LOAD1]>], [1]>,
-    InstrItinData<Unit_LS0LOAD1_L2, [InstrStage<1, [U_LOADSTORE0, U_LOAD1]>], [2]>,
-    InstrItinData<Unit_LS0_L1, [InstrStage<1, [U_LOADSTORE0]>], [1]>,
-    InstrItinData<Unit_LS0_L2, [InstrStage<1, [U_LOADSTORE0]>], [2]>,
-    InstrItinData<Unit_MAC0MAC1_L1, [InstrStage<1, [U_MAC0, U_MAC1]>], [1]>,
-    InstrItinData<Unit_MAC0MAC1_L2, [InstrStage<1, [U_MAC0, U_MAC1]>], [2]>,
-    InstrItinData<Unit_MAC0_L1, [InstrStage<1, [U_MAC0]>], [1]>,
-    InstrItinData<Unit_MAC0_L2, [InstrStage<1, [U_MAC0]>], [2]>,
-    InstrItinData<Unit_MAC1_L1, [InstrStage<1, [U_MAC1]>], [1]>,
-    InstrItinData<Unit_MAC1_L2, [InstrStage<1, [U_MAC1]>], [2]>
-]>;
 
 // Placement index: a dense enumeration of the (entry position, unit)
 // pairs the encoding admits. This is the member index in an
