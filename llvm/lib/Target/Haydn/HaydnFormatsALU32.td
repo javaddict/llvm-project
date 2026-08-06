@@ -1157,15 +1157,19 @@ def CSRR_S0 : HaydnFU_ALU32_S0_CSR<0b1000001,
     "csrr\t$r, $csr", []>;
 
 // #66 CSRW (I8: uimm8, rs). Two-operand shape (no dead def) — the decoder
-// requires every operand to have an Inst field. Legacy CSRW keeps the 3-op
-// FmtCSR shape for MC parity; encodeSlotSubInst drops the leading dead def
-// when leaveRegion setDesc commits CSRW → CSRW_S0 (see HaydnMCCodeEmitter.cpp).
+// requires every operand to have an Inst field. The logical CSRW now carries
+// the same two operands, so encodeSlotSubInst only has to retarget the
+// opcode when leaveRegion setDesc commits CSRW → CSRW_S0 (see
+// HaydnMCCodeEmitter.cpp); it no longer has to drop a leading dead def.
 let hasSideEffects = 1, Defs = [SFR] in
 def CSRW_S0 : HaydnFU_ALU32_S0_CSR<0b1000010,
     (outs), (ins uimm8:$csr, GPR32:$r),
     "csrw\t$csr, $r", []>;
 
-// CSRW_W — Bundle128 s0 CSR write (AsmPrinter SETCBR / HWLR path).
+// CSRW_W — Bundle128 s0 CSR write. No longer reachable from CodeGen: the
+// AsmPrinter SETCBR / HWLR path builds CSRW, which materializes to CSRW_S0
+// above. Kept so the Bundle128 member set stays complete for MC coverage;
+// retires with this file in the format E switch.
 let hasSideEffects = 1, Defs = [SFR] in
 def CSRW_W_S0 : HaydnFU_ALU32_S0_CSR<0b1010110,
     (outs), (ins uimm8:$csr, GPR32:$r),

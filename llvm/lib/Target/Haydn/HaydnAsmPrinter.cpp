@@ -577,7 +577,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       // Skip debug / pure meta. B1.2 wraps *all* real and byte-emitting
       // pseudos as BUNDLE children (HaydnFinalizeBundle / AIE FinalizeBundle).
       // AsmPrinter must expand the same pseudos the standalone path expands
-      // (B→BEQZ R0, RET→JALR_W, SETCBR→CSRW_W). Skipping Haydn::B as a
+      // (B→BEQZ R0, RET→JALR, SETCBR→CSRW). Skipping Haydn::B as a
       // generic isPseudo() turned singleton BUNDLEs into all-NOP parcels —
       // branch to fallthrough deleted in the binary → MEMORY_FAULT.
       if (I->isDebugInstr() || I->isImplicitDef() || I->isKill() ||
@@ -598,7 +598,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         unsigned CsrBase =
             (ChildOpc == Haydn::SETCBR_BEGIN) ? 0x2Cu : 0x2Du;
         unsigned CsrAddr = CsrBase + (CbrSel << 1);
-        ChildInst->setOpcode(Haydn::CSRW_W);
+        ChildInst->setOpcode(Haydn::CSRW);
         ChildInst->addOperand(MCOperand::createImm(CsrAddr));
         ChildInst->addOperand(MCOperand::createReg(ValReg));
       } else if (ChildOpc == Haydn::B) {
@@ -1012,10 +1012,10 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     // The pseudo carries (cbr_sel imm, value GPR32). Mirrors Hexagon's
     // `m0=rN; cs0=rN` boundary setup, but via the existing CSR space.
     //
-    // Phase 1c: route to the 48-bit WIDE CSRW_W (§5.10, opcode 0x81)
-    // instead of the legacy 32-bit Haydn32 CSRW (FmtCSR). The WIDE form is the
-    // spec-aligned CSR write encoding; the legacy FmtCSR def remains in the
-    // td for Phase 3 deletion but is no longer selected by CodeGen.
+    // Routed to CSRW (FmtCSR, opcode 0x3A). This used to build the 48-bit
+    // CSRW_W (§5.10, opcode 0x81); that spelling is retired, because the
+    // database keeps one CSR-write instruction and format E has no _W member
+    // for it. CSRW now carries the same two operands CSRW_W did.
     assert(MI->getOperand(0).isImm() && "SETCBR: cbr_sel must be immediate");
     unsigned CbrSel = MI->getOperand(0).getImm();
     assert((CbrSel == 0 || CbrSel == 1) && "SETCBR: cbr_sel must be 0 or 1");
@@ -1026,14 +1026,13 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         (MI->getOpcode() == Haydn::SETCBR_BEGIN) ? 0x2C : 0x2D;
     unsigned CsrAddr = CsrBase + (CbrSel << 1);
 
-    // CSRW_W's MCInst operand order (Fmt48_WideCSR, §5.10) is [uimm8, rt] with
-    // no defs. uimm8 is the CSR address (bits[47:40]); rt is the source GPR
-    // (bits[15:12]). The legacy FmtCSR decoder's dead $rd def is gone in the
-    // WIDE form — no R0 placeholder needed.
+    // CSRW's MCInst operand order (FmtCSR) is [csr_addr, rs] with no defs —
+    // the same shape CSRW_W had. The dead $rd that FmtCSR used to carry is
+    // gone, so no R0 placeholder is needed.
     MCInst CSRWInst;
-    CSRWInst.setOpcode(Haydn::CSRW_W);
+    CSRWInst.setOpcode(Haydn::CSRW);
     CSRWInst.addOperand(MCOperand::createImm(CsrAddr));  // uimm8 (CSR address)
-    CSRWInst.addOperand(MCOperand::createReg(ValReg));   // rt (source GPR)
+    CSRWInst.addOperand(MCOperand::createReg(ValReg));   // rs (source GPR)
     emitWrappedInst(CSRWInst);
     return;
   }

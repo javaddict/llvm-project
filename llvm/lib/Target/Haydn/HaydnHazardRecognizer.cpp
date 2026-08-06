@@ -104,23 +104,20 @@ bool isHwloopSetupOp(unsigned Opcode) {
          Opcode == Haydn::SET_HWLOOP_REG_W;
 }
 
-// If MI is a CSRW / CSRW_W whose CSR operand is in the HWLR range
-// 0x20-0x25, return that CSR address; otherwise return -1.
-// Operand layout (HaydnInstrInfo.td):
-// CSRW (3 operands, 1 def): op0=$rd (dead def for MC parity), op1=$csr_addr
-// CSRW_W (2 operands, 0 defs): op0=$uimm8 (the CSR address)
-// The CSR operand is a uimm8 immediate; we read getImm directly. The.td
+// If MI is a CSRW whose CSR operand is in the HWLR range 0x20-0x25, return
+// that CSR address; otherwise return -1.
+// Operand layout (HaydnInstrInfo.td): CSRW is (ins uimm8:$csr_addr,
+// GPR32:$rs), so the CSR address is op0. It used to carry a leading dead $rd
+// for MC parity, which forced a second case for the 2-operand CSRW_W; CSRW
+// now has that same shape and CSRW_W is no longer selected by anything, so
+// the two cases collapse into one.
+// The CSR operand is a uimm8 immediate; we read getImm directly. The .td
 // marks it uimm8 so a well-formed MI always carries an immediate here; we
 // still guard isImm against malformed/MIR test input.
 int getHwloopCsrAddr(const MachineInstr &MI) {
-  unsigned Opc = MI.getOpcode();
-  unsigned CsrOpIdx;
-  if (Opc == Haydn::CSRW)
-    CsrOpIdx = 1; // $csr_addr after the dead $rd def
-  else if (Opc == Haydn::CSRW_W)
-    CsrOpIdx = 0; // $uimm8 is the first operand
-  else
+  if (MI.getOpcode() != Haydn::CSRW)
     return -1;
+  const unsigned CsrOpIdx = 0;
   if (CsrOpIdx >= MI.getNumOperands())
     return -1;
   const MachineOperand &Csr = MI.getOperand(CsrOpIdx);

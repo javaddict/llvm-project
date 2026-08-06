@@ -906,20 +906,38 @@ def CSRR : FmtCSR<0x39, (outs GPR32:$rd), (ins uimm8:$csr_addr, GPR32:$rs),
   // tied input operand; no correctness impact.
 }
 
-// CSRW: the destination is a CSR (a side effect), NOT a GPR. The encoded
-// rd field is a don't-care (the DB never reads it back); $rd here exists
-// only for MC operand-count parity with the shared FmtCSR decoder. We tie
-// it to R0 (soft-zero) via isEarlyClobber-free dead-def so regalloc does not
-// hand out a real register. hasSideEffects=1 is the load-bearing attribute:
-// it stops DCE from dropping a CBR boundary setup.
+// CSRW: the destination is a CSR (a side effect), NOT a GPR, so the database
+// shape is two operands — `CSRW uimm8, rs`, no GPR write port.
+//
+// This def used to carry a dead $rd "for MC operand-count parity with the
+// shared FmtCSR decoder". That reason did not hold: CSRW is isCodeGenOnly, so
+// it was never in the decoder table at all — only CSRR and the _S0 members
+// are, which is checkable in HaydnGenDisassemblerTables.inc. Dropping $rd
+// therefore desyncs nothing, and it makes the logical agree with CSRW_S0 and
+// with all seven format E members, every one of which is two-operand.
+// The encoded rd field stays a don't-care the DB never reads back, so pin it.
+//
+// The attributes come from the retired CSRW_W, per the rule that where a _W
+// fold finds the two defs disagreeing the wide one wins. CSRW used to take
+// `hasSideEffects = 1` and no Defs; CSRW_W took `hasSideEffects = 0,
+// Defs = [SFR]`. The wide pair is the maintained one: hasUnmodeledSideEffects
+// makes the ScheduleDAG serialize behind an Ord Barrier edge, which shadowed
+// the CSRW<->SET_HWLOOP gate in HaydnHazardRecognizer so the gate never fired
+// load-bearingly, and modelling the write as a def of SFR lets the gate be the
+// sole separator (csrw-hwloop-hazard.mir is the test).
+//
+// This does not reopen the DCE hole hasSideEffects=1 was protecting: SFR is
+// a reserved register (HaydnRegisterInfo.cpp markSuperRegs), and a reserved
+// physreg def makes MachineInstr::isDead return false, so a CBR boundary
+// setup still survives.
 //
 // Prefer the Bundle128 CSRW_S0 in the AsmMatcher (2-op, csr encodes
-// correctly). Legacy CSRW stays for GISel/alts with the 3-op FmtCSR
-// shape; encodeSlotSubInst strips the dead $rd when pairing to CSRW_S0.
-let hasSideEffects = 1, isCodeGenOnly = 1 in
-def CSRW : FmtCSR<0x3A, (outs GPR32:$rd), (ins uimm8:$csr_addr, GPR32:$rs),
+// correctly); CSRW stays codegen-only for GISel/alts.
+let hasSideEffects = 0, isCodeGenOnly = 1, Defs = [SFR] in
+def CSRW : FmtCSR<0x3A, (outs), (ins uimm8:$csr_addr, GPR32:$rs),
                "csrw\t$csr_addr, $rs", []> {
   let TSFlags{2-0} = 0b001;
+  let rd = 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1854,23 +1872,28 @@ def SRAI64  : Fmt48_WideDR_RI6<0x52, (outs DR64:$rtd),
 // Class 100 — Control (§5.8-5.13). CSR + ZERO_GPR + SET_HWLOOP forms.
 //===----------------------------------------------------------------------===//
 
-// fix: model the CSR/HWLR side effect via an explicit SFR implicit def
-// instead of `hasSideEffects = 1`. The ScheduleDAG builder serializes every
-// `hasUnmodeledSideEffects` (i.e. `hasSideEffects=1`) instruction behind an
-// Ord Barrier edge, which shadowed the CSRW<->SET_HWLOOP hazard gate in
-// HaydnHazardRecognizer — the gate never load-bearingly fired because the DAG
-// had already forced separate cycles. Setting `hasSideEffects = 0` removes the
-// MCID::UnmodeledSideEffects flag (so the DAG stops adding barrier edges) and
-// `Defs = [SFR]` keeps the side effect modeled on the SFR/CSR space, which
-// HaydnHazardRecognizer already treats as slot-ordered-safe (the WAW guard
-// excludes SFR). The gate is then the SOLE separator and the control
-// case (CSRW@0x10 + SET_HWLOOP) bundles. CSRR_W reads CSR state: model via
-// Uses = [SFR].
-// CSRR_W (zero live C++ consumers) and ZERO_GPR_W (zero
-// live C++ consumers) removed; their Fmt48_WideCSR/Fmt48_WideZeroGPR classes
-// are retained (CSRW_W still uses Fmt48_WideCSR — HaydnAsmPrinter +
-// HaydnHazardRecognizer). CSRR_W's `Uses = [SFR]` comment is preserved for
-// historical context.
+// The SET_HWLOOP forms below model the CSR/HWLR side effect via an explicit
+// SFR implicit def instead of `hasSideEffects = 1`. The ScheduleDAG builder
+// serializes every `hasUnmodeledSideEffects` (i.e. `hasSideEffects=1`)
+// instruction behind an Ord Barrier edge, which shadowed the
+// CSRW<->SET_HWLOOP hazard gate in HaydnHazardRecognizer — the gate never
+// load-bearingly fired because the DAG had already forced separate cycles.
+// Setting `hasSideEffects = 0` removes the MCID::UnmodeledSideEffects flag
+// (so the DAG stops adding barrier edges) and `Defs = [SFR]` keeps the side
+// effect modeled on the SFR/CSR space, which HaydnHazardRecognizer already
+// treats as slot-ordered-safe (the WAW guard excludes SFR). The gate is then
+// the SOLE separator and the control case (CSRW@0x10 + SET_HWLOOP) bundles.
+//
+// CSRR_W and ZERO_GPR_W (zero live C++ consumers) removed; their
+// Fmt48_WideCSR/Fmt48_WideZeroGPR classes are retained. CSRR_W's
+// `Uses = [SFR]` comment is preserved for historical context.
+//
+// CSRW_W has no live C++ consumers either as of the _W fold — HaydnAsmPrinter
+// builds CSRW and HaydnHazardRecognizer matches CSRW. It is kept here only so
+// the Bundle128 member set stays complete for MC coverage
+// (MC/Haydn/d465-flex-coverage-completion.s), exactly as JAL_W, BEQ_W and the
+// rest were kept by their folds; it retires with the member files in the
+// format E switch.
 let hasSideEffects = 0, Defs = [SFR] in
 def CSRW_W : Fmt48_WideCSR<0x81, (outs),
                            (ins uimm8_csr:$uimm8, GPR32:$rt),

@@ -550,16 +550,13 @@ void HaydnMCCodeEmitter::encodeSlotSubInst(
   HaydnMCFormats Formats;
 
   auto encodeOne = [&](const MCInst &Inst) {
-    // CSRW (FmtCSR) is a 3-op shape: (dead $rd, $csr_addr, $rs). CSRW_S0 is
-    // 2-op: ($csr, $r). Drop the leading dead def — operand layout normalize
-    // only.
-    if ((Inst.getOpcode() == Haydn::CSRW_S0 ||
-         Inst.getOpcode() == Haydn::CSRW) &&
-        Inst.getNumOperands() == 3) {
-      MCInst Fixed;
+    // CSRW (FmtCSR) and CSRW_S0 now share the two-operand ($csr, $r) shape,
+    // so the leading-dead-def surgery this used to do is gone. The logical is
+    // codegen-only and has no slot of its own, so encode it as the member the
+    // packer would have committed it to.
+    if (Inst.getOpcode() == Haydn::CSRW) {
+      MCInst Fixed(Inst);
       Fixed.setOpcode(Haydn::CSRW_S0);
-      Fixed.addOperand(Inst.getOperand(1));
-      Fixed.addOperand(Inst.getOperand(2));
       getBinaryCodeForInstr(Fixed, BaseFixups, SubBinary, SubScratch, STI);
       return;
     }

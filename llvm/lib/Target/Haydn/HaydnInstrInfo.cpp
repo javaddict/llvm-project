@@ -202,7 +202,7 @@ static unsigned getHaydnFlexBaseOpcode(unsigned Opc, const MCInstrInfo &MII) {
       {"BGEU", Haydn::BGEU},       {"BLTU", Haydn::BLTU},
       {"BEQZ", Haydn::BEQZ},       {"BNEZ", Haydn::BNEZ},
       {"BGEZ", Haydn::BGEZ},       {"BLTZ", Haydn::BLTZ},
-      {"CSRW_W", Haydn::CSRW_W},       {"ORI32", Haydn::ORI32}};
+      {"CSRW", Haydn::CSRW},           {"ORI32", Haydn::ORI32}};
   for (auto [BaseName, Enum] : KnownBases)
     if (Base == BaseName)
       return Enum;

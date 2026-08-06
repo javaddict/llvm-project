@@ -41,10 +41,10 @@
 # which form reaches the scheduler.
 #
 # Test design:
-# test1: CSRW_W 0x20 (HWLR_BEGIN) + SET_HWLOOP_W. No data dep, ports fit
+# test1: CSRW 0x20 (HWLR_BEGIN) + SET_HWLOOP_W. No data dep, ports fit
 # slots free. ONLY the hazard forbids the bundle -> MUST be two
 # standalone instrs (no BUNDLE).
-# test2 (CONTROL): CSRW_W 0x10 (NOT a HWLR address) + SET_HWLOOP_W. No
+# test2 (CONTROL): CSRW 0x10 (NOT a HWLR address) + SET_HWLOOP_W. No
 # hazard -> SHOULD bundle. Guards against the fix over-rejecting.
 # (RESOLVED — see escalation block below.)
 #
@@ -62,7 +62,7 @@
 # control FAILED: both CSRW_W and SET_HWLOOP_W ended up as standalone instrs
 # even with no hazard. Root cause (confirmed via `-debug`):
 #
-# SU(0): CSRW_W 16, $r1
+# SU(0): CSRW 16, $r1
 # SU(1): Ord Latency=0 Barrier
 # SU(1): SET_HWLOOP_W...
 # SU(0): Ord Latency=0 Barrier
@@ -89,7 +89,7 @@
 ...
 ---
 # ============================================================================
-# Test 1: CSRW_W 0x20 (HWLR_BEGIN) + SET_HWLOOP_W. CSR 0x20 is in the forbidden
+# Test 1: CSRW 0x20 (HWLR_BEGIN) + SET_HWLOOP_W. CSR 0x20 is in the forbidden
 # 0x20-0x25 range -> hazard -> NOT bundled (two standalone instrs).
 # ============================================================================
 name:            test1_csrw_hwlr_set_hwloop_no_bundle
@@ -119,17 +119,17 @@ body:             |
     ; CHECK-LABEL: name: test1_csrw_hwlr_set_hwloop_no_bundle
     ; CHECK: liveins: $r1, $r2
     ; CHECK-NEXT: {{^ +$}}
-    ; CHECK-NEXT: CSRW_W 32, $r1, implicit-def $sfr
+    ; CHECK-NEXT: CSRW 32, $r1, implicit-def $sfr
     ; CHECK-NEXT: SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
-    CSRW_W 32, $r1, implicit-def $sfr
+    CSRW 32, $r1, implicit-def $sfr
     SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
 
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
 ...
 ---
 # ============================================================================
-# Test 2 (CONTROL): CSRW_W 0x10 (NOT a HWLR address) + SET_HWLOOP_W. The
+# Test 2 (CONTROL): CSRW 0x10 (NOT a HWLR address) + SET_HWLOOP_W. The
 # hazard gate lives in the Haydn packetizer (HaydnHazardRecognizer), NOT in
 # postmisched, so this -run-pass=postmisched run cannot exercise bundling.
 # The control case instead confirms postmisched leaves both instructions
@@ -164,10 +164,10 @@ body:             |
     ; CHECK-LABEL: name: test2_csrw_non_hwlr_set_hwloop_can_bundle
     ; CHECK: liveins: $r1, $r2
     ; CHECK-NEXT: {{^ +$}}
-    ; CHECK-NEXT: CSRW_W 16, $r1, implicit-def $sfr
+    ; CHECK-NEXT: CSRW 16, $r1, implicit-def $sfr
     ; CHECK-NEXT: SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
-    CSRW_W 16, $r1, implicit-def $sfr
+    CSRW 16, $r1, implicit-def $sfr
     SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
 
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
