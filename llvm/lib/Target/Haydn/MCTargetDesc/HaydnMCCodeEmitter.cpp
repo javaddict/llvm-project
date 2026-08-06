@@ -256,15 +256,12 @@ unsigned HaydnMCCodeEmitter::getExprFixupKind(const MCInst &MI) const {
   case Haydn::BLT_W:
   case Haydn::BLTU_W:
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI;
-  // ADDI32_W/ORI32_W `_S0` carry the wide-reloc operand
-  // (simm20_wide_abs / uimm20_wide_abs) — the symbolic operand MUST map to
-  // FIXUP_HAYDN_LO20 (the 20-bit absolute LO20 reloc, paired with LUI's HI12).
-  // Without this, the default FIXUP_HAYDN_32 clobbers the opcode bytes.
-  // The legacy ADDI32_W/ORI32_W are also handled here (the AsmParser matches
-  // the bare mnemonic to the logical opcode; residual encode materializes the
-  // _S0 member via alts — but getExprFixupKind sees the original opcode).
+  // ADDI32_W carries the wide-reloc operand (simm20_wide_abs) — the symbolic
+  // operand MUST map to FIXUP_HAYDN_LO20 (the 20-bit absolute LO20 reloc,
+  // paired with LUI's HI12). Without this, the default FIXUP_HAYDN_32 clobbers
+  // the opcode bytes. ORI32 is in the ANDI32/XORI32 block above: it now owns
+  // the wide encoding outright, so there is no second opcode to list.
   case Haydn::ADDI32_W:
-  case Haydn::ORI32_W:
     return Haydn::FIXUP_HAYDN_LO20;
   // (DEFERRED): LD32/ST32/LD64/ST64 still map to FIXUP_HAYDN_LO20.
   // The RISK-5 encoder-side change (all LS -> FIXUP_HAYDN_LS_IMM) was OVER-BROAD

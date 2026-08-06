@@ -85,7 +85,7 @@ void generate32BitSeq(int64_t Value, HaydnMatInt::InstSeq &Seq) {
   // Strategy 2: uimm20 with bit 19 set (doesn't fit simm20) — single ORI32_W
   // from R0 (zero-extended). Covers 0x80000..0xFFFFF in one instruction.
   if (isUInt<20>(Val))
-    Best.emplace_back(Haydn::ORI32_W, Val);
+    Best.emplace_back(Haydn::ORI32, Val);
 
   // Strategy 3: universal LUI + ADDI32_W (exactly 2 instr, always correct).
   // The 12+20 split covers the whole 32-bit space.
