@@ -291,8 +291,41 @@ def verify_decodable(placements: list[dict]) -> None:
                 f" {seen[key]} and {p['instruction']}")
 
 
+def placement_index(placements: list[dict]) -> dict[tuple[int, int, str], int]:
+    """Dense enumeration of the (entry position, unit) pairs the encoding admits.
+
+    This is the member index inside an instruction's alternatives, so `1 << index`
+    stays what it has always been: a mask of the positions an instruction is
+    legal in. A flat per-instruction ordinal would not survive that -- it carries
+    no position, so getLegalSlots could not be built from it.
+
+    NOP is excluded from the uniqueness requirement below: it exists under every
+    instruction type as the all-zero entry encoding, so it alone has several
+    placements per pair. An empty entry is not materialized through alternatives.
+    """
+    pairs = sorted({(p["entry_count"], p["entry_index"], p["unit"])
+                    for p in placements})
+    if len(pairs) > 64:
+        raise SystemExit(
+            f"{len(pairs)} placement pairs — a 1<<index legality mask no longer"
+            " fits 64 bits, so the mask type has to widen before this grows")
+
+    seen: dict[tuple, str] = {}
+    for p in placements:
+        if p["instruction"] == "NOP":
+            continue
+        key = (p["instruction"], p["entry_count"], p["entry_index"], p["unit"])
+        if seen.setdefault(key, p["type"]) != p["type"]:
+            raise SystemExit(
+                f"{p['instruction']} has two placements at the same position and"
+                f" unit ({seen[key]} and {p['type']}), so the pair cannot index"
+                " its alternatives")
+    return {pair: index for index, pair in enumerate(pairs)}
+
+
 def emit_tablegen(geometry: dict, placements: list[dict]) -> str:
     verify_decodable(placements)
+    indices = placement_index(placements)
     positions: dict[tuple[int, int], tuple[int, int]] = {}
     for p in placements:
         positions[(p["entry_count"], p["entry_index"])] = \
@@ -326,6 +359,20 @@ def emit_tablegen(geometry: dict, placements: list[dict]) -> str:
         "",
     ]
 
+    out += [
+        "// Placement index: a dense enumeration of the (entry position, unit)",
+        "// pairs the encoding admits. This is the member index in an",
+        "// instruction's alternatives, so 1<<PlacementIndex is the mask of",
+        "// positions the instruction is legal in -- the same meaning the slot",
+        "// index carried for Bundle128, generalized from 3 slots to these pairs.",
+        "//",
+    ]
+    for pair, index in sorted(indices.items(), key=lambda kv: kv[1]):
+        count, entry, unit = pair
+        out.append(f"//   {index:>2}  {count}-entry entry{entry}  {unit}")
+    out += [f"//", f"// {len(indices)} pairs; a 1<<index mask needs"
+            f" {max(32, 1 << (len(indices) - 1).bit_length())} bits.", ""]
+
     out += ["// Entry windows are operand types, one per position: an entry is only",
             "// substitutable for another at the same position, because the positions",
             "// differ in width and in which units they can name.",
@@ -347,6 +394,7 @@ def emit_tablegen(geometry: dict, placements: list[dict]) -> str:
             f"  let Slot = p{count}{index}_entry;",
             f"  let DecoderNamespace = \"P{count}{index}\";",
             f"  let Size = {(width + 7) // 8};",
+            "  int PlacementIndex = -1;  // set per unit by each member below",
             f"  bits<{width}> Inst;",
             "}",
             "",
@@ -436,6 +484,9 @@ def emit_tablegen(geometry: dict, placements: list[dict]) -> str:
         out.append(f"def {name} : HaydnEntryP{p['entry_count']}{p['entry_index']}<")
         out.append(f"    (outs {', '.join(outs)}), (ins {', '.join(ins)}),")
         out.append(f"    \"{asm}\"> {{")
+        index = indices[(p["entry_count"], p["entry_index"], p["unit"])]
+        out.append(f"  let PlacementIndex = {index};  // {p['unit']}"
+                   f" @ {p['entry_count']}-entry entry{p['entry_index']}")
         out += decls
         def constant(msb: int, lsb: int, value: int, label: str):
             width = msb - lsb + 1
