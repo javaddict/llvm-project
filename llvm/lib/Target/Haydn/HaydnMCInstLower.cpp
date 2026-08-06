@@ -13,10 +13,15 @@
 
 #include "HaydnMCInstLower.h"
 #include "HaydnAsmPrinter.h"
+#include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
@@ -26,9 +31,15 @@ using namespace llvm;
 
 #define DEBUG_TYPE "haydn-mcinstlower"
 
-static bool isHwloopWideSetup(unsigned Opc) {
-  return Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_F2 ||
-         Opc == Haydn::SET_HWLOOP_S0 || Opc == Haydn::SET_HWLOOP_F2_S0;
+// Folds the member to its logical rather than naming it, so this survives the
+// member spelling changing: stripHaydnMemberSuffix understands Bundle128's
+// `_S<k>` and format E's `_P<form><pos>_<unit>` alike.
+static bool isHwloopWideSetup(const MachineInstr *MI) {
+  const MCInstrInfo *MII = MI->getMF()->getSubtarget().getInstrInfo();
+  unsigned Base = getHaydnLogicalBaseOpcode(MI->getOpcode(), *MII);
+  if (!Base)
+    Base = MI->getOpcode();
+  return Base == Haydn::SET_HWLOOP || Base == Haydn::SET_HWLOOP_F2;
 }
 
 void HaydnMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
@@ -44,7 +55,7 @@ void HaydnMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   // first real of body, HWLR_END = last real of latch) — same contract as
   // former emitHWLoopWideInst, but owned by Lower so the BUNDLE path stays
   // pure MCInstLowering.Lower (no per-opcode expand in the printer).
-  const bool Hwloop = isHwloopWideSetup(MI->getOpcode());
+  const bool Hwloop = isHwloopWideSetup(MI);
 
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);

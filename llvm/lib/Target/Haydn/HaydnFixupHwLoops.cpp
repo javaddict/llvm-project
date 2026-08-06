@@ -80,6 +80,7 @@
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnPostRAScratch.h"
 #include "HaydnSubtarget.h"
+#include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -119,18 +120,33 @@ static cl::opt<bool> EnableHaydnHwLoopDemote(
 namespace {
 
 // Real wide forms (post ExpandPseudos) + residual logicals + setDesc members.
-static bool isHwloopSetup(unsigned Opc) {
-  return Opc == Haydn::SET_HWLOOP_PSEUDO || Opc == Haydn::SET_HWLOOP_F2_PSEUDO ||
-         Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_F2 ||
-         Opc == Haydn::SET_HWLOOP_S0 || Opc == Haydn::SET_HWLOOP_F2_S0;
+//
+// Members are folded to their logical rather than named, so these do not have
+// to grow a spelling: getLogicalBaseOpcode strips the suffix via
+// stripHaydnMemberSuffix, which understands Bundle128's `_S<k>` and format E's
+// `_P<form><pos>_<unit>` alike, and resolves the base by name. Naming members
+// directly is what made this table Bundle128-shaped -- one `_S0` becomes up to
+// seven `_P..` members, so the list would have grown rather than moved.
+// For the call sites that have a MachineInstr but no TII in scope.
+static const MCInstrInfo &instrInfoOf(const MachineInstr &MI) {
+  return *MI.getMF()->getSubtarget().getInstrInfo();
 }
-static bool isHwloopRegTrip(unsigned Opc) {
-  return Opc == Haydn::SET_HWLOOP_F2_PSEUDO || Opc == Haydn::SET_HWLOOP_F2 ||
-         Opc == Haydn::SET_HWLOOP_F2_S0;
+static unsigned hwloopBase(unsigned Opc, const MCInstrInfo &MII) {
+  unsigned Base = getHaydnLogicalBaseOpcode(Opc, MII);
+  return Base ? Base : Opc;
 }
-static bool isHwloopImmTrip(unsigned Opc) {
-  return Opc == Haydn::SET_HWLOOP_PSEUDO || Opc == Haydn::SET_HWLOOP ||
-         Opc == Haydn::SET_HWLOOP_S0;
+static bool isHwloopSetup(unsigned Opc, const MCInstrInfo &MII) {
+  unsigned B = hwloopBase(Opc, MII);
+  return B == Haydn::SET_HWLOOP_PSEUDO || B == Haydn::SET_HWLOOP_F2_PSEUDO ||
+         B == Haydn::SET_HWLOOP || B == Haydn::SET_HWLOOP_F2;
+}
+static bool isHwloopRegTrip(unsigned Opc, const MCInstrInfo &MII) {
+  unsigned B = hwloopBase(Opc, MII);
+  return B == Haydn::SET_HWLOOP_F2_PSEUDO || B == Haydn::SET_HWLOOP_F2;
+}
+static bool isHwloopImmTrip(unsigned Opc, const MCInstrInfo &MII) {
+  unsigned B = hwloopBase(Opc, MII);
+  return B == Haydn::SET_HWLOOP_PSEUDO || B == Haydn::SET_HWLOOP;
 }
 
 // Aliases from HaydnHWLoopContracts.h / BundlePlan EncodedBytes (B4.4).
@@ -373,7 +389,7 @@ HaydnFixupHwLoops::resolveBodyMBB(MachineInstr &SetMI) const {
     return nullptr;
 
   unsigned Opc = SetMI.getOpcode();
-  if (isHwloopSetup(Opc) &&
+  if (isHwloopSetup(Opc, instrInfoOf(SetMI)) &&
       SetMI.getNumOperands() >= 3 && SetMI.getOperand(1).isMBB()) {
     MachineBasicBlock *H = SetMI.getOperand(1).getMBB();
     return isLiveMBB(*MF, H) ? H : nullptr;
@@ -461,7 +477,7 @@ bool HaydnFixupHwLoops::computeOffsets(MachineInstr &SetMI,
 
 static Register getHwloopCountReg(const MachineInstr &SetMI) {
   unsigned Opc = SetMI.getOpcode();
-  if (isHwloopRegTrip(Opc) && SetMI.getNumOperands() >= 4 &&
+  if (isHwloopRegTrip(Opc, instrInfoOf(SetMI)) && SetMI.getNumOperands() >= 4 &&
       SetMI.getOperand(3).isReg())
     return SetMI.getOperand(3).getReg();
   if (Opc == Haydn::LoopStart && SetMI.getNumOperands() >= 1 &&
@@ -1010,7 +1026,7 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
                                              const HaydnInstrInfo &TII) {
   unsigned Opc = SetMI.getOpcode();
   const bool IsLoopStart = Opc == Haydn::LoopStart;
-  if (!isHwloopSetup(Opc) && !IsLoopStart)
+  if (!isHwloopSetup(Opc, TII) && !IsLoopStart)
     return false;
 
   MachineBasicBlock *Preheader = SetMI.getParent();
@@ -1036,7 +1052,7 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
       return eraseHardwareSetup(SetMI);
     Header = SetMI.getOperand(1).getMBB();
     Latch = SetMI.getOperand(2).getMBB();
-    if (isHwloopRegTrip(Opc)) {
+    if (isHwloopRegTrip(Opc, TII)) {
       if (!SetMI.getOperand(3).isReg())
         return eraseHardwareSetup(SetMI);
       Prefer = SetMI.getOperand(3).getReg();
@@ -1120,7 +1136,7 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
     return FI;
   };
 
-  if ((IsLoopStart || isHwloopRegTrip(Opc)) && Prefer.isPhysical() &&
+  if ((IsLoopStart || isHwloopRegTrip(Opc, TII)) && Prefer.isPhysical() &&
       Prefer != Haydn::R0) {
     // Trip reg at LoopStart / SET_HWLOOP_F2.
     // Prefer is correct only if the body does not redefine it as a
@@ -1142,7 +1158,7 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
                           << printReg(CountReg) << "\n");
       }
     }
-  } else if (!IsLoopStart && (isHwloopImmTrip(Opc) || HasImm)) {
+  } else if (!IsLoopStart && (isHwloopImmTrip(Opc, TII) || HasImm)) {
     // Imm form: need a free GPR + materialize.
     MachineBasicBlock::iterator Ins = SetMI.getIterator();
     CountReg = pickCounterReg(LoopBlocks, Prefer, ST, *Preheader, Ins);
@@ -1374,7 +1390,7 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
   // SET_HWLOOP with %bb.-1: body was erased after convert. Erase setup only.
   {
     unsigned Opc = SetMI.getOpcode();
-    if (isHwloopSetup(Opc)) {
+    if (isHwloopSetup(Opc, TII)) {
       if (SetMI.getNumOperands() >= 3 && SetMI.getOperand(1).isMBB() &&
           SetMI.getOperand(2).isMBB()) {
         MachineBasicBlock *H = SetMI.getOperand(1).getMBB();
@@ -1404,7 +1420,7 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
   // bundles and carry END with them. They execute every iteration, which is
   // exactly what the rule asks for — a body shorter than the pipeline depth has
   // nowhere to put the wrap.
-  if (isHwloopSetup(SetMI.getOpcode()) && SetMI.getNumOperands() >= 3 &&
+  if (isHwloopSetup(SetMI.getOpcode(), instrInfoOf(SetMI)) && SetMI.getNumOperands() >= 3 &&
       SetMI.getOperand(1).isMBB() && SetMI.getOperand(2).isMBB()) {
     MachineBasicBlock *Header = SetMI.getOperand(1).getMBB();
     MachineBasicBlock *Latch = SetMI.getOperand(2).getMBB();
@@ -1531,7 +1547,7 @@ bool HaydnFixupHwLoops::runOnMachineFunction(MachineFunction &MF) {
   for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB.instrs()) {
       unsigned Opc = MI.getOpcode();
-      if (isHwloopSetup(Opc) || Opc == Haydn::LoopStart)
+      if (isHwloopSetup(Opc, TII) || Opc == Haydn::LoopStart)
         Sets.push_back(&MI);
     }
   }
