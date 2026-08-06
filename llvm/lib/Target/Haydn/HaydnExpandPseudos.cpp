@@ -587,22 +587,22 @@ bool HaydnExpandPseudos::expandMI(MachineBasicBlock &MBB, MachineInstr &MI,
   // HardwareLoops emits SET_HWLOOP{,_REG} (sel, MBB start/end, count/rs).
   // Before PostRA pack they must be the real wide forms that materialize
   // into SET_HWLOOP_{W,F2_W}_S0 (same operand structure: imm + 2×brtarget +
-  // cnt/rs). Flex wrongly pairs SET_HWLOOP_REG → REG_S0 (4 GPRs); packing
+  // cnt/rs). Flex wrongly pairs SET_HWLOOP_F2 → REG_S0 (4 GPRs); packing
   // that shape corrupts encoding. Convert here so the bundle printer is
   // pure Desc-only Lower (AIE serialize path).
-  case Haydn::SET_HWLOOP_REG:
+  case Haydn::SET_HWLOOP_F2_PSEUDO:
     assert(MI.getNumOperands() >= 4 && MI.getOperand(0).isImm() &&
            MI.getOperand(1).isMBB() && MI.getOperand(2).isMBB() &&
            MI.getOperand(3).isReg() &&
-           "SET_HWLOOP_REG shape: sel, start, end, rs");
-    MI.setDesc(TII->get(Haydn::SET_HWLOOP_F2_W));
+           "SET_HWLOOP_F2_PSEUDO shape: sel, start, end, rs");
+    MI.setDesc(TII->get(Haydn::SET_HWLOOP_F2));
     return true;
-  case Haydn::SET_HWLOOP:
+  case Haydn::SET_HWLOOP_PSEUDO:
     assert(MI.getNumOperands() >= 4 && MI.getOperand(0).isImm() &&
            MI.getOperand(1).isMBB() && MI.getOperand(2).isMBB() &&
            MI.getOperand(3).isImm() &&
-           "SET_HWLOOP shape: sel, start, end, cnt");
-    MI.setDesc(TII->get(Haydn::SET_HWLOOP_W));
+           "SET_HWLOOP_PSEUDO shape: sel, start, end, cnt");
+    MI.setDesc(TII->get(Haydn::SET_HWLOOP));
     return true;
   }
 }

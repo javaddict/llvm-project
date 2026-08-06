@@ -1,6 +1,6 @@
 ; This test exercises the pre-RA HardwareLoops pass (Stream A,), which
 ; runs BEFORE SMS on VIRTUAL registers and converts countable loops to
-; SET_HWLOOP_REG + HWLOOP_END pseudos. Because the pre-RA pass operates on
+; SET_HWLOOP_F2 + HWLOOP_END pseudos. Because the pre-RA pass operates on
 ; vregs (no physreg copy chains exist yet), the / post-RA IV-init
 ; copy-source-clobber bug class is NOT directly exercised here anymore; the
 ; test is retained to (a) document WHY the post-RA resolvers (/) exist
@@ -42,7 +42,7 @@
 ; Pre-RA pass update (Stream A,): the pre-RA pass derives the trip count
 ; directly from the IV init and does NOT emit a SUB32/SRLI32 trip-compute
 ; sequence in the preheader. The CHECKs below therefore check the conversion
-; pseudos (SET_HWLOOP_REG + HWLOOP_END) rather than the post-RA trip-compute
+; pseudos (SET_HWLOOP_F2 + HWLOOP_END) rather than the post-RA trip-compute
 ; shape; vreg numbers are intentionally not pinned.
 ;
 ; REGRESSION TEST: HWLoop recognition of IV-bump-via-copy (pointer-IV where
@@ -77,14 +77,14 @@
 ; guard prevents LSR from fusing the post-increment into LD32_POST (the
 ; fused form only occurs when the loop is entered unconditionally). After
 ; post-RA, the bump is computed into a temp ($r4) and copied back to the
-; IV ($r1). If the recognizer regresses, SET_HWLOOP_REG disappears and a
+; IV ($r1). If the recognizer regresses, SET_HWLOOP_F2 disappears and a
 ; BNEZ back-edge appears instead.
 ;
 ; Decision reference: ~/haydn-plans/decisions/-hwloop-nested-explicit-branch.md
 
 define i32 @iv_bump_via_copy(ptr noalias readonly %p, ptr noalias readnone %end) nounwind {
 ; CHECK-LABEL: name: iv_bump_via_copy
-; Post-RA hwloop pass : loop converts to SET_HWLOOP_REG. Latch branch erased.
+; Post-RA hwloop pass : loop converts to SET_HWLOOP_F2. Latch branch erased.
 ; CHECK: SET_HWLOOP
 ; CHECK: PseudoLoopEnd
 entry:

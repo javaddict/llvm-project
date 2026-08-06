@@ -14,7 +14,7 @@
 
 
 
-; REBASELINED (G2.codegen-rebaseline): Desc-only Bundle128 print — packed set_hwloop_f2_w {..; nop; nop}, LLhwloop labels retained; no pre-set p2align.
+; REBASELINED (G2.codegen-rebaseline): Desc-only Bundle128 print — packed set_hwloop_f2 {..; nop; nop}, LLhwloop labels retained; no pre-set p2align.
 
 
 declare void @use_i32(i32)
@@ -107,7 +107,7 @@ define i32 @alloca_loop(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; nop; addi32_w r3, sp, 12 }
 ; CHECK-NEXT:    { nop; nop; addi32_w r4, r0, 1 }
 ; CHECK-NEXT:    { max32 r1, r1, r4; nop; st32 r2, r3, 0 }
-; CHECK-NEXT:    { nop; nop; set_hwloop_f2_w 1, .LLhwloop_start0, .LLhwloop_end0, r1 }
+; CHECK-NEXT:    { nop; nop; set_hwloop_f2 1, .LLhwloop_start0, .LLhwloop_end0, r1 }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }

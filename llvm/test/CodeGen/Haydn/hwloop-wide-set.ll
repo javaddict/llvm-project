@@ -1,17 +1,17 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop < %s | FileCheck %s
 ;
-; REGRESSION TEST : WIDE SET_HWLOOP_F2_W emission.
+; REGRESSION TEST : WIDE SET_HWLOOP_F2 emission.
 ;
 ; Bug being prevented: hardware-loop setup was ALWAYS expanded to a
 ; multi-bundle dance — R12 scratch spill (st32 r12), ADDI32 count
-; materialization, SET_HWLOOP_REG placeholder (8-byte two-word marker)
+; materialization, SET_HWLOOP_F2 placeholder (8-byte two-word marker)
 ; 3-NOP HWLR_COUNT commit window, R12 restore (ld32 r12) — even though the
-; 48-bit WIDE SET_HWLOOP_F2_W form (encoding_manual.md §5.12:
+; 48-bit WIDE SET_HWLOOP_F2 form (encoding_manual.md §5.12:
 ; rs(count) + uimm6_off1 + uimm12_off2 + hwlr_sel) encodes the same setup
 ; in ONE instruction.
 ;
-; Fix: HaydnAsmPrinter emits SET_HWLOOP_F2_W when -haydn-hwloop-wide is set.
+; Fix: HaydnAsmPrinter emits SET_HWLOOP_F2 when -haydn-hwloop-wide is set.
 ; The OLD dance is dropped entirely.
 ;
 ; RUN-line note: -haydn-hwloop-wide is registered as a direct cl::opt in
@@ -23,13 +23,13 @@
 ; Test design: a simple counted loop. The IR-level HardwareLoops pass forms
 ; it as a LoopStart pseudo (count materialized into a GPR by the preheader's
 ; `addi32 rN, r0, 10`); the AsmPrinter's LoopStart case then emits ONE
-; set_hwloop_f2_w (not the 5-bundle dance). The CHECK-NOTs assert the dance
+; set_hwloop_f2 (not the 5-bundle dance). The CHECK-NOTs assert the dance
 ; is GONE: no R12 scratch spill/restore, no set_hwloop_f2 (the OLD
 ; register-count mnemonic rendered by the placeholder path). The CHECK
-; confirms exactly one set_hwloop_f2_w with sel=1 and the loop-body symbol
+; confirms exactly one set_hwloop_f2 with sel=1 and the loop-body symbol
 ; as the start offset.
 ;
-; The all-immediate SET_HWLOOP_W (§5.11) form is reached via the same
+; The all-immediate SET_HWLOOP (§5.11) form is reached via the same
 ; EnableHaydnHwloopWide gate in the SET_HWLOOP case for constant counts that
 ; fit uimm16; the F2_W assertion here covers the WIDE-lowering plumbing
 ; (flag, helper, operand contract) shared by both WIDE forms.
@@ -46,7 +46,7 @@ define i32 @hwloop_wide_set(ptr %p) {
 ; CHECK-LABEL: hwloop_wide_set:
 ; CHECK-NOT: set_hwloop_f2 {{[0-9]+}}, .LBB0_1, .LLhwloop_end0, {{r[0-9]+}}
 ; CHECK-NOT: set_hwloop_reg
-; CHECK:     set_hwloop_f2_w 1, .LLhwloop_start{{[0-9]+}}, .LLhwloop_end0, {{r[0-9]+}}
+; CHECK:     set_hwloop_f2 1, .LLhwloop_start{{[0-9]+}}, .LLhwloop_end0, {{r[0-9]+}}
 ; CHECK-NOT: set_hwloop_f2 {{[0-9]+}}, .LBB0_1, .LLhwloop_end0, {{r[0-9]+}}
 ; CHECK-NOT: set_hwloop_reg
 entry:

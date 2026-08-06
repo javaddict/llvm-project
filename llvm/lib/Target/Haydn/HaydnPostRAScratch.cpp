@@ -268,7 +268,7 @@ void glueDefToUse(MachineInstr &RematDef, MachineInstr &UseMI) {
          "remat use not adjacent after splice");
 
   // Only glue into one Bundle128 cycle when encode-oracle canAdd accepts both
-  // (AIE Bundle canAdd). ADDI remat for SET_HWLOOP_REG is S0-only + SET is
+  // (AIE Bundle canAdd). ADDI remat for SET_HWLOOP_F2_PSEUDO is S0-only + SET is
   // S0-only — co-issue is illegal; leave sequential standalones (two cycles).
   {
     HaydnMCFormats Fmts;

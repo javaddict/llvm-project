@@ -15,7 +15,7 @@
 ; body — e.g. a hoisted 48-bit `addi32{{(_w)?}}` constant materialization in the
 ; preheader (`s += a[i] * 0x12345`):
 ;
-; { set_hwloop_f2_w 1,.LBB0_2,.LLhwloop_end0, r3 } # 6-byte WIDE SET
+; { set_hwloop_f2 1,.LBB0_2,.LLhwloop_end0, r3 } # 6-byte WIDE SET
 ; p2align 4 # c8013cb SET-pad
 ; { addi32{{(_w)?}} r1, r0,...;... } # 6-byte WIDE parcel
 ; LBB0_2: # HWLR_BEGIN at 2-mod-4

@@ -386,7 +386,7 @@ class HaydnFU_ALU32_S0_CSR<bits<7> opc, dag outs, dag ins, string asmstr,
   let s0 = {FU, opcode, reserved, csr, r};  // MSB-first -> s0[47:0]
 }
 
-// TODO(spec): SET_HWLOOP / SET_HWLOOP_F2 / SET_HWLOOP_REG operand encoding is
+// TODO(spec): SET_HWLOOP / SET_HWLOOP_F2 / SET_HWLOOP_F2 operand encoding is
 // under-specified in the ISA reference (HWLRIII / HWLRIIR / HWLRRRR shape
 // names only). Best-effort layout below reserves operand bits per the WIDE
 // SET_HWLOOP model (encoding_manual.md §5.11-5.13: loop_id uimm1 + count imm +
@@ -427,7 +427,7 @@ class HaydnFU_ALU32_S0_HWLOOP_F2<bits<7> opc, dag outs, dag ins,
   let s0 = {FU, opcode, reserved, loop_id, count, rs};  // s0[47:0]
 }
 
-// ALU32 SET_HWLOOP_REG in S0: 4 GPR32 (HWLRRRR: loop_id implied via reg).
+// ALU32 SET_HWLOOP_F2 in S0: 4 GPR32 (HWLRRRR: loop_id implied via reg).
 // TODO(spec): HWLRRRR exact reg roles TBD (count/start/end/step?).
 // Payload 3+7+9+4+4+4+4+13 = 48b.
 class HaydnFU_ALU32_S0_HWLOOP_REG<bits<7> opc, dag outs, dag ins,
@@ -446,7 +446,7 @@ class HaydnFU_ALU32_S0_HWLOOP_REG<bits<7> opc, dag outs, dag ins,
   let s0 = {FU, opcode, reserved, r0, r1, r2, r3, tail};  // s0[47:0]
 }
 
-// ALU32 SET_HWLOOP_W in S0: sel(uimm1), offset1(uimm6), offset2(uimm12)
+// ALU32 SET_HWLOOP in S0: sel(uimm1), offset1(uimm6), offset2(uimm12)
 // cnt(uimm16). Wide hwloop begin/end offsets + 16-bit count (§5.11).
 // Payload 3+7+3+16+12+6+1 = 48b.
 class HaydnFU_ALU32_S0_HWLOOP_W<bits<7> opc, dag outs, dag ins, string asmstr,
@@ -465,7 +465,7 @@ class HaydnFU_ALU32_S0_HWLOOP_W<bits<7> opc, dag outs, dag ins, string asmstr,
   let s0 = {FU, opcode, reserved, cnt, offset2, offset1, sel};  // s0[47:0]
 }
 
-// ALU32 SET_HWLOOP_F2_W in S0: sel(uimm1), offset1(uimm6), offset2(uimm12)
+// ALU32 SET_HWLOOP_F2 in S0: sel(uimm1), offset1(uimm6), offset2(uimm12)
 // rs(GPR32 count source). Wide hwloop with register count (§5.12).
 // Payload 3+7+15+4+12+6+1 = 48b.
 class HaydnFU_ALU32_S0_HWLOOP_F2_W<bits<7> opc, dag outs, dag ins,
@@ -1131,20 +1131,25 @@ def JALR_S0 : HaydnFU_ALU32_S0_RI12<0b0111011,
 
 } // Defs = caller-saved clobbers for calls
 
-// #60 SET_HWLOOP (HWLRIII: loop_id, count, target — TODO(spec) field split)
-def SET_HWLOOP_S0 : HaydnFU_ALU32_S0_HWLOOP<0b0111100,
-    (outs), (ins uimm1:$loop_id, simm20:$count, simm10:$target),
-    "set_hwloop\t$loop_id, $count, $target", []>;
-
-// #61 SET_HWLOOP_F2 (HWLRIIR: loop_id, count, rs — TODO(spec) field split)
-def SET_HWLOOP_F2_S0 : HaydnFU_ALU32_S0_HWLOOP_F2<0b0111101,
-    (outs), (ins uimm1:$loop_id, simm20:$count, GPR32:$rs),
-    "set_hwloop_f2\t$loop_id, $count, $rs", []>;
-
-// #62 SET_HWLOOP_REG (HWLRRRR: 4 GPR32 — TODO(spec) reg roles)
-def SET_HWLOOP_REG_S0 : HaydnFU_ALU32_S0_HWLOOP_REG<0b0111110,
-    (outs), (ins GPR32:$r0, GPR32:$r1, GPR32:$r2, GPR32:$r3),
-    "set_hwloop_reg\t$r0, $r1, $r2, $r3", []>;
+// #60-#62 SET_HWLOOP / _F2 / _REG narrow members (0b0111100/101/110) removed.
+//
+// Their operand shapes were guesses — each carried a "TODO(spec) field split"
+// and none matched the database, which spells the family
+//   SET_HWLOOP     hwlr_sel, uimm6_offset1, uimm12_offset2, uimm16_cnt
+//   SET_HWLOOP_F2  hwlr_sel, uimm6_offset1, uimm12_offset2, rs
+//   SET_HWLOOP_REG hwlr_sel, rs1, rs2, rs3
+// against which the narrow members had three operands (an unsplit simm20
+// count) and, for _REG, four GPRs with no hwlr_sel at all.
+//
+// They were never selected: the wide forms below carry the real encodings.
+// Worse, they were actively harmful, because AlternateInsts pairing is by
+// name (CodeGenFormat collectSparseAltSlotMemberRows drops the _S0 and looks
+// up the base). That is why HaydnExpandPseudos had to convert the pseudo
+// before packing — its comment records that Flex wrongly paired the
+// then-named SET_HWLOOP_REG pseudo to REG_S0 (4 GPRs) and that "packing that
+// shape corrupts encoding". With the _W spellings retired onto the database
+// names, leaving these in place would have paired the real SET_HWLOOP with
+// the corrupt three-operand member.
 
 // #63 WFI (HINT: no operands)
 def WFI_S0 : HaydnFU_ALU32_S0_HINT<0b0111111,
@@ -1382,9 +1387,9 @@ def SUB32_G_S0 : HaydnFU_ALU32_S0_R<0b1001010,
     (outs GPR32:$rt), (ins GPR32:$rs),
     "sub32_g\t$rt, $rs", []>;
 
-// SET_HWLOOP_W — Bundle128 s0 form (legacy wide 0x88 geometry mapped into
-// ALU32 S0). Live path: real SET_HWLOOP_W before pack → leaveRegion setDesc
-// → SET_HWLOOP_W_S0 member → Desc-only encodeBundle128.
+// SET_HWLOOP — Bundle128 s0 form (legacy wide 0x88 geometry mapped into
+// ALU32 S0). Live path: real SET_HWLOOP before pack → leaveRegion setDesc
+// → SET_HWLOOP_S0 member → Desc-only encodeBundle128.
 //
 // must NOT be isCodeGenOnly. That flag excludes the def from the
 // DecoderTableS048 trie, so llvm-objdump printed `<unknown>` for every
@@ -1392,16 +1397,16 @@ def SUB32_G_S0 : HaydnFU_ALU32_S0_R<0b1001010,
 // Same class as ADDI32_W_S0: CodeGenOnly for "legacy alias" was wrong
 // once Bundle128 emission used these as the real slot instructions.
 let hasSideEffects = 1, isNotDuplicable = 1 in
-def SET_HWLOOP_W_S0 : HaydnFU_ALU32_S0_HWLOOP_W<0b1001011,
+def SET_HWLOOP_S0 : HaydnFU_ALU32_S0_HWLOOP_W<0b1001011,
     (outs), (ins uimm1:$sel, hwloop_off1:$offset1, hwloop_off2:$offset2,
                  uimm16_hwloop_cnt:$cnt),
-    "set_hwloop_w\t$sel, $offset1, $offset2, $cnt", []>;
+    "set_hwloop\t$sel, $offset1, $offset2, $cnt", []>;
 
-// SET_HWLOOP_F2_W — Bundle128 s0 form (register trip count). Primary form
-// emitted for runtime-count ZOL (LoopStart / SET_HWLOOP_REG path).
+// SET_HWLOOP_F2 — Bundle128 s0 form (register trip count). Primary form
+// emitted for runtime-count ZOL (LoopStart / SET_HWLOOP_F2 path).
 // isCodeGenOnly removed so DecoderTableS048 matches opcode 0b1001100.
 let hasSideEffects = 1, isNotDuplicable = 1 in
-def SET_HWLOOP_F2_W_S0 : HaydnFU_ALU32_S0_HWLOOP_F2_W<0b1001100,
+def SET_HWLOOP_F2_S0 : HaydnFU_ALU32_S0_HWLOOP_F2_W<0b1001100,
     (outs), (ins uimm1:$sel, hwloop_off1:$offset1, hwloop_off2:$offset2,
                  GPR32:$rs),
-    "set_hwloop_f2_w\t$sel, $offset1, $offset2, $rs", []>;
+    "set_hwloop_f2\t$sel, $offset1, $offset2, $rs", []>;

@@ -28,9 +28,9 @@ define void @bqriir32x32_df1_single(ptr %st, ptr %r, ptr %x, i32 %N) {
 ;
 ; REGRESSION TEST : historically this loop's runtime trip-count (%N, the
 ; LIMIT) was spilled by regalloc in the preheader, then the post-RA HWLoop pass
-; emitted SET_HWLOOP_REG reading the spilled/killed trip-count reg with no
+; emitted SET_HWLOOP_F2 reading the spilled/killed trip-count reg with no
 ; reload, triggering `-verify-machineinstrs`:
-; "Using an undefined physical register... SET_HWLOOP_REG... operand 3: $rN".
+; "Using an undefined physical register... SET_HWLOOP_F2... operand 3: $rN".
 ; The post-RA fix (point-liveness gate via LivePhysRegs) REJECTED the conversion
 ; for that shape, so the loop stayed cmp+branch.
 ;

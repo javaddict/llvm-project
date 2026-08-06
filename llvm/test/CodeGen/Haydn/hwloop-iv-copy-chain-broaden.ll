@@ -1,6 +1,6 @@
 ; This test exercises the pre-RA HardwareLoops pass (Stream A,), which
 ; runs BEFORE SMS on VIRTUAL registers and converts countable loops to
-; SET_HWLOOP_REG + HWLOOP_END pseudos via IV-PHI analysis. Because the
+; SET_HWLOOP_F2 + HWLOOP_END pseudos via IV-PHI analysis. Because the
 ; pass runs pre-RA on vregs, the post-RA copy-chain/clobber resolver that
 ; P2b originally exercised is NO LONGER directly on this path — there are
 ; no physreg copy chains to follow yet. The test is retained to guard that the
@@ -39,7 +39,7 @@
 ; appears.
 ;
 ; STATUS (rebaseline for the pre-RA pass, Stream A /):
-; * iv_via_copy_chain : FIRES via IV-PHI analysis -> SET_HWLOOP_REG
+; * iv_via_copy_chain : FIRES via IV-PHI analysis -> SET_HWLOOP_F2
 ; in preheader.
 ; * sibling_loops_shared_reg: FIRES for BOTH loop A and loop B via IV-PHI
 ; analysis. Under the post-RA recognizer this
@@ -115,7 +115,7 @@ exit:
 ; must follow the copy to identify the IV and resolve the step.
 define i32 @iv_via_copy_chain(ptr noalias readonly %p, ptr noalias readnone %end) nounwind {
 ; CHECK-LABEL: name: iv_via_copy_chain
-; Post-RA converts. SET_HWLOOP_REG, BLT back-edge gone.
+; Post-RA converts. SET_HWLOOP_F2, BLT back-edge gone.
 ; REBASELINED : scheduling changed (//) — SWPS now fires
 ; so LoopStart's $adj is -2 instead of 0 (prologue/epilogue trip-count adjust).
 ; CHECK: SET_HWLOOP

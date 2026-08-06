@@ -27,8 +27,8 @@ using namespace llvm;
 #define DEBUG_TYPE "haydn-mcinstlower"
 
 static bool isHwloopWideSetup(unsigned Opc) {
-  return Opc == Haydn::SET_HWLOOP_W || Opc == Haydn::SET_HWLOOP_F2_W ||
-         Opc == Haydn::SET_HWLOOP_W_S0 || Opc == Haydn::SET_HWLOOP_F2_W_S0;
+  return Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_F2 ||
+         Opc == Haydn::SET_HWLOOP_S0 || Opc == Haydn::SET_HWLOOP_F2_S0;
 }
 
 void HaydnMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {

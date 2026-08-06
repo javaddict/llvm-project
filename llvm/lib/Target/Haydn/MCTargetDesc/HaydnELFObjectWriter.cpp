@@ -116,7 +116,7 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     // Hardware-loop body start/end offset: 16-bit signed PC-relative field
     // word-aligned (encoded value = byteOffset >> 2). Same encoding semantics
     // as a PC-relative branch, so reuse the BranchSimm16 relocation. Emitted
-    // by SET_HWLOOP_REG (two fixups: loop start + loop end). See.
+    // by SET_HWLOOP_F2 (two fixups: loop start + loop end). See.
     return ELF::R_HAYDN_BranchSImm16;
 
   case Haydn::FIXUP_HAYDN_HWLoopOff1:

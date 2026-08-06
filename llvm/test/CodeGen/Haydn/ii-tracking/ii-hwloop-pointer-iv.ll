@@ -19,7 +19,7 @@
 ;
 ; Test design: a streaming reduction whose only IV is the pointer %q stepping
 ; from %p to %end (4-byte stride, i32 elements). The integer trip count is
-; (%end - %p) / 4, computed at runtime by the SET_HWLOOP_REG emission. If the
+; (%end - %p) / 4, computed at runtime by the SET_HWLOOP_F2 emission. If the
 ; recognizer regresses (operand-index bug returns), the set_hwloop_f2
 ; disappears and a BLTU back-edge appears instead.
 ;

@@ -1,8 +1,8 @@
 ; This test exercises the pre-RA HardwareLoops pass (Stream A,), which
-; runs BEFORE SMS and converts countable loops to SET_HWLOOP_REG + HWLOOP_END
+; runs BEFORE SMS and converts countable loops to SET_HWLOOP_F2 + HWLOOP_END
 ; pseudos on virtual registers (do not pin vreg numbers in CHECKs). The pre-RA
 ; pass derives the trip count directly from the IV init (logic) and hands
-; the runtime loop bound straight to SET_HWLOOP_REG, so unlike the post-RA pass
+; the runtime loop bound straight to SET_HWLOOP_F2, so unlike the post-RA pass
 ; it does NOT emit a SUB32/SRLI32 trip-compute sequence in the preheader.
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
@@ -35,7 +35,7 @@
 ;
 ; Test design: a streaming reduction whose only IV is the pointer %q stepping
 ; from %p to %end via LD32_POST (4-byte stride, i32 elements). If the
-; recognizer regresses (the operand-index bug returns), the SET_HWLOOP_REG
+; recognizer regresses (the operand-index bug returns), the SET_HWLOOP_F2
 ; disappears, no SUB32/SRLI32 trip-compute appears in the preheader, and a
 ; BLTU back-edge appears instead.
 ;

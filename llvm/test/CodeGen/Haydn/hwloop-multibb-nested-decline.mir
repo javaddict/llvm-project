@@ -10,8 +10,8 @@
 #
 # CHECK-LABEL: name: multibb_nested_decline
 # Inner Role A expands to real wide SET (sel=1) before pack; outer stays soft.
-# CHECK: SET_HWLOOP_F2_W 1
-# CHECK-NOT: SET_HWLOOP_F2_W 0
+# CHECK: SET_HWLOOP_F2 1
+# CHECK-NOT: SET_HWLOOP_F2 0
 # Soft outer back-edge retained:
 # CHECK: BEQZ {{.*}}%bb.1
 

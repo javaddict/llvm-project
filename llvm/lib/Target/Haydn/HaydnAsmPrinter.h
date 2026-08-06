@@ -80,9 +80,9 @@ class LLVM_LIBRARY_VISIBILITY HaydnAsmPrinter : public AsmPrinter {
   // \param Sel HWLOOP selector (0=outer, 1=inner).
   // \param StartSym Symbol for the loop body start (HWLR_BEGIN target).
   // \param EndSym Symbol for the loop body end (HWLR_END target).
-  // \param CntImm If present, emit SET_HWLOOP_W with this constant trip
+  // \param CntImm If present, emit SET_HWLOOP with this constant trip
   // count (§5.11 all-imm form). If absent, emit
-  // SET_HWLOOP_F2_W with the count in \p RsReg (§5.12).
+  // SET_HWLOOP_F2 with the count in \p RsReg (§5.12).
   // \param RsReg GPR32 holding the trip count (used only when CntImm
   // is absent).
   void emitHWLoopWideInst(unsigned Sel, const MCSymbol *StartSym,

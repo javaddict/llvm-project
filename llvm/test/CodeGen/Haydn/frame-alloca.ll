@@ -13,7 +13,7 @@
 
 
 
-; REBASELINED (G2.codegen-rebaseline): Desc-only Bundle128 print — packed set_hwloop_f2_w {..; nop; nop}, LLhwloop labels retained; no pre-set p2align.
+; REBASELINED (G2.codegen-rebaseline): Desc-only Bundle128 print — packed set_hwloop_f2 {..; nop; nop}, LLhwloop labels retained; no pre-set p2align.
 
 
 declare void @use_ptr(ptr)
@@ -200,7 +200,7 @@ define i32 @vla_indexed(i32 %n, i32 %idx) {
 ; CHECK-NEXT:    { and32 r2, r2, r3; nop; addi32_w r3, r0, 0 }
 ; CHECK-NEXT:    { sub32 r2, sp, r2; max32 r4, r1, r4; nop }
 ; CHECK-NEXT:    { move32 sp, r2; nop; nop }
-; CHECK-NEXT:    { nop; nop; set_hwloop_f2_w 1, .LLhwloop_start0, .LLhwloop_end0, r4 }
+; CHECK-NEXT:    { nop; nop; set_hwloop_f2 1, .LLhwloop_start0, .LLhwloop_end0, r4 }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { move32 r4, r2; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }

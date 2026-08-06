@@ -37,18 +37,18 @@
 // Role A — IR ZOL already formed (do NOT re-convert):
 // LoopStart + PseudoLoopEnd (or LoopDec/LoopJNZ). AIE expands LoopStart to
 // real setup *before* PostMachineScheduler (AIE2 addPreSched2 order). Haydn
-// mirrors that: expandRoleALoopStarts rewrites LoopStart → SET_HWLOOP_REG
+// mirrors that: expandRoleALoopStarts rewrites LoopStart → SET_HWLOOP_F2
 // (sel=1, Header/Latch=body) before the post-RA VLIW scheduler so setup is
 // a schedulable boundary, not a zero-size pseudo AsmPrinter lowers late.
 // FixupHwLoops still pads / demotes. Degenerate shells (empty or store-only
 // body after SMS peel) are stripped so Role B can convert the real compute
 // loop. PseudoLoopEnd is MCID::Meta — body classifiers match the opcode.
 //
-// Role B — convert countable soft-branch loops to SET_HWLOOP / SET_HWLOOP_REG.
+// Role B — convert countable soft-branch loops to SET_HWLOOP / SET_HWLOOP_F2.
 //
 // Algorithm:
 // 0. stripEmptyZeroOverheadLoops — remove empty/shell Role A ZOLs
-// 0b.expandRoleALoopStarts — AIE-style LoopStart → SET_HWLOOP_REG (+ t−3)
+// 0b.expandRoleALoopStarts — AIE-style LoopStart → SET_HWLOOP_F2 (+ t−3)
 // 1. Walk loops inside-out; skip Role A; validate latch/exit/no-call
 // 2. Identify IV + bump + limit at the latch (fused or unfused cmp/br)
 // 3. step = Val(step @ bump); limit = Val(limit @ cmp); init at preheader
@@ -99,7 +99,7 @@ STATISTIC(NumHWLoopRangeOverflow,
 STATISTIC(NumEmptyZOLStripped,
           "Number of empty IR-form ZOLs stripped (peeled body)");
 STATISTIC(NumRoleAExpanded,
-          "Number of Role A LoopStart expanded to SET_HWLOOP_REG pre-sched");
+          "Number of Role A LoopStart expanded to SET_HWLOOP_F2_PSEUDO pre-sched");
 
 // Local aliases — sole numeric source is HaydnHWLoopContracts.h /
 // BundlePlan EncodedBytes (B4.4: productParcelBytes, not dual magic 16).
@@ -449,7 +449,7 @@ static bool stripEmptyZeroOverheadLoops(MachineFunction &MF) {
   return Changed;
 }
 
-// AIE-aligned Role A expand: LoopStart → SET_HWLOOP_REG before post-RA sched.
+// AIE-aligned Role A expand: LoopStart → SET_HWLOOP_F2 before post-RA sched.
 // AIE2 addPreSched2 runs AIEBaseHardwareLoops (expand LoopStart → LC/LS/LE
 // setup) *before* PostMachineScheduler. Haydn previously left LoopStart as a
 // zero-size pseudo until AsmPrinter, so postmisched could reorder real work
@@ -505,7 +505,7 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
         Body = &*std::next(It);
     }
     // Real (load/compute) and Shell (store-only payload, e.g. memset) both
-    // need SET_HWLOOP_REG. Empty is stripped earlier; NotZOL has no PLE.
+    // need SET_HWLOOP_F2. Empty is stripped earlier; NotZOL has no PLE.
     ZOLBodyKind BodyKind =
         Body ? classifyZOLBody(*Body) : ZOLBodyKind::NotZOL;
     if (!Body || (BodyKind != ZOLBodyKind::Real &&
@@ -527,11 +527,11 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
     // without clobbering Src — same facility as MatInt/VA expand, not a
     // hwloop-private scavenger. AIE writes dedicated LC; Haydn remats to GPR.
     MachineBasicBlock::iterator InsertPt = LS->getIterator();
-    // Emit the real wide form (not SET_HWLOOP_REG pseudo). Pack materializes
+    // Emit the real wide form (not SET_HWLOOP_F2 pseudo). Pack materializes
     // F2_W → F2_W_S0; AsmPrinter is Desc-only Lower (ExpandPseudos also
     // converts residual REG→F2_W if any older path still emits REG).
     MachineInstr *SetMI =
-        BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP_F2_W))
+        BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP_F2))
             .addImm(/*Sel=*/1)
             .addMBB(Header)
             .addMBB(Latch)
@@ -581,7 +581,7 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
     ++NumRoleAExpanded;
     Changed = true;
     LLVM_DEBUG(dbgs() << "HaydnHWLoops: Role A expanded LoopStart → "
-                         "SET_HWLOOP_REG sel=1 body="
+                         "SET_HWLOOP_F2_PSEUDO sel=1 body="
                       << printMBBReference(*Body) << " trip="
                       << printReg(TripReg) << "\n");
   }
@@ -605,7 +605,7 @@ bool HaydnHardwareLoops::runOnMachineFunction(MachineFunction &MF) {
   // Role A cleanup: strip fully-peeled empty ZOLs before convert walk.
   Changed |= stripEmptyZeroOverheadLoops(MF);
 
-  // AIE order: expand surviving Role A LoopStart → SET_HWLOOP_REG *before*
+  // AIE order: expand surviving Role A LoopStart → SET_HWLOOP_F2 *before*
   // PostMachineScheduler (this pass runs in addPreSched2 before postmisched).
   Changed |= expandRoleALoopStarts(MF);
 
@@ -795,7 +795,7 @@ bool HaydnHardwareLoops::loopBodyFitsRange(const MachineLoop *L) const {
 
 bool HaydnHardwareLoops::hasIRZOLForm(const MachineLoop *L) const {
   // Role A marker: IR-level HardwareLoops already formed THIS loop, or
-  // expandRoleALoopStarts already rewrote LoopStart → SET_HWLOOP_REG.
+  // expandRoleALoopStarts already rewrote LoopStart → SET_HWLOOP_F2.
   // Only scan this loop's own preheader and latch. Do NOT scan the full
   // block set — a converted child's setup lives in a preheader inside the
   // outer's block set (PR7 dual HWLR).
@@ -806,7 +806,7 @@ bool HaydnHardwareLoops::hasIRZOLForm(const MachineLoop *L) const {
       unsigned Opc = MI.getOpcode();
       if (Opc == Haydn::LoopStart || Opc == Haydn::PseudoLoopEnd ||
           Opc == Haydn::LoopDec || Opc == Haydn::LoopJNZ ||
-          Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG)
+          Opc == Haydn::SET_HWLOOP_PSEUDO || Opc == Haydn::SET_HWLOOP_F2_PSEUDO)
         return true;
     }
     return false;
@@ -835,13 +835,13 @@ bool HaydnHardwareLoops::containsInvalidInstruction(
       if (MI.isBarrier() && !MI.isBranch())
         return true;
       unsigned Opc = MI.getOpcode();
-      // Child SET_HWLOOP / SET_HWLOOP_REG live in the child's preheader, which
+      // Child SET_HWLOOP / SET_HWLOOP_F2 live in the child's preheader, which
       // is inside the outer loop's block set. When dual nesting is enabled the
       // outer may legally contain a child's hardware-loop setup — do not treat
       // those as invalid for the parent. Geometry
       // outer BEGIN < inner BEGIN < inner END < outer END
       // is validated later by FixupHwLoops range checks.
-      if (Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG) {
+      if (Opc == Haydn::SET_HWLOOP_PSEUDO || Opc == Haydn::SET_HWLOOP_F2_PSEUDO) {
         if (AllowChildHwloop)
           continue;
         return true;
@@ -2841,7 +2841,7 @@ bool HaydnHardwareLoops::findTripCount(MachineLoop *L, int64_t &TripCount,
   // limit on entry for any loop that executes at least once. Zero-trip safety
   // (init < limit) mirrors Case 2 (limit=0 imm): unguarded do-while loops
   // execute >= 1 time by construction, and guarded loops place the
-  // SET_HWLOOP_REG after the guard (via createPreheaderForLoop), so a
+  // SET_HWLOOP_F2 after the guard (via createPreheaderForLoop), so a
   // zero-trip loop never reaches the trip computation. This is the established
   // shipped Case-2 behavior; Case 5 mirrors it. See (Case 5).
   if ((isBranchEQ(BrOpc) || CmpIsEquality) && IVBump == -1 && !InitIsImm &&
@@ -2875,8 +2875,8 @@ bool HaydnHardwareLoops::findTripCount(MachineLoop *L, int64_t &TripCount,
 // clobbered between the block entry and \p InsertPt.
 // This catches the trip-count spill bug : a trip-count register that is
 // live-in to the preheader but then spilled (e.g. `ST32 killed $rN`) is NOT
-// live at the SET_HWLOOP_REG insertion point (the preheader terminator), yet
-// isLiveIn returns true. Emitting SET_HWLOOP_REG with such a reg produces
+// live at the SET_HWLOOP_F2 insertion point (the preheader terminator), yet
+// isLiveIn returns true. Emitting SET_HWLOOP_F2 with such a reg produces
 // the verifier error "Using an undefined physical register". Using LivePhysRegs
 // (rather than a kill-flag scan) also handles regmask clobbers (e.g. calls in
 // the preheader) and sub-register aliases correctly. See /.
@@ -3069,13 +3069,13 @@ bool HaydnHardwareLoops::convertToHardwareLoop(MachineLoop *L,
       ComputeKind != TripComputeKind::None;
 
   // Correctness gate : when the trip count is a register (runtime
-  // value), the register MUST be live at the SET_HWLOOP_REG insertion point
+  // value), the register MUST be live at the SET_HWLOOP_F2 insertion point
   // (the preheader terminator position) — the instruction reads it there.
   //
   // The check is point-liveness, not just block-live-in. A trip-count reg that
   // is live-in to the preheader but then SPILLED by regalloc (e.g.
   // `ST32 killed $rN` reading+kill it) is dead by the terminator. Emitting
-  // SET_HWLOOP_REG with such a reg triggers the verifier error "Using an
+  // SET_HWLOOP_F2 with such a reg triggers the verifier error "Using an
   // undefined physical register". isPhysRegLiveAt walks the preheader with
   // LivePhysRegs to evaluate liveness exactly at the insertion point
   // (— bqriir32x32_df1 trip-count spill).
@@ -3093,7 +3093,7 @@ bool HaydnHardwareLoops::convertToHardwareLoop(MachineLoop *L,
                          TripCountReg.asMCReg(), TRI)) {
       LLVM_DEBUG(dbgs() << "HaydnHWLoops: Trip-count reg "
                         << printReg(TripCountReg)
-                        << " not live at SET_HWLOOP_REG insertion point — "
+                        << " not live at SET_HWLOOP_F2_PSEUDO insertion point — "
                            "rejecting (would emit undefined trip-count)\n");
       Sel0Used = ChildSel0Used;
       Sel1Used = ChildSel1Used;
@@ -3194,7 +3194,7 @@ bool HaydnHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   // Trip-count computation in the preheader (Cases 3/4/5). LimitReg is dead
   // after the latch branch is removed (below), so clobbering it with the
   // computed trip is safe (gated by the single-use check in findTripCount).
-  // The SET_HWLOOP_REG below then reads LimitReg as the trip count.
+  // The SET_HWLOOP_F2 below then reads LimitReg as the trip count.
   // PointerIV (Case 3): trip = (LimitReg - IVReg) >> shift
   // ScalarCountUp (Case 4): trip = (LimitReg - ScalarTripInit) >> shift
   // ScalarCountDown (Case 5): trip = IVReg - LimitReg
@@ -3257,13 +3257,13 @@ bool HaydnHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   // AsmPrinter emits the END label at the latch's last real body instruction.
   MachineInstr *SetMI = nullptr;
   if (TripCountReg.isValid()) {
-    SetMI = BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP_F2_W))
+    SetMI = BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP_F2))
                 .addImm(Sel)
                 .addMBB(Header)
                 .addMBB(Latch)
                 .addReg(TripCountReg);
   } else {
-    SetMI = BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP_W))
+    SetMI = BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP))
                 .addImm(Sel)
                 .addMBB(Header)
                 .addMBB(Latch)

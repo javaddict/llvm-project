@@ -10,7 +10,7 @@
 //
 // Dual roles (see HaydnHardwareLoops.cpp + HaydnHWLoopContracts.h) — AIE split:
 // Role A — IR ZOL already formed (LoopStart/PseudoLoopEnd or LoopDec
-// LoopJNZ): expand LoopStart → SET_HWLOOP_REG pre-sched (AIE
+// LoopJNZ): expand LoopStart → SET_HWLOOP_F2 pre-sched (AIE
 // order); skip Role B convert; FixupHwLoops pads/demotes.
 // Authority: IR HardwareLoops + HaydnTTI (single-BB like AIE).
 // Role B — residual convert for multi-BB / IR miss (-haydn-hwloop-role-b

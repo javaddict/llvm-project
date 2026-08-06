@@ -168,7 +168,7 @@ bool HaydnTTIImpl::isHardwareLoopProfitable(
 
   // Trip count = BETC + 1. Must fit in the 32-bit HWLR_COUNT register
   // (Haydn's HWLOOP counter is uimm16 for the immediate form, but the
-  // register form SET_HWLOOP_REG reads a full 32-bit GPR).
+  // register form SET_HWLOOP_F2_PSEUDO reads a full 32-bit GPR).
   const SCEV *TripCountSCEV =
       SE.getAddExpr(BETC, SE.getOne(BETC->getType()));
   if (SE.getUnsignedRangeMax(TripCountSCEV).getBitWidth() > 32) {
@@ -275,7 +275,7 @@ bool HaydnTTIImpl::isHardwareLoopProfitable(
     HWLoopInfo.IsNestingLegal = true;
     HWLoopInfo.CounterInReg = true; // LoopDec + LoopJNZ
   }
-  // No guarded entry-test form — Haydn's SET_HWLOOP_REG is unguarded (the
+  // No guarded entry-test form — Haydn's SET_HWLOOP_F2_PSEUDO is unguarded (the
   // do-while form; zero-trip loops are handled by the post-RA pass's
   // createPreheaderForLoop guard insertion if needed).
   HWLoopInfo.PerformEntryTest = false;

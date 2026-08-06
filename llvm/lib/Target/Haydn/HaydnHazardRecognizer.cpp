@@ -87,21 +87,21 @@ namespace {
 // Writing them via CSRW in the same cycle as a SET_HWLOOP variant would race
 // the implicit HWLR update; the spec forbids it and the packetizer must put
 // the two in separate bundles (cycles).
-// These helpers identify both sides of the hazard. They cover ALL six
-// SET_HWLOOP opcode variants the spec names (narrow pseudos SET_HWLOOP
-// SET_HWLOOP_REG today lowered by AsmPrinter, plus the wide real forms
-// SET_HWLOOP_W / SET_HWLOOP_F2_W / SET_HWLOOP_REG_W that the encoding
-// migration is wiring onto the post-RA path). The pseudo variants are
+// These helpers identify both sides of the hazard. They cover every
+// hwloop-setup opcode: the two pre-expansion pseudos (SET_HWLOOP_PSEUDO and
+// SET_HWLOOP_F2_PSEUDO, which carry MBB operands until HaydnExpandPseudos
+// converts them), plus the three real instructions the database names —
+// SET_HWLOOP, SET_HWLOOP_F2 and SET_HWLOOP_REG. The pseudo variants are
 // normally skipped by getHazardType's isPseudo early-out, but the guard
 // is correct-by-construction regardless: if a future pass lowers a hwloop
-// setup to a real (non-pseudo) SET_HWLOOP opcode before postmisched, the
-// hazard fires automatically.
+// setup to a real (non-pseudo) opcode before postmisched, the hazard fires
+// automatically.
 
 // True iff MI is any SET_HWLOOP variant (the writer side of the hazard).
 bool isHwloopSetupOp(unsigned Opcode) {
-  return Opcode == Haydn::SET_HWLOOP || Opcode == Haydn::SET_HWLOOP_REG ||
-         Opcode == Haydn::SET_HWLOOP_W || Opcode == Haydn::SET_HWLOOP_F2_W ||
-         Opcode == Haydn::SET_HWLOOP_REG_W;
+  return Opcode == Haydn::SET_HWLOOP_PSEUDO || Opcode == Haydn::SET_HWLOOP_F2_PSEUDO ||
+         Opcode == Haydn::SET_HWLOOP || Opcode == Haydn::SET_HWLOOP_F2 ||
+         Opcode == Haydn::SET_HWLOOP_REG;
 }
 
 // If MI is a CSRW whose CSR operand is in the HWLR range 0x20-0x25, return
@@ -579,9 +579,9 @@ HaydnHazardRecognizer::getHazardType(SUnit *SU, int DeltaCycles) {
     if ((IsHwloopSetup && CurrentCycleHasHwloopCsrw) ||
         (IsHwloopCsrw && CurrentCycleHasHwloopSetup)) {
       LLVM_DEBUG({
-        dbgs() << "CSRW↔SET_HWLOOP hazard for ";
+        dbgs() << "CSRW↔SET_HWLOOP_PSEUDO hazard for ";
         MI->print(dbgs());
-        dbgs() << " (CSR 0x20-0x25 HWLR write vs SET_HWLOOP variant in same "
+        dbgs() << " (CSR 0x20-0x25 HWLR write vs SET_HWLOOP_PSEUDO variant in same "
                   "cycle; spec §5.10)\n";
       });
       return Hazard;

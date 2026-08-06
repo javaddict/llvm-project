@@ -33,7 +33,7 @@ body:             |
     liveins: $r1, $r2, $r3, $r4, $r7, $r8, $r9, $r10, $r11, $r12, $r15
     successors: %bb.1
 
-    SET_HWLOOP 0, %bb.2, %bb.2, 8
+    SET_HWLOOP_PSEUDO 0, %bb.2, %bb.2, 8
     NOP
     NOP
     NOP

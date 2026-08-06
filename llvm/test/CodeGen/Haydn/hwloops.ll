@@ -1,6 +1,6 @@
 ; STALE-FAILMARKER REMOVED (, post- cutover): the IR-level
 ; hardware-loop rearchitecture (prior revision) renamed the conversion
-; pseudos from SET_HWLOOP_REG to LoopStart + PseudoLoopEnd. All single-BB
+; pseudos from SET_HWLOOP_F2 to LoopStart + PseudoLoopEnd. All single-BB
 ; countable loops below now convert and the CHECKs were rebaselined to match.
 ; The `multi_bb_loop` subtest (test 6) is converted (GAP-4 multi-BB ZOL).
 ; not convert multi-BB if/else bodies — this is now documented as a
@@ -86,7 +86,7 @@ exit:
 
 ; Test 3: Loop with register trip count (unknown at compile time).
 ; The trip count comes from a function argument. The pass should detect the
-; simple case (init=0, bump=1) and emit SET_HWLOOP_REG.
+; simple case (init=0, bump=1) and emit SET_HWLOOP_F2.
 define i32 @loop_with_reg_count(ptr %p, i32 %n) {
 ; CHECK-LABEL: name: loop_with_reg_count
 ; CHECK: SET_HWLOOP

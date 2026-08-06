@@ -1,6 +1,6 @@
 ; This test exercises the IR-level HardwareLoops pass, which runs BEFORE SMS
 ; and converts countable loops to LoopStart + PseudoLoopEnd pseudos (renamed
-; from SET_HWLOOP_REG by the IR-level rearchitecture, prior revision).
+; from SET_HWLOOP_F2 by the IR-level rearchitecture, prior revision).
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
 ;
@@ -8,8 +8,8 @@
 ;
 ; Status (re-evaluated live during the G1 HWLoop broadening
 ; rebaseline — runtime-limit trip-count Cases 4/5 + PHI-form rework):
-; * Shape 1 (gap2_countup_blt) — CONVERTS. SET_HWLOOP_REG, trip reg = N. ✓
-; * Shape 2 (gap3_pointer_iv) — CONVERTS. SET_HWLOOP_REG via LD32_POST
+; * Shape 1 (gap2_countup_blt) — CONVERTS. SET_HWLOOP_F2, trip reg = N. ✓
+; * Shape 2 (gap3_pointer_iv) — CONVERTS. SET_HWLOOP_F2 via LD32_POST
 ; pointer-IV recognition + runtime trip
 ; (end-start)>>shift emitted in preheader. ✓
 ; * Shape 3 (gap4_multibb) — if-conversion collapses this shape into a
@@ -27,7 +27,7 @@
 ; conversion holds. GAP-4 multibb coverage moved to hwloop-multibb.ll (this
 ; function stays on BLT only because if-conversion pre-folds the conditional).
 ;
-; If any of the GAP-2 CHECKs regress, the SET_HWLOOP_REG disappears and a
+; If any of the GAP-2 CHECKs regress, the SET_HWLOOP_F2 disappears and a
 ; BLT back-edge appears instead — investigate, do NOT just update the
 ; CHECK line.
 ;
@@ -105,7 +105,7 @@ exit:
 ; back-edge. The imm is at operand index 3.
 ;
 ; Test design: streaming reduction with pointer-IV stepping from %p to %end
-; (4-byte stride, i32 elements). If the recognizer regresses, the SET_HWLOOP_REG
+; (4-byte stride, i32 elements). If the recognizer regresses, the SET_HWLOOP_F2
 ; disappears and a BLTU back-edge appears instead.
 ; ===========================================================================
 define i32 @gap3_pointer_iv(ptr readonly %p, ptr readnone %end) nounwind {
@@ -141,7 +141,7 @@ exit:
 ;
 ; The *genuine* multi-BB regression test (side-effecting branches that
 ; resist if-conversion) lives in hwloop-multibb.ll @gap4_multibb_calls and
-; DOES emit SET_HWLOOP_REG. This function is kept here to document that the
+; DOES emit SET_HWLOOP_F2. This function is kept here to document that the
 ; if-conversion collapse is benign — the loop still runs correctly, just on
 ; a BLT back-edge because the optimizer already removed the multibb shape.
 ;
@@ -149,7 +149,7 @@ exit:
 ; (data-dependent, no side effects in either branch). If the backend stops
 ; if-converting this shape, MLI will see multibb and (post- Fix A) the
 ; recognizer will convert it — at that point flip this CHECK to
-; SET_HWLOOP_REG.
+; SET_HWLOOP_F2.
 ; ===========================================================================
 define void @gap4_multibb(ptr %dst, ptr readonly %src, i32 %n) nounwind {
 ; CHECK-LABEL: name: gap4_multibb
@@ -197,7 +197,7 @@ exit:
 ; This shape now CONVERTS via the pre-RA pass. The previous G1 regression
 ; (, non-converting BNEZ back-edge after the runtime-limit trip
 ; count Cases 4/5 + PHI-form rework) is FIXED: the pre-RA pass derives
-; the trip count from the IV PHI init and emits SET_HWLOOP_REG with
+; the trip count from the IV PHI init and emits SET_HWLOOP_F2 with
 ; the trip register equal to N (the IR bound).
 ; ===========================================================================
 define i32 @gap2_countup_blt_ptrbody(ptr readonly %x, ptr readonly %y, i32 %N) nounwind {

@@ -106,7 +106,7 @@ constexpr Row Table[] = {
     // offset1, sel}`) place offset1 at s0 bits[6:1] (FieldLsb=1) and offset2
     // at s0 bits[18:7] (FieldLsb=7). With the stale FieldLsb=26, the patcher
     // wrote the 6-bit offset1 field into bits[31:26] of the LoWord — i.e. the
-    // opcode+FU discriminator bits — so `set_hwloop_f2_w` overflows the field
+    // opcode+FU discriminator bits — so `set_hwloop_f2` overflows the field
     // for any offset > 0 (the encoding silently corrupts the opcode and
     // disassembles as `<unknown>`). The agent's IsSigned=false fix alone
     // was incomplete: the field RANGE was correct but the field POSITION was

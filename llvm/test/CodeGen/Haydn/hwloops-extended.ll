@@ -1,6 +1,6 @@
 ; STALE-FAILMARKER REMOVED (, post- cutover): the IR-level
 ; hardware-loop rearchitecture (prior revision) renamed the runtime-count
-; conversion pseudo from SET_HWLOOP_REG to LoopStart + PseudoLoopEnd. Ten of
+; conversion pseudo from SET_HWLOOP_F2 to LoopStart + PseudoLoopEnd. Ten of
 ; the twelve subtests below now convert and the CHECKs were rebaselined.
 ; `loop_zero_trip` correctly stays unconverted (zero iterations). The only
 ; remaining G1 gap is `multi_bb_reg_count` (multi-BB if/else body), now
@@ -60,7 +60,7 @@ exit:
 }
 
 ; Test 3: Loop with trip count = 65536 (exceeds uimm16 immediate, but still
-; convertible via SET_HWLOOP_REG since the limit is materialized as a register).
+; convertible via SET_HWLOOP_F2 since the limit is materialized as a register).
 define i32 @loop_too_large(ptr %p) {
 ; CHECK-LABEL: name: loop_too_large
 ; CHECK: SET_HWLOOP

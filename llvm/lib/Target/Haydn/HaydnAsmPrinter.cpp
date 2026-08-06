@@ -321,9 +321,9 @@ void HaydnAsmPrinter::emitWrappedInst(const MCInst &Inst) {
 // Per encoding_manual.md §5.11-§5.13 there are three WIDE forms (logical
 // opcodes; encode-time Flex materializes the S0 slot variant into a
 // Bundle128 parcel):
-// SET_HWLOOP_W : uimm16_cnt + uimm6_off1 + uimm12_off2 + hwlr_sel
-// SET_HWLOOP_F2_W : rs(count) + uimm6_off1 + uimm12_off2 + hwlr_sel
-// SET_HWLOOP_REG_W : rs1(begin) + rs2(end) + rs3(count) + hwlr_sel
+// SET_HWLOOP : uimm16_cnt + uimm6_off1 + uimm12_off2 + hwlr_sel
+// SET_HWLOOP_F2 : rs(count) + uimm6_off1 + uimm12_off2 + hwlr_sel
+// SET_HWLOOP_REG : rs1(begin) + rs2(end) + rs3(count) + hwlr_sel
 // Offsets are MCSymbolRefExpr operands; the emitter attaches
 // FIXUP_HAYDN_HWLoopOff1/Off2 (÷4, Bundle128 FieldLsb —).
 // Spec §HW Loop setup timing (VLIW_Engine_Compiler_Constraints):
@@ -346,19 +346,19 @@ void HaydnAsmPrinter::emitHWLoopWideInst(unsigned Sel,
 
   MCInst HWInst;
   // MCInst operand order matches the.td / encoder contract: 
-  // SET_HWLOOP_W: (sel, offset1, offset2, cnt)
-  // SET_HWLOOP_F2_W: (sel, offset1, offset2, rs)
+  // SET_HWLOOP: (sel, offset1, offset2, cnt)
+  // SET_HWLOOP_F2: (sel, offset1, offset2, rs)
   // For the constant-count form we pass the symbol expressions for the
   // offsets and the materialized count as an immediate. For the register
   // form we pass rs as the count source. hwlr_sel = Sel (1 = innermost ZOL).
   if (CntImm) {
-    HWInst.setOpcode(Haydn::SET_HWLOOP_W);
+    HWInst.setOpcode(Haydn::SET_HWLOOP);
     HWInst.addOperand(MCOperand::createImm(Sel & 0x1));  // sel (uimm1)
     HWInst.addOperand(MCOperand::createExpr(StartExpr)); // offset1 (brtarget)
     HWInst.addOperand(MCOperand::createExpr(EndExpr));   // offset2 (brtarget)
     HWInst.addOperand(MCOperand::createImm(*CntImm));    // cnt (uimm16)
   } else {
-    HWInst.setOpcode(Haydn::SET_HWLOOP_F2_W);
+    HWInst.setOpcode(Haydn::SET_HWLOOP_F2);
     HWInst.addOperand(MCOperand::createImm(Sel & 0x1));  // sel (uimm1)
     HWInst.addOperand(MCOperand::createExpr(StartExpr)); // offset1 (brtarget)
     HWInst.addOperand(MCOperand::createExpr(EndExpr));   // offset2 (brtarget)
@@ -1100,7 +1100,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     // HWLR_END inclusive = last real instruction of the latch.
     MCSymbol *EndSym = getOrCreateHwloopEndSym(Latch);
 
-    // Sel=1 for innermost (ZOL). Trip count already in GPR (SET_HWLOOP_F2_W).
+    // Sel=1 for innermost (ZOL). Trip count already in GPR (SET_HWLOOP_F2).
     emitHWLoopWideInst(/*Sel=*/1, StartSym, EndSym, /*CntImm=*/std::nullopt,
                        Rs);
     return;
@@ -1108,7 +1108,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
   case Haydn::PseudoLoopEnd:
     // PseudoLoopEnd is a meta instruction (isMeta=1). It carries the
     // loop-body MBB for analyzeBranch round-trip but emits NO bytes — the
-    // SET_HWLOOP_REG (emitted from LoopStart above) already encodes the
+    // SET_HWLOOP_F2 (emitted from LoopStart above) already encodes the
     // start/end offsets. Just drop it.
     return;
   case Haydn::LoopDec:
@@ -1135,12 +1135,12 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     EmitToStreamer(*OutStreamer, Tmp);
     return;
   }
-  case Haydn::SET_HWLOOP:
-  case Haydn::SET_HWLOOP_REG:
+  case Haydn::SET_HWLOOP_PSEUDO:
+  case Haydn::SET_HWLOOP_F2_PSEUDO:
     // Must be SET_HWLOOP_{W,F2_W} before pack (HaydnExpandPseudos /
     // HaydnHardwareLoops). Printer is Desc-only for those forms.
     report_fatal_error(
-        "HaydnAsmPrinter: residual SET_HWLOOP{,_REG} pseudo — expand to "
+        "HaydnAsmPrinter: residual SET_HWLOOP_PSEUDO{,_REG} pseudo — expand to "
         "SET_HWLOOP_{W,F2_W} in ExpandPseudos before PostRA pack");
   }
 

@@ -4,7 +4,7 @@
 ; REGRESSION TEST: multi-BB Role B residual is intentionally soft.
 ;
 ; History: GAP-4 taught the recognizer multi-BB trip resolution, and
-; Role B briefly converted multi-BB soft loops to SET_HWLOOP_REG. That path
+; Role B briefly converted multi-BB soft loops to SET_HWLOOP_F2. That path
 ; is declined (AIE-aligned): multi-BB ZOL residual has open correctness
 ; issues (CoreMark bitextract nested ZOL; lc_dp_lis wrong exit). Single-BB
 ; Role A/B ZOL remains product. Multi-BB stays as soft back-edge.

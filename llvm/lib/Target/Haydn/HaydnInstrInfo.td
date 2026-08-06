@@ -809,14 +809,20 @@ def PseudoLongB    : HaydnLongBranchPseudo<(outs), (ins brtarget:$offset), "long
 // The asm printer expands these to SET_HWLOOP/SET_HWLOOP_F2 instructions
 // with PC-relative offsets computed from the MBB symbols.
 // Operands: sel (0=outer, 1=inner), loop_start MBB, loop_end MBB, trip count.
+//
+// These were named SET_HWLOOP and SET_HWLOOP_REG until the _W fold, which
+// needed those names for the real instructions the database declares. The
+// _PSEUDO suffix also fixes a long-standing misnomer: the reg-count pseudo
+// was called SET_HWLOOP_REG but always printed and expanded as _F2, while
+// SET_HWLOOP_REG in the database is the unrelated all-register form.
 // hasSideEffects=1 matches LoopStart: programs HWLR; must not be DCE'd or
 // freely reordered relative to the remat count producer (post-RA free-reg
 // remat → SET dep chain).
 let hasSideEffects = 1, isNotDuplicable = 1 in {
-def SET_HWLOOP : HaydnPseudo<(outs), (ins uimm5:$sel, brtarget:$loop_start, brtarget:$loop_end, uimm16:$cnt),
+def SET_HWLOOP_PSEUDO : HaydnPseudo<(outs), (ins uimm5:$sel, brtarget:$loop_start, brtarget:$loop_end, uimm16:$cnt),
                                "set_hwloop\t$sel, $loop_start, $loop_end, $cnt", []>;
 
-def SET_HWLOOP_REG : HaydnPseudo<(outs), (ins uimm5:$sel, brtarget:$loop_start, brtarget:$loop_end, GPR32:$rs),
+def SET_HWLOOP_F2_PSEUDO : HaydnPseudo<(outs), (ins uimm5:$sel, brtarget:$loop_start, brtarget:$loop_end, GPR32:$rs),
                                   "set_hwloop_f2\t$sel, $loop_start, $loop_end, $rs", []>;
 } // hasSideEffects = 1, isNotDuplicable = 1
 
@@ -829,7 +835,7 @@ def SET_HWLOOP_REG : HaydnPseudo<(outs), (ins uimm5:$sel, brtarget:$loop_start, 
 // standard analyzeBranch/insertBranch/removeBranch round-trip so the SMS
 // ModuloScheduleExpander can clone+erase them safely (the fix for the
 // expander crash). The post-RA HaydnHardwareLoops pass lowers them to
-// the real SET_HWLOOP_REG encoding.
+// the real SET_HWLOOP_F2 encoding.
 //
 // Two loop models (mirrors AIE AIE2InstrInfo.td:550-572):
 // ZOL (innermost): LoopStart (preheader) + PseudoLoopEnd (latch)
@@ -1711,7 +1717,7 @@ def D_SW_H_WITH_IMM : FmtLaneStore<0x4C,
 // Class 101 WIDE-LS: all 14 _WL + the Fmt48_WideLS class.
 // MOVEI_H, MOVEI_L + the Fmt48_MOVEI class (HaydnInstrInfoAuto.td).
 // The 21 KEPT defs below (ADDI32_W, ORI32_W, JAL_W, JALR_W, BEQ/BNE/BGE
-// BGEU/BLT/BLTU_W, BEQZ/BNEZ/BGEZ/BLTZ_W, CSRW_W, SET_HWLOOP_W
+// BGEU/BLT/BLTU_W, BEQZ/BNEZ/BGEZ/BLTZ_W, CSRW_W, SET_HWLOOP
 // F2_W/REG_W, SLLI64/SRLI64/SRAI64) retain live hand-written C++ consumers
 // (Haydn:: enum refs in AsmPrinter, InstrInfo, ConditionOptimizer
 // HazardRecognizer, HardwareLoops, ExpandPseudos, DClassOpcodes, MatInt).
@@ -1900,16 +1906,16 @@ def CSRW_W : Fmt48_WideCSR<0x81, (outs),
                            "csrw_w\t$uimm8, $rt", []>;
 
 let hasSideEffects = 0, isNotDuplicable = 1, Defs = [SFR] in {
-def SET_HWLOOP_W : Fmt48_WideSET_HWLOOP<0x88, (outs),
+def SET_HWLOOP : Fmt48_WideSET_HWLOOP<0x88, (outs),
     (ins uimm1:$sel, hwloop_off1:$offset1, hwloop_off2:$offset2,
          uimm16_hwloop_cnt:$cnt),
-    "set_hwloop_w\t$sel, $offset1, $offset2, $cnt", []>;
-def SET_HWLOOP_F2_W : Fmt48_WideSET_HWLOOP_F2<0x89, (outs),
+    "set_hwloop\t$sel, $offset1, $offset2, $cnt", []>;
+def SET_HWLOOP_F2 : Fmt48_WideSET_HWLOOP_F2<0x89, (outs),
     (ins uimm1:$sel, hwloop_off1:$offset1, hwloop_off2:$offset2, GPR32:$rs),
-    "set_hwloop_f2_w\t$sel, $offset1, $offset2, $rs", []>;
-def SET_HWLOOP_REG_W : Fmt48_WideSET_HWLOOP_REG<0x8A, (outs),
+    "set_hwloop_f2\t$sel, $offset1, $offset2, $rs", []>;
+def SET_HWLOOP_REG : Fmt48_WideSET_HWLOOP_REG<0x8A, (outs),
     (ins uimm1:$sel, GPR32:$rs1, GPR32:$rs2, GPR32:$rs3),
-    "set_hwloop_reg_w\t$sel, $rs1, $rs2, $rs3", []>;
+    "set_hwloop_reg\t$sel, $rs1, $rs2, $rs3", []>;
 }
 
 //===----------------------------------------------------------------------===//

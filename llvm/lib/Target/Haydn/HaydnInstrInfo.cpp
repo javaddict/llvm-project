@@ -1204,16 +1204,16 @@ bool HaydnInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
     return true;
 
   // Hardware-loop setup is a hard region boundary (AIE/Hexagon-aligned).
-  // Role A expands LoopStart → SET_HWLOOP_REG before postmisched; without
+  // Role A expands LoopStart → SET_HWLOOP_F2 before postmisched; without
   // this fence the scheduler can reorder body peels / address setup across
   // SET (lc_dp_merge: s_lw_post with unscaled index after SET → ALIGNMENT).
   // Treat remaining LoopStart the same until fully expanded.
   // Compare Flex base opcodes — post-RA setDesc may leave *_S0 member Desc.
   unsigned Opc = MI.getOpcode();
   unsigned HwBase = getHaydnFlexBaseOpcode(Opc, *this);
-  if (HwBase == Haydn::SET_HWLOOP || HwBase == Haydn::SET_HWLOOP_REG ||
-      HwBase == Haydn::SET_HWLOOP_W || HwBase == Haydn::SET_HWLOOP_F2_W ||
-      HwBase == Haydn::SET_HWLOOP_REG_W || HwBase == Haydn::LoopStart ||
+  if (HwBase == Haydn::SET_HWLOOP_PSEUDO || HwBase == Haydn::SET_HWLOOP_F2_PSEUDO ||
+      HwBase == Haydn::SET_HWLOOP || HwBase == Haydn::SET_HWLOOP_F2 ||
+      HwBase == Haydn::SET_HWLOOP_REG || HwBase == Haydn::LoopStart ||
       Opc == Haydn::LoopStart)
     return true;
 
@@ -1239,9 +1239,9 @@ bool HaydnInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
           ++I;
         if (I != MBB->end()) {
           unsigned NBase = getHaydnFlexBaseOpcode(I->getOpcode(), *this);
-          if (NBase == Haydn::SET_HWLOOP_REG || NBase == Haydn::SET_HWLOOP_F2_W ||
-              NBase == Haydn::SET_HWLOOP_REG_W || NBase == Haydn::SET_HWLOOP ||
-              NBase == Haydn::SET_HWLOOP_W || NBase == Haydn::LoopStart) {
+          if (NBase == Haydn::SET_HWLOOP_F2_PSEUDO || NBase == Haydn::SET_HWLOOP_F2 ||
+              NBase == Haydn::SET_HWLOOP_REG || NBase == Haydn::SET_HWLOOP_PSEUDO ||
+              NBase == Haydn::SET_HWLOOP || NBase == Haydn::LoopStart) {
             for (const MachineOperand &MO : I->operands()) {
               if (MO.isReg() && MO.isUse() && !MO.isImplicit() &&
                   MO.getReg() == Dest)
@@ -1260,9 +1260,9 @@ bool HaydnInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
     for (const MachineInstr *I = MI.getNextNode();
          I && I->isBundledWithPred(); I = I->getNextNode()) {
       unsigned B = getHaydnFlexBaseOpcode(I->getOpcode(), *this);
-      if (B == Haydn::SET_HWLOOP || B == Haydn::SET_HWLOOP_REG ||
-          B == Haydn::SET_HWLOOP_W || B == Haydn::SET_HWLOOP_F2_W ||
-          B == Haydn::SET_HWLOOP_REG_W || B == Haydn::LoopStart)
+      if (B == Haydn::SET_HWLOOP_PSEUDO || B == Haydn::SET_HWLOOP_F2_PSEUDO ||
+          B == Haydn::SET_HWLOOP || B == Haydn::SET_HWLOOP_F2 ||
+          B == Haydn::SET_HWLOOP_REG || B == Haydn::LoopStart)
         return true;
     }
   }
@@ -1600,8 +1600,8 @@ unsigned HaydnInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   case Haydn::RET:
   case Haydn::BR_JT:
   case Haydn::PseudoCALL:
-  case Haydn::SET_HWLOOP:
-  case Haydn::SET_HWLOOP_REG:
+  case Haydn::SET_HWLOOP_PSEUDO:
+  case Haydn::SET_HWLOOP_F2_PSEUDO:
     // Each expands to a single real instruction → one product parcel.
     return B;
   case Haydn::LOADI32: {

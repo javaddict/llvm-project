@@ -25,7 +25,7 @@
 .section .text
 .globl _start
 _start:
-    set_hwloop_w 0, loop_body, loop_end, 3
+    set_hwloop 0, loop_body, loop_end, 3
     .balign 16
 
 .section .text.body

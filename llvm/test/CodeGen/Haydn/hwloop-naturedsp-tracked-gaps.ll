@@ -9,7 +9,7 @@
 ; REGRESSION TEST (documenting): NatureDSP loop patterns and the HWLoop
 ; recognizer. This file now uses the pre-RA HardwareLoops pass
 ; (`-stop-after=haydn-hwloops`, Stream A /), which runs BEFORE SMS
-; and converts countable loops to SET_HWLOOP_REG + HWLOOP_END pseudos (on
+; and converts countable loops to SET_HWLOOP_F2 + HWLOOP_END pseudos (on
 ; virtual registers — vreg numbers are deliberately not pinned in the CHECKs).
 ; These are the tracked patterns from
 ; ~/haydn-plans/naturedsp-haydn/disasm/kernel-sdiff/PATTERNS.md (GAP-2, GAP-3).
@@ -42,14 +42,14 @@
 ; source across block boundaries, the IVInit constant resolves, and Case 1
 ; of the register-trip-count path matches (TripCountReg = LimitReg).
 ;
-; Behavior after : a SET_HWLOOP_REG + HWLOOP_END, no compare/branch
+; Behavior after : a SET_HWLOOP_F2 + HWLOOP_END, no compare/branch
 ; back-edge. This CHECK was updated from `CHECK-NOT: SET_HWLOOP / CHECK: BLT`
 ; to the converted form. The dedicated regression test for this shape (with
 ; the full comment block documenting the bug) lives in
 ; hwloop-recognizer-broaden.ll @gap2_countup_blt.
 ;
 ; Pre-RA pass note (Stream A,): under `-stop-after=haydn-hwloops`
-; the loop still converts; the SET_HWLOOP_REG/HWLOOP_END pseudos are emitted
+; the loop still converts; the SET_HWLOOP_F2/HWLOOP_END pseudos are emitted
 ; on virtual registers (pre-RA), so no vreg numbers are pinned here.
 ; ===========================================================================
 define i32 @countup_runtime_blt(ptr readonly %a, i32 %n) nounwind {
@@ -88,7 +88,7 @@ exit:
 ;
 ; CLOSED by the pre-RA HardwareLoops pass (Stream A,): the pre-RA pass
 ; runs before SMS and recognizes the countable trip from the induction/compare
-; pair regardless of the in-loop recurrence, emitting SET_HWLOOP_REG +
+; pair regardless of the in-loop recurrence, emitting SET_HWLOOP_F2 +
 ; HWLOOP_END on virtual registers. The CHECK has been flipped from the
 ; non-conversion form (`CHECK-NOT: SET_HWLOOP / CHECK: BNEZ`) to the converted
 ; form. vreg numbers are not pinned (pre-RA MIR).

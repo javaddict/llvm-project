@@ -24,7 +24,7 @@
 
 
 
-; REBASELINED (G2.codegen-rebaseline): Desc-only Bundle128 print — packed set_hwloop_f2_w {..; nop; nop}, LLhwloop labels retained; no pre-set p2align.
+; REBASELINED (G2.codegen-rebaseline): Desc-only Bundle128 print — packed set_hwloop_f2 {..; nop; nop}, LLhwloop labels retained; no pre-set p2align.
 
 define void @ii_scheduler_reorder(ptr %a, ptr %b, ptr %c, i32 %n) {
 ; The loop body must contain at least one multi-slot bundle: two ALU ops on
@@ -38,7 +38,7 @@ define void @ii_scheduler_reorder(ptr %a, ptr %b, ptr %c, i32 %n) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; addi32_w r5, r0, 1 }
 ; CHECK-NEXT:    { max32 r4, r4, r5; nop; nop }
-; CHECK-NEXT:    { nop; nop; set_hwloop_f2_w 1, .LLhwloop_start0, .LLhwloop_end0, r4 }
+; CHECK-NEXT:    { nop; nop; set_hwloop_f2 1, .LLhwloop_start0, .LLhwloop_end0, r4 }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }

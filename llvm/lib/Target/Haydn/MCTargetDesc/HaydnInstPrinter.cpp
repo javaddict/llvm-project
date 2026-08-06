@@ -72,7 +72,7 @@ void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
 void HaydnInstPrinter::printSingleInst(const MCInst *MI, uint64_t Address,
                                        const MCSubtargetInfo &STI,
                                        raw_ostream &O) {
-  // Special handling for SET_HWLOOP_REG: print as
+  // Special handling for SET_HWLOOP_F2_PSEUDO: print as
   // set_hwloop_f2 sel, loop_start, loop_end, rs
   // The MCInst carries: sel(imm), loop_start(expr|imm), loop_end(expr|imm), rs(reg).
   // The expr form comes from the AsmPrinter/asm-parser path (symbolic labels);
@@ -82,7 +82,7 @@ void HaydnInstPrinter::printSingleInst(const MCInst *MI, uint64_t Address,
   // (Bug C — previously the imm form was silently dropped because only
   // isExpr was checked, making objdump show "set_hwloop_f2 1, r12" with no
   // offsets, hiding the START/END correctness bug).
-  if (MI->getOpcode() == Haydn::SET_HWLOOP_REG) {
+  if (MI->getOpcode() == Haydn::SET_HWLOOP_F2_PSEUDO) {
     O << "set_hwloop_f2\t";
     if (MI->getNumOperands() > 0 && MI->getOperand(0).isImm())
       O << MI->getOperand(0).getImm();

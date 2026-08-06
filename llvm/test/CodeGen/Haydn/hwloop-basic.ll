@@ -2,7 +2,7 @@
 ; RUN:   -mattr=+hwloop < %s | FileCheck %s
 ;
 ; HiFi-competitive constant-trip loop: materialize count once, then ZOL.
-; Haydn form: set_hwloop_f2_w with trip in a GPR (imm 10 loaded preheader).
+; Haydn form: set_hwloop_f2 with trip in a GPR (imm 10 loaded preheader).
 ;
 ; CHECKs are intentionally shape-level (not full schedule) so packetizer
 ; post-RA densify can move body ops without false failures. Core contract:
@@ -11,7 +11,7 @@
 ; 3) soft back-edge gone
 
 ; CHECK-LABEL: hwloop_basic:
-; CHECK: set_hwloop_f2_w
+; CHECK: set_hwloop_f2
 ; CHECK: .LLhwloop_start{{[0-9]+}}:
 ; CHECK: .LLhwloop_end{{[0-9]+}}:
 ; CHECK-NOT: beqz

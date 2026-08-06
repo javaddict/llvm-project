@@ -64,7 +64,7 @@ exit:
 ; bnez in its rebaseline, but phi_const_init's back-edge was never
 ; SFR-stripped — the fused form survived, so bnez was unsatisfiable. Reverted.
 ; 2026-07 update: the loop is now converted to a hardware loop
-; (set_hwloop_f2_w) by the HWLoops pass — the scalar blt back-edge is gone.
+; (set_hwloop_f2) by the HWLoops pass — the scalar blt back-edge is gone.
 define i32 @phi_const_init(i32 %n) nounwind {
 ; Cmp+branch fusion no longer fires; loop back-edge is slt32+bnez
 ; (was a fused blt before the Flex cutover).

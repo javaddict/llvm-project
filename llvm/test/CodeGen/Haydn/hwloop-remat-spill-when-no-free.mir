@@ -9,7 +9,7 @@
 # CHECK: ST32
 # CHECK: $r{{[0-9]+}} = ADDI32_W $r1, -1
 # CHECK-NOT: $r1 = ADDI32_W $r1, -1
-# CHECK: SET_HWLOOP_F2_W
+# CHECK: SET_HWLOOP_F2
 # CHECK: LD32
 
 --- |

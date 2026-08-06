@@ -62,7 +62,7 @@ enum Fixups {
 
   // WIDE SET_HWLOOP / SET_HWLOOP_F2 offset fields (encoding_manual.md §5.11
   // §5.12). (RISK-6): the actually-emitted def is the Bundle128 s0
-  // variant SET_HWLOOP_F2_W_S0 (HaydnFormatsALU32.td), whose s0 slot
+  // variant SET_HWLOOP_F2_S0 (HaydnFormatsALU32.td), whose s0 slot
   // layout `{FU, opcode, reserved, rs, offset2, offset1, sel}` places:
   // offset1 (uimm6) at Bundle128 LoWord bits[6:1] (FieldLsb=1)
   // offset2 (uimm12) at Bundle128 LoWord bits[18:7] (FieldLsb=7)
@@ -70,7 +70,7 @@ enum Fixups {
   // bits[25:14]) are NEVER emitted subsequent and were a stale transcription
   // that caused the real bug (off1 silently corrupted the rs/reserved
   // bits). Both use ÷4 (hwloop body start/end are 4-byte aligned per §5.14).
-  // PC-relative base is the SET_HWLOOP_W parcel's own address.
+  // PC-relative base is the SET_HWLOOP parcel's own address.
   FIXUP_HAYDN_HWLoopOff1,
   FIXUP_HAYDN_HWLoopOff2,
 

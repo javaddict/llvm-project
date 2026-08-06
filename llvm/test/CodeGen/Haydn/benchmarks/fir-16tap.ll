@@ -46,7 +46,7 @@ define void @fir_16tap(ptr %out, ptr %in, ptr %coeffs, i32 %n) {
 ; bogus set_hwloop_f2 CHECK added then is removed here (rebaseline).
 ;
 ; rework : the pre-RA HardwareLoops pass was removed (it
-; corrupted SET_HWLOOP_REG MBB operands pre-RA). SMS runs pre-RA on the naive
+; corrupted SET_HWLOOP_F2 MBB operands pre-RA). SMS runs pre-RA on the naive
 ; loop; the post-RA HaydnHardwareLoops pass does not convert this nested inner
 ; loop (guarded preheader + multi-BB epilogue defeat the recognizer). The
 ; inner 16-tap loop stays a bnez back-edge; mac32 in the body is the invariant.

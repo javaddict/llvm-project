@@ -52,7 +52,7 @@ define void @matmul_4x4(ptr %C, ptr %A, ptr %B) {
 ; Each inner loop iteration has 1 mac32; the loop runs 4 times per (i,j) pair.
 ;
 ; update: the pre-RA HardwareLoops pass was removed (it corrupted
-; SET_HWLOOP_REG MBB operands pre-RA). SMS runs pre-RA on the naive loop; the
+; SET_HWLOOP_F2 MBB operands pre-RA). SMS runs pre-RA on the naive loop; the
 ; post-RA HaydnHardwareLoops pass does not form a hardware loop for this nested
 ; shape (the SMS kernel's guarded preheader + multi-BB epilogue defeat the
 ; single-exit/recognizer checks). The inner k-loop stays a regular bnez

@@ -380,7 +380,7 @@ void HaydnPassConfig::addPreRegAlloc() {
   // Hardware-loop formation happens POST-RA (addPreSched2 -> HaydnHardwareLoops)
   // after SMS. AIE2 order: MBP (O1+) then HardwareLoops (still post-RA). The
   // pre-RA hwloop pass was removed : forming hwloops pre-RA corrupted
-  // SET_HWLOOP_REG MBB operands (.LBB_-1) because later block-placement
+  // SET_HWLOOP_F2 MBB operands (.LBB_-1) because later block-placement
   // renumbering moved or erased referenced blocks. SMS uses virtual registers
   // for renaming across pipeline stages, so it must run before RA.
   if (getOptLevel() >= CodeGenOptLevel::Default) {

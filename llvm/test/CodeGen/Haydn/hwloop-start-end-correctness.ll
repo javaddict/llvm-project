@@ -32,7 +32,7 @@
 ; This test guards ALL THREE fixes:
 ;
 ; Test 1 (single-BB loop): The degenerate case. Before the fix the MIR showed
-; SET_HWLOOP_REG 1, %bb.X, %bb.X, $rN (same MBB twice — start==end).
+; SET_HWLOOP_F2 1, %bb.X, %bb.X, $rN (same MBB twice — start==end).
 ; After the fix the END must be a DIFFERENT MBB (the exit block).
 ;
 ; Test 2 (multi-BB loop with body+ latch): The END must be the EXIT block, not
@@ -81,7 +81,7 @@ exit:
 ; Test 2: multi-BB loop (header + body + latch) — END must be exit, not latch
 define i32 @multi_bb_loop(ptr %p, i32 %n) {
 ; MIR-LABEL: name: multi_bb_loop
-; The SET_HWLOOP_REG start operand is the loop header; the end operand is the
+; The SET_HWLOOP_F2 start operand is the loop header; the end operand is the
 ; loop's single exit block — NOT the latch. Before the end operand was
 ; the latch MBB (which for multi-BB loops is a different block from the exit
 ; causing HWLR_END to point to the latch's first instruction, skipping the
@@ -129,21 +129,21 @@ exit:
 ; This is a pre-existing G1 recognizer-breadth limitation, NOT a start/end
 ; regression and NOT caused by the findImmediateDefBefore fix (verified:
 ; the HEAD source, which predates and has only trip-count Cases 1/2/3
-; also emits no SET_HWLOOP_REG for this shape). The start/end-offset
+; also emits no SET_HWLOOP_F2 for this shape). The start/end-offset
 ; correctness is fully guarded by Test 1 and Test 2 above (single-BB and
 ; multi-BB), which DO convert.
 ;
 ; The check below asserts the ACTUAL behavior: nested_loop must NOT emit a
-; degenerate (start==end) SET_HWLOOP_REG. A future G1 broadening that makes the
+; degenerate (start==end) SET_HWLOOP_F2. A future G1 broadening that makes the
 ; inner loop convert should replace this MIR-NOT with the positive check
-; `SET_HWLOOP_REG 1, %bb.[[IS]], %bb.[[IE]], $r{{[0-9]+}}` plus the start!=end
+; `SET_HWLOOP_F2 1, %bb.[[IS]], %bb.[[IE]], $r{{[0-9]+}}` plus the start!=end
 ; guard, as documented in ~/haydn-plans/Haydn_Master_Plan.md (G1 forward focus).
 define i32 @nested_loop(ptr %p, i32 %m, i32 %n) {
 ; MIR-LABEL: name: nested_loop
 ; The inner loop does not convert today (G1 recognizer-breadth limit). Guard
 ; against a degenerate start==end emission IF a future change partially fires:
-; no SET_HWLOOP_REG with identical start/end operands may appear.
-; MIR-NOT: SET_HWLOOP_REG 1, %bb.[[IS:[0-9]+]], %bb.[[IS]], $r{{[0-9]+}}
+; no SET_HWLOOP_F2 with identical start/end operands may appear.
+; MIR-NOT: SET_HWLOOP_F2 1, %bb.[[IS:[0-9]+]], %bb.[[IS]], $r{{[0-9]+}}
 entry:
   br label %outer.header
 

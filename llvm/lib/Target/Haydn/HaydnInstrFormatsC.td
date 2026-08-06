@@ -102,9 +102,9 @@ class HaydnInst48<dag outs, dag ins, string asmstr, list<dag> pattern>
 // Fmt48_WideBR_I12 — BEQZ/BNEZ/BGEZ/BLTZ_W (4)
 // Fmt48_WideDR_RI6 — SLLI64, SRLI64, SRAI64
 // Fmt48_WideCSR — CSRW_W
-// Fmt48_WideSET_HWLOOP — SET_HWLOOP_W
-// Fmt48_WideSET_HWLOOP_F2 — SET_HWLOOP_F2_W
-// Fmt48_WideSET_HWLOOP_REG— SET_HWLOOP_REG_W
+// Fmt48_WideSET_HWLOOP — SET_HWLOOP
+// Fmt48_WideSET_HWLOOP_F2 — SET_HWLOOP_F2
+// Fmt48_WideSET_HWLOOP_REG— SET_HWLOOP_REG
 // (Verified: `grep -nE '^def [A-Z0-9_]+ +: Fmt48_' HaydnInstrInfo.td` — 21
 // live defs total.) 's "retire Fmt48_*" Cycle-B item cannot complete until
 // those 21 defs are migrated to Bundle128 s0/s1/s2 format classes owned by
@@ -142,7 +142,7 @@ class HaydnInst48<dag outs, dag ins, string asmstr, list<dag> pattern>
 // with the canonical §5.1 fixed-field map (rd/rt at [15:12]). The 12
 // defs (ADDI64..MINI64) and the Class 000 GPR WIDE variants (ADDI32_W
 // ORI32_W) are re-encoded onto the §5 opcode map. New WIDE-variant defs
-// (LUI_W, JAL_W, BEQ_W, CSRR_W, SET_HWLOOP_W,...) carry the §5 opcodes
+// (LUI_W, JAL_W, BEQ_W, CSRR_W, SET_HWLOOP,...) carry the §5 opcodes
 // 0x0C / 0x20-0x30 / 0x80-0x8A and coexist with the existing 32-bit FmtI
 // FmtBR / FmtJ / FmtCSR forms (which stay unchanged for short-offset code).
 //===----------------------------------------------------------------------===//
@@ -373,7 +373,7 @@ class Fmt48_WideSET_HWLOOP_F2<bits<8> opcode, dag outs, dag ins, string asmstr,
   let Inst{3 - 0} = 0b1101;
 }
 
-// 48-bit WIDE SET_HWLOOP_REG format (§5.13, opcode 0x8A). All-register form.
+// 48-bit WIDE SET_HWLOOP_F2 format (§5.13, opcode 0x8A). All-register form.
 // bits[47:44]=rs1(begin) bits[43:40]=rs2(end) bits[39:36]=rs3(count)
 // bits[35:14]=spare(0) bits[13]=hwlr_sel bits[12]=spare(0)
 // bits[11:4]=0x8A bits[3:0]=1101

@@ -5,8 +5,8 @@
 ;
 ; Bug class (CLAUDE.md M7 forward-focus): "fix the.LBB0_-1 negative-offset
 ; edge-case." Investigation verdict: ARCHITECTURALLY IMPOSSIBLE for the
-; CodeGen path to produce a negative SET_HWLOOP_REG fixup offset. The
-; HaydnHardwareLoops pass emits SET_HWLOOP_REG in the loop PREHEADER, and
+; CodeGen path to produce a negative SET_HWLOOP_F2 fixup offset. The
+; HaydnHardwareLoops pass emits SET_HWLOOP_F2 in the loop PREHEADER, and
 ; createPreheaderForLoop (HaydnHardwareLoops.cpp:111-174) always inserts
 ; the preheader immediately BEFORE the header in MBB layout:
 ;
@@ -38,9 +38,9 @@
 ; tightest offset (loop_start = +1 word minimum, loop_end = +1 word).
 ; This is the configuration most likely to expose any off-by-one or
 ; sign-extension bug in the fixup math.
-; 2. Check the textual asm shows set_hwloop_f2_w with a forward reference
-; (.LBB0_1 is AFTER the set_hwloop_f2_w in layout). The WIDE
-; set_hwloop_f2_w parcel is 6 bytes; the loop body label therefore
+; 2. Check the textual asm shows set_hwloop_f2 with a forward reference
+; (.LBB0_1 is AFTER the set_hwloop_f2 in layout). The WIDE
+; set_hwloop_f2 parcel is 6 bytes; the loop body label therefore
 ; lands at an unaligned offset and the -filetype=obj RUN line was
 ; retired (the AsmPrinter does not yet align after a WIDE hwloop
 ; tracked separately). The textual-asm RUN is the regression guard.
@@ -61,7 +61,7 @@
 
 define void @tiny_single_store_loop(ptr %p) {
 ; CHECK-LABEL: tiny_single_store_loop:
-; CHECK: set_hwloop_f2_w
+; CHECK: set_hwloop_f2
 entry:
   br label %loop
 
@@ -77,11 +77,11 @@ exit:
 }
 
 ; Two-instruction body — loop_start offset is still tiny (just the
-; SET_HWLOOP_REG width + any preheader fall-through), loop_end is one
+; SET_HWLOOP_F2 width + any preheader fall-through), loop_end is one
 ; instruction further. Still well within uimm6/uimm12.
 define i32 @tiny_two_inst_loop(ptr %p) {
 ; CHECK-LABEL: tiny_two_inst_loop:
-; CHECK: set_hwloop_f2_w
+; CHECK: set_hwloop_f2
 entry:
   br label %loop
 

@@ -386,7 +386,7 @@ class MemoryEdges : public ScheduleDAGMutation {
 class ZOLSetupExitLatency : public ScheduleDAGMutation {
   static bool isHWLoopSetup(const MachineInstr &MI) {
     unsigned Opc = MI.getOpcode();
-    return Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG ||
+    return Opc == Haydn::SET_HWLOOP_PSEUDO || Opc == Haydn::SET_HWLOOP_F2_PSEUDO ||
            Opc == Haydn::LoopStart;
   }
 
@@ -447,7 +447,7 @@ class RegionEndEdges : public ScheduleDAGMutation {
       // AIE: ZOL setup raises ExitSU latency so region end is after the
       // min setup→loop distance (Haydn: MinSetupBundles to BEGIN).
       unsigned Opc = MI.getOpcode();
-      if (Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG ||
+      if (Opc == Haydn::SET_HWLOOP_PSEUDO || Opc == Haydn::SET_HWLOOP_F2_PSEUDO ||
           Opc == Haydn::LoopStart)
         EdgeLatency =
             std::max(EdgeLatency, haydn::hwloop::MinSetupBundles);

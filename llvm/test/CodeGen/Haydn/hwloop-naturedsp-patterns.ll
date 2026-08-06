@@ -1,5 +1,5 @@
 ; This test exercises the pre-RA HardwareLoops pass (Stream A,), which
-; runs BEFORE SMS and converts countable loops to SET_HWLOOP_REG + HWLOOP_END
+; runs BEFORE SMS and converts countable loops to SET_HWLOOP_F2 + HWLOOP_END
 ; pseudos using IV-PHI analysis. Pre-RA MIR uses virtual registers, so
 ; the CHECKs do not pin specific vreg numbers.
 ;
@@ -9,7 +9,7 @@
 ; byte-stride pointer IV and the post-RA recognizer logged "Cannot compute trip
 ; count", leaving the loop on a BEQZ back-edge). The pre-RA IV-PHI analysis
 ; recovers the induction on the pointer PHI and now converts it. All
-; four NatureDSP-pattern functions below emit SET_HWLOOP_REG + HWLOOP_END
+; four NatureDSP-pattern functions below emit SET_HWLOOP_F2 + HWLOOP_END
 ; pseudos.
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
@@ -58,7 +58,7 @@
 ; logged "Cannot determine trip count" for this equality form and emitted
 ; no hardware loop. GAP-1 routes the unfused-equality latch through the
 ; cause-B trip formula (trip = limit - init, one SUB32 in preheader)
-; and emits SET_HWLOOP_REG.
+; and emits SET_HWLOOP_F2.
 ; ===========================================================================
 define i32 @vec_dot_unfused_equality(ptr readonly %x, ptr readonly %y, i32 %N) nounwind {
 ; CHECK-LABEL: name: vec_dot_unfused_equality
@@ -144,7 +144,7 @@ exit:
 ; (, non-converting BEQZ back-edge because the post-RA recognizer
 ; bailed on LSR's byte-stride pointer IV) is FIXED: the pre-RA IV-PHI
 ; analysis recovers the induction on the pointer PHI and emits
-; SET_HWLOOP_REG with trip reg = the IV's preheader init (the count-16
+; SET_HWLOOP_F2 with trip reg = the IV's preheader init (the count-16
 ; shape). Correctness: the pre-RA pass derives the trip from the IV PHI
 ; so the emitted trip is the IR-bound value.
 ; ===========================================================================

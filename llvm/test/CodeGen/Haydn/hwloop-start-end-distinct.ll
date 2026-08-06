@@ -22,7 +22,7 @@
 
 define void @tiny_body(ptr nocapture %p, i32 %n) {
 ; CHECK-LABEL: tiny_body:
-; CHECK: set_hwloop_f2_w{{.*}}[[START:\.LLhwloop_start[0-9]+]], [[END:\.LLhwloop_end[0-9]+]]
+; CHECK: set_hwloop_f2{{.*}}[[START:\.LLhwloop_start[0-9]+]], [[END:\.LLhwloop_end[0-9]+]]
 ; Setup gap: SET at or before t-3.
 ; CHECK: { nop; nop; nop }
 ; CHECK: { nop; nop; nop }

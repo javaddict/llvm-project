@@ -14,7 +14,7 @@
 //
 // Opt before RA; post-RA Fixup is correctness only.
 //
-// Count-unit law (reg trip SET_HWLOOP_REG): late remat owns
+// Count-unit law (reg trip SET_HWLOOP_F2): late remat owns
 //   Dest = Src + adj  →  SET …, Dest
 // Fixup must NEVER splice between remat and SET (splits the def→use).
 // Free lifts land *before the count-unit head* (remat if present).
@@ -120,17 +120,17 @@ namespace {
 
 // Real wide forms (post ExpandPseudos) + residual logicals + setDesc members.
 static bool isHwloopSetup(unsigned Opc) {
-  return Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG ||
-         Opc == Haydn::SET_HWLOOP_W || Opc == Haydn::SET_HWLOOP_F2_W ||
-         Opc == Haydn::SET_HWLOOP_W_S0 || Opc == Haydn::SET_HWLOOP_F2_W_S0;
+  return Opc == Haydn::SET_HWLOOP_PSEUDO || Opc == Haydn::SET_HWLOOP_F2_PSEUDO ||
+         Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_F2 ||
+         Opc == Haydn::SET_HWLOOP_S0 || Opc == Haydn::SET_HWLOOP_F2_S0;
 }
 static bool isHwloopRegTrip(unsigned Opc) {
-  return Opc == Haydn::SET_HWLOOP_REG || Opc == Haydn::SET_HWLOOP_F2_W ||
-         Opc == Haydn::SET_HWLOOP_F2_W_S0;
+  return Opc == Haydn::SET_HWLOOP_F2_PSEUDO || Opc == Haydn::SET_HWLOOP_F2 ||
+         Opc == Haydn::SET_HWLOOP_F2_S0;
 }
 static bool isHwloopImmTrip(unsigned Opc) {
-  return Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_W ||
-         Opc == Haydn::SET_HWLOOP_W_S0;
+  return Opc == Haydn::SET_HWLOOP_PSEUDO || Opc == Haydn::SET_HWLOOP ||
+         Opc == Haydn::SET_HWLOOP_S0;
 }
 
 // Aliases from HaydnHWLoopContracts.h / BundlePlan EncodedBytes (B4.4).
@@ -415,7 +415,7 @@ bool HaydnFixupHwLoops::computeOffsets(MachineInstr &SetMI,
     return false;
 
   // LoopStart (IR ZOL): body MBB from PseudoLoopEnd / layout successor.
-  // Without this, AsmPrinter still emits set_hwloop_f2_w with Off1 that can
+  // Without this, AsmPrinter still emits set_hwloop_f2 with Off1 that can
   // exceed uimm6 → "relocation offset out of range" / missing END labels.
   if (SetMI.getOpcode() == Haydn::LoopStart) {
     StartMBB = resolveBodyMBB(SetMI);
@@ -1122,7 +1122,7 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
 
   if ((IsLoopStart || isHwloopRegTrip(Opc)) && Prefer.isPhysical() &&
       Prefer != Haydn::R0) {
-    // Trip reg at LoopStart / SET_HWLOOP_REG.
+    // Trip reg at LoopStart / SET_HWLOOP_F2.
     // Prefer is correct only if the body does not redefine it as a
     // non-countdown (e.g. S_LW_POST dest = trip). Residual Prefer+=-1 is OK
     // we strip it below and install a single LoopDec.
@@ -1463,7 +1463,7 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
       return true;
     // Live body, soft edge not installable. Never silent single-pass body.
     report_fatal_error(
-        "HaydnFixupHwLoops: out-of-range/invalid SET_HWLOOP cannot demote to "
+        "HaydnFixupHwLoops: out-of-range/invalid SET_HWLOOP_PSEUDO cannot demote to "
         "software loop (no free counter GPR or usable exit); refusing "
         "erase-only once-through",
         /*gen_crash_diag=*/false);
