@@ -49,9 +49,11 @@ void use_all_xc_macros(ae_int32x2 *p32x2, ae_int16x4 *p16x4,
   AE_LA32X2POS_PC(align32, p32x2);
   AE_LA16X4_IC(d16x4, align16, p16x4, 0);
   AE_LA32X2_IC(d32x2, align32, p32x2, 0);
-  // C4.2 EXACT: reverse-IC via UA dir=1 + haydn_cbr_step(ptr, -8).
-  AE_LA16X4_RIC(d16x4, align16, p16x4, 0);
-  AE_LA32X2_RIC(d32x2, align32, p32x2, 0);
+  // The reverse forms AE_LA16X4_RIC / AE_LA32X2_RIC are WITHDRAWN — the AR
+  // direction select is gone (§ 8 Q2). Using them is now a compile error by
+  // design; haydn-compat-la-ric.c asserts that, so this smoke test drops them
+  // rather than testing the withdrawal a second time. The forward _IC forms
+  // above are unaffected (dir = 0, stride 8).
 
   // Bit-reversed addressing (F06: haydn_lw_brev_imm / haydn_ldw_brev_imm).
   // ImmArg: stride is a compile-time constant; 3-arg form updates ptr.

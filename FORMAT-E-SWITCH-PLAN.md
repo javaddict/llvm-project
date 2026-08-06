@@ -784,6 +784,29 @@ That gate is only as good as the binary, and this is the second time in this
 migration that a build system silently kept a stale artifact (§ 6.6 is the
 first). Assume nothing rebuilds itself.
 
+### 6.13 Editing `haydn_dsp.h` does not change what the tests see
+
+`clang/test/Headers/*.c` say `#include <haydn_dsp.h>`, which resolves to the
+**resource-dir copy** at `build/lib/clang/22/include/haydn_dsp.h`, not the
+source file you just edited. Withdrawing eleven `AE_*` macros and re-running
+`clang/test/Headers` reported **143/143 passing** — against the old header.
+The four tests that should have failed only did so after:
+
+```sh
+cmake --build build -j"$(nproc)" --target clang-resource-headers
+```
+
+This is the third member of the same family: § 6.6 (ninja keeps a stale
+`libc.a` and a stale BSP), § 6.12 (`cmake --build build` does not build
+`HaydnTests`), and now this. In every case a build system silently served a
+previous artifact and the test result was meaningless — twice in the
+reassuring direction, which is worse. **Whenever a change to generated or
+copied inputs produces no test movement at all, check the artifact's timestamp
+before believing it.**
+
+`-I clang/lib/Headers` on a manual `clang` invocation *does* pick up the source
+copy, so a hand check and the test suite can disagree — that is the tell.
+
 ### 6.8 Adding a regression case trips the manifest gate
 
 `scripts/check_regression_manifest.sh --write` regenerates it. It also rewrites
@@ -955,12 +978,52 @@ on literal mnemonics is called out in § 5.5 for exactly this reason.
    (`haydn_ae_la64_step(__ar, __p, 8, 0)` → `haydn_d_ltwua_post(p, ar, stride,
    dir)`). It will not compile until this is done, and how to do it depends on
    question 2.
-2. **Ten public `AE_*` macros have no format E equivalent.** They pass either
-   `dir = 1` or a runtime stride, neither of which the new hardware has. Every
-   other `AE_*` already passes `stride = 8, dir = 0` and is unaffected. Emulate
-   in software with ordinary loads and pointer arithmetic, or drop them? The
-   handout at `~/haydn/haydn-ar-intrinsics-change.html` asks users which they
-   depend on. **Awaiting a decision — nothing here has been changed.**
+2. **~~Ten~~ ELEVEN public `AE_*` macros have no format E equivalent —
+   ANSWERED: withdraw for now.** They pass either `dir = 1` or a runtime
+   stride, neither of which the new hardware has. Every other `AE_*` already
+   passes `stride = 8, dir = 0` and is unaffected.
+
+   **Decision: withdrawn, deliberately reversibly.** Software emulation with
+   ordinary loads and pointer arithmetic remains the open alternative; nothing
+   about it is foreclosed. Each macro now expands to
+   `__HAYDN_AE_WITHDRAWN_STMT(sym, needs)`, a `_Static_assert(0)` naming the
+   symbol and the missing capability.
+
+   That idiom is deliberately NOT the existing `__HAYDN_AE_UNSUPPORTED`:
+   that one is the opt-out for *inexact mappings* and is disarmed by
+   `__HAYDN_ALLOW_INEXACT_AE`. This is *missing hardware*, so it has no escape
+   hatch, and `haydn-compat-la-ric.c` has a RUN line asserting that
+   `__HAYDN_ALLOW_INEXACT_AE` does not re-enable it.
+
+   **It was eleven, not ten.** `AE_LA32X2F24_RIP` delegates to
+   `__AE_LA32X2_RIP_{3A,4A}` and needs `dir = 1` exactly like its peers.
+   `haydn_ae_audit.py` missed it because **the candidate list was hardcoded to
+   ten names** — the delegation-following logic was fine, it simply never ran
+   on a name nobody had typed in. The script now derives its candidates from
+   the header (588 macros scanned) and reports the 11 as withdrawn.
+
+   Ground truth for this class of question is the preprocessor, not a script:
+   expand every `AE_*` at every arity with `clang -E` and look at what actually
+   reaches an AR helper with `dir = 1` or a non-literal stride. That is how the
+   eleventh was found, and it now agrees with the audit exactly.
+
+   Both `HAYDN_COMPAT_TIER_AE_LA16X4_RIC` and `_AE_LA32X2_RIC` moved from
+   `HAYDN_COMPAT_EXACT` to `HAYDN_COMPAT_UNSUPPORTED`; the other nine never
+   carried a tier tag. Note the contrast the taxonomy test now pins:
+   **`AE_L16X4_RIC` stays EXACT** — it reverses via a negative `D_LDW_CB`
+   stride, not the direction select, so it is unaffected.
+
+   Four clang tests asserted the old lowering
+   (`haydn-compat-la-ric.c`, `haydn-compat-exact-value-ref.c`,
+   `haydn-compat-tier-taxonomy.c`, `haydn_dsp.c`). They now assert the
+   withdrawal instead, which is stronger than deleting them: the property the
+   old tests existed to protect was "RIC must not silent-alias forward IC",
+   and failing to compile is the strongest possible form of that. The forward
+   `_IC` probes are kept as the live contrast.
+
+   The handout at `~/haydn/haydn-ar-intrinsics-change.html` still asks users
+   which they depend on; that answer decides whether the withdrawal becomes
+   emulation or becomes permanent.
 
    Audited against the header as it stands (the *last* `#define` wins, and
    several of these are redefined two or three times, so the early definitions
@@ -988,7 +1051,12 @@ on literal mnemonics is called out in § 5.5 for exactly this reason.
    reads the final definition, which grepping does not:
 
    ```sh
+   # the cheap check — derives its candidates from the header now
    python3 llvm/lib/Target/Haydn/utils/haydn_ae_audit.py
+   #   588 AE_* macros scanned; 11 need attention.  (all WITHDRAWN)
+
+   # ground truth, when the answer matters: expand everything and look
+   cmake --build build --target clang-resource-headers   # REQUIRED — see § 6.13
    ```
 3. **The `.xlsx` twin of the bit layout** — see § 5.3.
 4. **CB-130** (`bundlesim_reg_cb44_o2_stale_cond_max_reduce`) is the sole

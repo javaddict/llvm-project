@@ -36,14 +36,26 @@ def resolve(name, depth=0, seen=None):
     return out
 
 
-TEN = ['AE_LA16X4_RIP', 'AE_LA16X4_RIC', 'AE_LA32X2_RIP', 'AE_LA32X2_RIC',
-       'AE_SA16X4_RIP', 'AE_SA32X2_RIP', 'AE_SA32X2F24_RIP', 'AE_SA64NEG_FP',
-       'AE_SA16X4_IP_X', 'AE_SA32X2_IP_X']
+# EVERY public AE_* macro, derived from the header — not a hardcoded list.
+#
+# It used to be a hardcoded list of ten, and that is exactly how it under-
+# reported: AE_LA32X2F24_RIP delegates to __AE_LA32X2_RIP_{3A,4A} and needs
+# dir = 1 like its peers, but it was not one of the ten names, so `resolve`
+# never ran on it. The resolution logic was fine; the candidate set was the
+# bug. Ground truth is the preprocessor — expand every macro and look at what
+# actually reaches an AR helper — and this scan is the cheap approximation of
+# that, so keep it derived.
+CANDIDATES = sorted(n for n in defs if re.fullmatch(r'AE_[A-Z0-9_]+', n))
 
-for name in TEN:
+flagged = []
+for name in CANDIDATES:
     chain = resolve(name)
     if not chain:
-        print(f'{name:18} NOT DEFINED')
+        continue
+    # Already withdrawn (§ 8 Q2) — report separately so "clean" keeps meaning
+    # "needs nothing", not "no longer expands to anything".
+    if any('__HAYDN_AE_WITHDRAWN_STMT' in text for _, _, text in chain):
+        flagged.append((name, 'WITHDRAWN (§ 8 Q2)', []))
         continue
     needs = set()
     where = []
@@ -77,7 +89,13 @@ for name in TEN:
             if dr != '0':
                 needs.add(f'dir={dr}')
             where.append(f'{who}:{line}')
-    verdict = ', '.join(sorted(needs)) if needs else 'CLEAN (no AR helper / all 8,0)'
+    if needs:
+        flagged.append((name, ', '.join(sorted(needs)), sorted(set(where))))
+
+print(f'{len(CANDIDATES)} AE_* macros scanned; {len(flagged)} need attention.\n')
+for name, verdict, where in flagged:
     print(f'{name:18} {verdict:34} defined last at line {defs[name][-1][0]}')
     if where:
-        print(f'{"":18} via {", ".join(sorted(set(where)))}')
+        print(f'{"":18} via {", ".join(where)}')
+if not flagged:
+    print('  (none — every macro passes stride = 8, dir = 0)')

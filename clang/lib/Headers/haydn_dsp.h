@@ -55,9 +55,14 @@
 #define HAYDN_COMPAT_TIER_AE_L16_XC HAYDN_COMPAT_EMULATED
 /* Reverse-circular via signed negative D_LDW_CB stride (EXACT). */
 #define HAYDN_COMPAT_TIER_AE_L16X4_RIC HAYDN_COMPAT_EXACT
-/* LA reverse-IC: UA dir=1 ImmArg + haydn_cbr_step(ptr,-8) (EXACT). */
-#define HAYDN_COMPAT_TIER_AE_LA16X4_RIC HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_LA32X2_RIC HAYDN_COMPAT_EXACT
+/* LA reverse-IC: was EXACT via UA dir=1 ImmArg + haydn_cbr_step(ptr,-8).
+ * The AR direction select is gone from the hardware, so the exact map no
+ * longer exists and there is no inexact one worth having — the forward form
+ * is a different operation. UNSUPPORTED until § 8 Q2 decides whether to
+ * emulate in software. The other nine withdrawn macros never carried a tier
+ * tag; these two did, so they have to move rather than stay EXACT. */
+#define HAYDN_COMPAT_TIER_AE_LA16X4_RIC HAYDN_COMPAT_UNSUPPORTED
+#define HAYDN_COMPAT_TIER_AE_LA32X2_RIC HAYDN_COMPAT_UNSUPPORTED
 /* Permanent UNSUPPORTED: HiFi dual-64 lane-wise add has no Haydn map —
  * ae_int64x2 is one DR64 bag; scalar i64 add is silent-wrong (cross-lane
  * carry). Not EMULATED; do not invent a bag dual-64 alias. */
@@ -87,6 +92,31 @@
 #endif
 #ifndef __HAYDN_AE_UNSUPPORTED
 #define __HAYDN_AE_UNSUPPORTED(sym) __HAYDN_AE_UNSUPPORTED_STMT(sym)
+#endif
+
+/* Withdrawn because the AR hardware no longer has the capability, not because
+ * the mapping was inexact — so there is deliberately NO escape hatch here.
+ * __HAYDN_ALLOW_INEXACT_AE does not and must not re-enable these.
+ *
+ * The re-delivered ISA dropped the AR direction select and made the
+ * post-increment a fixed +8, so an AE macro needing `dir = 1` (reverse) or a
+ * runtime stride has no instruction to lower to. Software emulation with
+ * ordinary loads and pointer arithmetic is possible and is the other half of
+ * the open question; this is the "withdraw for now" answer, and it is meant to
+ * be reversible. The full list, with what each one needs, is in
+ * FORMAT-E-SWITCH-PLAN.md § 8 Q2; utils/haydn_ae_audit.py regenerates it by
+ * resolving the overload chains rather than grepping.
+ *
+ * Every other AE_* passes stride = 8, dir = 0 and is unaffected. */
+#ifndef __HAYDN_AE_WITHDRAWN_STMT
+#define __HAYDN_AE_WITHDRAWN_STMT(sym, needs)                                  \
+  do {                                                                         \
+    _Static_assert(0, "HAYDN AE withdrawn: " #sym " needs " needs              \
+                      ", which the format E AR hardware does not have. "       \
+                      "Not an inexact-mapping opt-out — see § 8 Q2 in "        \
+                      "FORMAT-E-SWITCH-PLAN.md; software emulation is the "    \
+                      "open alternative.");                                    \
+  } while (0)
 #endif
 
 /*===----------------------------------------------------------------------===
@@ -680,8 +710,9 @@ static inline void haydn_ae_sa64pos(int ar, void *p, int dir) {
 #define AE_SA64POS_FP(align, ptr) \
   haydn_ae_sa64pos(__HAYDN_AR_SEL(align), (ptr), 0)
 #define AE_SA64POS(align, ptr) AE_SA64POS_FP(align, ptr)
+/* Withdrawn (§ 8 Q2): the trailing 1 was the direction select. */
 #define AE_SA64NEG_FP(align, ptr) \
-  haydn_ae_sa64pos(__HAYDN_AR_SEL(align), (ptr), 1)
+  __HAYDN_AE_WITHDRAWN_STMT(AE_SA64NEG_FP, "reverse direction (dir = 1)")
 
 /// Load then advance C ptr (SCEV-visible GEP). HW writeback is not returned.
 #define AE_LA16X4_IP(dst, align, ptr) \
@@ -732,22 +763,12 @@ static inline void haydn_ae_sa64pos(int ar, void *p, int dir) {
     (ptr) = (ae_int64 *)((char *)(ptr) + 8); \
   } while (0)
 
+/* Withdrawn (§ 8 Q2): `inc` reached the instruction as a runtime stride; the
+ * post-increment is a fixed +8 now. The _IP forms above (stride 8) are fine. */
 #define AE_SA16X4_IP_X(src, align, ptr, inc) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    int __s = (int)(inc); \
-    haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p, __s, 0); \
-    (ptr) = (ae_int16x4 *)((char *)(ptr) + (inc)); \
-  } while (0)
+  __HAYDN_AE_WITHDRAWN_STMT(AE_SA16X4_IP_X, "a runtime stride")
 #define AE_SA32X2_IP_X(src, align, ptr, inc) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    int __s = (int)(inc); \
-    haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, __s, 0); \
-    (ptr) = (ae_int32x2 *)((char *)(ptr) + (inc)); \
-  } while (0)
+  __HAYDN_AE_WITHDRAWN_STMT(AE_SA32X2_IP_X, "a runtime stride")
 
 #define AE_LA16X4_RIP(dst, align, ptr, inc) \
   do { \
@@ -3710,99 +3731,49 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
 #define __AE_L32X2_RIC_4A(dst, ptr, offs, cbr_sel) \
   do { __HAYDN_AE_CB_LD64((dst), (ptr), (cbr_sel), (offs) >> 3); } while (0)
 
-//---- AE_LA16X4_RIC / AE_LA32X2_RIC — reverse UA dir=1 + CBR wrap -8 ------
-// EXACT: same unaligned reverse path as AE_LA*_RIP (haydn_ae_la{16x4,64}
-// _step / d_l{qhw,tw}ua_post dir=1 ImmArg) plus haydn_cbr_step(ptr, -8,
-// cbr_sel) for circular wrap. Must not silent-alias forward IC (dir=0, +8).
+//---- AE_LA16X4_RIC / AE_LA32X2_RIC — WITHDRAWN (§ 8 Q2) -------------------
+// These were the reverse unaligned path: haydn_ae_la{16x4,64}_step with the
+// direction select set to 1, plus haydn_cbr_step(ptr, -8, cbr_sel) for the
+// circular wrap. The direction select is gone from the AR hardware, and the
+// forward form (dir = 0, +8) is a DIFFERENT operation — silently aliasing to
+// it would be worse than not compiling, which is the whole reason the old
+// comment said "must not silent-alias forward IC".
+//
+// Both arities go. The 3-arg form only defaulted cbr_sel to 0; it still needed
+// dir = 1.
 #undef  AE_LA16X4_RIC
-#define AE_LA16X4_RIC(...) __AE_LA16X4_RIC_OVERLOAD(__VA_ARGS__)
-#define __AE_LA16X4_RIC_GET(_1, _2, _3, _4, NAME, ...) NAME
-#define __AE_LA16X4_RIC_OVERLOAD(...) \
-  __AE_LA16X4_RIC_GET(__VA_ARGS__, __AE_LA16X4_RIC_4A, __AE_LA16X4_RIC_3A)(__VA_ARGS__)
-#define __AE_LA16X4_RIC_3A(dst, align, ptr) \
-  __AE_LA16X4_RIC_4A(dst, align, ptr, 0)
-#define __AE_LA16X4_RIC_4A(dst, align, ptr, cbr_sel) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    (dst) = (ae_int16x4)haydn_ae_la16x4_step(__ar, __p, 8, 1); \
-    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
-        (uintptr_t)(ptr), -8, (int)(cbr_sel)); \
-  } while (0)
+#define AE_LA16X4_RIC(...) \
+  __HAYDN_AE_WITHDRAWN_STMT(AE_LA16X4_RIC, "reverse direction (dir = 1)")
 
 #undef  AE_LA32X2_RIC
-#define AE_LA32X2_RIC(...) __AE_LA32X2_RIC_OVERLOAD(__VA_ARGS__)
-#define __AE_LA32X2_RIC_GET(_1, _2, _3, _4, NAME, ...) NAME
-#define __AE_LA32X2_RIC_OVERLOAD(...) \
-  __AE_LA32X2_RIC_GET(__VA_ARGS__, __AE_LA32X2_RIC_4A, __AE_LA32X2_RIC_3A)(__VA_ARGS__)
-#define __AE_LA32X2_RIC_3A(dst, align, ptr) \
-  __AE_LA32X2_RIC_4A(dst, align, ptr, 0)
-#define __AE_LA32X2_RIC_4A(dst, align, ptr, cbr_sel) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p, 8, 1); \
-    (dst) = (ae_int32x2)haydn_ae_f32x2_mem_to_reg(__le); \
-    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
-        (uintptr_t)(ptr), -8, (int)(cbr_sel)); \
-  } while (0)
+#define AE_LA32X2_RIC(...) \
+  __HAYDN_AE_WITHDRAWN_STMT(AE_LA32X2_RIC, "reverse direction (dir = 1)")
 
-//---- AE_LA16X4_RIP / AE_LA32X2_RIP / AE_LA32X2F24_RIP overload (→ AR helpers)
+//---- AE_LA16X4_RIP / AE_LA32X2_RIP / AE_LA32X2F24_RIP — WITHDRAWN (§ 8 Q2) --
+// The reverse unaligned loads. Both arities go: the 3-arg form passed
+// stride = 8 but still dir = 1, and the 4-arg form additionally passed a
+// runtime stride. Neither exists in the AR hardware any more.
+//
+// AE_LA32X2F24_RIP is here because it DELEGATES to __AE_LA32X2_RIP_{3A,4A};
+// it is not reported by haydn_ae_audit.py, which resolves one hop of the
+// overload chain and not the second. See § 8 Q2.
 #undef  AE_LA16X4_RIP
-#define AE_LA16X4_RIP(...) __AE_LA16X4_RIP_OVERLOAD(__VA_ARGS__)
-#define __AE_LA16X4_RIP_GET(_1, _2, _3, _4, NAME, ...) NAME
-#define __AE_LA16X4_RIP_OVERLOAD(...) \
-  __AE_LA16X4_RIP_GET(__VA_ARGS__, __AE_LA16X4_RIP_4A, __AE_LA16X4_RIP_3A)(__VA_ARGS__)
-#define __AE_LA16X4_RIP_3A(dst, align, ptr) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    (dst) = (ae_int16x4)haydn_ae_la16x4_step(__ar, __p, 8, 1); \
-    (ptr) = (ae_int16x4 *)((char *)(ptr) - 8); \
-  } while (0)
-#define __AE_LA16X4_RIP_4A(dst, align, ptr, inc) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    int __s = (int)(inc); \
-    if (__s < 0) __s = -__s; \
-    if (__s == 0) __s = 8; \
-    (dst) = (ae_int16x4)haydn_ae_la16x4_step(__ar, __p, __s, 1); \
-    (ptr) = (ae_int16x4 *)((char *)(ptr) - ((inc) ? (inc) : 8)); \
-  } while (0)
+#define AE_LA16X4_RIP(...) \
+  __HAYDN_AE_WITHDRAWN_STMT(AE_LA16X4_RIP, \
+                            "reverse direction (dir = 1); the 4-arg form also " \
+                            "needs a runtime stride")
 
 #undef  AE_LA32X2_RIP
-#define AE_LA32X2_RIP(...) __AE_LA32X2_RIP_OVERLOAD(__VA_ARGS__)
-#define __AE_LA32X2_RIP_GET(_1, _2, _3, _4, NAME, ...) NAME
-#define __AE_LA32X2_RIP_OVERLOAD(...) \
-  __AE_LA32X2_RIP_GET(__VA_ARGS__, __AE_LA32X2_RIP_4A, __AE_LA32X2_RIP_3A)(__VA_ARGS__)
-#define __AE_LA32X2_RIP_3A(dst, align, ptr) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    (dst) = (ae_int32x2)haydn_ae_la64_step(__ar, __p, 8, 1); \
-    (ptr) = (ae_int32x2 *)((char *)(ptr) - 8); \
-  } while (0)
-#define __AE_LA32X2_RIP_4A(dst, align, ptr, inc) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    int __s = (int)(inc); \
-    if (__s < 0) __s = -__s; \
-    if (__s == 0) __s = 8; \
-    (dst) = (ae_int32x2)haydn_ae_la64_step(__ar, __p, __s, 1); \
-    (ptr) = (ae_int32x2 *)((char *)(ptr) - ((inc) ? (inc) : 8)); \
-  } while (0)
+#define AE_LA32X2_RIP(...) \
+  __HAYDN_AE_WITHDRAWN_STMT(AE_LA32X2_RIP, \
+                            "reverse direction (dir = 1); the 4-arg form also " \
+                            "needs a runtime stride")
 
 #undef  AE_LA32X2F24_RIP
-#define AE_LA32X2F24_RIP(...) __AE_LA32X2F24_RIP_OVERLOAD(__VA_ARGS__)
-#define __AE_LA32X2F24_RIP_GET(_1, _2, _3, _4, NAME, ...) NAME
-#define __AE_LA32X2F24_RIP_OVERLOAD(...) \
-  __AE_LA32X2F24_RIP_GET(__VA_ARGS__, __AE_LA32X2F24_RIP_4A, __AE_LA32X2F24_RIP_3A)(__VA_ARGS__)
-#define __AE_LA32X2F24_RIP_3A(dst, align, ptr) \
-  __AE_LA32X2_RIP_3A(dst, align, ptr)
-#define __AE_LA32X2F24_RIP_4A(dst, align, ptr, inc) \
-  __AE_LA32X2_RIP_4A(dst, align, ptr, inc)
+#define AE_LA32X2F24_RIP(...) \
+  __HAYDN_AE_WITHDRAWN_STMT(AE_LA32X2F24_RIP, \
+                            "reverse direction (dir = 1); the 4-arg form also " \
+                            "needs a runtime stride")
 
 //---- AE_L32X2F24_RIC overload -----------------------------------------
 #undef  AE_L32X2F24_RIC
@@ -4503,28 +4474,13 @@ static inline ae_int64 AE_MULZAAFD32X16_H3_L2_3A(ae_int64 acc, ae_int16x4 d,
   do { haydn_sdw_cb_imm((haydn_dr64_t)(src), (ptr), (cbr_sel), 1); \
        (void)(align); } while (0)
 
+// WITHDRAWN (§ 8 Q2) — reverse unaligned store, both arities. See the
+// AE_LA*_RIP block for the reasoning.
 #undef  AE_SA16X4_RIP
-#define AE_SA16X4_RIP(...) __AE_SA16X4_RIP_OVERLOAD(__VA_ARGS__)
-#define __AE_SA16X4_RIP_GET(_1, _2, _3, _4, NAME, ...) NAME
-#define __AE_SA16X4_RIP_OVERLOAD(...) \
-  __AE_SA16X4_RIP_GET(__VA_ARGS__, __AE_SA16X4_RIP_4A, __AE_SA16X4_RIP_3A)(__VA_ARGS__)
-#define __AE_SA16X4_RIP_3A(src, align, ptr) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    haydn_ae_sa16x4_step((int64_t)(src), __ar, __p, 8, 1); \
-    (ptr) = (ae_int16x4 *)((char *)(ptr) - 8); \
-  } while (0)
-#define __AE_SA16X4_RIP_4A(src, align, ptr, inc) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    int __s = (int)(inc); \
-    if (__s < 0) __s = -__s; \
-    if (__s == 0) __s = 8; \
-    haydn_ae_sa16x4_step((int64_t)(src), __ar, __p, __s, 1); \
-    (ptr) = (ae_int16x4 *)((char *)(ptr) - ((inc) ? (inc) : 8)); \
-  } while (0)
+#define AE_SA16X4_RIP(...) \
+  __HAYDN_AE_WITHDRAWN_STMT(AE_SA16X4_RIP, \
+                            "reverse direction (dir = 1); the 4-arg form also " \
+                            "needs a runtime stride")
 
 //---- AE_S32RA64S_XP overload (3-arg: acc, ptr, offs; default shift=0, inc=-offs)
 // HiFi3 signature AE_S32RA64S_XP(acc, ptr, offs) stores the saturated acc to
@@ -7077,22 +7033,16 @@ uint32_t AE_TRUNCA16P24S_H(ae_f24x2 x) {
 // data pointer. The "RIP" = reverse-increment: store 8 bytes at *ptr, then
 // ptr -= 8. (align is ignored on Haydn.)
 // ---------------------------------------------------------------------------
+// WITHDRAWN (§ 8 Q2) — the trailing 1 was the direction select. These are the
+// definitions that WIN: both names are defined two or three times in this
+// header and the earlier ones are dead, which is why § 8 Q2 says to trust
+// haydn_ae_audit.py over grep.
 #undef  AE_SA32X2F24_RIP
 #define AE_SA32X2F24_RIP(src, align, ptr) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    haydn_ae_sa64_step((int64_t)(src), __ar, __p, 8, 1); \
-    (ptr) = (__typeof__(ptr))((char *)(ptr) - 8); \
-  } while (0)
+  __HAYDN_AE_WITHDRAWN_STMT(AE_SA32X2F24_RIP, "reverse direction (dir = 1)")
 #undef  AE_SA32X2_RIP
 #define AE_SA32X2_RIP(src, align, ptr) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    haydn_ae_sa64_step((int64_t)(src), __ar, __p, 8, 1); \
-    (ptr) = (__typeof__(ptr))((char *)(ptr) - 8); \
-  } while (0)
+  __HAYDN_AE_WITHDRAWN_STMT(AE_SA32X2_RIP, "reverse direction (dir = 1)")
 
 //===----------------------------------------------------------------------===//
 // CASTXCC_LVALUE: XCC lvalue-cast extension for NatureDSP kernels.

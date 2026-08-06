@@ -9,7 +9,12 @@
 // under the default fail-closed mode. With __HAYDN_ALLOW_INEXACT_AE the
 // transitional inexact residual bodies still compile (NatureDSP -c only).
 // C4.2: AE_MULZAAFD16SS_33_22 EXACT; AE_L16X4_RIC EXACT (neg D_LDW_CB stride);
-// AE_LA16X4_RIC / AE_LA32X2_RIC EXACT (UA dir=1 + neg CBR wrap);
+// AE_LA16X4_RIC / AE_LA32X2_RIC moved from the EXACT tier to the unsupported
+// one — they needed the AR direction select, which the re-delivered ISA drops
+// (§ 8 Q2). (Spelled out rather than written as the bare tier name followed by
+// a colon, which lit parses as a test directive.) Note the
+// contrast with AE_L16X4_RIC, which is still EXACT — it is reverse via a
+// NEGATIVE D_LDW_CB STRIDE, not via the direction select, so it is unaffected.
 // AE_L16_XC EMULATED (i16 load + soft CBR step). Permanent residual:
 // AE_ADD64X2_vector UNSUPPORTED (no bag dual-64).
 // Value/ref bar for EXACT wrappers: haydn-compat-exact-value-ref.c (CAPI-4 exit).
@@ -40,11 +45,11 @@ _Static_assert(HAYDN_COMPAT_TIER_AE_MULZAAFD16SS_33_22 == HAYDN_COMPAT_EXACT,
 _Static_assert(HAYDN_COMPAT_TIER_AE_L16X4_RIC == HAYDN_COMPAT_EXACT,
                "L16X4_RIC exact negative CB stride (C4.2)");
 
-/* C4.2 exact: LA reverse-IC via UA dir=1 + haydn_cbr_step(ptr,-8). */
-_Static_assert(HAYDN_COMPAT_TIER_AE_LA16X4_RIC == HAYDN_COMPAT_EXACT,
-               "LA16X4_RIC exact reverse UA + neg CBR (C4.2)");
-_Static_assert(HAYDN_COMPAT_TIER_AE_LA32X2_RIC == HAYDN_COMPAT_EXACT,
-               "LA32X2_RIC exact reverse UA + neg CBR (C4.2)");
+/* Withdrawn (§ 8 Q2): the UA dir=1 path no longer exists in hardware. */
+_Static_assert(HAYDN_COMPAT_TIER_AE_LA16X4_RIC == HAYDN_COMPAT_UNSUPPORTED,
+               "LA16X4_RIC withdrawn, was exact reverse UA (§ 8 Q2)");
+_Static_assert(HAYDN_COMPAT_TIER_AE_LA32X2_RIC == HAYDN_COMPAT_UNSUPPORTED,
+               "LA32X2_RIC withdrawn, was exact reverse UA (§ 8 Q2)");
 
 /* C4.2 emulated: scalar L16 circular via soft i16 + CBR mirrors. */
 _Static_assert(HAYDN_COMPAT_TIER_AE_L16_XC == HAYDN_COMPAT_EMULATED,
@@ -73,9 +78,10 @@ void exact_xc_surface(ae_int32x2 *p32x2, ae_int16x4 *p16x4, ae_int16 *p16) {
   AE_S16X4_XC(d16x4, p16x4, 16, 0);
   /* C4.2 EXACT reverse-CB (negative stride). */
   AE_L16X4_RIC(d16x4, p16x4, 16, 0);
-  /* C4.2 EXACT reverse-IC (UA dir=1 + neg CBR wrap). */
-  AE_LA16X4_RIC(d16x4, al16, p16x4, 0);
-  AE_LA32X2_RIC(d32x2, al32, p32x2, 0);
+  /* AE_LA16X4_RIC / AE_LA32X2_RIC are withdrawn (§ 8 Q2) and no longer
+     compile; haydn-compat-la-ric.c asserts that. AE_L16X4_RIC just above
+     stays — it is reverse via a negative CB stride, not the direction
+     select. */
   /* C4.2 EMULATED scalar L16 circular (soft i16 + CBR step). */
   AE_L16_XC(d16, p16, 16, 0);
   (void)d32x2;

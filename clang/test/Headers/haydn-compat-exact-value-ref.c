@@ -12,7 +12,13 @@
 // wrapper repaired in C4.2:
 //   AE_MULZAAFD16SS_33_22  — dual-high hs_33_22 (not silent _11_00)
 //   AE_L16X4_RIC           — neg D_LDW_CB stride (not forward XC)
-//   AE_LA16X4_RIC / AE_LA32X2_RIC — UA dir=1 ImmArg + cbr -8 (not forward IC)
+//
+// AE_LA16X4_RIC / AE_LA32X2_RIC were on this list (UA dir=1 ImmArg + cbr -8).
+// They are WITHDRAWN (§ 8 Q2) — the AR direction select is gone — so there is
+// no value/ref bar left to meet and their probes are removed. Their forward
+// _IC contrast probes STAY: those are what prove the remaining forward path
+// still passes dir = 0, which is the property the withdrawal must not blur.
+// haydn-compat-la-ric.c asserts the withdrawal itself.
 //
 // Style: addbrba32 known-value probe (intr-addbrba32.ll) — host-documented
 // oracles in comments + known-vector/imm IR+ASM contrast. Default fail-closed
@@ -42,10 +48,10 @@ _Static_assert(HAYDN_COMPAT_TIER_AE_MULZAAFD16SS_33_22 == HAYDN_COMPAT_EXACT,
                "MULZAAFD16SS_33_22 EXACT");
 _Static_assert(HAYDN_COMPAT_TIER_AE_L16X4_RIC == HAYDN_COMPAT_EXACT,
                "L16X4_RIC EXACT");
-_Static_assert(HAYDN_COMPAT_TIER_AE_LA16X4_RIC == HAYDN_COMPAT_EXACT,
-               "LA16X4_RIC EXACT");
-_Static_assert(HAYDN_COMPAT_TIER_AE_LA32X2_RIC == HAYDN_COMPAT_EXACT,
-               "LA32X2_RIC EXACT");
+_Static_assert(HAYDN_COMPAT_TIER_AE_LA16X4_RIC == HAYDN_COMPAT_UNSUPPORTED,
+               "LA16X4_RIC withdrawn (§ 8 Q2)");
+_Static_assert(HAYDN_COMPAT_TIER_AE_LA32X2_RIC == HAYDN_COMPAT_UNSUPPORTED,
+               "LA32X2_RIC withdrawn (§ 8 Q2)");
 _Static_assert(__HAYDN_AE_COMPAT_STRICT == 1, "default fail-closed");
 
 /* Host-documented oracle constant: (26 << 32) for zero-acc high-only probe.
@@ -162,22 +168,14 @@ ae_int16x4 *l16x4_xc_forward_contrast(ae_int16x4 *p) {
 // Host oracle: UA reverse path dir ImmArg=1 (same as LA*_RIP); circular wrap
 // via haydn_cbr_step(ptr, -8, cbr_sel). Forward IC is dir=0 and soft +8.
 
-// IR-LABEL: @la16x4_ric_known_dir1
-// IR: call {{.*}}@llvm.haydn.d.lqhwua.post(ptr {{[^,]+}}, i32 {{[0-3]}}, i32 8, i32 1
-// O0-LABEL: @la16x4_ric_known_dir1
-// O0: call {{.*}}@haydn_ae_la16x4_step({{.*}}i32 noundef 8, i32 noundef 1)
-// O0: call {{.*}}@haydn_cbr_step({{.*}}i32 noundef -8
-// ASM-LABEL: la16x4_ric_known_dir1
-// ASM: d_lqhwua_post
-ae_int16x4 la16x4_ric_known_dir1(ae_int16x4 *p) {
-  ae_int16x4 d = {0};
-  ae_valign al = AE_ZALIGN64();
-  AE_LA16X4_RIC(d, al, p, 0);
-  return d;
-}
-
+// The O0 checks moved here from the withdrawn la16x4_ric_known_dir1 probe.
+// They are what keeps the -O0 RUN line meaningful, and the operand they pin —
+// the trailing dir argument — is exactly the one whose other value (1) no
+// longer has hardware.
 // IR-LABEL: @la16x4_ic_forward_contrast
 // IR: call {{.*}}@llvm.haydn.d.lqhwua.post(ptr {{[^,]+}}, i32 {{[0-3]}}, i32 8, i32 0
+// O0-LABEL: @la16x4_ic_forward_contrast
+// O0: call {{.*}}@haydn_ae_la16x4_step({{.*}}i32 noundef 8, i32 noundef 0)
 // ASM-LABEL: la16x4_ic_forward_contrast
 // ASM: d_lqhwua_post
 ae_int16x4 la16x4_ic_forward_contrast(ae_int16x4 *p) {
@@ -187,16 +185,3 @@ ae_int16x4 la16x4_ic_forward_contrast(ae_int16x4 *p) {
   return d;
 }
 
-// IR-LABEL: @la32x2_ric_known_dir1
-// IR: call {{.*}}@llvm.haydn.d.ltwua.post(ptr {{[^,]+}}, i32 {{[0-3]}}, i32 8, i32 1
-// O0-LABEL: @la32x2_ric_known_dir1
-// O0: call {{.*}}@haydn_ae_la64_step({{.*}}i32 noundef 8, i32 noundef 1)
-// O0: call {{.*}}@haydn_cbr_step({{.*}}i32 noundef -8
-// ASM-LABEL: la32x2_ric_known_dir1
-// ASM: d_ltwua_post
-ae_int32x2 la32x2_ric_known_dir1(ae_int32x2 *p) {
-  ae_int32x2 d = {0};
-  ae_valign al = AE_ZALIGN64();
-  AE_LA32X2_RIC(d, al, p, 0);
-  return d;
-}
