@@ -2527,7 +2527,7 @@ def D_SDW_BREV_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "d_sdw_brev_reg	$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;   // SLOT0 — DB slot 0 only for stores
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
@@ -2536,7 +2536,7 @@ def S_SW_BREV_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "s_sw_brev_reg	$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 // POST_REG — DR64 data. DB: mem64[rs1] = rtd; rs1 += rs2.
@@ -2546,7 +2546,7 @@ def D_SDW_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "d_sdw_post_reg	$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
@@ -2555,7 +2555,7 @@ def D_SHW_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "d_shw_post_reg	$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
@@ -2564,7 +2564,7 @@ def D_SW_H_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "d_sw_h_post_reg	$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
@@ -2573,7 +2573,7 @@ def D_SW_L_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "d_sw_l_post_reg	$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 // POST_REG — GPR32 data.
@@ -2583,7 +2583,7 @@ def S_SB_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "s_sb_post_reg	$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
@@ -2592,7 +2592,7 @@ def S_SHW_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "s_shw_post_reg	$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
@@ -2601,7 +2601,7 @@ def S_SW_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "s_sw_post_reg	$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 // PRE_REG — update base, then store. Same two-def shape.
@@ -2611,7 +2611,7 @@ def D_SDW_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "d_sdw_pre_reg	$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
@@ -2620,7 +2620,7 @@ def D_SHW_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "d_shw_pre_reg	$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
@@ -2629,7 +2629,7 @@ def D_SW_H_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "d_sw_h_pre_reg	$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
@@ -2638,7 +2638,7 @@ def D_SW_L_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "d_sw_l_pre_reg	$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
@@ -2647,7 +2647,7 @@ def S_SB_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "s_sb_pre_reg	$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
@@ -2656,7 +2656,7 @@ def S_SHW_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "s_shw_pre_reg	$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
@@ -2665,7 +2665,7 @@ def S_SW_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     "s_sw_pre_reg	$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 // WITH_REG — offset addressing, NO base writeback. (outs) empty.
@@ -2675,7 +2675,7 @@ def D_SDW_WITH_REG : HaydnInst<4, (outs),
     "d_sdw_with_reg	$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1 in
@@ -2684,7 +2684,7 @@ def D_SHW_WITH_REG : HaydnInst<4, (outs),
     "d_shw_with_reg	$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1 in
@@ -2693,7 +2693,7 @@ def D_SW_H_WITH_REG : HaydnInst<4, (outs),
     "d_sw_h_with_reg	$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1 in
@@ -2702,7 +2702,7 @@ def D_SW_L_WITH_REG : HaydnInst<4, (outs),
     "d_sw_l_with_reg	$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1 in
@@ -2711,7 +2711,7 @@ def S_SB_WITH_REG : HaydnInst<4, (outs),
     "s_sb_with_reg	$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1 in
@@ -2720,7 +2720,7 @@ def S_SHW_WITH_REG : HaydnInst<4, (outs),
     "s_shw_with_reg	$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let mayStore = 1 in
@@ -2729,7 +2729,7 @@ def S_SW_WITH_REG : HaydnInst<4, (outs),
     "s_sw_with_reg	$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 } // end isAsmParserOnly = 1
@@ -2821,7 +2821,7 @@ def D_LDW_BREV_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     "d_ldw_brev_imm\t$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;   // SLOT0|SLOT1 — DB slots 0 and 1
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1,
@@ -2831,7 +2831,7 @@ def D_LDW_BREV_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     "d_ldw_brev_reg\t$rtd, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 // POST_IMM forms — DR64 dest, tied base writeback, imm6 element index.
@@ -2846,7 +2846,7 @@ def D_LDW_POST_IMM : FmtLSPostInc<0x47, (outs DR64:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_ldw_post_imm\t$rt, $rs, $scaled_imm", []> {
   // Multi-slot like LD64: alts S0/S1 dual post-inc streams (P3).
-  let Itinerary = Slot01_LD;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isCodeGenOnly = 1, isAsmParserOnly = 1, mayLoad = 1,
@@ -2854,7 +2854,7 @@ let isCodeGenOnly = 1, isAsmParserOnly = 1, mayLoad = 1,
 def D_LW_POST_IMM : FmtLSPostInc<0x48, (outs DR64:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lw_post_imm\t$rt, $rs, $scaled_imm", []> {
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -2863,7 +2863,7 @@ def D_LHW_POST_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     "d_lhw_post_imm\t$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 // POST_REG forms — DR64 dest, register stride. Base is `$rs` (review §8.1.2).
@@ -2884,7 +2884,7 @@ let isPseudo = 0, mayLoad = 1,
 def D_LDW_POST_REG : FmtLSPostIncReg<0x4F, 0x0, (outs DR64:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_ldw_post_reg\t$rt, $rs, $rs2", []> {
-  let Itinerary = Slot01_LD;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 // W and HW POST_REG forms — same encoding shape as D_LDW_POST_REG
@@ -2895,14 +2895,14 @@ let isPseudo = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def D_LW_POST_REG : FmtLSPostIncReg<0x4E, 0x1, (outs DR64:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_lw_post_reg\t$rt, $rs, $rs2", []> {
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def D_LHW_POST_REG : FmtLSPostIncReg<0x4D, 0x2, (outs DR64:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_lhw_post_reg\t$rt, $rs, $rs2", []> {
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 // PRE_IMM / PRE_REG forms — update base, then load. Same two-def shape.
@@ -2914,7 +2914,7 @@ def D_LDW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     "d_ldw_pre_imm\t$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -2923,7 +2923,7 @@ def D_LW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     "d_lw_pre_imm\t$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -2932,7 +2932,7 @@ def D_LHW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     "d_lhw_pre_imm\t$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -2941,7 +2941,7 @@ def D_LDW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     "d_ldw_pre_reg\t$rtd, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -2950,7 +2950,7 @@ def D_LW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     "d_lw_pre_reg\t$rtd, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -2959,7 +2959,7 @@ def D_LHW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     "d_lhw_pre_reg\t$rtd, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 // WITH_IMM / WITH_REG forms — offset addressing, NO base writeback.
@@ -2970,7 +2970,7 @@ def D_LDW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
     "d_ldw_with_imm\t$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -2979,7 +2979,7 @@ def D_LW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
     "d_lw_with_imm\t$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -2988,7 +2988,7 @@ def D_LHW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
     "d_lhw_with_imm\t$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -2997,7 +2997,7 @@ def D_LDW_WITH_REG : HaydnInst<4, (outs DR64:$rtd),
     "d_ldw_with_reg\t$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -3006,7 +3006,7 @@ def D_LW_WITH_REG : HaydnInst<4, (outs DR64:$rtd),
     "d_lw_with_reg\t$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -3015,7 +3015,7 @@ def D_LHW_WITH_REG : HaydnInst<4, (outs DR64:$rtd),
     "d_lhw_with_reg\t$rtd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 //===---------------------------------------------------------------===//
@@ -3045,7 +3045,7 @@ def D_SDW_BREV_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "d_sdw_brev_imm	$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 // POST_IMM — DR64 data. DB: mem64[rs] = rtd; rs += imm6<<3.
@@ -3057,7 +3057,7 @@ def D_SDW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "d_sdw_post_imm	$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
@@ -3066,7 +3066,7 @@ def D_SHW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "d_shw_post_imm	$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
@@ -3075,7 +3075,7 @@ def D_SW_H_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "d_sw_h_post_imm	$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
@@ -3084,7 +3084,7 @@ def D_SW_L_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "d_sw_l_post_imm	$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 // PRE_IMM — update base, then store. DR64 data.
@@ -3095,7 +3095,7 @@ def D_SDW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "d_sdw_pre_imm	$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 // isPseudo=0: inside isPseudo=1 scope — C0.2 emit path for public PRE stores.
@@ -3105,7 +3105,7 @@ def D_SHW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "d_shw_pre_imm	$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
@@ -3114,7 +3114,7 @@ def D_SW_H_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "d_sw_h_pre_imm	$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
@@ -3123,7 +3123,7 @@ def D_SW_L_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "d_sw_l_pre_imm	$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 // WITH_IMM — offset addressing, NO base writeback. (outs) empty.
@@ -3135,7 +3135,7 @@ def D_SDW_WITH_IMM : HaydnInst<4, (outs),
     "d_sdw_with_imm	$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1 in
@@ -3144,7 +3144,7 @@ def D_SHW_WITH_IMM : HaydnInst<4, (outs),
     "d_shw_with_imm	$rtd, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let TSFlags = 14, isCodeGenOnly = 1 in
@@ -3290,7 +3290,7 @@ def S_LBS_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lbs_post_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -3299,7 +3299,7 @@ def S_LBS_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lbs_post_reg\t$rt, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -3308,7 +3308,7 @@ def S_LBS_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lbs_pre_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -3317,7 +3317,7 @@ def S_LBS_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lbs_pre_reg\t$rt, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -3326,7 +3326,7 @@ def S_LBS_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     "s_lbs_with_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -3335,7 +3335,7 @@ def S_LBS_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     "s_lbs_with_reg\t$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 // S_LBU (zero-extended byte).
@@ -3345,7 +3345,7 @@ def S_LBU_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lbu_post_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -3354,7 +3354,7 @@ def S_LBU_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lbu_post_reg\t$rt, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -3363,7 +3363,7 @@ def S_LBU_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lbu_pre_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -3372,7 +3372,7 @@ def S_LBU_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lbu_pre_reg\t$rt, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -3381,7 +3381,7 @@ def S_LBU_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     "s_lbu_with_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -3390,7 +3390,7 @@ def S_LBU_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     "s_lbu_with_reg\t$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 // S_LHWS (sign-extended halfword).
@@ -3400,7 +3400,7 @@ def S_LHWS_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lhws_post_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -3409,7 +3409,7 @@ def S_LHWS_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lhws_post_reg\t$rt, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -3418,7 +3418,7 @@ def S_LHWS_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lhws_pre_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -3427,7 +3427,7 @@ def S_LHWS_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lhws_pre_reg\t$rt, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -3436,7 +3436,7 @@ def S_LHWS_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     "s_lhws_with_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -3445,7 +3445,7 @@ def S_LHWS_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     "s_lhws_with_reg\t$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 // S_LHWU (zero-extended halfword).
@@ -3455,7 +3455,7 @@ def S_LHWU_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lhwu_post_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -3464,7 +3464,7 @@ def S_LHWU_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lhwu_post_reg\t$rt, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -3473,7 +3473,7 @@ def S_LHWU_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lhwu_pre_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -3482,7 +3482,7 @@ def S_LHWU_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lhwu_pre_reg\t$rt, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -3491,7 +3491,7 @@ def S_LHWU_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     "s_lhwu_with_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -3500,7 +3500,7 @@ def S_LHWU_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     "s_lhwu_with_reg\t$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 // S_LW_BREV — DB: rt = mem32[REVERSE32(rs)]; rs += imm6<<2. GPR32 dest + WB.
@@ -3522,7 +3522,7 @@ def S_LW_BREV_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lw_brev_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, mayLoad = 1,
@@ -3532,7 +3532,7 @@ def S_LW_BREV_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lw_brev_reg\t$rt, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 // S_LW (word). DB: rt = mem32[rs]; POST: rs += imm6<<2.
@@ -3545,7 +3545,7 @@ let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1,
 def S_LW_POST_IMM : FmtLSPostInc<0x48, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lw_post_imm\t$rt, $rs, $scaled_imm", []> {
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -3554,7 +3554,7 @@ def S_LW_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lw_post_reg\t$rt, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 // isCodeGenOnly: GISel forms pre-inc/dec word loads.
@@ -3564,7 +3564,7 @@ def S_LW_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lw_pre_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
@@ -3573,7 +3573,7 @@ def S_LW_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     "s_lw_pre_reg\t$rt, $rs, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -3582,7 +3582,7 @@ def S_LW_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     "s_lw_with_imm\t$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
@@ -3591,7 +3591,7 @@ def S_LW_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     "s_lw_with_reg\t$rt, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b011;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 //===---------------------------------------------------------------===//
@@ -3609,7 +3609,7 @@ def S_SB_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "s_sb_post_imm	$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
@@ -3618,7 +3618,7 @@ def S_SHW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "s_shw_post_imm	$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 // DB: mem32[rs] = rt; rs += imm6<<2.
@@ -3629,7 +3629,7 @@ def S_SW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "s_sw_post_imm	$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 // PRE_IMM — update base, then store. GPR32 data.
@@ -3639,7 +3639,7 @@ def S_SB_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "s_sb_pre_imm	$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
@@ -3648,7 +3648,7 @@ def S_SHW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "s_shw_pre_imm	$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 // isCodeGenOnly: GISel forms pre-inc/dec word stores.
@@ -3658,7 +3658,7 @@ def S_SW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "s_sw_pre_imm	$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 // WITH_IMM — offset addressing, NO base writeback. (outs) empty.
@@ -3668,7 +3668,7 @@ def S_SB_WITH_IMM : HaydnInst<4, (outs),
     "s_sb_with_imm	$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1 in
@@ -3677,7 +3677,7 @@ def S_SHW_WITH_IMM : HaydnInst<4, (outs),
     "s_shw_with_imm	$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1 in
@@ -3686,7 +3686,7 @@ def S_SW_WITH_IMM : HaydnInst<4, (outs),
     "s_sw_with_imm	$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 // BREV store — DB: mem32[REVERSE32(rs)] = rt; rs += imm6<<2. GPR32 data, WB.
@@ -3706,7 +3706,7 @@ def S_SW_BREV_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     "s_sw_brev_imm	$rt, $rs, $scaled_imm", []> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
 }
 
 // TRANSF64 / TRANSF64F2 — DB syntax `TRANSF64 rtd, rs` (DR64 dest + GPR32
@@ -3961,7 +3961,7 @@ def D_LDW_CB_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
   let Constraints = "$rs = $rs_wb";
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot01_LD;
+  let Itinerary = Unit_LS0_L2;
   bits<4> rtd;
   bits<4> rs;
   bits<16> imm;
@@ -3989,7 +3989,7 @@ def D_LDW_CB_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs1_wb),
   let Constraints = "$rs1 = $rs1_wb";
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot01_LD;
+  let Itinerary = Unit_LS0_L2;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4036,7 +4036,7 @@ def D_SDW_CB_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
   let Constraints = "$rs = $rs_wb";
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
   bits<4> rtd;
   bits<4> rs;
   bits<16> imm;
@@ -4060,7 +4060,7 @@ def D_SDW_CB_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
   let Constraints = "$rs1 = $rs1_wb";
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
+  let Itinerary = Unit_LS0_L1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
