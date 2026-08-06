@@ -30,6 +30,10 @@ import re
 from pathlib import Path
 
 FORMAT_E_LAYOUT = "format_e_bit_layout_v2.json"
+INSTRUCTION_INDEX = "instruction_type_index.json"
+
+# Hardware units, in the order their FuncUnit defs are emitted.
+UNITS = ("LOADSTORE0", "LOAD1", "ALU0", "ALU1", "ALU2", "MAC0", "MAC1")
 
 # Single-bit fields are spelled bit[N]; ranges are bit[HI:LO].
 BIT_SPAN = re.compile(r"bit\[(\d+)(?::(\d+))?\]")
@@ -61,6 +65,47 @@ def parse_int(text: str, base: int, context: str) -> int:
         return int(str(text).strip(), base)
     except ValueError:
         raise SystemExit(f"{context}: cannot read {text!r} as base-{base}")
+
+
+def load_pipeline(database: Path) -> dict[str, tuple[tuple[str, ...], object]]:
+    """Per-instruction (available units, data latency) from the instruction index.
+
+    Latency belongs to the itinerary class, so it has to come from here rather
+    than the bit layout. A missing Data_Latency means the instruction writes no
+    register -- stores, branches, hwloop setup -- and so has no result to wait
+    for; it reads as one, the no-bubble case. SIN_COS and ARCTAN state theirs as
+    uimm4 + 2, which no static class can express, so they are kept apart.
+    """
+    data = json.loads((database / INSTRUCTION_INDEX).read_text(encoding="utf-8"))
+    out: dict[str, tuple[tuple[str, ...], object]] = {}
+    for group, entries in data.items():
+        for entry in entries:
+            name = str(entry.get("Instruction", "")).strip()
+            if not name or name == "WFI<TBD>":
+                continue
+            available = entry.get("Available")
+            units = ((available,) if isinstance(available, str)
+                     else tuple(available or ()))
+            for unit in units:
+                if unit not in UNITS:
+                    raise SystemExit(f"{group}/{name}: unknown unit {unit!r}")
+            latency = (entry.get("Pipeline_Info") or {}).get("Data_Latency")
+            if isinstance(latency, str):
+                latency = "var"
+            elif latency is None:
+                latency = 1
+            previous = out.get(name)
+            if previous is not None and previous != (units, latency):
+                raise SystemExit(f"{name}: conflicting pipeline info")
+            out[name] = (units, latency)
+    if not out:
+        raise SystemExit("instruction index is empty")
+    return out
+
+
+def itinerary_name(units: tuple[str, ...], latency: object) -> str:
+    return "Unit_" + "".join(u.replace("LOADSTORE", "LS") for u in units) \
+           + f"_L{latency}"
 
 
 def header_fields(header: dict) -> dict:
@@ -358,10 +403,59 @@ def canonical_members(placements: list[dict]) -> list[dict]:
     return list(kept.values())
 
 
-def emit_tablegen(geometry: dict, placements: list[dict]) -> str:
+def emit_schedule(pipeline: dict, placements: list[dict]) -> list[str]:
+    """Units as FuncUnits, and one itinerary class per (unit set, latency).
+
+    A class states which resources can serve an instruction, which is exactly
+    what Available says, so the slot-shaped Slot0_ALU / Slot012_ALU classes have
+    a direct replacement rather than a translation. Logicals take the full set;
+    a member is pinned to one unit and takes the singleton.
+    """
+    out = [
+        "//===--- Units and itineraries "
+        + "-" * 44 + "===//",
+        "// Each unit is a FuncUnit and each itinerary class names the units that",
+        "// can serve it, with the data latency the ISA gives. Latencies of 'var'",
+        "// are SIN_COS and ARCTAN, whose latency is uimm4 + 2 and cannot be a",
+        "// static class; they are given the stage but no latency so the value has",
+        "// to come from the operand.",
+        "",
+    ]
+    for unit in UNITS:
+        out.append(f"def U_{unit} : FuncUnit;")
+    out.append("")
+
+    classes: dict[str, tuple[tuple[str, ...], object]] = {}
+    for name, (units, latency) in pipeline.items():
+        classes[itinerary_name(units, latency)] = (units, latency)
+    for p in placements:
+        info = pipeline.get(p["instruction"])
+        if info is None:
+            continue
+        classes[itinerary_name((p["unit"],), info[1])] = ((p["unit"],), info[1])
+
+    for name in sorted(classes):
+        out.append(f"def {name} : InstrItinClass;")
+    out.append("")
+    out.append("def HaydnFormatEItineraries : ProcessorItineraries<")
+    out.append("    [" + ", ".join(f"U_{u}" for u in UNITS) + "], [], [")
+    rows = []
+    for name in sorted(classes):
+        units, latency = classes[name]
+        stage = "[" + ", ".join(f"U_{u}" for u in units) + "]"
+        cycles = "[]" if latency == "var" else f"[{latency}]"
+        rows.append(f"    InstrItinData<{name}, [InstrStage<1, {stage}>], {cycles}>")
+    out.append(",\n".join(rows))
+    out += ["]>;", ""]
+    return out
+
+
+def emit_tablegen(geometry: dict, placements: list[dict],
+                  pipeline: dict) -> str:
     verify_decodable(placements)
     indices = placement_index(placements)
     placements = canonical_members(placements)
+    schedule = emit_schedule(pipeline, placements)
     positions: dict[tuple[int, int], tuple[int, int]] = {}
     for p in placements:
         positions[(p["entry_count"], p["entry_index"])] = \
@@ -395,6 +489,7 @@ def emit_tablegen(geometry: dict, placements: list[dict]) -> str:
         "",
     ]
 
+    out += schedule
     out += [
         "// Placement index: a dense enumeration of the (entry position, unit)",
         "// pairs the encoding admits. This is the member index in an",
@@ -525,6 +620,10 @@ def emit_tablegen(geometry: dict, placements: list[dict]) -> str:
         index = indices[(p["entry_count"], p["entry_index"], p["unit"])]
         out.append(f"  let PlacementIndex = {index};  // {p['unit']}"
                    f" @ {p['entry_count']}-entry entry{p['entry_index']}")
+        info = pipeline.get(p["instruction"])
+        if info is not None:
+            out.append("  let Itinerary = "
+                       f"{itinerary_name((p['unit'],), info[1])};")
         out += decls
         def constant(msb: int, lsb: int, value: int, label: str):
             width = msb - lsb + 1
@@ -658,7 +757,8 @@ def main() -> None:
         return
 
     if args.emit == "td":
-        text = emit_tablegen(geometry, placements)
+        text = emit_tablegen(geometry, placements,
+                             load_pipeline(args.database))
     elif args.emit == "table":
         text = json.dumps({"geometry": geometry, "placements": placements},
                           indent=1, sort_keys=True) + "\n"
