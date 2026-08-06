@@ -3810,15 +3810,17 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   }
   case haydn_movei_h:
   case haydn_movei_l: {
-    // Golden MOVEI_H/L exist as S0 I32 forms MOVEI_H_S0 / MOVEI_L_S0.
+    // Select the LOGICAL, not a member: post-RA materializeMultiOpcodeInstrs
+    // commits it to whichever placement the auction wins. Naming a member here
+    // would pin every movei to that one placement and would have to be
+    // respelled every time the member naming changes.
     // ImmArg bare Imm after legalize (C0.4).
     int64_t ImmVal = 0;
     if (!getConstOpSExt(I.getOperand(2), ImmVal))
       return false;
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
-    unsigned Opc =
-        (IntrID == Intrinsic::haydn_movei_h) ? MOVEI_H_S0 : MOVEI_L_S0;
+    unsigned Opc = (IntrID == Intrinsic::haydn_movei_h) ? MOVEI_H : MOVEI_L;
     MachineInstr *MI = MIB.buildInstr(Opc).addDef(DstReg).addImm(ImmVal);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
@@ -4798,12 +4800,14 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_x4conj16:   return selectUnary(X4CONJ16,   DR64RegClass);
   case haydn_x4conj16s:  return selectUnary(X4CONJ16S,  DR64RegClass);
   case haydn_x4energy16: return selectUnary(X4ENERGY16, DR64RegClass);
-  // Auto.td X4CMUL16{,S,_F2} are HaydnInst stubs (TSFlags=14) that AsmPrinter
-  // drops as MCID::Pseudo. Select the real FormatsMAC slot-1 encodings.
-  case haydn_x4cmul16:   return selectUnary(X4CMUL16_S1,   DR64RegClass);
-  case haydn_x4cmul16s:  return selectUnary(X4CMUL16S_S1,  DR64RegClass);
-  case haydn_x4cmul16s_f2: return selectUnary(X4CMUL16S_F2_S1, DR64RegClass);
-  case haydn_x4cmul16_f2:  return selectUnary(X4CMUL16_F2_S1,  DR64RegClass);
+  // X4CMUL16{,S,_F2,S_F2} are real FmtALU64Unary bases now (HaydnInstrInfo.td),
+  // so they select like every other unary above and the placement auction picks
+  // the member. They used to be Auto.td HaydnInst stubs that AsmPrinter dropped
+  // as MCID::Pseudo, which forced naming the slot-1 member here.
+  case haydn_x4cmul16:   return selectUnary(X4CMUL16,   DR64RegClass);
+  case haydn_x4cmul16s:  return selectUnary(X4CMUL16S,  DR64RegClass);
+  case haydn_x4cmul16s_f2: return selectUnary(X4CMUL16S_F2, DR64RegClass);
+  case haydn_x4cmul16_f2:  return selectUnary(X4CMUL16_F2,  DR64RegClass);
 
   // X2/X4 binary (DR64 binary)
   case haydn_x2max32:   return selectBinary(X2MAX32,   DR64RegClass);

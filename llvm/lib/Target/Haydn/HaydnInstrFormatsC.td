@@ -81,11 +81,24 @@ class HaydnInst48<dag outs, dag ins, string asmstr, list<dag> pattern>
 // (§5) below. See -fmt-exti-disposition-and-widemm-isPseudo.md.
 
 //===----------------------------------------------------------------------===//
-// 48-bit S-format (MOVEI) — encoding_manual.md §4. RETIRED by.
+// 48-bit S-format (MOVEI) — encoding_manual.md §4.
 //
-// The Fmt48_MOVEI class and its 2 defs (MOVEI_H/MOVEI_L) had zero live C++
-// consumers subsequent and are removed. The §4 bit-layout documentation is
-// retained above for historical reference.
+// Retired once for having zero live C++ consumers, and restored because the
+// logicals it carries are needed again: GISel used to select the format member
+// `MOVEI_H_S0` directly, which pins every movei to one placement and does not
+// survive a change of member spelling. Selecting the logical and letting the
+// placement auction choose a member requires the logical to exist and to carry
+// a real encoding — a bare HaydnInst with no `Inst` bits is inferred
+// MCID::Pseudo and AsmPrinter drops it, which is the same defect X4ABS16 was
+// promoted out of (HaydnInstrInfo.td).
+//
+// The encoding here is vestigial in the same sense as every other multi-member
+// logical: materializeMultiOpcodeInstrs commits the instruction to a member
+// before it is ever encoded, so these bits exist to keep the def out of
+// MCID::Pseudo, not to be emitted.
+//
+// The class itself is defined below, after Haydn48WideBase which it derives
+// from.
 //===----------------------------------------------------------------------===//
 
 
@@ -154,6 +167,21 @@ class Haydn48WideBase<dag outs, dag ins, string asmstr, list<dag> pattern>
   // Default itinerary + slot bits — subclasses override per Class.
   let Itinerary = Slot012_ALU;
   let TSFlags{2-0} = 0b111;   // slots 0+1+2 default; overridden per Class
+}
+
+// 48-bit S-format (MOVEI) — encoding_manual.md §4; see the §4 block above for
+// why this class exists again.
+// bits[47:16] = imm32  bits[15:12] = rd  bits[11:4] = opcode  bits[3:0] = 1101
+class Fmt48_MOVEI<bits<8> opcode, dag outs, dag ins, string asmstr,
+                  list<dag> pattern>
+    : Haydn48WideBase<outs, ins, asmstr, pattern> {
+  bits<4> rd;        // destination DR64 (bits[15:12])
+  bits<32> imm32;    // full 32-bit immediate (bits[47:16])
+
+  let Inst{47 - 16} = imm32;
+  let Inst{15 - 12} = rd;
+  let Inst{11 - 4} = opcode;
+  let Inst{3 - 0} = 0b1101;
 }
 
 //===----------------------------------------------------------------------===//

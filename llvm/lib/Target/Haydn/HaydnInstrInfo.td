@@ -1322,6 +1322,59 @@ def X4ABS16S : FmtALU64Unary<0x67, 0x1AD, (outs DR64:$rd), (ins DR64:$rs1),
   let TSFlags{4-3} = 0b01;
 }
 
+// X4CMUL16 / X4CMUL16S / X4CMUL16_F2 / X4CMUL16S_F2 — 4x16-bit complex
+// multiply. Same promotion as X4ABS16 above: they were HaydnInst<4> stubs in
+// HaydnInstrInfoAuto.td with no `Inst` bits, so tablegen inferred MCID::Pseudo
+// and AsmPrinter dropped them. GISel worked around that by selecting the
+// member X4CMUL16*_S1 directly, which pins every x4cmul16 to slot 1 and breaks
+// the moment members are respelled. With a real base the logical carries its
+// PlacementAlternative set and the auction places it.
+//
+// Itinerary follows the X2CMUL32 family (Unit_MAC0MAC1_L2), not
+// FmtALU64Unary's Slot12_ALU default: these are MAC-unit ops. Their members
+// are HaydnFU_MAC_*_D_R (HaydnFormatsMAC.td), and format E likewise places
+// them on MAC0/MAC1 only.
+//
+// Functs 0x1AE-0x1B1 continue the 0x67 allocation after X4ABS16S (0x1AD).
+let Itinerary = Unit_MAC0MAC1_L2 in {
+def X4CMUL16 : FmtALU64Unary<0x67, 0x1AE, (outs DR64:$rd), (ins DR64:$rs1),
+                             "x4cmul16\t$rd, $rs1", []> {
+  let TSFlags{2-0} = 0b110;
+  let TSFlags{4-3} = 0b01;
+}
+def X4CMUL16S : FmtALU64Unary<0x67, 0x1AF, (outs DR64:$rd), (ins DR64:$rs1),
+                              "x4cmul16s\t$rd, $rs1", []> {
+  let TSFlags{2-0} = 0b110;
+  let TSFlags{4-3} = 0b01;
+}
+def X4CMUL16_F2 : FmtALU64Unary<0x67, 0x1B0, (outs DR64:$rd), (ins DR64:$rs1),
+                                "x4cmul16_f2\t$rd, $rs1", []> {
+  let TSFlags{2-0} = 0b110;
+  let TSFlags{4-3} = 0b01;
+}
+def X4CMUL16S_F2 : FmtALU64Unary<0x67, 0x1B1, (outs DR64:$rd), (ins DR64:$rs1),
+                                 "x4cmul16s_f2\t$rd, $rs1", []> {
+  let TSFlags{2-0} = 0b110;
+  let TSFlags{4-3} = 0b01;
+}
+}
+
+// MOVEI_H / MOVEI_L — load the high/low half of a 64-bit DR64 from a full
+// 32-bit immediate. The logicals were deleted along with Fmt48_MOVEI when they
+// had no live C++ consumer; GISel then selected the member MOVEI_H_S0 / _L_S0
+// directly. Restored for the same reason as the X4CMUL16 family above.
+//
+// The operand class is simm32_movei rather than plain simm32 because that is
+// the one the live member carries: it has the EncoderMethod that sends a
+// symbolic operand to FIXUP_HAYDN_32, and § 6.1's trap is precisely a logical
+// and its member disagreeing about which class holds the EncoderMethod.
+let Itinerary = Unit_ALU0ALU1ALU2_L1 in {
+def MOVEI_H : Fmt48_MOVEI<0x1F, (outs DR64:$rd), (ins simm32_movei:$imm32),
+                          "movei_h\t$rd, $imm32", []>;
+def MOVEI_L : Fmt48_MOVEI<0x20, (outs DR64:$rd), (ins simm32_movei:$imm32),
+                          "movei_l\t$rd, $imm32", []>;
+}
+
 // X2 SIMD compare → SFR (binary DR64 → sets SFR). Passthrough return.
 let hasSideEffects = 0, Defs = [SFR] in {
 def X2SEQ32 : FmtALU64Binary<0x67, 0x18D, (outs DR64:$rd),

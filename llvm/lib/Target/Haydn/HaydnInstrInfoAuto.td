@@ -3801,25 +3801,10 @@ def X2SWAP32 : HaydnInst<4, (outs DR64:$rd),
 // (same EMPTY_SEL / AsmPrinter MCID::Pseudo drop as ABS64/X2ABS32S).
 // Slot forms remain X4ABS16{,S}_S1/_S2 in HaydnFormatsALU64.td.
 
-let TSFlags = 14 in
-def X4CMUL16 : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4cmul16	$rd, $rs", []>;
-
-let TSFlags = 14 in
-def X4CMUL16S : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4cmul16s	$rd, $rs", []>;
-
-let TSFlags = 14 in
-def X4CMUL16S_F2 : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4cmul16s_f2	$rd, $rs", []>;
-
-let TSFlags = 14 in
-def X4CMUL16_F2 : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4cmul16_f2	$rd, $rs", []>;
+// X4CMUL16 / X4CMUL16S / X4CMUL16_F2 / X4CMUL16S_F2 promoted to real
+// FmtALU64Unary in HaydnInstrInfo.td (same EMPTY_SEL / AsmPrinter MCID::Pseudo
+// drop as X4ABS16 / ABS64 / X2ABS32S). Slot forms remain X4CMUL16*_S1/_S2 in
+// HaydnFormatsMAC.td.
 
 let TSFlags = 14 in
 def X4CONJ16 : HaydnInst<4, (outs DR64:$rd),

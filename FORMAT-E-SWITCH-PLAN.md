@@ -46,9 +46,10 @@ hashes there are the ones on the pushed branch.
 
 ```sh
 # llvm-project
-cmake --build build -j"$(nproc)"                     # 0 errors
+cmake --build build -j"$(nproc)" -- -k 0             # 0 errors; -k 0, see § 5.2
 build/bin/llvm-lit -s llvm/test/CodeGen/Haydn llvm/test/MC/Haydn
 #   589 discovered: 573 pass, 8 XFAIL, 8 unsupported, 0 fail
+cmake --build build -j"$(nproc)" --target HaydnTests  # REQUIRED — see § 6.12
 build/unittests/Target/Haydn/HaydnTests               # 248/248
 build/bin/llvm-lit -s lld/test/ELF/haydn \
     lld/test/ELF/haydn-relocations.s lld/test/ELF/haydn-linker-script.s   # 24/24
@@ -162,6 +163,7 @@ All on `haydn`, each verified green before commit.
 | `74aa4d24f9eb` | `--fix-operand-mapping`, and the plan's own corrections | The 76-row correction did not travel with the repos and this host had the corrected `.td` against an uncorrected database. Repair is now reproducible and forced, not remembered. See § 5.3. |
 | `6e35b4124346` | `CSRW_W` retired | First fold that was not a rename in shape: dropped the dead `$rd` after showing the decoder-parity reason for it was false (`CSRW` is `isCodeGenOnly`, so it was never in the decoder table), and took the wide def's `hasSideEffects = 0, Defs = [SFR]`, which `csrw-hwloop-hazard.mir` exercises through postmisched. |
 | `318248c8d1aa` | The three `SET_HWLOOP` `_W` forms retired | The only fold where the base names were occupied — by pseudos, which move to `_PSEUDO`. Forced deleting the three narrow members: pairing is by name, so the renamed logical would otherwise have picked up a member whose shape the database contradicts. |
+| *(this session)* | `MOVEI_H`/`MOVEI_L` and the four `X4CMUL16` forms promoted to real logicals; GISel selects them instead of `_S0`/`_S1` members | Removes 6 of § 5.2's 23 errors **without** the switch, because the defect is not encoding-dependent: a bare `HaydnInst` with no `Inst` bits is inferred `MCID::Pseudo` and AsmPrinter drops it, so GISel had to name a member, which pins every `x4cmul16` to slot 1 and every `movei` to slot 0. Same promotion `X4ABS16`/`ABS64`/`X2ABS32S` already had. `Fmt48_MOVEI` is restored for this (retired earlier for having no live consumer). Found § 6.12. |
 
 On `simulator/master`: `4b65727` (LLDB port TOCTOU), `84d545d` + `29ac239`
 (docs), `786d7c4` (cb99 wired up as an executed case), `b8da0eb` (golden re-pin),
@@ -388,7 +390,7 @@ Then, by category:
 |---|---|---|
 | 5 | `BUNDLE128_FULL` → `BUNDLE_E2` / `BUNDLE_E3` | `HaydnAsmParser.cpp:878`, `HaydnAsmPrinter.cpp:696`, `HaydnMCCodeEmitter.cpp:316,501`, `HaydnMCFormats.cpp:333`. **The real design work**: the encoder must now *choose* a composite by entry count, and `HaydnAsmPrinter` fills the composite operand dag by slot index. |
 | 4 | Decoder tables | `DecoderTableS048/S140/S240` → `DecoderTableP2048/P2148/P30../P31../P32..`; `DecoderTableBundle128128` → the two `FormatE2`/`FormatE3` tables. Pick the composite from the header: `Inst{3}`. `HaydnDisassembler.cpp:252,267,282,477`. Its `SlotGeo Slots[3]` must become 2-or-3. |
-| 6 | GISel selects members directly | `MOVEI_H_S0`/`MOVEI_L_S0` at `HaydnInstructionSelector.cpp:3826`; `X4CMUL16{,S,_F2,S_F2}_S1` at 4808-4811. The comment says the Auto.td logicals are `HaydnInst` stubs that AsmPrinter drops as `MCID::Pseudo`. Format E has members for all of them (`MOVEI_H` 2, `X4CMUL16` 5), so the clean fix is to make the logicals real and let the alternates auction place them. |
+| ~~6~~ | ~~GISel selects members directly~~ | **Done on the trunk, before the switch** — see § 4. Not encoding-dependent: the promotion is verifiable while Bundle128 is still live, and the C++ then names only logicals. |
 | ~~6~~ | ~~hwloop predicates naming `_S0`~~ | **Done on the trunk in `c290615e3cb0`**, before the switch. Folded through `getHaydnLogicalBaseOpcode`, which resolves the base by name search rather than a table, so it works for either spelling. |
 | 1 | `CSRW_S0` normalization | `HaydnMCCodeEmitter.cpp`. Was 2; the `CSRW_W` fold (`6e35b4124346`) removed the operand surgery, leaving only the opcode retarget. |
 | 7 | The seven AR logicals | `PLDWWUA`, `FLAR`, `WBARWUA` and the four `D_*UA_POST` live in `HaydnFormatsLS.td` and vanish with it, so GISel loses them (`HaydnInstructionSelector.cpp:6031-6130`). This is § 7's reshape, which the lost WIP branch had already done. Database shapes confirmed: `PLDWWUA_POST ar_sel, rs`; `WBARWUA ar_sel, rs`; `FLAR ar_sel`; the four `D_*UA_POST rtd, ar_sel, rs`. Format E has members for all seven. |
@@ -621,6 +623,41 @@ passes on an idle machine.
 rate** across concurrent processes — and were fixed in simulator `4b65727` by
 passing `--lldb-port 0` and reading the port BundleSim announces on stderr.
 `lldb_feature_matrix.sh` has not had that treatment and should get it.
+
+### 6.12 `cmake --build build` does not build `HaydnTests`
+
+The default target does not include the unit tests, so the § 1 sequence
+"build, then run `build/unittests/Target/Haydn/HaydnTests`" happily runs a
+**binary from a previous session** against tablegen output that has since been
+regenerated. Nothing warns you; the timestamps are the only tell.
+
+This produced **32 false failures** during the GISel promotion
+(`HaydnBundleTest`, `HaydnBundleMaterializeTest`, `HaydnBundleFormatSolver`,
+`HaydnAIEParityBundleTest`) — a spread that looks exactly like § 6.2's
+"lit passes, HaydnTests breaks broadly on cases that never mention the changed
+instruction", which is the most alarming signature in this document. The
+proximate symptom was `enumeratePlacementAlternatives(Fmts, Haydn::ADD32, …)`
+returning false while the regenerated `HaydnGenFormats.inc` plainly contained
+`case Haydn::ADD32: return &AlternateInsts[53];` — the stale binary was reading
+the old enum numbering.
+
+Diagnose it before believing any broad `HaydnTests` failure:
+
+```sh
+ls -la --time-style=+%H:%M:%S build/unittests/Target/Haydn/HaydnTests \
+                              build/lib/Target/Haydn/HaydnGenFormats.inc
+```
+
+If the `.inc` is newer, the run means nothing. Always:
+
+```sh
+cmake --build build -j"$(nproc)" --target HaydnTests
+```
+
+§ 6.2 makes `HaydnTests` the gate that decides whether a `.td` edit was safe.
+That gate is only as good as the binary, and this is the second time in this
+migration that a build system silently kept a stale artifact (§ 6.6 is the
+first). Assume nothing rebuilds itself.
 
 ### 6.8 Adding a regression case trips the manifest gate
 
