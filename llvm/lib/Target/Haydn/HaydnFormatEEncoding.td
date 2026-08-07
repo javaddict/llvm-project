@@ -33277,7 +33277,7 @@ def SEQ64_P32_ALU2 : HaydnEntryP32<
 }
 
 def SET_HWLOOP_P20_ALU0 : HaydnEntryP20<
-    (outs ), (ins uimm1:$hwlr_sel, uimm6:$uimm6_offset1, uimm12:$uimm12_offset2, uimm16:$uimm16_cnt),
+    (outs ), (ins uimm1:$hwlr_sel, hwloop_off1:$uimm6_offset1, hwloop_off2:$uimm12_offset2, uimm16_hwloop_cnt:$uimm16_cnt),
     "set_hwloop	$hwlr_sel, $uimm6_offset1, $uimm12_offset2, $uimm16_cnt"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -33298,7 +33298,7 @@ def SET_HWLOOP_P20_ALU0 : HaydnEntryP20<
 }
 
 def SET_HWLOOP_F2_P20_ALU0 : HaydnEntryP20<
-    (outs ), (ins uimm1:$hwlr_sel, uimm6:$uimm6_offset1, uimm12:$uimm12_offset2, GPR32:$rs),
+    (outs ), (ins uimm1:$hwlr_sel, hwloop_off1:$uimm6_offset1, hwloop_off2:$uimm12_offset2, GPR32:$rs),
     "set_hwloop_f2	$hwlr_sel, $uimm6_offset1, $uimm12_offset2, $rs"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -33321,7 +33321,7 @@ def SET_HWLOOP_F2_P20_ALU0 : HaydnEntryP20<
 }
 
 def SET_HWLOOP_F2_P30_ALU0 : HaydnEntryP30<
-    (outs ), (ins uimm1:$hwlr_sel, uimm6:$uimm6_offset1, uimm12:$uimm12_offset2, GPR32:$rs),
+    (outs ), (ins uimm1:$hwlr_sel, hwloop_off1:$uimm6_offset1, hwloop_off2:$uimm12_offset2, GPR32:$rs),
     "set_hwloop_f2	$hwlr_sel, $uimm6_offset1, $uimm12_offset2, $rs"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -33342,7 +33342,7 @@ def SET_HWLOOP_F2_P30_ALU0 : HaydnEntryP30<
 }
 
 def SET_HWLOOP_F2_P31_ALU0 : HaydnEntryP31<
-    (outs ), (ins uimm1:$hwlr_sel, uimm6:$uimm6_offset1, uimm12:$uimm12_offset2, GPR32:$rs),
+    (outs ), (ins uimm1:$hwlr_sel, hwloop_off1:$uimm6_offset1, hwloop_off2:$uimm12_offset2, GPR32:$rs),
     "set_hwloop_f2	$hwlr_sel, $uimm6_offset1, $uimm12_offset2, $rs"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
