@@ -567,7 +567,7 @@ class HaydnFU_LS_S2_D_LD_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
   let mayLoad = 1;  // setDesc preserves load semantic
-  let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
+  let Itinerary = Slot2_LS;   // S2 memory: Data_Latency 2 (not Slot2_ALU)
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
   bits<16> reserved = 0;     // [29:14] unused
@@ -582,7 +582,7 @@ class HaydnFU_LS_S2_S_LD_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
   let mayLoad = 1;  // setDesc preserves load semantic
-  let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
+  let Itinerary = Slot2_LS;   // S2 memory: Data_Latency 2 (not Slot2_ALU)
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
   bits<16> reserved = 0;     // [29:14] unused
@@ -597,7 +597,7 @@ class HaydnFU_LS_S2_D_LD_RR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
   let mayLoad = 1;  // setDesc preserves load semantic
-  let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
+  let Itinerary = Slot2_LS;   // S2 memory: Data_Latency 2 (not Slot2_ALU)
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
   bits<18> reserved = 0;     // [29:12] unused
@@ -612,7 +612,7 @@ class HaydnFU_LS_S2_S_LD_RR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
   let mayLoad = 1;  // setDesc preserves load semantic
-  let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
+  let Itinerary = Slot2_LS;   // S2 memory: Data_Latency 2 (not Slot2_ALU)
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
   bits<18> reserved = 0;     // [29:12] unused
@@ -628,7 +628,7 @@ class HaydnFU_LS_S2_D_ST_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
   let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
-  let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
+  let Itinerary = Slot2_LS;   // S2 memory: Data_Latency 2 (not Slot2_ALU)
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
   bits<16> reserved = 0;     // [29:14] unused
@@ -644,7 +644,7 @@ class HaydnFU_LS_S2_S_ST_RI6<bits<7> opc, dag outs, dag ins, string asmstr,
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
   let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
-  let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
+  let Itinerary = Slot2_LS;   // S2 memory: Data_Latency 2 (not Slot2_ALU)
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
   bits<16> reserved = 0;     // [29:14] unused
@@ -660,7 +660,7 @@ class HaydnFU_LS_S2_D_ST_RR<bits<7> opc, dag outs, dag ins, string asmstr,
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
   let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
-  let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
+  let Itinerary = Slot2_LS;   // S2 memory: Data_Latency 2 (not Slot2_ALU)
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
   bits<18> reserved = 0;     // [29:12] unused
@@ -676,7 +676,7 @@ class HaydnFU_LS_S2_S_ST_RR<bits<7> opc, dag outs, dag ins, string asmstr,
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
   let mayStore = 1;  // setDesc preserves store semantic
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
-  let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
+  let Itinerary = Slot2_LS;   // S2 memory: Data_Latency 2 (not Slot2_ALU)
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
   bits<18> reserved = 0;     // [29:12] unused
@@ -692,7 +692,7 @@ class HaydnFU_LS_S2_CBRI<bits<7> opc, dag outs, dag ins, string asmstr,
                           list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
-  let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
+  let Itinerary = Slot2_LS;   // S2 memory: Data_Latency 2 (not Slot2_ALU)
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
   bits<12> reserved = 0;     // [29:18] unused
@@ -708,7 +708,7 @@ class HaydnFU_LS_S2_CBRR<bits<7> opc, dag outs, dag ins, string asmstr,
                           list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
-  let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
+  let Itinerary = Slot2_LS;   // S2 memory: Data_Latency 2 (not Slot2_ALU)
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
   bits<16> reserved = 0;     // [29:14] unused
@@ -724,7 +724,7 @@ class HaydnFU_LS_S2_AR_PLDW<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
-  let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
+  let Itinerary = Slot2_LS;   // S2 memory: Data_Latency 2 (not Slot2_ALU)
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
   bits<24> reserved = 0;     // [29:6] unused
@@ -738,7 +738,7 @@ class HaydnFU_LS_S2_AR_FLAR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
-  let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
+  let Itinerary = Slot2_LS;   // S2 memory: Data_Latency 2 (not Slot2_ALU)
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
   bits<28> reserved = 0;     // [29:2] unused
@@ -752,7 +752,7 @@ class HaydnFU_LS_S2_AR_WBAR<bits<7> opc, dag outs, dag ins, string asmstr,
                              list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
-  let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
+  let Itinerary = Slot2_LS;   // S2 memory: Data_Latency 2 (not Slot2_ALU)
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
   bits<23> reserved = 0;     // [29:7] unused
@@ -768,7 +768,7 @@ class HaydnFU_LS_S2_AR_UA<bits<7> opc, dag outs, dag ins, string asmstr,
                            list<dag> pattern>
     : HaydnSlotS2<outs, ins, asmstr, pattern> {
   let hasSideEffects = 1;   // audit: genuinely side-effecting (override base 0)
-  let Itinerary = Slot2_ALU;   // single-slot, mirrors encoder commit
+  let Itinerary = Slot2_LS;   // S2 memory: Data_Latency 2 (not Slot2_ALU)
   bits<3> FU = 0b001;        // LS
   bits<7> opcode = opc;
   bits<12> reserved = 0;     // [29:18] unused

@@ -57,6 +57,9 @@ def Slot1_LD     : InstrItinClass;  // load unit → LOAD1
 def Slot01_LD    : InstrItinClass;  // dual-load menu → LOADSTORE0|LOAD1
 def Slot1_ALU    : InstrItinClass;  // → ALU1
 def Slot2_ALU    : InstrItinClass;  // → ALU2
+// Slot 2 memory forms: Data_Latency 2. Must NOT borrow Slot2_ALU (latency 1).
+// Haydn has no interlock — wrong latency here is a silent silicon hazard.
+def Slot2_LS     : InstrItinClass;  // → ALU2 (S2 pack seat), mem Data_Latency 2
 def Slot2_MAC    : InstrItinClass;  // → MAC1
 def Slot2_ALU_AccLat : InstrItinClass;
 def Slot12_MAC   : InstrItinClass;  // → MAC0|MAC1
@@ -101,6 +104,7 @@ def HaydnItineraries : ProcessorItineraries<
     InstrItinData<Slot1_MAC, [InstrStage<1, [MAC0]>], [2, 1, 1, 2]>,
 
     InstrItinData<Slot2_ALU, [InstrStage<1, [ALU2]>], [1]>,
+    InstrItinData<Slot2_LS,  [InstrStage<1, [ALU2]>], [2]>,
     InstrItinData<Slot2_ALU_AccLat, [InstrStage<1, [ALU2]>], [5, 1, 1, 5]>,
     InstrItinData<Slot2_MAC, [InstrStage<1, [MAC1]>], [2, 1, 1, 2]>
   ]>;

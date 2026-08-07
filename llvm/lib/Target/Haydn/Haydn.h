@@ -41,6 +41,8 @@ FunctionPass *createHaydnBitSimplifyPass();
 FunctionPass *createHaydnFinalizeBundlePass();
 // fail-closed committed-bundle verifier (after FinalizeBundle).
 FunctionPass *createHaydnVerifyBundlesPass();
+// Exposed-pipeline Data_Latency stall insert (pre-emit; every opt level).
+FunctionPass *createHaydnLatencyStallsPass();
 
 // Pass initialization declarations
 void initializeHaydnPostLegalizerCombinerPass(PassRegistry &);
@@ -56,6 +58,7 @@ void initializeHaydnEnsureTerminatorsPass(PassRegistry &);
 void initializeHaydnBitSimplifyPass(PassRegistry &);
 void initializeHaydnFinalizeBundlePass(PassRegistry &);
 void initializeHaydnVerifyBundlesPass(PassRegistry &);
+void initializeHaydnLatencyStallsPass(PassRegistry &);
 void initializeHaydnHandoffBundleRootDefsPass(PassRegistry &);
 
 /// After TwoAddressInstruction: re-attach child vreg defs on multi-member
