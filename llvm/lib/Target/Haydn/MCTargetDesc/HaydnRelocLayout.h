@@ -108,6 +108,55 @@ struct RelocFieldInfo {
 };
 
 // The geometry table. Indexed by RelocKind.
+// Bundle-bit LSB of the relocatable immediate a fixup patches, derived from
+// the bundle image. \returns false when the geometry cannot be resolved, in
+// which case the caller MUST report an error rather than patch.
+//
+// A relocation names a BYTE, but format E entry windows do not start on byte
+// boundaries and the field's position inside an entry depends on the
+// placement, so neither `byte*8` nor a per-kind FieldLsb is right — the two
+// errors are independent and both are silent. See FORMAT-E-SWITCH-PLAN.md
+// § 5.8; getting it wrong mis-links quietly, and in the one loud case
+// overwrites the bundle header.
+//
+// Everything the lookup needs is in the image, which is what lets MC and lld
+// share one answer even though neither knows the member:
+//   * FieldSize      — the relocation's own RelocFieldInfo
+//   * entry count    — header bit 3
+//   * entry index    — which entry \p BundleByte falls in
+//   * mapping value  — read out of that entry, and what distinguishes e.g.
+//                      LUI on ALU2 from a branch on ALU0 at the same entry
+//
+// \p BundleBase points at the first byte of the 12-byte bundle and
+// \p BundleByte is the fixup's offset from it.
+bool relocFieldBundleLsb(unsigned FieldSize, const uint8_t *BundleBase,
+                         unsigned BundleByte, unsigned &OutBundleLsb);
+
+// Patch a relocatable immediate into its format E bundle. \returns false when
+// the geometry cannot be resolved or the window would leave the bundle; the
+// caller MUST report an error rather than proceed.
+//
+// This is the whole operation, not a helper, so MC and lld share every step —
+// the geometry lookup, the byte-window arithmetic, and the width rounding.
+// Each of those has already produced a silent wrong answer once (§ 5.8), and a
+// reader/writer split is exactly what this file exists to prevent.
+//
+// \p BundleBase points at the first byte of the 12-byte bundle; \p BundleByte
+// is the relocation's offset from it.
+// Whether \p R patches a field inside an INSTRUCTION, as opposed to a plain
+// word in .data / .rodata.
+//
+// Only the instruction ones live inside a format E bundle and need the
+// placement-dependent geometry; a data relocation patches its bytes directly
+// and must not go anywhere near the bundle header. Getting this wrong is how
+// the first attempt broke every data relocation in lld — it failed safely,
+// because non-bundle bytes do not carry the 0b111 format indicator, but it
+// should never have been asked.
+bool isInstructionFieldReloc(RelocKind R);
+
+bool patchRelocFieldInBundle(uint8_t *BundleBase, unsigned BundleByte,
+                             const RelocFieldInfo &FI, uint64_t FieldVal);
+
 const RelocFieldInfo &getRelocFieldInfo(RelocKind R);
 
 // Map an MC target fixup kind (FIXUP_HAYDN_*) to the neutral relocation.
