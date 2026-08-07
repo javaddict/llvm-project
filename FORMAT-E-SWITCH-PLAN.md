@@ -21,25 +21,45 @@ Companion documents:
 
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
-| `llvm-project` | `haydn` | `9e950478333a` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-wip` | `f7e173347bb4` | **no — 27 errors, deliberately** |
+| `llvm-project` | `haydn` | `d7e0d13b534f` | **yes, fully green** |
+| `llvm-project` | `haydn-formate-switch-mc` | `f7e173347bb4` | **no — 27 errors, deliberately** |
+| `llvm-project` | `haydn-formate-switch-wip` | *on the other host* | unknown |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
-
-Nothing is pushed.
 
 `haydn` is the trunk. Everything on it is green and committed; work from it.
 
-**`haydn-formate-switch-wip` exists again**, and this time it is a real branch
-rather than a working tree that evaporated. It carries the § 5.2 switch as far
-as it has been taken: both roots, the six deleted `.td` files, the slot-model
-correction, and the composite/emitter/printer/parser rework. It is **not
-green** — 27 errors, listed in § 5.2 — and is parked rather than merged so the
-trunk stays green. Its commit message is a summary of the design decisions;
-§ 5.2 is the full analysis. Do not re-derive this from scratch.
+### There are TWO WIP branches and they are COMPLEMENTARY
 
-The earlier branch of the same name was lost with the host that held it, which
-is why this one is committed to git rather than left in a working tree, and why
-§ 5.2 now records the reasoning instead of just the file list.
+An earlier revision of this file said `haydn-formate-switch-wip` "is gone with
+the host that held it". **That was wrong — the host is still there and so is
+the branch.** Do not re-derive its contents; get them.
+
+| | `haydn-formate-switch-wip` (other host) | `haydn-formate-switch-mc` (here) |
+|---|---|---|
+| both root `.td` include switches | yes | yes |
+| AR reshape — 7 logicals into `HaydnInstrInfo.td` | **yes** | no |
+| `BuiltinsHaydn.td` AR prototypes | **yes** | no |
+| GISel AR lowering | **yes** | no |
+| the five `HaydnFormats*.td` + composite deleted | no | **yes** |
+| Bundle128 `InstSlot`s deleted from `HaydnSlots.td` | no | **yes** |
+| slot-model correction (alternates index ≠ slot) | no | **yes** |
+| composites / emitter / printer / parser rework | no | **yes** |
+
+The AR half is 7 of the ~15 C++ errors still open in § 5.2; the MC half is the
+rest of the design work. **Neither is a superset of the other**, and both are
+now committed to git rather than living in a working tree.
+
+They both edit the same six root-include lines, and the WIP branch is based far
+below the current trunk, so combining them is a rebase-then-cherry-pick, not a
+merge. Recommended order: rebase `haydn-formate-switch-wip` onto the current
+`haydn` (taking the new side of the six-line include conflict), then cherry-pick
+the AR reshape onto `haydn-formate-switch-mc` — the MC branch is the larger diff
+(9987 lines deleted) and is the awkward one to replay.
+
+The branch here was originally created under the name
+`haydn-formate-switch-wip` too, which was a bad call precisely because this
+file documented that name as belonging to something lost. Renamed to
+`haydn-formate-switch-mc` for what it actually holds.
 
 Earlier revisions of this file named `haydn` heads `9802930e5fde` and
 `135c38e2f1bc`. Neither hash exists in the repo; the branch was rebased before
@@ -397,18 +417,18 @@ Then, by category:
 
 | n | What | Notes |
 |---|---|---|
-| ~~5~~ | ~~`BUNDLE128_FULL` → `BUNDLE_E2` / `BUNDLE_E3`~~ | **Done on `haydn-formate-switch-wip`.** It was billed as "the real design work" and turned out not to be — the generated packet-format table already makes the choice. See "What the composite choice actually is" below for what it really cost. |
+| ~~5~~ | ~~`BUNDLE128_FULL` → `BUNDLE_E2` / `BUNDLE_E3`~~ | **Done on `haydn-formate-switch-mc`.** It was billed as "the real design work" and turned out not to be — the generated packet-format table already makes the choice. See "What the composite choice actually is" below for what it really cost. |
 | 4 | Decoder tables | `DecoderTableS048/S140/S240` → `DecoderTableP2048/P2148/P30../P31../P32..`; `DecoderTableBundle128128` → the two `FormatE2`/`FormatE3` tables. Pick the composite from the header: `Inst{3}`. `HaydnDisassembler.cpp:252,267,282,477`. Its `SlotGeo Slots[3]` must become 2-or-3. |
 | ~~6~~ | ~~GISel selects members directly~~ | **Done on the trunk, before the switch** — see § 4. Not encoding-dependent: the promotion is verifiable while Bundle128 is still live, and the C++ then names only logicals. |
 | ~~6~~ | ~~hwloop predicates naming `_S0`~~ | **Done on the trunk in `c290615e3cb0`**, before the switch. Folded through `getHaydnLogicalBaseOpcode`, which resolves the base by name search rather than a table, so it works for either spelling. |
-| ~~1~~ | ~~`CSRW_S0` normalization~~ | **Done on `haydn-formate-switch-wip`, by deletion.** The hardcoded retarget to `CSRW_S0` was exactly the "residual logical, find its member for this entry" case, so it is subsumed by the general `findMemberForSlot` path the alternates-index correction introduced. Naming one member by hand could not survive format E anyway — `CSRW` has seven. |
+| ~~1~~ | ~~`CSRW_S0` normalization~~ | **Done on `haydn-formate-switch-mc`, by deletion.** The hardcoded retarget to `CSRW_S0` was exactly the "residual logical, find its member for this entry" case, so it is subsumed by the general `findMemberForSlot` path the alternates-index correction introduced. Naming one member by hand could not survive format E anyway — `CSRW` has seven. |
 | 7 | The seven AR logicals | `PLDWWUA`, `FLAR`, `WBARWUA` and the four `D_*UA_POST` live in `HaydnFormatsLS.td` and vanish with it, so GISel loses them (`HaydnInstructionSelector.cpp:6031-6130`). This is § 7's reshape, which the lost WIP branch had already done. Database shapes confirmed: `PLDWWUA_POST ar_sel, rs`; `WBARWUA ar_sel, rs`; `FLAR ar_sel`; the four `D_*UA_POST rtd, ar_sel, rs`. Format E has members for all seven. |
 
 #### The 23-error count was measuring the wrong thing
 
 **It counts C++ compile errors, and most of this step is not a compile error.**
 The switch has now been carried far enough to see the real shape; the work is
-parked on `haydn-formate-switch-wip` (`f7e173347bb4`), which builds down to 27
+parked on `haydn-formate-switch-mc` (`f7e173347bb4`), which builds down to 27
 errors and is where the numbers below come from. Read that commit message
 before re-deriving.
 
@@ -495,7 +515,7 @@ Four consequences that are real behaviour changes, not renames:
 
 #### What is left after all that — measured, not estimated
 
-27 C++ errors on `haydn-formate-switch-wip`, in five files:
+27 C++ errors on `haydn-formate-switch-mc`, in five files:
 
 | n | Where | What |
 |---:|---|---|
