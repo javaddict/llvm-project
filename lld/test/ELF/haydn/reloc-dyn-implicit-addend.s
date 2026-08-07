@@ -22,8 +22,8 @@ _start:
     LUI R1, my_data
     # CHECK: {{.*}} addi32
     ADDI32 R2, R1, my_data
-    # CHECK: {{.*}} ld32
-    LD32 R3, R2, 0
+    # CHECK: {{.*}} s_lw_with_imm
+    S_LW_WITH_IMM R3, R2, 0
     # Absolute 32-bit data reloc in .text (same class as reloc-32.s).
     .long my_data
 

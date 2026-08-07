@@ -26,10 +26,15 @@
 .globl _start
 _start:
     set_hwloop 0, loop_body, loop_end, 3
-    .balign 16
+    # .balign 4, not 16: a format E bundle is 12 bytes, so bundle boundaries
+    # are at section_start + 12k and are always 4-aligned but never reliably
+    # 8- or 16-aligned. Asking for more needs a partial-bundle pad, which
+    # writeNopData refuses (§ 5.9). 4 is the largest power of two that always
+    # costs zero padding.
+    .balign 4
 
 .section .text.body
-.balign 16
+.balign 4
 .globl loop_body
 loop_body:
     { add32 r1, r2, r3 }
