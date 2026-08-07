@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `2686a95478c5` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 12/24. Both § 5.2 generator gaps closed; § 5.11 partly.** |
+| `llvm-project` | `haydn-formate-switch-mc` | `8919a256dc42` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 12/24. Both § 5.2 generator gaps closed; § 5.11 partly.** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -1400,7 +1400,40 @@ tied in, copies the `Constraints`. 202 member definitions.
 builds the MCInst against the member, so the two agreed. Only **compiled** code
 was wrong, and only in the operands after the tie.
 
-#### What is left: 968 of 3567 member definitions
+#### What is left: 27 logicals, 171 placements — and it is now measurable
+
+```sh
+python3 .../haydn_encoding.py --database ~/haydn \
+    --emit operand-agreement --flags-from haydn-records.json
+#   operand agreement: 27 logicals, 171 member placements disagree
+```
+
+**Not 968.** That earlier figure compared the members' raw operand lists
+against the logicals', which counted fields the instruction does not use and
+did not account for the tie the generator now restores. The mode above counts
+what the encoder actually sees; `LUI` correctly no longer appears and `ABS32`
+does.
+
+The 27, by shape:
+
+* **13 declare a source the database does not have** — `ABS32`/`ABS32S`
+  (whose own asm string is `"abs32\t$rd, $rs1"`, so `$rs2` is provably dead),
+  `MOVE32`, and the `X2`/`X4` move and compare families. `ZERO_DR` has a
+  spurious immediate. These are `LUI`'s class: **fix the logical, the database
+  is the authority.** All but `MOVE32` have **zero** C++ references, so most
+  are pure `.td` edits.
+* **`CSRR`** — the extra dead `$rd`, already analysed in § 5.1.
+* **The `MUL`/`MULA`/`MULS` families at 5 placements each** — not yet looked
+  at; note 5 rather than 7, so these are MAC-only and the shape question may
+  differ.
+
+`X2SEQ32` is worth a second look before touching it: the database says
+`X2SEQ32 rsd1, rsd2` and the generator classes `rsd1` as an *out*, but these
+are the comparisons that carry `Defs = [SFR]` (§ 4), so `rsd1` may well be a
+second **source** and the generator's dest-by-field-name rule may be wrong for
+them.
+
+#### The old estimate, for the record
 
 Two classes, neither safe to do in bulk:
 
