@@ -21,20 +21,28 @@ Companion documents:
 
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
-| `llvm-project` | `haydn` | `d7e0d13b534f` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `f7e173347bb4` | **no — 27 errors, deliberately** |
-| `llvm-project` | `haydn-formate-switch-wip` | *on the other host* | unknown |
+| `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
+| `llvm-project` | `haydn-formate-switch-mc` | `d4bb9bead154` | **no — 17 errors; holds BOTH halves** |
+| `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
 `haydn` is the trunk. Everything on it is green and committed; work from it.
 
-### There are TWO WIP branches and they are COMPLEMENTARY
+All three branches are on the `github` remote. The pre-rebase states of the two
+WIP branches are preserved as the tags `backup/wip-preformate-20260807` and
+`backup/mc-preformate-20260807`, also pushed — the rebases were force-pushed
+over the branch names, so those tags are the only copies of what was there
+before.
+
+### The two WIP branches were COMPLEMENTARY — and are now joined
 
 An earlier revision of this file said `haydn-formate-switch-wip` "is gone with
-the host that held it". **That was wrong — the host is still there and so is
-the branch.** Do not re-derive its contents; get them.
+the host that held it". **That was wrong — the host was still there and so was
+the branch.** It has since been pushed, rebased and merged into
+`haydn-formate-switch-mc`, which now carries both halves. The table is kept as
+the record of what each contributed:
 
-| | `haydn-formate-switch-wip` (other host) | `haydn-formate-switch-mc` (here) |
+| | `haydn-formate-switch-wip` | `haydn-formate-switch-mc` |
 |---|---|---|
 | both root `.td` include switches | yes | yes |
 | AR reshape — 7 logicals into `HaydnInstrInfo.td` | **yes** | no |
@@ -45,16 +53,34 @@ the branch.** Do not re-derive its contents; get them.
 | slot-model correction (alternates index ≠ slot) | no | **yes** |
 | composites / emitter / printer / parser rework | no | **yes** |
 
-The AR half is 7 of the ~15 C++ errors still open in § 5.2; the MC half is the
-rest of the design work. **Neither is a superset of the other**, and both are
-now committed to git rather than living in a working tree.
+**Neither was a superset of the other**, and the join confirmed it precisely:
+the AR half closed exactly the 7 GISel errors it carried and moved nothing
+else. How it was done, since the shape is worth keeping:
 
-They both edit the same six root-include lines, and the WIP branch is based far
-below the current trunk, so combining them is a rebase-then-cherry-pick, not a
-merge. Recommended order: rebase `haydn-formate-switch-wip` onto the current
-`haydn` (taking the new side of the six-line include conflict), then cherry-pick
-the AR reshape onto `haydn-formate-switch-mc` — the MC branch is the larger diff
-(9987 lines deleted) and is the awkward one to replay.
+1. `git rebase haydn haydn-formate-switch-wip` — **no conflicts at all**. The
+   trunk had not touched `Haydn.td`, `HaydnAsmMatcher.td` or
+   `BuiltinsHaydn.td` since the WIP branch's base, so the six-line include
+   switch replayed clean. Its second commit (the `--emit report` one-liner) was
+   auto-dropped as already applied — trunk's `595218b8a264` is the same patch.
+2. `git rebase haydn haydn-formate-switch-mc` — **required, and not optional**.
+   `-mc` was based five commits below the trunk, two of them code:
+   `f9ed0ff6365f` (`HaydnBundlePlan.h`) and `d7e0d13b534f` (the unit axis).
+   The unit axis touches the same four files `-mc` reworks. Only
+   `HaydnPlacementAlternative.h` actually conflicted; the other three
+   auto-merged, and all three were checked by hand afterwards rather than
+   trusted.
+3. `git cherry-pick` the AR reshape onto `-mc`. Only the two root `.td` files
+   conflicted, and **both conflicts were pure comment text** — the `include`
+   lines were byte-identical on the two sides.
+
+The conflict in `HaydnPlacementAlternative.h` was the interesting one and it
+resolved cleanly, because the two sides were written for each other without
+knowing it: trunk's comment on `fieldSlotsForAltIndex` said "at the switch this
+must become *ask the member for its own slot kind*", which is exactly what
+`-mc`'s `fieldSlotsForMember` does; and `-mc`'s note saying "nothing currently
+enforces format E's rule that no two entries may name the same unit" is exactly
+what the unit axis had since implemented. Both stale halves of that
+conversation were rewritten rather than carried forward.
 
 The branch here was originally created under the name
 `haydn-formate-switch-wip` too, which was a bad call precisely because this
@@ -74,7 +100,7 @@ cmake --build build -j"$(nproc)" -- -k 0             # 0 errors; -k 0, see § 5.
 build/bin/llvm-lit -s llvm/test/CodeGen/Haydn llvm/test/MC/Haydn
 #   589 discovered: 573 pass, 8 XFAIL, 8 unsupported, 0 fail
 cmake --build build -j"$(nproc)" --target HaydnTests  # REQUIRED — see § 6.12
-build/unittests/Target/Haydn/HaydnTests               # 248/248
+build/unittests/Target/Haydn/HaydnTests               # 253/253 (248 + 5 unit-axis)
 build/bin/llvm-lit -s lld/test/ELF/haydn \
     lld/test/ELF/haydn-relocations.s lld/test/ELF/haydn-linker-script.s   # 24/24
 
@@ -515,13 +541,35 @@ Four consequences that are real behaviour changes, not renames:
 
 #### What is left after all that — measured, not estimated
 
-27 C++ errors on `haydn-formate-switch-mc`, in five files:
+**17 C++ errors** on `haydn-formate-switch-mc` after the two WIP branches were
+joined, in four files. Count **distinct source locations**, not `error:` lines
+— see § 6.14, the raw line count here is 111 and means nothing.
 
-| n | Where | What |
-|---:|---|---|
-| 12 | `HaydnBundlePlan.h` (8) + downstream `static_assert`s in `HaydnHWLoopContracts.h` (3) and `HaydnInstrInfo.cpp` (1) | **The product-format model is a singleton.** `FormatID::Bundle128Full`, `ProductFormatDesc` with `SlotSet = SLOT0\|SLOT1\|SLOT2`, `ProductFormatMask`, `Bundle128EncodedBytes = 16`, `planFromPacketFormats` querying by the full slot set. Format E needs two rows of 12 bytes, and `isProduct()` / `productFeasibleFormatMask` stop being one-valued. |
-| 8 | `HaydnDisassembler.cpp` | Decoder tables + `SlotGeo Slots[3]`. |
-| 7 | `HaydnInstructionSelector.cpp` | The AR logicals — § 7's reshape. |
+| n | Where | What | State |
+|---:|---|---|---|
+| 8 | `HaydnDisassembler.cpp` | Decoder tables + `SlotGeo Slots[3]`. | open |
+| 5 | `HaydnBundlePlan.h` | see below | open |
+| 3 | `HaydnHWLoopContracts.h` | downstream `static_assert`s | open |
+| 1 | `HaydnInstrInfo.cpp` | downstream `static_assert` | open |
+| ~~7~~ | ~~`HaydnInstructionSelector.cpp`~~ | ~~The AR logicals — § 7's reshape.~~ | **closed by the join** |
+
+The 5 + 3 + 1 = 9 are **one item**: the product-format table still holds the
+Bundle128 row and names `Haydn::SLOT0/1/2`, which `-mc` deleted from
+`HaydnBaseInfo.h`. This is no longer design work. `f9ed0ff6365f` turned the
+singleton into a table and wrote down what is left, on the table itself:
+
+> *the rows: one becomes two, 16 bytes becomes 12; `FormatID`'s enumerators;
+> the slot-window widths and their `static_assert`. What does NOT change: every
+> lookup below, because they all scan the table.*
+
+So it is a change of **data**, and `Haydn::BUNDLE_E_BYTES` / `SLOT_SET_E2` /
+`SLOT_SET_E3` already exist on `-mc` to write it with. Note the earlier
+estimate of 12 for this item was measured before `f9ed0ff6365f`, which took it
+to 9 — it did **not** take it to 0, and reading its subject as though it had is
+an easy mistake to make.
+
+That leaves `HaydnDisassembler.cpp` as the only genuinely open design work in
+the C++, which is § 5.2's real remaining cost.
 
 **And the compiler is the easy half.** Nothing below shows up as an error:
 
@@ -823,6 +871,36 @@ before believing it.**
 
 `-I clang/lib/Headers` on a manual `clang` invocation *does* pick up the source
 copy, so a hand check and the test suite can disagree — that is the tell.
+
+### 6.14 `grep -c 'error:'` is not the error count
+
+Every number in § 5.2 is **distinct source locations**. A raw count of `error:`
+lines is inflated by translation-unit multiplicity, and the inflation is
+concentrated exactly where the switch does its damage — in headers.
+
+Measuring `-mc` before the join gave **118** `error:` lines but **24** distinct
+locations. `HaydnBundlePlan.h` alone accounted for 90 of the 118: 6 distinct
+errors, each reported by all 15 translation units that include it. Read
+carelessly, that looks like the switch is four times worse than documented and
+that `f9ed0ff6365f` made things worse rather than better. It did not.
+
+```sh
+cmake --build build -j"$(nproc)" -- -k 0 > /tmp/build.log 2>&1
+grep -oE '^/home/[^ ]+:[0-9]+:[0-9]+: error:' /tmp/build.log | sort -u | wc -l
+```
+
+Two further cautions on the same measurement:
+
+* **`-k 0` is required** and is in § 1's baseline for this reason. Plain
+  `cmake --build` stops at the first failing target and showed 7 where there
+  were 23.
+* Even with `-k 0`, ninja stops when it *cannot make progress*, so errors
+  hidden behind a failed target are still not counted. The number is a lower
+  bound on a broken tree, and it only becomes exact at zero.
+
+This is the fourth member of the family in § 6.6 / § 6.12 / § 6.13: a tool
+answered a slightly different question than the one being asked, and the answer
+looked plausible.
 
 ### 6.8 Adding a regression case trips the manifest gate
 
