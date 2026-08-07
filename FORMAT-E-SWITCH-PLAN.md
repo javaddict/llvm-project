@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `311a13393a07` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 10/24. Not all of that is expectation work — see § 5.10.** |
+| `llvm-project` | `haydn-formate-switch-mc` | `3de4fbe4fe26` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 11/24.** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -1270,9 +1270,42 @@ They are one item: **the generator emits plain `simmN` where the logical had a
 purpose-built operand class, and everything that class carried is lost.**
 Scaling and fixup kind are two symptoms; there may be more.
 
-The fix has the same shape as `--flags-from`: the member should inherit its
-operand classes from the logical it expands, not be given generic ones. That
-is a generator change, and it closes § 6.10 at the same time.
+**Fixed in `3de4fbe4fe26`, but only partly, and the boundary matters.** The
+member now inherits the logical's operand class, with two restrictions,
+because a wrong inherit mis-encodes silently:
+
+* **Only classes with both an explicit width and an `EncoderMethod`** — six of
+  them: `hwloop_off1/2`, `uimm16_hwloop_cnt`, `uimm20_wide_abs`, `uimm6_dr`,
+  `uimm8_csr`. The width lets the member's field be checked against the class.
+  The width-agnostic `Operand<OtherVT>` classes (`brtarget`, `calltarget`) are
+  excluded **on purpose**: their encoders dispatch on the *opcode*, branches
+  already reach the right fixup kind through `getExprFixupKind`, and rerouting
+  a working path is not worth the risk.
+* **Matched by name, not position.** The member and the logical disagree on
+  arity for **280 of the 684** logicals — tied writebacks, database reshapes —
+  so a positional match would be wrong more often than right. The member's
+  alias carries the logical's operand name as a suffix (`uimm6_offset1` for
+  `offset1`), which is unambiguous wherever it matches.
+
+Net effect is four member definitions, all `SET_HWLOOP` / `SET_HWLOOP_F2`, and
+`set_hwloop` now emits `R_HAYDN_HWLoopOff1/Off2` instead of two
+`R_HAYDN_32`. lld 10/24 → 11/24.
+
+#### § 6.10 is still open, and now demonstrable
+
+The earlier expectation that this would close § 6.10 was wrong. Branch
+immediates still take a plain `simm12` and store the byte offset **raw**, so
+the same offset encodes two different ways depending on how it was written:
+
+```
+{ nop; nop; beqz r1, -12 }   -> field -12   literal, no scale
+{ nop; nop; beqz r1, tgt }   -> field  -6   symbolic, RelocFieldInfo
+                                            ValueShift = 1 applied
+```
+
+Closing it needs the branch operand classes to carry the scale, and it cannot
+reuse this mechanism as written, because `brtarget` has no width to check
+against. That is the last of § 5.2's two original generator gaps.
 
 #### Why it took until now to see
 
