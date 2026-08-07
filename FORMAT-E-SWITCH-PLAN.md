@@ -1028,6 +1028,91 @@ reach it. Restoring `HaydnTests` after the switch is what turned a documented
 risk into a reproducible failure. That is the argument for not deferring the
 gate any further.
 
+### 5.8 Fixup geometry corrupts the bundle header — BLOCKER, and no gate sees it
+
+**Demonstrated, not deduced.** Assembling the same branch with a literal
+offset and with a symbolic one:
+
+```
+{ nop; nop; beqz r1, -12 }    ->  8f ...   bits[5:0] = 0b001111   correct
+{ nop; nop; beqz r1, tgt  }   ->  af ...   bits[5:0] = 0b101111   CORRUPT
+                                             ^^ reserved bits, must be 00
+```
+
+The encoder produces a correct bundle in both cases. **Applying the
+relocation is what breaks it**, and the result does not decode at all —
+`llvm-objdump` renders `<unknown>`.
+
+#### Why
+
+The emitter anchors an entry's fixups at
+`SlotWindowLSBByteBase = (BUNDLE_E_BITS - 1 - RightOffset) / 8`. Format E's
+entry windows do not start on byte boundaries, so that division **truncates**:
+
+| entry | window | LSB bit | byte base | lost sub-byte shift |
+|---|---|---:|---:|---:|
+| P20 | `Inst{50-6}` | 6 | 0 | **6** |
+| P21 | `Inst{91-51}` | 51 | 6 | **3** |
+| P30 | `Inst{36-6}` | 6 | 0 | **6** |
+| P31 | `Inst{67-37}` | 37 | 4 | **5** |
+| P32 | `Inst{94-68}` | 68 | 8 | **4** |
+
+Bundle128's windows were 48/40/40 from bit 0 — LSBs at 0, 48, 88, every one
+byte-aligned — so the shift was always 0 and no code ever had to carry it.
+Above, `beqz` landed in P30, the shift of 6 was dropped, and the field was
+written six bits low, on top of the header.
+
+#### Why a static table cannot express it
+
+`RelocFieldInfo` is keyed by `RelocKind` alone and carries one `FieldLsb`. The
+shift is a property of the **placement**, and every relocation-bearing
+instruction has members in several entries:
+
+```
+JAL JALR BEQ BNE     P20, P30, P31           -> shifts 6, 6, 5
+BEQZ BNEZ LUI        P20, P30, P31, P32      -> shifts 6, 6, 5, 4
+ADDI32               P20, P21                -> shifts 6, 3
+SET_HWLOOP           P20                     -> shift 6
+```
+
+So one `RelocKind` needs up to four different `FieldLsb` values. This is a
+genuine design decision, and it is **linker-visible** — `HaydnRelocLayout` is
+the single source of truth that MC *and* lld both read, and lld sees only an
+ELF relocation (offset + type), never the placement.
+
+#### The options, none of them free
+
+1. **Encode the shift in the relocation type.** Up to 4 variants per kind.
+   Explicit, and lld reads it straight off the type — but it multiplies the
+   `R_HAYDN_*` set and is an ABI change.
+2. **Derive the shift from the image.** A fixup's offset modulo the bundle
+   gives the byte; the header at the bundle start gives the entry count;
+   together they identify the entry and hence the shift. No new relocation
+   types, and it keeps one source of truth — but it makes relocation
+   application depend on reading the bundle header, and on bundles being
+   12-byte aligned from the section start.
+3. **Widen the patched window and shift `FieldLsb` at application time**,
+   with the shift passed alongside the kind. Smallest ABI impact; requires
+   every producer of a fixup to know its placement, which the emitter does and
+   lld does not.
+
+**This needs a decision before it can be implemented.** Option 2 is the most
+faithful to "one geometry table serves both", but it is the one that changes
+what a relocation *means* — it stops being self-describing.
+
+#### Why nothing caught it, again
+
+`--emit roundtrip` never applies a fixup, so it cannot see this at all. The
+assemble/disassemble round trip caught it here **only by luck**: the field
+happened to land on the header, and the header is the one thing the generated
+decoder tables check (§ 5.2). A fixup that lands six bits low inside a
+*payload* field is completely silent — it round-trips, because the encoder and
+decoder still agree with each other, and only the linked program is wrong.
+
+`lld/test/ELF/haydn` and the simulator remain the only gates that stand
+outside this, which is exactly what § 5.4 said and is now demonstrated rather
+than predicted.
+
 ### 5.5 BundleSim side
 
 Must land in the **same commit** as § 5.2, because it is what keeps the two
