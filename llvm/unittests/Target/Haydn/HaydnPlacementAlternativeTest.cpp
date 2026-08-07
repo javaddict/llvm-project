@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // Unit tests for getAlternateInstsOpcode / PlacementAlternative over
-// BUNDLE128_FULL members + CompatibleFormatMask + sparse size-3
+// BUNDLE_E3 members + CompatibleFormatMask + sparse size-3
 // FieldSlots-by-index (alts-derived; index == field).
 // Mirrors AIE BundleTest / HazardRecognizerTest alternate-opcode coverage.
 //
@@ -40,42 +40,42 @@ TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_ADD32_AllThreeSlots)
   ASSERT_NE(Alts, nullptr);
   // Sparse size-3, index == field.
   ASSERT_EQ(Alts->size(), 3u);
-  EXPECT_EQ((*Alts)[0], Haydn::ADD32_S0);
-  EXPECT_EQ((*Alts)[1], Haydn::ADD32_S1);
-  EXPECT_EQ((*Alts)[2], Haydn::ADD32_S2);
+  EXPECT_EQ((*Alts)[0], Haydn::ADD32_P30_ALU0);
+  EXPECT_EQ((*Alts)[1], Haydn::ADD32_P31_ALU0);
+  EXPECT_EQ((*Alts)[2], Haydn::ADD32_P32_ALU0);
 
   SmallVector<PlacementAlternative, 4> Enumerated;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD32, Enumerated));
   ASSERT_EQ(Enumerated.size(), 3u);
-  EXPECT_EQ(Enumerated[0].MemberOpcode, Haydn::ADD32_S0);
-  EXPECT_EQ(Enumerated[0].FieldSlots, SlotBits(Haydn::SLOT0));
-  EXPECT_EQ(Enumerated[1].MemberOpcode, Haydn::ADD32_S1);
-  EXPECT_EQ(Enumerated[1].FieldSlots, SlotBits(Haydn::SLOT1));
-  EXPECT_EQ(Enumerated[2].MemberOpcode, Haydn::ADD32_S2);
-  EXPECT_EQ(Enumerated[2].FieldSlots, SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(Enumerated[0].MemberOpcode, Haydn::ADD32_P30_ALU0);
+  EXPECT_EQ(Enumerated[0].FieldSlots, SlotBits(Haydn::SLOT_P30));
+  EXPECT_EQ(Enumerated[1].MemberOpcode, Haydn::ADD32_P31_ALU0);
+  EXPECT_EQ(Enumerated[1].FieldSlots, SlotBits(Haydn::SLOT_P31));
+  EXPECT_EQ(Enumerated[2].MemberOpcode, Haydn::ADD32_P32_ALU0);
+  EXPECT_EQ(Enumerated[2].FieldSlots, SlotBits(Haydn::SLOT_P32));
   // Product alts stamp Full CompatibleFormatMask.
   for (const PlacementAlternative &A : Enumerated) {
     EXPECT_EQ(A.CompatibleFormatMask, ProductFormatMask);
-    EXPECT_TRUE(A.isCompatibleWith(FormatID::Bundle128Full));
+    EXPECT_TRUE(A.isCompatibleWith(FormatID::BundleE3));
   }
 }
 
 TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_LD32_SparseS0S1) {
   HaydnMCFormats Fmts;
   const std::vector<unsigned> *Alts =
-      Fmts.getAlternateInstsOpcode(Haydn::LD32);
+      Fmts.getAlternateInstsOpcode(Haydn::S_LW_WITH_IMM);
   ASSERT_NE(Alts, nullptr);
   // Sparse: {LD32_S0, LD32_S1, 0}
   ASSERT_EQ(Alts->size(), 3u);
-  EXPECT_EQ((*Alts)[0], Haydn::LD32_S0);
-  EXPECT_EQ((*Alts)[1], Haydn::LD32_S1);
+  EXPECT_EQ((*Alts)[0], Haydn::S_LW_WITH_IMM_P30_LOADSTORE0);
+  EXPECT_EQ((*Alts)[1], Haydn::S_LW_WITH_IMM_P31_LOAD1);
   EXPECT_EQ((*Alts)[2], 0u);
 
   SmallVector<PlacementAlternative, 4> Enumerated;
-  ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::LD32, Enumerated));
+  ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::S_LW_WITH_IMM, Enumerated));
   ASSERT_EQ(Enumerated.size(), 2u);
-  EXPECT_EQ(Enumerated[0].FieldSlots, SlotBits(Haydn::SLOT0));
-  EXPECT_EQ(Enumerated[1].FieldSlots, SlotBits(Haydn::SLOT1));
+  EXPECT_EQ(Enumerated[0].FieldSlots, SlotBits(Haydn::SLOT_P30));
+  EXPECT_EQ(Enumerated[1].FieldSlots, SlotBits(Haydn::SLOT_P31));
 }
 
 TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_ADD64_SparseS1S2) {
@@ -86,47 +86,50 @@ TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_ADD64_SparseS1S2) {
   // Sparse: {0, ADD64_S1, ADD64_S2} — no S0 (ALU64 is s1|s2 only).
   ASSERT_EQ(Alts->size(), 3u);
   EXPECT_EQ((*Alts)[0], 0u);
-  EXPECT_EQ((*Alts)[1], Haydn::ADD64_S1);
-  EXPECT_EQ((*Alts)[2], Haydn::ADD64_S2);
+  EXPECT_EQ((*Alts)[1], Haydn::ADD64_P31_ALU0);
+  EXPECT_EQ((*Alts)[2], Haydn::ADD64_P32_ALU0);
 
   SmallVector<PlacementAlternative, 4> Enumerated;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD64, Enumerated));
   ASSERT_EQ(Enumerated.size(), 2u);
-  EXPECT_EQ(Enumerated[0].MemberOpcode, Haydn::ADD64_S1);
-  EXPECT_EQ(Enumerated[0].FieldSlots, SlotBits(Haydn::SLOT1));
-  EXPECT_EQ(Enumerated[1].MemberOpcode, Haydn::ADD64_S2);
-  EXPECT_EQ(Enumerated[1].FieldSlots, SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(Enumerated[0].MemberOpcode, Haydn::ADD64_P31_ALU0);
+  EXPECT_EQ(Enumerated[0].FieldSlots, SlotBits(Haydn::SLOT_P31));
+  EXPECT_EQ(Enumerated[1].MemberOpcode, Haydn::ADD64_P32_ALU0);
+  EXPECT_EQ(Enumerated[1].FieldSlots, SlotBits(Haydn::SLOT_P32));
 }
 
 TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_ST32_SparseS0Only) {
   HaydnMCFormats Fmts;
   const std::vector<unsigned> *Alts =
-      Fmts.getAlternateInstsOpcode(Haydn::ST32);
+      Fmts.getAlternateInstsOpcode(Haydn::S_SW_WITH_IMM);
   ASSERT_NE(Alts, nullptr);
   ASSERT_EQ(Alts->size(), 3u);
-  EXPECT_EQ((*Alts)[0], Haydn::ST32_S0);
+  EXPECT_EQ((*Alts)[0], Haydn::S_SW_WITH_IMM_P30_LOADSTORE0);
   EXPECT_EQ((*Alts)[1], 0u);
   EXPECT_EQ((*Alts)[2], 0u);
 }
 
-TEST(HaydnPlacementAlternativeTest, FieldSlotsFromSparseIndexNotFlexReverse) {
-  // FieldSlots = 1<<alt-index (alts-derived; index == field).
-  // Member identity is sparse AlternateInsts.
+TEST(HaydnPlacementAlternativeTest, FieldSlotsComeFromTheMemberNotTheIndex) {
+  // The alternates index is NOT the slot under format E — it is the placement,
+  // the (entry position, unit) pair. This test used to assert
+  // `FieldSlots == 1 << alt-index`, which held only while the vector was
+  // indexed by slot; it is the invariant the switch breaks (plan § 5.2), so it
+  // now asserts the replacement: each row's FieldSlots is the bit of the slot
+  // its OWN member names.
   HaydnMCFormats Fmts;
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD64, Alts));
-  // Sparse holes mean index 1 → SLOT1; index is the sole FieldSlots authority.
-  EXPECT_EQ(Alts[0].FieldSlots, fieldSlotsForAltIndex(1));
-  EXPECT_EQ(Alts[1].FieldSlots, fieldSlotsForAltIndex(2));
+  for (const PlacementAlternative &A : Alts)
+    EXPECT_EQ(A.FieldSlots, fieldSlotsForMember(Fmts, A.MemberOpcode));
   const std::vector<unsigned> *Sparse =
       Fmts.getAlternateInstsOpcode(Haydn::ADD64);
   ASSERT_NE(Sparse, nullptr);
   ASSERT_EQ(Sparse->size(), 3u);
   EXPECT_EQ((*Sparse)[0], 0u);
-  EXPECT_EQ((*Sparse)[1], Haydn::ADD64_S1);
-  EXPECT_EQ((*Sparse)[2], Haydn::ADD64_S2);
-  EXPECT_EQ(Fmts.getSlotKind(Haydn::ADD64_S1),
-            MCSlotKind(MCSlotKind::Haydn_SLOT_S1));
+  EXPECT_EQ((*Sparse)[1], Haydn::ADD64_P31_ALU0);
+  EXPECT_EQ((*Sparse)[2], Haydn::ADD64_P32_ALU0);
+  EXPECT_EQ(Fmts.getSlotKind(Haydn::ADD64_P31_ALU0),
+            MCSlotKind(MCSlotKind::Haydn_SLOT_P31));
 }
 
 TEST(HaydnPlacementAlternativeTest, LegalSlotsEqualsOROfFieldSlots) {
@@ -134,7 +137,7 @@ TEST(HaydnPlacementAlternativeTest, LegalSlotsEqualsOROfFieldSlots) {
   HaydnMCFormats Fmts;
   const unsigned Opcodes[] = {
       Haydn::ADD32, Haydn::SUB32,  Haydn::NOT32, Haydn::NEG32,
-      Haydn::ADD64, Haydn::LD32,   Haydn::ST32,  Haydn::LD64,
+      Haydn::ADD64, Haydn::S_LW_WITH_IMM,   Haydn::S_SW_WITH_IMM,  Haydn::D_LDW_WITH_IMM,
       Haydn::X2MULA32, Haydn::MAX64, Haydn::SLL64, Haydn::POPCOUNT32};
 
   for (unsigned Opcode : Opcodes) {
@@ -179,7 +182,7 @@ TEST(HaydnPlacementAlternativeTest, UnknownOpcodeReturnsNull) {
 
 TEST(HaydnPlacementAlternativeTest, CompatibleFormatMask_ProductFullOnly) {
   EXPECT_EQ(ProductFormatMask, 1ull << 0);
-  EXPECT_EQ(formatIDBit(FormatID::Bundle128Full), ProductFormatMask);
+  EXPECT_EQ(formatIDBit(FormatID::BundleE3), ProductFormatMask);
 
   HaydnMCFormats Fmts;
   SmallVector<PlacementAlternative, 4> Alts;
@@ -188,7 +191,7 @@ TEST(HaydnPlacementAlternativeTest, CompatibleFormatMask_ProductFullOnly) {
   for (const PlacementAlternative &A : Alts) {
     EXPECT_EQ(A.CompatibleFormatMask, ProductFormatMask);
     EXPECT_TRUE(A.isCompatibleWith(ProductFormatID));
-    EXPECT_TRUE(A.isCompatibleWith(FormatID::Bundle128Full));
+    EXPECT_TRUE(A.isCompatibleWith(FormatID::BundleE3));
     constexpr FormatID Synth = static_cast<FormatID>(1);
     EXPECT_FALSE(A.isCompatibleWith(Synth));
   }
@@ -200,28 +203,28 @@ TEST(HaydnPlacementAlternativeTest, FilterAlternativesForFormat_Synthetic) {
   const uint64_t BothMask = ProductFormatMask | SynthMask;
 
   SmallVector<PlacementAlternative, 4> Alts;
-  Alts.emplace_back(/*MemberOpc=*/Haydn::ADD32_S0, ProductFormatMask);
-  Alts.emplace_back(/*MemberOpc=*/Haydn::ADD32_S1, BothMask);
-  Alts.emplace_back(/*MemberOpc=*/Haydn::ADD32_S2, SynthMask);
+  Alts.emplace_back(/*MemberOpc=*/Haydn::ADD32_P30_ALU0, ProductFormatMask);
+  Alts.emplace_back(/*MemberOpc=*/Haydn::ADD32_P31_ALU0, BothMask);
+  Alts.emplace_back(/*MemberOpc=*/Haydn::ADD32_P32_ALU0, SynthMask);
 
   SmallVector<PlacementAlternative, 4> ForFull = Alts;
-  filterAlternativesForFormat(ForFull, FormatID::Bundle128Full);
+  filterAlternativesForFormat(ForFull, FormatID::BundleE3);
   ASSERT_EQ(ForFull.size(), 2u);
-  EXPECT_EQ(ForFull[0].MemberOpcode, Haydn::ADD32_S0);
-  EXPECT_EQ(ForFull[1].MemberOpcode, Haydn::ADD32_S1);
+  EXPECT_EQ(ForFull[0].MemberOpcode, Haydn::ADD32_P30_ALU0);
+  EXPECT_EQ(ForFull[1].MemberOpcode, Haydn::ADD32_P31_ALU0);
 
   SmallVector<PlacementAlternative, 4> ForSynth = Alts;
   filterAlternativesForFormat(ForSynth, SynthNarrow);
   ASSERT_EQ(ForSynth.size(), 2u);
-  EXPECT_EQ(ForSynth[0].MemberOpcode, Haydn::ADD32_S1);
-  EXPECT_EQ(ForSynth[1].MemberOpcode, Haydn::ADD32_S2);
+  EXPECT_EQ(ForSynth[0].MemberOpcode, Haydn::ADD32_P31_ALU0);
+  EXPECT_EQ(ForSynth[1].MemberOpcode, Haydn::ADD32_P32_ALU0);
 }
 
 TEST(HaydnPlacementAlternativeTest, DefaultCtorStampsProductMask) {
-  PlacementAlternative A(Haydn::ADD32_S0);
-  EXPECT_EQ(A.MemberOpcode, Haydn::ADD32_S0);
+  PlacementAlternative A(Haydn::ADD32_P30_ALU0);
+  EXPECT_EQ(A.MemberOpcode, Haydn::ADD32_P30_ALU0);
   EXPECT_EQ(A.CompatibleFormatMask, ProductFormatMask);
-  EXPECT_TRUE(A.isCompatibleWith(FormatID::Bundle128Full));
+  EXPECT_TRUE(A.isCompatibleWith(FormatID::BundleE3));
 }
 
 } // namespace

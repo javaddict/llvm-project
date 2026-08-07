@@ -11,7 +11,7 @@
 //   empty accept, multi-slot fill, format coverage, clear, meta no-slot,
 //   reserve vs add occupancy agreement.
 //
-// Product: one live format BUNDLE128_FULL. Infra must stay N-format-ready
+// Product: one live format BUNDLE_E3. Infra must stay N-format-ready
 // (FormatID / Plan / PacketFormats APIs — not hard-coded "always pack").
 //
 //===----------------------------------------------------------------------===//
@@ -47,8 +47,8 @@ TEST(HaydnAIEParityBundleTest, EmptyAcceptsAnySupported) {
   Bundle<MCInst> B(&Fmts);
   EXPECT_TRUE(B.empty());
   EXPECT_TRUE(B.canAdd(Haydn::ADD32));
-  EXPECT_TRUE(B.canAdd(Haydn::LD32));
-  EXPECT_TRUE(B.canAdd(Haydn::ST32));
+  EXPECT_TRUE(B.canAdd(Haydn::S_LW_WITH_IMM));
+  EXPECT_TRUE(B.canAdd(Haydn::S_SW_WITH_IMM));
   EXPECT_TRUE(B.canAdd(Haydn::X2MULA32));
   EXPECT_TRUE(B.canAdd(Haydn::ADD64));
   EXPECT_TRUE(B.canAdd(Haydn::ARCTAN));
@@ -72,21 +72,21 @@ TEST(HaydnAIEParityBundleTest, MetaDoesNotConsumeSlots) {
 TEST(HaydnAIEParityBundleTest, FormatAvailableAllSubsetsLikeAIEPacket) {
   // AIE PacketFormats: subsets covered by composite. Bundle128 = all 8.
   HaydnMCFormats Fmts;
-  for (SlotBits Combo = 0; Combo <= SLOT_ALL; ++Combo)
+  for (SlotBits Combo = 0; Combo <= SLOT_SET_E3; ++Combo)
     EXPECT_TRUE(Fmts.isFormatAvailable(Combo)) << "combo=" << Combo;
 }
 
 TEST(HaydnAIEParityBundleTest, PacketFormatNameAndSizeAIEShape) {
   HaydnMCFormats Fmts;
   const VLIWFormat *F =
-      Fmts.getPacketFormats().getFormat(SLOT0 | SLOT1 | SLOT2);
+      Fmts.getPacketFormats().getFormat(SLOT_P30 | SLOT_P31 | SLOT_P32);
   ASSERT_NE(F, nullptr);
-  EXPECT_STREQ(F->Name, "BUNDLE128_FULL");
+  EXPECT_STREQ(F->Name, "BUNDLE_E3");
   // Product table Size = EncodedBytes (AIE VLIWFormat::Size is packet size unit).
-  EXPECT_EQ(vliwFormatSizeAsBytes(F->getSize()), Bundle128EncodedBytes);
-  EXPECT_TRUE(F->covers(SLOT0));
-  EXPECT_TRUE(F->covers(SLOT1 | SLOT2));
-  EXPECT_TRUE(F->covers(SLOT_ALL));
+  EXPECT_EQ(vliwFormatSizeAsBytes(F->getSize()), ProductEncodedBytes);
+  EXPECT_TRUE(F->covers(SLOT_P30));
+  EXPECT_TRUE(F->covers(SLOT_P31 | SLOT_P32));
+  EXPECT_TRUE(F->covers(SLOT_SET_E3));
 }
 
 TEST(HaydnAIEParityBundleTest, ThreeIssueFillThenRejectLikeAIE) {
@@ -98,7 +98,7 @@ TEST(HaydnAIEParityBundleTest, ThreeIssueFillThenRejectLikeAIE) {
     ASSERT_TRUE(B.canAdd(Ops[I].getOpcode()));
     B.add(&Ops[I]);
   }
-  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(SLOT_ALL));
+  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(SLOT_SET_E3));
   EXPECT_TRUE(B.hasValidFormat());
   Ops[3].setOpcode(Haydn::ADD32);
   EXPECT_FALSE(B.canAdd(Ops[3].getOpcode()));
@@ -116,23 +116,23 @@ TEST(HaydnAIEParityBundleTest, ClearReturnsToEmptyAccept) {
   B.clear();
   EXPECT_TRUE(B.empty());
   EXPECT_EQ(B.getOccupiedSlots(), 0u);
-  EXPECT_TRUE(B.canAdd(Haydn::ST32));
+  EXPECT_TRUE(B.canAdd(Haydn::S_SW_WITH_IMM));
 }
 
 TEST(HaydnAIEParityBundleTest, SlotMapReflectsPlacement) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst St, Alu;
-  St.setOpcode(Haydn::ST32);
+  St.setOpcode(Haydn::S_SW_WITH_IMM);
   Alu.setOpcode(Haydn::ADD32);
   B.add(&St);
   B.add(&Alu);
-  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_S0), &St);
+  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_P30), &St);
   // ST is S0-only; multi-slot ALU prefers high slots (S2 then S1).
-  EXPECT_TRUE(B.at(MCSlotKind::Haydn_SLOT_S1) == &Alu ||
-              B.at(MCSlotKind::Haydn_SLOT_S2) == &Alu)
+  EXPECT_TRUE(B.at(MCSlotKind::Haydn_SLOT_P31) == &Alu ||
+              B.at(MCSlotKind::Haydn_SLOT_P32) == &Alu)
       << "ALU must land S1 or S2; occ=" << B.getOccupiedSlots();
-  EXPECT_NE(B.getOccupiedSlots() & (Haydn::SLOT1 | Haydn::SLOT2), 0u);
+  EXPECT_NE(B.getOccupiedSlots() & (Haydn::SLOT_P31 | Haydn::SLOT_P32), 0u);
 }
 
 //===----------------------------------------------------------------------===//
@@ -145,10 +145,10 @@ TEST(HaydnAIEParityBundleTest, EveryPackedCycleIsProductPlan) {
       {Haydn::ADD32, 0, 0, 0},
       {Haydn::ADD32, Haydn::XOR32, 0, 0},
       {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32, 0},
-      {Haydn::LD32, Haydn::X2MULA32, 0, 0},
-      {Haydn::ST32, Haydn::ADD32, 0, 0},
-      {Haydn::LD32, Haydn::LD32, Haydn::ADD32, 0},
-      {Haydn::ST32, Haydn::ST32, 0, 0}, // split
+      {Haydn::S_LW_WITH_IMM, Haydn::X2MULA32, 0, 0},
+      {Haydn::S_SW_WITH_IMM, Haydn::ADD32, 0, 0},
+      {Haydn::S_LW_WITH_IMM, Haydn::S_LW_WITH_IMM, Haydn::ADD32, 0},
+      {Haydn::S_SW_WITH_IMM, Haydn::S_SW_WITH_IMM, 0, 0}, // split
   };
   for (const auto &Seq : Sequences) {
     SmallVector<unsigned, 4> Ops;
@@ -156,13 +156,13 @@ TEST(HaydnAIEParityBundleTest, EveryPackedCycleIsProductPlan) {
       Ops.push_back(Seq[I]);
     auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
     for (const OpcodeCycle &C : Cycles) {
-      EXPECT_EQ(C.Plan.FID, FormatID::Bundle128Full);
+      EXPECT_EQ(C.Plan.FID, FormatID::BundleE3);
       EXPECT_EQ(C.Plan.Bytes.Value, 16u);
       EXPECT_TRUE(C.Plan.isProductLegal());
       // N-format-ready: encodedBytesFor(FormatID) works
       auto B = encodedBytesFor(C.Plan.FID);
       ASSERT_TRUE(B.has_value());
-      EXPECT_EQ(*B, Bundle128EncodedBytes);
+      EXPECT_EQ(*B, ProductEncodedBytes);
     }
   }
 }
@@ -170,8 +170,8 @@ TEST(HaydnAIEParityBundleTest, EveryPackedCycleIsProductPlan) {
 TEST(HaydnAIEParityBundleTest, PlanFromPacketFormatsMatchesLiveRow) {
   HaydnMCFormats Fmts;
   for (SlotBits Occ :
-       {SlotBits(0), SlotBits(SLOT0), SlotBits(SLOT1 | SLOT2),
-        SlotBits(SLOT_ALL)}) {
+       {SlotBits(0), SlotBits(SLOT_P30), SlotBits(SLOT_P31 | SLOT_P32),
+        SlotBits(SLOT_SET_E3)}) {
     auto P = planFromPacketFormats(Fmts.getPacketFormats(), Occ);
     ASSERT_TRUE(P.has_value()) << "occ=" << Occ;
     EXPECT_EQ(P->FID, ProductFormatID);
@@ -185,33 +185,33 @@ TEST(HaydnAIEParityBundleTest, PlanFromPacketFormatsMatchesLiveRow) {
 
 TEST(HaydnAIEParityBundleTest, DspKernelLdMacAluDensity) {
   HaydnMCFormats Fmts;
-  unsigned Ops[] = {Haydn::LD32, Haydn::X2MULA32, Haydn::ADD32};
+  unsigned Ops[] = {Haydn::S_LW_WITH_IMM, Haydn::X2MULA32, Haydn::ADD32};
   EXPECT_TRUE(opcodesFormOneLegalCycle(Ops, Fmts));
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
   ASSERT_EQ(Cycles.size(), 1u);
-  EXPECT_EQ(Cycles[0].Plan.OccupiedSlots, SlotBits(SLOT_ALL));
+  EXPECT_EQ(Cycles[0].Plan.OccupiedSlots, SlotBits(SLOT_SET_E3));
 }
 
 TEST(HaydnAIEParityBundleTest, DualLoadMacFill) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst L0, L1, Mac;
-  L0.setOpcode(Haydn::LD32);
-  L1.setOpcode(Haydn::LD32);
+  L0.setOpcode(Haydn::S_LW_WITH_IMM);
+  L1.setOpcode(Haydn::S_LW_WITH_IMM);
   Mac.setOpcode(Haydn::X2MULA32);
   B.add(&L0);
   ASSERT_TRUE(B.canAdd(L1.getOpcode()));
   B.add(&L1);
   ASSERT_TRUE(B.canAdd(Mac.getOpcode()));
   B.add(&Mac);
-  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(SLOT_ALL));
+  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(SLOT_SET_E3));
   EXPECT_TRUE(B.hasValidFormat());
 }
 
 TEST(HaydnAIEParityBundleTest, StoreStoreMustSplitLikeResourceConflict) {
   // AIE-style: same exclusive resource → not one bundle.
   HaydnMCFormats Fmts;
-  unsigned Ops[] = {Haydn::ST32, Haydn::ST32, Haydn::ST32};
+  unsigned Ops[] = {Haydn::S_SW_WITH_IMM, Haydn::S_SW_WITH_IMM, Haydn::S_SW_WITH_IMM};
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
   EXPECT_EQ(Cycles.size(), 3u);
   for (const auto &C : Cycles)
@@ -226,9 +226,9 @@ TEST(HaydnAIEParityBundleTest, LongMixedStreamPartitionInvariant) {
   HaydnMCFormats Fmts;
   // Realistic FIR-ish stream: LD LD MAC ALU ST LD MAC ALU ST ...
   const unsigned Pattern[] = {
-      Haydn::LD32, Haydn::LD32, Haydn::X2MULA32, Haydn::ADD32, Haydn::ST32,
-      Haydn::LD32, Haydn::X2MULA32, Haydn::XOR32, Haydn::ST32,
-      Haydn::ADD64, Haydn::SLL64, Haydn::ST32,
+      Haydn::S_LW_WITH_IMM, Haydn::S_LW_WITH_IMM, Haydn::X2MULA32, Haydn::ADD32, Haydn::S_SW_WITH_IMM,
+      Haydn::S_LW_WITH_IMM, Haydn::X2MULA32, Haydn::XOR32, Haydn::S_SW_WITH_IMM,
+      Haydn::ADD64, Haydn::SLL64, Haydn::S_SW_WITH_IMM,
       Haydn::NOT32, Haydn::NEG32, Haydn::ADDI32, Haydn::ADD32};
   SmallVector<unsigned, 32> Ops(std::begin(Pattern), std::end(Pattern));
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
@@ -251,8 +251,8 @@ TEST(HaydnAIEParityBundleTest, LongMixedStreamPartitionInvariant) {
 
 TEST(HaydnAIEParityBundleTest, ResplitFixedPointOnAllSubcycles) {
   HaydnMCFormats Fmts;
-  unsigned Ops[] = {Haydn::ST32, Haydn::LD32, Haydn::X2MULA32, Haydn::ST32,
-                    Haydn::ADD32, Haydn::ADD64, Haydn::ST32, Haydn::XOR32};
+  unsigned Ops[] = {Haydn::S_SW_WITH_IMM, Haydn::S_LW_WITH_IMM, Haydn::X2MULA32, Haydn::S_SW_WITH_IMM,
+                    Haydn::ADD32, Haydn::ADD64, Haydn::S_SW_WITH_IMM, Haydn::XOR32};
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
   for (const OpcodeCycle &C : Cycles) {
     auto Again = greedySplitLegalOpcodeCycles(C.Opcodes, Fmts);
@@ -269,21 +269,21 @@ TEST(HaydnAIEParityBundleTest, ResplitFixedPointOnAllSubcycles) {
 
 TEST(HaydnAIEParityBundleTest, ProductFormatIdIsSingletonEnum) {
   // When multi-format lands, this test extends — today only Full is legal.
-  EXPECT_TRUE(isProductFormat(FormatID::Bundle128Full));
-  auto B = encodedBytesFor(FormatID::Bundle128Full);
+  EXPECT_TRUE(isProductFormat(FormatID::BundleE3));
+  auto B = encodedBytesFor(FormatID::BundleE3);
   ASSERT_TRUE(B.has_value());
   EXPECT_EQ(B->Value, 16u);
 }
 
 TEST(HaydnAIEParityBundleTest, SlotWindowBitsSum128AIEComposite) {
   // AIE composite size from field geometry; Haydn Full = 48+40+40.
-  EXPECT_EQ(Slot0EncodedBits.Value + Slot1EncodedBits.Value +
-                Slot2EncodedBits.Value,
-            Bundle128EncodedBitsValue);
+  EXPECT_EQ(P30EncodedBits.Value + P31EncodedBits.Value +
+                P32EncodedBits.Value,
+            ProductEncodedBitsValue);
   HaydnMCFormats Fmts;
   unsigned Sum = 0;
-  for (auto K : {MCSlotKind::Haydn_SLOT_S0, MCSlotKind::Haydn_SLOT_S1,
-                 MCSlotKind::Haydn_SLOT_S2})
+  for (auto K : {MCSlotKind::Haydn_SLOT_P30, MCSlotKind::Haydn_SLOT_P31,
+                 MCSlotKind::Haydn_SLOT_P32})
     Sum += Fmts.getSlotInfo(K)->getSize();
   EXPECT_EQ(Sum, 128u);
 }
@@ -295,13 +295,13 @@ TEST(HaydnAIEParityBundleTest, SlotWindowBitsSum128AIEComposite) {
 
 TEST(HaydnAIEParityBundleTest, FormatOpcodeIsProductCompositeSerializeOnly) {
   // AIE: MCBundle.setOpcode(Format->Opcode); emitter getBinaryCode + emit.
-  // Haydn product: Format->Opcode == BUNDLE128_FULL for every covered set.
+  // Haydn product: Format->Opcode == BUNDLE_E3 for every covered set.
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst A, X, N;
-  A.setOpcode(Haydn::ADD32_S2);
-  X.setOpcode(Haydn::XOR32_S1);
-  N.setOpcode(Haydn::NOT32_S0);
+  A.setOpcode(Haydn::ADD32_P32_ALU0);
+  X.setOpcode(Haydn::XOR32_P31_ALU0);
+  N.setOpcode(Haydn::NOT32_P30_ALU0);
   if (Fmts.getSlotKind(A.getOpcode()) == MCSlotKind()) {
     A.setOpcode(Haydn::ADD32);
     X.setOpcode(Haydn::XOR32);
@@ -316,16 +316,16 @@ TEST(HaydnAIEParityBundleTest, FormatOpcodeIsProductCompositeSerializeOnly) {
 
   const VLIWFormat *Fmt = B.getFormatOrNull();
   ASSERT_NE(Fmt, nullptr);
-  EXPECT_STREQ(Fmt->Name, "BUNDLE128_FULL");
-  EXPECT_EQ(Fmt->Opcode, Haydn::BUNDLE128_FULL)
+  EXPECT_STREQ(Fmt->Name, "BUNDLE_E3");
+  EXPECT_EQ(Fmt->Opcode, Haydn::BUNDLE_E3)
       << "AsmPrinter must emit Format->Opcode composite, not Haydn::BUNDLE";
 
   // Committed members keep fixed getSlotKind — encode must not re-auction.
-  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_S0)->getOpcode()),
+  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_P30)->getOpcode()),
             MCSlotKind());
-  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_S1)->getOpcode()),
+  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_P31)->getOpcode()),
             MCSlotKind());
-  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_S2)->getOpcode()),
+  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_P32)->getOpcode()),
             MCSlotKind());
 }
 
@@ -336,11 +336,11 @@ TEST(HaydnAIEParityBundleTest, SerializeSlotMapNoReAuctionOnMembers) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst St0, St1;
-  St0.setOpcode(Haydn::ST32_S0);
-  St1.setOpcode(Haydn::ST32_S0);
+  St0.setOpcode(Haydn::S_SW_WITH_IMM_P30_LOADSTORE0);
+  St1.setOpcode(Haydn::S_SW_WITH_IMM_P30_LOADSTORE0);
   if (Fmts.getSlotKind(St0.getOpcode()) == MCSlotKind()) {
-    St0.setOpcode(Haydn::ST32);
-    St1.setOpcode(Haydn::ST32);
+    St0.setOpcode(Haydn::S_SW_WITH_IMM);
+    St1.setOpcode(Haydn::S_SW_WITH_IMM);
   }
   ASSERT_TRUE(B.canAdd(St0.getOpcode()));
   B.add(&St0);
@@ -348,7 +348,7 @@ TEST(HaydnAIEParityBundleTest, SerializeSlotMapNoReAuctionOnMembers) {
       << "second fixed S0 member must fail (no encode re-auction)";
   const VLIWFormat *Fmt = B.getFormatOrNull();
   ASSERT_NE(Fmt, nullptr);
-  EXPECT_EQ(Fmt->Opcode, Haydn::BUNDLE128_FULL);
+  EXPECT_EQ(Fmt->Opcode, Haydn::BUNDLE_E3);
 }
 
 } // namespace

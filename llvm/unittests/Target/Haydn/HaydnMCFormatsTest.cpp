@@ -28,33 +28,33 @@ namespace {
 
 TEST(HaydnMCFormatsTest, GetLegalSlotsSpotChecks) {
   // getLegalSlots returns a bitmask (bit k = slot k in Haydn::SLOT convention:
-  // SLOT0=1<<0, SLOT1=1<<1, SLOT2=1<<2). Derived from sparse alts.
+  // SLOT_P30=1<<0, SLOT_P31=1<<1, SLOT_P32=1<<2). Derived from sparse alts.
   HaydnMCFormats Fmts;
 
   // ALU32 unary family (NOT32/NEG32) packs into all three slots.
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::NOT32),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::NEG32),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
 
   // ALU32 RR (ADD32) — sparse alts S0|S1|S2.
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD32),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
 
   // ALU64 (ADD64) — s1/s2 only (no S0).
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD64),
-            SlotBits(Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32));
 
   // CB-111: LD32 is logical S0|S1; stores S0.
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::LD32),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1));
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ST32), SlotBits(Haydn::SLOT0));
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_LW_WITH_IMM),
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31));
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_SW_WITH_IMM), SlotBits(Haydn::SLOT_P30));
 
   // Materialize members live in sparse alts (alts-derived getLegalSlots).
   const std::vector<unsigned> *LD32Alts =
-      Fmts.getAlternateInstsOpcode(Haydn::LD32);
+      Fmts.getAlternateInstsOpcode(Haydn::S_LW_WITH_IMM);
   const std::vector<unsigned> *LD64Alts =
-      Fmts.getAlternateInstsOpcode(Haydn::LD64);
+      Fmts.getAlternateInstsOpcode(Haydn::D_LDW_WITH_IMM);
   ASSERT_NE(LD32Alts, nullptr);
   ASSERT_NE(LD64Alts, nullptr);
   ASSERT_EQ(LD32Alts->size(), 3u);
@@ -62,13 +62,13 @@ TEST(HaydnMCFormatsTest, GetLegalSlotsSpotChecks) {
   EXPECT_NE((*LD32Alts)[1], 0u);
   EXPECT_NE((*LD64Alts)[1], 0u);
   EXPECT_EQ(Fmts.getSlotKind((*LD32Alts)[1]),
-            MCSlotKind(MCSlotKind::Haydn_SLOT_S1));
+            MCSlotKind(MCSlotKind::Haydn_SLOT_P31));
   EXPECT_EQ(Fmts.getSlotKind((*LD64Alts)[1]),
-            MCSlotKind(MCSlotKind::Haydn_SLOT_S1));
+            MCSlotKind(MCSlotKind::Haydn_SLOT_P31));
 
   // MAC (X2MULA32) — legal in s1|s2.
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::X2MULA32),
-            SlotBits(Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32));
 }
 
 TEST(HaydnMCFormatsTest, GetLegalSlotsIsDerivedFromSparseAlts) {
@@ -77,7 +77,7 @@ TEST(HaydnMCFormatsTest, GetLegalSlotsIsDerivedFromSparseAlts) {
   HaydnMCFormats Fmts;
   const unsigned Opcodes[] = {
       Haydn::ADD32,    Haydn::SUB32,    Haydn::NOT32,     Haydn::NEG32,
-      Haydn::ADD64,    Haydn::LD32,     Haydn::ST32,      Haydn::LD64,
+      Haydn::ADD64,    Haydn::S_LW_WITH_IMM,     Haydn::S_SW_WITH_IMM,      Haydn::D_LDW_WITH_IMM,
       Haydn::X2MULA32, Haydn::MAX64,    Haydn::SLL64,     Haydn::POPCOUNT32};
 
   for (unsigned Opcode : Opcodes) {
@@ -113,13 +113,13 @@ TEST(HaydnMCFormatsTest, GetLegalSlotsIsDerivedFromSparseAlts) {
 
 // Regression: the generated PacketFormats table + real ConflictBits are
 // consumed (GET_FORMATS_PACKETS_TABLE wired in HaydnMCFormats.cpp).
-// Previously ConflictBits was documented as SLOT_ALL (sentinel for "no
-// exclusivity info"); with BUNDLE128_FULL declared as a composite packet format
+// Previously ConflictBits was documented as SLOT_SET_E3 (sentinel for "no
+// exclusivity info"); with BUNDLE_E3 declared as a composite packet format
 // covering {S0,S1,S2}, the backend's computeSlotSets derives ConflictBits =
 // self-only for every slot (1/2/4). This test anchors:
 //   1. getPacketFormats() returns the generated table (non-empty, has a format
 //      covering the full slot set).
-//   2. ConflictBits != SLOT_ALL for every slot (the sentinel is gone).
+//   2. ConflictBits != SLOT_SET_E3 for every slot (the sentinel is gone).
 //   3. isFormatAvailable is true for all subsets of {S0,S1,S2} (the Bundle128
 //      packet format covers them; behavior preserved vs the hand-authored LUT).
 TEST(HaydnMCFormatsTest, PacketFormatsAndConflictBitsFromGeneratedTable) {
@@ -128,22 +128,22 @@ TEST(HaydnMCFormatsTest, PacketFormatsAndConflictBitsFromGeneratedTable) {
   // (1) getPacketFormats returns a table that covers the full slot set.
   const PacketFormats &Packets = Fmts.getPacketFormats();
   const VLIWFormat *Full =
-      Packets.getFormat(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2);
+      Packets.getFormat(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32);
   EXPECT_NE(Full, nullptr);
   ASSERT_TRUE(Full);
-  EXPECT_TRUE(Full->covers(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+  EXPECT_TRUE(Full->covers(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
 
-  // (2) ConflictBits != SLOT_ALL for every slot. Bundle128 co-emits all three,
+  // (2) ConflictBits != SLOT_SET_E3 for every slot. Bundle128 co-emits all three,
   //     so each slot's conflict-closure is self-only (1/2/4).
-  const MCSlotKind SlotKinds[] = {MCSlotKind::Haydn_SLOT_S0,
-                                  MCSlotKind::Haydn_SLOT_S1,
-                                  MCSlotKind::Haydn_SLOT_S2};
-  const SlotBits SelfBits[] = {Haydn::SLOT0, Haydn::SLOT1, Haydn::SLOT2};
+  const MCSlotKind SlotKinds[] = {MCSlotKind::Haydn_SLOT_P30,
+                                  MCSlotKind::Haydn_SLOT_P31,
+                                  MCSlotKind::Haydn_SLOT_P32};
+  const SlotBits SelfBits[] = {Haydn::SLOT_P30, Haydn::SLOT_P31, Haydn::SLOT_P32};
   for (size_t I = 0; I < 3; ++I) {
     const MCSlotInfo *SI = Fmts.getSlotInfo(SlotKinds[I]);
     ASSERT_NE(SI, nullptr) << "no SlotInfo for slot " << I;
-    EXPECT_NE(SI->getConflictSet(), SlotBits(Haydn::SLOT_ALL))
-        << "slot " << I << " still has SLOT_ALL ConflictBits sentinel";
+    EXPECT_NE(SI->getConflictSet(), SlotBits(Haydn::SLOT_SET_E3))
+        << "slot " << I << " still has SLOT_SET_E3 ConflictBits sentinel";
     // Self-only: ConflictBits == this slot's own bit.
     EXPECT_EQ(SI->getConflictSet(), SelfBits[I])
         << "slot " << I << " ConflictBits should be self-only under Bundle128";
@@ -151,7 +151,7 @@ TEST(HaydnMCFormatsTest, PacketFormatsAndConflictBitsFromGeneratedTable) {
 
   // (3) isFormatAvailable for all 8 slot-combos. With Bundle128 covering all 3
   //     slots, every subset is packetable (NOPs fill unused slots).
-  for (SlotBits Combo = 0; Combo <= Haydn::SLOT_ALL; ++Combo) {
+  for (SlotBits Combo = 0; Combo <= Haydn::SLOT_SET_E3; ++Combo) {
     EXPECT_TRUE(Fmts.isFormatAvailable(Combo))
         << "combo " << Combo << " should be available under Bundle128";
   }
@@ -167,33 +167,33 @@ TEST(HaydnMCFormatsTest, LegalSlotFamiliesByFU) {
 
   // ALU32 binary / imm family: full 3-slot issue.
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD32),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::SUB32),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::XOR32),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADDI32),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
 
   // ALU64 / shift64: no S0.
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD64),
-            SlotBits(Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32));
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::SLL64),
-            SlotBits(Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32));
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::MAX64),
-            SlotBits(Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32));
 
   // Loads: dual-issue S0|S1 (CB-111); stores stay S0-primary.
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::LD32),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1));
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::LD64),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1));
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ST32), SlotBits(Haydn::SLOT0));
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ST64), SlotBits(Haydn::SLOT0));
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_LW_WITH_IMM),
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31));
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::D_LDW_WITH_IMM),
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31));
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_SW_WITH_IMM), SlotBits(Haydn::SLOT_P30));
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::D_SDW_WITH_IMM), SlotBits(Haydn::SLOT_P30));
 
   // MAC dual-issue S1|S2.
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::X2MULA32),
-            SlotBits(Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32));
 }
 
 TEST(HaydnMCFormatsTest, SparseAltsMatchLegalBitsExhaustive) {
@@ -202,8 +202,8 @@ TEST(HaydnMCFormatsTest, SparseAltsMatchLegalBitsExhaustive) {
   HaydnMCFormats Fmts;
   const unsigned Opcodes[] = {
       Haydn::ADD32,    Haydn::SUB32,    Haydn::XOR32,     Haydn::NOT32,
-      Haydn::NEG32,    Haydn::ADDI32,   Haydn::ADD64,     Haydn::LD32,
-      Haydn::ST32,     Haydn::LD64,     Haydn::ST64,      Haydn::X2MULA32,
+      Haydn::NEG32,    Haydn::ADDI32,   Haydn::ADD64,     Haydn::S_LW_WITH_IMM,
+      Haydn::S_SW_WITH_IMM,     Haydn::D_LDW_WITH_IMM,     Haydn::D_SDW_WITH_IMM,      Haydn::X2MULA32,
       Haydn::MAX64,    Haydn::SLL64,    Haydn::POPCOUNT32, Haydn::ARCTAN,
       Haydn::SIN_COS,  Haydn::SET_HWLOOP};
   for (unsigned Opcode : Opcodes) {
@@ -239,14 +239,14 @@ TEST(HaydnMCFormatsTest, SingleSlotFamiliesNeverClaimAllThree) {
   // Guards against accidental sparse-alt rows that would let ST* steal S1/S2
   // and starve ALU/MAC co-issue (pack/IPC regression class).
   HaydnMCFormats Fmts;
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ST32) &
-                SlotBits(Haydn::SLOT1 | Haydn::SLOT2),
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_SW_WITH_IMM) &
+                SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32),
             0u);
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ST64) &
-                SlotBits(Haydn::SLOT1 | Haydn::SLOT2),
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::D_SDW_WITH_IMM) &
+                SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32),
             0u);
   // ALU64 must never claim S0.
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD64) & Haydn::SLOT0, 0u);
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD64) & Haydn::SLOT_P30, 0u);
 }
 
 // BREV logicals have sparse size-3 alts (LS *_S* members) so unconditional
@@ -286,7 +286,7 @@ TEST(HaydnMCFormatsTest, PacketFormatCoversEveryOccupiedSubset) {
   // stall accounting at higher layers.
   HaydnMCFormats Fmts;
   const PacketFormats &Packets = Fmts.getPacketFormats();
-  for (SlotBits Combo = 0; Combo <= Haydn::SLOT_ALL; ++Combo) {
+  for (SlotBits Combo = 0; Combo <= Haydn::SLOT_SET_E3; ++Combo) {
     EXPECT_TRUE(Fmts.isFormatAvailable(Combo)) << "combo=" << Combo;
     if (Combo == 0)
       continue;
@@ -301,9 +301,9 @@ TEST(HaydnMCFormatsTest, SlotInfoSelfOnlyConflictUnderBundle128) {
   // Conflict closure is self-only → any two distinct slots co-issue.
   // When multi-format lands, this pin must tighten (CompatibleFormatMask).
   HaydnMCFormats Fmts;
-  const MCSlotKind Kinds[] = {MCSlotKind::Haydn_SLOT_S0,
-                              MCSlotKind::Haydn_SLOT_S1,
-                              MCSlotKind::Haydn_SLOT_S2};
+  const MCSlotKind Kinds[] = {MCSlotKind::Haydn_SLOT_P30,
+                              MCSlotKind::Haydn_SLOT_P31,
+                              MCSlotKind::Haydn_SLOT_P32};
   for (unsigned I = 0; I < 3; ++I) {
     const MCSlotInfo *SI = Fmts.getSlotInfo(Kinds[I]);
     ASSERT_NE(SI, nullptr);
@@ -344,25 +344,25 @@ TEST(HaydnMCFormatsTest, LockedDspOpsHaveAltSlots) {
 TEST(HaydnMCFormatsTest, SetHwloopLegalOnS0) {
   HaydnMCFormats Fmts;
   // SET_HWLOOP is S0 setup (spec); sparse alt supplies S0 member for setDesc.
-  EXPECT_NE(Fmts.getLegalSlots(Haydn::SET_HWLOOP) & Haydn::SLOT0, 0u);
+  EXPECT_NE(Fmts.getLegalSlots(Haydn::SET_HWLOOP) & Haydn::SLOT_P30, 0u);
   const std::vector<unsigned> *Alts =
       Fmts.getAlternateInstsOpcode(Haydn::SET_HWLOOP);
   ASSERT_NE(Alts, nullptr);
   ASSERT_EQ(Alts->size(), 3u);
   EXPECT_NE((*Alts)[0], 0u);
   EXPECT_EQ(Fmts.getSlotKind((*Alts)[0]),
-            MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
+            MCSlotKind(MCSlotKind::Haydn_SLOT_P30));
 }
 
 TEST(HaydnMCFormatsTest, LegalSlotsSubsetOfSlotAll) {
   HaydnMCFormats Fmts;
   const unsigned Opcodes[] = {
-      Haydn::ADD32, Haydn::ADD64, Haydn::LD32, Haydn::ST32, Haydn::LD64,
-      Haydn::ST64,  Haydn::X2MULA32, Haydn::ARCTAN, Haydn::SIN_COS,
+      Haydn::ADD32, Haydn::ADD64, Haydn::S_LW_WITH_IMM, Haydn::S_SW_WITH_IMM, Haydn::D_LDW_WITH_IMM,
+      Haydn::D_SDW_WITH_IMM,  Haydn::X2MULA32, Haydn::ARCTAN, Haydn::SIN_COS,
       Haydn::ADDI32, Haydn::NOT32, Haydn::POPCOUNT32};
   for (unsigned Opc : Opcodes) {
     SlotBits L = Fmts.getLegalSlots(Opc);
-    EXPECT_EQ(L & ~SlotBits(Haydn::SLOT_ALL), 0u) << "opc=" << Opc;
+    EXPECT_EQ(L & ~SlotBits(Haydn::SLOT_SET_E3), 0u) << "opc=" << Opc;
   }
 }
 
@@ -371,10 +371,10 @@ TEST(HaydnMCFormatsTest, GetPacketFormatBySizeSixteenBytes) {
   HaydnMCFormats Fmts;
   const PacketFormats &P = Fmts.getPacketFormats();
   const VLIWFormat *BySize =
-      P.getFormatBySize(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2, 16);
+      P.getFormatBySize(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32, 16);
   ASSERT_NE(BySize, nullptr);
   EXPECT_EQ(BySize->getSize(), 16u);
-  EXPECT_STREQ(BySize->Name, "BUNDLE128_FULL");
+  EXPECT_STREQ(BySize->Name, "BUNDLE_E3");
 }
 
 TEST(HaydnMCFormatsTest, SparseAltsDistinctPerSlotWhenLegal) {
@@ -394,9 +394,9 @@ TEST(HaydnMCFormatsTest, SparseAltsDistinctPerSlotWhenLegal) {
   EXPECT_NE(V0, V1);
   EXPECT_NE(V1, V2);
   EXPECT_NE(V0, V2);
-  EXPECT_EQ(Fmts.getSlotKind(V0), MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
-  EXPECT_EQ(Fmts.getSlotKind(V1), MCSlotKind(MCSlotKind::Haydn_SLOT_S1));
-  EXPECT_EQ(Fmts.getSlotKind(V2), MCSlotKind(MCSlotKind::Haydn_SLOT_S2));
+  EXPECT_EQ(Fmts.getSlotKind(V0), MCSlotKind(MCSlotKind::Haydn_SLOT_P30));
+  EXPECT_EQ(Fmts.getSlotKind(V1), MCSlotKind(MCSlotKind::Haydn_SLOT_P31));
+  EXPECT_EQ(Fmts.getSlotKind(V2), MCSlotKind(MCSlotKind::Haydn_SLOT_P32));
 }
 
 // stripHaydnMemberSuffix is the one place that knows how a placed member is

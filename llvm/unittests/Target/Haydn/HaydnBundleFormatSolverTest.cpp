@@ -14,7 +14,7 @@
 //   AIEFormat.cpp:18-27 PacketFormats::getFormat first-covering
 //   BundleTest.cpp:33-41 FormatData[] synthetic multi-row shape
 //
-// Product: BUNDLE128_FULL only. Synthetic 2-row FormatDesc is unit/solver
+// Product: BUNDLE_E3 only. Synthetic 2-row FormatDesc is unit/solver
 // only (not product emit).
 //
 //===----------------------------------------------------------------------===//
@@ -50,7 +50,7 @@ TEST(HaydnBundleFormatSolver, EmptyCommitStall) {
   ASSERT_TRUE(Plan.has_value());
   EXPECT_TRUE(Plan->empty());
   EXPECT_EQ(Plan->OccupiedSlots, 0u);
-  EXPECT_EQ(Plan->FID, FormatID::Bundle128Full);
+  EXPECT_EQ(Plan->FID, FormatID::BundleE3);
   EXPECT_EQ(Plan->Bytes.Value, 16u);
   EXPECT_TRUE(Plan->isProductLegal());
 }
@@ -65,28 +65,28 @@ TEST(HaydnBundleFormatSolver, ST32_ADD64_Pack) {
   HaydnMCFormats Fmts;
   CycleState S = makeProductCycleState();
 
-  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ST32));
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
   EXPECT_EQ(S.memberCount(), 1u);
-  EXPECT_EQ(S.OccupiedSlots & Haydn::SLOT0, SlotBits(Haydn::SLOT0));
-  EXPECT_EQ(S.Members[0].LogicalOpcode, Haydn::ST32);
-  EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ST32_S0);
-  EXPECT_EQ(S.Members[0].FieldSlots, SlotBits(Haydn::SLOT0));
+  EXPECT_EQ(S.OccupiedSlots & Haydn::SLOT_P30, SlotBits(Haydn::SLOT_P30));
+  EXPECT_EQ(S.Members[0].LogicalOpcode, Haydn::S_SW_WITH_IMM);
+  EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::S_SW_WITH_IMM_P30_LOADSTORE0);
+  EXPECT_EQ(S.Members[0].FieldSlots, SlotBits(Haydn::SLOT_P30));
 
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD64));
   EXPECT_EQ(S.memberCount(), 2u);
-  EXPECT_NE(S.OccupiedSlots & (Haydn::SLOT1 | Haydn::SLOT2), 0u);
+  EXPECT_NE(S.OccupiedSlots & (Haydn::SLOT_P31 | Haydn::SLOT_P32), 0u);
   // Prefer S2 first (Bundle.pickSlot order).
-  EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADD64_S2);
-  EXPECT_EQ(S.Members[1].FieldSlots, SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADD64_P32_ALU0);
+  EXPECT_EQ(S.Members[1].FieldSlots, SlotBits(Haydn::SLOT_P32));
 
   auto Plan = commitProduct(S);
   ASSERT_TRUE(Plan.has_value());
   EXPECT_TRUE(Plan->isProductLegal());
   EXPECT_EQ(Plan->memberCount(), 2u);
-  EXPECT_EQ(Plan->MemberOpcodes[0], Haydn::ST32);
+  EXPECT_EQ(Plan->MemberOpcodes[0], Haydn::S_SW_WITH_IMM);
   EXPECT_EQ(Plan->MemberOpcodes[1], Haydn::ADD64);
   EXPECT_EQ(Plan->OccupiedSlots, S.OccupiedSlots);
-  EXPECT_EQ(Plan->FID, FormatID::Bundle128Full);
+  EXPECT_EQ(Plan->FID, FormatID::BundleE3);
 }
 
 //===----------------------------------------------------------------------===//
@@ -101,12 +101,12 @@ TEST(HaydnBundleFormatSolver, ThreeADD32_RejectFourth) {
     ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32)) << "ADD32 #" << I;
   }
   EXPECT_EQ(S.memberCount(), 3u);
-  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_ALL));
+  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_SET_E3));
 
   // Slot order preference S2 → S1 → S0.
-  EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ADD32_S2);
-  EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADD32_S1);
-  EXPECT_EQ(S.Members[2].MemberOpcode, Haydn::ADD32_S0);
+  EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ADD32_P32_ALU0);
+  EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADD32_P31_ALU0);
+  EXPECT_EQ(S.Members[2].MemberOpcode, Haydn::ADD32_P30_ALU0);
 
   EXPECT_FALSE(tryAddProduct(S, Fmts, Haydn::ADD32))
       << "fourth ADD32 must conflict once S0|S1|S2 are full";
@@ -127,12 +127,12 @@ TEST(HaydnBundleFormatSolver, EnumerateStampsFieldSlots) {
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD32, Alts));
   ASSERT_EQ(Alts.size(), 3u);
-  EXPECT_EQ(Alts[0].MemberOpcode, Haydn::ADD32_S0);
-  EXPECT_EQ(Alts[0].FieldSlots, SlotBits(Haydn::SLOT0));
-  EXPECT_EQ(Alts[1].MemberOpcode, Haydn::ADD32_S1);
-  EXPECT_EQ(Alts[1].FieldSlots, SlotBits(Haydn::SLOT1));
-  EXPECT_EQ(Alts[2].MemberOpcode, Haydn::ADD32_S2);
-  EXPECT_EQ(Alts[2].FieldSlots, SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(Alts[0].MemberOpcode, Haydn::ADD32_P30_ALU0);
+  EXPECT_EQ(Alts[0].FieldSlots, SlotBits(Haydn::SLOT_P30));
+  EXPECT_EQ(Alts[1].MemberOpcode, Haydn::ADD32_P31_ALU0);
+  EXPECT_EQ(Alts[1].FieldSlots, SlotBits(Haydn::SLOT_P31));
+  EXPECT_EQ(Alts[2].MemberOpcode, Haydn::ADD32_P32_ALU0);
+  EXPECT_EQ(Alts[2].FieldSlots, SlotBits(Haydn::SLOT_P32));
   for (const PlacementAlternative &A : Alts) {
     EXPECT_EQ(A.CompatibleFormatMask, ProductFormatMask);
   }
@@ -140,8 +140,8 @@ TEST(HaydnBundleFormatSolver, EnumerateStampsFieldSlots) {
   Alts.clear();
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD64, Alts));
   ASSERT_EQ(Alts.size(), 2u);
-  EXPECT_EQ(Alts[0].FieldSlots, SlotBits(Haydn::SLOT1));
-  EXPECT_EQ(Alts[1].FieldSlots, SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(Alts[0].FieldSlots, SlotBits(Haydn::SLOT_P31));
+  EXPECT_EQ(Alts[1].FieldSlots, SlotBits(Haydn::SLOT_P32));
 }
 
 //===----------------------------------------------------------------------===//
@@ -154,15 +154,15 @@ TEST(HaydnBundleFormatSolver, SyntheticTwoRow_PrefersNarrowPriority) {
   constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
   const FormatDesc Table[] = {
       {SynthNarrow, /*Priority=*/0, EncodedBytes{8},
-       static_cast<SlotBits>(Haydn::SLOT0 | Haydn::SLOT1)},
-      {FormatID::Bundle128Full, /*Priority=*/1, Bundle128EncodedBytes,
-       static_cast<SlotBits>(Haydn::SLOT_ALL)},
+       static_cast<SlotBits>(Haydn::SLOT_P30 | Haydn::SLOT_P31)},
+      {FormatID::BundleE3, /*Priority=*/1, ProductEncodedBytes,
+       static_cast<SlotBits>(Haydn::SLOT_SET_E3)},
   };
 
   HaydnMCFormats Fmts;
   CycleState S = makeInitialCycleState(Table);
   EXPECT_EQ(S.FeasibleFormatMask,
-            formatIDBit(SynthNarrow) | formatIDBit(FormatID::Bundle128Full));
+            formatIDBit(SynthNarrow) | formatIDBit(FormatID::BundleE3));
 
   // ADD32 with product-only alts: first free field under both formats.
   // S2 is preferred but Narrow does not cover S2 — only Full covers S2.
@@ -178,11 +178,11 @@ TEST(HaydnBundleFormatSolver, SyntheticTwoRow_PrefersNarrowPriority) {
   //
   // Direct Priority selection on synthetic occupancy:
   CycleState NarrowOnly;
-  NarrowOnly.OccupiedSlots = Haydn::SLOT0;
+  NarrowOnly.OccupiedSlots = Haydn::SLOT_P30;
   NarrowOnly.FeasibleFormatMask =
-      formatIDBit(SynthNarrow) | formatIDBit(FormatID::Bundle128Full);
+      formatIDBit(SynthNarrow) | formatIDBit(FormatID::BundleE3);
   NarrowOnly.Members.push_back(
-      CycleMember{Haydn::ADD32, Haydn::ADD32_S0, Haydn::SLOT0});
+      CycleMember{Haydn::ADD32, Haydn::ADD32_P30_ALU0, Haydn::SLOT_P30});
 
   auto NarrowPlan = commit(NarrowOnly, Table);
   ASSERT_TRUE(NarrowPlan.has_value());
@@ -192,14 +192,14 @@ TEST(HaydnBundleFormatSolver, SyntheticTwoRow_PrefersNarrowPriority) {
 
   // Occupancy needing S2 → Full only.
   CycleState NeedsFull;
-  NeedsFull.OccupiedSlots = Haydn::SLOT2;
+  NeedsFull.OccupiedSlots = Haydn::SLOT_P32;
   NeedsFull.FeasibleFormatMask =
-      formatIDBit(SynthNarrow) | formatIDBit(FormatID::Bundle128Full);
+      formatIDBit(SynthNarrow) | formatIDBit(FormatID::BundleE3);
   NeedsFull.Members.push_back(
-      CycleMember{Haydn::ADD32, Haydn::ADD32_S2, Haydn::SLOT2});
+      CycleMember{Haydn::ADD32, Haydn::ADD32_P32_ALU0, Haydn::SLOT_P32});
   auto FullPlan = commit(NeedsFull, Table);
   ASSERT_TRUE(FullPlan.has_value());
-  EXPECT_EQ(FullPlan->FID, FormatID::Bundle128Full);
+  EXPECT_EQ(FullPlan->FID, FormatID::BundleE3);
   EXPECT_TRUE(FullPlan->isProductLegal());
 }
 
@@ -209,25 +209,25 @@ TEST(HaydnBundleFormatSolver, SyntheticTwoRow_RestrictedMaskDropsFull) {
   constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
   const FormatDesc Table[] = {
       {SynthNarrow, 0, EncodedBytes{8},
-       static_cast<SlotBits>(Haydn::SLOT0 | Haydn::SLOT1)},
-      {FormatID::Bundle128Full, 1, Bundle128EncodedBytes,
-       static_cast<SlotBits>(Haydn::SLOT_ALL)},
+       static_cast<SlotBits>(Haydn::SLOT_P30 | Haydn::SLOT_P31)},
+      {FormatID::BundleE3, 1, ProductEncodedBytes,
+       static_cast<SlotBits>(Haydn::SLOT_SET_E3)},
   };
   const uint64_t NarrowMask = formatIDBit(SynthNarrow);
   const uint64_t BothMask =
-      formatIDBit(SynthNarrow) | formatIDBit(FormatID::Bundle128Full);
+      formatIDBit(SynthNarrow) | formatIDBit(FormatID::BundleE3);
 
   // S0 under Narrow-only allowed → NewMask = Narrow only.
-  uint64_t New = coveringFormatMask(Table, Haydn::SLOT0, NarrowMask);
+  uint64_t New = coveringFormatMask(Table, Haydn::SLOT_P30, NarrowMask);
   EXPECT_EQ(New, NarrowMask);
 
   // S2 under Narrow-only → no cover.
-  New = coveringFormatMask(Table, Haydn::SLOT2, NarrowMask);
+  New = coveringFormatMask(Table, Haydn::SLOT_P32, NarrowMask);
   EXPECT_EQ(New, 0u);
 
   // S2 under Both → Full only.
-  New = coveringFormatMask(Table, Haydn::SLOT2, BothMask);
-  EXPECT_EQ(New, formatIDBit(FormatID::Bundle128Full));
+  New = coveringFormatMask(Table, Haydn::SLOT_P32, BothMask);
+  EXPECT_EQ(New, formatIDBit(FormatID::BundleE3));
 
   // tryAdd with product alts: Full mask only; empty commit on multi-row
   // prefers Narrow Priority 0 (covers 0).
@@ -246,7 +246,7 @@ TEST(HaydnBundleFormatSolver, BruteForceVsBundleCanAddOracle) {
   // for multi-slot logicals that have PlacementAlternatives (Full product).
   HaydnMCFormats Fmts;
   const unsigned Opcodes[] = {
-      Haydn::ADD32, Haydn::ST32, Haydn::ADD64, Haydn::LD32, Haydn::SUB32,
+      Haydn::ADD32, Haydn::S_SW_WITH_IMM, Haydn::ADD64, Haydn::S_LW_WITH_IMM, Haydn::SUB32,
   };
 
   // All non-empty sequences of length <= 4 from a small alphabet.
@@ -299,15 +299,15 @@ TEST(HaydnBundleFormatSolver, BruteForceVsBundleCanAddOracle) {
     runSeq(Seq);
   }
   {
-    unsigned Seq[] = {Haydn::ST32, Haydn::ADD64, Haydn::ADD32};
+    unsigned Seq[] = {Haydn::S_SW_WITH_IMM, Haydn::ADD64, Haydn::ADD32};
     runSeq(Seq);
   }
   {
-    unsigned Seq[] = {Haydn::LD32, Haydn::ADD32, Haydn::ADD64};
+    unsigned Seq[] = {Haydn::S_LW_WITH_IMM, Haydn::ADD32, Haydn::ADD64};
     runSeq(Seq);
   }
   {
-    unsigned Seq[] = {Haydn::ST32, Haydn::ST32}; // second ST32 must fail
+    unsigned Seq[] = {Haydn::S_SW_WITH_IMM, Haydn::S_SW_WITH_IMM}; // second ST32 must fail
     runSeq(Seq);
   }
 }
@@ -315,9 +315,9 @@ TEST(HaydnBundleFormatSolver, BruteForceVsBundleCanAddOracle) {
 TEST(HaydnBundleFormatSolver, TryAddRejectLeavesStateUnchanged) {
   HaydnMCFormats Fmts;
   CycleState S = makeProductCycleState();
-  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ST32));
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
   const CycleState Before = S;
-  EXPECT_FALSE(tryAddProduct(S, Fmts, Haydn::ST32)); // S0 conflict
+  EXPECT_FALSE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM)); // S0 conflict
   EXPECT_EQ(S.memberCount(), Before.memberCount());
   EXPECT_EQ(S.OccupiedSlots, Before.OccupiedSlots);
   EXPECT_EQ(S.FeasibleFormatMask, Before.FeasibleFormatMask);
@@ -342,25 +342,25 @@ TEST(HaydnBundleFormatSolver, MakeFromOccupiedAndCanTryAdd) {
   EXPECT_EQ(Empty.OccupiedSlots, 0u);
   EXPECT_TRUE(canTryAddProduct(Empty, Fmts, Haydn::ADD32));
 
-  CycleState OccS0 = makeProductCycleStateFromOccupied(Haydn::SLOT0);
-  EXPECT_EQ(OccS0.OccupiedSlots, SlotBits(Haydn::SLOT0));
+  CycleState OccS0 = makeProductCycleStateFromOccupied(Haydn::SLOT_P30);
+  EXPECT_EQ(OccS0.OccupiedSlots, SlotBits(Haydn::SLOT_P30));
   EXPECT_NE(OccS0.FeasibleFormatMask, 0u);
   // ST32 is S0-only — cannot add onto occupied S0.
-  EXPECT_FALSE(canTryAddProduct(OccS0, Fmts, Haydn::ST32));
+  EXPECT_FALSE(canTryAddProduct(OccS0, Fmts, Haydn::S_SW_WITH_IMM));
   // ADD64 is S1|S2 — still fits.
   EXPECT_TRUE(canTryAddProduct(OccS0, Fmts, Haydn::ADD64));
   // Probe must not mutate.
-  EXPECT_EQ(OccS0.OccupiedSlots, SlotBits(Haydn::SLOT0));
+  EXPECT_EQ(OccS0.OccupiedSlots, SlotBits(Haydn::SLOT_P30));
   EXPECT_TRUE(OccS0.empty()) << "from-occupied has no member history";
 }
 
 TEST(HaydnBundleFormatSolver, FieldSlotsToIndex) {
-  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT0), std::optional<unsigned>(0u));
-  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT1), std::optional<unsigned>(1u));
-  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT2), std::optional<unsigned>(2u));
+  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P30), std::optional<unsigned>(0u));
+  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P31), std::optional<unsigned>(1u));
+  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P32), std::optional<unsigned>(2u));
   EXPECT_FALSE(fieldSlotsToIndex(0).has_value());
   EXPECT_FALSE(
-      fieldSlotsToIndex(Haydn::SLOT0 | Haydn::SLOT1).has_value());
+      fieldSlotsToIndex(Haydn::SLOT_P30 | Haydn::SLOT_P31).has_value());
 }
 
 TEST(HaydnBundleFormatSolver, B24_TryAddS2FirstThenS1S0) {
@@ -368,11 +368,11 @@ TEST(HaydnBundleFormatSolver, B24_TryAddS2FirstThenS1S0) {
   HaydnMCFormats Fmts;
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
-  EXPECT_EQ(S.Members.back().FieldSlots, SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(S.Members.back().FieldSlots, SlotBits(Haydn::SLOT_P32));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
-  EXPECT_EQ(S.Members.back().FieldSlots, SlotBits(Haydn::SLOT1));
+  EXPECT_EQ(S.Members.back().FieldSlots, SlotBits(Haydn::SLOT_P31));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
-  EXPECT_EQ(S.Members.back().FieldSlots, SlotBits(Haydn::SLOT0));
+  EXPECT_EQ(S.Members.back().FieldSlots, SlotBits(Haydn::SLOT_P30));
   EXPECT_FALSE(canTryAddProduct(S, Fmts, Haydn::ADD32));
 }
 
@@ -387,15 +387,15 @@ TEST(HaydnBundleFormatSolver, B24_TryAddS2FirstThenS1S0) {
 TEST(HaydnBundleFormatSolver, B41_ProductFeasibleFormatMaskEmptyOccupied) {
   // Empty and every Full-covering occupancy → ProductFormatMask (size-1).
   EXPECT_EQ(productFeasibleFormatMask(/*Occupied=*/0), ProductFormatMask);
-  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT0), ProductFormatMask);
-  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT1 | Haydn::SLOT2),
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P30), ProductFormatMask);
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P31 | Haydn::SLOT_P32),
             ProductFormatMask);
-  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_ALL), ProductFormatMask);
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_SET_E3), ProductFormatMask);
 
   // makeProductCycleStateFromOccupied rebuilds the same frontier.
   EXPECT_EQ(makeProductCycleStateFromOccupied(0).FeasibleFormatMask,
             ProductFormatMask);
-  EXPECT_EQ(makeProductCycleStateFromOccupied(Haydn::SLOT_ALL).FeasibleFormatMask,
+  EXPECT_EQ(makeProductCycleStateFromOccupied(Haydn::SLOT_SET_E3).FeasibleFormatMask,
             ProductFormatMask);
 }
 
@@ -406,26 +406,26 @@ TEST(HaydnBundleFormatSolver, B41_SyntheticSecondFormatCanShrinkFrontier) {
   constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
   const FormatDesc Table[] = {
       {SynthNarrow, /*Priority=*/0, EncodedBytes{8},
-       static_cast<SlotBits>(Haydn::SLOT0 | Haydn::SLOT1)},
-      {FormatID::Bundle128Full, /*Priority=*/1, Bundle128EncodedBytes,
-       static_cast<SlotBits>(Haydn::SLOT_ALL)},
+       static_cast<SlotBits>(Haydn::SLOT_P30 | Haydn::SLOT_P31)},
+      {FormatID::BundleE3, /*Priority=*/1, ProductEncodedBytes,
+       static_cast<SlotBits>(Haydn::SLOT_SET_E3)},
   };
   const uint64_t Both =
-      formatIDBit(SynthNarrow) | formatIDBit(FormatID::Bundle128Full);
+      formatIDBit(SynthNarrow) | formatIDBit(FormatID::BundleE3);
 
   // Empty / S0: both formats cover.
   EXPECT_EQ(feasibleFormatMask(Table, /*Occupied=*/0, Both), Both);
-  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT0, Both), Both);
-  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT0 | Haydn::SLOT1, Both), Both);
+  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT_P30, Both), Both);
+  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT_P30 | Haydn::SLOT_P31, Both), Both);
 
   // S2 needs Full — Narrow drops (frontier shrinks).
-  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT2, Both),
-            formatIDBit(FormatID::Bundle128Full));
-  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT_ALL, Both),
-            formatIDBit(FormatID::Bundle128Full));
+  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT_P32, Both),
+            formatIDBit(FormatID::BundleE3));
+  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT_SET_E3, Both),
+            formatIDBit(FormatID::BundleE3));
 
   // Product helper remains Full-only even when occupancy is S2.
-  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT2), ProductFormatMask);
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P32), ProductFormatMask);
 }
 
 TEST(HaydnBundleFormatSolver, B41_TryAddKeepsProductFrontier) {
@@ -435,7 +435,7 @@ TEST(HaydnBundleFormatSolver, B41_TryAddKeepsProductFrontier) {
   EXPECT_EQ(S.FeasibleFormatMask, ProductFormatMask);
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
   EXPECT_EQ(S.FeasibleFormatMask, ProductFormatMask);
-  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ST32));
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
   EXPECT_EQ(S.FeasibleFormatMask, ProductFormatMask);
   EXPECT_EQ(productFeasibleFormatMask(S.OccupiedSlots), S.FeasibleFormatMask);
 }
@@ -468,11 +468,11 @@ TEST(HaydnBundleFormatSolver, B42_ComputeProductResMII_ADD32) {
 TEST(HaydnBundleFormatSolver, B42_ComputeProductResMII_LD_LD_MAC) {
   // LD32 (S0|S1) ×2 + X2MULA32 (S1|S2): tryAdd S2→S1→S0 packs all three.
   // AIE-shaped dual-load + MAC density (ResMII 1).
-  unsigned Ops[] = {Haydn::LD32, Haydn::LD32, Haydn::X2MULA32};
+  unsigned Ops[] = {Haydn::S_LW_WITH_IMM, Haydn::S_LW_WITH_IMM, Haydn::X2MULA32};
   EXPECT_EQ(computeProductResMII(Ops), 1u);
 
   // Reverse order still one cycle.
-  unsigned Ops2[] = {Haydn::X2MULA32, Haydn::LD32, Haydn::LD32};
+  unsigned Ops2[] = {Haydn::X2MULA32, Haydn::S_LW_WITH_IMM, Haydn::S_LW_WITH_IMM};
   EXPECT_EQ(computeProductResMII(Ops2), 1u);
 }
 
@@ -484,22 +484,22 @@ TEST(HaydnBundleFormatSolver, B42_LiveMaskVsOccupiedRebuild_Synthetic) {
   constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
   const FormatDesc Table[] = {
       {SynthNarrow, /*Priority=*/0, EncodedBytes{8},
-       static_cast<SlotBits>(Haydn::SLOT0 | Haydn::SLOT1)},
-      {FormatID::Bundle128Full, /*Priority=*/1, Bundle128EncodedBytes,
-       static_cast<SlotBits>(Haydn::SLOT_ALL)},
+       static_cast<SlotBits>(Haydn::SLOT_P30 | Haydn::SLOT_P31)},
+      {FormatID::BundleE3, /*Priority=*/1, ProductEncodedBytes,
+       static_cast<SlotBits>(Haydn::SLOT_SET_E3)},
   };
   const uint64_t Both =
-      formatIDBit(SynthNarrow) | formatIDBit(FormatID::Bundle128Full);
+      formatIDBit(SynthNarrow) | formatIDBit(FormatID::BundleE3);
   const uint64_t NarrowOnly = formatIDBit(SynthNarrow);
 
   // Occupancy-only rebuild with Both seed keeps both for S0.
-  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT0, Both), Both);
+  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT_P30, Both), Both);
 
   // Live-style: member Compatible = Narrow only shrinks frontier to Narrow
   // (same accumulation tryAdd does via Allowed = Feasible ∩ Compatible).
-  uint64_t Live = coveringFormatMask(Table, Haydn::SLOT0, NarrowOnly);
+  uint64_t Live = coveringFormatMask(Table, Haydn::SLOT_P30, NarrowOnly);
   EXPECT_EQ(Live, NarrowOnly);
-  EXPECT_NE(Live, feasibleFormatMask(Table, Haydn::SLOT0, Both))
+  EXPECT_NE(Live, feasibleFormatMask(Table, Haydn::SLOT_P30, Both))
       << "Occupied-only rebuild with full seed drifts from live Compatible "
          "intersection — SMS must hold live CycleState";
 }
