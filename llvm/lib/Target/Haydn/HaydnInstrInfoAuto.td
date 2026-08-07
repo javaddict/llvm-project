@@ -3247,10 +3247,16 @@ def RECIP : HaydnInst<4, (outs GPR32:$rd),
 // real instruction NOT isCodeGenOnly (parseable + encodable), this stub
 // isCodeGenOnly (excluded from matcher). AsmPrinter never emits this opcode
 // (it emits SEXT_GPR32_TO_DR64), so MC encoding of the stub is irrelevant.
+// Shape corrected to match the database and this def's OWN generated members
+// (`SEXT32T64_P20_ALU0` is `(outs DR64:$rtd), (ins GPR32:$rs)`): the database
+// says `rtd = SEXT32->64(rs)`, so the result is 64-bit. It was declared
+// `(outs GPR32:$rd)` while it was an unreachable stub, which was harmless
+// only because CodeGen emitted SEXT_GPR32_TO_DR64 instead. CodeGen now emits
+// THIS, because it is the name the database gave members to.
 let TSFlags = 14, isCodeGenOnly = 1 in
-def SEXT32T64 : HaydnInst<4, (outs GPR32:$rd),
+def SEXT32T64 : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs),
-    "sext32t64	$rd, $rs", []>;
+    "sext32t64	$rtd, $rs", []>;
 
 // SIN_COS — DB syntax `SIN_COS rtd, rs, uimm4` (DR64 dest + GPR32 src
 // DB slots DR_Write=['rtd'] GPR_Read=['rs']). Stub previously modeled dest
