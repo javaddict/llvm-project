@@ -17,9 +17,15 @@
 # FORMAT-E-SWITCH-PLAN.md 5.8.
 #
 # The branch VALUES are derivable, which is what makes this a real check
-# rather than a recording: callee is at 0x10018, jal is fixed up at 0x10004
-# so its offset is 0x14 and the field holds 0x14/2 = 10; beq is fixed up at
-# 0x10010 so its offset is 8 and the field holds 4.
+# rather than a recording: callee is at 0x10018, jal is fixed up at 0x10004 so
+# its offset is 0x14 = 20, and beq is fixed up at 0x10010 so its offset is 8.
+#
+# Those are BYTE offsets. The field holds half of each (§ 5.14 D1 puts branch
+# offsets in 2-byte units) and the decoder shifts back, so the disassembly
+# reads in bytes — which is the convention § 6.11 says BundleSim depends on.
+# An earlier revision of this test asserted 10 and 4, the raw field values,
+# because it was written before the branch operand classes carried their
+# scale (§ 6.10) and simply recorded what the disassembler then printed.
 
 # RELOCS:      Relocations [
 # RELOCS-NEXT:   Section ({{.*}}) .rela.text {
@@ -32,10 +38,10 @@
 .globl _start
 _start:
     # CHECK-LABEL: <_start>:
-    # CHECK: 10000: {{.*}} jal	lr, 10
+    # CHECK: 10000: {{.*}} jal	lr, 20
     jal lr, callee
 
-    # CHECK: 1000c: {{.*}} beq	r1, r2, 4
+    # CHECK: 1000c: {{.*}} beq	r1, r2, 8
     beq r1, r2, callee
 
 .globl callee

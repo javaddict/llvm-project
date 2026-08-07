@@ -337,7 +337,7 @@ def load_instruction_flags(path: Path) -> dict[str, dict]:
     return flags
 
 
-def load_operand_classes(path: Path) -> dict[str, dict[str, tuple[str, int]]]:
+def load_operand_classes(path: Path):
     """Per-logical operand classes worth inheriting, from the same tblgen JSON.
 
     The generator synthesizes generic `simmN` / `uimmN` for every immediate.
@@ -367,17 +367,24 @@ def load_operand_classes(path: Path) -> dict[str, dict[str, tuple[str, int]]]:
             widths[name] = (name, int(match.group(1)))
 
     out: dict[str, dict[str, tuple[str, int]]] = {}
+    raw: dict[str, dict[str, str]] = {}
     for name, record in records.items():
         if not isinstance(record, dict) or "InOperandList" not in record:
             continue
         per: dict[str, tuple[str, int]] = {}
+        per_raw: dict[str, str] = {}
         for arg in record["InOperandList"].get("args", []):
             cls = arg[0].get("def") if isinstance(arg[0], dict) else str(arg[0])
-            if cls in widths and arg[1]:
+            if not arg[1]:
+                continue
+            per_raw[str(arg[1])] = cls
+            if cls in widths:
                 per[str(arg[1])] = widths[cls]
         if per:
             out[name] = per
-    return out
+        if per_raw:
+            raw[name] = per_raw
+    return out, raw
 
 
 def inherited_operand_class(classes: dict, logical: str, alias: str,
@@ -398,6 +405,40 @@ def inherited_operand_class(classes: dict, logical: str, alias: str,
         if alias == name or alias.endswith("_" + name):
             return cls if class_width == width else None
     return None
+
+
+# The width-agnostic branch/call operand classes, mapped to a width-matched
+# format E class that carries the same encoder.
+#
+# These cannot go through inherited_operand_class: they are Operand<OtherVT>
+# with no width to check a field against. But their encoders are exactly what a
+# member needs -- getBranchTargetOpValue does the section 5.14 D1 divide-by-two
+# and dispatches the fixup kind on the opcode -- and a plain simmN gets
+# neither, so a literal branch offset was stored raw while the same distance
+# written as a symbol was scaled by the relocation (section 6.10).
+BRANCH_CLASS_FOR_WIDTH = {
+    ("brtarget", 12): "brtarget_e12",
+    ("calltarget", 20): "calltarget_e20",
+}
+
+
+def branch_operand_class(classes_raw: dict, logical: str, width: int) -> str | None:
+    """The format E branch/call class for this member's immediate, if any.
+
+    Matched by UNIQUENESS, not by name: the logical calls a branch offset
+    `offset` or `target` while the database calls the member's field `imm12`,
+    so there is no name to match on. A branch logical carries exactly one
+    brtarget / calltarget operand, so "the logical has exactly one of these and
+    the member's field is the right width" identifies it without ambiguity.
+    Anything else is left alone.
+    """
+    per = classes_raw.get(logical)
+    if not per:
+        return None
+    targets = [cls for cls in per.values() if cls in ("brtarget", "calltarget")]
+    if len(targets) != 1:
+        return None
+    return BRANCH_CLASS_FOR_WIDTH.get((targets[0], width))
 
 
 def operand_type(alias: str, width: int, context: str) -> str:
@@ -834,7 +875,7 @@ def emit_reloc_geometry(placements: list[dict]) -> str:
 def emit_tablegen(geometry: dict, placements: list[dict],
                   pipeline: dict, syntax: dict[str, list[str]],
                   flags: dict[str, dict],
-                  op_classes: dict[str, dict[str, tuple[str, int]]],
+                  op_classes: dict, op_classes_raw: dict,
                   part: str = "members") -> str:
     """The encoding half. The scheduling half is its own file: it can be
     included while Bundle128 is live and this cannot, so emitting both here
@@ -1033,8 +1074,10 @@ def emit_tablegen(geometry: dict, placements: list[dict],
                 bit_lines.append(
                     (operand["msb"] - base, operand["lsb"] - base, "0", operand["field"]))
                 continue
-            kind = (inherited_operand_class(op_classes, p["instruction"],
-                                            alias, width)
+            kind = (branch_operand_class(op_classes_raw, p["instruction"],
+                                         width)
+                    or inherited_operand_class(op_classes, p["instruction"],
+                                               alias, width)
                     or operand_type(alias, width, context))
             decls.append(f"  bits<{width}> {alias};")
             target = outs if operand["field"].startswith("dest") else ins
@@ -1361,8 +1404,8 @@ def main() -> None:
                              load_syntax_order(args.database),
                              load_instruction_flags(args.flags_from)
                              if args.flags_from else {},
-                             load_operand_classes(args.flags_from)
-                             if args.flags_from else {},
+                             *(load_operand_classes(args.flags_from)
+                               if args.flags_from else ({}, {})),
                              part="composites" if args.emit == "composites"
                              else "members")
     elif args.emit == "reloc-geometry":
