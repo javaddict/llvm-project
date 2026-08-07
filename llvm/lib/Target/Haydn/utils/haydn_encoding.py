@@ -833,6 +833,58 @@ def verify_operand_sets(placements: list[dict],
     raise SystemExit("\n".join(lines))
 
 
+def check_operand_agreement(placements: list[dict], flags_path: Path) -> str:
+    """Report every member whose operand count disagrees with its logical's.
+
+    This is the § 5.11 hazard made measurable. After
+    materializeMultiOpcodeInstrs the MEMBER's MCInstrDesc drives the encoder
+    while the MCInst still carries the operands CodeGen built from the
+    LOGICAL, so a disagreement makes the encoder read every later operand one
+    position early. It is silent: no diagnostic, a plausible encoding, and a
+    missing or wrong relocation. LUI emitted no relocation at all; the whole
+    pre/post-increment load-store family encoded a register as its offset.
+
+    Nothing else can see this. --emit roundtrip never looks at the logical,
+    --check only validates the database against itself, and the encoder and
+    decoder agree with each other because both read the member. It is a .td
+    fact on both sides, so it costs nothing to check.
+
+    The count is a standing hazard, not a to-do list: it should only shrink.
+    """
+    records = json.loads(flags_path.read_text(encoding="utf-8"))
+    member = re.compile(r"^(.+)_P\d\d_[A-Z0-9]+$")
+
+    counted: dict[str, int] = {}
+    for placement in placements:
+        logical = placement["instruction"]
+        record = records.get(logical)
+        if not isinstance(record, dict) or "InOperandList" not in record:
+            continue
+        wanted = (len(record.get("OutOperandList", {}).get("args", []))
+                  + len(record["InOperandList"]["args"]))
+        # The member's operands are its used fields, plus the tied input the
+        # logical adds back (see load_tied_writebacks).
+        used = [o for o in placement["operands"]
+                if placement["operand_use"].get(o["field"])]
+        tie = str(record.get("Constraints") or "").strip()
+        have = len(used) + (1 if tie else 0)
+        if have != wanted:
+            counted[logical] = counted.get(logical, 0) + 1
+
+    if not counted:
+        return "operand agreement: every member matches its logical\n"
+    total = sum(counted.values())
+    lines = [f"operand agreement: {len(counted)} logicals, {total} member"
+             f" placements disagree with their logical",
+             "",
+             "  each one is a place the encoder reads the wrong operand,"
+             " silently (plan 5.11)",
+             ""]
+    for logical, count in sorted(counted.items()):
+        lines.append(f"  {logical:32} {count} placements")
+    return "\n".join(lines) + "\n"
+
+
 def emit_reloc_geometry(placements: list[dict]) -> str:
     """The bundle-bit position of every relocatable immediate, per placement.
 
@@ -1405,7 +1457,8 @@ def main() -> None:
                         help="directory holding the read-only ISA database JSON")
     parser.add_argument("--emit",
                         choices=("table", "report", "td", "composites",
-                                 "schedule", "roundtrip", "reloc-geometry"))
+                                 "schedule", "roundtrip", "reloc-geometry",
+                                 "operand-agreement"))
     parser.add_argument("--output", "-o", type=Path)
     parser.add_argument("--target-dir", type=Path,
                         help="Haydn target directory, for the .td comparison")
@@ -1465,6 +1518,11 @@ def main() -> None:
                              if args.flags_from else {},
                              part="composites" if args.emit == "composites"
                              else "members")
+    elif args.emit == "operand-agreement":
+        if args.flags_from is None:
+            raise SystemExit("--emit operand-agreement needs --flags-from:"
+                             " the logicals' operand lists come from tblgen")
+        text = check_operand_agreement(placements, args.flags_from)
     elif args.emit == "reloc-geometry":
         text = emit_reloc_geometry(placements)
     elif args.emit == "table":
