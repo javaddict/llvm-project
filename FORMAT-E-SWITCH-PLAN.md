@@ -1107,18 +1107,39 @@ already the tested carrier of the member→logical fold.
   on slots that post-RA then rejects on units. Either thread `MCInstrInfo`
   through those paths or move the unit to a generated table that needs no name
   lookup.
-* **The itinerary model already reserves units too.** `HaydnFormatESchedule.td`
-  defines 7 `U_*` FuncUnits and `InstrItinData<Unit_MAC0_L2, [InstrStage<1,
-  [U_MAC0]>], [2]>`, and the itinerary class names the *set* of units that can
-  serve it (`Unit_ALU0_L1` vs `Unit_ALU0ALU1ALU2_L1`) — which is the same
-  fixed↔flexible spectrum, expressed on the logical. **Two mechanisms now
-  describe one constraint** and they have not been reconciled: the itinerary is
-  on the logical, the placement is on the member, and a logical with one
-  itinerary can have members on several units. Decide which is authoritative
-  before both are live, or they will disagree silently.
+* **The itinerary model already reserves units too — but it is no longer the
+  authority.** `HaydnFormatESchedule.td` defines 7 `U_*` FuncUnits and
+  `InstrItinData<Unit_MAC0_L2, [InstrStage<1, [U_MAC0]>], [2]>`, and the
+  itinerary class names the *set* of units that can serve it (`Unit_ALU0_L1` vs
+  `Unit_ALU0ALU1ALU2_L1`) — the same fixed↔flexible spectrum, expressed on the
+  logical. Two mechanisms describe one constraint; **placement wins** (§ 7).
+  The itinerary is on the logical and therefore cannot express a logical whose
+  members sit on different units, which is the ordinary case here, so it is the
+  less expressive of the two. What still has to happen: the itinerary's unit set
+  should become *derived* from the members rather than independently authored,
+  or the two will drift silently — and until it is, do not read a `U_*`
+  reservation as a legality statement.
+
+  A live instance is already in the tree: the seven AR logicals cherry-picked
+  onto `haydn-formate-switch-mc` carry `let Itinerary = Slot012_ALU`, a
+  Bundle128 *slot* itinerary, while their format E members carry units in their
+  names. It compiles because `HaydnSchedule.td` is untouched. Picking the
+  replacement class is exactly the derivation above and should not be done by
+  hand.
 
 ## 7. Decided, do not relitigate
 
+* **Unit exclusion: the PLACEMENT is authoritative, not the itinerary.** The
+  member's unit — `PlacementAlternative::Units`, `Bundle::OccupiedUnits`,
+  `tryAdd` — decides whether a bundle is legal. The itinerary's `U_*` FuncUnit
+  reservation is derived and advisory, and must not be read as a legality
+  statement. The reason is expressiveness, not preference: the exclusion rule is
+  about *which member was chosen*, and only the member can say — a logical
+  carries one itinerary but has members on several units, so the itinerary
+  cannot state the constraint at all. Follow-ups this decides, both open:
+  derive the itinerary's unit set from the members instead of authoring it
+  separately, and close § 7.1's `MCInstrInfo`-optional gap so pre-RA paths stop
+  being slot-only.
 * **The AR intrinsic prototypes change; the source break is accepted.** The
   re-delivered database dropped the second base register and the direction
   select and made the post-increment a fixed +8. `pldwwua` → `PLDWWUA_POST`
