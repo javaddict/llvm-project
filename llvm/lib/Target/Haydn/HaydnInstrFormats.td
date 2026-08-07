@@ -47,12 +47,15 @@ class UImmAsmOperand<int width> : AsmOperandClass {
 // (simm6, /simm16, /simm20). One class → no one-off misses.
 //
 // Encoder stays default getMachineOpValue (N-bit trunc); ImmLeaf still gates
+// ImmediateCode is a function body — must `return`. Without it GISelEmitter
+// emits isInt<N>(Imm); llvm_unreachable(...) and Pats abort at selection.
+//
 // assembly/isInt. Scaled / fixup-bearing WIDE operands below keep their own
 // EncoderMethod+DecoderMethod pairs (immxstep-style).
 
 // Signed N-bit immediate. Peer of AIE `txxs`.
 class HaydnSImm<int n> : Operand<i32>,
-                         ImmLeaf<i32, [{ isInt<}] # n # [{>(Imm); }]> {
+                         ImmLeaf<i32, [{ return isInt<}] # n # [{>(Imm); }]> {
   let ParserMatchClass = SImmAsmOperand<n>;
   let DecoderMethod =
       "decodeSImmOperandXStepWide<" # n # ",0,/*IsSigned*/1>";
@@ -60,7 +63,7 @@ class HaydnSImm<int n> : Operand<i32>,
 
 // Unsigned N-bit immediate. Peer of AIE `txxu` (zero-extend on decode).
 class HaydnUImm<int n> : Operand<i32>,
-                         ImmLeaf<i32, [{ isUInt<}] # n # [{>(Imm); }]> {
+                         ImmLeaf<i32, [{ return isUInt<}] # n # [{>(Imm); }]> {
   let ParserMatchClass = UImmAsmOperand<n>;
   let DecoderMethod =
       "decodeSImmOperandXStepWide<" # n # ",0,/*IsSigned*/0>";
@@ -154,7 +157,7 @@ def calltarget_s0_ri12 : Operand<OtherVT> {
 // bits[47:16]; signed (MOVEI_H sign-extends the high half). Symbolic targets
 // emit FIXUP_HAYDN_32 (absolute, 4-byte field) — matches encode48Bit.
 def simm32_movei
-    : Operand<i32>, ImmLeaf<i32, [{ isInt<32>(Imm); }]> {
+    : Operand<i32>, ImmLeaf<i32, [{ return isInt<32>(Imm); }]> {
   // No ParserMatchClass: a full 32-bit immediate accepts any int32, so the
   // generic Imm matcher (HaydnOperand::isImm) is correct. A width-constrained
   // SImmAsmOperand<32> would generate an HaydnOperand::isSImm32 predicate we
@@ -170,7 +173,7 @@ def simm32_movei
 // is the masked 20-bit value. Symbolic targets emit FIXUP_HAYDN_LO20
 // (absolute) — matches encode48BitGPR for the signed-ALU opcodes.
 def simm20_wide_abs
-    : Operand<i32>, ImmLeaf<i32, [{ isInt<20>(Imm); }]> {
+    : Operand<i32>, ImmLeaf<i32, [{ return isInt<20>(Imm); }]> {
   let ParserMatchClass = SImmAsmOperand<20>;
   let EncoderMethod =
       "getSImmOpValueXStepWide<20,0,/*IsSigned*/1,/*IsPCRel*/0,"
@@ -182,7 +185,7 @@ def simm20_wide_abs
 // zero-extended. Symbolic targets emit FIXUP_HAYDN_LO20 (absolute) — matches
 // encode48BitGPR for the zero-extended opcodes.
 def uimm20_wide_abs
-    : Operand<i32>, ImmLeaf<i32, [{ isUInt<20>(Imm); }]> {
+    : Operand<i32>, ImmLeaf<i32, [{ return isUInt<20>(Imm); }]> {
   let ParserMatchClass = UImmAsmOperand<20>;
   let EncoderMethod =
       "getSImmOpValueXStepWide<20,0,/*IsSigned*/0,/*IsPCRel*/0,"
@@ -239,7 +242,7 @@ def calltarget_wide_ri12 : Operand<OtherVT> {
 // 48-bit WIDE DR-Imm RI20 (ADDI64..SLTUI64, encoding_manual.md §5.6).
 // bits[47:28]; signed 20-bit; pure immediate — no symbolic fixup emitted.
 def simm20_dr
-    : Operand<i32>, ImmLeaf<i32, [{ isInt<20>(Imm); }]> {
+    : Operand<i32>, ImmLeaf<i32, [{ return isInt<20>(Imm); }]> {
   let ParserMatchClass = SImmAsmOperand<20>;
   let EncoderMethod =
       "getSImmOpValueXStepWide<20,0,/*IsSigned*/1,/*IsPCRel*/0,"
@@ -250,7 +253,7 @@ def simm20_dr
 // 48-bit WIDE DR-Imm RI6 shift amount (SLLI64/SRLI64/SRAI64, §5.6).
 // bits[47:42]; unsigned 6-bit; pure immediate.
 def uimm6_dr
-    : Operand<i32>, ImmLeaf<i32, [{ isUInt<6>(Imm); }]> {
+    : Operand<i32>, ImmLeaf<i32, [{ return isUInt<6>(Imm); }]> {
   let ParserMatchClass = UImmAsmOperand<6>;
   let EncoderMethod =
       "getSImmOpValueXStepWide<6,0,/*IsSigned*/0,/*IsPCRel*/0,"
@@ -261,7 +264,7 @@ def uimm6_dr
 // 48-bit WIDE DRX imm32 (MAXI64/MINI64, §5.7). bits[47:16]; signed full
 // 32-bit; pure immediate.
 def simm32_drx
-    : Operand<i32>, ImmLeaf<i32, [{ isInt<32>(Imm); }]> {
+    : Operand<i32>, ImmLeaf<i32, [{ return isInt<32>(Imm); }]> {
   // No ParserMatchClass: a full 32-bit immediate accepts any int32, so the
   // generic Imm matcher (HaydnOperand::isImm) is correct. A width-constrained
   // SImmAsmOperand<32> would generate an HaydnOperand::isSImm32 predicate we
@@ -275,7 +278,7 @@ def simm32_drx
 // 48-bit WIDE CSR uimm8 (CSRR_W/CSRW_W, §5.9/5.10). bits[47:40]; unsigned
 // 8-bit; pure immediate.
 def uimm8_csr
-    : Operand<i32>, ImmLeaf<i32, [{ isUInt<8>(Imm); }]> {
+    : Operand<i32>, ImmLeaf<i32, [{ return isUInt<8>(Imm); }]> {
   let ParserMatchClass = UImmAsmOperand<8>;
   let EncoderMethod =
       "getSImmOpValueXStepWide<8,0,/*IsSigned*/0,/*IsPCRel*/0,"
@@ -286,7 +289,7 @@ def uimm8_csr
 // 48-bit WIDE SET_HWLOOP count (§5.11). bits[47:32]; unsigned 16-bit; pure
 // immediate.
 def uimm16_hwloop_cnt
-    : Operand<i32>, ImmLeaf<i32, [{ isUInt<16>(Imm); }]> {
+    : Operand<i32>, ImmLeaf<i32, [{ return isUInt<16>(Imm); }]> {
   let ParserMatchClass = UImmAsmOperand<16>;
   let EncoderMethod =
       "getSImmOpValueXStepWide<16,0,/*IsSigned*/0,/*IsPCRel*/0,"
@@ -298,7 +301,7 @@ def uimm16_hwloop_cnt
 // units (§5.14: field stores offset>>2). Symbolic target emits the dedicated
 // FIXUP_HAYDN_HWLoopOff1 (PC-rel, TargetOffset=26).
 def hwloop_off1
-    : Operand<i32>, ImmLeaf<i32, [{ isUInt<6>(Imm); }]> {
+    : Operand<i32>, ImmLeaf<i32, [{ return isUInt<6>(Imm); }]> {
   let ParserMatchClass = UImmAsmOperand<6>;
   let EncoderMethod =
       "getSImmOpValueXStepWide<6,/*Shift*/2,/*IsSigned*/0,/*IsPCRel*/1,"
@@ -309,7 +312,7 @@ def hwloop_off1
 // 48-bit WIDE SET_HWLOOP offset2 (§5.11/5.12). bits[25:14]; offset in 4-byte
 // units. Symbolic target emits FIXUP_HAYDN_HWLoopOff2 (PC-rel, TargetOffset=14).
 def hwloop_off2
-    : Operand<i32>, ImmLeaf<i32, [{ isUInt<12>(Imm); }]> {
+    : Operand<i32>, ImmLeaf<i32, [{ return isUInt<12>(Imm); }]> {
   let ParserMatchClass = UImmAsmOperand<12>;
   let EncoderMethod =
       "getSImmOpValueXStepWide<12,/*Shift*/2,/*IsSigned*/0,/*IsPCRel*/1,"
@@ -333,7 +336,7 @@ def hwloop_off2
 // rename across the reloc-layout siblings without changing any bytes.
 // See encoding_manual.md §5.16.3 (R_HAYDN_LS_ABS20 maps to the same field).
 def simm20_ls
-    : Operand<i32>, ImmLeaf<i32, [{ isInt<20>(Imm); }]> {
+    : Operand<i32>, ImmLeaf<i32, [{ return isInt<20>(Imm); }]> {
   let ParserMatchClass = SImmAsmOperand<20>;
   let EncoderMethod =
       "getSImmOpValueXStepWide<20,/*Shift*/0,/*IsSigned*/1,/*IsPCRel*/0,"
