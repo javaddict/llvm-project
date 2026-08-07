@@ -337,6 +337,69 @@ def load_instruction_flags(path: Path) -> dict[str, dict]:
     return flags
 
 
+def load_operand_classes(path: Path) -> dict[str, dict[str, tuple[str, int]]]:
+    """Per-logical operand classes worth inheriting, from the same tblgen JSON.
+
+    The generator synthesizes generic `simmN` / `uimmN` for every immediate.
+    That loses whatever the logical's purpose-built operand class carried --
+    and what it carries is the `EncoderMethod`, which is where BOTH the fixup
+    kind and the immediate scaling live. A member with a generic class falls
+    through to getMachineOpValue and then getExprFixupKind, which has no case
+    for e.g. SET_HWLOOP, so a hardware-loop setup emitted two R_HAYDN_32
+    pointing at an instruction. See FORMAT-E-SWITCH-PLAN.md 5.10; it is the
+    same gap as 6.9's property flags, on the operand axis.
+
+    ONLY classes with BOTH an explicit width and an EncoderMethod are taken.
+    The width lets the member's field be checked against the class, so a
+    mismatched inherit cannot silently mis-encode. Excluding the width-agnostic
+    Operand<OtherVT> classes (brtarget, calltarget) is deliberate: their
+    encoders dispatch on the OPCODE, branches already reach the right fixup
+    kind through getExprFixupKind, and rerouting a working path is not worth
+    the risk.
+    """
+    records = json.loads(path.read_text(encoding="utf-8"))
+    widths: dict[str, tuple[str, int]] = {}
+    for name, record in records.items():
+        if not isinstance(record, dict) or not record.get("EncoderMethod"):
+            continue
+        match = re.search(r"is[US]Int<(\d+)>", json.dumps(record))
+        if match:
+            widths[name] = (name, int(match.group(1)))
+
+    out: dict[str, dict[str, tuple[str, int]]] = {}
+    for name, record in records.items():
+        if not isinstance(record, dict) or "InOperandList" not in record:
+            continue
+        per: dict[str, tuple[str, int]] = {}
+        for arg in record["InOperandList"].get("args", []):
+            cls = arg[0].get("def") if isinstance(arg[0], dict) else str(arg[0])
+            if cls in widths and arg[1]:
+                per[str(arg[1])] = widths[cls]
+        if per:
+            out[name] = per
+    return out
+
+
+def inherited_operand_class(classes: dict, logical: str, alias: str,
+                            width: int) -> str | None:
+    r"""The logical's class for \p alias, when it is safe to inherit.
+
+    Matched by NAME rather than position: the member and the logical disagree
+    on arity for 280 of the 684 logicals (tied writebacks, database reshapes),
+    so a positional match would be wrong far more often than it is right. The
+    member's alias carries the logical's operand name as a suffix --
+    `uimm6_offset1` for `offset1` -- which is unambiguous where it matches at
+    all. The width must agree; otherwise the class is left alone.
+    """
+    per = classes.get(logical)
+    if not per:
+        return None
+    for name, (cls, class_width) in per.items():
+        if alias == name or alias.endswith("_" + name):
+            return cls if class_width == width else None
+    return None
+
+
 def operand_type(alias: str, width: int, context: str) -> str:
     if alias in GPR_ALIASES:
         expect, kind = 4, "GPR32"
@@ -770,7 +833,9 @@ def emit_reloc_geometry(placements: list[dict]) -> str:
 
 def emit_tablegen(geometry: dict, placements: list[dict],
                   pipeline: dict, syntax: dict[str, list[str]],
-                  flags: dict[str, dict], part: str = "members") -> str:
+                  flags: dict[str, dict],
+                  op_classes: dict[str, dict[str, tuple[str, int]]],
+                  part: str = "members") -> str:
     """The encoding half. The scheduling half is its own file: it can be
     included while Bundle128 is live and this cannot, so emitting both here
     would define the itinerary classes twice once the switch happens.
@@ -968,7 +1033,9 @@ def emit_tablegen(geometry: dict, placements: list[dict],
                 bit_lines.append(
                     (operand["msb"] - base, operand["lsb"] - base, "0", operand["field"]))
                 continue
-            kind = operand_type(alias, width, context)
+            kind = (inherited_operand_class(op_classes, p["instruction"],
+                                            alias, width)
+                    or operand_type(alias, width, context))
             decls.append(f"  bits<{width}> {alias};")
             target = outs if operand["field"].startswith("dest") else ins
             target.append(f"{kind}:${alias}")
@@ -1293,6 +1360,8 @@ def main() -> None:
                              load_pipeline(args.database),
                              load_syntax_order(args.database),
                              load_instruction_flags(args.flags_from)
+                             if args.flags_from else {},
+                             load_operand_classes(args.flags_from)
                              if args.flags_from else {},
                              part="composites" if args.emit == "composites"
                              else "members")
