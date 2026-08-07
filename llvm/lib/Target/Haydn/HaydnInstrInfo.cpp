@@ -177,36 +177,21 @@ static cl::opt<bool> AccurateMemoryLatency(
 #include "HaydnGenInstrInfo.inc"
 #include "HaydnGenDFAPacketizer.inc"
 
-// Map a `_S{0,1,2}` opcode to its base semantic opcode enum.
-// Strips the suffix + maps the base name to its legacy enum. Used by the SMS
-// naive loop recognizer + branch-analysis (for _W_S0 far branches).
+// Map a format-member opcode to the logical it was expanded from.
+//
+// Delegates to getHaydnLogicalBaseOpcode, which resolves the base by NAME
+// SEARCH rather than a hardcoded table, so it works for both spellings:
+// Bundle128's `<logical>_S<k>` and format E's `<logical>_P<form><pos>_<UNIT>`.
+//
+// This used to strip only `_S0/_S1/_S2` and then look the stripped name up in
+// a hand-maintained KnownBases table. Under format E neither half worked — the
+// suffix never matched, so the member opcode was returned unchanged and every
+// caller's `Opc == Haydn::BEQ`-style compare silently failed. In
+// getBranchDestBlock that reached llvm_unreachable and took out 112 of the 430
+// CodeGen tests in branch relaxation. Same correction as c290615e3cb0 made for
+// the hwloop predicates: fold through the logical, never the spelling.
 static unsigned getHaydnFlexBaseOpcode(unsigned Opc, const MCInstrInfo &MII) {
-  StringRef Name = MII.getName(Opc);
-  StringRef Base = Name;
-  for (StringRef Suffix : {"_S0", "_S1", "_S2"}) {
-    if (Base.ends_with(Suffix)) {
-      Base = Base.drop_back(Suffix.size());
-      break;
-    }
-  }
-  if (Base == Name)
-    return Opc;
-  static const std::pair<StringRef, unsigned> KnownBases[] = {
-      {"ADD32", Haydn::ADD32},         {"ADDI32", Haydn::ADDI32},
-      {"SUB32", Haydn::SUB32},
-      {"SEQ32", Haydn::SEQ32},         {"SLT32", Haydn::SLT32},
-      {"SLTU32", Haydn::SLTU32},       {"XORI32", Haydn::XORI32},
-      {"JAL", Haydn::JAL},         {"JALR", Haydn::JALR},
-      {"BEQ", Haydn::BEQ},         {"BNE", Haydn::BNE},
-      {"BGE", Haydn::BGE},         {"BLT", Haydn::BLT},
-      {"BGEU", Haydn::BGEU},       {"BLTU", Haydn::BLTU},
-      {"BEQZ", Haydn::BEQZ},       {"BNEZ", Haydn::BNEZ},
-      {"BGEZ", Haydn::BGEZ},       {"BLTZ", Haydn::BLTZ},
-      {"CSRW", Haydn::CSRW},           {"ORI32", Haydn::ORI32}};
-  for (auto [BaseName, Enum] : KnownBases)
-    if (Base == BaseName)
-      return Enum;
-  return Opc;
+  return getHaydnLogicalBaseOpcode(Opc, MII);
 }
 
 HaydnInstrInfo::HaydnInstrInfo(const HaydnSubtarget &STI)
@@ -1063,7 +1048,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
           BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
               .addReg(Scr)
               .addReg(Haydn::R13)
-              .addImm(4);
+              .addImm(haydnScaledLSImm(4, 4));
           BuildMI(MBB, MBBI, DL, get(Haydn::D_LDW_WITH_IMM), DstReg)
               .addReg(Haydn::R13)
               .addImm(0);
@@ -1153,7 +1138,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
           .addReg(SrcHi, getKillRegState(LoKill || HiKill))
           .addReg(Haydn::R13)
-          .addImm(4);
+          .addImm(haydnScaledLSImm(4, 4));
     } else {
       BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
           .addReg(SrcLo, getKillRegState(LoKill))
@@ -1162,7 +1147,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
           .addReg(SrcHi, getKillRegState(HiKill))
           .addReg(Haydn::R13)
-          .addImm(4);
+          .addImm(haydnScaledLSImm(4, 4));
     }
     BuildMI(MBB, MBBI, DL, get(Haydn::D_LDW_WITH_IMM), DstReg)
         .addReg(Haydn::R13)

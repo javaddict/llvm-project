@@ -151,11 +151,11 @@ void emitScratchMemOp(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       BuildMI(MBB, I, DL, TII.get(Haydn::S_SW_WITH_IMM))
           .addReg(Scr, StoreFlags)
           .addReg(FrameReg)
-          .addImm(Off);
+          .addImm(haydnScaledLSImm(Off, 4));
     else
       BuildMI(MBB, I, DL, TII.get(Haydn::S_LW_WITH_IMM), Scr)
           .addReg(FrameReg)
-          .addImm(Off);
+          .addImm(haydnScaledLSImm(Off, 4));
     return;
   }
 
