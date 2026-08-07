@@ -7,13 +7,23 @@
 # REGRESSION TEST (L228): lld must DISPATCH WIDE branch/call relocations
 # through getRelExpr / getImplicitAddend / inBranchRange / needsThunk.
 #
-# Bundle128 (D456/D487): every parcel is 16 bytes. WIDE jal / beq still
-# emit R_HAYDN_WIDE_CallSImm20 / R_HAYDN_WIDE_BranchSImm12; reloc offsets are
-# 0x0 and 0x10 (not legacy 6-byte parcel spacing 0x0/0x6).
+# Format E: every bundle is 12 bytes. WIDE jal / beq still emit
+# R_HAYDN_WIDE_CallSImm20 / R_HAYDN_WIDE_BranchSImm12.
+#
+# The reloc offsets are 0x4 and 0x10, NOT the bundle addresses. A relocation
+# is anchored at its ENTRY's byte base within the bundle, and both of these
+# land in entry 1 of a 3-entry bundle, whose base is +4 (entries start at
+# bundle bits 6, 37 and 68 -> byte bases 0, 4, 8). So 0x0+4 and 0xc+4. See
+# FORMAT-E-SWITCH-PLAN.md 5.8.
+#
+# The branch VALUES are derivable, which is what makes this a real check
+# rather than a recording: callee is at 0x10018, jal is fixed up at 0x10004
+# so its offset is 0x14 and the field holds 0x14/2 = 10; beq is fixed up at
+# 0x10010 so its offset is 8 and the field holds 4.
 
 # RELOCS:      Relocations [
 # RELOCS-NEXT:   Section ({{.*}}) .rela.text {
-# RELOCS-DAG:      0x0 R_HAYDN_WIDE_CallSImm20 callee 0x0
+# RELOCS-DAG:      0x4 R_HAYDN_WIDE_CallSImm20 callee 0x0
 # RELOCS-DAG:      0x10 R_HAYDN_WIDE_BranchSImm12{{(_RI)?}} callee 0x0
 # RELOCS:        }
 # RELOCS-NEXT: ]
@@ -22,10 +32,10 @@
 .globl _start
 _start:
     # CHECK-LABEL: <_start>:
-    # CHECK: 10000: {{.*}} jal
+    # CHECK: 10000: {{.*}} jal	lr, 10
     jal lr, callee
 
-    # CHECK: 10010: {{.*}} beq
+    # CHECK: 1000c: {{.*}} beq	r1, r2, 4
     beq r1, r2, callee
 
 .globl callee

@@ -364,10 +364,14 @@ void HaydnAsmPrinter::emitHWLoopWideInst(unsigned Sel,
     HWInst.addOperand(MCOperand::createExpr(EndExpr));   // offset2 (brtarget)
     HWInst.addOperand(MCOperand::createReg(RsReg));      // rs (GPR32 count)
   }
-  // Align the SET parcel to Bundle128 (16 B) before emit. HWLoop offsets are
-  // PC-relative to the SET address (FIXUP_HAYDN_HWLoopOff1/2). A.6: never
-  // request sub-parcel Align(4) pads — writeNopData only accepts 16 B multiples.
-  OutStreamer->emitCodeAlignment(Align(16), &getSubtargetInfo());
+  // Align the SET parcel to a bundle boundary before emit. HWLoop offsets are
+  // PC-relative to the SET address (FIXUP_HAYDN_HWLoopOff1/2).
+  //
+  // Align(4), not Align(16): a format E bundle is 12 bytes, so bundle
+  // boundaries are at section_start + 12k and are always 4-aligned, while
+  // asking for 16 needs 4 or 8 bytes of padding that is not a whole bundle
+  // and aborts the assembler. See § 5.9.
+  OutStreamer->emitCodeAlignment(Align(4), &getSubtargetInfo());
   EmitToStreamer(*OutStreamer, HWInst);
   // Setup-gap NOPs: HaydnFixupHwLoops (addPreEmit after BranchRelaxation).
 }
@@ -464,7 +468,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       // Pad first, then labels (÷4). Do not use setPreInstrSymbol for these
       // symbols — parent AsmPrinter would emit PreInstr before this pad.
       // A.6: Bundle128 pad only (16 B); implies 4-byte PC for ÷4 HWLoop fixups.
-      OutStreamer->emitCodeAlignment(Align(16), &getSubtargetInfo());
+      OutStreamer->emitCodeAlignment(Align(4), &getSubtargetInfo());
       for (MCSymbol *Sym : It->second)
         OutStreamer->emitLabel(Sym);
       It->second.clear();
@@ -494,7 +498,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       if (LastReal == MI) {
         // Pad once before END label(s), then clear (no double-define).
         // A.6: 16 B Bundle128 parcels only (covers ÷4 HWLoop END alignment).
-        OutStreamer->emitCodeAlignment(Align(16), &getSubtargetInfo());
+        OutStreamer->emitCodeAlignment(Align(4), &getSubtargetInfo());
         for (MCSymbol *Sym : It->second)
           OutStreamer->emitLabel(Sym);
         It->second.clear();
