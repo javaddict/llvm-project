@@ -1080,6 +1080,47 @@ genuine design decision, and it is **linker-visible** — `HaydnRelocLayout` is
 the single source of truth that MC *and* lld both read, and lld sees only an
 ELF relocation (offset + type), never the placement.
 
+#### The sub-byte shift is only half of it — attempted and reverted
+
+A first attempt derived the lost sub-byte shift from the image (bundle byte +
+header bit 3 identify the entry) and applied the field at
+`FieldLsb + shift`. **It stopped the header corruption and still produced
+wrong code**, because it assumed `FieldLsb` was already correct per entry and
+only the byte truncation had been lost. Both terms vary:
+
+| member | `imm12` at entry bit | entry LSB in bundle | **bundle bit** |
+|---|---:|---:|---:|
+| `BEQZ_P20` | 26 | 6 | 32 |
+| `BEQZ_P30` | 17 | 6 | 23 |
+| `BEQZ_P31` | 17 | 37 | 54 |
+
+and the table's `FieldLsb` for `WIDE_BranchSImm12` is **4** — Bundle128's
+position, from `s0={FU,opc,reserved22,imm12,rs}`. So the field's bundle-bit
+position is `entryLSB(placement) + fieldLsbWithinEntry(kind, placement)`, a
+genuine **2-D** relation over (RelocKind, placement). Neither term is a
+constant per kind.
+
+**Reverted deliberately, and this is the interesting part.** The half-fix was
+strictly worse than the broken state: writing into the header is what makes
+this bug *loud* — the generated decoder tables check the header, so
+`llvm-objdump` says `<unknown>` and you cannot miss it. Correct the header
+overlap while leaving the field misplaced and the bundle decodes fine with a
+wrong branch target, which nothing in this project can see. A loud wrong is
+worth more than a quiet wrong until the real fix lands.
+
+#### What the real fix has to be
+
+The geometry must come from the **generated encoding**, not a hand-written
+table: `haydn_encoding.py` already knows every member's field positions,
+because it emits them. A per-(RelocKind, placement) geometry table generated
+alongside `HaydnFormatEEncoding.td` is the only source that cannot drift from
+the members it describes — the same argument that retired the `KnownBases`
+table in § 5.6 and the `isValidFlexSlotWindow` FU table in § 5.2.
+
+The image-derivation decision still holds and is still needed: it is what
+recovers the *placement* at relocation time, in both MC and lld. It is simply
+an input to the table lookup rather than a correction applied on top of one.
+
 #### The options, none of them free
 
 1. **Encode the shift in the relocation type.** Up to 4 variants per kind.
