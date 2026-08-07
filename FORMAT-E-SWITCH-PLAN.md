@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `2b29488cd6fb` | **compiles; every reachable CodeGen test produces output (424/430, the 6 are `XFAIL` on trunk too). Not green: see § 5.2, § 5.6.** |
+| `llvm-project` | `haydn-formate-switch-mc` | `9e631c69a630` | **compiles; 424/430 CodeGen produce output; `HaydnTests` builds and runs 142/253. Not green: see § 5.2, § 5.6, § 5.7.** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -954,6 +954,45 @@ The lesson for the rest of the migration: a green encoder gate says the
 database is self-consistent, never that the compiler can reach it. The cheap
 standing check is the set difference between the `.td` logicals and the
 generated members — 47 today, and it should only ever shrink.
+
+### 5.7 The unit axis is not threaded — first finding from the restored gate
+
+`HaydnTests` compiles again as of `9e631c69a630` (578 errors to 0) and runs
+**142 of 253**. The 111 failures are deliberately NOT regenerated: an
+expectation rewritten to match the new code records only what the new code
+did, and the whole value of this gate is that it disagrees. They need triage
+one at a time — and the first one triaged found this.
+
+```
+HaydnBundleTest.DualLoadCanShareCycle
+  packs two S_LW_WITH_IMM, gets occupancy P31|P32
+  those members are S_LW_WITH_IMM_P31_LOAD1 and S_LW_WITH_IMM_P32_LOAD1
+  -> the SAME UNIT, which § 3 forbids
+```
+
+The axis itself is correct. The test builds `Bundle<MCInst> B(&Fmts)` with
+`MII = nullptr`, and § 7.1 already records the consequence:
+
+> *`MCInstrInfo` is optional on `Bundle` / `tryAdd` /
+> `enumeratePlacementAlternatives`. Without it no unit is claimed. Pre-RA
+> scheduler paths that have no `MCInstrInfo` therefore keep slot-only
+> behaviour — which is right today and **is a gap once format E is live**.*
+
+**Format E is now live on this branch, so the gap is real**, and this is its
+first concrete instance: a slot-only packer builds a bundle the hardware
+cannot issue. It is silent in every other gate — the bundle is well-formed,
+it encodes, it round-trips, and only the unit assignment is illegal.
+
+The fix is § 7's own decided follow-up: thread `MCInstrInfo` through those
+paths, or move the unit onto a generated per-member table that needs no name
+lookup. The second is better and is the natural companion to § 6.9's
+`--flags-from` work, since it would also remove the name-parsing dependency.
+
+Note the shape of this: § 7.1 predicted the gap in prose and could not
+demonstrate it, because under Bundle128 the axis was inert and no test could
+reach it. Restoring `HaydnTests` after the switch is what turned a documented
+risk into a reproducible failure. That is the argument for not deferring the
+gate any further.
 
 ### 5.5 BundleSim side
 
