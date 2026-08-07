@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `ac69b2a41b89` | **compiles; CodeGen 424/430; `HaydnTests` 142/253; lld 8/24. Not green: see § 5.2, § 5.6, § 5.7, § 5.8.** |
+| `llvm-project` | `haydn-formate-switch-mc` | `44e86ce31e76` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 10/24 — all expectation work (§ 5.4).** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -1179,6 +1179,51 @@ decoder still agree with each other, and only the linked program is wrong.
 `lld/test/ELF/haydn` and the simulator remain the only gates that stand
 outside this, which is exactly what § 5.4 said and is now demonstrated rather
 than predicted.
+
+### 5.9 Function alignment: a 12-byte parcel cannot align to 16
+
+**Fixed in `44e86ce31e76`.** Object emission went from **134 of 430** CodeGen
+tests to **424** — the same 424 that produce assembly.
+
+#### The measurement that hid it
+
+Every earlier count in this document ran `llc` to **assembly**. Running
+`llc -filetype=obj` on the same inputs gave 134, and 47 of the first 49
+failures were `unable to write nop sequence of N bytes`.
+
+**"llc produces output" was never the same claim as "the output assembles",
+and the gap was 290 tests.** Any future coverage number here should say which
+one it measured.
+
+#### Why
+
+A callee entry and an LR return PC must land on an exact bundle boundary.
+Under Bundle128 that meant `Align(16)`, the parcel size. Format E's parcel is
+**12 bytes — not a power of two**, so it cannot be requested at all, and
+asking for 16 is actively wrong: padding a stream of 12-byte bundles up to a
+16-byte boundary needs 4, 8 or 12 bytes depending on the function's length,
+and only 12 is a whole bundle. `writeNopData` correctly refuses a partial
+parcel, so **whether a function assembled depended on its size**:
+
+| function | pad to 16 | |
+|---|---:|---|
+| 1 bundle (12 B) | 4 | **abort** |
+| 2 bundles (24 B) | 8 | **abort** |
+| 3 bundles (36 B) | 12 | ok |
+| 4 bundles (48 B) | 0 | ok |
+| 5 bundles (60 B) | 4 | **abort** |
+
+That is why the first two functions tried by hand both assembled — they
+happened to be sizes where the padding was 0 or 12. A size-dependent failure
+is worse than a total one: it looks like the feature works.
+
+`Align(4)` is the right request. Every bundle boundary is at
+`section_start + 12k`, which is always 4-aligned, so the contract is already
+satisfied and the padding is **always zero**. It cannot ask for a partial
+bundle because it never asks for anything.
+
+This subsumes part of the `writeNopData` item: its all-zero payload is still
+wrong (§ 5.2), but nothing now asks it for a non-bundle length.
 
 ### 5.5 BundleSim side
 
