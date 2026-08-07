@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `3de4fbe4fe26` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 11/24.** |
+| `llvm-project` | `haydn-formate-switch-mc` | `6ee3d25bde2c` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 11/24. Both § 5.2 generator gaps are now closed.** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -1291,7 +1291,7 @@ Net effect is four member definitions, all `SET_HWLOOP` / `SET_HWLOOP_F2`, and
 `set_hwloop` now emits `R_HAYDN_HWLoopOff1/Off2` instead of two
 `R_HAYDN_32`. lld 10/24 → 11/24.
 
-#### § 6.10 is still open, and now demonstrable
+#### § 6.10 is CLOSED — `6ee3d25bde2c`
 
 The earlier expectation that this would close § 6.10 was wrong. Branch
 immediates still take a plain `simm12` and store the byte offset **raw**, so
@@ -1303,9 +1303,38 @@ the same offset encodes two different ways depending on how it was written:
                                             ValueShift = 1 applied
 ```
 
-Closing it needs the branch operand classes to carry the scale, and it cannot
-reuse this mechanism as written, because `brtarget` has no width to check
-against. That is the last of § 5.2's two original generator gaps.
+**Fixed.** The encoders already did the right thing and the members simply
+never reached them: `getBranchTargetOpValue` divides by two, checks 2-byte
+alignment, and dispatches the fixup kind on the opcode. The members now take
+`brtarget_e12` / `calltarget_e20` — width-matched so the decoder can shift
+back, encoder-shared so one class covers every placement and every branch
+shape. 37 member definitions: 34 branches, 3 calls.
+
+Matched by **uniqueness**, not name: the logical calls it `offset` or `target`
+and the database calls the field `imm12`, so there is nothing to match on, but
+a branch logical carries exactly one `brtarget`/`calltarget`.
+
+A second defect fell out, and it is § 5.6's mistake again:
+`getCallTargetOpValue` tested `Opcode == Haydn::JAL` — the **logical** opcode
+— so a member named `JAL_P30_ALU0` never matched and the `>>1` was skipped for
+every placed call. **Fold through the logical, never the spelling** now has
+four instances in this document (§ 4's fixup kinds, § 5.2's hwloop predicates,
+§ 5.6's `getHaydnFlexBaseOpcode`, and this).
+
+**Both of § 5.2's original generator gaps are now closed** — § 6.9's property
+flags and § 6.10's immediate scaling.
+
+##### And it immediately caught a bad expectation — mine
+
+`reloc-wide-branch-call` had been updated two commits earlier to assert
+`jal lr, 10` / `beq r1, r2, 4`. Those were the **raw field values**; the byte
+offsets are 20 and 8. The encoded bytes did not change when § 6.10 was
+closed — only the disassembly, which now reads in bytes (§ 6.11's convention).
+
+The expectation had been written by reading what the disassembler printed at a
+moment when the disassembler was wrong. That is exactly what § 5.4 means by
+"regenerating only records what the new encoder did", and it happened here
+despite knowing the rule — worth remembering before regenerating 589 more.
 
 #### Why it took until now to see
 
