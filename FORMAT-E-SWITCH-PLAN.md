@@ -782,6 +782,92 @@ evidence. The before/after `llc` diff in § 5.1 and the byte-level A/B against
 the retiring spelling are, and at the switch itself `lld/test/ELF/haydn` and the
 simulator suite are the only things standing outside the encoder's own opinion.
 
+### 5.6 The load/store family has no format E encoding — BLOCKER
+
+**Found after the C++ reached 0 errors. `llc` cannot compile a load or a
+store.** This is the largest remaining item in the whole migration and § 5.2's
+"and the compiler is the easy half" list did not contain it.
+
+```
+define void @copy(ptr %d, ptr %s) {
+  %v = load i32, ptr %s
+  store i32 %v, ptr %d
+  ret void
+}
+```
+
+```
+LLVM ERROR: HaydnAsmPrinter: standalone unsupported BUNDLE child
+(no getSlotKind / format) — refuse silent drop (B3.4). Bundle MIR:
+BUNDLE 0, implicit-def $r2, implicit killed $r2 :: (load (s32) from %ir.s)
+```
+
+The B3.4 defence is doing its job — it refuses to drop an instruction it
+cannot place — but ISel selects `LD32` and format E has **no member for it**.
+
+#### How much of the ISA this is
+
+Of 729 non-pseudo logicals, **684 have format E members and 47 do not**:
+
+| n | Group | Status |
+|---:|---|---|
+| 15 | `_W` forms (`BEQ_W`, `JAL_W`, `ADDI32_W`, …) | Harmless. § 5.1 folded the C++ onto the base names but left the `.td` defs; nothing selects them. Delete with the switch. |
+| 11 | `PseudoLong*` | Correct — pseudos are expanded before encode. |
+| 3 | `ASR32`, `LSR32`, `SHL32` | No C++ or GISel references found; likely dead, **not confirmed**. |
+| **18** | **load/store** | **The blocker.** |
+
+The 18: `LD8 LDU8 LD16 LDU16 LD32 LD64` and their `_POST` / `_REG_M0S0LS`
+variants, plus `ST8 ST16 ST32 ST64` and theirs. `LD32` has 35 C++/GISel
+references, `ST32` 47, `LD64` 17, `ST64` 18.
+
+#### It is a rename plus a range collapse, not a redesign
+
+The database renamed the family by width class — `S_` for a GPR32 result, `D_`
+for DR64 — and the correspondence is one to one:
+
+| Bundle128 | format E |
+|---|---|
+| `LD32 rt, rs, simm16` | `S_LW_WITH_IMM rt, rs, simm6:$scaled_imm` |
+| `ST32 rt, rs, simm16` | `S_SW_WITH_IMM rt, rs, simm6:$scaled_imm` |
+| `LDU8` / `LD8` | `S_LBU_*` / `S_LBS_*` |
+| `LDU16` / `LD16` | `S_LHWU_*` / `S_LHWS_*` |
+| `LD64` / `ST64` | `D_LW_*` / `D_SW_*` (DR64) |
+
+and each addressing mode is a separate logical — `_WITH_IMM`, `_WITH_REG`,
+`_PRE_IMM`, `_PRE_REG`, `_POST_IMM`, `_POST_REG`, plus `_BREV_*` and `_CB_*`.
+69 of the 110 LOADSTORE0/LOAD1 logicals produce a GPR32.
+
+**The hard part is not the rename, it is `simm16` → `simm6` scaled.** Any
+offset outside the scaled 6-bit range stops being an addressing mode and
+becomes an address materialization plus a `_REG` form. That is a
+frame-index-elimination and address-mode-selection change, not a table edit,
+and it will move stack layout for every function with more than a handful of
+locals. Expect § 5.4's expectations to move far more than a re-encode would
+explain.
+
+This is the same shape as § 7's AR reshape — the database reshaped a family and
+ISel has to be retargeted — but roughly three times the size, and unlike the AR
+work it is on the path of every compiled function rather than a DSP intrinsic
+surface.
+
+#### Why nothing caught it earlier
+
+Every gate that ran was blind to it, each for its own reason, and this is the
+same list as § 5.3 and § 6.10:
+
+* `--emit roundtrip` and `--check` only ever see the database's own members, so
+  a logical the database never mentions is invisible to them.
+* TableGen is happy: `LD32` is a well-formed def, it simply has no member.
+* The C++ compiles: nothing references a member that does not exist.
+* The assemble/disassemble round trip in § 5.2 used `add32`, which does have
+  members. **`{ ld32 r1, r2, 0 }` fails to assemble** and would have shown this
+  immediately.
+
+The lesson for the rest of the migration: a green encoder gate says the
+database is self-consistent, never that the compiler can reach it. The cheap
+standing check is the set difference between the `.td` logicals and the
+generated members — 47 today, and it should only ever shrink.
+
 ### 5.5 BundleSim side
 
 Must land in the **same commit** as § 5.2, because it is what keeps the two
