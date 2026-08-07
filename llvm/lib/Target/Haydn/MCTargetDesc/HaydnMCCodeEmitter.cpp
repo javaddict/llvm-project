@@ -196,8 +196,13 @@ unsigned HaydnMCCodeEmitter::getExprFixupKind(const MCInst &MI) const {
     // Bundle128 LUI_S0 carries a 12-bit high field (HaydnFU_ALU32_S0_I12).
     // HI12 pairs with LO20 on ADDI32 (not the retired 32-bit-parcel HI20/LO16).
     return Haydn::FIXUP_HAYDN_HI12;
-  // ADDI32 Bundle128 RI20: imm20 at s0 bits[37:18] → LO20 (not legacy LO16).
-  // ADDI32_W / ADDI32_W_S0 handled below with ORI32_W (block).
+  // ADDI32 RI20: imm20 → LO20 (not legacy LO16). The symbolic operand MUST
+  // map to the 20-bit absolute LO20 reloc, paired with LUI's HI12; without it
+  // the default FIXUP_HAYDN_32 clobbers the opcode bytes.
+  //
+  // ADDI32_W used to be a second case here returning the same kind. The two
+  // agreed, so retiring the narrow spelling onto ADDI32 merged them without a
+  // choice to make — the duplicate `case` label is what surfaced it (§ 5.1).
   case Haydn::ADDI32:
     return Haydn::FIXUP_HAYDN_LO20;
   // ADDI32S/SUBI* still use signed imm fields; ANDI/ORI/XORI are RI20 ZEXT
@@ -243,13 +248,6 @@ unsigned HaydnMCCodeEmitter::getExprFixupKind(const MCInst &MI) const {
   case Haydn::BLTZ:
   case Haydn::BGEZ:
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12;
-  // ADDI32_W carries the wide-reloc operand (simm20_wide_abs) — the symbolic
-  // operand MUST map to FIXUP_HAYDN_LO20 (the 20-bit absolute LO20 reloc,
-  // paired with LUI's HI12). Without this, the default FIXUP_HAYDN_32 clobbers
-  // the opcode bytes. ORI32 is in the ANDI32/XORI32 block above: it now owns
-  // the wide encoding outright, so there is no second opcode to list.
-  case Haydn::ADDI32_W:
-    return Haydn::FIXUP_HAYDN_LO20;
   // (DEFERRED): LD32/ST32/LD64/ST64 still map to FIXUP_HAYDN_LO20.
   // The RISK-5 encoder-side change (all LS -> FIXUP_HAYDN_LS_IMM) was OVER-BROAD
   // it broke the WIDE LSOff20 path (LD32 with a 20-bit offset is correctly
@@ -259,10 +257,10 @@ unsigned HaydnMCCodeEmitter::getExprFixupKind(const MCInst &MI) const {
   // WIDE LSOff20 (20-bit) is correctly LO20. Reverted until the narrow-vs-wide
   // distinction + R_HAYDN_LS_IMM ELF reloc land. LS_IMM kind/geometry
   // stay defined for that follow-up.
-  case Haydn::LD32:
-  case Haydn::ST32:
-  case Haydn::LD64:
-  case Haydn::ST64:
+  case Haydn::S_LW_WITH_IMM:
+  case Haydn::S_SW_WITH_IMM:
+  case Haydn::D_LDW_WITH_IMM:
+  case Haydn::D_SDW_WITH_IMM:
     return Haydn::FIXUP_HAYDN_LO20;
   }
   return Haydn::FIXUP_HAYDN_32;
