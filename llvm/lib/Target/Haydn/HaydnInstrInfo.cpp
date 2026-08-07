@@ -1568,18 +1568,19 @@ unsigned HaydnInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   //      AIEBaseInstrInfo.cpp:546-555)
   //   * bare real / multi-parcel pseudo → ProductFormatDesc.Bytes * N
   //     (AIE getInstSizeInBytes → get(Opcode).getSize(),
-  //      AIE1InstrInfo.cpp:646-651; Haydn product is one BUNDLE128_FULL
+  //      AIE1InstrInfo.cpp:646-651; Haydn product is one 12-byte format E
   //      parcel per architectural cycle)
   //   * child inside a BUNDLE → 0 (composite size is on the root)
   //   * pure meta / zero-size pseudos → 0
-  // No parallel "always 16" oracle independent of FormatID/EncodedBytes.
+  // No parallel "always 12" oracle independent of FormatID/EncodedBytes.
   using haydn::bundle::committedEncodedBytes;
   using haydn::bundle::productParcelBytes;
   const unsigned B = productParcelBytes();
-  static_assert(haydn::bundle::Bundle128EncodedBytesValue == 16u, "");
+  static_assert(haydn::bundle::ProductEncodedBytesValue == 12u,
+                "format E product parcel is 12 bytes");
   static_assert(
       haydn::bundle::ProductFormatDesc.Bytes.Value ==
-          haydn::bundle::Bundle128EncodedBytesValue,
+          haydn::bundle::ProductEncodedBytesValue,
       "product FormatDesc.Bytes is the EncodedBytes oracle");
 
   // Formed VLIW packet: committed FormatID → EncodedBytes (idle slots = zeros).

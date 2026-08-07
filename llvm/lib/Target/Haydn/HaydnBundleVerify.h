@@ -19,7 +19,7 @@
 //   * AIEBaseInstrInfo.cpp:1440-1459 verifyInstruction fail-closed
 //     MachineVerifier pattern
 //
-// Product: only FormatID::Bundle128Full (N-format-typed API). EncodedBytes=16.
+// Product: FormatID::BundleE2 / BundleE3 (N-format-typed API). EncodedBytes=12.
 // B3.1/B4.3: members may already be format-member opcodes (post-setDesc);
 // Bundle canAdd uses getSlotKind for those (AIE shape). No MCFlags writers.
 //
@@ -66,7 +66,7 @@ collectBundleMemberOpcodes(const MachineInstr &BundleRoot) {
 /// Pure fail-closed check for one committed cycle.
 ///
 /// Requires:
-///   * known product FormatID (today only Bundle128Full; unknown imm fails)
+///   * known product FormatID (BundleE2 / BundleE3; unknown imm fails)
 ///   * memberCount <= ISSUE_SLOT_COUNT
 ///   * EncodedBytes == 16 for that FormatID
 ///   * encode-oracle pack: Haydn::Bundle canAdd/add for members in order;
@@ -82,13 +82,13 @@ verifyCommittedBundle(FormatID FID, ArrayRef<unsigned> MemberOpcodes,
   if (!formatIDFromImm(formatIDToImm(FID)).has_value())
     return std::string("unknown FormatID (not N-format table row)");
   if (!isProductFormat(FID))
-    return std::string("non-product FormatID (only Bundle128Full live)");
+    return std::string("non-product FormatID (BundleE2 / BundleE3 live)");
 
   if (MemberOpcodes.size() > Haydn::ISSUE_SLOT_COUNT)
     return std::string("memberCount > ISSUE_SLOT_COUNT (3)");
 
   auto Bytes = encodedBytesFor(FID);
-  if (!Bytes.has_value() || *Bytes != Bundle128EncodedBytes)
+  if (!Bytes.has_value() || *Bytes != ProductEncodedBytes)
     return std::string("EncodedBytes != 16 for product FormatID");
 
   // Empty members: architectural stall / NOP-fill parcel still legal as
@@ -100,7 +100,7 @@ verifyCommittedBundle(FormatID FID, ArrayRef<unsigned> MemberOpcodes,
       return std::string("empty cycle BundlePlan not product-legal");
     auto Table = planFromPacketFormats(Fmts.getPacketFormats(), /*Occupied=*/0);
     if (!Table.has_value())
-      return std::string("PacketFormats missing BUNDLE128_FULL for stall");
+      return std::string("PacketFormats has no row covering an empty stall");
     if (OutPlan)
       *OutPlan = Stall;
     return std::nullopt;
@@ -138,7 +138,7 @@ verifyCommittedBundle(FormatID FID, ArrayRef<unsigned> MemberOpcodes,
   if (!TablePlan.has_value())
     return std::string("planFromPacketFormats rejected occupancy");
 
-  BundlePlan Plan = makeBundle128Plan(Occ, MemberOpcodes);
+  BundlePlan Plan = makeProductPlan(Occ, MemberOpcodes);
   Plan.FID = FID;
   auto FIDBytes = encodedBytesFor(FID);
   if (FIDBytes)

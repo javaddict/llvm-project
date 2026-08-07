@@ -44,18 +44,22 @@ namespace llvm {
 namespace haydn {
 namespace hwloop {
 
-// Bundle128 parcel size (bytes). B4.4: alias of ProductFormatDesc.Bytes
-// (encodedBytesFor(Bundle128Full)), not an independent magic constant.
-// getInstSizeInBytes / Fixup / HardwareLoops share this EncodedBytes oracle.
-inline constexpr int64_t Bundle128Bytes =
+// Product parcel size (bytes). B4.4: alias of ProductFormatDesc.Bytes, not an
+// independent magic constant. getInstSizeInBytes / Fixup / HardwareLoops share
+// this EncodedBytes oracle.
+//
+// Single-valued only because both format E rows are 12 bytes; if a row set
+// ever mixes sizes, productParcelBytes() fires its own assert first and these
+// callers have to be revisited rather than rescaled.
+inline constexpr int64_t ProductParcelBytes =
     static_cast<int64_t>(bundle::productParcelBytes().Value);
-static_assert(Bundle128Bytes == 16, "Bundle128 product parcel is 16 bytes");
-static_assert(Bundle128Bytes ==
-                  static_cast<int64_t>(bundle::Bundle128EncodedBytesValue),
-              "hwloop Bundle128Bytes must equal plan EncodedBytes");
-static_assert(Bundle128Bytes ==
+static_assert(ProductParcelBytes == 12, "format E product parcel is 12 bytes");
+static_assert(ProductParcelBytes ==
+                  static_cast<int64_t>(bundle::ProductEncodedBytesValue),
+              "hwloop ProductParcelBytes must equal plan EncodedBytes");
+static_assert(ProductParcelBytes ==
                   static_cast<int64_t>(bundle::ProductFormatDesc.Bytes.Value),
-              "hwloop Bundle128Bytes must equal ProductFormatDesc.Bytes");
+              "hwloop ProductParcelBytes must equal ProductFormatDesc.Bytes");
 
 // SET_HWLOOP offset field widths (ISA DB).
 inline constexpr unsigned Offset1Bits = 6;  // uimm6 → START
