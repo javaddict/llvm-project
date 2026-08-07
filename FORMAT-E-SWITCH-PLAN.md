@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `a9fbb2b69207` | **compiles; 424/430 CodeGen produce output; `HaydnTests` builds and runs 142/253. Not green: see § 5.2, § 5.6, § 5.7.** |
+| `llvm-project` | `haydn-formate-switch-mc` | `ac69b2a41b89` | **compiles; CodeGen 424/430; `HaydnTests` 142/253; lld 8/24. Not green: see § 5.2, § 5.6, § 5.7, § 5.8.** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -1121,25 +1121,51 @@ The image-derivation decision still holds and is still needed: it is what
 recovers the *placement* at relocation time, in both MC and lld. It is simply
 an input to the table lookup rather than a correction applied on top of one.
 
-#### The options, none of them free
+#### Fixed in `ac69b2a41b89` — a generated table, shared with lld
 
-1. **Encode the shift in the relocation type.** Up to 4 variants per kind.
-   Explicit, and lld reads it straight off the type — but it multiplies the
-   `R_HAYDN_*` set and is an ABI change.
-2. **Derive the shift from the image.** A fixup's offset modulo the bundle
-   gives the byte; the header at the bundle start gives the entry count;
-   together they identify the entry and hence the shift. No new relocation
-   types, and it keeps one source of truth — but it makes relocation
-   application depend on reading the bundle header, and on bundles being
-   12-byte aligned from the section start.
-3. **Widen the patched window and shift `FieldLsb` at application time**,
-   with the shift passed alongside the kind. Smallest ABI impact; requires
-   every producer of a fixup to know its placement, which the emitter does and
-   lld does not.
+Option 2 was taken: the placement is derived from the image, so no new
+`R_HAYDN_*` types and a re-delivered layout keeps working. But the geometry
+itself is **generated**, not corrected by hand — the key is
+`(FieldSize, entry count, entry index, mapping)` and every part of it is
+readable at relocation time:
 
-**This needs a decision before it can be implemented.** Option 2 is the most
-faithful to "one geometry table serves both", but it is the one that changes
-what a relocation *means* — it stops being self-describing.
+| part | where it comes from |
+|---|---|
+| `FieldSize` | the relocation's own `RelocFieldInfo` |
+| entry count | header bit 3 |
+| entry index | the relocation's offset within its bundle |
+| mapping | read out of that entry — distinguishes `LUI` on ALU2 from a branch on ALU0 at the same entry |
+
+47 rows from `haydn_encoding.py --emit reloc-geometry`, because that script
+already knows every field's position: it is what places them. Ambiguous keys
+are **dropped rather than guessed**, so a relocation that ever needs one
+misses the table and the caller errors instead of patching the wrong bits.
+Only narrow fields collide (`NOP`'s 4-bit imm); every 12- and 20-bit
+immediate resolves uniquely.
+
+`patchRelocFieldInBundle` is the **whole operation**, not a helper, and MC and
+lld both call it. Each of its three steps produced a silent wrong answer at
+least once, so splitting them across two callers was not worth the risk.
+
+Result: all three entry positions patch correctly
+(`-6`, `-14`, `-22` for branches at `0xc`, `0x18`, `0x24` to a target at 0),
+and `lld/test/ELF/haydn` goes **5/24 → 8/24**. The remaining 16 are Bundle128
+byte expectations (§ 5.4). No CodeGen or `HaydnTests` regression.
+
+##### Three silent traps on the way, all worth knowing
+
+* **The sub-byte shift alone is not enough** — see above. Correcting only the
+  byte truncation is strictly worse than leaving it broken.
+* **`patchField`'s image reader only knows widths 1, 2, 4 and 6** and silently
+  does *nothing* for anything else. A 3-byte window meant the P30 and P31
+  branches wrote **no bits at all** while P32, which happened to need 2,
+  patched correctly — a failure that looks like "the fix works for one case".
+  Widths are now rounded up to a supported one.
+* **Data relocations must not go near this.** `R_HAYDN_32` in `.rodata` has no
+  bundle and no header; applying the geometry broke every data relocation in
+  lld. It failed *safely* — non-bundle bytes do not carry the `0b111` format
+  indicator — but it should never have been asked.
+  `isInstructionFieldReloc` gates it.
 
 #### Why nothing caught it, again
 
