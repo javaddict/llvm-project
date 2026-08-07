@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `c970a7ef3dea` | **no — 8 errors, all Disassembler; holds BOTH halves** |
+| `llvm-project` | `haydn-formate-switch-mc` | `ab459e49b08a` | **compiles — 0 C++ errors; assembles and reads back 96-bit bundles. Not green: see § 5.2.** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -541,17 +541,87 @@ Four consequences that are real behaviour changes, not renames:
 
 #### What is left after all that — measured, not estimated
 
-**8 C++ errors** on `haydn-formate-switch-mc`, all in `HaydnDisassembler.cpp`.
-Count **distinct source locations**, not `error:` lines — see § 6.14.
+**0 C++ errors.** `haydn-formate-switch-mc` compiles, and the toolchain
+assembles a 96-bit bundle and reads it back:
+
+```
+{ nop; add32 r1, r2, r3 }                      -> 07 ...  12 bytes, BUNDLE_E2
+{ add32 r1,r2,r3; add32 r4,r5,r6; add32 ... }  -> 8f ...  12 bytes, BUNDLE_E3
+```
+
+both re-disassembling to exactly what went in. **This is much less than it
+sounds** — see "what the round trip does not prove" below.
 
 | n | Where | What | State |
 |---:|---|---|---|
-| 8 | `HaydnDisassembler.cpp` | `DecoderTableS0/S1/S2` → the `P*` tables; `DecoderTableBundle128128` → `FormatE2`/`FormatE3`; `getBundle128FormatDesc`; the three `Haydn_SLOT_S*` in `SlotGeo Slots[3]`, which must become 2-or-3. | **open — the only one left** |
 | ~~7~~ | ~~`HaydnInstructionSelector.cpp`~~ | ~~The AR logicals — § 7's reshape.~~ | closed by the branch join |
-| ~~9~~ | ~~`HaydnBundlePlan.h` + `HaydnHWLoopContracts.h` + `HaydnInstrInfo.cpp`~~ | ~~The product-format model.~~ | closed by `c970a7ef3dea` |
+| ~~9~~ | ~~`HaydnBundlePlan.h` + downstream~~ | ~~The product-format model.~~ | closed by `c970a7ef3dea` |
+| ~~8~~ | ~~`HaydnDisassembler.cpp`~~ | ~~Decoder tables + `SlotGeo Slots[3]`.~~ | closed by `ab459e49b08a` |
 
 The trajectory was 27 → 24 (rebase onto trunk) → 17 (AR half joined) → 8
-(product table filled in). Note the earlier estimate of 12 for the
+(product table filled in) → 0 (disassembler).
+
+##### The disassembler's content gate was wrong, and did not show up as an error
+
+`isValidFlexSlotWindow` read the unit from the entry window's **top three
+bits** — where Bundle128 put its FU and where format E puts reserved zeros.
+Format E's unit (`mapping`) is in the **bottom two bits**, and its value
+depends on the entry position: ALU0 is `0b00` at P20 but `0b10` at P30. Fed a
+valid `ADD32_P20_ALU0` it read FU=0 and opcode=0 out of the reserved field and
+returned false, so **every non-NOP bundle would have failed to disassemble**
+while the file compiled perfectly. The eight compile errors were the visible
+part of the port; this was the load-bearing part.
+
+It was deleted rather than ported, because the reason it existed is gone:
+Bundle128's generated sub-tries were catch-all defaults that accepted any
+window, so a hand-written FU + opcode-range table was the only content check.
+Format E's sub-tries are real tries — they switch on `mapping`+`type` and
+`OPC_CheckField` the reserved bits — so the generated table **is** the content
+authority and a second hand-maintained copy could only drift from it.
+
+Two smaller consequences, both of which change behaviour:
+
+* **No "all-zero window is an exempt NOP" case.** Format E has real NOP members
+  at every entry position and an all-zero window decodes to whichever has
+  `mapping == 0b00` there (`NOP_P20_ALU0`, `NOP_P30_MAC0`, …), so a NOP is a
+  successful decode, not an empty sub-MCInst. An all-zero **word** is still not
+  a bundle — its header is not `0b111` — the same fact that makes
+  `writeNopData`'s all-zero pad wrong.
+* **The trailing 2-byte `0x0000` → `Haydn::NOP` fallback is gone.** It rested
+  on Bundle128's "all-zero word is the NOP", and there is no 2-byte format E
+  encoding at all, so synthesising a NOP from two zero bytes invents an
+  instruction that cannot exist. Short tails render `<unknown>`. Revisit when
+  § 5.4's expectations are regenerated.
+
+##### Text order in a bundle is AsmString order, high entry first
+
+Worth knowing before reading a surprising assembly result. `{ a; b }` means
+`a` in the **high** entry, because the composite AsmStrings are `"$e1; $e0"`
+and `"$e2; $e1; $e0"` and the parser indexes `getSlots()` by text position.
+
+So `{ add32 r1,r2,r3; nop }` does **not** produce a 2-entry bundle: it asks for
+`ADD32` in P21, which admits only ALU1/LOAD1/MAC1, and `ADD32` has no P21
+member. The solver correctly falls back to a 3-entry bundle where `ADD32` does
+have a placement. Writing it the other way round, `{ nop; add32 r1,r2,r3 }`,
+gives `BUNDLE_E2`. Both composites are reachable; a run of E3-only results
+means the test inputs were written in the wrong order, not that E2 is dead.
+
+##### What the round trip does not prove
+
+The hostile-input hard bar was re-checked and holds: 30 random 12-byte words
+give 30 `<unknown>`, `llvm-objdump` exits 0, and each advances exactly 12 bytes
+with no desync.
+
+But an assemble/disassemble round trip is **symmetric across encoder and
+decoder**, so it is blind to exactly the class of defect § 5.3, § 6.10 and the
+`--emit roundtrip` gate are blind to. It proves nothing about fixup geometry,
+and `HaydnRelocLayout` is **still Bundle128's** while format E's entry windows
+are not byte-aligned. `lld/test/ELF/haydn` and the simulator are the only
+things standing outside the encoder's own opinion.
+
+Still open and not close to green: `HaydnTests` does not compile (the 12-file
+three-slot port below), the 589 lit expectations are Bundle128's, and neither
+lld nor the simulator has been run on this branch. Note the earlier estimate of 12 for the
 product-format item was measured before `f9ed0ff6365f`, which took it to 9 —
 it did **not** take it to 0, and reading its subject ("a table, not a
 singleton") as though it had is an easy mistake to make.
