@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `ab459e49b08a` | **compiles — 0 C++ errors; assembles and reads back 96-bit bundles. Not green: see § 5.2.** |
+| `llvm-project` | `haydn-formate-switch-mc` | `10514c6918f0` | **compiles; 372/430 CodeGen tests produce output. Not green: see § 5.2, § 5.6.** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -849,6 +849,74 @@ This is the same shape as § 7's AR reshape — the database reshaped a family a
 ISel has to be retargeted — but roughly three times the size, and unlike the AR
 work it is on the path of every compiled function rather than a DSP intrinsic
 surface.
+
+#### Status: retargeted, and llc compiles again
+
+Done in `404226033703` (load/store + `ADDI32_W`) and `10514c6918f0` (the
+member→logical fold). `llc` went from crashing on any function with a load to
+**372 of the 430 CodeGen tests producing output**, via 271 at the halfway
+point.
+
+The opcode retarget was mechanical — the operand shapes are identical, and the
+`_POST` / `_REG_M0S0LS` forms already carried `simm6:$scaled_imm`, so those
+were pure renames. Two things were not:
+
+* **The immediate changed units.** Bundle128's `simm16` held BYTES; format E's
+  `simm6:$scaled_imm` holds ELEMENTS, because the hardware does
+  `EA = rs + (imm6 << log2(width))`. A byte offset written into it compiles,
+  encodes, disassembles and round-trips — and addresses `width` times too far.
+  Demonstrated: `getelementptr i32, i32 5` (byte 20) emitted
+  `s_lw_with_imm r2, r1, 20`, which addresses byte 80.
+
+  The audit that bounded it: every `BuildMI`/`buildInstr` of a `*_WITH_IMM`
+  form whose last `.addImm` is not literally `0`. 66 construction sites, 24
+  already safe, 42 converted — 2 in GISel, 1 restructuring of
+  `eliminateFrameIndex` so its arithmetic stays in bytes end to end, and 38
+  through a new `haydnScaledLSImm(ByteOff, Width)` helper that **asserts
+  divisibility rather than truncating**. Verified: `[8 x i32]` at `sp+8` with
+  elements 0/3/7 emits immediates 0/3/7.
+
+* **`ADDI32_W` had to go too**, because frame setup/destroy emits it and it has
+  no member either. That is § 5.1's last `_W` fold, done by its own template.
+  The duplicate `case Haydn::ADDI32` in `getExprFixupKind` is a compile error
+  and is what surfaced it; both arms returned `FIXUP_HAYDN_LO20`, so there was
+  no decision to make. **Only the mechanical half of § 5.1's checklist is
+  done** — the llc-diff rename proof, the operand widening to `imm20`, and the
+  libc + BSP chain are not.
+
+##### `getHaydnFlexBaseOpcode` was folding on the spelling
+
+Worth its own note because it is the third instance of one mistake. It
+stripped only `_S0/_S1/_S2` and then consulted a hand-maintained `KnownBases`
+table. Format E members are `<logical>_P<form><pos>_<UNIT>`, so the suffix
+never matched, the member opcode came back **unchanged**, and every caller's
+`Opc == Haydn::BEQ` compare silently failed.
+
+Silently, except in `getBranchDestBlock`, which ends in `llvm_unreachable` —
+branch relaxation aborted on **112 of the 430 tests**. The other ten callers
+(analyzeBranch, the SMS loop recognizer, the hwloop bump matchers) just took
+the wrong path quietly. It now delegates to `getHaydnLogicalBaseOpcode`, which
+resolves by name search and works for either spelling, and the `KnownBases`
+table is gone — it was a second copy of a fact the names already carry, and it
+had already drifted (both the JAL and ADDI32 folds left a degenerate `X || X`
+in it).
+
+**The rule this keeps re-teaching: fold through the logical, never the
+spelling.** § 5.2 applied it to the hwloop predicates in `c290615e3cb0`, § 4
+applied it to the fixup kinds in `14754e31453b`, and this is the third site.
+Grep for anything else that strips `_S` by hand.
+
+#### Still open
+
+* **52 tests: `MOV_GPR_TO_DR64` reaches AsmPrinter unexpanded.** It is a
+  `HaydnPseudo` with no format E member, which is *correct* for a pseudo — the
+  bug is that it is not being expanded. Unrelated to the load/store retarget.
+* 3 shifts (`ASR32`, `LSR32`, `SHL32`) have no members and no references found;
+  likely dead, unconfirmed.
+* 15 `_W` and 11 `PseudoLong*` defs are memberless and harmless; delete with
+  the switch.
+* **"Compiles" is not "correct".** `HaydnTests` does not build, the 589 lit
+  expectations are Bundle128's, and neither lld nor the simulator has been run.
 
 #### Why nothing caught it earlier
 
