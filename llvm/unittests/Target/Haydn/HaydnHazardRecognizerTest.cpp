@@ -13,7 +13,7 @@
 // pure product tryAdd S2→S1→S0 field order the HR commits on Emit.
 //
 // HaydnFuncUnitWrapper is pure data (no MachineInstr/MachineFunction needed).
-// Slot bit indices: SLOT0=0, SLOT1=1, SLOT2=2 (itinerary FuncUnits).
+// Slot bit indices: SLOT_P30=0, SLOT_P31=1, SLOT_P32=2 (itinerary FuncUnits).
 //
 //===----------------------------------------------------------------------===//
 
@@ -353,7 +353,7 @@ TEST(HaydnHazardRecognizerTest, B24_TryAddIsPlacementAuthorityS2First) {
   CycleState S = makeProductCycleState();
   // Empty cycle accepts ADD32 on S2 (not S0).
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
-  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_P32));
   EXPECT_EQ(fieldSlotsToIndex(S.Members.back().FieldSlots),
             std::optional<unsigned>(2u));
 
@@ -371,9 +371,9 @@ TEST(HaydnHazardRecognizerTest, B24_ST32BlocksSecondStore) {
   using namespace llvm::haydn::bundle;
   HaydnMCFormats Fmts;
   CycleState S = makeProductCycleState();
-  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ST32));
-  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT0));
-  EXPECT_FALSE(canTryAddProduct(S, Fmts, Haydn::ST32));
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
+  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_P30));
+  EXPECT_FALSE(canTryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
   // Multi-slot ALU still fits on S2.
   EXPECT_TRUE(canTryAddProduct(S, Fmts, Haydn::ADD32));
 }
@@ -384,11 +384,11 @@ TEST(HaydnHazardRecognizerTest, B24_DualLoadThenMac) {
   using namespace llvm::haydn::bundle;
   HaydnMCFormats Fmts;
   CycleState S = makeProductCycleState();
-  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::LD32)); // prefers S1 (S0|S1, high first)
-  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::LD32)); // remaining load slot
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_LW_WITH_IMM)); // prefers S1 (S0|S1, high first)
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_LW_WITH_IMM)); // remaining load slot
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::X2MULA32));
   EXPECT_EQ(S.OccupiedSlots,
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
 }
 
 //===----------------------------------------------------------------------===//
@@ -416,11 +416,11 @@ TEST(HaydnHazardRecognizerTest, B25_FieldSlotsFromSparseIndex) {
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD64, Alts));
   // Sparse {0, S1, S2}: non-zero rows carry FieldSlots by index.
   ASSERT_EQ(Alts.size(), 2u);
-  EXPECT_EQ(Alts[0].FieldSlots, SlotBits(Haydn::SLOT1));
-  EXPECT_EQ(Alts[1].FieldSlots, SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(Alts[0].FieldSlots, SlotBits(Haydn::SLOT_P31));
+  EXPECT_EQ(Alts[1].FieldSlots, SlotBits(Haydn::SLOT_P32));
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD64));
-  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_P32));
 }
 
 } // end anonymous namespace

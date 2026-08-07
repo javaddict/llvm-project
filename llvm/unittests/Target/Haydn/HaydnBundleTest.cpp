@@ -44,17 +44,17 @@ TEST(HaydnBundleTest, DisjointSlotsFit) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst St32, Add64;
-  St32.setOpcode(Haydn::ST32);
+  St32.setOpcode(Haydn::S_SW_WITH_IMM);
   Add64.setOpcode(Haydn::ADD64);
   ASSERT_TRUE(B.canAdd(St32.getOpcode()));
   B.add(&St32);
   ASSERT_TRUE(B.canAdd(Add64.getOpcode()));
   B.add(&Add64);
   EXPECT_EQ(B.size(), 2u);
-  EXPECT_EQ(B.getOccupiedSlots() & Haydn::SLOT0, SlotBits(Haydn::SLOT0));
-  EXPECT_NE(B.getOccupiedSlots() & (Haydn::SLOT1 | Haydn::SLOT2), 0u);
+  EXPECT_EQ(B.getOccupiedSlots() & Haydn::SLOT_P30, SlotBits(Haydn::SLOT_P30));
+  EXPECT_NE(B.getOccupiedSlots() & (Haydn::SLOT_P31 | Haydn::SLOT_P32), 0u);
   EXPECT_TRUE(B.hasValidFormat());
-  EXPECT_NE(B.at(MCSlotKind::Haydn_SLOT_S0), nullptr);
+  EXPECT_NE(B.at(MCSlotKind::Haydn_SLOT_P30), nullptr);
 }
 
 TEST(HaydnBundleTest, SameSlotConflicts) {
@@ -70,7 +70,7 @@ TEST(HaydnBundleTest, SameSlotConflicts) {
     B.add(&A[I]);
   }
   EXPECT_EQ(B.getOccupiedSlots(),
-            SlotBits(Haydn::SLOT0) | Haydn::SLOT1 | Haydn::SLOT2);
+            SlotBits(Haydn::SLOT_P30) | Haydn::SLOT_P31 | Haydn::SLOT_P32);
   A[3].setOpcode(Haydn::ADD32);
   EXPECT_FALSE(B.canAdd(A[3].getOpcode()))
       << "fourth ADD32 must conflict once S0|S1|S2 are full";
@@ -101,9 +101,9 @@ TEST(HaydnBundleTest, MultiSlotOpPicksFirstFree) {
   Not.setOpcode(Haydn::NOT32);
   ASSERT_TRUE(B.canAdd(Not.getOpcode()));
   B.add(&Not);
-  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT2))
+  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT_P32))
       << "multi-slot NOT32 alone should prefer S2";
-  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_S2)->getOpcode(), Haydn::NOT32);
+  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_P32)->getOpcode(), Haydn::NOT32);
 
   // Second multi-slot op avoids occupied S2 → S1.
   Bundle<MCInst> B2(&Fmts);
@@ -113,7 +113,7 @@ TEST(HaydnBundleTest, MultiSlotOpPicksFirstFree) {
   B2.add(&Add32); // takes S2
   ASSERT_TRUE(B2.canAdd(Not2.getOpcode()));
   B2.add(&Not2);
-  EXPECT_EQ(B2.getOccupiedSlots(), SlotBits(Haydn::SLOT2) | Haydn::SLOT1)
+  EXPECT_EQ(B2.getOccupiedSlots(), SlotBits(Haydn::SLOT_P32) | Haydn::SLOT_P31)
       << "second multi-slot op should pick S1 (S2 occupied)";
 }
 
@@ -152,7 +152,7 @@ TEST(HaydnBundleTest, ReserveByOpcodeRejectsSaturatedSlot) {
   ASSERT_TRUE(B.canAdd(Haydn::ADD32));
   B.reserveByOpcode(Haydn::ADD32);
   EXPECT_EQ(B.getOccupiedSlots(),
-            SlotBits(Haydn::SLOT0) | Haydn::SLOT1 | Haydn::SLOT2);
+            SlotBits(Haydn::SLOT_P30) | Haydn::SLOT_P31 | Haydn::SLOT_P32);
   EXPECT_TRUE(B.empty()) << "still no Instrs after three reserves";
   // Bundle fully reserved — fourth ADD32 must NOT escape via empty().
   EXPECT_FALSE(B.canAdd(Haydn::ADD32))
@@ -172,7 +172,7 @@ TEST(HaydnBundleTest, LoadAndMacDisjointPack) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst Ld, Mac;
-  Ld.setOpcode(Haydn::LD32);
+  Ld.setOpcode(Haydn::S_LW_WITH_IMM);
   Mac.setOpcode(Haydn::X2MULA32);
   ASSERT_TRUE(B.canAdd(Ld.getOpcode()));
   B.add(&Ld);
@@ -183,9 +183,9 @@ TEST(HaydnBundleTest, LoadAndMacDisjointPack) {
   EXPECT_TRUE(B.hasValidFormat());
   // Occupied must include a load slot (0 or 1) and a MAC slot (1 or 2).
   SlotBits Occ = B.getOccupiedSlots();
-  EXPECT_NE(Occ & (Haydn::SLOT0 | Haydn::SLOT1), 0u);
-  EXPECT_NE(Occ & (Haydn::SLOT1 | Haydn::SLOT2), 0u);
-  EXPECT_EQ(Occ & Haydn::SLOT0 ? 1 : 0, (Occ & Haydn::SLOT0) ? 1 : 0);
+  EXPECT_NE(Occ & (Haydn::SLOT_P30 | Haydn::SLOT_P31), 0u);
+  EXPECT_NE(Occ & (Haydn::SLOT_P31 | Haydn::SLOT_P32), 0u);
+  EXPECT_EQ(Occ & Haydn::SLOT_P30 ? 1 : 0, (Occ & Haydn::SLOT_P30) ? 1 : 0);
 }
 
 TEST(HaydnBundleTest, StoreThenTwoAluFillsBundle) {
@@ -193,17 +193,17 @@ TEST(HaydnBundleTest, StoreThenTwoAluFillsBundle) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst St, A, X;
-  St.setOpcode(Haydn::ST32);
+  St.setOpcode(Haydn::S_SW_WITH_IMM);
   A.setOpcode(Haydn::ADD32);
   X.setOpcode(Haydn::XOR32);
   B.add(&St);
-  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT0));
+  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT_P30));
   ASSERT_TRUE(B.canAdd(A.getOpcode()));
   B.add(&A);
   ASSERT_TRUE(B.canAdd(X.getOpcode()));
   B.add(&X);
   EXPECT_EQ(B.getOccupiedSlots(),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
   EXPECT_TRUE(B.hasValidFormat());
   EXPECT_FALSE(B.canAdd(Haydn::ADD32));
 }
@@ -213,8 +213,8 @@ TEST(HaydnBundleTest, TwoS0OnlyOpsConflict) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst St0, St1;
-  St0.setOpcode(Haydn::ST32);
-  St1.setOpcode(Haydn::ST32);
+  St0.setOpcode(Haydn::S_SW_WITH_IMM);
+  St1.setOpcode(Haydn::S_SW_WITH_IMM);
   B.add(&St0);
   EXPECT_FALSE(B.canAdd(St1.getOpcode()));
 }
@@ -224,8 +224,8 @@ TEST(HaydnBundleTest, DualLoadCanShareCycle) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst L0, L1;
-  L0.setOpcode(Haydn::LD32);
-  L1.setOpcode(Haydn::LD32);
+  L0.setOpcode(Haydn::S_LW_WITH_IMM);
+  L1.setOpcode(Haydn::S_LW_WITH_IMM);
   B.add(&L0);
   ASSERT_TRUE(B.canAdd(L1.getOpcode()))
       << "second LD32 must fit on the free load slot; occ="
@@ -233,7 +233,7 @@ TEST(HaydnBundleTest, DualLoadCanShareCycle) {
   B.add(&L1);
   EXPECT_EQ(B.size(), 2u);
   EXPECT_EQ(B.getOccupiedSlots(),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31));
   EXPECT_TRUE(B.hasValidFormat());
 }
 
@@ -245,10 +245,10 @@ TEST(HaydnBundleTest, HintSlotHonoredWhenFreeAndLegal) {
   MCInst A;
   A.setOpcode(Haydn::ADD32);
   ASSERT_TRUE(B.canAdd(A.getOpcode()));
-  B.add(&A, MCSlotKind::Haydn_SLOT_S0);
-  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT0));
-  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_S0), &A);
-  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_S2), nullptr);
+  B.add(&A, MCSlotKind::Haydn_SLOT_P30);
+  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT_P30));
+  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_P30), &A);
+  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_P32), nullptr);
 }
 
 TEST(HaydnBundleTest, HintSlotFallsBackWhenOccupied) {
@@ -259,12 +259,12 @@ TEST(HaydnBundleTest, HintSlotFallsBackWhenOccupied) {
   A.setOpcode(Haydn::ADD32);
   X.setOpcode(Haydn::XOR32);
   B.add(&A); // prefers S2
-  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT_P32));
   ASSERT_TRUE(B.canAdd(X.getOpcode()));
-  B.add(&X, MCSlotKind::Haydn_SLOT_S2); // conflict → fallback
+  B.add(&X, MCSlotKind::Haydn_SLOT_P32); // conflict → fallback
   EXPECT_EQ(B.getOccupiedSlots(),
-            SlotBits(Haydn::SLOT2 | Haydn::SLOT1));
-  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_S1), &X);
+            SlotBits(Haydn::SLOT_P32 | Haydn::SLOT_P31));
+  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_P31), &X);
 }
 
 TEST(HaydnBundleTest, HintIllegalSlotFallsBack) {
@@ -272,11 +272,11 @@ TEST(HaydnBundleTest, HintIllegalSlotFallsBack) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst St;
-  St.setOpcode(Haydn::ST32);
+  St.setOpcode(Haydn::S_SW_WITH_IMM);
   ASSERT_TRUE(B.canAdd(St.getOpcode()));
-  B.add(&St, MCSlotKind::Haydn_SLOT_S2);
-  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT0));
-  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_S0), &St);
+  B.add(&St, MCSlotKind::Haydn_SLOT_P32);
+  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT_P30));
+  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_P30), &St);
 }
 
 TEST(HaydnBundleTest, CanAddAgreesWithAddOnSaturation) {
@@ -294,26 +294,26 @@ TEST(HaydnBundleTest, CanAddAgreesWithAddOnSaturation) {
   }
   EXPECT_FALSE(B.canAdd(Haydn::ADD32));
   EXPECT_FALSE(B.canAdd(Haydn::ADD64));
-  EXPECT_FALSE(B.canAdd(Haydn::LD32));
+  EXPECT_FALSE(B.canAdd(Haydn::S_LW_WITH_IMM));
   EXPECT_FALSE(B.canAdd(Haydn::X2MULA32));
-  EXPECT_FALSE(B.canAdd(Haydn::ST32));
+  EXPECT_FALSE(B.canAdd(Haydn::S_SW_WITH_IMM));
 }
 
 TEST(HaydnBundleTest, ReserveThenAddSharesOccupancy) {
   // SMS reserve + later real add must see the same OccupiedSlots budget.
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
-  B.reserveByOpcode(Haydn::ST32); // claims S0 without Instrs
+  B.reserveByOpcode(Haydn::S_SW_WITH_IMM); // claims S0 without Instrs
   EXPECT_TRUE(B.empty());
-  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT0));
-  EXPECT_FALSE(B.canAdd(Haydn::ST32)); // second store blocked
+  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT_P30));
+  EXPECT_FALSE(B.canAdd(Haydn::S_SW_WITH_IMM)); // second store blocked
   MCInst A;
   A.setOpcode(Haydn::ADD32);
   ASSERT_TRUE(B.canAdd(A.getOpcode()));
   B.add(&A);
   EXPECT_EQ(B.size(), 1u);
-  EXPECT_NE(B.getOccupiedSlots() & Haydn::SLOT0, 0u);
-  EXPECT_NE(B.getOccupiedSlots() & (Haydn::SLOT1 | Haydn::SLOT2), 0u);
+  EXPECT_NE(B.getOccupiedSlots() & Haydn::SLOT_P30, 0u);
+  EXPECT_NE(B.getOccupiedSlots() & (Haydn::SLOT_P31 | Haydn::SLOT_P32), 0u);
 }
 
 TEST(HaydnBundleTest, Alu64CannotPairWithTwoS0Only) {
@@ -321,13 +321,13 @@ TEST(HaydnBundleTest, Alu64CannotPairWithTwoS0Only) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst St, Add64;
-  St.setOpcode(Haydn::ST32);
+  St.setOpcode(Haydn::S_SW_WITH_IMM);
   Add64.setOpcode(Haydn::ADD64);
   B.add(&St);
   ASSERT_TRUE(B.canAdd(Add64.getOpcode()));
   B.add(&Add64);
   EXPECT_TRUE(B.hasValidFormat());
-  EXPECT_FALSE(B.canAdd(Haydn::ST32));
+  EXPECT_FALSE(B.canAdd(Haydn::S_SW_WITH_IMM));
 }
 
 TEST(HaydnBundleTest, ClearAllowsRepack) {
@@ -358,13 +358,13 @@ TEST(HaydnBundleTest, PreferHighSlotsLeavesS0ForLoad) {
   Bundle<MCInst> B(&Fmts);
   MCInst Alu, Ld;
   Alu.setOpcode(Haydn::ADD32);
-  Ld.setOpcode(Haydn::LD32);
+  Ld.setOpcode(Haydn::S_LW_WITH_IMM);
   B.add(&Alu);
-  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT_P32));
   ASSERT_TRUE(B.canAdd(Ld.getOpcode()));
   B.add(&Ld);
-  EXPECT_NE(B.getOccupiedSlots() & (Haydn::SLOT0 | Haydn::SLOT1), 0u);
-  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_S2), &Alu);
+  EXPECT_NE(B.getOccupiedSlots() & (Haydn::SLOT_P30 | Haydn::SLOT_P31), 0u);
+  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_P32), &Alu);
 }
 
 //===----------------------------------------------------------------------===//
@@ -375,7 +375,7 @@ TEST(HaydnBundleTest, LoadMacAluClassicDspFill) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst Ld, Mac, Alu;
-  Ld.setOpcode(Haydn::LD32);
+  Ld.setOpcode(Haydn::S_LW_WITH_IMM);
   Mac.setOpcode(Haydn::X2MULA32);
   Alu.setOpcode(Haydn::ADD32);
   ASSERT_TRUE(B.canAdd(Ld.getOpcode()));
@@ -386,7 +386,7 @@ TEST(HaydnBundleTest, LoadMacAluClassicDspFill) {
   B.add(&Alu);
   EXPECT_EQ(B.size(), 3u);
   EXPECT_EQ(B.getOccupiedSlots(),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
   EXPECT_TRUE(B.hasValidFormat());
   EXPECT_FALSE(B.canAdd(Haydn::XOR32));
 }
@@ -401,15 +401,15 @@ TEST(HaydnBundleTest, DualMacFillsS1S2) {
   ASSERT_TRUE(B.canAdd(M1.getOpcode()));
   B.add(&M1);
   EXPECT_EQ(B.getOccupiedSlots(),
-            SlotBits(Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32));
   EXPECT_FALSE(B.canAdd(Haydn::X2MULA32));
   // S0 free for a store.
   MCInst St;
-  St.setOpcode(Haydn::ST32);
+  St.setOpcode(Haydn::S_SW_WITH_IMM);
   ASSERT_TRUE(B.canAdd(St.getOpcode()));
   B.add(&St);
   EXPECT_EQ(B.getOccupiedSlots(),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
 }
 
 TEST(HaydnBundleTest, DualAlu64ThenRejectThird) {
@@ -423,16 +423,16 @@ TEST(HaydnBundleTest, DualAlu64ThenRejectThird) {
   B.add(&S);
   EXPECT_FALSE(B.canAdd(Haydn::MAX64));
   // S0 still free for ST.
-  EXPECT_TRUE(B.canAdd(Haydn::ST32));
+  EXPECT_TRUE(B.canAdd(Haydn::S_SW_WITH_IMM));
 }
 
 TEST(HaydnBundleTest, DualLoadThenRejectThirdLoad) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst L0, L1, L2;
-  L0.setOpcode(Haydn::LD32);
-  L1.setOpcode(Haydn::LD32);
-  L2.setOpcode(Haydn::LD32);
+  L0.setOpcode(Haydn::S_LW_WITH_IMM);
+  L1.setOpcode(Haydn::S_LW_WITH_IMM);
+  L2.setOpcode(Haydn::S_LW_WITH_IMM);
   B.add(&L0);
   ASSERT_TRUE(B.canAdd(L1.getOpcode()));
   B.add(&L1);
@@ -446,15 +446,15 @@ TEST(HaydnBundleTest, HintS1OnSecondLoad) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst L0, L1;
-  L0.setOpcode(Haydn::LD32);
-  L1.setOpcode(Haydn::LD32);
-  B.add(&L0, MCSlotKind::Haydn_SLOT_S0);
-  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT0));
+  L0.setOpcode(Haydn::S_LW_WITH_IMM);
+  L1.setOpcode(Haydn::S_LW_WITH_IMM);
+  B.add(&L0, MCSlotKind::Haydn_SLOT_P30);
+  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT_P30));
   ASSERT_TRUE(B.canAdd(L1.getOpcode()));
-  B.add(&L1, MCSlotKind::Haydn_SLOT_S1);
-  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_S1), &L1);
+  B.add(&L1, MCSlotKind::Haydn_SLOT_P31);
+  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_P31), &L1);
   EXPECT_EQ(B.getOccupiedSlots(),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31));
 }
 
 TEST(HaydnBundleTest, ReserveByOpcodeSaturatesLikeAdd) {
@@ -469,7 +469,7 @@ TEST(HaydnBundleTest, ReserveByOpcodeSaturatesLikeAdd) {
   }
   EXPECT_EQ(ByAdd.getOccupiedSlots(), ByRes.getOccupiedSlots());
   EXPECT_EQ(ByRes.getOccupiedSlots(),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
   EXPECT_FALSE(ByRes.canAdd(Haydn::ADD32));
   EXPECT_FALSE(ByAdd.canAdd(Haydn::ADD32));
 }
@@ -477,8 +477,8 @@ TEST(HaydnBundleTest, ReserveByOpcodeSaturatesLikeAdd) {
 TEST(HaydnBundleTest, AllSingleSlotCombosHaveValidFormat) {
   // Any subset occupancy after packing real ops must remain format-valid.
   HaydnMCFormats Fmts;
-  const unsigned Seeds[] = {Haydn::ST32, Haydn::ADD32, Haydn::ADD64,
-                            Haydn::LD32,  Haydn::X2MULA32};
+  const unsigned Seeds[] = {Haydn::S_SW_WITH_IMM, Haydn::ADD32, Haydn::ADD64,
+                            Haydn::S_LW_WITH_IMM,  Haydn::X2MULA32};
   for (unsigned Opc : Seeds) {
     Bundle<MCInst> B(&Fmts);
     MCInst M;
@@ -498,7 +498,7 @@ TEST(HaydnBundleTest, CanAddFalseNeverAcceptsOnFullBundle) {
     Ops[I].setOpcode(Haydn::XOR32);
     B.add(&Ops[I]);
   }
-  const unsigned Rejects[] = {Haydn::ADD32, Haydn::LD32, Haydn::ST32,
+  const unsigned Rejects[] = {Haydn::ADD32, Haydn::S_LW_WITH_IMM, Haydn::S_SW_WITH_IMM,
                               Haydn::ADD64, Haydn::X2MULA32, Haydn::ADDI32};
   for (unsigned Opc : Rejects)
     EXPECT_FALSE(B.canAdd(Opc)) << "opc=" << Opc;
@@ -516,9 +516,9 @@ TEST(HaydnBundleTest, B24_AltsBearingUsesTryAddOrder) {
   MCInst A;
   A.setOpcode(Haydn::ADD32);
   B.add(&A);
-  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT2));
-  EXPECT_EQ(B.lastPickedSlot(), MCSlotKind(MCSlotKind::Haydn_SLOT_S2));
-  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_S2), &A);
+  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT_P32));
+  EXPECT_EQ(B.lastPickedSlot(), MCSlotKind(MCSlotKind::Haydn_SLOT_P32));
+  EXPECT_EQ(B.at(MCSlotKind::Haydn_SLOT_P32), &A);
 }
 
 TEST(HaydnBundleTest, B24_BundleOccupancyMatchesSolver) {
@@ -527,7 +527,7 @@ TEST(HaydnBundleTest, B24_BundleOccupancyMatchesSolver) {
   Bundle<MCInst> B(&Fmts);
   haydn::bundle::CycleState S = haydn::bundle::makeProductCycleState();
   MCInst Ops[3];
-  const unsigned Seq[] = {Haydn::ST32, Haydn::ADD64, Haydn::ADD32};
+  const unsigned Seq[] = {Haydn::S_SW_WITH_IMM, Haydn::ADD64, Haydn::ADD32};
   for (unsigned I = 0; I < 3; ++I) {
     Ops[I].setOpcode(Seq[I]);
     ASSERT_TRUE(B.canAdd(Seq[I]));
@@ -537,7 +537,7 @@ TEST(HaydnBundleTest, B24_BundleOccupancyMatchesSolver) {
     EXPECT_EQ(B.getOccupiedSlots(), S.OccupiedSlots) << "idx " << I;
   }
   EXPECT_EQ(B.getOccupiedSlots(),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
 }
 
 TEST(HaydnBundleTest, B24_EmptyStandaloneEscapeRetained) {
@@ -549,7 +549,7 @@ TEST(HaydnBundleTest, B24_EmptyStandaloneEscapeRetained) {
   EXPECT_TRUE(B.canAdd(Haydn::ADD32));
   // Even after meta-only: OccupiedSlots still 0 → accept.
   B.reserveByOpcode(TargetOpcode::KILL); // no-op
-  EXPECT_TRUE(B.canAdd(Haydn::ST32));
+  EXPECT_TRUE(B.canAdd(Haydn::S_SW_WITH_IMM));
 }
 
 //===----------------------------------------------------------------------===//
@@ -582,10 +582,10 @@ TEST(HaydnBundleTest, B25_AltsBearingUnchangedTryAdd) {
   Bundle<MCInst> B(&Fmts);
   MCInst A, L;
   A.setOpcode(Haydn::ADD32);
-  L.setOpcode(Haydn::LD32);
+  L.setOpcode(Haydn::S_LW_WITH_IMM);
   B.add(&A); // S2
   B.add(&L); // prefers high free load field (S1)
-  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT2 | Haydn::SLOT1));
+  EXPECT_EQ(B.getOccupiedSlots(), SlotBits(Haydn::SLOT_P32 | Haydn::SLOT_P31));
 }
 
 //===----------------------------------------------------------------------===//
@@ -606,7 +606,7 @@ TEST(HaydnBundleTest, B41_GetFeasibleFormatMaskAfterAddAndReserve) {
   EXPECT_EQ(B.getFeasibleFormatMask(), productFeasibleFormatMask(0));
 
   MCInst St, A0, A1;
-  St.setOpcode(Haydn::ST32);
+  St.setOpcode(Haydn::S_SW_WITH_IMM);
   A0.setOpcode(Haydn::ADD32);
   A1.setOpcode(Haydn::ADD64);
   ASSERT_TRUE(B.canAdd(St.getOpcode()));
@@ -624,9 +624,9 @@ TEST(HaydnBundleTest, B41_GetFeasibleFormatMaskAfterAddAndReserve) {
   R.reserveByOpcode(Haydn::ADD32);
   R.reserveByOpcode(Haydn::ADD32);
   R.reserveByOpcode(Haydn::ADD32);
-  EXPECT_EQ(R.getOccupiedSlots(), SlotBits(Haydn::SLOT_ALL));
+  EXPECT_EQ(R.getOccupiedSlots(), SlotBits(Haydn::SLOT_SET_E3));
   EXPECT_EQ(R.getFeasibleFormatMask(), ProductFormatMask)
-      << "saturated Full still covers SLOT_ALL";
+      << "saturated Full still covers SLOT_SET_E3";
   EXPECT_FALSE(R.canAdd(Haydn::ADD32));
 }
 
@@ -642,7 +642,7 @@ TEST(HaydnBundleTest, B41_ResourceCycleThreeADD32KeepFullFrontier) {
     RC.reserveByOpcode(Haydn::ADD32);
     EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask) << "after #" << I;
   }
-  EXPECT_EQ(RC.getOccupiedSlots(), SlotBits(Haydn::SLOT_ALL));
+  EXPECT_EQ(RC.getOccupiedSlots(), SlotBits(Haydn::SLOT_SET_E3));
   EXPECT_FALSE(RC.canReserveByOpcode(Haydn::ADD32))
       << "fourth ADD32 must not fit once S0|S1|S2 reserved";
   EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask);
@@ -665,9 +665,9 @@ TEST(HaydnBundleTest, B41_PreRAProductFeasibleFormatMaskMatchesSolver) {
   // Pre-RA static helper is the same productFeasibleFormatMask (logical only).
   EXPECT_EQ(HaydnPreRASchedStrategy::productFeasibleFormatMask(0),
             ProductFormatMask);
-  EXPECT_EQ(HaydnPreRASchedStrategy::productFeasibleFormatMask(Haydn::SLOT_ALL),
-            productFeasibleFormatMask(Haydn::SLOT_ALL));
-  EXPECT_EQ(HaydnPreRASchedStrategy::productFeasibleFormatMask(Haydn::SLOT0),
+  EXPECT_EQ(HaydnPreRASchedStrategy::productFeasibleFormatMask(Haydn::SLOT_SET_E3),
+            productFeasibleFormatMask(Haydn::SLOT_SET_E3));
+  EXPECT_EQ(HaydnPreRASchedStrategy::productFeasibleFormatMask(Haydn::SLOT_P30),
             ProductFormatMask);
 }
 
@@ -720,15 +720,15 @@ TEST(HaydnBundleTest, B42_ResourceCycleLiveState_ThreeADD32Members) {
         << "live mask is State.FeasibleFormatMask after tryAdd #" << I;
     EXPECT_EQ(RC.getOccupiedSlots(), RC.getCycleState().OccupiedSlots);
   }
-  EXPECT_EQ(RC.getOccupiedSlots(), SlotBits(Haydn::SLOT_ALL));
+  EXPECT_EQ(RC.getOccupiedSlots(), SlotBits(Haydn::SLOT_SET_E3));
   // Product size-1: live mask still Full; occupancy rebuild agrees.
   EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask);
   EXPECT_EQ(RC.getFeasibleFormatMask(),
             productFeasibleFormatMask(RC.getOccupiedSlots()));
   // Slot order S2 → S1 → S0 (same as HR tryAdd).
-  EXPECT_EQ(RC.getCycleState().Members[0].FieldSlots, SlotBits(Haydn::SLOT2));
-  EXPECT_EQ(RC.getCycleState().Members[1].FieldSlots, SlotBits(Haydn::SLOT1));
-  EXPECT_EQ(RC.getCycleState().Members[2].FieldSlots, SlotBits(Haydn::SLOT0));
+  EXPECT_EQ(RC.getCycleState().Members[0].FieldSlots, SlotBits(Haydn::SLOT_P32));
+  EXPECT_EQ(RC.getCycleState().Members[1].FieldSlots, SlotBits(Haydn::SLOT_P31));
+  EXPECT_EQ(RC.getCycleState().Members[2].FieldSlots, SlotBits(Haydn::SLOT_P30));
   EXPECT_FALSE(RC.canReserveByOpcode(Haydn::ADD32));
 }
 
@@ -747,13 +747,13 @@ TEST(HaydnBundleTest, B42_ResourceCycleCountEqualsComputeProductResMII) {
     EXPECT_EQ(computeProductResMII(Ops), 1u);
   }
   {
-    unsigned Ops[] = {Haydn::LD32, Haydn::LD32, Haydn::X2MULA32};
+    unsigned Ops[] = {Haydn::S_LW_WITH_IMM, Haydn::S_LW_WITH_IMM, Haydn::X2MULA32};
     EXPECT_EQ(sequentialResourceCycleCount(Ops), 1u);
     EXPECT_EQ(computeProductResMII(Ops), 1u);
   }
   {
     // ST32 is S0-only — two ST32 need two cycles.
-    unsigned Ops[] = {Haydn::ST32, Haydn::ST32};
+    unsigned Ops[] = {Haydn::S_SW_WITH_IMM, Haydn::S_SW_WITH_IMM};
     EXPECT_EQ(sequentialResourceCycleCount(Ops), 2u);
     EXPECT_EQ(computeProductResMII(Ops), 2u);
   }
@@ -789,10 +789,10 @@ TEST(HaydnBundleTest, B42_MIDPathAgreesWithOpcodeAndClearResetsMask) {
 
 TEST(HaydnBundleTest, B42_ResourceCycleLDLDMACPacksOneCycle) {
   HaydnResourceCycle RC;
-  ASSERT_TRUE(RC.canReserveByOpcode(Haydn::LD32));
-  RC.reserveByOpcode(Haydn::LD32);
-  ASSERT_TRUE(RC.canReserveByOpcode(Haydn::LD32));
-  RC.reserveByOpcode(Haydn::LD32);
+  ASSERT_TRUE(RC.canReserveByOpcode(Haydn::S_LW_WITH_IMM));
+  RC.reserveByOpcode(Haydn::S_LW_WITH_IMM);
+  ASSERT_TRUE(RC.canReserveByOpcode(Haydn::S_LW_WITH_IMM));
+  RC.reserveByOpcode(Haydn::S_LW_WITH_IMM);
   ASSERT_TRUE(RC.canReserveByOpcode(Haydn::X2MULA32))
       << "MAC must co-issue with dual LD32 under live tryAdd; occ="
       << RC.getOccupiedSlots();
