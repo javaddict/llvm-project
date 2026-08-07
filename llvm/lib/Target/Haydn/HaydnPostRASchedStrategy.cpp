@@ -288,14 +288,21 @@ static void finalizeLegalMultiMI(MachineBasicBlock &MBB,
   MachineInstr &Root =
       *getBundleStart(Bundle.getInstrs().front()->getIterator());
   assert(Root.isBundle() && "finalizeBundle must produce a BUNDLE root");
-  haydn::bundle::stampBundleFormatID(Root, haydn::bundle::ProductFormatID);
+  // Stamp the format the packer actually chose, not a constant. Format E has
+  // two composites and this is the multi-MI path, so a 3-entry cycle must be
+  // stamped BundleE3 — Bundle128 had one row and the constant was correct.
+  // Fmt is the row Bundle::getFormatOrNull picked by slot coverage, which IS
+  // the entry-count decision.
+  haydn::bundle::stampBundleFormatID(
+      Root, haydn::bundle::formatIDForSlotSet(Fmt->getSlotSet())
+                .value_or(haydn::bundle::ProductFormatID));
   ++NumMultiMIBundlesFinalized;
 }
 
 // When a scheduled cycle cannot form one legal BUNDLE, greedily split
 // into ordered legal sub-cycles (multi-MI BUNDLE or singleton standalone).
 // Never silently leave a multi-MI illegal cycle as an unordered fog — each
-// sub-cycle is an explicit architectural cycle (FormatID Bundle128Full).
+// sub-cycle is an explicit architectural cycle (a product FormatID row).
 static void materializeMaybeSplitCycle(MachineBasicBlock &MBB,
                                        ArrayRef<MachineInstr *> Instrs) {
   if (Instrs.size() < 2)
@@ -359,7 +366,7 @@ void HaydnPostRASchedStrategy::materializeBundles(
   // * 2-3 MIs legal → finalizeBundle + stamp FormatID
   // * 2-3 MIs illegal → explicit greedy split (not silent fog)
   //
-  // Product plan: every encode cycle is FormatID::Bundle128Full / 16 B
+  // Product plan: every encode cycle is BundleE2 or BundleE3 / 12 B
   // (haydn::bundle::BundlePlan). Multi-MI BUNDLE roots carry FormatID imm 0
   // (stampBundleFormatID). Singleton cycles become BUNDLE + FormatID in
   // HaydnFinalizeBundle after this scheduler (AIE2 addPreSched2 order).

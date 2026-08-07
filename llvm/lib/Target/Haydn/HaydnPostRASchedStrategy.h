@@ -92,7 +92,7 @@ public:
 private:
   // A single cycle's worth of instructions, in MBB order. Empty Instrs means
   // an idle cycle (materialized as a rolling-position NOP). Product format is
-  // always Bundle128Full (HaydnBundlePlan). Multi-MI materialize stamps
+  // a product FormatID row (HaydnBundlePlan). Multi-MI materialize stamps
   // FormatID imm on the BUNDLE root. Singletons stay standalone MIR
   // here and are wrapped by HaydnFinalizeBundle after PostMachineScheduler
   // (AIEFinalizeBundle peer). Post-commit placement is getSlotKind on

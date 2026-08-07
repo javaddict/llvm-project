@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnAsmBackend.h"
+#include "HaydnBaseInfo.h"
 #include "HaydnFixupKinds.h"
 #include "HaydnRelocLayout.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
@@ -194,17 +195,30 @@ HaydnAsmBackend::createObjectTargetWriter() const {
 
 bool HaydnAsmBackend::writeNopData(raw_ostream &OS, uint64_t Count,
                                    const MCSubtargetInfo *) const {
-  // A.6 / Bundle128: executable pad is full 16-byte parcels only (all-zero
-  // Bundle128 NOP). Reject non-multiples so MC/lld cannot leave 2/4/8-byte
-  // executable gaps that the ISS treats as truncated parcels.
-  constexpr uint64_t Bundle128Bytes = 16;
-  if (Count % Bundle128Bytes != 0)
+  // A.6: executable pad is full parcels only. Reject non-multiples so MC/lld
+  // cannot leave 2/4/8-byte executable gaps that the ISS treats as truncated
+  // parcels.
+  //
+  // The size comes from Haydn::BUNDLE_E_BYTES, the MC-layer bundle-width
+  // constant that HaydnBundlePlan.h's ProductEncodedBytesValue is itself
+  // defined from. This was a local `= 16` — a second oracle that would have
+  // kept padding in 16-byte units after the switch to 12, silently desyncing
+  // the parcel stream at every pad site. (The plan header is the CodeGen-layer
+  // authority and cannot be included here; it pulls in MachineInstr.h.)
+  constexpr uint64_t ParcelBytes = Haydn::BUNDLE_E_BYTES;
+  if (Count % ParcelBytes != 0)
     return false;
 
-  // All-zero 16-byte little-endian composite (idle s2|s1|s0 windows).
-  static const char Zeros[Bundle128Bytes] = {};
-  for (uint64_t Idx = 0; Idx < Count; Idx += Bundle128Bytes)
-    OS.write(Zeros, Bundle128Bytes);
+  // FIXME(format E): an all-zero word is NOT a NOP bundle any more. Bundle128
+  // had no header, so a zero slot window WAS the idle encoding; format E puts
+  // the 0b111 format indicator in Inst{2-0} and the entry count in Inst{3}, so
+  // twelve zero bytes decode as a different format's bundle rather than as
+  // padding. This has to become a real all-NOP BUNDLE_E2 built through the
+  // normal encode path — see FORMAT-E-SWITCH-PLAN.md § 5.2. The size below is
+  // now right; the contents are not.
+  static const char Zeros[ParcelBytes] = {};
+  for (uint64_t Idx = 0; Idx < Count; Idx += ParcelBytes)
+    OS.write(Zeros, ParcelBytes);
 
   return true;
 }

@@ -15,7 +15,7 @@
 //   * commitLateProductCycle — B4.3 late layout firewall: empty-cycle
 //     tryAddProduct → format-member opcode for setDesc of a bare late MI
 //     (Fixup NOP pad, BR insertBranch, demote LoopDec/LoopJNZ edges).
-//   * Each sub-cycle is product FormatID::Bundle128Full (HaydnBundlePlan.h).
+//   * Each sub-cycle is a product FormatID row (HaydnBundlePlan.h).
 //
 // Encode-side oracle: Haydn::Bundle + HaydnMCFormats (same as G-PACK-LEGAL).
 // Schedule-side MI+AltDesc oracle stays in HaydnPostRASchedStrategy.cpp.
@@ -81,7 +81,7 @@ greedySplitLegalOpcodeCycles(ArrayRef<unsigned> Opcodes,
     OpcodeCycle C;
     for (unsigned I = Begin; I < End; ++I)
       C.Opcodes.push_back(Opcodes[I]);
-    C.Plan = makeBundle128Plan(Occ, C.Opcodes);
+    C.Plan = makeProductPlan(Occ, C.Opcodes);
     Out.push_back(std::move(C));
   };
 
@@ -136,7 +136,7 @@ struct LateProductCycle {
   /// opcode has no PlacementAlternatives (fixed-slot / already-member /
   /// branch pseudo without alts).
   unsigned MemberOpcode = 0;
-  /// Product cycle plan (Bundle128Full, 16 B, 1 cycle).
+  /// Product cycle plan (BundleE2 / BundleE3, 12 B, 1 cycle).
   BundlePlan Plan;
   /// True when MemberOpcode != LogicalOpcode (setDesc required).
   bool NeedsSetDesc = false;
@@ -170,7 +170,7 @@ commitLateProductCycle(unsigned LogicalOpc, HaydnMCFormats &Fmts) {
       Out.Plan = *P;
     } else {
       // tryAdd accepted but commit failed — still product singleton plan.
-      Out.Plan = makeBundle128Plan(S.OccupiedSlots, {LogicalOpc});
+      Out.Plan = makeProductPlan(S.OccupiedSlots, {LogicalOpc});
     }
     return Out;
   }
@@ -182,7 +182,7 @@ commitLateProductCycle(unsigned LogicalOpc, HaydnMCFormats &Fmts) {
   if (!opcodesFormOneLegalCycle(One, Fmts)) {
     // Standalone escape still counts as one product parcel for size model
     // (getInstSizeInBytes returns ProductFormatDesc.Bytes for real bare MIs).
-    Out.Plan = makeBundle128Plan(/*Occupied=*/0, One);
+    Out.Plan = makeProductPlan(/*Occupied=*/0, One);
     return Out;
   }
   auto Cycles = greedySplitLegalOpcodeCycles(One, Fmts);
