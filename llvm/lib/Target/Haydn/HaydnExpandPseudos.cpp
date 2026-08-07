@@ -352,7 +352,7 @@ bool HaydnExpandPseudos::expandPseudosInBundles(MachineBasicBlock &MBB) {
         }
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::S_LW_WITH_IMM), PI.DstReg)
             .addReg(PI.BaseReg)
-            .addImm(PI.Offset);
+            .addImm(haydnScaledLSImm(PI.Offset, 4));
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::ADDI32), PI.BaseReg)
             .addReg(PI.BaseReg)
             .addImm(PI.Stride);
@@ -362,7 +362,7 @@ bool HaydnExpandPseudos::expandPseudosInBundles(MachineBasicBlock &MBB) {
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::S_SW_WITH_IMM))
             .addReg(PI.DstReg)
             .addReg(PI.BaseReg)
-            .addImm(PI.Offset);
+            .addImm(haydnScaledLSImm(PI.Offset, 4));
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::ADDI32), PI.BaseReg)
             .addReg(PI.BaseReg)
             .addImm(PI.Stride);
@@ -388,7 +388,7 @@ bool HaydnExpandPseudos::expandPseudosInBundles(MachineBasicBlock &MBB) {
         // plain LD64 (slot 0/1) so the split post-inc load can pack.
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::D_LDW_WITH_IMM), PI.DstReg)
             .addReg(PI.BaseReg)
-            .addImm(PI.Offset);
+            .addImm(haydnScaledLSImm(PI.Offset, 8));
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::ADDI32), PI.BaseReg)
             .addReg(PI.BaseReg)
             .addImm(PI.Stride);
@@ -398,7 +398,7 @@ bool HaydnExpandPseudos::expandPseudosInBundles(MachineBasicBlock &MBB) {
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::D_SDW_WITH_IMM))
             .addReg(PI.DstReg)
             .addReg(PI.BaseReg)
-            .addImm(PI.Offset);
+            .addImm(haydnScaledLSImm(PI.Offset, 8));
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::ADDI32), PI.BaseReg)
             .addReg(PI.BaseReg)
             .addImm(PI.Stride);
@@ -661,7 +661,7 @@ bool HaydnExpandPseudos::expandVASTART(MachineBasicBlock &MBB,
           BuildMI(MBB, InsertPt, DL, TII->get(Haydn::S_SW_WITH_IMM))
               .addReg(Scr)
               .addReg(VaListPtr)
-              .addImm(FieldOff);
+              .addImm(haydnScaledLSImm(FieldOff, 4));
         };
 
         // __stack @0, __gr_top @4, __vr_top @8
@@ -677,7 +677,7 @@ bool HaydnExpandPseudos::expandVASTART(MachineBasicBlock &MBB,
           BuildMI(MBB, InsertPt, DL, TII->get(Haydn::S_SW_WITH_IMM))
               .addReg(Scr)
               .addReg(VaListPtr)
-              .addImm(FieldOff);
+              .addImm(haydnScaledLSImm(FieldOff, 4));
         };
         StoreNegSizeOff(GprSize, /*FieldOff=*/12);
         StoreNegSizeOff(DrSize, /*FieldOff=*/16);
@@ -703,11 +703,11 @@ bool HaydnExpandPseudos::expandVACOPY(MachineBasicBlock &MBB,
           int64_t Off = static_cast<int64_t>(W) * 4;
           BuildMI(MBB, InsertPt, DL, TII->get(Haydn::S_LW_WITH_IMM), Scr)
               .addReg(SrcPtr)
-              .addImm(Off);
+              .addImm(haydnScaledLSImm(Off, 4));
           BuildMI(MBB, InsertPt, DL, TII->get(Haydn::S_SW_WITH_IMM))
               .addReg(Scr)
               .addReg(DstPtr)
-              .addImm(Off);
+              .addImm(haydnScaledLSImm(Off, 4));
         }
       },
       Exclude);
@@ -769,7 +769,7 @@ static VAARGSpillHome vaargBeginSpill(MachineBasicBlock &MBB,
       BuildMI(MBB, I, DL, TII.get(Haydn::S_SW_WITH_IMM))
           .addReg(Scr)
           .addReg(Home.FrameReg)
-          .addImm(Home.Off);
+          .addImm(haydnScaledLSImm(Home.Off, 4));
     } else {
       // Large frame: materialize via soft-zero R0 temp.
       BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32), Haydn::R0)
@@ -807,7 +807,7 @@ static void vaargEndSpill(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
     if (isInt<16>(Home.Off)) {
       BuildMI(MBB, I, DL, TII.get(Haydn::S_LW_WITH_IMM), Scr)
           .addReg(Home.FrameReg)
-          .addImm(Home.Off);
+          .addImm(haydnScaledLSImm(Home.Off, 4));
     } else {
       BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32), Haydn::R0)
           .addReg(Home.FrameReg)
@@ -920,10 +920,10 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
   //   S0 = CurOff, S1 = Top, S2 = Tentative then UseStack.
   BuildMI(MBB, HeadPt, DL, TII->get(Haydn::S_LW_WITH_IMM), S0)
       .addReg(VaList)
-      .addImm(OffsField);
+      .addImm(haydnScaledLSImm(OffsField, 4));
   BuildMI(MBB, HeadPt, DL, TII->get(Haydn::S_LW_WITH_IMM), S1)
       .addReg(VaList)
-      .addImm(TopField);
+      .addImm(haydnScaledLSImm(TopField, 4));
   BuildMI(MBB, HeadPt, DL, TII->get(Haydn::ADDI32), S2)
       .addReg(S0)
       .addImm(RegStep);
@@ -961,7 +961,7 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
     auto Ins = StackMBB->end();
     BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::S_LW_WITH_IMM), S1)
         .addReg(VaList)
-        .addImm(kStackField);
+        .addImm(haydnScaledLSImm(kStackField, 4));
     if (IsI64) {
       BuildMI(*StackMBB, Ins, DL, TII->get(LoadOpc), Dst)
           .addReg(S1)
@@ -972,7 +972,7 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
       BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::S_SW_WITH_IMM))
           .addReg(S0)
           .addReg(VaList)
-          .addImm(kStackField);
+          .addImm(haydnScaledLSImm(kStackField, 4));
     } else {
       // Value in S2 first so VaList stays valid for the cursor store.
       BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::S_LW_WITH_IMM), S2)
@@ -984,7 +984,7 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
       BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::S_SW_WITH_IMM))
           .addReg(S0)
           .addReg(VaList)
-          .addImm(kStackField);
+          .addImm(haydnScaledLSImm(kStackField, 4));
       EmitI32Result(*StackMBB, Ins, S2);
     }
     BuildMI(*StackMBB, Ins, DL, TII->get(Haydn::B)).addMBB(JoinMBB);
@@ -996,10 +996,10 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
     auto Ins = RegMBB->end();
     BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::S_LW_WITH_IMM), S0)
         .addReg(VaList)
-        .addImm(OffsField);
+        .addImm(haydnScaledLSImm(OffsField, 4));
     BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::S_LW_WITH_IMM), S1)
         .addReg(VaList)
-        .addImm(TopField);
+        .addImm(haydnScaledLSImm(TopField, 4));
     BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::ADD32), S1)
         .addReg(S1)
         .addReg(S0);
@@ -1013,7 +1013,7 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
       BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::S_SW_WITH_IMM))
           .addReg(S0)
           .addReg(VaList)
-          .addImm(OffsField);
+          .addImm(haydnScaledLSImm(OffsField, 4));
     } else {
       BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::S_LW_WITH_IMM), S2)
           .addReg(S1)
@@ -1024,7 +1024,7 @@ bool HaydnExpandPseudos::expandVAARG(MachineBasicBlock &MBB, MachineInstr &MI,
       BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::S_SW_WITH_IMM))
           .addReg(S0)
           .addReg(VaList)
-          .addImm(OffsField);
+          .addImm(haydnScaledLSImm(OffsField, 4));
       EmitI32Result(*RegMBB, Ins, S2);
     }
     BuildMI(*RegMBB, Ins, DL, TII->get(Haydn::B)).addMBB(JoinMBB);
@@ -1383,7 +1383,7 @@ bool HaydnExpandPseudos::expandLD32PostInc(MachineBasicBlock &MBB,
   // LD32 rt, base, offset (load from base + offset, preserving displacement)
   BuildMI(MBB, MI, DL, TII->get(Haydn::S_LW_WITH_IMM), DstReg)
       .addReg(BaseReg)
-      .addImm(Offset);
+      .addImm(haydnScaledLSImm(Offset, 4));
 
   // ADDI32 base, base, stride (update base by stride)
   BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), BaseReg)
@@ -1406,7 +1406,7 @@ bool HaydnExpandPseudos::expandST32PostInc(MachineBasicBlock &MBB,
   BuildMI(MBB, MI, DL, TII->get(Haydn::S_SW_WITH_IMM))
       .addReg(DataReg)
       .addReg(BaseReg)
-      .addImm(Offset);
+      .addImm(haydnScaledLSImm(Offset, 4));
 
   // ADDI32 base, base, stride (update base by stride)
   BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), BaseReg)
@@ -1428,7 +1428,7 @@ bool HaydnExpandPseudos::expandLD64PostInc(MachineBasicBlock &MBB,
   // plain LD64 (slot 0/1) so this load can pack with a sibling.
   BuildMI(MBB, MI, DL, TII->get(Haydn::D_LDW_WITH_IMM), DstReg)
       .addReg(BaseReg)
-      .addImm(Offset);
+      .addImm(haydnScaledLSImm(Offset, 8));
 
   // ADDI32 base, base, stride (update base by stride)
   BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), BaseReg)
@@ -1451,7 +1451,7 @@ bool HaydnExpandPseudos::expandST64PostInc(MachineBasicBlock &MBB,
   BuildMI(MBB, MI, DL, TII->get(Haydn::D_SDW_WITH_IMM))
       .addReg(DataReg)
       .addReg(BaseReg)
-      .addImm(Offset);
+      .addImm(haydnScaledLSImm(Offset, 8));
 
   // ADDI32 base, base, stride (update base by stride)
   BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), BaseReg)

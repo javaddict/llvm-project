@@ -133,7 +133,7 @@ bool HaydnExpandPostIncEarly::expandMI(MachineBasicBlock &MBB,
     // and leaveRegion setDesc materializes the member (B3.exit.3).
     BuildMI(MBB, MI, DL, TII->get(Haydn::S_LW_WITH_IMM), DstReg)
         .addReg(BaseReg)
-        .addImm(Offset);
+        .addImm(haydnScaledLSImm(Offset, 4));
     BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), BaseReg)
         .addReg(BaseReg)
         .addImm(Stride);
@@ -166,7 +166,7 @@ bool HaydnExpandPostIncEarly::expandMI(MachineBasicBlock &MBB,
     BuildMI(MBB, MI, DL, TII->get(Haydn::S_SW_WITH_IMM))
         .addReg(DataReg)
         .addReg(BaseReg)
-        .addImm(Offset);
+        .addImm(haydnScaledLSImm(Offset, 4));
     BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), BaseReg)
         .addReg(BaseReg)
         .addImm(Stride);
@@ -199,7 +199,7 @@ bool HaydnExpandPostIncEarly::expandMI(MachineBasicBlock &MBB,
     // fallback for non-multiple stride / out-of-range index.
     BuildMI(MBB, MI, DL, TII->get(Haydn::D_LDW_WITH_IMM), DstReg)
         .addReg(BaseReg)
-        .addImm(Offset);
+        .addImm(haydnScaledLSImm(Offset, 8));
     BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), BaseReg)
         .addReg(BaseReg)
         .addImm(Stride);
@@ -229,7 +229,7 @@ bool HaydnExpandPostIncEarly::expandMI(MachineBasicBlock &MBB,
     BuildMI(MBB, MI, DL, TII->get(Haydn::D_SDW_WITH_IMM))
         .addReg(DataReg)
         .addReg(BaseReg)
-        .addImm(Offset);
+        .addImm(haydnScaledLSImm(Offset, 8));
     BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), BaseReg)
         .addReg(BaseReg)
         .addImm(Stride);

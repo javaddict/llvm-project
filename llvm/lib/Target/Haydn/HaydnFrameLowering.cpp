@@ -523,7 +523,7 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
           BuildMI(MBB, MBBI, DL, TII->get(Haydn::S_SW_WITH_IMM))
               .addReg(GPRCSRegs[J].Reg)
               .addReg(BaseReg)
-              .addImm(RelOffset)
+              .addImm(haydnScaledLSImm(RelOffset, 4))
               .setMIFlag(MachineInstr::FrameSetup);
         }
 
@@ -596,7 +596,7 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
           BuildMI(MBB, MBBI, DL, TII->get(Haydn::D_SDW_WITH_IMM))
               .addReg(DRCSRegs[J].Reg)
               .addReg(BaseReg)
-              .addImm(RelOffset)
+              .addImm(haydnScaledLSImm(RelOffset, 8))
               .setMIFlag(MachineInstr::FrameSetup);
         }
 

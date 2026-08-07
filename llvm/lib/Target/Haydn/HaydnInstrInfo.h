@@ -340,6 +340,21 @@ public:
       const TargetRegisterInfo *TRI) const override;
 };
 
+
+// Byte displacement -> the units a format E `simm6:$scaled_imm` actually
+// encodes. The hardware computes EA = rs + (imm6 << log2(Width)), so the field
+// holds ELEMENTS. Bundle128's simm16 held bytes and needed no conversion,
+// which is why call sites predate this helper and why a missed one is silent:
+// the access simply lands Width times too far from the base. Assert rather
+// than truncate — an unaligned displacement is a bug upstream, not something
+// to round.
+inline int64_t haydnScaledLSImm(int64_t ByteOff, unsigned Width) {
+  assert(Width != 0 && "access width must be known to scale a displacement");
+  assert(ByteOff % static_cast<int64_t>(Width) == 0 &&
+         "LS displacement must be a multiple of the access width");
+  return ByteOff / static_cast<int64_t>(Width);
+}
+
 } // namespace llvm
 
 #endif // LLVM_LIB_TARGET_HAYDN_HAYDNINSTRINFO_H

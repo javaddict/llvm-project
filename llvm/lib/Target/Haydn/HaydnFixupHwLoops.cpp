@@ -1190,7 +1190,7 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
                 BuildMI(*Preheader, Ins, DL, TII.get(Haydn::S_SW_WITH_IMM))
                     .addReg(Scr, getKillRegState(true))
                     .addReg(FrameReg)
-                    .addImm(Off);
+                    .addImm(haydnScaledLSImm(Off, 4));
               else {
                 // Rare large FI: use R0 as address temp (xor-zero after).
                 BuildMI(*Preheader, Ins, DL, TII.get(Haydn::ADDI32), Haydn::R0)
@@ -1213,7 +1213,7 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
           BuildMI(*Preheader, Ins, DL, TII.get(Haydn::S_SW_WITH_IMM))
               .addReg(Prefer)
               .addReg(FrameReg)
-              .addImm(Off);
+              .addImm(haydnScaledLSImm(Off, 4));
         else {
           BuildMI(*Preheader, Ins, DL, TII.get(Haydn::ADDI32), Haydn::R0)
               .addReg(FrameReg)
@@ -1298,7 +1298,7 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
           if (isInt<16>(Off))
             BuildMI(*Latch, LatchEnd, DL, TII.get(Haydn::S_LW_WITH_IMM), Scr)
                 .addReg(FrameReg)
-                .addImm(Off);
+                .addImm(haydnScaledLSImm(Off, 4));
           else {
             BuildMI(*Latch, LatchEnd, DL, TII.get(Haydn::ADDI32), Haydn::R0)
                 .addReg(FrameReg)
@@ -1316,7 +1316,7 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
             BuildMI(*Latch, LatchEnd, DL, TII.get(Haydn::S_SW_WITH_IMM))
                 .addReg(Scr)
                 .addReg(FrameReg)
-                .addImm(Off);
+                .addImm(haydnScaledLSImm(Off, 4));
           else {
             BuildMI(*Latch, LatchEnd, DL, TII.get(Haydn::ADDI32), Haydn::R0)
                 .addReg(FrameReg)
