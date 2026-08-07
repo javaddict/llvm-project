@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `afc345108f57` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 12/24. Both § 5.2 generator gaps closed.** |
+| `llvm-project` | `haydn-formate-switch-mc` | `2686a95478c5` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 12/24. Both § 5.2 generator gaps closed; § 5.11 partly.** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -1379,6 +1379,42 @@ wrong relocation.
 The cheap standing check is the same shape as § 5.6's memberless sweep:
 compare each logical's operand count against its members'. It is a `.td` fact
 on both sides, so it can be checked without running anything.
+
+#### The tied-writeback half, fixed in `2686a95478c5`
+
+The largest single group. A logical with `Constraints = "$rs = $rs_wb"`
+presents **four** operands — the tied register once as an out and once as an
+in — while the database describes the member with three, naming the writeback
+out `rs` and giving it no in. llc emitted a register where the offset belongs:
+
+```
+before  s_lw_pre_imm r3, r1, r1
+after   s_lw_pre_imm r3, r1, 1      getelementptr i32, i32 1 -> byte 4,
+                                    scaled by 4 -> 1
+```
+
+The generator now restores the tie — renames the written-back out, inserts the
+tied in, copies the `Constraints`. 202 member definitions.
+
+**Note the asymmetry that hid it.** Hand-written asm was *fine*: the parser
+builds the MCInst against the member, so the two agreed. Only **compiled** code
+was wrong, and only in the operands after the tie.
+
+#### What is left: 968 of 3567 member definitions
+
+Two classes, neither safe to do in bulk:
+
+* **Ties whose names do not line up** — the member's writeback out is `rs1`
+  where the logical's tie names `rs`, so there is nothing to match on. Skipped
+  rather than guessed.
+* **Logicals whose shape genuinely disagrees with the database** — `ABS32`
+  declares two sources where the database has one; `CSRR` carries an extra
+  dead `$rd` (§ 5.1 already analysed that one). These need what `LUI` got:
+  **fix the logical, not the member.** The database is the authority.
+
+Treat the count as a standing hazard, not a fixed list: it should only ever
+shrink, and any new mismatch is a new place the encoder can read the wrong
+operand.
 
 Note what did **not** catch this: `--emit roundtrip` never sees the logical at
 all, `--check` only validates the database against itself, and the encoder and
