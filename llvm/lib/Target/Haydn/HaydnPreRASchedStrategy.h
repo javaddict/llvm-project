@@ -94,6 +94,13 @@
 // from II-wrap metrics. Positive multi-cycle product needs an approved shared
 // hook — not a catalog-only flip.
 //
+// FE5B / WP4 whole-kernel periodic certificate (pre-RA surface):
+// ResourceCycle owns the pack-oracle certificate (proveWholeKernelPeriodicPhases,
+// SMSPeriodicCertificate lifecycle, same-bank simultaneous-def fail-close).
+// Pre-RA re-exports polarity so list-sched never claims multi-stage product
+// enable or discards the original loop before final accept. WP5 multi-stage
+// product policy is not flipped here.
+//
 // SMS/post-RA format-acceptance differential (pre-RA surface, plan §8.4 #7):
 // Descriptor-derived format legality is pure exactTryAddProduct depth — the
 // same API ResourceCycle canReserve/reserve and post-RA HR
@@ -116,6 +123,7 @@
 
 #include "HaydnBundleFormatSolver.h"
 #include "HaydnPortModel.h"
+#include "HaydnResourceCycle.h" // FE5B WP4 periodic certificate surface
 #include "HaydnResourceRestrictionClasses.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "llvm/CodeGen/MachineScheduler.h"
@@ -423,6 +431,72 @@ public:
            smsHookRejectsIIWrapFalseAccept(/*StageCycles=*/2, /*II=*/2) &&
            !smsHookRejectsIIWrapFalseAccept(/*StageCycles=*/1, /*II=*/2);
   }
+
+  //===--------------------------------------------------------------------===//
+  // FE5B whole-kernel periodic certificate — pre-RA re-export (WP4)
+  //===--------------------------------------------------------------------===//
+  // Authority: HaydnResourceCycle (pack oracle). Lifecycle retains the
+  // original loop until Accepted; Rejected requires recoverable rollback.
+  // Metrics/polarity only here — no MIR mutation, no WP5 multi-stage enable.
+
+  /// Product pin: multi-cycle / II-wrap long occupancy fails closed.
+  static constexpr bool
+  productIIWrapLongOccupancyFailsClosed(unsigned StageCycles, unsigned II) {
+    return HaydnResourceCycle::productIIWrapLongOccupancyFailsClosed(
+        StageCycles, II);
+  }
+
+  /// Original loop must remain until final accept (not on Accepted/Rejected).
+  static constexpr bool
+  productSMSCertOriginalLoopMustRemain(SMSCertLifecycle S) {
+    return SMSPeriodicCertificate::originalLoopMustRemain(S);
+  }
+
+  /// Final accept is the only state that may discard the original loop.
+  static constexpr bool
+  productSMSCertMayDiscardOriginalLoop(SMSCertLifecycle S) {
+    return SMSPeriodicCertificate::mayDiscardOriginalLoop(S);
+  }
+
+  /// Rejected certificates require recoverable rollback if rewrite ran.
+  static constexpr bool productSMSCertMustRollback(SMSCertLifecycle S) {
+    return SMSPeriodicCertificate::mustRollback(S);
+  }
+
+  /// Whole-kernel II/phase proof (ResourceCycle pack oracle).
+  static bool productProveWholeKernelPeriodicPhases(
+      unsigned II, ArrayRef<SMSCertPhaseOp> Ops) {
+    return HaydnResourceCycle::proveWholeKernelPeriodicPhases(II, Ops);
+  }
+
+  /// Transactional cert: retain → pre-proof → post-valid → accept/reject.
+  static SMSCertLifecycle productRunPeriodicCertificate(
+      unsigned II, ArrayRef<SMSCertPhaseOp> Ops, bool PostRewriteStillValid) {
+    return HaydnResourceCycle::runPeriodicCertificate(II, Ops,
+                                                      PostRewriteStillValid);
+  }
+
+  /// Full WP4 product pins (lifecycle + II-wrap + same-bank + legal kernel).
+  static bool productPeriodicCertificatePins() {
+    return HaydnResourceCycle::productPeriodicCertificatePins();
+  }
+
+  /// Half-enabled multi-stage remains forbidden until WP1–WP4 product ON.
+  /// Certificate surface never claims multi-stage product enable alone.
+  static constexpr bool productHalfEnabledMultiStageForbidden() {
+    return productSMSCertOriginalLoopMustRemain(
+               SMSCertLifecycle::OriginalRetained) &&
+           productSMSCertOriginalLoopMustRemain(
+               SMSCertLifecycle::PreRewriteProved) &&
+           productSMSCertOriginalLoopMustRemain(
+               SMSCertLifecycle::PostRewriteValid) &&
+           !productSMSCertMayDiscardOriginalLoop(
+               SMSCertLifecycle::OriginalRetained) &&
+           productSMSCertMustRollback(SMSCertLifecycle::Rejected) &&
+           !productCrossCycleCapacityEnabled &&
+           productClass3RestrictionCount == 0u;
+  }
+
 
   //===--------------------------------------------------------------------===//
   // SMS/post-RA format-acceptance differential — pre-RA HR surface

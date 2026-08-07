@@ -245,7 +245,8 @@ define void @bqriir32x32_df1_cascade(ptr %sections, i32 %nsec,
 ; CHECK-NEXT:    { s_lw_post_imm r1, r8, 1; nop }
 ; CHECK-NEXT:    { move32 r2, r10; move32 r4, r11 }
 ; CHECK-NEXT:    { jal_w lr, bqriir32x32_df1_single; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; move32 r3, r10 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { move32 r3, r10; nop }
 ; CHECK-NEXT:    { addi32_w r1, r0, 1; nop }
 ; CHECK-NEXT:    { add32 fp, fp, r1; nop }
 ; CHECK-NEXT:    { slt32 r1, fp, r9; nop }
@@ -313,11 +314,14 @@ define i32 @main() {
 ; CHECK-NEXT:    { move32 r2, r8; move32 r4, r9 }
 ; CHECK-NEXT:    { addi32_w r10, r10, section1; nop }
 ; CHECK-NEXT:    { jal_w lr, bqriir32x32_df1_single; nop }
-; CHECK-NEXT:    { move32 r1, r10; move32 r2, r8 }
-; CHECK-NEXT:    { move32 r3, r8; move32 r4, r9 }
+; CHECK-NEXT:    { move32 r1, r10; nop }
+; CHECK-NEXT:    { move32 r2, r8; nop }
+; CHECK-NEXT:    { move32 r3, r8; nop }
+; CHECK-NEXT:    { move32 r4, r9; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { jal_w lr, bqriir32x32_df1_single; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 r1, r8, 0 }
+; CHECK-NEXT:    { ld32 r1, r8, 0; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { ld32 lr, sp, 2; nop }
 ; CHECK-NEXT:    { ld32 r10, sp, 3; nop }

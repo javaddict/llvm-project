@@ -288,8 +288,12 @@ public:
 // phases. Product InstrStage cycles==1 and class-3 inventory is empty;
 // SMS-HOOK II-wrap false-accept fail-close polarity is pinned on
 // HaydnPreRASchedStrategy (catalog re-export) so list-sched never claims
-// multi-cycle product support. IsPreRA=false: post-RA path stamps
-// setAlternateDescriptor for leaveRegion setDesc materialize.
+// multi-cycle product support. FE5B WP4 whole-kernel periodic certificate
+// (retain original until final accept / recoverable rollback / same-phase
+// WAW via hasSameBundleWAW) is the ResourceCycle pack-oracle surface;
+// HR same-bundle WAW is the list-sched dual of SMS same-phase simultaneous
+// def fail-close. IsPreRA=false: post-RA path stamps setAlternateDescriptor
+// for leaveRegion setDesc materialize.
 // The recognizer is constructed once per scheduling region (the framework
 // resets it via Reset at each region boundary).
 class HaydnHazardRecognizer : public ScheduleHazardRecognizer {
@@ -328,6 +332,18 @@ public:
   int getMaxLatency() const { return MaxLatency; }
   int getPipelineDepth() const { return PipelineDepth; }
   bool isPreRA() const { return IsPreRA; }
+
+  /// Product pin: same-phase / same-bundle destination WAW is fail-closed
+  /// (hasSameBundleWAW). Peer of ResourceCycle certificate same-reg keys.
+  static constexpr bool productSamePhaseWAWFailsClosed() { return true; }
+
+  /// Product pin: original loop may not be discarded from the HR surface;
+  /// FE5B retain-until-accept is the ResourceCycle certificate lifecycle.
+  /// HR never rewrites loops — polarity only so post-RA/list-sched ownership
+  /// cannot claim half-enabled multi-stage SMS.
+  static constexpr bool productSMSCertHalfEnabledMultiStageForbidden() {
+    return productSamePhaseWAWFailsClosed();
+  }
 
   /// Pure matching-frontier score for pre-RA tryCandidate (plan §5.1).
   /// Probe never mutates MI / AltDescs / FormatID; Full-only product keeps
@@ -478,7 +494,10 @@ private:
   const TargetRegisterInfo *getTRI(const MachineInstr &MI);
 
   // true iff MI defines a register that overlaps a register already
-  // written by an instruction issued in the current cycle.
+  // written by an instruction issued in the current cycle. FE5B same-phase
+  // simultaneous def fail-close dual of HaydnResourceCycle WAW / DefRegKey
+  // certificate pin (WP4); product never accepts dual same-reg writers in
+  // one issue bundle/modulo phase.
   bool hasSameBundleWAW(const MachineInstr &MI) const;
 
   // true iff MI reads a register that an instruction already issued in

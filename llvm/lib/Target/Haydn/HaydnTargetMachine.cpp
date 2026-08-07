@@ -29,7 +29,10 @@
 #include "HaydnPostRASchedStrategy.h"
 #include "HaydnSubtarget.h"
 #include "HaydnTargetTransformInfo.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "TargetInfo/HaydnTargetInfo.h"
 #include "llvm/CodeGen/BranchRelaxation.h"
 #include "llvm/CodeGen/Passes.h" // EarlyIfConverterLegacyID
@@ -41,7 +44,9 @@
 #include "llvm/CodeGen/MachinePipeliner.h"
 #include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/CodeGen/Passes.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/CodeGen/VLIWMachineScheduler.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -50,6 +55,147 @@
 #include <optional>
 
 using namespace llvm;
+
+//===----------------------------------------------------------------------===//
+// WP2 — Bundled two-address rewrite (SMS hard-root RA survival)
+//===----------------------------------------------------------------------===//
+//
+// TwoAddressInstruction only walks bundle-level MBB iterators, so it never
+// sees tied def/use pairs on *children* of multi-member BUNDLE roots. SMS
+// handoff freezes legal product cycles as logical hard roots before
+// TwoAddress; children may still carry non-identical tied operands (e.g.
+// F2MULAA accumulator). After TwoAddress sets TiedOpsRewritten, the machine
+// verifier requires identity on every tied pair — including bundled children.
+//
+// Placement: AFTER PHIElimination and BEFORE TwoAddress. insertPass after
+// TwoAddress is too late under -verify-machineinstrs (the verifier runs
+// immediately after TwoAddress, before any insertPass followers). Pre-fixing
+// bundled ties here means TwoAddress sees already-identical child ties and
+// only has to rewrite bare MIs; post-TwoAddress verify is clean.
+//
+// Rewrite shape matches TwoAddress for bare MIs: prepend
+//   dst = COPY src
+// before the hard root, then set the tied use to dst. RegisterCoalescer folds
+// the COPY. Architectural dual-load / rematch roots without ties are no-ops.
+// Spill/reload around the hard root is ordinary RA; isSchedulingBoundary keeps
+// membership intact through machine-scheduler → coalescer → greedy → VRW.
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+bool rewriteBundledTiedTwoAddressOps(MachineFunction &MF) {
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  bool Changed = false;
+
+  for (MachineBasicBlock &MBB : MF) {
+    // Snapshot roots so COPY insertion before a root does not disturb the
+    // bundle-level walk.
+    SmallVector<MachineInstr *, 8> Roots;
+    for (MachineInstr &MI : MBB) {
+      if (MI.isBundle() && MI.getBundleSize() >= 2)
+        Roots.push_back(&MI);
+    }
+
+    for (MachineInstr *Root : Roots) {
+      for (MachineBasicBlock::instr_iterator II =
+               std::next(Root->getIterator());
+           II != MBB.instr_end() && II->isBundledWithPred(); ++II) {
+        MachineInstr &Child = *II;
+        for (unsigned SrcIdx = 0, E = Child.getNumOperands(); SrcIdx != E;
+             ++SrcIdx) {
+          unsigned DstIdx = 0;
+          if (!Child.isRegTiedToDefOperand(SrcIdx, &DstIdx))
+            continue;
+          MachineOperand &SrcMO = Child.getOperand(SrcIdx);
+          MachineOperand &DstMO = Child.getOperand(DstIdx);
+          if (!SrcMO.isReg() || !DstMO.isReg())
+            continue;
+          Register SrcReg = SrcMO.getReg();
+          Register DstReg = DstMO.getReg();
+          if (!SrcReg || !DstReg || SrcReg == DstReg)
+            continue;
+
+          // TwoAddress trivial path: undef tied use rewrites in place.
+          if (SrcMO.isUndef() && !DstMO.getSubReg()) {
+            if (DstReg.isVirtual() && SrcReg.isVirtual())
+              MRI.constrainRegClass(DstReg, MRI.getRegClass(SrcReg));
+            SrcMO.setReg(DstReg);
+            SrcMO.setSubReg(0);
+            Changed = true;
+            continue;
+          }
+
+          // Pre-RA SMS hard roots use virtual registers only.
+          if (!SrcReg.isVirtual() || !DstReg.isVirtual())
+            continue;
+
+          unsigned SubRegB = SrcMO.getSubReg();
+          const TargetRegisterClass *RC = MRI.getRegClass(SrcReg);
+          MRI.constrainRegClass(DstReg, RC);
+          BuildMI(MBB, *Root, Child.getDebugLoc(), TII.get(TargetOpcode::COPY),
+                  DstReg)
+              .addReg(SrcReg, 0, SubRegB);
+          SrcMO.setReg(DstReg);
+          SrcMO.setSubReg(0);
+          if (SrcMO.isKill())
+            SrcMO.setIsKill(false);
+          Changed = true;
+        }
+      }
+    }
+  }
+  return Changed;
+}
+
+class HaydnBundledTwoAddressRewrite : public MachineFunctionPass {
+public:
+  static char ID;
+  HaydnBundledTwoAddressRewrite();
+
+  StringRef getPassName() const override {
+    return "Haydn bundled two-address rewrite (SMS hard-root RA survival)";
+  }
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    // Preserve LiveVariables so the common no-op path (no multi-member hard
+    // roots) does not drop LV before TwoAddress — that would perturb RA for
+    // unrelated kernels. When this pass inserts COPYs it does not update LV
+    // kill sets; TwoAddress still rewrites correctly without relying on them.
+    AU.setPreservesCFG();
+    AU.addPreservedID(LiveVariablesID);
+    AU.addPreservedID(MachineLoopInfoID);
+    AU.addPreservedID(MachineDominatorsID);
+    MachineFunctionPass::getAnalysisUsage(AU);
+  }
+
+  bool runOnMachineFunction(MachineFunction &MF) override {
+    return rewriteBundledTiedTwoAddressOps(MF);
+  }
+};
+
+} // end anonymous namespace
+
+char HaydnBundledTwoAddressRewrite::ID = 0;
+
+// INITIALIZE_PASS expands initialize* in ::llvm; declare before defining.
+namespace llvm {
+void initializeHaydnBundledTwoAddressRewritePass(PassRegistry &);
+} // namespace llvm
+
+INITIALIZE_PASS(HaydnBundledTwoAddressRewrite, "haydn-bundled-twoaddr-rewrite",
+                "Haydn bundled two-address rewrite for SMS hard roots", false,
+                false)
+
+HaydnBundledTwoAddressRewrite::HaydnBundledTwoAddressRewrite()
+    : MachineFunctionPass(ID) {
+  initializeHaydnBundledTwoAddressRewritePass(*PassRegistry::getPassRegistry());
+}
+
+namespace {
+// Pass ID for insertPass (same TU as the class; anon-ns ID is link-local).
+char &HaydnBundledTwoAddressRewriteID = HaydnBundledTwoAddressRewrite::ID;
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Per-pass enable flags (pass bisection). Default ON; disable with
@@ -131,6 +277,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnTarget() {
   initializeHaydnFinalizeBundlePass(PR);
   initializeHaydnVerifyBundlesPass(PR);
   initializeHaydnHandoffBundleRootDefsPass(PR);
+  initializeHaydnBundledTwoAddressRewritePass(PR);
   initializeHaydnHardwareLoopsPass(PR);
   initializeHaydnFixupHwLoopsPass(PR);
   initializeBranchRelaxationLegacyPass(PR);
@@ -399,10 +546,23 @@ void HaydnPassConfig::addPreRegAlloc() {
 }
 
 void HaydnPassConfig::addOptimizedRegAlloc() {
-  // SMS handoff materialize keeps child-only vreg defs through IsSSA passes
-  // (ProcessImplicitDefs / PHIElimination). After TwoAddress leaves SSA,
-  // re-attach child defs on multi-member BUNDLE roots so LIS/coalescer see
-  // the architectural dual-def surface. No-op when handoff produced no roots.
+  // WP2 SMS hard-root RA survival (G-SMS-PRE-RA-HEXAGON):
+  //
+  // Pipeline after pre-RA MachinePipeliner handoff materialize:
+  //   IsSSA passes see child-only vreg defs on BUNDLE roots (no dual-def).
+  //   PHIElimination leaves SSA.
+  //   → haydn-bundled-twoaddr-rewrite (before TwoAddress): COPY+identity for
+  //     residual tied children inside multi-member hard roots. Must run
+  //     *before* TwoAddress under -verify-machineinstrs — the verifier fires
+  //     immediately after TwoAddress (TiedOpsRewritten) and would abort before
+  //     any insertPass-after-TwoAddress follower. Spill/copy recovery surface;
+  //     coalescer folds the COPY.
+  //   TwoAddress rewrites bare ties and sets TiedOpsRewritten.
+  //   → haydn-handoff-bundle-root-defs: re-attach child defs on multi-member
+  //     roots so LIS/coalescer see the architectural dual-def surface.
+  //   RegisterCoalescer → MachineScheduler (isSchedulingBoundary fence) →
+  //   greedy → VirtRegRewriter → postmisched exact-commit inside roots.
+  insertPass(&PHIEliminationID, &HaydnBundledTwoAddressRewriteID);
   insertPass(&TwoAddressInstructionPassID, &HaydnHandoffBundleRootDefsID);
   TargetPassConfig::addOptimizedRegAlloc();
 }

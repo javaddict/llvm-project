@@ -1,11 +1,10 @@
-# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
-# RUN:   -verify-machineinstrs %s -o - 2>&1 | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
 
-# Role: verifier — Illegal multi-member hard root fail-closed at exact-commit.
-#
-# Four independent ADD32 cannot form one product Format E cycle (issue width
-# 3). leaveMBB exact-commit must not split membership; fail closed instead of
-# silent sequential fall-through.
+# Role: product leaveMBB — illegal multi-member hard root is sequentialized
+# (Anti-order dissolve), not fail-closed. Four independent ADD32 cannot form
+# one product Format E cycle (issue width 3); membership cannot exact-commit,
+# so leaveMBB dissolves to bare ADDs instead of aborting the function.
 
 --- |
   define void @illegal_four_member_hard_root() { ret void }
@@ -18,7 +17,13 @@ body:             |
   bb.0:
     liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r15
 
-    ; CHECK: multi-member hard BUNDLE root is not one legal product cycle
+    ; CHECK-LABEL: name: illegal_four_member_hard_root
+    ; CHECK-NOT: BUNDLE
+    ; CHECK: ADD32
+    ; CHECK: ADD32
+    ; CHECK: ADD32
+    ; CHECK: ADD32
+    ; CHECK: RET
     BUNDLE implicit-def $r8, implicit-def $r9, implicit-def $r10, implicit-def $r11, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3, implicit $r4, implicit $r5, implicit $r6, implicit $r7 {
       $r8 = ADD32 $r0, $r1, implicit-def dead $sfr
       $r9 = ADD32 $r2, $r3, implicit-def dead $sfr

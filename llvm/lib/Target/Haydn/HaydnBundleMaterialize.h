@@ -26,8 +26,11 @@
 //     logical pack after FE8).
 //   * commitExactHardRootProductCycle — transactional recommit of a
 //     multi-member hard BUNDLE root (same children, member setDesc, field
-//     order, Format E row+completion); dissolves the old root shell and
-//     refinalizes so consolidated root operands/kills/InternalRead rebuild.
+//     order, Format E row+completion). Pre-validates one-cycle legality
+//     (no-forwarding RAW + product pack) *before* dissolving the old root
+//     so illegal membership never silently unbundles a frozen SMS group;
+//     then dissolves the shell and refinalizes so consolidated root
+//     operands/kills/InternalRead rebuild. Post-RA commit-inside-group only.
 //   * commitLateProductCycle / finalizeExactLateSingleton — late layout
 //     firewall: empty-cycle tryAdd → setDesc + stamp Format E commit.
 //   * greedySplitLegalOpcodeCycles — DIAGNOSTIC ONLY (ResMII / unit tests).
@@ -206,18 +209,16 @@ inline bool opcodesFormOneLegalCycle(ArrayRef<unsigned> Opcodes,
   return exactPackOneOpcodeCycle(Opcodes, Fmts).has_value();
 }
 
-/// True iff \p Instrs (in schedule/issue order) contain a same-cycle **true
-/// register dependence** hazard under Haydn's no-forwarding law: a **live**
-/// def of R by an EARLIER member and a use of R by a LATER member. The later
-/// reader wants the producer's new value, which intra-bundle forwarding cannot
-/// supply, so the cycle is illegal and must split.
+/// **Available-cycle detect** (and no-forwarding RAW): true iff \p Instrs in
+/// schedule/issue order have a **live** def of R by an EARLIER member and a
+/// use of R by a LATER member. That shape must not share one ReadyCycle —
+/// Data edges keep latency ≥1 so producer/consumer never share available
+/// cycle; seeing this on a same-cycle list means the avail-cycle contract
+/// is broken (or Anti use-before-redef was inverted after physreg paint).
 ///
 /// Order-sensitive, matching HaydnHazardRecognizer::hasSameBundleRAW (which
 /// tracks CurrentCycleLiveDefs incrementally as members append in issue
-/// order). The scheduler issues a producer before its RAW consumer
-/// (topological order), and adjustSchedDependency keeps data-edge latency
-/// ≥1 so a producer and consumer never share a ReadyCycle; a same-cycle
-/// earlier-live-def/later-use is therefore exactly the true-RAW class.
+/// order).
 ///
 /// A LATER member's live def read by an EARLIER member is WAR/snapshot: the
 /// earlier reader correctly observes the pre-cycle (OLD) value — legal. The
@@ -279,13 +280,110 @@ inline bool cycleMembersHaveTrueRAW(ArrayRef<MachineInstr *> Instrs,
   return false;
 }
 
-/// MI-list view of product one-cycle legality. Production PostRA commit
-/// authority — strategy must not dual-walk MachineBundle.
+//===----------------------------------------------------------------------===//
+// Product coissue law (one architectural issue cycle)
+//===----------------------------------------------------------------------===//
+//
+// **Available cycle is the primary detector.** Ops may share a cycle only if
+// the scheduler already gave them the same available/ready cycle
+// (TopReadyCycle / SMS cycle). That is not optional bookkeeping:
+//
+//   * **Data** edges: adjustSchedDependency keeps latency ≥1 ⇒ producer and
+//     consumer never share ReadyCycle. \p cycleMembersHaveTrueRAW on the
+//     member list is the MI-level restate of that contract (def-before-use
+//     of a live reg in one cycle = avail-cycle broken / no-forwarding RAW).
+//
+//   * **Anti** edges: latency 0 may share ReadyCycle only with **use-before-
+//     redef** order. Schedule-order true RAW is exactly "Anti order inverted"
+//     after RA paints one physreg onto a former vreg-independent pair
+//     (e.g. SEQ(limit) + ADD that redefs the limit reg for an address).
+//
+//   * **Field order** (layer 3): emission permute must still not invent true
+//     RAW. \p canCoissueProductCycle checks preferred exactSolve placement.
+//
+// Free pack: refuse multi-MI if avail-cycle detect fails (true RAW or Data
+// Lat≥1). Hard-root refuse: lower as **sequential cycles under Anti order**
+// (use-before-def) — the same order ReadyCycle would have used if Anti had
+// forced separation — via \p orderMembersUseBeforeDefForAnti. Not a separate
+// "WAR rewrite" product path.
+//
+//===----------------------------------------------------------------------===//
+
+/// Reorder \p Members so that for each physreg that is both live-def'd and
+/// read inside the list, every **read** appears before that reg's **def**
+/// when a safe swap exists (no new RAW the other way).
+///
+/// This is the Anti **available-cycle order**: use-before-redef. Call when
+/// \p cycleMembersHaveTrueRAW is true on the current order (avail-cycle
+/// detect failed) and the list must be lowered sequential rather than packed.
+/// Returns true if the order changed.
+inline bool orderMembersUseBeforeDefForAnti(
+    SmallVectorImpl<MachineInstr *> &Members, const TargetRegisterInfo *TRI) {
+  if (Members.size() < 2)
+    return false;
+  bool Any = false;
+  bool Changed = true;
+  for (unsigned Guard = 0; Changed && Guard < 8; ++Guard) {
+    Changed = false;
+    for (unsigned I = 0; I + 1 < Members.size(); ++I) {
+      MachineInstr *A = Members[I];
+      MachineInstr *B = Members[I + 1];
+      if (!A || !B)
+        continue;
+      auto reads = [&](const MachineInstr &MI, Register R) {
+        for (const MachineOperand &MO : MI.operands()) {
+          if (!MO.isReg() || !MO.getReg().isPhysical())
+            continue;
+          if (!(MO.isUse() || (MO.isDef() && MO.getSubReg())))
+            continue;
+          Register Reg = MO.getReg();
+          if (Reg == R || (TRI && TRI->regsOverlap(Reg, R)))
+            return true;
+        }
+        return false;
+      };
+      bool NeedSwap = false;
+      for (const MachineOperand &MO : A->all_defs()) {
+        if (!MO.isReg() || MO.isDead() || !MO.getReg().isPhysical())
+          continue;
+        Register R = MO.getReg();
+        if (!reads(*B, R))
+          continue;
+        bool CreatesRAW = false;
+        for (const MachineOperand &BD : B->all_defs()) {
+          if (!BD.isReg() || BD.isDead() || !BD.getReg().isPhysical())
+            continue;
+          if (reads(*A, BD.getReg())) {
+            CreatesRAW = true;
+            break;
+          }
+        }
+        if (!CreatesRAW) {
+          NeedSwap = true;
+          break;
+        }
+      }
+      if (NeedSwap) {
+        std::swap(Members[I], Members[I + 1]);
+        Changed = true;
+        Any = true;
+      }
+    }
+  }
+  return Any;
+}
+
+/// MI-list view of product one-cycle legality at **schedule / available-cycle
+/// order**. Production PostRA commit authority — strategy must not dual-walk
+/// Bundle.
 ///
 /// Rejects:
 ///   * INLINEASM (opaque layout boundary; multi-MI must not cross it)
-///   * same-cycle true RAW (no-forwarding law; see cycleMembersHaveTrueRAW)
+///   * \p cycleMembersHaveTrueRAW — **available-cycle detect**: def-before-use
+///     of a live reg cannot share one ReadyCycle under no-forwarding
 ///   * opcode lists that do not pack into one Format E product cycle
+///
+/// Does **not** validate field-order emission — use \p canCoissueProductCycle.
 inline bool instrsFormOneLegalCycle(ArrayRef<MachineInstr *> Instrs,
                                     HaydnBaseMCFormats &Fmts) {
   if (Instrs.empty() || Instrs.size() > Haydn::ISSUE_SLOT_COUNT)
@@ -302,11 +400,104 @@ inline bool instrsFormOneLegalCycle(ArrayRef<MachineInstr *> Instrs,
     const MachineFunction *MF = Instrs.front()->getMF();
     const TargetRegisterInfo *TRI =
         MF ? MF->getSubtarget().getRegisterInfo() : nullptr;
+    // Available-cycle detect (same as ReadyCycle / Data Lat≥1 contract).
     if (cycleMembersHaveTrueRAW(Instrs, TRI))
       return false;
   }
 
   return opcodesFormOneLegalCycle(Opcodes, Fmts);
+}
+
+/// Full **emission** coissue probe for one product cycle (layer 3 + schedule
+/// pack). Caller must already have same available/ready cycle (layer 1) and
+/// no blocking Data deps (layer 2).
+///
+/// Runs schedule-order legality, exactSolve/setDesc, MachineBundle encode,
+/// and **field-order** no-forwarding RAW. Temporary setDesc is reverted so
+/// pre-RA SMS handoff can probe without freezing illegal hard roots.
+///
+/// Alias kept for existing call sites: \p instrsCanExactCommitProductCycle.
+inline bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs) {
+  if (Instrs.size() < 2 || Instrs.size() > Haydn::ISSUE_SLOT_COUNT)
+    return false;
+  for (MachineInstr *MI : Instrs) {
+    if (!MI || !MI->getParent() || !MI->getMF() || MI->isInlineAsm())
+      return false;
+  }
+
+  HaydnMCFormats Fmts;
+  if (!instrsFormOneLegalCycle(Instrs, Fmts))
+    return false;
+
+  MachineFunction &MF = *Instrs.front()->getMF();
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+
+  SmallVector<unsigned, 3> SavedOps;
+  SavedOps.reserve(Instrs.size());
+  for (MachineInstr *MI : Instrs)
+    SavedOps.push_back(MI->getOpcode());
+
+  auto restoreDescs = [&]() {
+    for (unsigned I = 0, E = Instrs.size(); I != E; ++I) {
+      if (Instrs[I]->getOpcode() != SavedOps[I])
+        Instrs[I]->setDesc(TII.get(SavedOps[I]));
+    }
+  };
+
+  // Bake members the same way commitExactMultiMIProductCycle does.
+  {
+    SmallVector<unsigned, 3> Ops = SavedOps;
+    if (auto Exact = exactSolveProductOpcodes(Ops, Fmts)) {
+      for (unsigned I = 0, E = Instrs.size(); I != E; ++I) {
+        const unsigned Member = Exact->MemberOpcodes[I];
+        if (Member != Instrs[I]->getOpcode())
+          Instrs[I]->setDesc(TII.get(Member));
+      }
+    } else {
+      for (unsigned Opc : Ops) {
+        if (hasPlacementAlternatives(Fmts, Opc)) {
+          restoreDescs();
+          return false;
+        }
+      }
+      if (!opcodesFormOneLegalCycle(Ops, Fmts)) {
+        restoreDescs();
+        return false;
+      }
+    }
+  }
+
+  Haydn::MachineBundle Bundle(&Fmts);
+  for (MachineInstr *MI : Instrs) {
+    if (!Bundle.canAdd(MI)) {
+      restoreDescs();
+      return false;
+    }
+    Bundle.add(MI);
+  }
+  if (Bundle.size() <= 1 || Bundle.isStandalone()) {
+    restoreDescs();
+    return false;
+  }
+  const VLIWFormat *Fmt = Bundle.getFormatOrNull();
+  if (!Fmt) {
+    restoreDescs();
+    return false;
+  }
+
+  SmallVector<MachineInstr *, 3> FieldOrdered =
+      getFieldOrderedMembers(Bundle, *Fmt);
+  // Field order = emission order. True RAW here means an Anti/WAR that the
+  // preferred placement cannot preserve (use-before-redef flipped).
+  const bool FieldRAW = cycleMembersHaveTrueRAW(FieldOrdered, TRI);
+  restoreDescs();
+  return !FieldRAW;
+}
+
+/// Historical name — prefer \p canCoissueProductCycle.
+inline bool instrsCanExactCommitProductCycle(ArrayRef<MachineInstr *> Instrs) {
+  return canCoissueProductCycle(Instrs);
 }
 
 //===----------------------------------------------------------------------===//
@@ -628,13 +819,16 @@ inline bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
 
 /// Transactional exact-commit of a multi-member hard BUNDLE root.
 /// Same children, selected member descriptors, canonical field order,
-/// Format E row+completion stamp. Dissolves the old logical root inside one
-/// helper so no other pass observes an unbundled state. Hard groups survive.
+/// Format E row+completion stamp. Hard groups survive as atomic parcels;
+/// membership is never split and never free-repacked with neighbors.
 ///
-/// The dissolve erases the prior BUNDLE header (stale consolidated
-/// operands/kills). Refinalize via commitExactMultiMIProductCycle rebuilds
-/// root implicit-def/use + kill/dead flags and child InternalRead markers
-/// from the live post-setDesc members.
+/// Contract (SMS pre-RA durable groups / architectural rematch):
+///   * Pack and Format-E commit happen *inside* the frozen group only.
+///   * Illegal membership fails closed *before* dissolve — never leave the
+///     kernel unbundled so a later free pack can invent stages or splice
+///     across pre-RA cycle groups.
+///   * Successful path dissolves the stale shell then refinalizes via
+///     commitExactMultiMIProductCycle (root ops/kills/InternalRead rebuild).
 ///
 /// \p BundleRoot must be TargetOpcode::BUNDLE with ≥2 real children.
 /// \p MII provides MCInstrDesc for member setDesc (TargetInstrInfo ok).
@@ -649,6 +843,10 @@ inline bool commitExactHardRootProductCycle(MachineInstr &BundleRoot,
     return false;
 
   MachineBasicBlock &MBB = *BundleRoot.getParent();
+  MachineFunction *MF = MBB.getParent();
+  if (!MF)
+    return false;
+
   SmallVector<MachineInstr *, 3> Kids;
   for (MachineBasicBlock::instr_iterator I =
            std::next(BundleRoot.getIterator());
@@ -668,16 +866,20 @@ inline bool commitExactHardRootProductCycle(MachineInstr &BundleRoot,
     Ops.push_back(K->getOpcode());
   }
 
+  // Pre-dissolve legality must match commitExactMultiMIProductCycle, including
+  // **field-order** no-forwarding RAW. Schedule-order WAR can flip to true RAW
+  // under Format field order (residual S2→S0); RA can also turn pre-RA vreg
+  // independence into physreg WAR. Probe with canCoissueProductCycle (emission
+  // layer: temp setDesc + field-order Anti preservation) so dissolve never
+  // runs on a group that commit cannot finish — callers sequentialize safely.
+  if (!canCoissueProductCycle(Kids))
+    return false;
+
+  // Bake format-member opcodes before dissolve/re-finalize (same as commit).
+  // setDesc does not rebuild child operands/ties/implicits — consolidated root
+  // ops are rebuilt below by commitExactMultiMIProductCycle.
   HaydnMCFormats Fmts;
-  std::optional<ExactProductCycle> Exact = exactSolveProductOpcodes(Ops, Fmts);
-  if (!Exact) {
-    // Already-member path: encode oracle only (no setDesc rewrite).
-    if (!opcodesFormOneLegalCycle(Ops, Fmts))
-      return false;
-  } else {
-    // Bake format-member opcodes before dissolve/re-finalize.
-    // setDesc does not rebuild child operands/ties/implicits — logical→member
-    // shape compatibility is the gate; consolidated root ops are rebuilt below.
+  if (auto Exact = exactSolveProductOpcodes(Ops, Fmts)) {
     for (unsigned I = 0, E = Kids.size(); I != E; ++I) {
       const unsigned Member = Exact->MemberOpcodes[I];
       if (Member != Kids[I]->getOpcode())
@@ -703,7 +905,15 @@ inline bool commitExactHardRootProductCycle(MachineInstr &BundleRoot,
   }
   BundleRoot.eraseFromParent();
 
-  return commitExactMultiMIProductCycle(Kids);
+  if (!commitExactMultiMIProductCycle(Kids))
+    return false;
+
+  // Authoritative post-commit stamp: the new BUNDLE root must carry a product
+  // Format E row. Surviving hard groups are never left as unstamped shells.
+  MachineInstr &NewRoot = *getBundleStart(Kids.front()->getIterator());
+  if (!NewRoot.isBundle() || !getBundleRowID(NewRoot).has_value())
+    return false;
+  return true;
 }
 
 //===----------------------------------------------------------------------===//

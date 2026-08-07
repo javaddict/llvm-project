@@ -183,13 +183,16 @@ void HaydnSubtarget::adjustSchedDependency(
   // Haydn has **no** intra-bundle / same-cycle register forwarding: every
   // slot in a product cycle reads the pre-cycle register snapshot
   // (BundleSim execution model; durable-rules §Schedule). Data edges must
-  // keep latency ≥1 so a producer and its consumer never share ReadyCycle.
+  // keep latency ≥1 so a producer and its consumer never share **available
+  // / ReadyCycle** — that is the primary coissue separator (layer 1 of the
+  // product coissue law in HaydnBundleMaterialize.h).
   //
-  // A prior ALU→ALU latency 1→0 collapse ("same-cycle VLIW forwarding") was
-  // architecturally false and densified MOVE32_DR_*→SEXT (soft-float half
-  // extract) into one multi-MI product cycle — muldf3 O1/O2 miscompile
-  // (1.5*2.5). Do not reintroduce forwarding via latency collapse.
-  // Post-RA hasSameBundleRAW + cycleMembersHaveTrueRAW are belts only.
+  // Anti/Output stay latency 0 so they *may* share a ready cycle; emission
+  // order must still preserve Anti (use before redef) under Format field
+  // order (layer 3 canCoissueProductCycle). Do not collapse Data latency to
+  // 0 (prior ALU→ALU "forwarding" densified MOVE32_DR_*→SEXT — muldf3 bug).
+  // Reg-level true-RAW checks are belts over this dep-graph / avail-cycle
+  // contract, not the sole coissue authority.
 }
 
 void HaydnSubtarget::initLibcallLoweringInfo(

@@ -84,16 +84,20 @@ define i64 @test_mixed_pressure(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
 ; CHECK-NEXT:    { add64 d11, d8, d1; or64 d10, d3, d3; add32 r1, r3, r1 }
 ; CHECK-NEXT:    { or64 d0, d11, d11; nop }
 ; CHECK-NEXT:    { jal_w lr, consume_both; nop }
-; CHECK-NEXT:    { add64 d0, d8, d12; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { add64 d0, d8, d12; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { add64 d0, d9, d0; nop }
 ; CHECK-NEXT:    { add64 d0, d10, d0; nop }
 ; CHECK-NEXT:    { add64 d0, d12, d0; nop }
 ; CHECK-NEXT:    { add64 d0, d8, d0; nop }
 ; CHECK-NEXT:    { add64 d0, d9, d0; nop }
 ; CHECK-NEXT:    { addi32_w r1, r0, 346; nop }
-; CHECK-NEXT:    { add64 d0, d10, d0; sext32t64 d1, r1 }
-; CHECK-NEXT:    { add64 d0, d12, d0; slli64 d1, d1, 32 }
-; CHECK-NEXT:    { srli64 d1, d1, 32; add64 d0, d0, d11 }
+; CHECK-NEXT:    { add64 d0, d10, d0; nop }
+; CHECK-NEXT:    { sext32t64 d1, r1; nop }
+; CHECK-NEXT:    { add64 d0, d12, d0; nop }
+; CHECK-NEXT:    { slli64 d1, d1, 32; nop }
+; CHECK-NEXT:    { srli64 d1, d1, 32; nop }
+; CHECK-NEXT:    { add64 d0, d0, d11; nop }
 ; CHECK-NEXT:    { add64 d0, d0, d1; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { ld64 d12, sp, 1; nop }
@@ -175,7 +179,8 @@ define i64 @test_alternating_banks(i32 %a, i64 %b, i32 %c, i64 %d) nounwind {
 ; CHECK-NEXT:    { slli64 d8, d8, 32; nop }
 ; CHECK-NEXT:    { srli64 d8, d8, 32; nop }
 ; CHECK-NEXT:    { jal_w lr, use_i32; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; sext32t64 d0, r1 }
+; CHECK-NEXT:    { sext32t64 d0, r1; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { slli64 d0, d0, 32; nop }
 ; CHECK-NEXT:    { srli64 d0, d0, 32; nop }
 ; CHECK-NEXT:    { add64 d0, d9, d0; nop }
@@ -242,21 +247,35 @@ define i64 @test_addr_plus_data_pressure(i64 %base, i32 %offset, i32 %stride) no
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { move32 r1, r8; nop }
 ; CHECK-NEXT:    { jal_w lr, consume_both; nop }
-; CHECK-NEXT:    { add64 d0, d8, d8; ld32 r2, sp, 5; add32 r1, r10, r11 } // 4-byte Folded Reload
+; CHECK-NEXT:    { ld32 r2, sp, 5; nop } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
-; CHECK-NEXT:    { add32 r1, r1, fp; add64 d0, d8, d0; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { add32 r1, r1, r9; add64 d0, d8, d0 }
-; CHECK-NEXT:    { add32 r1, r1, r2; add64 d0, d8, d0; ld32 r2, sp, 4 } // 4-byte Folded Reload
+; CHECK-NEXT:    { add32 r1, r10, r11; nop }
+; CHECK-NEXT:    { add64 d0, d8, d8; nop }
+; CHECK-NEXT:    { add32 r1, r1, fp; nop }
+; CHECK-NEXT:    { add64 d0, d8, d0; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { add32 r1, r1, r9; nop }
+; CHECK-NEXT:    { add64 d0, d8, d0; nop }
+; CHECK-NEXT:    { add32 r1, r1, r2; nop }
+; CHECK-NEXT:    { ld32 r2, sp, 4; nop } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
-; CHECK-NEXT:    { add32 r1, r1, r2; add64 d0, d8, d0; ld32 r2, sp, 3 } // 4-byte Folded Reload
+; CHECK-NEXT:    { add64 d0, d8, d0; nop }
+; CHECK-NEXT:    { add32 r1, r1, r2; nop }
+; CHECK-NEXT:    { ld32 r2, sp, 3; nop } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
-; CHECK-NEXT:    { add32 r1, r1, r2; add64 d0, d8, d0 }
-; CHECK-NEXT:    { add32 r1, r1, r8; add64 d0, d0, d9 }
+; CHECK-NEXT:    { add64 d0, d8, d0; nop }
+; CHECK-NEXT:    { add32 r1, r1, r2; nop }
+; CHECK-NEXT:    { add64 d0, d8, d0; nop }
+; CHECK-NEXT:    { add32 r1, r1, r8; nop }
+; CHECK-NEXT:    { add64 d0, d0, d9; nop }
 ; CHECK-NEXT:    { sext32t64 d1, r1; nop }
 ; CHECK-NEXT:    { addi32_w r1, r0, 84; nop }
-; CHECK-NEXT:    { slli64 d1, d1, 32; sext32t64 d2, r1 }
-; CHECK-NEXT:    { srli64 d1, d1, 32; slli64 d2, d2, 32 }
-; CHECK-NEXT:    { srli64 d2, d2, 32; add64 d0, d0, d1 }
+; CHECK-NEXT:    { slli64 d1, d1, 32; nop }
+; CHECK-NEXT:    { sext32t64 d2, r1; nop }
+; CHECK-NEXT:    { srli64 d1, d1, 32; nop }
+; CHECK-NEXT:    { slli64 d2, d2, 32; nop }
+; CHECK-NEXT:    { srli64 d2, d2, 32; nop }
+; CHECK-NEXT:    { add64 d0, d0, d1; nop }
 ; CHECK-NEXT:    { add64 d0, d0, d2; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { ld64 d9, sp, 3; nop }

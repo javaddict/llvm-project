@@ -36,7 +36,8 @@ define i32 @factorial(i32 %n) nounwind {
 ; CHECK-NEXT:    { add32 r2, r1, r2; move32 r8, r1 }
 ; CHECK-NEXT:    { move32 r1, r2; nop }
 ; CHECK-NEXT:    { jal_w lr, factorial; nop }
-; CHECK-NEXT:    { mull r1, r8, r1; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { mull r1, r8, r1; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:  .LBB0_3: // %base
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { ld32 lr, sp, 2; nop }
@@ -112,10 +113,12 @@ define i32 @fib(i32 %n) nounwind {
 ; CHECK-NEXT:    { add32 r2, r1, r2; add32 r8, r1, r3 }
 ; CHECK-NEXT:    { move32 r1, r2; nop }
 ; CHECK-NEXT:    { jal_w lr, fib; nop }
-; CHECK-NEXT:    { move32 r9, r1; move32 r1, r8 }
+; CHECK-NEXT:    { move32 r9, r1; nop }
+; CHECK-NEXT:    { move32 r1, r8; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { jal_w lr, fib; nop }
-; CHECK-NEXT:    { add32 r1, r9, r1; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { add32 r1, r9, r1; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:  .LBB2_2: // %base
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { ld32 lr, sp, 3; nop }
@@ -227,10 +230,12 @@ define i32 @tree_sum(i32 %n) nounwind {
 ; CHECK-NEXT:    { sra32 r8, r1, r2; nop }
 ; CHECK-NEXT:    { move32 r1, r8; nop }
 ; CHECK-NEXT:    { jal_w lr, tree_sum; nop }
-; CHECK-NEXT:    { move32 r9, r1; move32 r1, r8 }
+; CHECK-NEXT:    { move32 r9, r1; nop }
+; CHECK-NEXT:    { move32 r1, r8; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { jal_w lr, tree_sum; nop }
-; CHECK-NEXT:    { add32 r1, r9, r1; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { add32 r1, r9, r1; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:  .LBB5_2: // %base
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { ld32 lr, sp, 3; nop }

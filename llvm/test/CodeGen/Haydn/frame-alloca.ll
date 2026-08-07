@@ -111,7 +111,8 @@ define ptr @dynamic_alloca_with_call(i32 %size) {
 ; CHECK-NEXT:    { sub32 r8, sp, r1; nop }
 ; CHECK-NEXT:    { move32 r1, r8; nop }
 ; CHECK-NEXT:    { jal_w lr, use_ptr; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; move32 r1, r8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { move32 r1, r8; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { addi32_w sp, fp, -24; nop }
 ; CHECK-NEXT:    { ld32 lr, sp, 3; nop }

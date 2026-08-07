@@ -1115,6 +1115,54 @@ TEST(HaydnBundleTest, SMSHookIIWrapIssueTimeOnlyFalseAccept) {
   EXPECT_FALSE(smsHookRejectsIIWrapFalseAccept(1, 2));
 }
 
+// FE5B WP4 whole-kernel periodic certificate (G-SMS-PRE-RA-HEXAGON):
+// original-loop retain until final accept, recoverable rollback on fail,
+// II-wrap/long occupancy fail-closed, same-bank simultaneous defs fail-closed.
+// Does not enable product multi-stage (WP5). Authority: HaydnResourceCycle.
+TEST(HaydnBundleTest, SMSPeriodicCertificatePins) {
+  using RC = HaydnResourceCycle;
+  EXPECT_TRUE(RC::productPeriodicCertificatePins());
+
+  // Lifecycle retain / discard / rollback polarity.
+  EXPECT_TRUE(SMSPeriodicCertificate::originalLoopMustRemain(
+      SMSCertLifecycle::OriginalRetained));
+  EXPECT_TRUE(SMSPeriodicCertificate::originalLoopMustRemain(
+      SMSCertLifecycle::PreRewriteProved));
+  EXPECT_TRUE(SMSPeriodicCertificate::originalLoopMustRemain(
+      SMSCertLifecycle::PostRewriteValid));
+  EXPECT_FALSE(SMSPeriodicCertificate::mayDiscardOriginalLoop(
+      SMSCertLifecycle::OriginalRetained));
+  EXPECT_TRUE(SMSPeriodicCertificate::mayDiscardOriginalLoop(
+      SMSCertLifecycle::Accepted));
+  EXPECT_TRUE(SMSPeriodicCertificate::mustRollback(SMSCertLifecycle::Rejected));
+
+  // Legal two-phase single-cycle kernel certifies to Accepted.
+  const SMSCertPhaseOp Legal[] = {
+      {0, Haydn::ADD32, 1, 1, 1},
+      {1, Haydn::XOR32, 1, 1, 2},
+  };
+  EXPECT_TRUE(RC::proveWholeKernelPeriodicPhases(/*II=*/2, Legal));
+  EXPECT_EQ(RC::runPeriodicCertificate(/*II=*/2, Legal, /*Post=*/true),
+            SMSCertLifecycle::Accepted);
+  // Post-rewrite fail → Rejected (rollback); original was retained until then.
+  EXPECT_EQ(RC::runPeriodicCertificate(/*II=*/2, Legal, /*Post=*/false),
+            SMSCertLifecycle::Rejected);
+
+  // Multi-cycle / II-wrap fail-closed.
+  const SMSCertPhaseOp Multi[] = {{0, Haydn::ADD32, 2, 1, 1}};
+  EXPECT_FALSE(RC::proveWholeKernelPeriodicPhases(/*II=*/2, Multi));
+  EXPECT_TRUE(RC::productIIWrapLongOccupancyFailsClosed(/*Stage=*/2, /*II=*/2));
+
+  // Same-phase same-reg WAW fail-closed.
+  const SMSCertPhaseOp Waw[] = {
+      {0, Haydn::ADD32, 1, 1, 9},
+      {0, Haydn::XOR32, 1, 1, 9},
+  };
+  EXPECT_TRUE(RC::sameBankSimultaneousDefsFailClosed(Waw, /*II=*/1));
+  EXPECT_FALSE(RC::proveWholeKernelPeriodicPhases(/*II=*/1, Waw));
+}
+
+
 // Soft-exit format-SMS QoR (SMS slice): II floors + post-RA exact-pack
 // metrics; no HANDOFF invent. Pins HaydnResourceCycle::softExitIIFloor =
 // max(format exhaustive ResMII, port ResMII). RecMII remains DDG/itinerary

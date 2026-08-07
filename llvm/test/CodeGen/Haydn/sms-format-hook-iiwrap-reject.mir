@@ -19,8 +19,13 @@
 # Unit peers:
 #   HaydnResourceRestrictionClassesTest.IIWrapPhaseMathAndFalseAcceptPolarity
 #   HaydnBundleTest.SMSHookIIWrapIssueTimeOnlyFalseAccept
+#   HaydnBundleTest.SMSPeriodicCertificatePins (WP4 FE5B whole-kernel cert)
+#   HaydnPortModelTest.PreRASMSPeriodicCertificateSurface
 # Companion generic HOOK force: sms-format-hook-reject.mir
 # Companion accept path: sms-format-resmii.mir (SMS-NOT: SMS-HOOK: reject).
+# WP4: product original-loop retain/rollback + whole-kernel periodic proof
+# live on HaydnResourceCycle; this lit remains the II-wrap force-reject
+# catalog pin. Half-enabled multi-stage product stays OFF (WP5 not flipped).
 #
 # IIWRAP: SMS-HOOK: reject — II-wrap issue-time-only false-accept
 # IIWRAP: SMS: analyzeLoopForPipelining fail-closed (unsupported SMS-HOOK resource class)

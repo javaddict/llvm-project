@@ -24,8 +24,7 @@
 ;
 ; Fix: track InvertMI (the XORI) and ignore it with CmpMI/EndLoop so the
 ; whole exit-control chain is unpipelineable stage-0. computeUnpipelineableNodes
-; also pulls the IV bump into stage 0. Product multi-stage-naive reject
-; (handoff off) further refuse bare multi-stage expansion.
+; also pulls the IV bump into stage 0. Product multi-stage always materializes durable groups.
 ;
 ; Contract checked below:
 ;   SWP -- "Do not pipeline" covers the XORI (SU that defines the invert).
@@ -36,7 +35,7 @@
 ; XORI is unpipelineable (InvertMI). Stage-forced with SEQ/IV.
 ; SWP: Do not pipeline SU({{[0-9]+}})
 ; SWP: XORI32
-; Accepted multi-stage expansion must not stick for product handoff-off.
+; InvertMI stage-0 keeps this latch unpipelineable (no multi-stage expand).
 ; SWP: No schedule found, return
 
 ; MIR-LABEL: name: countdown_seq_xori

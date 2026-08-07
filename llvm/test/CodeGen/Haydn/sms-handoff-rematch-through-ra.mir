@@ -1,0 +1,122 @@
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-before=greedy -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=SCHED
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=register-coalescer \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=COALESCER
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=greedy -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=GREEDY
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=virtregrewriter -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=VRW
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=virtregrewriter -stress-regalloc=4 -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s --check-prefix=SPILL
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=greedy -haydn-ra-compact-hints=true -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s --check-prefix=GREEDY
+# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN:   -stop-after=virtregrewriter -haydn-ra-compact-hints=true \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=VRW
+# REQUIRES: asserts
+
+# Role: MIR — WP2 architectural multi-member hard BUNDLE RA survival (green).
+#
+# G-SMS-PRE-RA-HEXAGON WP-LIT pin: rematch ADD32 + 2×ADD64 logical hard root
+# survives machine-scheduler → register-coalescer → greedy → VirtRegRewriter
+# with zero member loss / no private-slot form. Compact soft-order interop
+# (-haydn-ra-compact-hints=true) cannot unbundle.
+#
+# This is the architectural peer of SMS handoff groups (isSchedulingBoundary
+# fence + finalizeBundle children stay logical through RA). Continuous SMS
+# producer CONT (clone→cycle groups through pipeliner→RA→postmisched) remains
+# XFAIL in sms-handoff-bundle-through-ra.mir until WP2 root-def / two-address
+# path lands. Green expand-only: sms-handoff-materialize-groups.mir.
+
+--- |
+  define i32 @sms_handoff_rematch_members(i32 %a, i32 %b, i64 %x0, i64 %y0,
+                                         i64 %x1, i64 %y1) #0 {
+  entry:
+    ret i32 undef
+  }
+  attributes #0 = { "target-features"="-hwloop" }
+...
+---
+name:            sms_handoff_rematch_members
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $d0, $d1, $d2, $d3
+
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:dr64 = COPY $d0
+    %3:dr64 = COPY $d1
+    %4:dr64 = COPY $d2
+    %5:dr64 = COPY $d3
+    ; Independent neighbor before the hard root.
+    %ind_pre:gpr32 = ADDI32 %0:gpr32, 7, implicit-def dead $sfr
+    ; Architectural rematch triple: ADD32 + 2×ADD64 as one hard BUNDLE.
+    BUNDLE implicit-def %6:gpr32, implicit-def %7:dr64, implicit-def %8:dr64, implicit-def dead $sfr, implicit %0, implicit %1, implicit %2, implicit %3, implicit %4, implicit %5 {
+      %6:gpr32 = ADD32 %0:gpr32, %1:gpr32, implicit-def dead $sfr
+      %7:dr64 = ADD64 %2:dr64, %3:dr64, implicit-def dead $sfr
+      %8:dr64 = ADD64 %4:dr64, %5:dr64, implicit-def dead $sfr
+    }
+    ; Dependent on a bundle member — must stay outside the group.
+    %dep:gpr32 = ADDI32 %6:gpr32, 1, implicit-def dead $sfr
+    %ind_post:gpr32 = ADDI32 %0:gpr32, 11, implicit-def dead $sfr
+    %t0:gpr32 = ADD32 %dep:gpr32, %ind_pre:gpr32, implicit-def dead $sfr
+    %t1:gpr32 = ADD32 %t0:gpr32, %ind_post:gpr32, implicit-def dead $sfr
+    $r0 = COPY %t1:gpr32
+    RET implicit $r0, implicit $r15
+
+  ; SCHED-LABEL: name: sms_handoff_rematch_members
+  ; SCHED: ADDI32
+  ; SCHED: BUNDLE{{.*}}{
+  ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; SCHED-NEXT: {{%[0-9]+}}:dr64 = ADD64
+  ; SCHED-NEXT: {{%[0-9]+}}:dr64 = ADD64
+  ; SCHED-NEXT: }
+  ; SCHED: ADDI32
+  ; SCHED-NOT: ADD32_S
+  ; SCHED-NOT: ADD64_S
+
+  ; Isolated register-coalescer: hard root membership holds.
+  ; COALESCER-LABEL: name: sms_handoff_rematch_members
+  ; COALESCER: BUNDLE{{.*}}{
+  ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; COALESCER-NEXT: {{%[0-9]+}}:dr64 = ADD64
+  ; COALESCER-NEXT: {{%[0-9]+}}:dr64 = ADD64
+  ; COALESCER-NEXT: }
+  ; COALESCER-NOT: ADD32_S
+  ; COALESCER-NOT: ADD64_S
+
+  ; GREEDY-LABEL: name: sms_handoff_rematch_members
+  ; GREEDY: BUNDLE{{.*}}{
+  ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
+  ; GREEDY-NEXT: {{%[0-9]+}}:dr64 = ADD64
+  ; GREEDY-NEXT: {{%[0-9]+}}:dr64 = ADD64
+  ; GREEDY-NEXT: }
+  ; GREEDY-NOT: ADD32_S
+  ; GREEDY-NOT: ADD64_S
+
+  ; VRW-LABEL: name: sms_handoff_rematch_members
+  ; VRW: BUNDLE{{.*}}{
+  ; VRW-NEXT: ${{r[0-9]+}} = ADD32
+  ; VRW-NEXT: ${{d[0-9]+}} = ADD64
+  ; VRW-NEXT: ${{d[0-9]+}} = ADD64
+  ; VRW-NEXT: }
+  ; VRW-NOT: ADD32_S
+  ; VRW-NOT: ADD64_S
+
+  ; stress-regalloc=4: membership holds (spill/reload may or may not appear
+  ; for this compact rematch shape; root must not unbundle / private-slot).
+  ; SPILL-LABEL: name: sms_handoff_rematch_members
+  ; SPILL: BUNDLE{{.*}}{
+  ; SPILL-NEXT: ${{r[0-9]+}} = ADD32
+  ; SPILL-NEXT: ${{d[0-9]+}} = ADD64
+  ; SPILL-NEXT: ${{d[0-9]+}} = ADD64
+  ; SPILL-NEXT: }
+  ; SPILL-NOT: ADD32_S
+  ; SPILL-NOT: ADD64_S

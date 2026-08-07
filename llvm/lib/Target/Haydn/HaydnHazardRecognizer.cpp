@@ -635,6 +635,8 @@ bool HaydnHazardRecognizer::hasSameBundleWAW(const MachineInstr &MI) const {
   // as MachineInstr::modifiesRegister (the retired packetizer's
   // hasWAWHazard). Virtual registers (pre-RA) match by Register identity;
   // physregs use TRI::regsOverlap for aliases/subregs.
+  // FE5B WP4: dual of HaydnResourceCycle same-phase WAW / certificate
+  // same-reg DefRegKey fail-close (productSamePhaseWAWFailsClosed).
   //
   // R0 is *soft*-zero (not hardwired): XOR32 R0,R0,R0 and LD into R0 are real
   // write-port consumers. Excluding R0 allowed illegal packets such as

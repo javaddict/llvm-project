@@ -38,7 +38,7 @@
 ; Contract checked below:
 ;   Pipeliner trace -- analyzeLoop succeeds (LOADI32 step recognized, not
 ;     "Unable to analyzeLoop") and a schedule is found ("Schedule Found? 1").
-;     Product multi-stage naive SMS is then contained without -haydn-sms-handoff
+;     Product multi-stage SMS uses durable clone→cycle groups (no handoff switch)
 ;     (CoreMark matrix_sum residual — see sms-multistage-naive-handoff-off-reject.ll),
 ;     so the schedule may be Target-rejected after Found? 1; that is orthogonal
 ;     to LOADI32 step recognition.

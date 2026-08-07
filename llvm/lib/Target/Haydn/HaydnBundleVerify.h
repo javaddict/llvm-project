@@ -8,12 +8,16 @@
 //
 // Pure fail-closed invariant checker for a committed architectural cycle
 // (BUNDLE root + children after post-RA materialize / HaydnFinalizeBundle,
-// including late PreEmit re-commit).
+// including late PreEmit re-commit and SMS hard-root exact-commit).
 //
 // Product: Format E BundleFormatRowID + CompletionStateID on the BUNDLE root.
 // EncodedBytes from the registry product rows. Encode-oracle packing still
 // uses transitional SLOT* PacketFormats coverage until CodeGenFormat E96
 // rows replace it.
+//
+// SMS post-RA contract: multi-member hard roots are exact-committed inside
+// the frozen group only; verifyCommittedBundle is the post-commit certificate
+// that the group is one product Format E parcel (never free-repacked).
 //
 //===----------------------------------------------------------------------===//
 
@@ -180,6 +184,28 @@ verifyCommittedBundle(const MachineInstr &BundleRoot, HaydnBaseMCFormats &Fmts,
       OutPlan->Completion = *Comp;
   }
   return std::nullopt;
+}
+
+/// Post-RA hard-root / SMS commit-inside-group certificate.
+/// Requires multi-member membership (hard root shape) and a product Format E
+/// stamp. Used by leaveMBB after exactCommitHardRoots — fail closed when a
+/// frozen group is missing a row, underfilled, or not encode-legal.
+inline std::optional<std::string>
+verifyExactHardRootCommit(const MachineInstr &BundleRoot,
+                          HaydnBaseMCFormats &Fmts,
+                          BundlePlan *OutPlan = nullptr) {
+  if (!BundleRoot.isBundle())
+    return std::string("hard-root verify: not a BUNDLE root");
+
+  SmallVector<unsigned, 3> Members = collectBundleMemberOpcodes(BundleRoot);
+  if (Members.size() < 2)
+    return std::string(
+        "hard-root verify: expected multi-member hard root (>=2)");
+  if (Members.size() > Haydn::ISSUE_SLOT_COUNT)
+    return std::string(
+        "hard-root verify: membership exceeds ISSUE_SLOT_COUNT");
+
+  return verifyCommittedBundle(BundleRoot, Fmts, OutPlan);
 }
 
 } // namespace bundle

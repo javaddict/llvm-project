@@ -336,10 +336,13 @@ define i32 @complex_arith(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { mull r2, r9, r2; nop }
 ; CHECK-NEXT:    { move32 r1, r2; move32 r2, r8 }
 ; CHECK-NEXT:    { jal_w lr, __divsi3; nop }
-; CHECK-NEXT:    { move32 r10, r1; move32 r1, r9 }
-; CHECK-NEXT:    { move32 r2, r8; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { move32 r10, r1; nop }
+; CHECK-NEXT:    { move32 r1, r9; nop }
+; CHECK-NEXT:    { move32 r2, r8; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { jal_w lr, __modsi3; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; add32 r1, r10, r1 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { add32 r1, r10, r1; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { ld32 lr, sp, 2; nop }
 ; CHECK-NEXT:    { ld32 r10, sp, 3; nop }

@@ -5,34 +5,24 @@
 ; RUN:     -verify-machineinstrs -O2 < %s | FileCheck %s --check-prefix=ASM
 ; REQUIRES: asserts
 
-; Role: semantic — multi-stage naive SMS rejected without durable handoff.
+; Role: semantic — product multi-stage SMS (always durable groups, no handoff
+; switch). CoreMark matrix_sum-like residual.
 ;
-; REGRESSION TEST (contract): CoreMark matrix_sum / SMS multi-stage residual.
-;
-; Bug: multi-stage naive SMS (handoff default OFF) expands to bare logical
-; kernels. Post-RA freely reorders/packs across modulo phases. Runtime
-; CoreMark matrix_sum schedules (stages=2) produced ORACLE_MISMATCH vs host
-; (list/matrix/state CRCs diverged; SMS-off and -haydn-sms-max-stagecount=1
-; both restored host 0xe714/0x1fd7/0x8e3a). D999 made ResourceCycle MI-aware
-; for same-cycle no-forwarding, but did not make multi-stage expansion safe
-; without durable cycle groups.
-;
-; Fix: shouldUseSchedule rejects multi-stage naive schedules when
-; -haydn-sms-handoff is off (product default). Single-stage and ZOL paths
-; unchanged; multi-stage re-enable requires FE5B handoff proof.
+; History: bare multi-stage expand (no durable groups) produced ORACLE_MISMATCH.
+; Product path always accepts multi-stage and materializes clone→cycle BUNDLEs.
 ;
 ; Contract:
-;   Pipeliner finds a multi-stage schedule then shouldUse rejects it:
-;     "SMS-SHOULDUSE: reject multi-stage naive"
-;     "Target rejected schedule"
-;   Assembly: no SWPS multi-stage kernel annotation on this loop.
+;   accept multi-stage durable + materialize groups>0
+;   Assembly: SWPS multi-stage kernel annotation stages>=2
 
 ; SWP: Schedule Found? 1
-; SWP: SMS-SHOULDUSE: reject multi-stage naive stages={{[2-9]|[1-9][0-9]+}}
-; SWP: Target rejected schedule
+; SWP: SMS-SHOULDUSE: accept multi-stage durable stages={{[2-9]|[1-9][0-9]+}}
+; SWP: SMS-HANDOFF: materialize done groups={{[1-9][0-9]*}}
+; SWP-NOT: SMS-SHOULDUSE: reject multi-stage naive
+; SWP-NOT: Target rejected schedule
 
 ; ASM-LABEL: matrix_sum_like:
-; ASM-NOT: #<swps> stages=2
+; ASM: #<swps> stages={{[2-9]|[1-9][0-9]+}}
 ; ASM: jalr_w
 
 define i32 @matrix_sum_like(ptr nocapture readonly %C, i32 %N, i32 %clip) {

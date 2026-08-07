@@ -230,7 +230,8 @@ define i32 @nested_call_chain(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { move32 r9, r1; move32 r1, r8 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { jal_w lr, use_i32; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; add32 r1, r9, r1 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { add32 r1, r9, r1; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { ld32 lr, sp, 3; nop }
 ; CHECK-NEXT:    { ld32 r9, sp, 4; nop }

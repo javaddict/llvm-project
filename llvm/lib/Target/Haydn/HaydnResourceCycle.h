@@ -40,6 +40,10 @@
 // II-wrap: independent per-phase ResourceCycle booking is issue-time-only and
 // would false-accept multi-cycle occupancy wrapping under II — SMS-HOOK
 // fail-closes those stages (issueTimeOnlyFalseAcceptsIIWrapAloneConflict).
+// FE5B / WP4 whole-kernel periodic certificate (G-SMS-PRE-RA-HEXAGON):
+// prove II/phase pack + II-wrap/long-occupancy + same-bank simultaneous defs
+// before rewrite; retain the original loop until final accept; recoverable
+// rollback on fail. Never half-enable multi-stage product without this path.
 //
 // SMS-RESMII is a *qualification* gate outside this adapter's packing walk:
 // ResourceManager::calculateResMIIDFA still owns the SMS starting estimate and
@@ -285,6 +289,140 @@ inline bool haydnMove32ClassDescSaturatesReadPoolEarlier(unsigned N) {
   return MiR <= HAYDN_GPR_READ_PORTS && DescR > HAYDN_GPR_READ_PORTS;
 }
 
+//===----------------------------------------------------------------------===
+// Same-phase WAW (FE5B simultaneous same-bank / same-reg defs)
+//===----------------------------------------------------------------------===
+// Peer of HaydnHazardRecognizer::hasSameBundleWAW / appendDefs. ResourceCycle
+// already enforces no-forwarding RAW via CurrentCycleLiveDefs; WAW is the dual
+// for two writers of the same register (or physreg alias) in one modulo phase.
+// Dead defs still WAW-collide (spec forbids dual write regardless of liveness).
+// SFR is excluded (dual dead implicit-def $sfr is product-legal). Used by the
+// MI reserve path and by the pure periodic-certificate same-reg DefRegKey pin.
+
+template <typename DefSet>
+bool haydnHasIntraCycleWAW(const MachineInstr &MI, const DefSet &Defs,
+                           const TargetRegisterInfo *TRI) {
+  for (const MachineOperand &MO : MI.operands()) {
+    if (!MO.isReg() || !MO.isDef())
+      continue;
+    Register Reg = MO.getReg();
+    if (!Reg)
+      continue;
+    if (Reg.isVirtual()) {
+      if (Defs.contains(Reg))
+        return true;
+      continue;
+    }
+    if (!Reg.isPhysical() || Reg == Haydn::SFR || !TRI)
+      continue;
+    for (Register D : Defs)
+      if (D.isPhysical() && TRI->regsOverlap(Reg, D))
+        return true;
+  }
+  return false;
+}
+
+template <typename DefSet>
+void haydnAppendCycleDefs(const MachineInstr &MI, DefSet &Defs) {
+  for (const MachineOperand &MO : MI.operands()) {
+    if (!MO.isReg() || !MO.isDef())
+      continue;
+    Register Reg = MO.getReg();
+    if (!Reg)
+      continue;
+    if (!Reg.isPhysical() && !Reg.isVirtual())
+      continue;
+    if (Reg == Haydn::SFR)
+      continue;
+    Defs.insert(Reg);
+  }
+}
+
+//===----------------------------------------------------------------------===
+// FE5B whole-kernel periodic certificate lifecycle (WP4)
+//===----------------------------------------------------------------------===
+// Half-enabled multi-stage is forbidden. A product rewrite may discard the
+// original loop only after Accepted; Rejected always requires recoverable
+// rollback when rewrite has already mutated the CFG. Live MachinePipeliner
+// multi-stage naive remains rejected until WP1–WP4 product evidence lands
+// (WP5 policy flip is out of scope for this surface).
+
+enum class SMSCertLifecycle : uint8_t {
+  None = 0,              ///< No certificate in flight.
+  OriginalRetained = 1,  ///< Original loop present; cert not final.
+  PreRewriteProved = 2,  ///< MI-aware periodic proof OK before rewrite.
+  PostRewriteValid = 3,  ///< Recoverable validation after rewrite OK.
+  Accepted = 4,          ///< Final accept — original may be discarded.
+  Rejected = 5,          ///< Fail-closed; rollback if rewritten.
+};
+
+/// One kernel placement for the pure periodic certificate oracle.
+/// NormalizedPhase is AbsCycle % II. StageCycles models itinerary width
+/// (product == 1). DefBank: 0=none, 1=GPR, 2=DR, 3=AR. DefRegKey is an opaque
+/// same-reg identity for WAW within a phase (0 = no def tracked).
+struct SMSCertPhaseOp {
+  unsigned NormalizedPhase = 0;
+  unsigned Opcode = 0;
+  unsigned StageCycles = 1;
+  uint8_t DefBank = 0;
+  unsigned DefRegKey = 0;
+};
+
+/// Transactional certificate state + pure lifecycle transitions.
+struct SMSPeriodicCertificate {
+  unsigned II = 0;
+  unsigned KernelID = 0;
+  SMSCertLifecycle Status = SMSCertLifecycle::None;
+
+  static constexpr SMSCertLifecycle begin() {
+    return SMSCertLifecycle::OriginalRetained;
+  }
+
+  static constexpr bool originalLoopMustRemain(SMSCertLifecycle S) {
+    return S == SMSCertLifecycle::OriginalRetained ||
+           S == SMSCertLifecycle::PreRewriteProved ||
+           S == SMSCertLifecycle::PostRewriteValid;
+  }
+
+  static constexpr bool mayDiscardOriginalLoop(SMSCertLifecycle S) {
+    return S == SMSCertLifecycle::Accepted;
+  }
+
+  static constexpr bool mustRollback(SMSCertLifecycle S) {
+    return S == SMSCertLifecycle::Rejected;
+  }
+
+  static constexpr bool isTerminal(SMSCertLifecycle S) {
+    return S == SMSCertLifecycle::Accepted || S == SMSCertLifecycle::Rejected;
+  }
+
+  static constexpr SMSCertLifecycle onPreRewriteProof(SMSCertLifecycle Cur,
+                                                      bool Ok) {
+    if (Cur != SMSCertLifecycle::OriginalRetained)
+      return SMSCertLifecycle::Rejected;
+    return Ok ? SMSCertLifecycle::PreRewriteProved
+              : SMSCertLifecycle::Rejected;
+  }
+
+  static constexpr SMSCertLifecycle
+  onPostRewriteValidation(SMSCertLifecycle Cur, bool Ok) {
+    if (Cur != SMSCertLifecycle::PreRewriteProved)
+      return SMSCertLifecycle::Rejected;
+    return Ok ? SMSCertLifecycle::PostRewriteValid
+              : SMSCertLifecycle::Rejected;
+  }
+
+  static constexpr SMSCertLifecycle onFinalAccept(SMSCertLifecycle Cur) {
+    if (Cur != SMSCertLifecycle::PostRewriteValid)
+      return SMSCertLifecycle::Rejected;
+    return SMSCertLifecycle::Accepted;
+  }
+
+  static constexpr SMSCertLifecycle fail() {
+    return SMSCertLifecycle::Rejected;
+  }
+};
+
 /// ARCTAN / SIN_COS issue alone in their cycle (PackLegality rule 4 / HR peer).
 /// Descriptor-derived (opcode only) — same-cycle class-1 capacity, not class-3
 /// (draft multi-cycle lock is not product-enabled; see restriction catalog).
@@ -312,6 +450,10 @@ class HaydnResourceCycle : public ResourceCycle {
   /// spec §Constraints) and is rejected, slipping to a later cycle. Uses
   /// `Register` (not MCRegister) so pre-RA virtual defs are tracked by identity.
   SmallSetVector<Register, 8> CurrentCycleLiveDefs;
+  /// ALL non-SFR destination registers written this modulo phase (peer of
+  /// HaydnHazardRecognizer::CurrentCycleDefs). Same-phase WAW fail-closes even
+  /// for dead defs — FE5B simultaneous same-reg / same-bank interference.
+  SmallSetVector<Register, 8> CurrentCycleDefs;
   /// Lazily cached register info (the adapter has no MachineFunction at
   /// construction; resolved from the first MI seen — same pattern as HR).
   const TargetRegisterInfo *TRI = nullptr;
@@ -418,9 +560,10 @@ public:
         haydn::bundle::makeProductCandidateSet(Fmts.getPacketFormats());
     Ports = HaydnCyclePortDemand{};
     HasAloneOp = false;
-    // No-forwarding RAW bookkeeping (D999): a fresh cycle/bundle has no live
-    // defs. TRI is lazily re-resolved from the next MI (see getTRI).
+    // No-forwarding RAW + same-phase WAW bookkeeping: a fresh cycle/bundle has
+    // no defs. TRI is lazily re-resolved from the next MI (see getTRI).
     CurrentCycleLiveDefs.clear();
+    CurrentCycleDefs.clear();
     TRI = nullptr;
   }
 
@@ -441,21 +584,23 @@ public:
   // by SMS placement, which now passes the MI instead of its descriptor so the
   // operand-aware no-forwarding intra-bundle RAW law can be enforced here.
   // Prefer exact MRI-correct port demand (vreg regclass → bank); format still
-  // opcode-keyed. The RAW check runs BEFORE accepting and uses the shared
-  // HaydnIntraCycleRAW predicate (same mechanism as post-RA HR — hard #7), so
-  // SMS refuses to place a consumer in the same cycle as its producer and the
-  // consumer slips to a later cycle. Live defs accumulate per modulo phase
-  // (DFAResources[phase] is one runtime bundle), so a later MI reading a live
-  // def already reserved in this phase is correctly rejected.
+  // opcode-keyed. RAW (HaydnIntraCycleRAW, hard #7) and same-phase WAW (FE5B
+  // simultaneous same-reg defs — peer of HR hasSameBundleWAW) run BEFORE
+  // accepting. Live/all defs accumulate per modulo phase (DFAResources[phase]
+  // is one runtime bundle).
   bool canReserveResources(MachineInstr &MI) override {
-    if (haydnHasIntraCycleRAW(MI, CurrentCycleLiveDefs, getTRI(MI)))
+    const TargetRegisterInfo *LocalTRI = getTRI(MI);
+    if (haydnHasIntraCycleWAW(MI, CurrentCycleDefs, LocalTRI))
+      return false;
+    if (haydnHasIntraCycleRAW(MI, CurrentCycleLiveDefs, LocalTRI))
       return false;
     return canReserveWithPorts(MI.getOpcode(), countHaydnPortsFromMI(MI));
   }
   void reserveResources(MachineInstr &MI) override {
     reserveWithPorts(MI.getOpcode(), countHaydnPortsFromMI(MI));
-    // Record live defs AFTER a successful commit so subsequent same-cycle
-    // consumers see them (dual of the canReserve RAW check above).
+    // Record defs AFTER a successful commit so subsequent same-cycle
+    // producers/consumers see them (dual of the canReserve WAW/RAW checks).
+    haydnAppendCycleDefs(MI, CurrentCycleDefs);
     haydnAppendLiveDefs(MI, CurrentCycleLiveDefs);
   }
 
@@ -877,6 +1022,235 @@ public:
     return smsHookRejectsIIWrapFalseAccept(/*StageCycles=*/2, /*II=*/2) &&
            smsIIWrapOccupiesPhase(/*Issue=*/0, /*Stage=*/2, /*II=*/2,
                                   /*Query=*/1);
+  }
+
+  //===--------------------------------------------------------------------===
+  // FE5B whole-kernel periodic certificate (WP4 — G-SMS-PRE-RA-HEXAGON)
+  //===--------------------------------------------------------------------===
+  // MI-aware periodic proof over II independent phase ResourceCycles before
+  // rewrite; lifecycle retains the original loop until Accepted; Rejected
+  // is recoverable rollback. II-wrap / long occupancy fail-closed under
+  // product class-3 law. Same-bank simultaneous defs fail-closed via write-
+  // port budget and same-reg DefRegKey WAW. Does not flip WP5 multi-stage
+  // product policy.
+
+  /// Product pin: multi-cycle / II-wrap long occupancy is not product-enabled.
+  static constexpr bool
+  productIIWrapLongOccupancyFailsClosed(unsigned StageCycles, unsigned II) {
+    using namespace haydn::restriction;
+    return smsHookRejectsMultiCycleStage(StageCycles) ||
+           smsHookRejectsIIWrapFalseAccept(StageCycles, II) ||
+           smsIIWrapSelfConflicts(StageCycles, II);
+  }
+
+  /// True when pure same-phase same-reg WAW keys collide (DefRegKey != 0).
+  static bool samePhaseSameRegWAWConflicts(ArrayRef<SMSCertPhaseOp> Ops,
+                                           unsigned II, unsigned Phase) {
+    if (II == 0)
+      return false;
+    for (size_t I = 0, E = Ops.size(); I != E; ++I) {
+      const SMSCertPhaseOp &A = Ops[I];
+      if (A.DefRegKey == 0 || (A.NormalizedPhase % II) != Phase)
+        continue;
+      for (size_t J = I + 1; J != E; ++J) {
+        const SMSCertPhaseOp &B = Ops[J];
+        if (B.DefRegKey == A.DefRegKey && (B.NormalizedPhase % II) == Phase)
+          return true;
+      }
+    }
+    return false;
+  }
+
+  /// True when pure same-phase bank write counts exceed product port budgets.
+  /// DefBank: 1=GPR (2W), 2=DR (3W), 3=AR (2W).
+  static bool samePhaseBankWritesExceedBudget(ArrayRef<SMSCertPhaseOp> Ops,
+                                              unsigned II, unsigned Phase) {
+    if (II == 0)
+      return false;
+    unsigned GPRW = 0, DRW = 0, ARW = 0;
+    for (const SMSCertPhaseOp &Op : Ops) {
+      if ((Op.NormalizedPhase % II) != Phase)
+        continue;
+      switch (Op.DefBank) {
+      case 1:
+        ++GPRW;
+        break;
+      case 2:
+        ++DRW;
+        break;
+      case 3:
+        ++ARW;
+        break;
+      default:
+        break;
+      }
+    }
+    return GPRW > HAYDN_GPR_WRITE_PORTS || DRW > HAYDN_DR_WRITE_PORTS ||
+           ARW > HAYDN_AR_WRITE_PORTS;
+  }
+
+  /// Simultaneous same-bank defs fail-closed when same-reg WAW collides or
+  /// bank write ports are exceeded in any phase under \p II.
+  static bool sameBankSimultaneousDefsFailClosed(ArrayRef<SMSCertPhaseOp> Ops,
+                                                 unsigned II) {
+    if (II == 0)
+      return true; // invalid II — fail closed
+    for (unsigned P = 0; P < II; ++P) {
+      if (samePhaseSameRegWAWConflicts(Ops, II, P))
+        return true;
+      if (samePhaseBankWritesExceedBudget(Ops, II, P))
+        return true;
+    }
+    return false;
+  }
+
+  /// Whole-kernel MI-aware periodic proof: for every phase in [0, II),
+  /// pack opcodes with an independent ResourceCycle (same depth as SMS
+  /// placement) and enforce II-wrap / long-occupancy + same-bank laws.
+  /// Empty ops with II>=1 is vacuously true (no body). Pure; no MIR mutation.
+  static bool proveWholeKernelPeriodicPhases(unsigned II,
+                                             ArrayRef<SMSCertPhaseOp> Ops) {
+    using namespace haydn::restriction;
+    if (II == 0)
+      return false;
+    // Bound pure oracle depth; product SMS IIs are small.
+    if (II > 64u)
+      return false;
+
+    for (const SMSCertPhaseOp &Op : Ops) {
+      if (productIIWrapLongOccupancyFailsClosed(Op.StageCycles, II))
+        return false;
+      // Occupancy that spans beyond issue under any II is class-3 — fail closed
+      // even when StageCycles==II (exact cover still needs approved booking).
+      if (smsIIWrapSpansBeyondIssuePhase(Op.StageCycles, II))
+        return false;
+    }
+
+    if (sameBankSimultaneousDefsFailClosed(Ops, II))
+      return false;
+
+    for (unsigned P = 0; P < II; ++P) {
+      HaydnResourceCycle RC;
+      for (const SMSCertPhaseOp &Op : Ops) {
+        if ((Op.NormalizedPhase % II) != P)
+          continue;
+        if (Op.Opcode == 0)
+          continue; // bank/WAW-only probe rows
+        if (!RC.canReserveByOpcode(Op.Opcode))
+          return false;
+        RC.reserveByOpcode(Op.Opcode);
+      }
+    }
+    return true;
+  }
+
+  /// Drive retain → pre-proof → post-validation → final accept (or reject).
+  /// \p PostRewriteStillValid models recoverable validation after expand
+  /// (false → Rejected with mustRollback; original must still be retained
+  /// until this transition when rewrite is transactional).
+  static SMSCertLifecycle runPeriodicCertificate(unsigned II,
+                                                 ArrayRef<SMSCertPhaseOp> Ops,
+                                                 bool PostRewriteStillValid) {
+    SMSCertLifecycle S = SMSPeriodicCertificate::begin();
+    assert(SMSPeriodicCertificate::originalLoopMustRemain(S) &&
+           "begin retains original loop");
+    const bool PreOK = proveWholeKernelPeriodicPhases(II, Ops);
+    S = SMSPeriodicCertificate::onPreRewriteProof(S, PreOK);
+    if (SMSPeriodicCertificate::mustRollback(S))
+      return S;
+    S = SMSPeriodicCertificate::onPostRewriteValidation(S,
+                                                        PostRewriteStillValid);
+    if (SMSPeriodicCertificate::mustRollback(S))
+      return S;
+    return SMSPeriodicCertificate::onFinalAccept(S);
+  }
+
+  /// Product law pins for WP4: original retained until Accepted; II-wrap
+  /// false-accept fail-closed; classic legal single-cycle kernel certifies;
+  /// multi-cycle / same-reg WAW / bank over-budget reject; half-enabled
+  /// multi-stage remains forbidden (WP5 not flipped here).
+  static bool productPeriodicCertificatePins() {
+    using namespace haydn::restriction;
+
+    // Lifecycle: retain until final accept; reject rolls back.
+    if (!SMSPeriodicCertificate::originalLoopMustRemain(
+            SMSCertLifecycle::OriginalRetained) ||
+        !SMSPeriodicCertificate::originalLoopMustRemain(
+            SMSCertLifecycle::PreRewriteProved) ||
+        !SMSPeriodicCertificate::originalLoopMustRemain(
+            SMSCertLifecycle::PostRewriteValid) ||
+        SMSPeriodicCertificate::mayDiscardOriginalLoop(
+            SMSCertLifecycle::OriginalRetained) ||
+        !SMSPeriodicCertificate::mayDiscardOriginalLoop(
+            SMSCertLifecycle::Accepted) ||
+        !SMSPeriodicCertificate::mustRollback(SMSCertLifecycle::Rejected))
+      return false;
+
+    // II-wrap / long occupancy fail-closed under product class-3.
+    if (!productIIWrapLongOccupancyFailsClosed(/*StageCycles=*/2, /*II=*/2) ||
+        productIIWrapLongOccupancyFailsClosed(/*StageCycles=*/1, /*II=*/2) ||
+        !issueTimeOnlyFalseAcceptsIIWrapAloneConflict())
+      return false;
+
+    // Legal single-cycle two-phase kernel (ADD32 @0, XOR32 @1 under II=2).
+    {
+      const SMSCertPhaseOp Legal[] = {
+          {/*Phase=*/0, Haydn::ADD32, /*Stage=*/1, /*GPR=*/1, /*Key=*/1},
+          {/*Phase=*/1, Haydn::XOR32, /*Stage=*/1, /*GPR=*/1, /*Key=*/2},
+      };
+      if (!proveWholeKernelPeriodicPhases(/*II=*/2, Legal))
+        return false;
+      if (runPeriodicCertificate(/*II=*/2, Legal, /*Post=*/true) !=
+          SMSCertLifecycle::Accepted)
+        return false;
+      // Post-rewrite validation fail → Rejected (rollback), original was still
+      // retained through PreRewriteProved.
+      if (runPeriodicCertificate(/*II=*/2, Legal, /*Post=*/false) !=
+          SMSCertLifecycle::Rejected)
+        return false;
+    }
+
+    // Multi-cycle stage under II=2 fail-closed.
+    {
+      const SMSCertPhaseOp Multi[] = {
+          {0, Haydn::ADD32, /*Stage=*/2, 1, 1},
+      };
+      if (proveWholeKernelPeriodicPhases(/*II=*/2, Multi))
+        return false;
+      if (runPeriodicCertificate(/*II=*/2, Multi, true) !=
+          SMSCertLifecycle::Rejected)
+        return false;
+    }
+
+    // Same-phase same-reg WAW fail-closed.
+    {
+      const SMSCertPhaseOp Waw[] = {
+          {0, Haydn::ADD32, 1, 1, /*Key=*/7},
+          {0, Haydn::XOR32, 1, 1, /*Key=*/7},
+      };
+      if (proveWholeKernelPeriodicPhases(/*II=*/1, Waw))
+        return false;
+      if (!sameBankSimultaneousDefsFailClosed(Waw, /*II=*/1))
+        return false;
+    }
+
+    // Same-phase bank write-port over-budget (3×GPR write under 2W).
+    {
+      const SMSCertPhaseOp Ports[] = {
+          {0, Haydn::ADD32, 1, 1, 1},
+          {0, Haydn::XOR32, 1, 1, 2},
+          {0, Haydn::OR32, 1, 1, 3},
+      };
+      if (proveWholeKernelPeriodicPhases(/*II=*/1, Ports))
+        return false;
+    }
+
+    // Half-enabled multi-stage still forbidden: certificate does not claim
+    // product multi-stage ON; class-3 remains empty.
+    if (ProductCrossCycleCapacityEnabled || ProductClass3RestrictionCount != 0u)
+      return false;
+
+    return true;
   }
 };
 

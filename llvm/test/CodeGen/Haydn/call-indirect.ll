@@ -181,9 +181,11 @@ define i32 @test_mixed_calls(ptr %fp, i32 %x) {
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { move32 r8, r1; move32 r1, r2 }
 ; CHECK-NEXT:    { jal_w lr, direct_callee; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; move32 r9, r1 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { move32 r9, r1; nop }
 ; CHECK-NEXT:    { jalr_w lr, r8, 0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; add32 r1, r9, r1 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { add32 r1, r9, r1; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { ld32 lr, sp, 3; nop }
 ; CHECK-NEXT:    { ld32 r9, sp, 4; nop }

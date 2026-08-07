@@ -1,0 +1,111 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=COMMIT
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -stats \
+# RUN:   -verify-machineinstrs %s -o /dev/null 2>&1 | \
+# RUN:   FileCheck %s --check-prefix=STATS
+# Illegal membership: sequential Anti-order dissolve (not free repack; not
+# necessarily fatal — coissue fail lowers under use-before-def order).
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:   -verify-machineinstrs %S/postmisched-hard-root-illegal-fail.mir \
+# RUN:   -o - | FileCheck %s --check-prefix=ILLEGAL
+
+# Role: MIR — G-SMS-PRE-RA-HEXAGON WP3 post-RA commit-inside-group.
+#
+# Multi-member hard BUNDLE roots model SMS durable same-cycle groups (or
+# architectural rematch). leaveMBB must:
+#   * exact Format-E pack/commit *inside* each frozen group only
+#   * never free-splice neighbors across groups (no stage invent post-RA)
+#   * illegal membership → sequential dissolve under Anti order (no free
+#     multi-MI exact-commit of an illegal pack)
+#
+# Product multi-stage is ON (WP5); this pin proves the post-RA commit surface
+# for durable groups through leaveMBB.
+
+--- |
+  define void @two_stage_shaped_hard_roots() { ret void }
+  define void @dual_load_hard_root_with_neighbors() { ret void }
+...
+---
+name:            two_stage_shaped_hard_roots
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r15
+
+    ; COMMIT-LABEL: name: two_stage_shaped_hard_roots
+    ; COMMIT: liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r15
+    ; COMMIT-NEXT: {{  $}}
+    ; Group A: dual-ALU hard root exact-commits as Format E row 0.
+    ; COMMIT-NEXT: BUNDLE 0, 0, implicit-def $r8, implicit-def dead $sfr, implicit-def $r9, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3 {
+    ; COMMIT-NEXT:   $r8 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
+    ; COMMIT-NEXT:   $r9 = ADD32_S1 killed $r2, killed $r3, implicit-def dead $sfr
+    ; COMMIT-NEXT: }
+    ; Mid-stage free op stays outside both groups (no cross-stage splice).
+    ; COMMIT-NEXT: $r10 = ADDI32 killed $r8, 1, implicit-def dead $sfr
+    ; Group B: second hard root exact-commits independently.
+    ; COMMIT-NEXT: BUNDLE 0, 0, implicit-def $r11, implicit-def dead $sfr, implicit-def $r12, implicit killed $r4, implicit killed $r5, implicit killed $r6, implicit killed $r7 {
+    ; COMMIT-NEXT:   $r11 = ADD32_S2 killed $r4, killed $r5, implicit-def dead $sfr
+    ; COMMIT-NEXT:   $r12 = ADD32_S1 killed $r6, killed $r7, implicit-def dead $sfr
+    ; COMMIT-NEXT: }
+    ; COMMIT-NEXT: $r13 = XOR32 killed $r11, killed $r12, implicit-def dead $sfr
+    ; COMMIT-NEXT: RET implicit $r15
+
+    BUNDLE implicit-def $r8, implicit-def $r9, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r8 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r9 = ADD32 $r2, $r3, implicit-def dead $sfr
+    }
+    $r10 = ADDI32 $r8, 1, implicit-def dead $sfr
+    BUNDLE implicit-def $r11, implicit-def $r12, implicit-def dead $sfr, implicit $r4, implicit $r5, implicit $r6, implicit $r7 {
+      $r11 = ADD32 $r4, $r5, implicit-def dead $sfr
+      $r12 = ADD32 $r6, $r7, implicit-def dead $sfr
+    }
+    $r13 = XOR32 $r11, $r12, implicit-def dead $sfr
+    RET implicit $r15
+
+...
+---
+name:            dual_load_hard_root_with_neighbors
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+
+    ; COMMIT-LABEL: name: dual_load_hard_root_with_neighbors
+    ; COMMIT: liveins: $r0, $r1, $r2, $r3, $r15
+    ; COMMIT-NEXT: {{  $}}
+    ; Neighbor before hard root stays outside the group.
+    ; COMMIT-NEXT: $r4 = ADDI32 $r0, 0, implicit-def dead $sfr
+    ; Dual-load hard root (SMS handoff shape) exact-commits Format E.
+    ; COMMIT-NEXT: BUNDLE 0, 0, implicit-def $r5, implicit-def $r6, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3 :: (load (s32)) {
+    ; COMMIT-NEXT:   $r5 = LD32_S1 $r0, killed $r1 :: (load (s32))
+    ; COMMIT-NEXT:   $r6 = LD32_S0 killed $r2, killed $r3 :: (load (s32))
+    ; COMMIT-NEXT: }
+    ; Latency pad may appear; consumer stays outside the hard group.
+    ; COMMIT: $r7 = ADD32 killed $r5, killed $r6, implicit-def dead $sfr
+    ; COMMIT-NEXT: RET implicit $r15
+
+    $r4 = ADDI32 $r0, 0, implicit-def dead $sfr
+    BUNDLE implicit-def $r5, implicit-def $r6, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r5 = LD32 $r0, $r1 :: (load (s32))
+      $r6 = LD32 $r2, $r3 :: (load (s32))
+    }
+    $r7 = ADD32 $r5, $r6, implicit-def dead $sfr
+    RET implicit $r15
+
+...
+
+# Two hard roots exact-committed; free-pack refusal counter silent; no split.
+# STATS-DAG: {{[1-9][0-9]*}} haydn-post-ra-sched - Number of multi-member hard BUNDLE roots at post-RA MBB entry
+# STATS-DAG: {{[1-9][0-9]*}} haydn-post-ra-sched - Number of multi-member hard BUNDLE roots transactionally exact-committed at post-RA leaveMBB
+# STATS-NOT: hard-root member (commit-inside-group only)
+# STATS-NOT: Number of scheduled multi-MI cycles that failed exact no-split
+
+# Illegal four-member hard root dissolves to sequential (no multi-member BUNDLE).
+# ILLEGAL-LABEL: name: illegal_four_member_hard_root
+# ILLEGAL-NOT: BUNDLE
+# ILLEGAL-DAG: $r8 = ADD32
+# ILLEGAL-DAG: $r9 = ADD32
+# ILLEGAL-DAG: $r10 = ADD32
+# ILLEGAL-DAG: $r11 = ADD32
