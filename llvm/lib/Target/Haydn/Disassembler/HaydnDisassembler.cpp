@@ -8,25 +8,39 @@
 //
 // This file implements the HaydnDisassembler class.
 //
-// Bundle128-only decode (16-byte parcels; variable-width realized as fixed
-// Bundle128 geometry). Size=16 on every Success/Fail from the composite path.
+// Format E decode: 12-byte / 96-bit parcels. Size=12 on every Success/Fail
+// from the composite path.
 //
-// 1. tryDecodeBundle128Composite — primary path when >= 16 bytes remain.
-//    Content gate: each non-zero slot window must pass isValidFlexSlotWindow
-//    (strict FU + opcode range). Geometry via getBundle128FormatDesc peer
-//    offsets (same authority as encodeSlotInBundle128). Generated composite
-//    trie (DecoderTableBundle128128 → case 164 = BUNDLE128_FULL) dispatches
-//    per-slot sub-tries via decodeS0Slot/S1Slot/S2Slot. All-zero Bundle128
-//    (spec §10 NOP) is 3 empty NOP slots. Bundle128 is probed before any
-//    2-byte NOP check so s0-NOP parcels (leading zero bytes) are not stolen.
-// 2. < 16 bytes remaining — trailing 16-bit NOP fallback: leading 0x0000
-//    decodes as Haydn::NOP (Size = 2); other trailing bytes → <unknown>
-//    with Size = Bytes.size (forward progress).
+// 1. tryDecodeFormatEComposite — primary path when >= 12 bytes remain.
+//    The entry count comes from the header bit Inst{3} and selects one of two
+//    composite tries, DecoderTableFormatE296 (entries P20,P21) or
+//    DecoderTableFormatE396 (P30,P31,P32). Each trie re-checks the full
+//    6-bit header and the unused high bits, so a word that is not a format E
+//    bundle of that entry count fails there rather than being mis-decoded.
+//    The trie dispatches per-entry sub-tries via
+//    decodeP20Slot/P21Slot/P30Slot/P31Slot/P32Slot.
+// 2. < 12 bytes remaining — trailing bytes → <unknown> with
+//    Size = Bytes.size (forward progress).
+//
+// NO hand-written content gate. Bundle128 needed one (isValidFlexSlotWindow,
+// a hardcoded FU + opcode-range table) because its generated sub-tries were
+// catch-all defaults that accepted any window. Format E's sub-tries are real
+// tries — they switch on the entry's low bits (mapping + type) and
+// OPC_CheckField the reserved bits — so the generated table IS the content
+// authority and a second hand-maintained copy could only drift from it.
+//
+// That gate was also actively wrong here rather than merely redundant: it
+// read the unit from the window's TOP three bits, which is where Bundle128
+// put its FU and where format E puts reserved zeros. Format E's unit
+// (`mapping`) is in the BOTTOM two bits and its value differs per entry
+// position — ALU0 is 0b00 at P20 but 0b10 at P30. Applied to a valid
+// ADD32_P20_ALU0 it read FU=0 and opcode=0 out of the reserved field and
+// rejected it, so every non-NOP bundle would have failed to disassemble.
 //
 // CLAUDE.md hard bar: `llvm-objdump -d` MUST NEVER abort on hostile.text.
 // The bounds-safe `<?>` printOperand defense (HaydnInstPrinter) remains the
-// primary anti-crash mechanism; slot decoders degrade sub-trie misses to
-// empty NOP slots (always return Success) rather than asserting.
+// primary anti-crash mechanism; entry decoders degrade sub-trie misses to
+// empty sub-MCInsts (always return Success) rather than asserting.
 //
 //===----------------------------------------------------------------------===//
 
@@ -141,17 +155,9 @@ static DecodeStatus decodeSImmOperandXStepWide(MCInst &Inst, uint32_t Imm,
   return MCDisassembler::Success;
 }
 
-//===----------------------------------------------------------------------===//
-// Bitfield extraction helpers
-//===----------------------------------------------------------------------===//
-
-// Extract bits [Hi:Lo] (inclusive) from a value.
-static uint32_t extractBits(uint64_t Word, unsigned Lo, unsigned Width) {
-  return static_cast<uint32_t>((Word >> Lo) & ((1ULL << Width) - 1));
-}
-
-// Bundle128 slot decode uses the generated S0/S1/S2 sub-tries plus
-// decodeSImmOperandXStepWide / register class helpers only.
+// Format E entry decode uses the generated per-position sub-tries plus
+// decodeSImmOperandXStepWide / register class helpers only. The Bundle128
+// bitfield helper that backed the hand-written content gate went with it.
 
 //===----------------------------------------------------------------------===//
 // Main disassembler class
@@ -177,115 +183,99 @@ public:
 HaydnDisassembler::HaydnDisassembler(const MCSubtargetInfo &STI, MCContext &Ctx)
     : MCDisassembler(STI, Ctx) {}
 
-// Bundle128 composite per-slot decoders (forward declarations).
+// Format E composite per-entry decoders (forward declarations).
 //
 // The generated HaydnGenDisassemblerTables.inc defines a template
-// `decodeToMCInst` whose case 164 (the BUNDLE128_FULL decoder) emits:
-// tmp = fieldFromInstruction(insn, 0, 48); / s0 window bits
-// decodeS0Slot(MI, tmp, Address, Decoder);
-// tmp = fieldFromInstruction(insn, 48, 40); / s1 window bits
-// decodeS1Slot(MI, tmp, Address, Decoder);
-// tmp = fieldFromInstruction(insn, 88, 40); / s2 window bits
-// decodeS2Slot(MI, tmp, Address, Decoder);
+// `decodeToMCInst` whose two composite cases emit, for BUNDLE_E2:
+// tmp = fieldFromInstruction(insn, 6, 45);  / entry0 window
+// decodeP20Slot(MI, tmp, Address, Decoder);
+// tmp = fieldFromInstruction(insn, 51, 41); / entry1 window
+// decodeP21Slot(MI, tmp, Address, Decoder);
+// and for BUNDLE_E3 the same shape over (6,31), (37,31), (68,27) calling
+// decodeP30Slot / decodeP31Slot / decodeP32Slot. The names are fixed by the
+// InstSlot defs in the generated encoding, not chosen here.
+//
 // Because `decodeToMCInst` is a template and `tmp` is a dependent type, the
-// slot decoders must be visible by name BEFORE the.inc include for two-phase
+// entry decoders must be visible by name BEFORE the.inc include for two-phase
 // lookup to find them. This mirrors AIE's `SLOTDECODERDecl(...)` macro pattern
 // (AIEDisassemblerPP.h:42) — forward-declare here, define after the include.
 //
-// Each slot decoder takes the already-extracted slot-window bits (the
-// composite trie did the fieldFromInstruction extraction), runs the per-slot
-// tablegen trie on them (DecoderTableS048 / DecoderTableS140 / DecoderTableS240
-// namespaces "S0"/"S1"/"S2" generated from HaydnSlotS0/S1/S2 in HaydnSlots.td)
+// Each entry decoder takes the already-extracted window (the composite trie
+// did the fieldFromInstruction), runs that position's tablegen sub-trie on it
 // and adds the result as an MCOperand::createInst sub-instruction operand to
 // the composite MI (mirrors AIE's decodeAIE2PSSlot). On a sub-trie miss the
-// sub-MCInst is cleared (an empty NOP slot, §4). Each decoder ALWAYS returns
-// Success — a NOP/failed slot is a valid Bundle128 slot occupancy, not a hard
-// Fail.
+// sub-MCInst is cleared. Each decoder ALWAYS returns Success; the caller
+// decides what an empty sub-MCInst means, because failing here would abort the
+// whole composite and lose the entries that did decode.
+//
+// Note there is one sub-trie PER ENTRY POSITION, not per unit: the same
+// logical has a different member (and different bit layout) at P20 than at
+// P30, and the position is what selects the table.
 //
 // CLAUDE.md hard bar: `llvm-objdump -d` MUST NEVER abort on hostile.text.
 // The bounds-safe `<?>` printOperand defense remains the primary anti-crash
 // bar regardless.
 namespace {
-template <typename InsnType>
-static DecodeStatus decodeS0Slot(MCInst &MI, InsnType &Insn, uint64_t Address,
-                                 const MCDisassembler *Decoder);
-template <typename InsnType>
-static DecodeStatus decodeS1Slot(MCInst &MI, InsnType &Insn, uint64_t Address,
-                                 const MCDisassembler *Decoder);
-template <typename InsnType>
-static DecodeStatus decodeS2Slot(MCInst &MI, InsnType &Insn, uint64_t Address,
-                                 const MCDisassembler *Decoder);
+#define HAYDN_ENTRY_DECODER_DECL(NAME)                                         \
+  template <typename InsnType>                                                 \
+  static DecodeStatus NAME(MCInst &MI, InsnType &Insn, uint64_t Address,       \
+                           const MCDisassembler *Decoder);
+HAYDN_ENTRY_DECODER_DECL(decodeP20Slot)
+HAYDN_ENTRY_DECODER_DECL(decodeP21Slot)
+HAYDN_ENTRY_DECODER_DECL(decodeP30Slot)
+HAYDN_ENTRY_DECODER_DECL(decodeP31Slot)
+HAYDN_ENTRY_DECODER_DECL(decodeP32Slot)
+#undef HAYDN_ENTRY_DECODER_DECL
 } // namespace
 
-// Include the auto-generated decoder tables (the Bundle128 composite trie +
-// the per-slot sub-tries; the legacy Haydn16/32/48/64 tables remain generated
-// from the.td but are no longer consulted by this disassembler subsequent).
+// Include the auto-generated decoder tables (the two format E composite tries
+// + the five per-entry-position sub-tries; the legacy Haydn16/32/48/64 tables
+// remain generated from the .td but are not consulted by this disassembler).
 #define LLVM_DISASSEMBLER_HAYDN_DECODER_TABLES
 #include "HaydnGenDisassemblerTables.inc"
 
-// Bundle128 composite per-slot decoders (definitions).
+// Format E composite per-entry decoders (definitions).
 //
 // Mirrors AIE's decodeAIE2PSSlot (AIE2PSDisassembler.cpp:75-87): allocate a
-// heap MCInst via MCContext (persists beyond this call), run the per-slot
-// tablegen trie on the window bits, and add the sub-instruction as an
-// MCOperand::createInst operand to the composite MI. The composite trie's
-// case 164 (BUNDLE128_FULL) extracted the windows already via
-// fieldFromInstruction; here we just run the slot sub-trie.
+// heap MCInst via MCContext (persists beyond this call), run that entry
+// position's tablegen trie on the window bits, and add the sub-instruction as
+// an MCOperand::createInst operand to the composite MI. The composite trie
+// extracted the window already via fieldFromInstruction.
 //
-// Slot DecoderTable names (generated from the namespaces "S0"/"S1"/"S2" set
-// by HaydnSlotS0/S1/S2 in HaydnSlots.td):
-// s0: DecoderTableS048 — 48-bit s0 window (bits[47:0])
-// s1: DecoderTableS140 — 40-bit s1 window (bits[39:0])
-// s2: DecoderTableS240 — 40-bit s2 window (bits[39:0])
+// Entry DecoderTable names come from the InstSlot namespaces in the generated
+// HaydnFormatEEncoding.td. Their numeric suffix is the window PADDED to whole
+// bytes (§ 6.5 — `Size` is a byte count and cannot express 45), not the window
+// width:
+//   P20: DecoderTableP2048 — 45-bit window, padded to 48
+//   P21: DecoderTableP2148 — 41-bit window, padded to 48
+//   P30: DecoderTableP3032 — 31-bit window, padded to 32
+//   P31: DecoderTableP3132 — 31-bit window, padded to 32
+//   P32: DecoderTableP3232 — 27-bit window, padded to 32
 //
-// On a sub-trie miss the sub-MCInst is cleared (per AIE). An empty sub-MCInst
-// is the per-slot NOP. The decoder ALWAYS returns Success — a NOP/failed slot
-// is a valid Bundle128 occupancy, not a hard Fail.
+// On a sub-trie miss the sub-MCInst is cleared (per AIE) and the decoder still
+// returns Success; tryDecodeFormatEComposite turns an empty sub-MCInst into a
+// whole-bundle Fail. Doing it there rather than here keeps one policy in one
+// place and lets the other entries decode first.
 namespace {
-// Decode the s0 slot of a Bundle128 parcel. \p Insn is the s0 window bits
-// (48-bit, extracted by the composite trie via fieldFromInstruction).
-template <typename InsnType>
-static DecodeStatus decodeS0Slot(MCInst &MI, InsnType &Insn, uint64_t Address,
-                                 const MCDisassembler *Decoder) {
-  MCInst *SlotInst = Decoder->getContext().createMCInst();
-  DecodeStatus Result =
-      decodeInstruction(DecoderTableS048, *SlotInst, Insn, Address, Decoder,
-                        Decoder->getSubtargetInfo());
-  if (Result != MCDisassembler::Success)
-    SlotInst->clear();
-  MI.addOperand(MCOperand::createInst(SlotInst));
-  return MCDisassembler::Success;
-}
-
-// Decode the s1 slot of a Bundle128 parcel. \p Insn is the s1 window bits
-// (40-bit, extracted by the composite trie via fieldFromInstruction).
-template <typename InsnType>
-static DecodeStatus decodeS1Slot(MCInst &MI, InsnType &Insn, uint64_t Address,
-                                 const MCDisassembler *Decoder) {
-  MCInst *SlotInst = Decoder->getContext().createMCInst();
-  DecodeStatus Result =
-      decodeInstruction(DecoderTableS140, *SlotInst, Insn, Address, Decoder,
-                        Decoder->getSubtargetInfo());
-  if (Result != MCDisassembler::Success)
-    SlotInst->clear();
-  MI.addOperand(MCOperand::createInst(SlotInst));
-  return MCDisassembler::Success;
-}
-
-// Decode the s2 slot of a Bundle128 parcel. \p Insn is the s2 window bits
-// (40-bit, extracted by the composite trie via fieldFromInstruction).
-template <typename InsnType>
-static DecodeStatus decodeS2Slot(MCInst &MI, InsnType &Insn, uint64_t Address,
-                                 const MCDisassembler *Decoder) {
-  MCInst *SlotInst = Decoder->getContext().createMCInst();
-  DecodeStatus Result =
-      decodeInstruction(DecoderTableS240, *SlotInst, Insn, Address, Decoder,
-                        Decoder->getSubtargetInfo());
-  if (Result != MCDisassembler::Success)
-    SlotInst->clear();
-  MI.addOperand(MCOperand::createInst(SlotInst));
-  return MCDisassembler::Success;
-}
+#define HAYDN_ENTRY_DECODER_DEF(NAME, TABLE)                                   \
+  template <typename InsnType>                                                 \
+  static DecodeStatus NAME(MCInst &MI, InsnType &Insn, uint64_t Address,       \
+                           const MCDisassembler *Decoder) {                    \
+    MCInst *EntryInst = Decoder->getContext().createMCInst();                  \
+    DecodeStatus Result =                                                      \
+        decodeInstruction(TABLE, *EntryInst, Insn, Address, Decoder,           \
+                          Decoder->getSubtargetInfo());                        \
+    if (Result != MCDisassembler::Success)                                     \
+      EntryInst->clear();                                                      \
+    MI.addOperand(MCOperand::createInst(EntryInst));                           \
+    return MCDisassembler::Success;                                            \
+  }
+HAYDN_ENTRY_DECODER_DEF(decodeP20Slot, DecoderTableP2048)
+HAYDN_ENTRY_DECODER_DEF(decodeP21Slot, DecoderTableP2148)
+HAYDN_ENTRY_DECODER_DEF(decodeP30Slot, DecoderTableP3032)
+HAYDN_ENTRY_DECODER_DEF(decodeP31Slot, DecoderTableP3132)
+HAYDN_ENTRY_DECODER_DEF(decodeP32Slot, DecoderTableP3232)
+#undef HAYDN_ENTRY_DECODER_DEF
 } // namespace
 
 Expected<bool> HaydnDisassembler::onSymbolStart(SymbolInfoTy &Symbol,
@@ -298,123 +288,69 @@ Expected<bool> HaydnDisassembler::onSymbolStart(SymbolInfoTy &Symbol,
   Size = 0;
   return true;
 }
-
 //===----------------------------------------------------------------------===//
-// Bundle128 content-gate: strict FU + opcode validation.
-//===----------------------------------------------------------------------===//
-//
-// isValidFlexSlotWindow validates a Bundle128 slot window's FU and opcode
-// fields against the encoding_manual_flex.md contract. The generated
-// DecoderTableS048/S140/S240 have DEFAULT catch-all branches that accept any
-// non-zero window, so the gate rejects reserved FU (5..7) and out-of-range
-// opcodes before the composite trie runs.
-//
-// Slot geometry is single-authority: windows are extracted from the 128-bit
-// Bundle128 word using offsets from the Bundle128 format-desc
-// (HaydnMCFormats::getBundle128FormatDesc.getSlotOffsetsHiBit) — the same
-// geometric authority the encoder consults (HaydnMCCodeEmitter
-// encodeSlotInBundle128). \p Window is that extracted value viewed as a
-// standalone Width-bit integer (MSB at bit Width-1). FU sits at the top 3
-// bits of the window (LSB [WindowTopBit-2, WindowTopBit]); the opcode starts
-// just below it (top at WindowTopBit-3). s0/s1/s2 differ only in window
-// width, not in FU/opcode placement (encoding_manual_flex.md §1.2 + §2).
-//
-// Opcode widths and valid max (from the.td FLEX defs):
-// ALU32 (FU=0): 7b, max 0x71 (113 ops — ADDI32_W=0x70, ORI32_W=0x71)
-// LS (FU=1): 7b, max 0x7B (LD16=0x7A, LD8=0x7B — signed half/byte after LDU16)
-// ALU64 (FU=2): 8b, max 0x9B (155 ops, dense from 0x01)
-// LD (FU=3): 6b, max 0x3F (64 ops)
-// MAC (FU=4): 9b, max 0x165 (357 ops, dense from 0x01)
-//
-// \p WindowTopBit is the LSB index of the window's most-significant bit
-// within \p Window (i.e. Width-1; the FU top bit). \returns true if the
-// window is a plausible Bundle128 slot (valid FU + opcode in range); false
-// if it should be rejected.
-static bool isValidFlexSlotWindow(uint64_t Window, unsigned WindowTopBit) {
-  // FU occupies the top 3 bits of the window: LSB [WindowTopBit-2, WindowTopBit].
-  unsigned Fu = extractBits(Window, WindowTopBit - 2, 3);
-  // Reserved FU (5..7) → illegal-instruction per §1.2.
-  if (Fu >= Haydn::FlexFU::FIRST_RESERVED)
-    return false;
-
-  // Opcode width per FU (encoding_manual_flex.md §1.2).
-  unsigned OpBits;
-  unsigned MaxOpcode;
-  switch (Fu) {
-  case Haydn::FlexFU::ALU32: OpBits = 7; MaxOpcode = 0x71;  break;
-  case Haydn::FlexFU::LS:    OpBits = 7; MaxOpcode = 0x7B;  break;
-  case Haydn::FlexFU::ALU64: OpBits = 8; MaxOpcode = 0x9B;  break;
-  case Haydn::FlexFU::LD:    OpBits = 6; MaxOpcode = 0x3F;  break;
-  case Haydn::FlexFU::MAC:   OpBits = 9; MaxOpcode = 0x165; break;
-  default:                   return false; // unreachable (FIRST_RESERVED guard)
-  }
-
-  // Opcode sits just below FU: its top bit is at WindowTopBit-3, occupying
-  // LSB [WindowTopBit-3-OpBits+1, WindowTopBit-3].
-  unsigned OpcodeStartBit = WindowTopBit - 3;
-  unsigned Opcode = extractBits(Window, OpcodeStartBit - OpBits + 1, OpBits);
-  // Dense codepoints from 0x01 (§1.2: "no legacy opcodes borrowed"; opcode 0
-  // is a real instruction or per-FU trap, but the FLEX defs start at 0x01).
-  // Out-of-range opcode → not a valid Bundle128 slot.
-  return Opcode >= 1 && Opcode <= MaxOpcode;
-}
-
-//===----------------------------------------------------------------------===//
-// Bundle128 composite decode (AIE two-step model).
+// Format E composite decode (AIE two-step model).
 //===----------------------------------------------------------------------===//
 //
-// tryDecodeBundle128Composite is the decoder's symmetric inverse of the
-// encoder's encodeBundleE (HaydnMCCodeEmitter.cpp): it reads a 16-byte
-// (128-bit) parcel, then runs the generated composite trie
-// DecoderTableBundle128128 on it. The composite trie matches unconditionally
-// (case 164 = BUNDLE128_FULL, no fixed bits to match — FU is the slot-level
-// discriminator) and calls decodeS0Slot/decodeS1Slot/decodeS2Slot on each
-// already-extracted slot window. The result is a BUNDLE128_FULL MCInst whose
-// 3 operands are MCOperand::createInst sub-instructions (mirrors AIE's
-// AIEBaseMCCodeEmitter/decodeXxxSlot).
+// tryDecodeFormatEComposite is the decoder's symmetric inverse of the encoder's
+// encodeBundleE (HaydnMCCodeEmitter.cpp): it reads a 12-byte / 96-bit parcel
+// and runs one of the two generated composite tries on it.
 //
-// The slot sub-instructions are MCContext-allocated and persist beyond this
-// call. Per-slot NOP / trie-miss handling lives in the slot decoders (each
-// always returns Success; a NOP/failed slot becomes an empty sub-MCInst). The
-// top-level composite MCInst is always 3 operands wide (one per slot).
+// WHICH trie is the entry-count decision, and it is read from the header rather
+// than guessed: Inst{3} is 0 for a 2-entry bundle and 1 for a 3-entry one
+// (§ 3). Bundle128 had a single composite whose trie had no fixed bits and
+// matched anything; format E's two tries each OPC_CheckField the whole 6-bit
+// header AND the unused high bits, so selecting on Inst{3} is a fast path and
+// the trie itself is still the one that validates. A word that is not a format
+// E bundle at all — wrong format indicator, nonzero reserved or unused bits —
+// fails inside the trie.
 //
-// Content gate (strict FU+opcode via isValidFlexSlotWindow): the composite
-// trie alone accepts every 16-byte window; the gate validates each non-zero
-// slot window's FU and opcode (generated sub-tries have catch-all defaults).
-// A non-zero window with reserved FU or out-of-range opcode is not a
-// Bundle128 slot — return Fail. The all-zero word (real §4 Bundle128 NOP)
-// has no non-zero window to validate and passes unconditionally.
+// The trie calls the per-position entry decoders on each already-extracted
+// window, and the result is a BUNDLE_E2 / BUNDLE_E3 MCInst whose 2 or 3
+// operands are MCOperand::createInst sub-instructions. Those are
+// MCContext-allocated and persist beyond this call.
 //
-// Post-trie sub-MCInst validation (second tier): a non-zero source window
-// whose sub-MCInst came back empty (sub-trie miss → cleared by the slot
-// decoders) is not a real Bundle128 slot — return Fail. An all-zero source
-// window is a valid §4 NOP slot and is exempt.
+// There is NO hand-written content gate — see the file header for why the
+// Bundle128 one was not merely redundant here but actively wrong.
 //
-// Size contract: a parcel is one whole composite — 16 bytes for Bundle128.
-// On Success or Fail from this path, Size is that width (forward progress;
-// never leave Size unset).
-static DecodeStatus tryDecodeBundle128Composite(MCInst &Instr, uint64_t &Size,
-                                                ArrayRef<uint8_t> Bytes,
-                                                uint64_t Address,
-                                                const MCDisassembler *DisAsm) {
-  // single-authority slot geometry. The bundle width and the slot windows are
-  // both derived from the composite's format-desc (the SAME geometric
-  // authority the encoder consults via
-  // HaydnMCCodeEmitter::encodeSlotInBundle128). No hand-coded bit offsets:
-  // each slot's MSB-indexed {LeftOffset, RightOffset} comes from
-  // getSlotOffsetsHiBit, converted to LSB-indexed once
-  // (LoBit = BundleBits-1 - RightOffset, Width = Right - Left + 1). The window
-  // is extracted as an isolated Width-bit value, so within it the FU top bit
-  // is at position Width-1. If the geometry ever changes in HaydnMCFormats.cpp
-  // (B128S0Field/B128S1Field/B128S2Field), this decode path tracks it
-  // automatically — no second source of truth to drift.
-  //
-  // Width comes from the table rather than a literal so the parcel stride
-  // follows the format: 128 bits / 16 bytes for Bundle128, 96 / 12 for
-  // format E.
+// Post-trie sub-MCInst validation: an entry whose sub-MCInst came back empty
+// (sub-trie miss → cleared by the entry decoder) means the window was not a
+// legal entry, so the bundle is not decodable — return Fail.
+//
+// Note there is deliberately no "all-zero window is an exempt NOP" case, which
+// Bundle128 needed. Format E has real NOP members at every entry position and
+// an all-zero window decodes to whichever one has mapping == 0b00 there
+// (NOP_P20_ALU0 at P20, NOP_P30_MAC0 at P30, …), so a NOP is a successful
+// decode and not an empty sub-MCInst. An all-zero 12-byte WORD is still not a
+// valid bundle, because its header is not 0b111 — that is the same fact that
+// makes an all-zero pad wrong in HaydnAsmBackend::writeNopData.
+//
+// Size contract: a parcel is one whole composite — 12 bytes. On Success or
+// Fail from this path, Size is that width (forward progress; never leave Size
+// unset). A wrong stride does not fail cleanly, it desyncs the parcel stream.
+static DecodeStatus tryDecodeFormatEComposite(MCInst &Instr, uint64_t &Size,
+                                              ArrayRef<uint8_t> Bytes,
+                                              uint64_t Address,
+                                              const MCDisassembler *DisAsm) {
+  // Entry count from the header. Bit 3 of byte 0 — the payload starts at bit 6,
+  // so the whole header is inside the first byte and is readable before any
+  // width decision. Bytes.size() >= 1 is guaranteed by the caller's length
+  // check, but read defensively: this is the hostile-input path.
+  if (Bytes.empty())
+    return MCDisassembler::Fail;
+  const bool IsThreeEntry = (Bytes[0] >> 3) & 1;
+  const unsigned CompositeOpc =
+      IsThreeEntry ? Haydn::BUNDLE_E3 : Haydn::BUNDLE_E2;
+
+  // Single-authority geometry: the bundle width and every entry window come
+  // from the composite's format-desc — the SAME authority the encoder consults
+  // — so a regenerated layout moves both sides together and there is no second
+  // source of truth to drift. No hand-coded bit offsets: each entry's
+  // MSB-indexed {LeftOffset, RightOffset} comes from getSlotOffsetsHiBit,
+  // converted to LSB-indexed once.
   HaydnMCFormats Formats;
-  const MCFormatDesc &B128 = Formats.getBundle128FormatDesc();
-  const unsigned BundleBits = B128.getFormatSize();
+  const MCFormatDesc &Composite = Formats.getCompositeFormatDesc(CompositeOpc);
+  const unsigned BundleBits = Composite.getFormatSize();
   const unsigned BundleBytes = BundleBits / 8;
   assert(BundleBits % 8 == 0 && BundleBits <= 128 &&
          "composite must be a whole number of bytes and fit one APInt read");
@@ -423,7 +359,9 @@ static DecodeStatus tryDecodeBundle128Composite(MCInst &Instr, uint64_t &Size,
     return MCDisassembler::Fail;
 
   // Read the parcel little-endian, low 64-bit lane first. APInt::insertBits
-  // places each lane at its LSB offset.
+  // places each lane at its LSB offset. 96 bits is NOT two whole limbs — the
+  // second lane is 4 bytes — which is the same arithmetic the encoder had to
+  // get right when emitBundleWord stopped writing two uint64s.
   APInt Word(BundleBits, 0);
   for (unsigned Off = 0; Off < BundleBytes; Off += 8) {
     unsigned Lane = std::min(8u, BundleBytes - Off);
@@ -432,78 +370,42 @@ static DecodeStatus tryDecodeBundle128Composite(MCInst &Instr, uint64_t &Size,
       Bits |= static_cast<uint64_t>(Bytes[Off + I]) << (8 * I);
     Word.insertBits(Bits, 8 * Off, 8 * Lane);
   }
-  struct SlotGeo {
-    MCSlotKind Kind;
-    uint64_t Window;
-    unsigned WindowTopBit; // LSB index of the window's MSB within Window.
-  };
-  auto BuildGeo = [&](MCSlotKind Kind) -> SlotGeo {
-    MCFormatField::GlobalOffsets Off = B128.getSlotOffsetsHiBit(Kind);
-    unsigned Width = Off.RightOffset - Off.LeftOffset + 1;
-    unsigned LoBit = (BundleBits - 1) - Off.RightOffset;
-    uint64_t Window = Word.extractBitsAsZExtValue(Width, LoBit);
-    return {Kind, Window, Width - 1};
-  };
-  SlotGeo Slots[3] = {
-      BuildGeo(MCSlotKind::Haydn_SLOT_S0),
-      BuildGeo(MCSlotKind::Haydn_SLOT_S1),
-      BuildGeo(MCSlotKind::Haydn_SLOT_S2),
-  };
 
-  // Content gate (strict FU + opcode via isValidFlexSlotWindow).
-  //
-  // The composite trie (DecoderTableBundle128128) has no fixed bits and
-  // matches any 16-byte input (single unconditional OPC_Decode). The gate
-  // validates each non-zero slot window by checking (a) FU ∈ {0..4} (reject
-  // reserved 5..7 per encoding_manual_flex.md §1.2) and (b) the raw opcode
-  // is within the valid dense range for that FU (per the.td FLEX defs).
-  // A non-zero window that fails either check is not a Bundle128 slot →
-  // return Fail. An all-zero window is a §4 NOP slot and skips the gate.
-  //
-  // Every Fail path MUST set Size=16. Leaving Size unset (or 0) makes
-  // llvm-objdump advance by an undefined/tiny amount, desyncing the 16-byte
-  // parcel stream and cascading misaligned <unknown>s.
-  for (const SlotGeo &S : Slots) {
-    if (S.Window != 0 && !isValidFlexSlotWindow(S.Window, S.WindowTopBit)) {
-      Size = BundleBytes;
-      return MCDisassembler::Fail;
-    }
-  }
+  // The entry positions of the chosen composite, in operand order (low entry
+  // first). Two or three of them — this is the Slots[3] that could not stay a
+  // fixed three under format E.
+  static constexpr MCSlotKind TwoEntry[] = {MCSlotKind::Haydn_SLOT_P20,
+                                            MCSlotKind::Haydn_SLOT_P21};
+  static constexpr MCSlotKind ThreeEntry[] = {MCSlotKind::Haydn_SLOT_P30,
+                                              MCSlotKind::Haydn_SLOT_P31,
+                                              MCSlotKind::Haydn_SLOT_P32};
+  ArrayRef<MCSlotKind> Entries =
+      IsThreeEntry ? ArrayRef<MCSlotKind>(ThreeEntry)
+                   : ArrayRef<MCSlotKind>(TwoEntry);
 
-  // Run the generated composite trie. DecoderTableBundle128128 has one entry
-  // (case 164 = BUNDLE128_FULL, no fixed bits) so it always matches; the slot
-  // decoders do the per-FU sub-trie dispatch. The result MCInst is
-  // BUNDLE128_FULL with 3 MCOperand::createInst operands.
-  DecodeStatus S = decodeInstruction(DecoderTableBundle128128, Instr, Word,
-                                     Address, DisAsm, DisAsm->getSubtargetInfo());
+  // Run the generated composite trie. It re-checks the header, so a word whose
+  // Inst{3} we read but whose remaining header bits are wrong fails here.
+  DecodeStatus S = decodeInstruction(
+      IsThreeEntry ? DecoderTableFormatE396 : DecoderTableFormatE296, Instr,
+      Word, Address, DisAsm, DisAsm->getSubtargetInfo());
   if (S == MCDisassembler::Fail) {
-    // The composite trie only fails on an internal decoder error (it has no
-    // fixed bits to match). Commit Size=16 for forward progress and let the
-    // caller render <unknown>.
     Size = BundleBytes;
     return MCDisassembler::Fail;
   }
 
-  // Post-trie sub-MCInst validation (second content-gate tier). A non-zero
-  // source window whose sub-MCInst came back empty (sub-trie miss → cleared
-  // by decodeS0Slot/S1Slot/S2Slot) is not a real Bundle128 slot. Return Fail
-  // so the caller renders <unknown> with forward-progress Size.
-  //
-  // An all-zero source window is a valid §4 NOP slot: empty sub-MCInst is
-  // the intended NOP rendering, so it is exempt.
-  //
-  // An empty sub-MCInst has getOpcode==0 and getNumOperands==0 (the slot
-  // decoder's `SlotInst->clear` resets it to a default-constructed state).
-  // A successfully-decoded real instruction always has a non-zero opcode.
-  assert(Instr.getNumOperands() == 3 && "Bundle128 composite must have 3 slots");
-  for (unsigned SlotIdx = 0; SlotIdx < 3; ++SlotIdx) {
-    if (Slots[SlotIdx].Window == 0)
-      continue; // all-zero window = valid §4 NOP slot, exempt.
-    const MCOperand &Op = Instr.getOperand(SlotIdx);
+  // Post-trie sub-MCInst validation. An empty sub-MCInst has getOpcode()==0 and
+  // no operands (the entry decoder's `clear` resets it); a real decode always
+  // has a non-zero opcode, NOPs included.
+  if (Instr.getNumOperands() != Entries.size()) {
+    Instr = MCInst();
+    Size = BundleBytes;
+    return MCDisassembler::Fail;
+  }
+  for (unsigned Idx = 0, E = Entries.size(); Idx != E; ++Idx) {
+    const MCOperand &Op = Instr.getOperand(Idx);
     if (!Op.isInst() || Op.getInst()->getOpcode() == 0) {
-      // Non-zero window but the sub-trie missed (sub-MCInst empty/cleared).
       Instr = MCInst(); // clear the partial composite
-      Size = BundleBytes; // must advance one full composite parcel
+      Size = BundleBytes;
       return MCDisassembler::Fail;
     }
   }
@@ -516,34 +418,30 @@ MCDisassembler::DecodeStatus HaydnDisassembler::getInstruction(
     MCInst &Instr, uint64_t &Size, ArrayRef<uint8_t> Bytes, uint64_t Address,
     raw_ostream &CStream) const {
 
-  // Bundle128-only decoder. Primary path is tryDecodeBundle128Composite
-  // (content gate + composite trie; Size=16 on Success/Fail). Bundle128 is
-  // probed before any 2-byte NOP check so parcels whose s0 window is a §4
-  // NOP (leading zero bytes) are not stolen as standalone 0x0000.
+  // Format E decoder. Primary path is tryDecodeFormatEComposite (composite
+  // trie; Size=12 on Success/Fail).
   //
   // Size / forward-progress contract:
-  // * >= 16 bytes + composite Success → Size = 16, Success.
-  // * >= 16 bytes + composite Fail (content-gate / trie / post-trie miss)
-  //   → Size = 16, Fail (caller renders <unknown>).
-  // * < 16 bytes + leading 0x0000 → Size = 2, NOP, Success (trailing only).
-  // * < 16 bytes (other) → Size = Bytes.size, Fail (EOF / trailing junk).
+  // * >= 12 bytes + composite Success → Size = 12, Success.
+  // * >= 12 bytes + composite Fail (trie reject / post-trie miss)
+  //   → Size = 12, Fail (caller renders <unknown>).
+  // * < 12 bytes → Size = Bytes.size, Fail (EOF / trailing junk).
   //
-  // All-zero Bundle128 (spec §10 NOP) decodes as 3 empty NOP slots via the
-  // composite path; encodeBundle emits 16-byte all-zero for all-NOP, so a
-  // bare 2-byte 0x0000 parcel only appears as hand-crafted trailing bytes.
+  // Bundle128 had a fourth case here: a trailing 2-byte 0x0000 decoded as a
+  // standalone Haydn::NOP. That is deliberately gone. It rested on Bundle128's
+  // "all-zero word is the NOP" property, which format E does not have — the
+  // header must be 0b111 — and there is no 2-byte format E encoding at all, so
+  // synthesising a NOP from two zero bytes would be inventing an instruction
+  // that cannot exist. Short tails now render <unknown>, which is what they
+  // are. Revisit when § 5.4's lit expectations are regenerated.
+  //
   // CLAUDE.md hard bar: `llvm-objdump -d` MUST NEVER abort.
-  if (Bytes.size() < 16) {
-    // Trailing standalone 16-bit NOP (0x0000) when Bundle128 cannot run.
-    if (Bytes.size() >= 2 && Bytes[0] == 0x00 && Bytes[1] == 0x00) {
-      Instr.setOpcode(Haydn::NOP);
-      Size = 2;
-      return MCDisassembler::Success;
-    }
+  if (Bytes.size() < Haydn::BUNDLE_E_BYTES) {
     Size = Bytes.size();
     return MCDisassembler::Fail;
   }
 
-  return tryDecodeBundle128Composite(Instr, Size, Bytes, Address, this);
+  return tryDecodeFormatEComposite(Instr, Size, Bytes, Address, this);
 }
 
 
