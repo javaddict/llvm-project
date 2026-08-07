@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `44e86ce31e76` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 10/24 — all expectation work (§ 5.4).** |
+| `llvm-project` | `haydn-formate-switch-mc` | `311a13393a07` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 10/24. Not all of that is expectation work — see § 5.10.** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -1224,6 +1224,64 @@ bundle because it never asks for anything.
 
 This subsumes part of the `writeNopData` item: its all-zero payload is still
 wrong (§ 5.2), but nothing now asks it for a non-bundle length.
+
+### 5.10 The members lost the operand classes that carry EncoderMethods
+
+**§ 6.1, exactly, and it is still open.** Found while regenerating the lld
+expectations: two of those tests are not stale, they are reporting real
+defects.
+
+```
+set_hwloop 0, loop_body, loop_end, 3
+  expected  0x0 R_HAYDN_HWLoopOff1 / 0x0 R_HAYDN_HWLoopOff2
+  actual    0x0 R_HAYDN_32         / 0x0 R_HAYDN_32
+lui R1, target_data
+  expected  R_HAYDN_HI12
+  actual    no relocation emitted at all
+```
+
+The mechanism is the one § 6.1 already describes for `JAL`:
+
+* The **logical** `SET_HWLOOP` takes `hwloop_off1` / `hwloop_off2`, whose
+  `EncoderMethod` is
+  `getSImmOpValueXStepWide<6,/*Shift*/2,…,FIXUP_HAYDN_HWLoopOff1>`. The fixup
+  kind is attached **by the operand class**, and the value never reaches
+  `getExprFixupKind`.
+* The generated format E **member** takes a plain immediate with no
+  `EncoderMethod`, so it falls through to `getMachineOpValue` →
+  `getExprFixupKind`, which has **no `SET_HWLOOP` case at all** (`grep` finds
+  the name zero times in `HaydnMCCodeEmitter.cpp`) and returns the data
+  default `FIXUP_HAYDN_32`.
+
+So a hardware-loop setup emits two *data* relocations pointing at an
+instruction. `isInstructionFieldReloc` then correctly treats them as data and
+patches at the raw byte offset (§ 5.8) — every layer behaves consistently with
+a premise that is wrong three steps upstream.
+
+#### This is the same gap as § 6.9 and § 6.10, on a third axis
+
+§ 6.9 closed the **instruction property flags** for members by teaching
+`--emit td` to copy them from the logical (`--flags-from`). § 6.10 records the
+**immediate scaling** as still open, and says the fix is "operand classes
+carrying `getSImmOpValueXStepWide<N,/*Shift*/1,…>`". This is the **fixup
+kind**, carried by the same `EncoderMethod`, in the same operand classes.
+
+They are one item: **the generator emits plain `simmN` where the logical had a
+purpose-built operand class, and everything that class carried is lost.**
+Scaling and fixup kind are two symptoms; there may be more.
+
+The fix has the same shape as `--flags-from`: the member should inherit its
+operand classes from the logical it expands, not be given generic ones. That
+is a generator change, and it closes § 6.10 at the same time.
+
+#### Why it took until now to see
+
+Nothing before this point applied a relocation to a hand-written hwloop or
+`lui`. `--emit roundtrip` does not do fixups; the CodeGen sweep measured
+whether `llc` produced output; and the § 5.8 work used branches, whose members
+*do* land in `getExprFixupKind` and so happened to work. `lld/test/ELF/haydn`
+is the first gate that exercises the others — which is what § 5.4 meant by
+"the round trip is not evidence".
 
 ### 5.5 BundleSim side
 
