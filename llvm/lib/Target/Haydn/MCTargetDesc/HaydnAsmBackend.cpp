@@ -119,12 +119,34 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
       return;
     }
     const HaydnReloc::RelocFieldInfo &FI = HaydnReloc::getRelocFieldInfo(R);
-    if (Fixup.getOffset() + FI.NBytes > F.getSize()) {
+
+    // Format E: the field's position is BUNDLE-absolute and depends on the
+    // placement, so neither the byte the relocation names nor the kind's
+    // nominal FieldLsb locates it. Resolve it from the bundle image; both
+    // errors are silent, and one of them lands on the header (§ 5.8).
+    if (!HaydnReloc::isInstructionFieldReloc(R)) {
+      // A plain data word: patch it where the relocation says, no bundle.
+      if (Fixup.getOffset() + FI.NBytes > F.getSize()) {
+        getContext().reportError(Fixup.getLoc(),
+                                 "fixup offset exceeds fragment size");
+        return;
+      }
+      HaydnReloc::patchField(Data, Comp.FieldVal, FI.NBytes, FI.FieldSize,
+                             FI.FieldLsb);
+      return;
+    }
+    const unsigned BundleByte = Fixup.getOffset() % Haydn::BUNDLE_E_BYTES;
+    uint8_t *BundleBase = Data - BundleByte;
+    if (Fixup.getOffset() - BundleByte + Haydn::BUNDLE_E_BYTES > F.getSize()) {
       getContext().reportError(Fixup.getLoc(), "fixup offset exceeds fragment size");
       return;
     }
-    // Data is pre-adjusted to Fixup.getOffset (lesson): write at Data[0].
-    HaydnReloc::patchField(Data, Comp.FieldVal, FI.NBytes, FI.FieldSize, FI.FieldLsb);
+    if (!HaydnReloc::patchRelocFieldInBundle(BundleBase, BundleByte, FI,
+                                             Comp.FieldVal)) {
+      getContext().reportError(
+          Fixup.getLoc(), "no format E relocation geometry for this placement");
+      return;
+    }
     return;
   }
 

@@ -232,8 +232,23 @@ void Haydn::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
              << Comp.Err;
     return;
   }
+  // Format E: the field's position is BUNDLE-absolute and depends on the
+  // placement, so neither the byte the relocation names nor the kind's nominal
+  // FieldLsb locates it (§ 5.8). patchRelocFieldInBundle resolves it from the
+  // bundle image — the same call the MC backend makes, so reader and writer
+  // cannot diverge.
   const HaydnReloc::RelocFieldInfo &FI = HaydnReloc::getRelocFieldInfo(R);
-  HaydnReloc::patchField(loc, Comp.FieldVal, FI.NBytes, FI.FieldSize, FI.FieldLsb);
+  if (!HaydnReloc::isInstructionFieldReloc(R)) {
+    // A plain data word: patch it where the relocation says, no bundle.
+    HaydnReloc::patchField(loc, Comp.FieldVal, FI.NBytes, FI.FieldSize,
+                           FI.FieldLsb);
+    return;
+  }
+  const unsigned bundleByte = rel.offset % 12;
+  if (!HaydnReloc::patchRelocFieldInBundle(loc - bundleByte, bundleByte, FI,
+                                           Comp.FieldVal))
+    Err(ctx) << getErrorLoc(ctx, loc) << "relocation " << type
+             << ": no format E geometry for this placement";
 }
 
 void elf::setHaydnTargetInfo(Ctx &ctx) {

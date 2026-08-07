@@ -15,6 +15,7 @@
 
 #include "HaydnRelocLayout.h"
 #include "HaydnFixupKinds.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -165,6 +166,112 @@ const Row &rowFor(RelocKind R) {
   return Table[0]; // None fallback
 }
 } // namespace
+
+namespace {
+// The generated geometry, as a flat table. See HaydnRelocGeometry.inc.
+struct RelocGeomRow {
+  uint8_t FieldSize, EntryCount, EntryIndex, Mapping, BundleLsb;
+};
+#define HAYDN_RELOC_GEOM_ROW_LIST(...) __VA_ARGS__
+#define HAYDN_RELOC_GEOM_ROW(FS, EC, EI, MP, LSB) {FS, EC, EI, MP, LSB},
+constexpr RelocGeomRow RelocGeom[] = {
+#include "HaydnRelocGeometry.inc"
+};
+#undef HAYDN_RELOC_GEOM_ROW
+#undef HAYDN_RELOC_GEOM_ROW_LIST
+
+// Entry byte base and entry LSB bit, per composite. From the generated
+// composites: BUNDLE_E2 entries start at bundle bits 6 and 51, BUNDLE_E3 at
+// 6, 37 and 68 — none of them byte-aligned, which is the whole problem.
+struct EntryGeom { uint8_t ByteBase, LsbBit; };
+constexpr EntryGeom TwoEntry[] = {{0, 6}, {6, 51}};
+constexpr EntryGeom ThreeEntry[] = {{0, 6}, {4, 37}, {8, 68}};
+
+uint64_t readBundleBits(const uint8_t *Base, unsigned Lsb, unsigned Width) {
+  uint64_t V = 0;
+  for (unsigned I = 0; I != 12; ++I)
+    if (I < 8)
+      V |= uint64_t(Base[I]) << (8 * I);
+  // Only the low 64 bits are needed: every mapping field sits below bit 70,
+  // and the two whose entry starts at bit 68 still have their mapping within
+  // reach of a second read.
+  if (Lsb + Width <= 64)
+    return (V >> Lsb) & ((uint64_t(1) << Width) - 1);
+  uint64_t Hi = 0;
+  for (unsigned I = 8; I != 12; ++I)
+    Hi |= uint64_t(Base[I]) << (8 * (I - 8));
+  return (Hi >> (Lsb - 64)) & ((uint64_t(1) << Width) - 1);
+}
+} // namespace
+
+bool relocFieldBundleLsb(unsigned FieldSize, const uint8_t *BundleBase,
+                         unsigned BundleByte, unsigned &OutBundleLsb) {
+  // Header bit 3 is the entry count (§ 3). Bits[2:0] must be the format
+  // indicator; if they are not, this is not a format E bundle and guessing a
+  // geometry for it would patch arbitrary bytes.
+  const uint8_t Header = BundleBase[0];
+  if ((Header & 0x7) != 0x7)
+    return false;
+  const bool IsThreeEntry = (Header >> 3) & 1;
+  ArrayRef<EntryGeom> Entries = IsThreeEntry ? ArrayRef<EntryGeom>(ThreeEntry)
+                                             : ArrayRef<EntryGeom>(TwoEntry);
+
+  // The entry whose byte base is the greatest at or below this byte. A fixup
+  // is anchored at its entry's base, never partway into it, so this is exact.
+  unsigned Index = 0;
+  for (unsigned I = 0, E = Entries.size(); I != E; ++I)
+    if (BundleByte >= Entries[I].ByteBase)
+      Index = I;
+
+  const unsigned Mapping =
+      (unsigned)readBundleBits(BundleBase, Entries[Index].LsbBit, 2);
+  const unsigned EntryCount = IsThreeEntry ? 3 : 2;
+  for (const RelocGeomRow &R : RelocGeom)
+    if (R.FieldSize == FieldSize && R.EntryCount == EntryCount &&
+        R.EntryIndex == Index && R.Mapping == Mapping) {
+      OutBundleLsb = R.BundleLsb;
+      return true;
+    }
+  return false;
+}
+
+bool isInstructionFieldReloc(RelocKind R) {
+  switch (R) {
+  case RelocKind::None:
+  case RelocKind::Data8:
+  case RelocKind::Data16:
+  case RelocKind::Data32:
+  case RelocKind::Data32PCRel:
+    return false;
+  default:
+    return true;
+  }
+}
+
+bool patchRelocFieldInBundle(uint8_t *BundleBase, unsigned BundleByte,
+                             const RelocFieldInfo &FI, uint64_t FieldVal) {
+  unsigned BundleLsb = 0;
+  if (!relocFieldBundleLsb(FI.FieldSize, BundleBase, BundleByte, BundleLsb))
+    return false;
+
+  const unsigned ByteLo = BundleLsb / 8;
+  const unsigned BitLo = BundleLsb % 8;
+  // patchField's image reader only knows widths 1, 2, 4 and 6 and silently
+  // does NOTHING for anything else, so round up to one it supports. A 3-byte
+  // window is how this first went wrong: the P32 branch patched correctly and
+  // the P30/P31 ones wrote nothing at all, with no diagnostic.
+  unsigned NBytes = (BitLo + FI.FieldSize + 7) / 8;
+  for (unsigned W : {1u, 2u, 4u, 6u, 8u})
+    if (W >= NBytes) {
+      NBytes = W;
+      break;
+    }
+  if (ByteLo + NBytes > 12)
+    return false;
+
+  patchField(BundleBase + ByteLo, FieldVal, NBytes, FI.FieldSize, BitLo);
+  return true;
+}
 
 const RelocFieldInfo &getRelocFieldInfo(RelocKind R) {
   return rowFor(R).Info;
