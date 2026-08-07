@@ -355,8 +355,17 @@ def NOP : HaydnInst16<(outs), (ins), "nop", []> {
   let Inst{15 - 0} = 0x0000;
 }
 
-def LUI : FmtI<0x27, (outs GPR32:$rd), (ins GPR32:$rs, uimm12:$imm),
+// Database shape: `LUI rt, imm12`. The extra GPR32:$rs was a Bundle128
+// artifact — callers passed R0 for it — and it made the LOGICAL's operand
+// list one longer than its format E members', so after materialization the
+// encoder read the dummy register where the immediate should be: imm encoded
+// as 0 and no HI12 relocation was emitted at all. See § 5.11.
+def LUI : FmtI<0x27, (outs GPR32:$rd), (ins uimm12:$imm),
               "lui\t$rd, $imm", []> {
+  // FmtI's Inst{19-16} still wants an `rs` field; bind it rather than keep an
+  // operand for it. The Bundle128 encoding this feeds is dead on this branch
+  // (the members encode), so the value only has to exist.
+  let rs = 0;
   let TSFlags{2-0} = 0b001;
 }
 
