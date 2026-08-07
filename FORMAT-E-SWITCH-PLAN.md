@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `9e631c69a630` | **compiles; 424/430 CodeGen produce output; `HaydnTests` builds and runs 142/253. Not green: see § 5.2, § 5.6, § 5.7.** |
+| `llvm-project` | `haydn-formate-switch-mc` | `a9fbb2b69207` | **compiles; 424/430 CodeGen produce output; `HaydnTests` builds and runs 142/253. Not green: see § 5.2, § 5.6, § 5.7.** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -983,10 +983,44 @@ first concrete instance: a slot-only packer builds a bundle the hardware
 cannot issue. It is silent in every other gate — the bundle is well-formed,
 it encodes, it round-trips, and only the unit assignment is illegal.
 
-The fix is § 7's own decided follow-up: thread `MCInstrInfo` through those
-paths, or move the unit onto a generated per-member table that needs no name
-lookup. The second is better and is the natural companion to § 6.9's
-`--flags-from` work, since it would also remove the name-parsing dependency.
+**Fixed in `a9fbb2b69207`**, verified on real codegen rather than in
+principle:
+
+```
+before  $r1 = S_LW_WITH_IMM_P32_LOAD1
+        $r2 = S_LW_WITH_IMM_P31_LOAD1        <- both LOAD1, one bundle
+after   $r1 = S_LW_WITH_IMM_P32_LOAD1
+        $r2 = S_LW_WITH_IMM_P30_LOADSTORE0
+```
+
+and the two loads still dual-issue, so it costs no ILP.
+
+Fixed at the root, not per call site. **The formats object now carries the
+MII** (`HaydnBaseMCFormats::getMCInstrInfo()` — null on the plain class, the
+real one on `HaydnMCFormatsWithMII`) and the two chokepoints fall back to it:
+`Bundle`'s constructor and `enumeratePlacementAlternatives`. `tryAdd` and
+`tryAddProduct` both funnel through the latter, so one change covers the whole
+solver and **a new caller cannot lose the unit check by forgetting an
+argument** — which is exactly how it was lost. `HaydnMCCodeEmitter` had even
+built a `HaydnMCFormatsWithMII` and then dropped it when constructing its
+`Bundle`.
+
+`HaydnHazardRecognizer` mattered most: it is what *chooses* which member an
+instruction becomes, and it held a plain `HaydnMCFormats` while owning a
+`TargetInstrInfo *`. Fixing the finalize paths alone did nothing, because the
+member was already chosen by then — worth remembering when reasoning about
+this layer.
+
+**Still uncovered:** a caller that passes no MII packs slot-only. That is now
+the documented behaviour of an object that was never told which `MCInstrInfo`
+is in play, rather than an accident — but `HaydnTests` cannot currently
+construct an `MCInstrInfo`, so unit-aware packing has **no unit-test
+coverage** and `DualLoadCanShareCycle` still fails. Fold that into the 111
+triage.
+
+The remaining § 7.1 option — moving the unit onto a generated per-member table
+— is still the better end state, and is the natural companion to § 6.9's
+`--flags-from` work since it removes the name-parsing dependency entirely.
 
 Note the shape of this: § 7.1 predicted the gap in prose and could not
 demonstrate it, because under Bundle128 the axis was inert and no test could
