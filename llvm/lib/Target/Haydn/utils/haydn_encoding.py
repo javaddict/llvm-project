@@ -582,7 +582,6 @@ def roundtrip(geometry: dict, placements: list[dict]) -> str:
                        operand["field"])
 
         failures += [f"{where}: {n}" for n in note]
-        failures += [f"{where}: {n}" for n in note]
         key = (p["entry_count"], p["entry_index"],
                get(word, p["mapping"]["msb"], p["mapping"]["lsb"], base),
                get(word, p["type_code"]["msb"], p["type_code"]["lsb"], base),
