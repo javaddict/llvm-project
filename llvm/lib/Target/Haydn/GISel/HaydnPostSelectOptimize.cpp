@@ -99,7 +99,7 @@ bool HaydnPostSelectOptimize::tryFoldMove32DrToSw(MachineInstr &MovInst,
     St32 = &UseMI;
     break;
   }
-  if (!St32 || St32->getOpcode() != Haydn::ST32)
+  if (!St32 || St32->getOpcode() != Haydn::S_SW_WITH_IMM)
     return false;
 
   // Both must be in the same block.

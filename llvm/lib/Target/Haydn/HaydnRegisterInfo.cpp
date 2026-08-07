@@ -121,17 +121,6 @@ bool HaydnRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   int64_t OffsetVal = Offset.getFixed();
 
-  // Fold in any existing immediate operand (e.g. LD32 $rd, $fi, +off).
-  if (MI.getNumOperands() > FIOperandNum + 1 &&
-      MI.getOperand(FIOperandNum + 1).isImm()) {
-    OffsetVal += MI.getOperand(FIOperandNum + 1).getImm();
-    MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
-    MI.getOperand(FIOperandNum + 1).ChangeToImmediate(OffsetVal);
-  } else {
-    MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
-    MI.addOperand(MachineOperand::CreateImm(OffsetVal));
-  }
-
   // F33: short-form load/store immediates are golden scaled simm6
   // (EA = base + (simm6 << log2(access_width))). Anything outside that range
   // must rebase (base+offset in a reg, imm 0) or use a WITH_REG form. Never
@@ -140,35 +129,53 @@ bool HaydnRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   unsigned Scale = 0;
   unsigned RegOpc = 0;
   switch (Opc) {
-  case Haydn::LD32:
+  case Haydn::S_LW_WITH_IMM:
     Scale = 4;
-    RegOpc = Haydn::LD32_REG_M0S0LS; // logical; post-RA setDesc / member Desc-as-is at encode
+    RegOpc = Haydn::S_LW_WITH_REG; // logical; post-RA setDesc / member Desc-as-is at encode
     break;
-  case Haydn::ST32:
+  case Haydn::S_SW_WITH_IMM:
     Scale = 4;
-    RegOpc = Haydn::ST32_REG_M0S0LS;
+    RegOpc = Haydn::S_SW_WITH_REG;
     break;
-  case Haydn::LD64:
+  case Haydn::D_LDW_WITH_IMM:
     Scale = 8;
-    RegOpc = Haydn::LD64_REG_M0S0LS;
+    RegOpc = Haydn::D_LDW_WITH_REG;
     break;
-  case Haydn::ST64:
+  case Haydn::D_SDW_WITH_IMM:
     Scale = 8;
-    RegOpc = Haydn::ST64_REG_M0S0LS;
+    RegOpc = Haydn::D_SDW_WITH_REG;
     break;
-  case Haydn::ST8:
-  case Haydn::LD8:
-  case Haydn::LDU8:
+  case Haydn::S_SB_WITH_IMM:
+  case Haydn::S_LBS_WITH_IMM:
+  case Haydn::S_LBU_WITH_IMM:
     Scale = 1;
     break;
-  case Haydn::ST16:
-  case Haydn::LD16:
-  case Haydn::LDU16:
+  case Haydn::S_SHW_WITH_IMM:
+  case Haydn::S_LHWS_WITH_IMM:
+  case Haydn::S_LHWU_WITH_IMM:
     Scale = 2;
     break;
   default:
     break;
   }
+
+  bool IsTrackedLS = Scale != 0;
+
+  // Fold in any existing immediate operand (e.g. LD32 $rd, $fi, +off).
+  if (MI.getNumOperands() > FIOperandNum + 1 &&
+      MI.getOperand(FIOperandNum + 1).isImm()) {
+    // Everything below works in BYTES. A tracked LS already carries its
+    // displacement in scaled units (`simm6:$scaled_imm`, EA = rs + imm << k),
+    // so convert on the way in and back out again at the end.
+    OffsetVal += MI.getOperand(FIOperandNum + 1).getImm() *
+                 static_cast<int64_t>(IsTrackedLS ? Scale : 1);
+    MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
+    MI.getOperand(FIOperandNum + 1).ChangeToImmediate(OffsetVal);
+  } else {
+    MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
+    MI.addOperand(MachineOperand::CreateImm(OffsetVal));
+  }
+
 
   auto isLegalScaledSimm6 = [](int64_t ByteOff, unsigned Sc) {
     return Sc != 0 && (ByteOff % static_cast<int64_t>(Sc)) == 0 &&
@@ -177,7 +184,6 @@ bool HaydnRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   // If this is not an LS we know how to range-check, keep the legacy simm16
   // guard for other FI users (e.g. ADDI-like shapes that still take simm16).
-  bool IsTrackedLS = Scale != 0;
   bool OffsetLegal =
       IsTrackedLS ? isLegalScaledSimm6(OffsetVal, Scale) : isInt<16>(OffsetVal);
 
@@ -211,7 +217,7 @@ bool HaydnRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     Register NewBase = getScratch();
 
     if (isInt<20>(OffsetVal)) {
-      BuildMI(MBB, II, DL, TII->get(Haydn::ADDI32_W), NewBase)
+      BuildMI(MBB, II, DL, TII->get(Haydn::ADDI32), NewBase)
           .addReg(FrameReg)
           .addImm(OffsetVal);
     } else {
@@ -226,6 +232,19 @@ bool HaydnRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
         MI.getOperand(FIOperandNum + 1).isImm())
       MI.getOperand(FIOperandNum + 1).ChangeToImmediate(0);
     return false;
+  }
+
+  // Legal fall-through: convert the byte displacement back to the scaled
+  // units the format E operand actually encodes. Bundle128's simm16 held
+  // bytes, so this conversion did not exist and a missed one is silent —
+  // the access simply lands Scale times too far from the base.
+  if (IsTrackedLS && MI.getNumOperands() > FIOperandNum + 1 &&
+      MI.getOperand(FIOperandNum + 1).isImm()) {
+    int64_t Bytes = MI.getOperand(FIOperandNum + 1).getImm();
+    assert(Bytes % static_cast<int64_t>(Scale) == 0 &&
+           "frame displacement must be a multiple of the access width");
+    MI.getOperand(FIOperandNum + 1)
+        .ChangeToImmediate(Bytes / static_cast<int64_t>(Scale));
   }
 
   return false;

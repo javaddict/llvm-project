@@ -62,7 +62,7 @@ void generateLuiAddi32W(uint32_t Val, HaydnMatInt::InstSeq &Seq) {
   int32_t Lo20 = static_cast<int32_t>(Val - (Hi12 << 20));
   assert(isInt<20>(Lo20) && "LUI+ADDI32_W residual must fit simm20");
   Seq.emplace_back(Haydn::LUI, Hi12);
-  Seq.emplace_back(Haydn::ADDI32_W, Lo20);
+  Seq.emplace_back(Haydn::ADDI32, Lo20);
 }
 
 // Generate the shortest CORRECT sequence for a 32-bit constant.
@@ -76,7 +76,7 @@ void generate32BitSeq(int64_t Value, HaydnMatInt::InstSeq &Seq) {
   // Strategy 1: simm20 — single ADDI32_W from R0 (sign-extended, 1 instr).
   // Includes 0 (addi32_w Dst, R0, 0).
   if (isInt<20>(Value)) {
-    Seq.emplace_back(Haydn::ADDI32_W, Value);
+    Seq.emplace_back(Haydn::ADDI32, Value);
     return;
   }
 

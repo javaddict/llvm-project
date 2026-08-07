@@ -403,7 +403,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     // Before: %dst = G_FRAME_INDEX %fi
     // After: %dst = ADDI32 %fi, 0
     // eliminateFrameIndex will later change %fi to SP/FP and add the offset.
-    I.setDesc(TII.get(Haydn::ADDI32_W));
+    I.setDesc(TII.get(Haydn::ADDI32));
     I.addOperand(MachineOperand::CreateImm(0));
     return constrainSelectedInstRegOperands(I, TII, TRI, RBI);
   }
@@ -581,7 +581,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
 
     // Load the table entry value.
     Register EntryVal = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-    MachineInstr *LoadMI = MIB.buildInstr(Haydn::LD32)
+    MachineInstr *LoadMI = MIB.buildInstr(Haydn::S_LW_WITH_IMM)
                               .addDef(EntryVal)
                               .addReg(JTEAddr)
                               .addImm(0); // offset 0
@@ -1407,7 +1407,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
                   OffsetReg);
           constrainSelectedInstRegOperands(*Add, TII, TRI, RBI);
         } else {
-          MachineInstr *Add = MIB.buildInstr(Haydn::ADDI32_W)
+          MachineInstr *Add = MIB.buildInstr(Haydn::ADDI32)
                                   .addDef(PtrOut)
                                   .addReg(Base)
                                   .addImm(Bytes);
@@ -1420,17 +1420,17 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
         Register Lo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
         Register Hi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
         Register AddrHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-        MachineInstr *AddHi = MIB.buildInstr(Haydn::ADDI32_W)
+        MachineInstr *AddHi = MIB.buildInstr(Haydn::ADDI32)
                                   .addDef(AddrHi)
                                   .addReg(AccessBase)
                                   .addImm(4);
         constrainSelectedInstRegOperands(*AddHi, TII, TRI, RBI);
         MachineInstr *LLo =
-            MIB.buildInstr(Haydn::LD32).addDef(Lo).addReg(AccessBase).addImm(0);
+            MIB.buildInstr(Haydn::S_LW_WITH_IMM).addDef(Lo).addReg(AccessBase).addImm(0);
         LLo->cloneMemRefs(MF, I);
         constrainSelectedInstRegOperands(*LLo, TII, TRI, RBI);
         MachineInstr *LHi =
-            MIB.buildInstr(Haydn::LD32).addDef(Hi).addReg(AddrHi).addImm(0);
+            MIB.buildInstr(Haydn::S_LW_WITH_IMM).addDef(Hi).addReg(AddrHi).addImm(0);
         LHi->cloneMemRefs(MF, I);
         constrainSelectedInstRegOperands(*LHi, TII, TRI, RBI);
         MachineInstr *Pack = MIB.buildInstr(Haydn::MOV_GPR_TO_DR64)
@@ -1448,17 +1448,17 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
         MachineInstr *HiMI =
             MIB.buildInstr(Haydn::MOVE32_DR_H).addDef(Hi).addReg(Data);
         constrainSelectedInstRegOperands(*HiMI, TII, TRI, RBI);
-        MachineInstr *AddHi = MIB.buildInstr(Haydn::ADDI32_W)
+        MachineInstr *AddHi = MIB.buildInstr(Haydn::ADDI32)
                                   .addDef(AddrHi)
                                   .addReg(AccessBase)
                                   .addImm(4);
         constrainSelectedInstRegOperands(*AddHi, TII, TRI, RBI);
         MachineInstr *SLo =
-            MIB.buildInstr(Haydn::ST32).addReg(Lo).addReg(AccessBase).addImm(0);
+            MIB.buildInstr(Haydn::S_SW_WITH_IMM).addReg(Lo).addReg(AccessBase).addImm(0);
         SLo->cloneMemRefs(MF, I);
         constrainSelectedInstRegOperands(*SLo, TII, TRI, RBI);
         MachineInstr *SHi =
-            MIB.buildInstr(Haydn::ST32).addReg(Hi).addReg(AddrHi).addImm(0);
+            MIB.buildInstr(Haydn::S_SW_WITH_IMM).addReg(Hi).addReg(AddrHi).addImm(0);
         SHi->cloneMemRefs(MF, I);
         constrainSelectedInstRegOperands(*SHi, TII, TRI, RBI);
       }
@@ -1470,7 +1470,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
                   OffsetReg);
           constrainSelectedInstRegOperands(*Add, TII, TRI, RBI);
         } else {
-          MachineInstr *Add = MIB.buildInstr(Haydn::ADDI32_W)
+          MachineInstr *Add = MIB.buildInstr(Haydn::ADDI32)
                                   .addDef(PtrOut)
                                   .addReg(Base)
                                   .addImm(Bytes);
@@ -1531,7 +1531,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
         pick(Haydn::S_LW_POST_IMM, Haydn::S_LW_PRE_IMM, Haydn::S_LW_POST_REG,
              Haydn::S_LW_PRE_REG);
       else
-        pick(Haydn::ST32_POST, Haydn::S_SW_PRE_IMM, Haydn::S_SW_POST_REG,
+        pick(Haydn::S_SW_POST_IMM, Haydn::S_SW_PRE_IMM, Haydn::S_SW_POST_REG,
              Haydn::S_SW_PRE_REG);
       break;
     case 8:
@@ -1539,7 +1539,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
         pick(Haydn::D_LDW_POST_IMM, Haydn::D_LDW_PRE_IMM, Haydn::D_LDW_POST_REG,
              Haydn::D_LDW_PRE_REG);
       else
-        pick(Haydn::ST64_POST, Haydn::D_SDW_PRE_IMM, Haydn::D_SDW_POST_REG,
+        pick(Haydn::D_SDW_POST_IMM, Haydn::D_SDW_PRE_IMM, Haydn::D_SDW_POST_REG,
              Haydn::D_SDW_PRE_REG);
       break;
     }
@@ -1676,17 +1676,17 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
         getMemAccessBytes(I, /*FallbackBytes=*/DstTy.getSizeInBits() / 8);
     unsigned Opc;
     switch (MemBytes) {
-    case 1:  Opc = IsSExt ? Haydn::LD8 : Haydn::LDU8; break;
-    case 2:  Opc = IsSExt ? Haydn::LD16 : Haydn::LDU16; break;
-    case 4:  Opc = Haydn::LD32; break;
-    case 8:  Opc = Haydn::LD64; break;
+    case 1:  Opc = IsSExt ? Haydn::S_LBS_WITH_IMM : Haydn::S_LBU_WITH_IMM; break;
+    case 2:  Opc = IsSExt ? Haydn::S_LHWS_WITH_IMM : Haydn::S_LHWU_WITH_IMM; break;
+    case 4:  Opc = Haydn::S_LW_WITH_IMM; break;
+    case 8:  Opc = Haydn::D_LDW_WITH_IMM; break;
     default: return false;
     }
     const TargetRegisterClass *DstRC = memResultRC(MemBytes);
 
     // Mirror G_STORE: ABI i64:32 allows 4-byte-aligned s64, but LD64/D_LDW
     // requires 8-byte alignment. Split to LD32 lo/hi + MOV_GPR_TO_DR64.
-    if (Opc == Haydn::LD64) {
+    if (Opc == Haydn::D_LDW_WITH_IMM) {
       Align MemAlign = Align(1);
       if (!I.memoperands_empty())
         MemAlign = (*I.memoperands_begin())->getAlign();
@@ -1698,17 +1698,17 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
         Register Lo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
         Register Hi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
         Register AddrHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-        MachineInstr *AddMI = MIB.buildInstr(Haydn::ADDI32_W)
+        MachineInstr *AddMI = MIB.buildInstr(Haydn::ADDI32)
                                   .addDef(AddrHi)
                                   .addReg(Ptr)
                                   .addImm(4);
         constrainSelectedInstRegOperands(*AddMI, TII, TRI, RBI);
         MachineInstr *LLo =
-            MIB.buildInstr(Haydn::LD32).addDef(Lo).addReg(Ptr).addImm(0);
+            MIB.buildInstr(Haydn::S_LW_WITH_IMM).addDef(Lo).addReg(Ptr).addImm(0);
         LLo->cloneMemRefs(MF, I);
         constrainSelectedInstRegOperands(*LLo, TII, TRI, RBI);
         MachineInstr *LHi =
-            MIB.buildInstr(Haydn::LD32).addDef(Hi).addReg(AddrHi).addImm(0);
+            MIB.buildInstr(Haydn::S_LW_WITH_IMM).addDef(Hi).addReg(AddrHi).addImm(0);
         LHi->cloneMemRefs(MF, I);
         constrainSelectedInstRegOperands(*LHi, TII, TRI, RBI);
         MachineInstr *Pack = MIB.buildInstr(Haydn::MOV_GPR_TO_DR64)
@@ -1736,8 +1736,12 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
         if (OffsetCst &&
             isLegalScaledSimm6(OffsetCst->Value.getSExtValue(), MemBytes)) {
           BaseReg = PtrDef->getOperand(1).getReg();
-          Offset = OffsetCst->Value.getSExtValue();
-        } else if (Opc == Haydn::LD32 || Opc == Haydn::LD64) {
+          // The format E operand is `simm6:$scaled_imm` and the hardware does
+          // EA = rs + (imm6 << log2(width)), so the field holds ELEMENTS, not
+          // bytes. Bundle128's simm16 held bytes; writing a byte offset here
+          // silently addresses width times too far.
+          Offset = OffsetCst->Value.getSExtValue() / (int64_t)MemBytes;
+        } else if (Opc == Haydn::S_LW_WITH_IMM || Opc == Haydn::D_LDW_WITH_IMM) {
           BaseReg = PtrDef->getOperand(1).getReg();
           RuntimeOffsetReg = OffsetReg;
         }
@@ -1750,10 +1754,10 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     // never emit private *_S0 encode peers from ISel).
     if (RuntimeOffsetReg) {
       unsigned RegOpc = 0;
-      if (Opc == Haydn::LD32)
-        RegOpc = Haydn::LD32_REG_M0S0LS;
-      else if (Opc == Haydn::LD64)
-        RegOpc = Haydn::LD64_REG_M0S0LS;
+      if (Opc == Haydn::S_LW_WITH_IMM)
+        RegOpc = Haydn::S_LW_WITH_REG;
+      else if (Opc == Haydn::D_LDW_WITH_IMM)
+        RegOpc = Haydn::D_LDW_WITH_REG;
 
       if (RegOpc) {
         Register OffReg = RuntimeOffsetReg;
@@ -1795,10 +1799,10 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
         getMemAccessBytes(I, /*FallbackBytes=*/ValTy.getSizeInBits() / 8);
     unsigned Opc;
     switch (MemBytes) {
-    case 1:  Opc = Haydn::ST8; break;
-    case 2:  Opc = Haydn::ST16; break;
-    case 4:  Opc = Haydn::ST32; break;
-    case 8:  Opc = Haydn::ST64; break;
+    case 1:  Opc = Haydn::S_SB_WITH_IMM; break;
+    case 2:  Opc = Haydn::S_SHW_WITH_IMM; break;
+    case 4:  Opc = Haydn::S_SW_WITH_IMM; break;
+    case 8:  Opc = Haydn::D_SDW_WITH_IMM; break;
     default: return false;
     }
     const TargetRegisterClass *ValRC = memResultRC(MemBytes);
@@ -1807,7 +1811,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     // D_SDW (ST64) requires 8-byte alignment. BundleSim faults ALIGNMENT on
     // ST64 to e.g. struct {int x; long long v;}.v (offset 4). Split into two
     // 4-byte ST32 of the DR lanes (MOVE32_DR_L/H + ST32).
-    if (Opc == Haydn::ST64) {
+    if (Opc == Haydn::D_SDW_WITH_IMM) {
       Align MemAlign = Align(1);
       if (!I.memoperands_empty())
         MemAlign = (*I.memoperands_begin())->getAlign();
@@ -1825,17 +1829,17 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
         MachineInstr *HiMI =
             MIB.buildInstr(Haydn::MOVE32_DR_H).addDef(Hi).addReg(Val);
         constrainSelectedInstRegOperands(*HiMI, TII, TRI, RBI);
-        MachineInstr *AddMI = MIB.buildInstr(Haydn::ADDI32_W)
+        MachineInstr *AddMI = MIB.buildInstr(Haydn::ADDI32)
                                   .addDef(AddrHi)
                                   .addReg(Ptr)
                                   .addImm(4);
         constrainSelectedInstRegOperands(*AddMI, TII, TRI, RBI);
         MachineInstr *SLo =
-            MIB.buildInstr(Haydn::ST32).addReg(Lo).addReg(Ptr).addImm(0);
+            MIB.buildInstr(Haydn::S_SW_WITH_IMM).addReg(Lo).addReg(Ptr).addImm(0);
         SLo->cloneMemRefs(MF, I);
         constrainSelectedInstRegOperands(*SLo, TII, TRI, RBI);
         MachineInstr *SHi =
-            MIB.buildInstr(Haydn::ST32).addReg(Hi).addReg(AddrHi).addImm(0);
+            MIB.buildInstr(Haydn::S_SW_WITH_IMM).addReg(Hi).addReg(AddrHi).addImm(0);
         SHi->cloneMemRefs(MF, I);
         constrainSelectedInstRegOperands(*SHi, TII, TRI, RBI);
         I.eraseFromParent();
@@ -1856,8 +1860,9 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
         if (OffsetCst &&
             isLegalScaledSimm6(OffsetCst->Value.getSExtValue(), MemBytes)) {
           BaseReg = PtrDef->getOperand(1).getReg();
-          Offset = OffsetCst->Value.getSExtValue();
-        } else if (Opc == Haydn::ST32 || Opc == Haydn::ST64) {
+          // Scaled field — see the G_LOAD path above.
+          Offset = OffsetCst->Value.getSExtValue() / (int64_t)MemBytes;
+        } else if (Opc == Haydn::S_SW_WITH_IMM || Opc == Haydn::D_SDW_WITH_IMM) {
           // Non-constant or non-foldable offset: capture for the WITH_REG path
           // (ST32/ST64 only — byte/half stores leave BaseReg = Ptr).
           BaseReg = PtrDef->getOperand(1).getReg();
@@ -1870,10 +1875,10 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     // §6.5 register-offset (WITH_REG) path — see G_LOAD for full rationale.
     if (RuntimeOffsetReg) {
       unsigned RegOpc = 0;
-      if (Opc == Haydn::ST32)
-        RegOpc = Haydn::ST32_REG_M0S0LS;
-      else if (Opc == Haydn::ST64)
-        RegOpc = Haydn::ST64_REG_M0S0LS;
+      if (Opc == Haydn::S_SW_WITH_IMM)
+        RegOpc = Haydn::S_SW_WITH_REG;
+      else if (Opc == Haydn::D_SDW_WITH_IMM)
+        RegOpc = Haydn::D_SDW_WITH_REG;
 
       if (RegOpc) {
         Register OffReg = RuntimeOffsetReg;

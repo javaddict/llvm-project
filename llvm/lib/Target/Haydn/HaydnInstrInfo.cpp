@@ -193,7 +193,7 @@ static unsigned getHaydnFlexBaseOpcode(unsigned Opc, const MCInstrInfo &MII) {
     return Opc;
   static const std::pair<StringRef, unsigned> KnownBases[] = {
       {"ADD32", Haydn::ADD32},         {"ADDI32", Haydn::ADDI32},
-      {"ADDI32_W", Haydn::ADDI32_W},   {"SUB32", Haydn::SUB32},
+      {"SUB32", Haydn::SUB32},
       {"SEQ32", Haydn::SEQ32},         {"SLT32", Haydn::SLT32},
       {"SLTU32", Haydn::SLTU32},       {"XORI32", Haydn::XORI32},
       {"JAL", Haydn::JAL},         {"JALR", Haydn::JALR},
@@ -286,10 +286,10 @@ void HaydnInstrInfo::storeRegToStackSlot(
   // Use contains check since GPR32NoSPNoLR is a subclass
   if (RC == &Haydn::GPR32RegClass || RC == &Haydn::GPR32NoSPNoLRRegClass ||
       RC->hasSubClassEq(&Haydn::GPR32RegClass)) {
-    Opc = Haydn::ST32;
+    Opc = Haydn::S_SW_WITH_IMM;
     Size = 4;
   } else if (RC == &Haydn::DR64RegClass) {
-    Opc = Haydn::ST64; // Use 64-bit store for DR64 registers
+    Opc = Haydn::D_SDW_WITH_IMM; // Use 64-bit store for DR64 registers
     Size = 8;
   } else {
     llvm_unreachable("Unknown register class for store");
@@ -325,10 +325,10 @@ void HaydnInstrInfo::loadRegFromStackSlot(
   // Use contains check since GPR32NoSPNoLR is a subclass
   if (RC == &Haydn::GPR32RegClass || RC == &Haydn::GPR32NoSPNoLRRegClass ||
       RC->hasSubClassEq(&Haydn::GPR32RegClass)) {
-    Opc = Haydn::LD32;
+    Opc = Haydn::S_LW_WITH_IMM;
     Size = 4;
   } else if (RC == &Haydn::DR64RegClass) {
-    Opc = Haydn::LD64; // logical; slot from placement / setDesc materialize
+    Opc = Haydn::D_LDW_WITH_IMM; // logical; slot from placement / setDesc materialize
     Size = 8;
   } else {
     llvm_unreachable("Unknown register class for load");
@@ -1048,7 +1048,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
               .addReg(Haydn::R13)
               .addImm(8);
           emitConst32(Lo, Scr);
-          BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+          BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
               .addReg(Scr)
               .addReg(Haydn::R13)
               .addImm(0);
@@ -1060,14 +1060,14 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
           } else {
             emitConst32(Hi, Scr);
           }
-          BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+          BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
               .addReg(Scr)
               .addReg(Haydn::R13)
               .addImm(4);
-          BuildMI(MBB, MBBI, DL, get(Haydn::LD64), DstReg)
+          BuildMI(MBB, MBBI, DL, get(Haydn::D_LDW_WITH_IMM), DstReg)
               .addReg(Haydn::R13)
               .addImm(0);
-          BuildMI(MBB, MBBI, DL, get(Haydn::ADDI32_W), Haydn::R13)
+          BuildMI(MBB, MBBI, DL, get(Haydn::ADDI32), Haydn::R13)
               .addReg(Haydn::R13)
               .addImm(8);
         },
@@ -1146,28 +1146,28 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     // When SrcLo == SrcHi, only apply kill on the last use to avoid
     // killing the same physical register twice.
     if (SrcLo == SrcHi) {
-      BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+      BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
           .addReg(SrcLo, getKillRegState(false))
           .addReg(Haydn::R13)
           .addImm(0);
-      BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+      BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
           .addReg(SrcHi, getKillRegState(LoKill || HiKill))
           .addReg(Haydn::R13)
           .addImm(4);
     } else {
-      BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+      BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
           .addReg(SrcLo, getKillRegState(LoKill))
           .addReg(Haydn::R13)
           .addImm(0);
-      BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+      BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
           .addReg(SrcHi, getKillRegState(HiKill))
           .addReg(Haydn::R13)
           .addImm(4);
     }
-    BuildMI(MBB, MBBI, DL, get(Haydn::LD64), DstReg)
+    BuildMI(MBB, MBBI, DL, get(Haydn::D_LDW_WITH_IMM), DstReg)
         .addReg(Haydn::R13)
         .addImm(0);
-    BuildMI(MBB, MBBI, DL, get(Haydn::ADDI32_W), Haydn::R13)
+    BuildMI(MBB, MBBI, DL, get(Haydn::ADDI32), Haydn::R13)
         .addReg(Haydn::R13)
         .addImm(8);
 
@@ -1222,7 +1222,7 @@ bool HaydnInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
   // Look through debug/NOP. Post-RA setDesc may leave ADDI32_W_S0 member Desc.
   {
     unsigned BaseOpc = getHaydnFlexBaseOpcode(Opc, *this);
-    if (BaseOpc == Haydn::ADDI32 || BaseOpc == Haydn::ADDI32_W) {
+    if (BaseOpc == Haydn::ADDI32) {
       if (MI.getNumExplicitOperands() >= 1 && MI.getOperand(0).isReg()) {
         Register Dest = MI.getOperand(0).getReg();
         // Bundled remat def: whole BUNDLE is a boundary via SET inside, but
@@ -2052,7 +2052,7 @@ std::optional<bool> HaydnPipelinerLoopInfo::createTripCountGreaterCondition(
     BuildMI(&MBB, BranchDL, HII->get(Haydn::LUI), CmpReg)
         .addReg(Haydn::R0)
         .addImm(((static_cast<uint32_t>(TC + 1) + 0x8000) >> 16) & 0xFFFF);
-    BuildMI(&MBB, BranchDL, HII->get(Haydn::ADDI32_W), CmpReg)
+    BuildMI(&MBB, BranchDL, HII->get(Haydn::ADDI32), CmpReg)
         .addReg(CmpReg)
         .addImm((TC + 1) & 0xFFFF);
   }
@@ -2104,7 +2104,7 @@ void HaydnPipelinerLoopInfo::adjustTripCount(int TripCountAdjust) {
   // Use the cached LoopBB (the original loop body).
   MachineBasicBlock *LoopBB = this->LoopBB;
   if (isInt<16>(Adj)) {
-    BuildMI(*LoopBB, LoopBB->getFirstNonPHI(), DL, HII->get(Haydn::ADDI32_W),
+    BuildMI(*LoopBB, LoopBB->getFirstNonPHI(), DL, HII->get(Haydn::ADDI32),
             NewTC)
         .addReg(TripCountReg)
         .addImm(Adj);
@@ -2141,8 +2141,7 @@ namespace {
 // opcodes and their `_S<k>` Selector-emitted variants.
 static bool isInductionStep(unsigned Opc, const MCInstrInfo &MII) {
   unsigned Base = getHaydnFlexBaseOpcode(Opc, MII);
-  return Base == Haydn::ADD32 || Base == Haydn::ADDI32 ||
-         Base == Haydn::ADDI32_W || Base == Haydn::SUB32;
+  return Base == Haydn::ADD32 || Base == Haydn::ADDI32 || Base == Haydn::SUB32;
 }
 
 // Return the latch-incoming value of a PHI in \p LoopBB, i.e. the incoming
@@ -2194,7 +2193,7 @@ static bool getInductionStep(const MachineRegisterInfo &MRI,
                              const MachineInstr &BumpMI, int64_t &Step) {
   unsigned Opc = BumpMI.getOpcode();
   unsigned Base = getHaydnFlexBaseOpcode(Opc, MII);
-  if (Base == Haydn::ADDI32 || Base == Haydn::ADDI32_W) {
+  if (Base == Haydn::ADDI32) {
     if (!BumpMI.getOperand(2).isImm())
       return false;
     Step = BumpMI.getOperand(2).getImm();
@@ -2211,7 +2210,7 @@ static bool getInductionStep(const MachineRegisterInfo &MRI,
     if (!Def)
       continue;
     unsigned DefBase = getHaydnFlexBaseOpcode(Def->getOpcode(), MII);
-    if (DefBase != Haydn::ADDI32 && DefBase != Haydn::ADDI32_W)
+    if (DefBase != Haydn::ADDI32)
       continue;
     if (Def->getOperand(1).getReg() != Haydn::R0 || !Def->getOperand(2).isImm())
       continue;
@@ -2621,7 +2620,7 @@ std::optional<int64_t> getHaydnConstantImm(Register R,
     if (Opc == Haydn::LOADI32 && Def->getOperand(1).isImm())
       return Def->getOperand(1).getImm();
     // ADDI32 / ADDI32_W rd, r0, imm  (materialize small constants)
-    if ((Opc == Haydn::ADDI32 || Opc == Haydn::ADDI32_W) &&
+    if ((Opc == Haydn::ADDI32) &&
         Def->getNumOperands() >= 3 && Def->getOperand(1).isReg() &&
         Def->getOperand(2).isImm()) {
       Register Base = Def->getOperand(1).getReg();
@@ -2892,13 +2891,13 @@ bool HaydnInstrInfo::getBaseAndOffsetPosition(const MachineInstr &MI,
 
   // Plain base+imm loads/stores used by canUseLastOffsetValue rewrite.
   switch (Opc) {
-  case Haydn::LD32:
-  case Haydn::LD64:
+  case Haydn::S_LW_WITH_IMM:
+  case Haydn::D_LDW_WITH_IMM:
     BasePos = 1;
     OffsetPos = 2;
     break;
-  case Haydn::ST32:
-  case Haydn::ST64:
+  case Haydn::S_SW_WITH_IMM:
+  case Haydn::D_SDW_WITH_IMM:
     BasePos = 1;
     OffsetPos = 2;
     break;
@@ -2941,7 +2940,7 @@ bool HaydnInstrInfo::getIncrementValue(const MachineInstr &MI,
   }
 
   // Plain ADDI is the split post-inc fallback (and common IV step).
-  if (Opc == Haydn::ADDI32 || Opc == Haydn::ADDI32_W) {
+  if (Opc == Haydn::ADDI32) {
     const MachineOperand &ImmOp = MI.getOperand(2);
     if (!ImmOp.isImm() || !isInt<32>(ImmOp.getImm()))
       return false;
@@ -3012,23 +3011,23 @@ bool HaydnInstrInfo::getMemOperandsWithOffsetWidth(
 
   // Plain LD/ST base+imm.
   switch (Opc) {
-  case Haydn::LD32:
-  case Haydn::LD64:
+  case Haydn::S_LW_WITH_IMM:
+  case Haydn::D_LDW_WITH_IMM:
     if (MI.getNumOperands() < 3 || !MI.getOperand(1).isReg() ||
         !MI.getOperand(2).isImm())
       return false;
     BaseOps.push_back(&MI.getOperand(1));
     Offset = MI.getOperand(2).getImm();
-    Width = LocationSize::precise(Opc == Haydn::LD64 ? 8 : 4);
+    Width = LocationSize::precise(Opc == Haydn::D_LDW_WITH_IMM ? 8 : 4);
     return true;
-  case Haydn::ST32:
-  case Haydn::ST64:
+  case Haydn::S_SW_WITH_IMM:
+  case Haydn::D_SDW_WITH_IMM:
     if (MI.getNumOperands() < 3 || !MI.getOperand(1).isReg() ||
         !MI.getOperand(2).isImm())
       return false;
     BaseOps.push_back(&MI.getOperand(1));
     Offset = MI.getOperand(2).getImm();
-    Width = LocationSize::precise(Opc == Haydn::ST64 ? 8 : 4);
+    Width = LocationSize::precise(Opc == Haydn::D_SDW_WITH_IMM ? 8 : 4);
     return true;
   default:
     return false;

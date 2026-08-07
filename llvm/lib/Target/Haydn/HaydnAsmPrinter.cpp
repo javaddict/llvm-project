@@ -894,7 +894,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       emitWrappedInst(LuiInst);
 
       MCInst AddiInst;
-      AddiInst.setOpcode(Haydn::ADDI32_W);
+      AddiInst.setOpcode(Haydn::ADDI32);
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createExpr(Expr));
@@ -924,7 +924,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
 
       // Emit ADDI32 with LO16 fixup (auto-created by MC layer based on opcode)
       MCInst AddiInst;
-      AddiInst.setOpcode(Haydn::ADDI32_W);
+      AddiInst.setOpcode(Haydn::ADDI32);
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createExpr(Expr));
@@ -945,7 +945,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
 
       // Emit ADDI32 with LO16 fixup
       MCInst AddiInst;
-      AddiInst.setOpcode(Haydn::ADDI32_W);
+      AddiInst.setOpcode(Haydn::ADDI32);
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createExpr(Expr));
@@ -967,7 +967,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       emitWrappedInst(LuiInst);
 
       MCInst AddiInst;
-      AddiInst.setOpcode(Haydn::ADDI32_W);
+      AddiInst.setOpcode(Haydn::ADDI32);
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createExpr(Expr));
@@ -1158,7 +1158,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
 
   // ST32 with DR64 data is a selector bug — do not silently rewrite
   // in the printer (sizes/sched already fixed on the wrong opcode). Fail closed.
-  if (TmpInst.getOpcode() == Haydn::ST32 && TmpInst.getNumOperands() >= 1 &&
+  if (TmpInst.getOpcode() == Haydn::S_SW_WITH_IMM && TmpInst.getNumOperands() >= 1 &&
       TmpInst.getOperand(0).isReg()) {
     const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
     unsigned Reg = TmpInst.getOperand(0).getReg();
