@@ -205,6 +205,28 @@ def uimm20_wide_abs
 // offset in 2-byte units (§5.14 D1: field stores offset>>1, decoder
 // sign-extends then shifts left 1). Symbolic target emits the dedicated
 // FIXUP_HAYDN_WIDE_CallSImm20 (PC-rel, TargetOffset=28).
+// Format E branch / call targets.
+//
+// The generated members take these instead of a plain simmN so the immediate
+// carries its SCALE. § 5.14 D1 puts branch offsets in 2-byte units; a plain
+// simm12 stores the byte offset raw, so `beqz r1, -12` encoded -12 while the
+// same distance written as a symbol encoded -6 (the relocation applying
+// ValueShift). Two encodings for one offset — see FORMAT-E-SWITCH-PLAN.md
+// § 6.10.
+//
+// The encoders dispatch the fixup kind on the OPCODE
+// (getBranchFixupKind / getCallFixupKind), so one class serves every
+// placement and every branch shape; only the decoder needs the field width.
+def brtarget_e12 : Operand<OtherVT> {
+  let EncoderMethod = "getBranchTargetOpValue";
+  let DecoderMethod = "decodeSImmOperandXStepWide<12,1,/*IsSigned*/1>";
+}
+
+def calltarget_e20 : Operand<OtherVT> {
+  let EncoderMethod = "getCallTargetOpValue";
+  let DecoderMethod = "decodeSImmOperandXStepWide<20,1,/*IsSigned*/1>";
+}
+
 def brtarget_wide_i20 : Operand<OtherVT> {
   let EncoderMethod =
       "getSImmOpValueXStepWide<20,/*Shift*/1,/*IsSigned*/1,/*IsPCRel*/1,"

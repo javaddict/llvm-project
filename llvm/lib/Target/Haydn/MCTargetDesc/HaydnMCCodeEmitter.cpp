@@ -729,8 +729,11 @@ HaydnMCCodeEmitter::getCallTargetOpValue(const MCInst &MI, unsigned OpNo,
                                          SmallVectorImpl<MCFixup> &Fixups,
                                          const MCSubtargetInfo &STI) const {
   const MCOperand &MO = MI.getOperand(OpNo);
-  unsigned Opcode = MI.getOpcode();
-  bool IsJAL = (Opcode == Haydn::JAL);
+  // Fold through the logical: this runs for MEMBERS too, and a member is
+  // named JAL_P30_ALU0, not JAL. Comparing the raw opcode silently skipped the
+  // >>1 for every placed call. Same rule as § 5.6 — never fold on the
+  // spelling.
+  bool IsJAL = getHaydnLogicalBaseOpcode(MI.getOpcode(), MII) == Haydn::JAL;
 
   if (MO.isImm()) {
     int64_t Imm = MO.getImm();

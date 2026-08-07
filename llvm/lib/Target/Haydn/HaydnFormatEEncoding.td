@@ -1896,7 +1896,7 @@ def ARCTAN_P32_ALU2 : HaydnEntryP32<
 }
 
 def BEQ_P20_ALU0 : HaydnEntryP20<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "beq	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -1917,7 +1917,7 @@ def BEQ_P20_ALU0 : HaydnEntryP20<
 }
 
 def BEQ_P30_ALU0 : HaydnEntryP30<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "beq	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -1936,7 +1936,7 @@ def BEQ_P30_ALU0 : HaydnEntryP30<
 }
 
 def BEQ_P31_ALU0 : HaydnEntryP31<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "beq	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
@@ -1955,7 +1955,7 @@ def BEQ_P31_ALU0 : HaydnEntryP31<
 }
 
 def BEQZ_P20_ALU0 : HaydnEntryP20<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "beqz	$rs, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -1974,7 +1974,7 @@ def BEQZ_P20_ALU0 : HaydnEntryP20<
 }
 
 def BEQZ_P30_ALU0 : HaydnEntryP30<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "beqz	$rs, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -1992,7 +1992,7 @@ def BEQZ_P30_ALU0 : HaydnEntryP30<
 }
 
 def BEQZ_P31_ALU0 : HaydnEntryP31<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "beqz	$rs, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
@@ -2010,7 +2010,7 @@ def BEQZ_P31_ALU0 : HaydnEntryP31<
 }
 
 def BEQZ_P32_ALU0 : HaydnEntryP32<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "beqz	$rs, $imm12"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
@@ -2027,7 +2027,7 @@ def BEQZ_P32_ALU0 : HaydnEntryP32<
 }
 
 def BGE_P20_ALU0 : HaydnEntryP20<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "bge	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2048,7 +2048,7 @@ def BGE_P20_ALU0 : HaydnEntryP20<
 }
 
 def BGE_P30_ALU0 : HaydnEntryP30<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "bge	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2067,7 +2067,7 @@ def BGE_P30_ALU0 : HaydnEntryP30<
 }
 
 def BGE_P31_ALU0 : HaydnEntryP31<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "bge	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
@@ -2086,7 +2086,7 @@ def BGE_P31_ALU0 : HaydnEntryP31<
 }
 
 def BGEU_P20_ALU0 : HaydnEntryP20<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "bgeu	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2107,7 +2107,7 @@ def BGEU_P20_ALU0 : HaydnEntryP20<
 }
 
 def BGEU_P30_ALU0 : HaydnEntryP30<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "bgeu	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2126,7 +2126,7 @@ def BGEU_P30_ALU0 : HaydnEntryP30<
 }
 
 def BGEU_P31_ALU0 : HaydnEntryP31<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "bgeu	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
@@ -2145,7 +2145,7 @@ def BGEU_P31_ALU0 : HaydnEntryP31<
 }
 
 def BGEZ_P20_ALU0 : HaydnEntryP20<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "bgez	$rs, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2164,7 +2164,7 @@ def BGEZ_P20_ALU0 : HaydnEntryP20<
 }
 
 def BGEZ_P30_ALU0 : HaydnEntryP30<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "bgez	$rs, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2182,7 +2182,7 @@ def BGEZ_P30_ALU0 : HaydnEntryP30<
 }
 
 def BGEZ_P31_ALU0 : HaydnEntryP31<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "bgez	$rs, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
@@ -2200,7 +2200,7 @@ def BGEZ_P31_ALU0 : HaydnEntryP31<
 }
 
 def BGEZ_P32_ALU0 : HaydnEntryP32<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "bgez	$rs, $imm12"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
@@ -2217,7 +2217,7 @@ def BGEZ_P32_ALU0 : HaydnEntryP32<
 }
 
 def BLT_P20_ALU0 : HaydnEntryP20<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "blt	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2238,7 +2238,7 @@ def BLT_P20_ALU0 : HaydnEntryP20<
 }
 
 def BLT_P30_ALU0 : HaydnEntryP30<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "blt	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2257,7 +2257,7 @@ def BLT_P30_ALU0 : HaydnEntryP30<
 }
 
 def BLT_P31_ALU0 : HaydnEntryP31<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "blt	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
@@ -2276,7 +2276,7 @@ def BLT_P31_ALU0 : HaydnEntryP31<
 }
 
 def BLTU_P20_ALU0 : HaydnEntryP20<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "bltu	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2297,7 +2297,7 @@ def BLTU_P20_ALU0 : HaydnEntryP20<
 }
 
 def BLTU_P30_ALU0 : HaydnEntryP30<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "bltu	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2316,7 +2316,7 @@ def BLTU_P30_ALU0 : HaydnEntryP30<
 }
 
 def BLTU_P31_ALU0 : HaydnEntryP31<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "bltu	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
@@ -2335,7 +2335,7 @@ def BLTU_P31_ALU0 : HaydnEntryP31<
 }
 
 def BLTZ_P20_ALU0 : HaydnEntryP20<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "bltz	$rs, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2354,7 +2354,7 @@ def BLTZ_P20_ALU0 : HaydnEntryP20<
 }
 
 def BLTZ_P30_ALU0 : HaydnEntryP30<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "bltz	$rs, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2372,7 +2372,7 @@ def BLTZ_P30_ALU0 : HaydnEntryP30<
 }
 
 def BLTZ_P31_ALU0 : HaydnEntryP31<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "bltz	$rs, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
@@ -2390,7 +2390,7 @@ def BLTZ_P31_ALU0 : HaydnEntryP31<
 }
 
 def BLTZ_P32_ALU0 : HaydnEntryP32<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "bltz	$rs, $imm12"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
@@ -2407,7 +2407,7 @@ def BLTZ_P32_ALU0 : HaydnEntryP32<
 }
 
 def BNE_P20_ALU0 : HaydnEntryP20<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "bne	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2428,7 +2428,7 @@ def BNE_P20_ALU0 : HaydnEntryP20<
 }
 
 def BNE_P30_ALU0 : HaydnEntryP30<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "bne	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2447,7 +2447,7 @@ def BNE_P30_ALU0 : HaydnEntryP30<
 }
 
 def BNE_P31_ALU0 : HaydnEntryP31<
-    (outs ), (ins GPR32:$rs1, GPR32:$rs2, simm12:$imm12),
+    (outs ), (ins GPR32:$rs1, GPR32:$rs2, brtarget_e12:$imm12),
     "bne	$rs1, $rs2, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
@@ -2466,7 +2466,7 @@ def BNE_P31_ALU0 : HaydnEntryP31<
 }
 
 def BNEZ_P20_ALU0 : HaydnEntryP20<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "bnez	$rs, $imm12"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2485,7 +2485,7 @@ def BNEZ_P20_ALU0 : HaydnEntryP20<
 }
 
 def BNEZ_P30_ALU0 : HaydnEntryP30<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "bnez	$rs, $imm12"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -2503,7 +2503,7 @@ def BNEZ_P30_ALU0 : HaydnEntryP30<
 }
 
 def BNEZ_P31_ALU0 : HaydnEntryP31<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "bnez	$rs, $imm12"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
@@ -2521,7 +2521,7 @@ def BNEZ_P31_ALU0 : HaydnEntryP31<
 }
 
 def BNEZ_P32_ALU0 : HaydnEntryP32<
-    (outs ), (ins GPR32:$rs, simm12:$imm12),
+    (outs ), (ins GPR32:$rs, brtarget_e12:$imm12),
     "bnez	$rs, $imm12"> {
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
@@ -19780,7 +19780,7 @@ def FMULZSS32S_HLLH_P32_MAC1 : HaydnEntryP32<
 }
 
 def JAL_P20_ALU0 : HaydnEntryP20<
-    (outs GPR32:$rt), (ins simm20:$imm20),
+    (outs GPR32:$rt), (ins calltarget_e20:$imm20),
     "jal	$rt, $imm20"> {
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -19798,7 +19798,7 @@ def JAL_P20_ALU0 : HaydnEntryP20<
 }
 
 def JAL_P30_ALU0 : HaydnEntryP30<
-    (outs GPR32:$rt), (ins simm20:$imm20),
+    (outs GPR32:$rt), (ins calltarget_e20:$imm20),
     "jal	$rt, $imm20"> {
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
@@ -19814,7 +19814,7 @@ def JAL_P30_ALU0 : HaydnEntryP30<
 }
 
 def JAL_P31_ALU0 : HaydnEntryP31<
-    (outs GPR32:$rt), (ins simm20:$imm20),
+    (outs GPR32:$rt), (ins calltarget_e20:$imm20),
     "jal	$rt, $imm20"> {
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
