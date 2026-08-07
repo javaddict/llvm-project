@@ -2669,8 +2669,48 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
       }
     }
 
-    // Generic fallback: emit COPYs from source to each def.
+    // 32-bit residual packs (<2 x s16>, <4 x s8>) live in ONE GPR32: shift+mask
+    // each lane. The old fallback COPY'd the whole GPR into every def, so lane
+    // 0 was accidentally right and higher lanes were wrong.
+    if (SrcTy.getSizeInBits() == 32 && (NumDefs == 2 || NumDefs == 4)) {
+      LLT DstTy = MRI.getType(I.getOperand(0).getReg());
+      const unsigned LaneBits = 32 / NumDefs;
+      if (DstTy.isValid() && DstTy.getSizeInBits() == LaneBits) {
+        MachineIRBuilder MIB(I);
+        if (Src.isVirtual()) {
+          if (!RBI.constrainGenericRegister(Src, Haydn::GPR32RegClass, MRI))
+            return false;
+        }
+        const unsigned Mask = (1u << LaneBits) - 1;
+        for (unsigned Idx = 0; Idx < NumDefs; ++Idx) {
+          Register Dst = I.getOperand(Idx).getReg();
+          if (!RBI.constrainGenericRegister(Dst, Haydn::GPR32RegClass, MRI))
+            return false;
+          Register Tmp = Src;
+          if (unsigned Shift = Idx * LaneBits) {
+            Tmp = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+            MIB.buildInstr(Haydn::SRLI32).addDef(Tmp).addReg(Src).addImm(Shift);
+          }
+          MIB.buildInstr(Haydn::ANDI32).addDef(Dst).addReg(Tmp).addImm(Mask);
+        }
+        I.eraseFromParent();
+        return true;
+      }
+    }
+
+    // Fail closed for width-changing unmerge. COPY-to-every-def only works for
+    // same-width degenerate unmerge; narrower shapes silently miscompiled
+    // (every lane = lane 0 / illegal cross-bank MOVE32).
     MachineIRBuilder MIB(I);
+    for (unsigned Idx = 0; Idx < NumDefs; ++Idx) {
+      Register Dst = I.getOperand(Idx).getReg();
+      LLT DstTy = MRI.getType(Dst);
+      if (DstTy.isValid() && DstTy.getSizeInBits() != SrcTy.getSizeInBits()) {
+        LLVM_DEBUG(dbgs() << "Unhandled G_UNMERGE_VALUES shape: " << SrcTy
+                          << " -> " << NumDefs << " x " << DstTy << "\n");
+        return false;
+      }
+    }
     for (unsigned Idx = 0; Idx < NumDefs; ++Idx) {
       Register Dst = I.getOperand(Idx).getReg();
       if (Dst != Src) {
