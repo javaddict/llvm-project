@@ -21,12 +21,18 @@ Companion documents:
 
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
-| `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
+| `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
 | `llvm-project` | `haydn-formate-switch-mc` | `8919a256dc42` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 12/24. Both § 5.2 generator gaps closed; § 5.11 partly.** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
 `haydn` is the trunk. Everything on it is green and committed; work from it.
+
+**Check `git log haydn -1` before believing anything in this file.** The
+`haydn` row above deliberately carries no hash: a previous revision of this
+table was 13 commits stale, and a session started by re-deriving work that was
+already done. The `-mc` hash is given because that branch moves in deliberate
+steps, but verify it too.
 
 All three branches are on the `github` remote. The pre-rebase states of the two
 WIP branches are preserved as the tags `backup/wip-preformate-20260807` and
