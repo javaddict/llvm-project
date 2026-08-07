@@ -2054,7 +2054,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
         RBI.constrainGenericRegister(Src, Haydn::GPR32RegClass, MRI);
       if (Dst.isVirtual())
         RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-      MachineInstr *SextMI = MIB.buildInstr(Haydn::SEXT_GPR32_TO_DR64)
+      MachineInstr *SextMI = MIB.buildInstr(Haydn::SEXT32T64)
                                 .addDef(Dst).addReg(Src);
       constrainSelectedInstRegOperands(*SextMI, TII, TRI, RBI);
     } else if (DstBits == 32 && SrcBits == 1) {
@@ -2084,7 +2084,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
       emitALUImm(MIB, Haydn::SRAI32, Ext32, Tmp, ShiftAmt, TII, TRI, RBI, MRI);
       if (Dst.isVirtual())
         RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-      MachineInstr *SextMI = MIB.buildInstr(Haydn::SEXT_GPR32_TO_DR64)
+      MachineInstr *SextMI = MIB.buildInstr(Haydn::SEXT32T64)
                                 .addDef(Dst).addReg(Ext32);
       constrainSelectedInstRegOperands(*SextMI, TII, TRI, RBI);
     } else {
@@ -3453,10 +3453,10 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     Register AExt = MRI.createVirtualRegister(&DR64RegClass);
     Register BExt = MRI.createVirtualRegister(&DR64RegClass);
     MachineInstr *SextA =
-        MIB.buildInstr(SEXT_GPR32_TO_DR64).addDef(AExt).addReg(A);
+        MIB.buildInstr(SEXT32T64).addDef(AExt).addReg(A);
     constrainSelectedInstRegOperands(*SextA, TII, TRI, RBI);
     MachineInstr *SextB =
-        MIB.buildInstr(SEXT_GPR32_TO_DR64).addDef(BExt).addReg(B);
+        MIB.buildInstr(SEXT32T64).addDef(BExt).addReg(B);
     constrainSelectedInstRegOperands(*SextB, TII, TRI, RBI);
 
     // MUL64_LL DstReg, AExt, BExt

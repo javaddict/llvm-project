@@ -1102,7 +1102,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     if (SrcLo == Haydn::R0) {
       // rd = (uint64_t)rs_hi << 32 — hi in [63:32], zero in [31:0].
       // Zero low half comes from the shift, not from reading R0.
-      BuildMI(MBB, MBBI, DL, get(Haydn::SEXT_GPR32_TO_DR64), DstReg)
+      BuildMI(MBB, MBBI, DL, get(Haydn::SEXT32T64), DstReg)
           .addReg(SrcHi, getKillRegState(HiKill));
       BuildMI(MBB, MBBI, DL, get(Haydn::SLLI64), DstReg)
           .addReg(DstReg)
@@ -1113,7 +1113,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     if (SrcHi == Haydn::R0) {
       // rd = zero_extend(rs_lo) — lo in [31:0], zero in [63:32].
       // Zero high half from (<<32)>>32; do not read R0.
-      BuildMI(MBB, MBBI, DL, get(Haydn::SEXT_GPR32_TO_DR64), DstReg)
+      BuildMI(MBB, MBBI, DL, get(Haydn::SEXT32T64), DstReg)
           .addReg(SrcLo, getKillRegState(LoKill));
       BuildMI(MBB, MBBI, DL, get(Haydn::SLLI64), DstReg)
           .addReg(DstReg)
