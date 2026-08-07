@@ -66,7 +66,12 @@ public:
   // the slot-only behaviour they had.
   Bundle(const HaydnBaseMCFormats *FormatInterface,
          const MCInstrInfo *MII = nullptr)
-      : FormatInterface(FormatInterface), MII(MII) {}
+      : FormatInterface(FormatInterface),
+        // Fall back to the formats object's own MII. A caller that built a
+        // HaydnMCFormatsWithMII has already said which MCInstrInfo is in
+        // play; making it re-state that as a second argument is what let the
+        // unit check go missing (§ 5.7). An explicit non-null MII still wins.
+        MII(MII ? MII : FormatInterface->getMCInstrInfo()) {}
 
   // Whether adding \p Instr (by opcode) leaves the bundle valid.
   // Committed format-members (post-setDesc): fixed getSlotKind (AIE shape).

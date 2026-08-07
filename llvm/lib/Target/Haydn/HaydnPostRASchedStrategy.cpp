@@ -56,7 +56,12 @@ STATISTIC(NumScheduledCyclesSplit,
 static bool cycleCanFormLegalBundle(ArrayRef<MachineInstr *> Instrs) {
   if (Instrs.empty() || Instrs.size() > 3)
     return false;
-  HaydnMCFormats Fmts;
+  // WithMII, so the unit axis is live: format E forbids two entries of a
+  // bundle sharing a hardware unit, and that is a property of the MEMBER, so
+  // it cannot be checked without names. A plain HaydnMCFormats here would
+  // silently accept e.g. two loads on LOAD1 (§ 5.7).
+  HaydnMCFormatsWithMII Fmts(
+      *Instrs.front()->getMF()->getSubtarget().getInstrInfo());
   Haydn::MachineBundle Bundle(&Fmts);
   for (MachineInstr *MI : Instrs) {
     if (!Bundle.canAdd(MI))
@@ -262,7 +267,11 @@ static void finalizeLegalMultiMI(MachineBasicBlock &MBB,
                                  ArrayRef<MachineInstr *> Instrs) {
   assert(Instrs.size() >= 2 && "multi-MI finalize only");
 
-  HaydnMCFormats Fmts;
+  // WithMII — see cycleCanFormLegalBundle. This is the path that commits the
+  // real bundle, so a missing unit check here ships a bundle the hardware
+  // cannot issue.
+  HaydnMCFormatsWithMII Fmts(
+      *Instrs.front()->getMF()->getSubtarget().getInstrInfo());
   Haydn::MachineBundle Bundle(&Fmts);
 
   // SlotMap authority: fixed getSlotKind after setDesc (AIE shape). Bundle
