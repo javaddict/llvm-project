@@ -337,6 +337,34 @@ def load_instruction_flags(path: Path) -> dict[str, dict]:
     return flags
 
 
+def load_tied_writebacks(path: Path) -> dict[str, tuple[str, str]]:
+    r"""Per-logical tied writeback, as (input name, output name).
+
+    A logical with `Constraints = "$rs = $rs_wb"` presents FOUR operands to
+    CodeGen -- the tied register appears once as an out and once as an in --
+    while the database describes the member with three, naming the writeback
+    out `rs` and having no in for it. After materializeMultiOpcodeInstrs the
+    MEMBER's MCInstrDesc drives the encoder while the MCInst still carries the
+    LOGICAL's operands, so every operand after the tie is read one position
+    early: `s_lw_pre_imm r3, r1, r1` came out of llc with a REGISTER where the
+    offset belongs. See FORMAT-E-SWITCH-PLAN.md 5.11.
+
+    Note the assembler path was unaffected, because the parser builds the
+    MCInst against the member and the two agree. Only compiled code was wrong,
+    which is why the round trip never saw it.
+    """
+    records = json.loads(path.read_text(encoding="utf-8"))
+    out: dict[str, tuple[str, str]] = {}
+    for name, record in records.items():
+        if not isinstance(record, dict):
+            continue
+        text = str(record.get("Constraints") or "").strip()
+        match = re.fullmatch(r"\$(\w+)\s*=\s*\$(\w+)", text)
+        if match:
+            out[name] = (match.group(1), match.group(2))
+    return out
+
+
 def load_operand_classes(path: Path):
     """Per-logical operand classes worth inheriting, from the same tblgen JSON.
 
@@ -875,7 +903,7 @@ def emit_reloc_geometry(placements: list[dict]) -> str:
 def emit_tablegen(geometry: dict, placements: list[dict],
                   pipeline: dict, syntax: dict[str, list[str]],
                   flags: dict[str, dict],
-                  op_classes: dict, op_classes_raw: dict,
+                  op_classes: dict, op_classes_raw: dict, tied: dict,
                   part: str = "members") -> str:
     """The encoding half. The scheduling half is its own file: it can be
     included while Bundle128 is live and this cannot, so emitting both here
@@ -1085,6 +1113,30 @@ def emit_tablegen(geometry: dict, placements: list[dict],
             bit_lines.append(
                 (operand["msb"] - base, operand["lsb"] - base, alias, operand["field"]))
 
+        # Restore the logical's tied writeback. The database describes the
+        # written-back register as an out only; the logical presents it twice,
+        # tied, so CodeGen builds one more operand than the member declares and
+        # the encoder then reads every later operand one position early.
+        tie = tied.get(p["instruction"])
+        constraint = None
+        if tie is not None:
+            tied_in, tied_out = tie
+            existing = {e.partition(":$")[2] for e in outs + ins}
+            for position, entry in enumerate(outs):
+                cls_name, _, operand_name = entry.partition(":$")
+                if operand_name != tied_in:
+                    continue
+                # The tie renames the out and adds an in. Skip when the member
+                # already spells both -- the database sometimes gives the
+                # written-back register its own in, and re-adding it would
+                # declare the name twice.
+                if tied_out in existing:
+                    break
+                outs[position] = f"{cls_name}:${tied_out}"
+                ins.insert(0, f"{cls_name}:${tied_in}")
+                constraint = f"{tied_in} = {tied_out}"
+                break
+
         asm_operands = ", ".join(f"${spelling[o['field']]}" for o in used)
         asm = p["instruction"].lower() + (f"\t{asm_operands}" if asm_operands else "")
 
@@ -1092,6 +1144,9 @@ def emit_tablegen(geometry: dict, placements: list[dict],
         out.append(f"    (outs {', '.join(outs)}), (ins {', '.join(ins)}),")
 
         out.append(f"    \"{asm}\"> {{")
+        if constraint is not None:
+            out.append(f"  let Constraints = \"${constraint.split(' = ')[0]}"
+                       f" = ${constraint.split(' = ')[1]}\";")
         index = indices[(p["entry_count"], p["entry_index"], p["unit"])]
         out.append(f"  let PlacementIndex = {index};  // {p['unit']}"
                    f" @ {p['entry_count']}-entry entry{p['entry_index']}")
@@ -1406,6 +1461,8 @@ def main() -> None:
                              if args.flags_from else {},
                              *(load_operand_classes(args.flags_from)
                                if args.flags_from else ({}, {})),
+                             load_tied_writebacks(args.flags_from)
+                             if args.flags_from else {},
                              part="composites" if args.emit == "composites"
                              else "members")
     elif args.emit == "reloc-geometry":
