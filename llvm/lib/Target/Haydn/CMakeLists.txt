@@ -59,6 +59,7 @@ add_llvm_target(HaydnCodeGen
   HaydnPostRASchedStrategy.cpp
   HaydnFinalizeBundle.cpp
   HaydnVerifyBundles.cpp
+  HaydnLatencyStalls.cpp
   HaydnHazardRecognizer.cpp
   HaydnHardwareLoops.cpp
   HaydnFixupHwLoops.cpp

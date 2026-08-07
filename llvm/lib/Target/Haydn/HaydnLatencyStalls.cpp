@@ -1,0 +1,230 @@
+//===- HaydnLatencyStalls.cpp - Exposed-pipeline RAW stall insertion ------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// See HaydnLatencyStalls.h for the ISA rule and why nothing else enforces it.
+//
+//===----------------------------------------------------------------------===//
+
+#include "HaydnLatencyStalls.h"
+#include "Haydn.h"
+#include "HaydnInstrInfo.h"
+#include "HaydnSubtarget.h"
+#include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/Statistic.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/MC/MCInstrItineraries.h"
+#include "llvm/Support/Debug.h"
+#include "llvm/Support/raw_ostream.h"
+
+using namespace llvm;
+
+#define DEBUG_TYPE "haydn-latency-stalls"
+
+STATISTIC(NumStallBundles, "Number of NOP stall bundles inserted");
+
+namespace {
+
+/// One "cycle" of the exposed pipeline: either a BUNDLE root plus its children
+/// or a single standalone MI (the -O0 shape, where no MI bundles are formed).
+struct Cycle {
+  MachineBasicBlock::iterator Boundary; // insertion point for a stall
+  SmallVector<MachineInstr *, 4> Members;
+};
+
+/// Collect the block as a list of cycles in program order.
+static void collectCycles(MachineBasicBlock &MBB,
+                          SmallVectorImpl<Cycle> &Cycles) {
+  for (MachineBasicBlock::instr_iterator I = MBB.instr_begin(),
+                                         E = MBB.instr_end();
+       I != E;) {
+    MachineInstr &MI = *I;
+    if (MI.isBundledWithPred()) {
+      // Defensive: a child without a visited root (should not happen).
+      ++I;
+      continue;
+    }
+    Cycle C;
+    C.Boundary = MachineBasicBlock::iterator(I);
+    if (MI.isBundle()) {
+      // BUNDLE root carries no encoding itself; the children are the ops.
+      ++I;
+      while (I != E && I->isBundledWithPred()) {
+        if (!I->isMetaInstruction() && !I->isDebugInstr() && !I->isPosition())
+          C.Members.push_back(&*I);
+        ++I;
+      }
+    } else {
+      if (!MI.isMetaInstruction() && !MI.isDebugInstr() && !MI.isPosition())
+        C.Members.push_back(&MI);
+      ++I;
+    }
+    if (!C.Members.empty())
+      Cycles.push_back(std::move(C));
+  }
+}
+
+/// Largest operand cycle in \p SchedClass — i.e. the instruction's documented
+/// Data_Latency.
+static unsigned classDataLatency(const InstrItineraryData *Itin,
+                                 unsigned SchedClass) {
+  unsigned Max = 1;
+  int FirstOp = Itin->Itineraries[SchedClass].FirstOperandCycle;
+  int LastOp = Itin->Itineraries[SchedClass].LastOperandCycle;
+  for (int OpIdx = FirstOp; OpIdx < LastOp; ++OpIdx)
+    Max = std::max(Max, Itin->OperandCycles[OpIdx]);
+  return Max;
+}
+
+/// Architectural Data_Latency of \p MI's def at \p DefOpIdx, straight from the
+/// itinerary. Deliberately does NOT go through
+/// HaydnSubtarget::adjustSchedDependency, which softens load latency for
+/// scheduling heuristics — correctness must use the raw ISA value.
+static unsigned defLatency(const InstrItineraryData *Itin,
+                           const MachineInstr &MI, unsigned DefOpIdx) {
+  if (!Itin || Itin->isEmpty())
+    return 1;
+  unsigned SchedClass = MI.getDesc().getSchedClass();
+  if (std::optional<unsigned> Cycle = Itin->getOperandCycle(SchedClass, DefOpIdx))
+    if (*Cycle != 0)
+      return *Cycle;
+  // No per-operand entry for this def. The ISA documents ONE Data_Latency per
+  // instruction and lists EVERY written register as a destination, so a
+  // post/pre-increment load's base writeback ("rs = rs + imm") sits in the same
+  // window as the loaded value. Assuming 1 here is what let
+  //   { s_lbu_post_imm r5, r1, 1 }   ; writes r5 AND r1
+  //   { ldu8 r1, r1, 0 }             ; reads the r1 writeback
+  // through. Take the class maximum instead. If hardware really does forward
+  // the address writeback a cycle earlier, that belongs in the itinerary as an
+  // explicit per-operand cycle, not as an assumption here.
+  return classDataLatency(Itin, SchedClass);
+}
+
+} // namespace
+
+char HaydnLatencyStalls::ID = 0;
+
+HaydnLatencyStalls::HaydnLatencyStalls() : MachineFunctionPass(ID) {}
+
+void HaydnLatencyStalls::getAnalysisUsage(AnalysisUsage &AU) const {
+  MachineFunctionPass::getAnalysisUsage(AU);
+}
+
+bool HaydnLatencyStalls::runOnMachineFunction(MachineFunction &MF) {
+  // No skipFunction: -O0 is exactly the case that needs this most, because
+  // nothing schedules there at all.
+  const HaydnSubtarget &STI = MF.getSubtarget<HaydnSubtarget>();
+  const HaydnInstrInfo &TII = *STI.getInstrInfo();
+  const TargetRegisterInfo &TRI = *STI.getRegisterInfo();
+  const InstrItineraryData *Itin = STI.getInstrItineraryData();
+  if (!Itin || Itin->isEmpty())
+    return false;
+
+  bool Changed = false;
+
+  for (MachineBasicBlock &MBB : MF) {
+    SmallVector<Cycle, 32> Cycles;
+    collectCycles(MBB, Cycles);
+    if (Cycles.empty())
+      continue;
+
+    // Physical register -> number of further cycles before it may be read.
+    DenseMap<MCRegister, unsigned> Pending;
+
+    auto readsPending = [&](const Cycle &C) -> unsigned {
+      unsigned Worst = 0;
+      for (const MachineInstr *MI : C.Members) {
+        for (const MachineOperand &MO : MI->operands()) {
+          if (!MO.isReg() || !MO.isUse() || !MO.getReg())
+            continue;
+          MCRegister Reg = MO.getReg().asMCReg();
+          for (const auto &KV : Pending) {
+            if (KV.second == 0)
+              continue;
+            if (Reg == KV.first || TRI.regsOverlap(Reg, KV.first))
+              Worst = std::max(Worst, KV.second);
+          }
+        }
+      }
+      return Worst;
+    };
+
+    auto tick = [&](unsigned N) {
+      for (auto &KV : Pending)
+        KV.second = KV.second > N ? KV.second - N : 0;
+    };
+
+    for (Cycle &C : Cycles) {
+      if (unsigned Stalls = readsPending(C)) {
+        LLVM_DEBUG(dbgs() << "HaydnLatencyStalls: " << Stalls
+                          << " stall bundle(s) before " << *C.Members.front());
+        for (unsigned I = 0; I < Stalls; ++I)
+          BuildMI(MBB, C.Boundary, C.Members.front()->getDebugLoc(),
+                  TII.get(Haydn::NOP));
+        NumStallBundles += Stalls;
+        tick(Stalls);
+        Changed = true;
+      }
+
+      // This cycle retires one pipeline step for everything already pending,
+      // then publishes its own defs.
+      tick(1);
+      for (const MachineInstr *MI : C.Members) {
+        for (unsigned OpIdx = 0, E = MI->getNumOperands(); OpIdx != E; ++OpIdx) {
+          const MachineOperand &MO = MI->getOperand(OpIdx);
+          if (!MO.isReg() || !MO.isDef() || !MO.getReg())
+            continue;
+          unsigned Lat = defLatency(Itin, *MI, OpIdx);
+          if (Lat > 1)
+            Pending[MO.getReg().asMCReg()] = Lat - 1;
+        }
+      }
+    }
+
+    // Conservative block exit: a latency window must not leak into a successor
+    // (we cannot know which one runs, and a successor may also be reached from
+    // elsewhere). Pad at the end of this block so every outgoing path is
+    // covered. Haydn terminators have no Data_Latency > 1 def (JAL/JALR are
+    // Branch_Penalty only), so padding in front of them is sufficient.
+    unsigned Leak = 0;
+    for (const auto &KV : Pending)
+      Leak = std::max(Leak, KV.second);
+    if (Leak) {
+      // Pad before the BUNDLE ROOT holding the first terminator, never before
+      // a bundle child — that would split the packet.
+      MachineBasicBlock::iterator InsertPt = MBB.getFirstTerminator();
+      if (InsertPt != MBB.end()) {
+        MachineBasicBlock::instr_iterator II = InsertPt.getInstrIterator();
+        while (II != MBB.instr_begin() && II->isBundledWithPred())
+          --II;
+        InsertPt = MachineBasicBlock::iterator(II);
+      }
+      LLVM_DEBUG(dbgs() << "HaydnLatencyStalls: " << Leak
+                        << " stall bundle(s) at exit of bb." << MBB.getNumber()
+                        << "\n");
+      for (unsigned I = 0; I < Leak; ++I)
+        BuildMI(MBB, InsertPt, DebugLoc(), TII.get(Haydn::NOP));
+      NumStallBundles += Leak;
+      Changed = true;
+    }
+  }
+
+  return Changed;
+}
+
+INITIALIZE_PASS(HaydnLatencyStalls, DEBUG_TYPE,
+                "Haydn Exposed-Pipeline Latency Stalls", false, false)
+
+FunctionPass *llvm::createHaydnLatencyStallsPass() {
+  return new HaydnLatencyStalls();
+}

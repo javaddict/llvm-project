@@ -22,6 +22,7 @@
 #include "HaydnExpandPostIncEarly.h"
 #include "HaydnEnsureTerminators.h"
 #include "HaydnFinalizeBundle.h"
+#include "HaydnLatencyStalls.h"
 #include "HaydnVerifyBundles.h"
 #include "HaydnPEIPeephole.h"
 #include "HaydnMachineFunctionInfo.h"
@@ -276,6 +277,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnTarget() {
   initializeHaydnBitSimplifyPass(PR);
   initializeHaydnFinalizeBundlePass(PR);
   initializeHaydnVerifyBundlesPass(PR);
+  initializeHaydnLatencyStallsPass(PR);
   initializeHaydnHandoffBundleRootDefsPass(PR);
   initializeHaydnBundledTwoAddressRewritePass(PR);
   initializeHaydnHardwareLoopsPass(PR);
@@ -644,12 +646,18 @@ void HaydnPassConfig::addPreEmitPass() {
   // pass. Haydn needs Format E branch range + hwloop Off fixups after pack
   // (size model). Pattern matches Hexagon: relax then target fixup that can
   // grow layout, then relax again.
+  //
+  // 0. HaydnLatencyStalls — exposed-pipeline correctness net (Option C L3).
+  //    Data_Latency=2 defs must not be read in the next bundle. Runs at
+  //    EVERY opt level (-O0 is optnone so postmisched/Finalize skip). FIRST
+  //    so BranchRelaxation + FixupHwLoops absorb size growth / recompute
+  //    offsets. Stall NOPs are bare MIs; late Finalize wraps Format E.
   // 1. BranchRelaxation — Format E simm fields
   // 2. HaydnFixupHwLoops — SET_HWLOOP Off1/Off2 ÷4; product demote-first
   //    (LoopDec+LoopJNZ when free counter; fatal if live demote fails).
   //    demote OFF = debug erase-setup only — not product.
   // 3. BranchRelaxation — re-close after Fixup growth (e.g. long BEQZ_W)
- // 4. late layout firewall: re-apply AIE commit surfaces after allowed
+  // 4. late layout firewall: re-apply AIE commit surfaces after allowed
   //    late growth (no 2nd packer / no silent reshape / no MCFlags):
   //      materialize bare MIs via empty-cycle tryAdd → setDesc
   //        (AIEMachineScheduler.cpp:1121-1139; AIEHazardRecognizer.cpp:174-214;
@@ -659,6 +667,7 @@ void HaydnPassConfig::addPreEmitPass() {
   //      fail-closed verifyCommittedBundle
   //        (AIEBaseInstrInfo.cpp:1440-1459; haydn-verify-bundles)
   // Do not move BR before pack (sizes wrong). No PostMachineScheduler here.
+  addPass(createHaydnLatencyStallsPass());
   addPass(&BranchRelaxationPassID);
   if (getOptLevel() != CodeGenOptLevel::None && EnableHaydnHardwareLoops) {
     addPass(createHaydnFixupHwLoopsPass());
