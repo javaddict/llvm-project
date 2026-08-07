@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `10514c6918f0` | **compiles; 372/430 CodeGen tests produce output. Not green: see § 5.2, § 5.6.** |
+| `llvm-project` | `haydn-formate-switch-mc` | `2b29488cd6fb` | **compiles; every reachable CodeGen test produces output (424/430, the 6 are `XFAIL` on trunk too). Not green: see § 5.2, § 5.6.** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -906,11 +906,30 @@ spelling.** § 5.2 applied it to the hwloop predicates in `c290615e3cb0`, § 4
 applied it to the fixup kinds in `14754e31453b`, and this is the third site.
 Grep for anything else that strips `_S` by hand.
 
-#### Still open
+##### Two defs described `sext32t64`, and the wrong one had the members
 
-* **52 tests: `MOV_GPR_TO_DR64` reaches AsmPrinter unexpanded.** It is a
-  `HaydnPseudo` with no format E member, which is *correct* for a pseudo — the
-  bug is that it is not being expanded. Unrelated to the load/store retarget.
+The last 52 failures. `SEXT_GPR32_TO_DR64` (`HaydnInstrInfo.td:601`,
+`FmtALU64Unary<0x67,0x197>`, asm `sext32t64`) is what CodeGen emitted and has
+**no** format E member; `SEXT32T64` (`HaydnInstrInfoAuto.td`, `isCodeGenOnly`
+stub) is the database name and has seven. The stub was declared
+`(outs GPR32:$rd)`, which is wrong against the database (`rtd =
+SEXT32->64(rs)`) **and against its own generated members**
+(`(outs DR64:$rtd), (ins GPR32:$rs)`) — harmless only while nothing selected
+it. Corrected and retargeted.
+
+The MIR blamed `MOV_GPR_TO_DR64`, which was a red herring: it expands fine,
+*into* `SEXT_GPR32_TO_DR64`.
+
+**Note how the last two instances escaped a systematic sweep.** Set-differencing
+the `.td` logicals against the generated members and intersecting with
+`grep 'Haydn::[A-Z]'` over the target reported **zero** CodeGen-reachable
+memberless opcodes while two tests still failed:
+`HaydnInstructionSelector` builds this one as a bare
+`buildInstr(SEXT_GPR32_TO_DR64)` inside a `using namespace llvm::Haydn` scope,
+so the `Haydn::` qualifier the sweep keyed on is simply absent. **Match the
+bare name too**, or the sweep quietly under-reports.
+
+#### Still open
 * 3 shifts (`ASR32`, `LSR32`, `SHL32`) have no members and no references found;
   likely dead, unconfirmed.
 * 15 `_W` and 11 `PseudoLong*` defs are memberless and harmless; delete with
