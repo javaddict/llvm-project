@@ -34,6 +34,21 @@ def : Pat<(i32 (xor GPR32:$rs1, GPR32:$rs2)), (XOR32 GPR32:$rs1, GPR32:$rs2)>;
 def : Pat<(i32 (not GPR32:$rs)), (NOT32 GPR32:$rs)>;
 
 //===----------------------------------------------------------------------===//
+// Scalar binary with immediate — s32. Fold G_CONSTANT into RI20/RI5 forms
+// instead of materializing then using RR. Immediate class is NOT uniform:
+//   ADDI32 / SUBI32           simm16
+//   ANDI32 / ORI32 / XORI32   uimm20 (ISA zero-extends — no negative imm)
+//   SLLI32 / SRLI32 / SRAI32  uimm5
+// `not` (xor x, -1) is unaffected: -1 fails uimm20, so NOT32 still wins.
+//===----------------------------------------------------------------------===//
+
+def : Pat<(i32 (add GPR32:$rs, simm16:$imm)), (ADDI32 GPR32:$rs, simm16:$imm)>;
+def : Pat<(i32 (sub GPR32:$rs, simm16:$imm)), (SUBI32 GPR32:$rs, simm16:$imm)>;
+def : Pat<(i32 (and GPR32:$rs, uimm20:$imm)), (ANDI32 GPR32:$rs, uimm20:$imm)>;
+def : Pat<(i32 (or  GPR32:$rs, uimm20:$imm)), (ORI32  GPR32:$rs, uimm20:$imm)>;
+def : Pat<(i32 (xor GPR32:$rs, uimm20:$imm)), (XORI32 GPR32:$rs, uimm20:$imm)>;
+
+//===----------------------------------------------------------------------===//
 // Scalar binary — s64 (DR64)
 //===----------------------------------------------------------------------===//
 
@@ -79,6 +94,11 @@ def : Pat<(i64 (smin DR64:$rs1, DR64:$rs2)), (MIN64 DR64:$rs1, DR64:$rs2)>;
 def : Pat<(i32 (shl GPR32:$rs1, GPR32:$rs2)), (SLL32 GPR32:$rs1, GPR32:$rs2)>;
 def : Pat<(i32 (srl GPR32:$rs1, GPR32:$rs2)), (SRL32 GPR32:$rs1, GPR32:$rs2)>;
 def : Pat<(i32 (sra GPR32:$rs1, GPR32:$rs2)), (SRA32 GPR32:$rs1, GPR32:$rs2)>;
+
+// Shift-by-constant → RI5 (uimm5). Out-of-range amounts stay on RR above.
+def : Pat<(i32 (shl GPR32:$rs, uimm5:$imm)), (SLLI32 GPR32:$rs, uimm5:$imm)>;
+def : Pat<(i32 (srl GPR32:$rs, uimm5:$imm)), (SRLI32 GPR32:$rs, uimm5:$imm)>;
+def : Pat<(i32 (sra GPR32:$rs, uimm5:$imm)), (SRAI32 GPR32:$rs, uimm5:$imm)>;
 
 // s64 shifts — data DR64, amount GPR32 (legalizer {S64,S32}). Logical ops
 // only (SLL64/SRL64/SRA64); post-RA setDesc → *_S1/*_S2 members. SIMD
