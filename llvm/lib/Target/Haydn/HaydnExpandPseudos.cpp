@@ -406,7 +406,6 @@ bool HaydnExpandPseudos::expandPseudosInBundles(MachineBasicBlock &MBB) {
       }
       case Haydn::LOAD_ADDR: {
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::LUI), LoadAddrDst)
-            .addReg(Haydn::R0)
             .add(*AddrOp);
         BuildMI(MBB, BundleIter, DL, TII->get(Haydn::ADDI32), LoadAddrDst)
             .addReg(LoadAddrDst)
@@ -1112,7 +1111,6 @@ bool HaydnExpandPseudos::expandLOAD_ADDR(MachineBasicBlock &MBB,
   // The MC layer emits HI12/LO20 fixups based on the instruction opcode.
   if (AddrOp.isGlobal() || AddrOp.isSymbol()) {
     BuildMI(MBB, MI, DL, TII->get(Haydn::LUI), DstReg)
-        .addReg(Haydn::R0)
         .add(AddrOp);
     BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), DstReg)
         .addReg(DstReg)
@@ -1124,7 +1122,6 @@ bool HaydnExpandPseudos::expandLOAD_ADDR(MachineBasicBlock &MBB,
   // For constant pool indices and jump table addresses.
   if (AddrOp.isCPI()) {
     BuildMI(MBB, MI, DL, TII->get(Haydn::LUI), DstReg)
-        .addReg(Haydn::R0)
         .add(AddrOp);
     BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), DstReg)
         .addReg(DstReg)
@@ -1136,7 +1133,6 @@ bool HaydnExpandPseudos::expandLOAD_ADDR(MachineBasicBlock &MBB,
   // For block addresses (e.g., taking address of a basic block).
   if (AddrOp.isBlockAddress()) {
     BuildMI(MBB, MI, DL, TII->get(Haydn::LUI), DstReg)
-        .addReg(Haydn::R0)
         .add(AddrOp);
     BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), DstReg)
         .addReg(DstReg)
@@ -1151,7 +1147,6 @@ bool HaydnExpandPseudos::expandLOAD_ADDR(MachineBasicBlock &MBB,
   // corrupts the JT base and produces OOB loads.
   if (AddrOp.isJTI()) {
     BuildMI(MBB, MI, DL, TII->get(Haydn::LUI), DstReg)
-        .addReg(Haydn::R0)
         .add(AddrOp);
     BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), DstReg)
         .addReg(DstReg)

@@ -893,7 +893,6 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       MCInst LuiInst;
       LuiInst.setOpcode(Haydn::LUI);
       LuiInst.addOperand(MCOperand::createReg(DstReg));
-      LuiInst.addOperand(MCOperand::createReg(Haydn::R0));
       LuiInst.addOperand(MCOperand::createExpr(Expr));
       emitWrappedInst(LuiInst);
 
@@ -922,7 +921,6 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       MCInst LuiInst;
       LuiInst.setOpcode(Haydn::LUI);
       LuiInst.addOperand(MCOperand::createReg(DstReg));
-      LuiInst.addOperand(MCOperand::createReg(Haydn::R0));
       LuiInst.addOperand(MCOperand::createExpr(Expr));
       emitWrappedInst(LuiInst);
 
@@ -943,7 +941,6 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       MCInst LuiInst;
       LuiInst.setOpcode(Haydn::LUI);
       LuiInst.addOperand(MCOperand::createReg(DstReg));
-      LuiInst.addOperand(MCOperand::createReg(Haydn::R0));
       LuiInst.addOperand(MCOperand::createExpr(Expr));
       emitWrappedInst(LuiInst);
 
@@ -966,7 +963,6 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       MCInst LuiInst;
       LuiInst.setOpcode(Haydn::LUI);
       LuiInst.addOperand(MCOperand::createReg(DstReg));
-      LuiInst.addOperand(MCOperand::createReg(Haydn::R0));
       LuiInst.addOperand(MCOperand::createExpr(Expr));
       emitWrappedInst(LuiInst);
 

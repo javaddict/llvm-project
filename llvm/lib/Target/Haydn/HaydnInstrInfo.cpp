@@ -2035,7 +2035,6 @@ std::optional<bool> HaydnPipelinerLoopInfo::createTripCountGreaterCondition(
     BuildMI(&MBB, BranchDL, HII->get(Haydn::LOADI32), CmpReg).addImm(TC + 1);
   } else {
     BuildMI(&MBB, BranchDL, HII->get(Haydn::LUI), CmpReg)
-        .addReg(Haydn::R0)
         .addImm(((static_cast<uint32_t>(TC + 1) + 0x8000) >> 16) & 0xFFFF);
     BuildMI(&MBB, BranchDL, HII->get(Haydn::ADDI32), CmpReg)
         .addReg(CmpReg)
