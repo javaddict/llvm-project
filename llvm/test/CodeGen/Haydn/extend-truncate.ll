@@ -89,7 +89,7 @@ define i32 @trunc_i64_i32(i64 %a) nounwind {
 define i32 @zext_cmp(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: zext_cmp:
 ; CHECK: slt32
-; CHECK: and32
+; CHECK: andi32
   %cmp = icmp slt i32 %a, %b
   %r = zext i1 %cmp to i32
   ret i32 %r
@@ -99,8 +99,8 @@ define i32 @zext_cmp(i32 %a, i32 %b) nounwind {
 define i32 @sext_cmp(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: sext_cmp:
 ; CHECK: slt32
-; CHECK: sll32
-; CHECK: sra32
+; CHECK: slli32
+; CHECK: srai32
   %cmp = icmp slt i32 %a, %b
   %r = sext i1 %cmp to i32
   ret i32 %r
