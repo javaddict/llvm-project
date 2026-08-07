@@ -20,10 +20,9 @@
 ;     These bodies have overestimate=0. No shared MachinePipeliner rewrite.
 ;   * Port-forced ResMII ≥ 2 pin: sms-format-resmii-port-forced.mir
 ;   * SMS-HANDOFF metrics-only freeze: analyzeLoop logs qual-kernel post-RA
-;     packability; recordSuccessfulSMS stores scalar SWPS only.
-;     Default OFF: -stop-after=pipeliner keeps logical opcodes only
-;     (HANDOFF-NOT:BUNDLE). Opt-in: -haydn-sms-handoff
-;     (sms-handoff-bundle-through-ra.mir).
+;     packability; recordSuccessfulSMS stores scalar SWPS + durable groups.
+;     Product multi-stage ON (WP5): -stop-after=pipeliner may emit logical
+;     BUNDLE cycle groups (always on for multi-stage).
 ;
 ; Port model: three independent GPR writes cannot share one cycle (2W cap)
 ; even when Full format has three slots — ResourceCycle ports bind ResMII /
@@ -96,11 +95,12 @@ exit:
   ret i32 %acc.next
 }
 
-; SMS-HANDOFF negative: after pipeliner, kernel ops remain logical opcodes —
-; no pre-RA BUNDLE cycle group from SMS expansion (durable groups need
-; approved handoff + VF4 RA preservation).
+; SMS-HANDOFF product (WP5): multi-stage expand materializes legal clone→cycle
+; BUNDLE groups on the dual-load/MAC-shaped kernel; simple acc may stay bare
+; single-stage. Logical member opcodes remain (no private-slot setDesc).
 ; HANDOFF-LABEL: name: sms_acc_port_shape
-; HANDOFF-NOT: BUNDLE
 ; HANDOFF: ADD32
 ; HANDOFF-LABEL: name: sms_dual_load_mac_shape
-; HANDOFF-NOT: BUNDLE
+; HANDOFF: BUNDLE
+; HANDOFF-DAG: LD32
+; HANDOFF-NOT: {{LD32|ADD32|MULL|MUL64}}_S

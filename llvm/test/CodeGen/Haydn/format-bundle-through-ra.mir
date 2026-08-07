@@ -77,8 +77,8 @@
 #     outside the root. Optional stop-after=postmisched exact-commits the
 #     dual-load root as private slot members (setDesc) with zero member loss.
 #
-# SMS clone→cycle logical BUNDLE materialize is opt-in (-haydn-sms-handoff,
-# default OFF; sms-handoff-bundle-through-ra.mir CONT through postmisched
+# SMS clone→cycle logical BUNDLE materialize is product multi-stage always on
+# (sms-handoff-bundle-through-ra.mir CONT through postmisched
 # exact-commit + dual-run -stats). Compact TRI hints dual-run spill/copy/cycle
 # metrics: regalloc-compact-hints.ll (-haydn-ra-compact-hints, default OFF).
 # regalloc-hints.ll CSR baseline stays distinct. Full-only product. No hard RC

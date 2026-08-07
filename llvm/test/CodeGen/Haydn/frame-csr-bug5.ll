@@ -47,9 +47,12 @@ define i32 @bug5_main(i32 %argc) {
 ; CHECK-NEXT:    { d_sw_l_with_imm d8, r2, 0; nop }
 ; CHECK-NEXT:    { d_sw_h_with_imm d8, r3, 0; nop }
 ; CHECK-NEXT:    { jal_w lr, helper; nop }
-; CHECK-NEXT:    { or64 d0, d8, d8; xor32 r0, r0, r0; move32 r8, r1 }
+; CHECK-NEXT:    { or64 d0, d8, d8; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { move32 r8, r1; nop }
 ; CHECK-NEXT:    { jal_w lr, __fixdfsi; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; add32 r1, r8, r1 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { add32 r1, r8, r1; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { ld64 d8, sp, 3; nop }
 ; CHECK-NEXT:    { ld32 lr, sp, 8; nop }

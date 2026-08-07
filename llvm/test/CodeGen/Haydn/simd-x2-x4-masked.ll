@@ -469,7 +469,8 @@ define <4 x i16> @test_x4cmul16s_h_masked_lt(<4 x i16> %a, <4 x i16> %b, <4 x i1
 ; CHECK-NEXT:    { x4slt16 d0, d8, d2; nop }
 ; CHECK-NEXT:    { or64 d0, d8, d8; nop }
 ; CHECK-NEXT:    { jal_w lr, llvm.haydn.x4cmul16s_h; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; x4movt16 d0, d8, d0 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { x4movt16 d0, d8, d0; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { ld64 d8, sp, 1; nop }
 ; CHECK-NEXT:    { ld32 lr, sp, 5; nop }

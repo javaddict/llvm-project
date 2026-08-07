@@ -16,6 +16,7 @@
 #include "HaydnAlternateDescriptors.h"
 #include "MCTargetDesc/HaydnFormat.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineFunction.h"
 
 namespace llvm {
@@ -104,17 +105,29 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   HaydnAlternateDescriptors AltDescs;
 
 public:
-  /// SMS scalar SWPS freeze for release `#<swps>` asm comments (HiFi-like).
-  /// Keyed by kernel / loop-header MBB. Does not encode cycle membership,
-  /// FormatID, or BUNDLE roots — same-cycle logical groups come from the
-  /// expander clone→cycle hook when -haydn-sms-handoff is enabled.
+  /// One durable same-cycle BUNDLE group from SMS expand (WP1 product path).
+  /// Cycle is schedule-relative phase key (AbsCycle - FirstCycle); Members is
+  /// the contiguous legal product-cycle size frozen as a logical BUNDLE root.
+  /// Does not encode FormatID / setDesc — post-RA commits inside the root.
+  struct SMSDurableGroup {
+    unsigned Cycle = 0;   ///< Kernel phase / modulo cycle (FirstCycle-biased).
+    unsigned Members = 0; ///< Contiguous coissue size at that cycle.
+  };
+
+  /// Always-on SMS kernel metadata for release `#<swps>` and durable groups.
+  /// Keyed by kernel MBB. Holds II / stage / ops scalars plus group cycle
+  /// identity for later RA / post-RA pack-inside. FormatID and member setDesc
+  /// are not frozen here — only schedule metrics and handoff group keys.
   struct SMSSWPSInfo {
     unsigned ResMII = 0;
     unsigned RecMII = 0;
     unsigned MII = 0;
-    unsigned StageCount = 0;
+    unsigned StageCount = 0;   ///< Prolog stages + 1 (kernel phase span).
     unsigned NumOps = 0;
-    unsigned ScheduledII = 0;
+    unsigned ScheduledII = 0;  ///< Accepted initiation interval.
+    /// Same-cycle groups from materializeSMSKernelCycleGroups (empty when
+    /// durable path OFF / bare single-stage expand).
+    SmallVector<SMSDurableGroup, 4> DurableGroups;
   };
 
 private:
@@ -200,8 +213,21 @@ public:
   const HaydnAlternateDescriptors &getAltDescs() const { return AltDescs; }
 
   void recordSMSLoop(const MachineBasicBlock *KernelBB, SMSSWPSInfo Info) {
-    SMSLoopInfos[KernelBB] = Info;
+    // Expand materialize runs before recordSuccessfulSMS and may already have
+    // appended DurableGroups. Preserve them when scalar freeze overwrites.
+    auto &Slot = SMSLoopInfos[KernelBB];
+    SmallVector<SMSDurableGroup, 4> KeptGroups = std::move(Slot.DurableGroups);
+    Slot = std::move(Info);
+    if (Slot.DurableGroups.empty())
+      Slot.DurableGroups = std::move(KeptGroups);
   }
+
+  /// Record one durable same-cycle group for \p KernelBB (handoff expand).
+  void recordSMSDurableGroup(const MachineBasicBlock *KernelBB, unsigned Cycle,
+                             unsigned Members) {
+    SMSLoopInfos[KernelBB].DurableGroups.push_back({Cycle, Members});
+  }
+
   const SMSSWPSInfo *getSMSLoop(const MachineBasicBlock *KernelBB) const {
     auto It = SMSLoopInfos.find(KernelBB);
     return It == SMSLoopInfos.end() ? nullptr : &It->second;

@@ -97,24 +97,38 @@ define i32 @bigimm(ptr %a, i32 %n) {
 ; ASM-LABEL: bigimm:
 ; ASM:       // %bb.0: // %entry
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop }
-; ASM-NEXT:    { subi32 sp, sp, 8; nop }
-; ASM-NEXT:    .cfi_def_cfa_offset 8
-; ASM-NEXT:    { nop; nop }
-; ASM-NEXT:    { addi32_w r3, r0, 0; nop }
+; ASM-NEXT:    { subi32 sp, sp, 16; nop }
+; ASM-NEXT:    { st32 r8, sp, 3; nop }
+; ASM-NEXT:    .cfi_def_cfa_offset 16
+; ASM-NEXT:    .cfi_offset r8, 12
+; ASM-NEXT:    { s_lw_post_imm r12, r1, 1; nop }
 ; ASM-NEXT:    { addi32_w r4, r0, 74565; nop }
 ; ASM-NEXT:    { addi32_w r5, r0, 1; nop }
-; ASM-NEXT:    { move32 r6, r3; nop }
+; ASM-NEXT:    { addi32_w r3, r0, 0; nop }
+; ASM-NEXT:    { addi32_w r7, r0, 2; nop }
+; ASM-NEXT:    { move32 r6, r4; slt32 r8, r2, r7 }
+; ASM-NEXT:    { mull r6, r12, r6; add32 r7, r3, r5 }
+; ASM-NEXT:    { bnez_w r8, .LBB1_2; nop }
 ; ASM-NEXT:  .LBB1_1: // %for.body
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
-; ASM-NEXT:    { s_lw_post_imm r7, r1, 1; nop }
-; ASM-NEXT:    { move32 r12, r4; add32 r6, r6, r5 }
-; ASM-NEXT:    { mull r12, r7, r12; slt32 r7, r6, r2 }
-; ASM-NEXT:    { add32 r3, r3, r12; nop }
-; ASM-NEXT:    { bnez_w r7, .LBB1_1; nop }
-; ASM-NEXT:  // %bb.2: // %for.end
-; ASM-NEXT:    { move32 r1, r3; nop }
+; ASM-NEXT:  // #<swps> loop bb.1 @bigimm
+; ASM-NEXT:  // #<swps> II=3 cycles per pipeline stage (SMS schedule)
+; ASM-NEXT:  // #<swps> stages=2
+; ASM-NEXT:  // #<swps> ops=8 (non-meta at SMS)
+; ASM-NEXT:  // #<swps> ResMII=3
+; ASM-NEXT:  // #<swps> RecMII=1
+; ASM-NEXT:  // #<swps> MII=max(res,rec)=3
+; ASM-NEXT:  // #<swps> AchievedII=4 (kernel parcels)
+; ASM-NEXT:  // #<swps> verdict=schedule-limited
+; ASM-NEXT:    { s_lw_post_imm r12, r1, 1; nop }
+; ASM-NEXT:    { add32 r3, r3, r6; add32 r7, r7, r5 }
+; ASM-NEXT:    { mull r6, r12, r6; slt32 r12, r7, r2 }
+; ASM-NEXT:    { bnez_w r12, .LBB1_1; nop }
+; ASM-NEXT:  .LBB1_2:
+; ASM-NEXT:    { add32 r1, r3, r6; nop }
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop }
-; ASM-NEXT:    { addi32_w sp, sp, 8; nop }
+; ASM-NEXT:    { ld32 r8, sp, 3; nop }
+; ASM-NEXT:    { addi32_w sp, sp, 16; nop }
 ; ASM-NEXT:    { jalr_w r0, lr, 0; nop }
 entry:
   br label %for.body

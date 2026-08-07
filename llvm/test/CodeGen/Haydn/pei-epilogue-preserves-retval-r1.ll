@@ -47,7 +47,8 @@ define i32 @ret_after_csr_epilogue(i32 %x) {
 ; CHECK-NEXT:    { addi32_w r11, r0, 2; nop }
 ; CHECK-NEXT:    { addi32_w fp, r0, 3; nop }
 ; CHECK-NEXT:    { jal_w lr, ext; nop }
-; CHECK-NEXT:    { add32 r1, r9, r10; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { add32 r1, r9, r10; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { st32 r1, r8, 0; nop }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { add32 r1, r9, r11; nop }
@@ -63,9 +64,12 @@ define i32 @ret_after_csr_epilogue(i32 %x) {
 ; CHECK-NEXT:    { move32 r1, r8; nop }
 ; CHECK-NEXT:    { jal_w lr, ext; nop }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { ld32 r1, r8, 0; ld32 r2, r8, 10 }
-; CHECK-NEXT:    { ld32 r3, r8, 20; ld32 r4, r8, 30 }
-; CHECK-NEXT:    { xor32 r0, r0, r0; add32 r1, r1, r2 }
+; CHECK-NEXT:    { ld32 r1, r8, 0; nop }
+; CHECK-NEXT:    { ld32 r2, r8, 10; nop }
+; CHECK-NEXT:    { ld32 r3, r8, 20; nop }
+; CHECK-NEXT:    { ld32 r4, r8, 30; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { add32 r1, r1, r2; nop }
 ; CHECK-NEXT:    { add32 r2, r3, r4; nop }
 ; CHECK-NEXT:    { add32 r1, r1, r2; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }

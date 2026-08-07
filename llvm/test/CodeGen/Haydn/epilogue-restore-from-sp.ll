@@ -36,10 +36,15 @@ define void @epilogue_restore_from_sp(i32 %a, i32 %b, i32 %c, i32 %d) nounwind {
 ; CHECK-NEXT:    { st32 r11, sp, 0; nop }
 ; CHECK-NEXT:    { jal_w lr, callee_with_many_args; nop }
 ; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { move32 r1, r10; move32 r2, r8 }
-; CHECK-NEXT:    { move32 r3, r9; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { move32 r4, r11; move32 r5, r10; st32 r11, sp, 0 }
-; CHECK-NEXT:    { move32 r6, r8; move32 r7, r9 }
+; CHECK-NEXT:    { move32 r1, r10; nop }
+; CHECK-NEXT:    { move32 r2, r8; nop }
+; CHECK-NEXT:    { move32 r3, r9; nop }
+; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { move32 r4, r11; nop }
+; CHECK-NEXT:    { move32 r5, r10; nop }
+; CHECK-NEXT:    { st32 r11, sp, 0; nop }
+; CHECK-NEXT:    { move32 r6, r8; nop }
+; CHECK-NEXT:    { move32 r7, r9; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { jal_w lr, callee_with_many_args; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }

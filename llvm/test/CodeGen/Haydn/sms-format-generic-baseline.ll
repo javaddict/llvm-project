@@ -124,27 +124,25 @@
 ; RP-DAG: Schedule Found? 1 (II=3)
 
 ; --- Dual-run -stats attribution (PROD vs GEN vs RP) ---
-; FileCheck order follows -stats emission (post-RA first among these). The
-; 'failed exact no-split' may be absent under multi-stage SMS containment
-; (handoff off). Field-order RAW fail-close still applies when dense packs form:
-; the post-RA field-order-RAW fix (companion regression
-; postra-field-order-raw-narrow-store.mir) correctly fails commit for any cycle
-; whose field-order permutation would reverse a legal same-cycle WAR into a
-; no-forwarding RAW hazard (which previously corrupted adjacent narrow stores);
-; such cycles fall back to sequential parcels — correct product behavior, not a
-; regression.
-; STATS-PROD: haydn-post-ra-sched{{.*}}multi-MI cycles finalized as BUNDLE
-; STATS-PROD-NOT: multi-member hard BUNDLE roots at post-RA
+; FileCheck order follows -stats emission (post-RA first among these).
+; WP5 product multi-stage: durable SMS groups enter post-RA as multi-member
+; hard roots and exact-commit; free multi-MI packs still finalize as BUNDLE.
+; Field-order RAW may fail exact no-split and sequentialize — correct product
+; behavior (postra-field-order-raw-narrow-store.mir). Zero spill/reload on this
+; body remains the QoR pin.
+; STATS-PROD-DAG: SMS kernel same-cycle groups materialized
+; STATS-PROD-DAG: multi-member hard BUNDLE roots at post-RA
+; STATS-PROD-DAG: multi-MI cycles finalized as BUNDLE
 ; STATS-PROD-NOT: Number of spills inserted
 ; STATS-PROD-NOT: Number of reloads inserted
 ;
-; STATS-GEN: haydn-post-ra-sched{{.*}}multi-MI cycles finalized as BUNDLE
-; STATS-GEN-NOT: multi-member hard BUNDLE roots at post-RA
+; STATS-GEN-DAG: multi-member hard BUNDLE roots at post-RA
+; STATS-GEN-DAG: multi-MI cycles finalized as BUNDLE
 ; STATS-GEN-NOT: Number of spills inserted
 ; STATS-GEN-NOT: Number of reloads inserted
 ;
-; STATS-RP: haydn-post-ra-sched{{.*}}multi-MI cycles finalized as BUNDLE
-; STATS-RP-NOT: multi-member hard BUNDLE roots at post-RA
+; STATS-RP-DAG: multi-member hard BUNDLE roots at post-RA
+; STATS-RP-DAG: multi-MI cycles finalized as BUNDLE
 ; STATS-RP-NOT: Number of spills inserted
 ; STATS-RP-NOT: Number of reloads inserted
 

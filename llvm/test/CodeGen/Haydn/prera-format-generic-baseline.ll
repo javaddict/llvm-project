@@ -191,11 +191,12 @@ entry:
 define i32 @base_dual_load_mac_stream(ptr nocapture readonly %x,
                                       ptr nocapture readonly %h, i32 %n) {
 ; PREGREEDY-LABEL: name: base_dual_load_mac_stream
-; PREGREEDY-NOT: BUNDLE
+; Multi-stage SMS product: durable BUNDLE groups may exist pre-greedy.
+; PREGREEDY: BUNDLE
 ; PREGREEDY-NOT: {{LD32|MUL|ADD32}}_S
 ;
 ; PREPOST-LABEL: name: base_dual_load_mac_stream
-; PREPOST-NOT: BUNDLE
+; PREPOST: BUNDLE
 ;
 ; POST-LABEL: name: base_dual_load_mac_stream
 ; POST: BUNDLE 0

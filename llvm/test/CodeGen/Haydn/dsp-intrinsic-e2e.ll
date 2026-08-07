@@ -173,35 +173,63 @@ define i64 @dot_product(ptr %a, ptr %b, i32 %n) {
 ; CHECK-NEXT:    { st32 r8, sp, 5; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    .cfi_offset r8, 20
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r6, r0, 0; nop }
-; CHECK-NEXT:    { sext32t64 d0, r6; nop }
-; CHECK-NEXT:    { slli64 d0, d0, 32; nop }
-; CHECK-NEXT:    { addi32_w r4, r0, 1; nop }
+; CHECK-NEXT:    { ld32 r8, r1, 0; nop }
+; CHECK-NEXT:    { addi32_w r7, r1, 4; nop }
+; CHECK-NEXT:    { addi32 r1, r1, 8; ld32 r7, r7, 0; st32 r8, sp, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { addi32_w r5, r0, 0; nop }
-; CHECK-NEXT:    { srli64 d0, d0, 32; nop }
+; CHECK-NEXT:    { sext32t64 d0, r5; st32 r7, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { addi32_w r12, r2, 4; nop }
+; CHECK-NEXT:    { slli64 d0, d0, 32; ld64 d1, sp, 1; ld32 r12, r12, 0 } // 8-byte Folded Reload
+; CHECK-NEXT:    // 8-byte Reload
+; CHECK-NEXT:    { addi32_w r5, r2, 8; nop }
+; CHECK-NEXT:    { srli64 d0, d0, 32; ld32 r2, r2, 0; st32 r12, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { st32 r2, sp, 2; nop } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { addi32_w r4, r0, 1; nop }
+; CHECK-NEXT:    { addi32_w r6, r0, 0; nop }
+; CHECK-NEXT:    { add32 r2, r6, r4; ld64 d2, sp, 1 } // 8-byte Folded Reload
+; CHECK-NEXT:    // 8-byte Reload
+; CHECK-NEXT:    { addi32_w r7, r0, 2; nop }
+; CHECK-NEXT:    { slt32 r7, r3, r7; nop }
+; CHECK-NEXT:    { bnez_w r7, .LBB8_2; nop }
 ; CHECK-NEXT:  .LBB8_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld32 r8, r1, 0; ld32 r12, r2, 0 }
-; CHECK-NEXT:    { addi32_w r6, r1, 4; nop }
-; CHECK-NEXT:    { addi32 r1, r1, 8; ld32 r6, r6, 0; st32 r8, sp, 2 } // 4-byte Folded Spill
-; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { addi32_w r7, r2, 4; nop }
-; CHECK-NEXT:    { add32 r5, r5, r4; st32 r6, sp, 3 } // 4-byte Folded Spill
-; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { ld64 d1, sp, 1; ld32 r6, r7, 0 } // 8-byte Folded Reload
-; CHECK-NEXT:    // 8-byte Reload
-; CHECK-NEXT:    { st32 r12, sp, 2; nop } // 4-byte Folded Spill
+; CHECK-NEXT:  // #<swps> loop bb.1 @dot_product
+; CHECK-NEXT:  // #<swps> II=6 cycles per pipeline stage (SMS schedule)
+; CHECK-NEXT:  // #<swps> stages=2
+; CHECK-NEXT:  // #<swps> ops=18 (non-meta at SMS)
+; CHECK-NEXT:  // #<swps> ResMII=5
+; CHECK-NEXT:  // #<swps> RecMII=1
+; CHECK-NEXT:  // #<swps> MII=max(res,rec)=5
+; CHECK-NEXT:  // #<swps> AchievedII=15 (kernel parcels)
+; CHECK-NEXT:  // #<swps> verdict=schedule-limited
+; CHECK-NEXT:    { mul64.ll d1, d1, d2; addi32_w r6, r5, 4 }
+; CHECK-NEXT:    { add64 d0, d0, d1; ld32 r6, r6, 0; ld32 r7, r5, 0 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { add32 r2, r2, r4; st32 r7, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { st32 r6, sp, 3; nop } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { ld64 d2, sp, 1; nop } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
-; CHECK-NEXT:    { mul64.ll d1, d1, d2; slt32 r6, r5, r3 }
-; CHECK-NEXT:    { addi32_w r2, r2, 8; nop }
-; CHECK-NEXT:    { add64 d0, d0, d1; nop }
+; CHECK-NEXT:    { addi32_w r5, r5, 8; nop }
+; CHECK-NEXT:    { addi32_w r12, r1, 4; nop }
+; CHECK-NEXT:    { slt32 r6, r2, r3; nop }
+; CHECK-NEXT:    { ld32 r7, r12, 0; ld32 r12, r1, 0 }
+; CHECK-NEXT:    { st32 r12, sp, 2; nop } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { addi32 r1, r1, 8; nop }
+; CHECK-NEXT:    { st32 r7, sp, 3; nop } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { ld64 d1, sp, 1; nop } // 8-byte Folded Reload
+; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { bnez_w r6, .LBB8_1; nop }
-; CHECK-NEXT:  // %bb.2: // %exit
+; CHECK-NEXT:  .LBB8_2:
+; CHECK-NEXT:    { mul64.ll d1, d1, d2; nop }
+; CHECK-NEXT:    { add64 d0, d0, d1; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { ld32 r8, sp, 5; nop }
 ; CHECK-NEXT:    { addi32_w sp, sp, 24; nop }

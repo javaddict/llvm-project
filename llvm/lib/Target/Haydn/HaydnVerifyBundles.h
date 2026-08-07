@@ -6,16 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// — analysis-only MachineFunction pass that fail-closes
-// on committed-cycle invariant violations (haydn::bundle::verifyCommittedBundle).
+// Analysis-only MachineFunction pass that fail-closes on committed-cycle
+// invariant violations (haydn::bundle::verifyCommittedBundle).
 //
 // Pipeline peer: immediately after HaydnFinalizeBundle in addPreSched2 and
-// again after PreEmit late re-commit (; AIEFinalizeBundle.cpp:40-59 peer
+// again after PreEmit late re-commit (AIEFinalizeBundle.cpp:40-59 peer
 // order; AIEBaseInstrInfo.cpp:1440-1459 verifyInstruction fail-closed).
 // AIE PreEmit is empty so AIE never re-verifies late; Haydn must.
 //
+// Covers SMS hard-root exact-commits from post-RA leaveMBB as well as free
+// scheduled multi-MI packs and late singleton wraps. Does not invent stages.
+//
 // Does not mutate MIR. report_fatal_error on violation (no silent skip).
-// No MCFlags writers. setDesc is owned by Finalize/materialize ().
+// No MCFlags writers. setDesc is owned by Finalize / materialize / hard-root
+// commit-inside-group.
 //
 //===----------------------------------------------------------------------===//
 

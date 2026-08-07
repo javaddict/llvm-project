@@ -1,0 +1,37 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -run-pass=pipeliner \
+# RUN:   -debug-only=pipeliner -verify-machineinstrs \
+# RUN:   %S/sms-format-shoulduse-reject.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefixes=PIPE,GROUPS
+# REQUIRES: asserts
+
+# Role: MIR — durable clone→cycle BUNDLE groups (product multi-stage always on).
+#
+# G-SMS WP1 / WP-LIT pin:
+#   * Multi-stage schedule accepted; expand materializes legal groups.
+#   * Expander hands FirstCycle-biased (clone, cycle) pairs — negative Swing
+#     indices included — so same-cycle legal product packs become logical
+#     BUNDLE roots via finalizeBundle (no setDesc / FormatID freeze).
+#   * Log pins groups>0 when coissue packs exist; MFI stores durable group
+#     cycle identity + II/stage scalars (recordSuccessfulSMS durable_groups=N).
+# Continuous RA survival: sms-handoff-bundle-through-ra.mir (WP2 CONT).
+
+# PIPE-NOT: SMS-HOOK: reject
+# PIPE-NOT: SMS-RESMII: reject
+# PIPE-NOT: SMS-HANDOFF: reject
+# PIPE-DAG: Schedule Found? 1 (II={{[1-9][0-9]*}})
+# PIPE-DAG: SMS-SHOULDUSE: accept multi-stage durable stages={{[2-9]|[1-9][0-9]+}}
+# PIPE-DAG: SMS-HANDOFF: materialize cycle={{[0-9]+}} members={{[2-9]|[1-9][0-9]+}} logical BUNDLE
+# PIPE-DAG: SMS-HANDOFF: materialize done groups={{[1-9][0-9]*}}
+# PIPE-DAG: SMS-HANDOFF: metrics-only freeze ResMII={{[0-9]+}} RecMII={{[0-9]+}} MII={{[0-9]+}} stages={{[2-9]|[1-9][0-9]+}}{{.*}} durable_groups={{[1-9][0-9]*}}
+# Illegal same-cycle combinations stay bare (no durable hard root).
+# PIPE-DAG: SMS-HANDOFF: skip cycle={{[0-9]+}} members={{[2-9]|[1-9][0-9]+}} (not one legal product cycle
+
+# GROUPS-LABEL: name: sms_shoulduse_multistage_mac
+# Dual-load hard root (load memops on BUNDLE) + bare multi-expand pack after.
+# GROUPS-DAG: SEQ32
+# GROUPS: BUNDLE{{.*}}:: (load{{.*}}{
+# GROUPS-NEXT: {{%[0-9]+}}:gpr32 = LD32
+# GROUPS-NEXT: {{%[0-9]+}}:gpr32 = LD32
+# GROUPS-NEXT: }
+# GROUPS-NEXT: {{%[0-9]+}}:dr64 = MOV_GPR_TO_DR64
+# GROUPS-NOT: {{LD32|MOV_GPR_TO_DR64|ADD32|ADDI32|F2MULAA32RS_HHLL}}_S

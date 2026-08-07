@@ -18,16 +18,16 @@
 //
 // Bundle formation lives in this strategy. enterMBB stashes CurrentMBB and
 // counts multi-member hard BUNDLE roots (product path expects zero before an
-// approved producer). leaveRegion reconstructs Top and Bot SchedBoundary
-// zones into an in-memory cycle list (port of AIE computeAndFinalizeBundles),
-// runs handleRegionConflicts (ExitReadyCycle + inter-zone scoreboard /
-// TopReadyCycle hazard pads), then merges; leaveMBB materializes the
-// accumulated list — a NOP per empty cycle + exact no-split multi-MI
-// Format E commit via HaydnBundleMaterialize — then transactionally
-// exact-commits any multi-member hard roots and replays the full MBB cycle
-// stream for cross-boundary operand latency + stage-relative
-// Required/Reserved hazards (plan §5.5). Dual-load packing is HR
-// exactTryAddProduct → setDesc members (no promoteLoads residual).
+// approved producer such as SMS handoff). leaveRegion reconstructs Top and
+// Bot SchedBoundary zones into an in-memory cycle list (port of AIE
+// computeAndFinalizeBundles), runs handleRegionConflicts (ExitReadyCycle +
+// inter-zone scoreboard / TopReadyCycle hazard pads), then merges; leaveMBB
+// materializes free scheduled packs (NOP per empty cycle + exact no-split
+// multi-MI Format E) without touching hard-root members, then
+// transactionally exact-commits multi-member hard roots *inside* each frozen
+// group and replays cross-boundary latency + Required/Reserved hazards.
+// Post-RA never invents SMS stages and never free-splices across hard groups.
+// Dual-load packing is HR exactTryAddProduct → setDesc members.
 //
 //===----------------------------------------------------------------------===//
 
@@ -157,21 +157,23 @@ private:
 
   // Insert one NOP (via TII->insertNoop) per empty cycle in \p Bundles, and
   // exact-commit each legal multi-MI cycle via shared
-  // haydn::bundle::commitExactMultiMIProductCycle. Illegal scheduled
-  // multi-MI fails closed (no production greedy split; NumScheduledCyclesSplit
-  // diagnostic). Port of AIE materializeEmptyBundles + applyBundles
-  // (AIEMachineScheduler.cpp:806-863, AIEHazardRecognizer.cpp:317-351)
-  // under exact no-split law.
+  // haydn::bundle::commitExactMultiMIProductCycle. Free packs never include
+  // members from \p HardMembers (SMS / rematch hard roots stay frozen until
+  // exactCommitHardRoots). Illegal scheduled multi-MI fails closed (no
+  // production greedy split; NumScheduledCyclesSplit diagnostic).
   void materializeBundles(MachineBasicBlock &MBB,
-                          SmallVector<CycleBundle> &Bundles);
+                          SmallVector<CycleBundle> &Bundles,
+                          const SmallPtrSetImpl<MachineInstr *> &HardMembers);
 
   // Transactionally exact-commit multi-member hard BUNDLE roots whose members
   // are in \p HardMembers (same children, member setDesc, field order,
-  // Format E row + completion stamp). Illegal membership fail-closes.
-  // \p HardMembers are the
-  // children of multi-member roots that existed before leaveMBB materialize
+  // Format E row + completion stamp). Commit-inside-group only: never splice
+  // neighbors into the membership and never invent stages post-RA. Illegal
+  // membership fail-closes before dissolve; successful commits are certified
+  // with verifyExactHardRootCommit. \p HardMembers are the children of
+  // multi-member roots that existed before leaveMBB free materialize
   // (approved producer / multipass re-entry) — not packs created by this
-  // leaveMBB's scheduled exact commit.
+  // leaveMBB's scheduled free exact commit.
   void exactCommitHardRoots(MachineBasicBlock &MBB,
                             const SmallPtrSetImpl<MachineInstr *> &HardMembers);
 

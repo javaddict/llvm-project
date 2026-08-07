@@ -53,7 +53,8 @@ define i32 @test_gpr_caller_saved_across_call(i32 %a, i32 %b, i32 %c) nounwind {
 ; CHECK-NEXT:    { move32 r8, r1; move32 r9, r2 }
 ; CHECK-NEXT:    { move32 r10, r3; nop }
 ; CHECK-NEXT:    { jal_w lr, clobber_gpr; nop }
-; CHECK-NEXT:    { add32 r2, r8, r9; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { add32 r2, r8, r9; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { add32 r2, r2, r10; nop }
 ; CHECK-NEXT:    { add32 r1, r2, r1; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
@@ -88,7 +89,8 @@ define i64 @test_dr64_caller_saved_across_call(i64 %a, i64 %b) nounwind {
 ; CHECK-NEXT:    { st64 d8, r1, 1; nop }
 ; CHECK-NEXT:    { or64 d8, d0, d0; or64 d9, d1, d1 }
 ; CHECK-NEXT:    { jal_w lr, clobber_dr64; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; add64 d1, d8, d9 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { add64 d1, d8, d9; nop }
 ; CHECK-NEXT:    { add64 d0, d1, d0; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { ld64 d9, sp, 1; nop }
@@ -125,8 +127,10 @@ define i32 @test_all_gpr_caller_saved(i32 %a, i32 %b, i32 %c, i32 %d,
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { move32 r8, r6; nop }
 ; CHECK-NEXT:    { jal_w lr, clobber_gpr; nop }
-; CHECK-NEXT:    { ld32 r2, sp, 3; ld32 r3, sp, 2 } // 8-byte Folded Reload
-; CHECK-NEXT:    // 4-byte Reload4-byte Reload
+; CHECK-NEXT:    { ld32 r2, sp, 3; nop } // 4-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload
+; CHECK-NEXT:    { ld32 r3, sp, 2; nop } // 4-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { add32 r2, r2, r9; nop }
 ; CHECK-NEXT:    { add32 r2, r2, r10; nop }
@@ -179,13 +183,17 @@ define i32 @test_repeated_clobber(i32 %x) nounwind {
 ; CHECK-NEXT:    { jal_w lr, clobber_gpr; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; move32 r9, r1 }
 ; CHECK-NEXT:    { jal_w lr, clobber_gpr; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; move32 r10, r1 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { move32 r10, r1; nop }
 ; CHECK-NEXT:    { jal_w lr, clobber_gpr; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; move32 r11, r1 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { move32 r11, r1; nop }
 ; CHECK-NEXT:    { jal_w lr, clobber_gpr; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; move32 fp, r1 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { move32 fp, r1; nop }
 ; CHECK-NEXT:    { jal_w lr, clobber_gpr; nop }
-; CHECK-NEXT:    { add32 r2, r8, r9; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { add32 r2, r8, r9; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { add32 r2, r2, r10; nop }
 ; CHECK-NEXT:    { add32 r2, r2, r11; nop }
 ; CHECK-NEXT:    { add32 r2, r2, fp; nop }
@@ -228,7 +236,8 @@ define i64 @test_both_banks_clobbered(i32 %a, i64 %b) nounwind {
 ; CHECK-NEXT:    { st64 d8, sp, 1; nop }
 ; CHECK-NEXT:    { move32 r8, r1; or64 d8, d0, d0 }
 ; CHECK-NEXT:    { jal_w lr, clobber_all; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; sext32t64 d0, r8 }
+; CHECK-NEXT:    { sext32t64 d0, r8; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { slli64 d0, d0, 32; nop }
 ; CHECK-NEXT:    { srli64 d0, d0, 32; nop }
 ; CHECK-NEXT:    { add64 d0, d8, d0; nop }

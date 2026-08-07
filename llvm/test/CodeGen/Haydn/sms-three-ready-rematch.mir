@@ -23,8 +23,9 @@
 #     (positive reject: sms-format-hook-reject.mir).
 #   * SMS-HANDOFF metrics-only freeze: qual-kernel exact_packable=1 for the
 #     rematch triple body. Default OFF keeps logical opcodes only (no durable
-#     pre-RA BUNDLE). Clone→cycle materialize is opt-in (-haydn-sms-handoff);
-#     positive ON pin: sms-handoff-bundle-through-ra.mir.
+#     pre-RA BUNDLE). Clone→cycle materialize always on;
+#     positive ON pin: sms-handoff-materialize-groups.mir (CONT XFAIL:
+#     sms-handoff-bundle-through-ra.mir).
 #
 # Sibling pre-RA list HR owns prera-format-feasibility.mir
 # (vreg_three_ready_rematch_add32_2xadd64). This file owns SMS ResourceCycle /

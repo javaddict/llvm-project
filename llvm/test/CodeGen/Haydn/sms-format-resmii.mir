@@ -29,8 +29,9 @@
 #   * SMS-HANDOFF metrics-only freeze: analyzeLoop logs qual-kernel post-RA
 #     packability (exact_packable=1); recordSuccessfulSMS scalar only.
 #     Default OFF: expansion keeps logical opcodes (HANDOFF-NOT:BUNDLE).
-#     Opt-in clone→cycle materialize: -haydn-sms-handoff
-#     (sms-handoff-bundle-through-ra.mir).
+#     Clone→cycle materialize always on (product multi-stage)
+#     (sms-handoff-materialize-groups.mir; CONT XFAIL:
+#     sms-handoff-bundle-through-ra.mir).
 #
 # Companion: sms-format-resmii.ll (end-to-end IR). Positive HOOK reject:
 # sms-format-hook-reject.mir. Sibling pre-RA list HR is

@@ -894,9 +894,10 @@ public:
     /// Called by ModuloScheduleExpander after kernel rewrite cleanup (dead
     /// induction removal + prolog/epilog branches), while the rewritten
     /// kernel still exists. \p KernelCloneCycles is an ordered list of live
-    /// (kernel-clone MI, schedule-cycle) pairs whose cycle was captured from
-    /// ModuloSchedule::getCycle(original) at clone time — not reconstructed
-    /// from adjacency after the fact. Targets may materialize architectural
+    /// (kernel-clone MI, schedule-relative cycle) pairs. Cycle keys are
+    /// AbsCycle - FirstCycle from ModuloSchedule::getCycle(original) at clone
+    /// time (negative Swing indices included) — not reconstructed from
+    /// adjacency after the fact. Targets may materialize architectural
     /// multi-member BUNDLE roots for same-cycle groups. Default: no-op.
     virtual void materializeSMSKernelCycleGroups(
         ArrayRef<std::pair<MachineInstr *, unsigned>> KernelCloneCycles) {

@@ -1405,6 +1405,24 @@ TEST(HaydnPortModelTest, PreRASMSHookIIWrapFalseAcceptFailClosedSurface) {
   }
 }
 
+// FE5B WP4 certificate re-export on pre-RA surface (ResourceCycle authority).
+// Half-enabled multi-stage remains forbidden; original retained until accept.
+TEST(HaydnPortModelTest, PreRASMSPeriodicCertificateSurface) {
+  using S = HaydnPreRASchedStrategy;
+  EXPECT_TRUE(S::productPeriodicCertificatePins());
+  EXPECT_TRUE(S::productHalfEnabledMultiStageForbidden());
+  EXPECT_TRUE(S::productIIWrapLongOccupancyFailsClosed(/*Stage=*/2, /*II=*/2));
+  EXPECT_FALSE(S::productIIWrapLongOccupancyFailsClosed(/*Stage=*/1, /*II=*/2));
+  EXPECT_TRUE(S::productSMSCertOriginalLoopMustRemain(
+      SMSCertLifecycle::OriginalRetained));
+  EXPECT_FALSE(S::productSMSCertMayDiscardOriginalLoop(
+      SMSCertLifecycle::OriginalRetained));
+  EXPECT_TRUE(S::productSMSCertMustRollback(SMSCertLifecycle::Rejected));
+  EXPECT_TRUE(HaydnHazardRecognizer::productSamePhaseWAWFailsClosed());
+  EXPECT_TRUE(HaydnHazardRecognizer::productSMSCertHalfEnabledMultiStageForbidden());
+}
+
+
 //===----------------------------------------------------------------------===//
 // SMS/post-RA format-acceptance differential (pre-RA surface, plan §8.4 #7)
 //===----------------------------------------------------------------------===//
@@ -1880,7 +1898,7 @@ TEST(HaydnHazardRecognizerTest, VF4_HardBundleDualLoadMembersFillProductCycle) {
   // must keep two members through RA (format-bundle-through-ra.mir
   // hard_bundle_dual_ld / hard_bundle_dual_ld_large_frame); this pin is the
   // placement half of that membership contract (SMS handoff freezes the same
-  // dual-load root under -haydn-sms-handoff).
+  // dual-load SMS durable group root).
   using namespace llvm::haydn::bundle;
   HaydnMCFormats Fmts;
   CycleState S = makeProductCycleState();
@@ -2304,6 +2322,134 @@ TEST_F(HaydnBundleBoundaryTest, MultiChildLiveHRNoHazardForBundleRoot) {
   SUnit S2(Free2, /*NodeNum=*/3);
   EXPECT_EQ(HR.getHazardType(&S2, /*DeltaCycles=*/0),
             ScheduleHazardRecognizer::Hazard);
+}
+
+//===----------------------------------------------------------------------===//
+// WP2 — RA survival contract for SMS hard-root BUNDLEs
+//===----------------------------------------------------------------------===//
+//
+// Product path through machine-scheduler → coalescer → greedy → VRW →
+// postmisched keeps multi-member hard roots intact under
+// isSchedulingBoundary (zero hard-group split). Integration class:
+// sms-handoff-bundle-through-ra.mir rematch body (SCHED/COALESCER/GREEDY/VRW/
+// SPILL) and CONT-* producer body (product multi-stage).
+//
+// Spill/copy recovery (documented + pinned here / in TargetMachine):
+//   * isSchedulingBoundary(BUNDLE) is the load-bearing fence so RA cannot
+//     splice members out of a hard root (stress-regalloc membership holds).
+//   * TwoAddress does not walk bundled children; Haydn's pre-TwoAddress
+//     bundled two-addr rewrite (after PHIElimination) prepends COPY dst,src
+//     before the root and rewrites residual tied uses (F2MULAA acc) so
+//     post-TwoAddress TiedOpsRewritten verify passes. Coalescer folds the COPY.
+//   * HaydnHandoffBundleRootDefs re-attaches child vreg defs on the root
+//     after TwoAddress for the LIS/coalescer dual-def surface.
+// Do not enable product multi-stage (WP5) until this contract + post-RA
+// commit-inside-group (WP3) + FE5B certificate (WP4) are green.
+
+TEST_F(HaydnBundleBoundaryTest, WP2_DualLoadHardRootIsSchedulingBoundary) {
+  // SMS handoff dual-load product shape: two LD32 under one hard root.
+  // Root is a boundary; children are not — membership fence for RA.
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LD32), Haydn::R1)
+      .addReg(Haydn::R2)
+      .addImm(0);
+  BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LD32), Haydn::R3)
+      .addReg(Haydn::R4)
+      .addImm(0);
+  finalizeBundle(*MBB, MBB->instr_begin(), MBB->instr_end());
+  ASSERT_FALSE(MBB->empty());
+  MachineInstr &Root = MBB->front();
+  ASSERT_TRUE(Root.isBundle());
+  EXPECT_EQ(Root.getBundleSize(), 2u);
+  EXPECT_TRUE(II.isSchedulingBoundary(Root, MBB, *MF));
+
+  unsigned ChildCount = 0;
+  for (MachineBasicBlock::instr_iterator I = std::next(Root.getIterator());
+       I != MBB->instr_end() && I->isBundledWithPred(); ++I) {
+    EXPECT_FALSE(II.isSchedulingBoundary(*I, MBB, *MF));
+    EXPECT_TRUE(I->getOpcode() == Haydn::LD32 ||
+                I->getOpcode() == Haydn::LD32_S0 ||
+                I->getOpcode() == Haydn::LD32_S1);
+    ++ChildCount;
+  }
+  EXPECT_EQ(ChildCount, 2u);
+}
+
+TEST_F(HaydnBundleBoundaryTest, WP2_RematchMixedFUHardRootIsSchedulingBoundary) {
+  // Rematch ADD32 + 2×ADD64 hard root (sms-handoff-bundle-through-ra.mir
+  // rematch / format-bundle-through-ra.mir mixed-FU). Three members under
+  // one boundary through the RA fence.
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R1)
+      .addReg(Haydn::R2)
+      .addReg(Haydn::R3);
+  BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD64), Haydn::D0)
+      .addReg(Haydn::D1)
+      .addReg(Haydn::D2);
+  BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD64), Haydn::D3)
+      .addReg(Haydn::D4)
+      .addReg(Haydn::D5);
+  finalizeBundle(*MBB, MBB->instr_begin(), MBB->instr_end());
+  ASSERT_FALSE(MBB->empty());
+  MachineInstr &Root = MBB->front();
+  ASSERT_TRUE(Root.isBundle());
+  EXPECT_EQ(Root.getBundleSize(), 3u);
+  EXPECT_TRUE(II.isSchedulingBoundary(Root, MBB, *MF));
+
+  unsigned ChildCount = 0;
+  for (MachineBasicBlock::instr_iterator I = std::next(Root.getIterator());
+       I != MBB->instr_end() && I->isBundledWithPred(); ++I) {
+    EXPECT_FALSE(II.isSchedulingBoundary(*I, MBB, *MF))
+        << "RA must not treat hard-root children as independent boundaries";
+    ++ChildCount;
+  }
+  EXPECT_EQ(ChildCount, 3u);
+}
+
+TEST_F(HaydnBundleBoundaryTest, WP2_TiedMacChildStillRootOnlyBoundary) {
+  // Tied-def MAC co-issued with ADDI under one hard root (SMS handoff can
+  // freeze F2MULAA+ADDI same-cycle). Boundary is the root only; child ties
+  // are repaired post-TwoAddress by haydn-bundled-twoaddr-rewrite (COPY
+  // recovery), not by dissolving the group.
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::F2MULAA32RS_HHLL), Haydn::D0)
+      .addReg(Haydn::D1)
+      .addReg(Haydn::D2)
+      .addReg(Haydn::D3);
+  BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADDI32_W), Haydn::R1)
+      .addReg(Haydn::R2)
+      .addImm(4);
+  finalizeBundle(*MBB, MBB->instr_begin(), MBB->instr_end());
+  ASSERT_FALSE(MBB->empty());
+  MachineInstr &Root = MBB->front();
+  ASSERT_TRUE(Root.isBundle());
+  EXPECT_EQ(Root.getBundleSize(), 2u);
+  EXPECT_TRUE(II.isSchedulingBoundary(Root, MBB, *MF));
+
+  bool SawMac = false;
+  bool SawAddi = false;
+  for (MachineBasicBlock::instr_iterator I = std::next(Root.getIterator());
+       I != MBB->instr_end() && I->isBundledWithPred(); ++I) {
+    EXPECT_FALSE(II.isSchedulingBoundary(*I, MBB, *MF));
+    if (I->getOpcode() == Haydn::F2MULAA32RS_HHLL)
+      SawMac = true;
+    if (I->getOpcode() == Haydn::ADDI32_W)
+      SawAddi = true;
+  }
+  EXPECT_TRUE(SawMac);
+  EXPECT_TRUE(SawAddi);
 }
 
 TEST_F(HaydnBundleBoundaryTest, PreRAMove32MiVsDescPortsAndIsPreRAHR) {
@@ -3230,6 +3376,76 @@ TEST_F(HaydnBundleBoundaryTest, HardRootExactCommitRebuildsRootOperands) {
         << "hard-root child must be setDesc member, not logical";
     EXPECT_NE(MemberFmts.getSlotKind(I->getOpcode()), MCSlotKind());
   }
+}
+
+
+// Coissue law: same available cycle may still host Anti (WAR). Emission/
+// field order must preserve use-before-redef. LD + index-ADD is schedule WAR;
+// residual S2→S0 field order flips to true RAW → canCoissueProductCycle false.
+// SMS handoff must not freeze; exact-commit refuses before dissolve.
+TEST_F(HaydnBundleBoundaryTest, CoissueProductCycle_AntiNotPreservable_LDregAdd) {
+  using namespace llvm::haydn::bundle;
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *Ld =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LD32_REG_M0S0LS), Haydn::R3)
+          .addReg(Haydn::R10)
+          .addReg(Haydn::R2)
+          .getInstr();
+  MachineInstr *Add =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R2)
+          .addReg(Haydn::R2)
+          .addReg(Haydn::R11)
+          .getInstr();
+
+  MachineInstr *Kids[] = {Ld, Add};
+  HaydnMCFormats Fmts;
+  // Layer: schedule-order still looks legal (WAR snapshot, no Data RAW).
+  EXPECT_TRUE(opcodesFormOneLegalCycle(
+      ArrayRef<unsigned>{Haydn::LD32_REG_M0S0LS, Haydn::ADD32}, Fmts));
+  EXPECT_FALSE(cycleMembersHaveTrueRAW(Kids, TRI()));
+  EXPECT_TRUE(instrsFormOneLegalCycle(Kids, Fmts));
+  // Layer 3 emission: preferred field order cannot preserve Anti.
+  EXPECT_FALSE(canCoissueProductCycle(Kids))
+      << "Anti/WAR not preservable under Format field order";
+  EXPECT_FALSE(instrsCanExactCommitProductCycle(Kids));
+
+  finalizeBundle(*MBB, Ld->getIterator(), std::next(Add->getIterator()));
+  MachineInstr &Root = MBB->front();
+  ASSERT_TRUE(Root.isBundle());
+  EXPECT_FALSE(commitExactHardRootProductCycle(Root, II));
+  ASSERT_FALSE(MBB->empty());
+  EXPECT_TRUE(MBB->front().isBundle());
+}
+
+// Independent MULL+SEQ32: no Anti between them → coissue + exact-commit OK.
+TEST_F(HaydnBundleBoundaryTest, CoissueProductCycle_Independent_MullSeq) {
+  using namespace llvm::haydn::bundle;
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *Mul =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::MULL), Haydn::R6)
+          .addReg(Haydn::R1)
+          .addReg(Haydn::R6)
+          .getInstr();
+  MachineInstr *Seq =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::SEQ32), Haydn::R4)
+          .addReg(Haydn::R2)
+          .addReg(Haydn::R14)
+          .getInstr();
+
+  MachineInstr *Kids[] = {Mul, Seq};
+  EXPECT_TRUE(canCoissueProductCycle(Kids));
+  finalizeBundle(*MBB, Mul->getIterator(), std::next(Seq->getIterator()));
+  MachineInstr &Root = MBB->front();
+  ASSERT_TRUE(commitExactHardRootProductCycle(Root, II));
+  ASSERT_TRUE(getBundleRowID(MBB->front()).has_value());
 }
 
 //===----------------------------------------------------------------------===//

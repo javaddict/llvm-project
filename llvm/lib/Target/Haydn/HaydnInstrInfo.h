@@ -120,19 +120,23 @@ public:
 
   bool shouldIgnoreForPipelining(const MachineInstr *MI) const override;
 
-  // Reject schedules that produce no pipeline overlap (StageCount <= 1),
-  // PPS-3 stage-count / reg-pressure gates, and AIE ZeroOverheadLoop
-  // MaxStageCount >= MinTripCount (cannot guard ZOL epilogues).
+  // Reject schedules that produce no pipeline overlap (ZOL StageCount <= 1),
+  // PPS-3 stage-count / reg-pressure gates, AIE ZeroOverheadLoop
+  // MaxStageCount >= MinTripCount. Non-ZOL multi-stage is always accepted;
+  // expand always materializes durable clone→cycle groups (no handoff switch).
   bool shouldUseSchedule(SwingSchedulerDAG &SSD, SMSchedule &SMS) override;
 
+  /// Always-on MFI freeze of II/stage scalars plus any durable groups already
+  /// materialized by materializeSMSKernelCycleGroups (expand-before-record).
   void recordSuccessfulSMS(MachineFunction &MF, MachineBasicBlock *KernelBB,
                            unsigned ResMII, unsigned RecMII, unsigned MII,
                            unsigned StageCount, unsigned NumOps,
                            unsigned ScheduledII) override;
 
-  /// Optional same-cycle logical BUNDLE materialize from clone→cycle pairs
-  /// (gated by -haydn-sms-handoff, default OFF). Contiguous real-issue ops
-  /// only; no private member setDesc, FormatID, or side-map.
+  /// Durable same-cycle logical BUNDLE materialize from expander clone→cycle
+  /// pairs (product multi-stage; always on). Contiguous real-issue ops only;
+  /// no private member setDesc, FormatID, or side-map. Records group
+  /// cycle/member identity on HaydnMachineFunctionInfo.
   void materializeSMSKernelCycleGroups(
       ArrayRef<std::pair<MachineInstr *, unsigned>> KernelCloneCycles) override;
 

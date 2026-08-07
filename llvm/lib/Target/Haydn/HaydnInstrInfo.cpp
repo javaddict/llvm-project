@@ -158,22 +158,12 @@ static cl::opt<int> HaydnLoopMinTripCount(
     cl::desc("AIE aie-loop-min-tripcount peer: floor MinTripCount for ZOL SMS "
              "(-1 = disabled). Warning: applies to all ZOL SMS candidates."));
 
-// Optional SMS kernel same-cycle logical BUNDLE materialize. Default OFF:
-// expansion keeps bare logical opcodes so product post-RA entry has no hard
-// roots. When ON, expander clone→cycle pairs drive finalizeBundle of
-// contiguous real-issue children that form one legal product parcel only
-// (no private member setDesc, FormatID stamp, or side-map). leaveMBB then
-// exact-commits surviving roots.
-static cl::opt<bool> EnableHaydnSMSHandoff(
-    "haydn-sms-handoff", cl::Hidden, cl::init(false),
-    cl::desc("Materialize logical multi-member BUNDLE roots from SMS kernel "
-             "clone→cycle pairs that form one legal product cycle (default "
-             "OFF)."));
-
-// Dual-run handoff ON/OFF -stats attribution (asserts-free KPI). Metrics —
-// not the flag — gate any future product enable: legal groups freeze, illegal
-// multi-expand same-cycle runs stay bare, and spill/cycle surface is compared
-// under CONT-STATS dual-run pins. Zero counters omit from -stats (OFF silent).
+// G-SMS product multi-stage (always on): non-ZOL multi-stage is accepted and
+// expander FirstCycle-biased clone→cycle pairs drive finalizeBundle of
+// contiguous real-issue children that form one legal product parcel (no
+// private member setDesc / FormatID). Durable group cycle identity is
+// recorded on HaydnMachineFunctionInfo; leaveMBB exact-commits surviving
+// roots. No dual-path / handoff switch — multi-stage always implies groups.
 STATISTIC(NumSMSHandoffGroupsMaterialized,
           "Number of SMS kernel same-cycle groups materialized as logical "
           "BUNDLE");
@@ -1695,12 +1685,10 @@ bool HaydnInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
   // this fence MachineScheduler can place dependent / resource-conflicting
   // neighbors across membership — including mixed GPR32/DR64 Full rematch
   // groups (ADD32 + 2xADD64). Soft compact TRI hints remain metrics-gated
-  // default OFF; SMS clone→cycle logical groups are -haydn-sms-handoff
-  // (default OFF); post-RA exact-commits hard roots + cross-boundary replay.
-  // Integration: format-bundle-through-ra.mir (ADD32-only, resource-conflict,
-  // mixed-FU, isolated register-coalescer, stress spill-around);
-  // sms-handoff-bundle-through-ra.mir; unit pin: HaydnHazardRecognizerTest
-  // bundle fence.
+  // default OFF; SMS clone→cycle logical groups always materialize on
+  // multi-stage expand; post-RA exact-commits hard roots + cross-boundary
+  // replay. Integration: format-bundle-through-ra.mir; unit pin
+  // HaydnHazardRecognizerTest bundle fence.
   if (MI.isBundle())
     return true;
 
@@ -2433,10 +2421,12 @@ void HaydnPipelinerLoopInfo::recordSuccessfulSMS(
     MachineFunction &MFIn, MachineBasicBlock *KernelBB, unsigned ResMII,
     unsigned RecMII, unsigned MII, unsigned StageCount, unsigned NumOps,
     unsigned ScheduledII) {
-  // Scalar SWPS freeze for release asm. Same-cycle logical BUNDLE membership
-  // (when requested) is applied earlier via materializeSMSKernelCycleGroups
-  // from expander clone→cycle pairs under -haydn-sms-handoff — never invented
-  // here from opcode/order.
+  // Always-on MFI membership for accepted SMS kernels (WP1-GROUPS): II/stage/
+  // ops scalars plus any DurableGroups already recorded by
+  // materializeSMSKernelCycleGroups (expand runs before this call). Groups
+  // come only from expander clone→cycle pairs on the durable multi-stage path
+  // — never invented here from opcode/order. Product multi-stage implies
+  // groups via expand; this freeze always reports durable_groups=N.
   if (!KernelBB)
     return;
   auto &HMFI = *MFIn.getInfo<HaydnMachineFunctionInfo>();
@@ -2449,14 +2439,17 @@ void HaydnPipelinerLoopInfo::recordSuccessfulSMS(
   Info.ScheduledII = ScheduledII;
   HMFI.recordSMSLoop(KernelBB, Info);
   DEBUG_WITH_TYPE("pipeliner", {
+    const auto *Stored = HMFI.getSMSLoop(KernelBB);
+    const unsigned NumGroups =
+        Stored ? static_cast<unsigned>(Stored->DurableGroups.size()) : 0;
+    // Keep "metrics-only freeze" prefix for lit pins; durable_groups=N is the
+    // always-on membership surface. Qual-kernel analyzeLoop logs remain
+    // metrics-only packability (separate from expand groups).
     dbgs() << "SMS-HANDOFF: metrics-only freeze ResMII=" << ResMII
            << " RecMII=" << RecMII << " MII=" << MII
            << " stages=" << StageCount << " ops=" << NumOps
-           << " II=" << ScheduledII;
-    if (EnableHaydnSMSHandoff)
-      dbgs() << " (clone→cycle handoff enabled)\n";
-    else
-      dbgs() << " (no durable cycle group / BUNDLE invent)\n";
+           << " II=" << ScheduledII << " durable_groups=" << NumGroups
+           << " (durable path; clone→cycle groups when legal coissue)\n";
   });
 }
 
@@ -2468,30 +2461,39 @@ static bool isSMSHandoffNonIssueMI(const MachineInstr &MI) {
          MI.isCopy() || MI.isTransient();
 }
 
-/// True when the contiguous same-cycle opcode list is one legal product
-/// parcel (shared exact/encode oracle). Multi-expand post-RA pseudos
-/// (e.g. MOV_GPR_TO_DR64 stack pack) and other non-row combinations return
-/// false so handoff never freezes a hard root leaveMBB cannot exact-commit.
+/// True when the contiguous same **SMS available cycle** run can coissue as
+/// one product parcel. SMS cycle index is the pipeliner analogue of
+/// TopReadyCycle: Data Lat≥1 already separated producer/consumer; Anti may
+/// still share a cycle only if emission/field order preserves use-before-redef
+/// (\p canCoissueProductCycle). Opcode-only is not enough.
 static bool smsHandoffRunFormsOneLegalProductCycle(
     ArrayRef<MachineInstr *> Members, unsigned Begin, unsigned End) {
   if (End - Begin < 2 || End - Begin > Haydn::ISSUE_SLOT_COUNT)
     return false;
-  SmallVector<unsigned, 3> Ops;
-  Ops.reserve(End - Begin);
+  SmallVector<MachineInstr *, 3> Slice;
+  Slice.reserve(End - Begin);
   for (unsigned I = Begin; I != End; ++I)
-    Ops.push_back(Members[I]->getOpcode());
-  HaydnMCFormats Fmts;
-  return haydn::bundle::opcodesFormOneLegalCycle(Ops, Fmts);
+    Slice.push_back(Members[I]);
+  return haydn::bundle::canCoissueProductCycle(Slice);
 }
 
 void HaydnPipelinerLoopInfo::materializeSMSKernelCycleGroups(
     ArrayRef<std::pair<MachineInstr *, unsigned>> KernelCloneCycles) {
-  // Default OFF: preserve bare logical expansion (HANDOFF-NOT:BUNDLE).
-  if (!EnableHaydnSMSHandoff || KernelCloneCycles.empty())
+  // Product multi-stage always materializes durable groups (WP1-GROUPS): legal
+  // same-cycle runs become logical BUNDLE roots + MFI DurableGroups for RA /
+  // post-RA pack-inside. Illegal same-cycle runs stay bare (no hard root).
+  if (KernelCloneCycles.empty()) {
+    DEBUG_WITH_TYPE("pipeliner", {
+      dbgs() << "SMS-HANDOFF: materialize done groups=0 cycles_seen=0 "
+                "(no live clone→cycle pairs)\n";
+    });
     return;
+  }
 
   // Collect real-issue clones still live in their parent, grouped by schedule
-  // cycle while preserving the expander's ordered ArrayRef order.
+  // cycle while preserving the expander's ordered ArrayRef order. Cycle keys
+  // are FirstCycle-biased (AbsCycle - FirstCycle) so negative Swing indices
+  // from ModuloScheduleExpander still co-group correctly.
   DenseMap<unsigned, SmallVector<MachineInstr *, 4>> CycleToMIs;
   SmallVector<unsigned, 8> CycleOrder;
   for (auto [MI, Cycle] : KernelCloneCycles) {
@@ -2581,6 +2583,7 @@ void HaydnPipelinerLoopInfo::materializeSMSKernelCycleGroups(
   // IsSSA on the ordinary path. SlotIndexes map bundled child defs to the
   // BUNDLE header index so LIS still sees them.
   assert(MF && "HaydnPipelinerLoopInfo requires MachineFunction");
+  auto &HMFI = *MF->getInfo<HaydnMachineFunctionInfo>();
 
   for (const Run &R : Runs) {
     MachineBasicBlock &MBB = *R.First->getParent();
@@ -2603,6 +2606,14 @@ void HaydnPipelinerLoopInfo::materializeSMSKernelCycleGroups(
     }
 
     // Strip root dual-def of those vregs (walk reverse so removeOperand is safe).
+    // finalizeBundle may copy tied-def / use pairs (e.g. MAC acc) onto the
+    // root. removeOperand asserts when shifting any still-tied operands, so
+    // untie the entire root first, then drop child vreg dual-defs.
+    for (unsigned OpIdx = 0, E = Root.getNumOperands(); OpIdx != E; ++OpIdx) {
+      MachineOperand &MO = Root.getOperand(OpIdx);
+      if (MO.isReg() && MO.isTied())
+        Root.untieRegOperand(OpIdx);
+    }
     bool HasSFRDef = false;
     for (unsigned OpIdx = Root.getNumOperands(); OpIdx > 0; --OpIdx) {
       MachineOperand &MO = Root.getOperand(OpIdx - 1);
@@ -2621,6 +2632,10 @@ void HaydnPipelinerLoopInfo::materializeSMSKernelCycleGroups(
     if (!HasSFRDef)
       MachineInstrBuilder(*MBB.getParent(), &Root)
           .addReg(Haydn::SFR, RegState::ImplicitDefine);
+
+    // Persist cycle/member identity for later RA / post-RA pack-inside-group.
+    // II and StageCount are filled by recordSuccessfulSMS on the same MBB.
+    HMFI.recordSMSDurableGroup(&MBB, R.Cycle, R.Size);
 
     ++NumSMSHandoffGroupsMaterialized;
     DEBUG_WITH_TYPE("pipeliner", {
@@ -2721,22 +2736,15 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
     return false;
   }
 
-  // Multi-stage naive SMS without durable handoff is unsound on Haydn today.
-  // Expansion (handoff default OFF) yields bare logical kernels; post-RA freely
-  // reschedules/packs across what were distinct modulo phases. Runtime-confirmed
-  // CoreMark matrix_sum multi-stage schedules (stages=2, AchievedII≠II) produce
-  // ORACLE_MISMATCH (wrong trip / OOB accumulation); SMS-off and
-  // -haydn-sms-max-stagecount=1 both restore host CRCs. Keep single-stage and
-  // ZOL paths; re-enable multi-stage naive only with -haydn-sms-handoff after
-  // FE5B periodic/phase proof. Checked before organic pressure so the
-  // containment reject is the stable diagnostic for this class.
-  if (!IsZOL && StageCount > 1 && !EnableHaydnSMSHandoff) {
+  // G-SMS multi-stage policy (naive / non-ZOL): always accept multi-stage;
+  // expand always materializes legal clone→cycle BUNDLE groups (no handoff
+  // switch). ZOL multi-stage stays on HWLOOP geometry / MinTripCount pins.
+  if (!IsZOL && StageCount > 1) {
     DEBUG_WITH_TYPE("pipeliner", {
-      dbgs() << "SMS-SHOULDUSE: reject multi-stage naive stages=" << StageCount
+      dbgs() << "SMS-SHOULDUSE: accept multi-stage durable stages=" << StageCount
              << " II=" << SMS.getInitiationInterval()
-             << " (handoff off; multi-stage needs durable cycle groups)\n";
+             << " (clone→cycle groups will materialize)\n";
     });
-    return false;
   }
 
   // PPS-3: AIE canAcceptII TrackRegPressure/canAllocate gate. Reject schedules
@@ -3467,13 +3475,12 @@ namespace {
 //   * operand-dependent format predicates not encoded in MCInstrDesc.
 // SMS-RESMII (exact ResMII oracle vs greedy/DFA) fail-closes on positive
 // overestimate in analyzeLoopForPipelining after this HOOK scan. SMS-HANDOFF
-// qual-kernel packability is metrics/fail-closed here; optional same-cycle
-// logical BUNDLE materialize is gated by -haydn-sms-handoff (default OFF) via
-// materializeSMSKernelCycleGroups on clone→cycle pairs. Neither RESMII
-// overestimate nor missing handoff is repaired inside ResourceCycle. Fail
-// closed here via the existing analyzeLoopForPipelining rejection (AIE
-// precedent) so SMS never product-enables unsupported resource classes or
-// format-oracle overestimates.
+// qual-kernel packability is metrics/fail-closed here; same-cycle logical
+// BUNDLE materialize always runs via materializeSMSKernelCycleGroups on
+// clone→cycle pairs. Neither RESMII overestimate nor missing groups is
+// repaired inside ResourceCycle. Fail closed here via the existing
+// analyzeLoopForPipelining rejection (AIE precedent) so SMS never
+// product-enables unsupported resource classes or format-oracle overestimates.
 //
 // Product pin ProductCrossCycleCapacityEnabled=false: all product InstrStage
 // rows use cycles==1; the multi-cycle scan is the hard gate when a multi-cycle
@@ -3729,8 +3736,8 @@ static void haydnLogSMSSoftExitQoR(const MachineBasicBlock &LoopBB) {
 
 /// SMS-HANDOFF analyzeLoop metrics: log qualification-kernel post-RA
 /// packability under the shared product oracle and restate the scalar freeze.
-/// Optional same-cycle logical BUNDLE materialize is a separate expander hook
-/// under -haydn-sms-handoff (default OFF). Does **not** fail-close on
+/// Same-cycle logical BUNDLE materialize is a separate expander hook
+/// (always on for product multi-stage). Does **not** fail-close on
 /// multi-cycle covers (those remain legal; only RESMII overestimate rejects).
 /// Exact_packable=0 on an exact-bound body after RESMII pass would mean the
 /// exhaustive cover is missing — treat as fail-close so qualification never
@@ -3746,8 +3753,7 @@ static bool haydnCheckSMSHandoffPackability(const MachineBasicBlock &LoopBB) {
   // Scalar freeze contract is always restated (even on empty bodies).
   DEBUG_WITH_TYPE("pipeliner", {
     dbgs() << "SMS-HANDOFF: metrics-only freeze "
-              "(recordSuccessfulSMS scalar; clone→cycle BUNDLE is "
-              "-haydn-sms-handoff)\n";
+              "(recordSuccessfulSMS scalar; clone→cycle BUNDLE always on)\n";
   });
 
   if (Body.empty()) {
@@ -3813,8 +3819,7 @@ HaydnInstrInfo::analyzeLoopForPipelining(MachineBasicBlock *LoopBB) const {
   // SMS-HANDOFF: metrics-only freeze + qualification-kernel post-RA packability.
   // Logs packability evidence; fail-closes only for in-bound bodies that are
   // not exactly packable (rare after RESMII). N>bound is not rejected here.
-  // Same-cycle logical BUNDLE materialize is expander-side under
-  // -haydn-sms-handoff (default OFF).
+  // Same-cycle logical BUNDLE materialize is always-on expander-side.
   if (!haydnCheckSMSHandoffPackability(*LoopBB)) {
     DEBUG_WITH_TYPE("pipeliner", {
       dbgs() << "SMS: analyzeLoopForPipelining fail-closed "

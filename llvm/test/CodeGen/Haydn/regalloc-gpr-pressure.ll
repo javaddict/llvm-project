@@ -90,13 +90,19 @@ define i32 @test_gpr_spill_15_live(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
 ; CHECK-NEXT:    { addi32_w r1, r0, 321; nop }
 ; CHECK-NEXT:    { add32 r10, r8, r1; move32 r1, r9 }
 ; CHECK-NEXT:    { jal_w lr, use_i32; nop }
-; CHECK-NEXT:    { move32 r1, r10; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { move32 r1, r10; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { jal_w lr, use_i32; nop }
-; CHECK-NEXT:    { ld32 r2, sp, 5; ld32 r3, sp, 4 } // 8-byte Folded Reload
-; CHECK-NEXT:    // 4-byte Reload4-byte Reload
-; CHECK-NEXT:    { ld32 r4, sp, 3; ld32 r5, sp, 2 } // 8-byte Folded Reload
-; CHECK-NEXT:    // 4-byte Reload4-byte Reload
-; CHECK-NEXT:    { add32 r1, r2, r9; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { ld32 r2, sp, 5; nop } // 4-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload
+; CHECK-NEXT:    { ld32 r3, sp, 4; nop } // 4-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload
+; CHECK-NEXT:    { ld32 r4, sp, 3; nop } // 4-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload
+; CHECK-NEXT:    { ld32 r5, sp, 2; nop } // 4-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload
+; CHECK-NEXT:    { add32 r1, r2, r9; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { add32 r1, r3, r1; nop }
 ; CHECK-NEXT:    { add32 r1, r4, r1; nop }
 ; CHECK-NEXT:    { add32 r1, r11, r1; nop }
@@ -185,19 +191,24 @@ define i32 @test_all_callee_saved_gpr(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) no
 ; CHECK-NEXT:    { move32 r9, r2; move32 r10, r3 }
 ; CHECK-NEXT:    { move32 r11, r4; move32 r8, r5 }
 ; CHECK-NEXT:    { jal_w lr, consume_i32; nop }
-; CHECK-NEXT:    { move32 fp, r1; move32 r1, r9 }
+; CHECK-NEXT:    { move32 fp, r1; nop }
+; CHECK-NEXT:    { move32 r1, r9; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { jal_w lr, consume_i32; nop }
-; CHECK-NEXT:    { move32 r9, r1; move32 r1, r10 }
+; CHECK-NEXT:    { move32 r9, r1; nop }
+; CHECK-NEXT:    { move32 r1, r10; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { jal_w lr, consume_i32; nop }
-; CHECK-NEXT:    { move32 r10, r1; move32 r1, r11 }
+; CHECK-NEXT:    { move32 r10, r1; nop }
+; CHECK-NEXT:    { move32 r1, r11; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { jal_w lr, consume_i32; nop }
-; CHECK-NEXT:    { move32 r11, r1; move32 r1, r8 }
+; CHECK-NEXT:    { move32 r11, r1; nop }
+; CHECK-NEXT:    { move32 r1, r8; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { jal_w lr, consume_i32; nop }
-; CHECK-NEXT:    { add32 r2, fp, r9; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { add32 r2, fp, r9; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { add32 r2, r2, r10; nop }
 ; CHECK-NEXT:    { add32 r2, r2, r11; nop }
 ; CHECK-NEXT:    { add32 r1, r2, r1; nop }
@@ -245,21 +256,29 @@ define i32 @test_interleaved_calls_heavy(i32 %x) nounwind {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; st32 r1, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { jal_w lr, consume_i32; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; st32 r1, sp, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r1, sp, 2; nop } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { jal_w lr, consume_i32; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; move32 r10, r1 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { move32 r10, r1; nop }
 ; CHECK-NEXT:    { jal_w lr, consume_i32; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; move32 r11, r1 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { move32 r11, r1; nop }
 ; CHECK-NEXT:    { jal_w lr, consume_i32; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; move32 fp, r1 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { move32 fp, r1; nop }
 ; CHECK-NEXT:    { jal_w lr, consume_i32; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; move32 r8, r1 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { move32 r8, r1; nop }
 ; CHECK-NEXT:    { jal_w lr, consume_i32; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; move32 r9, r1 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { move32 r9, r1; nop }
 ; CHECK-NEXT:    { jal_w lr, consume_i32; nop }
-; CHECK-NEXT:    { ld32 r2, sp, 3; ld32 r3, sp, 2 } // 8-byte Folded Reload
-; CHECK-NEXT:    // 4-byte Reload4-byte Reload
+; CHECK-NEXT:    { ld32 r2, sp, 3; nop } // 4-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload
+; CHECK-NEXT:    { ld32 r3, sp, 2; nop } // 4-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { add32 r2, r2, r3; nop }
 ; CHECK-NEXT:    { add32 r2, r2, r10; nop }

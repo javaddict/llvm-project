@@ -10,17 +10,14 @@
 
 ; Role: MIR — Product qualification for post-RA exact no-split commit and the pre-handoff hard-bundle entry law:.
 
-; Product qualification for post-RA exact no-split commit and the pre-handoff
-; hard-bundle entry law:
-;   * stop-before postmisched: production MIR has no multi-member hard BUNDLE
-;     roots (durable groups need an approved handoff + RA preservation).
+; Product qualification for post-RA exact no-split commit under multi-stage SMS:
+;   * leaf/no-loop (pack_three_alu): stop-before postmisched has no hard BUNDLE
+;     roots; post-RA owns packing.
+;   * multi-stage SMS kernels (acc_stream / dual_stream): durable clone→cycle
+;     BUNDLE groups survive through RA into postmisched (product handoff law).
 ;   * stop-after postmisched: exact-commits multi-MI product cycles as BUNDLE 0
 ;     (FormatE96 FormatID) with member setDesc where alts apply.
-;   * -stats: multi-MI exact finalize > 0; the field-order-RAW fix now correctly
-;     fails commit for >=1 cycle whose field-order permutation would create a
-;     no-forwarding RAW, so 'failed exact no-split' is non-zero; multi-member
-;     hard roots at post-RA entry stay 0 (silent). Hard-root
-;     exact-commit / illegal-fail pins: postmisched-hard-root-exact-commit.mir,
+;   * Illegal multi-member hard root sequential-dissolve:
 ;     postmisched-hard-root-illegal-fail.mir.
 ;
 
@@ -52,7 +49,7 @@ entry:
 ; logical/bare (no hard cycle group), then post-RA owns BUNDLE roots.
 define i32 @acc_stream(ptr nocapture readonly %p, i32 %n) {
 ; PRE-LABEL: name: acc_stream
-; PRE-NOT: BUNDLE
+; Multi-stage SMS may stamp durable BUNDLE groups pre-postmisched.
 ; PRE: ADD32
 ;
 ; POST-LABEL: name: acc_stream
@@ -79,7 +76,8 @@ exit:
 define i32 @dual_stream(ptr nocapture readonly %x, ptr nocapture readonly %h,
                         i32 %n) {
 ; PRE-LABEL: name: dual_stream
-; PRE-NOT: BUNDLE
+; Multi-stage SMS durable handoff groups may appear pre-postmisched.
+; PRE: BUNDLE
 ;
 ; POST-LABEL: name: dual_stream
 ; POST: BUNDLE 0
