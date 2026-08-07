@@ -469,12 +469,19 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       // CB-126 residual: G_STORE s32 value into s64 MMO (after non-pow2
       // split) — generic lower returns UnableToLegalize. Custom: match
       // value width to mem width and rewrite MMO.
+      //
+      // Mem width must be a whole byte (>= 8): sub-byte mem (`store i1`,
+      // MemoryTy s1) would otherwise livelock — minScalar(0, S8) widens the
+      // value to s8, custom truncs it back to s1 and rewrites the MMO to s1,
+      // forever (unbounded vreg/MMO growth, no diagnostic). Sub-byte mem
+      // belongs to lowerIfMemSizeNotByteSizePow2() below.
       .customIf(
           [](const LegalityQuery &Query) {
             return Query.Opcode == TargetOpcode::G_STORE &&
                    Query.Types[0].isScalar() && !Query.MMODescrs.empty() &&
                    Query.Types[0] != Query.MMODescrs[0].MemoryTy &&
                    Query.MMODescrs[0].MemoryTy.isScalar() &&
+                   Query.MMODescrs[0].MemoryTy.getSizeInBits() >= 8 &&
                    isPowerOf2_32(Query.MMODescrs[0].MemoryTy.getSizeInBits());
           })
       // Non-pow2 mem (i40/i72 bitfields) MUST lower before widenScalar, or
