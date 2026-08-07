@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `6ee3d25bde2c` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 11/24. Both § 5.2 generator gaps are now closed.** |
+| `llvm-project` | `haydn-formate-switch-mc` | `afc345108f57` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 12/24. Both § 5.2 generator gaps closed.** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -1344,6 +1344,47 @@ whether `llc` produced output; and the § 5.8 work used branches, whose members
 *do* land in `getExprFixupKind` and so happened to work. `lld/test/ELF/haydn`
 is the first gate that exercises the others — which is what § 5.4 meant by
 "the round trip is not evidence".
+
+### 5.11 Logical and member operand lists must agree, or the encoder reads the wrong one
+
+**`lui r1, sym` emitted no relocation at all** and encoded its immediate as 0.
+Fixed in `afc345108f57`; lld 11/24 → 12/24.
+
+The database says `LUI rt, imm12` — two operands. The logical said
+`(outs GPR32:$rd), (ins GPR32:$rs, uimm12:$imm)` — three, with every caller
+passing `R0` for the extra one. Its format E members have two, matching the
+database.
+
+**That one-operand difference is enough to mis-encode silently.** After
+`materializeMultiOpcodeInstrs` the MEMBER's `MCInstrDesc` is what the encoder
+reads, but the MCInst still carries the operands the LOGICAL was built with.
+So the encoder took operand 1 — the dummy `R0` — where the immediate should
+be. A register operand produces no fixup and encodes as its register number,
+so the field read 0 and the relocation vanished, with no diagnostic anywhere.
+
+Fixed by giving the logical the database's shape and dropping the `R0`
+argument at all ten call sites. `FmtI`'s `Inst{19-16}` still wants an `rs`
+field, so it is bound to a constant rather than kept as an operand — that
+encoding is dead on this branch anyway.
+
+#### This is a class, not one bug
+
+**280 of the 684 logicals that have members disagree with them on operand
+arity.** Most are tied writebacks the database reshaped and are probably
+harmless — the member declares `$rs_wb` where the logical declares a tie — but
+each one is a place the encoder can read the wrong operand, and the failure
+mode is what `LUI` showed: no diagnostic, a plausible encoding, a missing or
+wrong relocation.
+
+The cheap standing check is the same shape as § 5.6's memberless sweep:
+compare each logical's operand count against its members'. It is a `.td` fact
+on both sides, so it can be checked without running anything.
+
+Note what did **not** catch this: `--emit roundtrip` never sees the logical at
+all, `--check` only validates the database against itself, and the encoder and
+decoder agreed with each other because both were reading the member. Only a
+relocation — an outside reference — could expose it, which is § 5.4's point
+again.
 
 ### 5.5 BundleSim side
 
