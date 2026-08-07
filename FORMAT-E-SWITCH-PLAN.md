@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | `ef5c1b1971de` | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `d4bb9bead154` | **no — 17 errors; holds BOTH halves** |
+| `llvm-project` | `haydn-formate-switch-mc` | `c970a7ef3dea` | **no — 8 errors, all Disassembler; holds BOTH halves** |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -541,35 +541,56 @@ Four consequences that are real behaviour changes, not renames:
 
 #### What is left after all that — measured, not estimated
 
-**17 C++ errors** on `haydn-formate-switch-mc` after the two WIP branches were
-joined, in four files. Count **distinct source locations**, not `error:` lines
-— see § 6.14, the raw line count here is 111 and means nothing.
+**8 C++ errors** on `haydn-formate-switch-mc`, all in `HaydnDisassembler.cpp`.
+Count **distinct source locations**, not `error:` lines — see § 6.14.
 
 | n | Where | What | State |
 |---:|---|---|---|
-| 8 | `HaydnDisassembler.cpp` | Decoder tables + `SlotGeo Slots[3]`. | open |
-| 5 | `HaydnBundlePlan.h` | see below | open |
-| 3 | `HaydnHWLoopContracts.h` | downstream `static_assert`s | open |
-| 1 | `HaydnInstrInfo.cpp` | downstream `static_assert` | open |
-| ~~7~~ | ~~`HaydnInstructionSelector.cpp`~~ | ~~The AR logicals — § 7's reshape.~~ | **closed by the join** |
+| 8 | `HaydnDisassembler.cpp` | `DecoderTableS0/S1/S2` → the `P*` tables; `DecoderTableBundle128128` → `FormatE2`/`FormatE3`; `getBundle128FormatDesc`; the three `Haydn_SLOT_S*` in `SlotGeo Slots[3]`, which must become 2-or-3. | **open — the only one left** |
+| ~~7~~ | ~~`HaydnInstructionSelector.cpp`~~ | ~~The AR logicals — § 7's reshape.~~ | closed by the branch join |
+| ~~9~~ | ~~`HaydnBundlePlan.h` + `HaydnHWLoopContracts.h` + `HaydnInstrInfo.cpp`~~ | ~~The product-format model.~~ | closed by `c970a7ef3dea` |
 
-The 5 + 3 + 1 = 9 are **one item**: the product-format table still holds the
-Bundle128 row and names `Haydn::SLOT0/1/2`, which `-mc` deleted from
-`HaydnBaseInfo.h`. This is no longer design work. `f9ed0ff6365f` turned the
-singleton into a table and wrote down what is left, on the table itself:
+The trajectory was 27 → 24 (rebase onto trunk) → 17 (AR half joined) → 8
+(product table filled in). Note the earlier estimate of 12 for the
+product-format item was measured before `f9ed0ff6365f`, which took it to 9 —
+it did **not** take it to 0, and reading its subject ("a table, not a
+singleton") as though it had is an easy mistake to make.
 
-> *the rows: one becomes two, 16 bytes becomes 12; `FormatID`'s enumerators;
-> the slot-window widths and their `static_assert`. What does NOT change: every
-> lookup below, because they all scan the table.*
+##### The product table fill-in was not a pure data change
 
-So it is a change of **data**, and `Haydn::BUNDLE_E_BYTES` / `SLOT_SET_E2` /
-`SLOT_SET_E3` already exist on `-mc` to write it with. Note the earlier
-estimate of 12 for this item was measured before `f9ed0ff6365f`, which took it
-to 9 — it did **not** take it to 0, and reading its subject as though it had is
-an easy mistake to make.
+`f9ed0ff6365f` said the switch owed the table "one row becomes two, 16 bytes
+becomes 12, `FormatID`'s enumerators, the slot-window widths and their
+`static_assert`", and that every lookup would be unchanged. The lookups were
+indeed unchanged. Three other things were not, and all three are silent:
 
-That leaves `HaydnDisassembler.cpp` as the only genuinely open design work in
-the C++, which is § 5.2's real remaining cost.
+* **The entry windows do not tile the word.** Bundle128's 48/40/40 summed to
+  128 exactly, so the assert was `sum == width`. Format E's are 45+41 (4 bits
+  unused) and 31+31+27 (1 unused) over a 90-bit payload, so that assert cannot
+  be rescaled — it became two per-composite asserts of
+  `header + windows + unused == 96`. Widths verified against the generated
+  `HaydnFormatEComposites.td`, not the prose.
+* **`makeBundle128Plan` stamped the format instead of deriving it.** With one
+  row that was right. With two, the occupancy is what says which — a
+  `{P30,P31}` occupancy is a 3-entry bundle — and the FormatID is stamped on
+  the BUNDLE MIR root, so a wrong one names a composite whose `SlotSet` does
+  not contain the slots in use. Now `makeProductPlan`, deriving by table scan.
+  `HaydnPostRASchedStrategy`'s multi-MI finalize had the same constant with
+  the chosen `VLIWFormat` already in scope.
+* **`HaydnAsmBackend::writeNopData` held a second parcel-size oracle** — its
+  own `constexpr uint64_t Bundle128Bytes = 16`, exactly what
+  `HaydnBundlePlan.h`'s header comment forbids, and invisible to a grep for
+  the plan's symbols. It would have kept padding in 16-byte units after the
+  switch. **Its all-zero payload is still wrong** and is marked FIXME rather
+  than quietly resized: format E puts `0b111` in `Inst{2-0}`, so twelve zero
+  bytes are not a NOP bundle but a different format's. Needs a real
+  `BUNDLE_E2` built through the encoder.
+
+One known-wrong site remains, deliberately: `HaydnFinalizeBundle`'s
+**singleton** path stamps the default row because it has no chosen format to
+derive from. That is right for most singletons — there is no 1-entry form, so
+a lone instruction NOP-pads to two entries — but wrong for an ALU2-only op
+(`ARCTAN`, `RECIP`, …), which has no 2-entry placement at all (§ 7.1: ALU2
+never appears in the 2-entry form) and must be `BundleE3`.
 
 **And the compiler is the easy half.** Nothing below shows up as an error:
 
