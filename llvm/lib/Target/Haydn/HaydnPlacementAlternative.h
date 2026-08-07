@@ -57,6 +57,15 @@ struct PlacementAlternative {
   /// 0 means unknown / unset (synthetic unit rows may set explicitly).
   SlotBits FieldSlots = 0;
 
+  /// The hardware unit this member uses, as a 1<<Unit bit; 0 when the encoding
+  /// does not model units (Bundle128, where slot and unit were one fact).
+  ///
+  /// Distinct from FieldSlots and NOT derivable from it: two alternatives can
+  /// share a unit in different entries (ADD32_P30_ALU0 / ADD32_P31_ALU0) or
+  /// share an entry on different units (ADD32_P30_ALU0 / LD32_P30_LOADSTORE0).
+  /// A bundle may hold both of the second pair and neither of the first.
+  Haydn::UnitBits Units = 0;
+
   constexpr PlacementAlternative() = default;
   /// Full ctor: member + FormatID mask + field occupancy bit.
   /// Field last (no default) so (MemberOpc, FormatMask) is unambiguous vs
@@ -94,18 +103,44 @@ getPlacementMemberOpcodes(const HaydnBaseMCFormats &Fmts,
 
 /// FieldSlots for a sparse-alt entry at \p AltIndex is 1<<AltIndex
 /// (vector index == field/slot).
+///
+/// TRUE ONLY FOR BUNDLE128, whose alternates vector is indexed by slot. Format
+/// E indexes it by placement — the (entry position, unit) pair — so the index
+/// is not the slot and several entries can share one. At the switch this must
+/// become "ask the member for its own slot kind"
+/// (HaydnMCFormats::getSlotKind); see FORMAT-E-SWITCH-PLAN.md § 5.2.
 inline SlotBits fieldSlotsForAltIndex(unsigned AltIndex) {
   return SlotBits(1) << AltIndex;
 }
 
+/// The unit bit for \p MemberOpc, or 0 when units are not modelled.
+///
+/// Read off the member's NAME, which is where the encoding records it. A
+/// generated per-member unit table would be a better source and is the natural
+/// follow-up to § 6.9's `--flags-from` work; the name is used here because it
+/// is available today and is already the tested carrier of the member→logical
+/// fold (stripHaydnMemberSuffix).
+///
+/// \p MII may be null — then no unit is claimed, which is exactly right for
+/// Bundle128: its members carry no unit because its slot model pinned one unit
+/// per slot, so the slot already said everything.
+inline Haydn::UnitBits unitBitsForMember(const MCInstrInfo *MII,
+                                         unsigned MemberOpc) {
+  if (!MII)
+    return 0;
+  return haydnMemberUnitBits(MII->getName(MemberOpc));
+}
+
 /// Fill \p Out with PlacementAlternative rows for \p LogicalOpc (non-zero
 /// sparse members only). Each row stamps CompatibleFormatMask =
-/// ProductFormatMask and FieldSlots = 1<<index.
+/// ProductFormatMask, FieldSlots = 1<<index, and — when \p MII is given — the
+/// member's unit.
 /// Returns false if there are no non-zero alternatives.
 inline bool
 enumeratePlacementAlternatives(const HaydnMCFormats &Fmts,
                                unsigned LogicalOpc,
-                               SmallVectorImpl<PlacementAlternative> &Out) {
+                               SmallVectorImpl<PlacementAlternative> &Out,
+                               const MCInstrInfo *MII = nullptr) {
   Out.clear();
   const std::vector<unsigned> *Alts =
       Fmts.getAlternateInstsOpcode(LogicalOpc);
@@ -121,6 +156,7 @@ enumeratePlacementAlternatives(const HaydnMCFormats &Fmts,
     // Sparse size-3: index == field.
     Out.emplace_back(MemberOpc, haydn::bundle::ProductFormatMask,
                      fieldSlotsForAltIndex(Index));
+    Out.back().Units = unitBitsForMember(MII, MemberOpc);
     Any = true;
   }
   return Any;

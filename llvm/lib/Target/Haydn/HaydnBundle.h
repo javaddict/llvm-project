@@ -57,8 +57,16 @@ namespace Haydn {
 // \a I must provide getOpcode.
 template <class I> class Bundle {
 public:
-  Bundle(const HaydnBaseMCFormats *FormatInterface)
-      : FormatInterface(FormatInterface) {}
+  // \p MII is optional. Pass it to get unit-aware placement: a bundle entry
+  // uses one hardware unit and no two entries may share one, and the unit is
+  // read off the chosen member's name. Without it the unit axis stays inert,
+  // which is exactly right for Bundle128 — its members carry no unit, because
+  // its slot model pinned one unit per slot and the slot already said
+  // everything. Callers with no MCInstrInfo (the pre-RA scheduler paths) keep
+  // the slot-only behaviour they had.
+  Bundle(const HaydnBaseMCFormats *FormatInterface,
+         const MCInstrInfo *MII = nullptr)
+      : FormatInterface(FormatInterface), MII(MII) {}
 
   // Whether adding \p Instr (by opcode) leaves the bundle valid.
   // Committed format-members (post-setDesc): fixed getSlotKind (AIE shape).
@@ -125,12 +133,13 @@ public:
     // bundle canAdd returned true (standalone escape), so this op becomes a
     // standalone parcel with no OccupiedSlots update — mirroring AIE's add
     // (AIEBundle.h:134-139). Reserve the slot only when pickSlot finds one.
-    auto Slot = pickSlot(Opcode);
+    Haydn::UnitBits PickedUnits = 0;
+    auto Slot = pickSlot(Opcode, &PickedUnits);
     if (!Slot) {
       assert(Instrs.size() == 1 && "no-slot op added to a non-empty bundle");
       return;
     }
-    reserveSlot(Instr, *Slot);
+    reserveSlot(Instr, *Slot, PickedUnits);
   }
 
   // add \p Instr with a HINT slot. If \p HintSlot is free, legal under
@@ -158,21 +167,30 @@ public:
     }
     // Try the hint first: free + legal under alts/FieldSlots + format-valid.
     std::optional<MCSlotKind> Chosen;
+    Haydn::UnitBits ChosenUnits = 0;
     const MCSlotInfo *HintSI = FormatInterface->getSlotInfo(HintSlot);
     if (HintSI && !(OccupiedSlots & HintSI->getSlotSet()) &&
         isHintSlotLegal(Opcode, HintSlot) &&
         FormatInterface->isFormatAvailable(OccupiedSlots |
                                            HintSI->getSlotSet())) {
-      Chosen = HintSlot;
+      // The hint names a slot, and the unit follows from whichever member
+      // ends up there. For a committed member that is the member's own unit;
+      // for a logical the member is picked later, so nothing is claimed here
+      // and the axis stays permissive. Under Bundle128 both are 0.
+      const Haydn::UnitBits HintUnits = unitBitsForMember(MII, Opcode);
+      if (!(OccupiedUnits & HintUnits)) {
+        Chosen = HintSlot;
+        ChosenUnits = HintUnits;
+      }
     }
     // Hint did not fit: fall back to solver pickSlot (alts tryAdd).
     if (!Chosen)
-      Chosen = pickSlot(Opcode);
+      Chosen = pickSlot(Opcode, &ChosenUnits);
     if (!Chosen) {
       assert(Instrs.size() == 1 && "no-slot op added to a non-empty bundle");
       return;
     }
-    reserveSlot(Instr, *Chosen);
+    reserveSlot(Instr, *Chosen, ChosenUnits);
   }
 
   // reserve resources for \p Opcode WITHOUT storing an instruction
@@ -197,12 +215,14 @@ public:
     // change — the next supported op will start the slot accounting.
     if (!FormatInterface->isSupportedInstruction(Opcode))
       return;
-    auto Slot = pickSlot(Opcode);
+    Haydn::UnitBits PickedUnits = 0;
+    auto Slot = pickSlot(Opcode, &PickedUnits);
     if (!Slot)
       return;
     const MCSlotInfo *SI = FormatInterface->getSlotInfo(*Slot);
     assert(SI && "no SlotInfo for picked slot");
     OccupiedSlots |= SI->getSlotSet();
+    OccupiedUnits |= PickedUnits;
   }
 
   // Whether a packet format covers the currently occupied slots. Haydn has no
@@ -236,6 +256,7 @@ public:
 
   void clear() {
     OccupiedSlots = 0;
+    OccupiedUnits = 0;
     Instrs.clear();
     MetaInstrs.clear();
     SlotMap.clear();
@@ -245,6 +266,7 @@ public:
   bool empty() const { return Instrs.empty(); }
   unsigned size() const { return Instrs.size(); }
   SlotBits getOccupiedSlots() const { return OccupiedSlots; }
+  Haydn::UnitBits getOccupiedUnits() const { return OccupiedUnits; }
 
   // Instruction occupying \p Slot, or nullptr.
   I *at(MCSlotKind Slot) const {
@@ -298,21 +320,29 @@ private:
   // Committed format-member opcodes (post-setDesc) use fixed getSlotKind
   // (AIEBundle.h:92-104). Alts-bearing logicals: CycleState tryAddProduct.
   // Else nullopt (no getLegalSlots first-fit).
-  std::optional<MCSlotKind> pickSlot(unsigned Opcode) const {
-    return pickSlotForOccupied(Opcode, OccupiedSlots);
+  std::optional<MCSlotKind>
+  pickSlot(unsigned Opcode, Haydn::UnitBits *PickedUnits = nullptr) const {
+    return pickSlotForOccupied(Opcode, OccupiedSlots, PickedUnits);
   }
 
-  // Commit \p Slot for \p Instr: append to SlotMap and mark OccupiedSlots.
-  // Shared tail of both `add` overloads.
-  void reserveSlot(I *Instr, MCSlotKind Slot) {
+  // Commit \p Slot for \p Instr: append to SlotMap and mark OccupiedSlots,
+  // plus \p Units on the unit axis. Shared tail of both `add` overloads.
+  void reserveSlot(I *Instr, MCSlotKind Slot, Haydn::UnitBits Units = 0) {
     const MCSlotInfo *SI = FormatInterface->getSlotInfo(Slot);
     assert(SI && "no SlotInfo for picked slot");
     SlotMap.push_back({Slot, Instr});
     OccupiedSlots |= SI->getSlotSet();
+    OccupiedUnits |= Units;
   }
 
+  // \p PickedUnits, when non-null, receives the unit bit the chosen member
+  // claims (0 when units are not modelled). The slot alone cannot tell the
+  // caller this: several members at one slot differ only in unit.
   std::optional<MCSlotKind>
-  pickSlotForOccupied(unsigned Opcode, SlotBits Occ) const {
+  pickSlotForOccupied(unsigned Opcode, SlotBits Occ,
+                      Haydn::UnitBits *PickedUnits = nullptr) const {
+    if (PickedUnits)
+      *PickedUnits = 0;
     // Already-materialized format-member opcodes (MI.setDesc after
     // leaveRegion) have a single fixed slot — AIE AIEBundle.h:92-104
     // getSlotKind + conflict/format check.
@@ -323,6 +353,14 @@ private:
         return std::nullopt;
       if (Occ & SI->getConflictSet())
         return std::nullopt;
+      // A committed member has no choice of unit either — it is whatever the
+      // member names — so a taken unit rejects it outright rather than
+      // sending it to another alternative.
+      const Haydn::UnitBits FixedUnits = unitBitsForMember(MII, Opcode);
+      if (OccupiedUnits & FixedUnits)
+        return std::nullopt;
+      if (PickedUnits)
+        *PickedUnits = FixedUnits;
       const SlotBits NewSlots = Occ | SI->getSlotSet();
       if (!FormatInterface->isFormatAvailable(NewSlots))
         return std::nullopt;
@@ -337,11 +375,17 @@ private:
       return std::nullopt;
     haydn::bundle::CycleState Probe =
         haydn::bundle::makeProductCycleStateFromOccupied(Occ);
+    // Seed the probe with the units already claimed, or it would re-offer an
+    // alternative on a unit this bundle has taken. Slots come in via \p Occ;
+    // units are the second axis and have to travel the same way.
+    Probe.OccupiedUnits = OccupiedUnits;
     if (Probe.FeasibleFormatMask == 0)
       return std::nullopt;
-    if (!haydn::bundle::tryAddProduct(Probe, SolverFmts, Opcode))
+    if (!haydn::bundle::tryAddProduct(Probe, SolverFmts, Opcode, MII))
       return std::nullopt;
     assert(!Probe.Members.empty());
+    if (PickedUnits)
+      *PickedUnits = Probe.Members.back().Units;
     return haydnSlotMaskToKind(Probe.Members.back().FieldSlots);
   }
 
@@ -356,7 +400,11 @@ private:
   }
 
   const HaydnBaseMCFormats *FormatInterface;
+  // MCInstrInfo, when the caller has one. Only needed to read a member's unit
+  // off its name; without it the unit axis is inert (see HaydnBundle's ctor).
+  const MCInstrInfo *MII = nullptr;
   SlotBits OccupiedSlots = 0;
+  Haydn::UnitBits OccupiedUnits = 0;
   std::vector<I *> Instrs;
   SmallVector<std::pair<MCSlotKind, I *>, 3> SlotMap;
   std::vector<I *> MetaInstrs;

@@ -206,21 +206,26 @@ unsigned getLogicalBaseOpcode(unsigned Opc, const MCInstrInfo &MII) {
 
 } // end anonymous namespace
 
-std::optional<StringRef> stripHaydnMemberSuffix(StringRef Name) {
-  // Bundle128: `<logical>_S<k>`.
-  for (StringRef Suf : HaydnMemberSlotSuffix)
-    if (Name.ends_with(Suf))
-      return Name.drop_back(Suf.size());
+// Unit spellings, indexed by Haydn::Unit. Order must match the enum; the
+// static_assert below and haydnUnitName are the only things that know it.
+static constexpr StringRef HaydnUnitNames[] = {
+    "LOADSTORE0", "LOAD1", "ALU0", "ALU1", "ALU2", "MAC0", "MAC1"};
+static_assert(sizeof(HaydnUnitNames) / sizeof(HaydnUnitNames[0]) ==
+                  Haydn::UNIT_COUNT,
+              "unit name table out of step with Haydn::Unit");
 
-  // format E: `<logical>_P<form><pos>_<unit>`. The unit set is closed, so
-  // matching it explicitly stops a logical that merely ends in `_<word>`
-  // (ADD32_W, D_LDW_POST_IMM) from being mistaken for a placed member.
-  static constexpr StringRef Units[] = {"LOADSTORE0", "LOAD1", "ALU0", "ALU1",
-                                        "ALU2",       "MAC0",  "MAC1"};
-  for (StringRef Unit : Units) {
-    if (!Name.ends_with(Unit))
+// Split `<logical>_P<form><pos>_<unit>` into its logical and its unit.
+// \returns nullopt when \p Name carries no format E placement suffix.
+static std::optional<std::pair<StringRef, Haydn::Unit>>
+splitFormatEMember(StringRef Name) {
+  // The unit set is closed, so matching it explicitly stops a logical that
+  // merely ends in `_<word>` (ADD32_W, D_LDW_POST_IMM) from being mistaken for
+  // a placed member.
+  for (unsigned I = 0; I != Haydn::UNIT_COUNT; ++I) {
+    StringRef UnitName = HaydnUnitNames[I];
+    if (!Name.ends_with(UnitName))
       continue;
-    StringRef Head = Name.drop_back(Unit.size());
+    StringRef Head = Name.drop_back(UnitName.size());
     if (!Head.ends_with("_"))
       continue;
     Head = Head.drop_back(1);
@@ -232,10 +237,44 @@ std::optional<StringRef> stripHaydnMemberSuffix(StringRef Name) {
     if (Digits.size() != 2 ||
         !llvm::all_of(Digits, [](char C) { return C >= '0' && C <= '9'; }))
       continue;
-    return Head.substr(0, Sep);
+    return std::make_pair(Head.substr(0, Sep), static_cast<Haydn::Unit>(I));
   }
+  return std::nullopt;
+}
+
+std::optional<StringRef> stripHaydnMemberSuffix(StringRef Name) {
+  // Bundle128: `<logical>_S<k>`.
+  for (StringRef Suf : HaydnMemberSlotSuffix)
+    if (Name.ends_with(Suf))
+      return Name.drop_back(Suf.size());
+
+  if (auto Split = splitFormatEMember(Name))
+    return Split->first;
 
   return std::nullopt; // already logical
+}
+
+StringRef haydnUnitName(Haydn::Unit U) {
+  unsigned I = static_cast<unsigned>(U);
+  assert(I < Haydn::UNIT_COUNT && "unit out of range");
+  return HaydnUnitNames[I];
+}
+
+std::optional<Haydn::Unit> haydnMemberUnitFromName(StringRef Name) {
+  // Bundle128 members carry no unit: its slot model pinned each unit to one
+  // slot, so the slot WAS the unit and the spelling never had to say. Returning
+  // nullopt is the truthful answer, not a failure — callers treat "no unit
+  // modelled" as "no unit constraint", which is what makes the unit axis inert
+  // while Bundle128 is live.
+  if (auto Split = splitFormatEMember(Name))
+    return Split->second;
+  return std::nullopt;
+}
+
+Haydn::UnitBits haydnMemberUnitBits(StringRef Name) {
+  if (auto U = haydnMemberUnitFromName(Name))
+    return Haydn::unitBit(*U);
+  return 0;
 }
 
 int getHaydnFlexSlotFromName(unsigned Opc, const MCInstrInfo &MII) {

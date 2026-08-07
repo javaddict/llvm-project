@@ -438,17 +438,14 @@ Three things the count missed:
    (`getSlotKind(MemberOpc)`). This is the single most load-bearing correction
    in the step.
 
-3. **The unit-exclusion rule is not modelled anywhere.** § 3 says no two
-   entries of a bundle may share a unit. The slot model cannot express it: the
-   generated `ConflictBits` correctly let P30/P31/P32 co-occur, and *which unit*
-   each entry uses is a property of the member chosen, not of the slot. So
-   nothing stops the packer putting ALU0 in P30 (placement 6) and ALU0 in P31
-   (placement 10). The itinerary/FuncUnit model is the plausible home for this
-   — `Unit_*` classes are already live per § 3 — but the two have not been
-   reconciled, and a logical carries one itinerary while its members span
-   several units. **Decide where this is enforced before trusting a packed
-   bundle**, and note `--emit roundtrip` cannot see it: it is symmetric across
-   encoder and decoder, the same blind spot as § 5.3 and § 6.10.
+3. **~~The unit-exclusion rule is not modelled anywhere.~~ Now a second axis in
+   the packer — see § 7.1.** § 3 says no two entries of a bundle may share a
+   unit. The slot model cannot express it: the generated `ConflictBits`
+   correctly let P30/P31/P32 co-occur, and *which unit* each entry uses is a
+   property of the member chosen, not of the slot. Nothing stopped the packer
+   putting ALU0 in P30 (placement 6) and ALU0 in P31 (placement 10). Note
+   `--emit roundtrip` cannot see this: it is symmetric across encoder and
+   decoder, the same blind spot as § 5.3 and § 6.10.
 
 #### What the composite choice actually is
 
@@ -941,6 +938,86 @@ JAL, 1 for rs-relative JALR — so this was one hardcoded list disagreeing with 
 generated table that already knew the answer. **Grep the simulator for other
 mnemonic literals before retiring the next spelling**; `dispatch_*.c` matching
 on literal mnemonics is called out in § 5.5 for exactly this reason.
+
+## 7.1 The unit model — and why the implementation must stay data-driven
+
+**This is a hardware model that is expected to move again. Nothing in C++ may
+encode where it currently sits.**
+
+| Model | unit → slot | Consequence |
+|---|---|---|
+| Bundle128 (old) | each unit pinned to ONE slot | unit and slot are the same fact; the migration elided units entirely and said "this instruction only goes in slot N" |
+| format E (now) | many-to-many, but **partial** | an instruction goes anywhere its unit is still free |
+| next (expected) | some units 1 slot, some 2, a few all 3 | full flexibility costs too much hardware; the balance point moves |
+
+**The delivered layout is already at a balance point, not the flexible
+extreme.** 7 units × 5 entry positions = 35 pairs; the bit layout admits **18**:
+
+| unit | positions | which |
+|---|---:|---|
+| ALU0 | 4 | 2e-e0, 3e-e0, 3e-e1, 3e-e2 |
+| MAC0 | 3 | 2e-e0, 3e-e0, 3e-e1 |
+| LOAD1 | 3 | 2e-e1, 3e-e1, 3e-e2 |
+| ALU2 | 2 | 3e-e0, 3e-e2 |
+| MAC1 | 2 | 2e-e1, 3e-e2 |
+| LOADSTORE0 | 2 | 2e-e0, 3e-e0 |
+| ALU1 | 2 | 2e-e1, 3e-e1 |
+
+ALU2 never appears in the 2-entry form at all. So **the (unit, position)
+relation is already data in `format_e_bit_layout_v2.json`**, surfaced as the
+placement-index enumeration the generator emits. Re-delivering a layout and
+regenerating is the whole of "customising the balance point" — provided C++
+never hardcodes a unit, a position, or a relation between them.
+
+### What is implemented
+
+Two independent occupancy axes on the packer. **Slot** says where in the
+bundle; **unit** says which hardware serves it; neither implies the other:
+
+* same unit, different entries — `ADD32_P30_ALU0` / `ADD32_P31_ALU0` — a bundle
+  may hold **one**, and the slot check alone would take both;
+* same entry, different units — `ADD32_P30_ALU0` / `LD32_P30_LOADSTORE0` — also
+  only one, but for the *other* reason, and the unit check alone would take
+  both.
+
+`PlacementAlternative::Units` and `CycleMember::Units` carry the member's unit;
+`CycleState::OccupiedUnits` and `Bundle::OccupiedUnits` accumulate it.
+`tryAdd` rejects an alternative whose unit is taken **and tries the next one** —
+that is what makes "put it wherever its unit is free" the placement rule rather
+than a failure. A committed member has no such choice and is rejected outright.
+
+The unit is read off the member NAME (`haydnMemberUnitFromName`), sharing the
+closed unit table with `stripHaydnMemberSuffix`. A generated per-member unit
+table would be a better source and is the natural follow-up to § 6.9's
+`--flags-from` work; the name is used because it is available today and is
+already the tested carrier of the member→logical fold.
+
+### What is NOT yet true, and must not be assumed
+
+* **The axis is inert under Bundle128** and therefore **not exercised by any
+  live path**. Bundle128 members carry no unit — correctly: its slot model
+  pinned one unit per slot, so the spelling never had to say — and
+  `Units == 0` conflicts with nothing. The mechanism is covered only by
+  `HaydnMemberUnit.*` in `HaydnMCFormatsTest.cpp`, which feeds it format E
+  spellings directly. **Treat it as untested against real packing until the
+  switch lands**, and expect the first real bundles to be where it earns or
+  loses trust.
+* **`MCInstrInfo` is optional** on `Bundle` / `tryAdd` / `enumeratePlacementAlternatives`.
+  Without it no unit is claimed. Pre-RA scheduler paths that have no
+  `MCInstrInfo` therefore keep slot-only behaviour — which is right today and
+  **is a gap once format E is live**: a pre-RA cycle could be declared feasible
+  on slots that post-RA then rejects on units. Either thread `MCInstrInfo`
+  through those paths or move the unit to a generated table that needs no name
+  lookup.
+* **The itinerary model already reserves units too.** `HaydnFormatESchedule.td`
+  defines 7 `U_*` FuncUnits and `InstrItinData<Unit_MAC0_L2, [InstrStage<1,
+  [U_MAC0]>], [2]>`, and the itinerary class names the *set* of units that can
+  serve it (`Unit_ALU0_L1` vs `Unit_ALU0ALU1ALU2_L1`) — which is the same
+  fixed↔flexible spectrum, expressed on the logical. **Two mechanisms now
+  describe one constraint** and they have not been reconciled: the itinerary is
+  on the logical, the placement is on the member, and a logical with one
+  itinerary can have members on several units. Decide which is authoritative
+  before both are live, or they will disagree silently.
 
 ## 7. Decided, do not relitigate
 

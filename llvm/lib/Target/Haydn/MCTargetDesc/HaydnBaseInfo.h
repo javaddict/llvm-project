@@ -51,6 +51,48 @@ constexpr unsigned SLOT2 = 0b100;
 constexpr unsigned SLOT_ALL = SLOT0 | SLOT1 | SLOT2;
 
 //===----------------------------------------------------------------------===//
+// Hardware units
+//===----------------------------------------------------------------------===//
+//
+// The seven execution units. An entry of a bundle uses exactly one, and no two
+// entries of a bundle may use the same one — that is the constraint the slot
+// model cannot express, because which unit an instruction uses is a property
+// of the MEMBER chosen, not of the entry it sits in.
+//
+// Two things vary independently and both are DATA, never hardcoded here:
+//
+//   * which units an instruction can use — the set of members it has, from
+//     the database's bit layout (HaydnFormatEEncoding.td alternates)
+//   * which entry positions a unit may appear at — also the bit layout; today
+//     18 of the 5x7 (position, unit) pairs exist, not all 35
+//
+// Those two are the knobs the hardware model moves between the fixed extreme
+// (Bundle128: one unit per slot, so unit and slot were the same fact and this
+// enum was unnecessary) and the flexible extreme (every unit at every
+// position). The delivered format E layout already sits between them, and the
+// balance point is expected to move again. Nothing in C++ should encode where
+// it currently is: regenerate from a new layout and this all still holds.
+enum class Unit : unsigned {
+  LOADSTORE0 = 0,
+  LOAD1 = 1,
+  ALU0 = 2,
+  ALU1 = 3,
+  ALU2 = 4,
+  MAC0 = 5,
+  MAC1 = 6,
+};
+
+constexpr unsigned UNIT_COUNT = 7;
+
+// Occupancy bitset over Unit, bit k = 1 << unit k. Distinct from SlotBits:
+// SlotBits says WHERE in the bundle, UnitBits says WHICH hardware serves it.
+using UnitBits = uint32_t;
+
+constexpr UnitBits unitBit(Unit U) {
+  return UnitBits(1) << static_cast<unsigned>(U);
+}
+
+//===----------------------------------------------------------------------===//
 // Encoded instruction width (TSFlags bits [4:3])
 //===----------------------------------------------------------------------===//
 

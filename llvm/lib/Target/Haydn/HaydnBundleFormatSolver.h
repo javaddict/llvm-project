@@ -80,6 +80,9 @@ struct CycleMember {
   unsigned MemberOpcode = 0;
   /// Single Haydn::SLOT* bit claimed by this member.
   SlotBits FieldSlots = 0;
+  /// Single Haydn::Unit bit claimed by this member; 0 when the encoding does
+  /// not model units (Bundle128).
+  Haydn::UnitBits Units = 0;
 };
 
 /// Transactional packing state for one architectural issue cycle.
@@ -87,6 +90,12 @@ struct CycleMember {
 struct CycleState {
   SmallVector<CycleMember, 3> Members;
   SlotBits OccupiedSlots = 0;
+  /// Units already claimed this cycle. A bundle entry uses exactly one unit
+  /// and no two entries may share one, which is a SEPARATE constraint from
+  /// slot occupancy: two entries at different positions can want the same
+  /// unit. Stays 0 under Bundle128, where the member spelling carries no unit
+  /// because its slot model pinned one unit per slot.
+  Haydn::UnitBits OccupiedUnits = 0;
   /// Intersection of FormatIDs still covering OccupiedSlots and compatible
   /// with every accepted member (bit = formatIDBit(FormatID)).
   uint64_t FeasibleFormatMask = ProductFormatMask;
@@ -194,9 +203,10 @@ inline std::optional<unsigned> fieldSlotsToIndex(SlotBits Field) {
 ///
 /// \returns true and mutates \p S on accept; false leaves \p S unchanged.
 inline bool tryAdd(CycleState &S, const HaydnMCFormats &Fmts,
-                   ArrayRef<FormatDesc> Table, unsigned LogicalOpc) {
+                   ArrayRef<FormatDesc> Table, unsigned LogicalOpc,
+                   const MCInstrInfo *MII = nullptr) {
   SmallVector<PlacementAlternative, 4> Alts;
-  if (!enumeratePlacementAlternatives(Fmts, LogicalOpc, Alts))
+  if (!enumeratePlacementAlternatives(Fmts, LogicalOpc, Alts, MII))
     return false;
 
   // Snapshot for pure transactional reject path.
@@ -223,6 +233,19 @@ inline bool tryAdd(CycleState &S, const HaydnMCFormats &Fmts,
       // Slot conflict (AIEBundle.h:98-100 OccupiedSlots & ConflictBits shape).
       if (S.OccupiedSlots & Alt.FieldSlots)
         continue;
+      // Unit conflict — a SECOND axis, not implied by the slot check. Two
+      // alternatives at different entry positions can name the same unit
+      // (ADD32_P30_ALU0 and ADD32_P31_ALU0), and the hardware has one of each
+      // unit. Trying the next alternative rather than rejecting the
+      // instruction is the point: this is what makes "put it wherever its unit
+      // is still free" the placement rule.
+      //
+      // Alt.Units is 0 when units are not modelled — Bundle128 always, and
+      // format E whenever the caller had no MCInstrInfo to read the member
+      // name from — and 0 conflicts with nothing, so the axis is inert rather
+      // than wrong.
+      if (S.OccupiedUnits & Alt.Units)
+        continue;
       // Member must share a feasible FormatID with the cycle frontier.
       const uint64_t Allowed =
           S.FeasibleFormatMask & Alt.CompatibleFormatMask;
@@ -238,8 +261,10 @@ inline bool tryAdd(CycleState &S, const HaydnMCFormats &Fmts,
       M.LogicalOpcode = LogicalOpc;
       M.MemberOpcode = Alt.MemberOpcode;
       M.FieldSlots = Alt.FieldSlots;
+      M.Units = Alt.Units;
       S.Members.push_back(M);
       S.OccupiedSlots = NewOcc;
+      S.OccupiedUnits |= Alt.Units;
       S.FeasibleFormatMask = NewMask;
       (void)Snapshot; // accepted — Snapshot discarded
       return true;
@@ -254,16 +279,18 @@ inline bool tryAdd(CycleState &S, const HaydnMCFormats &Fmts,
 
 /// tryAdd against the product FormatDesc table (BUNDLE128_FULL only).
 inline bool tryAddProduct(CycleState &S, const HaydnMCFormats &Fmts,
-                          unsigned LogicalOpc) {
-  return tryAdd(S, Fmts, productFormatTable(), LogicalOpc);
+                          unsigned LogicalOpc,
+                          const MCInstrInfo *MII = nullptr) {
+  return tryAdd(S, Fmts, productFormatTable(), LogicalOpc, MII);
 }
 
 /// Probe-only product tryAdd: true iff \p LogicalOpc can be accepted without
 /// mutating \p S (Bundle.canAdd / HR getHazardType shape).
 inline bool canTryAddProduct(const CycleState &S, const HaydnMCFormats &Fmts,
-                             unsigned LogicalOpc) {
+                             unsigned LogicalOpc,
+                             const MCInstrInfo *MII = nullptr) {
   CycleState Probe = S;
-  return tryAddProduct(Probe, Fmts, LogicalOpc);
+  return tryAddProduct(Probe, Fmts, LogicalOpc, MII);
 }
 
 //===----------------------------------------------------------------------===//

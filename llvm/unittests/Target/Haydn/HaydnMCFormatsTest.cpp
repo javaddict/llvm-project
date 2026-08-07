@@ -447,4 +447,76 @@ TEST(HaydnMemberSuffix, FormatENearMissesAreNotMembers) {
   EXPECT_FALSE(stripHaydnMemberSuffix("ADD32_PXY_ALU0").has_value());
 }
 
+//===----------------------------------------------------------------------===//
+// The unit axis
+//===----------------------------------------------------------------------===//
+//
+// A bundle entry uses exactly one hardware unit and no two entries may share
+// one. That is a SECOND axis: slot occupancy says where in the bundle, unit
+// occupancy says which hardware serves it, and neither implies the other.
+//
+// The axis is inert while Bundle128 is live — its members carry no unit,
+// because its slot model pinned one unit per slot and the slot already said
+// everything — so these tests are the only place the mechanism is exercised
+// until the encoding switches. Same arrangement as the format E member
+// spellings above, and the same reason: a pure function can be tested before
+// the encoding that produces its inputs is the live one.
+
+TEST(HaydnMemberUnit, Bundle128MembersHaveNoUnit) {
+  // Not a gap. Under Bundle128 the slot IS the unit, so there is nothing for
+  // the spelling to carry, and "no unit" must read as "no unit constraint"
+  // rather than as a parse failure.
+  EXPECT_FALSE(haydnMemberUnitFromName("ADD32_S0").has_value());
+  EXPECT_FALSE(haydnMemberUnitFromName("ADD32_S2").has_value());
+  EXPECT_FALSE(haydnMemberUnitFromName("JAL_S0").has_value());
+  EXPECT_EQ(haydnMemberUnitBits("ADD32_S1"), Haydn::UnitBits(0));
+  // A logical is not a member and has no unit either.
+  EXPECT_FALSE(haydnMemberUnitFromName("ADD32").has_value());
+  EXPECT_EQ(haydnMemberUnitBits("ADD32"), Haydn::UnitBits(0));
+}
+
+TEST(HaydnMemberUnit, FormatEMembersNameTheirUnit) {
+  EXPECT_EQ(haydnMemberUnitFromName("JAL_P20_ALU0"), Haydn::Unit::ALU0);
+  EXPECT_EQ(haydnMemberUnitFromName("ADD32_P32_ALU2"), Haydn::Unit::ALU2);
+  EXPECT_EQ(haydnMemberUnitFromName("X2MULA32_P30_MAC0"), Haydn::Unit::MAC0);
+  EXPECT_EQ(haydnMemberUnitFromName("LD32_P21_LOAD1"), Haydn::Unit::LOAD1);
+  EXPECT_EQ(haydnMemberUnitFromName("D_LDW_BREV_IMM_P20_LOADSTORE0"),
+            Haydn::Unit::LOADSTORE0);
+  // LOADSTORE0 vs LOAD1 share a prefix; the longer name must win.
+  EXPECT_EQ(haydnMemberUnitFromName("ST32_P30_LOADSTORE0"),
+            Haydn::Unit::LOADSTORE0);
+}
+
+TEST(HaydnMemberUnit, NamesRoundTrip) {
+  for (unsigned I = 0; I != Haydn::UNIT_COUNT; ++I) {
+    auto U = static_cast<Haydn::Unit>(I);
+    std::string Member = std::string("ADD32_P30_") + haydnUnitName(U).str();
+    EXPECT_EQ(haydnMemberUnitFromName(Member), U) << "member " << Member;
+  }
+}
+
+TEST(HaydnMemberUnit, SlotAndUnitAreIndependentAxes) {
+  // Same unit, different entries — a bundle may hold only ONE of these, and
+  // the slot check alone would happily take both.
+  EXPECT_EQ(haydnMemberUnitFromName("ADD32_P30_ALU0"), Haydn::Unit::ALU0);
+  EXPECT_EQ(haydnMemberUnitFromName("ADD32_P31_ALU0"), Haydn::Unit::ALU0);
+  EXPECT_EQ(haydnMemberUnitBits("ADD32_P30_ALU0"),
+            haydnMemberUnitBits("ADD32_P31_ALU0"));
+
+  // Same entry, different units — a bundle may hold only one of these either,
+  // but for the OTHER reason, and the unit check alone would allow both.
+  EXPECT_NE(haydnMemberUnitBits("ADD32_P30_ALU0"),
+            haydnMemberUnitBits("LD32_P30_LOADSTORE0"));
+}
+
+TEST(HaydnMemberUnit, BitsAreDistinctAndSingle) {
+  Haydn::UnitBits Seen = 0;
+  for (unsigned I = 0; I != Haydn::UNIT_COUNT; ++I) {
+    Haydn::UnitBits B = Haydn::unitBit(static_cast<Haydn::Unit>(I));
+    EXPECT_TRUE(llvm::isPowerOf2_32(B)) << "unit " << I << " is not one bit";
+    EXPECT_EQ(Seen & B, Haydn::UnitBits(0)) << "unit " << I << " bit reused";
+    Seen |= B;
+  }
+}
+
 } // end anonymous namespace

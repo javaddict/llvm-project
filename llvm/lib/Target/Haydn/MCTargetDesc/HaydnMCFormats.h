@@ -510,6 +510,24 @@ unsigned getHaydnLogicalBaseOpcode(unsigned Opc, const MCInstrInfo &MII);
 // live.
 std::optional<StringRef> stripHaydnMemberSuffix(StringRef Name);
 
+// The spelling of \p U, e.g. Unit::ALU0 -> "ALU0".
+StringRef haydnUnitName(Haydn::Unit U);
+
+// The hardware unit a format-member name names, or nullopt.
+//
+// Bundle128 members return nullopt, and that is the correct answer rather than
+// a gap: its slot model pinned one unit per slot, so the slot and the unit were
+// the same fact and the spelling never carried it. Format E decouples them —
+// `ADD32_P30_ALU0` and `ADD32_P31_ALU0` are different entries on the SAME unit,
+// and only one of them may be in a bundle.
+//
+// Kept a pure string operation, like stripHaydnMemberSuffix, so format E's
+// spelling is unit-testable while Bundle128 is the one that is live.
+std::optional<Haydn::Unit> haydnMemberUnitFromName(StringRef Name);
+
+// haydnMemberUnitFromName as an occupancy bit, or 0 for "no unit modelled".
+Haydn::UnitBits haydnMemberUnitBits(StringRef Name);
+
 // `HaydnMCFormats` subclass that normalizes member opcodes before consulting
 // alts-derived getLegalSlots. Constructed by the MC encoder (holds MCInstrInfo).
 // The HR/scheduler path keeps using the base `HaydnMCFormats` (logical-only).
