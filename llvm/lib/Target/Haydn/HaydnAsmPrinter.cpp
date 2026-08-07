@@ -562,7 +562,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
             "BUNDLE — multi-parcel expand cannot share a Bundle128 composite");
     }
 
-    HaydnMCFormats Fmts;
+    HaydnMCFormatsWithMII Fmts(*MF->getSubtarget().getInstrInfo());
     Haydn::MCBundle Bundle(&Fmts);
 
     // AIEBaseAsmPrinter.cpp:143-154: verbose per-slot Spill/Reload comments

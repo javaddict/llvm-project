@@ -248,7 +248,8 @@ HaydnHazardRecognizer::HaydnHazardRecognizer(const TargetInstrInfo *TII,
                                              const InstrItineraryData *ItinData,
                                              bool IsPreRA,
                                              HaydnAlternateDescriptors *AltDescs)
-    : TII(TII), ItinData(ItinData), IsPreRA(IsPreRA), AltDescs(AltDescs) {
+    : TII(TII), ItinData(ItinData), IsPreRA(IsPreRA), AltDescs(AltDescs),
+      Fmts(*TII) {
   // Compute the scoreboard depth from the itineraries so the window covers
   // the deepest pipeline + max result latency. For Haydn's current
   // single-stage, latency-1 itineraries this is small (1-2), but Stream C

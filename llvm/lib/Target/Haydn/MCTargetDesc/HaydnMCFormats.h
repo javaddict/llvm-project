@@ -401,6 +401,16 @@ public:
   // Haydn::Formats table (single truth).
   const MCFormatDesc &getCompositeFormatDesc(unsigned CompositeOpcode) const;
 
+  // \returns the MCInstrInfo this formats object was built with, or nullptr.
+  //
+  // The unit axis needs a member's NAME to read its unit off, and only
+  // MCInstrInfo has names. Carrying it here rather than asking every Bundle
+  // caller to pass it separately is what stops a caller silently losing the
+  // unit check — HaydnMCCodeEmitter already constructed
+  // HaydnMCFormatsWithMII and then dropped the MII on the floor when it built
+  // its Bundle. See FORMAT-E-SWITCH-PLAN.md § 5.7.
+  virtual const MCInstrInfo *getMCInstrInfo() const { return nullptr; }
+
   // \returns whether \p Opcode has an entry in the format-desc table.
   virtual bool isSupportedInstruction(unsigned Opcode) const;
 
@@ -546,6 +556,8 @@ class HaydnMCFormatsWithMII : public HaydnMCFormats {
 
 public:
   HaydnMCFormatsWithMII(const MCInstrInfo &MII) : MII(MII) {}
+
+  const MCInstrInfo *getMCInstrInfo() const override { return &MII; }
 
   // Member-opcode-aware legal-slot query. Strips the `_S<k>` suffix to
   // recover the logical base, then queries alts-derived getLegalSlots.

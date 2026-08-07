@@ -348,7 +348,11 @@ private:
 
   // HaydnMCFormats for PlacementAlternative / tryAdd (B2.5 alts-only).
   // Stateless table lookup.
-  HaydnMCFormats Fmts;
+  // WithMII: this is the placement authority — enumeratePlacementAlternatives
+  // and tryAddProduct below choose which MEMBER an instruction becomes, and
+  // the unit is a property of the member. A plain HaydnMCFormats here makes
+  // that choice slot-only (§ 5.7).
+  HaydnMCFormatsWithMII Fmts;
 
   // Walk all scheduling classes to compute the scoreboard depth and the
   // maximum result latency (used to size the scoreboard window).

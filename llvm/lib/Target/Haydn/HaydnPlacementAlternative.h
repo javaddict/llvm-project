@@ -153,6 +153,14 @@ enumeratePlacementAlternatives(const HaydnMCFormats &Fmts,
                                SmallVectorImpl<PlacementAlternative> &Out,
                                const MCInstrInfo *MII = nullptr) {
   Out.clear();
+  // Take the MII from the formats object when the caller did not pass one.
+  // Without it no unit is claimed and the rows come back unit-less, which
+  // makes the packer slot-only and lets it build a bundle whose entries share
+  // a hardware unit — see FORMAT-E-SWITCH-PLAN.md § 5.7. Doing the fallback
+  // here rather than at each call site is what makes it hard to lose again:
+  // tryAdd and tryAddProduct both funnel through this function.
+  if (!MII)
+    MII = Fmts.getMCInstrInfo();
   const std::vector<unsigned> *Alts =
       Fmts.getAlternateInstsOpcode(LogicalOpc);
   if (!Alts || Alts->empty())
