@@ -337,34 +337,6 @@ def load_instruction_flags(path: Path) -> dict[str, dict]:
     return flags
 
 
-def load_tied_writebacks(path: Path) -> dict[str, tuple[str, str]]:
-    r"""Per-logical tied writeback, as (input name, output name).
-
-    A logical with `Constraints = "$rs = $rs_wb"` presents FOUR operands to
-    CodeGen -- the tied register appears once as an out and once as an in --
-    while the database describes the member with three, naming the writeback
-    out `rs` and having no in for it. After materializeMultiOpcodeInstrs the
-    MEMBER's MCInstrDesc drives the encoder while the MCInst still carries the
-    LOGICAL's operands, so every operand after the tie is read one position
-    early: `s_lw_pre_imm r3, r1, r1` came out of llc with a REGISTER where the
-    offset belongs. See FORMAT-E-SWITCH-PLAN.md 5.11.
-
-    Note the assembler path was unaffected, because the parser builds the
-    MCInst against the member and the two agree. Only compiled code was wrong,
-    which is why the round trip never saw it.
-    """
-    records = json.loads(path.read_text(encoding="utf-8"))
-    out: dict[str, tuple[str, str]] = {}
-    for name, record in records.items():
-        if not isinstance(record, dict):
-            continue
-        text = str(record.get("Constraints") or "").strip()
-        match = re.fullmatch(r"\$(\w+)\s*=\s*\$(\w+)", text)
-        if match:
-            out[name] = (match.group(1), match.group(2))
-    return out
-
-
 def load_operand_classes(path: Path):
     """Per-logical operand classes worth inheriting, from the same tblgen JSON.
 
@@ -796,6 +768,209 @@ def load_syntax_order(database: Path) -> dict[str, list[str]]:
     return order
 
 
+READ_PORTS = ("GPR_Read_Port", "DR_Read_Port", "AR_Read_Port", "SFR_Read_Port")
+WRITE_PORTS = ("GPR_Write_Port", "DR_Write_Port", "AR_Write_Port", "SFR_Write_Port")
+
+
+def load_operand_roles(database: Path) -> dict[str, tuple[set[str], set[str]]]:
+    r"""Per instruction, the operands it READS and the ones it WRITES.
+
+    This is what decides whether a member operand is a def, and the database
+    states it directly: every instruction carries `GPR/DR/AR/SFR_Read_Port`
+    and `_Write_Port` over the same operand names its Syntax uses.
+
+    It replaces asking whether the bit-layout field the operand landed in is
+    called `dest`, which is a LAYOUT fact and not a semantic one. The two come
+    apart because an entry's field set depends on its (entry, unit):
+
+        2-entry entry0/ALU0   {"dest": "rsd1", "src": "rsd2"}
+        3-entry entry0/ALU2   {"dest": "   ", "src1": "rsd1", "src2": "rsd2"}
+
+    Both rows are `X2SEQ32 rsd1, rsd2`, whose only write is `SFR_Write_Port`
+    -- it has no register destination at all, and the ALU2 row says so by
+    leaving `dest` blank. The narrower row has nowhere to put a second source,
+    so `rsd1` sits in the field named `dest` and the old rule called it an out.
+    That made the SAME instruction a def on one unit and not on another, and it
+    failed both ways: it invented a destination for the SFR compares and lost
+    the real one for LUI, ZERO_GPR, CSRR and MOVESFR2GPR on six placements of
+    seven. See FORMAT-E-SWITCH-PLAN.md 5.11.
+
+    A write reaches a register FILE through a selector (`ar[ar_sel]`) or names
+    an implicit register (`SFR`); neither makes an operand a def, so both drop
+    out. Anything else has to be a known register alias -- a re-delivered
+    database that invents a shape must fail here rather than silently decide
+    every operand of that instruction is a source.
+    """
+    data = json.loads((database / INSTRUCTION_INDEX).read_text(encoding="utf-8"))
+    indirect = re.compile(r"\w+\[\w+\]")
+    implicit = re.compile(r"[A-Z]+\d*")
+    known = GPR_ALIASES | DR_ALIASES
+    def ports(entry: dict, name: str, keys: tuple[str, ...]) -> set[str]:
+        found: set[str] = set()
+        for key in keys:
+            for port in entry.get(key) or []:
+                port = str(port).strip()
+                if indirect.fullmatch(port) or implicit.fullmatch(port):
+                    continue
+                if port not in known:
+                    raise SystemExit(
+                        f"{name}: {key} names {port!r}, which is neither a"
+                        " register alias, an implicit register nor a"
+                        " selected file")
+                found.add(port)
+        return found
+
+    roles: dict[str, tuple[set[str], set[str]]] = {}
+    for entries in data.values():
+        for entry in entries:
+            name = str(entry.get("Instruction", "")).strip()
+            if not name or name == "WFI<TBD>":
+                continue
+            roles[name] = (ports(entry, name, READ_PORTS),
+                           ports(entry, name, WRITE_PORTS))
+    return roles
+
+
+def syntax_ordered_operands(placement: dict,
+                            syntax: dict[str, list[str]]) -> list[dict]:
+    """The placement's used fields, in the order the instruction is written.
+
+    `operand_fields` lists the entry's fields in bit order, which is not the
+    order the instruction reads. Bits stay keyed by field, so only the operand
+    list and the asm string follow the Syntax; encoding is unaffected.
+    verify_operand_sets cross-checks that the two database files name the same
+    operand set for this instruction.
+
+    Both the emitter and member_operand_shape order operands through here. They
+    have to agree: `CSRW uimm8, rs` is written immediate-first while its bit
+    layout puts `rs` first, so splitting into outs and ins before this sort
+    yields an operand list the logical does not match.
+    """
+    used = [o for o in placement["operands"]
+            if placement["operand_use"].get(o["field"])]
+    written = syntax.get(placement["instruction"])
+    if written is not None:
+        rank = {name: i for i, name in enumerate(written)}
+        used.sort(key=lambda o: rank[placement["operand_use"][o["field"]]])
+    return used
+
+
+def load_tie_positions(path: Path) -> dict[str, list[int]]:
+    r"""Where each logical puts the IN of a tied writeback, among its ins.
+
+    The database describes a written-back register as ONE operand; CodeGen
+    presents it as two, an out and a tied in. Where that second one lands is
+    therefore an LLVM-side fact that the database cannot state, and the
+    logicals do not agree with each other about it:
+
+        D_SDW_POST_IMM rtd, rs, imm6   ins ($rtd, $rs, $imm)   tie 2nd
+        PLDWWUA_POST   ar_sel, rs      ins ($rs, $ar_sel)      tie 1st
+
+    Both are legal -- the AsmString names operands, so either order prints the
+    same -- but the encoder reads the MCInst positionally, so the member has
+    to make the same choice its logical did. Read as an index rather than by
+    name: the two sides name the same register differently (`rd`/`rd_in`
+    against the database's `rtd`), which is exactly what silently defeated the
+    previous tie restoration.
+    """
+    records = json.loads(path.read_text(encoding="utf-8"))
+    clause = re.compile(r"\s*\$(\w+)\s*=\s*\$(\w+)\s*")
+    positions: dict[str, list[int]] = {}
+    for name, record in records.items():
+        if not isinstance(record, dict):
+            continue
+        text = str(record.get("Constraints") or "").strip()
+        if not text:
+            continue
+        ins = [str(arg[1])
+               for arg in (record.get("InOperandList") or {}).get("args", [])]
+        found = []
+        for part in text.split(","):
+            match = clause.fullmatch(part)
+            if match is None:
+                continue
+            # `Constraints` does not say which side is the in: the logicals
+            # write both `"$rs = $rs_wb"` (in first) and `"$rd = $rd_in"` (in
+            # second). The in is whichever name the InOperandList carries.
+            for side in (match.group(1), match.group(2)):
+                if side in ins:
+                    found.append(ins.index(side))
+                    break
+        if found:
+            positions[name] = sorted(found)
+    return positions
+
+
+def member_operand_shape(placement: dict,
+                         roles: dict[str, tuple[set[str], set[str]]],
+                         syntax: dict[str, list[str]],
+                         tie_positions: dict[str, list[int]] | None = None,
+                         ) -> tuple[list[str], list[str]]:
+    """The member's operand aliases in MCInst order, as (outs, ins).
+
+    Shared with emit_tablegen so check_operand_agreement cannot drift from
+    what the generator actually emits. The previous check MODELLED the
+    emitter -- it added one for a tied writeback whenever the logical carried
+    a `Constraints` -- while the emitter only restored that tie when the
+    logical happened to name it the way the database does. Where the names did
+    not line up the emitter silently skipped the tie and the check credited it
+    anyway, so 823 placements over 164 logicals were reported as agreeing
+    while their member really was one operand short. `F2MULAA32RS_HHLL` is the
+    shape: the logical ties `$rd = $rd_in`, the database calls the same
+    register `rtd`, nothing matched, and every MAC accumulate encoded its
+    accumulator as its first source.
+
+    The tie is now read off the database too -- an operand the instruction
+    both reads and writes is one register CodeGen presents twice -- so it no
+    longer depends on the two sides agreeing about a name.
+    """
+    used = syntax_ordered_operands(placement, syntax)
+    reads, writes = roles.get(placement["instruction"], (None, None))
+    aliases = {placement["operand_use"][o["field"]] for o in used}
+
+    def written(operand: dict, alias: str) -> bool:
+        if writes is None:
+            return operand["field"].startswith("dest")
+        return alias in writes
+
+    # Read AND written is one register that CodeGen can present twice, as an
+    # out and a tied in.
+    tied_names = [alias for operand in used
+                  if (alias := placement["operand_use"][operand["field"]])
+                  and written(operand, alias) and reads is not None
+                  and alias in reads and f"{alias}_wb" not in aliases]
+
+    # Whether there IS a tie, and where its in sits, are CodeGen-side
+    # presentation choices that only the logical can state -- the database
+    # says no more than that the register is read and written. So the member
+    # follows the logical: the two have to match operand for operand, or the
+    # encoder reads past the end of the MCInst and llc aborts inside
+    # MCOperand::operator[]. Where the logical then contradicts the database
+    # -- 87 accumulating MAC logicals declare no tie at all, so their
+    # accumulator input is not pinned to the register the hardware reads --
+    # that is reported on its own axis rather than papered over here.
+    wanted = (tie_positions or {}).get(placement["instruction"], [])
+    if len(wanted) != len(tied_names):
+        tied_names = []
+
+    outs: list[str] = []
+    ins: list[str] = []
+    for operand in used:
+        alias = placement["operand_use"][operand["field"]]
+        if written(operand, alias):
+            outs.append(f"{alias}_wb" if alias in tied_names else alias)
+        if alias in tied_names or not written(operand, alias):
+            # Everything else follows the Syntax, with the write-only operands
+            # taken out.
+            ins.append(alias)
+
+    if tied_names:
+        ins = [name for name in ins if name not in set(tied_names)]
+        for index, name in zip(wanted, tied_names):
+            ins.insert(index, name)
+    return outs, ins
+
+
 def verify_operand_sets(placements: list[dict],
                         syntax: dict[str, list[str]]) -> None:
     """Every operand the Syntax names must have a field in the bit layout.
@@ -833,8 +1008,11 @@ def verify_operand_sets(placements: list[dict],
     raise SystemExit("\n".join(lines))
 
 
-def check_operand_agreement(placements: list[dict], flags_path: Path) -> str:
-    """Report every member whose operand count disagrees with its logical's.
+def check_operand_agreement(placements: list[dict], flags_path: Path,
+                            roles: dict[str, tuple[set[str], set[str]]],
+                            syntax: dict[str, list[str]],
+                            tie_positions: dict[str, list[int]]) -> str:
+    """Report every member whose operand list disagrees with its logical's.
 
     This is the § 5.11 hazard made measurable. After
     materializeMultiOpcodeInstrs the MEMBER's MCInstrDesc drives the encoder
@@ -844,6 +1022,19 @@ def check_operand_agreement(placements: list[dict], flags_path: Path) -> str:
     missing or wrong relocation. LUI emitted no relocation at all; the whole
     pre/post-increment load-store family encoded a register as its offset.
 
+    Two axes, because count alone missed most of it:
+
+    * **arity** -- the member declares a different NUMBER of operands, so
+      everything after the difference is read from the wrong position.
+    * **defs** -- the counts agree but the member disagrees about how many of
+      them are outs. `MCInstrDesc::NumDefs` is where the operand numbering
+      starts, and a member that calls a source a def describes an instruction
+      that writes a register it does not write. This is the axis that caught
+      the SFR compares inventing a destination and LUI losing its real one.
+
+    Both are asked of member_operand_shape rather than modelled here; the
+    previous version modelled the emitter and got 823 placements wrong.
+
     Nothing else can see this. --emit roundtrip never looks at the logical,
     --check only validates the database against itself, and the encoder and
     decoder agree with each other because both read the member. It is a .td
@@ -852,37 +1043,89 @@ def check_operand_agreement(placements: list[dict], flags_path: Path) -> str:
     The count is a standing hazard, not a to-do list: it should only shrink.
     """
     records = json.loads(flags_path.read_text(encoding="utf-8"))
-    member = re.compile(r"^(.+)_P\d\d_[A-Z0-9]+$")
 
-    counted: dict[str, int] = {}
-    for placement in placements:
+    # A logical operand is a register iff its class is a RegisterClass; a
+    # member's is iff the database alias names a register file. Both sides are
+    # closed sets, so this needs no per-target table.
+    register_classes = {name for name, record in records.items()
+                        if isinstance(record, dict)
+                        and "RegisterClass" in (record.get("!superclasses") or [])}
+    registers = GPR_ALIASES | DR_ALIASES
+
+    def logical_kinds(record: dict) -> list[str]:
+        kinds = []
+        for key in ("OutOperandList", "InOperandList"):
+            for arg in (record.get(key) or {}).get("args", []):
+                cls = arg[0]
+                if isinstance(cls, dict):
+                    cls = cls.get("def") or str(cls)
+                kinds.append("reg" if str(cls) in register_classes else "imm")
+        return kinds
+
+    arity: dict[str, int] = {}
+    defs: dict[str, int] = {}
+    kinds: dict[str, int] = {}
+    ties: dict[str, int] = {}
+    # Only the placements that become members: canonical_members is what
+    # --emit td writes, and counting the rest reports defects in defs that do
+    # not exist.
+    for placement in canonical_members(placements):
         logical = placement["instruction"]
         record = records.get(logical)
         if not isinstance(record, dict) or "InOperandList" not in record:
             continue
-        wanted = (len(record.get("OutOperandList", {}).get("args", []))
-                  + len(record["InOperandList"]["args"]))
-        # The member's operands are its used fields, plus the tied input the
-        # logical adds back (see load_tied_writebacks).
-        used = [o for o in placement["operands"]
-                if placement["operand_use"].get(o["field"])]
-        tie = str(record.get("Constraints") or "").strip()
-        have = len(used) + (1 if tie else 0)
-        if have != wanted:
-            counted[logical] = counted.get(logical, 0) + 1
+        want_outs = len(record.get("OutOperandList", {}).get("args", []))
+        wanted = want_outs + len(record["InOperandList"]["args"])
+        outs, ins = member_operand_shape(placement, roles, syntax,
+                                        tie_positions)
 
-    if not counted:
+        # Independent of the position axes below: the database says this
+        # register is both read and written, and the logical does not present
+        # it that way. The member follows the logical so the encoder stays in
+        # bounds (see member_operand_shape), which leaves the MODEL wrong --
+        # an accumulator whose input is not pinned to the register the
+        # hardware reads, so regalloc is free to put the addend elsewhere.
+        reads, writes = roles.get(logical, (None, None))
+        if reads is not None:
+            used = syntax_ordered_operands(placement, syntax)
+            database_ties = sum(
+                1 for operand in used
+                if (alias := placement["operand_use"][operand["field"]])
+                and alias in reads and alias in writes)
+            if database_ties != len(tie_positions.get(logical, [])):
+                ties[logical] = ties.get(logical, 0) + 1
+
+        if len(outs) + len(ins) != wanted:
+            arity[logical] = arity.get(logical, 0) + 1
+        elif len(outs) != want_outs:
+            defs[logical] = defs.get(logical, 0) + 1
+        else:
+            have = ["reg" if n.removesuffix("_wb") in registers else "imm"
+                    for n in outs + ins]
+            if have != logical_kinds(record):
+                kinds[logical] = kinds.get(logical, 0) + 1
+
+    if not arity and not defs and not kinds and not ties:
         return "operand agreement: every member matches its logical\n"
-    total = sum(counted.values())
-    lines = [f"operand agreement: {len(counted)} logicals, {total} member"
-             f" placements disagree with their logical",
+
+    lines = [f"operand agreement:"
+             f" {len(set(arity) | set(defs) | set(kinds) | set(ties))} logicals,"
+             f" {sum(arity.values()) + sum(defs.values()) + sum(kinds.values()) + sum(ties.values())}"
+             f" member placements disagree with their logical",
              "",
              "  each one is a place the encoder reads the wrong operand,"
              " silently (plan 5.11)",
              ""]
-    for logical, count in sorted(counted.items()):
-        lines.append(f"  {logical:32} {count} placements")
-    return "\n".join(lines) + "\n"
+    for title, counted in (("arity", arity), ("defs", defs),
+                           ("kinds", kinds), ("ties", ties)):
+        if not counted:
+            continue
+        lines.append(f"  {title}: {len(counted)} logicals,"
+                     f" {sum(counted.values())} placements")
+        for logical, count in sorted(counted.items()):
+            lines.append(f"    {logical:32} {count} placements")
+        lines.append("")
+    return "\n".join(lines).rstrip("\n") + "\n"
 
 
 def emit_reloc_geometry(placements: list[dict]) -> str:
@@ -955,7 +1198,9 @@ def emit_reloc_geometry(placements: list[dict]) -> str:
 def emit_tablegen(geometry: dict, placements: list[dict],
                   pipeline: dict, syntax: dict[str, list[str]],
                   flags: dict[str, dict],
-                  op_classes: dict, op_classes_raw: dict, tied: dict,
+                  op_classes: dict, op_classes_raw: dict,
+                  roles: dict[str, tuple[set[str], set[str]]],
+                  tie_positions: dict[str, list[int]],
                   part: str = "members") -> str:
     """The encoding half. The scheduling half is its own file: it can be
     included while Bundle128 is live and this cannot, so emitting both here
@@ -1131,21 +1376,13 @@ def emit_tablegen(geometry: dict, placements: list[dict],
         base = p["entry_lsb"]
         context = f"{p['instruction']}@{p['entry_count']}e{p['entry_index']}/{p['unit']}"
 
-        # `operand_fields` lists the entry's fields in bit order, which is not
-        # the order the instruction is written in. Bits stay keyed by field, so
-        # only the operand list and the asm string follow the Syntax; encoding
-        # is unaffected. syntax_order cross-checks that the two database files
-        # name the same operand set for this instruction.
-        used = [o for o in p["operands"] if p["operand_use"].get(o["field"])]
+        used = syntax_ordered_operands(p, syntax)
         spelling = {o["field"]: p["operand_use"][o["field"]] for o in used}
-        written = syntax.get(p["instruction"])
-        if written is not None:
-            rank = {name: i for i, name in enumerate(written)}
-            used.sort(key=lambda o: rank[spelling[o["field"]]])
 
         unused = [o for o in p["operands"]
                   if not p["operand_use"].get(o["field"])]
-        outs, ins, bit_lines, decls = [], [], [], []
+        bit_lines, decls = [], []
+        classes: dict[str, str] = {}
         for operand in used + unused:
             alias = p["operand_use"].get(operand["field"])
             width = operand["msb"] - operand["lsb"] + 1
@@ -1160,34 +1397,26 @@ def emit_tablegen(geometry: dict, placements: list[dict],
                                                alias, width)
                     or operand_type(alias, width, context))
             decls.append(f"  bits<{width}> {alias};")
-            target = outs if operand["field"].startswith("dest") else ins
-            target.append(f"{kind}:${alias}")
+            classes[alias] = kind
             bit_lines.append(
                 (operand["msb"] - base, operand["lsb"] - base, alias, operand["field"]))
 
-        # Restore the logical's tied writeback. The database describes the
-        # written-back register as an out only; the logical presents it twice,
-        # tied, so CodeGen builds one more operand than the member declares and
-        # the encoder then reads every later operand one position early.
-        tie = tied.get(p["instruction"])
-        constraint = None
-        if tie is not None:
-            tied_in, tied_out = tie
-            existing = {e.partition(":$")[2] for e in outs + ins}
-            for position, entry in enumerate(outs):
-                cls_name, _, operand_name = entry.partition(":$")
-                if operand_name != tied_in:
-                    continue
-                # The tie renames the out and adds an in. Skip when the member
-                # already spells both -- the database sometimes gives the
-                # written-back register its own in, and re-adding it would
-                # declare the name twice.
-                if tied_out in existing:
-                    break
-                outs[position] = f"{cls_name}:${tied_out}"
-                ins.insert(0, f"{cls_name}:${tied_in}")
-                constraint = f"{tied_in} = {tied_out}"
-                break
+        # Which of these are defs, and which is a tied writeback, is the
+        # database's statement and not this entry's field naming -- see
+        # member_operand_shape. The bits<> above stay bound to the alias, which
+        # after a tie is the name of the tied IN, so the field still resolves.
+        out_names, in_names = member_operand_shape(p, roles, syntax,
+                                                   tie_positions)
+
+        def declare(operand_name: str) -> str:
+            base_name = (operand_name[:-len("_wb")]
+                         if operand_name.endswith("_wb") else operand_name)
+            return f"{classes[base_name]}:${operand_name}"
+
+        outs = [declare(n) for n in out_names]
+        ins = [declare(n) for n in in_names]
+        constraints = [f"${n[:-len('_wb')]} = ${n}"
+                       for n in out_names if n.endswith("_wb")]
 
         asm_operands = ", ".join(f"${spelling[o['field']]}" for o in used)
         asm = p["instruction"].lower() + (f"\t{asm_operands}" if asm_operands else "")
@@ -1196,9 +1425,8 @@ def emit_tablegen(geometry: dict, placements: list[dict],
         out.append(f"    (outs {', '.join(outs)}), (ins {', '.join(ins)}),")
 
         out.append(f"    \"{asm}\"> {{")
-        if constraint is not None:
-            out.append(f"  let Constraints = \"${constraint.split(' = ')[0]}"
-                       f" = ${constraint.split(' = ')[1]}\";")
+        if constraints:
+            out.append(f"  let Constraints = \"{', '.join(constraints)}\";")
         index = indices[(p["entry_count"], p["entry_index"], p["unit"])]
         out.append(f"  let PlacementIndex = {index};  // {p['unit']}"
                    f" @ {p['entry_count']}-entry entry{p['entry_index']}")
@@ -1514,7 +1742,8 @@ def main() -> None:
                              if args.flags_from else {},
                              *(load_operand_classes(args.flags_from)
                                if args.flags_from else ({}, {})),
-                             load_tied_writebacks(args.flags_from)
+                             load_operand_roles(args.database),
+                             load_tie_positions(args.flags_from)
                              if args.flags_from else {},
                              part="composites" if args.emit == "composites"
                              else "members")
@@ -1522,7 +1751,10 @@ def main() -> None:
         if args.flags_from is None:
             raise SystemExit("--emit operand-agreement needs --flags-from:"
                              " the logicals' operand lists come from tblgen")
-        text = check_operand_agreement(placements, args.flags_from)
+        text = check_operand_agreement(placements, args.flags_from,
+                                       load_operand_roles(args.database),
+                                       load_syntax_order(args.database),
+                                       load_tie_positions(args.flags_from))
     elif args.emit == "reloc-geometry":
         text = emit_reloc_geometry(placements)
     elif args.emit == "table":
