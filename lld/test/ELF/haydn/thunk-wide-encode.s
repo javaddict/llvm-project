@@ -7,8 +7,8 @@
 # 3 × 16 = 48 bytes. No R12 (not a free AT). No post-JALR dead XOR.
 #
 #   0x10000: lui    r0, hi12(target)
-#   0x10010: addi32 r0, r0, lo20(target)
-#   0x10020: jalr   r0, r0, 0
+#   0x1000c: addi32 r0, r0, lo20(target)
+#   0x10018: jalr   r0, r0, 0
 
 .section .text
 .globl _start
@@ -24,8 +24,8 @@ callee:
 
 # CHECK-LABEL: <__haydn_thunk_callee>:
 # CHECK:        10000: {{.*}} lui{{.*}}r0,
-# CHECK:        10010: {{.*}} addi32{{.*}}r0,{{.*}}r0,
-# CHECK:        10020: {{.*}} jalr{{.*}}r0,{{.*}}r0
+# CHECK:        1000c: {{.*}} addi32{{.*}}r0,{{.*}}r0,
+# CHECK:        10018: {{.*}} jalr{{.*}}r0,{{.*}}r0
 # CHECK-NOT: r12
 # CHECK-NOT: xor32
 # CHECK-NOT: lui_w
