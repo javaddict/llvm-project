@@ -22,7 +22,8 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `b6c960be45ee`, **local only — not pushed** | **objects emit: 424/430 CodeGen. lit 282/589, `HaydnTests` 142/253, lld 12/24.** Both § 5.2 generator gaps closed; § 5.11's generator half done and two of its four logical shapes. |
+| `llvm-project` | `haydn-formate-switch-mc` | `7cf1079b8505`, **local only — not pushed** | **objects emit: 424/430 CodeGen. lit 290/589, `HaydnTests` 142/253, lld 12/24.** Both § 5.2 generator gaps closed; § 5.11 down to five logicals, all with reasons. |
+| `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -795,12 +796,16 @@ disagree, **the encoder is wrong**.
 
 **Do not regenerate while § 5.11's first three axes are non-zero.** They are
 exactly the places the encoder reads an operand the logical did not put there,
-so regenerating now would freeze the wrong bytes into 589 expectations and the
-round trip would agree with all of them. Five attempts to regenerate have been
-made so far and four of them found code to fix instead — the relocation kind
-for `SET_HWLOOP`, branch scaling, `LUI`'s operand shape, and the tied writeback
-family. `ties` is a weaker gate: it is a register-allocation defect, not an
-encoding one, so it does not by itself corrupt an expectation.
+so regenerating would freeze the wrong bytes into 589 expectations and the
+round trip would agree with all of them. Six attempts have been made so far and
+five found code to fix instead — the relocation kind for `SET_HWLOOP`, branch
+scaling, `LUI`'s operand shape, the tied writeback family, and § 5.11's own
+generator half.
+
+**`arity`, `defs` and `kinds` are now all zero**, so this precondition is met
+for the first time. `ties` is a weaker gate and does not block: it is a
+register-allocation defect, not an encoding one, and the five left on it are
+held by reasons rather than by work.
 
 Be aware of what `--emit roundtrip` cannot see, though: it checks the encoder
 against the decoder, so any defect symmetric across the pair passes. That is how
@@ -1506,8 +1511,8 @@ about names. Two things forced that reading:
 ```sh
 python3 .../haydn_encoding.py --database ~/haydn \
     --emit operand-agreement --flags-from haydn-records.json
-#   operand agreement: 104 logicals, 527 member placements disagree
-#     arity 58 / 10   defs 0   kinds 6 / 3   ties 521 / 101
+#   operand agreement: 5 logicals, 25 member placements disagree
+#     arity 0   defs 0   kinds 0   ties 25 / 5
 ```
 
 The generator no longer contributes a single disagreement. The first three axes
@@ -1522,40 +1527,57 @@ defect rather than an encoding one.
 | `kinds` | counts and defs agree, but a position is a register on one side and an immediate on the other |
 | `ties` | the database says a register is read *and* written and the logical does not present it that way |
 
-**`defs` earned itself immediately, and is now empty.** It caught
-`SEQ64`/`SLE64`/`SLT64`, which have two operands on both sides — so every
-count-based check passed them — while the logical called the first a
-destination and the hardware reads it as the second source. They were never in
-the old list of 27 at all. Fixed in `b6c960be45ee`.
+**Three of the four axes are empty.** What each one caught before it emptied is
+worth keeping, because none of them was visible to the count the section used
+to carry:
 
-Two of the four shapes are done, in the same commit — **the generated encoding
-did not change by one byte**, because the members already had the right shape
-and it was the logicals that moved to meet them:
+* **`defs`** caught `SEQ64`/`SLE64`/`SLT64` — two operands on both sides, so
+  every count-based check passed them, while the logical called the first a
+  destination and the hardware reads it as the second source. They were never
+  in the old list of 27 at all.
+* **`kinds`** caught `D_SDW_CB_IMM`/`_REG` and `WBARWUA`, whose logicals put
+  the selector immediate after the registers while the database Syntax and the
+  members put it first. Counts and def counts agreed; only comparing what each
+  position *means* found it.
+* **`arity`** ended up naming six instructions where the *database* was wrong,
+  not the logical — see below.
 
-* ~~**9 SFR compares**~~ — the six `X2`/`X4` plus the three scalars above. The
-  logical declared a `$rd` the hardware does not have. **Note this was the
-  opposite of what this section used to say**: they were filed as "declares a
-  source the database does not have", and dropping `$rs2` would have made the
-  count agree while leaving the roles wrong. Intrinsics and builtins are void
-  now; see § 7.
-* ~~**5 with an extra dead operand**~~ — `ABS32`, `ABS32S`, `MOVE32`, `CSRR`,
-  `ZERO_DR`. None was ever in an asm string, so no test could see one.
+The four shapes, and what each cost:
 
-The `arity` 10 that remain:
+| Shape | n | Fixed in | Cost |
+|---|---:|---|---|
+| SFR compares with no destination | 9 | `b6c960be45ee` | intrinsics and builtins become void (§ 7) |
+| an extra dead operand | 5 | `b6c960be45ee` | `.td` only; none was ever in an asm string |
+| `Behavior` reads a port the database omits | 6 | `fb3fd13bebed` | a database repair, not a `.td` one |
+| an accumulator the logical never declared | 89 | `5185d0634df6`, `91a58cebd7aa` | 85 intrinsic prototypes gain the accumulator |
+| operand order against the Syntax | 3 | `7cf1079b8505` | `.td` plus four GISel construction sites |
 
-* **6 that are database defects, not logical ones** — see below.
-* **4 conditional moves** — `X2MOVF32`, `X2MOVT32`, `X4MOVF16`, `X4MOVT16`, 28
-  placements. `rtd` is read and written and the logical declares no tie, so
-  they are really the `ties` shape and should be done with it, not alone.
+**The first two changed the generated encoding by not one byte.** The members
+already had the right shape — the generator takes an operand's role from the
+database — so it was the logicals that moved to meet them. That is the shape of
+this whole section: the encoder was reading operands the logical had put
+somewhere else.
 
-`kinds` is `D_SDW_CB_IMM`/`_REG` and `WBARWUA`: the logical orders its operands
-differently from the Syntax, so an immediate sits where a register was built.
+**The 85 accumulates were a live miscompile, not a modelling gap.** `FMULS16_HS00`
+is `rtd = SAT(rtd - rsd1*rsd2)`; its intrinsic took two arguments, so GISel gave
+the instruction a fresh vreg to accumulate into and the hardware added to
+whatever the register allocator had left there. The target shape was already in
+the tree — `X4CJMULA16S_H` has carried `FmtALU64Acc` + `$rd = $rd_in` + a
+ternary intrinsic + `selectAccMAC` all along — so this was a rename onto an
+existing vocabulary rather than a design.
 
-`ties` is mostly the accumulating MAC family — 101 logicals whose members the
-hardware reads back but whose `.td` declares no tie, so nothing pins the
-accumulator to the register the hardware actually reads and regalloc is free to
-put the addend elsewhere. It also holds the reverse: `MULL`, `SLLI64`,
-`SRAI64`, `SRLI64` declare a tie the database does not have.
+The five left on `ties` are reasons, not work:
+
+* `SLLI64`/`SRLI64`/`SRAI64` are tied **only** because Bundle128's 48-bit
+  `Fmt48_WideDR_RI6` has room for one register, so an untied `$rsd` has no
+  field to encode into. The database and the members both give the two
+  registers independent homes. It comes off with the Bundle128 formats (§ 5.2);
+  until then it costs a register copy and no correctness.
+* `MOVEI_H`/`MOVEI_L` write one half of the destination and preserve the other,
+  so they read it. Giving them the input is a **constant-materialization**
+  question — the pair has to chain, `MOVEI_L` then `MOVEI_H` on the same
+  register — not an operand-list one, and it is the one piece of § 5.11 that
+  has not been looked at.
 
 Treat every count as a standing hazard, not a fixed list: they should only ever
 shrink, and any new mismatch is a new place the encoder can read the wrong
@@ -1571,13 +1593,24 @@ rtd = SATQ1.63(rtdQ1.63 + SATQ1.63(rsd1[63:32]Q1.31 * rsd2[63:32]Q1.31))
 ```
 
 — while their `DR_Read_Port` lists only `rsd1, rsd2`. **The port list is
-wrong, not the logical**, which declares the tie correctly; the generator
-trusts the ports and therefore drops it, and the 30 placements land in `arity`.
+wrong, not the logical**, which declares the tie correctly.
 
-Same class as § 5.3's 16 instructions: a disagreement *between* two statements
-the database makes about itself, which only a cross-check can see. Neither
-`--check` nor the round trip looks at `Behavior` at all. A `Behavior`-against-
-ports sweep is the natural next gate and is how these six were found.
+Same class as § 5.3's 76 mapping rows: a disagreement *between* two statements
+the database makes about itself, which no gate that checks the database against
+the *encoder* can see. `--check` now refuses on it, and the repair is forced
+rather than chosen — the Behavior assigns the register from an expression
+containing itself, so it is read, and the register file follows from the alias:
+
+```sh
+python3 .../haydn_encoding.py --database ~/haydn --fix-read-ports --write
+#   6 read port(s) repaired over 6 row(s)
+```
+
+The file is CRLF and one field per line, so the edit is byte-level: +42 bytes,
+six lines, every line ending intact. Re-running is a no-op. The database is
+version-controlled by neither repo, so this is a mode rather than a note — see
+§ 5.3's account of a correction that did not travel. `GOLDEN_INPUTS.sha256` is
+re-pinned in `simulator` (`dfd2078`).
 
 Note what did **not** catch this: `--emit roundtrip` never sees the logical at
 all, `--check` only validates the database against itself, and the encoder and
