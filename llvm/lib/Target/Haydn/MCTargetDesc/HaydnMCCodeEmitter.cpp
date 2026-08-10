@@ -621,7 +621,23 @@ void HaydnMCCodeEmitter::encodeSlotSubInst(
   unsigned SlotWindowLSBByteBase =
       (Haydn::BUNDLE_E_BITS - 1 - Offsets.RightOffset) / 8;
   for (const MCFixup &F : BaseFixups) {
-    addHaydnFixup(Fixups, F.getOffset() + SlotWindowLSBByteBase, F.getValue(),
+    const MCExpr *Value = F.getValue();
+    // A PC-relative fixup is resolved against its OWN address — MC subtracts
+    // the whole fixup offset, and lld's P is the relocation's address — but
+    // the ISA branches from the bundle: `PC = PC + imm12`, and PC is the
+    // bundle. The byte base above puts the fixup inside the entry, which is
+    // where the bits are and where HaydnRelocLayout recovers the entry index
+    // from, so it has to stay; fold it back into the addend instead and the
+    // two cancel: (target + base) - (bundle + base) = target - bundle.
+    //
+    // Without this a taken branch lands `base` bytes short of its target —
+    // 4 or 8, so inside the PREVIOUS bundle's window. Nothing saw it: the
+    // round trip is symmetric across encoder and decoder and never compares
+    // an address, and both branch tests spell their target as a label.
+    if (SlotWindowLSBByteBase != 0 && isHaydnPCRelFixupKind(F.getKind()))
+      Value = MCBinaryExpr::createAdd(
+          Value, MCConstantExpr::create(SlotWindowLSBByteBase, Ctx), Ctx);
+    addHaydnFixup(Fixups, F.getOffset() + SlotWindowLSBByteBase, Value,
                   F.getKind());
   }
 }
