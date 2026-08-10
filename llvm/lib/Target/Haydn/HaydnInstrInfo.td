@@ -1249,15 +1249,23 @@ def SLE64 : FmtALU64Binary<0x67, 0x189, (outs),
 
 // Scalar 64-bit SFR conditional move (unary DR64 → reads SFR, sets dst).
 let hasSideEffects = 0, Uses = [SFR] in {
-def MOVT64 : FmtALU64Unary<0x67, 0x18A, (outs DR64:$rd), (ins DR64:$rs1),
+def MOVT64 : FmtALU64Unary<0x67, 0x18A, (outs DR64:$rd),
+                           (ins DR64:$rd_in, DR64:$rs1),
                            "movt64\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // `MOVT64 rtd, rsd` keeps rtd when the condition rejects it, so the
+  // destination is also a source. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let Constraints = "$rd = $rd_in";
 }
-def MOVF64 : FmtALU64Unary<0x67, 0x18B, (outs DR64:$rd), (ins DR64:$rs1),
+def MOVF64 : FmtALU64Unary<0x67, 0x18B, (outs DR64:$rd),
+                           (ins DR64:$rd_in, DR64:$rs1),
                            "movf64\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // `MOVF64 rtd, rsd` keeps rtd when the condition rejects it, so the
+  // destination is also a source. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let Constraints = "$rd = $rd_in";
 }
 }  // hasSideEffects = 0, Uses = [SFR]
 
@@ -1978,6 +1986,10 @@ def BLTZ_W  : Fmt48_WideBR_I12<0x2F, (outs), (ins GPR32:$rs, brtarget_wide_i12:$
 // rsd → wrong schoolbook half extract → cb50.s exit 96 vs host/ELF 21.
 // One mechanism: always print the 3-operand DB shape (matches ISS + objdump).
 // InstAlias keeps hand-written 2-op assembly working (in-place form).
+// Tied only because Fmt48_WideDR_RI6 can encode one register — see the class.
+// The database and the format E members both give $rsd and $rtd independent
+// homes, so this is the retired encoding's constraint, not the hardware's, and
+// it is what keeps these three on § 5.11's `ties` axis.
 let Constraints = "$rtd = $rsd" in {
 def SLLI64  : Fmt48_WideDR_RI6<0x50, (outs DR64:$rtd),
                                (ins DR64:$rsd, uimm6_dr:$imm),

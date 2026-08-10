@@ -195,13 +195,13 @@ define <4 x i16> @test_x4cmul16s_h_masked_lt(<4 x i16> %a, <4 x i16> %b, <4 x i1
   ret <4 x i16> %result
 }
 
-define <2 x i32> @test_x2clamp32_masked_sle(<2 x i32> %a, <2 x i32> %b, <2 x i32> %mask_val) {
+define <2 x i32> @test_x2clamp32_masked_sle(<2 x i32> %a, <2 x i32> %b, <2 x i32> %mask_val, <2 x i32> %acc) {
   call void @llvm.haydn.x2sle32(<2 x i32> %a,<2 x i32> %mask_val)
   %a_i = bitcast <2 x i32> %a to i64
   %b_i = bitcast <2 x i32> %b to i64
   %bc.7 = bitcast i64 %a_i to <2 x i32>
   %bc.8 = bitcast i64 %b_i to <2 x i32>
-  %call.9 = call <2 x i32> @llvm.haydn.x2clamp32(<2 x i32> %bc.7, <2 x i32> %bc.8)
+  %call.9 = call <2 x i32> @llvm.haydn.x2clamp32(<2 x i32> %acc, <2 x i32> %bc.7, <2 x i32> %bc.8)
   %clamped_i = bitcast <2 x i32> %call.9 to i64
   %clamped   = bitcast i64 %clamped_i to <2 x i32>
   %result = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %a,<2 x i32> %clamped)
@@ -241,7 +241,7 @@ declare i64 @llvm.haydn.x2sel32_lh(i64, i64)
 declare i64 @llvm.haydn.x2sel32_ll(i64, i64)
 
 ; X2/X4 clamp (binary DR64)
-declare <2 x i32> @llvm.haydn.x2clamp32(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2clamp32(<2 x i32>, <2 x i32>, <2 x i32>)
 ; X2 complex multiply (Path B: 2-dest DR64)
 declare { i64, i64 } @llvm.haydn.x2cmul32(<2 x i32>, <2 x i32>)
 declare { i64, i64 } @llvm.haydn.x2cmul32s(<2 x i32>, <2 x i32>)

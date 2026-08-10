@@ -306,7 +306,14 @@ class Fmt48_WideDR_RI6<bits<8> opcode, dag outs, dag ins, string asmstr,
   let Itinerary = Slot12_ALU;
   let TSFlags{2-0} = 0b110;
 
-  bits<4> rtd;            // DR64 destination (bits[15:12]); rsd tied
+  // The source register has no home in this 48-bit form, which is the only
+  // reason SLLI64/SRLI64/SRAI64 are declared `$rtd = $rsd`. The hardware does
+  // not tie them: the database gives them independent read and write ports and
+  // the format E members encode both. The tie cannot come off while they are
+  // derived from this class — an untied operand needs a field to encode into —
+  // so it goes when the Bundle128 formats do (§ 5.2), and until then it costs
+  // a register copy. FORMAT-E-SWITCH-PLAN.md 5.11.
+  bits<4> rtd;            // DR64 destination (bits[15:12]); rsd tied to it
   bits<6> imm;            // bits[47:42]
 
   let Inst{47 - 42} = imm;

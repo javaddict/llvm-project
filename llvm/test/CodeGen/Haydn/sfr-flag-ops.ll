@@ -85,8 +85,8 @@ define i64 @test_sle64(i64 %a, i64 %cmp_rhs) {
 
 ; CHECK-LABEL: name: test_movt64
 ; CHECK: MOVT64
-define i64 @test_movt64(i64 %a) {
-  %r = call i64 @llvm.haydn.movt64(i64 %a)
+define i64 @test_movt64(i64 %a, i64 %acc) {
+  %r = call i64 @llvm.haydn.movt64(i64 %acc, i64 %a)
   ret i64 %r
 }
 
@@ -95,8 +95,8 @@ define i64 @test_movt64(i64 %a) {
 
 ; CHECK-LABEL: name: test_movf64
 ; CHECK: MOVF64
-define i64 @test_movf64(i64 %a) {
-  %r = call i64 @llvm.haydn.movf64(i64 %a)
+define i64 @test_movf64(i64 %a, i64 %acc) {
+  %r = call i64 @llvm.haydn.movf64(i64 %acc, i64 %a)
   ret i64 %r
 }
 
@@ -108,9 +108,9 @@ define i64 @test_movf64(i64 %a) {
 ; CHECK-LABEL: name: test_sfr_compare_then_cmov
 ; CHECK: SEQ64
 ; CHECK: MOVT64
-define i64 @test_sfr_compare_then_cmov(i64 %a, i64 %b) {
+define i64 @test_sfr_compare_then_cmov(i64 %a, i64 %b, i64 %acc) {
   call void @llvm.haydn.seq64(i64 %a, i64 %b)
-  %result = call i64 @llvm.haydn.movt64(i64 %a)
+  %result = call i64 @llvm.haydn.movt64(i64 %acc, i64 %a)
   ret i64 %result
 }
 
@@ -147,5 +147,5 @@ declare void @llvm.haydn.zero_sfr()
 declare void @llvm.haydn.seq64(i64, i64)
 declare void @llvm.haydn.slt64(i64, i64)
 declare void @llvm.haydn.sle64(i64, i64)
-declare i64 @llvm.haydn.movt64(i64)
-declare i64 @llvm.haydn.movf64(i64)
+declare i64 @llvm.haydn.movt64(i64, i64)
+declare i64 @llvm.haydn.movf64(i64, i64)

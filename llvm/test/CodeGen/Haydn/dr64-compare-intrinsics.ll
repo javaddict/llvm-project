@@ -372,18 +372,18 @@ define dso_local i64 @test_seq64(i64 %a, i64 %cmp_rhs) {
 ; Scalar 64-bit SFR conditional move (unary DR64, IntrHasSideEffects)
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.movt64(i64)
-declare i64 @llvm.haydn.movf64(i64)
+declare i64 @llvm.haydn.movt64(i64, i64)
+declare i64 @llvm.haydn.movf64(i64, i64)
 
-define dso_local i64 @test_movt64(i64 %a, i64 %cmp_rhs) {
+define dso_local i64 @test_movt64(i64 %a, i64 %cmp_rhs, i64 %acc) {
   call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
-  %r = call i64 @llvm.haydn.movt64(i64 %a)
+  %r = call i64 @llvm.haydn.movt64(i64 %acc, i64 %a)
   ret i64 %r
 }
 
-define dso_local i64 @test_movf64(i64 %a, i64 %cmp_rhs) {
+define dso_local i64 @test_movf64(i64 %a, i64 %cmp_rhs, i64 %acc) {
   call void @llvm.haydn.sle64(i64 %a, i64 %cmp_rhs)
-  %r = call i64 @llvm.haydn.movf64(i64 %a)
+  %r = call i64 @llvm.haydn.movf64(i64 %acc, i64 %a)
   ret i64 %r
 }
 
@@ -414,9 +414,9 @@ define dso_local void @test_zero_sfr() {
 ; Scalar predication pattern: compare -> SFR -> conditional select
 ;===----------------------------------------------------------------------===;
 
-define dso_local i64 @test_scalar_predication(i64 %a, i64 %cmp_rhs) {
+define dso_local i64 @test_scalar_predication(i64 %a, i64 %cmp_rhs, i64 %acc) {
   call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
-  %result = call i64 @llvm.haydn.movt64(i64 %a)
+  %result = call i64 @llvm.haydn.movt64(i64 %acc, i64 %a)
   ret i64 %result
 }
 
