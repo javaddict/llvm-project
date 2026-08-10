@@ -856,8 +856,14 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         Tmp.setOpcode(Inst.Opc);
 
         switch (Inst.Opc) {
+        case Haydn::LUI:
+          // (rd, imm). The source went with the Bundle128 shape in
+          // afc345108f57 — FORMAT-E-SWITCH-PLAN.md 5.11.
+          Tmp.addOperand(MCOperand::createReg(DstReg));
+          Tmp.addOperand(MCOperand::createImm(Inst.Imm));
+          break;
         default:
-          // ADDI32, LUI, ADDI32_W: (rd, rs, imm). ADDI32_W is the 48-bit
+          // ADDI32, ADDI32_W: (rd, rs, imm). ADDI32_W is the 48-bit
           // wide-add variant (20-bit imm); its $rt/$rs operands are tied in
           // the.td Constraints, so the (rd, rs, imm) shape is identical.
           Tmp.addOperand(MCOperand::createReg(DstReg));

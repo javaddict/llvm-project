@@ -961,12 +961,17 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     Register CurrentReg = Haydn::R0;
     for (const HaydnMatInt::Inst &MatInst : Seq) {
       switch (MatInst.Opc) {
-      default:
-        // ADDI32 / LUI / ADDI32_W / ORI32_W: (rd, rs, imm)
-        BuildMI(MBB, MBBI, DL, get(MatInst.Opc), DstReg)
-            .addReg(CurrentReg)
-            .addImm(MatInst.Imm);
+      default: {
+        // ADDI32 / ADDI32_W / ORI32_W: (rd, rs, imm). LUI is (rd, imm) —
+        // its source went with the Bundle128 shape in afc345108f57 and this
+        // loop kept passing one, which MachineVerifier rejects as an extra
+        // explicit operand. FORMAT-E-SWITCH-PLAN.md 5.11.
+        auto B = BuildMI(MBB, MBBI, DL, get(MatInst.Opc), DstReg);
+        if (MatInst.Opc != Haydn::LUI)
+          B.addReg(CurrentReg);
+        B.addImm(MatInst.Imm);
         break;
+      }
       case Haydn::SLLI32:
         BuildMI(MBB, MBBI, DL, get(Haydn::SLLI32), DstReg)
             .addReg(CurrentReg)
@@ -1016,9 +1021,10 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(V);
       Register Cur = Haydn::R0;
       for (size_t I = 0; I < Seq.size(); ++I) {
-        BuildMI(MBB, MBBI, DL, get(Seq[I].Opc), Target)
-            .addReg(Cur)
-            .addImm(Seq[I].Imm);
+        auto B = BuildMI(MBB, MBBI, DL, get(Seq[I].Opc), Target);
+        if (Seq[I].Opc != Haydn::LUI)  // (rd, imm), see above
+          B.addReg(Cur);
+        B.addImm(Seq[I].Imm);
         Cur = Target;
       }
     };
