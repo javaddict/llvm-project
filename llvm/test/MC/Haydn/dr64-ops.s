@@ -63,33 +63,33 @@ x2sra32 d11, d12, r0
 # LD64 (internal name LD64_S1, Slot 1 load) — asm mnemonic is "ld64".
 # Decoder routes the LD64 parcel to slot 0.
 # ROUNDTRIP: ld64	d0, r7, 0
-ld64 d0, r7, 0
+d_ldw_with_imm d0, r7, 0
 
 # ROUNDTRIP: ld64	d1, r8, 8
-ld64 d1, r8, 8
+d_ldw_with_imm d1, r8, 1
 
 # ROUNDTRIP: ld64	d15, r0, 1020
-ld64 d15, r0, 1020
+d_ldw_with_imm d15, r0, 31
 
 # ST64 (Slot 0 store)
 # ROUNDTRIP: st64	d2, r9, 0
-st64 d2, r9, 0
+d_sdw_with_imm d2, r9, 0
 
 # ROUNDTRIP: st64	d3, r10, 65520
-st64 d3, r10, -16
+d_sdw_with_imm d3, r10, -2
 
 # ROUNDTRIP: st64	d0, r1, 8
-st64 d0, r1, 8
+d_sdw_with_imm d0, r1, 1
 
 #===----------------------------------------------------------------------===
 # Slot 1 Scalar Load
 #===----------------------------------------------------------------------===
 
 # ROUNDTRIP: ld32	r1, r2, 4
-ld32 r1, r2, 4
+s_lw_with_imm r1, r2, 1
 
 # ROUNDTRIP: ld32	r3, r4, 0
-ld32 r3, r4, 0
+s_lw_with_imm r3, r4, 0
 
 #===----------------------------------------------------------------------===
 # Accumulator Shift/Extract (DR64 accumulator -> GPR32 result)
