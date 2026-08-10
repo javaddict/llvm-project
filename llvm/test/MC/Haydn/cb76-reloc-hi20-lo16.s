@@ -44,8 +44,13 @@ glob_val:
 
 # RELOCS:      Relocations [
 # RELOCS-NEXT:   Section ({{.*}}) .rela.text {
-# RELOCS-NEXT:     0x0 R_HAYDN_HI12 glob_val 0x0
-# RELOCS-NEXT:     0x10 R_HAYDN_LO20 glob_val 0x0
+# The offsets are bundle_start + the entry's byte base, so they move when the
+# packer puts the pair in different entries. 0x8 is bundle 0 entry 2 (3-entry
+# bases 0/4/8) and 0x12 is bundle 1 entry 1 (2-entry bases 0/6). What is
+# invariant is that each offset IS such a sum — the relocation is anchored in
+# its entry so HaydnRelocLayout can recover the placement (§ 5.8).
+# RELOCS-NEXT:     0x8 R_HAYDN_HI12 glob_val 0x0
+# RELOCS-NEXT:     0x12 R_HAYDN_LO20 glob_val 0x0
 # RELOCS:        }
 # RELOCS-NEXT: ]
 
