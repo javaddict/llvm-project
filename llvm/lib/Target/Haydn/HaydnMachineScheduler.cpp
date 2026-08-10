@@ -13,9 +13,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnMachineScheduler.h"
+#include "HaydnPostPipeliner.h"
 #include "HaydnPostRASchedStrategy.h"
 #include "HaydnSchedMutations.h"
 #include "llvm/CodeGen/MachineScheduler.h"
+#include "llvm/Support/Debug.h"
 #include <memory>
 
 using namespace llvm;
@@ -23,8 +25,23 @@ using namespace llvm;
 #define DEBUG_TYPE "haydn-machine-scheduler"
 
 void HaydnScheduleDAGMI::schedule() {
-  // Product: list schedule only. Stage-0 PostPipeliner deleted (YOLO densify
-  // kill). Pre-RA MachinePipeliner remains the SWP home.
+  // Post-RA multi-stage engine (product default ON; rollback flag only).
+  // On success the engine has already committed exact Format E cycles; skip
+  // list schedule. Failure or analysis-only falls through to the ordinary
+  // post-RA list schedule.
+  if (EnableHaydnPostPipeliner) {
+    buildSchedGraph(AA);
+    postProcessDAG();
+    HaydnPostPipeliner PostSWP;
+    if (PostSWP.schedule(*this, /*IIHint=*/0)) {
+      CurrentTop = end();
+      CurrentBottom = end();
+      LLVM_DEBUG(dbgs() << "HaydnScheduleDAGMI: PostPipeliner took region II="
+                        << PostSWP.getII() << " NStages="
+                        << PostSWP.getStageCount() << "\n");
+      return;
+    }
+  }
   ScheduleDAGMI::schedule();
 }
 

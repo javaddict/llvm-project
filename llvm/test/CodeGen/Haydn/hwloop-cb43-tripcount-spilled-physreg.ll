@@ -15,44 +15,35 @@
 define dso_local i32 @main() local_unnamed_addr #0 {
 ; CHECK-LABEL: main:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 80; nop }
-; CHECK-NEXT:    { addi32_w r1, sp, 72; nop }
-; CHECK-NEXT:    { st32 r9, r1, 0; nop }
-; CHECK-NEXT:    { st32 r8, r1, 1; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 72 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r1, sp, 8; nop }
-; CHECK-NEXT:    { addi32_w r6, r0, 0; nop }
-; CHECK-NEXT:    { addi32_w r7, r0, 1; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 16; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 31; nop }
-; CHECK-NEXT:    { addi32_w r4, r0, -1; nop }
-; CHECK-NEXT:    { addi32_w r5, r0, 255; nop }
-; CHECK-NEXT:    { move32 r12, r1; move32 r8, r6 }
+; CHECK-NEXT:    { nop; addi32_w r1, sp, 8 }
+; CHECK-NEXT:    { nop; addi32_w r3, r0, 0 }
+; CHECK-NEXT:    { nop; addi32_w r2, r0, 16 }
+; CHECK-NEXT:    { move32 r5, r3; move32 r4, r1 }
 ; CHECK-NEXT:  .LBB0_1: // %for.body
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { st32_post r8, r12, 16; nop }
-; CHECK-NEXT:    { add32 r8, r8, r7; nop }
-; CHECK-NEXT:    { seq32 r9, r8, r2; nop }
-; CHECK-NEXT:    { xori32 r9, r9, 1; nop }
-; CHECK-NEXT:    { bnez_w r9, .LBB0_1; nop }
+; CHECK-NEXT:    { addi32 r5, r5, 1; st32_post r5, r4, 16 }
+; CHECK-NEXT:    { nop; seq32 r6, r5, r2 }
+; CHECK-NEXT:    { nop; xori32 r6, r6, 1 }
+; CHECK-NEXT:    { nop; bnez_w r6, .LBB0_1 }
 ; CHECK-NEXT:  // %bb.2: // %for.body5.preheader
-; CHECK-NEXT:    { move32 r7, r6; nop }
+; CHECK-NEXT:    { nop; move32 r4, r3 }
 ; CHECK-NEXT:  .LBB0_3: // %for.body5
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { s_lw_post_imm r12, r1, 16; nop }
-; CHECK-NEXT:    { sra32 r8, r12, r3; add32 r2, r2, r4 }
-; CHECK-NEXT:    { add32 r12, r12, r8; seq32 r9, r2, r6 }
-; CHECK-NEXT:    { xor32 r12, r12, r8; xori32 r8, r9, 1 }
-; CHECK-NEXT:    { add32 r7, r12, r7; nop }
-; CHECK-NEXT:    { bnez_w r8, .LBB0_3; nop }
+; CHECK-NEXT:    { nop; s_lw_post_imm r5, r1, 16 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, -1 }
+; CHECK-NEXT:    { seq32 r7, r2, r3; srai32 r6, r5, 31 }
+; CHECK-NEXT:    { nop; add32 r5, r5, r6 }
+; CHECK-NEXT:    { xori32 r6, r7, 1; xor32 r5, r5, r6 }
+; CHECK-NEXT:    { nop; add32 r4, r5, r4 }
+; CHECK-NEXT:    { nop; bnez_w r6, .LBB0_3 }
 ; CHECK-NEXT:  // %bb.4: // %for.cond.cleanup4
-; CHECK-NEXT:    { and32 r1, r7, r5; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { ld32 r9, sp, 18; nop }
-; CHECK-NEXT:    { ld32 r8, sp, 19; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 80; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; andi32 r1, r4, 255 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 72 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   %v = alloca [16 x i32], align 4
   br label %for.body

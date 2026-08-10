@@ -1,15 +1,13 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
 # RUN:   llvm-objdump -d --no-show-raw-insn --triple=haydn-unknown-elf %t.o | FileCheck %s
 # REQUIRES: haydn-registered-target
-# Format E96 cutover residual: FileCheck/idle-pad/reloc geometry still open (GE96-01/03).
-# XFAIL: *
 
-# Role: object — Format E SET_HWLOOP_F2_W_S0 must decode (not <unknown>).
+# Role: object — Format E SET_HWLOOP_F2 must decode (not <unknown>) with
+# typed HWLoopOff1/Off2 (not R_HAYDN_32). Body pads are product-legal ALU
+# reals (no idle/all-nop invent). Same-section Off1/Off2 resolve at assemble.
 
-# Format E SET_HWLOOP_F2_W_S0 must decode (not <unknown>).
-# isCodeGenOnly=1 on SET_HWLOOP_*_W_S0 excluded them from DecoderTableS048
-# so llvm-objdump lost memset/memcpy SET parcels on direct-ELF and ISS never
-# armed HWLR. Confirm round-trip prints set_hwloop_f2_w.
+# Format E SET_HWLOOP_F2 must decode (not <unknown>) after FieldLsb patch.
+# Confirm round-trip prints set_hwloop_f2 (ISS arms HWLR from real SET wire).
 
 .text
 .globl test_cb90_hwloop_decode
@@ -17,8 +15,12 @@
 test_cb90_hwloop_decode:
     set_hwloop_f2_w 1, .Lbody, .Lend, r3
 .Lbody:
-    { nop }
-    { nop }
+    { add32 r0, r0, r0 }
+    { add32 r0, r0, r0 }
 .Lend:
-    { nop }
+    { add32 r0, r0, r0 }
 
+# CHECK-LABEL: <test_cb90_hwloop_decode>:
+# CHECK: set_hwloop_f2
+# CHECK-NOT: <unknown>
+# CHECK: add32

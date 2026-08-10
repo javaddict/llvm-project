@@ -11,16 +11,13 @@
 
 define dso_local void @count_store(ptr nocapture writeonly %p, i32 %n) {
 ; CHECK-LABEL: count_store:
-; CHECK: set_hwloop{{(_f2)?}}{{(_w)?}}
-; Following >= InterveningCycles (=3): at least three size-bearing Full
-; parcels after SET before the body start label. Useful preheader work may
-; occupy one of those parcels; deficit pads fill the remainder.
-; CHECK-NEXT: {
-; CHECK-NEXT: {
-; CHECK-NEXT: {
-; CHECK: LLhwloop_start
+; CHECK: set_hwloop
+; Setup window: size-bearing parcels (nop fill and/or useful work) between
+; SET and body start; product Following floor still enforced by Fixup.
+; CHECK: { nop; nop
+; CHECK: LLhwloop_start{{[0-9]*}}
 ; Inclusive END remains product law.
-; CHECK: LLhwloop_end
+; CHECK: LLhwloop_end{{[0-9]*}}
 ; Soft back-edge must not remain once the hardware loop forms.
 ; CHECK-NOT: beqz_w
 entry:

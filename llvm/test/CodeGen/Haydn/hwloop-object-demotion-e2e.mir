@@ -14,8 +14,6 @@
 # RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | \
 # RUN:   FileCheck %s --check-prefixes=OBJ-KEEP
 # REQUIRES: haydn-registered-target
-; Format E96 cutover residual: FileCheck/idle-pad/reloc geometry still open (GE96-01/03).
-; XFAIL: *
 
 # Role: object — Hardware-loop demotion closes only at object identity, not MIR shape alone.
 
@@ -139,20 +137,18 @@ body:             |
 # DEMOTE-NOT: LoopDec
 # DEMOTE-NOT: LoopJNZ
 # DEMOTE-NOT: LoopStart
-# Exact-committed Full singleton soft edge.
-# DEMOTE: BUNDLE 0
+# Trip materialize + exact-committed Format E singleton soft edge.
+# DEMOTE: ADDI32_W
 # DEMOTE: SUBI32
-# DEMOTE: BUNDLE 0
 # DEMOTE: BNEZ_W
 # DEMOTE: bb.3.exit
 # DEMOTE: RET
 
 # OBJ-DEMOTE-LABEL: <demote_range>:
 # Final-real software countdown encodes and decodes (not <unknown>).
-# Region ends at next OBJ-DEMOTE-LABEL (none) — use positive matches only;
-# set_hwloop absence is covered by KEEP positive + DEMOTE MIR-NOT.
+# OBJ-DEMOTE: addi32
 # OBJ-DEMOTE: subi32
-# OBJ-DEMOTE: bnez_w
+# OBJ-DEMOTE: bnez
 
 ...
 ---
@@ -174,10 +170,17 @@ body:             |
     NOP
     NOP
 
-  ; 16×NOP spacer ≈ 256 B after Following → StartOff > 252.
+  ; Format E 12 B parcels: 22×NOP spacer + 3 following ≈ 300 B > uimm6 252
+  ; (legacy 16 B fixtures used 16×NOP; re-sized so hard Off1 still demotes).
   bb.1.spacer:
     liveins: $r1, $r0, $r2, $r15
     successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
     NOP
     NOP
     NOP
@@ -221,7 +224,7 @@ body:             |
 # Bundle-preserving demote is object-observable: ALU + soft edge.
 # OBJ-COISSUE: add32
 # OBJ-COISSUE: subi32
-# OBJ-COISSUE: bnez_w
+# OBJ-COISSUE: bnez
 
 ...
 ---
@@ -284,4 +287,4 @@ body:             |
 # Hardware form survives to object (discriminator vs demote cases).
 # OBJ-KEEP: set_hwloop
 # OBJ-KEEP-NOT: subi32
-# OBJ-KEEP-NOT: bnez_w
+# OBJ-KEEP-NOT: bnez

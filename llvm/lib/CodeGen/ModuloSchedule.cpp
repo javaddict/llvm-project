@@ -135,12 +135,6 @@ void ModuloScheduleExpander::generatePipelinedLoop() {
 
   // Rearrange the instructions to generate the new, pipelined loop,
   // and update register names as needed.
-  KernelCloneCycleMap.clear();
-  // Swing / SMSchedule often uses a negative origin (FirstCycle < 0). Same-
-  // cycle membership is absolute-cycle equality, not "Cycle >= 0". Bias by
-  // FirstCycle so the target handoff API can keep an unsigned cycle key while
-  // still seeing every co-issued group (including those at negative indices).
-  const int FirstCycle = Schedule.getFirstCycle();
   for (MachineInstr *CI : Schedule.getInstructions()) {
     if (CI->isPHI())
       continue;
@@ -150,14 +144,6 @@ void ModuloScheduleExpander::generatePipelinedLoop() {
     KernelBB->push_back(NewMI);
     LIS.InsertMachineInstrInMaps(*NewMI);
     InstrMap[NewMI] = CI;
-    // Capture schedule cycle at clone time (original MI), not by later
-    // adjacency reconstruction. Include negative Swing indices via FirstCycle
-    // bias; missing map entries report getCycle()==-1 and are skipped only when
-    // that sentinel is outside the schedule window.
-    int AbsCycle = Schedule.getCycle(CI);
-    if (AbsCycle >= FirstCycle)
-      KernelCloneCycleMap[NewMI] =
-          static_cast<unsigned>(AbsCycle - FirstCycle);
   }
 
   // Copy any terminator instructions to the new kernel, and update
@@ -196,20 +182,6 @@ void ModuloScheduleExpander::generatePipelinedLoop() {
   // Add branches between prolog and epilog blocks.
   addBranches(*Preheader, PrologBBs, KernelBB, EpilogBBs, VRMap);
 
-  // After kernel rewrite cleanup, hand the target an ordered list of live
-  // (kernel-clone MI, schedule-cycle) pairs for optional same-cycle grouping.
-  // Walk the live kernel so erased clones are never dereferenced; cycle
-  // values come from the clone-time map above.
-  if (NewKernel && LoopInfo && !KernelCloneCycleMap.empty()) {
-    SmallVector<std::pair<MachineInstr *, unsigned>, 16> LiveCloneCycles;
-    for (MachineInstr &MI : *KernelBB) {
-      auto It = KernelCloneCycleMap.find(&MI);
-      if (It == KernelCloneCycleMap.end())
-        continue;
-      LiveCloneCycles.emplace_back(&MI, It->second);
-    }
-    LoopInfo->materializeSMSKernelCycleGroups(LiveCloneCycles);
-  }
 
   delete[] VRMap;
   delete[] VRMapPhi;

@@ -136,6 +136,11 @@ using namespace llvm;
 // * Always pad short setup windows to InterveningCycles with NOPs.
 // * Layout-owned setup: useful preheader work stays *before* SET; only
 // deficit NOPs after SET (no "smart-setup" after-SET fill).
+// * Geometry floors (SetupIssueDistance / MinBodyBundles) cost final product
+// EncodedBytes parcels — never SMS II as a setup/body proxy.
+// * Product default -haydn-enable-hwloops stays OFF until ZOL formation is
+// BundleSim-green (Format E typed HWLoopOff reloc path is closed). Role B
+// stays off. Peer-law StageCount/proven-trip/geometry prep is closed.
 
 // Role B convert deleted (YOLO densify kill). Product = Role A expand only.
 static constexpr bool EnableHaydnHwloopRoleB = false;
@@ -606,39 +611,29 @@ bool HaydnHardwareLoops::runOnMachineFunction(MachineFunction &MF) {
   if (!STI.hasHWLoop())
     return false;
 
+  // Analysis retained for Role A helpers / future re-entry; Role B convert
+  // no longer walks the loop forest.
   MLI = &getAnalysis<MachineLoopInfoWrapperPass>().getLI();
   MDT = &getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
+  (void)MLI;
+  (void)MDT;
+  (void)EnableHaydnHwloopRoleB;
 
   LLVM_DEBUG(dbgs() << "HaydnHWLoops: Running on " << MF.getName()
-                    << " (Role A expand; Role B residual="
-                    << (EnableHaydnHwloopRoleB ? "on" : "off") << ")\n");
+                    << " (Role A expand only; Role B convert deleted)\n");
 
   bool Changed = false;
 
-  // Role A cleanup: strip fully-peeled empty ZOLs before convert walk.
+  // Role A cleanup: strip fully-peeled empty ZOLs before expand.
   Changed |= stripEmptyZeroOverheadLoops(MF);
 
   // AIE order: expand surviving Role A LoopStart → SET_HWLOOP_REG *before*
   // PostMachineScheduler (this pass runs in addPreSched2 before postmisched).
   Changed |= expandRoleALoopStarts(MF);
 
-  // Role B residual convert (soft-branch → SET). Off = AIE-like expand-only.
-  if (!EnableHaydnHwloopRoleB) {
-    LLVM_DEBUG(dbgs() << "HaydnHWLoops: Role B disabled — expand-only\n");
-    return Changed;
-  }
-
-  // Process each top-level loop recursively. The recursive function processes
-  // sub-loops (inner) first, then the current loop (outer). This ensures
-  // inner loops get sel=1 and outer loops get sel=0 for 2-level nesting.
-  // Role A (SET_HWLOOP after expand, or residual LoopDec/LoopJNZ) is skipped
-  // inside convertToHardwareLoop; Role B converts the rest.
-  for (MachineLoop *L : *MLI) {
-    bool Sel0Used = false;
-    bool Sel1Used = false;
-    Changed |= convertToHardwareLoop(L, MF, Sel0Used, Sel1Used);
-  }
-
+  // Role B convert is permanently deleted (peer-law). Soft-branch residuals
+  // stay soft until a future qualified Role A / IR formation path.
+  LLVM_DEBUG(dbgs() << "HaydnHWLoops: Role B convert deleted — expand-only\n");
   return Changed;
 }
 
@@ -748,13 +743,17 @@ bool HaydnHardwareLoops::loopBodyFitsRange(const MachineLoop *L) const {
     }
   }
 
-  // Body floor: >= MinBodyBundles size-bearing parcels (product EncodedBytes).
+  // Body floor: >= MinBodyBundles size-bearing parcels from final product
+  // EncodedBytes (ceilProductParcels). Not an SMS II proxy — a short II
+  // candidate is still measured here after materialize, and Fixup pads only
+  // when the emitted body remains under the floor.
   const unsigned BodyParcels = ceilProductParcels(
       static_cast<unsigned>(std::max<int64_t>(BodyBytes, 0)));
   if (BodyParcels < MinBodyBundles) {
     ++NumHWLoopRangeOverflow;
     LLVM_DEBUG(dbgs() << "HaydnHWLoops: body parcels " << BodyParcels
                       << " < MinBodyBundles=" << MinBodyBundles
+                      << " (final EncodedBytes parcels; not II proxy)"
                       << " — declining conversion\n");
     return false;
   }

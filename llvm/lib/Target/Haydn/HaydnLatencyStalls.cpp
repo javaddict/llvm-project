@@ -24,14 +24,18 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/MC/MCInstrItineraries.h"
+#include "llvm/Support/CodeGen.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "haydn-latency-stalls"
 
 STATISTIC(NumStallBundles, "Number of NOP stall bundles inserted");
+STATISTIC(NumUnexpectedOptStallBundles,
+          "NOP stall bundles inserted at -O1+ (scheduler/late-mutation gap)");
 
 namespace {
 
@@ -87,9 +91,9 @@ static unsigned classDataLatency(const InstrItineraryData *Itin,
 }
 
 /// Architectural Data_Latency of \p MI's def at \p DefOpIdx, straight from the
-/// itinerary. Deliberately does NOT go through
-/// HaydnSubtarget::adjustSchedDependency, which softens load latency for
-/// scheduling heuristics — correctness must use the raw ISA value.
+/// itinerary. Schedulers also consume the same architectural OperandCycles;
+/// this helper still reads the raw itinerary so the O0 net / O1+ auditor stays
+/// independent of any future dep-graph rewrite.
 static unsigned defLatency(const InstrItineraryData *Itin,
                            const MachineInstr &MI, unsigned DefOpIdx) {
   if (!Itin || Itin->isEmpty())
@@ -130,6 +134,11 @@ bool HaydnLatencyStalls::runOnMachineFunction(MachineFunction &MF) {
   if (!Itin || Itin->isEmpty())
     return false;
 
+  // -O1+: insertions are unexpected if schedulers already saw architectural
+  // latency; still insert for correctness and count for the auditor.
+  const bool AuditUnexpected =
+      MF.getTarget().getOptLevel() != CodeGenOptLevel::None;
+
   bool Changed = false;
 
   for (MachineBasicBlock &MBB : MF) {
@@ -164,16 +173,25 @@ bool HaydnLatencyStalls::runOnMachineFunction(MachineFunction &MF) {
         KV.second = KV.second > N ? KV.second - N : 0;
     };
 
+    auto insertStalls = [&](MachineBasicBlock::iterator InsertPt, DebugLoc DL,
+                            unsigned Stalls, StringRef Why) {
+      LLVM_DEBUG(dbgs() << "HaydnLatencyStalls: " << Stalls
+                        << " stall bundle(s) " << Why << "\n");
+      for (unsigned I = 0; I < Stalls; ++I)
+        BuildMI(MBB, InsertPt, DL, TII.get(Haydn::NOP));
+      NumStallBundles += Stalls;
+      if (AuditUnexpected) {
+        NumUnexpectedOptStallBundles += Stalls;
+        LLVM_DEBUG(dbgs() << "  (unexpected at -O1+; scheduler/late gap)\n");
+      }
+      Changed = true;
+    };
+
     for (Cycle &C : Cycles) {
       if (unsigned Stalls = readsPending(C)) {
-        LLVM_DEBUG(dbgs() << "HaydnLatencyStalls: " << Stalls
-                          << " stall bundle(s) before " << *C.Members.front());
-        for (unsigned I = 0; I < Stalls; ++I)
-          BuildMI(MBB, C.Boundary, C.Members.front()->getDebugLoc(),
-                  TII.get(Haydn::NOP));
-        NumStallBundles += Stalls;
+        insertStalls(C.Boundary, C.Members.front()->getDebugLoc(), Stalls,
+                     "before next consumer");
         tick(Stalls);
-        Changed = true;
       }
 
       // This cycle retires one pipeline step for everything already pending,
@@ -209,13 +227,8 @@ bool HaydnLatencyStalls::runOnMachineFunction(MachineFunction &MF) {
           --II;
         InsertPt = MachineBasicBlock::iterator(II);
       }
-      LLVM_DEBUG(dbgs() << "HaydnLatencyStalls: " << Leak
-                        << " stall bundle(s) at exit of bb." << MBB.getNumber()
-                        << "\n");
-      for (unsigned I = 0; I < Leak; ++I)
-        BuildMI(MBB, InsertPt, DebugLoc(), TII.get(Haydn::NOP));
-      NumStallBundles += Leak;
-      Changed = true;
+      insertStalls(InsertPt, DebugLoc(), Leak,
+                   ("at exit of bb." + Twine(MBB.getNumber())).str());
     }
   }
 

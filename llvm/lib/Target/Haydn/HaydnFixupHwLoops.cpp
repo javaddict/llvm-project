@@ -2015,6 +2015,73 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
   return Changed;
 }
 
+/// Sequentialize multi-member shells that coissue SET_HWLOOP with a producer
+/// of its trip/Off GPRs (snapshot no-forwarding). Remat glue and post-pipeliner
+/// trip adjust can stamp ADDI+SET after a preheader leaveMBB has already run;
+/// this is the late owned correctness net before Off recompute / demote.
+static bool sequentializeIllegalHwloopTripCoissue(MachineFunction &MF,
+                                                  const HaydnInstrInfo &TII) {
+  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+  bool Changed = false;
+
+  SmallVector<MachineInstr *, 8> Roots;
+  for (MachineBasicBlock &MBB : MF) {
+    for (MachineInstr &MI : MBB) {
+      if (!MI.isBundle() || MI.isBundledWithPred())
+        continue;
+      unsigned Kids = 0;
+      for (MachineBasicBlock::instr_iterator I = std::next(MI.getIterator());
+           I != MBB.instr_end() && I->isBundledWithPred(); ++I)
+        ++Kids;
+      if (Kids >= 2)
+        Roots.push_back(&MI);
+    }
+  }
+
+  for (MachineInstr *Root : Roots) {
+    if (!Root || !Root->getParent())
+      continue;
+    MachineBasicBlock &MBB = *Root->getParent();
+    SmallVector<MachineInstr *, 3> Kids;
+    for (MachineBasicBlock::instr_iterator I = std::next(Root->getIterator());
+         I != MBB.instr_end() && I->isBundledWithPred(); ++I)
+      Kids.push_back(&*I);
+    if (Kids.size() < 2)
+      continue;
+    if (!haydn::bundle::cycleMembersHaveHwloopTripConflict(Kids, TII, TRI))
+      continue;
+
+    LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: sequentialize SET trip/Off "
+                         "coissue in bb."
+                      << MBB.getNumber() << "\n");
+    for (MachineInstr *K : Kids) {
+      if (!K)
+        continue;
+      for (MachineOperand &MO : K->operands()) {
+        if (MO.isReg() && MO.isInternalRead())
+          MO.setIsInternalRead(false);
+      }
+      if (K->isBundledWithPred())
+        K->unbundleFromPred();
+      if (K->isBundledWithSucc())
+        K->unbundleFromSucc();
+    }
+    Root->eraseFromParent();
+    // Keep schedule/def-before-use order; re-commit each as a late singleton
+    // so EncodedBytes stay Format E product parcels for Off measurement.
+    for (MachineInstr *K : Kids) {
+      if (!K || !K->getParent())
+        continue;
+      unsigned Member = lateMemberOpcode(K->getOpcode());
+      if (Member != K->getOpcode())
+        K->setDesc(TII.get(Member));
+      finalizeExactLateSingleton(*K);
+    }
+    Changed = true;
+  }
+  return Changed;
+}
+
 bool HaydnFixupHwLoops::runOnMachineFunction(MachineFunction &MF) {
   if (skipFunction(MF.getFunction()))
     return false;
@@ -2023,6 +2090,11 @@ bool HaydnFixupHwLoops::runOnMachineFunction(MachineFunction &MF) {
       *static_cast<const HaydnInstrInfo *>(MF.getSubtarget().getInstrInfo());
 
   bool Changed = false;
+  // Layout ownership only: sequentialize illegal SET trip-reg coissue before
+  // Off/Following walks. Semantic multi-stage peel repair is forbidden —
+  // post-pipeliner either refuses before mutation or commits a valid loop.
+  Changed |= sequentializeIllegalHwloopTripCoissue(MF, TII);
+
   // Collect first — inserting NOPs / demote invalidates iterators.
   // Walk instrs so SETs that PostRASched coissued (mid-bundle) are found.
   SmallVector<MachineInstr *, 8> Sets;

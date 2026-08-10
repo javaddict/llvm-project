@@ -1,8 +1,7 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 
-; Role: semantic — that the full GISel pipeline works end-to-end.
-
-; Test that the full GISel pipeline works end-to-end
+; Role: semantic — full GISel pipeline end-to-end with MachineVerifier enabled.
+; Verifier-enabled GISel is a G-TEST-CONTRACTS exit: no historical disable.
 
 define i32 @test_gisel_pipeline(i32 %a, i32 %b) {
   %r = add i32 %a, %b

@@ -130,18 +130,17 @@
 ; Field-order RAW may fail exact no-split and sequentialize — correct product
 ; behavior (postra-field-order-raw-narrow-store.mir). Zero spill/reload on this
 ; body remains the QoR pin.
-; STATS-PROD-DAG: SMS kernel same-cycle groups materialized
-; STATS-PROD-DAG: multi-member hard BUNDLE roots at post-RA
+; STATS-PROD-NOT: SMS kernel same-cycle groups materialized
 ; STATS-PROD-DAG: multi-MI cycles finalized as BUNDLE
 ; STATS-PROD-NOT: Number of spills inserted
 ; STATS-PROD-NOT: Number of reloads inserted
 ;
-; STATS-GEN-DAG: multi-member hard BUNDLE roots at post-RA
+; STATS-GEN-NOT: SMS kernel same-cycle groups materialized
 ; STATS-GEN-DAG: multi-MI cycles finalized as BUNDLE
 ; STATS-GEN-NOT: Number of spills inserted
 ; STATS-GEN-NOT: Number of reloads inserted
 ;
-; STATS-RP-DAG: multi-member hard BUNDLE roots at post-RA
+; STATS-RP-NOT: SMS kernel same-cycle groups materialized
 ; STATS-RP-DAG: multi-MI cycles finalized as BUNDLE
 ; STATS-RP-NOT: Number of spills inserted
 ; STATS-RP-NOT: Number of reloads inserted

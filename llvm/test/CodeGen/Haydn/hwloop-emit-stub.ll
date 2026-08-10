@@ -26,24 +26,23 @@
 define i32 @hwloop_stub_simple(ptr %p) {
 ; CHECK-LABEL: hwloop_stub_simple:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { move32 r2, r1; nop }
-; CHECK-NEXT:    { ld32 r2, r2, 0; nop }
-; CHECK-NEXT:    { addi32_w r1, r0, 0; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 1; nop }
-; CHECK-NEXT:    { addi32_w r4, r0, 10; nop }
-; CHECK-NEXT:    { move32 r5, r1; nop }
+; CHECK-NEXT:    { nop; move32 r2, r1 }
+; CHECK-NEXT:    { nop; ld32 r2, r2, 0 }
+; CHECK-NEXT:    { nop; addi32_w r1, r0, 0 }
+; CHECK-NEXT:    { nop; addi32_w r3, r0, 10 }
+; CHECK-NEXT:    { nop; move32 r4, r1 }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { add32 r5, r5, r3; add32 r1, r1, r2 }
-; CHECK-NEXT:    { slt32 r6, r5, r4; nop }
-; CHECK-NEXT:    { bnez_w r6, .LBB0_1; nop }
+; CHECK-NEXT:    { addi32 r4, r4, 1; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; slt32 r5, r4, r3 }
+; CHECK-NEXT:    { nop; bnez_w r5, .LBB0_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   br label %loop
 
