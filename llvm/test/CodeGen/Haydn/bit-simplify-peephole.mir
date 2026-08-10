@@ -39,7 +39,7 @@ body:             |
     liveins: $r1
 
     ; AND32 with R0 (zero register) → result is zero → MOVE32 $r2, $r0
-    ; CHECK: $r2 = MOVE32 $r0, $r0
+    ; CHECK: $r2 = MOVE32 $r0
     ; CHECK-NOT: AND32
     $r2 = AND32 $r1, $r0, implicit-def dead $sfr
 
@@ -67,7 +67,7 @@ body:             |
     liveins: $r1
 
     ; OR32 with R0 (zero register) → identity → MOVE32 $r2, $r1
-    ; CHECK: $r2 = MOVE32 $r1, $r1
+    ; CHECK: $r2 = MOVE32 $r1
     ; CHECK-NOT: OR32
     $r2 = OR32 $r1, $r0, implicit-def dead $sfr
 
@@ -95,7 +95,7 @@ body:             |
     liveins: $r1
 
     ; XOR32 with R0 (zero register) → identity → MOVE32 $r2, $r1
-    ; CHECK: $r2 = MOVE32 $r1, $r1
+    ; CHECK: $r2 = MOVE32 $r1
     ; CHECK-NOT: XOR32
     $r2 = XOR32 $r1, $r0, implicit-def dead $sfr
 
@@ -123,7 +123,7 @@ body:             |
     liveins: $r1
 
     ; ANDI32 with 0 → result is zero → MOVE32 $r2, $r0
-    ; CHECK: $r2 = MOVE32 $r0, $r0
+    ; CHECK: $r2 = MOVE32 $r0
     ; CHECK-NOT: ANDI32
     $r2 = ANDI32 $r1, 0, implicit-def dead $sfr
 
@@ -151,7 +151,7 @@ body:             |
     liveins: $r1
 
     ; ORI32 with 0 → identity → MOVE32 $r2, $r1
-    ; CHECK: $r2 = MOVE32 $r1, $r1
+    ; CHECK: $r2 = MOVE32 $r1
     ; CHECK-NOT: ORI32
     $r2 = ORI32 $r1, 0, implicit-def dead $sfr
 
@@ -179,7 +179,7 @@ body:             |
     liveins: $r1
 
     ; XORI32 with 0 → identity → MOVE32 $r2, $r1
-    ; CHECK: $r2 = MOVE32 $r1, $r1
+    ; CHECK: $r2 = MOVE32 $r1
     ; CHECK-NOT: XORI32
     $r2 = XORI32 $r1, 0, implicit-def dead $sfr
 
@@ -296,7 +296,7 @@ body:             |
 
     ; AND32 rd, rs, rs → identity copy (r1 & r1 = r1).
     ; Since rd ($r2) != rs ($r1), this becomes MOVE32 $r2, $r1.
-    ; CHECK: $r2 = MOVE32 $r1, $r1
+    ; CHECK: $r2 = MOVE32 $r1
     ; CHECK-NOT: AND32
     $r2 = AND32 $r1, $r1, implicit-def dead $sfr
 
