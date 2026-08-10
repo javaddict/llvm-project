@@ -18,7 +18,7 @@
 // running value.
 //
 // ISA (VLIW_Engine_ISA_Reference.md): LUI rt,imm12 loads imm12 into bits
-// [31:20]. ADDI32 is simm16. ORI32 is uimm16. ADDI32_W (encoding_manual.md §5
+// [31:20]. ADDI32 is simm16. ORI32 is uimm16. ADDI32_W (Format E RI20
 // Class 000, opcode 0x08) is the 48-bit wide variant carrying simm20. So:
 // 1 instr: simm16 (ADDI32), or 0..65535 (ORI32 from R0), or simm20 not
 // already covered (ADDI32_W from R0)..

@@ -31,12 +31,13 @@ using namespace llvm;
 void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
                                  StringRef Annot, const MCSubtargetInfo &STI,
                                  raw_ostream &O) {
-  // VLIW / Format E parcels: Hexagon-style { entry0; entry1[; entry2] }.
-  // Product disasm emits BUNDLE_E96_TWO_ENTRY / BUNDLE_E96_THREE_ENTRY of
-  // logical children (public mnemonics, no private member suffix). Generic
-  // TargetOpcode::BUNDLE is a fallback for non-product composite roots.
-  // Print children via isInst operands — do not rely on generated AsmWriter
-  // for multi-entry composites (avoids empty / <unknown>-adjacent dumps).
+  // VLIW / Format E parcels: high-entry-first text
+  // `{ e2; e1; e0 }` / `{ e1; e0 }` (CB-142 / #10). Product disasm emits
+  // BUNDLE_E96_TWO_ENTRY / BUNDLE_E96_THREE_ENTRY of logical children (public
+  // mnemonics, no private member suffix). Generic TargetOpcode::BUNDLE is a
+  // fallback for non-product composite roots. Print children via isInst
+  // operands — do not rely on generated AsmWriter for multi-entry composites
+  // (avoids empty / <unknown>-adjacent dumps).
   const unsigned Opc = MI->getOpcode();
   if (Opc == Haydn::BUNDLE || Opc == Haydn::BUNDLE_E96_TWO_ENTRY ||
       Opc == Haydn::BUNDLE_E96_THREE_ENTRY) {
@@ -53,9 +54,12 @@ void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
       printAnnotation(O, Annot);
       return;
     }
+    // High entry first (`{ e2; e1; e0 }` / `{ e1; e0 }`), matching the
+    // BUNDLE_E96_* AsmStrings and the ISA bundle spelling (CB-142 / #10).
+    // Children[] is still encode-order e0..eN from the composite operand dag.
     O << "\t{ ";
-    for (unsigned I = 0, E = Children.size(); I != E; ++I) {
-      if (I > 0)
+    for (unsigned I = Children.size(); I-- > 0;) {
+      if (I + 1 != Children.size())
         O << "; ";
       printSingleInst(Children[I], Address, STI, O);
     }

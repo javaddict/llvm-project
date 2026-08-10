@@ -14,7 +14,7 @@
 // Do not invent encodings.
 
 // CHECK-LABEL: <.text>:
-// CHECK: {{.*}}0: 07 0b 04 21 00 00 00 00 00 00 00 00  { add64{{.*}}d0, d1, d2
+// CHECK: {{.*}}0: 07 0b 04 21 00 00 00 00 00 00 00 00  { nop; add64{{.*}}d0, d1, d2
 // CHECK-NOT: <?>
 // CHECK-NOT: <unknown>
 

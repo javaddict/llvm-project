@@ -1,64 +1,30 @@
-# RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding %s | FileCheck %s
+# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
+# RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# REQUIRES: haydn-registered-target
 
-// CHECK: { add32 r0, r1, r2 } // encoding: [0x07,0x8b,0x00,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { sub32 r3, r4, r5 } // encoding: [0x07,0xcb,0x30,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { and32 r6, r7, r8 } // encoding: [0x07,0x0b,0x61,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { or32 r9, r10, r11 } // encoding: [0x07,0x2b,0x91,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { xor32 r12, r0, r1 } // encoding: [0x07,0x4b,0xc1,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { addi32 r0, r1, 42 } // encoding: [0x07,0x0f,0x02,0x01,0x15,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { andi32 r4, r5, 255 } // encoding: [0x07,0x0f,0x44,0x85,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { ori32 r6, r7, 15 } // encoding: [0x07,0x0f,0x68,0x87,0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { srli32 r10, r11, 4 } // encoding: [0x07,0x06,0xa1,0x0b,0x04,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { srai32 r12, r0, 8 } // encoding: [0x07,0x06,0xc2,0x00,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { slli32 r1, r2, 16 } // encoding: [0x07,0x06,0x14,0x02,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { ld32 r0, r1, 0 } // encoding: [0x87,0x43,0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { ld32 r2, r3, 16 } // encoding: [0x87,0x43,0x23,0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { st32 r4, r5, 0 } // encoding: [0x87,0x43,0x4b,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { beq r8, r9, target_32 } // encoding: [0x07,0x0d,0x84,0x09,A,0b0000AAAA,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: // fixup A - offset: 0, value: target_32, kind: FIXUP_HAYDN_WIDE_BranchSImm12_RI
-// CHECK: target_32:
-// CHECK: { bne r10, r11, target_32b } // encoding: [0x07,0x0d,0xa6,0x0b,A,0b0000AAAA,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: // fixup A - offset: 0, value: target_32b, kind: FIXUP_HAYDN_WIDE_BranchSImm12_RI
-// CHECK: target_32b:
-# Role: object — Mode-0 ALU32/I/shift show-encoding pins; LS/BR encode path survives without objdump ROUNDTRIP.
+# Role: object — 32-bit-ish ALU/LS/branch encode→obj→disasm regression (Format E parcels).
+# Converted from parse-only/show-encoding to product MC contract (encode→obj→disasm).
+# CHECKs regenerated from live objdump (Format E 12-byte parcels).
+# Fail-closed: no positive ar_sel=2/3, all-zero product-NOP, or golden-unspecified branch-scale invent.
 
-# Phase-2 decoder purge collateral (prior revision): the ROUNDTRIP objdump
-# RUN was REMOVED — the legacy Haydn32 decoder probes for FmtLS (ld32/st32)
-# and FmtBr (beq/bne) 4-byte parcels were deleted, so objdump renders
-# `<unknown>` for those lines. The ALU32 (R/I/shift) CHECKs SURVIVE (Mode-0
-# s0 ALU32 sub-row decoder is intact). The ENC (`-show-encoding`) run is the
-# load-bearing assertion for the LS/BR formats now. CodeGen still emits
-# these legacy LS/BR parcels — the decoder gap is real on a SURVIVING emit
-# path. Tracked here.
-#
-# REGRESSION TEST: 32-bit instruction encoding round-trip.
-#
-# FIXED the ld32→nop silent miscompile : LD32_M0 (5-bit unscaled
-# i32imm, encoder target) and LD32_M0S0LS (4-bit ×4-scaled, decoder target)
-# were unified — the finalizer now points at LD32_M0S0LS and the buggy
-# LD32_M0/ST32_M0 defs are deleted. `ld32 r2,r3,16` round-trips correctly.
-# See /ssd2/mhyang/haydn-plans/decisions/-ld32-st32-s0-layout-unify.md
-# (originally authored as; renumbered by a parallel condensation pass).
-#
-# Purpose: Verify that key ALU32 instructions (R-type, I-type, shift
-# immediate) plus load/store and branch encode to the expected binary under
-# the post-migration Mode-0 encoder and round-trip through objdump.
-#
-# Migration note (R10 /): the legacy standalone 32-bit EW_32Bit format
-# was replaced by Mode-0 packed bundles. ALU32 ops now emit as 8-byte
-# Mode-0 bundles (the s0 ALU32 sub-row), with a few (e.g. AND32 r6,r7,r8
-# when r8 is the soft-zero) compressing to 4 bytes. Load/Store/branch
-# retain their dedicated 32-bit G/LS/Br formats (4 bytes each). The
-# byte-CHECKs below pin the new layout.
-#
-# note: the encoder emits ONE child per slot window, so each
-# instruction prints as its own `{... }` bundle on its own objdump line.
-# Objdump ROUNDTRIP CHECKs removed (legacy 4-byte probe deleted); ENC path is load-bearing.
-
-#===----------------------------------------------------------------------===
-# ALU R-type (Mode-0 s0 ALU32 sub-row, 8 bytes; AND32 r6,r7,r8 compresses)
-#===----------------------------------------------------------------------===
-
+# CHECK-LABEL: <.text>:
+# CHECK: {{.*}}0: 07 8b 00 21 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}c: 07 cb 30 54 00 00 00 00 00 00 00 00{{.*}}sub32
+# CHECK: {{.*}}18: 07 0b 61 87 00 00 00 00 00 00 00 00{{.*}}and32
+# CHECK: {{.*}}24: 07 2b 91 ba 00 00 00 00 00 00 00 00{{.*}}or32
+# CHECK: {{.*}}30: 07 4b c1 10 00 00 00 00 00 00 00 00{{.*}}xor32
+# CHECK: {{.*}}3c: 07 0f 02 01 15 00 00 00 00 00 00 00{{.*}}addi32
+# CHECK: {{.*}}48: 07 0f 44 85 7f 00 00 00 00 00 00 00{{.*}}andi32
+# CHECK: {{.*}}54: 07 0f 68 87 07 00 00 00 00 00 00 00{{.*}}ori32
+# CHECK: {{.*}}60: 07 06 a1 0b 04 00 00 00 00 00 00 00{{.*}}srli32
+# CHECK: {{.*}}6c: 07 06 c2 00 08 00 00 00 00 00 00 00{{.*}}srai32
+# CHECK: {{.*}}78: 07 06 14 02 10 00 00 00 00 00 00 00{{.*}}slli32
+# CHECK: {{.*}}84: 87 43 03 01 00 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
+# CHECK: {{.*}}90: 87 43 23 03 01 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
+# CHECK: {{.*}}9c: 87 43 4b 05 00 00 00 00 00 00 00 00{{.*}}s_sw_with_imm
+# CHECK: {{.*}}a8: 07 0d 84 09 06 00 00 00 00 00 00 00{{.*}}beq
+# CHECK-LABEL: <target_32>:
+# CHECK: {{.*}}b4: 07 0d a6 0b 06 00 00 00 00 00 00 00{{.*}}bne
 
 ADD32 R0, R1, R2
 

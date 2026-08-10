@@ -1,6 +1,4 @@
 # REQUIRES: haydn-registered-target
-# Format E96 cutover residual: FileCheck/idle-pad/reloc geometry still open (GE96-01/03).
-# XFAIL: *
 // CHECK: 	.text
 // CHECK: 	.globl	_start
 // CHECK: 	.type	_start,@function
@@ -66,7 +64,7 @@ glob_val:
 # RELOCS:      Relocations [
 # RELOCS-NEXT:   Section ({{.*}}) .rela.text {
 # RELOCS-NEXT:     0x0 R_HAYDN_HI12 glob_val 0x0
-# RELOCS-NEXT:     0x10 R_HAYDN_LO20 glob_val 0x0
+# RELOCS-NEXT:     0xC R_HAYDN_LO20 glob_val 0x0
 # RELOCS:        }
 # RELOCS-NEXT: ]
 

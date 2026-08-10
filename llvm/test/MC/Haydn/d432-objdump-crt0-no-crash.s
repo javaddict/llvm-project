@@ -43,5 +43,5 @@
 jal lr, external_target
 
 # CHECK-LABEL: Disassembly of section .text:
-# CHECK: {{.*}}0: { jal lr, 0; nop }
+# CHECK: {{.*}}0: { nop; jal lr, 0 }
 # CHECK-NOT: {{Assertion|abort|Stack dump|PLEASE submit a bug report}}

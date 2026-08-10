@@ -1,6 +1,25 @@
-# RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
+# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
+# RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# REQUIRES: haydn-registered-target
 
 # Role: object — 64-bit ALU / SIMD / 2-dest MAC / Slot-1 ld64 mnemonics.
+# Converted from parse-only to product MC contract (encode→obj→disasm).
+# CHECKs regenerated from live objdump (Format E 12-byte parcels).
+
+# CHECK-LABEL: <.text>:
+# CHECK: {{.*}}0: 07 0b 04 21 00 00 00 00 00 00 00 00{{.*}}add64
+# CHECK: {{.*}}c: 07 0b 35 54 00 00 00 00 00 00 00 00{{.*}}sub64
+# CHECK: {{.*}}18: 07 8b 66 87 00 00 00 00 00 00 00 00{{.*}}and64
+# CHECK: {{.*}}24: 07 ab 96 ba 00 00 00 00 00 00 00 00{{.*}}or64
+# CHECK: {{.*}}30: 07 cb c6 ed 00 00 00 00 00 00 00 00{{.*}}xor64
+# CHECK: {{.*}}3c: 07 0b 58 76 00 00 00 00 00 00 00 00{{.*}}x2add32
+# CHECK: {{.*}}48: 07 8b 89 a9 00 00 00 00 00 00 00 00{{.*}}x2sub32
+# CHECK: {{.*}}54: 47 02 b1 dc 0e 00 00 00 00 00 00 00{{.*}}x2mul32
+# CHECK: {{.*}}60: 07 0b ec 0f 00 00 00 00 00 00 00 00{{.*}}x4add16
+# CHECK: {{.*}}6c: 47 02 1c 32 04 00 00 00 00 00 00 00{{.*}}x4mul16
+# CHECK: {{.*}}78: 87 43 12 01 00 00 00 00 00 00 00 00{{.*}}d_ldw_with_imm
+# CHECK: {{.*}}84: 87 43 22 82 00 00 00 00 00 00 00 00{{.*}}d_ldw_with_imm
+# CHECK-NOT: <unknown>
 
 # Immediate-form SLLI64/SRLI64/SRAI64 and 4-operand MAC32 AsmParser gaps
 # are covered by disassembler-dsp-math-roundtrip.s.
@@ -10,50 +29,38 @@
 #===----------------------------------------------------------------------===
 
 ADD64 D0, D1, D2
-# CHECK: add64 d0, d1, d2
 
 SUB64 D3, D4, D5
-# CHECK: sub64 d3, d4, d5
 
 AND64 D6, D7, D8
-# CHECK: and64 d6, d7, d8
 
 OR64 D9, D10, D11
-# CHECK: or64 d9, d10, d11
 
 XOR64 D12, D13, D14
-# CHECK: xor64 d12, d13, d14
 
 #===----------------------------------------------------------------------===
 # SIMD X2 (dual 32-bit)
 #===----------------------------------------------------------------------===
 
 X2ADD32 D5, D6, D7
-# CHECK: x2add32 d5, d6, d7
 
 X2SUB32 D8, D9, D10
-# CHECK: x2sub32 d8, d9, d10
 
 # X2MUL32 is true 2-output: 4-operand asm form.
 X2MUL32 D11, D12, D13, D14
-# CHECK: x2mul32 d11, d12, d13, d14
 
 #===----------------------------------------------------------------------===
 # SIMD X4 (quad 16-bit)
 #===----------------------------------------------------------------------===
 
 X4ADD16 D14, D15, D0
-# CHECK: x4add16 d14, d15, d0
 
 X4MUL16 D1, D2, D3, D4
-# CHECK: x4mul16 d1, d2, d3, d4
 
 #===----------------------------------------------------------------------===
 # Slot 1 loads
 #===----------------------------------------------------------------------===
 
 LD64 D1, R1, 0
-# CHECK: ld64 d1, r1, 0
 
 LD64 D2, R2, 8
-# CHECK: ld64 d2, r2, 8

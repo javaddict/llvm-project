@@ -1718,38 +1718,54 @@ def MOVF64_S2 : HaydnFU_ALU64_S2_R_COND<0b00011001,
 // 3 DR64 at [18:14:10] = RR_DDD. So we MUST use RR_DDD to match.
 // `let hasSideEffects = 1` models the implicit SFR read.
 let hasSideEffects = 1 in {  // implicit SFR read
-// #98 X2MOVT32
+// #98 X2MOVT32 — RMW: rd holds false lanes; Constraints for TwoAddress seed.
 def X2MOVT32_S1 : HaydnFU_ALU64_S1_RR_DDD<0b01100010,
     (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x2movt32\t$rd, $rs1, $rs2", []>;
+    "x2movt32\t$rd, $rs1, $rs2", []> {
+  let Constraints = "$rd = $rs1";
+}
 // #98 X2MOVT32
 def X2MOVT32_S2 : HaydnFU_ALU64_S2_RR_DDD<0b01100010,
     (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x2movt32\t$rd, $rs1, $rs2", []>;
+    "x2movt32\t$rd, $rs1, $rs2", []> {
+  let Constraints = "$rd = $rs1";
+}
 // #99 X2MOVF32
 def X2MOVF32_S1 : HaydnFU_ALU64_S1_RR_DDD<0b01100011,
     (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x2movf32\t$rd, $rs1, $rs2", []>;
+    "x2movf32\t$rd, $rs1, $rs2", []> {
+  let Constraints = "$rd = $rs1";
+}
 // #99 X2MOVF32
 def X2MOVF32_S2 : HaydnFU_ALU64_S2_RR_DDD<0b01100011,
     (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x2movf32\t$rd, $rs1, $rs2", []>;
-// #127 X4MOVT16
+    "x2movf32\t$rd, $rs1, $rs2", []> {
+  let Constraints = "$rd = $rs1";
+}
+// #127 X4MOVT16 — RMW; Constraints for TwoAddress false-path seed.
 def X4MOVT16_S1 : HaydnFU_ALU64_S1_RR_DDD<0b01111111,
     (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x4movt16\t$rd, $rs1, $rs2", []>;
+    "x4movt16\t$rd, $rs1, $rs2", []> {
+  let Constraints = "$rd = $rs1";
+}
 // #127 X4MOVT16
 def X4MOVT16_S2 : HaydnFU_ALU64_S2_RR_DDD<0b01111111,
     (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x4movt16\t$rd, $rs1, $rs2", []>;
+    "x4movt16\t$rd, $rs1, $rs2", []> {
+  let Constraints = "$rd = $rs1";
+}
 // #128 X4MOVF16
 def X4MOVF16_S1 : HaydnFU_ALU64_S1_RR_DDD<0b10000000,
     (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x4movf16\t$rd, $rs1, $rs2", []>;
+    "x4movf16\t$rd, $rs1, $rs2", []> {
+  let Constraints = "$rd = $rs1";
+}
 // #128 X4MOVF16
 def X4MOVF16_S2 : HaydnFU_ALU64_S2_RR_DDD<0b10000000,
     (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x4movf16\t$rd, $rs1, $rs2", []>;
+    "x4movf16\t$rd, $rs1, $rs2", []> {
+  let Constraints = "$rd = $rs1";
+}
 }  // hasSideEffects = 1
 
 //===----------------------------------------------------------------------===//

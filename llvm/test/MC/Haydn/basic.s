@@ -1,163 +1,170 @@
-# RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
+# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
+# RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# REQUIRES: haydn-registered-target
 
 # Role: object — Basic arithmetic instructions.
+# Converted from parse-only to product MC contract (encode→obj→disasm).
+# CHECKs regenerated from live objdump (Format E 12-byte parcels).
+
+# CHECK-LABEL: <.text>:
+# CHECK: {{.*}}0: 07 8b 00 21 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}c: 07 0f 02 01 15 00 00 00 00 00 00 00{{.*}}addi32
+# CHECK: {{.*}}18: 07 cb 30 54 00 00 00 00 00 00 00 00{{.*}}sub32
+# CHECK: {{.*}}24: 07 eb 60 87 00 00 00 00 00 00 00 00{{.*}}sub32s
+# CHECK: {{.*}}30: 07 0b 91 ba 00 00 00 00 00 00 00 00{{.*}}and32
+# CHECK: {{.*}}3c: 07 2b c1 10 00 00 00 00 00 00 00 00{{.*}}or32
+# CHECK: {{.*}}48: 07 4b 21 43 00 00 00 00 00 00 00 00{{.*}}xor32
+# CHECK: {{.*}}54: 07 0f 54 86 7f 00 00 00 00 00 00 00{{.*}}andi32
+# CHECK: {{.*}}60: 07 0f 78 88 07 00 00 00 00 00 00 00{{.*}}ori32
+# CHECK: {{.*}}6c: 07 0f 9c 8a 03 00 00 00 00 00 00 00{{.*}}xori32
+# CHECK: {{.*}}78: 07 06 01 01 04 00 00 00 00 00 00 00{{.*}}srli32
+# CHECK: {{.*}}84: 07 06 22 03 08 00 00 00 00 00 00 00{{.*}}srai32
+# CHECK: {{.*}}90: 07 06 44 05 10 00 00 00 00 00 00 00{{.*}}slli32
+# CHECK: {{.*}}9c: 07 cb 61 87 00 00 00 00 00 00 00 00{{.*}}srl32
+# CHECK: {{.*}}a8: 07 8b 91 ba 00 00 00 00 00 00 00 00{{.*}}sra32
+# CHECK: {{.*}}b4: 07 eb c1 10 00 00 00 00 00 00 00 00{{.*}}sll32
+# CHECK: {{.*}}c0: 07 44 20 03 00 00 00 00 00 00 00 00{{.*}}move32
+# CHECK: {{.*}}cc: 07 0a 42 00 2a 00 00 00 00 00 00 00{{.*}}lui
+# CHECK: {{.*}}d8: 07 24 51 06 00 00 00 00 00 00 00 00{{.*}}abs32s
+# CHECK: {{.*}}e4: 07 0b 72 98 00 00 00 00 00 00 00 00{{.*}}max32
+# CHECK: {{.*}}f0: 07 4b a2 cb 00 00 00 00 00 00 00 00{{.*}}min32
+# CHECK: {{.*}}fc: 07 44 01 01 00 00 00 00 00 00 00 00{{.*}}neg32
+# CHECK: {{.*}}108: 07 8b 22 43 00 00 00 00 00 00 00 00{{.*}}slt32
+# CHECK: {{.*}}114: 07 ab 52 76 00 00 00 00 00 00 00 00{{.*}}sltu32
+# CHECK: {{.*}}120: 07 eb 82 a9 00 00 00 00 00 00 00 00{{.*}}seq32
+# CHECK: {{.*}}12c: 87 43 03 01 00 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
+# CHECK: {{.*}}138: 87 43 23 03 01 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
+# CHECK: {{.*}}144: 87 43 4b 05 00 00 00 00 00 00 00 00{{.*}}s_sw_with_imm
+# CHECK: {{.*}}150: 87 43 6b c7 03 00 00 00 00 00 00 00{{.*}}s_sw_with_imm
+# CHECK: {{.*}}15c: 87 43 84 09 00 00 00 00 00 00 00 00{{.*}}s_lhws_with_imm
+# CHECK: {{.*}}168: 87 43 a6 0b 00 00 00 00 00 00 00 00{{.*}}s_lbs_with_imm
+# CHECK: {{.*}}174: 87 43 c5 00 00 00 00 00 00 00 00 00{{.*}}s_lhwu_with_imm
+# CHECK: {{.*}}180: 87 43 17 02 00 00 00 00 00 00 00 00{{.*}}s_lbu_with_imm
+# CHECK: {{.*}}18c: 87 43 3c 04 00 00 00 00 00 00 00 00{{.*}}s_shw_with_imm
+# CHECK: {{.*}}198: 87 43 5e 06 00 00 00 00 00 00 00 00{{.*}}s_sb_with_imm
+# CHECK: {{.*}}1a4: 07 0d 74 08 24 00 00 00 00 00 00 00{{.*}}beq
+# CHECK: {{.*}}1b0: 07 0d 96 0a 1e 00 00 00 00 00 00 00{{.*}}bne
+# CHECK: {{.*}}1bc: 07 0d b8 0c 18 00 00 00 00 00 00 00{{.*}}bge
+# CHECK: {{.*}}1c8: 07 0d 0a 01 12 00 00 00 00 00 00 00{{.*}}blt
+# CHECK: {{.*}}1d4: 07 0d 2c 03 0c 00 00 00 00 00 00 00{{.*}}bgeu
+# CHECK: {{.*}}1e0: 07 0d 4e 05 06 00 00 00 00 00 00 00{{.*}}bltu
+# CHECK: {{.*}}1ec: 07 0a 68 00 18 00 00 00 00 00 00 00{{.*}}beqz
+# CHECK: {{.*}}1f8: 07 0a 7a 00 12 00 00 00 00 00 00 00{{.*}}bnez
+# CHECK: {{.*}}204: 07 0a 8c 00 0c 00 00 00 00 00 00 00{{.*}}bgez
+# CHECK: {{.*}}210: 07 0a 9e 00 06 00 00 00 00 00 00 00{{.*}}bltz
+# CHECK: {{.*}}21c: 07 0e a8 00 0c 00 00 00 00 00 00 00{{.*}}jal
+# CHECK: {{.*}}228: 07 0d b2 0c 06 00 00 00 00 00 00 00{{.*}}jalr
+# CHECK-NOT: <unknown>
 
 # Basic arithmetic instructions
 
 ADD32 R0, R1, R2
-# CHECK: add32 r0, r1, r2
 
 ADDI32 R0, R1, 42
-# CHECK: addi32 r0, r1, 42
 
 SUB32 R3, R4, R5
-# CHECK: sub32 r3, r4, r5
 
 SUB32S R6, R7, R8
-# CHECK: sub32s r6, r7, r8
 
 # Logical instructions
 AND32 R9, R10, R11
-# CHECK: and32 r9, r10, r11
 
 OR32 R12, R0, R1
-# CHECK: or32 r12, r0, r1
 
 XOR32 R2, R3, R4
-# CHECK: xor32 r2, r3, r4
 
 # Logical immediate instructions
 ANDI32 R5, R6, 255
-# CHECK: andi32 r5, r6, 255
 
 ORI32 R7, R8, 15
-# CHECK: ori32 r7, r8, 15
 
 XORI32 R9, R10, 7
-# CHECK: xori32 r9, r10, 7
 
 # Shift instructions (immediate)
 SRLI32 R0, R1, 4
-# CHECK: srli32 r0, r1, 4
 
 SRAI32 R2, R3, 8
-# CHECK: srai32 r2, r3, 8
 
 SLLI32 R4, R5, 16
-# CHECK: slli32 r4, r5, 16
 
 # Shift instructions (register)
 SRL32 R6, R7, R8
-# CHECK: srl32 r6, r7, r8
 
 SRA32 R9, R10, R11
-# CHECK: sra32 r9, r10, r11
 
 SLL32 R12, R0, R1
-# CHECK: sll32 r12, r0, r1
 
 # Move and load immediate
 MOVE32 R2, R3
-# CHECK: move32 r2, r3
 
 LUI R4, 42
-# CHECK: lui r4, 42
 
 # DSP/miscellaneous instructions
 ABS32S R5, R6
-# CHECK: abs32s r5, r6
 
 MAX32 R7, R8, R9
-# CHECK: max32 r7, r8, r9
 
 MIN32 R10, R11, R12
-# CHECK: min32 r10, r11, r12
 
 NEG32 R0, R1
-# CHECK: neg32 r0, r1
 
 # Compare instructions
 SLT32 R2, R3, R4
-# CHECK: slt32 r2, r3, r4
 
 SLTU32 R5, R6, R7
-# CHECK: sltu32 r5, r6, r7
 
 SEQ32 R8, R9, R10
-# CHECK: seq32 r8, r9, r10
 
 # Load/store instructions
 LD32 R0, R1, 0
-# CHECK: ld32 r0, r1, 0
 
 LD32 R2, R3, 16
-# CHECK: ld32 r2, r3, 16
 
 ST32 R4, R5, 0
-# CHECK: st32 r4, r5, 0
 
 ST32 R6, R7, -4
-# CHECK: st32 r6, r7, -4
 
 # Load/store size variants
 LD16 R8, R9, 0
-# CHECK: ld16 r8, r9, 0
 
 LD8 R10, R11, 0
-# CHECK: ld8 r10, r11, 0
 
 LDU16 R12, R0, 0
-# CHECK: ldu16 r12, r0, 0
 
 LDU8 R1, R2, 0
-# CHECK: ldu8 r1, r2, 0
 
 ST16 R3, R4, 0
-# CHECK: st16 r3, r4, 0
 
 ST8 R5, R6, 0
-# CHECK: st8 r5, r6, 0
 
 # Branch instructions
 BEQ R7, R8, .Ltarget
-# CHECK: beq r7, r8, .Ltarget
 
 BNE R9, R10, .Ltarget
-# CHECK: bne r9, r10, .Ltarget
 
 BGE R11, R12, .Ltarget
-# CHECK: bge r11, r12, .Ltarget
 
 BLT R0, R1, .Ltarget
-# CHECK: blt r0, r1, .Ltarget
 
 BGEU R2, R3, .Ltarget
-# CHECK: bgeu r2, r3, .Ltarget
 
 BLTU R4, R5, .Ltarget
-# CHECK: bltu r4, r5, .Ltarget
 
 .Ltarget:
 BEQZ R6, .Ltarget2
-# CHECK: beqz r6, .Ltarget2
 
 BNEZ R7, .Ltarget2
-# CHECK: bnez r7, .Ltarget2
 
 BGEZ R8, .Ltarget2
-# CHECK: bgez r8, .Ltarget2
 
 BLTZ R9, .Ltarget2
-# CHECK: bltz r9, .Ltarget2
 
 .Ltarget2:
 
 # Jump and link instructions
 JAL R10, foo
-# CHECK: jal r10, foo
 
 JALR R11, R12, bar
-# CHECK: jalr r11, r12, bar
 
 foo:
 bar:

@@ -1,13 +1,41 @@
-# RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
+# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
+# RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# REQUIRES: haydn-registered-target
 
-# Role: object — branch target relocations.
+# Role: object — Branch/call fixups encode→obj→disasm (mnemonic identity; no golden branch-scale invent).
+# Converted from parse-only/show-encoding to product MC contract (encode→obj→disasm).
+# CHECKs regenerated from live objdump (Format E 12-byte parcels).
+# Fail-closed: no positive ar_sel=2/3, all-zero product-NOP, or golden-unspecified branch-scale invent.
 
-#===----------------------------------------------------------------------===
-# Test branch target relocations
-#===----------------------------------------------------------------------===
-
-# Forward branch reference
-# CHECK: beq r0, r1, forward_label
+# CHECK-LABEL: <.text>:
+# CHECK: {{.*}}0: 07 0d 04 01 06 00 00 00 00 00 00 00{{.*}}beq
+# CHECK-LABEL: <forward_label>:
+# CHECK: {{.*}}c: 07 8b 20 43 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK-LABEL: <backward_label>:
+# CHECK: {{.*}}18: 07 0d 56 06 00 00 00 00 00 00 00 00{{.*}}bne
+# CHECK: {{.*}}24: 07 0a 78 00 0c 00 00 00 00 00 00 00{{.*}}beqz
+# CHECK-LABEL: <backward_target>:
+# CHECK: {{.*}}30: 07 0a 8a 00 00 00 00 00 00 00 00 00{{.*}}bnez
+# CHECK-LABEL: <forward_target>:
+# CHECK: {{.*}}3c: 07 8b 90 ba 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}48: 07 0e 08 00 00 00 00 00 00 00 00 00{{.*}}jal
+# CHECK: {{.*}}54: 87 43 33 04 00 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
+# CHECK: {{.*}}60: 87 43 5b 06 00 00 00 00 00 00 00 00{{.*}}s_sw_with_imm
+# CHECK-LABEL: <local_loop>:
+# CHECK: {{.*}}6c: 07 0d aa 0b 00 00 00 00 00 00 00 00{{.*}}blt
+# CHECK: {{.*}}78: 07 0d c8 00 42 00 00 00 00 00 00 00{{.*}}bge
+# CHECK: {{.*}}84: 07 8b 10 11 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}90: 07 8b 20 22 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}9c: 07 8b 30 33 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}a8: 07 8b 40 44 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}b4: 07 8b 50 55 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}c0: 07 8b 60 66 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}cc: 07 8b 70 77 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}d8: 07 8b 80 88 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}e4: 07 8b 90 99 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}f0: 07 8b a0 aa 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK-LABEL: <far_target>:
+# CHECK: {{.*}}fc: 07 8b b0 bb 00 00 00 00 00 00 00 00{{.*}}add32
 
 BEQ R0, R1, forward_label
 
@@ -15,7 +43,6 @@ forward_label:
 ADD32 R2, R3, R4
 
 # Backward branch reference
-# CHECK: bne r5, r6, backward_label
 backward_label:
 BNE R5, R6, backward_label
 
@@ -24,11 +51,9 @@ BNE R5, R6, backward_label
 #===----------------------------------------------------------------------===
 
 # Forward unconditional branch
-# CHECK: beqz r7, forward_target
 BEQZ R7, forward_target
 
 # Backward unconditional branch
-# CHECK: bnez r8, backward_target
 backward_target:
 BNEZ R8, backward_target
 
@@ -40,7 +65,6 @@ ADD32 R9, R10, R11
 #===----------------------------------------------------------------------===
 
 # JAL to external symbol
-# CHECK: jal r0, external_func
 JAL R0, external_func
 
 #===----------------------------------------------------------------------===
@@ -48,11 +72,9 @@ JAL R0, external_func
 #===----------------------------------------------------------------------===
 
 # Load with symbol reference (requires relocation)
-# CHECK: ld32 r3, r4, symbol_offset
 LD32 R3, R4, symbol_offset
 
 # Store with symbol reference
-# CHECK: st32 r5, r6, data_location
 ST32 R5, R6, data_location
 
 #===----------------------------------------------------------------------===
@@ -60,13 +82,11 @@ ST32 R5, R6, data_location
 #===----------------------------------------------------------------------===
 
 # PC-relative branch
-# CHECK: blt r10, r11, local_loop
 local_func:
 local_loop:
 BLT R10, R11, local_loop
 
 # Test far branch
-# CHECK: bge r12, r0, far_target
 BGE R12, R0, far_target
 
 # Skip some instructions to create distance

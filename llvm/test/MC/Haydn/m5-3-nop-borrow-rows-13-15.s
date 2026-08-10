@@ -1,9 +1,9 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
 # RUN:   llvm-objdump -d --triple=haydn-unknown-elf %t.o | FileCheck %s
 
-// CHECK: {{.*}}0: 07 8b 00 21 00 00 48 10 31 20 00 00 { add32 r0, r1, r2; x2mul32 d1, d2, d3 }
-// CHECK: {{.*}}c: 07 8b 30 54 00 00 00 00 00 00 00 00 { add32 r3, r4, r5; nop }
-// CHECK: {{.*}}18: 47 02 41 06 05 00 00 00 00 00 00 00 { x2mul32 d4, d5, d6; nop }
+// CHECK: {{.*}}0: 07 8b 00 21 00 00 48 10 10 32 00 00 { 	x2mul32	d0, d1, d2, d3; 	add32	r0, r1, r2 }
+// CHECK: {{.*}}c: 07 8b 30 54 00 00 00 00 00 00 00 00 { 	nop; 	add32	r3, r4, r5 }
+// CHECK: {{.*}}18: 47 02 31 54 06 00 00 00 00 00 00 00 { 	nop; 	x2mul32	d3, d4, d5, d6 }
 # Role: object — Phase-2 decoder purge collateral (prior revision): the { add32; x2mul32 } bundle packs add32 into the s0 ALU32 sub-row (SURVIVES) and x2mul32 into.
 
 # Phase-2 decoder purge collateral (prior revision): the { add32; x2mul32 }

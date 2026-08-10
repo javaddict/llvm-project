@@ -1,3 +1,5 @@
+set(LLVM_OPTIONAL_SOURCES HaydnTestEncodingProfileProvider.cpp)
+
 add_llvm_component_library(LLVMHaydnDesc
   HaydnMCTargetDesc.cpp
   HaydnMCAsmInfo.cpp

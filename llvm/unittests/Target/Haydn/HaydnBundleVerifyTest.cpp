@@ -143,6 +143,13 @@ TEST(HaydnBundleVerifyTest, ResidualCycleFormingPseudoSet) {
   EXPECT_FALSE(isResidualCycleFormingPseudo(Haydn::ADD32));
   EXPECT_FALSE(isResidualCycleFormingPseudo(Haydn::B));
   EXPECT_FALSE(isResidualCycleFormingPseudo(Haydn::RET));
+
+  EXPECT_TRUE(isRepresentationExpandPseudo(Haydn::B));
+  EXPECT_TRUE(isRepresentationExpandPseudo(Haydn::RET));
+  EXPECT_TRUE(isRepresentationExpandPseudo(Haydn::BR_JT));
+  EXPECT_TRUE(isRepresentationExpandPseudo(Haydn::PseudoCALLIndirect));
+  EXPECT_FALSE(isRepresentationExpandPseudo(Haydn::LOADI32));
+  EXPECT_FALSE(isRepresentationExpandPseudo(Haydn::ADD32));
 }
 
 TEST(HaydnBundleVerifyTest, ProductRowImmRoundTrip) {

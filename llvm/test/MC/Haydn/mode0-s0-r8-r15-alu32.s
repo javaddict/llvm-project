@@ -1,9 +1,9 @@
 # RUN: llvm-mc -triple haydn-unknown-elf -filetype=obj %s -o %t.o && \
 # RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
 # REQUIRES: haydn-registered-target
-// CHECK: {{.*}}0: 07 cb 80 a9 00 00 00 00 00 00 00 00  	{ 		sub32	r8, r9, r10; 	nop }
-// CHECK: {{.*}}c: 07 8b b0 9a 00 00 00 00 00 00 00 00  	{ 		add32	r11, r10, r9; 	nop }
-// CHECK: {{.*}}18: 07 8b 80 a9 00 00 00 00 00 00 00 00  	{ 		add32	r8, r9, r10; 	nop }
+// CHECK: {{.*}}0: 07 cb 80 a9 00 00 00 00 00 00 00 00  	{ nop; sub32	r8, r9, r10 }
+// CHECK: {{.*}}c: 07 8b b0 9a 00 00 00 00 00 00 00 00  	{ nop; add32	r11, r10, r9 }
+// CHECK: {{.*}}18: 07 8b 80 a9 00 00 00 00 00 00 00 00  	{ nop; add32	r8, r9, r10 }
 
 # Role: object — ALU32 RR ops whose GPRs fall outside the r0-r7 window (r8-r11) MUST still assemble as bare mnemonics and emit a Format E parcel.
 

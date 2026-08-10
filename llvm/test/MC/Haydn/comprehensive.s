@@ -1,6 +1,80 @@
-# RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
+# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
+# RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# REQUIRES: haydn-registered-target
 
 # Role: object — Comprehensive instruction test for Haydn DSP.
+# Converted from parse-only to product MC contract (encode→obj→disasm).
+# CHECKs regenerated from live objdump (Format E 12-byte parcels).
+
+# CHECK-LABEL: <.text>:
+# CHECK: {{.*}}0: 07 8b 00 21 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}c: 07 0f 32 04 32 00 00 00 00 00 00 00{{.*}}addi32
+# CHECK: {{.*}}18: 07 cb 50 76 00 00 00 00 00 00 00 00{{.*}}sub32
+# CHECK: {{.*}}24: 07 0f 8a 09 e7 ff 07 00 00 00 00 00{{.*}}subi32
+# CHECK: {{.*}}30: 07 0b a1 cb 00 00 00 00 00 00 00 00{{.*}}and32
+# CHECK: {{.*}}3c: 07 2b 01 21 00 00 00 00 00 00 00 00{{.*}}or32
+# CHECK: {{.*}}48: 07 4b 31 54 00 00 00 00 00 00 00 00{{.*}}xor32
+# CHECK: {{.*}}54: 07 24 60 07 00 00 00 00 00 00 00 00{{.*}}not32
+# CHECK: {{.*}}60: 07 0f 84 89 7f 00 00 00 00 00 00 00{{.*}}andi32
+# CHECK: {{.*}}6c: 07 0f a8 0b 40 00 00 00 00 00 00 00{{.*}}ori32
+# CHECK: {{.*}}78: 07 0f 0c 01 20 00 00 00 00 00 00 00{{.*}}xori32
+# CHECK: {{.*}}84: 07 44 20 03 00 00 00 00 00 00 00 00{{.*}}move32
+# CHECK: {{.*}}90: 07 0a 42 00 2a 00 00 00 00 00 00 00{{.*}}lui
+# CHECK: {{.*}}9c: 07 06 51 06 04 00 00 00 00 00 00 00{{.*}}srli32
+# CHECK: {{.*}}a8: 07 06 72 08 08 00 00 00 00 00 00 00{{.*}}srai32
+# CHECK: {{.*}}b4: 07 06 94 0a 10 00 00 00 00 00 00 00{{.*}}slli32
+# CHECK: {{.*}}c0: 07 cb b1 10 00 00 00 00 00 00 00 00{{.*}}srl32
+# CHECK: {{.*}}cc: 07 8b 21 43 00 00 00 00 00 00 00 00{{.*}}sra32
+# CHECK: {{.*}}d8: 07 eb 51 76 00 00 00 00 00 00 00 00{{.*}}sll32
+# CHECK: {{.*}}e4: 07 24 81 09 00 00 00 00 00 00 00 00{{.*}}abs32s
+# CHECK: {{.*}}f0: 07 0b a2 cb 00 00 00 00 00 00 00 00{{.*}}max32
+# CHECK: {{.*}}fc: 07 2b 02 21 00 00 00 00 00 00 00 00{{.*}}maxu32
+# CHECK: {{.*}}108: 07 4b 32 54 00 00 00 00 00 00 00 00{{.*}}min32
+# CHECK: {{.*}}114: 07 6b 62 87 00 00 00 00 00 00 00 00{{.*}}minu32
+# CHECK: {{.*}}120: 07 44 91 0a 00 00 00 00 00 00 00 00{{.*}}neg32
+# CHECK: {{.*}}12c: 07 64 b1 0c 00 00 00 00 00 00 00 00{{.*}}neg32s
+# CHECK: {{.*}}138: 07 6b 01 21 00 00 00 00 00 00 00 00{{.*}}brev32
+# CHECK: {{.*}}144: 07 84 31 04 00 00 00 00 00 00 00 00{{.*}}nsa32
+# CHECK: {{.*}}150: 07 a4 51 06 00 00 00 00 00 00 00 00{{.*}}nsau32
+# CHECK: {{.*}}15c: 07 c4 71 08 00 00 00 00 00 00 00 00{{.*}}popcount32
+# CHECK: {{.*}}168: 07 8b 92 ba 00 00 00 00 00 00 00 00{{.*}}slt32
+# CHECK: {{.*}}174: 07 ab c2 10 00 00 00 00 00 00 00 00{{.*}}sltu32
+# CHECK: {{.*}}180: 07 cb 22 43 00 00 00 00 00 00 00 00{{.*}}sle32
+# CHECK: {{.*}}18c: 07 eb 52 76 00 00 00 00 00 00 00 00{{.*}}seq32
+# CHECK: {{.*}}198: 07 2b 83 a9 00 00 00 00 00 00 00 00{{.*}}movt32
+# CHECK: {{.*}}1a4: 07 0b b3 0c 00 00 00 00 00 00 00 00{{.*}}movf32
+# CHECK: {{.*}}1b0: 87 43 13 02 00 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
+# CHECK: {{.*}}1bc: 87 43 34 84 00 00 00 00 00 00 00 00{{.*}}s_lhws_with_imm
+# CHECK: {{.*}}1c8: 87 43 56 06 01 00 00 00 00 00 00 00{{.*}}s_lbs_with_imm
+# CHECK: {{.*}}1d4: 87 43 75 88 01 00 00 00 00 00 00 00{{.*}}s_lhwu_with_imm
+# CHECK: {{.*}}1e0: 87 43 97 0a 02 00 00 00 00 00 00 00{{.*}}s_lbu_with_imm
+# CHECK: {{.*}}1ec: 87 43 bb 0c 00 00 00 00 00 00 00 00{{.*}}s_sw_with_imm
+# CHECK: {{.*}}1f8: 87 43 0c 41 00 00 00 00 00 00 00 00{{.*}}s_shw_with_imm
+# CHECK: {{.*}}204: 87 43 2e 23 00 00 00 00 00 00 00 00{{.*}}s_sb_with_imm
+# CHECK: {{.*}}210: 07 0d 44 05 00 00 00 00 00 00 00 00{{.*}}beq
+# CHECK: {{.*}}21c: 07 0d 66 07 fa 0f 00 00 00 00 00 00{{.*}}bne
+# CHECK: {{.*}}228: 07 0d 88 09 f4 0f 00 00 00 00 00 00{{.*}}bge
+# CHECK: {{.*}}234: 07 0d ac 0b ee 0f 00 00 00 00 00 00{{.*}}bgeu
+# CHECK: {{.*}}240: 07 0d ca 00 e8 0f 00 00 00 00 00 00{{.*}}blt
+# CHECK: {{.*}}24c: 07 0d 1e 02 e2 0f 00 00 00 00 00 00{{.*}}bltu
+# CHECK: {{.*}}258: 07 0a 38 00 dc 0f 00 00 00 00 00 00{{.*}}beqz
+# CHECK: {{.*}}264: 07 0a 4a 00 d6 0f 00 00 00 00 00 00{{.*}}bnez
+# CHECK: {{.*}}270: 07 0a 5c 00 d0 0f 00 00 00 00 00 00{{.*}}bgez
+# CHECK: {{.*}}27c: 07 0a 6e 00 ca 0f 00 00 00 00 00 00{{.*}}bltz
+# CHECK: {{.*}}288: 07 0b 04 21 00 00 00 00 00 00 00 00{{.*}}add64
+# CHECK: {{.*}}294: 07 0b 35 54 00 00 00 00 00 00 00 00{{.*}}sub64
+# CHECK: {{.*}}2a0: 07 8b 66 87 00 00 00 00 00 00 00 00{{.*}}and64
+# CHECK: {{.*}}2ac: 07 ab 96 ba 00 00 00 00 00 00 00 00{{.*}}or64
+# CHECK: {{.*}}2b8: 07 cb c6 ed 00 00 00 00 00 00 00 00{{.*}}xor64
+# CHECK: {{.*}}2c4: 07 0b 58 76 00 00 00 00 00 00 00 00{{.*}}x2add32
+# CHECK: {{.*}}2d0: 07 8b 89 a9 00 00 00 00 00 00 00 00{{.*}}x2sub32
+# CHECK: {{.*}}2dc: 47 02 b1 dc 0e 00 00 00 00 00 00 00{{.*}}x2mul32
+# CHECK: {{.*}}2e8: 07 0b ec 0f 00 00 00 00 00 00 00 00{{.*}}x4add16
+# CHECK: {{.*}}2f4: 47 02 1c 32 04 00 00 00 00 00 00 00{{.*}}x4mul16
+# CHECK: {{.*}}300: 87 43 42 05 00 00 00 00 00 00 00 00{{.*}}d_ldw_with_imm
+# CHECK: {{.*}}30c: 07 03 68 00 00 00 00 00 00 00 00 00{{.*}}csrr
+# CHECK: {{.*}}318: 07 03 7a 00 00 00 00 00 00 00 00 00{{.*}}csrw
+# CHECK-NOT: <unknown>
 
 # Comprehensive instruction test for Haydn DSP. The WideImm immediate-form
 # shifts (slli64/srli64/srai64) and the 4-operand MAC32 are AsmParser gaps
@@ -141,71 +215,4 @@ CSRR R6, 0
 CSRW 0, R7
 
 # Verify all instructions are recognized
-# CHECK: add32
-# CHECK: addi32
-# CHECK: sub32
-# CHECK: subi32
-# CHECK: and32
-# CHECK: or32
-# CHECK: xor32
-# CHECK: not32
-# CHECK: andi32
-# CHECK: ori32
-# CHECK: xori32
-# CHECK: move32
-# CHECK: lui
-# CHECK: srli32
-# CHECK: srai32
-# CHECK: slli32
-# CHECK: srl32
-# CHECK: sra32
-# CHECK: sll32
-# CHECK: abs32s
-# CHECK: max32
-# CHECK: maxu32
-# CHECK: min32
-# CHECK: minu32
-# CHECK: neg32
-# CHECK: neg32s
-# CHECK: brev32
-# CHECK: nsa32
-# CHECK: nsau32
-# CHECK: popcount32
-# CHECK: slt32
-# CHECK: sltu32
-# CHECK: sle32
-# CHECK: seq32
-# CHECK: movt32
-# CHECK: movf32
-# CHECK: ld32
-# CHECK: ld16
-# CHECK: ld8
-# CHECK: ldu16
-# CHECK: ldu8
-# CHECK: st32
-# CHECK: st16
-# CHECK: st8
-# CHECK: beq
-# CHECK: bne
-# CHECK: bge
-# CHECK: bgeu
-# CHECK: blt
-# CHECK: bltu
-# CHECK: beqz
-# CHECK: bnez
-# CHECK: bgez
-# CHECK: bltz
-# CHECK: add64
-# CHECK: sub64
-# CHECK: and64
-# CHECK: or64
-# CHECK: xor64
-# CHECK: x2add32
-# CHECK: x2sub32
-# CHECK: x2mul32
-# CHECK: x4add16
-# CHECK: x4mul16
 # Mulq31/macq31/mulq63 REMOVED (phantom — not in the ISA DB).
-# CHECK: ld64
-# CHECK: csrr
-# CHECK: csrw

@@ -6,8 +6,9 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -defsym=DEFINE_TARGET=1 -o %t.target.o
 # RUN: ld.lld -m elf32haydn -e 0 %t.o %t.target.o -o %t.elf
 # RUN: llvm-objdump -d --no-show-raw-insn %t.elf | FileCheck %s --check-prefix=LINKED
-# Format E96 cutover residual: FileCheck/idle-pad/reloc geometry still open (GE96-01/03).
 # XFAIL: *
+# Residual: FileCheck / idle-pad / reloc geometry still open under Format E cutover.
+# XFAIL-OWNER: branch PC-rel wire scale (golden unspecified) | positive branch-scale claim residual; no golden invent
 
 # Role: object — Unresolved external RI12 BNE_W must emit R_HAYDN_WIDE_BranchSImm12_RI (not crash with "Invalid Haydn relocation kind" / llvm_unreachable).
 

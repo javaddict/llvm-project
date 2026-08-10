@@ -41,75 +41,92 @@
 // CHECK: { sra64 d0, d0, r1 } // encoding: [0x07,0x0b,0x06,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { srl64 d1, d1, r3 } // encoding: [0x07,0x4b,0x16,0x31,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { sra64r d2, d2, r5 } // encoding: [0x07,0x2b,0x26,0x52,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { x2cmul32 d0, d1, d2, d3 } // encoding: [0x47,0x02,0x14,0x03,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { x2cmul32s d4, d5, d6, d7 } // encoding: [0x47,0x02,0x56,0x07,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { x2mula32 d0, d1, d2, d3 } // encoding: [0x47,0x02,0x12,0x03,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { x2muls32 d4, d5, d6, d7 } // encoding: [0x47,0x02,0x53,0x07,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { x4mula16 d0, d1, d2, d3 } // encoding: [0x47,0x02,0x18,0x03,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { x4mula16s d4, d5, d6, d7 } // encoding: [0x47,0x02,0x5a,0x07,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { x4muls16 d0, d1, d2, d3 } // encoding: [0x47,0x02,0x19,0x03,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { x4muls16s d4, d5, d6, d7 } // encoding: [0x47,0x02,0x5b,0x07,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { x2cmul32 d0, d1, d2, d3 } // encoding: [0x47,0x02,0x04,0x21,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { x2cmul32s d4, d5, d6, d7 } // encoding: [0x47,0x02,0x46,0x65,0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { x2mula32 d0, d1, d2, d3 } // encoding: [0x47,0x02,0x02,0x21,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { x2muls32 d4, d5, d6, d7 } // encoding: [0x47,0x02,0x43,0x65,0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { x4mula16 d0, d1, d2, d3 } // encoding: [0x47,0x02,0x08,0x21,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { x4mula16s d4, d5, d6, d7 } // encoding: [0x47,0x02,0x4a,0x65,0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { x4muls16 d0, d1, d2, d3 } // encoding: [0x47,0x02,0x09,0x21,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { x4muls16s d4, d5, d6, d7 } // encoding: [0x47,0x02,0x4b,0x65,0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { x4sel16 d0, d1, d2, r3 } // encoding: [0x07,0x09,0x08,0x21,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// ROUNDTRIP: {{.*}}0: 47 01 08 01 00 00 00 00 00 00 00 00 { mull r0, r1, r0; nop }
-// ROUNDTRIP: {{.*}}c: 47 09 38 34 00 00 00 00 00 00 00 00 { mulssh r3, r4, r3; nop }
-// ROUNDTRIP: {{.*}}18: 47 11 68 67 00 00 00 00 00 00 00 00 { mulsuh r6, r7, r6; nop }
-// ROUNDTRIP: {{.*}}24: 47 19 98 9a 00 00 00 00 00 00 00 00 { muluuh r9, r10, r9; nop }
-// ROUNDTRIP: {{.*}}30: 47 99 08 21 00 00 00 00 00 00 00 00 { mul64_hh d0, d1, d2; nop }
-// ROUNDTRIP: {{.*}}3c: 47 91 38 54 00 00 00 00 00 00 00 00 { mul64_hl d3, d4, d5; nop }
-// ROUNDTRIP: {{.*}}48: 47 89 68 87 00 00 00 00 00 00 00 00 { mul64_lh d6, d7, d8; nop }
-// ROUNDTRIP: {{.*}}54: 47 81 98 ba 00 00 00 00 00 00 00 00 { mul64_ll d9, d10, d11; nop }
-// ROUNDTRIP: {{.*}}60: 47 d9 c8 ed 00 00 00 00 00 00 00 00 { mul64_uhh d12, d13, d14; nop }
-// ROUNDTRIP: {{.*}}6c: 47 d1 f8 10 00 00 00 00 00 00 00 00 { mul64_uhl d15, d0, d1; nop }
-// ROUNDTRIP: {{.*}}78: 47 c9 28 43 00 00 00 00 00 00 00 00 { mul64_ulh d2, d3, d4; nop }
-// ROUNDTRIP: {{.*}}84: 47 c1 58 76 00 00 00 00 00 00 00 00 { mul64_ull d5, d6, d7; nop }
-// ROUNDTRIP: {{.*}}90: 47 19 09 21 00 00 00 00 00 00 00 00 { mula64_hh d0, d1, d2; nop }
-// ROUNDTRIP: {{.*}}9c: 47 01 39 54 00 00 00 00 00 00 00 00 { mula64_ll d3, d4, d5; nop }
-// ROUNDTRIP: {{.*}}a8: 47 59 69 87 00 00 00 00 00 00 00 00 { mula64_uhh d6, d7, d8; nop }
-// ROUNDTRIP: {{.*}}b4: 47 41 99 ba 00 00 00 00 00 00 00 00 { mula64_ull d9, d10, d11; nop }
-// ROUNDTRIP: {{.*}}c0: 47 19 0a 21 00 00 00 00 00 00 00 00 { muls64_hh d0, d1, d2; nop }
-// ROUNDTRIP: {{.*}}cc: 47 01 3a 54 00 00 00 00 00 00 00 00 { muls64_ll d3, d4, d5; nop }
-// ROUNDTRIP: {{.*}}d8: 47 99 6a 87 00 00 00 00 00 00 00 00 { mulss64_hh d6, d7, d8; nop }
-// ROUNDTRIP: {{.*}}e4: 47 81 9a ba 00 00 00 00 00 00 00 00 { mulss64_ll d9, d10, d11; nop }
-// ROUNDTRIP: {{.*}}f0: 47 99 09 21 00 00 00 00 00 00 00 00 { mulas64_hh d0, d1, d2; nop }
-// ROUNDTRIP: {{.*}}fc: 47 e1 3d 54 00 00 00 00 00 00 00 00 { mulas32_hhll d3, d4, d5; nop }
-// ROUNDTRIP: {{.*}}108: 47 c1 6d 87 00 00 00 00 00 00 00 00 { mulaa32_hhll d6, d7, d8; nop }
-// ROUNDTRIP: {{.*}}114: 47 d1 9d ba 00 00 00 00 00 00 00 00 { mulss32_hhll d9, d10, d11; nop }
-// ROUNDTRIP: {{.*}}120: 47 01 05 21 00 00 00 00 00 00 00 00 { smula16s_00 d0, d1, d2; nop }
-// ROUNDTRIP: {{.*}}12c: 47 19 35 54 00 00 00 00 00 00 00 00 { smula16s_33 d3, d4, d5; nop }
-// ROUNDTRIP: {{.*}}138: 47 01 64 87 00 00 00 00 00 00 00 00 { smula16_00 d6, d7, d8; nop }
-// ROUNDTRIP: {{.*}}144: 47 81 95 ba 00 00 00 00 00 00 00 00 { smuls16s_00 d9, d10, d11; nop }
-// ROUNDTRIP: {{.*}}150: 47 99 c4 ed 00 00 00 00 00 00 00 00 { smuls16_33 d12, d13, d14; nop }
-// ROUNDTRIP: {{.*}}15c: 47 89 00 21 00 00 00 00 00 00 00 00 { fmul16_hs00 d0, d1, d2; nop }
-// ROUNDTRIP: {{.*}}168: 47 51 30 54 00 00 00 00 00 00 00 00 { fmul16_ls33 d3, d4, d5; nop }
-// ROUNDTRIP: {{.*}}174: 47 11 6b 87 00 00 00 00 00 00 00 00 { fmul32s_hh d6, d7, d8; nop }
-// ROUNDTRIP: {{.*}}180: 47 01 9b ba 00 00 00 00 00 00 00 00 { fmul32s_ll d9, d10, d11; nop }
-// ROUNDTRIP: {{.*}}18c: 47 89 01 21 00 00 00 00 00 00 00 00 { fmula16_hs00 d0, d1, d2; nop }
-// ROUNDTRIP: {{.*}}198: 47 31 3b 54 00 00 00 00 00 00 00 00 { fmula32s_hh d3, d4, d5; nop }
-// ROUNDTRIP: {{.*}}1a4: 47 89 62 87 00 00 00 00 00 00 00 00 { fmuls16_hs00 d6, d7, d8; nop }
-// ROUNDTRIP: {{.*}}1b0: 47 51 9b ba 00 00 00 00 00 00 00 00 { fmuls32s_hh d9, d10, d11; nop }
-// ROUNDTRIP: {{.*}}1bc: 47 09 07 21 00 00 00 00 00 00 00 00 { mul16aq d0, d1, d2; nop }
-// ROUNDTRIP: {{.*}}1c8: 47 01 37 54 00 00 00 00 00 00 00 00 { mul16zaq d3, d4, d5; nop }
-// ROUNDTRIP: {{.*}}1d4: 07 0b 06 10 00 00 00 00 00 00 00 00 { sra64 d0, d0, r1; nop }
-// ROUNDTRIP: {{.*}}1e0: 07 4b 16 31 00 00 00 00 00 00 00 00 { srl64 d1, d1, r3; nop }
-// ROUNDTRIP: {{.*}}1ec: 07 2b 26 52 00 00 00 00 00 00 00 00 { sra64r d2, d2, r5; nop }
-// ROUNDTRIP: {{.*}}1f8: 47 02 14 03 02 00 00 00 00 00 00 00 { x2cmul32 d1, d2, d3; nop }
-// ROUNDTRIP: {{.*}}204: 47 02 56 07 06 00 00 00 00 00 00 00 { x2cmul32s d5, d6, d7; nop }
-// ROUNDTRIP: {{.*}}210: 47 02 12 03 02 00 00 00 00 00 00 00 { x2mula32 d1, d2, d3; nop }
-// ROUNDTRIP: {{.*}}21c: 47 02 53 07 06 00 00 00 00 00 00 00 { x2muls32 d5, d6, d7; nop }
-// ROUNDTRIP: {{.*}}228: 47 02 18 03 02 00 00 00 00 00 00 00 { x4mula16 d1, d2, d3; nop }
-// ROUNDTRIP: {{.*}}234: 47 02 5a 07 06 00 00 00 00 00 00 00 { x4mula16s d5, d6, d7; nop }
-// ROUNDTRIP: {{.*}}240: 47 02 19 03 02 00 00 00 00 00 00 00 { x4muls16 d1, d2, d3; nop }
-// ROUNDTRIP: {{.*}}24c: 47 02 5b 07 06 00 00 00 00 00 00 00 { x4muls16s d5, d6, d7; nop }
-// ROUNDTRIP: {{.*}}258: 07 09 08 21 03 00 00 00 00 00 00 00 { x4sel16 d0, d1, d2, r3; nop }
+// ROUNDTRIP: {{.*}}0: 47 01 08 01 00 00 00 00 00 00 00 00 { 	nop; 	mull	r0, r1, r0 }
+// ROUNDTRIP: {{.*}}c: 47 09 38 34 00 00 00 00 00 00 00 00 { 	nop; 	mulssh	r3, r4, r3 }
+// ROUNDTRIP: {{.*}}18: 47 11 68 67 00 00 00 00 00 00 00 00 { 	nop; 	mulsuh	r6, r7, r6 }
+// ROUNDTRIP: {{.*}}24: 47 19 98 9a 00 00 00 00 00 00 00 00 { 	nop; 	muluuh	r9, r10, r9 }
+// ROUNDTRIP: {{.*}}30: 47 99 08 21 00 00 00 00 00 00 00 00 { 	nop; 	mul64_hh	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}3c: 47 91 38 54 00 00 00 00 00 00 00 00 { 	nop; 	mul64_hl	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}48: 47 89 68 87 00 00 00 00 00 00 00 00 { 	nop; 	mul64_lh	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}54: 47 81 98 ba 00 00 00 00 00 00 00 00 { 	nop; 	mul64_ll	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}60: 47 d9 c8 ed 00 00 00 00 00 00 00 00 { 	nop; 	mul64_uhh	d12, d13, d14 }
+// ROUNDTRIP: {{.*}}6c: 47 d1 f8 10 00 00 00 00 00 00 00 00 { 	nop; 	mul64_uhl	d15, d0, d1 }
+// ROUNDTRIP: {{.*}}78: 47 c9 28 43 00 00 00 00 00 00 00 00 { 	nop; 	mul64_ulh	d2, d3, d4 }
+// ROUNDTRIP: {{.*}}84: 47 c1 58 76 00 00 00 00 00 00 00 00 { 	nop; 	mul64_ull	d5, d6, d7 }
+// ROUNDTRIP: {{.*}}90: 47 19 09 21 00 00 00 00 00 00 00 00 { 	nop; 	mula64_hh	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}9c: 47 01 39 54 00 00 00 00 00 00 00 00 { 	nop; 	mula64_ll	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}a8: 47 59 69 87 00 00 00 00 00 00 00 00 { 	nop; 	mula64_uhh	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}b4: 47 41 99 ba 00 00 00 00 00 00 00 00 { 	nop; 	mula64_ull	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}c0: 47 19 0a 21 00 00 00 00 00 00 00 00 { 	nop; 	muls64_hh	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}cc: 47 01 3a 54 00 00 00 00 00 00 00 00 { 	nop; 	muls64_ll	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}d8: 47 99 6a 87 00 00 00 00 00 00 00 00 { 	nop; 	mulss64_hh	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}e4: 47 81 9a ba 00 00 00 00 00 00 00 00 { 	nop; 	mulss64_ll	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}f0: 47 99 09 21 00 00 00 00 00 00 00 00 { 	nop; 	mulas64_hh	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}fc: 47 e1 3d 54 00 00 00 00 00 00 00 00 { 	nop; 	mulas32_hhll	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}108: 47 c1 6d 87 00 00 00 00 00 00 00 00 { 	nop; 	mulaa32_hhll	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}114: 47 d1 9d ba 00 00 00 00 00 00 00 00 { 	nop; 	mulss32_hhll	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}120: 47 01 05 21 00 00 00 00 00 00 00 00 { 	nop; 	smula16s_00	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}12c: 47 19 35 54 00 00 00 00 00 00 00 00 { 	nop; 	smula16s_33	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}138: 47 01 64 87 00 00 00 00 00 00 00 00 { 	nop; 	smula16_00	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}144: 47 81 95 ba 00 00 00 00 00 00 00 00 { 	nop; 	smuls16s_00	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}150: 47 99 c4 ed 00 00 00 00 00 00 00 00 { 	nop; 	smuls16_33	d12, d13, d14 }
+// ROUNDTRIP: {{.*}}15c: 47 89 00 21 00 00 00 00 00 00 00 00 { 	nop; 	fmul16_hs00	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}168: 47 51 30 54 00 00 00 00 00 00 00 00 { 	nop; 	fmul16_ls33	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}174: 47 11 6b 87 00 00 00 00 00 00 00 00 { 	nop; 	fmul32s_hh	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}180: 47 01 9b ba 00 00 00 00 00 00 00 00 { 	nop; 	fmul32s_ll	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}18c: 47 89 01 21 00 00 00 00 00 00 00 00 { 	nop; 	fmula16_hs00	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}198: 47 31 3b 54 00 00 00 00 00 00 00 00 { 	nop; 	fmula32s_hh	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}1a4: 47 89 62 87 00 00 00 00 00 00 00 00 { 	nop; 	fmuls16_hs00	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}1b0: 47 51 9b ba 00 00 00 00 00 00 00 00 { 	nop; 	fmuls32s_hh	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}1bc: 47 09 07 21 00 00 00 00 00 00 00 00 { 	nop; 	mul16aq	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}1c8: 47 01 37 54 00 00 00 00 00 00 00 00 { 	nop; 	mul16zaq	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}1d4: 07 0b 06 10 00 00 00 00 00 00 00 00 { 	nop; 	sra64	d0, d0, r1 }
+// ROUNDTRIP: {{.*}}1e0: 07 4b 16 31 00 00 00 00 00 00 00 00 { 	nop; 	srl64	d1, d1, r3 }
+// ROUNDTRIP: {{.*}}1ec: 07 2b 26 52 00 00 00 00 00 00 00 00 { 	nop; 	sra64r	d2, d2, r5 }
+// ROUNDTRIP: {{.*}}1f8: 47 02 04 21 03 00 00 00 00 00 00 00 { 	nop; 	x2cmul32	d0, d1, d2, d3 }
+// ROUNDTRIP: {{.*}}204: 47 02 46 65 07 00 00 00 00 00 00 00 { 	nop; 	x2cmul32s	d4, d5, d6, d7 }
+// ROUNDTRIP: {{.*}}210: 47 02 02 21 03 00 00 00 00 00 00 00 { 	nop; 	x2mula32	d0, d1, d2, d3 }
+// ROUNDTRIP: {{.*}}21c: 47 02 43 65 07 00 00 00 00 00 00 00 { 	nop; 	x2muls32	d4, d5, d6, d7 }
+// ROUNDTRIP: {{.*}}228: 47 02 08 21 03 00 00 00 00 00 00 00 { 	nop; 	x4mula16	d0, d1, d2, d3 }
+// ROUNDTRIP: {{.*}}234: 47 02 4a 65 07 00 00 00 00 00 00 00 { 	nop; 	x4mula16s	d4, d5, d6, d7 }
+// ROUNDTRIP: {{.*}}240: 47 02 09 21 03 00 00 00 00 00 00 00 { 	nop; 	x4muls16	d0, d1, d2, d3 }
+// ROUNDTRIP: {{.*}}24c: 47 02 4b 65 07 00 00 00 00 00 00 00 { 	nop; 	x4muls16s	d4, d5, d6, d7 }
+// ROUNDTRIP: {{.*}}258: 07 09 08 21 03 00 00 00 00 00 00 00 { 	nop; 	x4sel16	d0, d1, d2, r3 }
 # RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding %s | FileCheck %s
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s | llvm-objdump -d --triple=haydn-unknown-elf - | FileCheck --check-prefix=ROUNDTRIP %s
 # REQUIRES: haydn-registered-target
-
 # Role: object — MAC (Multiply-Accumulate) instruction test.
-
 # MAC (Multiply-Accumulate) instruction test.
 # Covers FmtALU64 multiply-family and FmtMAC ternary instructions from
-# HaydnInstrInfoAuto.td. These execute on Slot 1/2 MAC datapaths.
+# Instruction categories tested:
+# 32-bit multiply: MULL, MULSSH, MULSUH, MULUUH
+# 64-bit multiply: MUL64_HH, MUL64_LL, MUL64_UHH, MUL64_ULUL,...
+# 64-bit multiply-accumulate: MULA64_HH, MULA64_LL,...
+# 64-bit multiply-subtract: MULS64_HH, MULSS64_LL,...
+# 16-bit sum-of-products: SMULA16S_00, SMULA16_33, SMULS16S_00,...
+# Fractional multiply: FMUL16_HS00, FMUL32S_HH, FMULA16_HS00,...
+# Complex MAC: X2CMUL32, X2MULA32, X4MULA16, X4MULS16, X4SEL16
+# 32-bit Multiply (GPR32 result)
+# 64-bit Multiply (DR64 result) — halfword select variants
+# 64-bit Multiply-Accumulate (MULA64)
+# 64-bit Multiply-Subtract (MULS64 / MULSS64)
+# 16-bit Sum-of-Products (SMULA / SMULS)
+# Fractional Multiply (FMUL / FMULA / FMULS)
+# These produce GPR32 result from DR64 accumulator + GPR32 shift amount.
+# These are the 4-operand MAC instructions from HaydnInstrInfoAuto.td.
+# Complex multiply
+# Select
+# authoritative DB (~/haydn-plans/Database/haydn_instruction_db.json).
+
 #
 # Instruction categories tested:
 # 32-bit multiply: MULL, MULSSH, MULSUH, MULUUH

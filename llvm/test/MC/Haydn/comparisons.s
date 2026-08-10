@@ -1,18 +1,24 @@
-# RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding %s | FileCheck %s
+# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
+# RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# REQUIRES: haydn-registered-target
 
-// CHECK: 	{ 	slt32	r0, r1, r2 }            // encoding: [0x07,0x8b,0x02,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	sltu32	r3, r4, r5 }            // encoding: [0x07,0xab,0x32,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	sle32	r6, r7, r8 }            // encoding: [0x07,0xcb,0x62,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	seq32	r9, r10, r11 }          // encoding: [0x07,0xeb,0x92,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	movt32	r0, r1, r2 }            // encoding: [0x07,0x2b,0x03,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	movf32	r3, r4, r5 }            // encoding: [0x07,0x0b,0x33,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	max32	r6, r7, r8 }            // encoding: [0x07,0x0b,0x62,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	maxu32	r9, r10, r11 }          // encoding: [0x07,0x2b,0x92,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	min32	r0, r1, r2 }            // encoding: [0x07,0x4b,0x02,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	minu32	r3, r4, r5 }            // encoding: [0x07,0x6b,0x32,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-# Role: object — comparison / cmov / minmax mnemonics with pinned Mode-0 encodings.
+# Role: object — Compare / select / min-max encode→obj→disasm (Format E 12-byte).
+# Converted from parse-only/show-encoding to product MC contract (encode→obj→disasm).
+# CHECKs regenerated from live objdump (Format E 12-byte parcels).
+# Fail-closed: no positive ar_sel=2/3, all-zero product-NOP, or golden-unspecified branch-scale invent.
 
-# Signed less than
+# CHECK-LABEL: <.text>:
+# CHECK: {{.*}}0: 07 8b 02 21 00 00 00 00 00 00 00 00{{.*}}slt32
+# CHECK: {{.*}}c: 07 ab 32 54 00 00 00 00 00 00 00 00{{.*}}sltu32
+# CHECK: {{.*}}18: 07 cb 62 87 00 00 00 00 00 00 00 00{{.*}}sle32
+# CHECK: {{.*}}24: 07 eb 92 ba 00 00 00 00 00 00 00 00{{.*}}seq32
+# CHECK: {{.*}}30: 07 2b 03 21 00 00 00 00 00 00 00 00{{.*}}movt32
+# CHECK: {{.*}}3c: 07 0b 33 54 00 00 00 00 00 00 00 00{{.*}}movf32
+# CHECK: {{.*}}48: 07 0b 62 87 00 00 00 00 00 00 00 00{{.*}}max32
+# CHECK: {{.*}}54: 07 2b 92 ba 00 00 00 00 00 00 00 00{{.*}}maxu32
+# CHECK: {{.*}}60: 07 4b 02 21 00 00 00 00 00 00 00 00{{.*}}min32
+# CHECK: {{.*}}6c: 07 6b 32 54 00 00 00 00 00 00 00 00{{.*}}minu32
+
 SLT32 R0, R1, R2
 
 # Unsigned less than

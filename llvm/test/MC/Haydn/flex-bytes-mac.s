@@ -2,7 +2,7 @@
 // RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
 // REQUIRES: haydn-registered-target
 
-# Role: object — Format E product oracle: `{ x2mula32 d1, d2, d3, d1 }` encodes
+# Role: object — Format E product oracle: `{ nop; x2mula32 d1, d2, d3, d1 }` encodes
 # as a 12-byte parcel and disassembles as the product MAC form.
 
 // REGRESSION TEST (Format E MAC): product assembler→encoder path for
@@ -14,8 +14,8 @@
 // Printer may collapse the tied accumulator form; pin bytes + family mnemonic.
 
 // CHECK-LABEL: <.text>:
-// CHECK: {{.*}}0: 47 02 22 01 03 00 00 00 00 00 00 00  { x2mula32
+// CHECK: {{.*}}0: 47 02 12 32 01 00 00 00 00 00 00 00 {{.*}}x2mula32
 // CHECK-NOT: <?>
 // CHECK-NOT: <unknown>
 
-{ x2mula32 d1, d2, d3, d1 }
+{ nop; x2mula32 d1, d2, d3, d1 }

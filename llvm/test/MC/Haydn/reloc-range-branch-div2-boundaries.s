@@ -3,16 +3,14 @@
 # RUN: llvm-objdump -d --triple=haydn-unknown-elf %t.o | FileCheck %s
 # RUN: not llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=OOR_POS=1 %s -o /dev/null 2>&1 | FileCheck --check-prefix=OOR-POS %s
 # RUN: not llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=OOR_NEG=1 %s -o /dev/null 2>&1 | FileCheck --check-prefix=OOR-NEG %s
-# Format E96 cutover residual: FileCheck/idle-pad/reloc geometry still open (GE96-01/03).
 # XFAIL: *
+# Residual: FileCheck / idle-pad / reloc geometry still open under Format E cutover.
+# XFAIL-OWNER: branch PC-rel wire scale (golden unspecified) | positive branch-scale claim residual; no golden invent
 
-# Role: object — Pin WIDE branch PC-rel geometry: signed 12-bit field after ÷2 (ValueShift=1, Align=2).
-
-# Pin WIDE branch PC-rel geometry: signed 12-bit field after ÷2 (ValueShift=1,
-# Align=2). Effective byte window is [-4096, +4094]. Format E parcels are
-# 12 bytes, so the nearest in-range parcel distances are +4080 / -4096; the
-# next parcel steps (+4096 / -4112) must fail closed in applyFixup via
-# HaydnRelocLayout::computeRelocValue (shared with lld inBranchRange).
+# Role: object — fail-closed residual for WIDE branch PC-rel range tables.
+# Branch wire scale is not golden-defined; do not treat halfword field pins
+# as product law. Positive in-range oracles remain residual (XFAIL).
+# Negative OOR paths exercise applyFixup fail-closed only.
 #
 
 # OOR-POS: relocation offset out of range

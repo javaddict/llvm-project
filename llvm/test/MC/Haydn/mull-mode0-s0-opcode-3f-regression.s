@@ -13,10 +13,10 @@
 # encoder packs the tied source; the decoder reconstructs it.
 
 # CHECK-LABEL: <test_mull_mode0>:
-# CHECK: {{.*}}0: 47 01 08 01 00 00 00 00 00 00 00 00  	{ 		mull	r0, r1, r0; 	nop }
-# CHECK: c: 47 09 08 01 00 00 00 00 00 00 00 00  	{ 		mulssh	r0, r1, r0; 	nop }
-# CHECK: {{.*}}18: 47 11 08 01 00 00 00 00 00 00 00 00  	{ 		mulsuh	r0, r1, r0; 	nop }
-# CHECK: {{.*}}24: 47 19 08 01 00 00 00 00 00 00 00 00  	{ 		muluuh	r0, r1, r0; 	nop }
+# CHECK: {{.*}}0: 47 01 08 01 00 00 00 00 00 00 00 00  	{ nop; mull	r0, r1, r0 }
+# CHECK: c: 47 09 08 01 00 00 00 00 00 00 00 00  	{ nop; mulssh	r0, r1, r0 }
+# CHECK: {{.*}}18: 47 11 08 01 00 00 00 00 00 00 00 00  	{ nop; mulsuh	r0, r1, r0 }
+# CHECK: {{.*}}24: 47 19 08 01 00 00 00 00 00 00 00 00  	{ nop; muluuh	r0, r1, r0 }
 # COM: CHECK: 20: 00 00 00 00 00 00 00 00 00 00 00 01 00 00 30 80
 # COM: CHECK: mulsuh{{.*}}r0, r1, r0
 # COM: CHECK: 30: 00 00 00 00 00 00 00 00 00 00 00 01 00 00 40 80

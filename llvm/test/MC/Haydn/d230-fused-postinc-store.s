@@ -9,8 +9,8 @@
 # success alone is not the contract.
 
 # CHECK-LABEL: <.text>:
-# CHECK: {{.*}}0: 87 83 3b 11 00 00 00 00 00 00 00 00 { s_sw_post_imm r3, r1, 1; nop }
-# CHECK: c: 87 83 0a 11 00 00 00 00 00 00 00 00 { d_sdw_post_imm d0, r1, 1; nop }
+# CHECK: {{.*}}0: 87 83 3b 11 00 00 00 00 00 00 00 00 { nop; s_sw_post_imm r3, r1, 1 }
+# CHECK: c: 87 83 0a 11 00 00 00 00 00 00 00 00 { nop; d_sdw_post_imm d0, r1, 1 }
 # CHECK-NOT: <?>
 # CHECK-NOT: <unknown>
 

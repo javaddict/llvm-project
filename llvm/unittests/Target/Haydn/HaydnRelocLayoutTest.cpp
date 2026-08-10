@@ -40,15 +40,16 @@ static uint64_t field(RelocKind K, int64_t ByteOffset) {
 // Format E E2 e0 product FieldLsb (parcel-origin r_offset), pin production
 // HaydnRelocLayout table (golden E2 e0 / FE8 12-byte parcels):
 //   I12/RI12 branch imm12 @32 (bits[32:43]); NBytes=6
-//   WIDE_Call / LO20 / PC_LO20 @31 (bits[31:50]); NBytes=8 (covers bit 50)
-//   LUI HI12 @32; NBytes=8
+//   WIDE_Call table FieldLsb=31 (E2 e0); NBytes=12 (E3 e1 imm may reach bit 67)
+//   LO20 / PC_LO20 @31 (bits[31:50]); LUI HI12 @32; NBytes=8
 // WIDE_Call is byte PC-relative (ValueShift=0); branches remain ÷2.
+// E3 call windows are resolved dynamically via resolveFieldLsb(Loc).
 TEST(HaydnRelocLayoutTest, FormatEE2E0FieldLsbParcelOrigin) {
   EXPECT_EQ(getRelocFieldInfo(RelocKind::WIDE_BranchSImm12).FieldLsb, 32u);
   EXPECT_EQ(getRelocFieldInfo(RelocKind::WIDE_BranchSImm12).NBytes, 6u);
   EXPECT_EQ(getRelocFieldInfo(RelocKind::WIDE_BranchSImm12_RI).FieldLsb, 32u);
   EXPECT_EQ(getRelocFieldInfo(RelocKind::WIDE_CallSImm20).FieldLsb, 31u);
-  EXPECT_EQ(getRelocFieldInfo(RelocKind::WIDE_CallSImm20).NBytes, 8u);
+  EXPECT_EQ(getRelocFieldInfo(RelocKind::WIDE_CallSImm20).NBytes, 12u);
   EXPECT_EQ(getRelocFieldInfo(RelocKind::HI12).FieldLsb, 32u);
   EXPECT_EQ(getRelocFieldInfo(RelocKind::HI12).NBytes, 8u);
   EXPECT_EQ(getRelocFieldInfo(RelocKind::LO20).FieldLsb, 31u);
@@ -252,10 +253,24 @@ TEST(HaydnRelocLayoutTest, ReadAddendUndoesBranchAndHwloopScale) {
   EXPECT_EQ(readRelocAddend(RelocKind::WIDE_BranchSImm12, Buf), 200); // ×2
 
   // WIDE_Call is byte PC-relative (ValueShift=0): field value == addend.
-  uint8_t CBuf[8] = {};
+  // Full 12-byte parcel buffer (NBytes=12); non-Format-E header keeps
+  // resolveFieldLsb on the E2 table default FieldLsb=31.
+  uint8_t CBuf[12] = {};
   const RelocFieldInfo &Call = getRelocFieldInfo(RelocKind::WIDE_CallSImm20);
   patchField(CBuf, 50, Call.NBytes, Call.FieldSize, Call.FieldLsb);
   EXPECT_EQ(readRelocAddend(RelocKind::WIDE_CallSImm20, CBuf), 50);
+
+  // E3 e0 JAL (indicator=7, entry_num=1, map=2, type=14, opc=1, rt=15):
+  // imm FieldLsb resolves to 17, not the E2 table default of 31.
+  uint8_t E3[12] = {};
+  E3[0] = 0x8f; // indicator 111, entry_num=1
+  // map=2 @ bits[6:7] already in 0x8f (bits 6-7 = 10); type=14 @ [8:11],
+  // opc=1 @ [12], dest=15 @ [13:16] → match encode of freestanding E3 JAL.
+  E3[1] = 0xfe; // bits[8:15]
+  E3[2] = 0x01; // bits[16:23] (imm low still zero)
+  EXPECT_EQ(resolveFieldLsb(RelocKind::WIDE_CallSImm20, E3), 17u);
+  patchField(E3, 36, Call.NBytes, Call.FieldSize, 17u);
+  EXPECT_EQ(readRelocAddend(RelocKind::WIDE_CallSImm20, E3), 36);
 
   uint8_t HBuf[8] = {};
   const RelocFieldInfo &H1 = getRelocFieldInfo(RelocKind::HWLoopOff1);

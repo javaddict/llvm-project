@@ -22,7 +22,8 @@
 //   R_HAYDN_CallSImm20 — signed call field (range via HaydnRelocLayout).
 //   R_HAYDN_WIDE_BranchSImm12/_RI — narrow signed branch field.
 //   R_HAYDN_WIDE_CallSImm20 — wide signed call field.
-//   R_HAYDN_HWLoopOff1/Off2 — unsigned hwloop displacement fields (<<2 law).
+//   R_HAYDN_HWLoopOff1/Off2 — unsigned Format E SET_HWLOOP displacement
+//     fields (<<2 law; FieldLsb via HaydnRelocLayout / resolveFieldLsb).
 //   Out-of-range branch/call sites get long-branch thunks (needsThunk).
 //   R_HAYDN_HI20/LO16 — LUI+ADDI32 pair for 32-bit absolute addressing.
 //   R_HAYDN_GOT_HI20 — GOT entry address high part.
@@ -212,21 +213,41 @@ public:
       return;
     }
     const HaydnReloc::RelocFieldInfo &FI = HaydnReloc::getRelocFieldInfo(R);
+    // WIDE_CallSImm20: E2 e0 imm @ [31:50]; E3 e0/e1 via resolveFieldLsb.
+    const unsigned FieldLsb = HaydnReloc::resolveFieldLsb(R, loc);
     HaydnReloc::patchField(loc, Comp.FieldVal, FI.NBytes, FI.FieldSize,
-                           FI.FieldLsb);
+                           FieldLsb);
   }
 
   uint32_t calcEFlags() const override {
-    // Note: exact E96 object-ABI flag equality lands with the allocated flag
-    // number on the ELF-ABI track; do not invent a value here.
-    uint32_t flags = 0;
+    // Product output always carries production ELFFlagsValue (nonzero).
+    // Inputs with e_flags==0 are transitional yaml/pre-flag objects and are
+    // upgraded only when no conflicting nonzero flag is present.
+    const uint32_t Expected =
+        llvm::haydn::format::getProductionObjectEncodingProfile().ELFFlagsValue;
+    assert(Expected != 0 && "E96 product profile must allocate nonzero e_flags");
+    bool SeenZero = false;
+    bool SeenExpected = false;
     for (InputFile *f : ctx.objectFiles) {
       uint32_t eflags =
           cast<ObjFile<ELF32LE>>(f)->getObj().getHeader().e_flags;
-      if (eflags > flags)
-        flags = eflags;
+      if (eflags == 0) {
+        SeenZero = true;
+        continue;
+      }
+      if (eflags != Expected) {
+        ErrAlways(ctx) << f << ": incompatible e_flags 0x"
+                       << Twine::utohexstr(eflags)
+                       << "; expected Format E ABI flag 0x"
+                       << Twine::utohexstr(Expected);
+        continue;
+      }
+      SeenExpected = true;
     }
-    return flags;
+    // Zero e_flags inputs are transitional (pre-flag crt/sysroot/yaml).
+    (void)SeenZero;
+    (void)SeenExpected;
+    return Expected;
   }
 
   // Pre-create ThunkSections so far sites inside a large .text can still

@@ -12,10 +12,10 @@
 //     16-byte Bundle128 / 8-byte Mode-0)
 //
 // Golden bytes from live `llvm-mc -show-encoding` under production E96 profile
-// (G-FORMAT-E-96-CUTOVER). Do not invent encodings.
+// (Format E 96 cutover). Do not invent encodings.
 
 // CHECK-LABEL: <.text>:
-// CHECK: {{.*}}0: 07 8b 10 32 00 00 00 00 00 00 00 00  { add32{{.*}}r1, r2, r3
+// CHECK: {{.*}}0: 07 8b 10 32 00 00 00 00 00 00 00 00  { nop; add32{{.*}}r1, r2, r3
 // CHECK-NOT: <?>
 // CHECK-NOT: <unknown>
 

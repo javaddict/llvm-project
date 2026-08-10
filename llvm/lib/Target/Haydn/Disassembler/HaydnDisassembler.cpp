@@ -615,17 +615,25 @@ static DecodeStatus tryDecodeFormatE(MCInst &Instr, uint64_t &Size,
                                DisAsm.getSubtargetInfo());
       }
       if (DS != MCDisassembler::Fail) {
-        // Cond-branch targets decode as the raw halfword field (simm12,
-        // Shift=0), but the encoder stores offset>>1 (WIDE_BranchSImm12
-        // ValueShift=1) and the dump/BundleSim contract is byte displacements
-        // (validate_target uses the printed imm as bytes). JAL already encodes
-        // bytes (ValueShift=0 -> formatEControlImmByteShift==0); hwloop is off.
-        // Shift the trailing cond-branch target imm <<1 to print bytes.
-        if (formatEControlImmByteShift(Logical) == 1 &&
-            Decoded.getNumOperands() > 0) {
+        // Format E member DecoderMethods emit raw field units. Recover dump
+        // bytes for BundleSim / validate_target:
+        //   cond-branch: halfword field (ValueShift=1) → <<1 on last imm
+        //   SET_HWLOOP / SET_HWLOOP_F2: Off1/Off2 word fields (ValueShift=2)
+        //     → <<2 on operands 1 and 2 (sel, off1, off2, cnt|rs)
+        // JAL already encodes/prints bytes (ValueShift=0).
+        const unsigned ByteShift = formatEControlImmByteShift(Logical);
+        if (ByteShift == 1 && Decoded.getNumOperands() > 0) {
           MCOperand &T = Decoded.getOperand(Decoded.getNumOperands() - 1);
           if (T.isImm())
             T.setImm(T.getImm() << 1);
+        } else if (ByteShift == 2) {
+          for (unsigned OI : {1u, 2u}) {
+            if (OI >= Decoded.getNumOperands())
+              break;
+            MCOperand &T = Decoded.getOperand(OI);
+            if (T.isImm())
+              T.setImm(T.getImm() << 2);
+          }
         }
         *Child = Decoded;
         AnyReal = true;

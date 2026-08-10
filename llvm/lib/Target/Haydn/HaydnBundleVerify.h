@@ -48,6 +48,17 @@ namespace bundle {
 /// Defined in HaydnVerifyBundles.cpp (avoids dual GET_INSTRINFO_ENUM includes).
 bool isResidualCycleFormingPseudo(unsigned Opc);
 
+/// Typed presentation expands allowed in AsmPrinter (B/RET/BR_JT/
+/// PseudoCALLIndirect). Every other residual executable pseudo is fatal at
+/// the late firewall — no silent drop inside committed BUNDLEs.
+bool isRepresentationExpandPseudo(unsigned Opc);
+
+/// Bare residual semantic pseudo (VerifyBundles + AsmPrinter): cycle-forming
+/// or Expand-owned multi-MI only. MultiSlot_Pseudo logicals are not residual
+/// while bare — Finalize owns setDesc+wrap.
+bool isExpandOwnedSemanticPseudo(unsigned Opc);
+bool isResidualExecutablePseudo(const MachineInstr &MI);
+
 /// Collect non-meta child opcodes of a BUNDLE root (schedule / MIR order).
 inline SmallVector<unsigned, 3>
 collectBundleMemberOpcodes(const MachineInstr &BundleRoot) {
@@ -83,6 +94,16 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
 
   if (MemberOpcodes.size() > Haydn::ISSUE_SLOT_COUNT)
     return std::string("memberCount > ISSUE_SLOT_COUNT (3)");
+
+  // One-to-one serialize: stamped row must have enough entries for every
+  // real member. E96TwoEntry with 3 reals used to pass verify and then drop
+  // a child at AsmPrinter (NumEntries from row imm only).
+  const unsigned RowEntries =
+      (Row == BundleFormatRowID::E96ThreeEntry) ? 3u : 2u;
+  if (MemberOpcodes.size() > RowEntries)
+    return std::string(
+        "BUNDLE membership exceeds stamped row entry count (E2 holds 2; "
+        "three real members require E96ThreeEntry)");
 
   auto GenBytes = productEncodedBytesFromPackets(Fmts.getPacketFormats());
   if (!GenBytes.has_value() || *GenBytes != productParcelBytes())
@@ -173,13 +194,18 @@ verifyCommittedBundle(const MachineInstr &BundleRoot, HaydnBaseMCFormats &Fmts,
   if (Err)
     return Err;
 
-  // Completion imm, when present, must be a known ID and match member count.
+  // Completion imm, when present, must be a known ID and match row+member
+  // count exactly — no stub/product reselection at verify or MC. Missing
+  // completion remains allowed on residual row-only stamps (BUNDLE 0);
+  // multi-member hard-root verify requires it separately.
   if (auto Comp = getBundleCompletionID(BundleRoot)) {
+    if (!isStubCompletion(*Comp) && !isProductLegalCompletion(*Comp))
+      return std::string("BUNDLE root has unknown CompletionStateID");
     CompletionStateID Expected =
         selectCompletionFor(*Row, Members.size());
-    if (*Comp != Expected && !isStubCompletion(*Comp) &&
-        !isProductLegalCompletion(*Comp))
-      return std::string("BUNDLE root has unknown CompletionStateID");
+    if (*Comp != Expected)
+      return std::string(
+          "BUNDLE root CompletionStateID does not match row and member count");
     if (OutPlan)
       OutPlan->Completion = *Comp;
   }
@@ -205,7 +231,23 @@ verifyExactHardRootCommit(const MachineInstr &BundleRoot,
     return std::string(
         "hard-root verify: membership exceeds ISSUE_SLOT_COUNT");
 
-  return verifyCommittedBundle(BundleRoot, Fmts, OutPlan);
+  // Durable stamp: hard roots carry row + completion so MC/AsmPrinter cannot
+  // reselect geometry or silently underfill from a lone FormatID imm.
+  if (!getBundleCompletionID(BundleRoot).has_value())
+    return std::string(
+        "hard-root verify: missing CompletionStateID on BUNDLE root");
+
+  auto Err = verifyCommittedBundle(BundleRoot, Fmts, OutPlan);
+  if (Err)
+    return Err;
+
+  // Row must be the product selection for this membership (E2 for 2, E3 for 3).
+  auto Row = getBundleRowID(BundleRoot);
+  assert(Row.has_value() && "verifyCommittedBundle requires a product row");
+  if (*Row != selectProductRowForMemberCount(Members.size()))
+    return std::string(
+        "hard-root verify: BundleFormatRowID does not match member count");
+  return std::nullopt;
 }
 
 } // namespace bundle

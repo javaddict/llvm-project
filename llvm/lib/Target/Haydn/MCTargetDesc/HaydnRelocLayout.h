@@ -13,12 +13,13 @@
 // never diverge: a writer÷4 / reader÷2 scale split or a flat HI20/LO16
 // 0xFFFF mask is structurally impossible.
 //
-// Branch/call PC-relative kinds use product scales from encoding_manual
+// Branch/call PC-relative kinds use the product RelocFieldInfo table
 // (halfword ÷2 for WIDE_* / BranchSImm16; CallSImm20 byte scale). FieldLsb
 // is Format E E2 e0 absolute parcel bits with r_offset = parcel origin.
-// GE96-03 golden formalization is still open; product keeps the documented
+// Golden branch-scale formalization remains open; product keeps the table
 // halfword scale (not silent ValueShift=0 invent). RelocTrans::Unresolved
-// remains for kinds without a published wire scale. Hwloop Off1/Off2 retain
+// remains for kinds without a published wire scale, and for unknown/
+// Invalid kinds (rowFor never falls open to None). Hwloop Off1/Off2 retain
 // ValueShift=2 from the explicit SET_HWLOOP displacement law.
 //
 // Lives in namespace llvm::HaydnReloc (distinct from the lld arch handler
@@ -132,12 +133,22 @@ void writeImage(uint8_t *Loc, unsigned NBytes, uint64_t Value);
 
 // Geometric bit patch (AIE patchNBytes): clear then set FieldSize bits of
 // FieldVal (already aligned to bit 0) at FieldLsb in the N-byte image.
+// Supports FieldLsb+FieldSize beyond 64 (Format E E3 e1 I20 @ bits[48:67]).
 void patchField(uint8_t *Loc, uint64_t FieldVal, unsigned NBytes,
                 unsigned FieldSize, unsigned FieldLsb);
 
 // Extract FieldSize bits at FieldLsb from the N-byte image (inverse of patchField).
 uint64_t readField(const uint8_t *Loc, unsigned NBytes, unsigned FieldSize,
                    unsigned FieldLsb);
+
+// Resolve FieldLsb for kinds whose absolute parcel bit position depends on the
+// live Format E mode/entry at Loc. Table FieldLsb is E2 e0 authority:
+//   WIDE_CallSImm20 — E3 JAL I20 at e0 [17:36] or e1 [48:67]
+//   HWLoopOff1/Off2 — E2 HWLRIII Off1/Off2 @ [13]/[36]; E3 F2 e0 @ [18]/[24],
+//     e1 @ [49]/[55] (golden absolute parcel bits; table default is E2 F2
+//     Off1@32 / Off2@38).
+// Returns the table default when Loc is not a recognizable Format E site.
+unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc);
 
 // Result of computing the field value from a relocation input.
 struct RelocCompute {

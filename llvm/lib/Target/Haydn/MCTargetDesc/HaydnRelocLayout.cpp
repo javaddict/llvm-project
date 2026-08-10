@@ -8,10 +8,11 @@
 //
 // Implementation of the single-source Haydn relocation geometry table and the
 // generic geometric patcher. See HaydnRelocLayout.h. Product FieldLsb is Format
-// E E2 e0 absolute parcel bits (r_offset = parcel origin). Scales follow
-// encoding_manual (branch/call halfword ÷2; CallSImm20 byte; hwloop ÷4).
-// GE96-03 still open for golden formalization — product does not invent a
-// second scale. RelocTrans::Unresolved remains for unpublished kinds.
+// E E2 e0 absolute parcel bits (r_offset = parcel origin). Scales follow the
+// product RelocFieldInfo table (branch/call halfword ÷2; CallSImm20 byte;
+// hwloop ÷4). Golden branch-scale formalization remains open — product does
+// not invent a second scale. RelocTrans::Unresolved remains for unpublished
+// kinds and for unknown/Invalid kinds (rowFor is fail-closed).
 // Both MC and lld delegate here.
 //
 //===----------------------------------------------------------------------===//
@@ -38,7 +39,8 @@ struct Row {
 // Product Format E (E96, E2 e0 ALU0 primary freestanding placement):
 //   I12 branch imm12         @ absolute parcel bits[24:35]  → FieldLsb=24
 //   RI12 branch imm12        @ absolute parcel bits[28:39]  → FieldLsb=28
-//   WIDE_Call / I20 (JAL)    @ absolute parcel bits[31:50]  → FieldLsb=31
+//   WIDE_Call / I20 (JAL)    @ E2 e0 absolute parcel bits[31:50] → FieldLsb=31
+//     E3 e0/e1 I20 positions differ (resolveFieldLsb): e0 [17:36], e1 [48:67].
 //   LO20 / RI20 (ADDI32)     @ absolute parcel bits[31:50]  → FieldLsb=31
 //   HI12 / LUI I12 imm12     @ absolute parcel bits[32:43]  → FieldLsb=32
 //     Golden E2 e0 ALU0 I12: reg[23:20], reserved[31:24]=0, imm[43:32].
@@ -50,12 +52,14 @@ struct Row {
 // MC emits r_offset = parcel origin (byte 0) so P is the hardware PC and
 // Align=2 range checks see even places. Residual s0 FieldLsb
 // (bits[15:4]/bits[23:4]) is retired for these product kinds.
-// HWLoopOff1/Off2 retain historical geometry until Format E hwloop lands.
+// HWLoopOff1/Off2: Format E absolute parcel bits (r_offset = parcel origin).
+// Table default is E2 e0 SET_HWLOOP_F2 (HWLRIIR); resolveFieldLsb covers
+// E2 SET_HWLOOP (HWLRIII) and E3 e0/e1 F2 windows from golden layout.
 constexpr Row Table[] = {
     {RelocKind::None, {0, 0, 0, 0, 1, false, false, RelocTrans::None}},
     {RelocKind::Data32, {4, 32, 0, 0, 1, true, false, RelocTrans::None}},
     {RelocKind::SImm16, {4, 16, 0, 0, 1, true, false, RelocTrans::None}},
-    // Branch/call product scales (encoding_manual halfword ÷2; CallSImm20 byte).
+    // Branch/call product scales (table halfword ÷2; CallSImm20 byte).
     {RelocKind::BranchSImm16, {4, 16, 0, 1, 2, true, true, RelocTrans::None}},
     // CallSImm20: signed PC-relative BYTE offset (ValueShift=0). Used by
     // assembler-independent YAML thunk geometry tests; FieldLsb=4 is a
@@ -77,9 +81,14 @@ constexpr Row Table[] = {
     // Format E ADDI32 RI20: imm20 @ parcel bits[31:50] (golden abs[50:31]).
     {RelocKind::LO20, {8, 20, 31, 0, 1, false, false, RelocTrans::Lo20}},
     {RelocKind::PC_LO20, {8, 20, 31, 0, 1, false, true, RelocTrans::Lo20}},
-    // SET_HWLOOP Off1/Off2: explicit displacement <<2 → ValueShift=2, Align=4.
-    {RelocKind::HWLoopOff1, {6, 6, 1, 2, 4, false, true, RelocTrans::None}},
-    {RelocKind::HWLoopOff2, {6, 12, 7, 2, 4, false, true, RelocTrans::None}},
+    // SET_HWLOOP_F2 Off1/Off2 (Format E E2 e0 HWLRIIR golden absolute bits):
+    //   uimm6  offset1 @ parcel bits[37:32] → FieldLsb=32
+    //   uimm12 offset2 @ parcel bits[49:38] → FieldLsb=38
+    // ValueShift=2 (byte offset ÷4), Align=4. NBytes=12 covers E3 e1 windows
+    // past bit 63 via patchField bit-walk. resolveFieldLsb adjusts for
+    // E2 HWLRIII and E3 e0/e1 placements.
+    {RelocKind::HWLoopOff1, {12, 6, 32, 2, 4, false, true, RelocTrans::None}},
+    {RelocKind::HWLoopOff2, {12, 12, 38, 2, 4, false, true, RelocTrans::None}},
     // Format E I12 one-reg branch (BEQZ/BNEZ): imm12 @ parcel bits[32:43]
     // (ALU0 entry0 window; same I12 field position as HI12/RI12 below).
     // FieldLsb was stale 24 (historical) — LLD wrote imm into golden-reserved
@@ -92,11 +101,11 @@ constexpr Row Table[] = {
     // (was stale 28; same field-position bug as the one-reg row above).
     {RelocKind::WIDE_BranchSImm12_RI,
      {6, 12, 32, 1, 2, true, true, RelocTrans::None}},
-    // Format E I20 call (JAL): imm20 @ parcel bits[31:50] (golden abs[50:31]).
-    // Byte PC-relative; NBytes=8 so bits[48:50] are not truncated (NBytes=6
-    // only images [47:0] — negative offsets became 0x1Fxxxx garbage).
+    // Format E I20 call (JAL): table FieldLsb=31 is E2 e0 (golden abs[50:31]).
+    // E3 e0/e1 imm windows differ — resolveFieldLsb reads mode/entry at Loc.
+    // Byte PC-relative; NBytes=12 covers E3 e1 imm @ bits[48:67].
     {RelocKind::WIDE_CallSImm20,
-     {8, 20, 31, 0, 1, true, true, RelocTrans::None}},
+     {12, 20, 31, 0, 1, true, true, RelocTrans::None}},
     {RelocKind::C_BranchSImm4, {2, 4, 0, 1, 2, true, true, RelocTrans::None}},
     {RelocKind::C_UImm4, {2, 4, 0, 0, 1, false, false, RelocTrans::None}},
     {RelocKind::C_BranchSImm10, {2, 10, 4, 1, 2, true, true, RelocTrans::None}},
@@ -114,11 +123,18 @@ constexpr Row Table[] = {
     {RelocKind::LS_IMM, {6, 6, 28, 0, 1, true, false, RelocTrans::None}},
 };
 
+// Fail-closed sentinel: unknown / Invalid kinds are never product-ready.
+// Returning Table[0] (None, Trans::None) used to make isRelocTransformReady
+// succeed for RelocKind::Invalid and any out-of-table value.
+constexpr Row kInvalidRow = {
+    RelocKind::Invalid,
+    {0, 0, 0, 0, 1, false, false, RelocTrans::Unresolved}};
+
 const Row &rowFor(RelocKind R) {
   for (const Row &RowEntry : Table)
     if (RowEntry.Kind == R)
       return RowEntry;
-  return Table[0]; // None fallback
+  return kInvalidRow;
 }
 
 // Shared diagnostic for kinds whose value transform is not product-closed.
@@ -153,6 +169,9 @@ uint64_t readImage(const uint8_t *Loc, unsigned NBytes) {
   case 8:
     // Full low 64 bits of a Format E parcel (enough for imm20 @ [31:50]).
     return readImage(Loc, 4) | (readImage(Loc + 4, 4) << 32);
+  case 12:
+    // Low 64 only — callers that need bits[64:95] use bit-walk patch/read.
+    return readImage(Loc, 8);
   }
 }
 
@@ -181,22 +200,129 @@ void writeImage(uint8_t *Loc, unsigned NBytes, uint64_t Value) {
     writeImage(Loc, 4, Value & 0xFFFFFFFFULL);
     writeImage(Loc + 4, 4, (Value >> 32) & 0xFFFFFFFFULL);
     break;
+  case 12:
+    // Preserve bytes[8:11]; only rewrite low 64 via the 8-byte path when the
+    // field fits below bit 64. Fields past bit 63 use patchField bit-walk.
+    writeImage(Loc, 8, Value);
+    break;
   }
 }
 
 void patchField(uint8_t *Loc, uint64_t FieldVal, unsigned NBytes,
                 unsigned FieldSize, unsigned FieldLsb) {
-  uint64_t Image = readImage(Loc, NBytes);
+  // Bit-walk so Format E fields past bit 63 (E3 e1 I20 @ [48:67]) patch
+  // correctly. uint64_t image math cannot represent FieldLsb+FieldSize > 64.
+  if (FieldSize == 0 || NBytes == 0)
+    return;
   uint64_t Mask = (FieldSize >= 64) ? ~0ULL : ((1ULL << FieldSize) - 1);
-  Image = (Image & ~(Mask << FieldLsb)) | ((FieldVal & Mask) << FieldLsb);
-  writeImage(Loc, NBytes, Image);
+  FieldVal &= Mask;
+  for (unsigned B = 0; B < FieldSize; ++B) {
+    const unsigned Bit = FieldLsb + B;
+    const unsigned ByteIdx = Bit / 8;
+    if (ByteIdx >= NBytes)
+      break;
+    const uint8_t BitInByte = static_cast<uint8_t>(Bit % 8);
+    const uint8_t M = static_cast<uint8_t>(1u << BitInByte);
+    if ((FieldVal >> B) & 1ull)
+      Loc[ByteIdx] = static_cast<uint8_t>(Loc[ByteIdx] | M);
+    else
+      Loc[ByteIdx] = static_cast<uint8_t>(Loc[ByteIdx] & ~M);
+  }
 }
 
 uint64_t readField(const uint8_t *Loc, unsigned NBytes, unsigned FieldSize,
                    unsigned FieldLsb) {
-  uint64_t Image = readImage(Loc, NBytes);
-  uint64_t Mask = (FieldSize >= 64) ? ~0ULL : ((1ULL << FieldSize) - 1);
-  return (Image >> FieldLsb) & Mask;
+  if (FieldSize == 0 || NBytes == 0)
+    return 0;
+  uint64_t Out = 0;
+  const unsigned Cap = FieldSize >= 64 ? 64 : FieldSize;
+  for (unsigned B = 0; B < Cap; ++B) {
+    const unsigned Bit = FieldLsb + B;
+    const unsigned ByteIdx = Bit / 8;
+    if (ByteIdx >= NBytes)
+      break;
+    if ((Loc[ByteIdx] >> (Bit % 8)) & 1u)
+      Out |= (1ull << B);
+  }
+  return Out;
+}
+
+unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
+  const RelocFieldInfo &I = getRelocFieldInfo(R);
+  if (!Loc)
+    return I.FieldLsb;
+
+  auto GetBits = [&](unsigned Lo, unsigned Width) -> unsigned {
+    unsigned V = 0;
+    for (unsigned B = 0; B < Width; ++B) {
+      const unsigned Bit = Lo + B;
+      if ((Loc[Bit / 8] >> (Bit % 8)) & 1u)
+        V |= (1u << B);
+    }
+    return V;
+  };
+
+  // Format E header: indicator bits[2:0]=7, entry_num bit[3] (0=E2, 1=E3).
+  const unsigned Indicator = Loc[0] & 0x7u;
+  const unsigned EntryNum = (Loc[0] >> 3) & 0x1u;
+
+  // SET_HWLOOP_F2 / SET_HWLOOP Off1/Off2 — golden absolute parcel bits.
+  // Table default is E2 e0 F2 (HWLRIIR): Off1@32, Off2@38.
+  if (R == RelocKind::HWLoopOff1 || R == RelocKind::HWLoopOff2) {
+    const bool IsOff1 = R == RelocKind::HWLoopOff1;
+    if (Indicator != 0x7u)
+      return I.FieldLsb;
+
+    if (EntryNum == 0) {
+      // E2 e0: type field at entry bits[6:2] → abs bits[12:8] (5b).
+      // HWLRIIR (F2)=0x0c, HWLRIII (SET)=0x10 (generated Inst{} packing).
+      const unsigned Type = GetBits(8, 5);
+      if (Type == 0x10u)
+        // SET_HWLOOP HWLRIII: Off1@bits[18:13], Off2@bits[47:36].
+        return IsOff1 ? 13u : 36u;
+      // SET_HWLOOP_F2 HWLRIIR (and unrecognized): table default.
+      return IsOff1 ? 32u : 38u;
+    }
+
+    // E3: F2 only. map@entry+0 (2b)=2 (ALU0), type@entry+2 (4b)=0xc.
+    // e0 @ abs[6:36] → Off1@18 Off2@24; e1 @ abs[37:67] → Off1@49 Off2@55.
+    auto IsE3HwloopF2 = [&](unsigned EntryLo) -> bool {
+      return GetBits(EntryLo, 2) == 2u && GetBits(EntryLo + 2, 4) == 0xcu;
+    };
+    if (IsE3HwloopF2(6))
+      return IsOff1 ? 18u : 24u;
+    if (IsE3HwloopF2(37))
+      return IsOff1 ? 49u : 55u;
+    return I.FieldLsb;
+  }
+
+  if (R != RelocKind::WIDE_CallSImm20)
+    return I.FieldLsb;
+
+  if (Indicator != 0x7u)
+    return I.FieldLsb;
+
+  if (EntryNum == 0)
+    return 31u; // E2 e0 I20: Inst e0={imm20, c0, dest, …} → abs [31:50]
+
+  // E3 I20 JAL: e0/e1 Inst = {imm20, dest4, opc1, type4, map2} (MSB-first).
+  // map @ entry+0 (2b), type @ entry+2 (4b), opc @ entry+6 (1b), dest @
+  // entry+7 (4b), imm @ entry+11 (20b). ALU0 UnitMap=2, TypeCode=14, Opc=1.
+  auto IsE3JalI20 = [&](unsigned EntryLo) -> bool {
+    return GetBits(EntryLo, 2) == 2u && GetBits(EntryLo + 2, 4) == 14u &&
+           GetBits(EntryLo + 6, 1) == 1u;
+  };
+
+  // E3 e0 @ parcel bits[6:36] → imm abs [17:36]
+  if (IsE3JalI20(6))
+    return 17u;
+  // E3 e1 @ parcel bits[37:67] → imm abs [48:67]
+  if (IsE3JalI20(37))
+    return 48u;
+
+  // Unrecognized E3 call site: keep table default (E2 geometry) rather than
+  // invent a third window.
+  return I.FieldLsb;
 }
 
 RelocCompute computeRelocValue(RelocKind R, uint64_t Value) {
@@ -302,7 +428,8 @@ RelocAddend tryReadRelocAddend(RelocKind R, const uint8_t *Loc) {
     return Out;
   }
 
-  uint64_t Field = readField(Loc, I.NBytes, I.FieldSize, I.FieldLsb);
+  const unsigned FieldLsb = resolveFieldLsb(R, Loc);
+  uint64_t Field = readField(Loc, I.NBytes, I.FieldSize, FieldLsb);
 
   switch (I.Trans) {
   case RelocTrans::Unresolved:

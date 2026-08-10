@@ -29,10 +29,10 @@
 // and the mnemonic line are the SAME line in objdump output.
 // The byte offset (0xc, 0x18, 0x24 — not 0x10/0x08) is the width
 // assertion: 12 bytes per parcel (Format E EncodedBytes).
-// CHECK: {{.*}}0: 07 cb 10 32 00 00 00 00 00 00 00 00  	{ 		sub32	r1, r2, r3; 	nop }
-// CHECK: c: 07 0b 41 65 00 00 00 00 00 00 00 00  	{ 		and32	r4, r5, r6; 	nop }
-// CHECK: {{.*}}18: 07 2b 71 98 00 00 00 00 00 00 00 00  	{ 		or32	r7, r8, r9; 	nop }
-// CHECK: {{.*}}24: 07 4b a1 0b 00 00 00 00 00 00 00 00  	{ 		xor32	r10, r11, r0; 	nop }
+// CHECK: {{.*}}0: 07 cb 10 32 00 00 00 00 00 00 00 00  	{ nop; sub32	r1, r2, r3 }
+// CHECK: c: 07 0b 41 65 00 00 00 00 00 00 00 00  	{ nop; and32	r4, r5, r6 }
+// CHECK: {{.*}}18: 07 2b 71 98 00 00 00 00 00 00 00 00  	{ nop; or32	r7, r8, r9 }
+// CHECK: {{.*}}24: 07 4b a1 0b 00 00 00 00 00 00 00 00  	{ nop; xor32	r10, r11, r0 }
 // COM: CHECK: 20:
 // COM: CHECK: or32 r7, r8, r9
 // COM: CHECK: 30:

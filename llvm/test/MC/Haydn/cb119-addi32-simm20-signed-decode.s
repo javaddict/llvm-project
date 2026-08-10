@@ -32,11 +32,11 @@ cb119_addi32_simm20:
     .size cb119_addi32_simm20, .-cb119_addi32_simm20
 
 # CHECK-LABEL: <cb119_addi32_simm20>:
-# CHECK: {{.*}}0: { addi32 r12, r12, -132688; nop }
-# CHECK: c: { addi32 r1, r0, -524288; nop }
-# CHECK: {{.*}}18: { addi32 r2, r0, 524287; nop }
-# CHECK: {{.*}}24: { addi32 r3, r0, -1; nop }
-# CHECK: {{.*}}30: { addi32 r4, r0, 1; nop }
+# CHECK: {{.*}}0: { nop; addi32 r12, r12, -132688 }
+# CHECK: c: { nop; addi32 r1, r0, -524288 }
+# CHECK: {{.*}}18: { nop; addi32 r2, r0, 524287 }
+# CHECK: {{.*}}24: { nop; addi32 r3, r0, -1 }
+# CHECK: {{.*}}30: { nop; addi32 r4, r0, 1 }
 # CHECK-NOT: 915888
 # CHECK-NOT: 524288
 # CHECK-NOT: 1048575

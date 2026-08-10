@@ -1,86 +1,93 @@
-# RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
+# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
+# RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# REQUIRES: haydn-registered-target
 
 # Role: object — absolute value instructions.
+# Converted from parse-only to product MC contract (encode→obj→disasm).
+# CHECKs regenerated from live objdump (Format E 12-byte parcels).
+
+# CHECK-LABEL: <.text>:
+# CHECK: {{.*}}0: 07 24 01 01 00 00 00 00 00 00 00 00{{.*}}abs32s
+# CHECK: {{.*}}c: 07 04 21 03 00 00 00 00 00 00 00 00{{.*}}abs32
+# CHECK: {{.*}}18: 07 64 41 05 00 00 00 00 00 00 00 00{{.*}}neg32s
+# CHECK: {{.*}}24: 07 44 61 07 00 00 00 00 00 00 00 00{{.*}}neg32
+# CHECK: {{.*}}30: 07 6b 81 a9 00 00 00 00 00 00 00 00{{.*}}brev32
+# CHECK: {{.*}}3c: 07 84 b1 0c 00 00 00 00 00 00 00 00{{.*}}nsa32
+# CHECK: {{.*}}48: 07 a4 01 01 00 00 00 00 00 00 00 00{{.*}}nsau32
+# CHECK: {{.*}}54: 07 c4 21 03 00 00 00 00 00 00 00 00{{.*}}popcount32
+# CHECK: {{.*}}60: 07 06 44 05 02 00 00 00 00 00 00 00{{.*}}slli32
+# CHECK: {{.*}}6c: 07 eb 61 87 00 00 00 00 00 00 00 00{{.*}}sll32
+# CHECK: {{.*}}78: 07 06 91 0a 03 00 00 00 00 00 00 00{{.*}}srli32
+# CHECK: {{.*}}84: 07 cb b1 0c 00 00 00 00 00 00 00 00{{.*}}srl32
+# CHECK: {{.*}}90: 07 06 12 02 05 00 00 00 00 00 00 00{{.*}}srai32
+# CHECK: {{.*}}9c: 07 8b 31 54 00 00 00 00 00 00 00 00{{.*}}sra32
+# CHECK: {{.*}}a8: 07 ab 60 87 00 00 00 00 00 00 00 00{{.*}}add32s
+# CHECK: {{.*}}b4: 07 eb 90 ba 00 00 00 00 00 00 00 00{{.*}}sub32s
+# CHECK: {{.*}}c0: 07 0f c6 00 08 00 00 00 00 00 00 00{{.*}}addi32s
+# CHECK: {{.*}}cc: 07 0f 1e 02 fc ff 07 00 00 00 00 00{{.*}}subi32s
+# CHECK-NOT: <unknown>
 
 #===----------------------------------------------------------------------===
 # Test absolute value instructions
 #===----------------------------------------------------------------------===
 
-# CHECK: abs32s r0, r1
 
 ABS32S R0, R1
 
-# CHECK: abs32 r2, r3
 ABS32 R2, R3
 
 #===----------------------------------------------------------------------===
 # Test negation instructions
 #===----------------------------------------------------------------------===
 
-# CHECK: neg32s r4, r5
 NEG32S R4, R5
 
-# CHECK: neg32 r6, r7
 NEG32 R6, R7
 
 #===----------------------------------------------------------------------===
 # Test bitwise reverse instruction
 #===----------------------------------------------------------------------===
 
-# CHECK: brev32 r8, r9, r10
 BREV32 R8, R9, R10
 
 #===----------------------------------------------------------------------===
 # Test count leading/trailing zeros
 #===----------------------------------------------------------------------===
 
-# CHECK: nsa32 r11, r12
 NSA32 R11, R12
 
-# CHECK: nsau32 r0, r1
 NSAU32 R0, R1
 
 #===----------------------------------------------------------------------===
 # Test population count
 #===----------------------------------------------------------------------===
 
-# CHECK: popcount32 r2, r3
 POPCOUNT32 R2, R3
 
 #===----------------------------------------------------------------------===
 # Test DSP-specific shift operations
 #===----------------------------------------------------------------------===
 
-# CHECK: slli32 r4, r5, 2
 SLLI32 R4, R5, 2
 
-# CHECK: sll32 r6, r7, r8
 SLL32 R6, R7, R8
 
-# CHECK: srli32 r9, r10, 3
 SRLI32 R9, R10, 3
 
-# CHECK: srl32 r11, r12, r0
 SRL32 R11, R12, R0
 
-# CHECK: srai32 r1, r2, 5
 SRAI32 R1, R2, 5
 
-# CHECK: sra32 r3, r4, r5
 SRA32 R3, R4, R5
 
 #===----------------------------------------------------------------------===
 # Test saturation arithmetic variants
 #===----------------------------------------------------------------------===
 
-# CHECK: add32s r6, r7, r8
 ADD32S R6, R7, R8
 
-# CHECK: sub32s r9, r10, r11
 SUB32S R9, R10, R11
 
-# CHECK: addi32s r12, r0, 16
 ADDI32S R12, R0, 16
 
-# CHECK: subi32s r1, r2, -8
 SUBI32S R1, R2, -8

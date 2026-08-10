@@ -1,12 +1,12 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o
 # RUN: llvm-objdump -d %t.o | FileCheck %s
 # REQUIRES: haydn-registered-target
-// CHECK: {{.*}}0: 07 eb 11 c1 00 00 00 00 00 00 00 00 { sll32 r1, r1, r12; nop }
-// CHECK: {{.*}}c: 07 8b 21 43 00 00 00 00 00 00 00 00 { sra32 r2, r3, r4; nop }
-// CHECK: {{.*}}18: 07 8b 50 76 00 00 00 00 00 00 00 00 { add32 r5, r6, r7; nop }
-// CHECK: {{.*}}24: 07 0b 82 a9 00 00 00 00 00 00 00 00 { max32 r8, r9, r10; nop }
-// CHECK: {{.*}}30: 07 ab 06 21 00 00 00 00 00 00 00 00 { or64 d0, d1, d2; nop }
-// CHECK: {{.*}}3c: 07 0b 34 54 00 00 00 00 00 00 00 00 { add64 d3, d4, d5; nop }
+// CHECK: {{.*}}0: 07 eb 11 c1 00 00 00 00 00 00 00 00 { nop; sll32 r1, r1, r12 }
+// CHECK: {{.*}}c: 07 8b 21 43 00 00 00 00 00 00 00 00 { nop; sra32 r2, r3, r4 }
+// CHECK: {{.*}}18: 07 8b 50 76 00 00 00 00 00 00 00 00 { nop; add32 r5, r6, r7 }
+// CHECK: {{.*}}24: 07 0b 82 a9 00 00 00 00 00 00 00 00 { nop; max32 r8, r9, r10 }
+// CHECK: {{.*}}30: 07 ab 06 21 00 00 00 00 00 00 00 00 { nop; or64 d0, d1, d2 }
+// CHECK: {{.*}}3c: 07 0b 34 54 00 00 00 00 00 00 00 00 { nop; add64 d3, d4, d5 }
 
 # Role: object — Phase-2 decoder purge collateral (prior revision): historically a hybrid test.
 

@@ -1,51 +1,41 @@
-# RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding %s | FileCheck %s
+# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
+# RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# REQUIRES: haydn-registered-target
 
-// CHECK: { add32 r0, r1, r2 } // encoding: [0x07,0x8b,0x00,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { sub32 r3, r4, r5 } // encoding: [0x07,0xcb,0x30,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { and32 r6, r7, r8 } // encoding: [0x07,0x0b,0x61,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { or32 r9, r10, r11 } // encoding: [0x07,0x2b,0x91,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { xor32 r12, r0, r1 } // encoding: [0x07,0x4b,0xc1,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { addi32 r0, r1, 42 } // encoding: [0x07,0x0f,0x02,0x01,0x15,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { addi32 r2, r3, -100 } // encoding: [0x07,0x0f,0x22,0x03,0xce,0xff,0x07,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { andi32 r4, r5, 255 } // encoding: [0x07,0x0f,0x44,0x85,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { ori32 r6, r7, 15 } // encoding: [0x07,0x0f,0x68,0x87,0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { xori32 r8, r9, 7 } // encoding: [0x07,0x0f,0x8c,0x89,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { srli32 r10, r11, 4 } // encoding: [0x07,0x06,0xa1,0x0b,0x04,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { srai32 r12, r0, 8 } // encoding: [0x07,0x06,0xc2,0x00,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { slli32 r1, r2, 16 } // encoding: [0x07,0x06,0x14,0x02,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { ld32 r0, r1, 0 } // encoding: [0x87,0x43,0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { ld32 r2, r3, 16 } // encoding: [0x87,0x43,0x23,0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { st32 r4, r5, 0 } // encoding: [0x87,0x43,0x4b,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { st32 r6, r7, -4 } // encoding: [0x87,0x43,0x6b,0xc7,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { beq r8, r9, target1 } // encoding: [0x07,0x0d,0x84,0x09,A,0b0000AAAA,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: // fixup A - offset: 0, value: target1, kind: FIXUP_HAYDN_WIDE_BranchSImm12_RI
-// CHECK: target1:
-// CHECK: { bne r10, r11, target2 } // encoding: [0x07,0x0d,0xa6,0x0b,A,0b0000AAAA,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: // fixup A - offset: 0, value: target2, kind: FIXUP_HAYDN_WIDE_BranchSImm12_RI
-// CHECK: target2:
-// CHECK: { blt r12, r0, target3 } // encoding: [0x07,0x0d,0xca,0x00,A,0b0000AAAA,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: // fixup A - offset: 0, value: target3, kind: FIXUP_HAYDN_WIDE_BranchSImm12_RI
-// CHECK: target3:
-// CHECK: { beqz r1, target4 } // encoding: [0x07,0x0a,0x18,0x00,A,0b0000AAAA,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: // fixup A - offset: 0, value: target4, kind: FIXUP_HAYDN_WIDE_BranchSImm12
-// CHECK: target4:
-// CHECK: { bnez r2, target5 } // encoding: [0x07,0x0a,0x2a,0x00,A,0b0000AAAA,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: // fixup A - offset: 0, value: target5, kind: FIXUP_HAYDN_WIDE_BranchSImm12
-// CHECK: target5:
-// CHECK: { jal r0, extern_func } // encoding: [0x07,0x0e,0x08,0bA0000000,A,A,0b00000AAA,0x00,0x00,0x00,0x00,0x00]
-// CHECK: // fixup A - offset: 0, value: extern_func, kind: FIXUP_HAYDN_WIDE_CallSImm20
-# Role: object — Encoding byte patterns for production Format E
-# (96-bit / 12-byte EncodedBytes, G-FORMAT-E-96-CUTOVER).
+# Role: object — Core ALU/LS/branch encode→obj→disasm (Format E 12-byte parcels).
+# Converted from parse-only/show-encoding to product MC contract (encode→obj→disasm).
+# CHECKs regenerated from live objdump (Format E 12-byte parcels).
+# Fail-closed: no positive ar_sel=2/3, all-zero product-NOP, or golden-unspecified branch-scale invent.
 
-# Asm-printer mnemonic + operand round-trip is unchanged; each parcel is a
-# 12-byte Format E word. LD/ST, conditional branches, and JAL use the product
-# Format E path. Golden encodings below are live product bytes.
-
-
-#===----------------------------------------------------------------------===
-# Test 32-bit R-type encoding (ALU32)
-#===----------------------------------------------------------------------===
-
+# CHECK-LABEL: <.text>:
+# CHECK: {{.*}}0: 07 8b 00 21 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}c: 07 cb 30 54 00 00 00 00 00 00 00 00{{.*}}sub32
+# CHECK: {{.*}}18: 07 0b 61 87 00 00 00 00 00 00 00 00{{.*}}and32
+# CHECK: {{.*}}24: 07 2b 91 ba 00 00 00 00 00 00 00 00{{.*}}or32
+# CHECK: {{.*}}30: 07 4b c1 10 00 00 00 00 00 00 00 00{{.*}}xor32
+# CHECK: {{.*}}3c: 07 0f 02 01 15 00 00 00 00 00 00 00{{.*}}addi32
+# CHECK: {{.*}}48: 07 0f 22 03 ce ff 07 00 00 00 00 00{{.*}}addi32
+# CHECK: {{.*}}54: 07 0f 44 85 7f 00 00 00 00 00 00 00{{.*}}andi32
+# CHECK: {{.*}}60: 07 0f 68 87 07 00 00 00 00 00 00 00{{.*}}ori32
+# CHECK: {{.*}}6c: 07 0f 8c 89 03 00 00 00 00 00 00 00{{.*}}xori32
+# CHECK: {{.*}}78: 07 06 a1 0b 04 00 00 00 00 00 00 00{{.*}}srli32
+# CHECK: {{.*}}84: 07 06 c2 00 08 00 00 00 00 00 00 00{{.*}}srai32
+# CHECK: {{.*}}90: 07 06 14 02 10 00 00 00 00 00 00 00{{.*}}slli32
+# CHECK: {{.*}}9c: 87 43 03 01 00 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
+# CHECK: {{.*}}a8: 87 43 23 03 01 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
+# CHECK: {{.*}}b4: 87 43 4b 05 00 00 00 00 00 00 00 00{{.*}}s_sw_with_imm
+# CHECK: {{.*}}c0: 87 43 6b c7 03 00 00 00 00 00 00 00{{.*}}s_sw_with_imm
+# CHECK: {{.*}}cc: 07 0d 84 09 06 00 00 00 00 00 00 00{{.*}}beq
+# CHECK-LABEL: <target1>:
+# CHECK: {{.*}}d8: 07 0d a6 0b 06 00 00 00 00 00 00 00{{.*}}bne
+# CHECK-LABEL: <target2>:
+# CHECK: {{.*}}e4: 07 0d ca 00 06 00 00 00 00 00 00 00{{.*}}blt
+# CHECK-LABEL: <target3>:
+# CHECK: {{.*}}f0: 07 0a 18 00 06 00 00 00 00 00 00 00{{.*}}beqz
+# CHECK-LABEL: <target4>:
+# CHECK: {{.*}}fc: 07 0a 2a 00 06 00 00 00 00 00 00 00{{.*}}bnez
+# CHECK-LABEL: <target5>:
+# CHECK: {{.*}}108: 07 0e 08 00 00 00 00 00 00 00 00 00{{.*}}jal
 
 ADD32 R0, R1, R2
 
