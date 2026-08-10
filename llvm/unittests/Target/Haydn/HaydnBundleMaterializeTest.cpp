@@ -22,6 +22,7 @@
 #include "HaydnBundle.h"
 #include "HaydnBundleMaterialize.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
+#include "HaydnTestMCInstrInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "gtest/gtest.h"
 
@@ -102,18 +103,18 @@ static void expectValidSplit(ArrayRef<unsigned> Ops, HaydnMCFormats &Fmts,
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleMaterializeTest, EmptyInput) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   expectValidSplit({}, Fmts, /*Min=*/0, /*Max=*/0);
 }
 
 TEST(HaydnBundleMaterializeTest, SingleOpOneCycle) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::ADD32};
   expectValidSplit(Ops, Fmts, 1, 1);
 }
 
 TEST(HaydnBundleMaterializeTest, ThreeAluOneCycle) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32};
   expectValidSplit(Ops, Fmts, 1, 1);
 }
@@ -123,19 +124,19 @@ TEST(HaydnBundleMaterializeTest, ThreeAluOneCycle) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleMaterializeTest, TwoStoresSplitToTwoCycles) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_SW_WITH_IMM, Haydn::S_SW_WITH_IMM};
   expectValidSplit(Ops, Fmts, 2, 2);
 }
 
 TEST(HaydnBundleMaterializeTest, ThreeStoresSplitToThreeCycles) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_SW_WITH_IMM, Haydn::S_SW_WITH_IMM, Haydn::S_SW_WITH_IMM};
   expectValidSplit(Ops, Fmts, 3, 3);
 }
 
 TEST(HaydnBundleMaterializeTest, StoreAluStoreSplitsThird) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_SW_WITH_IMM, Haydn::ADD32, Haydn::S_SW_WITH_IMM};
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
   expectValidSplit(Ops, Fmts, 2, 2);
@@ -145,13 +146,13 @@ TEST(HaydnBundleMaterializeTest, StoreAluStoreSplitsThird) {
 }
 
 TEST(HaydnBundleMaterializeTest, DualST64AlsoSplits) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::D_SDW_WITH_IMM, Haydn::D_SDW_WITH_IMM};
   expectValidSplit(Ops, Fmts, 2, 2);
 }
 
 TEST(HaydnBundleMaterializeTest, ST32ThenST64Split) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_SW_WITH_IMM, Haydn::D_SDW_WITH_IMM};
   expectValidSplit(Ops, Fmts, 2, 2);
 }
@@ -161,52 +162,52 @@ TEST(HaydnBundleMaterializeTest, ST32ThenST64Split) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleMaterializeTest, DualLoadOneCycle) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_LW_WITH_IMM, Haydn::S_LW_WITH_IMM};
   expectValidSplit(Ops, Fmts, 1, 1);
 }
 
 TEST(HaydnBundleMaterializeTest, DualLD64OneCycle) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::D_LDW_WITH_IMM, Haydn::D_LDW_WITH_IMM};
   expectValidSplit(Ops, Fmts, 1, 1);
 }
 
 TEST(HaydnBundleMaterializeTest, TripleLoadSplitsThird) {
   // LD is S0|S1 only — third load cannot pack.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_LW_WITH_IMM, Haydn::S_LW_WITH_IMM, Haydn::S_LW_WITH_IMM};
   expectValidSplit(Ops, Fmts, 2, 2);
 }
 
 TEST(HaydnBundleMaterializeTest, LoadMacOneCycle) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_LW_WITH_IMM, Haydn::X2MULA32};
   expectValidSplit(Ops, Fmts, 1, 1);
 }
 
 TEST(HaydnBundleMaterializeTest, LoadMacAluOneCycle) {
   // Classic DSP fill: LD (S0|S1) + MAC (S1|S2) + ALU (any free).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_LW_WITH_IMM, Haydn::X2MULA32, Haydn::ADD32};
   expectValidSplit(Ops, Fmts, 1, 1);
 }
 
 TEST(HaydnBundleMaterializeTest, StoreAndAlu64OneCycle) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_SW_WITH_IMM, Haydn::ADD64};
   expectValidSplit(Ops, Fmts, 1, 1);
 }
 
 TEST(HaydnBundleMaterializeTest, DualAlu64OneCycle) {
   // ADD64 is S1|S2 — two fit, third must split.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::ADD64, Haydn::SLL64};
   expectValidSplit(Ops, Fmts, 1, 1);
 }
 
 TEST(HaydnBundleMaterializeTest, TripleAlu64SplitsThird) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::ADD64, Haydn::SLL64, Haydn::MAX64};
   expectValidSplit(Ops, Fmts, 2, 2);
 }
@@ -216,13 +217,13 @@ TEST(HaydnBundleMaterializeTest, TripleAlu64SplitsThird) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleMaterializeTest, FourAluSplitToTwoCycles) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32, Haydn::ADD32};
   expectValidSplit(Ops, Fmts, 2, 2);
 }
 
 TEST(HaydnBundleMaterializeTest, SixAluSplitToTwoFullCycles) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32,
                     Haydn::SUB32, Haydn::NEG32, Haydn::ADDI32};
   expectValidSplit(Ops, Fmts, 2, 2);
@@ -233,7 +234,7 @@ TEST(HaydnBundleMaterializeTest, SixAluSplitToTwoFullCycles) {
 }
 
 TEST(HaydnBundleMaterializeTest, SevenAluSplitToThreeCycles) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32, Haydn::SUB32,
                     Haydn::NEG32,  Haydn::ADDI32, Haydn::ADD32};
   expectValidSplit(Ops, Fmts, 3, 3);
@@ -244,21 +245,21 @@ TEST(HaydnBundleMaterializeTest, SevenAluSplitToThreeCycles) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleMaterializeTest, SplitPreservesOrderAndCoverage) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_SW_WITH_IMM, Haydn::S_SW_WITH_IMM, Haydn::ADD32, Haydn::S_SW_WITH_IMM};
   expectValidSplit(Ops, Fmts, 3, 3);
 }
 
 TEST(HaydnBundleMaterializeTest, StoreLoadMacPreferPack) {
   // ST S0 + LD may fight for S0|S1 — greedy may pack ST+LD or ST alone.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_SW_WITH_IMM, Haydn::S_LW_WITH_IMM, Haydn::X2MULA32};
   expectValidSplit(Ops, Fmts, 1, 2);
 }
 
 TEST(HaydnBundleMaterializeTest, AlternatingStoreAlu) {
   // ST, ALU, ST, ALU, ST — each ST needs S0; ALU can ride with one ST.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_SW_WITH_IMM, Haydn::ADD32, Haydn::S_SW_WITH_IMM, Haydn::XOR32,
                     Haydn::S_SW_WITH_IMM};
   expectValidSplit(Ops, Fmts, 3, 3);
@@ -266,13 +267,13 @@ TEST(HaydnBundleMaterializeTest, AlternatingStoreAlu) {
 
 TEST(HaydnBundleMaterializeTest, DualMacOneCycle) {
   // MAC is S1|S2 — dual MAC packs; third splits.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::X2MULA32, Haydn::X2MULA32};
   expectValidSplit(Ops, Fmts, 1, 1);
 }
 
 TEST(HaydnBundleMaterializeTest, TripleMacSplitsThird) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::X2MULA32, Haydn::X2MULA32, Haydn::X2MULA32};
   expectValidSplit(Ops, Fmts, 2, 2);
 }
@@ -283,13 +284,13 @@ TEST(HaydnBundleMaterializeTest, TripleMacSplitsThird) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleMaterializeTest, ArctanAloneOneCycle) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::ARCTAN};
   expectValidSplit(Ops, Fmts, 1, 1);
 }
 
 TEST(HaydnBundleMaterializeTest, SinCosAloneOneCycle) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::SIN_COS};
   expectValidSplit(Ops, Fmts, 1, 1);
 }
@@ -299,7 +300,7 @@ TEST(HaydnBundleMaterializeTest, ArctanWithAluEncodeLegality) {
   // FieldSlots allow ARCTAN + ADD32 on disjoint slots, one cycle; else split.
   // HR alone-in-bundle is a separate schedule authority
   // (MIR postmisched-arctan-locked-slot). Here we only pin partition safety.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::ARCTAN, Haydn::ADD32};
   expectValidSplit(Ops, Fmts, 1, 2);
 }
@@ -309,7 +310,7 @@ TEST(HaydnBundleMaterializeTest, ArctanWithAluEncodeLegality) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleMaterializeTest, ExhaustivePairsPartitionSafe) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const unsigned Palette[] = {
       Haydn::ADD32, Haydn::XOR32,  Haydn::S_SW_WITH_IMM,    Haydn::S_LW_WITH_IMM,
       Haydn::ADD64, Haydn::X2MULA32, Haydn::D_SDW_WITH_IMM,  Haydn::D_LDW_WITH_IMM,
@@ -324,7 +325,7 @@ TEST(HaydnBundleMaterializeTest, ExhaustivePairsPartitionSafe) {
 
 TEST(HaydnBundleMaterializeTest, ExhaustiveTriplesSelectedPartitionSafe) {
   // Full 11^3 is large but cheap; keep all for regression density.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const unsigned Palette[] = {Haydn::ADD32, Haydn::S_SW_WITH_IMM, Haydn::S_LW_WITH_IMM,
                               Haydn::ADD64, Haydn::X2MULA32, Haydn::NOT32};
   for (unsigned A : Palette) {
@@ -338,7 +339,7 @@ TEST(HaydnBundleMaterializeTest, ExhaustiveTriplesSelectedPartitionSafe) {
 }
 
 TEST(HaydnBundleMaterializeTest, SingletonAndEmptyFormOneCyclePredicate) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   EXPECT_FALSE(opcodesFormOneLegalCycle({}, Fmts));
   unsigned One[] = {Haydn::ADD32};
   EXPECT_TRUE(opcodesFormOneLegalCycle(One, Fmts));
@@ -351,7 +352,7 @@ TEST(HaydnBundleMaterializeTest, SingletonAndEmptyFormOneCyclePredicate) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleMaterializeTest, FullThreeSlotPlanOccupancy) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32};
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
   ASSERT_EQ(Cycles.size(), 1u);
@@ -360,7 +361,7 @@ TEST(HaydnBundleMaterializeTest, FullThreeSlotPlanOccupancy) {
 }
 
 TEST(HaydnBundleMaterializeTest, DualLoadPlanOccupancyIsS0S1) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_LW_WITH_IMM, Haydn::S_LW_WITH_IMM};
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
   ASSERT_EQ(Cycles.size(), 1u);
@@ -371,7 +372,7 @@ TEST(HaydnBundleMaterializeTest, DualLoadPlanOccupancyIsS0S1) {
 
 TEST(HaydnBundleMaterializeTest, IdempotentResplitOfSubcycles) {
   // Resplitting each output cycle must yield exactly one cycle (fixed point).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_SW_WITH_IMM, Haydn::ADD32, Haydn::S_SW_WITH_IMM, Haydn::XOR32,
                     Haydn::S_LW_WITH_IMM,  Haydn::X2MULA32, Haydn::S_SW_WITH_IMM};
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);

@@ -194,6 +194,13 @@ constexpr StringRef HaydnMemberSlotSuffix[3] = {"_S0", "_S1", "_S2"};
 // \returns the slot index (0/1/2) encoded in \p Opc's `_S<k>` name
 // suffix, or -1 if \p Opc is not a format-member opcode.
 int getMemberSlotFromNameLocal(unsigned Opc, const MCInstrInfo &MII) {
+  // MCInstrInfo::getName asserts on an out-of-range opcode. These helpers back
+  // isSupportedInstruction, which is a PREDICATE — "does this opcode
+  // participate in the slot model" — so an opcode it has never heard of is a
+  // "no", not a reason to abort. Nothing guarded this while the formats object
+  // carried no MCInstrInfo, because then no name was ever read.
+  if (Opc >= MII.getNumOpcodes())
+    return -1;
   StringRef Name = MII.getName(Opc);
   for (int Slot = 0; Slot < 3; ++Slot) {
     StringRef Suffix = HaydnMemberSlotSuffix[Slot];
@@ -206,6 +213,9 @@ int getMemberSlotFromNameLocal(unsigned Opc, const MCInstrInfo &MII) {
 // \returns the logical base opcode for \p Opc by stripping any placement
 // suffix, or \p Opc itself if it has none. Base found by NAME lookup.
 unsigned getLogicalBaseOpcode(unsigned Opc, const MCInstrInfo &MII) {
+  // See getMemberSlotFromNameLocal: an unknown opcode has no logical base.
+  if (Opc >= MII.getNumOpcodes())
+    return 0;
   std::optional<StringRef> Stripped = stripHaydnMemberSuffix(MII.getName(Opc));
   if (!Stripped)
     return Opc; // already logical

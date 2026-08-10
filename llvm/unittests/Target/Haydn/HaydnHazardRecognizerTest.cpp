@@ -24,6 +24,7 @@
 #include "HaydnPortModel.h"
 #include "HaydnStaticBitSet.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
+#include "HaydnTestMCInstrInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "gtest/gtest.h"
 
@@ -348,7 +349,7 @@ TEST(HaydnPackLegalityTest, DualAuthorityIssueCapMatchesBundle) {
 
 TEST(HaydnHazardRecognizerTest, B24_TryAddIsPlacementAuthorityS2First) {
   using namespace llvm::haydn::bundle;
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   ASSERT_TRUE(hasPlacementAlternatives(Fmts, Haydn::ADD32));
   CycleState S = makeProductCycleState();
   // Empty cycle accepts ADD32 on S2 (not S0).
@@ -369,7 +370,7 @@ TEST(HaydnHazardRecognizerTest, B24_TryAddIsPlacementAuthorityS2First) {
 
 TEST(HaydnHazardRecognizerTest, B24_ST32BlocksSecondStore) {
   using namespace llvm::haydn::bundle;
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
   EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_P30));
@@ -382,7 +383,7 @@ TEST(HaydnHazardRecognizerTest, B24_DualLoadThenMac) {
   // Dual LD32 (S0|S1) + MAC (S1|S2) product pack — tryAdd order must allow
   // LD@S1, LD@S0, MAC@S2 when loads issue first (or MAC@S2 then loads).
   using namespace llvm::haydn::bundle;
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_LW_WITH_IMM)); // prefers S1 (S0|S1, high first)
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_LW_WITH_IMM)); // remaining load slot
@@ -400,7 +401,7 @@ TEST(HaydnHazardRecognizerTest, B25_NoAltSkipsPlacementGate) {
   // placement fallback (AIEHazardRecognizer.cpp:186-187: no alts → fixed-slot
   // canAdd; Haydn no-alt means no multi-slot auction).
   using namespace llvm::haydn::bundle;
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   EXPECT_FALSE(hasPlacementAlternatives(Fmts, /*Opcode=*/0));
   CycleState S = makeProductCycleState();
   EXPECT_FALSE(canTryAddProduct(S, Fmts, 0));
@@ -411,7 +412,7 @@ TEST(HaydnHazardRecognizerTest, B25_NoAltSkipsPlacementGate) {
 
 TEST(HaydnHazardRecognizerTest, B25_FieldSlotsFromSparseIndex) {
   using namespace llvm::haydn::bundle;
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD64, Alts));
   // Sparse {0, S1, S2}: non-zero rows carry FieldSlots by index.

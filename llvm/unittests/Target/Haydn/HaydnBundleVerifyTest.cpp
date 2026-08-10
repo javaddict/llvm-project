@@ -18,6 +18,7 @@
 
 #include "HaydnBundleVerify.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
+#include "HaydnTestMCInstrInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "gtest/gtest.h"
 
@@ -30,7 +31,7 @@ using namespace llvm::haydn::bundle;
 namespace {
 
 TEST(HaydnBundleVerifyTest, ProductSingletonAdd32Ok) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   BundlePlan Plan;
   auto Err = verifyCommittedBundle(FormatID::BundleE3, {Haydn::ADD32},
                                    Fmts, &Plan);
@@ -44,7 +45,7 @@ TEST(HaydnBundleVerifyTest, ProductSingletonAdd32Ok) {
 
 TEST(HaydnBundleVerifyTest, ProductDisjointPairOk) {
   // ST32 S0-only + ADD64 S1|S2 — encode-oracle packs (AIE canAdd peer).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   BundlePlan Plan;
   auto Err = verifyCommittedBundle(FormatID::BundleE3,
                                    {Haydn::S_SW_WITH_IMM, Haydn::ADD64}, Fmts, &Plan);
@@ -55,7 +56,7 @@ TEST(HaydnBundleVerifyTest, ProductDisjointPairOk) {
 }
 
 TEST(HaydnBundleVerifyTest, ProductThreeSlotFillOk) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   BundlePlan Plan;
   auto Err = verifyCommittedBundle(
       FormatID::BundleE3, {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32}, Fmts,
@@ -68,7 +69,7 @@ TEST(HaydnBundleVerifyTest, ProductThreeSlotFillOk) {
 }
 
 TEST(HaydnBundleVerifyTest, StallEmptyMembersOk) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   BundlePlan Plan;
   auto Err =
       verifyCommittedBundle(FormatID::BundleE3, {}, Fmts, &Plan);
@@ -79,7 +80,7 @@ TEST(HaydnBundleVerifyTest, StallEmptyMembersOk) {
 }
 
 TEST(HaydnBundleVerifyTest, RejectsFourMembers) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   auto Err = verifyCommittedBundle(
       FormatID::BundleE3,
       {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32, Haydn::OR32}, Fmts);
@@ -89,7 +90,7 @@ TEST(HaydnBundleVerifyTest, RejectsFourMembers) {
 
 TEST(HaydnBundleVerifyTest, RejectsSameSlotConflict) {
   // Two ST32 are S0-only — cannot co-issue (encode-oracle canAdd fails).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   auto Err = verifyCommittedBundle(FormatID::BundleE3,
                                    {Haydn::S_SW_WITH_IMM, Haydn::S_SW_WITH_IMM}, Fmts);
   ASSERT_TRUE(Err.has_value());
@@ -99,7 +100,7 @@ TEST(HaydnBundleVerifyTest, RejectsSameSlotConflict) {
 TEST(HaydnBundleVerifyTest, RejectsUnknownFormatIDImm) {
   // N-format-ready: only imm 0 (Bundle128Full) is known. Cast an unknown
   // value past the enum to exercise the fail-closed gate (no silent Full).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   auto Fake = static_cast<FormatID>(1u);
   auto Err = verifyCommittedBundle(Fake, {Haydn::ADD32}, Fmts);
   ASSERT_TRUE(Err.has_value());
@@ -114,7 +115,7 @@ TEST(HaydnBundleVerifyTest, ProductFormatIDImmIsZero) {
 }
 
 TEST(HaydnBundleVerifyTest, DualLoadMayPack) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   BundlePlan Plan;
   auto Err = verifyCommittedBundle(FormatID::BundleE3,
                                    {Haydn::S_LW_WITH_IMM, Haydn::S_LW_WITH_IMM}, Fmts, &Plan);
@@ -130,7 +131,7 @@ TEST(HaydnBundleVerifyTest, DualLoadMayPack) {
 }
 
 TEST(HaydnBundleVerifyTest, LdPlusMacIndependentOk) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   BundlePlan Plan;
   // LD32 + multi-slot MAC family — typical DSP density pack.
   auto Err = verifyCommittedBundle(
@@ -141,11 +142,22 @@ TEST(HaydnBundleVerifyTest, LdPlusMacIndependentOk) {
 }
 
 TEST(HaydnBundleVerifyTest, EncodedBytesAlwaysSixteenOnSuccess) {
-  HaydnMCFormats Fmts;
-  for (ArrayRef<unsigned> Ops :
-       {ArrayRef<unsigned>{Haydn::NOP}, ArrayRef<unsigned>{Haydn::ADD32},
-        ArrayRef<unsigned>{Haydn::S_SW_WITH_IMM, Haydn::ADD64},
-        ArrayRef<unsigned>{Haydn::ADD32, Haydn::XOR32, Haydn::NOT32}}) {
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
+  // Real storage, not `ArrayRef<unsigned>{Haydn::NOP}`. ArrayRef keeps a
+  // pointer, and its single-element constructor points at a temporary that
+  // dies at the end of the full expression, so every opcode read below was
+  // whatever happened to be on the stack. It went unnoticed because a formats
+  // object with no MCInstrInfo never reads an opcode's NAME — garbage simply
+  // missed the alternates table and returned "no slots". With the real
+  // MCInstrInfo in play it reaches MCInstrInfo::getName and aborts, which is
+  // how it surfaced.
+  const std::vector<std::vector<unsigned>> Cases = {
+      {Haydn::NOP},
+      {Haydn::ADD32},
+      {Haydn::S_SW_WITH_IMM, Haydn::ADD64},
+      {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32},
+  };
+  for (ArrayRef<unsigned> Ops : Cases) {
     BundlePlan Plan;
     auto Err =
         verifyCommittedBundle(FormatID::BundleE3, Ops, Fmts, &Plan);
@@ -158,7 +170,7 @@ TEST(HaydnBundleVerifyTest, EncodedBytesAlwaysSixteenOnSuccess) {
 }
 
 TEST(HaydnBundleVerifyTest, PlanFromPacketFormatsMatchesOracleOcc) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   BundlePlan Plan;
   ASSERT_FALSE(verifyCommittedBundle(FormatID::BundleE3,
                                      {Haydn::ADD32, Haydn::S_LW_WITH_IMM}, Fmts, &Plan));
