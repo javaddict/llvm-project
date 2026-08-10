@@ -14,8 +14,10 @@
 
 # RELOCS:      Relocations [
 # RELOCS-NEXT:   Section ({{.*}}) .rela.text {
-# RELOCS-DAG:      0x0 R_HAYDN_HI12 target_data 0x0
-# RELOCS-DAG:      0x10 R_HAYDN_LO20 target_data 0x0
+# The offsets are bundle_start + the entry byte base, so they move with the
+# packer, not with the value. FORMAT-E-SWITCH-PLAN.md 5.4.
+# RELOCS-DAG:      0x8 R_HAYDN_HI12 target_data 0x0
+# RELOCS-DAG:      0x12 R_HAYDN_LO20 target_data 0x0
 # RELOCS:        }
 # RELOCS-NEXT: ]
 
@@ -26,7 +28,7 @@ _start:
     # CHECK: 10000: {{.*}} lui{{.*}}r1, 0
     lui R1, target_data
 
-    # CHECK: 10010: {{.*}} addi32{{.*}}r1,{{.*}}r1, 69640
+    # CHECK: 1000c: {{.*}} addi32{{.*}}r1,{{.*}}r1, 69640
     addi32 R1, R1, target_data
 
     .size _start, .-_start

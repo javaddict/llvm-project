@@ -48,8 +48,8 @@
 # ---------------------------------------------------------------------------
 # DISASM: <_start>:
 # DISASM: 10000: {{.*}} add32 r0, r0, r0
-# DISASM: 10010: {{.*}} addi32 r1, r0, 0
-# DISASM: 10020: {{.*}} addi32 r0, r0, 42
+# DISASM: 1000c: {{.*}} addi32 r1, r0, 0
+# DISASM: 10018: {{.*}} addi32 r0, r0, 42
 
     .globl _start
     .type _start, @function
