@@ -20,6 +20,7 @@
 #include "HaydnBundleMaterialize.h"
 #include "HaydnBundlePlan.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
+#include "HaydnTestMCInstrInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
@@ -43,7 +44,7 @@ namespace {
 
 TEST(HaydnAIEParityBundleTest, EmptyAcceptsAnySupported) {
   // AIE: Empty bundles can accept any instruction (BundleTest Construct).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   EXPECT_TRUE(B.empty());
   EXPECT_TRUE(B.canAdd(Haydn::ADD32));
@@ -56,7 +57,7 @@ TEST(HaydnAIEParityBundleTest, EmptyAcceptsAnySupported) {
 
 TEST(HaydnAIEParityBundleTest, MetaDoesNotConsumeSlots) {
   // AIE: meta / BUNDLE root do not occupy slots.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst Meta, Alu;
   Meta.setOpcode(TargetOpcode::IMPLICIT_DEF);
@@ -71,13 +72,13 @@ TEST(HaydnAIEParityBundleTest, MetaDoesNotConsumeSlots) {
 
 TEST(HaydnAIEParityBundleTest, FormatAvailableAllSubsetsLikeAIEPacket) {
   // AIE PacketFormats: subsets covered by composite. Bundle128 = all 8.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   for (SlotBits Combo = 0; Combo <= SLOT_SET_E3; ++Combo)
     EXPECT_TRUE(Fmts.isFormatAvailable(Combo)) << "combo=" << Combo;
 }
 
 TEST(HaydnAIEParityBundleTest, PacketFormatNameAndSizeAIEShape) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const VLIWFormat *F =
       Fmts.getPacketFormats().getFormat(SLOT_P30 | SLOT_P31 | SLOT_P32);
   ASSERT_NE(F, nullptr);
@@ -90,7 +91,7 @@ TEST(HaydnAIEParityBundleTest, PacketFormatNameAndSizeAIEShape) {
 }
 
 TEST(HaydnAIEParityBundleTest, ThreeIssueFillThenRejectLikeAIE) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst Ops[4];
   for (int I = 0; I < 3; ++I) {
@@ -106,7 +107,7 @@ TEST(HaydnAIEParityBundleTest, ThreeIssueFillThenRejectLikeAIE) {
 
 TEST(HaydnAIEParityBundleTest, ClearReturnsToEmptyAccept) {
   // AIE Bundle clear resets occupancy.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst A, X;
   A.setOpcode(Haydn::ADD32);
@@ -120,7 +121,7 @@ TEST(HaydnAIEParityBundleTest, ClearReturnsToEmptyAccept) {
 }
 
 TEST(HaydnAIEParityBundleTest, SlotMapReflectsPlacement) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst St, Alu;
   St.setOpcode(Haydn::S_SW_WITH_IMM);
@@ -140,7 +141,7 @@ TEST(HaydnAIEParityBundleTest, SlotMapReflectsPlacement) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnAIEParityBundleTest, EveryPackedCycleIsProductPlan) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const unsigned Sequences[][4] = {
       {Haydn::ADD32, 0, 0, 0},
       {Haydn::ADD32, Haydn::XOR32, 0, 0},
@@ -168,7 +169,7 @@ TEST(HaydnAIEParityBundleTest, EveryPackedCycleIsProductPlan) {
 }
 
 TEST(HaydnAIEParityBundleTest, PlanFromPacketFormatsMatchesLiveRow) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   for (SlotBits Occ :
        {SlotBits(0), SlotBits(SLOT_P30), SlotBits(SLOT_P31 | SLOT_P32),
         SlotBits(SLOT_SET_E3)}) {
@@ -184,7 +185,7 @@ TEST(HaydnAIEParityBundleTest, PlanFromPacketFormatsMatchesLiveRow) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnAIEParityBundleTest, DspKernelLdMacAluDensity) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_LW_WITH_IMM, Haydn::X2MULA32, Haydn::ADD32};
   EXPECT_TRUE(opcodesFormOneLegalCycle(Ops, Fmts));
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
@@ -193,7 +194,7 @@ TEST(HaydnAIEParityBundleTest, DspKernelLdMacAluDensity) {
 }
 
 TEST(HaydnAIEParityBundleTest, DualLoadMacFill) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst L0, L1, Mac;
   L0.setOpcode(Haydn::S_LW_WITH_IMM);
@@ -210,7 +211,7 @@ TEST(HaydnAIEParityBundleTest, DualLoadMacFill) {
 
 TEST(HaydnAIEParityBundleTest, StoreStoreMustSplitLikeResourceConflict) {
   // AIE-style: same exclusive resource → not one bundle.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_SW_WITH_IMM, Haydn::S_SW_WITH_IMM, Haydn::S_SW_WITH_IMM};
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
   EXPECT_EQ(Cycles.size(), 3u);
@@ -223,7 +224,7 @@ TEST(HaydnAIEParityBundleTest, StoreStoreMustSplitLikeResourceConflict) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnAIEParityBundleTest, LongMixedStreamPartitionInvariant) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   // Realistic FIR-ish stream: LD LD MAC ALU ST LD MAC ALU ST ...
   const unsigned Pattern[] = {
       Haydn::S_LW_WITH_IMM, Haydn::S_LW_WITH_IMM, Haydn::X2MULA32, Haydn::ADD32, Haydn::S_SW_WITH_IMM,
@@ -250,7 +251,7 @@ TEST(HaydnAIEParityBundleTest, LongMixedStreamPartitionInvariant) {
 }
 
 TEST(HaydnAIEParityBundleTest, ResplitFixedPointOnAllSubcycles) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::S_SW_WITH_IMM, Haydn::S_LW_WITH_IMM, Haydn::X2MULA32, Haydn::S_SW_WITH_IMM,
                     Haydn::ADD32, Haydn::ADD64, Haydn::S_SW_WITH_IMM, Haydn::XOR32};
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
@@ -280,7 +281,7 @@ TEST(HaydnAIEParityBundleTest, SlotWindowBitsSum128AIEComposite) {
   EXPECT_EQ(P30EncodedBits.Value + P31EncodedBits.Value +
                 P32EncodedBits.Value,
             ProductEncodedBitsValue);
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Sum = 0;
   for (auto K : {MCSlotKind::Haydn_SLOT_P30, MCSlotKind::Haydn_SLOT_P31,
                  MCSlotKind::Haydn_SLOT_P32})
@@ -296,12 +297,13 @@ TEST(HaydnAIEParityBundleTest, SlotWindowBitsSum128AIEComposite) {
 TEST(HaydnAIEParityBundleTest, FormatOpcodeIsProductCompositeSerializeOnly) {
   // AIE: MCBundle.setOpcode(Format->Opcode); emitter getBinaryCode + emit.
   // Haydn product: Format->Opcode == BUNDLE_E3 for every covered set.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst A, X, N;
   A.setOpcode(Haydn::ADD32_P32_ALU0);
-  X.setOpcode(Haydn::XOR32_P31_ALU0);
-  N.setOpcode(Haydn::NOT32_P30_ALU0);
+  X.setOpcode(Haydn::XOR32_P31_ALU1);
+  // ALU2: ADD32 above already holds ALU0, and one unit serves one entry.
+  N.setOpcode(Haydn::NOT32_P30_ALU2);
   if (Fmts.getSlotKind(A.getOpcode()) == MCSlotKind()) {
     A.setOpcode(Haydn::ADD32);
     X.setOpcode(Haydn::XOR32);
@@ -333,7 +335,7 @@ TEST(HaydnAIEParityBundleTest, SerializeSlotMapNoReAuctionOnMembers) {
   // Source order that would starve under wrong re-auction still packs by
   // Desc getSlotKind (members already placed). Second S0-only fails canAdd
   // — no constrained-first re-auction escape (B3.5 delete).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst St0, St1;
   St0.setOpcode(Haydn::S_SW_WITH_IMM_P30_LOADSTORE0);

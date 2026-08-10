@@ -35,6 +35,7 @@
 #include "HaydnBundleFormatSolver.h"
 #include "HaydnPlacementAlternative.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
+#include "HaydnTestMCInstrInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrDesc.h"
@@ -88,16 +89,19 @@ static bool wouldUnconditionalSetDesc(HaydnAlternateDescriptors &AltDescs,
 TEST(HaydnMaterializeMultiOpcode, TryAddProductMemberIsSetDescTarget) {
   // Three ADD32s fill S2, S1, S0 (solver prefer high slots). Each MemberOpcode
   // is the format-member that materializeMultiOpcodeInstrs would setDesc.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
   ASSERT_EQ(S.Members.size(), 3u);
 
+  // P32/ALU0, P31/ALU1, P30/ALU2 — one per unit. The solver used to be
+  // free to put all three on ALU0 because nothing modelled units;
+  // that bundle cannot issue (FORMAT-E-SWITCH-PLAN.md 3, 7.1).
   EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ADD32_P32_ALU0);
-  EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADD32_P31_ALU0);
-  EXPECT_EQ(S.Members[2].MemberOpcode, Haydn::ADD32_P30_ALU0);
+  EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADD32_P31_ALU1);
+  EXPECT_EQ(S.Members[2].MemberOpcode, Haydn::ADD32_P30_ALU2);
   EXPECT_EQ(S.Members[0].LogicalOpcode, Haydn::ADD32);
   EXPECT_EQ(S.Members[1].LogicalOpcode, Haydn::ADD32);
   EXPECT_EQ(S.Members[2].LogicalOpcode, Haydn::ADD32);
@@ -106,7 +110,7 @@ TEST(HaydnMaterializeMultiOpcode, TryAddProductMemberIsSetDescTarget) {
 TEST(HaydnMaterializeMultiOpcode, AltDescRecordsMemberForMaterialize) {
   // commitPlacementForEmit shape: after tryAdd, stamp setAlternateDescriptor
   // with MemberOpcode (AIEHazardRecognizer.cpp:389). materialize reads it.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_LW_WITH_IMM));
   ASSERT_EQ(S.Members.size(), 1u);
@@ -128,7 +132,7 @@ TEST(HaydnMaterializeMultiOpcode, AltDescRecordsMemberForMaterialize) {
 }
 
 TEST(HaydnMaterializeMultiOpcode, ThreeMembersStampIndependentKeys) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::XOR32));
@@ -167,7 +171,7 @@ TEST(HaydnMaterializeMultiOpcode, NoAltMeansNoMaterialize) {
 
 TEST(HaydnMaterializeMultiOpcode, ST32PlusADD64Members) {
   // BundleFormatSolverTest peer: ST32 claims S0; ADD64 takes high free slot.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD64));
@@ -193,7 +197,7 @@ TEST(HaydnMaterializeMultiOpcode, ST32PlusADD64Members) {
 
 TEST(HaydnMaterializeMultiOpcode, EnumerateAltsMatchSetDescCandidates) {
   // PlacementAlternative rows are exactly the opcodes materialize may setDesc.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD32, Alts));
   ASSERT_EQ(Alts.size(), 3u);
@@ -216,7 +220,7 @@ TEST(HaydnMaterializeMultiOpcode, EnumerateAltsMatchSetDescCandidates) {
 // getSlotKind on committed members is the MCInstLower placement source
 // (no AltDesc slot read; Desc-as-is after setDesc).
 TEST(HaydnMaterializeMultiOpcode, GetSlotKindIsPostCommitPlacement) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   EXPECT_EQ(Fmts.getSlotKind(Haydn::ADD32_P30_ALU0),
             MCSlotKind(MCSlotKind::Haydn_SLOT_P30));
   EXPECT_EQ(Fmts.getSlotKind(Haydn::ADD32_P31_ALU0),
@@ -234,7 +238,7 @@ TEST(HaydnMaterializeMultiOpcode, GetSlotKindIsPostCommitPlacement) {
 // After setDesc, Bundle canAdd must accept committed members via getSlotKind
 // (AIE AIEBundle.h:92-104; AIEBaseMCFormats.cpp:66-75) — not tryAddProduct.
 TEST(HaydnMaterializeMultiOpcode, BundleCanAddCommittedMembers) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   EXPECT_NE(Fmts.getSlotKind(Haydn::ADD32_P30_ALU0), MCSlotKind());
   EXPECT_NE(Fmts.getSlotKind(Haydn::ADD32_P31_ALU0), MCSlotKind());
   EXPECT_NE(Fmts.getSlotKind(Haydn::ADD32_P32_ALU0), MCSlotKind());
@@ -244,8 +248,9 @@ TEST(HaydnMaterializeMultiOpcode, BundleCanAddCommittedMembers) {
   Haydn::Bundle<MCInst> B(&Fmts);
   MCInst A0, A1, A2;
   A0.setOpcode(Haydn::ADD32_P32_ALU0);
-  A1.setOpcode(Haydn::ADD32_P31_ALU0);
-  A2.setOpcode(Haydn::ADD32_P30_ALU0);
+  // ALU1, not ALU0: no two entries of a bundle may name the same unit.
+  A1.setOpcode(Haydn::ADD32_P31_ALU1);
+  A2.setOpcode(Haydn::ADD32_P30_ALU2);
   ASSERT_TRUE(B.canAdd(A0.getOpcode()));
   B.add(&A0);
   ASSERT_TRUE(B.canAdd(A1.getOpcode()));
@@ -261,11 +266,11 @@ TEST(HaydnMaterializeMultiOpcode, BundleCanAddCommittedMembers) {
 
 // cycleCanFormLegalBundle shape: Bundle.canAdd + getFormatOrNull only.
 TEST(HaydnMaterializeMultiOpcode, CycleCanFormLegalBundleGetSlotKindOnly) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Haydn::Bundle<MCInst> B(&Fmts);
   MCInst A, X;
   A.setOpcode(Haydn::ADD32_P32_ALU0);
-  X.setOpcode(Haydn::XOR32_P31_ALU0);
+  X.setOpcode(Haydn::XOR32_P31_ALU1);
   ASSERT_TRUE(B.canAdd(A.getOpcode()));
   B.add(&A);
   ASSERT_TRUE(B.canAdd(X.getOpcode()));
@@ -298,7 +303,7 @@ TEST(HaydnMaterializeMultiOpcode, UnconditionalSetDescWhenSelected) {
 TEST(HaydnMaterializeMultiOpcode, BrevStoreMembersAreSetDescTargets) {
   // S_SW_BREV_* / D_SDW_BREV_* PlacementAlternatives are live setDesc members
   // (HaydnGenFormats AlternateInsts). tryAdd picks a private _S* opcode.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   for (unsigned Logical :
        {Haydn::S_SW_BREV_IMM, Haydn::S_SW_BREV_REG, Haydn::D_SDW_BREV_IMM,
         Haydn::D_SDW_BREV_REG}) {
@@ -337,7 +342,7 @@ TEST(HaydnMaterializeMultiOpcode, BrevStoreMembersAreSetDescTargets) {
 TEST(HaydnMaterializeMultiOpcode, BrevLoadMembersAreSetDescTargets) {
   // D_LDW_BREV_* / S_LW_BREV_* alts are LS *_S* members (tied shape aligned
   // with logical). LD *_LD_S* are encode peers, not PlacementAlternatives.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   for (unsigned Logical : {Haydn::D_LDW_BREV_IMM, Haydn::D_LDW_BREV_REG,
                            Haydn::S_LW_BREV_IMM, Haydn::S_LW_BREV_REG}) {
     SmallVector<PlacementAlternative, 4> Alts;
@@ -370,7 +375,7 @@ TEST(HaydnMaterializeMultiOpcode, BrevLoadMembersAreSetDescTargets) {
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleADD32) {
   // Empty-cycle tryAdd prefers S2 (same as post-RA HR).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   auto C = commitLateProductCycle(Haydn::ADD32, Fmts);
   ASSERT_TRUE(C.has_value());
   EXPECT_EQ(C->LogicalOpcode, Haydn::ADD32);
@@ -387,7 +392,7 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleADD32) {
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleNOP) {
   // FixupHwLoops deficit pad inserts bare NOP — S0-only alt → NOP_S0.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   auto C = commitLateProductCycle(Haydn::NOP, Fmts);
   ASSERT_TRUE(C.has_value());
   EXPECT_EQ(C->LogicalOpcode, Haydn::NOP);
@@ -402,7 +407,7 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleNOP) {
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleAlreadyMember) {
   // Already-setDesc member: no alts → wrap-only, NeedsSetDesc false.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   auto C = commitLateProductCycle(Haydn::ADD32_P32_ALU0, Fmts);
   ASSERT_TRUE(C.has_value());
   EXPECT_EQ(C->MemberOpcode, Haydn::ADD32_P32_ALU0);
@@ -413,7 +418,7 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleAlreadyMember) {
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleNoAltWrapOnly) {
   // B / RET have no PlacementAlternatives — explicit ProductFormatID singleton
   // without setDesc (AIE would never insert these post-finalize; Haydn BR does).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   for (unsigned Opc : {Haydn::B, Haydn::RET}) {
     auto C = commitLateProductCycle(Opc, Fmts);
     ASSERT_TRUE(C.has_value()) << "opc " << Opc;
@@ -426,7 +431,7 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleNoAltWrapOnly) {
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleBEQZ) {
   // BranchRelaxation / insertBranch may emit bare BEQZ → BEQZ_S0.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   auto C = commitLateProductCycle(Haydn::BEQZ, Fmts);
   ASSERT_TRUE(C.has_value());
   EXPECT_EQ(C->MemberOpcode, Haydn::BEQZ_P30_ALU0);
@@ -435,7 +440,7 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleBEQZ) {
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleMatchesEmptyTryAdd) {
   // Firewall must use the same empty-cycle tryAdd as post-RA, not a 2nd theory.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   for (unsigned Logical :
        {Haydn::ADD32, Haydn::XOR32, Haydn::S_LW_WITH_IMM, Haydn::S_SW_WITH_IMM, Haydn::ADDI32,
         Haydn::NOP}) {
