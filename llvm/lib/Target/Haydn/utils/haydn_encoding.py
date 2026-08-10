@@ -1561,6 +1561,135 @@ def report(geometry: dict, placements: list[dict], target_dir: Path | None) -> s
     return "\n".join(lines) + "\n"
 
 
+# A written register is read too when the Behavior names it on the right of
+# its own assignment. The lookahead keeps `rtd` from matching `rtd1`; the
+# operands carry Q-format suffixes (`rtdQ1.63`), so a plain \b would miss it.
+def _behavior_reads(behavior: str, name: str) -> bool:
+    pattern = re.compile(rf"\b{re.escape(name)}(?![0-9_])")
+    for statement in behavior.split(";"):
+        left, assign, right = statement.partition("=")
+        if assign and pattern.search(left) and pattern.search(right):
+            return True
+    return False
+
+
+def read_port_defects(database: Path) -> list[tuple[str, str, str]]:
+    """Instructions whose Behavior reads a register their Read_Port omits.
+
+    A third statement the database makes about each instruction, after the
+    Syntax and the ports: the Behavior text. `FMULA32S_HH` reads
+
+        rtd = SATQ1.63(rtdQ1.63 + SATQ1.63(rsd1[63:32]Q1.31 * ...))
+
+    and its Description says "written back to rtd", while its `DR_Read_Port`
+    lists only `rsd1, rsd2`. The ports are what the generator believes, so the
+    accumulator is not modelled as an input and nothing ties it to the register
+    the hardware actually reads.
+
+    Same class as § 5.3's 76 mapping rows: a disagreement *between* two
+    statements the database makes about itself, invisible to every gate that
+    checks the database against the encoder rather than against itself.
+    Returns (instruction, port key, operand).
+    """
+    data = json.loads((database / INSTRUCTION_INDEX).read_text(encoding="utf-8"))
+    files = (("GPR", GPR_ALIASES), ("DR", DR_ALIASES))
+    found: list[tuple[str, str, str]] = []
+    for entries in data.values():
+        for entry in entries:
+            name = str(entry.get("Instruction", "")).strip()
+            behavior = str(entry.get("Behavior") or "")
+            if not name or not behavior:
+                continue
+            for prefix, aliases in files:
+                written = [str(o).strip()
+                           for o in (entry.get(f"{prefix}_Write_Port") or [])]
+                read = {str(o).strip()
+                        for o in (entry.get(f"{prefix}_Read_Port") or [])}
+                for operand in written:
+                    if (operand in aliases and operand not in read
+                            and _behavior_reads(behavior, operand)):
+                        found.append((name, f"{prefix}_Read_Port", operand))
+    return found
+
+
+def verify_read_ports(database: Path) -> None:
+    defects = read_port_defects(database)
+    if not defects:
+        return
+    lines = [f"{len(defects)} instruction(s) read a register their Read_Port"
+             " does not name:", ""]
+    for name, key, operand in defects:
+        lines.append(f"  {name:20} {key} is missing {operand}")
+    lines += ["",
+              "The Behavior is explicit and the repair is forced. Run:",
+              "  haydn_encoding.py --database <dir> --fix-read-ports --write"]
+    raise SystemExit("\n".join(lines))
+
+
+def fix_read_ports(database: Path, write: bool) -> str:
+    """Add the operands the Behavior reads to the Read_Port that omits them.
+
+    Forced, not chosen: the Behavior assigns the register from an expression
+    containing itself, so it is read, and the register file follows from the
+    alias. Nothing else about the row changes.
+
+    Each port is one line of the file, so the edit is made at byte level and
+    every other byte -- including the CRLF endings -- is left alone. Re-running
+    is a no-op.
+    """
+    path = database / INSTRUCTION_INDEX
+    raw = path.read_bytes()
+    defects = read_port_defects(database)
+    if not defects:
+        return "read ports: every register the Behavior reads is named\n"
+
+    lines = raw.split(b"\n")
+    # Walk the file once, tracking which instruction each line belongs to, so
+    # a port line is only rewritten for the row that actually names it.
+    wanted: dict[tuple[str, str], list[str]] = {}
+    for name, key, operand in defects:
+        wanted.setdefault((name, key), []).append(operand)
+
+    current = None
+    edited = 0
+    for index, line in enumerate(lines):
+        if b'"Instruction":' in line:
+            current = line.split(b'"Instruction": "')[1].split(b'"')[0].decode()
+            continue
+        if current is None:
+            continue
+        for (name, key), operands in wanted.items():
+            if name != current or f'"{key}":'.encode() not in line:
+                continue
+            body = line.decode("utf-8")
+            # The file is CRLF. Split the terminator off and put it back, or
+            # the repaired rows silently become the only LF lines in it.
+            eol = "\r" if body.endswith("\r") else ""
+            content = body[:-len(eol)] if eol else body
+            head, _, tail = content.partition(":")
+            existing = json.loads(tail.strip().rstrip(",") or "null") or []
+            merged = existing + [o for o in operands if o not in existing]
+            rendered = ", ".join(f'"{o}"' for o in merged)
+            suffix = "," if content.rstrip().endswith(",") else ""
+            lines[index] = f"{head}: [{rendered}]{suffix}{eol}".encode("utf-8")
+            edited += 1
+    if edited != len(wanted):
+        raise SystemExit(f"{len(wanted)} port line(s) to repair but {edited}"
+                         " were placed; cannot write")
+
+    report = (f"{len(defects)} read port(s) repaired over {len(wanted)} row(s)"
+              f"{'' if write else ' — dry run, pass --write to apply'}\n")
+    for name, key, operand in defects:
+        report += f"  {name:20} {key} += {operand}\n"
+    if write:
+        path.write_bytes(b"\n".join(lines))
+        report += ("\nRe-pin the database: the sha256 in\n"
+                   "  simulator/bundlesim/isa/database/generated/"
+                   "GOLDEN_INPUTS.sha256\n"
+                   "now names the uncorrected file (§ 5.3).\n")
+    return report
+
+
 def fix_operand_mapping(database: Path, write: bool) -> str:
     """Repair mapping rows that name fewer operands than the Syntax does.
 
@@ -1707,18 +1836,25 @@ def main() -> None:
     parser.add_argument("--fix-operand-mapping", action="store_true",
                         help="repair mapping rows the Syntax cross-check"
                              " rejects, where the assignment is forced")
+    parser.add_argument("--fix-read-ports", action="store_true",
+                        help="add the operands the Behavior reads to the"
+                             " Read_Port that omits them")
     parser.add_argument("--write", action="store_true",
-                        help="with --fix-operand-mapping, edit the database"
-                             " in place instead of reporting")
+                        help="with --fix-operand-mapping or --fix-read-ports,"
+                             " edit the database in place instead of reporting")
     args = parser.parse_args()
 
     if args.fix_operand_mapping:
         print(fix_operand_mapping(args.database, args.write))
         return
+    if args.fix_read_ports:
+        print(fix_read_ports(args.database, args.write))
+        return
 
     geometry, placements = load_placements(args.database)
     verify_decodable(placements)
     verify_operand_sets(placements, load_syntax_order(args.database))
+    verify_read_ports(args.database)
     if args.check or args.emit is None:
         print(f"format E: {len(placements)} placements over "
               f"{len({(p['entry_count'], p['entry_index'], p['unit'], p['type']) for p in placements})}"
