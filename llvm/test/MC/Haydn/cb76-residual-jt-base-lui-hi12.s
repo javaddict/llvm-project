@@ -69,7 +69,7 @@
     .type _start, @function
 _start:
     lui    R3, jt_table
-    addi32_w R3, R3, jt_table
+    addi32 R3, R3, jt_table
     .size _start, .-_start
 
     .section .rodata

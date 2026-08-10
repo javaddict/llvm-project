@@ -37,7 +37,7 @@
     .type _start, @function
 _start:
     lui      R3, high_sym
-    addi32_w R3, R3, high_sym
+    addi32   R3, R3, high_sym
     .size _start, .-_start
 
     .section .rodata

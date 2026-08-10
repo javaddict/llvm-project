@@ -97,15 +97,15 @@ SLLI32 R1, R2, 16
 
 # CHECK: { ld32	r0, r1, 0 }
 # ROUNDTRIP: { ld32	r0, r1, 0 }
-LD32 R0, R1, 0
+s_lw_with_imm R0, R1, 0
 
 # CHECK: { ld32	r2, r3, 16 }
 # ROUNDTRIP: { ld32	r2, r3, 16 }
-LD32 R2, R3, 16
+s_lw_with_imm R2, R3, 4
 
 # CHECK: { st32 r4, r5, 0 }
 # ROUNDTRIP: { st32	r4, r5, 0 }
-ST32 R4, R5, 0
+s_sw_with_imm R4, R5, 0
 
 #===----------------------------------------------------------------------===
 # Branch (FmtBr, 4 bytes)
