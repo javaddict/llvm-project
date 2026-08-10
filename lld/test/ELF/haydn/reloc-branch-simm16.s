@@ -22,9 +22,9 @@ _start:
     # CHECK: 10000: {{.*}} beq{{.*}}r0,{{.*}}r1,
     BEQ R0, R1, forward_target
 
-    # CHECK: 10010: {{.*}} add32
+    # CHECK: 1000c: {{.*}} add32
     ADD32 R2, R2, R2
-    # CHECK: 10020: {{.*}} add32
+    # CHECK: 10018: {{.*}} add32
     ADD32 R3, R3, R3
 
 forward_target:
