@@ -62,13 +62,12 @@ body:             |
 
 # CHECK-LABEL: name: set_before_hard_boundary
 #
-# Top-down: SET coissues or sequences with independent ADD; ExitSU setup edge
-# yields InterveningCycles size-bearing parcels before the hard fence (or the
-# hard fence itself counts as following work once past SET). Hard root keeps
-# both ADD children and FormatID 0.
-# TOP: BUNDLE
-# TOP-DAG: ADD32
-# TOP-DAG: SET_HWLOOP
+# Top-down: one-SFR-writer law keeps SET and the independent ADD sequential
+# (both def dead $sfr). ExitSU setup edge still yields InterveningCycles
+# size-bearing work before the hard fence. Hard root keeps both ADD children
+# and FormatID 0 (input multi-member fence; not re-packed here).
+# TOP: SET_HWLOOP
+# TOP: ADD32
 # TOP: BUNDLE 0
 # TOP: ADD32
 # TOP: ADD32

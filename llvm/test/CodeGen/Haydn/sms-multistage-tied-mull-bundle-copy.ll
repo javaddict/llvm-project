@@ -1,0 +1,60 @@
+; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+; RUN:     -verify-machineinstrs -O2 < %s -o - \
+; RUN:     | FileCheck %s --check-prefix=ASM
+; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+; RUN:     -verify-machineinstrs -O2 -stop-after=machine-cp < %s -o - \
+; RUN:     | FileCheck %s --check-prefix=MCP
+; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+; RUN:     -verify-machineinstrs -O2 -debug-only=pipeliner < %s -o /dev/null 2>&1 \
+; RUN:     | FileCheck %s --check-prefix=SWP
+; REQUIRES: asserts
+
+; Role: Option C containment — fill_nn LCG does not freeze stages=2 hard BUNDLE.
+; Freeze-era pin expected multi-stage SWPS + BUNDLE+COPY; deleted pre-RA cycle
+; identity. Product multi-stage is post-RA only.
+;
+; SWP: Schedule Found? 1
+; SWP: SMS-SHOULDUSE: reject multi-stage stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (pre-RA StageCount>1 containment; post-RA multi-stage only)
+; SWP: Target rejected schedule
+; SWP-NOT: SMS-SHOULDUSE: accept multi-stage durable
+; SWP-NOT: SMS-HANDOFF: materialize done groups={{[1-9][0-9]*}}
+
+; ASM-LABEL: fill_nn:
+; ASM-NOT: #<swps> stages={{[2-9]|[1-9][0-9]+}}
+; ASM: mull
+; ASM: seq32
+; ASM: beqz
+
+; MCP-LABEL: name: fill_nn
+; MCP: $r{{[0-9]+}} = COPY $r{{[0-9]+}}
+; MCP-NEXT: $r{{[0-9]+}} = MULL{{.*}}$r{{[0-9]+}}{{.*}}$r{{[0-9]+}}
+; MCP-NOT: BUNDLE{{.*}}{
+
+define dso_local void @fill_nn(ptr noundef writeonly captures(none) %C,
+                               i32 noundef %n,
+                               ptr noundef captures(none) %s_io) local_unnamed_addr {
+entry:
+  %0 = load i32, ptr %s_io, align 4
+  %cmp9.not = icmp eq i32 %n, 0
+  br i1 %cmp9.not, label %for.cond.cleanup, label %for.body.preheader
+for.body.preheader:
+  %mul = mul i32 %n, %n
+  %umax = tail call i32 @llvm.umax.i32(i32 %mul, i32 1)
+  br label %for.body
+for.cond.cleanup:
+  %s.0.lcssa = phi i32 [ %0, %entry ], [ %add, %for.body ]
+  store i32 %s.0.lcssa, ptr %s_io, align 4
+  ret void
+for.body:
+  %k.011 = phi i32 [ %inc, %for.body ], [ 0, %for.body.preheader ]
+  %s.010 = phi i32 [ %add, %for.body ], [ %0, %for.body.preheader ]
+  %mul1 = mul i32 %s.010, 1664525
+  %add = add i32 %mul1, 1013904223
+  %conv2 = ashr i32 %add, 16
+  %arrayidx = getelementptr inbounds nuw i32, ptr %C, i32 %k.011
+  store i32 %conv2, ptr %arrayidx, align 4
+  %inc = add nuw nsw i32 %k.011, 1
+  %exitcond.not = icmp eq i32 %inc, %umax
+  br i1 %exitcond.not, label %for.cond.cleanup, label %for.body
+}
+declare i32 @llvm.umax.i32(i32, i32)

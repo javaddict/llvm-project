@@ -18,9 +18,11 @@
 // single latch, single true exit, no early break.
 // Layout-owned setup: after SET only InterveningCycles deficit pads
 // (SetupIssueDistance=3, Following>=2); useful work stays before SET. Dual
-// HWLR nesting; body parcels BEGIN..END inclusive >= MinBodyBundles (3);
+// HWLR nesting; body parcels BEGIN..END inclusive >= MinBodyBundles (3)
+// measured on final product EncodedBytes parcels (not SMS II proxy);
 // strict END > BEGIN (END = last body cycle). Gates: FeatureHWLoop,
-// -haydn-enable-hwloops, -haydn-hwloop-role-b.
+// -haydn-enable-hwloops (product default OFF until FE96 post-link residual
+// closes atomically; Role B stays off).
 //
 // Hardware loop semantics (from ISA spec):
 // SET_HWLOOP sel, offset1, offset2, cnt

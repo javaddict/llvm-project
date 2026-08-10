@@ -8,22 +8,19 @@
 define void @tiny_body(ptr nocapture %p, i32 %n) {
 ; CHECK-LABEL: tiny_body:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 1; nop }
-; CHECK-NEXT:    { addi32_w r4, r0, 0; nop }
+; CHECK-NEXT:    { nop; addi32_w r3, r0, 0 }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { st32_post r4, r1, 1; nop }
-; CHECK-NEXT:    { add32 r4, r4, r3; nop }
-; CHECK-NEXT:    { sltu32 r5, r4, r2; nop }
-; CHECK-NEXT:    { bnez_w r5, .LBB0_1; nop }
+; CHECK-NEXT:    { addi32 r3, r3, 1; st32_post r3, r1, 1 }
+; CHECK-NEXT:    { nop; sltu32 r4, r3, r2 }
+; CHECK-NEXT:    { nop; bnez_w r4, .LBB0_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 ; InterveningCycles=2 following parcels after SET before BEGIN.
 ; Inclusive START..END must both appear; body work lives between them.
 entry:

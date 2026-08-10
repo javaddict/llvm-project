@@ -95,12 +95,11 @@ exit:
   ret i32 %acc.next
 }
 
-; SMS-HANDOFF product (WP5): multi-stage expand materializes legal clone→cycle
-; BUNDLE groups on the dual-load/MAC-shaped kernel; simple acc may stay bare
-; single-stage. Logical member opcodes remain (no private-slot setDesc).
+; Option C containment: multi-stage StageCount>1 rejected pre-RA; dual-load
+; MAC kernel stays bare logicals (no SMS multi-member BUNDLE freeze).
 ; HANDOFF-LABEL: name: sms_acc_port_shape
 ; HANDOFF: ADD32
 ; HANDOFF-LABEL: name: sms_dual_load_mac_shape
-; HANDOFF: BUNDLE
 ; HANDOFF-DAG: LD32
+; HANDOFF-NOT: BUNDLE{{.*}}{
 ; HANDOFF-NOT: {{LD32|ADD32|MULL|MUL64}}_S

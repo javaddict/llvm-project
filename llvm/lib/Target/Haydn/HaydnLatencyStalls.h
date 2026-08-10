@@ -12,22 +12,25 @@
 //    bundles t+1 through t+N-1 may read A's destination register."
 //
 // Loads (and CSRR, and the MAC family) carry Data_Latency = 2, so a load's
-// destination must not be read in the very next bundle. Nothing enforced this:
+// destination must not be read in the very next bundle. Schedulers already
+// see architectural load→use latency (no soften); this pass remains the
+// pre-emit correctness net and O1+ auditor:
 //
 //   * at -O0 functions are `optnone`, so PostMachineScheduler and
-//     HaydnFinalizeBundle both skipFunction and no scheduler ever runs
-//   * even with the post-RA scheduler on, latency only shapes the schedule;
-//     it is not a hard guarantee after later passes move things
+//     HaydnFinalizeBundle both skipFunction and no scheduler ever runs — the
+//     pass is the primary stall inserter (O0 net)
+//   * at -O1+ the schedule should already leave empty cycles; insertions are
+//     counted as unexpected and still applied if a later mutation reopens a
+//     latency window (zero-unexpected is the product goal, not a hard fail)
 //
 // BundleSim cannot catch this either — it is a purely functional bundle
 // simulator with no timing model, so a violating program still produces the
 // right answer in simulation and the wrong answer on hardware.
 //
-// This pass is the correctness net: walk each block in bundle order and insert
-// NOP stall bundles wherever a read would land inside a producer's latency
-// window. It runs at every optimization level, before BranchRelaxation and
-// HaydnFixupHwLoops so those absorb the size growth and recompute hwloop
-// offsets.
+// Walk each block in bundle order and insert NOP stall bundles wherever a
+// read would land inside a producer's latency window. Runs at every
+// optimization level, before BranchRelaxation and HaydnFixupHwLoops so those
+// absorb the size growth and recompute hwloop offsets.
 //
 //===----------------------------------------------------------------------===//
 

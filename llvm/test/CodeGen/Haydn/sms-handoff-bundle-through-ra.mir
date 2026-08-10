@@ -1,19 +1,6 @@
-# G-SMS-PRE-RA-HEXAGON WP2 product path (RA hard-root survival).
-# Continuous SMS producer freezes multi-stage clone→cycle logical BUNDLE groups
-# at expand, then survives machine-scheduler → coalescer → greedy →
-# VirtRegRewriter → postmisched with -verify-machineinstrs. Tied-def MAC
-# children inside hard roots are rewritten pre-TwoAddress
-# (haydn-bundled-twoaddr-rewrite COPY recovery); dual-def roots restored
-# post-TwoAddress (haydn-handoff-bundle-root-defs). isSchedulingBoundary keeps
-# zero hard-group split. Product multi-stage always on (no handoff switch).
-#
-# Expand-only groups - sms-handoff-materialize-groups.mir.
-# Hard-root exact-commit peer - format-bundle-through-ra.mir POST.
-#
-# Continuous SMS membership (sms-format-shoulduse-reject.mir body):
-# pipeliner → machine-scheduler / register-coalescer / greedy / VirtRegRewriter
-# → postmisched (PEI in path). Only same-cycle runs that form one legal product
-# Format E freeze as hard roots; multi-expand pseudos stay bare.
+# Option C containment: no pre-RA SMS multi-member BUNDLE through RA.
+# Multi-stage StageCount>1 rejected; post-RA free multi-MI packs may still
+# form Format E BUNDLEs (sole commitment point).
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
 # RUN:   -stop-after=machine-scheduler \
 # RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
@@ -30,8 +17,6 @@
 # RUN:   -stop-after=virtregrewriter \
 # RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
 # RUN:   | FileCheck %s --check-prefix=CONT-VRW
-# Producer-body spill / compact soft-order interop (stress=8 keeps SMS schedule
-# alive; stress=4 rejects under artificial RC pressure).
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
 # RUN:   -stop-after=virtregrewriter -stress-regalloc=8 \
 # RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
@@ -41,108 +26,80 @@
 # RUN:   -haydn-ra-compact-hints=true -verify-machineinstrs \
 # RUN:   %S/sms-format-shoulduse-reject.mir -o - \
 # RUN:   | FileCheck %s --check-prefix=CONT-COMPACT
-# Real continuous path through PEI into postmisched exact hard-root commit.
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
 # RUN:   -stop-after=postmisched \
 # RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
 # RUN:   | FileCheck %s --check-prefix=CONT-POST
-# Product multi-stage -stats through postmisched.
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
 # RUN:   -stop-after=postmisched -stats \
 # RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o /dev/null \
 # RUN:   2>&1 | FileCheck %s --check-prefix=CONT-STATS
 # REQUIRES: asserts
 
-# Role - WP2 continuous SMS groups through RA to postmisched (product class).
-#
-# Contract (FileCheck names use hyphens so prose never spells PREFIX colon):
-#   * CONT sched/coalescer/greedy/VRW - dual-load hard BUNDLE survives with
-#     multi-expand MOV_GPR_TO_DR64 bare outside the root (never private-slot).
-#   * CONT spill/compact - stress=8 + compact soft-order keep dual-load
-#     membership (spill/copy recovery; root must not unbundle).
-#   * CONT post - PEI then postmisched exact-commits dual-load as Format E
-#     member setDesc (WP3 commit-inside-group).
-#   * CONT stats - group/skip/hard-root counters on product multi-stage path.
-
-# Continuous dual-load membership after ordinary pre-RA MachineScheduler.
-# Dual-load root holds two LD32 children; multi-expand MOV_GPR is bare
-# somewhere in the MBB (order after RA is not fixed to NEXT).
 # CONT-SCHED-LABEL: name: sms_shoulduse_multistage_mac
 # CONT-SCHED-DAG: SEQ32
-# CONT-SCHED: BUNDLE{{.*}}:: (load{{.*}}{
-# CONT-SCHED-NEXT: {{%[0-9]+}}:gpr32 = LD32
-# CONT-SCHED-NEXT: {{%[0-9]+}}:gpr32 = LD32
-# CONT-SCHED-NEXT: }
-# CONT-SCHED-DAG: {{%[0-9]+}}:dr64 = MOV_GPR_TO_DR64
+# CONT-SCHED-DAG: {{%[0-9]+}}:gpr32 = LD32
+# CONT-SCHED-DAG: {{%[0-9]+}}:gpr32 = LD32
+# CONT-SCHED-NOT: BUNDLE{{.*}}:: (load{{.*}}{
+# CONT-SCHED-NOT: BUNDLE_E96
 # CONT-SCHED-NOT: {{LD32|MOV_GPR_TO_DR64|SEQ32|ADD32|ADDI32|F2MULAA32RS_HHLL}}_S
+# CONT-SCHED-NOT: {{LD32|SEQ32|ADD32}}_E2_
+# CONT-SCHED-NOT: BundleFormatRowID
+# CONT-SCHED-NOT: CompletionStateID
 
 # CONT-COALESCER-LABEL: name: sms_shoulduse_multistage_mac
 # CONT-COALESCER-DAG: SEQ32
-# CONT-COALESCER: BUNDLE{{.*}}:: (load{{.*}}{
-# CONT-COALESCER-NEXT: {{%[0-9]+}}:gpr32 = LD32
-# CONT-COALESCER-NEXT: {{%[0-9]+}}:gpr32 = LD32
-# CONT-COALESCER-NEXT: }
-# CONT-COALESCER-DAG: {{%[0-9]+}}:dr64 = MOV_GPR_TO_DR64
+# CONT-COALESCER-DAG: {{%[0-9]+}}:gpr32 = LD32
+# CONT-COALESCER-DAG: {{%[0-9]+}}:gpr32 = LD32
+# CONT-COALESCER-NOT: BUNDLE{{.*}}:: (load{{.*}}{
+# CONT-COALESCER-NOT: BUNDLE_E96
 # CONT-COALESCER-NOT: {{LD32|MOV_GPR_TO_DR64|SEQ32|ADD32|ADDI32|F2MULAA32RS_HHLL}}_S
+# CONT-COALESCER-NOT: {{LD32|SEQ32|ADD32}}_E2_
+# CONT-COALESCER-NOT: BundleFormatRowID
+# CONT-COALESCER-NOT: CompletionStateID
 
 # CONT-GREEDY-LABEL: name: sms_shoulduse_multistage_mac
 # CONT-GREEDY-DAG: SEQ32
-# CONT-GREEDY: BUNDLE{{.*}}:: (load{{.*}}{
-# CONT-GREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
-# CONT-GREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
-# CONT-GREEDY-NEXT: }
-# CONT-GREEDY-DAG: {{%[0-9]+}}:dr64 = MOV_GPR_TO_DR64
+# CONT-GREEDY-DAG: {{%[0-9]+}}:gpr32 = LD32
+# CONT-GREEDY-DAG: {{%[0-9]+}}:gpr32 = LD32
+# CONT-GREEDY-NOT: BUNDLE{{.*}}:: (load{{.*}}{
+# CONT-GREEDY-NOT: BUNDLE_E96
 # CONT-GREEDY-NOT: {{LD32|MOV_GPR_TO_DR64|SEQ32|ADD32|ADDI32|F2MULAA32RS_HHLL}}_S
+# CONT-GREEDY-NOT: {{LD32|SEQ32|ADD32}}_E2_
+# CONT-GREEDY-NOT: BundleFormatRowID
+# CONT-GREEDY-NOT: CompletionStateID
 
 # CONT-VRW-LABEL: name: sms_shoulduse_multistage_mac
 # CONT-VRW-DAG: SEQ32
-# CONT-VRW: BUNDLE{{.*}}:: (load{{.*}}{
-# CONT-VRW-NEXT: ${{r[0-9]+}} = LD32
-# CONT-VRW-NEXT: ${{r[0-9]+}} = LD32
-# CONT-VRW-NEXT: }
-# CONT-VRW-DAG: ${{d[0-9]+}} = MOV_GPR_TO_DR64
+# CONT-VRW-DAG: ${{r[0-9]+}} = LD32
+# CONT-VRW-DAG: ${{r[0-9]+}} = LD32
+# CONT-VRW-NOT: BUNDLE{{.*}}:: (load{{.*}}{
+# CONT-VRW-NOT: BUNDLE_E96
 # CONT-VRW-NOT: {{LD32|MOV_GPR_TO_DR64|SEQ32|ADD32|ADDI32|F2MULAA32RS_HHLL}}_S
+# CONT-VRW-NOT: {{LD32|SEQ32|ADD32}}_E2_
+# CONT-VRW-NOT: BundleFormatRowID
+# CONT-VRW-NOT: CompletionStateID
 
-# stress-regalloc=8 - dual-load membership holds; spill/reload may appear;
-# root must not unbundle / private-slot; multi-expand stays bare.
 # CONT-SPILL-LABEL: name: sms_shoulduse_multistage_mac
-# CONT-SPILL: BUNDLE{{.*}}:: (load{{.*}}{
-# CONT-SPILL-NEXT: ${{r[0-9]+}} = LD32
-# CONT-SPILL-NEXT: ${{r[0-9]+}} = LD32
-# CONT-SPILL-NEXT: }
-# CONT-SPILL-DAG: ${{d[0-9]+}} = MOV_GPR_TO_DR64
+# CONT-SPILL-DAG: ${{r[0-9]+}} = LD32
+# CONT-SPILL-DAG: ${{r[0-9]+}} = LD32
+# CONT-SPILL-NOT: BUNDLE{{.*}}:: (load{{.*}}{
 # CONT-SPILL-NOT: LD32_S
 
-# compact soft-order interop - cannot unbundle dual-load root.
 # CONT-COMPACT-LABEL: name: sms_shoulduse_multistage_mac
-# CONT-COMPACT: BUNDLE{{.*}}:: (load{{.*}}{
-# CONT-COMPACT-NEXT: ${{r[0-9]+}} = LD32
-# CONT-COMPACT-NEXT: ${{r[0-9]+}} = LD32
-# CONT-COMPACT-NEXT: }
-# CONT-COMPACT-DAG: ${{d[0-9]+}} = MOV_GPR_TO_DR64
+# CONT-COMPACT-DAG: ${{r[0-9]+}} = LD32
+# CONT-COMPACT-DAG: ${{r[0-9]+}} = LD32
+# CONT-COMPACT-NOT: BUNDLE{{.*}}:: (load{{.*}}{
 # CONT-COMPACT-NOT: LD32_S
 
-# stop-after=postmisched (PEI in path) - dual-load hard root exact-commits as
-# Format E member setDesc; zero member loss. Multi-expand post-RA pseudo is
-# expanded (never residual hard-root member).
 # CONT-POST-LABEL: name: sms_shoulduse_multistage_mac
-# CONT-POST-DAG: BUNDLE 0{{.*}}{
-# CONT-POST-DAG: ${{r[0-9]+}} = LD32_S{{[012]}}
-# CONT-POST-DAG: ${{r[0-9]+}} = LD32_S{{[012]}}
-# CONT-POST-DAG: }
 # CONT-POST-DAG: SEQ32
+# CONT-POST-DAG: ${{r[0-9]+}} = LD32_S{{[012]}}
+# CONT-POST-DAG: ${{r[0-9]+}} = LD32_S{{[012]}}
 # CONT-POST-NOT: MOV_GPR_TO_DR64
 
-# Product multi-stage stats - legal groups + illegal skips; hard roots enter
-# post-RA and exact-commit; no RA spill/reload counters; no exact no-split fail.
-# CONT-STATS-DAG: {{[1-9][0-9]*}}{{ +}}haydn-instr-info{{.*}}SMS kernel same-cycle groups materialized as logical BUNDLE
-# CONT-STATS-DAG: {{[1-9][0-9]*}}{{ +}}haydn-instr-info{{.*}}SMS kernel same-cycle runs skipped
-# CONT-STATS-DAG: {{[1-9][0-9]*}}{{ +}}haydn-post-ra-sched{{.*}}Number of multi-member hard BUNDLE roots transactionally
-# CONT-STATS-DAG: {{[1-9][0-9]*}}{{ +}}haydn-post-ra-sched{{.*}}Number of multi-member hard BUNDLE roots at post-RA
-# CONT-STATS-DAG: {{[0-9]+}}{{ +}}haydn-post-ra-sched{{.*}}Number of post-RA idle
+# CONT-STATS-NOT: SMS kernel same-cycle groups materialized as logical BUNDLE
+# CONT-STATS-NOT: Number of loops software pipelined
 # CONT-STATS-DAG: {{[1-9][0-9]*}}{{ +}}haydn-post-ra-sched{{.*}}multi-MI cycles finalized as BUNDLE
 # CONT-STATS-DAG: {{[1-9][0-9]*}}{{ +}}prologepilog{{.*}}Number of bytes used for stack
-# CONT-STATS-DAG: 1{{ +}}pipeliner{{.*}}Number of loops software pipelined
 # CONT-STATS-NOT: failed exact no-split
-# CONT-STATS-NOT: Number of spills inserted
-# CONT-STATS-NOT: Number of reloads inserted

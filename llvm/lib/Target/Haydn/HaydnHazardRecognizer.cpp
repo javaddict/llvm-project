@@ -96,6 +96,15 @@ void llvm::applyFormatOrdering(Haydn::MachineBundle &Bundle,
   if (Bundle.empty())
     return;
 
+  // Post-RA only (phase firewall / PIPE-31): format ordering finalizes BUNDLE
+  // identity. Physreg proxy for !IsPreRA.
+  assert(llvm::all_of(Bundle.getInstrs(), [](const MachineInstr *MI) {
+           return llvm::none_of(MI->operands(), [](const MachineOperand &MO) {
+             return MO.isReg() && MO.getReg().isVirtual();
+           });
+         }) &&
+         "applyFormatOrdering is post-RA only (no virtual registers)");
+
   MachineBasicBlock &MBB = *Bundle.getInstrs()[0]->getParent();
 
   SmallVector<MachineInstr *, 3> Ordered =
@@ -642,9 +651,8 @@ bool HaydnHazardRecognizer::hasSameBundleWAW(const MachineInstr &MI) const {
   // write-port consumers. Excluding R0 allowed illegal packets such as
   //   { xor32 r0,r0,r0; ld32 r0, base, 0; ... }
   // which BundleSim correctly rejects as WRITE_CONFLICT.
-  // SFR stays excluded: dual dead implicit-def $sfr is normal product law
-  // (slot-ordered flag side-effects). Golden single-SFR-write is not product
-  // without explicit activation.
+  // SFR is included: product law is one SFR writer per cycle — dead
+  // implicit-def $sfr still collides with a second SFR def (WAW).
   // Returns false if TRI is not yet cached: that only happens before the first
   // emit, when CurrentCycleDefs is empty and no WAW is possible anyway.
   // TRI is required for physreg alias checks. Vreg identity checks work
@@ -660,7 +668,7 @@ bool HaydnHazardRecognizer::hasSameBundleWAW(const MachineInstr &MI) const {
         return true;
       continue;
     }
-    if (!Reg.isPhysical() || Reg == Haydn::SFR || !TRI)
+    if (!Reg.isPhysical() || !TRI)
       continue;
     for (Register D : CurrentCycleDefs)
       if (D.isPhysical() && TRI->regsOverlap(Reg, D))
@@ -688,7 +696,8 @@ bool HaydnHazardRecognizer::hasSameBundleRAW(const MachineInstr &MI) const {
   // so a live writer is in CurrentCycleLiveDefs by the time its consumer-reader
   // is evaluated. WAR (reader issued before writer) does not trip: the writer
   // candidate does not read that reg, and WAR in a bundle is legal on Haydn
-  // anyway. SFR excluded (parallel dead implicit-def $sfr is normal).
+  // anyway. SFR is still excluded from the live-def RAW set (dead flag
+  // side-effects have no consumer; live SFR RAW is rare and port-gated).
   // R0 is NOT excluded: soft-zero is a real register (borrow/restore); a
   // same-bundle reader of a live R0 write would observe the OLD value.
   // Vregs (pre-RA) match by Register identity; physregs use regsOverlap.
@@ -700,17 +709,18 @@ bool HaydnHazardRecognizer::hasSameBundleRAW(const MachineInstr &MI) const {
 }
 
 void HaydnHazardRecognizer::appendDefs(const MachineInstr &MI) {
-  // Record destination registers. SFR excluded (dual dead implicit-def $sfr
-  // is product-legal). R0 is tracked: soft-zero restores and R0-borrow loads
-  // are real defs. Every non-SFR def goes into CurrentCycleDefs for the WAW
-  // check; only LIVE defs go into CurrentCycleLiveDefs for the RAW check (a
-  // dead write has no consumer and a same-bundle reader correctly observes
-  // the OLD value). Virtual defs (pre-RA) are tracked by Register identity.
+  // Record destination registers. SFR is included: product law is one SFR
+  // writer per cycle (dead implicit-def $sfr still counts). R0 is tracked:
+  // soft-zero restores and R0-borrow loads are real defs. Every def goes into
+  // CurrentCycleDefs for the WAW check; only LIVE non-SFR defs go into
+  // CurrentCycleLiveDefs for the RAW check (a dead write has no consumer and
+  // a same-bundle reader correctly observes the OLD value). Virtual defs
+  // (pre-RA) are tracked by Register identity.
   if (!TRI)
     (void)getTRI(MI);
-  // WAW set: ALL non-SFR defs (live or dead) — the spec forbids two writes to
-  // one register regardless of liveness. HR-specific, not part of the shared
-  // no-forwarding RAW law.
+  // WAW set: ALL defs (live or dead), including SFR — the spec forbids two
+  // writes to one register regardless of liveness. HR-specific, not part of
+  // the shared no-forwarding RAW law.
   for (const MachineOperand &MO : MI.operands()) {
     if (!MO.isReg() || !MO.isDef())
       continue;
@@ -718,8 +728,6 @@ void HaydnHazardRecognizer::appendDefs(const MachineInstr &MI) {
     if (!Reg)
       continue;
     if (!Reg.isPhysical() && !Reg.isVirtual())
-      continue;
-    if (Reg == Haydn::SFR)
       continue;
     CurrentCycleDefs.insert(Reg);
   }

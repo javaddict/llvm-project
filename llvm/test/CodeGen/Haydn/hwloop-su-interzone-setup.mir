@@ -74,12 +74,11 @@ body:             |
 
 # CHECK-LABEL: name: interzone_setup
 #
-# Top-down: coissue SET+ADD then InterveningCycles trailing idle NOPs from
-# ExitReady (handleRegionConflicts ExitReady arm; SetupIssueDistance edge).
-# TOP: BUNDLE
-# TOP: ADD32
+# Top-down: one-SFR-writer law keeps SET+ADD sequential (both def dead $sfr);
+# InterveningCycles trailing idle NOPs still come from ExitReady
+# (handleRegionConflicts ExitReady arm; SetupIssueDistance edge).
 # TOP: SET_HWLOOP
-# TOP: NOP
+# TOP: ADD32
 # TOP: NOP
 # TOP: bb.1
 # TOP: RET

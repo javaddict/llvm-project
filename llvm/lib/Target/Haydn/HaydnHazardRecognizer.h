@@ -17,7 +17,7 @@
 // entries may issue per cycle, subject to:
 // * unit injectivity (no two entries map to the same unit)
 // * the GPR 4R2W, DR 7R3W, AR 2R2W port budgets (live SFR 2R1W vocabulary)
-// * dual dead implicit-def $sfr is product-legal (not a single-SFR-write gate)
+// * at most one SFR writer per cycle (dead implicit-def $sfr still counts)
 // * latency-bound data dependencies (carried by the scheduler DAG's SDep
 // edges, NOT by this recognizer — see note below).
 //
@@ -428,9 +428,9 @@ private:
   // in one bundle from writing the same register. This set holds destination
   // registers of instructions already issued in the CURRENT cycle (cleared on
   // Advance/Recede/Reset); a candidate whose defs overlap it is a Hazard.
-  // SFR is excluded: dual dead implicit-def $sfr is product-legal. R0 is
-  // included: soft-zero restores and R0-borrow loads are real write-port
-  // consumers.
+  // SFR is included: product law is one SFR writer per cycle (dead flag
+  // side-effects count). R0 is included: soft-zero restores and R0-borrow
+  // loads are real write-port consumers.
   SmallSet<Register, 8> CurrentCycleDefs;
   // LIVE destination registers written this cycle (defs whose result is
   // consumed, i.e. NOT dead). Used by hasSameBundleRAW. A same-bundle read+write

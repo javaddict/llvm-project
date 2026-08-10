@@ -3,28 +3,21 @@
 # RUN:   | FileCheck %s --check-prefix=RESMII
 # REQUIRES: asserts
 
-# Role: MIR — Positive SMS-RESMII fail-closed pin (plan §2.5 / §5.2 / exit #9): Left-to-right greedy exactTryAddProduct packing (ResourceCycle.
-
-# Positive SMS-RESMII fail-closed pin (plan §2.5 / §5.2 / exit #9):
-#   Left-to-right greedy exactTryAddProduct packing (ResourceCycle /
-#   calculateResMIIDFA peer depth) can open more cycles than the exhaustive
-#   ≤3 format set oracle. Body order is the unit order-trap multiset
-#   [ST32, ST32, ADD32, ADD32, ADD32] (plus IV/addr arithmetic that still
-#   leaves greedy > exhaustive): greedy opens 3+ cycles while a different
-#   partition needs fewer.
+# Role: MIR — Positive SMS-RESMII overestimate metrics pin (Option A).
 #
-#   analyzeLoopForPipelining must fail closed — not merely WARNING — so SMS
-#   never product-enables a body whose format ResMII starting estimate is not
-#   a true lower bound. No shared MachinePipeliner rewrite; no force flag.
+# Left-to-right greedy exactTryAddProduct packing can open more cycles than the
+# exhaustive ≤3 format set oracle on the order-trap multiset
+# [ST32, ST32, ADD32, ADD32, ADD32] (+ IV/addr). Under Option A product law,
+# overestimate is metrics-only: StageCount>1 containment is the product gate,
+# and inflated greedy ResMII is a conservative II floor (not an analyze reject).
+# No shared MachinePipeliner rewrite; no force flag; no force-coissue revival.
 #
 # Companion accept path (overestimate=0): sms-format-resmii.mir.
 # SMS-HOOK positive reject: sms-format-hook-reject.mir.
 #
 # RESMII: SMS-RESMII: body_ops={{[0-9]+}} greedy={{[0-9]+}} exhaustive={{[0-9]+}} overestimate={{[1-9][0-9]*}}
-# RESMII: SMS-RESMII: reject
-# RESMII: SMS: analyzeLoopForPipelining fail-closed (SMS-RESMII greedy overestimate)
-# RESMII: Unable to analyzeLoop, can NOT pipeline Loop
-# RESMII-NOT: Schedule Found? 1
+# RESMII: SMS-RESMII: reject — greedy overestimates exhaustive oracle by {{[1-9][0-9]*}} (metrics-only; StageCount>1 containment is the product gate; format-dependent multi-stage is post-RA only)
+# RESMII-NOT: SMS: analyzeLoopForPipelining fail-closed (SMS-RESMII greedy overestimate)
 
 --- |
   define void @sms_resmii_greedy_overestimate(ptr %p, ptr %q, i32 %n) #0 {

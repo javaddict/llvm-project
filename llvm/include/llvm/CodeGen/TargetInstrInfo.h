@@ -865,44 +865,6 @@ public:
     /// Return true if the target can expand pipelined schedule with modulo
     /// variable expansion.
     virtual bool isMVEExpanderSupported() { return false; }
-
-    /// Called after a successful Swing Modulo schedule is accepted (and will
-    /// be expanded). Targets may record ResMII/RecMII/II for release asm
-    /// annotation (e.g. Haydn `#<swps>`). Default: no-op.
-    /// \p KernelBB  loop header / kernel block (stable MBB number)
-    /// \p ResMII    resource lower bound
-    /// \p RecMII    recurrence lower bound
-    /// \p MII       max(Res,Rec) (or forced II)
-    /// \p StageCount  prologue stages + 1
-    /// \p NumOps    non-boundary SUnits at SMS time
-    /// \p ScheduledII  initiation interval of the accepted schedule
-    virtual void recordSuccessfulSMS(MachineFunction &MF,
-                                     MachineBasicBlock *KernelBB,
-                                     unsigned ResMII, unsigned RecMII,
-                                     unsigned MII, unsigned StageCount,
-                                     unsigned NumOps, unsigned ScheduledII) {
-      (void)MF;
-      (void)KernelBB;
-      (void)ResMII;
-      (void)RecMII;
-      (void)MII;
-      (void)StageCount;
-      (void)NumOps;
-      (void)ScheduledII;
-    }
-
-    /// Called by ModuloScheduleExpander after kernel rewrite cleanup (dead
-    /// induction removal + prolog/epilog branches), while the rewritten
-    /// kernel still exists. \p KernelCloneCycles is an ordered list of live
-    /// (kernel-clone MI, schedule-relative cycle) pairs. Cycle keys are
-    /// AbsCycle - FirstCycle from ModuloSchedule::getCycle(original) at clone
-    /// time (negative Swing indices included) — not reconstructed from
-    /// adjacency after the fact. Targets may materialize architectural
-    /// multi-member BUNDLE roots for same-cycle groups. Default: no-op.
-    virtual void materializeSMSKernelCycleGroups(
-        ArrayRef<std::pair<MachineInstr *, unsigned>> KernelCloneCycles) {
-      (void)KernelCloneCycles;
-    }
   };
 
   /// Analyze loop L, which must be a single-basic-block loop, and if the

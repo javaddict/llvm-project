@@ -90,7 +90,7 @@ define i32 @f(i32 %a, i32 %b) {
 ; O0-NOT:      Modulo Software Pipelining
 
 ; =============================================================================
-; Opt1+ - IR HardwareLoops default-OFF (haydn-enable-hwloops); PostLegalizer + PostSelect; PreRA MIS; dual-sched pack
+; Opt1+ - IR HardwareLoops default-OFF; PostLegalizer + PostSelect; PreRA MIS; dual-sched pack
 ; =============================================================================
 ; O123-NOT:      Hardware Loop Insertion
 ; O123:      HaydnPreLegalizerCombiner
@@ -126,8 +126,7 @@ define i32 @f(i32 %a, i32 %b) {
 ; O123:      PostRA Machine Instruction Scheduler
 ; Sole MBP (addBlockPlacement empty - no second placement after pack):
 ; O123-NOT:      Branch Probability Basic Block Placement
-; PreEmit - BR / FixupHwLoops / BR / B4.3 late Finalize+Verify
-; (AIE PreEmit empty AIE2TargetMachine.cpp:88; Haydn re-commit after growth)
+; PreEmit - BR / FixupHwLoops / BR / late Finalize+Verify
 ; O123:      Branch relaxation pass
 ; O123-NOT:      Haydn Hardware Loop Fixup
 ; O123-NEXT:      Haydn Bundle Finalization

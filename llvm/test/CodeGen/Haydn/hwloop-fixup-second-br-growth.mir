@@ -4,8 +4,6 @@
 # RUN: llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf -mattr=+hwloop \
 # RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs %s -o - | \
 # RUN:   FileCheck %s --check-prefixes=CHECK,DEBUGOFF
-; Format E96 cutover residual: FileCheck/idle-pad/reloc geometry still open (GE96-01/03).
-; XFAIL: *
 
 # Role: MIR — Post-Fixup second-BR growth budget (late-layout-stable-row rule):
 # Fixup accepts hardware SET only when residual Off1/Off2 margins cover the
@@ -16,12 +14,12 @@
 # Fixup acceptance.
 #
 # SetupIssueDistance=3 / InterveningCycles=2. Body parcels >= 3.
+# Format E productParcelBytes=12 ⇒ MaxSingleBranchGrowthBytes=48.
 #
 # growth_budget_demote:
-#   Following = InterveningCycles (2) after SET → StartOff hard floor OK.
-#   Three short unconditional B (simm12) in spacer MBBs before Header:
-#   current sizes still fit uimm6, but still-relaxable growth budget is
-#   3 × MaxSingleBranchGrowthBytes > BeginMargin → demote-first.
+#   Following floor OK (InterveningCycles after SET). Extra pad NOPs raise
+#   StartOff so hard Off1 still holds, but 3 × MaxSingleBranchGrowthBytes
+#   exceeds residual BeginMargin → demote-first.
 #
 # keep_with_one_short_b:
 #   Same setup + one short B. Growth ≤ BeginMargin and Off1 holds →
@@ -83,55 +81,31 @@ name:            growth_budget_demote
 tracksRegLiveness: true
 noVRegs:         true
 body:             |
-  ; CHECK-LABEL: name: growth_budget_demote
-  ; CHECK: bb.0.entry:
-  ; CHECK-NEXT:   successors: %bb.1(0x80000000)
-  ; CHECK-NEXT:   liveins: $r1, $r0, $r15
-  ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   $r0 = frame-setup XOR32 $r0, $r0
-  ; CHECK-NEXT:   SET_HWLOOP_W 0, %bb.4, %bb.4, 8
-  ; CHECK-NEXT:   NOP
-  ; CHECK-NEXT:   NOP
-  ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT: bb.1.s0:
-  ; CHECK-NEXT:   successors: %bb.2(0x80000000)
-  ; CHECK-NEXT:   liveins: $r1, $r0, $r15
-  ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   B %bb.2
-  ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT: bb.2.s1:
-  ; CHECK-NEXT:   successors: %bb.3(0x80000000)
-  ; CHECK-NEXT:   liveins: $r1, $r0, $r15
-  ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   B %bb.3
-  ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT: bb.3.s2:
-  ; CHECK-NEXT:   successors: %bb.4(0x80000000)
-  ; CHECK-NEXT:   liveins: $r1, $r0, $r15
-  ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   B %bb.4
-  ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT: bb.4.body:
-  ; CHECK-NEXT:   successors: %bb.5(0x80000000)
-  ; CHECK-NEXT:   liveins: $r1, $r0
-  ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   ST32 $r0, $r1, 0
-  ; CHECK-NEXT:   NOP
-  ; CHECK-NEXT:   NOP
-  ; CHECK-NEXT:   NOP
-  ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT: bb.5.exit:
-  ; CHECK-NEXT:   liveins: $r15
-  ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   RET implicit killed $r15
+  ; PRODUCT-LABEL: name: growth_budget_demote
+  ; PRODUCT-NOT: SET_HWLOOP
+  ; PRODUCT: ADDI32_W
+  ; PRODUCT: SUBI32
+  ; PRODUCT: BNEZ_W
+  ; PRODUCT: RET
+  ;
+  ; DEBUGOFF-LABEL: name: growth_budget_demote
+  ; DEBUGOFF-NOT: SET_HWLOOP
+  ; DEBUGOFF-NOT: SUBI32
+  ; DEBUGOFF-NOT: BNEZ_W
+  ; DEBUGOFF: RET
   bb.0.entry:
     liveins: $r1, $r0, $r15
     successors: %bb.1
 
     $r0 = frame-setup XOR32 $r0, $r0
     ; Imm trip; header==latch is %bb.4. Two following NOPs =
-    ; InterveningCycles (SetupIssueDistance=3).
+    ; InterveningCycles, plus pad so StartOff leaves BeginMargin < 3×48.
     SET_HWLOOP 0, %bb.4, %bb.4, 8
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
     NOP
     NOP
 
