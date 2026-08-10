@@ -8,7 +8,7 @@
 declare i32 @llvm.haydn.slli32(i32, i32)
 declare i64 @llvm.haydn.srai64(i64, i32)
 declare i64 @llvm.haydn.sin.cos(i32, i32)
-declare i64 @llvm.haydn.movei.h(i32)
+declare i64 @llvm.haydn.movei.h(i64, i32)
 declare i32 @llvm.haydn.arctan(i64, i32)
 declare void @llvm.haydn.setcbr.begin(i32, i32)
 declare void @llvm.haydn.flar(i32)
@@ -41,8 +41,8 @@ define i64 @probe_sin_cos(i32 %phase) {
 
 ; CHECK-LABEL: probe_movei_h:
 ; CHECK: movei_h
-define i64 @probe_movei_h() {
-  %r = call i64 @llvm.haydn.movei.h(i32 4660)
+define i64 @probe_movei_h(i64 %acc) {
+  %r = call i64 @llvm.haydn.movei.h(i64 %acc, i32 4660)
   ret i64 %r
 }
 

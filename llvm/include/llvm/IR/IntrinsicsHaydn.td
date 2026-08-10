@@ -1896,11 +1896,11 @@ def int_haydn_transf64f2 : Haydn_Intrinsic<"haydn_transf64f2",
     [llvm_i64_ty], [llvm_i32_ty],
     [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_movei_h : Haydn_Intrinsic<"haydn_movei_h",
-    [llvm_i64_ty], [llvm_i32_ty],
-    [ImmArg<ArgIndex<0>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_movei_l : Haydn_Intrinsic<"haydn_movei_l",
-    [llvm_i64_ty], [llvm_i32_ty],
-    [ImmArg<ArgIndex<0>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_zero_dr : Haydn_Intrinsic<"haydn_zero_dr",
     [llvm_i64_ty], [],
     [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
