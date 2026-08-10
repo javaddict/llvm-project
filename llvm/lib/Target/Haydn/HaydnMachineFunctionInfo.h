@@ -96,28 +96,17 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   // -1 when not reserved.
   int BranchRelaxationScratchFI = -1;
 
-  // slice 2a: function-lifetime alt-descriptor side-map. The post-RA
-  // HaydnHazardRecognizer records the chosen (slot, variant) per MI here during
-  // scheduling; the HaydnSlotVariantFinalizer reads it post-SMS to bake the
-  // variant opcode (so MC emit trusts the EW tag — E-2/E-3). Owned by the MFI
-  // (not the HR) because the HR is per-region while the finalizer runs after
-  // all regions. Mirrors AIE's AIEAlternateDescriptors ownership.
+  // Transient post-RA alt-descriptor side-map (not durable placement).
+  // HaydnHazardRecognizer records chosen member opcodes during post-RA
+  // scheduling; leaveRegion materialize reads then clear()s it
+  // (AIEAlternateDescriptors peer). clone() clears AltDescs and remaps
+  // SMSLoopInfos via Src2DstMBB so MI*/MBB* keys never leak across outline.
   HaydnAlternateDescriptors AltDescs;
 
 public:
-  /// One durable same-cycle BUNDLE group from SMS expand (WP1 product path).
-  /// Cycle is schedule-relative phase key (AbsCycle - FirstCycle); Members is
-  /// the contiguous legal product-cycle size frozen as a logical BUNDLE root.
-  /// Does not encode FormatID / setDesc — post-RA commits inside the root.
-  struct SMSDurableGroup {
-    unsigned Cycle = 0;   ///< Kernel phase / modulo cycle (FirstCycle-biased).
-    unsigned Members = 0; ///< Contiguous coissue size at that cycle.
-  };
-
-  /// Always-on SMS kernel metadata for release `#<swps>` and durable groups.
-  /// Keyed by kernel MBB. Holds II / stage / ops scalars plus group cycle
-  /// identity for later RA / post-RA pack-inside. FormatID and member setDesc
-  /// are not frozen here — only schedule metrics and handoff group keys.
+  /// SMS kernel metadata for release `#<swps>` asm annotation.
+  /// Keyed by kernel MBB. Holds II / stage / ops scalars only — no pre-RA
+  /// same-cycle group identity (issue-cycle identity must not cross RA).
   struct SMSSWPSInfo {
     unsigned ResMII = 0;
     unsigned RecMII = 0;
@@ -125,9 +114,6 @@ public:
     unsigned StageCount = 0;   ///< Prolog stages + 1 (kernel phase span).
     unsigned NumOps = 0;
     unsigned ScheduledII = 0;  ///< Accepted initiation interval.
-    /// Same-cycle groups from materializeSMSKernelCycleGroups (empty when
-    /// durable path OFF / bare single-stage expand).
-    SmallVector<SMSDurableGroup, 4> DurableGroups;
   };
 
 private:
@@ -140,9 +126,7 @@ public:
   MachineFunctionInfo *
   clone(BumpPtrAllocator &Allocator, MachineFunction &DestMF,
         const DenseMap<MachineBasicBlock *, MachineBasicBlock *> &Src2DstMBB)
-      const override {
-    return DestMF.cloneInfo<HaydnMachineFunctionInfo>(*this);
-  }
+      const override;
 
   /// Object-encoding profile for this MachineFunction (production E96).
   haydn::format::ObjectEncodingProfileID getObjectEncodingProfileID() const {
@@ -213,20 +197,9 @@ public:
   const HaydnAlternateDescriptors &getAltDescs() const { return AltDescs; }
 
   void recordSMSLoop(const MachineBasicBlock *KernelBB, SMSSWPSInfo Info) {
-    // Expand materialize runs before recordSuccessfulSMS and may already have
-    // appended DurableGroups. Preserve them when scalar freeze overwrites.
-    auto &Slot = SMSLoopInfos[KernelBB];
-    SmallVector<SMSDurableGroup, 4> KeptGroups = std::move(Slot.DurableGroups);
-    Slot = std::move(Info);
-    if (Slot.DurableGroups.empty())
-      Slot.DurableGroups = std::move(KeptGroups);
+    SMSLoopInfos[KernelBB] = std::move(Info);
   }
 
-  /// Record one durable same-cycle group for \p KernelBB (handoff expand).
-  void recordSMSDurableGroup(const MachineBasicBlock *KernelBB, unsigned Cycle,
-                             unsigned Members) {
-    SMSLoopInfos[KernelBB].DurableGroups.push_back({Cycle, Members});
-  }
 
   const SMSSWPSInfo *getSMSLoop(const MachineBasicBlock *KernelBB) const {
     auto It = SMSLoopInfos.find(KernelBB);

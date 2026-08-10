@@ -54,32 +54,12 @@ static void emitMaterializeImm32(MachineBasicBlock &MBB,
 }
 
 // PEI post-RA scratch for prologue/epilogue CSR addressing.
-// ## Why this exists (and why not invent heuristics)
-// Mid-body FI elimination uses the standard RISC-V model in
-// \c HaydnRegisterInfo::eliminateFrameIndex: reserved R12, else a vreg
-// resolved by \c scavengeFrameVirtualRegs (requiresFrameIndexScavenging).
-// PEI \c emitPrologue runs post-RA and often without a live scavenger at the
-// insert point, so we need a phys scratch up front. The **only** safe filter
-// is the **ABI call-preserved set**, not RA liveness:
-// \c TRI->getCalleeSavedRegs / CSR bank = R8–R11, R15, D8–D15 (R14 if hasFP).
-// Call-clobbered GPRs (R1–R7, R12) may be used at entry if
-// they are not entry live-ins.
-// \c !MRI.isPhysRegUsed(R8) is **not** permission to clobber R8: RA not
-// allocating R8 in *this* function still means R8 belongs to the
-// *caller* and must be preserved unless it is on CSI and already saved.
-// Historical bug : picking the first "unused" physreg fell through to
-// R8 for high-pressure leaves → clobbered caller's R8 without save/restore.
-// ## Preference (matches EFI intent)
-// 1. Call-clobbered GPR, prefer RA-unused, then any non-live-in.
-// 2. R12 (call-clobbered; PEI at entry before body).
-// 3. Fatal — never steal unsaved CSRs.
-// \p Avoid2 is an optional second physreg to exclude. Epilogue CSR restore
-// must pass R1 here: the integer return value lives in R1 across the
-// epilogue, but R1 is call-clobbered and not an entry live-in for arg-less
-// functions, so the "any call-clobbered" fallthrough would otherwise pick it
-// and clobber the return (cb44: last offset materialize left R1=196).
+// ABI-safe filter = call-clobbered set (not CSRs), not entry live-in, not Avoid.
+// ProtectRetCC (epilogue only): also exclude RetCC R1/R2 so large FrameDestroy
+// materialize cannot clobber live return values.
 static Register getPEIScratchReg(const MachineFunction &MF, Register Avoid,
-                                 Register Avoid2 = Register()) {
+                                 Register Avoid2 = Register(),
+                                 bool ProtectRetCC = false) {
   const HaydnSubtarget &ST = MF.getSubtarget<HaydnSubtarget>();
   const HaydnRegisterInfo *TRI = ST.getRegisterInfo();
 
@@ -94,14 +74,14 @@ static Register getPEIScratchReg(const MachineFunction &MF, Register Avoid,
     return false;
   };
 
-  // ABI-safe: not reserved, not call-preserved, not entry live-in, not Avoid.
-  // Never use R14: it is the architectural FP hard reg. HaydnPEIPeephole
-  // treats FrameSetup ADDI R14,R13,* as "dead FP setup" when !hasFP — PEI
-  // must not use R14 as a CSR-stride temp or that ADDI is deleted and CSR
-  // ST64 goes through an uninitialized FP (MEMORY_FAULT). Same spirit as
-  // never using SP as a general scratch.
+  auto isRetCCPhys = [](MCPhysReg Reg) {
+    return Reg == Haydn::R1 || Reg == Haydn::R2;
+  };
+
   auto isABISafeScratch = [&](MCPhysReg Reg) {
     if (Reg == Avoid || Reg == Avoid2 || Reg == Haydn::R0 || Reg == Haydn::R14)
+      return false;
+    if (ProtectRetCC && isRetCCPhys(Reg))
       return false;
     if (MRI.isReserved(Reg))
       return false;
@@ -112,26 +92,26 @@ static Register getPEIScratchReg(const MachineFunction &MF, Register Avoid,
     return Haydn::GPR32NoSPNoLRRegClass.contains(Reg);
   };
 
-  // Prefer a call-clobbered reg the body never touched (still ABI-safe at entry).
   for (MCPhysReg Reg : Haydn::GPR32NoSPNoLRRegClass)
     if (isABISafeScratch(Reg) && !MRI.isPhysRegUsed(Reg))
       return Reg;
 
-  // Any call-clobbered non-live-in (body may use it later; PEI is at entry
-  // epilogue with Avoid2 protecting the return value).
   for (MCPhysReg Reg : Haydn::GPR32NoSPNoLRRegClass)
     if (isABISafeScratch(Reg))
       return Reg;
 
-  // R12 is not in CSR_Haydn → call-clobbered. Usable as PEI temp even when
-  // allocatable and "used" later in the function.
   if (Avoid != Haydn::R12 && Avoid2 != Haydn::R12 &&
+      !(ProtectRetCC && isRetCCPhys(Haydn::R12)) &&
       !MRI.isReserved(Haydn::R12) && !Entry.isLiveIn(Haydn::R12) &&
       !isCalleeSavedPhys(Haydn::R12))
     return Haydn::R12;
 
   report_fatal_error(
       "Haydn PEI: no ABI-safe scratch GPR (need call-clobbered free reg)");
+}
+
+static int64_t getCalleeSavedCFAOffset(const MachineFunction &MF, int FI) {
+  return MF.getFrameInfo().getObjectOffset(FI);
 }
 
 // Emit a sequence to set a GPR32 register to BaseReg + Offset.
@@ -690,9 +670,7 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
     const TargetRegisterClass *RC = Reg.isVirtual() ?
         MRI.getRegClassOrNull(Reg) : TRI->getMinimalPhysRegClass(Reg);
     if (RC && (RC == &Haydn::GPR32RegClass || RC == &Haydn::GPR32NoSPNoLRRegClass)) {
-      Register FrameReg;
-      int64_t Offset =
-          getFrameIndexReference(MF, FrameIdx, FrameReg).getFixed();
+      int64_t Offset = getCalleeSavedCFAOffset(MF, FrameIdx);
       CFIIndex = MF.addFrameInst(MCCFIInstruction::createOffset(
           nullptr, MCRI->getDwarfRegNum(Reg, true), Offset));
       BuildMI(MBB, MBBI, DL, TII->get(TargetOpcode::CFI_INSTRUCTION))
@@ -701,9 +679,7 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
     }
     // Handle DR64 registers (D8-D15)
     else if (RC && RC == &Haydn::DR64RegClass) {
-      Register FrameReg;
-      int64_t Offset =
-          getFrameIndexReference(MF, FrameIdx, FrameReg).getFixed();
+      int64_t Offset = getCalleeSavedCFAOffset(MF, FrameIdx);
       CFIIndex = MF.addFrameInst(MCCFIInstruction::createOffset(
           nullptr, MCRI->getDwarfRegNum(Reg, true), Offset));
       BuildMI(MBB, MBBI, DL, TII->get(TargetOpcode::CFI_INSTRUCTION))
@@ -786,8 +762,8 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
           .addImm(-static_cast<int64_t>(StackSize))
           .setMIFlag(MachineInstr::FrameDestroy);
     } else {
-      Register TempReg =
-          getPEIScratchReg(MF, /*Avoid=*/FP, /*Avoid2=*/Haydn::R13);
+      Register TempReg = getPEIScratchReg(MF, /*Avoid=*/FP, /*Avoid2=*/Haydn::R13,
+                                           /*ProtectRetCC=*/true);
       emitMaterializeImm32(MBB, MBBI, DL, TII, TempReg,
                            static_cast<int64_t>(StackSize),
                            MachineInstr::FrameDestroy);
@@ -890,9 +866,10 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
           .setMIFlag(MachineInstr::FrameDestroy);
     } else {
       // Large stack restore: MatInt(size) into PEI scratch, ADD32 SP.
-      // Avoid R1: return value is live through the epilogue.
-      Register TempReg =
-          getPEIScratchReg(MF, /*Avoid=*/Haydn::R13, /*Avoid2=*/Haydn::R1);
+      // RetCC R1/R2 are excluded by getPEIScratchReg permanently.
+      Register TempReg = getPEIScratchReg(MF, /*Avoid=*/Haydn::R13,
+                                           /*Avoid2=*/Register(),
+                                           /*ProtectRetCC=*/true);
       emitMaterializeImm32(MBB, MBBI, DL, TII, TempReg,
                            static_cast<int64_t>(StackSize),
                            MachineInstr::FrameDestroy);
@@ -901,6 +878,17 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
           .addReg(TempReg)
           .setMIFlag(MachineInstr::FrameDestroy);
     }
+  }
+
+  // Epilogue FrameDestroy CFI: restore CFA to SP+0 once the frame is gone.
+  if (MF.needsFrameMoves() && (StackSize != 0 || hasFP(MF))) {
+    unsigned CFIIndex = MF.addFrameInst(MCCFIInstruction::cfiDefCfa(
+        nullptr,
+        MF.getContext().getRegisterInfo()->getDwarfRegNum(Haydn::R13, true),
+        0));
+    BuildMI(MBB, MBBI, DL, TII->get(TargetOpcode::CFI_INSTRUCTION))
+        .addCFIIndex(CFIIndex)
+        .setMIFlags(MachineInstr::FrameDestroy);
   }
 
   // Emit return instruction if the terminator isn't already a return.

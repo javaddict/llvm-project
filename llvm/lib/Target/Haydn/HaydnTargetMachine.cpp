@@ -30,10 +30,7 @@
 #include "HaydnPostRASchedStrategy.h"
 #include "HaydnSubtarget.h"
 #include "HaydnTargetTransformInfo.h"
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "TargetInfo/HaydnTargetInfo.h"
 #include "llvm/CodeGen/BranchRelaxation.h"
 #include "llvm/CodeGen/Passes.h" // EarlyIfConverterLegacyID
@@ -56,147 +53,6 @@
 #include <optional>
 
 using namespace llvm;
-
-//===----------------------------------------------------------------------===//
-// WP2 — Bundled two-address rewrite (SMS hard-root RA survival)
-//===----------------------------------------------------------------------===//
-//
-// TwoAddressInstruction only walks bundle-level MBB iterators, so it never
-// sees tied def/use pairs on *children* of multi-member BUNDLE roots. SMS
-// handoff freezes legal product cycles as logical hard roots before
-// TwoAddress; children may still carry non-identical tied operands (e.g.
-// F2MULAA accumulator). After TwoAddress sets TiedOpsRewritten, the machine
-// verifier requires identity on every tied pair — including bundled children.
-//
-// Placement: AFTER PHIElimination and BEFORE TwoAddress. insertPass after
-// TwoAddress is too late under -verify-machineinstrs (the verifier runs
-// immediately after TwoAddress, before any insertPass followers). Pre-fixing
-// bundled ties here means TwoAddress sees already-identical child ties and
-// only has to rewrite bare MIs; post-TwoAddress verify is clean.
-//
-// Rewrite shape matches TwoAddress for bare MIs: prepend
-//   dst = COPY src
-// before the hard root, then set the tied use to dst. RegisterCoalescer folds
-// the COPY. Architectural dual-load / rematch roots without ties are no-ops.
-// Spill/reload around the hard root is ordinary RA; isSchedulingBoundary keeps
-// membership intact through machine-scheduler → coalescer → greedy → VRW.
-//===----------------------------------------------------------------------===//
-
-namespace {
-
-bool rewriteBundledTiedTwoAddressOps(MachineFunction &MF) {
-  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
-  MachineRegisterInfo &MRI = MF.getRegInfo();
-  bool Changed = false;
-
-  for (MachineBasicBlock &MBB : MF) {
-    // Snapshot roots so COPY insertion before a root does not disturb the
-    // bundle-level walk.
-    SmallVector<MachineInstr *, 8> Roots;
-    for (MachineInstr &MI : MBB) {
-      if (MI.isBundle() && MI.getBundleSize() >= 2)
-        Roots.push_back(&MI);
-    }
-
-    for (MachineInstr *Root : Roots) {
-      for (MachineBasicBlock::instr_iterator II =
-               std::next(Root->getIterator());
-           II != MBB.instr_end() && II->isBundledWithPred(); ++II) {
-        MachineInstr &Child = *II;
-        for (unsigned SrcIdx = 0, E = Child.getNumOperands(); SrcIdx != E;
-             ++SrcIdx) {
-          unsigned DstIdx = 0;
-          if (!Child.isRegTiedToDefOperand(SrcIdx, &DstIdx))
-            continue;
-          MachineOperand &SrcMO = Child.getOperand(SrcIdx);
-          MachineOperand &DstMO = Child.getOperand(DstIdx);
-          if (!SrcMO.isReg() || !DstMO.isReg())
-            continue;
-          Register SrcReg = SrcMO.getReg();
-          Register DstReg = DstMO.getReg();
-          if (!SrcReg || !DstReg || SrcReg == DstReg)
-            continue;
-
-          // TwoAddress trivial path: undef tied use rewrites in place.
-          if (SrcMO.isUndef() && !DstMO.getSubReg()) {
-            if (DstReg.isVirtual() && SrcReg.isVirtual())
-              MRI.constrainRegClass(DstReg, MRI.getRegClass(SrcReg));
-            SrcMO.setReg(DstReg);
-            SrcMO.setSubReg(0);
-            Changed = true;
-            continue;
-          }
-
-          // Pre-RA SMS hard roots use virtual registers only.
-          if (!SrcReg.isVirtual() || !DstReg.isVirtual())
-            continue;
-
-          unsigned SubRegB = SrcMO.getSubReg();
-          const TargetRegisterClass *RC = MRI.getRegClass(SrcReg);
-          MRI.constrainRegClass(DstReg, RC);
-          BuildMI(MBB, *Root, Child.getDebugLoc(), TII.get(TargetOpcode::COPY),
-                  DstReg)
-              .addReg(SrcReg, 0, SubRegB);
-          SrcMO.setReg(DstReg);
-          SrcMO.setSubReg(0);
-          if (SrcMO.isKill())
-            SrcMO.setIsKill(false);
-          Changed = true;
-        }
-      }
-    }
-  }
-  return Changed;
-}
-
-class HaydnBundledTwoAddressRewrite : public MachineFunctionPass {
-public:
-  static char ID;
-  HaydnBundledTwoAddressRewrite();
-
-  StringRef getPassName() const override {
-    return "Haydn bundled two-address rewrite (SMS hard-root RA survival)";
-  }
-
-  void getAnalysisUsage(AnalysisUsage &AU) const override {
-    // Preserve LiveVariables so the common no-op path (no multi-member hard
-    // roots) does not drop LV before TwoAddress — that would perturb RA for
-    // unrelated kernels. When this pass inserts COPYs it does not update LV
-    // kill sets; TwoAddress still rewrites correctly without relying on them.
-    AU.setPreservesCFG();
-    AU.addPreservedID(LiveVariablesID);
-    AU.addPreservedID(MachineLoopInfoID);
-    AU.addPreservedID(MachineDominatorsID);
-    MachineFunctionPass::getAnalysisUsage(AU);
-  }
-
-  bool runOnMachineFunction(MachineFunction &MF) override {
-    return rewriteBundledTiedTwoAddressOps(MF);
-  }
-};
-
-} // end anonymous namespace
-
-char HaydnBundledTwoAddressRewrite::ID = 0;
-
-// INITIALIZE_PASS expands initialize* in ::llvm; declare before defining.
-namespace llvm {
-void initializeHaydnBundledTwoAddressRewritePass(PassRegistry &);
-} // namespace llvm
-
-INITIALIZE_PASS(HaydnBundledTwoAddressRewrite, "haydn-bundled-twoaddr-rewrite",
-                "Haydn bundled two-address rewrite for SMS hard roots", false,
-                false)
-
-HaydnBundledTwoAddressRewrite::HaydnBundledTwoAddressRewrite()
-    : MachineFunctionPass(ID) {
-  initializeHaydnBundledTwoAddressRewritePass(*PassRegistry::getPassRegistry());
-}
-
-namespace {
-// Pass ID for insertPass (same TU as the class; anon-ns ID is link-local).
-char &HaydnBundledTwoAddressRewriteID = HaydnBundledTwoAddressRewrite::ID;
-} // namespace
 
 //===----------------------------------------------------------------------===//
 // Per-pass enable flags (pass bisection). Default ON; disable with
@@ -234,20 +90,31 @@ static cl::opt<bool> EnableHaydnConditionOptimizer(
 static cl::opt<bool> EnableHaydnCopyElim(
     "haydn-enable-copy-elim", cl::init(true), cl::Hidden,
     cl::desc("Enable HaydnCopyElim (identity/dead/R0 copies)."));
+// R7 atomic flip certificate (product prep — default stays OFF):
+// Peer-law preconditions closed on this surface:
+//   * StageCount>1 pre-RA containment (ZOL + soft counted; closes inverted
+//     multi-stage gate — pre-RA multi-member BUNDLE / force-coissue stay gone)
+//   * Proven trip-count residual only (unit step; non-zero init / non-zero
+//     countdown limit reject; no (limit-init)/step invent)
+//   * Final-parcel geometry cost in shouldUseSchedule (MinBodyBundles pad +
+//     SetupIssueDistance as preheader floor, not II>=Setup proxy)
+// Product default OFF until ZOL formation is BundleSim-green under the
+// Format E typed HWLoopOff path (reloc FieldLsb residual is closed; residual
+// functional wrong-answer / MEMORY_FAULT on e2e loops blocks the atomic
+// product flip). Role A IR+expand only; Role B deleted. Peer-law StageCount
+// containment / proven-trip / geometry prep closed. Never revive pre-RA
+// multi-member SMS BUNDLE or force-coissue.
 static cl::opt<bool> EnableHaydnHardwareLoops(
     "haydn-enable-hwloops", cl::init(false), cl::Hidden,
-    cl::desc("Enable HaydnHardwareLoops (Role A expand; Role B deleted). "
-             "Default off for Format E product: SET_HWLOOP_F2 multi-slot encode "
-             "still mis-packs (memcpy body runs once). Re-enable after E96 "
-             "HWLRIIR parcel + solo placement are green."));
-static cl::opt<bool> EnableHaydnPostRASched(
-    "haydn-enable-post-ra-sched", cl::init(true), cl::Hidden,
-    cl::desc("Enable post-RA VLIW scheduler (bundle formation). LOAD-BEARING: "
-             "disabling yields unbundled/invalid asm; for bisection only."));
-static cl::opt<bool> EnableHaydnExpandPseudos(
-    "haydn-enable-expand-pseudos", cl::init(true), cl::Hidden,
-    cl::desc("Enable HaydnExpandPseudos (expand remaining pseudos, incl. in "
-             "bundles). LOAD-BEARING: disabling yields invalid asm; bisection only."));
+    cl::desc("Enable HaydnHardwareLoops (Role A IR+expand; Role B deleted). "
+             "Default off: Format E typed HWLoopOff reloc path is closed; "
+             "formation still fails BundleSim e2e (wrong exit / MEMORY_FAULT). "
+             "Flip atomically when those e2e residuals close."));
+// Pack/Finalize/Verify unconditional (PIPE-24/30).
+// ExpandPseudos is unconditional product legalization (PIPE-24 / AR0).
+// The old -haydn-enable-expand-pseudos product-disable switch is retired:
+// residual executable pseudos must never reach pack/printer as a "bisect"
+// path. Use pass isolation / stop-after for debugging, not a silent skip.
 static cl::opt<bool> EnableHaydnPEIPeephole(
     "haydn-enable-pei-peephole", cl::init(true), cl::Hidden,
     cl::desc("Enable HaydnPEIPeephole (dead ZERO_GPR/FP-setup/prologue waste)."));
@@ -278,8 +145,6 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnTarget() {
   initializeHaydnFinalizeBundlePass(PR);
   initializeHaydnVerifyBundlesPass(PR);
   initializeHaydnLatencyStallsPass(PR);
-  initializeHaydnHandoffBundleRootDefsPass(PR);
-  initializeHaydnBundledTwoAddressRewritePass(PR);
   initializeHaydnHardwareLoopsPass(PR);
   initializeHaydnFixupHwLoopsPass(PR);
   initializeBranchRelaxationLegacyPass(PR);
@@ -409,8 +274,6 @@ public:
   // SSA EarlyIfConversion (speculate + insertSelect → MOVT/MOVF).
   bool addILPOpts() override;
   void addPreRegAlloc() override;
-  // After TwoAddress: restore BUNDLE root vreg defs for SMS handoff roots.
-  void addOptimizedRegAlloc() override;
   // EnsureTerminators before PEI so invented RET gets epilogue.
   void addPostRegAlloc() override;
   void addPreSched2() override;
@@ -547,28 +410,6 @@ void HaydnPassConfig::addPreRegAlloc() {
   }
 }
 
-void HaydnPassConfig::addOptimizedRegAlloc() {
-  // WP2 SMS hard-root RA survival (G-SMS-PRE-RA-HEXAGON):
-  //
-  // Pipeline after pre-RA MachinePipeliner handoff materialize:
-  //   IsSSA passes see child-only vreg defs on BUNDLE roots (no dual-def).
-  //   PHIElimination leaves SSA.
-  //   → haydn-bundled-twoaddr-rewrite (before TwoAddress): COPY+identity for
-  //     residual tied children inside multi-member hard roots. Must run
-  //     *before* TwoAddress under -verify-machineinstrs — the verifier fires
-  //     immediately after TwoAddress (TiedOpsRewritten) and would abort before
-  //     any insertPass-after-TwoAddress follower. Spill/copy recovery surface;
-  //     coalescer folds the COPY.
-  //   TwoAddress rewrites bare ties and sets TiedOpsRewritten.
-  //   → haydn-handoff-bundle-root-defs: re-attach child defs on multi-member
-  //     roots so LIS/coalescer see the architectural dual-def surface.
-  //   RegisterCoalescer → MachineScheduler (isSchedulingBoundary fence) →
-  //   greedy → VirtRegRewriter → postmisched exact-commit inside roots.
-  insertPass(&PHIEliminationID, &HaydnBundledTwoAddressRewriteID);
-  insertPass(&TwoAddressInstructionPassID, &HaydnHandoffBundleRootDefsID);
-  TargetPassConfig::addOptimizedRegAlloc();
-}
-
 void HaydnPassConfig::addPreSched2() {
   // AIE2 order (AIE2TargetMachine::addPreSched2):
  // DeadMIElim → MBP (O1) → HardwareLoops → PseudoExpand → PostMachineScheduler
@@ -604,8 +445,8 @@ void HaydnPassConfig::addPreSched2() {
   // Safety: addPreSched2 runs AFTER PEI (post-RA + post-PEI) so
   // MFI.isCalleeSavedInfoValid and hasVarSizedObjects are final; ABI
   // physical regs exist. ExpandPseudos moves args to those physical regs.
-  if (EnableHaydnExpandPseudos)
-    addPass(createHaydnExpandPseudosPass());
+  // Always on — residual pseudos are fatal at Verify/AsmPrinter (PIPE-24).
+  addPass(createHaydnExpandPseudosPass());
 
   // BitSimplify / PEIPeephole: profitability peeps, O1+ only (PL / 1e).
   if (getOptLevel() != CodeGenOptLevel::None) {
@@ -621,19 +462,16 @@ void HaydnPassConfig::addPreSched2() {
   // AIE2 always runs PostRA for bundle/NoOp correctness (incl. O0).
   // targetSchedulesPostRAScheduling skips the duplicate upstream slot.
   // CopyConstrain is pre-RA only (AIE CopyConstrain placement).
-  if (EnableHaydnPostRASched)
-    addPass(&PostMachineSchedulerID);
+  addPass(&PostMachineSchedulerID);
   // After scheduling, wrap remaining standalone MIs as singleton BUNDLEs
   // with FormatID imm (AIE2TargetMachine.cpp:242-244 createAIEFinalizeBundle;
   // AIEFinalizeBundle.cpp:40-59). Multi-MI already stamped in
  // HaydnPostRASchedStrategy::finalizeLegalMultiMI.
-  if (EnableHaydnPostRASched)
-    addPass(createHaydnFinalizeBundlePass());
+  addPass(createHaydnFinalizeBundlePass());
  // : fail-closed committed-cycle verifier immediately after finalize
   // (AIEBaseInstrInfo.cpp:1440-1459 verifyInstruction peer; AIE finalize
   // commit surface AIEHazardRecognizer.cpp:278-312 under test).
-  if (EnableHaydnPostRASched)
-    addPass(createHaydnVerifyBundlesPass());
+  addPass(createHaydnVerifyBundlesPass());
 }
 
 void HaydnPassConfig::addBlockPlacement() {
@@ -649,7 +487,7 @@ void HaydnPassConfig::addPreEmitPass() {
   //
   // 0. HaydnLatencyStalls — exposed-pipeline correctness net (Option C L3).
   //    Data_Latency=2 defs must not be read in the next bundle. Runs at
-  //    EVERY opt level (-O0 is optnone so postmisched/Finalize skip). FIRST
+  //    EVERY opt level (Finalize/Verify never skip; postmisched may skip optnone). FIRST
   //    so BranchRelaxation + FixupHwLoops absorb size growth / recompute
   //    offsets. Stall NOPs are bare MIs; late Finalize wraps Format E.
   // 1. BranchRelaxation — Format E simm fields
@@ -675,8 +513,6 @@ void HaydnPassConfig::addPreEmitPass() {
   }
   // Late re-commit only when pack path produced committed cycles (same gate
   // as post-RA Finalize/Verify in addPreSched2).
-  if (EnableHaydnPostRASched) {
-    addPass(createHaydnFinalizeBundlePass());
-    addPass(createHaydnVerifyBundlesPass());
-  }
+  addPass(createHaydnFinalizeBundlePass());
+  addPass(createHaydnVerifyBundlesPass());
 }

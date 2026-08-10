@@ -17,6 +17,7 @@
 namespace llvm {
 
 class FunctionPass;
+class MachineInstr;
 class PassRegistry;
 class Target;
 
@@ -59,13 +60,6 @@ void initializeHaydnBitSimplifyPass(PassRegistry &);
 void initializeHaydnFinalizeBundlePass(PassRegistry &);
 void initializeHaydnVerifyBundlesPass(PassRegistry &);
 void initializeHaydnLatencyStallsPass(PassRegistry &);
-void initializeHaydnHandoffBundleRootDefsPass(PassRegistry &);
-
-/// After TwoAddressInstruction: re-attach child vreg defs on multi-member
-/// BUNDLE roots produced by SMS handoff (pre-PHI materialize is child-only
-/// for IsSSA legality).
-extern char &HaydnHandoffBundleRootDefsID;
-
 } // namespace llvm
 
 #endif // LLVM_LIB_TARGET_HAYDN_HAYDN_H

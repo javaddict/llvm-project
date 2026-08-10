@@ -69,7 +69,7 @@ inline constexpr unsigned PackLegalityRuleCount = 7;
 /// PackLegality rule identifiers (match HaydnPackLegality.h product list).
 inline constexpr unsigned PackRuleDualR0DefsIllegal = 1;
 inline constexpr unsigned PackRuleDualLiveSameRegWAWIllegal = 2;
-inline constexpr unsigned PackRuleDualDeadImplicitSfrLegal = 3;
+inline constexpr unsigned PackRuleDualDeadImplicitSfrIllegal = 3;
 inline constexpr unsigned PackRuleArctanSinCosIssueAlone = 4;
 inline constexpr unsigned PackRuleIssueAndPortBudgets = 5;
 inline constexpr unsigned PackRulePlacementFieldSlots = 6;

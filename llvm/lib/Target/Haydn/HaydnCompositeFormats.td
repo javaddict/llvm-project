@@ -39,8 +39,13 @@
 // ---------------------------------------------------------------------------
 
 // Two-entry Format E parcel (registry row E96TwoEntry).
+//
+// Bundle TEXT is written HIGH entry first — `{ e1; e0 }`. That matches the
+// MSB-first Inst concat below and the ISA spelling (high field first,
+// right-aligned on e0). Only the AsmString order is reversed; the operand
+// dag stays $e0/$e1 so encoding and decoding are unaffected (CB-142 / #10).
 class HaydnFormatE2Composite<dag entry_ins>
-    : HaydnFormatInst<(outs), entry_ins, "$e0; $e1", []> {
+    : HaydnFormatInst<(outs), entry_ins, "$e1; $e0", []> {
   let isComposite = true;
   let Size = 12;
   let DecoderNamespace = "FormatE96";
@@ -58,8 +63,9 @@ def BUNDLE_E96_TWO_ENTRY : HaydnFormatE2Composite<
     (ins e2_0_slot:$e0, e2_1_slot:$e1)>;
 
 // Three-entry Format E parcel (registry row E96ThreeEntry).
+// Bundle TEXT: `{ e2; e1; e0 }` — high entry first (see E2 comment).
 class HaydnFormatE3Composite<dag entry_ins>
-    : HaydnFormatInst<(outs), entry_ins, "$e0; $e1; $e2", []> {
+    : HaydnFormatInst<(outs), entry_ins, "$e2; $e1; $e0", []> {
   let isComposite = true;
   let Size = 12;
   let DecoderNamespace = "FormatE96";

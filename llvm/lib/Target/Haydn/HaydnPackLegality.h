@@ -21,13 +21,13 @@
 //   1. Dual R0 defs in one cycle are ILLEGAL. R0 is soft-zero (not hardwired);
 //      XOR32 R0,R0,R0 and LD into R0 are real write-port consumers.
 //   2. Dual live same-reg WAW is ILLEGAL.
-//   3. Dual dead implicit-def $sfr in one cycle is LEGAL (slot-ordered SFR
-//      writes; excluding SFR from WAW is intentional product law — not a
-//      golden "single SFR write" reopen without product activation).
+//   3. Dual SFR writers in one cycle are ILLEGAL — including dual dead
+//      implicit-def $sfr. Product law is at most one SFR writer per cycle;
+//      dead flag side-effects still consume the exclusive SFR write port.
 //   4. ARCTAN / SIN_COS issue alone in their cycle only until multi-cycle
 //      (uimm4+2) unit lock is product-enabled.
 //   5. Issue ≤ 3 entries; seven-unit injectivity; GPR 4R2W; DR 7R3W; AR 2R2W;
-//      live SFR 2R1W vocabulary (dead flag defs do not serialize packs).
+//      SFR 2R1W (every SFR def counts as a write, dead or live).
 //   6. Format placement: no two ops forced onto an illegal entry/unit pair
 //      (exact tryAdd / generated alternatives — entry ≠ unit resource).
 //   7. CSRW CSR 0x20–0x25 must not share a cycle with SET_HWLOOP family.

@@ -250,24 +250,24 @@ def SUB32S : FmtALU32<0x03, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
 // Keep SUB32_G_S0 (HaydnFormatsALU32.td) as legacy encode-only form.
 //===----------------------------------------------------------------------===//
 
-def ADDI32 : FmtI<0x20, (outs GPR32:$rd), (ins GPR32:$rs, simm16:$imm),
+def ADDI32 : FmtI<0x20, (outs GPR32:$rd), (ins GPR32:$rs, simm20:$imm),
                  "addi32\t$rd, $rs, $imm",
                  []> {
   let TSFlags{2-0} = 0b001;
 }
 
-def ADDI32S : FmtI<0x21, (outs GPR32:$rd), (ins GPR32:$rs, simm16:$imm),
+def ADDI32S : FmtI<0x21, (outs GPR32:$rd), (ins GPR32:$rs, simm20:$imm),
                    "addi32s\t$rd, $rs, $imm", []> {
   let TSFlags{2-0} = 0b001;
 }
 
-def SUBI32 : FmtI<0x22, (outs GPR32:$rd), (ins GPR32:$rs, simm16:$imm),
+def SUBI32 : FmtI<0x22, (outs GPR32:$rd), (ins GPR32:$rs, simm20:$imm),
                  "subi32\t$rd, $rs, $imm",
                  []> {
   let TSFlags{2-0} = 0b001;
 }
 
-def SUBI32S : FmtI<0x23, (outs GPR32:$rd), (ins GPR32:$rs, simm16:$imm),
+def SUBI32S : FmtI<0x23, (outs GPR32:$rd), (ins GPR32:$rs, simm20:$imm),
                   "subi32s\t$rd, $rs, $imm", []> {
   let TSFlags{2-0} = 0b001;
 }
@@ -1311,16 +1311,21 @@ def X2SLE32 : FmtALU64Binary<0x67, 0x18F, (outs DR64:$rd),
 }  // hasSideEffects = 0, Defs = [SFR]
 
 // X2 SIMD conditional move on SFR (binary DR64 → reads SFR).
+// Golden / Format E is 2-op RMW (rtd, rsd): false lanes stay in rtd, true
+// lanes come from rsd. Model as 3-op with Constraints so TwoAddress seeds
+// rd from rs1 (false) and fillFormatE collapses the tied pair on the wire.
 let hasSideEffects = 0, Uses = [SFR] in {
 def X2MOVF32 : FmtALU64Binary<0x67, 0x190, (outs DR64:$rd),
                               (ins DR64:$rs1, DR64:$rs2),
                               "x2movf32\t$rd, $rs1, $rs2", []> {
+  let Constraints = "$rd = $rs1";
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
 def X2MOVT32 : FmtALU64Binary<0x67, 0x191, (outs DR64:$rd),
                               (ins DR64:$rs1, DR64:$rs2),
                               "x2movt32\t$rd, $rs1, $rs2", []> {
+  let Constraints = "$rd = $rs1";
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
@@ -1349,16 +1354,19 @@ def X4SLE16 : FmtALU64Binary<0x67, 0x194, (outs DR64:$rd),
 }  // hasSideEffects = 0, Defs = [SFR]
 
 // X4 SIMD conditional move on SFR (binary DR64 → reads SFR).
+// Same RMW contract as X2MOVT32 (see Constraints note above).
 let hasSideEffects = 0, Uses = [SFR] in {
 def X4MOVF16 : FmtALU64Binary<0x67, 0x195, (outs DR64:$rd),
                               (ins DR64:$rs1, DR64:$rs2),
                               "x4movf16\t$rd, $rs1, $rs2", []> {
+  let Constraints = "$rd = $rs1";
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
 def X4MOVT16 : FmtALU64Binary<0x67, 0x196, (outs DR64:$rd),
                               (ins DR64:$rs1, DR64:$rs2),
                               "x4movt16\t$rd, $rs1, $rs2", []> {
+  let Constraints = "$rd = $rs1";
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }

@@ -138,8 +138,10 @@ inline CycleState makeProductCycleState() {
 
 /// Product covering mask from PacketFormats coverage (E2|E3 frontier).
 /// AIE peer: PacketFormats::getFormat first-covering (AIEFormat.cpp:18-27)
-/// strengthened to a row *mask* (plan §6.2 frontier). Any covering row keeps
-/// the full product E2|E3 frontier until commit freezes one row.
+/// strengthened to a row *mask*. Rows that cannot hold the occupancy are
+/// stripped: Format E E2 has two entries, E3 has three. Residual
+/// PlacementAlternative FieldSlots are one issue bit per member (SLOT0/1/2),
+/// so popcount(NewOcc) is the real member count on that path.
 inline uint64_t coveringFormatMaskFromPackets(const PacketFormats &Packets,
                                               SlotBits NewOcc,
                                               uint64_t AllowedMask) {
@@ -147,7 +149,15 @@ inline uint64_t coveringFormatMaskFromPackets(const PacketFormats &Packets,
     return 0;
   if (!productCovers(Packets, NewOcc))
     return 0;
-  return AllowedMask & ProductFormatMask;
+  uint64_t Mask = AllowedMask & ProductFormatMask;
+  // Entry capacity: refuse E2 when three members share a cycle, and refuse
+  // every product row beyond three.
+  const unsigned OccCount = llvm::popcount(NewOcc);
+  if (OccCount > 2)
+    Mask &= ~formatRowBit(BundleFormatRowID::E96TwoEntry);
+  if (OccCount > 3)
+    Mask &= ~formatRowBit(BundleFormatRowID::E96ThreeEntry);
+  return Mask;
 }
 
 /// Product Format E row frontier for Pre-RA / SMS from generated

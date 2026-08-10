@@ -23,11 +23,10 @@
 // sole surface — no PostRA dual). Transient only —
 //                     never a durable side-map.
 //
-// Hard multi-member BUNDLE roots (SMS handoff / rematch) are not in the
-// scheduled-region alt map: leaveMBB exact-commits them via
-// commitExactHardRootProductCycle (exactSolve setDesc + dissolve +
-// finalizeBundle rebuild of consolidated root operands/kills/InternalRead).
-// AltDescs remains region-only; hard-root membership never records here.
+// Pre-existing multi-member shells are not in the scheduled-region alt map.
+// Product leaveMBB free multi-MI uses commitExactMultiMIProductCycle; residual
+// unstamped multi-member shells use the same ordinary multi-MI commit or
+// sequentialize. AltDescs remains region-only.
 //
 // No slot side-map (AIE has none). Post-commit placement is opcode identity
 // via getSlotKind (AIEBaseMCFormats.cpp:66-75) + Bundle SlotMap

@@ -36,14 +36,20 @@ def : Pat<(i32 (not GPR32:$rs)), (NOT32 GPR32:$rs)>;
 //===----------------------------------------------------------------------===//
 // Scalar binary with immediate — s32. Fold G_CONSTANT into RI20/RI5 forms
 // instead of materializing then using RR. Immediate class is NOT uniform:
-//   ADDI32 / SUBI32           simm16
+//   ADDI32 / SUBI32           simm20 (product RI20; max 524287)
 //   ANDI32 / ORI32 / XORI32   uimm20 (ISA zero-extends — no negative imm)
 //   SLLI32 / SRLI32 / SRAI32  uimm5
 // `not` (xor x, -1) is unaffected: -1 fails uimm20, so NOT32 still wins.
+//
+// GISel Pat-first: legalizer rewrites sN→s32 zext/sext to G_AND /
+// G_SHL+G_LSHR / G_SHL+G_ASHR so these Pats cover casts too. trunc→s1
+// stays legal (selector residual ANDI32 bit0); cross-bank s32↔s64 /
+// anyext remain C++ residual. RI densify can enable multi-stage SMS;
+// product multi-stage is OK after BUNDLE-header resync (tied MULL COPY).
 //===----------------------------------------------------------------------===//
 
-def : Pat<(i32 (add GPR32:$rs, simm16:$imm)), (ADDI32 GPR32:$rs, simm16:$imm)>;
-def : Pat<(i32 (sub GPR32:$rs, simm16:$imm)), (SUBI32 GPR32:$rs, simm16:$imm)>;
+def : Pat<(i32 (add GPR32:$rs, simm20:$imm)), (ADDI32 GPR32:$rs, simm20:$imm)>;
+def : Pat<(i32 (sub GPR32:$rs, simm20:$imm)), (SUBI32 GPR32:$rs, simm20:$imm)>;
 def : Pat<(i32 (and GPR32:$rs, uimm20:$imm)), (ANDI32 GPR32:$rs, uimm20:$imm)>;
 def : Pat<(i32 (or  GPR32:$rs, uimm20:$imm)), (ORI32  GPR32:$rs, uimm20:$imm)>;
 def : Pat<(i32 (xor GPR32:$rs, uimm20:$imm)), (XORI32 GPR32:$rs, uimm20:$imm)>;

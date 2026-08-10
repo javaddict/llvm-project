@@ -15,9 +15,11 @@
 // FieldSlots = 1<<index for non-zero members). Bundle/HR placement does not
 // reverse-map through FlexMap; encode uses post-RA setDesc member Desc-as-is.
 //
-// CompatibleFormatMask is the product E2|E3 row frontier
-// (haydn::bundle::ProductFormatMask). Post-RA commit freezes one
-// BundleFormatRowID + CompletionStateID on the BUNDLE root.
+// CompatibleFormatMask is the Format E row frontier this residual member may
+// occupy. Most residual alts stamp ProductFormatMask (E2|E3). Logicals that
+// golden Format E exposes only as E2 (ADDI32, ...) stamp E96TwoEntry only and
+// drop residual S2 (no E2 e2). Post-RA commit freezes one BundleFormatRowID
+// + CompletionStateID on the BUNDLE root.
 //
 // leaveRegion materializeMultiOpcodeInstrs does MI.setDesc(selected
 // MemberOpcode) from HaydnAlternateDescriptors
@@ -34,6 +36,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include <cstdint>
 #include <vector>
 
@@ -96,10 +99,20 @@ inline SlotBits fieldSlotsForAltIndex(unsigned AltIndex) {
   return SlotBits(1) << AltIndex;
 }
 
+/// CompatibleFormatMask for a residual sparse-alt at \p AltIndex.
+/// E2-only Format E logicals (golden Mode=E2 only) drop residual S2 and keep
+/// E96TwoEntry only; other residual alts keep ProductFormatMask (E2|E3).
+uint64_t residualAltCompatibleFormatMask(unsigned LogicalOpc,
+                                         unsigned AltIndex);
+
+/// True if \p OpcodeName (logical or residual/member form) is a Format E
+/// E2-only product logical. Such ops must never co-issue in a 3-wide E3 cycle.
+bool isFormatEE2OnlyOpcodeName(llvm::StringRef OpcodeName);
+
 /// Fill \p Out with PlacementAlternative rows for \p LogicalOpc (non-zero
-/// sparse members only). Each row stamps CompatibleFormatMask =
-/// ProductFormatMask and FieldSlots = 1<<index.
-/// Returns false if there are no non-zero alternatives.
+/// sparse members only). Each row stamps CompatibleFormatMask from Format E
+/// golden availability (see residualAltCompatibleFormatMask) and FieldSlots =
+/// 1<<index. Returns false if there are no non-zero alternatives.
 inline bool
 enumeratePlacementAlternatives(const HaydnMCFormats &Fmts,
                                unsigned LogicalOpc,
@@ -116,9 +129,14 @@ enumeratePlacementAlternatives(const HaydnMCFormats &Fmts,
     const unsigned MemberOpc = (*Alts)[Index];
     if (MemberOpc == 0)
       continue; // sparse hole — not a placement choice
+    // Format E E2-only logicals: residual S2 is unavailable (no E2 e2) and the
+    // alt mask is E96TwoEntry only. Other residual alts keep ProductFormatMask.
+    // commitExact / canCoissue also refuse 3-wide packs that include E2-only.
+    const uint64_t Mask = residualAltCompatibleFormatMask(LogicalOpc, Index);
+    if (Mask == 0)
+      continue;
     // Sparse size-3: index == field.
-    Out.emplace_back(MemberOpc, haydn::bundle::ProductFormatMask,
-                     fieldSlotsForAltIndex(Index));
+    Out.emplace_back(MemberOpc, Mask, fieldSlotsForAltIndex(Index));
     Any = true;
   }
   return Any;

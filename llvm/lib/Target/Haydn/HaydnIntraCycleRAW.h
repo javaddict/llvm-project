@@ -27,10 +27,12 @@
 // def is already in the live-def set and the predicate trips. WAR (reader
 // issued before writer) does NOT trip: the writer candidate does not read that
 // register, and WAR in a bundle is legal on Haydn anyway. SFR is excluded
-// (parallel dead implicit-def $sfr is product-legal); R0 is NOT excluded
-// (soft-zero is a real register — a same-bundle reader of a live R0 write
-// would observe the OLD value). Virtual registers (pre-RA) match by Register
-// identity; physical registers use TRI::regsOverlap for alias/subreg overlap.
+// from the live-def RAW set (dead flag side-effects have no consumer; one
+// SFR writer is enforced by WAW/ports, not this RAW predicate); R0 is NOT
+// excluded (soft-zero is a real register — a same-bundle reader of a live R0
+// write would observe the OLD value). Virtual registers (pre-RA) match by
+// Register identity; physical registers use TRI::regsOverlap for alias/subreg
+// overlap.
 //
 //===----------------------------------------------------------------------===//
 

@@ -6,17 +6,63 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// `HaydnAlternateDescriptors` is a header-only side-map (all methods are
-// inline). This translation unit exists solely to anchor the header in the
-// build so it is type-checked today — it has no consumers yet (steps 2-4
-// fill it; SMS reads it). Without an anchoring TU the header would not be
-// compiled until the first includer lands, risking a latent build break.
+// Anchors HaydnAlternateDescriptors.h and hosts residual Format E placement
+// mask helpers declared in HaydnPlacementAlternative.h (E2-only golden list).
 //
 //===----------------------------------------------------------------------===//
 
 #include "HaydnAlternateDescriptors.h"
+#include "HaydnPlacementAlternative.h"
+#include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/ADT/StringRef.h"
 
-namespace llvm {
-// Force the header to be parsed/compiled as part of HaydnCodeGen. The class is
-// fully defined in the header; no out-of-line definitions live here.
-} // namespace llvm
+using namespace llvm;
+using namespace llvm::haydn::bundle;
+
+bool llvm::isFormatEE2OnlyOpcodeName(StringRef OpcodeName) {
+  // SET_HWLOOP_F2 / SET_HWLOOP_REG have Format E E3 members; bare SET_HWLOOP
+  // does not. Check the E3-bearing forms first.
+  if (OpcodeName.starts_with("SET_HWLOOP_F2") ||
+      OpcodeName.starts_with("SET_HWLOOP_REG"))
+    return false;
+
+  // Longer prefixes first so ADDI32S is not matched as ADDI32.
+  // Keep in sync with FormatEE2OnlyNames (HaydnGenFormatERecords.inc).
+  static constexpr StringRef E2Only[] = {
+      "ADDI32S", "ADDI32", "SUBI32S", "SUBI32", "ANDI32", "XORI32",
+      "ORI32",   "MOVEI_H", "MOVEI_L", "SET_HWLOOP",
+  };
+  for (StringRef Log : E2Only) {
+    if (OpcodeName == Log)
+      return true;
+    if (!OpcodeName.starts_with(Log))
+      continue;
+    StringRef Rest = OpcodeName.drop_front(Log.size());
+    if (Rest.starts_with("_S") || Rest.starts_with("_E2_") ||
+        Rest.starts_with("_W"))
+      return true;
+  }
+  return false;
+}
+
+uint64_t llvm::residualAltCompatibleFormatMask(unsigned LogicalOpc,
+                                               unsigned AltIndex) {
+  // Golden Format E members with Mode=E2 only (no E3 row).
+  switch (LogicalOpc) {
+  case Haydn::ADDI32:
+  case Haydn::ADDI32S:
+  case Haydn::ANDI32:
+  case Haydn::MOVEI_H:
+  case Haydn::MOVEI_L:
+  case Haydn::ORI32:
+  case Haydn::SET_HWLOOP:
+  case Haydn::SUBI32:
+  case Haydn::SUBI32S:
+  case Haydn::XORI32:
+    if (AltIndex >= 2)
+      return 0;
+    return formatRowBit(BundleFormatRowID::E96TwoEntry);
+  default:
+    return ProductFormatMask;
+  }
+}

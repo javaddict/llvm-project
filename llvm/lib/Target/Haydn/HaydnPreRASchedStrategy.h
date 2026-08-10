@@ -43,14 +43,14 @@
 // -haydn-pipeliner-track-regpressure=true. StageCount = PrologueCount + 1.
 // Pre-RA never freezes FormatID/setDesc from these metrics.
 //
-// SMS-HANDOFF (pre-RA slice): metrics-only packability surface. Pre-RA never
-// freezes FormatID, never stamps setDesc/member opcodes, and never materializes
-// durable BUNDLE roots from SMS cycle membership or matching-frontier scores.
-// Pure exact-cycle / ResMII oracles prove qualification co-issue sets remain
-// packable under the shared product model so post-RA exact no-split commit can
-// pack them without scheduled splits once registers are physical. Positive
-// clone→standard-BUNDLE handoff stays blocked until an approved expansion hook
-// exists (sibling SMS track freezes recordSuccessfulSMS as scalar metrics only).
+// Pre-RA packability surface (metrics only). Pre-RA never freezes FormatID,
+// never stamps setDesc/member opcodes, and never materializes durable BUNDLE
+// roots from SMS cycle membership or matching-frontier scores. Pure exact-cycle
+// / ResMII oracles prove qualification co-issue sets remain packable under the
+// shared product model so post-RA exact no-split commit can pack them without
+// scheduled splits once registers are physical. Pre-RA multi-member BUNDLE
+// freeze stays permanently off (StageCount>1 containment; product multi-stage
+// is post-RA only).
 //
 // MI-versus-descriptor port differential (MOVE32-class, pre-RA surface):
 // PortModel MI accounting dedupes same-reg sources so `MOVE32 rd, rs, rs` is
@@ -68,8 +68,8 @@
 // prera-format-generic-baseline.ll freezes spill/reload parity, post-RA
 // multi-MI exact finalize, silent split/hard-root counters, and
 // pre-greedy/pre-postmisched logical-only identity (no BUNDLE / no _S*).
-// isavail-delay stays product OFF (seed1 residual); SMS-HANDOFF stays
-// metrics-only OFF.
+// isavail-delay stays product OFF (seed1 residual); pre-RA packability
+// metrics never invent BUNDLE roots.
 //
 // ILP / critical ranking residual attribution: product matching-frontier
 // ResourceDemand fires only after pressure (RegExcess/RegCritical/RegMax)
@@ -528,7 +528,7 @@ public:
 
   /// Format accept/reject polarity for one multiset under exact matching
   /// (order-insensitive set oracle for N ≤ issue width). Same pure path
-  /// productFormsOneExactCycle uses for SMS-HANDOFF packability.
+  /// productFormsOneExactCycle uses for packability metrics.
   static bool productExactCanPackSet(ArrayRef<unsigned> Opcodes) {
     if (Opcodes.empty())
       return true;
@@ -665,12 +665,12 @@ public:
   }
 
   //===--------------------------------------------------------------------===//
-  // SMS-HANDOFF — pre-RA metrics-only packability (no hard cycle groups)
+  // Pre-RA metrics-only packability (no hard cycle groups)
   //===--------------------------------------------------------------------===//
   // Matching-frontier tryCandidate and these helpers are pure probes. They
   // never invent standard BUNDLE roots, never stamp AltDesc/setDesc, and do
   // not read SMS scalar metrics as membership. Sibling SMS track owns
-  // ResourceCycle / analyzeLoop / recordSuccessfulSMS freeze.
+  // ResourceCycle / analyzeLoop packability metrics.
 
   /// True iff \p Opcodes form one legal product cycle under exact matching
   /// (alts + rematch). Empty is vacuously true. Pure; no MIR mutation.
@@ -703,10 +703,8 @@ public:
   static bool productQualKernelExactlyPackable(ArrayRef<unsigned> Opcodes) {
     if (Opcodes.empty())
       return true;
-    // productResMIIFailsQualification is false for N>bound (no false reject
-    // on the greedy-fallback oracle). Empty is handled above.
-    if (productResMIIFailsQualification(Opcodes))
-      return false;
+    // Finite exhaustive cover is product-legal. Greedy overestimate is a
+    // conservative II floor, not un-packable under Option A containment.
     return productExhaustiveResMII(Opcodes) >= 1u;
   }
 

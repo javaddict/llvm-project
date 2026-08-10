@@ -65,20 +65,18 @@ static cl::opt<bool> EnableHaydnCallReturnCopyEdges(
     "haydn-prera-call-return-copy-edges", cl::init(true), cl::Hidden,
     cl::desc("Pre-RA: pin live-in physreg COPYs (post-call return glue)"));
 
-// Post-RA MemoryEdges ON (AIE peer with AccurateMemEdges=false): uses only
-// TII->getMemoryLatency; no invented store→load floor. Product
-// getMemoryLatency is class-agnostic latency 1 (-haydn-accurate-memory-latency
-// OFF). NatureDSP density A/B (mdct/bkfir/firinterp/cxfir/dct; 22 kernels)
-// showed accurate path +~12% bundles with zero wins — product stays latency-1.
-// Opt-in accurate path reads table-driven First/LastMemoryCycle for
-// Slot0_LS/Slot1_LD/Slot01_LD only. Densify invents remain FATED.
-// RegionEnd/WAW stay OFF (incomplete MaxLatencyFinder sticky model).
-// Product latency-1 packs st32→ld32 adjacent; unit pins cover all three
-// memory itineraries; densify-defaults-off + packing lit sample green.
+// Post-RA MemoryEdges ON: uses only TII->getMemoryLatency; no invented
+// store→load floor. Product getMemoryLatency is architectural (table
+// First/LastMemoryCycle for Slot0_LS/Slot1_LD/Slot01_LD → Latency=2). Soft
+// class-agnostic latency-1 is -haydn-accurate-memory-latency=false soak-off
+// only. Densify invents remain FATED. RegionEnd/WAW stay OFF (incomplete
+// MaxLatencyFinder sticky model). Product Latency=2 inserts a full-NOP
+// bubble on pure st32→ld32 chains; unit pins cover all three memory
+// itineraries.
 static cl::opt<bool> EnableHaydnPostRAMemoryEdges(
     "haydn-postra-memory-edges", cl::init(true), cl::Hidden,
     cl::desc("Post-RA: MemoryEdges via getMemoryLatency "
-             "(default ON; product latency-1; accurate opt-in)"));
+             "(default ON; product architectural latency)"));
 
 // AIE RegionEndEdges rebuilds ExitSU with MaxLatencyFinder. Without that
 // stripping ExitSU preds and replacing with getMaxResultLatency-only edges is
@@ -360,11 +358,10 @@ class MemoryEdges : public ScheduleDAGMutation {
         if (!SrcMI.mayStore() && !MI.mayStore())
           continue;
 
-        // Peer: AIEBaseSubtarget.cpp MemoryEdges — latency only from
-        // TII->getMemoryLatency; no store→load floor here. Product path
-        // returns 1; -haydn-accurate-memory-latency uses table First/Last
-        // (Slot0_LS/Slot1_LD/Slot01_LD → Last-First+1, floored at 1;
-        // nullopt → keep local default 1).
+        // Latency only from TII->getMemoryLatency; no store→load floor here.
+        // Product path uses table First/Last (Slot0_LS/Slot1_LD/Slot01_LD →
+        // Last-First+1, floored at 1); nullopt → keep local default 1. Soft
+        // soak-off (-haydn-accurate-memory-latency=false) returns 1 always.
         int Latency = 1;
         if (auto MemLat = HII->getMemoryLatency(SrcMI.getDesc().getSchedClass(),
                                                 MI.getDesc().getSchedClass())) {

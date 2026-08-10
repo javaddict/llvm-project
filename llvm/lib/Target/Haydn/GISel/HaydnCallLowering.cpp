@@ -64,9 +64,8 @@ struct HaydnIncomingAssigner : public CallLowering::IncomingValueAssigner {
   // Index of the first unallocated GPR arg reg after the fixed args are
   // placed. Default = size(HaydnArgGPRs) means all GPR arg regs were consumed
   // by fixed args -> no varargs GPRs to spill.
-  unsigned FirstUnallocatedGPR = std::size(HaydnArgGPRs);
-  // Index of the first unallocated DR arg reg. Default = all consumed.
-  unsigned FirstUnallocatedDR = std::size(HaydnArgDRs);
+  unsigned FirstUnallocatedGPR = 0;
+  unsigned FirstUnallocatedDR = 0;
 
   using IncomingValueAssigner::IncomingValueAssigner;
 
@@ -435,6 +434,12 @@ bool HaydnCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
   MachineFunction &MF = MIRBuilder.getMF();
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const DataLayout &DL = MF.getDataLayout();
+
+  // Reject musttail before any MIR mutation (fail closed; no ordinary-call
+  // fallthrough). Soft tail preference is not implemented.
+  if (Info.IsMustTailCall)
+    return false;
+  Info.IsTailCall = false;
 
   // F17: Emit ADJCALLSTACKDOWN before the call sequence and ADJCALLSTACKUP
   // after it, sized by the outgoing stack-argument bytes. Without this pair

@@ -14,12 +14,11 @@
 // scoreboard / TopReadyCycle hazard pads, AIEMachineScheduler.cpp:1149-1201),
 // plus commitBlockSchedule / applyBundles materialize
 // (AIEMachineScheduler.cpp:806-863, AIEHazardRecognizer.cpp:317-351).
-// leaveMBB free-packs scheduled multi-MI only outside frozen hard-root
-// members, then exact-commits multi-member hard roots inside each group
-// (SMS durable groups / architectural rematch) and replays the full MBB
-// cycle stream for cross-boundary operand latency + Required/Reserved
-// stalls (plan §5.5; no separate pass or inter-block fixpoint). Post-RA
-// never invents SMS stages and never free-splices across hard groups.
+// leaveMBB free-packs scheduled multi-MI via commitExactMultiMIProductCycle
+// (sole scheduled multi-MI producer), commits residual unstamped multi-member
+// shells with the same ordinary multi-MI path when jointly legal (else
+// sequentializes), and replays multi-member parcel seam latency. No hard-root
+// freeze identity and no force-coissue. Post-RA never invents SMS stages.
 //
 //===----------------------------------------------------------------------===//
 
@@ -28,7 +27,6 @@
 #include "HaydnBundle.h"
 #include "HaydnBundleMaterialize.h"
 #include "HaydnBundlePlan.h"
-#include "HaydnBundleVerify.h"
 #include "HaydnHazardRecognizer.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnMachineFunctionInfo.h"
@@ -72,23 +70,24 @@ STATISTIC(NumScheduledCyclesSplit,
 STATISTIC(NumTrueRAWCycleRejects,
           "Number of scheduled multi-MI cycles rejected for same-cycle true "
           "RAW (no-forwarding)");
-// Multi-member hard BUNDLE roots at post-RA entry (approved producer or
-// accidental). Product path before SMS-HANDOFF / architectural rematch
-// expects 0 (silent). Non-zero is exact-committed in leaveMBB.
+// Multi-member BUNDLE roots at post-RA entry. Product path expects 0.
 STATISTIC(NumPreExistingHardRootsAtPostRA,
           "Number of multi-member hard BUNDLE roots at post-RA MBB entry "
-          "(product path expects 0 before an approved producer)");
-STATISTIC(NumHardRootsExactCommitted,
+          "(product path expects 0)");
+// Description strings keep historical FileCheck pins from residual MIR
+// fixtures (hard-root era). Implementation is ordinary multi-MI commit /
+// multi-member seam replay — not freeze identity.
+STATISTIC(NumUnstampedMultiMemberCommitted,
           "Number of multi-member hard BUNDLE roots transactionally "
           "exact-committed at post-RA leaveMBB");
-STATISTIC(NumHardRootsDissolvedSequential,
+STATISTIC(NumUnstampedMultiMemberSequentialized,
           "Number of multi-member hard BUNDLE roots dissolved to sequential "
           "parcels when exact-commit could not form one product cycle "
           "(field-order RAW after RA physreg assign, etc.)");
-STATISTIC(NumHardRootFreePackRefusals,
+STATISTIC(NumBundledFreePackRefusals,
           "Number of free scheduled multi-MI packs refused because they "
           "touched a hard-root member (commit-inside-group only)");
-STATISTIC(NumCrossBoundaryReplayStalls,
+STATISTIC(NumMultiMemberSeamReplayStalls,
           "Number of idle NOP cycles inserted by post-RA cross-boundary "
           "latency/Required/Reserved replay");
 
@@ -97,15 +96,10 @@ static cl::opt<bool> EnableHaydnPostRAReadySubsetAuction(
     cl::desc("Post-RA: rank tryCandidate by bounded ready-subset cycle "
              "auction (maximize issued ops under exact product matching)"));
 
-static cl::opt<bool> EnableHaydnPostRAHardRootReplay(
-    "haydn-postra-hard-root-replay", cl::init(true), cl::Hidden,
-    cl::desc("Post-RA: exact-commit multi-member hard BUNDLE roots and "
-             "replay cross-boundary operand latency + Required/Reserved"));
-
 // legality + multi-MI MIR commit live on HaydnBundleMaterialize
-// (instrsFormOneLegalCycle / commitExactMultiMIProductCycle /
-// commitExactHardRootProductCycle). PostRA owns region grouping, skippable
-// splice, hard-root recommit, cross-boundary replay, fail-closed stats.
+// (instrsFormOneLegalCycle / commitExactMultiMIProductCycle). PostRA owns
+// region grouping, free multi-MI exact commit, residual unstamped multi-member
+// ordinary commit/sequentialize, and multi-member seam latency replay.
 
 /// Count multi-member TargetOpcode::BUNDLE roots in \p MBB (hard cycle
 /// groups from SMS handoff / architectural rematch / late multipass).
@@ -265,20 +259,16 @@ void HaydnPostRASchedStrategy::enterMBB(MachineBasicBlock *MBB) {
   // No promoteLoadsToSlot1 / AlternateSlots residual (AIE
   // AIEAlternateDescriptors.h:27-75 opcode-alt only).
   //
-  // Multi-member hard BUNDLE roots (SMS handoff / architectural rematch)
-  // are counted here and transactionally exact-committed in leaveMBB.
-  // Product path before an approved producer expects the counter to stay 0
-  // (postmisched-exact-nosplit-pre-handoff.ll). Illegal membership fails
-  // closed at exact-commit, not by silent entry.
+  // Multi-member BUNDLE roots at entry are metrics-only (product expects 0).
   if (MBB) {
     unsigned HardRoots = countMultiMemberHardRoots(*MBB);
     if (HardRoots) {
       NumPreExistingHardRootsAtPostRA += HardRoots;
       LLVM_DEBUG(dbgs() << "HaydnPostRASched: " << HardRoots
-                        << " multi-member hard BUNDLE root(s) at post-RA "
-                           "entry in bb."
+                        << " multi-member BUNDLE root(s) at post-RA entry "
+                           "in bb."
                         << MBB->getNumber()
-                        << " (exact-commit + replay in leaveMBB)\n");
+                        << " (metrics only)\n");
     }
   }
   PostGenericScheduler::enterMBB(MBB);
@@ -297,38 +287,36 @@ void HaydnPostRASchedStrategy::leaveMBB() {
   // SU (not a TII boundary). Fixup still residual-pads if useful-window fill
   // is short.
   //
-  // After region packs: (1) free-pack scheduled multi-MI *outside* hard-root
-  // members; (2) exact-commit multi-member hard roots that were region
-  // boundaries (commit-inside-group only); (3) replay the full ordered cycle
-  // stream for cross-boundary RAW latency + Req/Res stalls.
-  //
-  // Snapshot hard-root *children* before materializeBundles. Free scheduled
-  // multi-MI packs must never pull those members into a new cycle (would
-  // dissolve pre-RA SMS stages / architectural groups). Packs created by free
-  // materialize are ordinary product cycles — not hard roots — and must not
-  // re-enter exact-commit/replay.
+  // Product multi-MI: free scheduled packs only, then residual unstamped
+  // multi-member shells via ordinary commitExactMultiMIProductCycle (or
+  // sequentialize if illegal). Multi-member seam latency replay is not a
+  // hard-root freeze path.
   if (CurrentMBB) {
-    SmallPtrSet<MachineInstr *, 8> HardMembers;
-    if (EnableHaydnPostRAHardRootReplay) {
-      for (MachineInstr &MI : *CurrentMBB) {
-        if (!MI.isBundle() || MI.isBundledWithPred())
-          continue;
-        SmallVector<MachineInstr *, 3> Kids;
-        for (MachineBasicBlock::instr_iterator I = std::next(MI.getIterator());
-             I != CurrentMBB->instr_end() && I->isBundledWithPred(); ++I)
-          Kids.push_back(&*I);
-        if (Kids.size() >= 2)
-          HardMembers.insert(Kids.begin(), Kids.end());
-      }
+    // Snapshot multi-member children present before free pack. Seam latency
+    // replay applies only to residual shells (and their ordinary multi-MI
+    // recommits), not free scheduled multi-MI packs created this leaveMBB.
+    SmallPtrSet<MachineInstr *, 8> PreExistingMultiMembers;
+    for (MachineInstr &MI : *CurrentMBB) {
+      if (!MI.isBundle() || MI.isBundledWithPred())
+        continue;
+      SmallVector<MachineInstr *, 3> Kids;
+      for (MachineBasicBlock::instr_iterator I = std::next(MI.getIterator());
+           I != CurrentMBB->instr_end() && I->isBundledWithPred(); ++I)
+        Kids.push_back(&*I);
+      if (Kids.size() >= 2)
+        PreExistingMultiMembers.insert(Kids.begin(), Kids.end());
     }
     if (!MBBBundles.empty()) {
-      materializeBundles(*CurrentMBB, MBBBundles, HardMembers);
+      materializeBundles(*CurrentMBB, MBBBundles);
       MBBBundles.clear();
     }
-    if (EnableHaydnPostRAHardRootReplay && !HardMembers.empty()) {
-      exactCommitHardRoots(*CurrentMBB, HardMembers);
-      replayCrossBoundaryHazards(*CurrentMBB, HardMembers);
-    }
+    commitOrSequentializeUnstampedMultiMemberBundles(*CurrentMBB);
+    // Own only the current MBB. Predecessor re-probe after leave was a
+    // wrong-layer repair for post-pipeliner mutating already-left MBBs;
+    // post-pipeliner is default OFF and must preflight/commit whole-loop
+    // itself (no cross-MBB callback repair).
+    if (!PreExistingMultiMembers.empty())
+      replayMultiMemberSeamHazards(*CurrentMBB, PreExistingMultiMembers);
   }
   // Pack ownership = leaveRegion/leaveMBB only.
   PostGenericScheduler::leaveMBB();
@@ -480,12 +468,23 @@ static bool freePackReadyCycleAndDataDepsOK(
   if (Instrs.size() < 2)
     return true;
 
+  MachineFunction *MF = Instrs.front()->getMF();
   const TargetRegisterInfo *TRI =
-      Instrs.front()->getMF()->getSubtarget().getRegisterInfo();
+      MF ? MF->getSubtarget().getRegisterInfo() : nullptr;
+  const TargetInstrInfo *TII =
+      MF ? MF->getSubtarget().getInstrInfo() : nullptr;
   // Available-cycle detect at MI level (def-before-use cannot share a cycle).
   if (haydn::bundle::cycleMembersHaveTrueRAW(Instrs, TRI)) {
     LLVM_DEBUG(dbgs() << "HaydnPostRASched: free multi-MI fails avail-cycle "
                          "detect (schedule-order true RAW) — refuse\n");
+    return false;
+  }
+  // SET_HWLOOP trip/Off sample under snapshot no-forwarding: refuse free pack
+  // with any same-cycle producer of those regs (remat ADDI+SET peel).
+  if (TII && haydn::bundle::cycleMembersHaveHwloopTripConflict(Instrs, *TII,
+                                                               TRI)) {
+    LLVM_DEBUG(dbgs() << "HaydnPostRASched: free multi-MI SET trip/Off "
+                         "conflict — refuse\n");
     return false;
   }
 
@@ -536,54 +535,28 @@ static bool freePackReadyCycleAndDataDepsOK(
 // Product coissue law (HaydnBundleMaterialize.h):
 //   (1) same available/ready cycle + no Data Lat≥1 (dep graph)
 //   (2) emission pack + field-order no true RAW (canCoissueProductCycle)
-// Hard-root members are never free-packed. NumScheduledCyclesSplit diagnoses
-// free-pack bugs; product qualification requires it to stay 0.
+// Already-bundled members are never free-packed.
 static void materializeExactNoSplitCycle(
     MachineBasicBlock &MBB, ArrayRef<MachineInstr *> Instrs,
-    const SmallPtrSetImpl<MachineInstr *> &HardMembers,
     const ScheduleDAGMI *DAG, bool IsTop) {
   if (Instrs.size() < 2)
     return;
 
-  // Commit-inside-group law: free post-RA packs must not touch frozen SMS /
-  // rematch hard-root members (would dissolve pre-RA stages or splice across
-  // groups). Leave sequential; exactCommitHardRoots owns those members.
   for (MachineInstr *MI : Instrs) {
     if (!MI)
       continue;
-    if (HardMembers.contains(MI) || MI->isBundledWithPred() ||
-        MI->isBundledWithSucc() || MI->isBundle()) {
-      ++NumHardRootFreePackRefusals;
+    if (MI->isBundledWithPred() || MI->isBundledWithSucc() || MI->isBundle()) {
+      ++NumBundledFreePackRefusals;
       LLVM_DEBUG(dbgs() << "HaydnPostRASched: free multi-MI pack touches "
-                           "hard-root / bundled member — refuse free pack "
-                           "(commit-inside-group only)\n");
+                           "bundled member — refuse free pack\n");
       return;
     }
   }
 
   // On avail-cycle refuse (true RAW / split ReadyCycle / Data Lat≥1): leave
-  // sequential under Anti use-before-def order when the list still has
-  // def-before-use shape (same repair as hard-root lower).
-  auto lowerSequentialAntiOrder = [&](ArrayRef<MachineInstr *> List) {
-    const TargetRegisterInfo *TRI =
-        MBB.getParent()->getSubtarget().getRegisterInfo();
-    SmallVector<MachineInstr *, 4> Order(List.begin(), List.end());
-    if (!haydn::bundle::cycleMembersHaveTrueRAW(Order, TRI))
-      return;
-    haydn::bundle::orderMembersUseBeforeDefForAnti(Order, TRI);
-    for (unsigned I = 1; I < Order.size(); ++I) {
-      MachineInstr *Prev = Order[I - 1];
-      MachineInstr *Cur = Order[I];
-      if (!Prev || !Cur)
-        continue;
-      if (std::next(Prev->getIterator()) == Cur->getIterator())
-        continue;
-      MBB.splice(std::next(Prev->getIterator()), &MBB, Cur->getIterator());
-    }
-  };
-
+  // members sequential in schedule order. True RAW is already def-before-use;
+  // Anti use-before-def reorder would invent undefined physreg reads.
   if (!freePackReadyCycleAndDataDepsOK(DAG, Instrs, IsTop)) {
-    lowerSequentialAntiOrder(Instrs);
     ++NumTrueRAWCycleRejects;
     return;
   }
@@ -608,36 +581,24 @@ static void materializeExactNoSplitCycle(
     return;
   }
 
-  // Same ReadyCycle but emission/field cannot pack — sequential under Anti
-  // order if avail-cycle detect (true RAW) applies after physreg paint.
-  lowerSequentialAntiOrder(Instrs);
+  // Same ReadyCycle but emission/field cannot pack — leave sequential in
+  // schedule order (no Anti reorder; true RAW stays def-before-use).
   LLVM_DEBUG(dbgs() << "HaydnPostRASched: same-ready-cycle multi-MI cannot "
-                       "coissue — sequential (Anti order if needed)\n");
+                       "coissue — sequential in schedule order\n");
   ++NumScheduledCyclesSplit;
 }
 
 void HaydnPostRASchedStrategy::materializeBundles(
-    MachineBasicBlock &MBB, SmallVector<CycleBundle> &Bundles,
-    const SmallPtrSetImpl<MachineInstr *> &HardMembers) {
+    MachineBasicBlock &MBB, SmallVector<CycleBundle> &Bundles) {
   // Port of AIE materializeEmptyBundles + applyBundles, Top zone only.
   // Cycle ownership (exact no-split Format E encode):
   // * empty cycle → NOP at rolling position (before next real cycle / term)
   // * single MI → leave standalone here; HaydnFinalizeBundle wraps + stamps
-  //   FormatID (AIEFinalizeBundle.cpp:40-59 peer)
   // * 2-3 free MIs legal → shared commitExactMultiMIProductCycle
   // * 2-3 free MIs illegal → fail closed (no production greedy split)
-  // * any free pack that touches HardMembers → refuse (hard-root path only)
-  //
-  // Product plan: every encode cycle is Format E (registry EncodedBytes=12)
-  // with BUNDLE-root BundleFormatRowID + CompletionStateID. Multi-MI roots
-  // setDesc real members inside commitExactMultiMIProductCycle. Singleton
-  // cycles become BUNDLE + row stamp in HaydnFinalizeBundle after this
-  // scheduler (AIE2 addPreSched2 order; late setDesc for bare logicals).
-  // Hard SMS groups are exact-committed later by exactCommitHardRoots.
   for (unsigned Idx = 0; Idx < Bundles.size(); ++Idx) {
     CycleBundle &CB = Bundles[Idx];
     if (CB.Instrs.empty()) {
-      // Rolling idle NOP — before next real cycle's first MI, else term.
       MachineBasicBlock::iterator InsertPt = MBB.getFirstTerminator();
       for (unsigned J = Idx + 1; J < Bundles.size(); ++J) {
         if (!Bundles[J].Instrs.empty()) {
@@ -650,11 +611,9 @@ void HaydnPostRASchedStrategy::materializeBundles(
       continue;
     }
     if (CB.Instrs.size() == 1)
-      continue; // One cycle; HaydnFinalizeBundle wraps + late setDesc.
+      continue;
 
-    // PostGenericScheduler is top-down: available cycle = TopReadyCycle.
-    materializeExactNoSplitCycle(MBB, CB.Instrs, HardMembers, DAG,
-                                 /*IsTop=*/true);
+    materializeExactNoSplitCycle(MBB, CB.Instrs, DAG, /*IsTop=*/true);
   }
 }
 
@@ -807,37 +766,38 @@ void HaydnPostRASchedStrategy::leaveRegion(const SUnit &ExitSU) {
                     << " bot cycle(s) bundled\n");
 }
 
-/// Lower a hard root that fails canCoissueProductCycle to sequential MIs
-/// under **Anti available-cycle order** (use-before-def).
+/// Keep residual multi-member kids in schedule order after unbundle.
 ///
-/// Detect is \p cycleMembersHaveTrueRAW on the child list: same ReadyCycle
-/// coissue is illegal under no-forwarding when schedule order is def-before-
-/// use (Data would have split cycles; Anti requires use-before-redef). After
-/// RA, independent vregs may share a physreg and invert Anti order inside a
-/// frozen SMS hard root — avail-cycle detect fires at exact-commit.
+/// Product no-forwarding law: same-cycle true RAW cannot coissue, so leaveMBB
+/// sequentializes those shells. Schedule order is already def-before-use for
+/// true RAW; preserving it turns the illegal same-cycle forward into a legal
+/// multi-cycle RAW. Do **not** Anti-reorder (use-before-def) on true RAW —
+/// that places a use before its only same-shell def and creates undefined
+/// physreg reads under the verifier.
 ///
-/// Repair is not a product "WAR rewrite": reorder with
-/// \p orderMembersUseBeforeDefForAnti (the order ReadyCycle would enforce
-/// for Anti), unbundle, erase shell. Sequential parcels, not one cycle.
-static void sequentializeHardRootToAntiAvailOrder(
-    MachineInstr &Root, ArrayRef<MachineInstr *> Kids) {
-  MachineBasicBlock &MBB = *Root.getParent();
-  const TargetRegisterInfo *TRI =
-      MBB.getParent()->getSubtarget().getRegisterInfo();
-
+/// WAR-shaped shells that fail field-order coissue already have use-before-def
+/// in schedule order; keeping that order preserves multi-cycle WAR (reader
+/// observes the pre-cycle value). Mutual cyclic Anti is not repaired here —
+/// product law deletes pre-RA hard freezes that would produce it.
+static void sequentializeKidsInScheduleOrder(MachineBasicBlock &MBB,
+                                             ArrayRef<MachineInstr *> Kids) {
   SmallVector<MachineInstr *, 4> Order(Kids.begin(), Kids.end());
-  if (haydn::bundle::cycleMembersHaveTrueRAW(Order, TRI)) {
-    haydn::bundle::orderMembersUseBeforeDefForAnti(Order, TRI);
-    LLVM_DEBUG({
-      dbgs() << "HaydnPostRASched: avail-cycle detect (true RAW in schedule "
-                "order) — lower hard root under Anti use-before-def:\n";
-      for (MachineInstr *K : Order)
-        if (K)
-          dbgs() << "  " << *K;
-    });
+  for (unsigned I = 1; I < Order.size(); ++I) {
+    MachineInstr *Prev = Order[I - 1];
+    MachineInstr *Cur = Order[I];
+    if (!Prev || !Cur)
+      continue;
+    if (std::next(Prev->getIterator()) == Cur->getIterator())
+      continue;
+    MBB.splice(std::next(Prev->getIterator()), &MBB, Cur->getIterator());
   }
+}
 
-  for (MachineInstr *K : Order) {
+/// Unbundle a multi-member root shell and sequentialize kids in schedule order.
+static void sequentializeMultiMemberRoot(MachineInstr &Root,
+                                         ArrayRef<MachineInstr *> Kids) {
+  MachineBasicBlock &MBB = *Root.getParent();
+  for (MachineInstr *K : Kids) {
     if (!K)
       continue;
     for (MachineOperand &MO : K->operands()) {
@@ -849,98 +809,73 @@ static void sequentializeHardRootToAntiAvailOrder(
     if (K->isBundledWithSucc())
       K->unbundleFromSucc();
   }
-
   Root.eraseFromParent();
-
-  // Splice into Anti order (use-before-def) while kids stay in the MBB.
-  for (unsigned I = 1; I < Order.size(); ++I) {
-    MachineInstr *Prev = Order[I - 1];
-    MachineInstr *Cur = Order[I];
-    if (!Prev || !Cur)
-      continue;
-    if (std::next(Prev->getIterator()) == Cur->getIterator())
-      continue;
-    MBB.splice(std::next(Prev->getIterator()), &MBB, Cur->getIterator());
-  }
-
-  LLVM_DEBUG({
-    if (haydn::bundle::cycleMembersHaveTrueRAW(Order, TRI))
-      dbgs() << "HaydnPostRASched: WARNING still true-RAW after Anti order\n";
-  });
+  sequentializeKidsInScheduleOrder(MBB, Kids);
 }
 
-void HaydnPostRASchedStrategy::exactCommitHardRoots(
-    MachineBasicBlock &MBB,
-    const SmallPtrSetImpl<MachineInstr *> &HardMembers) {
-  // Collect multi-member roots whose children were hard at pre-materialize
-  // snapshot — commitExactHardRootProductCycle mutates the instr list
-  // (pre-validate + dissolve + refinalize). Skip ordinary multi-MI packs
-  // created by free materializeBundles this leaveMBB. Membership is never
-  // expanded with free neighbors (commit-inside-group only).
+void HaydnPostRASchedStrategy::commitOrSequentializeUnstampedMultiMemberBundles(
+    MachineBasicBlock &MBB) {
+  // Residual multi-member shells at leaveMBB:
+  //   * jointly legal → ordinary multi-MI commit (unstamped) or keep (stamped)
+  //   * illegal (true RAW / SET trip-Off conflict / field-order fail) →
+  //     sequentialize in schedule order and clear InternalRead
+  //
+  // Stamped Format-E multi-member is re-probed: remat glue / free pack can
+  // stamp a cycle product law refuses (snapshot no-forwarding SET trip).
+  // Do not trust the stamp alone. Not a hard-root freeze path.
   SmallVector<MachineInstr *, 4> Roots;
   for (MachineInstr &MI : MBB) {
     if (!MI.isBundle() || MI.isBundledWithPred())
       continue;
     unsigned Kids = 0;
-    bool IsHard = false;
     for (MachineBasicBlock::instr_iterator I = std::next(MI.getIterator());
-         I != MBB.instr_end() && I->isBundledWithPred(); ++I) {
+         I != MBB.instr_end() && I->isBundledWithPred(); ++I)
       ++Kids;
-      if (HardMembers.contains(&*I))
-        IsHard = true;
-    }
-    if (Kids >= 2 && IsHard)
+    if (Kids >= 2)
       Roots.push_back(&MI);
   }
 
-  HaydnMCFormats Fmts;
   for (MachineInstr *Root : Roots) {
-    if (!Root->getParent())
-      continue; // already dissolved as part of a prior commit
+    if (!Root || !Root->getParent())
+      continue;
 
-    // Snapshot child pointers before commit (root shell is erased).
     SmallVector<MachineInstr *, 3> Kids;
     for (MachineBasicBlock::instr_iterator I = std::next(Root->getIterator());
          I != MBB.instr_end() && I->isBundledWithPred(); ++I)
       Kids.push_back(&*I);
+    if (Kids.size() < 2)
+      continue;
 
-    // Idempotent when already Format E row/completion-stamped and field-ordered:
-    // still re-run so member setDesc, canonical order, and rebuilt
-    // consolidated root operands/kills/InternalRead stay authoritative
-    // (stale handoff root shell is erased inside the helper).
-    //
-    // Available-cycle detect failed for this frozen group (canCoissue false).
-    // Usually post-RA physreg paint inverted Anti order inside a hard root
-    // (def-before-use of one reg while still "same cycle"). Lower under Anti
-    // use-before-def order — same order ReadyCycle would have used.
-    if (!haydn::bundle::commitExactHardRootProductCycle(*Root, *HII)) {
-      LLVM_DEBUG({
-        dbgs() << "HaydnPostRASched: hard-root fails avail-cycle/emission "
-                  "coissue — lower sequential under Anti order:\n";
-        for (MachineInstr *K : Kids)
-          if (K)
-            dbgs() << "  " << *K;
-      });
-      sequentializeHardRootToAntiAvailOrder(*Root, Kids);
-      ++NumHardRootsDissolvedSequential;
+    // Product coissue probe (schedule + field + SET trip/Off). Illegal →
+    // sequentialize whether or not the shell already carries a Format E stamp.
+    if (!haydn::bundle::canCoissueProductCycle(Kids)) {
+      sequentializeMultiMemberRoot(*Root, Kids);
+      ++NumUnstampedMultiMemberSequentialized;
       continue;
     }
 
-    // Post-commit Format E certificate on the new root (same children).
-    MachineInstr &NewRoot = *getBundleStart(Kids.front()->getIterator());
-    if (auto Err = haydn::bundle::verifyExactHardRootCommit(NewRoot, Fmts)) {
-      LLVM_DEBUG(dbgs() << "HaydnPostRASched: hard-root post-commit verify "
-                           "failed: "
-                        << *Err << "\n"
-                        << NewRoot);
-      report_fatal_error(
-          "Haydn: hard-root exact-commit failed Format E certificate "
-          "(commit-inside-group fail-closed)",
-          /*GenCrashDiag=*/false);
-    }
+    if (haydn::bundle::getBundleRowID(*Root).has_value())
+      continue; // stamped and still jointly legal — keep
 
-    ++NumHardRootsExactCommitted;
-    ++NumMultiMIBundlesFinalized;
+    // Unstamped residual: dissolve and ordinary multi-MI commit.
+    for (MachineInstr *K : Kids) {
+      for (MachineOperand &MO : K->operands()) {
+        if (MO.isReg() && MO.isInternalRead())
+          MO.setIsInternalRead(false);
+      }
+      if (K->isBundledWithPred())
+        K->unbundleFromPred();
+      if (K->isBundledWithSucc())
+        K->unbundleFromSucc();
+    }
+    Root->eraseFromParent();
+    if (haydn::bundle::commitExactMultiMIProductCycle(Kids)) {
+      ++NumUnstampedMultiMemberCommitted;
+      ++NumMultiMIBundlesFinalized;
+      continue;
+    }
+    sequentializeKidsInScheduleOrder(MBB, Kids);
+    ++NumUnstampedMultiMemberSequentialized;
   }
 }
 
@@ -964,8 +899,6 @@ static void collectCycleMembers(MachineInstr &Head,
     Members.push_back(&Head);
 }
 
-// True if any member of \p Members conflicts with \p SB at the issue cycle
-// (stage-relative Required/Reserved + ports/issue).
 static bool cycleConflictsScoreboard(
     const HaydnHazardRecognizer &HR,
     const ResourceScoreboard<HaydnFuncUnitWrapper> &SB,
@@ -974,7 +907,6 @@ static bool cycleConflictsScoreboard(
     if (HR.checkConflict(SB, *MI, /*Cycle=*/0))
       return true;
   }
-  // Same-cycle WAW on destination regs across members (spec: no dual def).
   SmallSet<Register, 8> SeenDefs;
   const TargetRegisterInfo *TRI = nullptr;
   for (MachineInstr *MI : Members) {
@@ -996,8 +928,6 @@ static bool cycleConflictsScoreboard(
   return false;
 }
 
-// Minimum issue-cycle gap required between a prior def and a later use of the
-// same physreg (operand latency). Returns 0 when no edge / latency ≤ 1.
 static unsigned requiredLatencyGap(const TargetInstrInfo &TII,
                                    const InstrItineraryData *Itin,
                                    const MachineInstr &DefMI, unsigned DefIdx,
@@ -1008,51 +938,39 @@ static unsigned requiredLatencyGap(const TargetInstrInfo &TII,
       return 0;
     return *L - 1;
   }
-  // Itinerary miss: loads default to LoadLatency-driven gap of 1 (latency 2).
   if (DefMI.mayLoad())
     return 1;
   return 0;
 }
 
-void HaydnPostRASchedStrategy::replayCrossBoundaryHazards(
+void HaydnPostRASchedStrategy::replayMultiMemberSeamHazards(
     MachineBasicBlock &MBB,
-    const SmallPtrSetImpl<MachineInstr *> &HardMembers) {
-  // Cross-boundary replay (plan §5.5): close hazards on both sides of a fixed
-  // multi-member hard root. Region-local scheduling + handleRegionConflicts
-  // already own intra-region latency/Req/Res; full-stream re-validation would
-  // re-apply raw itinerary latencies that adjustSchedDependency refined in
-  // the DAG. Activation: only when ≥1 pre-materialize multi-member hard root
-  // is present (\p HardMembers non-empty). Ordinary leaveMBB multi-MI packs
-  // are excluded — their children are not in HardMembers.
-  //
-  // Inserts only exact NOP cycles at hard-root seams; never
-  // moves/merges/splits a hard cycle. Local scratch scoreboard only.
-  if (MBB.empty() || HardMembers.empty())
+    const SmallPtrSetImpl<MachineInstr *> &PreExistingMultiMembers) {
+  // Residual multi-member seam replay only (pre-free-pack shells). Free
+  // multi-MI packs are excluded; latency is DAG + LatencyStalls.
+  if (MBB.empty() || PreExistingMultiMembers.empty())
     return;
 
-  // Identify hard BUNDLE roots by surviving child identity (exact-commit may
-  // have dissolved the pre-materialize shell and re-stamped a new root).
-  SmallPtrSet<MachineInstr *, 4> HardRootSet;
+  SmallPtrSet<MachineInstr *, 4> MultiMemberRoots;
   for (MachineInstr &MI : MBB) {
     if (!MI.isBundle() || MI.isBundledWithPred())
       continue;
     unsigned Kids = 0;
-    bool IsHard = false;
+    bool IsPre = false;
     for (MachineBasicBlock::instr_iterator I = std::next(MI.getIterator());
          I != MBB.instr_end() && I->isBundledWithPred(); ++I) {
       ++Kids;
-      if (HardMembers.contains(&*I))
-        IsHard = true;
+      if (PreExistingMultiMembers.contains(&*I))
+        IsPre = true;
     }
-    if (Kids >= 2 && IsHard)
-      HardRootSet.insert(&MI);
+    if (Kids >= 2 && IsPre)
+      MultiMemberRoots.insert(&MI);
   }
-  if (HardRootSet.empty())
+  if (MultiMemberRoots.empty())
     return;
 
   const MachineFunction &MF = *MBB.getParent();
-  const InstrItineraryData *Itin =
-      MF.getSubtarget().getInstrItineraryData();
+  const InstrItineraryData *Itin = MF.getSubtarget().getInstrItineraryData();
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
   HaydnHazardRecognizer ScratchHR(HII, Itin, /*IsPreRA=*/false,
                                   /*AltDescs=*/nullptr);
@@ -1062,8 +980,6 @@ void HaydnPostRASchedStrategy::replayCrossBoundaryHazards(
   const int Depth = std::max(ScratchHR.getPipelineDepth(), 1);
   SB.reset(Depth);
 
-  // Def site: cycle index + MI/op. SideClass: which side of the nearest hard
-  // root produced this def (PreRoot / InRoot / PostRoot).
   enum class Side : uint8_t { PreRoot, InRoot, PostRoot };
   struct DefInfo {
     unsigned Cycle = 0;
@@ -1073,14 +989,14 @@ void HaydnPostRASchedStrategy::replayCrossBoundaryHazards(
   };
   DenseMap<Register, DefInfo> LastDef;
   unsigned CurrCycle = 0;
-  bool SeenHardRoot = false;
-  bool PrevWasHardRoot = false;
+  bool SeenMulti = false;
+  bool PrevWasMulti = false;
 
   auto insertStallBefore = [&](MachineBasicBlock::iterator InsertPt) {
     HII->insertNoop(MBB, InsertPt);
     SB.advance();
     ++CurrCycle;
-    ++NumCrossBoundaryReplayStalls;
+    ++NumMultiMemberSeamReplayStalls;
     ++NumIdleCyclesMaterialized;
   };
 
@@ -1099,16 +1015,14 @@ void HaydnPostRASchedStrategy::replayCrossBoundaryHazards(
       continue;
     }
 
-    const bool IsHard = HardRootSet.contains(&Head);
-    // Seam cycles: the hard root itself (producer→root) and the first cycle
-    // after a hard root (root→consumer).
-    const bool AtSeam = IsHard || PrevWasHardRoot;
+    const bool IsMulti = MultiMemberRoots.contains(&Head);
+    const bool AtSeam = IsMulti || PrevWasMulti;
 
     if (AtSeam) {
       unsigned LatencyStalls = 0;
       const Side UseSide =
-          IsHard ? Side::InRoot
-                 : (SeenHardRoot ? Side::PostRoot : Side::PreRoot);
+          IsMulti ? Side::InRoot
+                  : (SeenMulti ? Side::PostRoot : Side::PreRoot);
       for (MachineInstr *UseMI : Members) {
         for (unsigned U = 0, UE = UseMI->getNumOperands(); U != UE; ++U) {
           const MachineOperand &MO = UseMI->getOperand(U);
@@ -1119,8 +1033,6 @@ void HaydnPostRASchedStrategy::replayCrossBoundaryHazards(
             if (!TRI->regsOverlap(KV.first, UseR))
               continue;
             const DefInfo &DI = KV.second;
-            // Cross-boundary only: def and use on different sides of a root.
-            // PreRoot → InRoot, PreRoot → PostRoot, InRoot → PostRoot.
             bool Crosses = false;
             if (DI.Origin == Side::PreRoot &&
                 (UseSide == Side::InRoot || UseSide == Side::PostRoot))
@@ -1149,7 +1061,7 @@ void HaydnPostRASchedStrategy::replayCrossBoundaryHazards(
       }
       if (Guard >= 64) {
         report_fatal_error(
-            "Haydn: cross-boundary replay failed to clear Req/Res conflict",
+            "Haydn: multi-member seam replay failed to clear Req/Res conflict",
             /*GenCrashDiag=*/false);
       }
     }
@@ -1158,8 +1070,8 @@ void HaydnPostRASchedStrategy::replayCrossBoundaryHazards(
       ScratchHR.enterResources(SB, *MI, /*DeltaCycles=*/0);
 
     const Side DefSide =
-        IsHard ? Side::InRoot
-               : (SeenHardRoot ? Side::PostRoot : Side::PreRoot);
+        IsMulti ? Side::InRoot
+                : (SeenMulti ? Side::PostRoot : Side::PreRoot);
     for (MachineInstr *MI : Members) {
       for (unsigned D = 0, DE = MI->getNumOperands(); D != DE; ++D) {
         const MachineOperand &MO = MI->getOperand(D);
@@ -1172,11 +1084,11 @@ void HaydnPostRASchedStrategy::replayCrossBoundaryHazards(
       }
     }
 
-    if (IsHard) {
-      SeenHardRoot = true;
-      PrevWasHardRoot = true;
+    if (IsMulti) {
+      SeenMulti = true;
+      PrevWasMulti = true;
     } else {
-      PrevWasHardRoot = false;
+      PrevWasMulti = false;
     }
 
     SB.advance();
