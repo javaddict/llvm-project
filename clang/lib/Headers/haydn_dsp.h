@@ -29,129 +29,28 @@
  *   HAYDN_COMPAT_EMULATED    — software composition, documented soft-exact
  *   HAYDN_COMPAT_UNSUPPORTED — no correct map; fail closed (no silent alias)
  *
- * Residual silent-wrong public AE maps are tier UNSUPPORTED by default.
- * Opt-in __HAYDN_ALLOW_INEXACT_AE keeps transitional inexact bodies for
- * NatureDSP -c only. AE_MULZAAFD16SS_33_22 / L16X4_RIC / L32X2_RIC /
- * L32X2F24_RIC / LA*_RIC / SELP24 / SEL24 / dual-24 NEG|ADD|SUB|NEGSP /
- * SRAI24|SRAIP24|F24X2_SRAI|ADDP24|ZERO24 are EXACT; reverse linear RIP
- * loads/stores (L/S*32X2{,F24}_RIP, L16X4_RIP) are EXACT; AE_L16_XC and
- * saturating left-shift aliases (incl. F64_SLAIS/SLAS64S/SLAI24S/SLAS32S/
- * F32X2_SLAIS) are EMULATED; AE_SRAS32 / AE_SLAS32 (SAR dual shifts) are EXACT;
- * AE_SRA64_32 is EMULATED; ADDSP24S/SUBSP24S are EXACT dual-24. AE_LA32X2F24_RIC
- * is EXACT reverse-IC. Dual-24 unaligned circular LA32X2F24_{IC,XC}/SA32X2F24_
- * {IC,XC} and LA32X2F24POS_PC / LA24X2POS_PC are EXACT (AR residual + soft CBR
- * wrap; not plain mem or aligned D_*_CB). AE_LA*NEG_PC is EXACT (same PLDWWUA
- * seed as POS_PC; reverse direction lives on later RIC/RIP dir ImmArg, not the
- * seed). AE_MAXABS16S is EMULATED (X4ABS16S+X4MAX16 composite; never 2x32
- * maxabs32s). AE_ADD64X2_ and AE_ADD64X2_vector are permanent UNSUPPORTED
- * (Haydn ae_int64x2 is one DR64 bag — no dual-64 lane-wise add; scalar i64 add
- * is silent-wrong cross-lane carry). Hexagon peer = fail-closed / feature-
- * gated C surface, not an AE tier table. No formMACs, no FormatID / slot /
- * AltDesc here.
+ * Mechanical contract: every public AE_* macro has a HAYDN_COMPAT_TIER_* tag
+ * emitted into haydn.h from BuiltinsHaydn.td (HaydnAeCompat) via
+ * HaydnIntrinEmitter (inventory floor >= 600; CI rejects shrink/untagged).
+ * Residual public surface defaults to EMULATED until curated EXACT;
+ * permanent product law keeps AE_MAXABS16S EMULATED (X4ABS16S+X4MAX16;
+ * never 2x32 maxabs32s), AE_ADD64X2_ / _vector UNSUPPORTED (closed set —
+ * dual-64 only; no bag dual-64), and AE_LA*NEG_PC EXACT probe-only seed
+ * parity with POS_PC (PLDWWUA; no invented reverse pre-decrement). Dual-24
+ * F24 POS seeds (LA32X2F24POS_PC / LA24X2POS_PC) share the same PLDWWUA
+ * law. Curated dual-24 / lane-select residual class is EXACT (SELP24/SEL24/
+ * SEL32 via X2SEL32 not bag OR, NEG24S via X2NEG32S, F24X2_SRAI/SRAI24/
+ * F32X2_SRAI via X2SRA32, ADDP24/ADD24S dual ALU, LA/SA*F24_IC +
+ * LA/SA24X2_IC + base LA/SA16X4/32X2_IC AR+CBR, L/S32X2F24_XC aligned
+ * CB + next-ptr writeback, L32X2*_RIC reverse-CB);
+ * soft sat left (SLAI24S/SLAI64S/F64_SLAIS/F32X2_SLAIS/F64_SLAS) stays
+ * EMULATED and must not silent-alias plain << wrap. Opt-in
+ * __HAYDN_ALLOW_INEXACT_AE keeps transitional inexact bodies for NatureDSP
+ * -c only. No FormatID / slot / AltDesc here. CI fail-closes on untagged
+ * macros and all-tier width mismatches (not only EXACT).
  *===----------------------------------------------------------------------===*/
-#ifndef HAYDN_COMPAT_NATIVE
-#define HAYDN_COMPAT_NATIVE      0
-#define HAYDN_COMPAT_EXACT       1
-#define HAYDN_COMPAT_EMULATED    2
-#define HAYDN_COMPAT_UNSUPPORTED 3
-#endif
-
-/* Per-symbol residual tags (silent-wrong audit) + a few exact XC peers. */
-#define HAYDN_COMPAT_TIER_AE_L32X2_XC HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_S32X2_XC HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_L16X4_XC HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_S16X4_XC HAYDN_COMPAT_EXACT
-/* Scalar i16 CB: soft i16 load + haydn_cbr_step(byte offs) (EMULATED).
- * ISA has no S_LH_CB halfword circular load; not 64b D_LDW_CB trunc. */
-#define HAYDN_COMPAT_TIER_AE_L16_XC HAYDN_COMPAT_EMULATED
-/* Reverse-circular via signed negative D_LDW_CB stride (EXACT). */
-#define HAYDN_COMPAT_TIER_AE_L16X4_RIC HAYDN_COMPAT_EXACT
-/* LA reverse-IC: UA dir=1 ImmArg + haydn_cbr_step(ptr,-8) (EXACT). */
-#define HAYDN_COMPAT_TIER_AE_LA16X4_RIC HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_LA32X2_RIC HAYDN_COMPAT_EXACT
-/* Permanent UNSUPPORTED: HiFi dual-64 lane-wise add has no Haydn map —
- * ae_int64x2 is one DR64 bag; scalar i64 add is silent-wrong (cross-lane
- * carry). Not EMULATED; do not invent a bag dual-64 alias. Plain AE_ADD64X2_
- * is the same class (escaped the _vector quarantine name). */
-#define HAYDN_COMPAT_TIER_AE_ADD64X2_ HAYDN_COMPAT_UNSUPPORTED
-#define HAYDN_COMPAT_TIER_AE_ADD64X2_vector HAYDN_COMPAT_UNSUPPORTED
-/* Quad-16 max-abs: composite X4ABS16S + X4MAX16 (no fused MAXABS16S in ISA).
- * Never route 4x16 through maxabs32s (2x32) — silent miscomp on FFT bexp. */
-#define HAYDN_COMPAT_TIER_AE_MAXABS16S HAYDN_COMPAT_EMULATED
-/* Reverse unaligned circular seed: PLDWWUA only (same as POS_PC). Direction is
- * on subsequent RIC/RIP step ImmArg, not the seed — alias is not direction-
- * erasing on this AGU model. */
-#define HAYDN_COMPAT_TIER_AE_LA16X4NEG_PC HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_LA32X2NEG_PC HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_LA16X4POS_PC HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_LA32X2POS_PC HAYDN_COMPAT_EXACT
-/* Dual-high lanes 3+3/2+2 — exact native haydn_fmulaa16_hs_33_22. */
-#define HAYDN_COMPAT_TIER_AE_MULZAAFD16SS_33_22 HAYDN_COMPAT_EXACT
-/* Dual-24 lane pack — exact X2SEL32_* (not silent OR). */
-#define HAYDN_COMPAT_TIER_AE_SELP24_HH HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_SELP24_HL HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_SELP24_LH HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_SELP24_LL HAYDN_COMPAT_EXACT
-/* AE_SEL24_* same lane pack as SELP24 (not bag bitwise OR). */
-#define HAYDN_COMPAT_TIER_AE_SEL24_HH HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_SEL24_HL HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_SEL24_LH HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_SEL24_LL HAYDN_COMPAT_EXACT
-/* Reverse dual-32 CB via signed negative D_LDW_CB stride (EXACT). */
-#define HAYDN_COMPAT_TIER_AE_L32X2_RIC HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_L32X2F24_RIC HAYDN_COMPAT_EXACT
-/* Reverse unaligned F24 + CBR wrap (same UA dir=1 path as LA32X2_RIC). */
-#define HAYDN_COMPAT_TIER_AE_LA32X2F24_RIC HAYDN_COMPAT_EXACT
-/* Dual-24 sat ALU on 32-bit lanes (8-bit headroom; EXACT vs silent scalar). */
-#define HAYDN_COMPAT_TIER_AE_NEG24S HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_NEGSP24S HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_ADD24S HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_SUB24S HAYDN_COMPAT_EXACT
-/* Dual-24 non-sat add + dual ASR (not scalar high-lane drop). */
-#define HAYDN_COMPAT_TIER_AE_ADDP24 HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_SRAI24 HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_SRAIP24 HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_F24X2_SRAI HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_ZERO24 HAYDN_COMPAT_EXACT
-/* Saturating left-shift aliases — soft sat model (EMULATED). */
-#define HAYDN_COMPAT_TIER_AE_SLAI64S HAYDN_COMPAT_EMULATED
-#define HAYDN_COMPAT_TIER_AE_SLAA64S HAYDN_COMPAT_EMULATED
-#define HAYDN_COMPAT_TIER_AE_SLAS64S HAYDN_COMPAT_EMULATED
-#define HAYDN_COMPAT_TIER_AE_F64_SLAIS HAYDN_COMPAT_EMULATED
-#define HAYDN_COMPAT_TIER_AE_F64_SLAS HAYDN_COMPAT_EMULATED
-#define HAYDN_COMPAT_TIER_AE_SLAA32S HAYDN_COMPAT_EMULATED
-#define HAYDN_COMPAT_TIER_AE_SLAA16S HAYDN_COMPAT_EMULATED
-#define HAYDN_COMPAT_TIER_AE_SLAI32S HAYDN_COMPAT_EMULATED
-#define HAYDN_COMPAT_TIER_AE_SLAI16S HAYDN_COMPAT_EMULATED
-/* Dual-24 sat left — soft per-lane sat on 32-bit headroom (EMULATED). */
-#define HAYDN_COMPAT_TIER_AE_SLAI24S HAYDN_COMPAT_EMULATED
-/* Dual-32 bidirectional sat shift by SAR/explicit (EMULATED; not always ASR). */
-#define HAYDN_COMPAT_TIER_AE_SLAS32S HAYDN_COMPAT_EMULATED
-/* Dual-32 sat left immediate — soft per-lane (EMULATED; not wrap X2SLL). */
-#define HAYDN_COMPAT_TIER_AE_F32X2_SLAIS HAYDN_COMPAT_EMULATED
-/* Dual-32 ASR by ambient SAR (Cadence 1-arg AE_SRAS32) — EXACT X2SRA32. */
-#define HAYDN_COMPAT_TIER_AE_SRAS32 HAYDN_COMPAT_EXACT
-/* Dual-32 logical left by ambient SAR (Cadence 1-arg AE_SLAS32) — EXACT X2SLL32. */
-#define HAYDN_COMPAT_TIER_AE_SLAS32 HAYDN_COMPAT_EXACT
-/* 64→32 narrow with optional shift — soft pack/sat (EMULATED). */
-#define HAYDN_COMPAT_TIER_AE_SRA64_32 HAYDN_COMPAT_EMULATED
-/* Dual-24 SP aliases of ADD24S/SUB24S (not scalar add32s/sub32s). */
-#define HAYDN_COMPAT_TIER_AE_ADDSP24S HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_SUBSP24S HAYDN_COMPAT_EXACT
-/* Reverse linear post-inc stores/loads (RIP) — C ptr step, not forward IP. */
-#define HAYDN_COMPAT_TIER_AE_S32X2_RIP HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_S32X2F24_RIP HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_L32X2F24_RIP HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_L16X4_RIP HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_L32X2_RIP HAYDN_COMPAT_EXACT
-/* Dual-24 unaligned circular: AR residual + soft CBR wrap (same as LA/SA32X2_IC).
- * Must not silent-alias plain mem or aligned D_*_CB (drops unaligned residual). */
-#define HAYDN_COMPAT_TIER_AE_LA32X2F24POS_PC HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_LA24X2POS_PC HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_LA32X2F24_IC HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_SA32X2F24_IC HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_LA32X2F24_XC HAYDN_COMPAT_EXACT
-#define HAYDN_COMPAT_TIER_AE_SA32X2F24_XC HAYDN_COMPAT_EXACT
+/* HAYDN_COMPAT_* ordinals + HAYDN_COMPAT_TIER_AE_* come from haydn.h
+ * (generated HaydnAeCompat inventory). */
 
 #if defined(__HAYDN_ALLOW_INEXACT_AE)
 #define __HAYDN_AE_COMPAT_STRICT 0
@@ -758,6 +657,9 @@ static inline void haydn_ae_sa64pos(int ar, void *p, int dir) {
 #define AE_ZALIGN64() haydn_ae_zalign64()
 #define AE_ZALIGN64_AR(ar) haydn_ae_zalign64_ar(ar)
 
+/* Store-finish residual (WBARWUA): direction lives on the ImmArg.
+ * POS dir=0, NEG dir=1. Unlike LA*NEG_PC seed (PLDWWUA probe-only, aliases
+ * POS), SA64NEG must not silent-alias POS dir=0. */
 #define AE_SA64POS_FP(align, ptr) \
   haydn_ae_sa64pos(__HAYDN_AR_SEL(align), (ptr), 0)
 #define AE_SA64POS(align, ptr) AE_SA64POS_FP(align, ptr)
@@ -857,7 +759,7 @@ static inline void haydn_ae_sa64pos(int ar, void *p, int dir) {
     int __s = (int)(inc); \
     if (__s < 0) __s = -__s; \
     if (__s == 0) __s = 8; \
-    haydn_ae_sa16x4_step((int64_t)(src), __ar, __p, __s, 1); \
+    haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p, __s, 1); \
     (ptr) = (ae_int16x4 *)((char *)(ptr) - ((inc) ? (inc) : 8)); \
   } while (0)
 #define AE_SA32X2_RIP(src, align, ptr, inc) \
@@ -867,7 +769,7 @@ static inline void haydn_ae_sa64pos(int ar, void *p, int dir) {
     int __s = (int)(inc); \
     if (__s < 0) __s = -__s; \
     if (__s == 0) __s = 8; \
-    haydn_ae_sa64_step((int64_t)(src), __ar, __p, __s, 1); \
+    haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, __s, 1); \
     (ptr) = (ae_int32x2 *)((char *)(ptr) - ((inc) ? (inc) : 8)); \
   } while (0)
 
@@ -1080,19 +982,10 @@ static inline ae_int64 AE_ABS64(ae_int64 a) { return haydn_abs64(a); }
 #define __AE_SAT16X4_2A(a, b) ((ae_int16x4)haydn_x4sat32t16((a), (b)))
 
 /// Saturate 16-bit value (alias)
-#define AE_CVT16X4_1ARG(a) ((ae_int16x4)haydn_x4sat32t16((a)))
+#define AE_CVT16X4_1ARG(a) \
+  ((ae_int16x4)haydn_x4sat32t16((a), (ae_int32x2){0, 0}))
 static inline ae_int16x4 __ae_cvt16x4_2(ae_int32x2 a, ae_int32x2 b) {
-  long long va = (long long)a, vb = (long long)b;
-  int a0 = (int)(va), a1 = (int)(va >> 32);
-  int b0 = (int)(vb), b1 = (int)(vb >> 32);
-  short s0 = (a0 > 32767) ? 32767 : (a0 < -32768) ? -32768 : (short)a0;
-  short s1 = (a1 > 32767) ? 32767 : (a1 < -32768) ? -32768 : (short)a1;
-  short s2 = (b0 > 32767) ? 32767 : (b0 < -32768) ? -32768 : (short)b0;
-  short s3 = (b1 > 32767) ? 32767 : (b1 < -32768) ? -32768 : (short)b1;
-  return (ae_int16x4)((long long)(unsigned short)s0 |
-                     ((long long)(unsigned short)s1 << 16) |
-                     ((long long)(unsigned short)s2 << 32) |
-                     ((long long)(unsigned short)s3 << 48));
+  return (ae_int16x4)haydn_x4sat32t16(a, b);
 }
 #define AE_CVT16X4(...) __AE_CVT16X4_OVERLOAD(__VA_ARGS__)
 #define __AE_CVT16X4_GET(_1, _2, NAME, ...) NAME
@@ -1238,15 +1131,15 @@ static inline ae_int32x2 AE_ROUND32X2F48S(ae_int64 a, ae_int64 b,
 }
 
 /// Truncate 2x64-bit to 2x32-bit with arithmetic shift + saturation.
-/// NatureDSP FQ FIR bodies call TRUNCA(..., 32); Haydn FQ maps accumulate
-/// FF2-scale products that pure finish with shift 16 — remap 32→16 so
-/// AE_MUL*FQ* + TRUNCA@32 matches pure bkfir16 (same as dual soft stub).
+/// Soft oracle: lo/hi = SAT32(acc >> shift) with the shift amount honored as
+/// given (no kernel-special 32→16 remap). Pack lanes with unsigned 32-bit
+/// casts so a negative high lane cannot sign-overwrite the low lane.
 static inline ae_int32x2 AE_TRUNCA32X2F64S(ae_int64 a, ae_int64 b,
                                              int shift) {
-  int sh = (shift == 32) ? 16 : shift;
-  ae_int32 lo = (ae_int32)haydn_satsr64(a, sh);
-  ae_int32 hi = (ae_int32)haydn_satsr64(b, sh);
-  return (ae_int32x2)((long long)lo | ((long long)hi << 32));
+  ae_int32 lo = (ae_int32)haydn_satsr64(a, shift);
+  ae_int32 hi = (ae_int32)haydn_satsr64(b, shift);
+  return (ae_int32x2)(((unsigned long long)(unsigned int)lo) |
+                      ((unsigned long long)(unsigned int)hi << 32));
 }
 
 /// Truncate 2x64-bit to 2x32-bit with rounding
@@ -1267,8 +1160,11 @@ static inline ae_int16x4 AE_ROUND16X4F32SASYM(ae_int32x2 a, ae_int32x2 b,
   return (ae_int16x4)haydn_x4sat32t16(sa, sb);
 }
 
-/// Convert 32-bit to Q1.56 accumulator (zero extend)
-#define AE_CVTQ56A32S(a) ((ae_int64)0)
+/// Convert 32-bit signed value to Q1.56-class accumulator (sign-extend, <<16).
+/// Soft oracle (kernel pure): (int64_t)(int32_t)(a) << 16 via unsigned left
+/// shift so negative inputs are defined (never a constant-zero body).
+#define AE_CVTQ56A32S(a) \
+  ((ae_int64)((int64_t)(((uint64_t)(int64_t)(int32_t)(a)) << 16)))
 
 /// Convert 48-bit Q-format to 32-bit
 #define AE_CVTQ48A32S(a, s) ((ae_int32)haydn_packsr32((a), (s)))
@@ -2614,11 +2510,14 @@ static inline float int32_rtor_ae_f32(ae_int32 v) {
 #define AE_SA24X2_X(src, align, ptr, offs) \
   do { *(ae_f24x2 *)((char *)(ptr) + (offs)) = (src); (void)(align); } while (0)
 
-/// Aligned dual-24 with circular buffer (align + cbr_sel args).
+/// Dual-24 unaligned circular (align + cbr_sel): same AR residual + soft CBR
+/// wrap as AE_LA32X2F24_IC / AE_SA32X2F24_IC. Must not silent-alias aligned
+/// D_LDW_CB (drops AR residual) or plain mem without ptr wrap. Late overload
+/// owns 3-arg/4-arg forms; early body routes to the same late helpers.
 #define AE_LA24X2_IC(dst, align, ptr, cbr_sel) \
-  do { __HAYDN_AE_CB_LD64((dst), (ptr), (cbr_sel), 0); (void)(align); } while (0)
+  __AE_LA32X2F24_IC_4A((dst), (align), (ptr), (cbr_sel))
 #define AE_SA24X2_IC(src, align, ptr, cbr_sel) \
-  do { *(ae_f24x2 *)(ptr) = (src); (void)(align); (void)(cbr_sel); } while (0)
+  __AE_SA32X2F24_IC_4A((src), (align), (ptr), (cbr_sel))
 
 /// Post-increment helpers (HiFi3 helper API)
 #define ae_f24x2_loadip(dst, ptr, inc) AE_L32X2_IP(dst, ptr, inc)
@@ -2976,15 +2875,19 @@ static inline void AE_MULFD24X2_FIR_H(ae_int64 *q0, ae_int64 *q1,
 //---- S24 / SA24 / SA64NEG ---------------------------------------------
 #define AE_SA24_IP(src, align, ptr) \
   do { *(ae_f24x2 *)(ptr) = (src); (ptr) = (ae_f24x2 *)((char *)(ptr) + 8); (void)(align); } while (0)
+/* Early SA IC placeholders — late overload owns AR residual + soft CBR wrap.
+ * Must not silent-alias plain mem (drops align residual and circular wrap). */
 #define AE_SA16X4_IC(src, align, ptr, cbr_sel) \
-  do { *(ae_int16x4 *)(ptr) = (src); (void)(align); (void)(cbr_sel); } while (0)
+  __AE_SA16X4_IC_4A((src), (align), (ptr), (cbr_sel))
 #define AE_SA32X2_IC(src, align, ptr, cbr_sel) \
-  do { *(ae_int32x2 *)(ptr) = (src); (void)(align); (void)(cbr_sel); } while (0)
+  __AE_SA32X2_IC_4A((src), (align), (ptr), (cbr_sel))
 /* Early SA F24 IC placeholder — late overload owns AR residual + CBR wrap. */
 #define AE_SA32X2F24_IC(src, align, ptr, cbr_sel) \
   __AE_SA32X2F24_IC_4A((src), (align), (ptr), (cbr_sel))
 /* AE_SA64NEG_FP defined with AR path above (WBARWUA dir=1). */
 /* Dual-24 unaligned seed: PLDWWUA into AR (same as AE_LA32X2POS_PC). Never no-op. */
+/* Dual-24 F24 POS seed: same PLDWWUA as base POS_PC (probe-only; reverse
+ * direction is the later IC/RIC ImmArg — do not invent pre-decrement). */
 #define AE_LA32X2F24POS_PC(align, ptr) \
   do { (align) = haydn_ae_la64_pp(ptr); } while (0)
 #define AE_LA24X2POS_PC(align, ptr) AE_LA32X2F24POS_PC((align), (ptr))
@@ -3025,23 +2928,27 @@ static inline void AE_MULFD24X2_FIR_H(ae_int64 *q0, ae_int64 *q1,
 #define AE_SRAA64(q, s)            ((ae_int64)((q) >> (s)))
 #define AE_SLAA64(q, s)            ((ae_int64)((ae_int64)(q) << (s)))
 /* Saturating arithmetic left shift (64-bit). Soft model matches NatureDSP
- * AE_SLAA64S / AE_F64_SLAS: clamp to INT64_MIN/MAX on overflow. */
+ * AE_SLAA64S / AE_F64_SLAS: clamp to INT64_MIN/MAX on overflow.
+ * Use unsigned left-shift + round-trip check — never a positive minv from
+ * logical right-shift of INT64_MIN, and never signed << (UB on negatives). */
 static inline ae_int64 haydn_ae_slaa64s(ae_int64 q, int s) {
   int64_t v = (int64_t)q;
-  if (s <= 0)
-    return (ae_int64)(s == 0 ? v : (v >> (-s)));
+  if (s == 0)
+    return (ae_int64)v;
+  if (s < 0)
+    return (ae_int64)(v >> (unsigned)(-s));
   if (s >= 63) {
-    if (v == 0) return (ae_int64)0;
-    return (ae_int64)(v > 0 ? (int64_t)0x7FFFFFFFFFFFFFFFLL
-                            : (int64_t)0x8000000000000000LL);
+    if (v == 0)
+      return (ae_int64)0;
+    return (ae_int64)(v < 0 ? (int64_t)0x8000000000000000LL
+                            : (int64_t)0x7FFFFFFFFFFFFFFFLL);
   }
   {
-    int64_t maxv = (int64_t)0x7FFFFFFFFFFFFFFFLL >> s;
-    int64_t minv = (int64_t)((uint64_t)0x8000000000000000ULL) >> s;
-    /* ASR of INT64_MIN: force arithmetic min bound */
-    if (v > maxv) return (ae_int64)(int64_t)0x7FFFFFFFFFFFFFFFLL;
-    if (v < minv) return (ae_int64)(int64_t)0x8000000000000000LL;
-    return (ae_int64)(v << s);
+    int64_t r = (int64_t)((uint64_t)v << (unsigned)s);
+    if ((r >> s) != v)
+      return (ae_int64)(v < 0 ? (int64_t)0x8000000000000000LL
+                              : (int64_t)0x7FFFFFFFFFFFFFFFLL);
+    return (ae_int64)r;
   }
 }
 #define AE_SLAA64S(q, s)           haydn_ae_slaa64s((q), (int)(s))
@@ -3062,32 +2969,31 @@ static inline ae_int64 haydn_ae_slaa64s(ae_int64 q, int s) {
 // Optimizer folds when the amount is constant.
 static inline int32_t haydn_ae_sla32s_lane(int32_t v, int s) {
   if (s <= 0)
-    return (s == 0) ? v : (int32_t)(v >> (-s));
+    return (s == 0) ? v : (int32_t)(v >> (unsigned)(-s));
   if (s >= 31) {
     if (v == 0) return 0;
     return v > 0 ? (int32_t)0x7FFFFFFF : (int32_t)0x80000000;
   }
   {
-    int32_t maxv = (int32_t)(0x7FFFFFFF >> s);
-    int32_t minv = (int32_t)((int32_t)0x80000000 >> s);
-    if (v > maxv) return (int32_t)0x7FFFFFFF;
-    if (v < minv) return (int32_t)0x80000000;
-    return (int32_t)(v << s);
+    /* Unsigned left-shift + arithmetic round-trip: defined for negatives. */
+    int32_t r = (int32_t)((uint32_t)v << (unsigned)s);
+    if ((r >> s) != v)
+      return v > 0 ? (int32_t)0x7FFFFFFF : (int32_t)0x80000000;
+    return r;
   }
 }
 static inline int16_t haydn_ae_sla16s_lane(int16_t v, int s) {
   if (s <= 0)
-    return (s == 0) ? v : (int16_t)(v >> (-s));
+    return (s == 0) ? v : (int16_t)(v >> (unsigned)(-s));
   if (s >= 15) {
     if (v == 0) return 0;
     return v > 0 ? (int16_t)0x7FFF : (int16_t)0x8000;
   }
   {
-    int16_t maxv = (int16_t)(0x7FFF >> s);
-    int16_t minv = (int16_t)((int16_t)0x8000 >> s);
-    if (v > maxv) return (int16_t)0x7FFF;
-    if (v < minv) return (int16_t)0x8000;
-    return (int16_t)(v << s);
+    int16_t r = (int16_t)((uint16_t)v << (unsigned)s);
+    if ((int16_t)(r >> s) != v)
+      return v > 0 ? (int16_t)0x7FFF : (int16_t)0x8000;
+    return r;
   }
 }
 static inline ae_int32x2 __ae_slaa32s(ae_int32x2 a, int s) {
@@ -3620,8 +3526,15 @@ static inline ae_int64 __AE_INT64X2_RADD_1(ae_int64x2 a) {
 /// routes to the CB intrinsic with cbr_sel=0 (CBR0). See .
 #define __AE_L32X2F24_XC_3A(dst, ptr, offs) \
   __AE_L32X2F24_XC_4A(dst, ptr, offs, 0)
+/* Dual-24 aligned circular load: same D_LDW_CB path as AE_L32X2_XC.
+ * Explicit ldw_cb_imm + next-ptr writeback (not plain mem). */
 #define __AE_L32X2F24_XC_4A(dst, ptr, offs, cbr_sel) \
-  do { __HAYDN_AE_CB_LD64((dst), (ptr), (cbr_sel), (offs) >> 3); } while (0)
+  do { \
+    haydn_cb_ld_t __r = haydn_ldw_cb_imm((ptr), (cbr_sel), \
+                                           (offs) >> 3); \
+    (dst) = (ae_f24x2)(haydn_dr64_t)__r.data; \
+    (ptr) = (__typeof__(ptr))__r.new_ptr; \
+  } while (0)
 
 //---- AE_L32X2F24_I 3-arg form -----------------------------------------
 #undef  AE_L32X2F24_I
@@ -3645,8 +3558,15 @@ static inline ae_int64 __AE_INT64X2_RADD_1(ae_int64x2 a) {
   __AE_S32X2F24_XC_GET(__VA_ARGS__, __AE_S32X2F24_XC_4A, __AE_S32X2F24_XC_3A)(__VA_ARGS__)
 #define __AE_S32X2F24_XC_3A(src, ptr, offs) \
   __AE_S32X2F24_XC_4A(src, ptr, offs, 0)
+/* Dual-24 aligned circular store: same CB path as AE_S32X2_XC. Must write
+ * back the CBR-wrapped next pointer — never drop the store-only silent
+ * residual that left ptr unmoved under an F24 XC name. */
 #define __AE_S32X2F24_XC_4A(src, ptr, offs, cbr_sel) \
-  do { haydn_sdw_cb_imm((haydn_dr64_t)(src), (ptr), (cbr_sel), (offs) >> 3); } while (0)
+  do { \
+    haydn_dr64_t __s = haydn_ae_f32x2_mem_to_reg((haydn_dr64_t)(src)); \
+    void *__np = haydn_sdw_cb_imm(__s, (ptr), (cbr_sel), (offs) >> 3); \
+    (ptr) = (__typeof__(ptr))__np; \
+  } while (0)
 
 //===----------------------------------------------------------------------===//
 // HiFi3 source-compat layer: 3-arg forms (no cbr_sel) for XC/IP/RIC loads  //
@@ -4044,10 +3964,25 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
 #define __AE_LA32X2F24_RIP_GET(_1, _2, _3, _4, NAME, ...) NAME
 #define __AE_LA32X2F24_RIP_OVERLOAD(...) \
   __AE_LA32X2F24_RIP_GET(__VA_ARGS__, __AE_LA32X2F24_RIP_4A, __AE_LA32X2F24_RIP_3A)(__VA_ARGS__)
+/* Dual-24 reverse UA residual: same dir=1 path as LA32X2_RIP, but keep
+ * ae_f24x2 / pointer typeof (never force ae_int32x2 assignment). */
 #define __AE_LA32X2F24_RIP_3A(dst, align, ptr) \
-  __AE_LA32X2_RIP_3A(dst, align, ptr)
+  do { \
+    int __ar = __HAYDN_AR_SEL(align); \
+    void *__p = (ptr); \
+    (dst) = (ae_f24x2)(haydn_dr64_t)haydn_ae_la64_step(__ar, __p, 8, 1); \
+    (ptr) = (__typeof__(ptr))((char *)(ptr) - 8); \
+  } while (0)
 #define __AE_LA32X2F24_RIP_4A(dst, align, ptr, inc) \
-  __AE_LA32X2_RIP_4A(dst, align, ptr, inc)
+  do { \
+    int __ar = __HAYDN_AR_SEL(align); \
+    void *__p = (ptr); \
+    int __s = (int)(inc); \
+    if (__s < 0) __s = -__s; \
+    if (__s == 0) __s = 8; \
+    (dst) = (ae_f24x2)(haydn_dr64_t)haydn_ae_la64_step(__ar, __p, __s, 1); \
+    (ptr) = (__typeof__(ptr))((char *)(ptr) - ((inc) ? (inc) : 8)); \
+  } while (0)
 
 //---- AE_L32X2F24_RIC overload — reverse-CB negative D_LDW_CB stride ------
 #undef  AE_L32X2F24_RIC
@@ -4787,7 +4722,7 @@ static inline ae_int64 AE_MULZAAFD32X16_H3_L2_3A(ae_int64 acc, ae_int16x4 d,
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_ae_sa16x4_step((int64_t)(src), __ar, __p, 8, 1); \
+    haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p, 8, 1); \
     (ptr) = (ae_int16x4 *)((char *)(ptr) - 8); \
   } while (0)
 #define __AE_SA16X4_RIP_4A(src, align, ptr, inc) \
@@ -4797,7 +4732,7 @@ static inline ae_int64 AE_MULZAAFD32X16_H3_L2_3A(ae_int64 acc, ae_int16x4 d,
     int __s = (int)(inc); \
     if (__s < 0) __s = -__s; \
     if (__s == 0) __s = 8; \
-    haydn_ae_sa16x4_step((int64_t)(src), __ar, __p, __s, 1); \
+    haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p, __s, 1); \
     (ptr) = (ae_int16x4 *)((char *)(ptr) - ((inc) ? (inc) : 8)); \
   } while (0)
 
@@ -7364,7 +7299,7 @@ uint32_t AE_TRUNCA16P24S_H(ae_f24x2 x) {
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_ae_sa64_step((int64_t)(src), __ar, __p, 8, 1); \
+    haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, 8, 1); \
     (ptr) = (__typeof__(ptr))((char *)(ptr) - 8); \
   } while (0)
 #undef  AE_SA32X2_RIP
@@ -7372,7 +7307,7 @@ uint32_t AE_TRUNCA16P24S_H(ae_f24x2 x) {
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_ae_sa64_step((int64_t)(src), __ar, __p, 8, 1); \
+    haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, 8, 1); \
     (ptr) = (__typeof__(ptr))((char *)(ptr) - 8); \
   } while (0)
 
@@ -7400,9 +7335,10 @@ uint32_t AE_TRUNCA16P24S_H(ae_f24x2 x) {
 // direction, width, lane, or arithmetic. Transitional NatureDSP -c may define
 // __HAYDN_ALLOW_INEXACT_AE to keep the inexact bodies defined above.
 // MULZAAFD / L16X4_RIC / L32X2_RIC / L32X2F24_RIC / LA*_RIC / SELP24 /
-// SEL24 / dual-24 NEG|ADD|SUB|NEGSP|ADDSP|SUBSP are EXACT; SRAS32/SLAS32
-// SAR dual shifts are EXACT; dual-24 unaligned circular LA/SA F24 IC/XC
-// + POS_PC/NEG_PC are EXACT (AR + CBR; NEG seed == POS seed); L16_XC +
+// SEL24 / SEL32 / dual-24 NEG|ADD|SUB|NEGSP|ADDSP|SUBSP are EXACT;
+// F24X2_SRAI / SRAI24 / F32X2_SRAI dual ASR are EXACT; SRAS32/SLAS32 SAR
+// dual shifts are EXACT; dual-24 unaligned circular LA/SA F24 IC/XC +
+// POS_PC/NEG_PC are EXACT (AR + CBR; NEG seed == POS seed); L16_XC +
 // saturating left-shifts + SRA64_32 + MAXABS16S are EMULATED. Permanent
 // residual: AE_ADD64X2_ / AE_ADD64X2_vector only (no dual-64 ISA map).
 // Do not add new silent aliases.

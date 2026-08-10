@@ -1,0 +1,11 @@
+# RUN: python3 %S/ae-compat-tier-audit.py \
+# RUN:   %S/../../../lib/Headers/haydn_dsp.h \
+# RUN:   %S/../../../include/clang/Basic/BuiltinsHaydn.td
+#
+# Mechanical public AE_* inventory: every #define AE_* in haydn_dsp.h is
+# tagged EXACT/EMULATED/UNSUPPORTED in BuiltinsHaydn.td HaydnAeCompat, with
+# product-law pins for MAXABS16S, ADD64X2_*, dual-24/SELP24/F24, reverse-CB,
+# and soft sat-left residual classes. Fail-closed on untagged macros,
+# width-mismatch, and body/tier drift (SRAS32-class hole cannot recur).
+#
+# Standalone of haydn-registered-target / clang_cc1 so inventory CI always runs.

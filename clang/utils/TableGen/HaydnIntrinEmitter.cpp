@@ -11,7 +11,8 @@
 //   -gen-haydn-intrin-header      → haydn.h
 //   -gen-haydn-builtin-codegen    → haydn_builtin_cg.inc
 //   -gen-haydn-builtin-sema       → haydn_builtin_sema.inc
-//   -gen-haydn-op-manifest        → haydn_op_manifest.inc (public-op contract)
+//   -gen-haydn-op-manifest        → haydn_op_manifest.inc (public-op contract
+//                                   + HAYDN_AE_COMPAT tier/lowering rows)
 //   -gen-haydn-op-closure-probe   → exhaustive PublicEnabled C probe
 //   -gen-haydn-op-imm-audit       → exhaustive Imm non-ICE + range-neg Sema
 //   -gen-haydn-op-feature-audit   → exhaustive Features-gate Sema audit
@@ -37,6 +38,17 @@
 // Feature audit emits multi-verify generic/full/noagu on every PublicEnabled
 // op with non-empty Features (err_builtin_needs_feature; Hexagon peer =
 // checkTargetFeatures).
+//
+// AE NatureDSP compat (HaydnAeCompat in BuiltinsHaydn.td):
+//   Emit HAYDN_COMPAT_TIER_AE_* into haydn.h and HAYDN_AE_COMPAT rows into the
+//   op-manifest. Fail-closed product law: AE_MAXABS16S is EMULATED
+//   (x4abs16s+x4max16, never maxabs32s); AE_ADD64X2_ / _vector are
+//   UNSUPPORTED; AE_LA*NEG_PC is EXACT probe-only seed parity with POS_PC
+//   (haydn_ae_la64_pp / PLDWWUA — no invented reverse pre-decrement).
+//   EXACT/EMULATED lowerings that mix 16-lane AE names with maxabs32*
+//   width-divergent callees abort tblgen (all-tier width ban). Permanent
+//   UNSUPPORTED set is closed: AE_ADD64X2_ / _vector only. CI compares
+//   public #define AE_* inventory in haydn_dsp.h against generated tiers.
 //
 //===----------------------------------------------------------------------===//
 
@@ -102,6 +114,13 @@ struct BuiltinEntry {
   bool IsPair = false;
   /// When false, skip haydn.h wrapper (builtin may still exist for dsp/CG).
   bool PublicEnabled = true;
+};
+
+/// NatureDSP AE_* public-macro compatibility tier (HaydnAeCompat in TD).
+struct AeCompatEntry {
+  std::string Name;     // AE_* symbol (record name)
+  std::string Tier;     // EXACT | EMULATED | UNSUPPORTED
+  std::string Lowering; // free-text native/composite summary
 };
 
 static std::string upperSnake(StringRef N) {
@@ -399,6 +418,620 @@ static std::vector<BuiltinEntry> collect(const RecordKeeper &Records) {
     return A.PublicName < B.PublicName;
   });
   return Entries;
+}
+
+/// Fail-closed AE compat tier validation (product law + width mismatch).
+static void validateAeCompat(const AeCompatEntry &E) {
+  if (E.Name.empty() || !StringRef(E.Name).starts_with("AE_"))
+    PrintFatalError("HaydnIntrin: HaydnAeCompat record '" + E.Name +
+                    "' must be named AE_*");
+  if (E.Tier != "EXACT" && E.Tier != "EMULATED" && E.Tier != "UNSUPPORTED")
+    PrintFatalError("HaydnIntrin: HaydnAeCompat '" + E.Name +
+                    "' has invalid CompatTier='" + E.Tier +
+                    "' (want EXACT|EMULATED|UNSUPPORTED)");
+
+  // Product law: quad-16 max-abs is EMULATED composite, never 2x32 maxabs32s.
+  if (E.Name == "AE_MAXABS16S") {
+    if (E.Tier != "EMULATED")
+      PrintFatalError("HaydnIntrin: AE_MAXABS16S CompatTier must be EMULATED "
+                      "(X4ABS16S+X4MAX16 composite; never maxabs32s)");
+    StringRef L = E.Lowering;
+    if (L.contains_insensitive("maxabs32"))
+      PrintFatalError("HaydnIntrin: AE_MAXABS16S CompatLowering must not name "
+                      "maxabs32* (width-divergent 2x32 under 4x16)");
+    if (!L.contains_insensitive("x4abs16s") ||
+        !L.contains_insensitive("x4max16"))
+      PrintFatalError("HaydnIntrin: AE_MAXABS16S CompatLowering must name "
+                      "x4abs16s+x4max16 composite (got '" + E.Lowering + "')");
+  }
+  // Product law: dual-64 lane add has no bag map — permanent UNSUPPORTED.
+  if (E.Name == "AE_ADD64X2_" || E.Name == "AE_ADD64X2_vector") {
+    if (E.Tier != "UNSUPPORTED")
+      PrintFatalError("HaydnIntrin: " + E.Name +
+                      " CompatTier must be UNSUPPORTED (no bag dual-64)");
+  }
+
+  // Product law: POS/NEG_PC seed is PLDWWUA only. Reverse direction is the
+  // later IC/RIC ImmArg — do not invent pre-decrement seed for either form.
+  // Dual-24 F24 POS seed (LA32X2F24POS_PC) shares the same PLDWWUA law.
+  if (E.Name == "AE_LA16X4POS_PC" || E.Name == "AE_LA32X2POS_PC" ||
+      E.Name == "AE_LA16X4NEG_PC" || E.Name == "AE_LA32X2NEG_PC" ||
+      E.Name == "AE_LA32X2F24POS_PC") {
+    if (E.Tier != "EXACT")
+      PrintFatalError("HaydnIntrin: " + E.Name +
+                      " CompatTier must be EXACT (PLDWWUA seed)");
+    if (E.Lowering != "haydn_ae_la64_pp")
+      PrintFatalError("HaydnIntrin: " + E.Name +
+                      " CompatLowering must be haydn_ae_la64_pp (POS/NEG seed "
+                      "parity; no invented reverse predec)");
+    StringRef L = E.Lowering;
+    if (L.contains_insensitive("predec") ||
+        L.contains_insensitive("reverse") ||
+        L.contains_insensitive("ric") || L.contains_insensitive("rip"))
+      PrintFatalError("HaydnIntrin: " + E.Name +
+                      " must not invent reverse-direction seed semantics");
+  }
+  // Store-finish residual: SA64POS/NEG share haydn_ae_sa64pos; direction is
+  // the ImmArg (dir0 / dir1). NEG must not silent-alias POS dir=0.
+  if (E.Name == "AE_SA64POS_FP") {
+    if (E.Tier != "EMULATED")
+      PrintFatalError("HaydnIntrin: AE_SA64POS_FP CompatTier must be EMULATED "
+                      "(store-finish residual)");
+    if (!StringRef(E.Lowering).contains_insensitive("sa64pos") ||
+        !StringRef(E.Lowering).contains_insensitive("dir0"))
+      PrintFatalError("HaydnIntrin: AE_SA64POS_FP CompatLowering must name "
+                      "haydn_ae_sa64pos+dir0 (got '" + E.Lowering + "')");
+  }
+  if (E.Name == "AE_SA64NEG_FP") {
+    if (E.Tier != "EMULATED")
+      PrintFatalError("HaydnIntrin: AE_SA64NEG_FP CompatTier must be EMULATED "
+                      "(store-finish residual)");
+    if (!StringRef(E.Lowering).contains_insensitive("sa64pos") ||
+        !StringRef(E.Lowering).contains_insensitive("dir1"))
+      PrintFatalError("HaydnIntrin: AE_SA64NEG_FP CompatLowering must name "
+                      "haydn_ae_sa64pos+dir1 (got '" + E.Lowering + "')");
+    if (StringRef(E.Lowering).contains_insensitive("dir0"))
+      PrintFatalError("HaydnIntrin: AE_SA64NEG_FP must not silent-alias POS "
+                      "dir=0");
+  }
+  // Dual-24 POS alias must stay EXACT header→F24POS (no reverse invent).
+  if (E.Name == "AE_LA24X2POS_PC") {
+    if (E.Tier != "EXACT")
+      PrintFatalError("HaydnIntrin: AE_LA24X2POS_PC CompatTier must be EXACT "
+                      "(dual-24 POS seed alias)");
+    if (E.Lowering != "header" && E.Lowering != "haydn_ae_la64_pp")
+      PrintFatalError("HaydnIntrin: AE_LA24X2POS_PC CompatLowering must be "
+                      "header or haydn_ae_la64_pp (got '" + E.Lowering + "')");
+  }
+
+  // Residual reverse-circular class: EXACT reverse path tokens only.
+  // Must not silent-alias forward IC (dir=0 / +8) under a RIC name.
+  if (E.Name == "AE_L32X2_RIC" || E.Name == "AE_L16X4_RIC" ||
+      E.Name == "AE_L32X2F24_RIC") {
+    if (E.Tier != "EXACT")
+      PrintFatalError("HaydnIntrin: " + E.Name +
+                      " CompatTier must be EXACT (reverse-CB residual)");
+    if (!StringRef(E.Lowering).contains_insensitive("ldw_cb_imm") &&
+        E.Lowering != "header")
+      PrintFatalError("HaydnIntrin: " + E.Name +
+                      " CompatLowering must name ldw_cb_imm reverse-CB "
+                      "(got '" + E.Lowering + "')");
+  }
+  if (E.Name == "AE_LA16X4_RIC" || E.Name == "AE_LA32X2_RIC" ||
+      E.Name == "AE_LA32X2F24_RIC") {
+    if (E.Tier != "EXACT")
+      PrintFatalError("HaydnIntrin: " + E.Name +
+                      " CompatTier must be EXACT (reverse-UA residual)");
+    StringRef L = E.Lowering;
+    if (L != "header" && !L.contains_insensitive("cbr_step") &&
+        !L.contains_insensitive("la64_step") &&
+        !L.contains_insensitive("la16x4_step"))
+      PrintFatalError("HaydnIntrin: " + E.Name +
+                      " CompatLowering must name reverse UA step+cbr "
+                      "(got '" + E.Lowering + "')");
+  }
+
+  // Residual dual-24 / lane-select class: EXACT peers must name dual ops, not
+  // scalar high-lane drop or bag-OR. Soft sat left (SLAI24S) stays EMULATED.
+  auto requireExactLoweringToken = [&](StringRef Sym, StringRef Token) {
+    if (E.Name != Sym)
+      return;
+    if (E.Tier != "EXACT")
+      PrintFatalError("HaydnIntrin: " + Sym.str() +
+                      " CompatTier must be EXACT (residual dual-24 class)");
+    if (!E.Lowering.empty() && E.Lowering != "header" &&
+        !StringRef(E.Lowering).contains_insensitive(Token))
+      PrintFatalError("HaydnIntrin: " + Sym.str() + " CompatLowering must name " +
+                      Token.str() + " (got '" + E.Lowering + "')");
+  };
+  requireExactLoweringToken("AE_SELP24_HH", "x2sel32_hh");
+  requireExactLoweringToken("AE_SELP24_HL", "x2sel32_hl");
+  requireExactLoweringToken("AE_SELP24_LH", "x2sel32_lh");
+  requireExactLoweringToken("AE_SELP24_LL", "x2sel32_ll");
+  requireExactLoweringToken("AE_SEL24_HH", "x2sel32_hh");
+  requireExactLoweringToken("AE_SEL24_HL", "x2sel32_hl");
+  requireExactLoweringToken("AE_SEL24_LH", "x2sel32_lh");
+  requireExactLoweringToken("AE_SEL24_LL", "x2sel32_ll");
+  // Dual-32 lane-pack peers of SELP24/SEL24 residual class.
+  requireExactLoweringToken("AE_SEL32_HH", "x2sel32_hh");
+  requireExactLoweringToken("AE_SEL32_HL", "x2sel32_hl");
+  requireExactLoweringToken("AE_SEL32_LH", "x2sel32_lh");
+  requireExactLoweringToken("AE_SEL32_LL", "x2sel32_ll");
+  requireExactLoweringToken("AE_NEG24S", "x2neg32s");
+  requireExactLoweringToken("AE_F24X2_SRAI", "x2sra32");
+  // F32 dual ASR peer of F24X2_SRAI (native X2SRA32; not soft sat left).
+  requireExactLoweringToken("AE_F32X2_SRAI", "x2sra32");
+  requireExactLoweringToken("AE_ADDP24", "x2add32");
+  requireExactLoweringToken("AE_ADD24S", "x2add32s");
+  requireExactLoweringToken("AE_SUB24S", "x2sub32s");
+  // Dual-24 unaligned circular residual: AR step + CBR wrap (forward IC).
+  requireExactLoweringToken("AE_LA32X2F24_IC", "la64_step");
+  requireExactLoweringToken("AE_LA32X2F24_IC", "cbr_step");
+  requireExactLoweringToken("AE_SA32X2F24_IC", "sa64_step");
+  requireExactLoweringToken("AE_SA32X2F24_IC", "cbr_step");
+  requireExactLoweringToken("AE_LA24X2_IC", "la64_step");
+  requireExactLoweringToken("AE_LA24X2_IC", "cbr_step");
+  requireExactLoweringToken("AE_SA24X2_IC", "sa64_step");
+  requireExactLoweringToken("AE_SA24X2_IC", "cbr_step");
+  // Base unaligned circular residual (non-F24 peers of dual-24 IC path).
+  requireExactLoweringToken("AE_LA16X4_IC", "la16x4_step");
+  requireExactLoweringToken("AE_LA16X4_IC", "cbr_step");
+  requireExactLoweringToken("AE_LA32X2_IC", "la64_step");
+  requireExactLoweringToken("AE_LA32X2_IC", "cbr_step");
+  requireExactLoweringToken("AE_SA16X4_IC", "sa16x4_step");
+  requireExactLoweringToken("AE_SA16X4_IC", "cbr_step");
+  requireExactLoweringToken("AE_SA32X2_IC", "sa64_step");
+  requireExactLoweringToken("AE_SA32X2_IC", "cbr_step");
+  requireExactLoweringToken("AE_LA32X2F24_XC", "la64_step");
+  requireExactLoweringToken("AE_LA32X2F24_XC", "cbr_step");
+  requireExactLoweringToken("AE_SA32X2F24_XC", "sa64_step");
+  requireExactLoweringToken("AE_SA32X2F24_XC", "cbr_step");
+  // Reverse unaligned post-inc residual (dir=1 UA step).
+  requireExactLoweringToken("AE_LA16X4_RIP", "la16x4_step");
+  requireExactLoweringToken("AE_LA32X2_RIP", "la64_step");
+  requireExactLoweringToken("AE_LA32X2F24_RIP", "la64_step");
+  requireExactLoweringToken("AE_SA16X4_RIP", "sa16x4_step");
+  requireExactLoweringToken("AE_SA32X2_RIP", "sa64_step");
+  requireExactLoweringToken("AE_SA32X2F24_RIP", "sa64_step");
+  // Dual-24 unaligned forward IP residual.
+  requireExactLoweringToken("AE_LA32X2F24_IP", "la64_step");
+  requireExactLoweringToken("AE_SA32X2F24_IP", "sa64_step");
+  requireExactLoweringToken("AE_LA24X2_IP", "la64_step");
+  requireExactLoweringToken("AE_SA24X2_IP", "sa64_step");
+  if (E.Name == "AE_SLAI24S" || E.Name == "AE_SLAI64S" ||
+      E.Name == "AE_SLAS32S" || E.Name == "AE_SLAA64S" ||
+      E.Name == "AE_SLAS64S" || E.Name == "AE_F64_SLAIS" ||
+      E.Name == "AE_F32X2_SLAIS" || E.Name == "AE_F64_SLAS") {
+    if (E.Tier != "EMULATED")
+      PrintFatalError("HaydnIntrin: " + E.Name +
+                      " CompatTier must be EMULATED (soft sat left)");
+  }
+  // Soft sat-left residual must name the sat helper, not plain non-sat SLA/SRA.
+  if (E.Name == "AE_SLAI24S" || E.Name == "AE_F32X2_SLAIS") {
+    if (!StringRef(E.Lowering).contains_insensitive("slaa32s") &&
+        !StringRef(E.Lowering).contains_insensitive("slas32s"))
+      PrintFatalError("HaydnIntrin: " + E.Name +
+                      " CompatLowering must name slaa32s/soft sat left (got '" +
+                      E.Lowering + "')");
+  }
+  if (E.Name == "AE_SLAS32S") {
+    if (!StringRef(E.Lowering).contains_insensitive("slaa32s") &&
+        !StringRef(E.Lowering).contains_insensitive("slas"))
+      PrintFatalError("HaydnIntrin: AE_SLAS32S CompatLowering must name soft "
+                      "sat left (got '" + E.Lowering + "')");
+  }
+  if (E.Name == "AE_F64_SLAIS" || E.Name == "AE_F64_SLAS" ||
+      E.Name == "AE_SLAI64S" || E.Name == "AE_SLAA64S" ||
+      E.Name == "AE_SLAS64S") {
+    if (!StringRef(E.Lowering).contains_insensitive("slaa64s") &&
+        E.Lowering != "header")
+      PrintFatalError("HaydnIntrin: " + E.Name +
+                      " CompatLowering must name slaa64s soft sat left (got '" +
+                      E.Lowering + "')");
+  }
+  if (E.Name == "AE_SRAI24" || E.Name == "AE_SRAIP24" ||
+      E.Name == "AE_NEGSP24S" || E.Name == "AE_ADDSP24S" ||
+      E.Name == "AE_SUBSP24S") {
+    if (E.Tier != "EXACT")
+      PrintFatalError("HaydnIntrin: " + E.Name +
+                      " CompatTier must be EXACT (dual-24 alias peer)");
+  }
+
+  // Width-mismatch ban applies to every product tier, not only EXACT.
+  // SRAS32/MAXABS16S-class holes were untagged *or* mis-tagged EMULATED with a
+  // width-divergent body (e.g. maxabs32s under a 16-lane name). UNSUPPORTED
+  // may omit a dual-lane map; it must not claim a false exact width either.
+  if (E.Tier == "EXACT" || E.Tier == "EMULATED" || E.Tier == "UNSUPPORTED") {
+    StringRef N = E.Name;
+    StringRef L = E.Lowering;
+    bool Name16 = N.contains("16");
+    if (Name16 && L.contains_insensitive("maxabs32"))
+      PrintFatalError("HaydnIntrin: " + E.Tier + " '" + E.Name +
+                      "' CompatLowering mentions maxabs32* (width mismatch)");
+    if (N.contains("MAXABS16") && L.contains_insensitive("maxabs32"))
+      PrintFatalError("HaydnIntrin: " + E.Tier + " '" + E.Name +
+                      "' cannot lower via maxabs32*");
+    // Dual-24 / SEL* residual: no scalar high-lane drop under a dual name.
+    // Soft sat-left EMULATED peers name slaa32s (not plain add32/neg32s).
+    // SEL32 lane-pack is the dual-32 peer of SELP24; bag-OR is silent-wrong.
+    bool DualLaneSel = N.contains("24") || N.contains("SELP24") ||
+                       N.contains("SEL24") || N.contains("SEL32");
+    if (DualLaneSel && E.Tier != "UNSUPPORTED") {
+      if (L.contains_insensitive("neg32s") &&
+          !L.contains_insensitive("x2neg32s"))
+        PrintFatalError("HaydnIntrin: " + E.Tier + " '" + E.Name +
+                        "' scalar neg32s under dual-24 name (high-lane drop)");
+      if ((L.contains_insensitive("add32s") ||
+           L.contains_insensitive("add32")) &&
+          !L.contains_insensitive("x2add") &&
+          !L.contains_insensitive("x2sub") &&
+          !L.contains_insensitive("slaa32") &&
+          !L.contains_insensitive("slas32") &&
+          !L.contains_insensitive("x2sel"))
+        PrintFatalError("HaydnIntrin: " + E.Tier + " '" + E.Name +
+                        "' scalar add/sub under dual-24 name");
+      if ((N.contains("SELP24") || N.contains("SEL24") || N.contains("SEL32")) &&
+          !L.empty() && L != "header" && !L.contains_insensitive("x2sel32") &&
+          !L.contains_insensitive("x2sel"))
+        PrintFatalError("HaydnIntrin: " + E.Tier + " '" + E.Name +
+                        "' lane-select must name x2sel32 (not bag OR)");
+      // Dual ASR residual: F24/SRAI24/F32X2_SRAI/SRAS32 must name x2sra32,
+      // never scalar sra/ashr under a dual name (high-lane drop class).
+      bool DualAsr = N.contains("F24X2_SRAI") || N.contains("F32X2_SRAI") ||
+                     N == "AE_SRAI24" || N == "AE_SRAIP24" || N == "AE_SRAS32";
+      if (DualAsr && !L.empty() && L != "header" &&
+          !L.contains_insensitive("x2sra32") &&
+          !L.contains_insensitive("x2sra"))
+        PrintFatalError("HaydnIntrin: " + E.Tier + " '" + E.Name +
+                        "' dual ASR must name x2sra32 (not scalar sra)");
+    }
+  }
+
+  // No FormatID / slot / AltDesc in tier metadata.
+  auto forbidden = [](StringRef S) {
+    return S.contains_insensitive("formatid") ||
+           S.contains_insensitive("altdesc") ||
+           S.contains_insensitive("bundle128") ||
+           S.contains_insensitive("_slot");
+  };
+  if (forbidden(E.Name) || forbidden(E.Tier) || forbidden(E.Lowering))
+    PrintFatalError("HaydnIntrin: HaydnAeCompat '" + E.Name +
+                    "' leaks FormatID/AltDesc/slot into tier metadata");
+}
+
+static std::vector<AeCompatEntry> collectAeCompat(const RecordKeeper &Records) {
+  std::vector<AeCompatEntry> Out;
+  StringSet<> Seen;
+  for (const Record *R : Records.getAllDerivedDefinitions("HaydnAeCompat")) {
+    AeCompatEntry E;
+    E.Name = R->getName().str();
+    // Class HaydnAeCompatDef is not a leaf AE_* record.
+    if (E.Name == "HaydnAeCompat" || E.Name == "HaydnAeCompatDef")
+      continue;
+    if (!StringRef(E.Name).starts_with("AE_"))
+      continue;
+    E.Tier = R->getValueAsString("CompatTier").str();
+    E.Lowering = R->getValueAsString("CompatLowering").str();
+    if (!Seen.insert(E.Name).second)
+      PrintFatalError("HaydnIntrin: duplicate HaydnAeCompat record '" + E.Name +
+                      "'");
+    validateAeCompat(E);
+    Out.push_back(std::move(E));
+  }
+  llvm::sort(Out, [](const AeCompatEntry &A, const AeCompatEntry &B) {
+    return A.Name < B.Name;
+  });
+
+  // Required product-law symbols must be present.
+  auto require = [&](StringRef Sym, StringRef Tier) {
+    auto It = llvm::find_if(
+        Out, [&](const AeCompatEntry &E) { return E.Name == Sym; });
+    if (It == Out.end())
+      PrintFatalError("HaydnIntrin: missing required HaydnAeCompat '" +
+                      Sym.str() + "'");
+    if (It->Tier != Tier)
+      PrintFatalError("HaydnIntrin: required HaydnAeCompat '" + Sym.str() +
+                      "' must be " + Tier.str() + " (got " + It->Tier + ")");
+  };
+  require("AE_MAXABS16S", "EMULATED");
+  require("AE_ADD64X2_", "UNSUPPORTED");
+  require("AE_ADD64X2_vector", "UNSUPPORTED");
+  require("AE_LA16X4NEG_PC", "EXACT");
+  require("AE_LA32X2NEG_PC", "EXACT");
+  require("AE_LA16X4POS_PC", "EXACT");
+  require("AE_LA32X2POS_PC", "EXACT");
+  // Dual-24 F24 POS seed peers (same PLDWWUA probe-only law; no reverse invent).
+  require("AE_LA32X2F24POS_PC", "EXACT");
+  require("AE_LA24X2POS_PC", "EXACT");
+  // Store-finish residual: POS dir0 / NEG dir1 (not seed-class POS alias).
+  require("AE_SA64POS_FP", "EMULATED");
+  require("AE_SA64NEG_FP", "EMULATED");
+  // Residual dual-24 / lane-select / sat-shift inventory (fail-closed CI).
+  require("AE_SELP24_HH", "EXACT");
+  require("AE_SELP24_HL", "EXACT");
+  require("AE_SELP24_LH", "EXACT");
+  require("AE_SELP24_LL", "EXACT");
+  require("AE_SEL24_HH", "EXACT");
+  require("AE_SEL24_HL", "EXACT");
+  require("AE_SEL24_LH", "EXACT");
+  require("AE_SEL24_LL", "EXACT");
+  require("AE_SEL32_HH", "EXACT");
+  require("AE_SEL32_HL", "EXACT");
+  require("AE_SEL32_LH", "EXACT");
+  require("AE_SEL32_LL", "EXACT");
+  require("AE_NEG24S", "EXACT");
+  require("AE_NEGSP24S", "EXACT");
+  require("AE_F24X2_SRAI", "EXACT");
+  require("AE_F32X2_SRAI", "EXACT");
+  require("AE_SRAI24", "EXACT");
+  require("AE_SRAIP24", "EXACT");
+  require("AE_ADDP24", "EXACT");
+  require("AE_ADD24S", "EXACT");
+  require("AE_SUB24S", "EXACT");
+  require("AE_ADDSP24S", "EXACT");
+  require("AE_SUBSP24S", "EXACT");
+  require("AE_ZERO24", "EXACT");
+  require("AE_L32X2_RIC", "EXACT");
+  require("AE_L32X2F24_RIC", "EXACT");
+  // Reverse-circular residual class: EXACT reverse path, never forward IC alias.
+  require("AE_L16X4_RIC", "EXACT");
+  require("AE_LA16X4_RIC", "EXACT");
+  require("AE_LA32X2_RIC", "EXACT");
+  require("AE_LA32X2F24_RIC", "EXACT");
+  // Dual-24 unaligned circular residual: AR + CBR (forward IC), not plain mem.
+  require("AE_LA32X2F24_IC", "EXACT");
+  require("AE_SA32X2F24_IC", "EXACT");
+  require("AE_LA24X2_IC", "EXACT");
+  require("AE_SA24X2_IC", "EXACT");
+  // Base unaligned circular residual peers (same AR+CBR path as dual-24 IC).
+  require("AE_LA16X4_IC", "EXACT");
+  require("AE_LA32X2_IC", "EXACT");
+  require("AE_SA16X4_IC", "EXACT");
+  require("AE_SA32X2_IC", "EXACT");
+  require("AE_LA32X2F24_XC", "EXACT");
+  require("AE_SA32X2F24_XC", "EXACT");
+  // Reverse unaligned post-inc residual (UA dir=1); must not silent-alias IP.
+  require("AE_LA16X4_RIP", "EXACT");
+  require("AE_LA32X2_RIP", "EXACT");
+  require("AE_LA32X2F24_RIP", "EXACT");
+  require("AE_SA16X4_RIP", "EXACT");
+  require("AE_SA32X2_RIP", "EXACT");
+  require("AE_SA32X2F24_RIP", "EXACT");
+  // Aligned reverse linear RIP residual (already EXACT peers of L/S family).
+  require("AE_L16X4_RIP", "EXACT");
+  require("AE_L32X2_RIP", "EXACT");
+  require("AE_L32X2F24_RIP", "EXACT");
+  require("AE_S32X2_RIP", "EXACT");
+  require("AE_S32X2F24_RIP", "EXACT");
+  // Dual-24 unaligned forward IP residual (AR step; alias LA24/SA24 peers).
+  require("AE_LA32X2F24_IP", "EXACT");
+  require("AE_SA32X2F24_IP", "EXACT");
+  require("AE_LA24X2_IP", "EXACT");
+  require("AE_SA24X2_IP", "EXACT");
+  // Base aligned XC residual (forward CB wrap peers).
+  require("AE_L32X2_XC", "EXACT");
+  require("AE_S32X2_XC", "EXACT");
+  require("AE_L16X4_XC", "EXACT");
+  require("AE_S16X4_XC", "EXACT");
+  // Dual-24 aligned F24 XC residual: same D_LDW/SDW_CB path as base XC.
+  require("AE_L32X2F24_XC", "EXACT");
+  require("AE_S32X2F24_XC", "EXACT");
+  require("AE_SRAS32", "EXACT");
+  require("AE_SLAS32", "EXACT");
+  require("AE_SLAI24S", "EMULATED");
+  require("AE_SLAI64S", "EMULATED");
+  require("AE_SLAS32S", "EMULATED");
+  require("AE_SLAA64S", "EMULATED");
+  require("AE_SLAS64S", "EMULATED");
+  // Hot NatureDSP IIR soft sat-left residual (F64/F32x2); never plain << wrap.
+  require("AE_F64_SLAIS", "EMULATED");
+  require("AE_F32X2_SLAIS", "EMULATED");
+  require("AE_F64_SLAS", "EMULATED");
+
+  // NEG/POS seed lowering must match (probe-only; no invent).
+  auto loweringOf = [&](StringRef Sym) -> StringRef {
+    auto It = llvm::find_if(
+        Out, [&](const AeCompatEntry &E) { return E.Name == Sym; });
+    return It == Out.end() ? StringRef() : StringRef(It->Lowering);
+  };
+  if (loweringOf("AE_LA16X4NEG_PC") != loweringOf("AE_LA16X4POS_PC") ||
+      loweringOf("AE_LA32X2NEG_PC") != loweringOf("AE_LA32X2POS_PC"))
+    PrintFatalError("HaydnIntrin: AE_LA*NEG_PC lowering must match POS_PC "
+                    "(probe-only PLDWWUA seed parity)");
+  // Dual-24 F24 POS seed must stay PLDWWUA-identical to base 32x2 POS.
+  if (loweringOf("AE_LA32X2F24POS_PC") != loweringOf("AE_LA32X2POS_PC"))
+    PrintFatalError("HaydnIntrin: AE_LA32X2F24POS_PC lowering must match "
+                    "AE_LA32X2POS_PC (dual-24 POS seed parity)");
+  // Reverse-circular residual: lowering must name reverse path tokens.
+  auto requireLoweringHas = [&](StringRef Sym, StringRef Token) {
+    StringRef L = loweringOf(Sym);
+    if (L.empty() || L == "header")
+      PrintFatalError("HaydnIntrin: " + Sym.str() +
+                      " CompatLowering must name reverse path (got '" +
+                      L.str() + "')");
+    if (!L.contains_insensitive(Token))
+      PrintFatalError("HaydnIntrin: " + Sym.str() +
+                      " CompatLowering must name " + Token.str() + " (got '" +
+                      L.str() + "')");
+  };
+  requireLoweringHas("AE_L32X2_RIC", "ldw_cb_imm");
+  requireLoweringHas("AE_L16X4_RIC", "ldw_cb_imm");
+  requireLoweringHas("AE_L32X2F24_RIC", "ldw_cb_imm");
+  requireLoweringHas("AE_LA16X4_RIC", "la16x4_step");
+  requireLoweringHas("AE_LA16X4_RIC", "cbr_step");
+  requireLoweringHas("AE_LA32X2_RIC", "la64_step");
+  requireLoweringHas("AE_LA32X2_RIC", "cbr_step");
+  requireLoweringHas("AE_LA32X2F24_RIC", "la64_step");
+  requireLoweringHas("AE_LA32X2F24_RIC", "cbr_step");
+  // Reverse unaligned post-inc residual: must name UA reverse step tokens.
+  requireLoweringHas("AE_LA16X4_RIP", "la16x4_step");
+  requireLoweringHas("AE_LA32X2_RIP", "la64_step");
+  requireLoweringHas("AE_LA32X2F24_RIP", "la64_step");
+  requireLoweringHas("AE_SA16X4_RIP", "sa16x4_step");
+  requireLoweringHas("AE_SA32X2_RIP", "sa64_step");
+  requireLoweringHas("AE_SA32X2F24_RIP", "sa64_step");
+  // Dual-24 unaligned forward IP residual: AR step tokens.
+  requireLoweringHas("AE_LA32X2F24_IP", "la64_step");
+  requireLoweringHas("AE_SA32X2F24_IP", "sa64_step");
+  requireLoweringHas("AE_LA24X2_IP", "la64_step");
+  requireLoweringHas("AE_SA24X2_IP", "sa64_step");
+  // Base / dual-24 aligned XC residual: CB tokens (not bare header).
+  requireLoweringHas("AE_L32X2_XC", "ldw_cb_imm");
+  requireLoweringHas("AE_S32X2_XC", "sdw_cb_imm");
+  requireLoweringHas("AE_L16X4_XC", "ldw_cb_imm");
+  requireLoweringHas("AE_S16X4_XC", "sdw_cb_imm");
+  requireLoweringHas("AE_L32X2F24_XC", "ldw_cb_imm");
+  requireLoweringHas("AE_S32X2F24_XC", "sdw_cb_imm");
+
+  if (Out.empty())
+    PrintFatalError("HaydnIntrin: HaydnAeCompat inventory is empty");
+
+  // Fail-closed residual: public AE surface must stay fully tagged. The
+  // mechanical inventory floor is the observed public #define AE_* count
+  // (opt-in residual was ~64; closed surface is >= 600). Shrink is a
+  // regression of the SRAS32-class untagged-macro hole.
+  constexpr unsigned kAeCompatInventoryFloor = 600;
+  if (Out.size() < kAeCompatInventoryFloor)
+    PrintFatalError("HaydnIntrin: HaydnAeCompat inventory size " +
+                    std::to_string(Out.size()) + " < floor " +
+                    std::to_string(kAeCompatInventoryFloor) +
+                    " (public AE_* surface must stay fully tagged)");
+
+  // Permanent UNSUPPORTED set is closed under product law: dual-64 adds only.
+  // New silent-wrong maps must be repaired (EXACT/EMULATED) or explicitly
+  // added here — never a quiet scalar escape under default (no ALLOW_INEXACT).
+  std::vector<std::string> UnsupNames;
+  for (const AeCompatEntry &E : Out) {
+    if (E.Tier == "UNSUPPORTED")
+      UnsupNames.push_back(E.Name);
+  }
+  llvm::sort(UnsupNames);
+  static const char *const kPermanentUnsup[] = {"AE_ADD64X2_",
+                                                "AE_ADD64X2_vector"};
+  if (UnsupNames.size() != 2 || UnsupNames[0] != kPermanentUnsup[0] ||
+      UnsupNames[1] != kPermanentUnsup[1]) {
+    std::string Got;
+    for (size_t I = 0; I < UnsupNames.size(); ++I) {
+      if (I)
+        Got += ",";
+      Got += UnsupNames[I];
+    }
+    PrintFatalError(
+        "HaydnIntrin: UNSUPPORTED set must be exactly "
+        "{AE_ADD64X2_, AE_ADD64X2_vector} (got {" +
+        Got + "})");
+  }
+  // Scalar AE_ADD64 is a legal bag add; dual-64 is ADD64X2_* only.
+  require("AE_ADD64", "EMULATED");
+
+  // AE0 public P0 contract: tier + non-placeholder recipe required.
+  require("AE_TRUNCA32X2F64S", "EMULATED");
+  require("AE_CVTQ56A32S", "EMULATED");
+  require("AE_CVT16X4", "EMULATED");
+  require("AE_CVT16X4_1ARG", "EMULATED");
+  require("AE_SLAA64S", "EMULATED");
+  require("AE_TRUNCA32F64S", "EMULATED");
+  auto requireNonPlaceholder = [&](StringRef Sym, StringRef Token) {
+    StringRef L = loweringOf(Sym);
+    if (L.empty() || L == "residual" || L == "overload" || L == "c-op" ||
+        L == "header" || L == "none")
+      PrintFatalError("HaydnIntrin: " + Sym.str() +
+                      " CompatLowering must be a typed non-placeholder recipe "
+                      "(got '" + L.str() + "')");
+    if (!Token.empty() && !L.contains_insensitive(Token))
+      PrintFatalError("HaydnIntrin: " + Sym.str() +
+                      " CompatLowering must name " + Token.str() + " (got '" +
+                      L.str() + "')");
+  };
+  requireNonPlaceholder("AE_TRUNCA32X2F64S", "satsr64");
+  requireNonPlaceholder("AE_TRUNCA32X2F64S", "pack");
+  requireNonPlaceholder("AE_CVTQ56A32S", "sext32_shl16");
+  requireNonPlaceholder("AE_CVT16X4", "x4sat32t16");
+  requireNonPlaceholder("AE_CVT16X4_1ARG", "x4sat32t16");
+  requireNonPlaceholder("AE_SLAA64S", "slaa64s");
+  requireNonPlaceholder("AE_TRUNCA32F64S", "satsr64");
+  requireNonPlaceholder("AE_SA64POS_FP", "dir0");
+  requireNonPlaceholder("AE_SA64NEG_FP", "dir1");
+
+  for (const AeCompatEntry &E : Out) {
+    if (E.Tier != "EXACT" && E.Tier != "EMULATED")
+      continue;
+    StringRef L = E.Lowering;
+    if (L.empty() || L == "residual" || L == "none")
+      PrintFatalError("HaydnIntrin: " + E.Name +
+                      " EXACT/EMULATED CompatLowering must not be placeholder '" +
+                      E.Lowering + "'");
+  }
+  return Out;
+}
+
+/// Emit HAYDN_COMPAT_* ordinals + per-AE tier macros into haydn.h.
+static void emitAeCompatTiers(raw_ostream &OS,
+                              ArrayRef<AeCompatEntry> Compat) {
+  OS << "//===----------------------------------------------------------------------===//\n"
+        "// NatureDSP AE_* compatibility tier taxonomy (HaydnAeCompat)\n"
+        "//\n"
+        "// Generated from BuiltinsHaydn.td. DO NOT EDIT.\n"
+        "// Ordinals and HAYDN_COMPAT_TIER_AE_* tags for haydn_dsp.h / CI.\n"
+        "// Product law: AE_MAXABS16S=EMULATED; AE_ADD64X2_*=UNSUPPORTED;\n"
+        "// AE_LA*NEG_PC=EXACT probe-only (POS seed; no invent reverse).\n"
+        "// No FormatID / slot / AltDesc.\n"
+        "//===----------------------------------------------------------------------===//\n\n";
+  OS << "#ifndef HAYDN_COMPAT_NATIVE\n"
+        "#define HAYDN_COMPAT_NATIVE      0\n"
+        "#define HAYDN_COMPAT_EXACT       1\n"
+        "#define HAYDN_COMPAT_EMULATED    2\n"
+        "#define HAYDN_COMPAT_UNSUPPORTED 3\n"
+        "#endif\n\n";
+  unsigned NExact = 0, NEmu = 0, NUnsup = 0;
+  for (const AeCompatEntry &E : Compat) {
+    StringRef TierMacro;
+    if (E.Tier == "EXACT") {
+      TierMacro = "HAYDN_COMPAT_EXACT";
+      ++NExact;
+    } else if (E.Tier == "EMULATED") {
+      TierMacro = "HAYDN_COMPAT_EMULATED";
+      ++NEmu;
+    } else {
+      TierMacro = "HAYDN_COMPAT_UNSUPPORTED";
+      ++NUnsup;
+    }
+    OS << "#define HAYDN_COMPAT_TIER_" << E.Name << " " << TierMacro << "\n";
+  }
+  OS << "\n#define HAYDN_AE_COMPAT_TAG_COUNT " << Compat.size() << "\n";
+  OS << "/* AE compat summary: exact=" << NExact << " emulated=" << NEmu
+     << " unsupported=" << NUnsup << " total=" << Compat.size() << " */\n\n";
+}
+
+/// Emit HAYDN_AE_COMPAT manifest rows (tier + lowering) for CI.
+static void emitAeCompatManifest(raw_ostream &OS,
+                                 ArrayRef<AeCompatEntry> Compat) {
+  OS << "\n//=== AE NatureDSP compat tier+lowering (HaydnAeCompat) ===//\n"
+        "// Columns: HAYDN_AE_COMPAT,<ae_name>,<tier>,<lowering>\n"
+        "// Fail-closed: product-law tiers; no FormatID/slot/AltDesc.\n";
+  auto esc = [](StringRef S) {
+    std::string O;
+    for (char C : S) {
+      if (C == ',' || C == '\\' || C == '\n' || C == '\r')
+        O.push_back('_');
+      else
+        O.push_back(C);
+    }
+    return O;
+  };
+  unsigned NExact = 0, NEmu = 0, NUnsup = 0;
+  for (const AeCompatEntry &E : Compat) {
+    if (E.Tier == "EXACT")
+      ++NExact;
+    else if (E.Tier == "EMULATED")
+      ++NEmu;
+    else
+      ++NUnsup;
+    OS << "HAYDN_AE_COMPAT," << esc(E.Name) << "," << esc(E.Tier) << ","
+       << esc(E.Lowering) << "\n";
+  }
+  OS << "// AE_compat_summary: exact=" << NExact << " emulated=" << NEmu
+     << " unsupported=" << NUnsup << " total=" << Compat.size() << "\n";
 }
 
 static void emitFn(raw_ostream &OS, StringRef Ret, StringRef Name,
@@ -1506,6 +2139,8 @@ void clang::EmitHaydnIntrinHeader(const RecordKeeper &Records, raw_ostream &OS) 
   for (const BuiltinEntry &E : Entries)
     emitOne(OS, E, Emitted);
   emitSpecials(OS);
+  // AE NatureDSP compat tiers (HaydnAeCompat) — consumed by haydn_dsp.h / CI.
+  emitAeCompatTiers(OS, collectAeCompat(Records));
   OS << "#endif /* __HAYDN_H */\n";
 }
 
@@ -1599,6 +2234,9 @@ void clang::EmitHaydnOpManifest(const RecordKeeper &Records, raw_ostream &OS) {
   OS << "\n";
   OS << "// Contract: with_features=" << NFeat << " with_immchecks=" << NImm
      << "\n";
+
+  // AE public-macro tier+lowering inventory (fail-closed product law).
+  emitAeCompatManifest(OS, collectAeCompat(Records));
 }
 
 /// Exhaustive PublicEnabled C probe (continuous closure).

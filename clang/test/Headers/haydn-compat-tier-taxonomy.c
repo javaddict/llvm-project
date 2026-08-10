@@ -167,6 +167,28 @@ _Static_assert(HAYDN_COMPAT_TIER_AE_L16X4_RIP == HAYDN_COMPAT_EXACT,
                "L16X4_RIP exact reverse linear load");
 _Static_assert(HAYDN_COMPAT_TIER_AE_L32X2_RIP == HAYDN_COMPAT_EXACT,
                "L32X2_RIP exact reverse linear load");
+/* Reverse unaligned post-inc residual (UA dir=1; not forward IP). */
+_Static_assert(HAYDN_COMPAT_TIER_AE_LA16X4_RIP == HAYDN_COMPAT_EXACT,
+               "LA16X4_RIP exact reverse UA post-inc");
+_Static_assert(HAYDN_COMPAT_TIER_AE_LA32X2_RIP == HAYDN_COMPAT_EXACT,
+               "LA32X2_RIP exact reverse UA post-inc");
+_Static_assert(HAYDN_COMPAT_TIER_AE_LA32X2F24_RIP == HAYDN_COMPAT_EXACT,
+               "LA32X2F24_RIP exact reverse dual-24 UA post-inc");
+_Static_assert(HAYDN_COMPAT_TIER_AE_SA16X4_RIP == HAYDN_COMPAT_EXACT,
+               "SA16X4_RIP exact reverse UA post-inc store");
+_Static_assert(HAYDN_COMPAT_TIER_AE_SA32X2_RIP == HAYDN_COMPAT_EXACT,
+               "SA32X2_RIP exact reverse UA post-inc store");
+_Static_assert(HAYDN_COMPAT_TIER_AE_SA32X2F24_RIP == HAYDN_COMPAT_EXACT,
+               "SA32X2F24_RIP exact reverse dual-24 UA post-inc store");
+/* Dual-24 unaligned forward IP residual (AR step). */
+_Static_assert(HAYDN_COMPAT_TIER_AE_LA32X2F24_IP == HAYDN_COMPAT_EXACT,
+               "LA32X2F24_IP exact dual-24 AR post-inc");
+_Static_assert(HAYDN_COMPAT_TIER_AE_SA32X2F24_IP == HAYDN_COMPAT_EXACT,
+               "SA32X2F24_IP exact dual-24 AR post-inc store");
+_Static_assert(HAYDN_COMPAT_TIER_AE_LA24X2_IP == HAYDN_COMPAT_EXACT,
+               "LA24X2_IP exact dual-24 IP alias");
+_Static_assert(HAYDN_COMPAT_TIER_AE_SA24X2_IP == HAYDN_COMPAT_EXACT,
+               "SA24X2_IP exact dual-24 IP alias");
 _Static_assert(HAYDN_COMPAT_TIER_AE_LA32X2F24POS_PC == HAYDN_COMPAT_EXACT,
                "LA32X2F24POS_PC exact AR seed (not no-op)");
 _Static_assert(HAYDN_COMPAT_TIER_AE_LA24X2POS_PC == HAYDN_COMPAT_EXACT,
@@ -276,14 +298,30 @@ void exact_rip_surface(ae_int32x2 *p32, ae_f24x2 *pf24, ae_int16x4 *p16) {
   ae_int32x2 d32 = {0, 0};
   ae_f24x2 d24 = 0;
   ae_int16x4 d16 = {0};
+  ae_valign al16 = AE_ZALIGN64();
+  ae_valign al32 = AE_ZALIGN64();
   AE_L32X2_RIP(d32, p32, 8);
   AE_S32X2_RIP(d32, p32, 8);
   AE_L32X2F24_RIP(d24, pf24, 8);
   AE_S32X2F24_RIP(d24, pf24, 8);
   AE_L16X4_RIP(d16, p16, 8);
+  /* Reverse unaligned post-inc residual (UA dir=1). */
+  AE_LA16X4_RIP(d16, al16, p16, 8);
+  AE_LA32X2_RIP(d32, al32, p32, 8);
+  AE_LA32X2F24_RIP(d24, al32, pf24, 8);
+  AE_SA16X4_RIP(d16, al16, p16, 8);
+  AE_SA32X2_RIP(d32, al32, p32);
+  AE_SA32X2F24_RIP(d24, al32, pf24);
+  /* Dual-24 unaligned forward IP residual. */
+  AE_LA32X2F24_IP(d24, al32, pf24);
+  AE_SA32X2F24_IP(d24, al32, pf24);
+  AE_LA24X2_IP(d24, al32, pf24);
+  AE_SA24X2_IP(d24, al32, pf24);
   (void)d32;
   (void)d24;
   (void)d16;
+  (void)al16;
+  (void)al32;
 }
 
 /* C4.2: exact MULZAAFD16SS_33_22 available under default fail-closed mode. */
