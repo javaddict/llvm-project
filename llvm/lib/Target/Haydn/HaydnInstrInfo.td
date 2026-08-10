@@ -1448,12 +1448,22 @@ def X2MOVF32 : FmtALU64Binary<0x67, 0x190, (outs DR64:$rd),
                               "x2movf32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // `X2MOVF32 rtd, rsd` preserves the lanes the condition rejects, so
+  // $rs1 IS the destination read back. Declaring the tie is what pins
+  // them to one register; the operand list is unchanged, so no caller
+  // moves. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let Constraints = "$rs1 = $rd";
 }
 def X2MOVT32 : FmtALU64Binary<0x67, 0x191, (outs DR64:$rd),
                               (ins DR64:$rs1, DR64:$rs2),
                               "x2movt32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // `X2MOVT32 rtd, rsd` preserves the lanes the condition rejects, so
+  // $rs1 IS the destination read back. Declaring the tie is what pins
+  // them to one register; the operand list is unchanged, so no caller
+  // moves. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let Constraints = "$rs1 = $rd";
 }
 }  // hasSideEffects = 0, Uses = [SFR]
 
@@ -1495,12 +1505,22 @@ def X4MOVF16 : FmtALU64Binary<0x67, 0x195, (outs DR64:$rd),
                               "x4movf16\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // `X4MOVF16 rtd, rsd` preserves the lanes the condition rejects, so
+  // $rs1 IS the destination read back. Declaring the tie is what pins
+  // them to one register; the operand list is unchanged, so no caller
+  // moves. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let Constraints = "$rs1 = $rd";
 }
 def X4MOVT16 : FmtALU64Binary<0x67, 0x196, (outs DR64:$rd),
                               (ins DR64:$rs1, DR64:$rs2),
                               "x4movt16\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // `X4MOVT16 rtd, rsd` preserves the lanes the condition rejects, so
+  // $rs1 IS the destination read back. Declaring the tie is what pins
+  // them to one register; the operand list is unchanged, so no caller
+  // moves. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let Constraints = "$rs1 = $rd";
 }
 }  // hasSideEffects = 0, Uses = [SFR]
 

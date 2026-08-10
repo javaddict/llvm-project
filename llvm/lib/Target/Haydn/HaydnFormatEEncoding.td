@@ -50118,8 +50118,9 @@ def X2MJSWAP32S_P32_ALU2 : HaydnEntryP32<
 }
 
 def X2MOVF32_P20_ALU0 : HaydnEntryP20<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x2movf32	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -50133,8 +50134,9 @@ def X2MOVF32_P20_ALU0 : HaydnEntryP20<
 }
 
 def X2MOVF32_P30_ALU0 : HaydnEntryP30<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x2movf32	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -50148,8 +50150,9 @@ def X2MOVF32_P30_ALU0 : HaydnEntryP30<
 }
 
 def X2MOVF32_P30_ALU2 : HaydnEntryP30<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x2movf32	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
   bits<4> rtd;
@@ -50164,8 +50167,9 @@ def X2MOVF32_P30_ALU2 : HaydnEntryP30<
 }
 
 def X2MOVF32_P31_ALU0 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x2movf32	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -50179,8 +50183,9 @@ def X2MOVF32_P31_ALU0 : HaydnEntryP31<
 }
 
 def X2MOVF32_P31_ALU1 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x2movf32	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
   bits<4> rtd;
@@ -50194,8 +50199,9 @@ def X2MOVF32_P31_ALU1 : HaydnEntryP31<
 }
 
 def X2MOVF32_P32_ALU0 : HaydnEntryP32<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x2movf32	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -50209,8 +50215,9 @@ def X2MOVF32_P32_ALU0 : HaydnEntryP32<
 }
 
 def X2MOVF32_P32_ALU2 : HaydnEntryP32<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x2movf32	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
   bits<4> rtd;
@@ -50225,8 +50232,9 @@ def X2MOVF32_P32_ALU2 : HaydnEntryP32<
 }
 
 def X2MOVT32_P20_ALU0 : HaydnEntryP20<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x2movt32	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -50240,8 +50248,9 @@ def X2MOVT32_P20_ALU0 : HaydnEntryP20<
 }
 
 def X2MOVT32_P30_ALU0 : HaydnEntryP30<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x2movt32	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -50255,8 +50264,9 @@ def X2MOVT32_P30_ALU0 : HaydnEntryP30<
 }
 
 def X2MOVT32_P30_ALU2 : HaydnEntryP30<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x2movt32	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
   bits<4> rtd;
@@ -50271,8 +50281,9 @@ def X2MOVT32_P30_ALU2 : HaydnEntryP30<
 }
 
 def X2MOVT32_P31_ALU0 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x2movt32	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -50286,8 +50297,9 @@ def X2MOVT32_P31_ALU0 : HaydnEntryP31<
 }
 
 def X2MOVT32_P31_ALU1 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x2movt32	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
   bits<4> rtd;
@@ -50301,8 +50313,9 @@ def X2MOVT32_P31_ALU1 : HaydnEntryP31<
 }
 
 def X2MOVT32_P32_ALU0 : HaydnEntryP32<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x2movt32	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -50316,8 +50329,9 @@ def X2MOVT32_P32_ALU0 : HaydnEntryP32<
 }
 
 def X2MOVT32_P32_ALU2 : HaydnEntryP32<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x2movt32	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
   bits<4> rtd;
@@ -58496,8 +58510,9 @@ def X4MJSWAP16S_P32_ALU2 : HaydnEntryP32<
 }
 
 def X4MOVF16_P20_ALU0 : HaydnEntryP20<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x4movf16	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -58511,8 +58526,9 @@ def X4MOVF16_P20_ALU0 : HaydnEntryP20<
 }
 
 def X4MOVF16_P30_ALU0 : HaydnEntryP30<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x4movf16	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -58526,8 +58542,9 @@ def X4MOVF16_P30_ALU0 : HaydnEntryP30<
 }
 
 def X4MOVF16_P30_ALU2 : HaydnEntryP30<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x4movf16	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
   bits<4> rtd;
@@ -58542,8 +58559,9 @@ def X4MOVF16_P30_ALU2 : HaydnEntryP30<
 }
 
 def X4MOVF16_P31_ALU0 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x4movf16	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -58557,8 +58575,9 @@ def X4MOVF16_P31_ALU0 : HaydnEntryP31<
 }
 
 def X4MOVF16_P31_ALU1 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x4movf16	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
   bits<4> rtd;
@@ -58572,8 +58591,9 @@ def X4MOVF16_P31_ALU1 : HaydnEntryP31<
 }
 
 def X4MOVF16_P32_ALU0 : HaydnEntryP32<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x4movf16	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -58587,8 +58607,9 @@ def X4MOVF16_P32_ALU0 : HaydnEntryP32<
 }
 
 def X4MOVF16_P32_ALU2 : HaydnEntryP32<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x4movf16	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
   bits<4> rtd;
@@ -58603,8 +58624,9 @@ def X4MOVF16_P32_ALU2 : HaydnEntryP32<
 }
 
 def X4MOVT16_P20_ALU0 : HaydnEntryP20<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x4movt16	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -58618,8 +58640,9 @@ def X4MOVT16_P20_ALU0 : HaydnEntryP20<
 }
 
 def X4MOVT16_P30_ALU0 : HaydnEntryP30<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x4movt16	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -58633,8 +58656,9 @@ def X4MOVT16_P30_ALU0 : HaydnEntryP30<
 }
 
 def X4MOVT16_P30_ALU2 : HaydnEntryP30<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x4movt16	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
   bits<4> rtd;
@@ -58649,8 +58673,9 @@ def X4MOVT16_P30_ALU2 : HaydnEntryP30<
 }
 
 def X4MOVT16_P31_ALU0 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x4movt16	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -58664,8 +58689,9 @@ def X4MOVT16_P31_ALU0 : HaydnEntryP31<
 }
 
 def X4MOVT16_P31_ALU1 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x4movt16	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
   bits<4> rtd;
@@ -58679,8 +58705,9 @@ def X4MOVT16_P31_ALU1 : HaydnEntryP31<
 }
 
 def X4MOVT16_P32_ALU0 : HaydnEntryP32<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x4movt16	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -58694,8 +58721,9 @@ def X4MOVT16_P32_ALU0 : HaydnEntryP32<
 }
 
 def X4MOVT16_P32_ALU2 : HaydnEntryP32<
-    (outs DR64:$rtd), (ins DR64:$rsd),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd),
     "x4movt16	$rtd, $rsd"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
   bits<4> rtd;
