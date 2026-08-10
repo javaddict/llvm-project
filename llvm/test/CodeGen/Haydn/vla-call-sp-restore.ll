@@ -19,47 +19,36 @@
 ; Expected (correct) epilogue: restore from SP after SP = FP - StackSize.
 ; FP (R14) is architectural frame pointer (BP folded in); CSR bank saves it.
 
-; REBASELINED (auto) B3.exit.4 Desc-only Bundle128 print (setDesc members; AIEBaseAsmPrinter field order); .file skipped
 
-; CHECK: 	.text
-; CHECK: 	.globl	vla_call_sp_restore             // -- Begin function vla_call_sp_restore
-; CHECK: 	.type	vla_call_sp_restore,@function
-; CHECK: vla_call_sp_restore:                    // @vla_call_sp_restore
-; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ subi32	sp, sp, 24; nop; nop }
-; CHECK: 	{ nop; nop; addi32_w	r2, sp, 12 }
-; CHECK: 	{ nop; nop; st32	lr, r2, 0 }
-; CHECK: 	{ nop; nop; st32	fp, r2, 4 }
-; CHECK: 	{ nop; nop; st32	r8, r2, 8 }
-; CHECK: 	{ nop; nop; addi32_w	fp, sp, 24 }
-; CHECK: 	{ slli32	r1, r1, 2; nop; addi32_w	r2, r0, -8 }
-; CHECK: 	{ addi32	r1, r1, 7; nop; nop }
-; CHECK: 	{ and32	r1, r1, r2; nop; nop }
-; CHECK: 	{ sub32	r8, sp, r1; nop; nop }
-; CHECK: 	{ move32	r1, r8; nop; nop }
-; CHECK: 	{ nop; nop; jal	lr, use }
-; CHECK: 	{ xor32	r0, r0, r0; ld32	r1, r8, 0; nop }
-; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; addi32_w	sp, fp, -24 }
-; CHECK: 	{ nop; ld32	lr, sp, 12; nop }
-; CHECK: 	{ nop; ld32	fp, sp, 16; nop }
-; CHECK: 	{ nop; ld32	r8, sp, 20; nop }
-; CHECK: 	{ nop; nop; addi32_w	sp, sp, 24 }
-; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
-; CHECK: .Lfunc_end0:
-; CHECK: 	.size	vla_call_sp_restore, .Lfunc_end0-vla_call_sp_restore
-; CHECK:                                         // -- End function
-; CHECK: 	.section	".note.GNU-stack","",@progbits
 
 declare void @use(ptr)
 
 define i32 @vla_call_sp_restore(i32 %n) nounwind {
 ; Epilogue must restore callee-saved regs directly from SP (R13).
-
-; REBASELINED (auto) B3.exit.4 Desc-only Bundle128 print (S0-S1-S2 / setDesc members); .file skipped
-
-
+; CHECK-LABEL: vla_call_sp_restore:
+; CHECK:       // #<spill-kpi> @vla_call_sp_restore spills=3 spill-bytes=12 reloads=3 reload-bytes=12
+; CHECK-NEXT:  // %bb.0: // %entry
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { subi32 sp, sp, 24; nop }
+; CHECK-NEXT:    { addi32 r2, sp, 12; nop }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, r2, 0 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm fp, r2, 1 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r8, r2, 2 }
+; CHECK-NEXT:    { addi32 fp, sp, 24; nop }
+; CHECK-NEXT:    { slli32 r1, r1, 2; nop; nop }
+; CHECK-NEXT:    { addi32 r1, r1, 7; addi32 r2, r0, -8 }
+; CHECK-NEXT:    { and32 r1, r1, r2; nop; nop }
+; CHECK-NEXT:    { sub32 r8, sp, r1; nop; nop }
+; CHECK-NEXT:    { move32 r1, r8; nop; nop }
+; CHECK-NEXT:    { nop; jal lr, use; nop }
+; CHECK-NEXT:    { s_lw_with_imm r1, r8, 0; xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { addi32 sp, fp, -24; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm fp, sp, 16; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 20; nop; nop }
+; CHECK-NEXT:    { addi32 sp, sp, 24; nop }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
   %v = alloca i32, i32 %n
   call void @use(ptr %v)
