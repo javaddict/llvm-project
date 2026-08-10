@@ -14431,8 +14431,9 @@ def FMULA16_LS33_P32_MAC1 : HaydnEntryP32<
 }
 
 def FMULA32S_HH_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_hh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -14449,8 +14450,9 @@ def FMULA32S_HH_P20_MAC0 : HaydnEntryP20<
 }
 
 def FMULA32S_HH_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_hh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd;
@@ -14466,8 +14468,9 @@ def FMULA32S_HH_P21_MAC1 : HaydnEntryP21<
 }
 
 def FMULA32S_HH_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_hh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -14483,8 +14486,9 @@ def FMULA32S_HH_P30_MAC0 : HaydnEntryP30<
 }
 
 def FMULA32S_HH_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_hh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -14500,8 +14504,9 @@ def FMULA32S_HH_P31_MAC0 : HaydnEntryP31<
 }
 
 def FMULA32S_HH_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_hh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd;
@@ -14517,8 +14522,9 @@ def FMULA32S_HH_P32_MAC1 : HaydnEntryP32<
 }
 
 def FMULA32S_LH_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_lh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -14535,8 +14541,9 @@ def FMULA32S_LH_P20_MAC0 : HaydnEntryP20<
 }
 
 def FMULA32S_LH_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_lh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd;
@@ -14552,8 +14559,9 @@ def FMULA32S_LH_P21_MAC1 : HaydnEntryP21<
 }
 
 def FMULA32S_LH_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_lh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -14569,8 +14577,9 @@ def FMULA32S_LH_P30_MAC0 : HaydnEntryP30<
 }
 
 def FMULA32S_LH_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_lh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -14586,8 +14595,9 @@ def FMULA32S_LH_P31_MAC0 : HaydnEntryP31<
 }
 
 def FMULA32S_LH_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_lh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd;
@@ -14603,8 +14613,9 @@ def FMULA32S_LH_P32_MAC1 : HaydnEntryP32<
 }
 
 def FMULA32S_LL_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_ll	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -14621,8 +14632,9 @@ def FMULA32S_LL_P20_MAC0 : HaydnEntryP20<
 }
 
 def FMULA32S_LL_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_ll	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd;
@@ -14638,8 +14650,9 @@ def FMULA32S_LL_P21_MAC1 : HaydnEntryP21<
 }
 
 def FMULA32S_LL_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_ll	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -14655,8 +14668,9 @@ def FMULA32S_LL_P30_MAC0 : HaydnEntryP30<
 }
 
 def FMULA32S_LL_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_ll	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -14672,8 +14686,9 @@ def FMULA32S_LL_P31_MAC0 : HaydnEntryP31<
 }
 
 def FMULA32S_LL_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmula32s_ll	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd;
@@ -17299,8 +17314,9 @@ def FMULS16_LS33_P32_MAC1 : HaydnEntryP32<
 }
 
 def FMULS32S_HH_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_hh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -17317,8 +17333,9 @@ def FMULS32S_HH_P20_MAC0 : HaydnEntryP20<
 }
 
 def FMULS32S_HH_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_hh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd;
@@ -17334,8 +17351,9 @@ def FMULS32S_HH_P21_MAC1 : HaydnEntryP21<
 }
 
 def FMULS32S_HH_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_hh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -17351,8 +17369,9 @@ def FMULS32S_HH_P30_MAC0 : HaydnEntryP30<
 }
 
 def FMULS32S_HH_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_hh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -17368,8 +17387,9 @@ def FMULS32S_HH_P31_MAC0 : HaydnEntryP31<
 }
 
 def FMULS32S_HH_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_hh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd;
@@ -17385,8 +17405,9 @@ def FMULS32S_HH_P32_MAC1 : HaydnEntryP32<
 }
 
 def FMULS32S_LH_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_lh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -17403,8 +17424,9 @@ def FMULS32S_LH_P20_MAC0 : HaydnEntryP20<
 }
 
 def FMULS32S_LH_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_lh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd;
@@ -17420,8 +17442,9 @@ def FMULS32S_LH_P21_MAC1 : HaydnEntryP21<
 }
 
 def FMULS32S_LH_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_lh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -17437,8 +17460,9 @@ def FMULS32S_LH_P30_MAC0 : HaydnEntryP30<
 }
 
 def FMULS32S_LH_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_lh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -17454,8 +17478,9 @@ def FMULS32S_LH_P31_MAC0 : HaydnEntryP31<
 }
 
 def FMULS32S_LH_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_lh	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd;
@@ -17471,8 +17496,9 @@ def FMULS32S_LH_P32_MAC1 : HaydnEntryP32<
 }
 
 def FMULS32S_LL_P20_MAC0 : HaydnEntryP20<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_ll	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 2;  // MAC0 @ 2-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -17489,8 +17515,9 @@ def FMULS32S_LL_P20_MAC0 : HaydnEntryP20<
 }
 
 def FMULS32S_LL_P21_MAC1 : HaydnEntryP21<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_ll	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 5;  // MAC1 @ 2-entry entry1
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd;
@@ -17506,8 +17533,9 @@ def FMULS32S_LL_P21_MAC1 : HaydnEntryP21<
 }
 
 def FMULS32S_LL_P30_MAC0 : HaydnEntryP30<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_ll	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 9;  // MAC0 @ 3-entry entry0
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -17523,8 +17551,9 @@ def FMULS32S_LL_P30_MAC0 : HaydnEntryP30<
 }
 
 def FMULS32S_LL_P31_MAC0 : HaydnEntryP31<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_ll	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 13;  // MAC0 @ 3-entry entry1
   let Itinerary = Unit_MAC0_L2;
   bits<4> rtd;
@@ -17540,8 +17569,9 @@ def FMULS32S_LL_P31_MAC0 : HaydnEntryP31<
 }
 
 def FMULS32S_LL_P32_MAC1 : HaydnEntryP32<
-    (outs DR64:$rtd), (ins DR64:$rsd1, DR64:$rsd2),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, DR64:$rsd1, DR64:$rsd2),
     "fmuls32s_ll	$rtd, $rsd1, $rsd2"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 17;  // MAC1 @ 3-entry entry2
   let Itinerary = Unit_MAC1_L2;
   bits<4> rtd;
