@@ -4560,20 +4560,60 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
 
   //===-----------------------------------------------------------------===
   // Wave 3: SFR Flag Register Predication
-  // Compare→SFR→conditional-move pattern for SIMD predication.
-  // Compare ops: binary DR64, set per-lane SFR flags.
-  // Move ops: binary DR64, conditionally select per-lane based on SFR.
+  // Golden/ISA: SEQ/SLT/SLE are 2-op (rsd1, rsd2) → SFR only; MOVT/MOVF are
+  // 2-op RMW (rtd, rsd). Do not emit a 3-operand DR dest form.
   //===-----------------------------------------------------------------===
-  case haydn_x2seq32:  return selectBinary(X2SEQ32,  DR64RegClass);
-  case haydn_x2slt32:  return selectBinary(X2SLT32,  DR64RegClass);
-  case haydn_x2sle32:  return selectBinary(X2SLE32,  DR64RegClass);
-  case haydn_x2movf32: return selectBinary(X2MOVF32, DR64RegClass);
-  case haydn_x2movt32: return selectBinary(X2MOVT32, DR64RegClass);
-  case haydn_x4seq16:  return selectBinary(X4SEQ16,  DR64RegClass);
-  case haydn_x4slt16:  return selectBinary(X4SLT16,  DR64RegClass);
-  case haydn_x4sle16:  return selectBinary(X4SLE16,  DR64RegClass);
-  case haydn_x4movf16: return selectBinary(X4MOVF16, DR64RegClass);
-  case haydn_x4movt16: return selectBinary(X4MOVT16, DR64RegClass);
+  case haydn_x2seq32:
+  case haydn_x2slt32:
+  case haydn_x2sle32:
+  case haydn_x4seq16:
+  case haydn_x4slt16:
+  case haydn_x4sle16: {
+    unsigned Opc = IntrID == haydn_x2seq32   ? X2SEQ32
+                   : IntrID == haydn_x2slt32 ? X2SLT32
+                   : IntrID == haydn_x2sle32 ? X2SLE32
+                   : IntrID == haydn_x4seq16 ? X4SEQ16
+                   : IntrID == haydn_x4slt16 ? X4SLT16
+                                             : X4SLE16;
+    Register A = I.getOperand(2).getReg();
+    Register B = I.getOperand(3).getReg();
+    if (A.isVirtual())
+      RBI.constrainGenericRegister(A, DR64RegClass, MRI);
+    if (B.isVirtual())
+      RBI.constrainGenericRegister(B, DR64RegClass, MRI);
+    // Hardware writes SFR only (no DR dest).
+    MachineInstr *CmpMI = MIB.buildInstr(Opc).addReg(A).addReg(B);
+    constrainSelectedInstRegOperands(*CmpMI, TII, TRI, RBI);
+    // C intrinsic still has a return value: passthrough rs1 (not on the wire).
+    if (DstReg.isVirtual())
+      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
+    MIB.buildCopy(DstReg, A);
+    I.eraseFromParent();
+    return true;
+  }
+  case haydn_x2movf32:
+  case haydn_x2movt32:
+  case haydn_x4movf16:
+  case haydn_x4movt16: {
+    // dst = movt/movf(false=rs1, true=rsd); Constraints $rd=$rs1 for RMW seed.
+    unsigned Opc = IntrID == haydn_x2movf32   ? X2MOVF32
+                   : IntrID == haydn_x2movt32 ? X2MOVT32
+                   : IntrID == haydn_x4movf16 ? X4MOVF16
+                                              : X4MOVT16;
+    Register FalseV = I.getOperand(2).getReg();
+    Register TrueV = I.getOperand(3).getReg();
+    if (FalseV.isVirtual())
+      RBI.constrainGenericRegister(FalseV, DR64RegClass, MRI);
+    if (TrueV.isVirtual())
+      RBI.constrainGenericRegister(TrueV, DR64RegClass, MRI);
+    if (DstReg.isVirtual())
+      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
+    MachineInstr *MovMI =
+        MIB.buildInstr(Opc).addDef(DstReg).addReg(FalseV).addReg(TrueV);
+    constrainSelectedInstRegOperands(*MovMI, TII, TRI, RBI);
+    I.eraseFromParent();
+    return true;
+  }
 
   //===---------------------------------------------------------------===
  // : pure SSA predicate value + fused compare-select
@@ -4588,7 +4628,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   //===---------------------------------------------------------------===
   case haydn_x2cmplt32:
   case haydn_x4cmplt16: {
-    // pred = movesfr2gpr(slt(a, b)). Passthrough of SLT is discarded.
+    // pred = movesfr2gpr(slt(a, b)). SLT is 2-op SFR write only.
     const bool IsX2 = IntrID == haydn_x2cmplt32;
     unsigned SltOpc = IsX2 ? X2SLT32 : X4SLT16;
     Register A = I.getOperand(2).getReg();
@@ -4597,9 +4637,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(A, DR64RegClass, MRI);
     if (B.isVirtual())
       RBI.constrainGenericRegister(B, DR64RegClass, MRI);
-    Register Pass = MRI.createVirtualRegister(&DR64RegClass);
-    MachineInstr *SltMI =
-        MIB.buildInstr(SltOpc).addDef(Pass).addReg(A).addReg(B);
+    MachineInstr *SltMI = MIB.buildInstr(SltOpc).addReg(A).addReg(B);
     constrainSelectedInstRegOperands(*SltMI, TII, TRI, RBI);
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, GPR32RegClass, MRI);
@@ -4612,6 +4650,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_x4mux16: {
     // dst = movt(false, true) after restoring pred into SFR.
     // Args: pred, true_val, false_val (Hexagon C2_mux order).
+    // MOVT: %rd = MOVT %rs1(false, tied), %rsd(true) → asm "movt rd, rsd".
     const bool IsX2 = IntrID == haydn_x2mux32;
     unsigned MovtOpc = IsX2 ? X2MOVT32 : X4MOVT16;
     Register Pred = I.getOperand(2).getReg();
@@ -4627,7 +4666,6 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     constrainSelectedInstRegOperands(*SfrMI, TII, TRI, RBI);
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
-    // X2/X4MOVT: dst = SFR ? rs2(true) : rs1(false)
     MachineInstr *MovtMI = MIB.buildInstr(MovtOpc)
                                .addDef(DstReg)
                                .addReg(FalseV)
@@ -4638,14 +4676,12 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   }
   case haydn_x2cmpsel32:
   case haydn_x4cmpsel16: {
-    // Fused: SLT(a,b) → SFR, then MOVT. Format E MOVT is 2-op RMW (rtd
-    // keeps false lanes). Residual has Constraints "$rd = $rs1" so TwoAddress
-    // seeds dest from False when needed; fillFormatE collapses the tied pair
-    // to (rd, true) on the wire. Args: a, b, true_val, false_val.
+    // Fused: SLT(a,b) → SFR (2-op), then MOVT RMW (2-op asm). Args:
+    // a, b, true_val, false_val.
     const bool IsX2 = IntrID == haydn_x2cmpsel32;
     // Prefer single-slot residual (*_S1): multi-slot public X2MOVT32 has no
     // getSlotKind and Bundle.tryAdd can leave a standalone escape that
-    // AsmPrinter fail-closes. S1 peels to Format E logical via encode.
+    // AsmPrinter fail-closes.
     unsigned SltOpc = IsX2 ? X2SLT32_S1 : X4SLT16_S1;
     unsigned MovtOpc = IsX2 ? X2MOVT32_S1 : X4MOVT16_S1;
     Register A = I.getOperand(2).getReg();
@@ -4662,12 +4698,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(FalseV, DR64RegClass, MRI);
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
-    // SLT: Format E is 2-src SFR write; logical stub has a dead DR def.
-    Register Pass = MRI.createVirtualRegister(&DR64RegClass);
-    MachineInstr *SltMI =
-        MIB.buildInstr(SltOpc).addDef(Pass).addReg(A).addReg(B);
+    MachineInstr *SltMI = MIB.buildInstr(SltOpc).addReg(A).addReg(B);
     constrainSelectedInstRegOperands(*SltMI, TII, TRI, RBI);
-    // Tied-def MOVT: %rd = MOVT %rs1(false, tied), %rs2(true).
+    // Tied-def MOVT: %rd = MOVT %rs1(false, tied), %rsd(true).
     MachineInstr *MovtMI = MIB.buildInstr(MovtOpc)
                                .addDef(DstReg)
                                .addReg(FalseV)

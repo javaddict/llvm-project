@@ -34,7 +34,25 @@
 > | **CB-134** | **P1** | compile hang | `20001111-1`, `20170401-1`, `20180921-1`, `950809-1`, `960312-1` (lit UNSUPPORTED hang skip) |
 > | **CB-126 residual** | P3 | GISel legalize | any remaining non-pow2 / width MMO edge cases outside torture green set |
 >
-> ### Closed / fixed on lit-enabled gate (2026-07-24 wave)
+> 
+### Closed — CB-137 / CB-138 / CB-140 SFR-class 2-op encoding (2026-08-10)
+
+Same root: compiler emitted **3-DR** forms (`RR_DDD` / `x2seq32 d0, d0, d1`) for
+ISA **2-op** instructions. BundleSim catalog pre-check →
+`operand count disagrees with the golden catalog` / `ILLEGAL_INSTRUCTION`.
+
+| ID | Scope | Evidence |
+|----|--------|----------|
+| **CB-137** | `x2slt32`, `x2movt32` (+ `x2cmplt32`/`x2mux32` lowers) | `bundlesim_reg_intrin_x2_cmpsel` **PASS** (2026-08-10) |
+| **CB-138** | `x4slt16`, `x4movt16` (+ `x4cmplt16`/`x4mux16` lowers) | `bundlesim_reg_intrin_x4_cmpsel` **PASS** |
+| **CB-140** | remaining 10: `x2seq/sle/movf`, `x4seq/sle/movf/movt` (+ siblings) | `bundlesim_reg_intrin_x2x4_sfr_cmp` **PASS** |
+
+**Golden:** Format E `dest=rsd1,src=rsd2` / `rtd,rsd`; BundleSim `slot2_alu.h`
+syntax `X2SEQ32 rsd1, rsd2`, `X2MOVT32 rtd, rsd`.  
+**Fix:** residual `_S1/_S2` → `R_CMP` / `R_COND`; logical ops match; GISel 2-op
+select. Lit pin: `llvm/test/CodeGen/Haydn/sfr-predication-intrinsics.ll`.
+
+### Closed / fixed on lit-enabled gate (2026-07-24 wave)
 >
 > | Item | Evidence |
 > |------|----------|

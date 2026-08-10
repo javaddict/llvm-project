@@ -40,7 +40,8 @@ define dso_local i64 @test_slt64(i64 %a) {
 ; CHECK-NEXT:    { nop; slt64 d0, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.slt64(i64 %a)
   ret i64 %r
 }
@@ -54,7 +55,8 @@ define dso_local i64 @test_sle64(i64 %a) {
 ; CHECK-NEXT:    { nop; sle64 d0, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.sle64(i64 %a)
   ret i64 %r
 }
@@ -68,7 +70,8 @@ define dso_local i64 @test_seq64(i64 %a) {
 ; CHECK-NEXT:    { nop; seq64 d0, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.seq64(i64 %a)
   ret i64 %r
 }
@@ -90,7 +93,8 @@ define dso_local i64 @test_movt64(i64 %a) {
 ; CHECK-NEXT:    { nop; movt64 d0, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %cmp = call i64 @llvm.haydn.slt64(i64 %a)
   %r = call i64 @llvm.haydn.movt64(i64 %cmp)
   ret i64 %r
@@ -106,7 +110,8 @@ define dso_local i64 @test_movf64(i64 %a) {
 ; CHECK-NEXT:    { nop; movf64 d0, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %cmp = call i64 @llvm.haydn.sle64(i64 %a)
   %r = call i64 @llvm.haydn.movf64(i64 %cmp)
   ret i64 %r
@@ -129,7 +134,8 @@ define dso_local i32 @test_movesfr2gpr() {
 ; CHECK-NEXT:    { nop; movesfr2gpr r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i32 @llvm.haydn.movesfr2gpr()
   ret i32 %r
 }
@@ -143,7 +149,8 @@ define dso_local void @test_movegpr2sfr(i32 %val) {
 ; CHECK-NEXT:    { nop; movegpr2sfr r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   call void @llvm.haydn.movegpr2sfr(i32 %val)
   ret void
 }
@@ -157,7 +164,8 @@ define dso_local void @test_zero_sfr() {
 ; CHECK-NEXT:    { nop; zero_sfr }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   call void @llvm.haydn.zero.sfr()
   ret void
 }
@@ -176,7 +184,8 @@ define dso_local i64 @test_scalar_predication(i64 %a) {
 ; CHECK-NEXT:    { nop; movt64 d0, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %cmp = call i64 @llvm.haydn.slt64(i64 %a)
   %result = call i64 @llvm.haydn.movt64(i64 %cmp)
   ret i64 %result
@@ -196,7 +205,8 @@ define dso_local i64 @test_sfr_save_restore(i64 %a, i32 %saved_sfr) {
 ; CHECK-NEXT:    { nop; slt64 d0, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   call void @llvm.haydn.movegpr2sfr(i32 %saved_sfr)
   %r = call i64 @llvm.haydn.slt64(i64 %a)
   ret i64 %r
@@ -216,10 +226,11 @@ define dso_local <2 x i32> @test_x2seq32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; x2seq32 d0, d0, d1 }
+; CHECK-NEXT:    { nop; x2seq32 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call <2 x i32> @llvm.haydn.x2seq32(<2 x i32> %a,<2 x i32> %b)
   ret <2 x i32> %r
 }
@@ -230,10 +241,11 @@ define dso_local <2 x i32> @test_x2slt32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; x2slt32 d0, d0, d1 }
+; CHECK-NEXT:    { nop; x2slt32 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call <2 x i32> @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %b)
   ret <2 x i32> %r
 }
@@ -244,10 +256,11 @@ define dso_local <2 x i32> @test_x2sle32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; x2sle32 d0, d0, d1 }
+; CHECK-NEXT:    { nop; x2sle32 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call <2 x i32> @llvm.haydn.x2sle32(<2 x i32> %a,<2 x i32> %b)
   ret <2 x i32> %r
 }
@@ -265,10 +278,11 @@ define dso_local <2 x i32> @test_x2movf32(<2 x i32> %fallthrough, <2 x i32> %con
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; x2movf32 d0, d0, d1 }
+; CHECK-NEXT:    { nop; x2movf32 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call <2 x i32> @llvm.haydn.x2movf32(<2 x i32> %fallthrough,<2 x i32> %cond_val)
   ret <2 x i32> %r
 }
@@ -279,10 +293,11 @@ define dso_local <2 x i32> @test_x2movt32(<2 x i32> %fallthrough, <2 x i32> %con
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; x2movt32 d0, d0, d1 }
+; CHECK-NEXT:    { nop; x2movt32 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %fallthrough,<2 x i32> %cond_val)
   ret <2 x i32> %r
 }
@@ -301,10 +316,11 @@ define dso_local <4 x i16> @test_x4seq16(<4 x i16> %a, <4 x i16> %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; x4seq16 d0, d0, d1 }
+; CHECK-NEXT:    { nop; x4seq16 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call <4 x i16> @llvm.haydn.x4seq16(<4 x i16> %a,<4 x i16> %b)
   ret <4 x i16> %r
 }
@@ -315,10 +331,11 @@ define dso_local <4 x i16> @test_x4slt16(<4 x i16> %a, <4 x i16> %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; x4slt16 d0, d0, d1 }
+; CHECK-NEXT:    { nop; x4slt16 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call <4 x i16> @llvm.haydn.x4slt16(<4 x i16> %a,<4 x i16> %b)
   ret <4 x i16> %r
 }
@@ -329,10 +346,11 @@ define dso_local <4 x i16> @test_x4sle16(<4 x i16> %a, <4 x i16> %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; x4sle16 d0, d0, d1 }
+; CHECK-NEXT:    { nop; x4sle16 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call <4 x i16> @llvm.haydn.x4sle16(<4 x i16> %a,<4 x i16> %b)
   ret <4 x i16> %r
 }
@@ -350,10 +368,11 @@ define dso_local <4 x i16> @test_x4movf16(<4 x i16> %fallthrough, <4 x i16> %con
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; x4movf16 d0, d0, d1 }
+; CHECK-NEXT:    { nop; x4movf16 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call <4 x i16> @llvm.haydn.x4movf16(<4 x i16> %fallthrough,<4 x i16> %cond_val)
   ret <4 x i16> %r
 }
@@ -364,10 +383,11 @@ define dso_local <4 x i16> @test_x4movt16(<4 x i16> %fallthrough, <4 x i16> %con
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; x4movt16 d0, d0, d1 }
+; CHECK-NEXT:    { nop; x4movt16 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %fallthrough,<4 x i16> %cond_val)
   ret <4 x i16> %r
 }

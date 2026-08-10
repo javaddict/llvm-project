@@ -73,25 +73,24 @@ define void @vadd_streaming(ptr nocapture %a, ptr nocapture readonly %b, ptr noc
 ; SWP-NOT: Unable to analyzeLoop
 ; CHECK-LABEL: vadd_streaming:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r5, r0, 1; nop }
-; CHECK-NEXT:    { addi32_w r6, r0, 0; nop }
+; CHECK-NEXT:    { nop; addi32_w r5, r0, 0 }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld32 r7, r2, 0; ld32 r12, r3, 0 }
-; CHECK-NEXT:    { add32 r6, r6, r5; addi32 r3, r3, 4 }
-; CHECK-NEXT:    { add32 r7, r7, r12; addi32 r2, r2, 4 }
-; CHECK-NEXT:    { st32_post r7, r1, 1; nop }
-; CHECK-NEXT:    { slt32 r7, r6, r4; nop }
+; CHECK-NEXT:    { ld32 r7, r3, 0; ld32 r6, r2, 0 }
+; CHECK-NEXT:    { addi32 r3, r3, 4; addi32 r5, r5, 1 }
+; CHECK-NEXT:    { addi32 r2, r2, 4; add32 r6, r6, r7 }
+; CHECK-NEXT:    { nop; st32_post r6, r1, 1 }
+; CHECK-NEXT:    { nop; slt32 r6, r5, r4 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { bnez_w r7, .LBB0_1; nop }
+; CHECK-NEXT:    { nop; bnez_w r6, .LBB0_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
 entry:
   br label %loop
 loop:
