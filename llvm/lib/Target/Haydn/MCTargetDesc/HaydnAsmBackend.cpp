@@ -201,12 +201,24 @@ MCFixupKindInfo HaydnAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
   assert(unsigned(Kind - FirstTargetFixupKind) < Haydn::NumTargetFixupKinds &&
          "Invalid fixup kind!");
 
-  HaydnReloc::RelocKind R = HaydnReloc::mapFixupKind(Kind);
-  const HaydnReloc::RelocFieldInfo &FI = HaydnReloc::getRelocFieldInfo(R);
+  // NO bit range. Under format E a fixup kind does not determine one: the
+  // field's position depends on the PLACEMENT — (entry count, entry index,
+  // mapping) — and MCFixupKindInfo has no room for that, being keyed by kind
+  // alone. `RelocFieldInfo::FieldLsb` is the Bundle128 answer, where every
+  // kind sat at one offset in a 4- or 6-byte image; reporting it here named
+  // bits the encoder had legitimately written and tripped MCAsmStreamer's
+  // "Encoder wrote into fixed up bit!" on jal and on the HI12/LO20 pair.
+  //
+  // Nothing is lost. This override reaches only MCAsmStreamer's -show-encoding
+  // annotation, which merely stops lettering which bits a fixup owns; the
+  // instruction bytes and the fixup list still print. The geometry that
+  // matters is per-placement and lives in HaydnRelocLayout, which applyFixup
+  // above and lld's Haydn::relocate both consult through
+  // patchRelocFieldInBundle. See FORMAT-E-SWITCH-PLAN.md 5.8.
+  //
   // This LLVM tree stores PC-relativity on MCFixup::isPCRel (set by the
   // encoder), not on MCFixupKindInfo::Flags. Keep Flags=0 (matches RISCV).
-  return MCFixupKindInfo{Names[Kind - FirstTargetFixupKind], FI.FieldLsb,
-                         FI.FieldSize, 0};
+  return MCFixupKindInfo{Names[Kind - FirstTargetFixupKind], 0, 0, 0};
 }
 
 // Write NOP data to the output stream.
