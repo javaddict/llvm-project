@@ -4189,8 +4189,11 @@ def D_LDW_CB_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs1_wb),
 //===----------------------------------------------------------------------===//
 
 let isAsmParserOnly = 1, isPseudo = 0, mayStore = 1 in
+// Operands follow the database Syntax — `D_SDW_CB_IMM cbr_sel, ...` — so the
+// selector immediate leads. It used to sit third, which put an
+// immediate where the member has a register (§ 5.11 `kinds`).
 def D_SDW_CB_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
-    (ins DR64:$rtd, GPR32:$rs, i32imm:$cbr_sel, simm16:$imm),
+    (ins i32imm:$cbr_sel, DR64:$rtd, GPR32:$rs, simm16:$imm),
     "d_sdw_cb_imm\t$cbr_sel, $rtd, $rs, $imm", []> {
   let Constraints = "$rs = $rs_wb";
   let TSFlags{2-0} = 0b001;
@@ -4213,8 +4216,11 @@ def D_SDW_CB_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 // D_SDW_CB_IMM but stride is GPR32. Layout mirrors D_LDW_CB_REG with the
 // data operand flipped to a source.
 let isAsmParserOnly = 1, isPseudo = 0, mayStore = 1 in
+// Operands follow the database Syntax — `D_SDW_CB_REG cbr_sel, ...` — so the
+// selector immediate leads. It used to sit third, which put an
+// immediate where the member has a register (§ 5.11 `kinds`).
 def D_SDW_CB_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
-    (ins DR64:$rtd, GPR32:$rs1, i32imm:$cbr_sel, GPR32:$rs2),
+    (ins i32imm:$cbr_sel, DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_sdw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
   let Constraints = "$rs1 = $rs1_wb";
   let TSFlags{2-0} = 0b001;

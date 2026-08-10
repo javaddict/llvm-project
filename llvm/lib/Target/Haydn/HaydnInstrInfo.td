@@ -2109,7 +2109,9 @@ def FLAR : HaydnInst<4, (outs), (ins uimm2:$ar_sel), "flar\t$ar_sel", []> {
 }
 
 let mayStore = 1, hasSideEffects = 1 in
-def WBARWUA : HaydnInst<4, (outs), (ins GPR32:$rs, uimm2:$ar_sel),
+// `WBARWUA ar_sel, rs`: the selector leads in the database Syntax and in
+// the format E members, so it leads here too (§ 5.11 `kinds`).
+def WBARWUA : HaydnInst<4, (outs), (ins uimm2:$ar_sel, GPR32:$rs),
                         "wbarwua\t$ar_sel, $rs", []> {
   let Itinerary = Slot012_ALU;
 }

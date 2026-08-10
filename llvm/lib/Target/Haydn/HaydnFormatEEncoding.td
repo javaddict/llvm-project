@@ -5064,7 +5064,7 @@ def D_SDW_BREV_REG_P30_LOADSTORE0 : HaydnEntryP30<
 }
 
 def D_SDW_CB_IMM_P20_LOADSTORE0 : HaydnEntryP20<
-    (outs GPR32:$rs_wb), (ins uimm1:$cbr_sel, GPR32:$rs, DR64:$rtd, simm8:$imm8),
+    (outs GPR32:$rs_wb), (ins uimm1:$cbr_sel, DR64:$rtd, GPR32:$rs, simm8:$imm8),
     "d_sdw_cb_imm	$cbr_sel, $rtd, $rs, $imm8"> {
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
@@ -5085,7 +5085,7 @@ def D_SDW_CB_IMM_P20_LOADSTORE0 : HaydnEntryP20<
 }
 
 def D_SDW_CB_IMM_P30_LOADSTORE0 : HaydnEntryP30<
-    (outs GPR32:$rs_wb), (ins uimm1:$cbr_sel, GPR32:$rs, DR64:$rtd, simm8:$imm8),
+    (outs GPR32:$rs_wb), (ins uimm1:$cbr_sel, DR64:$rtd, GPR32:$rs, simm8:$imm8),
     "d_sdw_cb_imm	$cbr_sel, $rtd, $rs, $imm8"> {
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
@@ -5107,7 +5107,7 @@ def D_SDW_CB_IMM_P30_LOADSTORE0 : HaydnEntryP30<
 }
 
 def D_SDW_CB_REG_P20_LOADSTORE0 : HaydnEntryP20<
-    (outs GPR32:$rs1_wb), (ins uimm1:$cbr_sel, GPR32:$rs1, DR64:$rtd, GPR32:$rs2),
+    (outs GPR32:$rs1_wb), (ins uimm1:$cbr_sel, DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_sdw_cb_reg	$cbr_sel, $rtd, $rs1, $rs2"> {
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
@@ -5129,7 +5129,7 @@ def D_SDW_CB_REG_P20_LOADSTORE0 : HaydnEntryP20<
 }
 
 def D_SDW_CB_REG_P30_LOADSTORE0 : HaydnEntryP30<
-    (outs GPR32:$rs1_wb), (ins uimm1:$cbr_sel, GPR32:$rs1, DR64:$rtd, GPR32:$rs2),
+    (outs GPR32:$rs1_wb), (ins uimm1:$cbr_sel, DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_sdw_cb_reg	$cbr_sel, $rtd, $rs1, $rs2"> {
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
