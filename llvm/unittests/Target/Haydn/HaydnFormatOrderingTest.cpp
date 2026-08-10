@@ -205,7 +205,7 @@ TEST(HaydnFormatOrdering, GetFormatOrNullReturnsProductRow) {
   EXPECT_STREQ(Fmt->Name, "BUNDLE_E3");
   EXPECT_EQ(Fmt->getSize(), ProductEncodedBytesValue);
   // Size-filtered form still returns product (N-format-ready API).
-  const VLIWFormat *BySize = B.getFormatOrNull(/*Size=*/16);
+  const VLIWFormat *BySize = B.getFormatOrNull(ProductEncodedBytesValue);
   ASSERT_NE(BySize, nullptr);
   EXPECT_STREQ(BySize->Name, "BUNDLE_E3");
 }
@@ -213,10 +213,10 @@ TEST(HaydnFormatOrdering, GetFormatOrNullReturnsProductRow) {
 TEST(HaydnFormatOrdering, StampProductFormatIDRemainsZero) {
   // After applyFormatOrdering, finalizeLegalMultiMI stamps ProductFormatID.
   // Pin durable encoding: Full == imm 0 (BUNDLE-root mark).
-  EXPECT_EQ(ProductFormatID, FormatID::BundleE3);
+  EXPECT_EQ(ProductFormatID, FormatID::BundleE2);
   EXPECT_EQ(formatIDToImm(ProductFormatID), 0u);
   EXPECT_TRUE(isKnownFormatIDImm(0u));
-  EXPECT_EQ(formatIDFromImm(0u), FormatID::BundleE3);
+  EXPECT_EQ(formatIDFromImm(0u), ProductFormatID);
 }
 
 //===----------------------------------------------------------------------===//
@@ -274,9 +274,10 @@ TEST(HaydnFormatOrdering, FixedKindIsSolePostCommitAuthority) {
   ASSERT_TRUE(B.canAdd(M.getOpcode()));
   B.add(&M);
   EXPECT_EQ(B.at(Fixed), &M);
-  // Slot enum is sequential 0/1/2 (HaydnMCFormats.h). MCInstLower does
-  // not stamp Flags — encode uses getSlotKind / Format composite only.
-  EXPECT_EQ(static_cast<unsigned>(Fixed), 2u);
+  // The slot enum runs P20,P21,P30,P31,P32, so the 3-entry positions start at
+  // 2 and this member's kind is 4, not 2. MCInstLower still stamps no Flags --
+  // encode reads getSlotKind and the composite only.
+  EXPECT_EQ(static_cast<unsigned>(Fixed), 4u);
 }
 
 //===----------------------------------------------------------------------===//
@@ -313,14 +314,20 @@ TEST(HaydnFormatOrdering, ProductFormatOpcodeIsBundle128Full) {
   EXPECT_EQ(Fmt->Opcode, Haydn::BUNDLE_E3)
       << "AsmPrinter MCB.setOpcode(Format->Opcode) must be BUNDLE_E3";
 
-  // Empty / sparse occupancy still covers via the same product row.
+  // An occupancy inside the 3-entry set still selects BUNDLE_E3. An EMPTY one
+  // no longer does: with nothing occupied both rows cover, and the table
+  // returns the first, which is the 2-entry composite. That is the entry-count
+  // decision being made by coverage rather than by a constant.
   for (SlotBits Occ :
-       {SlotBits(0), SlotBits(Haydn::SLOT_P30),
+       {SlotBits(Haydn::SLOT_P30),
         SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32), SlotBits(Haydn::SLOT_SET_E3)}) {
     const VLIWFormat *F = Fmts.getPacketFormats().getFormat(Occ);
     ASSERT_NE(F, nullptr) << "occ=" << Occ;
     EXPECT_EQ(F->Opcode, Haydn::BUNDLE_E3) << "occ=" << Occ;
   }
+  const VLIWFormat *Empty = Fmts.getPacketFormats().getFormat(0);
+  ASSERT_NE(Empty, nullptr);
+  EXPECT_EQ(Empty->Opcode, Haydn::BUNDLE_E2);
 }
 
 TEST(HaydnFormatOrdering, AsmPrinterEncodeOrderIsS0S1S2) {

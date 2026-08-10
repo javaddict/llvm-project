@@ -51,7 +51,9 @@ TEST(HaydnBundleFormatSolver, EmptyCommitStall) {
   ASSERT_TRUE(Plan.has_value());
   EXPECT_TRUE(Plan->empty());
   EXPECT_EQ(Plan->OccupiedSlots, 0u);
-  EXPECT_EQ(Plan->FID, FormatID::BundleE3);
+  // An empty cycle has no occupancy to derive a composite from, so it takes
+  // the default row rather than a chosen one.
+  EXPECT_EQ(Plan->FID, ProductFormatID);
   EXPECT_EQ(Plan->Bytes.Value, ProductEncodedBytesValue);
   EXPECT_TRUE(Plan->isProductLegal());
 }
@@ -130,22 +132,31 @@ TEST(HaydnBundleFormatSolver, EnumerateStampsFieldSlots) {
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD32, Alts));
-  ASSERT_EQ(Alts.size(), 3u);
-  EXPECT_EQ(Alts[0].MemberOpcode, Haydn::ADD32_P30_ALU0);
-  EXPECT_EQ(Alts[0].FieldSlots, SlotBits(Haydn::SLOT_P30));
-  EXPECT_EQ(Alts[1].MemberOpcode, Haydn::ADD32_P31_ALU0);
-  EXPECT_EQ(Alts[1].FieldSlots, SlotBits(Haydn::SLOT_P31));
-  EXPECT_EQ(Alts[2].MemberOpcode, Haydn::ADD32_P32_ALU0);
-  EXPECT_EQ(Alts[2].FieldSlots, SlotBits(Haydn::SLOT_P32));
+  // Seven placements, not three: ADD32 has two ALUs at each 3-entry position
+  // plus one at entry 0 of the 2-entry form. The stamp is what matters here,
+  // and it comes from the member, so assert it that way rather than by index.
+  EXPECT_EQ(Alts.size(), 7u);
+  SlotBits Union = 0;
+  for (const PlacementAlternative &A : Alts) {
+    EXPECT_EQ(A.FieldSlots, fieldSlotsForMember(Fmts, A.MemberOpcode));
+    Union |= A.FieldSlots;
+  }
+  EXPECT_EQ(Union, Fmts.getLegalSlots(Haydn::ADD32));
   for (const PlacementAlternative &A : Alts) {
     EXPECT_EQ(A.CompatibleFormatMask, ProductFormatMask);
   }
 
   Alts.clear();
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD64, Alts));
-  ASSERT_EQ(Alts.size(), 2u);
-  EXPECT_EQ(Alts[0].FieldSlots, SlotBits(Haydn::SLOT_P31));
-  EXPECT_EQ(Alts[1].FieldSlots, SlotBits(Haydn::SLOT_P32));
+  // ADD64 is no longer the sparse counter-example: it has the same seven
+  // placements ADD32 has.
+  EXPECT_EQ(Alts.size(), 7u);
+  SlotBits Add64Union = 0;
+  for (const PlacementAlternative &A : Alts) {
+    EXPECT_EQ(A.FieldSlots, fieldSlotsForMember(Fmts, A.MemberOpcode));
+    Add64Union |= A.FieldSlots;
+  }
+  EXPECT_EQ(Add64Union, Fmts.getLegalSlots(Haydn::ADD64));
 }
 
 //===----------------------------------------------------------------------===//
@@ -155,7 +166,8 @@ TEST(HaydnBundleFormatSolver, EnumerateStampsFieldSlots) {
 TEST(HaydnBundleFormatSolver, SyntheticTwoRow_PrefersNarrowPriority) {
   // Unit-only multi-row table (AIE BundleTest.cpp:33-41 FormatData shape).
   // Narrow Priority 0 covers S0|S1; Full Priority 1 is wide fallback.
-  constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
+  // Past both live composites: FormatID 1 is BundleE3, not a spare value.
+  constexpr FormatID SynthNarrow = static_cast<FormatID>(2);
   const FormatDesc Table[] = {
       {SynthNarrow, /*Priority=*/0, EncodedBytes{8},
        static_cast<SlotBits>(Haydn::SLOT_P30 | Haydn::SLOT_P31)},
@@ -210,7 +222,8 @@ TEST(HaydnBundleFormatSolver, SyntheticTwoRow_PrefersNarrowPriority) {
 TEST(HaydnBundleFormatSolver, SyntheticTwoRow_RestrictedMaskDropsFull) {
   // Member CompatibleFormatMask = Narrow only: Feasible shrinks to Narrow
   // when covering holds. Exercise coveringFormatMask + selectFeasible.
-  constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
+  // Past both live composites: FormatID 1 is BundleE3, not a spare value.
+  constexpr FormatID SynthNarrow = static_cast<FormatID>(2);
   const FormatDesc Table[] = {
       {SynthNarrow, 0, EncodedBytes{8},
        static_cast<SlotBits>(Haydn::SLOT_P30 | Haydn::SLOT_P31)},
@@ -359,9 +372,14 @@ TEST(HaydnBundleFormatSolver, MakeFromOccupiedAndCanTryAdd) {
 }
 
 TEST(HaydnBundleFormatSolver, FieldSlotsToIndex) {
-  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P30), std::optional<unsigned>(0u));
-  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P31), std::optional<unsigned>(1u));
-  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P32), std::optional<unsigned>(2u));
+  // The index is the slot's own bit position, and P20/P21 now occupy 0 and 1,
+  // so the 3-entry slots start at 2. This is a slot-kind index, NOT an entry
+  // number: P30 is entry 0 of its composite and index 2.
+  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P20), std::optional<unsigned>(0u));
+  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P21), std::optional<unsigned>(1u));
+  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P30), std::optional<unsigned>(2u));
+  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P31), std::optional<unsigned>(3u));
+  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P32), std::optional<unsigned>(4u));
   EXPECT_FALSE(fieldSlotsToIndex(0).has_value());
   EXPECT_FALSE(
       fieldSlotsToIndex(Haydn::SLOT_P30 | Haydn::SLOT_P31).has_value());
@@ -389,25 +407,35 @@ TEST(HaydnBundleFormatSolver, B24_TryAddS2FirstThenS1S0) {
 // Haydn keeps a FormatID *mask* frontier until post-RA freeze (plan §7.1).
 
 TEST(HaydnBundleFormatSolver, B41_ProductFeasibleFormatMaskEmptyOccupied) {
-  // Empty and every Full-covering occupancy → ProductFormatMask (size-1).
+  // An empty occupancy leaves both composites open -- that is the frontier the
+  // solver narrows. The moment a slot is taken the frontier collapses to the
+  // one composite that slot belongs to, which is the entry-count decision
+  // making itself rather than being decided (5.2).
   EXPECT_EQ(productFeasibleFormatMask(/*Occupied=*/0), ProductFormatMask);
-  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P30), ProductFormatMask);
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P20),
+            formatIDBit(FormatID::BundleE2));
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P30),
+            formatIDBit(FormatID::BundleE3));
   EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P31 | Haydn::SLOT_P32),
-            ProductFormatMask);
-  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_SET_E3), ProductFormatMask);
+            formatIDBit(FormatID::BundleE3));
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_SET_E3),
+            formatIDBit(FormatID::BundleE3));
+  // A mask spanning both is not a bundle: no row covers it.
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P20 | Haydn::SLOT_P30), 0u);
 
   // makeProductCycleStateFromOccupied rebuilds the same frontier.
   EXPECT_EQ(makeProductCycleStateFromOccupied(0).FeasibleFormatMask,
             ProductFormatMask);
   EXPECT_EQ(makeProductCycleStateFromOccupied(Haydn::SLOT_SET_E3).FeasibleFormatMask,
-            ProductFormatMask);
+            formatIDBit(FormatID::BundleE3));
 }
 
 TEST(HaydnBundleFormatSolver, B41_SyntheticSecondFormatCanShrinkFrontier) {
   // N-format-ready: synthetic 2nd FormatDesc row can drop out of the mask
   // when occupancy no longer covers (no product emit).
   // AIE BundleTest.cpp:33-41 FormatData[] multi-row shape.
-  constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
+  // Past both live composites: FormatID 1 is BundleE3, not a spare value.
+  constexpr FormatID SynthNarrow = static_cast<FormatID>(2);
   const FormatDesc Table[] = {
       {SynthNarrow, /*Priority=*/0, EncodedBytes{8},
        static_cast<SlotBits>(Haydn::SLOT_P30 | Haydn::SLOT_P31)},
@@ -429,7 +457,7 @@ TEST(HaydnBundleFormatSolver, B41_SyntheticSecondFormatCanShrinkFrontier) {
             formatIDBit(FormatID::BundleE3));
 
   // Product helper remains Full-only even when occupancy is S2.
-  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P32), ProductFormatMask);
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P32), formatIDBit(FormatID::BundleE3));
 }
 
 TEST(HaydnBundleFormatSolver, B41_TryAddKeepsProductFrontier) {
@@ -438,9 +466,9 @@ TEST(HaydnBundleFormatSolver, B41_TryAddKeepsProductFrontier) {
   CycleState S = makeProductCycleState();
   EXPECT_EQ(S.FeasibleFormatMask, ProductFormatMask);
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
-  EXPECT_EQ(S.FeasibleFormatMask, ProductFormatMask);
+  EXPECT_EQ(S.FeasibleFormatMask, formatIDBit(FormatID::BundleE3));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
-  EXPECT_EQ(S.FeasibleFormatMask, ProductFormatMask);
+  EXPECT_EQ(S.FeasibleFormatMask, formatIDBit(FormatID::BundleE3));
   EXPECT_EQ(productFeasibleFormatMask(S.OccupiedSlots), S.FeasibleFormatMask);
 }
 
@@ -485,7 +513,8 @@ TEST(HaydnBundleFormatSolver, B42_LiveMaskVsOccupiedRebuild_Synthetic) {
   // rebuild when CompatibleFormatMask restricts members (N-format-ready).
   // Product alts are Full-only so product path matches; exercise covering
   // with restricted Allowed mask on a synthetic table.
-  constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
+  // Past both live composites: FormatID 1 is BundleE3, not a spare value.
+  constexpr FormatID SynthNarrow = static_cast<FormatID>(2);
   const FormatDesc Table[] = {
       {SynthNarrow, /*Priority=*/0, EncodedBytes{8},
        static_cast<SlotBits>(Haydn::SLOT_P30 | Haydn::SLOT_P31)},

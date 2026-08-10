@@ -98,10 +98,10 @@ TEST(HaydnBundleVerifyTest, RejectsSameSlotConflict) {
 }
 
 TEST(HaydnBundleVerifyTest, RejectsUnknownFormatIDImm) {
-  // N-format-ready: only imm 0 (Bundle128Full) is known. Cast an unknown
-  // value past the enum to exercise the fail-closed gate (no silent Full).
+  // Two imms are known now, 0 and 1, so the fail-closed probe has to reach
+  // past both. It must not silently become a composite.
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
-  auto Fake = static_cast<FormatID>(1u);
+  auto Fake = static_cast<FormatID>(2u);
   auto Err = verifyCommittedBundle(Fake, {Haydn::ADD32}, Fmts);
   ASSERT_TRUE(Err.has_value());
   EXPECT_NE(Err->find("unknown FormatID"), std::string::npos) << *Err;
@@ -109,9 +109,12 @@ TEST(HaydnBundleVerifyTest, RejectsUnknownFormatIDImm) {
 
 TEST(HaydnBundleVerifyTest, ProductFormatIDImmIsZero) {
   // Durable BUNDLE-root contract: FormatID Full encodes as imm 0.
-  EXPECT_EQ(formatIDToImm(FormatID::BundleE3), 0u);
+  // Two composites, two imms: 0 is the 2-entry form and 1 the 3-entry one.
+  EXPECT_EQ(formatIDToImm(FormatID::BundleE2), 0u);
+  EXPECT_EQ(formatIDToImm(FormatID::BundleE3), 1u);
   EXPECT_TRUE(isKnownFormatIDImm(0u));
-  EXPECT_FALSE(isKnownFormatIDImm(1u));
+  EXPECT_TRUE(isKnownFormatIDImm(1u));
+  EXPECT_FALSE(isKnownFormatIDImm(2u));
 }
 
 TEST(HaydnBundleVerifyTest, DualLoadMayPack) {

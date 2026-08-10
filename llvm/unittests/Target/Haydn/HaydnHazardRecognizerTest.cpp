@@ -355,16 +355,19 @@ TEST(HaydnHazardRecognizerTest, B24_TryAddIsPlacementAuthorityS2First) {
   // Empty cycle accepts ADD32 on S2 (not S0).
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
   EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_P32));
+  // The index is the slot KIND's position in the enum, which now starts at the
+  // 2-entry slots -- so P32 is 4, P31 is 3, P30 is 2. The order the solver
+  // fills them in is unchanged: highest entry first.
   EXPECT_EQ(fieldSlotsToIndex(S.Members.back().FieldSlots),
-            std::optional<unsigned>(2u));
+            fieldSlotsToIndex(Haydn::SLOT_P32));
 
-  // Second ADD32 → S1; third → S0; fourth Hazard-shaped reject.
+  // Second ADD32 -> P31; third -> P30; fourth rejected.
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
   EXPECT_EQ(fieldSlotsToIndex(S.Members.back().FieldSlots),
-            std::optional<unsigned>(1u));
+            fieldSlotsToIndex(Haydn::SLOT_P31));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
   EXPECT_EQ(fieldSlotsToIndex(S.Members.back().FieldSlots),
-            std::optional<unsigned>(0u));
+            fieldSlotsToIndex(Haydn::SLOT_P30));
   EXPECT_FALSE(canTryAddProduct(S, Fmts, Haydn::ADD32));
 }
 
@@ -415,10 +418,11 @@ TEST(HaydnHazardRecognizerTest, B25_FieldSlotsFromSparseIndex) {
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD64, Alts));
-  // Sparse {0, S1, S2}: non-zero rows carry FieldSlots by index.
-  ASSERT_EQ(Alts.size(), 2u);
-  EXPECT_EQ(Alts[0].FieldSlots, SlotBits(Haydn::SLOT_P31));
-  EXPECT_EQ(Alts[1].FieldSlots, SlotBits(Haydn::SLOT_P32));
+  // Each row's FieldSlots comes from its own member. ADD64 is no longer the
+  // sparse case -- it has the same seven placements ADD32 has.
+  EXPECT_EQ(Alts.size(), 7u);
+  for (const PlacementAlternative &A : Alts)
+    EXPECT_EQ(A.FieldSlots, fieldSlotsForMember(Fmts, A.MemberOpcode));
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD64));
   EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_P32));

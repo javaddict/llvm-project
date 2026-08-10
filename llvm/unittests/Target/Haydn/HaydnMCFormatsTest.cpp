@@ -28,6 +28,37 @@ using namespace llvm;
 
 namespace {
 
+// Slot masks worth naming once. A legal-slot mask spans BOTH composites and is
+// therefore not an occupancy: it says "every entry position this logical has a
+// member for", and no bundle ever holds a P2x and a P3x at the same time.
+static constexpr SlotBits AluAny = Haydn::SLOT_P20 | Haydn::SLOT_P30 |
+                                   Haydn::SLOT_P31 | Haydn::SLOT_P32;
+static constexpr SlotBits StoreAny = Haydn::SLOT_P20 | Haydn::SLOT_P30;
+
+// The alternates vector is indexed by PLACEMENT, 0..17, and is sparse; under
+// Bundle128 the index was the slot, which is why these tests used to walk it
+// as size-3 with `MCSlotKind(Slot)`. Ask each member its own slot instead.
+static std::vector<unsigned> liveMembers(const std::vector<unsigned> *Alts) {
+  std::vector<unsigned> Out;
+  if (Alts)
+    for (unsigned M : *Alts)
+      if (M != 0)
+        Out.push_back(M);
+  return Out;
+}
+
+static SlotBits slotsOfMembers(const HaydnBaseMCFormats &Fmts,
+                               const std::vector<unsigned> *Alts) {
+  SlotBits Bits = 0;
+  for (unsigned M : liveMembers(Alts)) {
+    MCSlotKind K = Fmts.getSlotKind(M);
+    if (K != MCSlotKind())
+      Bits |= SlotBits(1) << static_cast<unsigned>(K);
+  }
+  return Bits;
+}
+
+
 TEST(HaydnMCFormatsTest, GetLegalSlotsSpotChecks) {
   // getLegalSlots returns a bitmask (bit k = slot k in Haydn::SLOT convention:
   // SLOT_P30=1<<0, SLOT_P31=1<<1, SLOT_P32=1<<2). Derived from sparse alts.
@@ -158,18 +189,19 @@ TEST(HaydnMCFormatsTest, PacketFormatsAndConflictBitsFromGeneratedTable) {
   for (size_t I = 0; I < 3; ++I) {
     const MCSlotInfo *SI = Fmts.getSlotInfo(SlotKinds[I]);
     ASSERT_NE(SI, nullptr) << "no SlotInfo for slot " << I;
-    EXPECT_NE(SI->getConflictSet(), SlotBits(Haydn::SLOT_SET_E3))
-        << "slot " << I << " still has SLOT_SET_E3 ConflictBits sentinel";
-    // Self-only: ConflictBits == this slot's own bit.
-    EXPECT_EQ(SI->getConflictSet(), SelfBits[I])
-        << "slot " << I << " ConflictBits should be self-only under Bundle128";
+    // Self plus the whole other composite: an E3 slot cannot co-issue with an
+    // E2 one. Self-only was Bundle128's degenerate case, not the model.
+    EXPECT_EQ(SI->getConflictSet(),
+              SlotBits(SelfBits[I] | Haydn::SLOT_SET_E2))
+        << "slot " << I;
   }
 
-  // (3) isFormatAvailable for all 8 slot-combos. With Bundle128 covering all 3
-  //     slots, every subset is packetable (NOPs fill unused slots).
-  for (SlotBits Combo = 0; Combo <= Haydn::SLOT_SET_E3; ++Combo) {
-    EXPECT_TRUE(Fmts.isFormatAvailable(Combo))
-        << "combo " << Combo << " should be available under Bundle128";
+  // (3) A combo is packetable iff it fits inside one composite; the two are
+  //     mutually exclusive, so mixed masks are not.
+  for (SlotBits Combo = 0; Combo <= Haydn::SLOT_MASK_ANY; ++Combo) {
+    const bool Fits = (Combo & ~SlotBits(Haydn::SLOT_SET_E2)) == 0 ||
+                      (Combo & ~SlotBits(Haydn::SLOT_SET_E3)) == 0;
+    EXPECT_EQ(Fmts.isFormatAvailable(Combo), Fits) << "combo " << Combo;
   }
 }
 
@@ -181,35 +213,34 @@ TEST(HaydnMCFormatsTest, PacketFormatsAndConflictBitsFromGeneratedTable) {
 TEST(HaydnMCFormatsTest, LegalSlotFamiliesByFU) {
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
 
-  // ALU32 binary / imm family: full 3-slot issue.
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD32),
-            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::SUB32),
-            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::XOR32),
-            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADDI32),
-            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
+  // The ALU32 family: entry 0 of the 2-entry form, every entry of the 3-entry
+  // one. Not P21, whose ALU is ALU1 -- these logicals have no P21 member.
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD32), AluAny);
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::SUB32), AluAny);
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::XOR32), AluAny);
 
-  // ALU64 / shift64: no S0.
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD64),
-            SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32));
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::SLL64),
-            SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32));
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::MAX64),
-            SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32));
+  // ADDI32 is the narrow one, and for a size reason rather than a unit one:
+  // its imm20 only fits the wide 2-entry windows, so it has P20 and P21 and
+  // no 3-entry placement at all.
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADDI32), SlotBits(Haydn::SLOT_SET_E2));
 
-  // Loads: dual-issue S0|S1 (CB-111); stores stay S0-primary.
+  // The 64-bit ALU ops are no longer narrower than the 32-bit ones.
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD64), AluAny);
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::SLL64), AluAny);
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::MAX64), AluAny);
+
+  // Loads reach every entry (LOADSTORE0 at P20/P30, LOAD1 at P21/P31/P32);
+  // stores reach only the LOADSTORE0 ones, because there is one store unit.
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_LW_WITH_IMM),
-            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31));
+            SlotBits(Haydn::SLOT_MASK_ANY));
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::D_LDW_WITH_IMM),
-            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31));
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_SW_WITH_IMM), SlotBits(Haydn::SLOT_P30));
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::D_SDW_WITH_IMM), SlotBits(Haydn::SLOT_P30));
+            SlotBits(Haydn::SLOT_MASK_ANY));
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_SW_WITH_IMM), StoreAny);
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::D_SDW_WITH_IMM), StoreAny);
 
-  // MAC dual-issue S1|S2.
+  // MAC0 at P20/P30/P31 and MAC1 at P21/P32 -- between them, everywhere.
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::X2MULA32),
-            SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32));
+            SlotBits(Haydn::SLOT_MASK_ANY));
 }
 
 TEST(HaydnMCFormatsTest, SparseAltsMatchLegalBitsExhaustive) {
@@ -233,20 +264,17 @@ TEST(HaydnMCFormatsTest, SparseAltsMatchLegalBitsExhaustive) {
       continue;
     }
     ASSERT_NE(Alts, nullptr) << "opcode " << Opcode;
-    ASSERT_EQ(Alts->size(), 3u) << "opcode " << Opcode;
-    for (unsigned Slot = 0; Slot < 3; ++Slot) {
-      bool LegalHere = (Legal & (SlotBits(1) << Slot)) != 0;
-      bool HasAlt = ((*Alts)[Slot] != 0);
-      EXPECT_EQ(LegalHere, HasAlt)
-          << "opcode " << Opcode << " slot " << Slot
-          << " legal=" << LegalHere << " alt=" << HasAlt;
-      if (HasAlt) {
-        EXPECT_NE((*Alts)[Slot], Opcode)
-            << "member must be a distinct private encode opcode";
-        EXPECT_EQ(Fmts.getSlotKind((*Alts)[Slot]),
-                  MCSlotKind(static_cast<int>(Slot)))
-            << "opcode " << Opcode << " slot " << Slot;
-      }
+    // Every legal slot is claimed by at least one member, and every member
+    // claims a legal slot. Stated as a set equality because the vector's
+    // positions carry no meaning.
+    EXPECT_EQ(Legal, slotsOfMembers(Fmts, Alts)) << "opcode " << Opcode;
+    for (unsigned M : liveMembers(Alts)) {
+      EXPECT_NE(M, Opcode)
+          << "member must be a distinct private encode opcode";
+      MCSlotKind K = Fmts.getSlotKind(M);
+      EXPECT_NE(K, MCSlotKind()) << "opcode " << Opcode << " member " << M;
+      EXPECT_NE(Legal & (SlotBits(1) << static_cast<unsigned>(K)), 0u)
+          << "opcode " << Opcode << " member " << M;
     }
   }
 }
@@ -255,14 +283,15 @@ TEST(HaydnMCFormatsTest, SingleSlotFamiliesNeverClaimAllThree) {
   // Guards against accidental sparse-alt rows that would let ST* steal S1/S2
   // and starve ALU/MAC co-issue (pack/IPC regression class).
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_SW_WITH_IMM) &
-                SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32),
-            0u);
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::D_SDW_WITH_IMM) &
-                SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32),
-            0u);
-  // ALU64 must never claim S0.
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD64) & Haydn::SLOT_P30, 0u);
+  // Stores reach only the LOADSTORE0 positions. The constraint is the UNIT --
+  // there is one store unit and LOAD1 cannot store -- which is why P21/P31/P32
+  // stay closed to them however the entry layout is re-delivered.
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_SW_WITH_IMM), StoreAny);
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::D_SDW_WITH_IMM), StoreAny);
+
+  // ADD64 claiming P30 is no longer a regression, it is the point: format E
+  // gives the 64-bit ALU ops the same placements as the 32-bit ones.
+  EXPECT_NE(Fmts.getLegalSlots(Haydn::ADD64) & Haydn::SLOT_P30, 0u);
 }
 
 // BREV logicals have sparse size-3 alts (LS *_S* members) so unconditional
@@ -278,21 +307,16 @@ TEST(HaydnMCFormatsTest, BrevLogicalsHaveSparseAltsForSetDesc) {
     const std::vector<unsigned> *Alts =
         Fmts.getAlternateInstsOpcode(Opcode);
     ASSERT_NE(Alts, nullptr) << "opcode " << Opcode;
-    ASSERT_EQ(Alts->size(), 3u) << "opcode " << Opcode;
-    unsigned NonZero = 0;
-    for (unsigned Slot = 0; Slot < 3; ++Slot) {
-      if ((*Alts)[Slot] == 0)
-        continue;
-      ++NonZero;
-      EXPECT_NE((*Alts)[Slot], Opcode);
-      // Member has fixed getSlotKind == field index (AIE getSlotKind peer).
-      EXPECT_EQ(Fmts.getSlotKind((*Alts)[Slot]), MCSlotKind(static_cast<int>(Slot)))
-          << "opcode " << Opcode << " slot " << Slot;
-      // Legal bit tracks sparse hole.
-      EXPECT_NE(Fmts.getLegalSlots(Opcode) & (SlotBits(1) << Slot), 0u)
-          << "opcode " << Opcode << " slot " << Slot;
+    std::vector<unsigned> Members = liveMembers(Alts);
+    EXPECT_FALSE(Members.empty()) << "opcode " << Opcode;
+    for (unsigned M : Members) {
+      EXPECT_NE(M, Opcode) << "opcode " << Opcode;
+      // The member carries its own slot; the position it sits at does not.
+      EXPECT_NE(Fmts.getSlotKind(M), MCSlotKind())
+          << "opcode " << Opcode << " member " << M;
     }
-    EXPECT_GE(NonZero, 1u) << "opcode " << Opcode;
+    EXPECT_EQ(Fmts.getLegalSlots(Opcode), slotsOfMembers(Fmts, Alts))
+        << "opcode " << Opcode;
   }
 }
 
@@ -302,30 +326,44 @@ TEST(HaydnMCFormatsTest, PacketFormatCoversEveryOccupiedSubset) {
   // stall accounting at higher layers.
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const PacketFormats &Packets = Fmts.getPacketFormats();
-  for (SlotBits Combo = 0; Combo <= Haydn::SLOT_SET_E3; ++Combo) {
-    EXPECT_TRUE(Fmts.isFormatAvailable(Combo)) << "combo=" << Combo;
-    if (Combo == 0)
+  // An occupancy is available iff it fits inside ONE composite. Bundle128 had
+  // a single row covering everything, so every subset was available and the
+  // loop could not fail; format E's rows are mutually exclusive, so a mask
+  // mixing a 2-entry and a 3-entry slot -- P20|P30, say -- is not a bundle
+  // anyone can build and must come back unavailable.
+  for (SlotBits Combo = 0; Combo <= Haydn::SLOT_MASK_ANY; ++Combo) {
+    const bool FitsE2 = (Combo & ~SlotBits(Haydn::SLOT_SET_E2)) == 0;
+    const bool FitsE3 = (Combo & ~SlotBits(Haydn::SLOT_SET_E3)) == 0;
+    EXPECT_EQ(Fmts.isFormatAvailable(Combo), FitsE2 || FitsE3)
+        << "combo=" << Combo;
+    if (Combo == 0 || !(FitsE2 || FitsE3))
       continue;
-    const VLIWFormat *F = Packets.getFormat(Combo);
-    // getFormat may return the full covering format even for subsets.
-    if (F)
+    if (const VLIWFormat *F = Packets.getFormat(Combo))
       EXPECT_TRUE(F->covers(Combo)) << "combo=" << Combo;
   }
 }
 
-TEST(HaydnMCFormatsTest, SlotInfoSelfOnlyConflictUnderBundle128) {
-  // Conflict closure is self-only → any two distinct slots co-issue.
-  // When multi-format lands, this pin must tighten (CompatibleFormatMask).
+TEST(HaydnMCFormatsTest, ConflictClosureMakesTheCompositesExclusive) {
+  // Bundle128 covered all three slots with ONE packet format, so every slot
+  // co-emitted with every other and the conflict closure degenerated to
+  // self-only. Format E has two composites and they are mutually exclusive, so
+  // each slot now conflicts with itself AND with every slot of the other
+  // composite. This is what makes "which entry count" a lookup rather than a
+  // decision (5.2).
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
-  const MCSlotKind Kinds[] = {MCSlotKind::Haydn_SLOT_P30,
-                              MCSlotKind::Haydn_SLOT_P31,
-                              MCSlotKind::Haydn_SLOT_P32};
-  for (unsigned I = 0; I < 3; ++I) {
-    const MCSlotInfo *SI = Fmts.getSlotInfo(Kinds[I]);
+  struct Row { MCSlotKind Kind; SlotBits Self; SlotBits Other; };
+  const Row Rows[] = {
+      {MCSlotKind::Haydn_SLOT_P20, Haydn::SLOT_P20, Haydn::SLOT_SET_E3},
+      {MCSlotKind::Haydn_SLOT_P21, Haydn::SLOT_P21, Haydn::SLOT_SET_E3},
+      {MCSlotKind::Haydn_SLOT_P30, Haydn::SLOT_P30, Haydn::SLOT_SET_E2},
+      {MCSlotKind::Haydn_SLOT_P31, Haydn::SLOT_P31, Haydn::SLOT_SET_E2},
+      {MCSlotKind::Haydn_SLOT_P32, Haydn::SLOT_P32, Haydn::SLOT_SET_E2},
+  };
+  for (const Row &R : Rows) {
+    const MCSlotInfo *SI = Fmts.getSlotInfo(R.Kind);
     ASSERT_NE(SI, nullptr);
-    SlotBits Self = SlotBits(1) << I;
-    EXPECT_EQ(SI->getSlotSet(), Self);
-    EXPECT_EQ(SI->getConflictSet(), Self);
+    EXPECT_EQ(SI->getSlotSet(), R.Self);
+    EXPECT_EQ(SI->getConflictSet(), SlotBits(R.Self | R.Other));
   }
 }
 
@@ -345,29 +383,31 @@ TEST(HaydnMCFormatsTest, LockedDspOpsHaveAltSlots) {
       Fmts.getAlternateInstsOpcode(Haydn::SIN_COS);
   ASSERT_NE(AAlts, nullptr);
   ASSERT_NE(SAlts, nullptr);
-  ASSERT_EQ(AAlts->size(), 3u);
-  ASSERT_EQ(SAlts->size(), 3u);
-  for (unsigned Slot = 0; Slot < 3; ++Slot) {
-    bool LegalA =
-        (Fmts.getLegalSlots(Haydn::ARCTAN) & (SlotBits(1) << Slot)) != 0;
-    EXPECT_EQ(LegalA, (*AAlts)[Slot] != 0u);
-    bool LegalS =
-        (Fmts.getLegalSlots(Haydn::SIN_COS) & (SlotBits(1) << Slot)) != 0;
-    EXPECT_EQ(LegalS, (*SAlts)[Slot] != 0u);
-  }
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ARCTAN), slotsOfMembers(Fmts, AAlts));
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::SIN_COS), slotsOfMembers(Fmts, SAlts));
+
+  // Both are ALU2/ALU1-only, and ALU2 never appears in the 2-entry form, so
+  // they have NO 2-entry placement. This is the concrete case behind 5.2's
+  // "give a solitary instruction no slot hint": hinting entry 0 of a 2-entry
+  // bundle would have had nowhere to put them.
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ARCTAN), SlotBits(Haydn::SLOT_SET_E3));
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::SIN_COS), SlotBits(Haydn::SLOT_SET_E3));
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ARCTAN) & Haydn::SLOT_SET_E2, 0u);
 }
 
-TEST(HaydnMCFormatsTest, SetHwloopLegalOnS0) {
+TEST(HaydnMCFormatsTest, SetHwloopFitsOnlyTheWideEntry) {
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
-  // SET_HWLOOP is S0 setup (spec); sparse alt supplies S0 member for setDesc.
-  EXPECT_NE(Fmts.getLegalSlots(Haydn::SET_HWLOOP) & Haydn::SLOT_P30, 0u);
+  // SET_HWLOOP has exactly ONE placement, P20, and the reason is width rather
+  // than units: it needs 35 bits of operands, which only the 45-bit entry 0 of
+  // the 2-entry form has room for (5.1). So a hardware-loop setup forces its
+  // bundle to be BUNDLE_E2.
   const std::vector<unsigned> *Alts =
       Fmts.getAlternateInstsOpcode(Haydn::SET_HWLOOP);
   ASSERT_NE(Alts, nullptr);
-  ASSERT_EQ(Alts->size(), 3u);
-  EXPECT_NE((*Alts)[0], 0u);
-  EXPECT_EQ(Fmts.getSlotKind((*Alts)[0]),
-            MCSlotKind(MCSlotKind::Haydn_SLOT_P30));
+  EXPECT_EQ(liveMembers(Alts).size(), 1u);
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::SET_HWLOOP), SlotBits(Haydn::SLOT_P20));
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::SET_HWLOOP), slotsOfMembers(Fmts, Alts));
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::SET_HWLOOP) & Haydn::SLOT_SET_E3, 0u);
 }
 
 TEST(HaydnMCFormatsTest, LegalSlotsSubsetOfSlotAll) {
@@ -378,16 +418,22 @@ TEST(HaydnMCFormatsTest, LegalSlotsSubsetOfSlotAll) {
       Haydn::ADDI32, Haydn::NOT32, Haydn::POPCOUNT32};
   for (unsigned Opc : Opcodes) {
     SlotBits L = Fmts.getLegalSlots(Opc);
-    EXPECT_EQ(L & ~SlotBits(Haydn::SLOT_SET_E3), 0u) << "opc=" << Opc;
+    // There is deliberately no SLOT_ALL: a full bundle is E2's mask or E3's
+    // depending on the composite. SLOT_MASK_ANY is a range check, not an
+    // occupancy, and that is all this test can mean now.
+    EXPECT_EQ(L & ~SlotBits(Haydn::SLOT_MASK_ANY), 0u) << "opc=" << Opc;
+    EXPECT_NE(L, 0u) << "opc=" << Opc;
   }
 }
 
-TEST(HaydnMCFormatsTest, GetPacketFormatBySizeSixteenBytes) {
-  // Product table Size is EncodedBytes=16 for Bundle128.
+TEST(HaydnMCFormatsTest, GetPacketFormatBySizeIsTheParcel) {
+  // Both composites are the same size, so a size lookup cannot distinguish
+  // them -- the SlotSet does. That equality is what lets one default row
+  // survive at all (5.2).
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const PacketFormats &P = Fmts.getPacketFormats();
-  const VLIWFormat *BySize =
-      P.getFormatBySize(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32, 16);
+  const VLIWFormat *BySize = P.getFormatBySize(
+      Haydn::SLOT_SET_E3, llvm::haydn::bundle::ProductEncodedBytesValue);
   ASSERT_NE(BySize, nullptr);
   EXPECT_EQ(BySize->getSize(), llvm::haydn::bundle::ProductEncodedBytesValue);
   EXPECT_STREQ(BySize->Name, "BUNDLE_E3");
@@ -400,19 +446,23 @@ TEST(HaydnMCFormatsTest, SparseAltsDistinctPerSlotWhenLegal) {
   const std::vector<unsigned> *Alts =
       Fmts.getAlternateInstsOpcode(Haydn::ADD32);
   ASSERT_NE(Alts, nullptr);
-  ASSERT_EQ(Alts->size(), 3u);
-  unsigned V0 = (*Alts)[0];
-  unsigned V1 = (*Alts)[1];
-  unsigned V2 = (*Alts)[2];
-  ASSERT_NE(V0, 0u);
-  ASSERT_NE(V1, 0u);
-  ASSERT_NE(V2, 0u);
-  EXPECT_NE(V0, V1);
-  EXPECT_NE(V1, V2);
-  EXPECT_NE(V0, V2);
-  EXPECT_EQ(Fmts.getSlotKind(V0), MCSlotKind(MCSlotKind::Haydn_SLOT_P30));
-  EXPECT_EQ(Fmts.getSlotKind(V1), MCSlotKind(MCSlotKind::Haydn_SLOT_P31));
-  EXPECT_EQ(Fmts.getSlotKind(V2), MCSlotKind(MCSlotKind::Haydn_SLOT_P32));
+  // Members are distinct from each other and from the logical, but they are
+  // NOT one per slot: ADD32 has two members at each 3-entry position, one per
+  // ALU. Distinctness is the property; a bijection with slots is not.
+  std::vector<unsigned> Members = liveMembers(Alts);
+  EXPECT_EQ(Members.size(), 7u);
+  std::vector<unsigned> Unique = Members;
+  llvm::sort(Unique);
+  Unique.erase(std::unique(Unique.begin(), Unique.end()), Unique.end());
+  EXPECT_EQ(Unique.size(), Members.size()) << "members must be distinct";
+  for (unsigned M : Members) {
+    EXPECT_NE(M, Haydn::ADD32);
+    EXPECT_NE(Fmts.getSlotKind(M), MCSlotKind());
+  }
+  // Two members sharing one slot is the normal case, and is exactly why the
+  // vector cannot be indexed by slot.
+  EXPECT_EQ(Fmts.getSlotKind(Haydn::ADD32_P31_ALU0),
+            Fmts.getSlotKind(Haydn::ADD32_P31_ALU1));
 }
 
 // stripHaydnMemberSuffix is the one place that knows how a placed member is

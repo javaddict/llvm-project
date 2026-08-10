@@ -103,7 +103,9 @@ TEST(HaydnBundlePlanTest, HwloopBytesMatchesPlanAuthority) {
             FromID->Value);
   EXPECT_EQ(haydn::hwloop::MinSetupBytes,
             productBundlesToBytes(haydn::hwloop::MinSetupBundles));
-  EXPECT_EQ(haydn::hwloop::MinSetupBytes, 48);
+  // Three parcels of 12, not of 16. The setup DISTANCE is in cycles and did
+  // not move; only the byte multiplier did.
+  EXPECT_EQ(haydn::hwloop::MinSetupBytes, 36);
 }
 
 TEST(HaydnBundlePlanTest, EncodedBytesForProductFormat) {
@@ -118,12 +120,17 @@ TEST(HaydnBundlePlanTest, EncodedBytesForProductFormat) {
 // (AIEMachineAlignment.cpp:287+ sums Format->getSize(); Haydn uses
 // ProductFormatDesc.Bytes for product-only live table).
 TEST(HaydnBundlePlanTest, CeilProductParcelsFromEncodedBytes) {
+  // Parcel boundaries are at multiples of 12 now, so the ceilings step at
+  // different byte counts. Expressed against the constant where the point is
+  // the ceiling, and with literals where the point is the step positions.
   EXPECT_EQ(ceilProductParcels(0), 0u);
   EXPECT_EQ(ceilProductParcels(1), 1u);
-  EXPECT_EQ(ceilProductParcels(16), 1u);
-  EXPECT_EQ(ceilProductParcels(17), 2u);
-  EXPECT_EQ(ceilProductParcels(32), 2u);
-  EXPECT_EQ(ceilProductParcels(33), 3u);
+  EXPECT_EQ(ceilProductParcels(ProductEncodedBytesValue), 1u);
+  EXPECT_EQ(ceilProductParcels(ProductEncodedBytesValue + 1), 2u);
+  EXPECT_EQ(ceilProductParcels(12), 1u);
+  EXPECT_EQ(ceilProductParcels(13), 2u);
+  EXPECT_EQ(ceilProductParcels(24), 2u);
+  EXPECT_EQ(ceilProductParcels(25), 3u);
   // Multi-parcel pseudo sizing (LOADI32 worst = 2 × productParcelBytes).
   EXPECT_EQ(ceilProductParcels(2u * productParcelBytes().Value), 2u);
   // N-format-ready: synthetic compact unit (not product emit).
@@ -131,8 +138,8 @@ TEST(HaydnBundlePlanTest, CeilProductParcelsFromEncodedBytes) {
   EXPECT_EQ(ceilParcelsForBytes(15, EncodedBytes{8}), 2u);
   EXPECT_EQ(ceilParcelsForBytes(8, EncodedBytes{8}), 1u);
   EXPECT_EQ(productBundlesToBytes(0), 0);
-  EXPECT_EQ(productBundlesToBytes(1), 16);
-  EXPECT_EQ(productBundlesToBytes(3), 48);
+  EXPECT_EQ(productBundlesToBytes(1), 12);
+  EXPECT_EQ(productBundlesToBytes(3), 36);
   EXPECT_EQ(productBundlesToBytes(haydn::hwloop::MinSetupBundles),
             haydn::hwloop::MinSetupBytes);
 }
@@ -141,7 +148,11 @@ TEST(HaydnBundlePlanTest, ProductParcelBytesIsFormatDescAuthority) {
   // getInstSizeInBytes bare-real unit must be ProductFormatDesc.Bytes.
   EXPECT_EQ(productParcelBytes(), ProductFormatDesc.Bytes);
   EXPECT_EQ(productParcelBytes(), ProductEncodedBytes);
-  EXPECT_EQ(ProductFormatDesc.FID, FormatID::BundleE3);
+  // The default row is the 2-entry composite. It is a DEFAULT for callers
+  // with no occupancy to derive from, not "the sole live format" -- which
+  // is what it meant when there was only one row.
+  EXPECT_EQ(ProductFormatDesc.FID, FormatID::BundleE2);
+  EXPECT_EQ(ProductFormatDesc.FID, ProductFormatID);
 }
 
 TEST(HaydnBundlePlanTest, MakeBundle128PlanIsProductLegal) {
@@ -197,16 +208,25 @@ TEST(HaydnBundlePlanTest, GeneratedSlotInfoSizeIsEncodedBits) {
   EXPECT_EQ(slotInfoSizeAsBits(S0->getSize()), P30EncodedBits);
   EXPECT_EQ(slotInfoSizeAsBits(S1->getSize()), P31EncodedBits);
   EXPECT_EQ(slotInfoSizeAsBits(S2->getSize()), P32EncodedBits);
+  // The three windows do NOT sum to the bundle: format E leaves the header and
+  // one spare bit outside them. Bundle128's 48/40/40 did tile the word, which
+  // is why this could once be written as a bare sum.
   EXPECT_EQ(S0->getSize() + S1->getSize() + S2->getSize(),
-            ProductEncodedBitsValue);
+            ProductEncodedBitsValue - BundleEHeaderBits - BundleE3UnusedBits);
 }
 
 TEST(HaydnBundlePlanTest, PlanFromPacketFormatsAllSubsets) {
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const PacketFormats &Packets = Fmts.getPacketFormats();
-  for (SlotBits Combo = 0; Combo <= Haydn::SLOT_SET_E3; ++Combo) {
+  // Only an occupancy that fits inside ONE composite has a plan; the two are
+  // mutually exclusive, so a mask mixing them is not a bundle.
+  for (SlotBits Combo = 0; Combo <= Haydn::SLOT_MASK_ANY; ++Combo) {
+    const bool Fits = (Combo & ~SlotBits(Haydn::SLOT_SET_E2)) == 0 ||
+                      (Combo & ~SlotBits(Haydn::SLOT_SET_E3)) == 0;
     auto Plan = planFromPacketFormats(Packets, Combo);
-    ASSERT_TRUE(Plan.has_value()) << "combo=" << Combo;
+    ASSERT_EQ(Plan.has_value(), Fits) << "combo=" << Combo;
+    if (!Fits)
+      continue;
     EXPECT_TRUE(Plan->isProductLegal()) << "combo=" << Combo;
     EXPECT_EQ(Plan->OccupiedSlots, Combo);
     EXPECT_EQ(Plan->Bytes.Value, ProductEncodedBytesValue);
@@ -219,7 +239,7 @@ TEST(HaydnBundlePlanTest, CycleCountIsNotBytes) {
   EncodedBytes SetupBytes{
       Setup.Value * ProductEncodedBytesValue};
   EXPECT_EQ(Setup.Value, 3u);
-  EXPECT_EQ(SetupBytes.Value, 48u);
+  EXPECT_EQ(SetupBytes.Value, 36u);
   EXPECT_NE(Setup.Value, SetupBytes.Value);
 }
 
@@ -297,24 +317,33 @@ TEST(HaydnBundlePlanTest, Off1SafetyMarginIsThreeParcels) {
 // 278-312; AIEBundle.h:150-156 getFormatOrNull). Haydn stores FormatID as an
 // imm so multi-format tables need no MF side map. Product Full = imm 0.
 
-TEST(HaydnBundlePlanTest, FormatIDImmProductIsZero) {
-  EXPECT_EQ(formatIDToImm(FormatID::BundleE3), 0u);
+TEST(HaydnBundlePlanTest, FormatIDImmIsTheCompositeIndex) {
+  // Two imms are live now, not one. The BUNDLE root's imm is what tells a
+  // later pass which composite the packer chose, so 0 stopped being "the
+  // format" and became "the 2-entry one".
+  EXPECT_EQ(formatIDToImm(FormatID::BundleE2), 0u);
+  EXPECT_EQ(formatIDToImm(FormatID::BundleE3), 1u);
   EXPECT_EQ(formatIDToImm(ProductFormatID), 0u);
   auto Decoded = formatIDFromImm(0u);
   ASSERT_TRUE(Decoded.has_value());
-  EXPECT_EQ(*Decoded, FormatID::BundleE3);
+  EXPECT_EQ(*Decoded, FormatID::BundleE2);
+  auto Decoded3 = formatIDFromImm(1u);
+  ASSERT_TRUE(Decoded3.has_value());
+  EXPECT_EQ(*Decoded3, FormatID::BundleE3);
   EXPECT_TRUE(isKnownFormatIDImm(0u));
+  EXPECT_TRUE(isKnownFormatIDImm(1u));
 }
 
 TEST(HaydnBundlePlanTest, FormatIDImmUnknownRejected) {
-  // N-format-ready: unknown encodings must not silently become Full.
-  EXPECT_FALSE(formatIDFromImm(1u).has_value());
+  // Still fail-closed, just one imm further out: an unknown encoding must not
+  // silently become a composite.
+  EXPECT_FALSE(formatIDFromImm(2u).has_value());
   EXPECT_FALSE(formatIDFromImm(0xffffffffu).has_value());
-  EXPECT_FALSE(isKnownFormatIDImm(1u));
+  EXPECT_FALSE(isKnownFormatIDImm(2u));
 }
 
 TEST(HaydnBundlePlanTest, FormatIDImmRoundTrip) {
-  for (FormatID ID : {FormatID::BundleE3}) {
+  for (FormatID ID : {FormatID::BundleE2, FormatID::BundleE3}) {
     unsigned Imm = formatIDToImm(ID);
     auto Back = formatIDFromImm(Imm);
     ASSERT_TRUE(Back.has_value());
@@ -334,7 +363,7 @@ TEST(HaydnBundlePlanTest, FormatIDImmOperandShape) {
   EXPECT_FALSE(MO.isReg());
   auto ID = formatIDFromImm(static_cast<unsigned>(MO.getImm()));
   ASSERT_TRUE(ID.has_value());
-  EXPECT_EQ(*ID, FormatID::BundleE3);
+  EXPECT_EQ(*ID, ProductFormatID);
 }
 
 //===----------------------------------------------------------------------===//
@@ -367,18 +396,27 @@ TEST(HaydnBundlePlanTest, SingletonBundleFormatIDIsProductFull) {
 // FormatData[] — unit/solver infra only, not product emit.
 
 TEST(HaydnBundlePlanTest, ProductFormatDescRow) {
-  EXPECT_EQ(ProductFormatDesc.FID, FormatID::BundleE3);
+  // The default row is the 2-entry composite. It is a DEFAULT for callers
+  // with no occupancy to derive from, not "the sole live format" -- which
+  // is what it meant when there was only one row.
+  EXPECT_EQ(ProductFormatDesc.FID, FormatID::BundleE2);
+  EXPECT_EQ(ProductFormatDesc.FID, ProductFormatID);
   EXPECT_EQ(ProductFormatDesc.Priority, 0u);
   EXPECT_EQ(ProductFormatDesc.Bytes, ProductEncodedBytes);
-  EXPECT_EQ(ProductFormatDesc.SlotSet,
-            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
+  // The default row is the 2-entry composite, so it covers P20/P21 and
+  // emphatically NOT the 3-entry slots. Anything that needs an E3 occupancy
+  // has to derive its row from that occupancy rather than take this one --
+  // which is the whole of makeProductPlan's job.
+  EXPECT_EQ(ProductFormatDesc.SlotSet, SlotBits(Haydn::SLOT_SET_E2));
   EXPECT_TRUE(ProductFormatDesc.isProduct());
   EXPECT_TRUE(ProductFormatDesc.covers(0));
-  EXPECT_TRUE(ProductFormatDesc.covers(Haydn::SLOT_P30));
-  EXPECT_TRUE(ProductFormatDesc.covers(Haydn::SLOT_SET_E3));
+  EXPECT_TRUE(ProductFormatDesc.covers(Haydn::SLOT_P20));
+  EXPECT_TRUE(ProductFormatDesc.covers(Haydn::SLOT_SET_E2));
+  EXPECT_FALSE(ProductFormatDesc.covers(Haydn::SLOT_P30));
 
   ArrayRef<FormatDesc> Product = productFormatTable();
-  ASSERT_EQ(Product.size(), 1u);
+  // Two rows now, and their equal size is what keeps a single default sane.
+  ASSERT_EQ(Product.size(), 2u);
   const FormatDesc *Sel =
       selectFormatByPriority(Product, Haydn::SLOT_P30 | Haydn::SLOT_P32);
   ASSERT_NE(Sel, nullptr);
@@ -389,7 +427,8 @@ TEST(HaydnBundlePlanTest, ProductFormatDescRow) {
 TEST(HaydnBundlePlanTest, SelectFormatByPriority_SyntheticTwoRow) {
   // Unit-only second format (not product encode). Narrow prefers lower Priority
   // when it covers; Full is wide fallback with higher Priority number.
-  constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
+  // Past both live composites: FormatID 1 is BundleE3, not a spare value.
+  constexpr FormatID SynthNarrow = static_cast<FormatID>(2);
   const FormatDesc Table[] = {
       // Priority 0: 8 B, SLOT_P30|SLOT_P31 only (synthetic compact).
       {SynthNarrow, /*Priority=*/0, EncodedBytes{8},
@@ -431,7 +470,7 @@ TEST(HaydnBundlePlanTest, SelectFormatByPriority_SyntheticTwoRow) {
 
 TEST(HaydnBundlePlanTest, SelectFormatByPriority_EqualPriorityStableOrder) {
   // Equal Priority: earlier table index wins (stable AIE table-order tie-break).
-  constexpr FormatID SynthA = static_cast<FormatID>(1);
+  constexpr FormatID SynthA = static_cast<FormatID>(2);
   constexpr FormatID SynthB = static_cast<FormatID>(2);
   const FormatDesc Table[] = {
       {SynthA, /*Priority=*/5, EncodedBytes{8},
@@ -462,11 +501,16 @@ TEST(HaydnBundlePlanTest, PlanFromFormatTable_ProductAndSynthetic) {
   EXPECT_EQ(Prod->FID, FormatID::BundleE3);
   EXPECT_EQ(Prod->Bytes.Value, ProductEncodedBytesValue);
 
-  constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
+  // Past both live composites: FormatID 1 is BundleE3, not a spare value.
+  constexpr FormatID SynthNarrow = static_cast<FormatID>(2);
+  // The wider row must be the 3-entry composite: ProductFormatDesc is the
+  // 2-entry DEFAULT and covers P20|P21, so it cannot hold a P32 occupancy.
+  const FormatDesc E3Row{FormatID::BundleE3, 1, ProductEncodedBytes,
+                         static_cast<SlotBits>(Haydn::SLOT_SET_E3)};
   const FormatDesc Multi[] = {
       {SynthNarrow, 0, EncodedBytes{8},
        static_cast<SlotBits>(Haydn::SLOT_P30 | Haydn::SLOT_P31)},
-      ProductFormatDesc,
+      E3Row,
   };
   auto NarrowPlan = planFromFormatTable(Multi, Haydn::SLOT_P30, {Haydn::ADD32});
   ASSERT_TRUE(NarrowPlan.has_value());
@@ -476,15 +520,22 @@ TEST(HaydnBundlePlanTest, PlanFromFormatTable_ProductAndSynthetic) {
       << "synthetic format must not pass product legality";
   EXPECT_EQ(NarrowPlan->memberCount(), 1u);
 
-  auto FullPlan = planFromFormatTable(Multi, Haydn::SLOT_P32);
+  // The synthetic narrow row covers P30|P31 only, so a P32 occupancy has to
+  // fall through to the 3-entry composite. Ask for a slot the narrow row
+  // cannot hold and the table picks the wider one -- which is the whole point
+  // of scanning rather than stamping.
+  auto FullPlan = planFromFormatTable(Multi, Haydn::SLOT_P32, {Haydn::ADD32});
   ASSERT_TRUE(FullPlan.has_value());
   EXPECT_EQ(FullPlan->FID, FormatID::BundleE3);
   EXPECT_TRUE(FullPlan->isProductLegal());
 }
 
 TEST(HaydnBundlePlanTest, FormatIDBitAndProductMask) {
-  EXPECT_EQ(formatIDBit(FormatID::BundleE3), 1ull);
-  EXPECT_EQ(ProductFormatMask, 1ull);
+  // Bit 1, because BundleE2 is bit 0. One row meant one bit.
+  EXPECT_EQ(formatIDBit(FormatID::BundleE2), 1ull);
+  EXPECT_EQ(formatIDBit(FormatID::BundleE3), 2ull);
+  // Both composites are product rows, so the mask is both bits.
+  EXPECT_EQ(ProductFormatMask, 3ull);
   EXPECT_EQ(formatIDBit(static_cast<FormatID>(1)), 2ull);
   EXPECT_EQ(formatIDBit(static_cast<FormatID>(2)), 4ull);
 }

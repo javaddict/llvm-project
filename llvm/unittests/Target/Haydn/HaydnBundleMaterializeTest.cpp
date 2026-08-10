@@ -70,7 +70,17 @@ static void expectValidSplit(ArrayRef<unsigned> Ops, HaydnMCFormats &Fmts,
     EXPECT_FALSE(C.Opcodes.empty()) << "empty sub-cycle " << Ci;
     EXPECT_LE(C.Opcodes.size(), 3u) << "overfull sub-cycle " << Ci;
     EXPECT_TRUE(C.Plan.isProductLegal()) << "illegal plan sub-cycle " << Ci;
-    EXPECT_EQ(C.Plan.FID, FormatID::BundleE3);
+    // The FID follows the occupancy: a cycle occupying P2x is the 2-entry
+    // composite and one occupying P3x is the 3-entry one. It is no longer a
+    // constant, because there is no longer only one row.
+    EXPECT_TRUE(isProductFormat(C.Plan.FID)) << "sub-cycle " << Ci;
+    if (C.Plan.OccupiedSlots != 0) {
+      const bool E2 =
+          (C.Plan.OccupiedSlots & ~SlotBits(Haydn::SLOT_SET_E2)) == 0;
+      EXPECT_EQ(C.Plan.FID,
+                E2 ? FormatID::BundleE2 : FormatID::BundleE3)
+          << "sub-cycle " << Ci << " occ=" << C.Plan.OccupiedSlots;
+    }
     EXPECT_EQ(C.Plan.Bytes.Value, ProductEncodedBytesValue);
     EXPECT_EQ(C.Plan.Cycles.Value, 1u);
     EXPECT_EQ(C.Plan.memberCount(), C.Opcodes.size());
@@ -206,10 +216,13 @@ TEST(HaydnBundleMaterializeTest, DualAlu64OneCycle) {
   expectValidSplit(Ops, Fmts, 1, 1);
 }
 
-TEST(HaydnBundleMaterializeTest, TripleAlu64SplitsThird) {
+TEST(HaydnBundleMaterializeTest, TripleAlu64FitsOneCycle) {
+  // Bundle128 had two ALU64 slots, so the third op forced a second cycle.
+  // Format E has three ALUs and these logicals have a member on each, so all
+  // three issue together -- one cycle, not two.
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Ops[] = {Haydn::ADD64, Haydn::SLL64, Haydn::MAX64};
-  expectValidSplit(Ops, Fmts, 2, 2);
+  expectValidSplit(Ops, Fmts, 1, 1);
 }
 
 //===----------------------------------------------------------------------===//
@@ -224,13 +237,18 @@ TEST(HaydnBundleMaterializeTest, FourAluSplitToTwoCycles) {
 
 TEST(HaydnBundleMaterializeTest, SixAluSplitToTwoFullCycles) {
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
+  // ADDI32 is the odd one out and it costs a cycle: its imm20 only fits the
+  // wide 2-entry windows, so it has no 3-entry placement and cannot join a
+  // bundle the other five have already made 3-entry. Five ALU ops pack two
+  // deep and ADDI32 lands alone.
   unsigned Ops[] = {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32,
                     Haydn::SUB32, Haydn::NEG32, Haydn::ADDI32};
-  expectValidSplit(Ops, Fmts, 2, 2);
+  expectValidSplit(Ops, Fmts, 2, 3);
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
-  ASSERT_EQ(Cycles.size(), 2u);
+  ASSERT_EQ(Cycles.size(), 3u);
   EXPECT_EQ(Cycles[0].Opcodes.size(), 3u);
-  EXPECT_EQ(Cycles[1].Opcodes.size(), 3u);
+  EXPECT_EQ(Cycles[1].Opcodes.size(), 2u);
+  EXPECT_EQ(Cycles[2].Opcodes.size(), 1u) << "ADDI32 alone: no 3-entry form";
 }
 
 TEST(HaydnBundleMaterializeTest, SevenAluSplitToThreeCycles) {
@@ -365,9 +383,12 @@ TEST(HaydnBundleMaterializeTest, DualLoadPlanOccupancyIsS0S1) {
   unsigned Ops[] = {Haydn::S_LW_WITH_IMM, Haydn::S_LW_WITH_IMM};
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
   ASSERT_EQ(Cycles.size(), 1u);
-  // Bundle prefers high slots first for multi-slot, but LD only S0|S1 → both.
+  // P30|P32, not P30|P31. Both loads want a load unit and there are two;
+  // P31's load member is LOAD1, which the first load already holds, so the
+  // second moves to P32. Packing on slots alone takes P31 and names LOAD1
+  // twice -- the bundle the hardware cannot issue (5.7).
   EXPECT_EQ(Cycles[0].Plan.OccupiedSlots,
-            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P32));
 }
 
 TEST(HaydnBundleMaterializeTest, IdempotentResplitOfSubcycles) {
