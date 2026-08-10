@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `6240579f9013`, **local only — not pushed** | **objects emit: 424/430 CodeGen. lit 270/589, `HaydnTests` 142/253, lld 12/24.** Both § 5.2 generator gaps closed; § 5.11's generator half done, its logical half open. |
+| `llvm-project` | `haydn-formate-switch-mc` | `b6c960be45ee`, **local only — not pushed** | **objects emit: 424/430 CodeGen. lit 282/589, `HaydnTests` 142/253, lld 12/24.** Both § 5.2 generator gaps closed; § 5.11's generator half done and two of its four logical shapes. |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -1506,8 +1506,8 @@ about names. Two things forced that reading:
 ```sh
 python3 .../haydn_encoding.py --database ~/haydn \
     --emit operand-agreement --flags-from haydn-records.json
-#   operand agreement: 118 logicals, 625 member placements disagree
-#     arity 135 / 21   defs 21 / 3   kinds 6 / 3   ties 521 / 101
+#   operand agreement: 104 logicals, 527 member placements disagree
+#     arity 58 / 10   defs 0   kinds 6 / 3   ties 521 / 101
 ```
 
 The generator no longer contributes a single disagreement. The first three axes
@@ -1522,27 +1522,31 @@ defect rather than an encoding one.
 | `kinds` | counts and defs agree, but a position is a register on one side and an immediate on the other |
 | `ties` | the database says a register is read *and* written and the logical does not present it that way |
 
-**`defs` earned itself immediately.** It caught `SEQ64`/`SLE64`/`SLT64`, which
-have two operands on both sides — so every count-based check passed them — while
-the logical calls the first a destination and the hardware reads it as the
-second source. They were never in the old list of 27 at all.
+**`defs` earned itself immediately, and is now empty.** It caught
+`SEQ64`/`SLE64`/`SLT64`, which have two operands on both sides — so every
+count-based check passed them — while the logical called the first a
+destination and the hardware reads it as the second source. They were never in
+the old list of 27 at all. Fixed in `b6c960be45ee`.
 
-The `arity` 21, by shape:
+Two of the four shapes are done, in the same commit — **the generated encoding
+did not change by one byte**, because the members already had the right shape
+and it was the logicals that moved to meet them:
 
-* **6 SFR compares** — `X2SEQ32`, `X2SLE32`, `X2SLT32`, `X4SEQ16`, `X4SLE16`,
-  `X4SLT16`, 42 placements. The logical declares a `$rd` the hardware does not
-  have. **Note this is the opposite of what this section used to say**: they
-  were filed as "declares a source the database does not have", and dropping
-  `$rs2` would have made the count agree while leaving the roles wrong — the
-  state `SEQ64` is in. Drop `$rd`, keep both sources. Decided: the intrinsic
-  becomes void and the source break is accepted, as for the AR family in § 7.
-* **5 with an extra dead operand** — `ABS32`/`ABS32S` (whose own asm string is
-  `"abs32\t$rd, $rs1"`, so `$rs2` is provably dead), `MOVE32`, `CSRR` (§ 5.1),
-  `ZERO_DR` (a spurious immediate), 35 placements. `LUI`'s class: fix the
-  logical. All but `MOVE32` have zero C++ references.
-* **4 conditional moves** — `X2MOVF32`, `X2MOVT32`, `X4MOVF16`, `X4MOVT16`, 28
-  placements. `rtd` is read and written; the logical must declare the tie.
+* ~~**9 SFR compares**~~ — the six `X2`/`X4` plus the three scalars above. The
+  logical declared a `$rd` the hardware does not have. **Note this was the
+  opposite of what this section used to say**: they were filed as "declares a
+  source the database does not have", and dropping `$rs2` would have made the
+  count agree while leaving the roles wrong. Intrinsics and builtins are void
+  now; see § 7.
+* ~~**5 with an extra dead operand**~~ — `ABS32`, `ABS32S`, `MOVE32`, `CSRR`,
+  `ZERO_DR`. None was ever in an asm string, so no test could see one.
+
+The `arity` 10 that remain:
+
 * **6 that are database defects, not logical ones** — see below.
+* **4 conditional moves** — `X2MOVF32`, `X2MOVT32`, `X4MOVF16`, `X4MOVT16`, 28
+  placements. `rtd` is read and written and the logical declares no tie, so
+  they are really the `ties` shape and should be done with it, not alone.
 
 `kinds` is `D_SDW_CB_IMM`/`_REG` and `WBARWUA`: the logical orders its operands
 differently from the Syntax, so an immediate sits where a register was built.
@@ -2030,6 +2034,15 @@ already the tested carrier of the member→logical fold.
   derive the itinerary's unit set from the members instead of authoring it
   separately, and close § 7.1's `MCInstrInfo`-optional gap so pre-RA paths stop
   being slot-only.
+* **The SFR compares are void; the source break is accepted.** `X2SEQ32`,
+  `X2SLT32`, `X2SLE32`, `X4SEQ16`, `X4SLT16`, `X4SLE16`, `SEQ64`, `SLT64`,
+  `SLE64` write SFR and no register, so their intrinsics and builtins return
+  nothing and the three scalars take the second source they always had. Read
+  the result with `haydn_movesfr2gpr()`. The old return value was never a value
+  at all: GISel allocated a dead vreg for it, and every caller in `haydn_dsp.h`
+  already discarded it and read the flags back. Same call as the AR prototypes
+  below, and for a stronger reason — those changed shape, this one never had
+  the shape it advertised. Done in `b6c960be45ee`.
 * **The AR intrinsic prototypes change; the source break is accepted.** The
   re-delivered database dropped the second base register and the direction
   select and made the post-increment a fixed +8. `pldwwua` → `PLDWWUA_POST`
