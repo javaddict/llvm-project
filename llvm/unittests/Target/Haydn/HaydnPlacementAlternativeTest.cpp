@@ -21,6 +21,7 @@
 #include "HaydnBundlePlan.h"
 #include "HaydnPlacementAlternative.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
+#include "HaydnTestMCInstrInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 
 #include "gtest/gtest.h"
@@ -34,7 +35,7 @@ using namespace llvm::haydn::bundle;
 namespace {
 
 TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_ADD32_AllThreeSlots) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const std::vector<unsigned> *Alts =
       Fmts.getAlternateInstsOpcode(Haydn::ADD32);
   ASSERT_NE(Alts, nullptr);
@@ -61,7 +62,7 @@ TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_ADD32_AllThreeSlots)
 }
 
 TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_LD32_SparseS0S1) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const std::vector<unsigned> *Alts =
       Fmts.getAlternateInstsOpcode(Haydn::S_LW_WITH_IMM);
   ASSERT_NE(Alts, nullptr);
@@ -79,7 +80,7 @@ TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_LD32_SparseS0S1) {
 }
 
 TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_ADD64_SparseS1S2) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const std::vector<unsigned> *Alts =
       Fmts.getAlternateInstsOpcode(Haydn::ADD64);
   ASSERT_NE(Alts, nullptr);
@@ -99,7 +100,7 @@ TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_ADD64_SparseS1S2) {
 }
 
 TEST(HaydnPlacementAlternativeTest, GetAlternateInstsOpcode_ST32_SparseS0Only) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const std::vector<unsigned> *Alts =
       Fmts.getAlternateInstsOpcode(Haydn::S_SW_WITH_IMM);
   ASSERT_NE(Alts, nullptr);
@@ -116,7 +117,7 @@ TEST(HaydnPlacementAlternativeTest, FieldSlotsComeFromTheMemberNotTheIndex) {
   // indexed by slot; it is the invariant the switch breaks (plan § 5.2), so it
   // now asserts the replacement: each row's FieldSlots is the bit of the slot
   // its OWN member names.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD64, Alts));
   for (const PlacementAlternative &A : Alts)
@@ -134,7 +135,7 @@ TEST(HaydnPlacementAlternativeTest, FieldSlotsComeFromTheMemberNotTheIndex) {
 
 TEST(HaydnPlacementAlternativeTest, LegalSlotsEqualsOROfFieldSlots) {
   // Consistency: getLegalSlots(Opc) == OR FieldSlots from enumerate.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const unsigned Opcodes[] = {
       Haydn::ADD32, Haydn::SUB32,  Haydn::NOT32, Haydn::NEG32,
       Haydn::ADD64, Haydn::S_LW_WITH_IMM,   Haydn::S_SW_WITH_IMM,  Haydn::D_LDW_WITH_IMM,
@@ -170,7 +171,7 @@ TEST(HaydnPlacementAlternativeTest, LegalSlotsEqualsOROfFieldSlots) {
 }
 
 TEST(HaydnPlacementAlternativeTest, UnknownOpcodeReturnsNull) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   // PHI is not a Haydn multi-slot logical.
   EXPECT_EQ(Fmts.getAlternateInstsOpcode(/*Opcode=*/0), nullptr);
   EXPECT_FALSE(hasPlacementAlternatives(Fmts, 0));
@@ -184,7 +185,7 @@ TEST(HaydnPlacementAlternativeTest, CompatibleFormatMask_ProductFullOnly) {
   EXPECT_EQ(ProductFormatMask, 1ull << 0);
   EXPECT_EQ(formatIDBit(FormatID::BundleE3), ProductFormatMask);
 
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD32, Alts));
   ASSERT_FALSE(Alts.empty());

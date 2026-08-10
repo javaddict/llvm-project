@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "MCTargetDesc/HaydnBaseInfo.h"
+#include "HaydnTestMCInstrInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/STLExtras.h"
 
@@ -29,7 +30,7 @@ namespace {
 TEST(HaydnMCFormatsTest, GetLegalSlotsSpotChecks) {
   // getLegalSlots returns a bitmask (bit k = slot k in Haydn::SLOT convention:
   // SLOT_P30=1<<0, SLOT_P31=1<<1, SLOT_P32=1<<2). Derived from sparse alts.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
 
   // ALU32 unary family (NOT32/NEG32) packs into all three slots.
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::NOT32),
@@ -74,7 +75,7 @@ TEST(HaydnMCFormatsTest, GetLegalSlotsSpotChecks) {
 TEST(HaydnMCFormatsTest, GetLegalSlotsIsDerivedFromSparseAlts) {
   // getLegalSlots bit k iff getAlternateInstsOpcode[k] != 0.
   // Sparse size-3; members carry fixed getSlotKind (AIE post-setDesc).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const unsigned Opcodes[] = {
       Haydn::ADD32,    Haydn::SUB32,    Haydn::NOT32,     Haydn::NEG32,
       Haydn::ADD64,    Haydn::S_LW_WITH_IMM,     Haydn::S_SW_WITH_IMM,      Haydn::D_LDW_WITH_IMM,
@@ -123,7 +124,7 @@ TEST(HaydnMCFormatsTest, GetLegalSlotsIsDerivedFromSparseAlts) {
 //   3. isFormatAvailable is true for all subsets of {S0,S1,S2} (the Bundle128
 //      packet format covers them; behavior preserved vs the hand-authored LUT).
 TEST(HaydnMCFormatsTest, PacketFormatsAndConflictBitsFromGeneratedTable) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
 
   // (1) getPacketFormats returns a table that covers the full slot set.
   const PacketFormats &Packets = Fmts.getPacketFormats();
@@ -163,7 +164,7 @@ TEST(HaydnMCFormatsTest, PacketFormatsAndConflictBitsFromGeneratedTable) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnMCFormatsTest, LegalSlotFamiliesByFU) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
 
   // ALU32 binary / imm family: full 3-slot issue.
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD32),
@@ -199,7 +200,7 @@ TEST(HaydnMCFormatsTest, LegalSlotFamiliesByFU) {
 TEST(HaydnMCFormatsTest, SparseAltsMatchLegalBitsExhaustive) {
   // Broader opcode sample: every legal bit has a non-zero sparse alt;
   // illegal bits are 0. Members have fixed getSlotKind (alts-derived).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const unsigned Opcodes[] = {
       Haydn::ADD32,    Haydn::SUB32,    Haydn::XOR32,     Haydn::NOT32,
       Haydn::NEG32,    Haydn::ADDI32,   Haydn::ADD64,     Haydn::S_LW_WITH_IMM,
@@ -238,7 +239,7 @@ TEST(HaydnMCFormatsTest, SparseAltsMatchLegalBitsExhaustive) {
 TEST(HaydnMCFormatsTest, SingleSlotFamiliesNeverClaimAllThree) {
   // Guards against accidental sparse-alt rows that would let ST* steal S1/S2
   // and starve ALU/MAC co-issue (pack/IPC regression class).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_SW_WITH_IMM) &
                 SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32),
             0u);
@@ -253,7 +254,7 @@ TEST(HaydnMCFormatsTest, SingleSlotFamiliesNeverClaimAllThree) {
 // setDesc has a legal member per field. LD *_LD_S* are not
 // PlacementAlternatives of the logical (encode peers only).
 TEST(HaydnMCFormatsTest, BrevLogicalsHaveSparseAltsForSetDesc) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const unsigned Logicals[] = {
       Haydn::S_SW_BREV_IMM, Haydn::S_SW_BREV_REG, Haydn::D_SDW_BREV_IMM,
       Haydn::D_SDW_BREV_REG, Haydn::D_LDW_BREV_IMM, Haydn::D_LDW_BREV_REG,
@@ -284,7 +285,7 @@ TEST(HaydnMCFormatsTest, PacketFormatCoversEveryOccupiedSubset) {
   // Bundle128 product: every non-empty subset of {S0,S1,S2} has a covering
   // packet format (NOPs fill holes). Empty occupancy is also available for
   // stall accounting at higher layers.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const PacketFormats &Packets = Fmts.getPacketFormats();
   for (SlotBits Combo = 0; Combo <= Haydn::SLOT_SET_E3; ++Combo) {
     EXPECT_TRUE(Fmts.isFormatAvailable(Combo)) << "combo=" << Combo;
@@ -300,7 +301,7 @@ TEST(HaydnMCFormatsTest, PacketFormatCoversEveryOccupiedSubset) {
 TEST(HaydnMCFormatsTest, SlotInfoSelfOnlyConflictUnderBundle128) {
   // Conflict closure is self-only → any two distinct slots co-issue.
   // When multi-format lands, this pin must tighten (CompatibleFormatMask).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const MCSlotKind Kinds[] = {MCSlotKind::Haydn_SLOT_P30,
                               MCSlotKind::Haydn_SLOT_P31,
                               MCSlotKind::Haydn_SLOT_P32};
@@ -320,7 +321,7 @@ TEST(HaydnMCFormatsTest, SlotInfoSelfOnlyConflictUnderBundle128) {
 TEST(HaydnMCFormatsTest, LockedDspOpsHaveAltSlots) {
   // ARCTAN/SIN_COS are issue-alone at schedule time; alts still need ≥1
   // member so standalone Bundle128 emit works.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   EXPECT_NE(Fmts.getLegalSlots(Haydn::ARCTAN), 0u);
   EXPECT_NE(Fmts.getLegalSlots(Haydn::SIN_COS), 0u);
   const std::vector<unsigned> *AAlts =
@@ -342,7 +343,7 @@ TEST(HaydnMCFormatsTest, LockedDspOpsHaveAltSlots) {
 }
 
 TEST(HaydnMCFormatsTest, SetHwloopLegalOnS0) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   // SET_HWLOOP is S0 setup (spec); sparse alt supplies S0 member for setDesc.
   EXPECT_NE(Fmts.getLegalSlots(Haydn::SET_HWLOOP) & Haydn::SLOT_P30, 0u);
   const std::vector<unsigned> *Alts =
@@ -355,7 +356,7 @@ TEST(HaydnMCFormatsTest, SetHwloopLegalOnS0) {
 }
 
 TEST(HaydnMCFormatsTest, LegalSlotsSubsetOfSlotAll) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const unsigned Opcodes[] = {
       Haydn::ADD32, Haydn::ADD64, Haydn::S_LW_WITH_IMM, Haydn::S_SW_WITH_IMM, Haydn::D_LDW_WITH_IMM,
       Haydn::D_SDW_WITH_IMM,  Haydn::X2MULA32, Haydn::ARCTAN, Haydn::SIN_COS,
@@ -368,7 +369,7 @@ TEST(HaydnMCFormatsTest, LegalSlotsSubsetOfSlotAll) {
 
 TEST(HaydnMCFormatsTest, GetPacketFormatBySizeSixteenBytes) {
   // Product table Size is EncodedBytes=16 for Bundle128.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const PacketFormats &P = Fmts.getPacketFormats();
   const VLIWFormat *BySize =
       P.getFormatBySize(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32, 16);
@@ -380,7 +381,7 @@ TEST(HaydnMCFormatsTest, GetPacketFormatBySizeSixteenBytes) {
 TEST(HaydnMCFormatsTest, SparseAltsDistinctPerSlotWhenLegal) {
   // AlternateInsts members are distinct per legal slot (alts-derived
   // member identity per field).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const std::vector<unsigned> *Alts =
       Fmts.getAlternateInstsOpcode(Haydn::ADD32);
   ASSERT_NE(Alts, nullptr);

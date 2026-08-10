@@ -24,6 +24,7 @@
 #include "HaydnBundlePlan.h"
 #include "HaydnPlacementAlternative.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
+#include "HaydnTestMCInstrInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/MC/MCInst.h"
 #include "gtest/gtest.h"
@@ -62,7 +63,7 @@ TEST(HaydnBundleFormatSolver, EmptyCommitStall) {
 TEST(HaydnBundleFormatSolver, ST32_ADD64_Pack) {
   // ST32 is S0-only; ADD64 is S1|S2. Disjoint → both fit (mirrors
   // HaydnBundleTest DisjointSlotsFit).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
 
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
@@ -94,7 +95,7 @@ TEST(HaydnBundleFormatSolver, ST32_ADD64_Pack) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleFormatSolver, ThreeADD32_RejectFourth) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
 
   for (unsigned I = 0; I < 3; ++I) {
@@ -104,9 +105,12 @@ TEST(HaydnBundleFormatSolver, ThreeADD32_RejectFourth) {
   EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_SET_E3));
 
   // Slot order preference S2 → S1 → S0.
+  // P32/ALU0, P31/ALU1, P30/ALU2 — one per unit. The solver used to be
+  // free to put all three on ALU0 because nothing modelled units;
+  // that bundle cannot issue (FORMAT-E-SWITCH-PLAN.md 3, 7.1).
   EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ADD32_P32_ALU0);
-  EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADD32_P31_ALU0);
-  EXPECT_EQ(S.Members[2].MemberOpcode, Haydn::ADD32_P30_ALU0);
+  EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADD32_P31_ALU1);
+  EXPECT_EQ(S.Members[2].MemberOpcode, Haydn::ADD32_P30_ALU2);
 
   EXPECT_FALSE(tryAddProduct(S, Fmts, Haydn::ADD32))
       << "fourth ADD32 must conflict once S0|S1|S2 are full";
@@ -123,7 +127,7 @@ TEST(HaydnBundleFormatSolver, ThreeADD32_RejectFourth) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleFormatSolver, EnumerateStampsFieldSlots) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD32, Alts));
   ASSERT_EQ(Alts.size(), 3u);
@@ -159,7 +163,7 @@ TEST(HaydnBundleFormatSolver, SyntheticTwoRow_PrefersNarrowPriority) {
        static_cast<SlotBits>(Haydn::SLOT_SET_E3)},
   };
 
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeInitialCycleState(Table);
   EXPECT_EQ(S.FeasibleFormatMask,
             formatIDBit(SynthNarrow) | formatIDBit(FormatID::BundleE3));
@@ -244,7 +248,7 @@ TEST(HaydnBundleFormatSolver, SyntheticTwoRow_RestrictedMaskDropsFull) {
 TEST(HaydnBundleFormatSolver, BruteForceVsBundleCanAddOracle) {
   // Sequential packing: solver tryAdd accept/reject must match Bundle.canAdd
   // for multi-slot logicals that have PlacementAlternatives (Full product).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const unsigned Opcodes[] = {
       Haydn::ADD32, Haydn::S_SW_WITH_IMM, Haydn::ADD64, Haydn::S_LW_WITH_IMM, Haydn::SUB32,
   };
@@ -313,7 +317,7 @@ TEST(HaydnBundleFormatSolver, BruteForceVsBundleCanAddOracle) {
 }
 
 TEST(HaydnBundleFormatSolver, TryAddRejectLeavesStateUnchanged) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
   const CycleState Before = S;
@@ -325,7 +329,7 @@ TEST(HaydnBundleFormatSolver, TryAddRejectLeavesStateUnchanged) {
 }
 
 TEST(HaydnBundleFormatSolver, UnknownOpcodeNoAltsRejected) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
   EXPECT_FALSE(tryAddProduct(S, Fmts, /*LogicalOpc=*/0));
   EXPECT_TRUE(S.empty());
@@ -336,7 +340,7 @@ TEST(HaydnBundleFormatSolver, UnknownOpcodeNoAltsRejected) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleFormatSolver, MakeFromOccupiedAndCanTryAdd) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState Empty = makeProductCycleStateFromOccupied(0);
   EXPECT_TRUE(Empty.empty());
   EXPECT_EQ(Empty.OccupiedSlots, 0u);
@@ -365,7 +369,7 @@ TEST(HaydnBundleFormatSolver, FieldSlotsToIndex) {
 
 TEST(HaydnBundleFormatSolver, B24_TryAddS2FirstThenS1S0) {
   // Pin S2→S1→S0 order that Bundle/HR adapters inherit.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
   EXPECT_EQ(S.Members.back().FieldSlots, SlotBits(Haydn::SLOT_P32));
@@ -430,7 +434,7 @@ TEST(HaydnBundleFormatSolver, B41_SyntheticSecondFormatCanShrinkFrontier) {
 
 TEST(HaydnBundleFormatSolver, B41_TryAddKeepsProductFrontier) {
   // After packing, CycleState.FeasibleFormatMask stays ProductFormatMask.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
   EXPECT_EQ(S.FeasibleFormatMask, ProductFormatMask);
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));

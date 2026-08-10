@@ -22,6 +22,7 @@
 #include "HaydnBundlePlan.h"
 #include "HaydnHWLoopContracts.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
+#include "HaydnTestMCInstrInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "gtest/gtest.h"
@@ -145,7 +146,7 @@ TEST(HaydnBundlePlanTest, RejectsTooManyMembers) {
 
 TEST(HaydnBundlePlanTest, GeneratedPacketFormatSizeIsEncodedBytes) {
   // Generated VLIWFormat row for BUNDLE_E3: Size==16 means EncodedBytes.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const PacketFormats &Packets = Fmts.getPacketFormats();
   const VLIWFormat *Full =
       Packets.getFormat(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32);
@@ -159,7 +160,7 @@ TEST(HaydnBundlePlanTest, GeneratedPacketFormatSizeIsEncodedBytes) {
 }
 
 TEST(HaydnBundlePlanTest, GeneratedSlotInfoSizeIsEncodedBits) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const MCSlotInfo *S0 = Fmts.getSlotInfo(MCSlotKind::Haydn_SLOT_P30);
   const MCSlotInfo *S1 = Fmts.getSlotInfo(MCSlotKind::Haydn_SLOT_P31);
   const MCSlotInfo *S2 = Fmts.getSlotInfo(MCSlotKind::Haydn_SLOT_P32);
@@ -175,7 +176,7 @@ TEST(HaydnBundlePlanTest, GeneratedSlotInfoSizeIsEncodedBits) {
 }
 
 TEST(HaydnBundlePlanTest, PlanFromPacketFormatsAllSubsets) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const PacketFormats &Packets = Fmts.getPacketFormats();
   for (SlotBits Combo = 0; Combo <= Haydn::SLOT_SET_E3; ++Combo) {
     auto Plan = planFromPacketFormats(Packets, Combo);
@@ -231,7 +232,7 @@ TEST(HaydnBundlePlanTest, EncodedBytesBitsRoundTrip) {
 }
 
 TEST(HaydnBundlePlanTest, PlanFromPacketFormatsMatchesMakePlan) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const PacketFormats &Packets = Fmts.getPacketFormats();
   for (SlotBits Combo : {SlotBits(0), SlotBits(Haydn::SLOT_P30),
                          SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32),
@@ -247,7 +248,7 @@ TEST(HaydnBundlePlanTest, PlanFromPacketFormatsMatchesMakePlan) {
 }
 
 TEST(HaydnBundlePlanTest, SlotBitWidthsMatchGeneratedSlotInfo) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   EXPECT_EQ(Fmts.getSlotInfo(MCSlotKind::Haydn_SLOT_P30)->getSize(),
             P30EncodedBits.Value);
   EXPECT_EQ(Fmts.getSlotInfo(MCSlotKind::Haydn_SLOT_P31)->getSize(),
