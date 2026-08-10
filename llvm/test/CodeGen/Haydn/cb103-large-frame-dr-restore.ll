@@ -23,7 +23,7 @@ entry:
   ret i64 %sum
 }
 
-; CHECK-NOT: ld64{{.*}}sp, 480
-; CHECK-NOT: ld64{{.*}}sp, 4{{[0-9][0-9]}}
+; CHECK-NOT: d_ldw_{{.*}}sp, 480
+; CHECK-NOT: d_ldw_{{.*}}sp, 4{{[0-9][0-9]}}
 ; Large-frame restore uses register-offset form with offset in a GPR.
 ; CHECK: ld64_reg

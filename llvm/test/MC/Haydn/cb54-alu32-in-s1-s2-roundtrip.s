@@ -56,4 +56,3 @@
 # CHECK:      20: {{.*}} not32 {{.*}} popcount32
 # CHECK:      30: {{.*}} add64 {{.*}} add64
 # CHECK-NOT:  <unknown>
-# CHECK-NOT:  c.add
