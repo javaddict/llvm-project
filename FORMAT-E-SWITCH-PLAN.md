@@ -675,6 +675,30 @@ indeed unchanged. Three other things were not, and all three are silent:
   than quietly resized: format E puts `0b111` in `Inst{2-0}`, so twelve zero
   bytes are not a NOP bundle but a different format's. Needs a real
   `BUNDLE_E2` built through the encoder.
+* **`lld/ELF/Arch/HaydnThunks.cpp` held a THIRD one, and it is the one that
+  hid longest** — fixed in `6801aff730c7`. `writeBundle128LE` wrote two
+  `uint64`s, `size()` returned 48, parcels went at 0/16/32, and the three
+  instructions were hand-written 64-bit constants. It lives in lld, so a grep
+  for `HaydnBundlePlan.h`'s symbols never reaches it and **no compiler-side
+  gate can see it at all**: every far call and far branch jumped into a veneer
+  that `llvm-objdump` renders as three `<unknown>` lines.
+
+  Rewritten as generated data, on § 5.8's precedent rather than as a second
+  set of constants: `haydn_encoding.py --emit thunk-encoding` writes
+  `HaydnThunkEncoding.inc`, which lld already has on its include path for
+  `HaydnRelocLayout.h`. The veneer is three `BUNDLE_E2` words — instruction at
+  entry 0 on ALU0, NOP at entry 1 on ALU1, the one shape all three share since
+  `ADDI32` has no 3-entry placement — and every register field is zero because
+  the veneer is R0 throughout, so the immediate is the only thing link time
+  varies. The generated words were checked against an independent oracle
+  before being trusted: `llvm-mc` assembles `{ nop; lui r0, 0 }` to
+  `07 0a 02 00 …`, byte for byte what the table says. `alignment` drops from
+  16 to 4 for § 5.9's reason.
+
+  **The lesson is the oracle count, not the fix.** Three copies of "a parcel
+  is 16 bytes" existed, in three files, and the third was invisible to every
+  search that found the first two. Before believing the parcel size is
+  single-sourced, grep for the *number* across `lld/` as well as `llvm/`.
 
 One known-wrong site remains, deliberately: `HaydnFinalizeBundle`'s
 **singleton** path stamps the default row because it has no chosen format to
@@ -1314,8 +1338,17 @@ least once, so splitting them across two callers was not worth the risk.
 
 Result: all three entry positions patch correctly
 (`-6`, `-14`, `-22` for branches at `0xc`, `0x18`, `0x24` to a target at 0),
-and `lld/test/ELF/haydn` goes **5/24 → 8/24**. The remaining 16 are Bundle128
-byte expectations (§ 5.4). No CodeGen or `HaydnTests` regression.
+and `lld/test/ELF/haydn` goes **5/24 → 8/24**. No CodeGen or `HaydnTests`
+regression.
+
+**This paragraph used to end "the remaining 16 are Bundle128 byte expectations
+(§ 5.4)", and that guess was half wrong.** Triaging all twelve that were left
+later split them evenly: six were stale — the 16-byte address stride, and one
+that could not be ported at all because format E has neither an all-zero NOP
+nor a whole-parcel `.p2align` — and six were **one defect**, the Bundle128
+thunk emitter (§ 5.2) plus the addend correction below. Assuming a red gate is
+stale is exactly the assumption § 5.4 warns about, and it was made here about
+the one gate that stands outside the encoder's opinion.
 
 ##### Three silent traps on the way, all worth knowing
 
@@ -1344,6 +1377,42 @@ decoder still agree with each other, and only the linked program is wrong.
 `lld/test/ELF/haydn` and the simulator remain the only gates that stand
 outside this, which is exactly what § 5.4 said and is now demonstrated rather
 than predicted.
+
+#### The byte base is in the ADDEND too, and a veneer does not cancel it
+
+**Found in `6801aff730c7`, after the thunk emitter was rewritten (§ 5.2) and
+its veneer finally decoded. The target was still four bytes past the symbol.**
+
+This is the other half of "a branch resolves from the bundle, not from the
+entry it sits in" (`14afcf2e79a5`), and it is the half that only bites a
+consumer computing an absolute address:
+
+* the emitter puts the entry's byte base into the **addend**, and the
+  relocation's offset points at the **entry** — the offset has to, because
+  § 5.8's geometry lookup recovers the entry index from it;
+* a PC-relative patch is `S + A - P`, and the base appears in both `A` and
+  `P`, so **it cancels** and the branch resolves from the bundle. That is the
+  whole trick;
+* a **veneer cancels nothing**. It materializes `S + A` into a register with
+  HI12/LO20 and jumps there, so the base stays in and every far call lands
+  that many bytes into the middle of a bundle.
+
+`jal lr, callee + 16` therefore produced a veneer targeting `callee + 20`.
+Recovered the same way § 5.8 recovers a placement — from the image, as the
+relocation's offset within its own bundle — which keeps the fix in one
+vocabulary instead of adding a second convention.
+
+Two things worth carrying forward:
+
+* **The addend is no longer just the source addend.** Any new consumer of a
+  Haydn instruction-field relocation has to decide whether it cancels the byte
+  base or removes it, and the answer is not the same for all of them.
+  `reloc-callsimm20.s` now states the invariant — offset and addend are equal
+  for a bare call, and the two cancel — rather than pinning the numbers.
+* **Nothing but the linker could have found it.** The object is identical
+  either way; only the linked image differs, and only for symbols far enough
+  away to need a veneer. `--emit roundtrip` never applies a fixup, and MC's
+  own tests never link.
 
 ### 5.9 Function alignment: a 12-byte parcel cannot align to 16
 
@@ -2370,6 +2439,9 @@ already the tested carrier of the member→logical fold.
 | `llvm/lib/Target/Haydn/utils/haydn_ae_audit.py` | Which `AE_*` macros still need the AR args format E drops (§ 8 Q2) |
 | `llvm/lib/Target/Haydn/MCTargetDesc/HaydnMCFormats.{h,cpp}` | `stripHaydnMemberSuffix`, `getHaydnLogicalBaseOpcode`, slot geometry |
 | `llvm/lib/Target/Haydn/MCTargetDesc/HaydnMCCodeEmitter.cpp` | Fixup kinds, composite encode |
+| `llvm/lib/Target/Haydn/MCTargetDesc/HaydnRelocGeometry.inc` | Generated `--emit reloc-geometry` (§ 5.8); checked in, shared with lld |
+| `llvm/lib/Target/Haydn/MCTargetDesc/HaydnThunkEncoding.inc` | Generated `--emit thunk-encoding` (§ 5.2); the veneer's three bundle words |
+| `lld/ELF/Arch/HaydnThunks.cpp` | Long-branch veneer. lld sees these two `.inc`s via the include path `lld/ELF/CMakeLists.txt` adds for `HaydnRelocLayout.h` |
 | `llvm/lib/Target/Haydn/Disassembler/HaydnDisassembler.cpp` | Parcel decode, `SlotGeo` |
 | `llvm/unittests/Target/Haydn/HaydnMCFormatsTest.cpp` | Member-suffix tests, both spellings |
 | `clang/include/clang/Basic/BuiltinsHaydn.td` | AR prototypes (changed on WIP) |
