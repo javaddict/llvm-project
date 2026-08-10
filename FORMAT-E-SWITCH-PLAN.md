@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `1240fd66d030`, **local only — not pushed** | **objects emit: 424/430 CodeGen. lit 290/589, `HaydnTests` 142/253, lld 12/24, clang 1299/1331.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. |
+| `llvm-project` | `haydn-formate-switch-mc` | `2eba490a051c`, **local only — not pushed** | **objects emit: 424/430 CodeGen. lit 435/589, `HaydnTests` 142/253, lld 12/24, clang 1299/1331.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves; § 5.4 started. |
 | `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -797,15 +797,73 @@ disagree, **the encoder is wrong**.
 **Do not regenerate while § 5.11's first three axes are non-zero.** They are
 exactly the places the encoder reads an operand the logical did not put there,
 so regenerating would freeze the wrong bytes into 589 expectations and the
-round trip would agree with all of them. Six attempts have been made so far and
-five found code to fix instead — the relocation kind for `SET_HWLOOP`, branch
-scaling, `LUI`'s operand shape, the tied writeback family, and § 5.11's own
-generator half.
+round trip would agree with all of them. Six attempts were made before the gate
+was met and five found code to fix instead — the relocation kind for
+`SET_HWLOOP`, branch scaling, `LUI`'s operand shape, the tied writeback family,
+and § 5.11's own generator half.
 
-**`arity`, `defs` and `kinds` are now all zero**, so this precondition is met
-for the first time. `ties` is a weaker gate and does not block: it is a
-register-allocation defect, not an encoding one, and the five left on it are
-held by reasons rather than by work.
+`arity`, `defs` and `kinds` reached zero and **62 tests have been regenerated
+against that**; lit went 373 → 435 of 589. `ties` is a weaker gate and did not
+block: it is a register-allocation defect, not an encoding one, and the three
+left on it are held by § 5.2 rather than by work.
+
+#### It is not one script run
+
+Of the 200 that were failing when the gate opened:
+
+| | n | |
+|---|---:|---|
+| hand-written | 132 | no script owns them |
+| `REBASELINED (auto)` | 35 | an earlier ad-hoc pass, no owner either |
+| `utils/update_*_test_checks.py` | 33 | of which 6 have RUN lines the scripts cannot drive |
+
+**And running the script is not enough on its own.** It replaces only blocks in
+its own format, so on a file that also carries a stale hand-written block it
+APPENDS: `bitfield.ll` came out holding the format E assertions *and* the
+Bundle128 ones they were meant to replace. Strip every assertion first, then
+regenerate whole. That is what the 27 script-owned and the 35 rebaselined tests
+got, and the 35 now name the script as their owner so the next encoding change
+does not become 35 more hand-edits.
+
+#### Read the diff; the numbers move for two different reasons
+
+Regenerating records the encoder, so the review is the check. Two things worth
+looking for, both seen:
+
+* **A changed value that is right.** `s64-loadstore.ll` spills the halves of an
+  i64 at offsets 0 and **1**, not 0 and 4 — § 5.11's ÷4 LS scaling, the same
+  fact as `s_lw_pre_imm r3, r1, 1`. An expectation that "corrects" it back to 4
+  is the defect.
+* **A changed value that is a placement.** Relocation offsets are
+  `bundle_start + the entry's byte base`, so they move whenever the packer puts
+  an instruction in a different entry. `cb76-reloc-hi20-lo16.s` went 0x0/0x10 →
+  0x8/0x12 and both are correct. Assert the invariant in a comment, because the
+  number is not one.
+
+#### The prose goes stale too, and nothing catches it
+
+25 comment lines in the regenerated tests still described Bundle128. They are
+not assertions so nothing failed, but they are what tells the next reader why a
+test expects what it expects. Two kinds:
+
+* **The slot model** — "the second LD32 is promoted to LD32_S1 so both loads
+  pack", "slot 1 + slot 2". The behaviour survives, the reason does not:
+  LOADSTORE0 and LOAD1 are two units and an entry may name each (§ 7.1), where
+  Bundle128 had one unit per slot so packing meant promoting to another slot.
+* **A previous bulk rename's wreckage** — two tests read "both ld32 and ld32
+  are semantically identical loads", a sentence that once named two spellings
+  and had them collapsed onto one. Left in place and labelled rather than
+  guessed at: its claim was about slot promotion and does not survive, and
+  inventing a replacement would be § 5.6's mistake at one remove.
+
+#### What is left: 138, and none of it is scriptable
+
+~48 assert a retired spelling. **A substitution will not do it**: § 5.6's
+load/store rename is "a rename plus a range collapse", so `LD32` did not become
+one name — it became `s_lw_with_imm rt, rs, imm`, with an operand the old
+spelling did not have and a ÷4 scale on it. The rest assert bundle shapes that
+changed with the packing. Six pipeline tests (`llc -filetype=obj | llvm-objdump`)
+need their RUN lines split before a script can drive them.
 
 Be aware of what `--emit roundtrip` cannot see, though: it checks the encoder
 against the decoder, so any defect symmetric across the pair passes. That is how
