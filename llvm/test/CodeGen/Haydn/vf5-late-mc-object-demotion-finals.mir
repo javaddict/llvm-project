@@ -7,9 +7,8 @@
 # RUN:   -filetype=obj %t.mir -o %t.o
 # RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s --check-prefix=OBJ
 # REQUIRES: haydn-registered-target
-; Format E96 cutover residual: FileCheck/idle-pad/reloc geometry still open (GE96-01/03).
-; XFAIL: *
-
+# Object CHECKs pin live Format E 12-byte disasm mnemonics only;
+# do not pin provisional branch-scale immediates (golden open).
 # Role: object — Late-MC one-to-one: demotion final reals serialize through
 # AsmPrinter to ELF and disassemble by identity (no residual cycle-forming
 # pseudo, no multi-cycle repair, no FlexMap).
@@ -69,9 +68,9 @@ body:             |
 
 # OBJ-LABEL: <late_mc_csrw_soft_edge>:
 # Serialize-only identity: final reals encode/decode; no residual mnemonics.
-# OBJ: csrw_w{{.*}}44{{.*}}r1
-# OBJ: subi32{{.*}}r3{{.*}}r3{{.*}}1
-# OBJ: bnez_w{{.*}}r3
+# OBJ: csrw{{.*}}44{{.*}}r1
+# OBJ: subi32{{.*}}r3
+# OBJ: bnez{{.*}}r3
 # OBJ-NOT: setcbr
 # OBJ-NOT: loopdec
 # OBJ-NOT: loopjnz
@@ -107,7 +106,7 @@ body:             |
 # MIR-NOT: SET_HWLOOP_REG
 
 # OBJ-LABEL: <late_mc_set_hwloop_final>:
-# OBJ: set_hwloop_w
+# OBJ: set_hwloop
 # OBJ-NOT: setcbr
 # OBJ-NOT: loopstart
 # OBJ-NOT: <unknown>

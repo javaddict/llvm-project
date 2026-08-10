@@ -43,27 +43,27 @@ declare void @clobber_all()
 define i32 @test_gpr_caller_saved_across_call(i32 %a, i32 %b, i32 %c) nounwind {
 ; CHECK-LABEL: test_gpr_caller_saved_across_call:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 24; nop }
-; CHECK-NEXT:    { addi32_w r4, sp, 8; nop }
-; CHECK-NEXT:    { st32 lr, r4, 0; nop }
-; CHECK-NEXT:    { st32 r10, r4, 1; nop }
-; CHECK-NEXT:    { st32 r9, r4, 2; nop }
-; CHECK-NEXT:    { st32 r8, r4, 3; nop }
-; CHECK-NEXT:    { move32 r8, r1; move32 r9, r2 }
-; CHECK-NEXT:    { move32 r10, r3; nop }
-; CHECK-NEXT:    { jal_w lr, clobber_gpr; nop }
-; CHECK-NEXT:    { add32 r2, r8, r9; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { add32 r2, r2, r10; nop }
-; CHECK-NEXT:    { add32 r1, r2, r1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { ld32 lr, sp, 2; nop }
-; CHECK-NEXT:    { ld32 r10, sp, 3; nop }
-; CHECK-NEXT:    { ld32 r9, sp, 4; nop }
-; CHECK-NEXT:    { ld32 r8, sp, 5; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 24; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { nop; addi32_w r4, sp, 8 }
+; CHECK-NEXT:    { nop; st32 lr, r4, 0 }
+; CHECK-NEXT:    { nop; st32 r10, r4, 1 }
+; CHECK-NEXT:    { nop; st32 r9, r4, 2 }
+; CHECK-NEXT:    { nop; st32 r8, r4, 3 }
+; CHECK-NEXT:    { move32 r9, r2; move32 r8, r1 }
+; CHECK-NEXT:    { nop; move32 r10, r3 }
+; CHECK-NEXT:    { nop; jal_w lr, clobber_gpr }
+; CHECK-NEXT:    { nop; add32 r2, r8, r9 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; add32 r2, r2, r10 }
+; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; ld32 lr, sp, 2 }
+; CHECK-NEXT:    { nop; ld32 r10, sp, 3 }
+; CHECK-NEXT:    { nop; ld32 r9, sp, 4 }
+; CHECK-NEXT:    { nop; ld32 r8, sp, 5 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
 ; %a, %b, %c arrive in R1, R2, R3 (caller-saved). All three must survive
 ; the call to @clobber_gpr. The allocator should move them to callee-saved
@@ -81,23 +81,23 @@ entry:
 define i64 @test_dr64_caller_saved_across_call(i64 %a, i64 %b) nounwind {
 ; CHECK-LABEL: test_dr64_caller_saved_across_call:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 32; nop }
-; CHECK-NEXT:    { st32 lr, sp, 7; nop }
-; CHECK-NEXT:    { addi32_w r1, sp, 8; nop }
-; CHECK-NEXT:    { st64 d9, r1, 0; nop }
-; CHECK-NEXT:    { st64 d8, r1, 1; nop }
-; CHECK-NEXT:    { or64 d8, d0, d0; or64 d9, d1, d1 }
-; CHECK-NEXT:    { jal_w lr, clobber_dr64; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { add64 d1, d8, d9; nop }
-; CHECK-NEXT:    { add64 d0, d1, d0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { ld64 d9, sp, 1; nop }
-; CHECK-NEXT:    { ld64 d8, sp, 2; nop }
-; CHECK-NEXT:    { ld32 lr, sp, 7; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 32; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
+; CHECK-NEXT:    { nop; st32 lr, sp, 7 }
+; CHECK-NEXT:    { nop; addi32_w r1, sp, 8 }
+; CHECK-NEXT:    { nop; st64 d9, r1, 0 }
+; CHECK-NEXT:    { nop; st64 d8, r1, 1 }
+; CHECK-NEXT:    { or64 d9, d1, d1; or64 d8, d0, d0 }
+; CHECK-NEXT:    { nop; jal_w lr, clobber_dr64 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; add64 d1, d8, d9 }
+; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; ld64 d9, sp, 1 }
+; CHECK-NEXT:    { nop; ld64 d8, sp, 2 }
+; CHECK-NEXT:    { nop; ld32 lr, sp, 7 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 32 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
 ; %a, %b arrive in D0, D1 (caller-saved). Both must survive the call.
   %call_result = call i64 @clobber_dr64()
@@ -112,42 +112,42 @@ entry:
 define i32 @test_all_gpr_caller_saved(i32 %a, i32 %b, i32 %c, i32 %d,
 ; CHECK-LABEL: test_all_gpr_caller_saved:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 40; nop }
-; CHECK-NEXT:    { addi32_w r12, sp, 16; nop }
-; CHECK-NEXT:    { st32 lr, r12, 0; nop }
-; CHECK-NEXT:    { st32 fp, r12, 1; nop }
-; CHECK-NEXT:    { st32 r11, r12, 2; nop }
-; CHECK-NEXT:    { st32 r10, r12, 3; nop }
-; CHECK-NEXT:    { st32 r9, r12, 4; nop }
-; CHECK-NEXT:    { st32 r8, r12, 5; nop }
-; CHECK-NEXT:    { move32 r9, r2; move32 r10, r3; st32 r1, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 40 }
+; CHECK-NEXT:    { nop; addi32_w r12, sp, 16 }
+; CHECK-NEXT:    { nop; st32 lr, r12, 0 }
+; CHECK-NEXT:    { nop; st32 fp, r12, 1 }
+; CHECK-NEXT:    { nop; st32 r11, r12, 2 }
+; CHECK-NEXT:    { nop; st32 r10, r12, 3 }
+; CHECK-NEXT:    { nop; st32 r9, r12, 4 }
+; CHECK-NEXT:    { nop; st32 r8, r12, 5 }
+; CHECK-NEXT:    { st32 r1, sp, 3; move32 r10, r3; move32 r9, r2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { move32 r11, r4; move32 fp, r5; st32 r7, sp, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r7, sp, 2; move32 fp, r5; move32 r11, r4 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { move32 r8, r6; nop }
-; CHECK-NEXT:    { jal_w lr, clobber_gpr; nop }
-; CHECK-NEXT:    { ld32 r2, sp, 3; nop } // 4-byte Folded Reload
+; CHECK-NEXT:    { nop; move32 r8, r6 }
+; CHECK-NEXT:    { nop; jal_w lr, clobber_gpr }
+; CHECK-NEXT:    { nop; ld32 r2, sp, 3 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
-; CHECK-NEXT:    { ld32 r3, sp, 2; nop } // 4-byte Folded Reload
+; CHECK-NEXT:    { nop; ld32 r3, sp, 2 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { add32 r2, r2, r9; nop }
-; CHECK-NEXT:    { add32 r2, r2, r10; nop }
-; CHECK-NEXT:    { add32 r2, r2, r11; nop }
-; CHECK-NEXT:    { add32 r2, r2, fp; nop }
-; CHECK-NEXT:    { add32 r2, r2, r8; nop }
-; CHECK-NEXT:    { add32 r2, r2, r3; nop }
-; CHECK-NEXT:    { add32 r1, r2, r1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { ld32 lr, sp, 4; nop }
-; CHECK-NEXT:    { ld32 fp, sp, 5; nop }
-; CHECK-NEXT:    { ld32 r11, sp, 6; nop }
-; CHECK-NEXT:    { ld32 r10, sp, 7; nop }
-; CHECK-NEXT:    { ld32 r9, sp, 8; nop }
-; CHECK-NEXT:    { ld32 r8, sp, 9; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 40; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; add32 r2, r2, r9 }
+; CHECK-NEXT:    { nop; add32 r2, r2, r10 }
+; CHECK-NEXT:    { nop; add32 r2, r2, r11 }
+; CHECK-NEXT:    { nop; add32 r2, r2, fp }
+; CHECK-NEXT:    { nop; add32 r2, r2, r8 }
+; CHECK-NEXT:    { nop; add32 r2, r2, r3 }
+; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; ld32 lr, sp, 4 }
+; CHECK-NEXT:    { nop; ld32 fp, sp, 5 }
+; CHECK-NEXT:    { nop; ld32 r11, sp, 6 }
+; CHECK-NEXT:    { nop; ld32 r10, sp, 7 }
+; CHECK-NEXT:    { nop; ld32 r9, sp, 8 }
+; CHECK-NEXT:    { nop; ld32 r8, sp, 9 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 40 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
                                        i32 %e, i32 %f, i32 %g) nounwind {
 entry:
 ; All 7 args arrive in R1-R7. The call clobbers all of them.
@@ -170,43 +170,43 @@ entry:
 define i32 @test_repeated_clobber(i32 %x) nounwind {
 ; CHECK-LABEL: test_repeated_clobber:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 32; nop }
-; CHECK-NEXT:    { addi32_w r2, sp, 8; nop }
-; CHECK-NEXT:    { st32 lr, r2, 0; nop }
-; CHECK-NEXT:    { st32 fp, r2, 1; nop }
-; CHECK-NEXT:    { st32 r11, r2, 2; nop }
-; CHECK-NEXT:    { st32 r10, r2, 3; nop }
-; CHECK-NEXT:    { st32 r9, r2, 4; nop }
-; CHECK-NEXT:    { st32 r8, r2, 5; nop }
-; CHECK-NEXT:    { move32 r8, r1; nop }
-; CHECK-NEXT:    { jal_w lr, clobber_gpr; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; move32 r9, r1 }
-; CHECK-NEXT:    { jal_w lr, clobber_gpr; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { move32 r10, r1; nop }
-; CHECK-NEXT:    { jal_w lr, clobber_gpr; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { move32 r11, r1; nop }
-; CHECK-NEXT:    { jal_w lr, clobber_gpr; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { move32 fp, r1; nop }
-; CHECK-NEXT:    { jal_w lr, clobber_gpr; nop }
-; CHECK-NEXT:    { add32 r2, r8, r9; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { add32 r2, r2, r10; nop }
-; CHECK-NEXT:    { add32 r2, r2, r11; nop }
-; CHECK-NEXT:    { add32 r2, r2, fp; nop }
-; CHECK-NEXT:    { add32 r1, r2, r1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { ld32 lr, sp, 2; nop }
-; CHECK-NEXT:    { ld32 fp, sp, 3; nop }
-; CHECK-NEXT:    { ld32 r11, sp, 4; nop }
-; CHECK-NEXT:    { ld32 r10, sp, 5; nop }
-; CHECK-NEXT:    { ld32 r9, sp, 6; nop }
-; CHECK-NEXT:    { ld32 r8, sp, 7; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 32; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
+; CHECK-NEXT:    { nop; addi32_w r2, sp, 8 }
+; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
+; CHECK-NEXT:    { nop; st32 fp, r2, 1 }
+; CHECK-NEXT:    { nop; st32 r11, r2, 2 }
+; CHECK-NEXT:    { nop; st32 r10, r2, 3 }
+; CHECK-NEXT:    { nop; st32 r9, r2, 4 }
+; CHECK-NEXT:    { nop; st32 r8, r2, 5 }
+; CHECK-NEXT:    { nop; move32 r8, r1 }
+; CHECK-NEXT:    { nop; jal_w lr, clobber_gpr }
+; CHECK-NEXT:    { move32 r9, r1; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; jal_w lr, clobber_gpr }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; move32 r10, r1 }
+; CHECK-NEXT:    { nop; jal_w lr, clobber_gpr }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; move32 r11, r1 }
+; CHECK-NEXT:    { nop; jal_w lr, clobber_gpr }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; move32 fp, r1 }
+; CHECK-NEXT:    { nop; jal_w lr, clobber_gpr }
+; CHECK-NEXT:    { nop; add32 r2, r8, r9 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; add32 r2, r2, r10 }
+; CHECK-NEXT:    { nop; add32 r2, r2, r11 }
+; CHECK-NEXT:    { nop; add32 r2, r2, fp }
+; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; ld32 lr, sp, 2 }
+; CHECK-NEXT:    { nop; ld32 fp, sp, 3 }
+; CHECK-NEXT:    { nop; ld32 r11, sp, 4 }
+; CHECK-NEXT:    { nop; ld32 r10, sp, 5 }
+; CHECK-NEXT:    { nop; ld32 r9, sp, 6 }
+; CHECK-NEXT:    { nop; ld32 r8, sp, 7 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 32 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
 ; %x must survive across all 5 calls
   %r1 = call i32 @clobber_gpr()
@@ -228,25 +228,25 @@ entry:
 define i64 @test_both_banks_clobbered(i32 %a, i64 %b) nounwind {
 ; CHECK-LABEL: test_both_banks_clobbered:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 24; nop }
-; CHECK-NEXT:    { addi32_w r2, sp, 16; nop }
-; CHECK-NEXT:    { st32 lr, r2, 0; nop }
-; CHECK-NEXT:    { st32 r8, r2, 1; nop }
-; CHECK-NEXT:    { st64 d8, sp, 1; nop }
-; CHECK-NEXT:    { move32 r8, r1; or64 d8, d0, d0 }
-; CHECK-NEXT:    { jal_w lr, clobber_all; nop }
-; CHECK-NEXT:    { sext32t64 d0, r8; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { slli64 d0, d0, 32; nop }
-; CHECK-NEXT:    { srli64 d0, d0, 32; nop }
-; CHECK-NEXT:    { add64 d0, d8, d0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { ld64 d8, sp, 1; nop }
-; CHECK-NEXT:    { ld32 lr, sp, 4; nop }
-; CHECK-NEXT:    { ld32 r8, sp, 5; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 24; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { nop; addi32_w r2, sp, 16 }
+; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
+; CHECK-NEXT:    { nop; st32 r8, r2, 1 }
+; CHECK-NEXT:    { nop; st64 d8, sp, 1 }
+; CHECK-NEXT:    { or64 d8, d0, d0; move32 r8, r1 }
+; CHECK-NEXT:    { nop; jal_w lr, clobber_all }
+; CHECK-NEXT:    { nop; sext32t64 d0, r8 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; ld64 d8, sp, 1 }
+; CHECK-NEXT:    { nop; ld32 lr, sp, 4 }
+; CHECK-NEXT:    { nop; ld32 r8, sp, 5 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
 ; %a (GPR R1) and %b (DR64 D0) are both caller-saved and must survive.
   call void @clobber_all()

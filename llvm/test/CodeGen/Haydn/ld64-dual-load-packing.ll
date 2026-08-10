@@ -13,16 +13,18 @@ define void @dual_load_i64(ptr %a, ptr %b) {
 ; REBASELINED (auto) B3.exit.4 Desc-only Format E print (S0-S1-S2 / setDesc members); .file skipped
 ; CHECK-LABEL: dual_load_i64:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { d_ldw_post_imm d0, r1, 1; nop }
-; CHECK-NEXT:    { ld64 d1, r1, 0; nop }
-; CHECK-NEXT:    { add64 d0, d0, d1; nop }
-; CHECK-NEXT:    { st64 d0, r2, 0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; d_ldw_post_imm d0, r1, 1 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; ld64 d1, r1, 0 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; st64 d0, r2, 0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   %x = load i64, ptr %a, align 8
   %ap = getelementptr i64, ptr %a, i32 1

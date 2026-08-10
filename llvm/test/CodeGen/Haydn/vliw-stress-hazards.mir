@@ -227,6 +227,7 @@ body:             |
     ; CHECK: liveins: $r0, $r1, $r2
     ; CHECK-NEXT: {{  $}}
     ; CHECK-NEXT: ST32_S0 killed $r1, $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: NOP
     ; CHECK-NEXT: ST32_S0 killed $r2, $r0, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY $r0
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
@@ -275,12 +276,9 @@ body:             |
     ; CHECK-LABEL: name: test5_two_ld32_slot_conflict
     ; CHECK: liveins: $r0, $r1
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit $r0, implicit killed $r1 {
-    ; CHECK-NEXT:   $r2 = LD32_S1 $r0, 0, implicit-def dead $sfr
-    ; CHECK-NEXT:   $r3 = LD32_S0 killed $r1, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: }
+    ; CHECK-NEXT: $r2 = LD32_S1 $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: $r3 = LD32_S1 killed $r1, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r2
-    ; CHECK-NEXT: NOP
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = LD32 $r0, 0, implicit-def dead $sfr
     $r3 = LD32 $r1, 0, implicit-def dead $sfr
@@ -329,6 +327,7 @@ body:             |
     ; CHECK-NEXT: {{  $}}
     ; CHECK-NEXT: ST32_S0 killed $r2, $r0, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY $r0
+    ; CHECK-NEXT: NOP
     ; CHECK-NEXT: ST32_S0 killed $r3, killed $r1, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     ST32 $r2, $r0, 0, implicit-def dead $sfr
@@ -375,6 +374,7 @@ body:             |
     ; CHECK: liveins: $r0, $r2
     ; CHECK-NEXT: {{  $}}
     ; CHECK-NEXT: $r1 = LD32_S1 $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: NOP
     ; CHECK-NEXT: ST32_S0 killed $r2, $r0, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r1
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

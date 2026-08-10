@@ -12,13 +12,13 @@
 define <2 x i32> @test_x2frsst32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2frsst32:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x2frsst32 d0, d0, d1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; x2frsst32 d0, d0, d1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = call <2 x i32> @llvm.haydn.x2frsst32(<2 x i32> %a,<2 x i32> %b)
   ret <2 x i32> %r
 }
@@ -30,13 +30,13 @@ define <2 x i32> @test_x2frsst32(<2 x i32> %a, <2 x i32> %b) {
 define <2 x i32> @test_x2frst32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2frst32:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x2frst32 d0, d0, d1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; x2frst32 d0, d0, d1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = call <2 x i32> @llvm.haydn.x2frst32(<2 x i32> %a,<2 x i32> %b)
   ret <2 x i32> %r
 }
@@ -48,13 +48,13 @@ define <2 x i32> @test_x2frst32(<2 x i32> %a, <2 x i32> %b) {
 define i64 @test_x4frsst16(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x4frsst16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x4frsst16 d0, d0, d1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; x4frsst16 d0, d0, d1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %bc.1 = bitcast i64 %a to <4 x i16>
   %bc.2 = bitcast i64 %b to <4 x i16>
   %call.3 = call <4 x i16> @llvm.haydn.x4frsst16(<4 x i16> %bc.1, <4 x i16> %bc.2)
@@ -69,13 +69,13 @@ define i64 @test_x4frsst16(i64 %a, i64 %b) {
 define i64 @test_x4frst16(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_x4frst16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x4frst16 d0, d0, d1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; x4frst16 d0, d0, d1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %bc.4 = bitcast i64 %a to <4 x i16>
   %bc.5 = bitcast i64 %b to <4 x i16>
   %call.6 = call <4 x i16> @llvm.haydn.x4frst16(<4 x i16> %bc.4, <4 x i16> %bc.5)
@@ -90,14 +90,14 @@ define i64 @test_x4frst16(i64 %a, i64 %b) {
 define <2 x i32> @test_x2frsst32_masked_lt(<2 x i32> %a, <2 x i32> %b, <2 x i32> %mask_val) {
 ; CHECK-LABEL: test_x2frsst32_masked_lt:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x2slt32 d2, d0, d2; x2frsst32 d1, d0, d1 }
-; CHECK-NEXT:    { x2movt32 d0, d0, d1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { x2frsst32 d1, d0, d1; x2slt32 d2, d0, d2 }
+; CHECK-NEXT:    { nop; x2movt32 d0, d0, d1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %cmp = call <2 x i32> @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %mask_val)
   %shifted = call <2 x i32> @llvm.haydn.x2frsst32(<2 x i32> %a,<2 x i32> %b)
   %result = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %a,<2 x i32> %shifted)
@@ -107,14 +107,14 @@ define <2 x i32> @test_x2frsst32_masked_lt(<2 x i32> %a, <2 x i32> %b, <2 x i32>
 define <4 x i16> @test_x4frsst16_masked_eq(<4 x i16> %a, <4 x i16> %b, <4 x i16> %mask_val) {
 ; CHECK-LABEL: test_x4frsst16_masked_eq:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x4seq16 d2, d0, d2; x4frsst16 d1, d0, d1 }
-; CHECK-NEXT:    { x4movt16 d0, d0, d1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { x4frsst16 d1, d0, d1; x4seq16 d2, d0, d2 }
+; CHECK-NEXT:    { nop; x4movt16 d0, d0, d1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %cmp = call <4 x i16> @llvm.haydn.x4seq16(<4 x i16> %a,<4 x i16> %mask_val)
   %a_i = bitcast <4 x i16> %a to i64
   %b_i = bitcast <4 x i16> %b to i64

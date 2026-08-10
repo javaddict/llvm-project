@@ -167,9 +167,9 @@ body:             |
     liveins: $r1, $r2, $r3, $r15
 
     ; DIRECT-LABEL: name: direct_csrw_multi_mi
-    ; DIRECT: BUNDLE 0
-    ; DIRECT-DAG: CSRW_W_S0 44, {{.*}}$r1, implicit-def {{(dead )?}}$sfr, implicit-def $cbr0
-    ; DIRECT-DAG: $r4 = ADD32_S{{[012]}} {{.*}}$r2, {{.*}}$r3, implicit-def dead $sfr
+    ; One-SFR-writer law: CSRW and flag-writing ADD32 cannot co-issue.
+    ; DIRECT: CSRW_W_S0 44, {{.*}}$r1, implicit-def {{(dead )?}}$sfr, implicit-def $cbr0
+    ; DIRECT-NEXT: $r4 = ADD32_S{{[012]}} {{.*}}$r2, {{.*}}$r3, implicit-def dead $sfr
     ; DIRECT-NOT: SETCBR
     ; DIRECT-NOT: {{^    CSRW_W }}
     CSRW_W 44, $r1, implicit-def dead $sfr, implicit-def $cbr0

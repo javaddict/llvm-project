@@ -19,7 +19,7 @@
 ; using them aborted during selection.
 ;
 ; Immediate classes differ per opcode, so the range boundaries are checked too:
-;   ADDI32 / SUBI32           simm16
+;   ADDI32 / SUBI32           simm20 (product RI20; max 524287)
 ;   ANDI32 / ORI32 / XORI32   uimm20 (zero-extended -- no negative immediate)
 ;   SLLI32 / SRLI32 / SRAI32  uimm5
 ;
@@ -36,7 +36,7 @@ define i32 @add_imm(i32 %x) {
   ret i32 %r
 }
 
-; Negative immediate is fine for ADDI32 (simm16 is signed).
+; Negative immediate is fine for ADDI32 (simm20 is signed).
 ; CHECK-LABEL: add_imm_neg:
 ; CHECK: addi32 r{{[0-9]+}}, r{{[0-9]+}}, -1
 ; CHECK-NOT: add32 r
@@ -44,6 +44,10 @@ define i32 @add_imm_neg(i32 %x) {
   %r = add i32 %x, -1
   ret i32 %r
 }
+
+; sub x, C is canonicalized to add x, -C before selection, so SUBI32 is
+; exercised via MIR / residual G_SUB rather than plain IR here. ADDI simm20
+; already covers the product sub-imm shape (see add_imm_neg).
 
 ; CHECK-LABEL: and_imm:
 ; CHECK: andi32 r{{[0-9]+}}, r{{[0-9]+}}, 255
@@ -107,21 +111,21 @@ define i32 @ashr_imm(i32 %x) {
 ; Boundaries -- out-of-range constants must stay on the register-register path.
 ;===----------------------------------------------------------------------===;
 
-; 32767 is the largest simm16.
-; CHECK-LABEL: add_imm_simm16_max:
-; CHECK: addi32 r{{[0-9]+}}, r{{[0-9]+}}, 32767
+; 524287 is the largest simm20 (product RI20 ADDI32).
+; CHECK-LABEL: add_imm_simm20_max:
+; CHECK: addi32 r{{[0-9]+}}, r{{[0-9]+}}, 524287
 ; CHECK-NOT: add32 r
-define i32 @add_imm_simm16_max(i32 %x) {
-  %r = add i32 %x, 32767
+define i32 @add_imm_simm20_max(i32 %x) {
+  %r = add i32 %x, 524287
   ret i32 %r
 }
 
-; 32768 does not fit simm16: materialize with ADDI32_W, then ADD32.
-; CHECK-LABEL: add_imm_over_simm16:
-; CHECK: addi32_w r{{[0-9]+}}, r0, 32768
+; 524288 does not fit simm20: materialize (ORI32_W), then ADD32.
+; CHECK-LABEL: add_imm_over_simm20:
+; CHECK: ori32_w r{{[0-9]+}}, r0, 524288
 ; CHECK: add32 r{{[0-9]+}}, r{{[0-9]+}}, r{{[0-9]+}}
-define i32 @add_imm_over_simm16(i32 %x) {
-  %r = add i32 %x, 32768
+define i32 @add_imm_over_simm20(i32 %x) {
+  %r = add i32 %x, 524288
   ret i32 %r
 }
 

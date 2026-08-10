@@ -158,5 +158,7 @@ exit:
 ; ASM-LABEL: streaming_i64_large_stride:
 ; The cross-bank DR64→GPR32 extract now uses native move32_dr_l
 ; (1 op) instead of the 5-op stack spill (ld32 from stack).
-; ASM: addi32{{(_w)?}}{{.*}}, 256
-; ASM: move32_dr_l
+; Residual packing may co-issue move32_dr_l with the trip compare before
+; the stride ADDI32, so do not force source order between them.
+; ASM-DAG: move32_dr_l
+; ASM-DAG: addi32{{(_w)?}}{{.*}}, 256

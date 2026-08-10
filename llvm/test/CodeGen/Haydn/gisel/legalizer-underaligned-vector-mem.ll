@@ -28,7 +28,7 @@ define void @st_v8i8_align1(ptr %p, <8 x i8> %v) nounwind {
 ; CHECK-LABEL: st_v8i8_align2:
 ; CHECK-NOT: d_sw_
 ; CHECK-NOT: st64
-; CHECK: st16
+; CHECK: st8
 define void @st_v8i8_align2(ptr %p, <8 x i8> %v) nounwind {
   store <8 x i8> %v, ptr %p, align 2
   ret void

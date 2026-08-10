@@ -29,19 +29,21 @@ declare i64 @llvm.haydn.mulfp32x16x2ras.high(i64, i64, i64)
 define i64 @test_mulfp32x16x2ras_low(i64 %acc, i64 %a32, i64 %b16) {
 ; CHECK-LABEL: test_mulfp32x16x2ras_low:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x2srai32 d3, d2, 16; x2slli32 d2, d2, 16 }
-; CHECK-NEXT:    { x2slli32 d3, d3, 16; x2srai32 d2, d2, 16 }
-; CHECK-NEXT:    { x2srai32 d3, d3, 16; fmula16.ls00 d0, d1, d2 }
-; CHECK-NEXT:    { x2slli32 d3, d3, 16; fmula16.ls11 d0, d1, d2 }
-; CHECK-NEXT:    { x2srai32 d3, d3, 16; nop }
-; CHECK-NEXT:    { fmula16.hs00 d0, d1, d3; nop }
-; CHECK-NEXT:    { fmula16.hs11 d0, d1, d3; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { x2slli32 d2, d2, 16; x2srai32 d3, d2, 16 }
+; CHECK-NEXT:    { x2srai32 d2, d2, 16; x2slli32 d3, d3, 16 }
+; CHECK-NEXT:    { fmula16.ls00 d0, d1, d2; x2srai32 d3, d3, 16 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { fmula16.ls11 d0, d1, d2; x2slli32 d3, d3, 16 }
+; CHECK-NEXT:    { nop; x2srai32 d3, d3, 16 }
+; CHECK-NEXT:    { nop; fmula16.hs00 d0, d1, d3 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; fmula16.hs11 d0, d1, d3 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.mulfp32x16x2ras.low(i64 %acc, i64 %a32, i64 %b16)
   ret i64 %r
 }
@@ -49,19 +51,22 @@ define i64 @test_mulfp32x16x2ras_low(i64 %acc, i64 %a32, i64 %b16) {
 define i64 @test_mulfp32x16x2ras_high(i64 %acc, i64 %a32, i64 %b16) {
 ; CHECK-LABEL: test_mulfp32x16x2ras_high:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x2srli32 d2, d2, 32; nop }
-; CHECK-NEXT:    { x2slli32 d3, d2, 16; x2srai32 d2, d2, 16 }
-; CHECK-NEXT:    { x2srai32 d3, d3, 16; x2slli32 d2, d2, 16 }
-; CHECK-NEXT:    { fmula16.ls00 d0, d1, d3; x2srai32 d2, d2, 16 }
-; CHECK-NEXT:    { fmula16.ls11 d0, d1, d3; nop }
-; CHECK-NEXT:    { fmula16.hs00 d0, d1, d2; nop }
-; CHECK-NEXT:    { fmula16.hs11 d0, d1, d2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; x2srli32 d2, d2, 32 }
+; CHECK-NEXT:    { x2srai32 d2, d2, 16; x2slli32 d3, d2, 16 }
+; CHECK-NEXT:    { x2slli32 d2, d2, 16; x2srai32 d3, d3, 16 }
+; CHECK-NEXT:    { x2srai32 d2, d2, 16; fmula16.ls00 d0, d1, d3 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; fmula16.ls11 d0, d1, d3 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; fmula16.hs00 d0, d1, d2 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; fmula16.hs11 d0, d1, d2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.mulfp32x16x2ras.high(i64 %acc, i64 %a32, i64 %b16)
   ret i64 %r
 }

@@ -29,66 +29,66 @@
 define i64 @i64_const_small() nounwind {
 ; CHECK-LABEL: i64_const_small:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r1, r0, 1; nop }
-; CHECK-NEXT:    { sext32t64 d0, r1; nop }
-; CHECK-NEXT:    { slli64 d0, d0, 32; nop }
-; CHECK-NEXT:    { srli64 d0, d0, 32; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; addi32_w r1, r0, 1 }
+; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
+; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   ret i64 1
 }
 
 define i64 @i64_const_large() nounwind {
 ; CHECK-LABEL: i64_const_large:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { lui r1, 291; nop }
-; CHECK-NEXT:    { addi32_w r1, r1, 284280; nop }
-; CHECK-NEXT:    { sext32t64 d0, r1; nop }
-; CHECK-NEXT:    { slli64 d0, d0, 32; nop }
-; CHECK-NEXT:    { srli64 d0, d0, 32; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; lui r1, 291 }
+; CHECK-NEXT:    { nop; addi32_w r1, r1, 284280 }
+; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
+; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   ret i64 305419896            ; 0x12345678
 }
 
 define i64 @i64_const_neg() nounwind {
 ; CHECK-LABEL: i64_const_neg:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r1, r0, -1; nop }
-; CHECK-NEXT:    { sext32t64 d0, r1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; addi32_w r1, r0, -1 }
+; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   ret i64 -1                   ; 0xFFFFFFFFFFFFFFFF
 }
 
 define i64 @i64_const_in_two_blocks(i32 %c) nounwind {
 ; CHECK-LABEL: i64_const_in_two_blocks:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 0; nop }
-; CHECK-NEXT:    { seq32 r1, r1, r2; nop }
-; CHECK-NEXT:    { xori32 r1, r1, 1; nop }
-; CHECK-NEXT:    { addi32_w r1, r0, 42; nop }
-; CHECK-NEXT:    { sext32t64 d0, r1; nop }
-; CHECK-NEXT:    { slli64 d0, d0, 32; nop }
-; CHECK-NEXT:    { srli64 d0, d0, 32; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; addi32_w r2, r0, 0 }
+; CHECK-NEXT:    { nop; seq32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; xori32 r1, r1, 1 }
+; CHECK-NEXT:    { nop; addi32_w r1, r0, 42 }
+; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
+; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   %t = icmp eq i32 %c, 0
   br i1 %t, label %then, label %else

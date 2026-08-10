@@ -4,6 +4,8 @@ include_directories(
   ${PROJECT_BINARY_DIR}/lib/Target/Haydn
   )
 
+set(LLVM_OPTIONAL_SOURCES HaydnTestEncodingProfileProvider.cpp)
+
 set(LLVM_LINK_COMPONENTS
   HaydnCodeGen
   HaydnDesc
@@ -25,6 +27,7 @@ add_llvm_target_unittest(HaydnTests
   HaydnBundlePlanTest.cpp
   HaydnBundleTest.cpp
   HaydnBundleVerifyTest.cpp
+  HaydnDecisionGuardTest.cpp
   HaydnFormatERecordsTest.cpp
   HaydnFormatOrderingTest.cpp
   HaydnFormatRegistryTest.cpp

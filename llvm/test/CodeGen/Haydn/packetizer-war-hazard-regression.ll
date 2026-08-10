@@ -1,9 +1,14 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
 ; RUN:     -stop-after=postmisched < %s | FileCheck %s
-; Format E96 cutover residual: FileCheck/idle-pad/reloc geometry still open (GE96-01/03).
-; XFAIL: *
 
 ; Role: MIR — VLIW packetizer WAR (write-after-read) hazard.
+
+; Contract: postmisched must not co-issue a WAR on the same physreg.
+; CHECK-LABEL: name: war_hazard_test
+; CHECK: SLLI32
+; CHECK: S_LW_PRE_REG
+; CHECK-NOT: BUNDLE
+
 
 ; REGRESSION TEST: VLIW packetizer WAR (write-after-read) hazard.
 ;

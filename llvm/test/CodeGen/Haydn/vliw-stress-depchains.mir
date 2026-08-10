@@ -141,14 +141,10 @@ body:             |
     ; CHECK-LABEL: name: test2_two_independent_chains
     ; CHECK: liveins: $r0, $r1, $d2, $d3, $d5
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit-def $d0, implicit $r0, implicit killed $r1, implicit killed $d2, implicit killed $d3 {
-    ; CHECK-NEXT:   $r2 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
-    ; CHECK-NEXT:   $d0 = ADD64_S1 killed $d2, killed $d3, implicit-def dead $sfr
-    ; CHECK-NEXT: }
-    ; CHECK-NEXT: BUNDLE 0, 0, implicit-def $r4, implicit-def dead $sfr, implicit-def $d4, implicit killed $r2, implicit $r0, implicit killed $d0, implicit killed $d5 {
-    ; CHECK-NEXT:   $r4 = ADD32_S2 killed $r2, $r0, implicit-def dead $sfr
-    ; CHECK-NEXT:   $d4 = SUB64_S1 killed $d0, killed $d5, implicit-def dead $sfr
-    ; CHECK-NEXT: }
+    ; CHECK-NEXT: $r2 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
+    ; CHECK-NEXT: $d0 = ADD64_S2 killed $d2, killed $d3, implicit-def dead $sfr
+    ; CHECK-NEXT: $r4 = ADD32_S2 killed $r2, $r0, implicit-def dead $sfr
+    ; CHECK-NEXT: $d4 = SUB64_S2 killed $d0, killed $d5, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r4
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
@@ -267,13 +263,11 @@ body:             |
     ; CHECK-LABEL: name: test4_interleaved_deps
     ; CHECK: liveins: $r0, $r1, $d2, $d3, $d5, $d6
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE 1, 0, implicit-def $d0, implicit-def dead $sfr, implicit-def $d4, implicit-def $r2, implicit killed $d2, implicit killed $d3, implicit killed $d5, implicit killed $d6, implicit $r0, implicit killed $r1 {
-    ; CHECK-NEXT:   $d0 = ADD64_S2 killed $d2, killed $d3, implicit-def dead $sfr
-    ; CHECK-NEXT:   $d4 = ADD64_S1 killed $d5, killed $d6, implicit-def dead $sfr
-    ; CHECK-NEXT:   $r2 = ADD32_S0 $r0, killed $r1, implicit-def dead $sfr
-    ; CHECK-NEXT: }
+    ; CHECK-NEXT: $r2 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
     ; CHECK-NEXT: $r3 = SUB32_S2 killed $r2, $r0, implicit-def dead $sfr
+    ; CHECK-NEXT: $d0 = ADD64_S2 killed $d2, killed $d3, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r3
+    ; CHECK-NEXT: $d4 = ADD64_S2 killed $d5, killed $d6, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
     $d0 = ADD64 $d2, $d3, implicit-def dead $sfr

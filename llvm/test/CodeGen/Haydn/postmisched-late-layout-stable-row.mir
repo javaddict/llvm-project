@@ -54,10 +54,12 @@ body:             |
 
     ; CHECK-LABEL: name: postmisched_through_late_multipass
     ;
-    ; Full product multipass with postmisched: multi-MI exact-commit survives.
+    ; Full product multipass with postmisched: one-SFR-writer law packs each
+    ; flag-writing ALU as its own Format E cycle (no dual dead $sfr coissue).
     ; POSTRA: BUNDLE 0
-    ; POSTRA-DAG: ADD32_S2
-    ; POSTRA-DAG: XOR32_S1
+    ; POSTRA: ADD32
+    ; POSTRA: BUNDLE 0
+    ; POSTRA: XOR32
     ; POSTRA: BUNDLE 0
     ; POSTRA: OR32
     ; POSTRA: BUNDLE 0

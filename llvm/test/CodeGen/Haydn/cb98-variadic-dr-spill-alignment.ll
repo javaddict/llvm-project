@@ -29,59 +29,62 @@ define i32 @cb98_first(i32 %count, i32 %ignored, ...) {
 ; (IncomingSP-56 after 4B pad between banks). Historical bug was sp+20.
 ; CHECK-LABEL: cb98_first:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 72; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 72 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 72
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r1, sp, 52; nop }
-; CHECK-NEXT:    { st32 r3, r1, 0; nop }
-; CHECK-NEXT:    { st32 r4, r1, 1; nop }
-; CHECK-NEXT:    { st32 r5, r1, 2; nop }
-; CHECK-NEXT:    { st32 r6, r1, 3; nop }
-; CHECK-NEXT:    { st32 r7, r1, 4; nop }
-; CHECK-NEXT:    { addi32_w r1, sp, 16; nop }
-; CHECK-NEXT:    { st64 d0, r1, 0; nop }
-; CHECK-NEXT:    { st64 d1, r1, 1; nop }
-; CHECK-NEXT:    { st64 d2, r1, 2; nop }
-; CHECK-NEXT:    { addi32_w r2, sp, 12; nop }
-; CHECK-NEXT:    { st64 d3, r1, 3; nop }
-; CHECK-NEXT:    { addi32_w r1, sp, 72; nop }
-; CHECK-NEXT:    { st32 r1, r2, 0; nop }
+; CHECK-NEXT:    { nop; addi32_w r1, sp, 52 }
+; CHECK-NEXT:    { nop; st32 r3, r1, 0 }
+; CHECK-NEXT:    { nop; st32 r4, r1, 1 }
+; CHECK-NEXT:    { nop; st32 r5, r1, 2 }
+; CHECK-NEXT:    { nop; st32 r6, r1, 3 }
+; CHECK-NEXT:    { nop; st32 r7, r1, 4 }
+; CHECK-NEXT:    { nop; addi32_w r1, sp, 16 }
+; CHECK-NEXT:    { nop; st64 d0, r1, 0 }
+; CHECK-NEXT:    { nop; st64 d1, r1, 1 }
+; CHECK-NEXT:    { nop; st64 d2, r1, 2 }
+; CHECK-NEXT:    { nop; st64 d3, r1, 3 }
+; CHECK-NEXT:    { nop; addi32_w r2, sp, 12 }
+; CHECK-NEXT:    { nop; addi32_w r1, sp, 72 }
+; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r1, sp, 72; nop }
-; CHECK-NEXT:    { st32 r1, r2, 1; nop }
+; CHECK-NEXT:    { nop; addi32_w r1, sp, 72 }
+; CHECK-NEXT:    { nop; st32 r1, r2, 1 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r1, sp, 48; nop }
-; CHECK-NEXT:    { st32 r1, r2, 2; nop }
+; CHECK-NEXT:    { nop; addi32_w r1, sp, 48 }
+; CHECK-NEXT:    { nop; st32 r1, r2, 2 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r1, r0, -20; nop }
-; CHECK-NEXT:    { st32 r1, r2, 3; nop }
+; CHECK-NEXT:    { nop; addi32_w r1, r0, -20 }
+; CHECK-NEXT:    { nop; st32 r1, r2, 3 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r1, r0, -32; nop }
-; CHECK-NEXT:    { st32 r1, r2, 4; nop }
-; CHECK-NEXT:    { ld32 r3, r2, 3; ld32 r4, r2, 1 }
-; CHECK-NEXT:    { addi32_w r5, r3, 4; nop }
-; CHECK-NEXT:    { slt32 r5, r0, r5; nop }
-; CHECK-NEXT:    { bnez_w r5, .LBB0_1; nop }
-; CHECK-NEXT:    { beqz_w r0, .LBB0_2; nop }
+; CHECK-NEXT:    { nop; addi32_w r1, r0, -32 }
+; CHECK-NEXT:    { nop; st32 r1, r2, 4 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { ld32 r4, r2, 1; ld32 r3, r2, 3 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; addi32_w r5, r3, 4 }
+; CHECK-NEXT:    { nop; slt32 r5, r0, r5 }
+; CHECK-NEXT:    { nop; bnez_w r5, .LBB0_1 }
+; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_2 }
 ; CHECK-NEXT:  .LBB0_1: // %entry
-; CHECK-NEXT:    { ld32 r4, r2, 0; nop }
-; CHECK-NEXT:    { ld32 r5, r4, 0; nop }
-; CHECK-NEXT:    { addi32_w r3, r4, 8; nop }
-; CHECK-NEXT:    { add32 r1, r5, r0; st32 r3, r2, 0 }
-; CHECK-NEXT:    { beqz_w r0, .LBB0_3; nop }
-; CHECK-NEXT:  .LBB0_2: // %entry
-; CHECK-NEXT:    { ld32 r3, r2, 3; ld32 r4, r2, 1 }
+; CHECK-NEXT:    { nop; ld32 r4, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { add32 r4, r4, r3; nop }
-; CHECK-NEXT:    { ld32 r5, r4, 0; nop }
-; CHECK-NEXT:    { addi32_w r3, r3, 4; nop }
-; CHECK-NEXT:    { add32 r1, r5, r0; st32 r3, r2, 3 }
-; CHECK-NEXT:    { beqz_w r0, .LBB0_3; nop }
+; CHECK-NEXT:    { nop; ld32 r5, r4, 0 }
+; CHECK-NEXT:    { nop; addi32_w r3, r4, 8 }
+; CHECK-NEXT:    { st32 r3, r2, 0; add32 r1, r5, r0 }
+; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_3 }
+; CHECK-NEXT:  .LBB0_2: // %entry
+; CHECK-NEXT:    { ld32 r4, r2, 1; ld32 r3, r2, 3 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; add32 r4, r4, r3 }
+; CHECK-NEXT:    { nop; ld32 r5, r4, 0 }
+; CHECK-NEXT:    { nop; addi32_w r3, r3, 4 }
+; CHECK-NEXT:    { st32 r3, r2, 3; add32 r1, r5, r0 }
+; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_3 }
 ; CHECK-NEXT:  .LBB0_3: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 72; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 72 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)

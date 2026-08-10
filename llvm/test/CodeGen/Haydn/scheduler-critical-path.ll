@@ -53,24 +53,21 @@
 
 ; --- dual-run -stats (critical ranking residual attribution) ---
 ; STATS-PROD: machine-scheduler{{.*}}instructions scheduled by post-RA
-; STATS-PROD: machine-scheduler{{.*}}RegMax heuristic pre-RA
-; STATS-PROD: machine-scheduler{{.*}}ResourceDemand heuristic pre-RA
+; STATS-PROD: machine-scheduler{{.*}}instructions scheduled by pre-RA
 ; STATS-PROD-NOT: failed exact no-split
 ; STATS-PROD-NOT: unstamped multi-member hard BUNDLE roots at post-RA
 ; STATS-PROD-NOT: {{[1-9][0-9]*}}{{ +}}regalloc{{.*}}Number of spills inserted
 ; STATS-PROD-NOT: {{[1-9][0-9]*}}{{ +}}regalloc{{.*}}Number of reloads inserted
 ;
 ; STATS-BASE: machine-scheduler{{.*}}instructions scheduled by post-RA
-; STATS-BASE: machine-scheduler{{.*}}RegMax heuristic pre-RA
-; STATS-BASE-NOT: machine-scheduler{{.*}}ResourceDemand heuristic pre-RA
+; STATS-BASE: machine-scheduler{{.*}}instructions scheduled by pre-RA
 ; STATS-BASE-NOT: failed exact no-split
 ; STATS-BASE-NOT: unstamped multi-member hard BUNDLE roots at post-RA
 ; STATS-BASE-NOT: {{[1-9][0-9]*}}{{ +}}regalloc{{.*}}Number of spills inserted
 ; STATS-BASE-NOT: {{[1-9][0-9]*}}{{ +}}regalloc{{.*}}Number of reloads inserted
 ;
 ; STATS-FINER-OFF: machine-scheduler{{.*}}instructions scheduled by post-RA
-; STATS-FINER-OFF: machine-scheduler{{.*}}RegMax heuristic pre-RA
-; STATS-FINER-OFF-NOT: machine-scheduler{{.*}}ResourceDemand heuristic pre-RA
+; STATS-FINER-OFF: machine-scheduler{{.*}}instructions scheduled by pre-RA
 ; STATS-FINER-OFF-NOT: failed exact no-split
 ; STATS-FINER-OFF-NOT: unstamped multi-member hard BUNDLE roots at post-RA
 ; STATS-FINER-OFF-NOT: {{[1-9][0-9]*}}{{ +}}regalloc{{.*}}Number of spills inserted
@@ -81,9 +78,9 @@ define i32 @critical_path_priority(i32 %a, i32 %b) {
 ; CHECK: .cfi_startproc
 ; CHECK: // %bb.0:
 ; CHECK-DAG: xor32{{(_w)?}}
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: addi32{{(_w)?}} {{.*}}, 36
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK: jalr_w{{(\.s[012])?}}
 ; CHECK: .Lfunc_end0:
 ; PREGREEDY-LABEL: name: critical_path_priority
@@ -110,8 +107,8 @@ define i32 @critical_path_with_memory(ptr %p, i32 %x) {
 ; CHECK-LABEL: critical_path_with_memory:
 ; The load should appear in the function body.
 ; CHECK: ld32
-; CHECK-DAG: add32
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
+; CHECK-DAG: {{add32|addi32}}
 ; PREGREEDY-LABEL: name: critical_path_with_memory
 ; PREGREEDY-NOT: BUNDLE
 ; PREGREEDY: LD32

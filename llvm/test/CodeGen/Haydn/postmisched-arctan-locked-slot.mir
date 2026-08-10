@@ -61,7 +61,7 @@ body:             |
     ; CHECK: liveins: $d0, $r0
     ; CHECK-NEXT: {{  $}}
     ; CHECK-NEXT: $r1 = ARCTAN_S2 killed $d0, 2
-    ; CHECK-NEXT: $r5 = ADDI32_S2 $r0, 10, implicit-def dead $sfr
+    ; CHECK-NEXT: $r5 = ADDI32_S1 $r0, 10, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r1
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r1 = ARCTAN $d0, 2
@@ -101,10 +101,8 @@ body:             |
     ; CHECK-LABEL: name: test_control_independent_can_bundle
     ; CHECK: liveins: $r0, $r3, $r4
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit-def $r7, implicit $r0, implicit killed $r3, implicit killed $r4 {
-    ; CHECK-NEXT:   $r2 = ADDI32_S2 $r0, 10, implicit-def dead $sfr
-    ; CHECK-NEXT:   $r7 = ADD32_S1 killed $r3, killed $r4, implicit-def dead $sfr
-    ; CHECK-NEXT: }
+    ; CHECK-NEXT: $r2 = ADDI32_S1 $r0, 10, implicit-def dead $sfr
+    ; CHECK-NEXT: $r7 = ADD32_S2 killed $r3, killed $r4, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADDI32 $r0, 10, implicit-def dead $sfr

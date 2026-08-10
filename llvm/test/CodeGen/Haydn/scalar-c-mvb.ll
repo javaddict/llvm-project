@@ -16,13 +16,13 @@
 define i32 @add(i32 %a, i32 %b) {
 ; CHECK-LABEL: add:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { add32 r1, r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = add i32 %a, %b
   ret i32 %r
 }
@@ -30,13 +30,13 @@ define i32 @add(i32 %a, i32 %b) {
 define i32 @sub(i32 %a, i32 %b) {
 ; CHECK-LABEL: sub:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { sub32 r1, r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; sub32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = sub i32 %a, %b
   ret i32 %r
 }
@@ -44,14 +44,15 @@ define i32 @sub(i32 %a, i32 %b) {
 define i32 @mul(i32 %a, i32 %b) {
 ; CHECK-LABEL: mul:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { mull r2, r1, r2; nop }
-; CHECK-NEXT:    { move32 r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; mull r2, r1, r2 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; move32 r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = mul i32 %a, %b
   ret i32 %r
 ; Scalar s32 mul lowers to mull.
@@ -61,13 +62,13 @@ define i32 @mul(i32 %a, i32 %b) {
 define i32 @and_op(i32 %a, i32 %b) {
 ; CHECK-LABEL: and_op:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { and32 r1, r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; and32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = and i32 %a, %b
   ret i32 %r
 }
@@ -75,13 +76,13 @@ define i32 @and_op(i32 %a, i32 %b) {
 define i32 @or_op(i32 %a, i32 %b) {
 ; CHECK-LABEL: or_op:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { or32 r1, r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; or32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = or i32 %a, %b
   ret i32 %r
 }
@@ -89,13 +90,13 @@ define i32 @or_op(i32 %a, i32 %b) {
 define i32 @xor_op(i32 %a, i32 %b) {
 ; CHECK-LABEL: xor_op:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { xor32 r1, r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = xor i32 %a, %b
   ret i32 %r
 }
@@ -104,13 +105,13 @@ define i32 @xor_op(i32 %a, i32 %b) {
 define i32 @shl_op(i32 %a, i32 %b) {
 ; CHECK-LABEL: shl_op:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { sll32 r1, r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; sll32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = shl i32 %a, %b
   ret i32 %r
 }
@@ -118,13 +119,13 @@ define i32 @shl_op(i32 %a, i32 %b) {
 define i32 @lshr_op(i32 %a, i32 %b) {
 ; CHECK-LABEL: lshr_op:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { srl32 r1, r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; srl32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = lshr i32 %a, %b
   ret i32 %r
 }
@@ -132,13 +133,13 @@ define i32 @lshr_op(i32 %a, i32 %b) {
 define i32 @ashr_op(i32 %a, i32 %b) {
 ; CHECK-LABEL: ashr_op:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { sra32 r1, r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; sra32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = ashr i32 %a, %b
   ret i32 %r
 }
@@ -147,13 +148,13 @@ define i32 @ashr_op(i32 %a, i32 %b) {
 define i32 @select_test(i32 %a, i32 %b) {
 ; CHECK-LABEL: select_test:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { min32 r1, r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; min32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %cmp = icmp slt i32 %a, %b
   %r = select i1 %cmp, i32 %a, i32 %b
   ret i32 %r
@@ -163,18 +164,18 @@ define i32 @select_test(i32 %a, i32 %b) {
 define i32 @max_func(i32 %a, i32 %b) {
 ; CHECK-LABEL: max_func:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { slt32 r3, r2, r1; nop }
-; CHECK-NEXT:    { xori32 r3, r3, 1; nop }
-; CHECK-NEXT:    { beqz_w r3, .LBB10_2; nop }
+; CHECK-NEXT:    { nop; slt32 r3, r2, r1 }
+; CHECK-NEXT:    { nop; xori32 r3, r3, 1 }
+; CHECK-NEXT:    { nop; beqz_w r3, .LBB10_2 }
 ; CHECK-NEXT:  // %bb.1: // %false_bb
-; CHECK-NEXT:    { move32 r1, r2; nop }
+; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:  .LBB10_2: // %true_bb
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %cmp = icmp sgt i32 %a, %b
   br i1 %cmp, label %true_bb, label %false_bb
 
@@ -191,16 +192,16 @@ declare i32 @extern_func(i32)
 define i32 @call_test(i32 %x) {
 ; CHECK-LABEL: call_test:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { st32 lr, sp, 3; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-NEXT:    .cfi_offset lr, 12
-; CHECK-NEXT:    { jal_w lr, extern_func; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { ld32 lr, sp, 3; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 16; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    .cfi_offset lr, -4
+; CHECK-NEXT:    { nop; jal_w lr, extern_func }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = call i32 @extern_func(i32 %x)
   ret i32 %r
 }
@@ -209,17 +210,17 @@ define i32 @call_test(i32 %x) {
 define i32 @load_store(i32* %p) {
 ; CHECK-LABEL: load_store:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { ld32 r3, r1, 0; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 1; nop }
-; CHECK-NEXT:    { add32 r2, r3, r2; nop }
-; CHECK-NEXT:    { st32 r2, r1, 0; nop }
-; CHECK-NEXT:    { move32 r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; ld32 r2, r1, 0 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; addi32 r2, r2, 1 }
+; CHECK-NEXT:    { nop; st32 r2, r1, 0 }
+; CHECK-NEXT:    { nop; move32 r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %v = load i32, i32* %p
   %r = add i32 %v, 1
   store i32 %r, i32* %p
@@ -230,17 +231,16 @@ define i32 @load_store(i32* %p) {
 define i32 @array_access(i32* %arr, i32 %idx) {
 ; CHECK-LABEL: array_access:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { nop; slli32 r2, r2, 2 }
+; CHECK-NEXT:    { nop; s_lw_pre_reg r2, r1, r2 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 2; nop }
-; CHECK-NEXT:    { sll32 r2, r2, r3; nop }
-; CHECK-NEXT:    { s_lw_pre_reg r2, r1, r2; nop }
-; CHECK-NEXT:    { move32 r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; move32 r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %ptr = getelementptr i32, i32* %arr, i32 %idx
   %v = load i32, i32* %ptr
   ret i32 %v
@@ -252,15 +252,15 @@ define i32 @array_access(i32* %arr, i32 %idx) {
 define i32 @struct_field(%struct.point* %p) {
 ; CHECK-LABEL: struct_field:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { ld32 r2, r1, 0; ld32 r1, r1, 1 }
+; CHECK-NEXT:    { ld32 r1, r1, 1; ld32 r2, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { add32 r1, r2, r1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %x.ptr = getelementptr %struct.point, %struct.point* %p, i32 0, i32 0
   %y.ptr = getelementptr %struct.point, %struct.point* %p, i32 0, i32 1
   %x = load i32, i32* %x.ptr
@@ -273,39 +273,37 @@ define i32 @struct_field(%struct.point* %p) {
 define i32 @fib(i32 %n) {
 ; CHECK-LABEL: fib:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 24; nop }
-; CHECK-NEXT:    { addi32_w r2, sp, 12; nop }
-; CHECK-NEXT:    { st32 lr, r2, 0; nop }
-; CHECK-NEXT:    { st32 r9, r2, 1; nop }
-; CHECK-NEXT:    { st32 r8, r2, 2; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { nop; addi32_w r2, sp, 12 }
+; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
+; CHECK-NEXT:    { nop; st32 r9, r2, 1 }
+; CHECK-NEXT:    { nop; st32 r8, r2, 2 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
-; CHECK-NEXT:    .cfi_offset r8, 20
-; CHECK-NEXT:    .cfi_offset r9, 16
-; CHECK-NEXT:    .cfi_offset lr, 12
+; CHECK-NEXT:    .cfi_offset r8, -4
+; CHECK-NEXT:    .cfi_offset r9, -8
+; CHECK-NEXT:    .cfi_offset lr, -12
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 1; nop }
-; CHECK-NEXT:    { slt32 r2, r2, r1; nop }
-; CHECK-NEXT:    { beqz_w r2, .LBB15_2; nop }
+; CHECK-NEXT:    { nop; addi32_w r2, r0, 1 }
+; CHECK-NEXT:    { nop; slt32 r2, r2, r1 }
+; CHECK-NEXT:    { nop; beqz_w r2, .LBB15_2 }
 ; CHECK-NEXT:  // %bb.1: // %recurse
-; CHECK-NEXT:    { addi32_w r2, r0, -1; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, -2; nop }
-; CHECK-NEXT:    { add32 r2, r1, r2; add32 r8, r1, r3 }
-; CHECK-NEXT:    { move32 r1, r2; nop }
-; CHECK-NEXT:    { jal_w lr, fib; nop }
-; CHECK-NEXT:    { move32 r9, r1; nop }
-; CHECK-NEXT:    { move32 r1, r8; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { jal_w lr, fib; nop }
-; CHECK-NEXT:    { add32 r1, r9, r1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { addi32 r8, r1, -2; addi32 r2, r1, -1 }
+; CHECK-NEXT:    { nop; move32 r1, r2 }
+; CHECK-NEXT:    { nop; jal_w lr, fib }
+; CHECK-NEXT:    { nop; move32 r9, r1 }
+; CHECK-NEXT:    { nop; move32 r1, r8 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; jal_w lr, fib }
+; CHECK-NEXT:    { nop; add32 r1, r9, r1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:  .LBB15_2: // %base
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { ld32 lr, sp, 3; nop }
-; CHECK-NEXT:    { ld32 r9, sp, 4; nop }
-; CHECK-NEXT:    { ld32 r8, sp, 5; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 24; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
+; CHECK-NEXT:    { nop; ld32 r9, sp, 4 }
+; CHECK-NEXT:    { nop; ld32 r8, sp, 5 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %cmp = icmp sle i32 %n, 1
   br i1 %cmp, label %base, label %recurse
 
@@ -325,13 +323,13 @@ recurse:
 define i64 @add_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: add_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { add64 d0, d0, d1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %r = add i64 %a, %b
   ret i64 %r
 }
@@ -339,21 +337,23 @@ define i64 @add_i64(i64 %a, i64 %b) {
 define i64 @load64(i64* %p) {
 ; CHECK-LABEL: load64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 24; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r2, r1, 4; nop }
-; CHECK-NEXT:    { ld32 r1, r1, 0; ld32 r2, r2, 0 }
-; CHECK-NEXT:    { st32 r1, sp, 2; nop } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; addi32_w r2, r1, 4 }
+; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { st32 r2, sp, 3; nop } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; st32 r2, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { ld64 d0, sp, 1; nop } // 8-byte Folded Reload
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; ld64 d0, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 24; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %v = load i64, i64* %p
   ret i64 %v
 }
@@ -361,15 +361,15 @@ define i64 @load64(i64* %p) {
 define void @store64(i64* %p, i64 %v) {
 ; CHECK-LABEL: store64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { d_sw_l_with_imm d0, r1, 0; nop }
-; CHECK-NEXT:    { addi32_w r2, r1, 4; nop }
-; CHECK-NEXT:    { d_sw_h_with_imm d0, r2, 0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r1, 0 }
+; CHECK-NEXT:    { nop; addi32_w r2, r1, 4 }
+; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r2, 0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   store i64 %v, i64* %p
   ret void
 }

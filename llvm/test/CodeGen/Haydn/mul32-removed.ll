@@ -12,14 +12,15 @@ define i32 @scalar_mul(i32 %a, i32 %b) {
 ; REBASELINED (auto) B3.exit.4 Desc-only Format E print (S0-S1-S2 / setDesc members); .file skipped
 ; CHECK-LABEL: scalar_mul:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { mull r2, r1, r2; nop }
-; CHECK-NEXT:    { move32 r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; mull r2, r1, r2 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; move32 r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   %m = mul i32 %a, %b
   ret i32 %m
@@ -29,19 +30,17 @@ entry:
 define i32 @cond_mul(i32 %n, i32 %h, i32 %x) {
 ; CHECK-LABEL: cond_mul:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { mull r3, r2, r3; nop }
-; CHECK-NEXT:    { addi32_w r4, r0, 1; nop }
-; CHECK-NEXT:    { addi32_w r5, r0, 0; nop }
-; CHECK-NEXT:    { and32 r1, r1, r4; nop }
-; CHECK-NEXT:    { seq32 r1, r1, r5; nop }
-; CHECK-NEXT:    { movt32 r3, r2, r1; nop }
-; CHECK-NEXT:    { move32 r1, r3; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { andi32 r1, r1, 1; mull r3, r2, r3 }
+; CHECK-NEXT:    { nop; addi32_w r4, r0, 0 }
+; CHECK-NEXT:    { nop; seq32 r1, r1, r4 }
+; CHECK-NEXT:    { nop; movt32 r3, r2, r1 }
+; CHECK-NEXT:    { nop; move32 r1, r3 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   %bit = and i32 %n, 1
   %cmp = icmp eq i32 %bit, 0

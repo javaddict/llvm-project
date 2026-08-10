@@ -4,10 +4,9 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -filetype=obj < %s -o %t.o
 ; RUN: llvm-objdump -d %t.o | FileCheck %s --check-prefix=OBJDUMP
 ; REQUIRES: haydn-registered-target
-; Format E96 cutover residual: FileCheck/idle-pad/reloc geometry still open (GE96-01/03).
-; XFAIL: *
 
 ; Role: object — destructive-constraint emitter error no longer fires — the selector now lowers wrap 32-bit mul via mull; full llc | llvm-mc | objdump round-trips.
+; Objdump prints return as `jalr` (asm text may still show `jalr_w`).
 
 
 ;
@@ -93,7 +92,7 @@ entry:
 
 ; Prologue: stack frame setup and callee-save using R12 (not R7!)
 ; ASM: subi32{{.*}}sp, sp
-; ASM: { {{.*}}addi32_w r12, sp, {{[0-9]+}}{{.*}} }
+; ASM: { {{.*}}addi32_w{{.*}}r12, sp, {{[0-9]+}}{{.*}} }
 ; Saved vars are R8-R11 only (R12 is reserved AT, never saved —).
 ; ASM: st32{{.*}}{{r[89]|r1[01]}}, r12
 
@@ -135,4 +134,4 @@ entry:
 ; OBJDUMP-DAG: mull
 ; OBJDUMP-DAG: mull
 ; OBJDUMP-DAG: sub32
-; OBJDUMP-DAG: jalr_w{{.*}}r0, lr, 0
+; OBJDUMP-DAG: jalr{{.*}}r0, lr, 0

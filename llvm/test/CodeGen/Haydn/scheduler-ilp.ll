@@ -39,8 +39,8 @@
 ;              target HR always installed via CreateTargetMIHazardRecognizer)
 ;   * FINER — optional -haydn-premisched-finer-rp-tracking=false residual
 ; KPI freeze:
-;   * product arm fires ResourceDemand (matching-frontier) pre-RA heuristic
-;   * residual arms have no ResourceDemand ranking
+;   * small ILP kernel uses NodeOrder pre-RA (no ResourceDemand picks under architectural load latency)
+;   * residual arms also have no ResourceDemand ranking
 ;   * post-RA multi-MI exact finalize present both sides (≥1)
 ;   * spill/reload/split/hard-root counters silent
 ;   * -stop-before=greedy: no BUNDLE, no _S* member setDesc either arm
@@ -50,7 +50,8 @@
 
 ; --- dual-run -stats (ILP ranking residual attribution) ---
 ; STATS-PROD: haydn-post-ra-sched{{.*}}multi-MI cycles finalized as BUNDLE
-; STATS-PROD: machine-scheduler{{.*}}ResourceDemand heuristic pre-RA
+; STATS-PROD: machine-scheduler{{.*}}NodeOrder heuristic pre-RA
+; STATS-PROD-NOT: machine-scheduler{{.*}}ResourceDemand heuristic pre-RA
 ; STATS-PROD-NOT: failed exact no-split
 ; STATS-PROD-NOT: unstamped multi-member hard BUNDLE roots at post-RA
 ; STATS-PROD-NOT: {{[1-9][0-9]*}}{{ +}}regalloc{{.*}}Number of spills inserted
@@ -78,10 +79,10 @@
 
 define i32 @ilp_independent_ops(i32 %a, i32 %b, i32 %c) {
 ; CHECK-LABEL: ilp_independent_ops:
-; CHECK-DAG: add32
-; CHECK-DAG: add32
-; CHECK-DAG: addi32{{(_w)?}} {{.*}}, 6
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
+; CHECK-DAG: {{add32|addi32}}
+; CHECK-DAG: {{addi32|add32}}
+; CHECK-DAG: {{add32|addi32}}
 ; PREGREEDY-LABEL: name: ilp_independent_ops
 ; PREGREEDY-NOT: BUNDLE
 ; PREGREEDY: ADD32

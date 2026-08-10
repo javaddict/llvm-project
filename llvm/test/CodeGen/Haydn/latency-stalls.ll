@@ -2,29 +2,30 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s --check-prefix=O2
 ;
 ; Haydn has an EXPOSED pipeline: no interlock. A Data_Latency = 2 def (loads,
-; CSRR, MAC) must not be read in the next bundle. Nothing enforced this before
-; HaydnLatencyStalls:
+; CSRR, MAC) must not be read in the next bundle. HaydnLatencyStalls is the
+; pre-emit correctness net / auditor:
 ;
 ;   * -O0 functions are optnone, so PostMachineScheduler AND
-;     HaydnFinalizeBundle both skipFunction — nothing schedules at all
-;   * HaydnSubtarget::adjustSchedDependency deliberately softens load->use to
-;     latency 1 as a scheduling heuristic
+;     HaydnFinalizeBundle both skipFunction — nothing schedules at all, so
+;     the stall pass must insert the architectural bubble
+;   * at -O1+ schedulers already see architectural load→use latency 2 and
+;     should leave empty cycles; the pass remains a late-mutation auditor
+;     and still inserts if anything reorders into a latency window
 ;
 ; BundleSim cannot catch a violation either: it is a functional bundle simulator
 ; with no timing model, so violating code still returns the right answer in
 ; simulation and the wrong one on hardware.
 ;
-; A load feeding the very next instruction must get a stall bundle between them.
-; With nothing else to fill the slot, that is an all-NOP bundle at both -O0 and
-; -O2 (the -O2 scheduler softens load latency to 1, so the backstop is what
-; separates them).
+; A load feeding the very next instruction must have a stall / empty cycle
+; between them. With nothing else to fill the slot, that is an all-NOP bundle
+; at both -O0 and -O2.
 
 ; O0-LABEL: load_then_use:
 ; O0:      ld32
-; O0-NEXT: nop; {{.*}}nop; {{.*}}nop
+; O0-NEXT: { nop; nop
 ; O2-LABEL: load_then_use:
 ; O2:      ld32
-; O2-NEXT: nop; {{.*}}nop; {{.*}}nop
+; O2-NEXT: { nop; nop
 define i32 @load_then_use(ptr %p) nounwind {
   %v = load i32, ptr %p, align 4
   %s = add i32 %v, %v

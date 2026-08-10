@@ -20,14 +20,14 @@
 
 define zeroext i1 @bool_and(i1 zeroext %a, i1 zeroext %b) {
 ; CHECK-LABEL: bool_and:
-; CHECK: and32
+; CHECK: {{and32|andi32}}
   %result = and i1 %a, %b
   ret i1 %result
 }
 
 define zeroext i1 @bool_or(i1 zeroext %a, i1 zeroext %b) {
 ; CHECK-LABEL: bool_or:
-; CHECK: or32
+; CHECK: {{or32|ori32}}
   %result = or i1 %a, %b
   ret i1 %result
 }
@@ -36,7 +36,7 @@ define zeroext i1 @bool_not(i1 zeroext %a) {
 ; CHECK-LABEL: bool_not:
 ; Soft-zero uses xor32 r0,r0,r0; pin the real ones-complement not32 + mask.
 ; CHECK: not32
-; CHECK: and32
+; CHECK: {{and32|andi32}}
   %result = xor i1 %a, true
   ret i1 %result
 }
@@ -47,7 +47,7 @@ define zeroext i1 @bool_complex(i1 zeroext %a, i1 zeroext %b) {
 ; i8 store/load + trunc s8->s1 path that used to legalize-fail.
 ; CHECK-DAG: st8
 ; CHECK-DAG: ldu8
-; CHECK-DAG: and32
+; CHECK-DAG: {{and32|andi32}}
 entry:
   %a.addr = alloca i8, align 1
   %b.addr = alloca i8, align 1

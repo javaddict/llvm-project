@@ -13,20 +13,17 @@ define i8 @smulh_s8(i8 %a, i8 %b) nounwind {
 ; REBASELINED (auto) B3.exit.4 Desc-only Format E print (S0-S1-S2 / setDesc members); .file skipped
 ; CHECK-LABEL: smulh_s8:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { slli32 r2, r2, 24; slli32 r1, r1, 24 }
+; CHECK-NEXT:    { srai32 r2, r2, 24; srai32 r1, r1, 24 }
+; CHECK-NEXT:    { nop; mull r2, r1, r2 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 24; nop }
-; CHECK-NEXT:    { sll32 r1, r1, r3; sll32 r2, r2, r3 }
-; CHECK-NEXT:    { sra32 r1, r1, r3; sra32 r2, r2, r3 }
-; CHECK-NEXT:    { addi32_w r3, r0, 65535; nop }
-; CHECK-NEXT:    { mull r2, r1, r2; nop }
-; CHECK-NEXT:    { addi32_w r1, r0, 8; nop }
-; CHECK-NEXT:    { and32 r2, r2, r3; nop }
-; CHECK-NEXT:    { srl32 r1, r2, r1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; andi32 r1, r2, 65535 }
+; CHECK-NEXT:    { nop; srli32 r1, r1, 8 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %aa = sext i8 %a to i16
   %bb = sext i8 %b to i16
   %m = mul i16 %aa, %bb
@@ -38,17 +35,15 @@ define i8 @smulh_s8(i8 %a, i8 %b) nounwind {
 define i8 @umulh_s8(i8 %a, i8 %b) nounwind {
 ; CHECK-LABEL: umulh_s8:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { andi32 r2, r2, 255; andi32 r1, r1, 255 }
+; CHECK-NEXT:    { nop; mull r2, r1, r2 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 255; nop }
-; CHECK-NEXT:    { and32 r1, r1, r3; and32 r2, r2, r3 }
-; CHECK-NEXT:    { addi32_w r3, r0, 8; nop }
-; CHECK-NEXT:    { mull r2, r1, r2; nop }
-; CHECK-NEXT:    { srl32 r1, r2, r3; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; srli32 r1, r2, 8 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %aa = zext i8 %a to i16
   %bb = zext i8 %b to i16
   %m = mul i16 %aa, %bb
@@ -60,17 +55,16 @@ define i8 @umulh_s8(i8 %a, i8 %b) nounwind {
 define i16 @smulh_s16(i16 %a, i16 %b) nounwind {
 ; CHECK-LABEL: smulh_s16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { slli32 r2, r2, 16; slli32 r1, r1, 16 }
+; CHECK-NEXT:    { srai32 r2, r2, 16; srai32 r1, r1, 16 }
+; CHECK-NEXT:    { nop; mull r2, r1, r2 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 16; nop }
-; CHECK-NEXT:    { sll32 r1, r1, r3; sll32 r2, r2, r3 }
-; CHECK-NEXT:    { sra32 r1, r1, r3; sra32 r2, r2, r3 }
-; CHECK-NEXT:    { mull r2, r1, r2; nop }
-; CHECK-NEXT:    { srl32 r1, r2, r3; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; srli32 r1, r2, 16 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %aa = sext i16 %a to i32
   %bb = sext i16 %b to i32
   %m = mul i32 %aa, %bb
@@ -82,17 +76,15 @@ define i16 @smulh_s16(i16 %a, i16 %b) nounwind {
 define i16 @umulh_s16(i16 %a, i16 %b) nounwind {
 ; CHECK-LABEL: umulh_s16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { andi32 r2, r2, 65535; andi32 r1, r1, 65535 }
+; CHECK-NEXT:    { nop; mull r2, r1, r2 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 65535; nop }
-; CHECK-NEXT:    { and32 r1, r1, r3; and32 r2, r2, r3 }
-; CHECK-NEXT:    { addi32_w r3, r0, 16; nop }
-; CHECK-NEXT:    { mull r2, r1, r2; nop }
-; CHECK-NEXT:    { srl32 r1, r2, r3; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; srli32 r1, r2, 16 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %aa = zext i16 %a to i32
   %bb = zext i16 %b to i32
   %m = mul i32 %aa, %bb
@@ -104,20 +96,17 @@ define i16 @umulh_s16(i16 %a, i16 %b) nounwind {
 define i8 @smulh_s8_neg(i8 %a, i8 %b) nounwind {
 ; CHECK-LABEL: smulh_s8_neg:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { slli32 r2, r2, 24; slli32 r1, r1, 24 }
+; CHECK-NEXT:    { srai32 r2, r2, 24; srai32 r1, r1, 24 }
+; CHECK-NEXT:    { nop; mull r2, r1, r2 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 24; nop }
-; CHECK-NEXT:    { sll32 r1, r1, r3; sll32 r2, r2, r3 }
-; CHECK-NEXT:    { sra32 r1, r1, r3; sra32 r2, r2, r3 }
-; CHECK-NEXT:    { addi32_w r3, r0, 65535; nop }
-; CHECK-NEXT:    { mull r2, r1, r2; nop }
-; CHECK-NEXT:    { addi32_w r1, r0, 8; nop }
-; CHECK-NEXT:    { and32 r2, r2, r3; nop }
-; CHECK-NEXT:    { srl32 r1, r2, r1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; andi32 r1, r2, 65535 }
+; CHECK-NEXT:    { nop; srli32 r1, r1, 8 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %aa = sext i8 %a to i16
   %bb = sext i8 %b to i16
   %m = mul i16 %aa, %bb

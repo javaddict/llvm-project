@@ -14,6 +14,7 @@
 
 ; PIPE-NOT:      Haydn Load/Store Optimizer
 ; PIPE:      Haydn early post-increment pseudo expansion
+; Product default -haydn-enable-hwloops OFF until ZOL e2e is green.
 ; PIPE-NOT:      Haydn Hardware Loop Detection
 ; PIPE:      PostRA Machine Instruction Scheduler
 ; PIPE-NOT:      Haydn Circular Buffer Detection

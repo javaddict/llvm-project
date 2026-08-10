@@ -1,0 +1,24 @@
+Haydn inverse corruption matrix scaffolding (G-TEST-CONTRACTS / T7)
+==================================================================
+Stamp: 2026-08-10 T7-TEST-CONTRACTS
+
+Purpose: independent final-boundary negatives. Each seat injects one defect;
+verifier/MC/consumer must reject without planner/fallback repair.
+Broad freestanding greens do not close this matrix.
+
+| Seat              | Defect                          | Live pin                                      | Status    |
+|-------------------|---------------------------------|-----------------------------------------------|-----------|
+| row/format        | missing BundleFormatRowID imm   | bundle-corruption-matrix.mir (NO-IMM)         | landed    |
+| row/format        | unknown BundleFormatRowID (99)  | bundle-corruption-matrix.mir (BAD-ID)         | landed    |
+| residual phase    | bare LOADI32 past commit        | bundle-corruption-matrix.mir (RESIDUAL)       | landed    |
+| entry count       | >3 co-issue entries             | MC/Haydn/bundle-canadd-reject.s               | landed    |
+| residual printer  | SETCBR / cross-bank at print    | vf5-residual-*-ban.mir, residual-crossbank-*  | landed    |
+| completion/idle   | wrong completion/pad payload    | GE96-01/02 blocked — no golden invent         | blocked   |
+| member identity   | re-place / wrong member opc     | AR4 / independent inverse still open          | open      |
+| dependence        | illegal unit/port co-issue      | expand as generated inverse lands             | open      |
+| liveness/lifetime | post-mutation lifetime break    | PP5/PP6 fault seats (product owner T2)        | open      |
+| profile/ELF       | upgraded/default e_flags        | strict profile consumer negatives             | open      |
+| size/geometry     | non-12B product parcel          | FE8 product size pins; synthetic test-only    | partial   |
+
+Exit for full matrix: every decision-guard §6.5 seat has a focused reject pin
+and an exact artifact path; no seat is proven only by CoreMark/torture green.

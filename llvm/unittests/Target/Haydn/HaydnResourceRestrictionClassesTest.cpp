@@ -52,7 +52,7 @@ TEST(HaydnResourceRestrictionClassesTest, Class1PackLegalityRulesOneThroughSeven
 
   EXPECT_EQ(PackRuleDualR0DefsIllegal, 1u);
   EXPECT_EQ(PackRuleDualLiveSameRegWAWIllegal, 2u);
-  EXPECT_EQ(PackRuleDualDeadImplicitSfrLegal, 3u);
+  EXPECT_EQ(PackRuleDualDeadImplicitSfrIllegal, 3u);
   EXPECT_EQ(PackRuleArctanSinCosIssueAlone, 4u);
   EXPECT_EQ(PackRuleIssueAndPortBudgets, 5u);
   EXPECT_EQ(PackRulePlacementFieldSlots, 6u);

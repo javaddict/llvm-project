@@ -38,55 +38,55 @@ define i32 @test_many_gpr_callee_saves(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) {
 ; SP, off DCE'd because R12 is reserved AT).
 ; CHECK-LABEL: test_many_gpr_callee_saves:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 32; nop }
-; CHECK-NEXT:    { addi32_w r6, sp, 8; nop }
-; CHECK-NEXT:    { st32 lr, r6, 0; nop }
-; CHECK-NEXT:    { st32 fp, r6, 1; nop }
-; CHECK-NEXT:    { st32 r11, r6, 2; nop }
-; CHECK-NEXT:    { st32 r10, r6, 3; nop }
-; CHECK-NEXT:    { st32 r9, r6, 4; nop }
-; CHECK-NEXT:    { st32 r8, r6, 5; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
+; CHECK-NEXT:    { nop; addi32_w r6, sp, 8 }
+; CHECK-NEXT:    { nop; st32 lr, r6, 0 }
+; CHECK-NEXT:    { nop; st32 fp, r6, 1 }
+; CHECK-NEXT:    { nop; st32 r11, r6, 2 }
+; CHECK-NEXT:    { nop; st32 r10, r6, 3 }
+; CHECK-NEXT:    { nop; st32 r9, r6, 4 }
+; CHECK-NEXT:    { nop; st32 r8, r6, 5 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    .cfi_offset r8, 28
-; CHECK-NEXT:    .cfi_offset r9, 24
-; CHECK-NEXT:    .cfi_offset r10, 20
-; CHECK-NEXT:    .cfi_offset r11, 16
-; CHECK-NEXT:    .cfi_offset fp, 12
-; CHECK-NEXT:    .cfi_offset lr, 8
-; CHECK-NEXT:    { move32 r9, r2; move32 r10, r3 }
-; CHECK-NEXT:    { move32 r11, r4; move32 r8, r5 }
-; CHECK-NEXT:    { jal_w lr, callee_i32; nop }
-; CHECK-NEXT:    { move32 fp, r1; nop }
-; CHECK-NEXT:    { move32 r1, r9; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { jal_w lr, callee_i32; nop }
-; CHECK-NEXT:    { move32 r9, r1; nop }
-; CHECK-NEXT:    { move32 r1, r10; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { jal_w lr, callee_i32; nop }
-; CHECK-NEXT:    { move32 r10, r1; nop }
-; CHECK-NEXT:    { move32 r1, r11; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { jal_w lr, callee_i32; nop }
-; CHECK-NEXT:    { move32 r11, r1; nop }
-; CHECK-NEXT:    { move32 r1, r8; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { jal_w lr, callee_i32; nop }
-; CHECK-NEXT:    { add32 r2, fp, r9; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { add32 r2, r2, r10; nop }
-; CHECK-NEXT:    { add32 r2, r2, r11; nop }
-; CHECK-NEXT:    { add32 r1, r2, r1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { ld32 lr, sp, 2; nop }
-; CHECK-NEXT:    { ld32 fp, sp, 3; nop }
-; CHECK-NEXT:    { ld32 r11, sp, 4; nop }
-; CHECK-NEXT:    { ld32 r10, sp, 5; nop }
-; CHECK-NEXT:    { ld32 r9, sp, 6; nop }
-; CHECK-NEXT:    { ld32 r8, sp, 7; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 32; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    .cfi_offset r8, -4
+; CHECK-NEXT:    .cfi_offset r9, -8
+; CHECK-NEXT:    .cfi_offset r10, -12
+; CHECK-NEXT:    .cfi_offset r11, -16
+; CHECK-NEXT:    .cfi_offset fp, -20
+; CHECK-NEXT:    .cfi_offset lr, -24
+; CHECK-NEXT:    { move32 r10, r3; move32 r9, r2 }
+; CHECK-NEXT:    { move32 r8, r5; move32 r11, r4 }
+; CHECK-NEXT:    { nop; jal_w lr, callee_i32 }
+; CHECK-NEXT:    { nop; move32 fp, r1 }
+; CHECK-NEXT:    { nop; move32 r1, r9 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; jal_w lr, callee_i32 }
+; CHECK-NEXT:    { nop; move32 r9, r1 }
+; CHECK-NEXT:    { nop; move32 r1, r10 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; jal_w lr, callee_i32 }
+; CHECK-NEXT:    { nop; move32 r10, r1 }
+; CHECK-NEXT:    { nop; move32 r1, r11 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; jal_w lr, callee_i32 }
+; CHECK-NEXT:    { nop; move32 r11, r1 }
+; CHECK-NEXT:    { nop; move32 r1, r8 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; jal_w lr, callee_i32 }
+; CHECK-NEXT:    { nop; add32 r2, fp, r9 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; add32 r2, r2, r10 }
+; CHECK-NEXT:    { nop; add32 r2, r2, r11 }
+; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; ld32 lr, sp, 2 }
+; CHECK-NEXT:    { nop; ld32 fp, sp, 3 }
+; CHECK-NEXT:    { nop; ld32 r11, sp, 4 }
+; CHECK-NEXT:    { nop; ld32 r10, sp, 5 }
+; CHECK-NEXT:    { nop; ld32 r9, sp, 6 }
+; CHECK-NEXT:    { nop; ld32 r8, sp, 7 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 32 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %v1 = call i32 @callee_i32(i32 %a)
   %v2 = call i32 @callee_i32(i32 %b)
   %v3 = call i32 @callee_i32(i32 %c)
@@ -105,15 +105,13 @@ define i32 @test_many_gpr_callee_saves(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) {
 define i32 @test_no_callee_saves(i32 %x) {
 ; CHECK-LABEL: test_no_callee_saves:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 1; nop }
-; CHECK-NEXT:    { add32 r1, r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %result = add i32 %x, 1
   ret i32 %result
 }
@@ -135,38 +133,38 @@ define i64 @test_dr64_callee_saves(i64 %a, i64 %b, i64 %c) {
 ; land in 2 bundles (slot-1 load promotion packs 2 per cycle).
 ; CHECK-LABEL: test_dr64_callee_saves:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 40; nop }
-; CHECK-NEXT:    { st32 lr, sp, 9; nop }
-; CHECK-NEXT:    { addi32_w r1, sp, 8; nop }
-; CHECK-NEXT:    { st64 d10, r1, 0; nop }
-; CHECK-NEXT:    { st64 d9, r1, 1; nop }
-; CHECK-NEXT:    { st64 d8, r1, 2; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 40 }
+; CHECK-NEXT:    { nop; st32 lr, sp, 9 }
+; CHECK-NEXT:    { nop; addi32_w r1, sp, 8 }
+; CHECK-NEXT:    { nop; st64 d10, r1, 0 }
+; CHECK-NEXT:    { nop; st64 d9, r1, 1 }
+; CHECK-NEXT:    { nop; st64 d8, r1, 2 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 40
-; CHECK-NEXT:    .cfi_offset lr, 36
-; CHECK-NEXT:    .cfi_offset d8, 24
-; CHECK-NEXT:    .cfi_offset d9, 16
-; CHECK-NEXT:    .cfi_offset d10, 8
-; CHECK-NEXT:    { or64 d8, d1, d1; or64 d9, d2, d2 }
-; CHECK-NEXT:    { jal_w lr, callee_i64; nop }
-; CHECK-NEXT:    { or64 d10, d0, d0; nop }
-; CHECK-NEXT:    { or64 d0, d8, d8; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { jal_w lr, callee_i64; nop }
-; CHECK-NEXT:    { or64 d8, d0, d0; nop }
-; CHECK-NEXT:    { or64 d0, d9, d9; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { jal_w lr, callee_i64; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { add64 d1, d10, d8; nop }
-; CHECK-NEXT:    { add64 d0, d1, d0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { ld64 d10, sp, 1; nop }
-; CHECK-NEXT:    { ld64 d9, sp, 2; nop }
-; CHECK-NEXT:    { ld64 d8, sp, 3; nop }
-; CHECK-NEXT:    { ld32 lr, sp, 9; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 40; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    .cfi_offset lr, -4
+; CHECK-NEXT:    .cfi_offset d8, -16
+; CHECK-NEXT:    .cfi_offset d9, -24
+; CHECK-NEXT:    .cfi_offset d10, -32
+; CHECK-NEXT:    { or64 d9, d2, d2; or64 d8, d1, d1 }
+; CHECK-NEXT:    { nop; jal_w lr, callee_i64 }
+; CHECK-NEXT:    { nop; or64 d10, d0, d0 }
+; CHECK-NEXT:    { nop; or64 d0, d8, d8 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; jal_w lr, callee_i64 }
+; CHECK-NEXT:    { nop; or64 d8, d0, d0 }
+; CHECK-NEXT:    { nop; or64 d0, d9, d9 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; jal_w lr, callee_i64 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; add64 d1, d10, d8 }
+; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; ld64 d10, sp, 1 }
+; CHECK-NEXT:    { nop; ld64 d9, sp, 2 }
+; CHECK-NEXT:    { nop; ld64 d8, sp, 3 }
+; CHECK-NEXT:    { nop; ld32 lr, sp, 9 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 40 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %v1 = call i64 @callee_i64(i64 %a)
   %v2 = call i64 @callee_i64(i64 %b)
   %v3 = call i64 @callee_i64(i64 %c)
