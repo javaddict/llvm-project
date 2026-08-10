@@ -36,7 +36,7 @@ define i32 @test_call_has_modsi3(i32 %a, i32 %b) nounwind {
 ; Between call and epilogue soft-zero re-zero (xor32 r0 before CSR restore)
 ; no stale sp+r12 access without remat (failure mode when R12 was
 ; reserved AT and remat was DCE'd across the call).
-; CHECK-NOT: { {{ld32_reg|st32_reg}}{{[^}]*}}sp, r12
+; CHECK-NOT: { {{s_lw_with_reg|s_sw_with_reg}}{{[^}]*}}sp, r12
 ; CHECK: xor32{{.*}}r0, r0, r0
 ; Epilogue restores CSRs via ld32/ld32_reg with a rematerialized offset in
 ; some scavenged GPR (not necessarily r12 when AT is optional).
@@ -58,7 +58,7 @@ entry:
 ; Loop body calls __modsi3; post-loop block reloads a large-offset slot.
 ; CHECK-LABEL: test_loop_call_reload:
 ; CHECK: {{__modsi3|and32|andi32|sra32|srai32|srl32|srli32|jal}}
-; CHECK-NOT: { {{ld32_reg|st32_reg}}{{[^}]*}}sp, r12
+; CHECK-NOT: { {{s_lw_with_reg|s_sw_with_reg}}{{[^}]*}}sp, r12
 ; CHECK: xor32{{.*}}r0, r0, r0
 ; CHECK: {{ld32(_reg)?}}
 

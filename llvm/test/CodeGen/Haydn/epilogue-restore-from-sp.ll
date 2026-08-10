@@ -20,7 +20,7 @@
 ; CHECK: ld32
 ; CHECK: sp,
 ; CHECK: jalr{{(\.s[012])?}}
-; CHECK-NOT: ld32 {{[^,]+}}, r12,
+; CHECK-NOT: s_lw_{{[a-z_]*}} {{[^,]+}}, r12,
 define void @epilogue_restore_from_sp(i32 %a, i32 %b, i32 %c, i32 %d) nounwind {
 entry:
   call void @callee_with_many_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %a, i32 %b, i32 %c, i32 %d)

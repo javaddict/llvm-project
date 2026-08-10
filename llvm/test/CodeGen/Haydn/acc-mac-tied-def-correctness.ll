@@ -29,7 +29,10 @@
 ; dropping the Constraints let-block from the.td), the post-RA verifier OR
 ; verify-machineinstrs will catch the mismatched operand count / untied
 ; accumulator, and the OR64 seed would reappear in the output. The
-; CHECK-NOT: or64 in each case guards against the regressed seed pattern.
+; the CHECK-NOT on `or64` in each case guards against the regressed seed
+; pattern. (Written this way deliberately: a comment line that STARTS with
+; `CHECK-NOT:` is a directive, not prose — FileCheck read the whole
+; sentence as a pattern, which then never matched and never failed.)
 ;
 ; The MC printer renders the tied-def as `OP dst, src1, src2` (the tied
 ; rd_in operand is not printed because it equals rd by the constraint).

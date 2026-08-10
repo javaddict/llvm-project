@@ -73,14 +73,20 @@ define i32 @single_load(i32 %a) nounwind {
 ; CHECK: ld32
 ; Post-R10 migration: the encoder uses Mode-0 bundles (one-child-per
 ; window) instead of 's legacy-flat path, but the load-bearing assertion
-; is unchanged — single-child bundles decode to their REAL mnemonic, NOT
-; garbage c.ld8/c.add32 compressed instructions. The CHECK-NOTs use {{^}}
-; anchors so they only fire on a bare `c.add`/`c.ld` token at the start of
-; the mnemonic (a `c.addi32 r0, 7` materialized by the spill path is a
-; legitimate compressed immediate-add, not the c.add32 mis-decode this test
-; guards against).
-; CHECK-NOT: c.ld{{ }}
-; CHECK-NOT: c.add{{ }}
+; is unchanged — a single-child bundle must decode to its REAL mnemonic and
+; not to garbage.
+;
+; What garbage LOOKS like changed, so the guard had to be re-aimed rather than
+; kept. It used to forbid `c.ld8` / `c.add32`: under Bundle128 the generated
+; sub-tries were catch-all defaults that accepted any window, so a mis-decode
+; came back as a plausible-looking compressed alias. Format E's sub-tries are
+; real tries that OPC_CheckField the reserved bits, so a mis-decode cannot
+; produce a wrong mnemonic — it produces `<unknown>`
+; (FORMAT-E-SWITCH-PLAN.md § 5.2). Forbidding `c.*` here would assert against
+; something the ISA no longer has: 16-bit compressed forms were retired before
+; the switch (HaydnInstrInfoC.td is deliberately empty), so the old CHECK-NOTs
+; could not have failed.
+; CHECK-NOT: <unknown>
   %p = load i32, ptr @g1, align 4
   %r = add i32 %p, %a
   ret i32 %r
@@ -91,7 +97,7 @@ define i32 @single_load(i32 %a) nounwind {
 define i32 @single_alu(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: <single_alu>:
 ; CHECK: add32
-; CHECK-NOT: c.add{{ }}
+; CHECK-NOT: <unknown>
   %r = add i32 %a, %b
   ret i32 %r
 }

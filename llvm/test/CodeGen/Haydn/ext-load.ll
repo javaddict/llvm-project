@@ -125,8 +125,8 @@ define i32 @volatile_sextload(ptr %ptr) {
 ; High byte uses ld8 (sign), low byte uses s_lbu_* (zero); combine via sll+or.
 define i32 @unaligned_sextload(ptr %ptr) {
 ; CHECK-LABEL: unaligned_sextload:
-; CHECK-NOT: ldu16
-; CHECK-NOT: {{[^0-9]}}ld16
+; CHECK-NOT: s_lhwu_
+; CHECK-NOT: {{[^0-9]}}s_lhws_
 ; CHECK-DAG: {{s_lbu_|ldu8|ld8}}
 ; CHECK-DAG: slli32
 ; CHECK-DAG: or32

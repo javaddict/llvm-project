@@ -88,7 +88,7 @@ define i64 @caller_8_dr64_args(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e, i64 %f, i
 
 define i64 @callee_4_dr64(i64 %a, i64 %b, i64 %c, i64 %d) {
 ; CHECK-LABEL: callee_4_dr64:
-; CHECK-NOT: ld64 {{.*}}, sp,
+; CHECK-NOT: d_ldw_{{[a-z_]*}} {{.*}}, sp,
 ; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %s1 = add i64 %a, %b
   %s2 = add i64 %s1, %c

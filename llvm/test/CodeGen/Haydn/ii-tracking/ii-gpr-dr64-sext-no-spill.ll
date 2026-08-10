@@ -30,8 +30,8 @@ declare { i64, i64 } @llvm.haydn.x2mul32(<2 x i32>, <2 x i32>)
 define i64 @ii_gpr_dr64_sext_no_spill(ptr %p, i64 %acc) {
 ; CHECK-LABEL: ii_gpr_dr64_sext_no_spill:
 ; CHECK:       x2mul32
-; CHECK-NOT:   st32
-; CHECK-NOT:   ld64
+; CHECK-NOT:   s_sw_
+; CHECK-NOT:   d_ldw_
 entry:
   %a32 = load i32, ptr %p
   %a64 = sext i32 %a32 to i64
