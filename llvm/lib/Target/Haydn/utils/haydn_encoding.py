@@ -1066,6 +1066,9 @@ def check_operand_agreement(placements: list[dict], flags_path: Path,
     defs: dict[str, int] = {}
     kinds: dict[str, int] = {}
     ties: dict[str, int] = {}
+    # `ties` is judged independently of the three position axes, so a
+    # placement can land in two buckets; the headline counts each once.
+    flagged: set[tuple[str, int, int, str]] = set()
     # Only the placements that become members: canonical_members is what
     # --emit td writes, and counting the rest reports defects in defs that do
     # not exist.
@@ -1076,6 +1079,8 @@ def check_operand_agreement(placements: list[dict], flags_path: Path,
             continue
         want_outs = len(record.get("OutOperandList", {}).get("args", []))
         wanted = want_outs + len(record["InOperandList"]["args"])
+        key = (logical, placement["entry_count"], placement["entry_index"],
+               placement["unit"])
         outs, ins = member_operand_shape(placement, roles, syntax,
                                         tie_positions)
 
@@ -1094,24 +1099,27 @@ def check_operand_agreement(placements: list[dict], flags_path: Path,
                 and alias in reads and alias in writes)
             if database_ties != len(tie_positions.get(logical, [])):
                 ties[logical] = ties.get(logical, 0) + 1
+                flagged.add(key)
 
         if len(outs) + len(ins) != wanted:
             arity[logical] = arity.get(logical, 0) + 1
+            flagged.add(key)
         elif len(outs) != want_outs:
             defs[logical] = defs.get(logical, 0) + 1
+            flagged.add(key)
         else:
             have = ["reg" if n.removesuffix("_wb") in registers else "imm"
                     for n in outs + ins]
             if have != logical_kinds(record):
                 kinds[logical] = kinds.get(logical, 0) + 1
+                flagged.add(key)
 
     if not arity and not defs and not kinds and not ties:
         return "operand agreement: every member matches its logical\n"
 
     lines = [f"operand agreement:"
              f" {len(set(arity) | set(defs) | set(kinds) | set(ties))} logicals,"
-             f" {sum(arity.values()) + sum(defs.values()) + sum(kinds.values()) + sum(ties.values())}"
-             f" member placements disagree with their logical",
+             f" {len(flagged)} member placements disagree with their logical",
              "",
              "  each one is a place the encoder reads the wrong operand,"
              " silently (plan 5.11)",
