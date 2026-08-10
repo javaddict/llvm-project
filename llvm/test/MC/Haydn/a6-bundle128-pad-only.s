@@ -1,26 +1,27 @@
 # RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.o
-# RUN: llvm-readobj -x .text %t.o | FileCheck %s --check-prefix=HEX
+# RUN: llvm-readobj -S %t.o | FileCheck %s --check-prefix=SIZE
 # RUN: not --crash llvm-mc -filetype=obj -triple=haydn-unknown-elf %s --defsym NEG=1 -o %t.bad.o 2>&1 | FileCheck %s --check-prefix=NEG
+# RUN: not --crash llvm-mc -filetype=obj -triple=haydn-unknown-elf %s --defsym NEG32=1 -o %t.bad32.o 2>&1 | FileCheck %s --check-prefix=NEG32
 #
-# A.6: executable alignment pad is Bundle128 parcels only (16 B all-zero).
-# Positive: .p2align 5 after one nop → one full 16 B zero pad parcel.
-# Negative: non-16-byte pad request aborts writeNopData.
+# A.6: an executable alignment pad is whole parcels only.
+#
+# Under format E a parcel is 12 bytes, which is NOT a power of two, so
+# .p2align can never request a whole number of them except by requesting none.
+# That is why function alignment is Align(4) and not the parcel size: every
+# bundle boundary is at section_start + 12k, which is always 4-aligned, so the
+# contract is already satisfied and the padding is always zero
+# (FORMAT-E-SWITCH-PLAN.md § 5.9). Bundle128 could ask for Align(16) and get a
+# whole 16-byte pad parcel; that positive case has no format E counterpart.
+#
+# Deliberately asserts no pad CONTENT. writeNopData's all-zero payload is still
+# wrong under format E — twelve zero bytes are not a NOP bundle, because
+# Inst{2-0} is the 0b111 format indicator — and is marked FIXME rather than
+# quietly resized (§ 5.2). Nothing here asks it for a non-zero length, so the
+# defect is out of reach; asserting bytes now would freeze the wrong answer.
 
-.ifndef NEG
-.section .text
-.globl _start
-_start:
-    nop
-    # 32-byte align after 16 B nop → one full Bundle128 pad.
-    .p2align 5
-    ADD32 R2, R2, R2
-    .size _start, .-_start
-
-# Two all-zero 16 B parcels (nop + pad), then ADD32.
-# HEX: Hex dump of section '.text':
-# HEX: 0x00000000 00000000 00000000 00000000 00000000
-# HEX: 0x00000010 00000000 00000000 00000000 00000000
-.else
+.ifdef NEG
+# Not a whole parcel: one 12 B bundle plus a stray byte, then a 4-byte
+# alignment request -> 3 bytes of padding.
 .section .text
 .globl bad
 bad:
@@ -29,4 +30,29 @@ bad:
     .p2align 2
     ADD32 R1, R1, R1
 # NEG: unable to write nop sequence
+.else
+.ifdef NEG32
+# 32-byte alignment after one 12 B bundle -> 20 bytes of padding, which is
+# neither zero nor a whole number of parcels.
+.section .text
+.globl bad32
+bad32:
+    nop
+    .p2align 5
+    ADD32 R2, R2, R2
+# NEG32: unable to write nop sequence
+.else
+# Positive: .p2align 2 is always already satisfied at a bundle boundary, so it
+# emits nothing at all and .text is exactly two 12 B parcels.
+.section .text
+.globl _start
+_start:
+    nop
+    .p2align 2
+    ADD32 R2, R2, R2
+    .size _start, .-_start
+
+# SIZE: Name: .text
+# SIZE: Size: 24
+.endif
 .endif
