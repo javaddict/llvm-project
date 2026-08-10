@@ -160,13 +160,20 @@ MCSlotKind haydnSlotMaskToKind(SlotBits Mask) {
 // `HaydnMCFormatsWithMII::getLegalSlots`.
 
 bool isHaydnBundleTargetOpcode(unsigned Opc, const MCInstrInfo &MII) {
-  // Format-member opcodes (self-describing via _S<k> name suffix) pass directly.
-  if (getHaydnFlexSlotFromName(Opc, MII) >= 0)
-    return true;
-  // Logical opcodes that have a PlacementAlternative member in ANY slot pass —
-  // residual encode materializes via getAlternateInstsOpcode[slot]. Alts-
-  // derived getLegalSlots is the authority.
-  HaydnMCFormats Formats;
+  // Answer for either spelling by asking the member-aware getLegalSlots, which
+  // folds a member to its logical through getLogicalBaseOpcode and only then
+  // falls back to the name suffix.
+  //
+  // The previous pair could not see a format E member at all. Its first arm
+  // read the Bundle128 `_S<k>` suffix table, which cannot parse
+  // `_P<form><pos>_<UNIT>`; its second built a PLAIN HaydnMCFormats, whose
+  // rows are logicals only, and handed it the member opcode. So every format E
+  // member answered "no". It stayed hidden because the AsmParser matches the
+  // logical for almost everything — CSRW is isCodeGenOnly, so it is the one
+  // mnemonic that had to arrive here as a member, and it aborted the encoder.
+  // FORMAT-E-SWITCH-PLAN.md § 5.6: fold through the logical, never the
+  // spelling.
+  HaydnMCFormatsWithMII Formats(MII);
   return Formats.getLegalSlots(Opc) != 0;
 }
 
