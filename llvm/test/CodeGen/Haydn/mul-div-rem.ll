@@ -4,8 +4,6 @@
 ; Multiply / divide / remainder selection smoke.
 ; s32 mul → MULL; s64 mul → native MUL64 schoolbook or partials; div/rem → libcalls.
 
-
-
 define i32 @mul_i32(i32 %a, i32 %b) {
 ; CHECK-LABEL: mul_i32:
 ; CHECK:       // #<spill-kpi> @mul_i32 spills=0 spill-bytes=0 reloads=0 reload-bytes=0
@@ -52,10 +50,8 @@ define i64 @mul_i64_with_use(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { sext32t64 d3, r3; nop; nop }
 ; CHECK-NEXT:    { sext32t64 d4, r4; nop; nop }
 ; CHECK-NEXT:    { slli64 d1, d1, 32; slli64 d3, d3, 32; s_sw_with_imm r1, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d2, sp, 0; nop; nop }
-; CHECK-NEXT:    { nop; move32_dr_l r1, d0; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d2, sp, 0; move32_dr_l r1, d0; slli64 d4, d4, 32 }
 ; CHECK-NEXT:    { sext32t64 d0, r1; nop; nop }
-; CHECK-NEXT:    { nop; nop; slli64 d4, d4, 32 }
 ; CHECK-NEXT:    { slli64 d0, d0, 32; srli64 d1, d1, 32; srli64 d3, d3, 32 }
 ; CHECK-NEXT:    { srli64 d0, d0, 32; srli64 d4, d4, 32; mul64_ulul d1, d1, d3 }
 ; CHECK-NEXT:    { mul64_ulul d5, d0, d3; mul64_ulul d0, d0, d4; nop }
