@@ -37,7 +37,8 @@ define <2 x i32> @test_x2addsub32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-NEXT:    { nop; x2addsub32 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call <2 x i32> @llvm.haydn.x2addsub32(<2 x i32> %a,<2 x i32> %b)
   ret <2 x i32> %r
 }
@@ -51,7 +52,8 @@ define <2 x i32> @test_x2addsub32s(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-NEXT:    { nop; x2addsub32s d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call <2 x i32> @llvm.haydn.x2addsub32s(<2 x i32> %a,<2 x i32> %b)
   ret <2 x i32> %r
 }
@@ -65,7 +67,8 @@ define <2 x i32> @test_x2subadd32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-NEXT:    { nop; x2subadd32 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call <2 x i32> @llvm.haydn.x2subadd32(<2 x i32> %a,<2 x i32> %b)
   ret <2 x i32> %r
 }
@@ -79,7 +82,8 @@ define <2 x i32> @test_x2subadd32s(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-NEXT:    { nop; x2subadd32s d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call <2 x i32> @llvm.haydn.x2subadd32s(<2 x i32> %a,<2 x i32> %b)
   ret <2 x i32> %r
 }
@@ -100,7 +104,8 @@ define i64 @test_x2addsub32_hllh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x2addsub32_hllh(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -117,7 +122,8 @@ define i64 @test_x2addsub32s_hllh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x2addsub32s_hllh(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -134,7 +140,8 @@ define i64 @test_x2subadd32_hllh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x2subadd32_hllh(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -151,7 +158,8 @@ define i64 @test_x2subadd32s_hllh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x2subadd32s_hllh(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -172,7 +180,8 @@ define i64 @test_x2sel32_hh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x2sel32_hh(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -189,7 +198,8 @@ define i64 @test_x2sel32_hl(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x2sel32_hl(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -206,7 +216,8 @@ define i64 @test_x2sel32_lh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x2sel32_lh(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -223,7 +234,8 @@ define i64 @test_x2sel32_ll(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x2sel32_ll(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -241,7 +253,8 @@ define i64 @test_x2cmul32(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; x2cmul32 d0, d1, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %bc.1 = bitcast i64 %a to <2 x i32>
   %bc.2 = bitcast i64 %b to <2 x i32>
   %r = call { i64, i64 } @llvm.haydn.x2cmul32(<2 x i32> %bc.1, <2 x i32> %bc.2)
@@ -258,7 +271,8 @@ define i64 @test_x2cmul32s(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; x2cmul32s d0, d1, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %bc.3 = bitcast i64 %a to <2 x i32>
   %bc.4 = bitcast i64 %b to <2 x i32>
   %r = call { i64, i64 } @llvm.haydn.x2cmul32s(<2 x i32> %bc.3, <2 x i32> %bc.4)
@@ -282,7 +296,8 @@ define i64 @test_x4cmul16s_h(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x4cmul16s_h(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -299,7 +314,8 @@ define i64 @test_x4cmul16s_l(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x4cmul16s_l(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -316,7 +332,8 @@ define i64 @test_x4cmula16s_h(i64 %acc, i64 %a) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x4cmula16s_h(i64 %acc, i64 %a)
   ret i64 %r
 }
@@ -333,7 +350,8 @@ define i64 @test_x4cmula16s_l(i64 %acc, i64 %a) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x4cmula16s_l(i64 %acc, i64 %a)
   ret i64 %r
 }
@@ -354,7 +372,8 @@ define i64 @test_x4cjmul16s_h(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x4cjmul16s_h(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -371,7 +390,8 @@ define i64 @test_x4cjmul16s_l(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x4cjmul16s_l(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -388,7 +408,8 @@ define i64 @test_x4cjmula16s_h(i64 %acc, i64 %a) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x4cjmula16s_h(i64 %acc, i64 %a)
   ret i64 %r
 }
@@ -405,7 +426,8 @@ define i64 @test_x4cjmula16s_l(i64 %acc, i64 %a) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %r = call i64 @llvm.haydn.x4cjmula16s_l(i64 %acc, i64 %a)
   ret i64 %r
 }
@@ -420,11 +442,12 @@ define <2 x i32> @test_x2addsub32s_masked_lt(<2 x i32> %a, <2 x i32> %b, <2 x i3
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x2addsub32s d1, d0, d1; x2slt32 d2, d0, d2 }
-; CHECK-NEXT:    { nop; x2movt32 d0, d0, d1 }
+; CHECK-NEXT:    { x2addsub32s d1, d0, d1; x2slt32 d0, d2 }
+; CHECK-NEXT:    { nop; x2movt32 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %cmp = call <2 x i32> @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %mask_val)
   %as = call <2 x i32> @llvm.haydn.x2addsub32s(<2 x i32> %a,<2 x i32> %b)
   %result = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %a,<2 x i32> %as)
@@ -437,12 +460,13 @@ define <2 x i32> @test_x2cmul32_masked_eq(<2 x i32> %acc, <2 x i32> %a, <2 x i32
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x2cmul32 d1, d2, d1, d2; x2seq32 d3, d1, d3 }
+; CHECK-NEXT:    { x2cmul32 d1, d2, d1, d2; x2seq32 d1, d3 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; x2movt32 d0, d0, d1 }
+; CHECK-NEXT:    { nop; x2movt32 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %cmp = call <2 x i32> @llvm.haydn.x2seq32(<2 x i32> %a,<2 x i32> %mask_val)
   %acc_i = bitcast <2 x i32> %acc to i64
   %a_i   = bitcast <2 x i32> %a to i64
@@ -467,17 +491,17 @@ define <4 x i16> @test_x4cmul16s_h_masked_lt(<4 x i16> %a, <4 x i16> %b, <4 x i1
 ; CHECK-NEXT:    .cfi_offset lr, -4
 ; CHECK-NEXT:    .cfi_offset d8, -16
 ; CHECK-NEXT:    { nop; or64 d8, d0, d0 }
-; CHECK-NEXT:    { nop; x4slt16 d0, d8, d2 }
-; CHECK-NEXT:    { nop; or64 d0, d8, d8 }
+; CHECK-NEXT:    { nop; x4slt16 d8, d2 }
 ; CHECK-NEXT:    { nop; jal_w lr, llvm.haydn.x4cmul16s_h }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; x4movt16 d8, d8, d0 }
+; CHECK-NEXT:    { nop; x4movt16 d8, d0 }
 ; CHECK-NEXT:    { nop; or64 d0, d8, d8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 1 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 5 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %cmp = call <4 x i16> @llvm.haydn.x4slt16(<4 x i16> %a,<4 x i16> %mask_val)
   %a_i = bitcast <4 x i16> %a to i64
   %b_i = bitcast <4 x i16> %b to i64
@@ -493,11 +517,12 @@ define <2 x i32> @test_x2clamp32_masked_sle(<2 x i32> %a, <2 x i32> %b, <2 x i32
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x2clamp32 d1, d0, d1; x2sle32 d2, d0, d2 }
-; CHECK-NEXT:    { nop; x2movt32 d0, d0, d1 }
+; CHECK-NEXT:    { x2clamp32 d1, d0, d1; x2sle32 d0, d2 }
+; CHECK-NEXT:    { nop; x2movt32 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
   %cmp = call <2 x i32> @llvm.haydn.x2sle32(<2 x i32> %a,<2 x i32> %mask_val)
   %a_i = bitcast <2 x i32> %a to i64
   %b_i = bitcast <2 x i32> %b to i64

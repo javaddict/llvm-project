@@ -1644,51 +1644,48 @@ def SEQ64_S2 : HaydnFU_ALU64_S2_R_DD<0b00010111,
 }  // Defs = [SFR] (scalar SLT64/SLE64/SEQ64 block closes here)
 
 // SIMD compares X2SLT32/X2SLE32/X2SEQ32 + X4SLT16/X4SLE16/X4SEQ16.
-// Spec (golden DB): DR_read=2, DR_write=0, SFR_write=1. BUT the IR intrinsic
-// returns a value, so the.td models a PASSTHROUGH dest (rd = rs1) — same as
-// the legacy X2SEQ32 (HaydnInstrInfo.td:1401, FmtALU64Binary 3-operand). The
-// GISel selector (selectBinary) emits def + 2 sources. Decoder 16 reads 3 DR64
-// at [18:14:10] — identical to RR_DDD. So we MUST use RR_DDD (3-DR64 layout)
-// to match encoder/decoder/selector. `let hasSideEffects = 1` models the
-// implicit SFR write (AIE pattern; proven at HaydnFormatsALU64.td:569/584).
-let hasSideEffects = 1 in {  // implicit SFR write
-def X2SLT32_S1 : HaydnFU_ALU64_S1_RR_DDD<0b01011111,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x2slt32\t$rd, $rs1, $rs2", []>;
-def X2SLT32_S2 : HaydnFU_ALU64_S2_RR_DDD<0b01011111,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x2slt32\t$rd, $rs1, $rs2", []>;
-def X2SLE32_S1 : HaydnFU_ALU64_S1_RR_DDD<0b01100000,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x2sle32\t$rd, $rs1, $rs2", []>;
-def X2SLE32_S2 : HaydnFU_ALU64_S2_RR_DDD<0b01100000,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x2sle32\t$rd, $rs1, $rs2", []>;
-def X2SEQ32_S1 : HaydnFU_ALU64_S1_RR_DDD<0b01100001,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x2seq32\t$rd, $rs1, $rs2", []>;
-def X2SEQ32_S2 : HaydnFU_ALU64_S2_RR_DDD<0b01100001,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x2seq32\t$rd, $rs1, $rs2", []>;
-def X4SLT16_S1 : HaydnFU_ALU64_S1_RR_DDD<0b01111100,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x4slt16\t$rd, $rs1, $rs2", []>;
-def X4SLT16_S2 : HaydnFU_ALU64_S2_RR_DDD<0b01111100,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x4slt16\t$rd, $rs1, $rs2", []>;
-def X4SLE16_S1 : HaydnFU_ALU64_S1_RR_DDD<0b01111101,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x4sle16\t$rd, $rs1, $rs2", []>;
-def X4SLE16_S2 : HaydnFU_ALU64_S2_RR_DDD<0b01111101,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x4sle16\t$rd, $rs1, $rs2", []>;
-def X4SEQ16_S1 : HaydnFU_ALU64_S1_RR_DDD<0b01111110,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x4seq16\t$rd, $rs1, $rs2", []>;
-def X4SEQ16_S2 : HaydnFU_ALU64_S2_RR_DDD<0b01111110,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x4seq16\t$rd, $rs1, $rs2", []>;
-}  // hasSideEffects = 1
+// Golden Format E + BundleSim ISA: 2 DR sources, SFR write only
+// (Syntax: X2SEQ32 rsd1, rsd2). R_CMP class — not RR_DDD (3-DR), which made
+// dumps print three operands and disagree with golden operand_count=2.
+// IR intrinsic return is a COPY of rs1 in the selector (not a hardware dest).
+let Defs = [SFR] in {
+def X2SLT32_S1 : HaydnFU_ALU64_S1_R_CMP<0b01011111,
+    (outs), (ins DR64:$rs1, DR64:$rs2),
+    "x2slt32\t$rs1, $rs2", []>;
+def X2SLT32_S2 : HaydnFU_ALU64_S2_R_CMP<0b01011111,
+    (outs), (ins DR64:$rs1, DR64:$rs2),
+    "x2slt32\t$rs1, $rs2", []>;
+def X2SLE32_S1 : HaydnFU_ALU64_S1_R_CMP<0b01100000,
+    (outs), (ins DR64:$rs1, DR64:$rs2),
+    "x2sle32\t$rs1, $rs2", []>;
+def X2SLE32_S2 : HaydnFU_ALU64_S2_R_CMP<0b01100000,
+    (outs), (ins DR64:$rs1, DR64:$rs2),
+    "x2sle32\t$rs1, $rs2", []>;
+def X2SEQ32_S1 : HaydnFU_ALU64_S1_R_CMP<0b01100001,
+    (outs), (ins DR64:$rs1, DR64:$rs2),
+    "x2seq32\t$rs1, $rs2", []>;
+def X2SEQ32_S2 : HaydnFU_ALU64_S2_R_CMP<0b01100001,
+    (outs), (ins DR64:$rs1, DR64:$rs2),
+    "x2seq32\t$rs1, $rs2", []>;
+def X4SLT16_S1 : HaydnFU_ALU64_S1_R_CMP<0b01111100,
+    (outs), (ins DR64:$rs1, DR64:$rs2),
+    "x4slt16\t$rs1, $rs2", []>;
+def X4SLT16_S2 : HaydnFU_ALU64_S2_R_CMP<0b01111100,
+    (outs), (ins DR64:$rs1, DR64:$rs2),
+    "x4slt16\t$rs1, $rs2", []>;
+def X4SLE16_S1 : HaydnFU_ALU64_S1_R_CMP<0b01111101,
+    (outs), (ins DR64:$rs1, DR64:$rs2),
+    "x4sle16\t$rs1, $rs2", []>;
+def X4SLE16_S2 : HaydnFU_ALU64_S2_R_CMP<0b01111101,
+    (outs), (ins DR64:$rs1, DR64:$rs2),
+    "x4sle16\t$rs1, $rs2", []>;
+def X4SEQ16_S1 : HaydnFU_ALU64_S1_R_CMP<0b01111110,
+    (outs), (ins DR64:$rs1, DR64:$rs2),
+    "x4seq16\t$rs1, $rs2", []>;
+def X4SEQ16_S2 : HaydnFU_ALU64_S2_R_CMP<0b01111110,
+    (outs), (ins DR64:$rs1, DR64:$rs2),
+    "x4seq16\t$rs1, $rs2", []>;
+}  // Defs = [SFR]
 
 //===----------------------------------------------------------------------===//
 // ALU64 R_COND ops -- 1 DR64(out) + 1 DR64(in) | SFR(in) (rtd, rsd -- MOVT/MOVF).
@@ -1711,62 +1708,56 @@ def MOVF64_S2 : HaydnFU_ALU64_S2_R_COND<0b00011001,
     (outs DR64:$rd), (ins DR64:$rsd),
     "movf64\t$rd, $rsd", []>;
 // SIMD conditional moves X2MOVT32/X2MOVF32/X4MOVT16/X4MOVF16.
-// Spec (golden DB): DR_read=1, DR_write=1, SFR_read=1. BUT the IR intrinsic
-// is dst = movt(src_false, src_true) — 2 DR sources + 1 DR dest. The GISel
-// selector (selectBinary) emits def + 2 sources. Legacy X2MOVT32
-// (HaydnInstrInfo.td:1427, FmtALU64Binary) is 3-operand. Decoder 16 reads
-// 3 DR64 at [18:14:10] = RR_DDD. So we MUST use RR_DDD to match.
-// `let hasSideEffects = 1` models the implicit SFR read.
-let hasSideEffects = 1 in {  // implicit SFR read
-// #98 X2MOVT32 — RMW: rd holds false lanes; Constraints for TwoAddress seed.
-def X2MOVT32_S1 : HaydnFU_ALU64_S1_RR_DDD<0b01100010,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x2movt32\t$rd, $rs1, $rs2", []> {
-  let Constraints = "$rd = $rs1";
-}
+// Golden + BundleSim: Syntax X2MOVT32 rtd, rsd (2 ops). rtd is RMW (false
+// lanes stay); rsd supplies true/false-path lanes per SFR. MIR keeps a
+// two-address seed ($rd = $rs1 false) so the selector can pass false/true
+// as (rs1, rsd); asm prints only $rd, $rsd. R_COND encodes 2×4b like MOVT64.
+let Uses = [SFR] in {
 // #98 X2MOVT32
-def X2MOVT32_S2 : HaydnFU_ALU64_S2_RR_DDD<0b01100010,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x2movt32\t$rd, $rs1, $rs2", []> {
+def X2MOVT32_S1 : HaydnFU_ALU64_S1_R_COND<0b01100010,
+    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
+    "x2movt32\t$rd, $rsd", []> {
+  let Constraints = "$rd = $rs1";
+}
+def X2MOVT32_S2 : HaydnFU_ALU64_S2_R_COND<0b01100010,
+    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
+    "x2movt32\t$rd, $rsd", []> {
   let Constraints = "$rd = $rs1";
 }
 // #99 X2MOVF32
-def X2MOVF32_S1 : HaydnFU_ALU64_S1_RR_DDD<0b01100011,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x2movf32\t$rd, $rs1, $rs2", []> {
+def X2MOVF32_S1 : HaydnFU_ALU64_S1_R_COND<0b01100011,
+    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
+    "x2movf32\t$rd, $rsd", []> {
   let Constraints = "$rd = $rs1";
 }
-// #99 X2MOVF32
-def X2MOVF32_S2 : HaydnFU_ALU64_S2_RR_DDD<0b01100011,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x2movf32\t$rd, $rs1, $rs2", []> {
-  let Constraints = "$rd = $rs1";
-}
-// #127 X4MOVT16 — RMW; Constraints for TwoAddress false-path seed.
-def X4MOVT16_S1 : HaydnFU_ALU64_S1_RR_DDD<0b01111111,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x4movt16\t$rd, $rs1, $rs2", []> {
+def X2MOVF32_S2 : HaydnFU_ALU64_S2_R_COND<0b01100011,
+    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
+    "x2movf32\t$rd, $rsd", []> {
   let Constraints = "$rd = $rs1";
 }
 // #127 X4MOVT16
-def X4MOVT16_S2 : HaydnFU_ALU64_S2_RR_DDD<0b01111111,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x4movt16\t$rd, $rs1, $rs2", []> {
+def X4MOVT16_S1 : HaydnFU_ALU64_S1_R_COND<0b01111111,
+    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
+    "x4movt16\t$rd, $rsd", []> {
+  let Constraints = "$rd = $rs1";
+}
+def X4MOVT16_S2 : HaydnFU_ALU64_S2_R_COND<0b01111111,
+    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
+    "x4movt16\t$rd, $rsd", []> {
   let Constraints = "$rd = $rs1";
 }
 // #128 X4MOVF16
-def X4MOVF16_S1 : HaydnFU_ALU64_S1_RR_DDD<0b10000000,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x4movf16\t$rd, $rs1, $rs2", []> {
+def X4MOVF16_S1 : HaydnFU_ALU64_S1_R_COND<0b10000000,
+    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
+    "x4movf16\t$rd, $rsd", []> {
   let Constraints = "$rd = $rs1";
 }
-// #128 X4MOVF16
-def X4MOVF16_S2 : HaydnFU_ALU64_S2_RR_DDD<0b10000000,
-    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-    "x4movf16\t$rd, $rs1, $rs2", []> {
+def X4MOVF16_S2 : HaydnFU_ALU64_S2_R_COND<0b10000000,
+    (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
+    "x4movf16\t$rd, $rsd", []> {
   let Constraints = "$rd = $rs1";
 }
-}  // hasSideEffects = 1
+}  // Uses = [SFR]
 
 //===----------------------------------------------------------------------===//
 // ALU64 RI6 ops -- 2 DR64 + uimm6 (rtd, rsd, uimm6).

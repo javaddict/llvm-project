@@ -1288,89 +1288,77 @@ def X4ABS16S : FmtALU64Unary<0x67, 0x1AD, (outs DR64:$rd), (ins DR64:$rs1),
   let TSFlags{4-3} = 0b01;
 }
 
-// X2 SIMD compare → SFR (binary DR64 → sets SFR). Passthrough return.
-let hasSideEffects = 0, Defs = [SFR] in {
-def X2SEQ32 : FmtALU64Binary<0x67, 0x18D, (outs DR64:$rd),
-                             (ins DR64:$rs1, DR64:$rs2),
-                             "x2seq32\t$rd, $rs1, $rs2", []> {
+// X2 SIMD compare → SFR only. Golden/ISA: "X2SEQ32 rsd1, rsd2" (2 ops).
+// No DR dest write; selector COPY-passthroughs rs1 for the C return value.
+let Defs = [SFR] in {
+def X2SEQ32 : HaydnInst<4, (outs), (ins DR64:$rs1, DR64:$rs2),
+                        "x2seq32\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
-def X2SLT32 : FmtALU64Binary<0x67, 0x18E, (outs DR64:$rd),
-                             (ins DR64:$rs1, DR64:$rs2),
-                             "x2slt32\t$rd, $rs1, $rs2", []> {
+def X2SLT32 : HaydnInst<4, (outs), (ins DR64:$rs1, DR64:$rs2),
+                        "x2slt32\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
-def X2SLE32 : FmtALU64Binary<0x67, 0x18F, (outs DR64:$rd),
-                             (ins DR64:$rs1, DR64:$rs2),
-                             "x2sle32\t$rd, $rs1, $rs2", []> {
+def X2SLE32 : HaydnInst<4, (outs), (ins DR64:$rs1, DR64:$rs2),
+                        "x2sle32\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
-}  // hasSideEffects = 0, Defs = [SFR]
+}  // Defs = [SFR]
 
-// X2 SIMD conditional move on SFR (binary DR64 → reads SFR).
-// Golden / Format E is 2-op RMW (rtd, rsd): false lanes stay in rtd, true
-// lanes come from rsd. Model as 3-op with Constraints so TwoAddress seeds
-// rd from rs1 (false) and fillFormatE collapses the tied pair on the wire.
-let hasSideEffects = 0, Uses = [SFR] in {
-def X2MOVF32 : FmtALU64Binary<0x67, 0x190, (outs DR64:$rd),
-                              (ins DR64:$rs1, DR64:$rs2),
-                              "x2movf32\t$rd, $rs1, $rs2", []> {
+// X2 SIMD conditional move. Golden/ISA: "X2MOVT32 rtd, rsd" (2 ops, RMW).
+// Two-address seed: $rd = $rs1 (false lanes); $rsd is true-path source.
+let Uses = [SFR] in {
+def X2MOVF32 : HaydnInst<4, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
+                         "x2movf32\t$rd, $rsd", []> {
   let Constraints = "$rd = $rs1";
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
-def X2MOVT32 : FmtALU64Binary<0x67, 0x191, (outs DR64:$rd),
-                              (ins DR64:$rs1, DR64:$rs2),
-                              "x2movt32\t$rd, $rs1, $rs2", []> {
+def X2MOVT32 : HaydnInst<4, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
+                         "x2movt32\t$rd, $rsd", []> {
   let Constraints = "$rd = $rs1";
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
-}  // hasSideEffects = 0, Uses = [SFR]
+}  // Uses = [SFR]
 
-// X4 SIMD compare → SFR (binary DR64 → sets SFR).
-let hasSideEffects = 0, Defs = [SFR] in {
-def X4SEQ16 : FmtALU64Binary<0x67, 0x192, (outs DR64:$rd),
-                             (ins DR64:$rs1, DR64:$rs2),
-                             "x4seq16\t$rd, $rs1, $rs2", []> {
+// X4 SIMD compare → SFR only (same 2-op golden shape as X2).
+let Defs = [SFR] in {
+def X4SEQ16 : HaydnInst<4, (outs), (ins DR64:$rs1, DR64:$rs2),
+                        "x4seq16\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
-def X4SLT16 : FmtALU64Binary<0x67, 0x193, (outs DR64:$rd),
-                             (ins DR64:$rs1, DR64:$rs2),
-                             "x4slt16\t$rd, $rs1, $rs2", []> {
+def X4SLT16 : HaydnInst<4, (outs), (ins DR64:$rs1, DR64:$rs2),
+                        "x4slt16\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
-def X4SLE16 : FmtALU64Binary<0x67, 0x194, (outs DR64:$rd),
-                             (ins DR64:$rs1, DR64:$rs2),
-                             "x4sle16\t$rd, $rs1, $rs2", []> {
+def X4SLE16 : HaydnInst<4, (outs), (ins DR64:$rs1, DR64:$rs2),
+                        "x4sle16\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
-}  // hasSideEffects = 0, Defs = [SFR]
+}  // Defs = [SFR]
 
-// X4 SIMD conditional move on SFR (binary DR64 → reads SFR).
-// Same RMW contract as X2MOVT32 (see Constraints note above).
-let hasSideEffects = 0, Uses = [SFR] in {
-def X4MOVF16 : FmtALU64Binary<0x67, 0x195, (outs DR64:$rd),
-                              (ins DR64:$rs1, DR64:$rs2),
-                              "x4movf16\t$rd, $rs1, $rs2", []> {
+// X4 SIMD conditional move (same RMW 2-op shape as X2MOVT32).
+let Uses = [SFR] in {
+def X4MOVF16 : HaydnInst<4, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
+                         "x4movf16\t$rd, $rsd", []> {
   let Constraints = "$rd = $rs1";
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
-def X4MOVT16 : FmtALU64Binary<0x67, 0x196, (outs DR64:$rd),
-                              (ins DR64:$rs1, DR64:$rs2),
-                              "x4movt16\t$rd, $rs1, $rs2", []> {
+def X4MOVT16 : HaydnInst<4, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
+                         "x4movt16\t$rd, $rsd", []> {
   let Constraints = "$rd = $rs1";
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
-}  // hasSideEffects = 0, Uses = [SFR]
+}  // Uses = [SFR]
 
 // X4SELI16 — per-lane 16-bit select with 4-bit immediate lane mask.
 // Two DR64 sources + 4-bit imm. funct6=0x06 distinguishes this from the
