@@ -48,11 +48,11 @@ _start:
     jal lr, callee
 
     # Padding (3 bundles). ADD32 R0,R0,R0 disassembles as add32 r0, r0, r0.
-    # CHECK: 10010: {{.*}} add32 r0, r0, r0
+    # CHECK: 1000c: {{.*}} add32 r0, r0, r0
     ADD32 R0, R0, R0
-    # CHECK: 10020: {{.*}} add32 r1, r1, r1
+    # CHECK: 10018: {{.*}} add32 r1, r1, r1
     ADD32 R1, R1, R1
-    # CHECK: 10030: {{.*}} add32 r2, r2, r2
+    # CHECK: 10024: {{.*}} add32 r2, r2, r2
     ADD32 R2, R2, R2
 
     # ---------------------------------------------------------------------------
@@ -62,10 +62,10 @@ _start:
 
     # BEQ forward to branch_target. The .globl on branch_target forces a
     # relocation. branch_target is 2 bundles (32 bytes) ahead.
-    # CHECK: 10040: {{.*}} beq r4, r5,
+    # CHECK: 10030: {{.*}} beq r4, r5,
     BEQ R4, R5, branch_target
 
-    # CHECK: 10050: {{.*}} add32 r6, r6, r6
+    # CHECK: 1003c: {{.*}} add32 r6, r6, r6
     ADD32 R6, R6, R6
 
     .globl branch_target
@@ -76,16 +76,16 @@ branch_target:
     # LO16: addr & 0xFFFF, stored in bits [15:0] of ADDI32.
     #
     # target_data is in .rodata. The linker places it after .text in a separate
-    # segment. With .text at 0x10000 (9 Bundle128s = size 0x90), .rodata is
+    # segment. With .text at 0x10000 (9 format E parcels = size 0x6c), .rodata is
     # placed at 0x11090 (= 69776). The Bundle128 addi32 immediate is wide enough
     # to hold the full low value, so the HI20 part resolves to 0.
     # ---------------------------------------------------------------------------
 
     # CHECK: <branch_target>:
-    # CHECK: 10060: {{.*}} lui r1, 0
+    # CHECK: 10048: {{.*}} lui r1, 0
     lui R1, target_data
 
-    # CHECK: 10070: {{.*}} addi32 r1, r1, 69776
+    # CHECK: 10054: {{.*}} addi32 r1, r1, 69740
     addi32 R1, R1, target_data
 
     .size _start, .-_start
@@ -98,7 +98,7 @@ branch_target:
     .type callee, @function
 callee:
     # CHECK: <callee>:
-    # CHECK: 10080: {{.*}} add32 r10, r10, r10
+    # CHECK: 10060: {{.*}} add32 r10, r10, r10
     ADD32 R10, R10, R10
     .size callee, .-callee
 
@@ -114,7 +114,7 @@ callee:
     .type target_data, @object
 target_data:
     # RODATA: Contents of section .rodata:
-    # RODATA-NEXT: 11090 00000100
+    # RODATA-NEXT: 1106c 00000100
     .long _start
     .size target_data, .-target_data
 
@@ -131,6 +131,6 @@ target_data:
     .p2align 2
 pcrel_data:
     # DATA: Contents of section .data:
-    # DATA-NEXT: 12094 6cdfffff
+    # DATA-NEXT: 12070 90dfffff
     .long _start - .
     .size pcrel_data, .-pcrel_data

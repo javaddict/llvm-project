@@ -8,10 +8,18 @@
 # (linear imm20 at s0 bits[23:4], FieldLsb=4 / CB-82). Corrupted patches
 # disassemble as <unknown> or LUI.
 
+# Neither the offset nor the addend is a constant of this test; both follow
+# from where the packer put the jal. The offset is bundle_start + the entry's
+# byte base, and the addend is the same byte base again, because a branch is
+# resolved from the BUNDLE and not from the entry it happens to sit in
+# (`14afcf2e79a5`). So an entry-1 jal at bundle 0 reads 0x4 / 0x4, and the two
+# cancel. The invariant is that they are equal and that the linked target is
+# exactly `callee` — checked below by address, which is the part that would
+# actually be wrong if this drifted.
 # RELOCS:      Relocations [
 # RELOCS-NEXT:   Section ({{.*}}) .rela.text {
-# RELOCS-DAG:      0x0 R_HAYDN_WIDE_CallSImm20 callee 0x0
-# RELOCS-DAG:      0x10 R_HAYDN_WIDE_CallSImm20 callee 0x0
+# RELOCS-DAG:      0x4 R_HAYDN_WIDE_CallSImm20 callee 0x4
+# RELOCS-DAG:      0x10 R_HAYDN_WIDE_CallSImm20 callee 0x4
 # RELOCS:        }
 # RELOCS-NEXT: ]
 
@@ -22,10 +30,10 @@ _start:
     # CHECK: 10000: {{.*}} jal{{.*}}lr,
     jal lr, callee
 
-    # CHECK: 10010: {{.*}} jal{{.*}}r0,
+    # CHECK: 1000c: {{.*}} jal{{.*}}r0,
     jal r0, callee
 
-    # CHECK: 10020: {{.*}} add32
+    # CHECK: 10018: {{.*}} add32
     ADD32 R0, R0, R0
 
 .globl callee
