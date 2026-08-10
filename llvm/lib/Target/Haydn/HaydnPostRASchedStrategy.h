@@ -17,16 +17,14 @@
 // (MachineScheduler.cpp:4295-4300).
 //
 // Bundle formation lives in this strategy. enterMBB stashes CurrentMBB and
-// counts multi-member hard BUNDLE roots (product path expects zero before an
-// approved producer such as SMS handoff). leaveRegion reconstructs Top and
-// Bot SchedBoundary zones into an in-memory cycle list (port of AIE
-// computeAndFinalizeBundles), runs handleRegionConflicts (ExitReadyCycle +
-// inter-zone scoreboard / TopReadyCycle hazard pads), then merges; leaveMBB
-// materializes free scheduled packs (NOP per empty cycle + exact no-split
-// multi-MI Format E) without touching hard-root members, then
-// transactionally exact-commits multi-member hard roots *inside* each frozen
-// group and replays cross-boundary latency + Required/Reserved hazards.
-// Post-RA never invents SMS stages and never free-splices across hard groups.
+// counts multi-member BUNDLE roots at entry (product expects zero — pre-RA
+// SMS never freezes multi-member BUNDLE). leaveRegion reconstructs Top/Bot
+// zones into an in-memory cycle list, runs handleRegionConflicts, then
+// merges. leaveMBB free-packs scheduled multi-MI via
+// commitExactMultiMIProductCycle (sole scheduled multi-MI producer), commits
+// residual unstamped multi-member shells with the same ordinary multi-MI
+// path when jointly legal (else sequentializes), and replays multi-member
+// parcel seam latency. No hard-root dissolve identity and no force-coissue.
 // Dual-load packing is HR exactTryAddProduct → setDesc members.
 //
 //===----------------------------------------------------------------------===//
@@ -57,9 +55,8 @@ public:
   ~HaydnPostRASchedStrategy() override = default;
 
   // Stash CurrentMBB for leaveMBB materialize (DAG BB is not publicly
-  // accessible). Count multi-member hard BUNDLE roots for metrics; leaveMBB
-  // exact-commits them. Dual-load packing is HR alts tryAdd → setDesc members
-  // (AIEHazardRecognizer.cpp:389; no promoteLoads residual).
+  // accessible). Count multi-member BUNDLE roots at entry for metrics only
+  // (product expects 0). Dual-load packing is HR alts tryAdd → setDesc.
   void enterMBB(MachineBasicBlock *MBB) override;
 
   // Override tryCandidate: (1) bounded ready-subset cycle auction ranks denser
@@ -157,34 +154,22 @@ private:
 
   // Insert one NOP (via TII->insertNoop) per empty cycle in \p Bundles, and
   // exact-commit each legal multi-MI cycle via shared
-  // haydn::bundle::commitExactMultiMIProductCycle. Free packs never include
-  // members from \p HardMembers (SMS / rematch hard roots stay frozen until
-  // exactCommitHardRoots). Illegal scheduled multi-MI fails closed (no
-  // production greedy split; NumScheduledCyclesSplit diagnostic).
+  // haydn::bundle::commitExactMultiMIProductCycle. Already-bundled members
+  // are refused. Illegal scheduled multi-MI fails closed (no production
+  // greedy split; NumScheduledCyclesSplit diagnostic).
   void materializeBundles(MachineBasicBlock &MBB,
-                          SmallVector<CycleBundle> &Bundles,
-                          const SmallPtrSetImpl<MachineInstr *> &HardMembers);
+                          SmallVector<CycleBundle> &Bundles);
 
-  // Transactionally exact-commit multi-member hard BUNDLE roots whose members
-  // are in \p HardMembers (same children, member setDesc, field order,
-  // Format E row + completion stamp). Commit-inside-group only: never splice
-  // neighbors into the membership and never invent stages post-RA. Illegal
-  // membership fail-closes before dissolve; successful commits are certified
-  // with verifyExactHardRootCommit. \p HardMembers are the children of
-  // multi-member roots that existed before leaveMBB free materialize
-  // (approved producer / multipass re-entry) — not packs created by this
-  // leaveMBB's scheduled free exact commit.
-  void exactCommitHardRoots(MachineBasicBlock &MBB,
-                            const SmallPtrSetImpl<MachineInstr *> &HardMembers);
+  // Residual multi-member shells: ordinary multi-MI commit when jointly
+  // legal; sequentialize when not. Format-E stamped multi-member is kept only
+  // when coissue probe still passes (SET trip/Off + true RAW + field order);
+  // illegal stamped peels sequentialize. Not a hard-root freeze path.
+  void commitOrSequentializeUnstampedMultiMemberBundles(MachineBasicBlock &MBB);
 
-  // Replay the ordered MBB cycle stream through stage-relative
-  // Required/Reserved scoreboard + target operand-latency facts. Inserts
-  // exact generated NOP cycles only at seams of hard roots identified by
-  // \p HardMembers; never moves/merges/splits a hard cycle. No-op when
-  // \p HardMembers is empty (ordinary scheduled multi-MI packs are not hard).
-  void replayCrossBoundaryHazards(
+  // Residual multi-member seam replay (pre-free-pack shells only).
+  void replayMultiMemberSeamHazards(
       MachineBasicBlock &MBB,
-      const SmallPtrSetImpl<MachineInstr *> &HardMembers);
+      const SmallPtrSetImpl<MachineInstr *> &PreExistingMultiMembers);
 };
 
 } // end namespace llvm

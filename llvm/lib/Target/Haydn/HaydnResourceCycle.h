@@ -65,15 +65,14 @@
 // KPI parity holds on dedicated ILP multi-load / dual-acc and critical-path
 // chain SMS kernels (sms-format-ilp-crit-dual-run.ll) — ranking residual must
 // not invent ResMII/II/soft-exit deltas on those bodies either.
-// SMS-HANDOFF is a *metrics-only freeze* outside this packing walk:
-// recordSuccessfulSMS stores scalar Res/Rec/MII/stage/ops/II only; expansion
-// never invents durable BUNDLE cycle groups from ResourceCycle membership.
-// Qualification-kernel post-RA packability is proven via pure product oracles
-// (qualKernel* helpers below / analyzeLoop logs) so accepted bodies remain
-// exact-packable by post-RA no-split commit once regs are physical. Positive
-// clone→standard-BUNDLE handoff needs an approved expansion hook (plan §3.4 /
-// §5.2) — not this adapter. Until HOOK + RESMII + HANDOFF product activation,
-// format-dependent SMS stays qualification-only.
+// Outside this packing walk, SMS metrics are remark-only (no generic
+// post-expand virtual). Expansion never invents durable BUNDLE cycle groups
+// from ResourceCycle membership; pre-RA SMS stays bare logical MIs
+// (StageCount>1 rejected). Qualification-kernel post-RA packability is proven
+// via pure product oracles (qualKernel* helpers / analyzeLoop logs) so accepted
+// bodies remain exact-packable by post-RA no-split commit once regs are
+// physical. Product multi-stage + exact E96 commit live only in the post-RA
+// engine — not this adapter.
 //
 // Format-acceptance differential (plan §8.4 #7, SMS surface): descriptor-
 // derived per-cycle format legality is pure exactTryAddProduct depth. Live
@@ -296,8 +295,9 @@ inline bool haydnMove32ClassDescSaturatesReadPoolEarlier(unsigned N) {
 // already enforces no-forwarding RAW via CurrentCycleLiveDefs; WAW is the dual
 // for two writers of the same register (or physreg alias) in one modulo phase.
 // Dead defs still WAW-collide (spec forbids dual write regardless of liveness).
-// SFR is excluded (dual dead implicit-def $sfr is product-legal). Used by the
-// MI reserve path and by the pure periodic-certificate same-reg DefRegKey pin.
+// SFR is included: product law is one SFR writer per cycle (dead flag
+// side-effects count). Used by the MI reserve path and by the pure
+// periodic-certificate same-reg DefRegKey pin.
 
 template <typename DefSet>
 bool haydnHasIntraCycleWAW(const MachineInstr &MI, const DefSet &Defs,
@@ -313,7 +313,7 @@ bool haydnHasIntraCycleWAW(const MachineInstr &MI, const DefSet &Defs,
         return true;
       continue;
     }
-    if (!Reg.isPhysical() || Reg == Haydn::SFR || !TRI)
+    if (!Reg.isPhysical() || !TRI)
       continue;
     for (Register D : Defs)
       if (D.isPhysical() && TRI->regsOverlap(Reg, D))
@@ -331,8 +331,6 @@ void haydnAppendCycleDefs(const MachineInstr &MI, DefSet &Defs) {
     if (!Reg)
       continue;
     if (!Reg.isPhysical() && !Reg.isVirtual())
-      continue;
-    if (Reg == Haydn::SFR)
       continue;
     Defs.insert(Reg);
   }
@@ -450,7 +448,7 @@ class HaydnResourceCycle : public ResourceCycle {
   /// spec §Constraints) and is rejected, slipping to a later cycle. Uses
   /// `Register` (not MCRegister) so pre-RA virtual defs are tracked by identity.
   SmallSetVector<Register, 8> CurrentCycleLiveDefs;
-  /// ALL non-SFR destination registers written this modulo phase (peer of
+  /// ALL destination registers written this modulo phase (peer of
   /// HaydnHazardRecognizer::CurrentCycleDefs). Same-phase WAW fail-closes even
   /// for dead defs — FE5B simultaneous same-reg / same-bank interference.
   SmallSetVector<Register, 8> CurrentCycleDefs;
@@ -666,7 +664,7 @@ public:
   }
 
   //===--------------------------------------------------------------------===//
-  // SMS-HANDOFF — metrics-only qualification packability (no hard cycle groups)
+  // Qualification packability metrics (no hard cycle groups)
   //===--------------------------------------------------------------------===//
   // Pure product oracles (shared BundleFormatSolver depth). SMS analyzeLoop
   // logs these as qualification evidence that accepted kernels remain
@@ -706,10 +704,8 @@ public:
   static bool qualKernelExactlyPackable(ArrayRef<unsigned> Opcodes) {
     if (Opcodes.empty())
       return true;
-    // productResMIIFailsQualification is false for N>bound (no false reject
-    // on the greedy-fallback oracle). Empty is handled above.
-    if (haydn::bundle::productResMIIFailsQualification(Opcodes))
-      return false;
+    // Finite exhaustive cover is product-legal. Greedy overestimate is a
+    // conservative II floor, not un-packable under Option A containment.
     return haydn::bundle::computeExhaustiveProductResMII(Opcodes) >= 1u;
   }
 

@@ -163,30 +163,12 @@ void HaydnSubtarget::adjustSchedDependency(
   if (Dep.getKind() != SDep::Data)
     return;
 
-  // Load→use: itinerary is Data_Latency=2. Soften to 1 for non-accumulator
-  // consumers so dct-style LateStart load placement still has chain room
-  // under ResMII≈II. Keep latency 2 when the use is an accumulator-MAC
-  // (tied-def) so dual-load reductions (vec_dot) retain enough schedule
-  // span for MaxStageCount≥1.
-  //
-  // SAFETY (exposed pipeline, Option C L2): this soften is a *scheduling
-  // heuristic only*. Haydn has no interlock — a read in the bundle right
-  // after a load is hardware-illegal. BundleSim is functional-only and will
-  // not catch it. Safe ONLY while HaydnLatencyStalls (pre-emit, every opt
-  // level) inserts architectural stall parcels from the raw itinerary
-  // latency. Do not remove that pass while this soften stays. Do not feed
-  // true latency=2 into SMS until ResMII/II goldens are re-qualified with it.
-  if (DefMI->mayLoad() && Dep.getLatency() > 1) {
-    bool UseIsAccMAC = false;
-    for (const MachineOperand &MO : UseMI->operands()) {
-      if (MO.isReg() && MO.isUse() && MO.isTied()) {
-        UseIsAccMAC = true;
-        break;
-      }
-    }
-    if (!UseIsAccMAC)
-      Dep.setLatency(1);
-  }
+  // Architectural Data_Latency is left intact for every Data edge, including
+  // load→use (itinerary 2). Schedulers must see the true ISA latency so II
+  // and density are measurable; empty-cycle materialization and the
+  // HaydnLatencyStalls pre-emit auditor insert any remaining stalls. There is
+  // no load→use soften: a non-architectural heuristic would make every
+  // initiation-interval figure fiction until stalls were patched in later.
 
   // Haydn has **no** intra-bundle / same-cycle register forwarding: every
   // slot in a product cycle reads the pre-cycle register snapshot

@@ -1946,6 +1946,8 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
   }
 
   case TargetOpcode::G_ZEXT: {
+    // Full pipeline: legalizer → G_AND/G_SHL + RI Pats. Residual is for
+    // select-only MIR and cross-bank / narrow leftovers only.
     Register Dst = I.getOperand(0).getReg();
     Register Src = I.getOperand(1).getReg();
     LLT DstTy = MRI.getType(Dst);
@@ -1956,8 +1958,6 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     MachineIRBuilder MIB(I);
 
     if (DstBits == 64 && SrcBits == 32) {
-      // i32 to i64 zero-extend: upper 32 bits are 0.
-      // Emit MOV_GPR_TO_DR64 Dst, Src, R0 (R0 = 0 for upper half)
       if (Dst.isVirtual())
         RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
       if (Src.isVirtual())
@@ -1968,14 +1968,9 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
                              .addReg(Haydn::R0);
       constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     } else if (DstBits == 8 && SrcBits == 1) {
-      // i1 to i8: AND with 1 (both live in GPR32)
       emitALUImm(MIB, Haydn::ANDI32, Dst, Src, 1, TII, TRI, RBI, MRI);
     } else if (DstBits == 32 && SrcBits >= 1 && SrcBits < 32) {
-      // Any sub-32 → i32 zero-extend.
-      // One ANDI32 whenever the mask fits the RI20 field (SrcBits ≤ 20):
-      // s1/s8/s16 plus the s17..s20 bitfield widths. Wider sources (s24
-      // bitfields, s31) need a mask ANDI32 cannot hold, so they keep the
-      // shift pair by (32-SrcBits) — that amount is 1..31, always a uimm5.
+      // MIR select-only (legalizer skipped). Full pipeline never hits this.
       if (Src.isVirtual())
         RBI.constrainGenericRegister(Src, Haydn::GPR32RegClass, MRI);
       RBI.constrainGenericRegister(Dst, Haydn::GPR32RegClass, MRI);
@@ -1989,8 +1984,7 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
         emitALUImm(MIB, Haydn::SRLI32, Dst, Tmp, ShAmt, TII, TRI, RBI, MRI);
       }
     } else if (DstBits == 64 && SrcBits >= 1 && SrcBits < 32) {
-      // Sub-32 → i64 zero-extend: zext to i32, then MOV_GPR_TO_DR64 R0.
-      // Generalizes {1,8,16} and non-pow2 bitfield widths (residual).
+      // MIR / residual non-pow2 sN→s64 (product legalizer leaves s64 legal).
       Register Ext32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
       if (Src.isVirtual())
         RBI.constrainGenericRegister(Src, Haydn::GPR32RegClass, MRI);
@@ -2069,6 +2063,8 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
   }
 
   case TargetOpcode::G_SEXT: {
+    // Full pipeline: legalizer → G_SHL+G_ASHR + RI Pats. Residual: MIR +
+    // cross-bank only.
     Register Dst = I.getOperand(0).getReg();
     Register Src = I.getOperand(1).getReg();
     LLT DstTy = MRI.getType(Dst);
@@ -2079,12 +2075,6 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     MachineIRBuilder MIB(I);
 
     if (DstBits == 64 && SrcBits == 32) {
-      // i32 to i64 sign-extend: direct SEXT32T64. Replaces the previous
-      // LOADI32 31 + SRA32 (sign mask) + MOV_GPR_TO_DR64 sequence — the
-      // MOV_GPR_TO_DR64 pseudo expanded post-RA to a 5+ bundle SP-relative
-      // spill chain (SUBI32/ST32/ST32/LD64_S1/ADDI32). One native instruction
-      // instead. ISA: `SEXT32T64 rtd, rs` (DB: rtd = SEXT32->64(rs), slots
-      // 1/2 ALU, latency 1).
       if (Src.isVirtual())
         RBI.constrainGenericRegister(Src, Haydn::GPR32RegClass, MRI);
       if (Dst.isVirtual())
@@ -2092,26 +2082,14 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
       MachineInstr *SextMI = MIB.buildInstr(Haydn::SEXT_GPR32_TO_DR64)
                                 .addDef(Dst).addReg(Src);
       constrainSelectedInstRegOperands(*SextMI, TII, TRI, RBI);
-    } else if (DstBits == 32 && SrcBits == 1) {
-      // i1 to i32 sign-extend: SHL by 31, then ASR by 31.
-      // For input 0: (0 << 31) >> 31 = 0.
-      // For input 1: (1 << 31) >> 31 = 0xFFFFFFFF (-1).
-      Register Tmp = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-      emitALUImm(MIB, Haydn::SLLI32, Tmp, Src, 31, TII, TRI, RBI, MRI);
-      emitALUImm(MIB, Haydn::SRAI32, Dst, Tmp, 31, TII, TRI, RBI, MRI);
     } else if (DstBits == 32 && SrcBits >= 1 && SrcBits < 32) {
-      // Any sub-32 → i32 sign-extend: SHL then ASR by (32-SrcBits).
-      // Covers legal {1,8,16} and non-pow2 bitfield widths (s12/s24/s31
-      // residual). s1 path above is identical (shift 31); kept as a
-      // separate branch only for the comment about 0/-1.
+      // MIR select-only (legalizer skipped).
       unsigned ShiftAmt = 32 - SrcBits;
       Register Tmp = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
       RBI.constrainGenericRegister(Dst, Haydn::GPR32RegClass, MRI);
       emitALUImm(MIB, Haydn::SLLI32, Tmp, Src, ShiftAmt, TII, TRI, RBI, MRI);
       emitALUImm(MIB, Haydn::SRAI32, Dst, Tmp, ShiftAmt, TII, TRI, RBI, MRI);
     } else if (DstBits == 64 && SrcBits >= 1 && SrcBits < 32) {
-      // Sub-32 → i64 sign-extend: SHL/ASR to i32, then SEXT_GPR32_TO_DR64.
-      // Generalizes {1,8,16} and non-pow2 bitfield widths (residual).
       Register Ext32 = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
       Register Tmp = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
       unsigned ShiftAmt = 32 - SrcBits;
@@ -3828,22 +3806,29 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     return true;
   }
   case haydn_sext32t64: {
-    // TD currently models SEXT32T64 as GPR outs; golden wants DR rtd.
-    // Select machine opcode as defined.
+    // Auto-gen SEXT32T64 stub is (outs GPR32) and must not be selected —
+    // that yields a post-RA cross-bank COPY D←R. Real opcode is
+    // SEXT_GPR32_TO_DR64 (outs DR64, ins GPR32); Format E logical peels to
+    // SEXT32T64.
     Register Src = I.getOperand(2).getReg();
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
     if (Src.isVirtual())
       RBI.constrainGenericRegister(Src, GPR32RegClass, MRI);
-    MachineInstr *MI = MIB.buildInstr(SEXT32T64).addDef(DstReg).addReg(Src);
+    MachineInstr *MI =
+        MIB.buildInstr(SEXT_GPR32_TO_DR64).addDef(DstReg).addReg(Src);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
   }
   case haydn_zero_dr: {
+    // Auto-gen ZERO_DR is isPseudo (outs+simm16 stub) — AsmPrinter drops
+    // BUNDLE children that are still Pseudo, leaving an all-NOP parcel and
+    // an undefined DR return. Residual ZERO_DR_S1 is a real FU member
+    // (outs DR only); Format E logical peels to ZERO_DR.
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
-    MachineInstr *MI = MIB.buildInstr(ZERO_DR).addDef(DstReg).addImm(0);
+    MachineInstr *MI = MIB.buildInstr(ZERO_DR_S1).addDef(DstReg);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;
@@ -4653,11 +4638,16 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   }
   case haydn_x2cmpsel32:
   case haydn_x4cmpsel16: {
-    // Fused: SLT(a,b) then MOVT(false, true). SFR local; no capture.
-    // Args: a, b, true_val, false_val.
+    // Fused: SLT(a,b) → SFR, then MOVT. Format E MOVT is 2-op RMW (rtd
+    // keeps false lanes). Residual has Constraints "$rd = $rs1" so TwoAddress
+    // seeds dest from False when needed; fillFormatE collapses the tied pair
+    // to (rd, true) on the wire. Args: a, b, true_val, false_val.
     const bool IsX2 = IntrID == haydn_x2cmpsel32;
-    unsigned SltOpc = IsX2 ? X2SLT32 : X4SLT16;
-    unsigned MovtOpc = IsX2 ? X2MOVT32 : X4MOVT16;
+    // Prefer single-slot residual (*_S1): multi-slot public X2MOVT32 has no
+    // getSlotKind and Bundle.tryAdd can leave a standalone escape that
+    // AsmPrinter fail-closes. S1 peels to Format E logical via encode.
+    unsigned SltOpc = IsX2 ? X2SLT32_S1 : X4SLT16_S1;
+    unsigned MovtOpc = IsX2 ? X2MOVT32_S1 : X4MOVT16_S1;
     Register A = I.getOperand(2).getReg();
     Register B = I.getOperand(3).getReg();
     Register TrueV = I.getOperand(4).getReg();
@@ -4670,12 +4660,14 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(TrueV, DR64RegClass, MRI);
     if (FalseV.isVirtual())
       RBI.constrainGenericRegister(FalseV, DR64RegClass, MRI);
+    if (DstReg.isVirtual())
+      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
+    // SLT: Format E is 2-src SFR write; logical stub has a dead DR def.
     Register Pass = MRI.createVirtualRegister(&DR64RegClass);
     MachineInstr *SltMI =
         MIB.buildInstr(SltOpc).addDef(Pass).addReg(A).addReg(B);
     constrainSelectedInstRegOperands(*SltMI, TII, TRI, RBI);
-    if (DstReg.isVirtual())
-      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
+    // Tied-def MOVT: %rd = MOVT %rs1(false, tied), %rs2(true).
     MachineInstr *MovtMI = MIB.buildInstr(MovtOpc)
                                .addDef(DstReg)
                                .addReg(FalseV)

@@ -297,9 +297,10 @@ def uimm16_hwloop_cnt
   let DecoderMethod = "decodeSImmOperandXStepWide<16,0,/*IsSigned*/0>";
 }
 
-// 48-bit WIDE SET_HWLOOP offset1 (§5.11/5.12). bits[31:26]; offset in 4-byte
-// units (§5.14: field stores offset>>2). Symbolic target emits the dedicated
-// FIXUP_HAYDN_HWLoopOff1 (PC-rel, TargetOffset=26).
+// SET_HWLOOP offset1 (uimm6, ÷4). Format E product FieldLsb lives in
+// HaydnRelocLayout (E2 e0 F2 abs bits[37:32]). Symbolic target emits
+// FIXUP_HAYDN_HWLoopOff1 (PC-rel). Residual s0 EncoderMethod still uses this
+// operand class; Format E members patch via getMachineOpValue + OpNo.
 def hwloop_off1
     : Operand<i32>, ImmLeaf<i32, [{ return isUInt<6>(Imm); }]> {
   let ParserMatchClass = UImmAsmOperand<6>;
@@ -309,8 +310,9 @@ def hwloop_off1
   let DecoderMethod = "decodeSImmOperandXStepWide<6,2,/*IsSigned*/0>";
 }
 
-// 48-bit WIDE SET_HWLOOP offset2 (§5.11/5.12). bits[25:14]; offset in 4-byte
-// units. Symbolic target emits FIXUP_HAYDN_HWLoopOff2 (PC-rel, TargetOffset=14).
+// SET_HWLOOP offset2 (uimm12, ÷4). Format E product FieldLsb lives in
+// HaydnRelocLayout (E2 e0 F2 abs bits[49:38]). Symbolic target emits
+// FIXUP_HAYDN_HWLoopOff2 (PC-rel).
 def hwloop_off2
     : Operand<i32>, ImmLeaf<i32, [{ return isUInt<12>(Imm); }]> {
   let ParserMatchClass = UImmAsmOperand<12>;

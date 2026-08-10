@@ -336,10 +336,9 @@ countARPorts(const MachineInstr &MI,
 }
 
 // Count SFR read and write port usage for an instruction.
-// Spec budget vocabulary is 2R1W, but product packing law treats dual *dead*
-// implicit-def $sfr as legal (slot-ordered flag side-effects on ALU ops).
-// Charge only live SFR uses/defs so ordinary flag-writing ALUs still co-issue.
-// Live SFR traffic (true flag consumers/writers) remains port-visible.
+// Spec budget is 2R1W and product law is at most one SFR writer per cycle:
+// every SFR def (dead or live) reserves the exclusive write port so dual
+// dead implicit-def $sfr cannot co-issue (PackLegality rule 3).
 // \returns {Reads, Writes}.
 inline std::pair<unsigned, unsigned>
 countSFRPorts(const MachineInstr &MI,
@@ -353,10 +352,6 @@ countSFRPorts(const MachineInstr &MI,
       continue;
     Register Reg = MO.getReg();
     if (!isHaydnSFRPortReg(Reg))
-      continue;
-    // Dead flag side-effects do not reserve the exclusive SFR write port
-    // under current product law (see HaydnPackLegality rule 3).
-    if (MO.isDead())
       continue;
     const bool IsUse = MO.isUse() && !MO.isUndef();
     const bool IsDef = MO.isDef();

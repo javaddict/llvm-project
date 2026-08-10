@@ -120,25 +120,16 @@ public:
 
   bool shouldIgnoreForPipelining(const MachineInstr *MI) const override;
 
-  // Reject schedules that produce no pipeline overlap (ZOL StageCount <= 1),
-  // PPS-3 stage-count / reg-pressure gates, AIE ZeroOverheadLoop
-  // MaxStageCount >= MinTripCount. Non-ZOL multi-stage is always accepted;
-  // expand always materializes durable clone→cycle groups (no handoff switch).
+  // Pre-RA SMS containment: reject every StageCount > 1 (no issue-cycle
+  // identity crosses RA; ZOL and soft counted alike — closes inverted ZOL
+  // multi-stage gate). Also reject ZOL StageCount <= 1 (no overlap), PPS-3
+  // stage-count / reg-pressure gates, and AIE ZeroOverheadLoop
+  // MaxStageCount >= MinTripCount. Accepted StageCount==1 schedules stay
+  // bare logical MIs (proven counted residual only). Metrics live on the
+  // MachinePipeliner success remark — no generic post-expand virtual.
+  // Costs hwloop geometry on final parcels (kernel II + MinBodyBundles pad);
+  // SetupIssueDistance is preheader→BEGIN, never an II>=Setup floor.
   bool shouldUseSchedule(SwingSchedulerDAG &SSD, SMSchedule &SMS) override;
-
-  /// Always-on MFI freeze of II/stage scalars plus any durable groups already
-  /// materialized by materializeSMSKernelCycleGroups (expand-before-record).
-  void recordSuccessfulSMS(MachineFunction &MF, MachineBasicBlock *KernelBB,
-                           unsigned ResMII, unsigned RecMII, unsigned MII,
-                           unsigned StageCount, unsigned NumOps,
-                           unsigned ScheduledII) override;
-
-  /// Durable same-cycle logical BUNDLE materialize from expander clone→cycle
-  /// pairs (product multi-stage; always on). Contiguous real-issue ops only;
-  /// no private member setDesc, FormatID, or side-map. Records group
-  /// cycle/member identity on HaydnMachineFunctionInfo.
-  void materializeSMSKernelCycleGroups(
-      ArrayRef<std::pair<MachineInstr *, unsigned>> KernelCloneCycles) override;
 
   std::optional<bool>
   createTripCountGreaterCondition(int TC, MachineBasicBlock &MBB,
@@ -317,12 +308,12 @@ public:
   //===--------------------------------------------------------------------===
 
   // Memory→memory edge latency for post-RA MemoryEdges mutation (AIE peer).
-  // Product default: always 1 (AccurateMemEdges=false peer). NatureDSP density
-  // A/B kept product latency-1; -haydn-accurate-memory-latency stays opt-in
-  // (default OFF). Accurate path: max(1, LastSrc-FirstDst+1) from memory-only
-  // sched classes (Slot0_LS / Slot1_LD / Slot01_LD); nullopt when either cycle
-  // is unknown (MemoryEdges falls back to latency 1). Unit tables + lit packing
-  // pins (product adjacent st32→ld32; accurate full-NOP bubble).
+  // Product default: max(1, LastSrc-FirstDst+1) from memory-only sched classes
+  // (Slot0_LS / Slot1_LD / Slot01_LD); nullopt when either cycle is unknown
+  // (MemoryEdges falls back to latency 1). Soft soak-off
+  // (-haydn-accurate-memory-latency=false) returns class-agnostic 1. Unit
+  // tables + lit packing pins (product full-NOP bubble; soft adjacent
+  // st32→ld32).
   std::optional<int> getMemoryLatency(unsigned SrcSchedClass,
                                       unsigned DstSchedClass) const;
 
@@ -330,7 +321,7 @@ public:
   // Table-driven (MemInstrItinData peer): first=0, last=1 for memory itineraries
   // Slot0_LS / Slot1_LD / Slot01_LD only (OperandCycles [2], LoadLatency=2 /
   // ISA §55). nullopt = non-memory / unknown class (ALU/MAC/PSEUDO never report
-  // a memory cycle). Product path ignores these; accurate flag is opt-in only.
+  // a memory cycle). Product getMemoryLatency reads these by default.
   std::optional<int> getFirstMemoryCycle(unsigned SchedClass) const;
   std::optional<int> getLastMemoryCycle(unsigned SchedClass) const;
   int getMinFirstMemoryCycle() const { return 0; }

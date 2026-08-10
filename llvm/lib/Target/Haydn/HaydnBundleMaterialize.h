@@ -23,14 +23,12 @@
 //   * commitExactMultiMIProductCycle — production multi-MI MIR commit:
 //     exactSolve setDesc → MachineBundle SlotMap → applyFormatOrdering →
 //     stamp row+completion. Never leaves alts-bearing logicals (no residual
-//     logical pack after FE8).
-//   * commitExactHardRootProductCycle — transactional recommit of a
-//     multi-member hard BUNDLE root (same children, member setDesc, field
-//     order, Format E row+completion). Pre-validates one-cycle legality
-//     (no-forwarding RAW + product pack) *before* dissolving the old root
-//     so illegal membership never silently unbundles a frozen SMS group;
-//     then dissolves the shell and refinalizes so consolidated root
-//     operands/kills/InternalRead rebuild. Post-RA commit-inside-group only.
+//     logical pack after FE8). Sole product multi-MI commit is post-RA; never
+//     a pre-RA SMS freeze path (no force-coissue / multi-member handoff).
+//   * commitExactHardRootProductCycle — residual unit-test helper only.
+//     Product leaveMBB uses free multi-MI commitExactMultiMIProductCycle and
+//     ordinary residual unstamped multi-member commit/sequentialize; it does
+//     not keep hard-root freeze identity.
 //   * commitLateProductCycle / finalizeExactLateSingleton — late layout
 //     firewall: empty-cycle tryAdd → setDesc + stamp Format E commit.
 //   * greedySplitLegalOpcodeCycles — DIAGNOSTIC ONLY (ResMII / unit tests).
@@ -46,11 +44,14 @@
 #include "HaydnBundle.h"
 #include "HaydnBundleFormatSolver.h"
 #include "HaydnBundlePlan.h"
+#include "HaydnFormatERecords.h"
+#include "HaydnPlacementAlternative.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/bit.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
@@ -59,7 +60,9 @@
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include <algorithm>
+#include <cstring>
 #include <optional>
+#include <string>
 
 namespace llvm {
 
@@ -104,6 +107,151 @@ struct ExactProductCycle {
   /// Preferred CycleState after exact expand (OccupiedSlots + members).
   CycleState State;
 };
+
+/// Peel residual / Format E member opcode names to the golden logical catalog
+/// string used by Format E unit tables (mirrors MC formatELogicalName core +
+/// public mnemonic map for LD32/ST32/…).
+inline std::string peelFormatELogicalOpcodeName(StringRef Name) {
+  StringRef Base = Name;
+  auto peel = [&](StringRef Suf) {
+    if (Base.ends_with(Suf))
+      Base = Base.drop_back(Suf.size());
+  };
+  for (StringRef Marker : {"_E2_", "_E3_"}) {
+    size_t Idx = Base.find(Marker);
+    if (Idx != StringRef::npos) {
+      Base = Base.take_front(Idx);
+      break;
+    }
+  }
+  for (int Pass = 0; Pass < 3; ++Pass) {
+    StringRef Before = Base;
+    for (StringRef Suf :
+         {"_S0", "_S1", "_S2", "_LD_S0", "_LD_S1", "_LD_S2", "_M0S0LS",
+          "_M0S1LS", "_M0S2LS", "_M1S0LS", "_M1S1LS", "_M1S2LS"})
+      peel(Suf);
+    if (Base == Before)
+      break;
+  }
+  if (Base.ends_with("_F2_W"))
+    Base = Base.drop_back(2);
+  else if (Base.ends_with("_W"))
+    Base = Base.drop_back(2);
+
+  // Public mnemonic → Format E golden catalog (same map as MC encode).
+  if (Base.equals_insensitive("LD32") || Base.equals_insensitive("LW") ||
+      Base.equals_insensitive("LD32_REG"))
+    return Base.equals_insensitive("LD32_REG") ? "S_LW_WITH_REG"
+                                               : "S_LW_WITH_IMM";
+  if (Base.equals_insensitive("ST32") || Base.equals_insensitive("SW") ||
+      Base.equals_insensitive("ST32_REG"))
+    return Base.equals_insensitive("ST32_REG") ? "S_SW_WITH_REG"
+                                               : "S_SW_WITH_IMM";
+  if (Base.equals_insensitive("LD64") || Base.equals_insensitive("LD64_REG"))
+    return Base.equals_insensitive("LD64_REG") ? "D_LDW_WITH_REG"
+                                               : "D_LDW_WITH_IMM";
+  if (Base.equals_insensitive("ST64") || Base.equals_insensitive("ST64_REG"))
+    return Base.equals_insensitive("ST64_REG") ? "D_SDW_WITH_REG"
+                                               : "D_SDW_WITH_IMM";
+  if (Base.equals_insensitive("LD32_POST") ||
+      Base.equals_insensitive("LD32_POST_INC"))
+    return "S_LW_POST_IMM";
+  if (Base.equals_insensitive("ST32_POST") ||
+      Base.equals_insensitive("ST32_POST_INC"))
+    return "S_SW_POST_IMM";
+  if (Base.equals_insensitive("LD64_POST"))
+    return "D_LDW_POST_IMM";
+  if (Base.equals_insensitive("ST64_POST"))
+    return "D_SDW_POST_IMM";
+  return Base.str();
+}
+
+/// True when \p Opcodes can be assigned injective Format E units under E2 or
+/// E3 (MC serialize authority). Residual S0/S1/S2 FieldSlots alone over-count
+/// multi-issue for single-unit logicals (e.g. dual D_SW_L_WITH_IMM both need
+/// LOADSTORE0) — refuse those packs before setDesc / BUNDLE freeze.
+inline bool opcodesHaveFormatEUnitCover(ArrayRef<unsigned> Opcodes,
+                                        const TargetInstrInfo &TII) {
+  if (Opcodes.size() < 2)
+    return true;
+  using namespace haydn::format_e;
+
+  SmallVector<std::string, 3> Logs;
+  Logs.reserve(Opcodes.size());
+  for (unsigned Opc : Opcodes)
+    Logs.push_back(peelFormatELogicalOpcodeName(TII.getName(Opc)));
+
+  auto unitsFor = [&](uint8_t Mode, StringRef Logical) -> uint32_t {
+    uint32_t Mask = 0;
+    for (unsigned I = 0; I < FormatEMemberCount; ++I) {
+      const FormatEMemberRec &M = FormatEMembers[I];
+      if (M.Mode != Mode || M.IsNop != 0 || M.Unit >= 32)
+        continue;
+      if (!StringRef(M.Logical).equals_insensitive(Logical))
+        continue;
+      Mask |= (1u << M.Unit);
+    }
+    return Mask;
+  };
+
+  // N <= 3: brute-force injective assignment of one free unit per member.
+  auto assignable = [&](ArrayRef<uint32_t> UnitMasks) -> bool {
+    const unsigned N = UnitMasks.size();
+    if (N == 0)
+      return true;
+    if (N == 1)
+      return UnitMasks[0] != 0;
+    if (N == 2) {
+      for (unsigned U0 = 0; U0 < 32; ++U0) {
+        if (!(UnitMasks[0] & (1u << U0)))
+          continue;
+        for (unsigned U1 = 0; U1 < 32; ++U1) {
+          if (U0 == U1)
+            continue;
+          if (UnitMasks[1] & (1u << U1))
+            return true;
+        }
+      }
+      return false;
+    }
+    // N == 3
+    for (unsigned U0 = 0; U0 < 32; ++U0) {
+      if (!(UnitMasks[0] & (1u << U0)))
+        continue;
+      for (unsigned U1 = 0; U1 < 32; ++U1) {
+        if (U1 == U0 || !(UnitMasks[1] & (1u << U1)))
+          continue;
+        for (unsigned U2 = 0; U2 < 32; ++U2) {
+          if (U2 == U0 || U2 == U1)
+            continue;
+          if (UnitMasks[2] & (1u << U2))
+            return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  for (uint8_t Mode : {static_cast<uint8_t>(0), static_cast<uint8_t>(1)}) {
+    SmallVector<uint32_t, 3> Masks;
+    Masks.reserve(Logs.size());
+    bool Ok = true;
+    bool AnyConstrained = false;
+    for (const std::string &L : Logs) {
+      uint32_t M = unitsFor(Mode, L);
+      // Unknown catalog logical: do not invent a unit ban; leave unconstrained
+      // (full mask). Constrained dual-single-unit packs still fail below.
+      if (M == 0)
+        M = ~0u;
+      else
+        AnyConstrained = true;
+      Masks.push_back(M);
+    }
+    if (Ok && (!AnyConstrained || assignable(Masks)))
+      return true;
+  }
+  return false;
+}
 
 /// Exact no-split product solve for a same-cycle opcode sequence.
 ///
@@ -280,6 +428,98 @@ inline bool cycleMembersHaveTrueRAW(ArrayRef<MachineInstr *> Instrs,
   return false;
 }
 
+/// True when two different members of one cycle both live-def overlapping
+/// registers (WAW). leaveMBB residual seam replay treats same-cycle WAW as a
+/// permanent Req/Res conflict (stalls cannot clear it). Multi-stage modulo
+/// packs without rename can place stage-N and stage-N+1 redefs of one physreg
+/// on the same mod — refuse multi-MI and leave sequential parcels.
+inline bool cycleMembersHaveWAW(ArrayRef<MachineInstr *> Instrs,
+                                const TargetRegisterInfo *TRI) {
+  if (Instrs.size() < 2)
+    return false;
+
+  SmallVector<Register, 4> SeenDefs;
+  for (MachineInstr *MI : Instrs) {
+    if (!MI)
+      continue;
+    for (const MachineOperand &MO : MI->all_defs()) {
+      if (!MO.isReg() || !MO.getReg() || MO.isDead())
+        continue;
+      Register R = MO.getReg();
+      if (!(R.isPhysical() || R.isVirtual()))
+        continue;
+      for (Register Prev : SeenDefs) {
+        if (Prev == R)
+          return true;
+        if (TRI && Prev.isPhysical() && R.isPhysical() &&
+            TRI->regsOverlap(Prev, R))
+          return true;
+      }
+      SeenDefs.push_back(R);
+    }
+  }
+  return false;
+}
+
+/// Opcode check for product SET_HWLOOP / LoopStart forms.
+/// True when MI is any product SET_HWLOOP / LoopStart form (logical, wide,
+/// _S0, Format E member). Name peel so Format E private members match without
+/// requiring every member enum in this TU's include set.
+inline bool isProductHwloopSetupOpcodeName(StringRef Name) {
+  std::string Logical = peelFormatELogicalOpcodeName(Name);
+  return StringRef(Logical).starts_with_insensitive("SET_HWLOOP") ||
+         StringRef(Logical).equals_insensitive("LoopStart");
+}
+
+/// SET_HWLOOP samples trip/Off GPRs under snapshot no-forwarding: refuse
+/// coissue with any same-cycle producer of those regs (RAW needs forwarding;
+/// WAR samples stale trip — post-pipeliner peel ADDI+SET).
+inline bool cycleMembersHaveHwloopTripConflict(
+    ArrayRef<MachineInstr *> Instrs, const TargetInstrInfo &TII,
+    const TargetRegisterInfo *TRI) {
+  if (Instrs.size() < 2)
+    return false;
+  auto overlaps = [&](Register A, Register B) -> bool {
+    if (A == B)
+      return true;
+    if (!TRI || !A.isPhysical() || !B.isPhysical())
+      return false;
+    return TRI->regsOverlap(A, B);
+  };
+  for (MachineInstr *SetMI : Instrs) {
+    if (!SetMI)
+      continue;
+    if (!isProductHwloopSetupOpcodeName(TII.getName(SetMI->getOpcode())))
+      continue;
+    SmallVector<Register, 4> SetUses;
+    for (const MachineOperand &MO : SetMI->operands()) {
+      if (!MO.isReg() || !MO.getReg() || MO.isDef() || MO.isUndef())
+        continue;
+      Register R = MO.getReg();
+      if (R.isPhysical() || R.isVirtual())
+        SetUses.push_back(R);
+    }
+    if (SetUses.empty())
+      continue;
+    for (MachineInstr *Other : Instrs) {
+      if (!Other || Other == SetMI)
+        continue;
+      for (const MachineOperand &MO : Other->operands()) {
+        if (!MO.isReg() || !MO.getReg() || !MO.isDef())
+          continue;
+        Register D = MO.getReg();
+        if (!(D.isPhysical() || D.isVirtual()))
+          continue;
+        for (Register U : SetUses)
+          if (overlaps(D, U))
+            return true;
+      }
+    }
+  }
+  return false;
+}
+
+
 //===----------------------------------------------------------------------===//
 // Product coissue law (one architectural issue cycle)
 //===----------------------------------------------------------------------===//
@@ -298,14 +538,17 @@ inline bool cycleMembersHaveTrueRAW(ArrayRef<MachineInstr *> Instrs,
 //     after RA paints one physreg onto a former vreg-independent pair
 //     (e.g. SEQ(limit) + ADD that redefs the limit reg for an address).
 //
+//   * **WAW** (live def vs live def): \p cycleMembersHaveWAW. Same-cycle
+//     multi-stage physreg redefs without rename must not multi-MI commit —
+//     residual seam replay cannot stall-clear WAW.
+//
 //   * **Field order** (layer 3): emission permute must still not invent true
 //     RAW. \p canCoissueProductCycle checks preferred exactSolve placement.
 //
-// Free pack: refuse multi-MI if avail-cycle detect fails (true RAW or Data
-// Lat≥1). Hard-root refuse: lower as **sequential cycles under Anti order**
-// (use-before-def) — the same order ReadyCycle would have used if Anti had
-// forced separation — via \p orderMembersUseBeforeDefForAnti. Not a separate
-// "WAR rewrite" product path.
+// Free pack: refuse multi-MI if avail-cycle detect fails (true RAW / WAW or Data
+// Lat≥1). Residual illegal multi-member shells sequentialize under Anti
+// order via \p orderMembersUseBeforeDefForAnti. Not a separate WAR-rewrite
+// product path.
 //
 //===----------------------------------------------------------------------===//
 
@@ -400,8 +643,14 @@ inline bool instrsFormOneLegalCycle(ArrayRef<MachineInstr *> Instrs,
     const MachineFunction *MF = Instrs.front()->getMF();
     const TargetRegisterInfo *TRI =
         MF ? MF->getSubtarget().getRegisterInfo() : nullptr;
+    const TargetInstrInfo *TII =
+        MF ? MF->getSubtarget().getInstrInfo() : nullptr;
     // Available-cycle detect (same as ReadyCycle / Data Lat≥1 contract).
     if (cycleMembersHaveTrueRAW(Instrs, TRI))
+      return false;
+    // SET_HWLOOP trip/Off sample cannot share a cycle with a producer of
+    // those regs (snapshot no-forwarding — remat ADDI+SET peel).
+    if (TII && cycleMembersHaveHwloopTripConflict(Instrs, *TII, TRI))
       return false;
   }
 
@@ -425,18 +674,36 @@ inline bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs) {
       return false;
   }
 
-  HaydnMCFormats Fmts;
-  if (!instrsFormOneLegalCycle(Instrs, Fmts))
-    return false;
-
   MachineFunction &MF = *Instrs.front()->getMF();
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+
+  // SET_HWLOOP must not share a cycle with a producer of its trip/Off regs
+  // (snapshot no-forwarding: WAR samples stale trip; RAW needs forwarding).
+  if (cycleMembersHaveHwloopTripConflict(Instrs, TII, TRI))
+    return false;
+
+  // Format E E2-only logicals cannot form a 3-wide E3 parcel.
+  if (Instrs.size() >= 3) {
+    for (MachineInstr *MI : Instrs) {
+      if (isFormatEE2OnlyOpcodeName(TII.getName(MI->getOpcode())))
+        return false;
+    }
+  }
+
+  HaydnMCFormats Fmts;
+  if (!instrsFormOneLegalCycle(Instrs, Fmts))
+    return false;
 
   SmallVector<unsigned, 3> SavedOps;
   SavedOps.reserve(Instrs.size());
   for (MachineInstr *MI : Instrs)
     SavedOps.push_back(MI->getOpcode());
+
+  // Residual FieldSlots can accept dual single-unit logicals; MC unit
+  // injectivity cannot. Fail closed before temporary setDesc.
+  if (!opcodesHaveFormatEUnitCover(SavedOps, TII))
+    return false;
 
   auto restoreDescs = [&]() {
     for (unsigned I = 0, E = Instrs.size(); I != E; ++I) {
@@ -491,8 +758,11 @@ inline bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs) {
   // Field order = emission order. True RAW here means an Anti/WAR that the
   // preferred placement cannot preserve (use-before-redef flipped).
   const bool FieldRAW = cycleMembersHaveTrueRAW(FieldOrdered, TRI);
+  // Same-cycle live WAW (incl. multi-stage physreg redefs) cannot multi-MI.
+  const bool FieldWAW = cycleMembersHaveWAW(FieldOrdered, TRI) ||
+                        cycleMembersHaveWAW(Instrs, TRI);
   restoreDescs();
-  return !FieldRAW;
+  return !FieldRAW && !FieldWAW;
 }
 
 /// Historical name — prefer \p canCoissueProductCycle.
@@ -720,9 +990,24 @@ inline bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
 
+  // Fail closed: E2-only Format E logicals cannot form a 3-wide E3 parcel.
+  if (Instrs.size() >= 3) {
+    for (MachineInstr *MI : Instrs) {
+      if (isFormatEE2OnlyOpcodeName(TII.getName(MI->getOpcode())))
+        return false;
+    }
+  }
+
   // Fail closed on same-cycle true RAW before setDesc / finalizeBundle can
   // invent InternalRead markers for an illegal no-forwarding pack.
   if (cycleMembersHaveTrueRAW(Instrs, TRI))
+    return false;
+  // Fail closed on same-cycle live WAW (leaveMBB seam replay cannot clear it).
+  if (cycleMembersHaveWAW(Instrs, TRI))
+    return false;
+  // SET_HWLOOP trip/Off sample cannot coissue with a producer of those regs
+  // (WAR would sample stale trip under snapshot no-forwarding).
+  if (cycleMembersHaveHwloopTripConflict(Instrs, TII, TRI))
     return false;
 
   // Bake format-member descriptors before SlotMap / encode. leaveRegion
@@ -733,6 +1018,11 @@ inline bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
     Ops.reserve(Instrs.size());
     for (MachineInstr *MI : Instrs)
       Ops.push_back(MI->getOpcode());
+
+    // Format E unit injectivity (MC serialize authority). Residual S* packs
+    // that over-count single-unit logicals must not freeze a BUNDLE.
+    if (!opcodesHaveFormatEUnitCover(Ops, TII))
+      return false;
 
     HaydnMCFormats SolveFmts;
     if (auto Exact = exactSolveProductOpcodes(Ops, SolveFmts)) {
@@ -817,26 +1107,17 @@ inline bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
   return true;
 }
 
-/// Transactional exact-commit of a multi-member hard BUNDLE root.
-/// Same children, selected member descriptors, canonical field order,
-/// Format E row+completion stamp. Hard groups survive as atomic parcels;
-/// membership is never split and never free-repacked with neighbors.
-///
-/// Contract (SMS pre-RA durable groups / architectural rematch):
-///   * Pack and Format-E commit happen *inside* the frozen group only.
-///   * Illegal membership fails closed *before* dissolve — never leave the
-///     kernel unbundled so a later free pack can invent stages or splice
-///     across pre-RA cycle groups.
-///   * Successful path dissolves the stale shell then refinalizes via
-///     commitExactMultiMIProductCycle (root ops/kills/InternalRead rebuild).
+/// Residual unit-test helper: dissolve a multi-member BUNDLE shell and
+/// recommit via \p commitExactMultiMIProductCycle when membership is one
+/// legal product cycle. Product leaveMBB does not keep hard-root freeze
+/// identity — free multi-MI and residual unstamped multi-member handling
+/// use ordinary multi-MI commit / sequentialize.
 ///
 /// \p BundleRoot must be TargetOpcode::BUNDLE with ≥2 real children.
 /// \p MII provides MCInstrDesc for member setDesc (TargetInstrInfo ok).
-/// Member setDesc here is the hard-root path (exactSolveProductOpcodes);
-/// scheduled-region alts still flow through HaydnAlternateDescriptors.
 ///
 /// \returns true on successful recommit; false if membership is not one
-/// legal product cycle (caller fail-closed — never split a hard root).
+/// legal product cycle.
 inline bool commitExactHardRootProductCycle(MachineInstr &BundleRoot,
                                             const MCInstrInfo &MII) {
   if (!BundleRoot.isBundle() || !BundleRoot.getParent())

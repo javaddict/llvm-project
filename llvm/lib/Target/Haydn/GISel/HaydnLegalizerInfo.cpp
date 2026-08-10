@@ -245,17 +245,15 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // 128-bit multiply itself into s64 G_UNMERGE_VALUES + G_MUL/G_UMULH +
   // G_MERGE_VALUES; only the feeding s64->s128 extension lacked a rule.
   // See /.
-  // Closed rule for extensions TO s32/s64 FROM any narrower scalar (incl.
-  // non-pow2 s12/s24/s31 bitfield widths). The selector masks (ZEXT/ANYEXT)
-  // or shift-sign-extends (SEXT) by SrcBits — not a hardcoded {1,8,16} set.
-  // Narrow *results* (s8/s16) stay customFor below (cannot clampScalar dest).
-  // legalIf is ordered after legalFor/customFor so those rules still win.
-  getActionDefinitionsBuilder({G_SEXT, G_ZEXT, G_ANYEXT})
-      .legalFor({{S32, S1}, {S32, S8}, {S32, S16}, {S64, S32},
-                 {S64, S8}, {S64, S16}, {S64, S1}})
-      .customFor({{S16, S1}, {S16, S8}, {S8, S1}, {S8, S8}, {S16, S16},
+  // s32←sN zext/sext: custom → AND / SHL+LSHR / SHL+ASHR for selectImpl RI Pats.
+  // s64←sN stays legal so post-legalizer redundant-ext combine can collapse
+  // double zext/sext to s64 (isLegal gate); selector residual emits ANDI/MOV.
+  // s64←s32 legal (MOV / SEXT_GPR32_TO_DR64).
+  getActionDefinitionsBuilder({G_SEXT, G_ZEXT})
+      .legalFor({{S64, S32}, {S64, S8}, {S64, S16}, {S64, S1}})
+      .customFor({{S32, S1}, {S32, S8}, {S32, S16},
+                  {S16, S1}, {S16, S8}, {S8, S1}, {S8, S8}, {S16, S16},
                   {S128, S64}})
-      // pr79737-2: G_ANYEXT s72→s128 from non-pow2 bitfield store widen.
       .customIf([](const LegalityQuery &Query) {
         const LLT DstTy = Query.Types[0];
         const LLT SrcTy = Query.Types[1];
@@ -263,7 +261,42 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
                DstTy.getSizeInBits() == 128 && SrcTy.getSizeInBits() < 128 &&
                SrcTy.getSizeInBits() != 64;
       })
- // Residual vector extends (v2i16→v2i32 etc. from SLP after ).
+      .scalarize(0)
+      // Non-pow2 / residual →s32: rewrite via custom legalize.
+      .customIf([](const LegalityQuery &Query) {
+        const LLT DstTy = Query.Types[0];
+        const LLT SrcTy = Query.Types[1];
+        if (!DstTy.isScalar() || !SrcTy.isScalar())
+          return false;
+        const unsigned DstBits = DstTy.getSizeInBits();
+        const unsigned SrcBits = SrcTy.getSizeInBits();
+        if (DstBits != 32)
+          return false;
+        return SrcBits >= 1 && SrcBits < 32;
+      })
+      // Residual s64←sN (non-pow2 bitfields): keep legal for combiner/select.
+      .legalIf([](const LegalityQuery &Query) {
+        const LLT DstTy = Query.Types[0];
+        const LLT SrcTy = Query.Types[1];
+        if (!DstTy.isScalar() || !SrcTy.isScalar())
+          return false;
+        return DstTy.getSizeInBits() == 64 && SrcTy.getSizeInBits() >= 1 &&
+               SrcTy.getSizeInBits() < 64;
+      });
+
+  // ANYEXT: bank identity (selector replaceRegWith / MOV); no mask rewrite.
+  getActionDefinitionsBuilder(G_ANYEXT)
+      .legalFor({{S32, S1}, {S32, S8}, {S32, S16}, {S64, S32},
+                 {S64, S8}, {S64, S16}, {S64, S1}})
+      .customFor({{S16, S1}, {S16, S8}, {S8, S1}, {S8, S8}, {S16, S16},
+                  {S128, S64}})
+      .customIf([](const LegalityQuery &Query) {
+        const LLT DstTy = Query.Types[0];
+        const LLT SrcTy = Query.Types[1];
+        return DstTy.isScalar() && SrcTy.isScalar() &&
+               DstTy.getSizeInBits() == 128 && SrcTy.getSizeInBits() < 128 &&
+               SrcTy.getSizeInBits() != 64;
+      })
       .scalarize(0)
       .legalIf([](const LegalityQuery &Query) {
         const LLT DstTy = Query.Types[0];
@@ -272,7 +305,6 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
           return false;
         const unsigned DstBits = DstTy.getSizeInBits();
         const unsigned SrcBits = SrcTy.getSizeInBits();
-        // Only full-register destinations; narrow results stay custom.
         if (DstBits != 32 && DstBits != 64)
           return false;
         return SrcBits >= 1 && SrcBits < DstBits;
@@ -302,6 +334,8 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // other sub-register widths are replaceRegWith no-ops. Companion
   // ZEXT/SEXT legalIf above masks/sign-extends non-pow2 sources.
   getActionDefinitionsBuilder(G_TRUNC)
+      // trunc→s1 stays legal: G_SELECT/G_BRCOND require s1 cond type.
+      // Selector isolates bit0 via ANDI32 (cannot rewrite to s32 here).
       .legalFor({{S1, S32}, {S1, S16}, {S1, S8}, {S1, S64},
                  {S8, S16}, {S16, S32}, {S8, S32},
                  {S32, S64}, {S16, S64}, {S8, S64}})
@@ -1225,6 +1259,49 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
       MI.getOpcode() == G_ANYEXT) {
     Register DstReg = MI.getOperand(0).getReg();
     LLT DstTy = MRI.getType(DstReg);
+    Register SrcReg = MI.getOperand(1).getReg();
+    LLT SrcTy = MRI.getType(SrcReg);
+
+    // Phase A (Pat-first): rewrite sN→s32 zext/sext to generic AND / SHL+LSHR /
+    // SHL+ASHR with G_CONSTANT so selectImpl RI Pats fold immediates. Avoids
+    // C++ emitALUImm residual for the common width matrix.
+    //
+    // Sub-32 sources may still carry LLT s8/s16/s1; G_AND/G_SHL require a
+    // common scalar type. Widen via G_ANYEXT (next legalizer pass turns that
+    // into a bank-identity copy on GPR32).
+    if (DstTy.isScalar() && SrcTy.isScalar() &&
+        DstTy.getSizeInBits() == 32 && SrcTy.getSizeInBits() < 32 &&
+        SrcTy.getSizeInBits() >= 1) {
+      const unsigned SrcBits = SrcTy.getSizeInBits();
+      const LLT S32 = LLT::scalar(32);
+      MIB.setInstrAndDebugLoc(MI);
+      // Widen LLT to s32 for AND/SHL (anyext is legal → selector identity).
+      auto Wide =
+          (SrcBits == 32) ? SrcReg : MIB.buildAnyExt(S32, SrcReg).getReg(0);
+      if (MI.getOpcode() == G_ZEXT) {
+        if (SrcBits <= 20) {
+          auto Mask = MIB.buildConstant(S32, (1u << SrcBits) - 1);
+          MIB.buildAnd(DstReg, Wide, Mask);
+        } else {
+          const unsigned Sh = 32 - SrcBits;
+          auto ShAmt = MIB.buildConstant(S32, Sh);
+          auto Tmp = MIB.buildShl(S32, Wide, ShAmt);
+          MIB.buildLShr(DstReg, Tmp, ShAmt);
+        }
+        MI.eraseFromParent();
+        return true;
+      }
+      // G_SEXT
+      const unsigned Sh = 32 - SrcBits;
+      auto ShAmt = MIB.buildConstant(S32, Sh);
+      auto Tmp = MIB.buildShl(S32, Wide, ShAmt);
+      MIB.buildAShr(DstReg, Tmp, ShAmt);
+      MI.eraseFromParent();
+      return true;
+    }
+
+    // sN→s64 is legal (selector residual ANDI/MOV or SEXT chain). Do not
+    // custom-chain here: post-legalizer redundant-ext combine needs isLegal.
 
     // s64 -> s128 extension. IR-level instcombine / AggressiveInst
     // Combine folds an inline 64x64->128 schoolbook multiply into

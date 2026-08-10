@@ -26,11 +26,10 @@
 // productResMIIOverestimate / productResMIIFailsQualification thin-wrap pure
 // BundleFormatSolver oracles; portLowerBoundResMII thin-wraps PortModel.
 // Soft-exit QoR: productSoftExitIIFloor = max(format ResMII, port ResMII).
-// SMS-HANDOFF pre-RA slice: productFormsOneExactCycle /
+// Pre-RA packability metrics: productFormsOneExactCycle /
 // productQualKernelCoissuePackable / productQualKernelExactlyPackable are
-// metrics-only packability probes — never freeze FormatID or invent BUNDLE.
-// No MIR mutation / setDesc. Sibling SMS owns analyzeLoop / ResourceCycle /
-// recordSuccessfulSMS metrics freeze.
+// pure probes — never freeze FormatID or invent BUNDLE. No MIR mutation /
+// setDesc. Sibling SMS owns analyzeLoop / ResourceCycle packability metrics.
 //
 // Generic-pass dual-run baseline: product defaults (matching-frontier ON,
 // finer-RP ON, isavail-delay OFF) vs residual arms
