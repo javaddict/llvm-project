@@ -36,12 +36,21 @@ using namespace llvm::haydn::bundle;
 namespace {
 
 TEST(HaydnBundlePlanTest, ProductConstants) {
-  EXPECT_EQ(ProductEncodedBytesValue, 16u);
-  EXPECT_EQ(ProductEncodedBitsValue, 128u);
-  EXPECT_EQ(ProductEncodedBytes.Value, 16u);
-  EXPECT_EQ(ProductEncodedBits.Value, 128u);
-  EXPECT_EQ(ProductFormatID, FormatID::BundleE3);
+  // The one place a literal belongs: this pins the architectural fact rather
+  // than restating a constant. 12 bytes / 96 bits, and note 12 is not a power
+  // of two, which is why alignment is requested as 4 (5.9).
+  EXPECT_EQ(ProductEncodedBytesValue, 12u);
+  EXPECT_EQ(ProductEncodedBitsValue, 96u);
+  EXPECT_EQ(ProductEncodedBytes.Value, ProductEncodedBytesValue);
+  EXPECT_EQ(ProductEncodedBits.Value, ProductEncodedBitsValue);
+  // Bundle128 had ONE composite, so "the product format" named a single row.
+  // Format E has two and they are the same size, which is what lets a single
+  // default survive at all; both are product formats.
+  EXPECT_EQ(ProductFormatID, FormatID::BundleE2);
+  EXPECT_TRUE(isProductFormat(FormatID::BundleE2));
   EXPECT_TRUE(isProductFormat(FormatID::BundleE3));
+  EXPECT_EQ(encodedBytesFor(FormatID::BundleE2),
+            encodedBytesFor(FormatID::BundleE3));
 }
 
 TEST(HaydnBundlePlanTest, EncodedBytesBitsNotAliased) {
@@ -54,13 +63,30 @@ TEST(HaydnBundlePlanTest, EncodedBytesBitsNotAliased) {
   EXPECT_EQ(slotInfoSizeAsBits(48u).Value, 48u);
 }
 
-TEST(HaydnBundlePlanTest, SlotWindowsSumToBundle128Bits) {
-  EXPECT_EQ(P30EncodedBits.Value + P31EncodedBits.Value +
-                P32EncodedBits.Value,
+TEST(HaydnBundlePlanTest, SlotWindowsAccountForEveryBundleBit) {
+  // Bundle128's 48/40/40 summed to 128 exactly, so the invariant could be
+  // "the windows ARE the word". Format E's do not tile it: 45+41 leaves four
+  // bits unused and 31+31+27 leaves one, over a payload that starts at bit 6.
+  // The invariant that survives is per composite and includes both the header
+  // and the slack -- rescaling the old sum would have been wrong rather than
+  // merely stale (FORMAT-E-SWITCH-PLAN.md 5.2).
+  EXPECT_EQ(BundleEHeaderBits + P20EncodedBits.Value + P21EncodedBits.Value +
+                BundleE2UnusedBits,
             ProductEncodedBitsValue);
-  EXPECT_EQ(P30EncodedBits.Value, 48u);
-  EXPECT_EQ(P31EncodedBits.Value, 40u);
-  EXPECT_EQ(P32EncodedBits.Value, 40u);
+  EXPECT_EQ(BundleEHeaderBits + P30EncodedBits.Value + P31EncodedBits.Value +
+                P32EncodedBits.Value + BundleE3UnusedBits,
+            ProductEncodedBitsValue);
+
+  EXPECT_EQ(P20EncodedBits.Value, 45u);
+  EXPECT_EQ(P21EncodedBits.Value, 41u);
+  EXPECT_EQ(P30EncodedBits.Value, 31u);
+  EXPECT_EQ(P31EncodedBits.Value, 31u);
+  EXPECT_EQ(P32EncodedBits.Value, 27u);
+
+  // The 3-entry form is not the 2-entry form subdivided: it buys a third
+  // entry by making all of them narrower, which is why an instruction can
+  // have a placement in one and not the other.
+  EXPECT_LT(P30EncodedBits.Value, P20EncodedBits.Value);
 }
 
 TEST(HaydnBundlePlanTest, HwloopBytesMatchesPlanAuthority) {
@@ -83,7 +109,7 @@ TEST(HaydnBundlePlanTest, HwloopBytesMatchesPlanAuthority) {
 TEST(HaydnBundlePlanTest, EncodedBytesForProductFormat) {
   auto B = encodedBytesFor(FormatID::BundleE3);
   ASSERT_TRUE(B.has_value());
-  EXPECT_EQ(B->Value, 16u);
+  EXPECT_EQ(B->Value, ProductEncodedBytesValue);
   EXPECT_EQ(encodedBytesOrProduct(FormatID::BundleE3),
             productParcelBytes());
 }
@@ -123,7 +149,7 @@ TEST(HaydnBundlePlanTest, MakeBundle128PlanIsProductLegal) {
   BundlePlan P = makeProductPlan(Haydn::SLOT_P30 | Haydn::SLOT_P32, Members);
   EXPECT_TRUE(P.isProductLegal());
   EXPECT_EQ(P.FID, FormatID::BundleE3);
-  EXPECT_EQ(P.Bytes.Value, 16u);
+  EXPECT_EQ(P.Bytes.Value, ProductEncodedBytesValue);
   EXPECT_EQ(P.Cycles.Value, 1u);
   EXPECT_EQ(P.memberCount(), 2u);
   EXPECT_EQ(P.OccupiedSlots, SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P32));
@@ -135,7 +161,7 @@ TEST(HaydnBundlePlanTest, StallPlanIsProductLegalEmptyMembers) {
   EXPECT_TRUE(Stall.isProductLegal());
   EXPECT_TRUE(Stall.empty());
   EXPECT_EQ(Stall.OccupiedSlots, 0u);
-  EXPECT_EQ(Stall.Bytes.Value, 16u) << "idle cycle still emits Bundle128 NOP parcel";
+  EXPECT_EQ(Stall.Bytes.Value, ProductEncodedBytesValue) << "idle cycle still emits Bundle128 NOP parcel";
 }
 
 TEST(HaydnBundlePlanTest, RejectsTooManyMembers) {
@@ -183,7 +209,7 @@ TEST(HaydnBundlePlanTest, PlanFromPacketFormatsAllSubsets) {
     ASSERT_TRUE(Plan.has_value()) << "combo=" << Combo;
     EXPECT_TRUE(Plan->isProductLegal()) << "combo=" << Combo;
     EXPECT_EQ(Plan->OccupiedSlots, Combo);
-    EXPECT_EQ(Plan->Bytes.Value, 16u);
+    EXPECT_EQ(Plan->Bytes.Value, ProductEncodedBytesValue);
   }
 }
 
@@ -328,7 +354,7 @@ TEST(HaydnBundlePlanTest, SingletonBundleFormatIDIsProductFull) {
   BundlePlan Single = makeProductPlan(Haydn::SLOT_P30, {Haydn::ADD32});
   EXPECT_TRUE(Single.isProductLegal());
   EXPECT_EQ(Single.memberCount(), 1u);
-  EXPECT_EQ(Single.Bytes.Value, 16u);
+  EXPECT_EQ(Single.Bytes.Value, ProductEncodedBytesValue);
   EXPECT_EQ(Single.Cycles.Value, 1u);
 }
 
@@ -357,7 +383,7 @@ TEST(HaydnBundlePlanTest, ProductFormatDescRow) {
       selectFormatByPriority(Product, Haydn::SLOT_P30 | Haydn::SLOT_P32);
   ASSERT_NE(Sel, nullptr);
   EXPECT_EQ(Sel->FID, FormatID::BundleE3);
-  EXPECT_EQ(Sel->Bytes.Value, 16u);
+  EXPECT_EQ(Sel->Bytes.Value, ProductEncodedBytesValue);
 }
 
 TEST(HaydnBundlePlanTest, SelectFormatByPriority_SyntheticTwoRow) {
@@ -389,7 +415,7 @@ TEST(HaydnBundlePlanTest, SelectFormatByPriority_SyntheticTwoRow) {
   const FormatDesc *C = selectFormatByPriority(Table, Haydn::SLOT_P32);
   ASSERT_NE(C, nullptr);
   EXPECT_EQ(C->FID, FormatID::BundleE3);
-  EXPECT_EQ(C->Bytes.Value, 16u);
+  EXPECT_EQ(C->Bytes.Value, ProductEncodedBytesValue);
 
   // All three slots → Full only.
   const FormatDesc *D = selectFormatByPriority(Table, Haydn::SLOT_SET_E3);
@@ -434,7 +460,7 @@ TEST(HaydnBundlePlanTest, PlanFromFormatTable_ProductAndSynthetic) {
   ASSERT_TRUE(Prod.has_value());
   EXPECT_TRUE(Prod->isProductLegal());
   EXPECT_EQ(Prod->FID, FormatID::BundleE3);
-  EXPECT_EQ(Prod->Bytes.Value, 16u);
+  EXPECT_EQ(Prod->Bytes.Value, ProductEncodedBytesValue);
 
   constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
   const FormatDesc Multi[] = {

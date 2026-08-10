@@ -38,7 +38,7 @@ TEST(HaydnBundleVerifyTest, ProductSingletonAdd32Ok) {
   EXPECT_FALSE(Err.has_value()) << (Err ? *Err : "");
   EXPECT_TRUE(Plan.isProductLegal());
   EXPECT_EQ(Plan.FID, FormatID::BundleE3);
-  EXPECT_EQ(Plan.Bytes.Value, 16u);
+  EXPECT_EQ(Plan.Bytes.Value, ProductEncodedBytesValue);
   EXPECT_EQ(Plan.memberCount(), 1u);
   EXPECT_EQ(Plan.MemberOpcodes[0], Haydn::ADD32);
 }
@@ -76,7 +76,7 @@ TEST(HaydnBundleVerifyTest, StallEmptyMembersOk) {
   EXPECT_FALSE(Err.has_value()) << (Err ? *Err : "");
   EXPECT_TRUE(Plan.isProductLegal());
   EXPECT_TRUE(Plan.empty());
-  EXPECT_EQ(Plan.Bytes.Value, 16u);
+  EXPECT_EQ(Plan.Bytes.Value, ProductEncodedBytesValue);
 }
 
 TEST(HaydnBundleVerifyTest, RejectsFourMembers) {
@@ -163,7 +163,7 @@ TEST(HaydnBundleVerifyTest, EncodedBytesAlwaysSixteenOnSuccess) {
         verifyCommittedBundle(FormatID::BundleE3, Ops, Fmts, &Plan);
     if (Err)
       continue; // some NOP/slot combos may reject; only check successes
-    EXPECT_EQ(Plan.Bytes.Value, 16u);
+    EXPECT_EQ(Plan.Bytes.Value, ProductEncodedBytesValue);
     EXPECT_EQ(Plan.Cycles.Value, 1u);
     EXPECT_EQ(Plan.FID, FormatID::BundleE3);
   }
