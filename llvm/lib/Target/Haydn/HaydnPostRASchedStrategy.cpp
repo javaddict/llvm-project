@@ -199,8 +199,31 @@ HaydnPostRASchedStrategy::computeRegionBundles() {
   return Bundles;
 }
 
+// True if reordering MI past X would break a register dependency. Symmetric,
+// so one predicate serves both directions: any shared register where at least
+// one side writes is an edge, whichever way the move goes.
+static bool crossingBreaksDependency(const MachineInstr &MI,
+                                     const MachineInstr &X,
+                                     const TargetRegisterInfo *TRI) {
+  for (const MachineOperand &MO : MI.operands()) {
+    if (!MO.isReg() || !MO.getReg())
+      continue;
+    Register R = MO.getReg();
+    if (MO.isDef()) {
+      if (X.readsRegister(R, TRI) || X.definesRegister(R, TRI))
+        return true;
+    } else if (X.definesRegister(R, TRI)) {
+      // X produces what MI consumes. This is the edge the def-only check
+      // missed: a logical with no Inst bits is inferred MCID::Pseudo, so
+      // SEXT32T64 is "skippable" and was hoisted above its own producer.
+      return true;
+    }
+  }
+  return false;
+}
+
 // Splice skippable MIs out of [First,Last] so real members are contiguous.
-// Returns false if a skippable has a reg conflict with a real member (unsafe).
+// Returns false if a skippable can be moved in neither direction (unsafe).
 static bool spliceSkippablesForCycle(MachineBasicBlock &MBB,
                                      ArrayRef<MachineInstr *> Instrs) {
   if (Instrs.size() < 2)
@@ -217,28 +240,30 @@ static bool spliceSkippablesForCycle(MachineBasicBlock &MBB,
     ++It;
     if (!isBundleSkippable(MI) || &MI == First)
       continue;
-    bool HasRegConflict = false;
-    for (const MachineOperand &MO : MI.operands()) {
-      if (!MO.isReg() || !MO.isDef() || !MO.getReg())
-        continue;
-      Register DefReg = MO.getReg();
-      for (const MachineInstr *RealMI : Instrs) {
-        if (RealMI == &MI)
-          continue;
-        if (RealMI->readsRegister(DefReg, TRI) ||
-            RealMI->definesRegister(DefReg, TRI)) {
-          HasRegConflict = true;
-          break;
-        }
-      }
-      if (HasRegConflict)
-        break;
+
+    // Debug values carry no dataflow; they may always move. Everything else
+    // is checked against exactly what it would cross — hoisting spans
+    // [First, MI), sinking spans (MI, Last] — rather than against the member
+    // list as a set, which both over- and under-approximated the range.
+    bool IsDebug = MI.isDebugInstr();
+    bool CanHoist = IsDebug || !MI.hasUnmodeledSideEffects();
+    bool CanSink = CanHoist;
+    if (!IsDebug) {
+      for (MachineBasicBlock::instr_iterator J = First->getIterator();
+           CanHoist && J != MI.getIterator(); ++J)
+        CanHoist = !crossingBreaksDependency(MI, *J, TRI);
+      for (MachineBasicBlock::instr_iterator J = std::next(MI.getIterator()),
+                                             SE = std::next(Last->getIterator());
+           CanSink && J != SE; ++J)
+        CanSink = !crossingBreaksDependency(MI, *J, TRI);
     }
-    if (HasRegConflict) {
+
+    if (CanHoist)
+      MBB.splice(First->getIterator(), &MBB, MI.getIterator());
+    else if (CanSink)
+      MBB.splice(std::next(Last->getIterator()), &MBB, MI.getIterator());
+    else
       BundleUnsafe = true;
-      continue;
-    }
-    MBB.splice(First->getIterator(), &MBB, MI.getIterator());
   }
   return !BundleUnsafe;
 }
