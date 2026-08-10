@@ -5325,9 +5325,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     if (getConstOpSExt(I.getOperand(5), StrideImm)) {
       MachineInstr *MI = MIB.buildInstr(D_SDW_CB_IMM)
                              .addDef(WbReg)
+                             .addImm(CbrSel)
                              .addReg(Data)
                              .addReg(PtrBase)
-                             .addImm(CbrSel)
                              .addImm(StrideImm);
       constrainSelectedMemInst(MI, I, TII, TRI, RBI);
       I.eraseFromParent();
@@ -5340,9 +5340,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(StrideReg, GPR32RegClass, MRI);
     MachineInstr *MI = MIB.buildInstr(D_SDW_CB_REG)
                            .addDef(WbReg)
+                           .addImm(CbrSel)
                            .addReg(Data)
                            .addReg(PtrBase)
-                           .addImm(CbrSel)
                            .addReg(StrideReg);
     constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
@@ -5375,9 +5375,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
 
     MachineInstr *MI = MIB.buildInstr(D_SDW_CB_REG)
                            .addDef(WbReg)
+                           .addImm(CbrSel)
                            .addReg(Data)
                            .addReg(PtrBase)
-                           .addImm(CbrSel)
                            .addReg(StrideReg);
     constrainSelectedMemInst(MI, I, TII, TRI, RBI);
     I.eraseFromParent();
@@ -6124,8 +6124,8 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1, Haydn::AR2,
                                        Haydn::AR3};
     MachineInstr *MI = MIB.buildInstr(WBARWUA)
-                           .addReg(PtrReg)
                            .addImm(static_cast<int64_t>(ArSel))
+                           .addReg(PtrReg)
                            .addDef(ArRegs[ArSel], RegState::Implicit)
                            .addUse(ArRegs[ArSel],
                                    RegState::Implicit | RegState::Undef);
