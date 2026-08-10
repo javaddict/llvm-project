@@ -126,14 +126,14 @@ define i64 @test_sle64(i64 %a, i64 %cmp_rhs) {
 }
 
 ; CHECK-LABEL: test_movt64:
-define i64 @test_movt64(i64 %a) {
-  %r = call i64 @llvm.haydn.movt64(i64 %a)
+define i64 @test_movt64(i64 %a, i64 %acc) {
+  %r = call i64 @llvm.haydn.movt64(i64 %acc, i64 %a)
   ret i64 %r
 }
 
 ; CHECK-LABEL: test_movf64:
-define i64 @test_movf64(i64 %a) {
-  %r = call i64 @llvm.haydn.movf64(i64 %a)
+define i64 @test_movf64(i64 %a, i64 %acc) {
+  %r = call i64 @llvm.haydn.movf64(i64 %acc, i64 %a)
   ret i64 %r
 }
 
@@ -208,8 +208,8 @@ declare <4 x i16> @llvm.haydn.x4movt16(<4 x i16>, <4 x i16>)
 ; Scalar 64-bit SFR (unary DR64)
 declare void @llvm.haydn.slt64(i64, i64)
 declare void @llvm.haydn.sle64(i64, i64)
-declare i64 @llvm.haydn.movt64(i64)
-declare i64 @llvm.haydn.movf64(i64)
+declare i64 @llvm.haydn.movt64(i64, i64)
+declare i64 @llvm.haydn.movf64(i64, i64)
 
 ; SFR register transfer
 declare i32 @llvm.haydn.movesfr2gpr()

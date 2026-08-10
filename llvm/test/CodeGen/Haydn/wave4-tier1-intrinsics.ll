@@ -409,11 +409,11 @@ entry:
 ; G. FMULAA16 HS/LS MAC variants
 ;===---------------------------------------------------------------------===;
 
-define dso_local i64 @test_fmulaa16_hs_13_02(i64 %a, i64 %b) {
+define dso_local i64 @test_fmulaa16_hs_13_02(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.63 = bitcast i64 %a to <4 x i16>
   %bc.64 = bitcast i64 %b to <4 x i16>
-  %r = call i64 @llvm.haydn.fmulaa16.hs.13.02(<4 x i16> %bc.63, <4 x i16> %bc.64)
+  %r = call i64 @llvm.haydn.fmulaa16.hs.13.02(i64 %acc, <4 x i16> %bc.63, <4 x i16> %bc.64)
   ret i64 %r
 }
 ; CHECK-LABEL: test_fmulaa16_hs_13_02:
@@ -429,31 +429,31 @@ entry:
 ; CHECK-LABEL: test_fmulaa16_hs_33_22:
 ; CHECK: fmulaa16_hs_33_22
 
-define dso_local i64 @test_fmulaa16_ls_11_00(i64 %a, i64 %b) {
+define dso_local i64 @test_fmulaa16_ls_11_00(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.67 = bitcast i64 %a to <4 x i16>
   %bc.68 = bitcast i64 %b to <4 x i16>
-  %r = call i64 @llvm.haydn.fmulaa16.ls.11.00(<4 x i16> %bc.67, <4 x i16> %bc.68)
+  %r = call i64 @llvm.haydn.fmulaa16.ls.11.00(i64 %acc, <4 x i16> %bc.67, <4 x i16> %bc.68)
   ret i64 %r
 }
 ; CHECK-LABEL: test_fmulaa16_ls_11_00:
 ; CHECK: fmulaa16_ls_11_00
 
-define dso_local i64 @test_fmulaa16_ls_13_02(i64 %a, i64 %b) {
+define dso_local i64 @test_fmulaa16_ls_13_02(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.69 = bitcast i64 %a to <4 x i16>
   %bc.70 = bitcast i64 %b to <4 x i16>
-  %r = call i64 @llvm.haydn.fmulaa16.ls.13.02(<4 x i16> %bc.69, <4 x i16> %bc.70)
+  %r = call i64 @llvm.haydn.fmulaa16.ls.13.02(i64 %acc, <4 x i16> %bc.69, <4 x i16> %bc.70)
   ret i64 %r
 }
 ; CHECK-LABEL: test_fmulaa16_ls_13_02:
 ; CHECK: fmulaa16_ls_13_02
 
-define dso_local i64 @test_fmulaa16_ls_33_22(i64 %a, i64 %b) {
+define dso_local i64 @test_fmulaa16_ls_33_22(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.71 = bitcast i64 %a to <4 x i16>
   %bc.72 = bitcast i64 %b to <4 x i16>
-  %r = call i64 @llvm.haydn.fmulaa16.ls.33.22(<4 x i16> %bc.71, <4 x i16> %bc.72)
+  %r = call i64 @llvm.haydn.fmulaa16.ls.33.22(i64 %acc, <4 x i16> %bc.71, <4 x i16> %bc.72)
   ret i64 %r
 }
 ; CHECK-LABEL: test_fmulaa16_ls_33_22:
@@ -463,51 +463,51 @@ entry:
 ; H. FMULSS16 HS/LS MSU variants
 ;===---------------------------------------------------------------------===;
 
-define dso_local i64 @test_fmulss16_hs_13_02(i64 %a, i64 %b) {
+define dso_local i64 @test_fmulss16_hs_13_02(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.73 = bitcast i64 %a to <4 x i16>
   %bc.74 = bitcast i64 %b to <4 x i16>
-  %r = call i64 @llvm.haydn.fmulss16.hs.13.02(<4 x i16> %bc.73, <4 x i16> %bc.74)
+  %r = call i64 @llvm.haydn.fmulss16.hs.13.02(i64 %acc, <4 x i16> %bc.73, <4 x i16> %bc.74)
   ret i64 %r
 }
 ; CHECK-LABEL: test_fmulss16_hs_13_02:
 ; CHECK: fmulss16_hs_13_02
 
-define dso_local i64 @test_fmulss16_hs_33_22(i64 %a, i64 %b) {
+define dso_local i64 @test_fmulss16_hs_33_22(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.75 = bitcast i64 %a to <4 x i16>
   %bc.76 = bitcast i64 %b to <4 x i16>
-  %r = call i64 @llvm.haydn.fmulss16.hs.33.22(<4 x i16> %bc.75, <4 x i16> %bc.76)
+  %r = call i64 @llvm.haydn.fmulss16.hs.33.22(i64 %acc, <4 x i16> %bc.75, <4 x i16> %bc.76)
   ret i64 %r
 }
 ; CHECK-LABEL: test_fmulss16_hs_33_22:
 ; CHECK: fmulss16_hs_33_22
 
-define dso_local i64 @test_fmulss16_ls_11_00(i64 %a, i64 %b) {
+define dso_local i64 @test_fmulss16_ls_11_00(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.77 = bitcast i64 %a to <4 x i16>
   %bc.78 = bitcast i64 %b to <4 x i16>
-  %r = call i64 @llvm.haydn.fmulss16.ls.11.00(<4 x i16> %bc.77, <4 x i16> %bc.78)
+  %r = call i64 @llvm.haydn.fmulss16.ls.11.00(i64 %acc, <4 x i16> %bc.77, <4 x i16> %bc.78)
   ret i64 %r
 }
 ; CHECK-LABEL: test_fmulss16_ls_11_00:
 ; CHECK: fmulss16_ls_11_00
 
-define dso_local i64 @test_fmulss16_ls_13_02(i64 %a, i64 %b) {
+define dso_local i64 @test_fmulss16_ls_13_02(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.79 = bitcast i64 %a to <4 x i16>
   %bc.80 = bitcast i64 %b to <4 x i16>
-  %r = call i64 @llvm.haydn.fmulss16.ls.13.02(<4 x i16> %bc.79, <4 x i16> %bc.80)
+  %r = call i64 @llvm.haydn.fmulss16.ls.13.02(i64 %acc, <4 x i16> %bc.79, <4 x i16> %bc.80)
   ret i64 %r
 }
 ; CHECK-LABEL: test_fmulss16_ls_13_02:
 ; CHECK: fmulss16_ls_13_02
 
-define dso_local i64 @test_fmulss16_ls_33_22(i64 %a, i64 %b) {
+define dso_local i64 @test_fmulss16_ls_33_22(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.81 = bitcast i64 %a to <4 x i16>
   %bc.82 = bitcast i64 %b to <4 x i16>
-  %r = call i64 @llvm.haydn.fmulss16.ls.33.22(<4 x i16> %bc.81, <4 x i16> %bc.82)
+  %r = call i64 @llvm.haydn.fmulss16.ls.33.22(i64 %acc, <4 x i16> %bc.81, <4 x i16> %bc.82)
   ret i64 %r
 }
 ; CHECK-LABEL: test_fmulss16_ls_33_22:
@@ -517,41 +517,41 @@ entry:
 ; I. F2MUL zero-accumulator variants (saturating + rounding)
 ;===---------------------------------------------------------------------===;
 
-define dso_local i64 @test_f2mulas32rs_hhll(i64 %a, i64 %b) {
+define dso_local i64 @test_f2mulas32rs_hhll(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.83 = bitcast i64 %a to <2 x i32>
   %bc.84 = bitcast i64 %b to <2 x i32>
-  %r = call i64 @llvm.haydn.f2mulas32rs.hhll(<2 x i32> %bc.83, <2 x i32> %bc.84)
+  %r = call i64 @llvm.haydn.f2mulas32rs.hhll(i64 %acc, <2 x i32> %bc.83, <2 x i32> %bc.84)
   ret i64 %r
 }
 ; CHECK-LABEL: test_f2mulas32rs_hhll:
 ; CHECK: f2mulas32rs_hhll
 
-define dso_local i64 @test_f2mulas32rs_hllh(i64 %a, i64 %b) {
+define dso_local i64 @test_f2mulas32rs_hllh(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.85 = bitcast i64 %a to <2 x i32>
   %bc.86 = bitcast i64 %b to <2 x i32>
-  %r = call i64 @llvm.haydn.f2mulas32rs.hllh(<2 x i32> %bc.85, <2 x i32> %bc.86)
+  %r = call i64 @llvm.haydn.f2mulas32rs.hllh(i64 %acc, <2 x i32> %bc.85, <2 x i32> %bc.86)
   ret i64 %r
 }
 ; CHECK-LABEL: test_f2mulas32rs_hllh:
 ; CHECK: f2mulas32rs_hllh
 
-define dso_local i64 @test_f2mulsa32rs_hhll(i64 %a, i64 %b) {
+define dso_local i64 @test_f2mulsa32rs_hhll(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.87 = bitcast i64 %a to <2 x i32>
   %bc.88 = bitcast i64 %b to <2 x i32>
-  %r = call i64 @llvm.haydn.f2mulsa32rs.hhll(<2 x i32> %bc.87, <2 x i32> %bc.88)
+  %r = call i64 @llvm.haydn.f2mulsa32rs.hhll(i64 %acc, <2 x i32> %bc.87, <2 x i32> %bc.88)
   ret i64 %r
 }
 ; CHECK-LABEL: test_f2mulsa32rs_hhll:
 ; CHECK: f2mulsa32rs_hhll
 
-define dso_local i64 @test_f2mulsa32rs_hllh(i64 %a, i64 %b) {
+define dso_local i64 @test_f2mulsa32rs_hllh(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.89 = bitcast i64 %a to <2 x i32>
   %bc.90 = bitcast i64 %b to <2 x i32>
-  %r = call i64 @llvm.haydn.f2mulsa32rs.hllh(<2 x i32> %bc.89, <2 x i32> %bc.90)
+  %r = call i64 @llvm.haydn.f2mulsa32rs.hllh(i64 %acc, <2 x i32> %bc.89, <2 x i32> %bc.90)
   ret i64 %r
 }
 ; CHECK-LABEL: test_f2mulsa32rs_hllh:
@@ -561,41 +561,41 @@ entry:
 ; J. F2MUL zero-accumulator variants (non-saturating + rounding)
 ;===---------------------------------------------------------------------===;
 
-define dso_local i64 @test_f2mulas32r_hhll(i64 %a, i64 %b) {
+define dso_local i64 @test_f2mulas32r_hhll(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.91 = bitcast i64 %a to <2 x i32>
   %bc.92 = bitcast i64 %b to <2 x i32>
-  %r = call i64 @llvm.haydn.f2mulas32r.hhll(<2 x i32> %bc.91, <2 x i32> %bc.92)
+  %r = call i64 @llvm.haydn.f2mulas32r.hhll(i64 %acc, <2 x i32> %bc.91, <2 x i32> %bc.92)
   ret i64 %r
 }
 ; CHECK-LABEL: test_f2mulas32r_hhll:
 ; CHECK: f2mulas32r_hhll
 
-define dso_local i64 @test_f2mulas32r_hllh(i64 %a, i64 %b) {
+define dso_local i64 @test_f2mulas32r_hllh(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.93 = bitcast i64 %a to <2 x i32>
   %bc.94 = bitcast i64 %b to <2 x i32>
-  %r = call i64 @llvm.haydn.f2mulas32r.hllh(<2 x i32> %bc.93, <2 x i32> %bc.94)
+  %r = call i64 @llvm.haydn.f2mulas32r.hllh(i64 %acc, <2 x i32> %bc.93, <2 x i32> %bc.94)
   ret i64 %r
 }
 ; CHECK-LABEL: test_f2mulas32r_hllh:
 ; CHECK: f2mulas32r_hllh
 
-define dso_local i64 @test_f2mulsa32r_hhll(i64 %a, i64 %b) {
+define dso_local i64 @test_f2mulsa32r_hhll(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.95 = bitcast i64 %a to <2 x i32>
   %bc.96 = bitcast i64 %b to <2 x i32>
-  %r = call i64 @llvm.haydn.f2mulsa32r.hhll(<2 x i32> %bc.95, <2 x i32> %bc.96)
+  %r = call i64 @llvm.haydn.f2mulsa32r.hhll(i64 %acc, <2 x i32> %bc.95, <2 x i32> %bc.96)
   ret i64 %r
 }
 ; CHECK-LABEL: test_f2mulsa32r_hhll:
 ; CHECK: f2mulsa32r_hhll
 
-define dso_local i64 @test_f2mulsa32r_hllh(i64 %a, i64 %b) {
+define dso_local i64 @test_f2mulsa32r_hllh(i64 %a, i64 %b, i64 %acc) {
 entry:
   %bc.97 = bitcast i64 %a to <2 x i32>
   %bc.98 = bitcast i64 %b to <2 x i32>
-  %r = call i64 @llvm.haydn.f2mulsa32r.hllh(<2 x i32> %bc.97, <2 x i32> %bc.98)
+  %r = call i64 @llvm.haydn.f2mulsa32r.hllh(i64 %acc, <2 x i32> %bc.97, <2 x i32> %bc.98)
   ret i64 %r
 }
 ; CHECK-LABEL: test_f2mulsa32r_hllh:
@@ -650,24 +650,24 @@ declare i64 @llvm.haydn.fmul16.ls22(<4 x i16>, <4 x i16>)
 declare i64 @llvm.haydn.fmul16.ls23(<4 x i16>, <4 x i16>)
 declare i64 @llvm.haydn.fmul16.ls33(<4 x i16>, <4 x i16>)
 ; FMULAA16 HS/LS MAC
-declare i64 @llvm.haydn.fmulaa16.hs.13.02(<4 x i16>, <4 x i16>)
+declare i64 @llvm.haydn.fmulaa16.hs.13.02(i64, <4 x i16>, <4 x i16>)
 declare i64 @llvm.haydn.fmulaa16.hs.33.22(i64, <4 x i16>, <4 x i16>)
-declare i64 @llvm.haydn.fmulaa16.ls.11.00(<4 x i16>, <4 x i16>)
-declare i64 @llvm.haydn.fmulaa16.ls.13.02(<4 x i16>, <4 x i16>)
-declare i64 @llvm.haydn.fmulaa16.ls.33.22(<4 x i16>, <4 x i16>)
+declare i64 @llvm.haydn.fmulaa16.ls.11.00(i64, <4 x i16>, <4 x i16>)
+declare i64 @llvm.haydn.fmulaa16.ls.13.02(i64, <4 x i16>, <4 x i16>)
+declare i64 @llvm.haydn.fmulaa16.ls.33.22(i64, <4 x i16>, <4 x i16>)
 ; FMULSS16 HS/LS MSU
-declare i64 @llvm.haydn.fmulss16.hs.13.02(<4 x i16>, <4 x i16>)
-declare i64 @llvm.haydn.fmulss16.hs.33.22(<4 x i16>, <4 x i16>)
-declare i64 @llvm.haydn.fmulss16.ls.11.00(<4 x i16>, <4 x i16>)
-declare i64 @llvm.haydn.fmulss16.ls.13.02(<4 x i16>, <4 x i16>)
-declare i64 @llvm.haydn.fmulss16.ls.33.22(<4 x i16>, <4 x i16>)
+declare i64 @llvm.haydn.fmulss16.hs.13.02(i64, <4 x i16>, <4 x i16>)
+declare i64 @llvm.haydn.fmulss16.hs.33.22(i64, <4 x i16>, <4 x i16>)
+declare i64 @llvm.haydn.fmulss16.ls.11.00(i64, <4 x i16>, <4 x i16>)
+declare i64 @llvm.haydn.fmulss16.ls.13.02(i64, <4 x i16>, <4 x i16>)
+declare i64 @llvm.haydn.fmulss16.ls.33.22(i64, <4 x i16>, <4 x i16>)
 ; F2MUL zero-accumulator (saturating + rounding)
-declare i64 @llvm.haydn.f2mulas32rs.hhll(<2 x i32>, <2 x i32>)
-declare i64 @llvm.haydn.f2mulas32rs.hllh(<2 x i32>, <2 x i32>)
-declare i64 @llvm.haydn.f2mulsa32rs.hhll(<2 x i32>, <2 x i32>)
-declare i64 @llvm.haydn.f2mulsa32rs.hllh(<2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.f2mulas32rs.hhll(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.f2mulas32rs.hllh(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.f2mulsa32rs.hhll(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.f2mulsa32rs.hllh(i64, <2 x i32>, <2 x i32>)
 ; F2MUL zero-accumulator (non-saturating + rounding)
-declare i64 @llvm.haydn.f2mulas32r.hhll(<2 x i32>, <2 x i32>)
-declare i64 @llvm.haydn.f2mulas32r.hllh(<2 x i32>, <2 x i32>)
-declare i64 @llvm.haydn.f2mulsa32r.hhll(<2 x i32>, <2 x i32>)
-declare i64 @llvm.haydn.f2mulsa32r.hllh(<2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.f2mulas32r.hhll(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.f2mulas32r.hllh(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.f2mulsa32r.hhll(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.f2mulsa32r.hllh(i64, <2 x i32>, <2 x i32>)

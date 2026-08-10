@@ -66,45 +66,61 @@ def F2MULAA32R_HLLH : FmtALU64Acc<0x67, 0x008,
     let Constraints = "$rd = $rd_in";
   }
 
-def F2MULAS32RS_HHLL : FmtALU64<0x67, 0x009,
+def F2MULAS32RS_HHLL : FmtALU64Acc<0x67, 0x009,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulas32rs_hhll	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulas32rs_hhll	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def F2MULAS32RS_HLLH : FmtALU64<0x67, 0x00A,
+def F2MULAS32RS_HLLH : FmtALU64Acc<0x67, 0x00A,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulas32rs_hllh	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulas32rs_hllh	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def F2MULAS32R_HHLL : FmtALU64<0x67, 0x00B,
+def F2MULAS32R_HHLL : FmtALU64Acc<0x67, 0x00B,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulas32r_hhll	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulas32r_hhll	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def F2MULAS32R_HLLH : FmtALU64<0x67, 0x00C,
+def F2MULAS32R_HLLH : FmtALU64Acc<0x67, 0x00C,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulas32r_hllh	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulas32r_hllh	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def F2MULSA32RS_HHLL : FmtALU64<0x67, 0x00D,
+def F2MULSA32RS_HHLL : FmtALU64Acc<0x67, 0x00D,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulsa32rs_hhll	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulsa32rs_hhll	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def F2MULSA32RS_HLLH : FmtALU64<0x67, 0x00E,
+def F2MULSA32RS_HLLH : FmtALU64Acc<0x67, 0x00E,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulsa32rs_hllh	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulsa32rs_hllh	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def F2MULSA32R_HHLL : FmtALU64<0x67, 0x00F,
+def F2MULSA32R_HHLL : FmtALU64Acc<0x67, 0x00F,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulsa32r_hhll	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulsa32r_hhll	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def F2MULSA32R_HLLH : FmtALU64<0x67, 0x010,
+def F2MULSA32R_HLLH : FmtALU64Acc<0x67, 0x010,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulsa32r_hllh	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulsa32r_hllh	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 def F2MULSS32RS_HHLL : FmtALU64Acc<0x67, 0x011,
     (outs DR64:$rd),
@@ -622,10 +638,12 @@ def FMULAA16_HS_11_00 : FmtALU64Acc<0x67, 0x065,
     let Constraints = "$rd = $rd_in";
   }
 
-def FMULAA16_HS_13_02 : FmtALU64<0x67, 0x066,
+def FMULAA16_HS_13_02 : FmtALU64Acc<0x67, 0x066,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulaa16_hs_13_02	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulaa16_hs_13_02	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 // Spec/DB: rtd[63:32] = SATQ1.31(rtd[63:32] + p3 + p2); DR_Read_Port
 // includes rtd. Encoding is byte-identical to prior FmtALU64 form
@@ -638,20 +656,26 @@ def FMULAA16_HS_33_22 : FmtALU64Acc<0x67, 0x067,
     let Constraints = "$rd = $rd_in";
   }
 
-def FMULAA16_LS_11_00 : FmtALU64<0x67, 0x068,
+def FMULAA16_LS_11_00 : FmtALU64Acc<0x67, 0x068,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulaa16_ls_11_00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulaa16_ls_11_00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULAA16_LS_13_02 : FmtALU64<0x67, 0x069,
+def FMULAA16_LS_13_02 : FmtALU64Acc<0x67, 0x069,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulaa16_ls_13_02	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulaa16_ls_13_02	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULAA16_LS_33_22 : FmtALU64<0x67, 0x06A,
+def FMULAA16_LS_33_22 : FmtALU64Acc<0x67, 0x06A,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulaa16_ls_33_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulaa16_ls_33_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 // FMULAA32S_HHLL/HLLH and FMULAS32S_HHLL/HLLH are accumulator-form dual-MACs:
 // the DB (haydn_instruction_db.json:7272/7314/7356/7397) shows slot-1 reads
@@ -696,105 +720,145 @@ def FMULAS32S_HLLH : FmtALU64Acc<0x67, 0x06E,
     let Constraints = "$rd = $rd_in";
   }
 
-def FMULS16_HS00 : FmtALU64<0x67, 0x06F,
+def FMULS16_HS00 : FmtALU64Acc<0x67, 0x06F,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_HS01 : FmtALU64<0x67, 0x070,
+def FMULS16_HS01 : FmtALU64Acc<0x67, 0x070,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs01	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs01	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_HS02 : FmtALU64<0x67, 0x071,
+def FMULS16_HS02 : FmtALU64Acc<0x67, 0x071,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs02	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs02	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_HS03 : FmtALU64<0x67, 0x072,
+def FMULS16_HS03 : FmtALU64Acc<0x67, 0x072,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs03	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs03	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_HS11 : FmtALU64<0x67, 0x073,
+def FMULS16_HS11 : FmtALU64Acc<0x67, 0x073,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs11	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs11	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_HS12 : FmtALU64<0x67, 0x074,
+def FMULS16_HS12 : FmtALU64Acc<0x67, 0x074,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs12	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs12	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_HS13 : FmtALU64<0x67, 0x075,
+def FMULS16_HS13 : FmtALU64Acc<0x67, 0x075,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs13	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs13	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_HS22 : FmtALU64<0x67, 0x076,
+def FMULS16_HS22 : FmtALU64Acc<0x67, 0x076,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_HS23 : FmtALU64<0x67, 0x077,
+def FMULS16_HS23 : FmtALU64Acc<0x67, 0x077,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs23	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs23	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_HS33 : FmtALU64<0x67, 0x078,
+def FMULS16_HS33 : FmtALU64Acc<0x67, 0x078,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs33	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs33	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_LS00 : FmtALU64<0x67, 0x079,
+def FMULS16_LS00 : FmtALU64Acc<0x67, 0x079,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_LS01 : FmtALU64<0x67, 0x07A,
+def FMULS16_LS01 : FmtALU64Acc<0x67, 0x07A,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls01	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls01	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_LS02 : FmtALU64<0x67, 0x07B,
+def FMULS16_LS02 : FmtALU64Acc<0x67, 0x07B,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls02	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls02	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_LS03 : FmtALU64<0x67, 0x07C,
+def FMULS16_LS03 : FmtALU64Acc<0x67, 0x07C,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls03	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls03	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_LS11 : FmtALU64<0x67, 0x07D,
+def FMULS16_LS11 : FmtALU64Acc<0x67, 0x07D,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls11	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls11	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_LS12 : FmtALU64<0x67, 0x07E,
+def FMULS16_LS12 : FmtALU64Acc<0x67, 0x07E,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls12	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls12	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_LS13 : FmtALU64<0x67, 0x07F,
+def FMULS16_LS13 : FmtALU64Acc<0x67, 0x07F,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls13	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls13	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_LS22 : FmtALU64<0x67, 0x080,
+def FMULS16_LS22 : FmtALU64Acc<0x67, 0x080,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_LS23 : FmtALU64<0x67, 0x081,
+def FMULS16_LS23 : FmtALU64Acc<0x67, 0x081,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls23	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls23	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULS16_LS33 : FmtALU64<0x67, 0x082,
+def FMULS16_LS33 : FmtALU64Acc<0x67, 0x082,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls33	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls33	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 def FMULS32S_HH : FmtALU64Acc<0x67, 0x083,
     (outs DR64:$rd),
@@ -850,30 +914,40 @@ def FMULSS16_HS_11_00 : FmtALU64Acc<0x67, 0x088,
     let Constraints = "$rd = $rd_in";
   }
 
-def FMULSS16_HS_13_02 : FmtALU64<0x67, 0x089,
+def FMULSS16_HS_13_02 : FmtALU64Acc<0x67, 0x089,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_hs_13_02	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulss16_hs_13_02	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULSS16_HS_33_22 : FmtALU64<0x67, 0x08A,
+def FMULSS16_HS_33_22 : FmtALU64Acc<0x67, 0x08A,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_hs_33_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulss16_hs_33_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULSS16_LS_11_00 : FmtALU64<0x67, 0x08B,
+def FMULSS16_LS_11_00 : FmtALU64Acc<0x67, 0x08B,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_ls_11_00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulss16_ls_11_00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULSS16_LS_13_02 : FmtALU64<0x67, 0x08C,
+def FMULSS16_LS_13_02 : FmtALU64Acc<0x67, 0x08C,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_ls_13_02	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulss16_ls_13_02	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def FMULSS16_LS_33_22 : FmtALU64<0x67, 0x08D,
+def FMULSS16_LS_33_22 : FmtALU64Acc<0x67, 0x08D,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_ls_33_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulss16_ls_33_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 // FMULSS32S_HHLL/HLLH — spec correction (Rev 2): the *SS*
 // (sub-sub → combine '+') inner-product sign was inverted in the old manual.
@@ -1374,10 +1448,11 @@ def MULL : FmtALU32Ext<0x3F, 0b00000,
     (outs GPR32:$rd),
     (ins GPR32:$rs1, GPR32:$rs2),
     "mull	$rd, $rs1, $rs2", []> {
-  // rt = rs*rt destructive wire form — $rs2 (source 2) is tied to $rd
-  // (dest), so the encoded rt field carries rs2. TwoAddress inserts a MOV
-  // copy when the selector's dst != src2.
-  let Constraints = "$rd = $rs2";
+  // NOT tied, despite an earlier note claiming a "destructive wire form".
+  // The database reads rs1 and rs2 and writes rt, three distinct registers,
+  // and both FmtALU32Ext and the format E members carry three register
+  // fields. The tie only made TwoAddress insert a copy the hardware never
+  // needed. FORMAT-E-SWITCH-PLAN.md 5.11.
 }
 
 def MULS64_HH : FmtALU64Acc<0x67, 0x0DD,
@@ -1492,25 +1567,33 @@ def MULS64_ULUL : FmtALU64Acc<0x67, 0x0EC,
     let Constraints = "$rd = $rd_in";
   }
 
-def MULSA32_HHLL : FmtALU64<0x67, 0x0ED,
+def MULSA32_HHLL : FmtALU64Acc<0x67, 0x0ED,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulsa32_hhll	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "mulsa32_hhll	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def MULSA32_HLLH : FmtALU64<0x67, 0x0EE,
+def MULSA32_HLLH : FmtALU64Acc<0x67, 0x0EE,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulsa32_hllh	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "mulsa32_hllh	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def MULSS32_HHLL : FmtALU64<0x67, 0x0EF,
+def MULSS32_HHLL : FmtALU64Acc<0x67, 0x0EF,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulss32_hhll	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "mulss32_hhll	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def MULSS32_HLLH : FmtALU64<0x67, 0x0F0,
+def MULSS32_HLLH : FmtALU64Acc<0x67, 0x0F0,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulss32_hllh	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "mulss32_hllh	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 def MULSS64_HH : FmtALU64Acc<0x67, 0x0F1,
     (outs DR64:$rd),
@@ -1691,205 +1774,285 @@ def SLL64 : FmtALU64<0x67, 0x10C,
     (ins DR64:$rs1, GPR32:$rs2),
     "sll64	$rd, $rs1, $rs2", []>;
 
-def SMULA16S_00 : FmtALU64<0x67, 0x10D,
+def SMULA16S_00 : FmtALU64Acc<0x67, 0x10D,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16S_10 : FmtALU64<0x67, 0x10E,
+def SMULA16S_10 : FmtALU64Acc<0x67, 0x10E,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_10	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_10	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16S_11 : FmtALU64<0x67, 0x10F,
+def SMULA16S_11 : FmtALU64Acc<0x67, 0x10F,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_11	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_11	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16S_20 : FmtALU64<0x67, 0x110,
+def SMULA16S_20 : FmtALU64Acc<0x67, 0x110,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_20	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_20	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16S_21 : FmtALU64<0x67, 0x111,
+def SMULA16S_21 : FmtALU64Acc<0x67, 0x111,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_21	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_21	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16S_22 : FmtALU64<0x67, 0x112,
+def SMULA16S_22 : FmtALU64Acc<0x67, 0x112,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16S_30 : FmtALU64<0x67, 0x113,
+def SMULA16S_30 : FmtALU64Acc<0x67, 0x113,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_30	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_30	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16S_31 : FmtALU64<0x67, 0x114,
+def SMULA16S_31 : FmtALU64Acc<0x67, 0x114,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_31	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_31	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16S_32 : FmtALU64<0x67, 0x115,
+def SMULA16S_32 : FmtALU64Acc<0x67, 0x115,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_32	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_32	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16S_33 : FmtALU64<0x67, 0x116,
+def SMULA16S_33 : FmtALU64Acc<0x67, 0x116,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_33	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_33	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16_00 : FmtALU64<0x67, 0x117,
+def SMULA16_00 : FmtALU64Acc<0x67, 0x117,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16_10 : FmtALU64<0x67, 0x118,
+def SMULA16_10 : FmtALU64Acc<0x67, 0x118,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_10	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_10	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16_11 : FmtALU64<0x67, 0x119,
+def SMULA16_11 : FmtALU64Acc<0x67, 0x119,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_11	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_11	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16_20 : FmtALU64<0x67, 0x11A,
+def SMULA16_20 : FmtALU64Acc<0x67, 0x11A,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_20	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_20	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16_21 : FmtALU64<0x67, 0x11B,
+def SMULA16_21 : FmtALU64Acc<0x67, 0x11B,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_21	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_21	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16_22 : FmtALU64<0x67, 0x11C,
+def SMULA16_22 : FmtALU64Acc<0x67, 0x11C,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16_30 : FmtALU64<0x67, 0x11D,
+def SMULA16_30 : FmtALU64Acc<0x67, 0x11D,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_30	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_30	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16_31 : FmtALU64<0x67, 0x11E,
+def SMULA16_31 : FmtALU64Acc<0x67, 0x11E,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_31	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_31	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16_32 : FmtALU64<0x67, 0x11F,
+def SMULA16_32 : FmtALU64Acc<0x67, 0x11F,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_32	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_32	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULA16_33 : FmtALU64<0x67, 0x120,
+def SMULA16_33 : FmtALU64Acc<0x67, 0x120,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_33	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_33	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16S_00 : FmtALU64<0x67, 0x121,
+def SMULS16S_00 : FmtALU64Acc<0x67, 0x121,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16S_10 : FmtALU64<0x67, 0x122,
+def SMULS16S_10 : FmtALU64Acc<0x67, 0x122,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_10	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_10	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16S_11 : FmtALU64<0x67, 0x123,
+def SMULS16S_11 : FmtALU64Acc<0x67, 0x123,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_11	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_11	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16S_20 : FmtALU64<0x67, 0x124,
+def SMULS16S_20 : FmtALU64Acc<0x67, 0x124,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_20	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_20	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16S_21 : FmtALU64<0x67, 0x125,
+def SMULS16S_21 : FmtALU64Acc<0x67, 0x125,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_21	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_21	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16S_22 : FmtALU64<0x67, 0x126,
+def SMULS16S_22 : FmtALU64Acc<0x67, 0x126,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16S_30 : FmtALU64<0x67, 0x127,
+def SMULS16S_30 : FmtALU64Acc<0x67, 0x127,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_30	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_30	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16S_31 : FmtALU64<0x67, 0x128,
+def SMULS16S_31 : FmtALU64Acc<0x67, 0x128,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_31	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_31	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16S_32 : FmtALU64<0x67, 0x129,
+def SMULS16S_32 : FmtALU64Acc<0x67, 0x129,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_32	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_32	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16S_33 : FmtALU64<0x67, 0x12A,
+def SMULS16S_33 : FmtALU64Acc<0x67, 0x12A,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_33	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_33	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16_00 : FmtALU64<0x67, 0x12B,
+def SMULS16_00 : FmtALU64Acc<0x67, 0x12B,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16_10 : FmtALU64<0x67, 0x12C,
+def SMULS16_10 : FmtALU64Acc<0x67, 0x12C,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_10	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_10	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16_11 : FmtALU64<0x67, 0x12D,
+def SMULS16_11 : FmtALU64Acc<0x67, 0x12D,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_11	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_11	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16_20 : FmtALU64<0x67, 0x12E,
+def SMULS16_20 : FmtALU64Acc<0x67, 0x12E,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_20	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_20	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16_21 : FmtALU64<0x67, 0x12F,
+def SMULS16_21 : FmtALU64Acc<0x67, 0x12F,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_21	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_21	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16_22 : FmtALU64<0x67, 0x130,
+def SMULS16_22 : FmtALU64Acc<0x67, 0x130,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16_30 : FmtALU64<0x67, 0x131,
+def SMULS16_30 : FmtALU64Acc<0x67, 0x131,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_30	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_30	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16_31 : FmtALU64<0x67, 0x132,
+def SMULS16_31 : FmtALU64Acc<0x67, 0x132,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_31	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_31	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16_32 : FmtALU64<0x67, 0x133,
+def SMULS16_32 : FmtALU64Acc<0x67, 0x133,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_32	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_32	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
-def SMULS16_33 : FmtALU64<0x67, 0x134,
+def SMULS16_33 : FmtALU64Acc<0x67, 0x134,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_33	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_33	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 // SRA64/SRA64R/SRL64: 64-bit shift producing DR64 result.
 // ISA DB: rtd=DR64(result), rsd=DR64(data), rs=GPR32(shift amount)
@@ -1968,10 +2131,12 @@ def X2ADDSUB32_HLLH : FmtALU64<0x67, 0x143,
     (ins DR64:$rs1, DR64:$rs2),
     "x2addsub32_hllh	$rd, $rs1, $rs2", []>;
 
-def X2CLAMP32 : FmtALU64<0x67, 0x144,
+def X2CLAMP32 : FmtALU64Acc<0x67, 0x144,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2clamp32	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x2clamp32	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 def X2DOT32 : FmtALU64<0x67, 0x145,
     (outs DR64:$rd),
@@ -2217,10 +2382,12 @@ def X4CJMULA16S_L : FmtALU64Acc<0x67, 0x16F,
     let Constraints = "$rd = $rd_in";
   }
 
-def X4CLAMP16 : FmtALU64<0x67, 0x170,
+def X4CLAMP16 : FmtALU64Acc<0x67, 0x170,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4clamp16	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x4clamp16	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+  }
 
 def X4CMUL16S_H : FmtALU64<0x67, 0x171,
     (outs DR64:$rd),

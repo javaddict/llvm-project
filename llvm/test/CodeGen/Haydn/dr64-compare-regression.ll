@@ -137,11 +137,11 @@
 ; CHECK: 	.section	".note.GNU-stack","",@progbits
 
 declare void @llvm.haydn.slt64(i64, i64)
-declare i64 @llvm.haydn.movt64(i64)
+declare i64 @llvm.haydn.movt64(i64, i64)
 
-define dso_local i64 @test_slt64_movt64(i64 %a, i64 %cmp_rhs) {
+define dso_local i64 @test_slt64_movt64(i64 %a, i64 %cmp_rhs, i64 %acc) {
   call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
-  %r = call i64 @llvm.haydn.movt64(i64 %a)
+  %r = call i64 @llvm.haydn.movt64(i64 %acc, i64 %a)
   ret i64 %r
 }
 
@@ -150,11 +150,11 @@ define dso_local i64 @test_slt64_movt64(i64 %a, i64 %cmp_rhs) {
 ;===----------------------------------------------------------------------===;
 
 declare void @llvm.haydn.sle64(i64, i64)
-declare i64 @llvm.haydn.movf64(i64)
+declare i64 @llvm.haydn.movf64(i64, i64)
 
-define dso_local i64 @test_sle64_movf64(i64 %a, i64 %cmp_rhs) {
+define dso_local i64 @test_sle64_movf64(i64 %a, i64 %cmp_rhs, i64 %acc) {
   call void @llvm.haydn.sle64(i64 %a, i64 %cmp_rhs)
-  %r = call i64 @llvm.haydn.movf64(i64 %a)
+  %r = call i64 @llvm.haydn.movf64(i64 %acc, i64 %a)
   ret i64 %r
 }
 
