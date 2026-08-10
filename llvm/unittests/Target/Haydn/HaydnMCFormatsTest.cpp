@@ -14,6 +14,7 @@
 
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "HaydnTestMCInstrInfo.h"
+#include "HaydnBundlePlan.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/STLExtras.h"
 
@@ -32,44 +33,54 @@ TEST(HaydnMCFormatsTest, GetLegalSlotsSpotChecks) {
   // SLOT_P30=1<<0, SLOT_P31=1<<1, SLOT_P32=1<<2). Derived from sparse alts.
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
 
-  // ALU32 unary family (NOT32/NEG32) packs into all three slots.
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::NOT32),
-            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::NEG32),
-            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
+  // These sets span BOTH composites: a legal-slot mask is not an occupancy,
+  // it is "every entry position this logical has a member for". P20/P21 belong
+  // to the 2-entry form and P30/P31/P32 to the 3-entry one, and the two are
+  // mutually exclusive, so no bundle ever occupies a mask like these.
+  const SlotBits AluAny = Haydn::SLOT_P20 | Haydn::SLOT_P30 |
+                          Haydn::SLOT_P31 | Haydn::SLOT_P32;
 
-  // ALU32 RR (ADD32) — sparse alts S0|S1|S2.
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD32),
-            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
+  // The ALU32 family reaches entry 0 of the 2-entry form and all three of the
+  // 3-entry form. It does NOT reach P21, whose units are ALU1/LOAD1/MAC1 --
+  // ALU1 serves it, but these logicals have no P21 member.
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::NOT32), AluAny);
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::NEG32), AluAny);
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD32), AluAny);
 
-  // ALU64 (ADD64) — s1/s2 only (no S0).
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD64),
-            SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32));
+  // ADD64 is no longer narrower than ADD32. Bundle128 gave it s1|s2 only;
+  // format E gives the 64-bit ALU ops the same placements as the 32-bit ones,
+  // which is what makes three ALU64 ops in one bundle legal.
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD64), AluAny);
 
-  // CB-111: LD32 is logical S0|S1; stores S0.
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_LW_WITH_IMM),
-            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31));
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_SW_WITH_IMM), SlotBits(Haydn::SLOT_P30));
-
-  // Materialize members live in sparse alts (alts-derived getLegalSlots).
-  const std::vector<unsigned> *LD32Alts =
-      Fmts.getAlternateInstsOpcode(Haydn::S_LW_WITH_IMM);
-  const std::vector<unsigned> *LD64Alts =
-      Fmts.getAlternateInstsOpcode(Haydn::D_LDW_WITH_IMM);
-  ASSERT_NE(LD32Alts, nullptr);
-  ASSERT_NE(LD64Alts, nullptr);
-  ASSERT_EQ(LD32Alts->size(), 3u);
-  ASSERT_EQ(LD64Alts->size(), 3u);
-  EXPECT_NE((*LD32Alts)[1], 0u);
-  EXPECT_NE((*LD64Alts)[1], 0u);
-  EXPECT_EQ(Fmts.getSlotKind((*LD32Alts)[1]),
-            MCSlotKind(MCSlotKind::Haydn_SLOT_P31));
-  EXPECT_EQ(Fmts.getSlotKind((*LD64Alts)[1]),
-            MCSlotKind(MCSlotKind::Haydn_SLOT_P31));
-
-  // MAC (X2MULA32) — legal in s1|s2.
+  // The MAC family reaches ONE MORE position than the ALU family: MAC0 serves
+  // P20/P30/P31 and MAC1 serves P21/P32, so between them every entry is
+  // covered. That is the shape 7.1 calls the balance point, and it is data.
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::X2MULA32),
-            SlotBits(Haydn::SLOT_P31 | Haydn::SLOT_P32));
+            SlotBits(Haydn::SLOT_MASK_ANY));
+
+  // Loads reach every entry position, because LOADSTORE0 serves P20/P30 and
+  // LOAD1 serves P21/P31/P32. Stores reach only the LOADSTORE0 positions:
+  // there is one store unit, not two.
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_LW_WITH_IMM),
+            SlotBits(Haydn::SLOT_MASK_ANY));
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::S_SW_WITH_IMM),
+            SlotBits(Haydn::SLOT_P20 | Haydn::SLOT_P30));
+
+  // Members live in the alternates vector, which is indexed by PLACEMENT and
+  // not by slot, so it is neither size 3 nor addressable by slot number. Find
+  // a member by asking each one its own slot.
+  auto memberForSlot = [&](unsigned Opcode, MCSlotKind Want) -> unsigned {
+    const std::vector<unsigned> *Alts = Fmts.getAlternateInstsOpcode(Opcode);
+    if (!Alts)
+      return 0;
+    for (unsigned M : *Alts)
+      if (M != 0 && Fmts.getSlotKind(M) == Want)
+        return M;
+    return 0;
+  };
+  const MCSlotKind P31{MCSlotKind::Haydn_SLOT_P31};
+  EXPECT_NE(memberForSlot(Haydn::S_LW_WITH_IMM, P31), 0u);
+  EXPECT_NE(memberForSlot(Haydn::D_LDW_WITH_IMM, P31), 0u);
 }
 
 TEST(HaydnMCFormatsTest, GetLegalSlotsIsDerivedFromSparseAlts) {
@@ -92,23 +103,27 @@ TEST(HaydnMCFormatsTest, GetLegalSlotsIsDerivedFromSparseAlts) {
       continue;
     }
     ASSERT_NE(Alts, nullptr) << "opcode " << Opcode;
-    ASSERT_EQ(Alts->size(), 3u) << "opcode " << Opcode << " sparse size-3";
-    for (unsigned Slot = 0; Slot < 3; ++Slot) {
-      SlotBits Bit = SlotBits(1) << Slot;
-      bool LegalHere = (Legal & Bit) != 0;
-      bool HasAlt = ((*Alts)[Slot] != 0);
-      EXPECT_EQ(LegalHere, HasAlt)
-          << "opcode " << Opcode << " slot " << Slot
-          << ": getLegalSlots says " << LegalHere << " but sparse alt says "
-          << HasAlt;
-      // Member Desc has fixed getSlotKind == field (AIEBaseMCFormats.cpp:66-75).
-      if (HasAlt) {
-        EXPECT_NE((*Alts)[Slot], Opcode) << "opcode " << Opcode;
-        EXPECT_EQ(Fmts.getSlotKind((*Alts)[Slot]),
-                  MCSlotKind(static_cast<int>(Slot)))
-            << "opcode " << Opcode << " slot " << Slot;
-      }
+    // The vector is indexed by PLACEMENT -- the (entry position, unit) pair,
+    // 0..17 -- not by slot. Under Bundle128 the two coincided, which is why
+    // this used to be a size-3 walk with index == slot. Placement 6 and
+    // placement 10 are both ALU0 in different entries, so neither the index
+    // nor its low bits name a slot (FORMAT-E-SWITCH-PLAN.md 5.2).
+    //
+    // The invariant that survives the reindexing: getLegalSlots is exactly the
+    // union of the members' own slot kinds. Ask each member, never the index.
+    SlotBits FromMembers = 0;
+    for (unsigned Member : *Alts) {
+      if (Member == 0)
+        continue; // sparse hole
+      EXPECT_NE(Member, Opcode) << "opcode " << Opcode << " alt is itself";
+      MCSlotKind Kind = Fmts.getSlotKind(Member);
+      EXPECT_NE(Kind, MCSlotKind())
+          << "opcode " << Opcode << " member " << Member << " has no slot";
+      FromMembers |= SlotBits(1) << static_cast<unsigned>(Kind);
     }
+    EXPECT_EQ(Legal, FromMembers)
+        << "opcode " << Opcode
+        << ": getLegalSlots disagrees with the union of its members' slots";
   }
 }
 
@@ -374,7 +389,7 @@ TEST(HaydnMCFormatsTest, GetPacketFormatBySizeSixteenBytes) {
   const VLIWFormat *BySize =
       P.getFormatBySize(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32, 16);
   ASSERT_NE(BySize, nullptr);
-  EXPECT_EQ(BySize->getSize(), 16u);
+  EXPECT_EQ(BySize->getSize(), llvm::haydn::bundle::ProductEncodedBytesValue);
   EXPECT_STREQ(BySize->Name, "BUNDLE_E3");
 }
 

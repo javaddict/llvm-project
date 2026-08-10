@@ -158,7 +158,7 @@ TEST(HaydnAIEParityBundleTest, EveryPackedCycleIsProductPlan) {
     auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
     for (const OpcodeCycle &C : Cycles) {
       EXPECT_EQ(C.Plan.FID, FormatID::BundleE3);
-      EXPECT_EQ(C.Plan.Bytes.Value, 16u);
+      EXPECT_EQ(C.Plan.Bytes.Value, ProductEncodedBytesValue);
       EXPECT_TRUE(C.Plan.isProductLegal());
       // N-format-ready: encodedBytesFor(FormatID) works
       auto B = encodedBytesFor(C.Plan.FID);
@@ -176,7 +176,7 @@ TEST(HaydnAIEParityBundleTest, PlanFromPacketFormatsMatchesLiveRow) {
     auto P = planFromPacketFormats(Fmts.getPacketFormats(), Occ);
     ASSERT_TRUE(P.has_value()) << "occ=" << Occ;
     EXPECT_EQ(P->FID, ProductFormatID);
-    EXPECT_EQ(P->Bytes.Value, 16u);
+    EXPECT_EQ(P->Bytes.Value, ProductEncodedBytesValue);
   }
 }
 
@@ -273,7 +273,7 @@ TEST(HaydnAIEParityBundleTest, ProductFormatIdIsSingletonEnum) {
   EXPECT_TRUE(isProductFormat(FormatID::BundleE3));
   auto B = encodedBytesFor(FormatID::BundleE3);
   ASSERT_TRUE(B.has_value());
-  EXPECT_EQ(B->Value, 16u);
+  EXPECT_EQ(B->Value, ProductEncodedBytesValue);
 }
 
 TEST(HaydnAIEParityBundleTest, SlotWindowBitsSum128AIEComposite) {

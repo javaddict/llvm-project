@@ -52,7 +52,7 @@ TEST(HaydnBundleFormatSolver, EmptyCommitStall) {
   EXPECT_TRUE(Plan->empty());
   EXPECT_EQ(Plan->OccupiedSlots, 0u);
   EXPECT_EQ(Plan->FID, FormatID::BundleE3);
-  EXPECT_EQ(Plan->Bytes.Value, 16u);
+  EXPECT_EQ(Plan->Bytes.Value, ProductEncodedBytesValue);
   EXPECT_TRUE(Plan->isProductLegal());
 }
 

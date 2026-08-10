@@ -71,7 +71,7 @@ static void expectValidSplit(ArrayRef<unsigned> Ops, HaydnMCFormats &Fmts,
     EXPECT_LE(C.Opcodes.size(), 3u) << "overfull sub-cycle " << Ci;
     EXPECT_TRUE(C.Plan.isProductLegal()) << "illegal plan sub-cycle " << Ci;
     EXPECT_EQ(C.Plan.FID, FormatID::BundleE3);
-    EXPECT_EQ(C.Plan.Bytes.Value, 16u);
+    EXPECT_EQ(C.Plan.Bytes.Value, ProductEncodedBytesValue);
     EXPECT_EQ(C.Plan.Cycles.Value, 1u);
     EXPECT_EQ(C.Plan.memberCount(), C.Opcodes.size());
   }

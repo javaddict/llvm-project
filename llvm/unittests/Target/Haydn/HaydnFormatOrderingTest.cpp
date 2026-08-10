@@ -203,7 +203,7 @@ TEST(HaydnFormatOrdering, GetFormatOrNullReturnsProductRow) {
   const VLIWFormat *Fmt = B.getFormatOrNull();
   ASSERT_NE(Fmt, nullptr);
   EXPECT_STREQ(Fmt->Name, "BUNDLE_E3");
-  EXPECT_EQ(Fmt->getSize(), 16u);
+  EXPECT_EQ(Fmt->getSize(), ProductEncodedBytesValue);
   // Size-filtered form still returns product (N-format-ready API).
   const VLIWFormat *BySize = B.getFormatOrNull(/*Size=*/16);
   ASSERT_NE(BySize, nullptr);
