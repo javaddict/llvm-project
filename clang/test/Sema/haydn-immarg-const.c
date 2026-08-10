@@ -70,8 +70,8 @@ int64_t test_sin_cos_nonconst(int phase, int n) {
   // expected-error@+1 {{argument to '__builtin_haydn_sin_cos' must be a constant integer}}
   return __builtin_haydn_sin_cos(phase, n);
 }
-int64_t test_movei_l_ok(void) { return __builtin_haydn_movei_l(-1); }
-int64_t test_movei_l_nonconst(int v) {
+int64_t test_movei_l_ok(int64_t a) { return __builtin_haydn_movei_l(a, -1); }
+int64_t test_movei_l_nonconst(int64_t a, int v) {
   // expected-error@+1 {{argument to '__builtin_haydn_movei_l' must be a constant integer}}
-  return __builtin_haydn_movei_l(v);
+  return __builtin_haydn_movei_l(a, v);
 }

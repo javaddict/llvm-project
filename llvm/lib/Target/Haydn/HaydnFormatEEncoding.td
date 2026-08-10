@@ -21902,8 +21902,9 @@ def MOVEGPR2SFR_P32_ALU2 : HaydnEntryP32<
 }
 
 def MOVEI_H_P20_ALU0 : HaydnEntryP20<
-    (outs DR64:$rtd), (ins simm32:$imm32),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, simm32:$imm32),
     "movei_h	$rtd, $imm32"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -21916,8 +21917,9 @@ def MOVEI_H_P20_ALU0 : HaydnEntryP20<
 }
 
 def MOVEI_H_P21_ALU1 : HaydnEntryP21<
-    (outs DR64:$rtd), (ins simm32:$imm32),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, simm32:$imm32),
     "movei_h	$rtd, $imm32"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 3;  // ALU1 @ 2-entry entry1
   let Itinerary = Unit_ALU1_L1;
   bits<4> rtd;
@@ -21930,8 +21932,9 @@ def MOVEI_H_P21_ALU1 : HaydnEntryP21<
 }
 
 def MOVEI_L_P20_ALU0 : HaydnEntryP20<
-    (outs DR64:$rtd), (ins simm32:$imm32),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, simm32:$imm32),
     "movei_l	$rtd, $imm32"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -21944,8 +21947,9 @@ def MOVEI_L_P20_ALU0 : HaydnEntryP20<
 }
 
 def MOVEI_L_P21_ALU1 : HaydnEntryP21<
-    (outs DR64:$rtd), (ins simm32:$imm32),
+    (outs DR64:$rtd_wb), (ins DR64:$rtd, simm32:$imm32),
     "movei_l	$rtd, $imm32"> {
+  let Constraints = "$rtd = $rtd_wb";
   let PlacementIndex = 3;  // ALU1 @ 2-entry entry1
   let Itinerary = Unit_ALU1_L1;
   bits<4> rtd;

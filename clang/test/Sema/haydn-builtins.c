@@ -155,9 +155,9 @@ int test_arctan_bad(long long xy) {
   return __builtin_haydn_arctan(xy, 16);
 }
 long long test_movei_h_ok(void) {
-  return __builtin_haydn_movei_h(0x12345678);
+  return __builtin_haydn_movei_h(0, 0x12345678);
 }
 long long test_movei_h_runtime_bad(int v) {
   // expected-error@+1 {{argument to '__builtin_haydn_movei_h' must be a constant integer}}
-  return __builtin_haydn_movei_h(v);
+  return __builtin_haydn_movei_h(0, v);
 }

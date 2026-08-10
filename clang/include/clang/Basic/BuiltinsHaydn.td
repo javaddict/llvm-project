@@ -4320,19 +4320,19 @@ def transf64f2 : HaydnBuiltin<"int64_t(int)"> {
   let Mnemonic = "TRANSF64F2";
   let Semantics = "Golden D-ALU TRANSF64F2.";
 }
-def movei_h : HaydnBuiltin<"int64_t(int)"> {
+def movei_h : HaydnBuiltin<"int64_t(int64_t, int)"> {
   let PublicName = "movei_h";
-  let PublicPrototype = "int64_t(int)";
+  let PublicPrototype = "int64_t(int64_t, int)";
   let Mnemonic = "MOVEI_H";
   // Full imm32 must be ICE (ISel folds bare ImmArg / G_CONSTANT only).
-  let ImmChecks = [ImmCheck<0, ImmCheckSImm32>];
+  let ImmChecks = [ImmCheck<1, ImmCheckSImm32>];
   let Semantics = "Golden D-ALU MOVEI_H — materialize imm32 into DR high half.";
 }
-def movei_l : HaydnBuiltin<"int64_t(int)"> {
+def movei_l : HaydnBuiltin<"int64_t(int64_t, int)"> {
   let PublicName = "movei_l";
-  let PublicPrototype = "int64_t(int)";
+  let PublicPrototype = "int64_t(int64_t, int)";
   let Mnemonic = "MOVEI_L";
-  let ImmChecks = [ImmCheck<0, ImmCheckSImm32>];
+  let ImmChecks = [ImmCheck<1, ImmCheckSImm32>];
   let Semantics = "Golden D-ALU MOVEI_L — materialize imm32 into DR low half.";
 }
 def zero_dr : HaydnBuiltin<"int64_t()"> {

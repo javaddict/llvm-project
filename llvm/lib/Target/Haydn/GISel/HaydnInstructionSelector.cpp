@@ -3862,14 +3862,20 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     // commits it to whichever placement the auction wins. Naming a member here
     // would pin every movei to that one placement and would have to be
     // respelled every time the member naming changes.
-    // ImmArg bare Imm after legalize (C0.4).
+    // The preserved half arrives first and is tied to the destination, so the
+    // ImmArg is operand 3 rather than 2 — `rtd = {imm32, rtd[31:00]}` keeps
+    // the other half, and chaining MOVEI_L into MOVEI_H is the only way to
+    // build a whole 64-bit constant. ImmArg bare Imm after legalize (C0.4).
+    Register Acc = I.getOperand(2).getReg();
     int64_t ImmVal = 0;
-    if (!getConstOpSExt(I.getOperand(2), ImmVal))
+    if (!getConstOpSExt(I.getOperand(3), ImmVal))
       return false;
-    if (DstReg.isVirtual())
-      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
+    for (Register R : {DstReg, Acc})
+      if (R.isVirtual())
+        RBI.constrainGenericRegister(R, DR64RegClass, MRI);
     unsigned Opc = (IntrID == Intrinsic::haydn_movei_h) ? MOVEI_H : MOVEI_L;
-    MachineInstr *MI = MIB.buildInstr(Opc).addDef(DstReg).addImm(ImmVal);
+    MachineInstr *MI =
+        MIB.buildInstr(Opc).addDef(DstReg).addReg(Acc).addImm(ImmVal);
     constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
     I.eraseFromParent();
     return true;

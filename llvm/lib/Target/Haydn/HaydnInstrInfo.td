@@ -1412,10 +1412,21 @@ def X4CMUL16S_F2 : FmtALU64Unary<0x67, 0x1B1, (outs DR64:$rd), (ins DR64:$rs1),
 // symbolic operand to FIXUP_HAYDN_32, and § 6.1's trap is precisely a logical
 // and its member disagreeing about which class holds the EncoderMethod.
 let Itinerary = Unit_ALU0ALU1ALU2_L1 in {
-def MOVEI_H : Fmt48_MOVEI<0x1F, (outs DR64:$rd), (ins simm32_movei:$imm32),
-                          "movei_h\t$rd, $imm32", []>;
-def MOVEI_L : Fmt48_MOVEI<0x20, (outs DR64:$rd), (ins simm32_movei:$imm32),
-                          "movei_l\t$rd, $imm32", []>;
+// Each writes ONE half and preserves the other — `rtd = {imm32, rtd[31:00]}` —
+// so the destination is also a source. Without the tie the preserved half is
+// whatever the register allocator left there, and a caller could not build a
+// 64-bit constant at all: two independent defs cannot be chained.
+// FORMAT-E-SWITCH-PLAN.md 5.11.
+def MOVEI_H : Fmt48_MOVEI<0x1F, (outs DR64:$rd),
+                          (ins DR64:$rd_in, simm32_movei:$imm32),
+                          "movei_h\t$rd, $imm32", []> {
+  let Constraints = "$rd = $rd_in";
+}
+def MOVEI_L : Fmt48_MOVEI<0x20, (outs DR64:$rd),
+                          (ins DR64:$rd_in, simm32_movei:$imm32),
+                          "movei_l\t$rd, $imm32", []> {
+  let Constraints = "$rd = $rd_in";
+}
 }
 
 // X2 SIMD compare → SFR (binary DR64 → sets SFR). Passthrough return.
