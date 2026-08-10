@@ -215,16 +215,13 @@ void HaydnInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   }
 
   // GPR32 → GPR32: MOVE32 rd, rs, rs (register move).
-  // The.td models MOVE32 with two source operands ($rs1, $rs2) because the
-  // R-type encoding (FmtALU32) has separate rs1/rs2 bit fields, and both
-  // must be populated for a deterministic encoding. copyPhysReg therefore
-  // passes SrcReg twice. Semantically MOVE32 reads only one register
-  // (1R/1W, RI-like — see), and the VLIW packetizer's countGPRPorts
-  // dedupes repeated source operands so this counts as a single GPR read.
-  // Using OR32 rd, rs, rs instead would also work but OR32 is two-source
-  // in the.td (no duplicate), so MOVE32 is the canonical single-read move.
+  // MOVE32 reads one register (1R/1W). It used to be modelled with two source
+  // operands so that FmtALU32's rs2 bit field had something to encode, and
+  // copyPhysReg passed SrcReg twice to fill it; the field is bound to zero in
+  // the.td now, which is what the database and the format E members say. An
+  // operand the logical has and the member does not is a place the encoder
+  // reads the wrong one — FORMAT-E-SWITCH-PLAN.md § 5.11.
   BuildMI(MBB, MI, DL, get(Haydn::MOVE32), DestReg)
-      .addReg(SrcReg, getKillRegState(KillSrc))
       .addReg(SrcReg, getKillRegState(KillSrc));
 }
 

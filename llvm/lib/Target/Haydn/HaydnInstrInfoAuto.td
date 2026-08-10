@@ -3879,9 +3879,10 @@ def X4SWAP16 : HaydnInst<4, (outs DR64:$rd),
     "x4swap16	$rd, $rs", []>;
 
 let TSFlags = 14 in
-def ZERO_DR : HaydnInst<4, (outs DR64:$rd),
-    (ins simm16:$imm),
-    "zero_dr	$rd, $imm", []>;
+// `ZERO_DR rtd` writes zero and takes no input; the immediate was spurious
+// and gave CodeGen an operand the member does not have (§ 5.11).
+def ZERO_DR : HaydnInst<4, (outs DR64:$rd), (ins),
+    "zero_dr	$rd", []>;
 
 // MOVESFR2GPR / MOVEGPR2SFR / ZERO_SFR moved to HaydnInstrInfo.td (
 // real 32-bit R-type encodings under opcode 0x67 funct 0x198/0x199/0x19A

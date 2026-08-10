@@ -465,7 +465,7 @@ define dso_local i64 @test_x4cjmula16s_l(i64 %a, i64 %b) {
 ;===----------------------------------------------------------------------===;
 
 declare i64 @llvm.haydn.not64(i64)
-declare i64 @llvm.haydn.seq64(i64)
+declare void @llvm.haydn.seq64(i64, i64)
 define dso_local i64 @test_not64(i64 %a) {
 ; MIR-LABEL: name: test_not64
 ; MIR: NOT64
@@ -473,11 +473,11 @@ define dso_local i64 @test_not64(i64 %a) {
   ret i64 %r
 }
 
-define dso_local i64 @test_seq64(i64 %a) {
+define dso_local i64 @test_seq64(i64 %a, i64 %cmp_rhs) {
 ; MIR-LABEL: name: test_seq64
 ; MIR: SEQ64
-  %r = call i64 @llvm.haydn.seq64(i64 %a)
-  ret i64 %r
+  call void @llvm.haydn.seq64(i64 %a, i64 %cmp_rhs)
+  ret i64 %a
 }
 
 ;===----------------------------------------------------------------------===;

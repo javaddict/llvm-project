@@ -3146,6 +3146,30 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     return true;
   };
 
+  // Select an SFR-setting compare: op(src1, src2), with NO register result.
+  // Operand layout: intrinsic_id, src1, src2 — one less than selectBinary,
+  // because the intrinsic is void.
+  //
+  // These used to go through selectBinary and return their first operand. The
+  // ISA has no such destination: the database gives `X2SEQ32 rsd1, rsd2` two
+  // read ports and one SFR write port, so the def existed only to fill a
+  // destination field the instruction does not have. GISel allocated a dead
+  // vreg for it and every caller either discarded it or read the flags back
+  // through MOVESFR2GPR. Read the result with haydn_movesfr2gpr().
+  // See FORMAT-E-SWITCH-PLAN.md § 5.11.
+  auto selectSfrCompare = [&](unsigned Opcode, const TargetRegisterClass &RC) {
+    Register Src0 = I.getOperand(1).getReg();
+    Register Src1 = I.getOperand(2).getReg();
+    if (Src0.isVirtual())
+      RBI.constrainGenericRegister(Src0, RC, MRI);
+    if (Src1.isVirtual())
+      RBI.constrainGenericRegister(Src1, RC, MRI);
+    MachineInstr *MI = MIB.buildInstr(Opcode).addReg(Src0).addReg(Src1);
+    constrainSelectedInstRegOperands(*MI, TII, TRI, RBI);
+    I.eraseFromParent();
+    return true;
+  };
+
   // Select a SIMD shift intrinsic: dst = op(src_dr64, amt_gpr32).
   // The instruction uses DR64 for the data operand and GPR32 for the shift
   // amount. Operand layout: def DstReg, intrinsic_id, src(DR64), amt.
@@ -4529,14 +4553,14 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   // Compare ops: binary DR64, set per-lane SFR flags.
   // Move ops: binary DR64, conditionally select per-lane based on SFR.
   //===-----------------------------------------------------------------===
-  case haydn_x2seq32:  return selectBinary(X2SEQ32,  DR64RegClass);
-  case haydn_x2slt32:  return selectBinary(X2SLT32,  DR64RegClass);
-  case haydn_x2sle32:  return selectBinary(X2SLE32,  DR64RegClass);
+  case haydn_x2seq32:  return selectSfrCompare(X2SEQ32,  DR64RegClass);
+  case haydn_x2slt32:  return selectSfrCompare(X2SLT32,  DR64RegClass);
+  case haydn_x2sle32:  return selectSfrCompare(X2SLE32,  DR64RegClass);
   case haydn_x2movf32: return selectBinary(X2MOVF32, DR64RegClass);
   case haydn_x2movt32: return selectBinary(X2MOVT32, DR64RegClass);
-  case haydn_x4seq16:  return selectBinary(X4SEQ16,  DR64RegClass);
-  case haydn_x4slt16:  return selectBinary(X4SLT16,  DR64RegClass);
-  case haydn_x4sle16:  return selectBinary(X4SLE16,  DR64RegClass);
+  case haydn_x4seq16:  return selectSfrCompare(X4SEQ16,  DR64RegClass);
+  case haydn_x4slt16:  return selectSfrCompare(X4SLT16,  DR64RegClass);
+  case haydn_x4sle16:  return selectSfrCompare(X4SLE16,  DR64RegClass);
   case haydn_x4movf16: return selectBinary(X4MOVF16, DR64RegClass);
   case haydn_x4movt16: return selectBinary(X4MOVT16, DR64RegClass);
 
@@ -4553,7 +4577,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   //===---------------------------------------------------------------===
   case haydn_x2cmplt32:
   case haydn_x4cmplt16: {
-    // pred = movesfr2gpr(slt(a, b)). Passthrough of SLT is discarded.
+    // pred = movesfr2gpr(slt(a, b)). SLT has no result but SFR.
     const bool IsX2 = IntrID == haydn_x2cmplt32;
     unsigned SltOpc = IsX2 ? X2SLT32 : X4SLT16;
     Register A = I.getOperand(2).getReg();
@@ -4562,9 +4586,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(A, DR64RegClass, MRI);
     if (B.isVirtual())
       RBI.constrainGenericRegister(B, DR64RegClass, MRI);
-    Register Pass = MRI.createVirtualRegister(&DR64RegClass);
-    MachineInstr *SltMI =
-        MIB.buildInstr(SltOpc).addDef(Pass).addReg(A).addReg(B);
+    // No def: the compare writes SFR only. This used to allocate a dead
+    // vreg to receive a destination the ISA does not have (§ 5.11).
+    MachineInstr *SltMI = MIB.buildInstr(SltOpc).addReg(A).addReg(B);
     constrainSelectedInstRegOperands(*SltMI, TII, TRI, RBI);
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, GPR32RegClass, MRI);
@@ -4620,9 +4644,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(TrueV, DR64RegClass, MRI);
     if (FalseV.isVirtual())
       RBI.constrainGenericRegister(FalseV, DR64RegClass, MRI);
-    Register Pass = MRI.createVirtualRegister(&DR64RegClass);
-    MachineInstr *SltMI =
-        MIB.buildInstr(SltOpc).addDef(Pass).addReg(A).addReg(B);
+    // No def: the compare writes SFR only. This used to allocate a dead
+    // vreg to receive a destination the ISA does not have (§ 5.11).
+    MachineInstr *SltMI = MIB.buildInstr(SltOpc).addReg(A).addReg(B);
     constrainSelectedInstRegOperands(*SltMI, TII, TRI, RBI);
     if (DstReg.isVirtual())
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
@@ -4858,7 +4882,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   //===---------------------------------------------------------------===
   // Unary DR64
   case haydn_not64: return selectUnary(NOT64, DR64RegClass);
-  case haydn_seq64: return selectUnary(SEQ64, DR64RegClass);
+  case haydn_seq64: return selectSfrCompare(SEQ64, DR64RegClass);
 
   // Binary DR64
   case haydn_max64:   return selectBinary(MAX64,   DR64RegClass);
@@ -4981,8 +5005,8 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   //===---------------------------------------------------------------===
   // Wave 5: Scalar 64-bit SFR Compare (unary DR64, like SEQ64)
   //===---------------------------------------------------------------===
-  case haydn_slt64: return selectUnary(SLT64, DR64RegClass);
-  case haydn_sle64: return selectUnary(SLE64, DR64RegClass);
+  case haydn_slt64: return selectSfrCompare(SLT64, DR64RegClass);
+  case haydn_sle64: return selectSfrCompare(SLE64, DR64RegClass);
 
   //===---------------------------------------------------------------===
   // Wave 5: Scalar 64-bit SFR Conditional Move (unary DR64)

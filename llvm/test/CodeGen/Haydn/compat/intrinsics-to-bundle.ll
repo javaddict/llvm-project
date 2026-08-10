@@ -303,9 +303,9 @@ declare <4 x i16> @llvm.haydn.x4add16s(<4 x i16>, <4 x i16>)
 declare <2 x i32> @llvm.haydn.x2addsub32s(<2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2max32(<2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2min32(<2 x i32>, <2 x i32>)
-declare <2 x i32> @llvm.haydn.x2slt32(<2 x i32>, <2 x i32>)
-declare <2 x i32> @llvm.haydn.x2sle32(<2 x i32>, <2 x i32>)
-declare <4 x i16> @llvm.haydn.x4seq16(<4 x i16>, <4 x i16>)
+declare void @llvm.haydn.x2slt32(<2 x i32>, <2 x i32>)
+declare void @llvm.haydn.x2sle32(<2 x i32>, <2 x i32>)
+declare void @llvm.haydn.x4seq16(<4 x i16>, <4 x i16>)
 declare i32 @llvm.haydn.abs32s(i32)
 declare i64 @llvm.haydn.abs64(i64)
 declare i64 @llvm.haydn.abs64s(i64)
@@ -341,8 +341,8 @@ define <4 x i16> @test_x4add16s(<4 x i16> %a, <4 x i16> %b) {
 define <2 x i32> @test_x2slt32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2slt32:
 ; CHECK: x2slt32
-  %r = call <2 x i32> @llvm.haydn.x2slt32(<2 x i32> %a, <2 x i32> %b)
-  ret <2 x i32> %r
+  call void @llvm.haydn.x2slt32(<2 x i32> %a, <2 x i32> %b)
+  ret <2 x i32> %a
 }
 define <2 x i32> @test_x2max32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2max32:

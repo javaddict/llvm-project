@@ -2998,8 +2998,12 @@ static inline ae_int16x4 __ae_sraa16(ae_int16x4 a, int s) {
 // haydn_x2abs32/neg32 take haydn_x2int32, not int64 bag.
 #define AE_ABS32(a)   ((ae_int32x2)haydn_x2abs32(a))
 #define AE_NEG32(a)   ((ae_int32x2)haydn_x2neg32(a))
-#define AE_EQ16(a, b) haydn_x4seq16((a), (b))
-#define AE_LT16(a, b) haydn_x4slt16((a), (b))
+// Spellings of the quad-16 compares above. They used to cast the compare's
+// own return value, which was the vector passthrough the AE_SEQ16X4 block
+// explicitly warns against -- and which the ISA does not produce at all: the
+// compares write SFR and no register. Defer to the corrected forms.
+#define AE_EQ16(a, b) AE_SEQ16X4((a), (b))
+#define AE_LT16(a, b) AE_SLT16X4((a), (b))
 #define AE_LT64(a, b) ((a) < (b))
 #define AE_LE64(a, b) ((a) <= (b))
 #define AE_EQ64(a, b) ((a) == (b))

@@ -81,8 +81,7 @@ def : Pat<(int_haydn_sub32s GPR32:$a, GPR32:$b), (SUB32S GPR32:$a, GPR32:$b)>;
 def : Pat<(int_haydn_add64s DR64:$a, DR64:$b),   (ADD64S DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_sub64s DR64:$a, DR64:$b),   (SUB64S DR64:$a, DR64:$b)>;
 
-// ABS32S uses FmtALU32 with 2 GPR32 ins (rs1 is source, rs2 unused)
-def : Pat<(int_haydn_abs32s GPR32:$a),  (ABS32S GPR32:$a, GPR32:$a)>;
+def : Pat<(int_haydn_abs32s GPR32:$a),  (ABS32S GPR32:$a)>;
 def : Pat<(int_haydn_neg32s GPR32:$a),  (NEG32S GPR32:$a)>;
 def : Pat<(int_haydn_abs64s DR64:$a),   (ABS64S DR64:$a)>;
 def : Pat<(int_haydn_neg64s DR64:$a),   (NEG64S DR64:$a)>;

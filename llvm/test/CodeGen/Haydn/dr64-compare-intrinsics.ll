@@ -349,23 +349,23 @@
 ; CHECK:                                         // -- End function
 ; CHECK: 	.section	".note.GNU-stack","",@progbits
 
-declare i64 @llvm.haydn.slt64(i64)
-declare i64 @llvm.haydn.sle64(i64)
-declare i64 @llvm.haydn.seq64(i64)
+declare void @llvm.haydn.slt64(i64, i64)
+declare void @llvm.haydn.sle64(i64, i64)
+declare void @llvm.haydn.seq64(i64, i64)
 
-define dso_local i64 @test_slt64(i64 %a) {
-  %r = call i64 @llvm.haydn.slt64(i64 %a)
-  ret i64 %r
+define dso_local i64 @test_slt64(i64 %a, i64 %cmp_rhs) {
+  call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
+  ret i64 %a
 }
 
-define dso_local i64 @test_sle64(i64 %a) {
-  %r = call i64 @llvm.haydn.sle64(i64 %a)
-  ret i64 %r
+define dso_local i64 @test_sle64(i64 %a, i64 %cmp_rhs) {
+  call void @llvm.haydn.sle64(i64 %a, i64 %cmp_rhs)
+  ret i64 %a
 }
 
-define dso_local i64 @test_seq64(i64 %a) {
-  %r = call i64 @llvm.haydn.seq64(i64 %a)
-  ret i64 %r
+define dso_local i64 @test_seq64(i64 %a, i64 %cmp_rhs) {
+  call void @llvm.haydn.seq64(i64 %a, i64 %cmp_rhs)
+  ret i64 %a
 }
 
 ;===----------------------------------------------------------------------===;
@@ -375,15 +375,15 @@ define dso_local i64 @test_seq64(i64 %a) {
 declare i64 @llvm.haydn.movt64(i64)
 declare i64 @llvm.haydn.movf64(i64)
 
-define dso_local i64 @test_movt64(i64 %a) {
-  %cmp = call i64 @llvm.haydn.slt64(i64 %a)
-  %r = call i64 @llvm.haydn.movt64(i64 %cmp)
+define dso_local i64 @test_movt64(i64 %a, i64 %cmp_rhs) {
+  call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
+  %r = call i64 @llvm.haydn.movt64(i64 %a)
   ret i64 %r
 }
 
-define dso_local i64 @test_movf64(i64 %a) {
-  %cmp = call i64 @llvm.haydn.sle64(i64 %a)
-  %r = call i64 @llvm.haydn.movf64(i64 %cmp)
+define dso_local i64 @test_movf64(i64 %a, i64 %cmp_rhs) {
+  call void @llvm.haydn.sle64(i64 %a, i64 %cmp_rhs)
+  %r = call i64 @llvm.haydn.movf64(i64 %a)
   ret i64 %r
 }
 
@@ -414,9 +414,9 @@ define dso_local void @test_zero_sfr() {
 ; Scalar predication pattern: compare -> SFR -> conditional select
 ;===----------------------------------------------------------------------===;
 
-define dso_local i64 @test_scalar_predication(i64 %a) {
-  %cmp = call i64 @llvm.haydn.slt64(i64 %a)
-  %result = call i64 @llvm.haydn.movt64(i64 %cmp)
+define dso_local i64 @test_scalar_predication(i64 %a, i64 %cmp_rhs) {
+  call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
+  %result = call i64 @llvm.haydn.movt64(i64 %a)
   ret i64 %result
 }
 
@@ -424,33 +424,33 @@ define dso_local i64 @test_scalar_predication(i64 %a) {
 ; SFR save/restore via GPR
 ;===----------------------------------------------------------------------===;
 
-define dso_local i64 @test_sfr_save_restore(i64 %a, i32 %saved_sfr) {
+define dso_local i64 @test_sfr_save_restore(i64 %a, i32 %saved_sfr, i64 %cmp_rhs) {
   call void @llvm.haydn.movegpr2sfr(i32 %saved_sfr)
-  %r = call i64 @llvm.haydn.slt64(i64 %a)
-  ret i64 %r
+  call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
+  ret i64 %a
 }
 
 ;===----------------------------------------------------------------------===;
 ; X2 SIMD compare -> SFR (binary DR64)
 ;===----------------------------------------------------------------------===;
 
-declare <2 x i32> @llvm.haydn.x2seq32(<2 x i32>, <2 x i32>)
-declare <2 x i32> @llvm.haydn.x2slt32(<2 x i32>, <2 x i32>)
-declare <2 x i32> @llvm.haydn.x2sle32(<2 x i32>, <2 x i32>)
+declare void @llvm.haydn.x2seq32(<2 x i32>, <2 x i32>)
+declare void @llvm.haydn.x2slt32(<2 x i32>, <2 x i32>)
+declare void @llvm.haydn.x2sle32(<2 x i32>, <2 x i32>)
 
 define dso_local <2 x i32> @test_x2seq32(<2 x i32> %a, <2 x i32> %b) {
-  %r = call <2 x i32> @llvm.haydn.x2seq32(<2 x i32> %a,<2 x i32> %b)
-  ret <2 x i32> %r
+  call void @llvm.haydn.x2seq32(<2 x i32> %a,<2 x i32> %b)
+  ret <2 x i32> %a
 }
 
 define dso_local <2 x i32> @test_x2slt32(<2 x i32> %a, <2 x i32> %b) {
-  %r = call <2 x i32> @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %b)
-  ret <2 x i32> %r
+  call void @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %b)
+  ret <2 x i32> %a
 }
 
 define dso_local <2 x i32> @test_x2sle32(<2 x i32> %a, <2 x i32> %b) {
-  %r = call <2 x i32> @llvm.haydn.x2sle32(<2 x i32> %a,<2 x i32> %b)
-  ret <2 x i32> %r
+  call void @llvm.haydn.x2sle32(<2 x i32> %a,<2 x i32> %b)
+  ret <2 x i32> %a
 }
 
 ;===----------------------------------------------------------------------===;
@@ -474,23 +474,23 @@ define dso_local <2 x i32> @test_x2movt32(<2 x i32> %fallthrough, <2 x i32> %con
 ; X4 SIMD compare -> SFR (binary DR64)
 ;===----------------------------------------------------------------------===;
 
-declare <4 x i16> @llvm.haydn.x4seq16(<4 x i16>, <4 x i16>)
-declare <4 x i16> @llvm.haydn.x4slt16(<4 x i16>, <4 x i16>)
-declare <4 x i16> @llvm.haydn.x4sle16(<4 x i16>, <4 x i16>)
+declare void @llvm.haydn.x4seq16(<4 x i16>, <4 x i16>)
+declare void @llvm.haydn.x4slt16(<4 x i16>, <4 x i16>)
+declare void @llvm.haydn.x4sle16(<4 x i16>, <4 x i16>)
 
 define dso_local <4 x i16> @test_x4seq16(<4 x i16> %a, <4 x i16> %b) {
-  %r = call <4 x i16> @llvm.haydn.x4seq16(<4 x i16> %a,<4 x i16> %b)
-  ret <4 x i16> %r
+  call void @llvm.haydn.x4seq16(<4 x i16> %a,<4 x i16> %b)
+  ret <4 x i16> %a
 }
 
 define dso_local <4 x i16> @test_x4slt16(<4 x i16> %a, <4 x i16> %b) {
-  %r = call <4 x i16> @llvm.haydn.x4slt16(<4 x i16> %a,<4 x i16> %b)
-  ret <4 x i16> %r
+  call void @llvm.haydn.x4slt16(<4 x i16> %a,<4 x i16> %b)
+  ret <4 x i16> %a
 }
 
 define dso_local <4 x i16> @test_x4sle16(<4 x i16> %a, <4 x i16> %b) {
-  %r = call <4 x i16> @llvm.haydn.x4sle16(<4 x i16> %a,<4 x i16> %b)
-  ret <4 x i16> %r
+  call void @llvm.haydn.x4sle16(<4 x i16> %a,<4 x i16> %b)
+  ret <4 x i16> %a
 }
 
 ;===----------------------------------------------------------------------===;
