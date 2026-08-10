@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `8919a256dc42` | **objects emit: 424/430 CodeGen. lit 230/589, `HaydnTests` 142/253, lld 12/24. Both § 5.2 generator gaps closed; § 5.11 partly.** |
+| `llvm-project` | `haydn-formate-switch-mc` | `6240579f9013`, **local only — not pushed** | **objects emit: 424/430 CodeGen. lit 270/589, `HaydnTests` 142/253, lld 12/24.** Both § 5.2 generator gaps closed; § 5.11's generator half done, its logical half open. |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -33,6 +33,20 @@ Companion documents:
 table was 13 commits stale, and a session started by re-deriving work that was
 already done. The `-mc` hash is given because that branch moves in deliberate
 steps, but verify it too.
+
+**And check the hash against the REMOTE, not the local branch.** A later
+session hit the same trap from the other side: this table was correct and the
+*clone* was stale. Local `haydn-formate-switch-mc` still pointed at the
+pre-rebase WIP (`f7e173347bb4`, the state preserved as
+`backup/mc-preformate-20260807`) while the branch the table names lived only on
+`fork/haydn-formate-switch-mc`, 24 commits further on. Working from the local
+ref would have redone the `LUI` and tied-writeback fixes. `git log
+fork/haydn-formate-switch-mc -1`, and note the remote holding this work is
+named **`fork`** — `origin` is upstream `llvm/llvm-project`.
+
+**This file only exists on `haydn`.** The copy on `-mc` is 500 lines behind and
+is not the one to read or edit; the trunk's is authoritative even for work that
+lives entirely on `-mc`.
 
 All three branches are on the `github` remote. The pre-rebase states of the two
 WIP branches are preserved as the tags `backup/wip-preformate-20260807` and
@@ -779,6 +793,15 @@ toolchain only records what the new encoder did, so use `--emit roundtrip` as
 the independent judgement: where a regenerated expectation and the round-trip
 disagree, **the encoder is wrong**.
 
+**Do not regenerate while § 5.11's first three axes are non-zero.** They are
+exactly the places the encoder reads an operand the logical did not put there,
+so regenerating now would freeze the wrong bytes into 589 expectations and the
+round trip would agree with all of them. Five attempts to regenerate have been
+made so far and four of them found code to fix instead — the relocation kind
+for `SET_HWLOOP`, branch scaling, `LUI`'s operand shape, and the tied writeback
+family. `ties` is a weaker gate: it is a register-allocation defect, not an
+encoding one, so it does not by itself corrupt an expectation.
+
 Be aware of what `--emit roundtrip` cannot see, though: it checks the encoder
 against the decoder, so any defect symmetric across the pair passes. That is how
 § 5.3's blank MAC operand survived, and how § 6.10's missing ÷2 survived. For
@@ -1287,11 +1310,12 @@ because a wrong inherit mis-encodes silently:
   excluded **on purpose**: their encoders dispatch on the *opcode*, branches
   already reach the right fixup kind through `getExprFixupKind`, and rerouting
   a working path is not worth the risk.
-* **Matched by name, not position.** The member and the logical disagree on
-  arity for **280 of the 684** logicals — tied writebacks, database reshapes —
-  so a positional match would be wrong more often than right. The member's
-  alias carries the logical's operand name as a suffix (`uimm6_offset1` for
-  `offset1`), which is unambiguous wherever it matches.
+* **Matched by name, not position.** 21 logicals still disagree with their
+  members on arity (§ 5.11), and a positional match is wrong for every one of
+  them. The member's alias carries the logical's operand name as a suffix
+  (`uimm6_offset1` for `offset1`), which is unambiguous wherever it matches.
+  Note this is the *operand class*; the tie's position is matched positionally
+  and deliberately, because there the two sides' names never line up at all.
 
 Net effect is four member definitions, all `SET_HWLOOP` / `SET_HWLOOP_F2`, and
 `set_hwloop` now emits `R_HAYDN_HWLoopOff1/Off2` instead of two
@@ -1375,16 +1399,16 @@ encoding is dead on this branch anyway.
 
 #### This is a class, not one bug
 
-**280 of the 684 logicals that have members disagree with them on operand
-arity.** Most are tied writebacks the database reshaped and are probably
-harmless — the member declares `$rs_wb` where the logical declares a tie — but
-each one is a place the encoder can read the wrong operand, and the failure
-mode is what `LUI` showed: no diagnostic, a plausible encoding, a missing or
-wrong relocation.
+Hundreds of logicals disagreed with their members, and every one is a place
+the encoder can read the wrong operand — the failure mode `LUI` showed: no
+diagnostic, a plausible encoding, a missing or wrong relocation.
 
 The cheap standing check is the same shape as § 5.6's memberless sweep:
-compare each logical's operand count against its members'. It is a `.td` fact
-on both sides, so it can be checked without running anything.
+compare each logical's operand list against its members'. It is a `.td` fact
+on both sides, so it can be checked without running anything. **Comparing the
+counts is not enough** — see "the measurement was crediting a tie that never
+happened" below, and `SEQ64`, which has two operands on both sides and still
+mis-encodes because they mean different things.
 
 #### The tied-writeback half, fixed in `2686a95478c5`
 
@@ -1406,54 +1430,150 @@ tied in, copies the `Constraints`. 202 member definitions.
 builds the MCInst against the member, so the two agreed. Only **compiled** code
 was wrong, and only in the operands after the tie.
 
-#### What is left: 27 logicals, 171 placements — and it is now measurable
+#### The generator was deciding defs by spelling — fixed in `032d9cffcbbc`
+
+**`X2SEQ32` was the thread that unravelled it, and the suspicion recorded here
+was right: the dest-by-field-name rule was wrong.** It called an operand an out
+when the bit-layout field it landed in was named `dest`. That is a *layout*
+fact. An entry's field set depends on its (entry, unit):
+
+```
+2-entry entry0/ALU0   {"dest": "rsd1", "src": "rsd2"}
+3-entry entry0/ALU2   {"dest": "   ", "src1": "rsd1", "src2": "rsd2"}
+```
+
+Both rows are `X2SEQ32 rsd1, rsd2`. The narrow row has nowhere to put a second
+source, so `rsd1` sat in the field called `dest`; the wide row leaves `dest`
+**blank**, which is the database saying the instruction has no register
+destination at all. Its only write is `SFR_Write_Port`.
+
+Three things follow, and each is worth more than the bug itself:
+
+1. **The rule made the same instruction a def on one unit and not on another.**
+   14 logicals disagreed with themselves that way. A destination cannot depend
+   on which ALU executes the instruction, so no semantic reading of the field
+   name was ever going to hold.
+2. **It failed in both directions.** It invented a destination for the SFR
+   compares, and it *lost* the real one for `LUI`, `ZERO_GPR`, `CSRR` and
+   `MOVESFR2GPR` on six placements of seven — including on the branch that had
+   just fixed `LUI`'s logical. Fixing the logical did not fix the members, and
+   nothing said so.
+3. **The database had stated the answer all along and nothing read it.** Every
+   instruction carries `GPR/DR/AR/SFR_Read_Port` and `_Write_Port` over the
+   same operand names its Syntax uses. A `grep` for those field names in the
+   generator returned **zero**. They are the authority now.
+
+This is the fifth instance of the same rule — § 4, § 5.2, § 5.6, § 6.10 and now
+here. **Fold through the meaning, never through the spelling.** The spelling
+was a field name this time rather than a mnemonic suffix, which is why it
+survived four previous applications of the rule.
+
+#### The measurement was crediting a tie that never happened
+
+`--emit operand-agreement` did not ask the emitter what it had emitted; it
+*modelled* it, and the model was wrong. It added one operand for a tied
+writeback whenever the logical carried a `Constraints` — including for every
+tie the emitter had silently skipped.
+
+The emitter matched the tie **by name**, and the two sides do not use the same
+names for one register: `F2MULAA32RS_HHLL` ties `$rd = $rd_in` where the
+database calls it `rtd`, so nothing matched, no tie was restored, and the
+member came out one operand short. The check added its optimistic `+1` anyway
+and reported agreement.
+
+**823 placements over 164 logicals were reported as agreeing while their
+member really was one operand short.** The `968` this section previously
+dismissed was closer to the truth than the `171` that replaced it. The check
+now shares `member_operand_shape` with the emitter and cannot drift again.
+
+The tie itself is read differently now. **Whether there is a tie, and where its
+in sits, are CodeGen-side presentation choices that only the logical can
+state** — the database says no more than that the register is read and written.
+So both come from the logical, but **positionally**, which needs no agreement
+about names. Two things forced that reading:
+
+* the logicals do not agree with each other about where the tied in goes —
+  `D_SDW_POST_IMM rtd, rs, imm6` puts it second, `PLDWWUA_POST ar_sel, rs`
+  puts it first — and either is legal, because the AsmString names operands;
+* restoring a tie the logical does not declare makes the member demand an
+  operand CodeGen never builds, and `llc` then aborts inside
+  `MCOperand::operator[]`. Object emission fell 424 → 408 on that alone. The
+  member has to match its logical operand for operand; where the logical then
+  contradicts the database, that is reported rather than papered over.
+
+#### What is left: four axes, all on the logical side
 
 ```sh
 python3 .../haydn_encoding.py --database ~/haydn \
     --emit operand-agreement --flags-from haydn-records.json
-#   operand agreement: 27 logicals, 171 member placements disagree
+#   operand agreement: 118 logicals, 625 member placements disagree
+#     arity 135 / 21   defs 21 / 3   kinds 6 / 3   ties 521 / 101
 ```
 
-**Not 968.** That earlier figure compared the members' raw operand lists
-against the logicals', which counted fields the instruction does not use and
-did not account for the tie the generator now restores. The mode above counts
-what the encoder actually sees; `LUI` correctly no longer appears and `ABS32`
-does.
+The generator no longer contributes a single disagreement. The first three axes
+are mutually exclusive and are all places the **encoder** reads the wrong
+operand; `ties` is judged independently, overlaps them, and is a **model**
+defect rather than an encoding one.
 
-The 27, by shape:
+| Axis | What it means |
+|---|---|
+| `arity` | different operand *count*: everything after the difference is read from the wrong position |
+| `defs` | counts agree, `NumDefs` does not — a member that calls a source a def describes an instruction writing a register it does not write |
+| `kinds` | counts and defs agree, but a position is a register on one side and an immediate on the other |
+| `ties` | the database says a register is read *and* written and the logical does not present it that way |
 
-* **13 declare a source the database does not have** — `ABS32`/`ABS32S`
-  (whose own asm string is `"abs32\t$rd, $rs1"`, so `$rs2` is provably dead),
-  `MOVE32`, and the `X2`/`X4` move and compare families. `ZERO_DR` has a
-  spurious immediate. These are `LUI`'s class: **fix the logical, the database
-  is the authority.** All but `MOVE32` have **zero** C++ references, so most
-  are pure `.td` edits.
-* **`CSRR`** — the extra dead `$rd`, already analysed in § 5.1.
-* **The `MUL`/`MULA`/`MULS` families at 5 placements each** — not yet looked
-  at; note 5 rather than 7, so these are MAC-only and the shape question may
-  differ.
+**`defs` earned itself immediately.** It caught `SEQ64`/`SLE64`/`SLT64`, which
+have two operands on both sides — so every count-based check passed them — while
+the logical calls the first a destination and the hardware reads it as the
+second source. They were never in the old list of 27 at all.
 
-`X2SEQ32` is worth a second look before touching it: the database says
-`X2SEQ32 rsd1, rsd2` and the generator classes `rsd1` as an *out*, but these
-are the comparisons that carry `Defs = [SFR]` (§ 4), so `rsd1` may well be a
-second **source** and the generator's dest-by-field-name rule may be wrong for
-them.
+The `arity` 21, by shape:
 
-#### The old estimate, for the record
+* **6 SFR compares** — `X2SEQ32`, `X2SLE32`, `X2SLT32`, `X4SEQ16`, `X4SLE16`,
+  `X4SLT16`, 42 placements. The logical declares a `$rd` the hardware does not
+  have. **Note this is the opposite of what this section used to say**: they
+  were filed as "declares a source the database does not have", and dropping
+  `$rs2` would have made the count agree while leaving the roles wrong — the
+  state `SEQ64` is in. Drop `$rd`, keep both sources. Decided: the intrinsic
+  becomes void and the source break is accepted, as for the AR family in § 7.
+* **5 with an extra dead operand** — `ABS32`/`ABS32S` (whose own asm string is
+  `"abs32\t$rd, $rs1"`, so `$rs2` is provably dead), `MOVE32`, `CSRR` (§ 5.1),
+  `ZERO_DR` (a spurious immediate), 35 placements. `LUI`'s class: fix the
+  logical. All but `MOVE32` have zero C++ references.
+* **4 conditional moves** — `X2MOVF32`, `X2MOVT32`, `X4MOVF16`, `X4MOVT16`, 28
+  placements. `rtd` is read and written; the logical must declare the tie.
+* **6 that are database defects, not logical ones** — see below.
 
-Two classes, neither safe to do in bulk:
+`kinds` is `D_SDW_CB_IMM`/`_REG` and `WBARWUA`: the logical orders its operands
+differently from the Syntax, so an immediate sits where a register was built.
 
-* **Ties whose names do not line up** — the member's writeback out is `rs1`
-  where the logical's tie names `rs`, so there is nothing to match on. Skipped
-  rather than guessed.
-* **Logicals whose shape genuinely disagrees with the database** — `ABS32`
-  declares two sources where the database has one; `CSRR` carries an extra
-  dead `$rd` (§ 5.1 already analysed that one). These need what `LUI` got:
-  **fix the logical, not the member.** The database is the authority.
+`ties` is mostly the accumulating MAC family — 101 logicals whose members the
+hardware reads back but whose `.td` declares no tie, so nothing pins the
+accumulator to the register the hardware actually reads and regalloc is free to
+put the addend elsewhere. It also holds the reverse: `MULL`, `SLLI64`,
+`SRAI64`, `SRLI64` declare a tie the database does not have.
 
-Treat the count as a standing hazard, not a fixed list: it should only ever
+Treat every count as a standing hazard, not a fixed list: they should only ever
 shrink, and any new mismatch is a new place the encoder can read the wrong
 operand.
+
+#### Six of them are the database contradicting itself
+
+`FMULA32S_{HH,LH,LL}` and `FMULS32S_{HH,LH,LL}` have a Behavior that plainly
+accumulates —
+
+```
+rtd = SATQ1.63(rtdQ1.63 + SATQ1.63(rsd1[63:32]Q1.31 * rsd2[63:32]Q1.31))
+```
+
+— while their `DR_Read_Port` lists only `rsd1, rsd2`. **The port list is
+wrong, not the logical**, which declares the tie correctly; the generator
+trusts the ports and therefore drops it, and the 30 placements land in `arity`.
+
+Same class as § 5.3's 16 instructions: a disagreement *between* two statements
+the database makes about itself, which only a cross-check can see. Neither
+`--check` nor the round trip looks at `Behavior` at all. A `Behavior`-against-
+ports sweep is the natural next gate and is how these six were found.
 
 Note what did **not** catch this: `--emit roundtrip` never sees the logical at
 all, `--check` only validates the database against itself, and the encoder and
