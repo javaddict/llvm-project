@@ -17,6 +17,7 @@
 #include "HaydnPreRASchedStrategy.h"
 #include "HaydnResourceCycle.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
+#include "HaydnTestMCInstrInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrDesc.h"
@@ -32,7 +33,7 @@ using namespace llvm::haydn::bundle;
 namespace {
 
 TEST(HaydnBundleTest, EmptyAcceptsAny) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   EXPECT_TRUE(B.empty());
   EXPECT_TRUE(B.canAdd(Haydn::ADD32));
@@ -41,7 +42,7 @@ TEST(HaydnBundleTest, EmptyAcceptsAny) {
 
 TEST(HaydnBundleTest, DisjointSlotsFit) {
   // ST32 is S0-only; ADD64 is S1|S2. Disjoint → both fit.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst St32, Add64;
   St32.setOpcode(Haydn::S_SW_WITH_IMM);
@@ -61,7 +62,7 @@ TEST(HaydnBundleTest, SameSlotConflicts) {
   // ADD32 is multi-slot (alts-derived getLegalSlots / PlacementAlternative
   // FieldSlots S0|S1|S2). Three copies fill every slot; a fourth must be
   // rejected (format/slot saturation).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst A[4];
   for (int I = 0; I < 3; ++I) {
@@ -79,7 +80,7 @@ TEST(HaydnBundleTest, SameSlotConflicts) {
 // Encode-time pack: four multi-slot ALU ops cannot all fit (issue/slot
 // saturation). Three can fill Bundle128.
 TEST(HaydnBundleTest, ExhaustiveThreeSlotFillRejectsFourth) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst Ops[4];
   for (int I = 0; I < 3; ++I) {
@@ -95,7 +96,7 @@ TEST(HaydnBundleTest, ExhaustiveThreeSlotFillRejectsFourth) {
 TEST(HaydnBundleTest, MultiSlotOpPicksFirstFree) {
   // NOT32 is legal in S0|S1|S2. pickSlot prefers higher slots first (S2→S1→S0)
   // so flexible ALU leaves S0 free for loads (HaydnBundle.h).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst Not;
   Not.setOpcode(Haydn::NOT32);
@@ -118,7 +119,7 @@ TEST(HaydnBundleTest, MultiSlotOpPicksFirstFree) {
 }
 
 TEST(HaydnBundleTest, ClearResets) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst A;
   A.setOpcode(Haydn::ADD32);
@@ -135,7 +136,7 @@ TEST(HaydnBundleTest, ClearResets) {
 // on S0|S1|S2 — three reserves fill the cycle; a fourth must return false so
 // ResMII can grow above 1. Truly empty (OccupiedSlots==0) still accepts.
 TEST(HaydnBundleTest, ReserveByOpcodeRejectsSaturatedSlot) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   EXPECT_TRUE(B.empty());
   EXPECT_EQ(B.getOccupiedSlots(), 0u);
@@ -169,7 +170,7 @@ TEST(HaydnBundleTest, ReserveByOpcodeRejectsSaturatedSlot) {
 TEST(HaydnBundleTest, LoadAndMacDisjointPack) {
   // Classic DSP cycle: LD32 (S0|S1) + X2MULA32 (S1|S2) must co-issue.
   // Prefer-S2 MAC + prefer-S2-first ALU leave a free low slot for the load.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst Ld, Mac;
   Ld.setOpcode(Haydn::S_LW_WITH_IMM);
@@ -190,7 +191,7 @@ TEST(HaydnBundleTest, LoadAndMacDisjointPack) {
 
 TEST(HaydnBundleTest, StoreThenTwoAluFillsBundle) {
   // ST32 is S0-only; two multi-slot ALUs take S2 then S1 → full cycle.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst St, A, X;
   St.setOpcode(Haydn::S_SW_WITH_IMM);
@@ -210,7 +211,7 @@ TEST(HaydnBundleTest, StoreThenTwoAluFillsBundle) {
 
 TEST(HaydnBundleTest, TwoS0OnlyOpsConflict) {
   // Two ST32 cannot share a cycle (both S0-only).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst St0, St1;
   St0.setOpcode(Haydn::S_SW_WITH_IMM);
@@ -221,7 +222,7 @@ TEST(HaydnBundleTest, TwoS0OnlyOpsConflict) {
 
 TEST(HaydnBundleTest, DualLoadCanShareCycle) {
   // LD32 is S0|S1 — two loads must pack (dual-load product).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst L0, L1;
   L0.setOpcode(Haydn::S_LW_WITH_IMM);
@@ -232,15 +233,21 @@ TEST(HaydnBundleTest, DualLoadCanShareCycle) {
       << B.getOccupiedSlots();
   B.add(&L1);
   EXPECT_EQ(B.size(), 2u);
+  // P30|P32, not P30|P31. Both loads want a load unit and there are exactly
+  // two, LOADSTORE0 and LOAD1; P31's load member is LOAD1, which the first
+  // load already took, so the solver moves the second to P32. Packing on
+  // slots alone would have taken P31 and built a bundle naming LOAD1 twice,
+  // which the hardware cannot issue — that is the defect a9fbb2b69207 fixed
+  // and the occupancy it produced (FORMAT-E-SWITCH-PLAN.md 5.7).
   EXPECT_EQ(B.getOccupiedSlots(),
-            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P32));
   EXPECT_TRUE(B.hasValidFormat());
 }
 
 TEST(HaydnBundleTest, HintSlotHonoredWhenFreeAndLegal) {
   // add(Instr, HintSlot): when S0 is free and legal for ADD32, place there
   // even though first-fit prefers S2. MC encoder / .sN path uses this.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst A;
   A.setOpcode(Haydn::ADD32);
@@ -253,7 +260,7 @@ TEST(HaydnBundleTest, HintSlotHonoredWhenFreeAndLegal) {
 
 TEST(HaydnBundleTest, HintSlotFallsBackWhenOccupied) {
   // Hint S2 after S2 is taken → fall back to first free legal (S1).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst A, X;
   A.setOpcode(Haydn::ADD32);
@@ -269,7 +276,7 @@ TEST(HaydnBundleTest, HintSlotFallsBackWhenOccupied) {
 
 TEST(HaydnBundleTest, HintIllegalSlotFallsBack) {
   // ST32 is not legal on S2; hint S2 must fall back to S0.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst St;
   St.setOpcode(Haydn::S_SW_WITH_IMM);
@@ -282,7 +289,7 @@ TEST(HaydnBundleTest, HintIllegalSlotFallsBack) {
 TEST(HaydnBundleTest, CanAddAgreesWithAddOnSaturation) {
   // Contract: canAdd false ⇒ must not add. After full fill, all common
   // multi-slot ops reject.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst Ops[3];
   Ops[0].setOpcode(Haydn::ADD32);
@@ -301,7 +308,7 @@ TEST(HaydnBundleTest, CanAddAgreesWithAddOnSaturation) {
 
 TEST(HaydnBundleTest, ReserveThenAddSharesOccupancy) {
   // SMS reserve + later real add must see the same OccupiedSlots budget.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   B.reserveByOpcode(Haydn::S_SW_WITH_IMM); // claims S0 without Instrs
   EXPECT_TRUE(B.empty());
@@ -318,7 +325,7 @@ TEST(HaydnBundleTest, ReserveThenAddSharesOccupancy) {
 
 TEST(HaydnBundleTest, Alu64CannotPairWithTwoS0Only) {
   // ADD64 is S1|S2 only; one ST32 (S0) + ADD64 is legal; second ST32 is not.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst St, Add64;
   St.setOpcode(Haydn::S_SW_WITH_IMM);
@@ -331,7 +338,7 @@ TEST(HaydnBundleTest, Alu64CannotPairWithTwoS0Only) {
 }
 
 TEST(HaydnBundleTest, ClearAllowsRepack) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst A, B0;
   A.setOpcode(Haydn::ADD32);
@@ -354,7 +361,7 @@ TEST(HaydnBundleTest, ClearAllowsRepack) {
 TEST(HaydnBundleTest, PreferHighSlotsLeavesS0ForLoad) {
   // Product rationale (HaydnBundle.h): multi-slot ALU prefers S2 so LD can
   // take S0. Pin that ADD32 alone lands on S2, then LD32 still fits.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst Alu, Ld;
   Alu.setOpcode(Haydn::ADD32);
@@ -372,7 +379,7 @@ TEST(HaydnBundleTest, PreferHighSlotsLeavesS0ForLoad) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleTest, LoadMacAluClassicDspFill) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst Ld, Mac, Alu;
   Ld.setOpcode(Haydn::S_LW_WITH_IMM);
@@ -392,7 +399,7 @@ TEST(HaydnBundleTest, LoadMacAluClassicDspFill) {
 }
 
 TEST(HaydnBundleTest, DualMacFillsS1S2) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst M0, M1;
   M0.setOpcode(Haydn::X2MULA32);
@@ -412,8 +419,13 @@ TEST(HaydnBundleTest, DualMacFillsS1S2) {
             SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
 }
 
-TEST(HaydnBundleTest, DualAlu64ThenRejectThird) {
-  HaydnMCFormats Fmts;
+// Bundle128 had two ALU64 slots, so this used to be "dual then reject the
+// third". Format E has three ALUs, and ADD64/SLL64/MAX64 each carry members on
+// ALU0, ALU1 and ALU2, so all three now fit — and the bundle is then full at
+// three entries, which is why the store is rejected rather than accepted.
+// The rejection has moved from the unit axis to the slot axis.
+TEST(HaydnBundleTest, TripleAlu64FillsTheBundle) {
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst A, S;
   A.setOpcode(Haydn::ADD64);
@@ -421,13 +433,17 @@ TEST(HaydnBundleTest, DualAlu64ThenRejectThird) {
   B.add(&A);
   ASSERT_TRUE(B.canAdd(S.getOpcode()));
   B.add(&S);
-  EXPECT_FALSE(B.canAdd(Haydn::MAX64));
-  // S0 still free for ST.
-  EXPECT_TRUE(B.canAdd(Haydn::S_SW_WITH_IMM));
+  MCInst M;
+  M.setOpcode(Haydn::MAX64);
+  ASSERT_TRUE(B.canAdd(M.getOpcode())) << "three ALUs, three ALU64 ops";
+  B.add(&M);
+  EXPECT_EQ(B.size(), 3u);
+  // Three entries is the whole bundle: there is no 4-entry form.
+  EXPECT_FALSE(B.canAdd(Haydn::S_SW_WITH_IMM));
 }
 
 TEST(HaydnBundleTest, DualLoadThenRejectThirdLoad) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst L0, L1, L2;
   L0.setOpcode(Haydn::S_LW_WITH_IMM);
@@ -443,7 +459,7 @@ TEST(HaydnBundleTest, DualLoadThenRejectThirdLoad) {
 }
 
 TEST(HaydnBundleTest, HintS1OnSecondLoad) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst L0, L1;
   L0.setOpcode(Haydn::S_LW_WITH_IMM);
@@ -459,7 +475,7 @@ TEST(HaydnBundleTest, HintS1OnSecondLoad) {
 
 TEST(HaydnBundleTest, ReserveByOpcodeSaturatesLikeAdd) {
   // SMS path: three ADD32 reserves == three adds for occupancy.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> ByAdd(&Fmts), ByRes(&Fmts);
   MCInst Ops[3];
   for (int I = 0; I < 3; ++I) {
@@ -476,7 +492,7 @@ TEST(HaydnBundleTest, ReserveByOpcodeSaturatesLikeAdd) {
 
 TEST(HaydnBundleTest, AllSingleSlotCombosHaveValidFormat) {
   // Any subset occupancy after packing real ops must remain format-valid.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const unsigned Seeds[] = {Haydn::S_SW_WITH_IMM, Haydn::ADD32, Haydn::ADD64,
                             Haydn::S_LW_WITH_IMM,  Haydn::X2MULA32};
   for (unsigned Opc : Seeds) {
@@ -491,7 +507,7 @@ TEST(HaydnBundleTest, AllSingleSlotCombosHaveValidFormat) {
 }
 
 TEST(HaydnBundleTest, CanAddFalseNeverAcceptsOnFullBundle) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst Ops[3];
   for (int I = 0; I < 3; ++I) {
@@ -510,7 +526,7 @@ TEST(HaydnBundleTest, CanAddFalseNeverAcceptsOnFullBundle) {
 
 TEST(HaydnBundleTest, B24_AltsBearingUsesTryAddOrder) {
   // Alts-bearing ADD32 must prefer S2 via tryAdd (not getLegalSlots S0-first).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   ASSERT_TRUE(hasPlacementAlternatives(Fmts, Haydn::ADD32));
   Bundle<MCInst> B(&Fmts);
   MCInst A;
@@ -523,7 +539,7 @@ TEST(HaydnBundleTest, B24_AltsBearingUsesTryAddOrder) {
 
 TEST(HaydnBundleTest, B24_BundleOccupancyMatchesSolver) {
   // Adapter contract: sequential Bundle.add occupancy == pure tryAddProduct.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   haydn::bundle::CycleState S = haydn::bundle::makeProductCycleState();
   MCInst Ops[3];
@@ -542,7 +558,7 @@ TEST(HaydnBundleTest, B24_BundleOccupancyMatchesSolver) {
 
 TEST(HaydnBundleTest, B24_EmptyStandaloneEscapeRetained) {
   // AIE AIEBundle.h:71-73: truly empty still accepts (SMS ResMII escape).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   EXPECT_TRUE(B.empty());
   EXPECT_EQ(B.getOccupiedSlots(), 0u);
@@ -561,7 +577,7 @@ TEST(HaydnBundleTest, B25_NoAltOpcodeDoesNotUseFlexMapPick) {
   // Opcode 0 (PHI-ish) has no PlacementAlternatives and no sparse alt row
   // (getLegalSlots == 0). Bundle/HR alts-only pickSlot must not invent a
   // placement: empty escape still accepts; non-empty rejects.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   EXPECT_FALSE(hasPlacementAlternatives(Fmts, /*Opcode=*/0));
   EXPECT_EQ(Fmts.getLegalSlots(0), 0u);
 
@@ -578,7 +594,7 @@ TEST(HaydnBundleTest, B25_NoAltOpcodeDoesNotUseFlexMapPick) {
 }
 
 TEST(HaydnBundleTest, B25_AltsBearingUnchangedTryAdd) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
   MCInst A, L;
   A.setOpcode(Haydn::ADD32);
@@ -598,7 +614,7 @@ TEST(HaydnBundleTest, B25_AltsBearingUnchangedTryAdd) {
 // FormatID or setDesc (plan §7.1).
 
 TEST(HaydnBundleTest, B41_GetFeasibleFormatMaskAfterAddAndReserve) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   Bundle<MCInst> B(&Fmts);
 
   // Empty: Full frontier.
