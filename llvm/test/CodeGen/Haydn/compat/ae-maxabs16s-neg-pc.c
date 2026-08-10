@@ -35,6 +35,10 @@ _Static_assert(HAYDN_COMPAT_TIER_AE_LA32X2NEG_PC == HAYDN_COMPAT_EXACT,
                "NEG_PC exact PLDWWUA");
 _Static_assert(HAYDN_COMPAT_TIER_AE_ADD64X2_ == HAYDN_COMPAT_UNSUPPORTED,
                "ADD64X2_ permanent unsupported");
+_Static_assert(HAYDN_COMPAT_TIER_AE_SA64POS_FP == HAYDN_COMPAT_EMULATED,
+               "SA64POS_FP store-finish dir0");
+_Static_assert(HAYDN_COMPAT_TIER_AE_SA64NEG_FP == HAYDN_COMPAT_EMULATED,
+               "SA64NEG_FP store-finish dir1");
 _Static_assert(__HAYDN_AE_COMPAT_STRICT == 1, "strict default");
 
 // 2-arg: max(acc, sat_abs(val)) per 16-bit lane.
@@ -88,4 +92,15 @@ void la16x4neg_pc_seeds_pldwwua(ae_valign *al, const ae_int16x4 *ptr) {
 // ASM: pldwwua
 void la32x2pos_pc_seeds_pldwwua(ae_valign *al, const ae_int32x2 *ptr) {
   AE_LA32X2POS_PC(*al, ptr);
+}
+
+// Dual-24 F24 POS seed: same PLDWWUA path as base POS (probe-only law).
+// IR-LABEL: @la32x2f24pos_pc_seeds_pldwwua
+// IR: call void @llvm.haydn.pldwwua
+// IR-NOT: predec
+// ASM-LABEL: la32x2f24pos_pc_seeds_pldwwua:
+// ASM: pldwwua
+// ASM-NOT: predec
+void la32x2f24pos_pc_seeds_pldwwua(ae_valign *al, const ae_f24x2 *ptr) {
+  AE_LA32X2F24POS_PC(*al, ptr);
 }

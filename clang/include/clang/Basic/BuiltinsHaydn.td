@@ -19,8 +19,10 @@ include "clang/Basic/BuiltinsBase.td"
 //
 // Fields used by:
 //   -gen-clang-builtins          → BuiltinsHaydn.inc  (Spellings, Prototype)
-//   -gen-haydn-intrin-header     → haydn.h     (Public*, Mnemonic, …)
-//   -gen-haydn-op-manifest       → haydn_op_manifest.inc (public-op contract)
+//   -gen-haydn-intrin-header     → haydn.h     (Public*, Mnemonic, …
+//                                               + HAYDN_COMPAT_TIER_AE_* )
+//   -gen-haydn-op-manifest       → haydn_op_manifest.inc (public-op contract
+//                                               + HAYDN_AE_COMPAT tier rows)
 //   -gen-haydn-op-closure-probe  → exhaustive PublicEnabled C probe
 //   -gen-haydn-op-imm-audit      → exhaustive Imm non-ICE + range Sema
 //   -gen-haydn-op-feature-audit  → exhaustive Features-gate Sema
@@ -4943,3 +4945,787 @@ def s_sw_with_reg : HaydnBuiltin<"void(int, void*, int)"> {
   let Semantics = "Golden LS S_SW_WITH_REG.";
 }
 } // Golden LS Attributes = [NoThrow], Effect = Mem
+
+//===----------------------------------------------------------------------===//
+// AE_* NatureDSP compatibility tier taxonomy
+//
+// Single source for public AE_ tier + lowering. HaydnIntrinEmitter emits:
+//   - HAYDN_COMPAT_TIER_* macros into haydn.h
+//   - HAYDN_AE_ORACLE_* macros for value/object oracle IDs
+//   - HAYDN_AE_COMPAT rows into haydn_op_manifest.inc
+// Fail-closed: every public AE_* in haydn_dsp.h must have a HaydnAeCompat
+// record; CI rejects untagged macros and EXACT width-mismatched lowerings.
+// CompatTier: EXACT | EMULATED | UNSUPPORTED
+// CompatLowering: typed native/composite recipe (no FormatID/slot/AltDesc).
+// EXACT recipes must not be placeholder tokens (header/c-op/overload/ae_alias).
+//===----------------------------------------------------------------------===//
+
+class HaydnAeCompat {
+  // EXACT | EMULATED | UNSUPPORTED (native haydn.h surface is HAYDN_COMPAT_NATIVE).
+  string CompatTier;
+  // Lowering recipe for CI/audit (e.g. "haydn_x4abs16s+haydn_x4max16").
+  string CompatLowering = "";
+  // Declaration kind on the public surface: macro | inline | alias | overload.
+  string DeclKind = "";
+  // Independent value/object oracle id (empty when no oracle is registered).
+  string OracleId = "";
+  // Store/UA direction ImmArg: -1 none, 0 positive, 1 negative.
+  int DirImm = -1;
+  // Soft TU-local state (SAR/CBR) or memory effect flags for AE2 generation.
+  bit SoftState = 0;
+  bit MemEffect = 0;
+}
+
+class HaydnAeCompatDef<string tier, string lowering = ""> : HaydnAeCompat {
+  let CompatTier = tier;
+  let CompatLowering = lowering;
+}
+
+// --- UNSUPPORTED ---
+def AE_ADD64X2_ : HaydnAeCompatDef<"UNSUPPORTED", "none">;
+def AE_ADD64X2_vector : HaydnAeCompatDef<"UNSUPPORTED", "none">;
+
+// --- EMULATED ---
+def AE_L32X2_IP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_S32X2_IP : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t">;
+def AE_L32X2_I : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S32X2_I : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_L32X2_XP : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S32X2_XP : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L32X2_X : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S32X2_X : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_L16X4_IP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_L16X4_I : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L16X4_XP : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L16X4_X : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S16X4_IP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_L32_IP : HaydnAeCompatDef<"EMULATED", "haydn_l32">;
+def AE_L32_XP : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S32_L_IP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_L16_XC : HaydnAeCompatDef<"EMULATED", "haydn_cbr_step">;
+def AE_LA64_PP : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_LA64_PP_AR : HaydnAeCompatDef<"EMULATED", "haydn_ae_la64_pp_ar">;
+def AE_ZALIGN64 : HaydnAeCompatDef<"EMULATED", "haydn_ae_zalign64">;
+def AE_ZALIGN64_AR : HaydnAeCompatDef<"EMULATED", "haydn_ae_zalign64_ar">;
+// Store-finish residual: same haydn_ae_sa64pos intrinsic; direction is the
+// ImmArg (POS dir=0 / NEG dir=1). Unlike LA*NEG_PC seed (direction-agnostic
+// PLDWWUA), SA64NEG must not silent-alias POS dir=0.
+def AE_SA64POS_FP : HaydnAeCompatDef<"EMULATED", "haydn_ae_sa64pos+dir0"> {
+  let DeclKind = "macro";
+  let OracleId = "ae0.sa64pos_fp";
+  let DirImm = 0;
+  let MemEffect = 1;
+}
+def AE_SA64POS : HaydnAeCompatDef<"EMULATED", "haydn_ae_sa64pos+dir0"> {
+  let DeclKind = "alias";
+  let OracleId = "ae0.sa64pos_fp";
+  let DirImm = 0;
+  let MemEffect = 1;
+}
+def AE_SA64NEG_FP : HaydnAeCompatDef<"EMULATED", "haydn_ae_sa64pos+dir1"> {
+  let DeclKind = "macro";
+  let OracleId = "ae0.sa64neg_fp";
+  let DirImm = 1;
+  let MemEffect = 1;
+}
+def AE_LA16X4_IP : HaydnAeCompatDef<"EMULATED", "haydn_ae_la16x4_step">;
+def AE_LA32X2_IP : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t+haydn_ae_la64_step+haydn_ae_f32x2_mem_to_reg">;
+def AE_LA64_IP : HaydnAeCompatDef<"EMULATED", "haydn_ae_la64_step">;
+def AE_SA16X4_IP : HaydnAeCompatDef<"EMULATED", "haydn_ae_sa16x4_step">;
+def AE_SA32X2_IP : HaydnAeCompatDef<"EMULATED", "haydn_ae_sa64_step">;
+def AE_SA64_IP : HaydnAeCompatDef<"EMULATED", "haydn_ae_sa64_step">;
+def AE_SA16X4_IP_X : HaydnAeCompatDef<"EMULATED", "haydn_ae_sa16x4_step">;
+def AE_SA32X2_IP_X : HaydnAeCompatDef<"EMULATED", "haydn_ae_sa64_step">;
+// Reverse unaligned post-inc residual: UA step dir=1 (must not silent-alias
+// forward IP dir=0). Peers of aligned L/S RIP EXACT class.
+def AE_LA16X4_RIP : HaydnAeCompatDef<"EXACT", "haydn_ae_la16x4_step">;
+def AE_LA32X2_RIP : HaydnAeCompatDef<"EXACT", "haydn_ae_la64_step">;
+def AE_SA16X4_RIP : HaydnAeCompatDef<"EXACT", "haydn_ae_sa16x4_step">;
+def AE_SA32X2_RIP : HaydnAeCompatDef<"EXACT", "haydn_ae_sa64_step">;
+// Exact unaligned circular residual: AR step + soft CBR wrap (same path as
+// dual-24 LA32X2F24_IC / LA24X2_IC). Not plain mem; not aligned D_LDW_CB alone.
+def AE_LA16X4_IC : HaydnAeCompatDef<"EXACT", "haydn_ae_la16x4_step+haydn_cbr_step">;
+def AE_LA32X2_IC : HaydnAeCompatDef<"EXACT", "haydn_ae_la64_step+haydn_cbr_step">;
+def AE_ADDBRBA32 : HaydnAeCompatDef<"EMULATED", "haydn_addbrba32">;
+def AE_L32_BREV_IP : HaydnAeCompatDef<"EMULATED", "haydn_sld_t+haydn_lw_brev_imm">;
+def AE_L32X2_BREV_IP : HaydnAeCompatDef<"EMULATED", "haydn_cb_ld_t+haydn_ldw_brev_imm+__haydn_i64_as_v2+haydn_dr64_t">;
+def AE_ADD64 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_INT16X4_NEG : HaydnAeCompatDef<"EMULATED", "haydn_x4sub16">;
+def AE_SAT16X4 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_CVT16X4_1ARG : HaydnAeCompatDef<"EMULATED", "haydn_x4sat32t16"> {
+  let DeclKind = "macro";
+  let OracleId = "ae0.cvt16x4_1arg";
+}
+def AE_CVT16X4 : HaydnAeCompatDef<"EMULATED", "haydn_x4sat32t16"> {
+  let DeclKind = "overload";
+  let OracleId = "ae0.cvt16x4";
+}
+def AE_TRUNC16X4F32 : HaydnAeCompatDef<"EMULATED", "haydn_x4sat32t16">;
+def AE_SLAS32S : HaydnAeCompatDef<"EMULATED", "__ae_slaa32s+haydn_ae_sar">;
+def AE_SAR : HaydnAeCompatDef<"EMULATED", "haydn_ae_sar"> {
+  let SoftState = 1;
+}
+// Exact dual ASR peer of AE_F24X2_SRAI / AE_SRAI24 (native X2SRA32).
+def AE_F32X2_SRAI : HaydnAeCompatDef<"EXACT", "haydn_x2sra32">;
+def AE_TRUNCI32X2F64S : HaydnAeCompatDef<"EMULATED", "AE_ROUND32X2F48S">;
+def AE_ROUND32X2F64SASYM : HaydnAeCompatDef<"EMULATED", "AE_ROUND32X2F48S">;
+def AE_CVTQ56A32S : HaydnAeCompatDef<"EMULATED", "sext32_shl16"> {
+  let DeclKind = "macro";
+  let OracleId = "ae0.cvtq56a32s";
+}
+def AE_CVTQ48A32S : HaydnAeCompatDef<"EMULATED", "haydn_packsr32">;
+def AE_TRUNCA32X2F64S : HaydnAeCompatDef<"EMULATED", "haydn_satsr64+pack_u32x2"> {
+  let DeclKind = "inline";
+  let OracleId = "ae0.trunca32x2f64s";
+}
+// Public static-inline AE_* surface (typed AE1 inventory).
+def AE_ABS16S_vector : HaydnAeCompatDef<"EMULATED", "haydn_x4abs16s+haydn_mul64_uu_ull">;
+def AE_ABS32S : HaydnAeCompatDef<"EMULATED", "haydn_x2abs32s+haydn_abs64s+haydn_abs64+haydn_x4sat32t16">;
+def AE_ABS64 : HaydnAeCompatDef<"EMULATED", "haydn_abs64+haydn_x4sat32t16">;
+def AE_ABS64S : HaydnAeCompatDef<"EMULATED", "haydn_abs64s+haydn_abs64+haydn_x4sat32t16">;
+def AE_ADD16 : HaydnAeCompatDef<"EMULATED", "haydn_x4add16+haydn_x4sub16+haydn_add64s+haydn_x2neg32s">;
+def AE_ADD16S : HaydnAeCompatDef<"EMULATED", "haydn_x4add16s+haydn_x4sub16s+haydn_x2addsub32s+haydn_x2subadd32s">;
+def AE_ADD32 : HaydnAeCompatDef<"EMULATED", "haydn_x2add32+haydn_x2sub32+haydn_x4add16+haydn_x4sub16">;
+def AE_ADD32S : HaydnAeCompatDef<"EMULATED", "haydn_x2add32s+haydn_x2sub32s+haydn_x4add16s+haydn_x4sub16s">;
+def AE_ADD64S : HaydnAeCompatDef<"EMULATED", "haydn_add64s+haydn_x2neg32s+haydn_x4sub16s+haydn_x4sub16">;
+def AE_ADDSUB32S : HaydnAeCompatDef<"EMULATED", "haydn_x2addsub32s+haydn_x2subadd32s+haydn_x2add32+haydn_x2sub32">;
+def AE_CALCRNG3_1arg : HaydnAeCompatDef<"EMULATED", "haydn_bfp_shift+haydn_nsa64+haydn_mul64_ss_ll+haydn_mul64_ss_hh">;
+def AE_CONJ16S : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_CONJ32S : HaydnAeCompatDef<"EMULATED", "haydn_x2addsub32s+haydn_x4addsub16s">;
+def AE_CVT32X2F16_10 : HaydnAeCompatDef<"EMULATED", "haydn_x2sel32_lh+haydn_x2sel32_hh">;
+def AE_CVT32X2F16_32 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_DIV64D32REM_HL : HaydnAeCompatDef<"EMULATED", "haydn_recip_q31+haydn_recip">;
+def AE_DIV64D32_H : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_DIV64D32_L : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_FIR_OUT16_SAT : HaydnAeCompatDef<"EMULATED", "haydn_satsr64">;
+def AE_INT16X4_RADD : HaydnAeCompatDef<"EMULATED", "haydn_x2abs32s+haydn_x2add32s+haydn_x2neg32s">;
+def AE_INT32X2_ABS32S : HaydnAeCompatDef<"EMULATED", "haydn_x2abs32s+haydn_x2add32s+haydn_x2neg32s">;
+def AE_MAXABS32S : HaydnAeCompatDef<"EMULATED", "haydn_maxabs32s+haydn_x2hadd32_h+haydn_x2hadd32_l+haydn_x4hadd16_h">;
+def AE_MOVDA32X2 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MUL16JS : HaydnAeCompatDef<"EMULATED", "haydn_fmulaa16_hs_33_22+haydn_mula64_ss_ll+haydn_mul64_ss_hh">;
+def AE_MULAFD24X2_FIR_H_4A : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MULAFD24X2_FIR_H_5A : HaydnAeCompatDef<"EMULATED", "haydn_ff2mula32rs_ll+haydn_ff2mula32rs_hh">;
+def AE_MULAFQ16X2_FIR_1_4A : HaydnAeCompatDef<"EMULATED", "haydn_mulafq16x2_fir_1+haydn_mulfq16x2_fir_3">;
+def AE_MULAFQ16X2_FIR_1_5A : HaydnAeCompatDef<"EMULATED", "haydn_mulafq16x2_fir_1">;
+def AE_MULAFQ16X2_FIR_3_4A : HaydnAeCompatDef<"EMULATED", "haydn_mulafq16x2_fir_3+haydn_mulafq16x2_fir_1">;
+def AE_MULAFQ16X2_FIR_3_5A : HaydnAeCompatDef<"EMULATED", "haydn_mulafq16x2_fir_3">;
+def AE_MULASFD32X16_H1_L0 : HaydnAeCompatDef<"EMULATED", "haydn_f2mulss32rs_hhll">;
+def AE_MULASFD32X16_H3_L2 : HaydnAeCompatDef<"EMULATED", "haydn_f2mulss32rs_hhll+haydn_fmul32s_hh">;
+def AE_MULFD24X2_FIR_H_4A : HaydnAeCompatDef<"EMULATED", "haydn_ff2mula32rs_ll+haydn_ff2mula32rs_hh">;
+def AE_MULFD24X2_FIR_H_5A : HaydnAeCompatDef<"EMULATED", "haydn_ff2mula32rs_ll+haydn_ff2mula32rs_hh">;
+def AE_MULFQ16X2_FIR_1_4A : HaydnAeCompatDef<"EMULATED", "haydn_mulfq16x2_fir_1+haydn_mulafd32x16x2_fir_hh">;
+def AE_MULFQ16X2_FIR_1_5A : HaydnAeCompatDef<"EMULATED", "haydn_mulfq16x2_fir_1">;
+def AE_MULFQ16X2_FIR_3_4A : HaydnAeCompatDef<"EMULATED", "haydn_mulfq16x2_fir_3+haydn_mulfq16x2_fir_1">;
+def AE_MULFQ16X2_FIR_3_5A : HaydnAeCompatDef<"EMULATED", "haydn_mulfq16x2_fir_3">;
+def AE_MULP32X2 : HaydnAeCompatDef<"EMULATED", "haydn_dpair_t+haydn_x2mul32+haydn_x2fcmul32rs+haydn_x2fcmul32rss">;
+def AE_MULZAAFD32X16_H2_L3_2A : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl">;
+def AE_MULZAAFD32X16_H2_L3_3A : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl">;
+def AE_MULZAAFD32X16_H3_L2_2A : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hh">;
+def AE_MULZAAFD32X16_H3_L2_3A : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hh">;
+def AE_MULZASFD32X16_H3_L2_2A : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hh+haydn_mulafd32x16x2_fir_hl">;
+def AE_MULZASFD32X16_H3_L2_3A : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hh+haydn_mulafd32x16x2_fir_hl">;
+def AE_NEG16S : HaydnAeCompatDef<"EMULATED", "haydn_x4sub16s+haydn_x4sub16+haydn_x2abs32s+haydn_abs64s">;
+def AE_NEG32S : HaydnAeCompatDef<"EMULATED", "haydn_x2neg32s+haydn_x4sub16s+haydn_x4sub16+haydn_x2abs32s">;
+def AE_ROUND32X2F48S : HaydnAeCompatDef<"EMULATED", "haydn_packsr32x2_hh+haydn_satsr64">;
+def AE_SEL16 : HaydnAeCompatDef<"EMULATED", "haydn_x4sel16+haydn_x4seli16">;
+def AE_SLAI64 : HaydnAeCompatDef<"EMULATED", "haydn_sll64+haydn_sra64+haydn_srl64+haydn_x2sra32">;
+def AE_SLLA16X4 : HaydnAeCompatDef<"EMULATED", "haydn_x4sll16+haydn_x4sra16+haydn_x4srl16+haydn_slli64">;
+def AE_SLLA32 : HaydnAeCompatDef<"EMULATED", "haydn_x2sll32+haydn_x2sra32+haydn_x2srl32">;
+def AE_SLLI16X4 : HaydnAeCompatDef<"EMULATED", "haydn_x4sll16+haydn_x4sra16+haydn_x4srl16+haydn_slli64">;
+def AE_SLLI32 : HaydnAeCompatDef<"EMULATED", "haydn_x2sll32+haydn_x2sra32+haydn_x2srl32+haydn_x4sll16">;
+def AE_SRAA16RS : HaydnAeCompatDef<"EMULATED", "haydn_x4sra16r+haydn_x2sra32+haydn_packsr32x2_hh">;
+def AE_SRAA16X4 : HaydnAeCompatDef<"EMULATED", "haydn_x4sra16+haydn_x4srl16+haydn_x4sll16+haydn_slli64">;
+def AE_SRAA32 : HaydnAeCompatDef<"EMULATED", "haydn_x2sra32+haydn_x2srl32+haydn_x2sll32+haydn_x4sll16">;
+def AE_SRAA32RS : HaydnAeCompatDef<"EMULATED", "haydn_x2sra32r+haydn_x4sra16r+haydn_x2sra32+haydn_packsr32x2_hh">;
+def AE_SRAI16X4 : HaydnAeCompatDef<"EMULATED", "haydn_x4sra16+haydn_x4srl16+haydn_slli64+haydn_sll64">;
+def AE_SRAI32 : HaydnAeCompatDef<"EMULATED", "haydn_x2sra32+haydn_x2srl32+haydn_x4sll16+haydn_x4sra16">;
+def AE_SRAI64 : HaydnAeCompatDef<"EMULATED", "haydn_sra64+haydn_srl64+haydn_x2sra32+haydn_ae_sar">;
+def AE_SRLA16X4 : HaydnAeCompatDef<"EMULATED", "haydn_x4srl16+haydn_x4sll16+haydn_x4sra16+haydn_slli64">;
+def AE_SRLA32 : HaydnAeCompatDef<"EMULATED", "haydn_x2srl32+haydn_x2sll32+haydn_x2sra32+haydn_x4sll16">;
+def AE_SRLI16X4 : HaydnAeCompatDef<"EMULATED", "haydn_x4srl16+haydn_slli64+haydn_sll64+haydn_sra64">;
+def AE_SRLI32 : HaydnAeCompatDef<"EMULATED", "haydn_x2srl32+haydn_x4sll16+haydn_x4sra16+haydn_x4srl16">;
+def AE_SRLI64 : HaydnAeCompatDef<"EMULATED", "haydn_srl64+haydn_x2sra32+haydn_ae_sar+haydn_x2sll32">;
+def AE_SUB16 : HaydnAeCompatDef<"EMULATED", "haydn_x4sub16+haydn_add64s+haydn_x2neg32s+haydn_x4sub16s">;
+def AE_SUB16S : HaydnAeCompatDef<"EMULATED", "haydn_x4sub16s+haydn_x2addsub32s+haydn_x2subadd32s+haydn_x2add32">;
+def AE_SUB32 : HaydnAeCompatDef<"EMULATED", "haydn_x2sub32+haydn_x4add16+haydn_x4sub16+haydn_add64s">;
+def AE_SUB32S : HaydnAeCompatDef<"EMULATED", "haydn_x2sub32s+haydn_x4add16s+haydn_x4sub16s+haydn_x2addsub32s">;
+def AE_SUBADD32S : HaydnAeCompatDef<"EMULATED", "haydn_x2subadd32s+haydn_x2add32+haydn_x2sub32+haydn_x4add16">;
+def AE_TRUNCA16P24S_H : HaydnAeCompatDef<"EMULATED", "haydn_movad32_high+haydn_satsr64">;
+
+// Exact lane-pack peers of AE_SELP24_* / AE_SEL24_* (native X2SEL32).
+def AE_SEL32_LH : HaydnAeCompatDef<"EXACT", "haydn_x2sel32_lh">;
+def AE_SEL32_HH : HaydnAeCompatDef<"EXACT", "haydn_x2sel32_hh">;
+def AE_SEL32_LL : HaydnAeCompatDef<"EXACT", "haydn_x2sel32_ll">;
+def AE_SEL32_HL : HaydnAeCompatDef<"EXACT", "haydn_x2sel32_hl">;
+def AE_SHORTSWAP : HaydnAeCompatDef<"EMULATED", "haydn_x4seli16">;
+def AE_MOVDA32 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MOVDA16 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MOVINT32X2_FROMINT64 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVINT64_FROMINT32X2 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVI : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_ZERO64 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_ZERO32 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_ZERO16 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVT32X2 : HaydnAeCompatDef<"EMULATED", "haydn_x2mux32+haydn_pred2_t">;
+def AE_MOVF32X2 : HaydnAeCompatDef<"EMULATED", "haydn_x2mux32+haydn_pred2_t">;
+def AE_MOVT16X4 : HaydnAeCompatDef<"EMULATED", "haydn_x4mux16+haydn_pred4_t">;
+def AE_MOVF16X4 : HaydnAeCompatDef<"EMULATED", "haydn_x4mux16+haydn_pred4_t">;
+def AE_MOVT64 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MOVF64 : HaydnAeCompatDef<"EMULATED", "haydn_movf64">;
+def AE_EQ32 : HaydnAeCompatDef<"EMULATED", "haydn_x2seq32+haydn_movesfr2gpr">;
+def AE_LT32 : HaydnAeCompatDef<"EMULATED", "haydn_x2cmplt32">;
+def AE_LE32 : HaydnAeCompatDef<"EMULATED", "haydn_x2sle32+haydn_movesfr2gpr">;
+def AE_SEQ16X4 : HaydnAeCompatDef<"EMULATED", "haydn_x4seq16+haydn_movesfr2gpr">;
+def AE_SLT16X4 : HaydnAeCompatDef<"EMULATED", "haydn_x4cmplt16">;
+def AE_SLE16X4 : HaydnAeCompatDef<"EMULATED", "haydn_x4sle16+haydn_movesfr2gpr">;
+def AE_NSA64 : HaydnAeCompatDef<"EMULATED", "haydn_nsa64">;
+def AE_NSA32 : HaydnAeCompatDef<"EMULATED", "haydn_nsa32">;
+def AE_NSAZ32_L : HaydnAeCompatDef<"EMULATED", "haydn_nsaz32_l">;
+def AE_NSAZ16_0 : HaydnAeCompatDef<"EMULATED", "haydn_nsaz16_l">;
+def AE_NSA32U : HaydnAeCompatDef<"EMULATED", "haydn_nsau32">;
+def AE_NSA64S : HaydnAeCompatDef<"EMULATED", "haydn_nsaz64">;
+def AE_NSAL32 : HaydnAeCompatDef<"EMULATED", "haydn_nsa32_l">;
+def AE_CALCRNG3 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_CALCRNG3_0arg : HaydnAeCompatDef<"EMULATED", "haydn_bfp_shift">;
+def AE_MUL64_SS_LL : HaydnAeCompatDef<"EMULATED", "haydn_mul64_ss_ll">;
+def AE_MUL64_SS_HH : HaydnAeCompatDef<"EMULATED", "haydn_mul64_ss_hh">;
+def AE_MUL64_SS_LH : HaydnAeCompatDef<"EMULATED", "haydn_mul64_ss_lh">;
+def AE_MUL64_SS_HL : HaydnAeCompatDef<"EMULATED", "haydn_mul64_ss_hl">;
+def AE_MULA64_SS_LL : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_ll">;
+def AE_MULA64_SS_HH : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_hh">;
+def AE_MULA64_SS_LH : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_lh">;
+def AE_MULA64_SS_HL : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_hl">;
+def AE_MULS64_SS_HH : HaydnAeCompatDef<"EMULATED", "haydn_muls64_ss_hh">;
+def AE_MULS64_SS_LL : HaydnAeCompatDef<"EMULATED", "haydn_muls64_ss_ll">;
+def AE_MULS64_SS_LH : HaydnAeCompatDef<"EMULATED", "haydn_muls64_ss_lh">;
+def AE_MULS64_SS_HL : HaydnAeCompatDef<"EMULATED", "haydn_muls64_ss_hl">;
+def AE_MULF32S_HH : HaydnAeCompatDef<"EMULATED", "haydn_fmul32s_hh">;
+def AE_MULF32S_LL : HaydnAeCompatDef<"EMULATED", "haydn_fmul32s_ll">;
+def AE_MULF32S_LH : HaydnAeCompatDef<"EMULATED", "haydn_fmul32s_lh">;
+def AE_MULAF32S_HH : HaydnAeCompatDef<"EMULATED", "haydn_fmula32s_hh">;
+def AE_MULAF32S_LL : HaydnAeCompatDef<"EMULATED", "haydn_fmula32s_ll">;
+def AE_MULAF32S_LH : HaydnAeCompatDef<"EMULATED", "haydn_fmula32s_lh">;
+def AE_MULSF32S_HH : HaydnAeCompatDef<"EMULATED", "haydn_fmuls32s_hh">;
+def AE_MULSF32S_LL : HaydnAeCompatDef<"EMULATED", "haydn_fmuls32s_ll">;
+def AE_MULFP32X2RAS : HaydnAeCompatDef<"EMULATED", "haydn_x2fmul32rs">;
+def AE_MULAFP32X2RAS : HaydnAeCompatDef<"EMULATED", "haydn_ff2mula32rs_ll">;
+def AE_MULSFP32X2RAS : HaydnAeCompatDef<"EMULATED", "haydn_ff2muls32rs_ll">;
+def AE_MULFP32X2RAS_HH : HaydnAeCompatDef<"EMULATED", "haydn_ff2mul32rs_hh">;
+def AE_MULAFP32X2RAS_HH : HaydnAeCompatDef<"EMULATED", "haydn_ff2mula32rs_hh">;
+def AE_MULFP32X2RAS_LH : HaydnAeCompatDef<"EMULATED", "haydn_ff2mul32rs_lh">;
+def AE_MULAF32R_HH : HaydnAeCompatDef<"EMULATED", "haydn_ff2mula32rs_hh">;
+def AE_MULAF32R_LL : HaydnAeCompatDef<"EMULATED", "haydn_ff2mula32rs_ll">;
+def AE_MULF32S_HH_RS : HaydnAeCompatDef<"EMULATED", "haydn_ff2mul32rs_hh">;
+def AE_MULAAFD32R_HH_LL : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hhll">;
+def AE_MULAAFD32R_HL_LH : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hllh">;
+def AE_MULSSFD32X16X2_HH_LL : HaydnAeCompatDef<"EMULATED", "haydn_f2mulss32rs_hhll">;
+def AE_MULSSFD32X16X2_HL_LH : HaydnAeCompatDef<"EMULATED", "haydn_f2mulss32rs_hllh">;
+def AE_MUL32X16_H0 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MUL32X16_H1 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MUL32X16_H2 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MUL32X16_H3 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULF16SS_00 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs00">;
+def AE_MULAAAAQ16 : HaydnAeCompatDef<"EMULATED", "haydn_fmulaa16_hs_11_00">;
+def AE_MULSSSSQ16 : HaydnAeCompatDef<"EMULATED", "haydn_fmulss16_hs_11_00">;
+def AE_MULA32X2 : HaydnAeCompatDef<"EMULATED", "haydn_x2mula32">;
+def AE_MULS32X2 : HaydnAeCompatDef<"EMULATED", "haydn_x2muls32">;
+def AE_MULA16X4 : HaydnAeCompatDef<"EMULATED", "haydn_x4mula16">;
+def AE_MULS16X4 : HaydnAeCompatDef<"EMULATED", "haydn_x4muls16">;
+def AE_MUL16X4 : HaydnAeCompatDef<"EMULATED", "haydn_dpair_t+haydn_x4mul16+__haydn_i64_as_v4">;
+def AE_MULFC32RAS : HaydnAeCompatDef<"EMULATED", "haydn_x2fcmul32rs">;
+def AE_MULFCI32RAS : HaydnAeCompatDef<"EMULATED", "haydn_x2fcmul32rss">;
+def AE_MULFCR32RAS : HaydnAeCompatDef<"EMULATED", "haydn_x2fcmula32rs">;
+def AE_MULFCR32I_RAS : HaydnAeCompatDef<"EMULATED", "haydn_x2fcmula32rss">;
+def AE_MULFC16RAS : HaydnAeCompatDef<"EMULATED", "haydn_x4fcmul16rs">;
+def AE_MULAFC16RAS : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MAX32 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MIN32 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MAX16 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MIN16 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_HADD32_H : HaydnAeCompatDef<"EMULATED", "haydn_x2hadd32_h">;
+def AE_HADD32_L : HaydnAeCompatDef<"EMULATED", "haydn_x2hadd32_l">;
+def AE_HADD16_H : HaydnAeCompatDef<"EMULATED", "haydn_x4hadd16_h">;
+def AE_HADD16_L : HaydnAeCompatDef<"EMULATED", "haydn_x4hadd16_l">;
+def AE_DOT32 : HaydnAeCompatDef<"EMULATED", "haydn_x2dot32">;
+def AE_DOT16 : HaydnAeCompatDef<"EMULATED", "haydn_x4dot16">;
+def AE_MULPH32 : HaydnAeCompatDef<"EMULATED", "haydn_x2mulph32">;
+def AE_MULPL32 : HaydnAeCompatDef<"EMULATED", "haydn_x2mulpl32">;
+def AE_MULAPH32 : HaydnAeCompatDef<"EMULATED", "haydn_x2mulaph32">;
+def AE_MULAPL32 : HaydnAeCompatDef<"EMULATED", "haydn_x2mulapl32">;
+def AE_MULQ31 : HaydnAeCompatDef<"EMULATED", "haydn_mulq31">;
+def AE_MACQ31 : HaydnAeCompatDef<"EMULATED", "haydn_macq31">;
+def AE_MULQ63 : HaydnAeCompatDef<"EMULATED", "haydn_mulq63">;
+def AE_MAC32 : HaydnAeCompatDef<"EMULATED", "haydn_mac32">;
+def AE_MOVF24X2_FROMINT32X2 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_OR32 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_AND32 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_AND64 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_XOR32 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_ADDANDSUBRNG16RAS_S1 : HaydnAeCompatDef<"EMULATED", "haydn_aas_t+haydn_aas_u+haydn_x4add16s+haydn_x4sub16s">;
+def AE_ADDANDSUBRNG16RAS_S2 : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_MULA32X2_ : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_ll">;
+def AE_MUL32_HH : HaydnAeCompatDef<"EMULATED", "haydn_mul64_ss_hh">;
+def AE_MUL32_LL : HaydnAeCompatDef<"EMULATED", "haydn_mul64_ss_ll">;
+def AE_FF2RSST32 : HaydnAeCompatDef<"EMULATED", "haydn_x2ff2rsst32">;
+def AE_FF2RST32 : HaydnAeCompatDef<"EMULATED", "haydn_x2ff2rst32">;
+def AE_FF2MUL16S : HaydnAeCompatDef<"EMULATED", "haydn_dpair_t+haydn_x4ff2mul16s">;
+def AE_FF2MULA16S : HaydnAeCompatDef<"EMULATED", "haydn_dpair_t+haydn_x4ff2mula16s">;
+def AE_FF2MULS16S : HaydnAeCompatDef<"EMULATED", "haydn_dpair_t+haydn_x4ff2muls16s">;
+def AE_CMUL32_F2 : HaydnAeCompatDef<"EMULATED", "haydn_dpair_t+haydn_x2cmul32_f2">;
+def AE_CMUL32S_F2 : HaydnAeCompatDef<"EMULATED", "haydn_dpair_t+haydn_x2cmul32s_f2">;
+def AE_LOG2 : HaydnAeCompatDef<"EMULATED", "haydn_log2">;
+def AE_EXP2 : HaydnAeCompatDef<"EMULATED", "haydn_exp2">;
+def AE_RECIP : HaydnAeCompatDef<"EMULATED", "haydn_recip">;
+def AE_SQRT : HaydnAeCompatDef<"EMULATED", "haydn_sqrt">;
+def AE_ISQRT : HaydnAeCompatDef<"EMULATED", "haydn_isqrt">;
+def AE_POPCOUNT32 : HaydnAeCompatDef<"EMULATED", "haydn_popcount32">;
+def AE_POPCOUNT64 : HaydnAeCompatDef<"EMULATED", "haydn_popcount64">;
+def AE_BREV32 : HaydnAeCompatDef<"EMULATED", "haydn_brev32">;
+def AE_FIR_OUT32_SAT : HaydnAeCompatDef<"EMULATED", "haydn_satsr64">;
+def AE_FIR_OUT32_PACK : HaydnAeCompatDef<"EMULATED", "haydn_packsr32">;
+def AE_MOVF24X2_FROMF32X2 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVINT32X2_FROMF24X2 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVPA24X2 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MOVINT24X2_FROMF32X2 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_L32X2F24_IP : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_L32X2F24_I : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L32X2F24_XP : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_L32X2F24_X : HaydnAeCompatDef<"EMULATED", "overload">;
+// Dual-24 aligned circular load: same D_LDW_CB path as AE_L32X2_XC / L16X4_XC.
+// Must not silent-alias plain mem or drop CBR wrap under an F24 XC name.
+def AE_L32X2F24_XC : HaydnAeCompatDef<"EXACT", "haydn_cb_ld_t+haydn_ldw_cb_imm">;
+// Dual-24 unaligned forward IP residual: AR step dir=0 (same path as base
+// LA32X2_IP). Not plain mem; not reverse RIP.
+def AE_LA32X2F24_IP : HaydnAeCompatDef<"EXACT", "haydn_ae_la64_step">;
+def AE_LA32X2F24_I : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_LA32X2F24_XP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_LA32X2F24_X : HaydnAeCompatDef<"EMULATED", "c-op">;
+// Reverse dual-24 unaligned post-inc residual (dir=1); peer of LA32X2_RIP.
+def AE_LA32X2F24_RIP : HaydnAeCompatDef<"EXACT", "haydn_ae_la64_step">;
+def AE_S32X2F24_IP : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_S32X2F24_I : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_S32X2F24_XP : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S32X2F24_X : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_SA32X2F24_IP : HaydnAeCompatDef<"EXACT", "haydn_ae_sa64_step">;
+def AE_SA32X2F24_I : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SA32X2F24_RIP : HaydnAeCompatDef<"EXACT", "haydn_ae_sa64_step">;
+def AE_LA24X2_IP : HaydnAeCompatDef<"EXACT", "haydn_ae_la64_step">;
+def AE_LA24X2_I : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_LA24X2_XP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_LA24X2_X : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SA24X2_IP : HaydnAeCompatDef<"EXACT", "haydn_ae_sa64_step">;
+def AE_SA24X2_I : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SA24X2_XP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SA24X2_X : HaydnAeCompatDef<"EMULATED", "c-op">;
+// Dual-24 unaligned circular: same AR residual + CBR wrap as AE_LA32X2F24_IC
+// / AE_SA32X2F24_IC (never plain mem, never aligned D_LDW_CB without AR).
+def AE_LA24X2_IC : HaydnAeCompatDef<"EXACT", "haydn_ae_la64_step+haydn_cbr_step">;
+def AE_SA24X2_IC : HaydnAeCompatDef<"EXACT", "haydn_ae_sa64_step+haydn_cbr_step">;
+def AE_SAT24S : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_PKSR24 : HaydnAeCompatDef<"EMULATED", "json">;
+def AE_MULAAFD24_HH_LL : HaydnAeCompatDef<"EMULATED", "haydn_fmula32s_hh+haydn_dr64_t">;
+def AE_MULAAFD24_HL_LH : HaydnAeCompatDef<"EMULATED", "haydn_fmula32s_lh+haydn_dr64_t">;
+def AE_MULSSFD24_HH_LL : HaydnAeCompatDef<"EMULATED", "haydn_fmuls32s_hh+haydn_dr64_t">;
+def AE_MULSSFD24_HL_LH : HaydnAeCompatDef<"EMULATED", "haydn_fmuls32s_lh+haydn_dr64_t">;
+def AE_MULASFD24_HH_LL : HaydnAeCompatDef<"EMULATED", "haydn_mulsa32_hhll+haydn_dr64_t">;
+def AE_MULASFD24_HL_LH : HaydnAeCompatDef<"EMULATED", "haydn_mulsa32_hllh+haydn_dr64_t">;
+def AE_MULZAAFD24_HH_LL : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULZAAFD24_HL_LH : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULZSSFD24_HH_LL : HaydnAeCompatDef<"EMULATED", "haydn_fmuls32s_hh+haydn_dr64_t">;
+def AE_MULZSSFD24_HL_LH : HaydnAeCompatDef<"EMULATED", "haydn_fmula32s_lh">;
+def AE_MULZASFD24_HH_LL : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULZASFD24_HL_LH : HaydnAeCompatDef<"EMULATED", "haydn_mulsa32_hllh+haydn_dr64_t">;
+def AE_MULZAAD24_HH_LL : HaydnAeCompatDef<"EMULATED", "haydn_f2mulzaa32rs_hhll">;
+def AE_MULFP24X2RA : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULAFP24X2RA : HaydnAeCompatDef<"EMULATED", "haydn_ff2mula32rs_hh+haydn_dr64_t">;
+def AE_MULSFP24X2RA : HaydnAeCompatDef<"EMULATED", "haydn_ff2muls32rs_hh+haydn_dr64_t">;
+def AE_MULFC24RA : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULAFC24RA : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULSFC24RA : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_ROUND24X2F48SASYM : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_ROUNDSP24Q48ASYM : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S24RA64S_IP : HaydnAeCompatDef<"EMULATED", "haydn_satsr64">;
+def AE_S24RA64S_XP : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L16_I : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L16_IP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_L16_X : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L16_XP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_S16_0_I : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_S16_0_IP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_S16_0_X : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_S16_0_XP : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S16_0_XC : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L32_I : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L32_X : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L32_XC : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S32_L_I : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S32_L_X : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_S32_L_XC : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S32_L_XP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_L64_IP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_L64_X : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L64_I : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_L64_XP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_S64_IP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_S64_X : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_S64_I : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_L8X4F_IP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_S16X4RNG_IP : HaydnAeCompatDef<"EMULATED", "haydn_x4sat32t16">;
+def AE_S16X4RNG_X : HaydnAeCompatDef<"EMULATED", "haydn_x4sat32t16">;
+def AE_S16X4RNG_XP : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S16X4_X : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_S16X4_XP : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L32F24_I : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_L32F24_IP : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_L32F24_X : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_L32F24_XC : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S32F24_L_I : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_S32F24_L_IP : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_S32F24_L_X : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_S32F24_L_XC : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L16M_I : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_L16M_IU : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_L16X2M_I : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L16X2M_IU : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_L16X2M_X : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_L16X2M_XU : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_S16M_L_I : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_S16M_L_IU : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_S16X2M_I : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SA24_IP : HaydnAeCompatDef<"EMULATED", "c-op">;
+// Exact unaligned circular store residual: AR step + soft CBR wrap (same path
+// as dual-24 SA32X2F24_IC / SA24X2_IC). Not plain mem without ptr wrap.
+def AE_SA16X4_IC : HaydnAeCompatDef<"EXACT", "haydn_ae_sa16x4_step+haydn_cbr_step">;
+def AE_SA32X2_IC : HaydnAeCompatDef<"EXACT", "haydn_ae_sa64_step+haydn_cbr_step">;
+def AE_LSIP : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_SSIP : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_LSX2IP : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_SSX2IP : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_LSX2X2_IP : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_SSX2X2_IP : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_NSAQ56S : HaydnAeCompatDef<"EMULATED", "haydn_nsa64">;
+def AE_ROUNDSQ32F48ASYM : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_ROUND32F64SASYM : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_ROUND32X2F48SASYM : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_TRUNCA32F64S : HaydnAeCompatDef<"EMULATED", "haydn_satsr64"> {
+  let DeclKind = "macro";
+  let OracleId = "ae0.trunca32f64s";
+}
+def AE_SRAA64 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SLAA64 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SLAA64S : HaydnAeCompatDef<"EMULATED", "haydn_ae_slaa64s"> {
+  let DeclKind = "macro";
+  let OracleId = "ae0.slaa64s";
+}
+def AE_SLAS64S : HaydnAeCompatDef<"EMULATED", "haydn_ae_slaa64s"> {
+  let DeclKind = "alias";
+  let OracleId = "ae0.slaa64s";
+}
+def AE_SLAI64S : HaydnAeCompatDef<"EMULATED", "haydn_ae_slaa64s"> {
+  let DeclKind = "alias";
+  let OracleId = "ae0.slaa64s";
+}
+def AE_SLLI64 : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_NEG64S : HaydnAeCompatDef<"EMULATED", "haydn_neg64s">;
+def AE_ZEROP48 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_SLAA32 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SLAA32S : HaydnAeCompatDef<"EMULATED", "header">;
+def AE_SLAA16S : HaydnAeCompatDef<"EMULATED", "header">;
+def AE_SLAA16S_ : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_SLAI32 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SLAI32S : HaydnAeCompatDef<"EMULATED", "header">;
+def AE_SLAI16S : HaydnAeCompatDef<"EMULATED", "header">;
+def AE_SLAI24S : HaydnAeCompatDef<"EMULATED", "__haydn_v2_as_i64+__ae_slaa32s">;
+def AE_SRAI16 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SRAI16R : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_SRAI32R : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_SRLA16 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_SRAA16 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_ADDSUB32 : HaydnAeCompatDef<"EMULATED", "haydn_x2addsub32s">;
+def AE_ADDSUB32_HL_LH : HaydnAeCompatDef<"EMULATED", "haydn_x2addsub32s">;
+def AE_SUBADD32 : HaydnAeCompatDef<"EMULATED", "haydn_x2subadd32s">;
+def AE_SUBADD32_HL_LH : HaydnAeCompatDef<"EMULATED", "haydn_x2subadd32s">;
+def AE_SUBADD32S_HL_LH : HaydnAeCompatDef<"EMULATED", "haydn_x2subadd32s">;
+def AE_ADDANDSUBRNG16RAS_S0 : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_ADD16S_ : HaydnAeCompatDef<"EMULATED", "haydn_x4add16s">;
+def AE_SUB16S_ : HaydnAeCompatDef<"EMULATED", "haydn_x4sub16s">;
+def AE_ABS16S : HaydnAeCompatDef<"EMULATED", "haydn_x4abs16s">;
+def AE_ABS16S_ : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_AND16 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_OR16 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_NEG16S_ : HaydnAeCompatDef<"EMULATED", "haydn_x4sub16s">;
+def AE_MAXABS16S : HaydnAeCompatDef<"EMULATED", "haydn_x4abs16s+haydn_x4max16">;
+def AE_ABS32 : HaydnAeCompatDef<"EMULATED", "haydn_x2abs32">;
+def AE_NEG32 : HaydnAeCompatDef<"EMULATED", "haydn_x2neg32">;
+def AE_EQ16 : HaydnAeCompatDef<"EMULATED", "haydn_x4seq16">;
+def AE_LT16 : HaydnAeCompatDef<"EMULATED", "haydn_x4slt16">;
+def AE_LT64 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_LE64 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_EQ64 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_NEG16S_vector : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_ADD16S_vector : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_SLAA16S_vector : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_NEG16S_scalar : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_MUL16X4_vector : HaydnAeCompatDef<"EMULATED", "haydn_x4mul16">;
+def AE_MOVBA4 : HaydnAeCompatDef<"EMULATED", "haydn_x4slli16">;
+def AE_PKSR16 : HaydnAeCompatDef<"EMULATED", "haydn_packsr32+haydn_x4sat32t16">;
+def AE_SEL16_7610 : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_MOVINT32X2_FROMF64 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MULFP16X4S_vector : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_MUL32U_LL : HaydnAeCompatDef<"EMULATED", "haydn_mul64_uu_ull">;
+def AE_INT32X2_ADD32S : HaydnAeCompatDef<"EMULATED", "haydn_x2add32s">;
+def AE_INT32X2_NEG32S : HaydnAeCompatDef<"EMULATED", "haydn_x2neg32s">;
+def AE_INT64X2_RADD : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_INT64_LT : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_INT64_GE : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_INT64_EQ : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SEXT32X2D16_10 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_SEXT32X2D16_32 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVAD16_0 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_MOVAD16_1 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_MOVAD16_2 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_MOVAD16_3 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_MOVAD32_H : HaydnAeCompatDef<"EMULATED", "haydn_movad32_h">;
+def AE_MOVAD32_L : HaydnAeCompatDef<"EMULATED", "haydn_movad32_l">;
+def AE_MOVDA16X2 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_MOV32 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOV64 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOV : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVAB : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVAB2 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVAB4 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVBA : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVBA2 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_INTSWAP : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_MOVF16X4_FROMINT16X4 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVF16X4_FROMINT32X2 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVF24X2_FROMINT32 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVF32X2_FROMINT32 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVF32X2_FROMINT32X2 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVF64_FROMINT32X2 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVINT16X4_FROMF16 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVINT16X4_FROMF16X4 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVINT16X4_FROMF32X2 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVINT16X4_FROMINT32X2 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVINT16X4_FROMINT64 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVINT32X2_FROMF16X4 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVINT32X2_FROMF32 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVINT32X2_FROMF32X2 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVINT32X2_FROMINT16X4 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVINT64_FROMINT16X4 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVINT64_FROMINT32 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MOVXTFLOATX2_FROMXTFLOAT : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_CVT64F32_H : HaydnAeCompatDef<"EMULATED", "haydn_movad32_h">;
+def AE_CVTP24A16 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_MUL32_LH : HaydnAeCompatDef<"EMULATED", "haydn_mul64_ss_lh">;
+def AE_MULA32_HH : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_hh">;
+def AE_MULA32_HL : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_hl">;
+def AE_MULA32_LH : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_lh">;
+def AE_MULA32_LL : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_ll">;
+def AE_MULA32U_LL : HaydnAeCompatDef<"EMULATED", "haydn_mula64_uu_ull">;
+def AE_MULA32X16_H0 : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_hl">;
+def AE_MULA32X16_H1 : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_hl">;
+def AE_MULA32X16_L0 : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_ll">;
+def AE_MULA32X16_L1 : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_ll">;
+def AE_MULA32X16_L2 : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_ll">;
+def AE_MULA32X16_L3 : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_ll">;
+def AE_MULAAD32_HH_LL : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hhll">;
+def AE_MULAAD32_HL_LH : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hllh">;
+def AE_MULAAFD32RA_HH_LL : HaydnAeCompatDef<"EMULATED", "haydn_ff2mula32rs_hh">;
+def AE_MULAAFD32X16_H1_L0 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl+haydn_dr64_t">;
+def AE_MULAAFD32X16_H3_L2 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hh+haydn_dr64_t">;
+def AE_MULZAAAAQ16 : HaydnAeCompatDef<"EMULATED", "haydn_x4mula16">;
+def AE_MULAAR16P16X4S_ : HaydnAeCompatDef<"EMULATED", "haydn_x4mula16s">;
+def AE_MULAF16X4SS : HaydnAeCompatDef<"EMULATED", "haydn_dpair_t+haydn_x4mula16s">;
+def AE_MULSF16X4SS : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULAF32R_LH : HaydnAeCompatDef<"EMULATED", "haydn_ff2mula32rs_lh">;
+def AE_MULAF32R_LL_S2 : HaydnAeCompatDef<"EMULATED", "haydn_ff2mula32rs_ll">;
+def AE_MULAF32S_HL : HaydnAeCompatDef<"EMULATED", "haydn_fmula32s_hl">;
+def AE_MULAF32X16_H1 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl+haydn_dr64_t">;
+def AE_MULAF32X16_H3 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hh+haydn_dr64_t">;
+def AE_MULAP32X2 : HaydnAeCompatDef<"EMULATED", "haydn_mul64_ss_hh">;
+def AE_MULSF32R_LH : HaydnAeCompatDef<"EMULATED", "haydn_ff2muls32rs_lh">;
+def AE_MULSF32S_HL : HaydnAeCompatDef<"EMULATED", "haydn_fmuls32s_hl">;
+def AE_MULSF32S_LH : HaydnAeCompatDef<"EMULATED", "haydn_fmuls32s_lh">;
+def AE_MULSP32X2 : HaydnAeCompatDef<"EMULATED", "haydn_mul64_ss_hh">;
+def AE_MULSSFD32S_HH_LL : HaydnAeCompatDef<"EMULATED", "haydn_fmuls32s_hh+haydn_fmuls32s_ll">;
+def AE_MULSSFD32R_HH_LL : HaydnAeCompatDef<"EMULATED", "haydn_f2mulss32rs_hhll">;
+def AE_MULSSFD32R_HL_LH : HaydnAeCompatDef<"EMULATED", "haydn_f2mulss32rs_hllh">;
+def AE_MULF32R_HH : HaydnAeCompatDef<"EMULATED", "haydn_ff2mul32r_hh">;
+def AE_MULF32R_LH : HaydnAeCompatDef<"EMULATED", "haydn_ff2mul32r_lh">;
+def AE_MULF32R_LL : HaydnAeCompatDef<"EMULATED", "haydn_ff2mul32r_ll">;
+def AE_MULFP16X4RAS : HaydnAeCompatDef<"EMULATED", "haydn_x4ff2mula16s">;
+def AE_MULFP16X4S : HaydnAeCompatDef<"EMULATED", "haydn_x4ff2mul16s">;
+def AE_MULFP16X4S_ : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_MULFP32X16X2RAS_H : HaydnAeCompatDef<"EMULATED", "haydn_mulfp32x16x2ras_high+haydn_dr64_t">;
+def AE_MULFP32X16X2RAS_L : HaydnAeCompatDef<"EMULATED", "haydn_mulfp32x16x2ras_low+haydn_dr64_t">;
+def AE_MULFP32X2RS : HaydnAeCompatDef<"EMULATED", "haydn_x2fmul32rs">;
+def AE_MULP32X16X2_H : HaydnAeCompatDef<"EMULATED", "haydn_mul64_ss_hh">;
+def AE_MULP32X2_S2 : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_MULF48Q32SP16S_L : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl+haydn_dr64_t">;
+def AE_MULC32X16_H : HaydnAeCompatDef<"EMULATED", "haydn_x2cmul32">;
+def AE_MULC32X16_L : HaydnAeCompatDef<"EMULATED", "haydn_x2cmul32">;
+def AE_MULSSFD32X16_H1_L0 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl+haydn_dr64_t">;
+def AE_MULSSFD32X16_H3_L2 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hh+haydn_dr64_t">;
+def AE_MULZAAFD16SS_11_00 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULZAAFD32S_HH_LL : HaydnAeCompatDef<"EMULATED", "haydn_fmul32s_hh+haydn_fmul32s_ll">;
+def AE_MULZAAFD32X16_H1_L0 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULZAAFD32X16_H3_L2 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hh+haydn_dr64_t">;
+def AE_MULZSAFD24_HH_LL : HaydnAeCompatDef<"EMULATED", "haydn_fmula32s_hh">;
+def AE_MULZSAFD32X16_H3_L2 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULZSSFD32X16_H1_L0 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl+haydn_dr64_t">;
+def AE_MUL16X4_ : HaydnAeCompatDef<"EMULATED", "haydn_x4mul16">;
+def AE_SEL16_2301 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SEL16_4321 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_SEL16_5140 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SEL16_5146 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SEL16_5410 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SEL16_5432 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_SEL16_6420 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SEL16_6543 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_SEL16_7362 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SEL16_7520 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_SEL16_7632 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_SEL16I : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_ZERO : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_NOT32 : HaydnAeCompatDef<"EMULATED", "c_soft">;
+def AE_S32RA64S_XP : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S32X2RA64S_IP : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_S24X2RA64S_IP : HaydnAeCompatDef<"EMULATED", "overload">;
+// Dual-24 aligned circular store: same D_SDW_CB + next-ptr writeback as
+// AE_S32X2_XC. Must not silent-drop ptr wrap under an F24 XC name.
+def AE_S32X2F24_XC : HaydnAeCompatDef<"EXACT", "haydn_dr64_t+haydn_ae_f32x2_mem_to_reg+haydn_sdw_cb_imm">;
+def AE_S32RA64S_IP : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULFD24X2_FIR_H : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t+haydn_ff2mula32rs_hh+haydn_ff2mula32rs_ll+haydn_ff2mula32rs_lh">;
+def AE_MULAFD24X2_FIR_H : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t+haydn_ff2mula32rs_hh+haydn_ff2mula32rs_ll+haydn_ff2mula32rs_lh">;
+def AE_ROUND16X4F32SASYM : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULAFQ16X2_FIR_3 : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t+haydn_fq_fir3_q0+haydn_fq_fir3_q1">;
+def AE_MULAFQ16X2_FIR_1 : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t+haydn_fq_fir1_q0+haydn_fq_fir1_q1">;
+def AE_MULFQ16X2_FIR_3 : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t+haydn_fq_fir3_q0+haydn_fq_fir3_q1">;
+def AE_MULFQ16X2_FIR_1 : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t+haydn_fq_fir1_q0+haydn_fq_fir1_q1">;
+def AE_MULZASFD32X16_H3_L2 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULZAAFD32X16_H2_L3 : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hhll+haydn_dr64_t">;
+def AE_MULAAFD32X16_H2_L3 : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hhll+haydn_dr64_t">;
+def AE_MULAAFD32X16_H0_L1 : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hhll+haydn_dr64_t">;
+def AE_MULZAAD32X16_H3_L2 : HaydnAeCompatDef<"EMULATED", "haydn_f2mulzaa32rs_hhll+haydn_dr64_t">;
+def AE_MULAAD32X16_H1_L0 : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hhll+haydn_dr64_t">;
+def AE_MULAAD32X16_H3_L2 : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hhll+haydn_dr64_t">;
+def AE_MOVF16X4_FROMF32X2 : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t">;
+def AE_MOVF32_FROMF32X2 : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_MOVF32X2_FROMF64 : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t">;
+def AE_MOVF64_FROMF32X2 : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t">;
+def AE_SRA64_32 : HaydnAeCompatDef<"EMULATED", "haydn_packsr32+haydn_satsr64">;
+def AE_F64_SLAIS : HaydnAeCompatDef<"EMULATED", "haydn_ae_slaa64s">;
+def AE_F64_SUBS : HaydnAeCompatDef<"EMULATED", "haydn_sub64s">;
+def AE_F32X2_SLAIS : HaydnAeCompatDef<"EMULATED", "__ae_slaa32s">;
+def AE_MULF16SS_33 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs33">;
+def AE_MULF16SS_32 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs32">;
+def AE_MULAF16SS_00 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs00">;
+def AE_MULSF16SS_00 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs00">;
+def AE_MULSF16SS_20 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs20">;
+def AE_MULSF16SS_22 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs22">;
+def AE_MULSSFD16SS_11_00 : HaydnAeCompatDef<"EMULATED", "haydn_fmulss16_hs_11_00">;
+def AE_MULZAAFD16SS_13_02 : HaydnAeCompatDef<"EMULATED", "haydn_fmulaa16_hs_13_02">;
+def AE_MULF32R_HL : HaydnAeCompatDef<"EMULATED", "haydn_ff2mul32r_lh">;
+def AE_MULSF32R_HH : HaydnAeCompatDef<"EMULATED", "haydn_ff2muls32rs_hh">;
+def AE_MULSF32R_LL : HaydnAeCompatDef<"EMULATED", "haydn_ff2muls32rs_ll">;
+def AE_MUL32X16_L0 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MUL32X16_L1 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MUL32X16_L2 : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULAF32X16_L1 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl+haydn_dr64_t">;
+def AE_MULAF32X16_L3 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hh+haydn_dr64_t">;
+def AE_MULF32X16_H3 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hh+haydn_dr64_t">;
+def AE_MULSF32X16_L0 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl+haydn_dr64_t">;
+def AE_MULSF32X16_L1 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl+haydn_dr64_t">;
+def AE_MULSF32X16_L3 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hh+haydn_dr64_t">;
+def AE_MULZASFD32X16_H1_L0 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl+haydn_dr64_t">;
+def AE_MULZAAD32X16_H1_L0 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl+haydn_dr64_t">;
+def AE_MULAFP32X16X2RAS_H : HaydnAeCompatDef<"EMULATED", "haydn_mulfp32x16x2ras_high">;
+def AE_MULF16SS_30 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs30">;
+def AE_MOVF32X2_FROMF16X4 : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t">;
+def AE_MULAFP32X2RS : HaydnAeCompatDef<"EMULATED", "haydn_ff2mula32rs_ll">;
+def AE_TRUNCI32F64S_L : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_MULAF16SS_11 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs11">;
+def AE_MULAF16SS_30 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs30">;
+def AE_MULSF16SS_11 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs11">;
+def AE_MULSF16SS_21 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs21">;
+def AE_MULSF16SS_10 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs10">;
+def AE_MULSF16SS_30 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs30">;
+def AE_MULFD24X2_FIR_L : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t+haydn_ff2mula32rs_lh+haydn_ff2mula32rs_hh+haydn_ff2mula32rs_ll">;
+def AE_MULAFD24X2_FIR_L : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t+haydn_ff2mula32rs_lh+haydn_ff2mula32rs_hh+haydn_ff2mula32rs_ll">;
+def AE_MULFD32X16X2_FIR_HH : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t+haydn_q15_lane_as_q31_dup+haydn_ff2mula32rs_hh+haydn_ff2mula32rs_ll">;
+def AE_MULFD32X16X2_FIR_HL : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t+haydn_q15_lane_as_q31_dup+haydn_ff2mula32rs_hh+haydn_ff2mula32rs_ll">;
+def AE_MULAFD32X16X2_FIR_HH : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t+haydn_q15_lane_as_q31_dup+haydn_ff2mula32rs_hh+haydn_ff2mula32rs_ll">;
+def AE_MULAFD32X16X2_FIR_HL : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t+haydn_q15_lane_as_q31_dup+haydn_ff2mula32rs_hh+haydn_ff2mula32rs_ll">;
+def AE_F64_SLAS : HaydnAeCompatDef<"EMULATED", "haydn_ae_slaa64s">;
+def AE_MULSF32R_HL : HaydnAeCompatDef<"EMULATED", "haydn_ff2muls32rs_lh">;
+def AE_MULSF32X16_H1 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl+haydn_dr64_t">;
+def AE_MULSF32X16_H3 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hh+haydn_dr64_t">;
+def AE_MULAFP32X16X2RAS_L : HaydnAeCompatDef<"EMULATED", "haydn_mulfp32x16x2ras_low">;
+def AE_MULSSFD24_HH_LL_S2 : HaydnAeCompatDef<"EMULATED", "haydn_f2mulss32rs_hhll+haydn_dr64_t">;
+def AE_S16X4_I : HaydnAeCompatDef<"EMULATED", "c-op">;
+def AE_MULZAAD24_HL_LH : HaydnAeCompatDef<"EMULATED", "haydn_f2mulzaa32rs_hllh">;
+def AE_PKSR32 : HaydnAeCompatDef<"EMULATED", "haydn_packsr32">;
+def AE_MULFC32X16RAS_H : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_MULFC32X16RAS_L : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_INT16X4_MAX : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_INT16X4_MIN : HaydnAeCompatDef<"EMULATED", "overload">;
+def AE_SUB16S_vector : HaydnAeCompatDef<"EMULATED", "ae_alias">;
+def AE_MULAAR16P16X4S_vector : HaydnAeCompatDef<"EMULATED", "haydn_x4mula16s">;
+def AE_MULA32X2_vector : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hhll">;
+
+// --- EXACT ---
+// Base aligned XC residual: explicit CB tokens (not bare "header") so
+// inventory CI fails closed if a body reverts to plain mem.
+def AE_L32X2_XC : HaydnAeCompatDef<"EXACT", "haydn_cb_ld_t+haydn_ldw_cb_imm+haydn_ae_f32x2_mem_to_reg">;
+def AE_S32X2_XC : HaydnAeCompatDef<"EXACT", "haydn_dr64_t+haydn_ae_f32x2_mem_to_reg+haydn_sdw_cb_imm">;
+def AE_L16X4_XC : HaydnAeCompatDef<"EXACT", "haydn_cb_ld_t+haydn_ldw_cb_imm">;
+def AE_S16X4_XC : HaydnAeCompatDef<"EXACT", "haydn_sdw_cb_imm">;
+// Reverse-CB: negative D_LDW_CB element stride (must not silent-alias XC/IC).
+def AE_L16X4_RIC : HaydnAeCompatDef<"EXACT", "haydn_cb_ld_t+haydn_ldw_cb_imm">;
+def AE_L16X4_RIP : HaydnAeCompatDef<"EXACT", "soft_rev_postinc">;
+// Reverse UA dir=1 ImmArg + CBR wrap -8 (must not silent-alias forward IC).
+def AE_LA16X4_RIC : HaydnAeCompatDef<"EXACT", "haydn_ae_la16x4_step+haydn_cbr_step">;
+def AE_LA32X2_RIC : HaydnAeCompatDef<"EXACT", "haydn_dr64_t+haydn_ae_la64_step+haydn_ae_f32x2_mem_to_reg+haydn_cbr_step">;
+def AE_LA16X4POS_PC : HaydnAeCompatDef<"EXACT", "haydn_ae_la64_pp">;
+def AE_LA32X2POS_PC : HaydnAeCompatDef<"EXACT", "haydn_ae_la64_pp">;
+// NEG_PC is probe-only seed parity with POS_PC (PLDWWUA residual). Do not
+// invent reverse-direction pre-decrement; reverse lives on later RIC/RIP.
+def AE_LA16X4NEG_PC : HaydnAeCompatDef<"EXACT", "haydn_ae_la64_pp">;
+def AE_LA32X2NEG_PC : HaydnAeCompatDef<"EXACT", "haydn_ae_la64_pp">;
+def AE_SRAS32 : HaydnAeCompatDef<"EXACT", "haydn_x2sra32+haydn_ae_sar">;
+def AE_SLAS32 : HaydnAeCompatDef<"EXACT", "haydn_x2sll32+haydn_ae_sar">;
+def AE_L32X2F24_RIP : HaydnAeCompatDef<"EXACT", "soft_rev_postinc">;
+def AE_L32X2F24_RIC : HaydnAeCompatDef<"EXACT", "haydn_cb_ld_t+haydn_ldw_cb_imm+haydn_dr64_t">;
+def AE_LA32X2F24_XC : HaydnAeCompatDef<"EXACT", "haydn_dr64_t+haydn_ae_la64_step+haydn_ae_f32x2_mem_to_reg+haydn_cbr_step">;
+def AE_LA32X2F24_RIC : HaydnAeCompatDef<"EXACT", "haydn_dr64_t+haydn_ae_la64_step+haydn_cbr_step">;
+def AE_S32X2F24_RIP : HaydnAeCompatDef<"EXACT", "soft_rev_postinc">;
+def AE_SA32X2F24_XC : HaydnAeCompatDef<"EXACT", "haydn_dr64_t+haydn_ae_f32x2_mem_to_reg+haydn_ae_sa64_step+haydn_cbr_step">;
+def AE_SELP24_HH : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2sel32_hh">;
+def AE_SELP24_HL : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2sel32_hl">;
+def AE_SELP24_LH : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2sel32_lh">;
+def AE_SELP24_LL : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2sel32_ll">;
+def AE_ADD24S : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2add32s">;
+def AE_SUB24S : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2sub32s">;
+def AE_ADDSP24S : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2add32s">;
+def AE_SUBSP24S : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2sub32s">;
+def AE_NEG24S : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2neg32s">;
+def AE_NEGSP24S : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2neg32s">;
+def AE_ZERO24 : HaydnAeCompatDef<"EXACT", "haydn_dr64_t">;
+def AE_F24X2_SRAI : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2sra32">;
+def AE_SRAI24 : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2sra32">;
+def AE_S32X2_RIP : HaydnAeCompatDef<"EXACT", "soft_rev_postinc">;
+def AE_SA32X2F24_IC : HaydnAeCompatDef<"EXACT", "haydn_ae_sa64_step+haydn_cbr_step">;
+def AE_LA32X2F24POS_PC : HaydnAeCompatDef<"EXACT", "haydn_ae_la64_pp">;
+def AE_LA24X2POS_PC : HaydnAeCompatDef<"EXACT", "haydn_ae_la64_pp">;
+def AE_LA32X2F24_IC : HaydnAeCompatDef<"EXACT", "haydn_ae_la64_step+haydn_cbr_step">;
+def AE_SRAIP24 : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2sra32">;
+def AE_ADDP24 : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2add32">;
+def AE_SEL24_HH : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2sel32_hh">;
+def AE_SEL24_HL : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2sel32_hl">;
+def AE_SEL24_LH : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2sel32_lh">;
+def AE_SEL24_LL : HaydnAeCompatDef<"EXACT", "__haydn_v2_as_i64+haydn_x2sel32_ll">;
+def AE_L32X2_RIP : HaydnAeCompatDef<"EXACT", "soft_rev_postinc">;
+def AE_L32X2_RIC : HaydnAeCompatDef<"EXACT", "haydn_cb_ld_t+haydn_ldw_cb_imm+haydn_ae_f32x2_mem_to_reg+haydn_dr64_t">;
+def AE_MULZAAFD16SS_33_22 : HaydnAeCompatDef<"EXACT", "haydn_fmulaa16_hs_33_22">;
+
